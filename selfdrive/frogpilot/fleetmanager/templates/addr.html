@@ -1,0 +1,11 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    FrogPilot Navigation
+{% endblock %}
+
+{% block main %}
+{% with gmap_key=gmap_key, lon=lon, lat=lat %}
+    {% include "addr_input.html" %}
+{% endwith %}
+{% endblock %}

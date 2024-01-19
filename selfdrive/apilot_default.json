@@ -1,0 +1,722 @@
+[
+  {
+    "filename": "AChangeCost",
+    "content": "200"
+  },
+  {
+    "filename": "AChangeCostStart",
+    "content": "40"
+  },
+  {
+    "filename": "StopDistanceCarrot",
+    "content": "600"
+  },
+  {
+    "filename": "ALeadTau",
+    "content": "135"
+  },
+  {
+    "filename": "ALeadTauStart",
+    "content": "40"
+  },
+  {
+    "filename": "AccelerationPath",
+    "content": "1"
+  },
+  {
+    "filename": "AccelerationProfile",
+    "content": "0"
+  },
+  {
+    "filename": "AdjacentPath",
+    "content": "1"
+  },
+  {
+    "filename": "AdjustCurveOffset",
+    "content": "10"
+  },
+  {
+    "filename": "AdjustLaneOffset",
+    "content": "10"
+  },
+  {
+    "filename": "AdjustablePersonalities",
+    "content": "1"
+  },
+  {
+    "filename": "AggressiveAcceleration",
+    "content": "1"
+  },
+  {
+    "filename": "AggressiveFollow",
+    "content": "10"
+  },
+  {
+    "filename": "AggressiveJerk",
+    "content": "5"
+  },
+  {
+    "filename": "AlwaysOnLateral",
+    "content": "1"
+  },
+  {
+    "filename": "AlwaysOnLateralMain",
+    "content": "1"
+  },
+  {
+    "filename": "AutoCancelFromGasMode",
+    "content": "2"
+  },
+  {
+    "filename": "AutoCruiseControl",
+    "content": "0"
+  },
+  {
+    "filename": "AutoCurveSpeedCtrlUse",
+    "content": "0"
+  },
+  {
+    "filename": "AutoCurveSpeedFactor",
+    "content": "100"
+  },
+  {
+    "filename": "AutoCurveSpeedFactorIn",
+    "content": "50"
+  },
+  {
+    "filename": "AutoNaviSpeedBumpSpeed",
+    "content": "35"
+  },
+  {
+    "filename": "AutoNaviSpeedBumpTime",
+    "content": "3"
+  },
+  {
+    "filename": "AutoNaviSpeedCtrlEnd",
+    "content": "7"
+  },
+  {
+    "filename": "AutoNaviSpeedDecelRate",
+    "content": "150"
+  },
+  {
+    "filename": "AutoNaviSpeedSafetyFactor",
+    "content": "105"
+  },
+  {
+    "filename": "AutoResumeFromBrakeReleaseTrafficSign",
+    "content": "1"
+  },
+  {
+    "filename": "AutoResumeFromGasSpeed",
+    "content": "30"
+  },
+  {
+    "filename": "AutoSpeedUptoRoadSpeedLimit",
+    "content": "110"
+  },
+  {
+    "filename": "AverageCurvature",
+    "content": "0"
+  },
+  {
+    "filename": "BlindSpotPath",
+    "content": "1"
+  },
+  {
+    "filename": "CECurves",
+    "content": "1"
+  },
+  {
+    "filename": "CECurvesLead",
+    "content": "0"
+  },
+  {
+    "filename": "CENavigation",
+    "content": "1"
+  },
+  {
+    "filename": "CESignal",
+    "content": "1"
+  },
+  {
+    "filename": "CESlowerLead",
+    "content": "0"
+  },
+  {
+    "filename": "CESpeed",
+    "content": "0"
+  },
+  {
+    "filename": "CESpeedLead",
+    "content": "0"
+  },
+  {
+    "filename": "CEStopLights",
+    "content": "1"
+  },
+  {
+    "filename": "CameraView",
+    "content": "0"
+  },
+  {
+    "filename": "Compass",
+    "content": "1"
+  },
+  {
+    "filename": "ConditionalExperimental",
+    "content": "0"
+  },
+  {
+    "filename": "CruiseEcoControl",
+    "content": "2"
+  },
+  {
+    "filename": "CruiseMaxVals1",
+    "content": "200"
+  },
+  {
+    "filename": "CruiseMaxVals2",
+    "content": "160"
+  },
+  {
+    "filename": "CruiseMaxVals3",
+    "content": "130"
+  },
+  {
+    "filename": "CruiseMaxVals4",
+    "content": "110"
+  },
+  {
+    "filename": "CruiseMaxVals5",
+    "content": "95"
+  },
+  {
+    "filename": "CruiseMaxVals6",
+    "content": "80"
+  },
+  {
+    "filename": "CruiseMinVals",
+    "content": "120"
+  },
+  {
+    "filename": "CruiseOnDist",
+    "content": "-400"
+  },
+  {
+    "filename": "CruiseSpeedMin",
+    "content": "10"
+  },
+  {
+    "filename": "CruiseSpeedUnit",
+    "content": "10"
+  },
+  {
+    "filename": "CurveSensitivity",
+    "content": "120"
+  },
+  {
+    "filename": "CustomColors",
+    "content": "1"
+  },
+  {
+    "filename": "CustomIcons",
+    "content": "1"
+  },
+  {
+    "filename": "CustomPersonalities",
+    "content": "1"
+  },
+  {
+    "filename": "CustomSignals",
+    "content": "1"
+  },
+  {
+    "filename": "CustomSounds",
+    "content": "2"
+  },
+  {
+    "filename": "CustomTheme",
+    "content": "1"
+  },
+  {
+    "filename": "CustomUI",
+    "content": "1"
+  },
+  {
+    "filename": "DeviceShutdown",
+    "content": "9"
+  },
+  {
+    "filename": "DisengageOnAccelerator",
+    "content": "0"
+  },
+  {
+    "filename": "DriverCamera",
+    "content": "0"
+  },
+  {
+    "filename": "EVTable",
+    "content": "0"
+  },
+  {
+    "filename": "EnableRadarTracks",
+    "content": "0"
+  },
+  {
+    "filename": "ExperimentalLongitudinalEnabled",
+    "content": "0"
+  },
+  {
+    "filename": "ExperimentalModeViaPress",
+    "content": "1"
+  },
+  {
+    "filename": "FireTheBabysitter",
+    "content": "0"
+  },
+  {
+    "filename": "GreenLightAlert",
+    "content": "0"
+  },
+  {
+    "filename": "HasAcceptedTerms",
+    "content": "2"
+  },
+  {
+    "filename": "IsMetric",
+    "content": "1"
+  },
+  {
+    "filename": "LaneChangeTime",
+    "content": "0"
+  },
+  {
+    "filename": "LaneDetection",
+    "content": "1"
+  },
+  {
+    "filename": "LaneLinesWidth",
+    "content": "4"
+  },
+  {
+    "filename": "LanguageSetting",
+    "content": "main_ko"
+  },
+  {
+    "filename": "LateralTorqueAccelFactor",
+    "content": "2100"
+  },
+  {
+    "filename": "LateralTorqueCustom",
+    "content": "0"
+  },
+  {
+    "filename": "LateralTorqueFriction",
+    "content": "40"
+  },
+  {
+    "filename": "LateralTune",
+    "content": "1"
+  },
+  {
+    "filename": "LeadInfo",
+    "content": "1"
+  },
+  {
+    "filename": "LockDoors",
+    "content": "0"
+  },
+  {
+    "filename": "LongitudinalActuatorDelayLowerBound",
+    "content": "50"
+  },
+  {
+    "filename": "LongitudinalActuatorDelayUpperBound",
+    "content": "50"
+  },
+  {
+    "filename": "LongitudinalPersonality",
+    "content": "0"
+  },
+  {
+    "filename": "LongitudinalTune",
+    "content": "1"
+  },
+  {
+    "filename": "LongitudinalTuningKf",
+    "content": "100"
+  },
+  {
+    "filename": "LongitudinalTuningKiV",
+    "content": "0"
+  },
+  {
+    "filename": "LongitudinalTuningKpV",
+    "content": "100"
+  },
+  {
+    "filename": "LowerVolt",
+    "content": "0"
+  },
+  {
+    "filename": "MapboxStyle",
+    "content": "2"
+  },
+  {
+    "filename": "MixRadarInfo",
+    "content": "0"
+  },
+  {
+    "filename": "ModelUI",
+    "content": "1"
+  },
+  {
+    "filename": "MuteDM",
+    "content": "1"
+  },
+  {
+    "filename": "MuteDoor",
+    "content": "1"
+  },
+  {
+    "filename": "MuteOverheated",
+    "content": "1"
+  },
+  {
+    "filename": "MuteSeatbelt",
+    "content": "1"
+  },
+  {
+    "filename": "MyDrivingMode",
+    "content": "3"
+  },
+  {
+    "filename": "MyEcoModeFactor",
+    "content": "85"
+  },
+  {
+    "filename": "MySafeModeFactor",
+    "content": "70"
+  },
+  {
+    "filename": "NNFF",
+    "content": "0"
+  },
+  {
+    "filename": "NudgelessLaneChange",
+    "content": "1"
+  },
+  {
+    "filename": "NumericalTemp",
+    "content": "1"
+  },
+  {
+    "filename": "OSMDownloadProgress",
+    "content": ""
+  },
+  {
+    "filename": "ObdMultiplexingChanged",
+    "content": "1"
+  },
+  {
+    "filename": "ObdMultiplexingEnabled",
+    "content": "0"
+  },
+  {
+    "filename": "Offset1",
+    "content": "5"
+  },
+  {
+    "filename": "Offset2",
+    "content": "5"
+  },
+  {
+    "filename": "Offset3",
+    "content": "10"
+  },
+  {
+    "filename": "Offset4",
+    "content": "10"
+  },
+  {
+    "filename": "OneLaneChange",
+    "content": "1"
+  },
+  {
+    "filename": "OpenpilotEnabledToggle",
+    "content": "1"
+  },
+  {
+    "filename": "PathEdgeWidth",
+    "content": "20"
+  },
+  {
+    "filename": "PathOffset",
+    "content": "0"
+  },
+  {
+    "filename": "PathWidth",
+    "content": "30"
+  },
+  {
+    "filename": "PauseLateralOnSignal",
+    "content": "0"
+  },
+  {
+    "filename": "PreviousSpeedLimit",
+    "content": "1666"
+  },
+  {
+    "filename": "RelaxedFollow",
+    "content": "15"
+  },
+  {
+    "filename": "RelaxedJerk",
+    "content": "18"
+  },
+  {
+    "filename": "ReverseCruise",
+    "content": "0"
+  },
+  {
+    "filename": "RoadEdgesWidth",
+    "content": "2"
+  },
+  {
+    "filename": "RoadNameUI",
+    "content": "1"
+  },
+  {
+    "filename": "RotatingWheel",
+    "content": "1"
+  },
+  {
+    "filename": "SLCFallback",
+    "content": "2"
+  },
+  {
+    "filename": "SLCPriority",
+    "content": "1"
+  },
+  {
+    "filename": "SNGHack",
+    "content": "0"
+  },
+  {
+    "filename": "SccConnectedBus2",
+    "content": "0"
+  },
+  {
+    "filename": "ScreenBrightness",
+    "content": "101"
+  },
+  {
+    "filename": "ShowAccelRpm",
+    "content": "0"
+  },
+  {
+    "filename": "ShowBlindSpot",
+    "content": "1"
+  },
+  {
+    "filename": "ShowCPU",
+    "content": "0"
+  },
+  {
+    "filename": "ShowConnInfo",
+    "content": "1"
+  },
+  {
+    "filename": "ShowDateTime",
+    "content": "1"
+  },
+  {
+    "filename": "ShowDebugUI",
+    "content": "0"
+  },
+  {
+    "filename": "ShowDeviceState",
+    "content": "1"
+  },
+  {
+    "filename": "ShowDmInfo",
+    "content": "1"
+  },
+  {
+    "filename": "ShowFPS",
+    "content": "0"
+  },
+  {
+    "filename": "ShowGapInfo",
+    "content": "-1"
+  },
+  {
+    "filename": "ShowHudMode",
+    "content": "4"
+  },
+  {
+    "filename": "ShowLaneInfo",
+    "content": "2"
+  },
+  {
+    "filename": "ShowMemoryUsage",
+    "content": "0"
+  },
+  {
+    "filename": "ShowPathColor",
+    "content": "13"
+  },
+  {
+    "filename": "ShowPathColorCruiseOff",
+    "content": "19"
+  },
+  {
+    "filename": "ShowPathColorLane",
+    "content": "13"
+  },
+  {
+    "filename": "ShowPathEnd",
+    "content": "1"
+  },
+  {
+    "filename": "ShowPathMode",
+    "content": "9"
+  },
+  {
+    "filename": "ShowPathModeCruiseOff",
+    "content": "0"
+  },
+  {
+    "filename": "ShowPathModeLane",
+    "content": "0"
+  },
+  {
+    "filename": "ShowPathWidth",
+    "content": "100"
+  },
+  {
+    "filename": "ShowPlotMode",
+    "content": "0"
+  },
+  {
+    "filename": "ShowRadarInfo",
+    "content": "3"
+  },
+  {
+    "filename": "ShowSLCOffset",
+    "content": "0"
+  },
+  {
+    "filename": "ShowSteerMode",
+    "content": "2"
+  },
+  {
+    "filename": "ShowSteerRotate",
+    "content": "1"
+  },
+  {
+    "filename": "ShowTpms",
+    "content": "1"
+  },
+  {
+    "filename": "ShowZOffset",
+    "content": "162"
+  },
+  {
+    "filename": "Sidebar",
+    "content": "1"
+  },
+  {
+    "filename": "SilentMode",
+    "content": "0"
+  },
+  {
+    "filename": "SmoothBraking",
+    "content": "1"
+  },
+  {
+    "filename": "SoftHoldMode",
+    "content": "2"
+  },
+  {
+    "filename": "SoundVolumeAdjust",
+    "content": "100"
+  },
+  {
+    "filename": "SpeedLimitController",
+    "content": "0"
+  },
+  {
+    "filename": "StandardFollow",
+    "content": "11"
+  },
+  {
+    "filename": "StandardJerk",
+    "content": "10"
+  },
+  {
+    "filename": "StartAccelApply",
+    "content": "0"
+  },
+  {
+    "filename": "SteerRatio",
+    "content": "0"
+  },
+  {
+    "filename": "StopAccelApply",
+    "content": "50"
+  },
+  {
+    "filename": "StoppingAccel",
+    "content": "-40"
+  },
+  {
+    "filename": "StoppingDistance",
+    "content": "0"
+  },
+  {
+    "filename": "TFollowSpeedAdd",
+    "content": "30"
+  },
+  {
+    "filename": "TFollowSpeedAddM",
+    "content": "10"
+  },
+  {
+    "filename": "TSS2Tune",
+    "content": "1"
+  },
+  {
+    "filename": "TrafficStopMode",
+    "content": "1"
+  },
+  {
+    "filename": "TurnAggressiveness",
+    "content": "92"
+  },
+  {
+    "filename": "TurnDesires",
+    "content": "1"
+  },
+  {
+    "filename": "UnlimitedLength",
+    "content": "1"
+  },
+  {
+    "filename": "UseLaneLineSpeed",
+    "content": "0"
+  },
+  {
+    "filename": "UseModelPath",
+    "content": "0"
+  },
+  {
+    "filename": "VisionTurnControl",
+    "content": "1"
+  },
+  {
+    "filename": "WheelIcon",
+    "content": "1"
+  }
+]
