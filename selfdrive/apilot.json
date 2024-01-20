@@ -444,6 +444,19 @@
       "unit": 1
     },
     {
+      "group": "조향일반",
+      "name": "AutoTurnChangeMap",
+      "title": "NOO Helper 맵전환(0)",
+      "descr": "NOO 작동시 자동맵전환",
+      "egroup": "LATSET",
+      "etitle": "NOO Helper Map display(0)",
+      "edescr": "",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
       "group": "버튼설정",
       "name": "CruiseButtonMode",
       "title": "크루즈버튼작동모드(0)",

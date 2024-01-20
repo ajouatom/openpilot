@@ -121,6 +121,7 @@ class VCruiseHelper:
     self.cruiseSpeedMin = Params().get_int("CruiseSpeedMin")
     self.autoTurnControl = Params().get_int("AutoTurnControl")
     self.autoTurnControlTurnEnd = Params().get_int("AutoTurnControlTurnEnd")
+    self.autoTurnMapChange = Params().get_int("AutoTurnMapChange")
     self.autoTurnControlSpeedLaneChange = Params().get_int("AutoTurnControlSpeedLaneChange")
     self.autoTurnControlSpeedTurn = Params().get_int("AutoTurnControlSpeedTurn")
     self.showDebugUI= Params().get_int("ShowDebugUI")
@@ -149,6 +150,7 @@ class VCruiseHelper:
     elif self.params_count == 40:
       self.autoTurnControl = Params().get_int("AutoTurnControl")
       self.autoTurnControlTurnEnd = Params().get_int("AutoTurnControlTurnEnd")
+      self.autoTurnMapChange = Params().get_int("AutoTurnMapChange")
       self.autoTurnControlSpeedLaneChange = Params().get_int("AutoTurnControlSpeedLaneChange")
       self.autoTurnControlSpeedTurn = Params().get_int("AutoTurnControlSpeedTurn")
     elif self.params_count >= 100:
@@ -817,12 +819,12 @@ class VCruiseHelper:
           self.naviSpeed = turn_speed if nav_turn or nav_speedDown else laneChange_speed
 
       if 0 < self.naviDistance < 300.0:
-        if self.nooHelperActivated == 0:
+        if self.nooHelperActivated == 0 and self.autoTurnMapChange > 0:
           self.params.put_nonblocking("CarrotDisplay", "3")
         self.nooHelperActivated = max(1, self.nooHelperActivated)
         self._add_log("Auto Speed Down to {:.0f}km/h. {:.0f}m left.".format(self.naviSpeed, self.naviDistance))
       else:
-        if self.nooHelperActivated > 0:
+        if self.nooHelperActivated > 0 and self.autoTurnMapChange > 0:
           self.params.put_nonblocking("CarrotDisplay", "2")
         self.nooHelperActivated = 0
 
