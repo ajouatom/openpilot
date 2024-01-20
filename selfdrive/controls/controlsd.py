@@ -18,7 +18,7 @@ from openpilot.system.version import get_short_branch
 from openpilot.selfdrive.boardd.boardd import can_list_to_can_capnp
 from openpilot.selfdrive.car.car_helpers import get_car, get_startup_event, get_one_can
 from openpilot.selfdrive.controls.lib.lateral_planner import CAMERA_OFFSET
-from openpilot.selfdrive.controls.lib.drive_helpers import VCruiseHelper, clip_curvature
+from openpilot.selfdrive.controls.lib.drive_helpers import VCruiseHelper, clip_curvature, get_lag_adjusted_curvature
 from openpilot.selfdrive.controls.lib.latcontrol import LatControl, MIN_LATERAL_CONTROL_SPEED
 from openpilot.selfdrive.controls.lib.longcontrol import LongControl
 from openpilot.selfdrive.controls.lib.latcontrol_pid import LatControlPID
@@ -28,10 +28,6 @@ from openpilot.selfdrive.controls.lib.events import Events, ET
 from openpilot.selfdrive.controls.lib.alertmanager import AlertManager, set_offroad_alert
 from openpilot.selfdrive.controls.lib.vehicle_model import VehicleModel
 from openpilot.system.hardware import HARDWARE
-
-# PFEIFER - AOL {{
-from openpilot.selfdrive.controls.always_on_lateral import AlwaysOnLateral
-# }} PFEIFER - AOL
 
 SOFT_DISABLE_TIME = 3  # seconds
 LDW_MIN_SPEED = 31 * CV.MPH_TO_MS
@@ -111,9 +107,11 @@ class Controls:
     self.CP.alternativeExperience = 0
     if not self.disengage_on_accelerator:
       self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.DISABLE_DISENGAGE_ON_GAS
-    # PFEIFER - AOL {{
-    self.CP.alternativeExperience |= AlwaysOnLateral.alternative_experience()
-    # }} PFEIFER - AOL
+    self.always_on_lateral = self.params.get_bool("AlwaysOnLateralEnabled")
+    self.lateral_allowed = False
+    if self.always_on_lateral:
+      self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ENABLE_ALWAYS_ON_LATERAL
+
     # read params
     self.is_metric = self.params.get_bool("IsMetric")
     self.is_ldw_enabled = self.params.get_bool("IsLdwEnabled")
@@ -210,9 +208,6 @@ class Controls:
     # controlsd is driven by can recv, expected at 100Hz
     self.rk = Ratekeeper(100, print_delay_threshold=None)
 
-    # PFEIFER - AOL {{
-    self.aol = AlwaysOnLateral(self)
-    # }} PFEIFER - AOL
 
     self.carrotCruiseActivate = 0 #carrot
     self._panda_controls_allowed = False #carrot
@@ -647,15 +642,18 @@ class Controls:
     CC = car.CarControl.new_message()
     CC.enabled = self.enabled
 
+    gear = car.CarState.GearShifter
+    driving_gear = CS.gearShifter not in (gear.neutral, gear.park, gear.reverse, gear.unknown)
+    lateral_enabled = False
+    if self.always_on_lateral:
+      self.lateral_allowed &= CS.cruiseState.available
+      self.lateral_allowed |= CS.cruiseState.enabled
+      
+      lateral_enabled = self.lateral_allowed and driving_gear
     # Check which actuators can be enabled
     standstill = CS.vEgo <= max(self.CP.minSteerSpeed, MIN_LATERAL_CONTROL_SPEED) or CS.standstill
-    CC.latActive = self.active and not CS.steerFaultTemporary and not CS.steerFaultPermanent and \
+    CC.latActive = (self.active or lateral_enabled) and not CS.steerFaultTemporary and not CS.steerFaultPermanent and \
                    (not standstill or self.joystick_mode)
-    # PFEIFER - AOL {{
-    self.aol.update(CS, self.state, self.CP)
-    if self.aol.enabled:
-        CC.latActive = self.aol.lat_active
-    # }} PFEIFER - AOL
     CC.longActive = self.enabled and not self.events.contains(ET.OVERRIDE_LONGITUDINAL) and self.CP.openpilotLongitudinalControl
 
     actuators = CC.actuators
@@ -686,7 +684,10 @@ class Controls:
         actuators.speed = long_plan.speeds[-1]
 
       # Steering PID loop and lateral MPC
-      self.desired_curvature = clip_curvature(CS.vEgo, self.desired_curvature, model_v2.action.desiredCurvature)
+      if Params().get_int("UseLaneLineSpeed") == 0:
+        self.desired_curvature = clip_curvature(CS.vEgo, self.desired_curvature, model_v2.action.desiredCurvature)
+      else:
+        self.desired_curvature = get_lag_adjusted_curvature(self.CP, CS.vEgo, lat_plan.psis, lat_plan.curvatures)
       actuators.steer, actuators.steeringAngleDeg, lac_log = self.LaC.update(CC.latActive, CS, self.VM, lp,
                                                                              self.steer_limited, self.desired_curvature,
                                                                              self.sm['liveLocationKalman'],

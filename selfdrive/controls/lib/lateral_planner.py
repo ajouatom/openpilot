@@ -82,7 +82,9 @@ class LateralPlanner:
       self.readParams = 100
       self.useLaneLineSpeed = float(int(Params().get("UseLaneLineSpeed", encoding="utf8")))
       self.pathOffset = float(int(Params().get("PathOffset", encoding="utf8")))*0.01
-    if self.useLaneLineSpeed > 0:
+
+    ## LA model부터는 lateralPlannerSolution이 안나옴. controlsd에서 laneless 선택 및 처리함.
+    if True: #self.useLaneLineSpeed > 0:
       self.update_lane_mode(sm)
       return
     v_ego_car = sm['carState'].vEgo

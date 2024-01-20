@@ -49,9 +49,7 @@ def manager_init() -> None:
     ("LanguageSetting", "main_en"),
     ("OpenpilotEnabledToggle", "1"),
     ("LongitudinalPersonality", str(log.LongitudinalPersonality.standard)),
-    # PFEIFER - AOL {{
-    ("AlwaysOnLateralMainEnables", "1"),
-    # }} PFEIFER - AOL
+    ("AlwaysOnLateralEnabled", "1"),
     ("SearchInput", "0"),
     ("GMapKey", "0"),
     ("SteerRatio", "0"),

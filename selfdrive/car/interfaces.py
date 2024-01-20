@@ -170,7 +170,7 @@ class CarInterfaceBase(ABC):
     self.CP = CP
     self.VM = VehicleModel(CP)
     eps_firmware = str(next((fw.fwVersion for fw in CP.carFw if fw.ecu == "eps"), ""))
-    self.has_lateral_torque_nn = self.initialize_lat_torque_nn(CP.carFingerprint, eps_firmware)
+    self.has_lateral_torque_nn = self.initialize_lat_torque_nn(CP.carFingerprint, eps_firmware) and params.get_bool("NNFF")
     print("has_lateral_torque_nn = ", self.has_lateral_torque_nn)
 
     self.frame = 0
@@ -496,6 +496,7 @@ class CarStateBase(ABC):
       self.longitudinal_personality = log.LongitudinalPersonality.standard
     self.distance_button_pressed = False
     self.distance_button_pressed_prev = False
+    self.distance_step_max = 3
     self.distance_button_timer = 0
     self.lkas_button_pressed = False
     self.lkas_button_pressed_prev = False
@@ -578,7 +579,7 @@ class CarStateBase(ABC):
       if self.distance_pressed_timer == 70:
         Params().put_int_nonblocking("MyDrivingMode", Params().get_int("MyDrivingMode") % 4 + 1) # 1,2,3,4 (1:eco, 2:safe, 3:normal, 4:high speed)
     elif not distance_pressed and self.distance_button_pressed_prev and self.distance_pressed_timer < 70:
-      self.longitudinal_personality = (self.longitudinal_personality - 1) % 4
+      self.longitudinal_personality = (self.longitudinal_personality - 1) % self.distance_step_max
       Params().put_nonblocking("LongitudinalPersonality", str(self.longitudinal_personality))
       self.personality_updated = self.longitudinal_personality
 

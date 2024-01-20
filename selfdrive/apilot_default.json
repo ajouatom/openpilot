@@ -56,14 +56,6 @@
     "content": "5"
   },
   {
-    "filename": "AlwaysOnLateral",
-    "content": "1"
-  },
-  {
-    "filename": "AlwaysOnLateralMain",
-    "content": "1"
-  },
-  {
     "filename": "AutoCancelFromGasMode",
     "content": "2"
   },

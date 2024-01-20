@@ -21,7 +21,7 @@ const SteeringLimits HYUNDAI_STEERING_LIMITS = HYUNDAI_LIMITS(409, 3, 7); //HYUN
 const SteeringLimits HYUNDAI_STEERING_LIMITS_ALT = HYUNDAI_LIMITS(384, 2, 3); //HYUNDAI_LIMITS(270, 2, 3);
 
 const LongitudinalLimits HYUNDAI_LONG_LIMITS = {
-  .max_accel = 400,   // 1/100 m/s2
+  .max_accel = 250,   // 1/100 m/s2
   .min_accel = -400,  // 1/100 m/s2
 };
 

@@ -530,11 +530,6 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
     latLongToggles->addItem(new CValueControl("AdjustCurveOffset", "AdjustCurveOffset(0)cm", "", "../assets/offroad/icon_shell.png", 0, 500, 5));
     //latLongToggles->addItem(new CValueControl("UseModelPath", "UseModelPath(0)", "", "../assets/offroad/icon_shell.png", 0, 1, 1));
     latLongToggles->addItem(new CValueControl("PathOffset", "PathOffset", "(-)left, (+)right, when UseLaneLineSpeed > 0", "../assets/offroad/icon_road.png", -50, 50, 1));
-    latLongToggles->addItem(new CValueControl("SteerActuatorDelay", "LAT:SteerActuatorDelay(40)", "표준", "../assets/offroad/icon_road.png", 1, 100, 1));
-    latLongToggles->addItem(new CValueControl("SteerRatio", "LAT: SteerRatiox0.1(0)", "Custom SteerRatio", "../assets/offroad/icon_road.png", 0, 300, 1));
-    latLongToggles->addItem(new CValueControl("LateralTorqueCustom", "LAT: TorqueCustom(0)", "", "../assets/offroad/icon_road.png", 0, 2, 1));
-    latLongToggles->addItem(new CValueControl("LateralTorqueAccelFactor", "LAT: TorqueAccelFactor(2500)", "", "../assets/offroad/icon_road.png", 1000, 4000, 10));
-    latLongToggles->addItem(new CValueControl("LateralTorqueFriction", "LAT: TorqueFriction(100)", "", "../assets/offroad/icon_road.png", 0, 1000, 10));
     //latLongToggles->addItem(horizontal_line());
     //latLongToggles->addItem(new CValueControl("JerkStartLimit", "LONG: JERK START(10)x0.1", "Starting Jerk.", "../assets/offroad/icon_road.png", 1, 50, 1));
     latLongToggles->addItem(new CValueControl("LongitudinalTuningKpV", "LONG: P Gain(100)", "", "../assets/offroad/icon_road.png", 50, 150, 1));
@@ -699,9 +694,14 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
     QVBoxLayout* toggles_layout = new QVBoxLayout(toggles);
 
     commonToggles = new ListWidget(this);
-    commonToggles->addItem(new ParamControl("NNFF", "NNFF", "", "../assets/offroad/icon_warning.png", this));
     commonToggles->addItem(new ParamControl("MuteDoor", "MuteDoor", "", "../assets/offroad/icon_warning.png", this));
     commonToggles->addItem(new ParamControl("MuteSeatbelt", "MuteSeatbelt", "", "../assets/offroad/icon_warning.png", this));
+    commonToggles->addItem(new ParamControl("NNFF", "NNFF", "", "../assets/offroad/icon_warning.png", this));
+    commonToggles->addItem(new CValueControl("SteerActuatorDelay", "LAT:SteerActuatorDelay(40)", "표준", "../assets/offroad/icon_road.png", 1, 100, 1));
+    commonToggles->addItem(new CValueControl("SteerRatio", "LAT: SteerRatiox0.1(0)", "Custom SteerRatio", "../assets/offroad/icon_road.png", 0, 300, 1));
+    commonToggles->addItem(new CValueControl("LateralTorqueCustom", "LAT: TorqueCustom(0)", "", "../assets/offroad/icon_road.png", 0, 2, 1));
+    commonToggles->addItem(new CValueControl("LateralTorqueAccelFactor", "LAT: TorqueAccelFactor(2500)", "", "../assets/offroad/icon_road.png", 1000, 4000, 10));
+    commonToggles->addItem(new CValueControl("LateralTorqueFriction", "LAT: TorqueFriction(100)", "", "../assets/offroad/icon_road.png", 0, 1000, 10));
 
     hyundaiToggles = new ListWidget(this);
     hyundaiToggles->addItem(new CValueControl("AutoCruiseControl", "(HKG) Auto Cruise control", "Softhold, Auto Cruise ON/OFF control", "../assets/offroad/icon_road.png", 0, 2, 1));

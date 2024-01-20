@@ -261,7 +261,10 @@ class CarState(CarStateBase):
     if self.prev_main_buttons == 0 and self.main_buttons[-1] != 0:
       self.main_enabled = not self.main_enabled
     # }} PFEIFER - AOL
-    self.distance_button_pressed = self.cruise_buttons[-1] == Buttons.GAP_DIST
+    if self.CP.openpilotLongitudinalControl:
+      self.distance_button_pressed = self.cruise_buttons[-1] == Buttons.GAP_DIST
+      self.distance_step_max = 4
+
     if ret.cruiseState.available and self.CP.flags & HyundaiFlags.HAS_LFA_BUTTON.value:
       self.lkas_button_pressed = cp.vl["BCM_PO_11"]["LFA_Pressed"]
 
