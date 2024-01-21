@@ -75,7 +75,7 @@ class LongControl:
     self.pid.reset()
     self.v_pid = v_pid
 
-  def update(self, active, CS, long_plan, accel_limits, t_since_plan, CC):
+  def update(self, active, CS, long_plan, accel_limits, t_since_plan, softHoldActive):
     self.readParamCount += 1
     if self.readParamCount >= 100:
       self.readParamCount = 0
@@ -138,7 +138,7 @@ class LongControl:
                                                        v_target, v_target_1sec, CS.brakePressed,
                                                        CS.cruiseState.standstill, a_target_now)
 
-    if active and CC.hudControl.softHold > 0:
+    if active and softHoldActive > 0:
       self.long_control_state = LongCtrlState.stopping
 
     if self.long_control_state == LongCtrlState.off:
@@ -149,7 +149,7 @@ class LongControl:
       if output_accel > self.CP.stopAccel:
         output_accel = min(output_accel, 0.0)
         output_accel -= self.CP.stoppingDecelRate * DT_CTRL
-        if CC.hudControl.softHold > 0:
+        if softHoldActive > 0:
           output_accel = self.CP.stopAccel
       self.reset(CS.vEgo)
 

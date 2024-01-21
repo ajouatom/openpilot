@@ -113,8 +113,22 @@ def get_T_FOLLOW(personality=log.LongitudinalPersonality.standard):
   else:
     raise NotImplementedError("Longitudinal personality not supported")
 
-def get_stopped_equivalence_factor(v_lead):
-  return (v_lead**2) / (2 * COMFORT_BRAKE)
+def get_stopped_equivalence_factor(v_lead, v_ego, t_follow=get_T_FOLLOW(), stop_distance=STOP_DISTANCE, krkeegan=False):
+  if not krkeegan:
+    return (v_lead**2) / (2 * COMFORT_BRAKE)
+
+  # KRKeegan방법은 lead거리값을 고의로 늘려주어. solver가 더빠른 가속을 유발하도록 하는것 같음...
+  # KRKeegan this offset rapidly decreases the following distance when the lead pulls
+  # away, resulting in an early demand for acceleration.
+  v_diff_offset = 0
+  if np.all(v_lead - v_ego > 0):
+    v_diff_offset = ((v_lead - v_ego) * 1.)
+    v_diff_offset = np.clip(v_diff_offset, 0, stop_distance / 2)
+    v_diff_offset = np.maximum(v_diff_offset * ((10 - v_ego)/10), 0)
+  distance = (v_lead**2) / (2 * COMFORT_BRAKE) + v_diff_offset
+  return distance
+
+
 
 def get_safe_obstacle_distance(v_ego, t_follow=get_T_FOLLOW(), comfort_brake=COMFORT_BRAKE, stop_distance=STOP_DISTANCE):
   return (v_ego**2) / (2 * comfort_brake) + t_follow * v_ego + stop_distance
@@ -122,7 +136,7 @@ def get_safe_obstacle_distance(v_ego, t_follow=get_T_FOLLOW(), comfort_brake=COM
 def desired_follow_distance(v_ego, v_lead, t_follow=None):
   if t_follow is None:
     t_follow = get_T_FOLLOW()
-  return get_safe_obstacle_distance(v_ego, t_follow) - get_stopped_equivalence_factor(v_lead)
+  return get_safe_obstacle_distance(v_ego, t_follow) - get_stopped_equivalence_factor(v_lead, v_ego)
 
 
 def gen_long_model():
@@ -263,6 +277,7 @@ def gen_long_ocp():
 class LongitudinalMpc:
   def __init__(self, mode='acc'):
     self.trafficStopDistanceAdjust = 1.8
+    self.applyLongDynamicCost = False
     self.aChangeCost = 200
     self.aChangeCostStart = 40
     self.trafficStopMode = 1
@@ -351,12 +366,40 @@ class LongitudinalMpc:
     for i in range(N):
       self.solver.cost_set(i, 'Zl', Zl)
 
-  def set_weights(self, prev_accel_constraint=True, personality=log.LongitudinalPersonality.standard):
+  def get_cost_multipliers(self, v_lead0, v_lead1):
+    v_ego = self.x0[1]
+    v_ego_bps = [0, 10]
+    TFs = [0.8, 1.2, 1.45] #[1.2, 1.45, 1.8]
+    # KRKeegan adjustments to costs for different TFs
+    # these were calculated using the test_longitudial.py deceleration tests
+  #TF에 의한 a,j,d cost변경
+    a_change_tf = interp(self.t_follow, TFs, [.9, 1., 1.0]) # 가까울수록 작게 #interp(self.t_follow, TFs, [.8, 1., 1.1]) # 가까울수록 작게
+    j_ego_tf = interp(self.t_follow, TFs, [.5, 1., 1.0]) #가까울수록 작게 interp(self.t_follow, TFs, [.8, 1., 1.1]) #가까울수록 작게
+    d_zone_tf = interp(self.t_follow, TFs, [1.1, 1., 1.0]) # 가까울수록 크게interp(self.t_follow, TFs, [1.3, 1., 1.]) # 가까울수록 크게
+
+    # KRKeegan adjustments to improve sluggish acceleration
+    # do not apply to deceleration
+    j_ego_v_ego = 1
+    a_change_v_ego = 1
+    if (v_lead0 - v_ego >= 0) and (v_lead1 - v_ego >= 0):  #상대차량이 현재속도보다 빠르다면...
+      j_ego_v_ego = interp(v_ego, v_ego_bps, [.05, 1.])
+      a_change_v_ego = interp(v_ego, v_ego_bps, [.05, 1.])
+    # Select the appropriate min/max of the options
+    j_ego = min(j_ego_tf, j_ego_v_ego)
+    a_change = min(a_change_tf, a_change_v_ego)
+    return (a_change, j_ego, d_zone_tf)
+
+  def set_weights(self, prev_accel_constraint=True, v_lead0=0, v_lead1=0, personality=log.LongitudinalPersonality.standard):
     jerk_factor = get_jerk_factor(personality)
     if self.mode == 'acc':
       a_change_cost = self.aChangeCost if prev_accel_constraint else self.aChangeCostStart
-      cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, V_EGO_COST, A_EGO_COST, jerk_factor * a_change_cost, jerk_factor * J_EGO_COST]
-      constraint_cost_weights = [LIMIT_COST, LIMIT_COST, LIMIT_COST, DANGER_ZONE_COST]
+      if self.applyLongDynamicCost:
+        cost_muls = self.get_cost_multipliers(v_lead0, v_lead1)
+        cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, V_EGO_COST, A_EGO_COST, jerk_factor * a_change_cost * cost_muls[0], jerk_factor * J_EGO_COST * cost_muls[1]]
+        constraint_cost_weights = [LIMIT_COST, LIMIT_COST, LIMIT_COST, DANGER_ZONE_COST * cost_muls[2]]
+      else:
+        cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, V_EGO_COST, A_EGO_COST, jerk_factor * a_change_cost, jerk_factor * J_EGO_COST]
+        constraint_cost_weights = [LIMIT_COST, LIMIT_COST, LIMIT_COST, DANGER_ZONE_COST]
     elif self.mode == 'blended':
       a_change_cost = 40.0 if prev_accel_constraint else self.aChangeCostStart
       cost_weights = [0., 0.1, 0.2, 5.0, a_change_cost, 1.0]
@@ -412,7 +455,8 @@ class LongitudinalMpc:
       t_follow = max(t_follow, self.t_follow_prev)
     self.t_follow_prev = t_follow
     self.v_ego_prev = v_ego
-    return np.full(N+1, t_follow)
+    #return np.full(N+1, t_follow)
+    return t_follow
 
   def set_accel_limits(self, min_a, max_a):
     # TODO this sets a max accel limit, but the minimum limit is only for cruise decel
@@ -420,7 +464,7 @@ class LongitudinalMpc:
     self.cruise_min_a = min_a
     self.max_a = max_a
 
-  def update(self, sm, reset_state, radarstate, v_cruise, x, v, a, j, personality=log.LongitudinalPersonality.standard):
+  def update(self, sm, reset_state, prev_accel_constraint, radarstate, v_cruise, x, v, a, j, personality=log.LongitudinalPersonality.standard):
     t_follow = self.get_T_FOLLOW(personality)
     #self.debugLongText = "v_cruise ={:.1f}".format(v_cruise)
     carstate = sm['carState']
@@ -444,18 +488,19 @@ class LongitudinalMpc:
     # To estimate a safe distance from a moving lead, we calculate how much stopping
     # distance that lead needs as a minimum. We can add that to the current distance
     # and then treat that as a stopped car/obstacle at this new distance.
-    lead_0_obstacle = lead_xv_0[:,0] + get_stopped_equivalence_factor(lead_xv_0[:,1])
-    lead_1_obstacle = lead_xv_1[:,0] + get_stopped_equivalence_factor(lead_xv_1[:,1])
-
+    lead_0_obstacle = lead_xv_0[:,0] + get_stopped_equivalence_factor(lead_xv_0[:,1], self.x_sol[:,1], self.t_follow, applyStopDistance, krkeegan=self.applyLongDynamicCost)
+    lead_1_obstacle = lead_xv_1[:,0] + get_stopped_equivalence_factor(lead_xv_1[:,1], self.x_sol[:,1], self.t_follow, applyStopDistance, krkeegan=self.applyLongDynamicCost)
     self.params[:,0] = ACCEL_MIN if not reset_state else a_ego
     self.params[:,1] = self.max_a if not reset_state else a_ego
 
     v_cruise, stop_x, self.mode = self.update_apilot(carstate, radarstate, model, v_cruise)
     self.debugLongText = "{},{},{:.1f},tf={:.2f},{:.1f},stop={:.1f},{:.1f},xv={:.0f},{:.0f}".format(
-      str(self.xState), str(self.trafficState), v_cruise*3.6, t_follow[0], t_follow[0]*v_ego+6.0, stop_x, self.stopDist,x[-1],v[-1])
+      str(self.xState), str(self.trafficState), v_cruise*3.6, t_follow, t_follow*v_ego+6.0, stop_x, self.stopDist,x[-1],v[-1])
     # TODO: e2eStop시 속도증가된는 문제발생, 일단 속도제한해보자.. 왜그러지? cruise_obstacle이 더 작을텐데...
     if self.xState == XState.e2eStop:
       self.max_a = 0.0
+
+    self.set_weights(prev_accel_constraint=prev_accel_constraint, v_lead0=lead_xv_0[0,1], v_lead1=lead_xv_1[0,1], personality=personality)
 
     # Update in ACC mode or ACC/e2e blend
     if self.mode == 'acc':
@@ -520,9 +565,9 @@ class LongitudinalMpc:
     # Check if it got within lead comfort range
     # TODO This should be done cleaner
     if self.mode == 'blended':
-      if any((lead_0_obstacle - get_safe_obstacle_distance(self.x_sol[:,1], t_follow, self.comfort_brake, self.stop_distance)) - self.x_sol[:,0] < 0.0):
+      if any((lead_0_obstacle - get_safe_obstacle_distance(self.x_sol[:,1], t_follow, self.comfort_brake, applyStopDistance)) - self.x_sol[:,0] < 0.0):
         self.source = 'lead0'
-      if any((lead_1_obstacle - get_safe_obstacle_distance(self.x_sol[:,1], t_follow, self.comfort_brake, self.stop_distance)) - self.x_sol[:,0] < 0.0) and \
+      if any((lead_1_obstacle - get_safe_obstacle_distance(self.x_sol[:,1], t_follow, self.comfort_brake, applyStopDistance)) - self.x_sol[:,0] < 0.0) and \
          (lead_1_obstacle[0] - lead_0_obstacle[0]):
         self.source = 'lead1'
 
@@ -596,7 +641,7 @@ class LongitudinalMpc:
     if self.lo_timer > 200:
       self.lo_timer = 0
     elif self.lo_timer == 20:
-      pass
+      self.applyLongDynamicCost = Params().get_bool("ApplyLongDynamicCost")
     elif self.lo_timer == 80:
       self.trafficStopMode = int(Params().get("TrafficStopMode", encoding="utf8"))
     elif self.lo_timer == 100:

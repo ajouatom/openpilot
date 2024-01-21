@@ -116,15 +116,13 @@ class Controls:
     self.is_metric = self.params.get_bool("IsMetric")
     self.is_ldw_enabled = self.params.get_bool("IsLdwEnabled")
     openpilot_enabled_toggle = self.params.get_bool("OpenpilotEnabledToggle")
-    passive = self.params.get_bool("Passive") or not openpilot_enabled_toggle
-    self.update_params()
 
     # detect sound card presence and ensure successful init
     sounds_available = HARDWARE.get_sound_card_online()
 
     car_recognized = self.CP.carName != 'mock'
 
-    controller_available = self.CI.CC is not None and not passive and not self.CP.dashcamOnly
+    controller_available = self.CI.CC is not None and openpilot_enabled_toggle and not self.CP.dashcamOnly
     self.CP.passive = not car_recognized or not controller_available or self.CP.dashcamOnly
     if self.CP.passive:
       safety_config = car.CarParams.SafetyConfig.new_message()
@@ -598,7 +596,6 @@ class Controls:
       if self.events.contains(ET.ENABLE):
         if self.events.contains(ET.NO_ENTRY):
           self.current_alert_types.append(ET.NO_ENTRY)
-
         else:
           if self.events.contains(ET.PRE_ENABLE):
             self.state = State.preEnabled
@@ -624,7 +621,11 @@ class Controls:
     # Update VehicleModel
     lp = self.sm['liveParameters']
     x = max(lp.stiffnessFactor, 0.1)
-    sr = max(self.steer_ratio if self.steer_ratio > 0 else lp.steerRatio, 0.1)
+
+    #carrot
+    steer_ratio = float(self.params.get_int("SteerRatio")) / 10.0
+
+    sr = max(steer_ratio if steer_ratio > 1.0 else lp.steerRatio, 0.1)
     self.VM.update_params(x, sr)
 
     # Update Torque Params
@@ -646,8 +647,10 @@ class Controls:
     driving_gear = CS.gearShifter not in (gear.neutral, gear.park, gear.reverse, gear.unknown)
     lateral_enabled = False
     if self.always_on_lateral:
-      self.lateral_allowed &= CS.cruiseState.available
-      self.lateral_allowed |= CS.cruiseState.enabled
+      lateral_allowed = self.lateral_allowed
+      lateral_allowed = CS.cruiseState.available
+      lateral_allowed |= CS.cruiseState.enabled
+      self.lateral_allowed = lateral_allowed
       
       lateral_enabled = self.lateral_allowed and driving_gear
     # Check which actuators can be enabled
@@ -678,7 +681,7 @@ class Controls:
       # accel PID loop
       pid_accel_limits = self.CI.get_pid_accel_limits(self.CP, CS.vEgo, self.v_cruise_helper.v_cruise_kph * CV.KPH_TO_MS)
       t_since_plan = (self.sm.frame - self.sm.rcv_frame['longitudinalPlan']) * DT_CTRL
-      actuators.accel, actuators.jerk = self.LoC.update(CC.longActive, CS, long_plan, pid_accel_limits, t_since_plan, CC)
+      actuators.accel, actuators.jerk = self.LoC.update(CC.longActive, CS, long_plan, pid_accel_limits, t_since_plan, self.v_cruise_helper.softHoldActive)
 
       if len(long_plan.speeds):
         actuators.speed = long_plan.speeds[-1]
@@ -989,14 +992,10 @@ class Controls:
         self.step()
         self.rk.monitor_time()
 
-        self.update_params()
     except SystemExit:
       e.set()
       t.join()
 
-  def update_params(self):
-    steer_ratio = float(self.params.get_int("SteerRatio")) / 10.0
-    self.steer_ratio = steer_ratio if steer_ratio >= 1.0 else -1
 
 
 def main():

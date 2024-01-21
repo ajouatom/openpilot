@@ -869,6 +869,7 @@ class VCruiseHelper:
             self.blinkerExtMode = 20000 if nav_turn else 10000
         if self.nooHelperActivated == 2:
           self._add_log("Automatic lanechange canceled(blinker or steering torque)")
+          self.rightBlinkerExtCount = self.leftBlinkerExtCount = self.blinkerExtMode = 0
 
         if self.blinkerExtMode >= 10000:
           self._add_log("Automatic {} Started. {:.0f}m left".format("Turning" if self.blinkerExtMode >= 20000 else "Lanechanging", self.naviDistance ))

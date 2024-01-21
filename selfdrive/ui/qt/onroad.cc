@@ -77,11 +77,11 @@ void OnroadWindow::updateState(const UIState &s) {
     }
 
   QColor bgColor = bg_colors[s.status];
-  // PFEIFER - AOL {{
-  if(s.status == STATUS_DISENGAGED && Params("/dev/shm/params").getBool("LateralActive")){
+  const SubMaster& sm = *(s.sm);
+  const auto cs = sm["controlsState"].getControlsState();
+  if(s.status == STATUS_DISENGAGED && cs.getLatAtive()){
       bgColor = bg_colors[STATUS_LAT_ACTIVE];
   }
-  // }} PFEIFER - AOL
 
   Alert alert = Alert::get(*(s.sm), s.scene.started_frame);
   //alerts->updateAlert(alert);
@@ -366,7 +366,7 @@ AnnotatedCameraWidget::AnnotatedCameraWidget(VisionStreamType type, QWidget* par
 	record_timer->start(1000/UI_FREQ);
 
 	recorder = new ScreenRecoder(this);
-	main_layout->addWidget(recorder, 0, Qt::AlignTop | Qt::AlignRight);
+	main_layout->addWidget(recorder, 0, Qt::AlignBottom | Qt::AlignRight);
 }
 
 void AnnotatedCameraWidget::updateState(const UIState &s) {

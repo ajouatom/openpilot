@@ -54,7 +54,7 @@ class CarController:
     self.doors_locked = False
     self.doors_unlocked = True
 
-  def update_frogpilot_variables(self):
+  def update_variables(self):
     self.lock_doors = Params().get_bool("LockDoors")
     self.reverse_cruise_increase = False #Params().get_bool("ReverseCruise")
     self.sng_hack = Params().get_bool("SNGHack")

@@ -383,8 +383,8 @@ class LanePlanner:
 
     # offset_center = lane_line_center - laneless_center
     
-    lane_path_y_center = interp(0.5, path_t, lane_path_y)
-    path_xyz_y_center = interp(0.5, path_t, path_xyz[:,1])
+    lane_path_y_center = interp(1.2, path_t, lane_path_y)
+    path_xyz_y_center = interp(1.2, path_t, path_xyz[:,1])
     diff_center = (lane_path_y_center - path_xyz_y_center) if not self.lanefull_mode else 0.0
     ## laneless일때만 center보정
     #print("center = {:.2f}={:.2f}-{:.2f}, lanefull={}".format(diff_center, lane_path_y_center, path_xyz_y_center, self.lanefull_mode))

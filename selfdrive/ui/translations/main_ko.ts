@@ -68,23 +68,23 @@
     </message>
     <message>
         <source>Hidden Network</source>
-        <translation type="unfinished"></translation>
+        <translation>숨겨진 네트워크</translation>
     </message>
     <message>
         <source>CONNECT</source>
-        <translation type="unfinished">연결됨</translation>
+        <translation>연결됨</translation>
     </message>
     <message>
         <source>Enter SSID</source>
-        <translation type="unfinished">SSID 입력</translation>
+        <translation>SSID 입력</translation>
     </message>
     <message>
         <source>Enter password</source>
-        <translation type="unfinished">비밀번호를 입력하세요</translation>
+        <translation>비밀번호를 입력하세요</translation>
     </message>
     <message>
         <source>for &quot;%1&quot;</source>
-        <translation type="unfinished">&quot;%1&quot;에 접속하려면 비밀번호가 필요합니다</translation>
+        <translation>&quot;%1&quot;에 접속하려면 비밀번호가 필요합니다</translation>
     </message>
 </context>
 <context>
@@ -558,10 +558,6 @@
         <translation>종료</translation>
     </message>
     <message>
-        <source>dashcam</source>
-        <translation>블랙박스</translation>
-    </message>
-    <message>
         <source>openpilot</source>
         <translation>openpilot</translation>
     </message>
@@ -668,20 +664,31 @@ This may take up to a minute.</source>
       <translation>당근메뉴</translation>
     </message>
     <message>
-      <source>Controls</source>
-      <translation>개구리메뉴</translation>
-    </message>
-    <message>
-      <source>Navigation</source>
-      <translation>네비게이션</translation>
-    </message>
-    <message>
-      <source>Vehicles</source>
+      <source>Cars</source>
       <translation>차량</translation>
     </message>
+</context>
+<context>
+    <name>CarsPanel</name>
     <message>
-      <source>Visuals</source>
-      <translation>화면</translation>
+      <source>Common</source>
+      <translation>공통</translation>
+    </message>
+    <message>
+      <source>Hyundai</source>
+      <translation>현대</translation>
+    </message>
+    <message>
+      <source>GM</source>
+      <translation>지엠</translation>
+    </message>
+    <message>
+      <source>Toyota</source>
+      <translation>도요타</translation>
+    </message>
+    <message>
+      <source>Select your car</source>
+      <translation>차종선택</translation>
     </message>
 </context>
 <context>

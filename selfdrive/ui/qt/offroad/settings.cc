@@ -229,15 +229,13 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   });
   addItem(resetCalibBtn);
 
-  if (!params.getBool("Passive")) {
-    auto retrainingBtn = new ButtonControl(tr("Review Training Guide"), tr("REVIEW"), tr("Review the rules, features, and limitations of openpilot"));
-    connect(retrainingBtn, &ButtonControl::clicked, [=]() {
-      if (ConfirmationDialog::confirm(tr("Are you sure you want to review the training guide?"), tr("Review"), this)) {
-        emit reviewTrainingGuide();
-      }
-    });
-    addItem(retrainingBtn);
-  }
+  auto retrainingBtn = new ButtonControl(tr("Review Training Guide"), tr("REVIEW"), tr("Review the rules, features, and limitations of openpilot"));
+  connect(retrainingBtn, &ButtonControl::clicked, [=]() {
+    if (ConfirmationDialog::confirm(tr("Are you sure you want to review the training guide?"), tr("Review"), this)) {
+      emit reviewTrainingGuide();
+    }
+  });
+  addItem(retrainingBtn);
 
   if (Hardware::TICI()) {
     auto regulatoryBtn = new ButtonControl(tr("Regulatory"), tr("VIEW"), "");
@@ -370,7 +368,6 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
     QPushButton {
       font-size: 140px;
       padding-bottom: 20px;
-      border 1px grey solid;
       border-radius: 100px;
       background-color: #292929;
       font-weight: 400;
@@ -514,6 +511,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
     cruiseToggles->addItem(new CValueControl("AutoSpeedUptoRoadSpeedLimit", "CRUISE: Auto speed up (100%)", "Auto speed up based on the lead car upto RoadSpeedLimit.", "../assets/offroad/icon_road.png", 0, 200, 10));
     //cruiseToggles->addItem(new CValueControl("AutoResumeFromGas", "GAS CRUISE ON: Use", "Auto Cruise on when GAS pedal released, 60% Gas Cruise On automatically", "../assets/offroad/icon_road.png", 0, 3, 1));
     cruiseToggles->addItem(new CValueControl("AutoResumeFromGasSpeed", "GAS CRUISE ON: Speed(30)", "Driving speed exceeds the set value, Cruise ON", "../assets/offroad/icon_road.png", 20, 140, 5));
+    cruiseToggles->addItem(new ParamControl("ApplyLongDynamicCost", "GAP: Dynamic Control(0)", "전방차량의 간격을 최대한 유지하도록 응답속도가 빨라집니다.", "../assets/offroad/icon_road.png", this));
     cruiseToggles->addItem(new CValueControl("TFollowSpeedAddM", "GAP: Additinal TFs 40km/h(0)x0.01s", "Speed-dependent additinal max(100km/h) TFs", "../assets/offroad/icon_road.png", -100, 200, 5));
     cruiseToggles->addItem(new CValueControl("TFollowSpeedAdd", "GAP: Additinal TFs 100Km/h(0)x0.01s", "Speed-dependent additinal max(100km/h) TFs", "../assets/offroad/icon_road.png", -100, 200, 5));
     cruiseToggles->addItem(new CValueControl("TFollowGap1", "GAP1: Apply TFollow (110)x0.01s", "선행차와의 간격1단계, 속도x시간", "../assets/offroad/icon_road.png", 70, 300, 5));
@@ -669,11 +667,11 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
     QHBoxLayout* select_layout = new QHBoxLayout();
     select_layout->setSpacing(30);
 
-    QPushButton* common_btn = new QPushButton(tr("COMMON"));
+    QPushButton* common_btn = new QPushButton(tr("Common"));
     common_btn->setObjectName("common_btn");
     QObject::connect(common_btn, &QPushButton::clicked, this, [this]() {this->togglesCarrot(0); });
 
-    QPushButton* hyundai_btn = new QPushButton(tr("HYUNDAI"));
+    QPushButton* hyundai_btn = new QPushButton(tr("Hyundai"));
     hyundai_btn->setObjectName("hyundai_btn");
     QObject::connect(hyundai_btn, &QPushButton::clicked, this, [this]() {this->togglesCarrot(1); });
 
@@ -915,8 +913,10 @@ SelectCar::SelectCar(QWidget* parent): QWidget(parent) {
 
   QStringList items = get_list("/data/params/d/SupportedCars");
   QStringList items_gm = get_list("/data/params/d/SupportedCars_gm");
+  QStringList items_toyota = get_list("/data/params/d/SupportedCars_toyota");
   list->addItems(items);
   list->addItems(items_gm);
+  list->addItems(items_toyota);
   list->setCurrentRow(0);
 
   QString selected = QString::fromStdString(Params().get("SelectedCar"));

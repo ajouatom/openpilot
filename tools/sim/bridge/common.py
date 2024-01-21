@@ -160,10 +160,13 @@ Ignition: {self.simulator_state.ignition} Engaged: {self.simulator_state.is_enga
       controlsState = self.simulated_car.sm['controlsState']
       self.simulator_state.is_engaged = controlsState.active
 
+      #carrot
+      if self.simulated_car.sm['carControl'].latActive:
+        steer_op = self.simulated_car.sm['carControl'].actuators.steeringAngleDeg
       if self.simulator_state.is_engaged:
         throttle_op = clip(self.simulated_car.sm['carControl'].actuators.accel / 1.6, 0.0, 1.0)
         brake_op = clip(-self.simulated_car.sm['carControl'].actuators.accel / 4.0, 0.0, 1.0)
-        steer_op = self.simulated_car.sm['carControl'].actuators.steeringAngleDeg
+        #steer_op = self.simulated_car.sm['carControl'].actuators.steeringAngleDeg
 
         self.past_startup_engaged = True
       elif not self.past_startup_engaged and controlsState.engageable:
@@ -171,7 +174,8 @@ Ignition: {self.simulator_state.ignition} Engaged: {self.simulator_state.is_enga
 
       throttle_out = throttle_op if self.simulator_state.is_engaged else throttle_manual
       brake_out = brake_op if self.simulator_state.is_engaged else brake_manual
-      steer_out = steer_op if self.simulator_state.is_engaged else steer_manual
+      #steer_out = steer_op if self.simulator_state.is_engaged else steer_manual
+      steer_out = steer_op #carrot always lateral control
 
       self.world.apply_controls(steer_out, throttle_out, brake_out)
       self.world.read_sensors(self.simulator_state)
