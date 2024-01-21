@@ -862,7 +862,7 @@ class VCruiseHelper:
             self.leftBlinkerExtCount = 10
             self.blinkerExtMode = 20000 if nav_turn else 10000
         elif nav_direction == 2:
-          if CS.leftBlinker or (CS.steeringPressed and CS.steeringTorque < 0):
+          if CS.leftBlinker or (CS.steeringPressed and CS.steeringTorque > 0):
             self.nooHelperActivated = 2
           else:
             self.rightBlinkerExtCount = 10

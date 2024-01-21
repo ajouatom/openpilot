@@ -739,6 +739,8 @@ void DrawApilot::drawRadarInfo(const UIState* s) {
                 if (s->show_radar_info >= 2) {
                     sprintf(str, "%.1f", ry_rel);
                     ui_draw_text(s, rx, ry - 40, str, 30, COLOR_WHITE, BOLD);
+                    sprintf(str, "%.1f", v_lat);
+                    ui_draw_text(s, rx, ry + 30, str, 30, COLOR_WHITE, BOLD);
                 }
             }
 #if 0
@@ -1882,6 +1884,11 @@ void DrawApilot::drawDeviceState(UIState* s, bool show) {
     }
     nvgTextAlign(s->vg, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM);
     ui_draw_text(s, s->fb_w - 20, s->fb_h - 15, (read_ip_count < 30)? ip_address:gitBranch.toStdString().c_str(), 30, COLOR_WHITE, BOLD, 0.0f, 0.0f);
+
+    auto controls_state = sm["controlsState"].getControlsState();
+    qstr = QString::fromStdString(controls_state.getDebugText1().cStr());
+    ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, qstr.toStdString().c_str(), 30, COLOR_WHITE, BOLD, 0.0f, 0.0f);
+
 
 }
 void DrawApilot::drawDebugText(UIState* s, bool show) {
