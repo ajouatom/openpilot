@@ -79,7 +79,7 @@ void OnroadWindow::updateState(const UIState &s) {
   QColor bgColor = bg_colors[s.status];
   const SubMaster& sm = *(s.sm);
   const auto cs = sm["controlsState"].getControlsState();
-  if(s.status == STATUS_DISENGAGED && cs.getLatAtive()){
+  if(s.status == STATUS_DISENGAGED && cs.getLatActive()){
       bgColor = bg_colors[STATUS_LAT_ACTIVE];
   }
 
