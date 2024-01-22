@@ -1362,67 +1362,21 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
 }
 void DrawApilot::drawTurnInfo(const UIState* s, int x, int y) {
     SubMaster& sm = *(s->sm);
-    auto lateralPlan = sm["lateralPlan"].getLateralPlan();
-    auto desire = lateralPlan.getDesire();
-    auto laneChangeDirection = lateralPlan.getLaneChangeDirection();
+    //auto lateralPlan = sm["lateralPlan"].getLateralPlan();
     auto desireEvent = 0;//HW: lateralPlan.getDesireEvent();
-    float desireStateTurnLeft = (desire == cereal::LateralPlan::Desire::TURN_LEFT) ? 1 : 0;
-    float desireStateTurnRight = (desire == cereal::LateralPlan::Desire::TURN_RIGHT) ? 1 : 0;
-    float desireStateLaneChangeLeft = (desire == cereal::LateralPlan::Desire::LANE_CHANGE_LEFT) ? 1 : 0;
-    float desireStateLaneChangeRight = (desire == cereal::LateralPlan::Desire::LANE_CHANGE_RIGHT) ? 1 : 0;
+    auto meta = sm["modelV2"].getModelV2().getMeta();
+    auto laneChangeDirection = meta.getLaneChangeDirection();
+    float desireStateTurnLeft = meta.getDesireState()[1];
+    float desireStateTurnRight = meta.getDesireState()[2];
+    float desireStateLaneChangeLeft = meta.getDesireState()[3];
+    float desireStateLaneChangeRight = meta.getDesireState()[4];
 
-    if (desire == cereal::LateralPlan::Desire::NONE) {
-        auto meta = sm["modelV2"].getModelV2().getMeta();
-        desireStateTurnLeft = meta.getDesireState()[1];
-        desireStateTurnRight = meta.getDesireState()[2];
-        desireStateLaneChangeLeft = meta.getDesireState()[3];
-        desireStateLaneChangeRight = meta.getDesireState()[4];
-    }
     auto car_state = sm["carState"].getCarState();
     auto controls_state = sm["controlsState"].getControlsState();
     bool leftBlinker = car_state.getLeftBlinker() || (controls_state.getLeftBlinkerExt()%10000 > 0);
     bool rightBlinker = car_state.getRightBlinker() || (controls_state.getRightBlinkerExt()%10000 > 0);
     bool bsd_l = car_state.getLeftBlindspot();
     bool bsd_r = car_state.getRightBlindspot();
-
-#ifdef __TEST
-    static int _desire = 0.;
-    desireStateTurnLeft = 0.0;
-    desireStateTurnRight = 0.0;
-    desireStateLaneChangeLeft = 0.0;
-    desireStateLaneChangeRight = 0.0;
-
-    if (_desire++ > 200) _desire = 0;
-    //if (_desire > 100) brake_valid = true; else brake_valid = false;
-    if (_desire < 50) {
-        desireStateTurnLeft = 1.0;
-        //trafficState = 0;
-}
-    else if (_desire < 100) {
-        desireStateTurnRight = 1.0;
-        //trafficState = 1;
-    }
-    else if (_desire < 150) {
-        desireStateLaneChangeLeft = 1.0;
-        //trafficState = 2;
-    }
-    else {
-        desireStateLaneChangeRight = 1.0;
-        //trafficState = 3;
-    }
-#endif
-
-#ifdef __TEST
-    static int traffic = 0;
-    if (traffic++ > 200) traffic = 0;
-    //if (traffic < 50) trafficMode = 0;
-    //else if (traffic < 100) trafficMode = 1;
-    //else if (traffic < 150) trafficMode = 2;
-    //else trafficMode = 3;
-
-    if (traffic < 100) { leftBlinker = true; }
-    else { rightBlinker = true; }
-#endif
 
     // 차로변경, 턴 표시~
     if (true) {
@@ -1439,11 +1393,11 @@ void DrawApilot::drawTurnInfo(const UIState* s, int x, int y) {
             ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, "ic_lane_change_r", 1.0f);
         }
         else if (desireEvent == 71) {
-            if (laneChangeDirection == cereal::LateralPlan::LaneChangeDirection::LEFT) {
+            if (laneChangeDirection == cereal::LaneChangeDirection::LEFT) {
                 ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, "ic_lane_change_inhibit", 1.0f);
                 ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, "ic_lane_change_l", 1.0f);
             }
-            else if (laneChangeDirection == cereal::LateralPlan::LaneChangeDirection::RIGHT) {
+            else if (laneChangeDirection == cereal::LaneChangeDirection::RIGHT) {
                 ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, "ic_lane_change_inhibit", 1.0f);
                 ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, "ic_lane_change_r", 1.0f);
             }

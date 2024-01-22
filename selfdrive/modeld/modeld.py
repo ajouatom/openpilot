@@ -4,10 +4,10 @@ import time
 import pickle
 import numpy as np
 import cereal.messaging as messaging
+from cereal import car, log
 from pathlib import Path
 from typing import Dict, Optional
 from setproctitle import setproctitle
-from cereal import car
 from cereal.messaging import PubMaster, SubMaster
 from cereal.visionipc import VisionIpcClient, VisionStreamType, VisionBuf
 from openpilot.common.swaglog import cloudlog
@@ -16,6 +16,8 @@ from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import config_realtime_process
 from openpilot.common.transformations.model import get_warp_matrix
 from openpilot.selfdrive import sentry
+from openpilot.selfdrive.car.car_helpers import get_demo_car_params
+from openpilot.selfdrive.controls.lib.desire_helper import DesireHelper
 from openpilot.selfdrive.modeld.runners import ModelRunner, Runtime
 from openpilot.selfdrive.modeld.parse_model_outputs import Parser
 from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_pose_msg, PublishState
@@ -113,14 +115,11 @@ class ModelState:
     return outputs
 
 
-def main():
+def main(demo=False):
   sentry.set_tag("daemon", PROCESS_NAME)
   cloudlog.bind(daemon=PROCESS_NAME)
   setproctitle(PROCESS_NAME)
   config_realtime_process(7, 54)
-
-
-
 
   cl_context = CLContext()
   model = ModelState(cl_context)
@@ -151,7 +150,8 @@ def main():
 
   # messaging
   pm = PubMaster(["modelV2", "cameraOdometry"])
-  sm = SubMaster(["lateralPlan", "roadCameraState", "liveCalibration", "driverMonitoringState", "navModel", "navInstruction", "carState"])
+  sm = SubMaster(["carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "navModel", "navInstruction", "carControl", "radarState", "controlsState"])
+
 
   publish_state = PublishState()
   params = Params()
@@ -174,6 +174,17 @@ def main():
   buf_main, buf_extra = None, None
   meta_main = FrameMeta()
   meta_extra = FrameMeta()
+
+
+  if demo:
+    CP = get_demo_car_params()
+  with car.CarParams.from_bytes(params.get("CarParams", block=True)) as msg:
+    CP = msg
+  cloudlog.info("plannerd got CarParams: %s", CP.carName)
+  # TODO this needs more thought, use .2s extra for now to estimate other delays
+  steer_delay = CP.steerActuatorDelay + .2
+  DH = DesireHelper()
+
 
   while True:
     # Keep receiving frames until we are at least 1 frame ahead of previous extra frame
@@ -211,10 +222,14 @@ def main():
 
     # TODO: path planner timeout?
     sm.update(0)
-    desire = sm["lateralPlan"].desire.raw
+    desire = DH.desire
+    v_ego = sm["carState"].vEgo
     is_rhd = sm["driverMonitoringState"].isRHD
     frame_id = sm["roadCameraState"].frameId
     # TODO add lag
+    
+    #carrot
+    steer_delay = max(0.01, float(Params().get_int("SteerActuatorDelay")) * 0.01)
     lateral_control_params = np.array([sm["carState"].vEgo, steer_delay], dtype=np.float32)
     if sm.updated["liveCalibration"]:
       device_from_calib_euler = np.array(sm["liveCalibration"].rpyCalib, dtype=np.float32)
@@ -282,7 +297,21 @@ def main():
       modelv2_send = messaging.new_message('modelV2')
       posenet_send = messaging.new_message('cameraOdometry')
       fill_model_msg(modelv2_send, model_output, publish_state, meta_main.frame_id, meta_extra.frame_id, frame_id, frame_drop_ratio,
-                      meta_main.timestamp_eof, timestamp_llk, model_execution_time, nav_enabled, live_calib_seen)
+                      meta_main.timestamp_eof, timestamp_llk, model_execution_time, nav_enabled, v_ego, steer_delay, live_calib_seen)
+
+      desire_state = modelv2_send.modelV2.meta.desireState
+      l_lane_change_prob = desire_state[log.Desire.laneChangeLeft]
+      r_lane_change_prob = desire_state[log.Desire.laneChangeRight]
+      lane_change_prob = l_lane_change_prob + r_lane_change_prob
+      DH.update(sm['carState'], modelv2_send.modelV2, sm['carControl'].latActive, lane_change_prob, sm)
+      modelv2_send.modelV2.meta.laneChangeState = DH.lane_change_state
+      modelv2_send.modelV2.meta.laneChangeDirection = DH.lane_change_direction
+      modelv2_send.modelV2.meta.laneWidthLeft = float(DH.lane_width_left)
+      modelv2_send.modelV2.meta.laneWidthRight = float(DH.lane_width_right)
+      modelv2_send.modelV2.meta.distanceToRoadEdgeLeft = float(DH.distance_to_road_edge_left)
+      modelv2_send.modelV2.meta.distanceToRoadEdgeRight = float(DH.distance_to_road_edge_right)
+      modelv2_send.modelV2.meta.desire = DH.desire
+      modelv2_send.modelV2.meta.laneChangeProb = DH.lane_change_ll_prob
 
       fill_pose_msg(posenet_send, model_output, meta_main.frame_id, vipc_dropped_frames, meta_main.timestamp_eof, live_calib_seen)
       pm.send('modelV2', modelv2_send)
@@ -293,7 +322,11 @@ def main():
 
 if __name__ == "__main__":
   try:
-    main()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--demo', action='store_true', help='A boolean for demo mode.')
+    args = parser.parse_args()
+    main(demo=args.demo)
   except KeyboardInterrupt:
     cloudlog.warning(f"child {PROCESS_NAME} got SIGINT")
   except Exception:

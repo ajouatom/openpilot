@@ -779,9 +779,9 @@ class VCruiseHelper:
     if self.autoTurnControl > 0:
       navInstruction = controls.sm['navInstruction']      
       roadLimitSpeed = controls.sm['roadLimitSpeed']
-      lateralPlan = controls.sm['lateralPlan']
-      distanceToRoadEdgeLeft = lateralPlan.distanceToRoadEdgeLeft
-      distanceToRoadEdgeRight = lateralPlan.distanceToRoadEdgeRight
+      md = controls.sm['modelV2']
+      distanceToRoadEdgeLeft = md.meta.distanceToRoadEdgeLeft
+      distanceToRoadEdgeRight = md.meta.distanceToRoadEdgeRight
 
       nav_type = navInstruction.maneuverType;
       nav_modifier = navInstruction.maneuverModifier;
@@ -933,8 +933,8 @@ def get_lag_adjusted_curvature(CP, v_ego, psis, curvatures):
   return safe_desired_curvature
 
 def clip_curvature(v_ego, prev_curvature, new_curvature):
-  # This is the "desired rate of the setpoint" not an actual desired rate
-  max_curvature_rate = MAX_LATERAL_JERK / (max(v_ego, 0.1)**2) # inexact calculation, check https://github.com/commaai/openpilot/pull/24755
+  v_ego = max(MIN_SPEED, v_ego)
+  max_curvature_rate = MAX_LATERAL_JERK / (v_ego**2) # inexact calculation, check https://github.com/commaai/openpilot/pull/24755
   safe_desired_curvature = clip(new_curvature,
                                 prev_curvature - max_curvature_rate * DT_CTRL,
                                 prev_curvature + max_curvature_rate * DT_CTRL)

@@ -174,7 +174,7 @@ class LanePlanner:
       offset_lane = interp(self.lane_width, [2.5, 2.9], [0.0, -self.adjustLaneOffset]) # 차선이 좁으면 안함..
 
     #select lane path
-    if True: #self.lane_width <= 2.2:  ## 240122 가급적 도로경계쪽차선을 따라가도록 함.
+    if self.lane_width <= 2.2:  ## 240122 가급적 도로경계쪽차선을 따라가도록 함. 원상복구: 도로경계는 지저분함... ㅋㅋ
       # 차선이 좁아지면, 도로경계쪽에 있는 차선 위주로 따라가도록함. 다시생각해봐야...
       if l_prob > 0.5 and self.lane_width_left_filtered.x < 2.0:
         lane_path_y = path_from_left_lane
