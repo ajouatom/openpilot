@@ -821,6 +821,7 @@ class VCruiseHelper:
       if 0 < self.naviDistance < 300.0:
         if self.nooHelperActivated == 0 and self.autoTurnMapChange > 0:
           self.params.put_nonblocking("CarrotDisplay", "3")
+          self.nooHelperActivated = 1
         self.nooHelperActivated = max(1, self.nooHelperActivated)
         self._add_log("Auto Speed Down to {:.0f}km/h. {:.0f}m left.".format(self.naviSpeed, self.naviDistance))
       else:

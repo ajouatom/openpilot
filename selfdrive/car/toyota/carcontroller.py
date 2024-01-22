@@ -7,6 +7,7 @@ from openpilot.selfdrive.car.toyota.values import CAR, STATIC_DSU_MSGS, NO_STOP_
                                         MIN_ACC_SPEED, PEDAL_TRANSITION, CarControllerParams, ToyotaFlags, \
                                         UNSUPPORTED_DSU_CAR
 from opendbc.can.packer import CANPacker
+from openpilot.common.params import Params
 
 SteerControlType = car.CarParams.SteerControlType
 VisualAlert = car.CarControl.HUDControl.VisualAlert
@@ -56,10 +57,10 @@ class CarController:
 
   def update_variables(self):
     self.lock_doors = Params().get_bool("LockDoors")
-    self.reverse_cruise_increase = False #Params().get_bool("ReverseCruise")
+    self.reverse_cruise_increase = True #Params().get_bool("ReverseCruise")
     self.sng_hack = Params().get_bool("SNGHack")
 
-  def update(self, CC, CS, now_nanos, sport_plus):
+  def update(self, CC, CS, now_nanos):
     self.update_variables()
     actuators = CC.actuators
     hud_control = CC.hudControl
@@ -161,10 +162,10 @@ class CarController:
       if pcm_cancel_cmd and self.CP.carFingerprint in UNSUPPORTED_DSU_CAR:
         can_sends.append(toyotacan.create_acc_cancel_command(self.packer))
       elif self.CP.openpilotLongitudinalControl:
-        can_sends.append(toyotacan.create_accel_command(self.packer, pcm_accel_cmd, pcm_cancel_cmd, self.standstill_req, lead, CS.acc_type, fcw_alert, self.reverse_cruise_increase, CS.distance_button))
+        can_sends.append(toyotacan.create_accel_command(self.packer, pcm_accel_cmd, pcm_cancel_cmd, self.standstill_req, lead, CS.acc_type, fcw_alert, self.reverse_cruise_increase, CS.distance_button_pressed))
         self.accel = pcm_accel_cmd
       else:
-        can_sends.append(toyotacan.create_accel_command(self.packer, 0, pcm_cancel_cmd, False, lead, CS.acc_type, False, self.reverse_cruise_increase, CS.distance_button))
+        can_sends.append(toyotacan.create_accel_command(self.packer, 0, pcm_cancel_cmd, False, lead, CS.acc_type, False, self.reverse_cruise_increase, CS.distance_button_pressed))
 
     if self.frame % 2 == 0 and self.CP.enableGasInterceptor and self.CP.openpilotLongitudinalControl:
       # send exactly zero if gas cmd is zero. Interceptor will send the max between read value and gas cmd.

@@ -445,7 +445,7 @@
     },
     {
       "group": "조향일반",
-      "name": "AutoTurnChangeMap",
+      "name": "AutoTurnMapChange",
       "title": "NOO Helper 맵전환(0)",
       "descr": "NOO 작동시 자동맵전환",
       "egroup": "LATSET",

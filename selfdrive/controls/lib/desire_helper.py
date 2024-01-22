@@ -91,9 +91,9 @@ class DesireHelper:
     self.leftSideObjectDist = 255
     self.rightSideObjectDist = 255
     if radarState.leadLeft.status:
-      self.leftSideObjectDist = radarState.leadLeft.dRel
+      self.leftSideObjectDist = radarState.leadLeft.dRel + (radarState.leadLeft.vLead) ** 2 / (2.5 * 2)
     if radarState.leadRight.status:
-      self.rightSideObjectDist = radarState.leadRight.dRel
+      self.rightSideObjectDist = radarState.leadRight.dRel + (radarState.leadRight.vLead) ** 2 / (2.5 * 2)
     leftBlinkerExt = sm['controlsState'].leftBlinkerExt
     rightBlinkerExt = sm['controlsState'].rightBlinkerExt
     blinkerExtMode = int((leftBlinkerExt + rightBlinkerExt) / 20000)  ## 둘다 10000 or 20000이 + 되어 있으므로,, 10000이 아니라 20000으로 나누어야함.

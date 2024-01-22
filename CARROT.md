@@ -2,11 +2,9 @@
 ------
 
 **당근의 탄생**
- * 당근은 Frogpilot + Apilot을 섞어서 만들었다.
- * Frogpilot의 거의 모든기능을 사용할 수 있고, 설정을 기본으로 바꿔주면 당근의 기능을 사용할 수 있다.
+ * 당근은 OPGM의 기본코드와 Apilot을 섞어서 만들었다.
 
 **당근의 특별한기능**
- * Frogpilot의 모든기능
  * SCC배선개조, 레이더트랙지원
  * 신호정지/출발기능
  * 다양한 주행모드(일반/연비/안전/고속)
@@ -45,6 +43,7 @@
  * 당근파일럿은 직접설치가 안된다.  반드시, ssh연결을 하여 clone하여 빌드하여 설치해야한다.
 **ssh의 연결**
  * ssh key만들기 (PEM옵션넣어야함)
+   * ssh-keygen -m PEM -t rsa -f ~/.ssh/id_rsa
  * ssh key의 등록 (github에 등록함)
  * 오파의 설정
    * 네트워크 - 고급설정 - SSH 사용 : ON
@@ -78,11 +77,6 @@
 
 수정이력
 ------
- * 240114
-   * liveSR삭제
-     * 당근메뉴: Tuning -> LAT:SteerRatio 값을 설정하거나,
-     * 개구리메뉴: Lateral Tuning -> Manager -> SteerRatio를 설정하거나,
-     * 당근맨:  SET -> 조향튜닝 -> SteerRatioCustom값을 설정함.
-   * pcmCruise지원(현기차)
-     * 롱컨 비개조차량지원 및 시험.
+ * 250120
+   * 당근시작(개구리 삭제)
 

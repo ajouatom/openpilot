@@ -1626,7 +1626,7 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
     //int disp_y = y + 120;
     int disp_y = y + 195;// 175;
     bool draw_dist = false;
-    disp_size = 60;
+    disp_size = 50;
     if (isBrakeHold() || isSoftHold()) {
         sprintf(str, "%s", (isBrakeHold()) ? "AUTOHOLD" : "SOFTHOLD");
         ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
@@ -1650,9 +1650,12 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
     else draw_dist = true;
 
     if (draw_dist) {
-        if (getRadarDist() < 10.0) sprintf(str, "%.1f(%.1f)", getRadarDist(), getVisionDist());
-        else sprintf(str, "%.0f(%.0f)", getRadarDist(), getVisionDist());
+        if (getRadarDist() > 0.0) sprintf(str, "%.0f", getRadarDist());
+        else if (getVisionDist() > 0.0) sprintf(str, "%.0f", getVisionDist());
+        //if (getRadarDist() < 10.0) sprintf(str, "%.1f(%.1f)", getRadarDist(), getVisionDist());
+        //else sprintf(str, "%.0f(%.0f)", getRadarDist(), getVisionDist());
         ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
+
     }
 
     // 타겟하단: 롱컨상태표시
@@ -1723,9 +1726,7 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
             py[3] = py[2];
             NVGcolor color2 = COLOR_BLACK_ALPHA(20);
             ui_draw_line2(s, px, py, 4, &color2, nullptr, 3.0f, isRadarDetected() ? rcolor : COLOR_BLUE);
-
         }
-
     }
 }
 void DrawApilot::makeData(const UIState* s) {
@@ -1884,6 +1885,15 @@ void DrawApilot::drawDeviceState(UIState* s, bool show) {
     }
     nvgTextAlign(s->vg, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM);
     ui_draw_text(s, s->fb_w - 20, s->fb_h - 15, (read_ip_count < 30)? ip_address:gitBranch.toStdString().c_str(), 30, COLOR_WHITE, BOLD, 0.0f, 0.0f);
+
+
+    nvgTextAlign(s->vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
+    const auto lat_plan = sm["lateralPlan"].getLateralPlan();
+    float laneWidth = lat_plan.getLaneWidth();
+    float laneWidthLeft = lat_plan.getLaneWidthLeft();
+    float laneWidthRight = lat_plan.getLaneWidthRight();
+    sprintf(str, "%3.1fm    %3.1fm    %3.1fm", laneWidthLeft, laneWidth, laneWidthRight);
+    ui_draw_text(s, s->fb_w / 2, s->fb_h - 50, str, 30, COLOR_WHITE, BOLD);
 
     auto controls_state = sm["controlsState"].getControlsState();
     qstr = QString::fromStdString(controls_state.getDebugText1().cStr());
