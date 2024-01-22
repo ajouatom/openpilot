@@ -473,9 +473,9 @@ def main():
     53: ("notification", "straight", None),
     54: ("notification", "straight", None),
     55: ("notification", "straight", None),
-    153: ("", "", 5),  #TG
-    154: ("", "", 5),  #TG
-    249: ("", "", 5)   #TG
+    153: ("", "", 6),  #TG
+    154: ("", "", 6),  #TG
+    249: ("", "", 6)   #TG
   }
 
   with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:

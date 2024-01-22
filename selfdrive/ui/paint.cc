@@ -1115,7 +1115,7 @@ void DrawApilot::drawGapInfo2(const UIState* s, int x, int y) {
     dx = x + 220;
     dy = y + 77;
     sprintf(str, "%d", gap);
-    ui_draw_text(s, dx, dy, str, 40, COLOR_WHITE, BOLD);
+    ui_draw_text(s, dx, dy, str, 30, COLOR_WHITE, BOLD);
     static int _gap1 = 0;
     if (_gap1 != gap) ui_draw_text_a(s, dx, dy, str, 40, COLOR_WHITE, BOLD);
     _gap1 = gap;
@@ -1283,7 +1283,7 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
         if (true) {
             if (isEnabled()) {// && curveSpeed > 0 && curveSpeed < 150) {
                 sprintf(str, "%d", (int)(curveSpeed * (s->scene.is_metric ? 1.0 : KM_TO_MILE) + 0.5));
-                ui_draw_text(s, bx + 140, by + 110, str, 50, (speedCtrlActive) ? COLOR_RED : COLOR_YELLOW, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
+                ui_draw_text(s, bx + 140, by + 110, str, 50, (speedCtrlActive) ? COLOR_ORANGE : COLOR_YELLOW, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
             }
         }
         drawGapInfo2(s, bx, by);
@@ -1343,6 +1343,7 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
                     ui_draw_text(s, bx, by + 20, str, 35, COLOR_WHITE, BOLD, 0.0f, 0.0f);
                 }
                 break;
+            case 6: ui_draw_text(s, bx, by + 20, "톨게이트 진입", 35, COLOR_WHITE, BOLD, 0.0f, 0.0f); break;
             case 35: ui_draw_text(s, bx, by + 20, "좌측고가 진입", 35, COLOR_WHITE, BOLD, 0.0f, 0.0f); break;
             case 43: ui_draw_text(s, bx, by + 20, "지하차도 우측", 35, COLOR_WHITE, BOLD, 0.0f, 0.0f); break;
             case 48: ui_draw_text(s, bx, by + 20, "휴게소", 35, COLOR_WHITE, BOLD, 0.0f, 0.0f); break;
@@ -1650,10 +1651,9 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
     else draw_dist = true;
 
     if (draw_dist) {
-        if (getRadarDist() > 0.0) sprintf(str, "%.0f", getRadarDist());
-        else if (getVisionDist() > 0.0) sprintf(str, "%.0f", getVisionDist());
-        //if (getRadarDist() < 10.0) sprintf(str, "%.1f(%.1f)", getRadarDist(), getVisionDist());
-        //else sprintf(str, "%.0f(%.0f)", getRadarDist(), getVisionDist());
+        float dist = (getRadarDist() > 0.0) ? getRadarDist() : getVisionDist();
+        if (dist < 10.0) sprintf(str, "%.1f", dist);
+        else sprintf(str, "%.0f", dist);
         ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
 
     }
@@ -1878,29 +1878,43 @@ void DrawApilot::drawDeviceState(UIState* s, bool show) {
     int r = interp<float>(cpuTemp, { 50.f, 90.f }, { 200.f, 255.f }, false);
     int g = interp<float>(cpuTemp, { 50.f, 90.f }, { 255.f, 200.f }, false);
     NVGcolor textColor = nvgRGBA(r, g, 200, 255);
-    if (s->fb_w > 1200 && show) {
+    float engineRpm = car_state.getEngineRpm();
+    float motorRpm = car_state.getMotorRpm();
+    if (false && s->fb_w > 1200 && show) {
         ui_draw_text(s, s->fb_w - 20, 85, str, 35, textColor, BOLD);
-        float engineRpm = car_state.getEngineRpm();
-        float motorRpm = car_state.getMotorRpm();
         sprintf(str, "FPS: %d, %s: %.0f CHARGE: %.0f%%                           ", g_fps, (motorRpm > 0.0) ? "MOTOR" : "RPM", (motorRpm > 0.0) ? motorRpm : engineRpm, car_state.getChargeMeter());
         ui_draw_text(s, s->fb_w - 20, 120, str, 35, textColor, BOLD);
     }
     nvgTextAlign(s->vg, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM);
-    ui_draw_text(s, s->fb_w - 20, s->fb_h - 15, (read_ip_count < 30)? ip_address:gitBranch.toStdString().c_str(), 30, COLOR_WHITE, BOLD, 0.0f, 0.0f);
-
+    ui_draw_text(s, s->fb_w - 20, s->fb_h - 15, (read_ip_count < 30) ? ip_address : gitBranch.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
 
     nvgTextAlign(s->vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
+
     const auto lat_plan = sm["lateralPlan"].getLateralPlan();
-    float laneWidth = lat_plan.getLaneWidth();
-    float laneWidthLeft = lat_plan.getLaneWidthLeft();
-    float laneWidthRight = lat_plan.getLaneWidthRight();
-    sprintf(str, "%3.1fm    %3.1fm    %3.1fm", laneWidthLeft, laneWidth, laneWidthRight);
-    ui_draw_text(s, s->fb_w / 2, s->fb_h - 50, str, 30, COLOR_WHITE, BOLD);
+    QString latDebugText = QString::fromStdString(lat_plan.getLatDebugText());
+    ui_draw_text(s, s->fb_w / 2, s->fb_h - 50, latDebugText.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
+    //float laneWidth = lat_plan.getLaneWidth();
+    //float laneWidthLeft = lat_plan.getLaneWidthLeft();
+    //float laneWidthRight = lat_plan.getLaneWidthRight();
+    //sprintf(str, "%3.1fm    %3.1fm    %3.1fm", laneWidthLeft, laneWidth, laneWidthRight);
+    //ui_draw_text(s, s->fb_w / 2, s->fb_h - 50, str, 30, COLOR_WHITE, BOLD);
 
     auto controls_state = sm["controlsState"].getControlsState();
     qstr = QString::fromStdString(controls_state.getDebugText1().cStr());
-    ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, qstr.toStdString().c_str(), 30, COLOR_WHITE, BOLD, 0.0f, 0.0f);
+    if(qstr.length() > 2) 
+      ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, qstr.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
+    else if(s->fb_w > 1200 && show) {
+      sprintf(str, "MEM: %d%% DISK: %.0f%% CPU: %.0f°C FPS: %d, %s: %.0f BATTERY: %.0f%%", memoryUsagePercent, freeSpacePercent, cpuTemp, g_fps, (motorRpm > 0.0) ? "MOTOR" : "RPM", (motorRpm > 0.0) ? motorRpm : engineRpm, car_state.getChargeMeter());
+      ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, str, 30, COLOR_WHITE, BOLD);
+    }
+    
 
+    const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
+    const auto live_params = sm["liveParameters"].getLiveParameters();
+    float   liveSteerRatio = live_params.getSteerRatio();
+    qstr = QString::fromStdString(lp.getDebugLongText().cStr());
+    qstr += (" LiveSR:" + QString::number(liveSteerRatio, 'f', 2));
+    ui_draw_text(s, s->fb_w / 2, 30, qstr.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
 
 }
 void DrawApilot::drawDebugText(UIState* s, bool show) {
@@ -1925,18 +1939,18 @@ void DrawApilot::drawDebugText(UIState* s, bool show) {
     //ui_draw_text(s, text_x, y, qstr.toStdString().c_str(), 35, COLOR_WHITE, BOLD, 0.0f, 0.0f);
 
     const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
-    qstr = QString::fromStdString(lp.getDebugLongText().cStr());
-    y += dy;
-    ui_draw_text(s, text_x, y, qstr.toStdString().c_str(), 35, COLOR_WHITE, BOLD, 0.0f, 0.0f);
+    //qstr = QString::fromStdString(lp.getDebugLongText().cStr());
+    //y += dy;
+    //ui_draw_text(s, text_x, y, qstr.toStdString().c_str(), 35, COLOR_WHITE, BOLD, 0.0f, 0.0f);
     qstr = QString::fromStdString(lp.getDebugLongText2().cStr());
     y += dy;
     ui_draw_text(s, text_x, y, qstr.toStdString().c_str(), 35, COLOR_WHITE, BOLD, 0.0f, 0.0f);
 
-    const auto live_params = sm["liveParameters"].getLiveParameters();
-    float   liveSteerRatio = live_params.getSteerRatio();
-    sprintf(str, "LiveSR = %.2f", liveSteerRatio);
-    y += dy;
-    ui_draw_text(s, text_x, y, str, 35, COLOR_WHITE, BOLD, 0.0f, 0.0f);
+    //const auto live_params = sm["liveParameters"].getLiveParameters();
+    //float   liveSteerRatio = live_params.getSteerRatio();
+    //sprintf(str, "LiveSR = %.2f", liveSteerRatio);
+    //y += dy;
+    //ui_draw_text(s, text_x, y, str, 35, COLOR_WHITE, BOLD, 0.0f, 0.0f);
 
     auto controls_state = sm["controlsState"].getControlsState();
     qstr = QString::fromStdString(controls_state.getDebugText1().cStr());
@@ -1980,6 +1994,7 @@ void DrawApilot::drawDebugText(UIState* s, bool show) {
     //int xRoadSignType = road_limit_speed.getXRoadSignType();
     //int xRoadLimitSpeed = road_limit_speed.getXRoadLimitSpeed();
 
+#if 0
     auto lateralPlan = sm["lateralPlan"].getLateralPlan();
     float laneWidth = lateralPlan.getLaneWidth();
     //int roadEdgeStat = lateralPlan.getRoadEdgeStat();
@@ -1993,7 +2008,7 @@ void DrawApilot::drawDebugText(UIState* s, bool show) {
     sprintf(str, "LW:%.1f, %s", laneWidth, latDebugText.toStdString().c_str());
     y += dy;
     ui_draw_text(s, text_x, y, str, 35, COLOR_WHITE, BOLD, 0.0f, 0.0f);
-
+#endif
 #if 0
     //p.drawText(text_x, y + 160, QString::fromStdString(controls_state.getDebugText2().cStr()));
     //p.drawText(text_x, y + 240, QString::fromStdString(controls_state.getDebugText1().cStr()));

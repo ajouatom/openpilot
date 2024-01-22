@@ -344,6 +344,7 @@ class CarInterface(CarInterfaceBase):
        
       if Params().get_bool("SccConnectedBus2"):
         ret.flags |= HyundaiFlags.SCC_BUS2.value
+        experimental_long = True
       
       print("***************************************************************************")
       print("sccBus = ", 2 if ret.flags & HyundaiFlags.SCC_BUS2.value else 0)

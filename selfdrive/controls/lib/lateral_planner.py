@@ -83,67 +83,6 @@ class LateralPlanner:
       self.useLaneLineSpeed = float(int(Params().get("UseLaneLineSpeed", encoding="utf8")))
       self.pathOffset = float(int(Params().get("PathOffset", encoding="utf8")))*0.01
 
-    ## LA model부터는 lateralPlannerSolution이 안나옴. controlsd에서 laneless 선택 및 처리함.
-    if True: #self.useLaneLineSpeed > 0:
-      self.update_lane_mode(sm)
-      return
-    v_ego_car = sm['carState'].vEgo
-
-    # Parse model predictions
-    md = sm['modelV2']
-    if len(md.position.x) == TRAJECTORY_SIZE and len(md.velocity.x) == TRAJECTORY_SIZE and len(md.lateralPlannerSolution.x) == TRAJECTORY_SIZE:
-      self.path_xyz = np.column_stack([md.position.x, md.position.y, md.position.z])
-      self.velocity_xyz = np.column_stack([md.velocity.x, md.velocity.y, md.velocity.z])
-      car_speed = np.linalg.norm(self.velocity_xyz, axis=1) - get_speed_error(md, v_ego_car)
-      self.v_plan = np.clip(car_speed, MIN_SPEED, np.inf)
-      self.v_ego = self.v_plan[0]
-      self.x_sol = np.column_stack([md.lateralPlannerSolution.x, md.lateralPlannerSolution.y, md.lateralPlannerSolution.yaw, md.lateralPlannerSolution.yawRate])
-
-    # Lane change logic
-    desire_state = md.meta.desireState
-    if len(desire_state):
-      self.l_lane_change_prob = desire_state[log.LateralPlan.Desire.laneChangeLeft]
-      self.r_lane_change_prob = desire_state[log.LateralPlan.Desire.laneChangeRight]
-    lane_change_prob = self.l_lane_change_prob + self.r_lane_change_prob
-    self.DH.update(sm['carState'], md, sm['carControl'].latActive, lane_change_prob, sm)
-
-  def publish(self, sm, pm):
-    if self.useLaneLineSpeed > 0:
-      self.publish_lane_mode(sm, pm)
-      return
-    plan_send = messaging.new_message('lateralPlan')
-    plan_send.valid = sm.all_checks(service_list=['carState', 'controlsState', 'modelV2'])
-
-    lateralPlan = plan_send.lateralPlan
-    lateralPlan.modelMonoTime = sm.logMonoTime['modelV2']
-    lateralPlan.dPathPoints = self.path_xyz[:,1].tolist()
-    lateralPlan.psis = self.x_sol[0:CONTROL_N, 2].tolist()
-
-    lateralPlan.curvatures = (self.x_sol[0:CONTROL_N, 3]/self.v_ego).tolist()
-    lateralPlan.curvatureRates = [float(0) for _ in range(CONTROL_N-1)] # TODO: unused
-
-    lateralPlan.mpcSolutionValid = bool(1)
-    lateralPlan.solverExecutionTime = 0.0
-    if self.debug_mode:
-      lateralPlan.solverState = log.LateralPlan.SolverState.new_message()
-      lateralPlan.solverState.x = self.x_sol.tolist()
-
-    lateralPlan.desire = self.DH.desire
-    lateralPlan.useLaneLines = False
-    lateralPlan.laneChangeState = self.DH.lane_change_state
-    lateralPlan.laneChangeDirection = self.DH.lane_change_direction
-
-    # ajouatom
-    lateralPlan.laneWidth = 3.0 #float(self.LP.lane_width)
-    lateralPlan.latDebugText = self.latDebugText
-    lateralPlan.laneWidthLeft = float(self.DH.lane_width_left)
-    lateralPlan.laneWidthRight = float(self.DH.lane_width_right)
-    lateralPlan.distanceToRoadEdgeLeft = float(self.DH.distance_to_road_edge_left)
-    lateralPlan.distanceToRoadEdgeRight = float(self.DH.distance_to_road_edge_right)
-
-    pm.send('lateralPlan', plan_send)
-    
-  def update_lane_mode(self, sm):
     # clip speed , lateral planning is not possible at 0 speed
     measured_curvature = sm['controlsState'].curvature
     v_ego_car = sm['carState'].vEgo
@@ -169,26 +108,6 @@ class LateralPlanner:
       self.useLaneLineMode = True
     elif self.v_ego*3.6 < self.useLaneLineSpeed - 2:
       self.useLaneLineMode = False
-
-    #if self.useLaneLineMode and self.useLaneLineSpeed > 0:
-    #  # Turn off lanes during lane change
-    #  if self.DH.desire == log.LateralPlan.Desire.laneChangeRight or self.DH.desire == log.LateralPlan.Desire.laneChangeLeft:
-    #    self.LP.lll_prob *= self.DH.lane_change_ll_prob
-    #    self.LP.rll_prob *= self.DH.lane_change_ll_prob
-  
-    #  # dynamic laneline/laneless logic
-    #  if self.LP.lll_prob < 0.3 and self.LP.rll_prob < 0.3:
-    #    self.lanelines_active_tmp = False
-    #  elif self.LP.lll_prob > 0.5 and self.LP.rll_prob > 0.5:
-    #    self.lanelines_active_tmp = True
-    #  self.lanelines_active = self.lanelines_active_tmp
-      
-    #else:
-    #  self.lanelines_active = False
-
-    #self.latDebugText = "laneMode({}), active({}/{}), prob={:.2f}".format(self.useLaneLineMode, self.lanelines_active_tmp, self.lanelines_active, self.LP.lll_prob)
-    # Calculate final driving path and set MPC costs
-    #self.path_xyz = self.LP.get_d_path(self.v_ego, self.t_idxs, self.path_xyz, self.lanelines_active)
 
     # Turn off lanes during lane change
     #if self.DH.desire == log.LateralPlan.Desire.laneChangeRight or self.DH.desire == log.LateralPlan.Desire.laneChangeLeft:
@@ -248,7 +167,7 @@ class LateralPlanner:
     else:
       self.solution_invalid_cnt = 0
 
-  def publish_lane_mode(self, sm, pm):
+  def publish(self, sm, pm):
     plan_solution_valid = self.solution_invalid_cnt < 2
     plan_send = messaging.new_message('lateralPlan')
     plan_send.valid = sm.all_checks(service_list=['carState', 'controlsState', 'modelV2'])
@@ -283,8 +202,13 @@ class LateralPlanner:
     
     self.x_sol = self.lat_mpc.x_sol
 
+    debugText = "{} | {:.1f}m | {:.1f}m | {:.1f}m | {}".format(
+      "lanemode" if self.lanelines_active else "laneless",
+      self.DH.lane_width_left, self.LP.lane_width, self.DH.lane_width_right,
+      "offset={:.1f}cm".format(self.LP.offset_total*100.0) if self.lanelines_active else "")
 
-    lateralPlan.latDebugText = self.latDebugText
+    lateralPlan.latDebugText = debugText
+    #lateralPlan.latDebugText = self.latDebugText
     lateralPlan.laneWidthLeft = float(self.DH.lane_width_left)
     lateralPlan.laneWidthRight = float(self.DH.lane_width_right)
     lateralPlan.distanceToRoadEdgeLeft = float(self.DH.distance_to_road_edge_left)

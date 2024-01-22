@@ -88,7 +88,6 @@ class VCruiseHelper:
     self.debugText = ""
     self.debugTextNoo = ""
     self.debugText2 = ""
-    self._first = True
     self.activeAPM = 0
     self.blinkerExtMode = 0 # 0: Normal, 10000: voice
     self.rightBlinkerExtCount = 0
@@ -98,6 +97,7 @@ class VCruiseHelper:
     self.nav_distance = 0  # for navInstruction
     self.distance_traveled = 0.0
     self.nooHelperActivated = 0
+    self.nooHelperActivateCount = 0
     
     #ajouatom: params
     self.params_count = 0
@@ -253,10 +253,9 @@ class VCruiseHelper:
 
   def initialize_v_cruise(self, CS, experimental_mode: bool) -> None:
     # initializing is handled by the PCM
-    if self.CP.pcmCruise or not self._first:
-      return
+    #if self.CP.pcmCruise:
+    #  return
 
-    self._first = False
     initial = V_CRUISE_INITIAL_EXPERIMENTAL_MODE if experimental_mode else V_CRUISE_INITIAL
 
     # 250kph or above probably means we never had a set speed
@@ -799,7 +798,7 @@ class VCruiseHelper:
           self.nav_distance = roadLimitSpeed.xDistToTurn
         nav_type = roadLimitSpeed.xTurnInfo
         nav_turn = True if nav_type in [1,2] else False
-        nav_speedDown = True if nav_turn or nav_type == 5 else False
+        nav_speedDown = True if nav_turn or nav_type in [5, 6] else False
         direction = 1 if nav_type in [1,3] else 2 if nav_type in [2,4,43] else 0
 
       roadcate = roadLimitSpeed.roadcate
@@ -816,18 +815,23 @@ class VCruiseHelper:
       if nav_turn or nav_speedDown or direction != 0:
         if self.autoTurnControl in [2,3]:
           self.naviDistance = self.nav_distance
-          self.naviSpeed = turn_speed if nav_turn or nav_speedDown else laneChange_speed
+          self.naviSpeed = turn_speed if nav_turn or (nav_speedDown and nav_type in [5]) else laneChange_speed
 
       if 0 < self.naviDistance < 300.0:
-        if self.nooHelperActivated == 0 and self.autoTurnMapChange > 0:
-          self.params.put_nonblocking("CarrotDisplay", "3")
+        if self.nooHelperActivated == 0:
           self.nooHelperActivated = 1
         self.nooHelperActivated = max(1, self.nooHelperActivated)
+        self.nooHelperActivateCount = max(0, self.nooHelperActivateCount + 1)
         self._add_log("Auto Speed Down to {:.0f}km/h. {:.0f}m left.".format(self.naviSpeed, self.naviDistance))
       else:
-        if self.nooHelperActivated > 0 and self.autoTurnMapChange > 0:
-          self.params.put_nonblocking("CarrotDisplay", "2")
         self.nooHelperActivated = 0
+        self.nooHelperActivateCount = min(0, self.nooHelperActivateCount - 1)
+
+      if self.autoTurnMapChange > 0:
+        if self.nooHelperActivateCount == 10:
+          self.params.put_nonblocking("CarrotDisplay", "3")
+        elif self.nooHelperActivateCount == -10:
+          self.params.put_nonblocking("CarrotDisplay", "2")
 
       ## lanechange, turn : 300m left
       if 5 < self.nav_distance < 300 and direction != 0:

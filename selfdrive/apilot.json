@@ -69,14 +69,14 @@
     {
       "group": "크루즈",
       "name": "CruiseEcoControl",
-      "title": "크루즈연비제어(4km/h)",
+      "title": "크루즈연비제어(2km/h)",
       "descr": "목표속도를 일시적으로 올림",
       "egroup": "CRUISE",
-      "etitle": "CruiseEcoControl(4km/h)",
+      "etitle": "CruiseEcoControl(2km/h)",
       "edescr": "",
       "min": 0,
       "max": 10,
-      "default": 4,
+      "default": 2,
       "unit": 1
     },
     {
@@ -108,14 +108,14 @@
     {
       "group": "가속설정",
       "name": "MyEcoModeFactor",
-      "title": "연비가속비율(80%)",
+      "title": "연비가속비율(90%)",
       "descr": "일반모드대비 가속비율을 지정합니다.",
       "egroup": "ACCEL",
-      "etitle": "EcoAccelRatio(80%)",
+      "etitle": "EcoAccelRatio(90%)",
       "edescr": "",
       "min": 10,
-      "max": 95,
-      "default": 80,
+      "max": 100,
+      "default": 90,
       "unit": 1
     },
     {
@@ -218,7 +218,7 @@
       "etitle": "SafeModeRatio(80%)",
       "edescr": "",
       "min": 10,
-      "max": 90,
+      "max": 100,
       "default": 80,
       "unit": 5
     },
@@ -922,19 +922,6 @@
       "min": 80,
       "max": 100,
       "default": 89,
-      "unit": 1
-    },
-    {
-      "group": "조향일반",
-      "name": "UseModelPath",
-      "title": "(x)UseModelPath(0)",
-      "descr": "",
-      "egroup": "LAT",
-      "etitle": "(x)UseModelPath",
-      "edescr": "",
-      "min": 0,
-      "max": 1,
-      "default": 0,
       "unit": 1
     },
     {

@@ -78,7 +78,7 @@ void ScreenRecoder::paintEvent(QPaintEvent *event) {
     p.setPen(QPen(QColor::fromRgbF(1, 1, 1, 0.4), 10, Qt::SolidLine, Qt::FlatCap));
 
     p.setBrush(QBrush(QColor::fromRgbF(0, 0, 0, 0)));
-    p.drawEllipse(r);
+    //p.drawEllipse(r);
 
     r -= QMargins(40, 40, 40, 40);
     p.setPen(Qt::NoPen);

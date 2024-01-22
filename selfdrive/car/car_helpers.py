@@ -198,9 +198,9 @@ def get_car(logcan, sendcan, experimental_long_allowed, num_pandas=1):
   if candidate is None:
     cloudlog.event("car doesn't match any fingerprints", fingerprints=fingerprints, error=True)
     candidate = "mock"
-  selected_car = Params().get("SelectedCar")
+  selected_car = Params().get("CarSelected")
   if selected_car:
-    print ("SelectedCar = ", selected_car)
+    print ("CarSelected = ", selected_car)
     candidate = selected_car.decode("utf-8")
 
   CarInterface, CarController, CarState = interfaces[candidate]

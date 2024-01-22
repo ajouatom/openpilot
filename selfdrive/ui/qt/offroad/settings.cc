@@ -526,7 +526,6 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
     latLongToggles->addItem(new CValueControl("UseLaneLineSpeed", "Use Laneline mode (0)", "Lainline mode, lat_mpc control used", "../assets/offroad/icon_shell.png", 0, 200, 5));
     latLongToggles->addItem(new CValueControl("AdjustLaneOffset", "AdjustLaneOffset(0)cm", "", "../assets/offroad/icon_shell.png", 0, 500, 5));
     latLongToggles->addItem(new CValueControl("AdjustCurveOffset", "AdjustCurveOffset(0)cm", "", "../assets/offroad/icon_shell.png", 0, 500, 5));
-    //latLongToggles->addItem(new CValueControl("UseModelPath", "UseModelPath(0)", "", "../assets/offroad/icon_shell.png", 0, 1, 1));
     latLongToggles->addItem(new CValueControl("PathOffset", "PathOffset", "(-)left, (+)right, when UseLaneLineSpeed > 0", "../assets/offroad/icon_road.png", -50, 50, 1));
     //latLongToggles->addItem(horizontal_line());
     //latLongToggles->addItem(new CValueControl("JerkStartLimit", "LONG: JERK START(10)x0.1", "Starting Jerk.", "../assets/offroad/icon_road.png", 1, 50, 1));
@@ -644,7 +643,7 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
     carrotLayout = new QVBoxLayout(homeScreen);
     carrotLayout->setMargin(40);
 
-    QString selected = QString::fromStdString(Params().get("SelectedCar"));
+    QString selected = QString::fromStdString(Params().get("CarSelected"));
     QPushButton* selectCarBtn = new QPushButton(selected.length() ? selected : tr("Select your car"));
     selectCarBtn->setObjectName("selectCarBtn");
     //selectCarBtn->setStyleSheet("margin-right: 30px;");
@@ -654,7 +653,7 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
     connect(selectCar, &SelectCar::backPress, [=]() { main_layout->setCurrentWidget(homeScreen); });
     connect(selectCar, &SelectCar::selectedCar, [=]() {
 
-        QString selected = QString::fromStdString(Params().get("SelectedCar"));
+        QString selected = QString::fromStdString(Params().get("CarSelected"));
         selectCarBtn->setText(selected.length() ? selected : tr("Select your car"));
         main_layout->setCurrentWidget(homeScreen);
         });
@@ -760,7 +759,7 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
   QVBoxLayout* vlayout = new QVBoxLayout(homeScreen);
   vlayout->setContentsMargins(0, 20, 0, 20);
 
-  QString selected = QString::fromStdString(Params().get("SelectedCar"));
+  QString selected = QString::fromStdString(Params().get("CarSelected"));
   QPushButton* selectCarBtn = new QPushButton(selected.length() ? selected : tr("Select your car"));
   selectCarBtn->setObjectName("selectCarBtn");
   //selectCarBtn->setStyleSheet("margin-right: 30px;");
@@ -780,7 +779,7 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
   connect(selectCar, &SelectCar::backPress, [=]() { main_layout->setCurrentWidget(homeScreen); });
   connect(selectCar, &SelectCar::selectedCar, [=]() {
 
-     QString selected = QString::fromStdString(Params().get("SelectedCar"));
+     QString selected = QString::fromStdString(Params().get("CarSelected"));
      selectCarBtn->setText(selected.length() ? selected : tr("Select your car"));
      main_layout->setCurrentWidget(homeScreen);
   });
@@ -920,7 +919,7 @@ SelectCar::SelectCar(QWidget* parent): QWidget(parent) {
   list->addItems(items_toyota);
   list->setCurrentRow(0);
 
-  QString selected = QString::fromStdString(Params().get("SelectedCar"));
+  QString selected = QString::fromStdString(Params().get("CarSelected"));
 
   int index = 0;
   for(QString item : items) {
@@ -935,9 +934,9 @@ SelectCar::SelectCar(QWidget* parent): QWidget(parent) {
     [=](QListWidgetItem* item){
 
     if(list->currentRow() == 0)
-        Params().remove("SelectedCar");
+        Params().remove("CarSelected");
     else
-        Params().put("SelectedCar", list->currentItem()->text().toStdString());
+        Params().put("CarSelected", list->currentItem()->text().toStdString());
 
     emit selectedCar();
     });
