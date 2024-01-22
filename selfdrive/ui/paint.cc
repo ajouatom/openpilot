@@ -1828,7 +1828,7 @@ void DrawApilot::drawLeadApilot(const UIState* s) {
 #include <arpa/inet.h>
 char ip_address[64] = "";
 QString gitBranch = "branch";
-void read_ip_address() {
+char *read_ip_address() {
     int     fd;
     struct ifreq ifr;
 
@@ -1841,6 +1841,8 @@ void read_ip_address() {
 
     strcpy(ip_address, inet_ntoa(((struct sockaddr_in*)&ifr.ifr_addr)->sin_addr));
     printf("ip_address= %s\n", ip_address);
+
+    return ip_address;
 }
 void DrawApilot::drawDeviceState(UIState* s, bool show) {
     const SubMaster& sm = *(s->sm);

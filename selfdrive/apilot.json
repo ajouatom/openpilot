@@ -991,6 +991,19 @@
     },
     {
       "group": "시작",
+      "name": "HotspotOnBoot",
+      "title": "부팅시 핫스팟켜기",
+      "descr": "",
+      "egroup": "START",
+      "etitle": "Enable HotSpot(0)",
+      "edescr": "",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "시작",
       "name": "SoundVolumeAdjust",
       "title": "사운드볼륨조절(100%)",
       "descr": "",

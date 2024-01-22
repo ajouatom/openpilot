@@ -16,7 +16,6 @@
 #include "common/mat.h"
 #include "common/params.h"
 #include "common/timing.h"
-#include "selfdrive/ui/qt/network/wifi_manager.h"
 #include "system/hardware/hw.h"
 
 const int UI_BORDER_SIZE = 30;
@@ -177,7 +176,6 @@ typedef struct UIScene {
   bool started, ignition, is_metric, map_on_left, longitudinal_control;
   bool world_objects_visible = false;
   uint64_t started_frame;
-  bool tethering_enabled;
 } UIScene;
 
 class UIState : public QObject {
@@ -248,8 +246,6 @@ private:
   QTimer *timer;
   bool started_prev = false;
   PrimeType prime_type = PrimeType::UNKNOWN;
-
-  WifiManager *wifi = nullptr;
 };
 
 UIState *uiState();

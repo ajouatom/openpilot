@@ -285,6 +285,7 @@ std::unordered_map<std::string, uint32_t> keys = {
     { "LongitudinalActuatorDelayLowerBound", PERSISTENT },
     { "LongitudinalActuatorDelayUpperBound", PERSISTENT },        
     { "EnableRadarTracks", PERSISTENT },
+    { "HotspotOnBoot", PERSISTENT },
     { "SccConnectedBus2", PERSISTENT },
     { "SoundVolumeAdjust", PERSISTENT },
     { "SoundVolumeAdjustEngage", PERSISTENT },
