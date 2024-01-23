@@ -1,5 +1,6 @@
 from cereal import car
 from openpilot.common.conversions import Conversions as CV
+from openpilot.common.params import Params
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.numpy_fast import interp, clip
 from openpilot.common.realtime import DT_CTRL
@@ -54,6 +55,7 @@ class CarController:
 
     self.pitch = FirstOrderFilter(0., 0.09 * 4, DT_CTRL * 4)  # runs at 25 Hz
     self.accel_g = 0.0
+	
   @staticmethod
   def calc_pedal_command(accel: float, long_active: bool) -> float:
     if not long_active: return 0.
@@ -70,6 +72,7 @@ class CarController:
 
 
   def update(self, CC, CS, now_nanos):
+    params = Params()
     self.long_pitch = params.get_bool("LongPitch")
     self.use_ev_tables = params.get_bool("EVTable")
 
@@ -189,7 +192,7 @@ class CarController:
           # Send dashboard UI commands (ACC status)
           send_fcw = hud_alert == VisualAlert.fcw
           can_sends.append(gmcan.create_acc_dashboard_command(self.packer_pt, CanBus.POWERTRAIN, CC.enabled,
-                                                              hud_v_cruise * CV.MS_TO_KPH, hud_control.leadVisible, send_fcw, CS.display_menu, CS.longitudinal_personality))
+                                                              hud_v_cruise * CV.MS_TO_KPH, hud_control.leadVisible, send_fcw, CS.longitudinal_personality))
       else:
         # to keep accel steady for logs when not sending gas
         accel += self.accel_g

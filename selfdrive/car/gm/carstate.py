@@ -2,7 +2,6 @@ import copy
 from cereal import car
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.numpy_fast import mean
-from openpilot.common.params import Params
 from opendbc.can.can_define import CANDefine
 from opendbc.can.parser import CANParser
 from openpilot.selfdrive.car.interfaces import CarStateBase
@@ -26,12 +25,21 @@ class CarState(CarStateBase):
     self.loopback_lka_steering_cmd_ts_nanos = 0
     self.pt_lka_steering_cmd_counter = 0
     self.cam_lka_steering_cmd_counter = 0
+
+    # GAP_DIST
+    self.distance_button_pressed = False 
+    # gm steer -kans
+    self.belowSteerSpeed_shown = False
+    self.disable_belowSteerSpeed = False
+    self.resumeRequired_shown = False
+    self.disable_resumeRequired = False
+
     # use cluster speed & vCluRatio
     self.use_cluster_speed = True
     self.buttons_counter = 0
 
     self.single_pedal_mode = False
-    self.pedal_steady = 0.
+
     # for delay Accfault event
     self.accFaultedCount = 0
 
@@ -56,8 +64,13 @@ class CarState(CarStateBase):
       self.cruise_buttons = CruiseButtons.GAP_DIST
 
     if self.CP.enableBsm:
-      ret.leftBlindspot = pt_cp.vl["BCMBSM"]["Left_BSM"] == 1
-      ret.rightBlindspot = pt_cp.vl["BCMBSM"]["Right_BSM"] == 1
+      # kans
+      if self.CP.carFingerprint in SDGM_CAR:
+        ret.leftBlindspot = cam_cp.vl["BCMBSM"]["Left_BSM"] == 1
+        ret.rightBlindspot = cam_cp.vl["BCMBSM"]["Right_BSM"] == 1
+      else:
+        ret.leftBlindspot = pt_cp.vl["BCMBSM"]["Left_BSM"] == 1
+        ret.rightBlindspot = pt_cp.vl["BCMBSM"]["Right_BSM"] == 1
 
     # Variables used for avoiding LKAS faults
     self.loopback_lka_steering_cmd_updated = len(loopback_cp.vl_all["ASCMLKASteeringCmd"]["RollingCounter"]) > 0
@@ -202,6 +215,8 @@ class CarState(CarStateBase):
           ("BCMGeneralPlatformStatus", 10),
           ("ASCMSteeringButton", 33),
         ]
+        if CP.enableBsm:
+          messages.append(("BCMBSM", 10))
       else:
         messages += [
           ("AEBCmd", 10),
@@ -226,10 +241,6 @@ class CarState(CarStateBase):
       ("ECMVehicleSpeed", 20),
     ]
 
-    # BSM does not send a signal until the first instance of it lighting up
-    messages.append(("left_blindspot", 0))
-    messages.append(("right_blindspot", 0))
-
     if CP.carFingerprint in SDGM_CAR:
       messages += [
         ("ECMPRDNL2", 40),
@@ -246,6 +257,8 @@ class CarState(CarStateBase):
         ("BCMGeneralPlatformStatus", 10),
         ("ASCMSteeringButton", 33),
       ]
+      if CP.enableBsm:
+        messages.append(("BCMBSM", 10))
 
     # Used to read back last counter sent to PT by camera
     if CP.networkLocation == NetworkLocation.fwdCamera:

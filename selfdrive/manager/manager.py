@@ -59,7 +59,6 @@ def manager_init() -> None:
     ("LongPitch", "0"),
     ("EVTable", "0"),
     ("GasRegenCmd", "0"),
-    ("LowerVolt", "0"),
     ("LockDoors", "0"),
     ("SNGHack", "0"),
     ("TSS2Tune", "0"),
@@ -157,7 +156,7 @@ def manager_init() -> None:
     ("LateralTorqueCustom", "0"),       
     ("LateralTorqueAccelFactor", "2500"),       
     ("LateralTorqueFriction", "100"),       
-    ("SteerActuatorDelay", "40"),       
+    ("SteerActuatorDelay", "30"),       
     ("CruiseOnDist", "0"),
   ]
   if not PC:

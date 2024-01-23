@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from cereal import car, custom
+from cereal import car
 from math import fabs, exp
 from panda import Panda
 
@@ -136,10 +136,10 @@ class CarInterface(CarInterfaceBase):
     else:  # ASCM, OBD-II harness
       ret.openpilotLongitudinalControl = True
       ret.networkLocation = NetworkLocation.gateway
-      ret.radarUnavailable = RADAR_HEADER_MSG not in fingerprint[CanBus.OBSTACLE] and not docs
+      ret.radarUnavailable = False # kans
       ret.pcmCruise = False  # stock non-adaptive cruise control is kept off
       # supports stop and go, but initial engage must (conservatively) be above 18mph
-      ret.minEnableSpeed = -1 * CV.MPH_TO_MS if Params().get_bool("LowerVolt") else 18
+      ret.minEnableSpeed = -1 * CV.MPH_TO_MS
       ret.minSteerSpeed = (6.7 if useEVTables else 7) * CV.MPH_TO_MS
 
       # Tuning
@@ -159,7 +159,7 @@ class CarInterface(CarInterfaceBase):
     ret.longitudinalActuatorDelayUpperBound = 0.5  # large delay to initially start braking
 
     if candidate in (CAR.VOLT, CAR.VOLT_CC):
-      ret.minEnableSpeed = -1 if Params().get_bool("LowerVolt") else ret.minEnableSpeed
+      ret.minEnableSpeed = -1
       ret.mass = 1607.
       ret.wheelbase = 2.69
       ret.steerRatio = 17.7  # Stock 15.7, LiveParameters
@@ -398,9 +398,16 @@ class CarInterface(CarInterfaceBase):
     ret = self.CS.update(self.cp, self.cp_cam, self.cp_loopback)
 
     # Don't add event if transitioning from INIT, unless it's to an actual button
+    buttonEvents = [] # kans
+    # Don't add event if transitioning from INIT, unless it's to an actual button
     if self.CS.cruise_buttons != CruiseButtons.UNPRESS or self.CS.prev_cruise_buttons != CruiseButtons.INIT:
-      ret.buttonEvents = create_button_events(self.CS.cruise_buttons, self.CS.prev_cruise_buttons, BUTTONS_DICT,
-                                              unpressed_btn=CruiseButtons.UNPRESS)
+      buttonEvents.extend(create_button_events(self.CS.cruise_buttons, self.CS.prev_cruise_buttons, BUTTONS_DICT,
+                                               unpressed_btn=CruiseButtons.UNPRESS)) # kans
+    # kans : long_button GAP for cruise Mode(safety, ecco, high-speed..)
+    if self.CS.distance_button_pressed:
+      buttonEvents.append(car.CarState.ButtonEvent(pressed=True, type=ButtonType.gapAdjustCruise))
+
+    ret.buttonEvents = buttonEvents # kans
 
     # The ECM allows enabling on falling edge of set, but only rising edge of resume
     events = self.create_common_events(ret, extra_gears=[GearShifter.sport, GearShifter.low,
@@ -416,21 +423,21 @@ class CarInterface(CarInterfaceBase):
     if below_min_enable_speed and not (ret.standstill and ret.brake >= 20 and
                                        (self.CP.networkLocation == NetworkLocation.fwdCamera and not self.CP.carFingerprint in SDGM_CAR)):
       events.add(EventName.belowEngageSpeed)
-    if ret.cruiseState.standstill and not self.CP.autoResumeSng and not self.disable_resumeRequired:
+    if ret.cruiseState.standstill and not self.CP.autoResumeSng and not self.CS.disable_resumeRequired:
       events.add(EventName.resumeRequired)
-      self.resumeRequired_shown = True
+      self.CS.resumeRequired_shown = True # kans
 
     # Disable the "resumeRequired" event after it's been shown once to not annoy the driver
-    if self.resumeRequired_shown and not ret.cruiseState.standstill:
-      self.disable_resumeRequired = True
+    if self.CS.resumeRequired_shown and not ret.cruiseState.standstill:
+      self.CS.disable_resumeRequired = True # kans
 
-    if ret.vEgo < self.CP.minSteerSpeed and not self.disable_belowSteerSpeed:
+    if ret.vEgo < self.CP.minSteerSpeed and not self.CS.disable_belowSteerSpeed:
       events.add(EventName.belowSteerSpeed)
-      self.belowSteerSpeed_shown = True
+      self.CS.belowSteerSpeed_shown = True # kans
 
     # Disable the "belowSteerSpeed" event after it's been shown once to not annoy the driver
-    if self.belowSteerSpeed_shown and ret.vEgo > self.CP.minSteerSpeed:
-      self.disable_belowSteerSpeed = True
+    if self.CS.belowSteerSpeed_shown and ret.vEgo > self.CP.minSteerSpeed:
+      self.CS.disable_belowSteerSpeed = True # kans
 
     if (self.CP.flags & GMFlags.CC_LONG.value) and ret.vEgo < self.CP.minEnableSpeed and ret.cruiseState.enabled:
       events.add(EventName.speedTooLow)

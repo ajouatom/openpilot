@@ -321,7 +321,6 @@ std::unordered_map<std::string, uint32_t> keys = {
     { "LongPitch", PERSISTENT },
     { "EVTable", PERSISTENT },
     { "GasRegenCmd", PERSISTENT },
-    { "LowerVolt", PERSISTENT },
     { "LockDoors", PERSISTENT },
     { "SNGHack", PERSISTENT },
     { "TSS2Tune", PERSISTENT },

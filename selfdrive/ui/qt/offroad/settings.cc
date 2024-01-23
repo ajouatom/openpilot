@@ -713,7 +713,6 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
     gmToggles->addItem(new ParamControl("LongPitch", "LongPitch", "", "../assets/offroad/icon_warning.png", this));
     gmToggles->addItem(new ParamControl("EVTable", "EVTable", "", "../assets/offroad/icon_warning.png", this));
     gmToggles->addItem(new ParamControl("GasRegenCmd", "GasRegenCmd", "", "../assets/offroad/icon_warning.png", this));
-    gmToggles->addItem(new ParamControl("LowerVolt", "LowerVolt", "", "../assets/offroad/icon_warning.png", this));
 
     toyotaToggles = new ListWidget(this);
     toyotaToggles->addItem(new ParamControl("LockDoors", "LockDoors", "", "../assets/offroad/icon_warning.png", this));
