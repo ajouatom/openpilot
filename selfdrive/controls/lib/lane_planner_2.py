@@ -66,9 +66,9 @@ class LanePlanner:
     self.debugText = ""
     self.lane_width_left = 0.0
     self.lane_width_right = 0.0
-    self.lane_width_left_filtered = FirstOrderFilter(1.0, 0.98, DT_MDL)
-    self.lane_width_right_filtered = FirstOrderFilter(1.0, 0.98, DT_MDL)
-    self.lane_offset_filtered = FirstOrderFilter(0.0, 0.98, DT_MDL)
+    self.lane_width_left_filtered = FirstOrderFilter(1.0, 0.99, DT_MDL)
+    self.lane_width_right_filtered = FirstOrderFilter(1.0, 0.99, DT_MDL)
+    self.lane_offset_filtered = FirstOrderFilter(0.0, 0.99, DT_MDL)
 
     self.lanefull_mode = False
 
@@ -104,7 +104,7 @@ class LanePlanner:
       self.l_lane_change_prob = desire_state[log.LateralPlan.Desire.laneChangeLeft]
       self.r_lane_change_prob = desire_state[log.LateralPlan.Desire.laneChangeRight]
 
-  def get_d_path(self, CS, v_ego, path_t, path_xyz, vcurv):
+  def get_d_path(self, CS, v_ego, path_t, path_xyz, curve_speed):
     # Reduce reliance on lanelines that are too far apart or
     # will be in a few seconds
     l_prob, r_prob = self.lll_prob, self.rll_prob
@@ -147,26 +147,24 @@ class LanePlanner:
     # 좌/우의 차선폭을 필터링.
     if self.lane_width_left > 0:
       self.lane_width_left_filtered.update(self.lane_width_left)
+      self.lane_width_left_filtered.x = self.lane_width_left
     if self.lane_width_right > 0:
       self.lane_width_right_filtered.update(self.lane_width_right)
+      self.lane_width_right_filtered.x = self.lane_width_right
 
     self.adjustLaneOffset = float(Params().get_int("AdjustLaneOffset")) * 0.01
     self.adjustCurveOffset = float(Params().get_int("AdjustCurveOffset")) * 0.01
     ADJUST_OFFSET_LIMIT = 0.4 #max(self.adjustLaneOffset, self.adjustCurveOffset)
     offset_curve = 0.0
     ## curve offset
-    curvature = 0.0
-    if len(vcurv) > 0:
-      curvature = max(vcurv, key=abs)
-      offset_curve = interp(abs(curvature), [0.01, 0.15], [0.0, self.adjustCurveOffset]) * np.sign(curvature)
+    offset_curve = -interp(abs(curve_speed), [50, 200], [self.adjustCurveOffset, 0.0]) * np.sign(curve_speed)
 
     # roadedge offset
-    # 좌/우에 여유가 없거나 많으면 offset은 0
     # 여유가 없는곳(도로경계쪽)으로 붙임. 
     offset_lane = 0.0
-    if self.lane_width_left_filtered.x > 1.8 and self.lane_width_right_filtered.x > 1.8:
-      offset_lane = 0.0
-    elif self.lane_width_left_filtered.x < 2.5 and self.lane_width_right_filtered.x < 2.5:
+    #if self.lane_width_left_filtered.x < 1.8 and self.lane_width_right_filtered.x < 1.8:
+    #  offset_lane = 0.0
+    if self.lane_width_left_filtered.x > 2.5 and self.lane_width_right_filtered.x > 2.5: #양쪽에 차선이 있는경우
       offset_lane = 0.0
     elif self.lane_width_left_filtered.x > 2.5:
       offset_lane = interp(self.lane_width, [2.5, 2.9], [0.0, self.adjustLaneOffset]) # 차선이 좁으면 안함..
@@ -198,7 +196,10 @@ class LanePlanner:
     diff_center = 0.0
     #print("center = {:.2f}={:.2f}-{:.2f}, lanefull={}".format(diff_center, lane_path_y_center, path_xyz_y_center, self.lanefull_mode))
     #diff_center = lane_path_y[5] - path_xyz[:,1][5] if not self.lanefull_mode else 0.0
-    offset_total = clip(offset_curve + offset_lane + diff_center, - ADJUST_OFFSET_LIMIT, ADJUST_OFFSET_LIMIT)
+    if offset_curve * offset_lane < 0:
+      offset_total = clip(offset_curve + offset_lane + diff_center, - ADJUST_OFFSET_LIMIT, ADJUST_OFFSET_LIMIT)
+    else:
+      offset_total = clip(max(offset_curve, offset_lane, key=abs) + diff_center, - ADJUST_OFFSET_LIMIT, ADJUST_OFFSET_LIMIT)
 
     ## self.d_prob = 0 if lane_changing
     self.d_prob *= self.lane_change_multiplier  ## 차선변경중에는 꺼버림.
@@ -210,15 +211,16 @@ class LanePlanner:
     ## laneless at lowspeed
     self.d_prob *= interp(v_ego*3.6, [5., 10.], [0.0, 1.0])
 
-    #self.debugText = "off:{:.2f},dc:{:.2f},dp:{:.1f},vC:{:.2f},oc:{:.2f},ol:{:.2f},LP={:.1f},RP={:.1f},LW={:.1f},RW={:.1f}".format(self.lane_offset_filtered.x, diff_center, self.d_prob, curvature, offset_curve, offset_lane, l_prob, r_prob, self.lane_width_left_filtered.x, self.lane_width_right_filtered.x)
     self.debugText = "OFFSET({:.2f}={:.2f}+{:.2f}+{:.2f}),Vc:{:.2f},dp:{:.1f},lf:{},lrw={:.1f}|{:.1f}|{:.1f}".format(
       self.lane_offset_filtered.x,
       diff_center, offset_lane, offset_curve,
-      curvature,
+      curve_speed,
       self.d_prob, self.lanefull_mode,
       self.lane_width_left_filtered.x, self.lane_width, self.lane_width_right_filtered.x)
+
+    useLaneLineDebug = Params().get_int("UseLaneLineDebug")
     if self.lanefull_mode:        
-      if False:
+      if useLaneLineDebug == 0:
         safe_idxs = np.isfinite(self.ll_t)
         if safe_idxs[0]:
           lane_path_y_interp = np.interp(path_t, self.ll_t[safe_idxs], lane_path_y[safe_idxs])
@@ -227,16 +229,8 @@ class LanePlanner:
         #safe_idxs = np.isfinite(self.ll_x)
         #if safe_idxs[0]:
         #TODO: 여기에 왜? v_ego*0.1을 했을까? 까먹음...
-        lane_path_y_interp = np.interp(path_xyz[:,0] + v_ego * 0.1, self.ll_x, lane_path_y)
+        lane_path_y_interp = np.interp(path_xyz[:,0] + v_ego * useLaneLineDebug*0.01, self.ll_x, lane_path_y)
         path_xyz[:,1] = self.d_prob * lane_path_y_interp + (1.0 - self.d_prob) * path_xyz[:,1]
-
-    # debug
-    #if len(vcurv) > 0:
-      #sLogger.Send("vC" + "{:.2f}".format(vcurv[0]) + " LX" + "{:.1f}".format(self.lll_y[0]) + " RX" + "{:.1f}".format(self.rll_y[0]) + " LW" + "{:.1f}".format(self.lane_width) + " LP" + "{:.1f}".format(l_prob) + " RP" + "{:.1f}".format(r_prob) + " RS" + "{:.1f}".format(self.rll_std) + " LS" + "{:.1f}".format(self.lll_std))
-      #self.debugText = "vC" + "{:.2f}".format(vcurv[0]) + " LX" + "{:.1f}".format(self.lll_y[0]) + " RX" + "{:.1f}".format(self.rll_y[0]) + " LW" + "{:.1f}".format(self.lane_width) + " LP" + "{:.1f}".format(l_prob) + " RP" + "{:.1f}".format(r_prob) + " RS" + "{:.1f}".format(self.rll_std) + " LS" + "{:.1f}".format(self.lll_std)
-    #else:
-      #sLogger.Send("vC--- LX" + "{:.1f}".format(self.lll_y[0]) + " RX" + "{:.1f}".format(self.rll_y[0]) + " LW" + "{:.1f}".format(self.lane_width) + " LP" + "{:.1f}".format(l_prob) + " RP" + "{:.1f}".format(r_prob) + " RS" + "{:.1f}".format(self.rll_std) + " LS" + "{:.1f}".format(self.lll_std))
-      #self.debugText = "vC--- LX" + "{:.1f}".format(self.lll_y[0]) + " RX" + "{:.1f}".format(self.rll_y[0]) + " LW" + "{:.1f}".format(self.lane_width) + " LP" + "{:.1f}".format(l_prob) + " RP" + "{:.1f}".format(r_prob) + " RS" + "{:.1f}".format(self.rll_std) + " LS" + "{:.1f}".format(self.lll_std)
 
     path_xyz[:, 1] += (CAMERA_OFFSET + self.lane_offset_filtered.x)
 

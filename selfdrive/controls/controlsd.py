@@ -691,7 +691,8 @@ class Controls:
         self.desired_curvature = clip_curvature(CS.vEgo, self.desired_curvature, model_v2.action.desiredCurvature)
         actuators.curvature = self.desired_curvature
       else:
-        self.desired_curvature = get_lag_adjusted_curvature(self.CP, CS.vEgo, lat_plan.psis, lat_plan.curvatures)
+        desired_curvature = get_lag_adjusted_curvature(self.CP, CS.vEgo, lat_plan.psis, lat_plan.curvatures)
+        self.desired_curvature = clip_curvature(CS.vEgo, self.desired_curvature, desired_curvature)
         actuators.curvature = self.desired_curvature
       actuators.steer, actuators.steeringAngleDeg, lac_log = self.LaC.update(CC.latActive, CS, self.VM, lp,
                                                                              self.steer_limited, self.desired_curvature,
@@ -912,6 +913,7 @@ class Controls:
 
     controlsState.leftBlinkerExt = self.v_cruise_helper.leftBlinkerExtCount + self.v_cruise_helper.blinkerExtMode
     controlsState.rightBlinkerExt = self.v_cruise_helper.rightBlinkerExtCount  + self.v_cruise_helper.blinkerExtMode
+    controlsState.curveSpeed = float(self.v_cruise_helper.curveSpeed)
 
     lat_tuning = self.CP.lateralTuning.which()
     if self.joystick_mode:

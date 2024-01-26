@@ -5,6 +5,7 @@ from cereal import car
 from openpilot.common.params import Params
 from openpilot.common.realtime import Priority, config_realtime_process
 from openpilot.common.swaglog import cloudlog
+from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.controls.lib.longitudinal_planner import LongitudinalPlanner
 from openpilot.selfdrive.controls.lib.lateral_planner import LateralPlanner
 import cereal.messaging as messaging
@@ -17,9 +18,17 @@ def publish_ui_plan(sm, pm, lateral_planner, longitudinal_planner):
   ui_send.valid = sm.all_checks(service_list=['carState', 'controlsState', 'modelV2'])
   uiPlan = ui_send.uiPlan
   uiPlan.frameId = sm['modelV2'].frameId
-  uiPlan.position.x = list(sm['modelV2'].position.x)
-  uiPlan.position.y = list(sm['modelV2'].position.y)
-  uiPlan.position.z = list(sm['modelV2'].position.z)
+  if Params().get_int("UseLaneLineSpeed") == 0:
+    uiPlan.position.x = list(sm['modelV2'].position.x)
+    uiPlan.position.y = list(sm['modelV2'].position.y)
+    uiPlan.position.z = list(sm['modelV2'].position.z)
+  else:
+    plan_odo = cumtrapz(longitudinal_planner.v_desired_trajectory_full, ModelConstants.T_IDXS)
+    model_odo = cumtrapz(lateral_planner.v_plan, ModelConstants.T_IDXS)
+    uiPlan.position.x = np.interp(plan_odo, model_odo, lateral_planner.x_sol[:,0]).tolist()
+    uiPlan.position.y = np.interp(plan_odo, model_odo, lateral_planner.x_sol[:,1]).tolist()
+    uiPlan.position.z = np.interp(plan_odo, model_odo, lateral_planner.path_xyz[:,2]).tolist()
+  
   uiPlan.accel = longitudinal_planner.a_desired_trajectory_full.tolist()
   pm.send('uiPlan', ui_send)
 

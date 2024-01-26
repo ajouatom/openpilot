@@ -8,6 +8,7 @@ from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.common.params import Params
 import numpy as np
 from common.filter_simple import StreamingMovingAverage
+from openpilot.selfdrive.carrot.carrot_functions import CarrotSpeedController
 
 EventName = car.CarEvent.EventName
 
@@ -24,7 +25,7 @@ MIN_CURVE_SPEED = 20. * CV.KPH_TO_MS
 V_CRUISE_MIN = 8
 V_CRUISE_MAX = 161 #145
 V_CRUISE_UNSET = 255
-V_CRUISE_INITIAL = 30 #40
+V_CRUISE_INITIAL = 10 #40
 V_CRUISE_INITIAL_EXPERIMENTAL_MODE = 105
 IMPERIAL_INCREMENT = 1.6  # should be CV.MPH_TO_KPH, but this causes rounding errors
 
@@ -81,7 +82,7 @@ class VCruiseHelper:
     self.curvatureFilter = StreamingMovingAverage(20)
     self.softHold_count = 0
     self.cruiseActiveReady = 0
-    self.autoCruiseCancelState = False
+    self.autoCruiseCancelState = 0  # 0: normal, 1:cancel, 2: timer cancel
     self.xIndex = 0
     self.frame = 0
     self._log_timer = 0
@@ -98,7 +99,11 @@ class VCruiseHelper:
     self.distance_traveled = 0.0
     self.nooHelperActivated = 0
     self.nooHelperActivateCount = 0
-    
+    self.curveSpeed = 0.0 # turnSpeed with sign
+    self.autoCruiseCancelTimer = 0
+
+    self.carrot = CarrotSpeedController()
+
     #ajouatom: params
     self.params_count = 0
     self.autoNaviSpeedBumpSpeed = float(self.params.get_int("AutoNaviSpeedBumpSpeed"))
@@ -237,7 +242,7 @@ class VCruiseHelper:
     if CS.gasPressed and button_type in (ButtonType.decelCruise, ButtonType.setCruise):
       self.v_cruise_kph = max(self.v_cruise_kph, CS.vEgo * CV.MS_TO_KPH)
 
-    self.v_cruise_kph = clip(round(self.v_cruise_kph, 1), V_CRUISE_MIN, V_CRUISE_MAX)
+    self.v_cruise_kph = clip(round(self.v_cruise_kph, 1), self.cruiseSpeedMin, V_CRUISE_MAX)
 
   def update_button_timers(self, CS, enabled):
     # increment timer for buttons still pressed
@@ -255,6 +260,10 @@ class VCruiseHelper:
     # initializing is handled by the PCM
     #if self.CP.pcmCruise:
     #  return
+
+    #carrot
+    if len(CS.buttonEvents) == 0:
+      return
 
     initial = V_CRUISE_INITIAL_EXPERIMENTAL_MODE if experimental_mode else V_CRUISE_INITIAL
 
@@ -304,6 +313,22 @@ class VCruiseHelper:
     if self.rightBlinkerExtCount + self.leftBlinkerExtCount <= 0:
       self.blinkerExtMode = 0
 
+    ## autoCruise가 핸들을 60도이상 돌리면.. 40초간 일시정지된다.
+    if abs(CS.steeringAngleDeg) > 60:
+      if self.autoCruiseCancelTimer == 0:
+        self._add_log("autoCruise paused for 40 seconds.")
+        controls.events.add(EventName.audioPrompt)
+      self.autoCruiseCancelTimer = int(40. / DT_CTRL)
+
+    if self.autoCruiseCancelTimer > 0:
+      if self.autoCruiseCancelTimer % int(1 / DT_CTRL) == 0:
+        self._add_log("autoCruise paused for {:.0f}seconds.".format(self.autoCruiseCancelTimer*DT_CTRL))
+    if self.autoCruiseCancelTimer == 1:
+      controls.events.add(EventName.audioPrompt)
+      self._add_log("autoCruise activated.")
+
+    self.autoCruiseCancelTimer = max(self.autoCruiseCancelTimer - 1, 0)
+
     self._update_lead(controls)
     self.v_ego_kph_set = int(CS.vEgoCluster * CV.MS_TO_KPH + 0.5)
     if self.v_cruise_kph_set > 200:
@@ -311,12 +336,18 @@ class VCruiseHelper:
     v_cruise_kph = self.v_cruise_kph_set    
     v_cruise_kph = self._update_cruise_carrot(CS, v_cruise_kph, controls)
     v_cruise_kph_apply = self.cruise_control_speed(v_cruise_kph)
-    self.auto_navi_control(CS, controls)
-    apn_limit_kph = self.update_speed_apilot(CS, controls, self.v_cruise_kph)
-    v_cruise_kph_apply = min(v_cruise_kph_apply, apn_limit_kph)
-    self.curveSpeed = self.apilot_curve(CS, controls)
+
+    if False:
+      carrot_cruise_kph = self.carrot.update(CS, controls, self.v_cruise_kph)
+      v_cruise_kph_apply = min(v_cruise_kph_apply, carrot_cruise_kph)
+    else:
+      self.auto_navi_control(CS, controls)
+      apn_limit_kph = self.update_speed_apilot(CS, controls, self.v_cruise_kph)
+      v_cruise_kph_apply = min(v_cruise_kph_apply, apn_limit_kph)
+
+    self.turnSpeed = self.apilot_curve(CS, controls)
     if self.autoCurveSpeedCtrlUse > 0:
-      v_cruise_kph_apply = min(v_cruise_kph_apply, self.curveSpeed)
+      v_cruise_kph_apply = min(v_cruise_kph_apply, self.turnSpeed)
     self.v_cruise_kph_set = v_cruise_kph
     self.v_cruise_kph = v_cruise_kph_apply
 
@@ -329,14 +360,17 @@ class VCruiseHelper:
     # 계산된 결과로, oritetationRates를 나누어 조금더 curvature값이 커지도록 함.
     speed = min(self.turnSpeed_prev / 3.6, clip(CS.vEgo, 0.5, 100.0))    
     #curvature = np.max(np.abs(orientationRates[12:])) / speed  # 12: 약1.4초 미래의 curvature를 계산함.
-    curvature = np.max(np.abs(orientationRates[12:20])) / speed  # 12: 약1.4~3.5초 미래의 curvature를 계산함.
+    #curvature = np.max(np.abs(orientationRates[12:20])) / speed  # 12: 약1.4~3.5초 미래의 curvature를 계산함.
+    curvature = np.max(np.abs(orientationRates[12:28])) / speed  
     curvature = self.curvatureFilter.process(curvature) * self.autoCurveSpeedFactor
     turnSpeed = 300
     if abs(curvature) > 0.0001:
-      turnSpeed = interp(curvature, V_CURVE_LOOKUP_BP, V_CRUVE_LOOKUP_VALS)
+      turnSpeed = interp(abs(curvature), V_CURVE_LOOKUP_BP, V_CRUVE_LOOKUP_VALS)
       turnSpeed = clip(turnSpeed, MIN_CURVE_SPEED, 255)
     else:
       turnSpeed = 300
+
+    self.curveSpeed = turnSpeed * np.sign(curvature)
 
     #print("curvature={:.5f}, speed = {:.1f}".format(curvature, turnSpeed))
     self.turnSpeed_prev = turnSpeed
@@ -517,23 +551,28 @@ class VCruiseHelper:
       if self.long_pressed:
         if button_type in [ButtonType.accelCruise, ButtonType.decelCruise]:
           v_cruise_kph = button_kph
+          self._add_log("Button long pressed..{:.0f}".format(v_cruise_kph))
         elif button_type == ButtonType.gapAdjustCruise:
-          print("gapAdjustCruise")
+          self._add_log("Button gap pressed ..")
       else:
         if button_type == ButtonType.accelCruise:
           if self.softHoldActive > 0:
             self.softHoldActive = 0
+            self._add_log("Button softhold released ..")
           else:
             if self.cruiseButtonMode == 0:
               v_cruise_kph = button_kph
             elif self.cruiseButtonMode in [1,2]:
               v_cruise_kph = self.v_cruise_speed_up(v_cruise_kph)
-          self._add_log("Button speed up...{:.0f}".format(v_cruise_kph))
+            self._add_log("Button speed up...{:.0f}".format(v_cruise_kph))
         elif button_type == ButtonType.decelCruise:
-          if self.autoCruiseControl == 0 or self.cruiseButtonMode in [0,1]:
+          #if self.autoCruiseControl == 0 or self.cruiseButtonMode in [0,1]:
+          if self.cruiseButtonMode in [0,1]:
             v_cruise_kph = button_kph
+            self._add_log("Button speed down...{:.0f}".format(v_cruise_kph))
           elif v_cruise_kph > self.v_ego_kph_set + 0:
             v_cruise_kph = self.v_ego_kph_set
+            self._add_log("Button speed set...{:.0f}".format(v_cruise_kph))
           else:
             #v_cruise_kph = button_kph
             self.cruiseActiveReady = 1
@@ -549,11 +588,13 @@ class VCruiseHelper:
       self.softHoldActive = 0
     if self.brake_pressed_count > 0 or self.gas_pressed_count > 0 or button_type in [ButtonType.cancel, ButtonType.accelCruise, ButtonType.decelCruise]:
       if button_type == ButtonType.cancel:
-        self.autoCruiseCancelState = not self.autoCruiseCancelState
+        self.autoCruiseCancelState = 0 if self.autoCruiseCancelState > 0 else 1
         controls.events.add(EventName.audioPrompt)
         print("autoCruiseCancelSate = {}".format(self.autoCruiseCancelState))
+        self.autoCruiseCancelTimer = 0
       elif button_type != 0:
-        self.autoCruiseCancelState = False    
+        self.autoCruiseCancelState = 0
+        self.autoCruiseCancelTimer = 0
       if self.cruiseActivate > 0:
         self.cruiseActivate = 0
 
@@ -597,21 +638,27 @@ class VCruiseHelper:
 
     ## Auto Engage/Disengage via Gas/Brake
     if gas_tok:
+      self.autoCruiseCancelTimer = 0
       if controls.enabled:
         v_cruise_kph = self.v_cruise_speed_up(v_cruise_kph)
       elif self.autoResumeFromGasSpeed > 0:
         self._add_log("Cruise Activate from GasTok")
-        v_cruise_kph = self.v_ego_kph_set
+        #v_cruise_kph = self.v_ego_kph_set
         self.cruiseActivate = 1
     elif self.gas_pressed_count == -1:
       v_cruise_kph = self._gas_released_cond(CS, v_cruise_kph, controls)
+      if self.autoCruiseCancelTimer > 0 and self.cruiseActivate > 0:
+        self.cruiseActivate = 0
     elif self.brake_pressed_count == -1:
       if self.softHoldActive == 1 and self.softHoldMode > 0:
         self._add_log("Cruise Activete from SoftHold")
         self.softHoldActive = 2
         self.cruiseActivate = 1
+        self.autoCruiseCancelTimer = 0
       else:
         v_cruise_kph =  self._brake_released_cond(CS, v_cruise_kph, controls)
+        if self.autoCruiseCancelTimer > 0 and self.cruiseActivate > 0:
+          self.cruiseActivate = 0
 
     elif self.gas_pressed_count > 0 and self.v_ego_kph_set > v_cruise_kph:
       v_cruise_kph = self.v_ego_kph_set
@@ -642,7 +689,7 @@ class VCruiseHelper:
       else:
         self.cruiseActivate = 0
 
-    if self.autoCruiseControl < 1 or self.autoCruiseCancelState or not controls.can_enable or CS.brakeHoldActive:
+    if self.autoCruiseControl < 1 or self.autoCruiseCancelState > 0 or not controls.can_enable or CS.brakeHoldActive:
       if self.cruiseActivate != 0:
         self._add_log("Cancel auto Cruise = {self.cruiseActivate}")
       self.cruiseActivate = 0
@@ -773,6 +820,7 @@ class VCruiseHelper:
     return v_cruise_kph_apply
 
   def auto_navi_control(self, CS, controls):
+    v_ego = CS.vEgoCluster
     delta_dist = controls.distance_traveled - self.distance_traveled
     self.distance_traveled = controls.distance_traveled
     self.nav_distance = max(0, self.nav_distance - delta_dist)
@@ -817,12 +865,14 @@ class VCruiseHelper:
           self.naviDistance = self.nav_distance
           self.naviSpeed = turn_speed if nav_turn or (nav_speedDown and nav_type in [5]) else laneChange_speed
 
-      if 0 < self.naviDistance < 300.0:
-        if self.nooHelperActivated == 0:
+      start_dist = interp(v_ego*3.6, [60, 110], [300, 1000])
+      if 0 < self.naviDistance:
+        if self.nooHelperActivated == 0 and self.naviDistance < start_dist:
           self.nooHelperActivated = 1
-        self.nooHelperActivated = max(1, self.nooHelperActivated)
-        self.nooHelperActivateCount = max(0, self.nooHelperActivateCount + 1)
-        self._add_log("Auto Speed Down to {:.0f}km/h. {:.0f}m left.".format(self.naviSpeed, self.naviDistance))
+        if self.nooHelperActivated:
+          self.nooHelperActivated = max(1, self.nooHelperActivated)
+          self.nooHelperActivateCount = max(0, self.nooHelperActivateCount + 1)
+          self._add_log("Auto Speed Down to {:.0f}km/h. {:.0f}m left.".format(self.naviSpeed, self.naviDistance))
       else:
         self.nooHelperActivated = 0
         self.nooHelperActivateCount = min(0, self.nooHelperActivateCount - 1)
@@ -860,7 +910,7 @@ class VCruiseHelper:
 
       if self.autoTurnControl in [1,2] and self.nooHelperActivated == 1:
         blinkerExtState = self.rightBlinkerExtCount + self.rightBlinkerExtCount
-        if nav_direction == 1 and nav_turn: # 왼쪽차선변경은 위험하니 턴인경우만 하자, 하지만 지금은 안함.
+        if nav_direction == 1: #여기서는 풀고... desire에서 막자.  and nav_turn: # 왼쪽차선변경은 위험하니 턴인경우만 하자, 하지만 지금은 안함.
           if CS.rightBlinker or (CS.steeringPressed and CS.steeringTorque < 0):
             self.nooHelperActivated = 2
           else:

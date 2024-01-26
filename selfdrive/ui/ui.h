@@ -138,7 +138,7 @@ static std::map<cereal::ControlsState::AlertStatus, QColor> alert_colors = {
 
 // ajouatom
 typedef struct {
-    float x, y, d, v, y_rel, v_lat;
+    float x, y, d, v, y_rel, v_lat, radar;
 } lead_vertex_data;
 typedef struct UIScene {
   bool calibration_valid = false;

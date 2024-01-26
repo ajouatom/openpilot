@@ -692,9 +692,9 @@ def main():
         else:
           xTurnInfo = xTurnInfo1
 
-        navTypeNext, navModifierNext = "invalid", ""
+        navTypeNext, navModifierNext, xTurnInfoNext = "invalid", "", -1
         if nTBTTurnTypeNext in turn_type_mapping:
-          navTypeNext, navModifierNext, xTurnInfo_temp = turn_type_mapping[nTBTTurnTypeNext]
+          navTypeNext, navModifierNext, xTurnInfoNext = turn_type_mapping[nTBTTurnTypeNext]
 
 
         if nTBTDist > 0 and xTurnInfo >= 0:
@@ -775,6 +775,8 @@ def main():
         #print("turn={},{}".format(xTurnInfo, xDistToTurn))
         dat.roadLimitSpeed.xTurnInfo = int(xTurnInfo)
         dat.roadLimitSpeed.xDistToTurn = int(xDistToTurn)
+        dat.roadLimitSpeed.xTurnInfoNext = int(xTurnInfoNext)
+        dat.roadLimitSpeed.xDistToTurnNext = int(nTBTDistNext)
         dat.roadLimitSpeed.xSpdDist = int(xSpdDist) if xBumpDistance <= 0 else int(xBumpDistance)
         dat.roadLimitSpeed.xSpdLimit = int(xSpdLimit) if xBumpDistance <= 0 else 35 # 속도는 추후조절해야함. 일단 35
         dat.roadLimitSpeed.xSignType = int(xSignType) if xBumpDistance <= 0 else 22

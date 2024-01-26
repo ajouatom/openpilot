@@ -68,7 +68,7 @@ class LateralPlanner:
 
     self.lat_mpc = LateralMpc()
     self.reset_mpc(np.zeros(4))
-    self.vcurv = []
+    self.curve_speed = 0
 
   def reset_mpc(self, x0=None):
     if x0 is None:
@@ -86,6 +86,7 @@ class LateralPlanner:
     # clip speed , lateral planning is not possible at 0 speed
     measured_curvature = sm['controlsState'].curvature
     v_ego_car = sm['carState'].vEgo
+    self.curve_speed = sm['controlsState'].curveSpeed
 
     # Parse model predictions
     md = sm['modelV2']
@@ -123,7 +124,7 @@ class LateralPlanner:
     self.LP.lane_width_left = md.meta.laneWidthLeft
     self.LP.lane_width_right = md.meta.laneWidthRight
     self.LP.curvature = measured_curvature
-    self.path_xyz = self.LP.get_d_path(sm['carState'], self.v_ego, self.t_idxs, self.path_xyz, self.vcurv)
+    self.path_xyz = self.LP.get_d_path(sm['carState'], self.v_ego, self.t_idxs, self.path_xyz, self.curve_speed)
     self.latDebugText = self.LP.debugText
     self.lanelines_active = True if self.LP.d_prob > 0.3 and self.LP.lanefull_mode else False
 
@@ -181,7 +182,6 @@ class LateralPlanner:
 
     lateralPlan.curvatures = (self.lat_mpc.x_sol[0:CONTROL_N, 3]/self.v_ego).tolist()
     lateralPlan.curvatureRates = [float(x.item() / self.v_ego) for x in self.lat_mpc.u_sol[0:CONTROL_N - 1]] + [0.0]
-    self.vcurv = (100 * self.lat_mpc.x_sol[:, 3]/self.v_ego).tolist()
 
     lateralPlan.mpcSolutionValid = bool(plan_solution_valid)
     lateralPlan.solverExecutionTime = self.lat_mpc.solve_time
@@ -207,7 +207,7 @@ class LateralPlanner:
     debugText = "{} | {:.1f}m | {:.1f}m | {:.1f}m | {}".format(
       "lanemode" if self.lanelines_active else "laneless",
       self.LP.lane_width_left, self.LP.lane_width, self.LP.lane_width_right,
-      "offset={:.1f}cm".format(self.LP.offset_total*100.0) if self.lanelines_active else "")
+      "offset={:.1f}cm turn={:.0f}km/h".format(self.LP.offset_total*100.0, self.curve_speed) if self.lanelines_active else "")
 
     lateralPlan.latDebugText = debugText
     #lateralPlan.latDebugText = self.latDebugText

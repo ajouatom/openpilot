@@ -728,6 +728,7 @@ struct ControlsState @0x97ff69c53601abf1 {
   debugText2 @67 : Text;
   leftBlinkerExt @68 : Int32;
   rightBlinkerExt @69 : Int32;
+  curveSpeed @70 : Float32;
   enum OpenpilotState @0xdbe58b96d2d1ac61 {
     disabled @0;
     preEnabled @1;
@@ -960,6 +961,7 @@ struct ModelDataV2 {
     distanceToRoadEdgeRight @13 :Float32;
     desire @14 :Desire;
     laneChangeProb @15 :Float32;
+    debugText @16 :Text;
 
     # deprecated
     brakeDisengageProbDEPRECATED @2 :Float32;
@@ -2267,6 +2269,8 @@ struct RoadLimitSpeed {
     roadcate @23 : Int16;
     navInstruction @24 :NavInstruction;
     xNextRoadWidth @25 : Int16;
+    xTurnInfoNext @26 :Int32;
+    xDistToTurnNext @27 :Int32;
 }
 
 struct Event {

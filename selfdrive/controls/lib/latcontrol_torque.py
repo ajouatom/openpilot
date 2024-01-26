@@ -25,7 +25,7 @@ from openpilot.common.params import Params
 
 LOW_SPEED_X = [0, 10, 20, 30]
 LOW_SPEED_Y = [15, 13, 10, 5]
-LOW_SPEED_Y_NN = [12, 3, 1, 0]
+LOW_SPEED_Y_NN = [12, 4, 1, 0]
 
 def sign(x):
   return 1.0 if x > 0.0 else (-1.0 if x < 0.0 else 0.0)
@@ -62,13 +62,11 @@ class LatControlTorque(LatControl):
     self.torque_from_lateral_accel = CI.torque_from_lateral_accel()
     self.use_steering_angle = self.torque_params.useSteeringAngle
     self.steering_angle_deadzone_deg = self.torque_params.steeringAngleDeadzoneDeg
-    self.lowspeed_factor_factor = 1.0 # in [0, 1] in 0.1 increments.
 
     # Twilsonco's Lateral Neural Network Feedforward
     self.use_nn = CI.has_lateral_torque_nn
     if self.use_nn:
       self.pitch = FirstOrderFilter(0.0, 0.5, 0.01)
-      self.lowspeed_factor_factor = 1.0
       # NN model takes current v_ego, lateral_accel, lat accel/jerk error, roll, and past/future/planned data
       # of lat accel and roll
       # Past value is computed using previous desired lat accel and observed roll
@@ -87,7 +85,6 @@ class LatControlTorque(LatControl):
       self.history_frame_offsets = [history_check_frames[0] - i for i in history_check_frames]
       self.lateral_accel_desired_deque = deque(maxlen=history_check_frames[0])
       self.roll_deque = deque(maxlen=history_check_frames[0])
-      self.error_deque = deque(maxlen=history_check_frames[0])
       self.past_future_len = len(self.past_times) + len(self.nn_future_times)
 
       # Setup adjustable parameters
@@ -99,17 +96,12 @@ class LatControlTorque(LatControl):
       # Note that LAT_PLAN_MIN_IDX is defined above and is used in order to prevent
       # using a "future" value that is actually planned to occur before the "current" desired
       # value, which is offset by the steerActuatorDelay.
-      self.friction_look_ahead_v = [0.8, 1.8] # how many seconds in the future to look ahead in [0, ~2.1] in 0.1 increments
-      self.friction_look_ahead_bp = [9.0, 35.0] # corresponding speeds in m/s in [0, ~40] in 1.0 increments
-      # Additionally, we use a deadzone to make sure that we only put additional torque
-      # when the jerk is large enough to be significant.
-      self.lat_jerk_deadzone = 0.0 # m/s^3 in [0, ∞] in 0.05 increments
-      # Finally, lateral jerk error is downscaled so it doesn't dominate the friction error
-      # term.
-      self.lat_jerk_friction_factor = 0.4 # in [0, 3] in 0.05 increments
+      self.friction_look_ahead_v = [1.4, 2.0] # how many seconds in the future to look ahead in [0, ~2.1] in 0.1 increments
+      self.friction_look_ahead_bp = [9.0, 30.0] # corresponding speeds in m/s in [0, ~40] in 1.0 increments
 
       # Scaling the lateral acceleration "friction response" could be helpful for some.
       # Increase for a stronger response, decrease for a weaker response.
+      self.lat_jerk_friction_factor = 0.4
       self.lat_accel_friction_factor = 0.7 # in [0, 3], in 0.05 increments. 3 is arbitrary safety limit
       
 
@@ -166,58 +158,28 @@ class LatControlTorque(LatControl):
       actual_lateral_accel = actual_curvature * CS.vEgo ** 2
       lateral_accel_deadzone = curvature_deadzone * CS.vEgo ** 2
 
-      low_speed_factor = (self.lowspeed_factor_factor * interp(CS.vEgo, LOW_SPEED_X, LOW_SPEED_Y if not self.use_nn else LOW_SPEED_Y_NN))**2
+      low_speed_factor = interp(CS.vEgo, LOW_SPEED_X, LOW_SPEED_Y if not self.use_nn else LOW_SPEED_Y_NN)**2
       setpoint = desired_lateral_accel + low_speed_factor * desired_curvature
       measurement = actual_lateral_accel + low_speed_factor * actual_curvature
 
-      model_planner_good = None not in [lat_plan, model_data] and all([len(i) >= CONTROL_N for i in [model_data.orientation.x, lat_plan.curvatures]])
-      if self.use_nn and model_planner_good:
+      if self.use_nn:
         # update past data
         roll = params.roll
         pitch = self.pitch.update(llk.calibratedOrientationNED.value[1])
         roll = roll_pitch_adjust(roll, pitch)
-        self.roll_deque.append(roll)
-        self.lateral_accel_desired_deque.append(desired_lateral_accel)
-
-        # prepare "look-ahead" desired lateral jerk
-        lookahead = interp(CS.vEgo, self.friction_look_ahead_bp, self.friction_look_ahead_v)
-        friction_upper_idx = next((i for i, val in enumerate(ModelConstants.T_IDXS) if val > lookahead), 16)
-        lookahead_curvature_rate = get_lookahead_value(list(lat_plan.curvatureRates)[LAT_PLAN_MIN_IDX:friction_upper_idx], 1.0)
-        lookahead_lateral_jerk = lookahead_curvature_rate * CS.vEgo**2
-
-        # prepare past and future values
-        # adjust future times to account for longitudinal acceleration
-        adjusted_future_times = [t + 0.5*CS.aEgo*(t/max(CS.vEgo, 1.0)) for t in self.nn_future_times]
-        past_rolls = [self.roll_deque[min(len(self.roll_deque)-1, i)] for i in self.history_frame_offsets]
-        future_rolls = [roll_pitch_adjust(interp(t, ModelConstants.T_IDXS, model_data.orientation.x) + roll, interp(t, ModelConstants.T_IDXS, model_data.orientation.y) + pitch) for t in adjusted_future_times]
-        past_lateral_accels_desired = [self.lateral_accel_desired_deque[min(len(self.lateral_accel_desired_deque)-1, i)] for i in self.history_frame_offsets]
-        future_planned_lateral_accels = [interp(t, ModelConstants.T_IDXS[:CONTROL_N], lat_plan.curvatures) * CS.vEgo ** 2 for t in adjusted_future_times]
-
-        # compute NN error response.
-        lookahead_lateral_jerk = apply_deadzone(lookahead_lateral_jerk, self.lat_jerk_deadzone)
-        lateral_jerk_setpoint = self.lat_jerk_friction_factor * lookahead_lateral_jerk
-        lateral_jerk_measurement = self.lat_jerk_friction_factor * actual_lateral_jerk
-        if self.use_steering_angle or lookahead_lateral_jerk == 0.0:
-          lateral_jerk_measurement = 0.0
 
         # compute NNFF error response
-        nnff_setpoint_input = [CS.vEgo, setpoint, lateral_jerk_setpoint, roll] \
-                              + [setpoint] * self.past_future_len \
-                              + past_rolls + future_rolls
+        nn_setpoint_input = [CS.vEgo, setpoint, 0.0, roll]
         # past lateral accel error shouldn't count, so use past desired like the setpoint input
-        nnff_measurement_input = [CS.vEgo, measurement, lateral_jerk_measurement, roll] \
-                              + [measurement] * self.past_future_len \
-                              + past_rolls + future_rolls
-        torque_from_setpoint = self.torque_from_nn(nnff_setpoint_input)
-        torque_from_measurement = self.torque_from_nn(nnff_measurement_input)
+        nn_measurement_input = [CS.vEgo, measurement, 0.0, roll]
+        torque_from_setpoint = self.torque_from_nn(nn_setpoint_input)
+        torque_from_measurement = self.torque_from_nn(nn_measurement_input)
         pid_log.error = torque_from_setpoint - torque_from_measurement
 
         # compute feedforward (same as nn setpoint output)
         error = setpoint - measurement
-        friction_input = self.lat_accel_friction_factor * error + self.lat_jerk_friction_factor * lookahead_lateral_jerk
-        nn_input = [CS.vEgo, desired_lateral_accel, friction_input, roll] \
-                              + past_lateral_accels_desired + future_planned_lateral_accels \
-                              + past_rolls + future_rolls
+        friction_input = error
+        nn_input = [CS.vEgo, desired_lateral_accel, friction_input, roll]
         ff = self.torque_from_nn(nn_input)
 
         # apply friction override for cars with low NN friction response
@@ -225,7 +187,7 @@ class LatControlTorque(LatControl):
           pid_log.error += self.torque_from_lateral_accel(0.0, self.torque_params,
                                             friction_input,
                                             lateral_accel_deadzone, friction_compensation=True)
-        nn_log = nn_input + nnff_setpoint_input + nnff_measurement_input
+        nn_log = nn_input + nn_setpoint_input + nn_measurement_input
       else:
         gravity_adjusted_lateral_accel = desired_lateral_accel - params.roll * ACCELERATION_DUE_TO_GRAVITY
         torque_from_setpoint = self.torque_from_lateral_accel(setpoint, self.torque_params, setpoint,

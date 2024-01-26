@@ -702,7 +702,9 @@ class LongitudinalMpc:
 
     #self.check_model_stopping(v, v_ego, self.xStop, y)
     self.check_model_stopping(v, v_ego, x[-1], y)
-    
+
+    if (carstate.rightBlinker and not carstate.leftBlinker) or self.myDrivingMode == 4 or self.trafficStopMode == 0:
+      self.trafficState = TrafficState.off    
 
     if self.xState == XState.e2eStopped:
       if carstate.gasPressed:
@@ -746,7 +748,7 @@ class LongitudinalMpc:
       if self.status:
         self.xState = XState.lead
       #elif self.trafficState == TrafficState.red and not carstate.gasPressed and self.myDrivingMode != 4 and self.trafficStopMode > 0:
-      elif self.trafficState == TrafficState.red and self.myDrivingMode != 4 and self.trafficStopMode > 0 and abs(carstate.steeringAngleDeg) < 30:
+      elif self.trafficState == TrafficState.red and abs(carstate.steeringAngleDeg) < 30:
         self.xState = XState.e2eStop
         self.stopDist = self.xStop
       else:

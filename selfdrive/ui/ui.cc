@@ -360,6 +360,7 @@ void update_leads(UIState *s, const cereal::RadarState::Reader &radar_state, con
           vd.v = l.getVLeadK();
           vd.y_rel = l.getYRel();
           vd.v_lat = l.getVLat();
+          vd.radar = l.getRadar();
           s->scene.lead_vertices_side.push_back(vd);
       }
   }
@@ -455,8 +456,9 @@ void update_model(UIState *s,
   else if (show_path_mode == 0) {
       update_line_data2(s, plan_position, s->show_path_width, s->show_z_offset, s->show_z_offset, &scene.track_vertices, max_idx);
   }
-  else if(show_path_mode < 9 || show_path_mode == 13 || show_path_mode == 14 || show_path_mode == 15)
-    update_line_data_dist(s, plan_position, s->show_path_width, 0.8, s->show_z_offset, &scene.track_vertices, max_distance, false);
+  else if (show_path_mode < 9 || show_path_mode == 13 || show_path_mode == 14 || show_path_mode == 15) {
+      update_line_data_dist(s, plan_position, s->show_path_width, 0.8, s->show_z_offset, &scene.track_vertices, max_distance, false);
+  }
   else
     update_line_data_dist3(s, plan_position, s->show_path_width, 0.8, s->show_z_offset, &scene.track_vertices, max_distance, false);
 

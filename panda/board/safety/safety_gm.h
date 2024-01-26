@@ -88,7 +88,7 @@ bool gm_cc_long = false;
 bool gm_skip_relay_check = false;
 bool gm_force_ascm = false;
 
-static void handle_gm_wheel_buttons(CANPacket_t *to_push) {
+static void handle_gm_wheel_buttons(const CANPacket_t *to_push) {
   int button = (GET_BYTE(to_push, 5) & 0x70U) >> 4;
 
   // enter controls on falling edge of set or rising edge of resume (avoids fault)
@@ -106,7 +106,7 @@ static void handle_gm_wheel_buttons(CANPacket_t *to_push) {
   cruise_button_prev = button;
 }
 
-static void gm_rx_hook(CANPacket_t *to_push) {
+static void gm_rx_hook(const CANPacket_t *to_push) {
   if ((GET_BUS(to_push) == 2U) && (GET_ADDR(to_push) == 0x1E1) && (gm_hw == GM_SDGM)) {
     // SDGM buttons are on bus 2
     handle_gm_wheel_buttons(to_push);
@@ -192,7 +192,7 @@ static void gm_rx_hook(CANPacket_t *to_push) {
   }
 }
 
-static bool gm_tx_hook(CANPacket_t *to_send) {
+static bool gm_tx_hook(const CANPacket_t *to_send) {
   bool tx = true;
   int addr = GET_ADDR(to_send);
 

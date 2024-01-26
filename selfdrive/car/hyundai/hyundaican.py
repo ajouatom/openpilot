@@ -246,6 +246,7 @@ def create_acc_commands_mix_scc(CP, packer, enabled, accel, upper_jerk, lower_je
     values["StopReq"] = stopReq
     values["aReqRaw"] = accel
     values["aReqValue"] = accel
+    values["ACCFailInfo"] = 0
 
     values["CR_VSM_ChkSum"] = 0
     values["CR_VSM_Alive"] = idx % 0xF

@@ -64,7 +64,7 @@ procs = [
   NativeProcess("proclogd", "system/proclogd", ["./proclogd"], only_onroad),
   PythonProcess("logmessaged", "system.logmessaged", enable_logging),
   PythonProcess("micd", "system.micd", iscar),
-  PythonProcess("timezoned", "system.timezoned", always_run, enabled=not PC),
+  PythonProcess("timed", "system.timed", always_run, enabled=not PC),
 
   PythonProcess("dmonitoringmodeld", "selfdrive.modeld.dmonitoringmodeld", enable_dm, enabled=(not PC or WEBCAM)),
   PythonProcess("carrotmodeld", "selfdrive.modeld.carrot.carrotmodeld", only_onroad),

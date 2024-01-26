@@ -707,6 +707,9 @@ void DrawPlot::draw(const UIState* s) {
     if (plotMax < _data) plotMax = _data;
     if (plotMin > _data1) plotMin = _data1;
     if (plotMax < _data1) plotMax = _data1;
+
+    if (plotMin > -2.) plotMin = -2.0;
+    if (plotMax < 2.0) plotMax = 2.0;
     plotIndex = (plotIndex + 1) % PLOT_MAX;
     plotQueue[0][plotIndex] = _data;
     plotQueue[1][plotIndex] = _data1;
@@ -729,12 +732,12 @@ void DrawApilot::drawRadarInfo(const UIState* s) {
     if (s->show_radar_info) {
         int wStr = 40;
         for (auto const& vrd : s->scene.lead_vertices_side) {
-            auto [rx, ry, rd, rv, ry_rel, v_lat] = vrd;
+            auto [rx, ry, rd, rv, ry_rel, v_lat, radar] = vrd;
 
             if (rv < -1.0 || rv > 1.0) {
                 sprintf(str, "%.0f", rv * 3.6);
                 wStr = 35 * (strlen(str) + 0);
-                ui_fill_rect(s->vg, { (int)(rx - wStr / 2), (int)(ry - 35), wStr, 42 }, (rv>0.)?COLOR_GREEN:COLOR_RED, 15);
+                ui_fill_rect(s->vg, { (int)(rx - wStr / 2), (int)(ry - 35), wStr, 42 }, (!radar)?COLOR_BLUE:(rv>0.)?COLOR_GREEN:COLOR_RED, 15);
                 ui_draw_text(s, rx, ry, str, 40, COLOR_WHITE, BOLD);
                 if (s->show_radar_info >= 2) {
                     sprintf(str, "%.1f", ry_rel);
@@ -1136,8 +1139,8 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
         else x = 950;
     }
     else if (s->show_mode == 4) {
-        y = 380;
-        x = 150;
+        y = 410;// 380;
+        x = 120;// 150;
     }
     else if (s->show_mode == 5) {
         y = 620;
@@ -1292,7 +1295,7 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
         by = y + 250;
         if (s->show_mode == 4) {
             bx = 150;
-            by = 380;
+            by = 410;// 380;
         }
         else if (s->show_mode == 5) {
             bx = 100;
@@ -1340,10 +1343,10 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
                 if(navModifier == "uturn") ui_draw_image(s, {bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size}, "ic_turn_u", 1.0f);
                 else {
                     sprintf(str, "%s", (navModifier.length()>0)?navModifier.toStdString().c_str() : "unknown");
-                    ui_draw_text(s, bx, by + 20, str, 35, COLOR_WHITE, BOLD, 0.0f, 0.0f);
+                    ui_draw_text(s, bx, by + 20, str, 35, COLOR_WHITE, BOLD);
                 }
                 break;
-            case 6: ui_draw_text(s, bx, by + 20, "톨게이트 진입", 35, COLOR_WHITE, BOLD, 0.0f, 0.0f); break;
+            case 6: ui_draw_text(s, bx, by + 20, "TG", 35, COLOR_WHITE, BOLD); break;
             case 35: ui_draw_text(s, bx, by + 20, "좌측고가 진입", 35, COLOR_WHITE, BOLD, 0.0f, 0.0f); break;
             case 43: ui_draw_text(s, bx, by + 20, "지하차도 우측", 35, COLOR_WHITE, BOLD, 0.0f, 0.0f); break;
             case 48: ui_draw_text(s, bx, by + 20, "휴게소", 35, COLOR_WHITE, BOLD, 0.0f, 0.0f); break;
@@ -1543,7 +1546,8 @@ void DrawApilot::makePathXY(const UIState* s, int& path_bx1, int& path_x, int& p
     //    _path_x = (int)std::clamp((float)vd.x(), 550.f, s->fb_w - 550.f);
     //    _path_y = (int)std::clamp((float)vd.y(), 200.f, s->fb_h - 100.f);
     //}
-    _path_x = (int)std::clamp(_path_x, 550.f, s->fb_w - 550.f);
+    //_path_x = (int)std::clamp(_path_x, 550.f, s->fb_w - 550.f);
+    _path_x = (int)std::clamp(_path_x, 350.f, s->fb_w - 350.f);
     _path_y = (int)std::clamp(_path_y, 200.f, s->fb_h - 120.f);
     if (isnan(_path_x) || isnan(_path_y) || isnan(_path_width));
     else {
@@ -1802,7 +1806,6 @@ void DrawApilot::drawDeviceState(UIState* s, bool show) {
     const SubMaster& sm = *(s->sm);
     auto deviceState = sm["deviceState"].getDeviceState();
     char  str[128];
-    QString qstr;
     const auto freeSpacePercent = deviceState.getFreeSpacePercent();
     const auto memoryUsagePercent = deviceState.getMemoryUsagePercent();
 
@@ -1853,22 +1856,30 @@ void DrawApilot::drawDeviceState(UIState* s, bool show) {
     //sprintf(str, "%3.1fm    %3.1fm    %3.1fm", laneWidthLeft, laneWidth, laneWidthRight);
     //ui_draw_text(s, s->fb_w / 2, s->fb_h - 50, str, 30, COLOR_WHITE, BOLD);
 
+    auto meta = sm["modelV2"].getModelV2().getMeta();
+    QString debugModelV2 = QString::fromStdString(meta.getDebugText().cStr());
     auto controls_state = sm["controlsState"].getControlsState();
-    qstr = QString::fromStdString(controls_state.getDebugText1().cStr());
-    if(qstr.length() > 2) 
-      ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, qstr.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
-    else if(s->fb_w > 1200 && show) {
-      sprintf(str, "MEM: %d%% DISK: %.0f%% CPU: %.0f°C FPS: %d, %s: %.0f BATTERY: %.0f%%", memoryUsagePercent, freeSpacePercent, cpuTemp, g_fps, (motorRpm > 0.0) ? "MOTOR" : "RPM", (motorRpm > 0.0) ? motorRpm : engineRpm, car_state.getChargeMeter());
-      ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, str, 30, COLOR_WHITE, BOLD);
+    QString debugControlsState = QString::fromStdString(controls_state.getDebugText1().cStr());
+    if (debugModelV2.length() > 2) {
+        ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugModelV2.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
+    }
+    else {
+        if (debugControlsState.length() > 2) {
+            ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugControlsState.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
+        }
+        else if (s->fb_w > 1200 && show) {
+            sprintf(str, "MEM: %d%% DISK: %.0f%% CPU: %.0f°C FPS: %d, %s: %.0f BATTERY: %.0f%%", memoryUsagePercent, freeSpacePercent, cpuTemp, g_fps, (motorRpm > 0.0) ? "MOTOR" : "RPM", (motorRpm > 0.0) ? motorRpm : engineRpm, car_state.getChargeMeter());
+            ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, str, 30, COLOR_WHITE, BOLD);
+        }
     }
     
 
     const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
     const auto live_params = sm["liveParameters"].getLiveParameters();
     float   liveSteerRatio = live_params.getSteerRatio();
-    qstr = QString::fromStdString(lp.getDebugLongText().cStr());
-    qstr += (" LiveSR:" + QString::number(liveSteerRatio, 'f', 2));
-    ui_draw_text(s, s->fb_w / 2, 30, qstr.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
+    QString debugLong = QString::fromStdString(lp.getDebugLongText().cStr());
+    debugLong += (" LiveSR:" + QString::number(liveSteerRatio, 'f', 2));
+    ui_draw_text(s, s->fb_w / 2, 30, debugLong.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
 
 }
 void DrawApilot::drawDebugText(UIState* s, bool show) {
