@@ -187,8 +187,10 @@ class LanePlanner:
     # offset_center = lane_line_center - laneless_center
 
     ## 0.5초 앞의 중심을 보도록함.
-    lane_path_y_center = interp(0.5, path_t, lane_path_y)
-    path_xyz_y_center = interp(0.5, path_t, path_xyz[:,1])
+    #lane_path_y_center = interp(0.5, path_t, lane_path_y)
+    #path_xyz_y_center = interp(0.5, path_t, path_xyz[:,1])
+    lane_path_y_center = lane_path_y[0]
+    path_xyz_y_center = path_xyz[:,1][0]
 
     ## laneless일때는 center보정 TODO: 이걸해야되나? 
     ##일단 지워야겠다. 저속에서 차를 피해가는데 왜 보정을 해?

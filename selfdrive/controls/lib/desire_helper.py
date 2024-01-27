@@ -95,10 +95,13 @@ class DesireHelper:
     self.lane_change_wait_timer = 0
 
     self.lane_available_prev = False
+    self.edge_available_prev = False
     self.blinker_bypass = False
 
     self.available_left_lane = False
     self.available_right_lane = False
+    self.available_left_edge = False
+    self.available_right_edge = False
     self._log_timer = 0
     self.debugText = ""
     self.noo_active = 0
@@ -118,9 +121,9 @@ class DesireHelper:
     self.leftSideObjectDist = 255
     self.rightSideObjectDist = 255
     if radarState.leadLeft.status:
-      self.leftSideObjectDist = radarState.leadLeft.dRel + (radarState.leadLeft.vLead) ** 2 / (2.5 * 2)
+      self.leftSideObjectDist = radarState.leadLeft.dRel + radarState.leadLeft.vLead * 1.0
     if radarState.leadRight.status:
-      self.rightSideObjectDist = radarState.leadRight.dRel + (radarState.leadRight.vLead) ** 2 / (2.5 * 2)
+      self.rightSideObjectDist = radarState.leadRight.dRel + radarState.leadRight.vLead * 1.0
     leftBlinkerExt = sm['controlsState'].leftBlinkerExt
     rightBlinkerExt = sm['controlsState'].rightBlinkerExt
     blinkerExtMode = int((leftBlinkerExt + rightBlinkerExt) / 20000)  ## 둘다 10000 or 20000이 + 되어 있으므로,, 10000이 아니라 20000으로 나누어야함.
@@ -154,9 +157,19 @@ class DesireHelper:
     elif self.lane_width_right > 2.4:
       self.available_right_lane = True
 
+    if self.distance_to_road_edge_left < 2.2:
+      self.available_left_edge = False
+    elif self.distance_to_road_edge_left > 2.4:
+      self.available_left_edge = True
+    if self.distance_to_road_edge_right < 2.2:
+      self.available_right_edge = False
+    elif self.distance_to_road_edge_right > 2.4:
+      self.available_right_edge = True
+
     # Calculate the desired lane width for nudgeless lane change with lane detection
     if not (self.lane_detection and one_blinker) or below_lane_change_speed:
       lane_available = True
+      edge_available = False
     else:
       # Set the minimum lane threshold to 2.8 meters
       #min_lane_threshold = 2.8
@@ -171,6 +184,7 @@ class DesireHelper:
       #lane_width = self.lane_width_left if leftBlinker else self.lane_width_right
       #lane_available = lane_width >= min_lane_threadhold
       lane_available = self.available_left_lane if leftBlinker else self.available_right_lane
+      edge_available = self.available_left_edge if leftBlinker else self.available_right_edge
 
     if not lateral_active or self.lane_change_timer > LANE_CHANGE_TIME_MAX:
       self.lane_change_state = LaneChangeState.off
@@ -217,19 +231,25 @@ class DesireHelper:
         if (not carstate.leftBlinker and not carstate.rightBlinker) and blinkerExtMode > 0: # Noo Helper #0: voice etc, 1:noo helper lanechange, 2: noo helper turn
           #if leftBlinker:
           #  self.noo_active = 3
-          if not self.lane_available_prev and lane_available: #차선이 생김
+          if not self.lane_available_prev and lane_available and not leftBlinker: #차선이 생김, 왼쪽NOO는 차선이 생겨도 핸들토크필요
             self.noo_active = 2
+          elif not self.edge_available_prev and edge_available: #에지가 멀어짐.
+            self.noo_active = 5
+          elif not edge_available: #에지가 가까움.
+            self.noo_active = 4
           elif not self.lane_available_prev and not lane_available: #차선이 없음
             self.noo_active = 1
 
         if object_detected:
           self._add_log("Lane change object detected.. {:.1f}m".format(self.leftSideObjectDist if leftBlinker else self.rightSideObjectDist))
-        elif not lane_available:
+        elif not lane_available and self.noo_active != 5:
           self._add_log("Lane change no lane available")
         elif self.noo_active == 1:
           self._add_log("Lane change noo no roadedge")
         elif self.noo_active == 3:
           self._add_log("Lane change left NOO. need steering torque")
+        elif self.noo_active == 4:
+          self._add_log("Lane change too close road edge")
         elif self.lane_change_completed:
           self._add_log("Lane change need torque to start")
         elif self.lane_change_wait_timer < self.lane_change_delay:
@@ -247,11 +267,11 @@ class DesireHelper:
           # Set the "lane_change_completed" flag to prevent any more lane changes if the toggle is on
           self.lane_change_completed = self.one_lane_change
           self.lane_change_state = LaneChangeState.laneChangeStarting
-          self._add_log("Lane change starting.. {}".format("left" if leftBlinker else "right"))
+          self._add_log("Lane change starting.. {}, noo={}".format("left" if leftBlinker else "right", self.noo_active))
 
       # LaneChangeState.laneChangeStarting
       elif self.lane_change_state == LaneChangeState.laneChangeStarting:
-        #self._add_log("Lane change starting.. {}".format("left" if leftBlinker else "right"))
+        #self._add_log("Lane change starting.. {}, {}".format("left" if leftBlinker else "right", self.noo_active))
         # fade out over .5s
         self.lane_change_ll_prob = max(self.lane_change_ll_prob - 2 * DT_MDL, 0.0)
 
@@ -281,6 +301,7 @@ class DesireHelper:
 
     self.prev_one_blinker = one_blinker
     self.lane_available_prev = lane_available
+    self.edge_available_prev = edge_available
     
     steering_pressed = carstate.steeringPressed and \
                      ((carstate.steeringTorque < 0 and self.lane_change_direction == LaneChangeDirection.left) or

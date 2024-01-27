@@ -666,7 +666,7 @@ class VCruiseHelper:
       if 0 < self.lead_dRel or self.xState == 3:
         self._add_log("Cruise Activate from Lead or Traffic sign stop")
         self.cruiseActivate = 1
-    elif not controls.enabled and self.brake_pressed_count < 0 and self.gas_pressed_count < 0:
+    elif not controls.enabled and self.brake_pressed_count < 0 and self.gas_pressed_count < 0 and self.autoCruiseCancelTimer == 0:
       cruiseOnDist = abs(self.cruiseOnDist)
       if self.autoCruiseControl >= 2 and self.lead_vRel < 0 and 0 < self.lead_dRel < CS.vEgo ** 2 / (2.5 * 2):
         self._add_log("Cruise Activated")
@@ -866,13 +866,12 @@ class VCruiseHelper:
           self.naviSpeed = turn_speed if nav_turn or (nav_speedDown and nav_type in [5]) else laneChange_speed
 
       start_dist = interp(v_ego*3.6, [60, 110], [300, 1000])
-      if 0 < self.naviDistance:
-        if self.nooHelperActivated == 0 and self.naviDistance < start_dist:
+      if 0 < self.naviDistance < start_dist:
+        if self.nooHelperActivated == 0:
           self.nooHelperActivated = 1
-        if self.nooHelperActivated:
-          self.nooHelperActivated = max(1, self.nooHelperActivated)
-          self.nooHelperActivateCount = max(0, self.nooHelperActivateCount + 1)
-          self._add_log("Auto Speed Down to {:.0f}km/h. {:.0f}m left.".format(self.naviSpeed, self.naviDistance))
+        self.nooHelperActivated = max(1, self.nooHelperActivated)
+        self.nooHelperActivateCount = max(0, self.nooHelperActivateCount + 1)
+        self._add_log("Auto Speed Down to {:.0f}km/h. {:.0f}m left.".format(self.naviSpeed, self.naviDistance))
       else:
         self.nooHelperActivated = 0
         self.nooHelperActivateCount = min(0, self.nooHelperActivateCount - 1)

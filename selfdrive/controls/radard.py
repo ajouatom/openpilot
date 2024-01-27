@@ -346,15 +346,21 @@ def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego):
     lc = [leads_center[dRel_min]]
   else:
     lc = {}
-  if leads_left:
-    dRel_min = min(leads_left.keys())
-    leadLeft = leads_left[dRel_min]
-  if leads_right:
-    dRel_min = min(leads_right.keys())
-    leadRight = leads_right[dRel_min]
-  #lc = list(leads_center.values())
+
+  leadLeft = min((lead for dRel, lead in leads_left.items() if lead['dRel'] > 5.0), key=lambda x: x['dRel'], default=leadLeft)
+  leadRight = min((lead for dRel, lead in leads_right.items() if lead['dRel'] > 5.0), key=lambda x: x['dRel'], default=leadRight)
+
+  #filtered_leads_left = {dRel: lead for dRel, lead in leads_left.items() if lead['dRel'] > 5.0}
+  #if filtered_leads_left:
+  #  dRel_min = min(filtered_leads_left.keys())
+  #  leadLeft = filtered_leads_left[dRel_min]
+
+  #filtered_leads_right = {dRel: lead for dRel, lead in leads_right.items() if lead['dRel'] > 5.0}
+  #if filtered_leads_right:
+  #  dRel_min = min(filtered_leads_right.keys())
+  #  leadRight = filtered_leads_right[dRel_min]
+
   return [ll,lc,lr, leadLeft, leadRight]
-  #return [leads_left, leads_center, leads_right]
 
 def match_vision_track_apilot(v_ego, lead_msg, tracks, md, lane_width):
   offset_vision_dist = lead_msg.x[0] - RADAR_TO_CAMERA
