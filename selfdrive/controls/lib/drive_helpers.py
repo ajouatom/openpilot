@@ -478,6 +478,9 @@ class VCruiseHelper:
     elif self.v_ego_kph_set > self.autoResumeFromGasSpeed > 0:
       if self.cruiseActivate <= 0:
         if self.gas_pressed_value > 0.6 or self.gas_pressed_count_prev > 3.0 / DT_CTRL:
+          if self.autoCruiseCancelTimer > 0:
+            v_cruise_kph = self.v_ego_kph_set
+            self.autoCruiseCancelTimer = 0
           self._add_log("Cruise Activate from gas(deep/long pressed)")          
         else:
           v_cruise_kph = self.v_ego_kph_set
@@ -637,8 +640,7 @@ class VCruiseHelper:
 
 
     ## Auto Engage/Disengage via Gas/Brake
-    if gas_tok:
-      self.autoCruiseCancelTimer = 0
+    if gas_tok and self.autoCruiseCancelTimer == 0:      
       if controls.enabled:
         v_cruise_kph = self.v_cruise_speed_up(v_cruise_kph)
       elif self.autoResumeFromGasSpeed > 0:
@@ -879,7 +881,7 @@ class VCruiseHelper:
       if self.autoTurnMapChange > 0:
         if self.nooHelperActivateCount == 10:
           self.params.put_nonblocking("CarrotDisplay", "3")
-        elif self.nooHelperActivateCount == -10:
+        elif self.nooHelperActivateCount == - int(5/DT_CTRL):
           self.params.put_nonblocking("CarrotDisplay", "2")
 
       ## lanechange, turn : 300m left

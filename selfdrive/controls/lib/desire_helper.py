@@ -55,8 +55,8 @@ def calculate_lane_width_frog(lane, current_lane, road_edge):
 def calculate_lane_width(lane, lane_prob, current_lane, road_edge):
   index = 10 #약 1초 앞의 차선..
   distance_to_lane = abs(current_lane.y[index] - lane.y[index])
-  if lane_prob < 0.3: # 차선이 없으면 없는것으로 간주시킴.
-    distance_to_lane = min(2.0, distance_to_lane)
+  #if lane_prob < 0.3: # 차선이 없으면 없는것으로 간주시킴.
+  #  distance_to_lane = min(2.0, distance_to_lane)
   distance_to_road_edge = abs(current_lane.y[index] - road_edge.y[index]);
   return min(distance_to_lane, distance_to_road_edge), distance_to_road_edge
 
@@ -229,27 +229,33 @@ class DesireHelper:
 
         ## nooHelper인경우 차선이 생기면 하면 됨. (수동개입이 없는경우에만)        
         if (not carstate.leftBlinker and not carstate.rightBlinker) and blinkerExtMode > 0: # Noo Helper #0: voice etc, 1:noo helper lanechange, 2: noo helper turn
-          #if leftBlinker:
-          #  self.noo_active = 3
-          if not self.lane_available_prev and lane_available and not leftBlinker: #차선이 생김, 왼쪽NOO는 차선이 생겨도 핸들토크필요
+          if leftBlinker:
+            self.noo_active = 3
+          elif not self.lane_available_prev and lane_available: # start... 차선이 생김
             self.noo_active = 2
-          elif not self.edge_available_prev and edge_available: #에지가 멀어짐.
+          elif not self.edge_available_prev and edge_available: # start... 에지가 멀어짐. 
             self.noo_active = 5
-          elif not edge_available: #에지가 가까움.
-            self.noo_active = 4
           elif not self.lane_available_prev and not lane_available: #차선이 없음
             self.noo_active = 1
+          elif self.lane_available_prev and lane_available: #차선이 계속있음.
+            self.noo_active = 6
+          else: #if not edge_available: #에지가 가까움.
+            self.noo_active = 4
+        else:
+          self.noo_active = 0
 
         if object_detected:
           self._add_log("Lane change object detected.. {:.1f}m".format(self.leftSideObjectDist if leftBlinker else self.rightSideObjectDist))
         elif not lane_available and self.noo_active != 5:
           self._add_log("Lane change no lane available")
         elif self.noo_active == 1:
-          self._add_log("Lane change noo no roadedge")
+          self._add_log("Lane change blocked. no lane")
         elif self.noo_active == 3:
-          self._add_log("Lane change left NOO. need steering torque")
+          self._add_log("Lane change left direction blocked.")
         elif self.noo_active == 4:
           self._add_log("Lane change too close road edge")
+        elif self.noo_active == 6:
+          self._add_log("Lane change blocked. not end lane")
         elif self.lane_change_completed:
           self._add_log("Lane change need torque to start")
         elif self.lane_change_wait_timer < self.lane_change_delay:

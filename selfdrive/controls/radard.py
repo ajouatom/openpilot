@@ -189,7 +189,7 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
 
   def prob(c, c_key):
     prob_d = laplacian_pdf(c.dRel, offset_vision_dist, lead.xStd[0])
-    prob_y = laplacian_pdf(c.yRel+c.vLat, -lead.y[0], lead.yStd[0])
+    prob_y = laplacian_pdf(c.yRel + c.vLat * 2.0, -lead.y[0], lead.yStd[0])
     prob_v = laplacian_pdf(c.vRel + v_ego, lead.v[0], lead.vStd[0])
 
     #속도가 빠른것에 weight를 더줌. apilot, 
