@@ -99,6 +99,7 @@ def manager_init() -> None:
     ("AutoTurnControlSpeedTurn", "20"),
     ("AutoTurnControlTurnEnd", "6"),
     ("AutoTurnMapChange", "0"),
+    ("AutoNaviSpeedCtrl", "1"),
     ("AutoNaviSpeedCtrlEnd", "6"),
     ("AutoNaviSpeedBumpTime", "1"),
     ("AutoNaviSpeedBumpSpeed", "35"),
@@ -157,8 +158,10 @@ def manager_init() -> None:
     ("LateralTorqueCustom", "0"),       
     ("LateralTorqueAccelFactor", "2500"),       
     ("LateralTorqueFriction", "100"),       
+    ("SpeedFromPCM", "1"),       
     ("SteerActuatorDelay", "30"),       
     ("CruiseOnDist", "0"),
+    ("EnableOSM", "0"),
   ]
   if not PC:
     default_params.append(("LastUpdateTime", datetime.datetime.utcnow().isoformat().encode('utf8')))

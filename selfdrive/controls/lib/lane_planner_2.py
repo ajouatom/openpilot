@@ -164,7 +164,7 @@ class LanePlanner:
     offset_lane = 0.0
     #if self.lane_width_left_filtered.x < 1.8 and self.lane_width_right_filtered.x < 1.8:
     #  offset_lane = 0.0
-    if self.lane_width_left_filtered.x > 2.5 and self.lane_width_right_filtered.x > 2.5: #양쪽에 차선이 있는경우
+    if self.lane_width_left_filtered.x > 2.2 and self.lane_width_right_filtered.x > 2.2: #양쪽에 차선이 있는경우
       offset_lane = 0.0
     elif self.lane_width_left_filtered.x > 2.5:
       offset_lane = interp(self.lane_width, [2.5, 2.9], [0.0, self.adjustLaneOffset]) # 차선이 좁으면 안함..
@@ -241,6 +241,6 @@ class LanePlanner:
 
     path_xyz[:, 1] += (CAMERA_OFFSET + self.lane_offset_filtered.x)
 
-    self.offset_total = offset_total #self.lane_offset_filtered.x
+    self.offset_total = self.lane_offset_filtered.x
 
     return path_xyz

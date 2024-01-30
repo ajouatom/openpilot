@@ -78,6 +78,7 @@ void MainWindow::closeSettings() {
     // Map is always shown when using navigate on openpilot
     if (uiState()->scene.navigate_on_openpilot) {
       homeWindow->showMapPanel(true);
+      printf("[closeSetting] showMapPanel\n");
     }
   }
 }

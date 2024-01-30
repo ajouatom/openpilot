@@ -78,6 +78,18 @@ function launch {
 
   # start manager
   cd selfdrive/manager
+  if [ -f "/data/params/d/EnableOSM" ]; then
+    OSM_ENABLE=$(cat /data/params/d/EnableOSM)
+  fi
+  if [ "$OSM_ENABLE" == "1" ] || [ "$OSM_ENABLE" == "2" ] || [ "$OSM_ENABLE" == "3" ]; then
+    ./custom_dep.py
+    #if [ "$OSM_OFFLINE_ENABLE" == "1" ]; then
+    #  ./custom_dep.py && ./build.py && ./local_osm_install.py && ./manager.py
+    #else
+    #  ./custom_dep.py && ./build.py && ./manager.py
+    #fi
+  fi
+
   if [ ! -f $DIR/prebuilt ]; then
     ./build.py
   fi

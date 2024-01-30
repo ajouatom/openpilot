@@ -56,6 +56,8 @@ def enable_logging(started, params, CP: car.CarParams) -> bool:
   return True
   #return not (params.get_bool("FireTheBabysitter") and params.get_bool("NoLogging"))
 
+EnableOSM = Params().get_int("EnableOSM")
+
 procs = [
   DaemonProcess("manage_athenad", "selfdrive.athena.manage_athenad", "AthenadPid"),
 
@@ -107,5 +109,9 @@ procs = [
   
   PythonProcess("road_speed_limiter", "selfdrive.carrot.road_speed_limiter", always_run),
 ]
+if EnableOSM > 0:
+  procs += [
+    PythonProcess("mapd", "selfdrive.mapd.mapd", only_onroad),
+  ]
 
 managed_processes = {p.name: p for p in procs}

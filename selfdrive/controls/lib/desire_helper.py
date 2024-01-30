@@ -3,6 +3,7 @@ from openpilot.common.conversions import Conversions as CV
 from openpilot.common.realtime import DT_MDL
 import numpy as np
 from openpilot.common.filter_simple import StreamingMovingAverage
+from openpilot.common.params import Params
 
 
 LaneChangeState = log.LaneChangeState
@@ -105,6 +106,8 @@ class DesireHelper:
     self._log_timer = 0
     self.debugText = ""
     self.noo_active = 0
+    self.params = Params()
+    self.autoTurnControl = self.params.get_int("AutoTurnControl")
 
   def _add_log(self, log):
     if len(log) == 0:
@@ -117,13 +120,14 @@ class DesireHelper:
 
   def update(self, carstate, modeldata, lateral_active, lane_change_prob, sm):
     self._add_log("")
+    self.autoTurnControl = self.params.get_int("AutoTurnControl")
     radarState = sm['radarState']
     self.leftSideObjectDist = 255
     self.rightSideObjectDist = 255
     if radarState.leadLeft.status:
-      self.leftSideObjectDist = radarState.leadLeft.dRel + radarState.leadLeft.vLead * 1.0
+      self.leftSideObjectDist = radarState.leadLeft.dRel + radarState.leadLeft.vLead * 4.0
     if radarState.leadRight.status:
-      self.rightSideObjectDist = radarState.leadRight.dRel + radarState.leadRight.vLead * 1.0
+      self.rightSideObjectDist = radarState.leadRight.dRel + radarState.leadRight.vLead * 4.0
     leftBlinkerExt = sm['controlsState'].leftBlinkerExt
     rightBlinkerExt = sm['controlsState'].rightBlinkerExt
     blinkerExtMode = int((leftBlinkerExt + rightBlinkerExt) / 20000)  ## 둘다 10000 or 20000이 + 되어 있으므로,, 10000이 아니라 20000으로 나누어야함.
@@ -229,32 +233,32 @@ class DesireHelper:
 
         ## nooHelper인경우 차선이 생기면 하면 됨. (수동개입이 없는경우에만)        
         if (not carstate.leftBlinker and not carstate.rightBlinker) and blinkerExtMode > 0: # Noo Helper #0: voice etc, 1:noo helper lanechange, 2: noo helper turn
-          if leftBlinker:
-            self.noo_active = 3
-          elif not self.lane_available_prev and lane_available: # start... 차선이 생김
-            self.noo_active = 2
-          elif not self.edge_available_prev and edge_available: # start... 에지가 멀어짐. 
-            self.noo_active = 5
-          elif not self.lane_available_prev and not lane_available: #차선이 없음
+          if self.autoTurnControl == 3: #leftBlinker:
             self.noo_active = 1
-          elif self.lane_available_prev and lane_available: #차선이 계속있음.
-            self.noo_active = 6
-          else: #if not edge_available: #에지가 가까움.
-            self.noo_active = 4
+          elif not self.lane_available_prev and lane_available: # start... 차선이 생김
+            self.noo_active = 10
+          elif not self.edge_available_prev and edge_available: # start... 에지가 멀어짐. 
+            self.noo_active = 11
+          #elif not self.lane_available_prev and not lane_available: #차선이 없음
+          #  self.noo_active = 2
+          elif self.noo_active < 10 and self.lane_available_prev and lane_available: #차선이 계속있음.
+            self.noo_active = 2
+          #else: #if not edge_available: #에지가 가까움.
+          #  self.noo_active = 4
         else:
           self.noo_active = 0
 
         if object_detected:
           self._add_log("Lane change object detected.. {:.1f}m".format(self.leftSideObjectDist if leftBlinker else self.rightSideObjectDist))
-        elif not lane_available and self.noo_active != 5:
+        elif not lane_available and self.noo_active < 10:
           self._add_log("Lane change no lane available")
         elif self.noo_active == 1:
-          self._add_log("Lane change blocked. no lane")
-        elif self.noo_active == 3:
-          self._add_log("Lane change left direction blocked.")
-        elif self.noo_active == 4:
-          self._add_log("Lane change too close road edge")
-        elif self.noo_active == 6:
+          self._add_log("Lane change blocked. need torque")
+        #elif self.noo_active == 3:
+        #  self._add_log("Lane change left direction blocked.")
+        #elif self.noo_active == 4:
+        #  self._add_log("Lane change too close road edge")
+        elif self.noo_active == 2:
           self._add_log("Lane change blocked. not end lane")
         elif self.lane_change_completed:
           self._add_log("Lane change need torque to start")

@@ -519,6 +519,7 @@ struct PandaState @0xa7649e2575e4591e {
     redPanda @7;
     redPandaV2 @8;
     tres @9;
+    cuatro @10;
   }
 
   enum HarnessStatus {
@@ -729,6 +730,8 @@ struct ControlsState @0x97ff69c53601abf1 {
   leftBlinkerExt @68 : Int32;
   rightBlinkerExt @69 : Int32;
   curveSpeed @70 : Float32;
+  limitSpeed @71 : Float32;
+
   enum OpenpilotState @0xdbe58b96d2d1ac61 {
     disabled @0;
     preEnabled @1;
@@ -2090,6 +2093,31 @@ struct LiveMapDataDEPRECATED {
   mapValid @11 :Bool;
 }
 
+struct LiveMapData {
+  speedLimitValid @0 :Bool;
+  speedLimit @1 :Float32;
+  speedLimitAheadValid @2 :Bool;
+  speedLimitAhead @3 :Float32;
+  speedLimitAheadDistance @4 :Float32;
+  turnSpeedLimitValid @5 :Bool;
+  turnSpeedLimit @6 :Float32;
+  turnSpeedLimitEndDistance @7 :Float32;
+  turnSpeedLimitSign @8 :Int16;
+  turnSpeedLimitsAhead @9 :List(Float32);
+  turnSpeedLimitsAheadDistances @10 :List(Float32);
+  turnSpeedLimitsAheadSigns @11 :List(Int16);
+  lastGpsTimestamp @12 :Int64;  # Milliseconds since January 1, 1970.
+  currentRoadName @13 :Text;
+  lastGpsLatitude @14 :Float64;
+  lastGpsLongitude @15 :Float64;
+  lastGpsSpeed @16 :Float32;
+  lastGpsBearingDeg @17 :Float32;
+  lastGpsAccuracy @18 :Float32;
+  lastGpsBearingAccuracyDeg @19 :Float32;
+  roadCameraOffset @20 :Float32;
+  ref @21 :Text;
+}
+
 struct CameraOdometry {
   frameId @4 :UInt32;
   timestampEof @5 :UInt64;
@@ -2360,8 +2388,8 @@ struct Event {
     # UI services
     userFlag @93 :UserFlag;
     uiDebug @102 :UIDebug;
-    # neokii
     roadLimitSpeed @127 :RoadLimitSpeed;
+    liveMapData @128: LiveMapData;
 
     # *********** debug ***********
     testJoystick @52 :Joystick;

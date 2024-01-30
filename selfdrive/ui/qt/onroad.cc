@@ -116,6 +116,7 @@ void OnroadWindow::updateState(const UIState &s) {
       if (temp != 0) {
           carrot_display = temp;
           params.putNonBlocking("CarrotDisplay", "0");
+          printf("carrot display = %d\n", carrot_display);
       }
   }
 

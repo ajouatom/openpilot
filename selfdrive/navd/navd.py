@@ -91,6 +91,8 @@ class RouteEngine:
     else:
       if self.carrot_route_active:
         self.params.remove("NavDestination")
+      if self.carrot_route_active:
+        print("################# Carrot navigation terminated(no active)... ###################")
       self.carrot_route_active = False
 
     self.update_location()

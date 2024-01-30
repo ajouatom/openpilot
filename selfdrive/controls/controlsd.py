@@ -76,7 +76,7 @@ class Controls:
 
     mute_dm = self.params.get_int("ShowDmInfo") < 1
 
-    ignore = self.sensor_packets + ['testJoystick']
+    ignore = self.sensor_packets + ['testJoystick', 'liveMapData']
     if SIMULATION:
       ignore += ['driverCameraState', 'managerState']
     if mute_dm:
@@ -85,8 +85,8 @@ class Controls:
     self.sm = messaging.SubMaster(['deviceState', 'pandaStates', 'peripheralState', 'modelV2', 'liveCalibration',
                                    'driverMonitoringState', 'longitudinalPlan', 'lateralPlan', 'liveLocationKalman',
                                    'managerState', 'liveParameters', 'radarState', 'liveTorqueParameters',
-                                   'testJoystick', 'navInstruction', 'roadLimitSpeed'] + self.camera_packets + self.sensor_packets,
-                                  ignore_alive=ignore, ignore_avg_freq=['radarState', 'testJoystick'], ignore_valid=['testJoystick', 'navInstruction', 'roadLimitSpeed'], poll=['navInstruction', 'roadLimitSpeed'])
+                                   'testJoystick', 'navInstruction', 'roadLimitSpeed', 'liveMapData'] + self.camera_packets + self.sensor_packets,
+                                  ignore_alive=ignore, ignore_avg_freq=['radarState', 'testJoystick'], ignore_valid=['testJoystick', 'navInstruction', 'roadLimitSpeed', 'liveMapData'], poll=['navInstruction', 'roadLimitSpeed'])
 
     if CI is None:
       # wait for one pandaState and one CAN packet
@@ -521,7 +521,6 @@ class Controls:
       if self.can_enable:
         if not self.CP.pcmCruise and self._panda_controls_allowed:
           self.events.add(EventName.buttonEnable)
-          print("CruiseActivate: Button Enable")
         self.carrotCruiseActivate = 1
       else:
         print("CruiseActivate: Button Enable: Cannot enabled....###")
@@ -529,7 +528,6 @@ class Controls:
         self.v_cruise_helper.softHoldActive = 0
     if self.enabled and self.v_cruise_helper.cruiseActivate < 0:
       self.events.add(EventName.buttonCancel)
-      print("CruiseActivate: Button Cancel")
       self.carrotCruiseActivate = -1
 
     # decrement the soft disable timer at every step, as it's reset on
@@ -897,8 +895,8 @@ class Controls:
     controlsState.engageable = not self.events.contains(ET.NO_ENTRY)
     controlsState.longControlState = self.LoC.long_control_state
     controlsState.vPid = float(self.LoC.v_pid)
-    controlsState.vCruise = float(self.v_cruise_helper.v_cruise_kph)
-    controlsState.vCruiseCluster = float(self.v_cruise_helper.v_cruise_kph_set) #float(self.v_cruise_helper.v_cruise_cluster_kph)
+    controlsState.vCruise = float(self.v_cruise_helper.v_cruise_kph) ## 제어속도
+    controlsState.vCruiseCluster = float(self.v_cruise_helper.v_cruise_kph_set) #세팅속도, #float(self.v_cruise_helper.v_cruise_cluster_kph)
     controlsState.upAccelCmd = float(self.LoC.pid.p)
     controlsState.uiAccelCmd = float(self.LoC.pid.i)
     controlsState.ufAccelCmd = float(self.LoC.pid.f)
@@ -914,6 +912,7 @@ class Controls:
     controlsState.leftBlinkerExt = self.v_cruise_helper.leftBlinkerExtCount + self.v_cruise_helper.blinkerExtMode
     controlsState.rightBlinkerExt = self.v_cruise_helper.rightBlinkerExtCount  + self.v_cruise_helper.blinkerExtMode
     controlsState.curveSpeed = float(self.v_cruise_helper.curveSpeed)
+    controlsState.limitSpeed = float(self.v_cruise_helper.limitSpeed)
 
     lat_tuning = self.CP.lateralTuning.which()
     if self.joystick_mode:

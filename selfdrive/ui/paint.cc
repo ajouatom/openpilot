@@ -974,6 +974,15 @@ void DrawApilot::drawConnInfo(const UIState* s) {
     int radar_tracks = Params().getBool("EnableRadarTracks");
     int sccBus = Params().getBool("SccConnectedBus2");
     int activeNDA = road_limit_speed.getActive();
+
+    static int activeOSM = 0;
+    //auto navInstruction = sm["navInstruction"].getNavInstruction();
+    //if (navInstruction.getSpeedLimit() > 0 && activeNDA < 200) activeOSM = 100;
+    if (sm.updated("liveMapData")) {
+        activeOSM = 100;
+    }
+    else if (activeOSM > 0) activeOSM--;
+
     if (s->show_conn_info) {
         //ui_draw_text(s, strlen(str) / 2 * 35 / 2 + 50,40, str, 35, COLOR_WHITE, BOLD);
         int hda_speedLimit = car_state.getSpeedLimit();
@@ -987,6 +996,7 @@ void DrawApilot::drawConnInfo(const UIState* s) {
         else if (activeNDA % 100 > 0) ui_draw_image(s, { 30 + 135, y, 120, 54 }, "ic_nda", 1.0f);
         else if (naviCluster > 0) ui_draw_image(s, { 30 + 135, y, 120, 54 }, "ic_hda", 1.0f);
         if (radar_tracks) ui_draw_image(s, { 30 + 135 * 2, y, 240, 54 }, "ic_radartracks", 1.0f);
+        if (activeOSM > 0) ui_draw_image(s, { 30 + 120 + 135 * 3, y, 120, 54 }, "ic_osm", 1.0f);
     }
 }
 void DrawApilot::drawGapInfo(const UIState* s, int x, int y) {
@@ -1178,6 +1188,9 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
 
         //int activeNDA = road_limit_speed.getActive();
         int roadLimitSpeed = road_limit_speed.getRoadLimitSpeed();
+        int roadLimitSpeed_OSM = controls_state.getLimitSpeed();
+        if (roadLimitSpeed < roadLimitSpeed_OSM) roadLimitSpeed = roadLimitSpeed_OSM;
+
         int camLimitSpeed = road_limit_speed.getCamLimitSpeed();
         int camLimitSpeedLeftDist = road_limit_speed.getCamLimitSpeedLeftDist();
         int sectionLimitSpeed = road_limit_speed.getSectionLimitSpeed();
@@ -2091,6 +2104,7 @@ void ui_nvg_init(UIState *s) {
   {"ic_apm", "../assets/images/img_apm.png"},
   {"ic_apn", "../assets/images/img_apn.png"},
   {"ic_hda", "../assets/images/img_hda.png"},
+  {"ic_osm", "../assets/images/img_osm.png"},
 
   };
   for (auto [name, file] : images) {
