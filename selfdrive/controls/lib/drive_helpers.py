@@ -104,6 +104,8 @@ class VCruiseHelper:
     self.cruiseSpeedMax = V_CRUISE_MAX
     self.autoCruiseCancelTimer = 0
     self.sendEvent = None
+    self.activeAVM = 0
+    self.v_ego_kph_prev = 0.0
 
     self.carrot = CarrotSpeedController()
 
@@ -373,7 +375,7 @@ class VCruiseHelper:
     speed = min(self.turnSpeed_prev / 3.6, clip(CS.vEgo, 0.5, 100.0))    
     #curvature = np.max(np.abs(orientationRates[12:])) / speed  # 12: 약1.4초 미래의 curvature를 계산함.
     #curvature = np.max(np.abs(orientationRates[12:20])) / speed  # 12: 약1.4~3.5초 미래의 curvature를 계산함.
-    curvature = np.max(np.abs(orientationRates[12:28])) / speed  
+    curvature = np.max(orientationRates[12:28]) / speed  
     curvature = self.curvatureFilter.process(curvature) * self.autoCurveSpeedFactor
     turnSpeed = 300
     if abs(curvature) > 0.0001:
@@ -384,7 +386,7 @@ class VCruiseHelper:
 
     self.curveSpeed = turnSpeed * np.sign(curvature)
 
-    #print("curvature={:.5f}, speed = {:.1f}".format(curvature, turnSpeed))
+    #print("curvature={:.5f}, speed = {:.1f},{:.1f}".format(curvature, turnSpeed, self.curveSpeed))
     self.turnSpeed_prev = turnSpeed
     speed_diff = max(0, CS.vEgo*3.6 - turnSpeed)
     turnSpeed = turnSpeed - speed_diff * self.autoCurveSpeedFactorIn
@@ -568,9 +570,16 @@ class VCruiseHelper:
 
     if button_type != 0 and controls.enabled:
       if self.long_pressed:
-        if button_type in [ButtonType.accelCruise, ButtonType.decelCruise]:
+        if button_type in [ButtonType.accelCruise]:
           v_cruise_kph = button_kph
           self._add_log("Button long pressed..{:.0f}".format(v_cruise_kph))
+        elif button_type in [ButtonType.decelCruise]:
+          if self.cruiseButtonMode in [2] and self.params.get_int("EnableAVM") > 0:
+            self.activeAVM = 2 if self.activeAVM == 0 else 0
+            self._add_log("Button long pressed..Enable AVM{}".format(self.activeAVM))
+          else:
+            v_cruise_kph = button_kph
+            self._add_log("Button long pressed..{:.0f}".format(v_cruise_kph))
         elif button_type == ButtonType.gapAdjustCruise:
           self._add_log("Button gap pressed ..")
       else:
@@ -617,10 +626,18 @@ class VCruiseHelper:
 
     return v_cruise_kph
 
+  def _update_avm(self, CS):
+    v_ego_kph = CS.vEgo * 3.6
+    if v_ego_kph < 3.0 and self.v_ego_kph_prev >= 3.0:
+      self.activeAVM = 1
+    elif v_ego_kph > 5.0 and self.v_ego_kph_prev <= 5.0:
+      self.activeAVM = 0
+    self.v_ego_kph_prev = v_ego_kph
+
   def _update_cruise_carrot(self, CS, v_cruise_kph, controls):
 
-    #self.cruiseButtonMode = 2    
-
+    #self.cruiseButtonMode = 2
+    self._update_avm(CS)
     if v_cruise_kph > 200:
       self._add_log("VCruise: speed initialize....")
       v_cruise_kph = self.cruiseSpeedMin
@@ -651,7 +668,6 @@ class VCruiseHelper:
       self.cruiseActiveReady = 0
 
     v_cruise_kph = self._update_cruise_button(CS, v_cruise_kph, controls)
-
 
     ## Auto Engage/Disengage via Gas/Brake
     if gas_tok and self.autoCruiseCancelTimer == 0:      

@@ -209,6 +209,7 @@ class Controls:
 
     self.carrotCruiseActivate = 0 #carrot
     self._panda_controls_allowed = False #carrot
+    self.can_enable = False
 
   def set_initial_state(self):
     if REPLAY:
@@ -813,6 +814,7 @@ class Controls:
     CC.cruiseControl.activate = self.carrotCruiseActivate > 0
     CC.hudControl.softHold = self.v_cruise_helper.softHoldActive
     CC.hudControl.activeAPM = self.v_cruise_helper.activeAPM
+    CC.hudControl.activeAVM = self.v_cruise_helper.activeAVM if self.can_enable else 0
         
     hudControl.rightLaneVisible = CC.latActive
     hudControl.leftLaneVisible = CC.latActive

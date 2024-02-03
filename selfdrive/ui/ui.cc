@@ -448,19 +448,19 @@ void update_model(UIState *s,
   bool longActive = controls_state.getEnabled();
   if (longActive == false) show_path_mode = s->show_path_mode_cruise_off;
   max_idx = get_path_length_idx(plan_position, max_distance);
+
+  float start_z = 0.8;
   if(s->show_mode == 0) {
     update_line_data(s, plan_position, 0.9, 1.22, 1.22, &scene.track_vertices, max_idx, false);
-  
-  
   }
   else if (show_path_mode == 0) {
       update_line_data2(s, plan_position, s->show_path_width, s->show_z_offset, s->show_z_offset, &scene.track_vertices, max_idx);
   }
   else if (show_path_mode < 9 || show_path_mode == 13 || show_path_mode == 14 || show_path_mode == 15) {
-      update_line_data_dist(s, plan_position, s->show_path_width, 0.8, s->show_z_offset, &scene.track_vertices, max_distance, false);
+      update_line_data_dist(s, plan_position, s->show_path_width, start_z, s->show_z_offset, &scene.track_vertices, max_distance, false);
   }
   else
-    update_line_data_dist3(s, plan_position, s->show_path_width, 0.8, s->show_z_offset, &scene.track_vertices, max_distance, false);
+    update_line_data_dist3(s, plan_position, s->show_path_width, start_z, s->show_z_offset, &scene.track_vertices, max_distance, false);
 
 }
 

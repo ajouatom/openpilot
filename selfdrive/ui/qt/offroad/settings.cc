@@ -259,6 +259,18 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   });
   addItem(translateBtn);
 
+  // Set Default Params... for HKG
+  const auto defaultSetHkgBtn = new ButtonControl(tr("Set to default(for ajouatom)"), tr("DEFAULT"), "Use this button to set to default params for me");
+  connect(defaultSetHkgBtn, &ButtonControl::clicked, [this]() {
+      if (!ConfirmationDialog::confirm(tr("Are you sure you want to set to default?"), tr("Execute"), this)) return;
+      QProcess process;
+      process.setWorkingDirectory("/data/openpilot/selfdrive");
+      process.start("/bin/sh", QStringList{ "-c", "python ./apilot_default.py ./apilot_default.json" });
+      process.waitForFinished();
+      //Hardware::reboot();
+      });
+  addItem(defaultSetHkgBtn);
+
   QObject::connect(uiState(), &UIState::offroadTransition, [=](bool offroad) {
     for (auto btn : findChildren<ButtonControl *>()) {
       btn->setEnabled(offroad);
@@ -522,8 +534,8 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
     cruiseToggles->addItem(new CValueControl("MySafeModeFactor", "DRIVEMODE: SAFE ratio(60%)", "Accel/StopDistance/DecelRatio/Gap control ratio", "../assets/offroad/icon_road.png", 10, 90, 10));
 
     latLongToggles = new ListWidget(this);
-    latLongToggles->addItem(new CValueControl("UseLaneLineSpeed", "Use Laneline mode (0)", "Lainline mode, lat_mpc control used", "../assets/offroad/icon_shell.png", 0, 200, 5));
-    latLongToggles->addItem(new CValueControl("UseLaneLineDebug", "Use Laneline debug (0)", "don't change value", "../assets/offroad/icon_shell.png", 0, 100, 5));
+    latLongToggles->addItem(new CValueControl("UseLaneLineSpeed", "Laneline mode speed(0)", "Lainline mode, lat_mpc control used", "../assets/offroad/icon_shell.png", 0, 200, 5));
+    latLongToggles->addItem(new CValueControl("UseLaneLineDebug", "Laneline time compensation (10)", "x0.01sec", "../assets/offroad/icon_shell.png", 0, 100, 1));
     latLongToggles->addItem(new CValueControl("AdjustLaneOffset", "AdjustLaneOffset(0)cm", "", "../assets/offroad/icon_shell.png", 0, 500, 5));
     latLongToggles->addItem(new CValueControl("AdjustCurveOffset", "AdjustCurveOffset(0)cm", "", "../assets/offroad/icon_shell.png", 0, 500, 5));
     latLongToggles->addItem(new CValueControl("PathOffset", "PathOffset", "(-)left, (+)right, when UseLaneLineSpeed > 0", "../assets/offroad/icon_road.png", -50, 50, 1));

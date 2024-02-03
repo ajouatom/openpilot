@@ -47,11 +47,9 @@ class LanePlanner:
     self.le_y = np.zeros((TRAJECTORY_SIZE,))
     self.re_y = np.zeros((TRAJECTORY_SIZE,))
     self.lane_width_estimate = FirstOrderFilter(3.2, 9.95, DT_MDL)
-    self.lane_width_certainty = FirstOrderFilter(1.0, 0.95, DT_MDL)
     self.lane_width = 3.2
     self.lane_change_multiplier = 1
-    self.Options = Params()
-    self.updateOptions = 100
+    self.lane_width_updated_count = 0
 
     self.lll_prob = 0.
     self.rll_prob = 0.
@@ -72,11 +70,9 @@ class LanePlanner:
 
     self.lanefull_mode = False
 
-  def parse_model(self, md):
+    self.params = Params()
 
-    self.updateOptions -= 1
-    if self.updateOptions <= 0:
-      self.updateOptions = 100
+  def parse_model(self, md):
 
     lane_lines = md.laneLines
     edges = md.roadEdges
@@ -105,6 +101,8 @@ class LanePlanner:
       self.r_lane_change_prob = desire_state[log.LateralPlan.Desire.laneChangeRight]
 
   def get_d_path(self, CS, v_ego, path_t, path_xyz, curve_speed):
+    if v_ego > 0.1:
+      self.lane_width_updated_count = max(0, self.lane_width_updated_count - 1)
     # Reduce reliance on lanelines that are too far apart or
     # will be in a few seconds
     l_prob, r_prob = self.lll_prob, self.rll_prob
@@ -124,25 +122,25 @@ class LanePlanner:
     r_prob *= r_std_mod
 
     # Find current lanewidth
-    self.lane_width_certainty.update(l_prob * r_prob)
     current_lane_width = abs(self.rll_y[0] - self.lll_y[0])
-    self.lane_width_estimate.update(current_lane_width)
-    #speed_lane_width = interp(v_ego, [0., 31.], [2.8, 3.5])
-    speed_lane_width = interp(v_ego, [0., 60.], [2.8, 3.5])
-    self.lane_width = self.lane_width_certainty.x * self.lane_width_estimate.x + \
-                      (1 - self.lane_width_certainty.x) * speed_lane_width
 
+    max_updated_count = 10.0 * DT_MDL
+    both_lane_available = False
+    speed_lane_width = interp(v_ego, [0., 60.], [2.8, 3.5])
+    if l_prob > 0.5 and r_prob > 0.5:
+      both_lane_available = True
+      self.lane_width_updated_count = max_updated_count
+      self.lane_width_estimate.update(current_lane_width)
+    elif self.lane_width_updated_count < max_updated_count / 2 and v_ego > 0.1:
+      self.lane_width_estimate.update(speed_lane_width)
+
+    self.lane_width =  self.lane_width_estimate.x
     clipped_lane_width = min(4.0, self.lane_width)
     path_from_left_lane = self.lll_y + clipped_lane_width / 2.0
     path_from_right_lane = self.rll_y - clipped_lane_width / 2.0
 
     # 가장 차선이 진한쪽으로 골라서..
-    #self.d_prob = l_prob + r_prob - l_prob * r_prob
-    self.d_prob = max(l_prob, r_prob)
-
-    ## self.d_prob: lane_prob
-    # lanefull: offset + mix (laneline path, laneless)
-    # laneless: offset + laneless
+    self.d_prob = max(l_prob, r_prob) if not both_lane_available else 1.0
 
     # 좌/우의 차선폭을 필터링.
     if self.lane_width_left > 0:
@@ -152,54 +150,51 @@ class LanePlanner:
       self.lane_width_right_filtered.update(self.lane_width_right)
       self.lane_width_right_filtered.x = self.lane_width_right
 
-    self.adjustLaneOffset = float(Params().get_int("AdjustLaneOffset")) * 0.01
-    self.adjustCurveOffset = float(Params().get_int("AdjustCurveOffset")) * 0.01
+    self.adjustLaneOffset = float(self.params.get_int("AdjustLaneOffset")) * 0.01
+    self.adjustCurveOffset = float(self.params.get_int("AdjustCurveOffset")) * 0.01
     ADJUST_OFFSET_LIMIT = 0.4 #max(self.adjustLaneOffset, self.adjustCurveOffset)
     offset_curve = 0.0
     ## curve offset
-    offset_curve = -interp(abs(curve_speed), [50, 200], [self.adjustCurveOffset, 0.0]) * np.sign(curve_speed)
+    offset_curve = interp(abs(curve_speed), [50, 200], [self.adjustCurveOffset, 0.0]) * np.sign(curve_speed)
 
-    # roadedge offset
-    # 여유가 없는곳(도로경계쪽)으로 붙임. 
     offset_lane = 0.0
-    #if self.lane_width_left_filtered.x < 1.8 and self.lane_width_right_filtered.x < 1.8:
-    #  offset_lane = 0.0
-    if self.lane_width_left_filtered.x > 2.2 and self.lane_width_right_filtered.x > 2.2: #양쪽에 차선이 있는경우
+    if self.lane_width_left_filtered.x > 2.2 and self.lane_width_right_filtered.x > 2.2: #양쪽에 차로가 여유 있는경우
       offset_lane = 0.0
-    elif self.lane_width_left_filtered.x > 2.5:
+    elif self.lane_width_left_filtered.x < 2.0 and self.lane_width_right_filtered.x < 2.0: #양쪽에 차로가 여유 없는경우
+      offset_lane = 0.0
+    elif self.lane_width_left_filtered.x > self.lane_width_right_filtered.x:
       offset_lane = interp(self.lane_width, [2.5, 2.9], [0.0, self.adjustLaneOffset]) # 차선이 좁으면 안함..
-    elif self.lane_width_right_filtered.x > 2.5:
+    else:
       offset_lane = interp(self.lane_width, [2.5, 2.9], [0.0, -self.adjustLaneOffset]) # 차선이 좁으면 안함..
 
     #select lane path
     # 차선이 좁아지면, 도로경계쪽에 있는 차선 위주로 따라가도록함. 
-    if self.lane_width < 2.2: 
-      if l_prob > 0.5 and self.lane_width_left_filtered.x < 2.0:
-        lane_path_y = path_from_left_lane
-      elif r_prob > 0.5 and self.lane_width_right_filtered.x < 2.0:
+    if self.lane_width < 2.5: 
+      if r_prob > 0.5 and self.lane_width_right_filtered.x < self.lane_width_left_filtered.x:
         lane_path_y = path_from_right_lane
+      elif l_prob > 0.5 and self.lane_width_left_filtered.x < 2.0:
+        lane_path_y = path_from_left_lane
       else:
         lane_path_y = path_from_left_lane if l_prob > 0.5 or l_prob > r_prob else path_from_right_lane
-    # 오른쪽차선이 있으면.. 오른쪽 차선을 따라가도록함.
-    elif self.lane_width_right_filtered.x > 2.5 and r_prob > 0.5:
-      lane_path_y = path_from_right_lane
+    elif both_lane_available:
+      if self.lane_width > 3.2:
+        lane_path_y = path_from_right_lane
+      else:
+        lane_path_y = (path_from_left_lane + path_from_right_lane) / 2.
     # 그외 진한차선을 따라가도록함.
     else:
-      lane_path_y = path_from_left_lane if l_prob > 0.5 or l_prob > r_prob else path_from_right_lane
-    #lane_path_y = (l_prob * path_from_left_lane + r_prob * path_from_right_lane) / (l_prob + r_prob + 0.0001)
+      lane_path_y = (l_prob * path_from_left_lane + r_prob * path_from_right_lane) / (l_prob + r_prob + 0.0001)
 
-    # offset_center = lane_line_center - laneless_center
-
-    ## 0.5초 앞의 중심을 보도록함.
-    #lane_path_y_center = interp(0.5, path_t, lane_path_y)
-    #path_xyz_y_center = interp(0.5, path_t, path_xyz[:,1])
-    lane_path_y_center = lane_path_y[0]
-    path_xyz_y_center = path_xyz[:,1][0]
-
-    ## laneless일때는 center보정 TODO: 이걸해야되나? 
-    ##일단 지워야겠다. 저속에서 차를 피해가는데 왜 보정을 해?
-    #diff_center = (lane_path_y_center - path_xyz_y_center) if not self.lanefull_mode else 0.0
-    diff_center = 0.0
+    use_laneless_center_adjust = False
+    if use_laneless_center_adjust:
+      ## 0.5초 앞의 중심을 보도록함.
+      lane_path_y_center = interp(0.5, path_t, lane_path_y)
+      path_xyz_y_center = interp(0.5, path_t, path_xyz[:,1])
+      #lane_path_y_center = lane_path_y[0]
+      #path_xyz_y_center = path_xyz[:,1][0]
+      diff_center = (lane_path_y_center - path_xyz_y_center) if not self.lanefull_mode else 0.0
+    else:
+      diff_center = 0.0
     #print("center = {:.2f}={:.2f}-{:.2f}, lanefull={}".format(diff_center, lane_path_y_center, path_xyz_y_center, self.lanefull_mode))
     #diff_center = lane_path_y[5] - path_xyz[:,1][5] if not self.lanefull_mode else 0.0
     if offset_curve * offset_lane < 0:
@@ -225,22 +220,22 @@ class LanePlanner:
       self.d_prob, self.lanefull_mode,
       self.lane_width_left_filtered.x, self.lane_width, self.lane_width_right_filtered.x)
 
-    useLaneLineDebug = Params().get_int("UseLaneLineDebug")
-    if self.lanefull_mode:        
-      if useLaneLineDebug == 0:
-        safe_idxs = np.isfinite(self.ll_t)
-        if safe_idxs[0]:
-          lane_path_y_interp = np.interp(path_t, self.ll_t[safe_idxs], lane_path_y[safe_idxs])
-          path_xyz[:,1] = self.d_prob * lane_path_y_interp + (1.0 - self.d_prob) * path_xyz[:,1]
-      else:
-        #safe_idxs = np.isfinite(self.ll_x)
-        #if safe_idxs[0]:
-        #TODO: 여기에 왜? v_ego*0.1을 했을까? 까먹음...
+    useLaneLineDebug = self.params.get_int("UseLaneLineDebug")
+    if self.lanefull_mode:
+      use_dist_mode = False  ## 아무리생각해봐도.. 같은 방법인듯...
+      if use_dist_mode:
         lane_path_y_interp = np.interp(path_xyz[:,0] + v_ego * useLaneLineDebug*0.01, self.ll_x, lane_path_y)
         path_xyz[:,1] = self.d_prob * lane_path_y_interp + (1.0 - self.d_prob) * path_xyz[:,1]
+      else:
+        safe_idxs = np.isfinite(self.ll_t)
+        if safe_idxs[0]:
+          lane_path_y_interp = np.interp(path_t * (1.0 + useLaneLineDebug*0.01), self.ll_t[safe_idxs], lane_path_y[safe_idxs])
+          path_xyz[:,1] = self.d_prob * lane_path_y_interp + (1.0 - self.d_prob) * path_xyz[:,1]
+
 
     path_xyz[:, 1] += (CAMERA_OFFSET + self.lane_offset_filtered.x)
 
     self.offset_total = self.lane_offset_filtered.x
 
     return path_xyz
+

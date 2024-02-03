@@ -435,6 +435,7 @@ struct CarControl {
     softHold @13: Int32;
     radarAlarm @14: Bool;
     activeAPM @15: Int32;
+    activeAVM @16: Int32;
 
     enum VisualAlert {
       # these are the choices from the Honda

@@ -14,7 +14,6 @@ import openpilot.selfdrive.sentry as sentry
 from openpilot.common.basedir import BASEDIR
 from openpilot.common.params import Params, ParamKeyType
 from openpilot.common.text_window import TextWindow
-from openpilot.selfdrive.boardd.set_time import set_time
 from openpilot.system.hardware import HARDWARE, PC
 from openpilot.selfdrive.manager.helpers import unblock_stdout, write_onroad_params, save_bootlog
 from openpilot.selfdrive.manager.process import ensure_running, launcher
@@ -28,10 +27,6 @@ from openpilot.system.version import is_dirty, get_commit, get_version, get_orig
 
 
 def manager_init() -> None:
-  # update system time from panda
-  set_time(cloudlog)
-
-  # save boot log
   save_bootlog()
 
   params = Params()
@@ -136,6 +131,7 @@ def manager_init() -> None:
     ("LongitudinalActuatorDelayUpperBound", "50"),     
     ("LongitudinalActuatorDelayLowerBound", "50"),     
     ("EnableRadarTracks", "0"),      
+    ("EnableAVM", "0"),      
     ("SccConnectedBus2", "0"),
     ("SoundVolumeAdjust", "100"),
     ("SoundVolumeAdjustEngage", "10"),
@@ -150,7 +146,7 @@ def manager_init() -> None:
     ("SoftHoldMode", "0"),       
     ("CruiseEcoControl", "2"),
     ("UseLaneLineSpeed", "0"),    
-    ("UseLaneLineDebug", "0"),    
+    ("UseLaneLineDebug", "10"),    
     ("AdjustLaneOffset", "0"),    
     ("AdjustCurveOffset", "0"),    
     ("PathOffset", "0"),  

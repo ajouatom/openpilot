@@ -20,8 +20,8 @@ class IsoTpParallelQuery:
     self.response_pending_timeout = response_pending_timeout
 
     real_addrs = [a if isinstance(a, tuple) else (a, None) for a in addrs]
-    for tx_addr, _ in real_addrs:
-      assert tx_addr not in FUNCTIONAL_ADDRS, f"Functional address should be defined in functional_addrs: {hex(tx_addr)}"
+    #for tx_addr, _ in real_addrs:
+    #  assert tx_addr not in FUNCTIONAL_ADDRS, f"Functional address should be defined in functional_addrs: {hex(tx_addr)}"
 
     self.msg_addrs = {tx_addr: get_rx_addr_for_tx_addr(tx_addr[0], rx_offset=response_offset) for tx_addr in real_addrs}
     self.msg_buffer = defaultdict(list)
@@ -38,6 +38,7 @@ class IsoTpParallelQuery:
   def _can_tx(self, tx_addr, dat, bus):
     """Helper function to send single message"""
     msg = [tx_addr, 0, dat, bus]
+    print("_can_tx=", msg)
     self.sendcan.send(can_list_to_can_capnp([msg], msgtype='sendcan'))
 
   def _can_rx(self, addr, sub_addr=None):

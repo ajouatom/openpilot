@@ -71,12 +71,15 @@ class CarController:
     self.resume_wait_timer = 0
     self.button_alive = 0
     self.button_alive_frame = 0
+    self.activeAVM = 0
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
     hud_control = CC.hudControl
 
-    self.softHoldMode = Params().get_int("SoftHoldMode")
+    params = Params()
+    self.softHoldMode = params.get_int("SoftHoldMode")
+    self.enableAVM = params.get_int("EnableAVM")
     # steering torque
     new_steer = int(round(actuators.steer * self.params.STEER_MAX))
     apply_steer = apply_driver_steer_torque_limits(new_steer, self.apply_steer_last, CS.out.steeringTorque, self.params)
@@ -124,6 +127,27 @@ class CarController:
       # for blinkers
       if self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
         can_sends.append([0x7b1, 0, b"\x02\x3E\x80\x00\x00\x00\x00\x00", self.CAN.ECAN])
+
+    ## TODO: avm이 자꾸만 깜박임...  스캐너를 다시 물려봐야할듯..
+    if self.enableAVM > 0:
+      addr, bus = 0x7b1, 0
+      avm_on = b'\x05\x2f\xf0\x26\x03\xff\x00\x00'
+      avm_off = b'\x05\x2f\xf0\x26\x00\xff\x00\x00'
+      if self.frame % 100 == 0:
+        can_sends.append([addr, 0, b"\x02\x3E\x00\x00\x00\x00\x00\x00", bus])
+      if self.frame % 20 == 1:
+        if self.activeAVM != hud_control.activeAVM:
+          self.activeAVM = hud_control.activeAVM
+          if self.activeAVM > 0:
+            can_sends.append([addr, 0, avm_on, bus])
+          else:
+            can_sends.append([addr, 0, avm_off, bus])
+      ## 시험: 한번 껐다가 켜보자... 될랑가?
+      if self.activeAVM:
+        if self.frame % 100 == 50:
+          can_sends.append([addr, 0, avm_off, bus])
+        elif self.frame % 100 == 53:
+          can_sends.append([addr, 0, avm_on, bus])
 
     # CAN-FD platforms
     if self.CP.carFingerprint in CANFD_CAR:

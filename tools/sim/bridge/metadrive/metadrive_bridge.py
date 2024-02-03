@@ -63,15 +63,16 @@ def curve_block(length, angle=45, direction=0):
 def create_map(track_size=60):
   return dict(
     type=MapGenerateMethod.PG_MAP_FILE,
-    lane_num=2,
-    lane_width=3.5,
+    lane_num=1,
+    lane_width=3.8,
     config=[
       None,
       straight_block(track_size),
-      curve_block(track_size*2, 90),
+      straight_block(track_size*2),
+      curve_block(track_size*2, 5, 1),
       straight_block(track_size),
-      curve_block(track_size*2, 90),
-      straight_block(track_size),
+      curve_block(track_size*2, 5, 1),
+      straight_block(track_size*2),
       curve_block(track_size*2, 90),
       straight_block(track_size),
       curve_block(track_size*2, 90),

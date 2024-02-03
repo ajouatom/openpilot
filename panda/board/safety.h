@@ -80,6 +80,23 @@ bool safety_tx_hook(CANPacket_t *to_send) {
   }
 
   const bool safety_allowed = current_hooks->tx(to_send);
+
+  if (!whitelisted || !safety_allowed) {
+      int addr = GET_ADDR(to_send);
+      int bus = GET_BUS(to_send);
+      int length = GET_LEN(to_send);
+      print("not allowed:");
+      if (!whitelisted) print("whitelisted,");
+      if (!safety_allowed) print("safety_allowed,");
+      print("addr = ");
+      putui((uint32_t)addr);
+      print(" bus=");
+      putui((uint32_t)bus);
+      print(" length=");
+      putui((uint32_t)length);
+      print("\n");
+  }
+
   return !relay_malfunction && whitelisted && safety_allowed;
 }
 

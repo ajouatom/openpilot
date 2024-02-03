@@ -198,6 +198,8 @@ class DesireHelper:
       self.turn_direction = TurnDirection.turnLeft if leftBlinker else TurnDirection.turnRight
       # Set the "turn_completed" flag to prevent lane changes after completing a turn
       self.turn_completed = True
+      self.lane_change_state = LaneChangeState.off
+      self.lane_change_direction = LaneChangeDirection.none
       self._add_log("Lane change turning.. {}".format("left" if leftBlinker else "right"))
     else:
       # TurnDirection.turnLeft / turnRight
@@ -233,7 +235,7 @@ class DesireHelper:
 
         ## nooHelper인경우 차선이 생기면 하면 됨. (수동개입이 없는경우에만)        
         if (not carstate.leftBlinker and not carstate.rightBlinker) and blinkerExtMode > 0: # Noo Helper #0: voice etc, 1:noo helper lanechange, 2: noo helper turn
-          if self.autoTurnControl == 3: #leftBlinker:
+          if self.autoTurnControl == 3 or leftBlinker:
             self.noo_active = 1
           elif not self.lane_available_prev and lane_available: # start... 차선이 생김
             self.noo_active = 10

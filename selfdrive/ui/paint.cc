@@ -1382,6 +1382,7 @@ void DrawApilot::drawTurnInfo(const UIState* s, int x, int y) {
     auto desireEvent = 0;//HW: lateralPlan.getDesireEvent();
     auto meta = sm["modelV2"].getModelV2().getMeta();
     auto laneChangeDirection = meta.getLaneChangeDirection();
+    auto laneChangeState = meta.getLaneChangeState();
     float desireStateTurnLeft = meta.getDesireState()[1];
     float desireStateTurnRight = meta.getDesireState()[2];
     float desireStateLaneChangeLeft = meta.getDesireState()[3];
@@ -1400,6 +1401,7 @@ void DrawApilot::drawTurnInfo(const UIState* s, int x, int y) {
         else if (desireStateTurnRight > 0.5) ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, "ic_turn_r", 1.0f);
         else if (desireStateLaneChangeLeft > 0.5) ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, "ic_lane_change_l", 1.0f);
         else if (desireStateLaneChangeRight > 0.5) ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, "ic_lane_change_r", 1.0f);
+
         if (desireEvent == 57) {
             ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, "ic_lane_change_steer", 1.0f);
             ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, "ic_lane_change_l", 1.0f);
@@ -1418,7 +1420,16 @@ void DrawApilot::drawTurnInfo(const UIState* s, int x, int y) {
                 ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, "ic_lane_change_r", 1.0f);
             }
         }
-
+        if (laneChangeState == cereal::LaneChangeState::PRE_LANE_CHANGE) {
+            if (laneChangeDirection == cereal::LaneChangeDirection::LEFT) {
+                ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, "ic_lane_change_steer", 1.0f);
+                ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, "ic_lane_change_l", 1.0f);
+            }
+            else if (laneChangeDirection == cereal::LaneChangeDirection::RIGHT) {
+                ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, "ic_lane_change_steer", 1.0f);
+                ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, "ic_lane_change_r", 1.0f);
+            }
+        }
     }
     // blinker 표시~~
     if (true) {
