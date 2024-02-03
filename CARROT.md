@@ -43,6 +43,16 @@
 
  * 주소입력
    * https://smiskol.com/fork/ajouatom/carrot
+ * 직접설치후 git연결하기
+   * ssh연결 후
+   * cd /data/openpilot
+   * git init
+   * nano .git/config
+   * 내용을 다음과 같이 수정한다.
+     * [remote "origin"]
+     *  url = https://github.com/ajouatom/openpilot.git
+     *  fetch = +refs/heads/carrot*:refs/remotes/origin/carrot*
+
 
 수동설치
 ------
