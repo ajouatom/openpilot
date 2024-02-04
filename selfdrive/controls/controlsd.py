@@ -528,6 +528,7 @@ class Controls:
         self.v_cruise_helper.cruiseActivate = 0
         self.v_cruise_helper.softHoldActive = 0
     if self.enabled and self.v_cruise_helper.cruiseActivate < 0:
+      print("CruiseActivate: Button Cancel: ....")
       self.events.add(EventName.buttonCancel)
       self.carrotCruiseActivate = -1
 
@@ -782,6 +783,7 @@ class Controls:
     ### carrot
     if self.CP.pcmCruise:
       if self.enabled and self.carrotCruiseActivate < 0:
+        print("pcmCruise: carrotCruiseActivate: cancel")
         CC.cruiseControl.cancel = True
       elif CC.cruiseControl.cancel: 
         print("Cancel state...enabled={}, activate={}".format(self.enabled, self.carrotCruiseActivate))
