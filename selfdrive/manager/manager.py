@@ -158,6 +158,7 @@ def manager_init() -> None:
     ("SteerActuatorDelay", "30"),       
     ("CruiseOnDist", "0"),
     ("EnableOSM", "0"),
+    ("HotspotOnBoot", "0"),
   ]
   if not PC:
     default_params.append(("LastUpdateTime", datetime.datetime.utcnow().isoformat().encode('utf8')))
