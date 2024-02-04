@@ -595,7 +595,8 @@ class Controls:
     elif self.state == State.disabled:
       if self.events.contains(ET.ENABLE):
         if self.events.contains(ET.NO_ENTRY):
-          self.current_alert_types.append(ET.NO_ENTRY)
+         print("######## noEntry", self.events)
+         self.current_alert_types.append(ET.NO_ENTRY)
 
         else:
           if self.events.contains(ET.PRE_ENABLE):

@@ -323,15 +323,17 @@ class CarState(CarStateBase):
     # CAN FD cars enable on main button press, set available if no TCS faults preventing engagement
     # ret.cruiseState.available = cp.vl["TCS"]["ACCEnable"] == 0
     # PFEIFER - AOL {{
-    ret.cruiseState.available = self.main_enabled
+    #ret.cruiseState.available = self.main_enabled
     # }} PFEIFER - AOL
     if self.CP.openpilotLongitudinalControl:
       # These are not used for engage/disengage since openpilot keeps track of state using the buttons
       ret.cruiseState.enabled = cp.vl["TCS"]["ACC_REQ"] == 1
       ret.cruiseState.standstill = False
+      ret.cruiseState.available = self.main_enabled # carrot
     else:
       cp_cruise_info = cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else cp
       ret.cruiseState.enabled = cp_cruise_info.vl["SCC_CONTROL"]["ACCMode"] in (1, 2)
+      ret.cruiseState.available = ret.cruiseState.enabled # carrot
       ret.cruiseState.standstill = cp_cruise_info.vl["SCC_CONTROL"]["CRUISE_STANDSTILL"] == 1
       ret.cruiseState.speed = cp_cruise_info.vl["SCC_CONTROL"]["VSetDis"] * speed_factor
       self.cruise_info = copy.copy(cp_cruise_info.vl["SCC_CONTROL"])
@@ -350,7 +352,7 @@ class CarState(CarStateBase):
     # }} PFEIFER - AOL
     self.main_buttons.extend(cp.vl_all[self.cruise_btns_msg_canfd]["ADAPTIVE_CRUISE_MAIN_BTN"])
     # PFEIFER - AOL {{
-    if self.main_buttons[-1] != self.prev_main_buttons:
+    if self.main_buttons[-1] != self.prev_main_buttons and self.CP.openpilotLongitudinalControl: #carrot
       self.main_enabled = not self.main_enabled
     # }} PFEIFER - AOL
     self.buttons_counter = cp.vl[self.cruise_btns_msg_canfd]["COUNTER"]
