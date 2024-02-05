@@ -191,10 +191,10 @@ static void hyundai_canfd_rx_hook(const CANPacket_t *to_push) {
       hyundai_common_cruise_buttons_check(cruise_button, main_button);
       if (cruise_button > 0) {
           int k;
-          print("cruise_button="); putui((uint32_t)cruise_button); print("dat=");
+          print("cb="); putui((uint32_t)cruise_button); print(" dat= ");
           for (k = 0; k < 32; k++) {
-              if ((k % 4) == 0) print(" ");
               puth2(GET_BYTE(to_push, k));
+              print(" ");
           }
           print("\n");
       }
