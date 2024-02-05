@@ -212,8 +212,8 @@ static void hyundai_canfd_rx_hook(const CANPacket_t *to_push) {
       int cruise_status = ((GET_BYTE(to_push, 8) >> 4) & 0x7U);
       bool cruise_engaged = (cruise_status == 1) || (cruise_status == 2);
       hyundai_common_cruise_state_check(cruise_engaged);
-
-      acc_main_on = cruise_engaged; // carrot: 비롱컨 canfd는 cruise_on확인을 ACCMode로 확인하는것이 좋을것 같음. 단순버튼반전으로 하면 뒤죽박죽.
+      int mainMode_acc = ((GET_BYTE(to_push, 8) >> 2) & 0x1U);
+      acc_main_on = mainMode_acc; // carrot: 비롱컨 canfd는 cruise_on확인을 ACCMode로 확인하는것이 좋을것 같음. 단순버튼반전으로 하면 뒤죽박죽.
     }
   }
 
