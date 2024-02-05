@@ -431,6 +431,7 @@ class CarInterface(CarInterfaceBase):
       addr, bus = 0x7d0, 0
       if CP.flags & HyundaiFlags.CANFD_HDA2.value:
         addr, bus = 0x730, CanBus(CP).ECAN
+        addr, bus = 416, CanBus(CP).ECAN  ## test carrot
       disable_ecu(logcan, sendcan, bus=bus, addr=addr, com_cont_req=b'\x28\x83\x01')
     if Params().get_bool("EnableRadarTracks"): #ajouatom
       enable_radar_tracks(CP, logcan, sendcan) 
