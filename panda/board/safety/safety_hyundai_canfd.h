@@ -194,7 +194,7 @@ static void hyundai_canfd_rx_hook(const CANPacket_t *to_push) {
           print("cb="); putui((uint32_t)cruise_button); print(" dat= ");
           for (k = 0; k < 32; k++) {
               puth2(GET_BYTE(to_push, k));
-              print(" ");
+              print(",");
           }
           print("\n");
       }
