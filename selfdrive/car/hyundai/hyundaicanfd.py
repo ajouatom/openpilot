@@ -221,3 +221,9 @@ def create_adrv_messages(packer, CAN, frame):
     ret.append(packer.make_can_msg("ADRV_0x1da", CAN.ECAN, values))
 
   return ret
+
+
+def test_cruise_buttons(packer, CP, CAN, cruise_buttons_msg):
+  values = cruise_buttons_msg
+  dat = packer.make_can_msg("CRUISE_BUTTONS_ALT", CAN.ECAN, values)[2]
+  print("cruise_buttons_msg=", dat)

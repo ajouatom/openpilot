@@ -347,6 +347,9 @@ class CarState(CarStateBase):
 
     self.prev_cruise_buttons = self.cruise_buttons[-1]
     self.cruise_buttons.extend(cp.vl_all[self.cruise_btns_msg_canfd]["CRUISE_BUTTONS"])
+
+    self.cruise_buttons_msg = cp.vl_all[self.cruise_btns_msg_canfd] #carrot
+
     # PFEIFER - AOL {{
     self.prev_main_buttons = self.main_buttons[-1]
     # }} PFEIFER - AOL
