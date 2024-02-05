@@ -56,6 +56,9 @@ class Events:
   def names(self) -> List[int]:
     return self.events
 
+  def __str__(self):
+    return f"Events: {self.events}, Static Events: {self.static_events}"
+
   def __len__(self) -> int:
     return len(self.events)
 

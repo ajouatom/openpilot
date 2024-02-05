@@ -327,7 +327,7 @@ class VCruiseHelper:
       self.blinkerExtMode = 0
 
     ## autoCruise가 핸들을 60도이상 돌리면.. 40초간 일시정지된다.
-    if abs(CS.steeringAngleDeg) > 60:
+    if abs(CS.steeringAngleDeg) > 60 and self.autoCruiseControl != 3:
       if self.autoCruiseCancelTimer == 0:
         self._add_log_auto_cruise("autoCruise paused for 40 seconds.")
         controls.events.add(EventName.audioPrompt)

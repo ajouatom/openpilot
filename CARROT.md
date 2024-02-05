@@ -38,9 +38,25 @@
      * 저속에서 조향이 안되는 구형차량을 위해 만든개조방식이다.
      * MDPS배선중간에 WhitePanda를 연결하여 캔데이터를 조작하여 마치 빨리달리는 차량인것 처럼 속여주는것이다.
 
-설치
+직접설치
 ------
- * 당근파일럿은 직접설치가 안된다.  반드시, ssh연결을 하여 clone하여 빌드하여 설치해야한다.
+
+ * 주소입력
+   * https://smiskol.com/fork/ajouatom/carrot
+ * 직접설치후 git연결하기
+   * ssh연결 후
+   * cd /data/openpilot
+   * git init
+   * nano .git/config
+   * 내용을 다음과 같이 수정한다.
+     * [remote "origin"]
+     *  url = https://github.com/ajouatom/openpilot.git
+     *  fetch = +refs/heads/carrot*:refs/remotes/origin/carrot*
+
+
+수동설치
+------
+
 **ssh의 연결**
  * ssh key만들기 (PEM옵션넣어야함)
    * ssh-keygen -m PEM -t rsa -f ~/.ssh/id_rsa
