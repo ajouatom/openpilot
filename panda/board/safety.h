@@ -94,6 +94,10 @@ bool safety_tx_hook(CANPacket_t *to_send) {
       putui((uint32_t)bus);
       print(" length=");
       putui((uint32_t)length);
+      print(" controls=");
+      putui((uint32_t)controls_allowed);
+      print(" main=");
+      putui((uint32_t)acc_main_on);
       print("\n");
   }
 

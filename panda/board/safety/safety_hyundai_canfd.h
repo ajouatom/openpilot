@@ -295,11 +295,6 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
     if (violation) {
       tx = false;
     }
-    if (!tx) {
-        print("tx blocked...addr = ");
-        putui((uint32_t)addr);
-        print("\n");
-    }
   }
 
   return tx;
