@@ -338,11 +338,6 @@ static bool hyundai_tx_hook(const CANPacket_t *to_send) {
   else if(addr == 909)
     last_ts_fca11_from_op = (tx == 0 ? 0 : microsecond_timer_get());
 
-  if (!tx) {
-      print("tx blocked...addr = ");
-      putui((uint32_t)addr);
-      print("\n");
-  }
   return tx;
 }
 
