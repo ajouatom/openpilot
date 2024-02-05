@@ -221,7 +221,10 @@ static void hyundai_canfd_rx_hook(const CANPacket_t *to_push) {
       int cruise_status = ((GET_BYTE(to_push, 8) >> 4) & 0x7U);
       bool cruise_engaged = (cruise_status == 1) || (cruise_status == 2);
       hyundai_common_cruise_state_check(cruise_engaged);
-      int mainMode_acc = ((GET_BYTE(to_push, 8) >> 2) & 0x1U);
+      bool mainMode_acc = ((GET_BYTE(to_push, 8) >> 2) & 0x1U) == 1;
+      if (mainMode_acc != acc_main_on) {
+          print("mainMode_acc = "); putui((uint32_t)mainMode_acc); print("\n");
+      }
       acc_main_on = mainMode_acc; // carrot: 비롱컨 canfd는 cruise_on확인을 mainMode_acc로 확인해야할것 같음. 단순버튼반전으로 하면 뒤죽박죽.
     }
   }
@@ -291,6 +294,11 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
 
     if (violation) {
       tx = false;
+    }
+    if (!tx) {
+        print("tx blocked...addr = ");
+        putui((uint32_t)addr);
+        print("\n");
     }
   }
 
