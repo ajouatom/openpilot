@@ -189,6 +189,9 @@ static void hyundai_canfd_rx_hook(const CANPacket_t *to_push) {
         main_button = GET_BIT(to_push, 34U);
       }
       hyundai_common_cruise_buttons_check(cruise_button, main_button);
+      int k;
+      for (k = 0; k < 32; k++) { puth2(GET_BYTE(to_push, k)); print(" "); }
+
     }
 
     // gas press, different for EV, hybrid, and ICE models
