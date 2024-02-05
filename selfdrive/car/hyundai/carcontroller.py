@@ -342,8 +342,8 @@ class CarController:
         if CC.cruiseControl.cancel:
           print("cruiseControl.cancel222222")
           if self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS:
-            can_sends.append(hyundaicanfd.create_acc_cancel(self.packer, self.CP, self.CAN, CS.cruise_info))
-            #hyundaicanfd.test_cruise_buttons(self.packer, self.CP, self.CAN, CS.cruise_buttons_msg)
+            #can_sends.append(hyundaicanfd.create_acc_cancel(self.packer, self.CP, self.CAN, CS.cruise_info))
+            can_sends.append(hyundaicanfd.test_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.CANCEL))
             
             self.last_button_frame = self.frame
           else:
@@ -355,6 +355,9 @@ class CarController:
         elif CC.cruiseControl.resume:
           if self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS:
             # TODO: resume for alt button cars
+            print("cruiseControl.RES222222")
+            for _ in range(4):
+              can_sends.append(hyundaicanfd.test_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL))
             pass
           else:
             for _ in range(20):
