@@ -292,13 +292,16 @@ static bool hyundai_tx_hook(const CANPacket_t *to_send) {
     int desired_torque = ((GET_BYTES(to_send, 0, 4) >> 16) & 0x7ffU) - 1024U;
     bool steer_req = GET_BIT(to_send, 27U) != 0U;
 
+    if (steer_req) lat_active_count = 100; // carrot, latActive message from OP
+
     const SteeringLimits limits = hyundai_alt_limits ? HYUNDAI_STEERING_LIMITS_ALT : HYUNDAI_STEERING_LIMITS;
     if (steer_torque_cmd_checks(desired_torque, steer_req, limits)) {
-#if 0 //xxxpilot
-      tx = false;
-#endif
+      //tx = false;  //carrot comment..
     }
   }
+  // carrot automatic detect main enabled..
+  if (lat_active_count > 0) lat_active_count--;
+  acc_main_on = (lat_active_count > 0) || controls_allowed;
 
   // UDS: Only tester present ("\x02\x3E\x80\x00\x00\x00\x00\x00") allowed on diagnostics address
   if (addr == 0x7D0) {
