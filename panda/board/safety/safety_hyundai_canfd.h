@@ -117,12 +117,21 @@ RxCheck hyundai_canfd_radar_scc_alt_buttons_rx_checks[] = {
 // Does not use the alt buttons message
 RxCheck hyundai_canfd_hda2_rx_checks[] = {
   HYUNDAI_CANFD_COMMON_RX_CHECKS(1)
-  HYUNDAI_CANFD_BUTTONS_ADDR_CHECK(1)
+  HYUNDAI_CANFD_BUTTONS_ADDR_CHECK(1)  // TODO: carrot: canival no 0x1cf
   HYUNDAI_CANFD_SCC_ADDR_CHECK(1)
 };
 RxCheck hyundai_canfd_hda2_long_rx_checks[] = {
   HYUNDAI_CANFD_COMMON_RX_CHECKS(1)
-  HYUNDAI_CANFD_BUTTONS_ADDR_CHECK(1)
+  HYUNDAI_CANFD_BUTTONS_ADDR_CHECK(1)  // TODO: carrot: canival no 0x1cf
+};
+RxCheck hyundai_canfd_hda2_alt_buttons_rx_checks[] = {
+  HYUNDAI_CANFD_COMMON_RX_CHECKS(1)
+  HYUNDAI_CANFD_ALT_BUTTONS_ADDR_CHECK(1)
+  HYUNDAI_CANFD_SCC_ADDR_CHECK(1)
+};
+RxCheck hyundai_canfd_hda2_long_alt_buttons_rx_checks[] = {
+  HYUNDAI_CANFD_COMMON_RX_CHECKS(1)
+  HYUNDAI_CANFD_ALT_BUTTONS_ADDR_CHECK(1)
 };
 
 
@@ -212,6 +221,8 @@ static void hyundai_canfd_rx_hook(const CANPacket_t *to_push) {
       int cruise_status = ((GET_BYTE(to_push, 8) >> 4) & 0x7U);
       bool cruise_engaged = (cruise_status == 1) || (cruise_status == 2);
       hyundai_common_cruise_state_check(cruise_engaged);
+      int mainMode_acc = ((GET_BYTE(to_push, 8) >> 2) & 0x1U);
+      acc_main_on = mainMode_acc; // carrot: 비롱컨 canfd는 cruise_on확인을 mainMode_acc로 확인해야할것 같음. 단순버튼반전으로 하면 뒤죽박죽.
     }
   }
 
@@ -328,15 +339,26 @@ static safety_config hyundai_canfd_init(uint16_t param) {
   safety_config ret;
   if (hyundai_longitudinal) {
     if (hyundai_canfd_hda2) {
-      ret = BUILD_SAFETY_CFG(hyundai_canfd_hda2_long_rx_checks, HYUNDAI_CANFD_HDA2_LONG_TX_MSGS);
+        if (hyundai_canfd_alt_buttons) {          // carrot : for CANIVAL 4TH HDA2
+            ret = BUILD_SAFETY_CFG(hyundai_canfd_hda2_long_alt_buttons_rx_checks, HYUNDAI_CANFD_HDA2_LONG_TX_MSGS);
+        }
+        else {
+            ret = BUILD_SAFETY_CFG(hyundai_canfd_hda2_long_rx_checks, HYUNDAI_CANFD_HDA2_LONG_TX_MSGS);
+        }
     } else {
       ret = hyundai_canfd_alt_buttons ? BUILD_SAFETY_CFG(hyundai_canfd_long_alt_buttons_rx_checks, HYUNDAI_CANFD_HDA1_TX_MSGS) : \
                                         BUILD_SAFETY_CFG(hyundai_canfd_long_rx_checks, HYUNDAI_CANFD_HDA1_TX_MSGS);
     }
   } else {
     if (hyundai_canfd_hda2) {
-      ret = hyundai_canfd_hda2_alt_steering ? BUILD_SAFETY_CFG(hyundai_canfd_hda2_rx_checks, HYUNDAI_CANFD_HDA2_ALT_STEERING_TX_MSGS) : \
-                                              BUILD_SAFETY_CFG(hyundai_canfd_hda2_rx_checks, HYUNDAI_CANFD_HDA2_TX_MSGS);
+        if (hyundai_canfd_alt_buttons) { // carrot : for CANIVAL 4TH HDA2
+            ret = hyundai_canfd_hda2_alt_steering ? BUILD_SAFETY_CFG(hyundai_canfd_hda2_alt_buttons_rx_checks, HYUNDAI_CANFD_HDA2_ALT_STEERING_TX_MSGS) : \
+                BUILD_SAFETY_CFG(hyundai_canfd_hda2_alt_buttons_rx_checks, HYUNDAI_CANFD_HDA2_TX_MSGS);
+        }
+        else {
+            ret = hyundai_canfd_hda2_alt_steering ? BUILD_SAFETY_CFG(hyundai_canfd_hda2_rx_checks, HYUNDAI_CANFD_HDA2_ALT_STEERING_TX_MSGS) : \
+                BUILD_SAFETY_CFG(hyundai_canfd_hda2_rx_checks, HYUNDAI_CANFD_HDA2_TX_MSGS);
+        }
     } else if (!hyundai_camera_scc) {
       ret = hyundai_canfd_alt_buttons ? BUILD_SAFETY_CFG(hyundai_canfd_radar_scc_alt_buttons_rx_checks, HYUNDAI_CANFD_HDA1_TX_MSGS) : \
                                         BUILD_SAFETY_CFG(hyundai_canfd_radar_scc_rx_checks, HYUNDAI_CANFD_HDA1_TX_MSGS);

@@ -718,7 +718,7 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
     commonToggles->addItem(new CValueControl("SpeedFromPCM", "Read Cruise Speed from PCM", "Toyota must set to 1", "../assets/offroad/icon_road.png", 0, 1, 1));
 
     hyundaiToggles = new ListWidget(this);
-    hyundaiToggles->addItem(new CValueControl("AutoCruiseControl", "(HKG) Auto Cruise control", "Softhold, Auto Cruise ON/OFF control", "../assets/offroad/icon_road.png", 0, 2, 1));
+    hyundaiToggles->addItem(new CValueControl("AutoCruiseControl", "(HKG) Auto Cruise control", "Softhold, Auto Cruise ON/OFF control", "../assets/offroad/icon_road.png", 0, 3, 1));
     hyundaiToggles->addItem(new CValueControl("CruiseOnDist", "CRUISE: Auto ON distance(0cm)", "When GAS/Brake is OFF, Cruise ON when the lead car gets closer or warning (- value).", "../assets/offroad/icon_road.png", -500, 500, 50));
     hyundaiToggles->addItem(new ParamControl("SccConnectedBus2", "(HKG) SCC Module connected BUS2", "", "../assets/offroad/icon_warning.png", this));
     hyundaiToggles->addItem(new ParamControl("EnableRadarTracks", "(HKG) EnableRadarTracks", "Activate Radartracks at startup", "../assets/offroad/icon_warning.png", this));

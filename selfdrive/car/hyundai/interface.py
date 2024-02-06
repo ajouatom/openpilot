@@ -58,6 +58,9 @@ class CarInterface(CarInterfaceBase):
       if hda2:
         if 0x110 in fingerprint[CAN.CAM]:
           ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
+        ## carrot: canival 4th, no 0x1cf
+        if 0x1cf not in fingerprint[CAN.ECAN]:
+          ret.flags |= HyundaiFlags.CANFD_ALT_BUTTONS.value
       else:
         # non-HDA2
         if 0x1cf not in fingerprint[CAN.ECAN]:
@@ -336,6 +339,7 @@ class CarInterface(CarInterfaceBase):
       ret.longitudinalTuning.kpV = [0.1]
       ret.longitudinalTuning.kiV = [0.0]
       ret.experimentalLongitudinalAvailable = candidate not in (CANFD_UNSUPPORTED_LONGITUDINAL_CAR | CANFD_RADAR_SCC_CAR)
+      ret.experimentalLongitudinalAvailable = True # carrot: 비전 롱컨이라도 되도록... 될까?
     else:
       ret.longitudinalTuning.kpV = [0.5]
       ret.longitudinalTuning.kiV = [0.0]
@@ -441,7 +445,7 @@ class CarInterface(CarInterfaceBase):
   def _update(self, c):
     ret = self.CS.update(self.cp, self.cp_cam)
 
-    if self.CS.CP.openpilotLongitudinalControl or True: #ajouatom: for PCM
+    if self.CS.CP.openpilotLongitudinalControl or Params().get_int("SpeedFromPCM") == 0: #ajouatom: for PCM
       ret.buttonEvents = create_button_events(self.CS.cruise_buttons[-1], self.CS.prev_cruise_buttons, BUTTONS_DICT)
 
     # On some newer model years, the CANCEL button acts as a pause/resume button based on the PCM state
@@ -449,7 +453,7 @@ class CarInterface(CarInterfaceBase):
     # Main button also can trigger an engagement on these cars
     allow_enable = any(btn in ENABLE_BUTTONS for btn in self.CS.cruise_buttons) or any(self.CS.main_buttons)
 
-    allow_enable = True #carrot
+    #allow_enable = True #carrot
     events = self.create_common_events(ret, pcm_enable=self.CS.CP.pcmCruise, allow_enable=allow_enable)
 
     # low speed steer alert hysteresis logic (only for cars with steer cut off above 10 m/s)
