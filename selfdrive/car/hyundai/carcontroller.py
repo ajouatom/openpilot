@@ -364,9 +364,9 @@ class CarController:
                 can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL))
             self.last_button_frame = self.frame
         else:
-          print("before=", can_sends)
-          can_sends.append(self.canfd_speed_control_pcm(CC, CS))
-          print("after=", can_sends)
+          dat = self.canfd_speed_control_pcm(CC, CS)
+          if dat is not None:
+            can_sends.append(dat)
 
     return can_sends
 
