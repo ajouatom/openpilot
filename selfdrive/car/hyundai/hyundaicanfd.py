@@ -310,6 +310,6 @@ def get_random_data(channel):
     else:
         return None
 
-def test_cruise_buttons(packer, CP, CAN, buttons):
+def alt_cruise_buttons(packer, CP, CAN, buttons):
   ## CRUISE_BUTTONS_ALT
   return [426, 0, get_random_data(int(buttons)), CAN.ECAN]

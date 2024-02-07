@@ -344,7 +344,7 @@ class CarController:
             print("cruiseControl.cancel222222")
             if self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS:
               #can_sends.append(hyundaicanfd.create_acc_cancel(self.packer, self.CP, self.CAN, CS.cruise_info))
-              can_sends.append(hyundaicanfd.test_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.CANCEL))
+              can_sends.append(hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.CANCEL))
             
             else:
               for _ in range(20):
@@ -358,7 +358,7 @@ class CarController:
               # TODO: resume for alt button cars
               print("cruiseControl.RES222222")
               for _ in range(4):
-                can_sends.append(hyundaicanfd.test_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL))
+                can_sends.append(hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL))
             else:
               for _ in range(20):
                 can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL))
@@ -391,7 +391,7 @@ class CarController:
             #if CC.longActive and (hud_control.leadVisible or current > 10.0):
             if (hud_control.leadVisible or current > 10.0):
               if alt_buttons:
-                can_sends.append(hyundaicanfd.test_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL))
+                can_sends.append(hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL))
               else:
                 can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL))
               #can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
@@ -401,14 +401,14 @@ class CarController:
           #  CC.debugTextCC = "currentGap = {}, target = {}".format(CS.out.cruiseGap, hud_control.cruiseGap)
           elif target < current and current>= 31:
             if alt_buttons:
-              can_sends.append(hyundaicanfd.test_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.SET_DECEL))
+              can_sends.append(hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.SET_DECEL))
             else:
               can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.SET_DECEL))
             #can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.SET_DECEL, self.CP.carFingerprint))
             #CC.debugTextCC = "BTN:--,T:{:.1f},C:{:.1f}".format(target, current)
           elif target > current and current < 160:
             if alt_buttons:
-              can_sends.append(hyundaicanfd.test_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL))
+              can_sends.append(hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL))
             else:
               can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL))
             #can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
@@ -418,7 +418,7 @@ class CarController:
           if (hud_control.leadVisible or current > 10.0):
             print("sendActivateCruise Buttons....Sent....")
             if alt_buttons:
-              can_sends.append(hyundaicanfd.test_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL))
+              can_sends.append(hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL))
             else:
               can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL))
             #can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
