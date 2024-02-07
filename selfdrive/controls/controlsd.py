@@ -803,7 +803,7 @@ class Controls:
 
     hudControl = CC.hudControl
     if self.CP.pcmCruise:
-      hudControl.setSpeed = setSpeed if self.v_cruise_helper.speedFromPCM != 2 else float(self.v_cruise_helper.v_cruise_cluster_kph * CV.KPH_TO_MS)
+      hudControl.setSpeed = setSpeed if self.v_cruise_helper.speedFromPCM != 2 else float(self.v_cruise_helper.v_cruise_cluster_kph_set * CV.KPH_TO_MS)
     else:
       hudControl.setSpeed = setSpeed if self.v_cruise_helper.xState == 3 else float(self.v_cruise_helper.v_cruise_cluster_kph * CV.KPH_TO_MS)
     hudControl.speedVisible = self.enabled
