@@ -28,6 +28,7 @@ const CanMsg HYUNDAI_CANFD_HDA2_ALT_STEERING_TX_MSGS[] = {
   {0x110, 0, 32}, // LKAS_ALT
   {0x1CF, 1, 8},  // CRUISE_BUTTON
   {0x362, 0, 32}, // CAM_0x362
+  {0x1AA, 1, 16}, // CRUISE_ALT_BUTTONS , carrot
 };
 
 const CanMsg HYUNDAI_CANFD_HDA2_LONG_TX_MSGS[] = {
@@ -221,8 +222,13 @@ static void hyundai_canfd_rx_hook(const CANPacket_t *to_push) {
       int cruise_status = ((GET_BYTE(to_push, 8) >> 4) & 0x7U);
       bool cruise_engaged = (cruise_status == 1) || (cruise_status == 2);
       hyundai_common_cruise_state_check(cruise_engaged);
-      int mainMode_acc = ((GET_BYTE(to_push, 8) >> 2) & 0x1U);
+      /*
+      bool mainMode_acc = ((GET_BYTE(to_push, 8) >> 2) & 0x1U) == 1;
+      if (mainMode_acc != acc_main_on) {
+          print("mainMode_acc = "); putui((uint32_t)mainMode_acc); print("\n");
+      }
       acc_main_on = mainMode_acc; // carrot: 비롱컨 canfd는 cruise_on확인을 mainMode_acc로 확인해야할것 같음. 단순버튼반전으로 하면 뒤죽박죽.
+      */
     }
   }
 
@@ -248,11 +254,15 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
     int desired_torque = (((GET_BYTE(to_send, 6) & 0xFU) << 7U) | (GET_BYTE(to_send, 5) >> 1U)) - 1024U;
     bool steer_req = GET_BIT(to_send, 52U) != 0U;
 
+    if (steer_req) lat_active_count = 100; // carrot, latActive message from OP
     if (steer_torque_cmd_checks(desired_torque, steer_req, HYUNDAI_CANFD_STEERING_LIMITS)) {
-      tx = false;
+      //tx = false;
     }
   }
-
+  // carrot automatic detect main enabled..
+  if (lat_active_count > 0) lat_active_count--;
+  acc_main_on = (lat_active_count > 0) || controls_allowed;
+  
   // cruise buttons check
   if (addr == 0x1cf) {
     int button = GET_BYTE(to_send, 2) & 0x7U;
