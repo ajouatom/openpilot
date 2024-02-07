@@ -787,7 +787,7 @@ class Controls:
         print("pcmCruise: carrotCruiseActivate: cancel")
         CC.cruiseControl.cancel = True
       elif CC.cruiseControl.cancel: 
-        print("Cancel state...enabled={}, activate={}".format(self.enabled, self.carrotCruiseActivate))
+        #print("Cancel state...enabled={}, activate={}".format(self.enabled, self.carrotCruiseActivate))
         if self.carrotCruiseActivate > 0:
           CC.cruiseControl.cancel = False
 
