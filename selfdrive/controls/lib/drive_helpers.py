@@ -282,8 +282,10 @@ class VCruiseHelper:
     # 250kph or above probably means we never had a set speed
     if any(b.type in (ButtonType.accelCruise, ButtonType.resumeCruise) for b in CS.buttonEvents) and self.v_cruise_kph_last < 250:
       self.v_cruise_kph = self.v_cruise_kph_set = self.v_cruise_kph_last
+      self._add_log("Button init speed...{:.0f}".format(self.v_cruise_kph))
     else:
       self.v_cruise_kph = self.v_cruise_kph_set = int(round(clip(CS.vEgo * CV.MS_TO_KPH, initial, self.cruiseSpeedMax)))
+      self._add_log("Button init current speed...{:.0f}".format(self.v_cruise_kph))
 
     self.v_cruise_cluster_kph = self.v_cruise_kph
 
