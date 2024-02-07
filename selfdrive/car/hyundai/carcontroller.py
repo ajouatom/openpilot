@@ -371,7 +371,7 @@ class CarController:
     return can_sends
 
   def canfd_speed_control_pcm(self, CC, CS):
-    can_sends = []
+    can_sends = None
     hud_control = CC.hudControl
     alt_buttons = True if self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS else False
 
@@ -392,6 +392,7 @@ class CarController:
           if not CS.out.cruiseState.enabled:
             #if CC.longActive and (hud_control.leadVisible or current > 10.0):
             if (hud_control.leadVisible or current > 10.0):
+              can_sends = []
               if alt_buttons:
                 can_sends.append(hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL))
               else:
@@ -402,6 +403,7 @@ class CarController:
           #  can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.GAP_DIST, self.CP.carFingerprint))
           #  CC.debugTextCC = "currentGap = {}, target = {}".format(CS.out.cruiseGap, hud_control.cruiseGap)
           elif target < current and current>= 31:
+            can_sends = []
             if alt_buttons:
               can_sends.append(hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.SET_DECEL))
             else:
@@ -409,6 +411,7 @@ class CarController:
             #can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.SET_DECEL, self.CP.carFingerprint))
             #CC.debugTextCC = "BTN:--,T:{:.1f},C:{:.1f}".format(target, current)
           elif target > current and current < 160:
+            can_sends = []
             if alt_buttons:
               can_sends.append(hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL))
             else:
@@ -419,6 +422,7 @@ class CarController:
           #print("sendActivateCruise Buttons....")
           if (hud_control.leadVisible or current > 10.0):
             print("sendActivateCruise Buttons....Sent....")
+            can_sends = []
             if alt_buttons:
               can_sends.append(hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL))
             else:
