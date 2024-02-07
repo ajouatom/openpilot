@@ -445,7 +445,7 @@ class CarInterface(CarInterfaceBase):
   def _update(self, c):
     ret = self.CS.update(self.cp, self.cp_cam)
 
-    if self.CS.CP.openpilotLongitudinalControl or Params().get_int("SpeedFromPCM") == 0: #ajouatom: for PCM
+    if self.CS.CP.openpilotLongitudinalControl or Params().get_int("SpeedFromPCM") in [0,2]: #ajouatom: for PCM
       ret.buttonEvents = create_button_events(self.CS.cruise_buttons[-1], self.CS.prev_cruise_buttons, BUTTONS_DICT)
 
     # On some newer model years, the CANCEL button acts as a pause/resume button based on the PCM state
