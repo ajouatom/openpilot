@@ -333,7 +333,7 @@ class CarState(CarStateBase):
       # These are not used for engage/disengage since openpilot keeps track of state using the buttons
       ret.cruiseState.enabled = cp.vl["TCS"]["ACC_REQ"] == 1
       ret.cruiseState.standstill = False
-      #ret.cruiseState.available = self.main_enabled # carrot
+      print("cruiseState.available = {},{}".format(ret.cruiseState.available, ret.cruiseState.enabled))
     else:
       cp_cruise_info = cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else cp
       ret.cruiseState.enabled = cp_cruise_info.vl["SCC_CONTROL"]["ACCMode"] in (1, 2)
