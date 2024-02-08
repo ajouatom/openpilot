@@ -195,6 +195,7 @@ def create_acc_commands_mix_scc(CP, packer, enabled, accel, upper_jerk, lower_je
     stopReq = 0
 
   makeNewCommands = True if not (CP.flags & HyundaiFlags.SCC_BUS2.value) else False
+  print(makeNewCommands)
   commands = []
   if makeNewCommands:
     scc11_values = {
