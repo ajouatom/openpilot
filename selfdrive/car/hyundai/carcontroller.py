@@ -49,7 +49,7 @@ class CarController:
   def __init__(self, dbc_name, CP, VM):
     self.CP = CP
     self.CAN = CanBus(CP)
-    self.params = CarControllerParams(CP)
+    self.cc_params = CarControllerParams(CP)
     self.packer = CANPacker(dbc_name)
     self.angle_limit_counter = 0
     self.frame = 0
@@ -72,17 +72,18 @@ class CarController:
     self.button_alive = 0
     self.button_alive_frame = 0
     self.activeAVM = 0
+    self.params = Params()
+
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
     hud_control = CC.hudControl
 
-    params = Params()
-    self.softHoldMode = params.get_int("SoftHoldMode")
-    self.enableAVM = params.get_int("EnableAVM")
+    self.softHoldMode = self.params.get_int("SoftHoldMode")
+    self.enableAVM = self.params.get_int("EnableAVM")
     # steering torque
-    new_steer = int(round(actuators.steer * self.params.STEER_MAX))
-    apply_steer = apply_driver_steer_torque_limits(new_steer, self.apply_steer_last, CS.out.steeringTorque, self.params)
+    new_steer = int(round(actuators.steer * self.cc_params.STEER_MAX))
+    apply_steer = apply_driver_steer_torque_limits(new_steer, self.apply_steer_last, CS.out.steeringTorque, self.cc_params)
 
     # >90 degree steering fault prevention
     self.angle_limit_counter, apply_steer_req = common_fault_avoidance(abs(CS.out.steeringAngleDeg) >= MAX_ANGLE, CC.latActive,
@@ -114,7 +115,7 @@ class CarController:
 
     # *** common hyundai stuff ***
     if self.frame % 100 == 0:
-      self.maxAngleFrames = int(Params().get("MaxAngleFrames", encoding="utf8"))
+      self.maxAngleFrames = int(self.params.get("MaxAngleFrames", encoding="utf8"))
 
     # tester present - w/ no response (keeps relevant ECU disabled)
     if self.frame % 100 == 0 and not (self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC.value) and self.CP.openpilotLongitudinalControl:
@@ -252,7 +253,7 @@ class CarController:
         can_sends.append(hyundaican.create_frt_radar_opt(self.packer))
 
     new_actuators = actuators.copy()
-    new_actuators.steer = apply_steer / self.params.STEER_MAX
+    new_actuators.steer = apply_steer / self.cc_params.STEER_MAX
     new_actuators.steerOutputCan = apply_steer
     new_actuators.accel = accel
 
@@ -400,14 +401,14 @@ class CarController:
           #elif CS.out.cruiseGap != hud_control.cruiseGap:
           #  can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.GAP_DIST, self.CP.carFingerprint))
           #  CC.debugTextCC = "currentGap = {}, target = {}".format(CS.out.cruiseGap, hud_control.cruiseGap)
-          elif target < current and current>= 31:
+          elif target < current and current>= 31 and self.params.get_int("SpeedFromPCM") != 1:
             if alt_buttons:
               return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.SET_DECEL)
             else:
               return hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.SET_DECEL)
             #can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.SET_DECEL, self.CP.carFingerprint))
             #CC.debugTextCC = "BTN:--,T:{:.1f},C:{:.1f}".format(target, current)
-          elif target > current and current < 160:
+          elif target > current and current < 160 and self.params.get_int("SpeedFromPCM") != 1:
             can_sends = []
             if alt_buttons:
               return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL)
