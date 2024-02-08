@@ -264,7 +264,6 @@ class CarState(CarStateBase):
     # PFEIFER - AOL {{
     if self.prev_main_buttons == 0 and self.main_buttons[-1] != 0:
       self.main_enabled = not self.main_enabled
-      print("main_enabled = {}".format(self.main_enabled))
     # }} PFEIFER - AOL
     if self.CP.openpilotLongitudinalControl:
       self.distance_button_pressed = self.cruise_buttons[-1] == Buttons.GAP_DIST
@@ -334,7 +333,8 @@ class CarState(CarStateBase):
       # These are not used for engage/disengage since openpilot keeps track of state using the buttons
       ret.cruiseState.enabled = cp.vl["TCS"]["ACC_REQ"] == 1
       ret.cruiseState.standstill = False
-      print("cruiseState.available = {},{}".format(ret.cruiseState.available, ret.cruiseState.enabled))
+      if ret.cruiseState.available:
+        print("cruiseState.available = {},{}".format(ret.cruiseState.available, ret.cruiseState.enabled))
     else:
       cp_cruise_info = cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else cp
       ret.cruiseState.enabled = cp_cruise_info.vl["SCC_CONTROL"]["ACCMode"] in (1, 2)
@@ -364,6 +364,7 @@ class CarState(CarStateBase):
     # PFEIFER - AOL {{
     if self.main_buttons[-1] != self.prev_main_buttons: # and self.CP.openpilotLongitudinalControl: #carrot
       self.main_enabled = not self.main_enabled
+      print("main_enabled = {}".format(self.main_enabled))
     # }} PFEIFER - AOL
     self.buttons_counter = cp.vl[self.cruise_btns_msg_canfd]["COUNTER"]
     ret.accFaulted = cp.vl["TCS"]["ACCEnable"] != 0  # 0 ACC CONTROL ENABLED, 1-3 ACC CONTROL DISABLED
