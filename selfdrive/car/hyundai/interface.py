@@ -387,14 +387,17 @@ class CarInterface(CarInterfaceBase):
     ret.safetyConfigs = set_safety_config_hyundai(candidate, CAN, can_fd=(candidate in CANFD_CAR))
 
     if hda2:
+      print("$$$$$$$$$$$$$$ HDA2")
       ret.flags |= HyundaiFlags.CANFD_HDA2.value
       ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_CANFD_HDA2
 
     if candidate in CANFD_CAR:
       if hda2 and ret.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING:
         ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_CANFD_HDA2_ALT_STEERING
+        print("$$$$$$$$$ Alt Steering...")
       if ret.flags & HyundaiFlags.CANFD_ALT_BUTTONS:
         ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_CANFD_ALT_BUTTONS
+        print("$$$$$$$$$ Alt Buttons...")
     else:
       if candidate in LEGACY_SAFETY_MODE_CAR:
         # these cars require a special panda safety mode due to missing counters and checksums in the messages
