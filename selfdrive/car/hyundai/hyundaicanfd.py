@@ -226,6 +226,7 @@ def create_adrv_messages(packer, CAN, frame):
 
 
 import random
+from random import randint
 
 # 각 채널별 데이터를 파싱하여 구성
 channel_data_db = {
@@ -334,5 +335,5 @@ def alt_cruise_buttons2(packer, CP, CAN, buttons, cruise_btns_msg):
 
 def alt_cruise_buttons(packer, CP, CAN, buttons, cruise_btns_msg):
   cruise_btns_msg["CRUISE_BUTTONS"] = buttons
-  cruise_btns_msg["COUNTER"] = (cruise_btns_msg["COUNTER"] + 1) % 256
+  cruise_btns_msg["COUNTER"] = (cruise_btns_msg["COUNTER"] + randint(1, 10)) % 256
   return packer.make_can_msg("CRUISE_BUTTONS_ALT", CAN.ECAN, cruise_btns_msg)
