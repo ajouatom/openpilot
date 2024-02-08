@@ -322,5 +322,5 @@ def alt_cruise_buttons2(packer, CP, CAN, buttons, cruise_btns_msg):
   #  return None
   print("alt_cruise=", cruise_btns_msg)
   values = cruise_btns_msg
-  values["CRUISE_BUTTONS"] = buttons
+  values["CRUISE_BUTTONS"] = [buttons]
   return packer.make_can_msg("CRUISE_BUTTONS_ALT", CAN.ECAN, values)
