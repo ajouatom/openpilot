@@ -213,7 +213,6 @@ def create_acc_commands_mix_scc(CP, packer, enabled, accel, upper_jerk, lower_je
     commands.append(packer.make_can_msg("SCC11", 0, scc11_values))
   elif CS.scc11 is not None:
     values = CS.scc11
-    print("scc11=", values)
     values["MainMode_ACC"] = 1  if cruise_available else 0
     values["TauGapSet"] = cruiseGap
     values["VSetDis"] = set_speed if longEnabled or CS.out.gasPressed else 0
@@ -226,7 +225,6 @@ def create_acc_commands_mix_scc(CP, packer, enabled, accel, upper_jerk, lower_je
     values["ACC_ObjRelSpd"] = hud_control.objRelSpd
     values["ACC_ObjDist"] = hud_control.objDist
     values["DriverAlertDisplay"] = 0
-    print("scc11after=", values)
     commands.append(packer.make_can_msg("SCC11", 0, values))
 
   # SCC12.ACCMode: Init: 0, Brake: 0, Accel:2, Cruise: 1   KONA_EV에서 측정함.

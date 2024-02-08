@@ -311,9 +311,9 @@ def get_random_data(channel):
         return None
 
 def alt_cruise_buttons(packer, CP, CAN, buttons, cruise_btns_msg):
-  #if cruise_btns_msg is not None:
+  if cruise_btns_msg is not None:
   #  print("send alt_cruise_buttons")
-  #  return alt_cruise_buttons2(packer, CP, CAN, buttons, cruise_btns_msg)
+    return alt_cruise_buttons2(packer, CP, CAN, buttons, cruise_btns_msg)
   ## CRUISE_BUTTONS_ALT
   return [426, 0, get_random_data(int(buttons)), CAN.ECAN]
 
@@ -321,7 +321,8 @@ def alt_cruise_buttons2(packer, CP, CAN, buttons, cruise_btns_msg):
   #if cruise_btns_msg is None:
   #  return None
   
+  print("alt_cruise1=", values)
   values = {key: value[0] for key, value in cruise_btns_msg.items()}
   values["CRUISE_BUTTONS"] = buttons
-  print("alt_cruise=", values)
+  print("alt_cruise2=", values)
   return packer.make_can_msg("CRUISE_BUTTONS_ALT", CAN.ECAN, values)
