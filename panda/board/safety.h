@@ -92,8 +92,14 @@ bool safety_tx_hook(CANPacket_t *to_send) {
       putui((uint32_t)addr);
       print(" bus=");
       putui((uint32_t)bus);
-      print(" length=");
+      print(" len=");
       putui((uint32_t)length);
+      print(" ctrl=");
+      putui((uint32_t)controls_allowed);
+      print(" main=");
+      putui((uint32_t)acc_main_on);
+      print(" rely=");
+      putui((uint32_t)relay_malfunction);
       print("\n");
   }
 
@@ -407,7 +413,8 @@ int set_safety_hooks(uint16_t mode, uint16_t param) {
 // convert a trimmed integer to signed 32 bit int
 int to_signed(int d, int bits) {
   int d_signed = d;
-  if (d >= (1 << MAX((bits - 1), 0))) {
+  int max_value = (1 << MAX((bits - 1), 0));
+  if (d >= max_value) {
     d_signed = d - (1 << MAX(bits, 0));
   }
   return d_signed;

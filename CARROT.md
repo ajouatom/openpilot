@@ -41,6 +41,17 @@
 직접설치
 ------
 
+ * 브랜치
+   * carrot
+     * 직접설치용 주소
+     * Build가 되어 있어 빠른실행가능
+     * 업데이트가 느림.
+   * carrot-master
+     * 최신버젼
+     * 안정화되면 빌드하여, carrot 브랜치로 보내짐.
+   * carrot-0XXX
+     * 시험용
+     * 에러에 의해 실행되지 못하는 경우가 있음.
  * 주소입력
    * https://smiskol.com/fork/ajouatom/carrot
  * 직접설치후 git연결하기
@@ -73,10 +84,10 @@
    * cd /data
    * mv openpilot openpilot_bak
  * 데이터받기
-   * git clone -b master https://github.com/ajouatom/carrotpilot openpilot
+   * git clone -b carrot-master https://github.com/ajouatom/carrotpilot openpilot
 
 **빌드**
- * cd /data
+ * cd /data/openpilot
  * ./restart.py
 
 **빌드확인**

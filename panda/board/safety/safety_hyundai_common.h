@@ -18,6 +18,8 @@ enum {
   HYUNDAI_BTN_CANCEL = 4,
 };
 
+int lat_active_count = 0; // carrot
+
 // common state
 bool hyundai_ev_gas_signal = false;
 bool hyundai_hybrid_gas_signal = false;
