@@ -317,9 +317,11 @@ class VCruiseHelper:
     if leadOne.status and leadOne.radar:
       self.lead_dRel = leadOne.dRel
       self.lead_vRel = leadOne.vRel
+      self.lead_vLead = leadOne.vLeadK
     else:
       self.lead_dRel = 0
       self.lead_vRel = 0
+      self.lead_vLead = 0
 
   def _update_v_cruise_apilot(self, CS, controls):
 
@@ -713,8 +715,8 @@ class VCruiseHelper:
           self._add_log_auto_cruise("CruiseOnDist Activate")
           self.cruiseActivate = 1
     elif controls.enabled and self.autoSpeedUptoRoadSpeedLimit > 0.:
-      if self.lead_vRel > 0.5:
-        lead_v_kph = (self.lead_vRel + CS.vEgoCluster) * CV.MS_TO_KPH
+      if self.lead_vLead > CS.vEgoCluster:
+        lead_v_kph = self.lead_vLead * CV.MS_TO_KPH + 2.0
         v_cruise_kph = max(v_cruise_kph, min(lead_v_kph, (30 if self.roadSpeed < 30 else self.roadSpeed) * self.autoSpeedUptoRoadSpeedLimit))
 
     v_cruise_kph = self.update_apilot_cmd(controls, v_cruise_kph)
