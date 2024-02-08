@@ -49,6 +49,8 @@ class CarState(CarStateBase):
 
     self.cruise_info = {}
 
+    self.cruise_buttons_msg = None
+
     # On some cars, CLU15->CF_Clu_VehicleSpeed can oscillate faster than the dash updates. Sample at 5 Hz
     self.cluster_speed = 0
     self.cluster_speed_counter = CLUSTER_SAMPLE_RATE
@@ -351,7 +353,8 @@ class CarState(CarStateBase):
     self.prev_cruise_buttons = self.cruise_buttons[-1]
     self.cruise_buttons.extend(cp.vl_all[self.cruise_btns_msg_canfd]["CRUISE_BUTTONS"])
 
-    self.cruise_buttons_msg = cp.vl_all[self.cruise_btns_msg_canfd] if self.cruise_btns_msg_canfd in cp.vl_all else None #carrot
+    if self.cruise_btns_msg_canfd in cp.vl_all: #carrot
+      self.cruise_buttons_msg = cp.vl_all[self.cruise_btns_msg_canfd]
 
     # PFEIFER - AOL {{
     self.prev_main_buttons = self.main_buttons[-1]
