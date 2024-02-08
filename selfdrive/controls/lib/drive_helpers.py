@@ -752,7 +752,7 @@ class VCruiseHelper:
     temp = safe_speed*safe_speed + 2*(left_dist - safe_dist)/decel_rate
     dV = (-safe_speed + math.sqrt(temp)) * decel_rate
     apply_speed = min(250 , safe_speed + dV)
-    min_speed = prev_apply_speed - (decel_rate * 1.2) * 2 * DT_CTRL
+    min_speed = prev_apply_speed - (decel_rate * 1.8) * 2 * DT_CTRL
     apply_speed = max(apply_speed, min_speed)
     return apply_speed
 
