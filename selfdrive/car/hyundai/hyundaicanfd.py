@@ -328,5 +328,6 @@ def alt_cruise_buttons2(packer, CP, CAN, buttons, cruise_btns_msg):
     print("Index Error=", cruise_btns_msg)
     return [426, 0, get_random_data(int(buttons)), CAN.ECAN]
   values["CRUISE_BUTTONS"] = buttons
+  values["COUNTER"] = (values["COUNTER"] + 1) % 256
   #print("alt_cruise2=", values)
   return packer.make_can_msg("CRUISE_BUTTONS_ALT", CAN.ECAN, values)

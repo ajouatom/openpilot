@@ -355,8 +355,9 @@ class CarState(CarStateBase):
     self.cruise_buttons.extend(cp.vl_all[self.cruise_btns_msg_canfd]["CRUISE_BUTTONS"])
 
     if self.cruise_btns_msg_canfd in cp.vl_all: #carrot
-      if not cp.vl_all[self.cruise_btns_msg_canfd]['CHECKSUM']:
-        print("empty cruise btns...")
+      if not cp.vl_all[self.cruise_btns_msg_canfd]["CHECKSUM"]:
+        pass
+        #print("empty cruise btns...")
       else:
         self.cruise_buttons_msg = copy.copy(cp.vl_all[self.cruise_btns_msg_canfd])
 
