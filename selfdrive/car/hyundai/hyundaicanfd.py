@@ -333,7 +333,7 @@ def alt_cruise_buttons2(packer, CP, CAN, buttons, cruise_btns_msg):
   #print("alt_cruise2=", values)
   return packer.make_can_msg("CRUISE_BUTTONS_ALT", CAN.ECAN, values)
 
-def alt_cruise_buttons(packer, CP, CAN, buttons, cruise_btns_msg):
+def alt_cruise_buttons(packer, CP, CAN, buttons, cruise_btns_msg, cnt):
   cruise_btns_msg["CRUISE_BUTTONS"] = buttons
-  cruise_btns_msg["COUNTER"] = (cruise_btns_msg["COUNTER"] + randint(1, 10)) % 256
+  cruise_btns_msg["COUNTER"] = (cruise_btns_msg["COUNTER"] + 1 + cnt) % 256
   return packer.make_can_msg("CRUISE_BUTTONS_ALT", CAN.ECAN, cruise_btns_msg)
