@@ -321,7 +321,7 @@ def alt_cruise_buttons2(packer, CP, CAN, buttons, cruise_btns_msg):
   #if cruise_btns_msg is None:
   #  return None
   
-  print("alt_cruise1=", values)
+  print("alt_cruise1=", cruise_btns_msg)
   values = {key: value[0] for key, value in cruise_btns_msg.items()}
   values["CRUISE_BUTTONS"] = buttons
   print("alt_cruise2=", values)
