@@ -345,9 +345,10 @@ class CarController:
         try:
           cruise_buttons_msg_values = {key: value[0] for key, value in CS.cruise_buttons_msg.items()}
         except IndexError:
-          print("IndexError....")
+          #print("IndexError....")
           cruise_buttons_msg_values = None
-        self.cruise_buttons_msg_values = cruise_buttons_msg_values
+        if cruise_buttons_msg_values is not None:
+          self.cruise_buttons_msg_values = cruise_buttons_msg_values
 
       if (self.frame - self.last_button_frame) * DT_CTRL > 0.25:
         # cruise cancel
