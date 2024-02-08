@@ -362,7 +362,7 @@ class CarState(CarStateBase):
     # }} PFEIFER - AOL
     self.main_buttons.extend(cp.vl_all[self.cruise_btns_msg_canfd]["ADAPTIVE_CRUISE_MAIN_BTN"])
     # PFEIFER - AOL {{
-    if self.main_buttons[-1] != self.prev_main_buttons: # and self.CP.openpilotLongitudinalControl: #carrot
+    if self.main_buttons[-1] != self.prev_main_buttons and not self.main_buttons[-1]: # and self.CP.openpilotLongitudinalControl: #carrot
       self.main_enabled = not self.main_enabled
       print("main_enabled = {}".format(self.main_enabled))
     # }} PFEIFER - AOL
