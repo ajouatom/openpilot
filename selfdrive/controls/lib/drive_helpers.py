@@ -725,7 +725,7 @@ class VCruiseHelper:
       else:
         self.cruiseActivate = 0
 
-    if self.autoCruiseControl < 1 or self.autoCruiseCancelState > 0 or not controls.can_enable or CS.brakeHoldActive:
+    if self.autoCruiseControl < 1 or self.autoCruiseCancelState > 0 or not controls.enable_avail or CS.brakeHoldActive:
       if self.cruiseActivate != 0:
         self._add_log_auto_cruise("Cancel auto Cruise = {self.cruiseActivate}")
       self.cruiseActivate = 0
