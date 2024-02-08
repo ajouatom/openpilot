@@ -196,7 +196,7 @@ class VCruiseHelper:
         #
         #self.v_cruise_kph = CS.cruiseState.speed * CV.MS_TO_KPH
         #self.v_cruise_cluster_kph = self.v_cruise_kph_set = CS.cruiseState.speedCluster * CV.MS_TO_KPH
-        if self.params.get_int("SpeedFromPCM") > 0:
+        if self.params.get_int("SpeedFromPCM") == 1:
           self.v_cruise_kph_set = CS.cruiseState.speedCluster * CV.MS_TO_KPH
         self._update_v_cruise_apilot(CS, controls)
         self.v_cruise_cluster_kph = self.v_cruise_kph
@@ -282,8 +282,10 @@ class VCruiseHelper:
     # 250kph or above probably means we never had a set speed
     if any(b.type in (ButtonType.accelCruise, ButtonType.resumeCruise) for b in CS.buttonEvents) and self.v_cruise_kph_last < 250:
       self.v_cruise_kph = self.v_cruise_kph_set = self.v_cruise_kph_last
+      self._add_log("Button init speed...{:.0f}".format(self.v_cruise_kph))
     else:
       self.v_cruise_kph = self.v_cruise_kph_set = int(round(clip(CS.vEgo * CV.MS_TO_KPH, initial, self.cruiseSpeedMax)))
+      self._add_log("Button init current speed...{:.0f}".format(self.v_cruise_kph))
 
     self.v_cruise_cluster_kph = self.v_cruise_kph
 
@@ -315,9 +317,11 @@ class VCruiseHelper:
     if leadOne.status and leadOne.radar:
       self.lead_dRel = leadOne.dRel
       self.lead_vRel = leadOne.vRel
+      self.lead_vLead = leadOne.vLeadK
     else:
       self.lead_dRel = 0
       self.lead_vRel = 0
+      self.lead_vLead = 0
 
   def _update_v_cruise_apilot(self, CS, controls):
 
@@ -711,8 +715,8 @@ class VCruiseHelper:
           self._add_log_auto_cruise("CruiseOnDist Activate")
           self.cruiseActivate = 1
     elif controls.enabled and self.autoSpeedUptoRoadSpeedLimit > 0.:
-      if self.lead_vRel > 0.5:
-        lead_v_kph = (self.lead_vRel + CS.vEgoCluster) * CV.MS_TO_KPH
+      if self.lead_vLead > CS.vEgoCluster:
+        lead_v_kph = self.lead_vLead * CV.MS_TO_KPH + 2.0
         v_cruise_kph = max(v_cruise_kph, min(lead_v_kph, (30 if self.roadSpeed < 30 else self.roadSpeed) * self.autoSpeedUptoRoadSpeedLimit))
 
     v_cruise_kph = self.update_apilot_cmd(controls, v_cruise_kph)
@@ -723,7 +727,7 @@ class VCruiseHelper:
       else:
         self.cruiseActivate = 0
 
-    if self.autoCruiseControl < 1 or self.autoCruiseCancelState > 0 or not controls.can_enable or CS.brakeHoldActive:
+    if self.autoCruiseControl < 1 or self.autoCruiseCancelState > 0 or not controls.enable_avail or CS.brakeHoldActive:
       if self.cruiseActivate != 0:
         self._add_log_auto_cruise("Cancel auto Cruise = {self.cruiseActivate}")
       self.cruiseActivate = 0

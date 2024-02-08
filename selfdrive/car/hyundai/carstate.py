@@ -49,6 +49,8 @@ class CarState(CarStateBase):
 
     self.cruise_info = {}
 
+    self.cruise_buttons_msg = None
+
     # On some cars, CLU15->CF_Clu_VehicleSpeed can oscillate faster than the dash updates. Sample at 5 Hz
     self.cluster_speed = 0
     self.cluster_speed_counter = CLUSTER_SAMPLE_RATE
@@ -331,7 +333,8 @@ class CarState(CarStateBase):
       # These are not used for engage/disengage since openpilot keeps track of state using the buttons
       ret.cruiseState.enabled = cp.vl["TCS"]["ACC_REQ"] == 1
       ret.cruiseState.standstill = False
-      #ret.cruiseState.available = self.main_enabled # carrot
+      #if ret.cruiseState.available:
+      #  print("cruiseState.available = {},{}".format(ret.cruiseState.available, ret.cruiseState.enabled))
     else:
       cp_cruise_info = cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else cp
       ret.cruiseState.enabled = cp_cruise_info.vl["SCC_CONTROL"]["ACCMode"] in (1, 2)
@@ -351,15 +354,21 @@ class CarState(CarStateBase):
     self.prev_cruise_buttons = self.cruise_buttons[-1]
     self.cruise_buttons.extend(cp.vl_all[self.cruise_btns_msg_canfd]["CRUISE_BUTTONS"])
 
-    self.cruise_buttons_msg = cp.vl_all[self.cruise_btns_msg_canfd] #carrot
+    if self.cruise_btns_msg_canfd in cp.vl_all: #carrot
+      if not cp.vl_all[self.cruise_btns_msg_canfd]["CHECKSUM"]:
+        pass
+        #print("empty cruise btns...")
+      else:
+        self.cruise_buttons_msg = copy.copy(cp.vl_all[self.cruise_btns_msg_canfd])
 
     # PFEIFER - AOL {{
     self.prev_main_buttons = self.main_buttons[-1]
     # }} PFEIFER - AOL
     self.main_buttons.extend(cp.vl_all[self.cruise_btns_msg_canfd]["ADAPTIVE_CRUISE_MAIN_BTN"])
     # PFEIFER - AOL {{
-    if self.main_buttons[-1] != self.prev_main_buttons: # and self.CP.openpilotLongitudinalControl: #carrot
+    if self.main_buttons[-1] != self.prev_main_buttons and not self.main_buttons[-1]: # and self.CP.openpilotLongitudinalControl: #carrot
       self.main_enabled = not self.main_enabled
+      print("main_enabled = {}".format(self.main_enabled))
     # }} PFEIFER - AOL
     self.buttons_counter = cp.vl[self.cruise_btns_msg_canfd]["COUNTER"]
     ret.accFaulted = cp.vl["TCS"]["ACCEnable"] != 0  # 0 ACC CONTROL ENABLED, 1-3 ACC CONTROL DISABLED

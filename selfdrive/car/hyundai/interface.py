@@ -387,14 +387,17 @@ class CarInterface(CarInterfaceBase):
     ret.safetyConfigs = set_safety_config_hyundai(candidate, CAN, can_fd=(candidate in CANFD_CAR))
 
     if hda2:
+      print("$$$$$$$$$$$$$$ HDA2")
       ret.flags |= HyundaiFlags.CANFD_HDA2.value
       ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_CANFD_HDA2
 
     if candidate in CANFD_CAR:
       if hda2 and ret.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING:
         ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_CANFD_HDA2_ALT_STEERING
+        print("$$$$$$$$$ Alt Steering...")
       if ret.flags & HyundaiFlags.CANFD_ALT_BUTTONS:
         ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_CANFD_ALT_BUTTONS
+        print("$$$$$$$$$ Alt Buttons...")
     else:
       if candidate in LEGACY_SAFETY_MODE_CAR:
         # these cars require a special panda safety mode due to missing counters and checksums in the messages
@@ -445,7 +448,7 @@ class CarInterface(CarInterfaceBase):
   def _update(self, c):
     ret = self.CS.update(self.cp, self.cp_cam)
 
-    if self.CS.CP.openpilotLongitudinalControl or Params().get_int("SpeedFromPCM") == 0: #ajouatom: for PCM
+    if self.CS.CP.openpilotLongitudinalControl or Params().get_int("SpeedFromPCM") in [0,2]: #ajouatom: for PCM
       ret.buttonEvents = create_button_events(self.CS.cruise_buttons[-1], self.CS.prev_cruise_buttons, BUTTONS_DICT)
 
     # On some newer model years, the CANCEL button acts as a pause/resume button based on the PCM state
@@ -453,7 +456,7 @@ class CarInterface(CarInterfaceBase):
     # Main button also can trigger an engagement on these cars
     allow_enable = any(btn in ENABLE_BUTTONS for btn in self.CS.cruise_buttons) or any(self.CS.main_buttons)
 
-    #allow_enable = True #carrot
+    allow_enable = True #carrot
     events = self.create_common_events(ret, pcm_enable=self.CS.CP.pcmCruise, allow_enable=allow_enable)
 
     # low speed steer alert hysteresis logic (only for cars with steer cut off above 10 m/s)

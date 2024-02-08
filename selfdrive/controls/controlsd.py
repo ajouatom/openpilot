@@ -60,7 +60,7 @@ class Controls:
     config_realtime_process(4, Priority.CTRL_HIGH)
 
     # Ensure the current branch is cached, otherwise the first iteration of controlsd lags
-    self.branch = get_short_branch("")
+    self.branch = get_short_branch()
 
     # Setup sockets
     self.pm = messaging.PubMaster(['sendcan', 'controlsState', 'carState',
@@ -209,7 +209,7 @@ class Controls:
 
     self.carrotCruiseActivate = 0 #carrot
     self._panda_controls_allowed = False #carrot
-    self.can_enable = False
+    self.enable_avail = False
 
   def set_initial_state(self):
     if REPLAY:
@@ -507,9 +507,9 @@ class Controls:
     gear = car.CarState.GearShifter
     drivingGear = CS.gearShifter not in (gear.neutral, gear.park, gear.reverse, gear.unknown)
     if self.CP.pcmCruise:
-      self.can_enable = drivingGear
+      self.enable_avail = drivingGear
     else:
-      self.can_enable = drivingGear and not self.events.contains(ET.NO_ENTRY)
+      self.enable_avail = drivingGear and not self.events.contains(ET.NO_ENTRY)
 
     self.v_cruise_helper.update_v_cruise(CS, self.enabled, self.is_metric, self)
 
@@ -519,8 +519,10 @@ class Controls:
     #  pass
     if not self.enabled and self.v_cruise_helper.cruiseActivate > 0: #ajouatom
       self.carrotCruiseActivate = 1
-      if self.can_enable:
+      if self.enable_avail:
         if not self.CP.pcmCruise and self._panda_controls_allowed:
+          self.events.add(EventName.buttonEnable)
+        elif self.CP.pcmCruise and CS.cruiseState.enabled: # 이미 pcmCruise가 enabled되어 있는경우
           self.events.add(EventName.buttonEnable)
         self.carrotCruiseActivate = 1
       else:
@@ -787,7 +789,7 @@ class Controls:
         print("pcmCruise: carrotCruiseActivate: cancel")
         CC.cruiseControl.cancel = True
       elif CC.cruiseControl.cancel: 
-        print("Cancel state...enabled={}, activate={}".format(self.enabled, self.carrotCruiseActivate))
+        #print("Cancel state...enabled={}, activate={}".format(self.enabled, self.carrotCruiseActivate))
         if self.carrotCruiseActivate > 0:
           CC.cruiseControl.cancel = False
 
@@ -802,7 +804,10 @@ class Controls:
       setSpeed = speeds[-1] / vCluRatio
 
     hudControl = CC.hudControl
-    hudControl.setSpeed = setSpeed if self.CP.pcmCruise or self.v_cruise_helper.xState == 3 else float(self.v_cruise_helper.v_cruise_cluster_kph * CV.KPH_TO_MS)
+    if self.CP.pcmCruise:
+      hudControl.setSpeed = setSpeed if self.v_cruise_helper.speedFromPCM != 2 else float(self.v_cruise_helper.v_cruise_cluster_kph * CV.KPH_TO_MS)
+    else:
+      hudControl.setSpeed = setSpeed if self.v_cruise_helper.xState == 3 else float(self.v_cruise_helper.v_cruise_cluster_kph * CV.KPH_TO_MS)
     hudControl.speedVisible = self.enabled
     hudControl.lanesVisible = self.enabled
     hudControl.leadVisible = self.sm['longitudinalPlan'].hasLead
@@ -817,7 +822,7 @@ class Controls:
     CC.cruiseControl.activate = self.carrotCruiseActivate > 0
     CC.hudControl.softHold = self.v_cruise_helper.softHoldActive
     CC.hudControl.activeAPM = self.v_cruise_helper.activeAPM
-    CC.hudControl.activeAVM = self.v_cruise_helper.activeAVM if self.can_enable else 0
+    CC.hudControl.activeAVM = self.v_cruise_helper.activeAVM if self.enable_avail else 0
         
     hudControl.rightLaneVisible = CC.latActive
     hudControl.leftLaneVisible = CC.latActive
