@@ -264,6 +264,7 @@ class CarState(CarStateBase):
     # PFEIFER - AOL {{
     if self.prev_main_buttons == 0 and self.main_buttons[-1] != 0:
       self.main_enabled = not self.main_enabled
+      print("main_enabled = {}".format(self.main_enabled))
     # }} PFEIFER - AOL
     if self.CP.openpilotLongitudinalControl:
       self.distance_button_pressed = self.cruise_buttons[-1] == Buttons.GAP_DIST
