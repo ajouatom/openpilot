@@ -356,6 +356,8 @@ class CarState(CarStateBase):
 
     if self.cruise_btns_msg_canfd in cp.vl_all: #carrot
       self.cruise_buttons_msg = copy.copy(cp.vl_all[self.cruise_btns_msg_canfd])
+      print("receive = ", cp.vl_all[self.cruise_btns_msg_canfd])
+      print("copied = ", self.cruise_buttons_msg)
 
     # PFEIFER - AOL {{
     self.prev_main_buttons = self.main_buttons[-1]
