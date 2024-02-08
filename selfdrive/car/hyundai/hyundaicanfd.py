@@ -320,6 +320,7 @@ def alt_cruise_buttons(packer, CP, CAN, buttons, cruise_btns_msg):
 def alt_cruise_buttons2(packer, CP, CAN, buttons, cruise_btns_msg):
   #if cruise_btns_msg is None:
   #  return None
+  print(cruise_btns_msg)
   values = cruise_btns_msg
   values["CRUISE_BUTTONS"] = buttons
   return packer.make_can_msg("CRUISE_BUTTONS_ALT", CAN.ECAN, values)
