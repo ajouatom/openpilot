@@ -325,7 +325,7 @@ def alt_cruise_buttons2(packer, CP, CAN, buttons, cruise_btns_msg):
   try:
     values = {key: value[0] for key, value in cruise_btns_msg.items()}
   except IndexError:
-    print("Index Error")
+    print("Index Error=", cruise_btns_msg)
     return [426, 0, get_random_data(int(buttons)), CAN.ECAN]
   values["CRUISE_BUTTONS"] = buttons
   #print("alt_cruise2=", values)
