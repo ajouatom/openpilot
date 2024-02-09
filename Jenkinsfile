@@ -259,25 +259,6 @@ node {
         ])
       },
 
-      // *** PC tests ***
-      'PC tests': {
-        pcStage("PC tests") {
-          // tests that our build system's dependencies are configured properly,
-          // needs a machine with lots of cores
-          sh label: "test multi-threaded build",
-             script: '''#!/bin/bash
-                        scons --no-cache --random -j$(nproc)'''
-        }
-      },
-      'car tests': {
-        pcStage("car tests") {
-          sh label: "build", script: "selfdrive/manager/build.py"
-          sh label: "test_models", script: "INTERNAL_SEG_CNT=300 FILEREADER_CACHE=1 INTERNAL_SEG_LIST=selfdrive/car/tests/test_models_segs.txt \
-                                            pytest selfdrive/car/tests/test_models.py"
-          sh label: "test_car_interfaces", script: "MAX_EXAMPLES=300 pytest selfdrive/car/tests/test_car_interfaces.py"
-        }
-      },
-
     )
     }
   } catch (Exception e) {

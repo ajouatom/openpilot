@@ -73,7 +73,8 @@ class CarController:
     self.button_alive_frame = 0
     self.activeAVM = 0
     self.params = Params()
-
+    self.cruise_buttons_msg_values = None
+    self.cruise_buttons_msg_cnt = 0
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -338,6 +339,19 @@ class CarController:
           self.button_alive_frame = self.frame
       
     else:
+
+      # carrot.. 왜 alt_cruise_button는 값이 리스트일까?, 그리고 왜? 빈데이터가 들어오는것일까?
+      if CS.cruise_buttons_msg is not None and self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS:
+        try:
+          cruise_buttons_msg_values = {key: value[0] for key, value in CS.cruise_buttons_msg.items()}
+        except IndexError:
+          #print("IndexError....")
+          cruise_buttons_msg_values = None
+          self.cruise_buttons_msg_cnt += 1
+        if cruise_buttons_msg_values is not None:
+          self.cruise_buttons_msg_values = cruise_buttons_msg_values
+          self.cruise_buttons_msg_cnt = 0
+
       if (self.frame - self.last_button_frame) * DT_CTRL > 0.25:
         # cruise cancel
         if CC.cruiseControl.cancel:
@@ -345,7 +359,8 @@ class CarController:
             print("cruiseControl.cancel222222")
             if self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS:
               #can_sends.append(hyundaicanfd.create_acc_cancel(self.packer, self.CP, self.CAN, CS.cruise_info))
-              can_sends.append(hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.CANCEL, CS.cruise_buttons_msg))
+              if self.cruise_buttons_msg_values is not None:
+                can_sends.append(hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.CANCEL, self.cruise_buttons_msg_values, self.cruise_buttons_msg_cnt))
             
             else:
               for _ in range(20):
@@ -357,23 +372,28 @@ class CarController:
           if (self.frame - self.last_button_frame) * DT_CTRL > 0.1:
             if self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS:
               # TODO: resume for alt button cars
-              print("cruiseControl.RES222222")
-              for _ in range(4):
-                can_sends.append(hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL, CS.cruise_buttons_msg))
+              if self.cruise_buttons_msg_values is not None:
+                print("cruiseControl.RES222222")
+                for _ in range(4):
+                  can_sends.append(hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL, self.cruise_buttons_msg_values, self.cruise_buttons_msg_cnt))
             else:
               for _ in range(20):
                 can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL))
             self.last_button_frame = self.frame
         else:
-          dat = self.canfd_speed_control_pcm(CC, CS)
+          dat = self.canfd_speed_control_pcm(CC, CS, self.cruise_buttons_msg_values)
           if dat is not None:
             can_sends.append(dat)
 
     return can_sends
 
-  def canfd_speed_control_pcm(self, CC, CS):
+  def canfd_speed_control_pcm(self, CC, CS, cruise_buttons_msg_values):
+
     hud_control = CC.hudControl
     alt_buttons = True if self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS else False
+
+    if alt_buttons and cruise_buttons_msg_values is None:
+      return None
 
     set_speed_in_units = hud_control.setSpeed * (CV.MS_TO_KPH if CS.is_metric else CV.MS_TO_MPH)
     self.resume_wait_timer = 0
@@ -393,7 +413,7 @@ class CarController:
             #if CC.longActive and (hud_control.leadVisible or current > 10.0):
             if (hud_control.leadVisible or current > 10.0):
               if alt_buttons:
-                return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL, CS.cruise_buttons_msg)
+                return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL, cruise_buttons_msg_values, self.cruise_buttons_msg_cnt)
               else:
                 return hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL)
               #can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
@@ -403,7 +423,7 @@ class CarController:
           #  CC.debugTextCC = "currentGap = {}, target = {}".format(CS.out.cruiseGap, hud_control.cruiseGap)
           elif target < current and current>= 31 and self.params.get_int("SpeedFromPCM") != 1:
             if alt_buttons:
-              return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.SET_DECEL, CS.cruise_buttons_msg)
+              return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.SET_DECEL, cruise_buttons_msg_values, self.cruise_buttons_msg_cnt)
             else:
               return hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.SET_DECEL)
             #can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.SET_DECEL, self.CP.carFingerprint))
@@ -411,7 +431,7 @@ class CarController:
           elif target > current and current < 160 and self.params.get_int("SpeedFromPCM") != 1:
             can_sends = []
             if alt_buttons:
-              return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL, CS.cruise_buttons_msg)
+              return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL, cruise_buttons_msg_values, self.cruise_buttons_msg_cnt)
             else:
               return hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL)
             #can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
@@ -421,7 +441,7 @@ class CarController:
           if (hud_control.leadVisible or current > 10.0):
             print("sendActivateCruise Buttons....Sent....")
             if alt_buttons:
-              return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL, CS.cruise_buttons_msg)
+              return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL, cruise_buttons_msg_values, self.cruise_buttons_msg_cnt)
             else:
               return hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL)
             #can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
