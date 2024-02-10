@@ -191,6 +191,10 @@ static void hyundai_canfd_rx_hook(const CANPacket_t *to_push) {
       }
       hyundai_common_cruise_buttons_check(cruise_button, main_button);
     }
+    if (_carrot_prepare_engage == 2) {
+        controls_allowed = true;
+        _carrot_prepare_engage = 1;
+    }
 
     // gas press, different for EV, hybrid, and ICE models
     if ((addr == 0x35) && hyundai_ev_gas_signal) {
@@ -274,6 +278,18 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
+
+  // longcontrol일때... carcontroller에서 1: resume이 나온건, autocruise기능: controls_allowed를 켜라는 carrot신호임.
+  if ((addr == 0x1aa || addr == 0x1cf) && hyundai_longitudinal) {
+      int cruise_button = 0;
+      if (addr == 0x1cf) cruise_button = GET_BYTE(to_push, 2) & 0x7U;
+      else cruise_button = (GET_BYTE(to_push, 4) >> 4) & 0x7U;
+      if (cruise_button == 1) {
+          if (_carrot_prepare_engage == 0) _carrot_prepare_engage = 2;
+      }
+      tx = false;  // button spamming은 longcon일때.. 나가면 안될것이라고 판단됨..
+  }
+  if (controls_allowed) _carrot_prepare_engage = 0;
 
   // UDS: only tester present ("\x02\x3E\x80\x00\x00\x00\x00\x00") allowed on diagnostics address
   if ((addr == 0x730) && hyundai_canfd_hda2) {
