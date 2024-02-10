@@ -273,10 +273,10 @@ class CarController:
 
   def create_button_messages(self, CC: car.CarControl, CS: car.CarState, use_clu11: bool):
     can_sends = []
+    if CS.out.brakePressed:
+      return can_sends
     hud_control = CC.hudControl
     if use_clu11:
-      if CS.out.brakePressed:
-        return can_sends
       #if CC.cruiseControl.cancel:
       #  can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.CANCEL, self.CP.carFingerprint))
       #elif CC.cruiseControl.resume:
