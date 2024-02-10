@@ -179,6 +179,16 @@ class CarController:
           can_sends.append(hyundaicanfd.create_acc_control(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
                                                            set_speed_in_units, CS.longitudinal_personality))
           self.accel_last = accel
+
+        ### for LongControl auto activate...
+        if not CC.enabled:
+          self.activateCruise = 0
+        if CC.cruiseControl.activate and self.activateCruise == 0: ## ajouatom: send command to panda via Button spam(RES_ACCEL), for auto engage
+          self.activateCruise = 1
+          #can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
+          can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL))
+          print("SendActivateCanData#######")
+
       else:
         # button presses
         can_sends.extend(self.create_button_messages(CC, CS, use_clu11=False))
@@ -195,7 +205,7 @@ class CarController:
           self.activateCruise = 0
 
         ### for LongControl auto activate...
-        if CC.cruiseControl.activate and self.activateCruise == 0: ## ajouatom: send command to panda via Button spam(GAP_DIST), for auto engage
+        if CC.cruiseControl.activate and self.activateCruise == 0: ## ajouatom: send command to panda via Button spam(RES_ACCEL), for auto engage
           self.activateCruise = 1
           can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
           print("SendActivateCanData#######")
@@ -263,10 +273,10 @@ class CarController:
 
   def create_button_messages(self, CC: car.CarControl, CS: car.CarState, use_clu11: bool):
     can_sends = []
+    if CS.out.brakePressed:
+      return can_sends
     hud_control = CC.hudControl
     if use_clu11:
-      if CS.out.brakePressed:
-        return can_sends
       #if CC.cruiseControl.cancel:
       #  can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.CANCEL, self.CP.carFingerprint))
       #elif CC.cruiseControl.resume:

@@ -106,7 +106,6 @@ RxCheck hyundai_legacy_rx_checks[] = {
 };
 
 bool hyundai_legacy = false;
-int _carrot_prepare_engage = 0; // carrot
 
 
 static uint8_t hyundai_get_counter(const CANPacket_t *to_push) {
