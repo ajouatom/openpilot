@@ -282,8 +282,8 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
   // longcontrol일때... carcontroller에서 1: resume이 나온건, autocruise기능: controls_allowed를 켜라는 carrot신호임.
   if ((addr == 0x1aa || addr == 0x1cf) && hyundai_longitudinal) {
       int cruise_button = 0;
-      if (addr == 0x1cf) cruise_button = GET_BYTE(to_push, 2) & 0x7U;
-      else cruise_button = (GET_BYTE(to_push, 4) >> 4) & 0x7U;
+      if (addr == 0x1cf) cruise_button = GET_BYTE(to_send, 2) & 0x7U;
+      else cruise_button = (GET_BYTE(to_send, 4) >> 4) & 0x7U;
       if (cruise_button == 1) {
           if (_carrot_prepare_engage == 0) _carrot_prepare_engage = 2;
       }
