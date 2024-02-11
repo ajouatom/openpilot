@@ -172,7 +172,7 @@ class CarState(CarStateBase):
       self.lkas_hud = copy.copy(cp_cam.vl["LKAS_HUD"])
       
       
-    #self.personality_profile = cp.vl["PCM_CRUISE_SM"]["DISTANCE_LINES"] - 1  
+    self.pcm_personality = cp.vl["PCM_CRUISE_SM"]["DISTANCE_LINES"] - 1  
     #distance_buttons
     if self.CP.carFingerprint in (TSS2_CAR - RADAR_ACC_CAR):
       # KRKeegan - Add support for toyota distance button
