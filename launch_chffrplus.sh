@@ -10,7 +10,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 
 function agnos_init {
   if [ -f "$BASEDIR/prebuilt" ]; then
-    sleep 5
+    sleep 10
   fi
 
   # TODO: move this to agnos
