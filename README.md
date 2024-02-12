@@ -1,7 +1,4 @@
 * [당근설명](CARROT.md)
-* [당근설정](CARROT_SETTINGS.md)
-* [당근맨설명](CARROTMAN.md)
-
 
 Why carrot?
 ------
