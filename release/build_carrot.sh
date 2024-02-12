@@ -18,7 +18,7 @@ touch prebuilt
 # Add built files to git
 git add -f .
 
-$VERSION = "carrot_v$(date +%y%m%d)"
+VERSION="carrot_v$(date +%y%m%d)"
 git commit -m $VERSION
 git branch -m $VERSION
 git push -f origin $VERSION
