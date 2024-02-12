@@ -42,10 +42,10 @@
 ------
 
  * 브랜치
-   * carrot
+   * carrot, carrot-vxxxxxx
      * 직접설치용 주소
      * Build가 되어 있어 빠른실행가능
-     * 업데이트가 느림.
+     * 업데이트가 안될수 있음
    * carrot-master
      * 최신버젼
      * 안정화되면 빌드하여, carrot 브랜치로 보내짐.
