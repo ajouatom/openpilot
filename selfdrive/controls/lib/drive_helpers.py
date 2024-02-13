@@ -793,7 +793,6 @@ class VCruiseHelper:
       safeSpeed = CS.speedLimit
       leftDist = CS.speedLimitDistance
       speedLimitType = 2 if leftDist > 1 else 3
-      self.activeAPM += 1000
 
     if isSpeedBump:
       speedLimitType = 1 
@@ -834,6 +833,8 @@ class VCruiseHelper:
     #  print(log)
     #controls.debugText1 = log
     self.debugText2 = log
+    if speedLimitType == 2:
+      self.activeAPM += 1000
     return applySpeed #, roadSpeed, leftDist, speedLimitType
 
   def cruise_control_speed(self, v_cruise_kph):
