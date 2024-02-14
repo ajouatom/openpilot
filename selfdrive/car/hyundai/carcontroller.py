@@ -425,7 +425,7 @@ class CarController:
       self.last_button_frame = self.frame
 
     if (self.frame - self.last_button_frame) > self.button_wait:
-      self.button_wait = randint(8,12)
+      self.button_wait = randint(10,20)
       self.last_button_frame = self.frame
 
       if not CC.enabled:
