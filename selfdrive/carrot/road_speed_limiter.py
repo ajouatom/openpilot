@@ -61,9 +61,9 @@ class RoadLimitSpeedServer:
 
 
     #carrot
-    #self.carrot_route_thread = threading.Thread(target=self.carrot_route, args=[])
-    #self.carrot_route_thread.daemon = True
-    #self.carrot_route_thread.start()
+    self.carrot_route_thread = threading.Thread(target=self.carrot_route, args=[])
+    self.carrot_route_thread.daemon = True
+    self.carrot_route_thread.start()
 
   def recvall(self, sock, n):
     """n바이트를 수신할 때까지 반복적으로 데이터를 받는 함수"""
