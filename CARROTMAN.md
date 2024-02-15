@@ -9,7 +9,8 @@
      * adb shell pm grant com.ajouatom.carrotman android.permission.READ_LOGS
      * [당근맨은 설치했고 잘돌아가는데 네비가 없어요!, 주행중인 당근파일럿 사진첨부합니다.](http://pf.kakao.com/_xbviqG/chat)
            
- * SSH입력 (CarrotMan22 부터 삭제, Carrot V220212부터)
+ * SSH입력 (CarrotMan30 부터 선택입력)
+   * SSH키 입력을 안해도 작동은 하지만, git명령시 용량이 큰경우 타임아웃에러는 발생할수 있음.
    * SSH키 전송: 위에서 만든 id_rsa파일을 스마트폰에 복사
    * 당근맨에서 SSH 버튼 -> 개인키 버튼을 누르고, id_rsa 선택  (파일제일위에 BEGIN RSA PRIVATE KEY라고 되어 있어야함)
  * 연결
@@ -19,6 +20,13 @@
  * 네비게이션 연결
    * 네비게이션 안내모드 또는 주행모드로 변경되면, 오파화면에는 APN아이콘이 생긴다.
    * 네비를 연결하면 과속카메라, 과속방지턱등 다양한 속도제어를 할 수 있다.
+   * 티네비의 추가설정
+    * 권한은 모두 허가해야함
+    * 블랙박스모드설정
+     * 블랙박스 모드를 켜고
+     * 저장소: Download로 이동하여 Carrot폴더를 만든다(이앱에서 만들어야한다)
+     * 저장소 권한을 설정한다.
+     * 블랙박스 모드를 끈다.
  * 오파에서 에러가나면?
    * TMUX버튼을 얼른 누른다.
    * 하단의 복사 버튼을 누르고... 여기에 남겨준다.  [이슈남기기](https://github.com/ajouatom/carrotpilot/issues)
