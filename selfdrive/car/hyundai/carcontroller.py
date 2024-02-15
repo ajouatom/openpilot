@@ -60,17 +60,17 @@ class CarController:
     self.last_button_frame = 0
     
     self.jerkStartLimit = 2.0
+    self.speedCameraHapticEndFrame = 0
+    self.hapticFeedbackWhenSpeedCamera = 0
     self.maxAngleFrames = MAX_ANGLE_FRAMES
     self.softHoldMode = 1
-    self.blinking_signal = False #������ ����̿� 1Hz
+    self.blinking_signal = False #아이콘 깜박이용 1Hz
     self.blinking_frame = int(1.0 / DT_CTRL)
     self.jerk_count = 0
     self.activateCruise = 0
     self.button_wait = 12
     self.resume_cnt = 0
     self.resume_wait_timer = 0
-    self.button_alive = 0
-    self.button_alive_frame = 0
     self.activeAVM = 0
     self.params = Params()
     self.cruise_buttons_msg_values = None
@@ -108,6 +108,17 @@ class CarController:
     sys_warning, sys_state, left_lane_warning, right_lane_warning = process_hud_alert(CC.enabled, self.car_fingerprint,
                                                                                       hud_control)
 
+    active_speed_decel = hud_control.activeAPM > 1000
+    if active_speed_decel and self.speedCameraHapticEndFrame < 0: # 과속카메라 감속시작
+      self.speedCameraHapticEndFrame = self.frame + (8.0 / DT_CTRL)  #6초간 켜줌..
+    elif not active_speed_decel:
+      self.speedCameraHapticEndFrame = -1
+
+    if self.frame < self.speedCameraHapticEndFrame and self.hapticFeedbackWhenSpeedCamera>0:
+      haptic_stop = (self.speedCameraHapticEndFrame - (5.0/DT_CTRL)) < self.frame < (self.speedCameraHapticEndFrame - (3.0/DT_CTRL))
+      if not haptic_stop:
+         left_lane_warning = right_lane_warning = self.hapticFeedbackWhenSpeedCamera 
+     
     if self.frame % self.blinking_frame == 0:
       self.blinking_signal = True
     elif self.frame % self.blinking_frame == self.blinking_frame / 2:
@@ -117,6 +128,7 @@ class CarController:
     # *** common hyundai stuff ***
     if self.frame % 100 == 0:
       self.maxAngleFrames = int(self.params.get("MaxAngleFrames", encoding="utf8"))
+      self.hapticFeedbackWhenSpeedCamera = int(self.params.get_int("HapticFeedbackWhenSpeedCamera"))
 
     # tester present - w/ no response (keeps relevant ECU disabled)
     if self.frame % 100 == 0 and not (self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC.value) and self.CP.openpilotLongitudinalControl:
@@ -314,39 +326,37 @@ class CarController:
         target = int(set_speed_in_units+0.5)
         current = int(CS.out.cruiseState.speed*CV.MS_TO_KPH + 0.5)
 
+        if CS.cruise_buttons[-1] != Buttons.NONE:
+          self.last_button_frame = self.frame
+
         if (self.frame - self.last_button_frame) > self.button_wait:
-          if (self.frame - self.button_alive_frame) > self.button_alive:
-            self.button_wait = randint(8,15)
-            self.last_button_frame = self.frame
-          if CS.cruise_buttons[-1] == Buttons.NONE:
-            if not CC.enabled:
-              self.activateCruise = 0
-            if CC.enabled:
-              if not CS.out.cruiseState.enabled:
-                #if CC.longActive and (hud_control.leadVisible or current > 10.0):
-                if (hud_control.leadVisible or current > 10.0):
-                  can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
-                  #CC.debugTextCC = "BTN:++,T:{:.1f},C:{:.1f}".format(target, current)
-              #elif CS.out.cruiseGap != hud_control.cruiseGap:
-              #  can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.GAP_DIST, self.CP.carFingerprint))
-              #  CC.debugTextCC = "currentGap = {}, target = {}".format(CS.out.cruiseGap, hud_control.cruiseGap)
-              elif target < current and current>= 31:
-                can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.SET_DECEL, self.CP.carFingerprint))
-                #CC.debugTextCC = "BTN:--,T:{:.1f},C:{:.1f}".format(target, current)
-              elif target > current and current < 160:
+          self.button_wait = randint(8,15)
+          self.last_button_frame = self.frame
+
+          if not CC.enabled:
+            self.activateCruise = 0
+          if CC.enabled:
+            if not CS.out.cruiseState.enabled:
+              #if CC.longActive and (hud_control.leadVisible or current > 10.0):
+              if (hud_control.leadVisible or current > 10.0):
                 can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
                 #CC.debugTextCC = "BTN:++,T:{:.1f},C:{:.1f}".format(target, current)
-            elif CC.cruiseControl.activate and self.activateCruise == 0:
-              #print("sendActivateCruise Buttons....")
-              if (hud_control.leadVisible or current > 10.0):
-                print("sendActivateCruise Buttons....Sent....")
-                can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
-                self.activateCruise = 1
-                self.button_wait = 100
-
-        else:
-          self.button_alive = randint(4, 8) #randint(12, 18)
-          self.button_alive_frame = self.frame
+            #elif CS.out.cruiseGap != hud_control.cruiseGap:
+            #  can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.GAP_DIST, self.CP.carFingerprint))
+            #  CC.debugTextCC = "currentGap = {}, target = {}".format(CS.out.cruiseGap, hud_control.cruiseGap)
+            elif target < current and current>= 31:
+              can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.SET_DECEL, self.CP.carFingerprint))
+              #CC.debugTextCC = "BTN:--,T:{:.1f},C:{:.1f}".format(target, current)
+            elif target > current and current < 160:
+              can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
+              #CC.debugTextCC = "BTN:++,T:{:.1f},C:{:.1f}".format(target, current)
+          elif CC.cruiseControl.activate and self.activateCruise == 0:
+            #print("sendActivateCruise Buttons....")
+            if (hud_control.leadVisible or current > 10.0):
+              print("sendActivateCruise Buttons....Sent....")
+              can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
+              self.activateCruise = 1
+              self.button_wait = 40
       
     else:
 
@@ -394,6 +404,7 @@ class CarController:
           dat = self.canfd_speed_control_pcm(CC, CS, self.cruise_buttons_msg_values)
           if dat is not None:
             can_sends.append(dat)
+          self.cruise_buttons_msg_cnt += 1
 
     return can_sends
 
@@ -411,55 +422,53 @@ class CarController:
     target = int(set_speed_in_units+0.5)
     current = int(CS.out.cruiseState.speed*CV.MS_TO_KPH + 0.5)
 
+    if CS.cruise_buttons[-1] != Buttons.NONE:
+      self.last_button_frame = self.frame
+
     if (self.frame - self.last_button_frame) > self.button_wait:
-      if (self.frame - self.button_alive_frame) > self.button_alive:
-        self.button_wait = randint(8,15)
-        self.last_button_frame = self.frame
-      if CS.cruise_buttons[-1] == Buttons.NONE:
-        if not CC.enabled:
-          self.activateCruise = 0
-        if CC.enabled:
-          if not CS.out.cruiseState.enabled:
-            #if CC.longActive and (hud_control.leadVisible or current > 10.0):
-            if (hud_control.leadVisible or current > 10.0):
-              if alt_buttons:
-                return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL, cruise_buttons_msg_values, self.cruise_buttons_msg_cnt)
-              else:
-                return hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL)
-              #can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
-              #CC.debugTextCC = "BTN:++,T:{:.1f},C:{:.1f}".format(target, current)
-          #elif CS.out.cruiseGap != hud_control.cruiseGap:
-          #  can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.GAP_DIST, self.CP.carFingerprint))
-          #  CC.debugTextCC = "currentGap = {}, target = {}".format(CS.out.cruiseGap, hud_control.cruiseGap)
-          elif target < current and current>= 31 and self.params.get_int("SpeedFromPCM") != 1:
-            if alt_buttons:
-              return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.SET_DECEL, cruise_buttons_msg_values, self.cruise_buttons_msg_cnt)
-            else:
-              return hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.SET_DECEL)
-            #can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.SET_DECEL, self.CP.carFingerprint))
-            #CC.debugTextCC = "BTN:--,T:{:.1f},C:{:.1f}".format(target, current)
-          elif target > current and current < 160 and self.params.get_int("SpeedFromPCM") != 1:
-            can_sends = []
+      self.button_wait = randint(10,25)
+      self.last_button_frame = self.frame
+
+      if not CC.enabled:
+        self.activateCruise = 0
+      if CC.enabled:
+        if not CS.out.cruiseState.enabled:
+          #if CC.longActive and (hud_control.leadVisible or current > 10.0):
+          if (hud_control.leadVisible or current > 10.0):
             if alt_buttons:
               return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL, cruise_buttons_msg_values, self.cruise_buttons_msg_cnt)
             else:
               return hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL)
             #can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
             #CC.debugTextCC = "BTN:++,T:{:.1f},C:{:.1f}".format(target, current)
-        elif CC.cruiseControl.activate and self.activateCruise == 0:
-          #print("sendActivateCruise Buttons....")
-          if (hud_control.leadVisible or current > 10.0):
-            print("sendActivateCruise Buttons....Sent....")
-            if alt_buttons:
-              return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL, cruise_buttons_msg_values, self.cruise_buttons_msg_cnt)
-            else:
-              return hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL)
-            #can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
-            self.activateCruise = 1
-            self.button_wait = 100
-
-    else:
-      self.button_alive = randint(4, 8) #randint(12, 18)
-      self.button_alive_frame = self.frame
+        #elif CS.out.cruiseGap != hud_control.cruiseGap:
+        #  can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.GAP_DIST, self.CP.carFingerprint))
+        #  CC.debugTextCC = "currentGap = {}, target = {}".format(CS.out.cruiseGap, hud_control.cruiseGap)
+        elif target < current and current>= 31 and self.params.get_int("SpeedFromPCM") != 1:
+          if alt_buttons:
+            return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.SET_DECEL, cruise_buttons_msg_values, self.cruise_buttons_msg_cnt)
+          else:
+            return hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.SET_DECEL)
+          #can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.SET_DECEL, self.CP.carFingerprint))
+          #CC.debugTextCC = "BTN:--,T:{:.1f},C:{:.1f}".format(target, current)
+        elif target > current and current < 160 and self.params.get_int("SpeedFromPCM") != 1:
+          can_sends = []
+          if alt_buttons:
+            return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL, cruise_buttons_msg_values, self.cruise_buttons_msg_cnt)
+          else:
+            return hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL)
+          #can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
+          #CC.debugTextCC = "BTN:++,T:{:.1f},C:{:.1f}".format(target, current)
+      elif CC.cruiseControl.activate and self.activateCruise == 0:
+        #print("sendActivateCruise Buttons....")
+        if (hud_control.leadVisible or current > 10.0):
+          print("sendActivateCruise Buttons....Sent....")
+          self.activateCruise = 1
+          self.button_wait = 100
+          if alt_buttons:
+            return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL, cruise_buttons_msg_values, self.cruise_buttons_msg_cnt)
+          else:
+            return hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL)
+          #can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
 
     return None

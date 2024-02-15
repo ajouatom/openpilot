@@ -143,6 +143,7 @@ def manager_init() -> None:
     ("TFollowGap2", "120"),
     ("TFollowGap3", "140"),
     ("TFollowGap4", "160"),
+    ("HapticFeedbackWhenSpeedCamera", "0"),       
     ("SoftHoldMode", "0"),       
     ("CruiseEcoControl", "2"),
     ("UseLaneLineSpeed", "0"),    

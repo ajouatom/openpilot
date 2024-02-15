@@ -939,6 +939,19 @@
     },
     {
       "group": "시작",
+      "name": "HapticFeedbackWhenSpeedCamera",
+      "title": "핸들햅틱기능사용(0)",
+      "descr": "0:사용안함,1:진동,2:계기판,3:HUD표시",
+      "egroup": "START",
+      "etitle": "HapticFeedbackSpeedCamera(0)",
+      "edescr": "",
+      "min": 0,
+      "max": 3,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "시작",
       "name": "MaxAngleFrames",
       "title": "MaxAngleFrames(89)",
       "descr": "89:기본값",

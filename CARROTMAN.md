@@ -9,7 +9,7 @@
      * adb shell pm grant com.ajouatom.carrotman android.permission.READ_LOGS
      * [당근맨은 설치했고 잘돌아가는데 네비가 없어요!, 주행중인 당근파일럿 사진첨부합니다.](http://pf.kakao.com/_xbviqG/chat)
            
- * SSH입력
+ * SSH입력 (CarrotMan22 부터 삭제, Carrot V220212부터)
    * SSH키 전송: 위에서 만든 id_rsa파일을 스마트폰에 복사
    * 당근맨에서 SSH 버튼 -> 개인키 버튼을 누르고, id_rsa 선택  (파일제일위에 BEGIN RSA PRIVATE KEY라고 되어 있어야함)
  * 연결

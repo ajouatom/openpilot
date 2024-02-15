@@ -74,12 +74,16 @@ class Controls:
 
     self.params = Params()
 
-    mute_dm = self.params.get_int("ShowDmInfo") < 1
+    self.mute_dm = self.params.get_int("ShowDmInfo") < 1
+    if self.mute_dm:
+      IGNORE_PROCESSES.update({"dmonitoringd", "dmonitoringmodeld"})
+      self.camera_packets.remove("driverCameraState")
+
 
     ignore = self.sensor_packets + ['testJoystick', 'liveMapData']
     if SIMULATION:
       ignore += ['driverCameraState', 'managerState']
-    if mute_dm:
+    if self.mute_dm:
       ignore += ['driverMonitoringState']
       self.params.put_bool("DmModelInitialized", True)
     self.sm = messaging.SubMaster(['deviceState', 'pandaStates', 'peripheralState', 'modelV2', 'liveCalibration',

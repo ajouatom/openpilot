@@ -61,8 +61,8 @@ class RoadLimitSpeedServer:
 
 
     #carrot
-    self.carrot_route_thread = threading.Thread(target=self.carrot_route, args=[])
-    self.carrot_route_thread.daemon = True
+    #self.carrot_route_thread = threading.Thread(target=self.carrot_route, args=[])
+    #self.carrot_route_thread.daemon = True
     #self.carrot_route_thread.start()
 
   def recvall(self, sock, n):
