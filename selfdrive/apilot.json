@@ -36,7 +36,7 @@
       "etitle": "_LateralTorqueAccelFactor*0.001(2500)",
       "edescr": "",
       "min": 1000,
-      "max": 4000,
+      "max": 6000,
       "default": 2500,
       "unit": 1
     },
