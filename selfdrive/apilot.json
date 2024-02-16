@@ -62,7 +62,7 @@
       "etitle": "_CustomSteerMax(0)",
       "edescr": "",
       "min": 0,
-      "max": 409,
+      "max": 512,
       "default": 0,
       "unit": 1
     },
