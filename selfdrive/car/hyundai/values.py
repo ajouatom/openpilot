@@ -66,7 +66,6 @@ class CarControllerParams:
     else:
       self.STEER_MAX = 409
 
-
 class HyundaiFlags(IntFlag):
   CANFD_HDA2 = 1
   CANFD_ALT_BUTTONS = 2
