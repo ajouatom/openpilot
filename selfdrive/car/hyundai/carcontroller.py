@@ -361,7 +361,7 @@ class CarController:
               self.activateCruise = 1
               self.button_wait = 40
         else:
-          self.button_alive = randint(4, 8) #randint(12, 18)  # 여기서 만든 시간동안 4이면 4번 연속으로 때려넣는다.
+          self.button_alive = randint(4, 6) #randint(12, 18)  # 여기서 만든 시간동안 4이면 4번 연속으로 때려넣는다.
           self.button_alive_frame = self.frame
       
     else:
