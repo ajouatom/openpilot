@@ -35,7 +35,7 @@ class CarControllerParams:
       self.STEER_DELTA_UP = 2
       self.STEER_DELTA_DOWN = 3
 
-      if self.carFingerprint in (CAR.KIA_CARNIVAL_4TH_GEN):
+      if CP.carFingerprint in (CAR.KIA_CARNIVAL_4TH_GEN):
         print("$$$$$$$$$$$  KIA_CARNIVAL_4TH_GEN")
         self.STEER_MAX = 384
         self.STEER_DELTA_UP = 3
