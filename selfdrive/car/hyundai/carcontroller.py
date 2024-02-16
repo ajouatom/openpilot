@@ -71,6 +71,8 @@ class CarController:
     self.button_wait = 12
     self.resume_cnt = 0
     self.resume_wait_timer = 0
+    self.button_alive = 0
+    self.button_alive_frame = 0
     self.activeAVM = 0
     self.params = Params()
     self.cruise_buttons_msg_values = None
@@ -329,9 +331,10 @@ class CarController:
         if CS.cruise_buttons[-1] != Buttons.NONE:
           self.last_button_frame = self.frame
 
-        if (self.frame - self.last_button_frame) > self.button_wait:
-          self.button_wait = randint(8,15)
-          self.last_button_frame = self.frame
+        if (self.frame - self.last_button_frame) > self.button_wait: # button_wait만큼 일정시간 기다린다.
+          if (self.frame - self.button_alive_frame) > self.button_alive:  #button_alive만큼 마구 넣는다.
+            self.button_wait = randint(8,15)
+            self.last_button_frame = self.frame
 
           if not CC.enabled:
             self.activateCruise = 0
@@ -357,6 +360,9 @@ class CarController:
               can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
               self.activateCruise = 1
               self.button_wait = 40
+        else:
+          self.button_alive = randint(4, 8) #randint(12, 18)  # 여기서 만든 시간동안 4이면 4번 연속으로 때려넣는다.
+          self.button_alive_frame = self.frame
       
     else:
 
@@ -404,7 +410,7 @@ class CarController:
           dat = self.canfd_speed_control_pcm(CC, CS, self.cruise_buttons_msg_values)
           if dat is not None:
             can_sends.append(dat)
-          #self.cruise_buttons_msg_cnt += 1
+          self.cruise_buttons_msg_cnt += 1
 
     return can_sends
 
@@ -426,8 +432,9 @@ class CarController:
       self.last_button_frame = self.frame
 
     if (self.frame - self.last_button_frame) > self.button_wait:
-      self.button_wait = randint(10,25)
-      self.last_button_frame = self.frame
+      if (self.frame - self.button_alive_frame) > self.button_alive:
+        self.button_wait = randint(12,15)
+        self.last_button_frame = self.frame
 
       if not CC.enabled:
         self.activateCruise = 0
@@ -470,5 +477,8 @@ class CarController:
           else:
             return hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL)
           #can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
+    else:
+      self.button_alive = randint(4, 8) #randint(12, 18)
+      self.button_alive_frame = self.frame
 
     return None
