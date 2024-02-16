@@ -400,8 +400,9 @@ class CarController:
               # TODO: resume for alt button cars
               if self.cruise_buttons_msg_values is not None:
                 print("cruiseControl.RES222222")
-                for _ in range(4):
+                for _ in range(8):
                   can_sends.append(hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL, self.cruise_buttons_msg_values, self.cruise_buttons_msg_cnt))
+                  self.cruise_buttons_msg_cnt += 1
             else:
               for _ in range(20):
                 can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL))
