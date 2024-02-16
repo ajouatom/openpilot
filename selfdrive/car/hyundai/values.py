@@ -37,7 +37,7 @@ class CarControllerParams:
 
       if CP.carFingerprint in (CAR.KIA_CARNIVAL_4TH_GEN):
         print("$$$$$$$$$$$  KIA_CARNIVAL_4TH_GEN")
-        self.STEER_MAX = 384
+        self.STEER_MAX = 409
         self.STEER_DELTA_UP = 3
         self.STEER_DELTA_DOWN = 7
 
