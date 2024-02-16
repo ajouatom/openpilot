@@ -404,7 +404,7 @@ class CarController:
           dat = self.canfd_speed_control_pcm(CC, CS, self.cruise_buttons_msg_values)
           if dat is not None:
             can_sends.append(dat)
-          self.cruise_buttons_msg_cnt += 1
+          #self.cruise_buttons_msg_cnt += 1
 
     return can_sends
 
