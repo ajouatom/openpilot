@@ -48,26 +48,26 @@ class CarInterface(CarInterfaceBase):
     CAN = CanBus(None, hda2, fingerprint)
 
     if candidate in CANFD_CAR:
-      # detect if car is hybrid
-      if 0x105 in fingerprint[CAN.ECAN]:
+      # detect if car is hybrid 
+      if 0x105 in fingerprint[CAN.ECAN]: # 0x105(261): ACCELERATOR_ALT
         ret.flags |= HyundaiFlags.HYBRID.value
       elif candidate in EV_CAR:
         ret.flags |= HyundaiFlags.EV.value
 
       # detect HDA2 with ADAS Driving ECU
       if hda2:
-        if 0x110 in fingerprint[CAN.CAM]:
+        if 0x110 in fingerprint[CAN.CAM]: # 0x110(272): LKAS_ALT
           ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
         ## carrot: canival 4th, no 0x1cf
-        if 0x1cf not in fingerprint[CAN.ECAN]:
+        if 0x1cf not in fingerprint[CAN.ECAN]: # 0x1cf(463): CRUISE_BUTTONS
           ret.flags |= HyundaiFlags.CANFD_ALT_BUTTONS.value
       else:
         # non-HDA2
-        if 0x1cf not in fingerprint[CAN.ECAN]:
+        if 0x1cf not in fingerprint[CAN.ECAN]:  # 0x1cf(463): CRUISE_BUTTONS
           ret.flags |= HyundaiFlags.CANFD_ALT_BUTTONS.value
         # ICE cars do not have 0x130; GEARS message on 0x40 or 0x70 instead
-        if 0x130 not in fingerprint[CAN.ECAN]:
-          if 0x40 not in fingerprint[CAN.ECAN]:
+        if 0x130 not in fingerprint[CAN.ECAN]: # 0x130(304): GEAR_SHIFTER
+          if 0x40 not in fingerprint[CAN.ECAN]: # 0x40(64): GEAR_ALT
             ret.flags |= HyundaiFlags.CANFD_ALT_GEARS_2.value
           else:
             ret.flags |= HyundaiFlags.CANFD_ALT_GEARS.value
