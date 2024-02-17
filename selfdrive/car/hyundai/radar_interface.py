@@ -34,6 +34,9 @@ def get_radar_can_parser_scc(CP):
   if CP.carFingerprint in CANFD_CAR:
     return None
 
+  # 롱컨은 켜졌지만, 배선개조가 안된경우 비젼롱컨
+  if CP.openpilotLongitudinalControl and not scc2:
+    return None
 
   ## 레이더트랙과 SCC레이더를 같이 사용하고 싶은경우.. (서로 주파수가 달라 사용하기엔 radard를 수정해야함)
   #if enable_radar_tracks and not scc2: #레이더트랙은 켜져있으나, SCC2가 아닌경우  : SCC기능정지후 사용하는 롱컨..
