@@ -574,7 +574,7 @@ def main():
 
   # *** setup messaging
   can_sock = messaging.sub_sock('can')
-  sm = messaging.SubMaster(['modelV2', 'carState'], frequency=int(1./DT_CTRL))
+  sm = messaging.SubMaster(['modelV2', 'carState', 'lateralPlan'], frequency=int(1./DT_CTRL))
   pm = messaging.PubMaster(['radarState', 'liveTracks'])
 
   RI = RadarInterface(CP)
