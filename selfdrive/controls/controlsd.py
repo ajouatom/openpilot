@@ -90,7 +90,7 @@ class Controls:
                                    'driverMonitoringState', 'longitudinalPlan', 'lateralPlan', 'liveLocationKalman',
                                    'managerState', 'liveParameters', 'radarState', 'liveTorqueParameters',
                                    'testJoystick', 'navInstruction', 'roadLimitSpeed', 'liveMapData'] + self.camera_packets + self.sensor_packets,
-                                  ignore_alive=ignore, ignore_avg_freq=ignore+['radarState', 'testJoystick', 'navInstruction'], ignore_valid=['testJoystick', 'navInstruction', 'roadLimitSpeed', 'liveMapData'],
+                                  ignore_alive=ignore, ignore_avg_freq=ignore+['radarState', 'testJoystick'], ignore_valid=['testJoystick', 'navInstruction', 'roadLimitSpeed', 'liveMapData'], poll='navInstruction',
                                   frequency=int(1/DT_CTRL))
 
     if CI is None:
