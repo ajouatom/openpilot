@@ -13,23 +13,11 @@ from openpilot.common.params import Params  #ajouatom
 from selfdrive.car.isotp_parallel_query import IsoTpParallelQuery #ajouatom
 
 Ecu = car.CarParams.Ecu
-SafetyModel = car.CarParams.SafetyModel
 ButtonType = car.CarState.ButtonEvent.Type
 EventName = car.CarEvent.EventName
 ENABLE_BUTTONS = (Buttons.RES_ACCEL, Buttons.SET_DECEL, Buttons.CANCEL)
 BUTTONS_DICT = {Buttons.RES_ACCEL: ButtonType.accelCruise, Buttons.SET_DECEL: ButtonType.decelCruise,
                 Buttons.GAP_DIST: ButtonType.gapAdjustCruise, Buttons.CANCEL: ButtonType.cancel}
-
-
-def set_safety_config_hyundai(candidate, CAN, can_fd=False):
-  platform = SafetyModel.hyundaiCanfd if can_fd else \
-             SafetyModel.hyundaiLegacy if candidate in LEGACY_SAFETY_MODE_CAR else \
-             SafetyModel.hyundai
-  cfgs = [get_safety_config(platform), ]
-  if CAN.ECAN >= 4:
-    cfgs.insert(0, get_safety_config(SafetyModel.noOutput))
-
-  return cfgs
 
 
 class CarInterface(CarInterfaceBase):
@@ -48,7 +36,7 @@ class CarInterface(CarInterfaceBase):
     CAN = CanBus(None, hda2, fingerprint)
 
     if candidate in CANFD_CAR:
-      # detect if car is hybrid 
+      # detect if car is hybrid
       if 0x105 in fingerprint[CAN.ECAN]: # 0x105(261): ACCELERATOR_ALT
         ret.flags |= HyundaiFlags.HYBRID.value
       elif candidate in EV_CAR:
@@ -56,6 +44,7 @@ class CarInterface(CarInterfaceBase):
 
       # detect HDA2 with ADAS Driving ECU
       if hda2:
+        ret.flags |= HyundaiFlags.CANFD_HDA2.value
         if 0x110 in fingerprint[CAN.CAM]: # 0x110(272): LKAS_ALT
           ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
         ## carrot: canival 4th, no 0x1cf
@@ -384,20 +373,20 @@ class CarInterface(CarInterfaceBase):
       ret.enableBsm = 0x58b in fingerprint[0]
 
     # *** panda safety config ***
-    ret.safetyConfigs = set_safety_config_hyundai(candidate, CAN, can_fd=(candidate in CANFD_CAR))
-
-    if hda2:
-      print("$$$$$$$$$$$$$$ HDA2")
-      ret.flags |= HyundaiFlags.CANFD_HDA2.value
-      ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_CANFD_HDA2
-
     if candidate in CANFD_CAR:
-      if hda2 and ret.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING:
-        ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_CANFD_HDA2_ALT_STEERING
-        print("$$$$$$$$$ Alt Steering...")
+      cfgs = [get_safety_config(car.CarParams.SafetyModel.hyundaiCanfd), ]
+      if CAN.ECAN >= 4:
+        cfgs.insert(0, get_safety_config(car.CarParams.SafetyModel.noOutput))
+      ret.safetyConfigs = cfgs
+
+      if ret.flags & HyundaiFlags.CANFD_HDA2:
+        ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_CANFD_HDA2
+        if ret.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING:
+          ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_CANFD_HDA2_ALT_STEERING
       if ret.flags & HyundaiFlags.CANFD_ALT_BUTTONS:
         ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_CANFD_ALT_BUTTONS
-        print("$$$$$$$$$ Alt Buttons...")
+      if ret.flags & HyundaiFlags.CANFD_CAMERA_SCC:
+        ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_CAMERA_SCC
     else:
       if candidate in LEGACY_SAFETY_MODE_CAR:
         # these cars require a special panda safety mode due to missing counters and checksums in the messages
@@ -405,8 +394,8 @@ class CarInterface(CarInterfaceBase):
       else:
         ret.safetyConfigs = [get_safety_config(car.CarParams.SafetyModel.hyundai, 0)]
 
-    if ret.flags & HyundaiFlags.CANFD_CAMERA_SCC or candidate in CAMERA_SCC_CAR:
-      ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_CAMERA_SCC
+      if candidate in CAMERA_SCC_CAR:
+        ret.safetyConfigs[0].safetyParam |= Panda.FLAG_HYUNDAI_CAMERA_SCC
 
     if ret.flags & HyundaiFlags.SCC_BUS2.value:
       ret.openpilotLongitudinalControl = True

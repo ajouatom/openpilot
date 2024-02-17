@@ -48,11 +48,10 @@ def plannerd_thread():
 
   pm = messaging.PubMaster(['longitudinalPlan', 'lateralPlan', 'uiPlan'])
   sm = messaging.SubMaster(['carControl', 'carState', 'controlsState', 'radarState', 'modelV2'],
-                           poll=['radarState', 'modelV2'], ignore_avg_freq=['radarState'])
+                           poll='modelV2', ignore_avg_freq=['radarState'])
 
   while True:
     sm.update()
-
     if sm.updated['modelV2']:
       lateral_planner.update(sm)
       lateral_planner.publish(sm, pm)
