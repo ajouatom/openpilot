@@ -371,7 +371,7 @@ Export('cereal', 'messaging', 'messaging_python', 'visionipc')
 
 # Build other submodules
 SConscript([
-  'body/board/SConscript',
+  #'body/board/SConscript',
   'opendbc/can/SConscript',
   'panda/SConscript',
 ])
