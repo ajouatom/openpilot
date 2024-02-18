@@ -47,6 +47,8 @@ class CarInterface(CarInterfaceBase):
         ret.flags |= HyundaiFlags.CANFD_HDA2.value
         if 0x110 in fingerprint[CAN.CAM]: # 0x110(272): LKAS_ALT
           ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
+        ## carrot_todo: sorento
+        ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
         ## carrot: canival 4th, no 0x1cf
         if 0x1cf not in fingerprint[CAN.ECAN]: # 0x1cf(463): CRUISE_BUTTONS
           ret.flags |= HyundaiFlags.CANFD_ALT_BUTTONS.value
