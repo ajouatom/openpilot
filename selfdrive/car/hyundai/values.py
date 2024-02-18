@@ -35,6 +35,12 @@ class CarControllerParams:
       self.STEER_DELTA_UP = 2
       self.STEER_DELTA_DOWN = 3
 
+      if CP.carFingerprint in (CAR.KIA_CARNIVAL_4TH_GEN):
+        print("$$$$$$$$$$$  KIA_CARNIVAL_4TH_GEN")
+        self.STEER_MAX = 384
+        self.STEER_DELTA_UP = 3
+        self.STEER_DELTA_DOWN = 7
+
     # To determine the limit for your car, find the maximum value that the stock LKAS will request.
     # If the max stock LKAS request is <384, add your car to this list.
     elif CP.carFingerprint in (CAR.GENESIS_G80, CAR.GENESIS_G90, CAR.ELANTRA, CAR.ELANTRA_GT_I30, CAR.IONIQ,
@@ -51,6 +57,7 @@ class CarControllerParams:
     elif CP.carFingerprint in (CAR.KIA_STINGER, CAR.KONA_HEV):
       self.STEER_MAX = 384
     elif CP.carFingerprint in (CAR.SANTA_FE_HEV_2022):
+      print("$$$$$$$$$$$  SANTAFE HEV_2022")
       self.STEER_MAX = 409
       self.STEER_DELTA_UP = 3
       self.STEER_DELTA_DOWN = 7
@@ -58,7 +65,6 @@ class CarControllerParams:
     # Default for most HKG
     else:
       self.STEER_MAX = 409
-
 
 class HyundaiFlags(IntFlag):
   CANFD_HDA2 = 1

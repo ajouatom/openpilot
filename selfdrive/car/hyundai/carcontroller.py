@@ -71,6 +71,8 @@ class CarController:
     self.button_wait = 12
     self.resume_cnt = 0
     self.resume_wait_timer = 0
+    self.button_alive = 0
+    self.button_alive_frame = 0
     self.activeAVM = 0
     self.params = Params()
     self.cruise_buttons_msg_values = None
@@ -80,8 +82,16 @@ class CarController:
     actuators = CC.actuators
     hud_control = CC.hudControl
 
-    self.softHoldMode = self.params.get_int("SoftHoldMode")
-    self.enableAVM = self.params.get_int("EnableAVM")
+    if self.frame % 50 == 0:
+      self.softHoldMode = self.params.get_int("SoftHoldMode")
+      self.enableAVM = self.params.get_int("EnableAVM")
+      steerMax = self.params.get_int("CustomSteerMax")
+      steerDeltaUp = self.params.get_int("CustomSteerDeltaUp")
+      steerDeltaDown = self.params.get_int("CustomSteerDeltaDown")
+      self.cc_params.STEER_MAX = self.cc_params.STEER_MAX if steerMax <= 0 else steerMax
+      self.cc_params.STEER_DELTA_UP = self.cc_params.STEER_DELTA_UP if steerDeltaUp <= 0 else steerDeltaUp
+      self.cc_params.STEER_DELTA_DOWN = self.cc_params.STEER_DELTA_DOWN if steerDeltaDown <= 0 else steerDeltaDown
+
     # steering torque
     new_steer = int(round(actuators.steer * self.cc_params.STEER_MAX))
     apply_steer = apply_driver_steer_torque_limits(new_steer, self.apply_steer_last, CS.out.steeringTorque, self.cc_params)
@@ -329,9 +339,10 @@ class CarController:
         if CS.cruise_buttons[-1] != Buttons.NONE:
           self.last_button_frame = self.frame
 
-        if (self.frame - self.last_button_frame) > self.button_wait:
-          self.button_wait = randint(8,15)
-          self.last_button_frame = self.frame
+        if (self.frame - self.last_button_frame) > self.button_wait: # button_wait만큼 일정시간 기다린다.
+          if (self.frame - self.button_alive_frame) > self.button_alive:  #button_alive만큼 마구 넣는다.
+            self.button_wait = randint(8,15)
+            self.last_button_frame = self.frame
 
           if not CC.enabled:
             self.activateCruise = 0
@@ -357,6 +368,9 @@ class CarController:
               can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
               self.activateCruise = 1
               self.button_wait = 40
+        else:
+          self.button_alive = randint(4, 6) #randint(12, 18)  # 여기서 만든 시간동안 4이면 4번 연속으로 때려넣는다.
+          self.button_alive_frame = self.frame
       
     else:
 
@@ -394,8 +408,9 @@ class CarController:
               # TODO: resume for alt button cars
               if self.cruise_buttons_msg_values is not None:
                 print("cruiseControl.RES222222")
-                for _ in range(4):
+                for _ in range(8):
                   can_sends.append(hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.RES_ACCEL, self.cruise_buttons_msg_values, self.cruise_buttons_msg_cnt))
+                  self.cruise_buttons_msg_cnt += 1
             else:
               for _ in range(20):
                 can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL))
@@ -426,8 +441,9 @@ class CarController:
       self.last_button_frame = self.frame
 
     if (self.frame - self.last_button_frame) > self.button_wait:
-      self.button_wait = randint(10,25)
-      self.last_button_frame = self.frame
+      if (self.frame - self.button_alive_frame) > self.button_alive:
+        self.button_wait = randint(12,15)
+        self.last_button_frame = self.frame
 
       if not CC.enabled:
         self.activateCruise = 0
@@ -470,5 +486,8 @@ class CarController:
           else:
             return hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL)
           #can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
+    else:
+      self.button_alive = randint(4, 8) #randint(12, 18)
+      self.button_alive_frame = self.frame
 
     return None

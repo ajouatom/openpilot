@@ -178,13 +178,15 @@ def main(demo=False):
 
   if demo:
     CP = get_demo_car_params()
-  with car.CarParams.from_bytes(params.get("CarParams", block=True)) as msg:
-    CP = msg
-  cloudlog.info("plannerd got CarParams: %s", CP.carName)
+  else:
+    with car.CarParams.from_bytes(params.get("CarParams", block=True)) as msg:
+      CP = msg
+  cloudlog.info("modeld got CarParams: %s", CP.carName)
+
   # TODO this needs more thought, use .2s extra for now to estimate other delays
   steer_delay = CP.steerActuatorDelay + .2
-  DH = DesireHelper()
 
+  DH = DesireHelper()
 
   while True:
     # Keep receiving frames until we are at least 1 frame ahead of previous extra frame

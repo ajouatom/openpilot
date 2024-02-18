@@ -36,7 +36,7 @@
       "etitle": "_LateralTorqueAccelFactor*0.001(2500)",
       "edescr": "",
       "min": 1000,
-      "max": 4000,
+      "max": 6000,
       "default": 2500,
       "unit": 1
     },
@@ -51,6 +51,45 @@
       "min": 0,
       "max": 1000,
       "default": 100,
+      "unit": 1
+    },
+    {
+      "group": "Á¶ÇâÆ©´×",
+      "name": "CustomSteerMax",
+      "title": "_CustomSteerMax(0)",
+      "descr": "",
+      "egroup": "LAT",
+      "etitle": "_CustomSteerMax(0)",
+      "edescr": "",
+      "min": 0,
+      "max": 512,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "Á¶ÇâÆ©´×",
+      "name": "CustomSteerDeltaUp",
+      "title": "_CustomSteerDeltaUp(0)",
+      "descr": "",
+      "egroup": "LAT",
+      "etitle": "_CustomSteerDeltaUp(0)",
+      "edescr": "",
+      "min": 0,
+      "max": 20,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "Á¶ÇâÆ©´×",
+      "name": "CustomSteerDeltaDown",
+      "title": "_CustomSteerDeltaDown(0)",
+      "descr": "",
+      "egroup": "LAT",
+      "etitle": "_CustomSteerDeltaDown(0)",
+      "edescr": "",
+      "min": 0,
+      "max": 20,
+      "default": 0,
       "unit": 1
     },
     {
