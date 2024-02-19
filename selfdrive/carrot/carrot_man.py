@@ -56,7 +56,7 @@ class CarrotMan:
         }
         socket.send(json.dumps(response).encode('utf-8'))
       else:
-        if isOnroadCount == 100:
+        if isOnroadCount == 200:
           self.send_tmux("Ekdrmsvkdlffjt7710", "onroad")
         if self.params.get_bool("CarrotException") and networkConnected:
           self.params.put_bool("CarrotException", False)
