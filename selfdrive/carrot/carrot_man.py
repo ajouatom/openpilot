@@ -40,9 +40,9 @@ class CarrotMan:
       if network_type == NetworkType.none:
         networkConnected = False
       else:
-        #isOnroadCount = isOnroadCount + 1 if self.params.get_bool("IsOnroad") else 0
+        isOnroadCount = isOnroadCount + 1 if self.params.get_bool("IsOnroad") else 0
         networkConnected = True
-        isOnroadCount += 1
+        #isOnroadCount += 1
 
       socks = dict(poller.poll(100))
 
