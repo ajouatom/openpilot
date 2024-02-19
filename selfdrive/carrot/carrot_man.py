@@ -66,7 +66,7 @@ class CarrotMan:
   def send_tmux(self, ftp_password, tmux_why):
 
     try:
-      result = subprocess.run("rm /data/tmux.log && tmux capture-pane -pq -S-1000 > /data/tmux.log", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=False)
+      result = subprocess.run("rm /data/tmux.log && tmux capture-pane -pq -S-1000 > /data/media/tmux.log", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=False)
     except Exception as e:
       print("TMUX creation error")
       return
@@ -94,7 +94,7 @@ class CarrotMan:
     ftp.cwd(directory)
 
     try:
-      with open("/data/tmux.log", "rb") as file:
+      with open("/data/media/tmux.log", "rb") as file:
         ftp.storbinary(f'STOR {filename}', file)
     except Exception as e:
       print(f"ftp sending error...: {e}")
