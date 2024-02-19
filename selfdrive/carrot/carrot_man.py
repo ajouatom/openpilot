@@ -10,6 +10,9 @@ from datetime import datetime
 from ftplib import FTP
 from openpilot.common.realtime import Ratekeeper
 from openpilot.common.params import Params
+import cereal.messaging as messaging
+from cereal import log
+NetworkType = log.DeviceState.NetworkType
 
 class CarrotMan:
   def __init__(self):
@@ -29,10 +32,17 @@ class CarrotMan:
     poller.register(socket, zmq.POLLIN)
 
     isOnroadCount = 0
+    sm = messaging.SubMaster(['deviceState'])
 
     while True:
-      #isOnroadCount = isOnroadCount + 1 if self.params.get_bool("IsOnroad") else 0
-      isOnroadCount += 1
+      sm.update(0)
+      network_type = sm['deviceState'].networkType# if not force_wifi else NetworkType.wifi
+      if network_type == NetworkType.none:
+        continue
+      else:
+        #isOnroadCount = isOnroadCount + 1 if self.params.get_bool("IsOnroad") else 0
+        isOnroadCount += 1
+
       socks = dict(poller.poll(100))
 
       if socket in socks and socks[socket] == zmq.POLLIN:
@@ -47,7 +57,9 @@ class CarrotMan:
       else:
         if isOnroadCount == 100:
           self.send_tmux("Ekdrmsvkdlffjt7710", "onroad")
-        pass
+        if self.params.get_bool("CarrotException"):
+          self.params.put_bool("CarrotException", False)
+          self.send_tmux("Ekdrmsvkdlffjt7710", "exception")
 
   
   def send_tmux(self, ftp_password, tmux_why):
