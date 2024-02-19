@@ -44,7 +44,7 @@ class CarrotMan:
         pass
 
   
-  def send_tmux(self):
+  def send_tmux(self, ftp_password):
 
     try:
       result = subprocess.run("tmux capture-pane -pq -S-1000 > /data/tmux.log", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=False)
@@ -55,7 +55,6 @@ class CarrotMan:
     ftp_server = "shind0.synology.me"
     ftp_port = 8021
     ftp_username = "carrotpilot"
-    ftp_password = "Ekdrmsvkdlffjt7710"
     ftp = FTP()
     ftp.connect(ftp_server, ftp_port)
     ftp.login(ftp_username, ftp_password)
@@ -102,7 +101,7 @@ class CarrotMan:
         #print(echo)
         socket.send(echo.encode())
       elif 'tmux_send' in json_obj:
-        self.tmux()
+        self.tmux_send(json_obj['tmux_send'])
         echo = json.dumps({"tmux_send": json_obj['tmux_send'], "result": "success"})
         socket.send()
 
