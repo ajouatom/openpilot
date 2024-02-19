@@ -377,6 +377,7 @@ class CarState(CarStateBase):
       self.distance_button_pressed = self.cruise_buttons[-1] == Buttons.GAP_DIST
       self.distance_step_max = 4
     self.lkas_button_pressed = cp.vl[self.cruise_btns_msg_canfd]["LFA_BTN"]
+    print(f"lkas_button={self.lkas_button_pressed}")
 
     if self.CP.flags & HyundaiFlags.CANFD_HDA2:
       self.hda2_lfa_block_msg = copy.copy(cp_cam.vl["CAM_0x362"] if self.CP.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING
