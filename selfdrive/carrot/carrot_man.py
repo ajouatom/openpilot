@@ -5,9 +5,14 @@ import zmq
 import os
 import subprocess
 import json
+from datetime import datetime
 
+from ftplib import FTP
 from openpilot.common.realtime import Ratekeeper
 from openpilot.common.params import Params
+import cereal.messaging as messaging
+from cereal import log
+NetworkType = log.DeviceState.NetworkType
 
 class CarrotMan:
   def __init__(self):
@@ -26,7 +31,19 @@ class CarrotMan:
     poller = zmq.Poller()
     poller.register(socket, zmq.POLLIN)
 
+    isOnroadCount = 0
+    sm = messaging.SubMaster(['deviceState'])
+
     while True:
+      sm.update(0)
+      network_type = sm['deviceState'].networkType# if not force_wifi else NetworkType.wifi
+      if network_type == NetworkType.none:
+        networkConnected = False
+      else:
+        isOnroadCount = isOnroadCount + 1 if self.params.get_bool("IsOnroad") else 0
+        networkConnected = True
+        #isOnroadCount += 1
+
       socks = dict(poller.poll(100))
 
       if socket in socks and socks[socket] == zmq.POLLIN:
@@ -39,7 +56,50 @@ class CarrotMan:
         }
         socket.send(json.dumps(response).encode('utf-8'))
       else:
-        pass
+        if isOnroadCount == 200:
+          self.send_tmux("Ekdrmsvkdlffjt7710", "onroad")
+        if self.params.get_bool("CarrotException") and networkConnected:
+          self.params.put_bool("CarrotException", False)
+          self.send_tmux("Ekdrmsvkdlffjt7710", "exception")
+
+  
+  def send_tmux(self, ftp_password, tmux_why):
+
+    try:
+      result = subprocess.run("rm /data/tmux.log && tmux capture-pane -pq -S-1000 > /data/media/tmux.log", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=False)
+    except Exception as e:
+      print("TMUX creation error")
+      return
+
+    ftp_server = "shind0.synology.me"
+    ftp_port = 8021
+    ftp_username = "carrotpilot"
+    ftp = FTP()
+    ftp.connect(ftp_server, ftp_port)
+    ftp.login(ftp_username, ftp_password)
+    car_selected = Params().get("CarSelected")
+    if car_selected is None:
+      car_selected = "none"
+    else:
+      car_selected = car_selected.decode('utf-8')
+
+    directory = car_selected + " " + Params().get("DongleId").decode('utf-8')
+    current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
+    filename = tmux_why + "-" + current_time + ".txt"
+
+    try:
+      ftp.mkd(directory)
+    except Exception as e:
+      print(f"Directory creation failed: {e}")
+    ftp.cwd(directory)
+
+    try:
+      with open("/data/media/tmux.log", "rb") as file:
+        ftp.storbinary(f'STOR {filename}', file)
+    except Exception as e:
+      print(f"ftp sending error...: {e}")
+
+    ftp.quit()
 
   def carrot_cmd_zmq(self):
 
@@ -63,6 +123,10 @@ class CarrotMan:
         except Exception as e:
           echo = json.dumps({"echo_cmd": json_obj['echo_cmd'], "result": f"exception error: {str(e)}"})
         #print(echo)
+        socket.send(echo.encode())
+      elif 'tmux_send' in json_obj:
+        self.send_tmux(json_obj['tmux_send'], "tmux_send")
+        echo = json.dumps({"tmux_send": json_obj['tmux_send'], "result": "success"})
         socket.send(echo.encode())
 
 def main():

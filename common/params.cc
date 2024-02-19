@@ -319,6 +319,8 @@ std::unordered_map<std::string, uint32_t> keys = {
     { "CarrotRecord", PERSISTENT },
     { "CarrotDisplay", PERSISTENT },
     { "EnableOSM", PERSISTENT},
+    { "CarrotException", CLEAR_ON_MANAGER_START },
+    { "CarrotRouteActive", CLEAR_ON_MANAGER_START },
 
     { "AlwaysOnLateralEnabled", PERSISTENT},
     { "GMapKey", PERSISTENT},
