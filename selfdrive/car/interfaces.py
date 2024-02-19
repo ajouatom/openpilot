@@ -411,7 +411,7 @@ class CarInterfaceBase(ABC):
         distance_button_pressed = True
     if self.CP.openpilotLongitudinalControl:
       self.CS.update_personality(distance_button_pressed, pcm_personality)
-    self.update_lkas_buttons()
+    self.CS.update_lkas_buttons()
 
     # Handle permanent and temporary steering faults
     self.steering_unpressed = 0 if cs_out.steeringPressed else self.steering_unpressed + 1
