@@ -1302,6 +1302,19 @@
       "unit": 1
     },
     {
+      "group": "시작",
+      "name": "NoLogging",
+      "title": "Disable Logger",
+      "descr": "데이터로깅을 중지합니다.",
+      "egroup": "START",
+      "etitle": "Disable Logger",
+      "edescr": "",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
       "group": "감속제어",
       "name": "AutoNaviSpeedBumpTime",
       "title": "사고방지턱 감속완료시간시점(1s)",

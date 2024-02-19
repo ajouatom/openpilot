@@ -53,8 +53,8 @@ def enable_dm(started, params, CP: car.CarParams) -> bool:
   return (started or params.get_bool("IsDriverViewEnabled")) and params.get_int("ShowDmInfo") > 0
 
 def enable_logging(started, params, CP: car.CarParams) -> bool:
-  return True
-  #return params.get_bool("NoLogging"))
+  #return True
+  return not params.get_bool("NoLogging")
 
 EnableOSM = Params().get_int("EnableOSM")
 

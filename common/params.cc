@@ -318,7 +318,8 @@ std::unordered_map<std::string, uint32_t> keys = {
     { "SpeedFromPCM", PERSISTENT },
     { "CarrotRecord", PERSISTENT },
     { "CarrotDisplay", PERSISTENT },
-    { "EnableOSM", PERSISTENT},
+    { "EnableOSM", PERSISTENT },
+    { "NoLogging", PERSISTENT },
     { "CarrotException", CLEAR_ON_MANAGER_START },
     { "CarrotRouteActive", CLEAR_ON_MANAGER_START },
 
