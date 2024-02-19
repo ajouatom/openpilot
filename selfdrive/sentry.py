@@ -31,6 +31,7 @@ def report_tombstone(fn: str, message: str, contents: str) -> None:
 def capture_exception(*args, **kwargs) -> None:
   cloudlog.error("crash", exc_info=kwargs.get('exc_info', 1))
 
+  print("[capture_exception] CarrotException = True")
   Params().put_bool("CarrotException", True)
 
   try:

@@ -841,13 +841,10 @@ def main():
         server.check()
         #time.sleep(0.03)
 
-        time.sleep(10)
-        raise Exception("This is an error message.")
-
     except Exception as e:
       print(e)
       server.last_exception = e
-
+      Params().put_bool("CarrotException", True)
 
 
 if __name__ == "__main__":
