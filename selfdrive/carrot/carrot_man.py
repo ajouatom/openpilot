@@ -5,7 +5,9 @@ import zmq
 import os
 import subprocess
 import json
+from datetime import datetime
 
+from ftplib import FTP
 from openpilot.common.realtime import Ratekeeper
 from openpilot.common.params import Params
 
@@ -41,6 +43,41 @@ class CarrotMan:
       else:
         pass
 
+  
+  def send_tmux(self):
+
+    try:
+      result = subprocess.run("tmux capture-pane -pq -S-1000 > /data/tmux.log", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=False)
+    except Exception as e:
+      print("TMUX creation error")
+      return
+
+    ftp_server = "shind0.synology.me"
+    ftp_port = 8021
+    ftp_username = "carrotpilot"
+    ftp_password = "Ekdrmsvkdlffjt7710"
+    ftp = FTP()
+    ftp.connect(ftp_server, ftp_port)
+    ftp.login(ftp_username, ftp_password)
+    car_selected = Params().get("CarSelected")
+    if car_selected is None:
+      car_selected = "none"
+
+    directory = car_selected + " " + Params().get("DongleId")
+    current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
+    filename = current_time + ".txt"
+
+    try:
+      ftp.mkd(directory)
+    except Exception as e:
+      print(f"Directory creation failed: {e}")
+    ftp.cwd(directory)
+
+    with open("/data/tmux.log", "rb") as file:
+      ftp.storbinary(f'STOR {filename}', file)
+
+    ftp.quit()
+
   def carrot_cmd_zmq(self):
 
     context = zmq.Context()
@@ -64,6 +101,10 @@ class CarrotMan:
           echo = json.dumps({"echo_cmd": json_obj['echo_cmd'], "result": f"exception error: {str(e)}"})
         #print(echo)
         socket.send(echo.encode())
+      elif 'tmux_send' in json_obj:
+        self.tmux()
+        echo = json.dumps({"tmux_send": json_obj['tmux_send'], "result": "success"})
+        socket.send()
 
 def main():
   carrot_man = CarrotMan()
