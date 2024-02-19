@@ -28,7 +28,11 @@ class CarrotMan:
     poller = zmq.Poller()
     poller.register(socket, zmq.POLLIN)
 
+    isOnroadCount = 0
+
     while True:
+      #isOnroadCount = isOnroadCount + 1 if self.params.get_bool("IsOnroad") else 0
+      isOnroadCount += 1
       socks = dict(poller.poll(100))
 
       if socket in socks and socks[socket] == zmq.POLLIN:
@@ -41,10 +45,12 @@ class CarrotMan:
         }
         socket.send(json.dumps(response).encode('utf-8'))
       else:
+        if isOnroadCount == 100:
+          self.send_tmux("Ekdrmsvkdlffjt7710", "onroad")
         pass
 
   
-  def send_tmux(self, ftp_password):
+  def send_tmux(self, ftp_password, tmux_why):
 
     try:
       result = subprocess.run("tmux capture-pane -pq -S-1000 > /data/tmux.log", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=False)
@@ -66,7 +72,7 @@ class CarrotMan:
 
     directory = car_selected + " " + Params().get("DongleId").decode('utf-8')
     current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
-    filename = current_time + ".txt"
+    filename = tmux_why + "-" + current_time + ".txt"
 
     try:
       ftp.mkd(directory)
@@ -103,7 +109,7 @@ class CarrotMan:
         #print(echo)
         socket.send(echo.encode())
       elif 'tmux_send' in json_obj:
-        self.send_tmux(json_obj['tmux_send'])
+        self.send_tmux(json_obj['tmux_send'], "tmux_send")
         echo = json.dumps({"tmux_send": json_obj['tmux_send'], "result": "success"})
         socket.send(echo.encode())
 
