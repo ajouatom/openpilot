@@ -93,8 +93,11 @@ class CarrotMan:
       print(f"Directory creation failed: {e}")
     ftp.cwd(directory)
 
-    with open("/data/tmux.log", "rb") as file:
-      ftp.storbinary(f'STOR {filename}', file)
+    try:
+      with open("/data/tmux.log", "rb") as file:
+        ftp.storbinary(f'STOR {filename}', file)
+    except Exception as e:
+      print(f"ftp sending error...: {e}")
 
     ftp.quit()
 
