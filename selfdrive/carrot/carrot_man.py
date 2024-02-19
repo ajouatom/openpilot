@@ -131,7 +131,12 @@ class CarrotMan:
 
 def main():
   carrot_man = CarrotMan()
-  carrot_man.carrot_man_thread()
+  while True:
+    try:
+      carrot_man.carrot_man_thread()
+    except Exception as e:
+      print(f"carrot_man error...: {e}")
+      time.sleep(10)
 
 
 if __name__ == "__main__":
