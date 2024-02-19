@@ -62,7 +62,7 @@ class CarrotMan:
     if car_selected is None:
       car_selected = "none"
 
-    directory = car_selected + " " + Params().get("DongleId")
+    directory = car_selected + " " + String(Params().get("DongleId"))
     current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
     filename = current_time + ".txt"
 
