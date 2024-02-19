@@ -38,9 +38,10 @@ class CarrotMan:
       sm.update(0)
       network_type = sm['deviceState'].networkType# if not force_wifi else NetworkType.wifi
       if network_type == NetworkType.none:
-        continue
+        networkConnected = False
       else:
         #isOnroadCount = isOnroadCount + 1 if self.params.get_bool("IsOnroad") else 0
+        networkConnected = True
         isOnroadCount += 1
 
       socks = dict(poller.poll(100))
@@ -57,7 +58,7 @@ class CarrotMan:
       else:
         if isOnroadCount == 100:
           self.send_tmux("Ekdrmsvkdlffjt7710", "onroad")
-        if self.params.get_bool("CarrotException"):
+        if self.params.get_bool("CarrotException") and networkConnected:
           self.params.put_bool("CarrotException", False)
           self.send_tmux("Ekdrmsvkdlffjt7710", "exception")
 
