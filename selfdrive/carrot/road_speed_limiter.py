@@ -223,6 +223,7 @@ class RoadLimitSpeedServer:
     msg = {}
     msg['Carrot'] = Params().get("Version").decode('utf-8')
     msg['IsOnroad'] = Params().get_bool("IsOnroad")
+    msg['CarrotRouteActive'] = Params().get_bool("CarrotRouteActive")
     return json.dumps(msg)
 
 
