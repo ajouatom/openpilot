@@ -840,6 +840,7 @@ def main():
           send_time = now
         server.check()
         #time.sleep(0.03)
+        raise Exception("This is an error message.")
 
     except Exception as e:
       print(e)
