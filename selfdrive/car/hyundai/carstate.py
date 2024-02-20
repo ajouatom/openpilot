@@ -387,6 +387,9 @@ class CarState(CarStateBase):
       self.hda2_lfa_block_msg = copy.copy(cp_cam.vl["CAM_0x362"] if self.CP.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING
                                           else cp_cam.vl["CAM_0x2a4"])
 
+    # 측정값을 그냥 넣음... test
+    ret.vCluRatio = 0.945
+
     return ret
 
   def get_can_parser(self, CP):
