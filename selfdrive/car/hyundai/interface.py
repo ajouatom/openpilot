@@ -36,35 +36,47 @@ class CarInterface(CarInterfaceBase):
     CAN = CanBus(None, hda2, fingerprint)
 
     if candidate in CANFD_CAR:
+      print("$$$$CANFD_CAR")
       # detect if car is hybrid
       if 0x105 in fingerprint[CAN.ECAN]: # 0x105(261): ACCELERATOR_ALT
         ret.flags |= HyundaiFlags.HYBRID.value
+        print("$$$CANFD Hybrid")
       elif candidate in EV_CAR:
+        print("$$$CANFD EV")
         ret.flags |= HyundaiFlags.EV.value
 
       # detect HDA2 with ADAS Driving ECU
       if hda2:
+        print("$$$CANFD HDA2")
         ret.flags |= HyundaiFlags.CANFD_HDA2.value
         if 0x110 in fingerprint[CAN.CAM]: # 0x110(272): LKAS_ALT
           ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
+          print("$$$CANFD ALT_STEERING")
         ## carrot_todo: sorento
         if 0x2a4 not in fingerprint[CAN.CAM]: # 0x2a4(676): CAM_0x2a4
           ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
+          print("$$$CANFD ALT_STEERING")
         ## carrot: canival 4th, no 0x1cf
         if 0x1cf not in fingerprint[CAN.ECAN]: # 0x1cf(463): CRUISE_BUTTONS
           ret.flags |= HyundaiFlags.CANFD_ALT_BUTTONS.value
+          print("$$$CANFD ALT_BUTTONS")
       else:
         # non-HDA2
+        print("$$$CANFD non HDA2")
         if 0x1cf not in fingerprint[CAN.ECAN]:  # 0x1cf(463): CRUISE_BUTTONS
           ret.flags |= HyundaiFlags.CANFD_ALT_BUTTONS.value
+          print("$$$CANFD ALT_BUTTONS")
         # ICE cars do not have 0x130; GEARS message on 0x40 or 0x70 instead
         if 0x130 not in fingerprint[CAN.ECAN]: # 0x130(304): GEAR_SHIFTER
           if 0x40 not in fingerprint[CAN.ECAN]: # 0x40(64): GEAR_ALT
             ret.flags |= HyundaiFlags.CANFD_ALT_GEARS_2.value
+            print("$$$CANFD ALT_GEARS_2")
           else:
             ret.flags |= HyundaiFlags.CANFD_ALT_GEARS.value
+            print("$$$CANFD ALT_GEARS")
         if candidate not in CANFD_RADAR_SCC_CAR:
           ret.flags |= HyundaiFlags.CANFD_CAMERA_SCC.value
+          print("$$$CANFD CAMERA_SCC")
     else:
       # TODO: detect EV and hybrid
       if candidate in HYBRID_CAR:
