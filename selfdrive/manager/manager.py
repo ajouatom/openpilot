@@ -162,6 +162,7 @@ def manager_init() -> None:
     ("SteerActuatorDelay", "30"),       
     ("CruiseOnDist", "0"),
     ("EnableOSM", "0"),
+    ("NoLogging", "0"),
     ("HotspotOnBoot", "0"),
   ]
   if not PC:
