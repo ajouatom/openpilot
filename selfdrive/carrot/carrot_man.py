@@ -66,7 +66,7 @@ class CarrotMan:
   def send_tmux(self, ftp_password, tmux_why):
 
     try:
-      result = subprocess.run("rm /data/tmux.log && tmux capture-pane -pq -S-1000 > /data/media/tmux.log", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=False)
+      result = subprocess.run("rm /data/media/tmux.log; tmux capture-pane -pq -S-1000 > /data/media/tmux.log", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=False)
     except Exception as e:
       print("TMUX creation error")
       return
@@ -130,6 +130,8 @@ class CarrotMan:
         socket.send(echo.encode())
 
 def main():
+  print("CarrotManager Started")
+  print("Carrot GitBranch = {}, {}".format(Params().get("GitBranch"), Params().get("GitCommitDate")))
   carrot_man = CarrotMan()
   while True:
     try:

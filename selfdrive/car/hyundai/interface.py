@@ -387,6 +387,8 @@ class CarInterface(CarInterfaceBase):
     else:
       ret.enableBsm = 0x58b in fingerprint[0]
 
+    print(f"$$$$ enableBsm = {ret.enableBsm}")
+
     # *** panda safety config ***
     if candidate in CANFD_CAR:
       cfgs = [get_safety_config(car.CarParams.SafetyModel.hyundaiCanfd), ]
@@ -435,9 +437,10 @@ class CarInterface(CarInterfaceBase):
   @staticmethod
   def init(CP, logcan, sendcan):
     if CP.openpilotLongitudinalControl and not (CP.flags & HyundaiFlags.CANFD_CAMERA_SCC.value) and not (CP.flags & HyundaiFlags.SCC_BUS2.value):
-      addr, bus = 0x7d0, 0
+      addr, bus = 0x7d0, CanBus(CP).ECAN if CP.carFingerprint in CANFD_CAR else 0
       if CP.flags & HyundaiFlags.CANFD_HDA2.value:
         addr, bus = 0x730, CanBus(CP).ECAN
+      print(f"$$$$$$ Disable ECU : addr={addr}, bus={bus}")
       disable_ecu(logcan, sendcan, bus=bus, addr=addr, com_cont_req=b'\x28\x83\x01')
     if Params().get_bool("EnableRadarTracks"): #ajouatom
       enable_radar_tracks(CP, logcan, sendcan) 
