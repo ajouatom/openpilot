@@ -54,6 +54,7 @@ def enable_dm(started, params, CP: car.CarParams) -> bool:
 
 def enable_logging(started, params, CP: car.CarParams) -> bool:
   #return True
+  print("$$$$$$$$$ Logging Disabled")
   return not params.get_bool("NoLogging")
 
 EnableOSM = Params().get_int("EnableOSM")
