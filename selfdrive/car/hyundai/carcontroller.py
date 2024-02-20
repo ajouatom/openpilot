@@ -448,7 +448,7 @@ class CarController:
         self.button_wait = 7 #randint(12,15)
         self.last_button_frame = self.frame
 
-      diff = self.frame - self.last_button_frame
+      button_send_allowed = True if self.frame % 3 == 0 else False
       if not CC.enabled:
         self.activateCruise = 0
       if CC.enabled:
@@ -465,7 +465,7 @@ class CarController:
         #  can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.GAP_DIST, self.CP.carFingerprint))
         #  CC.debugTextCC = "currentGap = {}, target = {}".format(CS.out.cruiseGap, hud_control.cruiseGap)
         elif target < current and current>= 31 and self.params.get_int("SpeedFromPCM") != 1:
-          send_button = Buttons.SET_DECEL if diff % 2 == 0 else 0
+          send_button = Buttons.SET_DECEL if button_send_allowed else 0
           if alt_buttons:
             return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, send_button, cruise_buttons_msg_values, self.cruise_buttons_msg_cnt)
           else:
@@ -473,7 +473,7 @@ class CarController:
           #can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.SET_DECEL, self.CP.carFingerprint))
           #CC.debugTextCC = "BTN:--,T:{:.1f},C:{:.1f}".format(target, current)
         elif target > current and current < 160 and self.params.get_int("SpeedFromPCM") != 1:
-          send_button = Buttons.RES_ACCEL if diff % 2 == 0 else 0
+          send_button = Buttons.RES_ACCEL if button_send_allowed else 0
           if alt_buttons:
             return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, send_button, cruise_buttons_msg_values, self.cruise_buttons_msg_cnt)
           else:
