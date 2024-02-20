@@ -387,6 +387,8 @@ class CarInterface(CarInterfaceBase):
     else:
       ret.enableBsm = 0x58b in fingerprint[0]
 
+    print(f"$$$$ enableBsm = {ret.enableBsm}")
+
     # *** panda safety config ***
     if candidate in CANFD_CAR:
       cfgs = [get_safety_config(car.CarParams.SafetyModel.hyundaiCanfd), ]
