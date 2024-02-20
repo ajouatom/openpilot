@@ -313,12 +313,17 @@ class CarState(CarStateBase):
     ret.steeringPressed = self.update_steering_pressed(abs(ret.steeringTorque) > self.params.STEER_THRESHOLD, 5)
     ret.steerFaultTemporary = cp.vl["MDPS"]["LKA_FAULT"] != 0
 
+    # carrot test
+    left_blinker_lamp = cp.vl["BLINKERS"]["LEFT_LAMP"] or cp.vl["BLINKERS"]["LEFT_LAMP_ALT"] 
+    right_blinker_lamp = cp.vl["BLINKERS"]["RIGHT_LAMP"] or cp.vl["BLINKERS"]["RIGHT_LAMP_ALT"] 
+    ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_lamp(50, left_blinker_lamp, right_blinker_lamp)
+
     # TODO: alt signal usage may be described by cp.vl['BLINKERS']['USE_ALT_LAMP']
-    left_blinker_sig, right_blinker_sig = "LEFT_LAMP", "RIGHT_LAMP"
-    if self.CP.carFingerprint in [CAR.KONA_EV_2ND_GEN, CAR.KIA_CARNIVAL_4TH_GEN]:
-      left_blinker_sig, right_blinker_sig = "LEFT_LAMP_ALT", "RIGHT_LAMP_ALT"
-    ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_lamp(50, cp.vl["BLINKERS"][left_blinker_sig],
-                                                                      cp.vl["BLINKERS"][right_blinker_sig])
+    #left_blinker_sig, right_blinker_sig = "LEFT_LAMP", "RIGHT_LAMP"
+    #if self.CP.carFingerprint in [CAR.KONA_EV_2ND_GEN, CAR.KIA_CARNIVAL_4TH_GEN]:
+    #  left_blinker_sig, right_blinker_sig = "LEFT_LAMP_ALT", "RIGHT_LAMP_ALT"
+    #ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_lamp(50, cp.vl["BLINKERS"][left_blinker_sig],
+    #                                                                  cp.vl["BLINKERS"][right_blinker_sig])
     if self.CP.enableBsm:
       ret.leftBlindspot = cp.vl["BLINDSPOTS_REAR_CORNERS"]["FL_INDICATOR"] != 0
       ret.rightBlindspot = cp.vl["BLINDSPOTS_REAR_CORNERS"]["FR_INDICATOR"] != 0
