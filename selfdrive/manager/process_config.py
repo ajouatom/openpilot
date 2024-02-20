@@ -58,6 +58,7 @@ def enable_logging(started, params, CP: car.CarParams) -> bool:
   return not params.get_bool("NoLogging")
 
 EnableOSM = Params().get_int("EnableOSM")
+NoLogging = Params().get_bool("NoLogging")
 
 procs = [
   DaemonProcess("manage_athenad", "selfdrive.athena.manage_athenad", "AthenadPid"),
@@ -73,7 +74,7 @@ procs = [
   PythonProcess("carrotmodeld", "selfdrive.modeld.carrot.carrotmodeld", only_onroad),
   NativeProcess("encoderd", "system/loggerd", ["./encoderd"], only_onroad),
   NativeProcess("stream_encoderd", "system/loggerd", ["./encoderd", "--stream"], notcar),
-  NativeProcess("loggerd", "system/loggerd", ["./loggerd"], (enable_logging and logging)),
+  NativeProcess("loggerd", "system/loggerd", ["./loggerd"], (enable_logging and logging), enabled=not NoLogging),
   NativeProcess("modeld", "selfdrive/modeld", ["./modeld"], only_onroad),
   NativeProcess("mapsd", "selfdrive/navd", ["./mapsd"], only_onroad),
   PythonProcess("navmodeld", "selfdrive.modeld.navmodeld", only_onroad),
