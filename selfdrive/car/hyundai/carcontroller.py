@@ -448,7 +448,7 @@ class CarController:
         self.button_wait = 7 #randint(12,15)
         self.last_button_frame = self.frame
 
-      button_send_allowed = True if self.frame % 3 in [0, 1] else False
+      button_send_allowed = True if self.frame % 3 in [0] else False
       if not CC.enabled:
         self.activateCruise = 0
       if CC.enabled:
