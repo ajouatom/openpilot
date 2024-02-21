@@ -393,7 +393,7 @@ class CarState(CarStateBase):
     
     self.totalDistance += ret.vEgo * DT_CTRL 
     ret.totalDistance = self.totalDistance
-    if self.CP.flags & HyundaiFlags.NAVI_CLUSTER.value:
+    if self.CP.flags & HyundaiFlags.NAVI_CLUSTER.value and False:
       speed_limit_clu_bus_canfd = cp if self.CP.flags & HyundaiFlags.CANFD_HDA2 else cp_cam
       speedLimit = speed_limit_clu_bus_canfd.vl["CLUSTER_SPEED_LIMIT"]["SPEED_LIMIT_1"]
       speedLimitCam = 1
