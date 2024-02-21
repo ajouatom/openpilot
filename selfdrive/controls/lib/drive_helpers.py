@@ -16,7 +16,7 @@ EventName = car.CarEvent.EventName
 V_CURVE_LOOKUP_BP = [0., 1./800., 1./670., 1./560., 1./440., 1./360., 1./265., 1./190., 1./135., 1./85., 1./55., 1./30., 1./15., 1./10.]
 V_CRUVE_LOOKUP_VALS = [300, 150, 120, 110, 100, 90, 80, 70, 60, 50, 40, 30, 20, 10]
 #V_CRUVE_LOOKUP_VALS = [300, 150, 120, 110, 100, 90, 80, 70, 60, 50, 45, 35, 30, 20]
-MIN_CURVE_SPEED = 20. * CV.KPH_TO_MS
+MIN_CURVE_SPEED = 10. * CV.KPH_TO_MS
 
 
 # WARNING: this value was determined based on the model's training distribution,
