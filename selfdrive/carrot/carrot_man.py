@@ -57,21 +57,25 @@ class CarrotMan:
         }
         socket.send(json.dumps(response).encode('utf-8'))
       else:
+        print("carrot_man")
+        if isOnroadCount == 300:
+          self.make_tmux_data()
         if isOnroadCount > 300 and not is_tmux_sent and networkConnected:
           self.send_tmux("Ekdrmsvkdlffjt7710", "onroad")
           is_tmux_sent = True
         if self.params.get_bool("CarrotException") and networkConnected:
           self.params.put_bool("CarrotException", False)
+          self.make_tmux_data()
           self.send_tmux("Ekdrmsvkdlffjt7710", "exception")
 
-  
-  def send_tmux(self, ftp_password, tmux_why):
-
+  def make_tmux_data(self):
     try:
       result = subprocess.run("rm /data/media/tmux.log; tmux capture-pane -pq -S-1000 > /data/media/tmux.log", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=False)
     except Exception as e:
       print("TMUX creation error")
       return
+
+  def send_tmux(self, ftp_password, tmux_why):
 
     ftp_server = "shind0.synology.me"
     ftp_port = 8021
