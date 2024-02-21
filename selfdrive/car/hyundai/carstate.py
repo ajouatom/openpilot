@@ -394,13 +394,11 @@ class CarState(CarStateBase):
     self.totalDistance += ret.vEgo * DT_CTRL 
     ret.totalDistance = self.totalDistance
     if self.CP.flags & HyundaiFlags.NAVI_CLUSTER.value:
+      speedLimit = 0
       speed_limit_clu_bus_canfd = cp if self.CP.flags & HyundaiFlags.CANFD_HDA2 else cp_cam
       if "CLUSTER_SPEED_LIMIT" in speed_limit_clu_bus_canfd.vl:
         speedLimit = speed_limit_clu_bus_canfd.vl["CLUSTER_SPEED_LIMIT"]["SPEED_LIMIT_1"]
-        if speedLimit > 0:
-          print("speedLimit = {}".format(speedLimit))
       else:
-        speedLimit = 0
         if "CLUSTER_SPEED_LIMIT" in cp.vl:
           print("CLUSTER_SPEED_LIMIT in cp")
         elif "CLUSTER_SPEED_LIMIT" in cp_cam.vl:
@@ -557,6 +555,9 @@ class CarState(CarStateBase):
         ("SCC_CONTROL", 50),
       ]
 
+    if CP.flags & HyundaiFlags.CANFD_HDA2 and HyundaiFlags.NAVI_CLUSTER.value:
+      messages.append(("CLUSTER_SPEED_LIMIT", 10))
+
     return CANParser(DBC[CP.carFingerprint]["pt"], messages, CanBus(CP).ECAN)
 
   @staticmethod
@@ -569,5 +570,8 @@ class CarState(CarStateBase):
       messages += [
         ("SCC_CONTROL", 50),
       ]
+
+    if not (CP.flags & HyundaiFlags.CANFD_HDA2) and HyundaiFlags.NAVI_CLUSTER.value:
+      messages.append(("CLUSTER_SPEED_LIMIT", 10))
 
     return CANParser(DBC[CP.carFingerprint]["pt"], messages, CanBus(CP).CAM)
