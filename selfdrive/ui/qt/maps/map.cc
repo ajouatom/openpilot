@@ -197,6 +197,7 @@ void MapWindow::updateState(const UIState &s) {
     }
   }
 
+  bool allow_open = false;  // carrot
   if (sm.updated("navRoute") && sm["navRoute"].getNavRoute().getCoordinates().size()) {
     auto nav_dest = coordinate_from_param("NavDestination");
 #if 0
@@ -205,7 +206,7 @@ void MapWindow::updateState(const UIState &s) {
 #else
     // carrot: 왜? 경로가 바뀌었는데 목적지만 비교? navRoute가 수신되면 무조건 해야지.. 보내는곳은 만들어서 보냈는데..
     std::exchange(last_valid_nav_dest, nav_dest);
-    bool allow_open = nav_dest && !isVisible();
+    allow_open = nav_dest && !isVisible();
 #endif
 
     allow_open = true; // carrot : 왜? 경로가 바뀌었는데?

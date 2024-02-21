@@ -382,11 +382,13 @@ class CarInterface(CarInterfaceBase):
       print(f"$$$$$ CanFD ECAN = {CAN.ECAN}")
       if 0x1fa in fingerprint[CAN.ECAN]:
         ret.flags |= HyundaiFlags.NAVI_CLUSTER.value
+        print("$$$$ NaviCluster = True")
     else:
       ret.enableBsm = 0x58b in fingerprint[0]
 
       if 1348 in fingerprint[0]:
         ret.flags |= HyundaiFlags.NAVI_CLUSTER.value
+        print("$$$$ NaviCluster = True")
       if 1157 in fingerprint[0] or 1157 in fingerprint[2]:
         ret.flags |= HyundaiFlags.HAS_LFAHDA.value
       if 913 in fingerprint[0]:
