@@ -346,7 +346,7 @@ class RouteEngine:
       for path in self.route_geometry:
         coords += [c.as_dict() for c in path]
 
-    print(coords)
+    #print(coords)
     msg = messaging.new_message('navRoute', valid=True)
     msg.navRoute.coordinates = coords
     self.pm.send('navRoute', msg)
