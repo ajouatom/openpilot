@@ -38,13 +38,6 @@ class CarrotMan:
     while True:
       sm.update(0)
 
-      isOnroadCount = isOnroadCount + 1 if self.params.get_bool("IsOnroad") else 0
-      if isOnroadCount == 0:
-        is_tmux_sent = False
-
-      network_type = sm['deviceState'].networkType# if not force_wifi else NetworkType.wifi
-      networkConnected = False if network_type == NetworkType.none else True
-
       socks = dict(poller.poll(100))
 
       if socket in socks and socks[socket] == zmq.POLLIN:
@@ -57,6 +50,13 @@ class CarrotMan:
         }
         socket.send(json.dumps(response).encode('utf-8'))
       else:
+        isOnroadCount = isOnroadCount + 1 if self.params.get_bool("IsOnroad") else 0
+        if isOnroadCount == 0:
+          is_tmux_sent = False
+
+        network_type = sm['deviceState'].networkType# if not force_wifi else NetworkType.wifi
+        networkConnected = False if network_type == NetworkType.none else True
+
         print("carrot_man")
         if isOnroadCount == 300:
           self.make_tmux_data()
