@@ -419,7 +419,8 @@ class CarInterface(CarInterfaceBase):
       ret.openpilotLongitudinalControl = True
       ret.radarUnavailable = False
       ret.safetyConfigs = [get_safety_config(car.CarParams.SafetyModel.hyundaiLegacy)]
-    
+
+    print(f"$$$$ LongitudinalControl = {ret.openpilotLongitudinalControl}")
     if ret.openpilotLongitudinalControl:
       ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_LONG
     if ret.flags & HyundaiFlags.HYBRID:
@@ -452,6 +453,7 @@ class CarInterface(CarInterfaceBase):
 
     if Params().get_bool("EnableAVM"): #ajouatom
       enable_avm(logcan, sendcan)
+      print("$$$$ Enable AVM = True")
 
   def _update(self, c):
     ret = self.CS.update(self.cp, self.cp_cam)
