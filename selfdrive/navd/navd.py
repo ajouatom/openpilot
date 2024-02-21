@@ -81,6 +81,7 @@ class RouteEngine:
       if ui_pid:
         if self.ui_pid and self.ui_pid != ui_pid[0]:
           cloudlog.warning("UI restarting, sending route")
+          print("########## UI restarting, sending route")
           threading.Timer(5.0, self.send_route).start()
         self.ui_pid = ui_pid[0]
 
@@ -90,6 +91,7 @@ class RouteEngine:
       pass
     else:
       if self.carrot_route_active:
+        print("########## Remove NavDestination ")
         self.params.remove("NavDestination")
       if self.carrot_route_active:
         print("################# Carrot navigation terminated(no active)... ###################")
@@ -125,6 +127,7 @@ class RouteEngine:
       return
 
     new_destination = coordinate_from_param("NavDestination", self.params)
+    print("########### recompute_route = ", new_destination)
     if new_destination is None:
       self.clear_route()
       self.reset_recompute_limits()
@@ -133,6 +136,7 @@ class RouteEngine:
     should_recompute = self.should_recompute()
     if new_destination != self.nav_destination:
       cloudlog.warning(f"Got new destination from NavDestination param {new_destination}")
+      print(f"Got new destination from NavDestination param {new_destination} {self.nav_destination}")
       should_recompute = True
 
     # Don't recompute when GPS drifts in tunnels
@@ -149,6 +153,7 @@ class RouteEngine:
 
   def calculate_route(self, destination):
     cloudlog.warning(f"Calculating route {self.last_position} -> {destination}")
+    print(f"############## Calculating route {self.last_position} -> {destination}")
     self.nav_destination = destination
 
     lang = self.params.get('LanguageSetting', encoding='utf8')
@@ -341,6 +346,7 @@ class RouteEngine:
       for path in self.route_geometry:
         coords += [c.as_dict() for c in path]
 
+    #print(coords)
     msg = messaging.new_message('navRoute', valid=True)
     msg.navRoute.coordinates = coords
     self.pm.send('navRoute', msg)
@@ -350,6 +356,7 @@ class RouteEngine:
     self.route_geometry = None
     self.step_idx = None
     self.nav_destination = None
+    print("############### clear_route")
 
   def reset_recompute_limits(self):
     self.recompute_backoff = 0
@@ -414,6 +421,8 @@ class RouteEngine:
         conn, addr = s.accept()
         with conn:
           print(f"Connected by {addr}")
+
+          self.clear_route()
 
           # 전체 데이터 크기 수신
           total_size_bytes = self.recvall(conn, 4)

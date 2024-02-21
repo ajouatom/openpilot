@@ -1030,6 +1030,19 @@
     },
     {
       "group": "시작",
+      "name": "VisionAccelRatio",
+      "title": "비젼시험",
+      "descr": "",
+      "egroup": "START",
+      "etitle": "VisionAccelTest",
+      "edescr": "",
+      "min": 100,
+      "max": 200,
+      "default": 100,
+      "unit": 1
+    },
+    {
+      "group": "시작",
       "name": "SccConnectedBus2",
       "title": "SCC배선개조 BUS2연결(0)",
       "descr": "",

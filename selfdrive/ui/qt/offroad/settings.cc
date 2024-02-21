@@ -260,7 +260,7 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   addItem(translateBtn);
 
   // Set Default Params... for HKG
-  const auto defaultSetHkgBtn = new ButtonControl(tr("Set to default(for ajouatom)"), tr("DEFAULT"), "Use this button to set to default params for me");
+  const auto defaultSetHkgBtn = new ButtonControl(tr("Set to default(TM_HEV_SCC2)"), tr("DEFAULT"), "Use this button to set to default params for TMHEV");
   connect(defaultSetHkgBtn, &ButtonControl::clicked, [this]() {
       if (!ConfirmationDialog::confirm(tr("Are you sure you want to set to default?"), tr("Execute"), this)) return;
       QProcess process;
@@ -404,7 +404,7 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
     {tr("Device"), device},
     {tr("Network"), new Networking(this)},
     {tr("Toggles"), toggles},
-    //{tr("Software"), new SoftwarePanel(this)},
+    {tr("Software"), new SoftwarePanel(this)},
     {tr("Carrot"), new CarrotPanel(this)},
     {tr("Cars"), new CarsPanel(this)},
   };

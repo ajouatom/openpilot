@@ -197,10 +197,19 @@ void MapWindow::updateState(const UIState &s) {
     }
   }
 
+  bool allow_open = false;  // carrot
   if (sm.updated("navRoute") && sm["navRoute"].getNavRoute().getCoordinates().size()) {
     auto nav_dest = coordinate_from_param("NavDestination");
+#if 0
     bool allow_open = std::exchange(last_valid_nav_dest, nav_dest) != nav_dest &&
-                      nav_dest && !isVisible();
+        nav_dest && !isVisible();
+#else
+    // carrot: 왜? 경로가 바뀌었는데 목적지만 비교? navRoute가 수신되면 무조건 해야지.. 보내는곳은 만들어서 보냈는데..
+    std::exchange(last_valid_nav_dest, nav_dest);
+    allow_open = nav_dest && !isVisible();
+#endif
+
+    allow_open = true; // carrot : 왜? 경로가 바뀌었는데?
     qWarning() << "Got new navRoute from navd. Opening map:" << allow_open;
 
     // Show map on destination set/change
@@ -272,7 +281,9 @@ void MapWindow::updateState(const UIState &s) {
     }
   }
 
-  if (sm.rcv_frame("navRoute") != route_rcv_frame) {
+  //if (sm.rcv_frame("navRoute") != route_rcv_frame) {
+  if ((sm.rcv_frame("navRoute") != route_rcv_frame) || allow_open) {        // carrot
+      clearRoute();
     qWarning() << "Updating navLayer with new route";
     auto route = sm["navRoute"].getNavRoute();
     auto route_points = capnp_coordinate_list_to_collection(route.getCoordinates());

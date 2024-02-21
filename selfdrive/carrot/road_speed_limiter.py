@@ -210,7 +210,7 @@ class RoadLimitSpeedServer:
                 address = (socket.inet_ntoa(new_ip), Port.BROADCAST_PORT)
                 sock.sendto(msg.encode(), address)
           except Exception as e:
-            print("Ex: " + str(e))
+            print("$$$$$$RoadSpeedLimiter Exception: " + str(e))
             pass
 
           time.sleep(5.)

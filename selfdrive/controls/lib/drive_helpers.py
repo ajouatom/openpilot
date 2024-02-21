@@ -13,10 +13,10 @@ from openpilot.selfdrive.carrot.carrot_functions import CarrotSpeedController
 EventName = car.CarEvent.EventName
 
 ## 국가법령정보센터: 도로설계기준
-V_CURVE_LOOKUP_BP = [0., 1./800., 1./670., 1./560., 1./440., 1./360., 1./265., 1./190., 1./135., 1./85., 1./55., 1./30., 1./15.]
-#V_CRUVE_LOOKUP_VALS = [300, 150, 120, 110, 100, 90, 80, 70, 60, 50, 40, 30, 20]
-V_CRUVE_LOOKUP_VALS = [300, 150, 120, 110, 100, 90, 80, 70, 60, 50, 45, 35, 30]
-MIN_CURVE_SPEED = 20. * CV.KPH_TO_MS
+V_CURVE_LOOKUP_BP = [0., 1./800., 1./670., 1./560., 1./440., 1./360., 1./265., 1./190., 1./135., 1./85., 1./55., 1./30., 1./15., 1./10.]
+V_CRUVE_LOOKUP_VALS = [300, 150, 120, 110, 100, 90, 80, 70, 60, 50, 40, 30, 20, 10]
+#V_CRUVE_LOOKUP_VALS = [300, 150, 120, 110, 100, 90, 80, 70, 60, 50, 45, 35, 30, 20]
+MIN_CURVE_SPEED = 10. * CV.KPH_TO_MS
 
 
 # WARNING: this value was determined based on the model's training distribution,
@@ -106,6 +106,7 @@ class VCruiseHelper:
     self.sendEvent = None
     self.activeAVM = 0
     self.v_ego_kph_prev = 0.0
+    self.gas_tok_frame = 0
 
     self.carrot = CarrotSpeedController()
 
@@ -663,6 +664,8 @@ class VCruiseHelper:
       self.gas_pressed_count_prev = self.gas_pressed_count
     else:
       gas_tok = True if 0 < self.gas_pressed_count < 60 else False
+      if gas_tok:
+        self.gas_tok_frame = self.frame
       self.gas_pressed_count = -1 if self.gas_pressed_count > 0 else self.gas_pressed_count - 1
       if self.gas_pressed_count < -1:
         self.gas_pressed_max = 0
@@ -674,7 +677,8 @@ class VCruiseHelper:
     v_cruise_kph = self._update_cruise_button(CS, v_cruise_kph, controls)
 
     ## Auto Engage/Disengage via Gas/Brake
-    if gas_tok and self.autoCruiseCancelTimer == 0:      
+    if gas_tok and (self.autoCruiseCancelTimer == 0 or (self.frame - self.gas_tok_frame) < 100):  ## 1초이내 더블 엑셀톡인경우..
+      self.autoCruiseCancelTimer = 0
       if controls.enabled:
         v_cruise_kph = self.v_cruise_speed_up(v_cruise_kph)
       elif self.autoResumeFromGasSpeed > 0:
