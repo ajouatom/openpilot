@@ -404,7 +404,7 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
     {tr("Device"), device},
     {tr("Network"), new Networking(this)},
     {tr("Toggles"), toggles},
-    //{tr("Software"), new SoftwarePanel(this)},
+    {tr("Software"), new SoftwarePanel(this)},
     {tr("Carrot"), new CarrotPanel(this)},
     {tr("Cars"), new CarsPanel(this)},
   };
