@@ -57,7 +57,6 @@ class CarrotMan:
         network_type = sm['deviceState'].networkType# if not force_wifi else NetworkType.wifi
         networkConnected = False if network_type == NetworkType.none else True
 
-        print("carrot_man")
         if isOnroadCount == 300:
           self.make_tmux_data()
         if isOnroadCount > 300 and not is_tmux_sent and networkConnected:
