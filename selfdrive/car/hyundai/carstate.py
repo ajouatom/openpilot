@@ -398,7 +398,6 @@ class CarState(CarStateBase):
       speed_limit_clu_bus_canfd = cp if self.CP.flags & HyundaiFlags.CANFD_HDA2 else cp_cam
       if "CLUSTER_SPEED_LIMIT" in speed_limit_clu_bus_canfd.vl:
         speedLimit = speed_limit_clu_bus_canfd.vl["CLUSTER_SPEED_LIMIT"]["SPEED_LIMIT_1"]
-        print("speedLimit = {}".format(speedLimit))
       else:
         if "CLUSTER_SPEED_LIMIT" in cp.vl:
           print("CLUSTER_SPEED_LIMIT in cp")
