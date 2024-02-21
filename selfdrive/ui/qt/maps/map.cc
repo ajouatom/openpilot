@@ -283,6 +283,7 @@ void MapWindow::updateState(const UIState &s) {
 
   //if (sm.rcv_frame("navRoute") != route_rcv_frame) {
   if ((sm.rcv_frame("navRoute") != route_rcv_frame) || allow_open) {        // carrot
+      clearRoute();
     qWarning() << "Updating navLayer with new route";
     auto route = sm["navRoute"].getNavRoute();
     auto route_points = capnp_coordinate_list_to_collection(route.getCoordinates());

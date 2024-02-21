@@ -415,6 +415,8 @@ class RouteEngine:
         with conn:
           print(f"Connected by {addr}")
 
+          self.clear_route()
+
           # 전체 데이터 크기 수신
           total_size_bytes = self.recvall(conn, 4)
           if not total_size_bytes:
