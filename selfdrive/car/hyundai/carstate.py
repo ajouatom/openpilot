@@ -399,7 +399,12 @@ class CarState(CarStateBase):
         speedLimit = speed_limit_clu_bus_canfd.vl["CLUSTER_SPEED_LIMIT"]["SPEED_LIMIT_1"]
       else:
         speedLimit = 0
-        print("no CLUSTER_SPEED_LIMIT")
+        if "CLUSTER_SPEED_LIMIT" in cp.vl:
+          print("CLUSTER_SPEED_LIMIT in cp")
+        elif "CLUSTER_SPEED_LIMIT" in cp_cam.vl:
+          print("CLUSTER_SPEED_LIMIT in cp_cam")
+        else:
+          print("CLUSTER_SPEED_LIMIT none")
 
       speedLimitCam = 1
       ret.speedLimit = speedLimit if speedLimit < 255 and speedLimitCam == 1 else 0
