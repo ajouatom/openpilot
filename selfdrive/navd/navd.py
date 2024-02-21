@@ -136,7 +136,7 @@ class RouteEngine:
     should_recompute = self.should_recompute()
     if new_destination != self.nav_destination:
       cloudlog.warning(f"Got new destination from NavDestination param {new_destination}")
-      print(f"Got new destination from NavDestination param {new_destination}")
+      print(f"Got new destination from NavDestination param {new_destination} {self.nav_destination}")
       should_recompute = True
 
     # Don't recompute when GPS drifts in tunnels
@@ -356,6 +356,7 @@ class RouteEngine:
     self.route_geometry = None
     self.step_idx = None
     self.nav_destination = None
+    print("############### clear_route")
 
   def reset_recompute_limits(self):
     self.recompute_backoff = 0
