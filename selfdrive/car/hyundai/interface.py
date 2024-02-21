@@ -344,17 +344,12 @@ class CarInterface(CarInterfaceBase):
       ret.longitudinalTuning.kiV = [0.0]
       ret.experimentalLongitudinalAvailable = candidate not in (CANFD_UNSUPPORTED_LONGITUDINAL_CAR | CANFD_RADAR_SCC_CAR)
       ret.experimentalLongitudinalAvailable = True # carrot: 비전 롱컨이라도 되도록... 될까?
+
+       
     else:
       ret.longitudinalTuning.kpV = [0.5]
       ret.longitudinalTuning.kiV = [0.0]
       ret.experimentalLongitudinalAvailable = candidate not in (UNSUPPORTED_LONGITUDINAL_CAR | CAMERA_SCC_CAR)
-
-      if 1348 in fingerprint[0]:
-        ret.flags |= HyundaiFlags.NAVI_CLUSTER.value
-      if 1157 in fingerprint[0] or 1157 in fingerprint[2]:
-        ret.flags |= HyundaiFlags.HAS_LFAHDA.value
-      if 913 in fingerprint[0]:
-        ret.flags |= HyundaiFlags.HAS_LFA_BUTTON.value
        
       if Params().get_bool("SccConnectedBus2"):
         ret.flags |= HyundaiFlags.SCC_BUS2.value
@@ -385,8 +380,17 @@ class CarInterface(CarInterfaceBase):
     if candidate in CANFD_CAR:
       ret.enableBsm = 0x1e5 in fingerprint[CAN.ECAN]
       print(f"$$$$$ CanFD ECAN = {CAN.ECAN}")
+      if 0x1fa in fingerprint[CAN.ECAN]:
+        ret.flags |= HyundaiFlags.NAVI_CLUSTER.value
     else:
       ret.enableBsm = 0x58b in fingerprint[0]
+
+      if 1348 in fingerprint[0]:
+        ret.flags |= HyundaiFlags.NAVI_CLUSTER.value
+      if 1157 in fingerprint[0] or 1157 in fingerprint[2]:
+        ret.flags |= HyundaiFlags.HAS_LFAHDA.value
+      if 913 in fingerprint[0]:
+        ret.flags |= HyundaiFlags.HAS_LFA_BUTTON.value
 
     print(f"$$$$ enableBsm = {ret.enableBsm}")
 

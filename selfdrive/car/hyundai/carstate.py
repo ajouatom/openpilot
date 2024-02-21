@@ -389,6 +389,25 @@ class CarState(CarStateBase):
 
     # 측정값을 그냥 넣음... test
     ret.vCluRatio = 0.945
+    
+    
+    self.totalDistance += ret.vEgo * DT_CTRL 
+    ret.totalDistance = self.totalDistance
+    if self.CP.flags & HyundaiFlags.NAVI_CLUSTER.value:
+      speed_limit_clu_bus_canfd = cp if self.CP.flags & HyundaiFlags.CANFD_HDA2 else cp_cam
+      speedLimit = speed_limit_clu_bus_canfd.vl["CLUSTER_SPEED_LIMIT"]["SPEED_LIMIT_1"]
+      speedLimitCam = 1
+      ret.speedLimit = speedLimit if speedLimit < 255 and speedLimitCam == 1 else 0
+      if ret.speedLimit>0 and not ret.gasPressed:
+        if self.speedLimitDistance <= self.totalDistance:
+          self.speedLimitDistance = self.totalDistance + ret.speedLimit * 6  
+        self.speedLimitDistance = max(self.totalDistance+1, self.speedLimitDistance) 
+      else:
+        self.speedLimitDistance = self.totalDistance
+      ret.speedLimitDistance = self.speedLimitDistance - self.totalDistance
+    else:
+      ret.speedLimit = 0
+      ret.speedLimitDistance = 0
 
     return ret
 
