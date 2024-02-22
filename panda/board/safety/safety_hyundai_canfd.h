@@ -368,10 +368,9 @@ static safety_config hyundai_canfd_init(uint16_t param) {
   hyundai_canfd_hda2_alt_steering = GET_FLAG(param, HYUNDAI_PARAM_CANFD_HDA2_ALT_STEERING);
 
   // no long for radar-SCC HDA1 yet
-  if (!hyundai_canfd_hda2 && !hyundai_camera_scc) {
-    hyundai_longitudinal = false;
-  }
-
+  //if (!hyundai_canfd_hda2 && !hyundai_camera_scc) {
+  //    hyundai_longitudinal = false;
+  //}
   safety_config ret;
   if (hyundai_longitudinal) {
     if (hyundai_canfd_hda2) {
