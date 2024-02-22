@@ -383,6 +383,8 @@ class CarInterface(CarInterfaceBase):
       if 0x1fa in fingerprint[CAN.ECAN]:
         ret.flags |= HyundaiFlags.NAVI_CLUSTER.value
         print("$$$$ NaviCluster = True")
+      else:
+        print("$$$$ NaviCluster = False")
     else:
       ret.enableBsm = 0x58b in fingerprint[0]
 
