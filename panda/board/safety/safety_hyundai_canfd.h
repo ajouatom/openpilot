@@ -368,20 +368,24 @@ static safety_config hyundai_canfd_init(uint16_t param) {
   hyundai_canfd_hda2_alt_steering = GET_FLAG(param, HYUNDAI_PARAM_CANFD_HDA2_ALT_STEERING);
 
   // no long for radar-SCC HDA1 yet
-  if (!hyundai_canfd_hda2 && !hyundai_camera_scc) {
-    hyundai_longitudinal = false;
-  }
-
+  //if (!hyundai_canfd_hda2 && !hyundai_camera_scc) {
+  //    hyundai_longitudinal = false;
+  //}
   safety_config ret;
   if (hyundai_longitudinal) {
     if (hyundai_canfd_hda2) {
+        print("hyundai safety canfd_hda2 long\n");
         if (hyundai_canfd_alt_buttons) {          // carrot : for CANIVAL 4TH HDA2
+            print("hyundai safety canfd_hda2 long_alt_buttons\n");
             ret = BUILD_SAFETY_CFG(hyundai_canfd_hda2_long_alt_buttons_rx_checks, HYUNDAI_CANFD_HDA2_LONG_TX_MSGS);
         }
         else {
             ret = BUILD_SAFETY_CFG(hyundai_canfd_hda2_long_rx_checks, HYUNDAI_CANFD_HDA2_LONG_TX_MSGS);
         }
     } else {
+      if(hyundai_canfd_alt_buttons) print("hyundai safety canfd_hda1 long alt_buttons\n");
+      else print("hyundai safety canfd_hda1 long general_buttons\n");
+
       ret = hyundai_canfd_alt_buttons ? BUILD_SAFETY_CFG(hyundai_canfd_long_alt_buttons_rx_checks, HYUNDAI_CANFD_HDA1_TX_MSGS) : \
                                         BUILD_SAFETY_CFG(hyundai_canfd_long_rx_checks, HYUNDAI_CANFD_HDA1_TX_MSGS);
     }
