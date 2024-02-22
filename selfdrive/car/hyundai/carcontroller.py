@@ -472,7 +472,7 @@ class CarController:
     self.prev_clu_speed = current
     if (self.frame - self.last_button_frame) > self.button_wait:
       self.button_spamming_count = self.button_spamming_count + 1 if Buttons.RES_ACCEL else self.button_spamming_count - 1
-      self.last_button_frame = self.frame
+      #self.last_button_frame = self.frame
       if alt_buttons:
         print("Spamming=", self.button_spamming_count)
         return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, send_button, cruise_buttons_msg_values, self.cruise_buttons_msg_cnt)
