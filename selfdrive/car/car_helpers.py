@@ -210,6 +210,8 @@ def get_car(logcan, sendcan, experimental_long_allowed, num_pandas=1):
   CP.fingerprintSource = source
   CP.fuzzyFingerprint = not exact_match
 
+  print("Carrot GitBranch = {}, {}".format(Params().get("GitBranch"), Params().get("GitCommitDate")))
+
   return CarInterface(CP, CarController, CarState), CP
 
 def write_car_param(fingerprint="mock"):

@@ -136,7 +136,7 @@ class CarrotMan:
 
 def main():
   print("CarrotManager Started")
-  print("Carrot GitBranch = {}, {}".format(Params().get("GitBranch"), Params().get("GitCommitDate")))
+  #print("Carrot GitBranch = {}, {}".format(Params().get("GitBranch"), Params().get("GitCommitDate")))
   carrot_man = CarrotMan()
   while True:
     try:
