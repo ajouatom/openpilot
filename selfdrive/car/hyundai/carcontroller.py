@@ -462,9 +462,9 @@ class CarController:
 
     if CS.cruise_buttons[-1] != Buttons.NONE or (abs(self.button_spamming_count) > 4 and abs(self.prev_clu_speed - target) < 1):
       self.last_button_frame = self.frame
-      self.button_wait = 15
+      self.button_wait = 25
       self.button_spamming_count = 0
-    elif abs(self.button_spamming_count) > 10:
+    elif abs(self.button_spamming_count) > 40:
       self.last_button_frame = self.frame
       self.button_wait = 2
       self.button_spamming_count = 0
