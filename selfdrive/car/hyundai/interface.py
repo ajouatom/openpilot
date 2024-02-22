@@ -406,12 +406,16 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs = cfgs
 
       if ret.flags & HyundaiFlags.CANFD_HDA2:
+        print("!!!!!!!!!Panda: FLAG_HYUNDAI_CANFD_HDA2")
         ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_CANFD_HDA2
         if ret.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING:
+          print("!!!!!!!!!Panda: FLAG_HYUNDAI_CANFD_HDA2_ALT_STEERING")
           ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_CANFD_HDA2_ALT_STEERING
       if ret.flags & HyundaiFlags.CANFD_ALT_BUTTONS:
+        print("!!!!!!!!!Panda: FLAG_HYUNDAI_CANFD_ALT_BUTTONS")
         ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_CANFD_ALT_BUTTONS
       if ret.flags & HyundaiFlags.CANFD_CAMERA_SCC:
+        print("!!!!!!!!!Panda: FLAG_HYUNDAI_CAMERA_SCC")
         ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_CAMERA_SCC
     else:
       if candidate in LEGACY_SAFETY_MODE_CAR:
