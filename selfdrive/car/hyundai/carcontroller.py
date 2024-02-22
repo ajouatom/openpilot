@@ -366,7 +366,7 @@ class CarController:
             self.button_spamming_count = 0
           elif abs(self.button_spamming_count) > 6:
             self.last_button_frame = self.frame
-            self.button_wait = 8
+            self.button_wait = 2
             self.button_spamming_count = 0
 
           self.prev_clu_speed = current
@@ -466,7 +466,7 @@ class CarController:
       self.button_spamming_count = 0
     elif abs(self.button_spamming_count) > 6:
       self.last_button_frame = self.frame
-      self.button_wait = 8
+      self.button_wait = 2
       self.button_spamming_count = 0
 
     self.prev_clu_speed = current
