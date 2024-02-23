@@ -82,7 +82,7 @@ class CarState(CarStateBase):
     ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
     ret.vEgoCluster = ret.vEgo * 1.025  # minimum of all the cars
 
-    ret.vCluRatio = 0.98
+    ret.vCluRatio = 0.96
 
     ret.standstill = abs(ret.vEgoRaw) < 1e-3
 
