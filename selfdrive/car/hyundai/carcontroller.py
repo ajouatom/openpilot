@@ -442,12 +442,13 @@ class CarController:
     speed_diff = self.prev_clu_speed - current
     self.button_spamming_speed_diff += speed_diff
     spamming_max = 8
-    if CS.cruise_buttons[-1] != Buttons.NONE or (abs(self.button_spamming_count) > spamming_max and abs(speed_diff) < 1) or abs(self.button_spamming_speed_diff) > 5:
+    #if CS.cruise_buttons[-1] != Buttons.NONE or (abs(self.button_spamming_count) > spamming_max and abs(speed_diff) < 1) or abs(self.button_spamming_speed_diff) > 5:
+    if CS.cruise_buttons[-1] != Buttons.NONE or abs(self.button_spamming_speed_diff) > 5:
       self.last_button_frame = self.frame
       self.button_wait = 30
       self.button_spamming_count = 0
       self.button_spamming_speed_diff = 0
-    elif abs(self.button_spamming_count) >= spamming_max:
+    elif abs(self.button_spamming_count) >= spamming_max or abs(speed_diff) > 0:
       self.last_button_frame = self.frame
       self.button_wait = 6
       self.button_spamming_count = 0
