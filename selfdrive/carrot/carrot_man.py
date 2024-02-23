@@ -137,6 +137,7 @@ class CarrotMan:
         #print(echo)
         socket.send(echo.encode())
       elif 'tmux_send' in json_obj:
+        self.make_tmux_data()
         self.send_tmux(json_obj['tmux_send'], "tmux_send")
         echo = json.dumps({"tmux_send": json_obj['tmux_send'], "result": "success"})
         socket.send(echo.encode())
