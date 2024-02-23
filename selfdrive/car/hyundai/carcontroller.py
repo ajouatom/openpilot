@@ -476,6 +476,7 @@ class CarController:
       self.button_spamming_speed_diff = 0
 
     self.prev_clu_speed = current
+    print("speed_diff={:.1f}, send_button={}, button_wait={}, count={}".format(speed_diff, send_button, self.button_wait, self.button_spamming_count))
     if (self.frame - self.last_button_frame) > self.button_wait:
       self.button_spamming_count = self.button_spamming_count + 1 if Buttons.RES_ACCEL else self.button_spamming_count - 1
       #self.last_button_frame = self.frame
