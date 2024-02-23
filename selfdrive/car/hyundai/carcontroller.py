@@ -79,6 +79,7 @@ class CarController:
     self.cruise_buttons_msg_cnt = 0
     self.button_spamming_count = 0
     self.prev_clu_speed = 0
+    self.button_spamming_speed_diff = 0
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -457,24 +458,27 @@ class CarController:
 
     if send_button == 0:
       self.button_spamming_count = 0
+      self.button_spamming_speed_diff = 0
       self.prev_clu_speed = current      
       return None
 
-    if CS.cruise_buttons[-1] != Buttons.NONE or (abs(self.button_spamming_count) > 4 and abs(self.prev_clu_speed - target) < 1):
+    speed_diff = self.prev_clu_speed - target
+    self.button_spamming_speed_diff += speed_diff
+    if CS.cruise_buttons[-1] != Buttons.NONE or (abs(self.button_spamming_count) > 4 and abs(speed_diff) < 1) or abs(self.button_spamming_speed_diff) > 5:
       self.last_button_frame = self.frame
       self.button_wait = 30
       self.button_spamming_count = 0
+      self.button_spamming_speed_diff = 0
     elif abs(self.button_spamming_count) > 80:
       self.last_button_frame = self.frame
       self.button_wait = 2
       self.button_spamming_count = 0
+      self.button_spamming_speed_diff = 0
 
     self.prev_clu_speed = current
     if (self.frame - self.last_button_frame) > self.button_wait:
       self.button_spamming_count = self.button_spamming_count + 1 if Buttons.RES_ACCEL else self.button_spamming_count - 1
       #self.last_button_frame = self.frame
-      if self.frame % 2 == 0:
-        return None
       if alt_buttons:
         return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, send_button, cruise_buttons_msg_values, self.cruise_buttons_msg_cnt)
       else:
