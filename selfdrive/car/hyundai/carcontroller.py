@@ -418,11 +418,13 @@ class CarController:
               for _ in range(20):
                 can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL))
             self.last_button_frame = self.frame
-        else:
-          dat = self.canfd_speed_control_pcm(CC, CS, self.cruise_buttons_msg_values)
-          if dat is not None:
-            can_sends.append(dat)
-          self.cruise_buttons_msg_cnt += 1
+
+      ## button 스패밍을 안했을때...
+      if self.last_button_frame != self.frame:
+        dat = self.canfd_speed_control_pcm(CC, CS, self.cruise_buttons_msg_values)
+        if dat is not None:
+          can_sends.append(dat)
+        self.cruise_buttons_msg_cnt += 1
 
     return can_sends
 
@@ -464,14 +466,14 @@ class CarController:
 
     speed_diff = self.prev_clu_speed - current
     self.button_spamming_speed_diff += speed_diff
-    if CS.cruise_buttons[-1] != Buttons.NONE or (abs(self.button_spamming_count) > 4 and abs(speed_diff) < 1) or abs(self.button_spamming_speed_diff) > 5:
+    if CS.cruise_buttons[-1] != Buttons.NONE or (abs(self.button_spamming_count) > 8 and abs(speed_diff) < 1) or abs(self.button_spamming_speed_diff) > 5:
       self.last_button_frame = self.frame
       self.button_wait = 30
       self.button_spamming_count = 0
       self.button_spamming_speed_diff = 0
-    elif abs(self.button_spamming_count) > 80:
+    elif abs(self.button_spamming_count) > 4:
       self.last_button_frame = self.frame
-      self.button_wait = 2
+      self.button_wait = 20
       self.button_spamming_count = 0
       self.button_spamming_speed_diff = 0
 
