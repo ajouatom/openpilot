@@ -84,7 +84,7 @@ class CarD:
       experimental_long_allowed = self.params.get_bool("ExperimentalLongitudinalEnabled")
       self.CI, self.CP = get_car(self.can_sock, self.pm.sock['sendcan'], experimental_long_allowed, num_pandas)
     else:
-      self.CI, self.CP = CI, CI.CP
+      self.CI, self.CP, self.CS = CI, CI.CP, CI.CS
 
     # set alternative experiences from parameters
     disengage_on_accelerator = self.params.get_bool("DisengageOnAccelerator")
@@ -181,6 +181,7 @@ class Controls:
 
     self.CP = self.card.CP
     self.CI = self.card.CI
+    self.CS = self.card.CI.CS
 
     config_realtime_process(4, Priority.CTRL_HIGH)
 
@@ -909,7 +910,7 @@ class Controls:
 
     ## ajouatom
     no_entry_events = self.events.contains(ET.NO_ENTRY)
-    hudControl.cruiseGap = CS.longitudinal_personality + 1# if CS is not None else 1
+    hudControl.cruiseGap = self.CS.longitudinal_personality + 1 if self.CS is not None else 1
     lead_one = self.sm['radarState'].leadOne
     hudControl.objDist = int(lead_one.dRel) if lead_one.status else 0
     hudControl.objRelSpd = lead_one.vRel if lead_one.status else 0
