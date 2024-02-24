@@ -772,8 +772,28 @@ void DrawApilot::makeLeadData(const UIState* s) {
     const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
     auto lp_source = lp.getLongitudinalPlanSource();
     auto lead_radar = sm["radarState"].getRadarState().getLeadOne();
-    if(lp_source == cereal::LongitudinalPlan::LongitudinalPlanSource::LEAD1)
+
+    switch (lp_source) {
+    case cereal::LongitudinalPlan::LongitudinalPlanSource::CRUISE:
+        m_lpSource = 0;
+        break;
+    case cereal::LongitudinalPlan::LongitudinalPlanSource::LEAD0:
+        m_lpSource = 1;
+        break;
+    case cereal::LongitudinalPlan::LongitudinalPlanSource::LEAD1:
         lead_radar = sm["radarState"].getRadarState().getLeadTwo();
+        m_lpSource = 2;
+        break;
+    case cereal::LongitudinalPlan::LongitudinalPlanSource::LEAD2:
+        m_lpSource = 3;
+        break;
+    case cereal::LongitudinalPlan::LongitudinalPlanSource::E2E:
+        m_lpSource = 4;
+        break;
+    default:
+        m_lpSource = -1;
+        break;
+    }
     auto lead_one = sm["modelV2"].getModelV2().getLeadsV3()[0];
     bool radar_detected = lead_radar.getStatus() && lead_radar.getRadar();
     m_fLeadDistRadar = radar_detected ? lead_radar.getDRel() : 0;
@@ -1643,6 +1663,8 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
         ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
 
     }
+    sprint(str, "%d", getLpSource());
+    ui_draw_text(s, x, disp_y-100, str, 30, COLOR_WHITE, BOLD);
 
     // 타겟하단: 롱컨상태표시
     if (true) {
