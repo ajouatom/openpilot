@@ -83,6 +83,7 @@ class CarD:
       num_pandas = len(messaging.recv_one_retry(self.sm.sock['pandaStates']).pandaStates)
       experimental_long_allowed = self.params.get_bool("ExperimentalLongitudinalEnabled")
       self.CI, self.CP = get_car(self.can_sock, self.pm.sock['sendcan'], experimental_long_allowed, num_pandas)
+      self.CS = self.CI.CS
     else:
       self.CI, self.CP, self.CS = CI, CI.CP, CI.CS
 
