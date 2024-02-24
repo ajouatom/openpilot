@@ -70,6 +70,7 @@ class CarrotMan:
   def make_tmux_data(self):
     try:
       result = subprocess.run("rm /data/media/tmux.log; tmux capture-pane -pq -S-1000 > /data/media/tmux.log", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=False)
+      result = subprocess.run("/data/openpilot/selfdrive/apilot.py", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=False)
     except Exception as e:
       print("TMUX creation error")
       return
@@ -104,6 +105,12 @@ class CarrotMan:
     except Exception as e:
       print(f"ftp sending error...: {e}")
 
+    try:
+      with open("/data/backup_params.json", "rb") as file:
+        ftp.storbinary(f'STOR settings.json', file)
+    except Exception as e:
+      print(f"ftp params sending error...: {e}")
+
     ftp.quit()
 
   def carrot_cmd_zmq(self):
@@ -130,6 +137,7 @@ class CarrotMan:
         #print(echo)
         socket.send(echo.encode())
       elif 'tmux_send' in json_obj:
+        self.make_tmux_data()
         self.send_tmux(json_obj['tmux_send'], "tmux_send")
         echo = json.dumps({"tmux_send": json_obj['tmux_send'], "result": "success"})
         socket.send(echo.encode())

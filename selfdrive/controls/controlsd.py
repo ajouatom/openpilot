@@ -257,6 +257,7 @@ class Controls:
     if not self.nn_alert_shown and self.sm.frame % 1000 == 0 and self.CP.lateralTuning.which() == 'torque' and self.CI.has_lateral_torque_nn:
       self.nn_alert_shown = True
       self.events.add(EventName.torqueNNLoad)
+      print("=================== NNFF loaded")
 
     # Block resume if cruise never previously enabled
     resume_pressed = any(be.type in (ButtonType.accelCruise, ButtonType.resumeCruise) for be in CS.buttonEvents)
@@ -380,8 +381,12 @@ class Controls:
       self.events.add(EventName.usbError)
     if CS.canTimeout:
       self.events.add(EventName.canBusMissing)
+      print("CanBusMissing")
+      self.params.put_bool_nonblocking("CarrotException", True)
     elif not CS.canValid:
       self.events.add(EventName.canError)
+      print("CanError")
+      self.params.put_bool_nonblocking("CarrotException", True)
 
     # generic catch-all. ideally, a more specific event should be added above instead
     can_rcv_timeout = self.can_rcv_timeout_counter >= 5

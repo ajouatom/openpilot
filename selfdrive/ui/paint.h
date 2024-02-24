@@ -55,12 +55,14 @@ protected:
 	float	m_fStopDist;
 	bool	m_bLeadStatus;
 	bool	m_bLeadSCC;
+	int		m_lpSource;
 	float	getRadarDist() { return m_fLeadDistRadar; }
 	float	getVisionDist() { return m_fLeadDistVision; }
 	float	getStopDist() { return m_fStopDist; }
 	bool	isRadarDetected() { return m_fLeadDistRadar > 0.0; }
 	bool	isLeadDetected() { return m_bLeadStatus; }
 	bool	isLeadSCC() { return m_bLeadSCC; }
+	int		getLpSource() { return m_lpSource; }
 	void	makeLeadData(const UIState* s);
 
 	void	drawBackground(const UIState* s);

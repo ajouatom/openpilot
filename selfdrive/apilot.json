@@ -510,6 +510,32 @@
     },
     {
       "group": "버튼설정",
+      "name": "CruiseButtonTest1",
+      "title": "크루즈버튼스팸쏘기(8)",
+      "descr": "",
+      "egroup": "BUTN",
+      "etitle": "Cruise Button spam1(0)",
+      "edescr": "",
+      "min": 2,
+      "max": 20,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "버튼설정",
+      "name": "CruiseButtonTest2",
+      "title": "크루즈버튼스팸쉬기(30)",
+      "descr": "",
+      "egroup": "BUTN",
+      "etitle": "Cruise Button spam2(0)",
+      "edescr": "",
+      "min": 2,
+      "max": 200,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "버튼설정",
       "name": "CruiseSpeedUnit",
       "title": "크루즈버튼속도단위(10)",
       "descr": "",

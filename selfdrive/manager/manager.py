@@ -114,6 +114,8 @@ def manager_init() -> None:
     ("ALeadTauStart", "30"), 
     ("TrafficStopMode", "1"),         
     ("CruiseButtonMode", "0"),      
+    ("CruiseButtonTest1", "8"),      
+    ("CruiseButtonTest2", "30"),      
     ("CruiseSpeedUnit", "10"),      
     ("MyDrivingMode", "3"),      
     ("MySafeModeFactor", "80"),      

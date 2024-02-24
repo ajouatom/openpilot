@@ -576,7 +576,7 @@ class CarStateBase(ABC):
     #  self.personality_updated = self.longitudinal_personality
     #self.distance_button_timer = self.distance_button_timer + 1 if distance_button_pressed else 0
 
-    if pcm_personality is not None:
+    if False and pcm_personality is not None:
       if self.longitudinal_personality != pcm_personality:
         self.longitudinal_personality = pcm_personality
         Params().put_nonblocking("LongitudinalPersonality", str(pcm_personality))
