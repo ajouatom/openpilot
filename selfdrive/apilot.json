@@ -590,7 +590,7 @@
       "group": "시작",
       "name": "SpeedFromPCM",
       "title": "PCM차량속도제어",
-      "descr": "1:속도를 차량에서 가져옵니다, 0,2: OP속도",
+      "descr": "1:차량속도이용(감속제어안함), 0: 신호/커브/카메라 감속, 2: 커브/카메라 감속",
       "egroup": "START",
       "etitle": "Speed from PCM",
       "edescr": "1: Cruise speed control from Car, 0,2: Speed OP",
