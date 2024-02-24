@@ -321,7 +321,7 @@ class CarController:
       if CC.cruiseControl.cancel:
         print("cruiseControl.cancel")
         can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.CANCEL, self.CP.carFingerprint))
-      elif CC.cruiseControl.resume:
+      elif False: #CC.cruiseControl.resume:
         if self.CP.carFingerprint in LEGACY_SAFETY_MODE_CAR:            
           if self.resume_wait_timer > 0:
             self.resume_wait_timer -= 1
@@ -339,9 +339,8 @@ class CarController:
             #can_sends.extend([hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint)] * 25)
             can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
             self.last_button_frame = self.frame
-      else:
-        self.resume_wait_timer = 0
-        self.resume_cnt = 0
+
+      if self.last_button_frame != self.frame:
         send_button = self.make_spam_button(CC, CS)
         if send_button > 0:
           can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, send_button, self.CP.carFingerprint))
@@ -376,7 +375,7 @@ class CarController:
             self.last_button_frame = self.frame
 
         # cruise standstill resume
-        elif CC.cruiseControl.resume:
+        elif False: #CC.cruiseControl.resume:
           if (self.frame - self.last_button_frame) * DT_CTRL > 0.1:
             if self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS:
               # TODO: resume for alt button cars
@@ -429,6 +428,8 @@ class CarController:
       if not CS.out.cruiseState.enabled:
         if (hud_control.leadVisible or current > 10.0):
           send_button = Buttons.RES_ACCEL
+      elif CC.cruiseControl.resume:
+        send_button = Buttons.RES_ACCEL
       elif target < current and current>= 31 and self.params.get_int("SpeedFromPCM") != 1:
         send_button = Buttons.SET_DECEL
       elif target > current and current < 160 and self.params.get_int("SpeedFromPCM") != 1:
