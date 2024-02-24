@@ -92,6 +92,9 @@ class CarD:
     self.CP.alternativeExperience = 0
     if not disengage_on_accelerator:
       self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.DISABLE_DISENGAGE_ON_GAS
+          
+    if self.params.get_bool("AlwaysOnLateralEnabled"):
+      self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ENABLE_ALWAYS_ON_LATERAL
 
     car_recognized = self.CP.carName != 'mock'
     openpilot_enabled_toggle = self.params.get_bool("OpenpilotEnabledToggle")
@@ -222,8 +225,8 @@ class Controls:
 
     self.always_on_lateral = self.params.get_bool("AlwaysOnLateralEnabled")
     self.lateral_allowed = False
-    if self.always_on_lateral:
-      self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ENABLE_ALWAYS_ON_LATERAL
+    #if self.always_on_lateral:
+    #  self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ENABLE_ALWAYS_ON_LATERAL
 
     # read params
     self.disengage_on_accelerator = self.params.get_bool("DisengageOnAccelerator")
