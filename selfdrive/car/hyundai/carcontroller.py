@@ -450,7 +450,7 @@ class CarController:
       self.button_spamming_speed_diff = 0
     elif abs(self.button_spamming_count) >= spamming_max or abs(speed_diff) > 0:
       self.last_button_frame = self.frame
-      self.button_wait = 30 if abs(self.button_spamming_count) >= spamming_max else 8
+      self.button_wait = 60 if abs(self.button_spamming_count) >= spamming_max else 8
       self.button_spamming_count = 0
       self.button_spamming_speed_diff = 0
 
