@@ -909,7 +909,7 @@ class Controls:
 
     ## ajouatom
     no_entry_events = self.events.contains(ET.NO_ENTRY)
-    hudControl.cruiseGap = CS.longitudinal_personality + 1 if self.CS is not None else 1
+    hudControl.cruiseGap = CS.longitudinal_personality + 1# if CS is not None else 1
     lead_one = self.sm['radarState'].leadOne
     hudControl.objDist = int(lead_one.dRel) if lead_one.status else 0
     hudControl.objRelSpd = lead_one.vRel if lead_one.status else 0
