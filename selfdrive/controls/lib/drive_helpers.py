@@ -201,7 +201,8 @@ class VCruiseHelper:
           self.v_cruise_kph_set = CS.cruiseState.speedCluster * CV.MS_TO_KPH
         self._update_v_cruise_apilot(CS, controls)
         self.v_cruise_cluster_kph = self.v_cruise_kph
-        self._update_event_apilot(CS, controls)
+        if self.params.get_int("SpeedFromPCM") == 0:
+          self._update_event_apilot(CS, controls)
     else:
       self.v_cruise_kph = V_CRUISE_INITIAL#V_CRUISE_UNSET
       self.v_cruise_cluster_kph = V_CRUISE_INITIAL#V_CRUISE_UNSET
