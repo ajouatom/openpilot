@@ -136,15 +136,12 @@ struct CarEvent @0x9b1657f34caf3ad3 {
     turningLeft @134;
     turningRight @135;
 
+    pedalInterceptorNoBrake @136;
 
-    torqueNNLoad @136;
-
-    pedalInterceptorNoBrake @137;
-
-    personalityRelaxed @138;
-    personalityStandard @139;
-    personalityAggressive @140;
-    personalityRelaxed2 @141;
+    personalityRelaxed @137;
+    personalityStandard @138;
+    personalityAggressive @139;
+    personalityRelaxed2 @140;
 
     radarCanErrorDEPRECATED @15;
     communityFeatureDisallowedDEPRECATED @62;
@@ -595,8 +592,6 @@ struct CarParams {
     steeringAngleDeadzoneDeg @5 :Float32;
     latAccelFactor @6 :Float32;
     latAccelOffset @7 :Float32;
-    nnModelName @8 :Text;
-    nnModelFuzzyMatch @9 :Bool;
   }
 
   struct LongitudinalPIDTuning {
@@ -670,12 +665,14 @@ struct CarParams {
     body @27;
     hyundaiCanfd @28;
     volkswagenMqbEvo @29;
+    chryslerCusw @30;
   }
 
   enum SteerControlType {
     torque @0;
     angle @1;
-    curvature @2;
+
+    curvatureDEPRECATED @2;
   }
 
   enum TransmissionType {

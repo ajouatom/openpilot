@@ -331,7 +331,6 @@ std::unordered_map<std::string, uint32_t> keys = {
     { "MapboxSecretKey", PERSISTENT},
     { "SearchInput", PERSISTENT},
     { "SteerRatio", PERSISTENT },
-    { "NNFF", PERSISTENT },
     { "MuteDoor", PERSISTENT },
     { "MuteSeatbelt", PERSISTENT },
     { "LongPitch", PERSISTENT },

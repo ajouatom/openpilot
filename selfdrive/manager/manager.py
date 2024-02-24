@@ -48,7 +48,6 @@ def manager_init() -> None:
     ("SearchInput", "0"),
     ("GMapKey", "0"),
     ("SteerRatio", "0"),
-    ("NNFF", "0"),
     ("MuteDoor", "0"),
     ("MuteSeatbelt", "0"),
     ("LongPitch", "0"),
