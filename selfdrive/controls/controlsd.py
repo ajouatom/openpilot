@@ -306,7 +306,7 @@ class Controls:
 
 
     self.carrotCruiseActivate = 0 #carrot
-    self._panda_controls_allowed = False #carrot
+    self._panda_controls_not_allowed = False #carrot
     self.enable_avail = False
 
   def set_initial_state(self):
@@ -431,11 +431,16 @@ class Controls:
         safety_mismatch = pandaState.safetyModel != self.CP.safetyConfigs[i].safetyModel or \
                           pandaState.safetyParam != self.CP.safetyConfigs[i].safetyParam or \
                           pandaState.alternativeExperience != self.CP.alternativeExperience
+        if safety_mismatch:
+          print(f"safetyModel{i} =  {pandaState.safetyMode}:{self.CP.safetyConfigs[i].safetyModel}")
+          print(f"safetyParams{i} = {pandaState.safetyParam}:{self.CP.safetyConfigs[i].safetyParam}")
+          print(f"alterExperience{i} = {pandaState.alternativeExperience}:{self.CP.alternativeExperience}")
       else:
         safety_mismatch = pandaState.safetyModel not in IGNORED_SAFETY_MODES
 
       # safety mismatch allows some time for boardd to set the safety mode and publish it back from panda
       if (safety_mismatch and self.sm.frame*DT_CTRL > 10.) or pandaState.safetyRxChecksInvalid or self.mismatch_counter >= 200:
+        print(f"safetyRxChecksInvalid = {pandaState.safetyRxChecksInvalid}, mismatch_counter = {self.mismatch_counter}")
         self.events.add(EventName.controlsMismatch)
 
       if log.PandaState.FaultType.relayMalfunction in pandaState.faults:
@@ -592,9 +597,9 @@ class Controls:
       self.mismatch_counter = 0
 
     # All pandas not in silent mode must have controlsAllowed when openpilot is enabled
-    self._panda_controls_allowed = any(not ps.controlsAllowed for ps in self.sm['pandaStates']
+    self._panda_controls_not_allowed = any(not ps.controlsAllowed for ps in self.sm['pandaStates']
            if ps.safetyModel not in IGNORED_SAFETY_MODES)
-    if self.enabled and self._panda_controls_allowed:
+    if self.enabled and self._panda_controls_not_allowed:
       self.mismatch_counter += 1
 
     return CS
@@ -618,7 +623,7 @@ class Controls:
     if not self.enabled and self.v_cruise_helper.cruiseActivate > 0: #ajouatom
       self.carrotCruiseActivate = 1
       if self.enable_avail:
-        if not self.CP.pcmCruise and self._panda_controls_allowed:
+        if not self.CP.pcmCruise and not self._panda_controls_not_allowed:
           self.events.add(EventName.buttonEnable)
         elif self.CP.pcmCruise and CS.cruiseState.enabled: # 이미 pcmCruise가 enabled되어 있는경우
           self.events.add(EventName.buttonEnable)
