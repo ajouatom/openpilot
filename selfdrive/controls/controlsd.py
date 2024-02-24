@@ -381,7 +381,7 @@ class Controls:
       self.events.add(EventName.usbError)
     if CS.canTimeout:
       self.events.add(EventName.canBusMissing)
-      print("CanBusMissing")
+      #print("CanBusMissing")
       self.params.put_bool_nonblocking("CarrotException", True)
     elif not CS.canValid:
       self.events.add(EventName.canError)
