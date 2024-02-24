@@ -1664,7 +1664,7 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
 
     }
     sprintf(str, "%d", getLpSource());
-    ui_draw_text(s, x, disp_y-100, str, 30, COLOR_WHITE, BOLD);
+    ui_draw_text(s, x, disp_y-50, str, 30, COLOR_WHITE, BOLD);
 
     // 타겟하단: 롱컨상태표시
     if (true) {
