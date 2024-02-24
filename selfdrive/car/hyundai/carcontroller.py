@@ -107,7 +107,7 @@ class CarController:
         self.cc_params.STEER_DELTA_UP = 10
         self.cc_params.STEER_DELTA_DOWN = 10
       else:
-        self.cc_params.STEER_DRIVER_ALLOWANCE = 50
+        self.cc_params.STEER_DRIVER_ALLOWANCE = 150
         steerMax = self.params.get_int("CustomSteerMax")
         steerDeltaUp = self.params.get_int("CustomSteerDeltaUp")
         steerDeltaDown = self.params.get_int("CustomSteerDeltaDown")
