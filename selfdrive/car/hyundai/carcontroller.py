@@ -79,6 +79,8 @@ class CarController:
     self.cruise_buttons_msg_cnt = 0
     self.button_spamming_count = 0
     self.prev_clu_speed = 0
+    self.button_spam1 = 8
+    self.button_spam2 = 30
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -93,6 +95,10 @@ class CarController:
       self.cc_params.STEER_MAX = self.cc_params.STEER_MAX if steerMax <= 0 else steerMax
       self.cc_params.STEER_DELTA_UP = self.cc_params.STEER_DELTA_UP if steerDeltaUp <= 0 else steerDeltaUp
       self.cc_params.STEER_DELTA_DOWN = self.cc_params.STEER_DELTA_DOWN if steerDeltaDown <= 0 else steerDeltaDown
+
+      self.button_spam1 = self.params.get_int("CruiseButtonTest1")
+      self.button_spam2 = self.params.get_int("CruiseButtonTest2")
+
 
     # steering torque
     new_steer = int(round(actuators.steer * self.cc_params.STEER_MAX))
@@ -438,14 +444,14 @@ class CarController:
       return 0
 
     speed_diff = self.prev_clu_speed - current
-    spamming_max = 8
+    spamming_max = self.button_spam1
     if CS.cruise_buttons[-1] != Buttons.NONE:
       self.last_button_frame = self.frame
-      self.button_wait = 30
+      self.button_wait = self.button_spam2
       self.button_spamming_count = 0
     elif abs(self.button_spamming_count) >= spamming_max or abs(speed_diff) > 0:
       self.last_button_frame = self.frame
-      self.button_wait = 60 if abs(self.button_spamming_count) >= spamming_max else 8
+      self.button_wait = self.button_spam2 if abs(self.button_spamming_count) >= spamming_max else 7
       self.button_spamming_count = 0
 
     self.prev_clu_speed = current
