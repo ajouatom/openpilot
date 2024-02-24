@@ -1663,7 +1663,7 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
         ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
 
     }
-    sprint(str, "%d", getLpSource());
+    sprintf(str, "%d", getLpSource());
     ui_draw_text(s, x, disp_y-100, str, 30, COLOR_WHITE, BOLD);
 
     // 타겟하단: 롱컨상태표시
