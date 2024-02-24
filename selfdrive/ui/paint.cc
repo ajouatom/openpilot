@@ -769,7 +769,11 @@ void DrawApilot::drawRadarInfo(const UIState* s) {
 }
 void DrawApilot::makeLeadData(const UIState* s) {
     SubMaster& sm = *(s->sm);
+    const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
+    auto lp_source = lp.getLongitudinalPlanSource();
     auto lead_radar = sm["radarState"].getRadarState().getLeadOne();
+    if(lp_source == cereal::LongitudinalPlan::LongitudinalPlanSource::LEAD1)
+        lead_radar = sm["radarState"].getRadarState().getLeadTwo();
     auto lead_one = sm["modelV2"].getModelV2().getLeadsV3()[0];
     bool radar_detected = lead_radar.getStatus() && lead_radar.getRadar();
     m_fLeadDistRadar = radar_detected ? lead_radar.getDRel() : 0;
