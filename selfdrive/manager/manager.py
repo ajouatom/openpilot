@@ -72,6 +72,7 @@ def manager_init() -> None:
     ("ShowDmInfo", "1"),
     ("ShowRadarInfo", "1"),
     ("MixRadarInfo", "0"),
+    ("CarrotTest", "0"),
     ("VisionAccelRatio", "100"),
     ("ShowZOffset", "122"),
     ("ShowPathMode", "9"),

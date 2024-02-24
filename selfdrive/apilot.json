@@ -1043,6 +1043,19 @@
     },
     {
       "group": "시작",
+      "name": "CarrotTest",
+      "title": "당근시험",
+      "descr": "",
+      "egroup": "START",
+      "etitle": "Carrot test",
+      "edescr": "",
+      "min": 0,
+      "max": 2,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "시작",
       "name": "VisionAccelRatio",
       "title": "비젼레이더감도",
       "descr": "비젼롱컨시 전방차량데 대한 응답성이 좋아짐",
