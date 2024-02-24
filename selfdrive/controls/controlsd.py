@@ -626,7 +626,7 @@ class Controls:
     if not self.enabled and self.v_cruise_helper.cruiseActivate > 0: #ajouatom
       self.carrotCruiseActivate = 1
       if self.enable_avail:
-        if not self.CP.pcmCruise and not self._panda_controls_not_allowed:
+        if not self.CP.pcmCruise and self._panda_controls_not_allowed:
           self.events.add(EventName.buttonEnable)
         elif self.CP.pcmCruise and CS.cruiseState.enabled: # 이미 pcmCruise가 enabled되어 있는경우
           self.events.add(EventName.buttonEnable)
