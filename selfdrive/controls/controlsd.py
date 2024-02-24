@@ -181,6 +181,7 @@ class Controls:
 
     self.CP = self.card.CP
     self.CI = self.card.CI
+    self.CS = self.card.CS
 
     config_realtime_process(4, Priority.CTRL_HIGH)
 
