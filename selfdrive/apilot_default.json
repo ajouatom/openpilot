@@ -480,10 +480,6 @@
     "content": "0"
   },
   {
-    "filename": "TrafficStopMode",
-    "content": "1"
-  },
-  {
     "filename": "UseLaneLineDebug",
     "content": "10"
   },

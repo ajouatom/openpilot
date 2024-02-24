@@ -112,7 +112,6 @@ def manager_init() -> None:
     ("StopDistanceCarrot", "600"), 
     ("ALeadTau", "120"), 
     ("ALeadTauStart", "30"), 
-    ("TrafficStopMode", "1"),         
     ("CruiseButtonMode", "0"),      
     ("CruiseButtonTest1", "8"),      
     ("CruiseButtonTest2", "30"),      

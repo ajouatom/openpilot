@@ -393,19 +393,6 @@
     },
     {
       "group": "감속제어",
-      "name": "TrafficStopMode",
-      "title": "신호정지 방법 (1)",
-      "descr": "0:사용안함,1:사용함",
-      "egroup": "DECEL",
-      "etitle": "TrafficStopMode(1)",
-      "edescr": "0:No Stop, 1: Use",
-      "min": 0,
-      "max": 3,
-      "default": 1,
-      "unit": 1
-    },
-    {
-      "group": "감속제어",
       "name": "AutoCurveSpeedFactor",
       "title": "커브속도조절비율(100%)",
       "descr": "높으면 커브속도가 느려집니다.",
