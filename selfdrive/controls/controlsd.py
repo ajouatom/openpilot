@@ -84,7 +84,7 @@ class CarD:
       experimental_long_allowed = self.params.get_bool("ExperimentalLongitudinalEnabled")
       self.CI, self.CP = get_car(self.can_sock, self.pm.sock['sendcan'], experimental_long_allowed, num_pandas)
     else:
-      self.CI, self.CP = CI, CI.CP
+      self.CI, self.CP, self.CS = CI, CI.CP, CI.CS
 
     # set alternative experiences from parameters
     disengage_on_accelerator = self.params.get_bool("DisengageOnAccelerator")
