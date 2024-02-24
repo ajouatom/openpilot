@@ -456,8 +456,8 @@ class CarController:
 
     self.prev_clu_speed = current
     send_button_allowed = (self.frame - self.last_button_frame) > self.button_wait
-    print("{} speed_diff={:.1f},{:.0f}/{:.0f}, send_button={}, button_wait={}, count={}".format(
-      send_button_allowed, speed_diff, target, current, send_button, self.button_wait, self.button_spamming_count))
+    #print("{} speed_diff={:.1f},{:.0f}/{:.0f}, send_button={}, button_wait={}, count={}".format(
+    #  send_button_allowed, speed_diff, target, current, send_button, self.button_wait, self.button_spamming_count))
     if send_button_allowed:
       self.button_spamming_count = self.button_spamming_count + 1 if Buttons.RES_ACCEL else self.button_spamming_count - 1
       return send_button
