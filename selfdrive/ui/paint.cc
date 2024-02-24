@@ -1861,7 +1861,7 @@ void DrawApilot::drawDeviceState(UIState* s, bool show) {
 
     const auto cpuTempC = deviceState.getCpuTempC();
     //const auto gpuTempC = deviceState.getGpuTempC();
-    float ambientTemp = deviceState.getAmbientTempC();
+    //float ambientTemp = deviceState.getAmbientTempC();
     float cpuTemp = 0.f;
     //float gpuTemp = 0.f;
 
@@ -1881,7 +1881,7 @@ void DrawApilot::drawDeviceState(UIState* s, bool show) {
     }
     auto car_state = sm["carState"].getCarState();
     //const cereal::ModelDataV2::Reader& model = sm["modelV2"].getModelV2();
-    sprintf(str, "MEM: %d%% STORAGE: %.0f%% CPU: %.0f°C AMBIENT: %.0f°C", memoryUsagePercent, freeSpacePercent, cpuTemp, ambientTemp);
+    sprintf(str, "MEM: %d%% STORAGE: %.0f%% CPU: %.0f°C", memoryUsagePercent, freeSpacePercent, cpuTemp);
     int r = interp<float>(cpuTemp, { 50.f, 90.f }, { 200.f, 255.f }, false);
     int g = interp<float>(cpuTemp, { 50.f, 90.f }, { 255.f, 200.f }, false);
     NVGcolor textColor = nvgRGBA(r, g, 200, 255);
