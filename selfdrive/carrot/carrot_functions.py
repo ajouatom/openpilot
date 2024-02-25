@@ -552,10 +552,10 @@ class CarrotPlannerHelper:
     self.log += self.map_turn.log
     if len(self.log):
       self.log += "|"
-    self.log += navi_helper.log
+    self.log += self.navi_helper.log
     if len(self.log):
       self.log += "|"
-    self.log += navi_speed_manager.log
+    self.log += self.navi_speed_manager.log
 
     return min(vision_turn_kph, map_turn_kph, navi_helper_kph, navi_speed_manager_kph)
 
