@@ -397,7 +397,7 @@ class VCruiseHelper:
   def apilot_curve(self, CS, controls):
     if len(controls.sm['modelV2'].orientationRate.z) != 33:
       return 300
-    self.road_curvature = self.calculate_road_curvature(controls.sm['modelV2'], CS.vEgo)
+    #self.road_curvature = self.calculate_road_curvature(controls.sm['modelV2'], CS.vEgo)
 
     # 회전속도를 선속도 나누면 : 곡률이 됨. [20]은 약 4초앞의 곡률을 보고 커브를 계산함.
     #curvature = abs(controls.sm['modelV2'].orientationRate.z[20] / clip(CS.vEgo, 0.1, 100.0))
