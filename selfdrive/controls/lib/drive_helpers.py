@@ -12,6 +12,7 @@ from common.filter_simple import StreamingMovingAverage
 from openpilot.selfdrive.carrot.carrot_functions import CarrotSpeedController
 
 from openpilot.selfdrive.frogpilot.functions.map_turn_speed_controller import MapTurnSpeedController
+from openpilot.selfdrive.navd.helpers import Coordinate
 
 MIN_TARGET_V = 5    # m/s
 EventName = car.CarEvent.EventName
