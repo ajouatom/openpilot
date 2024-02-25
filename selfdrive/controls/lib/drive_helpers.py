@@ -887,9 +887,41 @@ class VCruiseHelper:
 
     return v_cruise_kph_apply
 
+  def get_current_speed_limit(self):
+    speed_limit = self.params_memory.get("MapSpeedLimit", encoding='utf8')
+    return float(speed_limit) if speed_limit else 0.0
+
+  def get_current_road_name(self):
+    current_road_name = self.params_memory.get("RoadName", encoding='utf8')
+    return current_road_name if current_road_name else ""
+
+  def get_next_speed_limit_and_distance(self):
+    next_speed_limit_section_str = self.params_memory.get("NextMapSpeedLimit", encoding='utf8')
+    next_speed_limit_section = json.loads(next_speed_limit_section_str) if next_speed_limit_section_str else {}
+    next_speed_limit = next_speed_limit_section.get('speedlimit', 0.0)
+    next_speed_limit_latitude = next_speed_limit_section.get('latitude')
+    next_speed_limit_longitude = next_speed_limit_section.get('longitude')
+    next_speed_limit_distance = 0
+
+    if next_speed_limit_latitude and next_speed_limit_longitude:
+      next_speed_limit_coordinates = Coordinate(next_speed_limit_latitude, next_speed_limit_longitude)
+      next_speed_limit_distance = (self.last_gps or Coordinate(0, 0)).distance_to(next_speed_limit_coordinates)
+
+    return next_speed_limit, next_speed_limit_distance
+
   def update_osm_apilot(self, CS, controls, v_cruise_kph):
     v_ego = CS.vEgoCluster
     v_cruise = v_cruise_kph * CV.KPH_TO_MS
+
+    roadName = self.get_current_road_name()
+    map_speed_limit = self.get_current_speed_limit()
+    map_speed_limit_next, map_speed_limit_dist_next = self.get_next_speed_limit_and_distance()
+
+    target_velocities = json.loads(self.params_memory.get("MapTargetVelocities"))
+    map_curvatures = json.loads(self.params_memory.get("MapCurvatures"))
+    #print("target_velocities=", target_velocities)
+    #print("map_curvature=", map_curvatures)
+    #log = "osm:[{}], speedLimit:{:.1f}, mapTargetVel:{:.1f},curvature:{:.4f}".format(roadName, map_speed_limit, target_velocities, map_curvatures)
 
     # Pfeiferj's Map Turn Speed Controller
     if self.map_turn_speed_controller and v_ego > MIN_TARGET_V:
@@ -901,9 +933,12 @@ class VCruiseHelper:
       #  self.mtsc_target = v_cruise
       #if v_ego - self.mtsc_limit >= self.mtsc_target:
       #  self.mtsc_target = v_cruise
-      log = "MTSC speed = {:.1f}kmh".format(self.mtsc_target * 3.6)
-      self._add_log(log)
+      #log = "MTSC speed = {:.1f}kmh".format(self.mtsc_target * 3.6)
+      #self._add_log(log)
       v_cruise_kph = min(v_cruise_kph, max(self.mtsc_target * 3.6, self.mtsc_limit))
+
+    log = "osm:{:.1f}:[{}], speedLimit:{:.1f},{:.1f}/{:.0f}, mapTargetVel:{:.1f},curvature:{:.4f}".format(self.mtsc_target*3.6, roadName, map_speed_limit, map_speed_limit_next, map_speed_limit_next_dist, target_velocities, map_curvatures)
+    self._add_log(log)
 
     if False: #controls.sm.updated['liveMapData']:
       osm = controls.sm['liveMapData']
