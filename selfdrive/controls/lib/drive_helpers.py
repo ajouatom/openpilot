@@ -116,7 +116,7 @@ class VCruiseHelper:
 
     self.mtsc = MapTurnSpeedController()
     self.mtsc_target = 0  #MS
-    self.map_turn_speed_controller = params.get_bool("MTSCEnabled")
+    self.map_turn_speed_controller = self.params.get_bool("MTSCEnabled")
     self.mtsc_curvature_check = self.params.get_bool("MTSCCurvatureCheck")
     self.mtsc_limit = 0
     self.road_curvature = 0
@@ -171,7 +171,7 @@ class VCruiseHelper:
       self.cruiseSpeedMin = self.params.get_int("CruiseSpeedMin")
     elif self.params_count == 30:
       self.autoSpeedUptoRoadSpeedLimit = float(self.params.get_int("AutoSpeedUptoRoadSpeedLimit")) * 0.01
-      self.map_turn_speed_controller = params.get_bool("MTSCEnabled")
+      self.map_turn_speed_controller = self.params.get_bool("MTSCEnabled")
       if self.map_turn_speed_controller:
         self.mtsc_curvature_check = self.params.get_bool("MTSCCurvatureCheck")
         self.mtsc_limit = self.params.get_float("MTSCLimit") * (CV.KPH_TO_MS if controls.is_metric else CV.MPH_TO_MS)
