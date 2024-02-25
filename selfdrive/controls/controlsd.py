@@ -1018,7 +1018,9 @@ class Controls:
     controlsState.canErrorCounter = self.card.can_rcv_cum_timeout_counter
     controlsState.experimentalMode = self.experimental_mode
 
-    controlsState.debugText1 = self.v_cruise_helper.debugText + " " + self.v_cruise_helper.debugTextNoo
+    controlsState.debugText1 = self.v_cruise_helper.debugText 
+    if self.v_cruise_helper.nooHelperActivated:
+      controlsState.debugText1 += (" " + self.v_cruise_helper.debugTextNoo)
     controlsState.debugText2 = self.v_cruise_helper.debugText2
 
     controlsState.leftBlinkerExt = self.v_cruise_helper.leftBlinkerExtCount + self.v_cruise_helper.blinkerExtMode
