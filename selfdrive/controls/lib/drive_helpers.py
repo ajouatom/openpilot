@@ -948,8 +948,8 @@ class VCruiseHelper:
       #self._add_log(log)
       v_cruise_kph = min(v_cruise_kph, max(self.mtsc_target * 3.6, self.mtsc_limit))
 
-    log = "osm:{:.1f}:[{}], speedLimit:{:.1f},{:.1f}/{:.0f}, vel:{},curv:{}".format(
-      self.mtsc_target*3.6, roadName, map_speed_limit, map_speed_limit_next, map_speed_limit_dist_next, target_velocities, map_curvatures)
+    log = "osm:{:.1f}:[{}], speedLimit:{:.1f},{:.1f}/{:.0f}, vel:{}".format(
+      self.mtsc_target*3.6, roadName, map_speed_limit, map_speed_limit_next, map_speed_limit_dist_next, target_velocities)
     self._add_log(log)
 
     if False: #controls.sm.updated['liveMapData']:
