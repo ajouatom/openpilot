@@ -897,6 +897,14 @@ class VCruiseHelper:
     current_road_name = self.params_memory.get("RoadName", encoding='utf8')
     return current_road_name if current_road_name else ""
 
+  def getLastGpsCoord(self):
+    try:
+      position = json.loads(params_memory.get("LastGPSPosition"))
+      lat = position["latitude"]
+      lon = position["longitude"]
+    except: return Coordinate(0.0, 0.0)
+    return Coordinate(lat, lon)
+
   def get_next_speed_limit_and_distance(self):
     next_speed_limit_section_str = self.params_memory.get("NextMapSpeedLimit", encoding='utf8')
     next_speed_limit_section = json.loads(next_speed_limit_section_str) if next_speed_limit_section_str else {}
@@ -906,6 +914,8 @@ class VCruiseHelper:
     next_speed_limit_distance = 0
 
     if next_speed_limit_latitude and next_speed_limit_longitude:
+      self.last_gps = getLastGpsCoord()
+
       next_speed_limit_coordinates = Coordinate(next_speed_limit_latitude, next_speed_limit_longitude)
       next_speed_limit_distance = (self.last_gps or Coordinate(0, 0)).distance_to(next_speed_limit_coordinates)
 
