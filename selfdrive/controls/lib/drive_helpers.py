@@ -387,7 +387,7 @@ class VCruiseHelper:
     self.v_cruise_kph_set = v_cruise_kph
     self.v_cruise_kph = v_cruise_kph_apply
 
-  def calculate_road_curvature(modelData, v_ego):
+  def calculate_road_curvature(self, modelData, v_ego):
     predicted_velocities = np.array(modelData.velocity.x)
     curvature_ratios = np.abs(np.array(modelData.acceleration.y)) / (predicted_velocities**2)
     return np.amax(curvature_ratios * (v_ego**2))
