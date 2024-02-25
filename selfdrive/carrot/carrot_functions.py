@@ -441,7 +441,7 @@ class CarrotNaviSpeedManager(CarrotBase):
 
     log = ""
     if leftDist > 0 and safeSpeed > 0 and safeDist > 0:
-      applySpeed = self.decelerate_for_speed_camera(safeSpeed/3.6, safeDist, v_cruise_kph_prev * CV.KPH_TO_MS, self.autoNaviSpeedDecelRate, leftDist) * CV.MS_TO_KPH
+      applySpeed = self.decelerate_for_speed_camera(safeSpeed/3.6, safeDist, v_cruise_kph * CV.KPH_TO_MS, self.autoNaviSpeedDecelRate, leftDist) * CV.MS_TO_KPH
       if isSectionLimit and applySpeed > safeSpeed:
         applySpeed = safeSpeed
     else:
@@ -451,7 +451,7 @@ class CarrotNaviSpeedManager(CarrotBase):
     apTbtSpeed = self.naviSpeed
     if apTbtSpeed > 0 and apTbtDistance > 0:
       safeTbtDist = self.autoTurnControlTurnEnd * v_ego
-      applyTbtSpeed = self.decelerate_for_speed_camera(apTbtSpeed/3.6, safeTbtDist, v_cruise_kph_prev/3.6, self.autoNaviSpeedDecelRate, apTbtDistance) * 3.6
+      applyTbtSpeed = self.decelerate_for_speed_camera(apTbtSpeed/3.6, safeTbtDist, v_cruise_kph/3.6, self.autoNaviSpeedDecelRate, apTbtDistance) * 3.6
       if applyTbtSpeed < applySpeed:
         applySpeed = applyTbtSpeed
         safeSpeed = apTbtSpeed
