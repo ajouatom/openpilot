@@ -1,4 +1,5 @@
 import math
+import json
 
 from cereal import car, log
 from openpilot.common.conversions import Conversions as CV
