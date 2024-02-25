@@ -1341,6 +1341,58 @@
       "unit": 1
     },
     {
+      "group": "감속제어",
+      "name": "MTSCEnabled",
+      "title": "MTSC Enabled",
+      "descr": "",
+      "egroup": "SPEED",
+      "etitle": "MTSC Enabled",
+      "edescr": "",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "감속제어",
+      "name": "MTSCCurvatureCheck",
+      "title": "MTSC CurvatureCheck",
+      "descr": "",
+      "egroup": "SPEED",
+      "etitle": "MTSC CurvatureCheck",
+      "edescr": "",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "감속제어",
+      "name": "MTSCLimit",
+      "title": "MTSC: lower limit",
+      "descr": "",
+      "egroup": "SPEED",
+      "etitle": "MTSC: lower limit",
+      "edescr": "",
+      "min": 0,
+      "max": 100,
+      "default": 30,
+      "unit": 5
+    },
+    {
+      "group": "감속제어",
+      "name": "MTSCAggressiveness",
+      "title": "MTSC Aggressiveness",
+      "descr": "",
+      "egroup": "SPEED",
+      "etitle": "MTSC Aggressiveness",
+      "edescr": "",
+      "min": 0,
+      "max": 200,
+      "default": 100,
+      "unit": 5
+    },
+    {
       "group": "시작",
       "name": "NoLogging",
       "title": "Disable Logger",

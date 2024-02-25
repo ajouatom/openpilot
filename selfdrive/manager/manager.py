@@ -166,6 +166,11 @@ def manager_init() -> None:
     ("EnableOSM", "0"),
     ("NoLogging", "0"),
     ("HotspotOnBoot", "0"),
+
+    ("MTSCAggressiveness", "100"),
+    ("MTSCCurvatureCheck", "1"),
+    ("MTSCLimit", "30"),
+    ("MTSCEnabled", "0"),
   ]
   if not PC:
     default_params.append(("LastUpdateTime", datetime.datetime.utcnow().isoformat().encode('utf8')))

@@ -10,6 +10,9 @@ import numpy as np
 from common.filter_simple import StreamingMovingAverage
 from openpilot.selfdrive.carrot.carrot_functions import CarrotSpeedController
 
+from openpilot.selfdrive.frogpilot.functions.map_turn_speed_controller import MapTurnSpeedController
+
+MIN_TARGET_V = 5    # m/s
 EventName = car.CarEvent.EventName
 
 ## 국가법령정보센터: 도로설계기준
@@ -72,6 +75,7 @@ class VCruiseHelper:
     self.button_prev = ButtonType.unknown
     self.cruiseActivate = 0
     self.params = Params()
+    self.params_memory = Params("/dev/shm/params")
     self.v_cruise_kph_set = V_CRUISE_INITIAL #V_CRUISE_UNSET
     self.cruiseSpeedTarget = 0
     self.roadSpeed = 0
@@ -110,6 +114,13 @@ class VCruiseHelper:
 
     self.carrot = CarrotSpeedController()
 
+    self.mtsc = MapTurnSpeedController()
+    self.mtsc_target = 0  #MS
+    self.map_turn_speed_controller = params.get_bool("MTSCEnabled")
+    self.mtsc_curvature_check = self.params.get_bool("MTSCCurvatureCheck")
+    self.mtsc_limit = 0
+    self.road_curvature = 0
+
     #ajouatom: params
     self.params_count = 0
     self.autoNaviSpeedBumpSpeed = float(self.params.get_int("AutoNaviSpeedBumpSpeed"))
@@ -139,7 +150,7 @@ class VCruiseHelper:
     self.enableOSM = self.params.get_int("EnableOSM")
     self.speedFromPCM = self.params.get_int("SpeedFromPCM")
 
-  def _params_update(self):
+  def _params_update(self, controls):
     self.frame += 1
     self.params_count += 1
     if self.params_count == 10:
@@ -160,6 +171,11 @@ class VCruiseHelper:
       self.cruiseSpeedMin = self.params.get_int("CruiseSpeedMin")
     elif self.params_count == 30:
       self.autoSpeedUptoRoadSpeedLimit = float(self.params.get_int("AutoSpeedUptoRoadSpeedLimit")) * 0.01
+      self.map_turn_speed_controller = params.get_bool("MTSCEnabled")
+      if self.map_turn_speed_controller:
+        self.mtsc_curvature_check = self.params.get_bool("MTSCCurvatureCheck")
+        self.mtsc_limit = self.params.get_float("MTSCLimit") * (CV.KPH_TO_MS if controls.is_metric else CV.MPH_TO_MS)
+        self.params_memory.put_float("MapTargetLatA", 2 * (self.params.get_int("MTSCAggressiveness") / 100))
     elif self.params_count == 40:
       self.autoTurnControl = self.params.get_int("AutoTurnControl")
       self.autoTurnControlTurnEnd = self.params.get_int("AutoTurnControlTurnEnd")
@@ -182,7 +198,7 @@ class VCruiseHelper:
   def update_v_cruise(self, CS, enabled, is_metric, controls):
     self.v_cruise_kph_last = self.v_cruise_kph
 
-    self._params_update()
+    self._params_update(controls)
     self._add_log("")
 
     if CS.cruiseState.available:
@@ -371,9 +387,16 @@ class VCruiseHelper:
     self.v_cruise_kph_set = v_cruise_kph
     self.v_cruise_kph = v_cruise_kph_apply
 
+  def road_curvature(modelData, v_ego):
+    predicted_velocities = np.array(modelData.velocity.x)
+    curvature_ratios = np.abs(np.array(modelData.acceleration.y)) / (predicted_velocities**2)
+    return np.amax(curvature_ratios * (v_ego**2))
+
   def apilot_curve(self, CS, controls):
     if len(controls.sm['modelV2'].orientationRate.z) != 33:
       return 300
+    self.road_curvature = self.road_curvature(controls.sm['modelV2'], CS.vEgo)
+
     # 회전속도를 선속도 나누면 : 곡률이 됨. [20]은 약 4초앞의 곡률을 보고 커브를 계산함.
     #curvature = abs(controls.sm['modelV2'].orientationRate.z[20] / clip(CS.vEgo, 0.1, 100.0))
     orientationRates = np.array(controls.sm['modelV2'].orientationRate.z, dtype=np.float32)
@@ -865,6 +888,22 @@ class VCruiseHelper:
     return v_cruise_kph_apply
 
   def update_osm_apilot(self, CS, controls, v_cruise_kph):
+    v_ego = CS.vEgoCluster
+    v_cruise = v_cruise_kph * CV.KPH_TO_MS
+
+    # Pfeiferj's Map Turn Speed Controller
+    if self.map_turn_speed_controller and v_ego > MIN_TARGET_V:
+      #mtsc_active = self.mtsc_target < v_cruise
+      self.mtsc_target = np.clip(self.mtsc.target_speed(v_ego, CS.aEgo), MIN_TARGET_V, v_cruise)
+
+      # MTSC failsafes
+      #if self.mtsc_curvature_check and self.road_curvature < 1.0 and not mtsc_active:
+      #  self.mtsc_target = v_cruise
+      #if v_ego - self.mtsc_limit >= self.mtsc_target:
+      #  self.mtsc_target = v_cruise
+      log = "MTSC speed = {:.1f}kmh".format(self.mtsc_target * 3.6)
+      self._add_log(log)
+
     if False: #controls.sm.updated['liveMapData']:
       osm = controls.sm['liveMapData']
       log = "speedLimit={}/{},{}/{}/{:.0f},turn={}/{:.1f}/{}/{:.1f}".format(
