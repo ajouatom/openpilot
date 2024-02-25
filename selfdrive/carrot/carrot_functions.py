@@ -54,7 +54,6 @@ class CarrotVisionTurn(CarrotBase):
     self.params = params
     super().__init__()
     self.curvatureFilter = StreamingMovingAverage(5)
-    self.curveSpeed = 0.0 # turnSpeed with sign
     self.turnSpeed_prev = 300
 
   def update_params(self):
@@ -92,7 +91,9 @@ class CarrotVisionTurn(CarrotBase):
     adjusted_target_lat_a = TARGET_LAT_A * self.turn_aggressiveness
 
     # Get the target velocity for the maximum curve
-    return max((adjusted_target_lat_a / max_curve)**0.5  * 3.6, 15.0)
+    turnSpeed = max((adjusted_target_lat_a / max_curve)**0.5  * 3.6, 15.0)
+
+    return turnSpeed
 
   def apilot_curve(self, CS, sm):
     if len(sm['modelV2'].orientationRate.z) != 33:
@@ -105,8 +106,7 @@ class CarrotVisionTurn(CarrotBase):
     # 계산된 결과로, oritetationRates를 나누어 조금더 curvature값이 커지도록 함.
     speed = min(self.turnSpeed_prev / 3.6, clip(CS.vEgo, 0.5, 100.0))    
     #curvature = np.max(np.abs(orientationRates[12:])) / speed  # 12: 약1.4초 미래의 curvature를 계산함.
-    #curvature = np.max(np.abs(orientationRates[12:20])) / speed  # 12: 약1.4~3.5초 미래의 curvature를 계산함.
-    curvature = np.max(orientationRates[12:28]) / speed  
+    curvature = np.max(np.abs(orientationRates[12:80])) / speed  # 12: 약1.4~3.5초 미래의 curvature를 계산함.
     curvature = self.curvatureFilter.process(curvature) * self.autoCurveSpeedFactor
     turnSpeed = 300
     if abs(curvature) > 0.0001:
@@ -114,8 +114,6 @@ class CarrotVisionTurn(CarrotBase):
       turnSpeed = clip(turnSpeed, MIN_CURVE_SPEED, 255)
     else:
       turnSpeed = 300
-
-    self.curveSpeed = turnSpeed * np.sign(curvature)
 
     #print("curvature={:.5f}, speed = {:.1f},{:.1f}".format(curvature, turnSpeed, self.curveSpeed))
     self.turnSpeed_prev = turnSpeed
@@ -530,7 +528,7 @@ class CarrotPlannerHelper:
   def update(self, sm, v_cruise_kph):
     vision_turn_kph = self.vision_turn.update(sm, v_cruise_kph)
     self.turnSpeed = self.vision_turn.turnSpeed
-    self.curveSpeed = self.vision_turn.curveSpeed
+    self.curveSpeed = self.turnSpeed * np.sign(sm['controlsState'].curvature)
 
     map_turn_kph = self.map_turn.update(sm, v_cruise_kph)
     self.limitSpeed = self.map_turn.limitSpeed
