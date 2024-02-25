@@ -920,8 +920,7 @@ class VCruiseHelper:
 
     target_velocities = json.loads(self.params_memory.get("MapTargetVelocities"))
     map_curvatures = json.loads(self.params_memory.get("MapCurvatures"))
-    print("target_velocities=", target_velocities)
-    print("map_curvature=", map_curvatures)
+    print("vel={}, curv={}".format(target_velocities, map_curvatures))
     #log = "osm:[{}], speedLimit:{:.1f}, mapTargetVel:{:.1f},curvature:{:.4f}".format(roadName, map_speed_limit, target_velocities, map_curvatures)
 
     # Pfeiferj's Map Turn Speed Controller
