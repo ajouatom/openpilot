@@ -899,7 +899,7 @@ class VCruiseHelper:
 
   def getLastGpsCoord(self):
     try:
-      position = json.loads(params_memory.get("LastGPSPosition"))
+      position = json.loads(self.params_memory.get("LastGPSPosition"))
       lat = position["latitude"]
       lon = position["longitude"]
     except: return Coordinate(0.0, 0.0)
