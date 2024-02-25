@@ -18,6 +18,7 @@ MIN_TARGET_V = 5    # m/s
 class CarrotBase(ABC):
   def __init__(self):
     self._log_timer = 0
+    self._log_timeout = 300
     self.log = ""
     self.update_params()
 
@@ -53,6 +54,7 @@ class CarrotVisionTurn(CarrotBase):
   def __init__(self, params):
     self.params = params
     super().__init__()
+    self._log_timeout = 20
     self.curvatureFilter = StreamingMovingAverage(5)
     self.turnSpeed_prev = 300
 
@@ -67,7 +69,7 @@ class CarrotVisionTurn(CarrotBase):
     #self.turnSpeed = self.apilot_curve(CS, sm)
     self.turnSpeed = self.turn_speed(CS, sm)
     if self.autoCurveSpeedCtrlUse > 0:
-      if self.turnSpeed < v_cruise_kph:
+      if self.turnSpeed < 200:
         self._add_log("VTurn = {:.0f}kmh".format(self.turnSpeed))
       v_cruise_kph = min(v_cruise_kph, self.turnSpeed)
     return v_cruise_kph
