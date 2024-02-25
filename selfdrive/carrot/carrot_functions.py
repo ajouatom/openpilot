@@ -1,3 +1,4 @@
+import math
 from openpilot.common.params import Params
 from openpilot.common.realtime import DT_MDL, DT_CTRL
 from enum import Enum
