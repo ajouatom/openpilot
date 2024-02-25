@@ -63,7 +63,6 @@ class CarrotVisionTurn(CarrotBase):
     self.autoCurveSpeedFactorIn = float(int(self.params.get("AutoCurveSpeedFactorIn", encoding="utf8")))*0.01
 
   def _update(self, sm, v_cruise_kph):
-    print("CarrotVisionTurn: update")
     CS = sm['carState']
     ## turn speed
     self.turnSpeed = self.apilot_curve(CS, sm)
@@ -144,7 +143,6 @@ class CarrotMapTurnSpeed(CarrotBase):
       self.params_memory.put_float_nonblocking("MapTargetLatA", 2 * (self.params.get_int("MTSCAggressiveness") / 100))
 
   def _update(self, sm, v_cruise_kph):
-    print("CarrotMapTurnSpeed: update")
     CS = sm['carState']
     v_ego = CS.vEgoCluster
     v_cruise = v_cruise_kph * CV.KPH_TO_MS
@@ -256,7 +254,6 @@ class CarrotNaviHelper(CarrotBase):
     self.autoTurnControl = self.params.get_int("AutoTurnControl")
 
   def _update(self, sm, v_cruise_kph):
-    print("CarrotNaviHelper: update")
     self.rightBlinkerExtCount = max(self.rightBlinkerExtCount - 1, 0)
     self.leftBlinkerExtCount = max(self.leftBlinkerExtCount - 1, 0)
     if self.rightBlinkerExtCount + self.leftBlinkerExtCount <= 0:
@@ -407,8 +404,6 @@ class CarrotNaviSpeedManager(CarrotBase):
     self.autoTurnControlTurnEnd = self.params.get_int("AutoTurnControlTurnEnd")
 
   def _update(self, sm, v_cruise_kph):
-    print("CarrotSpeedManager: update")
-
     v_ego = sm['carState'].vEgoCluster
     CS = sm['carState']
     msg = self.roadLimitSpeed = sm['roadLimitSpeed']
