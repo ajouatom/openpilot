@@ -387,7 +387,7 @@ class VCruiseHelper:
     self.v_cruise_kph_set = v_cruise_kph
     self.v_cruise_kph = v_cruise_kph_apply
 
-  def road_curvature(modelData, v_ego):
+  def calculate_road_curvature(modelData, v_ego):
     predicted_velocities = np.array(modelData.velocity.x)
     curvature_ratios = np.abs(np.array(modelData.acceleration.y)) / (predicted_velocities**2)
     return np.amax(curvature_ratios * (v_ego**2))
@@ -395,7 +395,7 @@ class VCruiseHelper:
   def apilot_curve(self, CS, controls):
     if len(controls.sm['modelV2'].orientationRate.z) != 33:
       return 300
-    self.road_curvature = self.road_curvature(controls.sm['modelV2'], CS.vEgo)
+    self.road_curvature = self.calculate_road_curvature(controls.sm['modelV2'], CS.vEgo)
 
     # 회전속도를 선속도 나누면 : 곡률이 됨. [20]은 약 4초앞의 곡률을 보고 커브를 계산함.
     #curvature = abs(controls.sm['modelV2'].orientationRate.z[20] / clip(CS.vEgo, 0.1, 100.0))
