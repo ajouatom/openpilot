@@ -68,6 +68,8 @@ class CarrotVisionTurn(CarrotBase):
     self.turnSpeed = self.apilot_curve(CS, sm)
     #self.turnSpeed = self.turn_speed(CS, sm)
     if self.autoCurveSpeedCtrlUse > 0:
+      if self.turnSpeed < v_cruise_kph:
+        self._add_log("VTurn = {:.0f}kmh".format(self.turnSpeed))
       v_cruise_kph = min(v_cruise_kph, self.turnSpeed)
     return v_cruise_kph
 
@@ -119,8 +121,6 @@ class CarrotVisionTurn(CarrotBase):
     self.turnSpeed_prev = turnSpeed
     speed_diff = max(0, CS.vEgo*3.6 - turnSpeed)
     turnSpeed = turnSpeed - speed_diff * self.autoCurveSpeedFactorIn
-    if turnSpeed < 200:
-      self._add_log("VTurn = {:.1f}kmh".format(turnSpeed))
     #controls.debugText2 = 'CURVE={:5.1f},curvature={:5.4f},mode={:3.1f}'.format(self.turnSpeed_prev, curvature, self.drivingModeIndex)
     return turnSpeed
 
