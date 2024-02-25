@@ -914,7 +914,7 @@ class VCruiseHelper:
     next_speed_limit_distance = 0
 
     if next_speed_limit_latitude and next_speed_limit_longitude:
-      self.last_gps = getLastGpsCoord()
+      self.last_gps = self.getLastGpsCoord()
 
       next_speed_limit_coordinates = Coordinate(next_speed_limit_latitude, next_speed_limit_longitude)
       next_speed_limit_distance = (self.last_gps or Coordinate(0, 0)).distance_to(next_speed_limit_coordinates)
@@ -931,7 +931,7 @@ class VCruiseHelper:
 
     target_velocities = json.loads(self.params_memory.get("MapTargetVelocities"))
     map_curvatures = json.loads(self.params_memory.get("MapCurvatures"))
-    print("vel={}, curv={}".format(target_velocities, map_curvatures))
+    #print("vel={}, curv={}".format(target_velocities, map_curvatures))
     #log = "osm:[{}], speedLimit:{:.1f}, mapTargetVel:{:.1f},curvature:{:.4f}".format(roadName, map_speed_limit, target_velocities, map_curvatures)
 
     # Pfeiferj's Map Turn Speed Controller
@@ -948,8 +948,8 @@ class VCruiseHelper:
       #self._add_log(log)
       v_cruise_kph = min(v_cruise_kph, max(self.mtsc_target * 3.6, self.mtsc_limit))
 
-    log = "osm:{:.1f}:[{}], speedLimit:{:.1f},{:.1f}/{:.0f}, vel:{},curv:{}".format(
-      self.mtsc_target*3.6, roadName, map_speed_limit, map_speed_limit_next, map_speed_limit_dist_next, target_velocities, map_curvatures)
+    log = "osm:{:.1f}:[{}], speedLimit:{:.1f},{:.1f}/{:.0f}".format(
+      self.mtsc_target*3.6, roadName, map_speed_limit, map_speed_limit_next, map_speed_limit_dist_next)
     self._add_log(log)
 
     if False: #controls.sm.updated['liveMapData']:
