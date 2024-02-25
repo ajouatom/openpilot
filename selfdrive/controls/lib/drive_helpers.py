@@ -903,6 +903,7 @@ class VCruiseHelper:
       #  self.mtsc_target = v_cruise
       log = "MTSC speed = {:.1f}kmh".format(self.mtsc_target * 3.6)
       self._add_log(log)
+      v_cruise_kph = min(v_cruise_kph, max(self.mtsc_target * 3.6, self.mtsc_limit))
 
     if False: #controls.sm.updated['liveMapData']:
       osm = controls.sm['liveMapData']
