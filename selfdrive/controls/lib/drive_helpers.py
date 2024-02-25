@@ -865,7 +865,7 @@ class VCruiseHelper:
     return v_cruise_kph_apply
 
   def update_osm_apilot(self, CS, controls, v_cruise_kph):
-    if controls.sm.updated['liveMapData']:
+    if False: #controls.sm.updated['liveMapData']:
       osm = controls.sm['liveMapData']
       log = "speedLimit={}/{},{}/{}/{:.0f},turn={}/{:.1f}/{}/{:.1f}".format(
         osm.speedLimitValid, osm.speedLimit,

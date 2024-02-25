@@ -47,6 +47,10 @@ public:
     std::string value = get(key, block);
     return value.empty() ? 0 : std::stoi(value);
   }
+  inline float getFloat(const std::string &key, bool block = false) {
+    std::string value = get(key, block);
+    return value.empty() ? 0.0 : std::stof(value);
+  }
   std::map<std::string, std::string> readAll();
 
   // helpers for writing values
@@ -60,12 +64,19 @@ public:
   inline int putInt(const std::string &key, int val) {
     return put(key.c_str(), std::to_string(val).c_str(), std::to_string(val).size());
   }
+  inline int putFloat(const std::string &key, float val) {
+    return put(key.c_str(), std::to_string(val).c_str(), std::to_string(val).size());
+  }
   void putNonBlocking(const std::string &key, const std::string &val);
   inline void putBoolNonBlocking(const std::string &key, bool val) {
     putNonBlocking(key, val ? "1" : "0");
   }
   void putIntNonBlocking(const std::string &key, const std::string &val);
   inline void putIntNonBlocking(const std::string &key, int val) {
+    putNonBlocking(key, std::to_string(val));
+  }
+  void putFloatNonBlocking(const std::string &key, const std::string &val);
+  inline void putFloatNonBlocking(const std::string &key, float val) {
     putNonBlocking(key, std::to_string(val));
   }
 

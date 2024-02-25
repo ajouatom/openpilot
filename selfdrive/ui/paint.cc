@@ -995,14 +995,14 @@ void DrawApilot::drawConnInfo(const UIState* s) {
     auto car_state = sm["carState"].getCarState();
     //const auto car_params = sm["carParams"].getCarParams();
     const auto road_limit_speed = sm["roadLimitSpeed"].getRoadLimitSpeed();
-    int radar_tracks = Params().getBool("EnableRadarTracks");
-    int sccBus = Params().getBool("SccConnectedBus2");
+    int radar_tracks = params.getBool("EnableRadarTracks");
+    int sccBus = params.getBool("SccConnectedBus2");
     int activeNDA = road_limit_speed.getActive();
 
     static int activeOSM = 0;
     //auto navInstruction = sm["navInstruction"].getNavInstruction();
     //if (navInstruction.getSpeedLimit() > 0 && activeNDA < 200) activeOSM = 100;
-    if (sm.updated("liveMapData")) {
+    if (false) { //sm.updated("liveMapData")) {
         activeOSM = 100;
     }
     else if (activeOSM > 0) activeOSM--;
@@ -1025,15 +1025,15 @@ void DrawApilot::drawConnInfo(const UIState* s) {
 }
 void DrawApilot::drawGapInfo(const UIState* s, int x, int y) {
     char    str[128];
-    float gap = Params().getInt("LongitudinalPersonality") + 1;// lp.getCruiseGap();
+    float gap = params.getInt("LongitudinalPersonality") + 1;// lp.getCruiseGap();
     int gap1 = gap;// controls_state.getLongCruiseGap(); // car_state.getCruiseGap();
 #ifdef __TEST
     drivingMode = 3;
 #endif
     char strDrivingMode[128];
-    int drivingMode = Params().getInt("AccelerationProfile"); //HW: controls_state.getMyDrivingMode();
+    int drivingMode = params.getInt("AccelerationProfile"); //HW: controls_state.getMyDrivingMode();
     if (drivingMode == 0) { // apilot driving mode
-        int myDrivingMode = Params().getInt("MyDrivingMode");
+        int myDrivingMode = params.getInt("MyDrivingMode");
         switch (myDrivingMode) {
         case 1: strcpy(strDrivingMode, tr("ECO").toStdString().c_str()); break;
         case 2: strcpy(strDrivingMode, tr("SAFE").toStdString().c_str()); break;
@@ -1110,11 +1110,11 @@ void DrawApilot::drawGapInfo(const UIState* s, int x, int y) {
 }
 void DrawApilot::drawGapInfo2(const UIState* s, int x, int y) {
     char    str[128];
-    int     gap = Params().getInt("LongitudinalPersonality") + 1;// lp.getCruiseGap();
+    int     gap = params.getInt("LongitudinalPersonality") + 1;// lp.getCruiseGap();
     char    strDrivingMode[128];
-    int drivingMode = Params().getInt("AccelerationProfile"); //HW: controls_state.getMyDrivingMode();
+    int drivingMode = params.getInt("AccelerationProfile"); //HW: controls_state.getMyDrivingMode();
     if (drivingMode == 0) { // apilot driving mode
-        int myDrivingMode = Params().getInt("MyDrivingMode");
+        int myDrivingMode = params.getInt("MyDrivingMode");
         switch (myDrivingMode) {
         case 1: strcpy(strDrivingMode, tr("ECO").toStdString().c_str()); break;
         case 2: strcpy(strDrivingMode, tr("SAFE").toStdString().c_str()); break;
@@ -1143,7 +1143,7 @@ void DrawApilot::drawGapInfo2(const UIState* s, int x, int y) {
     strcpy(_strDrivingMode, strDrivingMode);
 
     char strLatControlMode[128] = "";
-    int useLaneLineSpeed = Params().getInt("UseLaneLineSpeed");
+    int useLaneLineSpeed = params.getInt("UseLaneLineSpeed");
     strcpy(strLatControlMode, (useLaneLineSpeed > 0) ? tr("Lane Follow").toStdString().c_str() : tr("Laneless").toStdString().c_str());
     static char _strLatControlMode[128] = "";
     if (strcmp(strLatControlMode, _strLatControlMode)) ui_draw_text_a(s, dx, dy, strLatControlMode, 30, COLOR_WHITE, BOLD);
@@ -1868,7 +1868,7 @@ void DrawApilot::drawDeviceState(UIState* s, bool show) {
     static int read_ip_count = 60;
     if (read_ip_count == 60) {
         read_ip_address();
-        gitBranch = QString::fromStdString(Params().get("GitBranch"));
+        gitBranch = QString::fromStdString(params.get("GitBranch"));
     }
     if (read_ip_count-- < 0) read_ip_count = 60;
     nvgTextAlign(s->vg, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM);
@@ -1974,6 +1974,11 @@ void DrawApilot::drawDebugText(UIState* s, bool show) {
     qstr = QString::fromStdString(controls_state.getDebugText2().cStr());
     y += dy;
     ui_draw_text(s, text_x, y, qstr.toStdString().c_str(), 35, COLOR_WHITE, BOLD, 0.0f, 0.0f);
+
+    qstr = "OSMRoadName" + QString::fromStdString(paramsMemory.get("RoadName"));
+    y += dy;
+    ui_draw_text(s, text_x, y, qstr.toStdString().c_str(), 35, COLOR_WHITE, BOLD, 0.0f, 0.0f);
+
 #if 0
     const cereal::ModelDataV2::Reader& model = sm["modelV2"].getModelV2();
     bool navEnabled = model.getNavEnabled();

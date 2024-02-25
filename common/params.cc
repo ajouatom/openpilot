@@ -340,6 +340,14 @@ std::unordered_map<std::string, uint32_t> keys = {
     { "LockDoors", PERSISTENT },
     { "SNGHack", PERSISTENT },
     { "TSS2Tune", PERSISTENT },
+    {"LastMapsUpdate", PERSISTENT},
+    {"MapsSelected", PERSISTENT},
+    {"OSMDownloadLocations", PERSISTENT},
+    {"OSMDownloadProgress", CLEAR_ON_MANAGER_START},
+    {"PreferredSchedule", PERSISTENT},
+    {"RoadName", PERSISTENT},
+    {"RoadNameUI", PERSISTENT},
+    {"SchedulePending", PERSISTENT},
 };
 
 } // namespace

@@ -18,13 +18,16 @@ cdef extern from "common/params.h":
     string get(string, bool) nogil
     bool getBool(string, bool) nogil
     int getInt(string, bool) nogil
+    float getFloat(string, bool) nogil
     int remove(string) nogil
     int put(string, string) nogil
     void putNonBlocking(string, string) nogil
     void putBoolNonBlocking(string, bool) nogil
     void putIntNonBlocking(string, int) nogil
+    void putFloatNonBlocking(string, float) nogil
     int putBool(string, bool) nogil
     int putInt(string, int) nogil
+    int putFloat(string, float) nogil
     bool checkKey(string) nogil
     string getParamPath(string) nogil
     void clearAll(ParamKeyType)
@@ -87,6 +90,13 @@ cdef class Params:
       r = self.p.getInt(k, block)
     return r
 
+  def get_float(self, key, bool block=False):
+    cdef string k = self.check_key(key)
+    cdef float r
+    with nogil:
+      r = self.p.getFloat(k, block)
+    return r
+
   def put(self, key, dat):
     """
     Warning: This function blocks until the param is written to disk!
@@ -109,6 +119,11 @@ cdef class Params:
     with nogil:
       self.p.putInt(k, val)
 
+  def put_float(self, key, float val):
+    cdef string k = self.check_key(key)
+    with nogil:
+      self.p.putFloat(k, val)
+
   def put_nonblocking(self, key, dat):
     cdef string k = self.check_key(key)
     cdef string dat_bytes = ensure_bytes(dat)
@@ -124,6 +139,11 @@ cdef class Params:
     cdef string k = self.check_key(key)
     with nogil:
       self.p.putIntNonBlocking(k, val)
+
+  def put_float_nonblocking(self, key, float val):
+    cdef string k = self.check_key(key)
+    with nogil:
+      self.p.putFloatNonBlocking(k, val)
 
   def remove(self, key):
     cdef string k = self.check_key(key)
