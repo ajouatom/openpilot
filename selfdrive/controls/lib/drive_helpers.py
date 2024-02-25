@@ -922,10 +922,6 @@ class VCruiseHelper:
     map_curvatures = json.loads(self.params_memory.get("MapCurvatures"))
     print("target_velocities=", target_velocities)
     print("map_curvature=", map_curvatures)
-    if target_velocities is None:
-      target_velocities = 0
-    if map_curvatures is None:
-      map_curvatures = 0
     #log = "osm:[{}], speedLimit:{:.1f}, mapTargetVel:{:.1f},curvature:{:.4f}".format(roadName, map_speed_limit, target_velocities, map_curvatures)
 
     # Pfeiferj's Map Turn Speed Controller
@@ -942,7 +938,7 @@ class VCruiseHelper:
       #self._add_log(log)
       v_cruise_kph = min(v_cruise_kph, max(self.mtsc_target * 3.6, self.mtsc_limit))
 
-    log = "osm:{:.1f}:[{}], speedLimit:{:.1f},{:.1f}/{:.0f}, mapTargetVel:{:.1f},curvature:{:.4f}".format(
+    log = "osm:{:.1f}:[{}], speedLimit:{:.1f},{:.1f}/{:.0f}, vel:{},curv:{}".format(
       self.mtsc_target*3.6, roadName, map_speed_limit, map_speed_limit_next, map_speed_limit_dist_next, target_velocities, map_curvatures)
     self._add_log(log)
 
