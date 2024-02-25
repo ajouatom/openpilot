@@ -197,7 +197,7 @@ def main():
         bearing = math.degrees(location.calibratedOrientationNED.value[2])
         lat = location.positionGeodetic.value[0]
         lon = location.positionGeodetic.value[1]
-        params_memory.put("LastGPSPosition", json.dumps({ "latitude": lat, "longitude": lon, "bearing": bearing }))
+        params_memory.put_nonblocking("LastGPSPosition", json.dumps({ "latitude": lat, "longitude": lon, "bearing": bearing }))
       x = learner.kf.x
       P = np.sqrt(learner.kf.P.diagonal())
       if not all(map(math.isfinite, x)):

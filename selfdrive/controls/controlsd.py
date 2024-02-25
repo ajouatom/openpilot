@@ -434,16 +434,16 @@ class Controls:
         safety_mismatch = pandaState.safetyModel != self.CP.safetyConfigs[i].safetyModel or \
                           pandaState.safetyParam != self.CP.safetyConfigs[i].safetyParam or \
                           pandaState.alternativeExperience != self.CP.alternativeExperience
-        if safety_mismatch:
-          print(f"safetyModel{i} =  {pandaState.safetyModel}:{self.CP.safetyConfigs[i].safetyModel}")
-          print(f"safetyParams{i} = {pandaState.safetyParam}:{self.CP.safetyConfigs[i].safetyParam}")
-          print(f"alterExperience{i} = {pandaState.alternativeExperience}:{self.CP.alternativeExperience}")
+        #if safety_mismatch:
+        #  print(f"safetyModel{i} =  {pandaState.safetyModel}:{self.CP.safetyConfigs[i].safetyModel}")
+        #  print(f"safetyParams{i} = {pandaState.safetyParam}:{self.CP.safetyConfigs[i].safetyParam}")
+        #  print(f"alterExperience{i} = {pandaState.alternativeExperience}:{self.CP.alternativeExperience}")
       else:
         safety_mismatch = pandaState.safetyModel not in IGNORED_SAFETY_MODES
 
       # safety mismatch allows some time for boardd to set the safety mode and publish it back from panda
       if (safety_mismatch and self.sm.frame*DT_CTRL > 10.) or pandaState.safetyRxChecksInvalid or self.mismatch_counter >= 200:
-        print(f"safetyRxChecksInvalid = {pandaState.safetyRxChecksInvalid}, mismatch_counter = {self.mismatch_counter}")
+        #print(f"safetyRxChecksInvalid = {pandaState.safetyRxChecksInvalid}, mismatch_counter = {self.mismatch_counter}")
         self.events.add(EventName.controlsMismatch)
 
       if log.PandaState.FaultType.relayMalfunction in pandaState.faults:
@@ -926,7 +926,7 @@ class Controls:
 
     CC.cruiseControl.activate = self.carrotCruiseActivate > 0
     CC.hudControl.softHold = self.v_cruise_helper.softHoldActive
-    CC.hudControl.activeAPM = self.v_cruise_helper.activeAPM
+    CC.hudControl.activeAPM = self.sm['longitudinalPlan'].activeAPM #self.v_cruise_helper.activeAPM
     CC.hudControl.activeAVM = self.v_cruise_helper.activeAVM if self.enable_avail else 0
         
     hudControl.rightLaneVisible = CC.latActive
@@ -1019,14 +1019,12 @@ class Controls:
     controlsState.experimentalMode = self.experimental_mode
 
     controlsState.debugText1 = self.v_cruise_helper.debugText 
-    if self.v_cruise_helper.nooHelperActivated:
-      controlsState.debugText1 += (" " + self.v_cruise_helper.debugTextNoo)
+    #if self.v_cruise_helper.nooHelperActivated:
+    #  controlsState.debugText1 += (" " + self.v_cruise_helper.debugTextNoo)
     controlsState.debugText2 = self.v_cruise_helper.debugText2
 
     controlsState.leftBlinkerExt = self.v_cruise_helper.leftBlinkerExtCount + self.v_cruise_helper.blinkerExtMode
     controlsState.rightBlinkerExt = self.v_cruise_helper.rightBlinkerExtCount  + self.v_cruise_helper.blinkerExtMode
-    controlsState.curveSpeed = float(self.v_cruise_helper.curveSpeed)
-    controlsState.limitSpeed = float(self.v_cruise_helper.limitSpeed)
 
     lat_tuning = self.CP.lateralTuning.which()
     if self.joystick_mode:

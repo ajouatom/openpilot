@@ -730,8 +730,6 @@ struct ControlsState @0x97ff69c53601abf1 {
   debugText2 @67 : Text;
   leftBlinkerExt @68 : Int32;
   rightBlinkerExt @69 : Int32;
-  curveSpeed @70 : Float32;
-  limitSpeed @71 : Float32;
 
   enum OpenpilotState @0xdbe58b96d2d1ac61 {
     disabled @0;
@@ -1074,6 +1072,11 @@ struct LongitudinalPlan @0xe00b5b3eba12876c {
   xState @38 :Int32;
   debugLongText @39 : Text;
   debugLongText2 @40 : Text;
+  curveSpeed @41 : Float32;
+  activeAPM @42: Int32;
+  leftBlinkerExt @43: Int32;
+  rightBlinkerExt @44: Int32;
+  limitSpeed @45: Float32;
 
   enum LongitudinalPlanSource {
     cruise @0;

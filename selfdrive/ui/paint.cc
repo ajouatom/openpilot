@@ -1212,7 +1212,7 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
 
         //int activeNDA = road_limit_speed.getActive();
         int roadLimitSpeed = road_limit_speed.getRoadLimitSpeed();
-        int roadLimitSpeed_OSM = controls_state.getLimitSpeed();
+        int roadLimitSpeed_OSM = lp.getLimitSpeed();
         if (roadLimitSpeed < roadLimitSpeed_OSM) roadLimitSpeed = roadLimitSpeed_OSM;
 
         int camLimitSpeed = road_limit_speed.getCamLimitSpeed();
