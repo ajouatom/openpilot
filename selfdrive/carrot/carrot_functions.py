@@ -230,6 +230,7 @@ class CarrotNaviHelper(CarrotBase):
     self.autoTurnMapChange = self.params.get_int("AutoTurnMapChange")
     self.autoTurnControl = self.params.get_int("AutoTurnControl")
     self.autoTurnControlTurnEnd = self.params.get_int("AutoTurnControlTurnEnd")
+    self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
 
   def _update(self, sm, v_cruise_kph):
     self.rightBlinkerExtCount = max(self.rightBlinkerExtCount - 1, 0)
