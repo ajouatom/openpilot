@@ -643,7 +643,8 @@ class VCruiseHelper:
           self.cruiseActivate = 1
     elif controls.enabled and self.autoSpeedUptoRoadSpeedLimit > 0.:
       if self.lead_vLead > CS.vEgoCluster:
-        lead_v_kph = self.lead_vLead * CV.MS_TO_KPH + 2.0
+        lead_v_kph = self.lead_vLead * CV.MS_TO_KPH + 0.0
+        self._add_log_auto_cruise("AutoSpeed up to leadCar {:.0f}kph".format(lead_v_kph))
         v_cruise_kph = max(v_cruise_kph, min(lead_v_kph, (30 if self.roadSpeed < 30 else self.roadSpeed) * self.autoSpeedUptoRoadSpeedLimit))
 
     v_cruise_kph = self.update_apilot_cmd(controls, v_cruise_kph)
