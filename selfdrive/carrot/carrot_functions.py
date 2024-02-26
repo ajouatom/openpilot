@@ -112,12 +112,12 @@ class CarrotMapTurnSpeed(CarrotBase):
     self.params = params
     self.params_memory = params_memory
     self.map_turn_aggressiveness = 100
-    super().__init__()
     self.mtsc = MapTurnSpeedController()
     self.mtsc_target = 0  #MS
     self.mtsc_limit = 0
     self.road_curvature = 0
     self.limitSpeed = 0.0
+    super().__init__()
 
   def update_params(self):
     self.enableOSM = self.params.get_int("EnableOSM")
