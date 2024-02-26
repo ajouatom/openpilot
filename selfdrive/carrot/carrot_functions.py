@@ -46,16 +46,16 @@ class CarrotBase(ABC):
       self.event = event
       self._log_timer = self._log_timeout
 
-  def update(self, sm, v_cruise_kph):
+  def update(self, sm, v_cruise_kph, v_cruise_kph_prev):
     self._add_log("")
-    return self._update(sm, v_cruise_kph)
+    return self._update(sm, v_cruise_kph, v_cruise_kph_prev)
 
   @abstractmethod
   def update_params(self):
     pass
 
   @abstractmethod
-  def _update(self, sm, v_cruise_kph):
+  def _update(self, sm, v_cruise_kph, v_cruise_kph_prev):
     return v_cruise_kph
 
 MIN_CURVE_SPEED = 10. * CV.KPH_TO_MS
@@ -73,7 +73,7 @@ class CarrotVisionTurn(CarrotBase):
     self.autoCurveSpeedFactor = self.params.get_int("AutoCurveSpeedFactor")*0.01
     self.autoCurveSpeedAggressiveness = self.params.get_int("AutoCurveSpeedAggressiveness")*0.01
 
-  def _update(self, sm, v_cruise_kph):
+  def _update(self, sm, v_cruise_kph, v_cruise_kph_prev):
     CS = sm['carState']
     ## turn speed
     self.turnSpeed, self.curveSpeed = self.turn_speed(CS, sm)
@@ -130,7 +130,7 @@ class CarrotMapTurnSpeed(CarrotBase):
       self.map_turn_aggressiveness = map_turn_aggressiveness
       self.params_memory.put_float_nonblocking("MapTargetLatA", 2 * (self.map_turn_aggressiveness / 100))
 
-  def _update(self, sm, v_cruise_kph):
+  def _update(self, sm, v_cruise_kph, v_cruise_kph_prev):
     CS = sm['carState']
     v_ego = CS.vEgoCluster
     v_cruise = v_cruise_kph * CV.KPH_TO_MS
@@ -243,7 +243,7 @@ class CarrotNaviHelper(CarrotBase):
     self.autoTurnControlTurnEnd = self.params.get_int("AutoTurnControlTurnEnd")
     self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
 
-  def _update(self, sm, v_cruise_kph):
+  def _update(self, sm, v_cruise_kph, v_cruise_kph_prev):
     self.rightBlinkerExtCount = max(self.rightBlinkerExtCount - 1, 0)
     self.leftBlinkerExtCount = max(self.leftBlinkerExtCount - 1, 0)
     if self.rightBlinkerExtCount + self.leftBlinkerExtCount <= 0:
@@ -367,7 +367,7 @@ class CarrotNaviHelper(CarrotBase):
         apTbtSpeed = self.naviSpeed
         if apTbtSpeed > 0 and apTbtDistance > 0:
           safeTbtDist = self.autoTurnControlTurnEnd * v_ego
-          applyTbtSpeed = decelerate_for_speed_camera(apTbtSpeed/3.6, safeTbtDist, v_cruise_kph/3.6, self.autoNaviSpeedDecelRate, apTbtDistance) * 3.6
+          applyTbtSpeed = decelerate_for_speed_camera(apTbtSpeed/3.6, safeTbtDist, v_cruise_kph_prev/3.6, self.autoNaviSpeedDecelRate, apTbtDistance) * 3.6
           if applyTbtSpeed < v_cruise_kph:
             v_cruise_kph = applyTbtSpeed
 
@@ -393,7 +393,7 @@ class CarrotNaviSpeedManager(CarrotBase):
     self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
     self.autoNaviSpeedCtrl = self.params.get_int("AutoNaviSpeedCtrl")
 
-  def _update(self, sm, v_cruise_kph):
+  def _update(self, sm, v_cruise_kph, v_cruise_kph_prev):
     v_ego = sm['carState'].vEgoCluster
     CS = sm['carState']
     msg = self.roadLimitSpeed = sm['roadLimitSpeed']
@@ -442,7 +442,7 @@ class CarrotNaviSpeedManager(CarrotBase):
 
     log = ""
     if leftDist > 0 and safeSpeed > 0 and safeDist > 0:
-      applySpeed = decelerate_for_speed_camera(safeSpeed/3.6, safeDist, v_cruise_kph * CV.KPH_TO_MS, self.autoNaviSpeedDecelRate, leftDist) * CV.MS_TO_KPH
+      applySpeed = decelerate_for_speed_camera(safeSpeed/3.6, safeDist, v_cruise_kph_prev * CV.KPH_TO_MS, self.autoNaviSpeedDecelRate, leftDist) * CV.MS_TO_KPH
       if isSectionLimit and applySpeed > safeSpeed:
         applySpeed = safeSpeed
     else:
@@ -469,6 +469,8 @@ class CarrotPlannerHelper:
     self.params_count = 0
     self.frame = 0
 
+    self.v_cruise_kph = 255
+    
     self.vision_turn = CarrotVisionTurn(self.params)
     self.turnSpeed = 300
     self.curveSpeed = 300
@@ -496,25 +498,29 @@ class CarrotPlannerHelper:
 
   def update(self, sm, v_cruise_kph):
     self._params_update()
-    vision_turn_kph = self.vision_turn.update(sm, v_cruise_kph)
+    enabled = sm['controlsState'].enabled:
+    if not enabled:
+      self.v_cruise_kph = 255
+    
+    vision_turn_kph = self.vision_turn.update(sm, v_cruise_kph, self.v_cruise_kph)
     self.turnSpeed = self.vision_turn.turnSpeed
     self.curveSpeed = self.vision_turn.curveSpeed
     self.event = self.vision_turn.event
 
-    map_turn_kph = self.map_turn.update(sm, v_cruise_kph)
+    map_turn_kph = self.map_turn.update(sm, v_cruise_kph, self.v_cruise_kph)
     self.limitSpeed = self.map_turn.limitSpeed
     #self.log = self.map_turn.log
     if self.map_turn.event >= 0:
       self.event = self.map_turn.event
 
-    navi_helper_kph = self.navi_helper.update(sm, v_cruise_kph)
+    navi_helper_kph = self.navi_helper.update(sm, v_cruise_kph, self.v_cruise_kph)
     self.leftBlinkerExt = self.navi_helper.leftBlinkerExtCount + self.navi_helper.blinkerExtMode
     self.rightBlinkerExt = self.navi_helper.rightBlinkerExtCount + self.navi_helper.blinkerExtMode
 
     if self.navi_helper.event >= 0:
       self.event = self.navi_helper.event    
 
-    navi_speed_manager_kph = self.navi_speed_manager.update(sm, v_cruise_kph)
+    navi_speed_manager_kph = self.navi_speed_manager.update(sm, v_cruise_kph, self.v_cruise_kph)
     self.activeAPM = self.navi_speed_manager.activeAPM
     if self.navi_speed_manager.event >= 0:
       self.event = self.navi_speed_manager.event    
@@ -530,8 +536,8 @@ class CarrotPlannerHelper:
       self.log += "|"
     self.log += self.navi_speed_manager.log
 
-    return min(vision_turn_kph, map_turn_kph, navi_helper_kph, navi_speed_manager_kph)
-
+    self.v_cruise_kph = min(vision_turn_kph, map_turn_kph, navi_helper_kph, navi_speed_manager_kph)
+    return self.v_cruise_kph
 
 
 
