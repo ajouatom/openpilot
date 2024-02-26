@@ -86,7 +86,6 @@ class CarrotVisionTurn(CarrotBase):
 
     # Get the target velocity for the maximum curve
     turnSpeed = max((adjusted_target_lat_a / max_curve)**0.5  * 3.6, 15.0)
-    print(turnSpeed)
     return turnSpeed, turnSpeed * curv_direction
 
 
