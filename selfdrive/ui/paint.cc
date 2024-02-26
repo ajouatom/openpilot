@@ -1975,9 +1975,6 @@ void DrawApilot::drawDebugText(UIState* s, bool show) {
     y += dy;
     ui_draw_text(s, text_x, y, qstr.toStdString().c_str(), 35, COLOR_WHITE, BOLD, 0.0f, 0.0f);
 
-    qstr = "OSMRoadName" + QString::fromStdString(paramsMemory.get("RoadName"));
-    y += dy;
-    ui_draw_text(s, text_x, y, qstr.toStdString().c_str(), 35, COLOR_WHITE, BOLD, 0.0f, 0.0f);
 
 #if 0
     const cereal::ModelDataV2::Reader& model = sm["modelV2"].getModelV2();
