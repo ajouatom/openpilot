@@ -55,8 +55,8 @@ class CarrotVisionTurn(CarrotBase):
 
   def update_params(self):
     self.autoCurveSpeedCtrlUse = int(self.params.get("AutoCurveSpeedCtrlUse"))
-    self.autoCurveSpeedFactor = float(int(self.params.get("AutoCurveSpeedFactor", encoding="utf8")))*0.01
-    self.autoCurveSpeedAggressiveness = float(int(self.params.get("AutoCurveSpeedAggressiveness", encoding="utf8")))*0.01
+    self.autoCurveSpeedFactor = self.params.get_int("AutoCurveSpeedFactor")*0.01
+    self.autoCurveSpeedAggressiveness = self.params.get_int("AutoCurveSpeedAggressiveness")*0.01
 
   def _update(self, sm, v_cruise_kph):
     CS = sm['carState']
@@ -86,7 +86,7 @@ class CarrotVisionTurn(CarrotBase):
 
     # Get the target velocity for the maximum curve
     turnSpeed = max((adjusted_target_lat_a / max_curve)**0.5  * 3.6, 15.0)
-
+    print(turnSpeed)
     return turnSpeed, turnSpeed * curv_direction
 
 
