@@ -357,8 +357,8 @@ class CarrotNaviHelper(CarrotBase):
           self.rightBlinkerExtCount = self.leftBlinkerExtCount = self.blinkerExtMode = 0
 
         if self.blinkerExtMode >= 10000:
-          lane_change = self.blinkerExtMode >= 20000
-          self._add_log("Automatic {} Started. {:.0f}m left".format("Turning" if lane_change else "Lanechanging", self.naviDistance), EventName.audioTurn if not lane_change else EventName.audioLaneChange )
+          turning = self.blinkerExtMode >= 20000
+          self._add_log("Automatic {} Started. {:.0f}m left".format("Turning" if turning else "Lanechanging", self.naviDistance), EventName.audioTurn if turning else EventName.audioLaneChange )
 
         #if blinkerExtState <= 0 and self.leftBlinkerExtCount + self.rightBlinkerExtCount > 0 and v_ego > 0.5:
         #  self._make_event(controls, EventName.audioTurn if nav_turn else EventName.audioLaneChange)
