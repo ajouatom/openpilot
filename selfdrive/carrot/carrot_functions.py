@@ -14,7 +14,7 @@ import json
 
 MIN_TARGET_V = 5    # m/s
 
-def decelerate_for_speed_camera(self, safe_speed, safe_dist, prev_apply_speed, decel_rate, left_dist):
+def decelerate_for_speed_camera(safe_speed, safe_dist, prev_apply_speed, decel_rate, left_dist):
   if left_dist <= safe_dist:
     return safe_speed
   temp = safe_speed*safe_speed + 2*(left_dist - safe_dist)/decel_rate
