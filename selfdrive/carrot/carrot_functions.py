@@ -77,7 +77,7 @@ class CarrotVisionTurn(CarrotBase):
     # Get the maximum lat accel from the model
     max_index = np.argmax(np.abs(orientation_rate))
     curv_direction = np.sign(orientation_rate[max_index])
-    max_pred_lat_acc = np.abs(orientation_rate[max_index]) * velocity
+    max_pred_lat_acc = abs(orientation_rate[max_index]) * velocity
     #max_pred_lat_acc = np.amax(np.abs(orientation_rate) * velocity)
 
     # Get the maximum curve based on the current velocity
