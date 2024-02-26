@@ -643,6 +643,7 @@ class VCruiseHelper:
           self.cruiseActivate = 1
 
     if controls.enabled and self.autoSpeedUptoRoadSpeedLimit > 0.:
+      print("autoSpeed = {:.1f},{:.1f}".format(self.lead_vLead, CS.vEgoCluster))
       if self.lead_vLead > CS.vEgoCluster:
         lead_v_kph = self.lead_vLead * CV.MS_TO_KPH + 0.0
         self._add_log_auto_cruise("AutoSpeed up to leadCar {:.0f}kph".format(lead_v_kph))
