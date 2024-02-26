@@ -52,7 +52,6 @@ class CarrotVisionTurn(CarrotBase):
     super().__init__()
     self._log_timeout = 20
     self.curvatureFilter = StreamingMovingAverage(5)
-    self.turnSpeed_prev = 300
 
   def update_params(self):
     self.autoCurveSpeedCtrlUse = int(self.params.get("AutoCurveSpeedCtrlUse"))
@@ -62,8 +61,7 @@ class CarrotVisionTurn(CarrotBase):
   def _update(self, sm, v_cruise_kph):
     CS = sm['carState']
     ## turn speed
-    #self.turnSpeed = self.apilot_curve(CS, sm)
-    self.turnSpeed = self.turn_speed(CS, sm)
+    self.turnSpeed, self.curveSpeed = self.turn_speed(CS, sm)
     if self.autoCurveSpeedCtrlUse > 0:
       if self.turnSpeed < 200:
         self._add_log("VTurn = {:.0f}kmh".format(self.turnSpeed))
@@ -75,11 +73,12 @@ class CarrotVisionTurn(CarrotBase):
     modelData = sm['modelV2']
     v_ego = CS.vEgo
     # Set the curve sensitivity
-    orientation_rate = np.array(np.abs(modelData.orientationRate.z)) * self.autoCurveSpeedFactor
+    #orientation_rate = np.array(np.abs(modelData.orientationRate.z)) * self.autoCurveSpeedFactor
+    orientation_rate = np.array(modelData.orientationRate.z) * self.autoCurveSpeedFactor
     velocity = np.array(modelData.velocity.x)
 
     # Get the maximum lat accel from the model
-    max_pred_lat_acc = np.amax(orientation_rate * velocity)
+    max_pred_lat_acc = np.amax(np.abs(orientation_rate) * velocity)
 
     # Get the maximum curve based on the current velocity
     max_curve = max_pred_lat_acc / (v_ego**2)
@@ -90,7 +89,7 @@ class CarrotVisionTurn(CarrotBase):
     # Get the target velocity for the maximum curve
     turnSpeed = max((adjusted_target_lat_a / max_curve)**0.5  * 3.6, 15.0)
 
-    return turnSpeed
+    return turnSpeed, turnSpeed * np.sign(orientation_rate)
 
 
 class CarrotMapTurnSpeed(CarrotBase):
@@ -499,7 +498,7 @@ class CarrotPlannerHelper:
   def update(self, sm, v_cruise_kph):
     vision_turn_kph = self.vision_turn.update(sm, v_cruise_kph)
     self.turnSpeed = self.vision_turn.turnSpeed
-    self.curveSpeed = self.turnSpeed * np.sign(sm['controlsState'].curvature)
+    self.curvSpeed = self.vision_turn.curvSpeed
 
     map_turn_kph = self.map_turn.update(sm, v_cruise_kph)
     self.limitSpeed = self.map_turn.limitSpeed
