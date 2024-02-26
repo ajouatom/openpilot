@@ -1,16 +1,19 @@
 import math
+import numpy as np
+import json
+
+from cereal import car, log
 from openpilot.common.params import Params
 from openpilot.common.realtime import DT_MDL, DT_CTRL
 from enum import Enum
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.numpy_fast import clip, interp
 from openpilot.selfdrive.modeld.constants import ModelConstants
-import numpy as np
 from common.filter_simple import StreamingMovingAverage
 from abc import abstractmethod, ABC
 from openpilot.selfdrive.frogpilot.functions.map_turn_speed_controller import MapTurnSpeedController
 from openpilot.selfdrive.navd.helpers import Coordinate
-import json
+EventName = car.CarEvent.EventName
 
 MIN_TARGET_V = 5    # m/s
 
@@ -29,16 +32,19 @@ class CarrotBase(ABC):
     self._log_timer = 0
     self._log_timeout = 300
     self.log = ""
+    self.event = -1
     self.update_params()
 
-  def _add_log(self, log):
+  def _add_log(self, log, event=-1):
     if len(log) == 0:
       self._log_timer = max(0, self._log_timer - 1)
       if self._log_timer <= 0:
         self.log = ""
+        self.event = -1
     else:
       self.log = log
-      self._log_timer = 300
+      self.event = event
+      self._log_timer = self._log_timeout
 
   def update(self, sm, v_cruise_kph):
     self._add_log("")
@@ -72,6 +78,8 @@ class CarrotVisionTurn(CarrotBase):
     ## turn speed
     self.turnSpeed, self.curveSpeed = self.turn_speed(CS, sm)
     if self.autoCurveSpeedCtrlUse > 0:
+      if self.turnSpeed < v_cruise_kph:
+        self._add_log("Vision turn speed down {:.1f}kmh".format(self.turnSpeed), EventName.speedDown)
       v_cruise_kph = min(v_cruise_kph, self.turnSpeed)
     return v_cruise_kph
 
@@ -342,11 +350,12 @@ class CarrotNaviHelper(CarrotBase):
             self.rightBlinkerExtCount = 10
             self.blinkerExtMode = 20000 if nav_turn else 10000
         if self.nooHelperActivated == 2:
-          self._add_log("Automatic lanechange canceled(blinker or steering torque)")
+          self._add_log("Automatic lanechange canceled(blinker or steering torque)", EventName.audioLaneChange)
           self.rightBlinkerExtCount = self.leftBlinkerExtCount = self.blinkerExtMode = 0
 
         if self.blinkerExtMode >= 10000:
-          self._add_log("Automatic {} Started. {:.0f}m left".format("Turning" if self.blinkerExtMode >= 20000 else "Lanechanging", self.naviDistance ))
+          lane_change = self.blinkerExtMode >= 20000
+          self._add_log("Automatic {} Started. {:.0f}m left".format("Turning" if lane_change else "Lanechanging", self.naviDistance), EventName.audioTurn if not lane_change else EventName.audioLaneChange )
 
         #if blinkerExtState <= 0 and self.leftBlinkerExtCount + self.rightBlinkerExtCount > 0 and v_ego > 0.5:
         #  self._make_event(controls, EventName.audioTurn if nav_turn else EventName.audioLaneChange)
@@ -483,20 +492,29 @@ class CarrotPlannerHelper:
       self.params_count = 0
 
   def update(self, sm, v_cruise_kph):
+    self._params_update()
     vision_turn_kph = self.vision_turn.update(sm, v_cruise_kph)
     self.turnSpeed = self.vision_turn.turnSpeed
     self.curveSpeed = self.vision_turn.curveSpeed
+    self.event = self.vision_turn.event
 
     map_turn_kph = self.map_turn.update(sm, v_cruise_kph)
     self.limitSpeed = self.map_turn.limitSpeed
     #self.log = self.map_turn.log
+    if self.map_turn.event >= 0:
+      self.event = self.map_turn.event
 
     navi_helper_kph = self.navi_helper.update(sm, v_cruise_kph)
     self.leftBlinkerExt = self.navi_helper.leftBlinkerExtCount + self.navi_helper.blinkerExtMode
     self.rightBlinkerExt = self.navi_helper.rightBlinkerExtCount + self.navi_helper.blinkerExtMode
 
+    if self.navi_helper.event >= 0:
+      self.event = self.navi_helper.event    
+
     navi_speed_manager_kph = self.navi_speed_manager.update(sm, v_cruise_kph)
     self.activeAPM = self.navi_speed_manager.activeAPM
+    if self.navi_speed_manager.event >= 0:
+      self.event = self.navi_speed_manager.event    
 
     self.log = self.vision_turn.log
     if len(self.log):

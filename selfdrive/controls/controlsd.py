@@ -227,6 +227,7 @@ class Controls:
     self.lateral_allowed = False
     #if self.always_on_lateral:
     #  self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ENABLE_ALWAYS_ON_LATERAL
+    self.carrot_plan_event = -1
 
     # read params
     self.disengage_on_accelerator = self.params.get_bool("DisengageOnAccelerator")
@@ -916,6 +917,12 @@ class Controls:
     hudControl.speedVisible = self.enabled
     hudControl.lanesVisible = self.enabled
     hudControl.leadVisible = self.sm['longitudinalPlan'].hasLead
+
+    carrot_plan_event = self.sm['longitudinalPlan'].carrotEvent
+    if carrot_plan_event != self.carrot_plan_event:
+      self.carrot_plan_event = carrot_plan_event
+      if carrot_plan_event >= 0:
+        self.events.add(carrot_plan_event)
 
     ## ajouatom
     no_entry_events = self.events.contains(ET.NO_ENTRY)
