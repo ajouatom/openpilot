@@ -111,6 +111,7 @@ class CarrotMapTurnSpeed(CarrotBase):
   def __init__(self, params, params_memory):
     self.params = params
     self.params_memory = params_memory
+    self.map_turn_aggressiveness = 100
     super().__init__()
     self.mtsc = MapTurnSpeedController()
     self.mtsc_target = 0  #MS
@@ -124,8 +125,10 @@ class CarrotMapTurnSpeed(CarrotBase):
     self.mtsc_curvature_check = self.params.get_bool("MTSCCurvatureCheck")
     is_metric = True
     self.mtsc_limit = self.params.get_float("MTSCLimit") * (CV.KPH_TO_MS if is_metric else CV.MPH_TO_MS)
-    if self.map_turn_speed_controller:
-      self.params_memory.put_float_nonblocking("MapTargetLatA", 2 * (self.params.get_int("MTSCAggressiveness") / 100))
+    map_turn_aggressiveness = self.params.get_int("MTSCAggressiveness")
+    if self.map_turn_speed_controller and map_turn_aggressiveness != self.map_turn_aggressiveness:
+      self.map_turn_aggressiveness = map_turn_aggressiveness
+      self.params_memory.put_float_nonblocking("MapTargetLatA", 2 * (self.map_turn_aggressiveness / 100))
 
   def _update(self, sm, v_cruise_kph):
     CS = sm['carState']
