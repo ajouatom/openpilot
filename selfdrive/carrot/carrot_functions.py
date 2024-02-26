@@ -71,12 +71,14 @@ class CarrotVisionTurn(CarrotBase):
     modelData = sm['modelV2']
     v_ego = CS.vEgo
     # Set the curve sensitivity
-    orientation_rate = np.array(np.abs(modelData.orientationRate.z)) * self.autoCurveSpeedFactor
-    curv_direction = np.sign(modelData.orientationRate.z)
+    orientation_rate = np.array(modelData.orientationRate.z) * self.autoCurveSpeedFactor
     velocity = np.array(modelData.velocity.x)
 
     # Get the maximum lat accel from the model
-    max_pred_lat_acc = np.amax(orientation_rate * velocity)
+    max_index = np.argmax(np.abs(orientation_rate))
+    curv_direction = np.sign(orientation_rate[max_index])
+    max_pred_lat_acc = np.abs(orientation_rate[max_index]) * velocity
+    #max_pred_lat_acc = np.amax(np.abs(orientation_rate) * velocity)
 
     # Get the maximum curve based on the current velocity
     max_curve = max_pred_lat_acc / (v_ego**2)
