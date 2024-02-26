@@ -1078,6 +1078,7 @@ struct LongitudinalPlan @0xe00b5b3eba12876c {
   rightBlinkerExt @44: Int32;
   limitSpeed @45: Float32;
   carrotEvent @46: Int32;
+  vCruiseTarget @47: Float32;
 
   enum LongitudinalPlanSource {
     cruise @0;
