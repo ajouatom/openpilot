@@ -217,8 +217,8 @@ class Controls:
     self.sm = messaging.SubMaster(['deviceState', 'pandaStates', 'peripheralState', 'modelV2', 'liveCalibration',
                                    'driverMonitoringState', 'longitudinalPlan', 'liveLocationKalman',
                                    'managerState', 'liveParameters', 'radarState', 'liveTorqueParameters',
-                                   'testJoystick', 'lateralPlan', 'navInstruction', 'roadLimitSpeed'] + self.camera_packets + self.sensor_packets,
-                                  ignore_alive=ignore, ignore_avg_freq=ignore+['radarState', 'testJoystick'], ignore_valid=['testJoystick', 'navInstruction', 'roadLimitSpeed'],
+                                   'testJoystick', 'lateralPlan', 'roadLimitSpeed'] + self.camera_packets + self.sensor_packets,
+                                  ignore_alive=ignore, ignore_avg_freq=ignore+['radarState', 'testJoystick'], ignore_valid=['testJoystick', 'roadLimitSpeed'],
                                   frequency=int(1/DT_CTRL))
 
     self.joystick_mode = self.params.get_bool("JoystickDebugMode")
