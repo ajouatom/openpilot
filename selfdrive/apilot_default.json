@@ -48,8 +48,8 @@
     "content": "120"
   },
   {
-    "filename": "AutoCurveSpeedFactorIn",
-    "content": "70"
+    "filename": "AutoCurveSpeedAggressiveness",
+    "content": "100"
   },
   {
     "filename": "AutoNaviSpeedBumpSpeed",

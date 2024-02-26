@@ -244,7 +244,7 @@ std::unordered_map<std::string, uint32_t> keys = {
     { "MapboxStyle", PERSISTENT },
     { "AutoCurveSpeedCtrlUse", PERSISTENT },
     { "AutoCurveSpeedFactor", PERSISTENT },
-    { "AutoCurveSpeedFactorIn", PERSISTENT },
+    { "AutoCurveSpeedAggressiveness", PERSISTENT },
     { "AutoTurnControl", PERSISTENT },
     { "AutoTurnControlSpeedLaneChange", PERSISTENT },
     { "AutoTurnControlSpeedTurn", PERSISTENT },

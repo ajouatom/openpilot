@@ -89,7 +89,7 @@ def manager_init() -> None:
     ("MapboxStyle", "0"),    
     ("AutoCurveSpeedCtrlUse", "1"),
     ("AutoCurveSpeedFactor", "120"),
-    ("AutoCurveSpeedFactorIn", "70"),
+    ("AutoCurveSpeedAggressiveness", "100"),
     ("AutoTurnControl", "0"),
     ("AutoTurnControlSpeedLaneChange", "60"),
     ("AutoTurnControlSpeedTurn", "20"),

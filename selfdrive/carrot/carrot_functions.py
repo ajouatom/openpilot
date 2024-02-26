@@ -43,10 +43,6 @@ class CarrotBase(ABC):
   def _update(self, sm, v_cruise_kph):
     return v_cruise_kph
 
-## 국가법령정보센터: 도로설계기준
-V_CURVE_LOOKUP_BP = [0., 1./800., 1./670., 1./560., 1./440., 1./360., 1./265., 1./190., 1./135., 1./85., 1./55., 1./30., 1./15., 1./10.]
-V_CRUVE_LOOKUP_VALS = [300, 150, 120, 110, 100, 90, 80, 70, 60, 50, 40, 30, 20, 10]
-#V_CRUVE_LOOKUP_VALS = [300, 150, 120, 110, 100, 90, 80, 70, 60, 50, 45, 35, 30, 20]
 MIN_CURVE_SPEED = 10. * CV.KPH_TO_MS
 TARGET_LAT_A = 1.9  # m/s^2
 
@@ -61,7 +57,7 @@ class CarrotVisionTurn(CarrotBase):
   def update_params(self):
     self.autoCurveSpeedCtrlUse = int(self.params.get("AutoCurveSpeedCtrlUse"))
     self.autoCurveSpeedFactor = float(int(self.params.get("AutoCurveSpeedFactor", encoding="utf8")))*0.01
-    self.autoCurveSpeedFactorIn = float(int(self.params.get("AutoCurveSpeedFactorIn", encoding="utf8")))*0.01
+    self.autoCurveSpeedAggressiveness = float(int(self.params.get("AutoCurveSpeedAggressiveness", encoding="utf8")))*0.01
 
   def _update(self, sm, v_cruise_kph):
     CS = sm['carState']
@@ -89,40 +85,13 @@ class CarrotVisionTurn(CarrotBase):
     max_curve = max_pred_lat_acc / (v_ego**2)
 
     # Set the target lateral acceleration
-    self.turn_aggressiveness = 1.0
-    adjusted_target_lat_a = TARGET_LAT_A * self.turn_aggressiveness
+    adjusted_target_lat_a = TARGET_LAT_A * self.autoCurveSpeedAggressiveness
 
     # Get the target velocity for the maximum curve
     turnSpeed = max((adjusted_target_lat_a / max_curve)**0.5  * 3.6, 15.0)
 
     return turnSpeed
 
-  def apilot_curve(self, CS, sm):
-    if len(sm['modelV2'].orientationRate.z) != 33:
-      return 300
-    #self.road_curvature = self.calculate_road_curvature(sm['modelV2'], CS.vEgo)
-
-    # 회전속도를 선속도 나누면 : 곡률이 됨. [20]은 약 4초앞의 곡률을 보고 커브를 계산함.
-    #curvature = abs(sm['modelV2'].orientationRate.z[20] / clip(CS.vEgo, 0.1, 100.0))
-    orientationRates = np.array(sm['modelV2'].orientationRate.z, dtype=np.float32)
-    # 계산된 결과로, oritetationRates를 나누어 조금더 curvature값이 커지도록 함.
-    speed = min(self.turnSpeed_prev / 3.6, clip(CS.vEgo, 0.5, 100.0))    
-    #curvature = np.max(np.abs(orientationRates[12:])) / speed  # 12: 약1.4초 미래의 curvature를 계산함.
-    curvature = np.max(np.abs(orientationRates[12:80])) / speed  # 12: 약1.4~3.5초 미래의 curvature를 계산함.
-    curvature = self.curvatureFilter.process(curvature) * self.autoCurveSpeedFactor
-    turnSpeed = 300
-    if abs(curvature) > 0.0001:
-      turnSpeed = interp(abs(curvature), V_CURVE_LOOKUP_BP, V_CRUVE_LOOKUP_VALS)
-      turnSpeed = clip(turnSpeed, MIN_CURVE_SPEED, 255)
-    else:
-      turnSpeed = 300
-
-    #print("curvature={:.5f}, speed = {:.1f},{:.1f}".format(curvature, turnSpeed, self.curveSpeed))
-    self.turnSpeed_prev = turnSpeed
-    speed_diff = max(0, CS.vEgo*3.6 - turnSpeed)
-    turnSpeed = turnSpeed - speed_diff * self.autoCurveSpeedFactorIn
-    #controls.debugText2 = 'CURVE={:5.1f},curvature={:5.4f},mode={:3.1f}'.format(self.turnSpeed_prev, curvature, self.drivingModeIndex)
-    return turnSpeed
 
 class CarrotMapTurnSpeed(CarrotBase):
   def __init__(self, params, params_memory):
