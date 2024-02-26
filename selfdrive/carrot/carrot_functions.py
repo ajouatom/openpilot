@@ -61,7 +61,7 @@ class CarrotVisionTurn(CarrotBase):
   def _update(self, sm, v_cruise_kph):
     CS = sm['carState']
     ## turn speed
-    self.turnSpeed, self.curvSpeed = self.turn_speed(CS, sm)
+    self.turnSpeed, self.curveSpeed = self.turn_speed(CS, sm)
     if self.autoCurveSpeedCtrlUse > 0:
       v_cruise_kph = min(v_cruise_kph, self.turnSpeed)
     return v_cruise_kph
@@ -496,7 +496,7 @@ class CarrotPlannerHelper:
   def update(self, sm, v_cruise_kph):
     vision_turn_kph = self.vision_turn.update(sm, v_cruise_kph)
     self.turnSpeed = self.vision_turn.turnSpeed
-    self.curvSpeed = self.vision_turn.curvSpeed
+    self.curveSpeed = self.vision_turn.curveSpeed
 
     map_turn_kph = self.map_turn.update(sm, v_cruise_kph)
     self.limitSpeed = self.map_turn.limitSpeed
