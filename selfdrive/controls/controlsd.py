@@ -915,7 +915,7 @@ class Controls:
       hudControl.setSpeed = setSpeed if self.v_cruise_helper.speedFromPCM != 2 else float(v_cruise_kph_long * CV.KPH_TO_MS) #float(self.v_cruise_helper.v_cruise_cluster_kph * CV.KPH_TO_MS)
     else:
       hudControl.setSpeed = setSpeed if self.v_cruise_helper.xState == 3 else float(v_cruise_kph_long * CV.KPH_TO_MS) #float(self.v_cruise_helper.v_cruise_cluster_kph * CV.KPH_TO_MS)
-    print("setSpeed={:.1f}".format(hudControl.setSpeed * 3.6))
+    #print("setSpeed={:.1f}".format(hudControl.setSpeed * 3.6))
     hudControl.speedVisible = self.enabled
     hudControl.lanesVisible = self.enabled
     hudControl.leadVisible = self.sm['longitudinalPlan'].hasLead

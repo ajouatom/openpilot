@@ -227,7 +227,7 @@ class LongitudinalPlanner:
     longitudinalPlan.rightBlinkerExt = carrot_planner.rightBlinkerExt
     longitudinalPlan.limitSpeed = carrot_planner.limitSpeed
     longitudinalPlan.carrotEvent = carrot_planner.event
-    longitudinalPlan.vCruiseTarget = carrot_planner.v_cruise_kph
+    longitudinalPlan.vCruiseTarget = float(carrot_planner.v_cruise_kph)
 
     longitudinalPlan.debugLongText2 = carrot_planner.log
 
