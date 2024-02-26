@@ -220,6 +220,7 @@ class CarrotNaviHelper(CarrotBase):
     self.autoTurnControlSpeedTurn = self.params.get_int("AutoTurnControlSpeedTurn")
     self.autoTurnMapChange = self.params.get_int("AutoTurnMapChange")
     self.autoTurnControl = self.params.get_int("AutoTurnControl")
+    self.autoTurnControlTurnEnd = self.params.get_int("AutoTurnControlTurnEnd")
 
   def _update(self, sm, v_cruise_kph):
     self.rightBlinkerExtCount = max(self.rightBlinkerExtCount - 1, 0)
@@ -369,7 +370,6 @@ class CarrotNaviSpeedManager(CarrotBase):
     self.autoNaviSpeedSafetyFactor = float(self.params.get_int("AutoNaviSpeedSafetyFactor")) * 0.01
     self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
     self.autoNaviSpeedCtrl = self.params.get_int("AutoNaviSpeedCtrl")
-    self.autoTurnControlTurnEnd = self.params.get_int("AutoTurnControlTurnEnd")
 
   def _update(self, sm, v_cruise_kph):
     v_ego = sm['carState'].vEgoCluster
