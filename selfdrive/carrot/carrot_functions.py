@@ -61,7 +61,7 @@ class CarrotVisionTurn(CarrotBase):
   def _update(self, sm, v_cruise_kph):
     CS = sm['carState']
     ## turn speed
-    self.turnSpeed, self.curveSpeed = self.turn_speed(CS, sm)
+    self.turnSpeed, self.curvSpeed = self.turn_speed(CS, sm)
     if self.autoCurveSpeedCtrlUse > 0:
       if self.turnSpeed < 200:
         self._add_log("VTurn = {:.0f}kmh".format(self.turnSpeed))
