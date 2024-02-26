@@ -1910,12 +1910,17 @@ void DrawApilot::drawDeviceState(UIState* s, bool show) {
     QString debugModelV2 = QString::fromStdString(meta.getDebugText().cStr());
     auto controls_state = sm["controlsState"].getControlsState();
     QString debugControlsState = QString::fromStdString(controls_state.getDebugText1().cStr());
+    const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
+    QString debugLong2 = QString::fromStdString(lp.getDebugLongText2().cStr());
     if (debugModelV2.length() > 2) {
         ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugModelV2.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
     }
     else {
         if (debugControlsState.length() > 2) {
             ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugControlsState.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
+        }
+        else if (debugLong2.length() > 2) {
+            ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugLong2.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
         }
         else if (s->fb_w > 1200 && show) {
             sprintf(str, "MEM: %d%% DISK: %.0f%% CPU: %.0f°C FPS: %d, %s: %.0f BATTERY: %.0f%%", memoryUsagePercent, freeSpacePercent, cpuTemp, g_fps, (motorRpm > 0.0) ? "MOTOR" : "RPM", (motorRpm > 0.0) ? motorRpm : engineRpm, car_state.getChargeMeter());
@@ -1924,7 +1929,6 @@ void DrawApilot::drawDeviceState(UIState* s, bool show) {
     }
     
 
-    const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
     const auto live_params = sm["liveParameters"].getLiveParameters();
     float   liveSteerRatio = live_params.getSteerRatio();
     QString debugLong = QString::fromStdString(lp.getDebugLongText().cStr());
