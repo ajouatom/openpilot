@@ -268,7 +268,7 @@ class CarrotNaviHelper(CarrotBase):
       nav_speedDown = False
       direction = 0 #1:left, 2:right
       if nav_type in ['turn', 'fork', 'off ramp'] and roadLimitSpeed.xDistToTurn <= 0 and roadLimitSpeed.xTurnInfo < 0:
-        if controls.sm.updated['navInstruction']:
+        if sm.updated['navInstruction']:
           self.nav_distance = navInstruction.maneuverDistance;
         nav_turn = True if nav_type == 'turn' and nav_modifier in ['left', 'right'] else False
         direction = 1 if nav_modifier in ['slight left', 'left'] else 2 if nav_modifier in ['slight right', 'right'] else 0
