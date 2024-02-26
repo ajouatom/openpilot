@@ -14,6 +14,15 @@ import json
 
 MIN_TARGET_V = 5    # m/s
 
+def decelerate_for_speed_camera(self, safe_speed, safe_dist, prev_apply_speed, decel_rate, left_dist):
+  if left_dist <= safe_dist:
+    return safe_speed
+  temp = safe_speed*safe_speed + 2*(left_dist - safe_dist)/decel_rate
+  dV = (-safe_speed + math.sqrt(temp)) * decel_rate
+  apply_speed = min(250 , safe_speed + dV)
+  min_speed = prev_apply_speed - (decel_rate * 1.8) * 2 * DT_MDL
+  apply_speed = max(apply_speed, min_speed)
+  return apply_speed
 
 class CarrotBase(ABC):
   def __init__(self):
@@ -345,7 +354,7 @@ class CarrotNaviHelper(CarrotBase):
         apTbtSpeed = self.naviSpeed
         if apTbtSpeed > 0 and apTbtDistance > 0:
           safeTbtDist = self.autoTurnControlTurnEnd * v_ego
-          applyTbtSpeed = self.decelerate_for_speed_camera(apTbtSpeed/3.6, safeTbtDist, v_cruise_kph/3.6, self.autoNaviSpeedDecelRate, apTbtDistance) * 3.6
+          applyTbtSpeed = decelerate_for_speed_camera(apTbtSpeed/3.6, safeTbtDist, v_cruise_kph/3.6, self.autoNaviSpeedDecelRate, apTbtDistance) * 3.6
           if applyTbtSpeed < v_cruise_kph:
             v_cruise_kph = applyTbtSpeed
 
@@ -450,16 +459,6 @@ class CarrotNaviSpeedManager(CarrotBase):
     if speedLimitType == 2:
       self.activeAPM += 1000
     return min(v_cruise_kph, applySpeed) #, roadSpeed, leftDist, speedLimitType
-
-  def decelerate_for_speed_camera(self, safe_speed, safe_dist, prev_apply_speed, decel_rate, left_dist):
-    if left_dist <= safe_dist:
-      return safe_speed
-    temp = safe_speed*safe_speed + 2*(left_dist - safe_dist)/decel_rate
-    dV = (-safe_speed + math.sqrt(temp)) * decel_rate
-    apply_speed = min(250 , safe_speed + dV)
-    min_speed = prev_apply_speed - (decel_rate * 1.8) * 2 * DT_MDL
-    apply_speed = max(apply_speed, min_speed)
-    return apply_speed
 
 class CarrotPlannerHelper:
   def __init__(self):
