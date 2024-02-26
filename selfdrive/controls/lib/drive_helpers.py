@@ -272,7 +272,7 @@ class VCruiseHelper:
 
   def _update_lead(self, controls):
     leadOne = controls.sm['radarState'].leadOne
-    if leadOne.status and leadOne.radar:
+    if leadOne.status: # and leadOne.radar:
       self.lead_dRel = leadOne.dRel
       self.lead_vRel = leadOne.vRel
       self.lead_vLead = leadOne.vLeadK
@@ -644,7 +644,7 @@ class VCruiseHelper:
 
     if controls.enabled and self.autoSpeedUptoRoadSpeedLimit > 0.:
       print("autoSpeed = {:.1f},{:.1f}".format(self.lead_vLead, CS.vEgoCluster))
-      if self.lead_vLead > CS.vEgoCluster:
+      if self.lead_vLead > CS.vEgoCluster and self.lead_dRel < 60:
         lead_v_kph = self.lead_vLead * CV.MS_TO_KPH + 0.0
         self._add_log_auto_cruise("AutoSpeed up to leadCar {:.0f}kph".format(lead_v_kph))
         v_cruise_kph = max(v_cruise_kph, min(lead_v_kph, (30 if self.roadSpeed < 30 else self.roadSpeed) * self.autoSpeedUptoRoadSpeedLimit))
