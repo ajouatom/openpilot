@@ -499,7 +499,9 @@ class CarrotPlannerHelper:
   def update(self, sm, v_cruise_kph):
     self._params_update()
     enabled = sm['controlsState'].enabled
-    if not enabled:
+    if enabled:
+      self.v_cruise_kph = min(v_cruise_kph, self.v_cruise_kph)
+    else:
       self.v_cruise_kph = 255
     
     vision_turn_kph = self.vision_turn.update(sm, v_cruise_kph, self.v_cruise_kph)
