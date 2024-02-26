@@ -78,7 +78,7 @@ class CarrotVisionTurn(CarrotBase):
     ## turn speed
     self.turnSpeed, self.curveSpeed = self.turn_speed(CS, sm)
     if self.autoCurveSpeedCtrlUse > 0:
-      if self.turnSpeed < v_cruise_kph:
+      if self.turnSpeed < CS.vEgo * CV.MS_TO_KPH:
         self._add_log("Vision turn speed down {:.1f}kmh".format(self.turnSpeed), EventName.speedDown)
       v_cruise_kph = min(v_cruise_kph, self.turnSpeed)
     return v_cruise_kph
