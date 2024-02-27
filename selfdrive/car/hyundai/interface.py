@@ -60,6 +60,18 @@ class CarInterface(CarInterfaceBase):
         if 0x1cf not in fingerprint[CAN.ECAN]: # 0x1cf(463): CRUISE_BUTTONS
           ret.flags |= HyundaiFlags.CANFD_ALT_BUTTONS.value
           print("$$$CANFD ALT_BUTTONS")
+        ## carrot
+        if 0x130 not in fingerprint[CAN.ECAN]: # 0x130(304): GEAR_SHIFTER
+          if 0x40 not in fingerprint[CAN.ECAN]: # 0x40(64): GEAR_ALT
+            if 112 not in fingerprint[CAN.ECAN]:  # carrot: eGV70
+              ret.flags |= HyundaiFlags.CANFD_GEARS_NONE.value
+              print("$$$CANFD GEARS_NONE")
+            else:
+              ret.flags |= HyundaiFlags.CANFD_ALT_GEARS_2.value
+              print("$$$CANFD ALT_GEARS_2")
+          else:
+            ret.flags |= HyundaiFlags.CANFD_ALT_GEARS.value
+            print("$$$CANFD ALT_GEARS")
       else:
         # non-HDA2
         print("$$$CANFD non HDA2")
@@ -338,6 +350,10 @@ class CarInterface(CarInterfaceBase):
       ret.mass = 2150
       ret.wheelbase = 3.16
       ret.steerRatio = 12.069  # carrot, TODO
+    elif candidate == CAR.GENESIS_EGV70:
+      ret.mass = 2230
+      ret.wheelbase = 2.87
+      ret.steerRatio = 14.6
       
 
     # *** longitudinal control ***
