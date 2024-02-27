@@ -169,6 +169,11 @@ class CarrotMapTurnSpeed(CarrotBase):
 
     return v_cruise_kph
 
+  def calculate_road_curvature(self, modelData, v_ego):
+    predicted_velocities = np.array(modelData.velocity.x)
+    curvature_ratios = np.abs(np.array(modelData.acceleration.y)) / (predicted_velocities**2)
+    return np.amax(curvature_ratios * (v_ego**2))
+
   def get_current_speed_limit(self):
     speed_limit = self.params_memory.get("MapSpeedLimit", encoding='utf8')
     return float(speed_limit) if speed_limit else 0.0
