@@ -454,7 +454,7 @@ class CarrotNaviSpeedManager(CarrotBase):
                     msg.xSpdLimit, msg.xSpdDist,
                     msg.camLimitSpeed, msg.camLimitSpeedLeftDist,
                     CS.speedLimit, CS.speedLimitDistance)
-      self._add_log(log)
+      self._add_log(log, EventName.speedDown if applySpeed < v_cruise_kph else -1)
     #self.debugText2 = log
     if speedLimitType == 2:
       self.activeAPM += 1000
