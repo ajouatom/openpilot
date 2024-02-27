@@ -146,7 +146,8 @@ class CarrotMapTurnSpeed(CarrotBase):
     # Pfeiferj's Map Turn Speed Controller
     if self.map_turn_speed_controller and v_ego > MIN_TARGET_V:
       #mtsc_active = self.mtsc_target < v_cruise
-      self.mtsc_target = self.mtsc.target_speed(v_ego, CS.aEgo)
+      #self.mtsc_target = self.mtsc.target_speed(v_ego, CS.aEgo)
+      self.mtsc_target = self.mtsc.target_speed(100.0, CS.aEgo)
 
       # MTSC failsafes
       #if self.mtsc_curvature_check and self.road_curvature < 1.0 and not mtsc_active:
@@ -536,7 +537,7 @@ class CarrotPlannerHelper:
       self.log += "|"
     self.log += self.navi_speed_manager.log
 
-    self.log = "VT{:.1f}, MT{:.1f}, NH{:.1f}, SP{:.1f}".format(vision_turn_kph, map_turn_kph, navi_helper_kph, navi_speed_manager_kph)
+    #self.log = "VT{:.1f}, MT{:.1f}, NH{:.1f}, SP{:.1f}".format(vision_turn_kph, map_turn_kph, navi_helper_kph, navi_speed_manager_kph)
     self.v_cruise_kph = min(vision_turn_kph, map_turn_kph, navi_helper_kph, navi_speed_manager_kph)
     return self.v_cruise_kph
 
