@@ -112,17 +112,15 @@ class CarrotMapTurnSpeed(CarrotBase):
     self.map_turn_aggressiveness = 100
     self.mtsc = MapTurnSpeedController()
     self.mtsc_target = 0  #MS
-    self.mtsc_limit = 0
     self.road_curvature = 0
     self.limitSpeed = 0.0
     super().__init__()
 
   def update_params(self):
-    self.enableOSM = self.params.get_int("EnableOSM")
+    self.autoNaviSpeedSafetyFactor = float(self.params.get_int("AutoNaviSpeedSafetyFactor")) * 0.01
+    self.MSLCEnabled = self.params.get_int("MSLCEnabled")
     self.map_turn_speed_controller = self.params.get_bool("MTSCEnabled")
     self.mtsc_curvature_check = self.params.get_bool("MTSCCurvatureCheck")
-    is_metric = True
-    self.mtsc_limit = self.params.get_float("MTSCLimit") * (CV.KPH_TO_MS if is_metric else CV.MPH_TO_MS)
     map_turn_aggressiveness = self.params.get_int("MTSCAggressiveness")
     if self.map_turn_speed_controller and map_turn_aggressiveness != self.map_turn_aggressiveness:
       self.map_turn_aggressiveness = map_turn_aggressiveness
@@ -152,38 +150,23 @@ class CarrotMapTurnSpeed(CarrotBase):
       # MTSC failsafes
       #if self.mtsc_curvature_check and self.road_curvature < 1.0 and not mtsc_active:
       #  self.mtsc_target = v_cruise
-      #if v_ego - self.mtsc_limit >= self.mtsc_target:
-      #  self.mtsc_target = v_cruise
       #log = "MTSC speed = {:.1f}kmh".format(self.mtsc_target * 3.6)
       #self._add_log(log)
-      v_cruise_kph = min(v_cruise_kph, max(self.mtsc_target * 3.6, self.mtsc_limit))
+      if self.mtsc_target > 0:
+        v_cruise_kph_apply = min(v_cruise_kph, max(self.mtsc_target * 3.6, 15.0))
 
-    log = "osm:{:.1f}:[{}], speedLimit:{:.1f}".format(
-      self.mtsc_target*3.6, roadName, map_speed_limit)#, map_speed_limit_next, map_speed_limit_dist_next)
-    self._add_log(log)
+        log = "map:{:.1f}:[{}], mapsl:{:.1f}".format(
+          self.mtsc_target*3.6, roadName, map_speed_limit)#, map_speed_limit_next, map_speed_limit_dist_next)
+        self._add_log(log, EventName.speedDown if v_cruise_kph_apply < v_cruise_kph else -1)
+        v_cruise_kph = v_cruise_kph_apply
 
-    if False: #controls.sm.updated['liveMapData']:
-      osm = sm['liveMapData']
-      log = "speedLimit={}/{},{}/{}/{:.0f},turn={}/{:.1f}/{}/{:.1f}".format(
-        osm.speedLimitValid, osm.speedLimit,
-        osm.speedLimitAheadValid, osm.speedLimitAhead, osm.speedLimitAheadDistance,
-        osm.turnSpeedLimitValid, osm.turnSpeedLimit, osm.turnSpeedLimitSign, osm.turnSpeedLimitEndDistance)
-      self._add_log(log)
+      if self.MSLCEnabled > 0:
+        if map_speed_limit > 0:
+          v_cruise_kph_apply = min(v_cruise_kph, map_speed_limit * self.autoNaviSpeedSafetyFactor)
+          log = "mapsl:{:.1f}".format(map_speed_limit)#, map_speed_limit_next, map_speed_limit_dist_next)
+          self._add_log(log, EventName.speedDown if v_cruise_kph_apply < v_cruise_kph else -1)
+          v_cruise_kph = v_cruise_kph_apply
 
-      if self.enableOSM > 0:
-        if osm.speedLimitAheadValid and osm.speedLimitAhead > 0 and osm.speedLimitAheadDistance < 50:
-          self.limitSpeed = osm.speedLimitAhead
-        elif osm.speedLimitValid and osm.speedLimit > 0:
-          self.limitSpeed = osm.speedLimit
-
-        if self.enableOSM > 1:
-          if self.limitSpeed > 0:
-            self.cruiseSpeedMax = self.limitSpeed * self.autoNaviSpeedSafetyFactor
-
-        if self.enableOSM > 2:
-          if osm.turnSpeedLimitValid and osm.turnSpeedLimit > 0:
-            v_cruise_kph = min(v_cruise_kph, osm.turnSpeedLimit)
-      
     return v_cruise_kph
 
   def get_current_speed_limit(self):

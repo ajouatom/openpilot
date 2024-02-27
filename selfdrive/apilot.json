@@ -1329,12 +1329,12 @@
     },
     {
       "group": "皑加力绢",
-      "name": "EnableOSM",
-      "title": "Enable OSM(0)",
-      "descr": "1:OSM 2:SpeedCtrl,3:Speed+CurveCtrl(Reboot)",
+      "name": "MSLCEnabled",
+      "title": "MSLC Enabled(0)",
+      "descr": "Map: Speed Limit control enabled",
       "egroup": "SPEED",
-      "etitle": "Enable OSM(0)",
-      "edescr": "1:OSM 2:SpeedCtrl,3:Speed+CurveCtrl(Reboot)",
+      "etitle": "MSLC Enabled(0)",
+      "edescr": "Map: Speed Limit control enabled",
       "min": 0,
       "max": 3,
       "default": 0,
@@ -1365,19 +1365,6 @@
       "max": 1,
       "default": 0,
       "unit": 1
-    },
-    {
-      "group": "皑加力绢",
-      "name": "MTSCLimit",
-      "title": "MTSC: lower limit",
-      "descr": "",
-      "egroup": "SPEED",
-      "etitle": "MTSC: lower limit",
-      "edescr": "",
-      "min": 0,
-      "max": 100,
-      "default": 30,
-      "unit": 5
     },
     {
       "group": "皑加力绢",

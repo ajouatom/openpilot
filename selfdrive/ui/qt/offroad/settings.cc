@@ -613,11 +613,10 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
     speedToggles->addItem(new CValueControl("AutoTurnControlSpeedTurn", "NOO Helper Turn Speed (20)", "0:없음, 턴속도", "../assets/offroad/icon_road.png", 0, 100, 5));
     speedToggles->addItem(new CValueControl("AutoTurnControlTurnEnd", "NOO Helper Turn CtrlDistTime (6)", "dist=speed*time", "../assets/offroad/icon_road.png", 0, 30, 1));
     speedToggles->addItem(new CValueControl("AutoTurnMapChange", "NOO Helper Auto Map Change(0)", "", "../assets/offroad/icon_road.png", 0, 1, 1));
-    speedToggles->addItem(new CValueControl("EnableOSM", "Enable OSM(0) WIP", "1:Display, 2:Speed Limit, 3:Speed/Turn Limit(Reboot)", "../assets/offroad/icon_road.png", 0, 3, 1));
-    speedToggles->addItem(new CValueControl("MTSCEnabled", "OSM:MTSC Enabled", "Slow down for curves detected by downloaded maps.", "../assets/offroad/icon_road.png", 0, 1, 1));
-    speedToggles->addItem(new CValueControl("MTSCCurvatureCheck", "OSM:MTSC CurvatureCheck", "Trigger MTSC when the model detectes a curve in the road", "../assets/offroad/icon_road.png", 0, 1, 1));
-    speedToggles->addItem(new CValueControl("MTSCLimit", "OSM:MTSC Limit", "limit MTSC value", "../assets/offroad/icon_road.png", 0, 100, 5));
-    speedToggles->addItem(new CValueControl("MTSCAggressiveness", "OSM:MTSC MTSCAggressiveness", "MTSC turn speed aggressiveness, Higher value is more faster", "../assets/offroad/icon_road.png", 1, 200, 5));
+    speedToggles->addItem(new CValueControl("MSLCEnabled", "MSLC Enabled", "Map: Speed Limit controller", "../assets/offroad/icon_road.png", 0, 3, 1));
+    speedToggles->addItem(new CValueControl("MTSCEnabled", "MTSC Enabled", "Map: Slow down for curves detected by downloaded maps.", "../assets/offroad/icon_road.png", 0, 1, 1));
+    speedToggles->addItem(new CValueControl("MTSCCurvatureCheck", "MTSC CurvatureCheck", "Map: Trigger MTSC when the model detectes a curve in the road", "../assets/offroad/icon_road.png", 0, 1, 1));
+    speedToggles->addItem(new CValueControl("MTSCAggressiveness", "MTSC MTSCAggressiveness", "Map: MTSC turn speed aggressiveness, Higher value is more faster", "../assets/offroad/icon_road.png", 1, 200, 5));
 
     toggles_layout->addWidget(cruiseToggles);
     toggles_layout->addWidget(latLongToggles);
