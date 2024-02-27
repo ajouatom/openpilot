@@ -537,7 +537,7 @@ class CarrotPlannerHelper:
       self.log += "|"
     self.log += self.navi_speed_manager.log
 
-    self.log = "{} VT{:.1f}, MT{:.1f}, NH{:.1f}, SP{:.1f}".format(self.map_turn.log, vision_turn_kph, map_turn_kph, navi_helper_kph, navi_speed_manager_kph)
+    #self.log = "{} VT{:.1f}, MT{:.1f}, NH{:.1f}, SP{:.1f}".format(self.map_turn.log, vision_turn_kph, map_turn_kph, navi_helper_kph, navi_speed_manager_kph)
     self.v_cruise_kph = min(vision_turn_kph, map_turn_kph, navi_helper_kph, navi_speed_manager_kph)
     return self.v_cruise_kph
 
