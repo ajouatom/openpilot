@@ -9,7 +9,6 @@ from enum import Enum
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.numpy_fast import clip, interp
 from openpilot.selfdrive.modeld.constants import ModelConstants
-from common.filter_simple import StreamingMovingAverage
 from abc import abstractmethod, ABC
 from openpilot.selfdrive.frogpilot.functions.map_turn_speed_controller import MapTurnSpeedController
 from openpilot.selfdrive.navd.helpers import Coordinate
@@ -30,7 +29,7 @@ def decelerate_for_speed_camera(safe_speed, safe_dist, prev_apply_speed, decel_r
 class CarrotBase(ABC):
   def __init__(self):
     self._log_timer = 0
-    self._log_timeout = 300
+    self._log_timeout = int(3/DT_MDL) # 3 seconds
     self.log = ""
     self.event = -1
     self.update_params()
@@ -65,8 +64,7 @@ class CarrotVisionTurn(CarrotBase):
   def __init__(self, params):
     self.params = params
     super().__init__()
-    self._log_timeout = 20
-    self.curvatureFilter = StreamingMovingAverage(5)
+    self._log_timeout = int(2/DT_MDL) # 2 seconds
 
   def update_params(self):
     self.autoCurveSpeedCtrlUse = int(self.params.get("AutoCurveSpeedCtrlUse"))

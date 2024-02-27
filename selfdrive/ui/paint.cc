@@ -1916,11 +1916,11 @@ void DrawApilot::drawDeviceState(UIState* s, bool show) {
         ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugModelV2.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
     }
     else {
-        if (debugControlsState.length() > 2) {
-            ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugControlsState.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
-        }
-        else if (debugLong2.length() > 2) {
+        if (debugLong2.length() > 2) {
             ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugLong2.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
+        }
+        else if (debugControlsState.length() > 2) {
+            ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugControlsState.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
         }
         else if (s->fb_w > 1200 && show) {
             sprintf(str, "MEM: %d%% DISK: %.0f%% CPU: %.0f°C FPS: %d, %s: %.0f BATTERY: %.0f%%", memoryUsagePercent, freeSpacePercent, cpuTemp, g_fps, (motorRpm > 0.0) ? "MOTOR" : "RPM", (motorRpm > 0.0) ? motorRpm : engineRpm, car_state.getChargeMeter());
