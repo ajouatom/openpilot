@@ -116,7 +116,7 @@ class DesireHelper:
         self.debugText = ""
     else:
       self.debugText = log
-      self._log_timer = 100
+      self._log_timer = int(2/DT_MDL) # 2s
 
   def update(self, carstate, modeldata, lateral_active, lane_change_prob, sm):
     self._add_log("")
