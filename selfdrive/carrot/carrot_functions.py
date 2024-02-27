@@ -84,7 +84,7 @@ class CarrotVisionTurn(CarrotBase):
   def turn_speed(self, CS, sm):
 
     modelData = sm['modelV2']
-    v_ego = CS.vEgo
+    v_ego = max(CS.vEgo, 0.1)
     # Set the curve sensitivity
     orientation_rate = np.array(modelData.orientationRate.z) * self.autoCurveSpeedFactor
     velocity = np.array(modelData.velocity.x)
