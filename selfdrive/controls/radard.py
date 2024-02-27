@@ -262,15 +262,16 @@ def get_lead(v_ego: float, ready: bool, tracks: Dict[int, Track], lead_msg: capn
   else:
     track = None
 
+  ## carrot : 삭제함.. 오히려 SCC레이더의 값이 엉뚱한곳을 가르키는 차량이 있음.. kona_ev.. 엉뚱한 차량을 보고 쓸데없는 감속을 함.
   ## vision match후 발견된 track이 없으면
   ##  track_scc 가 있는 지 확인하고
   ##    비전과의 차이가 35%(5M)이상 차이나면 scc가 발견못한것이기 때문에 비전것으로 처리함.
-  if track_scc is not None and track is None:
-    track = track_scc
-    if lead_msg.prob > .5:
-      offset_vision_dist = lead_msg.x[0] - RADAR_TO_CAMERA
-      if offset_vision_dist < track.dRel - 5.0: #끼어드는 차량이 있는 경우 처리..
-        track = None
+  #if track_scc is not None and track is None:
+  #  track = track_scc
+  #  if lead_msg.prob > .5:
+  #    offset_vision_dist = lead_msg.x[0] - RADAR_TO_CAMERA
+  #    if offset_vision_dist < track.dRel - 5.0: #끼어드는 차량이 있는 경우 처리..
+  #      track = None
 
   lead_dict = {'status': False}
   if track is not None:
