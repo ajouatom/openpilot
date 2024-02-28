@@ -1322,13 +1322,17 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
         if (isEnabled() && isLongActive() && applyMaxSpeed > 0) {
             NVGcolor textColor = COLOR_GREEN;
             str[0] = 0;
-            if (longVCruiseTarget < cruiseMaxSpeed - 0.5) {
-                sprintf(str, "%d %s", (int)(longVCruiseTarget * (s->scene.is_metric ? 1.0 : KM_TO_MILE) + 0.5), longVCruiseTargetSource.toStdString().c_str());
-                textColor = COLOR_OCHRE;
-            }
-            else if (applyMaxSpeed != cruiseMaxSpeed) {
-                sprintf(str, "%d ECO", (int)(applyMaxSpeed* (s->scene.is_metric ? 1.0 : KM_TO_MILE) + 0.5));
-            }
+            static float dispApplyMaxSpeed = 0.0
+                if (longVCruiseTarget < cruiseMaxSpeed - 0.5) {
+                    dispApplyMaxSpeed = dispApplyMaxSpeed * 0.95 + longVCruiseTarget * (s->scene.is_metric ? 1.0 : KM_TO_MILE) * 0.05
+                    sprintf(str, "%d %s", (int)(dispApplyMaxSpeed + 0.5), longVCruiseTargetSource.toStdString().c_str());
+                    textColor = COLOR_OCHRE;
+                }
+                else if (applyMaxSpeed != cruiseMaxSpeed) {
+                    dispApplyMaxSpeed = applyMaxSpeed * (s->scene.is_metric ? 1.0 : KM_TO_MILE)
+                    sprintf(str, "%d ECO", (int)(dispApplyMaxSpeed + 0.5));
+                }
+                else dispApplyMaxSpeed = cruiseMaxSpeed;
             if (strlen(str)) {
                 nvgTextAlign(s->vg, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM);
                 ui_draw_text(s, bx + 220, by - 50, str, 50, textColor, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
