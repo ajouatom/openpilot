@@ -1330,7 +1330,7 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
                 }
                 else if (applyMaxSpeed != cruiseMaxSpeed) {
                     dispApplyMaxSpeed = applyMaxSpeed * (s->scene.is_metric ? 1.0 : KM_TO_MILE);
-                    sprintf(str, "%d ECO", (int)(dispApplyMaxSpeed + 0.5));
+                    sprintf(str, "%d", (int)(dispApplyMaxSpeed + 0.5));
                 }
                 else dispApplyMaxSpeed = cruiseMaxSpeed;
             if (strlen(str)) {
