@@ -1323,11 +1323,11 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             NVGcolor textColor = COLOR_GREEN;
             str[0] = 0;
             if (longVCruiseTarget < cruiseMaxSpeed - 0.5) {
-                sprintf(str, "%d-%s", (int)(longVCruiseTarget * (s->scene.is_metric ? 1.0 : KM_TO_MILE) + 0.5), longVCruiseTargetSource.toStdString().c_str());
+                sprintf(str, "%d %s", (int)(longVCruiseTarget * (s->scene.is_metric ? 1.0 : KM_TO_MILE) + 0.5), longVCruiseTargetSource.toStdString().c_str());
                 textColor = COLOR_OCHRE;
             }
             else if (applyMaxSpeed != cruiseMaxSpeed) {
-                sprintf(str, "%d-ECO", (int)(applyMaxSpeed* (s->scene.is_metric ? 1.0 : KM_TO_MILE) + 0.5));
+                sprintf(str, "%d ECO", (int)(applyMaxSpeed* (s->scene.is_metric ? 1.0 : KM_TO_MILE) + 0.5));
             }
             if (strlen(str)) {
                 nvgTextAlign(s->vg, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM);
