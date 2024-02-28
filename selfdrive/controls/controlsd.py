@@ -934,7 +934,7 @@ class Controls:
     hudControl.objDist = int(lead_one.dRel) if lead_one.status else 0
     hudControl.objRelSpd = lead_one.vRel if lead_one.status else 0
 
-    CC.cruiseControl.activate = self.carrotCruiseActivate > 0
+    CC.cruiseControl.activate = self.carrotCruiseActivate > 0 and not no_entry_events
     CC.hudControl.softHold = self.v_cruise_helper.softHoldActive
     CC.hudControl.activeAPM = self.sm['longitudinalPlan'].activeAPM #self.v_cruise_helper.activeAPM
     CC.hudControl.activeAVM = self.v_cruise_helper.activeAVM if self.enable_avail else 0
