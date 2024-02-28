@@ -143,25 +143,30 @@ class CarrotMapTurnSpeed(CarrotBase):
 
     # Pfeiferj's Map Turn Speed Controller
     if self.map_turn_speed_controller and v_ego > MIN_TARGET_V:
-      #mtsc_active = self.mtsc_target < v_cruise
+      mtsc_active = self.mtsc_target < v_cruise
       #self.mtsc_target = self.mtsc.target_speed(v_ego, CS.aEgo)
       self.mtsc_target = self.mtsc.target_speed(100.0, CS.aEgo)
 
-      # MTSC failsafes
-      #if self.mtsc_curvature_check and self.road_curvature < 1.0 and not mtsc_active:
-      #  self.mtsc_target = v_cruise
-      #log = "MTSC speed = {:.1f}kmh".format(self.mtsc_target * 3.6)
-      #self._add_log(log)
-      log = "map:{:.1f}:[{}], mapsl:{:.1f}".format(
-        self.mtsc_target*3.6, roadName, map_speed_limit)#, map_speed_limit_next, map_speed_limit_dist_next)
-      self._add_log(log, EventName.speedDown if v_cruise_kph_apply < v_cruise_kph else -1)
-      if self.mtsc_target > 0:
-        v_cruise_kph_apply = min(v_cruise_kph, max(self.mtsc_target * 3.6, 15.0))
+      self.road_curvature = self.road_curvature(sm['modelV2'], v_ego)
 
+      # MTSC failsafes
+      if self.mtsc_curvature_check and self.road_curvature < 1.0 and not mtsc_active:
+        self.mtsc_target = v_cruise
+        log = "map:{:.1f}:[{}] road_curvature = {:.4f}".format(self.mtsc_target*3.6, roadName, self.road_curvature)
+        self._add_log(log)
+      else:
+        #log = "MTSC speed = {:.1f}kmh".format(self.mtsc_target * 3.6)
+        #self._add_log(log)
         log = "map:{:.1f}:[{}], mapsl:{:.1f}".format(
           self.mtsc_target*3.6, roadName, map_speed_limit)#, map_speed_limit_next, map_speed_limit_dist_next)
         self._add_log(log, EventName.speedDown if v_cruise_kph_apply < v_cruise_kph else -1)
-        v_cruise_kph = v_cruise_kph_apply
+        if self.mtsc_target > 0:
+          v_cruise_kph_apply = min(v_cruise_kph, max(self.mtsc_target * 3.6, 15.0))
+
+          log = "map:{:.1f}:[{}], mapsl:{:.1f}".format(
+            self.mtsc_target*3.6, roadName, map_speed_limit)#, map_speed_limit_next, map_speed_limit_dist_next)
+          self._add_log(log, EventName.speedDown if v_cruise_kph_apply < v_cruise_kph else -1)
+          v_cruise_kph = v_cruise_kph_apply
 
       if self.MSLCEnabled > 0:
         if map_speed_limit > 0:
