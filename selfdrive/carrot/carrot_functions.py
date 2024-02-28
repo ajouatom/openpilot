@@ -171,7 +171,7 @@ class CarrotMapTurnSpeed(CarrotBase):
       if self.MSLCEnabled > 0:
         if map_speed_limit > 0:
           v_cruise_kph_apply = min(v_cruise_kph, map_speed_limit * 3.6 * self.autoNaviSpeedSafetyFactor)
-          log = "mapsl:{:.1f}".format(map_speed_limit)#, map_speed_limit_next, map_speed_limit_dist_next)
+          log = "mapsl:{:.1f}".format(map_speed_limit*3.6)#, map_speed_limit_next, map_speed_limit_dist_next)
           self._add_log(log, EventName.speedDown if v_cruise_kph_apply < v_cruise_kph else -1)
           v_cruise_kph = v_cruise_kph_apply
 
