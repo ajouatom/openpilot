@@ -48,7 +48,6 @@ def manager_init() -> None:
     ("SearchInput", "0"),
     ("GMapKey", "0"),
     ("SteerRatio", "0"),
-    ("NNFF", "0"),
     ("MuteDoor", "0"),
     ("MuteSeatbelt", "0"),
     ("LongPitch", "0"),
@@ -73,6 +72,7 @@ def manager_init() -> None:
     ("ShowDmInfo", "1"),
     ("ShowRadarInfo", "1"),
     ("MixRadarInfo", "0"),
+    ("CarrotTest", "0"),
     ("VisionAccelRatio", "100"),
     ("ShowZOffset", "122"),
     ("ShowPathMode", "9"),
@@ -89,7 +89,7 @@ def manager_init() -> None:
     ("MapboxStyle", "0"),    
     ("AutoCurveSpeedCtrlUse", "1"),
     ("AutoCurveSpeedFactor", "120"),
-    ("AutoCurveSpeedFactorIn", "70"),
+    ("AutoCurveSpeedAggressiveness", "100"),
     ("AutoTurnControl", "0"),
     ("AutoTurnControlSpeedLaneChange", "60"),
     ("AutoTurnControlSpeedTurn", "20"),
@@ -112,7 +112,6 @@ def manager_init() -> None:
     ("StopDistanceCarrot", "600"), 
     ("ALeadTau", "120"), 
     ("ALeadTauStart", "30"), 
-    ("TrafficStopMode", "1"),         
     ("CruiseButtonMode", "0"),      
     ("CruiseButtonTest1", "8"),      
     ("CruiseButtonTest2", "30"),      
@@ -164,9 +163,13 @@ def manager_init() -> None:
     ("SpeedFromPCM", "1"),       
     ("SteerActuatorDelay", "30"),       
     ("CruiseOnDist", "0"),
-    ("EnableOSM", "0"),
+    ("MSLCEnabled", "0"),
     ("NoLogging", "0"),
     ("HotspotOnBoot", "0"),
+
+    ("MTSCAggressiveness", "100"),
+    ("MTSCCurvatureCheck", "1"),
+    ("MTSCEnabled", "0"),
   ]
   if not PC:
     default_params.append(("LastUpdateTime", datetime.datetime.utcnow().isoformat().encode('utf8')))

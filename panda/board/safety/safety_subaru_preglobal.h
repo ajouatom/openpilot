@@ -57,9 +57,9 @@ static void subaru_preglobal_rx_hook(const CANPacket_t *to_push) {
     // enter controls on rising edge of ACC, exit controls on ACC off
     if (addr == MSG_SUBARU_PG_CruiseControl) {
       // PFEIFER - AOL {{
-      acc_main_on = GET_BIT(to_push, 48U) != 0U;
+      acc_main_on = GET_BIT(to_push, 48U);
       // }} PFEIFER - AOL
-      bool cruise_engaged = GET_BIT(to_push, 49U) != 0U;
+      bool cruise_engaged = GET_BIT(to_push, 49U);
       pcm_cruise_check(cruise_engaged);
     }
 
@@ -89,7 +89,7 @@ static bool subaru_preglobal_tx_hook(const CANPacket_t *to_send) {
     int desired_torque = ((GET_BYTES(to_send, 0, 4) >> 8) & 0x1FFFU);
     desired_torque = -1 * to_signed(desired_torque, 13);
 
-    bool steer_req = (GET_BIT(to_send, 24U) != 0U);
+    bool steer_req = GET_BIT(to_send, 24U);
 
     if (steer_torque_cmd_checks(desired_torque, steer_req, SUBARU_PG_STEERING_LIMITS)) {
       tx = false;
@@ -107,7 +107,7 @@ static int subaru_preglobal_fwd_hook(int bus_num, int addr) {
   }
 
   if (bus_num == SUBARU_PG_CAM_BUS) {
-    int block_msg = ((addr == MSG_SUBARU_PG_ES_Distance) || (addr == MSG_SUBARU_PG_ES_LKAS));
+    bool block_msg = ((addr == MSG_SUBARU_PG_ES_Distance) || (addr == MSG_SUBARU_PG_ES_LKAS));
     if (!block_msg) {
       bus_fwd = SUBARU_PG_MAIN_BUS;  // Main CAN
     }

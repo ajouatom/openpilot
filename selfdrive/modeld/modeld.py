@@ -116,12 +116,16 @@ class ModelState:
 
 
 def main(demo=False):
+  cloudlog.warning("modeld init")
+
   sentry.set_tag("daemon", PROCESS_NAME)
   cloudlog.bind(daemon=PROCESS_NAME)
   setproctitle(PROCESS_NAME)
   config_realtime_process(7, 54)
 
+  cloudlog.warning("setting up CL context")
   cl_context = CLContext()
+  cloudlog.warning("CL context ready; loading model")
   model = ModelState(cl_context)
   cloudlog.warning("models loaded, modeld starting")
 
@@ -150,7 +154,7 @@ def main(demo=False):
 
   # messaging
   pm = PubMaster(["modelV2", "cameraOdometry"])
-  sm = SubMaster(["carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "navModel", "navInstruction", "carControl", "radarState", "controlsState"])
+  sm = SubMaster(["carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "navModel", "navInstruction", "carControl", "radarState", "controlsState", "longitudinalPlan"])
 
 
   publish_state = PublishState()
