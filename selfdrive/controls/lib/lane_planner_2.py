@@ -222,7 +222,7 @@ class LanePlanner:
 
     useLaneLineDebug = self.params.get_int("UseLaneLineDebug")
     if self.lanefull_mode:
-      use_dist_mode = False  ## 아무리생각해봐도.. 같은 방법인듯...
+      use_dist_mode = True  ## 아무리생각해봐도.. 같은 방법인듯...
       if use_dist_mode:
         lane_path_y_interp = np.interp(path_xyz[:,0] + v_ego * useLaneLineDebug*0.01, self.ll_x, lane_path_y)
         path_xyz[:,1] = self.d_prob * lane_path_y_interp + (1.0 - self.d_prob) * path_xyz[:,1]

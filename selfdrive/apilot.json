@@ -432,6 +432,19 @@
     },
     {
       "group": "조향일반",
+      "name": "LaneChangeNeedTorque",
+      "title": "차선변경 반자동, 토크필요",
+      "descr": "",
+      "egroup": "LATSET",
+      "etitle": "LaneChange need torque",
+      "edescr": "",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "조향일반",
       "name": "AutoTurnControlSpeedLaneChange",
       "title": "NOO Helper 차선변경속도(60)",
       "descr": "0:사용안함, 차선변경시 적용속도",

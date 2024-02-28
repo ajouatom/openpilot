@@ -114,6 +114,7 @@ class CarrotMapTurnSpeed(CarrotBase):
     self.mtsc_target = 0  #MS
     self.road_curvature = 0
     self.limitSpeed = 0.0
+    self.mtsc_canceled = 0
     super().__init__()
 
   def update_params(self):
@@ -130,11 +131,12 @@ class CarrotMapTurnSpeed(CarrotBase):
     CS = sm['carState']
     v_ego = CS.vEgoCluster
     v_cruise = v_cruise_kph * CV.KPH_TO_MS
+    v_cruise_prev = v_cruise_kph_prev * CV.KPH_TO_MS
 
     roadName = self.get_current_road_name()
     map_speed_limit = self.get_current_speed_limit()
 
-    #map_speed_limit_next, map_speed_limit_dist_next = self.get_next_speed_limit_and_distance()
+    map_speed_limit_next, map_speed_limit_dist_next = self.get_next_speed_limit_and_distance()
 
     #target_velocities = json.loads(self.params_memory.get("MapTargetVelocities"))
     #map_curvatures = json.loads(self.params_memory.get("MapCurvatures"))
@@ -143,29 +145,34 @@ class CarrotMapTurnSpeed(CarrotBase):
 
     # Pfeiferj's Map Turn Speed Controller
     if self.map_turn_speed_controller and v_ego > MIN_TARGET_V:
-      mtsc_active = self.mtsc_target < v_cruise
+      mtsc_active = self.mtsc_target < v_cruise_prev
       #self.mtsc_target = self.mtsc.target_speed(v_ego, CS.aEgo)
       self.mtsc_target = self.mtsc.target_speed(100.0, CS.aEgo)
 
-      self.road_curvature = self.road_curvature(sm['modelV2'], v_ego)
+      self.road_curvature = self.calculate_road_curvature(sm['modelV2'], v_ego)
+
+      if CS.gasPressed:
+        self.mtsc_canceled = 1
+
+      if self.mtsc_target > v_cruise:
+        self.mtsc_canceled = 0
 
       # MTSC failsafes
       if self.mtsc_curvature_check and self.road_curvature < 1.0 and not mtsc_active:
         self.mtsc_target = v_cruise
-        log = "map:{:.1f}:[{}] road_curvature = {:.4f}".format(self.mtsc_target*3.6, roadName, self.road_curvature)
-        self._add_log(log)
+        #log = "map:{:.1f}:[{}] r_c = {:.4f}".format(self.mtsc_target*3.6, roadName, self.road_curvature)
+        #self._add_log(log)
       else:
         #log = "MTSC speed = {:.1f}kmh".format(self.mtsc_target * 3.6)
         #self._add_log(log)
-        log = "map:{:.1f}:[{}], mapsl:{:.1f}, rc={:.3f}".format(
-          self.mtsc_target*3.6, roadName, map_speed_limit, self.road_curvature)#, map_speed_limit_next, map_speed_limit_dist_next)
-        self._add_log(log, EventName.speedDown if v_cruise_kph_apply < v_cruise_kph else -1)
-        if self.mtsc_target > 0:
+        #log = "map:{:.1f}:[{}], mapsl:{:.1f}, rc={:.3f}, next={:.0f}/{:.0f}".format(
+        #  self.mtsc_target*3.6, roadName, map_speed_limit, self.road_curvature, map_speed_limit_next*3.6, map_speed_limit_dist_next)
+        #self._add_log(log) #, EventName.speedDown if v_cruise_kph_apply < v_cruise_kph else -1)
+        if self.mtsc_target > 0 and self.mtsc_canceled == 0:
           v_cruise_kph_apply = min(v_cruise_kph, max(self.mtsc_target * 3.6, 15.0))
-
           log = "map:{:.1f}:[{}], mapsl:{:.1f}".format(
             self.mtsc_target*3.6, roadName, map_speed_limit)#, map_speed_limit_next, map_speed_limit_dist_next)
-          self._add_log(log, EventName.speedDown if v_cruise_kph_apply < v_cruise_kph else -1)
+          self._add_log(log) # 소리끔..시골길 시끄러워... , EventName.speedDown if v_cruise_kph_apply < v_cruise_kph else -1)
           v_cruise_kph = v_cruise_kph_apply
 
       if self.MSLCEnabled > 0:
@@ -537,16 +544,16 @@ class CarrotPlannerHelper:
     #self.v_cruise_kph = min(vision_turn_kph, map_turn_kph, navi_helper_kph, navi_speed_manager_kph)
 
     values_and_names = [
-        (vision_turn_kph, "VTSC"),
-        (map_turn_kph, "MTSC"),
-        (navi_helper_kph, "NOSC"),
-        (navi_speed_manager_kph, "NVSC"),
+        (vision_turn_kph, "vTurn"),
+        (map_turn_kph, "mTurn"),
+        (navi_helper_kph, "noo"),
+        (navi_speed_manager_kph, "navi"),
     ]
 
     # min 함수를 사용하여 가장 작은 값을 가진 튜플 찾기
     self.v_cruise_kph, self.source = min(values_and_names, key=lambda x: x[0])
     if self.v_cruise_kph == v_cruise_kph:
-      self.source = "NONE"
+      self.source = "none"
     return self.v_cruise_kph
 
 

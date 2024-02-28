@@ -91,6 +91,7 @@ def manager_init() -> None:
     ("AutoCurveSpeedFactor", "120"),
     ("AutoCurveSpeedAggressiveness", "100"),
     ("AutoTurnControl", "0"),
+    ("LaneChangeNeedTorque", "0"),
     ("AutoTurnControlSpeedLaneChange", "60"),
     ("AutoTurnControlSpeedTurn", "20"),
     ("AutoTurnControlTurnEnd", "6"),
@@ -170,6 +171,8 @@ def manager_init() -> None:
     ("MTSCAggressiveness", "100"),
     ("MTSCCurvatureCheck", "1"),
     ("MTSCEnabled", "0"),
+    ("NNFF", "0"),
+    ("UseLateralJerk", "0"),
   ]
   if not PC:
     default_params.append(("LastUpdateTime", datetime.datetime.utcnow().isoformat().encode('utf8')))

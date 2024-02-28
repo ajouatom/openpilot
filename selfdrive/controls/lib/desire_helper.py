@@ -121,6 +121,7 @@ class DesireHelper:
   def update(self, carstate, modeldata, lateral_active, lane_change_prob, sm):
     self._add_log("")
     self.autoTurnControl = self.params.get_int("AutoTurnControl")
+    self.laneChangeNeedTorque = self.params.get_bool("LaneChangeNeedTorque")
     radarState = sm['radarState']
     self.leftSideObjectDist = 255
     self.rightSideObjectDist = 255
@@ -258,7 +259,7 @@ class DesireHelper:
           self._add_log("Lane change object detected.. {:.1f}m".format(self.leftSideObjectDist if leftBlinker else self.rightSideObjectDist))
         elif not lane_available and self.noo_active < 10:
           self._add_log("Lane change no lane available")
-        elif self.noo_active == 1:
+        elif self.noo_active == 1 or self.laneChangeNeedTorque:
           self._add_log("Lane change blocked. need torque")
         #elif self.noo_active == 3:
         #  self._add_log("Lane change left direction blocked.")
