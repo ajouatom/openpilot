@@ -912,8 +912,8 @@ class Controls:
     hudControl = CC.hudControl
     v_cruise_kph_long = self.sm['longitudinalPlan'].vCruiseTarget
     if self.CP.pcmCruise:
-      print("setSpeed={:.1f}, v_cruise_long={:.1f}".format(setSpeed, v_cruise_kph_long))
-      hudControl.setSpeed = max(30, setSpeed if self.v_cruise_helper.speedFromPCM != 2 else float(v_cruise_kph_long * CV.KPH_TO_MS)) #float(self.v_cruise_helper.v_cruise_cluster_kph * CV.KPH_TO_MS)
+      #print("setSpeed={:.1f}, v_cruise_long={:.1f}".format(setSpeed, v_cruise_kph_long))
+      hudControl.setSpeed = max(30/3.6, setSpeed if self.v_cruise_helper.speedFromPCM != 2 else float(v_cruise_kph_long * CV.KPH_TO_MS)) #float(self.v_cruise_helper.v_cruise_cluster_kph * CV.KPH_TO_MS)
     else:
       hudControl.setSpeed = setSpeed if self.v_cruise_helper.xState == 3 else float(v_cruise_kph_long * CV.KPH_TO_MS) #float(self.v_cruise_helper.v_cruise_cluster_kph * CV.KPH_TO_MS)
     #print("setSpeed={:.1f}".format(hudControl.setSpeed * 3.6))
