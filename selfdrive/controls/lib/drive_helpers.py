@@ -652,7 +652,7 @@ class VCruiseHelper:
 
     if self.autoCruiseControl < 1 or self.autoCruiseCancelState > 0 or not controls.enable_avail or CS.brakeHoldActive:
       if self.cruiseActivate != 0:
-        self._add_log_auto_cruise("Cancel auto Cruise = {self.cruiseActivate}")
+        self._add_log_auto_cruise(f"Cancel auto Cruise = {self.cruiseActivate}")
       self.cruiseActivate = 0
       self.softHoldActive = 0
     v_cruise_kph = clip(v_cruise_kph, self.cruiseSpeedMin, self.cruiseSpeedMax)
