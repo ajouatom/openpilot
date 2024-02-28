@@ -157,8 +157,8 @@ class CarrotMapTurnSpeed(CarrotBase):
       else:
         #log = "MTSC speed = {:.1f}kmh".format(self.mtsc_target * 3.6)
         #self._add_log(log)
-        log = "map:{:.1f}:[{}], mapsl:{:.1f}".format(
-          self.mtsc_target*3.6, roadName, map_speed_limit)#, map_speed_limit_next, map_speed_limit_dist_next)
+        log = "map:{:.1f}:[{}], mapsl:{:.1f}, rc={:.3f}".format(
+          self.mtsc_target*3.6, roadName, map_speed_limit, self.road_curvature)#, map_speed_limit_next, map_speed_limit_dist_next)
         self._add_log(log, EventName.speedDown if v_cruise_kph_apply < v_cruise_kph else -1)
         if self.mtsc_target > 0:
           v_cruise_kph_apply = min(v_cruise_kph, max(self.mtsc_target * 3.6, 15.0))
