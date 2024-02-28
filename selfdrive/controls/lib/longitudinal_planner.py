@@ -228,6 +228,7 @@ class LongitudinalPlanner:
     longitudinalPlan.limitSpeed = carrot_planner.limitSpeed
     longitudinalPlan.carrotEvent = carrot_planner.event
     longitudinalPlan.vCruiseTarget = float(carrot_planner.v_cruise_kph)
+    longitudinalPlan.vCruiseTargetSource = carrot_planner.source
 
     longitudinalPlan.debugLongText2 = carrot_planner.log
 

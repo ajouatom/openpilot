@@ -1192,6 +1192,8 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
         const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
         float cruiseMaxSpeed = controls_state.getVCruiseCluster();// scc_smoother.getCruiseMaxSpeed();
         float applyMaxSpeed = controls_state.getVCruise();// HW: controls_state.getVCruiseOut();// scc_smoother.getApplyMaxSpeed();
+        float longVCruiseTarget = lp.getVCruiseTarget();
+        QString longVCruiseTargetSource = QString::fromStdString(lp.getVCruiseTargetSource().cStr());
         float curveSpeed = 0.0;
         float lpSpeed = lp.getSpeeds()[0] * (s->scene.is_metric ? MS_TO_KPH : MS_TO_MPH);//HW: controls_state.getCurveSpeed();
         auto carstate = sm["carState"].getCarState();
@@ -1316,10 +1318,18 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
         }
         else strcpy(str, "--");
         ui_draw_text(s, bx + 170, by + 15, str, 60, COLOR_GREEN, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
-        sprintf(str, "%d", (int)(applyMaxSpeed * (s->scene.is_metric ? 1.0 : KM_TO_MILE) + 0.5));
-        if (isEnabled() && isLongActive() && applyMaxSpeed > 0 && applyMaxSpeed != cruiseMaxSpeed) {
-            ui_draw_text(s, bx + 250, by - 50, str, 50, COLOR_GREEN, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
+
+        if (isEnabled() && isLongActive() && applyMaxSpeed > 0) {
+            NVGcolor textColor = COLOR_GREEN;
+            if (longVCruiseTarget < cruiseMaxSpeed - 0.5) {
+                sprintf(str, "%d-%s", (int)(longVCruiseTarget * (s->scene.is_metric ? 1.0 : KM_TO_MILE) + 0.5), longVCruiseTargetSource.toStdString().c_str());
+            }
+            else if (applyMaxSpeed != cruiseMaxSpeed) {
+                sprintf(str, "%d", (int)(applyMaxSpeed* (s->scene.is_metric ? 1.0 : KM_TO_MILE) + 0.5));
+            }
+            ui_draw_text(s, bx + 250, by - 50, str, 50, textColor, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
         }
+
         if (true) {
             if (isEnabled()) {// && curveSpeed > 0 && curveSpeed < 150) {
                 sprintf(str, "%d", (int)(curveSpeed * (s->scene.is_metric ? 1.0 : KM_TO_MILE) + 0.5));

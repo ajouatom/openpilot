@@ -526,7 +526,19 @@ class CarrotPlannerHelper:
     self.log += self.navi_speed_manager.log
 
     #self.log = "{} VT{:.1f}, MT{:.1f}, NH{:.1f}, SP{:.1f}".format(self.map_turn.log, vision_turn_kph, map_turn_kph, navi_helper_kph, navi_speed_manager_kph)
-    self.v_cruise_kph = min(vision_turn_kph, map_turn_kph, navi_helper_kph, navi_speed_manager_kph)
+    #self.v_cruise_kph = min(vision_turn_kph, map_turn_kph, navi_helper_kph, navi_speed_manager_kph)
+
+    values_and_names = [
+        (vision_turn_kph, "VTSC"),
+        (map_turn_kph, "MTSC"),
+        (navi_helper_kph, "NOSC"),
+        (navi_speed_manager_kph, "NVSC"),
+    ]
+
+    # min 함수를 사용하여 가장 작은 값을 가진 튜플 찾기
+    self.v_cruise_kph, self.source = min(values_and_names, key=lambda x: x[0])
+    if self.v_cruise_kph == v_cruise_kph:
+      self.source = "NONE"
     return self.v_cruise_kph
 
 
