@@ -1322,9 +1322,9 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
         if (isEnabled() && isLongActive() && applyMaxSpeed > 0) {
             NVGcolor textColor = COLOR_GREEN;
             str[0] = 0;
-            static float dispApplyMaxSpeed = 0.0
+            static float dispApplyMaxSpeed = 0.0;
                 if (longVCruiseTarget < cruiseMaxSpeed - 0.5) {
-                    dispApplyMaxSpeed = dispApplyMaxSpeed * 0.95 + longVCruiseTarget * (s->scene.is_metric ? 1.0 : KM_TO_MILE) * 0.05
+                    dispApplyMaxSpeed = dispApplyMaxSpeed * 0.95 + longVCruiseTarget * (s->scene.is_metric ? 1.0 : KM_TO_MILE) * 0.05;
                     sprintf(str, "%d %s", (int)(dispApplyMaxSpeed + 0.5), longVCruiseTargetSource.toStdString().c_str());
                     textColor = COLOR_OCHRE;
                 }
