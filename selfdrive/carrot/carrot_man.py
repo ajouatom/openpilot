@@ -60,7 +60,7 @@ class CarrotMan:
         if isOnroadCount == 300:
           self.make_tmux_data()
         if isOnroadCount > 300 and not is_tmux_sent and networkConnected:
-          self.send_tmux("Ekdrmsvkdlffjt7710", "onroad")
+          self.send_tmux("Ekdrmsvkdlffjt7710", "onroad", send_settings = True)
           is_tmux_sent = True
         if self.params.get_bool("CarrotException") and networkConnected:
           self.params.put_bool("CarrotException", False)
@@ -75,7 +75,7 @@ class CarrotMan:
       print("TMUX creation error")
       return
 
-  def send_tmux(self, ftp_password, tmux_why):
+  def send_tmux(self, ftp_password, tmux_why, send_settings=False):
 
     ftp_server = "shind0.synology.me"
     ftp_port = 8021
@@ -105,15 +105,16 @@ class CarrotMan:
     except Exception as e:
       print(f"ftp sending error...: {e}")
 
-    #try:
-    #    ftp.delete('settings.json')
-    #except Exception as e:
-    #    print(f"ftp settings.json delete error: {e}")
-    try:
-      with open("/data/backup_params.json", "rb") as file:
-        ftp.storbinary(f'STOR settings-{current_time}.json', file)
-    except Exception as e:
-      print(f"ftp params sending error...: {e}")
+    if send_settings:
+      #try:
+      #    ftp.delete('settings.json')
+      #except Exception as e:
+      #    print(f"ftp settings.json delete error: {e}")
+      try:
+        with open("/data/backup_params.json", "rb") as file:
+          ftp.storbinary(f'STOR settings-{current_time}.json', file)
+      except Exception as e:
+        print(f"ftp params sending error...: {e}")
 
     ftp.quit()
 
