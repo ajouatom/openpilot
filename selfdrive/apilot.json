@@ -555,7 +555,7 @@
       "egroup": "CRUISE",
       "etitle": "GasCruiseON:Speed",
       "edescr": "",
-      "min": 5,
+      "min": 0,
       "max": 140,
       "default": 0,
       "unit": 5
@@ -1023,7 +1023,7 @@
       "egroup": "START",
       "etitle": "MaxAngleFrames(1)",
       "edescr": "",
-      "min": 80,
+      "min": 0,
       "max": 100,
       "default": 89,
       "unit": 1
