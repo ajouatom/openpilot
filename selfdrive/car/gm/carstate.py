@@ -58,8 +58,9 @@ class CarState(CarStateBase):
       self.cruise_buttons = cam_cp.vl["ASCMSteeringButton"]["ACCButtons"]
       self.buttons_counter = cam_cp.vl["ASCMSteeringButton"]["RollingCounter"]
     self.pscm_status = copy.copy(pt_cp.vl["PSCMStatus"])
-    moving_forward = pt_cp.vl["EBCMWheelSpdRear"]["MovingForward"] != 0
-    self.moving_backward = (pt_cp.vl["EBCMWheelSpdRear"]["MovingBackward"] != 0) and not moving_forward
+    # This is to avoid a fault where you engage while still moving backwards after shifting to D.
+    # An Equinox has been seen with an unsupported status (3), so only check if either wheel is in reverse (2)
+    self.moving_backward = (pt_cp.vl["EBCMWheelSpdRear"]["RLWheelDir"] == 2) or (pt_cp.vl["EBCMWheelSpdRear"]["RRWheelDir"] == 2) # and not moving_forward
     # GAP_DIST
     if self.cruise_buttons in [CruiseButtons.UNPRESS, CruiseButtons.INIT] and self.distance_button_pressed:
       self.cruise_buttons = CruiseButtons.GAP_DIST
