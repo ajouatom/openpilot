@@ -150,7 +150,6 @@ class VCruiseHelper:
         self._update_event_apilot(CS, controls)
         #self.update_button_timers(CS, enabled)
       else:
-        #
         #self.v_cruise_kph = CS.cruiseState.speed * CV.MS_TO_KPH
         #self.v_cruise_cluster_kph = self.v_cruise_kph_set = CS.cruiseState.speedCluster * CV.MS_TO_KPH
         if self.params.get_int("SpeedFromPCM") == 1:
