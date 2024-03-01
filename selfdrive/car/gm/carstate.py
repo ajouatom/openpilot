@@ -2,6 +2,7 @@ import copy
 from cereal import car
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.numpy_fast import mean
+from openpilot.common.params import Params #kans
 from opendbc.can.can_define import CANDefine
 from opendbc.can.parser import CANParser
 from openpilot.selfdrive.car.interfaces import CarStateBase
@@ -35,7 +36,7 @@ class CarState(CarStateBase):
     self.disable_resumeRequired = False
 
     # use cluster speed & vCluRatio
-    self.use_cluster_speed = True
+    self.use_cluster_speed = Params().get_int("SpeedFromPCM") #kans
     self.buttons_counter = 0
 
     self.single_pedal_mode = False
@@ -90,7 +91,8 @@ class CarState(CarStateBase):
       pt_cp.vl["EBCMWheelSpdRear"]["RRWheelSpd"],
     )
     # use cluster speed & vCluRatio(longitudialPlanner)
-    if self.use_cluster_speed:
+    if self.use_cluster_speed == 0: #kans
+      ret.cruiseState.speedCluster = cluSpeed * CV.MPH_TO_MS
       ret.vEgoRaw = cluSpeed * CV.MPH_TO_MS
       ret.vEgo, ret.aEgo = self.update_clu_speed_kf(ret.vEgoRaw)
 
