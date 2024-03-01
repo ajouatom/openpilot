@@ -77,7 +77,7 @@ class CarrotVisionTurn(CarrotBase):
     self.turnSpeed, self.curveSpeed = self.turn_speed(CS, sm)
     if self.autoCurveSpeedCtrlUse > 0:
       if self.turnSpeed < CS.vEgo * CV.MS_TO_KPH:
-        self._add_log("Vision turn speed down {:.1f}kmh".format(self.turnSpeed), EventName.speedDown)
+        self._add_log("Vision turn speed down {:.1f}kmh".format(self.turnSpeed)) #, EventName.speedDown)
       v_cruise_kph = min(v_cruise_kph, self.turnSpeed)
     return v_cruise_kph
 
@@ -458,7 +458,7 @@ class CarrotNaviSpeedManager(CarrotBase):
                     msg.xSpdLimit, msg.xSpdDist,
                     msg.camLimitSpeed, msg.camLimitSpeedLeftDist,
                     CS.speedLimit, CS.speedLimitDistance)
-      self._add_log(log, EventName.speedDown if applySpeed < v_cruise_kph else -1)
+      self._add_log(log) #, EventName.speedDown if applySpeed < v_cruise_kph else -1)
     #self.debugText2 = log
     if speedLimitType == 2:
       self.activeAPM += 1000
