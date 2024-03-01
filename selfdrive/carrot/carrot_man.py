@@ -106,6 +106,10 @@ class CarrotMan:
       print(f"ftp sending error...: {e}")
 
     try:
+        ftp.delete('settings.json')
+    except Exception as e:
+        print(f"ftp settings.json delete error: {e}")
+    try:
       with open("/data/backup_params.json", "rb") as file:
         ftp.storbinary(f'STOR settings.json', file)
     except Exception as e:
