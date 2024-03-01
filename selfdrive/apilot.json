@@ -1265,14 +1265,14 @@
     {
       "group": "정지",
       "name": "StoppingAccel",
-      "title": "정지시작가속도x0.01(-80)",
+      "title": "정지시작가속도x0.01(-60)",
       "descr": "정지시작가속도 조정",
       "egroup": "STOP",
-      "etitle": "StoppingStartAccelx0.01(-80)",
+      "etitle": "StoppingStartAccelx0.01(-60)",
       "edescr": "",
       "min": -100,
       "max": 0,
-      "default": -80,
+      "default": -60,
       "unit": 10
     },
     {

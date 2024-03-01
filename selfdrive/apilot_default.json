@@ -437,7 +437,7 @@
   },
   {
     "filename": "StopAccelApply",
-    "content": "0"
+    "content": "50"
   },
   {
     "filename": "StopDistanceCarrot",
@@ -449,7 +449,7 @@
   },
   {
     "filename": "StoppingAccel",
-    "content": "-30"
+    "content": "-60"
   },
   {
     "filename": "TFollowGap1",
