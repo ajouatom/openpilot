@@ -394,7 +394,7 @@
     {
       "group": "감속제어",
       "name": "AutoCurveSpeedFactor",
-      "title": "커브속도조절비율(100%)",
+      "title": "커브속도 조절비율(100%)",
       "descr": "높으면 커브속도가 느려집니다.",
       "egroup": "DECEL",
       "etitle": "CurveSpeedFactor(100%)",
@@ -407,8 +407,8 @@
     {
       "group": "감속제어",
       "name": "AutoCurveSpeedAggressiveness",
-      "title": "커브속도변화율(100%)",
-      "descr": "올리면 진입속도가 강하게 변합니다.",
+      "title": "커브속도 적극성(100%)",
+      "descr": "올리면 진입속도가 적극적으로 변합니다.",
       "egroup": "DECEL",
       "etitle": "CurveSpeed Aggressiveness(10%)",
       "edescr": "Higher value, more speed down",
