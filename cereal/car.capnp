@@ -478,7 +478,7 @@ struct CarControl {
       speedDown @21;
       stopStop @22;
       audioTurn @9;
-      
+      reverseGear @23;
     }
   }
 
