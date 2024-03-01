@@ -554,6 +554,8 @@ class CarrotPlannerHelper:
     self.v_cruise_kph, self.source = min(values_and_names, key=lambda x: x[0])
     if self.v_cruise_kph == v_cruise_kph:
       self.source = "none"
+    else:
+      self.log = self.log + "v{:.1f}:m{:.1f},n{:.1f},s{:.1f}".format(vision_turn_kph, map_turn_kph, navi_helper_kph, navi_speed_manager_kph)
     return self.v_cruise_kph
 
 
