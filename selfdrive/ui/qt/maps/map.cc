@@ -172,6 +172,7 @@ void MapWindow::updateState(const UIState &s) {
         m_map->setPaintProperty("navLayer", "line-color", getNavPathColor(nav_enabled));
       }
       if (nav_enabled) {
+          printf("#########MapWindow: requestVisible...\n");
         emit requestVisible(true);
       }
     }
@@ -214,6 +215,7 @@ void MapWindow::updateState(const UIState &s) {
 
     // Show map on destination set/change
     if (allow_open) {
+        printf("###########MapWindow : requestVisible\n");
       emit requestSettings(false);
       emit requestVisible(true);
 
