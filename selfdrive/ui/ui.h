@@ -219,7 +219,6 @@ public:
   int show_dm_info = -1;
   int show_radar_info = 0;
   int show_mode = 1;
-  float show_z_offset = 1.22;
   int show_path_mode = 0;
   int show_path_color = 14;
   int show_path_mode_cruise_off = 0;

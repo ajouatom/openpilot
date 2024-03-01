@@ -30,6 +30,8 @@ def publish_ui_plan(sm, pm, lateral_planner, longitudinal_planner):
     model_odo = cumtrapz(lateral_planner.v_plan, ModelConstants.T_IDXS)
     uiPlan.position.x = np.interp(plan_odo, model_odo, lateral_planner.x_sol[:,0]).tolist()
     uiPlan.position.y = np.interp(plan_odo, model_odo, lateral_planner.x_sol[:,1]).tolist()
+    #uiPlan.position.x = np.interp(plan_odo, model_odo, lateral_planner.path_xyz[:,0]).tolist()
+    #uiPlan.position.y = np.interp(plan_odo, model_odo, lateral_planner.path_xyz[:,1]).tolist()
     uiPlan.position.z = np.interp(plan_odo, model_odo, lateral_planner.path_xyz[:,2]).tolist()
   
   uiPlan.accel = longitudinal_planner.a_desired_trajectory_full.tolist()

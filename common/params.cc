@@ -229,7 +229,6 @@ std::unordered_map<std::string, uint32_t> keys = {
     { "MixRadarInfo", PERSISTENT },
     { "CarrotTest", PERSISTENT },
     { "VisionAccelRatio", PERSISTENT },
-    { "ShowZOffset", PERSISTENT },
     { "ShowPathMode", PERSISTENT },
     { "ShowPathColor", PERSISTENT },
     { "ShowPathModeCruiseOff", PERSISTENT },

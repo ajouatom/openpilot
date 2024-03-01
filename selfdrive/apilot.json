@@ -835,19 +835,6 @@
     },
     {
       "group": "화면패스",
-      "name": "ShowZOffset",
-      "title": "패스높이(170)",
-      "descr": "패스끝이 선행차 아래표시될때까지 올릴것",
-      "egroup": "DISP",
-      "etitle": "Show Path Z Offset",
-      "edescr": "",
-      "min": -200,
-      "max": 300,
-      "default": 0,
-      "unit": 1
-    },
-    {
-      "group": "화면패스",
       "name": "ShowPathMode",
       "title": "패스종류,레인리스(9)",
       "descr": "0:일반,1,2:사각,3,4:^^,5,6:사각,7,8:^^,9,10,11:smooth^^,12:smooth2^^,13:3줄,14:2줄,15:1줄",
@@ -1265,27 +1252,27 @@
     {
       "group": "정지",
       "name": "StopAccelApply",
-      "title": "정지유지브레이크-2.0x(50%)",
+      "title": "정지유지브레이크-2.0x(0)%",
       "descr": "정지시 브레이크유지 조정",
       "egroup": "STOP",
-      "etitle": "Stopping Accel-2.0m/s^2 x (50%)",
+      "etitle": "Stopping Accel-2.0m/s^2 x (0)%",
       "edescr": "",
       "min": 0,
       "max": 100,
-      "default": 50,
+      "default": 0,
       "unit": 10
     },
     {
       "group": "정지",
       "name": "StoppingAccel",
-      "title": "정지시작가속도x0.01(-80)",
+      "title": "정지시작가속도x0.01(-40)",
       "descr": "정지시작가속도 조정",
       "egroup": "STOP",
-      "etitle": "StoppingStartAccelx0.01(-80)",
+      "etitle": "StoppingStartAccelx0.01(-40)",
       "edescr": "",
       "min": -100,
       "max": 0,
-      "default": -80,
+      "default": -40,
       "unit": 10
     },
     {
@@ -1298,7 +1285,7 @@
       "edescr": "Not used",
       "min": 0,
       "max": 100,
-      "default": 30,
+      "default": 0,
       "unit": 10
     },
     {

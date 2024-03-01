@@ -392,10 +392,6 @@
     "content": "1"
   },
   {
-    "filename": "ShowZOffset",
-    "content": "162"
-  },
-  {
     "filename": "SoftHoldMode",
     "content": "2"
   },
@@ -445,7 +441,7 @@
   },
   {
     "filename": "StoppingAccel",
-    "content": "-30"
+    "content": "-40"
   },
   {
     "filename": "TFollowGap1",
