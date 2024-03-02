@@ -273,7 +273,7 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
         {"TM_HEV_SCC2", "apilot_default_tm_hev_scc2.json"},
         {"EV6_VLONG", "apilot_default_ev6_vlong.json"},
         {"IONIQ5_VLONG", "apilot_default_ioniq5_vlong.json"}
-    }
+    };
 
     for (const auto& setting : settings) {
         auto button = new ButtonControl(tr("Set to default(%1)").arg(setting.name), tr("DEFAULT"), tr("Use this button to set to default params for %1").arg(setting.name));
