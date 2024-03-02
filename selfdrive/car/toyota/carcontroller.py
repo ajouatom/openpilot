@@ -3,14 +3,16 @@ from openpilot.common.numpy_fast import clip, interp
 from openpilot.selfdrive.car import apply_meas_steer_torque_limits, apply_std_steer_angle_limits, common_fault_avoidance, \
                           create_gas_interceptor_command, make_can_msg
 from openpilot.selfdrive.car.toyota import toyotacan
+from openpilot.selfdrive.car.toyota.interface import CarInterface
 from openpilot.selfdrive.car.toyota.values import CAR, STATIC_DSU_MSGS, NO_STOP_TIMER_CAR, TSS2_CAR, \
                                         MIN_ACC_SPEED, PEDAL_TRANSITION, CarControllerParams, ToyotaFlags, \
-                                        UNSUPPORTED_DSU_CAR
+                                        UNSUPPORTED_DSU_CAR, STOP_AND_GO_CAR
 from opendbc.can.packer import CANPacker
 from openpilot.common.params import Params
 
 SteerControlType = car.CarParams.SteerControlType
 VisualAlert = car.CarControl.HUDControl.VisualAlert
+LongCtrlState = car.CarControl.Actuators.LongControlState
 
 # LKA limits
 # EPS faults if you apply torque while the steering rate is above 100 deg/s for too long
@@ -24,6 +26,12 @@ MAX_USER_TORQUE = 500
 # EPS ignores commands above this angle and causes PCS to fault
 MAX_LTA_ANGLE = 94.9461  # deg
 MAX_LTA_DRIVER_TORQUE_ALLOWANCE = 150  # slightly above steering pressed allows some resistance when changing lanes
+
+# PCM compensatory force calculation threshold
+# a variation in accel command is more pronounced at higher speeds, let compensatory forces ramp to zero before
+# applying when speed is high
+COMPENSATORY_CALCULATION_THRESHOLD_V = [-0.3, -0.25, 0.]  # m/s^2
+COMPENSATORY_CALCULATION_THRESHOLD_BP = [0., 11., 23.]  # m/s
 
 # Lock / unlock door commands - Credit goes to AlexandreSato!
 LOCK_CMD = b'\x40\x05\x30\x11\x00\x80\x00\x00'
@@ -42,6 +50,7 @@ class CarController:
     self.last_standstill = False
     self.standstill_req = False
     self.steer_rate_counter = 0
+    self.prohibit_neg_calculation = True
 
     self.packer = CANPacker(dbc_name)
     self.gas = 0
@@ -66,6 +75,7 @@ class CarController:
     hud_control = CC.hudControl
     pcm_cancel_cmd = CC.cruiseControl.cancel
     lat_active = CC.latActive and abs(CS.out.steeringTorque) < MAX_USER_TORQUE
+    stopping = actuators.longControlState == LongCtrlState.stopping
 
     # *** control msgs ***
     can_sends = []
@@ -75,10 +85,10 @@ class CarController:
     apply_steer = apply_meas_steer_torque_limits(new_steer, self.last_steer, CS.out.steeringTorqueEps, self.params)
 
     # >100 degree/sec steering fault prevention
-    self.steer_rate_counter, apply_steer_req = common_fault_avoidance(abs(CS.out.steeringRateDeg) >= MAX_STEER_RATE, CC.latActive,
+    self.steer_rate_counter, apply_steer_req = common_fault_avoidance(abs(CS.out.steeringRateDeg) >= MAX_STEER_RATE, lat_active,
                                                                       self.steer_rate_counter, MAX_STEER_RATE_FRAMES)
 
-    if not CC.latActive:
+    if not lat_active:
       apply_steer = 0
 
     # *** steer angle ***
@@ -119,12 +129,12 @@ class CarController:
                                                           lta_active, self.frame // 2, torque_wind_down))
 
     # *** gas and brake ***
-    if self.CP.enableGasInterceptor and CC.longActive:
+    if self.CP.enableGasInterceptor and CC.longActive and self.CP.carFingerprint not in STOP_AND_GO_CAR:
       MAX_INTERCEPTOR_GAS = 0.5
       # RAV4 has very sensitive gas pedal
-      if self.CP.carFingerprint in (CAR.RAV4, CAR.RAV4H, CAR.HIGHLANDER, CAR.HIGHLANDERH):
+      if self.CP.carFingerprint == CAR.RAV4:
         PEDAL_SCALE = interp(CS.out.vEgo, [0.0, MIN_ACC_SPEED, MIN_ACC_SPEED + PEDAL_TRANSITION], [0.15, 0.3, 0.0])
-      elif self.CP.carFingerprint in (CAR.COROLLA,):
+      elif self.CP.carFingerprint == CAR.COROLLA:
         PEDAL_SCALE = interp(CS.out.vEgo, [0.0, MIN_ACC_SPEED, MIN_ACC_SPEED + PEDAL_TRANSITION], [0.3, 0.4, 0.0])
       else:
         PEDAL_SCALE = interp(CS.out.vEgo, [0.0, MIN_ACC_SPEED, MIN_ACC_SPEED + PEDAL_TRANSITION], [0.4, 0.5, 0.0])
@@ -132,9 +142,33 @@ class CarController:
       pedal_offset = interp(CS.out.vEgo, [0.0, 2.3, MIN_ACC_SPEED + PEDAL_TRANSITION], [-.4, 0.0, 0.2])
       pedal_command = PEDAL_SCALE * (actuators.accel + pedal_offset)
       interceptor_gas_cmd = clip(pedal_command, 0., MAX_INTERCEPTOR_GAS)
+    elif ((CC.longActive and actuators.accel > 0.) or (not self.CP.openpilotLongitudinalControl and CS.stock_resume_ready)) \
+      and self.CP.carFingerprint in STOP_AND_GO_CAR and self.CP.enableGasInterceptor and CS.out.vEgo < 1e-3:
+      interceptor_gas_cmd = 0.12
     else:
       interceptor_gas_cmd = 0.
-    pcm_accel_cmd = clip(actuators.accel, self.params.ACCEL_MIN, self.params.ACCEL_MAX)
+
+    # prohibit negative compensatory calculations when first activating long after accelerator depression or engagement
+    if not CC.longActive:
+      self.prohibit_neg_calculation = True
+    comp_thresh = interp(CS.out.vEgo, COMPENSATORY_CALCULATION_THRESHOLD_BP, COMPENSATORY_CALCULATION_THRESHOLD_V)
+    # don't reset until a reasonable compensatory value is reached
+    if CS.pcm_neutral_force > comp_thresh * self.CP.mass:
+      self.prohibit_neg_calculation = False
+    # NO_STOP_TIMER_CAR will creep if compensation is applied when stopping or stopped, don't compensate when stopped or stopping
+    should_compensate = True
+    if (self.CP.carFingerprint in NO_STOP_TIMER_CAR and actuators.accel < 1e-3 or stopping) or CS.out.vEgo < 1e-3:
+      should_compensate = False
+    # limit minimum to only positive until first positive is reached after engagement, don't calculate when long isn't active
+    if CC.longActive and should_compensate and not self.prohibit_neg_calculation and (self.cydia_tune or self.frogs_go_moo_tune):
+      accel_offset = CS.pcm_neutral_force / self.CP.mass
+    else:
+      accel_offset = 0.
+    
+    if CC.longActive:
+      pcm_accel_cmd = clip(actuators.accel + accel_offset, self.params.ACCEL_MIN, self.params.ACCEL_MAX)
+    else:
+      pcm_accel_cmd = 0.
 
     # TODO: probably can delete this. CS.pcm_acc_status uses a different signal
     # than CS.cruiseState.enabled. confirm they're not meaningfully different
