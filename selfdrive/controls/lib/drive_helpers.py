@@ -437,6 +437,7 @@ class VCruiseHelper:
       self._add_log_auto_cruise("Cruise Activate from Traffic sign stop")
       self.cruiseActivate = 1
     elif 0 < self.lead_dRel < 20:
+      v_cruise_kph = self.v_ego_kph_set  ## 천천히 주행하다가..지나가는 차를 잘못읽고 자동으로 크루즈가 켜지는 경우 툭튀언
       self._add_log_auto_cruise("Cruise Activate from Lead Car")
       self.cruiseActivate = 1
     return v_cruise_kph
