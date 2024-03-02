@@ -7,6 +7,7 @@ from typing import Dict, Union, Callable, List, Optional
 from cereal import log, car
 import cereal.messaging as messaging
 from openpilot.common.conversions import Conversions as CV
+from openpilot.common.params import Params
 from openpilot.common.realtime import DT_CTRL
 from openpilot.selfdrive.locationd.calibrationd import MIN_SPEED_FILTER
 from openpilot.system.version import get_short_branch
@@ -261,30 +262,21 @@ def no_gps_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, m
     AlertStatus.normal, AlertSize.mid,
     Priority.LOWER, VisualAlert.none, AudibleAlert.none, .2, creation_delay=300.)
 
+
 def torque_nn_load_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int) -> Alert:
-  model_name = CP.lateralTuning.torque.nnModelName
-  fuzzy = CP.lateralTuning.torque.nnModelFuzzyMatch
+  model_name = Params("/dev/shm/params").get("NNFFModelName")
   if model_name == "":
     return Alert(
-      "NN torque controller not loaded",
-      "go donate logs to twilsonco to get loaded!",
+      "NNFF Torque Controller not available",
+      "Donate logs to Twilsonco to get it added!",
       AlertStatus.userPrompt, AlertSize.mid,
       Priority.LOW, VisualAlert.none, AudibleAlert.prompt, 6.0)
   else:
-    if 'b\'' in model_name:
-      car, eps = model_name.split('b\'')
-      eps = 'b\'' + eps
-      return Alert(
-        f"NN torque ({fuzzy = }): {car}",
-        f"eps: {eps}",
-        AlertStatus.userPrompt, AlertSize.none,
-        Priority.LOWEST, VisualAlert.none, AudibleAlert.none, 6.0)
-    else:
-      return Alert(
-        f"NN torque controller loaded ({fuzzy = })",
-        model_name,
-        AlertStatus.userPrompt, AlertSize.none,
-        Priority.LOWEST, VisualAlert.none, AudibleAlert.none, 6.0)
+    return Alert(
+      "NNFF Torque Controller loaded",
+      model_name,
+      AlertStatus.userPrompt, AlertSize.mid,
+      Priority.LOW, VisualAlert.none, AudibleAlert.engage, 5.0)
 
 # *** debug alerts ***
 
@@ -797,12 +789,12 @@ EVENTS: Dict[int, Dict[str, Union[Alert, AlertCallbackType]]] = {
   # is thrown. This can mean a service crashed, did not broadcast a message for
   # ten times the regular interval, or the average interval is more than 10% too high.
   EventName.commIssue: {
-    ET.SOFT_DISABLE: soft_disable_alert("Communication Issue between Processes"),
+    ET.SOFT_DISABLE: soft_disable_alert("Communication Issue Between Processes"),
     ET.NO_ENTRY: comm_issue_alert,
   },
   EventName.commIssueAvgFreq: {
-    ET.SOFT_DISABLE: soft_disable_alert("Low Communication Rate between Processes"),
-    ET.NO_ENTRY: NoEntryAlert("Low Communication Rate between Processes"),
+    ET.SOFT_DISABLE: soft_disable_alert("Low Communication Rate Between Processes"),
+    ET.NO_ENTRY: NoEntryAlert("Low Communication Rate Between Processes"),
   },
 
   EventName.controlsdLagging: {
@@ -930,8 +922,8 @@ EVENTS: Dict[int, Dict[str, Union[Alert, AlertCallbackType]]] = {
     ET.PERMANENT: Alert(
       "Reverse\nGear",
       "",
-      AlertStatus.normal, AlertSize.full,
-      Priority.LOWEST, VisualAlert.none, AudibleAlert.none, .2, creation_delay=0.5),
+      AlertStatus.normal, AlertSize.none,
+      Priority.LOWEST, VisualAlert.none, AudibleAlert.reverseGear, .2, creation_delay=0.5),
     ET.SOFT_DISABLE: SoftDisableAlert("Reverse Gear"),
     ET.NO_ENTRY: NoEntryAlert("Reverse Gear"),
   },
@@ -994,10 +986,6 @@ EVENTS: Dict[int, Dict[str, Union[Alert, AlertCallbackType]]] = {
     ET.NO_ENTRY: NoEntryAlert("Vehicle Sensors Calibrating"),
   },
 
-  EventName.torqueNNLoad: {
-    ET.PERMANENT: torque_nn_load_alert,
-  },
-
   EventName.pedalInterceptorNoBrake: {
     ET.WARNING: Alert(
       "Braking Unavailable",
@@ -1036,6 +1024,10 @@ EVENTS: Dict[int, Dict[str, Union[Alert, AlertCallbackType]]] = {
       "",
       AlertStatus.normal, AlertSize.small,
       Priority.LOW, VisualAlert.none, AudibleAlert.none, 2.0),
+  },
+
+  EventName.torqueNNLoad: {
+    ET.PERMANENT: torque_nn_load_alert,
   },
 
   EventName.turningLeft: {

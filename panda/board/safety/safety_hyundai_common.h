@@ -48,7 +48,7 @@ void hyundai_common_init(uint16_t param) {
 #endif
 }
 
-void hyundai_common_cruise_state_check(const int cruise_engaged) {
+void hyundai_common_cruise_state_check(const bool cruise_engaged) {
   // some newer HKG models can re-enable after spamming cancel button,
   // so keep track of user button presses to deny engagement if no interaction
 
@@ -66,15 +66,15 @@ void hyundai_common_cruise_state_check(const int cruise_engaged) {
   }
 }
 
-void hyundai_common_cruise_buttons_check(const int cruise_button, const int main_button) {
+void hyundai_common_cruise_buttons_check(const int cruise_button, const bool main_button) {
   // PFEIFER - AOL {{
-  if(main_button != 0 && main_button != cruise_main_prev) {
+  if(main_button && main_button != cruise_main_prev) {
     acc_main_on = !acc_main_on;
   }
   cruise_main_prev = main_button;
   // }} PFEIFER - AOL
   if ((cruise_button == HYUNDAI_BTN_RESUME) || (cruise_button == HYUNDAI_BTN_SET) || (cruise_button == HYUNDAI_BTN_CANCEL) ||
-      (main_button != 0)) {
+      (main_button)) {
     hyundai_last_button_interaction = 0U;
   } else {
     hyundai_last_button_interaction = MIN(hyundai_last_button_interaction + 1U, HYUNDAI_PREV_BUTTON_SAMPLES);

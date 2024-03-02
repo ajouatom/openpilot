@@ -280,7 +280,6 @@ class LongitudinalMpc:
     self.applyLongDynamicCost = False
     self.aChangeCost = 200
     self.aChangeCostStart = 40
-    self.trafficStopMode = 1
     self.tFollowSpeedAdd = 0.0
     self.tFollowSpeedAddM = 0.0
     self.tFollowGap1 = 1.1
@@ -643,7 +642,7 @@ class LongitudinalMpc:
     elif self.lo_timer == 20:
       self.applyLongDynamicCost = Params().get_bool("ApplyLongDynamicCost")
     elif self.lo_timer == 80:
-      self.trafficStopMode = int(Params().get("TrafficStopMode", encoding="utf8"))
+      pass
     elif self.lo_timer == 100:
       self.tFollowSpeedAdd = float(Params().get_int("TFollowSpeedAdd")) / 100.
       self.tFollowSpeedAddM = float(Params().get_int("TFollowSpeedAddM")) / 100.
@@ -703,7 +702,7 @@ class LongitudinalMpc:
     #self.check_model_stopping(v, v_ego, self.xStop, y)
     self.check_model_stopping(v, v_ego, x[-1], y)
 
-    if (carstate.rightBlinker and not carstate.leftBlinker) or self.myDrivingMode == 4 or self.trafficStopMode == 0:
+    if (carstate.rightBlinker and not carstate.leftBlinker) or self.myDrivingMode == 4:
       self.trafficState = TrafficState.off    
 
     if self.xState == XState.e2eStopped:
@@ -728,7 +727,7 @@ class LongitudinalMpc:
         else:
           self.comfort_brake = COMFORT_BRAKE * 0.9
           self.trafficStopAdjustRatio = 0.8
-          stop_dist = self.xStop  * interp(self.xStop, [0, 100], [1.0, self.trafficStopAdjustRatio])  ##남은거리에 따라 정지거리 비율조정
+          stop_dist = self.xStop * interp(self.xStop, [0, 100], [1.0, self.trafficStopAdjustRatio])  ##남은거리에 따라 정지거리 비율조정
           if stop_dist > 5.0:
             self.stopDist = stop_dist
           stop_x = 0
@@ -747,7 +746,6 @@ class LongitudinalMpc:
     else: #XState.lead, XState.cruise, XState.e2eCruise
       if self.status:
         self.xState = XState.lead
-      #elif self.trafficState == TrafficState.red and not carstate.gasPressed and self.myDrivingMode != 4 and self.trafficStopMode > 0:
       elif self.trafficState == TrafficState.red and abs(carstate.steeringAngleDeg) < 30:
         self.xState = XState.e2eStop
         self.stopDist = self.xStop

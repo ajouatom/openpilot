@@ -9,6 +9,7 @@
 #include "selfdrive/ui/qt/util.h"
 #include "selfdrive/ui/ui.h"
 
+#include "common/params.h"
 
 const int INTERACTION_TIMEOUT = 100;
 
@@ -162,6 +163,7 @@ void MapWindow::updateState(const UIState &s) {
   const SubMaster &sm = *(s.sm);
   update();
 
+  //auto params = Params();
   if (sm.updated("modelV2")) {
     // set path color on change, and show map on rising edge of navigate on openpilot
       //bool nav_enabled = sm["modelV2"].getModelV2().getNavEnabled() &&
@@ -171,7 +173,8 @@ void MapWindow::updateState(const UIState &s) {
       if (loaded_once) {
         m_map->setPaintProperty("navLayer", "line-color", getNavPathColor(nav_enabled));
       }
-      if (nav_enabled) {
+      if (nav_enabled && (params.getInt("AutoTurnMapChange") > 0)) {
+          printf("#########MapWindow: requestVisible...\n");
         emit requestVisible(true);
       }
     }
@@ -187,6 +190,8 @@ void MapWindow::updateState(const UIState &s) {
     // Check std norm
     auto pos_ecef_std = locationd_location.getPositionECEF().getStd();
     bool pos_accurate_enough = sqrt(pow(pos_ecef_std[0], 2) + pow(pos_ecef_std[1], 2) + pow(pos_ecef_std[2], 2)) < 100;
+
+    
 
     locationd_valid = (locationd_pos.getValid() && locationd_orientation.getValid() && locationd_velocity.getValid() && pos_accurate_enough);
 
@@ -213,7 +218,8 @@ void MapWindow::updateState(const UIState &s) {
     qWarning() << "Got new navRoute from navd. Opening map:" << allow_open;
 
     // Show map on destination set/change
-    if (allow_open) {
+    if (allow_open && (params.getInt("AutoTurnMapChange") > 0)) {
+        printf("###########MapWindow : requestVisible\n");
       emit requestSettings(false);
       emit requestVisible(true);
 

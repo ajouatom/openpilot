@@ -155,8 +155,9 @@ void OnroadWindow::updateState(const UIState &s) {
           if (map == nullptr) _current_carrot_display = 1;
           else {
               map->setVisible(true);
-              map->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-              map->setFixedWidth(topWidget(this)->width() - UI_BORDER_SIZE);
+              //map->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+              //map->setFixedWidth(topWidget(this)->width() - UI_BORDER_SIZE);
+              map->setFixedWidth(width());
           }
           break;
       }

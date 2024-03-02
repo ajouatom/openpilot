@@ -116,11 +116,12 @@ class DesireHelper:
         self.debugText = ""
     else:
       self.debugText = log
-      self._log_timer = 100
+      self._log_timer = int(2/DT_MDL) # 2s
 
   def update(self, carstate, modeldata, lateral_active, lane_change_prob, sm):
     self._add_log("")
     self.autoTurnControl = self.params.get_int("AutoTurnControl")
+    self.laneChangeNeedTorque = self.params.get_bool("LaneChangeNeedTorque")
     radarState = sm['radarState']
     self.leftSideObjectDist = 255
     self.rightSideObjectDist = 255
@@ -128,8 +129,12 @@ class DesireHelper:
       self.leftSideObjectDist = radarState.leadLeft.dRel + radarState.leadLeft.vLead * 4.0
     if radarState.leadRight.status:
       self.rightSideObjectDist = radarState.leadRight.dRel + radarState.leadRight.vLead * 4.0
-    leftBlinkerExt = sm['controlsState'].leftBlinkerExt
-    rightBlinkerExt = sm['controlsState'].rightBlinkerExt
+
+    leftBlinkerExt = sm['longitudinalPlan'].leftBlinkerExt
+    rightBlinkerExt = sm['longitudinalPlan'].rightBlinkerExt
+    if leftBlinkerExt + rightBlinkerExt == 0:
+      leftBlinkerExt = sm['controlsState'].leftBlinkerExt
+      rightBlinkerExt = sm['controlsState'].rightBlinkerExt
     blinkerExtMode = int((leftBlinkerExt + rightBlinkerExt) / 20000)  ## 둘다 10000 or 20000이 + 되어 있으므로,, 10000이 아니라 20000으로 나누어야함.
     leftBlinkerExt %= 10000
     rightBlinkerExt %= 10000
@@ -254,7 +259,7 @@ class DesireHelper:
           self._add_log("Lane change object detected.. {:.1f}m".format(self.leftSideObjectDist if leftBlinker else self.rightSideObjectDist))
         elif not lane_available and self.noo_active < 10:
           self._add_log("Lane change no lane available")
-        elif self.noo_active == 1:
+        elif self.noo_active == 1 or self.laneChangeNeedTorque:
           self._add_log("Lane change blocked. need torque")
         #elif self.noo_active == 3:
         #  self._add_log("Lane change left direction blocked.")

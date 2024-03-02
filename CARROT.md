@@ -13,6 +13,8 @@
    * 오픈파일럿에서는 자동재출발과 속도조절(일부차량)을 지원한다.
     * 자동재출발과 속도조절은 RES/ACCEL 버튼을 만들어서 차량에 전송하는 방식으로 작동이 원할하지 않는경우도 있다.
  * [당근설정](CARROT_SETTINGS.md)
+ * [당근주행설정](CARROT_SETTINGS_LONG.md)
+ * [당근조향설정](CARROT_SETTINGS_LAT.md)
  * [당근맨설명](CARROTMAN.md)
 
 **당근의 특별한기능**
