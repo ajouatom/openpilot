@@ -408,10 +408,6 @@
     "content": "1"
   },
   {
-    "filename": "ShowDebugUI",
-    "content": "1"
-  },
-  {
     "filename": "ShowDeviceState",
     "content": "0"
   },
