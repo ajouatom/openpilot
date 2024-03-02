@@ -163,7 +163,7 @@ void MapWindow::updateState(const UIState &s) {
   const SubMaster &sm = *(s.sm);
   update();
 
-  auto params = Params();
+  //auto params = Params();
   if (sm.updated("modelV2")) {
     // set path color on change, and show map on rising edge of navigate on openpilot
       //bool nav_enabled = sm["modelV2"].getModelV2().getNavEnabled() &&
