@@ -263,6 +263,31 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   });
   addItem(translateBtn);
 
+
+    struct DefaultSettings {
+        QString name;
+        QString jsonFile;
+    };
+
+    const QVector<DefaultSetting> settings = {
+        {"TM_HEV_SCC2", "apilot_default_tm_hev_scc2.json"},
+        {"EV6_VLONG", "apilot_default_ev6_vlong.json"},
+        {"IONIQ5_VLONG", "apilot_default_ioniq5_vlong.json"}
+    }
+
+    for (const auto& setting : settings) {
+        auto button = new ButtonControl(tr("Set to default(%1)").arg(setting.name), tr("DEFAULT"), tr("Use this button to set to default params for %1").arg(setting.name));
+        connect(button, &ButtonControl::clicked, [this, setting]() {
+            if (!ConfirmationDialog::confirm(tr("Are you sure you want to set to default?"), tr("Execute"), this)) return;
+            QProcess process;
+            process.setWorkingDirectory("/data/openpilot/selfdrive");
+            process.start("/bin/sh", QStringList{ "-c", QString("python ./apilot_default.py ./%1").arg(setting.jsonFile) });
+            process.waitForFinished();
+            //Hardware::reboot();
+            });
+        addItem(button);
+    }
+#if 0
   // Set Default Params... for HKG
   const auto defaultSet_tm_hev_scc2 = new ButtonControl(tr("Set to default(TM_HEV_SCC2)"), tr("DEFAULT"), "Use this button to set to default params for TMHEV");
   connect(defaultSet_tm_hev_scc2, &ButtonControl::clicked, [this]() {
@@ -296,6 +321,7 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
       //Hardware::reboot();
       });
   addItem(defaultSet_ioniq5_vlong);
+#endif
 
   QObject::connect(uiState(), &UIState::offroadTransition, [=](bool offroad) {
     for (auto btn : findChildren<ButtonControl *>()) {
