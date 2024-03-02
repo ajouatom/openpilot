@@ -38,7 +38,7 @@
       "min": 1000,
       "max": 6000,
       "default": 2500,
-      "unit": 1
+      "unit": 10
     },
     {
       "group": "조향튜닝",
@@ -51,7 +51,7 @@
       "min": 0,
       "max": 1000,
       "default": 100,
-      "unit": 1
+      "unit": 5
     },
     {
       "group": "조향튜닝",
@@ -337,7 +337,7 @@
       "min": 50,
       "max": 150,
       "default": 100,
-      "unit": 1
+      "unit": 5
     },
     {
       "group": "주행튜닝",
@@ -376,7 +376,7 @@
       "min": 0,
       "max": 2000,
       "default": 0,
-      "unit": 1
+      "unit": 5
     },
     {
       "group": "주행튜닝",
@@ -393,21 +393,8 @@
     },
     {
       "group": "감속제어",
-      "name": "TrafficStopMode",
-      "title": "신호정지 방법 (1)",
-      "descr": "0:사용안함,1:사용함",
-      "egroup": "DECEL",
-      "etitle": "TrafficStopMode(1)",
-      "edescr": "0:No Stop, 1: Use",
-      "min": 0,
-      "max": 3,
-      "default": 1,
-      "unit": 1
-    },
-    {
-      "group": "감속제어",
       "name": "AutoCurveSpeedFactor",
-      "title": "커브속도조절비율(100%)",
+      "title": "커브속도 조절비율(100%)",
       "descr": "높으면 커브속도가 느려집니다.",
       "egroup": "DECEL",
       "etitle": "CurveSpeedFactor(100%)",
@@ -415,20 +402,20 @@
       "min": 50,
       "max": 300,
       "default": 100,
-      "unit": 1
+      "unit": 5
     },
     {
       "group": "감속제어",
-      "name": "AutoCurveSpeedFactorIn",
-      "title": "커브속도조절비율진입(10%)",
-      "descr": "올리면 진입속도를 더 줄이도록 노력합니다.",
+      "name": "AutoCurveSpeedAggressiveness",
+      "title": "커브속도 적극성(100%)",
+      "descr": "올리면 진입속도가 적극적으로 변합니다.",
       "egroup": "DECEL",
-      "etitle": "CurveSpeedFactorWeight(10%)",
+      "etitle": "CurveSpeed Aggressiveness(10%)",
       "edescr": "Higher value, more speed down",
-      "min": 0,
+      "min": 50,
       "max": 300,
       "default": 10,
-      "unit": 1
+      "unit": 5
     },
     {
       "group": "조향일반",
@@ -440,6 +427,19 @@
       "edescr": "0: Not used, 1:laneChange, 2:laneChange+speed, 3:laneChange(half)+speed",
       "min": 0,
       "max": 3,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "조향일반",
+      "name": "LaneChangeNeedTorque",
+      "title": "차선변경 반자동, 토크필요",
+      "descr": "",
+      "egroup": "LATSET",
+      "etitle": "LaneChange need torque",
+      "edescr": "",
+      "min": 0,
+      "max": 1,
       "default": 0,
       "unit": 1
     },
@@ -486,12 +486,12 @@
       "group": "조향일반",
       "name": "AutoTurnMapChange",
       "title": "NOO Helper 맵전환(0)",
-      "descr": "NOO 작동시 자동맵전환",
+      "descr": "1: 맵시작시, 2: NOO 작동시 자동맵전환",
       "egroup": "LATSET",
       "etitle": "NOO Helper Map display(0)",
       "edescr": "",
       "min": 0,
-      "max": 1,
+      "max": 2,
       "default": 0,
       "unit": 1
     },
@@ -516,7 +516,7 @@
       "egroup": "BUTN",
       "etitle": "Cruise Button spam1(0)",
       "edescr": "",
-      "min": 2,
+      "min": 1,
       "max": 20,
       "default": 0,
       "unit": 1
@@ -529,7 +529,7 @@
       "egroup": "BUTN",
       "etitle": "Cruise Button spam2(0)",
       "edescr": "",
-      "min": 2,
+      "min": 1,
       "max": 200,
       "default": 0,
       "unit": 1
@@ -589,8 +589,8 @@
     {
       "group": "시작",
       "name": "SpeedFromPCM",
-      "title": "PCM차량속도제어",
-      "descr": "1:속도를 차량에서 가져옵니다, 0,2: OP속도",
+      "title": "PCM차량속도제어(롱컨지원차=해당없음)",
+      "descr": "1:차량속도이용(감속제어안함), 0: 신호/커브/카메라 감속, 2: 커브/카메라 감속",
       "egroup": "START",
       "etitle": "Speed from PCM",
       "edescr": "1: Cruise speed control from Car, 0,2: Speed OP",
@@ -835,19 +835,6 @@
     },
     {
       "group": "화면패스",
-      "name": "ShowZOffset",
-      "title": "패스높이(170)",
-      "descr": "패스끝이 선행차 아래표시될때까지 올릴것",
-      "egroup": "DISP",
-      "etitle": "Show Path Z Offset",
-      "edescr": "",
-      "min": -200,
-      "max": 300,
-      "default": 0,
-      "unit": 1
-    },
-    {
-      "group": "화면패스",
       "name": "ShowPathMode",
       "title": "패스종류,레인리스(9)",
       "descr": "0:일반,1,2:사각,3,4:^^,5,6:사각,7,8:^^,9,10,11:smooth^^,12:smooth2^^,13:3줄,14:2줄,15:1줄",
@@ -966,10 +953,10 @@
     {
       "group": "조향일반",
       "name": "UseLaneLineDebug",
-      "title": "레인모드: 시간보상(10)",
+      "title": "레인모드: 시간보상(7)",
       "descr": "x0.01sec, 지연시간 보상",
       "egroup": "LAT",
-      "etitle": "Laneline: Time compensation(10)",
+      "etitle": "Laneline: Time compensation(7)",
       "edescr": "x0.01sec",
       "min": 0,
       "max": 100,
@@ -1048,6 +1035,19 @@
       "descr": "",
       "egroup": "START",
       "etitle": "Radar test",
+      "edescr": "",
+      "min": 0,
+      "max": 2,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "시작",
+      "name": "CarrotTest",
+      "title": "당근시험",
+      "descr": "",
+      "egroup": "START",
+      "etitle": "Carrot test",
       "edescr": "",
       "min": 0,
       "max": 2,
@@ -1238,16 +1238,16 @@
     },
     {
       "group": "감속제어",
-      "name": "AutoCurveSpeedCtrlUse",
-      "title": "커브속도(1)",
-      "descr": "0:사용안함,1:사용함",
+      "name": "AutoCurveSpeedLowerLimit",
+      "title": "커브속도 최저속도(30)",
+      "descr": "최저속도설정",
       "egroup": "FDIST",
-      "etitle": "AutoCurveSpeedCtrl(1)",
-      "edescr": "",
-      "min": 0,
-      "max": 3,
-      "default": 1,
-      "unit": 1
+      "etitle": "AutoCurveSpeed LowerLimit(30)",
+      "edescr": "Lower limit speed",
+      "min": 30,
+      "max": 200,
+      "default": 30,
+      "unit": 10
     },
     {
       "group": "정지",
@@ -1265,14 +1265,14 @@
     {
       "group": "정지",
       "name": "StoppingAccel",
-      "title": "정지시작가속도x0.01(-60)",
+      "title": "정지시작가속도x0.01(-40)",
       "descr": "정지시작가속도 조정",
       "egroup": "STOP",
-      "etitle": "StoppingStartAccelx0.01(-60)",
+      "etitle": "StoppingStartAccelx0.01(-40)",
       "edescr": "",
       "min": -100,
       "max": 0,
-      "default": -60,
+      "default": -40,
       "unit": 10
     },
     {
@@ -1285,7 +1285,7 @@
       "edescr": "Not used",
       "min": 0,
       "max": 100,
-      "default": 30,
+      "default": 0,
       "unit": 10
     },
     {
@@ -1329,16 +1329,55 @@
     },
     {
       "group": "감속제어",
-      "name": "EnableOSM",
-      "title": "Enable OSM(0)",
-      "descr": "1:OSM 2:SpeedCtrl,3:Speed+CurveCtrl(Reboot)",
+      "name": "MSLCEnabled",
+      "title": "MSLC Enabled(0)",
+      "descr": "Map: Speed Limit control enabled",
       "egroup": "SPEED",
-      "etitle": "Enable OSM(0)",
-      "edescr": "1:OSM 2:SpeedCtrl,3:Speed+CurveCtrl(Reboot)",
+      "etitle": "MSLC Enabled(0)",
+      "edescr": "Map: Speed Limit control enabled",
       "min": 0,
       "max": 3,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "감속제어",
+      "name": "MTSCEnabled",
+      "title": "MTSC Enabled",
+      "descr": "",
+      "egroup": "SPEED",
+      "etitle": "MTSC Enabled",
+      "edescr": "",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "감속제어",
+      "name": "MTSCCurvatureCheck",
+      "title": "MTSC CurvatureCheck",
+      "descr": "",
+      "egroup": "SPEED",
+      "etitle": "MTSC CurvatureCheck",
+      "edescr": "",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "감속제어",
+      "name": "MTSCAggressiveness",
+      "title": "MTSC Aggressiveness",
+      "descr": "",
+      "egroup": "SPEED",
+      "etitle": "MTSC Aggressiveness",
+      "edescr": "",
+      "min": 0,
+      "max": 200,
+      "default": 100,
+      "unit": 5
     },
     {
       "group": "시작",
@@ -1363,8 +1402,8 @@
       "edescr": "",
       "min": 1,
       "max": 50,
-      "default": 10,
-      "unit": 5
+      "default": 1,
+      "unit": 1
     },
     {
       "group": "감속제어",
@@ -1377,7 +1416,7 @@
       "min": 10,
       "max": 100,
       "default": 35,
-      "unit": 1
+      "unit": 5
     },
     {
       "group": "감속제어",
