@@ -298,17 +298,18 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
 
   struct DefaultSetting {
       QString name;
+      QString descr;
       QString jsonFile;
   };
 
   const QVector<DefaultSetting> settings = {
-      {"TM_HEV_SCC2", "apilot_default_tm_hev_scc2.json"},
-      {"EV6_VLONG", "apilot_default_ev6_vlong.json"},
-      {"IONIQ5_VLONG", "apilot_default_ioniq5_vlong.json"}
+      {"TM_HEV_SCC2", "TM_HEV_2022, scc2, radarTracks, radar Long", apilot_default_tm_hev_scc2.json"},
+      {"EV6_VLONG", "EV6 vision Long", apilot_default_ev6_vlong.json"},
+      {"IONIQ5_VLONG", "IONIQ5 vision Long"apilot_default_ioniq5_vlong.json"}
   };
 
   for (const auto& setting : settings) {
-      auto button = new ButtonControl(tr("Set to default(%1)").arg(setting.name), tr("DEFAULT"), tr("Use this button to set to default params for %1").arg(setting.name));
+      auto button = new ButtonControl(tr("Set to default(%1)").arg(setting.name), tr("DEFAULT"), tr("%1").arg(setting.descr));
       connect(button, &ButtonControl::clicked, [this, setting]() {
           if (!ConfirmationDialog::confirm(tr("Are you sure you want to set to default?"), tr("Execute"), this)) return;
           QProcess process;
