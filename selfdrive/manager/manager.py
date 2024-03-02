@@ -149,7 +149,7 @@ def manager_init() -> None:
     ("SoftHoldMode", "0"),       
     ("CruiseEcoControl", "2"),
     ("UseLaneLineSpeed", "0"),    
-    ("UseLaneLineDebug", "10"),    
+    ("UseLaneLineDebug", "7"),    
     ("AdjustLaneOffset", "0"),    
     ("AdjustCurveOffset", "0"),    
     ("PathOffset", "0"),  

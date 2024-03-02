@@ -953,10 +953,10 @@
     {
       "group": "조향일반",
       "name": "UseLaneLineDebug",
-      "title": "레인모드: 시간보상(10)",
+      "title": "레인모드: 시간보상(7)",
       "descr": "x0.01sec, 지연시간 보상",
       "egroup": "LAT",
-      "etitle": "Laneline: Time compensation(10)",
+      "etitle": "Laneline: Time compensation(7)",
       "edescr": "x0.01sec",
       "min": 0,
       "max": 100,
