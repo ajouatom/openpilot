@@ -9,6 +9,7 @@
 #include "selfdrive/ui/qt/util.h"
 #include "selfdrive/ui/ui.h"
 
+#include "common/params.h"
 
 const int INTERACTION_TIMEOUT = 100;
 
@@ -171,7 +172,8 @@ void MapWindow::updateState(const UIState &s) {
       if (loaded_once) {
         m_map->setPaintProperty("navLayer", "line-color", getNavPathColor(nav_enabled));
       }
-      if (nav_enabled) {
+      auto params = Params();
+      if (nav_enabled && (params.getInt("AutoTurnMapChange") > 0)) {
           printf("#########MapWindow: requestVisible...\n");
         emit requestVisible(true);
       }
@@ -214,7 +216,8 @@ void MapWindow::updateState(const UIState &s) {
     qWarning() << "Got new navRoute from navd. Opening map:" << allow_open;
 
     // Show map on destination set/change
-    if (allow_open) {
+    auto params = Params();
+    if (allow_open && (params.getInt("AutoTurnMapChange") > 0)) {
         printf("###########MapWindow : requestVisible\n");
       emit requestSettings(false);
       emit requestVisible(true);

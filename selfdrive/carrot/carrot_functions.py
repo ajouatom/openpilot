@@ -308,7 +308,7 @@ class CarrotNaviHelper(CarrotBase):
         self.nooHelperActivated = 0
         self.nooHelperActivateCount = min(0, self.nooHelperActivateCount - 1)
 
-      if self.autoTurnMapChange > 0:
+      if self.autoTurnMapChange > 1:
         if self.nooHelperActivateCount == 10:
           self.params.put_nonblocking("CarrotDisplay", "3")
         elif self.nooHelperActivateCount == - int(5/DT_CTRL):
