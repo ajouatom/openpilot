@@ -1340,7 +1340,8 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             if (strlen(str)) {
                 ui_draw_text(s, bx + 250, by - 50, str, 50, textColor, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
                 if (strlen(str_source)) {
-                    ui_draw_text(s, bx + 250, by - 100, str_source, 30, textColor, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
+                    //ui_draw_text(s, bx + 250, by - 100, str_source, 30, textColor, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
+                    ui_draw_text(s, bx + 250, by - 20, str_source, 30, textColor, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
                 }
             }
         }
