@@ -2,6 +2,7 @@ import copy
 from cereal import car
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.numpy_fast import mean
+from openpilot.common.params import Params #kans
 from opendbc.can.can_define import CANDefine
 from opendbc.can.parser import CANParser
 from openpilot.selfdrive.car.interfaces import CarStateBase
@@ -35,7 +36,7 @@ class CarState(CarStateBase):
     self.disable_resumeRequired = False
 
     # use cluster speed & vCluRatio
-    self.use_cluster_speed = True
+    self.use_cluster_speed = Params().get_int("SpeedFromPCM") #kans
     self.buttons_counter = 0
 
     self.single_pedal_mode = False
@@ -57,8 +58,9 @@ class CarState(CarStateBase):
       self.cruise_buttons = cam_cp.vl["ASCMSteeringButton"]["ACCButtons"]
       self.buttons_counter = cam_cp.vl["ASCMSteeringButton"]["RollingCounter"]
     self.pscm_status = copy.copy(pt_cp.vl["PSCMStatus"])
-    moving_forward = pt_cp.vl["EBCMWheelSpdRear"]["MovingForward"] != 0
-    self.moving_backward = (pt_cp.vl["EBCMWheelSpdRear"]["MovingBackward"] != 0) and not moving_forward
+    # This is to avoid a fault where you engage while still moving backwards after shifting to D.
+    # An Equinox has been seen with an unsupported status (3), so only check if either wheel is in reverse (2)
+    self.moving_backward = (pt_cp.vl["EBCMWheelSpdRear"]["RLWheelDir"] == 2) or (pt_cp.vl["EBCMWheelSpdRear"]["RRWheelDir"] == 2) # and not moving_forward
     # GAP_DIST
     if self.cruise_buttons in [CruiseButtons.UNPRESS, CruiseButtons.INIT] and self.distance_button_pressed:
       self.cruise_buttons = CruiseButtons.GAP_DIST
@@ -90,7 +92,8 @@ class CarState(CarStateBase):
       pt_cp.vl["EBCMWheelSpdRear"]["RRWheelSpd"],
     )
     # use cluster speed & vCluRatio(longitudialPlanner)
-    if self.use_cluster_speed:
+    if self.use_cluster_speed == 0: #kans
+      ret.cruiseState.speedCluster = cluSpeed * CV.MPH_TO_MS
       ret.vEgoRaw = cluSpeed * CV.MPH_TO_MS
       ret.vEgo, ret.aEgo = self.update_clu_speed_kf(ret.vEgoRaw)
 

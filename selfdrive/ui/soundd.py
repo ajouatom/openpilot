@@ -55,6 +55,7 @@ sound_list: Dict[int, Tuple[str, Optional[int], float]] = {
   AudibleAlert.disengage2:  ("audio_disengage.wav", None, MAX_VOLUME),
   AudibleAlert.speedDown:  ("audio_speed_down.wav", None, MAX_VOLUME),
   AudibleAlert.audioTurn: ("audio_turn.wav", None, MAX_VOLUME),
+  AudibleAlert.reverseGear: ("reverse_gear.wav", 1, float(Params().get_int("SoundVolumeAdjustEngage"))/100.),
 }
 
 def check_controls_timeout_alert(sm):
