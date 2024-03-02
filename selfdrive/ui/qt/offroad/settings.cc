@@ -264,7 +264,7 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   addItem(translateBtn);
 
 
-    struct DefaultSettings {
+    struct DefaultSetting {
         QString name;
         QString jsonFile;
     };
