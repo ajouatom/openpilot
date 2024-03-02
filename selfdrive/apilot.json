@@ -1238,16 +1238,16 @@
     },
     {
       "group": "감속제어",
-      "name": "AutoCurveSpeedCtrlUse",
-      "title": "커브속도(1)",
-      "descr": "0:사용안함,1:사용함",
+      "name": "AutoCurveSpeedLowerLimit",
+      "title": "커브속도 최저속도(30)",
+      "descr": "최저속도설정",
       "egroup": "FDIST",
-      "etitle": "AutoCurveSpeedCtrl(1)",
-      "edescr": "",
-      "min": 0,
-      "max": 3,
-      "default": 1,
-      "unit": 1
+      "etitle": "AutoCurveSpeed LowerLimit(30)",
+      "edescr": "Lower limit speed",
+      "min": 30,
+      "max": 200,
+      "default": 30,
+      "unit": 10
     },
     {
       "group": "정지",

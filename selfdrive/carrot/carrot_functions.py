@@ -67,7 +67,7 @@ class CarrotVisionTurn(CarrotBase):
     self._log_timeout = int(2/DT_MDL) # 2 seconds
 
   def update_params(self):
-    self.autoCurveSpeedCtrlUse = int(self.params.get("AutoCurveSpeedCtrlUse"))
+    self.autoCurveSpeedLowerLimit = int(self.params.get("AutoCurveSpeedLowerLimit"))
     self.autoCurveSpeedFactor = self.params.get_int("AutoCurveSpeedFactor")*0.01
     self.autoCurveSpeedAggressiveness = self.params.get_int("AutoCurveSpeedAggressiveness")*0.01
 
@@ -75,10 +75,9 @@ class CarrotVisionTurn(CarrotBase):
     CS = sm['carState']
     ## turn speed
     self.turnSpeed, self.curveSpeed = self.turn_speed(CS, sm)
-    if self.autoCurveSpeedCtrlUse > 0:
-      if self.turnSpeed < CS.vEgo * CV.MS_TO_KPH:
-        self._add_log("Vision turn speed down {:.1f}kmh".format(self.turnSpeed)) #, EventName.speedDown)
-      v_cruise_kph = min(v_cruise_kph, self.turnSpeed)
+    if self.turnSpeed < CS.vEgo * CV.MS_TO_KPH:
+      self._add_log("Vision turn speed down {:.1f}kmh".format(self.turnSpeed)) #, EventName.speedDown)
+    v_cruise_kph = min(v_cruise_kph, self.turnSpeed)
     return v_cruise_kph
 
   def turn_speed(self, CS, sm):
@@ -101,7 +100,7 @@ class CarrotVisionTurn(CarrotBase):
     adjusted_target_lat_a = TARGET_LAT_A * self.autoCurveSpeedAggressiveness
 
     # Get the target velocity for the maximum curve
-    turnSpeed = max((adjusted_target_lat_a / max_curve)**0.5  * 3.6, 15.0)
+    turnSpeed = max((adjusted_target_lat_a / max_curve)**0.5  * 3.6, self.autoCurveSpeedLowerLimit)
     return turnSpeed, turnSpeed * curv_direction
 
 
