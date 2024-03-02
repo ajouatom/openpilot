@@ -80,7 +80,7 @@ class CarController:
     self.button_spamming_count = 0
     self.prev_clu_speed = 0
     self.button_spam1 = 8
-    self.button_spam2 = 30
+    self.button_spam2 = 30    
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -100,6 +100,20 @@ class CarController:
       self.button_spam2 = self.params.get_int("CruiseButtonTest2")
 
 
+    carrot_test = self.params.get_int("CarrotTest")
+    if carrot_test == 1:
+      if CS.out.vEgoRaw < 11:
+        #self.cc_params.STEER_DRIVER_ALLOWANCE = 50
+        self.cc_params.STEER_DELTA_UP = 10
+        self.cc_params.STEER_DELTA_DOWN = 5 #10
+      else:
+        #self.cc_params.STEER_DRIVER_ALLOWANCE = 50
+        steerMax = self.params.get_int("CustomSteerMax")
+        steerDeltaUp = self.params.get_int("CustomSteerDeltaUp")
+        steerDeltaDown = self.params.get_int("CustomSteerDeltaDown")
+        self.cc_params.STEER_MAX = self.cc_params.STEER_MAX if steerMax <= 0 else steerMax
+        self.cc_params.STEER_DELTA_UP = self.cc_params.STEER_DELTA_UP if steerDeltaUp <= 0 else steerDeltaUp
+        self.cc_params.STEER_DELTA_DOWN = self.cc_params.STEER_DELTA_DOWN if steerDeltaDown <= 0 else steerDeltaDown
     # steering torque
     new_steer = int(round(actuators.steer * self.cc_params.STEER_MAX))
     apply_steer = apply_driver_steer_torque_limits(new_steer, self.apply_steer_last, CS.out.steeringTorque, self.cc_params)
@@ -321,7 +335,7 @@ class CarController:
       if CC.cruiseControl.cancel:
         print("cruiseControl.cancel")
         can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.CANCEL, self.CP.carFingerprint))
-      elif CC.cruiseControl.resume:
+      elif False: #CC.cruiseControl.resume:
         if self.CP.carFingerprint in LEGACY_SAFETY_MODE_CAR:            
           if self.resume_wait_timer > 0:
             self.resume_wait_timer -= 1
@@ -339,9 +353,8 @@ class CarController:
             #can_sends.extend([hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint)] * 25)
             can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
             self.last_button_frame = self.frame
-      else:
-        self.resume_wait_timer = 0
-        self.resume_cnt = 0
+
+      if self.last_button_frame != self.frame:
         send_button = self.make_spam_button(CC, CS)
         if send_button > 0:
           can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, send_button, self.CP.carFingerprint))
@@ -376,7 +389,7 @@ class CarController:
             self.last_button_frame = self.frame
 
         # cruise standstill resume
-        elif CC.cruiseControl.resume:
+        elif False: #CC.cruiseControl.resume:
           if (self.frame - self.last_button_frame) * DT_CTRL > 0.1:
             if self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS:
               # TODO: resume for alt button cars
@@ -429,6 +442,8 @@ class CarController:
       if not CS.out.cruiseState.enabled:
         if (hud_control.leadVisible or current > 10.0):
           send_button = Buttons.RES_ACCEL
+      elif CC.cruiseControl.resume:
+        send_button = Buttons.RES_ACCEL
       elif target < current and current>= 31 and self.params.get_int("SpeedFromPCM") != 1:
         send_button = Buttons.SET_DECEL
       elif target > current and current < 160 and self.params.get_int("SpeedFromPCM") != 1:
@@ -456,8 +471,9 @@ class CarController:
 
     self.prev_clu_speed = current
     send_button_allowed = (self.frame - self.last_button_frame) > self.button_wait
-    #print("{} speed_diff={:.1f},{:.0f}/{:.0f}, send_button={}, button_wait={}, count={}".format(
-    #  send_button_allowed, speed_diff, target, current, send_button, self.button_wait, self.button_spamming_count))
+    CC.debugTextCC = "{} speed_diff={:.1f},{:.0f}/{:.0f}, button={}, button_wait={}, count={}".format(
+      send_button_allowed, speed_diff, target, current, send_button, self.button_wait, self.button_spamming_count)
+    
     if send_button_allowed:
       self.button_spamming_count = self.button_spamming_count + 1 if Buttons.RES_ACCEL else self.button_spamming_count - 1
       return send_button

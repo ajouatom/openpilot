@@ -83,7 +83,6 @@ services: dict[str, tuple] = {
   "microphone": (True, 10., 10),
 
   "roadLimitSpeed": (True, 0.),
-  "liveMapData": (False, 0.),
 
   # debug
   "uiDebug": (True, 0., 1),

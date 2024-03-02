@@ -1,7 +1,7 @@
 [
   {
     "filename": "AChangeCost",
-    "content": "130"
+    "content": "200"
   },
   {
     "filename": "AChangeCostStart",
@@ -17,11 +17,11 @@
   },
   {
     "filename": "AdjustCurveOffset",
-    "content": "4"
+    "content": "10"
   },
   {
     "filename": "AdjustLaneOffset",
-    "content": "4"
+    "content": "10"
   },
   {
     "filename": "AlwaysOnLateralEnabled",
@@ -33,11 +33,15 @@
   },
   {
     "filename": "AutoCancelFromGasMode",
-    "content": "0"
+    "content": "2"
   },
   {
     "filename": "AutoCruiseControl",
-    "content": "0"
+    "content": "1"
+  },
+  {
+    "filename": "AutoCurveSpeedAggressiveness",
+    "content": "100"
   },
   {
     "filename": "AutoCurveSpeedCtrlUse",
@@ -45,15 +49,11 @@
   },
   {
     "filename": "AutoCurveSpeedFactor",
-    "content": "90"
-  },
-  {
-    "filename": "AutoCurveSpeedFactorIn",
-    "content": "30"
+    "content": "120"
   },
   {
     "filename": "AutoNaviSpeedBumpSpeed",
-    "content": "30"
+    "content": "35"
   },
   {
     "filename": "AutoNaviSpeedBumpTime",
@@ -65,27 +65,27 @@
   },
   {
     "filename": "AutoNaviSpeedCtrlEnd",
-    "content": "12"
+    "content": "6"
   },
   {
     "filename": "AutoNaviSpeedDecelRate",
-    "content": "90"
+    "content": "190"
   },
   {
     "filename": "AutoNaviSpeedSafetyFactor",
-    "content": "100"
+    "content": "105"
   },
   {
     "filename": "AutoResumeFromBrakeReleaseTrafficSign",
-    "content": "0"
+    "content": "1"
   },
   {
     "filename": "AutoResumeFromGasSpeed",
-    "content": "0"
+    "content": "30"
   },
   {
     "filename": "AutoSpeedUptoRoadSpeedLimit",
-    "content": "0"
+    "content": "150"
   },
   {
     "filename": "AutoTurnControl",
@@ -97,31 +97,43 @@
   },
   {
     "filename": "AutoTurnControlSpeedTurn",
-    "content": "25"
+    "content": "20"
   },
   {
     "filename": "AutoTurnControlTurnEnd",
-    "content": "3"
+    "content": "5"
   },
   {
     "filename": "AutoTurnMapChange",
-    "content": "1"
+    "content": "0"
   },
   {
-    "filename": "CompletedTrainingVersion",
-    "content": "0.2.0"
+    "filename": "CarrotDisplay",
+    "content": "0"
+  },
+  {
+    "filename": "CarrotTest",
+    "content": "0"
   },
   {
     "filename": "CruiseButtonMode",
-    "content": "0"
+    "content": "2"
+  },
+  {
+    "filename": "CruiseButtonTest1",
+    "content": "6"
+  },
+  {
+    "filename": "CruiseButtonTest2",
+    "content": "60"
   },
   {
     "filename": "CruiseEcoControl",
-    "content": "0"
+    "content": "4"
   },
   {
     "filename": "CruiseMaxVals1",
-    "content": "200"
+    "content": "205"
   },
   {
     "filename": "CruiseMaxVals2",
@@ -141,15 +153,15 @@
   },
   {
     "filename": "CruiseMaxVals6",
-    "content": "50"
+    "content": "80"
   },
   {
     "filename": "CruiseMinVals",
-    "content": "150"
+    "content": "140"
   },
   {
     "filename": "CruiseOnDist",
-    "content": "0"
+    "content": "-400"
   },
   {
     "filename": "CruiseSpeedMin",
@@ -157,31 +169,35 @@
   },
   {
     "filename": "CruiseSpeedUnit",
+    "content": "10"
+  },
+  {
+    "filename": "CustomSteerDeltaDown",
     "content": "5"
+  },
+  {
+    "filename": "CustomSteerDeltaUp",
+    "content": "2"
+  },
+  {
+    "filename": "CustomSteerMax",
+    "content": "410"
   },
   {
     "filename": "DisengageOnAccelerator",
     "content": "0"
   },
   {
-    "filename": "EVTable",
-    "content": "1"
-  },
-  {
     "filename": "EnableAVM",
     "content": "0"
   },
   {
-    "filename": "EnableOSM",
-    "content": "0"
-  },
-  {
     "filename": "EnableRadarTracks",
-    "content": "0"
+    "content": "1"
   },
   {
     "filename": "ExperimentalLongitudinalEnabled",
-    "content": "0"
+    "content": "1"
   },
   {
     "filename": "GMapKey",
@@ -192,12 +208,20 @@
     "content": "0"
   },
   {
+    "filename": "HapticFeedbackWhenSpeedCamera",
+    "content": "0"
+  },
+  {
+    "filename": "HotspotOnBoot",
+    "content": "0"
+  },
+  {
     "filename": "IsMetric",
     "content": "1"
   },
   {
-    "filename": "LanguageSetting",
-    "content": "main_ko"
+    "filename": "LaneChangeNeedTorque",
+    "content": "0"
   },
   {
     "filename": "LateralTorqueAccelFactor",
@@ -205,7 +229,7 @@
   },
   {
     "filename": "LateralTorqueCustom",
-    "content": "1"
+    "content": "0"
   },
   {
     "filename": "LateralTorqueFriction",
@@ -217,7 +241,7 @@
   },
   {
     "filename": "LongPitch",
-    "content": "1"
+    "content": "0"
   },
   {
     "filename": "LongitudinalActuatorDelayLowerBound",
@@ -233,31 +257,47 @@
   },
   {
     "filename": "LongitudinalTuningKf",
-    "content": "103"
+    "content": "100"
   },
   {
     "filename": "LongitudinalTuningKiV",
-    "content": "350"
+    "content": "700"
   },
   {
     "filename": "LongitudinalTuningKpV",
-    "content": "117"
+    "content": "100"
+  },
+  {
+    "filename": "MSLCEnabled",
+    "content": "0"
+  },
+  {
+    "filename": "MTSCAggressiveness",
+    "content": "110"
+  },
+  {
+    "filename": "MTSCCurvatureCheck",
+    "content": "1"
+  },
+  {
+    "filename": "MTSCEnabled",
+    "content": "1"
   },
   {
     "filename": "MapboxStyle",
-    "content": "0"
+    "content": "2"
   },
   {
     "filename": "MaxAngleFrames",
-    "content": "0"
+    "content": "87"
   },
   {
     "filename": "MixRadarInfo",
-    "content": "1"
+    "content": "0"
   },
   {
     "filename": "MuteDoor",
-    "content": "1"
+    "content": "0"
   },
   {
     "filename": "MuteSeatbelt",
@@ -277,7 +317,19 @@
   },
   {
     "filename": "NNFF",
-    "content": "1"
+    "content": "0"
+  },
+  {
+    "filename": "NetworkMetered",
+    "content": "0"
+  },
+  {
+    "filename": "NoLogging",
+    "content": "0"
+  },
+  {
+    "filename": "OSMDownloadProgress",
+    "content": ""
   },
   {
     "filename": "OpenpilotEnabledToggle",
@@ -285,11 +337,15 @@
   },
   {
     "filename": "PathOffset",
-    "content": "-3"
+    "content": "0"
+  },
+  {
+    "filename": "PrimeType",
+    "content": "0"
   },
   {
     "filename": "RecordFront",
-    "content": "0"
+    "content": "1"
   },
   {
     "filename": "SNGHack",
@@ -297,7 +353,7 @@
   },
   {
     "filename": "SccConnectedBus2",
-    "content": "0"
+    "content": "1"
   },
   {
     "filename": "SearchInput",
@@ -320,20 +376,16 @@
     "content": "1"
   },
   {
-    "filename": "ShowDebugUI",
-    "content": "0"
-  },
-  {
     "filename": "ShowDeviceState",
     "content": "0"
   },
   {
     "filename": "ShowDmInfo",
-    "content": "0"
+    "content": "1"
   },
   {
     "filename": "ShowGapInfo",
-    "content": "1"
+    "content": "-1"
   },
   {
     "filename": "ShowHudMode",
@@ -377,7 +429,7 @@
   },
   {
     "filename": "ShowPlotMode",
-    "content": "1"
+    "content": "0"
   },
   {
     "filename": "ShowRadarInfo",
@@ -389,19 +441,15 @@
   },
   {
     "filename": "ShowSteerRotate",
-    "content": "0"
+    "content": "1"
   },
   {
     "filename": "ShowTpms",
-    "content": "0"
-  },
-  {
-    "filename": "ShowZOffset",
-    "content": "170"
+    "content": "1"
   },
   {
     "filename": "SoftHoldMode",
-    "content": "0"
+    "content": "2"
   },
   {
     "filename": "SoundVolumeAdjust",
@@ -409,11 +457,11 @@
   },
   {
     "filename": "SoundVolumeAdjustEngage",
-    "content": "85"
+    "content": "15"
   },
   {
     "filename": "SpeedFromPCM",
-    "content": "0"
+    "content": "2"
   },
   {
     "filename": "SshEnabled",
@@ -429,19 +477,19 @@
   },
   {
     "filename": "SteerActuatorDelay",
-    "content": "38"
+    "content": "32"
   },
   {
     "filename": "SteerRatio",
-    "content": "150"
+    "content": "164"
   },
   {
     "filename": "StopAccelApply",
-    "content": "50"
+    "content": "0"
   },
   {
     "filename": "StopDistanceCarrot",
-    "content": "600"
+    "content": "550"
   },
   {
     "filename": "StopRecord",
@@ -449,7 +497,7 @@
   },
   {
     "filename": "StoppingAccel",
-    "content": "-60"
+    "content": "-30"
   },
   {
     "filename": "TFollowGap1",
@@ -457,38 +505,78 @@
   },
   {
     "filename": "TFollowGap2",
-    "content": "180"
-  },
-  {
-    "filename": "TFollowGap3",
-    "content": "270"
-  },
-  {
-    "filename": "TFollowGap4",
     "content": "90"
   },
   {
+    "filename": "TFollowGap3",
+    "content": "140"
+  },
+  {
+    "filename": "TFollowGap4",
+    "content": "160"
+  },
+  {
     "filename": "TFollowSpeedAdd",
-    "content": "0"
+    "content": "20"
   },
   {
     "filename": "TFollowSpeedAddM",
-    "content": "0"
+    "content": "10"
   },
   {
     "filename": "TSS2Tune",
     "content": "0"
   },
   {
-    "filename": "TrafficStopMode",
-    "content": "1"
+    "filename": "TermsVersion",
+    "content": "2"
+  },
+  {
+    "filename": "Timezone",
+    "content": "Asia/Seoul"
+  },
+  {
+    "filename": "TrainingVersion",
+    "content": "0.2.0"
+  },
+  {
+    "filename": "UpdateFailedCount",
+    "content": "10"
+  },
+  {
+    "filename": "UpdaterFetchAvailable",
+    "content": "0"
+  },
+  {
+    "filename": "UpdaterNewDescription",
+    "content": ""
+  },
+  {
+    "filename": "UpdaterNewReleaseNotes",
+    "content": ""
+  },
+  {
+    "filename": "UpdaterState",
+    "content": "idle"
   },
   {
     "filename": "UseLaneLineDebug",
-    "content": "5"
+    "content": "7"
   },
   {
     "filename": "UseLaneLineSpeed",
     "content": "1"
+  },
+  {
+    "filename": "UseLateralJerk",
+    "content": "0"
+  },
+  {
+    "filename": "Version",
+    "content": "0.9.7"
+  },
+  {
+    "filename": "VisionAccelRatio",
+    "content": "100"
   }
 ]

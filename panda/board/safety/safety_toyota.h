@@ -98,11 +98,11 @@ RxCheck toyota_lta_interceptor_rx_checks[] = {
 // safety param flags
 // first byte is for EPS factor, second is for flags
 const uint32_t TOYOTA_PARAM_OFFSET = 8U;
-const uint32_t TOYOTA_EPS_FACTOR = (1U << TOYOTA_PARAM_OFFSET) - 1U;
-const uint32_t TOYOTA_PARAM_ALT_BRAKE = 1U << TOYOTA_PARAM_OFFSET;
-const uint32_t TOYOTA_PARAM_STOCK_LONGITUDINAL = 2U << TOYOTA_PARAM_OFFSET;
-const uint32_t TOYOTA_PARAM_LTA = 4U << TOYOTA_PARAM_OFFSET;
-const uint32_t TOYOTA_PARAM_GAS_INTERCEPTOR = 8U << TOYOTA_PARAM_OFFSET;
+const uint32_t TOYOTA_EPS_FACTOR = (1UL << TOYOTA_PARAM_OFFSET) - 1U;
+const uint32_t TOYOTA_PARAM_ALT_BRAKE = 1UL << TOYOTA_PARAM_OFFSET;
+const uint32_t TOYOTA_PARAM_STOCK_LONGITUDINAL = 2UL << TOYOTA_PARAM_OFFSET;
+const uint32_t TOYOTA_PARAM_LTA = 4UL << TOYOTA_PARAM_OFFSET;
+const uint32_t TOYOTA_PARAM_GAS_INTERCEPTOR = 8UL << TOYOTA_PARAM_OFFSET;
 
 bool toyota_alt_brake = false;
 bool toyota_stock_longitudinal = false;
@@ -140,7 +140,7 @@ static bool toyota_get_quality_flag_valid(const CANPacket_t *to_push) {
 
   bool valid = false;
   if (addr == 0x260) {
-    valid = GET_BIT(to_push, 3U) == 0U;  // STEER_ANGLE_INITIALIZING
+    valid = !GET_BIT(to_push, 3U);  // STEER_ANGLE_INITIALIZING
   }
   return valid;
 }
@@ -171,7 +171,7 @@ static void toyota_rx_hook(const CANPacket_t *to_push) {
 
       // LTA request angle should match current angle while inactive, clipped to max accepted angle.
       // note that angle can be relative to init angle on some TSS2 platforms, LTA has the same offset
-      bool steer_angle_initializing = GET_BIT(to_push, 3U) != 0U;
+      bool steer_angle_initializing = GET_BIT(to_push, 3U);
       if (!steer_angle_initializing) {
         int angle_meas_new = (GET_BYTE(to_push, 3) << 8U) | GET_BYTE(to_push, 4);
         angle_meas_new = CLAMP(to_signed(angle_meas_new, 16), -TOYOTA_LTA_MAX_ANGLE, TOYOTA_LTA_MAX_ANGLE);
@@ -188,12 +188,12 @@ static void toyota_rx_hook(const CANPacket_t *to_push) {
     // exit controls on rising edge of gas press
     if (addr == 0x1D2) {
       // 5th bit is CRUISE_ACTIVE
-      bool cruise_engaged = GET_BIT(to_push, 5U) != 0U;
+      bool cruise_engaged = GET_BIT(to_push, 5U);
       pcm_cruise_check(cruise_engaged);
 
       // sample gas pedal
       if (!enable_gas_interceptor) {
-        gas_pressed = GET_BIT(to_push, 4U) == 0U;
+        gas_pressed = !GET_BIT(to_push, 4U);
       }
     }
 
@@ -214,7 +214,7 @@ static void toyota_rx_hook(const CANPacket_t *to_push) {
     // most cars have brake_pressed on 0x226, corolla and rav4 on 0x224
     if (((addr == 0x224) && toyota_alt_brake) || ((addr == 0x226) && !toyota_alt_brake)) {
       uint8_t bit = (addr == 0x224) ? 5U : 37U;
-      brake_pressed = GET_BIT(to_push, bit) != 0U;
+      brake_pressed = GET_BIT(to_push, bit);
     }
 
     // sample gas interceptor
@@ -227,8 +227,8 @@ static void toyota_rx_hook(const CANPacket_t *to_push) {
     }
 
     bool stock_ecu_detected = addr == 0x2E4;  // STEERING_LKA
-    if (!toyota_stock_longitudinal) {
-      stock_ecu_detected = stock_ecu_detected || (addr == 0x343);  // ACC_CONTROL
+    if (!toyota_stock_longitudinal && (addr == 0x343)) {
+      stock_ecu_detected = true;  // ACC_CONTROL
     }
     generic_rx_checks(stock_ecu_detected);
   }
@@ -259,7 +259,7 @@ static bool toyota_tx_hook(const CANPacket_t *to_send) {
 
       // only ACC messages that cancel are allowed when openpilot is not controlling longitudinal
       if (toyota_stock_longitudinal) {
-        bool cancel_req = GET_BIT(to_send, 24U) != 0U;
+        bool cancel_req = GET_BIT(to_send, 24U);
         if (!cancel_req) {
           violation = true;
         }
@@ -285,8 +285,8 @@ static bool toyota_tx_hook(const CANPacket_t *to_send) {
     // LTA angle steering check
     if (addr == 0x191) {
       // check the STEER_REQUEST, STEER_REQUEST_2, TORQUE_WIND_DOWN, STEER_ANGLE_CMD signals
-      bool lta_request = GET_BIT(to_send, 0U) != 0U;
-      bool lta_request2 = GET_BIT(to_send, 25U) != 0U;
+      bool lta_request = GET_BIT(to_send, 0U);
+      bool lta_request2 = GET_BIT(to_send, 25U);
       int torque_wind_down = GET_BYTE(to_send, 5);
       int lta_angle = (GET_BYTE(to_send, 1) << 8) | GET_BYTE(to_send, 2);
       lta_angle = to_signed(lta_angle, 16);
@@ -334,7 +334,7 @@ static bool toyota_tx_hook(const CANPacket_t *to_send) {
     if (addr == 0x2E4) {
       int desired_torque = (GET_BYTE(to_send, 1) << 8) | GET_BYTE(to_send, 2);
       desired_torque = to_signed(desired_torque, 16);
-      bool steer_req = GET_BIT(to_send, 0U) != 0U;
+      bool steer_req = GET_BIT(to_send, 0U);
       // When using LTA (angle control), assert no actuation on LKA message
       if (!toyota_lta) {
         if (steer_torque_cmd_checks(desired_torque, steer_req, TOYOTA_STEERING_LIMITS)) {
@@ -401,10 +401,10 @@ static int toyota_fwd_hook(int bus_num, int addr) {
   if (bus_num == 2) {
     // block stock lkas messages and stock acc messages (if OP is doing ACC)
     // in TSS2, 0x191 is LTA which we need to block to avoid controls collision
-    int is_lkas_msg = ((addr == 0x2E4) || (addr == 0x412) || (addr == 0x191));
+    bool is_lkas_msg = ((addr == 0x2E4) || (addr == 0x412) || (addr == 0x191));
     // in TSS2 the camera does ACC as well, so filter 0x343
-    int is_acc_msg = (addr == 0x343);
-    int block_msg = is_lkas_msg || (is_acc_msg && !toyota_stock_longitudinal);
+    bool is_acc_msg = (addr == 0x343);
+    bool block_msg = is_lkas_msg || (is_acc_msg && !toyota_stock_longitudinal);
     if (!block_msg) {
       bus_fwd = 0;
     }

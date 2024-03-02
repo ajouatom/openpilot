@@ -23,6 +23,10 @@
 #include "selfdrive/ui/ui.h"
 #include "selfdrive/ui/qt/util.h"
 #include "selfdrive/ui/qt/qt_window.h"
+
+#include "selfdrive/frogpilot/navigation/ui/navigation_settings.h"
+
+
 #include <QScroller>
 #include <QListWidget>
 
@@ -259,18 +263,6 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   });
   addItem(translateBtn);
 
-  // Set Default Params... for HKG
-  const auto defaultSetHkgBtn = new ButtonControl(tr("Set to default(TM_HEV_SCC2)"), tr("DEFAULT"), "Use this button to set to default params for TMHEV");
-  connect(defaultSetHkgBtn, &ButtonControl::clicked, [this]() {
-      if (!ConfirmationDialog::confirm(tr("Are you sure you want to set to default?"), tr("Execute"), this)) return;
-      QProcess process;
-      process.setWorkingDirectory("/data/openpilot/selfdrive");
-      process.start("/bin/sh", QStringList{ "-c", "python ./apilot_default.py ./apilot_default.json" });
-      process.waitForFinished();
-      //Hardware::reboot();
-      });
-  addItem(defaultSetHkgBtn);
-
   QObject::connect(uiState(), &UIState::offroadTransition, [=](bool offroad) {
     for (auto btn : findChildren<ButtonControl *>()) {
       btn->setEnabled(offroad);
@@ -302,6 +294,34 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
     #poweroff_btn:pressed { background-color: #FF2424; }
   )");
   addItem(power_layout);
+
+
+  struct DefaultSetting {
+      QString name;
+      QString descr;
+      QString jsonFile;
+  };
+
+  const QVector<DefaultSetting> settings = {
+      {"TM_HEV_SCC2", "TM_HEV_2022, scc2, radarTracks, radar Long", "apilot_default_tm_hev_scc2.json"},
+      {"EV6_VLONG", "EV6 vision Long", "apilot_default_ev6_vlong.json"},
+      {"IONIQ5_VLONG", "IONIQ5 vision Long", "apilot_default_ioniq5_vlong.json"}
+  };
+
+  for (const auto& setting : settings) {
+      auto button = new ButtonControl(tr("Set to default(%1)").arg(setting.name), tr("DEFAULT"), tr("%1").arg(setting.descr));
+      connect(button, &ButtonControl::clicked, [this, setting]() {
+          if (!ConfirmationDialog::confirm(tr("Are you sure you want to set to default?"), tr("Execute"), this)) return;
+          QProcess process;
+          process.setWorkingDirectory("/data/openpilot/selfdrive");
+          process.start("/bin/sh", QStringList{ "-c", QString("python ./apilot_default.py ./%1").arg(setting.jsonFile) });
+          process.waitForFinished();
+          //Hardware::reboot();
+          });
+      addItem(button);
+  }
+
+
 }
 
 void DevicePanel::updateCalibDescription() {
@@ -405,6 +425,7 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
     {tr("Network"), new Networking(this)},
     {tr("Toggles"), toggles},
     {tr("Software"), new SoftwarePanel(this)},
+    {tr("Navigation"), new FrogPilotNavigationPanel(this)},
     {tr("Carrot"), new CarrotPanel(this)},
     {tr("Cars"), new CarsPanel(this)},
   };
@@ -516,7 +537,6 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
     cruiseToggles = new ListWidget(this);
     cruiseToggles->addItem(new CValueControl("CruiseButtonMode", "Button: Cruise Button Mode", "0:Normal,1:User1,2:User2", "../assets/offroad/icon_road.png", 0, 2, 1));
     cruiseToggles->addItem(new CValueControl("CruiseSpeedUnit", "Button: Cruise Speed Unit", "", "../assets/offroad/icon_road.png", 1, 20, 1));
-    cruiseToggles->addItem(new CValueControl("TrafficStopMode", "STOPPING: Traffice Stop Mode (1)", "0:Not Used, 1:Use", "../assets/offroad/icon_road.png", 0, 1, 1));
     cruiseToggles->addItem(new CValueControl("CruiseEcoControl", "CRUISE: Eco control(4km/h)", "Temporarily increasing the set speed to improve fuel efficiency.", "../assets/offroad/icon_road.png", 0, 10, 1));
     cruiseToggles->addItem(new CValueControl("CruiseSpeedMin", "CRUISE: Speed Lower limit(10)", "Cruise control MIN speed", "../assets/offroad/icon_road.png", 5, 50, 1));
     cruiseToggles->addItem(new CValueControl("AutoSpeedUptoRoadSpeedLimit", "CRUISE: Auto speed up (100%)", "Auto speed up based on the lead car upto RoadSpeedLimit.", "../assets/offroad/icon_road.png", 0, 200, 10));
@@ -535,7 +555,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
 
     latLongToggles = new ListWidget(this);
     latLongToggles->addItem(new CValueControl("UseLaneLineSpeed", "Laneline mode speed(0)", "Lainline mode, lat_mpc control used", "../assets/offroad/icon_shell.png", 0, 200, 5));
-    latLongToggles->addItem(new CValueControl("UseLaneLineDebug", "Laneline time compensation (10)", "x0.01sec", "../assets/offroad/icon_shell.png", 0, 100, 1));
+    latLongToggles->addItem(new CValueControl("UseLaneLineDebug", "Laneline time compensation (7)", "x0.01sec", "../assets/offroad/icon_shell.png", 0, 100, 1));
     latLongToggles->addItem(new CValueControl("AdjustLaneOffset", "AdjustLaneOffset(0)cm", "", "../assets/offroad/icon_shell.png", 0, 500, 5));
     latLongToggles->addItem(new CValueControl("AdjustCurveOffset", "AdjustCurveOffset(0)cm", "", "../assets/offroad/icon_shell.png", 0, 500, 5));
     latLongToggles->addItem(new CValueControl("PathOffset", "PathOffset", "(-)left, (+)right, when UseLaneLineSpeed > 0", "../assets/offroad/icon_road.png", -50, 50, 1));
@@ -543,11 +563,11 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
     //latLongToggles->addItem(new CValueControl("JerkStartLimit", "LONG: JERK START(10)x0.1", "Starting Jerk.", "../assets/offroad/icon_road.png", 1, 50, 1));
     latLongToggles->addItem(new CValueControl("LongitudinalTuningKpV", "LONG: P Gain(100)", "", "../assets/offroad/icon_road.png", 50, 150, 1));
     latLongToggles->addItem(new CValueControl("LongitudinalTuningKiV", "LONG: I Gain(200)", "", "../assets/offroad/icon_road.png", 0, 2000, 5));
-    latLongToggles->addItem(new CValueControl("LongitudinalTuningKf", "LONG: FF Gain(200)", "", "../assets/offroad/icon_road.png", 0, 200, 1));
-    latLongToggles->addItem(new CValueControl("StartAccelApply", "LONG: StartingAccel 2.0x(0%)", "정지->출발시 가속도의 가속율을 지정합니다 0: 사용안함.", "../assets/offroad/icon_road.png", 0, 100, 10));
-    latLongToggles->addItem(new CValueControl("StopAccelApply", "LONG: StoppingAccel -2.0x(50%)", "정지유지시 브레이크압을 조정합니다. 0: 사용안함. ", "../assets/offroad/icon_road.png", 0, 100, 10));
+    latLongToggles->addItem(new CValueControl("LongitudinalTuningKf", "LONG: FF Gain(100)", "", "../assets/offroad/icon_road.png", 0, 200, 1));
+    latLongToggles->addItem(new CValueControl("StartAccelApply", "LONG: StartingAccel 2.0x(0)%", "정지->출발시 가속도의 가속율을 지정합니다 0: 사용안함.", "../assets/offroad/icon_road.png", 0, 100, 10));
+    latLongToggles->addItem(new CValueControl("StopAccelApply", "LONG: StoppingAccel -2.0x(0)%", "정지유지시 브레이크압을 조정합니다. 0: 사용안함. ", "../assets/offroad/icon_road.png", 0, 100, 10));
     
-    latLongToggles->addItem(new CValueControl("StoppingAccel", "LONG: StoppingStartAccelx0.01(-80)", "", "../assets/offroad/icon_road.png", -100, 0, 5));
+    latLongToggles->addItem(new CValueControl("StoppingAccel", "LONG: StoppingStartAccelx0.01(-40)", "", "../assets/offroad/icon_road.png", -100, 0, 5));
     latLongToggles->addItem(new CValueControl("StopDistanceCarrot", "LONG: StopDistance (600)cm", "", "../assets/offroad/icon_road.png", 400, 1000, 10));
 
     latLongToggles->addItem(new CValueControl("CruiseMaxVals1", "ACCEL:0km/h(160)", "속도별 가속도를 지정합니다.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 1, 250, 5));
@@ -578,7 +598,6 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
 
 
     pathToggles = new ListWidget(this);
-    pathToggles->addItem(new CValueControl("ShowZOffset", "DISP:Path Height adjust(170)", "(+) Down, (-) Up", "../assets/offroad/icon_shell.png", -300, 300, 10));
     pathToggles->addItem(new CValueControl("ShowPathModeCruiseOff", "DISP: Path Mode: Cruise OFFF", "0:Normal,1,2:Rec,3,4:^^,5,6:Rec,7,8:^^,9,10,11,12:Smooth^^", "../assets/offroad/icon_shell.png", 0, 15, 1));
     pathToggles->addItem(new CValueControl("ShowPathColorCruiseOff", "DISP: Path Color: Cruise OFF", "(+10:Stroke)0:Red,1:Orange,2:Yellow,3:Green,4:Blue,5:Indigo,6:Violet,7:Brown,8:White,9:Black", "../assets/offroad/icon_shell.png", 0, 19, 1));
     pathToggles->addItem(new CValueControl("ShowPathMode", "DISP:Path Mode: Laneless", "0:Normal,1,2:Rec,3,4:^^,5,6:Rec,7,8:^^,9,10,11,12:Smooth^^", "../assets/offroad/icon_shell.png", 0, 15, 1));
@@ -593,11 +612,12 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
     startToggles->addItem(new CValueControl("MapboxStyle", "Mapbox Style(0)", "", "../assets/offroad/icon_shell.png", 0, 2, 1));
     startToggles->addItem(new ParamControl("HotspotOnBoot", "Hotspot enabled on boot", "", "../assets/offroad/icon_shell.png", this));
     startToggles->addItem(new ParamControl("NoLogging", "Disable Logger", "", "../assets/offroad/icon_shell.png", this));
+    startToggles->addItem(new ParamControl("LaneChangeNeedTorque", "LaneChange: Need Torque", "", "../assets/offroad/icon_shell.png", this));
 
     speedToggles = new ListWidget(this);
-    speedToggles->addItem(new CValueControl("AutoCurveSpeedCtrlUse", "CURVE: Auto Control(1)", "곡선도로를 만나면 속도를 줄여줍니다. 0:사용안함,1:도로설계기준", "../assets/offroad/icon_road.png", 0, 3, 1));
-    speedToggles->addItem(new CValueControl("AutoCurveSpeedFactor", "CURVE: Auto Control ratio(100%)", "커브속도조절(커브속도 조절 3일때 170)", "../assets/offroad/icon_road.png", 50, 300, 1));
-    speedToggles->addItem(new CValueControl("AutoCurveSpeedFactorIn", "CURVE: Auto Control ratio In(10%)", "커브속도조절진입", "../assets/offroad/icon_road.png", 0, 300, 1));
+    speedToggles->addItem(new CValueControl("AutoCurveSpeedLowerLimit", "CURVE: Lower limit speed(30)", "곡선도로를 만나면 속도를 줄여줍니다. 최저속도", "../assets/offroad/icon_road.png", 30, 200, 5));
+    speedToggles->addItem(new CValueControl("AutoCurveSpeedFactor", "CURVE: Auto Control ratio(100%)", "", "../assets/offroad/icon_road.png", 50, 300, 1));
+    speedToggles->addItem(new CValueControl("AutoCurveSpeedAggressiveness", "CURVE: Aggressiveness (100%)", "", "../assets/offroad/icon_road.png", 50, 300, 1));
     speedToggles->addItem(new CValueControl("AutoNaviSpeedCtrlEnd", "SpeedCameraDecelEnd(6s)", "감속완료시점을 설정합니다.값이 크면 카메라에서 멀리 감속 완료", ".. / assets / offroad / icon_road.png", 3, 20, 1));
     speedToggles->addItem(new CValueControl("AutoNaviSpeedCtrl", tr("SpeedCameraControl(1)"), "0:사용안함, 1:APN, 2:APN + Road Speedlimit", "../assets/offroad/icon_road.png", 0, 2, 1));
     speedToggles->addItem(new CValueControl("AutoNaviSpeedDecelRate", "SpeedCameraDecelRatex0.01m/s^2(80)", "낮으면 멀리서부터 감속함", ".. / assets / offroad / icon_road.png", 10, 200, 10));
@@ -608,8 +628,11 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
     speedToggles->addItem(new CValueControl("AutoTurnControlSpeedLaneChange", "NOO Helper LaneChange Speed (60)", "0:없음,차로변경속도", "../assets/offroad/icon_road.png", 0, 100, 5));
     speedToggles->addItem(new CValueControl("AutoTurnControlSpeedTurn", "NOO Helper Turn Speed (20)", "0:없음, 턴속도", "../assets/offroad/icon_road.png", 0, 100, 5));
     speedToggles->addItem(new CValueControl("AutoTurnControlTurnEnd", "NOO Helper Turn CtrlDistTime (6)", "dist=speed*time", "../assets/offroad/icon_road.png", 0, 30, 1));
-    speedToggles->addItem(new CValueControl("AutoTurnMapChange", "NOO Helper Auto Map Change(0)", "", "../assets/offroad/icon_road.png", 0, 1, 1));
-    speedToggles->addItem(new CValueControl("EnableOSM", "Enable OSM(0) WIP", "1:Display, 2:Speed Limit, 3:Speed/Turn Limit(Reboot)", "../assets/offroad/icon_road.png", 0, 3, 1));
+    speedToggles->addItem(new CValueControl("AutoTurnMapChange", "NOO Helper Auto Map Change(0)", "", "../assets/offroad/icon_road.png", 0, 2, 1));
+    speedToggles->addItem(new CValueControl("MSLCEnabled", "MSLC Enabled", "Map: Speed Limit controller", "../assets/offroad/icon_road.png", 0, 3, 1));
+    speedToggles->addItem(new CValueControl("MTSCEnabled", "MTSC Enabled", "Map: Slow down for curves detected by downloaded maps.", "../assets/offroad/icon_road.png", 0, 1, 1));
+    speedToggles->addItem(new CValueControl("MTSCCurvatureCheck", "MTSC CurvatureCheck", "Map: Trigger MTSC when the model detectes a curve in the road", "../assets/offroad/icon_road.png", 0, 1, 1));
+    speedToggles->addItem(new CValueControl("MTSCAggressiveness", "MTSC MTSCAggressiveness", "Map: MTSC turn speed aggressiveness, Higher value is more faster", "../assets/offroad/icon_road.png", 1, 200, 5));
 
     toggles_layout->addWidget(cruiseToggles);
     toggles_layout->addWidget(latLongToggles);
@@ -710,7 +733,6 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
     commonToggles = new ListWidget(this);
     commonToggles->addItem(new ParamControl("MuteDoor", "MuteDoor", "", "../assets/offroad/icon_warning.png", this));
     commonToggles->addItem(new ParamControl("MuteSeatbelt", "MuteSeatbelt", "", "../assets/offroad/icon_warning.png", this));
-    commonToggles->addItem(new ParamControl("NNFF", "NNFF", "", "../assets/offroad/icon_warning.png", this));
     commonToggles->addItem(new CValueControl("SteerActuatorDelay", "LAT:SteerActuatorDelay(40)", "표준", "../assets/offroad/icon_road.png", 1, 100, 1));
     commonToggles->addItem(new CValueControl("SteerRatio", "LAT: SteerRatiox0.1(0)", "Custom SteerRatio", "../assets/offroad/icon_road.png", 0, 300, 1));
     commonToggles->addItem(new CValueControl("LateralTorqueCustom", "LAT: TorqueCustom(0)", "", "../assets/offroad/icon_road.png", 0, 2, 1));
@@ -720,6 +742,8 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
     commonToggles->addItem(new CValueControl("CustomSteerDeltaUp", "LAT: CustomSteerDeltaUp(0)", "", "../assets/offroad/icon_road.png", 0, 20, 10));
     commonToggles->addItem(new CValueControl("CustomSteerDeltaDown", "LAT: CustomSteerDeltaDown(0)", "", "../assets/offroad/icon_road.png", 0, 20, 10));
     commonToggles->addItem(new CValueControl("SpeedFromPCM", "Read Cruise Speed from PCM", "Toyota must set to 1", "../assets/offroad/icon_road.png", 0, 2, 1));
+    commonToggles->addItem(new CValueControl("NNFF", "NNFF", "Twilsonco's NNFF(Reboot required)", "../assets/offroad/icon_road.png", 0, 1, 1));
+    commonToggles->addItem(new CValueControl("UseLateralJerk", "UseLateralJerk", "Reboot required", "../assets/offroad/icon_road.png", 0, 1, 1));
 
     hyundaiToggles = new ListWidget(this);
     hyundaiToggles->addItem(new CValueControl("AutoCruiseControl", "(HKG) Auto Cruise control", "Softhold, Auto Cruise ON/OFF control", "../assets/offroad/icon_road.png", 0, 3, 1));

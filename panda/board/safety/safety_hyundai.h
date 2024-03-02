@@ -6,7 +6,7 @@
   .max_rate_down = (rate_down), \
   .max_rt_delta = 112, \
   .max_rt_interval = 250000, \
-  .driver_torque_allowance = 50, \
+  .driver_torque_allowance = 250, \
   .driver_torque_factor = 2, \
   .type = TorqueDriverLimited, \
    /* the EPS faults when the steering angle is above a certain threshold for too long. to prevent this, */ \
@@ -201,7 +201,7 @@ static void hyundai_rx_hook(const CANPacket_t *to_push) {
     // ACC steering wheel buttons
     if (addr == 0x4F1) {
       int cruise_button = GET_BYTE(to_push, 0) & 0x7U;
-      int main_button = GET_BIT(to_push, 3U);
+      bool main_button = GET_BIT(to_push, 3U);
       hyundai_common_cruise_buttons_check(cruise_button, main_button);
     }
 
@@ -254,10 +254,10 @@ static bool hyundai_tx_hook(const CANPacket_t *to_send) {
   // FCA11: Block any potential actuation
   if (addr == 0x38D) {
     int CR_VSM_DecCmd = GET_BYTE(to_send, 1);
-    int FCA_CmdAct = GET_BIT(to_send, 20U);
-    int CF_VSM_DecCmdAct = GET_BIT(to_send, 31U);
+    bool FCA_CmdAct = GET_BIT(to_send, 20U);
+    bool CF_VSM_DecCmdAct = GET_BIT(to_send, 31U);
 
-    if ((CR_VSM_DecCmd != 0) || (FCA_CmdAct != 0) || (CF_VSM_DecCmdAct != 0)) {
+    if ((CR_VSM_DecCmd != 0) || FCA_CmdAct || CF_VSM_DecCmdAct) {
       tx = false;
     }
   }
@@ -269,7 +269,7 @@ static bool hyundai_tx_hook(const CANPacket_t *to_send) {
 
 #if 0 // xxxpilot
     int aeb_decel_cmd = GET_BYTE(to_send, 2);
-    int aeb_req = GET_BIT(to_send, 54U);
+    bool aeb_req = GET_BIT(to_send, 54U);
 #endif /// xxxpilot
 
     bool violation = false;
@@ -278,7 +278,7 @@ static bool hyundai_tx_hook(const CANPacket_t *to_send) {
     violation |= longitudinal_accel_checks(desired_accel_val, HYUNDAI_LONG_LIMITS);
 #if 0 // xxxpilot
     violation |= (aeb_decel_cmd != 0);
-    violation |= (aeb_req != 0);
+    violation |= aeb_req;
 #endif // xxxpilot
 
     if (violation) {
@@ -289,7 +289,7 @@ static bool hyundai_tx_hook(const CANPacket_t *to_send) {
   // LKA STEER: safety check
   if (addr == 0x340) {
     int desired_torque = ((GET_BYTES(to_send, 0, 4) >> 16) & 0x7ffU) - 1024U;
-    bool steer_req = GET_BIT(to_send, 27U) != 0U;
+    bool steer_req = GET_BIT(to_send, 27U);
 
     if (steer_req) lat_active_count = 100; // carrot, latActive message from OP
 

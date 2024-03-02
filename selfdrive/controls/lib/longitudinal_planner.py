@@ -114,7 +114,7 @@ class LongitudinalPlanner:
       j = np.zeros(len(T_IDXS_MPC))
     return x, v, a, j
 
-  def update(self, sm):
+  def update(self, sm, carrot_planner):
     if self.param_read_counter % 50 == 0:
       self.read_param()
     self.param_read_counter += 1
@@ -122,6 +122,9 @@ class LongitudinalPlanner:
 
     v_ego = sm['carState'].vEgo
     v_cruise_kph = min(sm['controlsState'].vCruise, V_CRUISE_MAX)
+
+    v_cruise_kph = carrot_planner.update(sm, v_cruise_kph)
+
     v_cruise = v_cruise_kph * CV.KPH_TO_MS
 
     vCluRatio = sm['carState'].vCluRatio
@@ -193,7 +196,7 @@ class LongitudinalPlanner:
     self.a_desired = float(interp(self.dt, ModelConstants.T_IDXS[:CONTROL_N], self.a_desired_trajectory))
     self.v_desired_filter.x = self.v_desired_filter.x + self.dt * (self.a_desired + a_prev) / 2.0
 
-  def publish(self, sm, pm):
+  def publish(self, sm, pm, carrot_planner):
     plan_send = messaging.new_message('longitudinalPlan')
 
     plan_send.valid = sm.all_checks(service_list=['carState', 'controlsState'])
@@ -214,8 +217,19 @@ class LongitudinalPlanner:
     longitudinalPlan.personality = self.personality
 
     longitudinalPlan.debugLongText = self.mpc.debugLongText
-    longitudinalPlan.debugLongText2 = "VC:{:.1f}".format(self.v_cruise_last*3.6)
+    #longitudinalPlan.debugLongText2 = "VC:{:.1f}".format(self.v_cruise_last*3.6)
     longitudinalPlan.trafficState = self.mpc.trafficState.value
     longitudinalPlan.xState = self.mpc.xState.value
+
+    longitudinalPlan.curveSpeed = float(carrot_planner.curveSpeed)
+    longitudinalPlan.activeAPM = carrot_planner.activeAPM
+    longitudinalPlan.leftBlinkerExt = carrot_planner.leftBlinkerExt
+    longitudinalPlan.rightBlinkerExt = carrot_planner.rightBlinkerExt
+    longitudinalPlan.limitSpeed = carrot_planner.limitSpeed
+    longitudinalPlan.carrotEvent = carrot_planner.event
+    longitudinalPlan.vCruiseTarget = float(carrot_planner.v_cruise_kph)
+    longitudinalPlan.vCruiseTargetSource = carrot_planner.source
+
+    longitudinalPlan.debugLongText2 = carrot_planner.log
 
     pm.send('longitudinalPlan', plan_send)

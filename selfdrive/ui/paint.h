@@ -108,6 +108,9 @@ protected:
 	QString m_navText = "";
 	int icon_size = 256;
 
+	Params	params;
+	Params	paramsMemory{ "/dev/shm/params" };
+
 public:
 	DrawApilot();
 public:

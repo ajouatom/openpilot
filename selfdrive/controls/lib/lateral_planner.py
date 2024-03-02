@@ -76,7 +76,7 @@ class LateralPlanner:
     self.x0 = x0
     self.lat_mpc.reset(x0=self.x0)
 
-  def update(self, sm):
+  def update(self, sm, carrot_planner):
     self.readParams -= 1
     if self.readParams <= 0:
       self.readParams = 100
@@ -86,7 +86,7 @@ class LateralPlanner:
     # clip speed , lateral planning is not possible at 0 speed
     measured_curvature = sm['controlsState'].curvature
     v_ego_car = sm['carState'].vEgo
-    self.curve_speed = sm['controlsState'].curveSpeed
+    self.curve_speed = carrot_planner.curveSpeed
 
     # Parse model predictions
     md = sm['modelV2']
