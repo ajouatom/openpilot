@@ -374,14 +374,21 @@ void DrawApilot::drawLaneLines(const UIState* s) {
         NVGcolor color2 = nvgRGBA(0, 204, 0, 150);
         auto lead_left = (*s->sm)["radarState"].getRadarState().getLeadLeft();
         auto lead_right = (*s->sm)["radarState"].getRadarState().getLeadRight();
-        auto controls_state = (*s->sm)["controlsState"].getControlsState();
-        int leftBlinkerExt = controls_state.getLeftBlinkerExt();
-        int rightBlinkerExt = controls_state.getRightBlinkerExt();
+        //auto controls_state = (*s->sm)["controlsState"].getControlsState();
+        //int leftBlinkerExt = controls_state.getLeftBlinkerExt();
+        //int rightBlinkerExt = controls_state.getRightBlinkerExt();
+        auto meta = (*s->sm)["modelV2"].getModelV2().getMeta();
+        auto laneChangeState = meta.getLaneChangeState();
+        auto laneChangeDirection = meta.getLaneChangeDirection();
+        bool rightLaneChange = (laneChangeState == cereal::LaneChangeState::PRE_LANE_CHANGE) && (laneChangeDirection == cereal::LaneChangeDirection::RIGHT);
+        bool leftLaneChange = (laneChangeState == cereal::LaneChangeState::PRE_LANE_CHANGE) && (laneChangeDirection == cereal::LaneChangeDirection::LEFT);
 
         if (left_blindspot) ui_draw_bsd(s, scene.lane_barrier_vertices[0], &color, false);
-        else if (lead_left.getStatus() && lead_left.getDRel() < getVEgo() * 3.0 && leftBlinkerExt >= 10000)  ui_draw_bsd(s, scene.lane_barrier_vertices[0], &color2, false);
+        //else if (lead_left.getStatus() && lead_left.getDRel() < getVEgo() * 3.0 && leftBlinkerExt)  ui_draw_bsd(s, scene.lane_barrier_vertices[0], &color2, false);
+        else if (lead_left.getStatus() && lead_left.getDRel() < getVEgo() * 3.0 && leftLaneChange)  ui_draw_bsd(s, scene.lane_barrier_vertices[0], &color2, false);
         if (right_blindspot) ui_draw_bsd(s, scene.lane_barrier_vertices[1], &color, true);
-        else if (lead_right.getStatus() && lead_right.getDRel() < getVEgo() * 3.0 && rightBlinkerExt >= 10000) ui_draw_bsd(s, scene.lane_barrier_vertices[1], &color2, true);
+        //else if (lead_right.getStatus() && lead_right.getDRel() < getVEgo() * 3.0 && rightBlinkerExt >= 10000) ui_draw_bsd(s, scene.lane_barrier_vertices[1], &color2, true);
+        else if (lead_right.getStatus() && lead_right.getDRel() < getVEgo() * 3.0 && rightLaneChange) ui_draw_bsd(s, scene.lane_barrier_vertices[1], &color2, true);
     }
 
     // road edges
