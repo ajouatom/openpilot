@@ -40,6 +40,17 @@ TURN_DESIRES = {
   TurnDirection.turnRight: log.Desire.turnRight,
 }
 
+class NooActive(Enum):
+  inactive = 0
+  active = 1
+  no_new_lane_detected = 2
+  new_lane_detected = 10
+  road_edge_detected = 11
+
+  def __str__(self):
+    return self.name
+
+
 def calculate_lane_width_frog(lane, current_lane, road_edge):
   lane_x, lane_y = np.array(lane.x), np.array(lane.y)
   edge_x, edge_y = np.array(road_edge.x), np.array(road_edge.y)
@@ -105,7 +116,7 @@ class DesireHelper:
     self.available_right_edge = False
     self._log_timer = 0
     self.debugText = ""
-    self.noo_active = 0
+    self.noo_active = NooActive.inactive
     self.params = Params()
     self.autoTurnControl = self.params.get_int("AutoTurnControl")
 
@@ -215,7 +226,7 @@ class DesireHelper:
         self.lane_change_state = LaneChangeState.preLaneChange
         self.lane_change_ll_prob = 1.0
         self.lane_change_wait_timer = 0
-        self.noo_active = 0
+        self.noo_active = NooActive.inactive
         self._add_log("Lane change prepare.. {}".format("left" if leftBlinker else "right"))
 
       # LaneChangeState.preLaneChange
@@ -241,31 +252,25 @@ class DesireHelper:
         ## nooHelper인경우 차선이 생기면 하면 됨. (수동개입이 없는경우에만)        
         if (not carstate.leftBlinker and not carstate.rightBlinker) and blinkerExtMode > 0: # Noo Helper #0: voice etc, 1:noo helper lanechange, 2: noo helper turn
           if self.autoTurnControl == 3 or leftBlinker:
-            self.noo_active = 1
+            self.noo_active = NooActive.active
           elif not self.lane_available_prev and lane_available: # start... 차선이 생김
-            self.noo_active = 10
+            self.noo_active = NooActive.new_lane_detected
           elif not self.edge_available_prev and edge_available: # start... 에지가 멀어짐. 
-            self.noo_active = 11
-          #elif not self.lane_available_prev and not lane_available: #차선이 없음
-          #  self.noo_active = 2
+            self.noo_active = NooActive.road_edge_detected
           elif self.noo_active < 10 and self.lane_available_prev and lane_available: #차선이 계속있음.
-            self.noo_active = 2
+            self.noo_active = NooActive.no_new_lane_detected
           #else: #if not edge_available: #에지가 가까움.
           #  self.noo_active = 4
         else:
-          self.noo_active = 0
+          self.noo_active = NooActive.inactive
 
         if object_detected:
           self._add_log("Lane change object detected.. {:.1f}m".format(self.leftSideObjectDist if leftBlinker else self.rightSideObjectDist))
-        elif not lane_available and self.noo_active < 10:
+        elif not lane_available and self.noo_active.value < 10:
           self._add_log("Lane change no lane available")
-        elif self.noo_active == 1 or self.laneChangeNeedTorque:
+        elif self.noo_active == NooActive.active or self.laneChangeNeedTorque:
           self._add_log("Lane change blocked. need torque")
-        #elif self.noo_active == 3:
-        #  self._add_log("Lane change left direction blocked.")
-        #elif self.noo_active == 4:
-        #  self._add_log("Lane change too close road edge")
-        elif self.noo_active == 2:
+        elif self.noo_active == NooActive.no_new_lane_detected:
           self._add_log("Lane change blocked. not end lane")
         elif self.lane_change_completed:
           self._add_log("Lane change need torque to start")
@@ -284,11 +289,12 @@ class DesireHelper:
           # Set the "lane_change_completed" flag to prevent any more lane changes if the toggle is on
           self.lane_change_completed = self.one_lane_change
           self.lane_change_state = LaneChangeState.laneChangeStarting
-          self._add_log("Lane change starting.. {}, noo={}".format("left" if leftBlinker else "right", self.noo_active))
+          self._add_log("Lane change starting.. {}, noo={}".format("left" if leftBlinker else "right", str(self.noo_active)))
 
+        self._add_log("DesireLog.. Object {:.1f}:{:.1f}:{:.1f}".format(self.leftSideObjectDist, object_dist, self.rightSideObjectDist))
       # LaneChangeState.laneChangeStarting
       elif self.lane_change_state == LaneChangeState.laneChangeStarting:
-        #self._add_log("Lane change starting.. {}, {}".format("left" if leftBlinker else "right", self.noo_active))
+        #self._add_log("Lane change starting.. {}, {}".format("left" if leftBlinker else "right", str(self.noo_active)))
         # fade out over .5s
         self.lane_change_ll_prob = max(self.lane_change_ll_prob - 2 * DT_MDL, 0.0)
 
