@@ -1582,7 +1582,7 @@ void DrawApilot::drawSteer(const UIState* s, int x, int y) {
         nvgFontSize(s->vg, 40);
     }
     if (s->show_mode >= 2) {
-        if (isLeadDetected() && s->show_path_end != 1) ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, (isRadarDetected()) ? "ic_radar" : "ic_radar_vision", 1.0f);
+        if (isLeadDetected() && s->show_path_end > 1) ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, (isRadarDetected()) ? "ic_radar" : "ic_radar_vision", 1.0f);
     }
     else ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, (!isLeadDetected()) ? "ic_radar_no" : (isRadarDetected()) ? "ic_radar" : "ic_radar_vision", 1.0f);
 }
@@ -1853,7 +1853,7 @@ void DrawApilot::drawLeadApilot(const UIState* s) {
     // }
     drawSteer(s, x, y);
     drawTurnInfo(s, x, y);
-    drawPathEnd(s, x, y, path_x, path_y, path_width);
+    if(s->draw_path_end > 0) drawPathEnd(s, x, y, path_x, path_y, path_width);
     drawGapInfo(s, x, y);
     drawAccel(s, x, y);
     drawRpm(s, x, y);
