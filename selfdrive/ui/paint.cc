@@ -1689,15 +1689,14 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
     }
     else draw_dist = true;
 
-    if (draw_dist) {
-        float dist = (getRadarDist() > 0.0) ? getRadarDist() : getVisionDist();
-        if (dist < 10.0) sprintf(str, "%.1f", dist);
-        else sprintf(str, "%.0f", dist);
-        ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
-
-    }
-
     if (s->show_path_end > 0) {
+        if (draw_dist) {
+            float dist = (getRadarDist() > 0.0) ? getRadarDist() : getVisionDist();
+            if (dist < 10.0) sprintf(str, "%.1f", dist);
+            else sprintf(str, "%.0f", dist);
+            ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
+
+        }
         sprintf(str, "%d", getLpSource());
         ui_draw_text(s, x, disp_y - 70, str, 25, COLOR_WHITE, BOLD);
     }
