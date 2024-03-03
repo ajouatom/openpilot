@@ -1346,7 +1346,7 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             }
         }
 
-        if (true) {
+        if (false) {    // longcontrol speed[0] : display..
             if (isEnabled()) {// && curveSpeed > 0 && curveSpeed < 150) {
                 sprintf(str, "%d", (int)(curveSpeed * (s->scene.is_metric ? 1.0 : KM_TO_MILE) + 0.5));
                 ui_draw_text(s, bx + 140, by + 110, str, 50, (speedCtrlActive) ? COLOR_ORANGE : COLOR_YELLOW, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
@@ -1938,11 +1938,11 @@ void DrawApilot::drawDeviceState(UIState* s, bool show) {
     QString debugControlsState = QString::fromStdString(controls_state.getDebugText1().cStr());
     const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
     QString debugLong2 = QString::fromStdString(lp.getDebugLongText2().cStr());
-    if (debugLong2.length() > 2) {
-        ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugLong2.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
-    }
-    else if (debugModelV2.length() > 2) {
+    if (debugModelV2.length() > 2) {
         ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugModelV2.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
+    }
+    else if (debugLong2.length() > 2) {
+        ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugLong2.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
     }
     else if (debugControlsState.length() > 2) {
         ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugControlsState.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
