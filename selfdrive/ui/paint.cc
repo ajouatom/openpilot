@@ -1912,7 +1912,8 @@ void DrawApilot::drawDeviceState(UIState* s, bool show) {
 
     const auto lat_plan = sm["lateralPlan"].getLateralPlan();
     QString latDebugText = QString::fromStdString(lat_plan.getLatDebugText());
-    ui_draw_text(s, s->fb_w / 2, s->fb_h - 50, latDebugText.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
+    if(s->show_debug>0)
+        ui_draw_text(s, s->fb_w / 2, s->fb_h - 50, latDebugText.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
     //float laneWidth = lat_plan.getLaneWidth();
     //float laneWidthLeft = lat_plan.getLaneWidthLeft();
     //float laneWidthRight = lat_plan.getLaneWidthRight();
@@ -1925,26 +1926,28 @@ void DrawApilot::drawDeviceState(UIState* s, bool show) {
     QString debugControlsState = QString::fromStdString(controls_state.getDebugText1().cStr());
     const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
     QString debugLong2 = QString::fromStdString(lp.getDebugLongText2().cStr());
-    if (debugModelV2.length() > 2) {
-        ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugModelV2.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
-    }
-    else if (debugLong2.length() > 2) {
-        ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugLong2.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
-    }
-    else if (debugControlsState.length() > 2) {
-        ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugControlsState.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
-    }
-    else if (s->fb_w > 1200 && show) {
-        sprintf(str, "MEM: %d%% DISK: %.0f%% CPU: %.0f°C FPS: %d, %s: %.0f BATTERY: %.0f%%", memoryUsagePercent, freeSpacePercent, cpuTemp, g_fps, (motorRpm > 0.0) ? "MOTOR" : "RPM", (motorRpm > 0.0) ? motorRpm : engineRpm, car_state.getChargeMeter());
-        ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, str, 30, COLOR_WHITE, BOLD);
-    }
-    
+    if (s->show_debug > 0) {
+        if (debugModelV2.length() > 2) {
+            ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugModelV2.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
+        }
+        else if (debugLong2.length() > 2) {
+            ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugLong2.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
+        }
+        else if (debugControlsState.length() > 2) {
+            ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugControlsState.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
+        }
+        else if (s->fb_w > 1200 && show) {
+            sprintf(str, "MEM: %d%% DISK: %.0f%% CPU: %.0f°C FPS: %d, %s: %.0f BATTERY: %.0f%%", memoryUsagePercent, freeSpacePercent, cpuTemp, g_fps, (motorRpm > 0.0) ? "MOTOR" : "RPM", (motorRpm > 0.0) ? motorRpm : engineRpm, car_state.getChargeMeter());
+            ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, str, 30, COLOR_WHITE, BOLD);
+        }
 
-    const auto live_params = sm["liveParameters"].getLiveParameters();
-    float   liveSteerRatio = live_params.getSteerRatio();
-    QString debugLong = QString::fromStdString(lp.getDebugLongText().cStr());
-    debugLong += (" LiveSR:" + QString::number(liveSteerRatio, 'f', 2));
-    ui_draw_text(s, s->fb_w / 2, 30, debugLong.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
+
+        const auto live_params = sm["liveParameters"].getLiveParameters();
+        float   liveSteerRatio = live_params.getSteerRatio();
+        QString debugLong = QString::fromStdString(lp.getDebugLongText().cStr());
+        debugLong += (" LiveSR:" + QString::number(liveSteerRatio, 'f', 2));
+        ui_draw_text(s, s->fb_w / 2, 30, debugLong.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
+    }
 
 }
 void DrawApilot::drawDebugText(UIState* s, bool show) {
@@ -2068,7 +2071,7 @@ void ui_draw(UIState *s, int w, int h) {
   nvgScissor(s->vg, 0, 0, s->fb_w, s->fb_h);
   drawApilot->drawLaneLines(s);
   drawApilot->drawLeadApilot(s);
-  drawApilot->drawDebugText(s, s->show_debug);
+  drawApilot->drawDebugText(s, s->show_debug>1);
   drawApilot->drawDeviceState(s, s->show_device_stat);
 
   ui_draw_text_a2(s);

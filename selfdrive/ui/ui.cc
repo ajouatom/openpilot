@@ -574,7 +574,7 @@ void ui_update_params(UIState *s) {
   case 0:
       s->scene.is_metric = params.getBool("IsMetric");
       s->scene.map_on_left = params.getBool("NavSettingLeftSide");
-      s->show_debug = params.getBool("ShowDebugUI");
+      s->show_debug = params.getInt("ShowDebugUI");
       break;
   case 10:
       s->show_datetime = std::atoi(params.get("ShowDateTime").c_str());
