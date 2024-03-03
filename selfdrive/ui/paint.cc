@@ -1853,7 +1853,7 @@ void DrawApilot::drawLeadApilot(const UIState* s) {
     // }
     drawSteer(s, x, y);
     drawTurnInfo(s, x, y);
-    if(s->draw_path_end > 0) drawPathEnd(s, x, y, path_x, path_y, path_width);
+    if(s->show_path_end > 0) drawPathEnd(s, x, y, path_x, path_y, path_width);
     drawGapInfo(s, x, y);
     drawAccel(s, x, y);
     drawRpm(s, x, y);
