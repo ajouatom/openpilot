@@ -374,14 +374,21 @@ void DrawApilot::drawLaneLines(const UIState* s) {
         NVGcolor color2 = nvgRGBA(0, 204, 0, 150);
         auto lead_left = (*s->sm)["radarState"].getRadarState().getLeadLeft();
         auto lead_right = (*s->sm)["radarState"].getRadarState().getLeadRight();
-        auto controls_state = (*s->sm)["controlsState"].getControlsState();
-        int leftBlinkerExt = controls_state.getLeftBlinkerExt();
-        int rightBlinkerExt = controls_state.getRightBlinkerExt();
+        //auto controls_state = (*s->sm)["controlsState"].getControlsState();
+        //int leftBlinkerExt = controls_state.getLeftBlinkerExt();
+        //int rightBlinkerExt = controls_state.getRightBlinkerExt();
+        auto meta = (*s->sm)["modelV2"].getModelV2().getMeta();
+        auto laneChangeState = meta.getLaneChangeState();
+        auto laneChangeDirection = meta.getLaneChangeDirection();
+        bool rightLaneChange = (laneChangeState == cereal::LaneChangeState::PRE_LANE_CHANGE) && (laneChangeDirection == cereal::LaneChangeDirection::RIGHT);
+        bool leftLaneChange = (laneChangeState == cereal::LaneChangeState::PRE_LANE_CHANGE) && (laneChangeDirection == cereal::LaneChangeDirection::LEFT);
 
         if (left_blindspot) ui_draw_bsd(s, scene.lane_barrier_vertices[0], &color, false);
-        else if (lead_left.getStatus() && lead_left.getDRel() < getVEgo() * 3.0 && leftBlinkerExt >= 10000)  ui_draw_bsd(s, scene.lane_barrier_vertices[0], &color2, false);
+        //else if (lead_left.getStatus() && lead_left.getDRel() < getVEgo() * 3.0 && leftBlinkerExt)  ui_draw_bsd(s, scene.lane_barrier_vertices[0], &color2, false);
+        else if (lead_left.getStatus() && lead_left.getDRel() < getVEgo() * 3.0 && leftLaneChange)  ui_draw_bsd(s, scene.lane_barrier_vertices[0], &color2, false);
         if (right_blindspot) ui_draw_bsd(s, scene.lane_barrier_vertices[1], &color, true);
-        else if (lead_right.getStatus() && lead_right.getDRel() < getVEgo() * 3.0 && rightBlinkerExt >= 10000) ui_draw_bsd(s, scene.lane_barrier_vertices[1], &color2, true);
+        //else if (lead_right.getStatus() && lead_right.getDRel() < getVEgo() * 3.0 && rightBlinkerExt >= 10000) ui_draw_bsd(s, scene.lane_barrier_vertices[1], &color2, true);
+        else if (lead_right.getStatus() && lead_right.getDRel() < getVEgo() * 3.0 && rightLaneChange) ui_draw_bsd(s, scene.lane_barrier_vertices[1], &color2, true);
     }
 
     // road edges
@@ -1346,7 +1353,7 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             }
         }
 
-        if (true) {
+        if (false) {    // longcontrol speed[0] : display..
             if (isEnabled()) {// && curveSpeed > 0 && curveSpeed < 150) {
                 sprintf(str, "%d", (int)(curveSpeed * (s->scene.is_metric ? 1.0 : KM_TO_MILE) + 0.5));
                 ui_draw_text(s, bx + 140, by + 110, str, 50, (speedCtrlActive) ? COLOR_ORANGE : COLOR_YELLOW, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
@@ -1938,11 +1945,11 @@ void DrawApilot::drawDeviceState(UIState* s, bool show) {
     QString debugControlsState = QString::fromStdString(controls_state.getDebugText1().cStr());
     const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
     QString debugLong2 = QString::fromStdString(lp.getDebugLongText2().cStr());
-    if (debugLong2.length() > 2) {
-        ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugLong2.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
-    }
-    else if (debugModelV2.length() > 2) {
+    if (debugModelV2.length() > 2) {
         ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugModelV2.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
+    }
+    else if (debugLong2.length() > 2) {
+        ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugLong2.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
     }
     else if (debugControlsState.length() > 2) {
         ui_draw_text(s, s->fb_w / 2, s->fb_h - 15, debugControlsState.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
