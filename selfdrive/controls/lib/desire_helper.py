@@ -4,7 +4,7 @@ from openpilot.common.realtime import DT_MDL
 import numpy as np
 from openpilot.common.filter_simple import StreamingMovingAverage
 from openpilot.common.params import Params
-
+from enum import Enum
 
 LaneChangeState = log.LaneChangeState
 LaneChangeDirection = log.LaneChangeDirection
