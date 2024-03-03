@@ -17,7 +17,7 @@
   },
   {
     "filename": "AdjustCurveOffset",
-    "content": "4"
+    "content": "3"
   },
   {
     "filename": "AdjustLaneOffset",
@@ -40,16 +40,12 @@
     "content": "0"
   },
   {
-    "filename": "AutoCurveSpeedCtrlUse",
-    "content": "1"
-  },
-  {
     "filename": "AutoCurveSpeedFactor",
     "content": "90"
   },
   {
-    "filename": "AutoCurveSpeedFactorIn",
-    "content": "30"
+    "filename": "AutoCurveSpeedAggressiveness",
+    "content": "100"
   },
   {
     "filename": "AutoNaviSpeedBumpSpeed",
@@ -61,7 +57,7 @@
   },
   {
     "filename": "AutoNaviSpeedCtrl",
-    "content": "1"
+    "content": "2"
   },
   {
     "filename": "AutoNaviSpeedCtrlEnd",
@@ -93,7 +89,7 @@
   },
   {
     "filename": "AutoTurnControlSpeedLaneChange",
-    "content": "55"
+    "content": "60"
   },
   {
     "filename": "AutoTurnControlSpeedTurn",
@@ -133,11 +129,11 @@
   },
   {
     "filename": "CruiseMaxVals4",
-    "content": "110"
+    "content": "100"
   },
   {
     "filename": "CruiseMaxVals5",
-    "content": "95"
+    "content": "55"
   },
   {
     "filename": "CruiseMaxVals6",
@@ -145,7 +141,7 @@
   },
   {
     "filename": "CruiseMinVals",
-    "content": "150"
+    "content": "140"
   },
   {
     "filename": "CruiseOnDist",
@@ -197,7 +193,7 @@
   },
   {
     "filename": "LanguageSetting",
-    "content": "main_ko"
+    "content": "main_en"
   },
   {
     "filename": "LateralTorqueAccelFactor",
@@ -396,10 +392,6 @@
     "content": "0"
   },
   {
-    "filename": "ShowZOffset",
-    "content": "170"
-  },
-  {
     "filename": "SoftHoldMode",
     "content": "0"
   },
@@ -421,7 +413,7 @@
   },
   {
     "filename": "StartAccelApply",
-    "content": "0"
+    "content": "60"
   },
   {
     "filename": "StartRecord",

@@ -38,7 +38,7 @@
       "min": 1000,
       "max": 6000,
       "default": 2500,
-      "unit": 1
+      "unit": 10
     },
     {
       "group": "조향튜닝",
@@ -51,7 +51,7 @@
       "min": 0,
       "max": 1000,
       "default": 100,
-      "unit": 1
+      "unit": 5
     },
     {
       "group": "조향튜닝",
@@ -337,7 +337,7 @@
       "min": 50,
       "max": 150,
       "default": 100,
-      "unit": 1
+      "unit": 5
     },
     {
       "group": "주행튜닝",
@@ -376,7 +376,7 @@
       "min": 0,
       "max": 2000,
       "default": 0,
-      "unit": 1
+      "unit": 5
     },
     {
       "group": "주행튜닝",
@@ -402,7 +402,7 @@
       "min": 50,
       "max": 300,
       "default": 100,
-      "unit": 1
+      "unit": 5
     },
     {
       "group": "감속제어",
@@ -415,7 +415,7 @@
       "min": 50,
       "max": 300,
       "default": 10,
-      "unit": 1
+      "unit": 5
     },
     {
       "group": "조향일반",
@@ -555,7 +555,7 @@
       "egroup": "CRUISE",
       "etitle": "GasCruiseON:Speed",
       "edescr": "",
-      "min": 5,
+      "min": 0,
       "max": 140,
       "default": 0,
       "unit": 5
@@ -589,7 +589,7 @@
     {
       "group": "시작",
       "name": "SpeedFromPCM",
-      "title": "PCM차량속도제어",
+      "title": "PCM차량속도제어(롱컨지원차=해당없음)",
       "descr": "1:차량속도이용(감속제어안함), 0: 신호/커브/카메라 감속, 2: 커브/카메라 감속",
       "egroup": "START",
       "etitle": "Speed from PCM",
@@ -1010,7 +1010,7 @@
       "egroup": "START",
       "etitle": "MaxAngleFrames(1)",
       "edescr": "",
-      "min": 80,
+      "min": 0,
       "max": 100,
       "default": 89,
       "unit": 1
@@ -1252,14 +1252,14 @@
     {
       "group": "정지",
       "name": "StopAccelApply",
-      "title": "정지유지브레이크-2.0x(0)%",
+      "title": "정지유지브레이크-2.0x(50%)",
       "descr": "정지시 브레이크유지 조정",
       "egroup": "STOP",
-      "etitle": "Stopping Accel-2.0m/s^2 x (0)%",
+      "etitle": "Stopping Accel-2.0m/s^2 x (50%)",
       "edescr": "",
       "min": 0,
       "max": 100,
-      "default": 0,
+      "default": 50,
       "unit": 10
     },
     {
@@ -1402,8 +1402,8 @@
       "edescr": "",
       "min": 1,
       "max": 50,
-      "default": 10,
-      "unit": 5
+      "default": 1,
+      "unit": 1
     },
     {
       "group": "감속제어",
@@ -1416,7 +1416,7 @@
       "min": 10,
       "max": 100,
       "default": 35,
-      "unit": 1
+      "unit": 5
     },
     {
       "group": "감속제어",
