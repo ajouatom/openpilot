@@ -316,6 +316,7 @@ class VCruiseHelper:
 
   def update_apilot_cmd(self, controls, v_cruise_kph):
     msg = controls.sm['roadLimitSpeed']
+    self.roadSpeed = clip(0, msg.roadLimitSpeed, 150.0)
 
     if msg.xIndex > 0 and msg.xIndex != self.xIndex:      
       self.xIndex = msg.xIndex
@@ -637,10 +638,11 @@ class VCruiseHelper:
           self.cruiseActivate = 1
 
     if controls.enabled and self.autoSpeedUptoRoadSpeedLimit > 0.:
-      lead_v_kph = self.lead_vLead * CV.MS_TO_KPH + 5.0
+      lead_v_kph = self.lead_vLead * CV.MS_TO_KPH + 2.0
       if lead_v_kph > v_cruise_kph and self.lead_dRel < 60:
-        self._add_log_auto_cruise("AutoSpeed up to leadCar {:.0f}kph".format(lead_v_kph))
-        v_cruise_kph = max(v_cruise_kph, min(lead_v_kph, (30 if self.roadSpeed < 30 else self.roadSpeed) * self.autoSpeedUptoRoadSpeedLimit))
+        road_speed = (30 if self.roadSpeed < 30 else self.roadSpeed) * self.autoSpeedUptoRoadSpeedLimit
+        self._add_log_auto_cruise("AutoSpeed up to leadCar={:.0f}kph, road_speed={:.0f}kph".format(lead_v_kph, road_speed))
+        v_cruise_kph = max(v_cruise_kph, min(lead_v_kph, road_speed))
 
     v_cruise_kph = self.update_apilot_cmd(controls, v_cruise_kph)
 
