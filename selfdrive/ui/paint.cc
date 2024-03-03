@@ -1696,34 +1696,15 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
         ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
 
     }
-    sprintf(str, "%d", getLpSource());
-    ui_draw_text(s, x, disp_y-70, str, 25, COLOR_WHITE, BOLD);
+
+    if (s->show_path_end > 0) {
+        sprintf(str, "%d", getLpSource());
+        ui_draw_text(s, x, disp_y - 70, str, 25, COLOR_WHITE, BOLD);
+    }
 
     // 타겟하단: 롱컨상태표시
     if (true) {
         QString qstr;
-#if 0//HW
-        if (isBrakeHold()) qstr = "AUTOHOLD";
-        else if (!isEnabled()) {
-            qstr = "NOT ACTIVE";
-        }
-        else if (isLongActive()) {
-            if (xState == cereal::LongitudinalPlan::XState::E2E_STOP) qstr = tr("SIGN DETECTED");
-            else if (xState == cereal::LongitudinalPlan::XState::SOFT_HOLD) qstr = "SOFTHOLD";
-            else if (xState == cereal::LongitudinalPlan::XState::LEAD) qstr = "LEAD";
-            else if (xState == cereal::LongitudinalPlan::XState::E2E_CRUISE) qstr = (getVEgo() * MS_TO_KPH < 80) ? tr("E2ECRUISE") : tr("CRUISE");
-            else if (xState == cereal::LongitudinalPlan::XState::E2E_CRUISE_PREPARE) qstr = "E2EPREPARE";
-            else if (xState == cereal::LongitudinalPlan::XState::CRUISE) qstr = tr("CRUISE");
-            else qstr = "UNKNOWN";
-        }
-        else {
-            if (isLongActiveReady()) {
-                if (xState == cereal::LongitudinalPlan::XState::SOFT_HOLD) qstr = "SOFTHOLD";
-                else qstr = tr("CRUISE READY");
-            }
-            else qstr = tr("MANUAL");
-        }
-#endif
         static QString _qstr = "";
         if (isBrakeHold()) qstr = "AUTOHOLD";
         else if (isSoftHold()) qstr = "SOFTHOLD";
@@ -1734,29 +1715,29 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
 
     }
 
-    if (s->show_path_end) {
-        //if (path_y < s->fb_h - 200) ui_fill_rect(s->vg, { path_x - path_width / 2, path_y, path_width, -10 }, (radar_rel_speed > -0.1) ? COLOR_GREEN : COLOR_RED, 5);
-        //if (path_y < s->fb_h - 200) ui_fill_rect(s->vg, { path_x - path_width / 2, path_y, path_width, -10 }, no_radar?COLOR_ORANGE:radar_detected?COLOR_RED:COLOR_BLUE, 5);
+    if (true) { 
 
         float px[7], py[7];
-        px[0] = path_x - path_width / 2;
-        px[1] = path_x + path_width / 2;
-        px[2] = path_x + path_width / 2;
-        px[3] = path_x + 20;
-        px[4] = path_x;
-        px[5] = path_x - 20;
-        px[6] = path_x - path_width / 2;
-        py[0] = path_y;
-        py[1] = path_y;
-        py[2] = path_y - 7;
-        py[3] = path_y - 17;
-        py[4] = path_y - 0;
-        py[5] = path_y - 17;
-        py[6] = path_y - 7;
         NVGcolor rcolor = isLeadSCC() ? COLOR_RED : COLOR_ORANGE;
         NVGcolor  pcolor = !isRadarDetected() ? ((getTrafficMode() == 1) ? rcolor : COLOR_GREEN) : isRadarDetected() ? rcolor : COLOR_BLUE;
-        ui_draw_line2(s, px, py, 7, &pcolor, nullptr, 3.0f);
-        if (s->show_path_end > 0 && isLeadDetected()) {
+        if (s->show_path_end) {
+            px[0] = path_x - path_width / 2;
+            px[1] = path_x + path_width / 2;
+            px[2] = path_x + path_width / 2;
+            px[3] = path_x + 20;
+            px[4] = path_x;
+            px[5] = path_x - 20;
+            px[6] = path_x - path_width / 2;
+            py[0] = path_y;
+            py[1] = path_y;
+            py[2] = path_y - 7;
+            py[3] = path_y - 17;
+            py[4] = path_y - 0;
+            py[5] = path_y - 17;
+            py[6] = path_y - 7;
+            ui_draw_line2(s, px, py, 7, &pcolor, nullptr, 3.0f);
+        }
+        if (isLeadDetected()) {
             px[0] = path_x - path_width / 2 - 10;
             px[1] = px[0] + path_width + 20;
             px[2] = px[1];
@@ -1853,7 +1834,7 @@ void DrawApilot::drawLeadApilot(const UIState* s) {
     // }
     drawSteer(s, x, y);
     drawTurnInfo(s, x, y);
-    if(s->show_path_end > 0) drawPathEnd(s, x, y, path_x, path_y, path_width);
+    drawPathEnd(s, x, y, path_x, path_y, path_width);
     drawGapInfo(s, x, y);
     drawAccel(s, x, y);
     drawRpm(s, x, y);
