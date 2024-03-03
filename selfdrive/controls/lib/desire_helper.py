@@ -247,7 +247,7 @@ class DesireHelper:
         object_dist = v_ego * 3.0
         object_detected = ((self.leftSideObjectDist < object_dist and self.lane_change_direction == LaneChangeDirection.left) or
                            (self.rightSideObjectDist < object_dist and self.lane_change_direction == LaneChangeDirection.right))
-        self.object_detected_count = min(1, self.object_detected_count + 1) if object_detected else max(-1, self.object_detected_count - 1)
+        self.object_detected_count = max(1, self.object_detected_count + 1) if object_detected else min(-1, self.object_detected_count - 1)
 
         # Conduct a nudgeless lane change if all the conditions are true
         self.lane_change_wait_timer += DT_MDL
