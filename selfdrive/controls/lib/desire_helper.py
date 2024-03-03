@@ -267,7 +267,7 @@ class DesireHelper:
         else:
           self.noo_active = NooActive.inactive
 
-        if self.object_detected_count > -0.5 / DT_MDL:  # 0.5 sec
+        if self.object_detected_count > -0.1 / DT_MDL:  # 0.5 sec
           self._add_log("Lane change object detected.. {:.1f}m".format(self.leftSideObjectDist if leftBlinker else self.rightSideObjectDist))
         elif not lane_available and self.noo_active.value < 10:
           self._add_log("Lane change no lane available")
