@@ -926,34 +926,6 @@ void DrawApilot::drawDateTime(const UIState* s) {
     }
 }
 
-#if 0
-void DrawApilot::makeLongState(const UIState* s) {
-    const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
-    auto xState = lp.getXState();
-    QString qstr;
-    if (isBrakeHold()) qstr = "AUTOHOLD";
-    else if (active < 0) {
-        qstr = "NOT ACTIVE";
-    }
-    else if (isLongActive()) {
-        if (xState == cereal::LongitudinalPlan::XState::E2E_STOP) qstr = tr("SIGN DETECTED");
-        else if (xState == cereal::LongitudinalPlan::XState::SOFT_HOLD) qstr = "SOFTHOLD";
-        else if (xState == cereal::LongitudinalPlan::XState::LEAD) qstr = "LEAD";
-        else if (xState == cereal::LongitudinalPlan::XState::E2E_CRUISE) qstr = (v_ego_kph < 80) ? tr("E2ECRUISE") : tr("CRUISE");
-        else if (xState == cereal::LongitudinalPlan::XState::E2E_CRUISE_PREPARE) qstr = "E2EPREPARE";
-        else if (xState == cereal::LongitudinalPlan::XState::CRUISE) qstr = tr("CRUISE");
-        else qstr = "UNKNOWN";
-    }
-    else {
-        if (isLongActiveReady()) {
-            if (xState == cereal::LongitudinalPlan::XState::SOFT_HOLD) qstr = "SOFTHOLD";
-            else qstr = tr("CRUISE READY");
-        }
-        else qstr = tr("MANUAL");
-    }
-
-}
-#endif
 void DrawApilot::drawAccel(const UIState* s, int x, int y) {
     // Accel표시
     SubMaster& sm = *(s->sm);
