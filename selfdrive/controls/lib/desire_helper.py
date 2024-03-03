@@ -114,6 +114,8 @@ class DesireHelper:
     self.available_right_lane = False
     self.available_left_edge = False
     self.available_right_edge = False
+
+    self.object_detected_count = 0
     self._log_timer = 0
     self.debugText = ""
     self.noo_active = NooActive.inactive
@@ -245,6 +247,7 @@ class DesireHelper:
         object_dist = v_ego * 3.0
         object_detected = ((self.leftSideObjectDist < object_dist and self.lane_change_direction == LaneChangeDirection.left) or
                            (self.rightSideObjectDist < object_dist and self.lane_change_direction == LaneChangeDirection.right))
+        self.object_detected_count = min(1, self.object_detected_count + 1) if object_detected else max(-1, self.object_detected_count - 1)
 
         # Conduct a nudgeless lane change if all the conditions are true
         self.lane_change_wait_timer += DT_MDL
@@ -264,7 +267,7 @@ class DesireHelper:
         else:
           self.noo_active = NooActive.inactive
 
-        if object_detected:
+        if object_detected_count > -0.5 / DT_MDL:  # 0.5 sec
           self._add_log("Lane change object detected.. {:.1f}m".format(self.leftSideObjectDist if leftBlinker else self.rightSideObjectDist))
         elif not lane_available and self.noo_active.value < 10:
           self._add_log("Lane change no lane available")
