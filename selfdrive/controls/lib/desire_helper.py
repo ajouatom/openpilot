@@ -260,7 +260,7 @@ class DesireHelper:
             self.noo_active = NooActive.new_lane_detected
           elif not self.edge_available_prev and edge_available: # start... 에지가 멀어짐. 
             self.noo_active = NooActive.road_edge_detected
-          elif self.noo_active < 10 and self.lane_available_prev and lane_available: #차선이 계속있음.
+          elif self.noo_active.value < 10 and self.lane_available_prev and lane_available: #차선이 계속있음.
             self.noo_active = NooActive.no_new_lane_detected
           #else: #if not edge_available: #에지가 가까움.
           #  self.noo_active = 4
