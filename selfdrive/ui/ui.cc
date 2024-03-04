@@ -560,6 +560,8 @@ static void update_state(UIState *s) {
                                  sm.rcv_frame("liveCalibration") > scene.started_frame &&
                                  sm.rcv_frame("modelV2") > scene.started_frame &&
                                  sm.rcv_frame("uiPlan") > scene.started_frame);
+
+  printf("update_state\n");
 }
 
 void ui_update_params(UIState *s) {
