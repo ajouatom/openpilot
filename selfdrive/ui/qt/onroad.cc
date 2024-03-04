@@ -263,7 +263,7 @@ void OnroadWindow::paintEvent(QPaintEvent *event) {
 
 
     const auto lat_plan = sm["lateralPlan"].getLateralPlan();
-    p.drawText(rect_bottom, Qt::AlignBottom | Qt::AlignHCenter, lat_plan.getLatDebugText());
+    p.drawText(rect_bottom, Qt::AlignBottom | Qt::AlignHCenter, lat_plan.getLatDebugText().cStr());
 
 }
 
