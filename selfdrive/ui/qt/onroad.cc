@@ -119,6 +119,8 @@ void OnroadWindow::updateState(const UIState &s) {
   else {
       update_text = true;
       updateStateText();
+      topLabel->setText("hello world");
+      bottomLabel->setText("bye bye");
   }
 
   Params params = Params();
