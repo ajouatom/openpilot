@@ -39,6 +39,7 @@ OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   topLabel->setFixedHeight(30); // 높이를 30 픽셀로 설정
   topLabel->setAlignment(Qt::AlignCenter);
   topLabel->setFont(font);
+  main_layout->addWidget(topLabel);
 
   QStackedLayout *stacked_layout = new QStackedLayout;
   stacked_layout->setStackingMode(QStackedLayout::StackAll);
@@ -48,6 +49,7 @@ OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   bottomLabel->setFixedHeight(30); // 높이를 30 픽셀로 설정
   bottomLabel->setAlignment(Qt::AlignCenter);
   bottomLabel->setFont(font);
+  main_layout->addWidget(bottomLabel);
 
 
   nvg = new AnnotatedCameraWidget(VISION_STREAM_ROAD, this);
