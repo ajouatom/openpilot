@@ -259,7 +259,7 @@ void OnroadWindow::paintEvent(QPaintEvent *event) {
 
     extern int g_fps;
     QString top_right = QString::sprintf("FPS: %d", g_fps);
-    p.drawText(rect_top, Qt::AlignBottom | Qt::AlignHRight, top_right);
+    p.drawText(rect_top, Qt::AlignBottom | Qt::AlignRight, top_right);
 
 
     const auto lat_plan = sm["lateralPlan"].getLateralPlan();
