@@ -32,6 +32,10 @@ static void drawIcon(QPainter &p, const QPoint &center, const QPixmap &img, cons
 OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   QVBoxLayout *main_layout  = new QVBoxLayout(this);
   main_layout->setMargin(UI_BORDER_SIZE);
+
+  topLabel = new QLabel("여기에 원하는 텍스트 입력", this);
+  topLabel->setFixedHeight(30); // 높이를 30 픽셀로 설정
+
   QStackedLayout *stacked_layout = new QStackedLayout;
   stacked_layout->setStackingMode(QStackedLayout::StackAll);
   main_layout->addLayout(stacked_layout);
@@ -103,6 +107,7 @@ void OnroadWindow::updateState(const UIState &s) {
   else {
       update_text = true;
       //update();
+      topLabel->setText("hellowaklsd;jfalks;dfjaslkdfjasl;kjf;l");
   }
 
   Params params = Params();

@@ -146,6 +146,8 @@ private:
   bool update_text = false;
   void updateStateText(QPainter &p);
 
+  QLabel* topLabel;
+
 private slots:
   void offroadTransition(bool offroad);
   void primeChanged(bool prime);
