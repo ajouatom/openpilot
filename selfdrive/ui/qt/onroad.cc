@@ -31,7 +31,8 @@ static void drawIcon(QPainter &p, const QPoint &center, const QPixmap &img, cons
 
 OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   QVBoxLayout *main_layout  = new QVBoxLayout(this);
-  main_layout->setMargin(UI_BORDER_SIZE);
+  //main_layout->setMargin(UI_BORDER_SIZE);
+  main_layout->setContentsMargins(UI_BORDER_SIZE, 0, UI_BORDER_SIZE, 0);
 
   QFont font;
   font.setPixelSize(29);
