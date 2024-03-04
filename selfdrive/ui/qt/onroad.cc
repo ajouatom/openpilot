@@ -174,7 +174,7 @@ void OnroadWindow::updateState(const UIState &s) {
   p.setPen(text_color);
 
   //UIState* s = uiState();
-  const SubMaster& sm = *(s.sm);
+  //const SubMaster& sm = *(s.sm);
   auto meta = sm["modelV2"].getModelV2().getMeta();
   QString debugModelV2 = QString::fromStdString(meta.getDebugText().cStr());
   auto controls_state = sm["controlsState"].getControlsState();
