@@ -262,11 +262,11 @@
       "unit": 5
     },
     {
-      "group": "정지",
+      "group": "주행튜닝",
       "name": "StopDistanceCarrot",
       "title": "StopDistance(600)cm",
       "descr": "",
-      "egroup": "STOP",
+      "egroup": "LONG",
       "etitle": "StopDistance(600)cm",
       "edescr": "",
       "min": 400,
@@ -1198,11 +1198,11 @@
       "unit": 10
     },
     {
-      "group": "정지",
+      "group": "주행튜닝",
       "name": "StopAccelApply",
       "title": "정지유지브레이크-2.0x(0)%",
       "descr": "정지시 브레이크유지 조정",
-      "egroup": "STOP",
+      "egroup": "LONG",
       "etitle": "Stopping Accel-2.0m/s^2 x (0)%",
       "edescr": "",
       "min": 0,
@@ -1211,11 +1211,11 @@
       "unit": 10
     },
     {
-      "group": "정지",
+      "group": "주행튜닝",
       "name": "StoppingAccel",
       "title": "정지시작가속도x0.01(-40)",
       "descr": "정지시작가속도 조정",
-      "egroup": "STOP",
+      "egroup": "LONG",
       "etitle": "StoppingStartAccelx0.01(-40)",
       "edescr": "",
       "min": -100,
@@ -1224,11 +1224,11 @@
       "unit": 10
     },
     {
-      "group": "정지",
+      "group": "주행튜닝",
       "name": "StartAccelApply",
       "title": "초기가속도2.0x(0%)",
       "descr": "정지->출발시 가속도: 사용할필요없음.",
-      "egroup": "STOP",
+      "egroup": "LONG",
       "etitle": "StartingAccel 2.0m/s^2x(0%)",
       "edescr": "Not used",
       "min": 0,
