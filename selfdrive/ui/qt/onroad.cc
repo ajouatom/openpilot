@@ -31,10 +31,11 @@ static void drawIcon(QPainter &p, const QPoint &center, const QPixmap &img, cons
 
 OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   QVBoxLayout *main_layout  = new QVBoxLayout(this);
-  main_layout->setMargin(UI_BORDER_SIZE);
+  //main_layout->setMargin(UI_BORDER_SIZE);
+  main_layout->setMargin(UI_BORDER_SIZE, UI_BORDER_SIZE, 0, 0);
 
   QFont font;
-  font.setPointSize(29);
+  font.setPixelSize(29);
   topLabel = new QLabel("", this);
   topLabel->setFixedHeight(30); // 높이를 30 픽셀로 설정
   topLabel->setAlignment(Qt::AlignCenter);
