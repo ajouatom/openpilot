@@ -231,8 +231,8 @@ void OnroadWindow::paintEvent(QPaintEvent *event) {
 
   p.setFont(InterFont(30, QFont::DemiBold));
   p.setPen(text_color);
-  p.drawText(rect_top, Qt::AlignTop | Qt::AlignHCenter, "testtestsetsateasfdask;ljfdsalkdfjaslkdfjasklf;jasfd;kljfdskjlka;sfdjl");
-  p.drawText(rect_bottom, Qt::AlignTop | Qt::AlignHCenter, "testtestsetsateasfdask;ljfdsalkdfjaslkdfjasklf;jasfd;kljfdskjlka;sfdjl");
+  p.drawText(rect_top, Qt::AlignBottom | Qt::AlignHCenter, "testtestsetsateasfdask;ljfdsalkdfjaslkdfjasklf;jasfd;kljfdskjlka;sfdjl");
+  p.drawText(rect_bottom, Qt::AlignBottom | Qt::AlignHCenter, "testtestsetsateasfdask;ljfdsalkdfjaslkdfjasklf;jasfd;kljfdskjlka;sfdjl");
 
 }
 
