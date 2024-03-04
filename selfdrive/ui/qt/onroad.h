@@ -148,6 +148,7 @@ private:
   void updateStateText(QPainter &p);
 
   QLabel* topLabel;
+  QLabel* bottomLabel;
 
 private slots:
   void offroadTransition(bool offroad);

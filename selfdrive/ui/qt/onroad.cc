@@ -33,12 +33,22 @@ OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   QVBoxLayout *main_layout  = new QVBoxLayout(this);
   main_layout->setMargin(UI_BORDER_SIZE);
 
-  topLabel = new QLabel("여기에 원하는 텍스트 입력", this);
+  QFont font;
+  font.setPointSize(29);
+  topLabel = new QLabel("", this);
   topLabel->setFixedHeight(30); // 높이를 30 픽셀로 설정
+  topLabel->setAlignment(Qt::AlignCenter);
+  topLabel->setFont(font);
 
   QStackedLayout *stacked_layout = new QStackedLayout;
   stacked_layout->setStackingMode(QStackedLayout::StackAll);
   main_layout->addLayout(stacked_layout);
+
+  bottomLabel = new QLabel("", this);
+  bottomLabel->setFixedHeight(30); // 높이를 30 픽셀로 설정
+  bottomLabel->setAlignment(Qt::AlignCenter);
+  bottomLabel->setFont(font);
+
 
   nvg = new AnnotatedCameraWidget(VISION_STREAM_ROAD, this);
 
@@ -108,6 +118,7 @@ void OnroadWindow::updateState(const UIState &s) {
       update_text = true;
       //update();
       topLabel->setText("hellowaklsd;jfalks;dfjaslkdfjasl;kjf;l");
+      bottomLabel->setText("hellowaklsd;jfalks;dfjaslkdfjasl;kjf;l");
   }
 
   Params params = Params();
