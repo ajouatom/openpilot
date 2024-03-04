@@ -118,9 +118,9 @@ void OnroadWindow::updateState(const UIState &s) {
   }
   else {
       update_text = true;
-      //updateStateText();
-      topLabel->setText("hello world");
-      bottomLabel->setText("bye bye");
+      updateStateText();
+      //topLabel->setText("hello world");
+      //bottomLabel->setText("bye bye");
   }
 
   Params params = Params();
@@ -252,10 +252,10 @@ void OnroadWindow::paintEvent(QPaintEvent *event) {
 
 void OnroadWindow::updateStateText() {
     //QPainter p(this);
-    QColor text_color = QColor(0, 0, 0, 0xff);
+    //QColor text_color = QColor(0, 0, 0, 0xff);
     //QColor text_color = QColor(0xff, 0xff, 0xff, 0xff);
-    QRect rect_top(0, 0, rect().width(), 29);
-    QRect rect_bottom(0, rect().height() - UI_BORDER_SIZE - 1, rect().width(), 29);
+    //QRect rect_top(0, 0, rect().width(), 29);
+    //QRect rect_bottom(0, rect().height() - UI_BORDER_SIZE - 1, rect().width(), 29);
 
     //p.setFont(InterFont(28, QFont::DemiBold));
     //p.setPen(text_color);
