@@ -102,7 +102,7 @@ void OnroadWindow::updateState(const UIState &s) {
   }
   else {
       update_text = true;
-      update();
+      //update();
   }
 
   Params params = Params();
