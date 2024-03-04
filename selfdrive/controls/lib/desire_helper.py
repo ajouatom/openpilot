@@ -294,7 +294,7 @@ class DesireHelper:
           self.lane_change_state = LaneChangeState.laneChangeStarting
           self._add_log("Lane change starting.. {}, noo={}".format("left" if leftBlinker else "right", str(self.noo_active)))
 
-        self._add_log("DesireLog.. Object {:.1f}:{:.1f}:{:.1f}".format(self.leftSideObjectDist, object_dist, self.rightSideObjectDist))
+        #self._add_log("DesireLog.. Object {:.1f}:{:.1f}:{:.1f}".format(self.leftSideObjectDist, object_dist, self.rightSideObjectDist))
       # LaneChangeState.laneChangeStarting
       elif self.lane_change_state == LaneChangeState.laneChangeStarting:
         #self._add_log("Lane change starting.. {}, {}".format("left" if leftBlinker else "right", str(self.noo_active)))

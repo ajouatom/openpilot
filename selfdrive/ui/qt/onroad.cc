@@ -31,10 +31,28 @@ static void drawIcon(QPainter &p, const QPoint &center, const QPixmap &img, cons
 
 OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   QVBoxLayout *main_layout  = new QVBoxLayout(this);
-  main_layout->setMargin(UI_BORDER_SIZE);
+  //main_layout->setMargin(UI_BORDER_SIZE);
+  main_layout->setContentsMargins(UI_BORDER_SIZE, 0, UI_BORDER_SIZE, 0);
+
+  QFont font;
+  font.setPixelSize(30);
+  font.setWeight(QFont::DemiBold);
+  topLabel = new QLabel("", this);
+  topLabel->setFixedHeight(27); // 높이를 30 픽셀로 설정
+  topLabel->setAlignment(Qt::AlignCenter);
+  topLabel->setFont(font);
+  main_layout->addWidget(topLabel);
+
   QStackedLayout *stacked_layout = new QStackedLayout;
   stacked_layout->setStackingMode(QStackedLayout::StackAll);
   main_layout->addLayout(stacked_layout);
+
+  bottomLabel = new QLabel("", this);
+  bottomLabel->setFixedHeight(27); // 높이를 30 픽셀로 설정
+  bottomLabel->setAlignment(Qt::AlignCenter);
+  bottomLabel->setFont(font);
+  main_layout->addWidget(bottomLabel);
+
 
   nvg = new AnnotatedCameraWidget(VISION_STREAM_ROAD, this);
 
@@ -99,6 +117,12 @@ void OnroadWindow::updateState(const UIState &s) {
     // repaint border
     bg = bgColor;
     update();
+  }
+  else {
+      update_text = true;
+      updateStateText();
+      //topLabel->setText("hello world");
+      //bottomLabel->setText("bye bye");
   }
 
   Params params = Params();
@@ -222,7 +246,56 @@ void OnroadWindow::primeChanged(bool prime) {
 
 void OnroadWindow::paintEvent(QPaintEvent *event) {
   QPainter p(this);
-  p.fillRect(rect(), QColor(bg.red(), bg.green(), bg.blue(), 255));
+  //if(!update_text)
+    p.fillRect(rect(), QColor(bg.red(), bg.green(), bg.blue(), 255));
+
+  update_text = false;
+}
+
+void OnroadWindow::updateStateText() {
+    //QPainter p(this);
+    //QColor text_color = QColor(0, 0, 0, 0xff);
+    //QColor text_color = QColor(0xff, 0xff, 0xff, 0xff);
+    //QRect rect_top(0, 0, rect().width(), 29);
+    //QRect rect_bottom(0, rect().height() - UI_BORDER_SIZE - 1, rect().width(), 29);
+
+    //p.setFont(InterFont(28, QFont::DemiBold));
+    //p.setPen(text_color);
+
+    UIState* s = uiState();
+    const SubMaster& sm = *(s->sm);
+    auto meta = sm["modelV2"].getModelV2().getMeta();
+    QString debugModelV2 = QString::fromStdString(meta.getDebugText().cStr());
+    auto controls_state = sm["controlsState"].getControlsState();
+    QString debugControlsState = QString::fromStdString(controls_state.getDebugText1().cStr());
+    const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
+    QString debugLong2 = QString::fromStdString(lp.getDebugLongText2().cStr());
+    const auto live_params = sm["liveParameters"].getLiveParameters();
+    float   liveSteerRatio = live_params.getSteerRatio();
+
+    QString top = "";
+
+    if (debugModelV2.length() > 2) {
+        top = debugModelV2;
+    }
+    else if (debugLong2.length() > 2) {
+        top = debugLong2;
+    }
+    else if (debugControlsState.length() > 2) {
+        top = debugControlsState;
+    }
+    else top = QString::fromStdString(lp.getDebugLongText().cStr()) + (" LiveSR:" + QString::number(liveSteerRatio, 'f', 2));
+    //p.drawText(rect_top, Qt::AlignBottom | Qt::AlignHCenter, top);
+    topLabel->setText(top);
+
+    //extern int g_fps;
+    //QString top_right = QString("FPS: %1").arg(g_fps);
+    //p.drawText(rect_top, Qt::AlignBottom | Qt::AlignRight, top_right);
+
+
+    const auto lat_plan = sm["lateralPlan"].getLateralPlan();
+    //p.drawText(rect_bottom, Qt::AlignBottom | Qt::AlignHCenter, lat_plan.getLatDebugText().cStr());
+    bottomLabel->setText(lat_plan.getLatDebugText().cStr());
 }
 
 // ***** onroad widgets *****
