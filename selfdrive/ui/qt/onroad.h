@@ -5,6 +5,7 @@
 #include <QPushButton>
 #include <QStackedLayout>
 #include <QWidget>
+#include <QLabel>
 
 #include "common/util.h"
 #include "selfdrive/ui/ui.h"
