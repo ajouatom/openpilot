@@ -539,6 +539,9 @@ class RadarD:
       elif self.mixRadarInfo == 2:
         self.radar_state.leadOne = get_lead_apilot(self.v_ego, self.ready, self.tracks, leads_v3[0], model_v_ego, sm['modelV2'], sm['lateralPlan'].laneWidth)
         self.radar_state.leadTwo = get_lead_apilot(self.v_ego, self.ready, self.tracks, leads_v3[1], model_v_ego, sm['modelV2'], sm['lateralPlan'].laneWidth)
+      elif self.mixRadarInfo == 3:
+        self.radar_state.leadOne = get_lead(self.v_ego, self.ready, self.tracks_empty, leads_v3[0], model_v_ego, low_speed_override=False)
+        self.radar_state.leadTwo = get_lead(self.v_ego, self.ready, self.tracks_empty, leads_v3[0], model_v_ego, low_speed_override=False)
       else:
         self.radar_state.leadOne = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[0], model_v_ego, low_speed_override=False)
         self.radar_state.leadTwo = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[1], model_v_ego, low_speed_override=False)

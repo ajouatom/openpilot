@@ -35,23 +35,53 @@ OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   main_layout->setContentsMargins(UI_BORDER_SIZE, 0, UI_BORDER_SIZE, 0);
 
   QFont font;
-  font.setPixelSize(30);
+  font.setPixelSize(27);
   font.setWeight(QFont::DemiBold);
+  QHBoxLayout* topLayout = new QHBoxLayout();
+  topLeftLabel = new QLabel("", this);
+  topLeftLabel->setFixedHeight(27); // 높이를 30 픽셀로 설정
+  topLeftLabel->setAlignment(Qt::AlignLeft);
+  topLeftLabel->setFont(font);
+  topLeftLabel->setStyleSheet("QLabel { color : white; }");
+  topLayout->addWidget(topLeftLabel);
   topLabel = new QLabel("", this);
   topLabel->setFixedHeight(27); // 높이를 30 픽셀로 설정
   topLabel->setAlignment(Qt::AlignCenter);
   topLabel->setFont(font);
-  main_layout->addWidget(topLabel);
+  topLabel->setStyleSheet("QLabel { color : white; }");
+  topLayout->addWidget(topLabel);
+  topRightLabel = new QLabel("", this);
+  topRightLabel->setFixedHeight(27); // 높이를 30 픽셀로 설정
+  topRightLabel->setAlignment(Qt::AlignRight);
+  topRightLabel->setFont(font);
+  topRightLabel->setStyleSheet("QLabel { color : white; }");
+  topLayout->addWidget(topRightLabel);
+  main_layout->addLayout(topLayout);
 
   QStackedLayout *stacked_layout = new QStackedLayout;
   stacked_layout->setStackingMode(QStackedLayout::StackAll);
   main_layout->addLayout(stacked_layout);
 
+  QHBoxLayout* bottomLayout = new QHBoxLayout();
+  bottomLeftLabel = new QLabel("", this);
+  bottomLeftLabel->setFixedHeight(27); // 높이를 30 픽셀로 설정
+  bottomLeftLabel->setAlignment(Qt::AlignLeft);
+  bottomLeftLabel->setFont(font);
+  bottomLeftLabel->setStyleSheet("QLabel { color : white; }");
+  bottomLayout->addWidget(bottomLeftLabel);
   bottomLabel = new QLabel("", this);
   bottomLabel->setFixedHeight(27); // 높이를 30 픽셀로 설정
   bottomLabel->setAlignment(Qt::AlignCenter);
   bottomLabel->setFont(font);
-  main_layout->addWidget(bottomLabel);
+  bottomLabel->setStyleSheet("QLabel { color : white; }");
+  bottomLayout->addWidget(bottomLabel);
+  bottomRightLabel = new QLabel("", this);
+  bottomRightLabel->setFixedHeight(27); // 높이를 30 픽셀로 설정
+  bottomRightLabel->setAlignment(Qt::AlignRight);
+  bottomRightLabel->setFont(font);
+  bottomRightLabel->setStyleSheet("QLabel { color : white; }");
+  bottomLayout->addWidget(bottomRightLabel);
+  main_layout->addLayout(bottomLayout);
 
 
   nvg = new AnnotatedCameraWidget(VISION_STREAM_ROAD, this);
@@ -288,14 +318,18 @@ void OnroadWindow::updateStateText() {
     //p.drawText(rect_top, Qt::AlignBottom | Qt::AlignHCenter, top);
     topLabel->setText(top);
 
-    //extern int g_fps;
-    //QString top_right = QString("FPS: %1").arg(g_fps);
-    //p.drawText(rect_top, Qt::AlignBottom | Qt::AlignRight, top_right);
-
+    extern int g_fps;
+    topRightLabel->setText(QString("FPS: %1").arg(g_fps));
 
     const auto lat_plan = sm["lateralPlan"].getLateralPlan();
     //p.drawText(rect_bottom, Qt::AlignBottom | Qt::AlignHCenter, lat_plan.getLatDebugText().cStr());
     bottomLabel->setText(lat_plan.getLatDebugText().cStr());
+
+    extern char ip_address[];
+    extern QString gitBranch;
+    bottomRightLabel->setText(QString(ip_address));
+    bottomLeftLabel->setText(gitBranch);
+
 }
 
 // ***** onroad widgets *****

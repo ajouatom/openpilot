@@ -148,7 +148,11 @@ private:
   void updateStateText();
 
   QLabel* topLabel;
+  QLabel* topLeftLabel;
+  QLabel* topRightLabel;
   QLabel* bottomLabel;
+  QLabel* bottomLeftLabel;
+  QLabel* bottomRightLabel;
 
 private slots:
   void offroadTransition(bool offroad);

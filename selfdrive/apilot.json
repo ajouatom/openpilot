@@ -38,7 +38,7 @@
       "min": 1000,
       "max": 6000,
       "default": 2500,
-      "unit": 1
+      "unit": 100
     },
     {
       "group": "Á¶ÇâÆ©´×",
@@ -51,7 +51,7 @@
       "min": 0,
       "max": 1000,
       "default": 100,
-      "unit": 1
+      "unit": 10
     },
     {
       "group": "Á¶ÇâÆ©´×",
@@ -311,7 +311,7 @@
       "min": 50,
       "max": 150,
       "default": 100,
-      "unit": 1
+      "unit": 5
     },
     {
       "group": "ÁÖÇàÆ©´×",
@@ -350,7 +350,7 @@
       "min": 50,
       "max": 300,
       "default": 100,
-      "unit": 1
+      "unit": 5
     },
     {
       "group": "°¨¼ÓÁ¦¾î",
@@ -985,7 +985,7 @@
       "etitle": "Radar test",
       "edescr": "",
       "min": 0,
-      "max": 2,
+      "max": 3,
       "default": 0,
       "unit": 1
     },
@@ -1350,8 +1350,8 @@
       "edescr": "",
       "min": 1,
       "max": 50,
-      "default": 10,
-      "unit": 5
+      "default": 1,
+      "unit": 1
     },
     {
       "group": "°¨¼ÓÁ¦¾î",
@@ -1364,7 +1364,7 @@
       "min": 10,
       "max": 100,
       "default": 35,
-      "unit": 1
+      "unit": 5
     },
     {
       "group": "°¨¼ÓÁ¦¾î",
