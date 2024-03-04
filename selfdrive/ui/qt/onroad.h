@@ -145,7 +145,7 @@ private:
   QWidget *map = nullptr;
   QHBoxLayout* split;
   bool update_text = false;
-  void updateStateText(QPainter &p);
+  void updateStateText();
 
   QLabel* topLabel;
   QLabel* bottomLabel;

@@ -118,9 +118,7 @@ void OnroadWindow::updateState(const UIState &s) {
   }
   else {
       update_text = true;
-      //update();
-      topLabel->setText("hellowaklsd;jfalks;dfjaslkdfjasl;kjf;l");
-      bottomLabel->setText("hellowaklsd;jfalks;dfjaslkdfjasl;kjf;l");
+      updateStateText();
   }
 
   Params params = Params();
@@ -250,15 +248,15 @@ void OnroadWindow::paintEvent(QPaintEvent *event) {
   update_text = false;
 }
 
-void OnroadWindow::updateStateText(QPainter &p) {
+void OnroadWindow::updateStateText() {
     //QPainter p(this);
     QColor text_color = QColor(0, 0, 0, 0xff);
     //QColor text_color = QColor(0xff, 0xff, 0xff, 0xff);
     QRect rect_top(0, 0, rect().width(), 29);
     QRect rect_bottom(0, rect().height() - UI_BORDER_SIZE - 1, rect().width(), 29);
 
-    p.setFont(InterFont(28, QFont::DemiBold));
-    p.setPen(text_color);
+    //p.setFont(InterFont(28, QFont::DemiBold));
+    //p.setPen(text_color);
 
     UIState* s = uiState();
     const SubMaster& sm = *(s->sm);
@@ -283,15 +281,17 @@ void OnroadWindow::updateStateText(QPainter &p) {
         top = debugControlsState;
     }
     else top = QString::fromStdString(lp.getDebugLongText().cStr()) + (" LiveSR:" + QString::number(liveSteerRatio, 'f', 2));
-    p.drawText(rect_top, Qt::AlignBottom | Qt::AlignHCenter, top);
+    //p.drawText(rect_top, Qt::AlignBottom | Qt::AlignHCenter, top);
+    topLabel->setText(top);
 
-    extern int g_fps;
-    QString top_right = QString("FPS: %1").arg(g_fps);
-    p.drawText(rect_top, Qt::AlignBottom | Qt::AlignRight, top_right);
+    //extern int g_fps;
+    //QString top_right = QString("FPS: %1").arg(g_fps);
+    //p.drawText(rect_top, Qt::AlignBottom | Qt::AlignRight, top_right);
 
 
     const auto lat_plan = sm["lateralPlan"].getLateralPlan();
-    p.drawText(rect_bottom, Qt::AlignBottom | Qt::AlignHCenter, lat_plan.getLatDebugText().cStr());
+    //p.drawText(rect_bottom, Qt::AlignBottom | Qt::AlignHCenter, lat_plan.getLatDebugText().cStr());
+    bottomLabel->setText(lat_plan.getLatDebugText().cStr());
 }
 
 // ***** onroad widgets *****
