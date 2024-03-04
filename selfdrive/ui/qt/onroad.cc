@@ -226,7 +226,7 @@ void OnroadWindow::primeChanged(bool prime) {
 
 void OnroadWindow::paintEvent(QPaintEvent *event) {
   QPainter p(this);
-  if(!update_text)
+  //if(!update_text)
     p.fillRect(rect(), QColor(bg.red(), bg.green(), bg.blue(), 255));
 
   update_text = false;
