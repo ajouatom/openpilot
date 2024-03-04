@@ -224,10 +224,12 @@ void OnroadWindow::paintEvent(QPaintEvent *event) {
   QPainter p(this);
   p.fillRect(rect(), QColor(bg.red(), bg.green(), bg.blue(), 255));
 
-  QColor text_color = QColor(0x00, 0x00, 0x00, 0xff);
-  QRect rect_top(0, 0, rect().width(), 30);
-  p.setFont(InterFont(30, QFont::DemiBold));
+  QColor text_color = QColor(0, 0, 0, 0xff);
+  //QColor text_color = QColor(0xff, 0xff, 0xff, 0xff);
+  QRect rect_top(0, 0, rect().width(), 29);
+  QRect rect_bottom(0, rect().height() - UI_BORDER_SIZE + 1, rect().width(), 29);
 
+  p.setFont(InterFont(30, QFont::DemiBold));
   p.setPen(text_color);
   p.drawText(rect_top, Qt::AlignTop | Qt::AlignHCenter, "testtestsetsateasfdask;ljfdsalkdfjaslkdfjasklf;jasfd;kljfdskjlka;sfdjl");
 
