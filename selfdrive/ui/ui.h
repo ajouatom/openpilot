@@ -204,7 +204,7 @@ public:
   QString language;
 
   QTransform car_space_transform;
-  int show_debug = false;
+  int  show_debug = false;
   int show_datetime = 1;
   bool show_tpms = true;
   int show_accel = 2;
@@ -237,7 +237,6 @@ signals:
   void offroadTransition(bool offroad);
   void primeChanged(bool prime);
   void primeTypeChanged(PrimeType prime_type);
-  void uiUpdateText(const UIState& s);
 
 private slots:
   void update();

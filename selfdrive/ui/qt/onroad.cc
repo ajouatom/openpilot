@@ -65,7 +65,6 @@ OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
 
   setAttribute(Qt::WA_OpaquePaintEvent);
   QObject::connect(uiState(), &UIState::uiUpdate, this, &OnroadWindow::updateState);
-  QObject::connect(uiState(), &UIState::uiUpdateText, this, &OnroadWindow::updateStateText);
   QObject::connect(uiState(), &UIState::offroadTransition, this, &OnroadWindow::offroadTransition);
   QObject::connect(uiState(), &UIState::primeChanged, this, &OnroadWindow::primeChanged);
 }
@@ -224,10 +223,12 @@ void OnroadWindow::primeChanged(bool prime) {
 void OnroadWindow::paintEvent(QPaintEvent *event) {
   QPainter p(this);
   p.fillRect(rect(), QColor(bg.red(), bg.green(), bg.blue(), 255));
+
+  updateStateText(p);
 }
 
-void OnroadWindow::updateStateText(const UIState& s) {
-    QPainter p(this);
+void OnroadWindow::updateStateText(QPainter &p) {
+    //QPainter p(this);
     QColor text_color = QColor(0, 0, 0, 0xff);
     //QColor text_color = QColor(0xff, 0xff, 0xff, 0xff);
     QRect rect_top(0, 0, rect().width(), 29);
@@ -236,8 +237,8 @@ void OnroadWindow::updateStateText(const UIState& s) {
     p.setFont(InterFont(28, QFont::DemiBold));
     p.setPen(text_color);
 
-    //UIState* s = uiState();
-    const SubMaster& sm = *(s.sm);
+    UIState* s = uiState();
+    const SubMaster& sm = *(s->sm);
     auto meta = sm["modelV2"].getModelV2().getMeta();
     QString debugModelV2 = QString::fromStdString(meta.getDebugText().cStr());
     auto controls_state = sm["controlsState"].getControlsState();
