@@ -36,7 +36,7 @@ OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
 
   QFont font;
   font.setPixelSize(30);
-  font.setWieght(QFont::DemiBold);
+  font.setWeight(QFont::DemiBold);
   topLabel = new QLabel("", this);
   topLabel->setFixedHeight(27); // 높이를 30 픽셀로 설정
   topLabel->setAlignment(Qt::AlignCenter);
