@@ -224,15 +224,45 @@ void OnroadWindow::paintEvent(QPaintEvent *event) {
   QPainter p(this);
   p.fillRect(rect(), QColor(bg.red(), bg.green(), bg.blue(), 255));
 
-  QColor text_color = QColor(0, 0, 0, 0xff);
-  //QColor text_color = QColor(0xff, 0xff, 0xff, 0xff);
-  QRect rect_top(0, 0, rect().width(), 29);
-  QRect rect_bottom(0, rect().height() - UI_BORDER_SIZE - 1, rect().width(), 29);
+    QColor text_color = QColor(0, 0, 0, 0xff);
+    //QColor text_color = QColor(0xff, 0xff, 0xff, 0xff);
+    QRect rect_top(0, 0, rect().width(), 29);
+    QRect rect_bottom(0, rect().height() - UI_BORDER_SIZE - 1, rect().width(), 29);
 
-  p.setFont(InterFont(28, QFont::DemiBold));
-  p.setPen(text_color);
-  p.drawText(rect_top, Qt::AlignBottom | Qt::AlignHCenter, "testtestsetsateasfdask;ljfdsalkdfjaslkdfjasklf;jasfd;kljfdskjlka;sfdjl");
-  p.drawText(rect_bottom, Qt::AlignBottom | Qt::AlignHCenter, "testtestsetsateasfdask;ljfdsalkdfjaslkdfjasklf;jasfd;kljfdskjlka;sfdjl");
+    p.setFont(InterFont(28, QFont::DemiBold));
+    p.setPen(text_color);
+
+    UIState* s = uiState();
+    const SubMaster& sm = *(s->sm);
+    auto meta = sm["modelV2"].getModelV2().getMeta();
+    QString debugModelV2 = QString::fromStdString(meta.getDebugText().cStr());
+    auto controls_state = sm["controlsState"].getControlsState();
+    QString debugControlsState = QString::fromStdString(controls_state.getDebugText1().cStr());
+    const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
+    QString debugLong2 = QString::fromStdString(lp.getDebugLongText2().cStr());
+    const auto live_params = sm["liveParameters"].getLiveParameters();
+    float   liveSteerRatio = live_params.getSteerRatio();
+
+    QString top = "";
+
+    if (debugModelV2.length() > 2) {
+        top = debugModelV2.toStdString();
+    }
+    else if (debugLong2.length() > 2) {
+        top = debugLong2.toStdString();
+    }
+    else if (debugControlsState.length() > 2) {
+        top = debugControlsState.toStdString();
+    }
+    else top = QString::fromStdString(lp.getDebugLongText().cStr()) + (" LiveSR:" + QString::number(liveSteerRatio, 'f', 2));
+    p.drawText(rect_top, Qt::AlignBottom | Qt::AlignHCenter, top);
+
+    QString = top_right = QString::Format("FPS: %d", g_fps);
+    p.drawText(rect_top, Qt::AlignBottom | Qt::AlignHRight, top_right);
+
+
+    const auto lat_plan = sm["lateralPlan"].getLateralPlan();
+    p.drawText(rect_bottom, Qt::AlignBottom | Qt::AlignHCenter, lat_plan.getLatDebugText());
 
 }
 
