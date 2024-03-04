@@ -1880,8 +1880,8 @@ void DrawApilot::drawDeviceState(UIState* s, bool show) {
     nvgTextAlign(s->vg, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM);
     ui_draw_text(s, s->fb_w - 20, s->fb_h - 15, (read_ip_count < 30) ? ip_address : gitBranch.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
 
+#if 0
     nvgTextAlign(s->vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
-
     const auto lat_plan = sm["lateralPlan"].getLateralPlan();
     QString latDebugText = QString::fromStdString(lat_plan.getLatDebugText());
     if(s->show_debug>0)
@@ -1920,6 +1920,7 @@ void DrawApilot::drawDeviceState(UIState* s, bool show) {
         debugLong += (" LiveSR:" + QString::number(liveSteerRatio, 'f', 2));
         ui_draw_text(s, s->fb_w / 2, 30, debugLong.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
     }
+#endif
 
 }
 void DrawApilot::drawDebugText(UIState* s, bool show) {
