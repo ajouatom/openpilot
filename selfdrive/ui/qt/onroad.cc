@@ -100,6 +100,10 @@ void OnroadWindow::updateState(const UIState &s) {
     bg = bgColor;
     update();
   }
+  else {
+      update_text = true;
+      update();
+  }
 
   Params params = Params();
   static int updateSeq = 0;
@@ -222,8 +226,10 @@ void OnroadWindow::primeChanged(bool prime) {
 
 void OnroadWindow::paintEvent(QPaintEvent *event) {
   QPainter p(this);
-  p.fillRect(rect(), QColor(bg.red(), bg.green(), bg.blue(), 255));
+  if(!update_text)
+    p.fillRect(rect(), QColor(bg.red(), bg.green(), bg.blue(), 255));
 
+  update_text = false;
   updateStateText(p);
 }
 
