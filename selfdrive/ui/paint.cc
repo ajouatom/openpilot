@@ -639,7 +639,8 @@ void DrawPlot::makePlotData(const UIState* s, float& data1, float& data2) {
     float   accel = lp.getAccels()[0];
     float   speeds_0 = lp.getSpeeds()[0];
     const auto lat_plan = sm["lateralPlan"].getLateralPlan();
-    float   curvatures_0 = lat_plan.getCurvatures()[0];
+    //float   curvatures_0 = lat_plan.getCurvatures()[0];
+    float   curvatures_0 = controls_state.getDesiredCurvature();
 
     const cereal::ModelDataV2::Reader& model = sm["modelV2"].getModelV2();
     const auto position = model.getPosition();
