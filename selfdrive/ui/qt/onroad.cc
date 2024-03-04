@@ -65,6 +65,7 @@ OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
 
   setAttribute(Qt::WA_OpaquePaintEvent);
   QObject::connect(uiState(), &UIState::uiUpdate, this, &OnroadWindow::updateState);
+  QObject::connect(uiState(), &UIState::uiUpdateText, this, &OnroadWindow::updateStateText);
   QObject::connect(uiState(), &UIState::offroadTransition, this, &OnroadWindow::offroadTransition);
   QObject::connect(uiState(), &UIState::primeChanged, this, &OnroadWindow::primeChanged);
 }
@@ -163,52 +164,6 @@ void OnroadWindow::updateState(const UIState &s) {
       }
       _current_carrot_display_prev = _current_carrot_display;
   }
-
-  QPainter p(this);
-  QColor text_color = QColor(0, 0, 0, 0xff);
-  //QColor text_color = QColor(0xff, 0xff, 0xff, 0xff);
-  QRect rect_top(0, 0, rect().width(), 29);
-  QRect rect_bottom(0, rect().height() - UI_BORDER_SIZE - 1, rect().width(), 29);
-
-  p.setFont(InterFont(28, QFont::DemiBold));
-  p.setPen(text_color);
-
-  //UIState* s = uiState();
-  //const SubMaster& sm = *(s.sm);
-  auto meta = sm["modelV2"].getModelV2().getMeta();
-  QString debugModelV2 = QString::fromStdString(meta.getDebugText().cStr());
-  auto controls_state = sm["controlsState"].getControlsState();
-  QString debugControlsState = QString::fromStdString(controls_state.getDebugText1().cStr());
-  const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
-  QString debugLong2 = QString::fromStdString(lp.getDebugLongText2().cStr());
-  const auto live_params = sm["liveParameters"].getLiveParameters();
-  float   liveSteerRatio = live_params.getSteerRatio();
-
-  QString top = "";
-
-  if (debugModelV2.length() > 2) {
-      top = debugModelV2;
-  }
-  else if (debugLong2.length() > 2) {
-      top = debugLong2;
-  }
-  else if (debugControlsState.length() > 2) {
-      top = debugControlsState;
-  }
-  else top = QString::fromStdString(lp.getDebugLongText().cStr()) + (" LiveSR:" + QString::number(liveSteerRatio, 'f', 2));
-  p.drawText(rect_top, Qt::AlignBottom | Qt::AlignHCenter, top);
-
-  extern int g_fps;
-  QString top_right = QString("FPS: %1").arg(g_fps);
-  p.drawText(rect_top, Qt::AlignBottom | Qt::AlignRight, top_right);
-
-
-  const auto lat_plan = sm["lateralPlan"].getLateralPlan();
-  p.drawText(rect_bottom, Qt::AlignBottom | Qt::AlignHCenter, lat_plan.getLatDebugText().cStr());
-
-
-
-
 }
 
 void OnroadWindow::mousePressEvent(QMouseEvent* e) {
@@ -269,6 +224,50 @@ void OnroadWindow::primeChanged(bool prime) {
 void OnroadWindow::paintEvent(QPaintEvent *event) {
   QPainter p(this);
   p.fillRect(rect(), QColor(bg.red(), bg.green(), bg.blue(), 255));
+}
+
+void OnroadWindow::updateStateText(const UIState& s) {
+    QPainter p(this);
+    QColor text_color = QColor(0, 0, 0, 0xff);
+    //QColor text_color = QColor(0xff, 0xff, 0xff, 0xff);
+    QRect rect_top(0, 0, rect().width(), 29);
+    QRect rect_bottom(0, rect().height() - UI_BORDER_SIZE - 1, rect().width(), 29);
+
+    p.setFont(InterFont(28, QFont::DemiBold));
+    p.setPen(text_color);
+
+    //UIState* s = uiState();
+    const SubMaster& sm = *(s.sm);
+    auto meta = sm["modelV2"].getModelV2().getMeta();
+    QString debugModelV2 = QString::fromStdString(meta.getDebugText().cStr());
+    auto controls_state = sm["controlsState"].getControlsState();
+    QString debugControlsState = QString::fromStdString(controls_state.getDebugText1().cStr());
+    const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
+    QString debugLong2 = QString::fromStdString(lp.getDebugLongText2().cStr());
+    const auto live_params = sm["liveParameters"].getLiveParameters();
+    float   liveSteerRatio = live_params.getSteerRatio();
+
+    QString top = "";
+
+    if (debugModelV2.length() > 2) {
+        top = debugModelV2;
+    }
+    else if (debugLong2.length() > 2) {
+        top = debugLong2;
+    }
+    else if (debugControlsState.length() > 2) {
+        top = debugControlsState;
+    }
+    else top = QString::fromStdString(lp.getDebugLongText().cStr()) + (" LiveSR:" + QString::number(liveSteerRatio, 'f', 2));
+    p.drawText(rect_top, Qt::AlignBottom | Qt::AlignHCenter, top);
+
+    extern int g_fps;
+    QString top_right = QString("FPS: %1").arg(g_fps);
+    p.drawText(rect_top, Qt::AlignBottom | Qt::AlignRight, top_right);
+
+
+    const auto lat_plan = sm["lateralPlan"].getLateralPlan();
+    p.drawText(rect_bottom, Qt::AlignBottom | Qt::AlignHCenter, lat_plan.getLatDebugText().cStr());
 }
 
 // ***** onroad widgets *****
