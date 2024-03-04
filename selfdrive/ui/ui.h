@@ -237,6 +237,7 @@ signals:
   void offroadTransition(bool offroad);
   void primeChanged(bool prime);
   void primeTypeChanged(PrimeType prime_type);
+  void uiUpdateText(const UIState& s);
 
 private slots:
   void update();
