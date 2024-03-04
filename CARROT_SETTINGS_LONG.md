@@ -67,15 +67,6 @@
     * aLeadTau (150)x0.01
       * 선행차의 가속도에 대한 반응정도 설정
       * 숫자가 적으면 반응이 적극적임.
-    * AChangeCost(200)
-      * 속도프로파일 생성시 가속도를 제한하는 가중치
-      * 값이 적으면 가속도변화율이 커짐
-    * AChangeCostStart(40)
-      * 정지 출발시 가속도를 제한함.
-      * 값이 적으면 출발가속도가 높아짐.
-    * LADLowerBound(50)/LADUpperBound(50)  * 0.01 sec
-      * Longitudinal Actuator Delay Upper/Lower Bound
-      * 일종의 차량 지연현상을 보상하는것임. 0.5초로 설정하는것이 가장 무방함.
     * 현기차(Hyunda/Kia)참조
       * Kf게인(100)
         * 현기차는 100으로 고정

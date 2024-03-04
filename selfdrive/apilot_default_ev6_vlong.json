@@ -1,21 +1,5 @@
 [
   {
-    "filename": "AChangeCost",
-    "content": "200"
-  },
-  {
-    "filename": "AChangeCostStart",
-    "content": "40"
-  },
-  {
-    "filename": "ALeadTau",
-    "content": "150"
-  },
-  {
-    "filename": "ALeadTauStart",
-    "content": "35"
-  },
-  {
     "filename": "AdjustCurveOffset",
     "content": "3"
   },
@@ -270,14 +254,6 @@
   {
     "filename": "LongPitch",
     "content": "0"
-  },
-  {
-    "filename": "LongitudinalActuatorDelayLowerBound",
-    "content": "50"
-  },
-  {
-    "filename": "LongitudinalActuatorDelayUpperBound",
-    "content": "50"
   },
   {
     "filename": "LongitudinalPersonality",

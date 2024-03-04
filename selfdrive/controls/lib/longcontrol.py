@@ -93,8 +93,7 @@ class LongControl:
         self.pid.k_f = self.longitudinalTuningKf
         #self.pid._k_i = ([0, 2.0, 200], [self.longitudinalTuningKiV, 0.0, 0.0]) # 정지때만.... i를 적용해보자... 시험..
     elif self.readParamCount == 30:
-      self.CP.longitudinalActuatorDelayLowerBound = float(Params().get_int("LongitudinalActuatorDelayLowerBound")) * 0.01
-      self.CP.longitudinalActuatorDelayUpperBound = float(Params().get_int("LongitudinalActuatorDelayUpperBound")) * 0.01
+      pass
     elif self.readParamCount == 40:
       self.startAccelApply = float(Params().get_int("StartAccelApply")) * 0.01
       self.stopAccelApply = float(Params().get_int("StopAccelApply")) * 0.01

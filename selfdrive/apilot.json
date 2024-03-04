@@ -262,32 +262,6 @@
       "unit": 5
     },
     {
-      "group": "ÁÖÇàÆ©´×",
-      "name": "AChangeCost",
-      "title": "AChangeCost(200)",
-      "descr": "",
-      "egroup": "LONG",
-      "etitle": "AChangeCost(200)",
-      "edescr": "",
-      "min": 0,
-      "max": 1000,
-      "default": 10,
-      "unit": 5
-    },
-    {
-      "group": "ÁÖÇàÆ©´×",
-      "name": "AChangeCostStart",
-      "title": "AChangeCostStart(40)",
-      "descr": "",
-      "egroup": "LONG",
-      "etitle": "AChangeCostStart(40)",
-      "edescr": "",
-      "min": 0,
-      "max": 1000,
-      "default": 10,
-      "unit": 5
-    },
-    {
       "group": "Á¤Áö",
       "name": "StopDistanceCarrot",
       "title": "StopDistance(600)cm",
@@ -338,32 +312,6 @@
       "max": 150,
       "default": 100,
       "unit": 1
-    },
-    {
-      "group": "ÁÖÇàÆ©´×",
-      "name": "LongitudinalActuatorDelayLowerBound",
-      "title": "_LADLowerBound(50)",
-      "descr": "³·Ãß¸é Á¤Áö·ÂÁõ°¡, °¡¼Ó·Â°¨¼Ò",
-      "egroup": "LONG",
-      "etitle": "LADLowerBound(50)",
-      "edescr": "",
-      "min": 10,
-      "max": 100,
-      "default": 50,
-      "unit": 10
-    },
-    {
-      "group": "ÁÖÇàÆ©´×",
-      "name": "LongitudinalActuatorDelayUpperBound",
-      "title": "_LADUpperBound(50)",
-      "descr": "¿Ã¸®¸é °¨¼Ó·Â Áõ°¡",
-      "egroup": "LONG",
-      "etitle": "LADUpperBound(50)",
-      "edescr": "",
-      "min": 10,
-      "max": 100,
-      "default": 50,
-      "unit": 10
     },
     {
       "group": "ÁÖÇàÆ©´×",
