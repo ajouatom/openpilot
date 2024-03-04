@@ -258,7 +258,7 @@ void OnroadWindow::paintEvent(QPaintEvent *event) {
     p.drawText(rect_top, Qt::AlignBottom | Qt::AlignHCenter, top);
 
     extern int g_fps;
-    QString top_right = QString::sprintf("FPS: %d", g_fps);
+    QString top_right = QString("FPS: %1").arg(g_fps);
     p.drawText(rect_top, Qt::AlignBottom | Qt::AlignRight, top_right);
 
 
