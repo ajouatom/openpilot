@@ -223,6 +223,14 @@ void OnroadWindow::primeChanged(bool prime) {
 void OnroadWindow::paintEvent(QPaintEvent *event) {
   QPainter p(this);
   p.fillRect(rect(), QColor(bg.red(), bg.green(), bg.blue(), 255));
+
+  QColor text_color = QColor(0x00, 0x00, 0x00, 0xff);
+  QRect rect_top(0, 0, rect().width(), 30);
+  p.setFont(InterFont(30, QFont::DemiBold));
+
+  p.setPen(text_color);
+  p.drawText(rect_top, Qt::AlignTop | Qt::AlignHCenter, "testtestsetsateasfdask;ljfdsalkdfjaslkdfjasklf;jasfd;kljfdskjlka;sfdjl");
+
 }
 
 // ***** onroad widgets *****
