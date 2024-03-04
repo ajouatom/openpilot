@@ -35,9 +35,9 @@ OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   main_layout->setContentsMargins(UI_BORDER_SIZE, 0, UI_BORDER_SIZE, 0);
 
   QFont font;
-  font.setPixelSize(29);
+  font.setPixelSize(30);
   topLabel = new QLabel("", this);
-  topLabel->setFixedHeight(30); // 높이를 30 픽셀로 설정
+  topLabel->setFixedHeight(28); // 높이를 30 픽셀로 설정
   topLabel->setAlignment(Qt::AlignCenter);
   topLabel->setFont(font);
   main_layout->addWidget(topLabel);
@@ -47,7 +47,7 @@ OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   main_layout->addLayout(stacked_layout);
 
   bottomLabel = new QLabel("", this);
-  bottomLabel->setFixedHeight(30); // 높이를 30 픽셀로 설정
+  bottomLabel->setFixedHeight(28); // 높이를 30 픽셀로 설정
   bottomLabel->setAlignment(Qt::AlignCenter);
   bottomLabel->setFont(font);
   main_layout->addWidget(bottomLabel);
