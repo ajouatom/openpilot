@@ -627,7 +627,6 @@ void UIState::updateStatus() {
     } else {
       status = controls_state.getEnabled() ? STATUS_ENGAGED : STATUS_DISENGAGED;
     }
-    emit uiUpdateText(*this);
   }
 
   // Handle onroad/offroad transition
