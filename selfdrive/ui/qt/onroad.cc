@@ -246,7 +246,6 @@ void OnroadWindow::paintEvent(QPaintEvent *event) {
     p.fillRect(rect(), QColor(bg.red(), bg.green(), bg.blue(), 255));
 
   update_text = false;
-  updateStateText(p);
 }
 
 void OnroadWindow::updateStateText(QPainter &p) {
