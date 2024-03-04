@@ -257,6 +257,7 @@ void OnroadWindow::paintEvent(QPaintEvent *event) {
     else top = QString::fromStdString(lp.getDebugLongText().cStr()) + (" LiveSR:" + QString::number(liveSteerRatio, 'f', 2));
     p.drawText(rect_top, Qt::AlignBottom | Qt::AlignHCenter, top);
 
+    extern int g_fps;
     QString top_right = QString::sprintf("FPS: %d", g_fps);
     p.drawText(rect_top, Qt::AlignBottom | Qt::AlignHRight, top_right);
 
