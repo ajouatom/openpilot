@@ -528,7 +528,7 @@ class CarState(CarStateBase):
     messages = [
       (self.accelerator_msg_canfd, 100),
       ("WHEEL_SPEEDS", 100),
-      ("STEERING_SENSORS", 100),
+      ("STEERING_SENSORS", 50),  #carrot test: 100
       ("MDPS", 100),
       ("TCS", 50),
       ("CRUISE_BUTTONS_ALT", 50),

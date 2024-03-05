@@ -651,8 +651,6 @@ class LongitudinalMpc:
       self.tFollowGap3 = float(Params().get_int("TFollowGap3")) / 100.
       self.tFollowGap4 = float(Params().get_int("TFollowGap4")) / 100.
     elif self.lo_timer == 120:
-      self.aChangeCost = Params().get_int("AChangeCost")
-      self.aChangeCostStart = Params().get_int("AChangeCostStart")
       self.stop_distance = float(Params().get_int("StopDistanceCarrot")) / 100.
 
   def update_stop_dist(self, stop_x):

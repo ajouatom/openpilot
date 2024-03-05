@@ -5,6 +5,7 @@
 #include <QPushButton>
 #include <QStackedLayout>
 #include <QWidget>
+#include <QLabel>
 
 #include "common/util.h"
 #include "selfdrive/ui/ui.h"
@@ -143,9 +144,17 @@ private:
   QColor bg = bg_colors[STATUS_DISENGAGED];
   QWidget *map = nullptr;
   QHBoxLayout* split;
+  void updateStateText();
+
+  QLabel* topLabel;
+  QLabel* topLeftLabel;
+  QLabel* topRightLabel;
+  QLabel* bottomLabel;
+  QLabel* bottomLeftLabel;
+  QLabel* bottomRightLabel;
 
 private slots:
   void offroadTransition(bool offroad);
   void primeChanged(bool prime);
-  void updateState(const UIState &s);
+  void updateState(const UIState& s);
 };
