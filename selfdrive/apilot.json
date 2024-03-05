@@ -1004,19 +1004,6 @@
     },
     {
       "group": "시작",
-      "name": "VisionAccelRatio",
-      "title": "비젼레이더감도",
-      "descr": "비젼롱컨시 전방차량데 대한 응답성이 좋아짐",
-      "egroup": "START",
-      "etitle": "Vision Sensitivity",
-      "edescr": "Adjust vision sensitivity for lead car",
-      "min": 100,
-      "max": 200,
-      "default": 100,
-      "unit": 1
-    },
-    {
-      "group": "시작",
       "name": "SccConnectedBus2",
       "title": "SCC배선개조 BUS2연결(0)",
       "descr": "",

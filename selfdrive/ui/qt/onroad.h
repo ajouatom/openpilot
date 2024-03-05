@@ -144,7 +144,6 @@ private:
   QColor bg = bg_colors[STATUS_DISENGAGED];
   QWidget *map = nullptr;
   QHBoxLayout* split;
-  bool update_text = false;
   void updateStateText();
 
   QLabel* topLabel;

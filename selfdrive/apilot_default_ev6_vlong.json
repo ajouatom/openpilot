@@ -582,9 +582,5 @@
   {
     "filename": "Version",
     "content": "0.9.7"
-  },
-  {
-    "filename": "VisionAccelRatio",
-    "content": "150"
   }
 ]

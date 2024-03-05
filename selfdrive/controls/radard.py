@@ -231,7 +231,7 @@ aLeadTauInit_Vision = 1.5
 def get_RadarState_from_vision(lead_msg: capnp._DynamicStructReader, v_ego: float, model_v_ego: float):
   global aLeadTau_Vision, aLeadTauStart_Vision, aLeadTauInit_Vision
   
-  aLeadK = float(lead_msg.a[0]) * Params().get_int("VisionAccelRatio") * 0.01
+  aLeadK = float(lead_msg.a[0])
   if abs(aLeadK) < aLeadTauStart_Vision:
     aLeadTau_Vision = aLeadTauInit_Vision
   else:
@@ -244,7 +244,7 @@ def get_RadarState_from_vision(lead_msg: capnp._DynamicStructReader, v_ego: floa
     "vRel": float(lead_v_rel_pred),
     "vLead": float(v_ego + lead_v_rel_pred),
     "vLeadK": float(v_ego + lead_v_rel_pred),
-    "aLeadK": aLeadK, #float(lead_msg.a[0]) * Params().get_int("VisionAccelRatio") * 0.01, #0.0,
+    "aLeadK": aLeadK, 
     "aLeadTau": aLeadTau_Vision, #0.3,
     "fcw": False,
     "modelProb": float(lead_msg.prob),
