@@ -80,7 +80,8 @@ class CarController:
     self.button_spamming_count = 0
     self.prev_clu_speed = 0
     self.button_spam1 = 8
-    self.button_spam2 = 30    
+    self.button_spam2 = 30
+    self.button_spam3 = 1
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -98,6 +99,7 @@ class CarController:
 
       self.button_spam1 = self.params.get_int("CruiseButtonTest1")
       self.button_spam2 = self.params.get_int("CruiseButtonTest2")
+      self.button_spam3 = self.params.get_int("CruiseButtonTest3")
 
 
     carrot_test = self.params.get_int("CarrotTest")
@@ -407,8 +409,9 @@ class CarController:
       if self.last_button_frame != self.frame:
         dat = self.canfd_speed_control_pcm(CC, CS, self.cruise_buttons_msg_values)
         if dat is not None:
-          can_sends.append(dat)
-        self.cruise_buttons_msg_cnt += 1
+          for _ in range(self.button_spam3):
+            can_sends.append(dat)
+          self.cruise_buttons_msg_cnt += 1
 
     return can_sends
 
