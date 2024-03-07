@@ -1017,6 +1017,19 @@
     },
     {
       "group": "시작",
+      "name": "CanfdHDA2",
+      "title": "CANFD HDA2지원(0)",
+      "descr": "",
+      "egroup": "START",
+      "etitle": "CANFD HDA2(0)",
+      "edescr": "",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "시작",
       "name": "EnableRadarTracks",
       "title": "레이더트랙사용(0)",
       "descr": "일부차량만 지원됨",
