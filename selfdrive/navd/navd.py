@@ -127,7 +127,6 @@ class RouteEngine:
       return
 
     new_destination = coordinate_from_param("NavDestination", self.params)
-    print("########### recompute_route = ", new_destination)
     if new_destination is None:
       self.clear_route()
       self.reset_recompute_limits()
@@ -356,7 +355,6 @@ class RouteEngine:
     self.route_geometry = None
     self.step_idx = None
     self.nav_destination = None
-    print("############### clear_route")
 
   def reset_recompute_limits(self):
     self.recompute_backoff = 0
