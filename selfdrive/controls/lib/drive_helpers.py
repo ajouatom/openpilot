@@ -429,18 +429,19 @@ class VCruiseHelper:
     return v_cruise_kph
 
   def _brake_released_cond(self, CS, v_cruise_kph, controls):
-    if self.autoResumeFromGasSpeed < self.v_ego_kph_set and self.autoResumeFromBrakeReleaseTrafficSign:
-      v_cruise_kph = self.v_ego_kph_set
-      self._add_log_auto_cruise("Cruise Activate Brake Release")
-      self.cruiseActivate = 1
-    elif self.xState == 3 and self.autoResumeFromBrakeReleaseTrafficSign:
-      #v_cruise_kph = self.v_ego_kph_set
-      self._add_log_auto_cruise("Cruise Activate from Traffic sign stop")
-      self.cruiseActivate = 1
-    elif 0 < self.lead_dRel < 20:
-      v_cruise_kph = self.v_ego_kph_set  ## 천천히 주행하다가..지나가는 차를 잘못읽고 자동으로 크루즈가 켜지는 경우 툭튀언
-      self._add_log_auto_cruise("Cruise Activate from Lead Car")
-      self.cruiseActivate = 1
+    if self.autoResumeFromBrakeReleaseTrafficSign:
+      if self.autoResumeFromGasSpeed < self.v_ego_kph_set:
+        v_cruise_kph = self.v_ego_kph_set
+        self._add_log_auto_cruise("Cruise Activate Brake Release")
+        self.cruiseActivate = 1
+      elif self.xState == 3:
+        #v_cruise_kph = self.v_ego_kph_set
+        self._add_log_auto_cruise("Cruise Activate from Traffic sign stop")
+        self.cruiseActivate = 1
+      elif 0 < self.lead_dRel < 20:
+        v_cruise_kph = self.v_ego_kph_set  ## 천천히 주행하다가..지나가는 차를 잘못읽고 자동으로 크루즈가 켜지는 경우 툭튀언
+        self._add_log_auto_cruise("Cruise Activate from Lead Car")
+        self.cruiseActivate = 1
     return v_cruise_kph
 
   def _update_cruise_button(self, CS, v_cruise_kph, controls):
