@@ -289,6 +289,7 @@ std::unordered_map<std::string, uint32_t> keys = {
     { "EnableAVM", PERSISTENT },
     { "HotspotOnBoot", PERSISTENT },
     { "SccConnectedBus2", PERSISTENT },
+    { "CanfdHDA2", PERSISTENT },
     { "SoundVolumeAdjust", PERSISTENT },
     { "SoundVolumeAdjustEngage", PERSISTENT },
     { "StartRecord", PERSISTENT },
