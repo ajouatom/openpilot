@@ -84,34 +84,6 @@ class CarControllerParams:
     self.EV_BRAKE_LOOKUP_BP = [self.ACCEL_MIN, gas_brake_threshold]
 
 
-class CAR(StrEnum):
-  HOLDEN_ASTRA = "HOLDEN ASTRA RS-V BK 2017"
-  VOLT = "CHEVROLET VOLT PREMIER 2017"
-  CADILLAC_ATS = "CADILLAC ATS Premium Performance 2018"
-  MALIBU = "CHEVROLET MALIBU PREMIER 2017"
-  ACADIA = "GMC ACADIA DENALI 2018"
-  BUICK_LACROSSE = "BUICK LACROSSE 2017"
-  BUICK_REGAL = "BUICK REGAL ESSENCE 2018"
-  ESCALADE = "CADILLAC ESCALADE 2017"
-  ESCALADE_ESV = "CADILLAC ESCALADE ESV 2016"
-  ESCALADE_ESV_2019 = "CADILLAC ESCALADE ESV 2019"
-  BOLT_EUV = "CHEVROLET BOLT EUV 2022"
-  SILVERADO = "CHEVROLET SILVERADO 1500 2020"
-  EQUINOX = "CHEVROLET EQUINOX 2019"
-  TRAILBLAZER = "CHEVROLET TRAILBLAZER 2021"
-  # Separate car def is required when there is no ASCM
-  # (for now) unless there is a way to detect it when it has been unplugged...
-  VOLT_CC = "CHEVROLET VOLT NO ACC"
-  BOLT_CC = "CHEVROLET BOLT EV NO ACC"
-  EQUINOX_CC = "CHEVROLET EQUINOX NO ACC"
-  SUBURBAN = "CHEVROLET SUBURBAN PREMIER 2016"
-  SUBURBAN_CC = "CHEVROLET SUBURBAN NO ACC"
-  YUKON_CC = "GMC YUKON NO ACC"
-  CT6_CC = "CADILLAC CT6 NO ACC"
-  TRAILBLAZER_CC = "CHEVROLET TRAILBLAZER 2024 NO ACC"
-  XT4 = "CADILLAC XT4 2023"
-
-
 class Footnote(Enum):
   OBD_II = CarFootnote(
     'Requires a <a href="https://github.com/commaai/openpilot/wiki/GM#hardware" target="_blank">community built ASCM harness</a>. ' +
@@ -131,38 +103,136 @@ class GMCarInfo(CarInfo):
       self.footnotes.append(Footnote.OBD_II)
 
 
-CAR_INFO: Dict[str, Union[GMCarInfo, List[GMCarInfo]]] = {
-  CAR.HOLDEN_ASTRA: GMCarInfo("Holden Astra 2017"),
-  CAR.VOLT: GMCarInfo("Chevrolet Volt 2017-18", min_enable_speed=0, video_link="https://youtu.be/QeMCN_4TFfQ"),
-  CAR.CADILLAC_ATS: GMCarInfo("Cadillac ATS Premium Performance 2018"),
-  CAR.MALIBU: GMCarInfo("Chevrolet Malibu Premier 2017"),
-  CAR.ACADIA: GMCarInfo("GMC Acadia 2018", video_link="https://www.youtube.com/watch?v=0ZN6DdsBUZo"),
-  CAR.BUICK_LACROSSE: GMCarInfo("Buick LaCrosse 2017-19", "Driver Confidence Package 2"),
-  CAR.BUICK_REGAL: GMCarInfo("Buick Regal Essence 2018"),
-  CAR.ESCALADE: GMCarInfo("Cadillac Escalade 2017", "Driver Assist Package"),
-  CAR.ESCALADE_ESV: GMCarInfo("Cadillac Escalade ESV 2016", "Adaptive Cruise Control (ACC) & LKAS"),
-  CAR.ESCALADE_ESV_2019: GMCarInfo("Cadillac Escalade ESV 2019", "Adaptive Cruise Control (ACC) & LKAS"),
-  CAR.BOLT_EUV: [
-    GMCarInfo("Chevrolet Bolt EUV 2022-23", "Premier or Premier Redline Trim without Super Cruise Package", video_link="https://youtu.be/xvwzGMUA210"),
-    GMCarInfo("Chevrolet Bolt EV 2022-23", "2LT Trim with Adaptive Cruise Control Package"),
-  ],
-  CAR.SILVERADO: [
-    GMCarInfo("Chevrolet Silverado 1500 2020-21", "Safety Package II"),
-    GMCarInfo("GMC Sierra 1500 2020-21", "Driver Alert Package II", video_link="https://youtu.be/5HbNoBLzRwE"),
-  ],
-  CAR.EQUINOX: GMCarInfo("Chevrolet Equinox 2019-22"),
-  CAR.TRAILBLAZER: GMCarInfo("Chevrolet Trailblazer 2021-22"),
+@dataclass
+class GMPlatformConfig(PlatformConfig):
+  dbc_dict: DbcDict = field(default_factory=lambda: dbc_dict('gm_global_a_powertrain_generated', 'gm_global_a_object', chassis_dbc='gm_global_a_chassis'))
 
-  CAR.VOLT_CC: GMCarInfo("Chevrolet Volt No ACC"),
-  CAR.BOLT_CC: GMCarInfo("Chevrolet Bolt No ACC"),
-  CAR.EQUINOX_CC: GMCarInfo("Chevrolet Equinox No ACC"),
-  CAR.SUBURBAN: GMCarInfo("Chevrolet Suburban Premier 2016-2020"),
-  CAR.SUBURBAN_CC: GMCarInfo("Chevrolet Suburban No ACC"),
-  CAR.YUKON_CC: GMCarInfo("GMC Yukon No ACC"),
-  CAR.CT6_CC: GMCarInfo("Cadillac CT6 No ACC"),
-  CAR.TRAILBLAZER_CC: GMCarInfo("Chevrolet Trailblazer 2024 No ACC"),
-  CAR.XT4: GMCarInfo("Cadillac XT4 2023", "Driver Assist Package"),
-}
+
+class CAR(Platforms):
+  HOLDEN_ASTRA = GMPlatformConfig(
+    "HOLDEN ASTRA RS-V BK 2017",
+    GMCarInfo("Holden Astra 2017"),
+    CarSpecs(mass=1363, wheelbase=2.662, steerRatio=15.7, centerToFrontRatio=0.4),
+  )
+  VOLT = GMPlatformConfig(
+    "CHEVROLET VOLT PREMIER 2017",
+    GMCarInfo("Chevrolet Volt 2017-18", min_enable_speed=0, video_link="https://youtu.be/QeMCN_4TFfQ"),
+    CarSpecs(mass=1607, wheelbase=2.69, steerRatio=17.7, centerToFrontRatio=0.45),
+    dbc_dict=dbc_dict('gm_global_a_powertrain_volt', 'gm_global_a_object', chassis_dbc='gm_global_a_chassis')
+  )
+  CADILLAC_ATS = GMPlatformConfig(
+    "CADILLAC ATS Premium Performance 2018",
+    GMCarInfo("Cadillac ATS Premium Performance 2018"),
+    CarSpecs(mass=1601, wheelbase=2.78, steerRatio=15.3),
+  )
+  MALIBU = GMPlatformConfig(
+    "CHEVROLET MALIBU PREMIER 2017",
+    GMCarInfo("Chevrolet Malibu Premier 2017"),
+    CarSpecs(mass=1496, wheelbase=2.83, steerRatio=15.8, centerToFrontRatio=0.4),
+  )
+  ACADIA = GMPlatformConfig(
+    "GMC ACADIA DENALI 2018",
+    GMCarInfo("GMC Acadia 2018", video_link="https://www.youtube.com/watch?v=0ZN6DdsBUZo"),
+    CarSpecs(mass=1975, wheelbase=2.86, steerRatio=14.4, centerToFrontRatio=0.4),
+  )
+  BUICK_LACROSSE = GMPlatformConfig(
+    "BUICK LACROSSE 2017",
+    GMCarInfo("Buick LaCrosse 2017-19", "Driver Confidence Package 2"),
+    CarSpecs(mass=1712, wheelbase=2.91, steerRatio=15.8, centerToFrontRatio=0.4),
+  )
+  BUICK_REGAL = GMPlatformConfig(
+    "BUICK REGAL ESSENCE 2018",
+    GMCarInfo("Buick Regal Essence 2018"),
+    CarSpecs(mass=1714, wheelbase=2.83, steerRatio=14.4, centerToFrontRatio=0.4),
+  )
+  ESCALADE = GMPlatformConfig(
+    "CADILLAC ESCALADE 2017",
+    GMCarInfo("Cadillac Escalade 2017", "Driver Assist Package"),
+    CarSpecs(mass=2564, wheelbase=2.95, steerRatio=17.3),
+  )
+  ESCALADE_ESV = GMPlatformConfig(
+    "CADILLAC ESCALADE ESV 2016",
+    GMCarInfo("Cadillac Escalade ESV 2016", "Adaptive Cruise Control (ACC) & LKAS"),
+    CarSpecs(mass=2739, wheelbase=3.302, steerRatio=17.3),
+  )
+  ESCALADE_ESV_2019 = GMPlatformConfig(
+    "CADILLAC ESCALADE ESV 2019",
+    GMCarInfo("Cadillac Escalade ESV 2019", "Adaptive Cruise Control (ACC) & LKAS"),
+    ESCALADE_ESV.specs,
+  )
+  BOLT_EUV = GMPlatformConfig(
+    "CHEVROLET BOLT EUV 2022",
+    [
+      GMCarInfo("Chevrolet Bolt EUV 2022-23", "Premier or Premier Redline Trim without Super Cruise Package", video_link="https://youtu.be/xvwzGMUA210"),
+      GMCarInfo("Chevrolet Bolt EV 2022-23", "2LT Trim with Adaptive Cruise Control Package"),
+    ],
+    CarSpecs(mass=1669, wheelbase=2.63779, steerRatio=16.8, centerToFrontRatio=0.4),
+  )
+  SILVERADO = GMPlatformConfig(
+    "CHEVROLET SILVERADO 1500 2020",
+    [
+      GMCarInfo("Chevrolet Silverado 1500 2020-21", "Safety Package II"),
+      GMCarInfo("GMC Sierra 1500 2020-21", "Driver Alert Package II", video_link="https://youtu.be/5HbNoBLzRwE"),
+    ],
+    CarSpecs(mass=2450, wheelbase=3.75, steerRatio=16.3),
+  )
+  EQUINOX = GMPlatformConfig(
+    "CHEVROLET EQUINOX 2019",
+    GMCarInfo("Chevrolet Equinox 2019-22"),
+    CarSpecs(mass=1588, wheelbase=2.72, steerRatio=14.4, centerToFrontRatio=0.4),
+  )
+  TRAILBLAZER = GMPlatformConfig(
+    "CHEVROLET TRAILBLAZER 2021",
+    GMCarInfo("Chevrolet Trailblazer 2021-22"),
+    CarSpecs(mass=1345, wheelbase=2.64, steerRatio=16.8, centerToFrontRatio=0.4),
+  )
+  # Separate car def is required when there is no ASCM
+  # (for now) unless there is a way to detect it when it has been unplugged...
+  VOLT_CC = GMPlatformConfig(
+    "CHEVROLET VOLT NO ACC",
+    VOLT.car_info,
+    VOLT.specs,
+  )
+  BOLT_CC = GMPlatformConfig(
+    "CHEVROLET BOLT EV NO ACC",
+    BOLT_EUV.car_info,
+    BOLT_EUV.specs,
+  )
+  EQUINOX_CC = GMPlatformConfig(
+    "CHEVROLET EQUINOX NO ACC",
+    EQUINOX.car_info,
+    EQUINOX.specs,
+  )
+  SUBURBAN = GMPlatformConfig(
+    "CHEVROLET SUBURBAN PREMIER 2016",
+    GMCarInfo("Chevrolet Suburban Premier 2016-2020"),
+    CarSpecs(mass=2731, wheelbase=3.302, steerRatio=17.3, centerToFrontRatio=0.49),
+  )
+  SUBURBAN_CC = GMPlatformConfig(
+    "CHEVROLET SUBURBAN NO ACC",
+    SUBURBAN.car_info,
+    SUBURBAN.specs,
+  )
+  YUKON_CC = GMPlatformConfig(
+    "GMC YUKON NO ACC",
+    GMCarInfo("GMC Yukon No ACC"),
+    CarSpecs(mass=2541, wheelbase=2.95, steerRatio=16.3, centerToFrontRatio=0.4),
+  )
+  CT6_CC = GMPlatformConfig(
+    "CADILLAC CT6 NO ACC",
+    GMCarInfo("Cadillac CT6 No ACC"),
+    CarSpecs(mass=2358, wheelbase=3.11, steerRatio=17.7, centerToFrontRatio=0.4),
+  )
+  TRAILBLAZER_CC = GMPlatformConfig(
+    "CHEVROLET TRAILBLAZER NO ACC",
+    TRAILBLAZER.car_info,
+    TRAILBLAZER.specs,
+  )
+  XT4 = GMPlatformConfig(
+    "CADILLAC XT4 2023",
+    GMCarInfo("Cadillac XT4 2023", "Driver Assist Package"),
+    CarSpecs(mass=1660, wheelbase=2.78, steerRatio=14.4, centerToFrontRatio=0.4),
+  )
 
 
 class CruiseButtons:
@@ -196,17 +266,57 @@ class GMFlags(IntFlag):
   NO_ACCELERATOR_POS_MSG = 8
 
 
+# In a Data Module, an identifier is a string used to recognize an object,
+# either by itself or together with the identifiers of parent objects.
+# Each returns a 4 byte hex representation of the decimal part number. `b"\x02\x8c\xf0'"` -> 42790951
+GM_BOOT_SOFTWARE_PART_NUMER_REQUEST = b'\x1a\xc0'  # likely does not contain anything useful
+GM_SOFTWARE_MODULE_1_REQUEST = b'\x1a\xc1'
+GM_SOFTWARE_MODULE_2_REQUEST = b'\x1a\xc2'
+GM_SOFTWARE_MODULE_3_REQUEST = b'\x1a\xc3'
+
+# Part number of XML data file that is used to configure ECU
+GM_XML_DATA_FILE_PART_NUMBER = b'\x1a\x9c'
+GM_XML_CONFIG_COMPAT_ID = b'\x1a\x9b'  # used to know if XML file is compatible with the ECU software/hardware
+
+# This DID is for identifying the part number that reflects the mix of hardware,
+# software, and calibrations in the ECU when it first arrives at the vehicle assembly plant.
+# If there's an Alpha Code, it's associated with this part number and stored in the DID $DB.
+GM_END_MODEL_PART_NUMBER_REQUEST = b'\x1a\xcb'
+GM_END_MODEL_PART_NUMBER_ALPHA_CODE_REQUEST = b'\x1a\xdb'
+GM_BASE_MODEL_PART_NUMBER_REQUEST = b'\x1a\xcc'
+GM_BASE_MODEL_PART_NUMBER_ALPHA_CODE_REQUEST = b'\x1a\xdc'
+GM_FW_RESPONSE = b'\x5a'
+
+GM_FW_REQUESTS = [
+  GM_BOOT_SOFTWARE_PART_NUMER_REQUEST,
+  GM_SOFTWARE_MODULE_1_REQUEST,
+  GM_SOFTWARE_MODULE_2_REQUEST,
+  GM_SOFTWARE_MODULE_3_REQUEST,
+  GM_XML_DATA_FILE_PART_NUMBER,
+  GM_XML_CONFIG_COMPAT_ID,
+  GM_END_MODEL_PART_NUMBER_REQUEST,
+  GM_END_MODEL_PART_NUMBER_ALPHA_CODE_REQUEST,
+  GM_BASE_MODEL_PART_NUMBER_REQUEST,
+  GM_BASE_MODEL_PART_NUMBER_ALPHA_CODE_REQUEST,
+]
+
 GM_RX_OFFSET = 0x400
 
-DBC: Dict[str, Dict[str, str]] = defaultdict(lambda: dbc_dict('gm_global_a_powertrain_generated', 'gm_global_a_object', chassis_dbc='gm_global_a_chassis'))
-DBC[CAR.VOLT] = dbc_dict('gm_global_a_powertrain_volt', 'gm_global_a_object', chassis_dbc='gm_global_a_chassis')
-DBC[CAR.VOLT_CC] = DBC[CAR.VOLT]
+FW_QUERY_CONFIG = FwQueryConfig(
+  requests=[request for req in GM_FW_REQUESTS for request in [
+    Request(
+      [StdQueries.SHORT_TESTER_PRESENT_REQUEST, req],
+      [StdQueries.SHORT_TESTER_PRESENT_RESPONSE, GM_FW_RESPONSE + bytes([req[-1]])],
+      rx_offset=GM_RX_OFFSET,
+      bus=0,
+      logging=True,
+    ),
+  ]],
+  extra_ecus=[(Ecu.fwdCamera, 0x24b, None)],
+)
 
 EV_CAR = {CAR.VOLT, CAR.BOLT_EUV, CAR.VOLT_CC, CAR.BOLT_CC}
 CC_ONLY_CAR = {CAR.VOLT_CC, CAR.BOLT_CC, CAR.EQUINOX_CC, CAR.SUBURBAN_CC, CAR.YUKON_CC, CAR.CT6_CC, CAR.TRAILBLAZER_CC}
-
-# Slow acceleration cars
-SLOW_ACC = {CAR.SILVERADO}
 
 # We're integrated at the Safety Data Gateway Module on these cars
 SDGM_CAR = {CAR.XT4}
@@ -217,12 +327,14 @@ CAMERA_ACC_CAR.update({CAR.VOLT_CC, CAR.BOLT_CC, CAR.EQUINOX_CC, CAR.YUKON_CC, C
 
 STEER_THRESHOLD = 1.0
 
-
-def main():
-  for member, value in vars(CAR).items():
-    if not member.startswith("_"):
-      print(value)
+CAR_INFO = CAR.create_carinfo_map()
+DBC = CAR.create_dbc_map()
 
 
 if __name__ == "__main__":
-  main()
+  cars = []
+  for _, member in CAR.__members__.items():
+    cars.append(member.value)
+  cars.sort()
+  for c in cars:
+    print(c)
