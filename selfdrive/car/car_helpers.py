@@ -209,11 +209,11 @@ def get_car(logcan, sendcan, experimental_long_allowed, num_pandas=1):
       from openpilot.selfdrive.car.hyundai.values import CAR as HYUNDAI
       from openpilot.selfdrive.car.gm.values import CAR as GM
       from openpilot.selfdrive.car.toyota.values import CAR as TOYOTA
-      for car in HYUNDAI:
+      for car in GM:
         print(car.config.platform_str)
         if car.config.platform_str == name:
           return car
-      for car in GM:
+      for car in HYUNDAI:
         print(car.config.platform_str)
         if car.config.platform_str == name:
           return car
