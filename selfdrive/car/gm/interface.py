@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
+import os
 from cereal import car
 from math import fabs, exp
 from panda import Panda
 
+from openpilot.common.basedir import BASEDIR
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.params import Params
 from openpilot.selfdrive.car import create_button_events, get_safety_config
 from openpilot.selfdrive.car.gm.radar_interface import RADAR_HEADER_MSG
 from openpilot.selfdrive.car.gm.values import CAR, CruiseButtons, CarControllerParams, EV_CAR, CAMERA_ACC_CAR, CanBus, GMFlags, CC_ONLY_CAR, SDGM_CAR, SLOW_ACC
-from openpilot.selfdrive.car.interfaces import CarInterfaceBase, TorqueFromLateralAccelCallbackType, FRICTION_THRESHOLD
+from openpilot.selfdrive.car.interfaces import CarInterfaceBase, TorqueFromLateralAccelCallbackType, FRICTION_THRESHOLD, LatControlInputs, NanoFFModel
 from openpilot.selfdrive.controls.lib.drive_helpers import get_friction
 
 ButtonType = car.CarState.ButtonEvent.Type
@@ -33,6 +35,8 @@ NON_LINEAR_TORQUE_PARAMS = {
   CAR.SILVERADO: [3.29974374, 1.0, 0.25571356, 0.0465122]
 }
 
+NEURAL_PARAMS_PATH = os.path.join(BASEDIR, 'selfdrive/car/torque_data/neural_ff_weights.json')
+
 
 class CarInterface(CarInterfaceBase):
   @staticmethod
@@ -52,8 +56,8 @@ class CarInterface(CarInterfaceBase):
     else:
       return CarInterfaceBase.get_steer_feedforward_default
 
-  def torque_from_lateral_accel_siglin(self, lateral_accel_value: float, torque_params: car.CarParams.LateralTorqueTuning,
-                                       lateral_accel_error: float, lateral_accel_deadzone: float, friction_compensation: bool) -> float:
+  def torque_from_lateral_accel_siglin(self, latcontrol_inputs: LatControlInputs, torque_params: car.CarParams.LateralTorqueTuning, lateral_accel_error: float,
+                                       lateral_accel_deadzone: float, friction_compensation: bool, gravity_adjusted: bool) -> float:
     friction = get_friction(lateral_accel_error, lateral_accel_deadzone, FRICTION_THRESHOLD, torque_params, friction_compensation)
 
     def sig(val):
@@ -66,11 +70,22 @@ class CarInterface(CarInterfaceBase):
     non_linear_torque_params = NON_LINEAR_TORQUE_PARAMS.get(self.CP.carFingerprint)
     assert non_linear_torque_params, "The params are not defined"
     a, b, c, _ = non_linear_torque_params
-    steer_torque = (sig(lateral_accel_value * a) * b) + (lateral_accel_value * c)
+    steer_torque = (sig(latcontrol_inputs.lateral_acceleration * a) * b) + (latcontrol_inputs.lateral_acceleration * c)
     return float(steer_torque) + friction
 
+  def torque_from_lateral_accel_neural(self, latcontrol_inputs: LatControlInputs, torque_params: car.CarParams.LateralTorqueTuning, lateral_accel_error: float,
+                                       lateral_accel_deadzone: float, friction_compensation: bool, gravity_adjusted: bool) -> float:
+    friction = get_friction(lateral_accel_error, lateral_accel_deadzone, FRICTION_THRESHOLD, torque_params, friction_compensation)
+    inputs = list(latcontrol_inputs)
+    if gravity_adjusted:
+      inputs[0] += inputs[1]
+    return float(self.neural_ff_model.predict(inputs)) + friction
+
   def torque_from_lateral_accel(self) -> TorqueFromLateralAccelCallbackType:
-    if self.CP.carFingerprint in NON_LINEAR_TORQUE_PARAMS:
+    if self.CP.carFingerprint in (CAR.BOLT_EUV, CAR.BOLT_CC):
+      self.neural_ff_model = NanoFFModel(NEURAL_PARAMS_PATH, self.CP.carFingerprint)
+      return self.torque_from_lateral_accel_neural
+    elif self.CP.carFingerprint in NON_LINEAR_TORQUE_PARAMS:
       return self.torque_from_lateral_accel_siglin
     else:
       return self.torque_from_lateral_accel_linear
@@ -160,13 +175,8 @@ class CarInterface(CarInterfaceBase):
 
     if candidate in (CAR.VOLT, CAR.VOLT_CC):
       ret.minEnableSpeed = -1
-      ret.mass = 1607.
-      ret.wheelbase = 2.69
-      ret.steerRatio = 17.7  # Stock 15.7, LiveParameters
       ret.tireStiffnessFactor = 0.469  # Stock Michelin Energy Saver A/S, LiveParameters
-      ret.centerToFront = ret.wheelbase * 0.45  # Volt Gen 1, TODO corner weigh
 
-      ret.steerActuatorDelay = 0.18 if useEVTables else 0.2
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
       ret.longitudinalTuning.kpBP = [0.]
@@ -177,7 +187,7 @@ class CarInterface(CarInterfaceBase):
       ret.stopAccel = -0.5
       ret.startAccel = 0.8
       ret.vEgoStopping = 0.1
-      ret.enableBsm = BSM_MSG in fingerprint[0]
+      ret.enableBsm = BSM_MSG in fingerprint[CanBus.POWERTRAIN]
 
       # softer long tune for ev table
       if useEVTables: 
@@ -190,61 +200,20 @@ class CarInterface(CarInterfaceBase):
         ret.startAccel = 0.8
         ret.vEgoStopping = 0.1
 
-    elif candidate == CAR.MALIBU:
-      ret.mass = 1496.
-      ret.wheelbase = 2.83
-      ret.steerRatio = 15.8
-      ret.centerToFront = ret.wheelbase * 0.4  # wild guess
-
-    elif candidate == CAR.HOLDEN_ASTRA:
-      ret.mass = 1363.
-      ret.wheelbase = 2.662
-      # Remaining parameters copied from Volt for now
-      ret.centerToFront = ret.wheelbase * 0.4
-      ret.steerRatio = 15.7
-
     elif candidate == CAR.ACADIA:
       ret.minEnableSpeed = -1.  # engage speed is decided by pcm
-      ret.mass = 4353. * CV.LB_TO_KG
-      ret.wheelbase = 2.86
-      ret.steerRatio = 14.4  # end to end is 13.46
-      ret.centerToFront = ret.wheelbase * 0.4
       ret.steerActuatorDelay = 0.2
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.BUICK_LACROSSE:
-      ret.mass = 1712.
-      ret.wheelbase = 2.91
-      ret.steerRatio = 15.8
-      ret.centerToFront = ret.wheelbase * 0.4  # wild guess
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
-
-    elif candidate == CAR.BUICK_REGAL:
-      ret.mass = 3779. * CV.LB_TO_KG  # (3849+3708)/2
-      ret.wheelbase = 2.83  # 111.4 inches in meters
-      ret.steerRatio = 14.4  # guess for tourx
-      ret.centerToFront = ret.wheelbase * 0.4  # guess for tourx
-
-    elif candidate == CAR.CADILLAC_ATS:
-      ret.mass = 1601.
-      ret.wheelbase = 2.78
-      ret.steerRatio = 15.3
-      ret.centerToFront = ret.wheelbase * 0.5
 
     elif candidate == CAR.ESCALADE:
       ret.minEnableSpeed = -1.  # engage speed is decided by pcm
-      ret.mass = 5653. * CV.LB_TO_KG  # (5552+5815)/2
-      ret.wheelbase = 2.95  # 116 inches in meters
-      ret.steerRatio = 17.3
-      ret.centerToFront = ret.wheelbase * 0.5
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate in (CAR.ESCALADE_ESV, CAR.ESCALADE_ESV_2019):
       ret.minEnableSpeed = -1.  # engage speed is decided by pcm
-      ret.mass = 2739.
-      ret.wheelbase = 3.302
-      ret.steerRatio = 17.3
-      ret.centerToFront = ret.wheelbase * 0.5
       ret.tireStiffnessFactor = 1.0
 
       if candidate == CAR.ESCALADE_ESV:
@@ -256,10 +225,6 @@ class CarInterface(CarInterfaceBase):
         CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate in (CAR.BOLT_EUV, CAR.BOLT_CC):
-      ret.mass = 1669.
-      ret.wheelbase = 2.63779
-      ret.steerRatio = 16.8
-      ret.centerToFront = ret.wheelbase * 0.4
       ret.tireStiffnessFactor = 1.0
       ret.steerActuatorDelay = 0.2
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
@@ -269,13 +234,7 @@ class CarInterface(CarInterfaceBase):
         ret.flags |= GMFlags.PEDAL_LONG.value
 
     elif candidate == CAR.SILVERADO:
-      ret.mass = 2450.
-      ret.wheelbase = 3.75
-      ret.steerRatio = 16.3
-      ret.centerToFront = ret.wheelbase * 0.5
       ret.tireStiffnessFactor = 1.0
-      if useGasRegenCmd:
-        ret.stopAccel = -0.25
       # On the Bolt, the ECM and camera independently check that you are either above 5 kph or at a stop
       # with foot on brake to allow engagement, but this platform only has that check in the camera.
       # TODO: check if this is split by EV/ICE with more platforms in the future
@@ -284,52 +243,25 @@ class CarInterface(CarInterfaceBase):
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate in (CAR.EQUINOX, CAR.EQUINOX_CC):
-      ret.mass = 3500. * CV.LB_TO_KG
-      ret.wheelbase = 2.72
-      ret.steerRatio = 14.4
-      ret.centerToFront = ret.wheelbase * 0.4
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate in (CAR.TRAILBLAZER, CAR.TRAILBLAZER_CC):
-      ret.mass = 1345.
-      ret.wheelbase = 2.64
-      ret.steerRatio = 16.8
-      ret.centerToFront = ret.wheelbase * 0.4
-      ret.tireStiffnessFactor = 1.0
       ret.steerActuatorDelay = 0.2
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate in (CAR.SUBURBAN, CAR.SUBURBAN_CC):
-      ret.mass = 2731.
-      ret.wheelbase = 3.302
-      ret.steerRatio = 17.3 # COPIED FROM SILVERADO
-      ret.centerToFront = ret.wheelbase * 0.49
       ret.steerActuatorDelay = 0.075
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.YUKON_CC:
-      ret.minSteerSpeed = -1 * CV.MPH_TO_MS
-      ret.mass = 5602. * CV.LB_TO_KG  # (3849+3708)/2
-      ret.wheelbase = 2.95  # 116 inches in meters
-      ret.steerRatio = 16.3  # guess for tourx
-      ret.steerRatioRear = 0.  # unknown online
-      ret.centerToFront = 2.59  # ret.wheelbase * 0.4 # wild guess
       ret.steerActuatorDelay = 0.2
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.XT4:
-      ret.mass = 3660. * CV.LB_TO_KG
-      ret.wheelbase = 2.78
-      ret.steerRatio = 14.4
-      ret.centerToFront = ret.wheelbase * 0.4
       ret.steerActuatorDelay = 0.2
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.CT6_CC:
-      ret.wheelbase = 3.11
-      ret.mass = 5198. * CV.LB_TO_KG
-      ret.centerToFront = ret.wheelbase * 0.4
-      ret.steerRatio = 17.7
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     if ret.enableGasInterceptor:
@@ -423,21 +355,10 @@ class CarInterface(CarInterfaceBase):
     if below_min_enable_speed and not (ret.standstill and ret.brake >= 20 and
                                        (self.CP.networkLocation == NetworkLocation.fwdCamera and not self.CP.carFingerprint in SDGM_CAR)):
       events.add(EventName.belowEngageSpeed)
-    if ret.cruiseState.standstill and not self.CP.autoResumeSng and not self.CS.disable_resumeRequired:
+    if ret.cruiseState.standstill and not self.CP.autoResumeSng:
       events.add(EventName.resumeRequired)
-      self.CS.resumeRequired_shown = True # kans
-
-    # Disable the "resumeRequired" event after it's been shown once to not annoy the driver
-    if self.CS.resumeRequired_shown and not ret.cruiseState.standstill:
-      self.CS.disable_resumeRequired = True # kans
-
-    if ret.vEgo < self.CP.minSteerSpeed and not self.CS.disable_belowSteerSpeed:
+    if ret.vEgo < self.CP.minSteerSpeed:
       events.add(EventName.belowSteerSpeed)
-      self.CS.belowSteerSpeed_shown = True # kans
-
-    # Disable the "belowSteerSpeed" event after it's been shown once to not annoy the driver
-    if self.CS.belowSteerSpeed_shown and ret.vEgo > self.CP.minSteerSpeed:
-      self.CS.disable_belowSteerSpeed = True # kans
 
     if (self.CP.flags & GMFlags.CC_LONG.value) and ret.vEgo < self.CP.minEnableSpeed and ret.cruiseState.enabled:
       events.add(EventName.speedTooLow)
