@@ -318,6 +318,9 @@ FW_QUERY_CONFIG = FwQueryConfig(
 EV_CAR = {CAR.VOLT, CAR.BOLT_EUV, CAR.VOLT_CC, CAR.BOLT_CC}
 CC_ONLY_CAR = {CAR.VOLT_CC, CAR.BOLT_CC, CAR.EQUINOX_CC, CAR.SUBURBAN_CC, CAR.YUKON_CC, CAR.CT6_CC, CAR.TRAILBLAZER_CC}
 
+# Slow acceleration cars
+SLOW_ACC = {CAR.SILVERADO}
+
 # We're integrated at the Safety Data Gateway Module on these cars
 SDGM_CAR = {CAR.XT4}
 
