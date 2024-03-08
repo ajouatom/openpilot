@@ -213,7 +213,7 @@ def get_car(logcan, sendcan, experimental_long_allowed, num_pandas=1):
         if car.config.platform_str == name:
           return car
       return None
-    found_car = find_car_from_hyundai(selected_car.decode("utf-8"))
+    found_car = find_car(selected_car.decode("utf-8"))
     if found_car is not None:
       candidate = found_car
 
