@@ -4,7 +4,7 @@ import numpy as np
 import tomllib
 from abc import abstractmethod, ABC
 from enum import StrEnum
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Union
 from collections.abc import Callable
 
 from cereal import car, log
@@ -141,7 +141,7 @@ class FluxModel:
     y = self.evaluate([10.0, 0.0, 0.2])
     self.friction_override = (y < 0.1)
 
-def get_nn_model_path(car, eps_firmware) -> Tuple[Union[str, None, float]]:
+def get_nn_model_path(car, eps_firmware) -> tuple[Union[str, None, float]]:
   def check_nn_path(check_model):
     model_path = None
     max_similarity = -1.0
@@ -167,7 +167,7 @@ def get_nn_model_path(car, eps_firmware) -> Tuple[Union[str, None, float]]:
       model_path = None
   return model_path, max_similarity
 
-def get_nn_model(car, eps_firmware) -> Tuple[Union[FluxModel, None, float]]:
+def get_nn_model(car, eps_firmware) -> tuple[Union[FluxModel, None, float]]:
   model, similarity_score = get_nn_model_path(car, eps_firmware)
   if model is not None:
     model = FluxModel(model)
