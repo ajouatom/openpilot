@@ -203,7 +203,7 @@ def get_car(logcan, sendcan, experimental_long_allowed, num_pandas=1):
     cloudlog.event("car doesn't match any fingerprints", fingerprints=repr(fingerprints), error=True)
     candidate = "mock"
 
-  selected_car = Params().get("SelectedCar")
+  selected_car = Params().get("CarSelected")
   if selected_car:
     def find_car_from_hyundai(name: str):
       from openpilot.selfdrive.car.hyundai.values import CAR as HYUNDAI
