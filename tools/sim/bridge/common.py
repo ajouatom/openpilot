@@ -56,14 +56,14 @@ class SimulatorBridge(ABC):
     try:
       self._run(q)
     finally:
-      self.close()
+      self.close("bridge terminated")
 
-  def close(self):
+  def close(self, reason):
     self.started.value = False
     self._exit_event.set()
 
     if self.world is not None:
-      self.world.close()
+      self.world.close(reason)
 
   def run(self, queue, retries=-1):
     bridge_p = Process(name="bridge", target=self.bridge_keep_alive, args=(queue, retries))
@@ -176,8 +176,8 @@ Ignition: {self.simulator_state.ignition} Engaged: {self.simulator_state.is_enga
       self.world.read_state()
       self.world.read_sensors(self.simulator_state)
 
-      #if self.world.exit_event.is_set():
-      #  self.shutdown()
+      if self.world.exit_event.is_set():
+        self.shutdown()
 
       if self.rk.frame % self.TICKS_PER_FRAME == 0:
         self.world.tick()

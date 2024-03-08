@@ -65,8 +65,8 @@ class LongitudinalPlanner:
     self.solverExecutionTime = 0.0
     self.params = Params()
     self.param_read_counter = 0
-    self.read_param()
     self.personality = log.LongitudinalPersonality.standard
+    self.read_param()
 
   #ajouatom
     self.cruiseMaxVals1 = 1.6

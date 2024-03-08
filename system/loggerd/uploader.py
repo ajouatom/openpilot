@@ -9,7 +9,8 @@ import threading
 import time
 import traceback
 import datetime
-from typing import BinaryIO, Iterator, List, Iterator
+from typing import BinaryIO
+from collections.abc import Iterator
 
 from cereal import log
 import cereal.messaging as messaging
@@ -43,7 +44,9 @@ class FakeResponse:
 
 
 def get_directory_sort(d: str) -> list[str]:
-  return [s.rjust(10, '0') for s in d.rsplit('--', 1)]
+  # ensure old format is sorted sooner
+  o = ["0", ] if d.startswith("2024-") else ["1", ]
+  return o + [s.rjust(10, '0') for s in d.rsplit('--', 1)]
 
 def listfiledir_by_creation(d: str) -> list[str]:
   try:
