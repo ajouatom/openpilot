@@ -205,8 +205,19 @@ def get_car(logcan, sendcan, experimental_long_allowed, num_pandas=1):
 
   selected_car = Params().get("CarSelected")
   if selected_car:
-    print ("CarSelected = ", selected_car)
-    candidate = selected_car.decode("utf-8")
+    def find_car(name: str):
+      from openpilot.selfdrive.car.hyundai.values import CAR as HYUNDAI
+      from openpilot.selfdrive.car.gm.values import CAR as GM
+      from openpilot.selfdrive.car.toyota.values import CAR as TOYOTA
+      for car in [HYUNDAI, GM, TOYOTA]:
+        if car.config.platform_str == name:
+          return car
+      return None
+    found_car = find_car_from_hyundai(selected_car.decode("utf-8"))
+    if found_car is not None:
+      candidate = found_car
+
+  print('candidate !!!!!!!!!', candidate)
 
   CarInterface, CarController, CarState = interfaces[candidate]
   CP = CarInterface.get_params(candidate, fingerprints, car_fw, experimental_long_allowed, docs=False)
