@@ -34,7 +34,6 @@ class CarControllerParams:
       self.STEER_DELTA_DOWN = 3
 
       if CP.carFingerprint in (CAR.KIA_CARNIVAL_4TH_GEN):
-        print("$$$$$$$$$$$  KIA_CARNIVAL_4TH_GEN")
         self.STEER_MAX = 384
         self.STEER_DELTA_UP = 3
         self.STEER_DELTA_DOWN = 7
@@ -55,7 +54,6 @@ class CarControllerParams:
     elif CP.carFingerprint in (CAR.KIA_STINGER, CAR.KONA_HEV):
       self.STEER_MAX = 384
     elif CP.carFingerprint in (CAR.SANTA_FE_HEV_2022):
-      print("$$$$$$$$$$$  SANTAFE HEV_2022")
       self.STEER_MAX = 409
       self.STEER_DELTA_UP = 3
       self.STEER_DELTA_DOWN = 7
@@ -144,7 +142,6 @@ class CAR(StrEnum):
   SONATA_LF = "HYUNDAI SONATA 2019"
   STARIA_4TH_GEN = "HYUNDAI STARIA 4TH GEN"
   TUCSON = "HYUNDAI TUCSON 2019"
-  TUCSON_TL_SCC  = "HYUNDAI TUCSON TL SCC 2017"
   PALISADE = "HYUNDAI PALISADE 2020"
   VELOSTER = "HYUNDAI VELOSTER 2019"
   SONATA_HYBRID = "HYUNDAI SONATA HYBRID 2021"
@@ -1085,8 +1082,7 @@ CAN_GEARS = {
   # which message has the gear. hybrid and EV use ELECT_GEAR
   "use_cluster_gears": {CAR.ELANTRA, CAR.ELANTRA_GT_I30, CAR.KONA,
                         CAR.GRANDEUR_IG, CAR.GRANDEUR_IG_FL, CAR.K7},
-  "use_tcu_gears": {CAR.KIA_OPTIMA_G4, CAR.KIA_OPTIMA_G4_FL, CAR.SONATA_LF, CAR.VELOSTER, CAR.TUCSON,
-                    CAR.TUCSON_TL_SCC},
+  "use_tcu_gears": {CAR.KIA_OPTIMA_G4, CAR.KIA_OPTIMA_G4_FL, CAR.SONATA_LF, CAR.VELOSTER, CAR.TUCSON},
 
 
  }
@@ -1171,7 +1167,6 @@ DBC = {
   CAR.SONATA: dbc_dict('hyundai_kia_generic', 'hyundai_kia_mando_front_radar_generated'),
   CAR.SONATA_LF: dbc_dict('hyundai_kia_generic', None), # Has 0x5XX messages, but different format
   CAR.TUCSON: dbc_dict('hyundai_kia_generic', None),
-  CAR.TUCSON_TL_SCC: dbc_dict('hyundai_kia_generic', None),
   CAR.PALISADE: dbc_dict('hyundai_kia_generic', 'hyundai_kia_mando_front_radar_generated'),
   CAR.VELOSTER: dbc_dict('hyundai_kia_generic', None),
   CAR.GRANDEUR_IG: dbc_dict('hyundai_kia_generic', None),

@@ -305,12 +305,6 @@ class CarInterface(CarInterfaceBase):
       ret.wheelbase = 2.95
       ret.steerRatio = 14.14
 
-    elif candidate == CAR.TUCSON_TL_SCC:
-      ret.mass = 1594. #1730
-      ret.wheelbase = 2.67
-      ret.tireStiffnessFactor = 0.7
-      ret.centerToFront = ret.wheelbase * 0.4
-      ret.steerRatio = 14.00
     elif candidate == CAR.KIA_SOUL_EV_SK3:
       ret.steerRatio = 13.7  # average of the platforms
       ret.mass = 1375.
