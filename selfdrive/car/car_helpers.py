@@ -213,11 +213,11 @@ def get_car(logcan, sendcan, experimental_long_allowed, num_pandas=1):
         print(car.config.platform_str)
         if car.config.platform_str == name:
           return car
-      for car in HYUNDAI:
+      for car in TOYOTA:
         print(car.config.platform_str)
         if car.config.platform_str == name:
           return car
-      for car in TOYOTA:
+      for car in HYUNDAI:
         print(car.config.platform_str)
         if car.config.platform_str == name:
           return car
