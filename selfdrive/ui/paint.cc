@@ -633,14 +633,15 @@ void DrawPlot::makePlotData(const UIState* s, float& data1, float& data2) {
     auto    live_parameters = sm["liveParameters"].getLiveParameters();
     float   roll = live_parameters.getRoll();
     auto    controls_state = sm["controlsState"].getControlsState();
-    float   curvature = controls_state.getCurvature();
+    auto    torque_state = controls_state.getLateralControlState().getTorqueState();
+    float   curvature = torque_state.getActualLateralAccel();
     //float   desired_curvature = controls_state.getDesiredCurvature();
     const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
     float   accel = lp.getAccels()[0];
     float   speeds_0 = lp.getSpeeds()[0];
     //const auto lat_plan = sm["lateralPlan"].getLateralPlan();
     //float   curvatures_0 = lat_plan.getCurvatures()[0];
-    float   curvatures_0 = controls_state.getDesiredCurvature();
+    float   curvatures_0 = torque_state.getDesiredLateralAccel();
 
     const cereal::ModelDataV2::Reader& model = sm["modelV2"].getModelV2();
     const auto position = model.getPosition();
@@ -656,9 +657,9 @@ void DrawPlot::makePlotData(const UIState* s, float& data1, float& data2) {
         break;
     case 2:
         // curvature * v * v : 원심가속도
-        data1 = (curvature * v_ego * v_ego) - (roll * 9.81);
+        data1 = curvature;
         //data2 = (desired_curvature * v_ego * v_ego) - (roll * 9.81);
-        data2 = (curvatures_0 * v_ego * v_ego) - (roll * 9.81);
+        data2 = curvatures_0;
         break;
     case 3:
         data1 = v_ego;
