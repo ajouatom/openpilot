@@ -9,7 +9,7 @@ import threading
 import time
 import traceback
 import datetime
-from typing import BinaryIO, Iterator, List, Optional, Tuple
+from typing import BinaryIO, Iterator, List, Iterator
 
 from cereal import log
 import cereal.messaging as messaging
@@ -42,10 +42,10 @@ class FakeResponse:
     self.request = FakeRequest()
 
 
-def get_directory_sort(d: str) -> List[str]:
+def get_directory_sort(d: str) -> list[str]:
   return [s.rjust(10, '0') for s in d.rsplit('--', 1)]
 
-def listfiledir_by_creation(d: str) -> List[str]:
+def listfiledir_by_creation(d: str) -> list[str]:
   try:
     paths = os.listdir(d)
     paths = sorted(paths, key=get_directory_sort)
@@ -54,7 +54,7 @@ def listfiledir_by_creation(d: str) -> List[str]:
     cloudlog.exception("listdir_by_creation failed")
     return list()
 
-def listdir_by_creation(d: str) -> List[str]:
+def listdir_by_creation(d: str) -> list[str]:
   if not os.path.isdir(d):
     return []
 
@@ -91,7 +91,7 @@ class Uploader:
     self.immediate_folders = ["crash/", "boot/"]
     self.immediate_priority = {"qlog": 0, "qlog.bz2": 0, "qcamera.ts": 1}
 
-  def list_upload_files(self, metered: bool) -> Iterator[Tuple[str, str, str]]:
+  def list_upload_files(self, metered: bool) -> Iterator[tuple[str, str, str]]:
     r = self.params.get("AthenadRecentlyViewedRoutes", encoding="utf8")
     requested_routes = [] if r is None else r.split(",")
 
@@ -130,7 +130,7 @@ class Uploader:
 
         yield name, key, fn
 
-  def next_file_to_upload(self, metered: bool) -> Optional[Tuple[str, str, str]]:
+  def next_file_to_upload(self, metered: bool) -> tuple[str, str, str] | None:
     upload_files = list(self.list_upload_files(metered))
 
     for name, key, fn in upload_files:
@@ -216,7 +216,7 @@ class Uploader:
     return success
 
 
-  def step(self, network_type: int, metered: bool) -> Optional[bool]:
+  def step(self, network_type: int, metered: bool) -> bool | None:
     d = self.next_file_to_upload(metered)
     if d is None:
       return None
@@ -230,7 +230,7 @@ class Uploader:
     return self.upload(name, key, fn, network_type, metered)
 
 
-def main(exit_event: Optional[threading.Event] = None) -> None:
+def main(exit_event: threading.Event = None) -> None:
   if exit_event is None:
     exit_event = threading.Event()
 

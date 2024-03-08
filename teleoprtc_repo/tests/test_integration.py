@@ -59,7 +59,7 @@ class TestStreamIntegration(unittest.IsolatedAsyncioTestCase):
     try:
       async with asyncio.timeout(2):
         await stream.wait_for_connection()
-    except asyncio.TimeoutError:
+    except TimeoutError:
       self.fail("Timed out waiting for connection")
     self.assertTrue(stream.is_connected_and_ready)
 
@@ -79,7 +79,7 @@ class TestStreamIntegration(unittest.IsolatedAsyncioTestCase):
       try:
         async with asyncio.timeout(1):
           await track.recv()
-      except asyncio.TimeoutError:
+      except TimeoutError:
         self.fail("Timed out waiting for audio frame")
 
     for cam in cameras:
@@ -93,7 +93,7 @@ class TestStreamIntegration(unittest.IsolatedAsyncioTestCase):
         try:
           async with asyncio.timeout(1):
             await stream.get_incoming_video_track(cam, False).recv()
-        except asyncio.TimeoutError:
+        except TimeoutError:
           self.fail("Timed out waiting for video frame")
 
     await stream.stop()

@@ -323,12 +323,6 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
-  // ADRV_0x160 (for FCA warning light), only allowed if openpilot longitudinal
-  if (addr == 0x160) {
-    if (!hyundai_longitudinal) {
-      tx = false;
-    }
-  }
 
   return tx;
 }
@@ -348,8 +342,8 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
     // HUD icons
     bool is_lfahda_msg = ((addr == 0x1e0) && !hyundai_canfd_hda2);
 
-    // CRUISE_INFO and ADRV_0x160 for non-HDA2, we send our own longitudinal commands and to show FCA light
-    bool is_scc_msg = (((addr == 0x1a0) || (addr == 0x160)) && hyundai_longitudinal && !hyundai_canfd_hda2);
+    // CRUISE_INFO for non-HDA2, we send our own longitudinal commands
+    bool is_scc_msg = ((addr == 0x1a0) && hyundai_longitudinal && !hyundai_canfd_hda2);
 
     bool block_msg = is_lkas_msg || is_lfa_msg || is_lfahda_msg || is_scc_msg;
     if (!block_msg) {
