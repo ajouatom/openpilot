@@ -1,13 +1,13 @@
-from collections import defaultdict
-from dataclasses import dataclass
-from enum import Enum, IntFlag, StrEnum
-from typing import Dict, List, Union
+from dataclasses import dataclass, field
+from enum import Enum, IntFlag
 
 from cereal import car
 from openpilot.common.numpy_fast import interp
+from openpilot.selfdrive.car import dbc_dict, PlatformConfig, DbcDict, Platforms, CarSpecs
 from openpilot.common.params import Params
-from openpilot.selfdrive.car import dbc_dict
 from openpilot.selfdrive.car.docs_definitions import CarFootnote, CarHarness, CarInfo, CarParts, Column
+from openpilot.selfdrive.car.fw_query_definitions import FwQueryConfig, Request, StdQueries
+
 Ecu = car.CarParams.Ecu
 
 
