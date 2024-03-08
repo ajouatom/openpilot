@@ -600,7 +600,7 @@ class VCruiseHelper:
       self.autoCruiseCancelTimer = 0
       if controls.enabled:
         v_cruise_kph = self.v_cruise_speed_up(v_cruise_kph)
-        self._add_log("Button speed up...{:.0f}".format(v_cruise_kph))
+        self._add_log("Gas tok speed up...{:.0f}".format(v_cruise_kph))
       elif self.autoResumeFromGasSpeed > 0:
         self._add_log_auto_cruise("Cruise Activate from GasTok")
         #v_cruise_kph = self.v_ego_kph_set
