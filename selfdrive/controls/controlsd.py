@@ -192,6 +192,7 @@ class Controls:
     self.carrotCruiseActivate = 0 #carrot
     self._panda_controls_not_allowed = False #carrot
     self.enable_avail = False
+    self.carrot_tmux_sent = 0
 
   def set_initial_state(self):
     if REPLAY:
@@ -361,12 +362,16 @@ class Controls:
       self.events.add(EventName.usbError)
     if CS.canTimeout:
       self.events.add(EventName.canBusMissing)
-      #print("CanBusMissing")
-      self.params.put_bool_nonblocking("CarrotException", True)
+      if self.carrot_tmux_sent == 0:
+        print("CanBusMissing")
+        self.params.put_bool_nonblocking("CarrotException", True)
+      self.carrot_tmux_sent += 1
     elif not CS.canValid:
       self.events.add(EventName.canError)
-      print("CanError")
-      self.params.put_bool_nonblocking("CarrotException", True)
+      if self.carrot_tmux_sent == 0:
+        print("CanError")
+        self.params.put_bool_nonblocking("CarrotException", True)
+      self.carrot_tmux_sent += 1
 
     # generic catch-all. ideally, a more specific event should be added above instead
     has_disable_events = self.events.contains(ET.NO_ENTRY) and (self.events.contains(ET.SOFT_DISABLE) or self.events.contains(ET.IMMEDIATE_DISABLE))
@@ -602,6 +607,7 @@ class Controls:
             self.state = State.enabled
           self.current_alert_types.append(ET.ENABLE)
           self.v_cruise_helper.initialize_v_cruise(CS, self.experimental_mode)
+          self.carrot_tmux_sent = 0
 
     # Check if openpilot is engaged and actuators are enabled
     self.enabled = self.state in ENABLED_STATES
