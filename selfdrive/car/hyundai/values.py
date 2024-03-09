@@ -206,7 +206,8 @@ class CAR(Platforms):
       HyundaiCarInfo("Hyundai Genesis 2015-16", min_enable_speed=19 * CV.MPH_TO_MS, car_parts=CarParts.common([CarHarness.hyundai_j])),
       HyundaiCarInfo("Genesis G80 2017", "All", min_enable_speed=19 * CV.MPH_TO_MS, car_parts=CarParts.common([CarHarness.hyundai_j])),
     ],
-    CarSpecs(mass=2060, wheelbase=3.01, steerRatio=16.5, minSteerSpeed=60 * CV.KPH_TO_MS),
+    #CarSpecs(mass=2060, wheelbase=3.01, steerRatio=16.5, minSteerSpeed=60 * CV.KPH_TO_MS),
+    CarSpecs(mass=2060, wheelbase=3.01, steerRatio=16.5), #carrot
     flags=HyundaiFlags.CHECKSUM_6B | HyundaiFlags.LEGACY,
   )
   IONIQ = HyundaiPlatformConfig(
