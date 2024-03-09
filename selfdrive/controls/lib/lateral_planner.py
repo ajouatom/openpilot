@@ -50,6 +50,8 @@ class LateralPlanner:
 
     self.debug_mode = debug
 
+    self.params = Params()
+
     self.latDebugText = ""
     # lane_mode
     self.LP = LanePlanner()
@@ -57,8 +59,9 @@ class LateralPlanner:
     self.lanelines_active = False
     self.lanelines_active_tmp = False
 
-    self.pathOffset = float(int(Params().get("PathOffset", encoding="utf8")))*0.01
-    self.useLaneLineSpeed = float(int(Params().get("UseLaneLineSpeed", encoding="utf8")))
+    self.useLaneLineSpeed = float(self.params.get_int("UseLaneLineSpeed"))
+    self.pathOffset = float(self.params.get_int("PathOffset")) * 0.01
+    self.carrotTest = self.params.get_int("CarrotTest")
     self.useLaneLineMode = False
     self.plan_yaw = np.zeros((TRAJECTORY_SIZE,))
     self.plan_yaw_rate = np.zeros((TRAJECTORY_SIZE,))
@@ -80,8 +83,23 @@ class LateralPlanner:
     self.readParams -= 1
     if self.readParams <= 0:
       self.readParams = 100
-      self.useLaneLineSpeed = float(int(Params().get("UseLaneLineSpeed", encoding="utf8")))
-      self.pathOffset = float(int(Params().get("PathOffset", encoding="utf8")))*0.01
+      self.useLaneLineSpeed = float(self.params.get_int("UseLaneLineSpeed"))
+      self.pathOffset = float(self.params.get_int("PathOffset")) * 0.01
+      self.carrotTest = self.params.get_int("CarrotTest")
+
+      if self.carrotTest == 2:
+        PATH_COST = 1.0
+        LATERAL_MOTION_COST = 0.11
+        LATERAL_ACCEL_COST = 1.0
+        LATERAL_JERK_COST = 0.04
+        STEERING_RATE_COST = 10.0
+      else:
+        PATH_COST = 1.0
+        LATERAL_MOTION_COST = 0.11
+        LATERAL_ACCEL_COST = 0.0
+        LATERAL_JERK_COST = 0.04
+        STEERING_RATE_COST = 700.0
+
 
     # clip speed , lateral planning is not possible at 0 speed
     measured_curvature = sm['controlsState'].curvature
