@@ -111,6 +111,7 @@ def manager_init() -> None:
     ("CruiseButtonMode", "0"),      
     ("CruiseButtonTest1", "8"),      
     ("CruiseButtonTest2", "30"),      
+    ("CruiseButtonTest3", "1"),      
     ("CruiseSpeedUnit", "10"),      
     ("MyDrivingMode", "3"),      
     ("MySafeModeFactor", "80"),      
