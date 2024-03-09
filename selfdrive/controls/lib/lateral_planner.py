@@ -80,6 +80,7 @@ class LateralPlanner:
     self.lat_mpc.reset(x0=self.x0)
 
   def update(self, sm, carrot_planner):
+    global PATH_COST, LATERAL_MOTION_COST, LATERAL_ACCEL_COST, LATERAL_JERK_COST, STEERING_RATE_COST
     self.readParams -= 1
     if self.readParams <= 0:
       self.readParams = 100
