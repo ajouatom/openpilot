@@ -597,8 +597,8 @@ class VCruiseHelper:
 
     ## Auto Engage/Disengage via Gas/Brake
     if CS.gasPressed and self.autoCruiseControl > 0:
-      self.cruiseActivate = -1
-      self._add_log("Cruise canceled.. gasPressed")
+      v_cruise_kph = self.v_ego_kph_set
+      self._add_log("Cruise speed set to current speed")
     elif gas_tok and (self.autoCruiseCancelTimer == 0 or (self.frame - self.gas_tok_frame) < 100):  ## 1초이내 더블 엑셀톡인경우..
       self.autoCruiseCancelTimer = 0
       if controls.enabled:
