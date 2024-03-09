@@ -622,7 +622,7 @@ void DrawPlot::drawPlotting(const UIState* s, int start, float x, float y[], int
 }
 
 // 에잉 시간텀... ㅠㅠ
-void DrawPlot::makePlotData(const UIState* s, float& data1, float& data2) {
+void DrawPlot::makePlotData(const UIState* s, float& data1, float& data2, char *str) {
 
     SubMaster& sm = *(s->sm);
     auto    car_state = sm["carState"].getCarState();
@@ -647,42 +647,50 @@ void DrawPlot::makePlotData(const UIState* s, float& data1, float& data2) {
     const auto position = model.getPosition();
     const auto velocity = model.getVelocity();
 
-    auto lead_radar = sm["radarState"].getRadarState().getLeadOne();
+    auto lead_radar = sm["radarState"].getRadarState().getLeadOne();    
 
     switch (s->show_plot_mode) {
     case 0:
     case 1:
         data1 = a_ego;
         data2 = accel;
+        sprintf(str, "Accel (G:desired, Y:actual)");
         break;
     case 2:
         // curvature * v * v : 원심가속도
         data1 = curvature;
         //data2 = (desired_curvature * v_ego * v_ego) - (roll * 9.81);
         data2 = curvatures_0;
+        sprintf(str, "Lateral Accel(G:desired, Y:actual)");
         break;
     case 3:
         data1 = v_ego;
         data2 = speeds_0;
+        sprintf(str, "Speed/Accel(G:speed, Y:accel)");
         break;
     case 4:
         data1 = position.getX()[32];
         data2 = velocity.getX()[32];
+        sprintf(str, "Model data(G:velocity, Y:position");
         break;
     case 5:
         data1 = lead_radar.getVLeadK();
         data2 = lead_radar.getALeadK();
+        sprintf(str, "Detected radar(G:aLeadK, Y:vLeadK)");
         break;
     case 6:
         data1 = a_ego;  //노
         data2 = lead_radar.getALeadK(); // 녹
+        sprintf(str, "Detected radar(G:aLeadK, Y:a_ego)");
         break;
     case 7:
         data1 = a_ego; // 노
         data2 = accel_out;  // 녹
+        sprintf(str, "Accel (G:accel output, Y:a_ego)");
         break;
     default:
         data1 = data2 = 0;
+        sprintf(str, "no data");
         break;
     }
     if (s->show_plot_mode != show_plot_mode_prev) {
@@ -700,8 +708,9 @@ void DrawPlot::draw(const UIState* s) {
 
     float _data = 0.;
     float _data1 = 0.;
+    char title[128] = "";
 
-    makePlotData(s, _data, _data1);
+    makePlotData(s, _data, _data1, title);
 
 #ifdef __TEST
     static float _data_s = 0.0;
@@ -732,7 +741,7 @@ void DrawPlot::draw(const UIState* s) {
         drawPlotting(s, plotIndex, plotX, plotQueue[i], plotSize, &color[i], 3.0f);
     }
     //ui_draw_rect(s->vg, { (int)plotX, (int)plotY, (int)plotWidth, (int)plotHeight }, COLOR_WHITE, 2, 0);
-
+    ui_draw_text(s, s->fb_w/2, 100, title, 40, COLOR_WHITE, BOLD);
 }
 void DrawApilot::drawRadarInfo(const UIState* s) {
 
