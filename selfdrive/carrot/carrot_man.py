@@ -83,7 +83,7 @@ class CarrotMan:
     ftp = FTP()
     ftp.connect(ftp_server, ftp_port)
     ftp.login(ftp_username, ftp_password)
-    car_selected = Params().get("CarSelected")
+    car_selected = Params().get("CarName")
     if car_selected is None:
       car_selected = "none"
     else:
