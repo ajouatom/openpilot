@@ -12,6 +12,7 @@ TransmissionType = car.CarParams.TransmissionType
 NetworkLocation = car.CarParams.NetworkLocation
 GearShifter = car.CarState.GearShifter
 STANDSTILL_THRESHOLD = 10 * 0.0311 * CV.KPH_TO_MS
+LongCtrlState = car.CarControl.Actuators.LongControlState # kans
 
 
 class CarState(CarStateBase):
@@ -29,11 +30,6 @@ class CarState(CarStateBase):
 
     # GAP_DIST
     self.distance_button_pressed = False 
-    # gm steer -kans
-    self.belowSteerSpeed_shown = False
-    self.disable_belowSteerSpeed = False
-    self.resumeRequired_shown = False
-    self.disable_resumeRequired = False
 
     # use cluster speed & vCluRatio
     self.use_cluster_speed = Params().get_int("SpeedFromPCM") #kans
