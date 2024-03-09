@@ -596,7 +596,10 @@ class VCruiseHelper:
     v_cruise_kph = self._update_cruise_button(CS, v_cruise_kph, controls)
 
     ## Auto Engage/Disengage via Gas/Brake
-    if gas_tok and (self.autoCruiseCancelTimer == 0 or (self.frame - self.gas_tok_frame) < 100):  ## 1초이내 더블 엑셀톡인경우..
+    if CS.gasPressed and self.autoCruiseControl > 0:
+      self.cruiseActivate = -1
+      self._add_log("Cruise canceled.. gasPressed")
+    elif gas_tok and (self.autoCruiseCancelTimer == 0 or (self.frame - self.gas_tok_frame) < 100):  ## 1초이내 더블 엑셀톡인경우..
       self.autoCruiseCancelTimer = 0
       if controls.enabled:
         v_cruise_kph = self.v_cruise_speed_up(v_cruise_kph)
