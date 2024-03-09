@@ -40,7 +40,7 @@ protected:
 	float   plotRatio = 1.0;
 	int     show_plot_mode_prev = -1;
 	void	drawPlotting(const UIState* s, int start, float x, float y[], int size, NVGcolor* color, float stroke = 0.0);
-	void	makePlotData(const UIState* s, float& data1, float& data2);
+	void	makePlotData(const UIState* s, float& data1, float& data2, char *title);
 
 public:
 	void	draw(const UIState* s);
