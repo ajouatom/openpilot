@@ -741,7 +741,7 @@ void DrawPlot::draw(const UIState* s) {
         drawPlotting(s, plotIndex, plotX, plotQueue[i], plotSize, &color[i], 3.0f);
     }
     //ui_draw_rect(s->vg, { (int)plotX, (int)plotY, (int)plotWidth, (int)plotHeight }, COLOR_WHITE, 2, 0);
-    ui_draw_text(s, s->fb_w/2, 100, title, 40, COLOR_WHITE, BOLD);
+    ui_draw_text(s, s->fb_w/2, 50, title, 25, COLOR_WHITE, BOLD);
 }
 void DrawApilot::drawRadarInfo(const UIState* s) {
 
