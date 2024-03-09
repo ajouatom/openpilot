@@ -1,6 +1,5 @@
 import math
 
-from cereal import log
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.realtime import DT_CTRL
 from openpilot.selfdrive.car import make_can_msg
