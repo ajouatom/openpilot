@@ -30,7 +30,7 @@ rm -rf $BUILD_DIR
 mkdir -p $BUILD_DIR
 cd $BUILD_DIR
 git init
-git remote add origin git@github.com:ajouatom/openpilot.git
+git remote add origin git@github.com:commaai/openpilot.git
 git checkout --orphan $RELEASE_BRANCH
 
 # do the files copy
