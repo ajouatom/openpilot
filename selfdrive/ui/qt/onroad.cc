@@ -315,6 +315,9 @@ void OnroadWindow::updateStateText() {
 
     extern int g_fps;
     topRightLabel->setText(QString("FPS: %1").arg(g_fps));
+    Params params = Params();
+    QString carName = params.get("CarName");
+    topLeftLabel->setText(carName);
 
     const auto lat_plan = sm["lateralPlan"].getLateralPlan();
     //p.drawText(rect_bottom, Qt::AlignBottom | Qt::AlignHCenter, lat_plan.getLatDebugText().cStr());
