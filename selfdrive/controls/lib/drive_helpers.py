@@ -55,6 +55,7 @@ class VCruiseHelper:
 
     # ajouatom
     self.brake_pressed_count = 0
+    self.brake_pressed_frame = 0
     self.gas_pressed_count = 0
     self.gas_pressed_count_prev = 0
     self.gas_pressed_value = 0
@@ -567,25 +568,27 @@ class VCruiseHelper:
       v_cruise_kph = self.cruiseSpeedMin
 
     if CS.brakePressed:
-      self.brake_pressed_count = 1 if self.brake_pressed_count < 0 else self.brake_pressed_count + 1
+      self.brake_pressed_count = max(1, self.brake_pressed_count + 1)
       self.softHold_count = self.softHold_count + 1 if self.softHoldMode > 0 and CS.vEgo < 0.1 else 0
-      self.softHoldActive = 1 if self.softHold_count > 60 else 0
+      self.softHoldActive = 1 if self.softHold_count > 60 else 0      
     else:
       self.softHold_count = 0
-      self.brake_pressed_count = -1 if self.brake_pressed_count > 0 else self.brake_pressed_count - 1
+      self.brake_pressed_count = min(-1, self.brake_pressed_count - 1)
+
+    if self.softHoldActive > 0 or CS.brakePressed:
+      self.brake_pressed_frame = self.frame
 
     gas_tok = False
     if CS.gasPressed:
-      self.gas_pressed_count = 1 if self.gas_pressed_count < 0 else self.gas_pressed_count + 1
+      self.gas_pressed_count = max(1, self.gas_pressed_count + 1)
       self.softHoldActive = 0
-      if CS.gas > self.gas_pressed_value:
-        self.gas_pressed_value = CS.gas
+      self.gas_pressed_value = max(CS.gas, self.gas_pressed_value)
       self.gas_pressed_count_prev = self.gas_pressed_count
     else:
       gas_tok = True if 0 < self.gas_pressed_count < 60 else False
       if gas_tok:
         self.gas_tok_frame = self.frame
-      self.gas_pressed_count = -1 if self.gas_pressed_count > 0 else self.gas_pressed_count - 1
+      self.gas_pressed_count = min(-1, self.gas_pressed_count - 1)
       if self.gas_pressed_count < -1:
         self.gas_pressed_max = 0
         self.gas_pressed_count_prev = 0
@@ -599,8 +602,12 @@ class VCruiseHelper:
     if gas_tok and (self.autoCruiseCancelTimer == 0 or (self.frame - self.gas_tok_frame) < 100):  ## 1초이내 더블 엑셀톡인경우..
       self.autoCruiseCancelTimer = 0
       if controls.enabled:
-        v_cruise_kph = self.v_cruise_speed_up(v_cruise_kph)
-        self._add_log("Gas tok speed up...{:.0f}".format(v_cruise_kph))
+        if (self.frame - self.brake_pressed_frame) < 3.0 / DT_CTRL:
+          v_cruise_kph = self.v_ego_kph_set
+          self._add_log("Gas tok speed set to current (prev. brake pressed)")
+        else:
+          v_cruise_kph = self.v_cruise_speed_up(v_cruise_kph)
+          self._add_log("Gas tok speed up...{:.0f}".format(v_cruise_kph))
       elif self.autoResumeFromGasSpeed > 0:
         self._add_log_auto_cruise("Cruise Activate from GasTok")
         #v_cruise_kph = self.v_ego_kph_set
