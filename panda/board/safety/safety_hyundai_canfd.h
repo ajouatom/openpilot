@@ -365,7 +365,8 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
     bus_fwd = 2;
   }
   if (bus_num == 2) {
-      for (int i = 0; i < addr_list_count; i++) {
+      int i;
+      for (i = 0; i < addr_list_count; i++) {
           if (addr_list[i] == addr) break;
       }
       if (i == addr_list_count) {
