@@ -388,8 +388,8 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
       }
       if (addr == 353) bus_fwd = -1;
       else if (addr == 354) bus_fwd = -1;
-      else if (addr == 908) bus_fwd = -1;
-      else if (addr == 1402) bus_fwd = -1;
+      //else if (addr == 908) bus_fwd = -1;
+      //else if (addr == 1402) bus_fwd = -1;
 #else
     // LKAS for HDA2, LFA for HDA1
     int hda2_lfa_block_addr = hyundai_canfd_hda2_alt_steering ? 0x362 : 0x2a4;
