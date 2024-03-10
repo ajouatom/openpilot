@@ -343,8 +343,12 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
 #if 1
       uint32_t now = microsecond_timer_get();
 
+      bus_fwd = 0
       for (int i = 0; canfd_tx_addr[i] > 0; i++) {
-          if (addr == canfd_tx_addr[i] && (now - canfd_tx_time[i]) >= 200000) bus_fwd = 0;
+          if (addr == canfd_tx_addr[i] && (now - canfd_tx_time[i]) < 200000) {
+              bus_fwd = -1;
+              break;
+          }
       }
 #else
     // LKAS for HDA2, LFA for HDA1
