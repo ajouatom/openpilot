@@ -120,6 +120,19 @@
     },
     {
       "group": "크루즈",
+      "name": "CruiseSpeedMin",
+      "title": "크루즈최저속도(10)",
+      "descr": "",
+      "egroup": "CRUISE",
+      "etitle": "CruiseSpeedMin(2)",
+      "edescr": "",
+      "min": 5,
+      "max": 50,
+      "default": 10,
+      "unit": 5
+    },
+    {
+      "group": "크루즈",
       "name": "CruiseOnDist",
       "title": "크루즈ON거리(0cm)",
       "descr": "엑셀/브레이크OFF, 선행차가 가까와지면 크루즈ON(+),알람(-)",
