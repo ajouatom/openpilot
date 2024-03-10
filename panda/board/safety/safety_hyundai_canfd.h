@@ -188,7 +188,7 @@ static void hyundai_canfd_rx_hook(const CANPacket_t *to_push) {
   int pt_bus = hyundai_canfd_hda2 ? 1 : 0;
   const int scc_bus = hyundai_camera_scc ? 2 : pt_bus;
 
-  if (hyundai_canfd_scc_bus2) pt_but = 0;
+  if (hyundai_canfd_scc_bus2) pt_bus = 0;
 
   if (bus == pt_bus) {
     // driver torque
