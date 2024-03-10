@@ -56,7 +56,8 @@ def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_steer):
     hda2_lkas_msg = "LKAS_ALT" if CP.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING else "LKAS"
     if CP.openpilotLongitudinalControl:
       ret.append(packer.make_can_msg("LFA", CAN.ECAN, values))
-    ret.append(packer.make_can_msg(hda2_lkas_msg, CAN.ACAN, values))
+    if not (CP.flags & HyundaiFlags.SCC_BUS2.value):
+      ret.append(packer.make_can_msg(hda2_lkas_msg, CAN.ACAN, values))
   else:
     ret.append(packer.make_can_msg("LFA", CAN.ECAN, values))
 
@@ -187,7 +188,7 @@ def create_fca_warning_light(packer, CAN, frame):
   return ret
 
 
-def create_adrv_messages(packer, CAN, frame):
+def create_adrv_messages(CP, packer, CAN, frame):
   # messages needed to car happy after disabling
   # the ADAS Driving ECU to do longitudinal control
 
@@ -195,7 +196,8 @@ def create_adrv_messages(packer, CAN, frame):
 
   values = {
   }
-  ret.append(packer.make_can_msg("ADRV_0x51", CAN.ACAN, values))
+  if not (CP.flags & HyundaiFlags.SCC_BUS2.value):
+    ret.append(packer.make_can_msg("ADRV_0x51", CAN.ACAN, values))
 
   ret.extend(create_fca_warning_light(packer, CAN, frame))
 
