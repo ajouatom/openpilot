@@ -411,7 +411,6 @@ static safety_config hyundai_canfd_init(uint16_t param) {
         print("hyundai safety canfd_hda2 long\n");
         if (hyundai_canfd_alt_buttons) {          // carrot : for CANIVAL 4TH HDA2
             print("hyundai safety canfd_hda2 long_alt_buttons\n");
-            if(
             ret = BUILD_SAFETY_CFG((hyundai_canfd_scc_bus2)?hyundai_canfd_hda2_long_alt_buttons_rx_checks_scc2: hyundai_canfd_hda2_long_alt_buttons_rx_checks, HYUNDAI_CANFD_HDA2_LONG_TX_MSGS);
         }
         else {
