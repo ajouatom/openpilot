@@ -166,7 +166,7 @@ class CarController(CarControllerBase):
       self.hapticFeedbackWhenSpeedCamera = int(self.params.get_int("HapticFeedbackWhenSpeedCamera"))
 
     # tester present - w/ no response (keeps relevant ECU disabled)
-    if self.frame % 100 == 0 and not (self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC.value) and self.CP.openpilotLongitudinalControl:
+    if self.frame % 100 == 0 and not (self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC.value) and self.CP.openpilotLongitudinalControl and not (self.CP.flags & HyundaiFlags.SCC_BUS2.value):
       # for longitudinal control, either radar or ADAS driving ECU
       addr, bus = 0x7d0, self.CAN.ECAN if self.CP.carFingerprint in CANFD_CAR else 0
       if self.CP.flags & HyundaiFlags.CANFD_HDA2.value:
