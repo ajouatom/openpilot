@@ -574,7 +574,7 @@ class CarState(CarStateBase):
     if CP.flags & HyundaiFlags.CANFD_HDA2 and not (CP.flags & HyundaiFlags.SCC_BUS2.value):
       block_lfa_msg = "CAM_0x362" if CP.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING else "CAM_0x2a4"
       messages += [(block_lfa_msg, 20)]
-    elif CP.flags & HyundaiFlags.CANFD_CAMERA_SCC or CP.flags & HyundaiFlags.SCC_BUS2.value:
+    elif CP.flags & HyundaiFlags.CANFD_CAMERA_SCC or (CP.flags & HyundaiFlags.SCC_BUS2.value and CP.openpilotLongitudinalControl):
       messages += [
         ("SCC_CONTROL", 50),
       ]
