@@ -593,6 +593,10 @@ class VCruiseHelper:
 
     if controls.enabled or CS.brakePressed or CS.gasPressed:
       self.cruiseActiveReady = 0
+      if CS.gasPressed and CS.aEgo < -0.3:
+        self.autoCruiseCancelTimer = 1.0 / DT_CTRL #잠시 오토크루멈춤
+        self.cruiseActivate = -1
+        self._add_log("Cruise off (GasPressed while braking)")
 
     v_cruise_kph = self._update_cruise_button(CS, v_cruise_kph, controls)
 
