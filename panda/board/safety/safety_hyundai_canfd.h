@@ -142,8 +142,8 @@ RxCheck hyundai_canfd_hda2_alt_buttons_rx_checks[] = {
   HYUNDAI_CANFD_SCC_ADDR_CHECK(1)
 };
 RxCheck hyundai_canfd_hda2_long_alt_buttons_rx_checks[] = {
-  HYUNDAI_CANFD_COMMON_RX_CHECKS(1)
-  HYUNDAI_CANFD_ALT_BUTTONS_ADDR_CHECK(1)
+  HYUNDAI_CANFD_COMMON_RX_CHECKS(0)  // carrot: for carnival long, HYUNDAI_CANFD_COMMON_RX_CHECKS(1)
+  HYUNDAI_CANFD_ALT_BUTTONS_ADDR_CHECK(0)  // carrot: for carnival long, HYUNDAI_CANFD_ALT_BUTTONS_ADDR_CHECK(1)
 };
 
 
