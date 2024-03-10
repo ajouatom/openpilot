@@ -586,8 +586,6 @@ class VCruiseHelper:
       self.gas_pressed_count_prev = self.gas_pressed_count
     else:
       gas_tok = True if 0 < self.gas_pressed_count < 60 else False
-      if gas_tok:
-        self.gas_tok_frame = self.frame
       self.gas_pressed_count = min(-1, self.gas_pressed_count - 1)
       if self.gas_pressed_count < -1:
         self.gas_pressed_max = 0
@@ -599,19 +597,21 @@ class VCruiseHelper:
     v_cruise_kph = self._update_cruise_button(CS, v_cruise_kph, controls)
 
     ## Auto Engage/Disengage via Gas/Brake
-    if gas_tok and (self.autoCruiseCancelTimer == 0 or (self.frame - self.gas_tok_frame) < 100):  ## 1초이내 더블 엑셀톡인경우..
-      self.autoCruiseCancelTimer = 0
-      if controls.enabled:
-        if (self.frame - self.brake_pressed_frame) < 3.0 / DT_CTRL:
-          v_cruise_kph = self.v_ego_kph_set
-          self._add_log("Gas tok speed set to current (prev. brake pressed)")
-        else:
-          v_cruise_kph = self.v_cruise_speed_up(v_cruise_kph)
-          self._add_log("Gas tok speed up...{:.0f}".format(v_cruise_kph))
-      elif self.autoResumeFromGasSpeed > 0:
-        self._add_log_auto_cruise("Cruise Activate from GasTok")
-        #v_cruise_kph = self.v_ego_kph_set
-        self.cruiseActivate = 1
+    if gas_tok:
+      if (self.autoCruiseCancelTimer == 0 or (self.frame - self.gas_tok_frame) < 1.0 / DT_CTRL):  ## 1초이내 더블 엑셀톡인경우..
+        self.autoCruiseCancelTimer = 0
+        if controls.enabled:
+          if (self.frame - self.brake_pressed_frame) < 3.0 / DT_CTRL:
+            v_cruise_kph = self.v_ego_kph_set
+            self._add_log("Gas tok speed set to current (prev. brake pressed)")
+          else:
+            v_cruise_kph = self.v_cruise_speed_up(v_cruise_kph)
+            self._add_log("Gas tok speed up...{:.0f}".format(v_cruise_kph))
+        elif self.autoResumeFromGasSpeed > 0:
+          self._add_log_auto_cruise("Cruise Activate from GasTok")
+          #v_cruise_kph = self.v_ego_kph_set
+          self.cruiseActivate = 1
+      self.gas_tok_frame = self.frame
     elif self.gas_pressed_count == -1:
       v_cruise_kph = self._gas_released_cond(CS, v_cruise_kph, controls)
       if self.autoCruiseCancelTimer > 0 and self.cruiseActivate > 0:
