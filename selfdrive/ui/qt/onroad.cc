@@ -300,14 +300,14 @@ void OnroadWindow::updateStateText() {
 
     QString top = "";
 
-    if (debugModelV2.length() > 2) {
+    if (debugControlsState.length() > 2) {
+        top = debugControlsState;
+    }
+    else if (debugModelV2.length() > 2) {
         top = debugModelV2;
     }
     else if (debugLong2.length() > 2) {
         top = debugLong2;
-    }
-    else if (debugControlsState.length() > 2) {
-        top = debugControlsState;
     }
     else top = QString::fromStdString(lp.getDebugLongText().cStr()) + (" LiveSR:" + QString::number(liveSteerRatio, 'f', 2));
     //p.drawText(rect_top, Qt::AlignBottom | Qt::AlignHCenter, top);
