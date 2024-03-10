@@ -45,6 +45,7 @@ def create_steering_messages_scc2(packer, CP, CAN, enabled, lat_active, apply_st
   values["STEER_REQ"] = 1 if lat_active else 0
   values["STEER_MODE"] = 0
   values["HAS_LANE_SAFETY"] = 0  # hide LKAS settings
+  values["NEW_SIGNAL_1"] = 3  # 카니발..
 
   return packer.make_can_msg("LFA", CAN.ECAN, values)
 
