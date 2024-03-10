@@ -207,7 +207,7 @@ class CarController(CarControllerBase):
       can_sends.extend(hyundaicanfd.create_steering_messages(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_steer))
 
       # prevent LFA from activating on HDA2 by sending "no lane lines detected" to ADAS ECU
-      if self.frame % 5 == 0 and hda2:
+      if self.frame % 5 == 0 and hda2 and not (self.CP.flags & HyundaiFlags.SCC_BUS2.value):
         can_sends.append(hyundaicanfd.create_suppress_lfa(self.packer, self.CAN, CS.hda2_lfa_block_msg,
                                                           self.CP.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING))
 
