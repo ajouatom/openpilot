@@ -31,7 +31,7 @@ def get_radar_can_parser_scc(CP):
   if enable_radar_tracks: 
     return None
 
-  if CP.carFingerprint in CANFD_CAR:
+  if CP.carFingerprint in CANFD_CAR and not scc2:
     return None
 
   # 롱컨은 켜졌지만, 배선개조가 안된경우 비젼롱컨
