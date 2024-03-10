@@ -563,8 +563,8 @@ class CarState(CarStateBase):
         ("SCC_CONTROL", 50),
       ]
 
-    if CP.flags & HyundaiFlags.CANFD_HDA2 and CP.flags & HyundaiFlags.NAVI_CLUSTER.value:
-      messages.append(("CLUSTER_SPEED_LIMIT", 10))
+    #if CP.flags & HyundaiFlags.CANFD_HDA2 and CP.flags & HyundaiFlags.NAVI_CLUSTER.value and not (CP.flags & HyundaiFlags.SCC_BUS2.value):
+    #  messages.append(("CLUSTER_SPEED_LIMIT", 10))
 
     return CANParser(DBC[CP.carFingerprint]["pt"], messages, CanBus(CP).ECAN)
 
@@ -579,8 +579,8 @@ class CarState(CarStateBase):
         ("SCC_CONTROL", 50),
       ]
 
-    if not (CP.flags & HyundaiFlags.CANFD_HDA2) and CP.flags & HyundaiFlags.NAVI_CLUSTER.value:
-      messages.append(("CLUSTER_SPEED_LIMIT", 10))
+    #if not (CP.flags & HyundaiFlags.CANFD_HDA2) and CP.flags & HyundaiFlags.NAVI_CLUSTER.value and (CP.flags & HyundaiFlags.SCC_BUS2.value) :
+    #  messages.append(("CLUSTER_SPEED_LIMIT", 10))
 
     if CP.enableBsm and (CP.flags & HyundaiFlags.SCC_BUS2.value):
       messages += [
