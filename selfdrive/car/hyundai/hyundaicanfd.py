@@ -1,6 +1,7 @@
 from openpilot.common.numpy_fast import clip
 from openpilot.selfdrive.car import CanBusBase
 from openpilot.selfdrive.car.hyundai.values import HyundaiFlags
+from openpilot.common.params import Params
 
 
 class CanBus(CanBusBase):
@@ -15,7 +16,7 @@ class CanBus(CanBusBase):
     # have a different harness than the HDA1 and non-HDA variants in order to split
     # a different bus, since the steering is done by different ECUs.
     self._a, self._e = 1, 0
-    if hda2:
+    if hda2 and not Params().get_bool("SccConnectedBus2"):  #배선개조는 무조건 Bus0가 ECAN임.
       self._a, self._e = 0, 1
 
     self._a += self.offset
@@ -34,6 +35,20 @@ class CanBus(CanBusBase):
   def CAM(self):
     return self._cam
 
+def create_steering_messages_scc2(packer, CP, CAN, enabled, lat_active, apply_steer, lfa_info):
+
+  values = lfa_info
+  values["LKA_MODE"] = 2
+  values["LKA_ICON"] = 2 if enabled else 1
+  values["TORQUE_REQUEST"] = apply_steer
+  values["LKA_ASSIST"] = 0
+  values["STEER_REQ"] = 1 if lat_active else 0
+  values["STEER_MODE"] = 0
+  values["HAS_LANE_SAFETY"] = 0  # hide LKAS settings
+  values["NEW_SIGNAL_1"] = 0  # 카니발..
+  values["NEW_SIGNAL_2"] = 0  # 카니발..
+
+  return packer.make_can_msg("LFA", CAN.ECAN, values)
 
 def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_steer):
 
@@ -55,7 +70,8 @@ def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_steer):
     hda2_lkas_msg = "LKAS_ALT" if CP.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING else "LKAS"
     if CP.openpilotLongitudinalControl:
       ret.append(packer.make_can_msg("LFA", CAN.ECAN, values))
-    ret.append(packer.make_can_msg(hda2_lkas_msg, CAN.ACAN, values))
+    if not (CP.flags & HyundaiFlags.SCC_BUS2.value):
+      ret.append(packer.make_can_msg(hda2_lkas_msg, CAN.ACAN, values))
   else:
     ret.append(packer.make_can_msg("LFA", CAN.ECAN, values))
 
@@ -120,6 +136,28 @@ def create_lfahda_cluster(packer, CAN, enabled):
   }
   return packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, values)
 
+
+def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, personality, cruise_info_copy):
+  jerk = 5
+  jn = jerk / 50
+  if not enabled or gas_override:
+    a_val, a_raw = 0, 0
+  else:
+    a_raw = accel
+    a_val = clip(accel, accel_last - jn, accel_last + jn)
+
+  values = cruise_info_copy
+  values["ACCMode"] = 0 if not enabled else (2 if gas_override else 1)
+  values["MainMode_ACC"] = 1
+  values["StopReq"] = 1 if stopping else 0
+  values["aReqValue"] = a_val
+  values["aReqRaw"] = a_raw
+  values["VSetDis"] = set_speed
+  values["JerkLowerLimit"] = jerk if enabled else 1
+  values["JerkUpperLimit"] = 3.0
+  values["DISTANCE_SETTING"] = personality + 1
+
+  return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
 
 def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, personality):
   jerk = 5
@@ -186,7 +224,7 @@ def create_fca_warning_light(packer, CAN, frame):
   return ret
 
 
-def create_adrv_messages(packer, CAN, frame):
+def create_adrv_messages(CP, packer, CAN, frame):
   # messages needed to car happy after disabling
   # the ADAS Driving ECU to do longitudinal control
 
@@ -194,7 +232,8 @@ def create_adrv_messages(packer, CAN, frame):
 
   values = {
   }
-  ret.append(packer.make_can_msg("ADRV_0x51", CAN.ACAN, values))
+  if not (CP.flags & HyundaiFlags.SCC_BUS2.value):
+    ret.append(packer.make_can_msg("ADRV_0x51", CAN.ACAN, values))
 
   ret.extend(create_fca_warning_light(packer, CAN, frame))
 

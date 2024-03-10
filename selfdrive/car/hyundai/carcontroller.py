@@ -166,7 +166,7 @@ class CarController(CarControllerBase):
       self.hapticFeedbackWhenSpeedCamera = int(self.params.get_int("HapticFeedbackWhenSpeedCamera"))
 
     # tester present - w/ no response (keeps relevant ECU disabled)
-    if self.frame % 100 == 0 and not (self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC.value) and self.CP.openpilotLongitudinalControl:
+    if self.frame % 100 == 0 and not (self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC.value) and self.CP.openpilotLongitudinalControl and not (self.CP.flags & HyundaiFlags.SCC_BUS2.value):
       # for longitudinal control, either radar or ADAS driving ECU
       addr, bus = 0x7d0, self.CAN.ECAN if self.CP.carFingerprint in CANFD_CAR else 0
       if self.CP.flags & HyundaiFlags.CANFD_HDA2.value:
@@ -206,8 +206,14 @@ class CarController(CarControllerBase):
       # steering control
       can_sends.extend(hyundaicanfd.create_steering_messages(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_steer))
 
+      ## carrot 기존데이터를 복사하니.. mdps에러가 뜨는것 같음...
+      #if self.CP.flags & HyundaiFlags.SCC_BUS2.value:  
+      #  can_sends.append(hyundaicanfd.create_steering_messages_scc2(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_steer, CS.lfa_info))
+      #else:
+      #  can_sends.extend(hyundaicanfd.create_steering_messages(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_steer))
+
       # prevent LFA from activating on HDA2 by sending "no lane lines detected" to ADAS ECU
-      if self.frame % 5 == 0 and hda2:
+      if self.frame % 5 == 0 and hda2 and not (self.CP.flags & HyundaiFlags.SCC_BUS2.value): # SCC_BUS2의 경우 ACAN이 bus1에 있어서 보낼수가 없음..
         can_sends.append(hyundaicanfd.create_suppress_lfa(self.packer, self.CAN, CS.hda2_lfa_block_msg,
                                                           self.CP.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING))
 
@@ -220,13 +226,18 @@ class CarController(CarControllerBase):
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker))
 
       if self.CP.openpilotLongitudinalControl:
-        if hda2:
-          can_sends.extend(hyundaicanfd.create_adrv_messages(self.packer, self.CAN, self.frame))
-        else:
-          can_sends.extend(hyundaicanfd.create_fca_warning_light(self.packer, self.CAN, self.frame))
+        if True: #not (self.CP.flags & HyundaiFlags.SCC_BUS2.value):
+          if hda2:
+            can_sends.extend(hyundaicanfd.create_adrv_messages(self.CP, self.packer, self.CAN, self.frame))
+          else:
+            can_sends.extend(hyundaicanfd.create_fca_warning_light(self.packer, self.CAN, self.frame))
         if self.frame % 2 == 0:
-          can_sends.append(hyundaicanfd.create_acc_control(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
-                                                           set_speed_in_units, CS.longitudinal_personality))
+          if self.CP.flags & HyundaiFlags.SCC_BUS2.value:
+            can_sends.append(hyundaicanfd.create_acc_control_scc2(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
+                                                             set_speed_in_units, CS.longitudinal_personality, CS.cruise_info))
+          else:
+            can_sends.append(hyundaicanfd.create_acc_control(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
+                                                             set_speed_in_units, CS.longitudinal_personality))
           self.accel_last = accel
 
         ### for LongControl auto activate...
