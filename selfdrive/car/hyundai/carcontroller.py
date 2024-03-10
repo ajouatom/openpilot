@@ -205,13 +205,15 @@ class CarController(CarControllerBase):
 
       # steering control
       can_sends.extend(hyundaicanfd.create_steering_messages(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_steer))
-      #if self.CP.flags & HyundaiFlags.SCC_BUS2.value:
+
+      ## carrot 기존데이터를 복사하니.. mdps에러가 뜨는것 같음...
+      #if self.CP.flags & HyundaiFlags.SCC_BUS2.value:  
       #  can_sends.append(hyundaicanfd.create_steering_messages_scc2(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_steer, CS.lfa_info))
       #else:
       #  can_sends.extend(hyundaicanfd.create_steering_messages(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_steer))
 
       # prevent LFA from activating on HDA2 by sending "no lane lines detected" to ADAS ECU
-      if self.frame % 5 == 0 and hda2 and not (self.CP.flags & HyundaiFlags.SCC_BUS2.value):
+      if self.frame % 5 == 0 and hda2 and not (self.CP.flags & HyundaiFlags.SCC_BUS2.value): # SCC_BUS2의 경우 ACAN이 bus1에 있어서 보낼수가 없음..
         can_sends.append(hyundaicanfd.create_suppress_lfa(self.packer, self.CAN, CS.hda2_lfa_block_msg,
                                                           self.CP.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING))
 
