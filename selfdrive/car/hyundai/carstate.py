@@ -344,7 +344,7 @@ class CarState(CarStateBase):
       #if ret.cruiseState.available:
       #  print("cruiseState.available = {},{}".format(ret.cruiseState.available, ret.cruiseState.enabled))
     else:
-      cp_cruise_info = cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else cp
+      cp_cruise_info = cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC or self.CP.flags & HyundaiFlags.SCC_BUS2.value else cp
       ret.cruiseState.enabled = cp_cruise_info.vl["SCC_CONTROL"]["ACCMode"] in (1, 2)
       if cp_cruise_info.vl["SCC_CONTROL"]["MainMode_ACC"] == 1: # carrot
         ret.cruiseState.available = self.main_enabled = True
@@ -574,7 +574,7 @@ class CarState(CarStateBase):
     if CP.flags & HyundaiFlags.CANFD_HDA2 and not (CP.flags & HyundaiFlags.SCC_BUS2.value):
       block_lfa_msg = "CAM_0x362" if CP.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING else "CAM_0x2a4"
       messages += [(block_lfa_msg, 20)]
-    elif CP.flags & HyundaiFlags.CANFD_CAMERA_SCC or (CP.flags & HyundaiFlags.SCC_BUS2.value and CP.openpilotLongitudinalControl):
+    elif CP.flags & HyundaiFlags.CANFD_CAMERA_SCC or CP.flags & HyundaiFlags.SCC_BUS2.value:
       messages += [
         ("SCC_CONTROL", 50),
       ]
