@@ -120,20 +120,20 @@ class CarInterface(CarInterfaceBase):
       ret.longitudinalTuning.kiV = [0.0]
       ret.experimentalLongitudinalAvailable = candidate not in (CANFD_UNSUPPORTED_LONGITUDINAL_CAR | CANFD_RADAR_SCC_CAR)
       ret.experimentalLongitudinalAvailable = True # carrot: 비전 롱컨이라도 되도록... 될까?
-
        
     else:
       ret.longitudinalTuning.kpV = [0.5]
       ret.longitudinalTuning.kiV = [0.0]
       ret.experimentalLongitudinalAvailable = candidate not in (UNSUPPORTED_LONGITUDINAL_CAR | CAMERA_SCC_CAR)
-       
-      if Params().get_bool("SccConnectedBus2"):
-        ret.flags |= HyundaiFlags.SCC_BUS2.value
-        experimental_long = True
       
-      print("***************************************************************************")
-      print("sccBus = ", 2 if ret.flags & HyundaiFlags.SCC_BUS2.value else 0)
       ret.experimentalLongitudinalAvailable = True
+
+    if Params().get_bool("SccConnectedBus2"):
+      ret.flags |= HyundaiFlags.SCC_BUS2.value
+      experimental_long = True
+    print("***************************************************************************")
+    print("sccBus = ", 2 if ret.flags & HyundaiFlags.SCC_BUS2.value else 0)
+
     ret.openpilotLongitudinalControl = experimental_long and ret.experimentalLongitudinalAvailable
     ret.pcmCruise = not ret.openpilotLongitudinalControl
 
