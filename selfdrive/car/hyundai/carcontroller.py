@@ -204,10 +204,11 @@ class CarController(CarControllerBase):
       hda2_long = hda2 and self.CP.openpilotLongitudinalControl
 
       # steering control
-      if self.CP.flags & HyundaiFlags.SCC_BUS2.value:
-        can_sends.append(hyundaicanfd.create_steering_messages_scc2(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_steer, CS.lfa_info))
-      else:
-        can_sends.extend(hyundaicanfd.create_steering_messages(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_steer))
+      can_sends.extend(hyundaicanfd.create_steering_messages(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_steer))
+      #if self.CP.flags & HyundaiFlags.SCC_BUS2.value:
+      #  can_sends.append(hyundaicanfd.create_steering_messages_scc2(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_steer, CS.lfa_info))
+      #else:
+      #  can_sends.extend(hyundaicanfd.create_steering_messages(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_steer))
 
       # prevent LFA from activating on HDA2 by sending "no lane lines detected" to ADAS ECU
       if self.frame % 5 == 0 and hda2 and not (self.CP.flags & HyundaiFlags.SCC_BUS2.value):
