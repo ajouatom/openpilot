@@ -323,10 +323,14 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
     if (hyundai_longitudinal) {
       violation |= longitudinal_accel_checks(desired_accel_raw, HYUNDAI_LONG_LIMITS);
       violation |= longitudinal_accel_checks(desired_accel_val, HYUNDAI_LONG_LIMITS);
+      if(violation) {
+          print("long violation"); putui((uint32_t)desired_accel_raw); print(","); putui((uint32_t)desired_accel_val); print("\n");
+
     } else {
       // only used to cancel on here
       if ((desired_accel_raw != 0) || (desired_accel_val != 0)) {
         violation = true;
+        print("no long violation\n");
       }
     }
 
