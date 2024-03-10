@@ -68,6 +68,8 @@ class RadarInterface(RadarInterfaceBase):
     self.vRelFilter = StreamingMovingAverage(4)
 
     self.canfd = True if CP.carFingerprint in CANFD_CAR else False
+    if self.canfd:
+      self.trigger_msg_scc = 416
 
   def update(self, can_strings):
     #if not self.enable_radar_tracks and (self.radar_off_can or (self.rcp is None)):
