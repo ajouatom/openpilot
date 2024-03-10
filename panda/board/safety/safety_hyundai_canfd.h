@@ -388,8 +388,6 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
       }
       if (addr == 353) bus_fwd = -1;
       else if (addr == 354) bus_fwd = -1;
-      else if (addr == 442) bus_fwd = -1;
-      else if (addr == 485) bus_fwd = -1;
       else if (addr == 908) bus_fwd = -1;
       else if (addr == 1402) bus_fwd = -1;
 #else
