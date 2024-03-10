@@ -760,7 +760,7 @@ class LongitudinalMpc:
     if stop_x == 1000.0:
       self.stopDist = 0.0
     elif self.stopDist > 0:
-      stop_dist = v_ego ** 2 / (2.5 * 2)
+      stop_dist = v_ego ** 2 / (2.1 * 2)
       self.stopDist = self.stopDist if self.stopDist > stop_dist else stop_dist
       stop_x = 0.0
     #self.debugLongText = "XState({}),stop_x={:.1f},stopDist={:.1f},Traffic={}".format(str(self.xState), stop_x, self.stopDist, str(self.trafficState))
