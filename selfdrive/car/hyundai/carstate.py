@@ -327,8 +327,9 @@ class CarState(CarStateBase):
     #ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_lamp(50, cp.vl["BLINKERS"][left_blinker_sig],
     #                                                                  cp.vl["BLINKERS"][right_blinker_sig])
     if self.CP.enableBsm:
-      ret.leftBlindspot = cp.vl["BLINDSPOTS_REAR_CORNERS"]["FL_INDICATOR"] != 0
-      ret.rightBlindspot = cp.vl["BLINDSPOTS_REAR_CORNERS"]["FR_INDICATOR"] != 0
+      cp_ = cp_cam if self.CP.flags & HyundaiFlags.SCC_BUS2 else cp
+      ret.leftBlindspot = cp_.vl["BLINDSPOTS_REAR_CORNERS"]["FL_INDICATOR"] != 0
+      ret.rightBlindspot = cp_.vl["BLINDSPOTS_REAR_CORNERS"]["FR_INDICATOR"] != 0
 
     # cruise state
     # CAN FD cars enable on main button press, set available if no TCS faults preventing engagement
@@ -552,7 +553,7 @@ class CarState(CarStateBase):
         ("CRUISE_BUTTONS", 50)
       ]
 
-    if CP.enableBsm:
+    if CP.enableBsm and not (CP.flags & HyundaiFlags.SCC_BUS2.value):
       messages += [
         ("BLINDSPOTS_REAR_CORNERS", 20),
       ]
@@ -570,7 +571,7 @@ class CarState(CarStateBase):
   @staticmethod
   def get_cam_can_parser_canfd(CP):
     messages = []
-    if CP.flags & HyundaiFlags.CANFD_HDA2:
+    if CP.flags & HyundaiFlags.CANFD_HDA2 and not (CP.flags & HyundaiFlags.SCC_BUS2.value):
       block_lfa_msg = "CAM_0x362" if CP.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING else "CAM_0x2a4"
       messages += [(block_lfa_msg, 20)]
     elif CP.flags & HyundaiFlags.CANFD_CAMERA_SCC or CP.flags & HyundaiFlags.SCC_BUS2.value:
@@ -580,5 +581,10 @@ class CarState(CarStateBase):
 
     if not (CP.flags & HyundaiFlags.CANFD_HDA2) and CP.flags & HyundaiFlags.NAVI_CLUSTER.value:
       messages.append(("CLUSTER_SPEED_LIMIT", 10))
+
+    if CP.enableBsm and (CP.flags & HyundaiFlags.SCC_BUS2.value):
+      messages += [
+        ("BLINDSPOTS_REAR_CORNERS", 20),
+      ]
 
     return CANParser(DBC[CP.carFingerprint]["pt"], messages, CanBus(CP).CAM)
