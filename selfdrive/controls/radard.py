@@ -354,7 +354,19 @@ class VisionTrack:
     self.vLeadFilter.set(0.0)
     self.active = False
     self.aLeadK = 0.0
+    self.vLeadK = 0.0
     self.P = 0.5 #1.0
+    self.P_v = 0.5 #1.0
+
+  def v_lead_k(self, vel):
+    vLeadK = self.vLeadK
+    Q = 0.01 #0.1
+    R = 10.0 #5.0
+    P_predict = self.P_v + Q
+    z = vel / self.radar_ts
+    K = P_predict / (P_predict + R)
+    self.vLeadK = vLeadK + K * (z - vLeadK)
+    self.P_v = (1 - K) * P_predict
 
   def a_lead_k(self, accel):
     aLeadK = self.aLeadK
@@ -373,7 +385,7 @@ class VisionTrack:
     lead_v_rel_pred = lead_msg.v[0] - self.vLead
     self.prob = lead_msg.prob
     if self.prob > .5:
-      self.dRel = float(lead_msg.x[0]) - RADAR_TO_CAMERA
+      dRel = float(lead_msg.x[0]) - RADAR_TO_CAMERA
       self.yRel = float(-lead_msg.y[0])
       self.vRel = lead_v_rel_pred
       if not self.active:
@@ -382,14 +394,18 @@ class VisionTrack:
         self.vLead = self.vLeadFilter.set(vLead)
         self.aLead = self.aLeadFilter.set(lead_msg.a[0])
         self.aLeadK = self.aLead
-        self.a_lead_k(0.0)
+        self.a_lead_k(self.aLead)
+        self.vLeadK = self.vLead
+        self.v_lead_k(self.vLead)
       else:
         #vLead = self.vLeadFilter.process(float(v_ego + lead_v_rel_pred))
         vLead = self.vLeadFilter.process(lead_msg.v[0])
         self.a_lead_k(vLead - self.vLead)
+        self.v_lead_k(v_ego + (dRel - self.dRel))
         self.vLead = vLead
         self.aLead = self.aLeadFilter.process(float(lead_msg.a[0]), median = True)
         self.aLead = float(lead_msg.a[0])
+      self.dRel = dRel
 
       #print("{:.2f}, {:.3f}".format(self.prob, self.P))
       if abs(self.aLead) < self.aLeadTauStart:
@@ -405,8 +421,8 @@ class VisionTrack:
       "dRel": self.dRel,
       "yRel": self.yRel,
       "vRel": self.vRel,
-      "vLead": self.vLead,
-      "vLeadK": self.vLead,
+      "vLead": self.vLeadK,
+      "vLeadK": self.vLeadK,
       "aLeadK": self.aLead if abs(self.aLead) < abs(self.aLeadK) else self.aLeadK, 
       "aLeadTau": self.aLeadTau,
       "fcw": False,
