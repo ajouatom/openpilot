@@ -1,7 +1,7 @@
 import time
 import numpy as np
 from openpilot.common.realtime import DT_MDL
-from openpilot.common.numpy_fast import interp
+from openpilot.common.numpy_fast import interp, clip
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.controls.lib.lateral_mpc_lib.lat_mpc import LateralMpc
 from openpilot.selfdrive.controls.lib.lateral_mpc_lib.lat_mpc import N as LAT_MPC_N
@@ -227,7 +227,7 @@ class LateralPlanner:
       "lanemode" if self.lanelines_active else "laneless",
       self.LP.d_prob,
       self.LP.lane_width_left, self.LP.lane_width, self.LP.lane_width_right,
-      "offset={:.1f}cm turn={:.0f}km/h".format(self.LP.offset_total*100.0, min(self.curve_speed, 200)) if self.lanelines_active else "")
+      "offset={:.1f}cm turn={:.0f}km/h".format(self.LP.offset_total*100.0, clip(self.curve_speed, -200, 200)) if self.lanelines_active else "")
 
     lateralPlan.latDebugText = debugText
     #lateralPlan.latDebugText = self.latDebugText

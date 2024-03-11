@@ -17,6 +17,8 @@ from openpilot.common.params import Params
 from selfdrive.controls.lib.lateral_planner import TRAJECTORY_SIZE
 import numpy as np
 
+from openpilot.common.filter_simple import StreamingMovingAverage
+
 # Default lead acceleration decay set to 50% at 1s
 _LEAD_ACCEL_TAU = 1.5
 
@@ -120,33 +122,14 @@ class Track:
     self.aLeadK = aLeadK
     self.aLeadTau = aLeadTauInit
 
-  def get_RadarState(self, model_prob: float = 0.0):
+  def get_RadarState(self, model_prob: float = 0.0, vision_y_rel = 0.0):
     return {
       "dRel": float(self.dRel),
-      "yRel": float(self.yRel),
+      "yRel": float(self.yRel) if self.yRel != 0 else vision_y_rel,
       "vRel": float(self.vRel),
       "vLead": float(self.vLead),
       "vLeadK": float(self.vLeadK),
       "aLeadK": float(self.aLeadK),
-      "aLeadTau": float(self.aLeadTau),
-      "status": True,
-      "fcw": self.is_potential_fcw(model_prob),
-      "modelProb": model_prob,
-      "radar": True,
-      "radarTrackId": self.identifier,
-      "aRel": float(self.aRel),
-      "vLat": float(self.vLat),
-    }
-  
-  def get_RadarState2(self, model_prob, lead_msg):
-
-    return {
-      "dRel": float(self.dRel),
-      "yRel": float(self.yRel) if self.yRel != 0 else float(-lead_msg.y[0]),
-      "vRel": float(self.vRel),
-      "vLead": float(self.vLead),
-      "vLeadK": float(self.vLeadK),
-      "aLeadK": self.aLeadK,
       "aLeadTau": float(self.aLeadTau),
       "status": True,
       "fcw": self.is_potential_fcw(model_prob),
@@ -224,19 +207,9 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
   else:
     return None
 
-aLeadTau_Vision = 1.5
-aLeadTauStart_Vision = 0.5
-aLeadTauInit_Vision = 1.5
-
 def get_RadarState_from_vision(lead_msg: capnp._DynamicStructReader, v_ego: float, model_v_ego: float):
-  global aLeadTau_Vision, aLeadTauStart_Vision, aLeadTauInit_Vision
   
   aLeadK = float(lead_msg.a[0])
-  if abs(aLeadK) < aLeadTauStart_Vision:
-    aLeadTau_Vision = aLeadTauInit_Vision
-  else:
-    aLeadTau_Vision *= 0.9
-
   lead_v_rel_pred = lead_msg.v[0] - model_v_ego
   return {
     "dRel": float(lead_msg.x[0] - RADAR_TO_CAMERA),
@@ -245,7 +218,7 @@ def get_RadarState_from_vision(lead_msg: capnp._DynamicStructReader, v_ego: floa
     "vLead": float(v_ego + lead_v_rel_pred),
     "vLeadK": float(v_ego + lead_v_rel_pred),
     "aLeadK": aLeadK, 
-    "aLeadTau": aLeadTau_Vision, #0.3,
+    "aLeadTau": 0.3,
     "fcw": False,
     "modelProb": float(lead_msg.prob),
     "status": True,
@@ -254,9 +227,8 @@ def get_RadarState_from_vision(lead_msg: capnp._DynamicStructReader, v_ego: floa
   }
 
 
-def get_lead(v_ego: float, ready: bool, tracks: dict[int, Track], lead_msg: capnp._DynamicStructReader,
+def get_lead_org(v_ego: float, ready: bool, tracks: dict[int, Track], lead_msg: capnp._DynamicStructReader,
              model_v_ego: float, low_speed_override: bool = True) -> dict[str, Any]:
-  global aLeadTau_Vision, aLeadTauInit_Vision
   ## SCC레이더는 일단 보관하고 리스트에서 삭제...
   track_scc = tracks.get(0)
   #if track_scc is not None:  
@@ -281,8 +253,7 @@ def get_lead(v_ego: float, ready: bool, tracks: dict[int, Track], lead_msg: capn
 
   lead_dict = {'status': False}
   if track is not None:
-    lead_dict = track.get_RadarState2(lead_msg.prob, lead_msg)
-    aLeadTau_Vision = aLeadTauInit_Vision # 레이더 -> 비젼 전환시, 순간적인 비젼 accel값의 변화로 인한 주행충격을 방지하기 위함. (시험)
+    lead_dict = track.get_RadarState(lead_msg.prob, float(-lead_msg.y[0]))
   elif (track is None) and ready and (lead_msg.prob > .5):
     lead_dict = get_RadarState_from_vision(lead_msg, v_ego, model_v_ego)
 
@@ -293,16 +264,9 @@ def get_lead(v_ego: float, ready: bool, tracks: dict[int, Track], lead_msg: capn
 
       # Only choose new track if it is actually closer than the previous one
       if (not lead_dict['status']) or (closest_track.dRel < lead_dict['dRel']):
-        lead_dict = closest_track.get_RadarState2(lead_msg.prob, lead_msg)
+        lead_dict = closest_track.get_RadarState(lead_msg.prob, float(-lead_msg.y[0]))
 
   return lead_dict
-
-def get_leads(tracks):
-  leads = []
-  for c in tracks.values():
-    ld = c.get_RaarState(c.vision_prob)
-    leads.append(ld)
-  return leads
 
 def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego):
   lead_msg = md.leadsV3[0]
@@ -331,7 +295,7 @@ def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego):
     # yRel값은 왼쪽이 +값, lead.y[0]값은 왼쪽이 -값
     d_y = -c.yRel - interp(c.dRel, md_x, md_y)
     if abs(d_y) < lane_width/2:
-      ld = c.get_RadarState2(lead_msg.prob, lead_msg)
+      ld = c.get_RadarState(lead_msg.prob, float(-lead_msg.y[0]))
       leads_center[c.dRel] = ld
     elif -next_lane_y < d_y < 0:
       ld = c.get_RadarState(0.0)
@@ -369,85 +333,88 @@ def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego):
 
   return [ll,lc,lr, leadLeft, leadRight]
 
-def match_vision_track_apilot(v_ego, lead_msg, tracks, md, lane_width):
-  offset_vision_dist = lead_msg.x[0] - RADAR_TO_CAMERA
+class VisionTrack:
+  def __init__(self, radar_ts):
+    self.radar_ts = radar_ts
+    self.aLeadTauInit = float(Params().get_int("ALeadTau")) / 100. 
+    self.aLeadTauStart = float(Params().get_int("ALeadTauStart")) / 100.
+    self.aLeadFilter = StreamingMovingAverage(1)
+    self.vLeadFilter = StreamingMovingAverage(1)
+    self.reset()
 
-  ## SCC레이더는 일단 보관하고 리스트에서 삭제...
-  track_scc = tracks.get(0)
-  #if track_scc is not None:
-  #  del tracks[0]
+  def reset(self):
+    self.dRel = 0.0
+    self.yRel = 0.0
+    self.vRel = 0.0
+    self.vLead = 0.0
+    self.aLead = 0.0
+    self.aLeadTau = self.aLeadTauInit
+    self.prob = 0.0
+    self.aLeadFilter.set(0.0)
+    self.vLeadFilter.set(0.0)
+    self.active = False
+    self.aLeadK = 0.0
+    self.P = 0.5 #1.0
 
-  ## SCC레이더 개조는 track이 1개밖에 없으니, 항상 SCC레이더는 사용한다.
-  if len(tracks) > 0:
-    if md is not None and len(md.position.x) == TRAJECTORY_SIZE:
-      md_y = md.position.y
-      md_x = md.position.x
+  def a_lead_k(self, accel):
+    aLeadK = self.aLeadK
+    Q = 0.01 #0.1
+    R = 10.0 #5.0
+    P_predict = self.P + Q
+    z = accel / self.radar_ts
+    K = P_predict / (P_predict + R)
+    self.aLeadK = aLeadK + K * (z - aLeadK)
+    self.P = (1 - K) * P_predict
+
+  def update(self, lead_msg, model_v_ego, v_ego):
+    self.aLeadTauInit = float(Params().get_int("ALeadTau")) / 100. 
+    self.aLeadTauStart = float(Params().get_int("ALeadTauStart")) / 100.
+    #lead_v_rel_pred = lead_msg.v[0] - model_v_ego
+    lead_v_rel_pred = lead_msg.v[0] - self.vLead
+    self.prob = lead_msg.prob
+    if self.prob > .5:
+      self.dRel = float(lead_msg.x[0]) - RADAR_TO_CAMERA
+      self.yRel = float(-lead_msg.y[0])
+      self.vRel = lead_v_rel_pred
+      if not self.active:
+        #vLead = float(v_ego + lead_v_rel_pred)
+        vLead = lead_msg.v[0] #float(v_ego + lead_v_rel_pred)
+        self.vLead = self.vLeadFilter.set(vLead)
+        self.aLead = self.aLeadFilter.set(lead_msg.a[0])
+        self.aLeadK = self.aLead
+        self.a_lead_k(0.0)
+      else:
+        #vLead = self.vLeadFilter.process(float(v_ego + lead_v_rel_pred))
+        vLead = self.vLeadFilter.process(lead_msg.v[0])
+        self.a_lead_k(vLead - self.vLead)
+        self.vLead = vLead
+        self.aLead = self.aLeadFilter.process(float(lead_msg.a[0]), median = True)
+        self.aLead = float(lead_msg.a[0])
+
+      #print("{:.2f}, {:.3f}".format(self.prob, self.P))
+      if abs(self.aLead) < self.aLeadTauStart:
+        self.aLeadTau = self.aLeadTauInit
+      else:
+        self.aLeadTau = min(self.aLeadTau * 0.9, self.aLeadTauInit)
+      self.active = True
     else:
-      return track_scc
+      self.reset()
 
-    tracks_center = {}
-    tracks_left = {}
-    tracks_right = {}
-    for track_id, c in tracks.items():
-      lp_y = interp(c.dRel + c.vLat, md_x, md_y)
-      d_y = -c.yRel - lp_y
-      lw = interp(c.dRel, [0, 10, 100], [1.5, lane_width, lane_width*0.6] )
-      if abs(d_y) < lw / 2:
-        tracks_center[track_id] = c
-      elif d_y < 0:
-        tracks_left[track_id] = c
-      else:
-        tracks_right[track_id] = c
-
-    if lead_msg.prob > .5: # 비젼감지된경우
-      # 정지된 차량의 감지... : 감지된 비젼은 움직이는 것으로 나온다. 레이더는 정지된것으로... 10m/s이상의 차이로 match fail된다.
-      # 선행차가 지나가고 있는 차량 위의 신호등이나, TG지붕등 감지를 안하게 하려면?
-      #     속도가 빠른것만 먼저고름:
-      #     없으면: 정지된 차량들을 골라야함. 비젼검출위주로 봐야할듯..
-
-      ## 1. 비젼거리오차&속도오차에 검출된것을 고름
-      tracks_match = {track_id: track for track_id, track in tracks_center.items() 
-                        if (abs(track.dRel - offset_vision_dist) < max([(offset_vision_dist)*.35, 5.0])) 
-                        and (abs(track.vRel + v_ego - lead_msg.v[0]) < 10)}
-      if tracks_match:
-        min_track_id = min(tracks_match, key=lambda id:tracks_match[id].dRel)
-        return tracks_match[min_track_id]
-      ## 2. 비젼거리오차에 해당되는것이 있다면... 속도가 가장 빠른것으로 선택함..
-      else:
-        tracks_match = {track_id: track for track_id, track in tracks_center.items() 
-                          if (abs(track.dRel - offset_vision_dist) < max([(offset_vision_dist)*.35, 5.0])) 
-                          and (track.vRel + v_ego) > -0.5}
-        if tracks_match:
-          min_track_id = max(tracks_match, key=lambda id:tracks_match[id].vRel)
-          return tracks_match[min_track_id]
-      if track_scc is not None:
-        if offset_vision_dist > track_scc.dRel - 5.0: #끼어드는 차량이 있는 경우 비젼으로 처리하도록 삭제..
-          track_scc = None
-      return track_scc
- 
-    tracks_fast = {track_id: track for track_id, track in tracks_center.items() if track.vRel+v_ego > 3.0}
-    if tracks_fast:
-      min_track_id = min(tracks_fast, key=lambda id:tracks_fast[id].dRel)
-      return tracks_fast[min_track_id]
-
-  ## 검출된 레이더가 없는데.. 
-  return track_scc
-
-def get_lead_apilot(v_ego, ready, tracks, lead_msg, model_v_ego, md, lane_width):
-  global aLeadTau_Vision, aLeadTauInit_Vision
-  if len(tracks) > 0 and ready:
-    track = match_vision_track_apilot(v_ego, lead_msg, tracks, md, lane_width)
-  else:
-    track = None
-
-  lead_dict = {'status': False}
-  if track is not None:
-    lead_dict = track.get_RadarState2(lead_msg.prob, lead_msg)
-    aLeadTau_Vision = aLeadTauInit_Vision # 레이더 -> 비젼 전환시, 순간적인 비젼 accel값의 변화로 인한 주행충격을 방지하기 위함. (시험)
-  elif lead_msg.prob > .5:
-    lead_dict = get_RadarState_from_vision(lead_msg, v_ego, model_v_ego)
-  
-  return lead_dict
+  def get_lead(self):
+    return {
+      "dRel": self.dRel,
+      "yRel": self.yRel,
+      "vRel": self.vRel,
+      "vLead": self.vLead,
+      "vLeadK": self.vLead,
+      "aLeadK": self.aLead if abs(self.aLead) < abs(self.aLeadK) else self.aLeadK, 
+      "aLeadTau": self.aLeadTau,
+      "fcw": False,
+      "modelProb": self.prob,
+      "status": True,
+      "radar": False,
+      "radarTrackId": -1,
+    }
 
 
 class RadarD:
@@ -470,19 +437,16 @@ class RadarD:
     self.mixRadarInfo = 0
     self.aLeadTauInit = 1.5
     self.aLeadTauStart = 0.5
+    self.vision_track = VisionTrack(radar_ts)
     self.a_ego = 0.0
 
     self.radar_ts = radar_ts
 
   def update(self, sm: messaging.SubMaster, rr: Optional[car.RadarData]):
     #self.showRadarInfo = int(Params().get("ShowRadarInfo"))
-    global aLeadTau_Vision, aLeadTauInit_Vision
     self.mixRadarInfo = int(Params().get_int("MixRadarInfo"))
     self.aLeadTauInit = float(Params().get_int("ALeadTau")) / 100. 
     self.aLeadTauStart = float(Params().get_int("ALeadTauStart")) / 100.
-
-    aLeadTauInit_Vision = self.aLeadTauInit
-    aLeadTauStart_Vision = self.aLeadTauStart
 
     self.ready = sm.seen['modelV2']
     self.current_time = 1e-9*max(sm.logMonoTime.values())
@@ -533,18 +497,16 @@ class RadarD:
       model_v_ego = self.v_ego
     leads_v3 = sm['modelV2'].leadsV3
     if len(leads_v3) > 1:
-      if self.mixRadarInfo == 1:
-        self.radar_state.leadOne = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[0], model_v_ego, low_speed_override=False)
-        self.radar_state.leadTwo = get_lead(self.v_ego, self.ready, self.tracks_empty, leads_v3[0], model_v_ego, low_speed_override=False)
-      elif self.mixRadarInfo == 2:
-        self.radar_state.leadOne = get_lead_apilot(self.v_ego, self.ready, self.tracks, leads_v3[0], model_v_ego, sm['modelV2'], sm['lateralPlan'].laneWidth)
-        self.radar_state.leadTwo = get_lead_apilot(self.v_ego, self.ready, self.tracks, leads_v3[1], model_v_ego, sm['modelV2'], sm['lateralPlan'].laneWidth)
-      elif self.mixRadarInfo == 3:
-        self.radar_state.leadOne = get_lead(self.v_ego, self.ready, self.tracks_empty, leads_v3[0], model_v_ego, low_speed_override=False)
-        self.radar_state.leadTwo = get_lead(self.v_ego, self.ready, self.tracks_empty, leads_v3[0], model_v_ego, low_speed_override=False)
-      else:
-        self.radar_state.leadOne = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[0], model_v_ego, low_speed_override=False)
-        self.radar_state.leadTwo = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[1], model_v_ego, low_speed_override=False)
+      self.vision_track.update(leads_v3[0], model_v_ego, self.v_ego)
+      if self.mixRadarInfo in [1,2]: ## leadOne: radar or vision, leadTwo: vision 
+        self.radar_state.leadOne = self.get_lead(self.tracks, leads_v3[0], model_v_ego, low_speed_override=False)
+        self.radar_state.leadTwo = self.get_lead(self.tracks_empty, leads_v3[0], model_v_ego, low_speed_override=False)
+      elif self.mixRadarInfo == 3: ## vision only mode
+        self.radar_state.leadOne = self.get_lead(self.tracks_empty, leads_v3[0], model_v_ego, low_speed_override=False)
+        self.radar_state.leadTwo = self.get_lead(self.tracks_empty, leads_v3[0], model_v_ego, low_speed_override=False)
+      else: ## comma stock.
+        self.radar_state.leadOne = self.get_lead(self.tracks, leads_v3[0], model_v_ego, low_speed_override=False)
+        self.radar_state.leadTwo = self.get_lead(self.tracks, leads_v3[1], model_v_ego, low_speed_override=False)
 
       if True: #self.showRadarInfo: #self.extended_radar_enabled and self.ready:
         ll, lc, lr, self.radar_state.leadLeft, self.radar_state.leadRight = get_lead_side(self.v_ego, self.tracks, sm['modelV2'], sm['lateralPlan'].laneWidth, model_v_ego)
@@ -575,6 +537,38 @@ class RadarD:
       }
     pm.send('liveTracks', tracks_msg)
 
+  def get_lead(self, tracks: dict[int, Track], lead_msg: capnp._DynamicStructReader,
+               model_v_ego: float, low_speed_override: bool = True) -> dict[str, Any]:
+
+    v_ego = self.v_ego
+    ready = self.ready
+    ## SCC레이더는 일단 보관하고 리스트에서 삭제...
+    track_scc = tracks.get(0)
+    #if track_scc is not None:  
+    #  del tracks[0]            ## tracks에서 삭제하면안됨... ㅠㅠ
+
+    # Determine leads, this is where the essential logic happens
+    if len(tracks) > 0 and ready and lead_msg.prob > .5:
+      track = match_vision_to_track(v_ego, lead_msg, tracks)
+    else:
+      track = None
+
+    lead_dict = {'status': False}
+    if track is not None:
+      lead_dict = track.get_RadarState(lead_msg.prob, float(-lead_msg.y[0]))
+    elif (track is None) and ready and (lead_msg.prob > .5):
+      lead_dict = self.vision_track.get_lead()
+
+    if low_speed_override:
+      low_speed_tracks = [c for c in tracks.values() if c.potential_low_speed_lead(v_ego)]
+      if len(low_speed_tracks) > 0:
+        closest_track = min(low_speed_tracks, key=lambda c: c.dRel)
+
+        # Only choose new track if it is actually closer than the previous one
+        if (not lead_dict['status']) or (closest_track.dRel < lead_dict['dRel']):
+          lead_dict = closest_track.get_RadarState(lead_msg.prob, float(-lead_msg.y[0]))
+
+    return lead_dict
 
 # fuses camera and radar data for best lead detection
 def main():

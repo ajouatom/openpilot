@@ -493,8 +493,9 @@ class LongitudinalMpc:
     self.params[:,1] = self.max_a if not reset_state else a_ego
 
     v_cruise, stop_x, self.mode = self.update_apilot(carstate, radarstate, model, v_cruise)
-    self.debugLongText = "{},{},{:.1f},tf={:.2f},{:.1f},stop={:.1f},{:.1f},xv={:.0f},{:.0f}".format(
-      str(self.xState), str(self.trafficState), v_cruise*3.6, t_follow, t_follow*v_ego+6.0, stop_x, self.stopDist,x[-1],v[-1])
+    #self.debugLongText = "{},{},{:.1f},tf={:.2f},{:.1f},stop={:.1f},{:.1f},xv={:.0f},{:.0f}".format(
+    #  str(self.xState), str(self.trafficState), v_cruise*3.6, t_follow, t_follow*v_ego+6.0, stop_x, self.stopDist,x[-1],v[-1])
+    xe, ve = x[-1], v[-1]
     # TODO: e2eStop시 속도증가된는 문제발생, 일단 속도제한해보자.. 왜그러지? cruise_obstacle이 더 작을텐데...
     if self.xState == XState.e2eStop:
       self.max_a = 0.0
@@ -522,6 +523,7 @@ class LongitudinalMpc:
 
       # These are not used in ACC mode
       x[:], v[:], a[:], j[:] = 0.0, 0.0, 0.0, 0.0
+      #print("{:.1f}, {:.1f}".format(lead_0_obstacle[0], cruise_obstacle[0]))
 
     elif self.mode == 'blended':
       self.params[:,5] = 1.0
@@ -553,6 +555,9 @@ class LongitudinalMpc:
     self.params[:,4] = t_follow
     self.params[:,6] = self.comfort_brake
     self.params[:,7] = applyStopDistance
+
+    self.debugLongText = "{},tf={:.2f},{:.1f},stop={:.1f},{:.1f},xv={:.0f},{:.0f},xt={:.0f},{:.0f}".format(
+      str(self.xState), t_follow, t_follow*v_ego+6.0, stop_x, self.stopDist,xe,ve, self.params[:,2][0], lead_0_obstacle[0])
 
     self.run()
     if (np.any(lead_xv_0[FCW_IDXS,0] - self.x_sol[FCW_IDXS,0] < CRASH_DISTANCE) and
