@@ -198,6 +198,28 @@ class CarController(CarControllerBase):
         elif self.frame % 100 == 53:
           can_sends.append([addr, 0, avm_on, bus])
 
+    # ajouatom: calculate jerk, cb : reverse engineer from KONA EV
+    jerk = actuators.jerk
+    startingJerk = self.jerkStartLimit
+    jerkLimit = 5.0
+    self.jerk_count += DT_CTRL
+    jerk_max = interp(self.jerk_count, [0, 1.5, 2.5], [startingJerk, startingJerk, jerkLimit])
+    cb_upper = cb_lower = 0
+    if actuators.longControlState == LongCtrlState.off:
+      jerk_u = jerkLimit
+      jerk_l = jerkLimit          
+      self.jerk_count = 0
+    elif actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
+      jerk_u = 0.5
+      jerk_l = 1.0 #jerkLimit
+      self.jerk_count = 0
+    else:
+      jerk_u = min(max(0.5, jerk * 2.0), jerk_max)
+      #jerk_l = min(max(1.0, -jerk * 2.0), jerk_max)
+      jerk_l = min(max(1.2, -jerk * 2.0), jerkLimit) ## 1.0으로 하니 덜감속, 1.5로하니 너무감속, 1.2로 한번해보자(231228)
+      cb_upper = clip(0.9 + accel * 0.2, 0, 1.2)
+      cb_lower = clip(0.8 + accel * 0.2, 0, 1.2)
+
     # CAN-FD platforms
     if self.CP.carFingerprint in CANFD_CAR:
       hda2 = self.CP.flags & HyundaiFlags.CANFD_HDA2
@@ -234,10 +256,10 @@ class CarController(CarControllerBase):
         if self.frame % 2 == 0:
           if self.CP.flags & HyundaiFlags.SCC_BUS2.value:
             can_sends.append(hyundaicanfd.create_acc_control_scc2(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
-                                                             set_speed_in_units, CS.longitudinal_personality, CS.cruise_info))
+                                                             set_speed_in_units, CS.longitudinal_personality, CS.cruise_info, jerk_u, jerk_l))
           else:
             can_sends.append(hyundaicanfd.create_acc_control(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
-                                                             set_speed_in_units, CS.longitudinal_personality))
+                                                             set_speed_in_units, CS.longitudinal_personality, jerk_u, jerk_l))
           self.accel_last = accel
 
         ### for LongControl auto activate...
@@ -274,27 +296,6 @@ class CarController(CarControllerBase):
         can_sends.append(hyundaican.create_mdps12(self.packer, self.frame, CS.mdps12))
 
       if self.frame % 2 == 0 and self.CP.openpilotLongitudinalControl:
-        # ajouatom: calculate jerk, cb : reverse engineer from KONA EV
-        jerk = actuators.jerk
-        startingJerk = self.jerkStartLimit
-        jerkLimit = 5.0
-        self.jerk_count += DT_CTRL
-        jerk_max = interp(self.jerk_count, [0, 1.5, 2.5], [startingJerk, startingJerk, jerkLimit])
-        cb_upper = cb_lower = 0
-        if actuators.longControlState == LongCtrlState.off:
-          jerk_u = jerkLimit
-          jerk_l = jerkLimit          
-          self.jerk_count = 0
-        elif actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
-          jerk_u = 0.5
-          jerk_l = 1.0 #jerkLimit
-          self.jerk_count = 0
-        else:
-          jerk_u = min(max(0.5, jerk * 2.0), jerk_max)
-          #jerk_l = min(max(1.0, -jerk * 2.0), jerk_max)
-          jerk_l = min(max(1.2, -jerk * 2.0), jerkLimit) ## 1.0으로 하니 덜감속, 1.5로하니 너무감속, 1.2로 한번해보자(231228)
-          cb_upper = clip(0.9 + accel * 0.2, 0, 1.2)
-          cb_lower = clip(0.8 + accel * 0.2, 0, 1.2)
         
         # TODO: unclear if this is needed
         #jerk = 3.0 if actuators.longControlState == LongCtrlState.pid else 1.0

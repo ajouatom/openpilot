@@ -137,7 +137,7 @@ def create_lfahda_cluster(packer, CAN, enabled):
   return packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, values)
 
 
-def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, personality, cruise_info_copy):
+def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, personality, cruise_info_copy, jerk_u, jerk_l):
   jerk = 5
   jn = jerk / 50
   if not enabled or gas_override:
@@ -153,13 +153,13 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
   values["aReqValue"] = a_val
   values["aReqRaw"] = a_raw
   values["VSetDis"] = set_speed
-  values["JerkLowerLimit"] = jerk if enabled else 1
-  values["JerkUpperLimit"] = 3.0
+  values["JerkLowerLimit"] = jerk_l #jerk if enabled else 1
+  values["JerkUpperLimit"] = jerk_u #3.0
   values["DISTANCE_SETTING"] = personality + 1
 
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
 
-def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, personality):
+def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, personality, jerk_u, jerk_l):
   jerk = 5
   jn = jerk / 50
   if not enabled or gas_override:
@@ -175,8 +175,8 @@ def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_ov
     "aReqValue": a_val,
     "aReqRaw": a_raw,
     "VSetDis": set_speed,
-    "JerkLowerLimit": jerk if enabled else 1,
-    "JerkUpperLimit": 3.0,
+    "JerkLowerLimit": jerk_l, #jerk if enabled else 1,
+    "JerkUpperLimit": jerk_u, #3.0,
 
     "ACC_ObjDist": 1,
     "ObjValid": 0,
