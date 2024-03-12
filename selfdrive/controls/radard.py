@@ -355,17 +355,19 @@ class VisionTrack:
     self.active = False
     self.aLeadK = 0.0
     self.vLeadK = 0.0
+    self.vRelK = 0.0
     self.P = 0.5 #1.0
     self.P_v = 0.5 #1.0
+    self.v_ego = 0.0
 
-  def v_lead_k(self, vel):
-    vLeadK = self.vLeadK
+  def v_rel_k(self, vel):
+    vRelK = self.vRelK
     Q = 0.01 #0.1
     R = 10.0 #5.0
     P_predict = self.P_v + Q
     z = vel / self.radar_ts
     K = P_predict / (P_predict + R)
-    self.vLeadK = vLeadK + K * (z - vLeadK)
+    self.vRelK = vRelK + K * (z - vRelK)
     self.P_v = (1 - K) * P_predict
 
   def a_lead_k(self, accel):
@@ -384,6 +386,7 @@ class VisionTrack:
     #lead_v_rel_pred = lead_msg.v[0] - model_v_ego
     lead_v_rel_pred = lead_msg.v[0] - self.vLead
     self.prob = lead_msg.prob
+    self.v_ego = v_ego
     if self.prob > .5:
       dRel = float(lead_msg.x[0]) - RADAR_TO_CAMERA
       self.yRel = float(-lead_msg.y[0])
@@ -394,14 +397,16 @@ class VisionTrack:
         self.vLead = self.vLeadFilter.set(vLead)
         self.aLead = self.aLeadFilter.set(lead_msg.a[0])
         self.aLeadK = self.aLead
-        self.a_lead_k(self.aLead)
+        self.a_lead_k(0.0)
+        self.vRelK = 0.0
         self.vLeadK = self.vLead
-        self.v_lead_k(self.vLead)
+        self.v_rel_k(0.0)
       else:
         #vLead = self.vLeadFilter.process(float(v_ego + lead_v_rel_pred))
         vLead = self.vLeadFilter.process(lead_msg.v[0])
         self.a_lead_k(vLead - self.vLead)
-        self.v_lead_k(v_ego + (dRel - self.dRel))
+        self.v_rel_k(dRel - self.dRel)
+        self.vLeadK = v_ego + self.vRelK
         self.vLead = vLead
         self.aLead = self.aLeadFilter.process(float(lead_msg.a[0]), median = True)
         self.aLead = float(lead_msg.a[0])
