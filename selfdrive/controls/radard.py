@@ -434,7 +434,7 @@ class VisionTrack:
       "vRel": self.vRel,
       "vLead": self.vLeadK,
       "vLeadK": self.vLeadK,
-      "aLeadK": self.aLead, #self.aLead if abs(self.aLead) < abs(self.aLeadK) else self.aLeadK, 
+      "aLeadK": self.aLead if abs(self.aLead) < abs(self.aLeadK) else self.aLeadK, 
       "aLeadTau": self.aLeadTau,
       "fcw": False,
       "modelProb": self.prob,
