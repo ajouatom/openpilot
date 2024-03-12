@@ -364,7 +364,7 @@ class VisionTrack:
 
   def v_rel_k(self, vel):
     vRelK = self.vRelK
-    Q = 0.02 #0.01 #0.1
+    Q = 0.01 #0.01 #0.1
     R = 10.0 #5.0
     P_predict = self.P_v + Q
     z = vel / self.radar_ts
