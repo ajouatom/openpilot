@@ -421,9 +421,9 @@ class VisionTrack:
         self.aLeadTau = self.aLeadTauInit
       else:
         self.aLeadTau = min(self.aLeadTau * 0.9, self.aLeadTauInit)
-      self.active += 1
+      self.active_count += 1
     else:
-      if self.active >= 0:
+      if self.active_count >= 0:
         self.reset()
       
 
