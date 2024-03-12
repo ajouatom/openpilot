@@ -234,7 +234,7 @@ class CarController(CarControllerBase):
       #else:
       #  can_sends.extend(hyundaicanfd.create_steering_messages(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_steer))
 
-      can_sends.extend(hyundaicanfd.carrot_canfd353(self.packer, CC.latActive, CS.canfd353_info))
+      can_sends.extend(hyundaicanfd.carrot_canfd353(self.packer, self.CAN, CC.latActive, CS.canfd353_info))
 
       # prevent LFA from activating on HDA2 by sending "no lane lines detected" to ADAS ECU
       if self.frame % 5 == 0 and hda2 and not (self.CP.flags & HyundaiFlags.SCC_BUS2.value): # SCC_BUS2의 경우 ACAN이 bus1에 있어서 보낼수가 없음..
