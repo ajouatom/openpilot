@@ -314,7 +314,10 @@ void OnroadWindow::updateStateText() {
     topLabel->setText(top);
 
     extern int g_fps;
-    topRightLabel->setText(QString("FPS: %1").arg(g_fps));
+    const auto cp = sm["carParams"].getCarParams();
+    top.sprintf("%s Long, FPS: %d", hasLongitudinalControl(cp)?"OP":"Stock", g_fps);
+    topRightLabel->setText(top);
+
     Params params = Params();
     QString carName = QString::fromStdString(params.get("CarName"));
     topLeftLabel->setText(carName);
