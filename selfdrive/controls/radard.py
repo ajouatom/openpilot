@@ -354,7 +354,7 @@ class VisionTrack:
     self.aLeadFilter.set(0.0)
     self.vLeadFilter.set(0.0)
     self.dRelFilter.set(0.0)
-    self.active = False
+    self.active_count = -1
     self.aLeadK = 0.0
     self.vLeadK = 0.0
     self.vRelK = 0.0
@@ -393,7 +393,7 @@ class VisionTrack:
       dRel = float(lead_msg.x[0]) - RADAR_TO_CAMERA
       self.yRel = float(-lead_msg.y[0])
       self.vRel = lead_v_rel_pred
-      if not self.active:
+      if self.active_count < 0:
         #vLead = float(v_ego + lead_v_rel_pred)
         vLead = lead_msg.v[0] #float(v_ego + lead_v_rel_pred)
         self.vLead = self.vLeadFilter.set(vLead)
@@ -421,9 +421,9 @@ class VisionTrack:
         self.aLeadTau = self.aLeadTauInit
       else:
         self.aLeadTau = min(self.aLeadTau * 0.9, self.aLeadTauInit)
-      self.active = True
+      self.active += 1
     else:
-      if self.active:
+      if self.active >= 0:
         self.reset()
       
 
@@ -432,8 +432,8 @@ class VisionTrack:
       "dRel": self.dRel,
       "yRel": self.yRel,
       "vRel": self.vRel,
-      "vLead": self.vLeadK,
-      "vLeadK": self.vLeadK,
+      "vLead": self.vLeadK if self.active_count > 10 else self.vLead,
+      "vLeadK": self.vLeadK if self.active_count > 10 else self.vLead,
       "aLeadK": self.aLead if abs(self.aLead) < abs(self.aLeadK) else self.aLeadK, 
       "aLeadTau": self.aLeadTau,
       "fcw": False,
