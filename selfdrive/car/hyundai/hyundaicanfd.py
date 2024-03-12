@@ -38,7 +38,7 @@ class CanBus(CanBusBase):
 def create_steering_messages_scc2(packer, CP, CAN, enabled, lat_active, apply_steer, lfa_info):
 
   values = lfa_info
-  values["LKA_MODE"] = 1 # carrot: 2
+  values["LKA_MODE"] = 2
   values["LKA_ICON"] = 2 if enabled else 1
   values["TORQUE_REQUEST"] = apply_steer
   values["LKA_ASSIST"] = 0
