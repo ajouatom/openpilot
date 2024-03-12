@@ -340,6 +340,7 @@ class VisionTrack:
     self.aLeadTauStart = float(Params().get_int("ALeadTauStart")) / 100.
     self.aLeadFilter = StreamingMovingAverage(1)
     self.vLeadFilter = StreamingMovingAverage(1)
+    self.dRelFilter = StreamingMovingAverage(5)
     self.reset()
 
   def reset(self):
@@ -352,6 +353,7 @@ class VisionTrack:
     self.prob = 0.0
     self.aLeadFilter.set(0.0)
     self.vLeadFilter.set(0.0)
+    self.dRelFilter.set(0.0)
     self.active = False
     self.aLeadK = 0.0
     self.vLeadK = 0.0
@@ -396,12 +398,14 @@ class VisionTrack:
         vLead = lead_msg.v[0] #float(v_ego + lead_v_rel_pred)
         self.vLead = self.vLeadFilter.set(vLead)
         self.aLead = self.aLeadFilter.set(lead_msg.a[0])
+        dRel = self.self.dRelFilter.set(dRel)
         self.aLeadK = self.aLead
         self.a_lead_k(0.0)
         self.vRelK = 0.0
         self.vLeadK = self.vLead
         self.v_rel_k(0.0)
       else:
+        dRel = self.dRelFilter.process(dRel)
         #vLead = self.vLeadFilter.process(float(v_ego + lead_v_rel_pred))
         vLead = self.vLeadFilter.process(lead_msg.v[0])
         self.a_lead_k(vLead - self.vLead)
@@ -419,7 +423,9 @@ class VisionTrack:
         self.aLeadTau = min(self.aLeadTau * 0.9, self.aLeadTauInit)
       self.active = True
     else:
-      self.reset()
+      if self.active:
+        self.reset()
+      
 
   def get_lead(self):
     return {
