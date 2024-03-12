@@ -410,12 +410,12 @@ class VisionTrack:
         vLead = self.vLeadFilter.process(lead_msg.v[0])
         self.a_lead_k(vLead - self.vLead)
         if abs(dRel - self.dRel) > 1.0:
+          self.vRelK = 0.0          
           self.vLeadK = vLead
           self.v_rel_k(dRel - self.dRel)
-          self.vRelK = 0.0
         else:
           self.v_rel_k(dRel - self.dRel)
-        self.vLeadK = v_ego + self.vRelK
+          self.vLeadK = v_ego + self.vRelK
         self.vLead = vLead
         self.aLead = self.aLeadFilter.process(float(lead_msg.a[0]), median = True)
         self.aLead = float(lead_msg.a[0])
