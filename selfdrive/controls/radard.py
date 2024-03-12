@@ -340,7 +340,7 @@ class VisionTrack:
     self.aLeadTauStart = float(Params().get_int("ALeadTauStart")) / 100.
     self.aLeadFilter = StreamingMovingAverage(1)
     self.vLeadFilter = StreamingMovingAverage(1)
-    self.dRelFilter = StreamingMovingAverage(5)
+    self.dRelFilter = StreamingMovingAverage(3)
     self.reset()
 
   def reset(self):
