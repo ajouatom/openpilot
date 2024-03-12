@@ -684,10 +684,14 @@ void DrawPlot::makePlotData(const UIState* s, float& data1, float& data2, char *
         sprintf(str, "Detected radar(G:aLeadK, Y:a_ego)");
         break;
     case 7:
-        data1 = a_ego; // 노
-        data2 = accel_out;  // 녹
-        sprintf(str, "Accel (G:accel output, Y:a_ego)");
+        data1 = lead_radar.getVLeadK();
+        data2 = lead_radar.getVLead();
+        sprintf(str, "Detected radar(G:vLead, Y:vLeadK)");
         break;
+        //data1 = a_ego; // 노
+        //data2 = accel_out;  // 녹
+        //sprintf(str, "Accel (G:accel output, Y:a_ego)");
+        //break;
     default:
         data1 = data2 = 0;
         sprintf(str, "no data");
