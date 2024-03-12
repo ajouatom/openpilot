@@ -121,6 +121,8 @@ class LanePlanner:
     l_prob *= l_std_mod
     r_prob *= r_std_mod
 
+    self.l_prob, self.r_prob = l_prob, r_prob
+
     # Find current lanewidth
     current_lane_width = abs(self.rll_y[0] - self.lll_y[0])
 

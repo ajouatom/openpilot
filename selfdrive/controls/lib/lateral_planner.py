@@ -223,10 +223,14 @@ class LateralPlanner:
     
     self.x_sol = self.lat_mpc.x_sol
 
-    debugText = "{} {:.1f} | {:.1f}m | {:.1f}m | {:.1f}m | {}".format(
+    debugText = "{} {:.1f} | {:.1f}m |{:.1f} {:.1f}m {:.1f}| {:.1f}m | {}".format(
       "lanemode" if self.lanelines_active else "laneless",
       self.LP.d_prob,
-      self.LP.lane_width_left, self.LP.lane_width, self.LP.lane_width_right,
+      self.LP.lane_width_left,
+      self.LP.l_prob,
+      self.LP.lane_width,
+      self.LP.r_prob,
+      self.LP.lane_width_right,
       "offset={:.1f}cm turn={:.0f}km/h".format(self.LP.offset_total*100.0, clip(self.curve_speed, -200, 200)) if self.lanelines_active else "")
 
     lateralPlan.latDebugText = debugText
