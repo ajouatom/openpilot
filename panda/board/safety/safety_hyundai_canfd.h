@@ -365,14 +365,17 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
   if (bus_num == 0) {
     bus_fwd = 2;
   }
+  extern uint8_t to_push_data_len_code;
   if (bus_num == 2) {
       int i;
       for (i = 0; i < addr_list_count; i++) {
-          if (addr_list[i] == addr) break;
+          if (addr_list[i] == addr) {
+              addr_list_len[i] = to_push_data_len_code;
+              break;
+          }
       }
       if (i == addr_list_count) {
           addr_list[addr_list_count] = addr;
-          extern uint8_t to_push_data_len_code;
           addr_list_len[addr_list_count] = to_push_data_len_code;
           addr_list_count++;
           print("bus2_list=");
