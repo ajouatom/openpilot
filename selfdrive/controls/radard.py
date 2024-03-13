@@ -367,7 +367,7 @@ class VisionTrack:
   def v_rel_k(self, vel, d_rel):
     vRelK = self.vRelK
     Q = 0.15 #0.01 #0.1   
-    R = interp(d_rel, [0.0, 50.0, 100.0], [3.0, 5.0, 100.0]) #15.0 #5.0
+    R = interp(d_rel, [0.0, 50.0, 100.0], [4.0, 5.0, 100.0]) #15.0 #5.0
     P_predict = self.P_v + Q
     z = vel / self.radar_ts
     K = P_predict / (P_predict + R)
@@ -395,7 +395,7 @@ class VisionTrack:
       dRel = float(lead_msg.x[0]) - RADAR_TO_CAMERA
       self.yRel = float(-lead_msg.y[0])
       self.vRel = lead_v_rel_pred
-      if self.active_count < 0 or self.prob < 0.9 or dRel > 70.0:
+      if self.active_count < 0 or self.prob < 0.8 or dRel > 70.0:
         #vLead = float(v_ego + lead_v_rel_pred)
         vLead = lead_msg.v[0] #float(v_ego + lead_v_rel_pred)
         self.vLead = self.vLeadFilter.set(vLead)
