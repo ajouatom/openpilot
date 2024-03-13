@@ -358,16 +358,16 @@ class VisionTrack:
     self.aLeadK = 0.0
     self.vLeadK = 0.0
     self.vRelK = 0.0
-    self.P = 0.5 #1.0
-    self.P_v = 0.5 #1.0
+    self.P = 0.3 #1.0
+    self.P_v = 0.3 #1.0
     self.v_ego = 0.0
 
   # 프로세스노이즈Q: 값을 올리면 측정값에 대해 민감하게 반응함, 응답성이 빨라짐.
   # 측정노이즈R: 값을 낮추면 측정값에 대해 더 신뢰하게 됨.
   def v_rel_k(self, vel, d_rel):
     vRelK = self.vRelK
-    Q = 0.15 #0.01 #0.1   
-    R = interp(d_rel, [0.0, 50.0, 1.0], [100, 8.0, 5.0]) #15.0 #5.0
+    Q = 0.2 #0.01 #0.1   
+    R = interp(d_rel, [0.0, 50.0, 1.0], [100, 5.0, 3.0]) #15.0 #5.0
     P_predict = self.P_v + Q
     z = vel / self.radar_ts
     K = P_predict / (P_predict + R)
