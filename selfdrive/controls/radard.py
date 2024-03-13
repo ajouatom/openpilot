@@ -368,7 +368,7 @@ class VisionTrack:
   # 프로세스노이즈Q: 값을 올리면 측정값에 대해 민감하게 반응함, 응답성이 빨라짐.
   # 측정노이즈R: 값을 낮추면 측정값에 대해 더 신뢰하게 됨.
   def v_rel_k(self, vel, d_rel):
-    self.dddd = vel
+    self.dddd = vel / self.radar_ts
     vRelK = self.vRelK
     Q = interp(d_rel, [0.0, 50.0, 100.0], [0.18, 0.12, 0.01]) #0.15 #0.01 #0.1   
     R = interp(d_rel, [0.0, 50.0, 100.0], [5.0, 6.0, 8.0]) #15.0 #5.0
