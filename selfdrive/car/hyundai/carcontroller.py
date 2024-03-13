@@ -166,7 +166,7 @@ class CarController(CarControllerBase):
       self.hapticFeedbackWhenSpeedCamera = int(self.params.get_int("HapticFeedbackWhenSpeedCamera"))
 
     # tester present - w/ no response (keeps relevant ECU disabled)
-    if self.frame % 100 == 0 and not (self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC.value) and self.CP.openpilotLongitudinalControl:
+    if self.frame % 100 == 0 and not (self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC.value) and self.CP.openpilotLongitudinalControl and not (self.CP.flags & HyundaiFlags.SCC_BUS2.value):
       # for longitudinal control, either radar or ADAS driving ECU
       addr, bus = 0x7d0, self.CAN.ECAN if self.CP.carFingerprint in CANFD_CAR else 0
       if self.CP.flags & HyundaiFlags.CANFD_HDA2.value:
@@ -198,6 +198,28 @@ class CarController(CarControllerBase):
         elif self.frame % 100 == 53:
           can_sends.append([addr, 0, avm_on, bus])
 
+    # ajouatom: calculate jerk, cb : reverse engineer from KONA EV
+    jerk = actuators.jerk
+    startingJerk = self.jerkStartLimit
+    jerkLimit = 5.0
+    self.jerk_count += DT_CTRL
+    jerk_max = interp(self.jerk_count, [0, 1.5, 2.5], [startingJerk, startingJerk, jerkLimit])
+    cb_upper = cb_lower = 0
+    if actuators.longControlState == LongCtrlState.off:
+      jerk_u = jerkLimit
+      jerk_l = jerkLimit          
+      self.jerk_count = 0
+    elif actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
+      jerk_u = 0.5
+      jerk_l = 1.0 #jerkLimit
+      self.jerk_count = 0
+    else:
+      jerk_u = min(max(0.5, jerk * 2.0), jerk_max)
+      #jerk_l = min(max(1.0, -jerk * 2.0), jerk_max)
+      jerk_l = min(max(1.2, -jerk * 2.0), jerkLimit) ## 1.0으로 하니 덜감속, 1.5로하니 너무감속, 1.2로 한번해보자(231228)
+      cb_upper = clip(0.9 + accel * 0.2, 0, 1.2)
+      cb_lower = clip(0.8 + accel * 0.2, 0, 1.2)
+
     # CAN-FD platforms
     if self.CP.carFingerprint in CANFD_CAR:
       hda2 = self.CP.flags & HyundaiFlags.CANFD_HDA2
@@ -206,8 +228,16 @@ class CarController(CarControllerBase):
       # steering control
       can_sends.extend(hyundaicanfd.create_steering_messages(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_steer))
 
+      ## carrot 기존데이터를 복사하니.. mdps에러가 뜨는것 같음...
+      #if self.CP.flags & HyundaiFlags.SCC_BUS2.value:  
+      #  can_sends.append(hyundaicanfd.create_steering_messages_scc2(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_steer, CS.lfa_info))
+      #else:
+      #  can_sends.extend(hyundaicanfd.create_steering_messages(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_steer))
+
+      #can_sends.append(hyundaicanfd.carrot_canfd353(self.packer, self.CAN, CC.latActive, CS.canfd353_info))
+
       # prevent LFA from activating on HDA2 by sending "no lane lines detected" to ADAS ECU
-      if self.frame % 5 == 0 and hda2:
+      if self.frame % 5 == 0 and hda2 and not (self.CP.flags & HyundaiFlags.SCC_BUS2.value): # SCC_BUS2의 경우 ACAN이 bus1에 있어서 보낼수가 없음..
         can_sends.append(hyundaicanfd.create_suppress_lfa(self.packer, self.CAN, CS.hda2_lfa_block_msg,
                                                           self.CP.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING))
 
@@ -220,13 +250,18 @@ class CarController(CarControllerBase):
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker))
 
       if self.CP.openpilotLongitudinalControl:
-        if hda2:
-          can_sends.extend(hyundaicanfd.create_adrv_messages(self.packer, self.CAN, self.frame))
-        else:
-          can_sends.extend(hyundaicanfd.create_fca_warning_light(self.packer, self.CAN, self.frame))
+        if True: #not (self.CP.flags & HyundaiFlags.SCC_BUS2.value):
+          if hda2:
+            can_sends.extend(hyundaicanfd.create_adrv_messages(self.CP, self.packer, self.CAN, self.frame))
+          else:
+            can_sends.extend(hyundaicanfd.create_fca_warning_light(self.packer, self.CAN, self.frame))
         if self.frame % 2 == 0:
-          can_sends.append(hyundaicanfd.create_acc_control(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
-                                                           set_speed_in_units, CS.longitudinal_personality))
+          if self.CP.flags & HyundaiFlags.SCC_BUS2.value:
+            can_sends.append(hyundaicanfd.create_acc_control_scc2(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
+                                                             set_speed_in_units, CS.longitudinal_personality, CS.cruise_info, jerk_u, jerk_l))
+          else:
+            can_sends.append(hyundaicanfd.create_acc_control(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
+                                                             set_speed_in_units, CS.longitudinal_personality, jerk_u, jerk_l))
           self.accel_last = accel
 
         ### for LongControl auto activate...
@@ -263,27 +298,6 @@ class CarController(CarControllerBase):
         can_sends.append(hyundaican.create_mdps12(self.packer, self.frame, CS.mdps12))
 
       if self.frame % 2 == 0 and self.CP.openpilotLongitudinalControl:
-        # ajouatom: calculate jerk, cb : reverse engineer from KONA EV
-        jerk = actuators.jerk
-        startingJerk = self.jerkStartLimit
-        jerkLimit = 5.0
-        self.jerk_count += DT_CTRL
-        jerk_max = interp(self.jerk_count, [0, 1.5, 2.5], [startingJerk, startingJerk, jerkLimit])
-        cb_upper = cb_lower = 0
-        if actuators.longControlState == LongCtrlState.off:
-          jerk_u = jerkLimit
-          jerk_l = jerkLimit          
-          self.jerk_count = 0
-        elif actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
-          jerk_u = 0.5
-          jerk_l = 1.0 #jerkLimit
-          self.jerk_count = 0
-        else:
-          jerk_u = min(max(0.5, jerk * 2.0), jerk_max)
-          #jerk_l = min(max(1.0, -jerk * 2.0), jerk_max)
-          jerk_l = min(max(1.2, -jerk * 2.0), jerkLimit) ## 1.0으로 하니 덜감속, 1.5로하니 너무감속, 1.2로 한번해보자(231228)
-          cb_upper = clip(0.9 + accel * 0.2, 0, 1.2)
-          cb_lower = clip(0.8 + accel * 0.2, 0, 1.2)
         
         # TODO: unclear if this is needed
         #jerk = 3.0 if actuators.longControlState == LongCtrlState.pid else 1.0
