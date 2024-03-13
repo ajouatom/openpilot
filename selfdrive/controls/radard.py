@@ -385,8 +385,9 @@ class VisionTrack:
     self.P = (1 - K) * P_predict
 
   def update(self, lead_msg, model_v_ego, v_ego):
-    self.aLeadTauInit = float(Params().get_int("ALeadTau")) / 100. 
-    self.aLeadTauStart = float(Params().get_int("ALeadTauStart")) / 100.
+    self.aLeadTauInit = self.params.get_int("ALeadTau") / 100. 
+    self.aLeadTauStart = self.params.get_float("ALeadTauStart") / 100.
+    self.mixRadarInfo = self.params.get_int("MixRadarInfo")
     #lead_v_rel_pred = lead_msg.v[0] - model_v_ego
     lead_v_rel_pred = lead_msg.v[0] - self.vLead
     self.prob = lead_msg.prob
@@ -439,9 +440,9 @@ class VisionTrack:
       "dRel": self.dRel,
       "yRel": self.yRel,
       "vRel": self.vRel,
-      "vLead": self.vLeadK if self.active_count > 1 / self.radar_ts else self.vLead,
+      "vLead": self.vLead if self.mixRadarInfo == 2 else self.vLeadK if self.active_count > 1 / self.radar_ts else self.vLead,
       "vLeadK": self.vLeadK if self.active_count > 1 / self.radar_ts else self.vLead,
-      "aLeadK": self.aLead if abs(self.aLead) < abs(self.aLeadK) else self.aLeadK, 
+      "aLeadK": self.aLead if self.mixRadarInfo == 2 else self.aLead if abs(self.aLead) < abs(self.aLeadK) else self.aLeadK, 
       #"aLeadK": self.aLeadK,# if abs(self.aLead) < abs(self.aLeadK) else self.aLeadK, 
       "aLeadTau": self.aLeadTau,
       "fcw": False,
@@ -535,10 +536,10 @@ class RadarD:
     if len(leads_v3) > 1:
       if model_updated:
         self.vision_track.update(leads_v3[0], model_v_ego, self.v_ego)
-      if self.mixRadarInfo in [1,2]: ## leadOne: radar or vision, leadTwo: vision 
+      if self.mixRadarInfo in [1]: ## leadOne: radar or vision, leadTwo: vision 
         self.radar_state.leadOne = self.get_lead(self.tracks, leads_v3[0], model_v_ego, low_speed_override=False)
         self.radar_state.leadTwo = self.get_lead(self.tracks_empty, leads_v3[0], model_v_ego, low_speed_override=False)
-      elif self.mixRadarInfo == 3: ## vision only mode
+      elif self.mixRadarInfo in [2,3]: ## vision only mode
         self.radar_state.leadOne = self.get_lead(self.tracks_empty, leads_v3[0], model_v_ego, low_speed_override=False)
         self.radar_state.leadTwo = self.get_lead(self.tracks_empty, leads_v3[0], model_v_ego, low_speed_override=False)
       else: ## comma stock.
