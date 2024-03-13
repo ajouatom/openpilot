@@ -536,7 +536,7 @@ class RadarD:
       model_v_ego = self.v_ego
     leads_v3 = sm['modelV2'].leadsV3
     if len(leads_v3) > 1:
-      if s.updated['modelV2']:
+      if sm.updated['modelV2']:
         self.vision_track.update(leads_v3[0], model_v_ego, self.v_ego)
       if self.mixRadarInfo in [1,2]: ## leadOne: radar or vision, leadTwo: vision 
         self.radar_state.leadOne = self.get_lead(self.tracks, leads_v3[0], model_v_ego, low_speed_override=False)
