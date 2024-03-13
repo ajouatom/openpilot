@@ -366,8 +366,8 @@ class VisionTrack:
   # 측정노이즈R: 값을 낮추면 측정값에 대해 더 신뢰하게 됨.
   def v_rel_k(self, vel, d_rel):
     vRelK = self.vRelK
-    Q = interp(d_rel, [0.0, 50.0, 100.0], [0.18, 0.12, 0.01]) #0.15 #0.01 #0.1   
-    R = interp(d_rel, [0.0, 50.0, 100.0], [5.0, 6.0, 8.0]) #15.0 #5.0
+    Q = 0.15 #interp(d_rel, [0.0, 50.0, 100.0], [0.18, 0.12, 0.01]) #0.15 #0.01 #0.1   
+    R = 5.0 #interp(d_rel, [0.0, 50.0, 100.0], [5.0, 6.0, 8.0]) #15.0 #5.0
     P_predict = self.P_v + Q
     z = vel / self.radar_ts
     K = P_predict / (P_predict + R)
