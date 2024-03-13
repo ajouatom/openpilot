@@ -441,7 +441,7 @@ class VisionTrack:
       "vRel": self.vRel,
       "vLead": self.vLeadK if self.active_count > 1 / self.radar_ts else self.vLead,
       "vLeadK": self.vLeadK if self.active_count > 1 / self.radar_ts else self.vLead,
-      "aLeadK": self.aLead if abs(self.aLead) < abs(self.aLeadK) else self.aLeadK, 
+      "aLeadK": self.aLead, # if abs(self.aLead) < abs(self.aLeadK) else self.aLeadK, 
       "aLeadTau": self.aLeadTau,
       "fcw": False,
       "modelProb": self.prob,
