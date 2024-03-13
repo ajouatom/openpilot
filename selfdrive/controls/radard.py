@@ -443,7 +443,7 @@ class VisionTrack:
       "vRel": self.vRel,
       "vLead": self.vLead if self.mixRadarInfo in [0, 1, 2] else self.vLeadK if self.active_count > 1 / self.radar_ts else self.vLead,
       "vLeadK": self.vLeadK if self.active_count > 1 / self.radar_ts else self.vLead,
-      "aLeadK": self.aLead if self.mixRadarInfo in [0, 1, 2] else self.aLead if abs(self.aLead) < abs(self.aLeadK) else self.aLeadK, 
+      "aLeadK": self.aLead, # if self.mixRadarInfo in [0, 1, 2] else self.aLead if abs(self.aLead) < abs(self.aLeadK) else self.aLeadK, 
       #"aLeadK": self.aLeadK,# if abs(self.aLead) < abs(self.aLeadK) else self.aLeadK, 
       "aLeadTau": self.aLeadTau,
       "fcw": False,
