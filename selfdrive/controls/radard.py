@@ -414,7 +414,7 @@ class VisionTrack:
         if abs(dRel - self.dRel) > 0.5:
           self.vRelK = 0.0          
           self.vLeadK = vLead
-          self.v_rel_k(dRel - self.dRel)
+          #self.v_rel_k(dRel - self.dRel)
         else:
           self.v_rel_k(dRel - self.dRel)
           self.vLeadK = v_ego + self.vRelK
