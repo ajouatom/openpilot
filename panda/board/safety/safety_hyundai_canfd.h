@@ -54,6 +54,8 @@ const CanMsg HYUNDAI_CANFD_HDA2_LONG_TX_MSGS[] = {
   {0x1A0, 0, 32}, // CRUISE_INFO
   {0x345, 0, 8},  // ADRV_0x345
   {0x1DA, 0, 32}, // ADRV_0x1da
+
+  {353, 0, 16}, // ADRV_353
 };
 
 const CanMsg HYUNDAI_CANFD_HDA1_TX_MSGS[] = {
