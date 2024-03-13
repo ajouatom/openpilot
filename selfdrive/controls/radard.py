@@ -376,8 +376,8 @@ class VisionTrack:
 
   def a_lead_k(self, accel):
     aLeadK = self.aLeadK
-    Q = 0.01 #0.1
-    R = 10.0 #5.0
+    Q = 0.15 #0.01
+    R = 5.0 #10.0
     P_predict = self.P + Q
     z = accel / self.radar_ts
     K = P_predict / (P_predict + R)
@@ -439,9 +439,10 @@ class VisionTrack:
       "dRel": self.dRel,
       "yRel": self.yRel,
       "vRel": self.vRel,
-      "vLead": self.vLead, #K if self.active_count > 1 / self.radar_ts else self.vLead,
-      "vLeadK": self.vLeadK, # if self.active_count > 1 / self.radar_ts else self.vLead,
-      "aLeadK": self.aLead, # if abs(self.aLead) < abs(self.aLeadK) else self.aLeadK, 
+      "vLead": self.vLeadK if self.active_count > 1 / self.radar_ts else self.vLead,
+      "vLeadK": self.vLeadK if self.active_count > 1 / self.radar_ts else self.vLead,
+      #"aLeadK": self.aLead if abs(self.aLead) < abs(self.aLeadK) else self.aLeadK, 
+      "aLeadK": self.aLeadK,# if abs(self.aLead) < abs(self.aLeadK) else self.aLeadK, 
       "aLeadTau": self.aLeadTau,
       "fcw": False,
       "modelProb": self.prob,
