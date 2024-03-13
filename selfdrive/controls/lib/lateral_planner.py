@@ -1,7 +1,7 @@
 import time
 import numpy as np
 from openpilot.common.realtime import DT_MDL
-from openpilot.common.numpy_fast import interp
+from openpilot.common.numpy_fast import interp, clip
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.controls.lib.lateral_mpc_lib.lat_mpc import LateralMpc
 from openpilot.selfdrive.controls.lib.lateral_mpc_lib.lat_mpc import N as LAT_MPC_N
@@ -50,6 +50,8 @@ class LateralPlanner:
 
     self.debug_mode = debug
 
+    self.params = Params()
+
     self.latDebugText = ""
     # lane_mode
     self.LP = LanePlanner()
@@ -57,8 +59,9 @@ class LateralPlanner:
     self.lanelines_active = False
     self.lanelines_active_tmp = False
 
-    self.pathOffset = float(int(Params().get("PathOffset", encoding="utf8")))*0.01
-    self.useLaneLineSpeed = float(int(Params().get("UseLaneLineSpeed", encoding="utf8")))
+    self.useLaneLineSpeed = float(self.params.get_int("UseLaneLineSpeed"))
+    self.pathOffset = float(self.params.get_int("PathOffset")) * 0.01
+    self.carrotTest = self.params.get_int("CarrotTest")
     self.useLaneLineMode = False
     self.plan_yaw = np.zeros((TRAJECTORY_SIZE,))
     self.plan_yaw_rate = np.zeros((TRAJECTORY_SIZE,))
@@ -77,11 +80,27 @@ class LateralPlanner:
     self.lat_mpc.reset(x0=self.x0)
 
   def update(self, sm, carrot_planner):
+    global PATH_COST, LATERAL_MOTION_COST, LATERAL_ACCEL_COST, LATERAL_JERK_COST, STEERING_RATE_COST
     self.readParams -= 1
     if self.readParams <= 0:
       self.readParams = 100
-      self.useLaneLineSpeed = float(int(Params().get("UseLaneLineSpeed", encoding="utf8")))
-      self.pathOffset = float(int(Params().get("PathOffset", encoding="utf8")))*0.01
+      self.useLaneLineSpeed = float(self.params.get_int("UseLaneLineSpeed"))
+      self.pathOffset = float(self.params.get_int("PathOffset")) * 0.01
+      self.carrotTest = self.params.get_int("CarrotTest")
+
+      if self.carrotTest == 2:
+        PATH_COST = 1.0
+        LATERAL_MOTION_COST = 0.11
+        LATERAL_ACCEL_COST = 1.0
+        LATERAL_JERK_COST = 0.04
+        STEERING_RATE_COST = 10.0
+      else:
+        PATH_COST = 1.0
+        LATERAL_MOTION_COST = 0.11
+        LATERAL_ACCEL_COST = 0.0
+        LATERAL_JERK_COST = 0.04
+        STEERING_RATE_COST = 700.0
+
 
     # clip speed , lateral planning is not possible at 0 speed
     measured_curvature = sm['controlsState'].curvature
@@ -204,10 +223,15 @@ class LateralPlanner:
     
     self.x_sol = self.lat_mpc.x_sol
 
-    debugText = "{} | {:.1f}m | {:.1f}m | {:.1f}m | {}".format(
+    debugText = "{} {:.1f} | {:.1f}m |{:.1f} {:.1f}m {:.1f}| {:.1f}m | {}".format(
       "lanemode" if self.lanelines_active else "laneless",
-      self.LP.lane_width_left, self.LP.lane_width, self.LP.lane_width_right,
-      "offset={:.1f}cm turn={:.0f}km/h".format(self.LP.offset_total*100.0, self.curve_speed) if self.lanelines_active else "")
+      self.LP.d_prob,
+      self.LP.lane_width_left,
+      self.LP.l_prob,
+      self.LP.lane_width,
+      self.LP.r_prob,
+      self.LP.lane_width_right,
+      "offset={:.1f}cm turn={:.0f}km/h".format(self.LP.offset_total*100.0, clip(self.curve_speed, -200, 200)) if self.lanelines_active else "")
 
     lateralPlan.latDebugText = debugText
     #lateralPlan.latDebugText = self.latDebugText

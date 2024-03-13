@@ -50,7 +50,7 @@ def allow_uploads(started, params, CP: car.CarParams) -> bool:
   #return wifi_connected if params.get_bool("DisableOnroadUploads") else enable_logging
 
 def enable_dm(started, params, CP: car.CarParams) -> bool:
-  return (started or params.get_bool("IsDriverViewEnabled")) and params.get_int("ShowDmInfo") > 0
+  return (started or params.get_bool("IsDriverViewEnabled")) and params.get_int("ShowDmInfo") >= 0
 
 def enable_logging(started, params, CP: car.CarParams) -> bool:
   #return True
@@ -99,7 +99,7 @@ procs = [
   PythonProcess("radard", "selfdrive.controls.radard", only_onroad),
   PythonProcess("thermald", "selfdrive.thermald.thermald", always_run),
   PythonProcess("tombstoned", "selfdrive.tombstoned", enable_logging, enabled=not PC),
-  PythonProcess("updated", "selfdrive.updated", only_offroad, enabled=not PC),
+  PythonProcess("updated", "selfdrive.updated.updated", only_offroad, enabled=not PC),
   PythonProcess("uploader", "system.loggerd.uploader", allow_uploads),
   PythonProcess("statsd", "selfdrive.statsd", always_run),
 

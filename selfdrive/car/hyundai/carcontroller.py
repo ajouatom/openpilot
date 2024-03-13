@@ -6,7 +6,8 @@ from opendbc.can.packer import CANPacker
 from openpilot.selfdrive.car import apply_driver_steer_torque_limits, common_fault_avoidance
 from openpilot.selfdrive.car.hyundai import hyundaicanfd, hyundaican
 from openpilot.selfdrive.car.hyundai.hyundaicanfd import CanBus
-from openpilot.selfdrive.car.hyundai.values import HyundaiFlags, Buttons, CarControllerParams, CANFD_CAR, CAR, LEGACY_SAFETY_MODE_CAR
+from openpilot.selfdrive.car.hyundai.values import HyundaiFlags, Buttons, CarControllerParams, CANFD_CAR, CAR, LEGACY_SAFETY_MODE_CAR, CAN_GEARS
+from openpilot.selfdrive.car.interfaces import CarControllerBase
 import random
 from random import randint
 from openpilot.common.params import Params
@@ -45,7 +46,7 @@ def process_hud_alert(enabled, fingerprint, hud_control):
   return sys_warning, sys_state, left_lane_warning, right_lane_warning
 
 
-class CarController:
+class CarController(CarControllerBase):
   def __init__(self, dbc_name, CP, VM):
     self.CP = CP
     self.CAN = CanBus(CP)
@@ -80,7 +81,8 @@ class CarController:
     self.button_spamming_count = 0
     self.prev_clu_speed = 0
     self.button_spam1 = 8
-    self.button_spam2 = 30    
+    self.button_spam2 = 30
+    self.button_spam3 = 1
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -98,6 +100,7 @@ class CarController:
 
       self.button_spam1 = self.params.get_int("CruiseButtonTest1")
       self.button_spam2 = self.params.get_int("CruiseButtonTest2")
+      self.button_spam3 = self.params.get_int("CruiseButtonTest3")
 
 
     carrot_test = self.params.get_int("CarrotTest")
@@ -231,7 +234,7 @@ class CarController:
           self.activateCruise = 0
         if CC.cruiseControl.activate and self.activateCruise == 0: ## ajouatom: send command to panda via Button spam(RES_ACCEL), for auto engage
           self.activateCruise = 1
-          #can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
+          #can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP))
           can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL))
           print("SendActivateCanData#######")
 
@@ -239,7 +242,7 @@ class CarController:
         # button presses
         can_sends.extend(self.create_button_messages(CC, CS, use_clu11=False))
     else:
-      can_sends.append(hyundaican.create_lkas11(self.packer, self.frame, self.car_fingerprint, apply_steer, apply_steer_req,
+      can_sends.append(hyundaican.create_lkas11(self.packer, self.frame, self.CP, apply_steer, apply_steer_req,
                                                 torque_fault, CS.lkas11, sys_warning, sys_state, CC.enabled,
                                                 hud_control.leftLaneVisible, hud_control.rightLaneVisible,
                                                 left_lane_warning, right_lane_warning))
@@ -253,10 +256,10 @@ class CarController:
         ### for LongControl auto activate...
         if CC.cruiseControl.activate and self.activateCruise == 0: ## ajouatom: send command to panda via Button spam(RES_ACCEL), for auto engage
           self.activateCruise = 1
-          can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
+          can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP))
           print("SendActivateCanData#######")
 
-      if self.CP.carFingerprint in (CAR.GENESIS_G90_2019, CAR.GENESIS_G90, CAR.K7):
+      if self.CP.carFingerprint in CAN_GEARS["send_mdps12"]:  # send mdps12 to LKAS to prevent LKAS error
         can_sends.append(hyundaican.create_mdps12(self.packer, self.frame, CS.mdps12))
 
       if self.frame % 2 == 0 and self.CP.openpilotLongitudinalControl:
@@ -324,23 +327,23 @@ class CarController:
     hud_control = CC.hudControl
     if use_clu11:
       #if CC.cruiseControl.cancel:
-      #  can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.CANCEL, self.CP.carFingerprint))
+      #  can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.CANCEL, self.CP))
       #elif CC.cruiseControl.resume:
       #  # send resume at a max freq of 10Hz
       #  if (self.frame - self.last_button_frame) * DT_CTRL > 0.1:
       #    # send 25 messages at a time to increases the likelihood of resume being accepted
-      #    can_sends.extend([hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint)] * 25)
+      #    can_sends.extend([hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP)] * 25)
       #    if (self.frame - self.last_button_frame) * DT_CTRL >= 0.15:
       #      self.last_button_frame = self.frame
       if CC.cruiseControl.cancel:
         print("cruiseControl.cancel")
-        can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.CANCEL, self.CP.carFingerprint))
+        can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.CANCEL, self.CP))
       elif False: #CC.cruiseControl.resume:
         if self.CP.carFingerprint in LEGACY_SAFETY_MODE_CAR:            
           if self.resume_wait_timer > 0:
             self.resume_wait_timer -= 1
           else:
-            can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
+            can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP))
             self.resume_cnt += 1
             if self.resume_cnt >= int(randint(4, 5) * 2):
               self.resume_cnt = 0
@@ -350,14 +353,14 @@ class CarController:
           # send resume at a max freq of 10Hz
           if (self.frame - self.last_button_frame) * DT_CTRL > 0.1:
             # send 25 messages at a time to increases the likelihood of resume being accepted
-            #can_sends.extend([hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint)] * 25)
-            can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP.carFingerprint))
+            #can_sends.extend([hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP)] * 25)
+            can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP))
             self.last_button_frame = self.frame
 
       if self.last_button_frame != self.frame:
         send_button = self.make_spam_button(CC, CS)
         if send_button > 0:
-          can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, send_button, self.CP.carFingerprint))
+          can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, send_button, self.CP))
       
     else:
 
@@ -407,8 +410,9 @@ class CarController:
       if self.last_button_frame != self.frame:
         dat = self.canfd_speed_control_pcm(CC, CS, self.cruise_buttons_msg_values)
         if dat is not None:
-          can_sends.append(dat)
-        self.cruise_buttons_msg_cnt += 1
+          for _ in range(self.button_spam3):
+            can_sends.append(dat)
+          self.cruise_buttons_msg_cnt += 1
 
     return can_sends
 

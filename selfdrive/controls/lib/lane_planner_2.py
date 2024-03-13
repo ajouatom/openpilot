@@ -64,9 +64,9 @@ class LanePlanner:
     self.debugText = ""
     self.lane_width_left = 0.0
     self.lane_width_right = 0.0
-    self.lane_width_left_filtered = FirstOrderFilter(1.0, 0.99, DT_MDL)
-    self.lane_width_right_filtered = FirstOrderFilter(1.0, 0.99, DT_MDL)
-    self.lane_offset_filtered = FirstOrderFilter(0.0, 0.99, DT_MDL)
+    self.lane_width_left_filtered = FirstOrderFilter(1.0, 2.0, DT_MDL)
+    self.lane_width_right_filtered = FirstOrderFilter(1.0, 2.0, DT_MDL)
+    self.lane_offset_filtered = FirstOrderFilter(0.0, 5.0, DT_MDL)
 
     self.lanefull_mode = False
 
@@ -121,6 +121,8 @@ class LanePlanner:
     l_prob *= l_std_mod
     r_prob *= r_std_mod
 
+    self.l_prob, self.r_prob = l_prob, r_prob
+
     # Find current lanewidth
     current_lane_width = abs(self.rll_y[0] - self.lll_y[0])
 
@@ -131,7 +133,7 @@ class LanePlanner:
       both_lane_available = True
       self.lane_width_updated_count = max_updated_count
       self.lane_width_estimate.update(current_lane_width)
-    elif self.lane_width_updated_count < max_updated_count / 2 and v_ego > 0.1:
+    elif self.lane_width_updated_count < max_updated_count / 2 and v_ego > 0.1:   # 양쪽차선이 없을때.... 일정시간후(약5초)부터 speed차선폭 적용함.
       self.lane_width_estimate.update(speed_lane_width)
 
     self.lane_width =  self.lane_width_estimate.x
@@ -145,10 +147,10 @@ class LanePlanner:
     # 좌/우의 차선폭을 필터링.
     if self.lane_width_left > 0:
       self.lane_width_left_filtered.update(self.lane_width_left)
-      self.lane_width_left_filtered.x = self.lane_width_left
+      #self.lane_width_left_filtered.x = self.lane_width_left #바로적용
     if self.lane_width_right > 0:
       self.lane_width_right_filtered.update(self.lane_width_right)
-      self.lane_width_right_filtered.x = self.lane_width_right
+      #self.lane_width_right_filtered.x = self.lane_width_right #바로적용
 
     self.adjustLaneOffset = float(self.params.get_int("AdjustLaneOffset")) * 0.01
     self.adjustCurveOffset = float(self.params.get_int("AdjustCurveOffset")) * 0.01

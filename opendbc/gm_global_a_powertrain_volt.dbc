@@ -79,10 +79,6 @@ VAL_TABLE_ LKATorqueDeliveredStatus 3 "Failed" 2 "Temp. Limited" 1 "Active" 0 "I
 VAL_TABLE_ HandsOffSWDetectionStatus 1 "Hands On" 0 "Hands Off" ;
 VAL_TABLE_ HandsOffSWDetectionMode 2 "Failed" 1 "Enabled" 0 "Disabled" ;
 
-BO_ 1 left_blindspot: 8 XXX
- SG_ leftbsmlight : 4|1@1+ (1,0) [0|1] "" XXX
-BO_ 2 right_blindspot: 8 XXX
- SG_ rightbsmlight : 0|1@1+ (1,0) [0|1] "" XXX
 
 BO_ 189 EBCMRegenPaddle: 7 K17_EBCM
  SG_ RegenPaddle : 7|4@0+ (1,0) [0|0] ""  NEO
@@ -130,8 +126,8 @@ BO_ 320 BCMTurnSignals: 3 K9_BCM
  SG_ HighBeamsTemporary : 5|1@0+ (1,0) [0|1] "" XXX
 
 BO_ 322 BCMBSM: 7 K9_BCM
- SG_ Left_BSM : 6|1@0+ (1,0) [0|1] "" XXX
- SG_ Right_BSM : 7|1@0+ (1,0) [0|1] "" XXX
+ SG_ LeftBSM : 6|1@0+ (1,0) [0|1] "" XXX
+ SG_ RightBSM : 7|1@0+ (1,0) [0|1] "" XXX
 
 BO_ 328 PSCM_148: 1 K43_PSCM
 
@@ -191,6 +187,9 @@ BO_ 497 BCMGeneralPlatformStatus: 8 K9_BCM
  SG_ SystemPowerMode : 1|2@0+ (1,0) [0|3] "" XXX
  SG_ SystemBackUpPowerMode : 5|2@0+ (1,0) [0|3] "" XXX
  SG_ ParkBrakeSwActive : 36|1@0+ (1,0) [0|3] "" XXX
+
+BO_ 500 SportMode: 6 XXX
+ SG_ SportMode : 15|1@0+ (1,0) [0|1] "" XXX
 
 BO_ 501 ECMPRDNL2: 8 K20_ECM
  SG_ TransmissionState : 48|4@1+ (1,0) [0|7] "" NEO
@@ -322,8 +321,8 @@ CM_ BU_ K124_ASCM "Active Safety Control Module";
 CM_ SG_ 381 MSG17D_AccPower "Need to investigate";
 CM_ BO_ 190 "Length varies from 6 to 8 bytes by car";
 CM_ SG_ 190 GasPedalAndAcc "ACC baseline is 62";
-CM_ SG_ 322 Left_BSM "For some cars, this can only be when the blinker is also active";
-CM_ SG_ 322 Right_BSM "For some cars, this can only be when the blinker is also active";
+CM_ SG_ 322 LeftBSM "For some cars, this can only be when the blinker is also active";
+CM_ SG_ 322 RightBSM "For some cars, this can only be when the blinker is also active";
 CM_ SG_ 352 ImmobilizerInfo "Non-zero when ignition or accessory mode";
 CM_ SG_ 451 GasPedalAndAcc2 "ACC baseline is 62";
 CM_ SG_ 481 ACCAlwaysOne "Usually 1 if the car is equipped with ACC";

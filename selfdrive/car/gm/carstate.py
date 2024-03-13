@@ -12,6 +12,7 @@ TransmissionType = car.CarParams.TransmissionType
 NetworkLocation = car.CarParams.NetworkLocation
 GearShifter = car.CarState.GearShifter
 STANDSTILL_THRESHOLD = 10 * 0.0311 * CV.KPH_TO_MS
+LongCtrlState = car.CarControl.Actuators.LongControlState # kans
 
 
 class CarState(CarStateBase):
@@ -29,11 +30,6 @@ class CarState(CarStateBase):
 
     # GAP_DIST
     self.distance_button_pressed = False 
-    # gm steer -kans
-    self.belowSteerSpeed_shown = False
-    self.disable_belowSteerSpeed = False
-    self.resumeRequired_shown = False
-    self.disable_resumeRequired = False
 
     # use cluster speed & vCluRatio
     self.use_cluster_speed = Params().get_int("SpeedFromPCM") #kans
@@ -181,12 +177,14 @@ class CarState(CarStateBase):
     # for delay Accfault event
     accFaulted = (pt_cp.vl["AcceleratorPedal2"]["CruiseState"] == AccState.FAULTED or \
                       pt_cp.vl["EBCMFrictionBrakeStatus"]["FrictionBrakeUnavailable"] == 1)
+    startingState = LongCtrlState.starting
     self.accFaultedCount = self.accFaultedCount + 1 if accFaulted else 0
     ret.accFaulted = True if self.accFaultedCount > 50 else False
 
     ret.cruiseState.enabled = pt_cp.vl["AcceleratorPedal2"]["CruiseState"] != AccState.OFF
     ret.cruiseState.standstill = pt_cp.vl["AcceleratorPedal2"]["CruiseState"] == AccState.STANDSTILL
-    ret.cruiseState.standstill = False
+    if startingState:
+      ret.cruiseState.standstill = False
     if self.CP.networkLocation == NetworkLocation.fwdCamera and not self.CP.flags & GMFlags.NO_CAMERA.value:
       if self.CP.carFingerprint not in CC_ONLY_CAR:
         ret.cruiseState.speed = cam_cp.vl["ASCMActiveCruiseControlStatus"]["ACCSpeedSetpoint"] * CV.KPH_TO_MS
