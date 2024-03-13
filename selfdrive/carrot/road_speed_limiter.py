@@ -19,6 +19,7 @@ from openpilot.system.hardware import TICI
 from openpilot.common.params import Params
 import subprocess
 from openpilot.selfdrive.navd.helpers import Coordinate
+import traceback
 
 CAMERA_SPEED_FACTOR = 1.05
 
@@ -843,6 +844,8 @@ def main():
         #time.sleep(0.03)
 
     except Exception as e:
+      stack_trace = traceback.format_exc()
+      print(stack_trace) 
       print(e)
       server.last_exception = e
       Params().put_bool("CarrotException", True)
