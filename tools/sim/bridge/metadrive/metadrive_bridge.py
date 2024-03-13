@@ -33,10 +33,10 @@ def create_map(track_size=60):
     lane_width=3.5,
     config=[
       None,
-      straight_block(track_size),
-      curve_block(track_size*2, 90),
-      straight_block(track_size),
-      curve_block(track_size*2, 90),
+      straight_block(track_size*2),
+      curve_block(track_size*3, 5),
+      straight_block(track_size*2),
+      curve_block(track_size*3, 5),
       straight_block(track_size),
       curve_block(track_size*2, 90),
       straight_block(track_size),
@@ -75,6 +75,7 @@ class MetaDriveBridge(SimulatorBridge):
       on_continuous_line_done=False,
       crash_vehicle_done=False,
       crash_object_done=False,
+      arrive_dest_done=False,
       traffic_density=0.05, # traffic is incredibly expensive
       map_config=create_map(),
       decision_repeat=1,

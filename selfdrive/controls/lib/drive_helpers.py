@@ -593,6 +593,10 @@ class VCruiseHelper:
 
     if controls.enabled or CS.brakePressed or CS.gasPressed:
       self.cruiseActiveReady = 0
+      if CS.gasPressed and CS.aEgo < -0.3:
+        self.autoCruiseCancelTimer = 1.0 / DT_CTRL #잠시 오토크루멈춤
+        self.cruiseActivate = -1
+        self._add_log("Cruise off (GasPressed while braking)")
 
     v_cruise_kph = self._update_cruise_button(CS, v_cruise_kph, controls)
 
@@ -648,10 +652,11 @@ class VCruiseHelper:
 
     if controls.enabled and self.autoSpeedUptoRoadSpeedLimit > 0.:
       lead_v_kph = self.lead_vLead * CV.MS_TO_KPH + 2.0
+      road_speed = (30 if self.roadSpeed < 30 else self.roadSpeed) * self.autoSpeedUptoRoadSpeedLimit
+      lead_v_kph = max(v_cruise_kph, min(lead_v_kph, road_speed))
       if lead_v_kph > v_cruise_kph and self.lead_dRel < 60:
-        road_speed = (30 if self.roadSpeed < 30 else self.roadSpeed) * self.autoSpeedUptoRoadSpeedLimit
         self._add_log_auto_cruise("AutoSpeed up to leadCar={:.0f}kph, road_speed={:.0f}kph".format(lead_v_kph, road_speed))
-        v_cruise_kph = max(v_cruise_kph, min(lead_v_kph, road_speed))
+        v_cruise_kph = lead_v_kph
 
     v_cruise_kph = self.update_apilot_cmd(controls, v_cruise_kph)
 

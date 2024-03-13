@@ -252,7 +252,7 @@ static void hyundai_canfd_rx_hook(const CANPacket_t *to_push) {
       if (mainMode_acc != acc_main_on) {
           print("mainMode_acc = "); putui((uint32_t)mainMode_acc); print("\n");
       }
-      acc_main_on = mainMode_acc; // carrot: ºñ·ÕÄÁ canfd´Â cruise_onÈ®ÀÎÀ» mainMode_acc·Î È®ÀÎÇØ¾ßÇÒ°Í °°À½. ´Ü¼ø¹öÆ°¹İÀüÀ¸·Î ÇÏ¸é µÚÁ×¹ÚÁ×.
+      acc_main_on = mainMode_acc; // carrot: ë¹„ë¡±ì»¨ canfdëŠ” cruise_oní™•ì¸ì„ mainMode_accë¡œ í™•ì¸í•´ì•¼í• ê²ƒ ê°™ìŒ. ë‹¨ìˆœë²„íŠ¼ë°˜ì „ìœ¼ë¡œ í•˜ë©´ ë’¤ì£½ë°•ì£½.
       */
     }
   }
@@ -300,7 +300,7 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
     }
   }
 
-  // longcontrolÀÏ¶§... carcontroller¿¡¼­ 1: resumeÀÌ ³ª¿Â°Ç, autocruise±â´É: controls_allowed¸¦ ÄÑ¶ó´Â carrot½ÅÈ£ÀÓ.
+  // longcontrolì¼ë•Œ... carcontrollerì—ì„œ 1: resumeì´ ë‚˜ì˜¨ê±´, autocruiseê¸°ëŠ¥: controls_allowedë¥¼ ì¼œë¼ëŠ” carrotì‹ í˜¸ì„.
   if ((addr == 0x1aa || addr == 0x1cf) && hyundai_longitudinal) {
       int cruise_button = 0;
       if (addr == 0x1cf) cruise_button = GET_BYTE(to_send, 2) & 0x7U;
@@ -308,7 +308,7 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
       if (cruise_button == 1) {
           if (_carrot_prepare_engage == 0) _carrot_prepare_engage = 2;
       }
-      tx = false;  // button spammingÀº longconÀÏ¶§.. ³ª°¡¸é ¾ÈµÉ°ÍÀÌ¶ó°í ÆÇ´ÜµÊ..
+      tx = false;  // button spammingì€ longconì¼ë•Œ.. ë‚˜ê°€ë©´ ì•ˆë ê²ƒì´ë¼ê³  íŒë‹¨ë¨..
   }
   if (controls_allowed) _carrot_prepare_engage = 0;
 
