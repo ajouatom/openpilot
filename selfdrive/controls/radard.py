@@ -361,6 +361,7 @@ class VisionTrack:
     self.P = 0.3 #1.0
     self.P_v = 0.3 #1.0
     self.v_ego = 0.0
+    self.params = Params()
 
   # 프로세스노이즈Q: 값을 올리면 측정값에 대해 민감하게 반응함, 응답성이 빨라짐.
   # 측정노이즈R: 값을 낮추면 측정값에 대해 더 신뢰하게 됨.
