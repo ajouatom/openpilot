@@ -608,7 +608,7 @@ void DrawPlot::drawPlotting(const UIState* s, int index, int start, float x, flo
         if (i == 0) {
             nvgMoveTo(s->vg, x + (size - i)*dx, plot_y);
             sprintf(str, "%.2f", data);
-            ui_draw_text(s, x + (size - i)*dx + 50, plot_y + (index>0)?40:0, str, 40, *color, BOLD);
+            ui_draw_text(s, x + (size - i)*dx + 50, plot_y + ((index>0)?40:0), str, 40, *color, BOLD);
         }
         else nvgLineTo(s->vg, x + (size - i)*dx, plot_y);
     }
