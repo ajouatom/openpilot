@@ -405,7 +405,7 @@ class VisionTrack:
         self.a_lead_k(0.0)
         self.vRelK = 0.0
         self.vLeadK = self.vLead
-        self.v_rel_k(0.0)
+        self.v_rel_k(0.0, 1.0)
       else:
         dRel = self.dRelFilter.process(dRel, median = True)
         #vLead = self.vLeadFilter.process(float(v_ego + lead_v_rel_pred))
