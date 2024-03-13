@@ -335,7 +335,7 @@ def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego):
 
 class VisionTrack:
   def __init__(self, radar_ts):
-    self.radar_ts = 0.05
+    self.radar_ts = radar_ts #0.05
     self.aLeadTauInit = float(Params().get_int("ALeadTau")) / 100. 
     self.aLeadTauStart = float(Params().get_int("ALeadTauStart")) / 100.
     self.aLeadFilter = StreamingMovingAverage(1)
@@ -533,7 +533,7 @@ class RadarD:
       model_v_ego = self.v_ego
     leads_v3 = sm['modelV2'].leadsV3
     if len(leads_v3) > 1:
-      if model_updated:
+      if True: #model_updated:
         self.vision_track.update(leads_v3[0], model_v_ego, self.v_ego)
       if self.mixRadarInfo in [1,2]: ## leadOne: radar or vision, leadTwo: vision 
         self.radar_state.leadOne = self.get_lead(self.tracks, leads_v3[0], model_v_ego, low_speed_override=False)
