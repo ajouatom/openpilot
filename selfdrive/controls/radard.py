@@ -340,7 +340,7 @@ class VisionTrack:
     self.aLeadTauStart = float(Params().get_int("ALeadTauStart")) / 100.
     self.aLeadFilter = StreamingMovingAverage(1)
     self.vLeadFilter = StreamingMovingAverage(1)
-    self.dRelFilter = StreamingMovingAverage(3)
+    self.dRelFilter = StreamingMovingAverage(5)
     self.reset()
 
   def reset(self):
@@ -366,7 +366,7 @@ class VisionTrack:
   # 측정노이즈R: 값을 낮추면 측정값에 대해 더 신뢰하게 됨.
   def v_rel_k(self, vel, prob):
     vRelK = self.vRelK
-    Q = 0.2 #0.01 #0.1   
+    Q = 0.15 #0.01 #0.1   
     R = 5.0 #interp(prob, [0.0, 0.8, 1.0], [100, 20, 5.0]) #15.0 #5.0
     P_predict = self.P_v + Q
     z = vel / self.radar_ts
