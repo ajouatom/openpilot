@@ -356,6 +356,7 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
 }
 
 int addr_list[128] = { 0, };
+int addr_list_len[128] = { 0, };
 int addr_list_count = 0;
 
 static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
@@ -373,7 +374,7 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
           addr_list[addr_list_count] = addr;
           addr_list_count++;
           print("bus2_list=");
-          for (int j = 0; j < addr_list_count; j++) { putui((uint32_t)addr_list[j]); print(" "); }
+          for (int j = 0; j < addr_list_count; j++) { putui((uint32_t)addr_list[j]); print("("); putui((uint32_t)addr_list[j]); print(") "); }
           print("\n");
       }
 #if 1
