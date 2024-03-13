@@ -376,7 +376,7 @@ class VisionTrack:
 
   def a_lead_k(self, accel):
     aLeadK = self.aLeadK
-    Q = 0.15 #0.01
+    Q = 0.05 #0.01
     R = 5.0 #10.0
     P_predict = self.P + Q
     z = accel / self.radar_ts
