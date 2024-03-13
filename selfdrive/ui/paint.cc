@@ -595,7 +595,7 @@ void DrawApilot::drawLaneLines(const UIState* s) {
     }
 }
 
-void DrawPlot::drawPlotting(const UIState* s, int start, float x, float y[], int size, NVGcolor* color, float stroke) {
+void DrawPlot::drawPlotting(const UIState* s, int index, int start, float x, float y[], int size, NVGcolor* color, float stroke) {
 
     nvgBeginPath(s->vg);
     plotRatio = (plotMax - plotMin) < 1.0 ? plotHeight : plotHeight / (plotMax - plotMin);
@@ -608,7 +608,7 @@ void DrawPlot::drawPlotting(const UIState* s, int start, float x, float y[], int
         if (i == 0) {
             nvgMoveTo(s->vg, x + (size - i)*dx, plot_y);
             sprintf(str, "%.2f", data);
-            ui_draw_text(s, x + (size - i)*dx + 50, plot_y + 40, str, 40, *color, BOLD);
+            ui_draw_text(s, x + (size - i)*dx + 50, plot_y + ((index>0)?40:0), str, 40, *color, BOLD);
         }
         else nvgLineTo(s->vg, x + (size - i)*dx, plot_y);
     }
@@ -684,6 +684,10 @@ void DrawPlot::makePlotData(const UIState* s, float& data1, float& data2, char *
         sprintf(str, "Detected radar(G:aLeadK, Y:a_ego)");
         break;
     case 7:
+        data1 = lead_radar.getVLeadK();
+        data2 = lead_radar.getVLead(); // getDRel();
+        sprintf(str, "Detected radar(G:vLead, Y:vLeadK)");
+        break;
         data1 = a_ego; // 노
         data2 = accel_out;  // 녹
         sprintf(str, "Accel (G:accel output, Y:a_ego)");
@@ -738,7 +742,7 @@ void DrawPlot::draw(const UIState* s) {
     NVGcolor color[2] = { COLOR_YELLOW, COLOR_GREEN };
     for (int i = 0; i < 2; i++) {
         //drawPlotting(s, i, plotX, plotQueue[i], plotSize, &color[i], nullptr);
-        drawPlotting(s, plotIndex, plotX, plotQueue[i], plotSize, &color[i], 3.0f);
+        drawPlotting(s, i, plotIndex, plotX, plotQueue[i], plotSize, &color[i], 3.0f);
     }
     //ui_draw_rect(s->vg, { (int)plotX, (int)plotY, (int)plotWidth, (int)plotHeight }, COLOR_WHITE, 2, 0);
     ui_draw_text(s, s->fb_w/2, 20, title, 25, COLOR_WHITE, BOLD);

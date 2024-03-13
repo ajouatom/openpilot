@@ -84,7 +84,7 @@ class Controls:
 
     self.log_sock = messaging.sub_sock('androidLog')
 
-    self.mute_dm = self.params.get_int("ShowDmInfo") < 1
+    self.mute_dm = self.params.get_int("ShowDmInfo") < 0
     if self.mute_dm:
       IGNORE_PROCESSES.update({"dmonitoringd", "dmonitoringmodeld"})
       self.camera_packets.remove("driverCameraState")
