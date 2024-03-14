@@ -31,7 +31,7 @@ def get_radar_can_parser_scc(CP):
   if enable_radar_tracks: 
     return None
 
-  if CP.carFingerprint in CANFD_CAR:
+  if CP.carFingerprint in CANFD_CAR and not scc2:
     return None
 
   # 롱컨은 켜졌지만, 배선개조가 안된경우 비젼롱컨
@@ -43,7 +43,10 @@ def get_radar_can_parser_scc(CP):
   #  return None
 
   print("RadarInterface: SCC Radar (Bus{})".format( 2 if scc2 else 0))
-  messages = [("SCC11", 50)]    
+  if CP.carFingerprint in CANFD_CAR:
+    messages = [("SCC_CONTROL", 50)]
+  else:
+    messages = [("SCC11", 50)]    
   return CANParser(DBC[CP.carFingerprint]['pt'], messages, 2 if scc2 else 0)
 
 class RadarInterface(RadarInterfaceBase):
@@ -63,6 +66,10 @@ class RadarInterface(RadarInterfaceBase):
     self.trigger_msg_scc = 0x420
     self.dRelFilter = StreamingMovingAverage(2)
     self.vRelFilter = StreamingMovingAverage(4)
+
+    self.canfd = True if CP.carFingerprint in CANFD_CAR else False
+    if self.canfd:
+      self.trigger_msg_scc = 416
 
   def update(self, can_strings):
     #if not self.enable_radar_tracks and (self.radar_off_can or (self.rcp is None)):
@@ -129,29 +136,54 @@ class RadarInterface(RadarInterfaceBase):
         errors.append("canError")
 
       cpt = self.rcp_scc.vl
-      dRel = cpt["SCC11"]['ACC_ObjDist']
-      vRel = cpt["SCC11"]['ACC_ObjRelSpd']
-      valid = cpt["SCC11"]['ACC_ObjStatus'] and dRel < 150
-      for ii in range(1):
-        if valid:
-          if ii not in self.pts:
-            self.pts[ii] = car.RadarData.RadarPoint.new_message()
-            self.pts[ii].trackId = 0 #self.track_id
-            #self.track_id += 1
-            dRel = self.dRelFilter.set(dRel)
-            vRel = self.vRelFilter.set(vRel)
+      if self.canfd:
+        dRel = cpt["SCC_CONTROL"]['ACC_ObjDist']
+        vRel = cpt["SCC_CONTROL"]['ACC_ObjRelSpd']
+        valid = cpt["SCC_CONTROL"]['OBJ_STATUS'] and dRel < 150
+        for ii in range(1):
+          if valid:
+            if ii not in self.pts:
+              self.pts[ii] = car.RadarData.RadarPoint.new_message()
+              self.pts[ii].trackId = 0 #self.track_id
+              #self.track_id += 1
+              dRel = self.dRelFilter.set(dRel)
+              vRel = self.vRelFilter.set(vRel)
+            else:
+              dRel = self.dRelFilter.process(dRel)
+              vRel = self.vRelFilter.process(vRel)
+            self.pts[ii].dRel = dRel #cpt["SCC11"]['ACC_ObjDist']  # from front of car
+            self.pts[ii].yRel = 0 #-cpt["SCC11"]['ACC_ObjLatPos']  # in car frame's y axis, left is negative
+            self.pts[ii].vRel = vRel #cpt["SCC11"]['ACC_ObjRelSpd']
+            self.pts[ii].aRel = 0 #float('nan')
+            self.pts[ii].yvRel = float('nan')
+            self.pts[ii].measured = True
           else:
-            dRel = self.dRelFilter.process(dRel)
-            vRel = self.vRelFilter.process(vRel)
-          self.pts[ii].dRel = dRel #cpt["SCC11"]['ACC_ObjDist']  # from front of car
-          self.pts[ii].yRel = -cpt["SCC11"]['ACC_ObjLatPos']  # in car frame's y axis, left is negative
-          self.pts[ii].vRel = vRel #cpt["SCC11"]['ACC_ObjRelSpd']
-          self.pts[ii].aRel = 0 #float('nan')
-          self.pts[ii].yvRel = float('nan')
-          self.pts[ii].measured = True
-        else:
-          if ii in self.pts:
-            del self.pts[ii]
+            if ii in self.pts:
+              del self.pts[ii]
+      else:
+        dRel = cpt["SCC11"]['ACC_ObjDist']
+        vRel = cpt["SCC11"]['ACC_ObjRelSpd']
+        valid = cpt["SCC11"]['ACC_ObjStatus'] and dRel < 150
+        for ii in range(1):
+          if valid:
+            if ii not in self.pts:
+              self.pts[ii] = car.RadarData.RadarPoint.new_message()
+              self.pts[ii].trackId = 0 #self.track_id
+              #self.track_id += 1
+              dRel = self.dRelFilter.set(dRel)
+              vRel = self.vRelFilter.set(vRel)
+            else:
+              dRel = self.dRelFilter.process(dRel)
+              vRel = self.vRelFilter.process(vRel)
+            self.pts[ii].dRel = dRel #cpt["SCC11"]['ACC_ObjDist']  # from front of car
+            self.pts[ii].yRel = -cpt["SCC11"]['ACC_ObjLatPos']  # in car frame's y axis, left is negative
+            self.pts[ii].vRel = vRel #cpt["SCC11"]['ACC_ObjRelSpd']
+            self.pts[ii].aRel = 0 #float('nan')
+            self.pts[ii].yvRel = float('nan')
+            self.pts[ii].measured = True
+          else:
+            if ii in self.pts:
+              del self.pts[ii]
 
     ret.points = list(self.pts.values())
     ret.errors = errors

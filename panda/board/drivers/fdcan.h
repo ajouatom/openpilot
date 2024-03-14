@@ -128,6 +128,7 @@ void process_can(uint8_t can_number) {
           to_push.addr = to_send.addr;
           to_push.bus = bus_number;
           to_push.data_len_code = to_send.data_len_code;
+          to_push_data_len_code = dlc_to_len[to_push.data_len_code];// data_len_w; // to_send.data_len_code;
           (void)memcpy(to_push.data, to_send.data, dlc_to_len[to_push.data_len_code]);
           can_set_checksum(&to_push);
 

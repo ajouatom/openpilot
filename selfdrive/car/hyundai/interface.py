@@ -120,20 +120,20 @@ class CarInterface(CarInterfaceBase):
       ret.longitudinalTuning.kiV = [0.0]
       ret.experimentalLongitudinalAvailable = candidate not in (CANFD_UNSUPPORTED_LONGITUDINAL_CAR | CANFD_RADAR_SCC_CAR)
       ret.experimentalLongitudinalAvailable = True # carrot: 비전 롱컨이라도 되도록... 될까?
-
        
     else:
       ret.longitudinalTuning.kpV = [0.5]
       ret.longitudinalTuning.kiV = [0.0]
       ret.experimentalLongitudinalAvailable = candidate not in (UNSUPPORTED_LONGITUDINAL_CAR | CAMERA_SCC_CAR)
-       
-      if Params().get_bool("SccConnectedBus2"):
-        ret.flags |= HyundaiFlags.SCC_BUS2.value
-        experimental_long = True
       
-      print("***************************************************************************")
-      print("sccBus = ", 2 if ret.flags & HyundaiFlags.SCC_BUS2.value else 0)
       ret.experimentalLongitudinalAvailable = True
+
+    if Params().get_bool("SccConnectedBus2"):
+      ret.flags |= HyundaiFlags.SCC_BUS2.value
+      #experimental_long = True
+    print("***************************************************************************")
+    print("sccBus = ", 2 if ret.flags & HyundaiFlags.SCC_BUS2.value else 0)
+
     ret.openpilotLongitudinalControl = experimental_long and ret.experimentalLongitudinalAvailable
     ret.pcmCruise = not ret.openpilotLongitudinalControl
 
@@ -193,6 +193,9 @@ class CarInterface(CarInterfaceBase):
       if ret.flags & HyundaiFlags.CANFD_CAMERA_SCC:
         print("!!!!!!!!!Panda: FLAG_HYUNDAI_CAMERA_SCC")
         ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_CAMERA_SCC
+      if ret.flags & HyundaiFlags.SCC_BUS2.value:
+        print("!!!!!!!!!Panda: FLAG_HYUNDAI_SCC_BUS2")
+        ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_SCC_BUS2
     else:
       if candidate in LEGACY_SAFETY_MODE_CAR:
         # these cars require a special panda safety mode due to missing counters and checksums in the messages
@@ -203,10 +206,10 @@ class CarInterface(CarInterfaceBase):
       if candidate in CAMERA_SCC_CAR:
         ret.safetyConfigs[0].safetyParam |= Panda.FLAG_HYUNDAI_CAMERA_SCC
 
-    if ret.flags & HyundaiFlags.SCC_BUS2.value:
-      ret.openpilotLongitudinalControl = True
-      ret.radarUnavailable = False
-      ret.safetyConfigs = [get_safety_config(car.CarParams.SafetyModel.hyundaiLegacy)]
+      if ret.flags & HyundaiFlags.SCC_BUS2.value:
+        ret.openpilotLongitudinalControl = True
+        ret.radarUnavailable = False
+        ret.safetyConfigs = [get_safety_config(car.CarParams.SafetyModel.hyundaiLegacy)]
 
     print(f"$$$$ LongitudinalControl = {ret.openpilotLongitudinalControl}")
     if ret.openpilotLongitudinalControl:
