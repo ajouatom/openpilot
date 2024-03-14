@@ -386,7 +386,7 @@ class CarInterfaceBase(ABC):
     pass
 
   def create_common_events(self, cs_out, extra_gears=None, pcm_enable=True, allow_enable=True,
-                           enable_buttons=(ButtonType.accelCruise, ButtonType.decelCruise), pcm_personality=None):
+                           enable_buttons=(ButtonType.accelCruise, ButtonType.decelCruise)):
     events = Events()
     self.mute_door = Params().get_bool("MuteDoor")
     self.mute_seatbelt = Params().get_bool("MuteSeatbelt")
@@ -422,20 +422,13 @@ class CarInterfaceBase(ABC):
       events.add(EventName.steerOverride)
 
     # Handle button presses
-    distance_button_pressed = False
     for b in cs_out.buttonEvents:
       # Enable OP long on falling edge of enable buttons (defaults to accelCruise and decelCruise, overridable per-port)
       if not self.CP.pcmCruise and (b.type in enable_buttons and not b.pressed):
         events.add(EventName.buttonEnable)
-        print("########################### create_common_event... buttonEnable")
       # Disable on rising and falling edge of cancel for both stock and OP long
       if b.type == ButtonType.cancel:
         events.add(EventName.buttonCancel)
-      if b.type == ButtonType.gapAdjustCruise:
-        distance_button_pressed = True
-    if self.CP.openpilotLongitudinalControl:
-      self.CS.update_personality(distance_button_pressed, pcm_personality)
-    self.CS.update_lkas_buttons()
 
     # Handle permanent and temporary steering faults
     self.steering_unpressed = 0 if cs_out.steeringPressed else self.steering_unpressed + 1
@@ -466,12 +459,6 @@ class CarInterfaceBase(ABC):
       elif not cs_out.cruiseState.enabled:
         events.add(EventName.pcmDisable)
 
-    if self.CS.personality_updated != -1:
-      personality_events = [EventName.personalityAggressive, EventName.personalityStandard, EventName.personalityRelaxed, EventName.personalityRelaxed2]
-      events.add(personality_events[self.CS.personality_updated])
-      self.CS.personality_updated = -1
-
-
     return events
 
 
@@ -482,7 +469,6 @@ class RadarInterfaceBase(ABC):
     self.delay = 0
     self.radar_ts = CP.radarTimeStep
     self.frame = 0
-    self.no_radar_sleep = 'NO_RADAR_SLEEP' in os.environ
 
   def update(self, can_strings):
     self.frame += 1
@@ -497,8 +483,6 @@ class CarStateBase(ABC):
     self.params = Params()
     self.car_fingerprint = CP.carFingerprint
     self.out = car.CarState.new_message()
-
-    self.personality_updated = -1
 
     self.cruise_buttons = 0
     self.left_blinker_cnt = 0
@@ -518,18 +502,6 @@ class CarStateBase(ABC):
     self.v_ego_kf = KF1D(x0=x0, A=A, C=C[0], K=K)
     self.v_ego_clu_kf = KF1D(x0=x0, A=A, C=C[0], K=K)
 
-    try:
-      self.longitudinal_personality = int(self.params.get("LongitudinalPersonality", encoding="utf-8"))
-    except (ValueError, TypeError):
-      self.longitudinal_personality = log.LongitudinalPersonality.standard
-    self.distance_button_pressed = False
-    self.distance_button_pressed_prev = False
-    self.distance_step_max = 3
-    self.distance_button_timer = 0
-    self.lkas_button_pressed = False
-    self.lkas_button_pressed_prev = False
-    self.lkas_button_timer = 0
-    self.pcm_personality = None
 
   def update_speed_kf(self, v_ego_raw):
     if abs(v_ego_raw - self.v_ego_kf.x[0][0]) > 2.0:  # Prevent large accelerations when car starts at non zero speed
@@ -592,7 +564,7 @@ class CarStateBase(ABC):
 
     return bool(left_blinker_stalk or self.left_blinker_cnt > 0), bool(right_blinker_stalk or self.right_blinker_cnt > 0)
 
-  def update_personality(self, distance_button_pressed: bool, pcm_personality) -> None:
+  def update_personality(self, distance_button_pressed: bool) -> None:
     #if self.distance_button_timer == CRUISE_LONG_PRESS:
     #  self.params.put_bool_nonblocking("ExperimentalMode", not self.params.get_bool("ExperimentalMode"))
     #elif not distance_button_pressed and self.distance_button_timer > 0 and self.distance_button_timer < CRUISE_LONG_PRESS:  # falling edge
@@ -601,11 +573,6 @@ class CarStateBase(ABC):
     #  self.personality_updated = self.longitudinal_personality
     #self.distance_button_timer = self.distance_button_timer + 1 if distance_button_pressed else 0
 
-    if False and pcm_personality is not None:
-      if self.longitudinal_personality != pcm_personality:
-        self.longitudinal_personality = pcm_personality
-        Params().put_nonblocking("LongitudinalPersonality", str(pcm_personality))
-      return
     distance_pressed = self.distance_button_pressed
     self.distance_pressed_timer = self.distance_pressed_timer + 1 if distance_pressed else 0
     if self.distance_pressed_timer >= 70:

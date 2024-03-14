@@ -13,6 +13,7 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.common.params import Params
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import config_realtime_process
+from openpilot.common.transformations.camera import DEVICE_CAMERAS
 from openpilot.common.transformations.model import get_warp_matrix
 from openpilot.selfdrive import sentry
 from openpilot.selfdrive.car.car_helpers import get_demo_car_params
@@ -153,15 +154,11 @@ def main(demo=False):
 
   # messaging
   pm = PubMaster(["modelV2", "cameraOdometry"])
-  sm = SubMaster(["carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "navModel", "navInstruction", "carControl", "radarState", "controlsState", "longitudinalPlan"])
+  sm = SubMaster(["deviceState", "carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "navModel", "navInstruction", "carControl", "radarState", "controlsState", "longitudinalPlan"])
 
 
   publish_state = PublishState()
   params = Params()
-  with car.CarParams.from_bytes(params.get("CarParams", block=True)) as msg:
-    #steer_delay = msg.steerActuatorDelay + .2
-    steer_delay = max(0.01, float(Params().get_int("SteerActuatorDelay")) * 0.01)
-
 
   # setup filter to track dropped frames
   frame_dropped_filter = FirstOrderFilter(0., 10., 1. / ModelConstants.MODEL_FREQ)
@@ -187,7 +184,8 @@ def main(demo=False):
   cloudlog.info("modeld got CarParams: %s", CP.carName)
 
   # TODO this needs more thought, use .2s extra for now to estimate other delays
-  steer_delay = CP.steerActuatorDelay + .2
+  #steer_delay = CP.steerActuatorDelay + .2
+  steer_delay = max(0.01, float(Params().get_int("SteerActuatorDelay")) * 0.01)
 
   DH = DesireHelper()
 
@@ -229,14 +227,12 @@ def main(demo=False):
     desire = DH.desire
     is_rhd = sm["driverMonitoringState"].isRHD
     frame_id = sm["roadCameraState"].frameId
-    
-    #carrot
-    steer_delay = max(0.01, float(Params().get_int("SteerActuatorDelay")) * 0.01)
     lateral_control_params = np.array([sm["carState"].vEgo, steer_delay], dtype=np.float32)
-    if sm.updated["liveCalibration"]:
+    if sm.updated["liveCalibration"] and sm.seen['roadCameraState'] and sm.seen['deviceState']:
       device_from_calib_euler = np.array(sm["liveCalibration"].rpyCalib, dtype=np.float32)
-      model_transform_main = get_warp_matrix(device_from_calib_euler, main_wide_camera, False).astype(np.float32)
-      model_transform_extra = get_warp_matrix(device_from_calib_euler, True, True).astype(np.float32)
+      dc = DEVICE_CAMERAS[(str(sm['deviceState'].deviceType), str(sm['roadCameraState'].sensor))]
+      model_transform_main = get_warp_matrix(device_from_calib_euler, dc.ecam.intrinsics if main_wide_camera else dc.fcam.intrinsics, False).astype(np.float32)
+      model_transform_extra = get_warp_matrix(device_from_calib_euler, dc.ecam.intrinsics, True).astype(np.float32)
       live_calib_seen = True
 
     traffic_convention = np.zeros(2)

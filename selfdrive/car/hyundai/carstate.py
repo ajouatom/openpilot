@@ -133,10 +133,10 @@ class CarState(CarStateBase):
       ret.cruiseState.nonAdaptive = cp_cruise.vl["SCC11"]["SCCInfoDisplay"] == 2.  # Shows 'Cruise Control' on dash
       ret.cruiseState.speed = cp_cruise.vl["SCC11"]["VSetDis"] * speed_conv
 
-      ret.cruiseGap = cp_cruise.vl["SCC11"]["TauGapSet"]
-      if ret.cruiseGap != self.pcmCruiseGap:
-        self.pcmCruiseGap = ret.cruiseGap
-        Params().put_int("LongitudinalPersonality", max(self.pcmCruiseGap - 1, 0))
+      cruiseGap = cp_cruise.vl["SCC11"]["TauGapSet"]
+      if cruiseGap != self.pcmCruiseGap:
+        self.pcmCruiseGap = cruiseGap
+        Params().put_int_nonblocking("LongitudinalPersonality", max(self.pcmCruiseGap - 1, 0))
 
     # TODO: Find brake pressure
     ret.brake = 0
@@ -216,7 +216,15 @@ class CarState(CarStateBase):
     self.clu11 = copy.copy(cp.vl["CLU11"])
     self.steer_state = cp.vl["MDPS12"]["CF_Mdps_ToiActive"]  # 0 NOT ACTIVE, 1 ACTIVE
     self.prev_cruise_buttons = self.cruise_buttons[-1]
-    self.cruise_buttons.extend(cp.vl_all["CLU11"]["CF_Clu_CruiseSwState"])
+    #self.cruise_buttons.extend(cp.vl_all["CLU11"]["CF_Clu_CruiseSwState"])
+    #carrot {{
+    cruise_button = cp.vl_all["CLU11"]["CF_Clu_CruiseSwState"]
+    if cruise_button == Buttons.NONE and self.CP.flags & HyundaiFlags.HAS_LFA_BUTTON.value:
+      if cp.vl["BCM_PO_11"]["LFA_Pressed"]:
+        cruise_button = Buttons.LKAS_BUTTON
+    self.cruise_buttons.extend(cruise_button)
+    # }} carrot
+
     # PFEIFER - AOL {{
     self.prev_main_buttons = self.main_buttons[-1]
     # }} PFEIFER - AOL
@@ -267,12 +275,6 @@ class CarState(CarStateBase):
     if self.prev_main_buttons == 0 and self.main_buttons[-1] != 0:
       self.main_enabled = not self.main_enabled
     # }} PFEIFER - AOL
-    if self.CP.openpilotLongitudinalControl:
-      self.distance_button_pressed = self.cruise_buttons[-1] == Buttons.GAP_DIST
-      self.distance_step_max = 4
-
-    if ret.cruiseState.available and self.CP.flags & HyundaiFlags.HAS_LFA_BUTTON.value:
-      self.lkas_button_pressed = cp.vl["BCM_PO_11"]["LFA_Pressed"]
 
     return ret
 
@@ -359,7 +361,15 @@ class CarState(CarStateBase):
       ret.cruiseState.nonAdaptive = cp.vl["MANUAL_SPEED_LIMIT_ASSIST"]["MSLA_ENABLED"] == 1
 
     self.prev_cruise_buttons = self.cruise_buttons[-1]
-    self.cruise_buttons.extend(cp.vl_all[self.cruise_btns_msg_canfd]["CRUISE_BUTTONS"])
+    #self.cruise_buttons.extend(cp.vl_all[self.cruise_btns_msg_canfd]["CRUISE_BUTTONS"])
+    #carrot {{
+    cruise_button = cp.vl_all[self.cruise_btns_msg_canfd]["CRUISE_BUTTONS"]
+    if cruise_button == Buttons.NONE:
+      if cp.vl[self.cruise_btns_msg_canfd]["LFA_BTN"]:
+        cruise_button = Buttons.LKAS_BUTTON
+    self.cruise_buttons.extend(cruise_button)
+    # }} carrot
+    
 
     if self.cruise_btns_msg_canfd in cp.vl_all: #carrot
       if not cp.vl_all[self.cruise_btns_msg_canfd]["CRUISE_BUTTONS"]:
@@ -379,11 +389,6 @@ class CarState(CarStateBase):
     # }} PFEIFER - AOL
     self.buttons_counter = cp.vl[self.cruise_btns_msg_canfd]["COUNTER"]
     ret.accFaulted = cp.vl["TCS"]["ACCEnable"] != 0  # 0 ACC CONTROL ENABLED, 1-3 ACC CONTROL DISABLED
-
-    if self.CP.openpilotLongitudinalControl:
-      self.distance_button_pressed = self.cruise_buttons[-1] == Buttons.GAP_DIST
-      self.distance_step_max = 4
-    self.lkas_button_pressed = cp.vl[self.cruise_btns_msg_canfd]["LFA_BTN"]
 
     if self.CP.flags & HyundaiFlags.CANFD_HDA2:
       self.hda2_lfa_block_msg = copy.copy(cp_cam.vl["CAM_0x362"] if self.CP.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING

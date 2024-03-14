@@ -149,7 +149,6 @@ def create_lfahda_mfc(packer, CC, blinking_signal):
 
 def create_acc_commands_mix_scc(CP, packer, enabled, accel, upper_jerk, lower_jerk, idx, hud_control, set_speed, stopping, CC, CS, softHoldMode, cb_upper, cb_lower, cruise_available):
   lead_visible = hud_control.leadVisible
-  cruiseGap = CS.longitudinal_personality + 1 #hud_control.cruiseGap
   softHold = hud_control.softHold
   softHoldInfo = softHold > 1  #계기판에 표시안하게 하려면 False로 하면됨~
   long_override = CC.cruiseControl.override
@@ -193,7 +192,7 @@ def create_acc_commands_mix_scc(CP, packer, enabled, accel, upper_jerk, lower_je
   if makeNewCommands:
     scc11_values = {
     "MainMode_ACC": 1  if cruise_available else 0,
-    "TauGapSet": cruiseGap,
+    "TauGapSet": hud_control.leadDistanceBars + 1,
     "VSetDis": set_speed if longEnabled or CS.out.gasPressed else 0,
     "AliveCounterACC": idx % 0x10,
     "SCCInfoDisplay" : 3 if longActive and radarAlarm else 4 if longActive and softHoldInfo else 0 if enabled else 0,   #2: 크루즈 선택, 3: 전방상황주의, 4: 출발준비 <= 주의 2를 선택하면... 선행차아이콘이 안나옴.
@@ -208,7 +207,7 @@ def create_acc_commands_mix_scc(CP, packer, enabled, accel, upper_jerk, lower_je
   elif CS.scc11 is not None:
     values = CS.scc11
     values["MainMode_ACC"] = 1  if cruise_available else 0
-    values["TauGapSet"] = cruiseGap
+    values["TauGapSet"] = hud_control.leadDistanceBars + 1
     values["VSetDis"] = set_speed if longEnabled or CS.out.gasPressed else 0
     values["AliveCounterACC"] = idx % 0x10
     #values["SCCInfoDisplay"] = 4 if longEnabled and softHoldInfo else 3 if longEnabled and radarAlarm else 2 if enabled else 0   #3: 전방상황주의, 4: 출발준비
@@ -285,12 +284,12 @@ def create_acc_commands_mix_scc(CP, packer, enabled, accel, upper_jerk, lower_je
 
   return commands
 
-def create_acc_commands(packer, enabled, accel, upper_jerk, idx, lead_visible, set_speed, stopping, long_override, use_fca, cruise_available, personality):
+def create_acc_commands(packer, enabled, accel, upper_jerk, idx, lead_visible, set_speed, stopping, long_override, use_fca, cruise_available, hud_control):
   commands = []
 
   scc11_values = {
     "MainMode_ACC": 1 if cruise_available else 0,
-    "TauGapSet": personality + 1,
+    "TauGapSet": hud_control.leadDistanceBars + 1,
     "VSetDis": set_speed if enabled else 0,
     "AliveCounterACC": idx % 0x10,
     "ObjValid": 1, # close lead makes controls tighter

@@ -166,6 +166,7 @@ class Controls:
     self.steer_limited = False
     self.desired_curvature = 0.0
     self.experimental_mode = False
+    self.personality = self.read_personality_param()
     self.v_cruise_helper = VCruiseHelper(self.CP)
     self.recalibrating_seen = False
     self.nn_alert_shown = False
@@ -765,6 +766,12 @@ class Controls:
         cloudlog.error(f"actuators.{p} not finite {actuators.to_dict()}")
         setattr(actuators, p, 0.0)
 
+    # decrement personality on distance button press
+    if self.CP.openpilotLongitudinalControl:
+      if any(not be.pressed and be.type == ButtonType.gapAdjustCruise for be in CS.buttonEvents):
+        self.personality = (self.personality - 1) % 3
+        self.params.put_nonblocking('LongitudinalPersonality', str(self.personality))
+
     return CC, lac_log
 
   def publish_logs(self, CS, start_time, CC, lac_log):
@@ -815,6 +822,7 @@ class Controls:
     hudControl.speedVisible = self.enabled
     hudControl.lanesVisible = self.enabled
     hudControl.leadVisible = self.sm['longitudinalPlan'].hasLead
+    hudControl.leadDistanceBars = self.personality + 1
 
     carrot_plan_event = self.sm['longitudinalPlan'].carrotEvent
     if carrot_plan_event != self.carrot_plan_event:
@@ -824,7 +832,7 @@ class Controls:
 
     ## ajouatom
     no_entry_events = self.events.contains(ET.NO_ENTRY)
-    hudControl.cruiseGap = self.CS.longitudinal_personality + 1 if self.CS is not None else 1
+    #hudControl.cruiseGap = self.CS.longitudinal_personality + 1 if self.CS is not None else 1
     lead_one = self.sm['radarState'].leadOne
     hudControl.objDist = int(lead_one.dRel) if lead_one.status else 0
     hudControl.objRelSpd = lead_one.vRel if lead_one.status else 0
@@ -921,6 +929,7 @@ class Controls:
     controlsState.forceDecel = bool(force_decel)
     controlsState.canErrorCounter = self.card.can_rcv_cum_timeout_counter
     controlsState.experimentalMode = self.experimental_mode
+    controlsState.personality = self.personality
 
     controlsState.debugText1 = self.v_cruise_helper.debugText 
     #if self.v_cruise_helper.nooHelperActivated:
@@ -981,10 +990,17 @@ class Controls:
 
     self.CS_prev = CS
 
+  def read_personality_param(self):
+    try:
+      return int(self.params.get('LongitudinalPersonality'))
+    except (ValueError, TypeError):
+      return log.LongitudinalPersonality.standard
+
   def params_thread(self, evt):
     while not evt.is_set():
       self.is_metric = self.params.get_bool("IsMetric")
       self.experimental_mode = self.params.get_bool("ExperimentalMode") and self.CP.openpilotLongitudinalControl
+      self.personality = self.read_personality_param()
       if self.CP.notCar:
         self.joystick_mode = self.params.get_bool("JoystickDebugMode")
       time.sleep(0.1)

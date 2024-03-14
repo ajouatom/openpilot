@@ -226,7 +226,7 @@ class CarController(CarControllerBase):
           can_sends.extend(hyundaicanfd.create_fca_warning_light(self.packer, self.CAN, self.frame))
         if self.frame % 2 == 0:
           can_sends.append(hyundaicanfd.create_acc_control(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
-                                                           set_speed_in_units, CS.longitudinal_personality))
+                                                           set_speed_in_units, hud_control))
           self.accel_last = accel
 
         ### for LongControl auto activate...

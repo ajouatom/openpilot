@@ -506,7 +506,11 @@ class VCruiseHelper:
             v_cruise_kph = button_kph
             self._add_log("Button long pressed..{:.0f}".format(v_cruise_kph))
         elif button_type == ButtonType.gapAdjustCruise:
-          self._add_log("Button gap pressed ..")
+          self._add_log("Button long gap pressed ..")
+          self.params.put_int_nonblocking("MyDrivingMode", self.params.get_int("MyDrivingMode") % 4 + 1) # 1,2,3,4 (1:eco, 2:safe, 3:normal, 4:high speed)
+        elif button_type == ButtonType.lkasButton:
+          self._add_log("Button long lkas pressed ..")
+          self.params.put_int_nonblocking("UseLaneLineSpeed", (self.params.get_int("UseLaneLineSpeed") + 1) % 2)
       else:
         if button_type == ButtonType.accelCruise:
           if self.softHoldActive > 0 and self.autoCruiseControl > 0:
@@ -532,6 +536,17 @@ class VCruiseHelper:
             controls.events.add(EventName.audioPrompt)
         elif button_type == ButtonType.cancel:
           print("************* cancel button pressed..")
+        elif button_type == ButtonType.gapAdjustCruise:
+          self._add_log("Button gap pressed ..")
+          controls.personality = (controls.personality - 1) % 3
+          self.params.put_nonblocking('LongitudinalPersonality', str(controls.personality))
+          personality_events = [EventName.personalityAggressive, EventName.personalityStandard, EventName.personalityRelaxed, EventName.personalityRelaxed2]
+          controls.events.add(personality_events[controls.personality])
+         
+        elif button_type == ButtonType.lkasButton:
+          self._add_log("Button lkas pressed ..")
+          self.params.put_int_nonblocking("MyDrivingMode", self.params.get_int("MyDrivingMode") % 4 + 1) # 1,2,3,4 (1:eco, 2:safe, 3:normal, 4:high speed)
+          
     elif button_type != 0 and not controls.enabled:
       self.cruiseActivate = 0
 
