@@ -2296,7 +2296,7 @@ struct RoadLimitSpeed {
     xPosAngle @29 :Float32;
     xPosLat @30 :Float32;
     xPosLon @31 :Float32;
-    xPosValidCount @32 :Boolean;
+    xPosValidCount @32 :Int32;
 }
 
 struct Event {
