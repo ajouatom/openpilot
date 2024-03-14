@@ -539,11 +539,11 @@ class RadarD:
         self.vision_tracks[0].update(leads_v3[0], model_v_ego, self.v_ego)
         self.vision_tracks[1].update(leads_v3[1], model_v_ego, self.v_ego)
       if self.mixRadarInfo in [1]: ## leadOne: radar or vision, leadTwo: vision 
-        self.radar_state.leadOne = self.get_lead(self.tracks, leads_v3[0], model_v_ego, low_speed_override=False)
-        self.radar_state.leadTwo = self.get_lead(self.tracks_empty, leads_v3[0], model_v_ego, low_speed_override=False)
+        self.radar_state.leadOne = self.get_lead(self.tracks, 0, leads_v3[0], model_v_ego, low_speed_override=False)
+        self.radar_state.leadTwo = self.get_lead(self.tracks_empty, 0, leads_v3[0], model_v_ego, low_speed_override=False)
       elif self.mixRadarInfo in [2,3]: ## vision only mode
-        self.radar_state.leadOne = self.get_lead(self.tracks_empty, leads_v3[0], model_v_ego, low_speed_override=False)
-        self.radar_state.leadTwo = self.get_lead(self.tracks_empty, leads_v3[0], model_v_ego, low_speed_override=False)
+        self.radar_state.leadOne = self.get_lead(self.tracks_empty, 0, leads_v3[0], model_v_ego, low_speed_override=False)
+        self.radar_state.leadTwo = self.get_lead(self.tracks_empty, 1, leads_v3[1], model_v_ego, low_speed_override=False)
       else: ## comma stock.
         self.radar_state.leadOne = self.get_lead(self.tracks, 0, leads_v3[0], model_v_ego, low_speed_override=False)
         self.radar_state.leadTwo = self.get_lead(self.tracks, 1, leads_v3[1], model_v_ego, low_speed_override=False)
