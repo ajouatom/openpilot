@@ -474,7 +474,7 @@ class RadarD:
     self.mixRadarInfo = 0
     self.aLeadTauInit = 1.5
     self.aLeadTauStart = 0.5
-    self.vision_track = VisionTrack(radar_ts)
+    self.vision_tracks = [VisionTrack(radar_ts), VisionTrack(radar_ts)]
     self.a_ego = 0.0
 
     self.radar_ts = radar_ts
@@ -536,7 +536,8 @@ class RadarD:
     leads_v3 = sm['modelV2'].leadsV3
     if len(leads_v3) > 1:
       if model_updated:
-        self.vision_track.update(leads_v3[0], model_v_ego, self.v_ego)
+        self.vision_tracks[0].update(leads_v3[0], model_v_ego, self.v_ego)
+        self.vision_tracks[1].update(leads_v3[1], model_v_ego, self.v_ego)
       if self.mixRadarInfo in [1]: ## leadOne: radar or vision, leadTwo: vision 
         self.radar_state.leadOne = self.get_lead(self.tracks, leads_v3[0], model_v_ego, low_speed_override=False)
         self.radar_state.leadTwo = self.get_lead(self.tracks_empty, leads_v3[0], model_v_ego, low_speed_override=False)
@@ -544,8 +545,8 @@ class RadarD:
         self.radar_state.leadOne = self.get_lead(self.tracks_empty, leads_v3[0], model_v_ego, low_speed_override=False)
         self.radar_state.leadTwo = self.get_lead(self.tracks_empty, leads_v3[0], model_v_ego, low_speed_override=False)
       else: ## comma stock.
-        self.radar_state.leadOne = self.get_lead(self.tracks, leads_v3[0], model_v_ego, low_speed_override=False)
-        self.radar_state.leadTwo = self.get_lead(self.tracks, leads_v3[1], model_v_ego, low_speed_override=False)
+        self.radar_state.leadOne = self.get_lead(self.tracks, 0, leads_v3[0], model_v_ego, low_speed_override=False)
+        self.radar_state.leadTwo = self.get_lead(self.tracks, 1, leads_v3[1], model_v_ego, low_speed_override=False)
 
       if True: #self.showRadarInfo: #self.extended_radar_enabled and self.ready:
         ll, lc, lr, self.radar_state.leadLeft, self.radar_state.leadRight = get_lead_side(self.v_ego, self.tracks, sm['modelV2'], sm['lateralPlan'].laneWidth, model_v_ego)
@@ -576,7 +577,7 @@ class RadarD:
       }
     pm.send('liveTracks', tracks_msg)
 
-  def get_lead(self, tracks: dict[int, Track], lead_msg: capnp._DynamicStructReader,
+  def get_lead(self, tracks: dict[int, Track], index: int, lead_msg: capnp._DynamicStructReader,
                model_v_ego: float, low_speed_override: bool = True) -> dict[str, Any]:
 
     v_ego = self.v_ego
@@ -596,7 +597,7 @@ class RadarD:
     if track is not None:
       lead_dict = track.get_RadarState(lead_msg.prob, float(-lead_msg.y[0]))
     elif (track is None) and ready and (lead_msg.prob > .5):
-      lead_dict = self.vision_track.get_lead()
+      lead_dict = self.vision_tracks[index].get_lead()
 
     if low_speed_override:
       low_speed_tracks = [c for c in tracks.values() if c.potential_low_speed_lead(v_ego)]
