@@ -493,7 +493,7 @@ class VCruiseHelper:
         button_type = ButtonType.gapAdjustCruise
         self.button_cnt %= 40
       elif self.button_prev == ButtonType.lfaButton:
-        button_type = ButtonType.lfaButon
+        button_type = ButtonType.lfaButton
         self.button_cnt %= 40
 
     button_kph = clip(button_kph, self.cruiseSpeedMin, self.cruiseSpeedMax)
