@@ -568,6 +568,7 @@ class CarState(CarStateBase):
       ]
 
     if CP.enableBsm and not (CP.flags & HyundaiFlags.SCC_BUS2.value and CP.flags & HyundaiFlags.CANFD_HDA2):
+      print("^^^^^^^^^^^^^^^^^^^^ EnableBsm")
       messages += [
         ("BLINDSPOTS_REAR_CORNERS", 20),
       ]
