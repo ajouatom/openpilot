@@ -139,7 +139,7 @@ class RadarInterface(RadarInterfaceBase):
       if self.canfd:
         dRel = cpt["SCC_CONTROL"]['ACC_ObjDist']
         vRel = cpt["SCC_CONTROL"]['ACC_ObjRelSpd']
-        valid = cpt["SCC_CONTROL"]['OBJ_STATUS'] and dRel < 150
+        valid = 0 < dRel < 150 #cpt["SCC_CONTROL"]['OBJ_STATUS'] and dRel < 150
         for ii in range(1):
           if valid:
             if ii not in self.pts:
