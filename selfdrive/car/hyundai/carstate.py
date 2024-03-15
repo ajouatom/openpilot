@@ -222,6 +222,7 @@ class CarState(CarStateBase):
     #carrot {{
     cruise_button = cp.vl_all["CLU11"]["CF_Clu_CruiseSwState"]
     if cruise_button == Buttons.NONE and self.CP.flags & HyundaiFlags.HAS_LFA_BUTTON.value:
+      print("buttons...")
       if cp.vl["BCM_PO_11"]["LFA_Pressed"]:
         cruise_button = Buttons.LKAS_BUTTON
         print("LFA_Pressed")
