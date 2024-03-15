@@ -333,7 +333,7 @@ class CarState(CarStateBase):
     #ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_lamp(50, cp.vl["BLINKERS"][left_blinker_sig],
     #                                                                  cp.vl["BLINKERS"][right_blinker_sig])
     if self.CP.enableBsm:
-      cp_ = cp_cam if self.CP.flags & HyundaiFlags.SCC_BUS2 else cp
+      cp_ = cp_cam if (self.CP.flags & HyundaiFlags.SCC_BUS2 and self.CP.flags & HyundaiFlags.CANFD_HDA2) else cp
       ret.leftBlindspot = cp_.vl["BLINDSPOTS_REAR_CORNERS"]["FL_INDICATOR"] != 0
       ret.rightBlindspot = cp_.vl["BLINDSPOTS_REAR_CORNERS"]["FR_INDICATOR"] != 0
 
@@ -568,7 +568,6 @@ class CarState(CarStateBase):
       ]
 
     if CP.enableBsm and not (CP.flags & HyundaiFlags.SCC_BUS2.value and CP.flags & HyundaiFlags.CANFD_HDA2):
-      print("^^^^^^^^^^^^^^^^^^^^ EnableBsm")
       messages += [
         ("BLINDSPOTS_REAR_CORNERS", 20),
       ]
