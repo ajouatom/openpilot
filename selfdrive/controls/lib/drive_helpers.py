@@ -470,6 +470,8 @@ class VCruiseHelper:
           button_type = ButtonType.decelCruise
         elif not self.long_pressed and b.type == ButtonType.gapAdjustCruise:
           button_type = ButtonType.gapAdjustCruise
+        elif not self.long_pressed and b.type == ButtonType.lfaButton:
+          button_type = ButtonType.lfaButton
 
         self.long_pressed = False
         self.button_cnt = 0
@@ -489,7 +491,10 @@ class VCruiseHelper:
         self.button_cnt %= 40
       elif self.button_prev == ButtonType.gapAdjustCruise:
         button_type = ButtonType.gapAdjustCruise
-        self.button_cnt = 0
+        self.button_cnt %= 40
+      elif self.button_prev == ButtonType.lfaButton:
+        button_type = ButtonType.lfaButon
+        self.button_cnt %= 40
 
     button_kph = clip(button_kph, self.cruiseSpeedMin, self.cruiseSpeedMax)
 
@@ -508,7 +513,7 @@ class VCruiseHelper:
         elif button_type == ButtonType.gapAdjustCruise:
           self._add_log("Button long gap pressed ..")
           self.params.put_int_nonblocking("MyDrivingMode", self.params.get_int("MyDrivingMode") % 4 + 1) # 1,2,3,4 (1:eco, 2:safe, 3:normal, 4:high speed)
-        elif button_type == ButtonType.lkasButton:
+        elif button_type == ButtonType.lfaButton:
           self._add_log("Button long lkas pressed ..")
           self.params.put_int_nonblocking("UseLaneLineSpeed", (self.params.get_int("UseLaneLineSpeed") + 1) % 2)
       else:
@@ -543,7 +548,7 @@ class VCruiseHelper:
           personality_events = [EventName.personalityAggressive, EventName.personalityStandard, EventName.personalityRelaxed, EventName.personalityRelaxed2]
           controls.events.add(personality_events[controls.personality])
          
-        elif button_type == ButtonType.lkasButton:
+        elif button_type == ButtonType.lfaButton:
           self._add_log("Button lkas pressed ..")
           self.params.put_int_nonblocking("MyDrivingMode", self.params.get_int("MyDrivingMode") % 4 + 1) # 1,2,3,4 (1:eco, 2:safe, 3:normal, 4:high speed)
           

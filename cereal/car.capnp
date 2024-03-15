@@ -312,7 +312,7 @@ struct CarState {
       setCruise @9;
       resumeCruise @10;
       gapAdjustCruise @11;
-      lkasButton @12;
+      lfaButton @12;
     }
   }
 
