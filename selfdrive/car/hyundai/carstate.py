@@ -564,7 +564,7 @@ class CarState(CarStateBase):
         ("CRUISE_BUTTONS", 50)
       ]
 
-    if CP.enableBsm and not (CP.flags & HyundaiFlags.SCC_BUS2.value):
+    if CP.enableBsm and not (CP.flags & HyundaiFlags.SCC_BUS2.value and CP.flags & HyundaiFlags.CANFD_HDA2):
       messages += [
         ("BLINDSPOTS_REAR_CORNERS", 20),
       ]
@@ -598,7 +598,7 @@ class CarState(CarStateBase):
     #if not (CP.flags & HyundaiFlags.CANFD_HDA2) and CP.flags & HyundaiFlags.NAVI_CLUSTER.value and (CP.flags & HyundaiFlags.SCC_BUS2.value) :
     #  messages.append(("CLUSTER_SPEED_LIMIT", 10))
 
-    if False: #CP.enableBsm and (CP.flags & HyundaiFlags.SCC_BUS2.value):
+    if CP.enableBsm and (CP.flags & HyundaiFlags.SCC_BUS2.value and CP.flags & HyundaiFlags.CANFD_HDA2):
       messages += [
         ("BLINDSPOTS_REAR_CORNERS", 20),
       ]
