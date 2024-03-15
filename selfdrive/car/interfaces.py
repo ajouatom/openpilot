@@ -564,41 +564,6 @@ class CarStateBase(ABC):
 
     return bool(left_blinker_stalk or self.left_blinker_cnt > 0), bool(right_blinker_stalk or self.right_blinker_cnt > 0)
 
-  def update_personality(self, distance_button_pressed: bool) -> None:
-    #if self.distance_button_timer == CRUISE_LONG_PRESS:
-    #  self.params.put_bool_nonblocking("ExperimentalMode", not self.params.get_bool("ExperimentalMode"))
-    #elif not distance_button_pressed and self.distance_button_timer > 0 and self.distance_button_timer < CRUISE_LONG_PRESS:  # falling edge
-    #  self.longitudinal_personality = (self.longitudinal_personality - 1) % 4
-    #  Params().put_nonblocking("LongitudinalPersonality", str(self.longitudinal_personality))
-    #  self.personality_updated = self.longitudinal_personality
-    #self.distance_button_timer = self.distance_button_timer + 1 if distance_button_pressed else 0
-
-    distance_pressed = self.distance_button_pressed
-    self.distance_pressed_timer = self.distance_pressed_timer + 1 if distance_pressed else 0
-    if self.distance_pressed_timer >= 70:
-      distance_pressed = False
-      if self.distance_pressed_timer == 70:
-        Params().put_int_nonblocking("MyDrivingMode", Params().get_int("MyDrivingMode") % 4 + 1) # 1,2,3,4 (1:eco, 2:safe, 3:normal, 4:high speed)
-    elif not distance_pressed and self.distance_button_pressed_prev and self.distance_pressed_timer < 70:
-      self.longitudinal_personality = (self.longitudinal_personality - 1) % self.distance_step_max
-      Params().put_nonblocking("LongitudinalPersonality", str(self.longitudinal_personality))
-      self.personality_updated = self.longitudinal_personality
-
-    self.distance_button_pressed_prev = distance_pressed
-
-  def update_lkas_buttons(self):
-    lkas_pressed = self.lkas_button_pressed
-    self.lkas_pressed_timer = self.lkas_pressed_timer + 1 if lkas_pressed else 0
-    if self.lkas_pressed_timer >= 70:
-      lkas_pressed = False
-      if self.lkas_pressed_timer == 70:
-        Params().put_int_nonblocking("UseLaneLineSpeed", (Params().get_int("UseLaneLineSpeed") + 1) % 2)
-    elif not lkas_pressed and self.lkas_button_pressed_prev and self.lkas_pressed_timer < 70:
-      Params().put_int_nonblocking("MyDrivingMode", Params().get_int("MyDrivingMode") % 4 + 1) # 1,2,3,4 (1:eco, 2:safe, 3:normal, 4:high speed)
-
-    self.lkas_button_pressed_prev = lkas_pressed
-    
-    
   @staticmethod
   def parse_gear_shifter(gear: str | None) -> car.CarState.GearShifter:
     if gear is None:
