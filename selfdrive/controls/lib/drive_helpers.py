@@ -456,7 +456,7 @@ class VCruiseHelper:
     if self.button_cnt > 0:
       self.button_cnt += 1
     for b in buttonEvents:
-      if b.pressed and self.button_cnt==0 and b.type in [ButtonType.accelCruise, ButtonType.decelCruise, ButtonType.gapAdjustCruise, ButtonType.cancel]:
+      if b.pressed and self.button_cnt==0 and b.type in [ButtonType.accelCruise, ButtonType.decelCruise, ButtonType.gapAdjustCruise, ButtonType.cancel, ButtonType.lfaButton]:
         self.button_cnt = 1
         self.button_prev = b.type
       elif not b.pressed and self.button_cnt > 0:
