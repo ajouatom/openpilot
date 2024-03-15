@@ -162,7 +162,7 @@ class CarController(CarControllerBase):
         can_sends.append(toyotacan.create_acc_cancel_command(self.packer))
       elif self.CP.openpilotLongitudinalControl:
         can_sends.append(toyotacan.create_accel_command(self.packer, pcm_accel_cmd, pcm_cancel_cmd, self.standstill_req, lead, CS.acc_type, fcw_alert,
-                                                        self.distance_button))
+                                                        self.distance_button, self.reverse_cruise_increase))
         self.accel = pcm_accel_cmd
       else:
         can_sends.append(toyotacan.create_accel_command(self.packer, 0, pcm_cancel_cmd, False, lead, CS.acc_type, False, self.distance_button, self.reverse_cruise_increase))
