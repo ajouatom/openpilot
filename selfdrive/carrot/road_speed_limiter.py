@@ -837,17 +837,16 @@ def main():
 
         #print(instruction)
 
-        roadLimitSpeed.send(dat.to_bytes())
-
+        xPosValidCount = max(0, xPosValidCount - 1)
         if nPosSpeed > 0:
-          dat.roadLimitSpeed.xPosSpeed = nPosSpeed
-          dat.roadLimitSpeed.xPosAngle = nPosAngle
-          dat.roadLimitSpeed.xPosLat = vpPosPointLat
-          dat.roadLimitSpeed.xPosLon = vpPosPointLon
-          dat.roadLimitSpeed.xPosValidCount = xPosValidCount
+          xPosValidCount = 10
+        dat.roadLimitSpeed.xPosSpeed = nPosSpeed
+        dat.roadLimitSpeed.xPosAngle = nPosAngle
+        dat.roadLimitSpeed.xPosLat = vpPosPointLat
+        dat.roadLimitSpeed.xPosLon = vpPosPointLon
+        dat.roadLimitSpeed.xPosValidCount = xPosValidCount
 
-
-
+        roadLimitSpeed.send(dat.to_bytes())
 
         if now - send_time > 1.0:
           server.send_sdp(sock)
