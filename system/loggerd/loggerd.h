@@ -64,6 +64,7 @@ const EncoderInfo main_road_encoder_info = {
 const EncoderInfo main_wide_road_encoder_info = {
   .publish_name = "wideRoadEncodeData",
   .filename = "ecamera.hevc",
+  .record = false,
   INIT_ENCODE_FUNCTIONS(WideRoadEncode),
 };
 

@@ -55,6 +55,7 @@ class VCruiseHelper:
 
     # ajouatom
     self.brake_pressed_count = 0
+    self.brake_pressed_frame = 0
     self.gas_pressed_count = 0
     self.gas_pressed_count_prev = 0
     self.gas_pressed_value = 0
@@ -429,18 +430,19 @@ class VCruiseHelper:
     return v_cruise_kph
 
   def _brake_released_cond(self, CS, v_cruise_kph, controls):
-    if self.autoResumeFromGasSpeed < self.v_ego_kph_set and self.autoResumeFromBrakeReleaseTrafficSign:
-      v_cruise_kph = self.v_ego_kph_set
-      self._add_log_auto_cruise("Cruise Activate Brake Release")
-      self.cruiseActivate = 1
-    elif self.xState == 3 and self.autoResumeFromBrakeReleaseTrafficSign:
-      #v_cruise_kph = self.v_ego_kph_set
-      self._add_log_auto_cruise("Cruise Activate from Traffic sign stop")
-      self.cruiseActivate = 1
-    elif 0 < self.lead_dRel < 20:
-      v_cruise_kph = self.v_ego_kph_set  ## 천천히 주행하다가..지나가는 차를 잘못읽고 자동으로 크루즈가 켜지는 경우 툭튀언
-      self._add_log_auto_cruise("Cruise Activate from Lead Car")
-      self.cruiseActivate = 1
+    if self.autoResumeFromBrakeReleaseTrafficSign:
+      if self.autoResumeFromGasSpeed < self.v_ego_kph_set:
+        v_cruise_kph = self.v_ego_kph_set
+        self._add_log_auto_cruise("Cruise Activate Brake Release")
+        self.cruiseActivate = 1
+      elif self.xState == 3:
+        #v_cruise_kph = self.v_ego_kph_set
+        self._add_log_auto_cruise("Cruise Activate from Traffic sign stop")
+        self.cruiseActivate = 1
+      elif 0 < self.lead_dRel < 20:
+        v_cruise_kph = self.v_ego_kph_set  ## 천천히 주행하다가..지나가는 차를 잘못읽고 자동으로 크루즈가 켜지는 경우 툭튀언
+        self._add_log_auto_cruise("Cruise Activate from Lead Car")
+        self.cruiseActivate = 1
     return v_cruise_kph
 
   def _update_cruise_button(self, CS, v_cruise_kph, controls):
@@ -454,7 +456,7 @@ class VCruiseHelper:
     if self.button_cnt > 0:
       self.button_cnt += 1
     for b in buttonEvents:
-      if b.pressed and self.button_cnt==0 and b.type in [ButtonType.accelCruise, ButtonType.decelCruise, ButtonType.gapAdjustCruise, ButtonType.cancel]:
+      if b.pressed and self.button_cnt==0 and b.type in [ButtonType.accelCruise, ButtonType.decelCruise, ButtonType.gapAdjustCruise, ButtonType.cancel, ButtonType.lfaButton]:
         self.button_cnt = 1
         self.button_prev = b.type
       elif not b.pressed and self.button_cnt > 0:
@@ -468,6 +470,8 @@ class VCruiseHelper:
           button_type = ButtonType.decelCruise
         elif not self.long_pressed and b.type == ButtonType.gapAdjustCruise:
           button_type = ButtonType.gapAdjustCruise
+        elif not self.long_pressed and b.type == ButtonType.lfaButton:
+          button_type = ButtonType.lfaButton
 
         self.long_pressed = False
         self.button_cnt = 0
@@ -487,7 +491,10 @@ class VCruiseHelper:
         self.button_cnt %= 40
       elif self.button_prev == ButtonType.gapAdjustCruise:
         button_type = ButtonType.gapAdjustCruise
-        self.button_cnt = 0
+        self.button_cnt %= 40
+      elif self.button_prev == ButtonType.lfaButton:
+        button_type = ButtonType.lfaButton
+        self.button_cnt %= 40
 
     button_kph = clip(button_kph, self.cruiseSpeedMin, self.cruiseSpeedMax)
 
@@ -504,7 +511,11 @@ class VCruiseHelper:
             v_cruise_kph = button_kph
             self._add_log("Button long pressed..{:.0f}".format(v_cruise_kph))
         elif button_type == ButtonType.gapAdjustCruise:
-          self._add_log("Button gap pressed ..")
+          self._add_log("Button long gap pressed ..")
+          self.params.put_int_nonblocking("MyDrivingMode", self.params.get_int("MyDrivingMode") % 4 + 1) # 1,2,3,4 (1:eco, 2:safe, 3:normal, 4:high speed)
+        elif button_type == ButtonType.lfaButton:
+          self._add_log("Button long lkas pressed ..")
+          self.params.put_int_nonblocking("UseLaneLineSpeed", (self.params.get_int("UseLaneLineSpeed") + 1) % 2)
       else:
         if button_type == ButtonType.accelCruise:
           if self.softHoldActive > 0 and self.autoCruiseControl > 0:
@@ -530,6 +541,17 @@ class VCruiseHelper:
             controls.events.add(EventName.audioPrompt)
         elif button_type == ButtonType.cancel:
           print("************* cancel button pressed..")
+        elif button_type == ButtonType.gapAdjustCruise:
+          self._add_log("Button gap pressed ..")
+          controls.personality = (controls.personality - 1) % 3
+          self.params.put_nonblocking('LongitudinalPersonality', str(controls.personality))
+          personality_events = [EventName.personalityAggressive, EventName.personalityStandard, EventName.personalityRelaxed, EventName.personalityRelaxed2]
+          controls.events.add(personality_events[controls.personality])
+         
+        elif button_type == ButtonType.lfaButton:
+          self._add_log("Button lkas pressed ..")
+          self.params.put_int_nonblocking("MyDrivingMode", self.params.get_int("MyDrivingMode") % 4 + 1) # 1,2,3,4 (1:eco, 2:safe, 3:normal, 4:high speed)
+          
     elif button_type != 0 and not controls.enabled:
       self.cruiseActivate = 0
 
@@ -566,43 +588,54 @@ class VCruiseHelper:
       v_cruise_kph = self.cruiseSpeedMin
 
     if CS.brakePressed:
-      self.brake_pressed_count = 1 if self.brake_pressed_count < 0 else self.brake_pressed_count + 1
+      self.brake_pressed_count = max(1, self.brake_pressed_count + 1)
       self.softHold_count = self.softHold_count + 1 if self.softHoldMode > 0 and CS.vEgo < 0.1 else 0
-      self.softHoldActive = 1 if self.softHold_count > 60 else 0
+      self.softHoldActive = 1 if self.softHold_count > 60 else 0      
     else:
       self.softHold_count = 0
-      self.brake_pressed_count = -1 if self.brake_pressed_count > 0 else self.brake_pressed_count - 1
+      self.brake_pressed_count = min(-1, self.brake_pressed_count - 1)
+
+    if self.softHoldActive > 0 or CS.brakePressed:
+      self.brake_pressed_frame = self.frame
 
     gas_tok = False
     if CS.gasPressed:
-      self.gas_pressed_count = 1 if self.gas_pressed_count < 0 else self.gas_pressed_count + 1
+      self.gas_pressed_count = max(1, self.gas_pressed_count + 1)
       self.softHoldActive = 0
-      if CS.gas > self.gas_pressed_value:
-        self.gas_pressed_value = CS.gas
+      self.gas_pressed_value = max(CS.gas, self.gas_pressed_value)
       self.gas_pressed_count_prev = self.gas_pressed_count
     else:
       gas_tok = True if 0 < self.gas_pressed_count < 60 else False
-      if gas_tok:
-        self.gas_tok_frame = self.frame
-      self.gas_pressed_count = -1 if self.gas_pressed_count > 0 else self.gas_pressed_count - 1
+      self.gas_pressed_count = min(-1, self.gas_pressed_count - 1)
       if self.gas_pressed_count < -1:
         self.gas_pressed_max = 0
         self.gas_pressed_count_prev = 0
 
     if controls.enabled or CS.brakePressed or CS.gasPressed:
       self.cruiseActiveReady = 0
+      if CS.gasPressed and CS.aEgo < -0.3:
+        self.autoCruiseCancelTimer = 1.0 / DT_CTRL #잠시 오토크루멈춤
+        self.cruiseActivate = -1
+        self._add_log("Cruise off (GasPressed while braking)")
 
     v_cruise_kph = self._update_cruise_button(CS, v_cruise_kph, controls)
 
     ## Auto Engage/Disengage via Gas/Brake
-    if gas_tok and (self.autoCruiseCancelTimer == 0 or (self.frame - self.gas_tok_frame) < 100):  ## 1초이내 더블 엑셀톡인경우..
-      self.autoCruiseCancelTimer = 0
-      if controls.enabled:
-        v_cruise_kph = self.v_cruise_speed_up(v_cruise_kph)
-      elif self.autoResumeFromGasSpeed > 0:
-        self._add_log_auto_cruise("Cruise Activate from GasTok")
-        #v_cruise_kph = self.v_ego_kph_set
-        self.cruiseActivate = 1
+    if gas_tok:
+      if (self.autoCruiseCancelTimer == 0 or (self.frame - self.gas_tok_frame) < 1.0 / DT_CTRL):  ## 1초이내 더블 엑셀톡인경우..
+        self.autoCruiseCancelTimer = 0
+        if controls.enabled:
+          if (self.frame - self.brake_pressed_frame) < 3.0 / DT_CTRL:
+            v_cruise_kph = self.v_ego_kph_set
+            self._add_log("Gas tok speed set to current (prev. brake pressed)")
+          else:
+            v_cruise_kph = self.v_cruise_speed_up(v_cruise_kph)
+            self._add_log("Gas tok speed up...{:.0f}".format(v_cruise_kph))
+        elif self.autoResumeFromGasSpeed > 0:
+          self._add_log_auto_cruise("Cruise Activate from GasTok")
+          #v_cruise_kph = self.v_ego_kph_set
+          self.cruiseActivate = 1
+      self.gas_tok_frame = self.frame
     elif self.gas_pressed_count == -1:
       v_cruise_kph = self._gas_released_cond(CS, v_cruise_kph, controls)
       if self.autoCruiseCancelTimer > 0 and self.cruiseActivate > 0:
@@ -639,10 +672,11 @@ class VCruiseHelper:
 
     if controls.enabled and self.autoSpeedUptoRoadSpeedLimit > 0.:
       lead_v_kph = self.lead_vLead * CV.MS_TO_KPH + 2.0
+      road_speed = (30 if self.roadSpeed < 30 else self.roadSpeed) * self.autoSpeedUptoRoadSpeedLimit
+      lead_v_kph = max(v_cruise_kph, min(lead_v_kph, road_speed))
       if lead_v_kph > v_cruise_kph and self.lead_dRel < 60:
-        road_speed = (30 if self.roadSpeed < 30 else self.roadSpeed) * self.autoSpeedUptoRoadSpeedLimit
         self._add_log_auto_cruise("AutoSpeed up to leadCar={:.0f}kph, road_speed={:.0f}kph".format(lead_v_kph, road_speed))
-        v_cruise_kph = max(v_cruise_kph, min(lead_v_kph, road_speed))
+        v_cruise_kph = lead_v_kph
 
     v_cruise_kph = self.update_apilot_cmd(controls, v_cruise_kph)
 

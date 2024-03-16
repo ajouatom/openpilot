@@ -30,7 +30,7 @@ rm -rf $BUILD_DIR
 mkdir -p $BUILD_DIR
 cd $BUILD_DIR
 git init
-git remote add origin git@github.com:ajouatom/openpilot.git
+git remote add origin git@github.com:commaai/openpilot.git
 git checkout --orphan $RELEASE_BRANCH
 
 # do the files copy
@@ -94,7 +94,7 @@ cp -pR -n --parents $TEST_FILES $BUILD_DIR/
 cd $BUILD_DIR
 RELEASE=1 selfdrive/test/test_onroad.py
 #selfdrive/manager/test/test_manager.py
-selfdrive/car/tests/test_car_interfaces.py
+#selfdrive/car/tests/test_car_interfaces.py
 rm -rf $TEST_FILES
 
 if [ ! -z "$RELEASE_BRANCH" ]; then

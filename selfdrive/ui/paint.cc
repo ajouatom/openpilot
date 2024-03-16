@@ -595,7 +595,7 @@ void DrawApilot::drawLaneLines(const UIState* s) {
     }
 }
 
-void DrawPlot::drawPlotting(const UIState* s, int start, float x, float y[], int size, NVGcolor* color, float stroke) {
+void DrawPlot::drawPlotting(const UIState* s, int index, int start, float x, float y[], int size, NVGcolor* color, float stroke) {
 
     nvgBeginPath(s->vg);
     plotRatio = (plotMax - plotMin) < 1.0 ? plotHeight : plotHeight / (plotMax - plotMin);
@@ -607,8 +607,8 @@ void DrawPlot::drawPlotting(const UIState* s, int start, float x, float y[], int
         float plot_y = plotY + plotHeight - (data - plotMin) * plotRatio;
         if (i == 0) {
             nvgMoveTo(s->vg, x + (size - i)*dx, plot_y);
-            sprintf(str, "%.1f", data);
-            ui_draw_text(s, x + (size - i)*dx + 50, plot_y + 40, str, 40, *color, BOLD);
+            sprintf(str, "%.2f", data);
+            ui_draw_text(s, x + (size - i)*dx + 50, plot_y + ((index>0)?40:0), str, 40, *color, BOLD);
         }
         else nvgLineTo(s->vg, x + (size - i)*dx, plot_y);
     }
@@ -622,7 +622,7 @@ void DrawPlot::drawPlotting(const UIState* s, int start, float x, float y[], int
 }
 
 // 에잉 시간텀... ㅠㅠ
-void DrawPlot::makePlotData(const UIState* s, float& data1, float& data2) {
+void DrawPlot::makePlotData(const UIState* s, float& data1, float& data2, char *str) {
 
     SubMaster& sm = *(s->sm);
     auto    car_state = sm["carState"].getCarState();
@@ -630,58 +630,71 @@ void DrawPlot::makePlotData(const UIState* s, float& data1, float& data2) {
     float   v_ego = car_state.getVEgo();
     auto    car_control = sm["carControl"].getCarControl();
     float   accel_out = car_control.getActuators().getAccel();
-    auto    live_parameters = sm["liveParameters"].getLiveParameters();
-    float   roll = live_parameters.getRoll();
+    //auto    live_parameters = sm["liveParameters"].getLiveParameters();
+    //float   roll = live_parameters.getRoll();
     auto    controls_state = sm["controlsState"].getControlsState();
-    float   curvature = controls_state.getCurvature();
+    auto    torque_state = controls_state.getLateralControlState().getTorqueState();
+    float   curvature = torque_state.getActualLateralAccel();
     //float   desired_curvature = controls_state.getDesiredCurvature();
     const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
     float   accel = lp.getAccels()[0];
     float   speeds_0 = lp.getSpeeds()[0];
     //const auto lat_plan = sm["lateralPlan"].getLateralPlan();
     //float   curvatures_0 = lat_plan.getCurvatures()[0];
-    float   curvatures_0 = controls_state.getDesiredCurvature();
+    float   curvatures_0 = torque_state.getDesiredLateralAccel();
 
     const cereal::ModelDataV2::Reader& model = sm["modelV2"].getModelV2();
     const auto position = model.getPosition();
     const auto velocity = model.getVelocity();
 
-    auto lead_radar = sm["radarState"].getRadarState().getLeadOne();
+    auto lead_radar = sm["radarState"].getRadarState().getLeadOne();    
 
     switch (s->show_plot_mode) {
     case 0:
     case 1:
         data1 = a_ego;
         data2 = accel;
+        sprintf(str, "Accel (G:desired, Y:actual)");
         break;
     case 2:
         // curvature * v * v : 원심가속도
-        data1 = (curvature * v_ego * v_ego) - (roll * 9.81);
+        data1 = curvature;
         //data2 = (desired_curvature * v_ego * v_ego) - (roll * 9.81);
-        data2 = (curvatures_0 * v_ego * v_ego) - (roll * 9.81);
+        data2 = curvatures_0;
+        sprintf(str, "Lateral Accel(G:desired, Y:actual)");
         break;
     case 3:
         data1 = v_ego;
         data2 = speeds_0;
+        sprintf(str, "Speed/Accel(G:speed, Y:accel)");
         break;
     case 4:
         data1 = position.getX()[32];
         data2 = velocity.getX()[32];
+        sprintf(str, "Model data(G:velocity, Y:position");
         break;
     case 5:
         data1 = lead_radar.getVLeadK();
         data2 = lead_radar.getALeadK();
+        sprintf(str, "Detected radar(G:aLeadK, Y:vLeadK)");
         break;
     case 6:
         data1 = a_ego;  //노
         data2 = lead_radar.getALeadK(); // 녹
+        sprintf(str, "Detected radar(G:aLeadK, Y:a_ego)");
         break;
     case 7:
+        data1 = lead_radar.getVLeadK();
+        data2 = lead_radar.getVLead(); // getDRel();
+        sprintf(str, "Detected radar(G:vLead, Y:vLeadK)");
+        break;
         data1 = a_ego; // 노
         data2 = accel_out;  // 녹
+        sprintf(str, "Accel (G:accel output, Y:a_ego)");
         break;
     default:
         data1 = data2 = 0;
+        sprintf(str, "no data");
         break;
     }
     if (s->show_plot_mode != show_plot_mode_prev) {
@@ -699,8 +712,9 @@ void DrawPlot::draw(const UIState* s) {
 
     float _data = 0.;
     float _data1 = 0.;
+    char title[128] = "";
 
-    makePlotData(s, _data, _data1);
+    makePlotData(s, _data, _data1, title);
 
 #ifdef __TEST
     static float _data_s = 0.0;
@@ -728,10 +742,10 @@ void DrawPlot::draw(const UIState* s) {
     NVGcolor color[2] = { COLOR_YELLOW, COLOR_GREEN };
     for (int i = 0; i < 2; i++) {
         //drawPlotting(s, i, plotX, plotQueue[i], plotSize, &color[i], nullptr);
-        drawPlotting(s, plotIndex, plotX, plotQueue[i], plotSize, &color[i], 3.0f);
+        drawPlotting(s, i, plotIndex, plotX, plotQueue[i], plotSize, &color[i], 3.0f);
     }
     //ui_draw_rect(s->vg, { (int)plotX, (int)plotY, (int)plotWidth, (int)plotHeight }, COLOR_WHITE, 2, 0);
-
+    ui_draw_text(s, s->fb_w/2, 20, title, 25, COLOR_WHITE, BOLD);
 }
 void DrawApilot::drawRadarInfo(const UIState* s) {
 
@@ -1420,8 +1434,9 @@ void DrawApilot::drawTurnInfo(const UIState* s, int x, int y) {
 
     auto car_state = sm["carState"].getCarState();
     auto controls_state = sm["controlsState"].getControlsState();
-    bool leftBlinker = car_state.getLeftBlinker() || (controls_state.getLeftBlinkerExt()%10000 > 0);
-    bool rightBlinker = car_state.getRightBlinker() || (controls_state.getRightBlinkerExt()%10000 > 0);
+    const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
+    bool leftBlinker = car_state.getLeftBlinker() || (controls_state.getLeftBlinkerExt()%10000 > 0) || (lp.getLeftBlinkerExt()%10000 > 0);
+    bool rightBlinker = car_state.getRightBlinker() || (controls_state.getRightBlinkerExt()%10000 > 0) || (lp.getRightBlinkerExt() % 10000 > 0);
     bool bsd_l = car_state.getLeftBlindspot();
     bool bsd_r = car_state.getRightBlindspot();
 

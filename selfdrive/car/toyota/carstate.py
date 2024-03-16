@@ -24,8 +24,6 @@ TEMP_STEER_FAULTS = (0, 9, 11, 21, 25)
 # - prolonged high driver torque: 17 (permanent)
 PERM_STEER_FAULTS = (3, 17)
 
-ZSS_THRESHOLD = 4.0
-ZSS_THRESHOLD_COUNT = 10
 
 class CarState(CarStateBase):
   def __init__(self, CP):
@@ -42,18 +40,14 @@ class CarState(CarStateBase):
     self.accurate_steer_angle_seen = False
     self.angle_offset = FirstOrderFilter(None, 60.0, DT_CTRL, initialized=False)
 
+    self.prev_distance_button = 0
+    self.distance_button = 0
+
+    self.pcm_follow_distance = 0
+
     self.low_speed_lockout = False
     self.acc_type = 1
     self.lkas_hud = {}
-
-    # FrogPilot variables
-    self.zss_compute = False
-    self.zss_cruise_active_last = False
-
-    self.zss_angle_offset = 0
-    self.zss_threshold_count = 0
-
-    self.traffic_signals = {}
 
   def update(self, cp, cp_cam):
     ret = car.CarState.new_message()
@@ -80,11 +74,9 @@ class CarState(CarStateBase):
     )
     ret.vEgoRaw = mean([ret.wheelSpeeds.fl, ret.wheelSpeeds.fr, ret.wheelSpeeds.rl, ret.wheelSpeeds.rr])
     ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
-    if self.CP.carFingerprint == CAR.LEXUS_ES_TSS2:
-      ret.vEgoCluster = ret.vEgo * 1.023456789
-    else:
-      ret.vEgoCluster = ret.vEgo * 1.015  # minimum of all the cars
+    ret.vEgoCluster = ret.vEgo * 1.015  # minimum of all the cars
 
+    # carrot
     ret.vCluRatio = 0.96
 
     ret.standstill = abs(ret.vEgoRaw) < 1e-3
@@ -165,7 +157,6 @@ class CarState(CarStateBase):
       ret.cruiseState.standstill = self.pcm_acc_status == 7
     ret.cruiseState.enabled = bool(cp.vl["PCM_CRUISE"]["CRUISE_ACTIVE"])
     ret.cruiseState.nonAdaptive = cp.vl["PCM_CRUISE"]["CRUISE_STATE"] in (1, 2, 3, 4, 5, 6)
-    self.pcm_neutral_force = cp.vl["PCM_CRUISE"]["NEUTRAL_FORCE"]
 
     ret.genericToggle = bool(cp.vl["LIGHT_STALK"]["AUTO_HIGH_BEAM"])
     ret.espDisabled = cp.vl["ESP_CONTROL"]["TC_DISABLED"] != 0
@@ -179,20 +170,17 @@ class CarState(CarStateBase):
 
     if self.CP.carFingerprint != CAR.PRIUS_V:
       self.lkas_hud = copy.copy(cp_cam.vl["LKAS_HUD"])
-      
-      
-    self.pcm_personality = cp.vl["PCM_CRUISE_SM"]["DISTANCE_LINES"] - 1  
-    #distance_buttons
-    if self.CP.carFingerprint in (TSS2_CAR - RADAR_ACC_CAR):
-      # KRKeegan - Add support for toyota distance button
-      self.distance_button_pressed = cp_cam.vl["ACC_CONTROL"]["DISTANCE"]
 
-    elif self.CP.carFingerprint in RADAR_ACC_CAR:
-      # These cars have the acc_control on car can
-      self.distance_button_pressed = cp.vl["ACC_CONTROL"]["DISTANCE"]
+    if self.CP.carFingerprint not in UNSUPPORTED_DSU_CAR:
+      self.pcm_follow_distance = cp.vl["PCM_CRUISE_2"]["PCM_FOLLOW_DISTANCE"]
 
-    elif self.CP.flags & ToyotaFlags.SMART_DSU:
-      self.distance_button_pressed = cp.vl["SDSU"]["FD_BUTTON"]
+    if self.CP.carFingerprint in (TSS2_CAR - RADAR_ACC_CAR) or (self.CP.flags & ToyotaFlags.SMART_DSU and not self.CP.flags & ToyotaFlags.RADAR_CAN_FILTER):
+      # distance button is wired to the ACC module (camera or radar)
+      self.prev_distance_button = self.distance_button
+      if self.CP.carFingerprint in (TSS2_CAR - RADAR_ACC_CAR):
+        self.distance_button = cp_acc.vl["ACC_CONTROL"]["DISTANCE"]
+      else:
+        self.distance_button = cp.vl["SDSU"]["FD_BUTTON"]
 
     return ret
 
@@ -244,21 +232,16 @@ class CarState(CarStateBase):
         ("PRE_COLLISION", 33),
       ]
 
-    if CP.flags & ToyotaFlags.SMART_DSU:
-      messages.append(("SDSU", 33))
-
-    messages += [("SECONDARY_STEER_ANGLE", 0)]
+    if CP.flags & ToyotaFlags.SMART_DSU and not CP.flags & ToyotaFlags.RADAR_CAN_FILTER:
+      messages += [
+        ("SDSU", 100),
+      ]
 
     return CANParser(DBC[CP.carFingerprint]["pt"], messages, 0)
 
   @staticmethod
   def get_cam_can_parser(CP):
     messages = []
-
-    messages += [
-      ("RSA1", 0),
-      ("RSA2", 0),
-    ]
 
     if CP.carFingerprint != CAR.PRIUS_V:
       messages += [
@@ -271,8 +254,5 @@ class CarState(CarStateBase):
         ("ACC_CONTROL", 33),
         ("PCS_HUD", 1),
       ]
-
-    if not CP.openpilotLongitudinalControl and CP.carFingerprint not in (TSS2_CAR, UNSUPPORTED_DSU_CAR):
-      messages.append(("ACC_CONTROL", 33))
 
     return CANParser(DBC[CP.carFingerprint]["pt"], messages, 2)

@@ -66,7 +66,6 @@ class LongitudinalPlanner:
     self.params = Params()
     self.param_read_counter = 0
     self.read_param()
-    self.personality = log.LongitudinalPersonality.standard
 
   #ajouatom
     self.cruiseMaxVals1 = 1.6
@@ -81,11 +80,6 @@ class LongitudinalPlanner:
     self.vCluRatio = 1.0
   
   def read_param(self):
-    try:
-      self.personality = int(self.params.get('LongitudinalPersonality'))
-    except (ValueError, TypeError):
-      self.personality = log.LongitudinalPersonality.standard
-
     # ajouatom
     self.cruiseMaxVals1 = float(self.params.get_int("CruiseMaxVals1")) / 100.
     self.cruiseMaxVals2 = float(self.params.get_int("CruiseMaxVals2")) / 100.
@@ -172,13 +166,13 @@ class LongitudinalPlanner:
     accel_limits_turns[0] = min(accel_limits_turns[0], self.a_desired + 0.05)
     accel_limits_turns[1] = max(accel_limits_turns[1], self.a_desired - 0.05)
 
-    #self.mpc.set_weights(prev_accel_constraint, personality=self.personality)
+    #self.mpc.set_weights(prev_accel_constraint, personality=sm['controlsState'].personality)
     self.mpc.set_accel_limits(accel_limits_turns[0], accel_limits_turns[1])
     self.mpc.set_cur_state(self.v_desired_filter.x, self.a_desired)
     x, v, a, j = self.parse_model(sm['modelV2'], self.v_model_error)
     self.v_cruise_last = v_cruise
 
-    self.mpc.update(sm, reset_state, prev_accel_constraint, sm['radarState'],  v_cruise, x, v, a, j, personality=self.personality)
+    self.mpc.update(sm, reset_state, prev_accel_constraint, sm['radarState'],  v_cruise, x, v, a, j, personality=sm['controlsState'].personality)
 
     self.v_desired_trajectory_full = np.interp(ModelConstants.T_IDXS, T_IDXS_MPC, self.mpc.v_solution)
     self.a_desired_trajectory_full = np.interp(ModelConstants.T_IDXS, T_IDXS_MPC, self.mpc.a_solution)
@@ -214,7 +208,6 @@ class LongitudinalPlanner:
     longitudinalPlan.fcw = self.fcw
 
     longitudinalPlan.solverExecutionTime = self.mpc.solve_time
-    longitudinalPlan.personality = self.personality
 
     longitudinalPlan.debugLongText = self.mpc.debugLongText
     #longitudinalPlan.debugLongText2 = "VC:{:.1f}".format(self.v_cruise_last*3.6)

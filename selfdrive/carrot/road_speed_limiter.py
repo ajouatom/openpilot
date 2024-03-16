@@ -19,6 +19,7 @@ from openpilot.system.hardware import TICI
 from openpilot.common.params import Params
 import subprocess
 from openpilot.selfdrive.navd.helpers import Coordinate
+import traceback
 
 CAMERA_SPEED_FACTOR = 1.05
 
@@ -410,6 +411,9 @@ def main():
   nGoPosTime = 0
   vpPosPointLat = 0
   vpPosPointLon = 0
+  nPosAngle = 0
+  nPosSpeed = -1
+  xPosValidCount = 0
   
   prev_recvTime = time.monotonic()
   #autoNaviSpeedCtrl = int(Params().get("AutoNaviSpeedCtrl"))
@@ -631,13 +635,14 @@ def main():
 
         #print("I:{:.1f},{:.1f},{:.1f},{:.2f}".format(nSdiDist, nSdiPlusDist, nTBTDist, delta_dist))
 
-        vpPosPointLat = vpPosPointLon = 0
+        #vpPosPointLat = vpPosPointLon = 0
         sdi_valid = False
         if ret:
           if int(server.get_apilot_val("nRoadLimitSpeed", -1)) != -1:
             sdi_valid = True
             nTBTTurnType = nSdiType = nSdiSpeedLimit = nSdiPlusType = nSdiPlusSpeedLimit = nSdiBlockType = -1
             nSdiBlockSpeed = nRoadLimitSpeed = -1
+            nPosSpeed = -1
 
           nTBTTurnType = int(server.get_apilot_val("nTBTTurnType", nTBTTurnType))
           nTBTTurnTypeNext = int(server.get_apilot_val("nTBTTurnTypeNext", nTBTTurnTypeNext))
@@ -664,6 +669,10 @@ def main():
           nGoPosTime = int(server.get_apilot_val("nGoPosTime", nGoPosTime))
           vpPosPointLat = float(server.get_apilot_val("vpPosPointLat", vpPosPointLat))
           vpPosPointLon = float(server.get_apilot_val("vpPosPointLon", vpPosPointLon))
+          nPosAngle = float(server.get_apilot_val("nPosAngle", nPosAngle))
+          nPosSpeed = float(server.get_apilot_val("nPosSpeed", nPosSpeed))
+          if nPosSpeed > 0.0:
+            xPosValidCount += 1
           #roadcate = 8 if nLaneCount == 0 else roadcate
           #print("roadcate=", roadcate)
 
@@ -830,8 +839,12 @@ def main():
 
         roadLimitSpeed.send(dat.to_bytes())
 
-        if vpPosPointLat > 0 and vpPosPointLon > 0:
-          pass
+        if nPosSpeed > 0:
+          dat.roadLimitSpeed.xPosSpeed = nPosSpeed
+          dat.roadLimitSpeed.xPosAngle = nPosAngle
+          dat.roadLimitSpeed.xPosLat = vpPosPointLat
+          dat.roadLimitSpeed.xPosLon = vpPosPointLon
+          dat.roadLimitSpeed.xPosValidCount = xPosValidCount
 
 
 
@@ -843,6 +856,8 @@ def main():
         #time.sleep(0.03)
 
     except Exception as e:
+      stack_trace = traceback.format_exc()
+      print(stack_trace) 
       print(e)
       server.last_exception = e
       Params().put_bool("CarrotException", True)

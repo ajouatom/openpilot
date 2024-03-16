@@ -1,13 +1,13 @@
 import copy
 
 import crcmod
-from openpilot.selfdrive.car.hyundai.values import HyundaiFlags, CAR, CHECKSUM, CAMERA_SCC_CAR
+from openpilot.selfdrive.car.hyundai.values import CAR, HyundaiFlags
 
 from openpilot.common.numpy_fast import clip
 
 hyundai_checksum = crcmod.mkCrcFun(0x11D, initCrc=0xFD, rev=False, xorOut=0xdf)
 
-def create_lkas11(packer, frame, car_fingerprint, apply_steer, steer_req,
+def create_lkas11(packer, frame, CP, apply_steer, steer_req,
                   torque_fault, lkas11, sys_warning, sys_state, enabled,
                   left_lane, right_lane,
                   left_lane_depart, right_lane_depart):
@@ -37,13 +37,7 @@ def create_lkas11(packer, frame, car_fingerprint, apply_steer, steer_req,
   values["CF_Lkas_ToiFlt"] = torque_fault  # seems to allow actuation on CR_Lkas_StrToqReq
   values["CF_Lkas_MsgCount"] = frame % 0x10
 
-  if car_fingerprint in (CAR.SONATA, CAR.PALISADE, CAR.KIA_NIRO_EV, CAR.KIA_NIRO_HEV_2021, CAR.SANTA_FE,
-                         CAR.IONIQ_EV_2020, CAR.IONIQ_PHEV, CAR.KIA_SELTOS, CAR.ELANTRA_2021, CAR.GENESIS_G70_2020,
-                         CAR.ELANTRA_HEV_2021, CAR.SONATA_HYBRID, CAR.KONA_EV, CAR.KONA_HEV, CAR.KONA_EV_2022,
-                         CAR.SANTA_FE_2022, CAR.KIA_K5_2021, CAR.IONIQ_HEV_2022, CAR.SANTA_FE_HEV_2022,
-                         CAR.SANTA_FE_PHEV_2022, CAR.KIA_STINGER_2022, CAR.KIA_K5_HEV_2020, CAR.KIA_CEED,
-                         CAR.AZERA_6TH_GEN, CAR.AZERA_HEV_6TH_GEN, CAR.CUSTIN_1ST_GEN,
-                         CAR.NEXO):
+  if CP.flags & HyundaiFlags.SEND_LFA.value:
     values["CF_Lkas_LdwsActivemode"] = int(left_lane) + (int(right_lane) << 1)
     values["CF_Lkas_LdwsOpt_USM"] = 2
 
@@ -61,7 +55,7 @@ def create_lkas11(packer, frame, car_fingerprint, apply_steer, steer_req,
     # Note: the warning is hidden while the blinkers are on
     values["CF_Lkas_SysWarning"] = 0 #4 if sys_warning else 0
   # Likely cars lacking the ability to show individual lane lines in the dash
-  elif car_fingerprint in (CAR.KIA_OPTIMA_G4, CAR.KIA_OPTIMA_G4_FL):
+  elif CP.carFingerprint in (CAR.KIA_OPTIMA_G4, CAR.KIA_OPTIMA_G4_FL):
     # SysWarning 4 = keep hands on wheel + beep
     values["CF_Lkas_SysWarning"] = 4 if sys_warning else 0
 
@@ -76,18 +70,18 @@ def create_lkas11(packer, frame, car_fingerprint, apply_steer, steer_req,
     values["CF_Lkas_LdwsActivemode"] = 0
     values["CF_Lkas_FcwOpt_USM"] = 0
 
-  elif car_fingerprint == CAR.HYUNDAI_GENESIS:
+  elif CP.carFingerprint == CAR.HYUNDAI_GENESIS:
     # This field is actually LdwsActivemode
     # Genesis and Optima fault when forwarding while engaged
     values["CF_Lkas_LdwsActivemode"] = 2
 
   dat = packer.make_can_msg("LKAS11", 0, values)[2]
 
-  if car_fingerprint in CHECKSUM["crc8"]:
+  if CP.flags & HyundaiFlags.CHECKSUM_CRC8:
     # CRC Checksum as seen on 2019 Hyundai Santa Fe
     dat = dat[:6] + dat[7:8]
     checksum = hyundai_checksum(dat)
-  elif car_fingerprint in CHECKSUM["6B"]:
+  elif CP.flags & HyundaiFlags.CHECKSUM_6B:
     # Checksum of first 6 Bytes, as seen on 2018 Kia Sorento
     checksum = sum(dat[:6]) % 256
   else:
@@ -99,7 +93,7 @@ def create_lkas11(packer, frame, car_fingerprint, apply_steer, steer_req,
   return packer.make_can_msg("LKAS11", 0, values)
 
 
-def create_clu11(packer, frame, clu11, button, car_fingerprint):
+def create_clu11(packer, frame, clu11, button, CP):
   values = {s: clu11[s] for s in [
     "CF_Clu_CruiseSwState",
     "CF_Clu_CruiseSwMain",
@@ -117,16 +111,16 @@ def create_clu11(packer, frame, clu11, button, car_fingerprint):
   values["CF_Clu_CruiseSwState"] = button
   values["CF_Clu_AliveCnt1"] = frame % 0x10
   # send buttons to camera on camera-scc based cars
-  bus = 2 if car_fingerprint in CAMERA_SCC_CAR else 0
+  bus = 2 if CP.flags & HyundaiFlags.CAMERA_SCC else 0
   return packer.make_can_msg("CLU11", bus, values)
 
-def create_clu11_button(packer, frame, clu11, button, car_fingerprint):
+def create_clu11_button(packer, frame, clu11, button, CP):
   values = clu11
   values["CF_Clu_CruiseSwState"] = button
   #values["CF_Clu_AliveCnt1"] = frame % 0x10
   values["CF_Clu_AliveCnt1"] = (values["CF_Clu_AliveCnt1"] + 1) % 0x10
   # send buttons to camera on camera-scc based cars
-  bus = 2 if car_fingerprint in CAMERA_SCC_CAR else 0
+  bus = 2 if CP.carFingerprint in CAMERA_SCC_CAR else 0
   return packer.make_can_msg("CLU11", bus, values)
 
 def create_lfahda_mfc(packer, CC, blinking_signal):
@@ -155,7 +149,6 @@ def create_lfahda_mfc(packer, CC, blinking_signal):
 
 def create_acc_commands_mix_scc(CP, packer, enabled, accel, upper_jerk, lower_jerk, idx, hud_control, set_speed, stopping, CC, CS, softHoldMode, cb_upper, cb_lower, cruise_available):
   lead_visible = hud_control.leadVisible
-  cruiseGap = CS.longitudinal_personality + 1 #hud_control.cruiseGap
   softHold = hud_control.softHold
   softHoldInfo = softHold > 1  #계기판에 표시안하게 하려면 False로 하면됨~
   long_override = CC.cruiseControl.override
@@ -199,7 +192,7 @@ def create_acc_commands_mix_scc(CP, packer, enabled, accel, upper_jerk, lower_je
   if makeNewCommands:
     scc11_values = {
     "MainMode_ACC": 1  if cruise_available else 0,
-    "TauGapSet": cruiseGap,
+    "TauGapSet": hud_control.leadDistanceBars + 1,
     "VSetDis": set_speed if longEnabled or CS.out.gasPressed else 0,
     "AliveCounterACC": idx % 0x10,
     "SCCInfoDisplay" : 3 if longActive and radarAlarm else 4 if longActive and softHoldInfo else 0 if enabled else 0,   #2: 크루즈 선택, 3: 전방상황주의, 4: 출발준비 <= 주의 2를 선택하면... 선행차아이콘이 안나옴.
@@ -214,7 +207,7 @@ def create_acc_commands_mix_scc(CP, packer, enabled, accel, upper_jerk, lower_je
   elif CS.scc11 is not None:
     values = CS.scc11
     values["MainMode_ACC"] = 1  if cruise_available else 0
-    values["TauGapSet"] = cruiseGap
+    values["TauGapSet"] = hud_control.leadDistanceBars + 1
     values["VSetDis"] = set_speed if longEnabled or CS.out.gasPressed else 0
     values["AliveCounterACC"] = idx % 0x10
     #values["SCCInfoDisplay"] = 4 if longEnabled and softHoldInfo else 3 if longEnabled and radarAlarm else 2 if enabled else 0   #3: 전방상황주의, 4: 출발준비
@@ -291,12 +284,12 @@ def create_acc_commands_mix_scc(CP, packer, enabled, accel, upper_jerk, lower_je
 
   return commands
 
-def create_acc_commands(packer, enabled, accel, upper_jerk, idx, lead_visible, set_speed, stopping, long_override, use_fca, cruise_available, personality):
+def create_acc_commands(packer, enabled, accel, upper_jerk, idx, lead_visible, set_speed, stopping, long_override, use_fca, cruise_available, hud_control):
   commands = []
 
   scc11_values = {
     "MainMode_ACC": 1 if cruise_available else 0,
-    "TauGapSet": personality + 1,
+    "TauGapSet": hud_control.leadDistanceBars + 1,
     "VSetDis": set_speed if enabled else 0,
     "AliveCounterACC": idx % 0x10,
     "ObjValid": 1, # close lead makes controls tighter
@@ -381,7 +374,7 @@ def create_frt_radar_opt(packer):
   }
   return packer.make_can_msg("FRT_RADAR11", 0, frt_radar11_values)
 
-def create_clu11_mdps(packer, frame, clu11, button, car_fingerprint, speed):
+def create_clu11_mdps(packer, frame, clu11, button, CP, speed):
   values = clu11
   values["CF_Clu_CruiseSwState"] = button
   values["CF_Clu_AliveCnt1"] = frame % 0x10

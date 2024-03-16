@@ -12,6 +12,7 @@ TransmissionType = car.CarParams.TransmissionType
 NetworkLocation = car.CarParams.NetworkLocation
 GearShifter = car.CarState.GearShifter
 STANDSTILL_THRESHOLD = 10 * 0.0311 * CV.KPH_TO_MS
+LongCtrlState = car.CarControl.Actuators.LongControlState # kans
 
 
 class CarState(CarStateBase):
@@ -27,17 +28,12 @@ class CarState(CarStateBase):
     self.pt_lka_steering_cmd_counter = 0
     self.cam_lka_steering_cmd_counter = 0
 
-    # GAP_DIST
-    self.distance_button_pressed = False 
-    # gm steer -kans
-    self.belowSteerSpeed_shown = False
-    self.disable_belowSteerSpeed = False
-    self.resumeRequired_shown = False
-    self.disable_resumeRequired = False
-
     # use cluster speed & vCluRatio
     self.use_cluster_speed = Params().get_int("SpeedFromPCM") #kans
     self.buttons_counter = 0
+
+    self.prev_distance_button = 0
+    self.distance_button = 0
 
     self.single_pedal_mode = False
 
@@ -47,22 +43,21 @@ class CarState(CarStateBase):
   def update(self, pt_cp, cam_cp, loopback_cp):
     ret = car.CarState.new_message()
 
-    # GAP_DIST
-    self.distance_button_pressed = pt_cp.vl["ASCMSteeringButton"]["DistanceButton"] != 0
-
     self.prev_cruise_buttons = self.cruise_buttons
     if self.CP.carFingerprint not in SDGM_CAR:
       self.cruise_buttons = pt_cp.vl["ASCMSteeringButton"]["ACCButtons"]
+      self.distance_button = pt_cp.vl["ASCMSteeringButton"]["DistanceButton"]
       self.buttons_counter = pt_cp.vl["ASCMSteeringButton"]["RollingCounter"]
     else:
       self.cruise_buttons = cam_cp.vl["ASCMSteeringButton"]["ACCButtons"]
+      self.distance_button = cam_cp.vl["ASCMSteeringButton"]["DistanceButton"]
       self.buttons_counter = cam_cp.vl["ASCMSteeringButton"]["RollingCounter"]
     self.pscm_status = copy.copy(pt_cp.vl["PSCMStatus"])
     # This is to avoid a fault where you engage while still moving backwards after shifting to D.
     # An Equinox has been seen with an unsupported status (3), so only check if either wheel is in reverse (2)
     self.moving_backward = (pt_cp.vl["EBCMWheelSpdRear"]["RLWheelDir"] == 2) or (pt_cp.vl["EBCMWheelSpdRear"]["RRWheelDir"] == 2) # and not moving_forward
     # GAP_DIST
-    if self.cruise_buttons in [CruiseButtons.UNPRESS, CruiseButtons.INIT] and self.distance_button_pressed:
+    if self.cruise_buttons in [CruiseButtons.UNPRESS, CruiseButtons.INIT] and self.distance_button:
       self.cruise_buttons = CruiseButtons.GAP_DIST
 
     if self.CP.enableBsm:
@@ -181,12 +176,14 @@ class CarState(CarStateBase):
     # for delay Accfault event
     accFaulted = (pt_cp.vl["AcceleratorPedal2"]["CruiseState"] == AccState.FAULTED or \
                       pt_cp.vl["EBCMFrictionBrakeStatus"]["FrictionBrakeUnavailable"] == 1)
+    startingState = LongCtrlState.starting
     self.accFaultedCount = self.accFaultedCount + 1 if accFaulted else 0
     ret.accFaulted = True if self.accFaultedCount > 50 else False
 
     ret.cruiseState.enabled = pt_cp.vl["AcceleratorPedal2"]["CruiseState"] != AccState.OFF
     ret.cruiseState.standstill = pt_cp.vl["AcceleratorPedal2"]["CruiseState"] == AccState.STANDSTILL
-    ret.cruiseState.standstill = False
+    if startingState:
+      ret.cruiseState.standstill = False
     if self.CP.networkLocation == NetworkLocation.fwdCamera and not self.CP.flags & GMFlags.NO_CAMERA.value:
       if self.CP.carFingerprint not in CC_ONLY_CAR:
         ret.cruiseState.speed = cam_cp.vl["ASCMActiveCruiseControlStatus"]["ACCSpeedSetpoint"] * CV.KPH_TO_MS

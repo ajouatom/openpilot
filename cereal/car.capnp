@@ -246,16 +246,15 @@ struct CarState {
   charging @43 :Bool;
 
 
-  cruiseGap @53 : Int32;
   tpms @48 : Tpms;
   # neokii
   vCluRatio @49 :Float32;
   driverOverride @50 : Int32; #0: Normal, 1:Gas, 2:Brake
   chargeMeter @51 : Float32;
   motorRpm @52 : Float32;
-  totalDistance @54 : Float32;
-  speedLimit @55 : Int32;
-  speedLimitDistance @56 : Float32;
+  totalDistance @53 : Float32;
+  speedLimit @54 : Int32;
+  speedLimitDistance @55 : Float32;
 
   struct Tpms {
     fl @0 :Float32;
@@ -313,6 +312,7 @@ struct CarState {
       setCruise @9;
       resumeCruise @10;
       gapAdjustCruise @11;
+      lfaButton @12;
     }
   }
 
@@ -368,13 +368,11 @@ struct CarControl {
   # Actuator commands as computed by controlsd
   actuators @6 :Actuators;
 
+  # moved to CarOutput
+  actuatorsOutputDEPRECATED @10 :Actuators;
+
   leftBlinker @15: Bool;
   rightBlinker @16: Bool;
-
-  # Any car specific rate limits or quirks applied by
-  # the CarController are reflected in actuatorsOutput
-  # and matches what is sent to the car
-  actuatorsOutput @10 :Actuators;
 
   orientationNED @13 :List(Float32);
   angularVelocity @14 :List(Float32);
@@ -429,7 +427,7 @@ struct CarControl {
     leftLaneVisible @7: Bool;
     rightLaneDepart @8: Bool;
     leftLaneDepart @9: Bool;
-    cruiseGap @10: Int32;
+    leadDistanceBars @10: Int8;  # 1-3: 1 is closest, 3 is farthest. some ports may utilize 2-4 bars instead
     objDist @11: Int32;
     objRelSpd @12: Float32;
     softHold @13: Int32;
@@ -488,6 +486,13 @@ struct CarControl {
   activeDEPRECATED @7 :Bool;
   rollDEPRECATED @8 :Float32;
   pitchDEPRECATED @9 :Float32;
+}
+
+struct CarOutput {
+  # Any car specific rate limits or quirks applied by
+  # the CarController are reflected in actuatorsOutput
+  # and matches what is sent to the car
+  actuatorsOutput @0 :CarControl.Actuators;
 }
 
 # ****** car param ******
@@ -669,6 +674,7 @@ struct CarParams {
     hyundaiCanfd @28;
     volkswagenMqbEvo @29;
     chryslerCusw @30;
+    psa @31;
   }
 
   enum SteerControlType {
