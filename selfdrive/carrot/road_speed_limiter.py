@@ -840,10 +840,10 @@ def main():
         xPosValidCount = max(0, xPosValidCount - 1)
         if nPosSpeed > 0:
           xPosValidCount = 10
-        dat.roadLimitSpeed.xPosSpeed = nPosSpeed
-        dat.roadLimitSpeed.xPosAngle = nPosAngle
-        dat.roadLimitSpeed.xPosLat = vpPosPointLat
-        dat.roadLimitSpeed.xPosLon = vpPosPointLon
+        dat.roadLimitSpeed.xPosSpeed = float(nPosSpeed)
+        dat.roadLimitSpeed.xPosAngle = float(nPosAngle)
+        dat.roadLimitSpeed.xPosLat = float(vpPosPointLat)
+        dat.roadLimitSpeed.xPosLon = float(vpPosPointLon)
         dat.roadLimitSpeed.xPosValidCount = xPosValidCount
         print(vpPosPointLat, vpPosPointLon)
 
