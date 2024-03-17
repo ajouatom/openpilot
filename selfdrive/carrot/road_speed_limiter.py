@@ -671,7 +671,7 @@ def main():
           vpPosPointLon = float(server.get_apilot_val("vpPosPointLon", vpPosPointLon))
           nPosAngle = float(server.get_apilot_val("nPosAngle", nPosAngle))
           nPosSpeed = float(server.get_apilot_val("nPosSpeed", nPosSpeed))
-          if nPosSpeed > 0.0:
+          if nPosSpeed >= 0:
             xPosValidCount += 1
           #roadcate = 8 if nLaneCount == 0 else roadcate
           #print("roadcate=", roadcate)
