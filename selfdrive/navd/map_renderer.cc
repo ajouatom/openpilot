@@ -160,7 +160,8 @@ void MapRenderer::updatePosition(QMapLibre::Coordinate position, float bearing) 
       float lat = roadLimitSpeed.getXPosLat();
       float lon = roadLimitSpeed.getXPosLon();
       float angle = roadLimitSpeed.getXPosAngle();
-      printf("roadLimit = %.4f, %.4f, %.1f\n", lat, lon, angle);
+      int validCount = roadLimitSpeed.getXPosValidCount();
+      printf("roadLimit(%d) = %.4f, %.4f, %.1f\n", validCount, lat, lon, angle);
   }
 
   m_map->setCoordinate(position);
