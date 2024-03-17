@@ -180,8 +180,24 @@ void MapWindow::updateState(const UIState &s) {
     }
     uiState()->scene.navigate_on_openpilot = nav_enabled;
   }
+  auto roadLimitSpeed = sm["roadLimitSpeed"].getRoadLimitSpeed();
+  float lat = roadLimitSpeed.getXPosLat();
+  float lon = roadLimitSpeed.getXPosLon();
+  float angle = roadLimitSpeed.getXPosAngle();
+  float speed = roadLimitSpeed.getXPosSpeed();
+  int validCount = roadLimitSpeed.getXPosValidCount();
+  if (validCount > 0) {
+      location_valid = true;
+      QMapLibre::Coordinate position;
+      bearing = (angle > 180) ? angle - 360 : angle;
+      position.first = lat;
+      position.second = lon;
 
-  if (sm.updated("liveLocationKalman")) {
+      last_position = position;
+      last_bearing = bearing;
+      velocity_filter.update(std::max(10.0, (double)speed));
+  }
+  else if (sm.updated("liveLocationKalman")) {
     auto locationd_location = sm["liveLocationKalman"].getLiveLocationKalman();
     auto locationd_pos = locationd_location.getPositionGeodetic();
     auto locationd_orientation = locationd_location.getCalibratedOrientationNED();
