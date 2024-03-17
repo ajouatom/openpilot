@@ -155,19 +155,17 @@ void MapRenderer::updatePosition(QMapLibre::Coordinate position, float bearing) 
   float zoom = get_zoom_level_for_scale(position.first, meters_per_pixel);
 
   printf("position = %.4f, %.4f, %.1f\n", position.first, position.second, bearing);
-  if (sm->updated("roadLimitSpeed")) {
-      auto roadLimitSpeed = (*sm)["roadLimitSpeed"].getRoadLimitSpeed();
-      float lat = roadLimitSpeed.getXPosLat();
-      float lon = roadLimitSpeed.getXPosLon();
-      float angle = roadLimitSpeed.getXPosAngle();
-      int validCount = roadLimitSpeed.getXPosValidCount();
-      printf("roadLimit(%d) = %.4f, %.4f, %.1f\n", validCount, lat, lon, angle);
-      if (validCount > 0) {
-          bearing = (angle > 180) ? angle - 360 : angle;
-          position.first = lat;
-          position.second = lon;
-      }
-  }
+    auto roadLimitSpeed = (*sm)["roadLimitSpeed"].getRoadLimitSpeed();
+    float lat = roadLimitSpeed.getXPosLat();
+    float lon = roadLimitSpeed.getXPosLon();
+    float angle = roadLimitSpeed.getXPosAngle();
+    int validCount = roadLimitSpeed.getXPosValidCount();
+    printf("roadLimit(%d) = %.4f, %.4f, %.1f\n", validCount, lat, lon, angle);
+    if (validCount > 0) {
+        bearing = (angle > 180) ? angle - 360 : angle;
+        position.first = lat;
+        position.second = lon;
+    }
 
   m_map->setCoordinate(position);
   m_map->setBearing(bearing);
