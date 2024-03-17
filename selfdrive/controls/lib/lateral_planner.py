@@ -89,7 +89,7 @@ class LateralPlanner:
       self.carrotTest = self.params.get_int("CarrotTest")
 
       if self.carrotTest == 2:
-        PATH_COST = 1.5 #1.0
+        PATH_COST = 15 #1.0
         LATERAL_MOTION_COST = 0.11
         LATERAL_ACCEL_COST = 1.0
         LATERAL_JERK_COST = 0.04
