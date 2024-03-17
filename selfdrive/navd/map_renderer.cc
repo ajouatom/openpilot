@@ -93,7 +93,7 @@ MapRenderer::MapRenderer(const QMapLibre::Settings &settings, bool online) : m_s
     vipc_server->start_listener();
 
     pm.reset(new PubMaster({"navThumbnail", "mapRenderState"}));
-    sm.reset(new SubMaster({"liveLocationKalman", "navRoute"}, {"liveLocationKalman"}));
+    sm.reset(new SubMaster({"liveLocationKalman", "navRoute", "roadLimitSpeed"}, {"liveLocationKalman"}));
 
     timer = new QTimer(this);
     timer->setSingleShot(true);
@@ -155,6 +155,13 @@ void MapRenderer::updatePosition(QMapLibre::Coordinate position, float bearing) 
   float zoom = get_zoom_level_for_scale(position.first, meters_per_pixel);
 
   printf("position = %.4f, %.4f, %.1f\n", position.first, position.second, bearing);
+  if (sm->updated("roadLimitSpeed")) {
+      auto roadLimitSpeed = (*sm)["roadLimitSpeed"].getRoadLimitSpeed();
+      float lat = roadLimitSpeed.getXPosLat();
+      float lon = roadLimitSpeed.getXPosLon();
+      float angle = roadLimitSpeed.getXPosAngle();
+      printf("roadLimit = %.4f, %.4f, %.1f\n", lat, lon, angle);
+  }
 
   m_map->setCoordinate(position);
   m_map->setBearing(bearing);
