@@ -845,6 +845,7 @@ def main():
         dat.roadLimitSpeed.xPosLat = vpPosPointLat
         dat.roadLimitSpeed.xPosLon = vpPosPointLon
         dat.roadLimitSpeed.xPosValidCount = xPosValidCount
+        print(vpPosPointLat, vpPosPointLon)
 
         roadLimitSpeed.send(dat.to_bytes())
 
