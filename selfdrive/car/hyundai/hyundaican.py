@@ -120,7 +120,7 @@ def create_clu11_button(packer, frame, clu11, button, CP):
   #values["CF_Clu_AliveCnt1"] = frame % 0x10
   values["CF_Clu_AliveCnt1"] = (values["CF_Clu_AliveCnt1"] + 1) % 0x10
   # send buttons to camera on camera-scc based cars
-  bus = 2 if CP.carFingerprint in CAMERA_SCC_CAR else 0
+  bus = 2 if CP.flags & HyundaiFlags.CAMERA_SCC else 0
   return packer.make_can_msg("CLU11", bus, values)
 
 def create_lfahda_mfc(packer, CC, blinking_signal):
