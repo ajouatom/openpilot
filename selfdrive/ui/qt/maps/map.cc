@@ -187,7 +187,7 @@ void MapWindow::updateState(const UIState &s) {
   float speed = roadLimitSpeed.getXPosSpeed();
   int validCount = roadLimitSpeed.getXPosValidCount();
   if (validCount > 0) {
-      location_valid = true;
+      locationd_valid = true;
       QMapLibre::Coordinate position;
       float bearing = (angle > 180) ? angle - 360 : angle;
       position.first = lat;
