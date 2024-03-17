@@ -839,7 +839,7 @@ def main():
 
         xPosValidCount = max(0, xPosValidCount - 1)
         if sdi_valid:
-          xPosValidCount = 10
+          xPosValidCount = 20
         dat.roadLimitSpeed.xPosSpeed = float(nPosSpeed)
         dat.roadLimitSpeed.xPosAngle = float(nPosAngle)
         dat.roadLimitSpeed.xPosLat = float(vpPosPointLat)
