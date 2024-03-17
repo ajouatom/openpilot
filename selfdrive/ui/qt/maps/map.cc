@@ -195,7 +195,7 @@ void MapWindow::updateState(const UIState &s) {
 
       last_position = position;
       last_bearing = bearing;
-      velocity_filter.update(std::max(10.0, (double)speed));
+      velocity_filter.update(std::max(10.0, (double)speed/3.6));
   }
   else if (sm.updated("liveLocationKalman")) {
     auto locationd_location = sm["liveLocationKalman"].getLiveLocationKalman();
@@ -225,12 +225,12 @@ void MapWindow::updateState(const UIState &s) {
     bool allow_open = std::exchange(last_valid_nav_dest, nav_dest) != nav_dest &&
         nav_dest && !isVisible();
 #else
-    // carrot: ¿Ö? °æ·Î°¡ ¹Ù²î¾ú´Âµ¥ ¸ñÀûÁö¸¸ ºñ±³? navRoute°¡ ¼ö½ÅµÇ¸é ¹«Á¶°Ç ÇØ¾ßÁö.. º¸³»´Â°÷Àº ¸¸µé¾î¼­ º¸³Â´Âµ¥..
+    // carrot: ì™œ? ê²½ë¡œê°€ ë°”ë€Œì—ˆëŠ”ë° ëª©ì ì§€ë§Œ ë¹„êµ? navRouteê°€ ìˆ˜ì‹ ë˜ë©´ ë¬´ì¡°ê±´ í•´ì•¼ì§€.. ë³´ë‚´ëŠ”ê³³ì€ ë§Œë“¤ì–´ì„œ ë³´ëƒˆëŠ”ë°..
     std::exchange(last_valid_nav_dest, nav_dest);
     allow_open = nav_dest && !isVisible();
 #endif
 
-    allow_open = true; // carrot : ¿Ö? °æ·Î°¡ ¹Ù²î¾ú´Âµ¥?
+    allow_open = true; // carrot : ì™œ? ê²½ë¡œê°€ ë°”ë€Œì—ˆëŠ”ë°?
     qWarning() << "Got new navRoute from navd. Opening map:" << allow_open;
 
     // Show map on destination set/change
