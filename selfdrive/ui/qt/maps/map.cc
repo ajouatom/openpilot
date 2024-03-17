@@ -189,7 +189,7 @@ void MapWindow::updateState(const UIState &s) {
   if (validCount > 0) {
       location_valid = true;
       QMapLibre::Coordinate position;
-      bearing = (angle > 180) ? angle - 360 : angle;
+      float bearing = (angle > 180) ? angle - 360 : angle;
       position.first = lat;
       position.second = lon;
 
