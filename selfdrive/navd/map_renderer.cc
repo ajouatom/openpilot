@@ -154,6 +154,8 @@ void MapRenderer::updatePosition(QMapLibre::Coordinate position, float bearing) 
   float meters_per_pixel = 2;
   float zoom = get_zoom_level_for_scale(position.first, meters_per_pixel);
 
+  printf("position = %.4f, %.4f, %.1f\n", position.first, position.second, bearing);
+
   m_map->setCoordinate(position);
   m_map->setBearing(bearing);
   m_map->setZoom(zoom);
