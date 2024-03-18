@@ -2,6 +2,7 @@
 import json
 import os
 import random
+import math
 
 import select
 import subprocess
@@ -354,6 +355,16 @@ class RoadLimitSpeedServer:
 
     return default
 
+def estimate_position(lat, lon, speed, angle, dt):
+    R = 6371000
+    angle_rad = math.radians(angle)
+    delta_d = speed * dt
+    delta_lat = delta_d * math.cos(angle_rad) / R
+    new_lat = lat + math.degrees(delta_lat)
+    delta_lon = delta_d * math.sin(angle_rad) / (R * math.cos(math.radians(lat)))
+    new_lon = lon + math.degrees(delta_lon)
+    
+    return new_lat, new_lon
 
 def main():
   print("RoadLimitSpeed Started.....")
@@ -414,6 +425,7 @@ def main():
   nPosAngle = 0
   nPosSpeed = -1
   xPosValidCount = 0
+  last_update_gps_time = last_calculate_gps_time = 0
   
   prev_recvTime = time.monotonic()
   #autoNaviSpeedCtrl = int(Params().get("AutoNaviSpeedCtrl"))
@@ -838,8 +850,14 @@ def main():
         #print(instruction)
 
         xPosValidCount = max(0, xPosValidCount - 1)
+        dt = now - last_update_gps_time
         if sdi_valid:
           xPosValidCount = 20
+          last_update_gps_time = last_calculate_gps_time = now
+        elif dt < 3.0:
+          dt = last_calculate_gps_time - now
+          last_calculate_gps_time = now
+          npPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), CS.vEgo, float(nPosAngle), dt)
         dat.roadLimitSpeed.xPosSpeed = float(nPosSpeed)
         dat.roadLimitSpeed.xPosAngle = float(nPosAngle)
         dat.roadLimitSpeed.xPosLat = float(vpPosPointLat)
