@@ -163,8 +163,8 @@ void MapRenderer::updatePosition(QMapLibre::Coordinate position, float bearing) 
     int validCount = roadLimitSpeed.getXPosValidCount();
     printf("roadLimit(%d) = %.4f, %.4f, %.1f\n", validCount, lat, lon, angle);
     if (validCount > 0) {
-        if(liveLocationKalmanActive == 0)
-            bearing = (angle > 180) ? angle - 360 : angle;
+        if (liveLocationKalmanActive == 0)
+            bearing = angle;// (angle > 180) ? angle - 360 : angle;
         position.first = lat;
         position.second = lon;
     }
