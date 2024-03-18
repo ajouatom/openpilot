@@ -854,7 +854,7 @@ def main():
         if sdi_valid:
           xPosValidCount = 20
           last_update_gps_time = last_calculate_gps_time = now
-        elif dt < 3.0:
+        elif dt < 3.0 and CS is not None:
           dt = last_calculate_gps_time - now
           last_calculate_gps_time = now
           npPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), CS.vEgo, float(nPosAngle), dt)
