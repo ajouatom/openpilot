@@ -101,7 +101,7 @@ MapRenderer::MapRenderer(const QMapLibre::Settings &settings, bool online) : m_s
     timer->start(0);
   }
 }
-
+int liveLocationKalmanActive = 0;
 void MapRenderer::msgUpdate() {
   sm->update(1000);
 
@@ -112,6 +112,7 @@ void MapRenderer::msgUpdate() {
 
     if ((sm->rcv_frame("liveLocationKalman") % LLK_DECIMATION) == 0) {
       float bearing = RAD2DEG(orientation.getValue()[2]);
+      liveLocationKalmanActive = max(0, liveLocationKalmanActive - 1);
       updatePosition(get_point_along_line(pos.getValue()[0], pos.getValue()[1], bearing, MAP_OFFSET), bearing);
 
       // TODO: use the static rendering mode instead
@@ -162,7 +163,8 @@ void MapRenderer::updatePosition(QMapLibre::Coordinate position, float bearing) 
     int validCount = roadLimitSpeed.getXPosValidCount();
     printf("roadLimit(%d) = %.4f, %.4f, %.1f\n", validCount, lat, lon, angle);
     if (validCount > 0) {
-        bearing = (angle > 180) ? angle - 360 : angle;
+        if(liveLocationKalmanActive == 0)
+            bearing = (angle > 180) ? angle - 360 : angle;
         position.first = lat;
         position.second = lon;
     }

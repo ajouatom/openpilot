@@ -180,21 +180,8 @@ void MapWindow::updateState(const UIState &s) {
     }
     uiState()->scene.navigate_on_openpilot = nav_enabled;
   }
-  auto roadLimitSpeed = sm["roadLimitSpeed"].getRoadLimitSpeed();
-  float lat = roadLimitSpeed.getXPosLat();
-  float lon = roadLimitSpeed.getXPosLon();
-  float angle = roadLimitSpeed.getXPosAngle();
-  float speed = roadLimitSpeed.getXPosSpeed();
-  int validCount = roadLimitSpeed.getXPosValidCount();
-  if (validCount > 0) {
-      locationd_valid = true;
-      float bearing = (angle > 180) ? angle - 360 : angle;
-
-      last_position = QMapLibre::Coordinate(lat, lon);
-      last_bearing = bearing;
-      velocity_filter.update(std::max(10.0, (double)speed/3.6));
-  }
-  else if (sm.updated("liveLocationKalman")) {
+  bool liveLocationKalmanActive = false;
+  if (sm.updated("liveLocationKalman")) {
     auto locationd_location = sm["liveLocationKalman"].getLiveLocationKalman();
     auto locationd_pos = locationd_location.getPositionGeodetic();
     auto locationd_orientation = locationd_location.getCalibratedOrientationNED();
@@ -212,7 +199,25 @@ void MapWindow::updateState(const UIState &s) {
       last_position = QMapLibre::Coordinate(locationd_pos.getValue()[0], locationd_pos.getValue()[1]);
       last_bearing = RAD2DEG(locationd_orientation.getValue()[2]);
       velocity_filter.update(std::max(10.0, locationd_velocity.getValue()[0]));
+      liveLocationKalmanActive = true;
     }
+  }
+  auto roadLimitSpeed = sm["roadLimitSpeed"].getRoadLimitSpeed();
+  float lat = roadLimitSpeed.getXPosLat();
+  float lon = roadLimitSpeed.getXPosLon();
+  float angle = roadLimitSpeed.getXPosAngle();
+  float speed = roadLimitSpeed.getXPosSpeed();
+
+  int validCount = roadLimitSpeed.getXPosValidCount();
+  if (validCount > 0) {
+      locationd_valid = true;
+      float bearing = (angle > 180) ? angle - 360 : angle;
+
+      last_position = QMapLibre::Coordinate(lat, lon);
+      if (liveLocationKalmanActive == false) {
+          last_bearing = bearing;
+          velocity_filter.update(std::max(10.0, (double)speed / 3.6));
+      }
   }
 
   bool allow_open = false;  // carrot
