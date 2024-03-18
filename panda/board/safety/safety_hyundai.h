@@ -325,7 +325,8 @@ static bool hyundai_tx_hook(const CANPacket_t *to_send) {
   else if ((addr == 0x4F1) && hyundai_longitudinal) {
       int button = GET_BYTE(to_send, 0) & 0x7U;
       if (button == 1) {
-          if (_carrot_prepare_engage == 0) _carrot_prepare_engage = 2;
+          //if (_carrot_prepare_engage == 0) _carrot_prepare_engage = 2;
+          _carrot_prepare_engage = 2;
       }
       tx = false;
   }
