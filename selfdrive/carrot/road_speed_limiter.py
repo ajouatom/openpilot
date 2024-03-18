@@ -851,13 +851,14 @@ def main():
 
         xPosValidCount = max(0, xPosValidCount - 1)
         dt = now - last_update_gps_time
+        v_ego = CS.vEgo if CS is not None else float(nPosSpeed)/3.6
         if sdi_valid:
           xPosValidCount = 20
           last_update_gps_time = last_calculate_gps_time = now
         elif dt < 3.0 and CS is not None:
           dt = last_calculate_gps_time - now
           last_calculate_gps_time = now
-          npPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), CS.vEgo, float(nPosAngle), dt)
+          npPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), v_ego, float(nPosAngle), dt)
         dat.roadLimitSpeed.xPosSpeed = float(nPosSpeed)
         dat.roadLimitSpeed.xPosAngle = float(nPosAngle)
         dat.roadLimitSpeed.xPosLat = float(vpPosPointLat)
