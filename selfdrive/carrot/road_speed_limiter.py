@@ -856,7 +856,7 @@ def main():
           xPosValidCount = 20
           last_update_gps_time = last_calculate_gps_time = now
         elif dt < 3.0 and CS is not None:
-          dt = last_calculate_gps_time - now
+          dt = now - last_calculate_gps_time
           last_calculate_gps_time = now
           vpPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), v_ego, float(nPosAngle), dt)
         dat.roadLimitSpeed.xPosSpeed = float(nPosSpeed)
