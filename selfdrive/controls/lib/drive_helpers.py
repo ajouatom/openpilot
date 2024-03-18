@@ -89,7 +89,7 @@ class VCruiseHelper:
     self.activeAVM = 0
     self.v_ego_kph_prev = 0.0
     self.gas_tok_frame = 0
-
+    self.xPosValidCount = 0
     
     #ajouatom: params
     self.params_count = 0
@@ -318,6 +318,7 @@ class VCruiseHelper:
   def update_apilot_cmd(self, controls, v_cruise_kph):
     msg = controls.sm['roadLimitSpeed']
     self.roadSpeed = clip(0, msg.roadLimitSpeed, 150.0)
+    self.xPosValidCount = msg.xPosValidCount
 
     if msg.xIndex > 0 and msg.xIndex != self.xIndex:      
       self.xIndex = msg.xIndex
