@@ -188,12 +188,9 @@ void MapWindow::updateState(const UIState &s) {
   int validCount = roadLimitSpeed.getXPosValidCount();
   if (validCount > 0) {
       locationd_valid = true;
-      QMapLibre::Coordinate position;
       float bearing = (angle > 180) ? angle - 360 : angle;
-      position.first = lat;
-      position.second = lon;
 
-      last_position = position;
+      last_position = QMapLibre::Coordinate(lat, lon);
       last_bearing = bearing;
       velocity_filter.update(std::max(10.0, (double)speed/3.6));
   }
