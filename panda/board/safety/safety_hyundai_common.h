@@ -19,7 +19,6 @@ enum {
 };
 
 int lat_active_count = 0; // carrot
-int _carrot_prepare_engage = 0; // carrot
 
 // common state
 bool hyundai_ev_gas_signal = false;
