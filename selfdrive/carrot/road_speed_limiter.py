@@ -855,6 +855,8 @@ def main():
         if sdi_valid:
           xPosValidCount = 20
           last_update_gps_time = last_calculate_gps_time = now
+          #n초 통신 지연시간이 있다고 가정하고 좀더 진행한것으로 처리함.
+          vpPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), v_ego, float(nPosAngle), 1.0)   #1초
         elif dt < 3.0 and CS is not None:
           dt = now - last_calculate_gps_time
           last_calculate_gps_time = now
