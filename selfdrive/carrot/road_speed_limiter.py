@@ -865,7 +865,6 @@ def main():
           last_calculate_gps_time = now
         elif now - last_update_gps_time < 3.0:# and CS is not None:
           dt = now - last_calculate_gps_time
-          print(dt)
           last_calculate_gps_time = now
           vpPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), v_ego, float(nPosAngle), dt)
         dat.roadLimitSpeed.xPosSpeed = float(nPosSpeed)
