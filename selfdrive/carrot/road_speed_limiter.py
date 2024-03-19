@@ -8,6 +8,7 @@ import select
 import subprocess
 import threading
 import time
+from datetime import datetime
 import socket
 import fcntl
 import struct
@@ -854,16 +855,17 @@ def main():
         xPosValidCount = max(0, xPosValidCount - 1)
         dt = now - last_update_gps_time
         v_ego = CS.vEgo if CS is not None else float(nPosSpeed)/3.6
+        unix_now = time.mktime(datetime.now().timetuple())
         if sdi_valid:
           xPosValidCount = 20
-          last_update_gps_time = last_calculate_gps_time = now
+          last_update_gps_time = last_calculate_gps_time = unix_now
           #n초 통신 지연시간이 있다고 가정하고 좀더 진행한것으로 처리함.
           if timeStamp > 0:
-            print("{}={}-{}", now - timeStamp, now, timeStamp)
+            print("{}={}-{}", unix_now - timeStamp / 1000., unix_now, timeStamp/ 1000.)
           vpPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), v_ego, float(nPosAngle), 1.0)   #1초
         elif dt < 3.0 and CS is not None:
-          dt = now - last_calculate_gps_time
-          last_calculate_gps_time = now
+          dt = unix_now - last_calculate_gps_time
+          last_calculate_gps_time = unix_now
           vpPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), v_ego, float(nPosAngle), dt)
         dat.roadLimitSpeed.xPosSpeed = float(nPosSpeed)
         dat.roadLimitSpeed.xPosAngle = float(nPosAngle)
