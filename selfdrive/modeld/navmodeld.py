@@ -103,7 +103,6 @@ def main():
     buf = vipc_client.recv()
     if buf is None:
       continue
-    print("navModel")
     sm.update(0)
     t1 = time.perf_counter()
     model_output, dsp_execution_time = model.run(buf.data[:buf.uv_offset])
