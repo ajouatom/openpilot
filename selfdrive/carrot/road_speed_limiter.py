@@ -840,6 +840,7 @@ def main():
           maneuver['distance'] = float(nTBTDist)
           maneuver['type'] = navType
           maneuver['modifier'] = navModifier
+          print(maneuver)
           maneuvers.append(maneuver)
           if nTBTDistNext >= nTBTDist:
             maneuver = {}
