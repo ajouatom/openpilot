@@ -853,16 +853,18 @@ def main():
         #print(instruction)
 
         xPosValidCount = max(0, xPosValidCount - 1)
-        dt = now - last_update_gps_time
-        v_ego = CS.vEgo if CS is not None else float(nPosSpeed)/3.6
         unix_now = time.mktime(datetime.now().timetuple())
+        dt = unix_now - last_update_gps_time
+        v_ego = CS.vEgo if CS is not None else float(nPosSpeed)/3.6
+        dt1 = 0.05 # carrotman delay
         if sdi_valid:
           xPosValidCount = 20
           last_update_gps_time = last_calculate_gps_time = unix_now
           #n초 통신 지연시간이 있다고 가정하고 좀더 진행한것으로 처리함.
           if timeStamp > 0:
-            print("{}={}-{}", unix_now - timeStamp / 1000., unix_now, timeStamp/ 1000.)
-          vpPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), v_ego, float(nPosAngle), 1.0)   #1초
+            #print("{}={}-{}".format(unix_now - timeStamp / 1000., unix_now, timeStamp/ 1000.))
+            dt1 = unix_now - timeStamp / 1000.
+          vpPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), v_ego, float(nPosAngle), dt1 + 0.5)   #carrotman delay + 0.5
         elif dt < 3.0 and CS is not None:
           dt = unix_now - last_calculate_gps_time
           last_calculate_gps_time = unix_now
