@@ -110,9 +110,10 @@ void MapRenderer::msgUpdate() {
     auto pos = location.getPositionGeodetic();
     auto orientation = location.getCalibratedOrientationNED();
 
+    if (liveLocationKalmanActive > 0) liveLocationKalmanActive--;
     if ((sm->rcv_frame("liveLocationKalman") % LLK_DECIMATION) == 0) {
       float bearing = RAD2DEG(orientation.getValue()[2]);
-      if (liveLocationKalmanActive > 0) liveLocationKalmanActive--;
+      liveLocationKalmanActive = 10;
       updatePosition(get_point_along_line(pos.getValue()[0], pos.getValue()[1], bearing, MAP_OFFSET), bearing);
 
       // TODO: use the static rendering mode instead
