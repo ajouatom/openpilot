@@ -684,7 +684,7 @@ def main():
           vpPosPointLon = float(server.get_apilot_val("vpPosPointLon", vpPosPointLon))
           nPosAngle = float(server.get_apilot_val("nPosAngle", nPosAngle))
           nPosSpeed = float(server.get_apilot_val("nPosSpeed", nPosSpeed))
-          timeStamp = float(server.get_apilot_val("timeStamp", 0))
+          timeStamp = int(server.get_apilot_val("timeStamp", 0))
           if nPosSpeed >= 0:
             xPosValidCount += 1
           #roadcate = 8 if nLaneCount == 0 else roadcate
@@ -859,7 +859,7 @@ def main():
           last_update_gps_time = last_calculate_gps_time = now
           #n초 통신 지연시간이 있다고 가정하고 좀더 진행한것으로 처리함.
           if timeStamp > 0:
-            print("time_diff=", now - timeStamp)
+            print("{}={}-{}", now - timeStamp, now, timeStamp)
           vpPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), v_ego, float(nPosAngle), 1.0)   #1초
         elif dt < 3.0 and CS is not None:
           dt = now - last_calculate_gps_time
