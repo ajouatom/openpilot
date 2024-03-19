@@ -868,12 +868,10 @@ def main():
             dt1 = 0.1
           dt1 += 0.5  #가상으로 0.5초만큼 더 진행한것으로 
           vpPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), v_ego, float(nPosAngle), dt1)
-          print(vpPosPointLat, vpPosPointLon)
         elif dt < 3.0:# and CS is not None:
           dt = unix_now - last_calculate_gps_time
           last_calculate_gps_time = unix_now
           vpPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), v_ego, float(nPosAngle), dt)
-          print(vpPosPointLat, vpPosPointLon)
         dat.roadLimitSpeed.xPosSpeed = float(nPosSpeed)
         dat.roadLimitSpeed.xPosAngle = float(nPosAngle)
         dat.roadLimitSpeed.xPosLat = float(vpPosPointLat)
