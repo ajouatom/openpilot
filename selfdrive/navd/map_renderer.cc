@@ -146,7 +146,7 @@ void MapRenderer::msgUpdate() {
   // schedule next update
   timer->start(0);
 }
-
+int apn_valid_count = 0;
 void MapRenderer::updatePosition(QMapLibre::Coordinate position, float bearing) {
   if (m_map.isNull()) {
     return;
@@ -162,6 +162,7 @@ void MapRenderer::updatePosition(QMapLibre::Coordinate position, float bearing) 
     float lon = roadLimitSpeed.getXPosLon();
     float angle = roadLimitSpeed.getXPosAngle();
     int validCount = roadLimitSpeed.getXPosValidCount();
+    apn_valid_count = validCount;
     printf("roadLimit(%d) = %.4f, %.4f, %.1f\n", validCount, lat, lon, angle);
     if (validCount > 0) {
         if (liveLocationKalmanActive == 0)
@@ -207,6 +208,8 @@ void MapRenderer::publish(const double render_time, const bool loaded) {
 
   auto location = (*sm)["liveLocationKalman"].getLiveLocationKalman();
   bool valid = loaded && (location.getStatus() == cereal::LiveLocationKalman::Status::VALID) && location.getPositionGeodetic().getValid();
+
+  if (apn_valid_count > 0) valid = true;
   ever_loaded = ever_loaded || loaded;
   uint64_t ts = nanos_since_boot();
   VisionBuf* buf = vipc_server->get_buffer(VisionStreamType::VISION_STREAM_MAP);
