@@ -519,9 +519,13 @@ class Controls:
       self.carrotCruiseActivate = 1
       if self.enable_avail:
         if not self.CP.pcmCruise and self._panda_controls_not_allowed:
+          print("####buttonEnable1")
           self.events.add(EventName.buttonEnable)
         elif self.CP.pcmCruise and CS.cruiseState.enabled: # 이미 pcmCruise가 enabled되어 있는경우
+          print("#####buttonEnable2")
           self.events.add(EventName.buttonEnable)
+        else:
+          printf("####buttonEnable3", self.CP.pcmCruise, self.cruiseState.enabled, self._panda_conrols_not_allowed)
         self.carrotCruiseActivate = 1
       else:
         print("CruiseActivate: Button Enable: Cannot enabled....###")
