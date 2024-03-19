@@ -854,21 +854,15 @@ def main():
 
         xPosValidCount = max(0, xPosValidCount - 1)
         unix_now = time.mktime(datetime.now().timetuple())
-        dt = unix_now - last_update_gps_time
         v_ego = CS.vEgo if CS is not None else float(nPosSpeed)/3.6
         if sdi_valid:
           xPosValidCount = 20
           #n초 통신 지연시간이 있다고 가정하고 좀더 진행한것으로 처리함.
-          if timeStamp > 0:
-            #print("{}={}-{}".format(unix_now - timeStamp / 1000., unix_now, timeStamp/ 1000.))
-            dt1 = unix_now - timeStamp / 1000.
-            last_update_gps_time = last_calculate_gps_time = timeStamp/1000.
-          else:
-            last_update_gps_time = last_calculate_gps_time = unix_now
-            dt1 = 0.1
-          dt1 += 0.5  #가상으로 0.5초만큼 더 진행한것으로 
-          vpPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), v_ego, float(nPosAngle), dt1)
-        elif dt < 3.0:# and CS is not None:
+          dt = (unix_now - timeStamp / 1000.) if timeStamp > 0 else 0.1
+          dt += 0.5  #가상으로 0.5초만큼 더 진행한것으로 
+          vpPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), v_ego, float(nPosAngle), dt)
+          last_update_gps_time = last_calculate_gps_time = unix_now
+        elif unix_now - last_update_gps_time < 3.0:# and CS is not None:
           dt = unix_now - last_calculate_gps_time
           last_calculate_gps_time = unix_now
           vpPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), v_ego, float(nPosAngle), dt)
