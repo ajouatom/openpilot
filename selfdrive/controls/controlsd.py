@@ -525,7 +525,7 @@ class Controls:
           print("#####MakeEvent: buttonEnable2")
           self.events.add(EventName.buttonEnable)
         else:
-          print("####MakeEvent: buttonEnable3", self.CP.pcmCruise, self.cruiseState.enabled, self._panda_conrols_not_allowed)
+          print("####MakeEvent: buttonEnable3", self.CP.pcmCruise, CS.cruiseState.enabled, self._panda_conrols_not_allowed)
         self.carrotCruiseActivate = 1
       else:
         print("CruiseActivate: Button Enable: Cannot enabled....###")
