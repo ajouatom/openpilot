@@ -212,7 +212,7 @@ void MapWindow::updateState(const UIState &s) {
   int validCount = roadLimitSpeed.getXPosValidCount();
   if (validCount > 0) {
       locationd_valid = true;
-      float bearing = angle; // (angle > 180) ? angle - 360 : angle;
+      //float bearing = angle; // (angle > 180) ? angle - 360 : angle;
 
       last_position = QMapLibre::Coordinate(lat, lon);
       if (liveLocationKalmanActive > 0) liveLocationKalmanActive--;
