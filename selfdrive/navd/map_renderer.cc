@@ -164,7 +164,7 @@ void MapRenderer::updatePosition(QMapLibre::Coordinate position, float bearing) 
     //float angle = roadLimitSpeed.getXPosAngle();
     int validCount = roadLimitSpeed.getXPosValidCount();
     apn_valid_count = validCount;
-    //printf("roadLimit(%d) = %.4f, %.4f, %.1f\n", validCount, lat, lon, angle);
+    printf("roadLimit(%d) = %.4f, %.4f, %.1f\n", validCount, lat, lon, bearing);
     if (validCount > 0) {
         //if (liveLocationKalmanActive == 0)
             //bearing = angle;// (angle > 180) ? angle - 360 : angle;
