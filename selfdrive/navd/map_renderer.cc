@@ -111,6 +111,7 @@ void MapRenderer::msgUpdate() {
     auto orientation = location.getCalibratedOrientationNED();
 
     if (liveLocationKalmanActive > 0) liveLocationKalmanActive--;
+    printf("msgUpdate = ????\n");
     if ((sm->rcv_frame("liveLocationKalman") % LLK_DECIMATION) == 0) {
       float bearing = RAD2DEG(orientation.getValue()[2]);
       liveLocationKalmanActive = 10;
