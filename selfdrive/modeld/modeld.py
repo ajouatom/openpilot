@@ -254,7 +254,7 @@ def main(demo=False):
     if nav_enabled and sm.updated["navModel"]:
       nav_features = np.array(sm["navModel"].features)
 
-    nav_active = False
+    nav_instructions_active = False
     if nav_enabled and sm.updated["navInstruction"]:
       nav_instructions[:] = 0
       for maneuver in sm["navInstruction"].allManeuvers:
@@ -266,9 +266,9 @@ def main(demo=False):
           direction_idx = 2
         if 0 <= distance_idx < 50:
           nav_instructions[distance_idx*3 + direction_idx] = 1
-          nav_active = True
+          nav_instructions_active = True
 
-    if nav_active and desire in [1,2]:
+    if nav_instructions_active and desire in [1,2]:
       desire = 0
 
     vec_desire = np.zeros(ModelConstants.DESIRE_LEN, dtype=np.float32)
