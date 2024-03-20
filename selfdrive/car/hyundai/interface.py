@@ -135,7 +135,6 @@ class CarInterface(CarInterfaceBase):
     print("sccBus = ", 2 if ret.flags & HyundaiFlags.SCC_BUS2.value else 0)
 
     ret.openpilotLongitudinalControl = experimental_long and ret.experimentalLongitudinalAvailable
-    ret.pcmCruise = not ret.openpilotLongitudinalControl
 
     ret.stoppingControl = True
     ret.startingState = False # apilot: True
@@ -211,6 +210,7 @@ class CarInterface(CarInterfaceBase):
         ret.radarUnavailable = False
         ret.safetyConfigs = [get_safety_config(car.CarParams.SafetyModel.hyundaiLegacy)]
 
+    ret.pcmCruise = not ret.openpilotLongitudinalControl
     print(f"$$$$ LongitudinalControl = {ret.openpilotLongitudinalControl}")
     if ret.openpilotLongitudinalControl:
       ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_LONG
