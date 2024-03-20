@@ -90,6 +90,7 @@ class VCruiseHelper:
     self.v_ego_kph_prev = 0.0
     self.gas_tok_frame = 0
     self.xPosValidCount = 0
+    self.button_long_time = 40
     
     #ajouatom: params
     self.params_count = 0
@@ -460,6 +461,10 @@ class VCruiseHelper:
       if b.pressed and self.button_cnt==0 and b.type in [ButtonType.accelCruise, ButtonType.decelCruise, ButtonType.gapAdjustCruise, ButtonType.cancel, ButtonType.lfaButton]:
         self.button_cnt = 1
         self.button_prev = b.type
+        if b.type in [ButtonType.accelCruise, ButtonType.decelCruise]:
+          self.button_long_time = 40
+        else:
+          self.button_long_time = 70
       elif not b.pressed and self.button_cnt > 0:
         if b.type == ButtonType.cancel:
           button_type = ButtonType.cancel
@@ -476,7 +481,7 @@ class VCruiseHelper:
 
         self.long_pressed = False
         self.button_cnt = 0
-    if self.button_cnt > 40:
+    if self.button_cnt > self.button_long_time:
       self.long_pressed = True
       V_CRUISE_DELTA = 10
       if self.button_prev == ButtonType.cancel:
@@ -485,17 +490,17 @@ class VCruiseHelper:
       elif self.button_prev == ButtonType.accelCruise:
         button_kph += V_CRUISE_DELTA - button_kph % V_CRUISE_DELTA
         button_type = ButtonType.accelCruise
-        self.button_cnt %= 40
+        self.button_cnt %= self.button_long_time
       elif self.button_prev == ButtonType.decelCruise:
         button_kph -= V_CRUISE_DELTA - -button_kph % V_CRUISE_DELTA
         button_type = ButtonType.decelCruise
-        self.button_cnt %= 40
+        self.button_cnt %= self.button_long_time
       elif self.button_prev == ButtonType.gapAdjustCruise:
         button_type = ButtonType.gapAdjustCruise
-        self.button_cnt %= 70
+        self.button_cnt %= self.button_long_time
       elif self.button_prev == ButtonType.lfaButton:
         button_type = ButtonType.lfaButton
-        self.button_cnt %= 70
+        self.button_cnt %= self.button_long_time
 
     button_kph = clip(button_kph, self.cruiseSpeedMin, self.cruiseSpeedMax)
 
