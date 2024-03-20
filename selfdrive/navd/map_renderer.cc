@@ -130,6 +130,7 @@ void MapRenderer::msgUpdate() {
       // fallback to sending a blank frame
       if (!rendered()) {
         publish(0, false);
+        printf("sending a blank frame\n");
       }
     }
   }
