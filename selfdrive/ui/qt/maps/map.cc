@@ -206,7 +206,7 @@ void MapWindow::updateState(const UIState &s) {
   auto roadLimitSpeed = sm["roadLimitSpeed"].getRoadLimitSpeed();
   float lat = roadLimitSpeed.getXPosLat();
   float lon = roadLimitSpeed.getXPosLon();
-  float angle = roadLimitSpeed.getXPosAngle();
+  //float angle = roadLimitSpeed.getXPosAngle();
   float speed = roadLimitSpeed.getXPosSpeed();
 
   int validCount = roadLimitSpeed.getXPosValidCount();
