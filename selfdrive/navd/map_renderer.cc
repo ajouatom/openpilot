@@ -168,8 +168,9 @@ void MapRenderer::updatePosition(QMapLibre::Coordinate position, float bearing) 
     if (validCount > 0) {
         //if (liveLocationKalmanActive == 0)
             //bearing = angle;// (angle > 180) ? angle - 360 : angle;
-        position.first = lat;
-        position.second = lon;
+        QMapLibre::Coordinate point = get_point_along_line(lat, lon, bearing, MAP_OFFSET);
+        position.first = point.first;
+        position.second = point.second;
     }
 
   m_map->setCoordinate(position);
