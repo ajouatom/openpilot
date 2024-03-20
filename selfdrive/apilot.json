@@ -291,7 +291,7 @@
       "group": "주행튜닝",
       "name": "ALeadTau",
       "title": "ALeadTaux0.01(150)",
-      "descr": "낮은값은 선행차의 움직임에 민감해짐",
+      "descr": "비전(10~30),낮은값은 선행차의 움직임에 민감해짐",
       "egroup": "LONG",
       "etitle": "ALeadTaux0.01(150)",
       "edescr": "",
