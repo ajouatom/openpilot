@@ -102,6 +102,7 @@ MapRenderer::MapRenderer(const QMapLibre::Settings &settings, bool online) : m_s
   }
 }
 int liveLocationKalmanActive = 0;
+float liveLocationKalman_bearing = 0.;
 void MapRenderer::msgUpdate() {
   sm->update(1000);
 
@@ -111,11 +112,11 @@ void MapRenderer::msgUpdate() {
     auto orientation = location.getCalibratedOrientationNED();
 
     if (liveLocationKalmanActive > 0) liveLocationKalmanActive--;
-    printf("msgUpdate = ????\n");
+    liveLocationKalman_bearing = RAD2DEG(orientation.getValue()[2]);
+    printf("msgUpdate = %.1f\n", liveLocationKalman_bearing);
     if ((sm->rcv_frame("liveLocationKalman") % LLK_DECIMATION) == 0) {
       float bearing = RAD2DEG(orientation.getValue()[2]);
-      liveLocationKalmanActive = 10;
-      printf("msgUpdate = %.1f\n", bearing);
+      liveLocationKalmanActive = 10;      
       updatePosition(get_point_along_line(pos.getValue()[0], pos.getValue()[1], bearing, MAP_OFFSET), bearing);
 
       // TODO: use the static rendering mode instead
