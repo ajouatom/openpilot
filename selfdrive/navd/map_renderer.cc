@@ -113,7 +113,6 @@ void MapRenderer::msgUpdate() {
 
     if (liveLocationKalmanActive > 0) liveLocationKalmanActive--;
     liveLocationKalman_bearing = RAD2DEG(orientation.getValue()[2]);
-    printf("msgUpdate = %.1f\n", liveLocationKalman_bearing);
     if ((sm->rcv_frame("liveLocationKalman") % LLK_DECIMATION) == 0) {
       float bearing = RAD2DEG(orientation.getValue()[2]);
       liveLocationKalmanActive = 10;      
@@ -160,6 +159,7 @@ void MapRenderer::updatePosition(QMapLibre::Coordinate position, float bearing) 
   float meters_per_pixel = 2;
   float zoom = get_zoom_level_for_scale(position.first, meters_per_pixel);
 
+  bearing = liveLocationKalman_bearing;
   //printf("position = %.4f, %.4f, %.1f\n", position.first, position.second, bearing);
     auto roadLimitSpeed = (*sm)["roadLimitSpeed"].getRoadLimitSpeed();
     float lat = roadLimitSpeed.getXPosLat();
@@ -167,7 +167,7 @@ void MapRenderer::updatePosition(QMapLibre::Coordinate position, float bearing) 
     //float angle = roadLimitSpeed.getXPosAngle();
     int validCount = roadLimitSpeed.getXPosValidCount();
     apn_valid_count = validCount;
-    printf("roadLimit(%d) = %.4f, %.4f, %.1f\n", validCount, lat, lon, bearing);
+    //printf("roadLimit(%d) = %.4f, %.4f, %.1f\n", validCount, lat, lon, bearing);
     if (validCount > 0) {
         //if (liveLocationKalmanActive == 0)
             //bearing = angle;// (angle > 180) ? angle - 360 : angle;
