@@ -114,6 +114,7 @@ void MapRenderer::msgUpdate() {
     if ((sm->rcv_frame("liveLocationKalman") % LLK_DECIMATION) == 0) {
       float bearing = RAD2DEG(orientation.getValue()[2]);
       liveLocationKalmanActive = 10;
+      printf("msgUpdate = %.1f\n", bearing);
       updatePosition(get_point_along_line(pos.getValue()[0], pos.getValue()[1], bearing, MAP_OFFSET), bearing);
 
       // TODO: use the static rendering mode instead
