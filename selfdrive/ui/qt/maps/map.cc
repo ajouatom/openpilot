@@ -201,6 +201,7 @@ void MapWindow::updateState(const UIState &s) {
       velocity_filter.update(std::max(10.0, locationd_velocity.getValue()[0]));
       liveLocationKalmanActive = 10;
     }
+    last_bearing = RAD2DEG(locationd_orientation.getValue()[2]);
   }
   auto roadLimitSpeed = sm["roadLimitSpeed"].getRoadLimitSpeed();
   float lat = roadLimitSpeed.getXPosLat();
@@ -216,7 +217,7 @@ void MapWindow::updateState(const UIState &s) {
       last_position = QMapLibre::Coordinate(lat, lon);
       if (liveLocationKalmanActive > 0) liveLocationKalmanActive--;
       if (liveLocationKalmanActive == 0) {
-          last_bearing = bearing;
+          //last_bearing = bearing;
           velocity_filter.update(std::max(10.0, (double)speed / 3.6));
       }
   }
