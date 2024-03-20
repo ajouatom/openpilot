@@ -519,13 +519,13 @@ class Controls:
       self.carrotCruiseActivate = 1
       if self.enable_avail:
         if not self.CP.pcmCruise and self._panda_controls_not_allowed:
-          print("####buttonEnable1")
+          print("####MakeEvent: buttonEnable1")
           self.events.add(EventName.buttonEnable)
         elif self.CP.pcmCruise and CS.cruiseState.enabled: # 이미 pcmCruise가 enabled되어 있는경우
-          print("#####buttonEnable2")
+          print("#####MakeEvent: buttonEnable2")
           self.events.add(EventName.buttonEnable)
         else:
-          print("####buttonEnable3", self.CP.pcmCruise, self.cruiseState.enabled, self._panda_conrols_not_allowed)
+          print("####MakeEvent: buttonEnable3", self.CP.pcmCruise, self.cruiseState.enabled, self._panda_conrols_not_allowed)
         self.carrotCruiseActivate = 1
       else:
         print("CruiseActivate: Button Enable: Cannot enabled....###")
@@ -598,6 +598,7 @@ class Controls:
     # DISABLED
     elif self.state == State.disabled:
       if self.events.contains(ET.ENABLE):
+        print("####ET.ENABEL event....")
         if self.events.contains(ET.NO_ENTRY):
          print("######## noEntry", self.events)
          self.current_alert_types.append(ET.NO_ENTRY)
@@ -620,6 +621,8 @@ class Controls:
       self.current_alert_types.append(ET.WARNING)
 
     if not self.enabled and not self.CP.pcmCruise:
+      if self.carrotCruiseActivate > 0:
+        print(f"senf.enabled = {self.enabled}, pcmCruise={self.CP.pcmCruise}")
       self.carrotCruiseActivate = 0
 
   def state_control(self, CS):
