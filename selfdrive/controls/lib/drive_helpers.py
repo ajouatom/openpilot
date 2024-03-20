@@ -91,6 +91,7 @@ class VCruiseHelper:
     self.gas_tok_frame = 0
     self.xPosValidCount = 0
     self.button_long_time = 40
+    self.accel_output = 0.0
     
     #ajouatom: params
     self.params_count = 0
@@ -619,7 +620,7 @@ class VCruiseHelper:
 
     if controls.enabled or CS.brakePressed or CS.gasPressed:
       self.cruiseActiveReady = 0
-      if CS.gasPressed and CS.aEgo < -0.3:
+      if CS.gasPressed and self.accel_output < -0.5:
         self.autoCruiseCancelTimer = 1.0 / DT_CTRL #잠시 오토크루멈춤
         self.cruiseActivate = -1
         self._add_log("Cruise off (GasPressed while braking)")
@@ -646,6 +647,8 @@ class VCruiseHelper:
       v_cruise_kph = self._gas_released_cond(CS, v_cruise_kph, controls)
       if self.autoCruiseCancelTimer > 0 and self.cruiseActivate > 0:
         self.cruiseActivate = 0
+        self.cruiseActiveReady = 1
+
     elif self.brake_pressed_count == -1:
       if self.softHoldActive == 1 and self.softHoldMode > 0:
         self._add_log_auto_cruise("Cruise Activete from SoftHold")
@@ -661,7 +664,7 @@ class VCruiseHelper:
       v_cruise_kph = self.v_ego_kph_set
       if V_CRUISE_MAX > v_cruise_kph > self.cruiseSpeedMax:
         self.cruiseSpeedMax = v_cruise_kph
-    elif self.cruiseActiveReady > 0:
+    elif self.cruiseActiveReady > 0 and self.autoCruiseCancelTimer == 0:
       if 0 < self.lead_dRel or self.xState == 3:
         self._add_log_auto_cruise("Cruise Activate from Lead or Traffic sign stop")
         self.cruiseActivate = 1
