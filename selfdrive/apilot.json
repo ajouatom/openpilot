@@ -393,6 +393,19 @@
     },
     {
       "group": "조향일반",
+      "name": "AutoLaneChangeSpeed",
+      "title": "차선변경속도(20)",
+      "descr": "지정속도 이상에서만 차선변경합니다.",
+      "egroup": "LATSET",
+      "etitle": "LaneChangeSpeed",
+      "edescr": "",
+      "min": 1,
+      "max": 100,
+      "default": 20,
+      "unit": 5
+    },
+    {
+      "group": "조향일반",
       "name": "LaneChangeNeedTorque",
       "title": "차선변경 반자동, 토크필요",
       "descr": "",

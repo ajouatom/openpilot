@@ -121,6 +121,7 @@ class DesireHelper:
     self.noo_active = NooActive.inactive
     self.params = Params()
     self.autoTurnControl = self.params.get_int("AutoTurnControl")
+    self.autoLaneChangeSpeed = self.params.get_int("AutoLaneChangeSpeed") / 3.6
 
   def _add_log(self, log):
     if len(log) == 0:
@@ -135,6 +136,7 @@ class DesireHelper:
     self._add_log("")
     self.autoTurnControl = self.params.get_int("AutoTurnControl")
     self.laneChangeNeedTorque = self.params.get_bool("LaneChangeNeedTorque")
+    self.autoLaneChangeSpeed = self.params.get_int("AutoLaneChangeSpeed") / 3.6
     radarState = sm['radarState']
     self.leftSideObjectDist = 255
     self.rightSideObjectDist = 255
@@ -159,7 +161,7 @@ class DesireHelper:
     if not one_blinker:
       self.blinker_bypass = False
     one_blinker &= not self.blinker_bypass
-    below_lane_change_speed = v_ego < LANE_CHANGE_SPEED_MIN if blinkerExtMode in [0,2] else v_ego < 5. * CV.KPH_TO_MS  ## carrot, when auto turn...
+    below_lane_change_speed = v_ego < self.autoLaneChangeSpeed if blinkerExtMode in [0,2] else v_ego < 5. * CV.KPH_TO_MS  ## carrot, when auto turn...
 
    
       # Calculate left and right lane widths

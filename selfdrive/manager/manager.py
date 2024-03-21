@@ -88,6 +88,7 @@ def manager_init() -> None:
     ("AutoCurveSpeedFactor", "120"),
     ("AutoCurveSpeedAggressiveness", "100"),
     ("AutoTurnControl", "0"),
+    ("AutoLaneChangeSpeed", "20"),
     ("LaneChangeNeedTorque", "0"),
     ("AutoTurnControlSpeedLaneChange", "60"),
     ("AutoTurnControlSpeedTurn", "20"),
