@@ -373,9 +373,6 @@ def main():
 
   pm = messaging.PubMaster(['roadLimitSpeed'])
   sm = messaging.SubMaster(['carState', 'liveLocationKalman'], poll='liveLocationKalman')
-  roadLimitSpeed = messaging.pub_sock('roadLimitSpeed')
-  sock_carState = messaging.sub_sock("carState")
-  liveLocationKalman = messaging.sub_sock("liveLocationKalman")
   carState = None
   CS = None
 
