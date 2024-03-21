@@ -869,7 +869,7 @@ def main():
           if not location_valid and CS is not None:
             diff_angle = nPosAngle%360 - bearing%360;
             #if abs(diff_angle) > 20 and CS.vEgo > 1.0 and abs(CS.steeringAngleDeg) < 2.0:
-            if abs(diff_angle) > 20 and abs(CS.steeringAngleDeg) < 2.0:
+            if abs(diff_angle) > 20:
               bearing_offset = nPosAngle - bearing
               print("bearing_offset = {:.1f} = {:.1f} - {:.1f}".format(bearing_offset, nPosAngle, bearing))
           xPosValidCount = 20
