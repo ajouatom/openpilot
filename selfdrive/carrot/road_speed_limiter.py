@@ -880,7 +880,7 @@ def main():
           xPosValidCount = 20
           #n초 통신 지연시간이 있다고 가정하고 좀더 진행한것으로 처리함.
           dt = 0 #(unix_now - timeStamp / 1000.) if timeStamp > 0 else 0.1
-          dt += 0.5  #가상으로 0.5초만큼 더 진행한것으로 
+          dt += 0.2  #가상으로 0.5초만큼 더 진행한것으로 
           vpPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), v_ego, bearing + bearing_offset, dt)
           last_update_gps_time = now
           last_calculate_gps_time = now
