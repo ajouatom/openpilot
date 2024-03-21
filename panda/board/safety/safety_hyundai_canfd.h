@@ -140,6 +140,10 @@ RxCheck hyundai_canfd_hda2_long_rx_checks[] = {
   HYUNDAI_CANFD_COMMON_RX_CHECKS(1)
   HYUNDAI_CANFD_BUTTONS_ADDR_CHECK(1)  // TODO: carrot: canival no 0x1cf
 };
+RxCheck hyundai_canfd_hda2_long_rx_checks_scc2[] = {
+  HYUNDAI_CANFD_COMMON_RX_CHECKS(0)
+  HYUNDAI_CANFD_BUTTONS_ADDR_CHECK(0)  
+};
 RxCheck hyundai_canfd_hda2_alt_buttons_rx_checks[] = {
   HYUNDAI_CANFD_COMMON_RX_CHECKS(1)
   HYUNDAI_CANFD_ALT_BUTTONS_ADDR_CHECK(1)
@@ -442,7 +446,8 @@ static safety_config hyundai_canfd_init(uint16_t param) {
             else ret = BUILD_SAFETY_CFG(hyundai_canfd_hda2_long_alt_buttons_rx_checks, HYUNDAI_CANFD_HDA2_LONG_TX_MSGS);
         }
         else {
-            ret = BUILD_SAFETY_CFG(hyundai_canfd_hda2_long_rx_checks, HYUNDAI_CANFD_HDA2_LONG_TX_MSGS);
+            if (hyundai_canfd_scc_bus2) ret = BUILD_SAFETY_CFG(hyundai_canfd_hda2_long_rx_checks, HYUNDAI_CANFD_HDA2_LONG_TX_MSGS);
+            else ret = BUILD_SAFETY_CFG(hyundai_canfd_hda2_long_rx_checks_scc2, HYUNDAI_CANFD_HDA2_LONG_TX_MSGS);
         }
     } else {
       if(hyundai_canfd_alt_buttons) print("hyundai safety canfd_hda1 long alt_buttons\n");
