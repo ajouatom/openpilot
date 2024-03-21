@@ -439,6 +439,7 @@ def main():
   bearing = 0.0
   bearing_offset = 0.0
   location_valid = False
+  diff_angle_count = 0.0
 
   road_category_map = {
     0: "고속도로0",
