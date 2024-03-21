@@ -874,6 +874,7 @@ def main():
               diff_angle_count += 1
             else:
               diff_angle_count = 0
+            print("{:.1f} bearing_diff[{}] = {:.1f} = {:.1f} - {:.1f}".format(bearing_offset, diff_angle_count, diff_angle, nPosAngle, bearing))
             if diff_angle_count > 20:
               bearing_offset = nPosAngle - bearing
               print("bearing_offset = {:.1f} = {:.1f} - {:.1f}".format(bearing_offset, nPosAngle, bearing))
