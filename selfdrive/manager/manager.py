@@ -88,6 +88,7 @@ def manager_init() -> None:
     ("AutoCurveSpeedFactor", "120"),
     ("AutoCurveSpeedAggressiveness", "100"),
     ("AutoTurnControl", "0"),
+    ("AutoLaneChangeSpeed", "20"),
     ("LaneChangeNeedTorque", "0"),
     ("AutoTurnControlSpeedLaneChange", "60"),
     ("AutoTurnControlSpeedTurn", "20"),
@@ -162,6 +163,10 @@ def manager_init() -> None:
     ("MSLCEnabled", "0"),
     ("NoLogging", "0"),
     ("HotspotOnBoot", "0"),
+    ("LatPathCost", "100"),
+    ("LatMotionCost", "11"),
+    ("LatAccelCost", "100"),
+    ("LatSteerRateCost", "10"),
 
     ("MTSCAggressiveness", "100"),
     ("MTSCCurvatureCheck", "1"),

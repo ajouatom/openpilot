@@ -902,7 +902,7 @@ void AnnotatedCameraWidget::paintEvent(QPaintEvent *event) {
   extern int g_fps;
   g_fps = fps;
   if (fps < 15) {
-    LOGW("slow frame rate: %.2f fps", fps);
+    //LOGW("slow frame rate: %.2f fps", fps);
   }
   prev_draw_t = cur_draw_t;
 

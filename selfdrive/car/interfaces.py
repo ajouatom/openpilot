@@ -426,9 +426,11 @@ class CarInterfaceBase(ABC):
       # Enable OP long on falling edge of enable buttons (defaults to accelCruise and decelCruise, overridable per-port)
       if not self.CP.pcmCruise and (b.type in enable_buttons and not b.pressed):
         events.add(EventName.buttonEnable)
+        print("$$$$$$$$$$$$$$ EventName.buttonEnable")
       # Disable on rising and falling edge of cancel for both stock and OP long
       if b.type == ButtonType.cancel:
         events.add(EventName.buttonCancel)
+        print("$$$$$$$$$$$$$$ EventName.buttonCancel")
 
     # Handle permanent and temporary steering faults
     self.steering_unpressed = 0 if cs_out.steeringPressed else self.steering_unpressed + 1

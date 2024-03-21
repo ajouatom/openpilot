@@ -442,7 +442,7 @@ class Controls:
       # Not show in first 1 km to allow for driving out of garage. This event shows after 5 minutes
       if not self.sm['liveLocationKalman'].gpsOK and self.sm['liveLocationKalman'].inputsOK and (self.distance_traveled > 1000):
         self.events.add(EventName.noGps)
-      if self.sm['liveLocationKalman'].gpsOK:
+      if self.sm['liveLocationKalman'].gpsOK or self.v_cruise_helper.xPosValidCount > 0:
         self.distance_traveled = 0
       self.distance_traveled += CS.vEgo * DT_CTRL
 
@@ -519,9 +519,13 @@ class Controls:
       self.carrotCruiseActivate = 1
       if self.enable_avail:
         if not self.CP.pcmCruise and self._panda_controls_not_allowed:
+          print("####MakeEvent: buttonEnable1")
           self.events.add(EventName.buttonEnable)
         elif self.CP.pcmCruise and CS.cruiseState.enabled: # 이미 pcmCruise가 enabled되어 있는경우
+          print("#####MakeEvent: buttonEnable2")
           self.events.add(EventName.buttonEnable)
+        else:
+          print("####MakeEvent: buttonEnable3", self.CP.pcmCruise, CS.cruiseState.enabled, self._panda_controls_not_allowed)
         self.carrotCruiseActivate = 1
       else:
         print("CruiseActivate: Button Enable: Cannot enabled....###")
@@ -594,6 +598,7 @@ class Controls:
     # DISABLED
     elif self.state == State.disabled:
       if self.events.contains(ET.ENABLE):
+        print("####ET.ENABEL event....")
         if self.events.contains(ET.NO_ENTRY):
          print("######## noEntry", self.events)
          self.current_alert_types.append(ET.NO_ENTRY)
@@ -616,6 +621,8 @@ class Controls:
       self.current_alert_types.append(ET.WARNING)
 
     if not self.enabled and not self.CP.pcmCruise:
+      if self.carrotCruiseActivate > 0:
+        print(f"senf.enabled = {self.enabled}, pcmCruise={self.CP.pcmCruise}")
       self.carrotCruiseActivate = 0
 
   def state_control(self, CS):
@@ -684,6 +691,7 @@ class Controls:
       pid_accel_limits = self.CI.get_pid_accel_limits(self.CP, CS.vEgo, self.v_cruise_helper.v_cruise_kph * CV.KPH_TO_MS)
       t_since_plan = (self.sm.frame - self.sm.recv_frame['longitudinalPlan']) * DT_CTRL
       actuators.accel, actuators.jerk = self.LoC.update(CC.longActive, CS, long_plan, pid_accel_limits, t_since_plan, self.v_cruise_helper.softHoldActive)
+      self.v_cruise_helper.accel_output = actuators.accel # carrot: for gas pedal
 
       if len(long_plan.speeds):
         actuators.speed = long_plan.speeds[-1]

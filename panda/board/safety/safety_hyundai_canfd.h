@@ -55,6 +55,8 @@ const CanMsg HYUNDAI_CANFD_HDA2_LONG_TX_MSGS[] = {
   {0x345, 0, 8},  // ADRV_0x345
   {0x1DA, 0, 32}, // ADRV_0x1da
 
+  {0x362, 1, 32}, // CAM_0x362
+
   {353, 0, 24}, // ADRV_353
 };
 
@@ -161,7 +163,7 @@ bool hyundai_canfd_alt_buttons = false;
 bool hyundai_canfd_hda2_alt_steering = false;
 bool hyundai_canfd_scc_bus2 = false;
 
-int canfd_tx_addr[32] = { 272, 80, 298, 866, 676, 480, 81, 490, 512, 837, 474, 352, 416, 0, };
+int canfd_tx_addr[32] = { 272, 80, 298, 866, 676, 480, 81, 490, 512, 837, 474, 352, 416, 282, 437, 506, 353, 354, 442, 485, 1402, 908, 1848, 0, };
 uint32_t canfd_tx_time[32] = { 0, };
 
 int hyundai_canfd_hda2_get_lkas_addr(void) {
@@ -213,10 +215,6 @@ static void hyundai_canfd_rx_hook(const CANPacket_t *to_push) {
         main_button = GET_BIT(to_push, 34U);
       }
       hyundai_common_cruise_buttons_check(cruise_button, main_button);
-    }
-    if (_carrot_prepare_engage == 2) {
-        controls_allowed = true;
-        _carrot_prepare_engage = 1;
     }
 
     // gas press, different for EV, hybrid, and ICE models
@@ -308,12 +306,11 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
       if (addr == 0x1cf) cruise_button = GET_BYTE(to_send, 2) & 0x7U;
       else cruise_button = (GET_BYTE(to_send, 4) >> 4) & 0x7U;
       if (cruise_button == 1) {
-          //if (_carrot_prepare_engage == 0) _carrot_prepare_engage = 2;
-          _carrot_prepare_engage = 2;
+          print("auto cruise: controls_allowed = true");
+          controls_allowed = true;
       }
       tx = false;  // button spamming은 longcon일때.. 나가면 안될것이라고 판단됨..
   }
-  if (controls_allowed) _carrot_prepare_engage = 0;
 
   // UDS: only tester present ("\x02\x3E\x80\x00\x00\x00\x00\x00") allowed on diagnostics address
   if (hyundai_longitudinal) {

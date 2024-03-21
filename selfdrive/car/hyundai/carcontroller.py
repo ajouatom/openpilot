@@ -272,7 +272,7 @@ class CarController(CarControllerBase):
           self.activateCruise = 1
           #can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP))
           can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL))
-          print("SendActivateCanData#######")
+          #print("SendActivateCanData#######")
 
       else:
         # button presses
@@ -293,7 +293,7 @@ class CarController(CarControllerBase):
         if CC.cruiseControl.activate and self.activateCruise == 0: ## ajouatom: send command to panda via Button spam(RES_ACCEL), for auto engage
           self.activateCruise = 1
           can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP))
-          print("SendActivateCanData#######")
+          #print("SendActivateCanData#######")
 
       if self.CP.carFingerprint in CAN_GEARS["send_mdps12"]:  # send mdps12 to LKAS to prevent LKAS error
         can_sends.append(hyundaican.create_mdps12(self.packer, self.frame, CS.mdps12))

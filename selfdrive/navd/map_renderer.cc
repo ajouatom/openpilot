@@ -93,7 +93,7 @@ MapRenderer::MapRenderer(const QMapLibre::Settings &settings, bool online) : m_s
     vipc_server->start_listener();
 
     pm.reset(new PubMaster({"navThumbnail", "mapRenderState"}));
-    sm.reset(new SubMaster({"liveLocationKalman", "navRoute"}, {"liveLocationKalman"}));
+    sm.reset(new SubMaster({"liveLocationKalman", "navRoute", "roadLimitSpeed"}, {"liveLocationKalman"}));
 
     timer = new QTimer(this);
     timer->setSingleShot(true);
@@ -101,7 +101,6 @@ MapRenderer::MapRenderer(const QMapLibre::Settings &settings, bool online) : m_s
     timer->start(0);
   }
 }
-
 void MapRenderer::msgUpdate() {
   sm->update(1000);
 
@@ -128,6 +127,7 @@ void MapRenderer::msgUpdate() {
       // fallback to sending a blank frame
       if (!rendered()) {
         publish(0, false);
+        printf("sending a blank frame\n");
       }
     }
   }
@@ -144,7 +144,7 @@ void MapRenderer::msgUpdate() {
   // schedule next update
   timer->start(0);
 }
-
+int apn_valid_count = 0;
 void MapRenderer::updatePosition(QMapLibre::Coordinate position, float bearing) {
   if (m_map.isNull()) {
     return;
@@ -153,6 +153,21 @@ void MapRenderer::updatePosition(QMapLibre::Coordinate position, float bearing) 
   // Choose a scale that ensures above 13 zoom level up to and above 75deg of lat
   float meters_per_pixel = 2;
   float zoom = get_zoom_level_for_scale(position.first, meters_per_pixel);
+
+  //printf("position = %.4f, %.4f, %.1f\n", position.first, position.second, bearing);
+    auto roadLimitSpeed = (*sm)["roadLimitSpeed"].getRoadLimitSpeed();
+    float lat = roadLimitSpeed.getXPosLat();
+    float lon = roadLimitSpeed.getXPosLon();
+    float angle = roadLimitSpeed.getXPosAngle();
+    int validCount = roadLimitSpeed.getXPosValidCount();
+    apn_valid_count = validCount;
+    printf("roadLimit(%d) = %.4f, %.4f, %.1f\n", validCount, lat, lon, bearing);
+    if (validCount > 0) {
+        bearing = (angle > 180) ? angle - 360 : angle;
+        QMapLibre::Coordinate point = get_point_along_line(lat, lon, bearing, MAP_OFFSET);
+        position.first = point.first;
+        position.second = point.second;
+    }
 
   m_map->setCoordinate(position);
   m_map->setBearing(bearing);
@@ -191,6 +206,8 @@ void MapRenderer::publish(const double render_time, const bool loaded) {
 
   auto location = (*sm)["liveLocationKalman"].getLiveLocationKalman();
   bool valid = loaded && (location.getStatus() == cereal::LiveLocationKalman::Status::VALID) && location.getPositionGeodetic().getValid();
+
+  if (apn_valid_count > 0) valid = loaded;
   ever_loaded = ever_loaded || loaded;
   uint64_t ts = nanos_since_boot();
   VisionBuf* buf = vipc_server->get_buffer(VisionStreamType::VISION_STREAM_MAP);

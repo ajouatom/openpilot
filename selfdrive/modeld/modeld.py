@@ -238,9 +238,9 @@ def main(demo=False):
     traffic_convention = np.zeros(2)
     traffic_convention[int(is_rhd)] = 1
 
-    vec_desire = np.zeros(ModelConstants.DESIRE_LEN, dtype=np.float32)
-    if desire >= 0 and desire < ModelConstants.DESIRE_LEN:
-      vec_desire[desire] = 1
+    #vec_desire = np.zeros(ModelConstants.DESIRE_LEN, dtype=np.float32)
+    #if desire >= 0 and desire < ModelConstants.DESIRE_LEN:
+    #  vec_desire[desire] = 1
 
     # Enable/disable nav features
     timestamp_llk = sm["navModel"].locationMonoTime
@@ -254,6 +254,7 @@ def main(demo=False):
     if nav_enabled and sm.updated["navModel"]:
       nav_features = np.array(sm["navModel"].features)
 
+    nav_instructions_active = False
     if nav_enabled and sm.updated["navInstruction"]:
       nav_instructions[:] = 0
       for maneuver in sm["navInstruction"].allManeuvers:
@@ -265,6 +266,14 @@ def main(demo=False):
           direction_idx = 2
         if 0 <= distance_idx < 50:
           nav_instructions[distance_idx*3 + direction_idx] = 1
+          nav_instructions_active = True
+
+    if nav_instructions_active and desire in [1,2]:
+      desire = 0
+
+    vec_desire = np.zeros(ModelConstants.DESIRE_LEN, dtype=np.float32)
+    if desire >= 0 and desire < ModelConstants.DESIRE_LEN:
+      vec_desire[desire] = 1
 
     # tracked dropped frames
     vipc_dropped_frames = max(0, meta_main.frame_id - last_vipc_frame_id - 1)

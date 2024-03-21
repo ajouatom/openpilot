@@ -89,7 +89,9 @@ class VCruiseHelper:
     self.activeAVM = 0
     self.v_ego_kph_prev = 0.0
     self.gas_tok_frame = 0
-
+    self.xPosValidCount = 0
+    self.button_long_time = 40
+    self.accel_output = 0.0
     
     #ajouatom: params
     self.params_count = 0
@@ -318,6 +320,7 @@ class VCruiseHelper:
   def update_apilot_cmd(self, controls, v_cruise_kph):
     msg = controls.sm['roadLimitSpeed']
     self.roadSpeed = clip(0, msg.roadLimitSpeed, 150.0)
+    self.xPosValidCount = msg.xPosValidCount
 
     if msg.xIndex > 0 and msg.xIndex != self.xIndex:      
       self.xIndex = msg.xIndex
@@ -459,6 +462,10 @@ class VCruiseHelper:
       if b.pressed and self.button_cnt==0 and b.type in [ButtonType.accelCruise, ButtonType.decelCruise, ButtonType.gapAdjustCruise, ButtonType.cancel, ButtonType.lfaButton]:
         self.button_cnt = 1
         self.button_prev = b.type
+        if b.type in [ButtonType.accelCruise, ButtonType.decelCruise]:
+          self.button_long_time = 40
+        else:
+          self.button_long_time = 70
       elif not b.pressed and self.button_cnt > 0:
         if b.type == ButtonType.cancel:
           button_type = ButtonType.cancel
@@ -475,7 +482,7 @@ class VCruiseHelper:
 
         self.long_pressed = False
         self.button_cnt = 0
-    if self.button_cnt > 40:
+    if self.button_cnt > self.button_long_time:
       self.long_pressed = True
       V_CRUISE_DELTA = 10
       if self.button_prev == ButtonType.cancel:
@@ -484,17 +491,17 @@ class VCruiseHelper:
       elif self.button_prev == ButtonType.accelCruise:
         button_kph += V_CRUISE_DELTA - button_kph % V_CRUISE_DELTA
         button_type = ButtonType.accelCruise
-        self.button_cnt %= 40
+        self.button_cnt %= self.button_long_time
       elif self.button_prev == ButtonType.decelCruise:
         button_kph -= V_CRUISE_DELTA - -button_kph % V_CRUISE_DELTA
         button_type = ButtonType.decelCruise
-        self.button_cnt %= 40
+        self.button_cnt %= self.button_long_time
       elif self.button_prev == ButtonType.gapAdjustCruise:
         button_type = ButtonType.gapAdjustCruise
-        self.button_cnt %= 40
+        self.button_cnt %= self.button_long_time
       elif self.button_prev == ButtonType.lfaButton:
         button_type = ButtonType.lfaButton
-        self.button_cnt %= 40
+        self.button_cnt %= self.button_long_time
 
     button_kph = clip(button_kph, self.cruiseSpeedMin, self.cruiseSpeedMax)
 
@@ -613,7 +620,7 @@ class VCruiseHelper:
 
     if controls.enabled or CS.brakePressed or CS.gasPressed:
       self.cruiseActiveReady = 0
-      if CS.gasPressed and CS.aEgo < -0.3:
+      if CS.gasPressed and self.accel_output < -0.5:
         self.autoCruiseCancelTimer = 1.0 / DT_CTRL #잠시 오토크루멈춤
         self.cruiseActivate = -1
         self._add_log("Cruise off (GasPressed while braking)")
@@ -640,6 +647,8 @@ class VCruiseHelper:
       v_cruise_kph = self._gas_released_cond(CS, v_cruise_kph, controls)
       if self.autoCruiseCancelTimer > 0 and self.cruiseActivate > 0:
         self.cruiseActivate = 0
+        self.cruiseActiveReady = 1
+
     elif self.brake_pressed_count == -1:
       if self.softHoldActive == 1 and self.softHoldMode > 0:
         self._add_log_auto_cruise("Cruise Activete from SoftHold")
@@ -655,7 +664,7 @@ class VCruiseHelper:
       v_cruise_kph = self.v_ego_kph_set
       if V_CRUISE_MAX > v_cruise_kph > self.cruiseSpeedMax:
         self.cruiseSpeedMax = v_cruise_kph
-    elif self.cruiseActiveReady > 0:
+    elif self.cruiseActiveReady > 0 and self.autoCruiseCancelTimer == 0:
       if 0 < self.lead_dRel or self.xState == 3:
         self._add_log_auto_cruise("Cruise Activate from Lead or Traffic sign stop")
         self.cruiseActivate = 1

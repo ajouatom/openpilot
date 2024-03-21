@@ -205,11 +205,6 @@ static void hyundai_rx_hook(const CANPacket_t *to_push) {
       hyundai_common_cruise_buttons_check(cruise_button, main_button);
     }
 
-    if (_carrot_prepare_engage == 2) {
-        controls_allowed = true;
-        _carrot_prepare_engage = 1;
-    }
-
     // gas press, different for EV, hybrid, and ICE models
     if ((addr == 0x371) && hyundai_ev_gas_signal) {
       gas_pressed = (((GET_BYTE(to_push, 4) & 0x7FU) << 1) | GET_BYTE(to_push, 3) >> 7) != 0U;
@@ -325,13 +320,11 @@ static bool hyundai_tx_hook(const CANPacket_t *to_send) {
   else if ((addr == 0x4F1) && hyundai_longitudinal) {
       int button = GET_BYTE(to_send, 0) & 0x7U;
       if (button == 1) {
-          //if (_carrot_prepare_engage == 0) _carrot_prepare_engage = 2;
-          _carrot_prepare_engage = 2;
+          controls_allowed = true;
+          print("auto cruise: controls_allowed = true");
       }
       tx = false;
   }
-// carrot
-  if (controls_allowed) _carrot_prepare_engage = 0;
   if(addr == 832)
     last_ts_lkas11_from_op = (tx == 0 ? 0 : microsecond_timer_get());
   else if(addr == 1057)
