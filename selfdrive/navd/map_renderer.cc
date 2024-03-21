@@ -101,8 +101,6 @@ MapRenderer::MapRenderer(const QMapLibre::Settings &settings, bool online) : m_s
     timer->start(0);
   }
 }
-int liveLocationKalmanActive = 0;
-float liveLocationKalman_bearing = 0.;
 void MapRenderer::msgUpdate() {
   sm->update(1000);
 
@@ -111,11 +109,8 @@ void MapRenderer::msgUpdate() {
     auto pos = location.getPositionGeodetic();
     auto orientation = location.getCalibratedOrientationNED();
 
-    if (liveLocationKalmanActive > 0) liveLocationKalmanActive--;
-    liveLocationKalman_bearing = RAD2DEG(orientation.getValue()[2]);
     if ((sm->rcv_frame("liveLocationKalman") % LLK_DECIMATION) == 0) {
       float bearing = RAD2DEG(orientation.getValue()[2]);
-      liveLocationKalmanActive = 10;      
       updatePosition(get_point_along_line(pos.getValue()[0], pos.getValue()[1], bearing, MAP_OFFSET), bearing);
 
       // TODO: use the static rendering mode instead
@@ -159,18 +154,16 @@ void MapRenderer::updatePosition(QMapLibre::Coordinate position, float bearing) 
   float meters_per_pixel = 2;
   float zoom = get_zoom_level_for_scale(position.first, meters_per_pixel);
 
-  bearing = liveLocationKalman_bearing;
   //printf("position = %.4f, %.4f, %.1f\n", position.first, position.second, bearing);
     auto roadLimitSpeed = (*sm)["roadLimitSpeed"].getRoadLimitSpeed();
     float lat = roadLimitSpeed.getXPosLat();
     float lon = roadLimitSpeed.getXPosLon();
-    //float angle = roadLimitSpeed.getXPosAngle();
+    float angle = roadLimitSpeed.getXPosAngle();
     int validCount = roadLimitSpeed.getXPosValidCount();
     apn_valid_count = validCount;
-    //printf("roadLimit(%d) = %.4f, %.4f, %.1f\n", validCount, lat, lon, bearing);
+    printf("roadLimit(%d) = %.4f, %.4f, %.1f\n", validCount, lat, lon, bearing);
     if (validCount > 0) {
-        //if (liveLocationKalmanActive == 0)
-            //bearing = angle;// (angle > 180) ? angle - 360 : angle;
+        bearing = (angle > 180) ? angle - 360 : angle;
         QMapLibre::Coordinate point = get_point_along_line(lat, lon, bearing, MAP_OFFSET);
         position.first = point.first;
         position.second = point.second;

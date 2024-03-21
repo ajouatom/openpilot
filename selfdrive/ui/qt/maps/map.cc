@@ -180,7 +180,6 @@ void MapWindow::updateState(const UIState &s) {
     }
     uiState()->scene.navigate_on_openpilot = nav_enabled;
   }
-  int liveLocationKalmanActive = 0;
   if (sm.updated("liveLocationKalman")) {
     auto locationd_location = sm["liveLocationKalman"].getLiveLocationKalman();
     auto locationd_pos = locationd_location.getPositionGeodetic();
@@ -199,27 +198,22 @@ void MapWindow::updateState(const UIState &s) {
       last_position = QMapLibre::Coordinate(locationd_pos.getValue()[0], locationd_pos.getValue()[1]);
       last_bearing = RAD2DEG(locationd_orientation.getValue()[2]);
       velocity_filter.update(std::max(10.0, locationd_velocity.getValue()[0]));
-      liveLocationKalmanActive = 10;
     }
-    last_bearing = RAD2DEG(locationd_orientation.getValue()[2]);
   }
   auto roadLimitSpeed = sm["roadLimitSpeed"].getRoadLimitSpeed();
   float lat = roadLimitSpeed.getXPosLat();
   float lon = roadLimitSpeed.getXPosLon();
-  //float angle = roadLimitSpeed.getXPosAngle();
+  float angle = roadLimitSpeed.getXPosAngle();
   float speed = roadLimitSpeed.getXPosSpeed();
 
   int validCount = roadLimitSpeed.getXPosValidCount();
   if (validCount > 0) {
       locationd_valid = true;
-      //float bearing = angle; // (angle > 180) ? angle - 360 : angle;
+      float bearing = (angle > 180) ? angle - 360 : angle;
 
       last_position = QMapLibre::Coordinate(lat, lon);
-      if (liveLocationKalmanActive > 0) liveLocationKalmanActive--;
-      if (liveLocationKalmanActive == 0) {
-          //last_bearing = bearing;
-          velocity_filter.update(std::max(10.0, (double)speed / 3.6));
-      }
+      last_bearing = bearing;
+      velocity_filter.update(std::max(10.0, (double)speed / 3.6));
   }
 
   bool allow_open = false;  // carrot

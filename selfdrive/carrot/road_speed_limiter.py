@@ -370,9 +370,12 @@ def estimate_position(lat, lon, speed, angle, dt):
 def main():
   print("RoadLimitSpeed Started.....")
   server = RoadLimitSpeedServer()
-  roadLimitSpeed = messaging.pub_sock('roadLimitSpeed')
 
+  pm = messaging.PubMaster(['roadLimitSpeed'])
+  sm = messaging.SubMaster(['carState', 'liveLocationKalman'], poll='liveLocationKalman')
+  roadLimitSpeed = messaging.pub_sock('roadLimitSpeed')
   sock_carState = messaging.sub_sock("carState")
+  liveLocationKalman = messaging.sub_sock("liveLocationKalman")
   carState = None
   CS = None
 
@@ -434,6 +437,11 @@ def main():
   #sockWaitTime = 1.0 if autoNaviSpeedCtrl == 3 else 0.2
   sockWaitTime = 0.2
   send_time = time.monotonic()
+
+
+  bearing = 0.0
+  bearing_offset = 0.0
+  location_valid = False
 
   road_category_map = {
     0: "고속도로0",
@@ -506,32 +514,37 @@ def main():
 
       while True:
 
+        sm.update()
         showDebugUI = Params().get_bool("ShowDebugUI")
         ret = server.udp_recv(sock, sockWaitTime)
 
-        try:
-          carState = messaging.recv_sock(sock_carState, wait=False)
-          if carState is not None:
-            CS = carState.carState
-        except:
-          pass
+        if sm.updated['carState']:
+          CS = sm['carState']
+        if sm.updated['liveLocationKalman']:
+          location = sm['liveLocationKalman']
+          bearing = math.degrees(location.calibratedOrientationNED.value[2])
+          if (location.status == log.LiveLocationKalman.Status.valid) and location.positionGeodetic.valid and location.gpsOK:            
+            location_valid = True
+            bearing_offset = 0.0
+          else:
+            location_valid = False
 
         #print(Port.RECEIVE_PORT)
 
-        dat = messaging.new_message('roadLimitSpeed', valid=True)
-        dat.init('roadLimitSpeed')
-        dat.roadLimitSpeed.active = server.active
-        dat.roadLimitSpeed.roadLimitSpeed = server.get_limit_val("road_limit_speed", 0)
-        dat.roadLimitSpeed.isHighway = server.get_limit_val("is_highway", False)
-        dat.roadLimitSpeed.camType = server.get_limit_val("cam_type", 0)
-        dat.roadLimitSpeed.camLimitSpeedLeftDist = server.get_limit_val("cam_limit_speed_left_dist", 0)
-        dat.roadLimitSpeed.camLimitSpeed = server.get_limit_val("cam_limit_speed", 0)
-        dat.roadLimitSpeed.sectionLimitSpeed = server.get_limit_val("section_limit_speed", 0)
-        dat.roadLimitSpeed.sectionLeftDist = server.get_limit_val("section_left_dist", 0)
-        dat.roadLimitSpeed.sectionAvgSpeed = server.get_limit_val("section_avg_speed", 0)
-        dat.roadLimitSpeed.sectionLeftTime = server.get_limit_val("section_left_time", 0)
-        dat.roadLimitSpeed.sectionAdjustSpeed = server.get_limit_val("section_adjust_speed", False)
-        dat.roadLimitSpeed.camSpeedFactor = server.get_limit_val("cam_speed_factor", CAMERA_SPEED_FACTOR)
+        msg = messaging.new_message('roadLimitSpeed', valid=True)
+        roadLimitSpeed = msg.roadLimitSpeed
+        roadLimitSpeed.active = server.active
+        roadLimitSpeed.roadLimitSpeed = server.get_limit_val("road_limit_speed", 0)
+        roadLimitSpeed.isHighway = server.get_limit_val("is_highway", False)
+        roadLimitSpeed.camType = server.get_limit_val("cam_type", 0)
+        roadLimitSpeed.camLimitSpeedLeftDist = server.get_limit_val("cam_limit_speed_left_dist", 0)
+        roadLimitSpeed.camLimitSpeed = server.get_limit_val("cam_limit_speed", 0)
+        roadLimitSpeed.sectionLimitSpeed = server.get_limit_val("section_limit_speed", 0)
+        roadLimitSpeed.sectionLeftDist = server.get_limit_val("section_left_dist", 0)
+        roadLimitSpeed.sectionAvgSpeed = server.get_limit_val("section_avg_speed", 0)
+        roadLimitSpeed.sectionLeftTime = server.get_limit_val("section_left_time", 0)
+        roadLimitSpeed.sectionAdjustSpeed = server.get_limit_val("section_adjust_speed", False)
+        roadLimitSpeed.camSpeedFactor = server.get_limit_val("cam_speed_factor", CAMERA_SPEED_FACTOR)
 
         atype = server.get_apilot_val("type")
         value = server.get_apilot_val("value")
@@ -620,7 +633,7 @@ def main():
           xIndex = value_int
         else:
           print("unknown{}={}".format(atype, value))
-        #dat.roadLimitSpeed.xRoadName = apilot_val['opkrroadname']['value']
+        #roadLimitSpeed.xRoadName = apilot_val['opkrroadname']['value']
 
         #for 띠맵
         #if ret or now - prev_recvTime > 2.0: # 수신값이 있거나, 2.0초가 지난경우 데이터를 초기화함.
@@ -760,7 +773,7 @@ def main():
           xSpdLimit = xSpdDist = sdiType = -1
 
         if sdiType >= 0:
-          dat.roadLimitSpeed.camType = sdiType
+          roadLimitSpeed.camType = sdiType
 
         szPosRoadName = server.get_apilot_val("szPosRoadName", "")
         if len(szPosRoadName) > 0:
@@ -778,7 +791,7 @@ def main():
           if xBumpDistance <= 0 and xSignType == 124:
             xSignType = -1
           else:
-            dat.roadLimitSpeed.camType = 22 # bump
+            roadLimitSpeed.camType = 22 # bump
 
         if xSignType == 124: ##사고방지턱
           if xBumpDistance <= 0:
@@ -787,40 +800,40 @@ def main():
           xBumpDistance = -1
 
         if sdi_valid_count > 0:
-          dat.roadLimitSpeed.active = 200 + server.active
+          roadLimitSpeed.active = 200 + server.active
           mappyMode = False
         elif apm_valid_count > 0 and mappyMode_valid:
-          dat.roadLimitSpeed.active = 200 + server.active
+          roadLimitSpeed.active = 200 + server.active
         elif apm_valid_count > 0:
-          dat.roadLimitSpeed.active = 100 + server.active
+          roadLimitSpeed.active = 100 + server.active
         else:
           xSpdDist = xBumpDistance = xSpdLimit = -1
           mappyMode_valid = False
-        #print("active=", dat.roadLimitSpeed.active)
+        #print("active=", roadLimitSpeed.active)
         #print("turn={},{}".format(xTurnInfo, xDistToTurn))
-        dat.roadLimitSpeed.xTurnInfo = int(xTurnInfo)
-        dat.roadLimitSpeed.xDistToTurn = int(xDistToTurn)
-        dat.roadLimitSpeed.xTurnInfoNext = int(xTurnInfoNext)
-        dat.roadLimitSpeed.xDistToTurnNext = int(nTBTDistNext)
-        dat.roadLimitSpeed.xSpdDist = int(xSpdDist) if xBumpDistance <= 0 else int(xBumpDistance)
-        dat.roadLimitSpeed.xSpdLimit = int(xSpdLimit) if xBumpDistance <= 0 else 35 # 속도는 추후조절해야함. 일단 35
-        dat.roadLimitSpeed.xSignType = int(xSignType) if xBumpDistance <= 0 else 22
-        dat.roadLimitSpeed.xRoadSignType = int(xRoadSignType)
-        dat.roadLimitSpeed.xRoadLimitSpeed = int(xRoadLimitSpeed)
+        roadLimitSpeed.xTurnInfo = int(xTurnInfo)
+        roadLimitSpeed.xDistToTurn = int(xDistToTurn)
+        roadLimitSpeed.xTurnInfoNext = int(xTurnInfoNext)
+        roadLimitSpeed.xDistToTurnNext = int(nTBTDistNext)
+        roadLimitSpeed.xSpdDist = int(xSpdDist) if xBumpDistance <= 0 else int(xBumpDistance)
+        roadLimitSpeed.xSpdLimit = int(xSpdLimit) if xBumpDistance <= 0 else 35 # 속도는 추후조절해야함. 일단 35
+        roadLimitSpeed.xSignType = int(xSignType) if xBumpDistance <= 0 else 22
+        roadLimitSpeed.xRoadSignType = int(xRoadSignType)
+        roadLimitSpeed.xRoadLimitSpeed = int(xRoadLimitSpeed)
         if xRoadLimitSpeed > 0:
-          dat.roadLimitSpeed.roadLimitSpeed = int(xRoadLimitSpeed)
-        dat.roadLimitSpeed.xRoadName = xRoadName
+          roadLimitSpeed.roadLimitSpeed = int(xRoadLimitSpeed)
+        roadLimitSpeed.xRoadName = xRoadName
         if showDebugUI:
-          dat.roadLimitSpeed.xRoadName += ("[{}]".format(nTBTNextRoadWidth) + "[{}]".format(road_category_map.get(roadcate,"X")) + sdiDebugText)
-        #print(dat.roadLimitSpeed.xRoadName)
+          roadLimitSpeed.xRoadName += ("[{}]".format(nTBTNextRoadWidth) + "[{}]".format(road_category_map.get(roadcate,"X")) + sdiDebugText)
+        #print(roadLimitSpeed.xRoadName)
 
-        dat.roadLimitSpeed.xCmd = "" if xCmd is None else xCmd
-        dat.roadLimitSpeed.xArg = "" if xArg is None else xArg
-        dat.roadLimitSpeed.xIndex = xIndex
-        dat.roadLimitSpeed.roadcate = roadcate
-        dat.roadLimitSpeed.xNextRoadWidth = nTBTNextRoadWidth
+        roadLimitSpeed.xCmd = "" if xCmd is None else xCmd
+        roadLimitSpeed.xArg = "" if xArg is None else xArg
+        roadLimitSpeed.xIndex = xIndex
+        roadLimitSpeed.roadcate = roadcate
+        roadLimitSpeed.xNextRoadWidth = nTBTNextRoadWidth
 
-        instruction = dat.roadLimitSpeed.navInstruction
+        instruction = roadLimitSpeed.navInstruction
         instruction.distanceRemaining = nGoPosDist
         instruction.timeRemaining = nGoPosTime
         instruction.speedLimit = nRoadLimitSpeed / 3.6 if nRoadLimitSpeed > 0 else 0
@@ -856,24 +869,26 @@ def main():
         unix_now = time.mktime(datetime.now().timetuple())
         v_ego = CS.vEgo if CS is not None else float(nPosSpeed)/3.6
         if sdi_valid:
+          if not location_valid and bearing_offset == 0:
+            bearing_offset = nPosAngle - bearing
           xPosValidCount = 20
           #n초 통신 지연시간이 있다고 가정하고 좀더 진행한것으로 처리함.
           dt = 0 #(unix_now - timeStamp / 1000.) if timeStamp > 0 else 0.1
           dt += 0.5  #가상으로 0.5초만큼 더 진행한것으로 
-          vpPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), v_ego, float(nPosAngle), dt)
+          vpPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), v_ego, bearing + bearing_offset, dt)
           last_update_gps_time = now
           last_calculate_gps_time = now
         elif now - last_update_gps_time < 3.0:# and CS is not None:
           dt = now - last_calculate_gps_time
           last_calculate_gps_time = now
-          vpPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), v_ego, float(nPosAngle), dt)
-        dat.roadLimitSpeed.xPosSpeed = float(nPosSpeed)
-        dat.roadLimitSpeed.xPosAngle = float(nPosAngle)
-        dat.roadLimitSpeed.xPosLat = float(vpPosPointLat)
-        dat.roadLimitSpeed.xPosLon = float(vpPosPointLon)
-        dat.roadLimitSpeed.xPosValidCount = xPosValidCount
+          vpPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), v_ego, bearing + bearing_offset, dt)
+        roadLimitSpeed.xPosSpeed = float(nPosSpeed)
+        roadLimitSpeed.xPosAngle = float(bearing + bearing_offset)
+        roadLimitSpeed.xPosLat = float(vpPosPointLat)
+        roadLimitSpeed.xPosLon = float(vpPosPointLon)
+        roadLimitSpeed.xPosValidCount = xPosValidCount
 
-        roadLimitSpeed.send(dat.to_bytes())
+        pm.send('roadLimitSpeed', msg)
 
         if now - send_time > 1.0:
           server.send_sdp(sock)
