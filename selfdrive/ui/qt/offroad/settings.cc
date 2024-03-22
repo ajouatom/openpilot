@@ -986,7 +986,7 @@ CarrotParamsControl::CarrotParamsControl(int mode, const QString& title, const Q
 
 void CarrotParamsControl::refresh()
 {
-    if(m_pressed != 0) label.setText((m_pressed>0)?"Yes":"No"));
+    if(m_pressed != 0) label.setText((m_pressed>0)?"Yes":"No");
     btnNo.setText("No");
     btnYes.setText("Yes");
 }
