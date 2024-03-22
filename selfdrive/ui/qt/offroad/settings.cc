@@ -1000,6 +1000,16 @@ void CarrotParamsControl::SetParams(int mode) {
     //addItem(new CarrotParamsControl(3, "자동크루즈 사용 (HKG)", "롱컨이 가능한차량만 가능함", "../assets/offroad/icon_shell.png"));
     printf("mode = %d, pressed = %d\n", mode, m_pressed);
 
+    switch (mode) {
+    case 0: // set default
+        QProcess process;
+        process.setWorkingDirectory("/data/openpilot/selfdrive");
+        process.start("/bin/sh", QStringList{ "-c", QString("python ./params_default.py") });
+        process.waitForFinished();
+        break;
+    case 1: // radar long con...
+        break;
+    }
 
 }
 

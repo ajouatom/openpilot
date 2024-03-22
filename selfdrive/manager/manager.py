@@ -23,7 +23,7 @@ from openpilot.system.version import is_dirty, get_commit, get_version, get_orig
                            get_normalized_origin, terms_version, training_version, \
                            is_tested_branch, is_release_branch, get_commit_date
 
-def get_default_params(hkg_long = False, vision_long = False, scc2 = False, volt = False):
+def get_default_params():
   default_params : list[tuple[str, str | bytes]] = [
     ("CompletedTrainingVersion", "0"),
     ("DisengageOnAccelerator", "0"),
@@ -69,9 +69,9 @@ def get_default_params(hkg_long = False, vision_long = False, scc2 = False, volt
     ("ShowPathColorLane", "13"),
     ("ShowPathWidth", "100"),
     ("ShowPlotMode", "0"),
-    ("AutoResumeFromGasSpeed", "0" if not hkg_long else "30"),
-    ("AutoCancelFromGasMode", "0" if not hkg_long else "2"),    
-    ("AutoCruiseControl", "0" if not hkg_long else "2"),    
+    ("AutoResumeFromGasSpeed", "30"),
+    ("AutoCancelFromGasMode", "2"),    
+    ("AutoCruiseControl", "2"),    
     ("MapboxStyle", "0"),    
     ("AutoCurveSpeedLowerLimit", "30"),
     ("AutoCurveSpeedFactor", "120"),
@@ -96,9 +96,9 @@ def get_default_params(hkg_long = False, vision_long = False, scc2 = False, volt
     ("AutoSpeedUptoRoadSpeedLimit", "100"),
     ("ApplyLongDynamicCost", "0"), 
     ("StopDistanceCarrot", "550"), 
-    ("ALeadTau", "120" if not vision_long else "30"), 
+    ("ALeadTau", "120"), 
     ("ALeadTauStart", "40"), 
-    ("CruiseButtonMode", "0" if not hkg_long else "1"),      
+    ("CruiseButtonMode", "0"),      
     ("CruiseButtonTest1", "8"),      
     ("CruiseButtonTest2", "30"),      
     ("CruiseButtonTest3", "1"),      
@@ -119,7 +119,7 @@ def get_default_params(hkg_long = False, vision_long = False, scc2 = False, volt
     ("LongitudinalTuningKf", "100"),     
     ("EnableRadarTracks", "0"),      
     ("EnableAVM", "0"),      
-    ("SccConnectedBus2", "0" if not scc2 else "1"),
+    ("SccConnectedBus2", "0"),
     ("CanfdHDA2", "0"),
     ("SoundVolumeAdjust", "100"),
     ("SoundVolumeAdjustEngage", "10"),
