@@ -24,7 +24,7 @@ from openpilot.system.version import is_dirty, get_commit, get_version, get_orig
                            is_tested_branch, is_release_branch, get_commit_date
 
 def get_default_params(hkg_long = False, vision_long = False, scc2 = False, volt = False):
-  default_params = list[tuple[str, str | bytes]] = [
+  default_params : list[tuple[str, str | bytes]] = [
     ("CompletedTrainingVersion", "0"),
     ("DisengageOnAccelerator", "0"),
     ("GsmMetered", "1"),
