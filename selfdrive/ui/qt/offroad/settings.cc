@@ -934,7 +934,7 @@ void CValueControl::showEvent(QShowEvent* event) {
     refresh();
 }
 
-CarrotParamsControl::CarrotParamsControl(const QString& params, const QString& title, const QString& desc, const QString& icon, int min, int max, int unit/*=1*/) : AbstractControl(title, desc, icon)
+CarrotParamsControl::CarrotParamsControl(const QString& title, const QString& desc, const QString& icon) : AbstractControl(title, desc, icon)
 {
     //label.setAlignment(Qt::AlignVCenter | Qt::AlignRight);
     //label.setStyleSheet("color: #e0e879");
