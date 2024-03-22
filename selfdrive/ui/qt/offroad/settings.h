@@ -187,6 +187,10 @@ private:
     void showEvent(QShowEvent* event) override;
     QPushButton btnYes;
     QPushButton btnNo;
+    QLabel label;
+
+    int     m_pressed;
 
     void refresh();
+    void SetParams(int mode);
 };

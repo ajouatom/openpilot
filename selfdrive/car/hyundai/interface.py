@@ -160,8 +160,7 @@ class CarInterface(CarInterfaceBase):
 
     # *** feature detection ***
     if candidate in CANFD_CAR:
-      # 240332 잠시... 중지.. 왜? can에러가?
-      #ret.enableBsm = 0x1e5 in fingerprint[CAN.ECAN]
+      ret.enableBsm = 0x1e5 in fingerprint[CAN.ECAN]
       print(f"$$$$$ CanFD ECAN = {CAN.ECAN}")
       if 0x1fa in fingerprint[CAN.ECAN]:
         ret.flags |= HyundaiFlags.NAVI_CLUSTER.value

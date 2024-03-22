@@ -342,7 +342,8 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   addItem(horizontal_line());
   addItem(new CarrotParamsControl(0, "기본값설정", "모든설정을 기본값으로", "../assets/offroad/icon_shell.png", false));
   addItem(new CarrotParamsControl(1, "롱컨배선개조 (HKG)", "레이더롱컨이 되도록 배선을 개조하였음", "../assets/offroad/icon_shell.png"));
-  addItem(new CarrotParamsControl(2, "자동크루즈를 사용 (HKG)", "레이더/비젼 롱컨이 가능한차량만 가능함", "../assets/offroad/icon_shell.png"));
+  addItem(new CarrotParamsControl(2, "비젼롱컨사용 (HKG)", "비젼을 이용한 롱컨을 이용중임, (카니발4_HDA2, 아이오닉6 X)", "../assets/offroad/icon_shell.png"));
+  addItem(new CarrotParamsControl(3, "자동크루즈 사용 (HKG)", "롱컨이 가능한차량만 가능함", "../assets/offroad/icon_shell.png"));
 
 }
 
@@ -939,9 +940,10 @@ void CValueControl::showEvent(QShowEvent* event) {
 
 CarrotParamsControl::CarrotParamsControl(int mode, const QString& title, const QString& desc, const QString& icon, bool disp_no) : AbstractControl(title, desc, icon)
 {
-    //label.setAlignment(Qt::AlignVCenter | Qt::AlignRight);
-    //label.setStyleSheet("color: #e0e879");
-    //hlayout->addWidget(&label);
+    m_pressed = 0;
+    label.setAlignment(Qt::AlignVCenter | Qt::AlignRight);
+    label.setStyleSheet("color: #e0e879");
+    hlayout->addWidget(&label);
     btnYes.setStyleSheet(R"(
     padding: 0;
     border-radius: 50px;
@@ -967,11 +969,15 @@ CarrotParamsControl::CarrotParamsControl(int mode, const QString& title, const Q
 
     QObject::connect(&btnYes, &QPushButton::released, [=]() {
         //Params().putInt(m_params.toStdString(), value);
+        SetParams(mode);
+        m_pressed = 1;
         refresh();
     });
 
     if (disp_no) {
         QObject::connect(&btnNo, &QPushButton::released, [=]() {
+            SetParams(mode);
+            m_pressed = -1;
             refresh();
             });
     }
@@ -980,11 +986,21 @@ CarrotParamsControl::CarrotParamsControl(int mode, const QString& title, const Q
 
 void CarrotParamsControl::refresh()
 {
+    if(m_pressed != 0) label.setText((m_pressed>0)?"Yes":"No"));
     btnNo.setText("No");
     btnYes.setText("Yes");
 }
 void CarrotParamsControl::showEvent(QShowEvent* event) {
     refresh();
+}
+void CarrotParamsControl::SetParams(int mode) {
+    //addItem(new CarrotParamsControl(0, "기본값설정", "모든설정을 기본값으로", "../assets/offroad/icon_shell.png", false));
+    //addItem(new CarrotParamsControl(1, "롱컨배선개조 (HKG)", "레이더롱컨이 되도록 배선을 개조하였음", "../assets/offroad/icon_shell.png"));
+    //addItem(new CarrotParamsControl(2, "비젼롱컨사용 (HKG)", "비젼을 이용한 롱컨을 이용중임, (카니발4_HDA2, 아이오닉6 X)", "../assets/offroad/icon_shell.png"));
+    //addItem(new CarrotParamsControl(3, "자동크루즈 사용 (HKG)", "롱컨이 가능한차량만 가능함", "../assets/offroad/icon_shell.png"));
+    printf("mode = %d, pressed = %d\n", mode, m_pressed);
+
+
 }
 
 static QStringList get_list(const char* path)
