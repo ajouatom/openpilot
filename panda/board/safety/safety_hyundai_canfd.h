@@ -368,7 +368,6 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
 
   if (bus_num == 0) {
     bus_fwd = 2;
-    if (acc_main_on && addr == 234) bus_fwd = -1;
   }
   extern uint8_t to_push_data_len_code;
   if (bus_num == 2) {
