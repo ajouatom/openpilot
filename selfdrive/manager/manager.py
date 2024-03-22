@@ -23,19 +23,8 @@ from openpilot.system.version import is_dirty, get_commit, get_version, get_orig
                            get_normalized_origin, terms_version, training_version, \
                            is_tested_branch, is_release_branch, get_commit_date
 
-
-
-def manager_init() -> None:
-  save_bootlog()
-
-  params = Params()
-  params.clear_all(ParamKeyType.CLEAR_ON_MANAGER_START)
-  params.clear_all(ParamKeyType.CLEAR_ON_ONROAD_TRANSITION)
-  params.clear_all(ParamKeyType.CLEAR_ON_OFFROAD_TRANSITION)
-  if is_release_branch():
-    params.clear_all(ParamKeyType.DEVELOPMENT_ONLY)
-
-  default_params: list[tuple[str, str | bytes]] = [
+def get_default_params():
+  default_params = list[tuple[str, str | bytes]] = [
     ("CompletedTrainingVersion", "0"),
     ("DisengageOnAccelerator", "0"),
     ("GsmMetered", "1"),
@@ -157,8 +146,8 @@ def manager_init() -> None:
     ("CustomSteerMax", "0"),       
     ("CustomSteerDeltaUp", "0"),       
     ("CustomSteerDeltaDown", "0"),       
-    ("SpeedFromPCM", "1"),       
-    ("SteerActuatorDelay", "30"),       
+    ("SpeedFromPCM", "2"),       
+    ("SteerActuatorDelay", "45"),       
     ("CruiseOnDist", "0"),
     ("MSLCEnabled", "0"),
     ("NoLogging", "0"),
@@ -174,6 +163,20 @@ def manager_init() -> None:
     ("NNFF", "0"),
     ("UseLateralJerk", "0"),
   ]
+  return default_params
+
+def manager_init() -> None:
+  save_bootlog()
+
+  params = Params()
+  params.clear_all(ParamKeyType.CLEAR_ON_MANAGER_START)
+  params.clear_all(ParamKeyType.CLEAR_ON_ONROAD_TRANSITION)
+  params.clear_all(ParamKeyType.CLEAR_ON_OFFROAD_TRANSITION)
+  if is_release_branch():
+    params.clear_all(ParamKeyType.DEVELOPMENT_ONLY)
+
+  default_params = get_default_params()
+
   if not PC:
     default_params.append(("LastUpdateTime", datetime.datetime.utcnow().isoformat().encode('utf8')))
 
