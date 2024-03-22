@@ -969,15 +969,15 @@ CarrotParamsControl::CarrotParamsControl(int mode, const QString& title, const Q
 
     QObject::connect(&btnYes, &QPushButton::released, [=]() {
         //Params().putInt(m_params.toStdString(), value);
-        SetParams(mode);
         m_pressed = 1;
+        SetParams(mode);
         refresh();
     });
 
     if (disp_no) {
         QObject::connect(&btnNo, &QPushButton::released, [=]() {
-            SetParams(mode);
             m_pressed = -1;
+            SetParams(mode);
             refresh();
             });
     }
