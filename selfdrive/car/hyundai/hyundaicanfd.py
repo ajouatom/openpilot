@@ -248,6 +248,8 @@ def create_adrv_messages(CP, packer, CAN, frame):
       'SET_ME_FF': 0xff,
       'SET_ME_TMP_F': 0xf,
       'SET_ME_TMP_F_2': 0xf,
+      'DATA26': 0,
+      'DATA32': 0,
     }
     ret.append(packer.make_can_msg("ADRV_0x1ea", CAN.ECAN, values))
 
