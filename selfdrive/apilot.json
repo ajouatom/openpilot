@@ -1414,8 +1414,8 @@
       "etitle": "NaviSpeedDecelRate 0.01m/s^2x(80)",
       "edescr": "",
       "min": 10,
-      "max": 200,
-      "default": 100,
+      "max": 300,
+      "default": 200,
       "unit": 10
     },
     {

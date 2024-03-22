@@ -23,7 +23,7 @@ from openpilot.system.version import is_dirty, get_commit, get_version, get_orig
                            get_normalized_origin, terms_version, training_version, \
                            is_tested_branch, is_release_branch, get_commit_date
 
-def get_default_params():
+def get_default_params(hkg_long = False, vision_long = False, scc2 = False, volt = False):
   default_params = list[tuple[str, str | bytes]] = [
     ("CompletedTrainingVersion", "0"),
     ("DisengageOnAccelerator", "0"),
@@ -69,9 +69,9 @@ def get_default_params():
     ("ShowPathColorLane", "13"),
     ("ShowPathWidth", "100"),
     ("ShowPlotMode", "0"),
-    ("AutoResumeFromGasSpeed", "0"),
-    ("AutoCancelFromGasMode", "0"),    
-    ("AutoCruiseControl", "0"),    
+    ("AutoResumeFromGasSpeed", "0" if not hkg_long else "30"),
+    ("AutoCancelFromGasMode", "0" if not hkg_long else "2"),    
+    ("AutoCruiseControl", "0" if not hkg_long else "2"),    
     ("MapboxStyle", "0"),    
     ("AutoCurveSpeedLowerLimit", "30"),
     ("AutoCurveSpeedFactor", "120"),
@@ -84,25 +84,25 @@ def get_default_params():
     ("AutoTurnControlTurnEnd", "6"),
     ("AutoTurnMapChange", "0"),
     ("AutoNaviSpeedCtrl", "1"),
-    ("AutoNaviSpeedCtrlEnd", "6"),
+    ("AutoNaviSpeedCtrlEnd", "7"),
     ("AutoNaviSpeedBumpTime", "1"),
     ("AutoNaviSpeedBumpSpeed", "35"),
     ("AutoNaviSpeedSafetyFactor", "105"),
-    ("AutoNaviSpeedDecelRate", "120"),
+    ("AutoNaviSpeedDecelRate", "200"),
     ("AutoResumeFromBrakeReleaseTrafficSign", "0"),
     ("StartAccelApply", "0"),
     ("StopAccelApply", "0"),
     ("StoppingAccel", "-40"),
     ("AutoSpeedUptoRoadSpeedLimit", "100"),
     ("ApplyLongDynamicCost", "0"), 
-    ("StopDistanceCarrot", "600"), 
-    ("ALeadTau", "120"), 
-    ("ALeadTauStart", "30"), 
-    ("CruiseButtonMode", "0"),      
+    ("StopDistanceCarrot", "550"), 
+    ("ALeadTau", "120" if not vision_long else "30"), 
+    ("ALeadTauStart", "40"), 
+    ("CruiseButtonMode", "0" if not hkg_long else "1"),      
     ("CruiseButtonTest1", "8"),      
     ("CruiseButtonTest2", "30"),      
     ("CruiseButtonTest3", "1"),      
-    ("CruiseSpeedUnit", "10"),      
+    ("CruiseSpeedUnit", "10"),
     ("MyDrivingMode", "3"),      
     ("MySafeModeFactor", "80"),      
     ("MyEcoModeFactor", "90"),  
@@ -119,7 +119,7 @@ def get_default_params():
     ("LongitudinalTuningKf", "100"),     
     ("EnableRadarTracks", "0"),      
     ("EnableAVM", "0"),      
-    ("SccConnectedBus2", "0"),
+    ("SccConnectedBus2", "0" if not scc2 else "1"),
     ("CanfdHDA2", "0"),
     ("SoundVolumeAdjust", "100"),
     ("SoundVolumeAdjustEngage", "10"),
@@ -164,6 +164,19 @@ def get_default_params():
     ("UseLateralJerk", "0"),
   ]
   return default_params
+
+def set_default_params():
+  params = Params()
+  default_params = get_default_params()
+  try:
+    default_params.remove(("GMapKey", "0"))
+    defulat_params.remove(("CompletedTrainingVersion", "0"))
+    default_params.remove(("LanguageSetting", "main_en"))
+    default_params.remove(("GsmMetered", "1"))
+  except ValueError:
+    pass
+  for k, v in default_params:
+    params.put(k, v)
 
 def manager_init() -> None:
   save_bootlog()
