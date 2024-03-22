@@ -934,6 +934,52 @@ void CValueControl::showEvent(QShowEvent* event) {
     refresh();
 }
 
+CarrotParamsControl::CarrotParamsControl(const QString& params, const QString& title, const QString& desc, const QString& icon, int min, int max, int unit/*=1*/) : AbstractControl(title, desc, icon)
+{
+    //label.setAlignment(Qt::AlignVCenter | Qt::AlignRight);
+    //label.setStyleSheet("color: #e0e879");
+    //hlayout->addWidget(&label);
+
+    btnYes.setStyleSheet(R"(
+    padding: 0;
+    border-radius: 50px;
+    font-size: 35px;
+    font-weight: 500;
+    color: #E4E4E4;
+    background-color: #393939;
+  )");
+    btnNo.setStyleSheet(R"(
+    padding: 0;
+    border-radius: 50px;
+    font-size: 35px;
+    font-weight: 500;
+    color: #E4E4E4;
+    background-color: #393939;
+  )");
+    btnNo.setFixedSize(150, 100);
+    btnYes.setFixedSize(150, 100);
+    hlayout->addWidget(&btnYes);
+    hlayout->addWidget(&btnNo);
+
+    QObject::connect(&btnYes, &QPushButton::released, [=]() {
+        //Params().putInt(m_params.toStdString(), value);
+        refresh();
+    });
+
+    QObject::connect(&btnNo, &QPushButton::released, [=]() {
+        refresh();
+    });
+    refresh();
+}
+
+void CarrotParamsControl::refresh()
+{
+    btnNo.setText("No");
+    btnYes.setText("Yes");
+}
+void CarrotParamsControl::showEvent(QShowEvent* event) {
+    refresh();
+}
 
 static QStringList get_list(const char* path)
 {
