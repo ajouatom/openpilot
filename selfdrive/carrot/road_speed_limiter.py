@@ -875,7 +875,7 @@ def main():
             else:
               diff_angle_count = 0
             print("{:.1f} bearing_diff[{}] = {:.1f} = {:.1f} - {:.1f}, v={:.1f},st={:.1f}".format(bearing_offset, diff_angle_count, diff_angle, nPosAngle, bearing, CS.vEgo*3.6, CS.steeringAngleDeg))
-            if diff_angle_count > 20:
+            if diff_angle_count > 5:
               bearing_offset = nPosAngle - bearing
               print("bearing_offset = {:.1f} = {:.1f} - {:.1f}".format(bearing_offset, nPosAngle, bearing))
           xPosValidCount = 20
