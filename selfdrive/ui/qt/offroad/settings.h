@@ -181,7 +181,7 @@ class CarrotParamsControl : public AbstractControl {
     Q_OBJECT
 
 public:
-    CarrotParamsControl(const QString& title, const QString& desc, const QString& icon);
+    CarrotParamsControl(int mode, const QString& title, const QString& desc, const QString& icon, bool disp_no=true);
 
 private:
     void showEvent(QShowEvent* event) override;

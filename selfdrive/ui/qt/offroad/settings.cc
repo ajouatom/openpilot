@@ -339,7 +339,10 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
           });
       addItem(button);
   }
-
+  addItem(horizontal_line());
+  addItem(new CarrotParamsControl(0, "기본값설정", "모든설정을 기본값으로", "../assets/offroad/icon_shell.png", false));
+  addItem(new CarrotParamsControl(1, "롱컨배선개조 (HKG)", "레이더롱컨이 되도록 배선을 개조하였음", "../assets/offroad/icon_shell.png"));
+  addItem(new CarrotParamsControl(2, "자동크루즈를 사용 (HKG)", "레이더/비젼 롱컨이 가능한차량만 가능함", "../assets/offroad/icon_shell.png"));
 
 }
 
@@ -934,12 +937,11 @@ void CValueControl::showEvent(QShowEvent* event) {
     refresh();
 }
 
-CarrotParamsControl::CarrotParamsControl(const QString& title, const QString& desc, const QString& icon) : AbstractControl(title, desc, icon)
+CarrotParamsControl::CarrotParamsControl(int mode, const QString& title, const QString& desc, const QString& icon, bool disp_no) : AbstractControl(title, desc, icon)
 {
     //label.setAlignment(Qt::AlignVCenter | Qt::AlignRight);
     //label.setStyleSheet("color: #e0e879");
     //hlayout->addWidget(&label);
-
     btnYes.setStyleSheet(R"(
     padding: 0;
     border-radius: 50px;
@@ -948,27 +950,31 @@ CarrotParamsControl::CarrotParamsControl(const QString& title, const QString& de
     color: #E4E4E4;
     background-color: #393939;
   )");
-    btnNo.setStyleSheet(R"(
-    padding: 0;
-    border-radius: 50px;
-    font-size: 35px;
-    font-weight: 500;
-    color: #E4E4E4;
-    background-color: #393939;
-  )");
-    btnNo.setFixedSize(150, 100);
+    if (disp_no) {
+        btnNo.setStyleSheet(R"(
+        padding: 0;
+        border-radius: 50px;
+        font-size: 35px;
+        font-weight: 500;
+        color: #E4E4E4;
+        background-color: #393939;
+      )");
+        btnNo.setFixedSize(150, 100);
+    }
     btnYes.setFixedSize(150, 100);
     hlayout->addWidget(&btnYes);
-    hlayout->addWidget(&btnNo);
+    if(disp_no) hlayout->addWidget(&btnNo);
 
     QObject::connect(&btnYes, &QPushButton::released, [=]() {
         //Params().putInt(m_params.toStdString(), value);
         refresh();
     });
 
-    QObject::connect(&btnNo, &QPushButton::released, [=]() {
-        refresh();
-    });
+    if (disp_no) {
+        QObject::connect(&btnNo, &QPushButton::released, [=]() {
+            refresh();
+            });
+    }
     refresh();
 }
 
