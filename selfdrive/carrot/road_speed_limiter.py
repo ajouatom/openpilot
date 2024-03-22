@@ -868,14 +868,16 @@ def main():
         v_ego = CS.vEgo if CS is not None else float(nPosSpeed)/3.6
         if sdi_valid:
           if not location_valid and CS is not None:
-            diff_angle = nPosAngle%360 - bearing%360;
+            diff_angle = nPosAngle - bearing;
+            while diff_angle < 0.0:
+              diff_angle += 360
             diff_angle = (diff_angle + 180) % 360 - 180;
             if abs(diff_angle) > 20 and CS.vEgo > 1.0 and abs(CS.steeringAngleDeg) < 2.0:
               diff_angle_count += 1
             else:
               diff_angle_count = 0
-            print("{:.1f} bearing_diff[{}] = {:.1f} = {:.1f} - {:.1f}".format(bearing_offset, diff_angle_count, diff_angle, nPosAngle, bearing))
-            if diff_angle_count > 20:
+            print("{:.1f} bearing_diff[{}] = {:.1f} = {:.1f} - {:.1f}, v={:.1f},st={:.1f}".format(bearing_offset, diff_angle_count, diff_angle, nPosAngle, bearing, CS.vEgo*3.6, CS.steeringAngleDeg))
+            if diff_angle_count > 2:
               bearing_offset = nPosAngle - bearing
               print("bearing_offset = {:.1f} = {:.1f} - {:.1f}".format(bearing_offset, nPosAngle, bearing))
           xPosValidCount = 20

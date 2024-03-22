@@ -157,7 +157,7 @@
   },
   {
     "filename": "EnableRadarTracks",
-    "content": "1"
+    "content": "0"
   },
   {
     "filename": "ExperimentalLongitudinalEnabled",
@@ -265,7 +265,7 @@
   },
   {
     "filename": "SccConnectedBus2",
-    "content": "1"
+    "content": "0"
   },
   {
     "filename": "SearchInput",
@@ -373,7 +373,7 @@
   },
   {
     "filename": "SpeedFromPCM",
-    "content": "1"
+    "content": "0"
   },
   {
     "filename": "SshEnabled",
@@ -390,10 +390,6 @@
   {
     "filename": "SteerActuatorDelay",
     "content": "30"
-  },
-  {
-    "filename": "SteerRatio",
-    "content": "150"
   },
   {
     "filename": "StopAccelApply",
@@ -445,6 +441,6 @@
   },
   {
     "filename": "UseLaneLineSpeed",
-    "content": "1"
+    "content": "0"
   }
 ]

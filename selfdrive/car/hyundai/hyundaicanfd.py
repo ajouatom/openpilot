@@ -224,6 +224,7 @@ def create_fca_warning_light(packer, CAN, frame):
       'SET_ME_FF': 0xff,
       'SET_ME_FC': 0xfc,
       'SET_ME_9': 0x9,
+      #'DATA102': 1,
     }
     ret.append(packer.make_can_msg("ADRV_0x160", CAN.ECAN, values))
   return ret
@@ -248,6 +249,8 @@ def create_adrv_messages(CP, packer, CAN, frame):
       'SET_ME_FF': 0xff,
       'SET_ME_TMP_F': 0xf,
       'SET_ME_TMP_F_2': 0xf,
+      #'DATA26': 1,  #1
+      #'DATA32': 5,  #5
     }
     ret.append(packer.make_can_msg("ADRV_0x1ea", CAN.ECAN, values))
 

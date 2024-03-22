@@ -107,8 +107,8 @@ class CarController(CarControllerBase):
     if carrot_test == 1:
       if CS.out.vEgoRaw < 11:
         #self.cc_params.STEER_DRIVER_ALLOWANCE = 50
-        self.cc_params.STEER_DELTA_UP = 10
-        self.cc_params.STEER_DELTA_DOWN = 5 #10
+        self.cc_params.STEER_DELTA_UP = 5
+        self.cc_params.STEER_DELTA_DOWN = 7 #10
       else:
         #self.cc_params.STEER_DRIVER_ALLOWANCE = 50
         steerMax = self.params.get_int("CustomSteerMax")

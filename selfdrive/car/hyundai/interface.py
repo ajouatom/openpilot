@@ -32,6 +32,10 @@ class CarInterface(CarInterfaceBase):
     # FIXME: the Optima Hybrid 2017 uses a different SCC12 checksum
     ret.dashcamOnly = candidate in {CAR.KIA_OPTIMA_H, }
 
+    scc2 = Params().get_bool("SccConnectedBus2")
+    if scc2:
+      ret.flags |= HyundaiFlags.SCC_BUS2.value
+
     hda2 = Ecu.adas in [fw.ecu for fw in car_fw] and candidate in CANFD_CAR or Params().get_bool("CanfdHDA2")
     CAN = CanBus(None, hda2, fingerprint)
 
@@ -49,13 +53,19 @@ class CarInterface(CarInterfaceBase):
       if hda2:
         print("$$$CANFD HDA2")
         ret.flags |= HyundaiFlags.CANFD_HDA2.value
-        if 0x110 in fingerprint[CAN.CAM]: # 0x110(272): LKAS_ALT
-          ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
-          print("$$$CANFD ALT_STEERING")
-        ## carrot_todo: sorento
-        if 0x2a4 not in fingerprint[CAN.CAM]: # 0x2a4(676): CAM_0x2a4
-          ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
-          print("$$$CANFD ALT_STEERING")
+        if scc2:
+          if 0x110 in fingerprint[CAN.ACAN]:
+            ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
+            print("$$$CANFD ALT_STEERING1")
+        else:
+          if 0x110 in fingerprint[CAN.CAM]: # 0x110(272): LKAS_ALT
+            ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
+            print("$$$CANFD ALT_STEERING1")
+          ## carrot_todo: sorento: 뭐 이런코드가... ㅠㅠ
+          if 0x2a4 not in fingerprint[CAN.CAM]: # 0x2a4(676): CAM_0x2a4
+            ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
+            print("$$$CANFD ALT_STEERING2")
+
         ## carrot: canival 4th, no 0x1cf
         if 0x1cf not in fingerprint[CAN.ECAN]: # 0x1cf(463): CRUISE_BUTTONS
           ret.flags |= HyundaiFlags.CANFD_ALT_BUTTONS.value
@@ -128,9 +138,6 @@ class CarInterface(CarInterfaceBase):
       
       ret.experimentalLongitudinalAvailable = True
 
-    if Params().get_bool("SccConnectedBus2"):
-      ret.flags |= HyundaiFlags.SCC_BUS2.value
-      #experimental_long = True
     print("***************************************************************************")
     print("sccBus = ", 2 if ret.flags & HyundaiFlags.SCC_BUS2.value else 0)
 
@@ -153,7 +160,8 @@ class CarInterface(CarInterfaceBase):
 
     # *** feature detection ***
     if candidate in CANFD_CAR:
-      ret.enableBsm = 0x1e5 in fingerprint[CAN.ECAN]
+      #BSD잠시끔...
+      #ret.enableBsm = 0x1e5 in fingerprint[CAN.ECAN]
       print(f"$$$$$ CanFD ECAN = {CAN.ECAN}")
       if 0x1fa in fingerprint[CAN.ECAN]:
         ret.flags |= HyundaiFlags.NAVI_CLUSTER.value
