@@ -69,31 +69,42 @@ def get_default_params():
     ("ShowPathColorLane", "13"),
     ("ShowPathWidth", "100"),
     ("ShowPlotMode", "0"),
+
+    ("AutoCruiseControl", "2"),    
     ("AutoResumeFromGasSpeed", "30"),
     ("AutoCancelFromGasMode", "2"),    
-    ("AutoCruiseControl", "2"),    
+    ("AutoResumeFromBrakeReleaseTrafficSign", "0"),
+    ("SoftHoldMode", "0"),       
+
+    ("AutoSpeedUptoRoadSpeedLimit", "100"),
+
     ("MapboxStyle", "0"),    
+
     ("AutoCurveSpeedLowerLimit", "30"),
     ("AutoCurveSpeedFactor", "120"),
     ("AutoCurveSpeedAggressiveness", "100"),
+
     ("AutoTurnControl", "0"),
+
     ("AutoLaneChangeSpeed", "20"),
     ("LaneChangeNeedTorque", "0"),
+
     ("AutoTurnControlSpeedLaneChange", "60"),
     ("AutoTurnControlSpeedTurn", "20"),
     ("AutoTurnControlTurnEnd", "6"),
     ("AutoTurnMapChange", "0"),
+
     ("AutoNaviSpeedCtrl", "1"),
     ("AutoNaviSpeedCtrlEnd", "7"),
     ("AutoNaviSpeedBumpTime", "1"),
     ("AutoNaviSpeedBumpSpeed", "35"),
     ("AutoNaviSpeedSafetyFactor", "105"),
     ("AutoNaviSpeedDecelRate", "200"),
-    ("AutoResumeFromBrakeReleaseTrafficSign", "0"),
+
     ("StartAccelApply", "0"),
     ("StopAccelApply", "0"),
     ("StoppingAccel", "-40"),
-    ("AutoSpeedUptoRoadSpeedLimit", "100"),
+
     ("ApplyLongDynamicCost", "0"), 
     ("StopDistanceCarrot", "550"), 
     ("ALeadTau", "120"), 
@@ -132,10 +143,9 @@ def get_default_params():
     ("TFollowGap3", "140"),
     ("TFollowGap4", "160"),
     ("HapticFeedbackWhenSpeedCamera", "0"),       
-    ("SoftHoldMode", "0"),       
     ("CruiseEcoControl", "2"),
     ("UseLaneLineSpeed", "0"),    
-    ("UseLaneLineDebug", "7"),    
+    ("UseLaneLineDebug", "0"),    
     ("AdjustLaneOffset", "0"),    
     ("AdjustCurveOffset", "0"),    
     ("PathOffset", "0"),  

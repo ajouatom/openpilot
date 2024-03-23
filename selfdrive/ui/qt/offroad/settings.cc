@@ -286,6 +286,12 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
     }
   });
 
+  //addItem(horizontal_line());
+  addItem(new CarrotParamsControl(0, "기본값설정", "모든설정을 기본값으로", "../assets/offroad/icon_shell.png", false));
+  addItem(new CarrotParamsControl(10, "롱컨배선개조 (HKG)", "레이더롱컨이 되도록 배선을 개조하였음", "../assets/offroad/icon_shell.png"));
+  addItem(new CarrotParamsControl(20, "비젼롱컨사용 (HKG)", "비젼을 이용한 롱컨을 이용중임, (카니발4_HDA2, 아이오닉6 X)", "../assets/offroad/icon_shell.png"));
+  addItem(new CarrotParamsControl(30, "자동크루즈 사용 (HKG)", "롱컨이 가능한차량만 가능함", "../assets/offroad/icon_shell.png"));
+
   // power buttons
   QHBoxLayout *power_layout = new QHBoxLayout();
   power_layout->setSpacing(30);
@@ -339,11 +345,6 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
           });
       addItem(button);
   }
-  addItem(horizontal_line());
-  addItem(new CarrotParamsControl(0, "기본값설정", "모든설정을 기본값으로", "../assets/offroad/icon_shell.png", false));
-  addItem(new CarrotParamsControl(1, "롱컨배선개조 (HKG)", "레이더롱컨이 되도록 배선을 개조하였음", "../assets/offroad/icon_shell.png"));
-  addItem(new CarrotParamsControl(2, "비젼롱컨사용 (HKG)", "비젼을 이용한 롱컨을 이용중임, (카니발4_HDA2, 아이오닉6 X)", "../assets/offroad/icon_shell.png"));
-  addItem(new CarrotParamsControl(3, "자동크루즈 사용 (HKG)", "롱컨이 가능한차량만 가능함", "../assets/offroad/icon_shell.png"));
 
 }
 
@@ -995,16 +996,32 @@ void CarrotParamsControl::showEvent(QShowEvent* event) {
 }
 void CarrotParamsControl::SetParams(int mode) {
     //addItem(new CarrotParamsControl(0, "기본값설정", "모든설정을 기본값으로", "../assets/offroad/icon_shell.png", false));
-    //addItem(new CarrotParamsControl(1, "롱컨배선개조 (HKG)", "레이더롱컨이 되도록 배선을 개조하였음", "../assets/offroad/icon_shell.png"));
-    //addItem(new CarrotParamsControl(2, "비젼롱컨사용 (HKG)", "비젼을 이용한 롱컨을 이용중임, (카니발4_HDA2, 아이오닉6 X)", "../assets/offroad/icon_shell.png"));
-    //addItem(new CarrotParamsControl(3, "자동크루즈 사용 (HKG)", "롱컨이 가능한차량만 가능함", "../assets/offroad/icon_shell.png"));
+    //addItem(new CarrotParamsControl(10, "롱컨배선개조 (HKG)", "레이더롱컨이 되도록 배선을 개조하였음 ", "../assets/offroad/icon_shell.png"));
+    //addItem(new CarrotParamsControl(20, "비젼롱컨사용 (HKG)", "비젼을 이용한 롱컨을 이용중임, (카니발4_HDA2, 아이오닉6 X)", "../assets/offroad/icon_shell.png"));
+    //addItem(new CarrotParamsControl(30, "자동크루즈 사용 (HKG)", "롱컨이 가능한차량만 가능함", "../assets/offroad/icon_shell.png"));
     printf("mode = %d, pressed = %d\n", mode, m_pressed);
+    bool on = (m_pressed > 0) ? true : false;
 
     if (mode == 0) { // set default
         QProcess process;
         process.setWorkingDirectory("/data/openpilot/selfdrive");
         process.start("/bin/sh", QStringList{ "-c", QString("python ./params_default.py") });
         process.waitForFinished();
+    }
+    else if (mode == 10) {   // 롱컨배선개조
+        Params().put("SccConnectedBus2", (on) ? "1" : "0");
+    }
+    else if (mode == 11) {   // 레이더트랙지원
+        Params().put("EnableRadarTracks", (on) ? "1" : "0");
+    }
+    else if (mode == 20) {   // 비젼롱컨 사용
+        Params().put("ALeadTau", (on) ? "120":"30");
+        Params().put("ALeadTauStart", (on) ? "40" : "40");
+    }
+    else if (mode == 30) {      // 자동크루즈사용
+        Params().put("AutoCruiseControl", (on) ? "2" : "0");
+        Params().put("SoftHoldMode", (on) ? "2" : "0");
+
     }
 
 }
