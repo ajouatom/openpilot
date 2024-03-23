@@ -289,6 +289,7 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   //addItem(horizontal_line());
   addItem(new CarrotParamsControl(0, "기본값설정", "모든설정을 기본값으로", "../assets/offroad/icon_shell.png", false));
   addItem(new CarrotParamsControl(10, "롱컨배선개조 (HKG)", "레이더롱컨이 되도록 배선을 개조하였음", "../assets/offroad/icon_shell.png"));
+  addItem(new CarrotParamsControl(11, "레이더트랙사용 (HKG)", "레이더트랙이 지원되는 차량만 선택", "../assets/offroad/icon_shell.png"));
   addItem(new CarrotParamsControl(20, "비젼롱컨사용 (HKG)", "비젼을 이용한 롱컨을 이용중임, (카니발4_HDA2, 아이오닉6 X)", "../assets/offroad/icon_shell.png"));
   addItem(new CarrotParamsControl(30, "자동크루즈 사용 (HKG)", "롱컨이 가능한차량만 가능함", "../assets/offroad/icon_shell.png"));
 
