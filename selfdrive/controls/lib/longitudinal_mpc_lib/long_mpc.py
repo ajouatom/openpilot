@@ -735,7 +735,7 @@ class LongitudinalMpc:
             self.stopDist = stop_dist
           stop_x = 0
           self.fakeCruiseDistance = 0 if self.stopDist > 10.0 else 10.0
-          if v_ego < 0.1:
+          if v_ego < 0.3:
             self.stopping_count = 0.5 / DT_MDL
             self.xState = XState.e2eStopped
     elif self.xState == XState.e2ePrepare:
