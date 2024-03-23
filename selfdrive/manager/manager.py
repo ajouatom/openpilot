@@ -187,6 +187,7 @@ def set_default_params():
     pass
   for k, v in default_params:
     params.put(k, v)
+    print(f"SetToDefault[{k}]={v}")
 
 def manager_init() -> None:
   save_bootlog()
