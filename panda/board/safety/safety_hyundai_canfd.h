@@ -333,6 +333,7 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
     bool violation = false;
 
     if (hyundai_longitudinal) {
+        controls_allowed = true;
       violation |= longitudinal_accel_checks(desired_accel_raw, HYUNDAI_LONG_LIMITS);
       violation |= longitudinal_accel_checks(desired_accel_val, HYUNDAI_LONG_LIMITS);
       if (violation) {
