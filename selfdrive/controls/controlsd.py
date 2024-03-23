@@ -558,29 +558,35 @@ class Controls:
         # ENABLED
         if self.state == State.enabled:
           if self.events.contains(ET.SOFT_DISABLE):
+            print("#######State.enabled => softDisabling")
             self.state = State.softDisabling
             self.soft_disable_timer = int(SOFT_DISABLE_TIME / DT_CTRL)
             self.current_alert_types.append(ET.SOFT_DISABLE)
 
           elif self.events.contains(ET.OVERRIDE_LATERAL) or self.events.contains(ET.OVERRIDE_LONGITUDINAL):
+            print("#######State.enabled => overriding")
             self.state = State.overriding
             self.current_alert_types += [ET.OVERRIDE_LATERAL, ET.OVERRIDE_LONGITUDINAL]
 
         # SOFT DISABLING
         elif self.state == State.softDisabling:
           if not self.events.contains(ET.SOFT_DISABLE):
+            print("#######State.softDisabling => enabled")
             # no more soft disabling condition, so go back to ENABLED
-            self.state = State.enabled
+            self.state = State.enabled            
 
           elif self.soft_disable_timer > 0:
+            print("#######State.softDisabling => timeout => disable")
             self.current_alert_types.append(ET.SOFT_DISABLE)
 
           elif self.soft_disable_timer <= 0:
+            print("#######State.softDisabling => disabled")
             self.state = State.disabled
 
         # PRE ENABLING
         elif self.state == State.preEnabled:
           if not self.events.contains(ET.PRE_ENABLE):
+            print("#######State.preEnabled => enabled")
             self.state = State.enabled
           else:
             self.current_alert_types.append(ET.PRE_ENABLE)
@@ -588,10 +594,12 @@ class Controls:
         # OVERRIDING
         elif self.state == State.overriding:
           if self.events.contains(ET.SOFT_DISABLE):
+            print("#######State.overriding => softDisabling")
             self.state = State.softDisabling
             self.soft_disable_timer = int(SOFT_DISABLE_TIME / DT_CTRL)
             self.current_alert_types.append(ET.SOFT_DISABLE)
           elif not (self.events.contains(ET.OVERRIDE_LATERAL) or self.events.contains(ET.OVERRIDE_LONGITUDINAL)):
+            print("#######State.overriding => enabled")
             self.state = State.enabled
           else:
             self.current_alert_types += [ET.OVERRIDE_LATERAL, ET.OVERRIDE_LONGITUDINAL]
@@ -606,8 +614,10 @@ class Controls:
 
         else:
           if self.events.contains(ET.PRE_ENABLE):
+            print("#######State.disabled => preEnabled")
             self.state = State.preEnabled
           elif self.events.contains(ET.OVERRIDE_LATERAL) or self.events.contains(ET.OVERRIDE_LONGITUDINAL):
+            print("#######State.disabled => overriding")
             self.state = State.overriding
           else:
             self.state = State.enabled
@@ -623,7 +633,7 @@ class Controls:
 
     if not self.enabled and not self.CP.pcmCruise:
       if self.carrotCruiseActivate > 0:
-        print(f"senf.enabled = {self.enabled}, pcmCruise={self.CP.pcmCruise}")
+        print(f"self.state = {self.state}, self.enabled = {self.enabled}, pcmCruise={self.CP.pcmCruise}")
       self.carrotCruiseActivate = 0
 
   def state_control(self, CS):
