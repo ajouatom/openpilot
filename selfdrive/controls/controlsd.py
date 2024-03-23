@@ -521,12 +521,11 @@ class Controls:
       if self.enable_avail:
         if not self.CP.pcmCruise and self._panda_controls_not_allowed:
           print("####MakeEvent: buttonEnable1")
-          self.events.add(EventName.buttonEnable)
         elif self.CP.pcmCruise and CS.cruiseState.enabled: # 이미 pcmCruise가 enabled되어 있는경우
           print("#####MakeEvent: buttonEnable2")
-          self.events.add(EventName.buttonEnable)
         else:
           print("####MakeEvent: buttonEnable3", self.CP.pcmCruise, CS.cruiseState.enabled, self._panda_controls_not_allowed)
+        self.events.add(EventName.buttonEnable)
         self.carrotCruiseActivate = 1
       else:
         print("CruiseActivate: Button Enable: Cannot enabled....###")
