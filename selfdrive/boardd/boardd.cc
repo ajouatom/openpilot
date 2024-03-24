@@ -132,17 +132,11 @@ bool safety_setter_thread(std::vector<Panda *> pandas) {
       safety_param = safety_configs[i].getSafetyParam();
     } else {
       // If no safety mode is specified, default to silent
-        if (scc2 == 2) {
-            safety_model = cereal::CarParams::SafetyModel::ALL_OUTPUT;
-            safety_param = 1U;
-        }
-        else {
-            safety_model = cereal::CarParams::SafetyModel::SILENT;
-            safety_param = 0U;
-        }
+        safety_model = cereal::CarParams::SafetyModel::SILENT;
+        safety_param = 0U;
     }
     printf("i=%d, scc2 = %d\n", i, scc2);
-    if (i == 1) {
+    if (i == 1 && scc2 == 2) {
         printf("boadd..ccc ################### %d\n", scc2);
         safety_model = cereal::CarParams::SafetyModel::ALL_OUTPUT;
         safety_param = 1U;
