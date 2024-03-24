@@ -14,7 +14,7 @@ unsetcolor = "\033[00m"
 if __name__ == "__main__":
 
   start_time = time.monotonic()
-  timeout = 3.0
+  timeout = 15.0
   while True:
     if time.monotonic() - start_time > timeout:
       print("timeout")
