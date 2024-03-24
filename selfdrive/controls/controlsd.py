@@ -170,6 +170,7 @@ class Controls:
     self.v_cruise_helper = VCruiseHelper(self.CP)
     self.recalibrating_seen = False
     self.nn_alert_shown = False
+    self.rx_checks_invalid_count = 0
 
     self.can_log_mono_time = 0
 
@@ -332,8 +333,12 @@ class Controls:
 
       # safety mismatch allows some time for boardd to set the safety mode and publish it back from panda
       if (safety_mismatch and self.sm.frame*DT_CTRL > 10.) or pandaState.safetyRxChecksInvalid or self.mismatch_counter >= 200:
-        print(f"safetyRxChecksInvalid = {pandaState.safetyRxChecksInvalid}, mismatch_counter = {self.mismatch_counter}")
+        if self.rx_checks_invalid_count < 3:
+          print(f"safetyRxChecksInvalid = {pandaState.safetyRxChecksInvalid}, mismatch_counter = {self.mismatch_counter}")
+          self.rx_checks_invalid_count += 1
         self.events.add(EventName.controlsMismatch)
+      else:
+        self.rx_checks_invalid_count = 0
 
       if log.PandaState.FaultType.relayMalfunction in pandaState.faults:
         self.events.add(EventName.relayMalfunction)
@@ -619,6 +624,7 @@ class Controls:
             print("#######State.disabled => overriding")
             self.state = State.overriding
           else:
+            print("#######State.disabled => enabled")
             self.state = State.enabled
           self.current_alert_types.append(ET.ENABLE)
           self.v_cruise_helper.initialize_v_cruise(CS, self.experimental_mode)
