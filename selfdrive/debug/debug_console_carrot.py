@@ -16,6 +16,9 @@ if __name__ == "__main__":
   start_time = time.monotonic()
   timeout = 3.0
   while True:
+    if time.monotonic() - start_time > timeout:
+      print("timeout")
+      break;
     try:
       port_number = int(os.getenv("PORT", "0"))
       claim = os.getenv("CLAIM") is not None
@@ -34,25 +37,25 @@ if __name__ == "__main__":
           panda.set_uart_baud(port_number, int(os.getenv("BAUD")))  # type: ignore
 
       while True:
+        if time.monotonic() - start_time > timeout:
+          print("timeout")
+          break;
         for i, panda in enumerate(pandas):
           while True:
+            if time.monotonic() - start_time > timeout:
+              print("timeout")
+              break;
             ret = panda.serial_read(port_number)
             if len(ret) > 0:
               sys.stdout.write(setcolor[i] + ret.decode('ascii') + unsetcolor)
               sys.stdout.flush()
             else:
               break
-            if time.monotonic() - start_time > timeout:
-              break;
           if select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], []):
             ln = sys.stdin.readline()
             if claim:
               panda.serial_write(port_number, ln)
           time.sleep(0.01)
-          if time.monotonic() - start_time > timeout:
-            break;
-      if time.monotonic() - start_time > timeout:
-        break;
     except KeyboardInterrupt:
       break
     except Exception:
