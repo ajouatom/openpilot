@@ -119,7 +119,7 @@ bool safety_setter_thread(std::vector<Panda *> pandas) {
   cereal::CarParams::SafetyModel safety_model;
   uint16_t safety_param;
 
-  int scc2 = p.getBool("SccConnectedBus2");
+  int scc2 = p.getInt("SccConnectedBus2");
   auto safety_configs = car_params.getSafetyConfigs();
   uint16_t alternative_experience = car_params.getAlternativeExperience();
   for (uint32_t i = 0; i < pandas.size(); i++) {
