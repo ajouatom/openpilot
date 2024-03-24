@@ -32,10 +32,11 @@ class CarInterface(CarInterfaceBase):
     # FIXME: the Optima Hybrid 2017 uses a different SCC12 checksum
     ret.dashcamOnly = candidate in {CAR.KIA_OPTIMA_H, }
 
-    scc2 = Params().get_bool("SccConnectedBus2")
-    if scc2:
+    scc2 = Params().get_int("SccConnectedBus2")
+    if scc2 > 0:
       ret.extFlags |= HyundaiExtFlags.SCC_BUS2.value
-
+      if scc2 > 1:
+        ret.extFlags |= HyundaiExtFlags.ADAS_PANDA.value
     hda2 = Ecu.adas in [fw.ecu for fw in car_fw] and candidate in CANFD_CAR or Params().get_bool("CanfdHDA2")
     CAN = CanBus(None, hda2, fingerprint)
 
@@ -53,7 +54,7 @@ class CarInterface(CarInterfaceBase):
       if hda2:
         print("$$$CANFD HDA2")
         ret.flags |= HyundaiFlags.CANFD_HDA2.value
-        if scc2:
+        if scc2 > 0:
           if 0x110 in fingerprint[CAN.ACAN]:
             ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
             print("$$$CANFD ALT_STEERING1")
@@ -140,6 +141,7 @@ class CarInterface(CarInterfaceBase):
 
     print("***************************************************************************")
     print("sccBus = ", 2 if ret.extFlags & HyundaiExtFlags.SCC_BUS2.value else 0)
+    print("adasPanda = ", 1 if ret.extFlags & HyundaiExtFlags.ADAS_PANDA.value else 0)
 
     ret.openpilotLongitudinalControl = experimental_long and ret.experimentalLongitudinalAvailable
 
@@ -287,7 +289,7 @@ class CarInterface(CarInterfaceBase):
 def enable_radar_tracks(CP, logcan, sendcan):
   print("################ Try To Enable Radar Tracks ####################")
   
-  sccBus = 2 if Params().get_bool("SccConnectedBus2") else 0
+  sccBus = 2 if Params().get_int("SccConnectedBus2") > 0 else 0
   rdr_fw = None
   rdr_fw_address = 0x7d0 #
   try:

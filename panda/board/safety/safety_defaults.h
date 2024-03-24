@@ -44,16 +44,28 @@ static bool alloutput_tx_hook(const CANPacket_t *to_send) {
   return true;
 }
 
+uint32_t last_ts_lkas_msg_acan = 0;
+bool lkas_msg_acan_active = false;
 static int alloutput_fwd_hook(int bus_num, int addr) {
   int bus_fwd = -1;
-  UNUSED(addr);
+  //UNUSED(addr);
 
   if (alloutput_passthrough) {
     if (bus_num == 0) {
       bus_fwd = 2;
+      if (addr == 272 || addr == 80) {
+          last_ts_lkas_msg_acan = microsecond_timer_get();
+          lkas_msg_acan_active = true;
+      }
     }
     if (bus_num == 2) {
       bus_fwd = 0;
+      if (addr == 272 || addr == 80) {
+          if (now - last_ts_lkas_msg_acan < 100000) {
+              bus_fwd = -1;
+          }
+          else lkas_msg_acan_active = false;
+      }
     }
   }
 

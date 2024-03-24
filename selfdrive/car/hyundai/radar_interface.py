@@ -23,7 +23,7 @@ def get_radar_can_parser(CP):
   return CANParser('hyundai_kia_mando_front_radar_generated', messages, 1)
 
 def get_radar_can_parser_scc(CP):
-  scc2 = Params().get_bool("SccConnectedBus2")
+  scc2 = Params().get_int("SccConnectedBus2") > 0
 
   enable_radar_tracks = Params().get_bool("EnableRadarTracks")
 
