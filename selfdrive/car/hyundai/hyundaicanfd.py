@@ -238,7 +238,7 @@ def create_adrv_messages(CP, packer, CAN, frame):
 
   values = {
   }
-  if not (CP.extFlags & HyundaiExtFlags.SCC_BUS2.value):
+  if not (CP.extFlags & HyundaiExtFlags.SCC_BUS2.value) or CP.extFlags & HyundaiExtFlags.ACAN_PANDA.value:
     ret.append(packer.make_can_msg("ADRV_0x51", CAN.ACAN, values))
 
   ret.extend(create_fca_warning_light(packer, CAN, frame))
