@@ -49,12 +49,13 @@ bool lkas_msg_acan_active = false;
 static int alloutput_fwd_hook(int bus_num, int addr) {
   int bus_fwd = -1;
   //UNUSED(addr);
+  uint32_t now = microsecond_timer_get();
 
   if (alloutput_passthrough) {
     if (bus_num == 0) {
       bus_fwd = 2;
       if (addr == 272 || addr == 80) {
-          last_ts_lkas_msg_acan = microsecond_timer_get();
+          last_ts_lkas_msg_acan = now;
           lkas_msg_acan_active = true;
       }
     }
