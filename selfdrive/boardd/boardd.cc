@@ -131,11 +131,13 @@ bool safety_setter_thread(std::vector<Panda *> pandas) {
     } else {
       // If no safety mode is specified, default to silent
         if (scc2 == 2) {
-            safety_model = cereal::CarParams::SafetyModel::NO_OUTPUT;
+            safety_model = cereal::CarParams::SafetyModel::ALL_OUTPUT;
+            safety_param = 1U;
         }
-        else
-      safety_model = cereal::CarParams::SafetyModel::SILENT;
-      safety_param = 0U;
+        else {
+            safety_model = cereal::CarParams::SafetyModel::SILENT;
+            safety_param = 0U;
+        }
     }
 
     LOGW("panda %d: setting safety model: %d, param: %d, alternative experience: %d", i, (int)safety_model, safety_param, alternative_experience);
