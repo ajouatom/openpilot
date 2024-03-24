@@ -14,6 +14,7 @@ unsetcolor = "\033[00m"
 if __name__ == "__main__":
 
   start_time = time.monotonic()
+  timeout = 3.0
   while True:
     try:
       port_number = int(os.getenv("PORT", "0"))
@@ -41,16 +42,16 @@ if __name__ == "__main__":
               sys.stdout.flush()
             else:
               break
-            if time.monotonic() - start_time > 20.0:
+            if time.monotonic() - start_time > timeout:
               break;
           if select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], []):
             ln = sys.stdin.readline()
             if claim:
               panda.serial_write(port_number, ln)
           time.sleep(0.01)
-          if time.monotonic() - start_time > 20.0:
+          if time.monotonic() - start_time > timeout:
             break;
-      if time.monotonic() - start_time > 20.0:
+      if time.monotonic() - start_time > timeout:
         break;
     except KeyboardInterrupt:
       break
