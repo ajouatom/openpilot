@@ -52,7 +52,7 @@ EventName = car.CarEvent.EventName
 ButtonType = car.CarState.ButtonEvent.Type
 SafetyModel = car.CarParams.SafetyModel
 
-IGNORED_SAFETY_MODES = (SafetyModel.silent, SafetyModel.noOutput)
+IGNORED_SAFETY_MODES = (SafetyModel.silent, SafetyModel.noOutput, SafetyMode.allOutput)
 CSID_MAP = {"1": EventName.roadCameraError, "2": EventName.wideRoadCameraError, "0": EventName.driverCameraError}
 ACTUATOR_FIELDS = tuple(car.CarControl.Actuators.schema.fields.keys())
 ACTIVE_STATES = (State.enabled, State.softDisabling, State.overriding)
