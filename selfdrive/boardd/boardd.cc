@@ -139,6 +139,10 @@ bool safety_setter_thread(std::vector<Panda *> pandas) {
             safety_param = 0U;
         }
     }
+    if (i == 1 && scc2 == 2) {
+        safety_model = cereal::CarParams::SafetyModel::ALL_OUTPUT;
+        safety_param = 1U;
+    }
 
     LOGW("panda %d: setting safety model: %d, param: %d, alternative experience: %d", i, (int)safety_model, safety_param, alternative_experience);
     panda->set_alternative_experience(alternative_experience);
