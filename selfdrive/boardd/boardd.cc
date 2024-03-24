@@ -122,6 +122,8 @@ bool safety_setter_thread(std::vector<Panda *> pandas) {
   int scc2 = p.getInt("SccConnectedBus2");
   auto safety_configs = car_params.getSafetyConfigs();
   uint16_t alternative_experience = car_params.getAlternativeExperience();
+
+  printf("panda.size() = %d, scc2 = %d\n", pandas.size(), scc2);
   for (uint32_t i = 0; i < pandas.size(); i++) {
     auto panda = pandas[i];
 
@@ -146,7 +148,7 @@ bool safety_setter_thread(std::vector<Panda *> pandas) {
         safety_param = 1U;
     }
 
-    LOGW("panda %d: setting safety model: %d, param: %d, alternative experience: %d", i, (int)safety_model, safety_param, alternative_experience);
+    LOGW("panda %d: setting safety model: %d, param: %d, alternative experience: %d, #######################", i, (int)safety_model, safety_param, alternative_experience);
     panda->set_alternative_experience(alternative_experience);
     panda->set_safety_model(safety_model, safety_param);
   }
