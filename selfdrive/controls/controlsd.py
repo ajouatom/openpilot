@@ -551,10 +551,12 @@ class Controls:
     if self.state != State.disabled:
       # user and immediate disable always have priority in a non-disabled state
       if self.events.contains(ET.USER_DISABLE):
+        print("####ET.USER_DISABLE")
         self.state = State.disabled
         self.current_alert_types.append(ET.USER_DISABLE)
 
       elif self.events.contains(ET.IMMEDIATE_DISABLE):
+        print("####ET.IMMEDIATE_DISABLE")
         self.state = State.disabled
         self.current_alert_types.append(ET.IMMEDIATE_DISABLE)
 
