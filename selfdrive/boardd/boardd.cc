@@ -139,7 +139,8 @@ bool safety_setter_thread(std::vector<Panda *> pandas) {
             safety_param = 0U;
         }
     }
-    if (i == 1 && scc2 == 2) {
+    printf("i=%d, scc2 = %d\n", i, scc2);
+    if (i == 1) {
         printf("boadd..ccc ################### %d\n", scc2);
         safety_model = cereal::CarParams::SafetyModel::ALL_OUTPUT;
         safety_param = 1U;
