@@ -123,7 +123,7 @@ bool safety_setter_thread(std::vector<Panda *> pandas) {
   auto safety_configs = car_params.getSafetyConfigs();
   uint16_t alternative_experience = car_params.getAlternativeExperience();
 
-  printf("panda.size() = %d, scc2 = %d\n", pandas.size(), scc2);
+  printf("panda.size() = %d, scc2 = %d\n", (int)pandas.size(), scc2);
   for (uint32_t i = 0; i < pandas.size(); i++) {
     auto panda = pandas[i];
 
