@@ -41,6 +41,8 @@ if __name__ == "__main__":
               sys.stdout.flush()
             else:
               break
+            if time.monotonic() - start_time > 20.0:
+              break;
           if select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], []):
             ln = sys.stdin.readline()
             if claim:
@@ -48,6 +50,8 @@ if __name__ == "__main__":
           time.sleep(0.01)
           if time.monotonic() - start_time > 20.0:
             break;
+      if time.monotonic() - start_time > 20.0:
+        break;
     except KeyboardInterrupt:
       break
     except Exception:
