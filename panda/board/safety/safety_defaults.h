@@ -58,6 +58,7 @@ static int alloutput_fwd_hook(int bus_num, int addr) {
           last_ts_lkas_msg_acan = now;
           lkas_msg_acan_active = true;
           print("blocking\n");
+          bus_fwd = -1;
       }
     }
     if (bus_num == 2) {
