@@ -36,7 +36,7 @@ class CarInterface(CarInterfaceBase):
     if scc2 > 0:
       ret.extFlags |= HyundaiExtFlags.SCC_BUS2.value
       if scc2 > 1:
-        ret.extFlags |= HyundaiExtFlags.ADAS_PANDA.value
+        ret.extFlags |= HyundaiExtFlags.ACAN_PANDA.value
     hda2 = Ecu.adas in [fw.ecu for fw in car_fw] and candidate in CANFD_CAR or Params().get_bool("CanfdHDA2")
     CAN = CanBus(None, hda2, fingerprint)
 
@@ -141,7 +141,7 @@ class CarInterface(CarInterfaceBase):
 
     print("***************************************************************************")
     print("sccBus = ", 2 if ret.extFlags & HyundaiExtFlags.SCC_BUS2.value else 0)
-    print("adasPanda = ", 1 if ret.extFlags & HyundaiExtFlags.ADAS_PANDA.value else 0)
+    print("adasPanda = ", 1 if ret.extFlags & HyundaiExtFlags.ACAN_PANDA.value else 0)
 
     ret.openpilotLongitudinalControl = experimental_long and ret.experimentalLongitudinalAvailable
 
