@@ -144,15 +144,6 @@ void process_can(uint8_t can_number) {
   }
 }
 
-void carrot_acan_function(int bus_num, CANPacket_t *to_send) {
-    if (!lkas_msg_acan_active) return;
-    int addr = GET_ADDR(to_send);
-    if (bus_num == 0) {
-        if (addr == 866 || addr == 676) {       // 0x362, 0x2a4, 56,57,58,59,60,61,62,63 => make zero
-            to_send->data[7] = 0x00;
-        }
-    }
-}
 // FDFDCANx_IT0 IRQ Handler (RX and errors)
 // blink blue when we are receiving CAN messages
 void can_rx(uint8_t can_number) {
@@ -217,7 +208,6 @@ void can_rx(uint8_t can_number) {
       to_send.bus = to_push.bus;
       to_send.data_len_code = to_push.data_len_code;
       (void)memcpy(to_send.data, to_push.data, dlc_to_len[to_push.data_len_code]);
-      carrot_acan_function(bus_fwd_num, &to_send);    // carrot
       can_set_checksum(&to_send);
 
       can_send(&to_send, bus_fwd_num, true);

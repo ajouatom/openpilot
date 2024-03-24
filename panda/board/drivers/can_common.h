@@ -255,7 +255,19 @@ bool can_check_checksum(CANPacket_t *packet) {
   return (calculate_checksum((uint8_t *) packet, CANPACKET_HEAD_SIZE + GET_LEN(packet)) == 0U);
 }
 
+void carrot_acan_function(int bus_num, CANPacket_t* to_send) {
+    if (!lkas_msg_acan_active) return;
+    int addr = GET_ADDR(to_send);
+    if (bus_num == 0) {
+        if (addr == 866 || addr == 676) {       // carrot: 0x362, 0x2a4, 56,57,58,59,60,61,62,63 => make zero
+            to_send->data[7] = 0x00;
+        }
+    }
+}
+
 void can_send(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook) {
+    carrot_acan_function(bus_number, to_push);    // carrot
+
   if (skip_tx_hook || safety_tx_hook(to_push) != 0) {
     if (bus_number < PANDA_BUS_CNT) {
       // add CAN packet to send queue
