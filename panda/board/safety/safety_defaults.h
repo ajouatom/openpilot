@@ -20,7 +20,7 @@ static int default_fwd_hook(int bus_num, int addr) {
   //UNUSED(bus_num);
   //UNUSED(addr);
     uint32_t now = microsecond_timer_get();
-    bus_fwd = -1;
+    int bus_fwd = -1;
   if (bus_num == 0) {
       bus_fwd = 2;
       if (addr == 272 || addr == 80 || addr == 81) { // || addr == 866 || addr == 676) {
