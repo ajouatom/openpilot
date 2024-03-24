@@ -13,11 +13,32 @@ static bool nooutput_tx_hook(const CANPacket_t *to_send) {
   UNUSED(to_send);
   return false;
 }
+uint32_t last_ts_lkas_msg_acan = 0;
+bool lkas_msg_acan_active = false;
 
 static int default_fwd_hook(int bus_num, int addr) {
-  UNUSED(bus_num);
-  UNUSED(addr);
-  return -1;
+  //UNUSED(bus_num);
+  //UNUSED(addr);
+    uint32_t now = microsecond_timer_get();
+    bus_fwd = -1;
+  if (bus_num == 0) {
+      bus_fwd = 2;
+      if (addr == 272 || addr == 80 || addr == 81) { // || addr == 866 || addr == 676) {
+          last_ts_lkas_msg_acan = now;
+          lkas_msg_acan_active = true;
+          print("blocking\n");
+      }
+  }
+  if (bus_num == 2) {
+      bus_fwd = 0;
+      if (addr == 272 || addr == 80 || addr == 81) { // || addr == 866 || addr == 676) {
+          if (now - last_ts_lkas_msg_acan < 200000) {
+              bus_fwd = -1;
+          }
+          else lkas_msg_acan_active = false;
+      }
+  }
+  return bus_fwd;
 }
 
 const safety_hooks nooutput_hooks = {
@@ -44,8 +65,6 @@ static bool alloutput_tx_hook(const CANPacket_t *to_send) {
   return true;
 }
 
-uint32_t last_ts_lkas_msg_acan = 0;
-bool lkas_msg_acan_active = false;
 static int alloutput_fwd_hook(int bus_num, int addr) {
   int bus_fwd = -1;
   //UNUSED(addr);
