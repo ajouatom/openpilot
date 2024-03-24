@@ -106,13 +106,14 @@ class HyundaiFlags(IntFlag):
 
   MIN_STEER_32_MPH = 2 ** 23
 
-  HAS_SCC13 = 2 ** 25
-  HAS_SCC14 = 2 ** 26
-  NAVI_CLUSTER = 2 ** 27
-  SCC_BUS2 = 2 ** 28
-  HAS_LFAHDA = 2 ** 29
-  HAS_LFA_BUTTON = 2 ** 30
-  CANFD_GEARS_NONE = 2 ** 31
+class HyundaiExtFlags(IntFlag):
+  HAS_SCC13 = 1
+  HAS_SCC14 = 2
+  NAVI_CLUSTER = 2 ** 2
+  SCC_BUS2 = 2 ** 3
+  HAS_LFAHDA = 2 ** 4
+  HAS_LFA_BUTTON = 2 ** 5
+  CANFD_GEARS_NONE = 2 ** 6
 
 class Footnote(Enum):
   CANFD = CarFootnote(

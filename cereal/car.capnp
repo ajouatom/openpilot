@@ -509,6 +509,7 @@ struct CarParams {
   enableDsu @5 :Bool;        # driving support unit
   enableBsm @56 :Bool;       # blind spot monitoring
   flags @64 :UInt32;         # flags for car specific quirks
+  extFlags @74 :UInt32;     # carrot ext car flags
   experimentalLongitudinalAvailable @71 :Bool;
 
   minEnableSpeed @7 :Float32;

@@ -1,7 +1,7 @@
 import copy
 
 import crcmod
-from openpilot.selfdrive.car.hyundai.values import CAR, HyundaiFlags
+from openpilot.selfdrive.car.hyundai.values import CAR, HyundaiFlags, HyundaiExtFlags
 
 from openpilot.common.numpy_fast import clip
 
@@ -187,7 +187,7 @@ def create_acc_commands_mix_scc(CP, packer, enabled, accel, upper_jerk, lower_je
     comfortBandLower = 0.0
     stopReq = 0
 
-  makeNewCommands = True if not (CP.flags & HyundaiFlags.SCC_BUS2.value) else False
+  makeNewCommands = True if not (CP.extFlags & HyundaiExtFlags.SCC_BUS2.value) else False
   commands = []
   if makeNewCommands:
     scc11_values = {
@@ -271,7 +271,7 @@ def create_acc_commands_mix_scc(CP, packer, enabled, accel, upper_jerk, lower_je
     values["ObjGap2"] = objGap2
     commands.append(packer.make_can_msg("SCC14", 0, values))
 
-  if not (CP.flags & HyundaiFlags.SCC_BUS2.value):
+  if not (CP.extFlags & HyundaiExtFlags.SCC_BUS2.value):
     fca11_values = {
       "CR_FCA_Alive": idx % 0xF,
       "PAINT1_Status": 1,
