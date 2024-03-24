@@ -62,7 +62,7 @@ static int alloutput_fwd_hook(int bus_num, int addr) {
     if (bus_num == 2) {
       bus_fwd = 0;
       if (addr == 272 || addr == 80) {
-          if (now - last_ts_lkas_msg_acan < 100000) {
+          if (now - last_ts_lkas_msg_acan < 200000) {
               bus_fwd = -1;
           }
           else lkas_msg_acan_active = false;
