@@ -256,6 +256,7 @@ bool can_check_checksum(CANPacket_t *packet) {
 }
 
 void carrot_acan_function(int bus_num, CANPacket_t* to_send) {
+    extern bool lkas_msg_acan_active;
     if (!lkas_msg_acan_active) return;
     int addr = GET_ADDR(to_send);
     if (bus_num == 0) {
