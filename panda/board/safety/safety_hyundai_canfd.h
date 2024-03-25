@@ -314,7 +314,7 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
       if (addr == 0x1cf) cruise_button = GET_BYTE(to_send, 2) & 0x7U;
       else cruise_button = (GET_BYTE(to_send, 4) >> 4) & 0x7U;
       if (cruise_button == 1) {
-          print("auto cruise: controls_allowed = true");
+          print("auto cruise: controls_allowed = true\n");
           controls_allowed = true;
       }
       tx = false;  // button spamming은 longcon일때.. 나가면 안될것이라고 판단됨..
