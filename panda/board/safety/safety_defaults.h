@@ -48,6 +48,9 @@ static bool alloutput_tx_hook(const CANPacket_t *to_send) {
 uint32_t last_ts_lkas_msg_acan = 0;
 bool lkas_msg_acan_active = false;
 
+int addr_list1[128];
+int addr_list_count1 = 0;
+
 static int alloutput_fwd_hook(int bus_num, int addr) {
   int bus_fwd = -1;
   //UNUSED(addr);
@@ -59,10 +62,25 @@ static int alloutput_fwd_hook(int bus_num, int addr) {
       if (addr == 272 || addr == 80) { // || addr == 81) { // || addr == 866 || addr == 676) {
           last_ts_lkas_msg_acan = now;
           lkas_msg_acan_active = true;
+          print("blocking\n");
           bus_fwd = -1;
       }
     }
     if (bus_num == 2) {
+        int i;
+        for (i = 0; i < addr_list_count1; i++) {
+            if (addr_list1[i] == addr) {
+                break;
+            }
+        }
+        if (i == addr_list_count1) {
+            addr_list1[addr_list_count1] = addr;
+            addr_list_count1++;
+            print("bus222_list33=");
+            for (int j = 0; j < addr_list_count1; j++) { putui((uint32_t)addr_list1[j]); print(","); }
+            print("\n");
+        }
+
       bus_fwd = 0;
       if (addr == 272 || addr == 80) { // || addr == 81) { // || addr == 866 || addr == 676) {
           if (now - last_ts_lkas_msg_acan < 200000) {
