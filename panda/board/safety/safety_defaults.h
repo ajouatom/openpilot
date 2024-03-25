@@ -36,6 +36,7 @@ bool alloutput_passthrough = false;
 static safety_config alloutput_init(uint16_t param) {
   controls_allowed = true;
   alloutput_passthrough = GET_FLAG(param, ALLOUTPUT_PARAM_PASSTHROUGH);
+  print("panda::: allooutput_init$$$$$$$$$$$= "); putui((uint32_t)alloutput_passthrough); print("\n");
   return (safety_config){NULL, 0, NULL, 0};
 }
 
