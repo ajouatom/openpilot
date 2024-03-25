@@ -51,6 +51,7 @@ bool lkas_msg_acan_active = false;
 extern int addr_list[];
 extern int addr_list_len[];
 extern int addr_list_count;
+extern uint8_t to_push_data_len_code;  // carrot
 
 static int alloutput_fwd_hook(int bus_num, int addr) {
   int bus_fwd = -1;
