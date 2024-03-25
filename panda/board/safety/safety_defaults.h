@@ -48,11 +48,6 @@ static bool alloutput_tx_hook(const CANPacket_t *to_send) {
 uint32_t last_ts_lkas_msg_acan = 0;
 bool lkas_msg_acan_active = false;
 
-extern int addr_list[];
-extern int addr_list_len[];
-extern int addr_list_count;
-extern uint8_t to_push_data_len_code;  // carrot
-
 static int alloutput_fwd_hook(int bus_num, int addr) {
   int bus_fwd = -1;
   //UNUSED(addr);
@@ -64,27 +59,10 @@ static int alloutput_fwd_hook(int bus_num, int addr) {
       if (addr == 272 || addr == 80) { // || addr == 81) { // || addr == 866 || addr == 676) {
           last_ts_lkas_msg_acan = now;
           lkas_msg_acan_active = true;
-          print("blocking\n");
           bus_fwd = -1;
       }
     }
     if (bus_num == 2) {
-        int i;
-        for (i = 0; i < addr_list_count; i++) {
-            if (addr_list[i] == addr) {
-                addr_list_len[i] = to_push_data_len_code;
-                break;
-            }
-        }
-        if (i == addr_list_count) {
-            addr_list[addr_list_count] = addr;
-            addr_list_len[addr_list_count] = to_push_data_len_code;
-            addr_list_count++;
-            print("bus222_list33=");
-            for (int j = 0; j < addr_list_count; j++) { putui((uint32_t)addr_list[j]); print("("); putui((uint32_t)addr_list_len[j]); print(") "); }
-            print("\n");
-        }
-
       bus_fwd = 0;
       if (addr == 272 || addr == 80) { // || addr == 81) { // || addr == 866 || addr == 676) {
           if (now - last_ts_lkas_msg_acan < 200000) {
