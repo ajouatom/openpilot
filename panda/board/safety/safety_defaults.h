@@ -47,6 +47,11 @@ static bool alloutput_tx_hook(const CANPacket_t *to_send) {
 
 uint32_t last_ts_lkas_msg_acan = 0;
 bool lkas_msg_acan_active = false;
+
+extern int addr_list[];
+extern int addr_list_len[];
+extern int addr_list_count;
+
 static int alloutput_fwd_hook(int bus_num, int addr) {
   int bus_fwd = -1;
   //UNUSED(addr);
