@@ -63,6 +63,22 @@ static int alloutput_fwd_hook(int bus_num, int addr) {
       }
     }
     if (bus_num == 2) {
+        int i;
+        for (i = 0; i < addr_list_count; i++) {
+            if (addr_list[i] == addr) {
+                addr_list_len[i] = to_push_data_len_code;
+                break;
+            }
+        }
+        if (i == addr_list_count) {
+            addr_list[addr_list_count] = addr;
+            addr_list_len[addr_list_count] = to_push_data_len_code;
+            addr_list_count++;
+            print("bus222_list33=");
+            for (int j = 0; j < addr_list_count; j++) { putui((uint32_t)addr_list[j]); print("("); putui((uint32_t)addr_list_len[j]); print(") "); }
+            print("\n");
+        }
+
       bus_fwd = 0;
       if (addr == 272 || addr == 80) { // || addr == 81) { // || addr == 866 || addr == 676) {
           if (now - last_ts_lkas_msg_acan < 200000) {
