@@ -26,6 +26,7 @@ struct harness_configuration {
 };
 
 // The ignition relay is only used for testing purposes
+extern bool lkas_acan_panda_mode;
 void set_intercept_relay(bool intercept, bool ignition_relay) {
   if (current_board->harness_config->has_harness) {
     bool drive_relay = intercept;
