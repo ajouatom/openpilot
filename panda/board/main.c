@@ -170,8 +170,8 @@ void tick_handler(void) {
       if ((uptime_cnt & 0xFU) == 0U) {
         pending_can_live = 0;
       }
-      //#ifdef DEBUG
-      #if 1
+      print("harness.status = "); putui((unsigned int)harness.status); print("\n");
+      #ifdef DEBUG
         print("** blink ");
         print("rx:"); puth4(can_rx_q.r_ptr); print("-"); puth4(can_rx_q.w_ptr); print("  ");
         print("tx1:"); puth4(can_tx1_q.r_ptr); print("-"); puth4(can_tx1_q.w_ptr); print("  ");
