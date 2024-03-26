@@ -171,7 +171,7 @@ void tick_handler(void) {
         pending_can_live = 0;
       }
       print("harness.status = "); putui((unsigned int)harness.status); print("\n");
-      #ifdef DEBUG
+      #if 1 //ifdef DEBUG
         print("** blink ");
         print("rx:"); puth4(can_rx_q.r_ptr); print("-"); puth4(can_rx_q.w_ptr); print("  ");
         print("tx1:"); puth4(can_tx1_q.r_ptr); print("-"); puth4(can_tx1_q.w_ptr); print("  ");
