@@ -14,7 +14,7 @@ unsetcolor = "\033[00m"
 if __name__ == "__main__":
 
   start_time = time.monotonic()
-  timeout = 20.0
+  timeout = 30.0
   while True:
     if time.monotonic() - start_time > timeout:
       print("timeout")
@@ -47,7 +47,7 @@ if __name__ == "__main__":
               break;
             ret = panda.serial_read(port_number)
             if len(ret) > 0:
-              sys.stdout.write(f"{i}:" + setcolor[i] + ret.decode('ascii') + unsetcolor)
+              sys.stdout.write(f"[{i}]" + setcolor[i] + ret.decode('ascii') + unsetcolor)
               sys.stdout.flush()
             else:
               break

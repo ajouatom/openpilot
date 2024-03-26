@@ -212,6 +212,8 @@ class CarController(CarControllerBase):
     elif actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
       jerk_u = 0.5
       jerk_l = 1.0 #jerkLimit
+      if self.CP.carFingerprint in CANFD_CAR:
+        jerk_u = 1.6
       self.jerk_count = 0
     else:
       jerk_u = min(max(0.5, jerk * 2.0), jerk_max)
