@@ -26,7 +26,6 @@ struct harness_configuration {
 };
 
 // The ignition relay is only used for testing purposes
-extern bool lkas_acan_panda_mode;
 void set_intercept_relay(bool intercept, bool ignition_relay) {
   if (current_board->harness_config->has_harness) {
     bool drive_relay = intercept;
@@ -45,11 +44,10 @@ void set_intercept_relay(bool intercept, bool ignition_relay) {
     // wait until we're not reading the analog voltages anymore
     while (harness.sbu_adc_lock) {}
 
-    if (harness.status == HARNESS_STATUS_NORMAL || lkas_acan_panda_mode) {
+    if (harness.status == HARNESS_STATUS_NORMAL) {
       set_gpio_output(current_board->harness_config->GPIO_relay_SBU1, current_board->harness_config->pin_relay_SBU1, !ignition_relay);
       set_gpio_output(current_board->harness_config->GPIO_relay_SBU2, current_board->harness_config->pin_relay_SBU2, !drive_relay);
-      if(lkas_acan_panda_mode) print("harness status normal...acan_panda_mode\n");
-      else print("harness status normal...\n");
+      print("harness status normal...\n");
     } else {
       set_gpio_output(current_board->harness_config->GPIO_relay_SBU1, current_board->harness_config->pin_relay_SBU1, !drive_relay);
       set_gpio_output(current_board->harness_config->GPIO_relay_SBU2, current_board->harness_config->pin_relay_SBU2, !ignition_relay);
