@@ -112,7 +112,7 @@ void set_safety_mode(uint16_t mode, uint16_t param) {
       break;
     default:
       print("safety mode other.... relay ON\n");
-      if (lkas_acan_panda_mode) harness.status = HARNESS_STATUS_NORMAL;
+      //if (lkas_acan_panda_mode) harness.status = HARNESS_STATUS_NORMAL;
       set_intercept_relay(true, false);
       heartbeat_counter = 0U;
       heartbeat_lost = false;
@@ -159,7 +159,7 @@ void tick_handler(void) {
     fan_tick();
     usb_tick();
     harness_tick();
-    if (lkas_acan_panda_mode) harness.status = HARNESS_STATUS_NORMAL;
+    //if (lkas_acan_panda_mode) harness.status = HARNESS_STATUS_NORMAL;
     simple_watchdog_kick();
 
     // decimated to 1Hz

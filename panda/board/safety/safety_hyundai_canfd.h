@@ -471,7 +471,7 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
 static safety_config hyundai_canfd_init(uint16_t param) {
   hyundai_acan_panda = GET_FLAG(param, HYUNDAI_PARAM_ACAN_PANDA);
   if (hyundai_acan_panda) {
-      lkas_acan_panda_mode = true;
+      //lkas_acan_panda_mode = true;
       print("ACAN RED-PANDA MODE\n");
       return (safety_config) { NULL, 0, NULL, 0 };
   }
