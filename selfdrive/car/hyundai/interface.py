@@ -187,11 +187,7 @@ class CarInterface(CarInterfaceBase):
     if candidate in CANFD_CAR:
       cfgs = [get_safety_config(car.CarParams.SafetyModel.hyundaiCanfd), ]
       if CAN.ECAN >= 4:
-        if ret.extFlags & HyundaiExtFlags.ACAN_PANDA.value:
-          cfgs.insert(0, get_safety_config(car.CarParams.SafetyModel.hyundaiCanfd))
-          ret.safetyConfigs[0].safetyParam = 512
-        else:
-          cfgs.insert(0, get_safety_config(car.CarParams.SafetyModel.noOutput))
+       cfgs.insert(0, get_safety_config(car.CarParams.SafetyModel.noOutput))
       ret.safetyConfigs = cfgs
 
       if ret.flags & HyundaiFlags.CANFD_HDA2:
