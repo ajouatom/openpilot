@@ -474,6 +474,8 @@ static safety_config hyundai_canfd_init(uint16_t param) {
   if (hyundai_acan_panda) {
       //lkas_acan_panda_mode = true;
       print("ACAN RED-PANDA MODE\n");
+      controls_allowed = true;
+      acc_main_on = true;
       return (safety_config) { NULL, 0, NULL, 0 };
   }
 
