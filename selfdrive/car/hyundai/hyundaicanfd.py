@@ -180,8 +180,8 @@ def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_ov
     "aReqValue": a_val,
     "aReqRaw": a_raw,
     "VSetDis": set_speed,
-    "JerkLowerLimit": jerk_l, #jerk if enabled else 1,
-    "JerkUpperLimit": jerk_u, #3.0,
+    "JerkLowerLimit": jerk if enabled else 1,
+    "JerkUpperLimit": 3.0,
 
     "ACC_ObjDist": 1,
     "ObjValid": 0,
