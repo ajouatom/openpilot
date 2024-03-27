@@ -19,6 +19,9 @@ class CanBus(CanBusBase):
     if hda2 and Params().get_int("SccConnectedBus2") == 0:  #배선개조는 무조건 Bus0가 ECAN임.
       self._a, self._e = 0, 1
 
+    if Params().get_int("SccConnectedBus2") == 2:
+      self.offset = 0
+
     self._a += self.offset
     self._e += self.offset
     self._cam = 2 + self.offset
