@@ -35,46 +35,6 @@ BS_:
 
 BU_: XXX CAMERA FRONT_RADAR ADRV APRK
 
-BO_ 353 CANFD353: 24 XXX
- SG_ WORD0 : 0|16@1+ (1,0) [0|255] "" XXX
- SG_ COUNT : 16|8@1+ (1,0) [0|1016] "deg/s" XXX
- SG_ BYTE3 : 24|3@1+ (1,0) [0|255] "deg" XXX
- SG_ BIT27 : 27|1@1+ (1,0) [0|255] "deg" XXX
- SG_ WHAT28 : 28|4@1+ (1,0) [0|255] "deg" XXX
- SG_ BIT32 : 32|1@1+ (1,0) [0|65535] "" XXX
- SG_ BYTE4 : 33|7@1+ (1,0) [0|65535] "" XXX
- SG_ BYTE5 : 40|8@1+ (1,0) [0|255] "" XXX
- SG_ BYTE6 : 48|8@1+ (1,0) [0|1016] "deg/s" XXX
- SG_ BYTE7 : 56|8@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE8 : 64|8@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE9 : 72|8@1+ (1,0) [0|255] "deg" XXX
- SG_ DATA80 : 80|1@1+ (1,0) [0|255] "deg" XXX
- SG_ DATA81 : 81|1@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE10 : 82|6@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE11 : 88|8@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE12 : 96|8@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE13 : 104|8@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE14 : 112|8@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE15 : 120|8@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE16 : 128|8@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE17 : 136|8@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE18 : 144|8@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE19 : 152|8@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE20 : 160|8@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE21 : 168|8@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE22 : 176|8@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE23 : 184|8@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE24 : 192|8@1+ (1,0) [0|255] "deg" XXX
- SG_ DATA200 : 200|2@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE25 : 202|4@1+ (1,0) [0|255] "deg" XXX
- SG_ DATA206 : 206|2@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE26 : 208|8@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE27 : 216|8@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE28 : 224|8@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE29 : 232|8@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE30 : 240|8@1+ (1,0) [0|255] "deg" XXX
- SG_ BYTE31 : 248|8@1+ (1,0) [0|255] "deg" XXX
-
 BO_ 53 ACCELERATOR: 32 XXX
  SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
  SG_ COUNTER : 16|8@1+ (1,0) [0|255] "" XXX

@@ -38,11 +38,6 @@ class CanBus(CanBusBase):
   def CAM(self):
     return self._cam
 
-#def carrot_canfd353(packer, CAN, lat_active, canfd353_info):
-#  values = canfd353_info
-#  values['BIT27'] = 0# if lat_active else 0
-#  return packer.make_can_msg("CANFD353", CAN.ECAN, values)
-
 def create_steering_messages_scc2(packer, CP, CAN, enabled, lat_active, apply_steer, lfa_info):
 
   values = lfa_info
