@@ -146,6 +146,7 @@ def create_lfahda_cluster(packer, CAN, enabled):
 
 
 def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control, jerk_u, jerk_l, cruise_info_copy):
+  enabled = enabled or hud_control.softHold > 0
   jerk = 5
   jn = jerk / 50
   if not enabled or gas_override:
@@ -161,13 +162,14 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
   values["aReqValue"] = a_val
   values["aReqRaw"] = a_raw
   values["VSetDis"] = set_speed
-  values["JerkLowerLimit"] = jerk_l #jerk if enabled else 1
-  values["JerkUpperLimit"] = jerk_u #3.0
+  values["JerkLowerLimit"] = jerk if enabled else 1
+  values["JerkUpperLimit"] = 3.0
   values["DISTANCE_SETTING"] = hud_control.leadDistanceBars
 
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
 
 def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control, jerk_u, jerk_l):
+  enabled = enabled or hud_control.softHold > 0
   jerk = 5
   jn = jerk / 50
   if not enabled or gas_override:
