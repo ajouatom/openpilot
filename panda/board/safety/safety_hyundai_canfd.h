@@ -385,7 +385,7 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
           if (addr == 272 || addr == 80) { // || addr == 81) { // || addr == 866 || addr == 676) {
               last_ts_lkas_msg_acan = now;
               lkas_msg_acan_active = true;
-              print("blocking\n");
+              //print("blocking\n");
               bus_fwd = -1;
           }
       }
