@@ -346,7 +346,7 @@ class CarState(CarStateBase):
     # }} PFEIFER - AOL
     if self.CP.openpilotLongitudinalControl:
       # These are not used for engage/disengage since openpilot keeps track of state using the buttons
-      ret.cruiseState.enabled = True #cp.vl["TCS"]["ACC_REQ"] == 1
+      ret.cruiseState.enabled = cp.vl["TCS"]["ACC_REQ"] == 1
       ret.cruiseState.standstill = False
       #if ret.cruiseState.available:
       #  print("cruiseState.available = {},{}".format(ret.cruiseState.available, ret.cruiseState.enabled))
