@@ -267,7 +267,7 @@ void carrot_acan_function(int bus_num, CANPacket_t* to_send) {
 }
 
 void can_send(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook) {
-    carrot_acan_function(bus_number, to_push);    // carrot
+    //carrot_acan_function(bus_number, to_push);    // carrot
 
   if (skip_tx_hook || safety_tx_hook(to_push) != 0) {
     if (bus_number < PANDA_BUS_CNT) {

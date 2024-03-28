@@ -196,7 +196,11 @@ static uint32_t hyundai_canfd_get_checksum(const CANPacket_t *to_push) {
 }
 
 static void hyundai_canfd_rx_hook(const CANPacket_t *to_push) {
-  if (hyundai_acan_panda) return;
+    if (hyundai_acan_panda) {
+        controls_allowed = true;
+        acc_main_on = true;
+        return;
+    }
   int bus = GET_BUS(to_push);
   int addr = GET_ADDR(to_push);
 
