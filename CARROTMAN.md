@@ -7,7 +7,7 @@
    * 스마트폰에서 당근맨의 권한은 모두 허용
    * 네비게이션을 사용한다면?
      * adb shell pm grant com.ajouatom.carrotman android.permission.READ_LOGS
-     * [당근맨은 설치했고 잘돌아가는데 네비가 없어요!, 주행중인 당근파일럿 사진첨부합니다.](http://pf.kakao.com/_xbviqG/chat)
+     * 당근전용네비는 더이상 배포하지 않습니다.
            
  * SSH입력 (CarrotMan30 부터 선택입력)
    * SSH키 입력을 안해도 작동은 하지만, git명령시 용량이 큰경우 타임아웃에러는 발생할수 있음.
