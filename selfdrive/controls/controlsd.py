@@ -324,7 +324,7 @@ class Controls:
         safety_mismatch = pandaState.safetyModel != self.CP.safetyConfigs[i].safetyModel or \
                           pandaState.safetyParam != self.CP.safetyConfigs[i].safetyParam or \
                           pandaState.alternativeExperience != self.CP.alternativeExperience
-        if safety_mismatch and False:
+        if safety_mismatch:
           print(f"safetyModel{i} =  {pandaState.safetyModel}:{self.CP.safetyConfigs[i].safetyModel}")
           print(f"safetyParams{i} = {pandaState.safetyParam}:{self.CP.safetyConfigs[i].safetyParam}")
           print(f"alterExperience{i} = {pandaState.alternativeExperience}:{self.CP.alternativeExperience}")
