@@ -59,7 +59,6 @@ class CarrotMan:
         if isOnroadCount == 0:
           is_tmux_sent = False
         if isOnroadCount == 1 or testFirst:
-          print("PandaDebugConsole Started......#########################")
           self.carrot_panda_debug_thread.start()
           testFirst = False
 
@@ -128,7 +127,7 @@ class CarrotMan:
     ftp.quit()
 
   def carrot_panda_debug(self):
-    print("PandaDebugConsole Started......@@@@@@@@@@@@##########")
+    time.sleep(2)
     try:
       result = subprocess.run("/data/openpilot/selfdrive/debug/debug_console_carrot.py", shell=True)
     except Exception as e:
