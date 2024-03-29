@@ -15,6 +15,7 @@ if __name__ == "__main__":
 
   start_time = time.monotonic()
   timeout = 30.0
+  print("Carrot Debug Console..... ^^^^ ")
   while True:
     if time.monotonic() - start_time > timeout:
       print("timeout")
