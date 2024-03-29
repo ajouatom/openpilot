@@ -48,7 +48,7 @@ if __name__ == "__main__":
               break;
             ret = panda.serial_read(port_number)
             if len(ret) > 0:
-              sys.stdout.write(f"[{i}]" + setcolor[i] + ret.decode('ascii') + unsetcolor)
+              sys.stdout.write(f"[{i}][" + setcolor[i] + ret.decode('ascii') + unsetcolor + "]")
               sys.stdout.flush()
             else:
               break
