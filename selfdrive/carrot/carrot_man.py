@@ -38,8 +38,6 @@ class CarrotMan:
     is_tmux_sent = False
     sm = messaging.SubMaster(['deviceState'])
 
-    testFirst = True
-
     while True:
       sm.update(0)
 
@@ -58,9 +56,8 @@ class CarrotMan:
         isOnroadCount = isOnroadCount + 1 if self.params.get_bool("IsOnroad") else 0
         if isOnroadCount == 0:
           is_tmux_sent = False
-        if isOnroadCount == 1 or testFirst:
+        if isOnroadCount == 1:
           self.carrot_panda_debug_thread.start()
-          testFirst = False
 
         network_type = sm['deviceState'].networkType# if not force_wifi else NetworkType.wifi
         networkConnected = False if network_type == NetworkType.none else True
@@ -127,7 +124,7 @@ class CarrotMan:
     ftp.quit()
 
   def carrot_panda_debug(self):
-    time.sleep(2)
+    #time.sleep(2)
     try:
       result = subprocess.run("/data/openpilot/selfdrive/debug/debug_console_carrot.py", shell=True)
     except Exception as e:
