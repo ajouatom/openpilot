@@ -58,7 +58,7 @@ class CarrotMan:
         isOnroadCount = isOnroadCount + 1 if self.params.get_bool("IsOnroad") else 0
         if isOnroadCount == 0:
           is_tmux_sent = False
-        elif isOnroadCount == 1 or testFirst:
+        if isOnroadCount == 1 or testFirst:
           print("PandaDebugConsole Started......#########################")
           self.carrot_panda_debug_thread.start()
           testFirst = False
