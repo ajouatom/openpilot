@@ -334,7 +334,7 @@ class Controls:
       # safety mismatch allows some time for boardd to set the safety mode and publish it back from panda
       if (safety_mismatch and self.sm.frame*DT_CTRL > 10.) or pandaState.safetyRxChecksInvalid or self.mismatch_counter >= 200:
         if self.rx_checks_invalid_count < 3:
-          #print(f"safetyRxChecksInvalid = {pandaState.safetyRxChecksInvalid}, mismatch_counter = {self.mismatch_counter}")
+          print(f"safetyRxChecksInvalid = {pandaState.safetyRxChecksInvalid}, mismatch_counter = {self.mismatch_counter}")
           self.rx_checks_invalid_count += 1
         self.events.add(EventName.controlsMismatch)
       else:
