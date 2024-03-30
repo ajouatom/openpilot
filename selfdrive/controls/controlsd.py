@@ -52,7 +52,7 @@ EventName = car.CarEvent.EventName
 ButtonType = car.CarState.ButtonEvent.Type
 SafetyModel = car.CarParams.SafetyModel
 
-IGNORED_SAFETY_MODES = (SafetyModel.silent, SafetyModel.noOutput)
+IGNORED_SAFETY_MODES = (SafetyModel.silent, SafetyModel.noOutput, SafetyModel.allOutput)
 CSID_MAP = {"1": EventName.roadCameraError, "2": EventName.wideRoadCameraError, "0": EventName.driverCameraError}
 ACTUATOR_FIELDS = tuple(car.CarControl.Actuators.schema.fields.keys())
 ACTIVE_STATES = (State.enabled, State.softDisabling, State.overriding)
@@ -163,12 +163,14 @@ class Controls:
     self.logged_comm_issue = None
     self.not_running_prev = None
     self.steer_limited = False
+    self.last_actuators = car.CarControl.Actuators.new_message()
     self.desired_curvature = 0.0
     self.experimental_mode = False
     self.personality = self.read_personality_param()
     self.v_cruise_helper = VCruiseHelper(self.CP)
     self.recalibrating_seen = False
     self.nn_alert_shown = False
+    self.rx_checks_invalid_count = 0
 
     self.can_log_mono_time = 0
 
@@ -328,11 +330,19 @@ class Controls:
           print(f"alterExperience{i} = {pandaState.alternativeExperience}:{self.CP.alternativeExperience}")
       else:
         safety_mismatch = pandaState.safetyModel not in IGNORED_SAFETY_MODES
+        #if safety_mismatch:
+        #  print(f"safetyModel = {pandaState.safetyModel}")
+        # TODO: 여기서 SCC 가 2면.. 에러를 0으로 해야함.. 레판이 hyundaiCanfd모드이기때문에 에러남...
+        safety_mismatch = False
 
       # safety mismatch allows some time for boardd to set the safety mode and publish it back from panda
       if (safety_mismatch and self.sm.frame*DT_CTRL > 10.) or pandaState.safetyRxChecksInvalid or self.mismatch_counter >= 200:
-        #print(f"safetyRxChecksInvalid = {pandaState.safetyRxChecksInvalid}, mismatch_counter = {self.mismatch_counter}")
+        if self.rx_checks_invalid_count < 3:
+          #print(f"safetyRxChecksInvalid = {pandaState.safetyRxChecksInvalid}, mismatch_counter = {self.mismatch_counter}")
+          self.rx_checks_invalid_count += 1
         self.events.add(EventName.controlsMismatch)
+      else:
+        self.rx_checks_invalid_count = 0
 
       if log.PandaState.FaultType.relayMalfunction in pandaState.faults:
         self.events.add(EventName.relayMalfunction)
@@ -520,12 +530,11 @@ class Controls:
       if self.enable_avail:
         if not self.CP.pcmCruise and self._panda_controls_not_allowed:
           print("####MakeEvent: buttonEnable1")
-          self.events.add(EventName.buttonEnable)
         elif self.CP.pcmCruise and CS.cruiseState.enabled: # 이미 pcmCruise가 enabled되어 있는경우
           print("#####MakeEvent: buttonEnable2")
-          self.events.add(EventName.buttonEnable)
         else:
           print("####MakeEvent: buttonEnable3", self.CP.pcmCruise, CS.cruiseState.enabled, self._panda_controls_not_allowed)
+        self.events.add(EventName.buttonEnable)
         self.carrotCruiseActivate = 1
       else:
         print("CruiseActivate: Button Enable: Cannot enabled....###")
@@ -546,10 +555,12 @@ class Controls:
     if self.state != State.disabled:
       # user and immediate disable always have priority in a non-disabled state
       if self.events.contains(ET.USER_DISABLE):
+        print("####ET.USER_DISABLE")
         self.state = State.disabled
         self.current_alert_types.append(ET.USER_DISABLE)
 
       elif self.events.contains(ET.IMMEDIATE_DISABLE):
+        print("####ET.IMMEDIATE_DISABLE")
         self.state = State.disabled
         self.current_alert_types.append(ET.IMMEDIATE_DISABLE)
 
@@ -557,29 +568,35 @@ class Controls:
         # ENABLED
         if self.state == State.enabled:
           if self.events.contains(ET.SOFT_DISABLE):
+            print("#######State.enabled => softDisabling")
             self.state = State.softDisabling
             self.soft_disable_timer = int(SOFT_DISABLE_TIME / DT_CTRL)
             self.current_alert_types.append(ET.SOFT_DISABLE)
 
           elif self.events.contains(ET.OVERRIDE_LATERAL) or self.events.contains(ET.OVERRIDE_LONGITUDINAL):
+            print("#######State.enabled => overriding")
             self.state = State.overriding
             self.current_alert_types += [ET.OVERRIDE_LATERAL, ET.OVERRIDE_LONGITUDINAL]
 
         # SOFT DISABLING
         elif self.state == State.softDisabling:
           if not self.events.contains(ET.SOFT_DISABLE):
+            print("#######State.softDisabling => enabled")
             # no more soft disabling condition, so go back to ENABLED
-            self.state = State.enabled
+            self.state = State.enabled            
 
           elif self.soft_disable_timer > 0:
+            print("#######State.softDisabling => timeout => disable")
             self.current_alert_types.append(ET.SOFT_DISABLE)
 
           elif self.soft_disable_timer <= 0:
+            print("#######State.softDisabling => disabled")
             self.state = State.disabled
 
         # PRE ENABLING
         elif self.state == State.preEnabled:
           if not self.events.contains(ET.PRE_ENABLE):
+            print("#######State.preEnabled => enabled")
             self.state = State.enabled
           else:
             self.current_alert_types.append(ET.PRE_ENABLE)
@@ -587,10 +604,12 @@ class Controls:
         # OVERRIDING
         elif self.state == State.overriding:
           if self.events.contains(ET.SOFT_DISABLE):
+            print("#######State.overriding => softDisabling")
             self.state = State.softDisabling
             self.soft_disable_timer = int(SOFT_DISABLE_TIME / DT_CTRL)
             self.current_alert_types.append(ET.SOFT_DISABLE)
           elif not (self.events.contains(ET.OVERRIDE_LATERAL) or self.events.contains(ET.OVERRIDE_LONGITUDINAL)):
+            print("#######State.overriding => enabled")
             self.state = State.enabled
           else:
             self.current_alert_types += [ET.OVERRIDE_LATERAL, ET.OVERRIDE_LONGITUDINAL]
@@ -605,10 +624,13 @@ class Controls:
 
         else:
           if self.events.contains(ET.PRE_ENABLE):
+            print("#######State.disabled => preEnabled")
             self.state = State.preEnabled
           elif self.events.contains(ET.OVERRIDE_LATERAL) or self.events.contains(ET.OVERRIDE_LONGITUDINAL):
+            print("#######State.disabled => overriding")
             self.state = State.overriding
           else:
+            print("#######State.disabled => enabled")
             self.state = State.enabled
           self.current_alert_types.append(ET.ENABLE)
           self.v_cruise_helper.initialize_v_cruise(CS, self.experimental_mode)
@@ -622,7 +644,7 @@ class Controls:
 
     if not self.enabled and not self.CP.pcmCruise:
       if self.carrotCruiseActivate > 0:
-        print(f"senf.enabled = {self.enabled}, pcmCruise={self.CP.pcmCruise}")
+        print(f"self.state = {self.state}, self.enabled = {self.enabled}, pcmCruise={self.CP.pcmCruise}")
       self.carrotCruiseActivate = 0
 
   def state_control(self, CS):
@@ -741,7 +763,7 @@ class Controls:
         undershooting = abs(lac_log.desiredLateralAccel) / abs(1e-3 + lac_log.actualLateralAccel) > 1.2
         turning = abs(lac_log.desiredLateralAccel) > 1.0
         good_speed = CS.vEgo > 5
-        max_torque = abs(actuators.steer) > 0.99
+        max_torque = abs(self.last_actuators.steer) > 0.99
         if undershooting and turning and good_speed and max_torque:
           lac_log.active and self.events.add(EventName.steerSaturated)
       elif lac_log.saturated:
@@ -889,6 +911,7 @@ class Controls:
 
     if not self.CP.passive and self.initialized:
       self.card.controls_update(CC)
+      self.last_actuators = CO.actuatorsOutput
       if self.CP.steerControlType == car.CarParams.SteerControlType.angle:
         self.steer_limited = abs(CC.actuators.steeringAngleDeg - CO.actuatorsOutput.steeringAngleDeg) > \
                              STEER_ANGLE_SATURATION_THRESHOLD

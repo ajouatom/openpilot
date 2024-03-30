@@ -22,6 +22,9 @@ class CarrotMan:
     self.carrot_zmq_thread.daemon = True
     self.carrot_zmq_thread.start()
 
+    self.carrot_panda_debug_thread = threading.Thread(target=self.carrot_panda_debug, args=[])
+    self.carrot_panda_debug_thread.daemon = True
+
 
   def carrot_man_thread(self):
     context = zmq.Context()
@@ -53,6 +56,8 @@ class CarrotMan:
         isOnroadCount = isOnroadCount + 1 if self.params.get_bool("IsOnroad") else 0
         if isOnroadCount == 0:
           is_tmux_sent = False
+        if isOnroadCount == 1:
+          self.carrot_panda_debug_thread.start()
 
         network_type = sm['deviceState'].networkType# if not force_wifi else NetworkType.wifi
         networkConnected = False if network_type == NetworkType.none else True
@@ -117,6 +122,14 @@ class CarrotMan:
         print(f"ftp params sending error...: {e}")
 
     ftp.quit()
+
+  def carrot_panda_debug(self):
+    #time.sleep(2)
+    try:
+      result = subprocess.run("/data/openpilot/selfdrive/debug/debug_console_carrot.py", shell=True)
+    except Exception as e:
+      print("debug_console error")
+      return
 
   def carrot_cmd_zmq(self):
 

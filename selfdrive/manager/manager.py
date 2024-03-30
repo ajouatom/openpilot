@@ -23,19 +23,8 @@ from openpilot.system.version import is_dirty, get_commit, get_version, get_orig
                            get_normalized_origin, terms_version, training_version, \
                            is_tested_branch, is_release_branch, get_commit_date
 
-
-
-def manager_init() -> None:
-  save_bootlog()
-
-  params = Params()
-  params.clear_all(ParamKeyType.CLEAR_ON_MANAGER_START)
-  params.clear_all(ParamKeyType.CLEAR_ON_ONROAD_TRANSITION)
-  params.clear_all(ParamKeyType.CLEAR_ON_OFFROAD_TRANSITION)
-  if is_release_branch():
-    params.clear_all(ParamKeyType.DEVELOPMENT_ONLY)
-
-  default_params: list[tuple[str, str | bytes]] = [
+def get_default_params():
+  default_params : list[tuple[str, str | bytes]] = [
     ("CompletedTrainingVersion", "0"),
     ("DisengageOnAccelerator", "0"),
     ("GsmMetered", "1"),
@@ -80,40 +69,51 @@ def manager_init() -> None:
     ("ShowPathColorLane", "13"),
     ("ShowPathWidth", "100"),
     ("ShowPlotMode", "0"),
-    ("AutoResumeFromGasSpeed", "0"),
-    ("AutoCancelFromGasMode", "0"),    
-    ("AutoCruiseControl", "0"),    
+
+    ("AutoCruiseControl", "2"),    
+    ("AutoResumeFromGasSpeed", "30"),
+    ("AutoCancelFromGasMode", "2"),    
+    ("AutoResumeFromBrakeReleaseTrafficSign", "0"),
+    ("SoftHoldMode", "0"),       
+
+    ("AutoSpeedUptoRoadSpeedLimit", "100"),
+
     ("MapboxStyle", "0"),    
+
     ("AutoCurveSpeedLowerLimit", "30"),
     ("AutoCurveSpeedFactor", "120"),
     ("AutoCurveSpeedAggressiveness", "100"),
+
     ("AutoTurnControl", "0"),
+
     ("AutoLaneChangeSpeed", "20"),
     ("LaneChangeNeedTorque", "0"),
+
     ("AutoTurnControlSpeedLaneChange", "60"),
     ("AutoTurnControlSpeedTurn", "20"),
     ("AutoTurnControlTurnEnd", "6"),
     ("AutoTurnMapChange", "0"),
+
     ("AutoNaviSpeedCtrl", "1"),
-    ("AutoNaviSpeedCtrlEnd", "6"),
+    ("AutoNaviSpeedCtrlEnd", "7"),
     ("AutoNaviSpeedBumpTime", "1"),
     ("AutoNaviSpeedBumpSpeed", "35"),
     ("AutoNaviSpeedSafetyFactor", "105"),
-    ("AutoNaviSpeedDecelRate", "120"),
-    ("AutoResumeFromBrakeReleaseTrafficSign", "0"),
+    ("AutoNaviSpeedDecelRate", "200"),
+
     ("StartAccelApply", "0"),
     ("StopAccelApply", "0"),
     ("StoppingAccel", "-40"),
-    ("AutoSpeedUptoRoadSpeedLimit", "100"),
+
     ("ApplyLongDynamicCost", "0"), 
-    ("StopDistanceCarrot", "600"), 
+    ("StopDistanceCarrot", "550"), 
     ("ALeadTau", "120"), 
-    ("ALeadTauStart", "30"), 
+    ("ALeadTauStart", "40"), 
     ("CruiseButtonMode", "0"),      
     ("CruiseButtonTest1", "8"),      
     ("CruiseButtonTest2", "30"),      
     ("CruiseButtonTest3", "1"),      
-    ("CruiseSpeedUnit", "10"),      
+    ("CruiseSpeedUnit", "10"),
     ("MyDrivingMode", "3"),      
     ("MySafeModeFactor", "80"),      
     ("MyEcoModeFactor", "90"),  
@@ -143,10 +143,9 @@ def manager_init() -> None:
     ("TFollowGap3", "140"),
     ("TFollowGap4", "160"),
     ("HapticFeedbackWhenSpeedCamera", "0"),       
-    ("SoftHoldMode", "0"),       
     ("CruiseEcoControl", "2"),
     ("UseLaneLineSpeed", "0"),    
-    ("UseLaneLineDebug", "7"),    
+    ("UseLaneLineDebug", "0"),    
     ("AdjustLaneOffset", "0"),    
     ("AdjustCurveOffset", "0"),    
     ("PathOffset", "0"),  
@@ -157,8 +156,8 @@ def manager_init() -> None:
     ("CustomSteerMax", "0"),       
     ("CustomSteerDeltaUp", "0"),       
     ("CustomSteerDeltaDown", "0"),       
-    ("SpeedFromPCM", "1"),       
-    ("SteerActuatorDelay", "30"),       
+    ("SpeedFromPCM", "2"),       
+    ("SteerActuatorDelay", "45"),       
     ("CruiseOnDist", "0"),
     ("MSLCEnabled", "0"),
     ("NoLogging", "0"),
@@ -174,6 +173,34 @@ def manager_init() -> None:
     ("NNFF", "0"),
     ("UseLateralJerk", "0"),
   ]
+  return default_params
+
+def set_default_params():
+  params = Params()
+  default_params = get_default_params()
+  try:
+    default_params.remove(("GMapKey", "0"))
+    defulat_params.remove(("CompletedTrainingVersion", "0"))
+    default_params.remove(("LanguageSetting", "main_en"))
+    default_params.remove(("GsmMetered", "1"))
+  except ValueError:
+    pass
+  for k, v in default_params:
+    params.put(k, v)
+    print(f"SetToDefault[{k}]={v}")
+
+def manager_init() -> None:
+  save_bootlog()
+
+  params = Params()
+  params.clear_all(ParamKeyType.CLEAR_ON_MANAGER_START)
+  params.clear_all(ParamKeyType.CLEAR_ON_ONROAD_TRANSITION)
+  params.clear_all(ParamKeyType.CLEAR_ON_OFFROAD_TRANSITION)
+  if is_release_branch():
+    params.clear_all(ParamKeyType.DEVELOPMENT_ONLY)
+
+  default_params = get_default_params()
+
   if not PC:
     default_params.append(("LastUpdateTime", datetime.datetime.utcnow().isoformat().encode('utf8')))
 

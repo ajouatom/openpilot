@@ -286,6 +286,13 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
     }
   });
 
+  //addItem(horizontal_line());
+  addItem(new CarrotParamsControl(0, "기본값설정", "모든설정을 기본값으로", "../assets/offroad/icon_shell.png", false));
+  addItem(new CarrotParamsControl(10, "롱컨배선개조 (HKG)", "레이더롱컨이 되도록 배선을 개조하였음", "../assets/offroad/icon_shell.png"));
+  addItem(new CarrotParamsControl(11, "레이더트랙사용 (HKG)", "레이더트랙이 지원되는 차량만 선택", "../assets/offroad/icon_shell.png"));
+  addItem(new CarrotParamsControl(20, "비젼롱컨사용 (HKG)", "비젼을 이용한 롱컨을 이용중임, (카니발4_HDA2, 아이오닉6 X)", "../assets/offroad/icon_shell.png"));
+  addItem(new CarrotParamsControl(30, "자동크루즈 사용 (HKG)", "롱컨이 가능한차량만 가능함", "../assets/offroad/icon_shell.png"));
+
   // power buttons
   QHBoxLayout *power_layout = new QHBoxLayout();
   power_layout->setSpacing(30);
@@ -322,7 +329,7 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   const QVector<DefaultSetting> settings = {
       {"TM_HEV_SCC2", "TM_HEV_2022, scc2, radarTracks, radar Long", "apilot_default_tm_hev_scc2.json"},
       {"DH_SCC2", "DH, scc2, radar Long", "apilot_default_dh_scc2.json"},
-      {"EV6_VLONG", "EV6 vision Long", "apilot_default_ev6_vlong.json"},
+      //{"EV6_VLONG", "EV6 vision Long", "apilot_default_ev6_vlong.json"},
       //{"IONIQ5_VLONG", "IONIQ5 vision Long", "apilot_default_ioniq5_vlong.json"},
       {"GM_VOLT", "GM VOLT radar Long", "apilot_default_volt_ev.json"}
   };
@@ -339,7 +346,6 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
           });
       addItem(button);
   }
-
 
 }
 
@@ -768,7 +774,7 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
     hyundaiToggles = new ListWidget(this);
     hyundaiToggles->addItem(new CValueControl("AutoCruiseControl", "(HKG) Auto Cruise control", "Softhold, Auto Cruise ON/OFF control", "../assets/offroad/icon_road.png", 0, 3, 1));
     hyundaiToggles->addItem(new CValueControl("CruiseOnDist", "CRUISE: Auto ON distance(0cm)", "When GAS/Brake is OFF, Cruise ON when the lead car gets closer or warning (- value).", "../assets/offroad/icon_road.png", -500, 500, 50));
-    hyundaiToggles->addItem(new ParamControl("SccConnectedBus2", "(HKG) SCC Module connected BUS2", "", "../assets/offroad/icon_warning.png", this));
+    hyundaiToggles->addItem(new CValueControl("SccConnectedBus2", "(HKG) SCC Module connected BUS2 ", "SCC(ADAS)Module conntected bus2(1), more red panda installed(2)", "../assets/offroad/icon_warning.png", 0, 2, 0));
     hyundaiToggles->addItem(new ParamControl("CanfdHDA2", "(HKG) CANFD HDA2 support", "", "../assets/offroad/icon_warning.png", this));
     hyundaiToggles->addItem(new ParamControl("EnableRadarTracks", "(HKG) EnableRadarTracks", "Activate Radartracks at startup", "../assets/offroad/icon_warning.png", this));
     hyundaiToggles->addItem(new CValueControl("MaxAngleFrames", "MaxAngleFrames(89)", "89:기본, 스티어계기판에러시 85~87", "../assets/offroad/icon_road.png", 80, 100, 1));
@@ -934,6 +940,92 @@ void CValueControl::showEvent(QShowEvent* event) {
     refresh();
 }
 
+CarrotParamsControl::CarrotParamsControl(int mode, const QString& title, const QString& desc, const QString& icon, bool disp_no) : AbstractControl(title, desc, icon)
+{
+    m_pressed = 0;
+    label.setAlignment(Qt::AlignVCenter | Qt::AlignRight);
+    label.setStyleSheet("color: #e0e879");
+    hlayout->addWidget(&label);
+    btnYes.setStyleSheet(R"(
+    padding: 0;
+    border-radius: 50px;
+    font-size: 35px;
+    font-weight: 500;
+    color: #E4E4E4;
+    background-color: #393939;
+  )");
+    if (disp_no) {
+        btnNo.setStyleSheet(R"(
+        padding: 0;
+        border-radius: 50px;
+        font-size: 35px;
+        font-weight: 500;
+        color: #E4E4E4;
+        background-color: #393939;
+      )");
+        btnNo.setFixedSize(150, 100);
+    }
+    btnYes.setFixedSize(150, 100);
+    hlayout->addWidget(&btnYes);
+    if(disp_no) hlayout->addWidget(&btnNo);
+
+    QObject::connect(&btnYes, &QPushButton::released, [=]() {
+        //Params().putInt(m_params.toStdString(), value);
+        m_pressed = 1;
+        SetParams(mode);
+        refresh();
+    });
+
+    if (disp_no) {
+        QObject::connect(&btnNo, &QPushButton::released, [=]() {
+            m_pressed = -1;
+            SetParams(mode);
+            refresh();
+            });
+    }
+    refresh();
+}
+
+void CarrotParamsControl::refresh()
+{
+    if(m_pressed != 0) label.setText((m_pressed>0)?"Y":"N");
+    btnNo.setText("No");
+    btnYes.setText("Yes");
+}
+void CarrotParamsControl::showEvent(QShowEvent* event) {
+    refresh();
+}
+void CarrotParamsControl::SetParams(int mode) {
+    //addItem(new CarrotParamsControl(0, "기본값설정", "모든설정을 기본값으로", "../assets/offroad/icon_shell.png", false));
+    //addItem(new CarrotParamsControl(10, "롱컨배선개조 (HKG)", "레이더롱컨이 되도록 배선을 개조하였음 ", "../assets/offroad/icon_shell.png"));
+    //addItem(new CarrotParamsControl(20, "비젼롱컨사용 (HKG)", "비젼을 이용한 롱컨을 이용중임, (카니발4_HDA2, 아이오닉6 X)", "../assets/offroad/icon_shell.png"));
+    //addItem(new CarrotParamsControl(30, "자동크루즈 사용 (HKG)", "롱컨이 가능한차량만 가능함", "../assets/offroad/icon_shell.png"));
+    printf("mode = %d, pressed = %d\n", mode, m_pressed);
+    bool on = (m_pressed > 0) ? true : false;
+
+    if (mode == 0) { // set default
+        QProcess process;
+        process.setWorkingDirectory("/data/openpilot/selfdrive");
+        process.start("/bin/sh", QStringList{ "-c", QString("python ./params_default.py") });
+        process.waitForFinished();
+    }
+    else if (mode == 10) {   // 롱컨배선개조
+        Params().put("SccConnectedBus2", (on) ? "1" : "0");
+    }
+    else if (mode == 11) {   // 레이더트랙지원
+        Params().put("EnableRadarTracks", (on) ? "1" : "0");
+    }
+    else if (mode == 20) {   // 비젼롱컨 사용
+        Params().put("ALeadTau", (on) ? "120":"30");
+        Params().put("ALeadTauStart", (on) ? "40" : "40");
+    }
+    else if (mode == 30) {      // 자동크루즈사용
+        Params().put("AutoCruiseControl", (on) ? "2" : "0");
+        Params().put("SoftHoldMode", (on) ? "2" : "0");
+
+    }
+
+}
 
 static QStringList get_list(const char* path)
 {

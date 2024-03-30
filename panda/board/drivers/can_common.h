@@ -256,12 +256,21 @@ bool can_check_checksum(CANPacket_t *packet) {
 }
 
 void can_send(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook) {
+
   if (skip_tx_hook || safety_tx_hook(to_push) != 0) {
     if (bus_number < PANDA_BUS_CNT) {
       // add CAN packet to send queue
       if ((bus_number == 3U) && (bus_config[3].can_num_lookup == 0xFFU)) {
         gmlan_send_errs += bitbang_gmlan(to_push) ? 0U : 1U;
       } else {
+          extern bool lkas_msg_acan_active;
+          // carrot: 0x362, 0x2a4, 56,57,58,59,60,61,62,63 => make zero
+          if (lkas_msg_acan_active && (to_push->addr == 866 || to_push->addr == 676) && bus_number == 0) {
+              to_push->data[0] = 0x00;
+              to_push->data[1] = 0x00;
+              to_push->data[7] = 0x00;
+              can_set_checksum(to_push);
+          }
         tx_buffer_overflow += can_push(can_queues[bus_number], to_push) ? 0U : 1U;
         process_can(CAN_NUM_FROM_BUS_NUM(bus_number));
       }

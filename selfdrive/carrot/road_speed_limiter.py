@@ -868,19 +868,22 @@ def main():
         v_ego = CS.vEgo if CS is not None else float(nPosSpeed)/3.6
         if sdi_valid:
           if not location_valid and CS is not None:
-            diff_angle = nPosAngle%360 - bearing%360;
+            diff_angle = nPosAngle - bearing;
+            while diff_angle < 0.0:
+              diff_angle += 360
             diff_angle = (diff_angle + 180) % 360 - 180;
             if abs(diff_angle) > 20 and CS.vEgo > 1.0 and abs(CS.steeringAngleDeg) < 2.0:
               diff_angle_count += 1
             else:
               diff_angle_count = 0
-            if diff_angle_count > 20:
+            print("{:.1f} bearing_diff[{}] = {:.1f} = {:.1f} - {:.1f}, v={:.1f},st={:.1f}".format(bearing_offset, diff_angle_count, diff_angle, nPosAngle, bearing, CS.vEgo*3.6, CS.steeringAngleDeg))
+            if diff_angle_count > 2:
               bearing_offset = nPosAngle - bearing
               print("bearing_offset = {:.1f} = {:.1f} - {:.1f}".format(bearing_offset, nPosAngle, bearing))
           xPosValidCount = 20
           #n초 통신 지연시간이 있다고 가정하고 좀더 진행한것으로 처리함.
           dt = 0 #(unix_now - timeStamp / 1000.) if timeStamp > 0 else 0.1
-          dt += 0.5  #가상으로 0.5초만큼 더 진행한것으로 
+          dt += 0.2  #가상으로 0.5초만큼 더 진행한것으로 
           vpPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), v_ego, bearing + bearing_offset, dt)
           last_update_gps_time = now
           last_calculate_gps_time = now

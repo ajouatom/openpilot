@@ -395,6 +395,10 @@ class CarrotNaviSpeedManager(CarrotBase):
     self.autoNaviSpeedCtrl = self.params.get_int("AutoNaviSpeedCtrl")
 
   def _update(self, sm, v_cruise_kph, v_cruise_kph_prev):
+
+    if self.autoNaviSpeedCtrl == 0:
+      return v_cruise_kph
+
     v_ego = sm['carState'].vEgoCluster
     CS = sm['carState']
     msg = self.roadLimitSpeed = sm['roadLimitSpeed']

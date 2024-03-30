@@ -991,7 +991,7 @@ void DrawApilot::drawConnInfo(const UIState* s) {
     //const auto car_params = sm["carParams"].getCarParams();
     const auto road_limit_speed = sm["roadLimitSpeed"].getRoadLimitSpeed();
     int radar_tracks = params.getBool("EnableRadarTracks");
-    int sccBus = params.getBool("SccConnectedBus2");
+    int sccBus = params.getInt("SccConnectedBus2");
     int activeNDA = road_limit_speed.getActive();
 
     static int activeOSM = 0;

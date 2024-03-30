@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 import capnp
 from cereal import messaging, log, car
-from openpilot.common.numpy_fast import interp
+from openpilot.common.numpy_fast import interp, clip
 from openpilot.common.params import Params
 from openpilot.common.realtime import DT_CTRL, Ratekeeper, Priority, config_realtime_process
 from openpilot.common.swaglog import cloudlog
@@ -333,126 +333,99 @@ def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego):
 
   return [ll,lc,lr, leadLeft, leadRight]
 
+LEAD_KALMAN_SPEED, LEAD_KALMAN_ACCEL = 0, 1
+def lead_kf(v_lead: float, a_lead: float, dt: float = 0.05):
+  # Lead Kalman Filter params, calculating K from A, C, Q, R requires the control library.
+  # hardcoding a lookup table to compute K for values of radar_ts between 0.01s and 0.2s
+  assert dt > .01 and dt < .2, "Radar time step must be between .01s and 0.2s"
+  A = [[1.0, dt], [0.0, 1.0]]
+  C = [1.0, 0.0]
+  #Q = np.matrix([[10., 0.0], [0.0, 100.]])
+  #R = 1e3
+  #K = np.matrix([[ 0.05705578], [ 0.03073241]])
+  dts = [dt * 0.01 for dt in range(1, 21)]
+  K0 = [0.12287673, 0.14556536, 0.16522756, 0.18281627, 0.1988689,  0.21372394,
+        0.22761098, 0.24069424, 0.253096,   0.26491023, 0.27621103, 0.28705801,
+        0.29750003, 0.30757767, 0.31732515, 0.32677158, 0.33594201, 0.34485814,
+        0.35353899, 0.36200124]
+  K1 = [0.29666309, 0.29330885, 0.29042818, 0.28787125, 0.28555364, 0.28342219,
+        0.28144091, 0.27958406, 0.27783249, 0.27617149, 0.27458948, 0.27307714,
+        0.27162685, 0.27023228, 0.26888809, 0.26758976, 0.26633338, 0.26511557,
+        0.26393339, 0.26278425]
+  K = [[interp(dt, dts, K0)], [interp(dt, dts, K1)]]
+
+  kf = KF1D([[v_lead], [a_lead]], A, C, K)
+  return kf
+
+
 class VisionTrack:
   def __init__(self, radar_ts):
     self.radar_ts = 0.05
-    self.aLeadTauInit = float(Params().get_int("ALeadTau")) / 100. 
-    self.aLeadTauStart = float(Params().get_int("ALeadTauStart")) / 100.
-    self.aLeadFilter = StreamingMovingAverage(1)
-    self.vLeadFilter = StreamingMovingAverage(1)
-    self.dRelFilter = StreamingMovingAverage(5)
-    self.reset()
-
-  def reset(self):
     self.dRel = 0.0
     self.yRel = 0.0
-    self.vRel = 0.0
     self.vLead = 0.0
     self.aLead = 0.0
-    self.aLeadTau = self.aLeadTauInit
-    self.prob = 0.0
-    self.aLeadFilter.set(0.0)
-    self.vLeadFilter.set(0.0)
-    self.dRelFilter.set(0.0)
-    self.active_count = -1
-    self.aLeadK = 0.0
     self.vLeadK = 0.0
-    self.vRelK = 0.0
-    self.P = 0.3 #1.0
-    self.P_v = 0.3 #1.0
-    self.v_ego = 0.0
-    self.params = Params()
+    self.aLeadK = 0.0
+    self.aLeadTau = _LEAD_ACCEL_TAU
+    self.prob = 0.0
+    self.status = False
+    self.aLeadTauInit = float(Params().get_int("ALeadTau")) / 100. 
+    self.aLeadTauStart = float(Params().get_int("ALeadTauStart")) / 100.
 
-  # 프로세스노이즈Q: 값을 올리면 측정값에 대해 민감하게 반응함, 응답성이 빨라짐.
-  # 측정노이즈R: 값을 낮추면 측정값에 대해 더 신뢰하게 됨.
-  def v_rel_k(self, vel, d_rel):
-    vRelK = self.vRelK
-    Q = 0.15 #interp(d_rel, [0.0, 50.0, 100.0], [0.18, 0.12, 0.01]) #0.15 #0.01 #0.1   
-    R = 5.0 #interp(d_rel, [0.0, 50.0, 100.0], [5.0, 6.0, 8.0]) #15.0 #5.0
-    P_predict = self.P_v + Q
-    z = vel / self.radar_ts
-    K = P_predict / (P_predict + R)
-    self.vRelK = vRelK + K * (z - vRelK)
-    self.P_v = (1 - K) * P_predict
-
-  def a_lead_k(self, accel):
-    aLeadK = self.aLeadK
-    Q = 0.05 #0.01
-    R = 10.0 #10.0
-    P_predict = self.P + Q
-    z = accel / self.radar_ts
-    K = P_predict / (P_predict + R)
-    self.aLeadK = aLeadK + K * (z - aLeadK)
-    self.P = (1 - K) * P_predict
-
-  def update(self, lead_msg, model_v_ego, v_ego):
-    self.aLeadTauInit = self.params.get_int("ALeadTau") / 100. 
-    self.aLeadTauStart = self.params.get_float("ALeadTauStart") / 100.
-    self.mixRadarInfo = self.params.get_int("MixRadarInfo")
-    #lead_v_rel_pred = lead_msg.v[0] - model_v_ego
-    lead_v_rel_pred = lead_msg.v[0] - self.vLead
-    self.prob = lead_msg.prob
-    self.v_ego = v_ego
-    if self.prob > .5:
-      dRel = float(lead_msg.x[0]) - RADAR_TO_CAMERA
-      self.yRel = float(-lead_msg.y[0])
-      self.vRel = lead_v_rel_pred
-      if self.active_count < 0 or self.prob < 0.9 or dRel > 60:
-        #vLead = float(v_ego + lead_v_rel_pred)
-        vLead = lead_msg.v[0] #float(v_ego + lead_v_rel_pred)
-        self.vLead = self.vLeadFilter.set(vLead)
-        self.aLead = self.aLeadFilter.set(lead_msg.a[0])
-        dRel = self.dRelFilter.set(dRel)
-        self.aLeadK = self.aLead
-        #self.a_lead_k(0.0)
-        self.vRelK = 0.0
-        self.vLeadK = self.vLead
-        #self.v_rel_k(0.0, 1.0)
-      else:
-        dRel = self.dRelFilter.process(dRel, median = True)
-        #vLead = self.vLeadFilter.process(float(v_ego + lead_v_rel_pred))
-        vLead = self.vLeadFilter.process(lead_msg.v[0])
-        self.a_lead_k(vLead - self.vLead)
-        if abs(dRel - self.dRel) > 10.0:
-          self.vRelK = 0.0          
-          self.vLeadK = vLead
-          #self.v_rel_k(dRel - self.dRel)
-        else:
-          self.v_rel_k(dRel - self.dRel, dRel)
-          self.vLeadK = v_ego + self.vRelK
-        self.vLead = vLead
-        self.aLead = self.aLeadFilter.process(float(lead_msg.a[0]), median = True)
-        self.aLead = float(lead_msg.a[0])
-      self.dRel = dRel
-
-      #print("{:.2f}, {:.3f}".format(self.prob, self.P))
-      if abs(self.aLead) < self.aLeadTauStart:
-        self.aLeadTau = self.aLeadTauInit
-      else:
-        self.aLeadTau = min(self.aLeadTau * 0.9, self.aLeadTauInit)
-      self.active_count += 1
-    else:
-      if self.active_count >= 0:
-        self.reset()
-      
+    self.kf: KF1D | None = None
 
   def get_lead(self):
     return {
       "dRel": self.dRel,
       "yRel": self.yRel,
-      "vRel": self.vRel,
-      "vLead": self.vLead if self.mixRadarInfo in [0, 1, 2] else self.vLeadK if self.active_count > 1 / self.radar_ts else self.vLead,
-      "vLeadK": self.vLeadK if self.active_count > 1 / self.radar_ts else self.vLead,
-      "aLeadK": self.aLead, # if self.mixRadarInfo in [0, 1, 2] else self.aLead if abs(self.aLead) < abs(self.aLeadK) else self.aLeadK, 
-      #"aLeadK": self.aLeadK,# if abs(self.aLead) < abs(self.aLeadK) else self.aLeadK, 
+      "vRel": 0, #self.vRel,
+      "vLead": self.vLead,
+      "vLeadK": self.vLeadK,
+      "aLeadK": clip(self.aLeadK, self.aLead - 1.0, self.aLead + 1.0),
       "aLeadTau": self.aLeadTau,
       "fcw": False,
       "modelProb": self.prob,
-      "status": True,
+      "status": self.status,
       "radar": False,
       "radarTrackId": -1,
     }
 
+  def reset(self):
+    self.status = False
+    self.kf = None
+    self.aLeadTau = _LEAD_ACCEL_TAU
+
+  def update(self, lead_msg, model_v_ego, v_ego):
+    self.aLeadTauInit = float(Params().get_int("ALeadTau")) / 100. 
+    self.aLeadTauStart = float(Params().get_int("ALeadTauStart")) / 100.
+
+    lead_v_rel_pred = lead_msg.v[0] - self.vLead
+    self.prob = lead_msg.prob
+    self.v_ego = v_ego
+    if self.prob > .5:
+      self.dRel = float(lead_msg.x[0]) - RADAR_TO_CAMERA
+      self.yRel = float(-lead_msg.y[0])
+      self.vRel = lead_v_rel_pred
+      self.vLead = lead_msg.v[0] #float(v_ego + lead_v_rel_pred)
+      self.aLead = lead_msg.a[0]
+      self.status = True
+    else:
+      self.reset()
+
+    if self.kf is None:
+      self.kf = lead_kf(self.vLead, self.aLead, self.radar_ts)
+    else:
+      self.kf.update(self.vLead)
+
+    self.vLeadK = float(self.kf.x[LEAD_KALMAN_SPEED][0])
+    self.aLeadK = float(self.kf.x[LEAD_KALMAN_ACCEL][0])
+
+    # Learn if constant acceleration
+    if abs(self.aLead) < self.aLeadTauStart:
+      self.aLeadTau = self.aLeadTauInit
+    else:
+      self.aLeadTau = min(self.aLeadTau * 0.9, self.aLeadTauInit)
 
 class RadarD:
   def __init__(self, radar_ts: float, delay: int = 0):

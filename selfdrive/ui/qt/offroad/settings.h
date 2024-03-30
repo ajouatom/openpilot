@@ -177,3 +177,20 @@ private:
 
     void refresh();
 };
+class CarrotParamsControl : public AbstractControl {
+    Q_OBJECT
+
+public:
+    CarrotParamsControl(int mode, const QString& title, const QString& desc, const QString& icon, bool disp_no=true);
+
+private:
+    void showEvent(QShowEvent* event) override;
+    QPushButton btnYes;
+    QPushButton btnNo;
+    QLabel label;
+
+    int     m_pressed;
+
+    void refresh();
+    void SetParams(int mode);
+};
