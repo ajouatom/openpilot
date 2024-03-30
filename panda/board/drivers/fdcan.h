@@ -208,6 +208,12 @@ void can_rx(uint8_t can_number) {
       to_send.bus = to_push.bus;
       to_send.data_len_code = to_push.data_len_code;
       (void)memcpy(to_send.data, to_push.data, dlc_to_len[to_push.data_len_code]);
+
+      extern bool lkas_msg_acan_active;
+      // carrot: 0x362, 0x2a4, 56,57,58,59,60,61,62,63 => make zero
+      if (lkas_msg_acan_active && (to_send.addr == 866 || to_send.addr == 676) && bus_fwd_num == 0) {
+          to_send.data[7] = 0x00;
+      }
       can_set_checksum(&to_send);
 
       can_send(&to_send, bus_fwd_num, true);
