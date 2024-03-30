@@ -453,6 +453,7 @@ class VisionTrack2:
       "radarTrackId": -1,
     }
 
+LEAD_KALMAN_SPEED, LEAD_KALMAN_ACCEL = 0, 1
 def lead_kf(v_lead: float, dt: float = 0.05):
   # Lead Kalman Filter params, calculating K from A, C, Q, R requires the control library.
   # hardcoding a lookup table to compute K for values of radar_ts between 0.01s and 0.2s
