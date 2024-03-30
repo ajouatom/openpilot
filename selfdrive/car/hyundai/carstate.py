@@ -53,6 +53,7 @@ class CarState(CarStateBase):
     self.lfa_info = {}
 
     self.cruise_buttons_msg = None
+    self.hda2_lfa_block_msg = None
 
     # On some cars, CLU15->CF_Clu_VehicleSpeed can oscillate faster than the dash updates. Sample at 5 Hz
     self.cluster_speed = 0
