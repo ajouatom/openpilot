@@ -139,8 +139,8 @@
       "egroup": "CRUISE",
       "etitle": "CruiseOnDist(0cm)",
       "edescr": "Gas/Brake Off and LeadCar close, CruiseON(+) or Alarm(-)",
-      "min": -500,
-      "max": 500,
+      "min": -2500,
+      "max": 2500,
       "default": 0,
       "unit": 50
     },
