@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 import capnp
 from cereal import messaging, log, car
-from openpilot.common.numpy_fast import interp
+from openpilot.common.numpy_fast import interp, clip
 from openpilot.common.params import Params
 from openpilot.common.realtime import DT_CTRL, Ratekeeper, Priority, config_realtime_process
 from openpilot.common.swaglog import cloudlog
@@ -502,7 +502,7 @@ class VisionTrack:
       "vRel": 0, #self.vRel,
       "vLead": self.vLead,
       "vLeadK": self.vLeadK,
-      "aLeadK": self.aLeadK,
+      "aLeadK": clip(self.aLeadK, self.aLead - 1.0, self.aLead + 1.0),
       "aLeadTau": self.aLeadTau,
       "fcw": False,
       "modelProb": self.prob,
