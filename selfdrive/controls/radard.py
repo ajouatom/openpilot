@@ -454,7 +454,7 @@ class VisionTrack2:
     }
 
 LEAD_KALMAN_SPEED, LEAD_KALMAN_ACCEL = 0, 1
-def lead_kf(v_lead: float, dt: float = 0.05):
+def lead_kf(v_lead: float, a_lead: float, dt: float = 0.05):
   # Lead Kalman Filter params, calculating K from A, C, Q, R requires the control library.
   # hardcoding a lookup table to compute K for values of radar_ts between 0.01s and 0.2s
   assert dt > .01 and dt < .2, "Radar time step must be between .01s and 0.2s"
@@ -474,7 +474,7 @@ def lead_kf(v_lead: float, dt: float = 0.05):
         0.26393339, 0.26278425]
   K = [[interp(dt, dts, K0)], [interp(dt, dts, K1)]]
 
-  kf = KF1D([[v_lead], [0.0]], A, C, K)
+  kf = KF1D([[v_lead], [a_lead]], A, C, K)
   return kf
 
 
@@ -534,7 +534,7 @@ class VisionTrack:
       self.reset()
 
     if self.kf is None:
-      self.kf = lead_kf(self.vLead, self.radar_ts)
+      self.kf = lead_kf(self.vLead, self.aLead, self.radar_ts)
     else:
       self.kf.update(self.vLead)
 
