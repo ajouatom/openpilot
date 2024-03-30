@@ -338,7 +338,7 @@ class Controls:
         if self.rx_checks_invalid_count < 3:
           #print(f"safetyRxChecksInvalid = {pandaState.safetyRxChecksInvalid}, mismatch_counter = {self.mismatch_counter}")
           self.rx_checks_invalid_count += 1
-        #self.events.add(EventName.controlsMismatch)
+        self.events.add(EventName.controlsMismatch)
       else:
         self.rx_checks_invalid_count = 0
 
