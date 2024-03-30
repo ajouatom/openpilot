@@ -78,7 +78,6 @@ class MetaDriveBridge(SimulatorBridge):
       arrive_dest_done=False,
       traffic_density=0.03, # traffic is incredibly expensive
       map_config=create_map(),
-      map_region_size=4096,
       decision_repeat=1,
       physics_world_step_size=self.TICKS_PER_FRAME/100,
       preload_models=False
