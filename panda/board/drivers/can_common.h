@@ -265,7 +265,7 @@ void can_send(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook) {
         gmlan_send_errs += bitbang_gmlan(to_push) ? 0U : 1U;
       } else {
           // carrot: 0x362, 0x2a4, 56,57,58,59,60,61,62,63 => make zero
-        if (lkas_msg_acan_active && (to_push->addr == 866 || to_push_addr == 676) && bus_number == 0) {
+        if (lkas_msg_acan_active && (to_push->addr == 866 || to_push->addr == 676) && bus_number == 0) {
             to_push->data[7] = 0x00;
         }
         tx_buffer_overflow += can_push(can_queues[bus_number], to_push) ? 0U : 1U;
