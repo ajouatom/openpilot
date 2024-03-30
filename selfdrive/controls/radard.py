@@ -540,7 +540,6 @@ class VisionTrack:
 
     self.vLeadK = float(self.kf.x[LEAD_KALMAN_SPEED][0])
     self.aLeadK = float(self.kf.x[LEAD_KALMAN_ACCEL][0])
-    print("{:.2f}, {:.1f}".format(self.aLead, self.aLeadK))
 
     # Learn if constant acceleration
     if abs(self.aLead) < self.aLeadTauStart:
