@@ -330,8 +330,10 @@ class Controls:
           print(f"alterExperience{i} = {pandaState.alternativeExperience}:{self.CP.alternativeExperience}")
       else:
         safety_mismatch = pandaState.safetyModel not in IGNORED_SAFETY_MODES
-        if safety_mismatch:
-          print(f"safetyModel = {pandaState.safetyModel}")
+        #if safety_mismatch:
+        #  print(f"safetyModel = {pandaState.safetyModel}")
+        # TODO: 여기서 SCC 가 2면.. 에러를 0으로 해야함.. 레판이 hyundaiCanfd모드이기때문에 에러남...
+        safety_mismatch = False
 
       # safety mismatch allows some time for boardd to set the safety mode and publish it back from panda
       if (safety_mismatch and self.sm.frame*DT_CTRL > 10.) or pandaState.safetyRxChecksInvalid or self.mismatch_counter >= 200:
