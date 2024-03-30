@@ -255,19 +255,8 @@ bool can_check_checksum(CANPacket_t *packet) {
   return (calculate_checksum((uint8_t *) packet, CANPACKET_HEAD_SIZE + GET_LEN(packet)) == 0U);
 }
 
-void carrot_acan_function(int bus_num, CANPacket_t* to_send) {
-    extern bool lkas_msg_acan_active;
-    if (!lkas_msg_acan_active) return;
-    int addr = GET_ADDR(to_send);
-    if (bus_num == 0) {
-        if (addr == 866 || addr == 676) {       // carrot: 0x362, 0x2a4, 56,57,58,59,60,61,62,63 => make zero
-            to_send->data[7] = 0x00;
-        }
-    }
-}
-
 void can_send(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook) {
-    carrot_acan_function(bus_number, to_push);    // carrot
+    extern bool lkas_msg_acan_active;
 
   if (skip_tx_hook || safety_tx_hook(to_push) != 0) {
     if (bus_number < PANDA_BUS_CNT) {
@@ -275,6 +264,10 @@ void can_send(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook) {
       if ((bus_number == 3U) && (bus_config[3].can_num_lookup == 0xFFU)) {
         gmlan_send_errs += bitbang_gmlan(to_push) ? 0U : 1U;
       } else {
+          // carrot: 0x362, 0x2a4, 56,57,58,59,60,61,62,63 => make zero
+        if (lkas_msg_acan_active && (to_push->addr == 866 || to_push_addr == 676) && bus_number == 0) {
+            to_push->data[7] = 0x00;
+        }
         tx_buffer_overflow += can_push(can_queues[bus_number], to_push) ? 0U : 1U;
         process_can(CAN_NUM_FROM_BUS_NUM(bus_number));
       }
