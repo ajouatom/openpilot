@@ -528,7 +528,7 @@ class VisionTrack:
       self.yRel = float(-lead_msg.y[0])
       self.vRel = lead_v_rel_pred
       self.vLead = lead_msg.v[0] #float(v_ego + lead_v_rel_pred)
-      self.aLead = model_msg.a[0]
+      self.aLead = lead_msg.a[0]
       self.status = True
     else:
       self.reset()
