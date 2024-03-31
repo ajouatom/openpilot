@@ -1,20 +1,60 @@
+# otisserv - Copyright (c) 2019-, Rick Lan, dragonpilot community, and a number of other of contributors.
+# Fleet Manager - [actuallylemoncurd](https://github.com/actuallylemoncurd), [AlexandreSato](https://github.com/alexandreSato), [ntegan1](https://github.com/ntegan1), [royjr](https://github.com/royjr), and [sunnyhaibin] (https://github.com/sunnypilot)
+# Almost everything else - ChatGPT
+# dirty PR pusher - mike8643
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+import json
+import math
 import os
+import requests
 import subprocess
+import time
+# otisserv conversion
+from common.params import Params
 from flask import render_template, request, session
 from functools import wraps
 from pathlib import Path
+
 from openpilot.system.hardware import PC
 from openpilot.system.hardware.hw import Paths
-from openpilot.system.loggerd.uploader import listfiledir_by_creation
+from openpilot.system.loggerd.uploader import listdir_by_creation
 from tools.lib.route import SegmentName
+from typing import List
+from openpilot.system.loggerd.xattr_cache import getxattr
 
 # otisserv conversion
-from common.params import Params
 from urllib.parse import parse_qs, quote
-import json
-import requests
+
+pi = 3.1415926535897932384626
+x_pi = 3.14159265358979324 * 3000.0 / 180.0
+a = 6378245.0
+ee = 0.00669342162296594323
 
 params = Params()
+params_memory = Params("/dev/shm/params")
+#params_storage = Params("/persist/comma/params")
+
+PRESERVE_ATTR_NAME = 'user.preserve'
+PRESERVE_ATTR_VALUE = b'1'
+PRESERVE_COUNT = 5
+
 
 # path to openpilot screen recordings and error logs
 if PC:
@@ -25,8 +65,17 @@ else:
   ERROR_LOGS_PATH = "/data/community/crashes/"
 
 
-def list_files(path):
-  return sorted(listfiledir_by_creation(path), reverse=True)
+def list_files(path): # still used for footage
+  return sorted(listdir_by_creation(path), reverse=True)
+
+
+def list_file(path): # new function for screenrecords/error-logs
+  if os.path.exists(path):
+    files = os.listdir(path)
+    sorted_files = sorted(files, reverse=True)
+  else:
+    return []  # Return an empty list if there are no files or directory
+  return sorted_files
 
 
 def is_valid_segment(segment):
@@ -44,7 +93,7 @@ def segment_to_segment_name(data_dir, segment):
 
 def all_segment_names():
   segments = []
-  for segment in listfiledir_by_creation(Paths.log_root()):
+  for segment in listdir_by_creation(Paths.log_root()):
     try:
       segments.append(segment_to_segment_name(Paths.log_root(), segment))
     except AssertionError:
@@ -59,6 +108,50 @@ def all_routes():
   unique_routes = list(dict.fromkeys(route_times))
   return sorted(unique_routes, reverse=True)
 
+def preserved_routes():
+  dirs = listdir_by_creation(Paths.log_root())
+  preserved_segments = get_preserved_segments(dirs)
+  return sorted(preserved_segments, reverse=True)
+
+def has_preserve_xattr(d: str) -> bool:
+  return getxattr(os.path.join(Paths.log_root(), d), PRESERVE_ATTR_NAME) == PRESERVE_ATTR_VALUE
+
+def get_preserved_segments(dirs_by_creation: List[str]) -> List[str]:
+  preserved = []
+  for n, d in enumerate(filter(has_preserve_xattr, reversed(dirs_by_creation))):
+    if n == PRESERVE_COUNT:
+      break
+    date_str, _, seg_str = d.rpartition("--")
+
+    # ignore non-segment directories
+    if not date_str:
+      continue
+    try:
+      seg_num = int(seg_str)
+    except ValueError:
+      continue
+    # preserve segment and its prior
+    preserved.append(d)
+
+  return preserved
+
+def video_to_gif(input_path, output_path, fps=1, duration=6): # not used right now but can if want longer animated gif
+  if os.path.exists(output_path):
+    return
+  command = [
+    'ffmpeg', '-y', '-i', input_path,
+    '-filter_complex',
+    f'fps={fps},scale=240:-1:flags=lanczos,setpts=0.1*PTS,split[s0][s1];[s0]palettegen=max_colors=32[p];[s1][p]paletteuse=dither=bayer',
+    '-t', str(duration), output_path
+  ]
+  subprocess.run(command)
+  print(f"GIF file created: {output_path}")
+
+def video_to_img(input_path, output_path, fps=1, duration=6):
+  if os.path.exists(output_path):
+    return
+  subprocess.run(['ffmpeg', '-y', '-i', input_path, '-ss', '5', '-vframes', '1', output_path])
+  print(f"GIF file created: {output_path}")
 
 def segments_in_route(route):
   segment_names = [segment_name for segment_name in all_segment_names() if segment_name.time_str == route]
@@ -145,6 +238,11 @@ def get_gmap_key():
   token = params.get("GMapKey", encoding='utf8')
   return token.strip() if token is not None else None
 
+def get_amap_key():
+  token = params.get("AMapKey1", encoding='utf8')
+  token2 = params.get("AMapKey2", encoding='utf8')
+  return (token.strip() if token is not None else None, token2.strip() if token2 is not None else None)
+
 def get_SearchInput():
   SearchInput = params.get_int("SearchInput")
   return SearchInput
@@ -155,19 +253,37 @@ def get_PrimeType():
 
 def get_last_lon_lat():
   last_pos = params.get("LastGPSPosition")
-  l = json.loads(last_pos)
+  if last_pos:
+    l = json.loads(last_pos)
+  else:
+    return 0.0, 0.0
   return l["longitude"], l["latitude"]
 
 def get_locations():
   data = params.get("ApiCache_NavDestinations", encoding='utf-8')
   return data
 
+def preload_favs():
+  try:
+    nav_destinations = json.loads(params.get("ApiCache_NavDestinations", encoding='utf8'))
+  except TypeError:
+    return (None, None, None, None, None)
+
+  locations = {"home": None, "work": None, "fav1": None, "fav2": None, "fav3": None}
+
+  for item in nav_destinations:
+    label = item.get("label")
+    if label in locations and locations[label] is None:
+      locations[label] = item.get("place_name")
+
+  return tuple(locations.values())
+
 def parse_addr(postvars, lon, lat, valid_addr, token):
   addr = postvars.get("fav_val", [""])
   real_addr = None
   if addr != "favorites":
     try:
-      dests = json.loads(params.get("ApiCache_NavDestinations", encoding='utf8').rstrip('\x00'))
+      dests = json.loads(params.get("ApiCache_NavDestinations", encoding='utf8'))
     except TypeError:
       dests = json.loads("[]")
     for item in dests:
@@ -220,6 +336,8 @@ def nav_confirmed(postvars):
     lng = float(postvars.get("lon"))
     save_type = postvars.get("save_type")
     name = postvars.get("name") if postvars.get("name") is not None else ""
+    if params.get_int("SearchInput") == 1:
+      lng, lat = gcj02towgs84(lng, lat)
     params.put("NavDestination", "{\"latitude\": %f, \"longitude\": %f, \"place_name\": \"%s\"}" % (lat, lng, name))
     if name == "":
       name =  str(lat) + "," + str(lng)
@@ -283,3 +401,202 @@ def gmap_key_input(postvars):
     token = postvars.get("gmap_key_val").strip()
     params.put("GMapKey", token)
   return token
+
+def amap_key_input(postvars):
+  if postvars is None or "amap_key_val" not in postvars or postvars.get("amap_key_val")[0] == "":
+    return postvars
+  else:
+    token = postvars.get("amap_key_val").strip()
+    token2 = postvars.get("amap_key_val_2").strip()
+    params.put("AMapKey1", token)
+    params.put("AMapKey2", token2)
+  return token
+
+def gcj02towgs84(lng, lat):
+  dlat = transform_lat(lng - 105.0, lat - 35.0)
+  dlng = transform_lng(lng - 105.0, lat - 35.0)
+  radlat = lat / 180.0 * pi
+  magic = math.sin(radlat)
+  magic = 1 - ee * magic * magic
+  sqrtmagic = math.sqrt(magic)
+  dlat = (dlat * 180.0) / ((a * (1 - ee)) / (magic * sqrtmagic) * pi)
+  dlng = (dlng * 180.0) / (a / sqrtmagic * math.cos(radlat) * pi)
+  mglat = lat + dlat
+  mglng = lng + dlng
+  return [lng * 2 - mglng, lat * 2 - mglat]
+
+def transform_lat(lng, lat):
+  ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * math.sqrt(abs(lng))
+  ret += (20.0 * math.sin(6.0 * lng * pi) + 20.0 * math.sin(2.0 * lng * pi)) * 2.0 / 3.0
+  ret += (20.0 * math.sin(lat * pi) + 40.0 * math.sin(lat / 3.0 * pi)) * 2.0 / 3.0
+  ret += (160.0 * math.sin(lat / 12.0 * pi) + 320 * math.sin(lat * pi / 30.0)) * 2.0 / 3.0
+  return ret
+
+def transform_lng(lng, lat):
+  ret = 300.0 + lng + 2.0 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * math.sqrt(abs(lng))
+  ret += (20.0 * math.sin(6.0 * lng * pi) + 20.0 * math.sin(2.0 * lng * pi)) * 2.0 / 3.0
+  ret += (20.0 * math.sin(lng * pi) + 40.0 * math.sin(lng / 3.0 * pi)) * 2.0 / 3.0
+  ret += (150.0 * math.sin(lng / 12.0 * pi) + 300.0 * math.sin(lng / 30.0 * pi)) * 2.0 / 3.0
+  return ret
+
+def get_all_toggle_values():
+  all_keys = [
+    "IsMetric",
+    "LanguageSetting",
+    "LongitudinalPersonality",
+    "OpenpilotEnabledToggle",
+    "CarSelected",
+    "ShowDebugUI",
+    "ShowDateTime",
+    "ShowHudMode",
+    "ShowSteerRotate",
+    "ShowPathEnd",
+    "ShowAccelRpm",
+    "ShowTpms",
+    "ShowSteerMode",
+    "ShowDeviceState",
+    "ShowConnInfo",
+    "ShowLaneInfo",
+    "ShowBlindSpot",
+    "ShowGapInfo",
+    "ShowDmInfo",
+    "ShowRadarInfo",
+    "MixRadarInfo",
+    "CarrotTest",
+    "ShowPathMode",
+    "ShowPathColor",
+    "ShowPathModeCruiseOff",
+    "ShowPathColorCruiseOff",
+    "ShowPathModeLane",
+    "ShowPathColorLane",
+    "ShowPathWidth",
+    "ShowPlotMode",
+    "AutoResumeFromGasSpeed",
+    "AutoCancelFromGasMode",
+    "AutoCruiseControl",
+    "MapboxStyle",
+    "AutoCurveSpeedLowerLimit",
+    "AutoCurveSpeedFactor",
+    "AutoCurveSpeedAggressiveness",
+    "AutoTurnControl",
+    "AutoLaneChangeSpeed",
+    "AutoTurnControlSpeedLaneChange",
+    "AutoTurnControlSpeedTurn",
+    "AutoTurnControlTurnEnd",
+    "AutoTurnMapChange", 
+    "LaneChangeNeedTorque", 
+    "AutoNaviSpeedCtrl",
+    "AutoNaviSpeedCtrlEnd",
+    "AutoNaviSpeedBumpTime",
+    "AutoNaviSpeedBumpSpeed",
+    "AutoNaviSpeedDecelRate",
+    "AutoNaviSpeedSafetyFactor",
+    "AutoResumeFromBrakeReleaseTrafficSign",
+    "StopAccelApply",
+    "StoppingAccel",
+    "StartAccelApply",
+    "AutoSpeedUptoRoadSpeedLimit",
+    "ApplyLongDynamicCost",
+    "StopDistanceCarrot",
+    "ALeadTau",
+    "ALeadTauStart",
+    "CruiseButtonMode",
+    "CruiseButtonTest1",
+    "CruiseButtonTest2",
+    "CruiseButtonTest3",
+    "CruiseSpeedUnit",
+    "CruiseSpeedMin",
+    "MyDrivingMode",
+    "MySafeModeFactor",
+    "CruiseEcoControl",
+    "SteerActuatorDelay",
+    "CruiseOnDist",
+    "MyEcoModeFactor",
+    "CruiseMaxVals1",
+    "CruiseMaxVals2",
+    "CruiseMaxVals3",
+    "CruiseMaxVals4",
+    "CruiseMaxVals5",
+    "CruiseMaxVals6",
+    "CruiseMinVals",
+    "LongitudinalTuningKpV",
+    "LongitudinalTuningKiV",
+    "LongitudinalTuningKf",
+    "EnableRadarTracks",
+    "EnableAVM",
+    "HotspotOnBoot",
+    "SccConnectedBus2",
+    "CanfdHDA2",
+    "SoundVolumeAdjust",
+    "SoundVolumeAdjustEngage",
+    "StartRecord",
+    "StopRecord",
+    "TFollowSpeedAdd",
+    "TFollowSpeedAddM",
+    "TFollowGap1",
+    "TFollowGap2",
+    "TFollowGap3",
+    "TFollowGap4",
+    "HapticFeedbackWhenSpeedCamera",
+    "UseLaneLineSpeed",
+    "UseLaneLineDebug",
+    "AdjustLaneOffset",
+    "AdjustCurveOffset",
+    "PathOffset",
+    "MaxAngleFrames",
+    "SoftHoldMode",
+    "LateralTorqueCustom",
+    "LateralTorqueAccelFactor",
+    "LateralTorqueFriction",
+    "CustomSteerMax",
+    "CustomSteerDeltaUp",
+    "CustomSteerDeltaDown",
+    "SpeedFromPCM",
+    "CarrotRecord",
+    "CarrotDisplay",
+    "MSLCEnabled",
+    "NoLogging",
+    "LatPathCost",
+    "LatMotionCost",
+    "LatAccelCost",
+    "LatSteerRateCost",
+
+    "AlwaysOnLateralEnabled",
+    "SteerRatio",
+    "MuteDoor",
+    "MuteSeatbelt",
+    "LongPitch",
+    "EVTable",
+    "GasRegenCmd",
+    "LockDoors",
+    "SNGHack",
+    "TSS2Tune",
+    "MTSCAggressiveness",
+    "MTSCCurvatureCheck",
+    "MTSCEnabled",
+    "NNFF",
+    "PreferredSchedule",
+    "UseLateralJerk"
+  ]
+
+  toggle_values = {}
+  for key in all_keys:
+    try:
+      value = params.get(key)
+    except Exception:
+      value = b"0"
+    toggle_values[key] = value.decode('utf-8') if value is not None else "0"
+
+  return toggle_values
+
+def store_toggle_values(updated_values):
+  for key, value in updated_values.items():
+    try:
+      params.put(key, value.encode('utf-8'))
+      #params_storage.put(key, value.encode('utf-8'))
+    except Exception as e:
+      print(f"Failed to update {key}: {e}")
+
+  #params_memory.put_bool("FrogPilotTogglesUpdated", True)
+  #time.sleep(1)
+  #params_memory.put_bool("FrogPilotTogglesUpdated", False)
