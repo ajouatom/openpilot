@@ -463,7 +463,7 @@ class LongitudinalMpc:
     self.cruise_min_a = min_a
     self.max_a = max_a
 
-  def update(self, sm, reset_state, prev_accel_constraint, radarstate, v_cruise, x, v, a, j, personality=log.LongitudinalPersonality.standard, carrot_planner):
+  def update(self, sm, reset_state, prev_accel_constraint, radarstate, v_cruise, x, v, a, j, carrot_planner, personality=log.LongitudinalPersonality.standard):
     t_follow = self.get_T_FOLLOW(personality)
     #self.debugLongText = "v_cruise ={:.1f}".format(v_cruise)
     carstate = sm['carState']
