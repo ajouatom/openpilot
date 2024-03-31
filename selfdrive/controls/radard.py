@@ -360,7 +360,7 @@ def lead_kf(v_lead: float, a_lead: float, dt: float = 0.05):
 
 class VisionTrack:
   def __init__(self, radar_ts):
-    self.radar_ts = 0.05
+    self.radar_ts = radar_ts
     self.dRel = 0.0
     self.yRel = 0.0
     self.vLead = 0.0
