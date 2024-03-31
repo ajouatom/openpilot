@@ -290,12 +290,12 @@ class VCruiseHelper:
     if self.rightBlinkerExtCount + self.leftBlinkerExtCount <= 0:
       self.blinkerExtMode = 0
 
-    ## autoCruise가 핸들을 60도이상 돌리면.. 40초간 일시정지된다.
+    ## autoCruise가 핸들을 60도이상 돌리면.. 10초간 일시정지된다.
     if abs(CS.steeringAngleDeg) > 60 and self.autoCruiseControl != 3:
       if self.autoCruiseCancelTimer == 0:
         self._add_log_auto_cruise("autoCruise paused for 40 seconds.")
         controls.events.add(EventName.audioPrompt)
-      self.autoCruiseCancelTimer = int(40. / DT_CTRL)
+      self.autoCruiseCancelTimer = int(10. / DT_CTRL)
 
     if self.autoCruiseCancelTimer > 0:
       if self.autoCruiseCancelTimer % int(1 / DT_CTRL) == 0:
@@ -424,12 +424,11 @@ class VCruiseHelper:
         if self.gas_pressed_value > 0.6 or self.gas_pressed_count_prev > 3.0 / DT_CTRL:
           if self.autoCruiseCancelTimer > 0:
             v_cruise_kph = self.v_ego_kph_set
-            #self.autoCruiseCancelTimer = 0
+            self.autoCruiseCancelTimer = 0
           self._add_log_auto_cruise("Cruise Activate from gas(deep/long pressed)")          
         else:
           v_cruise_kph = self.v_ego_kph_set
           self._add_log_auto_cruise("Cruise Activate from gas(speed)")
-      self.autoCruiseCancelTimer = 0
       self.cruiseActivate = 1
     return v_cruise_kph
 
