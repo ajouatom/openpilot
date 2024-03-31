@@ -382,8 +382,8 @@ class VisionTrack:
       "vRel": 0, #self.vRel,
       "vLead": self.vLead,
       "vLeadK": self.vLeadK,
-      "aLeadK": clip(self.aLeadK, self.aLead - 1.0, self.aLead + 1.0),
-      "aLeadTau": self.aLeadTau,
+      "aLeadK": 0.0 if self.mixRadarInfo in [3] else clip(self.aLeadK, self.aLead - 1.0, self.aLead + 1.0),
+      "aLeadTau": 0.3 if self.mixRadarInfo in [3] else self.aLeadTau,
       "fcw": False,
       "modelProb": self.prob,
       "status": self.status,
@@ -399,6 +399,7 @@ class VisionTrack:
   def update(self, lead_msg, model_v_ego, v_ego):
     self.aLeadTauInit = float(Params().get_int("ALeadTau")) / 100. 
     self.aLeadTauStart = float(Params().get_int("ALeadTauStart")) / 100.
+    self.mixRadarInfo = int(Params().get_int("MixRadarInfo"))
 
     lead_v_rel_pred = lead_msg.v[0] - self.vLead
     self.prob = lead_msg.prob
@@ -407,7 +408,7 @@ class VisionTrack:
       self.dRel = float(lead_msg.x[0]) - RADAR_TO_CAMERA
       self.yRel = float(-lead_msg.y[0])
       self.vRel = lead_v_rel_pred
-      self.vLead = lead_msg.v[0] #float(v_ego + lead_v_rel_pred)
+      self.vLead = float(v_ego + lead_v_rel_pred)
       self.aLead = lead_msg.a[0]
       self.status = True
     else:
