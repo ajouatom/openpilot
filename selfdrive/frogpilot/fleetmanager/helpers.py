@@ -49,7 +49,7 @@ ee = 0.00669342162296594323
 
 params = Params()
 params_memory = Params("/dev/shm/params")
-params_storage = Params("/persist/comma/params")
+#params_storage = Params("/persist/comma/params")
 
 PRESERVE_ATTR_NAME = 'user.preserve'
 PRESERVE_ATTR_VALUE = b'1'
@@ -458,10 +458,10 @@ def store_toggle_values(updated_values):
   for key, value in updated_values.items():
     try:
       params.put(key, value.encode('utf-8'))
-      params_storage.put(key, value.encode('utf-8'))
+      #params_storage.put(key, value.encode('utf-8'))
     except Exception as e:
       print(f"Failed to update {key}: {e}")
 
-  params_memory.put_bool("FrogPilotTogglesUpdated", True)
-  time.sleep(1)
-  params_memory.put_bool("FrogPilotTogglesUpdated", False)
+  #params_memory.put_bool("FrogPilotTogglesUpdated", True)
+  #time.sleep(1)
+  #params_memory.put_bool("FrogPilotTogglesUpdated", False)
