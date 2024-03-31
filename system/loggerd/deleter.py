@@ -54,14 +54,14 @@ def deleter_thread(exit_event):
 
       # skip deleting most recent N preserved segments (and their prior segment)
       preserved_dirs = get_preserved_segments(dirs)
-      print("deleter_thread")
-      print(dirs)
-      print(preserved_dirs)
+      #print("deleter_thread")
+      #print(dirs)
+      #print(preserved_dirs)
 
       # remove the earliest directory we can
       for delete_dir in sorted(dirs, key=lambda d: (d in DELETE_LAST, d in preserved_dirs)):
         delete_path = os.path.join(Paths.log_root(), delete_dir)
-        print(f"delete_path={delete_path}")
+        #print(f"delete_path={delete_path}")
 
         if any(name.endswith(".lock") for name in os.listdir(delete_path)):
           print(f"continue_delete_path={delete_path}")
