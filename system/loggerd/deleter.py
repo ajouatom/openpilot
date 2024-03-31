@@ -56,6 +56,7 @@ def deleter_thread(exit_event):
       preserved_dirs = get_preserved_segments(dirs)
       print("deleter_thread")
       print(dirs)
+      print(preserved_dirs)
 
       # remove the earliest directory we can
       for delete_dir in sorted(dirs, key=lambda d: (d in DELETE_LAST, d in preserved_dirs)):
