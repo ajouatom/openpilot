@@ -522,7 +522,7 @@ class VCruiseHelper:
           self.params.put_int_nonblocking("MyDrivingMode", self.params.get_int("MyDrivingMode") % 4 + 1) # 1,2,3,4 (1:eco, 2:safe, 3:normal, 4:high speed)
         elif button_type == ButtonType.lfaButton:
           self._add_log("Button long lkas pressed ..")
-          self.params.put_int_nonblocking("UseLaneLineSpeed", (self.params.get_int("UseLaneLineSpeed") + 1) % 2)
+          self.params.put_int_nonblocking("UseLaneLineSpeedApply", self.params.get_int("UseLaneLineSpeed") if self.params.get_int("UseLaneLineSpeedApply") == 0 else 0)
       else:
         if button_type == ButtonType.accelCruise:
           if self.softHoldActive > 0 and self.autoCruiseControl > 0:

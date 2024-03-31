@@ -719,7 +719,7 @@ class Controls:
         actuators.speed = long_plan.speeds[-1]
 
       # Steering PID loop and lateral MPC
-      if Params().get_int("UseLaneLineSpeed") == 0:
+      if Params().get_int("UseLaneLineSpeedApply") == 0:
         self.desired_curvature = clip_curvature(CS.vEgo, self.desired_curvature, model_v2.action.desiredCurvature)
         actuators.curvature = self.desired_curvature
       else:
@@ -767,7 +767,7 @@ class Controls:
         if undershooting and turning and good_speed and max_torque:
           lac_log.active and self.events.add(EventName.steerSaturated)
       elif lac_log.saturated:
-        if Params().get_int("UseLaneLineSpeed") == 0:
+        if Params().get_int("UseLaneLineSpeedApply") == 0:
           dpath_points = model_v2.position.y
         else:
           dpath_points = lat_plan.dPathPoints

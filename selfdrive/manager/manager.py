@@ -145,6 +145,7 @@ def get_default_params():
     ("HapticFeedbackWhenSpeedCamera", "0"),       
     ("CruiseEcoControl", "2"),
     ("UseLaneLineSpeed", "0"),    
+    ("UseLaneLineSpeedApply", "0"),    
     ("UseLaneLineDebug", "0"),    
     ("AdjustLaneOffset", "0"),    
     ("AdjustCurveOffset", "0"),    
