@@ -379,7 +379,7 @@ class VisionTrack:
     return {
       "dRel": self.dRel,
       "yRel": self.yRel,
-      "vRel": 0, #self.vRel,
+      "vRel": self.vRel,
       "vLead": self.vLead,
       "vLeadK": self.vLeadK,
       "aLeadK": 0.0 if self.mixRadarInfo in [3] else clip(self.aLeadK, self.aLead - 1.0, self.aLead + 1.0),
