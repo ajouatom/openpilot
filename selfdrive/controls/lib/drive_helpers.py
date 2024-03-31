@@ -424,11 +424,12 @@ class VCruiseHelper:
         if self.gas_pressed_value > 0.6 or self.gas_pressed_count_prev > 3.0 / DT_CTRL:
           if self.autoCruiseCancelTimer > 0:
             v_cruise_kph = self.v_ego_kph_set
-            self.autoCruiseCancelTimer = 0
+            #self.autoCruiseCancelTimer = 0
           self._add_log_auto_cruise("Cruise Activate from gas(deep/long pressed)")          
         else:
           v_cruise_kph = self.v_ego_kph_set
           self._add_log_auto_cruise("Cruise Activate from gas(speed)")
+      self.autoCruiseCancelTimer = 0
       self.cruiseActivate = 1
     return v_cruise_kph
 
