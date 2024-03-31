@@ -1019,7 +1019,7 @@
       "group": "시험",
       "name": "MixRadarInfo",
       "title": "레이더시험",
-      "descr": "0:레이더우선, 1:레이더+비젼, 2:비젼Only",
+      "descr": "0:레이더우선, 1:레이더+비젼, 2:비젼Only, 3:비젼Only(콤마)",
       "egroup": "TEST",
       "etitle": "Radar test",
       "edescr": "",
