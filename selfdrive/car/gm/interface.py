@@ -23,7 +23,6 @@ BUTTONS_DICT = {CruiseButtons.RES_ACCEL: ButtonType.accelCruise, CruiseButtons.D
                 CruiseButtons.GAP_DIST: ButtonType.gapAdjustCruise}
 
 ACCELERATOR_POS_MSG = 0xbe
-BSM_MSG = 0x142
 CAM_MSG = 0x320  # AEBCmd
                  # TODO: Is this always linked to camera presence?
 PEDAL_MSG = 0x201
@@ -98,6 +97,7 @@ class CarInterface(CarInterfaceBase):
     ret.carName = "gm"
     ret.safetyConfigs = [get_safety_config(car.CarParams.SafetyModel.gm)]
     ret.autoResumeSng = False
+    ret.enableBsm = 0x142 in fingerprint[CanBus.POWERTRAIN]
     if PEDAL_MSG in fingerprint[0]:
       ret.enableGasInterceptor = True
       ret.safetyConfigs[0].safetyParam |= Panda.FLAG_GM_GAS_INTERCEPTOR
@@ -187,7 +187,6 @@ class CarInterface(CarInterfaceBase):
       ret.stopAccel = -0.5
       ret.startAccel = 0.8
       ret.vEgoStopping = 0.1
-      ret.enableBsm = BSM_MSG in fingerprint[CanBus.POWERTRAIN]
 
       # softer long tune for ev table
       if useEVTables: 
@@ -319,9 +318,6 @@ class CarInterface(CarInterfaceBase):
 
     if ACCELERATOR_POS_MSG not in fingerprint[CanBus.POWERTRAIN]:
       ret.flags |= GMFlags.NO_ACCELERATOR_POS_MSG.value
-
-    # Detect if BSM message is present
-    ret.enableBsm = BSM_MSG in fingerprint[CanBus.POWERTRAIN]
 
     return ret
 

@@ -109,6 +109,8 @@ class VCruiseHelper:
     self.speedFromPCM = self.params.get_int("SpeedFromPCM")
     self.cruiseEcoControl = self.params.get_int("CruiseEcoControl")
 
+    self.params.put_int("UseLaneLineSpeedApply", self.params.get_int("UseLaneLineSpeed"))
+
   def _params_update(self, controls):
     self.frame += 1
     self.params_count += 1
@@ -290,12 +292,12 @@ class VCruiseHelper:
     if self.rightBlinkerExtCount + self.leftBlinkerExtCount <= 0:
       self.blinkerExtMode = 0
 
-    ## autoCruise가 핸들을 60도이상 돌리면.. 40초간 일시정지된다.
+    ## autoCruise가 핸들을 60도이상 돌리면.. 10초간 일시정지된다.
     if abs(CS.steeringAngleDeg) > 60 and self.autoCruiseControl != 3:
       if self.autoCruiseCancelTimer == 0:
         self._add_log_auto_cruise("autoCruise paused for 40 seconds.")
         controls.events.add(EventName.audioPrompt)
-      self.autoCruiseCancelTimer = int(40. / DT_CTRL)
+      self.autoCruiseCancelTimer = int(10. / DT_CTRL)
 
     if self.autoCruiseCancelTimer > 0:
       if self.autoCruiseCancelTimer % int(1 / DT_CTRL) == 0:
@@ -522,7 +524,7 @@ class VCruiseHelper:
           self.params.put_int_nonblocking("MyDrivingMode", self.params.get_int("MyDrivingMode") % 4 + 1) # 1,2,3,4 (1:eco, 2:safe, 3:normal, 4:high speed)
         elif button_type == ButtonType.lfaButton:
           self._add_log("Button long lkas pressed ..")
-          self.params.put_int_nonblocking("UseLaneLineSpeed", (self.params.get_int("UseLaneLineSpeed") + 1) % 2)
+          self.params.put_int_nonblocking("UseLaneLineSpeedApply", self.params.get_int("UseLaneLineSpeed") if self.params.get_int("UseLaneLineSpeedApply") == 0 else 0)
       else:
         if button_type == ButtonType.accelCruise:
           if self.softHoldActive > 0 and self.autoCruiseControl > 0:
@@ -680,11 +682,11 @@ class VCruiseHelper:
           self.cruiseActivate = 1
 
     if controls.enabled and self.autoSpeedUptoRoadSpeedLimit > 0.:
-      lead_v_kph = self.lead_vLead * CV.MS_TO_KPH + 2.0
-      lead_v_kph = min(lead_v_kph, self.v_ego_kph_set + 5)
+      lead_v_kph = self.lead_vLead * CV.MS_TO_KPH + 5.0
+      lead_v_kph = min(lead_v_kph, self.v_ego_kph_set + 10)
       road_speed = (30 if self.roadSpeed < 30 else self.roadSpeed) * self.autoSpeedUptoRoadSpeedLimit
       lead_v_kph = max(v_cruise_kph, min(lead_v_kph, road_speed))
-      if lead_v_kph > v_cruise_kph and self.lead_dRel < 60:
+      if lead_v_kph > v_cruise_kph and self.lead_dRel < 80:
         self._add_log_auto_cruise("AutoSpeed up to leadCar={:.0f}kph, road_speed={:.0f}kph".format(lead_v_kph, road_speed))
         v_cruise_kph = lead_v_kph
 

@@ -463,7 +463,7 @@ class LongitudinalMpc:
     self.cruise_min_a = min_a
     self.max_a = max_a
 
-  def update(self, sm, reset_state, prev_accel_constraint, radarstate, v_cruise, x, v, a, j, personality=log.LongitudinalPersonality.standard):
+  def update(self, sm, reset_state, prev_accel_constraint, radarstate, v_cruise, x, v, a, j, carrot_planner, personality=log.LongitudinalPersonality.standard):
     t_follow = self.get_T_FOLLOW(personality)
     #self.debugLongText = "v_cruise ={:.1f}".format(v_cruise)
     carstate = sm['carState']
@@ -492,7 +492,7 @@ class LongitudinalMpc:
     self.params[:,0] = ACCEL_MIN if not reset_state else a_ego
     self.params[:,1] = self.max_a if not reset_state else a_ego
 
-    v_cruise, stop_x, self.mode = self.update_apilot(carstate, radarstate, model, v_cruise)
+    v_cruise, stop_x, self.mode = self.update_apilot(carstate, radarstate, model, v_cruise, carrot_planner)
     #self.debugLongText = "{},{},{:.1f},tf={:.2f},{:.1f},stop={:.1f},{:.1f},xv={:.0f},{:.0f}".format(
     #  str(self.xState), str(self.trafficState), v_cruise*3.6, t_follow, t_follow*v_ego+6.0, stop_x, self.stopDist,x[-1],v[-1])
     xe, ve = x[-1], v[-1]
@@ -688,7 +688,7 @@ class LongitudinalMpc:
       self.trafficState = TrafficState.off
 
 
-  def update_apilot(self, carstate, radarstate, model, v_cruise):
+  def update_apilot(self, carstate, radarstate, model, v_cruise, carrot_planner):
     v_ego = carstate.vEgo
     v_ego_kph = v_ego * CV.MS_TO_KPH
     x = model.position.x
@@ -705,7 +705,7 @@ class LongitudinalMpc:
     #self.check_model_stopping(v, v_ego, self.xStop, y)
     self.check_model_stopping(v, v_ego, x[-1], y)
 
-    if (carstate.rightBlinker and not carstate.leftBlinker) or self.myDrivingMode == 4:
+    if (carstate.rightBlinker and not carstate.leftBlinker) or self.myDrivingMode == 4 or (carrot_planner.rightBlinkerExt % 10000) > 0:
       self.trafficState = TrafficState.off    
 
     if self.xState == XState.e2eStopped:

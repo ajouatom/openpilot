@@ -19,17 +19,28 @@
     <br>
     <a download="{{ route }}-{{ query_type }}.mp4" href="/footage/full/{{ query_type }}/{{ route }}">download full route {{ query_type }}</a>
     <br><br>
-    <a href="{{ route }}?0,qcamera">qcamera</a> -
-    <a href="{{ route }}?0,fcamera">fcamera</a> -
-    <a href="{{ route }}?0,dcamera">dcamera</a> -
-    <a href="{{ route }}?0,ecamera">ecamera</a>
+    <a href="{{ route }}?{{ query_segment }},qcamera">qcamera</a> -
+    <a href="{{ route }}?{{ query_segment }},fcamera">fcamera</a> -
+    <a href="{{ route }}?{{ query_segment }},dcamera">dcamera</a> -
+    <a href="{{ route }}?{{ query_segment }},ecamera">ecamera</a>
     <br><br>
     {{ links }}
     <script>
     var video = document.getElementById('video');
+    var segments = [{{ segments  }}];
+    var q_segment = {{ query_segment }};
+    var q_index = 0;
+    for (var i = 0; i < segments.length; i++) {
+          var segment = segments[i];
+          var q_val = segment.split('--').slice(2).join('--');
+          if (parseInt(q_val) === q_segment) {
+            q_index = i;
+            break
+          }
+        }
     var tracks = {
-      list: [{{ segments  }}],
-      index: {{ query_segment }},
+      list: segments,
+      index: q_index,
       next: function() {
         if (this.index == this.list.length - 1) this.index = 0;
         else {

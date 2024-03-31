@@ -568,10 +568,6 @@
     "content": "idle"
   },
   {
-    "filename": "UseLaneLineDebug",
-    "content": "5"
-  },
-  {
     "filename": "UseLaneLineSpeed",
     "content": "20"
   },
