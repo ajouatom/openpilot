@@ -401,7 +401,7 @@ class VisionTrack:
     self.aLeadTauStart = float(Params().get_int("ALeadTauStart")) / 100.
     self.mixRadarInfo = int(Params().get_int("MixRadarInfo"))
 
-    lead_v_rel_pred = lead_msg.v[0] - self.vLead
+    lead_v_rel_pred = lead_msg.v[0] - model_v_ego
     self.prob = lead_msg.prob
     self.v_ego = v_ego
     if self.prob > .5:
