@@ -680,7 +680,7 @@ class VCruiseHelper:
           self.cruiseActivate = 1
 
     if controls.enabled and self.autoSpeedUptoRoadSpeedLimit > 0.:
-      lead_v_kph = self.lead_vLead * CV.MS_TO_KPH + 2.0
+      lead_v_kph = self.lead_vLead * CV.MS_TO_KPH + 5.0
       lead_v_kph = min(lead_v_kph, self.v_ego_kph_set + 10)
       road_speed = (30 if self.roadSpeed < 30 else self.roadSpeed) * self.autoSpeedUptoRoadSpeedLimit
       lead_v_kph = max(v_cruise_kph, min(lead_v_kph, road_speed))
