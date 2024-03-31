@@ -17,6 +17,7 @@ NetworkType = log.DeviceState.NetworkType
 class CarrotMan:
   def __init__(self):
     self.params = Params()
+    self.show_panda_debug = False
 
     self.carrot_zmq_thread = threading.Thread(target=self.carrot_cmd_zmq, args=[])
     self.carrot_zmq_thread.daemon = True
@@ -25,9 +26,6 @@ class CarrotMan:
     self.carrot_panda_debug_thread = threading.Thread(target=self.carrot_panda_debug, args=[])
     self.carrot_panda_debug_thread.daemon = True
     self.carrot_panda_debug_thread.start()
-
-    self.show_panda_debug = False
-
 
   def carrot_man_thread(self):
     context = zmq.Context()
