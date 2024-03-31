@@ -54,7 +54,8 @@ def deleter_thread(exit_event):
 
       # skip deleting most recent N preserved segments (and their prior segment)
       preserved_dirs = get_preserved_segments(dirs)
-      print(preserved_dirs)
+      print("deleter_thread")
+      print(dirs)
 
       # remove the earliest directory we can
       for delete_dir in sorted(dirs, key=lambda d: (d in DELETE_LAST, d in preserved_dirs)):
@@ -65,6 +66,7 @@ def deleter_thread(exit_event):
 
         try:
           cloudlog.info(f"deleting {delete_path}")
+          print(f"deleting {delete_path}")
           if os.path.isfile(delete_path):
             os.remove(delete_path)
           else:
