@@ -59,7 +59,7 @@ class LateralPlanner:
     self.lanelines_active = False
     self.lanelines_active_tmp = False
 
-    self.useLaneLineSpeeApplyd = float(self.params.get_int("UseLaneLineSpeedApply"))
+    self.useLaneLineSpeeApply = float(self.params.get_int("UseLaneLineSpeedApply"))
     self.pathOffset = float(self.params.get_int("PathOffset")) * 0.01
     self.carrotTest = self.params.get_int("CarrotTest")
     self.useLaneLineMode = False
