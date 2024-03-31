@@ -88,7 +88,7 @@ class LateralPlanner:
       self.pathOffset = float(self.params.get_int("PathOffset")) * 0.01
       self.carrotTest = self.params.get_int("CarrotTest")
 
-      if self.carrotTest == 2:
+      if self.carrotTest in [1, 2]:
         PATH_COST = self.params.get_int("LatPathCost") * 0.01 #1
         LATERAL_MOTION_COST =  self.params.get_int("LatMotionCost") * 0.01 #0.11
         LATERAL_ACCEL_COST = self.params.get_int("LatAccelCost") * 0.01 #1.0

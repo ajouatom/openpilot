@@ -1032,7 +1032,7 @@
       "group": "시험",
       "name": "CarrotTest",
       "title": "당근시험",
-      "descr": "",
+      "descr": "1:저속DeltaUp/Down증가, 2:CustomLateralTune적용",
       "egroup": "TEST",
       "etitle": "Carrot test",
       "edescr": "",
