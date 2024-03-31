@@ -172,7 +172,7 @@ class LongitudinalPlanner:
     x, v, a, j = self.parse_model(sm['modelV2'], self.v_model_error)
     self.v_cruise_last = v_cruise
 
-    self.mpc.update(sm, reset_state, prev_accel_constraint, sm['radarState'],  v_cruise, x, v, a, j, personality=sm['controlsState'].personality)
+    self.mpc.update(sm, reset_state, prev_accel_constraint, sm['radarState'],  v_cruise, x, v, a, j, personality=sm['controlsState'].personality, carrot_planner)
 
     self.v_desired_trajectory_full = np.interp(ModelConstants.T_IDXS, T_IDXS_MPC, self.mpc.v_solution)
     self.a_desired_trajectory_full = np.interp(ModelConstants.T_IDXS, T_IDXS_MPC, self.mpc.a_solution)
