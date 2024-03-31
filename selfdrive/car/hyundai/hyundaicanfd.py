@@ -161,6 +161,13 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
   values["JerkUpperLimit"] = 3.0
   values["DISTANCE_SETTING"] = hud_control.leadDistanceBars
 
+  values["ACC_ObjDist"] = 1
+  values["ObjValid"] = 0
+  values["OBJ_STATUS"] =  2
+  values["SET_ME_2"] = 0x4
+  values["SET_ME_3"] = 0x3
+  values["SET_ME_TMP_64"] = 0x64
+
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
 
 def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control, jerk_u, jerk_l):
