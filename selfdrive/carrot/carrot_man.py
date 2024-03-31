@@ -24,6 +24,9 @@ class CarrotMan:
 
     self.carrot_panda_debug_thread = threading.Thread(target=self.carrot_panda_debug, args=[])
     self.carrot_panda_debug_thread.daemon = True
+    self.carrot_panda_debug_thread.start()
+
+    self.show_panda_debug = False
 
 
   def carrot_man_thread(self):
@@ -39,38 +42,41 @@ class CarrotMan:
     sm = messaging.SubMaster(['deviceState'])
 
     while True:
-      sm.update(0)
+      try:
+        sm.update(0)
 
-      socks = dict(poller.poll(100))
+        socks = dict(poller.poll(100))
 
-      if socket in socks and socks[socket] == zmq.POLLIN:
-        message = socket.recv(zmq.NOBLOCK)
-        data = json.loads(message)
-        print(f"Received request: {message}")
-        response = {
-            "status": "ok",
-            "data": "Hello from Python ZeroMQ server!"
-        }
-        socket.send(json.dumps(response).encode('utf-8'))
-      else:
-        isOnroadCount = isOnroadCount + 1 if self.params.get_bool("IsOnroad") else 0
-        if isOnroadCount == 0:
-          is_tmux_sent = False
-        if isOnroadCount == 1:
-          self.carrot_panda_debug_thread.start()
+        if socket in socks and socks[socket] == zmq.POLLIN:
+          message = socket.recv(zmq.NOBLOCK)
+          data = json.loads(message)
+          print(f"Received request: {message}")
+          response = {
+              "status": "ok",
+              "data": "Hello from Python ZeroMQ server!"
+          }
+          socket.send(json.dumps(response).encode('utf-8'))
+        else:
+          isOnroadCount = isOnroadCount + 1 if self.params.get_bool("IsOnroad") else 0
+          if isOnroadCount == 0:
+            is_tmux_sent = False
+          if isOnroadCount == 1:
+            self.show_panda_debug = True
 
-        network_type = sm['deviceState'].networkType# if not force_wifi else NetworkType.wifi
-        networkConnected = False if network_type == NetworkType.none else True
+          network_type = sm['deviceState'].networkType# if not force_wifi else NetworkType.wifi
+          networkConnected = False if network_type == NetworkType.none else True
 
-        if isOnroadCount == 500:
-          self.make_tmux_data()
-        if isOnroadCount > 500 and not is_tmux_sent and networkConnected:
-          self.send_tmux("Ekdrmsvkdlffjt7710", "onroad", send_settings = True)
-          is_tmux_sent = True
-        if self.params.get_bool("CarrotException") and networkConnected:
-          self.params.put_bool("CarrotException", False)
-          self.make_tmux_data()
-          self.send_tmux("Ekdrmsvkdlffjt7710", "exception")
+          if isOnroadCount == 500:
+            self.make_tmux_data()
+          if isOnroadCount > 500 and not is_tmux_sent and networkConnected:
+            self.send_tmux("Ekdrmsvkdlffjt7710", "onroad", send_settings = True)
+            is_tmux_sent = True
+          if self.params.get_bool("CarrotException") and networkConnected:
+            self.params.put_bool("CarrotException", False)
+            self.make_tmux_data()
+            self.send_tmux("Ekdrmsvkdlffjt7710", "exception")
+      except Exception as e:
+        print(f"carrot_man_thread: error...: {e}")
 
   def make_tmux_data(self):
     try:
@@ -125,11 +131,14 @@ class CarrotMan:
 
   def carrot_panda_debug(self):
     #time.sleep(2)
-    try:
-      result = subprocess.run("/data/openpilot/selfdrive/debug/debug_console_carrot.py", shell=True)
-    except Exception as e:
-      print("debug_console error")
-      return
+    while True:
+      if self.show_panda_debug:
+        self.show_panda_debug = False
+        try:
+          result = subprocess.run("/data/openpilot/selfdrive/debug/debug_console_carrot.py", shell=True)
+        except Exception as e:
+          print("debug_console error")
+          time.sleep(2)
 
   def carrot_cmd_zmq(self):
 
