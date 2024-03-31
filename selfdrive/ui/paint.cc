@@ -1138,8 +1138,8 @@ void DrawApilot::drawGapInfo2(const UIState* s, int x, int y) {
     strcpy(_strDrivingMode, strDrivingMode);
 
     char strLatControlMode[128] = "";
-    int useLaneLineSpeed = params.getInt("UseLaneLineSpeed");
-    strcpy(strLatControlMode, (useLaneLineSpeed > 0) ? tr("Lane Follow").toStdString().c_str() : tr("Laneless").toStdString().c_str());
+    int useLaneLineSpeedApply = params.getInt("UseLaneLineSpeedApply");
+    strcpy(strLatControlMode, (useLaneLineSpeedApply > 0) ? tr("Lane Follow").toStdString().c_str() : tr("Laneless").toStdString().c_str());
     static char _strLatControlMode[128] = "";
     if (strcmp(strLatControlMode, _strLatControlMode)) ui_draw_text_a(s, dx, dy, strLatControlMode, 30, COLOR_WHITE, BOLD);
     strcpy(_strLatControlMode, strLatControlMode);
