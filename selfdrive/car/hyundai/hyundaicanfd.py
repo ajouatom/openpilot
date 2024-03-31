@@ -168,7 +168,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
   values["SET_ME_3"] = 0x3
   values["SET_ME_TMP_64"] = 0x64
 
-  values["NEW_SIGNAL_3"] = 0  # 1이되면 차선이탈방지 알람이 뜬다고...
+  values["NEW_SIGNAL_3"] = 2 #0  # 1이되면 차선이탈방지 알람이 뜬다고...
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
 
 def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control, jerk_u, jerk_l):
