@@ -61,8 +61,10 @@ def deleter_thread(exit_event):
       # remove the earliest directory we can
       for delete_dir in sorted(dirs, key=lambda d: (d in DELETE_LAST, d in preserved_dirs)):
         delete_path = os.path.join(Paths.log_root(), delete_dir)
+        print(f"delete_path={delete_path}")
 
         if any(name.endswith(".lock") for name in os.listdir(delete_path)):
+          print(f"continue_delete_path={delete_path}")
           continue
 
         try:
