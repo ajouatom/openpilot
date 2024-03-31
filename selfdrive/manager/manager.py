@@ -146,7 +146,6 @@ def get_default_params():
     ("CruiseEcoControl", "2"),
     ("UseLaneLineSpeed", "0"),    
     ("UseLaneLineSpeedApply", "0"),    
-    ("UseLaneLineDebug", "0"),    
     ("AdjustLaneOffset", "0"),    
     ("AdjustCurveOffset", "0"),    
     ("PathOffset", "0"),  

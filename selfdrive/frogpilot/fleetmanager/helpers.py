@@ -539,7 +539,6 @@ def get_all_toggle_values():
     "TFollowGap4",
     "HapticFeedbackWhenSpeedCamera",
     "UseLaneLineSpeed",
-    "UseLaneLineDebug",
     "AdjustLaneOffset",
     "AdjustCurveOffset",
     "PathOffset",
