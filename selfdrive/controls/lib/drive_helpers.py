@@ -109,6 +109,8 @@ class VCruiseHelper:
     self.speedFromPCM = self.params.get_int("SpeedFromPCM")
     self.cruiseEcoControl = self.params.get_int("CruiseEcoControl")
 
+    self.params.put_int("UseLaneLineSpeedApply", self.params.get_int("UseLaneLineSpeed"))
+
   def _params_update(self, controls):
     self.frame += 1
     self.params_count += 1
