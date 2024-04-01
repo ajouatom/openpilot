@@ -235,6 +235,7 @@ class CarrotNaviHelper(CarrotBase):
     self.blinkerExtMode = 0 # 0: Normal, 10000: voice
     self.rightBlinkerExtCount = 0
     self.leftBlinkerExtCount = 0
+    self.nav_turn = False
 
   def update_params(self):
     self.autoTurnControlSpeedLaneChange = self.params.get_int("AutoTurnControlSpeedLaneChange")
@@ -317,42 +318,43 @@ class CarrotNaviHelper(CarrotBase):
       ## lanechange, turn : 300m left
       if 5 < self.nav_distance < 300 and direction != 0:
         if nav_turn:
-          if self.nav_distance < turn_dist:
+          if self.nav_distance < turn_dist or self.nav_turn:
             # start Turn
             nav_direction = direction
           elif self.nav_distance < laneChange_dist:
-            nav_turn = False
             nav_direction = direction
-          else:
             nav_turn = False
+          else:
             nav_direction = 0
+            nav_turn = False
         elif self.nav_distance < laneChange_dist:
           nav_direction = direction
         else:
           nav_direction = 0
+        self.nav_turn = nav_turn
       else:
-        nav_turn = False
+        self.nav_turn = False
         nav_direction = 0        
 
       self.debugTextNoo = "N<{}>{:.0f}[{}],T{}[{}],L{:.0f}/{:.0f},T{:.0f}/{:.0f}".format(
         self.nooHelperActivated,
-        self.nav_distance, direction, nav_direction, nav_turn,
+        self.nav_distance, direction, nav_direction, self.nav_turn,
         laneChange_dist, laneChange_speed, turn_dist, turn_speed)
 
       if self.autoTurnControl > 0 and self.nooHelperActivated == 1:
         blinkerExtState = self.rightBlinkerExtCount + self.rightBlinkerExtCount
-        if nav_direction == 1: #여기서는 풀고... desire에서 막자.  and nav_turn: # 왼쪽차선변경은 위험하니 턴인경우만 하자, 하지만 지금은 안함.
+        if nav_direction == 1: #여기서는 풀고... desire에서 막자.  and self.nav_turn: # 왼쪽차선변경은 위험하니 턴인경우만 하자, 하지만 지금은 안함.
           if CS.rightBlinker or (CS.steeringPressed and CS.steeringTorque < 0):
             self.nooHelperActivated = 2
           else:
             self.leftBlinkerExtCount = 10
-            self.blinkerExtMode = 20000 if nav_turn else 10000
+            self.blinkerExtMode = 20000 if self.nav_turn else 10000
         elif nav_direction == 2:
           if CS.leftBlinker or (CS.steeringPressed and CS.steeringTorque > 0):
             self.nooHelperActivated = 2
           else:
             self.rightBlinkerExtCount = 10
-            self.blinkerExtMode = 20000 if nav_turn else 10000
+            self.blinkerExtMode = 20000 if self.nav_turn else 10000
         if self.nooHelperActivated == 2:
           self._add_log("Automatic lanechange canceled(blinker or steering torque)", EventName.audioLaneChange)
           self.rightBlinkerExtCount = self.leftBlinkerExtCount = self.blinkerExtMode = 0
@@ -362,7 +364,7 @@ class CarrotNaviHelper(CarrotBase):
           self._add_log("Automatic {} Started. {:.0f}m left".format("Turning" if turning else "Lanechanging", self.naviDistance), EventName.audioTurn if turning else EventName.audioLaneChange )
 
         #if blinkerExtState <= 0 and self.leftBlinkerExtCount + self.rightBlinkerExtCount > 0 and v_ego > 0.5:
-        #  self._make_event(controls, EventName.audioTurn if nav_turn else EventName.audioLaneChange)
+        #  self._make_event(controls, EventName.audioTurn if self.nav_turn else EventName.audioLaneChange)
 
         apTbtDistance = self.naviDistance
         apTbtSpeed = self.naviSpeed
