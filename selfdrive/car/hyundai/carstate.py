@@ -405,7 +405,7 @@ class CarState(CarStateBase):
                                           else cp_cam.vl["CAM_0x2a4"])
 
     # 측정값을 그냥 넣음... test
-    ret.vCluRatio = 0.945
+    #ret.vCluRatio = 0.945
     
     
     self.totalDistance += ret.vEgo * DT_CTRL 
