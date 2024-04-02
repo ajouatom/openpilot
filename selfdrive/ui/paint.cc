@@ -377,7 +377,7 @@ void DrawApilot::drawLaneLines(const UIState* s) {
         //auto controls_state = (*s->sm)["controlsState"].getControlsState();
         //int leftBlinkerExt = controls_state.getLeftBlinkerExt();
         //int rightBlinkerExt = controls_state.getRightBlinkerExt();
-        auto meta = (*s->sm)["modelV2"].getModelV2().getMeta();
+        //auto meta = (*s->sm)["modelV2"].getModelV2().getMeta();
         //auto laneChangeState = meta.getLaneChangeState();
         //auto laneChangeDirection = meta.getLaneChangeDirection();
         bool rightLaneChange = true; // (laneChangeState == cereal::LaneChangeState::PRE_LANE_CHANGE) && (laneChangeDirection == cereal::LaneChangeDirection::RIGHT);
