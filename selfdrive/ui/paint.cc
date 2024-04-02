@@ -377,11 +377,11 @@ void DrawApilot::drawLaneLines(const UIState* s) {
         //auto controls_state = (*s->sm)["controlsState"].getControlsState();
         //int leftBlinkerExt = controls_state.getLeftBlinkerExt();
         //int rightBlinkerExt = controls_state.getRightBlinkerExt();
-        //auto meta = (*s->sm)["modelV2"].getModelV2().getMeta();
-        //auto laneChangeState = meta.getLaneChangeState();
-        //auto laneChangeDirection = meta.getLaneChangeDirection();
-        bool rightLaneChange = true; // (laneChangeState == cereal::LaneChangeState::PRE_LANE_CHANGE) && (laneChangeDirection == cereal::LaneChangeDirection::RIGHT);
-        bool leftLaneChange = true;// (laneChangeState == cereal::LaneChangeState::PRE_LANE_CHANGE) && (laneChangeDirection == cereal::LaneChangeDirection::LEFT);
+        auto meta = (*s->sm)["modelV2"].getModelV2().getMeta();
+        auto laneChangeState = meta.getLaneChangeState();
+        auto laneChangeDirection = meta.getLaneChangeDirection();
+        bool rightLaneChange = (laneChangeState == cereal::LaneChangeState::PRE_LANE_CHANGE) && (laneChangeDirection == cereal::LaneChangeDirection::RIGHT);
+        bool leftLaneChange = (laneChangeState == cereal::LaneChangeState::PRE_LANE_CHANGE) && (laneChangeDirection == cereal::LaneChangeDirection::LEFT);
 
         if (left_blindspot) ui_draw_bsd(s, scene.lane_barrier_vertices[0], &color, false);
         //else if (lead_left.getStatus() && lead_left.getDRel() < getVEgo() * 3.0 && leftBlinkerExt)  ui_draw_bsd(s, scene.lane_barrier_vertices[0], &color2, false);
