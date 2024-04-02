@@ -406,6 +406,10 @@ class CarState(CarStateBase):
 
     # 측정값을 그냥 넣음... test
     #ret.vCluRatio = 0.945
+    cluSpeed = cp.vl["CRUISE_BUTTONS_ALT"]["CLU_SPEED"]
+    ret.vEgoCluster = cluSpeed * speed_conv
+    vEgoClu, aEgoClu = self.update_clu_speed_kf(ret.vEgoCluster)
+    ret.vCluRatio = (ret.vEgo / vEgoClu) if (vEgoClu > 3. and ret.vEgo > 3.) else 1.0
     
     
     self.totalDistance += ret.vEgo * DT_CTRL 
