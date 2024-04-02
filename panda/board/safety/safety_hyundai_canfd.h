@@ -386,7 +386,7 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
   if (hyundai_acan_panda) {
       if (bus_num == 0) {
           bus_fwd = 2;
-          if (addr == 272 || addr == 80) { // || addr == 866 || addr == 676) {
+          if (addr == 272 || addr == 80 || addr == 81) { // || addr == 866 || addr == 676) {
               last_ts_lkas_msg_acan = now;
               lkas_msg_acan_active = true;
               //print("blocking\n");
@@ -409,7 +409,7 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
           }
 
           bus_fwd = 0;
-          if (addr == 272 || addr == 80) { // || addr == 866 || addr == 676) {
+          if (addr == 272 || addr == 80 || addr == 81) { // || addr == 866 || addr == 676) {
               if (now - last_ts_lkas_msg_acan < 200000) {
                   bus_fwd = -1;
               }
