@@ -415,6 +415,11 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
               }
               else lkas_msg_acan_active = false;
           }
+          if (lkas_msg_acan_active) {
+            if(addr == 353 || addr == 354 || addr == 908 || addr == 1402 || addr == 1848) {
+              bus_fwd = -1;
+            }
+          }
       }
       return bus_fwd;
   }
