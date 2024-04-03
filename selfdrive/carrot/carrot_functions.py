@@ -306,6 +306,7 @@ class CarrotNaviHelper(CarrotBase):
         self.nooHelperActivateCount = max(0, self.nooHelperActivateCount + 1)
         self._add_log("Auto Speed Down to {:.0f}km/h. {:.0f}m left.".format(self.naviSpeed, self.naviDistance))
       else:
+        self.nav_turn = False
         self.nooHelperActivated = 0
         self.nooHelperActivateCount = min(0, self.nooHelperActivateCount - 1)
 
