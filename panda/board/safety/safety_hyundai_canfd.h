@@ -306,7 +306,7 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
   acc_main_on = (lat_active_count > 0) || controls_allowed;
   
   // cruise buttons check
-  if (addr == 0x1cf) {
+  if (addr == 0x1cf && !hyundai_longitudinal) {
     int button = GET_BYTE(to_send, 2) & 0x7U;
     bool is_cancel = (button == HYUNDAI_BTN_CANCEL);
     bool is_resume = (button == HYUNDAI_BTN_RESUME);
@@ -314,7 +314,7 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
 
     bool allowed = (is_cancel && cruise_engaged_prev) || (is_resume && controls_allowed) || (is_set && controls_allowed);
     if (!allowed) {
-      // carrot: all allowed //tx = false;  
+      tx = false;  
     }
   }
 
