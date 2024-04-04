@@ -21,11 +21,11 @@ class CarrotMan:
 
     self.carrot_zmq_thread = threading.Thread(target=self.carrot_cmd_zmq, args=[])
     self.carrot_zmq_thread.daemon = True
-    self.carrot_zmq_thread.start()
+    #self.carrot_zmq_thread.start()
 
     self.carrot_panda_debug_thread = threading.Thread(target=self.carrot_panda_debug, args=[])
     self.carrot_panda_debug_thread.daemon = True
-    self.carrot_panda_debug_thread.start()
+    #self.carrot_panda_debug_thread.start()
 
   def carrot_man_thread(self):
     context = zmq.Context()
@@ -72,8 +72,7 @@ class CarrotMan:
           if self.params.get_bool("CarrotException") and networkConnected:
             self.params.put_bool("CarrotException", False)
             self.make_tmux_data()
-            self.send_tmux("Ekdrmsvkdlffjt7710", "exception")
-          time.sleep(0.1)
+            self.send_tmux("Ekdrmsvkdlffjt7710", "exception")          
 
       except Exception as e:
         print(f"carrot_man_thread: error...: {e}")
