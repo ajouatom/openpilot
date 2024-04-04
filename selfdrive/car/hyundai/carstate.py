@@ -405,7 +405,12 @@ class CarState(CarStateBase):
                                           else cp_cam.vl["CAM_0x2a4"])
 
     # 측정값을 그냥 넣음... test
-    ret.vCluRatio = 0.945
+    #ret.vCluRatio = 0.945
+    speed_conv = CV.KPH_TO_MS if self.is_metric else CV.MPH_TO_MS
+    cluSpeed = cp.vl["CRUISE_BUTTONS_ALT"]["CLU_SPEED"]
+    ret.vEgoCluster = cluSpeed * speed_conv
+    vEgoClu, aEgoClu = self.update_clu_speed_kf(ret.vEgoCluster)
+    ret.vCluRatio = (ret.vEgo / vEgoClu) if (vEgoClu > 3. and ret.vEgo > 3.) else 1.0
     
     
     self.totalDistance += ret.vEgo * DT_CTRL 

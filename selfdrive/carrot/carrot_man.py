@@ -72,7 +72,8 @@ class CarrotMan:
           if self.params.get_bool("CarrotException") and networkConnected:
             self.params.put_bool("CarrotException", False)
             self.make_tmux_data()
-            self.send_tmux("Ekdrmsvkdlffjt7710", "exception")
+            self.send_tmux("Ekdrmsvkdlffjt7710", "exception")          
+
       except Exception as e:
         print(f"carrot_man_thread: error...: {e}")
 
@@ -137,6 +138,8 @@ class CarrotMan:
         except Exception as e:
           print("debug_console error")
           time.sleep(2)
+      else:
+        time.sleep(1)
 
   def carrot_cmd_zmq(self):
 
