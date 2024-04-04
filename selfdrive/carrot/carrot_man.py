@@ -21,7 +21,7 @@ class CarrotMan:
 
     self.carrot_zmq_thread = threading.Thread(target=self.carrot_cmd_zmq, args=[])
     self.carrot_zmq_thread.daemon = True
-    #self.carrot_zmq_thread.start()
+    self.carrot_zmq_thread.start()
 
     self.carrot_panda_debug_thread = threading.Thread(target=self.carrot_panda_debug, args=[])
     self.carrot_panda_debug_thread.daemon = True
