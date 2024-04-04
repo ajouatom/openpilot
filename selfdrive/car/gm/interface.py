@@ -23,6 +23,7 @@ BUTTONS_DICT = {CruiseButtons.RES_ACCEL: ButtonType.accelCruise, CruiseButtons.D
                 CruiseButtons.GAP_DIST: ButtonType.gapAdjustCruise}
 
 ACCELERATOR_POS_MSG = 0xbe
+BSM_MSG = 0x142
 CAM_MSG = 0x320  # AEBCmd
                  # TODO: Is this always linked to camera presence?
 PEDAL_MSG = 0x201
@@ -96,7 +97,7 @@ class CarInterface(CarInterfaceBase):
 
     ret.carName = "gm"
     ret.safetyConfigs = [get_safety_config(car.CarParams.SafetyModel.gm)]
-    ret.autoResumeSng = False
+    ret.autoResumeSng = True #False
     ret.enableBsm = 0x142 in fingerprint[CanBus.POWERTRAIN]
     if PEDAL_MSG in fingerprint[0]:
       ret.enableGasInterceptor = True
@@ -187,6 +188,7 @@ class CarInterface(CarInterfaceBase):
       ret.stopAccel = -0.5
       ret.startAccel = 0.8
       ret.vEgoStopping = 0.1
+      ret.enableBsm = BSM_MSG in fingerprint[CanBus.POWERTRAIN]
 
       # softer long tune for ev table
       if useEVTables: 
@@ -319,20 +321,24 @@ class CarInterface(CarInterfaceBase):
     if ACCELERATOR_POS_MSG not in fingerprint[CanBus.POWERTRAIN]:
       ret.flags |= GMFlags.NO_ACCELERATOR_POS_MSG.value
 
+    # Detect if BSM message is present
+    ret.enableBsm = BSM_MSG in fingerprint[CanBus.POWERTRAIN]
+
     return ret
 
   # returns a car.CarState
   def _update(self, c):
     ret = self.CS.update(self.cp, self.cp_cam, self.cp_loopback)
 
+    buttonEvents = [] # kans
     # Don't add event if transitioning from INIT, unless it's to an actual button
     if self.CS.cruise_buttons != CruiseButtons.UNPRESS or self.CS.prev_cruise_buttons != CruiseButtons.INIT:
-      ret.buttonEvents = [
-        *create_button_events(self.CS.cruise_buttons, self.CS.prev_cruise_buttons, BUTTONS_DICT,
-                              unpressed_btn=CruiseButtons.UNPRESS),
-        *create_button_events(self.CS.distance_button, self.CS.prev_distance_button,
-                              {1: ButtonType.gapAdjustCruise})
-      ]
+      buttonEvents.extend(create_button_events(self.CS.cruise_buttons, self.CS.prev_cruise_buttons, BUTTONS_DICT,
+                                               unpressed_btn=CruiseButtons.UNPRESS)) # kans
+    # kans : long_button GAP for cruise Mode(safety, ecco, high-speed..)
+    if self.CS.distance_button_pressed:
+      buttonEvents.append(car.CarState.ButtonEvent(pressed=True, type=ButtonType.gapAdjustCruise))
+    ret.buttonEvents = buttonEvents # kans
 
     # The ECM allows enabling on falling edge of set, but only rising edge of resume
     events = self.create_common_events(ret, extra_gears=[GearShifter.sport, GearShifter.low,
