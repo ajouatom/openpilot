@@ -73,6 +73,8 @@ class CarrotMan:
             self.params.put_bool("CarrotException", False)
             self.make_tmux_data()
             self.send_tmux("Ekdrmsvkdlffjt7710", "exception")
+          time.sleep(0.1)
+
       except Exception as e:
         print(f"carrot_man_thread: error...: {e}")
 
