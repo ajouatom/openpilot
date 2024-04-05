@@ -163,7 +163,7 @@ class CarInterface(CarInterfaceBase):
     # *** feature detection ***
     if candidate in CANFD_CAR:
       ret.enableBsm = 0x1e5 in fingerprint[CAN.ECAN]
-      if candidate in (KIA_EV6):
+      if candidate in (CAR.KIA_EV6):
         ret.ret.extFlags |= HyundaiExtFlags.BSM_NO_ADAS.value
       print(f"$$$$$ CanFD ECAN = {CAN.ECAN}")
       if 0x1fa in fingerprint[CAN.ECAN]:
