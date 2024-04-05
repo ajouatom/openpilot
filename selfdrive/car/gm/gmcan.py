@@ -1,6 +1,5 @@
 import math
 
-from cereal import log
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.realtime import DT_CTRL
 from openpilot.selfdrive.car import make_can_msg
@@ -66,6 +65,7 @@ def create_gas_regen_command(packer, bus, throttle, idx, enabled, at_full_stop):
     "GasRegenFullStopActive": at_full_stop,
     "GasRegenAlwaysOne": 1,
     "GasRegenAlwaysOne2": 1,
+    "GasRegenAlwaysOne3": 1,
   }
 
   dat = packer.make_can_msg("ASCMGasRegenCmd", bus, values)[2]
