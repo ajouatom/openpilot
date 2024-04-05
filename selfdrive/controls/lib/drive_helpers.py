@@ -440,7 +440,7 @@ class VCruiseHelper:
         v_cruise_kph = self.v_ego_kph_set
         self._add_log_auto_cruise("Cruise Activate Brake Release")
         self.cruiseActivate = 1
-      elif self.xState == 3:
+      elif self.xState in [3, 5]:
         #v_cruise_kph = self.v_ego_kph_set
         self._add_log_auto_cruise("Cruise Activate from Traffic sign stop")
         self.cruiseActivate = 1
