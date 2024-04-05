@@ -183,7 +183,7 @@ class CarController(CarControllerBase):
             resume = (actuators.longControlState not in [LongCtrlState.starting]) or CC.cruiseControl.resume
             at_full_stop = at_full_stop and not resume
 
-          if actuators.longControlState in [LongCtrlState.starting]:
+          if actuators.longControlState in [LongCtrlState.stopping, LongCtrlState.starting]:
             if (self.frame - self.last_button_frame) * DT_CTRL > 0.2:
               self.last_button_frame = self.frame
               can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.POWERTRAIN, CS.buttons_counter, CruiseButtons.RES_ACCEL))
