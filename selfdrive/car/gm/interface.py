@@ -187,7 +187,8 @@ class CarInterface(CarInterfaceBase):
       ret.stoppingDecelRate = 0.2 # brake_travel/s while trying to stop
       ret.stopAccel = -0.5
       ret.startAccel = 0.8
-      ret.vEgoStopping = 0.1
+      ret.vEgoStarting = 0.25
+      ret.vEgoStopping = 0.25
       ret.enableBsm = BSM_MSG in fingerprint[CanBus.POWERTRAIN]
 
       # softer long tune for ev table
@@ -199,7 +200,8 @@ class CarInterface(CarInterfaceBase):
         ret.stoppingDecelRate = 0.1 # brake_travel/s while trying to stop
         ret.stopAccel = -0.5
         ret.startAccel = 0.8
-        ret.vEgoStopping = 0.1
+        ret.vEgoStarting = 0.25
+        ret.vEgoStopping = 0.25
 
     elif candidate == CAR.ACADIA:
       ret.minEnableSpeed = -1.  # engage speed is decided by pcm
