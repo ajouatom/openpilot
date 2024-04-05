@@ -164,7 +164,7 @@ class CarInterface(CarInterfaceBase):
     if candidate in CANFD_CAR:
       ret.enableBsm = 0x1e5 in fingerprint[CAN.ECAN]
       if candidate in (CAR.KIA_EV6) or (candidate in (CAR.KIA_CARNIVAL_4TH_GEN) and not hda2):
-        ret.ret.extFlags |= HyundaiExtFlags.BSM_NO_ADAS.value
+        ret.extFlags |= HyundaiExtFlags.BSM_NO_ADAS.value
       print(f"$$$$$ CanFD ECAN = {CAN.ECAN}")
       if 0x1fa in fingerprint[CAN.ECAN]:
         ret.extFlags |= HyundaiExtFlags.NAVI_CLUSTER.value
