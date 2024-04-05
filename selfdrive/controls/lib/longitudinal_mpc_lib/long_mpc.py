@@ -728,7 +728,8 @@ class LongitudinalMpc:
         if self.trafficState == TrafficState.green:
           self.xState = XState.e2ePrepare
         else:
-          self.comfort_brake = COMFORT_BRAKE * 0.9
+          #self.comfort_brake = COMFORT_BRAKE * 0.9
+          self.comfort_brake = COMFORT_BRAKE
           self.trafficStopAdjustRatio = 0.8
           stop_dist = self.xStop * interp(self.xStop, [0, 100], [1.0, self.trafficStopAdjustRatio])  ##남은거리에 따라 정지거리 비율조정
           if stop_dist > 5.0:
@@ -760,7 +761,7 @@ class LongitudinalMpc:
 
     mode = 'blended' if self.xState in [XState.e2ePrepare] else 'acc'
 
-    self.comfort_brake *= self.mySafeFactor
+    #self.comfort_brake *= self.mySafeFactor
     self.stopDist = max(0, self.stopDist - (v_ego * DT_MDL))
     if stop_x == 1000.0:
       self.stopDist = 0.0
