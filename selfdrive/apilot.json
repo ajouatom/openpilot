@@ -1421,14 +1421,14 @@
     {
       "group": "시험",
       "name": "LatPathCost",
-      "title": "LatPathCost(100)",
+      "title": "LatPathCost(160)",
       "descr": "레인모드에서만작동",
       "egroup": "TEST",
-      "etitle": "LatPathCost(100)",
+      "etitle": "LatPathCost(160)",
       "edescr": "",
       "min": 0,
       "max": 1000,
-      "default": 100,
+      "default": 160,
       "unit": 100
     },
     {

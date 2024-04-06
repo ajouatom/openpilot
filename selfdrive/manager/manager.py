@@ -162,7 +162,7 @@ def get_default_params():
     ("MSLCEnabled", "0"),
     ("NoLogging", "0"),
     ("HotspotOnBoot", "0"),
-    ("LatPathCost", "100"),
+    ("LatPathCost", "160"),
     ("LatMotionCost", "11"),
     ("LatAccelCost", "100"),
     ("LatSteerRateCost", "10"),
