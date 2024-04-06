@@ -80,6 +80,20 @@ def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_steer):
 
   return ret
 
+def create_suppress_lfa_scc2(packer, CAN, hda2_alt_steering, counter):
+  suppress_msg = "CAM_0x362" if hda2_alt_steering else "CAM_0x2a4"
+  msg_bytes = 32 if hda2_alt_steering else 24
+
+  values = {}
+  values["BYTE5"] = 34
+  values["BYTE8"] = 34
+  values["COUNTER"] = counter % 256
+  values["SET_ME_0"] = 0
+  values["SET_ME_0_2"] = 0
+  values["LEFT_LANE_LINE"] = 0
+  values["RIGHT_LANE_LINE"] = 0
+  return packer.make_can_msg(suppress_msg, CAN.ACAN, values)
+
 def create_suppress_lfa(packer, CAN, hda2_lfa_block_msg, hda2_alt_steering):
   suppress_msg = "CAM_0x362" if hda2_alt_steering else "CAM_0x2a4"
   msg_bytes = 32 if hda2_alt_steering else 24
