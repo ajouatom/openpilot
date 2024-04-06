@@ -586,7 +586,7 @@ class Controls:
             self.state = State.enabled            
 
           elif self.soft_disable_timer > 0:
-            print("#######State.softDisabling => timeout => disable")
+            #print("#######State.softDisabling => timeout => disable")
             self.current_alert_types.append(ET.SOFT_DISABLE)
 
           elif self.soft_disable_timer <= 0:
