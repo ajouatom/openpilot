@@ -410,6 +410,8 @@ class VisionTrack:
       self.vRel = lead_v_rel_pred
       self.vLead = float(v_ego + lead_v_rel_pred)
       self.aLead = lead_msg.a[0]
+      if self.prob < 0.99:
+        self.kf = None
       self.status = True
     else:
       self.reset()
