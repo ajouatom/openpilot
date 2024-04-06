@@ -238,6 +238,7 @@ def main(demo=False):
     traffic_convention = np.zeros(2)
     traffic_convention[int(is_rhd)] = 1
 
+    #carrot: 아래로 이동함.
     #vec_desire = np.zeros(ModelConstants.DESIRE_LEN, dtype=np.float32)
     #if desire >= 0 and desire < ModelConstants.DESIRE_LEN:
     #  vec_desire[desire] = 1
@@ -246,6 +247,7 @@ def main(demo=False):
     timestamp_llk = sm["navModel"].locationMonoTime
     nav_valid = sm.valid["navModel"] # and (nanos_since_boot() - timestamp_llk < 1e9)
     nav_enabled = nav_valid # and params.get_bool("ExperimentalMode")
+    nav_enabled = False # carrot: WD40모델
 
     if not nav_enabled:
       nav_features[:] = 0
