@@ -23,7 +23,6 @@ BUTTONS_DICT = {CruiseButtons.RES_ACCEL: ButtonType.accelCruise, CruiseButtons.D
                 CruiseButtons.GAP_DIST: ButtonType.gapAdjustCruise}
 
 ACCELERATOR_POS_MSG = 0xbe
-BSM_MSG = 0x142
 CAM_MSG = 0x320  # AEBCmd
                  # TODO: Is this always linked to camera presence?
 PEDAL_MSG = 0x201
@@ -322,9 +321,6 @@ class CarInterface(CarInterfaceBase):
 
     if ACCELERATOR_POS_MSG not in fingerprint[CanBus.POWERTRAIN]:
       ret.flags |= GMFlags.NO_ACCELERATOR_POS_MSG.value
-
-    # Detect if BSM message is present
-    ret.enableBsm = BSM_MSG in fingerprint[CanBus.POWERTRAIN]
 
     return ret
 
