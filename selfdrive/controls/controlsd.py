@@ -555,12 +555,12 @@ class Controls:
     if self.state != State.disabled:
       # user and immediate disable always have priority in a non-disabled state
       if self.events.contains(ET.USER_DISABLE):
-        print("####ET.USER_DISABLE")
+        print("####ET.USER_DISABLE", self.events)
         self.state = State.disabled
         self.current_alert_types.append(ET.USER_DISABLE)
 
       elif self.events.contains(ET.IMMEDIATE_DISABLE):
-        print("####ET.IMMEDIATE_DISABLE")
+        print("####ET.IMMEDIATE_DISABLE", self.events)
         self.state = State.disabled
         self.current_alert_types.append(ET.IMMEDIATE_DISABLE)
 
@@ -568,7 +568,7 @@ class Controls:
         # ENABLED
         if self.state == State.enabled:
           if self.events.contains(ET.SOFT_DISABLE):
-            print("#######State.enabled => softDisabling")
+            print("#######State.enabled => softDisabling", self.events)
             self.state = State.softDisabling
             self.soft_disable_timer = int(SOFT_DISABLE_TIME / DT_CTRL)
             self.current_alert_types.append(ET.SOFT_DISABLE)
@@ -581,12 +581,12 @@ class Controls:
         # SOFT DISABLING
         elif self.state == State.softDisabling:
           if not self.events.contains(ET.SOFT_DISABLE):
-            print("#######State.softDisabling => enabled")
+            print("#######State.softDisabling => enabled", self.events)
             # no more soft disabling condition, so go back to ENABLED
             self.state = State.enabled            
 
           elif self.soft_disable_timer > 0:
-            print("#######State.softDisabling => timeout => disable")
+            #print("#######State.softDisabling => timeout => disable")
             self.current_alert_types.append(ET.SOFT_DISABLE)
 
           elif self.soft_disable_timer <= 0:
@@ -596,7 +596,7 @@ class Controls:
         # PRE ENABLING
         elif self.state == State.preEnabled:
           if not self.events.contains(ET.PRE_ENABLE):
-            print("#######State.preEnabled => enabled")
+            print("#######State.preEnabled => enabled", self.events)
             self.state = State.enabled
           else:
             self.current_alert_types.append(ET.PRE_ENABLE)
@@ -604,7 +604,7 @@ class Controls:
         # OVERRIDING
         elif self.state == State.overriding:
           if self.events.contains(ET.SOFT_DISABLE):
-            print("#######State.overriding => softDisabling")
+            print("#######State.overriding => softDisabling", self.events)
             self.state = State.softDisabling
             self.soft_disable_timer = int(SOFT_DISABLE_TIME / DT_CTRL)
             self.current_alert_types.append(ET.SOFT_DISABLE)
@@ -617,14 +617,14 @@ class Controls:
     # DISABLED
     elif self.state == State.disabled:
       if self.events.contains(ET.ENABLE):
-        print("####ET.ENABEL event....")
+        print("####ET.ENABEL event....", self.events)
         if self.events.contains(ET.NO_ENTRY):
          print("######## noEntry", self.events)
          self.current_alert_types.append(ET.NO_ENTRY)
 
         else:
           if self.events.contains(ET.PRE_ENABLE):
-            print("#######State.disabled => preEnabled")
+            print("#######State.disabled => preEnabled", self.events)
             self.state = State.preEnabled
           elif self.events.contains(ET.OVERRIDE_LATERAL) or self.events.contains(ET.OVERRIDE_LONGITUDINAL):
             print("#######State.disabled => overriding")
@@ -719,7 +719,7 @@ class Controls:
         actuators.speed = long_plan.speeds[-1]
 
       # Steering PID loop and lateral MPC
-      if Params().get_int("UseLaneLineSpeed") == 0:
+      if Params().get_int("UseLaneLineSpeedApply") == 0:
         self.desired_curvature = clip_curvature(CS.vEgo, self.desired_curvature, model_v2.action.desiredCurvature)
         actuators.curvature = self.desired_curvature
       else:
@@ -767,7 +767,7 @@ class Controls:
         if undershooting and turning and good_speed and max_torque:
           lac_log.active and self.events.add(EventName.steerSaturated)
       elif lac_log.saturated:
-        if Params().get_int("UseLaneLineSpeed") == 0:
+        if Params().get_int("UseLaneLineSpeedApply") == 0:
           dpath_points = model_v2.position.y
         else:
           dpath_points = lat_plan.dPathPoints

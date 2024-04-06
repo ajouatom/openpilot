@@ -80,6 +80,20 @@ def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_steer):
 
   return ret
 
+def create_suppress_lfa_scc2(packer, CAN, hda2_alt_steering, counter):
+  suppress_msg = "CAM_0x362" if hda2_alt_steering else "CAM_0x2a4"
+  msg_bytes = 32 if hda2_alt_steering else 24
+
+  values = {}
+  values["BYTE5"] = 34
+  values["BYTE8"] = 34
+  values["COUNTER"] = counter % 256
+  values["SET_ME_0"] = 0
+  values["SET_ME_0_2"] = 0
+  values["LEFT_LANE_LINE"] = 0
+  values["RIGHT_LANE_LINE"] = 0
+  return packer.make_can_msg(suppress_msg, CAN.ACAN, values)
+
 def create_suppress_lfa(packer, CAN, hda2_lfa_block_msg, hda2_alt_steering):
   suppress_msg = "CAM_0x362" if hda2_alt_steering else "CAM_0x2a4"
   msg_bytes = 32 if hda2_alt_steering else 24
@@ -161,6 +175,14 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
   values["JerkUpperLimit"] = 3.0
   values["DISTANCE_SETTING"] = hud_control.leadDistanceBars
 
+  values["ACC_ObjDist"] = 1
+  values["ObjValid"] = 0
+  values["OBJ_STATUS"] =  2
+  values["SET_ME_2"] = 0x4
+  values["SET_ME_3"] = 0x3
+  values["SET_ME_TMP_64"] = 0x64
+
+  values["NEW_SIGNAL_3"] = 0  # 1이되면 차선이탈방지 알람이 뜬다고...
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
 
 def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control, jerk_u, jerk_l):

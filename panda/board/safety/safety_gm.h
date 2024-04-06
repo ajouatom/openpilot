@@ -220,7 +220,7 @@ static bool gm_tx_hook(const CANPacket_t *to_send) {
   // GAS: safety check (interceptor)
   if (addr == 0x200) {
     if (longitudinal_interceptor_checks(to_send)) {
-      tx = 0;
+      tx = false;
     }
   }
 
@@ -240,17 +240,7 @@ static bool gm_tx_hook(const CANPacket_t *to_send) {
   }
 
   // BUTTONS: used for resume spamming and cruise cancellation with stock longitudinal
-  // trying to allow resume button even at Volt
-  if ((addr == 0x1E1) && gm_force_ascm) {
-    int button = (GET_BYTE(to_send, 5) >> 4) & 0x7U;
-
-    bool allowed_btn = (button == GM_BTN_CANCEL);
-    allowed_btn |= (button == GM_BTN_SET || button == GM_BTN_RESUME || button == GM_BTN_UNPRESS);
-    if (!allowed_btn) {
-      tx = 0;
-    }
-  }
-  else if ((addr == 0x1E1) && (gm_pcm_cruise || gm_pedal_long || gm_cc_long)) {
+  if ((addr == 0x1E1) && (gm_pcm_cruise || gm_pedal_long || gm_cc_long)) {
     int button = (GET_BYTE(to_send, 5) >> 4) & 0x7U;
 
     bool allowed_btn = (button == GM_BTN_CANCEL) && cruise_engaged_prev;

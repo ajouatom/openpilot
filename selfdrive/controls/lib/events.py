@@ -214,6 +214,7 @@ AlertCallbackType = Callable[[car.CarParams, car.CarState, messaging.SubMaster, 
 
 
 def soft_disable_alert(alert_text_2: str) -> AlertCallbackType:
+  print("soft_diable_alert:", alert_text_2)
   def func(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int) -> Alert:
     if soft_disable_time < int(0.5 / DT_CTRL):
       return ImmediateDisableAlert(alert_text_2)

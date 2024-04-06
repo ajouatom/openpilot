@@ -306,7 +306,7 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
   acc_main_on = (lat_active_count > 0) || controls_allowed;
   
   // cruise buttons check
-  if (addr == 0x1cf) {
+  if (addr == 0x1cf && !hyundai_longitudinal) {
     int button = GET_BYTE(to_send, 2) & 0x7U;
     bool is_cancel = (button == HYUNDAI_BTN_CANCEL);
     bool is_resume = (button == HYUNDAI_BTN_RESUME);
@@ -314,7 +314,7 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
 
     bool allowed = (is_cancel && cruise_engaged_prev) || (is_resume && controls_allowed) || (is_set && controls_allowed);
     if (!allowed) {
-      // carrot: all allowed //tx = false;  
+      tx = false;  
     }
   }
 
@@ -386,7 +386,7 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
   if (hyundai_acan_panda) {
       if (bus_num == 0) {
           bus_fwd = 2;
-          if (addr == 272 || addr == 80) { // || addr == 866 || addr == 676) {
+          if (addr == 272 || addr == 80 || addr == 81 || addr == 866 || addr == 676) {
               last_ts_lkas_msg_acan = now;
               lkas_msg_acan_active = true;
               //print("blocking\n");
@@ -409,12 +409,18 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
           }
 
           bus_fwd = 0;
-          if (addr == 272 || addr == 80) { // || addr == 866 || addr == 676) {
+          if (addr == 272 || addr == 80 || addr == 81 || addr == 866 || addr == 676) {
               if (now - last_ts_lkas_msg_acan < 200000) {
                   bus_fwd = -1;
               }
               else lkas_msg_acan_active = false;
           }
+          if (lkas_msg_acan_active) {
+              if (addr == 353 || addr == 354 || addr == 908 || addr == 1402 || addr == 1848) {
+                  bus_fwd = -1;
+              }
+          }
+
       }
       return bus_fwd;
   }

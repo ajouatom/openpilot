@@ -59,9 +59,8 @@ class LateralPlanner:
     self.lanelines_active = False
     self.lanelines_active_tmp = False
 
-    self.useLaneLineSpeed = float(self.params.get_int("UseLaneLineSpeed"))
+    self.useLaneLineSpeeApply = self.params.get_int("UseLaneLineSpeedApply")
     self.pathOffset = float(self.params.get_int("PathOffset")) * 0.01
-    self.carrotTest = self.params.get_int("CarrotTest")
     self.useLaneLineMode = False
     self.plan_yaw = np.zeros((TRAJECTORY_SIZE,))
     self.plan_yaw_rate = np.zeros((TRAJECTORY_SIZE,))
@@ -84,23 +83,14 @@ class LateralPlanner:
     self.readParams -= 1
     if self.readParams <= 0:
       self.readParams = 100
-      self.useLaneLineSpeed = float(self.params.get_int("UseLaneLineSpeed"))
+      self.useLaneLineSpeedApply = self.params.get_int("UseLaneLineSpeedApply")
       self.pathOffset = float(self.params.get_int("PathOffset")) * 0.01
-      self.carrotTest = self.params.get_int("CarrotTest")
 
-      if self.carrotTest == 2:
-        PATH_COST = self.params.get_int("LatPathCost") * 0.01 #1
-        LATERAL_MOTION_COST =  self.params.get_int("LatMotionCost") * 0.01 #0.11
-        LATERAL_ACCEL_COST = self.params.get_int("LatAccelCost") * 0.01 #1.0
-        LATERAL_JERK_COST = 0.04
-        STEERING_RATE_COST = self.params.get_int("LatSteerRateCost") #10.0
-      else:
-        PATH_COST = 1.0
-        LATERAL_MOTION_COST = 0.11
-        LATERAL_ACCEL_COST = 0.0
-        LATERAL_JERK_COST = 0.04
-        STEERING_RATE_COST = 700.0
-
+      PATH_COST = self.params.get_int("LatPathCost") * 0.01 #1
+      LATERAL_MOTION_COST =  self.params.get_int("LatMotionCost") * 0.01 #0.11
+      LATERAL_ACCEL_COST = self.params.get_int("LatAccelCost") * 0.01 #1.0
+      LATERAL_JERK_COST = 0.04
+      STEERING_RATE_COST = self.params.get_int("LatSteerRateCost") #10.0
 
     # clip speed , lateral planning is not possible at 0 speed
     measured_curvature = sm['controlsState'].curvature
@@ -124,11 +114,11 @@ class LateralPlanner:
     #lane_change_prob = self.LP.l_lane_change_prob + self.LP.r_lane_change_prob
     #self.DH.update(sm['carState'], md, sm['carControl'].latActive, lane_change_prob, sm)
 
-    if self.useLaneLineSpeed == 0:
+    if self.useLaneLineSpeedApply == 0:
       self.useLaneLineMode = False
-    elif self.v_ego*3.6 >= self.useLaneLineSpeed + 2:
+    elif self.v_ego*3.6 >= self.useLaneLineSpeedApply + 2:
       self.useLaneLineMode = True
-    elif self.v_ego*3.6 < self.useLaneLineSpeed - 2:
+    elif self.v_ego*3.6 < self.useLaneLineSpeedApply - 2:
       self.useLaneLineMode = False
 
     # Turn off lanes during lane change

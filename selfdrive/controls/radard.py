@@ -360,7 +360,7 @@ def lead_kf(v_lead: float, a_lead: float, dt: float = 0.05):
 
 class VisionTrack:
   def __init__(self, radar_ts):
-    self.radar_ts = 0.05
+    self.radar_ts = radar_ts
     self.dRel = 0.0
     self.yRel = 0.0
     self.vLead = 0.0
@@ -379,11 +379,11 @@ class VisionTrack:
     return {
       "dRel": self.dRel,
       "yRel": self.yRel,
-      "vRel": 0, #self.vRel,
+      "vRel": self.vRel,
       "vLead": self.vLead,
       "vLeadK": self.vLeadK,
-      "aLeadK": clip(self.aLeadK, self.aLead - 1.0, self.aLead + 1.0),
-      "aLeadTau": self.aLeadTau,
+      "aLeadK": 0.0 if self.mixRadarInfo in [3] else clip(self.aLeadK, self.aLead - 1.0, self.aLead + 1.0),
+      "aLeadTau": 0.3 if self.mixRadarInfo in [3] else self.aLeadTau,
       "fcw": False,
       "modelProb": self.prob,
       "status": self.status,
@@ -399,16 +399,19 @@ class VisionTrack:
   def update(self, lead_msg, model_v_ego, v_ego):
     self.aLeadTauInit = float(Params().get_int("ALeadTau")) / 100. 
     self.aLeadTauStart = float(Params().get_int("ALeadTauStart")) / 100.
+    self.mixRadarInfo = int(Params().get_int("MixRadarInfo"))
 
-    lead_v_rel_pred = lead_msg.v[0] - self.vLead
+    lead_v_rel_pred = lead_msg.v[0] - model_v_ego
     self.prob = lead_msg.prob
     self.v_ego = v_ego
     if self.prob > .5:
       self.dRel = float(lead_msg.x[0]) - RADAR_TO_CAMERA
       self.yRel = float(-lead_msg.y[0])
       self.vRel = lead_v_rel_pred
-      self.vLead = lead_msg.v[0] #float(v_ego + lead_v_rel_pred)
+      self.vLead = float(v_ego + lead_v_rel_pred)
       self.aLead = lead_msg.a[0]
+      if self.prob < 0.99:
+        self.kf = None
       self.status = True
     else:
       self.reset()
@@ -461,6 +464,8 @@ class RadarD:
     self.ready = sm.seen['modelV2']
     self.current_time = 1e-9*max(sm.logMonoTime.values())
 
+    leads_v3 = sm['modelV2'].leadsV3
+
     radar_points = []
     radar_errors = []
     if rr is not None:
@@ -475,6 +480,9 @@ class RadarD:
 
     ar_pts = {}
     for pt in radar_points:
+      if pt.trackId == 0 and pt.yRel == 0: # SCC radar
+        if leads_v3[0].prob > 0.5:
+          pt.yRel = -leads_v3[0].y[0]
       ar_pts[pt.trackId] = [pt.dRel, pt.yRel, pt.vRel, pt.measured, pt.aRel]
 
     # *** remove missing points from meta data ***
@@ -506,7 +514,7 @@ class RadarD:
       model_v_ego = sm['modelV2'].temporalPose.trans[0]
     else:
       model_v_ego = self.v_ego
-    leads_v3 = sm['modelV2'].leadsV3
+    #leads_v3 = sm['modelV2'].leadsV3
     if len(leads_v3) > 1:
       if model_updated:
         self.vision_tracks[0].update(leads_v3[0], model_v_ego, self.v_ego)
