@@ -464,6 +464,8 @@ class RadarD:
     self.ready = sm.seen['modelV2']
     self.current_time = 1e-9*max(sm.logMonoTime.values())
 
+    leads_v3 = sm['modelV2'].leadsV3
+
     radar_points = []
     radar_errors = []
     if rr is not None:
@@ -478,6 +480,9 @@ class RadarD:
 
     ar_pts = {}
     for pt in radar_points:
+      if pt.trackId == 0 and pt.yRel == 0: # SCC radar
+        if leads_V3[0].prob > 0.5:
+          pt.yRel = -leads_V3[0].y[0]
       ar_pts[pt.trackId] = [pt.dRel, pt.yRel, pt.vRel, pt.measured, pt.aRel]
 
     # *** remove missing points from meta data ***
@@ -509,7 +514,7 @@ class RadarD:
       model_v_ego = sm['modelV2'].temporalPose.trans[0]
     else:
       model_v_ego = self.v_ego
-    leads_v3 = sm['modelV2'].leadsV3
+    #leads_v3 = sm['modelV2'].leadsV3
     if len(leads_v3) > 1:
       if model_updated:
         self.vision_tracks[0].update(leads_v3[0], model_v_ego, self.v_ego)
