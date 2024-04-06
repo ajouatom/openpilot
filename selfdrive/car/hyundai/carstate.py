@@ -335,9 +335,9 @@ class CarState(CarStateBase):
     #ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_lamp(50, cp.vl["BLINKERS"][left_blinker_sig],
     #                                                                  cp.vl["BLINKERS"][right_blinker_sig])
     if self.CP.enableBsm:
-      cp_ = cp_cam if (self.CP.extFlags & HyundaiExtFlags.SCC_BUS2 and self.CP.flags & HyundaiFlags.CANFD_HDA2 and not CP.extFlags & HyundaiExtFlags.BSM_NO_ADAS.value) else cp
-      ret.leftBlindspot = cp_.vl["BLINDSPOTS_REAR_CORNERS"]["FL_INDICATOR"] != 0
-      ret.rightBlindspot = cp_.vl["BLINDSPOTS_REAR_CORNERS"]["FR_INDICATOR"] != 0
+      #cp_ = cp_cam if (self.CP.extFlags & HyundaiExtFlags.SCC_BUS2 and self.CP.flags & HyundaiFlags.CANFD_HDA2 and not self.CP.extFlags & HyundaiExtFlags.BSM_NO_ADAS.value) else cp
+      ret.leftBlindspot = cp.vl["BLINDSPOTS_REAR_CORNERS"]["FL_INDICATOR"] != 0
+      ret.rightBlindspot = cp.vl["BLINDSPOTS_REAR_CORNERS"]["FR_INDICATOR"] != 0
 
     # cruise state
     # CAN FD cars enable on main button press, set available if no TCS faults preventing engagement
@@ -575,7 +575,7 @@ class CarState(CarStateBase):
     ## BSM신호가 ADAS인경우 BUS2로 개조되고, 독립인경우 ECAN에서 들어옴.
     # 개조, 독립 EV6: 1, 1 => True, inADAS: 1, 0 => False
     # 비개조, 0, 0 => True
-    if CP.enableBsm and (not CP.extFlags & HyundaiExtFlags.SCC_BUS2.value or CP.extFlags & HyundaiExtFlags.BSM_NO_ADAS.value):
+    if CP.enableBsm: # and (not CP.extFlags & HyundaiExtFlags.SCC_BUS2.value or CP.extFlags & HyundaiExtFlags.BSM_NO_ADAS.value):
       messages += [
         ("BLINDSPOTS_REAR_CORNERS", 20),
       ]
@@ -611,9 +611,9 @@ class CarState(CarStateBase):
     ## BSM신호가 ADAS인경우 BUS2로 개조되고, 독립인경우 ECAN에서 들어옴.
     # 개조, 독립 EV6: 1, 1 => False, inADAS: 1, 0 => True
     # 비개조, 0, 0 => False
-    if CP.enableBsm and CP.extFlags & HyundaiExtFlags.SCC_BUS2.value and not CP.extFlags & HyundaiExtFlags.BSM_NO_ADAS.value:
-      messages += [
-        ("BLINDSPOTS_REAR_CORNERS", 20),
-      ]
+    #if CP.enableBsm and CP.extFlags & HyundaiExtFlags.SCC_BUS2.value and not CP.extFlags & HyundaiExtFlags.BSM_NO_ADAS.value:
+    #  messages += [
+    #    ("BLINDSPOTS_REAR_CORNERS", 20),
+    #  ]
 
     return CANParser(DBC[CP.carFingerprint]["pt"], messages, CanBus(CP).CAM)
