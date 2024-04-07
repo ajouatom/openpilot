@@ -257,7 +257,7 @@ class CarController(CarControllerBase):
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker))
 
       if self.CP.openpilotLongitudinalControl:
-        if not (self.CP.extFlags & HyundaiExtFlags.SCC_BUS2.value):
+        if True: #not (self.CP.extFlags & HyundaiExtFlags.SCC_BUS2.value):
           if hda2:
             can_sends.extend(hyundaicanfd.create_adrv_messages(self.CP, self.packer, self.CAN, self.frame))
           else:
