@@ -108,6 +108,7 @@ class VCruiseHelper:
     
     self.speedFromPCM = self.params.get_int("SpeedFromPCM")
     self.cruiseEcoControl = self.params.get_int("CruiseEcoControl")
+    self.cruiseSpeedUnit = self.params.get_int("CruiseSpeedUnit")
 
     self.params.put_int("UseLaneLineSpeedApply", self.params.get_int("UseLaneLineSpeed"))
 
@@ -128,7 +129,7 @@ class VCruiseHelper:
     elif self.params_count == 30:
       self.autoSpeedUptoRoadSpeedLimit = float(self.params.get_int("AutoSpeedUptoRoadSpeedLimit")) * 0.01
     elif self.params_count == 40:
-      pass
+      self.cruiseSpeedUnit = self.params.get_int("CruiseSpeedUnit")
     elif self.params_count == 50:
       self.cruiseEcoControl = self.params.get_int("CruiseEcoControl")
     elif self.params_count >= 100:
@@ -455,7 +456,7 @@ class VCruiseHelper:
     button_kph = v_cruise_kph
     buttonEvents = CS.buttonEvents
     button_speed_up_diff = 1
-    button_speed_dn_diff = 10 if self.cruiseButtonMode in [3, 4] else 1
+    button_speed_dn_diff = self.cruiseSpeedUnit if self.cruiseButtonMode in [1, 2] else 1
 
     button_type = 0
     if self.button_cnt > 0:
@@ -712,7 +713,7 @@ class VCruiseHelper:
     if v_cruise_kph < roadSpeed:
       v_cruise_kph = roadSpeed
     else:
-      for speed in range (40, int(self.cruiseSpeedMax), Params().get_int("CruiseSpeedUnit")):
+      for speed in range (40, int(self.cruiseSpeedMax), self.cruiseSpeedUnit):
         if v_cruise_kph < speed:
           v_cruise_kph = speed
           break
