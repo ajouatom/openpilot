@@ -72,7 +72,7 @@ class Ratekeeper:
 
   ## carrot
   def reset_time(self):
-    self._next_frame_time = sec_since_boot() + self._interval
+    self._next_frame_time = time.monotonic() + self._interval
     self._frame = 0
     self._remaining = 0.0
 
