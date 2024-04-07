@@ -175,7 +175,7 @@ bool hyundai_canfd_hda2_alt_steering = false;
 bool hyundai_canfd_scc_bus2 = false;
 bool hyundai_acan_panda = false;
 
-int canfd_tx_addr[32] = { 272, 80, 298, 866, 676, 480, 81, 490, 512, 837, 474, 352, 416, 282, 437, 506, 353, 354, 442, 485, 1402, 908, 1848, 0, };
+int canfd_tx_addr[32] = { 80, 81, 272, 282, 298, 352, 353, 354, 442, 485, 416, 437, 506, 474, 480, 490, 512, 676, 866, 837, 1402, 908, 1848, 0, };
 uint32_t canfd_tx_time[32] = { 0, };
 
 int hyundai_canfd_hda2_get_lkas_addr(void) {
