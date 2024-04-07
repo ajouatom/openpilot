@@ -654,43 +654,43 @@ void DrawPlot::makePlotData(const UIState* s, float& data1, float& data2, char *
     case 1:
         data1 = a_ego;
         data2 = accel;
-        sprintf(str, "Accel (G:desired, Y:actual)");
+        sprintf(str, "1.Accel (G:desired, Y:actual)");
         break;
     case 2:
         // curvature * v * v : 원심가속도
         data1 = curvature;
         //data2 = (desired_curvature * v_ego * v_ego) - (roll * 9.81);
         data2 = curvatures_0;
-        sprintf(str, "Lateral Accel(G:desired, Y:actual)");
+        sprintf(str, "2.Lateral Accel(G:desired, Y:actual)");
         break;
     case 3:
         data1 = v_ego;
         data2 = speeds_0;
-        sprintf(str, "Speed/Accel(G:speed, Y:accel)");
+        sprintf(str, "3.Speed/Accel(G:speed, Y:accel)");
         break;
     case 4:
         data1 = position.getX()[32];
         data2 = velocity.getX()[32];
-        sprintf(str, "Model data(G:velocity, Y:position");
+        sprintf(str, "4.Model data(G:velocity, Y:position");
         break;
     case 5:
         data1 = lead_radar.getVLeadK();
         data2 = lead_radar.getALeadK();
-        sprintf(str, "Detected radar(G:aLeadK, Y:vLeadK)");
+        sprintf(str, "5.Detected radar(G:aLeadK, Y:vLeadK)");
         break;
     case 6:
         data1 = a_ego;  //노
         data2 = lead_radar.getALeadK(); // 녹
-        sprintf(str, "Detected radar(G:aLeadK, Y:a_ego)");
+        sprintf(str, "6.Detected radar(G:aLeadK, Y:a_ego)");
         break;
     case 7:
         data1 = lead_radar.getVLeadK();
         data2 = lead_radar.getVLead(); // getDRel();
-        sprintf(str, "Detected radar(G:vLead, Y:vLeadK)");
+        sprintf(str, "7.Detected radar(G:vLead, Y:vLeadK)");
         break;
         data1 = a_ego; // 노
         data2 = accel_out;  // 녹
-        sprintf(str, "Accel (G:accel output, Y:a_ego)");
+        sprintf(str, "7.Accel (G:accel output, Y:a_ego)");
         break;
     default:
         data1 = data2 = 0;
