@@ -56,7 +56,7 @@ const CanMsg HYUNDAI_CANFD_HDA2_LONG_TX_MSGS[] = {
   {0x1DA, 0, 32}, // ADRV_0x1da
 
   {0x362, 1, 32}, // CAM_0x362
-  {0x2a4, 1, 24), // CAM_0x2a4
+  {0x2a4, 1, 24}, // CAM_0x2a4
 
   {0x110, 1, 32}, // LKAS_ALT (272)
 
