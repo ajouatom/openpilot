@@ -417,12 +417,16 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
               }
               else lkas_msg_acan_active = false;
           }
+          // carrot
+          // ADAS의 데이터가 LKAS로 보내지는것을 막음. 근데.. 이건 ECAN데이터들인데?
+          // 일단 삭제함.. 의미없어보임.
+          /*
           if (lkas_msg_acan_active) {
               if (addr == 353 || addr == 354 || addr == 908 || addr == 1402 || addr == 1848) {
                   bus_fwd = -1;
               }
           }
-
+          */
       }
       return bus_fwd;
   }
@@ -459,6 +463,9 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
       //else if (addr == 354) bus_fwd = -1;
       //if (addr == 908) bus_fwd = -1;
       //else if (addr == 1402) bus_fwd = -1;
+      if (addr == 698) bus_fwd = -1;
+      if (addr == 1848) bus_fwd = -1;
+      if (addr == 1996) bus_fwd = -1;
 #else
     // LKAS for HDA2, LFA for HDA1
     int hda2_lfa_block_addr = hyundai_canfd_hda2_alt_steering ? 0x362 : 0x2a4;
