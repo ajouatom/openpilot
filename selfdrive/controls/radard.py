@@ -198,7 +198,8 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
   # if no 'sane' match is found return -1
   # stationary radar points can be false positives
   dist_sane = abs(track.dRel - offset_vision_dist) < max([(offset_vision_dist)*.35, 5.0])
-  vel_tolerance = 20.0 if lead.prob > 0.85 else 10 # high vision track prob, increase tolerance (for stopped car)
+  vel_tolerance = 20.0 if lead.prob > 0.98 else 15.0 if lead.prob > 0.95 else 10 # high vision track prob, increase tolerance (for stopped car)
+  #vel_tolerance = interp(lead.prob, [0.80, 0.85, 0.98, 1.0], [10.0, 20.0, 25.0, 30.0])
   vel_sane = (abs(track.vRel + v_ego - lead.v[0]) < vel_tolerance) or (v_ego + track.vRel > 3)
   ##간혹 어수선한경우, 전방에 차가 없지만, 좌우에 차가많은경우 억지로 레이더를 가져오는 경우가 있음..(레이더트랙의 경우)
   y_sane = (abs(-lead.y[0]-track.yRel) < 3.2 / 2.)  #lane_width assumed 3.2M, laplacian_pdf 의 prob값을 검증하려했지만, y값으로 처리해도 될듯함.
