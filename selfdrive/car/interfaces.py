@@ -190,6 +190,9 @@ class CarInterfaceBase(ABC):
     self.silent_steer_warning = True
     self.v_ego_cluster_seen = False
 
+    # tw: steer warning
+    self.steer_warning = 0
+
     self.CS = None
     self.can_parsers = []
     if CarState is not None:
@@ -433,24 +436,27 @@ class CarInterfaceBase(ABC):
         print("$$$$$$$$$$$$$$ EventName.buttonCancel")
 
     # Handle permanent and temporary steering faults
+    # tw: steer warning
+    self.steer_warning = self.steer_warning + 1 if cs_out.steerFaultTemporary else 0
     self.steering_unpressed = 0 if cs_out.steeringPressed else self.steering_unpressed + 1
-    if cs_out.steerFaultTemporary:
+    if cs_out.steerFaultPermanent: # 스티어폴트 선행.
+      events.add(EventName.steerUnavailable)
+
+    elif cs_out.steerFaultTemporary: # 일시오류 체크.
       if cs_out.steeringPressed and (not self.CS.out.steerFaultTemporary or self.no_steer_warning):
         self.no_steer_warning = True
       else:
         self.no_steer_warning = False
 
-        # if the user overrode recently, show a less harsh alert
-        if self.silent_steer_warning or cs_out.standstill or self.steering_unpressed < int(1.5 / DT_CTRL):
-          self.silent_steer_warning = True
-          events.add(EventName.steerTempUnavailableSilent)
-        else:
+        # 핸들손올림이나 일시 스티어오류가 0.5초이상일때 경고하며, 운전자 개입은 안하는 것으로 한다.
+        if self.steering_unpressed > int(0.5/DT_CTRL) and self.steer_warning > int(0.5/DT_CTRL):
           events.add(EventName.steerTempUnavailable)
+        else:
+          events.add(EventName.steerTempUnavailableSilent)
+
     else:
       self.no_steer_warning = False
       self.silent_steer_warning = False
-    if cs_out.steerFaultPermanent:
-      events.add(EventName.steerUnavailable)
 
     # we engage when pcm is active (rising edge)
     # enabling can optionally be blocked by the car interface
