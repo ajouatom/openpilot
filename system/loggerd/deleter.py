@@ -64,7 +64,7 @@ def deleter_thread(exit_event):
         #print(f"delete_path={delete_path}")
 
         if any(name.endswith(".lock") for name in os.listdir(delete_path)):
-          print(f"continue_delete_path={delete_path}")
+          #print(f"continue_delete_path={delete_path}")
           continue
 
         try:

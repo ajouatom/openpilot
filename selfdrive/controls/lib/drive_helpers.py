@@ -108,6 +108,7 @@ class VCruiseHelper:
     
     self.speedFromPCM = self.params.get_int("SpeedFromPCM")
     self.cruiseEcoControl = self.params.get_int("CruiseEcoControl")
+    self.cruiseSpeedUnit = self.params.get_int("CruiseSpeedUnit")
 
     self.params.put_int("UseLaneLineSpeedApply", self.params.get_int("UseLaneLineSpeed"))
 
@@ -128,7 +129,7 @@ class VCruiseHelper:
     elif self.params_count == 30:
       self.autoSpeedUptoRoadSpeedLimit = float(self.params.get_int("AutoSpeedUptoRoadSpeedLimit")) * 0.01
     elif self.params_count == 40:
-      pass
+      self.cruiseSpeedUnit = self.params.get_int("CruiseSpeedUnit")
     elif self.params_count == 50:
       self.cruiseEcoControl = self.params.get_int("CruiseEcoControl")
     elif self.params_count >= 100:
@@ -455,7 +456,7 @@ class VCruiseHelper:
     button_kph = v_cruise_kph
     buttonEvents = CS.buttonEvents
     button_speed_up_diff = 1
-    button_speed_dn_diff = 10 if self.cruiseButtonMode in [3, 4] else 1
+    button_speed_dn_diff = self.cruiseSpeedUnit if self.cruiseButtonMode in [1, 2] else 1
 
     button_type = 0
     if self.button_cnt > 0:
@@ -524,7 +525,8 @@ class VCruiseHelper:
           self.params.put_int_nonblocking("MyDrivingMode", self.params.get_int("MyDrivingMode") % 4 + 1) # 1,2,3,4 (1:eco, 2:safe, 3:normal, 4:high speed)
         elif button_type == ButtonType.lfaButton:
           self._add_log("Button long lkas pressed ..")
-          self.params.put_int_nonblocking("UseLaneLineSpeedApply", self.params.get_int("UseLaneLineSpeed") if self.params.get_int("UseLaneLineSpeedApply") == 0 else 0)
+          useLaneLineSpeed = max(1, self.params.get_int("UseLaneLineSpeed"))
+          self.params.put_int_nonblocking("UseLaneLineSpeedApply", useLaneLineSpeed if self.params.get_int("UseLaneLineSpeedApply") == 0 else 0)
       else:
         if button_type == ButtonType.accelCruise:
           if self.softHoldActive > 0 and self.autoCruiseControl > 0:
@@ -687,7 +689,7 @@ class VCruiseHelper:
       road_speed = (30 if self.roadSpeed < 30 else self.roadSpeed) * self.autoSpeedUptoRoadSpeedLimit
       lead_v_kph = max(v_cruise_kph, min(lead_v_kph, road_speed))
       if lead_v_kph > v_cruise_kph and self.lead_dRel < 80:
-        self._add_log_auto_cruise("AutoSpeed up to leadCar={:.0f}kph, road_speed={:.0f}kph".format(lead_v_kph, road_speed))
+        #self._add_log_auto_cruise("AutoSpeed up to leadCar={:.0f}kph, road_speed={:.0f}kph".format(lead_v_kph, road_speed))
         v_cruise_kph = lead_v_kph
 
     v_cruise_kph = self.update_apilot_cmd(controls, v_cruise_kph)
@@ -711,7 +713,7 @@ class VCruiseHelper:
     if v_cruise_kph < roadSpeed:
       v_cruise_kph = roadSpeed
     else:
-      for speed in range (40, int(self.cruiseSpeedMax), Params().get_int("CruiseSpeedUnit")):
+      for speed in range (40, int(self.cruiseSpeedMax), self.cruiseSpeedUnit):
         if v_cruise_kph < speed:
           v_cruise_kph = speed
           break
