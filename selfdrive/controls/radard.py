@@ -482,7 +482,7 @@ class RadarD:
     ar_pts = {}
     for pt in radar_points:
       if pt.trackId == 0 and pt.yRel == 0: # SCC radar
-        if len(leads_v3) > 1 and leads_v3[0].prob > 0.5:
+        if self.ready and leads_v3[0].prob > 0.5:
           pt.yRel = -leads_v3[0].y[0]
       ar_pts[pt.trackId] = [pt.dRel, pt.yRel, pt.vRel, pt.measured, pt.aRel]
 
