@@ -171,8 +171,10 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
   values["aReqValue"] = a_val
   values["aReqRaw"] = a_raw
   values["VSetDis"] = set_speed
-  values["JerkLowerLimit"] = jerk if enabled else 1
-  values["JerkUpperLimit"] = 3.0
+  #values["JerkLowerLimit"] = jerk if enabled else 1
+  #values["JerkUpperLimit"] = 3.0
+  values["JerkLowerLimit"] = jerk_u if enabled else 1
+  values["JerkUpperLimit"] = jerk_l
   values["DISTANCE_SETTING"] = hud_control.leadDistanceBars
 
   values["ACC_ObjDist"] = 1
@@ -202,8 +204,10 @@ def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_ov
     "aReqValue": a_val,
     "aReqRaw": a_raw,
     "VSetDis": set_speed,
-    "JerkLowerLimit": jerk if enabled else 1,
-    "JerkUpperLimit": 3.0,
+    #"JerkLowerLimit": jerk if enabled else 1,
+    #"JerkUpperLimit": 3.0,
+    "JerkLowerLimit": jerk_u if enabled else 1,
+    "JerkUpperLimit": jerk_l,
 
     "ACC_ObjDist": 1,
     "ObjValid": 0,
