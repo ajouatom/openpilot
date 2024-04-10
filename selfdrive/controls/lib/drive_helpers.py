@@ -689,7 +689,7 @@ class VCruiseHelper:
       road_speed = (30 if self.roadSpeed < 30 else self.roadSpeed) * self.autoSpeedUptoRoadSpeedLimit
       lead_v_kph = max(v_cruise_kph, min(lead_v_kph, road_speed))
       if lead_v_kph > v_cruise_kph and self.lead_dRel < 80:
-        self._add_log_auto_cruise("AutoSpeed up to leadCar={:.0f}kph, road_speed={:.0f}kph".format(lead_v_kph, road_speed))
+        #self._add_log_auto_cruise("AutoSpeed up to leadCar={:.0f}kph, road_speed={:.0f}kph".format(lead_v_kph, road_speed))
         v_cruise_kph = lead_v_kph
 
     v_cruise_kph = self.update_apilot_cmd(controls, v_cruise_kph)
