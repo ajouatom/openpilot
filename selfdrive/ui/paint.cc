@@ -1679,10 +1679,21 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
 
     if (s->show_path_end > 0) {
         if (draw_dist) {
-            float dist = (getRadarDist() > 0.0) ? getRadarDist() : getVisionDist();
-            if (dist < 10.0) sprintf(str, "%.1f", dist);
-            else sprintf(str, "%.0f", dist);
-            ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
+            //float dist = (getRadarDist() > 0.0) ? getRadarDist() : getVisionDist();
+            //if (dist < 10.0) sprintf(str, "%.1f", dist);
+            //else sprintf(str, "%.0f", dist);
+            //ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
+            int wStr = 0;
+            sprintf(str, "%.1f", getRadarDist());
+            wStr = 35 * (strlen(str) + 0);
+            ui_fill_rect(s->vg, { (int)(x - wStr / 2), (int)(disp_y - 50 - 35), wStr, 42 }, COLOR_RED, 15);
+            ui_draw_text(s, x, disp_y - 50, str, 40, COLOR_WHITE, BOLD);
+
+            sprintf(str, "%.1f", getVisionDist());
+            wStr = 35 * (strlen(str) + 0);
+            ui_fill_rect(s->vg, { (int)(x - wStr / 2), (int)(disp_y + 50 - 35), wStr, 42 }, COLOR_BLUE, 15);
+            ui_draw_text(s, x, disp_y + 50, str, 40, COLOR_WHITE, BOLD);
+
 
         }
         sprintf(str, "%d", getLpSource());
