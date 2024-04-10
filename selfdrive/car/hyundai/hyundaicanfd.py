@@ -167,12 +167,14 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
   values = cruise_info_copy
   values["ACCMode"] = 0 if not enabled else (2 if gas_override else 1)
   values["MainMode_ACC"] = 1
-  values["StopReq"] = 1 if stopping else 0
+  values["StopReq"] = 1 if stopping or hud_control.softHold > 0 else 0
   values["aReqValue"] = a_val
   values["aReqRaw"] = a_raw
   values["VSetDis"] = set_speed
-  values["JerkLowerLimit"] = jerk if enabled else 1
-  values["JerkUpperLimit"] = 3.0
+  #values["JerkLowerLimit"] = jerk if enabled else 1
+  #values["JerkUpperLimit"] = 3.0
+  values["JerkLowerLimit"] = jerk_l if enabled else 1
+  values["JerkUpperLimit"] = jerk_u
   values["DISTANCE_SETTING"] = hud_control.leadDistanceBars
 
   values["ACC_ObjDist"] = 1
@@ -198,12 +200,14 @@ def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_ov
   values = {
     "ACCMode": 0 if not enabled else (2 if gas_override else 1),
     "MainMode_ACC": 1,
-    "StopReq": 1 if stopping else 0,
+    "StopReq": 1 if stopping or hud_control.softHold > 0 else 0,
     "aReqValue": a_val,
     "aReqRaw": a_raw,
     "VSetDis": set_speed,
-    "JerkLowerLimit": jerk if enabled else 1,
-    "JerkUpperLimit": 3.0,
+    #"JerkLowerLimit": jerk if enabled else 1,
+    #"JerkUpperLimit": 3.0,
+    "JerkLowerLimit": jerk_l if enabled else 1,
+    "JerkUpperLimit": jerk_u,
 
     "ACC_ObjDist": 1,
     "ObjValid": 0,

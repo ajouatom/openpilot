@@ -1617,7 +1617,7 @@ void DrawApilot::makePathXY(const UIState* s, int& path_bx1, int& path_x, int& p
     //}
     //_path_x = (int)std::clamp(_path_x, 550.f, s->fb_w - 550.f);
     _path_x = (int)std::clamp(_path_x, 350.f, s->fb_w - 350.f);
-    _path_y = (int)std::clamp(_path_y, 200.f, s->fb_h - 120.f);
+    _path_y = (int)std::clamp(_path_y, 200.f, s->fb_h - 80.f);
     if (isnan(_path_x) || isnan(_path_y) || isnan(_path_width));
     else {
         path_fx = path_fx * alpha + _path_x * (1. - alpha);
@@ -1679,10 +1679,21 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
 
     if (s->show_path_end > 0) {
         if (draw_dist) {
-            float dist = (getRadarDist() > 0.0) ? getRadarDist() : getVisionDist();
-            if (dist < 10.0) sprintf(str, "%.1f", dist);
-            else sprintf(str, "%.0f", dist);
-            ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
+            //float dist = (getRadarDist() > 0.0) ? getRadarDist() : getVisionDist();
+            //if (dist < 10.0) sprintf(str, "%.1f", dist);
+            //else sprintf(str, "%.0f", dist);
+            //ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
+            int wStr = 0, w=80;
+            sprintf(str, "%.1f", getRadarDist());
+            wStr = 32 * (strlen(str) + 0);
+            ui_fill_rect(s->vg, { (int)(x - w - wStr / 2), (int)(disp_y - 35), wStr, 42 }, COLOR_RED, 15);
+            ui_draw_text(s, x - w, disp_y, str, 40, COLOR_WHITE, BOLD);
+
+            sprintf(str, "%.1f", getVisionDist());
+            wStr = 32 * (strlen(str) + 0);
+            ui_fill_rect(s->vg, { (int)(x + w - wStr / 2), (int)(disp_y - 35), wStr, 42 }, COLOR_BLUE, 15);
+            ui_draw_text(s, x + w, disp_y, str, 40, COLOR_WHITE, BOLD);
+
 
         }
         sprintf(str, "%d", getLpSource());

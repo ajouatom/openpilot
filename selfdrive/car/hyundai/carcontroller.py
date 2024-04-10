@@ -200,30 +200,6 @@ class CarController(CarControllerBase):
         elif self.frame % 100 == 53:
           can_sends.append([addr, 0, avm_on, bus])
 
-    # ajouatom: calculate jerk, cb : reverse engineer from KONA EV
-    jerk = actuators.jerk
-    startingJerk = self.jerkStartLimit
-    jerkLimit = 5.0
-    self.jerk_count += DT_CTRL
-    jerk_max = interp(self.jerk_count, [0, 1.5, 2.5], [startingJerk, startingJerk, jerkLimit])
-    cb_upper = cb_lower = 0
-    if actuators.longControlState == LongCtrlState.off:
-      jerk_u = jerkLimit
-      jerk_l = jerkLimit          
-      self.jerk_count = 0
-    elif actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
-      jerk_u = 0.5
-      jerk_l = 1.0 #jerkLimit
-      if self.CP.carFingerprint in CANFD_CAR:
-        jerk_u = 1.6
-      self.jerk_count = 0
-    else:
-      jerk_u = min(max(0.5, jerk * 2.0), jerk_max)
-      #jerk_l = min(max(1.0, -jerk * 2.0), jerk_max)
-      jerk_l = min(max(1.2, -jerk * 2.0), jerkLimit) ## 1.0으로 하니 덜감속, 1.5로하니 너무감속, 1.2로 한번해보자(231228)
-      cb_upper = clip(0.9 + accel * 0.2, 0, 1.2)
-      cb_lower = clip(0.8 + accel * 0.2, 0, 1.2)
-
     # CAN-FD platforms
     if self.CP.carFingerprint in CANFD_CAR:
       hda2 = self.CP.flags & HyundaiFlags.CANFD_HDA2
@@ -257,6 +233,24 @@ class CarController(CarControllerBase):
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker))
 
       if self.CP.openpilotLongitudinalControl:
+
+        jerk = actuators.jerk
+        startingJerk = self.jerkStartLimit
+        jerkLimit = 5.0
+        self.jerk_count += DT_CTRL
+        jerk_max = interp(self.jerk_count, [0, 1.5, 2.5], [startingJerk, startingJerk, jerkLimit])
+        if actuators.longControlState == LongCtrlState.off:
+          jerk_u = jerkLimit
+          jerk_l = jerkLimit          
+          self.jerk_count = 0
+        elif actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
+          jerk_u = 1.5
+          jerk_l = 1.0 #jerkLimit
+          self.jerk_count = 0
+        else:
+          jerk_u = min(max(1.0, jerk * 2.0), jerk_max)
+          jerk_l = min(max(1.0, -jerk * 3.0), jerkLimit) 
+
         if not (self.CP.extFlags & HyundaiExtFlags.SCC_BUS2.value):
           if hda2:
             can_sends.extend(hyundaicanfd.create_adrv_messages(self.CP, self.packer, self.CAN, self.frame))
@@ -306,6 +300,28 @@ class CarController(CarControllerBase):
 
       if self.frame % 2 == 0 and self.CP.openpilotLongitudinalControl:
         
+        # ajouatom: calculate jerk, cb : reverse engineer from KONA EV
+        jerk = actuators.jerk
+        startingJerk = self.jerkStartLimit
+        jerkLimit = 5.0
+        self.jerk_count += DT_CTRL
+        jerk_max = interp(self.jerk_count, [0, 1.5, 2.5], [startingJerk, startingJerk, jerkLimit])
+        cb_upper = cb_lower = 0
+        if actuators.longControlState == LongCtrlState.off:
+          jerk_u = jerkLimit
+          jerk_l = jerkLimit          
+          self.jerk_count = 0
+        elif actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
+          jerk_u = 0.5
+          jerk_l = 1.0 #jerkLimit
+          self.jerk_count = 0
+        else:
+          jerk_u = min(max(0.5, jerk * 2.0), jerk_max)
+          #jerk_l = min(max(1.0, -jerk * 2.0), jerk_max)
+          jerk_l = min(max(1.2, -jerk * 2.0), jerkLimit) ## 1.0으로 하니 덜감속, 1.5로하니 너무감속, 1.2로 한번해보자(231228)
+          cb_upper = clip(0.9 + accel * 0.2, 0, 1.2)
+          cb_lower = clip(0.8 + accel * 0.2, 0, 1.2)
+
         # TODO: unclear if this is needed
         #jerk = 3.0 if actuators.longControlState == LongCtrlState.pid else 1.0
         #use_fca = self.CP.flags & HyundaiFlags.USE_FCA.value
