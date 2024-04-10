@@ -1617,7 +1617,7 @@ void DrawApilot::makePathXY(const UIState* s, int& path_bx1, int& path_x, int& p
     //}
     //_path_x = (int)std::clamp(_path_x, 550.f, s->fb_w - 550.f);
     _path_x = (int)std::clamp(_path_x, 350.f, s->fb_w - 350.f);
-    _path_y = (int)std::clamp(_path_y, 200.f, s->fb_h - 120.f);
+    _path_y = (int)std::clamp(_path_y, 200.f, s->fb_h - 80.f);
     if (isnan(_path_x) || isnan(_path_y) || isnan(_path_width));
     else {
         path_fx = path_fx * alpha + _path_x * (1. - alpha);
