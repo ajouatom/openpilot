@@ -249,7 +249,7 @@ class CarController(CarControllerBase):
           self.jerk_count = 0
         else:
           jerk_u = min(max(1.0, jerk * 1.2), jerk_max)
-          jerk_l = min(max(1.0, -jerk * 3.0), jerkLimit) 
+          jerk_l = min(max(1.5, -jerk * 3.0), jerkLimit) 
 
         if not (self.CP.extFlags & HyundaiExtFlags.SCC_BUS2.value):
           if hda2:
