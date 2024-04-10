@@ -1686,13 +1686,13 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
             int wStr = 0;
             sprintf(str, "%.1f", getRadarDist());
             wStr = 35 * (strlen(str) + 0);
-            ui_fill_rect(s->vg, { (int)(x - wStr / 2), (int)(disp_y - 50 - 35), wStr, 42 }, COLOR_RED, 15);
-            ui_draw_text(s, x, disp_y - 50, str, 40, COLOR_WHITE, BOLD);
+            ui_fill_rect(s->vg, { (int)(x - 50 - wStr / 2), (int)(disp_y - 35), wStr, 42 }, COLOR_RED, 15);
+            ui_draw_text(s, x - 50, disp_y, str, 40, COLOR_WHITE, BOLD);
 
             sprintf(str, "%.1f", getVisionDist());
             wStr = 35 * (strlen(str) + 0);
-            ui_fill_rect(s->vg, { (int)(x - wStr / 2), (int)(disp_y + 50 - 35), wStr, 42 }, COLOR_BLUE, 15);
-            ui_draw_text(s, x, disp_y + 50, str, 40, COLOR_WHITE, BOLD);
+            ui_fill_rect(s->vg, { (int)(x + 50 - wStr / 2), (int)(disp_y - 35), wStr, 42 }, COLOR_BLUE, 15);
+            ui_draw_text(s, x + 50, disp_y, str, 40, COLOR_WHITE, BOLD);
 
 
         }
