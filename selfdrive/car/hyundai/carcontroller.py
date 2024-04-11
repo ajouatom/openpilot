@@ -235,7 +235,7 @@ class CarController(CarControllerBase):
       if self.CP.openpilotLongitudinalControl:
 
         jerk = actuators.jerk
-        startingJerk = self.jerkStartLimit
+        startingJerk = 0.5 #self.jerkStartLimit
         jerkLimit = 5.0
         self.jerk_count += DT_CTRL
         jerk_max = interp(self.jerk_count, [0, 1.5, 2.5], [startingJerk, startingJerk, jerkLimit])
