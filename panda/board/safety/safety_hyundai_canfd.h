@@ -56,9 +56,11 @@ const CanMsg HYUNDAI_CANFD_HDA2_LONG_TX_MSGS[] = {
   {0x1DA, 0, 32}, // ADRV_0x1da
 
   {0x362, 1, 32}, // CAM_0x362
+  {0x2a4, 1, 24}, // CAM_0x2a4
 
   {0x110, 1, 32}, // LKAS_ALT (272)
 
+  {0x50, 1, 16}, // 
   {0x51, 1, 32}, // 
 
   {353, 0, 24}, // ADRV_353
@@ -173,7 +175,7 @@ bool hyundai_canfd_hda2_alt_steering = false;
 bool hyundai_canfd_scc_bus2 = false;
 bool hyundai_acan_panda = false;
 
-int canfd_tx_addr[32] = { 272, 80, 298, 866, 676, 480, 81, 490, 512, 837, 474, 352, 416, 282, 437, 506, 353, 354, 442, 485, 1402, 908, 1848, 0, };
+int canfd_tx_addr[32] = { 80, 81, 272, 282, 298, 352, 353, 354, 442, 485, 416, 437, 506, 474, 480, 490, 512, 676, 866, 837, 1402, 908, 1848, 0, };
 uint32_t canfd_tx_time[32] = { 0, };
 
 int hyundai_canfd_hda2_get_lkas_addr(void) {
@@ -415,12 +417,16 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
               }
               else lkas_msg_acan_active = false;
           }
+          // carrot
+          // ADAS의 데이터가 LKAS로 보내지는것을 막음. 근데.. 이건 ECAN데이터들인데?
+          // 일단 삭제함.. 의미없어보임.
+          /*
           if (lkas_msg_acan_active) {
               if (addr == 353 || addr == 354 || addr == 908 || addr == 1402 || addr == 1848) {
                   bus_fwd = -1;
               }
           }
-
+          */
       }
       return bus_fwd;
   }
@@ -457,6 +463,11 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
       //else if (addr == 354) bus_fwd = -1;
       //if (addr == 908) bus_fwd = -1;
       //else if (addr == 1402) bus_fwd = -1;
+      //
+      // 아래코드중 오토상향등코드 있음.. ㅋ
+      //if (addr == 698) bus_fwd = -1;
+      //if (addr == 1848) bus_fwd = -1;
+      //if (addr == 1996) bus_fwd = -1;
 #else
     // LKAS for HDA2, LFA for HDA1
     int hda2_lfa_block_addr = hyundai_canfd_hda2_alt_steering ? 0x362 : 0x2a4;
