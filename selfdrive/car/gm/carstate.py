@@ -31,7 +31,13 @@ class CarState(CarStateBase):
 
     # GAP_DIST
     self.prev_distance_button = False
-    self.distance_button_pressed = False 
+    self.distance_button_pressed = False
+
+    # kans: steer이벤트(일시불가) 줄이기 위해
+    self.belowSteerSpeed_shown = False
+    self.disable_belowSteerSpeed = False
+    self.resumeRequired_shown = False
+    self.disable_resumeRequired = False
 
     self.buttons_counter = 0
 
