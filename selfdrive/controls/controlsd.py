@@ -857,9 +857,9 @@ class Controls:
     ## ajouatom
     no_entry_events = self.events.contains(ET.NO_ENTRY)
     #hudControl.cruiseGap = self.CS.longitudinal_personality + 1 if self.CS is not None else 1
-    lead_one = self.sm['radarState'].leadOne
-    hudControl.objDist = int(lead_one.dRel) if lead_one.status else 0
-    hudControl.objRelSpd = lead_one.vRel if lead_one.status else 0
+    #lead_one = self.sm['radarState'].leadOne
+    #hudControl.objDist = int(lead_one.dRel) if lead_one.status else 0
+    #hudControl.objRelSpd = lead_one.vRel if lead_one.status else 0
 
     CC.cruiseControl.activate = self.carrotCruiseActivate > 0 and not no_entry_events
     CC.hudControl.softHold = self.v_cruise_helper.softHoldActive
