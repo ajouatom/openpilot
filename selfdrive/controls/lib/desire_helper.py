@@ -137,13 +137,15 @@ class DesireHelper:
     self.autoTurnControl = self.params.get_int("AutoTurnControl")
     self.laneChangeNeedTorque = self.params.get_bool("LaneChangeNeedTorque")
     self.autoLaneChangeSpeed = self.params.get_int("AutoLaneChangeSpeed") / 3.6
-    radarState = sm['radarState']
+
+    #TODO: radarState는 어디엔가 다시 해야할듯..
+    #radarState = sm['radarState']
     self.leftSideObjectDist = 255
     self.rightSideObjectDist = 255
-    if radarState.leadLeft.status:
-      self.leftSideObjectDist = radarState.leadLeft.dRel + radarState.leadLeft.vLead * 4.0
-    if radarState.leadRight.status:
-      self.rightSideObjectDist = radarState.leadRight.dRel + radarState.leadRight.vLead * 4.0
+    #if radarState.leadLeft.status:
+    #  self.leftSideObjectDist = radarState.leadLeft.dRel + radarState.leadLeft.vLead * 4.0
+    #if radarState.leadRight.status:
+    #  self.rightSideObjectDist = radarState.leadRight.dRel + radarState.leadRight.vLead * 4.0
 
     leftBlinkerExt = sm['longitudinalPlan'].leftBlinkerExt
     rightBlinkerExt = sm['longitudinalPlan'].rightBlinkerExt
