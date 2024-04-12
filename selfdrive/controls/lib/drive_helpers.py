@@ -281,8 +281,10 @@ class VCruiseHelper:
     #  self.lead_dRel = leadOne.dRel
     #  self.lead_vRel = leadOne.vRel
     #  self.lead_vLead = leadOne.vLeadK
-    leadOne = controls.sm['modelV2'].leadsV3[0]
-    if leadOne.prob > 0.5:
+    leadOne = None
+    if len(controls.sm['modelV2'].leadsV3) > 0:
+      leadOne = controls.sm['modelV2'].leadsV3[0]
+    if leadOne is not None and leadOne.prob > 0.5:
       self.lead_dRel = leadOne.x[0]
       self.lead_vRel = leadOne.v[0] - CS.vEgo
       self.lead_vLead = leadOne.v[0]
