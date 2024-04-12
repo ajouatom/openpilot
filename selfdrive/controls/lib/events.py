@@ -978,14 +978,6 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
       Priority.HIGH, VisualAlert.wrongGear, AudibleAlert.promptRepeat, 4.),
   },
 
-  EventName.personalityRelaxed2: {
-    ET.PERMANENT: Alert(
-      "Relaxed2",
-      "",
-      AlertStatus.normal, AlertSize.small,
-      Priority.LOW, VisualAlert.none, AudibleAlert.none, 2.0),
-  },
-
   EventName.personalityRelaxed: {
     ET.PERMANENT: Alert(
       "Relaxed",
