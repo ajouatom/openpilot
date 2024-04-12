@@ -1684,17 +1684,20 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
             //else sprintf(str, "%.0f", dist);
             //ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
             int wStr = 0, w=80;
-            sprintf(str, "%.1f", getRadarDist());
-            wStr = 32 * (strlen(str) + 0);
-            ui_fill_rect(s->vg, { (int)(x - w - wStr / 2), (int)(disp_y - 35), wStr, 42 }, isLeadSCC() ? COLOR_RED : COLOR_ORANGE, 15);
-            ui_draw_text(s, x - w, disp_y, str, 40, COLOR_WHITE, BOLD);
-
-            sprintf(str, "%.1f", getVisionDist());
-            wStr = 32 * (strlen(str) + 0);
-            ui_fill_rect(s->vg, { (int)(x + w - wStr / 2), (int)(disp_y - 35), wStr, 42 }, COLOR_BLUE, 15);
-            ui_draw_text(s, x + w, disp_y, str, 40, COLOR_WHITE, BOLD);
-
-
+            float dist = getRadardist();
+            if (dist > 0.0) {
+                sprintf(str, "%.1f", dist);
+                wStr = 32 * (strlen(str) + 0);
+                ui_fill_rect(s->vg, { (int)(x - w - wStr / 2), (int)(disp_y - 35), wStr, 42 }, isLeadSCC() ? COLOR_RED : COLOR_ORANGE, 15);
+                ui_draw_text(s, x - w, disp_y, str, 40, COLOR_WHITE, BOLD);
+            }
+            dist = getVisionDist();
+            if (dist > 0.0) {
+                sprintf(str, "%.1f", dist);
+                wStr = 32 * (strlen(str) + 0);
+                ui_fill_rect(s->vg, { (int)(x + w - wStr / 2), (int)(disp_y - 35), wStr, 42 }, COLOR_BLUE, 15);
+                ui_draw_text(s, x + w, disp_y, str, 40, COLOR_WHITE, BOLD);
+            }
         }
         sprintf(str, "%d", getLpSource());
         ui_draw_text(s, x, disp_y - 70, str, 25, COLOR_WHITE, BOLD);
