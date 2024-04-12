@@ -275,12 +275,17 @@ class VCruiseHelper:
         self._make_event(controls, EventName.trafficSignChanged)
     self.trafficState = trafficState
 
-  def _update_lead(self, controls):
-    leadOne = controls.sm['radarState'].leadOne
-    if leadOne.status: # and leadOne.radar:
-      self.lead_dRel = leadOne.dRel
-      self.lead_vRel = leadOne.vRel
-      self.lead_vLead = leadOne.vLeadK
+  def _update_lead(self, CS, controls):
+    #leadOne = controls.sm['radarState'].leadOne
+    #if leadOne.status: # and leadOne.radar:
+    #  self.lead_dRel = leadOne.dRel
+    #  self.lead_vRel = leadOne.vRel
+    #  self.lead_vLead = leadOne.vLeadK
+    leadOne = controls.sm['modelV2'].leadsV3[0]
+    if leadOne.prob > 0.5:
+      self.lead_dRel = leadOne.x[0]
+      self.lead_vRel = leadOne.v[0] - CS.vEgo
+      self.lead_vLead = leadOne.v[0]
     else:
       self.lead_dRel = 0
       self.lead_vRel = 0
@@ -309,7 +314,7 @@ class VCruiseHelper:
 
     self.autoCruiseCancelTimer = max(self.autoCruiseCancelTimer - 1, 0)
 
-    self._update_lead(controls)
+    self._update_lead(CS, controls)
     self.v_ego_kph_set = int(CS.vEgoCluster * CV.MS_TO_KPH + 0.5)
     if self.v_cruise_kph_set > 200:
       self.v_cruise_kph_set = self.cruiseSpeedMin
