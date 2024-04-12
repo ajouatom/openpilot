@@ -12,6 +12,7 @@ from cereal.visionipc import VisionIpcClient, VisionStreamType
 
 
 from openpilot.common.conversions import Conversions as CV
+from openpilot.common.git import get_short_branch
 from openpilot.common.numpy_fast import clip
 from openpilot.common.params import Params
 from openpilot.common.realtime import config_realtime_process, Priority, Ratekeeper, DT_CTRL
@@ -30,7 +31,6 @@ from openpilot.selfdrive.controls.lib.longcontrol import LongControl
 from openpilot.selfdrive.controls.lib.vehicle_model import VehicleModel
 
 from openpilot.system.hardware import HARDWARE
-from openpilot.system.version import get_short_branch
 
 SOFT_DISABLE_TIME = 3  # seconds
 LDW_MIN_SPEED = 31 * CV.MPH_TO_MS
@@ -98,9 +98,9 @@ class Controls:
       ignore += ['driverCameraState', 'managerState']
     self.sm = messaging.SubMaster(['deviceState', 'pandaStates', 'peripheralState', 'modelV2', 'liveCalibration',
                                    'carOutput', 'driverMonitoringState', 'longitudinalPlan', 'liveLocationKalman',
-                                   'managerState', 'liveParameters', 'radarState', 'liveTorqueParameters',
+                                   'managerState', 'liveParameters', 'liveTorqueParameters',
                                    'testJoystick', 'lateralPlan', 'roadLimitSpeed'] + self.camera_packets + self.sensor_packets,
-                                  ignore_alive=ignore, ignore_avg_freq=ignore+['radarState', 'testJoystick'], ignore_valid=['testJoystick', 'roadLimitSpeed'],
+                                  ignore_alive=ignore, ignore_avg_freq=ignore+['testJoystick'], ignore_valid=['testJoystick', 'roadLimitSpeed'],
                                   frequency=int(1/DT_CTRL))
 
     self.joystick_mode = self.params.get_bool("JoystickDebugMode")
@@ -169,7 +169,6 @@ class Controls:
     self.personality = self.read_personality_param()
     self.v_cruise_helper = VCruiseHelper(self.CP)
     self.recalibrating_seen = False
-    self.nn_alert_shown = False
     self.rx_checks_invalid_count = 0
 
     self.can_log_mono_time = 0
@@ -229,12 +228,6 @@ class Controls:
     # no more events while in dashcam mode
     if self.CP.passive:
       return
-
-    # show alert to indicate whether NNFF is loaded
-    if not self.nn_alert_shown and self.sm.frame % 550 == 0 and self.CP.lateralTuning.which() == 'torque' and self.CI.has_lateral_torque_nn:
-      self.nn_alert_shown = True
-      self.events.add(EventName.torqueNNLoad)
-      print("$$$$$$$$$$ NNFF loaded displayed..")
 
     # Block resume if cruise never previously enabled
     resume_pressed = any(be.type in (ButtonType.accelCruise, ButtonType.resumeCruise) for be in CS.buttonEvents)
@@ -368,8 +361,8 @@ class Controls:
       #self.events.add(EventName.controlsdLagging)
       print("controlsdLagging")
       self.rk.reset_time()
-    if len(self.sm['radarState'].radarErrors) or (not self.rk.lagging and not self.sm.all_checks(['radarState'])):
-      self.events.add(EventName.radarFault)
+    # if len(self.sm['radarState'].radarErrors) or (not self.rk.lagging and not self.sm.all_checks(['radarState'])):
+    #   self.events.add(EventName.radarFault)
     if not self.sm.valid['pandaStates']:
       self.events.add(EventName.usbError)
     if CS.canTimeout:
@@ -730,8 +723,7 @@ class Controls:
         actuators.curvature = self.desired_curvature
       actuators.steer, actuators.steeringAngleDeg, lac_log = self.LaC.update(CC.latActive, CS, self.VM, lp,
                                                                              self.steer_limited, self.desired_curvature,
-                                                                             self.sm['liveLocationKalman'],
-                                                                             model_data=self.sm['modelV2'])
+                                                                             self.sm['liveLocationKalman'])
     else:
       lac_log = log.ControlsState.LateralDebugState.new_message()
       if self.sm.recv_frame['testJoystick'] > 0:

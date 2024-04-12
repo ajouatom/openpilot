@@ -75,7 +75,7 @@ void MapWindow::initLayers() {
 
     QVariantMap transition;
     transition["duration"] = 400;  // ms
-    m_map->setPaintProperty("navLayer", "line-color", getNavPathColor(uiState()->scene.navigate_on_openpilot));
+    m_map->setPaintProperty("navLayer", "line-color", QColor("#31a1ee"));
     m_map->setPaintProperty("navLayer", "line-color-transition", transition);
     m_map->setPaintProperty("navLayer", "line-width", 7.5);
     m_map->setLayoutProperty("navLayer", "line-cap", "round");
@@ -462,7 +462,6 @@ void MapWindow::pinchTriggered(QPinchGesture *gesture) {
 void MapWindow::offroadTransition(bool offroad) {
   if (offroad) {
     clearRoute();
-    uiState()->scene.navigate_on_openpilot = false;
     routing_problem = false;
   } else {
     auto dest = coordinate_from_param("NavDestination");

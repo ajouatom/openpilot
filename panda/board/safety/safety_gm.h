@@ -34,8 +34,7 @@ const int GM_GAS_INTERCEPTOR_THRESHOLD = 515; // (610 + 306.25) / 2 ratio betwee
 
 const CanMsg GM_ASCM_TX_MSGS[] = {{0x180, 0, 4}, {0x409, 0, 7}, {0x40A, 0, 7}, {0x2CB, 0, 8}, {0x370, 0, 6}, {0x200, 0, 6},  // pt bus
                                   {0xA1, 1, 7}, {0x306, 1, 8}, {0x308, 1, 7}, {0x310, 1, 2},   // obs bus
-                                  {0x315, 2, 5},  // ch bus
-                                  {0x104c006c, 3, 3}, {0x10400060, 3, 5}};  // gmlan
+                                  {0x315, 2, 5}};  // ch bus
 
 const CanMsg GM_CAM_TX_MSGS[] = {{0x180, 0, 4}, {0x200, 0, 6}, {0x1E1, 0, 7},  // pt bus
                                  {0x1E1, 2, 7}, {0x184, 2, 8}};  // camera bus
@@ -79,7 +78,12 @@ enum {
   GM_BTN_CANCEL = 6,
 };
 
-enum {GM_ASCM, GM_CAM, GM_SDGM} gm_hw = GM_ASCM;
+typedef enum {
+  GM_ASCM,
+  GM_CAM,
+  GM_SDGM
+} GmHardware;
+GmHardware gm_hw = GM_ASCM;
 bool gm_cam_long = false;
 bool gm_pcm_cruise = false;
 bool gm_has_acc = true;
@@ -111,7 +115,6 @@ static void gm_rx_hook(const CANPacket_t *to_push) {
     // SDGM buttons are on bus 2
     handle_gm_wheel_buttons(to_push);
   }
-
   if (GET_BUS(to_push) == 0U) {
     int addr = GET_ADDR(to_push);
 
@@ -141,11 +144,10 @@ static void gm_rx_hook(const CANPacket_t *to_push) {
     }
 
     if ((addr == 0xC9) && ((gm_hw == GM_CAM) || (gm_hw == GM_SDGM))) {
-      brake_pressed = GET_BIT(to_push, 40U);
-    }
-
-    if (addr == 0xC9) {
+      // PFEIFER - AOL {{
       acc_main_on = GET_BIT(to_push, 29U);
+      // }} PFEIFER - AOL
+      brake_pressed = GET_BIT(to_push, 40U);
     }
 
     if (addr == 0x1C4) {
@@ -227,7 +229,7 @@ static bool gm_tx_hook(const CANPacket_t *to_send) {
   // GAS/REGEN: safety check
   if (addr == 0x2CB) {
     bool apply = GET_BIT(to_send, 0U);
-    int gas_regen = ((GET_BYTE(to_send, 1) & 0x1U) << 13) + ((GET_BYTE(to_send, 2) & 0xFFU) << 5) + ((GET_BYTE(to_send, 3) & 0xF8U) >> 3);
+    int gas_regen = ((GET_BYTE(to_send, 2) & 0x7FU) << 5) + ((GET_BYTE(to_send, 3) & 0xF8U) >> 3);
 
     bool violation = false;
     // Allow apply bit in pre-enabled and overriding states

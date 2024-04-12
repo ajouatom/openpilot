@@ -20,10 +20,6 @@
     "content": "1"
   },
   {
-    "filename": "ApplyLongDynamicCost",
-    "content": "0"
-  },
-  {
     "filename": "AutoCancelFromGasMode",
     "content": "2"
   },
@@ -340,10 +336,6 @@
     "content": "80"
   },
   {
-    "filename": "NNFF",
-    "content": "0"
-  },
-  {
     "filename": "NavSettingLeftSide",
     "content": "0"
   },
@@ -377,10 +369,6 @@
   },
   {
     "filename": "RecordFront",
-    "content": "0"
-  },
-  {
-    "filename": "SNGHack",
     "content": "0"
   },
   {
@@ -560,10 +548,6 @@
     "content": "0"
   },
   {
-    "filename": "TSS2Tune",
-    "content": "0"
-  },
-  {
     "filename": "TermsVersion",
     "content": "2"
   },
@@ -589,10 +573,6 @@
   },
   {
     "filename": "UseLaneLineSpeed",
-    "content": "0"
-  },
-  {
-    "filename": "UseLateralJerk",
     "content": "0"
   }
 ]
