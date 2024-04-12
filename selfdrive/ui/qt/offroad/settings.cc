@@ -705,7 +705,7 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
     carrotLayout = new QVBoxLayout(homeScreen);
     carrotLayout->setMargin(40);
 
-    QString selected = QString::fromStdString(Params().get("CarSelected"));
+    QString selected = QString::fromStdString(Params().get("CarSelected2"));
     QPushButton* selectCarBtn = new QPushButton(selected.length() ? selected : tr("Select your car"));
     selectCarBtn->setObjectName("selectCarBtn");
     //selectCarBtn->setStyleSheet("margin-right: 30px;");
@@ -715,7 +715,7 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
     connect(selectCar, &SelectCar::backPress, [=]() { main_layout->setCurrentWidget(homeScreen); });
     connect(selectCar, &SelectCar::selectedCar, [=]() {
 
-        QString selected = QString::fromStdString(Params().get("CarSelected"));
+        QString selected = QString::fromStdString(Params().get("CarSelected2"));
         selectCarBtn->setText(selected.length() ? selected : tr("Select your car"));
         main_layout->setCurrentWidget(homeScreen);
         });
@@ -823,7 +823,7 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
   QVBoxLayout* vlayout = new QVBoxLayout(homeScreen);
   vlayout->setContentsMargins(0, 20, 0, 20);
 
-  QString selected = QString::fromStdString(Params().get("CarSelected"));
+  QString selected = QString::fromStdString(Params().get("CarSelected2"));
   QPushButton* selectCarBtn = new QPushButton(selected.length() ? selected : tr("Select your car"));
   selectCarBtn->setObjectName("selectCarBtn");
   //selectCarBtn->setStyleSheet("margin-right: 30px;");
@@ -843,7 +843,7 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
   connect(selectCar, &SelectCar::backPress, [=]() { main_layout->setCurrentWidget(homeScreen); });
   connect(selectCar, &SelectCar::selectedCar, [=]() {
 
-     QString selected = QString::fromStdString(Params().get("CarSelected"));
+     QString selected = QString::fromStdString(Params().get("CarSelected2"));
      selectCarBtn->setText(selected.length() ? selected : tr("Select your car"));
      main_layout->setCurrentWidget(homeScreen);
   });
@@ -1069,7 +1069,7 @@ SelectCar::SelectCar(QWidget* parent): QWidget(parent) {
   list->addItems(items_toyota);
   list->setCurrentRow(0);
 
-  QString selected = QString::fromStdString(Params().get("CarSelected"));
+  QString selected = QString::fromStdString(Params().get("CarSelected2"));
 
   int index = 0;
   for(QString item : items) {
@@ -1084,9 +1084,9 @@ SelectCar::SelectCar(QWidget* parent): QWidget(parent) {
     [=](QListWidgetItem* item){
 
     if(list->currentRow() == 0)
-        Params().remove("CarSelected");
+        Params().remove("CarSelected2");
     else
-        Params().put("CarSelected", list->currentItem()->text().toStdString());
+        Params().put("CarSelected2", list->currentItem()->text().toStdString());
 
     emit selectedCar();
     });

@@ -209,7 +209,7 @@ std::unordered_map<std::string, uint32_t> keys = {
     {"Version", PERSISTENT},
     {"VisionRadarToggle", PERSISTENT},
     {"WheeledBody", PERSISTENT},
-    {"CarSelected", PERSISTENT},
+    {"CarSelected2", PERSISTENT},
     {"SupportedCars", PERSISTENT},
     {"SupportedCars_gm", PERSISTENT},
     { "ShowDebugUI", PERSISTENT },

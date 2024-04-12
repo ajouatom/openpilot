@@ -445,7 +445,7 @@ def get_all_toggle_values():
     "LanguageSetting",
     "LongitudinalPersonality",
     "OpenpilotEnabledToggle",
-    "CarSelected",
+    "CarSelected2",
     "ShowDebugUI",
     "ShowDateTime",
     "ShowHudMode",
