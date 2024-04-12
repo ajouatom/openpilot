@@ -4,7 +4,7 @@ from openpilot.common.numpy_fast import interp, clip
 from openpilot.common.realtime import DT_CTRL
 from openpilot.common.params_pyx import Params
 from opendbc.can.packer import CANPacker
-from openpilot.selfdrive.car import apply_driver_steer_torque_limits, create_gas_interceptor_command
+from openpilot.selfdrive.car import apply_driver_steer_torque_limits
 from openpilot.selfdrive.car.gm import gmcan
 from openpilot.selfdrive.car.gm.values import DBC, CanBus, CarControllerParams, CruiseButtons, GMFlags, CC_ONLY_CAR, SDGM_CAR, EV_CAR
 from openpilot.selfdrive.car.interfaces import CarControllerBase
@@ -110,7 +110,6 @@ class CarController(CarControllerBase):
         stopping = actuators.longControlState == LongCtrlState.stopping
         at_full_stop = CC.longActive and CS.out.standstill
         near_stop = CC.longActive and (CS.out.vEgo < self.params.NEAR_STOP_BRAKE_PHASE)
-        interceptor_gas_cmd = 0
         if not CC.longActive:
           # ASCM sends max regen when not enabled
           self.apply_gas = self.params.INACTIVE_REGEN
@@ -131,15 +130,6 @@ class CarController(CarControllerBase):
           # FIXME: brakes aren't applied immediately when enabling at a stop
           if stopping:
             self.apply_gas = self.params.INACTIVE_REGEN
-          if self.CP.carFingerprint in CC_ONLY_CAR:
-            # gas interceptor only used for full long control on cars without ACC
-            interceptor_gas_cmd = self.calc_pedal_command(actuators.accel, CC.longActive)
-
-        if self.CP.enableGasInterceptor and self.apply_gas > self.params.INACTIVE_REGEN and CS.out.cruiseState.standstill:
-          # "Tap" the accelerator pedal to re-engage ACC
-          interceptor_gas_cmd = self.params.SNG_INTERCEPTOR_GAS
-          self.apply_brake = 0
-          self.apply_gas = self.params.INACTIVE_REGEN
 
         idx = (self.frame // 4) % 4
 
@@ -147,8 +137,6 @@ class CarController(CarControllerBase):
           if CC.longActive and CS.out.vEgo > self.CP.minEnableSpeed:
             # Using extend instead of append since the message is only sent intermittently
             can_sends.extend(gmcan.create_gm_cc_spam_command(self.packer_pt, self, CS, actuators))
-        if self.CP.enableGasInterceptor:
-          can_sends.append(create_gas_interceptor_command(self.packer_pt, interceptor_gas_cmd, idx))
         if self.CP.carFingerprint not in CC_ONLY_CAR:
           friction_brake_bus = CanBus.CHASSIS
           # GM Camera exceptions
