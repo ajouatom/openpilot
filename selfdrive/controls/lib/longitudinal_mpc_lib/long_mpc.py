@@ -570,9 +570,7 @@ class LongitudinalMpc:
     # lin {self.time_linearization:.2e} qp_iter {qp_iter}, reset {reset}")
 
   def get_T_FOLLOW(self, personality=log.LongitudinalPersonality.standard):
-    if personality==log.LongitudinalPersonality.relaxed2:
-      return self.tFollowGap4 #2.0
-    elif personality==log.LongitudinalPersonality.relaxed:
+    if personality==log.LongitudinalPersonality.relaxed:
       return self.tFollowGap3 #1.75
     elif personality==log.LongitudinalPersonality.standard:
       return self.tFollowGap2 #1.45
