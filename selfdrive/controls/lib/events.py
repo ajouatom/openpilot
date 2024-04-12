@@ -1001,11 +1001,6 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
       AlertStatus.normal, AlertSize.small,
       Priority.LOW, VisualAlert.none, AudibleAlert.none, 2.0),
   },
-
-  EventName.torqueNNLoad: {
-    ET.PERMANENT: torque_nn_load_alert,
-  },
-
   EventName.turningLeft: {
     ET.WARNING: Alert(
       "Turning Left",
