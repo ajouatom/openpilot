@@ -548,8 +548,11 @@ class CAR(Platforms):
     CarSpecs(mass=2258, wheelbase=2.95, steerRatio=14.14),
     flags=HyundaiFlags.RADAR_SCC,
   )
-
-
+  GENESIS_GV70_EV_1ST_GEN = HyundaiCanFDPlatformConfig(
+    [HyundaiCarDocs("Genesis GV70 EV 2020-2023", "All", car_parts=CarParts.common([CarHarness.hyundai_m]))],
+    CarSpecs(mass=2230, wheelbase=2.87, steerRatio=14.6),
+    flags=HyundaiFlags.EV | HyundaiFlags.RADAR_SCC,
+  )
 class Buttons:
   NONE = 0
   RES_ACCEL = 1
