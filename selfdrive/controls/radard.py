@@ -429,7 +429,7 @@ class VisionTrack:
       self.kf_v.update(self.dRel)
 
     #self.vLeadK = float(self.kf.x[LEAD_KALMAN_SPEED][0])
-    self.vLeadK = float(self.kf_v.x[1][0]) + v_ego
+    self.vLeadK = float(self.kf_v.x[1][0]) + model_v_ego
     self.aLeadK = float(self.kf.x[LEAD_KALMAN_ACCEL][0])
 
     # Learn if constant acceleration
