@@ -98,9 +98,9 @@ class Controls:
       ignore += ['driverCameraState', 'managerState']
     self.sm = messaging.SubMaster(['deviceState', 'pandaStates', 'peripheralState', 'modelV2', 'liveCalibration',
                                    'carOutput', 'driverMonitoringState', 'longitudinalPlan', 'liveLocationKalman',
-                                   'managerState', 'liveParameters', 'liveTorqueParameters',
+                                   'managerState', 'liveParameters', 'radarState', 'liveTorqueParameters',
                                    'testJoystick', 'lateralPlan', 'roadLimitSpeed'] + self.camera_packets + self.sensor_packets,
-                                  ignore_alive=ignore, ignore_avg_freq=ignore+['testJoystick'], ignore_valid=['testJoystick', 'roadLimitSpeed'],
+                                  ignore_alive=ignore, ignore_avg_freq=ignore+['radarState', 'testJoystick'], ignore_valid=['testJoystick', 'roadLimitSpeed'],
                                   frequency=int(1/DT_CTRL))
 
     self.joystick_mode = self.params.get_bool("JoystickDebugMode")
@@ -361,8 +361,8 @@ class Controls:
       #self.events.add(EventName.controlsdLagging)
       print("controlsdLagging")
       self.rk.reset_time()
-    # if len(self.sm['radarState'].radarErrors) or (not self.rk.lagging and not self.sm.all_checks(['radarState'])):
-    #   self.events.add(EventName.radarFault)
+    if len(self.sm['radarState'].radarErrors) or (not self.rk.lagging and not self.sm.all_checks(['radarState'])):
+      self.events.add(EventName.radarFault)
     if not self.sm.valid['pandaStates']:
       self.events.add(EventName.usbError)
     if CS.canTimeout:
@@ -857,9 +857,9 @@ class Controls:
     ## ajouatom
     no_entry_events = self.events.contains(ET.NO_ENTRY)
     #hudControl.cruiseGap = self.CS.longitudinal_personality + 1 if self.CS is not None else 1
-    #lead_one = self.sm['radarState'].leadOne
-    #hudControl.objDist = int(lead_one.dRel) if lead_one.status else 0
-    #hudControl.objRelSpd = lead_one.vRel if lead_one.status else 0
+    lead_one = self.sm['radarState'].leadOne
+    hudControl.objDist = int(lead_one.dRel) if lead_one.status else 0
+    hudControl.objRelSpd = lead_one.vRel if lead_one.status else 0
 
     CC.cruiseControl.activate = self.carrotCruiseActivate > 0 and not no_entry_events
     CC.hudControl.softHold = self.v_cruise_helper.softHoldActive

@@ -231,15 +231,14 @@ static void ui_draw_path(const UIState* s) {
     if (plan_position.getX().size() < 33) {
         plan_position = sm["modelV2"].getModelV2().getPosition();
     }
-    //float max_distance = std::clamp(plan_position.getX()[TRAJECTORY_SIZE - 1],
-    //    MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE);
+    float max_distance = std::clamp(plan_position.getX()[TRAJECTORY_SIZE - 1],
+        MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE);
 
-    //auto lead_one = sm["radarState"].getRadarState().getLeadOne();
-    //if (lead_one.getStatus()) {
-    //    const float lead_d = lead_one.getDRel() * 2.;
-    //    max_distance = std::clamp((float)(lead_d - fmin(lead_d * 0.35, 10.)), 0.0f, max_distance);
-    //}
-    float max_distance = scene.max_diatance;
+    auto lead_one = sm["radarState"].getRadarState().getLeadOne();
+    if (lead_one.getStatus()) {
+        const float lead_d = lead_one.getDRel() * 2.;
+        max_distance = std::clamp((float)(lead_d - fmin(lead_d * 0.35, 10.)), 0.0f, max_distance);
+    }
     auto    car_state = sm["carState"].getCarState();
     float   accel = car_state.getAEgo();
     float   v_ego_kph = getVEgo() * MS_TO_KPH;
@@ -795,7 +794,7 @@ void DrawApilot::makeLeadData(const UIState* s) {
     SubMaster& sm = *(s->sm);
     const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
     auto lp_source = lp.getLongitudinalPlanSource();
-    //auto lead_radar = sm["radarState"].getRadarState().getLeadOne();
+    auto lead_radar = sm["radarState"].getRadarState().getLeadOne();
 
     switch (lp_source) {
     case cereal::LongitudinalPlan::LongitudinalPlanSource::CRUISE:
@@ -805,7 +804,7 @@ void DrawApilot::makeLeadData(const UIState* s) {
         m_lpSource = 1;
         break;
     case cereal::LongitudinalPlan::LongitudinalPlanSource::LEAD1:
-        //lead_radar = sm["radarState"].getRadarState().getLeadTwo();
+        lead_radar = sm["radarState"].getRadarState().getLeadTwo();
         m_lpSource = 2;
         break;
     case cereal::LongitudinalPlan::LongitudinalPlanSource::LEAD2:
@@ -819,15 +818,15 @@ void DrawApilot::makeLeadData(const UIState* s) {
         break;
     }
     auto lead_one = sm["modelV2"].getModelV2().getLeadsV3()[0];
-    //bool radar_detected = lead_radar.getStatus() && lead_radar.getRadar();
-    m_fLeadDistRadar = 0;// radar_detected ? lead_radar.getDRel() : 0;
+    bool radar_detected = lead_radar.getStatus() && lead_radar.getRadar();
+    m_fLeadDistRadar = radar_detected ? lead_radar.getDRel() : 0;
     m_fLeadDistVision = lead_one.getProb() > .5 ? (lead_one.getX()[0] - 1.52) : 0;      // RADAR_TO_CAMERA: 1.52
 
     //const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
     m_fStopDist = 0;// lp.getXStop();
 
-    m_bLeadStatus = lead_one.getProb() > .5;// (lead_radar.getStatus() == 1);
-    m_bLeadSCC = false;// lead_radar.getRadarTrackId() == 0;
+    m_bLeadStatus = (lead_radar.getStatus() == 1);
+    m_bLeadSCC = lead_radar.getRadarTrackId() == 0;
 }
 void DrawApilot::drawBackground(const UIState* s) {
     if (s->show_mode == 2) {
@@ -1790,7 +1789,7 @@ void DrawApilot::drawLeadApilot(const UIState* s) {
     //const UIScene& scene = s->scene;
 
 #ifndef __TEST
-    if (!sm.alive("controlsState") || !sm.alive("carControl")) {
+    if (!sm.alive("controlsState") || !sm.alive("radarState") || !sm.alive("carControl")) {
         //printf("not ready....\n");
         return;
     }

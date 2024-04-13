@@ -8,6 +8,7 @@ from openpilot.common.swaglog import cloudlog
 # WARNING: imports outside of constants will not trigger a rebuild
 from openpilot.selfdrive.modeld.constants import index_function
 from openpilot.selfdrive.car.interfaces import ACCEL_MIN
+from openpilot.selfdrive.controls.radard import _LEAD_ACCEL_TAU
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.params import Params
 
@@ -47,8 +48,7 @@ CRASH_DISTANCE = .25
 LEAD_DANGER_FACTOR = 0.8 #0.75
 LIMIT_COST = 1e6
 ACADOS_SOLVER_TYPE = 'SQP_RTI'
-# Default lead acceleration decay set to 50% at 1s
-LEAD_ACCEL_TAU = 1.5
+
 
 # Fewer timestamps don't hurt performance and lead to
 # much better convergence of the MPC with low iterations
@@ -388,7 +388,7 @@ class LongitudinalMpc:
       x_lead = 50.0
       v_lead = v_ego + 10.0
       a_lead = 0.0
-      a_lead_tau = LEAD_ACCEL_TAU
+      a_lead_tau = _LEAD_ACCEL_TAU
 
     # MPC will not converge if immediate crash is expected
     # Clip lead distance to what is still possible to brake for
@@ -416,7 +416,7 @@ class LongitudinalMpc:
     self.cruise_min_a = min_a
     self.max_a = max_a
 
-  def update(self, sm, reset_state, prev_accel_constraint, lead_one, lead_two, v_cruise, x, v, a, j, carrot_planner, personality=log.LongitudinalPersonality.standard):
+  def update(self, sm, reset_state, prev_accel_constraint, radarstate, v_cruise, x, v, a, j, carrot_planner, personality=log.LongitudinalPersonality.standard):
     t_follow = self.get_T_FOLLOW(personality)
     #self.debugLongText = "v_cruise ={:.1f}".format(v_cruise)
     carstate = sm['carState']
@@ -432,10 +432,10 @@ class LongitudinalMpc:
     t_follow = self.update_tf(v_ego, t_follow)
     self.t_follow = t_follow
     
-    self.status = lead_one.status or lead_two.status
+    self.status = radarstate.leadOne.status or radarstate.leadTwo.status
 
-    lead_xv_0 = self.process_lead(lead_one)
-    lead_xv_1 = self.process_lead(lead_two)
+    lead_xv_0 = self.process_lead(radarstate.leadOne)
+    lead_xv_1 = self.process_lead(radarstate.leadTwo)
 
     # To estimate a safe distance from a moving lead, we calculate how much stopping
     # distance that lead needs as a minimum. We can add that to the current distance
@@ -445,7 +445,7 @@ class LongitudinalMpc:
     self.params[:,0] = ACCEL_MIN if not reset_state else a_ego
     self.params[:,1] = self.max_a if not reset_state else a_ego
 
-    v_cruise, stop_x, self.mode = self.update_apilot(carstate, lead_one, lead_two, model, v_cruise, carrot_planner)
+    v_cruise, stop_x, self.mode = self.update_apilot(carstate, radarstate, model, v_cruise, carrot_planner)
     #self.debugLongText = "{},{},{:.1f},tf={:.2f},{:.1f},stop={:.1f},{:.1f},xv={:.0f},{:.0f}".format(
     #  str(self.xState), str(self.trafficState), v_cruise*3.6, t_follow, t_follow*v_ego+6.0, stop_x, self.stopDist,x[-1],v[-1])
     xe, ve = x[-1], v[-1]
@@ -513,7 +513,8 @@ class LongitudinalMpc:
       str(self.xState), t_follow, t_follow*v_ego+6.0, stop_x, self.stopDist,xe,ve, self.params[:,2][0], lead_0_obstacle[0])
 
     self.run()
-    if (np.any(lead_xv_0[FCW_IDXS,0] - self.x_sol[FCW_IDXS,0] < CRASH_DISTANCE) and lead_one.prob > 0.9):
+    if (np.any(lead_xv_0[FCW_IDXS,0] - self.x_sol[FCW_IDXS,0] < CRASH_DISTANCE) and
+            radarstate.leadOne.modelProb > 0.9):
       self.crash_cnt += 1
     else:
       self.crash_cnt = 0
@@ -638,7 +639,7 @@ class LongitudinalMpc:
       self.trafficState = TrafficState.off
 
 
-  def update_apilot(self, carstate, lead_one, lead_two, model, v_cruise, carrot_planner):
+  def update_apilot(self, carstate, radarstate, model, v_cruise, carrot_planner):
     v_ego = carstate.vEgo
     v_ego_kph = v_ego * CV.MS_TO_KPH
     x = model.position.x
@@ -646,7 +647,7 @@ class LongitudinalMpc:
     v = model.velocity.x
 
     self.fakeCruiseDistance = 0.0
-    radar_detected = lead_one.status # & lead_one.radar
+    radar_detected = radarstate.leadOne.status & radarstate.leadOne.radar
 
     stop_x = x[31]
     self.xStop = self.update_stop_dist(stop_x)
@@ -661,7 +662,7 @@ class LongitudinalMpc:
     if self.xState == XState.e2eStopped:
       if carstate.gasPressed:
         self.xState = XState.e2ePrepare
-      elif radar_detected and (lead_one.dRel - stop_x) < 2.0:
+      elif radar_detected and (radarstate.leadOne.dRel - stop_x) < 2.0:
         self.xState = XState.lead
       elif self.stopping_count == 0:
         if self.trafficState == TrafficState.green:
@@ -672,7 +673,7 @@ class LongitudinalMpc:
       self.stopping_count = 0
       if carstate.gasPressed:
         self.xState = XState.e2ePrepare
-      elif radar_detected and (lead_one.dRel - stop_x) < 2.0:
+      elif radar_detected and (radarstate.leadOne.dRel - stop_x) < 2.0:
         self.xState = XState.lead
       else:
         if self.trafficState == TrafficState.green:

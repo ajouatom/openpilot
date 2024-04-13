@@ -323,24 +323,21 @@ int get_path_length_idx(const cereal::XYZTData::Reader &line, const float path_h
   return max_idx;
 }
 
-void update_leads(UIState *s, const cereal::RadarState::Reader& radar_state, const cereal::ModelDataV2::Reader &model_data) {
-  const cereal::XYZTData::Reader &line = model_data.getPosition();
-  if (model_data.getLeadsV3().size() < 1) return;
-  
+void update_leads(UIState *s, const cereal::RadarState::Reader &radar_state, const cereal::XYZTData::Reader &line) {
   float max_distance = s->scene.max_distance;
   int idx = get_path_length_idx(line, max_distance);
   float y = line.getY()[idx];
   float z = line.getZ()[idx];
   for (int i = 0; i < 4; ++i) {
-    const auto &lead = model_data.getLeadsV3()[i];
-    if (lead.getProb() > 0.5) {
-      float d_rel = lead.getX()[0];
-      float y_rel = lead.getY()[0];
-      z = line.getZ()[get_path_length_idx(line, d_rel)];
-      calib_frame_to_full_frame(s, d_rel, y_rel, z + 1.22, &s->scene.lead_vertices[i]);
-      y = y_rel;
-      max_distance = d_rel;
-      s->scene.lead_radar[i] = true;
+    auto lead_data = (i == 0) ? radar_state.getLeadOne() : (i == 1) ? radar_state.getLeadTwo() : (i == 2) ? radar_state.getLeadLeft() : radar_state.getLeadRight();
+    if (lead_data.getStatus()) {
+      //float z = line.getZ()[get_path_length_idx(line, lead_data.getDRel())];
+      z = line.getZ()[get_path_length_idx(line, lead_data.getDRel())];
+      calib_frame_to_full_frame(s, lead_data.getDRel(), -lead_data.getYRel(), z + 1.22, &s->scene.lead_vertices[i]);
+      //calib_frame_to_full_frame(s, lead_data.getDRel(), (i == 0) ? lead_one.getY()[0] : -lead_data.getYRel(), z + 1.22, &s->scene.lead_vertices[i]);
+      s->scene.lead_radar[i] = lead_data.getRadar();
+      max_distance = lead_data.getDRel();
+      y = -lead_data.getYRel();
     }
     else
       s->scene.lead_radar[i] = false;
@@ -349,6 +346,7 @@ void update_leads(UIState *s, const cereal::RadarState::Reader& radar_state, con
     calib_frame_to_full_frame(s, max_distance, y - 1.2, z + 1.22, &s->scene.path_end_left_vertices[i]);
     calib_frame_to_full_frame(s, max_distance, y + 1.2, z + 1.22, &s->scene.path_end_right_vertices[i]);
   }
+
   s->scene.lead_vertices_side.clear();
   for (auto const& rs : { radar_state.getLeadsLeft(), radar_state.getLeadsRight(), radar_state.getLeadsCenter() }) {
       for (auto const& l : rs) {
@@ -359,7 +357,7 @@ void update_leads(UIState *s, const cereal::RadarState::Reader& radar_state, con
           vd.x = vtmp.x();
           vd.y = vtmp.y();
           vd.d = l.getDRel();
-          vd.v = l.getVLead();
+          vd.v = l.getVLeadK();
           vd.y_rel = l.getYRel();
           vd.v_lat = l.getVLat();
           vd.radar = l.getRadar();
@@ -404,24 +402,13 @@ void update_model(UIState *s,
   float max_distance = std::clamp(*(plan_position.getX().end() - 1),
                                   MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE);
 
-  auto lead_count = model.getLeadsV3().size();
-  if (lead_count > 0) {
-    auto lead_one = model.getLeadsV3()[0];
-    if (lead_one.getProb() > 0.5) {
-      //const float lead_d = lead_one.getX()[0] * 2.;
+  auto lead_one = (*s->sm)["radarState"].getRadarState().getLeadOne();
+  if (lead_one.getStatus()) {
+      //const float lead_d = lead_one.getDRel() * 2.;
       //max_distance = std::clamp((float)(lead_d - fmin(lead_d * 0.35, 10.)), 0.0f, max_distance);
-      const float lead_d = lead_one.getX()[0];
+      const float lead_d = lead_one.getDRel();
       max_distance = std::clamp((float)lead_d, 0.0f, max_distance);
-    }
   }
-
-  //auto lead_one = (*s->sm)["radarState"].getRadarState().getLeadOne();
-  //if (lead_one.getStatus()) {
-  //    //const float lead_d = lead_one.getDRel() * 2.;
-  //    //max_distance = std::clamp((float)(lead_d - fmin(lead_d * 0.35, 10.)), 0.0f, max_distance);
-  //    const float lead_d = lead_one.getDRel();
-  //    max_distance = std::clamp((float)lead_d, 0.0f, max_distance);
-  //}
   scene.max_distance = max_distance;
 
   // update lane lines

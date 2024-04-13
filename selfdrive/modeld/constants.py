@@ -21,7 +21,6 @@ class ModelConstants:
   LAT_PLANNER_STATE_LEN = 4
   LATERAL_CONTROL_PARAMS_LEN = 2
   PREV_DESIRED_CURV_LEN = 1
-  RADAR_TRACKS_LEN = 64
 
   # model outputs constants
   FCW_THRESHOLDS_5MS2 = np.array([.05, .05, .15, .15, .15], dtype=np.float32)
@@ -40,7 +39,6 @@ class ModelConstants:
   DESIRE_PRED_WIDTH = 8
   LAT_PLANNER_SOLUTION_WIDTH = 4
   DESIRED_CURV_WIDTH = 1
-  RADAR_TRACKS_WIDTH = 3
 
   NUM_LANE_LINES = 4
   NUM_ROAD_EDGES = 2
