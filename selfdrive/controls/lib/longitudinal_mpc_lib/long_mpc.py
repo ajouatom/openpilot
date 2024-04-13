@@ -410,6 +410,16 @@ class LongitudinalMpc:
     #return np.full(N+1, t_follow)
     return t_follow
 
+  def update_dynamic_tf(self, t_follow, lead_data, a_ego, v_ego):
+    if lead_data.status:
+      t_follow *= interp(lead_data.vRel*3.6, [-100., 0, 100.], [self.tFollwSpeedDown, 1.0, self.tFollwSpeedUp])
+      #t_follow *= interp(self.prev_a[0], [-4, 0], [self.applyDynamicTFollowDecel, 1.0])
+      # 선행차감속도* 내차감속도 : 둘다감속이 심하면 더 t_follow를 크게..
+      t_follow *= interp(lead_data.aLeadK, [-4, 0], [self.applyDynamicTFollowDecel, 1.0]) # 선행차의 accel텀은 이미 사용하고 있지만(aLeadK).... 그러나, t_follow에 추가로 적용시험
+      t_follow *= interp(a_ego, [-4, 0], [self.applyDynamicTFollowDecel, 1.0]) # 내차의 감속도에 추가 적용
+
+    return t_follow
+
   def set_accel_limits(self, min_a, max_a):
     # TODO this sets a max accel limit, but the minimum limit is only for cruise decel
     # needs refactor
