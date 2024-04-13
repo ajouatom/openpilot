@@ -57,7 +57,7 @@ def get_lead_side(v_ego, points, md, lane_width):
   if lead_msg.prob > 0.5:
     leads_center[lead_msg.x[0]] = {
       "dRel": lead_msg.x[0],
-      "yRel": -lead_msg.y[0],
+      "yRel": lead_msg.y[0],
       "vRel": lead_msg.v[0] - v_ego,
       "vLead": lead_msg.v[0],
       "radarTrackId": -1,
