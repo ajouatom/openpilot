@@ -573,6 +573,11 @@ class CAR(Platforms):
     CarSpecs(mass=2290, wheelbase=3.45, steerRatio=16., tireStiffnessFactor=0.7),
     flags=HyundaiFlags.LEGACY,
   )
+  GENESIS_G90_2019 = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Genesis G90 2019", "All", car_parts=CarParts.common([CarHarness.hyundai_c]))],
+    CarSpecs(mass=2150, wheelbase=3.16, steerRatio=16., tireStiffnessFactor=0.7),
+    flags=HyundaiFlags.LEGACY,
+  )
 
 
 class Buttons:
