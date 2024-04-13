@@ -6,7 +6,7 @@ from openpilot.common.params import Params #kans
 from opendbc.can.can_define import CANDefine
 from opendbc.can.parser import CANParser
 from openpilot.selfdrive.car.interfaces import CarStateBase
-from openpilot.selfdrive.car.gm.values import CAR, DBC, AccState, CanBus, STEER_THRESHOLD, GMFlags, CC_ONLY_CAR, CAMERA_ACC_CAR, SDGM_CAR, CruiseButtons
+from openpilot.selfdrive.car.gm.values import DBC, AccState, CanBus, STEER_THRESHOLD, GMFlags, CC_ONLY_CAR, CAMERA_ACC_CAR, SDGM_CAR
 
 TransmissionType = car.CarParams.TransmissionType
 NetworkLocation = car.CarParams.NetworkLocation
@@ -31,7 +31,13 @@ class CarState(CarStateBase):
 
     # GAP_DIST
     self.prev_distance_button = False
-    self.distance_button_pressed = False 
+    self.distance_button_pressed = False
+
+    # kans: steer이벤트(일시불가) 줄이기 위해
+    self.belowSteerSpeed_shown = False
+    self.disable_belowSteerSpeed = False
+    self.resumeRequired_shown = False
+    self.disable_resumeRequired = False
 
     self.buttons_counter = 0
 
@@ -113,11 +119,8 @@ class CarState(CarStateBase):
 
     if self.CP.enableGasInterceptor:
       ret.gas = (pt_cp.vl["GAS_SENSOR"]["INTERCEPTOR_GAS"] + pt_cp.vl["GAS_SENSOR"]["INTERCEPTOR_GAS2"]) / 2.
-      if self.CP.carFingerprint in (CAR.BOLT_EUV, CAR.BOLT_CC):
-        ret.gasPressed = ret.gas > 20
-      else:
-        threshold = 20 if self.CP.carFingerprint in CAMERA_ACC_CAR else 4
-        ret.gasPressed = ret.gas > threshold
+      threshold = 15 if self.CP.carFingerprint in CAMERA_ACC_CAR else 4
+      ret.gasPressed = ret.gas > threshold
     else:
       ret.gas = pt_cp.vl["AcceleratorPedal2"]["AcceleratorPedal2"] / 254.
       ret.gasPressed = ret.gas > 1e-5
@@ -234,7 +237,6 @@ class CarState(CarStateBase):
       ("EBCMFrictionBrakeStatus", 20),
       ("PSCMSteeringAngle", 100),
       ("ECMAcceleratorPos", 80),
-      ("SPEED_RELATED", 20),
     ]
 
     if CP.enableBsm:

@@ -27,15 +27,9 @@ const LongitudinalLimits *gm_long_limits;
 
 const int GM_STANDSTILL_THRSLD = 10;  // 0.311kph
 
-// panda interceptor threshold needs to be equivalent to openpilot threshold to avoid controls mismatches
-// If thresholds are mismatched then it is possible for panda to see the gas fall and rise while openpilot is in the pre-enabled state
-const int GM_GAS_INTERCEPTOR_THRESHOLD = 515; // (610 + 306.25) / 2 ratio between offset and gain from dbc file
-#define GM_GET_INTERCEPTOR(msg) (((GET_BYTE((msg), 0) << 8) + GET_BYTE((msg), 1) + (GET_BYTE((msg), 2) << 8) + GET_BYTE((msg), 3)) / 2U) // avg between 2 tracks
-
 const CanMsg GM_ASCM_TX_MSGS[] = {{0x180, 0, 4}, {0x409, 0, 7}, {0x40A, 0, 7}, {0x2CB, 0, 8}, {0x370, 0, 6}, {0x200, 0, 6},  // pt bus
                                   {0xA1, 1, 7}, {0x306, 1, 8}, {0x308, 1, 7}, {0x310, 1, 2},   // obs bus
-                                  {0x315, 2, 5},  // ch bus
-                                  {0x104c006c, 3, 3}, {0x10400060, 3, 5}};  // gmlan
+                                  {0x315, 2, 5}};  // ch bus
 
 const CanMsg GM_CAM_TX_MSGS[] = {{0x180, 0, 4}, {0x200, 0, 6}, {0x1E1, 0, 7},  // pt bus
                                  {0x1E1, 2, 7}, {0x184, 2, 8}};  // camera bus
@@ -79,7 +73,12 @@ enum {
   GM_BTN_CANCEL = 6,
 };
 
-enum {GM_ASCM, GM_CAM, GM_SDGM} gm_hw = GM_ASCM;
+typedef enum {
+  GM_ASCM,
+  GM_CAM,
+  GM_SDGM
+} GmHardware;
+GmHardware gm_hw = GM_ASCM;
 bool gm_cam_long = false;
 bool gm_pcm_cruise = false;
 bool gm_has_acc = true;
@@ -111,7 +110,6 @@ static void gm_rx_hook(const CANPacket_t *to_push) {
     // SDGM buttons are on bus 2
     handle_gm_wheel_buttons(to_push);
   }
-
   if (GET_BUS(to_push) == 0U) {
     int addr = GET_ADDR(to_push);
 
@@ -141,17 +139,14 @@ static void gm_rx_hook(const CANPacket_t *to_push) {
     }
 
     if ((addr == 0xC9) && ((gm_hw == GM_CAM) || (gm_hw == GM_SDGM))) {
+      // PFEIFER - AOL {{
+      acc_main_on = GET_BIT(to_push, 29U);
+      // }} PFEIFER - AOL
       brake_pressed = GET_BIT(to_push, 40U);
     }
 
-    if (addr == 0xC9) {
-      acc_main_on = GET_BIT(to_push, 29U);
-    }
-
     if (addr == 0x1C4) {
-      if (!enable_gas_interceptor) {
-        gas_pressed = GET_BYTE(to_push, 5) != 0U;
-      }
+      gas_pressed = GET_BYTE(to_push, 5) != 0U;
 
       // enter controls on rising edge of ACC, exit controls when ACC off
       if (gm_pcm_cruise && gm_has_acc) {
@@ -174,18 +169,10 @@ static void gm_rx_hook(const CANPacket_t *to_push) {
       regen_braking = (GET_BYTE(to_push, 0) >> 4) != 0U;
     }
 
-    // Pedal Interceptor
-    if ((addr == 0x201) && enable_gas_interceptor) {
-      int gas_interceptor = GM_GET_INTERCEPTOR(to_push);
-      gas_pressed = gas_interceptor > GM_GAS_INTERCEPTOR_THRESHOLD;
-      gas_interceptor_prev = gas_interceptor;
-//      gm_pcm_cruise = false;
-    }
-
     bool stock_ecu_detected = (addr == 0x180);  // ASCMLKASteeringCmd
 
     // Check ASCMGasRegenCmd only if we're blocking it
-    if (!gm_pcm_cruise && !gm_pedal_long && (addr == 0x2CB)) {
+    if (!gm_pcm_cruise && (addr == 0x2CB)) {
       stock_ecu_detected = true;
     }
     generic_rx_checks(stock_ecu_detected);
@@ -217,17 +204,10 @@ static bool gm_tx_hook(const CANPacket_t *to_send) {
     }
   }
 
-  // GAS: safety check (interceptor)
-  if (addr == 0x200) {
-    if (longitudinal_interceptor_checks(to_send)) {
-      tx = false;
-    }
-  }
-
   // GAS/REGEN: safety check
   if (addr == 0x2CB) {
     bool apply = GET_BIT(to_send, 0U);
-    int gas_regen = ((GET_BYTE(to_send, 1) & 0x1U) << 13) + ((GET_BYTE(to_send, 2) & 0xFFU) << 5) + ((GET_BYTE(to_send, 3) & 0xF8U) >> 3);
+    int gas_regen = ((GET_BYTE(to_send, 2) & 0x7FU) << 5) + ((GET_BYTE(to_send, 3) & 0xF8U) >> 3);
 
     bool violation = false;
     // Allow apply bit in pre-enabled and overriding states
@@ -307,7 +287,6 @@ static safety_config gm_init(uint16_t param) {
   gm_pcm_cruise = ((gm_hw == GM_CAM) && (!gm_cam_long || gm_cc_long) && !gm_force_ascm && !gm_pedal_long) || (gm_hw == GM_SDGM);
   gm_skip_relay_check = GET_FLAG(param, GM_PARAM_NO_CAMERA);
   gm_has_acc = !GET_FLAG(param, GM_PARAM_NO_ACC);
-  enable_gas_interceptor = GET_FLAG(param, GM_PARAM_PEDAL_INTERCEPTOR);
 
   safety_config ret = BUILD_SAFETY_CFG(gm_rx_checks, GM_ASCM_TX_MSGS);
   if (gm_hw == GM_CAM) {

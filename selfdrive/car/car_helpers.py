@@ -4,9 +4,6 @@ from collections.abc import Callable
 
 from cereal import car
 from openpilot.common.params import Params
-from openpilot.common.basedir import BASEDIR
-from openpilot.selfdrive.car.values import PLATFORMS
-from openpilot.system.version import is_comma_remote, is_tested_branch
 from openpilot.selfdrive.car.interfaces import get_interface_attr
 from openpilot.selfdrive.car.fingerprints import eliminate_incompatible_cars, all_legacy_fingerprint_cars
 from openpilot.selfdrive.car.vin import get_vin, is_valid_vin, VIN_UNKNOWN
@@ -15,6 +12,7 @@ from openpilot.selfdrive.car.mock.values import CAR as MOCK
 from openpilot.common.swaglog import cloudlog
 import cereal.messaging as messaging
 from openpilot.selfdrive.car import gen_empty_fingerprint
+from openpilot.system.version import get_build_metadata
 
 FRAME_FINGERPRINT = 100  # 1s
 
@@ -22,7 +20,8 @@ EventName = car.CarEvent.EventName
 
 
 def get_startup_event(car_recognized, controller_available, fw_seen):
-  if is_comma_remote() and is_tested_branch():
+  build_metadata = get_build_metadata()
+  if build_metadata.openpilot.comma_remote and build_metadata.tested_channel:
     event = EventName.startup
   else:
     event = EventName.startupMaster
@@ -49,17 +48,8 @@ def load_interfaces(brand_names):
   for brand_name in brand_names:
     path = f'openpilot.selfdrive.car.{brand_name}'
     CarInterface = __import__(path + '.interface', fromlist=['CarInterface']).CarInterface
-
-    if os.path.exists(BASEDIR + '/' + path.replace('.', '/') + '/carstate.py'):
-      CarState = __import__(path + '.carstate', fromlist=['CarState']).CarState
-    else:
-      CarState = None
-
-    if os.path.exists(BASEDIR + '/' + path.replace('.', '/') + '/carcontroller.py'):
-      CarController = __import__(path + '.carcontroller', fromlist=['CarController']).CarController
-    else:
-      CarController = None
-
+    CarState = __import__(path + '.carstate', fromlist=['CarState']).CarState
+    CarController = __import__(path + '.carcontroller', fromlist=['CarController']).CarController
     for model_name in brand_names[brand_name]:
       ret[model_name] = (CarInterface, CarController, CarState)
   return ret
@@ -192,32 +182,39 @@ def fingerprint(logcan, sendcan, num_pandas):
                  fw_count=len(car_fw), ecu_responses=list(ecu_rx_addrs), vin_rx_addr=vin_rx_addr, vin_rx_bus=vin_rx_bus,
                  fingerprints=repr(finger), fw_query_time=fw_query_time, error=True)
 
-  car_platform = PLATFORMS.get(car_fingerprint, MOCK.MOCK)
+  return car_fingerprint, finger, vin, car_fw, source, exact_match
 
-  return car_platform, finger, vin, car_fw, source, exact_match
+
+def get_car_interface(CP):
+  CarInterface, CarController, CarState = interfaces[CP.carFingerprint]
+  return CarInterface(CP, CarController, CarState)
+
 
 def get_car(logcan, sendcan, experimental_long_allowed, num_pandas=1):
   candidate, fingerprints, vin, car_fw, source, exact_match = fingerprint(logcan, sendcan, num_pandas)
 
   if candidate is None:
     cloudlog.event("car doesn't match any fingerprints", fingerprints=repr(fingerprints), error=True)
-    candidate = "mock"
+    candidate = "MOCK"
 
-  selected_car = Params().get("CarSelected")
+  selected_car = Params().get("CarSelected2")
   if selected_car:
     def find_car(name: str):
       from openpilot.selfdrive.car.hyundai.values import CAR as HYUNDAI
       from openpilot.selfdrive.car.gm.values import CAR as GM
       from openpilot.selfdrive.car.toyota.values import CAR as TOYOTA
-      for car in GM:
-        if car.config.platform_str == name:
-          return car
-      for car in TOYOTA:
-        if car.config.platform_str == name:
-          return car
-      for car in HYUNDAI:
-        if car.config.platform_str == name:
-          return car
+      for platform in GM:
+        for doc in platform.config.car_docs:
+          if name == doc.name:
+            return platform
+      for platform in TOYOTA:
+        for doc in platform.config.car_docs:
+          if name == doc.name:
+            return platform
+      for platform in HYUNDAI:
+        for doc in platform.config.car_docs:
+          if name == doc.name:
+            return platform
       return None
     found_car = find_car(selected_car.decode("utf-8"))
     if found_car is not None:
@@ -226,7 +223,7 @@ def get_car(logcan, sendcan, experimental_long_allowed, num_pandas=1):
   print(f"SelectedCar = {candidate}")
   Params().put("CarName", candidate)
 
-  CarInterface, CarController, CarState = interfaces[candidate]
+  CarInterface, _, _ = interfaces[candidate]
   CP = CarInterface.get_params(candidate, fingerprints, car_fw, experimental_long_allowed, docs=False)
   CP.carVin = vin
   CP.carFw = car_fw
@@ -235,7 +232,7 @@ def get_car(logcan, sendcan, experimental_long_allowed, num_pandas=1):
 
   print("Carrot GitBranch = {}, {}".format(Params().get("GitBranch"), Params().get("GitCommitDate")))
 
-  return CarInterface(CP, CarController, CarState), CP
+  return get_car_interface(CP), CP
 
 def write_car_param(platform=MOCK.MOCK):
   params = Params()
