@@ -395,6 +395,7 @@ class VisionTrack:
   def reset(self):
     self.status = False
     self.kf = None
+    self.kf_v = None
     self.aLeadTau = _LEAD_ACCEL_TAU
 
   def update(self, lead_msg, model_v_ego, v_ego):
@@ -413,16 +414,20 @@ class VisionTrack:
       self.aLead = lead_msg.a[0]
       if self.prob < 0.99:
         self.kf = None
+        self.kf_v = None
       self.status = True
     else:
       self.reset()
 
     if self.kf is None:
       self.kf = lead_kf(self.vLead, self.aLead, self.radar_ts)
+      self.kf_v = lead_kf(self.dRel, self.vRel, self.radar_ts)
     else:
       self.kf.update(self.vLead)
+      self.kf_v.update(self.dRel)
 
-    self.vLeadK = float(self.kf.x[LEAD_KALMAN_SPEED][0])
+    #self.vLeadK = float(self.kf.x[LEAD_KALMAN_SPEED][0])
+    self.vLeadK = float(self.kf_v.x[1][0])
     self.aLeadK = float(self.kf.x[LEAD_KALMAN_ACCEL][0])
 
     # Learn if constant acceleration
