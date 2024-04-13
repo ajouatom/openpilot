@@ -33,7 +33,7 @@ def get_lead_side(v_ego, points, md, lane_width):
   leadLeft = {'status': False}
   leadRight = {'status': False}
 
-  if not points or md is None or len(md.position.x) != 33:
+  if md is None or len(md.position.x) != 33:
     return [[],[],[],leadLeft,leadRight]
 
   md_y = md.position.y
@@ -119,7 +119,6 @@ class RadarD:
       self.radar_state.leadsLeft = list(ll)
       self.radar_state.leadsCenter = list(lc)
       self.radar_state.leadsRight = list(lr)
-      print(ll, lc, lr)
 
   def publish(self, pm: messaging.PubMaster):
     #carrot
