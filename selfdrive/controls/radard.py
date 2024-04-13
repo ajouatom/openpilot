@@ -88,7 +88,7 @@ class RadarD:
 
     self.radar_tracks_valid = False
 
-  def update(self, rr: Optional[car.RadarData]):
+  def update(self, sm: messaging.SubMaster, rr: Optional[car.RadarData]):
     radar_points = []
     radar_errors = []
     if rr is not None:
@@ -102,11 +102,18 @@ class RadarD:
       self.points[pt.trackId] = (pt.dRel, pt.yRel, pt.vRel)
 
     # carrot
+    if len(sm['modelV2'].temporalPose.trans):
+      model_v_ego = sm['modelV2'].temporalPose.trans[0]
+    else:
+      model_v_ego = 0
+    leads_v3 = sm['modelV2'].leadsV3
+
     self.radar_state = log.RadarState.new_message()
-    ll, lc, lr, self.radar_state.leadLeft, self.radar_state.leadRight = get_lead_side(self.v_ego, self.points, sm['modelV2'], 2.8)
-    self.radar_state.leadsLeft = list(ll)
-    self.radar_state.leadsCenter = list(lc)
-    self.radar_state.leadsRight = list(lr)
+    if len(leads_V3) > 1:
+      ll, lc, lr, self.radar_state.leadLeft, self.radar_state.leadRight = get_lead_side(model_v_ego, self.points, sm['modelV2'], 2.8)
+      self.radar_state.leadsLeft = list(ll)
+      self.radar_state.leadsCenter = list(lc)
+      self.radar_state.leadsRight = list(lr)
 
   def publish(self, pm: messaging.PubMaster):
     #carrot
@@ -164,7 +171,7 @@ def main():
     if rr is None:
       continue
 
-    RD.update(rr)
+    RD.update(sm, rr)
     #msg = RD.publish()
     #pub_sock.send(msg.to_bytes())
     RD.publish(pm)
