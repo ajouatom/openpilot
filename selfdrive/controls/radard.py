@@ -124,7 +124,7 @@ class RadarD:
     #carrot
     assert self.radar_state is not None
     radar_msg = messaging.new_message("radarState")
-    #radar_msg.valid = self.radar_state_valid
+    radar_msg.valid = True #self.radar_state_valid
     radar_msg.radarState = self.radar_state
     #radar_msg.radarState.cumLagMs = lag_ms
     pm.send("radarState", radar_msg)
