@@ -95,6 +95,9 @@ class CarInterface(CarInterfaceBase):
     ret.safetyConfigs = [get_safety_config(car.CarParams.SafetyModel.gm)]
     ret.autoResumeSng = False
     ret.enableBsm = 0x142 in fingerprint[CanBus.POWERTRAIN]
+
+    useEVTables = Params().get_bool("EVTable")
+
     if PEDAL_MSG in fingerprint[0]:
       ret.enableGasInterceptor = True
       ret.safetyConfigs[0].safetyParam |= Panda.FLAG_GM_GAS_INTERCEPTOR
@@ -184,6 +187,17 @@ class CarInterface(CarInterfaceBase):
       ret.vEgoStopping = 0.25
       ret.enableBsm = 0x142 in fingerprint[CanBus.POWERTRAIN]
 
+      # softer long tune for ev table
+      if useEVTables: 
+        ret.longitudinalTuning.kpBP = [0.]
+        ret.longitudinalTuning.kpV = [1.75]
+        ret.longitudinalTuning.kiBP = [0.]
+        ret.longitudinalTuning.kiV = [0.36]
+        ret.stoppingDecelRate = 0.1 # brake_travel/s while trying to stop
+        ret.stopAccel = -0.5
+        ret.startAccel = 0.8
+        ret.vEgoStarting = 0.25
+        ret.vEgoStopping = 0.25
 
     elif candidate == CAR.GMC_ACADIA:
       ret.minEnableSpeed = -1.  # engage speed is decided by pcm
