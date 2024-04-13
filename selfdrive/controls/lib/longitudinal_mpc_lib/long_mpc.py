@@ -609,12 +609,11 @@ class LongitudinalMpc:
     elif self.lo_timer == 20:
       pass
     elif self.lo_timer == 80:
-      pass
-    elif self.lo_timer == 100:
       self.tFollowSpeedAdd = float(Params().get_int("TFollowSpeedAdd")) / 100.
       self.tFollowSpeedAddM = float(Params().get_int("TFollowSpeedAddM")) / 100.
       self.tFollowLeadCarSpeed = Params().get_float("TFollowLeadCarSpeed") / 100.
       self.tFollowMyCarAccel = Params().get_float("TFollowMyCarAccel") / 100.
+    elif self.lo_timer == 100:
       self.tFollowGap1 = float(Params().get_int("TFollowGap1")) / 100.
       self.tFollowGap2 = float(Params().get_int("TFollowGap2")) / 100.
       self.tFollowGap3 = float(Params().get_int("TFollowGap3")) / 100.
