@@ -338,7 +338,7 @@ void update_leads(UIState *s, const cereal::ModelDataV2::Reader &model_data) {
       float y_rel = lead.getY()[0];
       z = line.getZ()[get_path_length_idx(line, d_rel)];
       calib_frame_to_full_frame(s, d_rel, -y_rel, z + 1.22, &s->scene.lead_vertices[i]);
-      y = -y_rel;
+      y = y_rel;
       max_distance = d_rel;
       s->scene.lead_radar[i] = true;
     }
