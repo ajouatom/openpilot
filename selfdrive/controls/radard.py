@@ -363,6 +363,7 @@ class VisionTrack:
   def __init__(self, radar_ts):
     self.radar_ts = radar_ts
     self.dRel = 0.0
+    self.vRel = 0.0
     self.yRel = 0.0
     self.vLead = 0.0
     self.aLead = 0.0
@@ -375,6 +376,7 @@ class VisionTrack:
     self.aLeadTauStart = float(Params().get_int("ALeadTauStart")) / 100.
 
     self.kf: KF1D | None = None
+    self.kf_v: KF1D | None = None
 
   def get_lead(self):
     return {
