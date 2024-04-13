@@ -491,7 +491,7 @@ void AnnotatedCameraWidget::updateState(const UIState &s) {
   const auto nav_instruction = sm["navInstruction"].getNavInstruction();
 
   // Handle older routes where vCruiseCluster is not set
-  float v_cruise =  cs.getVCruiseCluster() == 0.0 ? cs.getVCruise() : cs.getVCruiseCluster();
+  float v_cruise = cs.getVCruiseCluster() == 0.0 ? cs.getVCruise() : cs.getVCruiseCluster();
   setSpeed = cs_alive ? v_cruise : SET_SPEED_NA;
   is_cruise_set = setSpeed > 0 && (int)setSpeed != SET_SPEED_NA;
   if (is_cruise_set && !s.scene.is_metric) {
@@ -768,13 +768,13 @@ void AnnotatedCameraWidget::drawDriverState(QPainter &painter, const UIState *s)
   painter.restore();
 }
 
-void AnnotatedCameraWidget::drawLead(QPainter &painter, const cereal::RadarState::LeadData::Reader &lead_data, const QPointF &vd) {
+void AnnotatedCameraWidget::drawLead(QPainter &painter, const cereal::ModelDataV2::LeadDataV3::Reader &lead_data, const QPointF &vd, const float v_ego) {
   painter.save();
 
   const float speedBuff = 10.;
   const float leadBuff = 40.;
-  const float d_rel = lead_data.getDRel();
-  const float v_rel = lead_data.getVRel();
+  const float d_rel = lead_data.getX()[0];
+  const float v_rel = lead_data.getV()[0] - v_ego;
 
   float fillAlpha = 0;
   if (d_rel < leadBuff) {
@@ -813,6 +813,7 @@ void AnnotatedCameraWidget::paintEvent(QPaintEvent *event) {
   QPainter painter(this);
   const double start_draw_t = millis_since_boot();
   const cereal::ModelDataV2::Reader &model = sm["modelV2"].getModelV2();
+  const float v_ego = sm["carState"].getCarState().getVEgo();
 
   // draw camera frame
   {
@@ -834,7 +835,6 @@ void AnnotatedCameraWidget::paintEvent(QPaintEvent *event) {
     // Wide or narrow cam dependent on speed
     bool has_wide_cam = available_streams.count(VISION_STREAM_WIDE_ROAD);
     if (has_wide_cam) {
-      float v_ego = sm["carState"].getCarState().getVEgo();
       if ((v_ego < 10) || available_streams.size() == 1) {
         wide_cam_requested = true;
       } else if (v_ego > 15) {
@@ -866,19 +866,18 @@ void AnnotatedCameraWidget::paintEvent(QPaintEvent *event) {
     update_model(s, model, sm["uiPlan"].getUiPlan());
     if(s->show_mode == 0) drawLaneLines(painter, s);
 
-    //if (s->scene.longitudinal_control && sm.rcv_frame("radarState") > s->scene.started_frame) {
-    if (sm.rcv_frame("radarState") > s->scene.started_frame) {
+    //if (s->scene.longitudinal_control && sm.rcv_frame("modelV2") > s->scene.started_frame) {
+    if (sm.rcv_frame("modelV2") > s->scene.started_frame) {
       auto radar_state = sm["radarState"].getRadarState();
-      update_leads(s, radar_state, model.getPosition());
-      auto lead_one = radar_state.getLeadOne();
-      auto lead_two = radar_state.getLeadTwo();
-      if (lead_one.getStatus()) {
-        if(s->show_mode == 0) drawLead(painter, lead_one, s->scene.lead_vertices[0]);
-      }
-      if (lead_two.getStatus() && (std::abs(lead_one.getDRel() - lead_two.getDRel()) > 3.0)) {
-        if(s->show_mode == 0) {
-          drawLead(painter, lead_two, s->scene.lead_vertices[1]);
+      update_leads(s, radar_state, model);
+      float prev_drel = -1;
+      for (int i = 0; i < model.getLeadsV3().size() && i < 2; i++) {
+        const auto &lead = model.getLeadsV3()[i];
+        auto lead_drel = lead.getX()[0];
+        if (lead.getProb() > 0.5 && (prev_drel < 0 || std::abs(lead_drel - prev_drel) > 3.0)) {
+          if(s->show_mode == 0) drawLead(painter, lead, s->scene.lead_vertices[i], v_ego);
         }
+        prev_drel = lead_drel;
       }
     }
   }

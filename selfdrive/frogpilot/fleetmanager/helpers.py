@@ -445,7 +445,7 @@ def get_all_toggle_values():
     "LanguageSetting",
     "LongitudinalPersonality",
     "OpenpilotEnabledToggle",
-    "CarSelected",
+    "CarSelected2",
     "ShowDebugUI",
     "ShowDateTime",
     "ShowHudMode",
@@ -496,7 +496,6 @@ def get_all_toggle_values():
     "StoppingAccel",
     "StartAccelApply",
     "AutoSpeedUptoRoadSpeedLimit",
-    "ApplyLongDynamicCost",
     "StopDistanceCarrot",
     "ALeadTau",
     "ALeadTauStart",
@@ -567,15 +566,11 @@ def get_all_toggle_values():
     "LongPitch",
     "EVTable",
     "GasRegenCmd",
-    "LockDoors",
-    "SNGHack",
     "TSS2Tune",
     "MTSCAggressiveness",
     "MTSCCurvatureCheck",
     "MTSCEnabled",
-    "NNFF",
-    "PreferredSchedule",
-    "UseLateralJerk"
+    "PreferredSchedule"
   ]
 
   toggle_values = {}

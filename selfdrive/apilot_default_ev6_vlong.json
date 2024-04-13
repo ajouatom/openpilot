@@ -20,10 +20,6 @@
     "content": "1"
   },
   {
-    "filename": "ApplyLongDynamicCost",
-    "content": "0"
-  },
-  {
     "filename": "AutoCancelFromGasMode",
     "content": "2"
   },
@@ -332,10 +328,6 @@
     "content": "80"
   },
   {
-    "filename": "NNFF",
-    "content": "0"
-  },
-  {
     "filename": "NoLogging",
     "content": "0"
   },
@@ -545,10 +537,6 @@
   },
   {
     "filename": "UseLaneLineSpeedApply",
-    "content": "0"
-  },
-  {
-    "filename": "UseLateralJerk",
     "content": "0"
   }
 ]

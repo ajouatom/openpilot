@@ -4,12 +4,10 @@ import numpy as np
 import tomllib
 from abc import abstractmethod, ABC
 from enum import StrEnum
-from difflib import SequenceMatcher
-from json import load
-from typing import Any, NamedTuple, Union
+from typing import Any, NamedTuple
 from collections.abc import Callable
 
-from cereal import car, log
+from cereal import car
 from openpilot.common.basedir import BASEDIR
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.simple_kalman import KF1D, get_kalman_gain
@@ -17,12 +15,11 @@ from openpilot.common.numpy_fast import clip
 from openpilot.common.params import Params
 from openpilot.common.realtime import DT_CTRL
 from openpilot.selfdrive.car import apply_hysteresis, gen_empty_fingerprint, scale_rot_inertia, scale_tire_stiffness, STD_CARGO_KG
-from openpilot.selfdrive.car.values import Platform
-from openpilot.selfdrive.controls.lib.drive_helpers import V_CRUISE_MAX, get_friction, CRUISE_LONG_PRESS
+from openpilot.selfdrive.car.values import PLATFORMS
+from openpilot.selfdrive.controls.lib.drive_helpers import V_CRUISE_MAX, get_friction
 from openpilot.selfdrive.controls.lib.events import Events
 from openpilot.selfdrive.controls.lib.vehicle_model import VehicleModel
 
-params_memory = Params("/dev/shm/params")
 ButtonType = car.CarState.ButtonEvent.Type
 GearShifter = car.CarState.GearShifter
 EventName = car.CarEvent.EventName
@@ -35,10 +32,7 @@ FRICTION_THRESHOLD = 0.3
 TORQUE_PARAMS_PATH = os.path.join(BASEDIR, 'selfdrive/car/torque_data/params.toml')
 TORQUE_OVERRIDE_PATH = os.path.join(BASEDIR, 'selfdrive/car/torque_data/override.toml')
 TORQUE_SUBSTITUTE_PATH = os.path.join(BASEDIR, 'selfdrive/car/torque_data/substitute.toml')
-TORQUE_NN_MODEL_PATH = os.path.join(BASEDIR, 'selfdrive/car/torque_data/lat_models')
 
-def similarity(s1:str, s2:str) -> float:
-  return SequenceMatcher(None, s1, s2).ratio()
 
 class LatControlInputs(NamedTuple):
   lateral_acceleration: float
@@ -74,114 +68,12 @@ def get_torque_params(candidate):
   return {key: out[i] for i, key in enumerate(params['legend'])}
 
 
-# Twilsonco's Lateral Neural Network Feedforward
-class FluxModel:
-  # dict used to rename activation functions whose names aren't valid python identifiers
-  activation_function_names = {'σ': 'sigmoid'}
-  def __init__(self, params_file, zero_bias=False):
-    with open(params_file, "r") as f:
-      params = load(f)
-
-    self.input_size = params["input_size"]
-    self.output_size = params["output_size"]
-    self.input_mean = np.array(params["input_mean"], dtype=np.float32).T
-    self.input_std = np.array(params["input_std"], dtype=np.float32).T
-    self.layers = []
-
-    for layer_params in params["layers"]:
-      W = np.array(layer_params[next(key for key in layer_params.keys() if key.endswith('_W'))], dtype=np.float32).T
-      b = np.array(layer_params[next(key for key in layer_params.keys() if key.endswith('_b'))], dtype=np.float32).T
-      if zero_bias:
-        b = np.zeros_like(b)
-      activation = layer_params["activation"]
-      for k, v in self.activation_function_names.items():
-        activation = activation.replace(k, v)
-      self.layers.append((W, b, activation))
-
-    self.validate_layers()
-    self.check_for_friction_override()
-
-  # Begin activation functions.
-  # These are called by name using the keys in the model json file
-  def sigmoid(self, x):
-    return 1 / (1 + np.exp(-x))
-
-  def identity(self, x):
-    return x
-  # End activation functions
-
-  def forward(self, x):
-    for W, b, activation in self.layers:
-      x = getattr(self, activation)(x.dot(W) + b)
-    return x
-
-  def evaluate(self, input_array):
-    in_len = len(input_array)
-    if in_len != self.input_size:
-      # If the input is length 2-4, then it's a simplified evaluation.
-      # In that case, need to add on zeros to fill out the input array to match the correct length.
-      if 2 <= in_len:
-        input_array = input_array + [0] * (self.input_size - in_len)
-      else:
-        raise ValueError(f"Input array length {len(input_array)} must be length 2 or greater")
-
-    input_array = np.array(input_array, dtype=np.float32)
-
-    # Rescale the input array using the input_mean and input_std
-    input_array = (input_array - self.input_mean) / self.input_std
-
-    output_array = self.forward(input_array)
-
-    return float(output_array[0, 0])
-
-  def validate_layers(self):
-    for W, b, activation in self.layers:
-      if not hasattr(self, activation):
-        raise ValueError(f"Unknown activation: {activation}")
-
-  def check_for_friction_override(self):
-    y = self.evaluate([10.0, 0.0, 0.2])
-    self.friction_override = (y < 0.1)
-
-def get_nn_model_path(car, eps_firmware) -> tuple[Union[str, None, float]]:
-  def check_nn_path(check_model):
-    model_path = None
-    max_similarity = -1.0
-    for f in os.listdir(TORQUE_NN_MODEL_PATH):
-      if f.endswith(".json") and car in f:
-        model = f.replace(".json", "").replace(f"{TORQUE_NN_MODEL_PATH}/", "")
-        similarity_score = similarity(model, check_model)
-        if similarity_score > max_similarity:
-          max_similarity = similarity_score
-          model_path = os.path.join(TORQUE_NN_MODEL_PATH, f)
-    return model_path, max_similarity
-
-  if len(eps_firmware) > 3:
-    eps_firmware = eps_firmware.replace("\\", "")
-    check_model = f"{car} {eps_firmware}"
-  else:
-    check_model = car
-  model_path, max_similarity = check_nn_path(check_model)
-  if max_similarity < 0.9:
-    check_model = car
-    model_path, max_similarity = check_nn_path(check_model)
-    if max_similarity < 0.9:
-      model_path = None
-  return model_path, max_similarity
-
-def get_nn_model(car, eps_firmware) -> tuple[Union[FluxModel, None, float]]:
-  model, similarity_score = get_nn_model_path(car, eps_firmware)
-  if model is not None:
-    model = FluxModel(model)
-  return model, similarity_score
-
 # generic car and radar interfaces
 
 class CarInterfaceBase(ABC):
   def __init__(self, CP, CarController, CarState):
     self.CP = CP
     self.VM = VehicleModel(CP)
-    eps_firmware = str(next((fw.fwVersion for fw in CP.carFw if fw.ecu == "eps"), ""))
 
     self.frame = 0
     self.steering_unpressed = 0
@@ -192,71 +84,46 @@ class CarInterfaceBase(ABC):
 
     # tw: steer warning
     self.steer_warning = 0
+    self.CS = CarState(CP)
+    self.cp = self.CS.get_can_parser(CP)
+    self.cp_cam = self.CS.get_cam_can_parser(CP)
+    self.cp_adas = self.CS.get_adas_can_parser(CP)
+    self.cp_body = self.CS.get_body_can_parser(CP)
+    self.cp_loopback = self.CS.get_loopback_can_parser(CP)
+    self.can_parsers = [self.cp, self.cp_cam, self.cp_adas, self.cp_body, self.cp_loopback]
 
-    self.CS = None
-    self.can_parsers = []
-    if CarState is not None:
-      self.CS = CarState(CP)
+    dbc_name = "" if self.cp is None else self.cp.dbc_name
+    self.CC: CarControllerBase = CarController(dbc_name, CP, self.VM)
 
-      self.cp = self.CS.get_can_parser(CP)
-      self.cp_cam = self.CS.get_cam_can_parser(CP)
-      self.cp_adas = self.CS.get_adas_can_parser(CP)
-      self.cp_body = self.CS.get_body_can_parser(CP)
-      self.cp_loopback = self.CS.get_loopback_can_parser(CP)
-      self.can_parsers = [self.cp, self.cp_cam, self.cp_adas, self.cp_body, self.cp_loopback]
-
-    self.CC = None
-    if CarController is not None:
-      self.CC = CarController(self.cp.dbc_name, CP, self.VM)
-
-    params = Params()
-    self.has_lateral_torque_nn = self.initialize_lat_torque_nn(CP.carFingerprint, eps_firmware) and params.get_bool("NNFF")
-    self.use_lateral_jerk = params.get_bool("UseLateralJerk")
-  def get_ff_nn(self, x):
-    return self.lat_torque_nn_model.evaluate(x)
-
-  def initialize_lat_torque_nn(self, car, eps_firmware):
-    self.lat_torque_nn_model, _ = get_nn_model(car, eps_firmware)
-    return (self.lat_torque_nn_model is not None)
+  def apply(self, c: car.CarControl, now_nanos: int) -> tuple[car.CarControl.Actuators, list[tuple[int, int, bytes, int]]]:
+    return self.CC.update(c, self.CS, now_nanos)
 
   @staticmethod
   def get_pid_accel_limits(CP, current_speed, cruise_speed):
     return ACCEL_MIN, ACCEL_MAX
 
   @classmethod
-  def get_non_essential_params(cls, candidate: Platform):
+  def get_non_essential_params(cls, candidate: str):
     """
     Parameters essential to controlling the car may be incomplete or wrong without FW versions or fingerprints.
     """
     return cls.get_params(candidate, gen_empty_fingerprint(), list(), False, False)
 
   @classmethod
-  def get_params(cls, candidate: Platform, fingerprint: dict[int, dict[int, int]], car_fw: list[car.CarParams.CarFw], experimental_long: bool, docs: bool):
+  def get_params(cls, candidate: str, fingerprint: dict[int, dict[int, int]], car_fw: list[car.CarParams.CarFw], experimental_long: bool, docs: bool):
     ret = CarInterfaceBase.get_std_params(candidate)
 
-    if "SIMULATION" in os.environ:  #ajouatom why?
-      ret.steerControlType = car.CarParams.SteerControlType.angle
-
-    ret.mass = candidate.config.specs.mass
-    ret.wheelbase = candidate.config.specs.wheelbase
-    ret.steerRatio = candidate.config.specs.steerRatio
-    ret.centerToFront = ret.wheelbase * candidate.config.specs.centerToFrontRatio
-    ret.minEnableSpeed = candidate.config.specs.minEnableSpeed
-    ret.minSteerSpeed = candidate.config.specs.minSteerSpeed
-    ret.tireStiffnessFactor = candidate.config.specs.tireStiffnessFactor
-    ret.flags |= int(candidate.config.flags)
+    platform = PLATFORMS[candidate]
+    ret.mass = platform.config.specs.mass
+    ret.wheelbase = platform.config.specs.wheelbase
+    ret.steerRatio = platform.config.specs.steerRatio
+    ret.centerToFront = ret.wheelbase * platform.config.specs.centerToFrontRatio
+    ret.minEnableSpeed = platform.config.specs.minEnableSpeed
+    ret.minSteerSpeed = platform.config.specs.minSteerSpeed
+    ret.tireStiffnessFactor = platform.config.specs.tireStiffnessFactor
+    ret.flags |= int(platform.config.flags)
 
     ret = cls._get_params(ret, candidate, fingerprint, car_fw, experimental_long, docs)
-
-    # Enable torque controller for all cars that do not use angle based steering
-    if ret.steerControlType != car.CarParams.SteerControlType.angle and Params().get_bool("NNFF"):
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
-      eps_firmware = str(next((fw.fwVersion for fw in car_fw if fw.ecu == "eps"), ""))
-      model, similarity_score = get_nn_model_path(candidate, eps_firmware)
-      if model is not None:
-        params_memory.put_bool("NNFFModelFuzzyMatch", similarity_score < 0.99)
-        params_memory.put("NNFFModelName", candidate)
-        print("######### NNFF loaded")
 
     # Vehicle mass is published curb weight plus assumed payload such as a human driver; notCars have no assumed payload
     if not ret.notCar:
@@ -334,7 +201,7 @@ class CarInterfaceBase(ABC):
     return ret
 
   @staticmethod
-  def configure_torque_tune(candidate, tune, steering_angle_deadzone_deg=0.2, use_steering_angle=True):
+  def configure_torque_tune(candidate, tune, steering_angle_deadzone_deg=0.0, use_steering_angle=True):
     params = get_torque_params(candidate)
 
     tune.init('torque')
@@ -384,9 +251,6 @@ class CarInterfaceBase(ABC):
 
     return reader
 
-  @abstractmethod
-  def apply(self, c: car.CarControl, now_nanos: int) -> tuple[car.CarControl.Actuators, list[bytes]]:
-    pass
 
   def create_common_events(self, cs_out, extra_gears=None, pcm_enable=True, allow_enable=True,
                            enable_buttons=(ButtonType.accelCruise, ButtonType.decelCruise)):
@@ -591,6 +455,10 @@ class CarStateBase(ABC):
     return d.get(gear.upper(), GearShifter.unknown)
 
   @staticmethod
+  def get_can_parser(CP):
+    return None
+
+  @staticmethod
   def get_cam_can_parser(CP):
     return None
 
@@ -611,8 +479,11 @@ SendCan = tuple[int, int, bytes, int]
 
 
 class CarControllerBase(ABC):
+  def __init__(self, dbc_name: str, CP, VM):
+    pass
+
   @abstractmethod
-  def update(self, CC, CS, now_nanos) -> tuple[car.CarControl.Actuators, list[SendCan]]:
+  def update(self, CC: car.CarControl.Actuators, CS: car.CarState, now_nanos: int) -> tuple[car.CarControl.Actuators, list[SendCan]]:
     pass
 
 
