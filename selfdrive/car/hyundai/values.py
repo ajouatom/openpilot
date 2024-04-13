@@ -563,6 +563,16 @@ class CAR(Platforms):
     CarSpecs(mass=1570, wheelbase=2.845, steerRatio=16., tireStiffnessFactor=0.7),
     flags=HyundaiFlags.HYBRID | HyundaiFlags.LEGACY,
   )
+  GENESIS_EQ900 = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Genesis EQ900 2017", "All", car_parts=CarParts.common([CarHarness.hyundai_c]))],
+    CarSpecs(mass=2200, wheelbase=3.15, steerRatio=16., tireStiffnessFactor=0.7),
+    flags=HyundaiFlags.LEGACY,
+  )
+  GENESIS_EQ900_L = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Genesis EQ900 LIMOUSINE", "All", car_parts=CarParts.common([CarHarness.hyundai_c]))],
+    CarSpecs(mass=2290, wheelbase=3.45, steerRatio=16., tireStiffnessFactor=0.7),
+    flags=HyundaiFlags.LEGACY,
+  )
 
 
 class Buttons:
