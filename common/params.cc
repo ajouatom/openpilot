@@ -343,7 +343,6 @@ std::unordered_map<std::string, uint32_t> keys = {
     { "MuteSeatbelt", PERSISTENT },
     { "LongPitch", PERSISTENT },
     { "EVTable", PERSISTENT },
-    { "GasRegenCmd", PERSISTENT },
     { "TSS2Tune", PERSISTENT },
     {"LastMapsUpdate", PERSISTENT},
     {"MapsSelected", PERSISTENT},
