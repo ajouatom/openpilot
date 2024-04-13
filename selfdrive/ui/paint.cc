@@ -231,14 +231,15 @@ static void ui_draw_path(const UIState* s) {
     if (plan_position.getX().size() < 33) {
         plan_position = sm["modelV2"].getModelV2().getPosition();
     }
-    float max_distance = std::clamp(plan_position.getX()[TRAJECTORY_SIZE - 1],
-        MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE);
+    //float max_distance = std::clamp(plan_position.getX()[TRAJECTORY_SIZE - 1],
+    //    MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE);
 
-    auto lead_one = sm["radarState"].getRadarState().getLeadOne();
-    if (lead_one.getStatus()) {
-        const float lead_d = lead_one.getDRel() * 2.;
-        max_distance = std::clamp((float)(lead_d - fmin(lead_d * 0.35, 10.)), 0.0f, max_distance);
-    }
+    //auto lead_one = sm["radarState"].getRadarState().getLeadOne();
+    //if (lead_one.getStatus()) {
+    //    const float lead_d = lead_one.getDRel() * 2.;
+    //    max_distance = std::clamp((float)(lead_d - fmin(lead_d * 0.35, 10.)), 0.0f, max_distance);
+    //}
+    float max_distance = scene.max_diatance;
     auto    car_state = sm["carState"].getCarState();
     float   accel = car_state.getAEgo();
     float   v_ego_kph = getVEgo() * MS_TO_KPH;
@@ -1789,7 +1790,7 @@ void DrawApilot::drawLeadApilot(const UIState* s) {
     //const UIScene& scene = s->scene;
 
 #ifndef __TEST
-    if (!sm.alive("controlsState") || !sm.alive("radarState") || !sm.alive("carControl")) {
+    if (!sm.alive("controlsState") || !sm.alive("carControl")) {
         //printf("not ready....\n");
         return;
     }
