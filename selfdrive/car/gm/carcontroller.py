@@ -38,7 +38,6 @@ class CarController(CarControllerBase):
     self.last_steer_frame = 0
     self.last_button_frame = 0
     self.cancel_counter = 0
-    self.pedal_steady = 0.
 
     self.lka_steering_cmd_counter = 0
     self.lka_icon_status_last = (False, False)
@@ -168,7 +167,7 @@ class CarController(CarControllerBase):
             friction_brake_bus = CanBus.POWERTRAIN
 
           if self.CP.autoResumeSng:
-            resume = actuators.longControlState != LongCtrlState.starting or CC.cruiseControl.resume
+            resume = (actuators.longControlState not in [LongCtrlState.starting]) or CC.cruiseControl.resume
             at_full_stop = at_full_stop and not resume
 
           if actuators.longControlState in [LongCtrlState.stopping, LongCtrlState.starting]:
@@ -179,7 +178,7 @@ class CarController(CarControllerBase):
           # GasRegenCmdActive needs to be 1 to avoid cruise faults. It describes the ACC state, not actuation
           can_sends.append(gmcan.create_gas_regen_command(self.packer_pt, CanBus.POWERTRAIN, self.apply_gas, idx, CC.enabled, at_full_stop))
           can_sends.append(gmcan.create_friction_brake_command(self.packer_ch, friction_brake_bus, self.apply_brake,
-                                                             idx, CC.enabled, near_stop, at_full_stop, self.CP))
+                                                               idx, CC.enabled, near_stop, at_full_stop, self.CP))
 
           # Send dashboard UI commands (ACC status)
           send_fcw = hud_alert == VisualAlert.fcw
@@ -209,10 +208,7 @@ class CarController(CarControllerBase):
         can_sends += gmcan.create_adas_keepalive(CanBus.POWERTRAIN)
 
       # TODO: integrate this with the code block below?
-      if (
-          (self.CP.flags & GMFlags.PEDAL_LONG.value)  # Always cancel stock CC when using pedal interceptor
-          or (self.CP.flags & GMFlags.CC_LONG.value and not CC.enabled)  # Cancel stock CC if OP is not active
-      ) and CS.out.cruiseState.enabled:
+      if (self.CP.flags & GMFlags.CC_LONG.value and not CC.enabled) and CS.out.cruiseState.enabled: # Cancel stock CC if OP is not active
         if (self.frame - self.last_button_frame) * DT_CTRL > 0.04:
           self.last_button_frame = self.frame
           can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.POWERTRAIN, (CS.buttons_counter + 1) % 4, CruiseButtons.CANCEL))

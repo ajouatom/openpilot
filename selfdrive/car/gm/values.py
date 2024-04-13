@@ -242,10 +242,9 @@ class CanBus:
   DROPPED = 192
 
 class GMFlags(IntFlag):
-  PEDAL_LONG = 1
-  CC_LONG = 2
-  NO_CAMERA = 4
-  NO_ACCELERATOR_POS_MSG = 8
+  CC_LONG = 1
+  NO_CAMERA = 2
+  NO_ACCELERATOR_POS_MSG = 4
 
 
 # In a Data Module, an identifier is a string used to recognize an object,
