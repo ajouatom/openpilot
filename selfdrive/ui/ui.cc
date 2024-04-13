@@ -359,7 +359,6 @@ void update_leads(UIState *s, const cereal::RadarState::Reader& radar_state, con
           vd.x = vtmp.x();
           vd.y = vtmp.y();
           vd.d = l.getDRel();
-          printf("vd.d = %.1f\n", vd.d);
           vd.v = l.getVLead();
           vd.y_rel = l.getYRel();
           vd.v_lat = l.getVLat();

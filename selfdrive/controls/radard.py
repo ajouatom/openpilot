@@ -113,7 +113,7 @@ class RadarD:
     leads_v3 = sm['modelV2'].leadsV3
     y_rel = 0.0
     if len(leads_v3) > 1 and leads_v3[0].prob > 0.5:
-      y_rel = -leads_v3[0].y[0]
+      y_rel = leads_v3[0].y[0]
 
     self.points = {}
     for pt in radar_points:
