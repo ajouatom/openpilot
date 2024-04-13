@@ -410,6 +410,14 @@ class LongitudinalMpc:
     #return np.full(N+1, t_follow)
     return t_follow
 
+  def update_dynamic_tf(self, t_follow, lead_data, a_ego, v_ego):
+    if lead_data.status:
+      t_follow *= clip(1.0 - lead_data.vRel * self.tFollowLeadCarSpeed, -1.2, 1.2)
+      #t_follow *= clip(1.0 - min(lead_data.aLeadK, 0.0) * self.tFollowLeadCarAccel, -1.2, 1.2)
+
+    t_follow *= clip(1.0 - min(a_ego, 0.0) * self.tFollowMyCarAccel, -1.2, 1.2)
+    return t_follow
+
   def set_accel_limits(self, min_a, max_a):
     # TODO this sets a max accel limit, but the minimum limit is only for cruise decel
     # needs refactor

@@ -363,6 +363,7 @@ class VisionTrack:
   def __init__(self, radar_ts):
     self.radar_ts = radar_ts
     self.dRel = 0.0
+    self.vRel = 0.0
     self.yRel = 0.0
     self.vLead = 0.0
     self.aLead = 0.0
@@ -375,14 +376,15 @@ class VisionTrack:
     self.aLeadTauStart = float(Params().get_int("ALeadTauStart")) / 100.
 
     self.kf: KF1D | None = None
+    self.kf_v: KF1D | None = None
 
   def get_lead(self):
     return {
       "dRel": self.dRel,
       "yRel": self.yRel,
       "vRel": self.vRel,
-      "vLead": self.vLead,
-      "vLeadK": self.vLeadK,
+      "vLeadK": self.vLead,
+      "vLead": self.vLeadK,
       "aLeadK": 0.0 if self.mixRadarInfo in [3] else clip(self.aLeadK, self.aLead - 1.0, self.aLead + 1.0),
       "aLeadTau": 0.3 if self.mixRadarInfo in [3] else self.aLeadTau,
       "fcw": False,
@@ -395,6 +397,7 @@ class VisionTrack:
   def reset(self):
     self.status = False
     self.kf = None
+    self.kf_v = None
     self.aLeadTau = _LEAD_ACCEL_TAU
 
   def update(self, lead_msg, model_v_ego, v_ego):
@@ -411,18 +414,22 @@ class VisionTrack:
       self.vRel = lead_v_rel_pred
       self.vLead = float(v_ego + lead_v_rel_pred)
       self.aLead = lead_msg.a[0]
-      if self.prob < 0.99:
+      if self.prob < 0.98:
         self.kf = None
+        self.kf_v = None
       self.status = True
     else:
       self.reset()
 
     if self.kf is None:
       self.kf = lead_kf(self.vLead, self.aLead, self.radar_ts)
+      self.kf_v = lead_kf(self.dRel, self.vRel, self.radar_ts)
     else:
       self.kf.update(self.vLead)
+      self.kf_v.update(self.dRel)
 
-    self.vLeadK = float(self.kf.x[LEAD_KALMAN_SPEED][0])
+    #self.vLeadK = float(self.kf.x[LEAD_KALMAN_SPEED][0])
+    self.vLeadK = float(self.kf_v.x[1][0]) + model_v_ego
     self.aLeadK = float(self.kf.x[LEAD_KALMAN_ACCEL][0])
 
     # Learn if constant acceleration
