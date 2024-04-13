@@ -117,7 +117,10 @@ class RadarD:
 
     self.points = {}
     for pt in radar_points:
-      y_rel = y_rel if pt.trackId == 0 else pt.yRel
+      if pt.trackId == 0 and pt.yRel == 0:
+        y_rel = interp(pt.dRel, sm['modelV2'].position.x, sm['modelV2'].position.y)
+      else:
+        y_rel = pt.yRel
       self.points[pt.trackId] = (pt.dRel, y_rel, pt.vRel)
 
     self.radar_state = log.RadarState.new_message()
