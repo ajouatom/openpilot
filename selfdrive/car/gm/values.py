@@ -176,7 +176,7 @@ class CAR(Platforms):
   # Separate car def is required when there is no ASCM
   # (for now) unless there is a way to detect it when it has been unplugged...
   CHEVROLET_VOLT_CC = GMPlatformConfig(
-    CHEVROLET_VOLT.car_docs,
+    [GMCarDocs("Chevrolet Volt-CC 2017-18", min_enable_speed=0, video_link="https://youtu.be/QeMCN_4TFfQ")],
     CHEVROLET_VOLT.specs,
   )
   CHEVROLET_BOLT_CC = GMPlatformConfig(
