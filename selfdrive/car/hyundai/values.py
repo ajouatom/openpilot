@@ -553,6 +553,13 @@ class CAR(Platforms):
     CarSpecs(mass=2230, wheelbase=2.87, steerRatio=14.6),
     flags=HyundaiFlags.EV | HyundaiFlags.RADAR_SCC,
   )
+  HYUNDAI_GRANDEUR_IG = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Hyundai Grandeur 2018-19", "All", car_parts=CarParts.common([CarHarness.hyundai_c]))],
+    CarSpecs(mass=1570, wheelbase=2.845, steerRatio=16., tireStiffnessFactor=0.7),
+    flags=HyundaiFlags.LEGACY | HyundaiFlags.CLUSTER_GEARS,
+  )
+
+
 class Buttons:
   NONE = 0
   RES_ACCEL = 1
