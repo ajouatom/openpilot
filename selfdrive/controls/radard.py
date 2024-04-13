@@ -55,8 +55,15 @@ def get_lead_side(v_ego, points, md, lane_width):
       leads_right[data[0]] = makeRadarState(trackId, data, v_ego) #c.get_RadarState(0.0)
 
   if lead_msg.prob > 0.5:
-    ld = get_RadarState_from_vision(lead_msg, v_ego, model_v_ego)
-    leads_center[ld['dRel']] = ld
+    leads_center[lead_msg.x[0]] = {
+      "dRel": lead_msg.x[0],
+      "yRel": -lead_msg.y[0],
+      "vRel": lead_msg.v[0] - v_ego,
+      "vLead": lead_msg.v[0],
+      "radarTrackId": -1,
+      "status": True,
+      "radar": False,
+      }
   #ll,lr = [[l[k] for k in sorted(list(l.keys()))] for l in [leads_left,leads_right]]
   #lc = sorted(leads_center.values(), key=lambda c:c["dRel"])
   ll = list(leads_left.values())
