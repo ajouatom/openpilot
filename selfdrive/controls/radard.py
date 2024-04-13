@@ -126,6 +126,7 @@ class RadarD:
       self.radar_state.leadsLeft = list(ll)
       self.radar_state.leadsCenter = list(lc)
       self.radar_state.leadsRight = list(lr)
+      print(ll, lc, lr)
 
   def publish(self, pm: messaging.PubMaster):
     #carrot
