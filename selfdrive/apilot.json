@@ -1004,19 +1004,6 @@
     },
     {
       "group": "시험",
-      "name": "MixRadarInfo",
-      "title": "레이더시험",
-      "descr": "0:레이더우선, 1:레이더+비젼, 2:비젼Only, 3:비젼Only(콤마), 4:scc레이더우선사용",
-      "egroup": "TEST",
-      "etitle": "Radar test",
-      "edescr": "",
-      "min": 0,
-      "max": 4,
-      "default": 0,
-      "unit": 1
-    },
-    {
-      "group": "시험",
       "name": "CarrotTest",
       "title": "당근시험",
       "descr": "1:저속DeltaUp/Down증가, 2:CustomLateralTune적용",

@@ -55,7 +55,6 @@ def get_default_params():
     ("ShowGapInfo", "-1"),
     ("ShowDmInfo", "1"),
     ("ShowRadarInfo", "1"),
-    ("MixRadarInfo", "0"),
     ("CarrotTest", "0"),
     ("ShowPathMode", "9"),
     ("ShowPathColor", "13"),
