@@ -323,7 +323,7 @@ int get_path_length_idx(const cereal::XYZTData::Reader &line, const float path_h
   return max_idx;
 }
 
-void update_leads(UIState *s, const cereal::ModelDataV2::Reader &model_data) {
+void update_leads(UIState *s, const cereal::RadarState::Reader& radar_state, const cereal::ModelDataV2::Reader &model_data) {
   const cereal::XYZTData::Reader &line = model_data.getPosition();
   if (model_data.getLeadsV3().size() < 1) return;
   

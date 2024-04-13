@@ -826,7 +826,7 @@ void DrawApilot::makeLeadData(const UIState* s) {
     //const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
     m_fStopDist = 0;// lp.getXStop();
 
-    m_bLeadStatus = false;// (lead_radar.getStatus() == 1);
+    m_bLeadStatus = lead_one.getProb() > .5;// (lead_radar.getStatus() == 1);
     m_bLeadSCC = false;// lead_radar.getRadarTrackId() == 0;
 }
 void DrawApilot::drawBackground(const UIState* s) {

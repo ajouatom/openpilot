@@ -868,7 +868,8 @@ void AnnotatedCameraWidget::paintEvent(QPaintEvent *event) {
 
     //if (s->scene.longitudinal_control && sm.rcv_frame("modelV2") > s->scene.started_frame) {
     if (sm.rcv_frame("modelV2") > s->scene.started_frame) {
-      update_leads(s, model);
+      auto radar_state = sm["radarState"].getRadarState();
+      update_leads(s, radar_state, model);
       float prev_drel = -1;
       for (int i = 0; i < model.getLeadsV3().size() && i < 2; i++) {
         const auto &lead = model.getLeadsV3()[i];
