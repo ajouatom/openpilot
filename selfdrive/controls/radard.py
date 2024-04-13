@@ -109,7 +109,7 @@ class RadarD:
     leads_v3 = sm['modelV2'].leadsV3
 
     self.radar_state = log.RadarState.new_message()
-    if len(leads_V3) > 1:
+    if len(leads_v3) > 1:
       ll, lc, lr, self.radar_state.leadLeft, self.radar_state.leadRight = get_lead_side(model_v_ego, self.points, sm['modelV2'], 2.8)
       self.radar_state.leadsLeft = list(ll)
       self.radar_state.leadsCenter = list(lc)
