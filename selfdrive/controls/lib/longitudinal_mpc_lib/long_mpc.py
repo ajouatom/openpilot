@@ -263,6 +263,8 @@ class LongitudinalMpc:
     self.aChangeCostStart = 40
     self.tFollowSpeedAdd = 0.0
     self.tFollowSpeedAddM = 0.0
+    self.tFollowLeadCarSpeed = 0.0
+    self.tFollowMyCarAccel = 0.0
     self.tFollowGap1 = 1.1
     self.tFollowGap2 = 1.2
     self.tFollowGap3 = 1.4
@@ -438,6 +440,7 @@ class LongitudinalMpc:
     self.comfort_brake = COMFORT_BRAKE
     applyStopDistance = self.stop_distance  * (2.0 - self.mySafeFactor)
     t_follow = self.update_tf(v_ego, t_follow)
+    t_follow = self.update_dynamic_tf(t_follow, radarstate.leadOne, a_ego, v_ego)
     self.t_follow = t_follow
     
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
@@ -610,6 +613,8 @@ class LongitudinalMpc:
     elif self.lo_timer == 100:
       self.tFollowSpeedAdd = float(Params().get_int("TFollowSpeedAdd")) / 100.
       self.tFollowSpeedAddM = float(Params().get_int("TFollowSpeedAddM")) / 100.
+      self.tFollowLeadCarSpeed = Params().get_float("TFollowLeadCarSpeed")
+      self.tFollowMyCarAccel = Params().get_float("TFollowMyCarAccel")
       self.tFollowGap1 = float(Params().get_int("TFollowGap1")) / 100.
       self.tFollowGap2 = float(Params().get_int("TFollowGap2")) / 100.
       self.tFollowGap3 = float(Params().get_int("TFollowGap3")) / 100.

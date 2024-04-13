@@ -1147,6 +1147,32 @@
     },
     {
       "group": "차량간격",
+      "name": "TFollowLeadCarSpeed",
+      "title": "TF: 선행차속도 반영(0)%",
+      "descr": "선행차가 빠르면 작아지고, 느리면 커짐.",
+      "egroup": "FDIST",
+      "etitle": "TF: LeadCar Speed(0)%",
+      "edescr": "",
+      "min": 0,
+      "max": 200,
+      "default": 0,
+      "unit": 5
+    },
+    {
+      "group": "차량간격",
+      "name": "TFollowMyCarAccel",
+      "title": "TF: 마이카가속도 반영(0)%",
+      "descr": "내차가 감속중이면, TF가 커짐",
+      "egroup": "FDIST",
+      "etitle": "TF: MyCar Accel (0)%",
+      "edescr": "",
+      "min": 0,
+      "max": 200,
+      "default": 0,
+      "unit": 5
+    },
+    {
+      "group": "차량간격",
       "name": "TFollowGap1",
       "title": "TF(1): 차량간격시간1x0.01s(110)",
       "descr": "단계별 차간 시간거리 설정",

@@ -531,6 +531,8 @@ def get_all_toggle_values():
     "StopRecord",
     "TFollowSpeedAdd",
     "TFollowSpeedAddM",
+    "TFollowLeadCarSpeed",
+    "TFollowMyCarAccel",
     "TFollowGap1",
     "TFollowGap2",
     "TFollowGap3",
