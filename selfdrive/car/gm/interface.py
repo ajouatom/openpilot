@@ -188,7 +188,7 @@ class CarInterface(CarInterfaceBase):
       ret.startAccel = 0.8
       ret.vEgoStarting = 0.25
       ret.vEgoStopping = 0.25
-      ret.enableBsm = BSM_MSG in fingerprint[CanBus.POWERTRAIN]
+      ret.enableBsm = 0x142 in fingerprint[CanBus.POWERTRAIN]
 
       # softer long tune for ev table
       if useEVTables: 
@@ -352,10 +352,28 @@ class CarInterface(CarInterfaceBase):
     if below_min_enable_speed and not (ret.standstill and ret.brake >= 20 and
                                        (self.CP.networkLocation == NetworkLocation.fwdCamera and not self.CP.carFingerprint in SDGM_CAR)):
       events.add(EventName.belowEngageSpeed)
-    if ret.cruiseState.standstill and not self.CP.autoResumeSng:
+
+    # kans: 정지 상태이면서, 자동재개 신호(self.CP.autoResumeSng)가 비활성화되어 있고, 
+    # resumeRequired 이벤트가 비활성화되어 있지 않으면, resumeRequired 이벤트를 활성화하고, 
+    # resumeRequired 이벤트를 한번 보여주게 한다.
+    if ret.cruiseState.standstill and not self.CP.autoResumeSng and not self.CS.disable_resumeRequired:
       events.add(EventName.resumeRequired)
-    if ret.vEgo < self.CP.minSteerSpeed:
+      self.CS.resumeRequired_shown = True
+
+    # kans: resumeRequired 이벤트가 표시된 후에는, 자동으로 재개될 때까지 resumeRequired 이벤트를 비활성화한다.
+    if self.CS.resumeRequired_shown and not ret.cruiseState.standstill:
+      self.CS.disable_resumeRequired = True
+
+    # kans: 속도가 최소조향속도 미만이고, belowSteerSpeed 이벤트가 비활성화되어 있지 않으면, 
+    # belowSteerSpeed 이벤트를 활성화하고,
+    # belowSteerSpeed이벤트를 한번 보여주게 한다.
+    if ret.vEgo < self.CP.minSteerSpeed and not self.CS.disable_belowSteerSpeed:
       events.add(EventName.belowSteerSpeed)
+      self.CS.belowSteerSpeed_shown = True
+
+    # kans: belowSteerSpeed 이벤트가 한번 표시된 후에는, 속도가 최소조향속도보다 높아질 때까지 belowSteerSpeed 이벤트를 비활성화한다.
+    if self.CS.belowSteerSpeed_shown and ret.vEgo > self.CP.minSteerSpeed:
+      self.CS.disable_belowSteerSpeed = True # kans
 
     if (self.CP.flags & GMFlags.CC_LONG.value) and ret.vEgo < self.CP.minEnableSpeed and ret.cruiseState.enabled:
       events.add(EventName.speedTooLow)

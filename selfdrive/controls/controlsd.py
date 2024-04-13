@@ -129,7 +129,7 @@ class Controls:
       self.params.remove("ExperimentalMode")
 
     # carrot: always remove Experimental Mode
-    self.params.remove("ExperimentalMode")
+    # self.params.remove("ExperimentalMode")
 
     self.CC = car.CarControl.new_message()
     self.CS_prev = car.CarState.new_message()
