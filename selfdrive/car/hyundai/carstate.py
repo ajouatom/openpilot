@@ -322,6 +322,7 @@ class CarState(CarStateBase):
     ret.steeringTorqueEps = cp.vl["MDPS"]["STEERING_OUT_TORQUE"]
     ret.steeringPressed = self.update_steering_pressed(abs(ret.steeringTorque) > self.params.STEER_THRESHOLD, 5)
     ret.steerFaultTemporary = cp.vl["MDPS"]["LKA_FAULT"] != 0
+    ret.steerFaultTemporary = False
 
     # carrot test
     left_blinker_lamp = cp.vl["BLINKERS"]["LEFT_LAMP"] or cp.vl["BLINKERS"]["LEFT_LAMP_ALT"] 
