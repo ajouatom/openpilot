@@ -18,11 +18,12 @@ V_EGO_STATIONARY = 4.   # no stationary object flag below this speed
 RADAR_TO_CENTER = 2.7   # (deprecated) RADAR is ~ 2.7m ahead from center of car
 RADAR_TO_CAMERA = 1.52  # RADAR is ~ 1.5m ahead from center of mesh frame
 
-def makeRadarState(trackId, data):
+def makeRadarState(trackId, data, v_ego):
   return {
     "dRel": float(data[0]),
     "yRel": float(data[1]),
     "vRel":float(data[2]),
+    "vLead": float(data[2]) + v_ego,
     "radarTrackId": trackId,
     "status": True,
     "radar": True,
@@ -47,11 +48,11 @@ def get_lead_side(v_ego, points, md, lane_width):
     # yRel값은 왼쪽이 +값, lead.y[0]값은 왼쪽이 -값
     d_y = -data[1] - interp(data[0], md_x, md_y)
     if abs(d_y) < lane_width/2:
-      leads_center[data[0]] = makeRadarState(trackId,data) #c.get_RadarState(lead_msg.prob, float(-lead_msg.y[0]))
+      leads_center[data[0]] = makeRadarState(trackId, data, v_ego) #c.get_RadarState(lead_msg.prob, float(-lead_msg.y[0]))
     elif -next_lane_y < d_y < 0:
-      leads_left[data[0]] = makeRadarState(trackId, data) #c.get_RadarState(0.0)
+      leads_left[data[0]] = makeRadarState(trackId, data, v_ego) #c.get_RadarState(0.0)
     elif 0 < d_y < next_lane_y:
-      leads_right[data[0]] = makeRadarState(trackId, data) #c.get_RadarState(0.0)
+      leads_right[data[0]] = makeRadarState(trackId, data, v_ego) #c.get_RadarState(0.0)
 
   #if lead_msg.prob > 0.5:
   #  ld = get_RadarState_from_vision(lead_msg, v_ego, model_v_ego)
@@ -97,16 +98,20 @@ class RadarD:
 
     self.radar_tracks_valid = len(radar_errors) == 0
 
-    self.points = {}
-    for pt in radar_points:
-      self.points[pt.trackId] = (pt.dRel, pt.yRel, pt.vRel)
-
     # carrot
     if len(sm['modelV2'].temporalPose.trans):
       model_v_ego = sm['modelV2'].temporalPose.trans[0]
     else:
       model_v_ego = 0
     leads_v3 = sm['modelV2'].leadsV3
+    y_rel = 0.0
+    if len(leads_v3) > 1 and leads_v3[0].prob > 0.5:
+      y_rel = -leads_v3[0].y[0]
+
+    self.points = {}
+    for pt in radar_points:
+      y_rel = y_rel if pt.trackId == 0 else pt.yRel
+      self.points[pt.trackId] = (pt.dRel, y_rel, pt.vRel)
 
     self.radar_state = log.RadarState.new_message()
     if len(leads_v3) > 1:

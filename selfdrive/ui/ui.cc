@@ -349,7 +349,6 @@ void update_leads(UIState *s, const cereal::ModelDataV2::Reader &model_data) {
     calib_frame_to_full_frame(s, max_distance, y - 1.2, z + 1.22, &s->scene.path_end_left_vertices[i]);
     calib_frame_to_full_frame(s, max_distance, y + 1.2, z + 1.22, &s->scene.path_end_right_vertices[i]);
   }
-#if 0
   s->scene.lead_vertices_side.clear();
   for (auto const& rs : { radar_state.getLeadsLeft(), radar_state.getLeadsRight(), radar_state.getLeadsCenter() }) {
       for (auto const& l : rs) {
@@ -360,14 +359,13 @@ void update_leads(UIState *s, const cereal::ModelDataV2::Reader &model_data) {
           vd.x = vtmp.x();
           vd.y = vtmp.y();
           vd.d = l.getDRel();
-          vd.v = l.getVLeadK();
+          vd.v = l.getVLead();
           vd.y_rel = l.getYRel();
           vd.v_lat = l.getVLat();
           vd.radar = l.getRadar();
           s->scene.lead_vertices_side.push_back(vd);
       }
   }
-#endif
 }
 
 void update_line_data(const UIState *s, const cereal::XYZTData::Reader &line,
