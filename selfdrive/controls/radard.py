@@ -20,7 +20,7 @@ RADAR_TO_CAMERA = 1.52  # RADAR is ~ 1.5m ahead from center of mesh frame
 
 def makeRadarState(trackId, data):
   return {
-    "dRel:": float(data[0]),
+    "dRel": float(data[0]),
     "yRel": float(data[1]),
     "vRel":float(data[2]),
     "radarTrackId": trackId,
