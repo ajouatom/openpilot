@@ -337,7 +337,7 @@ void update_leads(UIState *s, const cereal::ModelDataV2::Reader &model_data) {
       float d_rel = lead.getX()[0];
       float y_rel = lead.getY()[0];
       z = line.getZ()[get_path_length_idx(line, d_rel)];
-      calib_frame_to_full_frame(s, d_rel, -y_rel, z + 1.22, &s->scene.lead_vertices[i]);
+      calib_frame_to_full_frame(s, d_rel, y_rel, z + 1.22, &s->scene.lead_vertices[i]);
       y = y_rel;
       max_distance = d_rel;
       s->scene.lead_radar[i] = true;
@@ -410,8 +410,10 @@ void update_model(UIState *s,
   if (lead_count > 0) {
     auto lead_one = model.getLeadsV3()[0];
     if (lead_one.getProb() > 0.5) {
-      const float lead_d = lead_one.getX()[0] * 2.;
-      max_distance = std::clamp((float)(lead_d - fmin(lead_d * 0.35, 10.)), 0.0f, max_distance);
+      //const float lead_d = lead_one.getX()[0] * 2.;
+      //max_distance = std::clamp((float)(lead_d - fmin(lead_d * 0.35, 10.)), 0.0f, max_distance);
+      const float lead_d = lead_one.getX()[0];
+      max_distance = std::clamp((float)(lead_d, 0.0f, max_distance);
     }
   }
 
