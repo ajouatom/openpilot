@@ -32,7 +32,7 @@ def get_lead_side(v_ego, points, md, lane_width):
   leadLeft = {'status': False}
   leadRight = {'status': False}
 
-  if not points or md is None or len(md.position.x) != TRAJECTORY_SIZE:
+  if not points or md is None or len(md.position.x) != 33:
     return [[],[],[],leadLeft,leadRight]
 
   md_y = md.position.y
