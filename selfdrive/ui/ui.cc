@@ -413,7 +413,7 @@ void update_model(UIState *s,
       //const float lead_d = lead_one.getX()[0] * 2.;
       //max_distance = std::clamp((float)(lead_d - fmin(lead_d * 0.35, 10.)), 0.0f, max_distance);
       const float lead_d = lead_one.getX()[0];
-      max_distance = std::clamp((float)(lead_d, 0.0f, max_distance);
+      max_distance = std::clamp((float)lead_d, 0.0f, max_distance);
     }
   }
 
