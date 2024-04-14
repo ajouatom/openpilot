@@ -532,7 +532,7 @@ def get_all_toggle_values():
     "TFollowSpeedAdd",
     "TFollowSpeedAddM",
     "TFollowLeadCarSpeed",
-    "TFollowMyCarAccel",
+    "TFollowLeadCarAccel",
     "TFollowGap1",
     "TFollowGap2",
     "TFollowGap3",

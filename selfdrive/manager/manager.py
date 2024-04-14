@@ -133,7 +133,7 @@ def get_default_params():
     ("TFollowSpeedAdd", "10"),
     ("TFollowSpeedAddM", "0"),
     ("TFollowLeadCarSpeed", "0"),
-    ("TFollowMyCarAccel", "0"),
+    ("TFollowLeadCarAccel", "0"),
     ("TFollowGap1", "110"),
     ("TFollowGap2", "120"),
     ("TFollowGap3", "140"),
