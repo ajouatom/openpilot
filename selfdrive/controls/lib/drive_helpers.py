@@ -560,7 +560,7 @@ class VCruiseHelper:
           self._add_log("Button gap pressed ..")
           controls.personality = (controls.personality - 1) % 3
           self.params.put_nonblocking('LongitudinalPersonality', str(controls.personality))
-          personality_events = [EventName.personalityAggressive, EventName.personalityStandard, EventName.personalityRelaxed, EventName.personalityRelaxed2]
+          personality_events = [EventName.personalityAggressive, EventName.personalityStandard, EventName.personalityRelaxed]
           controls.events.add(personality_events[controls.personality])
          
         elif button_type == ButtonType.lfaButton:
