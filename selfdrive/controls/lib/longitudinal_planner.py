@@ -89,7 +89,7 @@ class LongitudinalPlanner:
     self.cruiseMaxVals6 = float(self.params.get_int("CruiseMaxVals6")) / 100.
     self.cruiseMinVals = -float(self.params.get_int("CruiseMinVals")) / 100.
     
-  def get_max_accel(self, v_ego):
+  def get_carrot_accel(self, v_ego):
     cruiseMaxVals = [self.cruiseMaxVals1, self.cruiseMaxVals2, self.cruiseMaxVals3, self.cruiseMaxVals4, self.cruiseMaxVals5, self.cruiseMaxVals6]
     return interp(v_ego, A_CRUISE_MAX_BP_APILOT, cruiseMaxVals)
   @staticmethod
@@ -139,7 +139,7 @@ class LongitudinalPlanner:
 
     if self.mpc.mode == 'acc':
       #accel_limits = [A_CRUISE_MIN, get_max_accel(v_ego)]
-      myMaxAccel = clip(self.get_max_accel(v_ego)*self.mpc.mySafeFactor, 0.05, ACCEL_MAX)
+      myMaxAccel = clip(self.get_carrot_accel(v_ego)*self.mpc.mySafeFactor, 0.05, ACCEL_MAX)
       accel_limits = [self.cruiseMinVals, myMaxAccel]      
       accel_limits_turns = limit_accel_in_turns(v_ego, sm['carState'].steeringAngleDeg, accel_limits, self.CP)
     else:
