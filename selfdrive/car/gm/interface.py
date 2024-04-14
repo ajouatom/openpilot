@@ -22,7 +22,6 @@ BUTTONS_DICT = {CruiseButtons.RES_ACCEL: ButtonType.accelCruise, CruiseButtons.D
                 CruiseButtons.MAIN: ButtonType.altButton3, CruiseButtons.CANCEL: ButtonType.cancel,
                 CruiseButtons.GAP_DIST: ButtonType.gapAdjustCruise}
 
-PEDAL_MSG = 0x201
 CAM_MSG = 0x320  # AEBCmd
                  # TODO: Is this always linked to camera presence?
 ACCELERATOR_POS_MSG = 0xbe
@@ -95,9 +94,8 @@ class CarInterface(CarInterfaceBase):
     ret.safetyConfigs = [get_safety_config(car.CarParams.SafetyModel.gm)]
     ret.autoResumeSng = False
     ret.enableBsm = 0x142 in fingerprint[CanBus.POWERTRAIN]
-    if PEDAL_MSG in fingerprint[0]:
-      ret.enableGasInterceptor = True
-      ret.safetyConfigs[0].safetyParam |= Panda.FLAG_GM_GAS_INTERCEPTOR
+
+    useEVTables = Params().get_bool("EVTable")
 
     if candidate in EV_CAR:
       ret.transmissionType = TransmissionType.direct
@@ -107,7 +105,7 @@ class CarInterface(CarInterfaceBase):
     ret.longitudinalTuning.deadzoneBP = [0.]
     ret.longitudinalTuning.deadzoneV = [0.15]
 
-    ret.longitudinalTuning.kpBP = [5., 35.]
+    ret.longitudinalTuning.kpBP = [0.]
     ret.longitudinalTuning.kiBP = [0.]
 
     if candidate in CAMERA_ACC_CAR:
@@ -143,25 +141,19 @@ class CarInterface(CarInterfaceBase):
     else:  # ASCM, OBD-II harness
       ret.openpilotLongitudinalControl = True
       ret.networkLocation = NetworkLocation.gateway
-      ret.radarUnavailable = RADAR_HEADER_MSG not in fingerprint[CanBus.OBSTACLE] and not docs
+      ret.radarUnavailable = False # kans
       ret.pcmCruise = False  # stock non-adaptive cruise control is kept off
       # supports stop and go, but initial engage must (conservatively) be above 18mph
-      ret.minEnableSpeed = 18 * CV.MPH_TO_MS
-      ret.minSteerSpeed = 7 * CV.MPH_TO_MS
+      ret.minEnableSpeed = -1 * CV.MPH_TO_MS
+      ret.minSteerSpeed = (6.7 if useEVTables else 7) * CV.MPH_TO_MS
 
       # Tuning
       ret.longitudinalTuning.kpV = [1.75]
       ret.longitudinalTuning.kiV = [0.36]
       ret.stoppingDecelRate = 0.2
-      if ret.enableGasInterceptor:
-        # Need to set ASCM long limits when using pedal interceptor, instead of camera ACC long limits
-        ret.safetyConfigs[0].safetyParam |= Panda.FLAG_GM_HW_ASCM_LONG
 
     # Start with a baseline tuning for all GM vehicles. Override tuning as needed in each model section below.
-    ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kpBP = [[0.], [0.]]
-    ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.00]]
-    ret.lateralTuning.pid.kf = 0.00004   # full torque for 20 deg at 80mph means 0.00007818594
-    ret.steerActuatorDelay = 0.1  # Default delay, not measured yet
+    ret.steerActuatorDelay = 0.2  # Default delay, not measured yet
 
     ret.steerLimitTimer = 0.4
     ret.radarTimeStep = 0.0667  # GM radar runs at 15Hz instead of standard 20Hz
@@ -184,6 +176,17 @@ class CarInterface(CarInterfaceBase):
       ret.vEgoStopping = 0.25
       ret.enableBsm = 0x142 in fingerprint[CanBus.POWERTRAIN]
 
+      # softer long tune for ev table
+      if useEVTables: 
+        ret.longitudinalTuning.kpBP = [0.]
+        ret.longitudinalTuning.kpV = [1.75]
+        ret.longitudinalTuning.kiBP = [0.]
+        ret.longitudinalTuning.kiV = [0.36]
+        ret.stoppingDecelRate = 0.1 # brake_travel/s while trying to stop
+        ret.stopAccel = -0.5
+        ret.startAccel = 0.8
+        ret.vEgoStarting = 0.25
+        ret.vEgoStopping = 0.25
 
     elif candidate == CAR.GMC_ACADIA:
       ret.minEnableSpeed = -1.  # engage speed is decided by pcm
@@ -211,10 +214,6 @@ class CarInterface(CarInterfaceBase):
     elif candidate in (CAR.CHEVROLET_BOLT_EUV, CAR.CHEVROLET_BOLT_CC):
       ret.steerActuatorDelay = 0.2
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
-
-      if ret.enableGasInterceptor:
-        # ACC Bolts use pedal for full longitudinal control, not just sng
-        ret.flags |= GMFlags.PEDAL_LONG.value
 
     elif candidate == CAR.CHEVROLET_SILVERADO:
       # On the Bolt, the ECM and camera independently check that you are either above 5 kph or at a stop
@@ -246,32 +245,7 @@ class CarInterface(CarInterfaceBase):
     elif candidate == CAR.CADILLAC_CT6_CC:
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
-    if ret.enableGasInterceptor:
-      ret.networkLocation = NetworkLocation.fwdCamera
-      ret.safetyConfigs[0].safetyParam |= Panda.FLAG_GM_HW_CAM
-      ret.minEnableSpeed = -1
-      ret.pcmCruise = False
-      ret.openpilotLongitudinalControl = True
-      ret.stoppingControl = True
-      ret.autoResumeSng = True
-
-      if candidate in CC_ONLY_CAR:
-        ret.flags |= GMFlags.PEDAL_LONG.value
-        ret.safetyConfigs[0].safetyParam |= Panda.FLAG_GM_PEDAL_LONG
-        # Note: Low speed, stop and go not tested. Should be fairly smooth on highway
-        ret.longitudinalTuning.kpBP = [5., 35.]
-        ret.longitudinalTuning.kpV = [0.35, 0.5]
-        ret.longitudinalTuning.kiBP = [0., 35.0]
-        ret.longitudinalTuning.kiV = [0.1, 0.1]
-        ret.longitudinalTuning.kf = 0.15
-        ret.stoppingDecelRate = 0.8
-      else:  # Pedal used for SNG, ACC for longitudinal control otherwise
-        ret.safetyConfigs[0].safetyParam |= Panda.FLAG_GM_HW_CAM_LONG
-        ret.startingState = True
-        ret.vEgoStopping = 0.25
-        ret.vEgoStarting = 0.25
-
-    elif candidate in CC_ONLY_CAR:
+    if candidate in CC_ONLY_CAR:
       ret.flags |= GMFlags.CC_LONG.value
       ret.safetyConfigs[0].safetyParam |= Panda.FLAG_GM_CC_LONG
       ret.radarUnavailable = True
@@ -290,8 +264,6 @@ class CarInterface(CarInterfaceBase):
       ret.longitudinalTuning.kpV = [0., 20., 20.]  # set lower end to 0 since we can't drive below that speed
       ret.longitudinalTuning.kiBP = [0.]
       ret.longitudinalTuning.kiV = [0.1]
-
-    if candidate in CC_ONLY_CAR:
       ret.safetyConfigs[0].safetyParam |= Panda.FLAG_GM_NO_ACC
 
     # Exception for flashed cars, or cars whose camera was removed
@@ -358,11 +330,6 @@ class CarInterface(CarInterfaceBase):
     if (self.CP.flags & GMFlags.CC_LONG.value) and ret.vEgo < self.CP.minEnableSpeed and ret.cruiseState.enabled:
       events.add(EventName.speedTooLow)
 
-    if (self.CP.flags & GMFlags.PEDAL_LONG.value) and \
-      self.CP.transmissionType == TransmissionType.direct and \
-      not self.CS.single_pedal_mode and \
-      c.longActive:
-      events.add(EventName.pedalInterceptorNoBrake)
 
     ret.events = events.to_msg()
 

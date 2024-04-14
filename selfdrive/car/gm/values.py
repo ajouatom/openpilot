@@ -154,6 +154,11 @@ class CAR(Platforms):
   CHEVROLET_BOLT_EUV = GMPlatformConfig(
     [
       GMCarDocs("Chevrolet Bolt EUV 2022-23", "Premier or Premier Redline Trim without Super Cruise Package", video_link="https://youtu.be/xvwzGMUA210"),
+    ],
+    GMCarSpecs(mass=1669, wheelbase=2.63779, steerRatio=16.8, centerToFrontRatio=0.4, tireStiffnessFactor=1.0),
+  )
+  CHEVROLET_BOLT_EV = GMPlatformConfig(
+    [
       GMCarDocs("Chevrolet Bolt EV 2022-23", "2LT Trim with Adaptive Cruise Control Package"),
     ],
     GMCarSpecs(mass=1669, wheelbase=2.63779, steerRatio=16.8, centerToFrontRatio=0.4, tireStiffnessFactor=1.0),
@@ -176,15 +181,15 @@ class CAR(Platforms):
   # Separate car def is required when there is no ASCM
   # (for now) unless there is a way to detect it when it has been unplugged...
   CHEVROLET_VOLT_CC = GMPlatformConfig(
-    [GMCarDocs("Chevrolet Volt-CC 2017-18", min_enable_speed=0, video_link="https://youtu.be/QeMCN_4TFfQ")],
+    [GMCarDocs("CHEVROLET VOLT NO ACC")],
     CHEVROLET_VOLT.specs,
   )
   CHEVROLET_BOLT_CC = GMPlatformConfig(
-    CHEVROLET_BOLT_EUV.car_docs,
+    [GMCarDocs("CHEVROLET BOLT EV NO ACC")],
     CHEVROLET_BOLT_EUV.specs,
   )
   CHEVROLET_EQUINOX_CC = GMPlatformConfig(
-    CHEVROLET_EQUINOX.car_docs,
+    [GMCarDocs("CHEVROLET EQUINOX NO ACC")],
     CHEVROLET_EQUINOX.specs,
   )
   CHEVROLET_SUBURBAN = GMPlatformConfig(
@@ -192,7 +197,7 @@ class CAR(Platforms):
     CarSpecs(mass=2731, wheelbase=3.302, steerRatio=17.3, centerToFrontRatio=0.49),
   )
   CHEVROLET_SUBURBAN_CC = GMPlatformConfig(
-    CHEVROLET_SUBURBAN.car_docs,
+    [GMCarDocs("CHEVROLET SUBURBAN NO ACC")],
     CHEVROLET_SUBURBAN.specs,
   )
   GMC_YUKON_CC = GMPlatformConfig(
@@ -204,7 +209,7 @@ class CAR(Platforms):
     CarSpecs(mass=2358, wheelbase=3.11, steerRatio=17.7, centerToFrontRatio=0.4),
   )
   CHEVROLET_TRAILBLAZER_CC = GMPlatformConfig(
-    CHEVROLET_TRAILBLAZER.car_docs,
+    [GMCarDocs("CHEVROLET TRAILBLAZER NO ACC")],
     CHEVROLET_TRAILBLAZER.specs,
   )
   CADILLAC_XT4 = GMPlatformConfig(
@@ -237,10 +242,9 @@ class CanBus:
   DROPPED = 192
 
 class GMFlags(IntFlag):
-  PEDAL_LONG = 1
-  CC_LONG = 2
-  NO_CAMERA = 4
-  NO_ACCELERATOR_POS_MSG = 8
+  CC_LONG = 1
+  NO_CAMERA = 2
+  NO_ACCELERATOR_POS_MSG = 4
 
 
 # In a Data Module, an identifier is a string used to recognize an object,

@@ -566,7 +566,6 @@ def get_all_toggle_values():
     "MuteSeatbelt",
     "LongPitch",
     "EVTable",
-    "GasRegenCmd",
     "TSS2Tune",
     "MTSCAggressiveness",
     "MTSCCurvatureCheck",

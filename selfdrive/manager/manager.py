@@ -38,7 +38,6 @@ def get_default_params():
     ("MuteSeatbelt", "0"),
     ("LongPitch", "0"),
     ("EVTable", "0"),
-    ("GasRegenCmd", "0"),
     ("TSS2Tune", "0"),
     ("ShowDebugUI", "0"),
     ("ShowDateTime", "1"),
