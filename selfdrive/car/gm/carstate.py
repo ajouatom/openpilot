@@ -262,8 +262,8 @@ class CarState(CarStateBase):
         ("BCMGeneralPlatformStatus", 10),
         ("ASCMSteeringButton", 33),
       ]
-      if CP.enableBsm:
-        messages.append(("BCMBlindSpotMonitor", 10))
+      #if CP.enableBsm:
+      #  messages.append(("BCMBlindSpotMonitor", 10))
 
     # Used to read back last counter sent to PT by camera
     if CP.networkLocation == NetworkLocation.fwdCamera:
