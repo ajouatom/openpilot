@@ -383,8 +383,8 @@ class VisionTrack:
       "dRel": self.dRel,
       "yRel": self.yRel,
       "vRel": self.vRel,
-      "vLeadK": self.vLead,
-      "vLead": self.vLeadK,
+      "vLead": self.vLead,
+      "vLeadK": self.vLeadK,    ## TODO: 아직 vLeadK는 엉망인듯...
       "aLeadK": 0.0 if self.mixRadarInfo in [3] else clip(self.aLeadK, self.aLead - 1.0, self.aLead + 1.0),
       "aLeadTau": 0.3 if self.mixRadarInfo in [3] else self.aLeadTau,
       "fcw": False,
