@@ -100,7 +100,8 @@ class RouteEngine:
 
     self.update_location()
 
-    if False: #self.carrot_route_active:
+    if self.carrot_route_active:
+      return
       msg = messaging.new_message('navInstruction', valid=True)
       msg.navInstruction = roadLimitSpeed.navInstruction
       #print(msg.navInstruction)
