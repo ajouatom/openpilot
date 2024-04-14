@@ -585,7 +585,7 @@ class RadarD:
     # vision match후 발견된 track이 없으면
     #  track_scc 가 있는 지 확인하고
     #    비전과의 차이가 35%(5M)이상 차이나면 scc가 발견못한것이기 때문에 비전것으로 처리함.
-    if track_scc is not None and track is None and self.mixRadarInfo == 4:
+    if track_scc is not None and track is None: # and self.mixRadarInfo == 4:
       track = track_scc
       if self.vision_tracks[index].prob > .5:
         if self.vision_tracks[index].dRel < track.dRel - 5.0: #끼어드는 차량이 있는 경우 처리..
