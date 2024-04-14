@@ -264,7 +264,7 @@ class LongitudinalMpc:
     self.tFollowSpeedAdd = 0.0
     self.tFollowSpeedAddM = 0.0
     self.tFollowLeadCarSpeed = 0.0
-    self.tFollowMyCarAccel = 0.0
+    self.tFollowLeadCarAccel = 0.0
     self.tFollowGap1 = 1.1
     self.tFollowGap2 = 1.2
     self.tFollowGap3 = 1.4
@@ -415,9 +415,9 @@ class LongitudinalMpc:
   def update_dynamic_tf(self, t_follow, lead_data, a_ego, v_ego):
     if lead_data.status:
       t_follow *= clip(1.0 - lead_data.vRel * self.tFollowLeadCarSpeed, -1.2, 1.2)
-      #t_follow *= clip(1.0 - min(lead_data.aLeadK, 0.0) * self.tFollowLeadCarAccel, -1.2, 1.2)
+      t_follow *= clip(1.0 - min(lead_data.aLeadK, 0.0) * self.tFollowLeadCarAccel, -1.2, 1.2)
 
-    t_follow *= clip(1.0 - min(a_ego, 0.0) * self.tFollowMyCarAccel, -1.2, 1.2)
+    #t_follow *= clip(1.0 - min(a_ego, 0.0) * self.tFollowMyCarAccel, -1.2, 1.2)
     return t_follow
 
   def set_accel_limits(self, min_a, max_a):
@@ -612,7 +612,7 @@ class LongitudinalMpc:
       self.tFollowSpeedAdd = float(Params().get_int("TFollowSpeedAdd")) / 100.
       self.tFollowSpeedAddM = float(Params().get_int("TFollowSpeedAddM")) / 100.
       self.tFollowLeadCarSpeed = Params().get_float("TFollowLeadCarSpeed") / 100.
-      self.tFollowMyCarAccel = Params().get_float("TFollowMyCarAccel") / 100.
+      self.tFollowLeadCarAccel = Params().get_float("TFollowLeadCarAccel") / 100.
     elif self.lo_timer == 100:
       self.tFollowGap1 = float(Params().get_int("TFollowGap1")) / 100.
       self.tFollowGap2 = float(Params().get_int("TFollowGap2")) / 100.
