@@ -110,13 +110,17 @@ class VCruiseHelper:
     self.cruiseEcoControl = self.params.get_int("CruiseEcoControl")
     self.cruiseSpeedUnit = self.params.get_int("CruiseSpeedUnit")
 
-    self.params.put_int("UseLaneLineSpeedApply", self.params.get_int("UseLaneLineSpeed"))
+    self.useLaneLineSpeed = self.params.get_int("UseLaneLineSpeed")
+    self.params.put_int("UseLaneLineSpeedApply", self.useLaneLineSpeed)
 
   def _params_update(self, controls):
     self.frame += 1
     self.params_count += 1
     if self.params_count == 10:
-      pass
+      useLaneLineSpeed = self.params.get_int("UseLaneLineSpeed")
+      if self.useLaneLineSpeed != useLaneLineSpeed:
+        self.params.put_int("UseLaneLineSpeedApply", useLaneLineSpeed)
+      self.useLaneLineSpeed = useLaneLineSpeed
     elif self.params_count == 20:
       self.autoResumeFromGasSpeed = self.params.get_int("AutoResumeFromGasSpeed")
       self.autoCancelFromGasMode = self.params.get_int("AutoCancelFromGasMode")
@@ -525,7 +529,7 @@ class VCruiseHelper:
           self.params.put_int_nonblocking("MyDrivingMode", self.params.get_int("MyDrivingMode") % 4 + 1) # 1,2,3,4 (1:eco, 2:safe, 3:normal, 4:high speed)
         elif button_type == ButtonType.lfaButton:
           self._add_log("Button long lkas pressed ..")
-          useLaneLineSpeed = max(1, self.params.get_int("UseLaneLineSpeed"))
+          useLaneLineSpeed = max(1, self.useLaneLineSpeed)
           self.params.put_int_nonblocking("UseLaneLineSpeedApply", useLaneLineSpeed if self.params.get_int("UseLaneLineSpeedApply") == 0 else 0)
       else:
         if button_type == ButtonType.accelCruise:
