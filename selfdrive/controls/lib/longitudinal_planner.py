@@ -91,7 +91,7 @@ class LongitudinalPlanner:
     
   def get_carrot_accel(self, v_ego, curveSpeed):
     cruiseMaxVals = [self.cruiseMaxVals1, self.cruiseMaxVals2, self.cruiseMaxVals3, self.cruiseMaxVals4, self.cruiseMaxVals5, self.cruiseMaxVals6]
-    return interp(v_ego, A_CRUISE_MAX_BP_APILOT, cruiseMaxVals) * interp(abs(curveSpeed), [0, 80], [0.1, 1.0])
+    return interp(v_ego, A_CRUISE_MAX_BP_APILOT, cruiseMaxVals) * interp(abs(curveSpeed), [0, 120], [0.1, 1.0])
     
   @staticmethod
   def parse_model(model_msg, model_error):
