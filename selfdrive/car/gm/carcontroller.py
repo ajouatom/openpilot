@@ -82,6 +82,13 @@ class CarController(CarControllerBase):
     if hud_v_cruise > 70:
       hud_v_cruise = 0
 
+    steerMax = params.get_int("CustomSteerMax")
+    steerDeltaUp = params.get_int("CustomSteerDeltaUp")
+    steerDeltaDown = params.get_int("CustomSteerDeltaDown")
+    self.params.STEER_MAX = self.params.STEER_MAX if steerMax <= 0 else steerMax
+    self.params.STEER_DELTA_UP = self.params.STEER_DELTA_UP if steerDeltaUp <= 0 else steerDeltaUp
+    self.params.STEER_DELTA_DOWN = self.params.STEER_DELTA_DOWN if steerDeltaDown <= 0 else steerDeltaDown
+
     # Send CAN commands.
     can_sends = []
 
