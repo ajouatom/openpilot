@@ -351,6 +351,8 @@ int set_safety_hooks(uint16_t mode, uint16_t param) {
   // reset state set by safety mode
   safety_mode_cnt = 0U;
   relay_malfunction = false;
+  enable_gas_interceptor = false;
+  gas_interceptor_prev = 0;
   gas_pressed = false;
   gas_pressed_prev = false;
   brake_pressed = false;
@@ -565,6 +567,9 @@ bool longitudinal_brake_checks(int desired_brake, const LongitudinalLimits limit
   return violation;
 }
 
+bool longitudinal_interceptor_checks(const CANPacket_t *to_send) {
+  return (!get_longitudinal_allowed() || brake_pressed_prev) && (GET_BYTE(to_send, 0) || GET_BYTE(to_send, 1));
+}
 // Safety checks for torque-based steering commands
 bool steer_torque_cmd_checks(int desired_torque, int steer_req, const SteeringLimits limits) {
   bool violation = false;
