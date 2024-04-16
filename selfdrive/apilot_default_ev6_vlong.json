@@ -228,22 +228,6 @@
     "content": "main_ko"
   },
   {
-    "filename": "LatAccelCost",
-    "content": "100"
-  },
-  {
-    "filename": "LatMotionCost",
-    "content": "11"
-  },
-  {
-    "filename": "LatPathCost",
-    "content": "160"
-  },
-  {
-    "filename": "LatSteerRateCost",
-    "content": "10"
-  },
-  {
     "filename": "LateralTorqueAccelFactor",
     "content": "2970"
   },

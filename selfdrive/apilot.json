@@ -1430,58 +1430,5 @@
       "max": 120,
       "default": 105,
       "unit": 1
-    },
-    {
-      "group": "시험",
-      "name": "LatPathCost",
-      "title": "LatPathCost(160)",
-      "descr": "레인모드에서만작동",
-      "egroup": "TEST",
-      "etitle": "LatPathCost(160)",
-      "edescr": "",
-      "min": 0,
-      "max": 1000,
-      "default": 160,
-      "unit": 100
-    },
-    {
-      "group": "시험",
-      "name": "LatMotionCost",
-      "title": "LatMotionCost(11)",
-      "descr": "레인모드에서만작동",
-      "egroup": "TEST",
-      "etitle": "LatMotionCost(11)",
-      "edescr": "",
-      "min": 0,
-      "max": 1000,
-      "default": 11,
-      "unit": 5
-    },
-    {
-      "group": "시험",
-      "name": "LatAccelCost",
-      "title": "LatAccelCost(100)",
-      "descr": "",
-      "egroup": "TEST",
-      "etitle": "LatAccelCost(100)",
-      "edescr": "",
-      "min": 0,
-      "max": 1000,
-      "default": 100,
-      "unit": 100
-    },
-    {
-      "group": "시험",
-      "name": "LatSteerRateCost",
-      "title": "LatSteerRateCost(10)",
-      "descr": "",
-      "egroup": "TEST",
-      "etitle": "LatSteerRateCost(10)",
-      "edescr": "",
-      "min": 0,
-      "max": 1000,
-      "default": 10,
-      "unit": 100
     }
-  ]
 }

@@ -555,10 +555,6 @@ def get_all_toggle_values():
     "CarrotDisplay",
     "MSLCEnabled",
     "NoLogging",
-    "LatPathCost",
-    "LatMotionCost",
-    "LatAccelCost",
-    "LatSteerRateCost",
 
     "AlwaysOnLateralEnabled",
     "SteerRatio",

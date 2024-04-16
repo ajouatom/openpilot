@@ -326,10 +326,6 @@ std::unordered_map<std::string, uint32_t> keys = {
     { "CarrotException", CLEAR_ON_MANAGER_START },
     { "CarrotRouteActive", CLEAR_ON_MANAGER_START },
     { "CarName", CLEAR_ON_MANAGER_START },
-    { "LatPathCost", PERSISTENT },
-    { "LatMotionCost", PERSISTENT },
-    { "LatAccelCost", PERSISTENT },
-    { "LatSteerRateCost", PERSISTENT },
 
     { "AlwaysOnLateralEnabled", PERSISTENT},
     { "GMapKey", PERSISTENT},
