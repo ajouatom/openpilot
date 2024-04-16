@@ -115,6 +115,7 @@ class LongitudinalPlanner:
       self.read_param()
     self.param_read_counter += 1
     self.mpc.mode = 'blended' if sm['controlsState'].experimentalMode else 'acc'
+    self.mpc.experimentalMode = sm['controlsState'].experimentalMode
 
     v_ego = sm['carState'].vEgo
     v_cruise_kph = min(sm['controlsState'].vCruise, V_CRUISE_MAX)
