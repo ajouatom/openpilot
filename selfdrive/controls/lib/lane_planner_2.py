@@ -223,7 +223,7 @@ class LanePlanner:
       self.d_prob, self.lanefull_mode,
       self.lane_width_left_filtered.x, self.lane_width, self.lane_width_right_filtered.x)
 
-    useLaneLineDebug = 0 #self.params.get_int("UseLaneLineDebug")
+    useLaneLineDebug = self.params.get_int("AdjustLaneTime")
     if self.lanefull_mode:
       use_dist_mode = True  ## 아무리생각해봐도.. 같은 방법인듯...
       if use_dist_mode:

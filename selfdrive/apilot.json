@@ -964,6 +964,19 @@
       "unit": 10
     },
     {
+      "group": "조향일반",
+      "name": "AdjustLaneTime",
+      "title": "레인모드: 시간옵셋 (5)x0.01",
+      "descr": "앞쪽의 레인을 보고 조향하도록 한다.",
+      "egroup": "LAT",
+      "etitle": "LaneLine: AdjustLaneTime (5)x0.01",
+      "edescr": "",
+      "min": 0,
+      "max": 20,
+      "default": 0,
+      "unit": 1
+    },
+    {
       "group": "시작",
       "name": "HapticFeedbackWhenSpeedCamera",
       "title": "핸들햅틱기능사용(0)",

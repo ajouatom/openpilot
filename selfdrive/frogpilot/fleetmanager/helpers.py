@@ -541,6 +541,7 @@ def get_all_toggle_values():
     "UseLaneLineSpeed",
     "AdjustLaneOffset",
     "AdjustCurveOffset",
+    "AdjustLaneTime",
     "PathOffset",
     "MaxAngleFrames",
     "SoftHoldMode",
