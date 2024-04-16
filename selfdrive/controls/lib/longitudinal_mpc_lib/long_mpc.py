@@ -459,6 +459,7 @@ class LongitudinalMpc:
 
     if self.experimentalMode:
       self.mode == 'blended'
+      stop_x = 1000.0
     else:
       v_cruise, stop_x, self.mode = self.update_apilot(carstate, radarstate, model, v_cruise, carrot_planner)
     #self.debugLongText = "{},{},{:.1f},tf={:.2f},{:.1f},stop={:.1f},{:.1f},xv={:.0f},{:.0f}".format(
