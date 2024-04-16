@@ -970,7 +970,7 @@
       "descr": "앞쪽의 레인을 보고 조향하도록 한다.",
       "egroup": "LAT",
       "etitle": "LaneLine: AdjustLaneTime (5)x0.01",
-      "edescr": "",
+      "edescr": "LaneLine controller delay compensation",
       "min": 0,
       "max": 20,
       "default": 0,
