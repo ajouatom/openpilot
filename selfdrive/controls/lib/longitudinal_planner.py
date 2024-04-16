@@ -91,6 +91,8 @@ class LongitudinalPlanner:
     
   def get_carrot_accel(self, v_ego, curveSpeed):
     cruiseMaxVals = [self.cruiseMaxVals1, self.cruiseMaxVals2, self.cruiseMaxVals3, self.cruiseMaxVals4, self.cruiseMaxVals5, self.cruiseMaxVals6]
+    if v_ego < 5.0: # 저속에서는 가속도제한하지 말자.
+      curveSpeed = 300
     return interp(v_ego, A_CRUISE_MAX_BP_APILOT, cruiseMaxVals) * interp(abs(curveSpeed), [0, 120], [0.1, 1.0])
     
   @staticmethod
