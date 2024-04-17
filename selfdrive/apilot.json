@@ -966,8 +966,8 @@
     {
       "group": "조향일반",
       "name": "AdjustLaneTime",
-      "title": "레인모드: 시간옵셋 (5)x0.01",
-      "descr": "앞쪽의 레인을 보고 조향하도록 한다.",
+      "title": "레인모드: 시간지연보상 (5)x0.01",
+      "descr": "레인제어기의 지연시간을 보상하여, 빠른 조향을 유도함",
       "egroup": "LAT",
       "etitle": "LaneLine: AdjustLaneTime (5)x0.01",
       "edescr": "LaneLine controller delay compensation",
