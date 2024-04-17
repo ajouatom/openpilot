@@ -740,7 +740,7 @@ def main():
           if nRoadLimitSpeed >= 200:
             nRoadLimitSpeed = (nRoadLimitSpeed - 20) / 10
         else:
-          nRoadLimitSpeed = 30
+          nRoadLimitSpeed = 20
         xRoadLimitSpeed = nRoadLimitSpeed
         #sdiBlockType
         # 1: startOSEPS: 구간단속시작
