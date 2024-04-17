@@ -972,7 +972,7 @@
       "etitle": "LaneLine: AdjustLaneTime (5)x0.01",
       "edescr": "LaneLine controller delay compensation",
       "min": 0,
-      "max": 20,
+      "max": 50,
       "default": 0,
       "unit": 1
     },
