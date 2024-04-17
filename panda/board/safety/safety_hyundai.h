@@ -40,6 +40,7 @@ const CanMsg HYUNDAI_TX_MSGS[] = {
   {1265, 2, 4},               // CLU11, Bus 0, 2
   {0x7D0, 0, 8}, // radar UDS TX addr Bus 0 (for radar disable)   // 2000
   {0x7b1, 0, 8},
+    {1268, 0, 8},
 };
 
 const CanMsg HYUNDAI_LONG_TX_MSGS[] = {
@@ -57,7 +58,6 @@ const CanMsg HYUNDAI_LONG_TX_MSGS[] = {
   {593, 2, 8},  // MDPS12, Bus 2    // 593
   {0x4F1, 2, 4}, // CLU11 Bus 2     // 1265
   {0x7b1, 0, 8},
-    {1268, 0, 8},
 };
 
 const CanMsg HYUNDAI_CAMERA_SCC_TX_MSGS[] = {
