@@ -176,12 +176,20 @@ class CarController(CarControllerBase):
     if self.params.get_int("CarrotTest") == 1:
       if self.frame % 20 == 0:
         values = {
-          "CF_Spas_Disp": 1,
-          "CF_Spas_FCS_Alarm": 2,
-          "CF_Spas_FI_Ind": 2,
-          "CF_Spas_FR_Alarm": 2,
+          "AVM_Display_Message": 61,
+          "AVM_FrontBtn_Type": 5,
+          "AVM_HU_FrontViewPointOpt": 11,
+          "AVM_HU_FrontView_Option": 1,
+          "AVM_HU_RearView_Option": 1,
+          "AVM_Option" : 3,
+          "AVM_ParkingAssist_BtnSts": 2,
+          "AVM_ParkingAssist_Step":1,
+          "AVM_Popup_Msg": 0,
+          "AVM_Ready": 2,
+          "AVM_Version": 4362,
+          "AVM_View": 3,
         }
-        can_sends.append(self.packer.make_can_msg("SPAS12", 0, values))
+        can_sends.append(self.packer.make_can_msg("AVM_HU_PE_00", 0, values))
     ## TODO: avm이 자꾸만 깜박임...  스캐너를 다시 물려봐야할듯..
     if self.enableAVM > 0:
       addr, bus = 0x7b1, 0
