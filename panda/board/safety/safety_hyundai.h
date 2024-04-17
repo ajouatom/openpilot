@@ -57,7 +57,7 @@ const CanMsg HYUNDAI_LONG_TX_MSGS[] = {
   {593, 2, 8},  // MDPS12, Bus 2    // 593
   {0x4F1, 2, 4}, // CLU11 Bus 2     // 1265
   {0x7b1, 0, 8},
-    {1268, 0, 9},
+    {1268, 0, 8},
 };
 
 const CanMsg HYUNDAI_CAMERA_SCC_TX_MSGS[] = {
