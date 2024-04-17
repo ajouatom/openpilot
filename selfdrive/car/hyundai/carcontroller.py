@@ -173,23 +173,6 @@ class CarController(CarControllerBase):
       if self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
         can_sends.append([0x7b1, 0, b"\x02\x3E\x80\x00\x00\x00\x00\x00", self.CAN.ECAN])
 
-    if self.params.get_int("CarrotTest") == 1:
-      if self.frame % 20 == 0:
-        values = {
-          "AVM_Display_Message": 61,
-          "AVM_FrontBtn_Type": 5,
-          "AVM_HU_FrontViewPointOpt": 11,
-          "AVM_HU_FrontView_Option": 1,
-          "AVM_HU_RearView_Option": 1,
-          "AVM_Option" : 3,
-          "AVM_ParkingAssist_BtnSts": 2,
-          "AVM_ParkingAssist_Step":1,
-          "AVM_Popup_Msg": 0,
-          "AVM_Ready": 2,
-          "AVM_Version": 4362,
-          "AVM_View": 3,
-        }
-        can_sends.append(self.packer.make_can_msg("AVM_HU_PE_00", 0, values))
     ## TODO: avm이 자꾸만 깜박임...  스캐너를 다시 물려봐야할듯..
     if self.enableAVM > 0:
       addr, bus = 0x7b1, 0
