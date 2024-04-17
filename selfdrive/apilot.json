@@ -964,6 +964,19 @@
       "unit": 10
     },
     {
+      "group": "조향일반",
+      "name": "AdjustLaneTime",
+      "title": "레인모드: 시간지연보상 (5)x0.01",
+      "descr": "레인제어기의 지연시간을 보상하여, 빠른 조향을 유도함",
+      "egroup": "LAT",
+      "etitle": "LaneLine: AdjustLaneTime (5)x0.01",
+      "edescr": "LaneLine controller delay compensation",
+      "min": 0,
+      "max": 50,
+      "default": 0,
+      "unit": 1
+    },
+    {
       "group": "시작",
       "name": "HapticFeedbackWhenSpeedCamera",
       "title": "핸들햅틱기능사용(0)",
@@ -1431,4 +1444,5 @@
       "default": 105,
       "unit": 1
     }
+  ]
 }
