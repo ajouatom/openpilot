@@ -173,6 +173,12 @@ class CarController(CarControllerBase):
       if self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
         can_sends.append([0x7b1, 0, b"\x02\x3E\x80\x00\x00\x00\x00\x00", self.CAN.ECAN])
 
+    if self.params.get_int("CarrotTest") == 1:
+      if self.frame % 20 == 0:
+        values = {
+          "CF_Spas_Disp": 1
+        }
+        can_sends.append(self.packer.make_can_msg("SPAS12", 0, values))
     ## TODO: avm이 자꾸만 깜박임...  스캐너를 다시 물려봐야할듯..
     if self.enableAVM > 0:
       addr, bus = 0x7b1, 0
