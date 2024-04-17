@@ -70,11 +70,11 @@ class CarState(CarStateBase):
     if self.CP.enableBsm:
       # kans
       if self.CP.carFingerprint in SDGM_CAR:
-        ret.leftBlindspot = cam_cp.vl["BCMBlindSpotMonitor"]["Left_BSM"] == 1
-        ret.rightBlindspot = cam_cp.vl["BCMBlindSpotMonitor"]["Right_BSM"] == 1
+        ret.leftBlindspot = cam_cp.vl["BCMBlindSpotMonitor"]["LeftBSM"] == 1
+        ret.rightBlindspot = cam_cp.vl["BCMBlindSpotMonitor"]["RightBSM"] == 1
       else:
-        ret.leftBlindspot = pt_cp.vl["BCMBlindSpotMonitor"]["Left_BSM"] == 1
-        ret.rightBlindspot = pt_cp.vl["BCMBlindSpotMonitor"]["Right_BSM"] == 1
+        ret.leftBlindspot = pt_cp.vl["BCMBlindSpotMonitor"]["LeftBSM"] == 1
+        ret.rightBlindspot = pt_cp.vl["BCMBlindSpotMonitor"]["RightBSM"] == 1
 
     # Variables used for avoiding LKAS faults
     self.loopback_lka_steering_cmd_updated = len(loopback_cp.vl_all["ASCMLKASteeringCmd"]["RollingCounter"]) > 0
