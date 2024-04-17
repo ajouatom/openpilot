@@ -176,7 +176,10 @@ class CarController(CarControllerBase):
     if self.params.get_int("CarrotTest") == 1:
       if self.frame % 20 == 0:
         values = {
-          "CF_Spas_Disp": 1
+          "CF_Spas_Disp": 1,
+          "CF_Spas_FCS_Alarm": 2,
+          "CF_Spas_FI_Ind": 2,
+          "CF_Spas_FR_Alram": 2,
         }
         can_sends.append(self.packer.make_can_msg("SPAS12", 0, values))
     ## TODO: avm이 자꾸만 깜박임...  스캐너를 다시 물려봐야할듯..
