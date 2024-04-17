@@ -311,7 +311,7 @@ class VCruiseHelper:
       controls.events.add(EventName.audioPrompt)
       self._add_log_auto_cruise("autoCruise activated.")
 
-    self.autoCruiseCancelTimer = max(self.autoCruiseCancelTimer - 1, 0)
+    self.autoCruiseCancelTimer = 0 if self.v_cruise_kph_set > 10 else max(self.autoCruiseCancelTimer - 1, 0)
 
     self._update_lead(controls)
     self.v_ego_kph_set = int(CS.vEgoCluster * CV.MS_TO_KPH + 0.5)
