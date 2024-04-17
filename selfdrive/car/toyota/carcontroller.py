@@ -51,6 +51,14 @@ class CarController(CarControllerBase):
     # *** control msgs ***
     can_sends = []
 
+    params = Params()
+    steerMax = params.get_int("CustomSteerMax")
+    steerDeltaUp = params.get_int("CustomSteerDeltaUp")
+    steerDeltaDown = params.get_int("CustomSteerDeltaDown")
+    self.params.STEER_MAX = self.params.STEER_MAX if steerMax <= 0 else steerMax
+    self.params.STEER_DELTA_UP = self.params.STEER_DELTA_UP if steerDeltaUp <= 0 else steerDeltaUp
+    self.params.STEER_DELTA_DOWN = self.params.STEER_DELTA_DOWN if steerDeltaDown <= 0 else steerDeltaDown
+
     # *** steer torque ***
     new_steer = int(round(actuators.steer * self.params.STEER_MAX))
     apply_steer = apply_meas_steer_torque_limits(new_steer, self.last_steer, CS.out.steeringTorqueEps, self.params)
