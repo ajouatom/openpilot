@@ -40,7 +40,6 @@ class CarState(CarStateBase):
     self.disable_resumeRequired = False
 
     self.buttons_counter = 0
-
     self.single_pedal_mode = False
 
     # for delay Accfault event
@@ -119,7 +118,7 @@ class CarState(CarStateBase):
 
     if self.CP.enableGasInterceptor:
       ret.gas = (pt_cp.vl["GAS_SENSOR"]["INTERCEPTOR_GAS"] + pt_cp.vl["GAS_SENSOR"]["INTERCEPTOR_GAS2"]) / 2.
-      if self.CP.carFingerprint in (CAR.BOLT_EUV, CAR.BOLT_CC):
+      if self.CP.carFingerprint in (CAR.CHEVROLET_BOLT_EUV, CAR.CHEVROLET_BOLT_CC):
         ret.gasPressed = ret.gas > 20
       else:
         threshold = 20 if self.CP.carFingerprint in CAMERA_ACC_CAR else 4
@@ -262,8 +261,6 @@ class CarState(CarStateBase):
         ("BCMGeneralPlatformStatus", 10),
         ("ASCMSteeringButton", 33),
       ]
-      #if CP.enableBsm:
-      #  messages.append(("BCMBlindSpotMonitor", 10))
 
     # Used to read back last counter sent to PT by camera
     if CP.networkLocation == NetworkLocation.fwdCamera:

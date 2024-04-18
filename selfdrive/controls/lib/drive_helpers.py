@@ -110,13 +110,17 @@ class VCruiseHelper:
     self.cruiseEcoControl = self.params.get_int("CruiseEcoControl")
     self.cruiseSpeedUnit = self.params.get_int("CruiseSpeedUnit")
 
-    self.params.put_int("UseLaneLineSpeedApply", self.params.get_int("UseLaneLineSpeed"))
+    self.useLaneLineSpeed = self.params.get_int("UseLaneLineSpeed")
+    self.params.put_int("UseLaneLineSpeedApply", self.useLaneLineSpeed)
 
   def _params_update(self, controls):
     self.frame += 1
     self.params_count += 1
     if self.params_count == 10:
-      pass
+      useLaneLineSpeed = self.params.get_int("UseLaneLineSpeed")
+      if self.useLaneLineSpeed != useLaneLineSpeed:
+        self.params.put_int("UseLaneLineSpeedApply", useLaneLineSpeed)
+      self.useLaneLineSpeed = useLaneLineSpeed
     elif self.params_count == 20:
       self.autoResumeFromGasSpeed = self.params.get_int("AutoResumeFromGasSpeed")
       self.autoCancelFromGasMode = self.params.get_int("AutoCancelFromGasMode")
@@ -307,7 +311,7 @@ class VCruiseHelper:
       controls.events.add(EventName.audioPrompt)
       self._add_log_auto_cruise("autoCruise activated.")
 
-    self.autoCruiseCancelTimer = max(self.autoCruiseCancelTimer - 1, 0)
+    self.autoCruiseCancelTimer = 0 if self.v_cruise_kph_set > 20 else max(self.autoCruiseCancelTimer - 1, 0)
 
     self._update_lead(controls)
     self.v_ego_kph_set = int(CS.vEgoCluster * CV.MS_TO_KPH + 0.5)
@@ -525,7 +529,7 @@ class VCruiseHelper:
           self.params.put_int_nonblocking("MyDrivingMode", self.params.get_int("MyDrivingMode") % 4 + 1) # 1,2,3,4 (1:eco, 2:safe, 3:normal, 4:high speed)
         elif button_type == ButtonType.lfaButton:
           self._add_log("Button long lkas pressed ..")
-          useLaneLineSpeed = max(1, self.params.get_int("UseLaneLineSpeed"))
+          useLaneLineSpeed = max(1, self.useLaneLineSpeed)
           self.params.put_int_nonblocking("UseLaneLineSpeedApply", useLaneLineSpeed if self.params.get_int("UseLaneLineSpeedApply") == 0 else 0)
       else:
         if button_type == ButtonType.accelCruise:
@@ -556,7 +560,7 @@ class VCruiseHelper:
           self._add_log("Button gap pressed ..")
           controls.personality = (controls.personality - 1) % 3
           self.params.put_nonblocking('LongitudinalPersonality', str(controls.personality))
-          personality_events = [EventName.personalityAggressive, EventName.personalityStandard, EventName.personalityRelaxed, EventName.personalityRelaxed2]
+          personality_events = [EventName.personalityAggressive, EventName.personalityStandard, EventName.personalityRelaxed]
           controls.events.add(personality_events[controls.personality])
          
         elif button_type == ButtonType.lfaButton:

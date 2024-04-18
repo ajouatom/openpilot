@@ -101,6 +101,7 @@ class RouteEngine:
     self.update_location()
 
     if self.carrot_route_active:
+      #return
       msg = messaging.new_message('navInstruction', valid=True)
       msg.navInstruction = roadLimitSpeed.navInstruction
       #print(msg.navInstruction)
@@ -128,6 +129,7 @@ class RouteEngine:
 
     new_destination = coordinate_from_param("NavDestination", self.params)
     if new_destination is None:
+      #print("recomput_route")
       self.clear_route()
       self.reset_recompute_limits()
       return
@@ -223,6 +225,7 @@ class RouteEngine:
         self.step_idx = 0
       else:
         cloudlog.warning("Got empty route response")
+        print("Got empty route response")
         self.clear_route()
 
       # clear waypoints to avoid a re-route including past waypoints
@@ -231,6 +234,7 @@ class RouteEngine:
 
     except requests.exceptions.RequestException:
       cloudlog.exception("failed to get route")
+      print("failed to get route")
       self.clear_route()
 
     self.send_route()
@@ -331,6 +335,7 @@ class RouteEngine:
         self.reset_recompute_limits()
       else:
         cloudlog.warning("Destination reached")
+        print("Destination reached")
 
         # Clear route if driving away from destination
         dist = self.nav_destination.distance_to(self.last_position)

@@ -4,7 +4,7 @@
     {
       "group": "조향일반",
       "name": "PathOffset",
-      "title": "차선치우침 좌우보정(0)",
+      "title": "레인모드: 좌우보정(0)",
       "descr": "(-)좌측,(+)우측",
       "egroup": "LAT",
       "etitle": "PathOffset (0)",
@@ -62,7 +62,7 @@
       "etitle": "_CustomSteerMax(0)",
       "edescr": "",
       "min": 0,
-      "max": 512,
+      "max": 3000,
       "default": 0,
       "unit": 1
     },
@@ -75,7 +75,7 @@
       "etitle": "_CustomSteerDeltaUp(0)",
       "edescr": "",
       "min": 0,
-      "max": 20,
+      "max": 50,
       "default": 0,
       "unit": 1
     },
@@ -88,7 +88,7 @@
       "etitle": "_CustomSteerDeltaDown(0)",
       "edescr": "",
       "min": 0,
-      "max": 20,
+      "max": 50,
       "default": 0,
       "unit": 1
     },
@@ -576,10 +576,10 @@
     {
       "group": "시작",
       "name": "SpeedFromPCM",
-      "title": "PCM차량속도제어",
+      "title": "PCM차량속도제어(순정SCC)",
       "descr": "1:차량속도이용(감속제어안함), 0: 신호/커브/카메라 감속, 2: 커브/카메라 감속",
       "egroup": "START",
-      "etitle": "Speed from PCM",
+      "etitle": "Speed from PCM(StockSCC)",
       "edescr": "1: Cruise speed control from Car, 0,2: Speed OP",
       "min": 0,
       "max": 2,
@@ -964,6 +964,19 @@
       "unit": 10
     },
     {
+      "group": "조향일반",
+      "name": "AdjustLaneTime",
+      "title": "레인모드: 시간지연보상 (5)x0.01",
+      "descr": "레인제어기의 지연시간을 보상하여, 빠른 조향을 유도함",
+      "egroup": "LAT",
+      "etitle": "LaneLine: AdjustLaneTime (5)x0.01",
+      "edescr": "LaneLine controller delay compensation",
+      "min": 0,
+      "max": 50,
+      "default": 0,
+      "unit": 1
+    },
+    {
       "group": "시작",
       "name": "HapticFeedbackWhenSpeedCamera",
       "title": "핸들햅틱기능사용(0)",
@@ -1121,19 +1134,6 @@
     },
     {
       "group": "차량간격",
-      "name": "ApplyLongDynamicCost",
-      "title": "차량간격유지 동적제어사용(0)",
-      "descr": "전방차량의 간격유지의 응답속도가 빨라짐",
-      "egroup": "FDIST",
-      "etitle": "DynamicFollow(0)",
-      "edescr": "",
-      "min": 0,
-      "max": 1,
-      "default": 1,
-      "unit": 1
-    },
-    {
-      "group": "차량간격",
       "name": "TFollowSpeedAdd",
       "title": "TF(s): 차량간격시간 추가100km/hx0.01s(0)",
       "descr": "속도(최대100km/h)에 따라 추가되는 값",
@@ -1157,6 +1157,32 @@
       "max": 200,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "차량간격",
+      "name": "TFollowLeadCarSpeed",
+      "title": "TF: 선행차속도 반영(0)%",
+      "descr": "선행차가 빠르면 작아지고, 느리면 커짐.",
+      "egroup": "FDIST",
+      "etitle": "TF: LeadCar Speed(0)%",
+      "edescr": "",
+      "min": 0,
+      "max": 200,
+      "default": 0,
+      "unit": 5
+    },
+    {
+      "group": "차량간격",
+      "name": "TFollowLeadCarAccel",
+      "title": "TF: 선행차가속도 반영(0)%",
+      "descr": "선행차가 감속중이면, TF가 커짐",
+      "egroup": "FDIST",
+      "etitle": "TF: LeadCar Accel (0)%",
+      "edescr": "",
+      "min": 0,
+      "max": 200,
+      "default": 0,
+      "unit": 5
     },
     {
       "group": "차량간격",
@@ -1417,58 +1443,6 @@
       "max": 120,
       "default": 105,
       "unit": 1
-    },
-    {
-      "group": "시험",
-      "name": "LatPathCost",
-      "title": "LatPathCost(160)",
-      "descr": "레인모드에서만작동",
-      "egroup": "TEST",
-      "etitle": "LatPathCost(160)",
-      "edescr": "",
-      "min": 0,
-      "max": 1000,
-      "default": 160,
-      "unit": 100
-    },
-    {
-      "group": "시험",
-      "name": "LatMotionCost",
-      "title": "LatMotionCost(11)",
-      "descr": "레인모드에서만작동",
-      "egroup": "TEST",
-      "etitle": "LatMotionCost(11)",
-      "edescr": "",
-      "min": 0,
-      "max": 1000,
-      "default": 11,
-      "unit": 5
-    },
-    {
-      "group": "시험",
-      "name": "LatAccelCost",
-      "title": "LatAccelCost(100)",
-      "descr": "",
-      "egroup": "TEST",
-      "etitle": "LatAccelCost(100)",
-      "edescr": "",
-      "min": 0,
-      "max": 1000,
-      "default": 100,
-      "unit": 100
-    },
-    {
-      "group": "시험",
-      "name": "LatSteerRateCost",
-      "title": "LatSteerRateCost(10)",
-      "descr": "",
-      "egroup": "TEST",
-      "etitle": "LatSteerRateCost(10)",
-      "edescr": "",
-      "min": 0,
-      "max": 1000,
-      "default": 10,
-      "unit": 100
     }
   ]
 }

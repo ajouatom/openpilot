@@ -12,10 +12,6 @@
     "content": "1"
   },
   {
-    "filename": "ApplyLongDynamicCost",
-    "content": "1"
-  },
-  {
     "filename": "AutoCancelFromGasMode",
     "content": "2"
   },
@@ -268,10 +264,6 @@
     "content": "87"
   },
   {
-    "filename": "MixRadarInfo",
-    "content": "0"
-  },
-  {
     "filename": "MuteDoor",
     "content": "0"
   },
@@ -290,10 +282,6 @@
   {
     "filename": "MySafeModeFactor",
     "content": "80"
-  },
-  {
-    "filename": "NNFF",
-    "content": "0"
   },
   {
     "filename": "NetworkMetered",
@@ -538,13 +526,5 @@
   {
     "filename": "UseLaneLineSpeed",
     "content": "1"
-  },
-  {
-    "filename": "UseLateralJerk",
-    "content": "0"
-  },
-  {
-    "filename": "Version",
-    "content": "0.9.7"
   }
 ]

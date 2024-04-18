@@ -216,23 +216,23 @@ class LanePlanner:
     ## laneless at lowspeed
     self.d_prob *= interp(v_ego*3.6, [5., 10.], [0.0, 1.0])
 
-    self.debugText = "OFFSET({:.2f}={:.2f}+{:.2f}+{:.2f}),Vc:{:.2f},dp:{:.1f},lf:{},lrw={:.1f}|{:.1f}|{:.1f}".format(
-      self.lane_offset_filtered.x,
-      diff_center, offset_lane, offset_curve,
-      curve_speed,
-      self.d_prob, self.lanefull_mode,
-      self.lane_width_left_filtered.x, self.lane_width, self.lane_width_right_filtered.x)
+    #self.debugText = "OFFSET({:.2f}={:.2f}+{:.2f}+{:.2f}),Vc:{:.2f},dp:{:.1f},lf:{},lrw={:.1f}|{:.1f}|{:.1f}".format(
+    #  self.lane_offset_filtered.x,
+    #  diff_center, offset_lane, offset_curve,
+    #  curve_speed,
+    #  self.d_prob, self.lanefull_mode,
+    #  self.lane_width_left_filtered.x, self.lane_width, self.lane_width_right_filtered.x)
 
-    useLaneLineDebug = 0 #self.params.get_int("UseLaneLineDebug")
+    adjustLaneTime = self.params.get_int("AdjustLaneTime")
     if self.lanefull_mode:
       use_dist_mode = True  ## 아무리생각해봐도.. 같은 방법인듯...
       if use_dist_mode:
-        lane_path_y_interp = np.interp(path_xyz[:,0] + v_ego * useLaneLineDebug*0.01, self.ll_x, lane_path_y)
+        lane_path_y_interp = np.interp(path_xyz[:,0] + v_ego * adjustLaneTime*0.01, self.ll_x, lane_path_y)
         path_xyz[:,1] = self.d_prob * lane_path_y_interp + (1.0 - self.d_prob) * path_xyz[:,1]
       else:
         safe_idxs = np.isfinite(self.ll_t)
         if safe_idxs[0]:
-          lane_path_y_interp = np.interp(path_t * (1.0 + useLaneLineDebug*0.01), self.ll_t[safe_idxs], lane_path_y[safe_idxs])
+          lane_path_y_interp = np.interp(path_t * (1.0 + adjustLaneTime*0.01), self.ll_t[safe_idxs], lane_path_y[safe_idxs])
           path_xyz[:,1] = self.d_prob * lane_path_y_interp + (1.0 - self.d_prob) * path_xyz[:,1]
 
 

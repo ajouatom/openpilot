@@ -363,6 +363,7 @@ class VisionTrack:
   def __init__(self, radar_ts):
     self.radar_ts = radar_ts
     self.dRel = 0.0
+    self.vRel = 0.0
     self.yRel = 0.0
     self.vLead = 0.0
     self.aLead = 0.0
@@ -375,6 +376,7 @@ class VisionTrack:
     self.aLeadTauStart = float(Params().get_int("ALeadTauStart")) / 100.
 
     self.kf: KF1D | None = None
+    self.kf_v: KF1D | None = None
 
   def get_lead(self):
     return {
@@ -382,7 +384,7 @@ class VisionTrack:
       "yRel": self.yRel,
       "vRel": self.vRel,
       "vLead": self.vLead,
-      "vLeadK": self.vLeadK,
+      "vLeadK": self.vLeadK,    ## TODO: 아직 vLeadK는 엉망인듯...
       "aLeadK": 0.0 if self.mixRadarInfo in [3] else clip(self.aLeadK, self.aLead - 1.0, self.aLead + 1.0),
       "aLeadTau": 0.3 if self.mixRadarInfo in [3] else self.aLeadTau,
       "fcw": False,
@@ -395,6 +397,7 @@ class VisionTrack:
   def reset(self):
     self.status = False
     self.kf = None
+    self.kf_v = None
     self.aLeadTau = _LEAD_ACCEL_TAU
 
   def update(self, lead_msg, model_v_ego, v_ego):
@@ -413,16 +416,20 @@ class VisionTrack:
       self.aLead = lead_msg.a[0]
       if self.prob < 0.99:
         self.kf = None
+        self.kf_v = None
       self.status = True
     else:
       self.reset()
 
     if self.kf is None:
       self.kf = lead_kf(self.vLead, self.aLead, self.radar_ts)
+      self.kf_v = lead_kf(self.dRel, self.vRel, self.radar_ts)
     else:
       self.kf.update(self.vLead)
+      self.kf_v.update(self.dRel)
 
-    self.vLeadK = float(self.kf.x[LEAD_KALMAN_SPEED][0])
+    #self.vLeadK = float(self.kf.x[LEAD_KALMAN_SPEED][0])
+    self.vLeadK = float(self.kf_v.x[1][0]) + model_v_ego
     self.aLeadK = float(self.kf.x[LEAD_KALMAN_ACCEL][0])
 
     # Learn if constant acceleration
@@ -578,7 +585,7 @@ class RadarD:
     # vision match후 발견된 track이 없으면
     #  track_scc 가 있는 지 확인하고
     #    비전과의 차이가 35%(5M)이상 차이나면 scc가 발견못한것이기 때문에 비전것으로 처리함.
-    if track_scc is not None and track is None and self.mixRadarInfo == 4:
+    if track_scc is not None and track is None: # and self.mixRadarInfo == 4:
       track = track_scc
       if self.vision_tracks[index].prob > .5:
         if self.vision_tracks[index].dRel < track.dRel - 5.0: #끼어드는 차량이 있는 경우 처리..

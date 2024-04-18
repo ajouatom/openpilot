@@ -20,10 +20,6 @@
     "content": "1"
   },
   {
-    "filename": "ApplyLongDynamicCost",
-    "content": "0"
-  },
-  {
     "filename": "AutoCancelFromGasMode",
     "content": "2"
   },
@@ -232,22 +228,6 @@
     "content": "main_ko"
   },
   {
-    "filename": "LatAccelCost",
-    "content": "100"
-  },
-  {
-    "filename": "LatMotionCost",
-    "content": "11"
-  },
-  {
-    "filename": "LatPathCost",
-    "content": "160"
-  },
-  {
-    "filename": "LatSteerRateCost",
-    "content": "10"
-  },
-  {
     "filename": "LateralTorqueAccelFactor",
     "content": "2970"
   },
@@ -308,10 +288,6 @@
     "content": "89"
   },
   {
-    "filename": "MixRadarInfo",
-    "content": "0"
-  },
-  {
     "filename": "MuteDoor",
     "content": "0"
   },
@@ -330,10 +306,6 @@
   {
     "filename": "MySafeModeFactor",
     "content": "80"
-  },
-  {
-    "filename": "NNFF",
-    "content": "0"
   },
   {
     "filename": "NoLogging",
@@ -545,10 +517,6 @@
   },
   {
     "filename": "UseLaneLineSpeedApply",
-    "content": "0"
-  },
-  {
-    "filename": "UseLateralJerk",
     "content": "0"
   }
 ]

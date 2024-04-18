@@ -12,10 +12,6 @@
     "content": "1"
   },
   {
-    "filename": "ApplyLongDynamicCost",
-    "content": "1"
-  },
-  {
     "filename": "AutoCancelFromGasMode",
     "content": "2"
   },
@@ -222,10 +218,6 @@
   {
     "filename": "MaxAngleFrames",
     "content": "87"
-  },
-  {
-    "filename": "MixRadarInfo",
-    "content": "0"
   },
   {
     "filename": "MuteDoor",

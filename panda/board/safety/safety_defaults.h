@@ -44,7 +44,6 @@ static bool alloutput_tx_hook(const CANPacket_t *to_send) {
   return true;
 }
 
-
 static int alloutput_fwd_hook(int bus_num, int addr) {
   int bus_fwd = -1;
   UNUSED(addr);
