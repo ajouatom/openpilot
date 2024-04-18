@@ -758,7 +758,8 @@ def main():
           xSpdLimit = nSdiSpeedLimit
           xSpdDist = nSdiDist
           sdiType = nSdiType
-          if nSdiBlockType in [1,2,3]: #구간단속
+          #if nSdiBlockType in [1,2,3]: #구간단속
+          if nSdiBlockType in [2,3]: #구간단속,
             sdiType = 4
             xSpdDist = nSdiBlockDist
           #if sdiType == 4: ## 구간단속
