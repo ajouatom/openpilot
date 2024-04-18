@@ -289,7 +289,7 @@ class CarrotNaviHelper(CarrotBase):
       turn_dist = interp(xNextRoadWidth, [5, 10], [43, 60])
       turn_speed = self.autoTurnControlSpeedTurn #interp(xNextRoadWidth, [5, 10], [self.autoTurnControlSpeedTurn, self.autoTurnControlSpeedTurn*1.5])
       laneChange_dist = interp(roadcate, [0, 1, 2, 7], [300, 280, 200, 160])
-      laneChange_speed = interp(roadcate, [0, 1, 2, 7], [self.autoTurnControlSpeedLaneChange*1.5, self.autoTurnControlSpeedLaneChange*1.5, self.autoTurnControlSpeedLaneChange*1.2, self.autoTurnControlSpeedLaneChange])
+      laneChange_speed = interp(roadcate, [0, 1, 2, 7], [self.autoTurnControlSpeedLaneChange*2.0, self.autoTurnControlSpeedLaneChange*1.5, self.autoTurnControlSpeedLaneChange*1.2, self.autoTurnControlSpeedLaneChange])
 
       self.naviDistance = 0
       self.naviSpeed = 0
