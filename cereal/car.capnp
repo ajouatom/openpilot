@@ -141,8 +141,7 @@ struct CarEvent @0x9b1657f34caf3ad3 {
     personalityRelaxed @137;
     personalityStandard @138;
     personalityAggressive @139;
-    personalityRelaxed2 @140;
-    torqueNNLoad @141;
+    torqueNNLoad @140;
 
     radarCanErrorDEPRECATED @15;
     communityFeatureDisallowedDEPRECATED @62;
@@ -247,7 +246,6 @@ struct CarState {
 
 
   tpms @48 : Tpms;
-  # neokii
   vCluRatio @49 :Float32;
   driverOverride @50 : Int32; #0: Normal, 1:Gas, 2:Brake
   chargeMeter @51 : Float32;

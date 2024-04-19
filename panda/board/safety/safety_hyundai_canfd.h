@@ -376,9 +376,12 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
   return tx;
 }
 
-int addr_list[128] = { 0, };
-int addr_list_len[128] = { 0, };
-int addr_list_count = 0;
+int addr_list1[128] = { 0, };
+int addr_list_len1[128] = { 0, };
+int addr_list_count1 = 0;
+int addr_list2[128] = { 0, };
+int addr_list_len2[128] = { 0, };
+int addr_list_count2 = 0;
 uint32_t last_ts_lkas_msg_acan = 0;
 
 static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
@@ -397,16 +400,16 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
       }
       if (bus_num == 2) {
           int i;
-          for (i = 0; i < addr_list_count; i++) {
-              if (addr_list[i] == addr) {
+          for (i = 0; i < addr_list_count2; i++) {
+              if (addr_list2[i] == addr) {
                   break;
               }
           }
-          if (i == addr_list_count) {
-              addr_list[addr_list_count] = addr;
-              addr_list_count++;
-              print("bus222_list33=");
-              for (int j = 0; j < addr_list_count; j++) { putui((uint32_t)addr_list[j]); print(","); }
+          if (i == addr_list_count2) {
+              addr_list2[addr_list_count2] = addr;
+              addr_list_count2++;
+              print("acan_panda bus2_list=");
+              for (int j = 0; j < addr_list_count2; j++) { putui((uint32_t)addr_list2[j]); print(","); }
               print("\n");
           }
 
@@ -435,20 +438,37 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
     bus_fwd = 2;
   }
   extern uint8_t to_push_data_len_code;
-  if (bus_num == 2) {
+  if (bus_num == 1) {
       int i;
-      for (i = 0; i < addr_list_count; i++) {
-          if (addr_list[i] == addr) {
-              addr_list_len[i] = to_push_data_len_code;
+      for (i = 0; i < addr_list_count1; i++) {
+          if (addr_list1[i] == addr) {
+              addr_list_len1[i] = to_push_data_len_code;
               break;
           }
       }
-      if (i == addr_list_count) {
-          addr_list[addr_list_count] = addr;
-          addr_list_len[addr_list_count] = to_push_data_len_code;
-          addr_list_count++;
-          print("bus2_list33=");
-          for (int j = 0; j < addr_list_count; j++) { putui((uint32_t)addr_list[j]); print("("); putui((uint32_t)addr_list_len[j]); print(") "); }
+      if (i == addr_list_count1) {
+          addr_list1[addr_list_count1] = addr;
+          addr_list_len1[addr_list_count1] = to_push_data_len_code;
+          addr_list_count1++;
+          print("!!!!! bus1_list=");
+          for (int j = 0; j < addr_list_count1; j++) { putui((uint32_t)addr_list1[j]); print("("); putui((uint32_t)addr_list_len1[j]); print(") "); }
+          print("\n");
+      }
+  }
+  if (bus_num == 2) {
+      int i;
+      for (i = 0; i < addr_list_count2; i++) {
+          if (addr_list2[i] == addr) {
+              addr_list_len2[i] = to_push_data_len_code;
+              break;
+          }
+      }
+      if (i == addr_list_count2) {
+          addr_list2[addr_list_count2] = addr;
+          addr_list_len2[addr_list_count2] = to_push_data_len_code;
+          addr_list_count2++;
+          print("@@@@ bus2_list=");
+          for (int j = 0; j < addr_list_count2; j++) { putui((uint32_t)addr_list2[j]); print("("); putui((uint32_t)addr_list_len2[j]); print(") "); }
           print("\n");
       }
 #if 1

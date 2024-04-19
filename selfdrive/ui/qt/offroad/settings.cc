@@ -567,22 +567,22 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
     cruiseToggles->addItem(new CValueControl("AutoSpeedUptoRoadSpeedLimit", "CRUISE: Auto speed up (100%)", "Auto speed up based on the lead car upto RoadSpeedLimit.", "../assets/offroad/icon_road.png", 0, 200, 10));
     //cruiseToggles->addItem(new CValueControl("AutoResumeFromGas", "GAS CRUISE ON: Use", "Auto Cruise on when GAS pedal released, 60% Gas Cruise On automatically", "../assets/offroad/icon_road.png", 0, 3, 1));
     cruiseToggles->addItem(new CValueControl("AutoResumeFromGasSpeed", "GAS CRUISE ON: Speed(30)", "Driving speed exceeds the set value, Cruise ON", "../assets/offroad/icon_road.png", 20, 140, 5));
-    cruiseToggles->addItem(new ParamControl("ApplyLongDynamicCost", "GAP: Dynamic Control(0)", "전방차량의 간격을 최대한 유지하도록 응답속도가 빨라집니다.", "../assets/offroad/icon_road.png", this));
     cruiseToggles->addItem(new CValueControl("TFollowSpeedAddM", "GAP: Additinal TFs 40km/h(0)x0.01s", "Speed-dependent additinal max(100km/h) TFs", "../assets/offroad/icon_road.png", -100, 200, 5));
     cruiseToggles->addItem(new CValueControl("TFollowSpeedAdd", "GAP: Additinal TFs 100Km/h(0)x0.01s", "Speed-dependent additinal max(100km/h) TFs", "../assets/offroad/icon_road.png", -100, 200, 5));
-    cruiseToggles->addItem(new CValueControl("TFollowGap1", "GAP1: Apply TFollow (110)x0.01s", "선행차와의 간격1단계, 속도x시간", "../assets/offroad/icon_road.png", 70, 300, 5));
-    cruiseToggles->addItem(new CValueControl("TFollowGap2", "GAP2: Apply TFollow (120)x0.01s", "선행차와의 간격2단계, 속도x시간", "../assets/offroad/icon_road.png", 70, 300, 5));
-    cruiseToggles->addItem(new CValueControl("TFollowGap3", "GAP3: Apply TFollow (160)x0.01s", "선행차와의 간격3단계, 속도x시간", "../assets/offroad/icon_road.png", 70, 300, 5));
-    cruiseToggles->addItem(new CValueControl("TFollowGap4", "GAP4: Apply TFollow (180)x0.01s", "선행차와의 간격4단계, 속도x시간", "../assets/offroad/icon_road.png", 70, 300, 5));
+    cruiseToggles->addItem(new CValueControl("TFollowGap1", "GAP1: Apply TFollow (110)x0.01s", "", "../assets/offroad/icon_road.png", 70, 300, 5));
+    cruiseToggles->addItem(new CValueControl("TFollowGap2", "GAP2: Apply TFollow (120)x0.01s", "", "../assets/offroad/icon_road.png", 70, 300, 5));
+    cruiseToggles->addItem(new CValueControl("TFollowGap3", "GAP3: Apply TFollow (160)x0.01s", "", "../assets/offroad/icon_road.png", 70, 300, 5));
+    cruiseToggles->addItem(new CValueControl("TFollowGap4", "GAP4: Apply TFollow (180)x0.01s", "", "../assets/offroad/icon_road.png", 70, 300, 5));
     cruiseToggles->addItem(new CValueControl("MyDrivingMode", "DRIVEMODE: Select", "1:ECO,2:SAFE,3:NORMAL,4:HIGH", "../assets/offroad/icon_road.png", 1, 4, 1));
     cruiseToggles->addItem(new CValueControl("MyEcoModeFactor", "DRIVEMODE: ECO Accel ratio(80%)", "Acceleartion ratio in ECO mode", "../assets/offroad/icon_road.png", 10, 95, 5));
     cruiseToggles->addItem(new CValueControl("MySafeModeFactor", "DRIVEMODE: SAFE ratio(60%)", "Accel/StopDistance/DecelRatio/Gap control ratio", "../assets/offroad/icon_road.png", 10, 90, 10));
 
     latLongToggles = new ListWidget(this);
-    latLongToggles->addItem(new CValueControl("AutoLaneChangeSpeed", "LaneChangeSpeed(20)", "자동차선변경속도설정", "../assets/offroad/icon_road.png", 1, 100, 5));
+    latLongToggles->addItem(new CValueControl("AutoLaneChangeSpeed", "LaneChangeSpeed(20)", "", "../assets/offroad/icon_road.png", 1, 100, 5));
     latLongToggles->addItem(new CValueControl("UseLaneLineSpeed", "Laneline mode speed(0)", "Lainline mode, lat_mpc control used", "../assets/offroad/icon_shell.png", 0, 200, 5));
     latLongToggles->addItem(new CValueControl("AdjustLaneOffset", "AdjustLaneOffset(0)cm", "", "../assets/offroad/icon_shell.png", 0, 500, 5));
-    latLongToggles->addItem(new CValueControl("AdjustCurveOffset", "AdjustCurveOffset(0)cm", "", "../assets/offroad/icon_shell.png", 0, 500, 5));
+    latLongToggles->addItem(new CValueControl("AdjustCurveOffset", "AdjustLaneCurveOffset(0)cm", "", "../assets/offroad/icon_shell.png", 0, 500, 5));
+    latLongToggles->addItem(new CValueControl("AdjustLaneTime", "AdjustLaneTimeOffset(5)x0.01s", "", "../assets/offroad/icon_shell.png", 0, 20, 1));
     latLongToggles->addItem(new CValueControl("PathOffset", "PathOffset", "(-)left, (+)right, when UseLaneLineSpeed > 0", "../assets/offroad/icon_road.png", -50, 50, 1));
     //latLongToggles->addItem(horizontal_line());
     //latLongToggles->addItem(new CValueControl("JerkStartLimit", "LONG: JERK START(10)x0.1", "Starting Jerk.", "../assets/offroad/icon_road.png", 1, 50, 1));
@@ -706,7 +706,7 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
     carrotLayout = new QVBoxLayout(homeScreen);
     carrotLayout->setMargin(40);
 
-    QString selected = QString::fromStdString(Params().get("CarSelected"));
+    QString selected = QString::fromStdString(Params().get("CarSelected2"));
     QPushButton* selectCarBtn = new QPushButton(selected.length() ? selected : tr("Select your car"));
     selectCarBtn->setObjectName("selectCarBtn");
     //selectCarBtn->setStyleSheet("margin-right: 30px;");
@@ -716,7 +716,7 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
     connect(selectCar, &SelectCar::backPress, [=]() { main_layout->setCurrentWidget(homeScreen); });
     connect(selectCar, &SelectCar::selectedCar, [=]() {
 
-        QString selected = QString::fromStdString(Params().get("CarSelected"));
+        QString selected = QString::fromStdString(Params().get("CarSelected2"));
         selectCarBtn->setText(selected.length() ? selected : tr("Select your car"));
         main_layout->setCurrentWidget(homeScreen);
         });
@@ -764,11 +764,9 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
     commonToggles->addItem(new CValueControl("LateralTorqueAccelFactor", "LAT: TorqueAccelFactor(2500)", "", "../assets/offroad/icon_road.png", 1000, 6000, 10));
     commonToggles->addItem(new CValueControl("LateralTorqueFriction", "LAT: TorqueFriction(100)", "", "../assets/offroad/icon_road.png", 0, 1000, 10));
     commonToggles->addItem(new CValueControl("CustomSteerMax", "LAT: CustomSteerMax(0)", "", "../assets/offroad/icon_road.png", 0, 512, 10));
-    commonToggles->addItem(new CValueControl("CustomSteerDeltaUp", "LAT: CustomSteerDeltaUp(0)", "", "../assets/offroad/icon_road.png", 0, 20, 10));
-    commonToggles->addItem(new CValueControl("CustomSteerDeltaDown", "LAT: CustomSteerDeltaDown(0)", "", "../assets/offroad/icon_road.png", 0, 20, 10));
+    commonToggles->addItem(new CValueControl("CustomSteerDeltaUp", "LAT: CustomSteerDeltaUp(0)", "", "../assets/offroad/icon_road.png", 0, 50, 10));
+    commonToggles->addItem(new CValueControl("CustomSteerDeltaDown", "LAT: CustomSteerDeltaDown(0)", "", "../assets/offroad/icon_road.png", 0, 50, 10));
     commonToggles->addItem(new CValueControl("SpeedFromPCM", "Read Cruise Speed from PCM", "Toyota must set to 1", "../assets/offroad/icon_road.png", 0, 2, 1));
-    commonToggles->addItem(new CValueControl("NNFF", "NNFF", "Twilsonco's NNFF(Reboot required)", "../assets/offroad/icon_road.png", 0, 1, 1));
-    commonToggles->addItem(new CValueControl("UseLateralJerk", "UseLateralJerk", "Reboot required", "../assets/offroad/icon_road.png", 0, 1, 1));
 
     hyundaiToggles = new ListWidget(this);
     hyundaiToggles->addItem(new CValueControl("AutoCruiseControl", "(HKG) Auto Cruise control", "Softhold, Auto Cruise ON/OFF control", "../assets/offroad/icon_road.png", 0, 3, 1));
@@ -782,11 +780,8 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
     gmToggles = new ListWidget(this);
     gmToggles->addItem(new ParamControl("LongPitch", "LongPitch", "", "../assets/offroad/icon_warning.png", this));
     gmToggles->addItem(new ParamControl("EVTable", "EVTable", "", "../assets/offroad/icon_warning.png", this));
-    gmToggles->addItem(new ParamControl("GasRegenCmd", "GasRegenCmd", "", "../assets/offroad/icon_warning.png", this));
 
     toyotaToggles = new ListWidget(this);
-    toyotaToggles->addItem(new ParamControl("LockDoors", "LockDoors", "", "../assets/offroad/icon_warning.png", this));
-    toyotaToggles->addItem(new ParamControl("SNGHack", "SNGHack", "", "../assets/offroad/icon_warning.png", this));
     toyotaToggles->addItem(new ParamControl("TSS2Tune", "TSS2Tune", "", "../assets/offroad/icon_warning.png", this));
 
     toggles_layout->addWidget(commonToggles);
@@ -828,7 +823,7 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
   QVBoxLayout* vlayout = new QVBoxLayout(homeScreen);
   vlayout->setContentsMargins(0, 20, 0, 20);
 
-  QString selected = QString::fromStdString(Params().get("CarSelected"));
+  QString selected = QString::fromStdString(Params().get("CarSelected2"));
   QPushButton* selectCarBtn = new QPushButton(selected.length() ? selected : tr("Select your car"));
   selectCarBtn->setObjectName("selectCarBtn");
   //selectCarBtn->setStyleSheet("margin-right: 30px;");
@@ -848,7 +843,7 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
   connect(selectCar, &SelectCar::backPress, [=]() { main_layout->setCurrentWidget(homeScreen); });
   connect(selectCar, &SelectCar::selectedCar, [=]() {
 
-     QString selected = QString::fromStdString(Params().get("CarSelected"));
+     QString selected = QString::fromStdString(Params().get("CarSelected2"));
      selectCarBtn->setText(selected.length() ? selected : tr("Select your car"));
      main_layout->setCurrentWidget(homeScreen);
   });
@@ -1074,7 +1069,7 @@ SelectCar::SelectCar(QWidget* parent): QWidget(parent) {
   list->addItems(items_toyota);
   list->setCurrentRow(0);
 
-  QString selected = QString::fromStdString(Params().get("CarSelected"));
+  QString selected = QString::fromStdString(Params().get("CarSelected2"));
 
   int index = 0;
   for(QString item : items) {
@@ -1089,9 +1084,9 @@ SelectCar::SelectCar(QWidget* parent): QWidget(parent) {
     [=](QListWidgetItem* item){
 
     if(list->currentRow() == 0)
-        Params().remove("CarSelected");
+        Params().remove("CarSelected2");
     else
-        Params().put("CarSelected", list->currentItem()->text().toStdString());
+        Params().put("CarSelected2", list->currentItem()->text().toStdString());
 
     emit selectedCar();
     });
