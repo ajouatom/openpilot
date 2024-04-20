@@ -1,3 +1,11 @@
+Carrot 0.9.7 (2024-04-19)
+========================
+* RT model
+* Update COMMA MASTER
+* Remove NNFF
+* More Settings
+  * LaneLine: AdjustLaneTime (13) : LaneLine controller delay compenstation
+
 Version 0.9.7 (2024-XX-XX)
 ========================
 * New driving model

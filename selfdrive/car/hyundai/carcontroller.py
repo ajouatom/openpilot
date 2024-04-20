@@ -105,20 +105,14 @@ class CarController(CarControllerBase):
       self.button_spam3 = self.params.get_int("CruiseButtonTest3")
 
 
-    carrot_test = self.params.get_int("CarrotTest")
-    if carrot_test == 1:
-      if CS.out.vEgoRaw < 11:
-        #self.cc_params.STEER_DRIVER_ALLOWANCE = 50
-        self.cc_params.STEER_DELTA_UP = 5
-        self.cc_params.STEER_DELTA_DOWN = 7 #10
-      else:
-        #self.cc_params.STEER_DRIVER_ALLOWANCE = 50
-        steerMax = self.params.get_int("CustomSteerMax")
-        steerDeltaUp = self.params.get_int("CustomSteerDeltaUp")
-        steerDeltaDown = self.params.get_int("CustomSteerDeltaDown")
-        self.cc_params.STEER_MAX = self.cc_params.STEER_MAX if steerMax <= 0 else steerMax
-        self.cc_params.STEER_DELTA_UP = self.cc_params.STEER_DELTA_UP if steerDeltaUp <= 0 else steerDeltaUp
-        self.cc_params.STEER_DELTA_DOWN = self.cc_params.STEER_DELTA_DOWN if steerDeltaDown <= 0 else steerDeltaDown
+    #self.cc_params.STEER_DRIVER_ALLOWANCE = 50
+    steerMax = self.params.get_int("CustomSteerMax")
+    steerDeltaUp = self.params.get_int("CustomSteerDeltaUp")
+    steerDeltaDown = self.params.get_int("CustomSteerDeltaDown")
+    self.cc_params.STEER_MAX = self.cc_params.STEER_MAX if steerMax <= 0 else steerMax
+    self.cc_params.STEER_DELTA_UP = self.cc_params.STEER_DELTA_UP if steerDeltaUp <= 0 else steerDeltaUp
+    self.cc_params.STEER_DELTA_DOWN = self.cc_params.STEER_DELTA_DOWN if steerDeltaDown <= 0 else steerDeltaDown
+
     # steering torque
     new_steer = int(round(actuators.steer * self.cc_params.STEER_MAX))
     apply_steer = apply_driver_steer_torque_limits(new_steer, self.apply_steer_last, CS.out.steeringTorque, self.cc_params)

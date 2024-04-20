@@ -1413,7 +1413,7 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
                 break;
             }
         }
-        else if (roadLimitSpeed > 0 && roadLimitSpeed < 200) {
+        else if (roadLimitSpeed >= 30 && roadLimitSpeed < 200) {
             ui_draw_image(s, { bx - 60, by - 50, 120, 150 }, "ic_road_speed", 1.0f);
             sprintf(str, "%d", roadLimitSpeed);
             ui_draw_text(s, bx, by + 75, str, 50, COLOR_BLACK, BOLD, 0.0f, 0.0f);
