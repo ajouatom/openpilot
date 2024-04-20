@@ -248,8 +248,11 @@ class CarController(CarControllerBase):
         else:
           # jerk_u: jerk값이 -일때... 1+jerk*2정도 올라감., +값이면 : 1.5정도로 됨.
           # jerk_l: jerk값이 -일때.... 1, +값이면 3으로 고정됨.
-          self.jerk_u = min(max(2.5, jerk * 3.0), jerk_max)
-          self.jerk_l = min(max(2.0, -jerk * 3.0), jerkLimit) 
+          self.jerk_u = min(max(1.5, -jerk * 3.0), jerk_max)
+          self.jerk_l = min(max(1.0, jerk * 3.0), jerkLimit)
+          # 240420값...
+          #self.jerk_u = min(max(2.5, jerk * 3.0), jerk_max)
+          #self.jerk_l = min(max(2.0, -jerk * 3.0), jerkLimit) 
 
         if not (self.CP.extFlags & HyundaiExtFlags.SCC_BUS2.value):
           if hda2:
