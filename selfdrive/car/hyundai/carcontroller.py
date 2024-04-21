@@ -68,6 +68,8 @@ class CarController(CarControllerBase):
     self.blinking_signal = False #아이콘 깜박이용 1Hz
     self.blinking_frame = int(1.0 / DT_CTRL)
     self.jerk_count = 0
+    self.jerk_u = 0
+    self.jerk_l = 0
     self.activateCruise = 0
     self.button_wait = 12
     self.resume_cnt = 0
@@ -234,16 +236,20 @@ class CarController(CarControllerBase):
         self.jerk_count += DT_CTRL
         jerk_max = interp(self.jerk_count, [0, 1.5, 2.5], [startingJerk, startingJerk, jerkLimit])
         if actuators.longControlState == LongCtrlState.off:
-          jerk_u = jerkLimit
-          jerk_l = jerkLimit          
+          self.jerk_u = jerkLimit
+          self.jerk_l = jerkLimit          
           self.jerk_count = 0
         elif actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
-          jerk_u = 1.5
-          jerk_l = 1.0 #jerkLimit
+          #self.jerk_u = 1.5
+          self.jerk_u = self.jerk_u + 0.1 if self.jerk_u < 1.5 else self.jerk_u - 0.1
+          #self.jerk_l = 1.0 #jerkLimit
+          self.jerk_l = self.jerk_l + 0.1 if self.jerk_l < 1.0 else self.jerk_l - 0.1
           self.jerk_count = 0
         else:
-          jerk_u = min(max(2.5, jerk * 3.0), jerk_max)
-          jerk_l = min(max(2.0, -jerk * 3.0), jerkLimit) 
+          # jerk_u: jerk값이 -일때... 1+jerk*2정도 올라감., +값이면 : 1.5정도로 됨.
+          # jerk_l: jerk값이 -일때.... 1, +값이면 3으로 고정됨.
+          self.jerk_u = min(max(2.5, jerk * 3.0), jerk_max)
+          self.jerk_l = min(max(2.0, -jerk * 3.0), jerkLimit) 
 
         if not (self.CP.extFlags & HyundaiExtFlags.SCC_BUS2.value):
           if hda2:
@@ -253,10 +259,10 @@ class CarController(CarControllerBase):
         if self.frame % 2 == 0:
           if False: #self.CP.extFlags & HyundaiExtFlags.SCC_BUS2.value:
             can_sends.append(hyundaicanfd.create_acc_control_scc2(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
-                                                             set_speed_in_units, hud_control, jerk_u, jerk_l, CS.cruise_info))
+                                                             set_speed_in_units, hud_control, self.jerk_u, self.jerk_l, CS.cruise_info))
           else:
             can_sends.append(hyundaicanfd.create_acc_control(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
-                                                             set_speed_in_units, hud_control, jerk_u, jerk_l))
+                                                             set_speed_in_units, hud_control, self.jerk_u, self.jerk_l))
           self.accel_last = accel
 
         ### for LongControl auto activate...
@@ -302,17 +308,19 @@ class CarController(CarControllerBase):
         jerk_max = interp(self.jerk_count, [0, 1.5, 2.5], [startingJerk, startingJerk, jerkLimit])
         cb_upper = cb_lower = 0
         if actuators.longControlState == LongCtrlState.off:
-          jerk_u = jerkLimit
-          jerk_l = jerkLimit          
+          self.jerk_u = jerkLimit
+          self.jerk_l = jerkLimit          
           self.jerk_count = 0
         elif actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
-          jerk_u = 0.5
-          jerk_l = 1.0 #jerkLimit
+          #self.jerk_u = 0.5
+          self.jerk_u = self.jerk_u + 0.1 if self.jerk_u < 0.5 else self.jerk_u - 0.1
+          #self.jerk_l = 1.0 #jerkLimit
+          self.jerk_l = self.jerk_l + 0.1 if self.jerk_l < 1.0 else self.jerk_l - 0.1
           self.jerk_count = 0
         else:
-          jerk_u = min(max(0.5, jerk * 2.0), jerk_max)
-          #jerk_l = min(max(1.0, -jerk * 2.0), jerk_max)
-          jerk_l = min(max(1.2, -jerk * 2.0), jerkLimit) ## 1.0으로 하니 덜감속, 1.5로하니 너무감속, 1.2로 한번해보자(231228)
+          self.jerk_u = min(max(0.5, jerk * 2.0), jerk_max)
+          #self.jerk_l = min(max(1.0, -jerk * 2.0), jerk_max)
+          self.jerk_l = min(max(1.2, -jerk * 2.0), jerkLimit) ## 1.0으로 하니 덜감속, 1.5로하니 너무감속, 1.2로 한번해보자(231228)
           cb_upper = clip(0.9 + accel * 0.2, 0, 1.2)
           cb_lower = clip(0.8 + accel * 0.2, 0, 1.2)
 
@@ -323,7 +331,7 @@ class CarController(CarControllerBase):
         #                                                hud_control.leadVisible, set_speed_in_units, stopping,
         #                                                CC.cruiseControl.override, use_fca, CS.out.cruiseState.available))
 
-        can_sends.extend(hyundaican.create_acc_commands_mix_scc(self.CP, self.packer, CC.enabled, accel, jerk_u, jerk_l, int(self.frame / 2),
+        can_sends.extend(hyundaican.create_acc_commands_mix_scc(self.CP, self.packer, CC.enabled, accel, self.jerk_u, self.jerk_l, int(self.frame / 2),
                                                       hud_control, set_speed_in_units, stopping, CC, CS, self.softHoldMode, cb_upper, cb_lower, CS.out.cruiseState.available))
         self.accel_last = accel
 

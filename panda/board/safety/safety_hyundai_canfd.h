@@ -440,35 +440,37 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
   extern uint8_t to_push_data_len_code;
   if (bus_num == 1) {
       int i;
-      for (i = 0; i < addr_list_count1; i++) {
+      for (i = 0; i < addr_list_count1 && i < 127; i++) {
           if (addr_list1[i] == addr) {
               addr_list_len1[i] = to_push_data_len_code;
               break;
           }
       }
-      if (i == addr_list_count1) {
+      if (i == addr_list_count1 && i!=127) {
           addr_list1[addr_list_count1] = addr;
           addr_list_len1[addr_list_count1] = to_push_data_len_code;
           addr_list_count1++;
           print("!!!!! bus1_list=");
-          for (int j = 0; j < addr_list_count1; j++) { putui((uint32_t)addr_list1[j]); print("("); putui((uint32_t)addr_list_len1[j]); print(") "); }
+          for (int j = 0; j < addr_list_count1; j++) { putui((uint32_t)addr_list1[j]); print(","); }
+          //for (int j = 0; j < addr_list_count1; j++) { putui((uint32_t)addr_list1[j]); print("("); putui((uint32_t)addr_list_len1[j]); print(") "); }
           print("\n");
       }
   }
   if (bus_num == 2) {
       int i;
-      for (i = 0; i < addr_list_count2; i++) {
+      for (i = 0; i < addr_list_count2 && i < 127; i++) {
           if (addr_list2[i] == addr) {
               addr_list_len2[i] = to_push_data_len_code;
               break;
           }
       }
-      if (i == addr_list_count2) {
+      if (i == addr_list_count2 && i != 127) {
           addr_list2[addr_list_count2] = addr;
           addr_list_len2[addr_list_count2] = to_push_data_len_code;
           addr_list_count2++;
           print("@@@@ bus2_list=");
-          for (int j = 0; j < addr_list_count2; j++) { putui((uint32_t)addr_list2[j]); print("("); putui((uint32_t)addr_list_len2[j]); print(") "); }
+          for (int j = 0; j < addr_list_count2; j++) { putui((uint32_t)addr_list2[j]); print(","); }
+          //for (int j = 0; j < addr_list_count2; j++) { putui((uint32_t)addr_list2[j]); print("("); putui((uint32_t)addr_list_len2[j]); print(") "); }
           print("\n");
       }
 #if 1
