@@ -147,7 +147,7 @@ def get_nn_model_path(car, eps_firmware) -> Tuple[Union[str, None, float]]:
     model_path = None
     max_similarity = -1.0
     for f in os.listdir(TORQUE_NN_MODEL_PATH):
-      print(car, f)
+      print(cehck_model, f)
       if f.endswith(".json") and car in f:
         model = f.replace(".json", "").replace(f"{TORQUE_NN_MODEL_PATH}/", "")
         similarity_score = similarity(model, check_model)
@@ -158,6 +158,7 @@ def get_nn_model_path(car, eps_firmware) -> Tuple[Union[str, None, float]]:
     return model_path, max_similarity
 
   car = car.replace('_', ' ')
+  car = car.replace('HEV', 'HYBRID')
   print("########get_nn_model_path :", car, eps_firmware)
   if len(eps_firmware) > 3:
     eps_firmware = eps_firmware.replace("\\", "")
