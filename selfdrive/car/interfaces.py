@@ -170,6 +170,7 @@ def get_nn_model_path(car, eps_firmware) -> Tuple[Union[str, None, float]]:
   return model_path, max_similarity
 
 def get_nn_model(car, eps_firmware) -> Tuple[Union[FluxModel, None, float]]:
+  print("###########get_nn_model", car)
   model, similarity_score = get_nn_model_path(car, eps_firmware)
   if model is not None:
     model = FluxModel(model)
@@ -204,10 +205,15 @@ class CarInterfaceBase(ABC):
     self.CC: CarControllerBase = CarController(dbc_name, CP, self.VM)
     self.params = Params()
     lateral_tune = True
+    print("$$$$$$$$$$$ NNFF")
     nnff_supported = self.initialize_lat_torque_nn(CP.carFingerprint, eps_firmware)
+    print("$$$$$$$$$$$ nnff_supported = ", nnff_supported)
     use_comma_nnff = self.check_comma_nn_ff_support(CP.carFingerprint)
+    print("$$$$$$$$$$$ use_comma_nnff = ", use_comma_nnff)
     self.use_nnff = not use_comma_nnff and nnff_supported and lateral_tune and self.params.get_bool("NNFF")
+    print("$$$$$$$$$$$ use_nnff = ", use_nnff)
     self.use_nnff_lite = not use_comma_nnff and not nnff_supported and lateral_tune and self.params.get_bool("NNFFLite")
+    print("$$$$$$$$$$$ use_nnff_lite = ", use_nnff_lite)
 
   def get_ff_nn(self, x):
     return self.lat_torque_nn_model.evaluate(x)
