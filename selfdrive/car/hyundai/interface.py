@@ -166,8 +166,8 @@ class CarInterface(CarInterfaceBase):
       if candidate in (CAR.KIA_CARNIVAL_4TH_GEN) and hda2:
         #ret.enableBsm = False
         pass
-      if not (candidate in (CAR.KIA_CARNIVAL_4TH_GEN) and hda2): ##카니발4th & hda2 인경우에만 BSM이 ADAS에서 나옴.
-        ret.extFlags |= HyundaiExtFlags.BSM_NO_ADAS.value
+      if candidate in (CAR.KIA_CARNIVAL_4TH_GEN) and hda2: ##카니발4th & hda2 인경우에만 BSM이 ADAS에서 나옴.
+        ret.extFlags |= HyundaiExtFlags.BSM_IN_ADAS.value
       print(f"$$$$$ CanFD ECAN = {CAN.ECAN}")
       if 0x1fa in fingerprint[CAN.ECAN]:
         ret.extFlags |= HyundaiExtFlags.NAVI_CLUSTER.value
