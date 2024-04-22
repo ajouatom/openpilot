@@ -1187,6 +1187,7 @@ FW_VERSIONS = {
     ],
     (Ecu.fwdRadar, 0x7d0, None): [
       b'\xf1\x00GL3_ RDR -----      1.00 1.02 99110-L8000         ',
+      b'\xf1\x8b $\x02\x06'
     ],
   },
   CAR.HYUNDAI_STARIA_4TH_GEN: {
