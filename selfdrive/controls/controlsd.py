@@ -456,6 +456,7 @@ class Controls:
 
     if self.sm.frame == 550 and self.CP.lateralTuning.which() == 'torque' and self.CI.use_nnff:
       self.events.add(EventName.torqueNNLoad)
+      print("############## Display:    torqueNNLoad")
       
   def data_sample(self):
     """Receive data from sockets and update carState"""
