@@ -79,11 +79,13 @@ class LateralPlanner:
     self.lat_mpc.reset(x0=self.x0)
 
   def update(self, sm, carrot_planner):
+    global LATERAL_JERK_COST
     self.readParams -= 1
     if self.readParams <= 0:
       self.readParams = 100
       self.useLaneLineSpeedApply = self.params.get_int("UseLaneLineSpeedApply")
       self.pathOffset = float(self.params.get_int("PathOffset")) * 0.01
+      LATERAL_JERK_COST = 0.04
 
     # clip speed , lateral planning is not possible at 0 speed
     measured_curvature = sm['controlsState'].curvature

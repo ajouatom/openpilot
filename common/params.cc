@@ -351,12 +351,16 @@ std::unordered_map<std::string, uint32_t> keys = {
     {"MTSCAggressiveness", PERSISTENT},
     {"MTSCCurvatureCheck", PERSISTENT},
     {"MTSCEnabled", PERSISTENT},
+    {"NNFF", PERSISTENT},
+    {"NNFFModelFuzzyMatch", PERSISTENT},
+    {"NNFFModelName", PERSISTENT},
     {"OSMDownloadLocations", PERSISTENT},
     {"OSMDownloadProgress", CLEAR_ON_MANAGER_START},
     {"PreferredSchedule", PERSISTENT},
     {"RoadName", PERSISTENT},
     {"RoadNameUI", PERSISTENT},
     {"SchedulePending", PERSISTENT},
+    {"UseLateralJerk", PERSISTENT},
 };
 
 } // namespace
