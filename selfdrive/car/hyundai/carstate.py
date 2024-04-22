@@ -582,7 +582,7 @@ class CarState(CarStateBase):
     ## BSM신호가 ADAS인경우 BUS2로 개조되고, 독립인경우 ECAN에서 들어옴.
     # 개조, 독립 EV6: 1, 1 => True, inADAS: 1, 0 => False
     # 비개조, 0, 0 => True
-    if CP.enableBsm: # and (not CP.extFlags & HyundaiExtFlags.SCC_BUS2.value or CP.extFlags & HyundaiExtFlags.BSM_NO_ADAS.value):
+    if CP.enableBsm and (not CP.extFlags & HyundaiExtFlags.SCC_BUS2.value or CP.extFlags & HyundaiExtFlags.BSM_NO_ADAS.value):
       messages += [
         ("BLINDSPOTS_REAR_CORNERS", 20),
       ]
@@ -618,9 +618,9 @@ class CarState(CarStateBase):
     ## BSM신호가 ADAS인경우 BUS2로 개조되고, 독립인경우 ECAN에서 들어옴.
     # 개조, 독립 EV6: 1, 1 => False, inADAS: 1, 0 => True
     # 비개조, 0, 0 => False
-    #if CP.enableBsm and CP.extFlags & HyundaiExtFlags.SCC_BUS2.value and not CP.extFlags & HyundaiExtFlags.BSM_NO_ADAS.value:
-    #  messages += [
-    #    ("BLINDSPOTS_REAR_CORNERS", 20),
-    #  ]
+    if CP.enableBsm and CP.extFlags & HyundaiExtFlags.SCC_BUS2.value and not CP.extFlags & HyundaiExtFlags.BSM_NO_ADAS.value:
+      messages += [
+        ("BLINDSPOTS_REAR_CORNERS", 20),
+      ]
 
     return CANParser(DBC[CP.carFingerprint]["pt"], messages, CanBus(CP).CAM)
