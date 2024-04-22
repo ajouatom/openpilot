@@ -488,6 +488,8 @@ class CarrotPlannerHelper:
     self.navi_speed_manager = CarrotNaviSpeedManager(self.params)
     self.activeAPM = 0
 
+    self.gas_override_speed = 0
+
     self.log = ""
 
   def _params_update(self):
@@ -560,6 +562,10 @@ class CarrotPlannerHelper:
     self.v_cruise_kph, self.source = min(values_and_names, key=lambda x: x[0])
     if self.v_cruise_kph == v_cruise_kph:
       self.source = "none"
+      self.gas_override_speed = 0
     else:
-      self.log = self.log + "v{:.1f}:m{:.1f},n{:.1f},s{:.1f}".format(vision_turn_kph, map_turn_kph, navi_helper_kph, navi_speed_manager_kph)
+      if sm['carState'].gasPressed:
+        self.gas_override_speed = sm['carState'].vEgoCluster * 3.6
+      self.log = self.log + "v{:.0f}:m{:.0f},n{:.0f},s{:.0f},g{:.0f}".format(vision_turn_kph, map_turn_kph, navi_helper_kph, navi_speed_manager_kph, self.gas_override_speed)
+      self.v_cruise_kph = max(self.v_cruise_kph, self.gas_override_speed)
     return self.v_cruise_kph
