@@ -163,6 +163,8 @@ def get_default_params():
     ("MTSCAggressiveness", "100"),
     ("MTSCCurvatureCheck", "1"),
     ("MTSCEnabled", "0"),
+    ("NNFF", "0"),
+    ("NNFFLite", "0"),
   ]
   return default_params
 
