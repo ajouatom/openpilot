@@ -265,7 +265,7 @@ def no_gps_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, m
 
 
 def torque_nn_load_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int) -> Alert:
-  model_name = Params("/dev/shm/params").get("NNFFModelName")
+  model_name = Params().get("NNFFModelName", encoding='utf-8')
   if model_name == "":
     return Alert(
       "NNFF Torque Controller not available",
