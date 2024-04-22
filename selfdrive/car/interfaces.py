@@ -211,9 +211,9 @@ class CarInterfaceBase(ABC):
     use_comma_nnff = self.check_comma_nn_ff_support(CP.carFingerprint)
     print("$$$$$$$$$$$ use_comma_nnff = ", use_comma_nnff)
     self.use_nnff = not use_comma_nnff and nnff_supported and lateral_tune and self.params.get_bool("NNFF")
-    print("$$$$$$$$$$$ use_nnff = ", use_nnff)
+    print("$$$$$$$$$$$ use_nnff = ", self.use_nnff)
     self.use_nnff_lite = not use_comma_nnff and not nnff_supported and lateral_tune and self.params.get_bool("NNFFLite")
-    print("$$$$$$$$$$$ use_nnff_lite = ", use_nnff_lite)
+    print("$$$$$$$$$$$ use_nnff_lite = ", self.use_nnff_lite)
 
   def get_ff_nn(self, x):
     return self.lat_torque_nn_model.evaluate(x)
