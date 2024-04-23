@@ -106,10 +106,11 @@ class Track:
     #  self.aLeadTau = aLeadTauInit
     #else:
     #  self.aLeadTau = min(self.aLeadTau * 0.9, aLeadTau_apply)
+    aLeadTauValue = aLeadTauPos if self.aLeadK >= 0 else aLeadTauNeg
     if abs(self.aLeadK) < aLeadTauThreshold:
-      self.aLeadTau = aLeadTauPos if self.aLeadK >= 0 else aLeadTauNeg
+      self.aLeadTau = aLeadTauValue
     else:
-      self.aLeadTau *= 0.9
+      self.aLeadTau = min(self.aLeadTau * 0.9, aLeadTauValue)
 
     self.cnt += 1
 
@@ -437,10 +438,11 @@ class VisionTrack:
     self.aLeadK = float(self.kf.x[LEAD_KALMAN_ACCEL][0])
 
     # Learn if constant acceleration
+    aLeadTauValue = self.aLeadTauPos if self.aLead >= 0 else self.aLeadTauNeg
     if abs(self.aLead) < self.aLeadTauThreshold:
-      self.aLeadTau = self.aLeadTauPos if self.aLeadK >= 0 else self.aLeadTauNeg
+      self.aLeadTau = aLeadTauValue
     else:
-      self.aLeadTau = min(self.aLeadTau * 0.9, _LEAD_ACCEL_TAU)
+      self.aLeadTau = min(self.aLeadTau * 0.9, aLeadTauValue)
 
 class RadarD:
   def __init__(self, radar_ts: float, delay: int = 0):
