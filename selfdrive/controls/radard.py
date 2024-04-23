@@ -271,6 +271,7 @@ def get_lead_org(v_ego: float, ready: bool, tracks: dict[int, Track], lead_msg: 
 
 def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego):
   lead_msg = md.leadsV3[0]
+  leadCenter = {'status': False}
   leadLeft = {'status': False}
   leadRight = {'status': False}
 
@@ -285,7 +286,7 @@ def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego):
     md_y = md.position.y
     md_x = md.position.x
   else:
-    return [[],[],[],leadLeft,leadRight]
+    return [[],[],[],leadCenter,leadLeft,leadRight]
 
   leads_center = {}
   leads_left = {}
@@ -321,7 +322,7 @@ def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego):
 
   leadLeft = min((lead for dRel, lead in leads_left.items() if lead['dRel'] > 5.0), key=lambda x: x['dRel'], default=leadLeft)
   leadRight = min((lead for dRel, lead in leads_right.items() if lead['dRel'] > 5.0), key=lambda x: x['dRel'], default=leadRight)
-  #leadCenter = min((lead for dRel, lead in leads_center.items() if lead['vLead'] > 0.5), key=lambda x: x['dRel'], default=leadCenter)
+  leadCenter = min((lead for dRel, lead in leads_center.items() if lead['vLead'] > 0.5 and lead['radar']), key=lambda x: x['dRel'], default=leadCenter)
 
   #filtered_leads_left = {dRel: lead for dRel, lead in leads_left.items() if lead['dRel'] > 5.0}
   #if filtered_leads_left:
@@ -333,7 +334,7 @@ def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego):
   #  dRel_min = min(filtered_leads_right.keys())
   #  leadRight = filtered_leads_right[dRel_min]
 
-  return [ll,lc,lr, leadLeft, leadRight]
+  return [ll, lc, lr, leadCenter, leadLeft, leadRight]
 
 LEAD_KALMAN_SPEED, LEAD_KALMAN_ACCEL = 0, 1
 def lead_kf(v_lead: float, a_lead: float, dt: float = 0.05):
@@ -532,21 +533,24 @@ class RadarD:
       if model_updated:
         self.vision_tracks[0].update(leads_v3[0], model_v_ego, self.v_ego)
         self.vision_tracks[1].update(leads_v3[1], model_v_ego, self.v_ego)
+
+      ll, lc, lr, leadCenter, self.radar_state.leadLeft, self.radar_state.leadRight = get_lead_side(self.v_ego, self.tracks, sm['modelV2'], sm['lateralPlan'].laneWidth, model_v_ego)
+      self.radar_state.leadsLeft = list(ll)
+      self.radar_state.leadsCenter = list(lc)
+      self.radar_state.leadsRight = list(lr)
+
       if self.mixRadarInfo in [1]: ## leadOne: radar or vision, leadTwo: vision 
         self.radar_state.leadOne = self.get_lead(self.tracks, 0, leads_v3[0], model_v_ego, low_speed_override=False)
         self.radar_state.leadTwo = self.get_lead(self.tracks_empty, 0, leads_v3[0], model_v_ego, low_speed_override=False)
       elif self.mixRadarInfo in [2,3]: ## vision only mode
         self.radar_state.leadOne = self.get_lead(self.tracks_empty, 0, leads_v3[0], model_v_ego, low_speed_override=False)
         self.radar_state.leadTwo = self.get_lead(self.tracks_empty, 1, leads_v3[1], model_v_ego, low_speed_override=False)
+      elif self.mixRadarInfo in [4]: ## additional radar detector
+        self.radar_state.leadOne = self.get_lead(self.tracks_empty, 0, leads_v3[0], model_v_ego, low_speed_override=False)
+        self.radar_state.leadTwo = leadCenter
       else: ## comma stock.
         self.radar_state.leadOne = self.get_lead(self.tracks, 0, leads_v3[0], model_v_ego, low_speed_override=False)
         self.radar_state.leadTwo = self.get_lead(self.tracks, 1, leads_v3[1], model_v_ego, low_speed_override=False)
-
-      if True: #self.showRadarInfo: #self.extended_radar_enabled and self.ready:
-        ll, lc, lr, self.radar_state.leadLeft, self.radar_state.leadRight = get_lead_side(self.v_ego, self.tracks, sm['modelV2'], sm['lateralPlan'].laneWidth, model_v_ego)
-        self.radar_state.leadsLeft = list(ll)
-        self.radar_state.leadsCenter = list(lc)
-        self.radar_state.leadsRight = list(lr)
 
   def publish(self, pm: messaging.PubMaster, lag_ms: float):
     assert self.radar_state is not None
@@ -590,7 +594,7 @@ class RadarD:
     # vision match후 발견된 track이 없으면
     #  track_scc 가 있는 지 확인하고
     #    비전과의 차이가 35%(5M)이상 차이나면 scc가 발견못한것이기 때문에 비전것으로 처리함.
-    if track_scc is not None and track is None: # and self.mixRadarInfo == 4:
+    if track_scc is not None and track is None: 
       track = track_scc
       if self.vision_tracks[index].prob > .5:
         if self.vision_tracks[index].dRel < track.dRel - 5.0: #끼어드는 차량이 있는 경우 처리..
