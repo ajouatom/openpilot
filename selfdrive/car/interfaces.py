@@ -156,7 +156,8 @@ def get_nn_model_path(car, eps_firmware) -> Tuple[Union[str, None, float]]:
     return model_path, max_similarity
 
   car1 = car.replace('_', ' ')
-  car = car1.replace('HEV', 'HYBRID')
+  car1 = car1.replace(' HEV', ' HYBRID')
+  car = car1.replace('EV', 'ELECTRIC')
   print("########get_nn_model_path :", car, eps_firmware)
   if len(eps_firmware) > 3:
     eps_firmware = eps_firmware.replace("\\", "")
