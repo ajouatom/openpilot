@@ -1012,8 +1012,9 @@ void CarrotParamsControl::SetParams(int mode) {
         Params().put("EnableRadarTracks", (on) ? "1" : "0");
     }
     else if (mode == 20) {   // 비젼롱컨 사용
-        Params().put("ALeadTau", (on) ? "120":"30");
-        Params().put("ALeadTauStart", (on) ? "40" : "40");
+        Params().put("ALeadTauPos", (on) ? "30" : "120");
+        Params().put("ALeadTauNeg", (on) ? "30" : "60");
+        Params().put("ALeadTauThreshold", (on) ? "40" : "40");
     }
     else if (mode == 30) {      // 자동크루즈사용
         Params().put("AutoCruiseControl", (on) ? "2" : "0");

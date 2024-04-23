@@ -101,8 +101,9 @@ def get_default_params():
     ("StoppingAccel", "-40"),
 
     ("StopDistanceCarrot", "550"), 
-    ("ALeadTau", "120"), 
-    ("ALeadTauStart", "40"), 
+    ("ALeadTauPos", "120"), 
+    ("ALeadTauNeg", "60"), 
+    ("ALeadTauThreshold", "40"), 
     ("CruiseButtonMode", "0"),      
     ("CruiseButtonTest1", "8"),      
     ("CruiseButtonTest2", "30"),      
