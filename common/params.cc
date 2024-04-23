@@ -265,7 +265,7 @@ std::unordered_map<std::string, uint32_t> keys = {
     { "StopDistanceCarrot", PERSISTENT },
     { "ALeadTauPos", PERSISTENT },
     { "ALeadTauNeg", PERSISTENT },
-    { "aLeadTauThreshold", PERSISTENT },
+    { "ALeadTauThreshold", PERSISTENT },
     { "CruiseButtonMode", PERSISTENT },
     { "CruiseButtonTest1", PERSISTENT },
     { "CruiseButtonTest2", PERSISTENT },
