@@ -234,6 +234,10 @@ class CarController(CarControllerBase):
           required_jerk = min(3, abs(accel - CS.out.aEgo) * 50)
           self.jerk_l = required_jerk
           self.jerk_u = required_jerk
+          if CS.out.aEgo < accel:
+            self.jerk_l = 0
+          else:
+            self.jerk_u = 0
         else:
           jerk = actuators.jerk
           startingJerk = 0.5 #self.jerkStartLimit
