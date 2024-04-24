@@ -238,6 +238,8 @@ class CarController(CarControllerBase):
             self.jerk_l = 0
           else:
             self.jerk_u = 0
+          self.jerk_u = min(3.0, self.jerk_u)
+          self.jerk_l = max(0.05, self.jerk_l)
         else:
           jerk = actuators.jerk
           startingJerk = 0.5 #self.jerkStartLimit
@@ -319,6 +321,9 @@ class CarController(CarControllerBase):
             self.jerk_l = 0
           else:
             self.jerk_u = 0
+
+          self.jerk_u = min(3.0, self.jerk_u)
+          self.jerk_l = max(0.05, self.jerk_l)
 
         else:
           # ajouatom: calculate jerk, cb : reverse engineer from KONA EV
