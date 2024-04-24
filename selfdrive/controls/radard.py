@@ -323,7 +323,7 @@ def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego):
 
   leadLeft = min((lead for dRel, lead in leads_left.items() if lead['dRel'] > 5.0), key=lambda x: x['dRel'], default=leadLeft)
   leadRight = min((lead for dRel, lead in leads_right.items() if lead['dRel'] > 5.0), key=lambda x: x['dRel'], default=leadRight)
-  leadCenter = min((lead for dRel, lead in leads_center.items() if lead['vLead'] > 1.5 and lead['radar']), key=lambda x: x['dRel'], default=leadCenter)
+  leadCenter = min((lead for dRel, lead in leads_center.items() if lead['vLead'] > 10 / 3.6 and lead['radar']), key=lambda x: x['dRel'], default=leadCenter)
 
   #filtered_leads_left = {dRel: lead for dRel, lead in leads_left.items() if lead['dRel'] > 5.0}
   #if filtered_leads_left:
