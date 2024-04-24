@@ -106,7 +106,7 @@ class Track:
     #  self.aLeadTau = aLeadTauInit
     #else:
     #  self.aLeadTau = min(self.aLeadTau * 0.9, aLeadTau_apply)
-    aLeadTauValue = aLeadTauPos if self.aLeadK >= 0 else aLeadTauNeg
+    aLeadTauValue = aLeadTauPos if self.aLeadK >= aLeadTauThreshold else aLeadTauNeg
     if abs(self.aLeadK) < aLeadTauThreshold:
       self.aLeadTau = aLeadTauValue
     else:
@@ -438,7 +438,7 @@ class VisionTrack:
     self.aLeadK = float(self.kf.x[LEAD_KALMAN_ACCEL][0])
 
     # Learn if constant acceleration
-    aLeadTauValue = self.aLeadTauPos if self.aLead >= 0 else self.aLeadTauNeg
+    aLeadTauValue = self.aLeadTauPos if self.aLead > self.aLeadTauThreshold else self.aLeadTauNeg
     if abs(self.aLead) < self.aLeadTauThreshold:
       self.aLeadTau = aLeadTauValue
     else:
