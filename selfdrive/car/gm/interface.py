@@ -312,6 +312,9 @@ class CarInterface(CarInterfaceBase):
     if ACCELERATOR_POS_MSG not in fingerprint[CanBus.POWERTRAIN]:
       ret.flags |= GMFlags.NO_ACCELERATOR_POS_MSG.value
 
+    if 608 not in fingerprint[CanBus.POWERTRAIN]:
+      ret.flags |= GMFlags.SPEED_RELATED_MSG.value
+
     return ret
 
   # returns a car.CarState

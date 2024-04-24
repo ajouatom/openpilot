@@ -192,13 +192,14 @@ class CarState(CarStateBase):
       ret.cruiseState.speed = pt_cp.vl["ECMCruiseControl"]["CruiseSetSpeed"] * CV.KPH_TO_MS
       ret.cruiseState.enabled = pt_cp.vl["ECMCruiseControl"]["CruiseActive"] != 0
 
-    # kans: use cluster speed & vCluRatio(longitudialPlanner)
-    self.is_metric = Params().get_bool("IsMetric")
-    speed_conv = CV.KPH_TO_MS * 1.609344 if self.is_metric else CV.MPH_TO_MS
-    cluSpeed = pt_cp.vl["SPEED_RELATED"]["ClusterSpeed"]
-    ret.vEgoCluster = cluSpeed * speed_conv
-    vEgoClu, aEgoClu = self.update_clu_speed_kf(ret.vEgoCluster)
-    ret.vCluRatio = (ret.vEgo / vEgoClu) if (vEgoClu > 3. and ret.vEgo > 3.) else 1.0
+    if CP.flags & GMFlags.SPEED_RELATED_MSG.value:
+      # kans: use cluster speed & vCluRatio(longitudialPlanner)
+      self.is_metric = Params().get_bool("IsMetric")
+      speed_conv = CV.KPH_TO_MS * 1.609344 if self.is_metric else CV.MPH_TO_MS
+      cluSpeed = pt_cp.vl["SPEED_RELATED"]["ClusterSpeed"]
+      ret.vEgoCluster = cluSpeed * speed_conv
+      vEgoClu, aEgoClu = self.update_clu_speed_kf(ret.vEgoCluster)
+      ret.vCluRatio = (ret.vEgo / vEgoClu) if (vEgoClu > 3. and ret.vEgo > 3.) else 1.0
 
     return ret
 
@@ -238,9 +239,10 @@ class CarState(CarStateBase):
       ("EBCMWheelSpdRear", 20),
       ("EBCMFrictionBrakeStatus", 20),
       ("PSCMSteeringAngle", 100),
-      ("ECMAcceleratorPos", 80),
-      ("SPEED_RELATED", 20),
+      ("ECMAcceleratorPos", 80),      
     ]
+    if CP.flags & GMFlags.SPEED_RELATED_MSG.value:
+      messages.append(("SPEED_RELATED", 20))
 
     if CP.enableBsm:
       messages.append(("BCMBlindSpotMonitor", 10))
