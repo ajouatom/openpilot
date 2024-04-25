@@ -262,15 +262,15 @@ def thermald_thread(end_event, hw_queue):
       usb_power = peripheralState.usbPowerMode != log.PeripheralState.UsbPowerMode.client
 
       # Setup fan handler on first connect to panda
-      #if fan_controller is None and peripheralState.pandaType != log.PandaState.PandaType.unknown:
-      #  is_uno = peripheralState.pandaType == log.PandaState.PandaType.uno
+      if fan_controller is None and peripheralState.pandaType != log.PandaState.PandaType.unknown:
+        is_uno = peripheralState.pandaType == log.PandaState.PandaType.uno
 
-      #  if TICI:
-      #    fan_controller = TiciFanController()
-      #  elif is_uno or PC:
-      #    fan_controller = UnoFanController()
-      #  else:
-      #    fan_controller = EonFanController()
+        if TICI:
+          fan_controller = TiciFanController()
+        elif is_uno or PC:
+          fan_controller = UnoFanController()
+        else:
+          fan_controller = EonFanController()
     #sunny
     #elif params.get_bool("IsOpenpilotViewEnabled") and is_openpilot_view_enabled == 0:
     #  is_openpilot_view_enabled = 1
