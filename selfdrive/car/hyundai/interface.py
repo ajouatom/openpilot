@@ -157,7 +157,8 @@ class CarInterface(CarInterfaceBase):
       ret.steerRatio = 13.9 if CAR.KIA_NIRO_HEV_2021 else 13.73  # Spec
       tire_stiffness_factor = 0.385
       if candidate == CAR.KIA_NIRO_PHEV:
-        ret.minSteerSpeed = 32 * CV.MPH_TO_MS
+        #ret.minSteerSpeed = 32 * CV.MPH_TO_MS
+        pass
     elif candidate == CAR.KIA_SELTOS:
       ret.mass = 1337. + STD_CARGO_KG
       ret.wheelbase = 2.63
