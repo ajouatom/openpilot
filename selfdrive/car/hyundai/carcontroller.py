@@ -511,14 +511,10 @@ class CarController(CarControllerBase):
           self.jerk_l = jerkLimit          
           self.jerk_count = 0
         elif actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
-          #self.jerk_u = 1.5
           self.jerk_u += 0.1 if self.jerk_u < 1.5 else -0.1
-          #self.jerk_l = 1.0 #jerkLimit
           self.jerk_l += 0.1 if self.jerk_l < 1.0 else -0.1
           self.jerk_count = 0
         else:
-          # jerk_u: jerk값이 -일때... 1+jerk*2정도 올라감., +값이면 : 1.5정도로 됨.
-          # jerk_l: jerk값이 -일때.... 1, +값이면 3으로 고정됨.
           self.jerk_u = min(max(2.5, jerk * 2.0), jerk_max)
           self.jerk_l = min(max(2.0, -jerk * 3.0), jerkLimit) 
       else:
@@ -533,9 +529,7 @@ class CarController(CarControllerBase):
           self.jerk_l = jerkLimit          
           self.jerk_count = 0
         elif actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
-          #self.jerk_u = 0.5
           self.jerk_u += 0.1 if self.jerk_u < 0.5 else -0.1
-          #self.jerk_l = 1.0 #jerkLimit
           self.jerk_l += 0.1 if self.jerk_l < 1.0 else -0.1
           self.jerk_count = 0
         else:
