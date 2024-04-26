@@ -599,7 +599,7 @@ class RadarD:
     if track_scc is not None and track is None: 
       track = track_scc
       if self.vision_tracks[index].prob > .5:
-        if self.vision_tracks[index].dRel < track.dRel - 5.0: #끼어드는 차량이 있는 경우 처리..
+        if self.vision_tracks[index].dRel < track.dRel - 10.0: #끼어드는 차량이 있는 경우 처리..  5-> 10M바꿔보자... 240427
           track = None
 
     lead_dict = {'status': False}
