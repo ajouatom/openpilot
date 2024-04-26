@@ -564,7 +564,7 @@ class CarrotPlannerHelper:
       self.source = "none"
       self.gas_override_speed = 0
     else:
-      if sm['carState'].gasPressed:
+      if sm['carState'].gasPressed and self.source != "navi":
         self.gas_override_speed = sm['carState'].vEgoCluster * 3.6
       elif sm['carState'].brakePressed:
         self.gas_override_speed = 0
