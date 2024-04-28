@@ -70,6 +70,8 @@ class CarController(CarControllerBase):
     self.jerk_count = 0
     self.jerk_u = 0
     self.jerk_l = 0
+    self.cb_lower = 0
+    self.cb_upper = 0
     self.activateCruise = 0
     self.button_wait = 12
     self.resume_cnt = 0
@@ -229,27 +231,7 @@ class CarController(CarControllerBase):
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker))
 
       if self.CP.openpilotLongitudinalControl:
-
-        jerk = actuators.jerk
-        startingJerk = 0.5 #self.jerkStartLimit
-        jerkLimit = 5.0
-        self.jerk_count += DT_CTRL
-        jerk_max = interp(self.jerk_count, [0, 1.5, 2.5], [startingJerk, startingJerk, jerkLimit])
-        if actuators.longControlState == LongCtrlState.off:
-          self.jerk_u = jerkLimit
-          self.jerk_l = jerkLimit          
-          self.jerk_count = 0
-        elif actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
-          #self.jerk_u = 1.5
-          self.jerk_u = self.jerk_u + 0.1 if self.jerk_u < 1.5 else self.jerk_u - 0.1
-          #self.jerk_l = 1.0 #jerkLimit
-          self.jerk_l = self.jerk_l + 0.1 if self.jerk_l < 1.0 else self.jerk_l - 0.1
-          self.jerk_count = 0
-        else:
-          # jerk_u: jerk값이 -일때... 1+jerk*2정도 올라감., +값이면 : 1.5정도로 됨.
-          # jerk_l: jerk값이 -일때.... 1, +값이면 3으로 고정됨.
-          self.jerk_u = min(max(2.5, jerk * 3.0), jerk_max)
-          self.jerk_l = min(max(2.0, -jerk * 3.0), jerkLimit) 
+        self.make_jerk(CS, accel, actuators, hud_control)
 
         if not (self.CP.extFlags & HyundaiExtFlags.SCC_BUS2.value):
           if hda2:
@@ -299,30 +281,7 @@ class CarController(CarControllerBase):
         can_sends.append(hyundaican.create_mdps12(self.packer, self.frame, CS.mdps12))
 
       if self.frame % 2 == 0 and self.CP.openpilotLongitudinalControl:
-        
-        # ajouatom: calculate jerk, cb : reverse engineer from KONA EV
-        jerk = actuators.jerk
-        startingJerk = self.jerkStartLimit
-        jerkLimit = 5.0
-        self.jerk_count += DT_CTRL
-        jerk_max = interp(self.jerk_count, [0, 1.5, 2.5], [startingJerk, startingJerk, jerkLimit])
-        cb_upper = cb_lower = 0
-        if actuators.longControlState == LongCtrlState.off:
-          self.jerk_u = jerkLimit
-          self.jerk_l = jerkLimit          
-          self.jerk_count = 0
-        elif actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
-          #self.jerk_u = 0.5
-          self.jerk_u = self.jerk_u + 0.1 if self.jerk_u < 0.5 else self.jerk_u - 0.1
-          #self.jerk_l = 1.0 #jerkLimit
-          self.jerk_l = self.jerk_l + 0.1 if self.jerk_l < 1.0 else self.jerk_l - 0.1
-          self.jerk_count = 0
-        else:
-          self.jerk_u = min(max(0.5, jerk * 2.0), jerk_max)
-          #self.jerk_l = min(max(1.0, -jerk * 2.0), jerk_max)
-          self.jerk_l = min(max(1.2, -jerk * 2.0), jerkLimit) ## 1.0으로 하니 덜감속, 1.5로하니 너무감속, 1.2로 한번해보자(231228)
-          cb_upper = clip(0.9 + accel * 0.2, 0, 1.2)
-          cb_lower = clip(0.8 + accel * 0.2, 0, 1.2)
+        self.make_jerk(CS, accel, actuators, hud_control)
 
         # TODO: unclear if this is needed
         #jerk = 3.0 if actuators.longControlState == LongCtrlState.pid else 1.0
@@ -332,7 +291,7 @@ class CarController(CarControllerBase):
         #                                                CC.cruiseControl.override, use_fca, CS.out.cruiseState.available))
 
         can_sends.extend(hyundaican.create_acc_commands_mix_scc(self.CP, self.packer, CC.enabled, accel, self.jerk_u, self.jerk_l, int(self.frame / 2),
-                                                      hud_control, set_speed_in_units, stopping, CC, CS, self.softHoldMode, cb_upper, cb_lower, CS.out.cruiseState.available))
+                                                      hud_control, set_speed_in_units, stopping, CC, CS, self.softHoldMode, self.cb_upper, self.cb_lower, CS.out.cruiseState.available))
         self.accel_last = accel
 
       # 20 Hz LFA MFA message
@@ -524,3 +483,58 @@ class CarController(CarControllerBase):
       self.button_spamming_count = 0
     return 0
 
+  def make_jerk(self, CS, accel, actuators, hud_control):
+    if self.params.get_int("CarrotTest") == 1:
+      required_jerk = min(3, abs(accel - CS.out.aEgo) * 50)
+      self.jerk_l = required_jerk
+      self.jerk_u = required_jerk
+      self.cb_upper = self.cb_lower = 0
+
+      if CS.out.aEgo < accel:
+        self.jerk_l = 0
+      else:
+        self.jerk_u = 0
+
+      self.jerk_u = max(0.5, min(3.0, self.jerk_u))
+      self.jerk_l = max(1.2, self.jerk_l) #max(0.05, self.jerk_l)
+
+    else:
+      # ajouatom: calculate jerk, cb : reverse engineer from KONA EV
+      if self.CP.carFingerprint in CANFD_CAR:
+        jerk = actuators.jerk
+        startingJerk = 0.5 #self.jerkStartLimit
+        jerkLimit = 5.0
+        self.jerk_count += DT_CTRL
+        jerk_max = interp(self.jerk_count, [0, 1.5, 2.5], [startingJerk, startingJerk, jerkLimit])
+        if actuators.longControlState == LongCtrlState.off:
+          self.jerk_u = jerkLimit
+          self.jerk_l = jerkLimit          
+          self.jerk_count = 0
+        elif actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
+          self.jerk_u += 0.1 if self.jerk_u < 1.5 else -0.1
+          self.jerk_l += 0.1 if self.jerk_l < 1.0 else -0.1
+          self.jerk_count = 0
+        else:
+          self.jerk_u = min(max(2.5, jerk * 2.0), jerk_max)
+          self.jerk_l = min(max(2.0, -jerk * 3.0), jerkLimit) 
+      else:
+        jerk = actuators.jerk
+        startingJerk = self.jerkStartLimit
+        jerkLimit = 5.0
+        self.jerk_count += DT_CTRL
+        jerk_max = interp(self.jerk_count, [0, 1.5, 2.5], [startingJerk, startingJerk, jerkLimit])
+        self.cb_upper = self.cb_lower = 0
+        if actuators.longControlState == LongCtrlState.off:
+          self.jerk_u = jerkLimit
+          self.jerk_l = jerkLimit          
+          self.jerk_count = 0
+        elif actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
+          self.jerk_u += 0.1 if self.jerk_u < 0.5 else -0.1
+          self.jerk_l += 0.1 if self.jerk_l < 1.0 else -0.1
+          self.jerk_count = 0
+        else:
+          self.jerk_u = min(max(0.5, jerk * 2.0), jerk_max)
+          #self.jerk_l = min(max(1.0, -jerk * 2.0), jerk_max)
+          self.jerk_l = min(max(1.2, -jerk * 2.0), jerkLimit) ## 1.0으로 하니 덜감속, 1.5로하니 너무감속, 1.2로 한번해보자(231228)
+          self.cb_upper = clip(0.9 + accel * 0.2, 0, 1.2)
+          self.cb_lower = clip(0.8 + accel * 0.2, 0, 1.2)

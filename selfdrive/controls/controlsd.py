@@ -317,10 +317,10 @@ class Controls:
         safety_mismatch = pandaState.safetyModel != self.CP.safetyConfigs[i].safetyModel or \
                           pandaState.safetyParam != self.CP.safetyConfigs[i].safetyParam or \
                           pandaState.alternativeExperience != self.CP.alternativeExperience
-        if safety_mismatch:
-          print(f"safetyModel{i} =  {pandaState.safetyModel}:{self.CP.safetyConfigs[i].safetyModel}")
-          print(f"safetyParams{i} = {pandaState.safetyParam}:{self.CP.safetyConfigs[i].safetyParam}")
-          print(f"alterExperience{i} = {pandaState.alternativeExperience}:{self.CP.alternativeExperience}")
+        #if safety_mismatch:
+          #print(f"safetyModel{i} =  {pandaState.safetyModel}:{self.CP.safetyConfigs[i].safetyModel}")
+          #print(f"safetyParams{i} = {pandaState.safetyParam}:{self.CP.safetyConfigs[i].safetyParam}")
+          #print(f"alterExperience{i} = {pandaState.alternativeExperience}:{self.CP.alternativeExperience}")
       else:
         safety_mismatch = pandaState.safetyModel not in IGNORED_SAFETY_MODES
         #if safety_mismatch:
@@ -454,6 +454,10 @@ class Controls:
       if self.sm['modelV2'].frameDropPerc > 20:
         self.events.add(EventName.modeldLagging)
 
+    if self.sm.frame == 900 and self.CP.lateralTuning.which() == 'torque' and self.CI.use_nnff:
+      self.events.add(EventName.torqueNNLoad)
+      print("NNFF display....")
+      
   def data_sample(self):
     """Receive data from sockets and update carState"""
 
@@ -723,7 +727,8 @@ class Controls:
         actuators.curvature = self.desired_curvature
       actuators.steer, actuators.steeringAngleDeg, lac_log = self.LaC.update(CC.latActive, CS, self.VM, lp,
                                                                              self.steer_limited, self.desired_curvature,
-                                                                             self.sm['liveLocationKalman'])
+                                                                             self.sm['liveLocationKalman'],
+                                                                             model_data=self.sm['modelV2'])
     else:
       lac_log = log.ControlsState.LateralDebugState.new_message()
       if self.sm.recv_frame['testJoystick'] > 0:

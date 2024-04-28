@@ -70,7 +70,7 @@ class Track:
     self.vision_prob = 0.0
     self.radar_ts = radar_ts
 
-  def update(self, d_rel: float, y_rel: float, v_rel: float, v_lead: float, measured: float, a_rel: float, aLeadTauInit: float, aLeadTauStart: float, a_ego: float):
+  def update(self, d_rel: float, y_rel: float, v_rel: float, v_lead: float, measured: float, a_rel: float, aLeadTauPos: float, aLeadTauNeg: float, aLeadTauThreshold: float, a_ego: float):
 
     #apilot: changed radar target
     if abs(self.dRel - d_rel) > 3.0 or abs(self.vRel - v_rel) > 20.0 * self.radar_ts: # 거리3M이상, 20m/s^2이상 상대속도 차이날때 초기화
@@ -106,10 +106,11 @@ class Track:
     #  self.aLeadTau = aLeadTauInit
     #else:
     #  self.aLeadTau = min(self.aLeadTau * 0.9, aLeadTau_apply)
-    if abs(self.aLeadK) < aLeadTauStart:
-      self.aLeadTau = aLeadTauInit
+    aLeadTauValue = aLeadTauPos if self.aLeadK >= aLeadTauThreshold else aLeadTauNeg
+    if abs(self.aLeadK) < aLeadTauThreshold:
+      self.aLeadTau = aLeadTauValue
     else:
-      self.aLeadTau *= 0.9
+      self.aLeadTau = min(self.aLeadTau * 0.9, aLeadTauValue)
 
     self.cnt += 1
 
@@ -271,6 +272,7 @@ def get_lead_org(v_ego: float, ready: bool, tracks: dict[int, Track], lead_msg: 
 
 def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego):
   lead_msg = md.leadsV3[0]
+  leadCenter = {'status': False}
   leadLeft = {'status': False}
   leadRight = {'status': False}
 
@@ -285,7 +287,7 @@ def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego):
     md_y = md.position.y
     md_x = md.position.x
   else:
-    return [[],[],[],leadLeft,leadRight]
+    return [[],[],[],leadCenter,leadLeft,leadRight]
 
   leads_center = {}
   leads_left = {}
@@ -321,6 +323,7 @@ def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego):
 
   leadLeft = min((lead for dRel, lead in leads_left.items() if lead['dRel'] > 5.0), key=lambda x: x['dRel'], default=leadLeft)
   leadRight = min((lead for dRel, lead in leads_right.items() if lead['dRel'] > 5.0), key=lambda x: x['dRel'], default=leadRight)
+  leadCenter = min((lead for dRel, lead in leads_center.items() if lead['vLead'] > 10 / 3.6 and lead['radar']), key=lambda x: x['dRel'], default=leadCenter)
 
   #filtered_leads_left = {dRel: lead for dRel, lead in leads_left.items() if lead['dRel'] > 5.0}
   #if filtered_leads_left:
@@ -332,7 +335,7 @@ def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego):
   #  dRel_min = min(filtered_leads_right.keys())
   #  leadRight = filtered_leads_right[dRel_min]
 
-  return [ll,lc,lr, leadLeft, leadRight]
+  return [ll, lc, lr, leadCenter, leadLeft, leadRight]
 
 LEAD_KALMAN_SPEED, LEAD_KALMAN_ACCEL = 0, 1
 def lead_kf(v_lead: float, a_lead: float, dt: float = 0.05):
@@ -372,8 +375,9 @@ class VisionTrack:
     self.aLeadTau = _LEAD_ACCEL_TAU
     self.prob = 0.0
     self.status = False
-    self.aLeadTauInit = float(Params().get_int("ALeadTau")) / 100. 
-    self.aLeadTauStart = float(Params().get_int("ALeadTauStart")) / 100.
+    self.aLeadTauPos = float(Params().get_int("ALeadTauPos")) / 100. 
+    self.aLeadTauNeg = float(Params().get_int("ALeadTauNeg")) / 100. 
+    self.aLeadTauThreshold = float(Params().get_int("ALeadTauThreshold")) / 100.
 
     self.kf: KF1D | None = None
     self.kf_v: KF1D | None = None
@@ -401,8 +405,9 @@ class VisionTrack:
     self.aLeadTau = _LEAD_ACCEL_TAU
 
   def update(self, lead_msg, model_v_ego, v_ego):
-    self.aLeadTauInit = float(Params().get_int("ALeadTau")) / 100. 
-    self.aLeadTauStart = float(Params().get_int("ALeadTauStart")) / 100.
+    self.aLeadTauPos = float(Params().get_int("ALeadTauPos")) / 100. 
+    self.aLeadTauNeg = float(Params().get_int("ALeadTauNeg")) / 100. 
+    self.aLeadTauThreshold = float(Params().get_int("ALeadTauThreshold")) / 100.
     self.mixRadarInfo = int(Params().get_int("MixRadarInfo"))
 
     lead_v_rel_pred = lead_msg.v[0] - model_v_ego
@@ -433,10 +438,11 @@ class VisionTrack:
     self.aLeadK = float(self.kf.x[LEAD_KALMAN_ACCEL][0])
 
     # Learn if constant acceleration
-    if abs(self.aLead) < self.aLeadTauStart:
-      self.aLeadTau = self.aLeadTauInit
+    aLeadTauValue = self.aLeadTauPos if self.aLead > self.aLeadTauThreshold else self.aLeadTauNeg
+    if abs(self.aLead) < self.aLeadTauThreshold:
+      self.aLeadTau = aLeadTauValue
     else:
-      self.aLeadTau = min(self.aLeadTau * 0.9, self.aLeadTauInit)
+      self.aLeadTau = min(self.aLeadTau * 0.9, aLeadTauValue)
 
 class RadarD:
   def __init__(self, radar_ts: float, delay: int = 0):
@@ -456,8 +462,9 @@ class RadarD:
     self.ready = False
     self.showRadarInfo = True
     self.mixRadarInfo = 0
-    self.aLeadTauInit = 1.5
-    self.aLeadTauStart = 0.5
+    self.aLeadTauPos = 1.5
+    self.aLeadTauNeg = 1.5
+    self.aLeadTauThreshold = 0.5
     self.vision_tracks = [VisionTrack(radar_ts), VisionTrack(radar_ts)]
     self.a_ego = 0.0
 
@@ -466,8 +473,9 @@ class RadarD:
   def update(self, sm: messaging.SubMaster, rr: Optional[car.RadarData]):
     #self.showRadarInfo = int(Params().get("ShowRadarInfo"))
     self.mixRadarInfo = int(Params().get_int("MixRadarInfo"))
-    self.aLeadTauInit = float(Params().get_int("ALeadTau")) / 100. 
-    self.aLeadTauStart = float(Params().get_int("ALeadTauStart")) / 100.
+    self.aLeadTauPos = float(Params().get_int("ALeadTauPos")) / 100. 
+    self.aLeadTauNeg = float(Params().get_int("ALeadTauNeg")) / 100. 
+    self.aLeadTauThreshold = float(Params().get_int("ALeadTauThreshold")) / 100.
 
     self.ready = sm.seen['modelV2']
     self.current_time = 1e-9*max(sm.logMonoTime.values())
@@ -508,7 +516,7 @@ class RadarD:
       # create the track if it doesn't exist or it's a new track
       if ids not in self.tracks:
         self.tracks[ids] = Track(ids, v_lead, rpt[1], self.kalman_params, self.radar_ts)
-      self.tracks[ids].update(rpt[0], rpt[1], rpt[2], v_lead, rpt[3], rpt[4], self.aLeadTauInit, self.aLeadTauStart, self.a_ego)
+      self.tracks[ids].update(rpt[0], rpt[1], rpt[2], v_lead, rpt[3], rpt[4], self.aLeadTauPos, self.aLeadTauNeg, self.aLeadTauThreshold, self.a_ego)
 
     # *** publish radarState ***
     self.radar_state_valid = sm.all_checks() and len(radar_errors) == 0
@@ -527,21 +535,24 @@ class RadarD:
       if model_updated:
         self.vision_tracks[0].update(leads_v3[0], model_v_ego, self.v_ego)
         self.vision_tracks[1].update(leads_v3[1], model_v_ego, self.v_ego)
+
+      ll, lc, lr, leadCenter, self.radar_state.leadLeft, self.radar_state.leadRight = get_lead_side(self.v_ego, self.tracks, sm['modelV2'], sm['lateralPlan'].laneWidth, model_v_ego)
+      self.radar_state.leadsLeft = list(ll)
+      self.radar_state.leadsCenter = list(lc)
+      self.radar_state.leadsRight = list(lr)
+
       if self.mixRadarInfo in [1]: ## leadOne: radar or vision, leadTwo: vision 
         self.radar_state.leadOne = self.get_lead(self.tracks, 0, leads_v3[0], model_v_ego, low_speed_override=False)
         self.radar_state.leadTwo = self.get_lead(self.tracks_empty, 0, leads_v3[0], model_v_ego, low_speed_override=False)
       elif self.mixRadarInfo in [2,3]: ## vision only mode
         self.radar_state.leadOne = self.get_lead(self.tracks_empty, 0, leads_v3[0], model_v_ego, low_speed_override=False)
         self.radar_state.leadTwo = self.get_lead(self.tracks_empty, 1, leads_v3[1], model_v_ego, low_speed_override=False)
+      elif self.mixRadarInfo in [4]: ## additional radar detector
+        self.radar_state.leadOne = self.get_lead(self.tracks, 0, leads_v3[0], model_v_ego, low_speed_override=False)
+        self.radar_state.leadTwo = leadCenter
       else: ## comma stock.
         self.radar_state.leadOne = self.get_lead(self.tracks, 0, leads_v3[0], model_v_ego, low_speed_override=False)
         self.radar_state.leadTwo = self.get_lead(self.tracks, 1, leads_v3[1], model_v_ego, low_speed_override=False)
-
-      if True: #self.showRadarInfo: #self.extended_radar_enabled and self.ready:
-        ll, lc, lr, self.radar_state.leadLeft, self.radar_state.leadRight = get_lead_side(self.v_ego, self.tracks, sm['modelV2'], sm['lateralPlan'].laneWidth, model_v_ego)
-        self.radar_state.leadsLeft = list(ll)
-        self.radar_state.leadsCenter = list(lc)
-        self.radar_state.leadsRight = list(lr)
 
   def publish(self, pm: messaging.PubMaster, lag_ms: float):
     assert self.radar_state is not None
@@ -585,10 +596,10 @@ class RadarD:
     # vision match후 발견된 track이 없으면
     #  track_scc 가 있는 지 확인하고
     #    비전과의 차이가 35%(5M)이상 차이나면 scc가 발견못한것이기 때문에 비전것으로 처리함.
-    if track_scc is not None and track is None: # and self.mixRadarInfo == 4:
+    if track_scc is not None and track is None: 
       track = track_scc
       if self.vision_tracks[index].prob > .5:
-        if self.vision_tracks[index].dRel < track.dRel - 5.0: #끼어드는 차량이 있는 경우 처리..
+        if self.vision_tracks[index].dRel < track.dRel - 10.0: #끼어드는 차량이 있는 경우 처리..  5-> 10M바꿔보자... 240427
           track = None
 
     lead_dict = {'status': False}

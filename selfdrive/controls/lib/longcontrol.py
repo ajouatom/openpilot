@@ -105,7 +105,7 @@ class LongControl:
     if len(speeds) == CONTROL_N:
       v_target_now = interp(t_since_plan, ModelConstants.T_IDXS[:CONTROL_N], speeds)
       a_target_now = interp(t_since_plan, ModelConstants.T_IDXS[:CONTROL_N], long_plan.accels)
-      j_target = long_plan.jerks[0]
+      j_target = interp(t_since_plan + 0.2, ModelConstants.T_IDXS[:CONTROL_N], long_plan.jerks)
 
       v_target_lower = interp(self.CP.longitudinalActuatorDelayLowerBound + t_since_plan, ModelConstants.T_IDXS[:CONTROL_N], speeds)
       a_target_lower = 2 * (v_target_lower - v_target_now) / self.CP.longitudinalActuatorDelayLowerBound - a_target_now
