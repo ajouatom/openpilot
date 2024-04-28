@@ -1750,7 +1750,7 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
             NVGcolor color2 = COLOR_BLACK_ALPHA(20);
             ui_draw_line2(s, px, py, 4, &color2, nullptr, 3.0f, isRadarDetected() ? rcolor : COLOR_BLUE);
 
-            //auto lead_radar = sm["radarState"].getRadarState().getLeadOne();
+            auto lead_radar = sm["radarState"].getRadarState().getLeadOne();
             float h = path_width * 0.8 / 2.;
             float ax[4], ay[4], vx[4], vy[4];
             vx[0] = px[0];
@@ -1759,10 +1759,10 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
             vx[3] = vx[0];
             vy[0] = py[0] - h;
             vy[1] = vy[0];            
-            vy[2] = vy[1] - 15;// std::clamp(lead_radar.getVRel() * 20 / h, -h, h);
+            vy[2] = vy[1] - std::clamp(lead_radar.getVRel() / 10 * h, -h, h);
             vy[3] = vy[2];
             NVGcolor vcolor = isLeadSCC() ? COLOR_RED : COLOR_ORANGE;
-            ui_draw_line2(s, vx, vy, 4, &vcolor, nullptr, 3.0f);
+            ui_draw_line2(s, vx, vy, 4, &vcolor, nullptr, 0.0f);
 
             ax[0] = px[1];
             ax[1] = px[1] - 10;
@@ -1770,10 +1770,10 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
             ax[3] = ax[0];
             ay[0] = py[0] - h;
             ay[1] = ay[0];
-            ay[2] = ay[1] + 25;// -std::clamp(lead_radar.getARel() * 22 / h, -h, h);
+            ay[2] = ay[1]  -std::clamp(lead_radar.getARel() / 2.0 * h, -h, h);
             ay[3] = ay[2];
             NVGcolor acolor = isLeadSCC() ? COLOR_RED : COLOR_ORANGE;
-            ui_draw_line2(s, ax, ay, 4, &acolor, nullptr, 3.0f);
+            ui_draw_line2(s, ax, ay, 4, &acolor, nullptr, 0.0f);
         }
     }
 }
