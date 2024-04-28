@@ -1754,12 +1754,12 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
             float h = path_width * 0.8 / 2.;
             float ax[4], ay[4], vx[4], vy[4];
             vx[0] = px[0];
-            vx[1] = vx[0] + 10;
+            vx[1] = vx[0] + 20;
             vx[2] = vx[1];
             vx[3] = vx[0];
             vy[0] = py[0] - h;
             vy[1] = vy[0];
-            float v = lead_radar.getVRel() / 10.0 * h;
+            float v = lead_radar.getVRel() / 5.0 * h;
             if (v < -h) v = -h;
             if (v > h) v = h;
             vy[2] = vy[1] - v;
@@ -1768,7 +1768,7 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
             ui_draw_line2(s, vx, vy, 4, &vcolor, nullptr, 0.0f);
 
             ax[0] = px[1];
-            ax[1] = px[1] - 10;
+            ax[1] = px[1] - 20;
             ax[2] = ax[1];
             ax[3] = ax[0];
             ay[0] = py[0] - h;
