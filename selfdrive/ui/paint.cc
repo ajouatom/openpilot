@@ -1760,7 +1760,8 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
             vy[0] = py[0] - h;
             vy[1] = vy[0];
             float v = lead_radar.getVRel() / 10.0 * h;
-            v = (v < -h) ? -h : (v > h) : h;
+            if (v < -h) v = -h;
+            if (v > h) v = h;
             vy[2] = vy[1] - v;
             vy[3] = vy[2];
             NVGcolor vcolor = isLeadSCC() ? COLOR_RED : COLOR_ORANGE;
@@ -1773,7 +1774,8 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
             ay[0] = py[0] - h;
             ay[1] = ay[0];
             float a = lead_radar.getARel() / 2.0 * h;
-            a = (a < -h) ? -h : (a > h) : h;
+            if (a < -h) a = -h;
+            if (a > h) a = h;
             ay[2] = ay[1]  - a;
             ay[3] = ay[2];
             NVGcolor acolor = isLeadSCC() ? COLOR_RED : COLOR_ORANGE;
