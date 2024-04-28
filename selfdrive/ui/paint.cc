@@ -1750,7 +1750,7 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
             NVGcolor color2 = COLOR_BLACK_ALPHA(20);
             ui_draw_line2(s, px, py, 4, &color2, nullptr, 3.0f, isRadarDetected() ? rcolor : COLOR_BLUE);
 
-            auto lead_radar = sm["radarState"].getRadarState().getLeadOne();
+            //auto lead_radar = sm["radarState"].getRadarState().getLeadOne();
             float h = path_width * 0.8 / 2.;
             float ax[4], ay[4], vx[4], vy[4];
             vx[0] = px[0];
