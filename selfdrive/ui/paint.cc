@@ -1773,7 +1773,7 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
             ax[3] = ax[0];
             ay[0] = py[0] - h;
             ay[1] = ay[0];
-            float a = lead_radar.getARel() / 2.0 * h;
+            float a = lead_radar.getARel() / 1.0 * h;
             if (a < -h) a = -h;
             if (a > h) a = h;
             ay[2] = ay[1]  - a;
