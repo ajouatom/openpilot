@@ -71,6 +71,7 @@ class Track:
     self.radar_ts = radar_ts
     self.jerk = 0.0
     self.aLeadK_prev = 0.0
+    self.params = Params()
 
   def update(self, d_rel: float, y_rel: float, v_rel: float, v_lead: float, measured: float, a_rel: float, aLeadTauPos: float, aLeadTauNeg: float, aLeadTauThreshold: float, a_ego: float):
 
@@ -102,6 +103,9 @@ class Track:
     self.jerk = self.jerk * 0.9 + (self.aLeadK - self.aLeadK_prev) / self.radar_ts * 0.1
 
     aLeadTauValue = aLeadTauPos if self.aLeadK >= aLeadTauThreshold else aLeadTauNeg
+
+    if self.params.get_int("CarrotTest2") == 0:
+      self.jerk = 0.0
 
     if abs(self.aLeadK) < aLeadTauThreshold and self.jerk > -0.1:
       self.aLeadTau = aLeadTauValue
