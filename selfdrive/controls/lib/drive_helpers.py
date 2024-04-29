@@ -432,7 +432,7 @@ class VCruiseHelper:
     elif self.v_ego_kph_set > self.autoResumeFromGasSpeed > 0:
       if self.cruiseActivate <= 0:
         if self.gas_pressed_value > 0.6 or self.gas_pressed_count_prev > 3.0 / DT_CTRL:
-          if self.autoCruiseCancelTimer > 0:
+          if True: #self.autoCruiseCancelTimer > 0: # 간혹, 저속으로 길게누를때... 기존속도로 resume되면... 브레이크를 밟게됨.
             v_cruise_kph = self.v_ego_kph_set
             self.autoCruiseCancelTimer = 0
           self._add_log_auto_cruise("Cruise Activate from gas(deep/long pressed)")          
@@ -623,7 +623,7 @@ class VCruiseHelper:
       self.gas_pressed_value = max(CS.gas, self.gas_pressed_value)
       self.gas_pressed_count_prev = self.gas_pressed_count
     else:
-      gas_tok = True if 0 < self.gas_pressed_count < 60 else False
+      gas_tok = True if 0 < self.gas_pressed_count < 0.4 / DT_CTRL else False  ## gas_tok: 0.4 seconds
       self.gas_pressed_count = min(-1, self.gas_pressed_count - 1)
       if self.gas_pressed_count < -1:
         self.gas_pressed_max = 0

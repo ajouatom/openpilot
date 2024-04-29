@@ -258,7 +258,7 @@ def gen_long_ocp():
 
 class LongitudinalMpc:
   def __init__(self, mode='acc'):
-    self.trafficStopDistanceAdjust = 1.8
+    self.trafficStopDistanceAdjust = 1.5
     self.aChangeCost = 200
     self.aChangeCostStart = 40
     self.tFollowSpeedAdd = 0.0

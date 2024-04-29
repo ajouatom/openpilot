@@ -496,8 +496,9 @@ def get_all_toggle_values():
     "StartAccelApply",
     "AutoSpeedUptoRoadSpeedLimit",
     "StopDistanceCarrot",
-    "ALeadTau",
-    "ALeadTauStart",
+    "ALeadTauPos",
+    "ALeadTauNeg",
+    "ALeadTauThreshold",
     "CruiseButtonMode",
     "CruiseButtonTest1",
     "CruiseButtonTest2",
@@ -567,7 +568,9 @@ def get_all_toggle_values():
     "MTSCAggressiveness",
     "MTSCCurvatureCheck",
     "MTSCEnabled",
-    "PreferredSchedule"
+    "PreferredSchedule",
+    "NNFF",
+    "NNFFLite"
   ]
 
   toggle_values = {}

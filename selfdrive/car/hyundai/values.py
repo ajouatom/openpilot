@@ -103,7 +103,7 @@ class HyundaiExtFlags(IntFlag):
   HAS_LFA_BUTTON = 2 ** 5
   CANFD_GEARS_NONE = 2 ** 6
   ACAN_PANDA = 2 ** 7
-  BSM_NO_ADAS = 2 ** 8
+  BSM_IN_ADAS = 2 ** 8
 
 class Footnote(Enum):
   CANFD = CarFootnote(
