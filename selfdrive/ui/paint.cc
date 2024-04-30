@@ -1011,7 +1011,7 @@ void DrawApilot::drawConnInfo(const UIState* s) {
         int hda_speedLimit = car_state.getSpeedLimit();
         int hda_speedLimitDistance = car_state.getSpeedLimitDistance();
         int naviCluster = 0;// HW: (int)car_params.getNaviCluster();
-        int y = 40;
+        int y = 10;
         if (sccBus) ui_draw_image(s, { 30, y, 120, 54 }, "ic_scc2", 1.0f);
         if (activeNDA >= 200) ui_draw_image(s, { 30 + 135, y, 120, 54 }, "ic_apn", 1.0f);
         else if (hda_speedLimit > 0 && hda_speedLimitDistance > 0) ui_draw_image(s, { 30 + 135, y, 120, 54 }, "ic_hda", 1.0f);
