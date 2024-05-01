@@ -104,9 +104,6 @@ class Track:
 
     aLeadTauValue = aLeadTauPos if self.aLeadK >= aLeadTauThreshold else aLeadTauNeg
 
-    if self.params.get_int("CarrotTest2") == 0:
-      self.jerk = 0.0
-
     if abs(self.aLeadK) < aLeadTauThreshold and self.jerk > -0.1:
       self.aLeadTau = aLeadTauValue
     else:
