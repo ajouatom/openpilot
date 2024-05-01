@@ -1043,8 +1043,8 @@
     },
     {
       "group": "시험",
-      "name": "CarrotTest",
-      "title": "당근시험",
+      "name": "CarrotTest2",
+      "title": "당근레이더시험",
       "descr": "None",
       "egroup": "TEST",
       "etitle": "Carrot test",

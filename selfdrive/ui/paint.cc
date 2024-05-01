@@ -679,11 +679,15 @@ void DrawPlot::makePlotData(const UIState* s, float& data1, float& data2, char *
         sprintf(str, "5.Detected radar(G:aLeadK, Y:vLeadK)");
         break;
     case 6:
-        data1 = a_ego;  //노
+        data1 = accel_out; // 노
         data2 = lead_radar.getALeadK(); // 녹
-        sprintf(str, "6.Detected radar(G:aLeadK, Y:a_ego)");
+        sprintf(str, "6.Detected radar(G:aLeadK, Y:accel)");
         break;
     case 7:
+        data1 = lead_radar.getALeadTau();//  //노
+        data2 = lead_radar.getALeadK(); // 녹
+        sprintf(str, "7.Detected radar(G:aLeadK, Y:aLeadTau)");
+        break;
         data1 = lead_radar.getVLeadK();
         data2 = lead_radar.getVLead(); // getDRel();
         sprintf(str, "7.Detected radar(G:vLead, Y:vLeadK)");
@@ -1007,7 +1011,7 @@ void DrawApilot::drawConnInfo(const UIState* s) {
         int hda_speedLimit = car_state.getSpeedLimit();
         int hda_speedLimitDistance = car_state.getSpeedLimitDistance();
         int naviCluster = 0;// HW: (int)car_params.getNaviCluster();
-        int y = 40;
+        int y = 10;
         if (sccBus) ui_draw_image(s, { 30, y, 120, 54 }, "ic_scc2", 1.0f);
         if (activeNDA >= 200) ui_draw_image(s, { 30 + 135, y, 120, 54 }, "ic_apn", 1.0f);
         else if (hda_speedLimit > 0 && hda_speedLimitDistance > 0) ui_draw_image(s, { 30 + 135, y, 120, 54 }, "ic_hda", 1.0f);
@@ -1749,6 +1753,37 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
             py[3] = py[2];
             NVGcolor color2 = COLOR_BLACK_ALPHA(20);
             ui_draw_line2(s, px, py, 4, &color2, nullptr, 3.0f, isRadarDetected() ? rcolor : COLOR_BLUE);
+
+            auto lead_radar = sm["radarState"].getRadarState().getLeadOne();
+            float h = path_width * 0.8 / 2.;
+            float ax[4], ay[4], vx[4], vy[4];
+            vx[0] = px[0];
+            vx[1] = vx[0] + 20;
+            vx[2] = vx[1];
+            vx[3] = vx[0];
+            vy[0] = py[0] - h;
+            vy[1] = vy[0];
+            float v = lead_radar.getVRel() / 5.0 * h;
+            if (v < -h) v = -h;
+            if (v > h) v = h;
+            vy[2] = vy[1] - v;
+            vy[3] = vy[2];
+            NVGcolor vcolor = isLeadSCC() ? COLOR_RED : COLOR_ORANGE;
+            ui_draw_line2(s, vx, vy, 4, &vcolor, nullptr, 0.0f);
+
+            ax[0] = px[1];
+            ax[1] = px[1] - 20;
+            ax[2] = ax[1];
+            ax[3] = ax[0];
+            ay[0] = py[0] - h;
+            ay[1] = ay[0];
+            float a = lead_radar.getALeadK() / 2.0 * h;
+            if (a < -h) a = -h;
+            if (a > h) a = h;
+            ay[2] = ay[1]  - a;
+            ay[3] = ay[2];
+            NVGcolor acolor = isLeadSCC() ? COLOR_RED : COLOR_ORANGE;
+            ui_draw_line2(s, ax, ay, 4, &acolor, nullptr, 0.0f);
         }
     }
 }

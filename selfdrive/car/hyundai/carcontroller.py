@@ -484,7 +484,7 @@ class CarController(CarControllerBase):
     return 0
 
   def make_jerk(self, CS, accel, actuators, hud_control):
-    if self.params.get_int("CarrotTest") == 1:
+    if False: 
       required_jerk = min(3, abs(accel - CS.out.aEgo) * 50)
       self.jerk_l = required_jerk
       self.jerk_u = required_jerk
