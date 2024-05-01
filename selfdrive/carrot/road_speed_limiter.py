@@ -823,7 +823,7 @@ def main():
         roadLimitSpeed.xRoadLimitSpeed = int(xRoadLimitSpeed)
         if xRoadLimitSpeed > 0:
           roadLimitSpeed.roadLimitSpeed = int(xRoadLimitSpeed)
-        roadLimitSpeed.xRoadName = xRoadName
+        roadLimitSpeed.xRoadName = xRoadName + "[{}]".format(int(xRoadLimitSpeed))
         if showDebugUI:
           roadLimitSpeed.xRoadName += ("[{}]".format(nTBTNextRoadWidth) + "[{}]".format(road_category_map.get(roadcate,"X")) + sdiDebugText)
         #print(roadLimitSpeed.xRoadName)

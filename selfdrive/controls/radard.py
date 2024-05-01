@@ -100,15 +100,15 @@ class Track:
     self.vLeadK = float(self.kf.x[SPEED][0])
     self.aLeadK = float(self.kf.x[ACCEL][0])
 
-    alpha = 0.8 #0.9
+    alpha = 0.9
     self.jerk = self.jerk * alpha + (self.aLeadK - self.aLeadK_prev) / self.radar_ts * (1.0 - alpha)
 
     aLeadTauValue = aLeadTauPos if self.aLeadK >= aLeadTauThreshold else aLeadTauNeg
 
     if abs(self.aLeadK) < aLeadTauThreshold and self.jerk > -0.1:
       self.aLeadTau = aLeadTauValue
-    elif self.jerk <= -0.1 and self.params.get_int("CarrotTest2") == 2:
-      self.aLeadTau = 0
+#    elif self.jerk <= -0.1 and self.params.get_int("CarrotTest2") == 2:
+#      self.aLeadTau = 0
     else:
       self.aLeadTau = min(self.aLeadTau * 0.9, aLeadTauValue)
 
