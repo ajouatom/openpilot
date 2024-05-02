@@ -276,7 +276,7 @@ static void ui_draw_path(const UIState* s) {
 }
 #endif
 
-void ui_draw_image(const UIState* s, const Rect& r, const char* name, float alpha) {
+void ui_draw_image(const UIState* s, const Rect1& r, const char* name, float alpha) {
     nvgBeginPath(s->vg);
     NVGpaint imgPaint = nvgImagePattern(s->vg, r.x, r.y, r.w, r.h, 0, s->images.at(name), alpha);
     nvgRect(s->vg, r.x, r.y, r.w, r.h);
@@ -301,24 +301,24 @@ static void ui_draw_circle_image_rotation(const UIState* s, int center_x, int ce
     ui_draw_image(s, { ct_pos, ct_pos, img_size, img_size }, image, img_alpha);
     nvgRestore(s->vg);
 }
-void ui_draw_rect(NVGcontext* vg, const Rect& r, NVGcolor color, int width, float radius) {
+void ui_draw_rect(NVGcontext* vg, const Rect1& r, NVGcolor color, int width, float radius) {
     nvgBeginPath(vg);
     radius > 0 ? nvgRoundedRect(vg, r.x, r.y, r.w, r.h, radius) : nvgRect(vg, r.x, r.y, r.w, r.h);
     nvgStrokeColor(vg, color);
     nvgStrokeWidth(vg, width);
     nvgStroke(vg);
 }
-static inline void fill_rect(NVGcontext* vg, const Rect& r, const NVGcolor* color, const NVGpaint* paint, float radius) {
+static inline void fill_rect(NVGcontext* vg, const Rect1& r, const NVGcolor* color, const NVGpaint* paint, float radius) {
     nvgBeginPath(vg);
     radius > 0 ? nvgRoundedRect(vg, r.x, r.y, r.w, r.h, radius) : nvgRect(vg, r.x, r.y, r.w, r.h);
     if (color) nvgFillColor(vg, *color);
     if (paint) nvgFillPaint(vg, *paint);
     nvgFill(vg);
 }
-void ui_fill_rect(NVGcontext* vg, const Rect& r, const NVGcolor& color, float radius) {
+void ui_fill_rect(NVGcontext* vg, const Rect1& r, const NVGcolor& color, float radius) {
     fill_rect(vg, r, &color, nullptr, radius);
 }
-void ui_fill_rect(NVGcontext* vg, const Rect& r, const NVGpaint& paint, float radius) {
+void ui_fill_rect(NVGcontext* vg, const Rect1& r, const NVGpaint& paint, float radius) {
     fill_rect(vg, r, nullptr, &paint, radius);
 }
 
