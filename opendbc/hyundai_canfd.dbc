@@ -78,10 +78,12 @@ BO_ 96 ESP_STATUS: 32 XXX
  SG_ TRACTION_AND_STABILITY_CONTROL : 42|3@1+ (1,0) [0|63] "" XXX
  SG_ BRAKE_PRESSURE : 128|10@1+ (1,0) [0|65535] "" XXX
  SG_ BRAKE_PRESSED : 148|1@1+ (1,0) [0|3] "" XXX
+ SG_ AUTO_HOLD : 192|1@0+ (1,0) [0|1] "" XXX
 
 BO_ 101 BRAKE: 32 XXX
  SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
  SG_ COUNTER : 16|8@1+ (1,0) [0|255] "" XXX
+ SG_ BRAKE_LIGHT : 29|1@0+ (1,0) [0|1] "" XXX
  SG_ BRAKE_POSITION : 40|16@1- (1,0) [0|65535] "" XXX
  SG_ BRAKE_PRESSED : 57|1@1+ (1,0) [0|3] "" XXX
 
@@ -136,7 +138,10 @@ BO_ 272 LKAS_ALT: 32 XXX
  SG_ LKA_ASSIST : 62|1@1+ (1,0) [0|1] "" XXX
  SG_ LKA_MODE : 24|3@1+ (1,0) [0|7] "" XXX
  SG_ NEW_SIGNAL_2 : 70|2@0+ (1,0) [0|3] "" XXX
+ SG_ LKAS_ANGLE_ACTIVE : 77|2@0+ (1,0) [0|3] "" XXX
  SG_ HAS_LANE_SAFETY : 80|1@0+ (1,0) [0|1] "" XXX
+ SG_ LKAS_ANGLE_CMD : 82|14@1- (-0.1,0) [0|511] "" XXX
+ SG_ UNKNOWN : 96|8@1+ (1,0) [0|255] "" XXX
  SG_ NEW_SIGNAL_3 : 111|8@0+ (1,0) [0|255] "" XXX
  SG_ FCA_SYSWARN : 40|1@0+ (1,0) [0|1] "" XXX
 
@@ -559,6 +564,14 @@ BO_ 866 CAM_0x362: 32 CAMERA
  SG_ BYTE30 : 240|8@1+ (1,0) [0|255] "" XXX
  SG_ BYTE31 : 248|8@1+ (1,0) [0|255] "" XXX
 
+BO_ 928 TPMS: 16 XXX
+ SG_ PRESSURE_FL : 39|8@0+ (1,0) [0|255] "" XXX
+ SG_ PRESSURE_FR : 47|8@0+ (1,0) [0|255] "" XXX
+ SG_ PRESSURE_RL : 55|8@0+ (1,0) [0|255] "" XXX
+ SG_ PRESSURE_RR : 63|8@0+ (1,0) [0|255] "" XXX
+ SG_ STATUS_TPMS : 66|3@0+ (1,0) [0|3] "" XXX
+ SG_ UNIT : 68|2@0+ (1,0) [0|3] "" XXX
+
 BO_ 961 BLINKER_STALKS: 8 XXX
  SG_ COUNTER_ALT : 15|4@0+ (1,0) [0|15] "" XXX
  SG_ CHECKSUM_MAYBE : 7|8@0+ (1,0) [0|255] "" XXX
@@ -665,6 +678,7 @@ BO_ 1264 LOCAL_TIME: 8 XXX
  SG_ SECONDS : 31|8@0+ (1,0) [0|59] "" XXX
 
 CM_ 272 "Alternative LKAS message, used on cars such as 2023 Ioniq 6, 2nd gen Kona. Matches LKAS except size is 32 bytes";
+CM_ SG_ 272 LKAS_ANGLE_CMD "tracks MDPS->STEERING_ANGLE when not engaged, not STEERING_SENSORS->STEERING_ANGLE";
 CM_ 676 "Contains signals with detailed lane line information. Used by ADAS ECU on HDA 2 vehicles to operate LFA.";
 CM_ 866 "Contains signals with detailed lane line information. Used by ADAS ECU on HDA 2 vehicles to operate LFA. Used on cars that use message 272.";
 CM_ 1043 "Lamp signals do not seem universal on cars that use LKAS_ALT, but stalk signals do.";
@@ -697,6 +711,7 @@ VAL_ 96 TRACTION_AND_STABILITY_CONTROL 0 "On" 5 "Limited" 1 "Off";
 VAL_ 234 LKA_FAULT 0 "ok" 1 "lka fault" ;
 VAL_ 272 LKA_ICON 0 "hidden" 1 "grey" 2 "green" 3 "flashing green" ;
 VAL_ 272 LKA_MODE 1 "warning only" 2 "assist" 6 "off" ;
+VAL_ 272 LKAS_ANGLE_ACTIVE 1 "not active" 2 "active" ;
 VAL_ 298 LKA_ICON 0 "hidden" 1 "grey" 2 "green" 3 "flashing green" ;
 VAL_ 298 LKA_MODE 1 "warning only" 2 "assist" 6 "off" ;
 VAL_ 304 PARK_BUTTON 1 "Pressed" 2 "Not Pressed";
