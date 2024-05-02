@@ -1703,8 +1703,10 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
                 ui_draw_text(s, x + w, disp_y, str, 40, COLOR_WHITE, BOLD);
             }
         }
-        sprintf(str, "%d", getLpSource());
-        ui_draw_text(s, x, disp_y - 70, str, 25, COLOR_WHITE, BOLD);
+        if (!isLeadDetected()) {
+            sprintf(str, "%d", getLpSource());
+            ui_draw_text(s, x, disp_y - 70, str, 25, COLOR_WHITE, BOLD);
+        }
     }
 
     // 타겟하단: 롱컨상태표시
