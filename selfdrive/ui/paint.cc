@@ -1747,7 +1747,7 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
             px[1] = px[0] + path_width + 20;
             px[2] = px[1];
             px[3] = px[0];
-            py[0] = path_y + 25;// 5;
+            py[0] = path_y + 20;// 5;
             py[1] = py[0];
             py[2] = py[1] - path_width * 0.8;
             py[3] = py[2];
