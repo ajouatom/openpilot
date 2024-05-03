@@ -70,15 +70,6 @@ class CarState(CarStateBase):
     self.totalDistance = 0.0
     self.speedLimitDistance = 0
     self.pcmCruiseGap = 0
-  def get_tpms(self, unit, fl, fr, rl, rr):
-    factor = 0.72519 if unit == 1 else 0.1 if unit == 2 else 1 # 0:psi, 1:kpa, 2:bar
-    tpms = car.CarState.TPMS.new_message()
-    tpms.unit = unit
-    tpms.fl = fl * factor
-    tpms.fr = fr * factor
-    tpms.rl = rl * factor
-    tpms.rr = rr * factor
-    return tpms
 
   def update(self, cp, cp_cam):
     if self.CP.carFingerprint in CANFD_CAR:
@@ -314,14 +305,11 @@ class CarState(CarStateBase):
     gear = cp.vl[self.gear_msg_canfd]["GEAR"]
     ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(gear))
 
-    # kisa
-    ret.tpms = self.get_tpms(
-      cp.vl["TPMS"]["UNIT"],
-      cp.vl["TPMS"]["PRESSURE_FL"],
-      cp.vl["TPMS"]["PRESSURE_FR"],
-      cp.vl["TPMS"]["PRESSURE_RL"],
-      cp.vl["TPMS"]["PRESSURE_RR"],
-    )
+    tpms_unit = cp.vl["TPMS"]["UNIT"] * 0.725 if int(cp.vl["TPMS"]["UNIT"]) > 0 else 1.
+    ret.tpms.fl = tpms_unit * cp.vl["TPMS"]["PRESSURE_FL"]
+    ret.tpms.fr = tpms_unit * cp.vl["TPMS"]["PRESSURE_FR"]
+    ret.tpms.rl = tpms_unit * cp.vl["TPMS"]["PRESSURE_RL"]
+    ret.tpms.rr = tpms_unit * cp.vl["TPMS"]["PRESSURE_RR"]
 
     # TODO: figure out positions
     ret.wheelSpeeds = self.get_wheel_speeds(
