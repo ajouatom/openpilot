@@ -276,7 +276,7 @@ static void ui_draw_path(const UIState* s) {
 }
 #endif
 
-void ui_draw_image(const UIState* s, const Rect& r, const char* name, float alpha) {
+void ui_draw_image(const UIState* s, const Rect1& r, const char* name, float alpha) {
     nvgBeginPath(s->vg);
     NVGpaint imgPaint = nvgImagePattern(s->vg, r.x, r.y, r.w, r.h, 0, s->images.at(name), alpha);
     nvgRect(s->vg, r.x, r.y, r.w, r.h);
@@ -301,24 +301,24 @@ static void ui_draw_circle_image_rotation(const UIState* s, int center_x, int ce
     ui_draw_image(s, { ct_pos, ct_pos, img_size, img_size }, image, img_alpha);
     nvgRestore(s->vg);
 }
-void ui_draw_rect(NVGcontext* vg, const Rect& r, NVGcolor color, int width, float radius) {
+void ui_draw_rect(NVGcontext* vg, const Rect1& r, NVGcolor color, int width, float radius) {
     nvgBeginPath(vg);
     radius > 0 ? nvgRoundedRect(vg, r.x, r.y, r.w, r.h, radius) : nvgRect(vg, r.x, r.y, r.w, r.h);
     nvgStrokeColor(vg, color);
     nvgStrokeWidth(vg, width);
     nvgStroke(vg);
 }
-static inline void fill_rect(NVGcontext* vg, const Rect& r, const NVGcolor* color, const NVGpaint* paint, float radius) {
+static inline void fill_rect(NVGcontext* vg, const Rect1& r, const NVGcolor* color, const NVGpaint* paint, float radius) {
     nvgBeginPath(vg);
     radius > 0 ? nvgRoundedRect(vg, r.x, r.y, r.w, r.h, radius) : nvgRect(vg, r.x, r.y, r.w, r.h);
     if (color) nvgFillColor(vg, *color);
     if (paint) nvgFillPaint(vg, *paint);
     nvgFill(vg);
 }
-void ui_fill_rect(NVGcontext* vg, const Rect& r, const NVGcolor& color, float radius) {
+void ui_fill_rect(NVGcontext* vg, const Rect1& r, const NVGcolor& color, float radius) {
     fill_rect(vg, r, &color, nullptr, radius);
 }
-void ui_fill_rect(NVGcontext* vg, const Rect& r, const NVGpaint& paint, float radius) {
+void ui_fill_rect(NVGcontext* vg, const Rect1& r, const NVGpaint& paint, float radius) {
     fill_rect(vg, r, nullptr, &paint, radius);
 }
 
@@ -1703,8 +1703,10 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
                 ui_draw_text(s, x + w, disp_y, str, 40, COLOR_WHITE, BOLD);
             }
         }
-        sprintf(str, "%d", getLpSource());
-        ui_draw_text(s, x, disp_y - 70, str, 25, COLOR_WHITE, BOLD);
+        if (!isLeadDetected()) {
+            sprintf(str, "%d", getLpSource());
+            ui_draw_text(s, x, disp_y - 70, str, 25, COLOR_WHITE, BOLD);
+        }
     }
 
     // 타겟하단: 롱컨상태표시
@@ -1725,7 +1727,7 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
         float px[7], py[7];
         NVGcolor rcolor = isLeadSCC() ? COLOR_RED : COLOR_ORANGE;
         NVGcolor  pcolor = !isRadarDetected() ? ((getTrafficMode() == 1) ? rcolor : COLOR_GREEN) : isRadarDetected() ? rcolor : COLOR_BLUE;
-        if (s->show_path_end) {
+        if (s->show_path_end && !isLeadDetected()) {
             px[0] = path_x - path_width / 2;
             px[1] = path_x + path_width / 2;
             px[2] = path_x + path_width / 2;
@@ -1747,7 +1749,7 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
             px[1] = px[0] + path_width + 20;
             px[2] = px[1];
             px[3] = px[0];
-            py[0] = path_y + 5;
+            py[0] = path_y + 20;// 5;
             py[1] = py[0];
             py[2] = py[1] - path_width * 0.8;
             py[3] = py[2];
