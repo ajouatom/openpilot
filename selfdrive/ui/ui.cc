@@ -353,7 +353,8 @@ void update_leads(UIState *s, const cereal::RadarState::Reader &radar_state, con
           lead_vertex_data vd;
           QPointF vtmp;
           z = line.getZ()[get_path_length_idx(line, l.getDRel())];
-          calib_frame_to_full_frame(s, l.getDRel(), -l.getYRel(), z + 0.61, &vtmp);
+          //calib_frame_to_full_frame(s, l.getDRel(), -l.getYRel(), z + 0.61, &vtmp);
+          calib_frame_to_full_frame(s, l.getDRel(), -l.getDPath(), z + 0.61, &vtmp);
           vd.x = vtmp.x();
           vd.y = vtmp.y();
           vd.d = l.getDRel();
