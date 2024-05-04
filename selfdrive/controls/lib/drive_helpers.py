@@ -527,9 +527,12 @@ class VCruiseHelper:
           else:
             v_cruise_kph = button_kph
             self._add_log("Button long pressed..{:.0f}".format(v_cruise_kph))
-        elif button_type == ButtonType.gapAdjustCruise:
-          self._add_log("Button long gap pressed ..")
-          self.params.put_int_nonblocking("MyDrivingMode", self.params.get_int("MyDrivingMode") % 4 + 1) # 1,2,3,4 (1:eco, 2:safe, 3:normal, 4:high speed)
+        elif button_type == ButtonType.gapAdjustCruise:          
+          if self.CP.pcmCruise:
+            self._add_log("Button long gap pressed ..pcmCruise can't adjust")
+          else:
+            self._add_log("Button long gap pressed ..")
+            self.params.put_int_nonblocking("MyDrivingMode", self.params.get_int("MyDrivingMode") % 4 + 1) # 1,2,3,4 (1:eco, 2:safe, 3:normal, 4:high speed)
         elif button_type == ButtonType.lfaButton:
           self._add_log("Button long lkas pressed ..")
           useLaneLineSpeed = max(1, self.useLaneLineSpeed)
@@ -560,11 +563,14 @@ class VCruiseHelper:
         elif button_type == ButtonType.cancel:
           print("************* cancel button pressed..")
         elif button_type == ButtonType.gapAdjustCruise:
-          self._add_log("Button gap pressed ..")
-          controls.personality = (controls.personality - 1) % 3
-          self.params.put_nonblocking('LongitudinalPersonality', str(controls.personality))
-          personality_events = [EventName.personalityAggressive, EventName.personalityStandard, EventName.personalityRelaxed]
-          controls.events.add(personality_events[controls.personality])
+          if self.CP.pcmCruise:
+            self._add_log("Button long gap pressed ..pcmCruise can't adjust")
+          else:
+            self._add_log("Button gap pressed ..")
+            controls.personality = (controls.personality - 1) % 3
+            self.params.put_nonblocking('LongitudinalPersonality', str(controls.personality))
+            personality_events = [EventName.personalityAggressive, EventName.personalityStandard, EventName.personalityRelaxed]
+            controls.events.add(personality_events[controls.personality])
          
         elif button_type == ButtonType.lfaButton:
           self._add_log("Button lkas pressed ..")
