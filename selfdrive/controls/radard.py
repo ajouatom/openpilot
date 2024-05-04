@@ -530,7 +530,7 @@ class RadarD:
     else:
       lead['dPath'] = lead['yRel']
       return
-    lead['dPath'] = -lead['yRel'] - interp(lead['dRel', md_x, md_y)
+    lead['dPath'] = -lead['yRel'] - interp(lead['dRel'], md_x, md_y)
     
   def publish(self, pm: messaging.PubMaster, lag_ms: float):
     assert self.radar_state is not None
