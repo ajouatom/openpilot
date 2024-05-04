@@ -353,7 +353,7 @@ class VisionTrack:
     return {
       "dRel": self.dRel,
       "yRel": self.yRel,
-      "dPath": -self.yRel - interp(self.dRel, md.position.x, md.position.y),
+      "dPath": self.yRel - interp(self.dRel, md.position.x, md.position.y),
       "vRel": self.vRel,
       "vLead": self.vLead,
       "vLeadK": self.vLeadK,    ## TODO: 아직 vLeadK는 엉망인듯...
