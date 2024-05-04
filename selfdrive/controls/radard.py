@@ -530,6 +530,7 @@ class RadarD:
     else:
       lead['dPath'] = lead['yRel']
       return
+    print(lead)
     lead['dPath'] = -lead['yRel'] - interp(lead['dRel'], md_x, md_y)
     
   def publish(self, pm: messaging.PubMaster, lag_ms: float):
