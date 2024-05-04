@@ -437,7 +437,7 @@ class RadarD:
 
   def update(self, sm: messaging.SubMaster, rr: Optional[car.RadarData]):
     #self.showRadarInfo = self.params.get_int("ShowRadarInfo")
-    self.mixRadarInfo = self.params.get_int("MixRadarInfo"))
+    self.mixRadarInfo = self.params.get_int("MixRadarInfo")
     self.aLeadTauPos = self.params.get_float("ALeadTauPos") / 100. 
     self.aLeadTauNeg = self.params.get_float("ALeadTauNeg") / 100. 
     self.aLeadTauThreshold = self.params.get_float("ALeadTauThreshold") / 100.
