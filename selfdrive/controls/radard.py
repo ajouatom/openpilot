@@ -522,7 +522,7 @@ class RadarD:
       if self.params.get_int("CarrotTest2") == 1:
         dPath = self.radar_state.leadOne.dPath
         self.make_dpath(sm['modelV2'], self.radar_state.leadOne)
-        print("dPath = {:.1f} => {:.1f}".format(dPath, self.radar_state.leadOne.dPath))
+        #print("dPath = {:.1f} => {:.1f}".format(dPath, self.radar_state.leadOne.dPath))
         self.make_dpath(sm['modelV2'], self.radar_state.leadTwo)
 
   def make_dpath(self, md, lead):
