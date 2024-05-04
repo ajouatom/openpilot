@@ -69,6 +69,9 @@ class Track:
     self.vLat = 0.0
     self.vision_prob = 0.0
     self.radar_ts = radar_ts
+    self.jerk = 0.0
+    self.aLeadK_prev = 0.0
+    self.params = Params()
 
   def update(self, d_rel: float, y_rel: float, v_rel: float, v_lead: float, measured: float, a_rel: float, aLeadTauPos: float, aLeadTauNeg: float, aLeadTauThreshold: float, a_ego: float):
 
@@ -76,7 +79,9 @@ class Track:
     if abs(self.dRel - d_rel) > 3.0 or abs(self.vRel - v_rel) > 20.0 * self.radar_ts: # 거리3M이상, 20m/s^2이상 상대속도 차이날때 초기화
       self.cnt = 0
       self.kf = KF1D([[v_lead], [0.0]], self.K_A, self.K_C, self.K_K)
-      self.kf_y = KF1D([[y_rel], [0.0]], self.K_A, self.K_C, self.K_K) 
+      self.kf_y = KF1D([[y_rel], [0.0]], self.K_A, self.K_C, self.K_K)
+      self.jerk = 0.0
+      self.aLeadK_prev = 0.0
     # relative values, copy
     self.dRel = d_rel   # LONG_DIST
     self.yRel = y_rel   # -LAT_DIST
@@ -94,25 +99,21 @@ class Track:
 
     self.vLeadK = float(self.kf.x[SPEED][0])
     self.aLeadK = float(self.kf.x[ACCEL][0])
-    #self.aLeadK = a_rel + a_ego if a_rel != 0 else float(self.kf.x[ACCEL][0]) ## radar track의 A_REL을 사용하도록 함. 값이 약간 더 큼.
 
-    # Learn if constant acceleration
-    #if abs(self.aLeadK) < 0.5:
-    #  self.aLeadTau = _LEAD_ACCEL_TAU
+    alpha = 0.9
+    self.jerk = self.jerk * alpha + (self.aLeadK - self.aLeadK_prev) / self.radar_ts * (1.0 - alpha)
 
-    # 감속일때는 0.2로 시작..  (시험중... 삭제)
-    #aLeadTau_apply = 0.2 if self.aLeadK < 0.0 else aLeadTau
-    #if -0.2 < self.aLeadK < 0.5:
-    #  self.aLeadTau = aLeadTauInit
-    #else:
-    #  self.aLeadTau = min(self.aLeadTau * 0.9, aLeadTau_apply)
     aLeadTauValue = aLeadTauPos if self.aLeadK >= aLeadTauThreshold else aLeadTauNeg
-    if abs(self.aLeadK) < aLeadTauThreshold:
+
+    if abs(self.aLeadK) < aLeadTauThreshold and self.jerk > -0.1:
       self.aLeadTau = aLeadTauValue
+#    elif self.jerk <= -0.1 and self.params.get_int("CarrotTest2") == 2:
+#      self.aLeadTau = 0
     else:
       self.aLeadTau = min(self.aLeadTau * 0.9, aLeadTauValue)
 
     self.cnt += 1
+    self.aLeadK_prev = self.aLeadK
 
   def get_key_for_cluster(self):
     # Weigh y higher since radar is inaccurate in this dimension
