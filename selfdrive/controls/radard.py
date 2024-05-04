@@ -351,7 +351,7 @@ class VisionTrack:
 
   def get_lead(self, md):
     dPath = self.yRel - interp(self.dRel, md.position.x, md.position.y)
-    print("yRel={:.1f}, posXY={:.1f},{:.1f} => {:.1f}".format(self.yRel, interp(self.dRel, md.position.x, md.position.y), dPath))
+    print("yRel={:.1f}, posXY={:.1f},{:.1f} => {:.1f}".format(self.yRel, self.dRel, interp(self.dRel, md.position.x, md.position.y), dPath))
     return {
       "dRel": self.dRel,
       "yRel": self.yRel,
