@@ -350,10 +350,12 @@ class VisionTrack:
     self.kf_v: KF1D | None = None
 
   def get_lead(self, md):
+    dPath = self.yRel - interp(self.dRel, md.position.x, md.position.y)
+    print("yRel={:.1f}, posXY={:.1f},{:.1f} => {:.1f}".format(self.yRel, interp(self.dRel, md.position.x, md.position.y), dPath))
     return {
       "dRel": self.dRel,
       "yRel": self.yRel,
-      "dPath": self.yRel - interp(self.dRel, md.position.x, md.position.y),
+      "dPath": dPath,
       "vRel": self.vRel,
       "vLead": self.vLead,
       "vLeadK": self.vLeadK,    ## TODO: 아직 vLeadK는 엉망인듯...
