@@ -229,48 +229,6 @@ def get_RadarState_from_vision(lead_msg: capnp._DynamicStructReader, v_ego: floa
     "radarTrackId": -1,
   }
 
-
-def get_lead_org(v_ego: float, ready: bool, tracks: dict[int, Track], lead_msg: capnp._DynamicStructReader,
-             model_v_ego: float, low_speed_override: bool = True) -> dict[str, Any]:
-  ## SCC레이더는 일단 보관하고 리스트에서 삭제...
-  track_scc = tracks.get(0)
-  #if track_scc is not None:  
-  #  del tracks[0]            ## tracks에서 삭제하면안됨... ㅠㅠ
-
-  # Determine leads, this is where the essential logic happens
-  if len(tracks) > 0 and ready and lead_msg.prob > .5:
-    track = match_vision_to_track(v_ego, lead_msg, tracks)
-  else:
-    track = None
-
-  ## carrot : 삭제함.. 오히려 SCC레이더의 값이 엉뚱한곳을 가르키는 차량이 있음.. kona_ev.. 엉뚱한 차량을 보고 쓸데없는 감속을 함.
-  ## vision match후 발견된 track이 없으면
-  ##  track_scc 가 있는 지 확인하고
-  ##    비전과의 차이가 35%(5M)이상 차이나면 scc가 발견못한것이기 때문에 비전것으로 처리함.
-  #if track_scc is not None and track is None:
-  #  track = track_scc
-  #  if lead_msg.prob > .5:
-  #    offset_vision_dist = lead_msg.x[0] - RADAR_TO_CAMERA
-  #    if offset_vision_dist < track.dRel - 5.0: #끼어드는 차량이 있는 경우 처리..
-  #      track = None
-
-  lead_dict = {'status': False}
-  if track is not None:
-    lead_dict = track.get_RadarState(lead_msg.prob, float(-lead_msg.y[0]))
-  elif (track is None) and ready and (lead_msg.prob > .5):
-    lead_dict = get_RadarState_from_vision(lead_msg, v_ego, model_v_ego)
-
-  if low_speed_override:
-    low_speed_tracks = [c for c in tracks.values() if c.potential_low_speed_lead(v_ego)]
-    if len(low_speed_tracks) > 0:
-      closest_track = min(low_speed_tracks, key=lambda c: c.dRel)
-
-      # Only choose new track if it is actually closer than the previous one
-      if (not lead_dict['status']) or (closest_track.dRel < lead_dict['dRel']):
-        lead_dict = closest_track.get_RadarState(lead_msg.prob, float(-lead_msg.y[0]))
-
-  return lead_dict
-
 def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego):
   lead_msg = md.leadsV3[0]
   leadCenter = {'status': False}
@@ -471,12 +429,14 @@ class RadarD:
 
     self.radar_ts = radar_ts
 
+    self.params = Params()
+
   def update(self, sm: messaging.SubMaster, rr: Optional[car.RadarData]):
-    #self.showRadarInfo = int(Params().get("ShowRadarInfo"))
-    self.mixRadarInfo = int(Params().get_int("MixRadarInfo"))
-    self.aLeadTauPos = float(Params().get_int("ALeadTauPos")) / 100. 
-    self.aLeadTauNeg = float(Params().get_int("ALeadTauNeg")) / 100. 
-    self.aLeadTauThreshold = float(Params().get_int("ALeadTauThreshold")) / 100.
+    #self.showRadarInfo = self.params.get_int("ShowRadarInfo")
+    self.mixRadarInfo = self.params.get_int("MixRadarInfo"))
+    self.aLeadTauPos = self.params.get_float("ALeadTauPos") / 100. 
+    self.aLeadTauNeg = self.params.get_float("ALeadTauNeg") / 100. 
+    self.aLeadTauThreshold = self.params.get_float("ALeadTauThreshold") / 100.
 
     self.ready = sm.seen['modelV2']
     self.current_time = 1e-9*max(sm.logMonoTime.values())
@@ -555,6 +515,19 @@ class RadarD:
         self.radar_state.leadOne = self.get_lead(self.tracks, 0, leads_v3[0], model_v_ego, low_speed_override=False)
         self.radar_state.leadTwo = self.get_lead(self.tracks, 1, leads_v3[1], model_v_ego, low_speed_override=False)
 
+      if self.params.get_int("CarrotTest2") == 1:
+        self.make_dpath(sm['modelV2'], self.radar_state.leadOne)
+        self.make_dpath(sm['modelV2'], self.radar_state.leadTwo)
+
+  def make_dpath(self, md, lead):
+    if md is not None and len(md.position.x) == TRAJECTORY_SIZE:
+      md_y = md.position.y
+      md_x = md.position.x
+    else:
+      lead['dPath'] = lead['yRel']
+      return
+    lead['dPath'] = -lead['yRel'] - interp(lead['dRel', md_x, md_y)
+    
   def publish(self, pm: messaging.PubMaster, lag_ms: float):
     assert self.radar_state is not None
 
