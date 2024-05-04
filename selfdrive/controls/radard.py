@@ -127,7 +127,7 @@ class Track:
   def get_RadarState(self, md, model_prob: float = 0.0, vision_y_rel = 0.0):
     dRel = float(self.dRel)
     yRel = float(self.yRel) if self.yRel != 0 else vision_y_rel
-    dPath = yRel - interp(dRel, md.position.x, md.position.y)
+    dPath = yRel + interp(dRel, md.position.x, md.position.y)
     return {
       "dRel": dRel,
       "yRel": yRel,
@@ -220,7 +220,7 @@ def get_RadarState_from_vision(md, lead_msg: capnp._DynamicStructReader, v_ego: 
   lead_v_rel_pred = lead_msg.v[0] - model_v_ego
   dRel = float(lead_msg.x[0] - RADAR_TO_CAMERA)
   yRel = float(-lead_msg.y[0])
-  dPath = yRel - interp(dRel, md.position.x, md.position.y)
+  dPath = yRel + interp(dRel, md.position.x, md.position.y)
   return {
     "dRel": dRel,
     "yRel": yRel,
@@ -263,7 +263,7 @@ def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego):
   for c in tracks.values():
     # d_y :  path_y - traks_y 의 diff값
     # yRel값은 왼쪽이 +값, lead.y[0]값은 왼쪽이 -값
-    d_y = -c.yRel - interp(c.dRel, md_x, md_y)
+    d_y = -c.yRel + interp(c.dRel, md_x, md_y)
     if abs(d_y) < lane_width/2:
       ld = c.get_RadarState(md, lead_msg.prob, float(-lead_msg.y[0]))
       leads_center[c.dRel] = ld
@@ -350,7 +350,7 @@ class VisionTrack:
     self.kf_v: KF1D | None = None
 
   def get_lead(self, md):
-    dPath = self.yRel - interp(self.dRel, md.position.x, md.position.y)
+    dPath = self.yRel + interp(self.dRel, md.position.x, md.position.y)
     print("yRel={:.1f}, posXY={:.1f},{:.1f} => {:.1f}".format(self.yRel, self.dRel, interp(self.dRel, md.position.x, md.position.y), dPath))
     return {
       "dRel": self.dRel,
