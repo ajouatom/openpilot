@@ -141,7 +141,7 @@ struct CarEvent @0x9b1657f34caf3ad3 {
     personalityRelaxed @137;
     personalityStandard @138;
     personalityAggressive @139;
-    personalityRelaxedMore @140;
+    personalityMoreRelaxed @140;
     torqueNNLoad @141;
 
     radarCanErrorDEPRECATED @15;
