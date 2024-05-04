@@ -520,7 +520,9 @@ class RadarD:
         self.radar_state.leadTwo = self.get_lead(self.tracks, 1, leads_v3[1], model_v_ego, low_speed_override=False)
 
       if self.params.get_int("CarrotTest2") == 1:
+        dPath = self.radar_state.leadOne.dPath
         self.make_dpath(sm['modelV2'], self.radar_state.leadOne)
+        print("dPath = {:.1f} => {:.1f}".format(dPath, self.radar_state.leadOne.dPath))
         self.make_dpath(sm['modelV2'], self.radar_state.leadTwo)
 
   def make_dpath(self, md, lead):
