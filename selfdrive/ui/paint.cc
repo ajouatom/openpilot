@@ -684,6 +684,10 @@ void DrawPlot::makePlotData(const UIState* s, float& data1, float& data2, char *
         sprintf(str, "6.Detected radar(G:aLeadK, Y:accel)");
         break;
     case 7:
+        data1 = lead_radar.getDPath();//  //노
+        data2 = lead_radar.getVLat(); // 녹
+        sprintf(str, "7.Detected radar(G:VLat, Y:DPath)");
+        break;
         data1 = lead_radar.getALeadTau();//  //노
         data2 = lead_radar.getALeadK(); // 녹
         sprintf(str, "7.Detected radar(G:aLeadK, Y:aLeadTau)");
