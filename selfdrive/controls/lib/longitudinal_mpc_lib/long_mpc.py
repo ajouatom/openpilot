@@ -88,7 +88,9 @@ class TrafficState(Enum):
     return self.name
 
 def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
-  if personality==log.LongitudinalPersonality.relaxed:
+  if personality==log.LongitudinalPersonality.moreRelaxed:
+    return 1.0
+  elif personality==log.LongitudinalPersonality.relaxed:
     return 1.0
   elif personality==log.LongitudinalPersonality.standard:
     return 1.0
@@ -100,7 +102,9 @@ def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
 
 def get_T_FOLLOW(personality=log.LongitudinalPersonality.standard):
   print("get_T_FOLLOW no!!!")
-  if personality==log.LongitudinalPersonality.relaxed:
+  if personality==log.LongitudinalPersonality.moreRelaxed:
+    return 2.00
+  elif personality==log.LongitudinalPersonality.relaxed:
     return 1.75
   elif personality==log.LongitudinalPersonality.standard:
     return 1.45
@@ -587,7 +591,9 @@ class LongitudinalMpc:
     # lin {self.time_linearization:.2e} qp_iter {qp_iter}, reset {reset}")
 
   def get_T_FOLLOW(self, personality=log.LongitudinalPersonality.standard):
-    if personality==log.LongitudinalPersonality.relaxed:
+    if personality==log.LongitudinalPersonality.moreRelaxed:
+      return self.tFollowGap4 #1.75
+    elif personality==log.LongitudinalPersonality.relaxed:
       return self.tFollowGap3 #1.75
     elif personality==log.LongitudinalPersonality.standard:
       return self.tFollowGap2 #1.45

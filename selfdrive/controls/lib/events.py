@@ -1003,6 +1003,14 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
       Priority.LOW, VisualAlert.none, AudibleAlert.none, 2.0),
   },
 
+  EventName.personalityMoreRelaxed: {
+    ET.PERMANENT: Alert(
+      "More Relaxed",
+      "",
+      AlertStatus.normal, AlertSize.small,
+      Priority.LOW, VisualAlert.none, AudibleAlert.none, 2.0),
+  },
+
   EventName.personalityStandard: {
     ET.PERMANENT: Alert(
       "Standard",

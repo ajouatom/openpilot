@@ -138,7 +138,7 @@ class CarState(CarStateBase):
       cruiseGap = cp_cruise.vl["SCC11"]["TauGapSet"]
       if cruiseGap != self.pcmCruiseGap:
         self.pcmCruiseGap = cruiseGap
-        Params().put_int_nonblocking("LongitudinalPersonality", min(2, max(self.pcmCruiseGap - 1, 0)))
+        Params().put_int_nonblocking("LongitudinalPersonality", min(3, max(self.pcmCruiseGap - 1, 0)))
 
     # TODO: Find brake pressure
     ret.brake = 0
