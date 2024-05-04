@@ -258,12 +258,15 @@ def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego):
     d_y = -c.yRel - interp(c.dRel, md_x, md_y)
     if abs(d_y) < lane_width/2:
       ld = c.get_RadarState(lead_msg.prob, float(-lead_msg.y[0]))
+      ld['dPath'] = d_y
       leads_center[c.dRel] = ld
     elif -next_lane_y < d_y < 0:
       ld = c.get_RadarState(0.0)
+      ld['dPath'] = d_y
       leads_left[c.dRel] = ld
     elif 0 < d_y < next_lane_y:
       ld = c.get_RadarState(0.0)
+      ld['dPath'] = d_y
       leads_right[c.dRel] = ld
 
   if lead_msg.prob > 0.5:
