@@ -358,6 +358,7 @@ class CarState(CarStateBase):
     # PFEIFER - AOL {{
     ret.cruiseState.available = self.main_enabled
     # }} PFEIFER - AOL
+    cp_cruise_info = cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC or self.CP.extFlags & HyundaiExtFlags.SCC_BUS2.value else cp
     if self.CP.openpilotLongitudinalControl:
       # These are not used for engage/disengage since openpilot keeps track of state using the buttons
       ret.cruiseState.enabled = cp.vl["TCS"]["ACC_REQ"] == 1
@@ -365,7 +366,7 @@ class CarState(CarStateBase):
       #if ret.cruiseState.available:
       #  print("cruiseState.available = {},{}".format(ret.cruiseState.available, ret.cruiseState.enabled))
     else:
-      cp_cruise_info = cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC or self.CP.extFlags & HyundaiExtFlags.SCC_BUS2.value else cp
+      #cp_cruise_info = cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC or self.CP.extFlags & HyundaiExtFlags.SCC_BUS2.value else cp
       ret.cruiseState.enabled = cp_cruise_info.vl["SCC_CONTROL"]["ACCMode"] in (1, 2)
       if cp_cruise_info.vl["SCC_CONTROL"]["MainMode_ACC"] == 1: # carrot
         ret.cruiseState.available = self.main_enabled = True
