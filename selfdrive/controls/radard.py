@@ -261,16 +261,16 @@ def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego):
   for c in tracks.values():
     # d_y :  path_y - traks_y 의 diff값
     # yRel값은 왼쪽이 +값, lead.y[0]값은 왼쪽이 -값
-    d_y = -c.yRel + interp(c.dRel, md_x, md_y)
+    d_y = c.yRel + interp(c.dRel, md_x, md_y)
     if abs(d_y) < lane_width/2:
       ld = c.get_RadarState(md, lead_msg.prob, float(-lead_msg.y[0]))
       leads_center[c.dRel] = ld
     elif -next_lane_y < d_y < 0:
       ld = c.get_RadarState(md, 0.0)
-      leads_left[c.dRel] = ld
+      leads_right[c.dRel] = ld
     elif 0 < d_y < next_lane_y:
       ld = c.get_RadarState(md, 0.0)
-      leads_right[c.dRel] = ld
+      leads_left[c.dRel] = ld
 
   if lead_msg.prob > 0.5:
     ld = get_RadarState_from_vision(md, lead_msg, v_ego, model_v_ego)    
