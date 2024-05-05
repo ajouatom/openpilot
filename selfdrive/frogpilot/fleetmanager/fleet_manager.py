@@ -61,7 +61,7 @@ def full(cameratype, route):
   return Response(generate_buffered_stream(), status=200, mimetype='video/mp4')
 
 @app.route("/footage/full/rlog/<route>")
-def download_rlog(route):
+def download_rlog(route, segment):
   file_name = Paths.log_root() + route + "/"
   print("download_route=", route, file_name, segment)
   return send_from_directory(file_name, "rlog", as_attachment=True)
