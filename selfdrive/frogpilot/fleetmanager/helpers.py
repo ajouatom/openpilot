@@ -103,7 +103,6 @@ def all_segment_names():
 
 def all_routes():
   segment_names = all_segment_names()
-  print(segment_names)
   route_names = [segment_name.route_name for segment_name in segment_names]
   route_times = [route_name.time_str for route_name in route_names]
   unique_routes = list(dict.fromkeys(route_times))
