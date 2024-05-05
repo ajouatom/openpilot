@@ -447,9 +447,9 @@ class LongitudinalMpc:
     t_follow = self.update_tf(v_ego, t_follow)
     t_follow = self.update_dynamic_tf(t_follow, radarstate.leadOne, a_ego, v_ego)
     if Params().get_int("CarrotTest3") == 1:
-      t_follow *= interp(leadOne.dPath * leadOne.vLat, [0.5, 1.0, 2.0], [1.0, 0.5, 0.2])
+      t_follow *= interp(radarstate.leadOne.dPath * radarstate.leadOne.vLat, [0.5, 1.0, 2.0], [1.0, 0.5, 0.2])
     elif Params().get_int("CarrotTest3") == 2:
-      t_follow *= interp(leadOne.dPath * leadOne.vLat, [-1.0, -0.5, 0.5, 1.0, 2.0], [1.5, 1.0, 1.0, 0.5, 0.2])
+      t_follow *= interp(radarstate.leadOne.dPath * radarstate.leadOne.vLat, [-1.0, -0.5, 0.5, 1.0, 2.0], [1.5, 1.0, 1.0, 0.5, 0.2])
     self.t_follow = t_follow
     
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
