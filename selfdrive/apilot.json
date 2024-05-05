@@ -1043,9 +1043,9 @@
     },
     {
       "group": "시험",
-      "name": "CarrotTest2",
-      "title": "당근레이더시험",
-      "descr": "None",
+      "name": "CarrotTest3",
+      "title": "당근시험",
+      "descr": "1:차로변경시 동적TF적용, 2:끼어들기시 동적TF적용",
       "egroup": "TEST",
       "etitle": "Carrot test",
       "edescr": "",
