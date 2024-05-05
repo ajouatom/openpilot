@@ -63,7 +63,7 @@ def full(cameratype, route):
 @app.route("/footage/full/rlog/<route>")
 def download_rlog(route):
   file_name = Paths.log_root() + route + "/"
-  print("download_route=", route, file_name)
+  print("download_route=", route, file_name, segment)
   return send_from_directory(file_name, "rlog", as_attachment=True)
 
 @app.route("/footage/<cameratype>/<segment>")
