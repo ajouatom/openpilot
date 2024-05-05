@@ -565,7 +565,7 @@ class CarState(CarStateBase):
       ("WHEEL_SPEEDS", 100),
       ("STEERING_SENSORS", 100),
       ("MDPS", 100),
-      ("BRAKE", 100),
+      #("BRAKE", 100),
       ("ESP_STATUS", 100),
       ("TCS", 50),
       ("CRUISE_BUTTONS_ALT", 50),
