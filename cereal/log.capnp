@@ -2278,7 +2278,7 @@ struct RoadLimitSpeed {
 
     xTurnInfo @12 : Int32;
     xDistToTurn @13 : Int32;
-    xSpdDist @14 : Int16;
+    xSpdDist @14 : Int32;
     xSpdLimit @15 : Int16;
     xSignType @16 : Int16;
     xRoadSignType @17 : Int16;
