@@ -365,6 +365,7 @@ class CarState(CarStateBase):
       ret.cruiseState.standstill = False
       #if ret.cruiseState.available:
       #  print("cruiseState.available = {},{}".format(ret.cruiseState.available, ret.cruiseState.enabled))
+      #ret.brakeHoldActive = cp.vl["ESP_STATUS"]["AUTO_HOLD"] == 1 and cp_cruise_info.vl["SCC_CONTROL"]["ACCMode"] not in (1, 2)
     else:
       #cp_cruise_info = cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC or self.CP.extFlags & HyundaiExtFlags.SCC_BUS2.value else cp
       ret.cruiseState.enabled = cp_cruise_info.vl["SCC_CONTROL"]["ACCMode"] in (1, 2)
@@ -373,12 +374,13 @@ class CarState(CarStateBase):
       ret.cruiseState.standstill = cp_cruise_info.vl["SCC_CONTROL"]["CRUISE_STANDSTILL"] == 1
       ret.cruiseState.speed = cp_cruise_info.vl["SCC_CONTROL"]["VSetDis"] * speed_factor
       self.cruise_info = copy.copy(cp_cruise_info.vl["SCC_CONTROL"])
+      ret.brakeHoldActive = cp.vl["ESP_STATUS"]["AUTO_HOLD"] == 1 and cp_cruise_info.vl["SCC_CONTROL"]["ACCMode"] not in (1, 2)
 
     if self.CP.extFlags & HyundaiExtFlags.SCC_BUS2.value:
       self.cruise_info = copy.copy(cp_cam.vl["SCC_CONTROL"])
       self.lfa_info = copy.copy(cp_cam.vl["LFA"])
 
-    ret.brakeHoldActive = cp.vl["ESP_STATUS"]["AUTO_HOLD"] == 1 and cp_cruise_info.vl["SCC_CONTROL"]["ACCMode"] not in (1, 2)
+    
     # Manual Speed Limit Assist is a feature that replaces non-adaptive cruise control on EV CAN FD platforms.
     # It limits the vehicle speed, overridable by pressing the accelerator past a certain point.
     # The car will brake, but does not respect positive acceleration commands in this mode
