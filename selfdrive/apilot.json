@@ -1257,7 +1257,7 @@
       "egroup": "FDIST",
       "etitle": "AutoCurveSpeed LowerLimit(30)",
       "edescr": "Lower limit speed",
-      "min": 30,
+      "min": 10,
       "max": 200,
       "default": 30,
       "unit": 10
