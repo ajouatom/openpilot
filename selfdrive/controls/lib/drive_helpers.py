@@ -528,7 +528,7 @@ class VCruiseHelper:
             v_cruise_kph = button_kph
             self._add_log("Button long pressed..{:.0f}".format(v_cruise_kph))
         elif button_type == ButtonType.gapAdjustCruise:          
-          if self.CP.pcmCruise:
+          if False: #self.CP.pcmCruise:
             self._add_log("Button long gap pressed ..pcmCruise can't adjust")
           else:
             self._add_log("Button long gap pressed ..")
@@ -563,7 +563,7 @@ class VCruiseHelper:
         elif button_type == ButtonType.cancel:
           print("************* cancel button pressed..")
         elif button_type == ButtonType.gapAdjustCruise:
-          if self.CP.pcmCruise:
+          if False: #self.CP.pcmCruise:
             self._add_log("Button long gap pressed ..pcmCruise can't adjust")
           else:
             self._add_log("Button gap pressed ..")
