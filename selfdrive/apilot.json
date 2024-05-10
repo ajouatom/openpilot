@@ -601,6 +601,19 @@
     },
     {
       "group": "시작",
+      "name": "MaxTimeOffroadMin",
+      "title": "자동전원OFF(분)",
+      "descr": "",
+      "egroup": "START",
+      "etitle": "PowerOffTime(min)",
+      "edescr": "",
+      "min": 0,
+      "max": 3000,
+      "default": 60,
+      "unit": 10
+    },
+    {
+      "group": "시작",
       "name": "MapboxStyle",
       "title": "맵박스 스타일",
       "descr": "",

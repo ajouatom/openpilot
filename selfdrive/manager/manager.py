@@ -155,6 +155,7 @@ def get_default_params():
     ("CustomSteerDeltaUp", "0"),       
     ("CustomSteerDeltaDown", "0"),       
     ("SpeedFromPCM", "2"),       
+    ("MaxTimeOffroadMin", "60"),       
     ("SteerActuatorDelay", "50"),       
     ("CruiseOnDist", "0"),
     ("MSLCEnabled", "0"),
