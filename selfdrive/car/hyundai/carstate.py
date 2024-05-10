@@ -305,7 +305,7 @@ class CarState(CarStateBase):
     gear = cp.vl[self.gear_msg_canfd]["GEAR"]
     ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(gear))
 
-    if self.CP.extFlags & HyundaiFlags.CANFD_TPMS.value:
+    if self.CP.extFlags & HyundaiExtFlags.CANFD_TPMS.value:
       tpms_unit = cp.vl["TPMS"]["UNIT"] * 0.725 if int(cp.vl["TPMS"]["UNIT"]) > 0 else 1.
       ret.tpms.fl = tpms_unit * cp.vl["TPMS"]["PRESSURE_FL"]
       ret.tpms.fr = tpms_unit * cp.vl["TPMS"]["PRESSURE_FR"]
@@ -583,7 +583,7 @@ class CarState(CarStateBase):
         (self.gear_msg_canfd, 100),
       ]
 
-    if CP.extFlags & HyundaiFlags.CANFD_TPMS.value:
+    if CP.extFlags & HyundaiExtFlags.CANFD_TPMS.value:
       messages += [
         ("TPMS", 5),
       ]

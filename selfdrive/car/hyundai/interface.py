@@ -51,7 +51,7 @@ class CarInterface(CarInterfaceBase):
         ret.flags |= HyundaiFlags.EV.value
 
       if 0x3a0 in fingerprint[CAN.ECAN]: # 0x3a0(928): TPMS
-        ret.flags |= HyundaiFlags.CANFD_TPMS.value
+        ret.flags |= HyundaiExtFlags.CANFD_TPMS.value
         print("$$$CANFD TPMS")
 
       # detect HDA2 with ADAS Driving ECU
