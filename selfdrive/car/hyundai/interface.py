@@ -242,6 +242,8 @@ class CarInterface(CarInterfaceBase):
 
     ret.centerToFront = ret.wheelbase * 0.4
 
+    Params().put_nonblocking('LongitudinalPersonalityMax', "4")
+
     return ret
 
   @staticmethod

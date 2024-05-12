@@ -567,7 +567,8 @@ class VCruiseHelper:
             self._add_log("Button long gap pressed ..pcmCruise can't adjust")
           else:
             self._add_log("Button gap pressed ..")
-            controls.personality = (controls.personality - 1) % 3
+            longitudinalPersonalityMax = self.params.get_int("LongitudinalPersonalityMax")
+            controls.personality = (controls.personality - 1) % longitudinalPersonalityMax
             self.params.put_nonblocking('LongitudinalPersonality', str(controls.personality))
             personality_events = [EventName.personalityAggressive, EventName.personalityStandard, EventName.personalityRelaxed, EventName.personalityMoreRelaxed]
             controls.events.add(personality_events[controls.personality])
