@@ -242,12 +242,11 @@ class CarInterface(CarInterfaceBase):
 
     ret.centerToFront = ret.wheelbase * 0.4
 
-    Params().put('LongitudinalPersonalityMax', "4")
-
     return ret
 
   @staticmethod
   def init(CP, logcan, sendcan):
+    Params().put('LongitudinalPersonalityMax', "4")
     if CP.openpilotLongitudinalControl and not (CP.flags & HyundaiFlags.CANFD_CAMERA_SCC.value) and not (CP.extFlags & HyundaiExtFlags.SCC_BUS2.value):
       addr, bus = 0x7d0, CanBus(CP).ECAN if CP.carFingerprint in CANFD_CAR else 0
       if CP.flags & HyundaiFlags.CANFD_HDA2.value:
