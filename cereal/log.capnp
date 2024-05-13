@@ -2286,7 +2286,7 @@ struct RoadLimitSpeed {
     xRoadName @19 : Text;
     xCmd @20 : Text;
     xArg @21 : Text;
-    xIndex @22 : Int16;
+    xIndex @22 : Int32;
     roadcate @23 : Int16;
     navInstruction @24 :NavInstruction;
     xNextRoadWidth @25 : Int16;
