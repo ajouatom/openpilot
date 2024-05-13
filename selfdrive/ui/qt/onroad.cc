@@ -294,7 +294,7 @@ void OnroadWindow::updateStateText() {
     auto controls_state = sm["controlsState"].getControlsState();
     QString debugControlsState = QString::fromStdString(controls_state.getDebugText1().cStr());
     const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
-    QString debugLong2 = QString::fromStdString(lp.getDebugLongText2().cStr());
+    //QString debugLong2 = QString::fromStdString(lp.getDebugLongText2().cStr());
     const auto live_params = sm["liveParameters"].getLiveParameters();
     float   liveSteerRatio = live_params.getSteerRatio();
 
@@ -306,9 +306,9 @@ void OnroadWindow::updateStateText() {
     else if (debugModelV2.length() > 2) {
         top = debugModelV2;
     }
-    else if (debugLong2.length() > 2) {
-        top = debugLong2;
-    }
+    //else if (debugLong2.length() > 2) {
+    //    top = debugLong2;
+    //}
     else top = QString::fromStdString(lp.getDebugLongText().cStr()) + (" LiveSR:" + QString::number(liveSteerRatio, 'f', 2));
     //p.drawText(rect_top, Qt::AlignBottom | Qt::AlignHCenter, top);
     topLabel->setText(top);

@@ -88,7 +88,9 @@ class TrafficState(Enum):
     return self.name
 
 def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
-  if personality==log.LongitudinalPersonality.relaxed:
+  if personality==log.LongitudinalPersonality.moreRelaxed:
+    return 1.0
+  elif personality==log.LongitudinalPersonality.relaxed:
     return 1.0
   elif personality==log.LongitudinalPersonality.standard:
     return 1.0
@@ -100,7 +102,9 @@ def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
 
 def get_T_FOLLOW(personality=log.LongitudinalPersonality.standard):
   print("get_T_FOLLOW no!!!")
-  if personality==log.LongitudinalPersonality.relaxed:
+  if personality==log.LongitudinalPersonality.moreRelaxed:
+    return 2.00
+  elif personality==log.LongitudinalPersonality.relaxed:
     return 1.75
   elif personality==log.LongitudinalPersonality.standard:
     return 1.45
@@ -442,6 +446,9 @@ class LongitudinalMpc:
     applyStopDistance = self.stop_distance  * (2.0 - self.mySafeFactor)
     t_follow = self.update_tf(v_ego, t_follow)
     t_follow = self.update_dynamic_tf(t_follow, radarstate.leadOne, a_ego, v_ego)
+    if Params().get_int("CarrotTest3") in [1,2]:
+      if radarstate.leadOne.dPath * radarstate.leadOne.vLat > 0:
+        t_follow *= interp(abs(radarstate.leadOne.dPath + radarstate.leadOne.vLat), [0.5, 1.0, 2.0], [1.0, 0.5, 0.2])
     self.t_follow = t_follow
     
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
@@ -587,7 +594,9 @@ class LongitudinalMpc:
     # lin {self.time_linearization:.2e} qp_iter {qp_iter}, reset {reset}")
 
   def get_T_FOLLOW(self, personality=log.LongitudinalPersonality.standard):
-    if personality==log.LongitudinalPersonality.relaxed:
+    if personality==log.LongitudinalPersonality.moreRelaxed:
+      return self.tFollowGap4 #1.75
+    elif personality==log.LongitudinalPersonality.relaxed:
       return self.tFollowGap3 #1.75
     elif personality==log.LongitudinalPersonality.standard:
       return self.tFollowGap2 #1.45
@@ -598,11 +607,12 @@ class LongitudinalMpc:
 
   def update_params(self):
     self.lo_timer += 1
-    
+
+    params = Params()
     if self.lo_timer % 2 == 0:
-      self.myDrivingMode = Params().get_int("MyDrivingMode")
-      self.myEcoModeFactor = float(Params().get_int("MyEcoModeFactor")) / 100.
-      self.mySafeModeFactor = float(Params().get_int("MySafeModeFactor")) / 100.
+      self.myDrivingMode = params.get_int("MyDrivingMode")
+      self.myEcoModeFactor = params.get_float("MyEcoModeFactor") / 100.
+      self.mySafeModeFactor = params.get_float("MySafeModeFactor") / 100.
       self.mySafeFactor = 1.0
       if self.myDrivingMode == 1: # eco
         self.mySafeFactor = self.myEcoModeFactor
@@ -614,17 +624,17 @@ class LongitudinalMpc:
     elif self.lo_timer == 20:
       pass
     elif self.lo_timer == 80:
-      self.tFollowSpeedAdd = float(Params().get_int("TFollowSpeedAdd")) / 100.
-      self.tFollowSpeedAddM = float(Params().get_int("TFollowSpeedAddM")) / 100.
-      self.tFollowLeadCarSpeed = Params().get_float("TFollowLeadCarSpeed") / 1000.
-      self.tFollowLeadCarAccel = Params().get_float("TFollowLeadCarAccel") / 100.
+      self.tFollowSpeedAdd = params.get_float("TFollowSpeedAdd") / 100.
+      self.tFollowSpeedAddM = params.get_float("TFollowSpeedAddM") / 100.
+      self.tFollowLeadCarSpeed = params.get_float("TFollowLeadCarSpeed") / 1000.
+      self.tFollowLeadCarAccel = params.get_float("TFollowLeadCarAccel") / 100.
     elif self.lo_timer == 100:
-      self.tFollowGap1 = float(Params().get_int("TFollowGap1")) / 100.
-      self.tFollowGap2 = float(Params().get_int("TFollowGap2")) / 100.
-      self.tFollowGap3 = float(Params().get_int("TFollowGap3")) / 100.
-      self.tFollowGap4 = float(Params().get_int("TFollowGap4")) / 100.
+      self.tFollowGap1 = params.get_float("TFollowGap1") / 100.
+      self.tFollowGap2 = params.get_float("TFollowGap2") / 100.
+      self.tFollowGap3 = params.get_float("TFollowGap3") / 100.
+      self.tFollowGap4 = params.get_float("TFollowGap4") / 100.
     elif self.lo_timer == 120:
-      self.stop_distance = float(Params().get_int("StopDistanceCarrot")) / 100.
+      self.stop_distance = params.get_float("StopDistanceCarrot") / 100.
 
   def update_stop_dist(self, stop_x):
     stop_x = self.xStopFilter.process(stop_x, median = True)

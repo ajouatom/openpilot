@@ -60,6 +60,11 @@ def full(cameratype, route):
         yield bytes(chunk)
   return Response(generate_buffered_stream(), status=200, mimetype='video/mp4')
 
+@app.route("/footage/full/rlog/<route>/<segment>")
+def download_rlog(route, segment):
+  file_name = Paths.log_root() + route + "--" + segment + "/"
+  print("download_route=", route, file_name, segment)
+  return send_from_directory(file_name, "rlog", as_attachment=True)
 
 @app.route("/footage/<cameratype>/<segment>")
 def fcamera(cameratype, segment):

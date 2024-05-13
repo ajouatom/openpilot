@@ -218,6 +218,7 @@ class LongitudinalPlanner:
     #longitudinalPlan.debugLongText2 = "VC:{:.1f}".format(self.v_cruise_last*3.6)
     longitudinalPlan.trafficState = self.mpc.trafficState.value
     longitudinalPlan.xState = self.mpc.xState.value
+    longitudinalPlan.tFollow = float(self.mpc.t_follow)
 
     longitudinalPlan.curveSpeed = float(carrot_planner.curveSpeed)
     longitudinalPlan.activeAPM = carrot_planner.activeAPM

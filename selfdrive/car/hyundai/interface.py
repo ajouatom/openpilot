@@ -18,6 +18,8 @@ EventName = car.CarEvent.EventName
 ENABLE_BUTTONS = (Buttons.RES_ACCEL, Buttons.SET_DECEL, Buttons.CANCEL)
 BUTTONS_DICT = {Buttons.RES_ACCEL: ButtonType.accelCruise, Buttons.SET_DECEL: ButtonType.decelCruise,
                 Buttons.GAP_DIST: ButtonType.gapAdjustCruise, Buttons.CANCEL: ButtonType.cancel, Buttons.LFA_BUTTON: ButtonType.lfaButton}
+BUTTONS_DICT_PCM = {Buttons.RES_ACCEL: ButtonType.accelCruise, Buttons.SET_DECEL: ButtonType.decelCruise,
+                Buttons.CANCEL: ButtonType.cancel, Buttons.LFA_BUTTON: ButtonType.lfaButton}
 
 
 class CarInterface(CarInterfaceBase):
@@ -49,6 +51,10 @@ class CarInterface(CarInterfaceBase):
       elif candidate in EV_CAR:
         print("$$$CANFD EV")
         ret.flags |= HyundaiFlags.EV.value
+
+      if 0x3a0 in fingerprint[CAN.ECAN]: # 0x3a0(928): TPMS
+        ret.extFlags |= HyundaiExtFlags.CANFD_TPMS.value
+        print("$$$CANFD TPMS")
 
       # detect HDA2 with ADAS Driving ECU
       if hda2:
@@ -240,6 +246,7 @@ class CarInterface(CarInterfaceBase):
 
   @staticmethod
   def init(CP, logcan, sendcan):
+    Params().put('LongitudinalPersonalityMax', "4")
     if CP.openpilotLongitudinalControl and not (CP.flags & HyundaiFlags.CANFD_CAMERA_SCC.value) and not (CP.extFlags & HyundaiExtFlags.SCC_BUS2.value):
       addr, bus = 0x7d0, CanBus(CP).ECAN if CP.carFingerprint in CANFD_CAR else 0
       if CP.flags & HyundaiFlags.CANFD_HDA2.value:
@@ -261,7 +268,7 @@ class CarInterface(CarInterfaceBase):
     ret = self.CS.update(self.cp, self.cp_cam)
 
     if self.CS.CP.openpilotLongitudinalControl or Params().get_int("SpeedFromPCM") in [0,2]: #ajouatom: for PCM
-      ret.buttonEvents = create_button_events(self.CS.cruise_buttons[-1], self.CS.prev_cruise_buttons, BUTTONS_DICT)
+      ret.buttonEvents = create_button_events(self.CS.cruise_buttons[-1], self.CS.prev_cruise_buttons, BUTTONS_DICT_PCM if self.CP.pcmCruise else BUTTONS_DICT)
 
     # On some newer model years, the CANCEL button acts as a pause/resume button based on the PCM state
     # To avoid re-engaging when openpilot cancels, check user engagement intention via buttons

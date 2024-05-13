@@ -601,6 +601,19 @@
     },
     {
       "group": "시작",
+      "name": "MaxTimeOffroadMin",
+      "title": "자동전원OFF(분)",
+      "descr": "",
+      "egroup": "START",
+      "etitle": "PowerOffTime(min)",
+      "edescr": "",
+      "min": 0,
+      "max": 3000,
+      "default": 60,
+      "unit": 10
+    },
+    {
+      "group": "시작",
       "name": "MapboxStyle",
       "title": "맵박스 스타일",
       "descr": "",
@@ -1043,9 +1056,9 @@
     },
     {
       "group": "시험",
-      "name": "CarrotTest2",
-      "title": "당근레이더시험",
-      "descr": "None",
+      "name": "CarrotTest3",
+      "title": "당근시험3",
+      "descr": "1:차로변경시 동적TF적용, 2:끼어들기시 동적TF적용",
       "egroup": "TEST",
       "etitle": "Carrot test",
       "edescr": "",
@@ -1257,7 +1270,7 @@
       "egroup": "FDIST",
       "etitle": "AutoCurveSpeed LowerLimit(30)",
       "edescr": "Lower limit speed",
-      "min": 30,
+      "min": 10,
       "max": 200,
       "default": 30,
       "unit": 10

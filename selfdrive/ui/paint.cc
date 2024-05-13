@@ -684,17 +684,24 @@ void DrawPlot::makePlotData(const UIState* s, float& data1, float& data2, char *
         sprintf(str, "6.Detected radar(G:aLeadK, Y:accel)");
         break;
     case 7:
+        data1 = lp.getTFollow();//  //노
+        data2 = lead_radar.getVLat(); // 녹
+        sprintf(str, "7.Detected radar(G:VLat, Y:TF)");
+        break;
+    case 8:
         data1 = lead_radar.getALeadTau();//  //노
         data2 = lead_radar.getALeadK(); // 녹
-        sprintf(str, "7.Detected radar(G:aLeadK, Y:aLeadTau)");
+        sprintf(str, "8.Detected radar(G:aLeadK, Y:aLeadTau)");
         break;
+    case 9:
         data1 = lead_radar.getVLeadK();
         data2 = lead_radar.getVLead(); // getDRel();
-        sprintf(str, "7.Detected radar(G:vLead, Y:vLeadK)");
+        sprintf(str, "9.Detected radar(G:vLead, Y:vLeadK)");
         break;
+    case 10:
         data1 = a_ego; // 노
         data2 = accel_out;  // 녹
-        sprintf(str, "7.Accel (G:accel output, Y:a_ego)");
+        sprintf(str, "10.Accel (G:accel output, Y:a_ego)");
         break;
     default:
         data1 = data2 = 0;
@@ -768,8 +775,8 @@ void DrawApilot::drawRadarInfo(const UIState* s) {
                 if (s->show_radar_info >= 2) {
                     sprintf(str, "%.1f", ry_rel);
                     ui_draw_text(s, rx, ry - 40, str, 30, COLOR_WHITE, BOLD);
-                    //sprintf(str, "%.1f", v_lat);
-                    sprintf(str, "%.1f", rd);
+                    sprintf(str, "%.2f", v_lat);
+                    //sprintf(str, "%.1f", rd);
                     ui_draw_text(s, rx, ry + 30, str, 30, COLOR_WHITE, BOLD);
                 }
             }
