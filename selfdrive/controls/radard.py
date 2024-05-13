@@ -107,6 +107,8 @@ class Track:
 
     if abs(self.aLeadK) < aLeadTauThreshold and self.jerk > -0.1:
       self.aLeadTau = aLeadTauValue
+#    elif self.jerk <= -0.1 and self.params.get_int("CarrotTest2") == 2:
+#      self.aLeadTau = 0
     else:
       self.aLeadTau = min(self.aLeadTau * 0.9, aLeadTauValue)
 
