@@ -573,7 +573,7 @@ class CarState(CarStateBase):
       ("ESP_STATUS", 100),
       ("TCS", 50),
       ("CRUISE_BUTTONS_ALT", 50),
-      ("TPMS", 5),
+      #("TPMS", 5),
       ("BLINKERS", 4),
       ("DOORS_SEATBELTS", 4),
     ]
