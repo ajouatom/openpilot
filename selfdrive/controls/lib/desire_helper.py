@@ -216,7 +216,7 @@ class DesireHelper:
       #lane_available = lane_width >= min_lane_threadhold
       lane_available = self.available_left_lane if leftBlinker else self.available_right_lane
       edge_available = self.available_left_edge if leftBlinker else self.available_right_edge
-      lane_appeared = self.lane_exist_left_count > 0.2 / DT_MDL if leftBlinker else self.lane_exist_right_count > 0.2 / DT_MDL
+      lane_appeared = self.lane_exist_left_count == int(0.2 / DT_MDL) if leftBlinker else self.lane_exist_right_count == int(0.2 / DT_MDL)
 
     if not lateral_active or self.lane_change_timer > LANE_CHANGE_TIME_MAX:
       self.lane_change_state = LaneChangeState.off
