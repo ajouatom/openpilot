@@ -1947,9 +1947,9 @@ void DrawApilot::drawDeviceState(UIState* s, bool show) {
     float engineRpm = car_state.getEngineRpm();
     float motorRpm = car_state.getMotorRpm();
     if (s->fb_w > 1200 && show) {
-        ui_draw_text(s, s->fb_w - 20, 85, str, 35, textColor, BOLD);
+        ui_draw_text(s, s->fb_w - 20, 40, str, 35, textColor, BOLD);
         sprintf(str, "FPS: %d, %s: %.0f CHARGE: %.0f%%                           ", g_fps, (motorRpm > 0.0) ? "MOTOR" : "RPM", (motorRpm > 0.0) ? motorRpm : engineRpm, car_state.getChargeMeter());
-        ui_draw_text(s, s->fb_w - 20, 120, str, 35, textColor, BOLD);
+        ui_draw_text(s, s->fb_w - 20, 85, str, 35, textColor, BOLD);
     }
     //nvgTextAlign(s->vg, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM);
     //ui_draw_text(s, s->fb_w - 20, s->fb_h - 15, (read_ip_count < 30) ? ip_address : gitBranch.toStdString().c_str(), 30, COLOR_WHITE, BOLD);
