@@ -46,6 +46,7 @@ class NooActive(Enum):
   no_new_lane_detected = 2
   new_lane_detected = 10
   road_edge_detected = 11
+  new_lane_appeared = 12
 
   def __str__(self):
     return self.name
@@ -70,7 +71,7 @@ def calculate_lane_width(lane, lane_prob, current_lane, road_edge):
   #if lane_prob < 0.3: # 차선이 없으면 없는것으로 간주시킴.
   #  distance_to_lane = min(2.0, distance_to_lane)
   distance_to_road_edge = abs(current_lane.y[index] - road_edge.y[index]);
-  return min(distance_to_lane, distance_to_road_edge), distance_to_road_edge
+  return min(distance_to_lane, distance_to_road_edge), distance_to_road_edge, lane_prob > 0.5
 
 
 class DesireHelper:
@@ -108,6 +109,8 @@ class DesireHelper:
 
     self.lane_available_prev = False
     self.edge_available_prev = False
+    self.lane_exist_left = False
+    self.lane_exist_right = False
     self.blinker_bypass = False
 
     self.available_left_lane = False
@@ -165,8 +168,8 @@ class DesireHelper:
 
    
       # Calculate left and right lane widths
-    lane_width_left, distance_to_road_edge_left = calculate_lane_width(modeldata.laneLines[0], modeldata.laneLineProbs[0], modeldata.laneLines[1], modeldata.roadEdges[0])
-    lane_width_right, distance_to_road_edge_right = calculate_lane_width(modeldata.laneLines[3], modeldata.laneLineProbs[3], modeldata.laneLines[2], modeldata.roadEdges[1])
+    lane_width_left, distance_to_road_edge_left, lane_exist_left = calculate_lane_width(modeldata.laneLines[0], modeldata.laneLineProbs[0], modeldata.laneLines[1], modeldata.roadEdges[0])
+    lane_width_right, distance_to_road_edge_right, lane_exist_right = calculate_lane_width(modeldata.laneLines[3], modeldata.laneLineProbs[3], modeldata.laneLines[2], modeldata.roadEdges[1])
     self.lane_width_left = self.lane_width_left_filter.process(lane_width_left)
     self.lane_width_right = self.lane_width_right_filter.process(lane_width_right)
     self.distance_to_road_edge_left = self.distance_to_road_edge_left_filter.process(distance_to_road_edge_left)
@@ -194,6 +197,7 @@ class DesireHelper:
     if not (self.lane_detection and one_blinker) or below_lane_change_speed:
       lane_available = True
       edge_available = False
+      lane_appeared = False
     else:
       # Set the minimum lane threshold to 2.8 meters
       #min_lane_threshold = 2.8
@@ -209,6 +213,7 @@ class DesireHelper:
       #lane_available = lane_width >= min_lane_threadhold
       lane_available = self.available_left_lane if leftBlinker else self.available_right_lane
       edge_available = self.available_left_edge if leftBlinker else self.available_right_edge
+      lane_appeared = not self.lane_exist_left and lane_exist_left if leftBlinker else not self.lane_exist_right and lane_exist_right
 
     if not lateral_active or self.lane_change_timer > LANE_CHANGE_TIME_MAX:
       self.lane_change_state = LaneChangeState.off
@@ -258,7 +263,9 @@ class DesireHelper:
         if (not carstate.leftBlinker and not carstate.rightBlinker) and blinkerExtMode > 0: # Noo Helper #0: voice etc, 1:noo helper lanechange, 2: noo helper turn
           if self.autoTurnControl == 3 or leftBlinker:
             self.noo_active = NooActive.active
-          elif not self.lane_available_prev and lane_available: # start... 차선이 생김
+          elif lane_appeared: #start... 차선이 발견됨.
+            self.noo_active = NooActive.new_lane_appeared
+          elif not self.lane_available_prev and lane_available: # start... 차선이 생김 (로드경계가 멀어짐)
             self.noo_active = NooActive.new_lane_detected
           elif not self.edge_available_prev and edge_available: # start... 에지가 멀어짐. 
             self.noo_active = NooActive.road_edge_detected
@@ -330,6 +337,8 @@ class DesireHelper:
     self.prev_one_blinker = one_blinker
     self.lane_available_prev = lane_available
     self.edge_available_prev = edge_available
+    self.lane_exist_left = lane_exist_left
+    self.lane_exist_right = lane_exist_right
     
     steering_pressed = carstate.steeringPressed and \
                      ((carstate.steeringTorque < 0 and self.lane_change_direction == LaneChangeDirection.left) or
