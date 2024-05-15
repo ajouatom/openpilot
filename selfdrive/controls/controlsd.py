@@ -965,6 +965,7 @@ class Controls:
     #if self.v_cruise_helper.nooHelperActivated:
     #  controlsState.debugText1 += (" " + self.v_cruise_helper.debugTextNoo)
     controlsState.debugText2 = self.v_cruise_helper.debugText2
+    controlsState.trafficLight = self.v_cruise_helper.traffic_state
 
     controlsState.leftBlinkerExt = self.v_cruise_helper.leftBlinkerExtCount + self.v_cruise_helper.blinkerExtMode
     controlsState.rightBlinkerExt = self.v_cruise_helper.rightBlinkerExtCount  + self.v_cruise_helper.blinkerExtMode

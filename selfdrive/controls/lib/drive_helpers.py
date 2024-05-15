@@ -8,6 +8,7 @@ from openpilot.common.realtime import DT_MDL, DT_CTRL
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.common.params import Params
 import numpy as np
+import collections
 
 EventName = car.CarEvent.EventName
 
@@ -92,6 +93,9 @@ class VCruiseHelper:
     self.xPosValidCount = 0
     self.button_long_time = 40
     self.accel_output = 0.0
+    self.traffic_light_q = collections.deque(max_len=1.0/DT_CTRL)
+    self.traffic_light_count = -1
+    self.traffic_state = 0
     
     #ajouatom: params
     self.params_count = 0
@@ -404,7 +408,35 @@ class VCruiseHelper:
 
       elif msg.xCmd == "DETECT":
         self.debugText2 = "DETECT[{}]={}".format(msg.xIndex, msg.xArg)
+        elements = [element.strip() for element in msg.xArg.split(',')]
+        self.traffic_light(float(elements[1]), float(elements[2]), elements[0])
+        self.traffic_light_count = 0.5 / DT_CTRL
+    self.traffic_light_q.append((-1, -1, "none"))
+    self.traffic_light_count -= 1
+    if self.traffic_light_count < 0:
+      self.traffic_light_count = -1
+      self.traffic_state = 0
     return v_cruise_kph
+
+  def traffic_light(self, x, y, color):
+    self.traffic_light_q.append((x,y,color))
+    for pdata in self.traffic_light_q:
+      px, py, pcolor = pdata
+      if abs(x - px) < 0.3 and abs(y - py) < 0.3:
+        if pcolor in ["Green", "LeftTurn"]:
+          if color == "Red":
+            print("Red light triggered")
+            self.traffic_state = 11
+          elif color in ["Green", "LeftTurn"]:
+            print("Green light continued")
+            self.traffic_state = 2
+        elif pcolor == "Red":
+          if color in ["Green", "LeftTurn"]:
+            print("Green light triggered")
+            self.traffic_state = 22
+          elif color == "Red":
+            self.traffic_state = 1
+            print("Red light continued")
 
   def _add_log_auto_cruise(self, log):
     if self.autoCruiseControl > 0:
