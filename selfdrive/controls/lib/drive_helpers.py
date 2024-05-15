@@ -425,18 +425,18 @@ class VCruiseHelper:
       if abs(x - px) < 0.3 and abs(y - py) < 0.3:
         if pcolor in ["Green", "LeftTurn"]:
           if color == "Red":
-            print("Red light triggered")
+            self._add_log("Red light triggered")
             self.traffic_state = 11
           elif color in ["Green", "LeftTurn"]:
-            print("Green light continued")
+            self._add_log("Green light continued")
             self.traffic_state = 2
         elif pcolor == "Red":
           if color in ["Green", "LeftTurn"]:
-            print("Green light triggered")
+            self._add_log("Green light triggered")
             self.traffic_state = 22
           elif color == "Red":
             self.traffic_state = 1
-            print("Red light continued")
+            self._add_log("Red light continued")
 
   def _add_log_auto_cruise(self, log):
     if self.autoCruiseControl > 0:
