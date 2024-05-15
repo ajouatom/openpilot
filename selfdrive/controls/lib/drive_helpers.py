@@ -93,7 +93,7 @@ class VCruiseHelper:
     self.xPosValidCount = 0
     self.button_long_time = 40
     self.accel_output = 0.0
-    self.traffic_light_q = collections.deque(max_len=1.0/DT_CTRL)
+    self.traffic_light_q = collections.deque(maxlen=1.0/DT_CTRL)
     self.traffic_light_count = -1
     self.traffic_state = 0
     
