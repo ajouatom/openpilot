@@ -420,23 +420,38 @@ class VCruiseHelper:
 
   def traffic_light(self, x, y, color):
     self.traffic_light_q.append((x,y,color))
+    traffic_state1 = 0
+    traffic_state2 = 0
+    traffic_state11 = 0
+    traffic_state22 = 0
     for pdata in self.traffic_light_q:
       px, py, pcolor = pdata
       if abs(x - px) < 0.3 and abs(y - py) < 0.3:
         if pcolor in ["Green", "LeftTurn"]:
           if color == "Red":
             self._add_log("Red light triggered")
-            self.traffic_state = 11
+            traffic_state11 += 1
           elif color in ["Green", "LeftTurn"]:
             self._add_log("Green light continued")
-            self.traffic_state = 2
+            traffic_state2 += 1
         elif pcolor == "Red":
           if color in ["Green", "LeftTurn"]:
             self._add_log("Green light triggered")
-            self.traffic_state = 22
+            traffic_state22 += 1
           elif color == "Red":
-            self.traffic_state = 1
+            traffic_state1 += 1
             self._add_log("Red light continued")
+
+    if traffic_state11 > 0:
+      self.traffic_state = 11
+    elif traffic_state22 > 0:
+      self.traffic_state = 22
+    elif traffic_state1 > 0:
+      self.traffic_state = 1
+    elif traffic_state2 > 0:
+      self.traffic_state = 2
+    else:
+      self.traffic_state = 0
 
   def _add_log_auto_cruise(self, log):
     if self.autoCruiseControl > 0:
