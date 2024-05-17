@@ -429,27 +429,27 @@ class VCruiseHelper:
       if abs(x - px) < 0.3 and abs(y - py) < 0.3:
         if pcolor in ["Green", "LeftTurn"]:
           if color == "Red":
-            self._add_log("Red light triggered")
             traffic_state11 += 1
           elif color in ["Green", "LeftTurn"]:
-            self._add_log("Green light continued")
             traffic_state2 += 1
         elif pcolor == "Red":
           if color in ["Green", "LeftTurn"]:
-            self._add_log("Green light triggered")
             traffic_state22 += 1
           elif color == "Red":
             traffic_state1 += 1
-            self._add_log("Red light continued")
 
     if traffic_state11 > 0:
       self.traffic_state = 11
+      self._add_log("Red light triggered")
     elif traffic_state22 > 0:
       self.traffic_state = 22
+      self._add_log("Green light triggered")
     elif traffic_state1 > 0:
       self.traffic_state = 1
+      self._add_log("Red light continued")
     elif traffic_state2 > 0:
       self.traffic_state = 2
+      self._add_log("Green light continued")
     else:
       self.traffic_state = 0
 
