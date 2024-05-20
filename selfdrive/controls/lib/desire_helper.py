@@ -181,10 +181,10 @@ class DesireHelper:
     self.road_edge_right_count = self.update_exist_count(self.road_edge_right_count, self.distance_to_road_edge_right > 2.5)
 
     available_count = int(0.2 / DT_MDL)
-    self.available_left_lane = self.lane_width_left_count == available_count
-    self.available_right_lane = self.lane_width_right_count == available_count
-    self.available_left_edge = self.road_edge_left_count == available_count
-    self.available_right_edge = self.road_edge_right_count == available_count
+    self.available_left_lane = self.lane_width_left_count > available_count
+    self.available_right_lane = self.lane_width_right_count > available_count
+    self.available_left_edge = self.road_edge_left_count > available_count
+    self.available_right_edge = self.road_edge_right_count > available_count
 
 
     # Calculate the desired lane width for nudgeless lane change with lane detection
