@@ -181,7 +181,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
   values["ObjValid"] = 0
   values["OBJ_STATUS"] =  2
   values["SET_ME_2"] = 0x4
-  values["SET_ME_3"] = 0x3
+  #values["SET_ME_3"] = 0x3
   values["SET_ME_TMP_64"] = 0x64
 
   values["NEW_SIGNAL_3"] = 0  # 1이되면 차선이탈방지 알람이 뜬다고...
@@ -213,7 +213,7 @@ def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_ov
     "ObjValid": 0,
     "OBJ_STATUS": 2,
     "SET_ME_2": 0x4,
-    "SET_ME_3": 0x3,
+    #"SET_ME_3": 0x3,
     "SET_ME_TMP_64": 0x64,
     "DISTANCE_SETTING": hud_control.leadDistanceBars,
   }
