@@ -287,11 +287,11 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   });
 
   //addItem(horizontal_line());
-  addItem(new CarrotParamsControl(0, "ê¸°ë³¸ê°’ì„¤??, "ëª¨ë“ ?¤ì •??ê¸°ë³¸ê°’ìœ¼ë¡?, "../assets/offroad/icon_shell.png", false));
-  addItem(new CarrotParamsControl(10, "ë¡±ì»¨ë°°ì„ ê°œì¡° (HKG)", "?ˆì´?”ë¡±ì»¨ì´ ?˜ë„ë¡?ë°°ì„ ??ê°œì¡°?˜ì???, "../assets/offroad/icon_shell.png"));
-  addItem(new CarrotParamsControl(11, "?ˆì´?”íŠ¸?™ì‚¬??(HKG)", "?ˆì´?”íŠ¸?™ì´ ì§€?ë˜??ì°¨ëŸ‰ë§?? íƒ", "../assets/offroad/icon_shell.png"));
-  addItem(new CarrotParamsControl(20, "ë¹„ì ¼ë¡±ì»¨?¬ìš© (HKG)", "ë¹„ì ¼???´ìš©??ë¡±ì»¨???´ìš©ì¤‘ìž„, (ì¹´ë‹ˆë°?_HDA2, ?„ì´?¤ë‹‰6 X)", "../assets/offroad/icon_shell.png"));
-  addItem(new CarrotParamsControl(30, "?ë™?¬ë£¨ì¦??¬ìš© (HKG)", "ë¡±ì»¨??ê°€?¥í•œì°¨ëŸ‰ë§?ê°€?¥í•¨", "../assets/offroad/icon_shell.png"));
+  addItem(new CarrotParamsControl(0, "±âº»°ª¼³Á¤", "¸ðµç¼³Á¤À» ±âº»°ªÀ¸·Î", "../assets/offroad/icon_shell.png", false));
+  addItem(new CarrotParamsControl(10, "·ÕÄÁ¹è¼±°³Á¶ (HKG)", "·¹ÀÌ´õ·ÕÄÁÀÌ µÇµµ·Ï ¹è¼±À» °³Á¶ÇÏ¿´À½", "../assets/offroad/icon_shell.png"));
+  addItem(new CarrotParamsControl(11, "·¹ÀÌ´õÆ®·¢»ç¿ë (HKG)", "·¹ÀÌ´õÆ®·¢ÀÌ Áö¿øµÇ´Â Â÷·®¸¸ ¼±ÅÃ", "../assets/offroad/icon_shell.png"));
+  addItem(new CarrotParamsControl(20, "ºñÁ¯·ÕÄÁ»ç¿ë (HKG)", "ºñÁ¯À» ÀÌ¿ëÇÑ ·ÕÄÁÀ» ÀÌ¿ëÁßÀÓ, (Ä«´Ï¹ß4_HDA2, ¾ÆÀÌ¿À´Ð6 X)", "../assets/offroad/icon_shell.png"));
+  addItem(new CarrotParamsControl(30, "ÀÚµ¿Å©·çÁî »ç¿ë (HKG)", "·ÕÄÁÀÌ °¡´ÉÇÑÂ÷·®¸¸ °¡´ÉÇÔ", "../assets/offroad/icon_shell.png"));
 
   // power buttons
   QHBoxLayout *power_layout = new QHBoxLayout();
@@ -362,9 +362,9 @@ void DevicePanel::updateCalibDescription() {
       if (calib.getCalStatus() != cereal::LiveCalibrationData::Status::UNCALIBRATED) {
         double pitch = calib.getRpyCalib()[1] * (180 / M_PI);
         double yaw = calib.getRpyCalib()[2] * (180 / M_PI);
-        desc += tr(" Your device is pointed %1Â° %2 and %3Â° %4.")
-                    .arg(QString::number(std::abs(pitch), 'g', 1), pitch > 0 ? tr("down") : tr("up"),
-                         QString::number(std::abs(yaw), 'g', 1), yaw > 0 ? tr("left") : tr("right"));
+        desc += tr(" Your device is pointed %1¡Æ %2 and %3¡Æ %4.")
+            .arg(QString::number(std::abs(pitch), 'g', 1), pitch > 0 ? tr("down") : tr("up"),
+                QString::number(std::abs(yaw), 'g', 1), yaw > 0 ? tr("left") : tr("right"));
       }
     } catch (kj::Exception) {
       qInfo() << "invalid CalibrationParams";
@@ -419,7 +419,7 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
   panel_widget = new QStackedWidget();
 
   // close button
-  QPushButton *close_btn = new QPushButton(tr("Ã—"));
+  QPushButton *close_btn = new QPushButton(tr("¡¿"));
   close_btn->setStyleSheet(R"(
     QPushButton {
       font-size: 140px;
