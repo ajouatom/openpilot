@@ -141,6 +141,7 @@ class DesireHelper:
     self._add_log("")
     self.autoTurnControl = self.params.get_int("AutoTurnControl")
     self.laneChangeNeedTorque = self.params.get_bool("LaneChangeNeedTorque")
+    self.laneChangeLaneCheck = self.params.get_bool("LaneChangeLaneCheck")    # 0: No check, 1: Lane Only, 2: use Edge
     self.autoLaneChangeSpeed = self.params.get_int("AutoLaneChangeSpeed") / 3.6
     radarState = sm['radarState']
     self.leftSideObjectDist = 255
@@ -196,6 +197,14 @@ class DesireHelper:
       lane_available = self.available_left_lane if leftBlinker else self.available_right_lane
       edge_available = self.available_left_edge if leftBlinker else self.available_right_edge
       lane_appeared = self.lane_exist_left_count == int(0.2 / DT_MDL) if leftBlinker else self.lane_exist_right_count == int(0.2 / DT_MDL)
+
+      if self.laneChangeLaneCheck == 0: # 차선이 항상 존재하는것으로 처리함.
+        lane_available = True
+        edge_available = False
+      elif self.laneChangeLaneCheck == 1: # 차선있을때만, edge는 항상작동안함.
+        edge_available = False
+      elif self.laneChangeLaneCheck == 2:  # 차선있을때, edge도 차선변경가능
+        pass
 
     if not lateral_active or self.lane_change_timer > LANE_CHANGE_TIME_MAX:
       self.lane_change_state = LaneChangeState.off

@@ -287,11 +287,11 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   });
 
   //addItem(horizontal_line());
-  addItem(new CarrotParamsControl(0, "기본값설정", "모든설정을 기본값으로", "../assets/offroad/icon_shell.png", false));
-  addItem(new CarrotParamsControl(10, "롱컨배선개조 (HKG)", "레이더롱컨이 되도록 배선을 개조하였음", "../assets/offroad/icon_shell.png"));
-  addItem(new CarrotParamsControl(11, "레이더트랙사용 (HKG)", "레이더트랙이 지원되는 차량만 선택", "../assets/offroad/icon_shell.png"));
-  addItem(new CarrotParamsControl(20, "비젼롱컨사용 (HKG)", "비젼을 이용한 롱컨을 이용중임, (카니발4_HDA2, 아이오닉6 X)", "../assets/offroad/icon_shell.png"));
-  addItem(new CarrotParamsControl(30, "자동크루즈 사용 (HKG)", "롱컨이 가능한차량만 가능함", "../assets/offroad/icon_shell.png"));
+  addItem(new CarrotParamsControl(0, "기본값설??, "모든?�정??기본값으�?, "../assets/offroad/icon_shell.png", false));
+  addItem(new CarrotParamsControl(10, "롱컨배선개조 (HKG)", "?�이?�롱컨이 ?�도�?배선??개조?��???, "../assets/offroad/icon_shell.png"));
+  addItem(new CarrotParamsControl(11, "?�이?�트?�사??(HKG)", "?�이?�트?�이 지?�되??차량�??�택", "../assets/offroad/icon_shell.png"));
+  addItem(new CarrotParamsControl(20, "비젼롱컨?�용 (HKG)", "비젼???�용??롱컨???�용중임, (카니�?_HDA2, ?�이?�닉6 X)", "../assets/offroad/icon_shell.png"));
+  addItem(new CarrotParamsControl(30, "?�동?�루�??�용 (HKG)", "롱컨??가?�한차량�?가?�함", "../assets/offroad/icon_shell.png"));
 
   // power buttons
   QHBoxLayout *power_layout = new QHBoxLayout();
@@ -589,19 +589,19 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
     latLongToggles->addItem(new CValueControl("LongitudinalTuningKpV", "LONG: P Gain(100)", "", "../assets/offroad/icon_road.png", 50, 150, 1));
     latLongToggles->addItem(new CValueControl("LongitudinalTuningKiV", "LONG: I Gain(200)", "", "../assets/offroad/icon_road.png", 0, 2000, 5));
     latLongToggles->addItem(new CValueControl("LongitudinalTuningKf", "LONG: FF Gain(100)", "", "../assets/offroad/icon_road.png", 0, 200, 1));
-    latLongToggles->addItem(new CValueControl("StartAccelApply", "LONG: StartingAccel 2.0x(0)%", "정지->출발시 가속도의 가속율을 지정합니다 0: 사용안함.", "../assets/offroad/icon_road.png", 0, 100, 10));
-    latLongToggles->addItem(new CValueControl("StopAccelApply", "LONG: StoppingAccel -2.0x(0)%", "정지유지시 브레이크압을 조정합니다. 0: 사용안함. ", "../assets/offroad/icon_road.png", 0, 100, 10));
+    latLongToggles->addItem(new CValueControl("StartAccelApply", "LONG: StartingAccel 2.0x(0)%", "?��?->출발??가?�도??가?�율??지?�합?�다 0: ?�용?�함.", "../assets/offroad/icon_road.png", 0, 100, 10));
+    latLongToggles->addItem(new CValueControl("StopAccelApply", "LONG: StoppingAccel -2.0x(0)%", "?��??��???브레?�크?�을 조정?�니?? 0: ?�용?�함. ", "../assets/offroad/icon_road.png", 0, 100, 10));
     
     latLongToggles->addItem(new CValueControl("StoppingAccel", "LONG: StoppingStartAccelx0.01(-40)", "", "../assets/offroad/icon_road.png", -100, 0, 5));
     latLongToggles->addItem(new CValueControl("StopDistanceCarrot", "LONG: StopDistance (600)cm", "", "../assets/offroad/icon_road.png", 400, 1000, 10));
 
-    latLongToggles->addItem(new CValueControl("CruiseMaxVals1", "ACCEL:0km/h(160)", "속도별 가속도를 지정합니다.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 1, 250, 5));
-    latLongToggles->addItem(new CValueControl("CruiseMaxVals2", "ACCEL:40km/h(120)", "속도별 가속도를 지정합니다.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 1, 250, 5));
-    latLongToggles->addItem(new CValueControl("CruiseMaxVals3", "ACCEL:60km/h(100)", "속도별 가속도를 지정합니다.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 1, 250, 5));
-    latLongToggles->addItem(new CValueControl("CruiseMaxVals4", "ACCEL:80km/h(80)", "속도별 가속도를 지정합니다.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 1, 250, 5));
-    latLongToggles->addItem(new CValueControl("CruiseMaxVals5", "ACCEL:110km/h(70)", "속도별 가속도를 지정합니다.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 1, 250, 5));
-    latLongToggles->addItem(new CValueControl("CruiseMaxVals6", "ACCEL:140km/h(60)", "속도별 가속도를 지정합니다.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 1, 250, 5));
-    latLongToggles->addItem(new CValueControl("CruiseMinVals", "DECEL:(120)", "감속도를 설정합니다.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 50, 250, 5));
+    latLongToggles->addItem(new CValueControl("CruiseMaxVals1", "ACCEL:0km/h(160)", "?�도�?가?�도�?지?�합?�다.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 1, 250, 5));
+    latLongToggles->addItem(new CValueControl("CruiseMaxVals2", "ACCEL:40km/h(120)", "?�도�?가?�도�?지?�합?�다.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 1, 250, 5));
+    latLongToggles->addItem(new CValueControl("CruiseMaxVals3", "ACCEL:60km/h(100)", "?�도�?가?�도�?지?�합?�다.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 1, 250, 5));
+    latLongToggles->addItem(new CValueControl("CruiseMaxVals4", "ACCEL:80km/h(80)", "?�도�?가?�도�?지?�합?�다.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 1, 250, 5));
+    latLongToggles->addItem(new CValueControl("CruiseMaxVals5", "ACCEL:110km/h(70)", "?�도�?가?�도�?지?�합?�다.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 1, 250, 5));
+    latLongToggles->addItem(new CValueControl("CruiseMaxVals6", "ACCEL:140km/h(60)", "?�도�?가?�도�?지?�합?�다.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 1, 250, 5));
+    latLongToggles->addItem(new CValueControl("CruiseMinVals", "DECEL:(120)", "감속?��? ?�정?�니??(x0.01m/s^2)", "../assets/offroad/icon_road.png", 50, 250, 5));
 
     dispToggles = new ListWidget(this);
     dispToggles->addItem(new CValueControl("ShowHudMode", "DISP:Display Mode", "0:Frog,1:APilot,2:Bottom,3:Top,4:Left,5:Left-Bottom", "../assets/offroad/icon_shell.png", 0, 5, 1));
@@ -638,20 +638,21 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
     startToggles->addItem(new ParamControl("HotspotOnBoot", "Hotspot enabled on boot", "", "../assets/offroad/icon_shell.png", this));
     startToggles->addItem(new ParamControl("NoLogging", "Disable Logger", "", "../assets/offroad/icon_shell.png", this));
     startToggles->addItem(new ParamControl("LaneChangeNeedTorque", "LaneChange: Need Torque", "", "../assets/offroad/icon_shell.png", this));
+    startToggles->addItem(new CValueControl("LaneChangeLaneCheck", "LaneChange: Check lane exist", "(0:No,1:Lane,2:+Edge)", "../assets/offroad/icon_shell.png", 0, 2, 1));
 
     speedToggles = new ListWidget(this);
-    speedToggles->addItem(new CValueControl("AutoCurveSpeedLowerLimit", "CURVE: Lower limit speed(30)", "곡선도로를 만나면 속도를 줄여줍니다. 최저속도", "../assets/offroad/icon_road.png", 30, 200, 5));
+    speedToggles->addItem(new CValueControl("AutoCurveSpeedLowerLimit", "CURVE: Lower limit speed(30)", "곡선?�로�?만나�??�도�?줄여줍니?? 최�??�도", "../assets/offroad/icon_road.png", 30, 200, 5));
     speedToggles->addItem(new CValueControl("AutoCurveSpeedFactor", "CURVE: Auto Control ratio(100%)", "", "../assets/offroad/icon_road.png", 50, 300, 1));
     speedToggles->addItem(new CValueControl("AutoCurveSpeedAggressiveness", "CURVE: Aggressiveness (100%)", "", "../assets/offroad/icon_road.png", 50, 300, 1));
-    speedToggles->addItem(new CValueControl("AutoNaviSpeedCtrlEnd", "SpeedCameraDecelEnd(6s)", "감속완료시점을 설정합니다.값이 크면 카메라에서 멀리 감속 완료", ".. / assets / offroad / icon_road.png", 3, 20, 1));
-    speedToggles->addItem(new CValueControl("AutoNaviSpeedCtrl", tr("SpeedCameraControl(1)"), "0:사용안함, 1:APN, 2:APN + Road Speedlimit", "../assets/offroad/icon_road.png", 0, 2, 1));
-    speedToggles->addItem(new CValueControl("AutoNaviSpeedDecelRate", "SpeedCameraDecelRatex0.01m/s^2(80)", "낮으면 멀리서부터 감속함", ".. / assets / offroad / icon_road.png", 10, 200, 10));
+    speedToggles->addItem(new CValueControl("AutoNaviSpeedCtrlEnd", "SpeedCameraDecelEnd(6s)", "감속?�료?�점???�정?�니??값이 ?�면 카메?�에??멀�?감속 ?�료", ".. / assets / offroad / icon_road.png", 3, 20, 1));
+    speedToggles->addItem(new CValueControl("AutoNaviSpeedCtrl", tr("SpeedCameraControl(1)"), "0:?�용?�함, 1:APN, 2:APN + Road Speedlimit", "../assets/offroad/icon_road.png", 0, 2, 1));
+    speedToggles->addItem(new CValueControl("AutoNaviSpeedDecelRate", "SpeedCameraDecelRatex0.01m/s^2(80)", "??���?멀리서부??감속??, ".. / assets / offroad / icon_road.png", 10, 200, 10));
     speedToggles->addItem(new CValueControl("AutoNaviSpeedSafetyFactor", "SpeedCameraSafetyFactor(105%)", "", ".. / assets / offroad / icon_road.png", 80, 120, 1));
     speedToggles->addItem(new CValueControl("AutoNaviSpeedBumpTime", "SpeedBumpTimeDistance(1s)", "", ".. / assets / offroad / icon_road.png", 1, 50, 1));
     speedToggles->addItem(new CValueControl("AutoNaviSpeedBumpSpeed", "SpeedBumpSpeed(35Km/h)", "", ".. / assets / offroad / icon_road.png", 10, 100, 5));
-    speedToggles->addItem(new CValueControl("AutoTurnControl", "NOO Helper(0)", "0:없음,1:차선변경,2:차선변경+속도,3:속도", "../assets/offroad/icon_road.png", 0, 3, 1));
-    speedToggles->addItem(new CValueControl("AutoTurnControlSpeedLaneChange", "NOO Helper LaneChange Speed (60)", "0:없음,차로변경속도", "../assets/offroad/icon_road.png", 0, 100, 5));
-    speedToggles->addItem(new CValueControl("AutoTurnControlSpeedTurn", "NOO Helper Turn Speed (20)", "0:없음, 턴속도", "../assets/offroad/icon_road.png", 0, 100, 5));
+    speedToggles->addItem(new CValueControl("AutoTurnControl", "NOO Helper(0)", "0:?�음,1:차선변�?2:차선변�??�도,3:?�도", "../assets/offroad/icon_road.png", 0, 3, 1));
+    speedToggles->addItem(new CValueControl("AutoTurnControlSpeedLaneChange", "NOO Helper LaneChange Speed (60)", "0:?�음,차로변경속??, "../assets/offroad/icon_road.png", 0, 100, 5));
+    speedToggles->addItem(new CValueControl("AutoTurnControlSpeedTurn", "NOO Helper Turn Speed (20)", "0:?�음, ?�속??, "../assets/offroad/icon_road.png", 0, 100, 5));
     speedToggles->addItem(new CValueControl("AutoTurnControlTurnEnd", "NOO Helper Turn CtrlDistTime (6)", "dist=speed*time", "../assets/offroad/icon_road.png", 0, 30, 1));
     speedToggles->addItem(new CValueControl("AutoTurnMapChange", "NOO Helper Auto Map Change(0)", "", "../assets/offroad/icon_road.png", 0, 2, 1));
     speedToggles->addItem(new CValueControl("MSLCEnabled", "MSLC Enabled", "Map: Speed Limit controller", "../assets/offroad/icon_road.png", 0, 3, 1));
@@ -758,7 +759,7 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
     commonToggles = new ListWidget(this);
     commonToggles->addItem(new ParamControl("MuteDoor", "MuteDoor", "", "../assets/offroad/icon_warning.png", this));
     commonToggles->addItem(new ParamControl("MuteSeatbelt", "MuteSeatbelt", "", "../assets/offroad/icon_warning.png", this));
-    commonToggles->addItem(new CValueControl("SteerActuatorDelay", "LAT:SteerActuatorDelay(40)", "표준", "../assets/offroad/icon_road.png", 1, 100, 1));
+    commonToggles->addItem(new CValueControl("SteerActuatorDelay", "LAT:SteerActuatorDelay(40)", "?��?", "../assets/offroad/icon_road.png", 1, 100, 1));
     commonToggles->addItem(new CValueControl("SteerRatio", "LAT: SteerRatiox0.1(0)", "Custom SteerRatio", "../assets/offroad/icon_road.png", 0, 300, 1));
     commonToggles->addItem(new CValueControl("LateralTorqueCustom", "LAT: TorqueCustom(0)", "", "../assets/offroad/icon_road.png", 0, 2, 1));
     commonToggles->addItem(new CValueControl("LateralTorqueAccelFactor", "LAT: TorqueAccelFactor(2500)", "", "../assets/offroad/icon_road.png", 1000, 6000, 10));
@@ -776,8 +777,8 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
     hyundaiToggles->addItem(new CValueControl("SccConnectedBus2", "(HKG) SCC Module connected BUS2 ", "SCC(ADAS)Module conntected bus2(1), more red panda installed(2)", "../assets/offroad/icon_warning.png", 0, 2, 0));
     hyundaiToggles->addItem(new ParamControl("CanfdHDA2", "(HKG) CANFD HDA2 support", "", "../assets/offroad/icon_warning.png", this));
     hyundaiToggles->addItem(new ParamControl("EnableRadarTracks", "(HKG) EnableRadarTracks", "Activate Radartracks at startup", "../assets/offroad/icon_warning.png", this));
-    hyundaiToggles->addItem(new CValueControl("MaxAngleFrames", "MaxAngleFrames(89)", "89:기본, 스티어계기판에러시 85~87", "../assets/offroad/icon_road.png", 80, 100, 1));
-    hyundaiToggles->addItem(new CValueControl("HapticFeedbackWhenSpeedCamera", "Haptic handle function", "0:사용안함,1:진동,2:계기판,3:HUD표시", "../assets/offroad/icon_road.png", 0, 3, 1));
+    hyundaiToggles->addItem(new CValueControl("MaxAngleFrames", "MaxAngleFrames(89)", "89:기본, ?�티?�계기판?�러??85~87", "../assets/offroad/icon_road.png", 80, 100, 1));
+    hyundaiToggles->addItem(new CValueControl("HapticFeedbackWhenSpeedCamera", "Haptic handle function", "0:?�용?�함,1:진동,2:계기??3:HUD?�시", "../assets/offroad/icon_road.png", 0, 3, 1));
 
     gmToggles = new ListWidget(this);
     gmToggles->addItem(new ParamControl("LongPitch", "LongPitch", "", "../assets/offroad/icon_warning.png", this));
@@ -929,8 +930,8 @@ CValueControl::CValueControl(const QString& params, const QString& title, const 
 void CValueControl::refresh()
 {
     label.setText(QString::fromStdString(Params().get(m_params.toStdString())));
-    btnminus.setText("－");
-    btnplus.setText("＋");
+    btnminus.setText("�?);
+    btnplus.setText("�?);
 }
 void CValueControl::showEvent(QShowEvent* event) {    
     refresh();
@@ -992,10 +993,10 @@ void CarrotParamsControl::showEvent(QShowEvent* event) {
     refresh();
 }
 void CarrotParamsControl::SetParams(int mode) {
-    //addItem(new CarrotParamsControl(0, "기본값설정", "모든설정을 기본값으로", "../assets/offroad/icon_shell.png", false));
-    //addItem(new CarrotParamsControl(10, "롱컨배선개조 (HKG)", "레이더롱컨이 되도록 배선을 개조하였음 ", "../assets/offroad/icon_shell.png"));
-    //addItem(new CarrotParamsControl(20, "비젼롱컨사용 (HKG)", "비젼을 이용한 롱컨을 이용중임, (카니발4_HDA2, 아이오닉6 X)", "../assets/offroad/icon_shell.png"));
-    //addItem(new CarrotParamsControl(30, "자동크루즈 사용 (HKG)", "롱컨이 가능한차량만 가능함", "../assets/offroad/icon_shell.png"));
+    //addItem(new CarrotParamsControl(0, "기본값설??, "모든?�정??기본값으�?, "../assets/offroad/icon_shell.png", false));
+    //addItem(new CarrotParamsControl(10, "롱컨배선개조 (HKG)", "?�이?�롱컨이 ?�도�?배선??개조?��???", "../assets/offroad/icon_shell.png"));
+    //addItem(new CarrotParamsControl(20, "비젼롱컨?�용 (HKG)", "비젼???�용??롱컨???�용중임, (카니�?_HDA2, ?�이?�닉6 X)", "../assets/offroad/icon_shell.png"));
+    //addItem(new CarrotParamsControl(30, "?�동?�루�??�용 (HKG)", "롱컨??가?�한차량�?가?�함", "../assets/offroad/icon_shell.png"));
     printf("mode = %d, pressed = %d\n", mode, m_pressed);
     bool on = (m_pressed > 0) ? true : false;
 
@@ -1008,15 +1009,15 @@ void CarrotParamsControl::SetParams(int mode) {
     else if (mode == 10) {   // 롱컨배선개조
         Params().put("SccConnectedBus2", (on) ? "1" : "0");
     }
-    else if (mode == 11) {   // 레이더트랙지원
+    else if (mode == 11) {   // ?�이?�트?��???
         Params().put("EnableRadarTracks", (on) ? "1" : "0");
     }
-    else if (mode == 20) {   // 비젼롱컨 사용
+    else if (mode == 20) {   // 비젼롱컨 ?�용
         Params().put("ALeadTauPos", (on) ? "30" : "120");
         Params().put("ALeadTauNeg", (on) ? "30" : "60");
         Params().put("ALeadTauThreshold", (on) ? "40" : "40");
     }
-    else if (mode == 30) {      // 자동크루즈사용
+    else if (mode == 30) {      // ?�동?�루즈사??
         Params().put("AutoCruiseControl", (on) ? "2" : "0");
         Params().put("SoftHoldMode", (on) ? "2" : "0");
 

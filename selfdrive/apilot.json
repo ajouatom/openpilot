@@ -432,6 +432,19 @@
     },
     {
       "group": "조향일반",
+      "name": "LaneChangeLaneCheck",
+      "title": "차선변경 차선검사",
+      "descr": "0:검사안함,1:차선검사,2:로드에지포함(NOO)",
+      "egroup": "LATSET",
+      "etitle": "LaneChangeLaneCheck",
+      "edescr": "",
+      "min": 0,
+      "max": 2,
+      "default": 1,
+      "unit": 1
+    },
+    {
+      "group": "조향일반",
       "name": "AutoTurnControlSpeedLaneChange",
       "title": "NOO Helper 차선변경속도(60)",
       "descr": "0:사용안함, 차선변경시 적용속도",

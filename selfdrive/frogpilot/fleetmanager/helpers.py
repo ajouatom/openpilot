@@ -485,6 +485,7 @@ def get_all_toggle_values():
     "AutoTurnControlTurnEnd",
     "AutoTurnMapChange", 
     "LaneChangeNeedTorque", 
+    "LaneChangeLaneCheck", 
     "AutoNaviSpeedCtrl",
     "AutoNaviSpeedCtrlEnd",
     "AutoNaviSpeedBumpTime",

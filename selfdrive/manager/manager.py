@@ -84,6 +84,7 @@ def get_default_params():
 
     ("AutoLaneChangeSpeed", "20"),
     ("LaneChangeNeedTorque", "0"),
+    ("LaneChangeLaneCheck", "1"),
 
     ("AutoTurnControlSpeedLaneChange", "60"),
     ("AutoTurnControlSpeedTurn", "20"),
