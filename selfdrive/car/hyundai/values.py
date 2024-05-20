@@ -621,6 +621,11 @@ class CAR(Platforms):
     CarSpecs(mass=2075, wheelbase=3.15, steerRatio=14.5, tireStiffnessFactor=0.7),
     flags=HyundaiFlags.LEGACY,
   )
+  KIA_EV_SK3 = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Kia Soul EV 2019", car_parts=CarParts.common([CarHarness.hyundai_c]))],
+    CarSpecs(mass=1695, wheelbase=2.6, steerRatio=13.75),
+    flags=HyundaiFlags.CHECKSUM_CRC8 | HyundaiFlags.EV,
+  )
 
 
 class Buttons:
