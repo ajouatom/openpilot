@@ -503,7 +503,13 @@ class CAR(Platforms):
     CarSpecs(mass=2087, wheelbase=3.09, steerRatio=14.23),
     flags=HyundaiFlags.RADAR_SCC,
   )
-
+  SOUL_EV_SK3 = HyundaiPlatformConfig(
+    "KIA SOUL EV (SK3)",
+    HyundaiCarInfo("Kia Soul EV 2019", car_parts=CarParts.common([CarHarness.hyundai_c])),
+    CarSpecs(mass=1695, wheelbase=2.6, steerRatio=13.75),
+    flags=HyundaiFlags.CHECKSUM_CRC8 | HyundaiFlags.EV,
+  )
+  
   # Genesis
   GENESIS_GV60_EV_1ST_GEN = HyundaiCanFDPlatformConfig(
     [
