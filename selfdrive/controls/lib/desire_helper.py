@@ -199,7 +199,7 @@ class DesireHelper:
       lane_appeared = self.lane_exist_left_count == int(0.2 / DT_MDL) if leftBlinker else self.lane_exist_right_count == int(0.2 / DT_MDL)
 
       if self.laneChangeLaneCheck == 0: # 차선이 항상 존재하는것으로 처리함.
-        lane_available = True
+        lane_available = True if edge_available else False
         edge_available = False
       elif self.laneChangeLaneCheck == 1: # 차선있을때만, edge는 항상작동안함.
         edge_available = False

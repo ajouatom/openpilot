@@ -434,7 +434,7 @@
       "group": "조향일반",
       "name": "LaneChangeLaneCheck",
       "title": "차선변경 차선검사",
-      "descr": "0:검사안함,1:차선검사,2:로드에지포함(NOO)",
+      "descr": "0:안함,1:검사,2:도로경계차선변경(NOO)",
       "egroup": "LATSET",
       "etitle": "LaneChangeLaneCheck",
       "edescr": "",
