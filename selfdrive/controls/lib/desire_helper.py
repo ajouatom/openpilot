@@ -2,7 +2,6 @@ from cereal import log
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.realtime import DT_MDL
 import numpy as np
-from openpilot.common.filter_simple import StreamingMovingAverage
 from openpilot.common.params import Params
 from enum import Enum
 
@@ -99,11 +98,6 @@ class DesireHelper:
     self.lane_width_right = 0
     self.distance_to_road_edge_left = 0
     self.distance_to_road_edge_right = 0
-    filter_size = 6
-    self.lane_width_left_filter = StreamingMovingAverage(filter_size)
-    self.lane_width_right_filter = StreamingMovingAverage(filter_size)
-    self.distance_to_road_edge_left_filter = StreamingMovingAverage(filter_size)
-    self.distance_to_road_edge_right_filter = StreamingMovingAverage(filter_size)
 
     self.lane_change_wait_timer = 0
 
@@ -111,6 +105,11 @@ class DesireHelper:
     self.edge_available_prev = False
     self.lane_exist_left_count = 0
     self.lane_exist_right_count = 0
+    self.lane_width_left_count = 0
+    self.lane_width_right_count = 0
+    self.road_edge_left_count = 0
+    self.road_edge_right_count = 0
+
     self.blinker_bypass = False
 
     self.available_left_lane = False
@@ -134,6 +133,9 @@ class DesireHelper:
     else:
       self.debugText = log
       self._log_timer = int(2/DT_MDL) # 2s
+
+  def update_exist_count(self, counter, exist):
+    return max(counter + 1, 1) if exist else min(counter - 1, -1)
 
   def update(self, carstate, modeldata, lateral_active, lane_change_prob, sm):
     self._add_log("")
@@ -168,33 +170,22 @@ class DesireHelper:
 
    
       # Calculate left and right lane widths
-    lane_width_left, distance_to_road_edge_left, lane_exist_left = calculate_lane_width(modeldata.laneLines[0], modeldata.laneLineProbs[0], modeldata.laneLines[1], modeldata.roadEdges[0])
-    lane_width_right, distance_to_road_edge_right, lane_exist_right = calculate_lane_width(modeldata.laneLines[3], modeldata.laneLineProbs[3], modeldata.laneLines[2], modeldata.roadEdges[1])
+    self.lane_width_left, self.distance_to_road_edge_left, lane_exist_left = calculate_lane_width(modeldata.laneLines[0], modeldata.laneLineProbs[0], modeldata.laneLines[1], modeldata.roadEdges[0])
+    self.lane_width_right, self.distance_to_road_edge_right, lane_exist_right = calculate_lane_width(modeldata.laneLines[3], modeldata.laneLineProbs[3], modeldata.laneLines[2], modeldata.roadEdges[1])
 
-    self.lane_exist_left_count = max(self.lane_exist_left_count + 1, 1) if lane_exist_left else min(self.lane_exist_left_count - 1, -1)
-    self.lane_exist_right_count = max(self.lane_exist_right_count + 1, 1) if lane_exist_right else min(self.lane_exist_right_count - 1, -1)
-    self.lane_width_left = self.lane_width_left_filter.process(lane_width_left)
-    self.lane_width_right = self.lane_width_right_filter.process(lane_width_right)
-    self.distance_to_road_edge_left = self.distance_to_road_edge_left_filter.process(distance_to_road_edge_left)
-    self.distance_to_road_edge_right = self.distance_to_road_edge_right_filter.process(distance_to_road_edge_right)
+    self.lane_exist_left_count = self.update_exist_count(self.lane_exist_left_count, lane_exist_left)
+    self.lane_exist_right_count = self.update_exist_count(self.lane_exist_right_count, lane_exist_right)
+    self.lane_width_left_count = self.update_exist_count(self.lane_width_left_count, self.lane_width_left > 2.5)
+    self.lane_width_right_count = self.update_exist_count(self.lane_width_right_count, self.lane_width_right > 2.5)
+    self.road_edge_left_count = self.update_exist_count(self.road_edge_left_count, self.distance_to_road_edge_left > 2.5)
+    self.road_edge_right_count = self.update_exist_count(self.road_edge_right_count, self.distance_to_road_edge_right > 2.5)
 
-    if self.lane_width_left < 2.2:
-      self.available_left_lane = False
-    elif self.lane_width_left > 2.4:
-      self.available_left_lane = True
-    if self.lane_width_right < 2.2:
-      self.available_right_lane = False
-    elif self.lane_width_right > 2.4:
-      self.available_right_lane = True
+    available_count = int(0.2 / DT_MDL)
+    self.available_left_lane = self.lane_width_left_count == available_count
+    self.available_right_lane = self.lane_width_right_count == available_count
+    self.available_left_edge = self.road_edge_left_count == available_count
+    self.available_right_edge = self.road_edge_right_count == available_count
 
-    if self.distance_to_road_edge_left < 2.2:
-      self.available_left_edge = False
-    elif self.distance_to_road_edge_left > 2.4:
-      self.available_left_edge = True
-    if self.distance_to_road_edge_right < 2.2:
-      self.available_right_edge = False
-    elif self.distance_to_road_edge_right > 2.4:
-      self.available_right_edge = True
 
     # Calculate the desired lane width for nudgeless lane change with lane detection
     if not (self.lane_detection and one_blinker) or below_lane_change_speed:
@@ -202,18 +193,6 @@ class DesireHelper:
       edge_available = False
       lane_appeared = False
     else:
-      # Set the minimum lane threshold to 2.8 meters
-      #min_lane_threshold = 2.8
-      # Set the blinker index based on which signal is on
-      #blinker_index = 0 if leftBlinker else 1
-      #current_lane = modeldata.laneLines[blinker_index + 1]
-      #desired_lane = modeldata.laneLines[blinker_index if leftBlinker else blinker_index + 2]
-      #road_edge = modeldata.roadEdges[blinker_index]
-      # Check if the lane width exceeds the threshold
-      #lane_width, distance_to_road_edge = calculate_lane_width(desired_lane, current_lane, road_edge)
-      #lane_available = lane_width >= min_lane_threshold
-      #lane_width = self.lane_width_left if leftBlinker else self.lane_width_right
-      #lane_available = lane_width >= min_lane_threadhold
       lane_available = self.available_left_lane if leftBlinker else self.available_right_lane
       edge_available = self.available_left_edge if leftBlinker else self.available_right_edge
       lane_appeared = self.lane_exist_left_count == int(0.2 / DT_MDL) if leftBlinker else self.lane_exist_right_count == int(0.2 / DT_MDL)
