@@ -589,19 +589,19 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
     latLongToggles->addItem(new CValueControl("LongitudinalTuningKpV", "LONG: P Gain(100)", "", "../assets/offroad/icon_road.png", 50, 150, 1));
     latLongToggles->addItem(new CValueControl("LongitudinalTuningKiV", "LONG: I Gain(200)", "", "../assets/offroad/icon_road.png", 0, 2000, 5));
     latLongToggles->addItem(new CValueControl("LongitudinalTuningKf", "LONG: FF Gain(100)", "", "../assets/offroad/icon_road.png", 0, 200, 1));
-    latLongToggles->addItem(new CValueControl("StartAccelApply", "LONG: StartingAccel 2.0x(0)%", "?ïÏ?->Ï∂úÎ∞ú??Í∞Ä?çÎèÑ??Í∞Ä?çÏú®??ÏßÄ?ïÌï©?àÎã§ 0: ?¨Ïö©?àÌï®.", "../assets/offroad/icon_road.png", 0, 100, 10));
-    latLongToggles->addItem(new CValueControl("StopAccelApply", "LONG: StoppingAccel -2.0x(0)%", "?ïÏ??†Ï???Î∏åÎ†à?¥ÌÅ¨?ïÏùÑ Ï°∞Ï†ï?©Îãà?? 0: ?¨Ïö©?àÌï®. ", "../assets/offroad/icon_road.png", 0, 100, 10));
+    latLongToggles->addItem(new CValueControl("StartAccelApply", "LONG: StartingAccel 2.0x(0)%", "", "../assets/offroad/icon_road.png", 0, 100, 10));
+    latLongToggles->addItem(new CValueControl("StopAccelApply", "LONG: StoppingAccel -2.0x(0)%", "", "../assets/offroad/icon_road.png", 0, 100, 10));
     
     latLongToggles->addItem(new CValueControl("StoppingAccel", "LONG: StoppingStartAccelx0.01(-40)", "", "../assets/offroad/icon_road.png", -100, 0, 5));
     latLongToggles->addItem(new CValueControl("StopDistanceCarrot", "LONG: StopDistance (600)cm", "", "../assets/offroad/icon_road.png", 400, 1000, 10));
 
-    latLongToggles->addItem(new CValueControl("CruiseMaxVals1", "ACCEL:0km/h(160)", "?çÎèÑÎ≥?Í∞Ä?çÎèÑÎ•?ÏßÄ?ïÌï©?àÎã§.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 1, 250, 5));
-    latLongToggles->addItem(new CValueControl("CruiseMaxVals2", "ACCEL:40km/h(120)", "?çÎèÑÎ≥?Í∞Ä?çÎèÑÎ•?ÏßÄ?ïÌï©?àÎã§.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 1, 250, 5));
-    latLongToggles->addItem(new CValueControl("CruiseMaxVals3", "ACCEL:60km/h(100)", "?çÎèÑÎ≥?Í∞Ä?çÎèÑÎ•?ÏßÄ?ïÌï©?àÎã§.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 1, 250, 5));
-    latLongToggles->addItem(new CValueControl("CruiseMaxVals4", "ACCEL:80km/h(80)", "?çÎèÑÎ≥?Í∞Ä?çÎèÑÎ•?ÏßÄ?ïÌï©?àÎã§.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 1, 250, 5));
-    latLongToggles->addItem(new CValueControl("CruiseMaxVals5", "ACCEL:110km/h(70)", "?çÎèÑÎ≥?Í∞Ä?çÎèÑÎ•?ÏßÄ?ïÌï©?àÎã§.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 1, 250, 5));
-    latLongToggles->addItem(new CValueControl("CruiseMaxVals6", "ACCEL:140km/h(60)", "?çÎèÑÎ≥?Í∞Ä?çÎèÑÎ•?ÏßÄ?ïÌï©?àÎã§.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 1, 250, 5));
-    latLongToggles->addItem(new CValueControl("CruiseMinVals", "DECEL:(120)", "Í∞êÏÜç?ÑÎ? ?§Ï†ï?©Îãà??(x0.01m/s^2)", "../assets/offroad/icon_road.png", 50, 250, 5));
+    latLongToggles->addItem(new CValueControl("CruiseMaxVals1", "ACCEL:0km/h(160)", "", "../assets/offroad/icon_road.png", 1, 250, 5));
+    latLongToggles->addItem(new CValueControl("CruiseMaxVals2", "ACCEL:40km/h(120)", "", "../assets/offroad/icon_road.png", 1, 250, 5));
+    latLongToggles->addItem(new CValueControl("CruiseMaxVals3", "ACCEL:60km/h(100)", "", "../assets/offroad/icon_road.png", 1, 250, 5));
+    latLongToggles->addItem(new CValueControl("CruiseMaxVals4", "ACCEL:80km/h(80)", "", "../assets/offroad/icon_road.png", 1, 250, 5));
+    latLongToggles->addItem(new CValueControl("CruiseMaxVals5", "ACCEL:110km/h(70)", "", "../assets/offroad/icon_road.png", 1, 250, 5));
+    latLongToggles->addItem(new CValueControl("CruiseMaxVals6", "ACCEL:140km/h(60)", "", "../assets/offroad/icon_road.png", 1, 250, 5));
+    latLongToggles->addItem(new CValueControl("CruiseMinVals", "DECEL:(120)", "", "../assets/offroad/icon_road.png", 50, 250, 5));
 
     dispToggles = new ListWidget(this);
     dispToggles->addItem(new CValueControl("ShowHudMode", "DISP:Display Mode", "0:Frog,1:APilot,2:Bottom,3:Top,4:Left,5:Left-Bottom", "../assets/offroad/icon_shell.png", 0, 5, 1));
@@ -641,18 +641,18 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
     startToggles->addItem(new CValueControl("LaneChangeLaneCheck", "LaneChange: Check lane exist", "(0:No,1:Lane,2:+Edge)", "../assets/offroad/icon_shell.png", 0, 2, 1));
 
     speedToggles = new ListWidget(this);
-    speedToggles->addItem(new CValueControl("AutoCurveSpeedLowerLimit", "CURVE: Lower limit speed(30)", "Í≥°ÏÑ†?ÑÎ°úÎ•?ÎßåÎÇòÎ©??çÎèÑÎ•?Ï§ÑÏó¨Ï§çÎãà?? ÏµúÏ??çÎèÑ", "../assets/offroad/icon_road.png", 30, 200, 5));
+    speedToggles->addItem(new CValueControl("AutoCurveSpeedLowerLimit", "CURVE: Lower limit speed(30)", "", "../assets/offroad/icon_road.png", 30, 200, 5));
     speedToggles->addItem(new CValueControl("AutoCurveSpeedFactor", "CURVE: Auto Control ratio(100%)", "", "../assets/offroad/icon_road.png", 50, 300, 1));
     speedToggles->addItem(new CValueControl("AutoCurveSpeedAggressiveness", "CURVE: Aggressiveness (100%)", "", "../assets/offroad/icon_road.png", 50, 300, 1));
-    speedToggles->addItem(new CValueControl("AutoNaviSpeedCtrlEnd", "SpeedCameraDecelEnd(6s)", "Í∞êÏÜç?ÑÎ£å?úÏ†ê???§Ï†ï?©Îãà??Í∞íÏù¥ ?¨Î©¥ Ïπ¥Î©î?ºÏóê??Î©ÄÎ¶?Í∞êÏÜç ?ÑÎ£å", ".. / assets / offroad / icon_road.png", 3, 20, 1));
-    speedToggles->addItem(new CValueControl("AutoNaviSpeedCtrl", tr("SpeedCameraControl(1)"), "0:?¨Ïö©?àÌï®, 1:APN, 2:APN + Road Speedlimit", "../assets/offroad/icon_road.png", 0, 2, 1));
-    speedToggles->addItem(new CValueControl("AutoNaviSpeedDecelRate", "SpeedCameraDecelRatex0.01m/s^2(80)", "??úºÎ©?Î©ÄÎ¶¨ÏÑúÎ∂Ä??Í∞êÏÜç??, ".. / assets / offroad / icon_road.png", 10, 200, 10));
+    speedToggles->addItem(new CValueControl("AutoNaviSpeedCtrlEnd", "SpeedCameraDecelEnd(6s)", "", ".. / assets / offroad / icon_road.png", 3, 20, 1));
+    speedToggles->addItem(new CValueControl("AutoNaviSpeedCtrl", tr("SpeedCameraControl(1)"), "", "../assets/offroad/icon_road.png", 0, 2, 1));
+    speedToggles->addItem(new CValueControl("AutoNaviSpeedDecelRate", "SpeedCameraDecelRatex0.01m/s^2(80)", "", ".. / assets / offroad / icon_road.png", 10, 200, 10));
     speedToggles->addItem(new CValueControl("AutoNaviSpeedSafetyFactor", "SpeedCameraSafetyFactor(105%)", "", ".. / assets / offroad / icon_road.png", 80, 120, 1));
     speedToggles->addItem(new CValueControl("AutoNaviSpeedBumpTime", "SpeedBumpTimeDistance(1s)", "", ".. / assets / offroad / icon_road.png", 1, 50, 1));
     speedToggles->addItem(new CValueControl("AutoNaviSpeedBumpSpeed", "SpeedBumpSpeed(35Km/h)", "", ".. / assets / offroad / icon_road.png", 10, 100, 5));
-    speedToggles->addItem(new CValueControl("AutoTurnControl", "NOO Helper(0)", "0:?ÜÏùå,1:Ï∞®ÏÑ†Î≥ÄÍ≤?2:Ï∞®ÏÑ†Î≥ÄÍ≤??çÎèÑ,3:?çÎèÑ", "../assets/offroad/icon_road.png", 0, 3, 1));
-    speedToggles->addItem(new CValueControl("AutoTurnControlSpeedLaneChange", "NOO Helper LaneChange Speed (60)", "0:?ÜÏùå,Ï∞®Î°úÎ≥ÄÍ≤ΩÏÜç??, "../assets/offroad/icon_road.png", 0, 100, 5));
-    speedToggles->addItem(new CValueControl("AutoTurnControlSpeedTurn", "NOO Helper Turn Speed (20)", "0:?ÜÏùå, ?¥ÏÜç??, "../assets/offroad/icon_road.png", 0, 100, 5));
+    speedToggles->addItem(new CValueControl("AutoTurnControl", "NOO Helper(0)", "../assets/offroad/icon_road.png", 0, 3, 1));
+    speedToggles->addItem(new CValueControl("AutoTurnControlSpeedLaneChange", "NOO Helper LaneChange Speed (60)", "", ".. / assets / offroad / icon_road.png", 0, 100, 5));
+    speedToggles->addItem(new CValueControl("AutoTurnControlSpeedTurn", "NOO Helper Turn Speed (20)", "",".. / assets / offroad / icon_road.png", 0, 100, 5));
     speedToggles->addItem(new CValueControl("AutoTurnControlTurnEnd", "NOO Helper Turn CtrlDistTime (6)", "dist=speed*time", "../assets/offroad/icon_road.png", 0, 30, 1));
     speedToggles->addItem(new CValueControl("AutoTurnMapChange", "NOO Helper Auto Map Change(0)", "", "../assets/offroad/icon_road.png", 0, 2, 1));
     speedToggles->addItem(new CValueControl("MSLCEnabled", "MSLC Enabled", "Map: Speed Limit controller", "../assets/offroad/icon_road.png", 0, 3, 1));
@@ -759,7 +759,7 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
     commonToggles = new ListWidget(this);
     commonToggles->addItem(new ParamControl("MuteDoor", "MuteDoor", "", "../assets/offroad/icon_warning.png", this));
     commonToggles->addItem(new ParamControl("MuteSeatbelt", "MuteSeatbelt", "", "../assets/offroad/icon_warning.png", this));
-    commonToggles->addItem(new CValueControl("SteerActuatorDelay", "LAT:SteerActuatorDelay(40)", "?úÏ?", "../assets/offroad/icon_road.png", 1, 100, 1));
+    commonToggles->addItem(new CValueControl("SteerActuatorDelay", "LAT:SteerActuatorDelay(40)", "", "../assets/offroad/icon_road.png", 1, 100, 1));
     commonToggles->addItem(new CValueControl("SteerRatio", "LAT: SteerRatiox0.1(0)", "Custom SteerRatio", "../assets/offroad/icon_road.png", 0, 300, 1));
     commonToggles->addItem(new CValueControl("LateralTorqueCustom", "LAT: TorqueCustom(0)", "", "../assets/offroad/icon_road.png", 0, 2, 1));
     commonToggles->addItem(new CValueControl("LateralTorqueAccelFactor", "LAT: TorqueAccelFactor(2500)", "", "../assets/offroad/icon_road.png", 1000, 6000, 10));
@@ -777,8 +777,8 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
     hyundaiToggles->addItem(new CValueControl("SccConnectedBus2", "(HKG) SCC Module connected BUS2 ", "SCC(ADAS)Module conntected bus2(1), more red panda installed(2)", "../assets/offroad/icon_warning.png", 0, 2, 0));
     hyundaiToggles->addItem(new ParamControl("CanfdHDA2", "(HKG) CANFD HDA2 support", "", "../assets/offroad/icon_warning.png", this));
     hyundaiToggles->addItem(new ParamControl("EnableRadarTracks", "(HKG) EnableRadarTracks", "Activate Radartracks at startup", "../assets/offroad/icon_warning.png", this));
-    hyundaiToggles->addItem(new CValueControl("MaxAngleFrames", "MaxAngleFrames(89)", "89:Í∏∞Î≥∏, ?§Ìã∞?¥Í≥ÑÍ∏∞Ìåê?êÎü¨??85~87", "../assets/offroad/icon_road.png", 80, 100, 1));
-    hyundaiToggles->addItem(new CValueControl("HapticFeedbackWhenSpeedCamera", "Haptic handle function", "0:?¨Ïö©?àÌï®,1:ÏßÑÎèô,2:Í≥ÑÍ∏∞??3:HUD?úÏãú", "../assets/offroad/icon_road.png", 0, 3, 1));
+    hyundaiToggles->addItem(new CValueControl("MaxAngleFrames", "MaxAngleFrames(89)", "", "../assets/offroad/icon_road.png", 80, 100, 1));
+    hyundaiToggles->addItem(new CValueControl("HapticFeedbackWhenSpeedCamera", "Haptic handle function", "", "../assets/offroad/icon_road.png", 0, 3, 1));
 
     gmToggles = new ListWidget(this);
     gmToggles->addItem(new ParamControl("LongPitch", "LongPitch", "", "../assets/offroad/icon_warning.png", this));
@@ -930,8 +930,8 @@ CValueControl::CValueControl(const QString& params, const QString& title, const 
 void CValueControl::refresh()
 {
     label.setText(QString::fromStdString(Params().get(m_params.toStdString())));
-    btnminus.setText("Ôº?);
-    btnplus.setText("Ôº?);
+    btnminus.setText("-");
+    btnplus.setText("+");
 }
 void CValueControl::showEvent(QShowEvent* event) {    
     refresh();
@@ -993,10 +993,6 @@ void CarrotParamsControl::showEvent(QShowEvent* event) {
     refresh();
 }
 void CarrotParamsControl::SetParams(int mode) {
-    //addItem(new CarrotParamsControl(0, "Í∏∞Î≥∏Í∞íÏÑ§??, "Î™®Îì†?§Ï†ï??Í∏∞Î≥∏Í∞íÏúºÎ°?, "../assets/offroad/icon_shell.png", false));
-    //addItem(new CarrotParamsControl(10, "Î°±Ïª®Î∞∞ÏÑ†Í∞úÏ°∞ (HKG)", "?àÏù¥?îÎ°±Ïª®Ïù¥ ?òÎèÑÎ°?Î∞∞ÏÑ†??Í∞úÏ°∞?òÏ???", "../assets/offroad/icon_shell.png"));
-    //addItem(new CarrotParamsControl(20, "ÎπÑÏ†ºÎ°±Ïª®?¨Ïö© (HKG)", "ÎπÑÏ†º???¥Ïö©??Î°±Ïª®???¥Ïö©Ï§ëÏûÑ, (Ïπ¥ÎãàÎ∞?_HDA2, ?ÑÏù¥?§Îãâ6 X)", "../assets/offroad/icon_shell.png"));
-    //addItem(new CarrotParamsControl(30, "?êÎèô?¨Î£®Ï¶??¨Ïö© (HKG)", "Î°±Ïª®??Í∞Ä?•ÌïúÏ∞®ÎüâÎß?Í∞Ä?•Ìï®", "../assets/offroad/icon_shell.png"));
     printf("mode = %d, pressed = %d\n", mode, m_pressed);
     bool on = (m_pressed > 0) ? true : false;
 
@@ -1006,18 +1002,18 @@ void CarrotParamsControl::SetParams(int mode) {
         process.start("/bin/sh", QStringList{ "-c", QString("python ./params_default.py") });
         process.waitForFinished();
     }
-    else if (mode == 10) {   // Î°±Ïª®Î∞∞ÏÑ†Í∞úÏ°∞
+    else if (mode == 10) {   // 
         Params().put("SccConnectedBus2", (on) ? "1" : "0");
     }
-    else if (mode == 11) {   // ?àÏù¥?îÌä∏?ôÏ???
+    else if (mode == 11) {   // 
         Params().put("EnableRadarTracks", (on) ? "1" : "0");
     }
-    else if (mode == 20) {   // ÎπÑÏ†ºÎ°±Ïª® ?¨Ïö©
+    else if (mode == 20) {   // 
         Params().put("ALeadTauPos", (on) ? "30" : "120");
         Params().put("ALeadTauNeg", (on) ? "30" : "60");
         Params().put("ALeadTauThreshold", (on) ? "40" : "40");
     }
-    else if (mode == 30) {      // ?êÎèô?¨Î£®Ï¶àÏÇ¨??
+    else if (mode == 30) {      // 
         Params().put("AutoCruiseControl", (on) ? "2" : "0");
         Params().put("SoftHoldMode", (on) ? "2" : "0");
 
