@@ -101,8 +101,11 @@ def ui_thread(addr):
   draw_plots = init_plots(plot_arr, name_to_arr_idx, plot_xlims, plot_ylims, plot_names, plot_colors, plot_styles)
 
   vipc_client = VisionIpcClient("camerad", VisionStreamType.VISION_STREAM_ROAD, True)
-  while 1:
-    list(pygame.event.get())
+  while True:
+    for event in pygame.event.get():
+      if event.type == pygame.QUIT:
+        pygame.quit()
+        sys.exit()
 
     screen.fill((64, 64, 64))
     lid_overlay = lid_overlay_blank.copy()
@@ -118,7 +121,7 @@ def ui_thread(addr):
 
     sm.update(0)
 
-    camera = DEVICE_CAMERAS[("three", str(sm['roadCameraState'].sensor))]
+    camera = DEVICE_CAMERAS[("tici", str(sm['roadCameraState'].sensor))]
 
     imgff = np.frombuffer(yuv_img_raw.data, dtype=np.uint8).reshape((len(yuv_img_raw.data) // vipc_client.stride, vipc_client.stride))
     num_px = vipc_client.width * vipc_client.height

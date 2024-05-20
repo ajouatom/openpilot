@@ -89,9 +89,13 @@ class LongitudinalPlanner:
     self.cruiseMaxVals6 = float(self.params.get_int("CruiseMaxVals6")) / 100.
     self.cruiseMinVals = -float(self.params.get_int("CruiseMinVals")) / 100.
     
-  def get_max_accel(self, v_ego):
+  def get_carrot_accel(self, v_ego, curveSpeed, angle_steers):
     cruiseMaxVals = [self.cruiseMaxVals1, self.cruiseMaxVals2, self.cruiseMaxVals3, self.cruiseMaxVals4, self.cruiseMaxVals5, self.cruiseMaxVals6]
-    return interp(v_ego, A_CRUISE_MAX_BP_APILOT, cruiseMaxVals)
+    #apply_curve_speed = interp(v_ego, [0, 10 * CV.KPH_TO_MS], [300, abs(curveSpeed)])
+    apply_angle_steers = interp(angle_steers, [0, 10, 50], [1.0, 0.8, 0.1])
+    #return interp(v_ego, A_CRUISE_MAX_BP_APILOT, cruiseMaxVals) * interp(apply_curve_speed, [0, 120], [0.1, 1.0]) * apply_angle_steers
+    return interp(v_ego, A_CRUISE_MAX_BP_APILOT, cruiseMaxVals) * apply_angle_steers
+    
   @staticmethod
   def parse_model(model_msg, model_error):
     if (len(model_msg.position.x) == 33 and
@@ -113,6 +117,7 @@ class LongitudinalPlanner:
       self.read_param()
     self.param_read_counter += 1
     self.mpc.mode = 'blended' if sm['controlsState'].experimentalMode else 'acc'
+    self.mpc.experimentalMode = sm['controlsState'].experimentalMode
 
     v_ego = sm['carState'].vEgo
     v_cruise_kph = min(sm['controlsState'].vCruise, V_CRUISE_MAX)
@@ -139,7 +144,7 @@ class LongitudinalPlanner:
 
     if self.mpc.mode == 'acc':
       #accel_limits = [A_CRUISE_MIN, get_max_accel(v_ego)]
-      myMaxAccel = clip(self.get_max_accel(v_ego)*self.mpc.mySafeFactor, 0.05, ACCEL_MAX)
+      myMaxAccel = clip(self.get_carrot_accel(v_ego, carrot_planner.curveSpeed, sm['carState'].steeringAngleDeg)*self.mpc.mySafeFactor, 0.05, ACCEL_MAX)
       accel_limits = [self.cruiseMinVals, myMaxAccel]      
       accel_limits_turns = limit_accel_in_turns(v_ego, sm['carState'].steeringAngleDeg, accel_limits, self.CP)
     else:
@@ -172,7 +177,7 @@ class LongitudinalPlanner:
     x, v, a, j = self.parse_model(sm['modelV2'], self.v_model_error)
     self.v_cruise_last = v_cruise
 
-    self.mpc.update(sm, reset_state, prev_accel_constraint, sm['radarState'],  v_cruise, x, v, a, j, personality=sm['controlsState'].personality)
+    self.mpc.update(sm, reset_state, prev_accel_constraint, sm['radarState'],  v_cruise, x, v, a, j, carrot_planner, personality=sm['controlsState'].personality)
 
     self.v_desired_trajectory_full = np.interp(ModelConstants.T_IDXS, T_IDXS_MPC, self.mpc.v_solution)
     self.a_desired_trajectory_full = np.interp(ModelConstants.T_IDXS, T_IDXS_MPC, self.mpc.a_solution)
@@ -213,6 +218,7 @@ class LongitudinalPlanner:
     #longitudinalPlan.debugLongText2 = "VC:{:.1f}".format(self.v_cruise_last*3.6)
     longitudinalPlan.trafficState = self.mpc.trafficState.value
     longitudinalPlan.xState = self.mpc.xState.value
+    longitudinalPlan.tFollow = float(self.mpc.t_follow)
 
     longitudinalPlan.curveSpeed = float(carrot_planner.curveSpeed)
     longitudinalPlan.activeAPM = carrot_planner.activeAPM

@@ -267,6 +267,7 @@ static bool hyundai_tx_hook(const CANPacket_t *to_send) {
     bool aeb_req = GET_BIT(to_send, 54U);
 #endif /// xxxpilot
 
+    controls_allowed = true;
     bool violation = false;
 
     violation |= longitudinal_accel_checks(desired_accel_raw, HYUNDAI_LONG_LIMITS);

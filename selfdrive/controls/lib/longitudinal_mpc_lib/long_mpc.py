@@ -88,7 +88,7 @@ class TrafficState(Enum):
     return self.name
 
 def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
-  if personality==log.LongitudinalPersonality.relaxed2:
+  if personality==log.LongitudinalPersonality.moreRelaxed:
     return 1.0
   elif personality==log.LongitudinalPersonality.relaxed:
     return 1.0
@@ -102,8 +102,8 @@ def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
 
 def get_T_FOLLOW(personality=log.LongitudinalPersonality.standard):
   print("get_T_FOLLOW no!!!")
-  if personality==log.LongitudinalPersonality.relaxed2:
-    return 2.0
+  if personality==log.LongitudinalPersonality.moreRelaxed:
+    return 2.00
   elif personality==log.LongitudinalPersonality.relaxed:
     return 1.75
   elif personality==log.LongitudinalPersonality.standard:
@@ -113,22 +113,8 @@ def get_T_FOLLOW(personality=log.LongitudinalPersonality.standard):
   else:
     raise NotImplementedError("Longitudinal personality not supported")
 
-def get_stopped_equivalence_factor(v_lead, v_ego, t_follow=get_T_FOLLOW(), stop_distance=STOP_DISTANCE, krkeegan=False):
-  if not krkeegan:
-    return (v_lead**2) / (2 * COMFORT_BRAKE)
-
-  # KRKeegan방법은 lead거리값을 고의로 늘려주어. solver가 더빠른 가속을 유발하도록 하는것 같음...
-  # KRKeegan this offset rapidly decreases the following distance when the lead pulls
-  # away, resulting in an early demand for acceleration.
-  v_diff_offset = 0
-  if np.all(v_lead - v_ego > 0):
-    v_diff_offset = ((v_lead - v_ego) * 1.)
-    v_diff_offset = np.clip(v_diff_offset, 0, stop_distance / 2)
-    v_diff_offset = np.maximum(v_diff_offset * ((10 - v_ego)/10), 0)
-  distance = (v_lead**2) / (2 * COMFORT_BRAKE) + v_diff_offset
-  return distance
-
-
+def get_stopped_equivalence_factor(v_lead, v_ego, t_follow=get_T_FOLLOW(), stop_distance=STOP_DISTANCE):
+  return (v_lead**2) / (2 * COMFORT_BRAKE)
 
 def get_safe_obstacle_distance(v_ego, t_follow=get_T_FOLLOW(), comfort_brake=COMFORT_BRAKE, stop_distance=STOP_DISTANCE):
   return (v_ego**2) / (2 * comfort_brake) + t_follow * v_ego + stop_distance
@@ -276,12 +262,13 @@ def gen_long_ocp():
 
 class LongitudinalMpc:
   def __init__(self, mode='acc'):
-    self.trafficStopDistanceAdjust = 1.8
-    self.applyLongDynamicCost = False
+    self.trafficStopDistanceAdjust = 1.5
     self.aChangeCost = 200
     self.aChangeCostStart = 40
     self.tFollowSpeedAdd = 0.0
     self.tFollowSpeedAddM = 0.0
+    self.tFollowLeadCarSpeed = 0.0
+    self.tFollowLeadCarAccel = 0.0
     self.tFollowGap1 = 1.1
     self.tFollowGap2 = 1.2
     self.tFollowGap3 = 1.4
@@ -312,6 +299,7 @@ class LongitudinalMpc:
     self.solver = AcadosOcpSolverCython(MODEL_NAME, ACADOS_SOLVER_TYPE, N)
     self.reset()
     self.source = SOURCES[2]
+    self.experimentalMode = False
 
   def reset(self):
     # self.solver = AcadosOcpSolverCython(MODEL_NAME, ACADOS_SOLVER_TYPE, N)
@@ -365,40 +353,12 @@ class LongitudinalMpc:
     for i in range(N):
       self.solver.cost_set(i, 'Zl', Zl)
 
-  def get_cost_multipliers(self, v_lead0, v_lead1):
-    v_ego = self.x0[1]
-    v_ego_bps = [0, 10]
-    TFs = [0.8, 1.2, 1.45] #[1.2, 1.45, 1.8]
-    # KRKeegan adjustments to costs for different TFs
-    # these were calculated using the test_longitudial.py deceleration tests
-  #TF에 의한 a,j,d cost변경
-    a_change_tf = interp(self.t_follow, TFs, [.9, 1., 1.0]) # 가까울수록 작게 #interp(self.t_follow, TFs, [.8, 1., 1.1]) # 가까울수록 작게
-    j_ego_tf = interp(self.t_follow, TFs, [.5, 1., 1.0]) #가까울수록 작게 interp(self.t_follow, TFs, [.8, 1., 1.1]) #가까울수록 작게
-    d_zone_tf = interp(self.t_follow, TFs, [1.1, 1., 1.0]) # 가까울수록 크게interp(self.t_follow, TFs, [1.3, 1., 1.]) # 가까울수록 크게
-
-    # KRKeegan adjustments to improve sluggish acceleration
-    # do not apply to deceleration
-    j_ego_v_ego = 1
-    a_change_v_ego = 1
-    if (v_lead0 - v_ego >= 0) and (v_lead1 - v_ego >= 0):  #상대차량이 현재속도보다 빠르다면...
-      j_ego_v_ego = interp(v_ego, v_ego_bps, [.05, 1.])
-      a_change_v_ego = interp(v_ego, v_ego_bps, [.05, 1.])
-    # Select the appropriate min/max of the options
-    j_ego = min(j_ego_tf, j_ego_v_ego)
-    a_change = min(a_change_tf, a_change_v_ego)
-    return (a_change, j_ego, d_zone_tf)
-
-  def set_weights(self, prev_accel_constraint=True, v_lead0=0, v_lead1=0, personality=log.LongitudinalPersonality.standard):
+  def set_weights(self, prev_accel_constraint=True, personality=log.LongitudinalPersonality.standard):
     jerk_factor = get_jerk_factor(personality)
     if self.mode == 'acc':
       a_change_cost = self.aChangeCost if prev_accel_constraint else self.aChangeCostStart
-      if self.applyLongDynamicCost:
-        cost_muls = self.get_cost_multipliers(v_lead0, v_lead1)
-        cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, V_EGO_COST, A_EGO_COST, jerk_factor * a_change_cost * cost_muls[0], jerk_factor * J_EGO_COST * cost_muls[1]]
-        constraint_cost_weights = [LIMIT_COST, LIMIT_COST, LIMIT_COST, DANGER_ZONE_COST * cost_muls[2]]
-      else:
-        cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, V_EGO_COST, A_EGO_COST, jerk_factor * a_change_cost, jerk_factor * J_EGO_COST]
-        constraint_cost_weights = [LIMIT_COST, LIMIT_COST, LIMIT_COST, DANGER_ZONE_COST]
+      cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, V_EGO_COST, A_EGO_COST, jerk_factor * a_change_cost, jerk_factor * J_EGO_COST]
+      constraint_cost_weights = [LIMIT_COST, LIMIT_COST, LIMIT_COST, DANGER_ZONE_COST]
     elif self.mode == 'blended':
       a_change_cost = 40.0 if prev_accel_constraint else self.aChangeCostStart
       cost_weights = [0., 0.1, 0.2, 5.0, a_change_cost, 1.0]
@@ -457,13 +417,21 @@ class LongitudinalMpc:
     #return np.full(N+1, t_follow)
     return t_follow
 
+  def update_dynamic_tf(self, t_follow, lead_data, a_ego, v_ego):
+    if lead_data.status:
+      t_follow *= clip(1.0 - lead_data.vRel * self.tFollowLeadCarSpeed, -1.2, 1.2)
+      t_follow *= clip(1.0 - min(lead_data.aLeadK, 0.0) * self.tFollowLeadCarAccel, -1.2, 1.2)
+
+    #t_follow *= clip(1.0 - min(a_ego, 0.0) * self.tFollowMyCarAccel, -1.2, 1.2)
+    return t_follow
+
   def set_accel_limits(self, min_a, max_a):
     # TODO this sets a max accel limit, but the minimum limit is only for cruise decel
     # needs refactor
     self.cruise_min_a = min_a
     self.max_a = max_a
 
-  def update(self, sm, reset_state, prev_accel_constraint, radarstate, v_cruise, x, v, a, j, personality=log.LongitudinalPersonality.standard):
+  def update(self, sm, reset_state, prev_accel_constraint, radarstate, v_cruise, x, v, a, j, carrot_planner, personality=log.LongitudinalPersonality.standard):
     t_follow = self.get_T_FOLLOW(personality)
     #self.debugLongText = "v_cruise ={:.1f}".format(v_cruise)
     carstate = sm['carState']
@@ -477,6 +445,10 @@ class LongitudinalMpc:
     self.comfort_brake = COMFORT_BRAKE
     applyStopDistance = self.stop_distance  * (2.0 - self.mySafeFactor)
     t_follow = self.update_tf(v_ego, t_follow)
+    t_follow = self.update_dynamic_tf(t_follow, radarstate.leadOne, a_ego, v_ego)
+    if Params().get_int("CarrotTest3") in [1,2]:
+      if radarstate.leadOne.dPath * radarstate.leadOne.vLat > 0:
+        t_follow *= interp(abs(radarstate.leadOne.dPath + radarstate.leadOne.vLat), [0.5, 1.0, 2.0], [1.0, 0.5, 0.2])
     self.t_follow = t_follow
     
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
@@ -487,12 +459,16 @@ class LongitudinalMpc:
     # To estimate a safe distance from a moving lead, we calculate how much stopping
     # distance that lead needs as a minimum. We can add that to the current distance
     # and then treat that as a stopped car/obstacle at this new distance.
-    lead_0_obstacle = lead_xv_0[:,0] + get_stopped_equivalence_factor(lead_xv_0[:,1], self.x_sol[:,1], self.t_follow, applyStopDistance, krkeegan=self.applyLongDynamicCost)
-    lead_1_obstacle = lead_xv_1[:,0] + get_stopped_equivalence_factor(lead_xv_1[:,1], self.x_sol[:,1], self.t_follow, applyStopDistance, krkeegan=self.applyLongDynamicCost)
+    lead_0_obstacle = lead_xv_0[:,0] + get_stopped_equivalence_factor(lead_xv_0[:,1], self.x_sol[:,1], self.t_follow, applyStopDistance)
+    lead_1_obstacle = lead_xv_1[:,0] + get_stopped_equivalence_factor(lead_xv_1[:,1], self.x_sol[:,1], self.t_follow, applyStopDistance)
     self.params[:,0] = ACCEL_MIN if not reset_state else a_ego
     self.params[:,1] = self.max_a if not reset_state else a_ego
 
-    v_cruise, stop_x, self.mode = self.update_apilot(carstate, radarstate, model, v_cruise)
+    if self.experimentalMode:
+      self.mode == 'blended'
+      stop_x = 1000.0
+    else:
+      v_cruise, stop_x, self.mode = self.update_apilot(carstate, radarstate, model, v_cruise, carrot_planner)
     #self.debugLongText = "{},{},{:.1f},tf={:.2f},{:.1f},stop={:.1f},{:.1f},xv={:.0f},{:.0f}".format(
     #  str(self.xState), str(self.trafficState), v_cruise*3.6, t_follow, t_follow*v_ego+6.0, stop_x, self.stopDist,x[-1],v[-1])
     xe, ve = x[-1], v[-1]
@@ -500,7 +476,7 @@ class LongitudinalMpc:
     if self.xState == XState.e2eStop:
       self.max_a = 0.0
 
-    self.set_weights(prev_accel_constraint=prev_accel_constraint, v_lead0=lead_xv_0[0,1], v_lead1=lead_xv_1[0,1], personality=personality)
+    self.set_weights(prev_accel_constraint=prev_accel_constraint, personality=personality)
 
     # Update in ACC mode or ACC/e2e blend
     if self.mode == 'acc':
@@ -618,8 +594,8 @@ class LongitudinalMpc:
     # lin {self.time_linearization:.2e} qp_iter {qp_iter}, reset {reset}")
 
   def get_T_FOLLOW(self, personality=log.LongitudinalPersonality.standard):
-    if personality==log.LongitudinalPersonality.relaxed2:
-      return self.tFollowGap4 #2.0
+    if personality==log.LongitudinalPersonality.moreRelaxed:
+      return self.tFollowGap4 #1.75
     elif personality==log.LongitudinalPersonality.relaxed:
       return self.tFollowGap3 #1.75
     elif personality==log.LongitudinalPersonality.standard:
@@ -631,11 +607,12 @@ class LongitudinalMpc:
 
   def update_params(self):
     self.lo_timer += 1
-    
+
+    params = Params()
     if self.lo_timer % 2 == 0:
-      self.myDrivingMode = Params().get_int("MyDrivingMode")
-      self.myEcoModeFactor = float(Params().get_int("MyEcoModeFactor")) / 100.
-      self.mySafeModeFactor = float(Params().get_int("MySafeModeFactor")) / 100.
+      self.myDrivingMode = params.get_int("MyDrivingMode")
+      self.myEcoModeFactor = params.get_float("MyEcoModeFactor") / 100.
+      self.mySafeModeFactor = params.get_float("MySafeModeFactor") / 100.
       self.mySafeFactor = 1.0
       if self.myDrivingMode == 1: # eco
         self.mySafeFactor = self.myEcoModeFactor
@@ -645,18 +622,19 @@ class LongitudinalMpc:
     if self.lo_timer > 200:
       self.lo_timer = 0
     elif self.lo_timer == 20:
-      self.applyLongDynamicCost = Params().get_bool("ApplyLongDynamicCost")
-    elif self.lo_timer == 80:
       pass
+    elif self.lo_timer == 80:
+      self.tFollowSpeedAdd = params.get_float("TFollowSpeedAdd") / 100.
+      self.tFollowSpeedAddM = params.get_float("TFollowSpeedAddM") / 100.
+      self.tFollowLeadCarSpeed = params.get_float("TFollowLeadCarSpeed") / 1000.
+      self.tFollowLeadCarAccel = params.get_float("TFollowLeadCarAccel") / 100.
     elif self.lo_timer == 100:
-      self.tFollowSpeedAdd = float(Params().get_int("TFollowSpeedAdd")) / 100.
-      self.tFollowSpeedAddM = float(Params().get_int("TFollowSpeedAddM")) / 100.
-      self.tFollowGap1 = float(Params().get_int("TFollowGap1")) / 100.
-      self.tFollowGap2 = float(Params().get_int("TFollowGap2")) / 100.
-      self.tFollowGap3 = float(Params().get_int("TFollowGap3")) / 100.
-      self.tFollowGap4 = float(Params().get_int("TFollowGap4")) / 100.
+      self.tFollowGap1 = params.get_float("TFollowGap1") / 100.
+      self.tFollowGap2 = params.get_float("TFollowGap2") / 100.
+      self.tFollowGap3 = params.get_float("TFollowGap3") / 100.
+      self.tFollowGap4 = params.get_float("TFollowGap4") / 100.
     elif self.lo_timer == 120:
-      self.stop_distance = float(Params().get_int("StopDistanceCarrot")) / 100.
+      self.stop_distance = params.get_float("StopDistanceCarrot") / 100.
 
   def update_stop_dist(self, stop_x):
     stop_x = self.xStopFilter.process(stop_x, median = True)
@@ -688,7 +666,7 @@ class LongitudinalMpc:
       self.trafficState = TrafficState.off
 
 
-  def update_apilot(self, carstate, radarstate, model, v_cruise):
+  def update_apilot(self, carstate, radarstate, model, v_cruise, carrot_planner):
     v_ego = carstate.vEgo
     v_ego_kph = v_ego * CV.MS_TO_KPH
     x = model.position.x
@@ -705,7 +683,7 @@ class LongitudinalMpc:
     #self.check_model_stopping(v, v_ego, self.xStop, y)
     self.check_model_stopping(v, v_ego, x[-1], y)
 
-    if (carstate.rightBlinker and not carstate.leftBlinker) or self.myDrivingMode == 4:
+    if (carstate.rightBlinker and not carstate.leftBlinker) or self.myDrivingMode == 4 or (carrot_planner.rightBlinkerExt % 10000) > 0:
       self.trafficState = TrafficState.off    
 
     if self.xState == XState.e2eStopped:
@@ -729,13 +707,14 @@ class LongitudinalMpc:
           self.xState = XState.e2ePrepare
         else:
           self.comfort_brake = COMFORT_BRAKE * 0.9
+          #self.comfort_brake = COMFORT_BRAKE
           self.trafficStopAdjustRatio = 0.8
           stop_dist = self.xStop * interp(self.xStop, [0, 100], [1.0, self.trafficStopAdjustRatio])  ##남은거리에 따라 정지거리 비율조정
           if stop_dist > 5.0:
             self.stopDist = stop_dist
           stop_x = 0
           self.fakeCruiseDistance = 0 if self.stopDist > 10.0 else 10.0
-          if v_ego < 0.1:
+          if v_ego < 0.3:
             self.stopping_count = 0.5 / DT_MDL
             self.xState = XState.e2eStopped
     elif self.xState == XState.e2ePrepare:
@@ -765,8 +744,7 @@ class LongitudinalMpc:
     if stop_x == 1000.0:
       self.stopDist = 0.0
     elif self.stopDist > 0:
-      stop_dist = v_ego ** 2 / (2.1 * 2)
-      self.stopDist = self.stopDist if self.stopDist > stop_dist else stop_dist
+      self.stopDist = max(self.stopDist, v_ego ** 2 / (self.comfort_brake * 2))
       stop_x = 0.0
     #self.debugLongText = "XState({}),stop_x={:.1f},stopDist={:.1f},Traffic={}".format(str(self.xState), stop_x, self.stopDist, str(self.trafficState))
     #번호를 읽을때는 self.xState.value

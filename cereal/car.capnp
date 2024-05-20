@@ -141,7 +141,7 @@ struct CarEvent @0x9b1657f34caf3ad3 {
     personalityRelaxed @137;
     personalityStandard @138;
     personalityAggressive @139;
-    personalityRelaxed2 @140;
+    personalityMoreRelaxed @140;
     torqueNNLoad @141;
 
     radarCanErrorDEPRECATED @15;
@@ -247,7 +247,6 @@ struct CarState {
 
 
   tpms @48 : Tpms;
-  # neokii
   vCluRatio @49 :Float32;
   driverOverride @50 : Int32; #0: Normal, 1:Gas, 2:Brake
   chargeMeter @51 : Float32;
@@ -509,6 +508,7 @@ struct CarParams {
   enableDsu @5 :Bool;        # driving support unit
   enableBsm @56 :Bool;       # blind spot monitoring
   flags @64 :UInt32;         # flags for car specific quirks
+  extFlags @74 :UInt32;     # carrot ext car flags
   experimentalLongitudinalAvailable @71 :Bool;
 
   minEnableSpeed @7 :Float32;

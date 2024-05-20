@@ -276,7 +276,7 @@ static void ui_draw_path(const UIState* s) {
 }
 #endif
 
-void ui_draw_image(const UIState* s, const Rect& r, const char* name, float alpha) {
+void ui_draw_image(const UIState* s, const Rect1& r, const char* name, float alpha) {
     nvgBeginPath(s->vg);
     NVGpaint imgPaint = nvgImagePattern(s->vg, r.x, r.y, r.w, r.h, 0, s->images.at(name), alpha);
     nvgRect(s->vg, r.x, r.y, r.w, r.h);
@@ -301,24 +301,24 @@ static void ui_draw_circle_image_rotation(const UIState* s, int center_x, int ce
     ui_draw_image(s, { ct_pos, ct_pos, img_size, img_size }, image, img_alpha);
     nvgRestore(s->vg);
 }
-void ui_draw_rect(NVGcontext* vg, const Rect& r, NVGcolor color, int width, float radius) {
+void ui_draw_rect(NVGcontext* vg, const Rect1& r, NVGcolor color, int width, float radius) {
     nvgBeginPath(vg);
     radius > 0 ? nvgRoundedRect(vg, r.x, r.y, r.w, r.h, radius) : nvgRect(vg, r.x, r.y, r.w, r.h);
     nvgStrokeColor(vg, color);
     nvgStrokeWidth(vg, width);
     nvgStroke(vg);
 }
-static inline void fill_rect(NVGcontext* vg, const Rect& r, const NVGcolor* color, const NVGpaint* paint, float radius) {
+static inline void fill_rect(NVGcontext* vg, const Rect1& r, const NVGcolor* color, const NVGpaint* paint, float radius) {
     nvgBeginPath(vg);
     radius > 0 ? nvgRoundedRect(vg, r.x, r.y, r.w, r.h, radius) : nvgRect(vg, r.x, r.y, r.w, r.h);
     if (color) nvgFillColor(vg, *color);
     if (paint) nvgFillPaint(vg, *paint);
     nvgFill(vg);
 }
-void ui_fill_rect(NVGcontext* vg, const Rect& r, const NVGcolor& color, float radius) {
+void ui_fill_rect(NVGcontext* vg, const Rect1& r, const NVGcolor& color, float radius) {
     fill_rect(vg, r, &color, nullptr, radius);
 }
-void ui_fill_rect(NVGcontext* vg, const Rect& r, const NVGpaint& paint, float radius) {
+void ui_fill_rect(NVGcontext* vg, const Rect1& r, const NVGpaint& paint, float radius) {
     fill_rect(vg, r, nullptr, &paint, radius);
 }
 
@@ -654,43 +654,54 @@ void DrawPlot::makePlotData(const UIState* s, float& data1, float& data2, char *
     case 1:
         data1 = a_ego;
         data2 = accel;
-        sprintf(str, "Accel (G:desired, Y:actual)");
+        sprintf(str, "1.Accel (G:desired, Y:actual)");
         break;
     case 2:
         // curvature * v * v : 원심가속도
         data1 = curvature;
         //data2 = (desired_curvature * v_ego * v_ego) - (roll * 9.81);
         data2 = curvatures_0;
-        sprintf(str, "Lateral Accel(G:desired, Y:actual)");
+        sprintf(str, "2.Lateral Accel(G:desired, Y:actual)");
         break;
     case 3:
         data1 = v_ego;
         data2 = speeds_0;
-        sprintf(str, "Speed/Accel(G:speed, Y:accel)");
+        sprintf(str, "3.Speed/Accel(G:speed, Y:accel)");
         break;
     case 4:
         data1 = position.getX()[32];
         data2 = velocity.getX()[32];
-        sprintf(str, "Model data(G:velocity, Y:position");
+        sprintf(str, "4.Model data(G:velocity, Y:position");
         break;
     case 5:
         data1 = lead_radar.getVLeadK();
         data2 = lead_radar.getALeadK();
-        sprintf(str, "Detected radar(G:aLeadK, Y:vLeadK)");
+        sprintf(str, "5.Detected radar(G:aLeadK, Y:vLeadK)");
         break;
     case 6:
-        data1 = a_ego;  //노
+        data1 = accel_out; // 노
         data2 = lead_radar.getALeadK(); // 녹
-        sprintf(str, "Detected radar(G:aLeadK, Y:a_ego)");
+        sprintf(str, "6.Detected radar(G:aLeadK, Y:accel)");
         break;
     case 7:
+        data1 = lp.getTFollow();//  //노
+        data2 = lead_radar.getVLat(); // 녹
+        sprintf(str, "7.Detected radar(G:VLat, Y:TF)");
+        break;
+    case 8:
+        data1 = lead_radar.getALeadTau();//  //노
+        data2 = lead_radar.getALeadK(); // 녹
+        sprintf(str, "8.Detected radar(G:aLeadK, Y:aLeadTau)");
+        break;
+    case 9:
         data1 = lead_radar.getVLeadK();
         data2 = lead_radar.getVLead(); // getDRel();
-        sprintf(str, "Detected radar(G:vLead, Y:vLeadK)");
+        sprintf(str, "9.Detected radar(G:vLead, Y:vLeadK)");
         break;
+    case 10:
         data1 = a_ego; // 노
         data2 = accel_out;  // 녹
-        sprintf(str, "Accel (G:accel output, Y:a_ego)");
+        sprintf(str, "10.Accel (G:accel output, Y:a_ego)");
         break;
     default:
         data1 = data2 = 0;
@@ -764,8 +775,8 @@ void DrawApilot::drawRadarInfo(const UIState* s) {
                 if (s->show_radar_info >= 2) {
                     sprintf(str, "%.1f", ry_rel);
                     ui_draw_text(s, rx, ry - 40, str, 30, COLOR_WHITE, BOLD);
-                    //sprintf(str, "%.1f", v_lat);
-                    sprintf(str, "%.1f", rd);
+                    sprintf(str, "%.2f", v_lat);
+                    //sprintf(str, "%.1f", rd);
                     ui_draw_text(s, rx, ry + 30, str, 30, COLOR_WHITE, BOLD);
                 }
             }
@@ -991,7 +1002,7 @@ void DrawApilot::drawConnInfo(const UIState* s) {
     //const auto car_params = sm["carParams"].getCarParams();
     const auto road_limit_speed = sm["roadLimitSpeed"].getRoadLimitSpeed();
     int radar_tracks = params.getBool("EnableRadarTracks");
-    int sccBus = params.getBool("SccConnectedBus2");
+    int sccBus = params.getInt("SccConnectedBus2");
     int activeNDA = road_limit_speed.getActive();
 
     static int activeOSM = 0;
@@ -1007,7 +1018,7 @@ void DrawApilot::drawConnInfo(const UIState* s) {
         int hda_speedLimit = car_state.getSpeedLimit();
         int hda_speedLimitDistance = car_state.getSpeedLimitDistance();
         int naviCluster = 0;// HW: (int)car_params.getNaviCluster();
-        int y = 40;
+        int y = 10;
         if (sccBus) ui_draw_image(s, { 30, y, 120, 54 }, "ic_scc2", 1.0f);
         if (activeNDA >= 200) ui_draw_image(s, { 30 + 135, y, 120, 54 }, "ic_apn", 1.0f);
         else if (hda_speedLimit > 0 && hda_speedLimitDistance > 0) ui_draw_image(s, { 30 + 135, y, 120, 54 }, "ic_hda", 1.0f);
@@ -1138,8 +1149,8 @@ void DrawApilot::drawGapInfo2(const UIState* s, int x, int y) {
     strcpy(_strDrivingMode, strDrivingMode);
 
     char strLatControlMode[128] = "";
-    int useLaneLineSpeed = params.getInt("UseLaneLineSpeed");
-    strcpy(strLatControlMode, (useLaneLineSpeed > 0) ? tr("Lane Follow").toStdString().c_str() : tr("Laneless").toStdString().c_str());
+    int useLaneLineSpeedApply = params.getInt("UseLaneLineSpeedApply");
+    strcpy(strLatControlMode, (useLaneLineSpeedApply > 0) ? tr("Lane Follow").toStdString().c_str() : tr("Laneless").toStdString().c_str());
     static char _strLatControlMode[128] = "";
     if (strcmp(strLatControlMode, _strLatControlMode)) ui_draw_text_a(s, dx, dy, strLatControlMode, 30, COLOR_WHITE, BOLD);
     strcpy(_strLatControlMode, strLatControlMode);
@@ -1413,7 +1424,7 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
                 break;
             }
         }
-        else if (roadLimitSpeed > 0 && roadLimitSpeed < 200) {
+        else if (roadLimitSpeed >= 30 && roadLimitSpeed < 200) {
             ui_draw_image(s, { bx - 60, by - 50, 120, 150 }, "ic_road_speed", 1.0f);
             sprintf(str, "%d", roadLimitSpeed);
             ui_draw_text(s, bx, by + 75, str, 50, COLOR_BLACK, BOLD, 0.0f, 0.0f);
@@ -1617,7 +1628,7 @@ void DrawApilot::makePathXY(const UIState* s, int& path_bx1, int& path_x, int& p
     //}
     //_path_x = (int)std::clamp(_path_x, 550.f, s->fb_w - 550.f);
     _path_x = (int)std::clamp(_path_x, 350.f, s->fb_w - 350.f);
-    _path_y = (int)std::clamp(_path_y, 200.f, s->fb_h - 120.f);
+    _path_y = (int)std::clamp(_path_y, 200.f, s->fb_h - 80.f);
     if (isnan(_path_x) || isnan(_path_y) || isnan(_path_width));
     else {
         path_fx = path_fx * alpha + _path_x * (1. - alpha);
@@ -1679,14 +1690,30 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
 
     if (s->show_path_end > 0) {
         if (draw_dist) {
-            float dist = (getRadarDist() > 0.0) ? getRadarDist() : getVisionDist();
-            if (dist < 10.0) sprintf(str, "%.1f", dist);
-            else sprintf(str, "%.0f", dist);
-            ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
-
+            //float dist = (getRadarDist() > 0.0) ? getRadarDist() : getVisionDist();
+            //if (dist < 10.0) sprintf(str, "%.1f", dist);
+            //else sprintf(str, "%.0f", dist);
+            //ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
+            int wStr = 0, w=80;
+            float dist = getRadarDist();
+            if (dist > 0.0) {
+                sprintf(str, "%.1f", dist);
+                wStr = 32 * (strlen(str) + 0);
+                ui_fill_rect(s->vg, { (int)(x - w - wStr / 2), (int)(disp_y - 35), wStr, 42 }, isLeadSCC() ? COLOR_RED : COLOR_ORANGE, 15);
+                ui_draw_text(s, x - w, disp_y, str, 40, COLOR_WHITE, BOLD);
+            }
+            dist = getVisionDist();
+            if (dist > 0.0) {
+                sprintf(str, "%.1f", dist);
+                wStr = 32 * (strlen(str) + 0);
+                ui_fill_rect(s->vg, { (int)(x + w - wStr / 2), (int)(disp_y - 35), wStr, 42 }, COLOR_BLUE, 15);
+                ui_draw_text(s, x + w, disp_y, str, 40, COLOR_WHITE, BOLD);
+            }
         }
-        sprintf(str, "%d", getLpSource());
-        ui_draw_text(s, x, disp_y - 70, str, 25, COLOR_WHITE, BOLD);
+        if (!isLeadDetected()) {
+            sprintf(str, "%d", getLpSource());
+            ui_draw_text(s, x, disp_y - 70, str, 25, COLOR_WHITE, BOLD);
+        }
     }
 
     // 타겟하단: 롱컨상태표시
@@ -1707,7 +1734,7 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
         float px[7], py[7];
         NVGcolor rcolor = isLeadSCC() ? COLOR_RED : COLOR_ORANGE;
         NVGcolor  pcolor = !isRadarDetected() ? ((getTrafficMode() == 1) ? rcolor : COLOR_GREEN) : isRadarDetected() ? rcolor : COLOR_BLUE;
-        if (s->show_path_end) {
+        if (s->show_path_end && !isLeadDetected()) {
             px[0] = path_x - path_width / 2;
             px[1] = path_x + path_width / 2;
             px[2] = path_x + path_width / 2;
@@ -1729,12 +1756,43 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
             px[1] = px[0] + path_width + 20;
             px[2] = px[1];
             px[3] = px[0];
-            py[0] = path_y + 5;
+            py[0] = path_y + 20;// 5;
             py[1] = py[0];
             py[2] = py[1] - path_width * 0.8;
             py[3] = py[2];
             NVGcolor color2 = COLOR_BLACK_ALPHA(20);
             ui_draw_line2(s, px, py, 4, &color2, nullptr, 3.0f, isRadarDetected() ? rcolor : COLOR_BLUE);
+
+            auto lead_radar = sm["radarState"].getRadarState().getLeadOne();
+            float h = path_width * 0.8 / 2.;
+            float ax[4], ay[4], vx[4], vy[4];
+            vx[0] = px[0];
+            vx[1] = vx[0] + 20;
+            vx[2] = vx[1];
+            vx[3] = vx[0];
+            vy[0] = py[0] - h;
+            vy[1] = vy[0];
+            float v = lead_radar.getVRel() / 5.0 * h;
+            if (v < -h) v = -h;
+            if (v > h) v = h;
+            vy[2] = vy[1] - v;
+            vy[3] = vy[2];
+            NVGcolor vcolor = isLeadSCC() ? COLOR_RED : COLOR_ORANGE;
+            ui_draw_line2(s, vx, vy, 4, &vcolor, nullptr, 0.0f);
+
+            ax[0] = px[1];
+            ax[1] = px[1] - 20;
+            ax[2] = ax[1];
+            ax[3] = ax[0];
+            ay[0] = py[0] - h;
+            ay[1] = ay[0];
+            float a = lead_radar.getALeadK() / 2.0 * h;
+            if (a < -h) a = -h;
+            if (a > h) a = h;
+            ay[2] = ay[1]  - a;
+            ay[3] = ay[2];
+            NVGcolor acolor = isLeadSCC() ? COLOR_RED : COLOR_ORANGE;
+            ui_draw_line2(s, ax, ay, 4, &acolor, nullptr, 0.0f);
         }
     }
 }

@@ -358,7 +358,7 @@ void update_leads(UIState *s, const cereal::RadarState::Reader &radar_state, con
           vd.y = vtmp.y();
           vd.d = l.getDRel();
           vd.v = l.getVLeadK();
-          vd.y_rel = l.getYRel();
+          vd.y_rel = l.getDPath();// l.getYRel();
           vd.v_lat = l.getVLat();
           vd.radar = l.getRadar();
           s->scene.lead_vertices_side.push_back(vd);

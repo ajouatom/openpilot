@@ -56,6 +56,12 @@ const CanMsg HYUNDAI_CANFD_HDA2_LONG_TX_MSGS[] = {
   {0x1DA, 0, 32}, // ADRV_0x1da
 
   {0x362, 1, 32}, // CAM_0x362
+  {0x2a4, 1, 24}, // CAM_0x2a4
+
+  {0x110, 1, 32}, // LKAS_ALT (272)
+
+  {0x50, 1, 16}, // 
+  {0x51, 1, 32}, // 
 
   {353, 0, 24}, // ADRV_353
 };
@@ -140,6 +146,10 @@ RxCheck hyundai_canfd_hda2_long_rx_checks[] = {
   HYUNDAI_CANFD_COMMON_RX_CHECKS(1)
   HYUNDAI_CANFD_BUTTONS_ADDR_CHECK(1)  // TODO: carrot: canival no 0x1cf
 };
+RxCheck hyundai_canfd_hda2_long_rx_checks_scc2[] = {
+  HYUNDAI_CANFD_COMMON_RX_CHECKS(0)
+  HYUNDAI_CANFD_BUTTONS_ADDR_CHECK(0)  
+};
 RxCheck hyundai_canfd_hda2_alt_buttons_rx_checks[] = {
   HYUNDAI_CANFD_COMMON_RX_CHECKS(1)
   HYUNDAI_CANFD_ALT_BUTTONS_ADDR_CHECK(1)
@@ -159,11 +169,13 @@ RxCheck hyundai_canfd_hda2_long_alt_buttons_rx_checks_scc2[] = {
 const int HYUNDAI_PARAM_CANFD_ALT_BUTTONS = 32;
 const int HYUNDAI_PARAM_CANFD_HDA2_ALT_STEERING = 128;
 const int HYUNDAI_PARAM_HYUNDAI_SCC_BUS2 = 256;
+const int HYUNDAI_PARAM_ACAN_PANDA = 512;
 bool hyundai_canfd_alt_buttons = false;
 bool hyundai_canfd_hda2_alt_steering = false;
 bool hyundai_canfd_scc_bus2 = false;
+bool hyundai_acan_panda = false;
 
-int canfd_tx_addr[32] = { 272, 80, 298, 866, 676, 480, 81, 490, 512, 837, 474, 352, 416, 282, 437, 506, 353, 354, 442, 485, 1402, 908, 1848, 0, };
+int canfd_tx_addr[32] = { 80, 81, 272, 282, 298, 352, 353, 354, 442, 485, 416, 437, 506, 474, 480, 490, 512, 676, 866, 837, 1402, 908, 1848, 0, };
 uint32_t canfd_tx_time[32] = { 0, };
 
 int hyundai_canfd_hda2_get_lkas_addr(void) {
@@ -186,6 +198,11 @@ static uint32_t hyundai_canfd_get_checksum(const CANPacket_t *to_push) {
 }
 
 static void hyundai_canfd_rx_hook(const CANPacket_t *to_push) {
+    if (hyundai_acan_panda) {
+        controls_allowed = true;
+        acc_main_on = true;
+        return;
+    }
   int bus = GET_BUS(to_push);
   int addr = GET_ADDR(to_push);
 
@@ -273,6 +290,8 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
   bool tx = true;
   int addr = GET_ADDR(to_send);
 
+  if (hyundai_acan_panda) return tx;
+
   // steering
   const int steer_addr = (hyundai_canfd_hda2 && !hyundai_longitudinal) ? hyundai_canfd_hda2_get_lkas_addr() : 0x12a;
   if (addr == steer_addr) {
@@ -289,14 +308,15 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
   acc_main_on = (lat_active_count > 0) || controls_allowed;
   
   // cruise buttons check
-  if (addr == 0x1cf) {
+  if (addr == 0x1cf && !hyundai_longitudinal) {
     int button = GET_BYTE(to_send, 2) & 0x7U;
     bool is_cancel = (button == HYUNDAI_BTN_CANCEL);
     bool is_resume = (button == HYUNDAI_BTN_RESUME);
+    bool is_set = (button == HYUNDAI_BTN_SET);
 
-    bool allowed = (is_cancel && cruise_engaged_prev) || (is_resume && controls_allowed);
+    bool allowed = (is_cancel && cruise_engaged_prev) || (is_resume && controls_allowed) || (is_set && controls_allowed);
     if (!allowed) {
-      tx = false;
+      tx = false;  
     }
   }
 
@@ -306,7 +326,7 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
       if (addr == 0x1cf) cruise_button = GET_BYTE(to_send, 2) & 0x7U;
       else cruise_button = (GET_BYTE(to_send, 4) >> 4) & 0x7U;
       if (cruise_button == 1) {
-          print("auto cruise: controls_allowed = true");
+          print("auto cruise: controls_allowed = true\n");
           controls_allowed = true;
       }
       tx = false;  // button spamming은 longcon일때.. 나가면 안될것이라고 판단됨..
@@ -329,6 +349,7 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
     bool violation = false;
 
     if (hyundai_longitudinal) {
+        controls_allowed = true;
       violation |= longitudinal_accel_checks(desired_accel_raw, HYUNDAI_LONG_LIMITS);
       violation |= longitudinal_accel_checks(desired_accel_val, HYUNDAI_LONG_LIMITS);
       if (violation) {
@@ -355,39 +376,104 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
   return tx;
 }
 
-int addr_list[128] = { 0, };
-int addr_list_len[128] = { 0, };
-int addr_list_count = 0;
+int addr_list1[128] = { 0, };
+int addr_list_len1[128] = { 0, };
+int addr_list_count1 = 0;
+int addr_list2[128] = { 0, };
+int addr_list_len2[128] = { 0, };
+int addr_list_count2 = 0;
+uint32_t last_ts_lkas_msg_acan = 0;
 
 static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
   int bus_fwd = -1;
+  uint32_t now = microsecond_timer_get();
+
+  if (hyundai_acan_panda) {
+      if (bus_num == 0) {
+          bus_fwd = 2;
+          if (addr == 272 || addr == 80 || addr == 81 || addr == 866 || addr == 676) {
+              last_ts_lkas_msg_acan = now;
+              lkas_msg_acan_active = true;
+              //print("blocking\n");
+              bus_fwd = -1;
+          }
+      }
+      if (bus_num == 2) {
+          int i;
+          for (i = 0; i < addr_list_count2; i++) {
+              if (addr_list2[i] == addr) {
+                  break;
+              }
+          }
+          if (i == addr_list_count2) {
+              addr_list2[addr_list_count2] = addr;
+              addr_list_count2++;
+              print("acan_panda bus2_list=");
+              for (int j = 0; j < addr_list_count2; j++) { putui((uint32_t)addr_list2[j]); print(","); }
+              print("\n");
+          }
+
+          bus_fwd = 0;
+          if (addr == 272 || addr == 80 || addr == 81 || addr == 866 || addr == 676) {
+              if (now - last_ts_lkas_msg_acan < 200000) {
+                  bus_fwd = -1;
+              }
+              else lkas_msg_acan_active = false;
+          }
+          // carrot
+          // ADAS의 데이터가 LKAS로 보내지는것을 막음. 근데.. 이건 ECAN데이터들인데?
+          // 일단 삭제함.. 의미없어보임.
+          /*
+          if (lkas_msg_acan_active) {
+              if (addr == 353 || addr == 354 || addr == 908 || addr == 1402 || addr == 1848) {
+                  bus_fwd = -1;
+              }
+          }
+          */
+      }
+      return bus_fwd;
+  }
 
   if (bus_num == 0) {
     bus_fwd = 2;
   }
   extern uint8_t to_push_data_len_code;
-  if (bus_num == 2) {
+  if (bus_num == 1) {
       int i;
-      for (i = 0; i < addr_list_count; i++) {
-          if (addr_list[i] == addr) {
-              if (addr == 353) {
-                  if (addr_list_len[i] != to_push_data_len_code) { print("len="); putui((uint32_t)to_push_data_len_code); print("\n"); }
-              }
-              addr_list_len[i] = to_push_data_len_code;
+      for (i = 0; i < addr_list_count1 && i < 127; i++) {
+          if (addr_list1[i] == addr) {
+              addr_list_len1[i] = to_push_data_len_code;
               break;
           }
       }
-      if (i == addr_list_count) {
-          addr_list[addr_list_count] = addr;
-          addr_list_len[addr_list_count] = to_push_data_len_code;
-          addr_list_count++;
-          print("bus2_list33=");
-          for (int j = 0; j < addr_list_count; j++) { putui((uint32_t)addr_list[j]); print("("); putui((uint32_t)addr_list_len[j]); print(") "); }
+      if (i == addr_list_count1 && i!=127) {
+          addr_list1[addr_list_count1] = addr;
+          addr_list_len1[addr_list_count1] = to_push_data_len_code;
+          addr_list_count1++;
+          print("!!!!! bus1_list=");
+          for (int j = 0; j < addr_list_count1; j++) { putui((uint32_t)addr_list1[j]); print(","); }
+          //for (int j = 0; j < addr_list_count1; j++) { putui((uint32_t)addr_list1[j]); print("("); putui((uint32_t)addr_list_len1[j]); print(") "); }
+          print("\n");
+      }
+  }
+  if (bus_num == 2) {
+      int i;
+      for (i = 0; i < addr_list_count2 && i < 127; i++) {
+          if (addr_list2[i] == addr) {
+              addr_list_len2[i] = to_push_data_len_code;
+              break;
+          }
+      }
+      if (i == addr_list_count2 && i != 127) {
+          addr_list2[addr_list_count2] = addr;
+          addr_list_len2[addr_list_count2] = to_push_data_len_code;
+          addr_list_count2++;
+          print("@@@@ bus2_list=");
+          for (int j = 0; j < addr_list_count2; j++) { putui((uint32_t)addr_list2[j]); print(","); }
+          //for (int j = 0; j < addr_list_count2; j++) { putui((uint32_t)addr_list2[j]); print("("); putui((uint32_t)addr_list_len2[j]); print(") "); }
           print("\n");
       }
 #if 1
-      uint32_t now = microsecond_timer_get();
-
       bus_fwd = 0;
       for (int i = 0; canfd_tx_addr[i] > 0; i++) {
           if (addr == canfd_tx_addr[i] && (now - canfd_tx_time[i]) < 200000) {
@@ -399,6 +485,11 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
       //else if (addr == 354) bus_fwd = -1;
       //if (addr == 908) bus_fwd = -1;
       //else if (addr == 1402) bus_fwd = -1;
+      //
+      // 아래코드중 오토상향등코드 있음.. ㅋ
+      //if (addr == 698) bus_fwd = -1;
+      //if (addr == 1848) bus_fwd = -1;
+      //if (addr == 1996) bus_fwd = -1;
 #else
     // LKAS for HDA2, LFA for HDA1
     int hda2_lfa_block_addr = hyundai_canfd_hda2_alt_steering ? 0x362 : 0x2a4;
@@ -422,6 +513,15 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
 }
 
 static safety_config hyundai_canfd_init(uint16_t param) {
+  hyundai_acan_panda = GET_FLAG(param, HYUNDAI_PARAM_ACAN_PANDA);
+  if (hyundai_acan_panda) {
+      //lkas_acan_panda_mode = true;
+      print("ACAN RED-PANDA MODE\n");
+      controls_allowed = true;
+      acc_main_on = true;
+      return (safety_config) { NULL, 0, NULL, 0 };
+  }
+
   hyundai_common_init(param);
 
   gen_crc_lookup_table_16(0x1021, hyundai_canfd_crc_lut);
@@ -442,7 +542,8 @@ static safety_config hyundai_canfd_init(uint16_t param) {
             else ret = BUILD_SAFETY_CFG(hyundai_canfd_hda2_long_alt_buttons_rx_checks, HYUNDAI_CANFD_HDA2_LONG_TX_MSGS);
         }
         else {
-            ret = BUILD_SAFETY_CFG(hyundai_canfd_hda2_long_rx_checks, HYUNDAI_CANFD_HDA2_LONG_TX_MSGS);
+            if (hyundai_canfd_scc_bus2) ret = BUILD_SAFETY_CFG(hyundai_canfd_hda2_long_rx_checks_scc2, HYUNDAI_CANFD_HDA2_LONG_TX_MSGS);
+            else ret = BUILD_SAFETY_CFG(hyundai_canfd_hda2_long_rx_checks, HYUNDAI_CANFD_HDA2_LONG_TX_MSGS);
         }
     } else {
       if(hyundai_canfd_alt_buttons) print("hyundai safety canfd_hda1 long alt_buttons\n");

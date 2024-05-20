@@ -119,8 +119,11 @@ bool safety_setter_thread(std::vector<Panda *> pandas) {
   cereal::CarParams::SafetyModel safety_model;
   uint16_t safety_param;
 
+  int scc2 = p.getInt("SccConnectedBus2");
   auto safety_configs = car_params.getSafetyConfigs();
   uint16_t alternative_experience = car_params.getAlternativeExperience();
+
+  printf("panda.size() = %d, scc2 = %d\n", (int)pandas.size(), scc2);
   for (uint32_t i = 0; i < pandas.size(); i++) {
     auto panda = pandas[i];
 
@@ -129,11 +132,17 @@ bool safety_setter_thread(std::vector<Panda *> pandas) {
       safety_param = safety_configs[i].getSafetyParam();
     } else {
       // If no safety mode is specified, default to silent
-      safety_model = cereal::CarParams::SafetyModel::SILENT;
-      safety_param = 0U;
+        safety_model = cereal::CarParams::SafetyModel::SILENT;
+        safety_param = 0U;
+    }
+    printf("i=%d, sccccccc2 = %d\n", i, scc2);
+    if (i == 1 && scc2 == 2) {
+        printf("boadd..ccc ################### %d\n", scc2);
+        safety_model = cereal::CarParams::SafetyModel::HYUNDAI_CANFD;
+        safety_param = 512U;
     }
 
-    LOGW("panda %d: setting safety model: %d, param: %d, alternative experience: %d", i, (int)safety_model, safety_param, alternative_experience);
+    LOGW("panda %d: setting safety model: %d, param: %d, alternative experience: %d, #######################", i, (int)safety_model, safety_param, alternative_experience);
     panda->set_alternative_experience(alternative_experience);
     panda->set_safety_model(safety_model, safety_param);
   }
@@ -144,7 +153,7 @@ bool safety_setter_thread(std::vector<Panda *> pandas) {
 Panda *connect(std::string serial="", uint32_t index=0) {
   std::unique_ptr<Panda> panda;
   try {
-    panda = std::make_unique<Panda>(serial, (index * PANDA_BUS_CNT));
+    panda = std::make_unique<Panda>(serial, (index * PANDA_BUS_OFFSET));
   } catch (std::exception &e) {
     return nullptr;
   }
@@ -316,7 +325,6 @@ std::optional<bool> send_panda_states(PubMaster *pm, const std::vector<Panda *> 
     ps.setControlsAllowed(health.controls_allowed_pkt);
     ps.setTxBufferOverflow(health.tx_buffer_overflow_pkt);
     ps.setRxBufferOverflow(health.rx_buffer_overflow_pkt);
-    ps.setGmlanSendErrs(health.gmlan_send_errs_pkt);
     ps.setPandaType(panda->hw_type);
     ps.setSafetyModel(cereal::CarParams::SafetyModel(health.safety_mode_pkt));
     ps.setSafetyParam(health.safety_param_pkt);

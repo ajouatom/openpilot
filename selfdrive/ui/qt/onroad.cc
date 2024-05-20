@@ -294,7 +294,7 @@ void OnroadWindow::updateStateText() {
     auto controls_state = sm["controlsState"].getControlsState();
     QString debugControlsState = QString::fromStdString(controls_state.getDebugText1().cStr());
     const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
-    QString debugLong2 = QString::fromStdString(lp.getDebugLongText2().cStr());
+    //QString debugLong2 = QString::fromStdString(lp.getDebugLongText2().cStr());
     const auto live_params = sm["liveParameters"].getLiveParameters();
     float   liveSteerRatio = live_params.getSteerRatio();
 
@@ -306,9 +306,9 @@ void OnroadWindow::updateStateText() {
     else if (debugModelV2.length() > 2) {
         top = debugModelV2;
     }
-    else if (debugLong2.length() > 2) {
-        top = debugLong2;
-    }
+    //else if (debugLong2.length() > 2) {
+    //    top = debugLong2;
+    //}
     else top = QString::fromStdString(lp.getDebugLongText().cStr()) + (" LiveSR:" + QString::number(liveSteerRatio, 'f', 2));
     //p.drawText(rect_top, Qt::AlignBottom | Qt::AlignHCenter, top);
     topLabel->setText(top);
@@ -491,7 +491,7 @@ void AnnotatedCameraWidget::updateState(const UIState &s) {
   const auto nav_instruction = sm["navInstruction"].getNavInstruction();
 
   // Handle older routes where vCruiseCluster is not set
-  float v_cruise =  cs.getVCruiseCluster() == 0.0 ? cs.getVCruise() : cs.getVCruiseCluster();
+  float v_cruise = cs.getVCruiseCluster() == 0.0 ? cs.getVCruise() : cs.getVCruiseCluster();
   setSpeed = cs_alive ? v_cruise : SET_SPEED_NA;
   is_cruise_set = setSpeed > 0 && (int)setSpeed != SET_SPEED_NA;
   if (is_cruise_set && !s.scene.is_metric) {
@@ -813,6 +813,7 @@ void AnnotatedCameraWidget::paintEvent(QPaintEvent *event) {
   QPainter painter(this);
   const double start_draw_t = millis_since_boot();
   const cereal::ModelDataV2::Reader &model = sm["modelV2"].getModelV2();
+  const float v_ego = sm["carState"].getCarState().getVEgo();
 
   // draw camera frame
   {
@@ -834,7 +835,6 @@ void AnnotatedCameraWidget::paintEvent(QPaintEvent *event) {
     // Wide or narrow cam dependent on speed
     bool has_wide_cam = available_streams.count(VISION_STREAM_WIDE_ROAD);
     if (has_wide_cam) {
-      float v_ego = sm["carState"].getCarState().getVEgo();
       if ((v_ego < 10) || available_streams.size() == 1) {
         wide_cam_requested = true;
       } else if (v_ego > 15) {

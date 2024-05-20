@@ -66,6 +66,7 @@ def create_gas_regen_command(packer, bus, throttle, idx, enabled, at_full_stop):
     "GasRegenFullStopActive": at_full_stop,
     "GasRegenAlwaysOne": 1,
     "GasRegenAlwaysOne2": 1,
+    "GasRegenAlwaysOne3": 1,
   }
 
   dat = packer.make_can_msg("ASCMGasRegenCmd", bus, values)[2]
@@ -80,7 +81,7 @@ def create_friction_brake_command(packer, bus, apply_brake, idx, enabled, near_s
   mode = 0x1
 
   # TODO: Understand this better. Volts and ICE Camera ACC cars are 0x1 when enabled with no brake
-  if enabled and CP.carFingerprint in (CAR.BOLT_EUV,):
+  if enabled and CP.carFingerprint in (CAR.CHEVROLET_BOLT_EUV,):
     mode = 0x9
 
   if apply_brake > 0:
@@ -178,31 +179,36 @@ def create_lka_icon_command(bus, active, critical, steer):
 
 
 def create_gm_cc_spam_command(packer, controller, CS, actuators):
-  # TODO: Cleanup the timing - normal is every 30ms...
+  if controller.params_.get_bool("IsMetric"):
+    _CV = CV.MS_TO_KPH
+    RATE_UP_MAX = 0.04
+    RATE_DOWN_MAX = 0.04
+  else:
+    _CV = CV.MS_TO_MPH
+    RATE_UP_MAX = 0.2
+    RATE_DOWN_MAX = 0.2
+
+  accel = actuators.accel * _CV  # m/s/s to mph/s
+  speedSetPoint = int(round(CS.out.cruiseState.speed * _CV))
 
   cruiseBtn = CruiseButtons.INIT
-
-  # if controller.params_.get_bool("IsMetric"):
-  #   accel = actuators.accel * CV.MS_TO_KPH  # m/s/s to km/h/s
-  # else:
-  #   accel = actuators.accel * CV.MS_TO_MPH  # m/s/s to mph/s
-  accel = actuators.accel * CV.MS_TO_MPH  # m/s/s to mph/s
-  speedSetPoint = int(round(CS.out.cruiseState.speed * CV.MS_TO_MPH))
-
-  RATE_UP_MAX = 0.2  # may be lower on new/euro cars
-  RATE_DOWN_MAX = 0.2  # may be lower on new/euro cars
-
   if speedSetPoint == CS.CP.minEnableSpeed and accel < -1:
     cruiseBtn = CruiseButtons.CANCEL
     controller.apply_speed = 0
     rate = 0.04
   elif accel < 0:
     cruiseBtn = CruiseButtons.DECEL_SET
-    rate = max(-1 / accel, RATE_DOWN_MAX)
+    if speedSetPoint > (CS.out.vEgo * _CV) + 3.0:  # If accel is changing directions, bring set speed to current speed as fast as possible
+      rate = RATE_DOWN_MAX
+    else:
+      rate = max(-1 / accel, RATE_DOWN_MAX)
     controller.apply_speed = speedSetPoint - 1
   elif accel > 0:
     cruiseBtn = CruiseButtons.RES_ACCEL
-    rate = max(1 / accel, RATE_UP_MAX)
+    if speedSetPoint < (CS.out.vEgo * _CV) - 3.0:
+      rate = RATE_UP_MAX
+    else:
+      rate = max(1 / accel, RATE_UP_MAX)
     controller.apply_speed = speedSetPoint + 1
   else:
     controller.apply_speed = speedSetPoint
@@ -210,7 +216,6 @@ def create_gm_cc_spam_command(packer, controller, CS, actuators):
 
   # Check rlogs closely - our message shouldn't show up on the pt bus for us
   # Or bus 2, since we're forwarding... but I think it does
-  # TODO: Cleanup the timing - normal is every 30ms...
   if (cruiseBtn != CruiseButtons.INIT) and ((controller.frame - controller.last_button_frame) * DT_CTRL > rate):
     controller.last_button_frame = controller.frame
     idx = (CS.buttons_counter + 1) % 4  # Need to predict the next idx for '22-23 EUV

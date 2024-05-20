@@ -3,13 +3,13 @@ import os
 import numpy as np
 import tomllib
 from abc import abstractmethod, ABC
-from enum import StrEnum
 from difflib import SequenceMatcher
+from enum import StrEnum
 from json import load
-from typing import Any, NamedTuple, Union
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple, Union
 from collections.abc import Callable
 
-from cereal import car, log
+from cereal import car
 from openpilot.common.basedir import BASEDIR
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.simple_kalman import KF1D, get_kalman_gain
@@ -17,12 +17,11 @@ from openpilot.common.numpy_fast import clip
 from openpilot.common.params import Params
 from openpilot.common.realtime import DT_CTRL
 from openpilot.selfdrive.car import apply_hysteresis, gen_empty_fingerprint, scale_rot_inertia, scale_tire_stiffness, STD_CARGO_KG
-from openpilot.selfdrive.car.values import Platform
-from openpilot.selfdrive.controls.lib.drive_helpers import V_CRUISE_MAX, get_friction, CRUISE_LONG_PRESS
+from openpilot.selfdrive.car.values import PLATFORMS
+from openpilot.selfdrive.controls.lib.drive_helpers import V_CRUISE_MAX, get_friction
 from openpilot.selfdrive.controls.lib.events import Events
 from openpilot.selfdrive.controls.lib.vehicle_model import VehicleModel
 
-params_memory = Params("/dev/shm/params")
 ButtonType = car.CarState.ButtonEvent.Type
 GearShifter = car.CarState.GearShifter
 EventName = car.CarEvent.EventName
@@ -143,7 +142,7 @@ class FluxModel:
     y = self.evaluate([10.0, 0.0, 0.2])
     self.friction_override = (y < 0.1)
 
-def get_nn_model_path(car, eps_firmware) -> tuple[Union[str, None, float]]:
+def get_nn_model_path(car, eps_firmware) -> Tuple[Union[str, None, float]]:
   def check_nn_path(check_model):
     model_path = None
     max_similarity = -1.0
@@ -156,6 +155,10 @@ def get_nn_model_path(car, eps_firmware) -> tuple[Union[str, None, float]]:
           model_path = os.path.join(TORQUE_NN_MODEL_PATH, f)
     return model_path, max_similarity
 
+  car1 = car.replace('_', ' ')
+  car1 = car1.replace(' HEV', ' HYBRID')
+  car = car1.replace('EV ', 'ELECTRIC ')
+  print("########get_nn_model_path :", car, eps_firmware)
   if len(eps_firmware) > 3:
     eps_firmware = eps_firmware.replace("\\", "")
     check_model = f"{car} {eps_firmware}"
@@ -169,7 +172,8 @@ def get_nn_model_path(car, eps_firmware) -> tuple[Union[str, None, float]]:
       model_path = None
   return model_path, max_similarity
 
-def get_nn_model(car, eps_firmware) -> tuple[Union[FluxModel, None, float]]:
+def get_nn_model(car, eps_firmware) -> Tuple[Union[FluxModel, None, float]]:
+  print("###########get_nn_model", car)
   model, similarity_score = get_nn_model_path(car, eps_firmware)
   if model is not None:
     model = FluxModel(model)
@@ -190,70 +194,85 @@ class CarInterfaceBase(ABC):
     self.silent_steer_warning = True
     self.v_ego_cluster_seen = False
 
-    self.CS = None
-    self.can_parsers = []
-    if CarState is not None:
-      self.CS = CarState(CP)
+    # tw: steer warning
+    self.steer_warning = 0
+    self.CS = CarState(CP)
+    self.cp = self.CS.get_can_parser(CP)
+    self.cp_cam = self.CS.get_cam_can_parser(CP)
+    self.cp_adas = self.CS.get_adas_can_parser(CP)
+    self.cp_body = self.CS.get_body_can_parser(CP)
+    self.cp_loopback = self.CS.get_loopback_can_parser(CP)
+    self.can_parsers = [self.cp, self.cp_cam, self.cp_adas, self.cp_body, self.cp_loopback]
 
-      self.cp = self.CS.get_can_parser(CP)
-      self.cp_cam = self.CS.get_cam_can_parser(CP)
-      self.cp_adas = self.CS.get_adas_can_parser(CP)
-      self.cp_body = self.CS.get_body_can_parser(CP)
-      self.cp_loopback = self.CS.get_loopback_can_parser(CP)
-      self.can_parsers = [self.cp, self.cp_cam, self.cp_adas, self.cp_body, self.cp_loopback]
+    dbc_name = "" if self.cp is None else self.cp.dbc_name
+    self.CC: CarControllerBase = CarController(dbc_name, CP, self.VM)
+    self.params = Params()
+    lateral_tune = True
+    print("$$$$$$$$$$$ NNFF")
+    nnff_supported = self.initialize_lat_torque_nn(CP.carFingerprint, eps_firmware)
+    print("$$$$$$$$$$$ nnff_supported = ", nnff_supported)
+    use_comma_nnff = self.check_comma_nn_ff_support(CP.carFingerprint)
+    print("$$$$$$$$$$$ use_comma_nnff = ", use_comma_nnff)
+    self.use_nnff = not use_comma_nnff and nnff_supported and lateral_tune and self.params.get_bool("NNFF")
+    print("$$$$$$$$$$$ use_nnff = ", self.use_nnff)
+    self.use_nnff_lite = not use_comma_nnff and not nnff_supported and lateral_tune and self.params.get_bool("NNFFLite")
+    print("$$$$$$$$$$$ use_nnff_lite = ", self.use_nnff_lite)
 
-    self.CC = None
-    if CarController is not None:
-      self.CC = CarController(self.cp.dbc_name, CP, self.VM)
+    Params().put('LongitudinalPersonalityMax', "3")
 
-    params = Params()
-    self.has_lateral_torque_nn = self.initialize_lat_torque_nn(CP.carFingerprint, eps_firmware) and params.get_bool("NNFF")
-    self.use_lateral_jerk = params.get_bool("UseLateralJerk")
   def get_ff_nn(self, x):
     return self.lat_torque_nn_model.evaluate(x)
+
+  def check_comma_nn_ff_support(self, car):
+    try:
+      with open("../car/torque_data/neural_ff_weights.json", "r") as file:
+        data = json.load(file)
+      return car in data
+
+    except FileNotFoundError:
+      print("Failed to open neural_ff_weights file.")
+      return False
 
   def initialize_lat_torque_nn(self, car, eps_firmware):
     self.lat_torque_nn_model, _ = get_nn_model(car, eps_firmware)
     return (self.lat_torque_nn_model is not None)
+
+  def apply(self, c: car.CarControl, now_nanos: int) -> tuple[car.CarControl.Actuators, list[tuple[int, int, bytes, int]]]:
+    return self.CC.update(c, self.CS, now_nanos)
 
   @staticmethod
   def get_pid_accel_limits(CP, current_speed, cruise_speed):
     return ACCEL_MIN, ACCEL_MAX
 
   @classmethod
-  def get_non_essential_params(cls, candidate: Platform):
+  def get_non_essential_params(cls, candidate: str):
     """
     Parameters essential to controlling the car may be incomplete or wrong without FW versions or fingerprints.
     """
     return cls.get_params(candidate, gen_empty_fingerprint(), list(), False, False)
 
   @classmethod
-  def get_params(cls, candidate: Platform, fingerprint: dict[int, dict[int, int]], car_fw: list[car.CarParams.CarFw], experimental_long: bool, docs: bool):
+  def get_params(cls, candidate: str, fingerprint: dict[int, dict[int, int]], car_fw: list[car.CarParams.CarFw], experimental_long: bool, docs: bool):
     ret = CarInterfaceBase.get_std_params(candidate)
 
-    if "SIMULATION" in os.environ:  #ajouatom why?
-      ret.steerControlType = car.CarParams.SteerControlType.angle
-
-    ret.mass = candidate.config.specs.mass
-    ret.wheelbase = candidate.config.specs.wheelbase
-    ret.steerRatio = candidate.config.specs.steerRatio
-    ret.centerToFront = ret.wheelbase * candidate.config.specs.centerToFrontRatio
-    ret.minEnableSpeed = candidate.config.specs.minEnableSpeed
-    ret.minSteerSpeed = candidate.config.specs.minSteerSpeed
-    ret.tireStiffnessFactor = candidate.config.specs.tireStiffnessFactor
-    ret.flags |= int(candidate.config.flags)
+    platform = PLATFORMS[candidate]
+    ret.mass = platform.config.specs.mass
+    ret.wheelbase = platform.config.specs.wheelbase
+    ret.steerRatio = platform.config.specs.steerRatio
+    ret.centerToFront = ret.wheelbase * platform.config.specs.centerToFrontRatio
+    ret.minEnableSpeed = platform.config.specs.minEnableSpeed
+    ret.minSteerSpeed = platform.config.specs.minSteerSpeed
+    ret.tireStiffnessFactor = platform.config.specs.tireStiffnessFactor
+    ret.flags |= int(platform.config.flags)
 
     ret = cls._get_params(ret, candidate, fingerprint, car_fw, experimental_long, docs)
-
-    # Enable torque controller for all cars that do not use angle based steering
-    if ret.steerControlType != car.CarParams.SteerControlType.angle and Params().get_bool("NNFF"):
+    params = Params()
+    if ret.steerControlType != car.CarParams.SteerControlType.angle and params.get_bool("NNFF"):
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
       eps_firmware = str(next((fw.fwVersion for fw in car_fw if fw.ecu == "eps"), ""))
       model, similarity_score = get_nn_model_path(candidate, eps_firmware)
       if model is not None:
-        params_memory.put_bool("NNFFModelFuzzyMatch", similarity_score < 0.99)
-        params_memory.put("NNFFModelName", candidate)
-        print("######### NNFF loaded")
+        params.put("NNFFModelName", candidate)
 
     # Vehicle mass is published curb weight plus assumed payload such as a human driver; notCars have no assumed payload
     if not ret.notCar:
@@ -381,9 +400,6 @@ class CarInterfaceBase(ABC):
 
     return reader
 
-  @abstractmethod
-  def apply(self, c: car.CarControl, now_nanos: int) -> tuple[car.CarControl.Actuators, list[bytes]]:
-    pass
 
   def create_common_events(self, cs_out, extra_gears=None, pcm_enable=True, allow_enable=True,
                            enable_buttons=(ButtonType.accelCruise, ButtonType.decelCruise)):
@@ -433,24 +449,27 @@ class CarInterfaceBase(ABC):
         print("$$$$$$$$$$$$$$ EventName.buttonCancel")
 
     # Handle permanent and temporary steering faults
+    # tw: steer warning
+    self.steer_warning = self.steer_warning + 1 if cs_out.steerFaultTemporary else 0
     self.steering_unpressed = 0 if cs_out.steeringPressed else self.steering_unpressed + 1
-    if cs_out.steerFaultTemporary:
+    if cs_out.steerFaultPermanent: # 스티어폴트 선행.
+      events.add(EventName.steerUnavailable)
+
+    elif cs_out.steerFaultTemporary: # 일시오류 체크.
       if cs_out.steeringPressed and (not self.CS.out.steerFaultTemporary or self.no_steer_warning):
         self.no_steer_warning = True
       else:
         self.no_steer_warning = False
 
-        # if the user overrode recently, show a less harsh alert
-        if self.silent_steer_warning or cs_out.standstill or self.steering_unpressed < int(1.5 / DT_CTRL):
-          self.silent_steer_warning = True
-          events.add(EventName.steerTempUnavailableSilent)
-        else:
+        # 핸들손올림이나 일시 스티어오류가 0.5초이상일때 경고하며, 운전자 개입은 안하는 것으로 한다.
+        if self.steering_unpressed > int(0.5/DT_CTRL) and self.steer_warning > int(0.5/DT_CTRL):
           events.add(EventName.steerTempUnavailable)
+        else:
+          events.add(EventName.steerTempUnavailableSilent)
+
     else:
       self.no_steer_warning = False
       self.silent_steer_warning = False
-    if cs_out.steerFaultPermanent:
-      events.add(EventName.steerUnavailable)
 
     # we engage when pcm is active (rising edge)
     # enabling can optionally be blocked by the car interface
@@ -585,6 +604,10 @@ class CarStateBase(ABC):
     return d.get(gear.upper(), GearShifter.unknown)
 
   @staticmethod
+  def get_can_parser(CP):
+    return None
+
+  @staticmethod
   def get_cam_can_parser(CP):
     return None
 
@@ -605,8 +628,11 @@ SendCan = tuple[int, int, bytes, int]
 
 
 class CarControllerBase(ABC):
+  def __init__(self, dbc_name: str, CP, VM):
+    pass
+
   @abstractmethod
-  def update(self, CC, CS, now_nanos) -> tuple[car.CarControl.Actuators, list[SendCan]]:
+  def update(self, CC: car.CarControl.Actuators, CS: car.CarState, now_nanos: int) -> tuple[car.CarControl.Actuators, list[SendCan]]:
     pass
 
 

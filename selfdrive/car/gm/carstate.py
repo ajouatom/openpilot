@@ -27,14 +27,19 @@ class CarState(CarStateBase):
     self.loopback_lka_steering_cmd_ts_nanos = 0
     self.pt_lka_steering_cmd_counter = 0
     self.cam_lka_steering_cmd_counter = 0
+    self.is_metric = False
 
-    # use cluster speed & vCluRatio
-    self.use_cluster_speed = Params().get_int("SpeedFromPCM") #kans
+    # GAP_DIST
+    self.prev_distance_button = False
+    self.distance_button_pressed = False
+
+    # kans: steer이벤트(일시불가) 줄이기 위해
+    self.belowSteerSpeed_shown = False
+    self.disable_belowSteerSpeed = False
+    self.resumeRequired_shown = False
+    self.disable_resumeRequired = False
+
     self.buttons_counter = 0
-
-    self.prev_distance_button = 0
-    self.distance_button = 0
-
     self.single_pedal_mode = False
 
     # for delay Accfault event
@@ -44,30 +49,31 @@ class CarState(CarStateBase):
     ret = car.CarState.new_message()
 
     self.prev_cruise_buttons = self.cruise_buttons
+    self.prev_distance_button = self.distance_button_pressed
     if self.CP.carFingerprint not in SDGM_CAR:
       self.cruise_buttons = pt_cp.vl["ASCMSteeringButton"]["ACCButtons"]
-      self.distance_button = pt_cp.vl["ASCMSteeringButton"]["DistanceButton"]
+      self.distance_button_pressed = pt_cp.vl["ASCMSteeringButton"]["DistanceButton"] != 0
       self.buttons_counter = pt_cp.vl["ASCMSteeringButton"]["RollingCounter"]
     else:
       self.cruise_buttons = cam_cp.vl["ASCMSteeringButton"]["ACCButtons"]
-      self.distance_button = cam_cp.vl["ASCMSteeringButton"]["DistanceButton"]
+      self.distance_button_pressed = cam_cp.vl["ASCMSteeringButton"]["DistanceButton"] != 0
       self.buttons_counter = cam_cp.vl["ASCMSteeringButton"]["RollingCounter"]
     self.pscm_status = copy.copy(pt_cp.vl["PSCMStatus"])
     # This is to avoid a fault where you engage while still moving backwards after shifting to D.
     # An Equinox has been seen with an unsupported status (3), so only check if either wheel is in reverse (2)
     self.moving_backward = (pt_cp.vl["EBCMWheelSpdRear"]["RLWheelDir"] == 2) or (pt_cp.vl["EBCMWheelSpdRear"]["RRWheelDir"] == 2) # and not moving_forward
     # GAP_DIST
-    if self.cruise_buttons in [CruiseButtons.UNPRESS, CruiseButtons.INIT] and self.distance_button:
+    if self.cruise_buttons in [CruiseButtons.UNPRESS, CruiseButtons.INIT] and self.distance_button_pressed:
       self.cruise_buttons = CruiseButtons.GAP_DIST
 
     if self.CP.enableBsm:
       # kans
       if self.CP.carFingerprint in SDGM_CAR:
-        ret.leftBlindspot = cam_cp.vl["BCMBSM"]["Left_BSM"] == 1
-        ret.rightBlindspot = cam_cp.vl["BCMBSM"]["Right_BSM"] == 1
+        ret.leftBlindspot = cam_cp.vl["BCMBlindSpotMonitor"]["LeftBSM"] == 1
+        ret.rightBlindspot = cam_cp.vl["BCMBlindSpotMonitor"]["RightBSM"] == 1
       else:
-        ret.leftBlindspot = pt_cp.vl["BCMBSM"]["Left_BSM"] == 1
-        ret.rightBlindspot = pt_cp.vl["BCMBSM"]["Right_BSM"] == 1
+        ret.leftBlindspot = pt_cp.vl["BCMBlindSpotMonitor"]["LeftBSM"] == 1
+        ret.rightBlindspot = pt_cp.vl["BCMBlindSpotMonitor"]["RightBSM"] == 1
 
     # Variables used for avoiding LKAS faults
     self.loopback_lka_steering_cmd_updated = len(loopback_cp.vl_all["ASCMLKASteeringCmd"]["RollingCounter"]) > 0
@@ -76,9 +82,6 @@ class CarState(CarStateBase):
     if self.CP.networkLocation == NetworkLocation.fwdCamera and not self.CP.flags & GMFlags.NO_CAMERA.value:
       self.pt_lka_steering_cmd_counter = pt_cp.vl["ASCMLKASteeringCmd"]["RollingCounter"]
       self.cam_lka_steering_cmd_counter = cam_cp.vl["ASCMLKASteeringCmd"]["RollingCounter"]
-    # use cluster speed & vCluRatio(longitudialPlanner)
-    cluSpeed = pt_cp.vl["ECMVehicleSpeed"]["VehicleSpeed"]
-    ret.vEgoCluster = cluSpeed * CV.MPH_TO_MS
 
     ret.wheelSpeeds = self.get_wheel_speeds(
       pt_cp.vl["EBCMWheelSpdFront"]["FLWheelSpd"],
@@ -86,18 +89,8 @@ class CarState(CarStateBase):
       pt_cp.vl["EBCMWheelSpdRear"]["RLWheelSpd"],
       pt_cp.vl["EBCMWheelSpdRear"]["RRWheelSpd"],
     )
-    # use cluster speed & vCluRatio(longitudialPlanner)
-    if self.use_cluster_speed == 0: #kans
-      ret.cruiseState.speedCluster = cluSpeed * CV.MPH_TO_MS
-      ret.vEgoRaw = cluSpeed * CV.MPH_TO_MS
-      ret.vEgo, ret.aEgo = self.update_clu_speed_kf(ret.vEgoRaw)
-
-    else:
-      ret.vEgoRaw = mean([ret.wheelSpeeds.fl, ret.wheelSpeeds.fr, ret.wheelSpeeds.rl, ret.wheelSpeeds.rr]) * (105./100.)
-      ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
-
-    ret.vCluRatio = (ret.vEgoCluster / ret.vEgo) if (ret.vEgo > 3. and ret.vEgoCluster > 3.) else 1.0
-
+    ret.vEgoRaw = mean([ret.wheelSpeeds.fl, ret.wheelSpeeds.fr, ret.wheelSpeeds.rl, ret.wheelSpeeds.rr]) * (105./100.)
+    ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
     ret.standstill = ret.wheelSpeeds.rl <= STANDSTILL_THRESHOLD and ret.wheelSpeeds.rr <= STANDSTILL_THRESHOLD
 
     if pt_cp.vl["ECMPRDNL2"]["ManualMode"] == 1:
@@ -125,7 +118,7 @@ class CarState(CarStateBase):
 
     if self.CP.enableGasInterceptor:
       ret.gas = (pt_cp.vl["GAS_SENSOR"]["INTERCEPTOR_GAS"] + pt_cp.vl["GAS_SENSOR"]["INTERCEPTOR_GAS2"]) / 2.
-      if self.CP.carFingerprint in (CAR.BOLT_EUV, CAR.BOLT_CC):
+      if self.CP.carFingerprint in (CAR.CHEVROLET_BOLT_EUV, CAR.CHEVROLET_BOLT_CC):
         ret.gasPressed = ret.gas > 20
       else:
         threshold = 20 if self.CP.carFingerprint in CAMERA_ACC_CAR else 4
@@ -199,6 +192,15 @@ class CarState(CarStateBase):
       ret.cruiseState.speed = pt_cp.vl["ECMCruiseControl"]["CruiseSetSpeed"] * CV.KPH_TO_MS
       ret.cruiseState.enabled = pt_cp.vl["ECMCruiseControl"]["CruiseActive"] != 0
 
+    if self.CP.flags & GMFlags.SPEED_RELATED_MSG.value:
+      # kans: use cluster speed & vCluRatio(longitudialPlanner)
+      self.is_metric = Params().get_bool("IsMetric")
+      speed_conv = CV.KPH_TO_MS * 1.609344 if self.is_metric else CV.MPH_TO_MS
+      cluSpeed = pt_cp.vl["SPEED_RELATED"]["ClusterSpeed"]
+      ret.vEgoCluster = cluSpeed * speed_conv
+      vEgoClu, aEgoClu = self.update_clu_speed_kf(ret.vEgoCluster)
+      ret.vCluRatio = (ret.vEgo / vEgoClu) if (vEgoClu > 3. and ret.vEgo > 3.) else 1.0
+
     return ret
 
   @staticmethod
@@ -216,7 +218,7 @@ class CarState(CarStateBase):
           ("ASCMSteeringButton", 33),
         ]
         if CP.enableBsm:
-          messages.append(("BCMBSM", 10))
+          messages.append(("BCMBlindSpotMonitor", 10))
       else:
         messages += [
           ("AEBCmd", 10),
@@ -237,9 +239,13 @@ class CarState(CarStateBase):
       ("EBCMWheelSpdRear", 20),
       ("EBCMFrictionBrakeStatus", 20),
       ("PSCMSteeringAngle", 100),
-      ("ECMAcceleratorPos", 80),
-      ("ECMVehicleSpeed", 20),
+      ("ECMAcceleratorPos", 80),      
     ]
+    if CP.flags & GMFlags.SPEED_RELATED_MSG.value:
+      messages.append(("SPEED_RELATED", 20))
+
+    if CP.enableBsm:
+      messages.append(("BCMBlindSpotMonitor", 10))
 
     if CP.carFingerprint in SDGM_CAR:
       messages += [
@@ -257,8 +263,6 @@ class CarState(CarStateBase):
         ("BCMGeneralPlatformStatus", 10),
         ("ASCMSteeringButton", 33),
       ]
-      if CP.enableBsm:
-        messages.append(("BCMBSM", 10))
 
     # Used to read back last counter sent to PT by camera
     if CP.networkLocation == NetworkLocation.fwdCamera:

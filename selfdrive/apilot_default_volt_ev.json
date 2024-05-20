@@ -12,10 +12,6 @@
     "content": "1"
   },
   {
-    "filename": "ApplyLongDynamicCost",
-    "content": "1"
-  },
-  {
     "filename": "AutoCancelFromGasMode",
     "content": "0"
   },
@@ -220,10 +216,6 @@
     "content": "0"
   },
   {
-    "filename": "MixRadarInfo",
-    "content": "1"
-  },
-  {
     "filename": "MuteDoor",
     "content": "1"
   },
@@ -242,10 +234,6 @@
   {
     "filename": "MySafeModeFactor",
     "content": "80"
-  },
-  {
-    "filename": "NNFF",
-    "content": "1"
   },
   {
     "filename": "OpenpilotEnabledToggle",
@@ -442,10 +430,6 @@
   {
     "filename": "TSS2Tune",
     "content": "0"
-  },
-  {
-    "filename": "UseLaneLineDebug",
-    "content": "5"
   },
   {
     "filename": "UseLaneLineSpeed",

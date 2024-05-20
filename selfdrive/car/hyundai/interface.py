@@ -4,7 +4,7 @@ from openpilot.common.conversions import Conversions as CV
 from openpilot.selfdrive.car.hyundai.hyundaicanfd import CanBus
 from openpilot.selfdrive.car.hyundai.values import HyundaiFlags, CAR, DBC, CANFD_CAR, CAMERA_SCC_CAR, CANFD_RADAR_SCC_CAR, \
                                          CANFD_UNSUPPORTED_LONGITUDINAL_CAR, EV_CAR, HYBRID_CAR, LEGACY_SAFETY_MODE_CAR, \
-                                         UNSUPPORTED_LONGITUDINAL_CAR, Buttons
+                                         UNSUPPORTED_LONGITUDINAL_CAR, Buttons, HyundaiExtFlags
 from openpilot.selfdrive.car.hyundai.radar_interface import RADAR_START_ADDR
 from openpilot.selfdrive.car import create_button_events, get_safety_config
 from openpilot.selfdrive.car.interfaces import CarInterfaceBase
@@ -18,6 +18,8 @@ EventName = car.CarEvent.EventName
 ENABLE_BUTTONS = (Buttons.RES_ACCEL, Buttons.SET_DECEL, Buttons.CANCEL)
 BUTTONS_DICT = {Buttons.RES_ACCEL: ButtonType.accelCruise, Buttons.SET_DECEL: ButtonType.decelCruise,
                 Buttons.GAP_DIST: ButtonType.gapAdjustCruise, Buttons.CANCEL: ButtonType.cancel, Buttons.LFA_BUTTON: ButtonType.lfaButton}
+BUTTONS_DICT_PCM = {Buttons.RES_ACCEL: ButtonType.accelCruise, Buttons.SET_DECEL: ButtonType.decelCruise,
+                Buttons.CANCEL: ButtonType.cancel, Buttons.LFA_BUTTON: ButtonType.lfaButton}
 
 
 class CarInterface(CarInterfaceBase):
@@ -32,6 +34,11 @@ class CarInterface(CarInterfaceBase):
     # FIXME: the Optima Hybrid 2017 uses a different SCC12 checksum
     ret.dashcamOnly = candidate in {CAR.KIA_OPTIMA_H, }
 
+    scc2 = Params().get_int("SccConnectedBus2")
+    if scc2 > 0:
+      ret.extFlags |= HyundaiExtFlags.SCC_BUS2.value
+      if scc2 > 1:
+        ret.extFlags |= HyundaiExtFlags.ACAN_PANDA.value
     hda2 = Ecu.adas in [fw.ecu for fw in car_fw] and candidate in CANFD_CAR or Params().get_bool("CanfdHDA2")
     CAN = CanBus(None, hda2, fingerprint)
 
@@ -45,17 +52,27 @@ class CarInterface(CarInterfaceBase):
         print("$$$CANFD EV")
         ret.flags |= HyundaiFlags.EV.value
 
+      if 0x3a0 in fingerprint[CAN.ECAN]: # 0x3a0(928): TPMS
+        ret.extFlags |= HyundaiExtFlags.CANFD_TPMS.value
+        print("$$$CANFD TPMS")
+
       # detect HDA2 with ADAS Driving ECU
       if hda2:
         print("$$$CANFD HDA2")
         ret.flags |= HyundaiFlags.CANFD_HDA2.value
-        if 0x110 in fingerprint[CAN.CAM]: # 0x110(272): LKAS_ALT
-          ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
-          print("$$$CANFD ALT_STEERING")
-        ## carrot_todo: sorento
-        if 0x2a4 not in fingerprint[CAN.CAM]: # 0x2a4(676): CAM_0x2a4
-          ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
-          print("$$$CANFD ALT_STEERING")
+        if scc2 > 0:
+          if 0x110 in fingerprint[CAN.ACAN]:
+            ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
+            print("$$$CANFD ALT_STEERING1")
+        else:
+          if 0x110 in fingerprint[CAN.CAM]: # 0x110(272): LKAS_ALT
+            ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
+            print("$$$CANFD ALT_STEERING1")
+          ## carrot_todo: sorento: 뭐 이런코드가... ㅠㅠ
+          if 0x2a4 not in fingerprint[CAN.CAM]: # 0x2a4(676): CAM_0x2a4
+            ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
+            print("$$$CANFD ALT_STEERING2")
+
         ## carrot: canival 4th, no 0x1cf
         if 0x1cf not in fingerprint[CAN.ECAN]: # 0x1cf(463): CRUISE_BUTTONS
           ret.flags |= HyundaiFlags.CANFD_ALT_BUTTONS.value
@@ -64,7 +81,7 @@ class CarInterface(CarInterfaceBase):
         if 0x130 not in fingerprint[CAN.ECAN]: # 0x130(304): GEAR_SHIFTER
           if 0x40 not in fingerprint[CAN.ECAN]: # 0x40(64): GEAR_ALT
             if 112 not in fingerprint[CAN.ECAN]:  # carrot: eGV70
-              ret.flags |= HyundaiFlags.CANFD_GEARS_NONE.value
+              ret.extFlags |= HyundaiExtFlags.CANFD_GEARS_NONE.value
               print("$$$CANFD GEARS_NONE")
             else:
               ret.flags |= HyundaiFlags.CANFD_ALT_GEARS_2.value
@@ -105,10 +122,10 @@ class CarInterface(CarInterfaceBase):
         ret.flags |= HyundaiFlags.USE_FCA.value
 
       if 1290 in fingerprint[2]:
-        ret.flags |= HyundaiFlags.HAS_SCC13.value
+        ret.extFlags |= HyundaiExtFlags.HAS_SCC13.value
 
       if 905 in fingerprint[2]:
-        ret.flags |= HyundaiFlags.HAS_SCC14.value
+        ret.extFlags |= HyundaiExtFlags.HAS_SCC14.value
 
     ret.steerActuatorDelay = 0.1  # Default delay
     ret.steerLimitTimer = 0.4
@@ -128,18 +145,16 @@ class CarInterface(CarInterfaceBase):
       
       ret.experimentalLongitudinalAvailable = True
 
-    if Params().get_bool("SccConnectedBus2"):
-      ret.flags |= HyundaiFlags.SCC_BUS2.value
-      #experimental_long = True
     print("***************************************************************************")
-    print("sccBus = ", 2 if ret.flags & HyundaiFlags.SCC_BUS2.value else 0)
+    print("sccBus = ", 2 if ret.extFlags & HyundaiExtFlags.SCC_BUS2.value else 0)
+    print("adasPanda = ", 1 if ret.extFlags & HyundaiExtFlags.ACAN_PANDA.value else 0)
 
     ret.openpilotLongitudinalControl = experimental_long and ret.experimentalLongitudinalAvailable
 
     ret.stoppingControl = True
     ret.startingState = False # apilot: True
     ret.vEgoStarting = 0.1
-    ret.vEgoStopping = 0.25
+    ret.vEgoStopping = 0.1 #0.25
     ret.startAccel = 2.0
     ret.stoppingDecelRate = 1.2 # brake_travel/s while trying to stop
     ret.longitudinalActuatorDelayLowerBound = 0.5
@@ -154,9 +169,11 @@ class CarInterface(CarInterfaceBase):
     # *** feature detection ***
     if candidate in CANFD_CAR:
       ret.enableBsm = 0x1e5 in fingerprint[CAN.ECAN]
+      if candidate in (CAR.KIA_CARNIVAL_4TH_GEN) and hda2: ##카니발4th & hda2 인경우에만 BSM이 ADAS에서 나옴.
+        ret.extFlags |= HyundaiExtFlags.BSM_IN_ADAS.value
       print(f"$$$$$ CanFD ECAN = {CAN.ECAN}")
       if 0x1fa in fingerprint[CAN.ECAN]:
-        ret.flags |= HyundaiFlags.NAVI_CLUSTER.value
+        ret.extFlags |= HyundaiExtFlags.NAVI_CLUSTER.value
         print("$$$$ NaviCluster = True")
       else:
         print("$$$$ NaviCluster = False")
@@ -164,12 +181,12 @@ class CarInterface(CarInterfaceBase):
       ret.enableBsm = 0x58b in fingerprint[0]
 
       if 1348 in fingerprint[0]:
-        ret.flags |= HyundaiFlags.NAVI_CLUSTER.value
+        ret.extFlags |= HyundaiExtFlags.NAVI_CLUSTER.value
         print("$$$$ NaviCluster = True")
       if 1157 in fingerprint[0] or 1157 in fingerprint[2]:
-        ret.flags |= HyundaiFlags.HAS_LFAHDA.value
+        ret.extFlags |= HyundaiExtFlags.HAS_LFAHDA.value
       if 913 in fingerprint[0]:
-        ret.flags |= HyundaiFlags.HAS_LFA_BUTTON.value
+        ret.extFlags |= HyundaiExtFlags.HAS_LFA_BUTTON.value
 
     print(f"$$$$ enableBsm = {ret.enableBsm}")
 
@@ -177,7 +194,7 @@ class CarInterface(CarInterfaceBase):
     if candidate in CANFD_CAR:
       cfgs = [get_safety_config(car.CarParams.SafetyModel.hyundaiCanfd), ]
       if CAN.ECAN >= 4:
-        cfgs.insert(0, get_safety_config(car.CarParams.SafetyModel.noOutput))
+       cfgs.insert(0, get_safety_config(car.CarParams.SafetyModel.noOutput))
       ret.safetyConfigs = cfgs
 
       if ret.flags & HyundaiFlags.CANFD_HDA2:
@@ -192,7 +209,7 @@ class CarInterface(CarInterfaceBase):
       if ret.flags & HyundaiFlags.CANFD_CAMERA_SCC:
         print("!!!!!!!!!Panda: FLAG_HYUNDAI_CAMERA_SCC")
         ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_CAMERA_SCC
-      if ret.flags & HyundaiFlags.SCC_BUS2.value:
+      if ret.extFlags & HyundaiExtFlags.SCC_BUS2.value:
         print("!!!!!!!!!Panda: FLAG_HYUNDAI_SCC_BUS2")
         ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_SCC_BUS2
     else:
@@ -205,7 +222,7 @@ class CarInterface(CarInterfaceBase):
       if candidate in CAMERA_SCC_CAR:
         ret.safetyConfigs[0].safetyParam |= Panda.FLAG_HYUNDAI_CAMERA_SCC
 
-      if ret.flags & HyundaiFlags.SCC_BUS2.value:
+      if ret.extFlags & HyundaiExtFlags.SCC_BUS2.value:
         ret.openpilotLongitudinalControl = True
         ret.radarUnavailable = False
         ret.safetyConfigs = [get_safety_config(car.CarParams.SafetyModel.hyundaiLegacy)]
@@ -219,7 +236,7 @@ class CarInterface(CarInterfaceBase):
     elif ret.flags & HyundaiFlags.EV:
       ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_EV_GAS
 
-    if candidate in (CAR.KONA, CAR.KONA_EV, CAR.KONA_HEV, CAR.KONA_EV_2022):
+    if candidate in (CAR.HYUNDAI_KONA, CAR.HYUNDAI_KONA_EV, CAR.HYUNDAI_KONA_HEV, CAR.HYUNDAI_KONA_EV_2022):
       ret.flags |= HyundaiFlags.ALT_LIMITS.value
       ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_ALT_LIMITS
 
@@ -229,7 +246,8 @@ class CarInterface(CarInterfaceBase):
 
   @staticmethod
   def init(CP, logcan, sendcan):
-    if CP.openpilotLongitudinalControl and not (CP.flags & HyundaiFlags.CANFD_CAMERA_SCC.value) and not (CP.flags & HyundaiFlags.SCC_BUS2.value):
+    Params().put('LongitudinalPersonalityMax', "4")
+    if CP.openpilotLongitudinalControl and not (CP.flags & HyundaiFlags.CANFD_CAMERA_SCC.value) and not (CP.extFlags & HyundaiExtFlags.SCC_BUS2.value):
       addr, bus = 0x7d0, CanBus(CP).ECAN if CP.carFingerprint in CANFD_CAR else 0
       if CP.flags & HyundaiFlags.CANFD_HDA2.value:
         addr, bus = 0x730, CanBus(CP).ECAN
@@ -250,7 +268,7 @@ class CarInterface(CarInterfaceBase):
     ret = self.CS.update(self.cp, self.cp_cam)
 
     if self.CS.CP.openpilotLongitudinalControl or Params().get_int("SpeedFromPCM") in [0,2]: #ajouatom: for PCM
-      ret.buttonEvents = create_button_events(self.CS.cruise_buttons[-1], self.CS.prev_cruise_buttons, BUTTONS_DICT)
+      ret.buttonEvents = create_button_events(self.CS.cruise_buttons[-1], self.CS.prev_cruise_buttons, BUTTONS_DICT_PCM if self.CP.pcmCruise else BUTTONS_DICT)
 
     # On some newer model years, the CANCEL button acts as a pause/resume button based on the PCM state
     # To avoid re-engaging when openpilot cancels, check user engagement intention via buttons
@@ -272,14 +290,11 @@ class CarInterface(CarInterfaceBase):
 
     return ret
 
-  def apply(self, c, now_nanos):
-    return self.CC.update(c, self.CS, now_nanos)
-
 #ajouatom: Enable Radar tracks
 def enable_radar_tracks(CP, logcan, sendcan):
   print("################ Try To Enable Radar Tracks ####################")
   
-  sccBus = 2 if Params().get_bool("SccConnectedBus2") else 0
+  sccBus = 2 if Params().get_int("SccConnectedBus2") > 0 else 0
   rdr_fw = None
   rdr_fw_address = 0x7d0 #
   try:
