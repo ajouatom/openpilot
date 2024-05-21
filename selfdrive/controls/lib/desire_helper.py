@@ -72,6 +72,26 @@ def calculate_lane_width(lane, lane_prob, current_lane, road_edge):
   distance_to_road_edge = abs(current_lane.y[index] - road_edge.y[index]);
   return min(distance_to_lane, distance_to_road_edge), distance_to_road_edge, lane_prob > 0.5
 
+class ExistCounter:
+  def __init__(self):
+    self.counter = 0
+    self.true_count = 0
+    self.false_count = 0
+    self.threshold = 3  # 노이즈를 무시하기 위한 임계값 설정
+
+  def update(self, exist_flag):
+    if exist_flag:
+      self.true_count += 1
+      self.false_count = 0  # false count 초기화
+      if self.true_count >= self.threshold:
+          self.counter = max(self.counter + 1, 1)
+    else:
+      self.false_count += 1
+      self.true_count = 0  # true count 초기화
+      if self.false_count >= self.threshold:
+          self.counter = min(self.counter - 1, -1)
+
+    return self.true_count
 
 class DesireHelper:
   def __init__(self):
@@ -103,12 +123,12 @@ class DesireHelper:
 
     self.lane_available_prev = False
     self.edge_available_prev = False
-    self.lane_exist_left_count = 0
-    self.lane_exist_right_count = 0
-    self.lane_width_left_count = 0
-    self.lane_width_right_count = 0
-    self.road_edge_left_count = 0
-    self.road_edge_right_count = 0
+    self.lane_exist_left_count = ExistCounter()
+    self.lane_exist_right_count = ExistCounter()
+    self.lane_width_left_count = ExistCounter()
+    self.lane_width_right_count = ExistCounter()
+    self.road_edge_left_count = ExistCounter()
+    self.road_edge_right_count = ExistCounter()
 
     self.blinker_bypass = False
 
@@ -174,18 +194,25 @@ class DesireHelper:
     self.lane_width_left, self.distance_to_road_edge_left, lane_exist_left = calculate_lane_width(modeldata.laneLines[0], modeldata.laneLineProbs[0], modeldata.laneLines[1], modeldata.roadEdges[0])
     self.lane_width_right, self.distance_to_road_edge_right, lane_exist_right = calculate_lane_width(modeldata.laneLines[3], modeldata.laneLineProbs[3], modeldata.laneLines[2], modeldata.roadEdges[1])
 
-    self.lane_exist_left_count = self.update_exist_count(self.lane_exist_left_count, lane_exist_left)
-    self.lane_exist_right_count = self.update_exist_count(self.lane_exist_right_count, lane_exist_right)
-    self.lane_width_left_count = self.update_exist_count(self.lane_width_left_count, self.lane_width_left > 2.5)
-    self.lane_width_right_count = self.update_exist_count(self.lane_width_right_count, self.lane_width_right > 2.5)
-    self.road_edge_left_count = self.update_exist_count(self.road_edge_left_count, self.distance_to_road_edge_left > 2.5)
-    self.road_edge_right_count = self.update_exist_count(self.road_edge_right_count, self.distance_to_road_edge_right > 2.5)
+    self.lane_exist_left_count.update(lane_exist_left)
+    self.lane_exist_right_count.update(lane_exist_right)
+    self.lane_width_left_count.update(self.lane_width_left > 2.5)
+    self.lane_width_right_count.update(self.lane_width_right > 2.5)
+    self.road_edge_left_count.update(self.distance_to_road_edge_left > 2.5)
+    self.road_edge_right_count.update(self.distance_to_road_edge_right > 2.5)
+
+    #self.lane_exist_left_count = self.update_exist_count(self.lane_exist_left_count, lane_exist_left)
+    #self.lane_exist_right_count = self.update_exist_count(self.lane_exist_right_count, lane_exist_right)
+    #self.lane_width_left_count = self.update_exist_count(self.lane_width_left_count, self.lane_width_left > 2.5)
+    #self.lane_width_right_count = self.update_exist_count(self.lane_width_right_count, self.lane_width_right > 2.5)
+    #self.road_edge_left_count = self.update_exist_count(self.road_edge_left_count, self.distance_to_road_edge_left > 2.5)
+    #self.road_edge_right_count = self.update_exist_count(self.road_edge_right_count, self.distance_to_road_edge_right > 2.5)
 
     available_count = int(0.2 / DT_MDL)
-    self.available_left_lane = self.lane_width_left_count > available_count
-    self.available_right_lane = self.lane_width_right_count > available_count
-    self.available_left_edge = self.road_edge_left_count > available_count
-    self.available_right_edge = self.road_edge_right_count > available_count
+    self.available_left_lane = self.lane_width_left_count.counter > available_count
+    self.available_right_lane = self.lane_width_right_count.counter > available_count
+    self.available_left_edge = self.road_edge_left_count.counter > available_count
+    self.available_right_edge = self.road_edge_right_count.counter > available_count
 
 
     # Calculate the desired lane width for nudgeless lane change with lane detection
@@ -196,7 +223,7 @@ class DesireHelper:
     else:
       lane_available = self.available_left_lane if leftBlinker else self.available_right_lane
       edge_available = self.available_left_edge if leftBlinker else self.available_right_edge
-      lane_appeared = self.lane_exist_left_count == int(0.2 / DT_MDL) if leftBlinker else self.lane_exist_right_count == int(0.2 / DT_MDL)
+      lane_appeared = self.lane_exist_left_count.counter == int(0.2 / DT_MDL) if leftBlinker else self.lane_exist_right_count.counter == int(0.2 / DT_MDL)
 
       if self.laneChangeLaneCheck == 0: # 차선이 항상 존재하는것으로 처리함.
         lane_available = True if edge_available else False
