@@ -194,6 +194,7 @@ class Controls:
     self._panda_controls_not_allowed = False #carrot
     self.enable_avail = False
     self.carrot_tmux_sent = 0
+    self.steerDisabledTemporary = False
 
   def set_initial_state(self):
     if REPLAY:
@@ -683,10 +684,15 @@ class Controls:
       self.lateral_allowed = lateral_allowed
       
       lateral_enabled = self.lateral_allowed and driving_gear
+    if CS.steeringPressed and self.sm['modelV2'].meta.laneChangeState in (LaneChangeState.laneChangeStarting,
+                                                  LaneChangeState.laneChangeFinishing):
+      self.steerDisabledTemporary = True
+    if self.steerDisabledTemporary and self.sm['modelV2'].meta.desireState[0] > 0.9:
+      self.steerDisabledTemporary = False
     # Check which actuators can be enabled
     standstill = CS.vEgo <= max(self.CP.minSteerSpeed, MIN_LATERAL_CONTROL_SPEED) or CS.standstill
     CC.latActive = (self.active or lateral_enabled) and not CS.steerFaultTemporary and not CS.steerFaultPermanent and \
-                   (not standstill or self.joystick_mode)
+                   (not standstill or self.joystick_mode) and not self.steerDisabledTemporary
     CC.longActive = self.enabled and not self.events.contains(ET.OVERRIDE_LONGITUDINAL) and self.CP.openpilotLongitudinalControl
 
     actuators = CC.actuators
