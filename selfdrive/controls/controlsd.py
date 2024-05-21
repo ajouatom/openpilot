@@ -684,9 +684,14 @@ class Controls:
       self.lateral_allowed = lateral_allowed
       
       lateral_enabled = self.lateral_allowed and driving_gear
+
     if CS.steeringPressed and self.sm['modelV2'].meta.laneChangeState in (LaneChangeState.laneChangeStarting,
                                                   LaneChangeState.laneChangeFinishing):
-      self.steerDisabledTemporary = True
+      lane_change_direction = self.sm['modelV2'].meta.laneChangeDirection
+      steering_pressed = ((carstate.steeringTorque < 0 and lane_change_direction == LaneChangeDirection.left) or
+                        (carstate.steeringTorque > 0 and lane_change_direction == LaneChangeDirection.right))
+      if steering_pressed:
+        self.steerDisabledTemporary = True
     if self.steerDisabledTemporary and self.sm['modelV2'].meta.desireState[0] > 0.9:
       self.steerDisabledTemporary = False
     # Check which actuators can be enabled
