@@ -688,8 +688,8 @@ class Controls:
     if CS.steeringPressed and self.sm['modelV2'].meta.laneChangeState in (LaneChangeState.laneChangeStarting,
                                                   LaneChangeState.laneChangeFinishing):
       lane_change_direction = self.sm['modelV2'].meta.laneChangeDirection
-      steering_pressed = ((carstate.steeringTorque < 0 and lane_change_direction == LaneChangeDirection.left) or
-                        (carstate.steeringTorque > 0 and lane_change_direction == LaneChangeDirection.right))
+      steering_pressed = ((CS.steeringTorque < 0 and lane_change_direction == LaneChangeDirection.left) or
+                        (CS.steeringTorque > 0 and lane_change_direction == LaneChangeDirection.right))
       if steering_pressed:
         self.steerDisabledTemporary = True
     if self.steerDisabledTemporary and self.sm['modelV2'].meta.desireState[0] > 0.9:
