@@ -70,14 +70,14 @@ def calculate_lane_width(lane, lane_prob, current_lane, road_edge):
   #if lane_prob < 0.3: # 차선이 없으면 없는것으로 간주시킴.
   #  distance_to_lane = min(2.0, distance_to_lane)
   distance_to_road_edge = abs(current_lane.y[index] - road_edge.y[index]);
-  return min(distance_to_lane, distance_to_road_edge), distance_to_road_edge, lane_prob > 0.5
+  return min(distance_to_lane, distance_to_road_edge), distance_to_road_edge, lane_prob > 0.3
 
 class ExistCounter:
   def __init__(self):
     self.counter = 0
     self.true_count = 0
     self.false_count = 0
-    self.threshold = 3  # 노이즈를 무시하기 위한 임계값 설정
+    self.threshold = int(0.2 / DT_MDL)  # 노이즈를 무시하기 위한 임계값 설정
 
   def update(self, exist_flag):
     if exist_flag:
@@ -154,8 +154,8 @@ class DesireHelper:
       self.debugText = log
       self._log_timer = int(2/DT_MDL) # 2s
 
-  def update_exist_count(self, counter, exist):
-    return max(counter + 1, 1) if exist else min(counter - 1, -1)
+  #def update_exist_count(self, counter, exist):
+  #  return max(counter + 1, 1) if exist else min(counter - 1, -1)
 
   def update(self, carstate, modeldata, lateral_active, lane_change_prob, sm):
     self._add_log("")
@@ -196,10 +196,10 @@ class DesireHelper:
 
     self.lane_exist_left_count.update(lane_exist_left)
     self.lane_exist_right_count.update(lane_exist_right)
-    self.lane_width_left_count.update(self.lane_width_left > 2.5)
-    self.lane_width_right_count.update(self.lane_width_right > 2.5)
-    self.road_edge_left_count.update(self.distance_to_road_edge_left > 2.5)
-    self.road_edge_right_count.update(self.distance_to_road_edge_right > 2.5)
+    self.lane_width_left_count.update(self.lane_width_left > 2.8)
+    self.lane_width_right_count.update(self.lane_width_right > 2.8)
+    self.road_edge_left_count.update(self.distance_to_road_edge_left > 2.8)
+    self.road_edge_right_count.update(self.distance_to_road_edge_right > 2.8)
 
     #self.lane_exist_left_count = self.update_exist_count(self.lane_exist_left_count, lane_exist_left)
     #self.lane_exist_right_count = self.update_exist_count(self.lane_exist_right_count, lane_exist_right)
