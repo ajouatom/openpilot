@@ -66,19 +66,19 @@ def download_rlog(route, segment):
   print("download_route=", route, file_name, segment)
   return send_from_directory(file_name, "rlog", as_attachment=True)
 
-@app.route("/footage/full/qcamera/<route>/<segment>")
+@app.route("/footage/full/qcamerad/<route>/<segment>")
 def download_qcamera(route, segment):
   file_name = Paths.log_root() + route + "--" + segment + "/"
   print("download_route=", route, file_name, segment)
   return send_from_directory(file_name, "qcamera.ts", as_attachment=True)
 
-@app.route("/footage/full/fcamera/<route>/<segment>")
+@app.route("/footage/full/fcamerad/<route>/<segment>")
 def download_qcamera(route, segment):
   file_name = Paths.log_root() + route + "--" + segment + "/"
   print("download_route=", route, file_name, segment)
   return send_from_directory(file_name, "fcamera.hevc", as_attachment=True)
 
-@app.route("/footage/full/dcamera/<route>/<segment>")
+@app.route("/footage/full/dcamerad/<route>/<segment>")
 def download_qcamera(route, segment):
   file_name = Paths.log_root() + route + "--" + segment + "/"
   print("download_route=", route, file_name, segment)
