@@ -71,7 +71,8 @@ def fcamera(cameratype, segment):
   if not fleet.is_valid_segment(segment):
     return render_template("error.html", error="invalid segment")
   file_name = Paths.log_root() + "/" + segment + "/" + cameratype + (".ts" if cameratype == "qcamera" else ".hevc")
-  return Response(fleet.ffmpeg_mp4_wrap_process_builder(file_name).stdout.read(), status=200, mimetype='video/mp4')
+  return send_from_directory(Paths.log_root(), segment + "/" + cameratype + (".ts" if cameratype == "qcamera" else ".hevc"), as_attachment=True)
+  #return Response(fleet.ffmpeg_mp4_wrap_process_builder(file_name).stdout.read(), status=200, mimetype='video/mp4')
 
 
 @app.route("/footage/<route>")
