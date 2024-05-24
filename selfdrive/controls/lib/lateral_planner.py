@@ -176,6 +176,11 @@ class LateralPlanner:
     plan_solution_valid = self.solution_invalid_cnt < 2
     plan_send = messaging.new_message('lateralPlan')
     plan_send.valid = sm.all_checks(service_list=['carState', 'controlsState', 'modelV2'])
+    if not plan_send.valid:
+      #print("lateralPlan_valid=", sm.valid)
+      #print("lateralPlan_alive=", sm.alive)
+      print("lateralPlan_freq_ok=", sm.freq_ok)
+      pass
 
     lateralPlan = plan_send.lateralPlan
     lateralPlan.modelMonoTime = sm.logMonoTime['modelV2']

@@ -252,6 +252,7 @@ std::unordered_map<std::string, uint32_t> keys = {
     { "AutoTurnControlTurnEnd", PERSISTENT },
     { "AutoTurnMapChange", PERSISTENT }, 
     { "LaneChangeNeedTorque", PERSISTENT },
+    { "ManualSteeringOverride", PERSISTENT },
     { "LaneChangeLaneCheck", PERSISTENT },
     { "AutoNaviSpeedCtrl", PERSISTENT },
     { "AutoNaviSpeedCtrlEnd", PERSISTENT },
@@ -364,6 +365,9 @@ std::unordered_map<std::string, uint32_t> keys = {
     {"RoadName", PERSISTENT},
     {"RoadNameUI", PERSISTENT},
     {"SchedulePending", PERSISTENT},
+    
+    {"UseExternalNaviRoutes", CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION },
+    
 };
 
 } // namespace

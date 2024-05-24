@@ -333,7 +333,11 @@ class VCruiseHelper:
 
   def update_apilot_cmd(self, controls, v_cruise_kph):
     msg = controls.sm['roadLimitSpeed']
-    self.roadSpeed = clip(0, msg.roadLimitSpeed, 150.0)
+    nda = controls.sm['naviData']
+    if nda.active:
+      self.roadSpeed = nda.roadLimitSpeed
+    else:
+      self.roadSpeed = clip(0, msg.roadLimitSpeed, 150.0)
     self.xPosValidCount = msg.xPosValidCount
 
     if msg.xIndex > 0 and msg.xIndex != self.xIndex:      
@@ -479,9 +483,9 @@ class VCruiseHelper:
     elif self.v_ego_kph_set > self.autoResumeFromGasSpeed > 0:
       if self.cruiseActivate <= 0:
         if self.gas_pressed_value > 0.6 or self.gas_pressed_count_prev > 3.0 / DT_CTRL:
-          if True: #self.autoCruiseCancelTimer > 0: # 간혹, 저속으로 길게누를때... 기존속도로 resume되면... 브레이크를 밟게됨.
+          if CS.aEgo < 1.0: #self.autoCruiseCancelTimer > 0: # 간혹, 저속으로 길게누를때... 기존속도로 resume되면... 브레이크를 밟게됨.
             v_cruise_kph = self.v_ego_kph_set
-            self.autoCruiseCancelTimer = 0
+          self.autoCruiseCancelTimer = 0
           self._add_log_auto_cruise("Cruise Activate from gas(deep/long pressed)")          
         else:
           v_cruise_kph = self.v_ego_kph_set

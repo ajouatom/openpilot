@@ -99,8 +99,8 @@ class Controls:
     self.sm = messaging.SubMaster(['deviceState', 'pandaStates', 'peripheralState', 'modelV2', 'liveCalibration',
                                    'carOutput', 'driverMonitoringState', 'longitudinalPlan', 'liveLocationKalman',
                                    'managerState', 'liveParameters', 'radarState', 'liveTorqueParameters',
-                                   'testJoystick', 'lateralPlan', 'roadLimitSpeed'] + self.camera_packets + self.sensor_packets,
-                                  ignore_alive=ignore, ignore_avg_freq=ignore+['radarState', 'testJoystick'], ignore_valid=['testJoystick', 'roadLimitSpeed'],
+                                   'testJoystick', 'lateralPlan', 'roadLimitSpeed', 'naviData'] + self.camera_packets + self.sensor_packets,
+                                  ignore_alive=ignore, ignore_avg_freq=ignore+['radarState', 'testJoystick'], ignore_valid=['testJoystick', 'roadLimitSpeed', 'naviData'],
                                   frequency=int(1/DT_CTRL))
 
     self.joystick_mode = self.params.get_bool("JoystickDebugMode")
@@ -195,6 +195,7 @@ class Controls:
     self.enable_avail = False
     self.carrot_tmux_sent = 0
     self.steerDisabledTemporary = False
+    self.seering_pressed_count = 0
 
   def set_initial_state(self):
     if REPLAY:
@@ -364,6 +365,8 @@ class Controls:
       self.rk.reset_time()
     if len(self.sm['radarState'].radarErrors) or (not self.rk.lagging and not self.sm.all_checks(['radarState'])):
       self.events.add(EventName.radarFault)
+      #print("sm.all_check = ", self.sm.all_alive(['radarState']), self.sm.all_freq_ok(['radarState']), self.sm.all_valid(['radarState']))
+
     if not self.sm.valid['pandaStates']:
       self.events.add(EventName.usbError)
     if CS.canTimeout:
@@ -685,13 +688,20 @@ class Controls:
       
       lateral_enabled = self.lateral_allowed and driving_gear
 
-    if CS.steeringPressed and self.sm['modelV2'].meta.laneChangeState in (LaneChangeState.laneChangeStarting,
-                                                  LaneChangeState.laneChangeFinishing):
-      lane_change_direction = self.sm['modelV2'].meta.laneChangeDirection
-      steering_pressed = ((CS.steeringTorque < 0 and lane_change_direction == LaneChangeDirection.left) or
-                        (CS.steeringTorque > 0 and lane_change_direction == LaneChangeDirection.right))
-      if steering_pressed:
+    manualSteeringOverride = self.params.get_int("ManualSteeringOverride")
+    if CS.steeringPressed:
+      self.seering_pressed_count += 1
+      if self.sm['modelV2'].meta.laneChangeState in (LaneChangeState.laneChangeStarting,
+                                                    LaneChangeState.laneChangeFinishing):
+        lane_change_direction = self.sm['modelV2'].meta.laneChangeDirection
+        steering_pressed = ((CS.steeringTorque < 0 and lane_change_direction == LaneChangeDirection.left) or
+                          (CS.steeringTorque > 0 and lane_change_direction == LaneChangeDirection.right))
+        if steering_pressed and manualSteeringOverride > 0:
+          self.steerDisabledTemporary = True
+      elif manualSteeringOverride == 2 and self.steering_pressed_count > 1.5 / DT_CTRL:
         self.steerDisabledTemporary = True
+    else:
+      self.steering_pressed_count = 0
     if self.steerDisabledTemporary and self.sm['modelV2'].meta.desireState[0] > 0.9:
       self.steerDisabledTemporary = False
     # Check which actuators can be enabled
@@ -729,7 +739,7 @@ class Controls:
         actuators.speed = long_plan.speeds[-1]
 
       # Steering PID loop and lateral MPC
-      if Params().get_int("UseLaneLineSpeedApply") == 0:
+      if self.params.get_int("UseLaneLineSpeedApply") == 0:
         self.desired_curvature = clip_curvature(CS.vEgo, self.desired_curvature, model_v2.action.desiredCurvature)
         actuators.curvature = self.desired_curvature
       else:
@@ -773,11 +783,11 @@ class Controls:
         undershooting = abs(lac_log.desiredLateralAccel) / abs(1e-3 + lac_log.actualLateralAccel) > 1.2
         turning = abs(lac_log.desiredLateralAccel) > 1.0
         good_speed = CS.vEgo > 5
-        max_torque = abs(self.last_actuators.steer) > 0.99
+        max_torque = abs(self.sm['carOutput'].actuatorsOutput.steer) > 0.99
         if undershooting and turning and good_speed and max_torque:
           lac_log.active and self.events.add(EventName.steerSaturated)
       elif lac_log.saturated:
-        if Params().get_int("UseLaneLineSpeedApply") == 0:
+        if self.params.get_int("UseLaneLineSpeedApply") == 0:
           dpath_points = model_v2.position.y
         else:
           dpath_points = lat_plan.dPathPoints

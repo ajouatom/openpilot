@@ -432,6 +432,19 @@
     },
     {
       "group": "조향일반",
+      "name": "ManualSteeringOverride",
+      "title": "운전자조향개입해제",
+      "descr": "1:차선변경시, 2: 1초간 운전자가 개입하면 조향해제, 직선시 자동복귀",
+      "egroup": "LATSET",
+      "etitle": "Manual Steering Override",
+      "edescr": "1: Lanechange, 2: 1sec override",
+      "min": 0,
+      "max": 2,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "조향일반",
       "name": "LaneChangeLaneCheck",
       "title": "차선변경 차선검사",
       "descr": "0:안함,1:검사,2:도로경계차선변경(NOO)",

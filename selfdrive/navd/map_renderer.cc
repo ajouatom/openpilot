@@ -10,6 +10,9 @@
 #include "common/swaglog.h"
 #include "selfdrive/ui/qt/maps/map_helpers.h"
 
+#include "selfdrive/controls/neokii/navi_gps_manager.h"
+NaviGpsManager navi_gps_manager;
+
 const float DEFAULT_ZOOM = 13.5; // Don't go below 13 or features will start to disappear
 const int HEIGHT = 256, WIDTH = 256;
 const int NUM_VIPC_BUFFERS = 4;
@@ -40,6 +43,8 @@ QMapLibre::Coordinate get_point_along_line(float lat, float lon, float bearing, 
 MapRenderer::MapRenderer(const QMapLibre::Settings &settings, bool online) : m_settings(settings) {
   QSurfaceFormat fmt;
   fmt.setRenderableType(QSurfaceFormat::OpenGLES);
+
+  m_settings.setMapMode(QMapLibre::Settings::MapMode::Static);
 
   ctx = std::make_unique<QOpenGLContext>();
   ctx->setFormat(fmt);
@@ -87,6 +92,18 @@ MapRenderer::MapRenderer(const QMapLibre::Settings &settings, bool online) : m_s
     LOGE("Map loading failed with %d: '%s'\n", err_code, reason.toStdString().c_str());
   });
 
+  QObject::connect(m_map.data(), &QMapLibre::Map::staticRenderFinished, [=](const QString &error) {
+    rendering = false;
+
+    if (!error.isEmpty()) {
+      LOGE("Static map rendering failed with error: '%s'\n", error.toStdString().c_str());
+    } else if (vipc_server != nullptr) {
+      double end_render_t = millis_since_boot();
+      publish((end_render_t - start_render_t) / 1000.0, true);
+      last_llk_rendered = (*sm)["liveLocationKalman"].getLogMonoTime();
+    }
+  });
+
   if (online) {
     vipc_server.reset(new VisionIpcServer("navd"));
     vipc_server->create_buffers(VisionStreamType::VISION_STREAM_MAP, NUM_VIPC_BUFFERS, false, WIDTH, HEIGHT);
@@ -104,7 +121,7 @@ MapRenderer::MapRenderer(const QMapLibre::Settings &settings, bool online) : m_s
 void MapRenderer::msgUpdate() {
   sm->update(1000);
 
-  if (sm->updated("liveLocationKalman")) {
+  if (sm->updated("liveLocationKalman") || navi_gps_manager.isValid()) {
     auto location = (*sm)["liveLocationKalman"].getLiveLocationKalman();
     auto pos = location.getPositionGeodetic();
     auto orientation = location.getCalibratedOrientationNED();
@@ -113,23 +130,17 @@ void MapRenderer::msgUpdate() {
       float bearing = RAD2DEG(orientation.getValue()[2]);
       updatePosition(get_point_along_line(pos.getValue()[0], pos.getValue()[1], bearing, MAP_OFFSET), bearing);
 
-      // TODO: use the static rendering mode instead
-      // retry render a few times
-      for (int i = 0; i < 5 && !rendered(); i++) {
-        QApplication::processEvents(QEventLoop::AllEvents, 100);
+      if (!rendering) {
         update();
-        if (rendered()) {
-          LOGW("rendered after %d retries", i+1);
-          break;
-        }
       }
 
-      // fallback to sending a blank frame
       if (!rendered()) {
         publish(0, false);
         printf("sending a blank frame\n");
       }
     }
+
+
   }
 
   if (sm->updated("navRoute")) {
@@ -154,6 +165,11 @@ void MapRenderer::updatePosition(QMapLibre::Coordinate position, float bearing) 
   float meters_per_pixel = 2;
   float zoom = get_zoom_level_for_scale(position.first, meters_per_pixel);
 
+  if(navi_gps_manager.check()) {
+    float speed;
+    navi_gps_manager.update(position, bearing, speed);
+  }
+
   //printf("position = %.4f, %.4f, %.1f\n", position.first, position.second, bearing);
     auto roadLimitSpeed = (*sm)["roadLimitSpeed"].getRoadLimitSpeed();
     float lat = roadLimitSpeed.getXPosLat();
@@ -172,7 +188,9 @@ void MapRenderer::updatePosition(QMapLibre::Coordinate position, float bearing) 
   m_map->setCoordinate(position);
   m_map->setBearing(bearing);
   m_map->setZoom(zoom);
-  update();
+  if (!rendering) {
+    update();
+  }
 }
 
 bool MapRenderer::loaded() {
@@ -180,16 +198,10 @@ bool MapRenderer::loaded() {
 }
 
 void MapRenderer::update() {
-  double start_t = millis_since_boot();
+  rendering = true;
   gl_functions->glClear(GL_COLOR_BUFFER_BIT);
-  m_map->render();
-  gl_functions->glFlush();
-  double end_t = millis_since_boot();
-
-  if ((vipc_server != nullptr) && loaded()) {
-    publish((end_t - start_t) / 1000.0, true);
-    last_llk_rendered = (*sm)["liveLocationKalman"].getLogMonoTime();
-  }
+  start_render_t = millis_since_boot();
+  m_map->startStaticRender();
 }
 
 void MapRenderer::sendThumbnail(const uint64_t ts, const kj::Array<capnp::byte> &buf) {
@@ -206,6 +218,7 @@ void MapRenderer::publish(const double render_time, const bool loaded) {
 
   auto location = (*sm)["liveLocationKalman"].getLiveLocationKalman();
   bool valid = loaded && (location.getStatus() == cereal::LiveLocationKalman::Status::VALID) && location.getPositionGeodetic().getValid();
+  valid = valid || navi_gps_manager.isValid();
 
   if (apn_valid_count > 0) valid = loaded;
   ever_loaded = ever_loaded || loaded;

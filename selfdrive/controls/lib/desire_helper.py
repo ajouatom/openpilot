@@ -196,10 +196,10 @@ class DesireHelper:
 
     self.lane_exist_left_count.update(lane_exist_left)
     self.lane_exist_right_count.update(lane_exist_right)
-    self.lane_width_left_count.update(self.lane_width_left > 2.8)
-    self.lane_width_right_count.update(self.lane_width_right > 2.8)
-    self.road_edge_left_count.update(self.distance_to_road_edge_left > 2.8)
-    self.road_edge_right_count.update(self.distance_to_road_edge_right > 2.8)
+    self.lane_width_left_count.update(self.lane_width_left > 2.5)
+    self.lane_width_right_count.update(self.lane_width_right > 2.5)
+    self.road_edge_left_count.update(self.distance_to_road_edge_left > 2.5)
+    self.road_edge_right_count.update(self.distance_to_road_edge_right > 2.5)
 
     #self.lane_exist_left_count = self.update_exist_count(self.lane_exist_left_count, lane_exist_left)
     #self.lane_exist_right_count = self.update_exist_count(self.lane_exist_right_count, lane_exist_right)
