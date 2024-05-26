@@ -113,9 +113,9 @@ procs = [
   PythonProcess("road_speed_limiter", "selfdrive.carrot.road_speed_limiter", always_run),
   PythonProcess("carrot_man", "selfdrive.carrot.carrot_man", always_run),
   
-  PythonProcess("navi_controller", "selfdrive.controls.neokii.navi_controller", always_run),
+  PythonProcess("navi_controller", "selfdrive.controls.neokii.navi_controller", always_run, enabled=not PC),
   #PythonProcess("navi_route", "selfdrive.controls.neokii.navi_route", only_onroad, enabled=Params().get_bool('UseExternalNaviRoutes')),
-  PythonProcess("navi_route", "selfdrive.controls.neokii.navi_route", only_onroad),
+  PythonProcess("navi_route", "selfdrive.controls.neokii.navi_route", only_onroad, enabled=not PC),
   
 ]
 
