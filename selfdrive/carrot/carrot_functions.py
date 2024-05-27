@@ -577,6 +577,6 @@ class CarrotPlannerHelper:
         self.gas_override_speed = sm['carState'].vEgoCluster * 3.6
       elif sm['carState'].brakePressed:
         self.gas_override_speed = 0
-      self.log = self.log + "v{:.0f}:m{:.0f},n{:.0f},s{:.0f},a{:.0f},g{:.0f}".format(vision_turn_kph, map_turn_kph, navi_helper_kph, navi_speed_manager_kph, nda_speed_kph, self.gas_override_speed)
+      self.log = self.log + "v{:.0f}:m{:.0f},n{:.0f},s{:.0f},g{:.0f}".format(vision_turn_kph, map_turn_kph, navi_helper_kph, navi_speed_manager_kph, self.gas_override_speed)
       self.v_cruise_kph = max(self.v_cruise_kph, self.gas_override_speed)
     return self.v_cruise_kph
