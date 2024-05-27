@@ -903,7 +903,7 @@ def main():
         if sm.updated['naviData']:
           naviData = sm['naviData']
           roadLimitSpeed.roadLimitSpeed = naviData.roadLimitSpeed
-          roadLimitSpeed.isHighway = naviData.isHighWay
+          roadLimitSpeed.isHighway = naviData.isHighway
           roadLimitSpeed.camType = naviData.camType
           roadLimitSpeed.camLimitSpeedLeftDist = naviData.camLimitSpeedLeftDist
           roadLimitSpeed.camLimitSpeed = naviData.camLimitSpeed
