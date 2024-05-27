@@ -73,6 +73,8 @@ class RouteEngine:
 
     self.carrot_route_active = False
 
+    self.nda_active_counter = 0
+
   def update(self):
     self.sm.update(0)
 
@@ -84,6 +86,25 @@ class RouteEngine:
           print("########## UI restarting, sending route")
           threading.Timer(5.0, self.send_route).start()
         self.ui_pid = ui_pid[0]
+
+    self.update_location()
+
+    if self.sm.updated['navInstructionNda']:
+      msg = messaging.new_message('navInstruction', valid=True)
+      nda_instruction = self.sm['navInstructionNda']
+      msg.navInstruction = nda_instruction
+      #print("navInstructionNda", msg.navInstruction)
+      if len(nda_instruction.allManeuvers) > 0:
+        first = nda_instruction.allManeuvers[0]
+        msg.navInstruction.maneuverType = first.type
+        msg.navInstruction.maneuverModifier = first.modifier
+      self.pm.send('navInstruction', msg)
+      self.nda_active_counter = 5
+      return
+
+    self.nda_active_counter -= 1
+    if self.nda_active_counter > 0:
+      return
 
     roadLimitSpeed = self.sm['roadLimitSpeed']
     #print(roadLimitSpeed.active)
@@ -97,8 +118,6 @@ class RouteEngine:
         print("################# Carrot navigation terminated(no active)... ###################")
         self.params.put_bool("CarrotRouteActive", False)
       self.carrot_route_active = False
-
-    self.update_location()
 
     if self.carrot_route_active:
       #return
@@ -241,7 +260,7 @@ class RouteEngine:
 
   def send_instruction(self):
     msg = messaging.new_message('navInstruction', valid=True)
-
+    print("navd_navInstruction")
     if self.step_idx is None:
       msg.valid = False
       self.pm.send('navInstruction', msg)
@@ -478,7 +497,7 @@ class RouteEngine:
 
 def main():
   pm = messaging.PubMaster(['navInstruction', 'navRoute'])
-  sm = messaging.SubMaster(['liveLocationKalman', 'managerState', 'roadLimitSpeed'])
+  sm = messaging.SubMaster(['liveLocationKalman', 'managerState', 'roadLimitSpeed', 'naviData', 'navInstructionNda'])
 
   rk = Ratekeeper(1.0)
   route_engine = RouteEngine(sm, pm)

@@ -1,4 +1,4 @@
-#include "selfdrive/ui/qt/onroad.h"
+﻿#include "selfdrive/ui/qt/onroad.h"
 
 #include <algorithm>
 #include <cmath>
@@ -125,10 +125,21 @@ void OnroadWindow::updateState(const UIState &s) {
     }
 
   QColor bgColor = bg_colors[s.status];
+  QColor bgColor_long = bg_colors[s.status];
   const SubMaster& sm = *(s.sm);
   const auto car_control = sm["carControl"].getCarControl();
   if(s.status == STATUS_DISENGAGED && car_control.getLatActive()){
       bgColor = bg_colors[STATUS_LAT_ACTIVE];
+  }
+  const auto car_state = sm["carState"].getCarState();
+  if (car_state.getSteeringPressed()) {
+      bgColor = bg_colors[STATUS_OVERRIDE];
+  }
+  if (car_state.getGasPressed()) {
+      bgColor_long = bg_colors[STATUS_OVERRIDE];
+  }
+  else if (car_control.getLongActive()) {
+      bgColor_long = bg_colors[STATUS_ENGAGED];
   }
 
   Alert alert = Alert::get(*(s.sm), s.scene.started_frame);
@@ -143,9 +154,10 @@ void OnroadWindow::updateState(const UIState &s) {
 
   nvg->updateState(s);
 
-  if (bg != bgColor) {
+  if (bg != bgColor || bg_long != bgColor_long) {
     // repaint border
     bg = bgColor;
+    bg_long = bgColor_long;
     update();
   }
   else {
@@ -273,7 +285,12 @@ void OnroadWindow::primeChanged(bool prime) {
 
 void OnroadWindow::paintEvent(QPaintEvent *event) {
   QPainter p(this);
-  p.fillRect(rect(), QColor(bg.red(), bg.green(), bg.blue(), 255));
+  //p.fillRect(rect(), QColor(bg.red(), bg.green(), bg.blue(), 255));
+  QRect upperRect(0, 0, width(), height() / 2);
+  p.fillRect(upperRect, QColor(bg.red(), bg.green(), bg.blue(), 255));
+
+  QRect lowerRect(0, height() / 2, width(), height() / 2);
+  p.fillRect(lowerRect, QColor(bg_long.red(), bg_long.green(), bg_long.blue(), 255));
 
 }
 

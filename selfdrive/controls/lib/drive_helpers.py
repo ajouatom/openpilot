@@ -8,6 +8,7 @@ from openpilot.common.realtime import DT_MDL, DT_CTRL
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.common.params import Params
 import numpy as np
+import collections
 
 EventName = car.CarEvent.EventName
 
@@ -58,6 +59,7 @@ class VCruiseHelper:
     self.brake_pressed_frame = 0
     self.gas_pressed_count = 0
     self.gas_pressed_count_prev = 0
+    self.gas_pressed_max_aego = 0.0
     self.gas_pressed_value = 0
     self.softHoldActive = 0
     self.button_cnt = 0
@@ -92,6 +94,9 @@ class VCruiseHelper:
     self.xPosValidCount = 0
     self.button_long_time = 40
     self.accel_output = 0.0
+    self.traffic_light_q = collections.deque(maxlen=int(1.0/DT_CTRL))
+    self.traffic_light_count = -1
+    self.traffic_state = 0
     
     #ajouatom: params
     self.params_count = 0
@@ -329,7 +334,11 @@ class VCruiseHelper:
 
   def update_apilot_cmd(self, controls, v_cruise_kph):
     msg = controls.sm['roadLimitSpeed']
-    self.roadSpeed = clip(0, msg.roadLimitSpeed, 150.0)
+    nda = controls.sm['naviData']
+    if nda.active:
+      self.roadSpeed = nda.roadLimitSpeed
+    else:
+      self.roadSpeed = clip(0, msg.roadLimitSpeed, 150.0)
     self.xPosValidCount = msg.xPosValidCount
 
     if msg.xIndex > 0 and msg.xIndex != self.xIndex:      
@@ -404,7 +413,50 @@ class VCruiseHelper:
 
       elif msg.xCmd == "DETECT":
         self.debugText2 = "DETECT[{}]={}".format(msg.xIndex, msg.xArg)
+        elements = [element.strip() for element in msg.xArg.split(',')]
+        self.traffic_light(float(elements[1]), float(elements[2]), elements[0])
+        self.traffic_light_count = 0.5 / DT_CTRL
+    self.traffic_light_q.append((-1, -1, "none"))
+    self.traffic_light_count -= 1
+    if self.traffic_light_count < 0:
+      self.traffic_light_count = -1
+      self.traffic_state = 0
     return v_cruise_kph
+
+  def traffic_light(self, x, y, color):
+    self.traffic_light_q.append((x,y,color))
+    traffic_state1 = 0
+    traffic_state2 = 0
+    traffic_state11 = 0
+    traffic_state22 = 0
+    for pdata in self.traffic_light_q:
+      px, py, pcolor = pdata
+      if abs(x - px) < 0.3 and abs(y - py) < 0.3:
+        if pcolor in ["Green", "LeftTurn", "GREEN", "GREEN_LEFT"]:
+          if color in ["Red", "RED_LEFT", "RED_YELLOW", "YELLOW"]:
+            traffic_state11 += 1
+          elif color in ["Green", "LeftTurn", "GREEN", "GREEN_LEFT"]:
+            traffic_state2 += 1
+        elif pcolor in ["Red", "RED_LEFT", "RED_YELLOW", "YELLOW"]:
+          if color in ["Green", "LeftTurn", "GREEN", "GREEN_LEFT"]:
+            traffic_state22 += 1
+          elif color in ["Red", "RED_LEFT", "RED_YELLOW", "YELLOW"]:
+            traffic_state1 += 1
+
+    if traffic_state11 > 0:
+      self.traffic_state = 11
+      self._add_log("Red light triggered")
+    elif traffic_state22 > 0:
+      self.traffic_state = 22
+      self._add_log("Green light triggered")
+    elif traffic_state1 > 0:
+      self.traffic_state = 1
+      self._add_log("Red light continued")
+    elif traffic_state2 > 0:
+      self.traffic_state = 2
+      self._add_log("Green light continued")
+    else:
+      self.traffic_state = 0
 
   def _add_log_auto_cruise(self, log):
     if self.autoCruiseControl > 0:
@@ -432,9 +484,9 @@ class VCruiseHelper:
     elif self.v_ego_kph_set > self.autoResumeFromGasSpeed > 0:
       if self.cruiseActivate <= 0:
         if self.gas_pressed_value > 0.6 or self.gas_pressed_count_prev > 3.0 / DT_CTRL:
-          if True: #self.autoCruiseCancelTimer > 0: # 간혹, 저속으로 길게누를때... 기존속도로 resume되면... 브레이크를 밟게됨.
+          if self.gas_pressed_max_aego < 1.0: #CS.aEgo < 0.5: #self.autoCruiseCancelTimer > 0: # 간혹, 저속으로 길게누를때... 기존속도로 resume되면... 브레이크를 밟게됨.
             v_cruise_kph = self.v_ego_kph_set
-            self.autoCruiseCancelTimer = 0
+          self.autoCruiseCancelTimer = 0
           self._add_log_auto_cruise("Cruise Activate from gas(deep/long pressed)")          
         else:
           v_cruise_kph = self.v_ego_kph_set
@@ -629,6 +681,7 @@ class VCruiseHelper:
       self.softHoldActive = 0
       self.gas_pressed_value = max(CS.gas, self.gas_pressed_value)
       self.gas_pressed_count_prev = self.gas_pressed_count
+      self.gas_pressed_max_aego = max(self.gas_pressed_max_aego, CS.aEgo) if self.gas_pressed_count > 1 else 0
     else:
       gas_tok = True if 0 < self.gas_pressed_count < 0.4 / DT_CTRL else False  ## gas_tok: 0.4 seconds
       self.gas_pressed_count = min(-1, self.gas_pressed_count - 1)

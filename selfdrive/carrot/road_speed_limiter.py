@@ -57,10 +57,10 @@ class RoadLimitSpeedServer:
 
     self.location = None
 
-    self.gps_event = threading.Event()
-    gps_thread = Thread(target=self.gps_thread, args=[])
-    gps_thread.daemon = True
-    gps_thread.start()
+    #self.gps_event = threading.Event()
+    #gps_thread = Thread(target=self.gps_thread, args=[])
+    #gps_thread.daemon = True
+    #gps_thread.start()
 
 
     #carrot
