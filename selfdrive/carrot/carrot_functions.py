@@ -540,12 +540,12 @@ class CarrotPlannerHelper:
     if self.navi_speed_manager.event >= 0:
       self.event = self.navi_speed_manager.event
 
-    apply_limit_speed, road_limit_speed, left_dist, first_started, cam_type, max_speed_log = \
-      SpeedLimiter.instance().get_max_speed(v_cruise_kph, self.is_metric)
-    nda_log = "nda_type={} | ".format(cam_type) if apply_limit_speed > 0 else ""
-    nda_speed_kph = apply_limit_speed  if apply_limit_speed > 0 else 255
+    #apply_limit_speed, road_limit_speed, left_dist, first_started, cam_type, max_speed_log = \
+    #  SpeedLimiter.instance().get_max_speed(v_cruise_kph, self.is_metric)
+    #nda_log = "nda_type={} | ".format(cam_type) if apply_limit_speed > 0 else ""
+    #nda_speed_kph = apply_limit_speed  if apply_limit_speed > 0 else 255
 
-    self.log = nda_log + self.vision_turn.log
+    self.log = self.vision_turn.log
     if len(self.log):
       self.log += "|"
     self.log += self.map_turn.log
@@ -564,7 +564,7 @@ class CarrotPlannerHelper:
         (map_turn_kph, "mTurn"),
         (navi_helper_kph, "noo"),
         (navi_speed_manager_kph, "navi"),
-        (nda_speed_kph, "nda"),
+        #(nda_speed_kph, "nda"),
     ]
 
     # min 함수를 사용하여 가장 작은 값을 가진 튜플 찾기
