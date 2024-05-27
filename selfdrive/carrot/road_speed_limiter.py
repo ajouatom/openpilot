@@ -375,6 +375,7 @@ def main():
   sm = messaging.SubMaster(['carState', 'liveLocationKalman', 'naviData'], poll='liveLocationKalman')
   carState = None
   CS = None
+  naviData = None
 
   xTurnInfo = -1
   xDistToTurn = -1
@@ -902,6 +903,7 @@ def main():
 
         if sm.updated['naviData']:
           naviData = sm['naviData']
+        if naviData is not None:
           roadLimitSpeed.roadLimitSpeed = naviData.roadLimitSpeed
           roadLimitSpeed.isHighway = naviData.isHighway
           roadLimitSpeed.camType = naviData.camType
