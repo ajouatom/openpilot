@@ -1021,15 +1021,39 @@ void DrawApilot::drawConnInfo(const UIState* s) {
         int hda_speedLimitDistance = car_state.getSpeedLimitDistance();
         int naviCluster = 0;// HW: (int)car_params.getNaviCluster();
         int y = 10;
-        if (sccBus) ui_draw_image(s, { 30, y, 120, 54 }, "ic_scc2", 1.0f);
-        if (activeAPM >= 200) ui_draw_image(s, { 30 + 135, y, 120, 54 }, "ic_apn", 1.0f);
-        else if (hda_speedLimit > 0 && hda_speedLimitDistance > 0) ui_draw_image(s, { 30 + 135, y, 120, 54 }, "ic_hda", 1.0f);
-        else if (activeAPM >= 100) ui_draw_image(s, { 30 + 135, y, 120, 54 }, "ic_apm", 1.0f);
-        else if (activeAPM % 100 > 0) ui_draw_image(s, { 30 + 135, y, 120, 54 }, "ic_nda", 1.0f);
-        else if (naviCluster > 0) ui_draw_image(s, { 30 + 135, y, 120, 54 }, "ic_hda", 1.0f);
-        if (radar_tracks) ui_draw_image(s, { 30 + 135 * 2, y, 240, 54 }, "ic_radartracks", 1.0f);
-        if (activeOSM > 0) ui_draw_image(s, { 30 + 120 + 135 * 3, y, 120, 54 }, "ic_osm", 1.0f);
-        if (activeNDA > 0) ui_draw_image(s, { 30 + 120 + 135 * 3, y, 120, 54 }, "ic_nda", 1.0f);
+        int x = 30;
+        if (sccBus) {
+            ui_draw_image(s, { x, y, 120, 54 }, "ic_scc2", 1.0f);
+            x += 135;
+        }
+        if (activeAPM >= 200) {
+            ui_draw_image(s, { x, y, 120, 54 }, "ic_apn", 1.0f);
+            x += 135;
+        }
+        else if (hda_speedLimit > 0 && hda_speedLimitDistance > 0) {
+            ui_draw_image(s, { x, y, 120, 54 }, "ic_hda", 1.0f);
+            x += 135;
+        }
+        else if (activeAPM >= 100) {
+            ui_draw_image(s, { x, y, 120, 54 }, "ic_apm", 1.0f);
+            x += 135;
+        }
+        else if (naviCluster > 0) {
+            ui_draw_image(s, { x, y, 120, 54 }, "ic_hda", 1.0f);
+            x += 135;
+        }
+        if (radar_tracks) {
+            ui_draw_image(s, { x, y, 240, 54 }, "ic_radartracks", 1.0f);
+            x += (120 + 135);
+        }
+        if (activeOSM > 0) {
+            ui_draw_image(s, { x, y, 120, 54 }, "ic_osm", 1.0f);
+            x += 135;
+        }
+        if (activeNDA > 0) {
+            ui_draw_image(s, { x, y, 120, 54 }, "ic_nda", 1.0f);
+            x += 135;
+        }
     }
 }
 void DrawApilot::drawGapInfo(const UIState* s, int x, int y) {
