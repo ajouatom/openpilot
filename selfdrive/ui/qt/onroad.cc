@@ -138,6 +138,9 @@ void OnroadWindow::updateState(const UIState &s) {
   if (car_state.getGasPressed()) {
       bgColor_long = bg_colors[STATUS_OVERRIDE];
   }
+  else if (car_control.getLongActive()) {
+      bgColor_long = bg_colors[STATUS_ENGAGED];
+  }
 
   Alert alert = Alert::get(*(s.sm), s.scene.started_frame);
   //alerts->updateAlert(alert);
