@@ -905,20 +905,24 @@ def main():
         if sm.updated['naviData']:
           naviData = sm['naviData']
           naviData_update_count = 20
+          camLimitSpeedLeftDist = naviData.camLimitSpeedLeftDist
+          sectionLeftDist = naviData.sectionLeftDist
         
         if naviData is not None and naviData_update_count > 0:
           naviData_update_count -= 1
           roadLimitSpeed.roadLimitSpeed = naviData.roadLimitSpeed
           roadLimitSpeed.isHighway = naviData.isHighway
           roadLimitSpeed.camType = naviData.camType
-          roadLimitSpeed.camLimitSpeedLeftDist = naviData.camLimitSpeedLeftDist
+          roadLimitSpeed.camLimitSpeedLeftDist = camLimitSpeedLeftDist
           roadLimitSpeed.camLimitSpeed = naviData.camLimitSpeed
           roadLimitSpeed.sectionLimitSpeed = naviData.sectionLimitSpeed
-          roadLimitSpeed.sectionLeftDist = naviData.sectionLeftDist
+          roadLimitSpeed.sectionLeftDist = sectionLeftDist
           roadLimitSpeed.sectionAvgSpeed = naviData.sectionAvgSpeed
           roadLimitSpeed.sectionLeftTime = naviData.sectionLeftTime
           roadLimitSpeed.sectionAdjustSpeed = naviData.sectionAdjustSpeed
           roadLimitSpeed.camSpeedFactor = naviData.camSpeedFactor
+          camLimitSpeedLeftDist -= delta_dist
+          sectionLeftDist -= delta_dist
 
         pm.send('roadLimitSpeed', msg)
 
