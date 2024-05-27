@@ -913,10 +913,10 @@ def main():
           roadLimitSpeed.roadLimitSpeed = naviData.roadLimitSpeed
           roadLimitSpeed.isHighway = naviData.isHighway
           roadLimitSpeed.camType = naviData.camType
-          roadLimitSpeed.camLimitSpeedLeftDist = camLimitSpeedLeftDist
+          roadLimitSpeed.camLimitSpeedLeftDist = int(camLimitSpeedLeftDist)
           roadLimitSpeed.camLimitSpeed = naviData.camLimitSpeed
           roadLimitSpeed.sectionLimitSpeed = naviData.sectionLimitSpeed
-          roadLimitSpeed.sectionLeftDist = sectionLeftDist
+          roadLimitSpeed.sectionLeftDist = int(sectionLeftDist)
           roadLimitSpeed.sectionAvgSpeed = naviData.sectionAvgSpeed
           roadLimitSpeed.sectionLeftTime = naviData.sectionLeftTime
           roadLimitSpeed.sectionAdjustSpeed = naviData.sectionAdjustSpeed
