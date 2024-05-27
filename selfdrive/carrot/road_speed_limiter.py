@@ -376,6 +376,7 @@ def main():
   carState = None
   CS = None
   naviData = None
+  naviData_update_count = 0
 
   xTurnInfo = -1
   xDistToTurn = -1
@@ -903,7 +904,10 @@ def main():
 
         if sm.updated['naviData']:
           naviData = sm['naviData']
-        if naviData is not None:
+          naviData_update_count = 20
+        
+        if naviData is not None and naviData_update_count > 0:
+          naviData_update_count -= 1
           roadLimitSpeed.roadLimitSpeed = naviData.roadLimitSpeed
           roadLimitSpeed.isHighway = naviData.isHighway
           roadLimitSpeed.camType = naviData.camType
