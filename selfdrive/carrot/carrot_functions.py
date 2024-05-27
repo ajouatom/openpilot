@@ -420,10 +420,6 @@ class CarrotNaviSpeedManager(CarrotBase):
     safeDist = 0
   
     
-    if camType == 22 or xSignType == 22:
-      safeSpeed = self.autoNaviSpeedBumpSpeed
-      isSpeedBump = True
-
     if msg.xSpdLimit > 0 and msg.xSpdDist > 0:
       safeSpeed = msg.xSpdLimit if safeSpeed <= 0 else safeSpeed
       leftDist = msg.xSpdDist
@@ -440,6 +436,10 @@ class CarrotNaviSpeedManager(CarrotBase):
       safeSpeed = CS.speedLimit
       leftDist = CS.speedLimitDistance
       speedLimitType = 2 if leftDist > 1 else 3
+
+    if camType == 22 or xSignType == 22:
+      safeSpeed = self.autoNaviSpeedBumpSpeed
+      isSpeedBump = True
 
     if isSpeedBump:
       speedLimitType = 1 
