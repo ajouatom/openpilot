@@ -81,8 +81,12 @@ class CarInterface(CarInterfaceBase):
         if 0x130 not in fingerprint[CAN.ECAN]: # 0x130(304): GEAR_SHIFTER
           if 0x40 not in fingerprint[CAN.ECAN]: # 0x40(64): GEAR_ALT
             if 112 not in fingerprint[CAN.ECAN]:  # carrot: eGV70
-              ret.extFlags |= HyundaiExtFlags.CANFD_GEARS_NONE.value
-              print("$$$CANFD GEARS_NONE")
+              if 69 in fingerprint[CAN.ECAN]:
+                ret.extFlags |= HyundaiExtFlags.CANFD_GEARS_69.value
+                print("$$$CANFD GEARS_69")
+              else:
+                ret.extFlags |= HyundaiExtFlags.CANFD_GEARS_NONE.value
+                print("$$$CANFD GEARS_NONE")
             else:
               ret.flags |= HyundaiFlags.CANFD_ALT_GEARS_2.value
               print("$$$CANFD ALT_GEARS_2")
@@ -99,8 +103,12 @@ class CarInterface(CarInterfaceBase):
         if 0x130 not in fingerprint[CAN.ECAN]: # 0x130(304): GEAR_SHIFTER
           if 0x40 not in fingerprint[CAN.ECAN]: # 0x40(64): GEAR_ALT
             if 112 not in fingerprint[CAN.ECAN]:  # carrot: eGV70
-              ret.extFlags |= HyundaiExtFlags.CANFD_GEARS_NONE.value
-              print("$$$CANFD GEARS_NONE")
+              if 69 in fingerprint[CAN.ECAN]:
+                ret.extFlags |= HyundaiExtFlags.CANFD_GEARS_69.value
+                print("$$$CANFD GEARS_69")
+              else:
+                ret.extFlags |= HyundaiExtFlags.CANFD_GEARS_NONE.value
+                print("$$$CANFD GEARS_NONE")
             else:
               ret.flags |= HyundaiFlags.CANFD_ALT_GEARS_2.value
               print("$$$CANFD ALT_GEARS_2")

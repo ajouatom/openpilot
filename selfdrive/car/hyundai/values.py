@@ -105,6 +105,7 @@ class HyundaiExtFlags(IntFlag):
   ACAN_PANDA = 2 ** 7
   BSM_IN_ADAS = 2 ** 8
   CANFD_TPMS = 2 ** 9
+  CANFD_GEARS_69 = 2 ** 10
 
 class Footnote(Enum):
   CANFD = CarFootnote(
