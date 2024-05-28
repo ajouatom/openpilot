@@ -907,6 +907,7 @@ def main():
           naviData_update_count = 20
           camLimitSpeedLeftDist = naviData.camLimitSpeedLeftDist
           sectionLeftDist = naviData.sectionLeftDist
+          print(naviData)
         
         if naviData is not None and naviData_update_count > 0:
           naviData_update_count -= 1
@@ -923,7 +924,6 @@ def main():
           roadLimitSpeed.camSpeedFactor = naviData.camSpeedFactor
           camLimitSpeedLeftDist -= delta_dist
           sectionLeftDist -= delta_dist
-          print(naviData)
 
         pm.send('roadLimitSpeed', msg)
 
