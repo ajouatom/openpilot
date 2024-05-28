@@ -367,7 +367,7 @@ def publish_thread(server):
     if dat.naviData.active:
       #print(dat.naviData.active)
       #print('naviData.road_limit_speed=', dat.naviData.roadLimitSpeed)
-      #print(dat.naviData)
+      print(dat.naviData)
       pass
 
     naviData.send(dat.to_bytes())
