@@ -923,6 +923,7 @@ def main():
           roadLimitSpeed.camSpeedFactor = naviData.camSpeedFactor
           camLimitSpeedLeftDist -= delta_dist
           sectionLeftDist -= delta_dist
+          print(naviData)
 
         pm.send('roadLimitSpeed', msg)
 
