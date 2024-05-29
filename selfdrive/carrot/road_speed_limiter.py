@@ -907,7 +907,7 @@ def main():
           naviData_update_count = 20
           camLimitSpeedLeftDist = naviData.camLimitSpeedLeftDist
           sectionLeftDist = naviData.sectionLeftDist
-          print(naviData)
+          #print(naviData)
 
         if naviData_update_count > 0:
           naviData_update_count -= 1
