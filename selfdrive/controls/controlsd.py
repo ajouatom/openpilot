@@ -728,6 +728,8 @@ class Controls:
     if not CC.longActive:
       self.LoC.reset(v_pid=CS.vEgo)
 
+    curve_speed = abs(self.sm['longitudinalPlan'].curveSpeed)
+    self.lanefull_mode_enabled = self.params.get_int("UseLaneLineSpeedApply") > 0 and curve_speed > self.params.get_int("UseLaneLineCurveSpeed")
     if not self.joystick_mode:
       # accel PID loop
       pid_accel_limits = self.CI.get_pid_accel_limits(self.CP, CS.vEgo, self.v_cruise_helper.v_cruise_kph * CV.KPH_TO_MS)
@@ -739,8 +741,7 @@ class Controls:
         actuators.speed = long_plan.speeds[-1]
 
       # Steering PID loop and lateral MPC
-      curve_speed = abs(self.sm['longitudinalPlan'].curveSpeed)
-      if self.params.get_int("UseLaneLineSpeedApply") > 0 and curve_speed > self.params.get_int("UseLaneLineCurveSpeed"):
+      if self.lanefull_mode_enabled:
         desired_curvature = get_lag_adjusted_curvature(self.CP, CS.vEgo, lat_plan.psis, lat_plan.curvatures)
         self.desired_curvature = clip_curvature(CS.vEgo, self.desired_curvature, desired_curvature)
         actuators.curvature = self.desired_curvature
@@ -788,7 +789,7 @@ class Controls:
         if undershooting and turning and good_speed and max_torque:
           lac_log.active and self.events.add(EventName.steerSaturated)
       elif lac_log.saturated:
-        if self.params.get_int("UseLaneLineSpeedApply") == 0:
+        if self.lanefull_mode_enabled:
           dpath_points = model_v2.position.y
         else:
           dpath_points = lat_plan.dPathPoints
