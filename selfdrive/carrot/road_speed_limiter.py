@@ -909,7 +909,7 @@ def main():
           sectionLeftDist = naviData.sectionLeftDist
           #print(naviData)
 
-        if navData_update_count > 0:
+        if naviData_update_count > 0:
           naviData_update_count -= 1
         else:
           naviData = None
