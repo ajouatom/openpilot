@@ -908,20 +908,24 @@ def main():
           camLimitSpeedLeftDist = naviData.camLimitSpeedLeftDist
           sectionLeftDist = naviData.sectionLeftDist
           #print(naviData)
+
+        if navData_update_count <= 0:
+          naviData = None
         
         if naviData is not None and naviData_update_count > 0:
           naviData_update_count -= 1
-          roadLimitSpeed.roadLimitSpeed = naviData.roadLimitSpeed
-          roadLimitSpeed.isHighway = naviData.isHighway
-          roadLimitSpeed.camType = naviData.camType
-          roadLimitSpeed.camLimitSpeedLeftDist = int(camLimitSpeedLeftDist)
-          roadLimitSpeed.camLimitSpeed = naviData.camLimitSpeed
-          roadLimitSpeed.sectionLimitSpeed = naviData.sectionLimitSpeed
-          roadLimitSpeed.sectionLeftDist = int(sectionLeftDist)
-          roadLimitSpeed.sectionAvgSpeed = naviData.sectionAvgSpeed
-          roadLimitSpeed.sectionLeftTime = naviData.sectionLeftTime
-          roadLimitSpeed.sectionAdjustSpeed = naviData.sectionAdjustSpeed
-          roadLimitSpeed.camSpeedFactor = naviData.camSpeedFactor
+          if naviData.active:
+            roadLimitSpeed.roadLimitSpeed = naviData.roadLimitSpeed
+            roadLimitSpeed.isHighway = naviData.isHighway
+            roadLimitSpeed.camType = naviData.camType
+            roadLimitSpeed.camLimitSpeedLeftDist = int(camLimitSpeedLeftDist)
+            roadLimitSpeed.camLimitSpeed = naviData.camLimitSpeed
+            roadLimitSpeed.sectionLimitSpeed = naviData.sectionLimitSpeed
+            roadLimitSpeed.sectionLeftDist = int(sectionLeftDist)
+            roadLimitSpeed.sectionAvgSpeed = naviData.sectionAvgSpeed
+            roadLimitSpeed.sectionLeftTime = naviData.sectionLeftTime
+            roadLimitSpeed.sectionAdjustSpeed = naviData.sectionAdjustSpeed
+            roadLimitSpeed.camSpeedFactor = naviData.camSpeedFactor
           camLimitSpeedLeftDist -= delta_dist
           sectionLeftDist -= delta_dist
 
