@@ -106,6 +106,7 @@ class RouteEngine:
       msg = messaging.new_message('navRoute', valid=True)
       msg.navRoute = self.sm['navRouteNda']
       self.pm.send('navRoute', msg)
+      self.nda_active_counter = 20
 
     self.nda_active_counter -= 1
     if self.nda_active_counter > 0:
