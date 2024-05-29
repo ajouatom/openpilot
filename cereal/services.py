@@ -86,6 +86,7 @@ services: dict[str, tuple] = {
   "naviGps": (False, 0.),
   "naviObstacles": (False, 0.),
   "navInstructionNda": (False, 0.),
+  "navRouteNda": (False, 0.),
 
   # debug
   "uiDebug": (True, 0., 1),
