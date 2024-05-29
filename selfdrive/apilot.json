@@ -496,11 +496,11 @@
       "unit": 1
     },
     {
-      "group": "조향일반",
+      "group": "화면",
       "name": "AutoTurnMapChange",
       "title": "NOO Helper 맵전환(0)",
       "descr": "1: 맵시작시, 2: NOO 작동시 자동맵전환",
-      "egroup": "LATSET",
+      "egroup": "DISP",
       "etitle": "NOO Helper Map display(0)",
       "edescr": "",
       "min": 0,
@@ -639,11 +639,11 @@
       "unit": 10
     },
     {
-      "group": "시작",
+      "group": "화면",
       "name": "MapboxStyle",
       "title": "맵박스 스타일",
       "descr": "",
-      "egroup": "START",
+      "egroup": "DISP",
       "etitle": "MapboxStyle",
       "edescr": "",
       "min": 0,
