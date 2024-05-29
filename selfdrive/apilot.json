@@ -991,6 +991,19 @@
     },
     {
       "group": "조향일반",
+      "name": "UseLaneLineCurveSpeed",
+      "title": "레인모드: 커브속도(0)",
+      "descr": "레인(차선)모드를 지정턴속도 이하에서는 사용하지 않습니다.",
+      "egroup": "LAT",
+      "etitle": "Laneline: Curve Speed(0)",
+      "edescr": "Lainline mode, above curve speed",
+      "min": 0,
+      "max": 200,
+      "default": 0,
+      "unit": 10
+    },
+    {
+      "group": "조향일반",
       "name": "AdjustLaneOffset",
       "title": "레인모드: 차선조절옵셋 (0)cm",
       "descr": "도로경계쪽으로 주행합니다.",
