@@ -352,6 +352,7 @@ void DrawApilot::drawLaneLines(const UIState* s) {
     SubMaster& sm = *(s->sm);
     NVGcolor color;
     auto    car_state = sm["carState"].getCarState();
+    auto    controls_state = sm["controlsState"].getControlsState();
     bool brake_valid = car_state.getBrakeLights();
 
     bool left_blindspot = sm["carState"].getCarState().getLeftBlindspot();
@@ -417,10 +418,10 @@ void DrawApilot::drawLaneLines(const UIState* s) {
          COLOR_BLACK_ALPHA(alpha),
     };
     if (s->show_lane_info > -1) {
-        auto lp = sm["lateralPlan"].getLateralPlan();
+        //auto lp = sm["lateralPlan"].getLateralPlan();
 
-        int show_path_color = (lp.getUseLaneLines()) ? s->show_path_color_lane : s->show_path_color;
-        int show_path_mode = (lp.getUseLaneLines()) ? s->show_path_mode_lane : s->show_path_mode;
+        int show_path_color = (controls_state.getUseLaneLines()) ? s->show_path_color_lane : s->show_path_color;
+        int show_path_mode = (controls_state.getUseLaneLines()) ? s->show_path_mode_lane : s->show_path_mode;
 
         if (!isLongActive()) {
             show_path_color = s->show_path_color_cruise_off;

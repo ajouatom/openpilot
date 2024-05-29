@@ -188,10 +188,10 @@ void update_line_data_dist3(const UIState* s, const cereal::XYZTData::Reader& li
         line_zs[i] = line_z[i];
     }
     SubMaster& sm = *(s->sm);
-    auto lp = sm["lateralPlan"].getLateralPlan();
+    //auto lp = sm["lateralPlan"].getLateralPlan();
     //int show_path_color = (lp.getUseLaneLines()) ? s->show_path_color_lane : s->show_path_color;
-    int show_path_mode = (lp.getUseLaneLines()) ? s->show_path_mode_lane : s->show_path_mode;
     auto controls_state = sm["controlsState"].getControlsState();
+    int show_path_mode = (controls_state.getUseLaneLines()) ? s->show_path_mode_lane : s->show_path_mode;
     bool longActive = controls_state.getEnabled();
     if (longActive == false) {
         show_path_mode = s->show_path_mode_cruise_off;
@@ -441,10 +441,10 @@ void update_model(UIState *s,
   //  max_distance = std::clamp((float)(lead_d - fmin(lead_d * 0.35, 10.)), 0.0f, max_distance);
   //}
   SubMaster& sm = *(s->sm);
-  auto lp = sm["lateralPlan"].getLateralPlan();
+  //auto lp = sm["lateralPlan"].getLateralPlan();
   //int show_path_color = (lp.getUseLaneLines()) ? s->show_path_color_lane : s->show_path_color;
-  int show_path_mode = (lp.getUseLaneLines()) ? s->show_path_mode_lane : s->show_path_mode;
   auto controls_state = sm["controlsState"].getControlsState();
+  int show_path_mode = (controls_state.getUseLaneLines()) ? s->show_path_mode_lane : s->show_path_mode;
   bool longActive = controls_state.getEnabled();
   if (longActive == false) show_path_mode = s->show_path_mode_cruise_off;
   max_distance -= 2.0;
