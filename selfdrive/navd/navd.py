@@ -108,6 +108,7 @@ class RouteEngine:
       self.pm.send('navRoute', msg)
       self.nda_active_counter = 20
 
+    print("nda_active_counter=", self.nda_active_counter)
     self.nda_active_counter -= 1
     if self.nda_active_counter > 0:
       return
