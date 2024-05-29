@@ -2393,6 +2393,8 @@ struct Event {
     uiDebug @102 :UIDebug;
     roadLimitSpeed @128 :RoadLimitSpeed;
     navInstructionNda @129 :NavInstruction;
+    navRouteNda @130 :NavRoute;
+
 
     # *********** debug ***********
     testJoystick @52 :Joystick;

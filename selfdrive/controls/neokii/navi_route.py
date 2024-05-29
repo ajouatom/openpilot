@@ -15,7 +15,7 @@ ROUTE_RECEIVE_PORT = 2845
 class NaviRoute():
   def __init__(self):
     self.sm = messaging.SubMaster(['managerState'])
-    self.pm = messaging.PubMaster(['navInstructionNda', 'navRoute'])
+    self.pm = messaging.PubMaster(['navInstructionNda', 'navRouteNda'])
     self.last_routes = None
     self.ui_pid = None
     self.last_client_address = None
@@ -39,13 +39,13 @@ class NaviRoute():
     route_server.serve_forever()
 
   def send_route(self):
-    msg = messaging.new_message('navRoute', valid=True)
+    msg = messaging.new_message('navRouteNda', valid=True)
     if self.last_routes is not None:
-      msg.navRoute.coordinates = self.last_routes
+      msg.navRouteNda.coordinates = self.last_routes
     else:
       self.dispatch_instruction(None)
 
-    self.pm.send('navRoute', msg)
+    self.pm.send('navRouteNda', msg)
 
   def dispatch_route(self, routes):
     self.last_routes = routes
