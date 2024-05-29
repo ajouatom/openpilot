@@ -83,21 +83,30 @@ void MapInstructions::updateInstructions(cereal::NavInstruction::Reader instruct
   distance->setText(QString("%1 %2").arg(distance_str_pair.first, distance_str_pair.second));
 
   // Show arrow with direction
-  /*QString type = QString::fromStdString(instruction.getManeuverType());
-  QString modifier = QString::fromStdString(instruction.getManeuverModifier());
-  if (!type.isEmpty()) {
-    QString fn = "direction_" + type;
-    if (!modifier.isEmpty()) {
-      fn += "_" + modifier;
-    }
-    fn = fn.replace(' ', '_');
-    bool rhd = is_rhd && (fn.contains("_left") || fn.contains("_right"));
-    icon_01->setPixmap(pixmap_cache[!rhd ? fn : "rhd_" + fn]);
-    icon_01->setSizePolicy(QSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed));
-    icon_01->setVisible(true);
-  }*/
   QString imageUrl = QString::fromStdString(instruction.getImageUrl());
-  icon_01->requestImage(imageUrl);
+  if (imageUrl.length() > 0) {
+      icon_01->requestImage(imageUrl);
+  }
+  else {
+
+      QString type = QString::fromStdString(instruction.getManeuverType());
+      QString modifier = QString::fromStdString(instruction.getManeuverModifier());
+      if (!type.isEmpty()) {
+          QString fn = "direction_" + type;
+          if (!modifier.isEmpty()) {
+              fn += "_" + modifier;
+          }
+          fn = fn.replace(' ', '_');
+          bool rhd = is_rhd && (fn.contains("_left") || fn.contains("_right"));
+          //icon_01->setPixmap(pixmap_cache[!rhd ? fn : "rhd_" + fn]);
+          //icon_01->setSizePolicy(QSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed));
+          //icon_01->setVisible(true);
+          icon_01->imageLabel->setPixmap(pixmap_cache[!rhd ? fn : "rhd_" + fn]);
+          icon_01->imageLabel->setSizePolicy(QSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed));
+          //icon_01->setVisible(true);
+          distance->setVisible(type != "arrive" || instruction.getManeuverDistance() > 0);
+      }
+  }
   icon_01->setVisible(true);
 
   // Hide distance after arrival

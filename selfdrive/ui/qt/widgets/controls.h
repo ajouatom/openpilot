@@ -310,6 +310,7 @@ class NetworkImageWidget : public QWidget
 
 public:
     explicit NetworkImageWidget(QWidget *parent = nullptr);
+    QLabel* imageLabel;
 
 public slots:
     void requestImage(const QString &imageUrl);
@@ -319,7 +320,7 @@ private slots:
 
 private:
     QVBoxLayout *layout;
-    QLabel *imageLabel;
+    //QLabel *imageLabel;
     QNetworkAccessManager *networkManager;
     QString lastUrl;
 };
