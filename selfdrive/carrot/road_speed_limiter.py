@@ -909,11 +909,12 @@ def main():
           sectionLeftDist = naviData.sectionLeftDist
           #print(naviData)
 
-        if navData_update_count <= 0:
+        if navData_update_count > 0:
+          naviData_update_count -= 1
+        else:
           naviData = None
         
-        if naviData is not None and naviData_update_count > 0:
-          naviData_update_count -= 1
+        if naviData is not None:
           if naviData.active:
             roadLimitSpeed.roadLimitSpeed = naviData.roadLimitSpeed
             roadLimitSpeed.isHighway = naviData.isHighway
