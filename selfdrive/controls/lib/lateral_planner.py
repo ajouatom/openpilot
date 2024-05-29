@@ -59,7 +59,7 @@ class LateralPlanner:
     self.lanelines_active = False
     self.lanelines_active_tmp = False
 
-    self.useLaneLineSpeeApply = self.params.get_int("UseLaneLineSpeedApply")
+    self.useLaneLineSpeedApply = self.params.get_int("UseLaneLineSpeedApply")
     self.pathOffset = float(self.params.get_int("PathOffset")) * 0.01
     self.useLaneLineMode = False
     self.plan_yaw = np.zeros((TRAJECTORY_SIZE,))

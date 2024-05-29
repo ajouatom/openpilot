@@ -739,12 +739,12 @@ class Controls:
         actuators.speed = long_plan.speeds[-1]
 
       # Steering PID loop and lateral MPC
-      if self.params.get_int("UseLaneLineSpeedApply") == 0:
-        self.desired_curvature = clip_curvature(CS.vEgo, self.desired_curvature, model_v2.action.desiredCurvature)
-        actuators.curvature = self.desired_curvature
-      else:
+      if self.params.get_int("UseLaneLineSpeedApply") > 0:
         desired_curvature = get_lag_adjusted_curvature(self.CP, CS.vEgo, lat_plan.psis, lat_plan.curvatures)
         self.desired_curvature = clip_curvature(CS.vEgo, self.desired_curvature, desired_curvature)
+        actuators.curvature = self.desired_curvature
+      else:
+        self.desired_curvature = clip_curvature(CS.vEgo, self.desired_curvature, model_v2.action.desiredCurvature)
         actuators.curvature = self.desired_curvature
       actuators.steer, actuators.steeringAngleDeg, lac_log = self.LaC.update(CC.latActive, CS, self.VM, lp,
                                                                              self.steer_limited, self.desired_curvature,
