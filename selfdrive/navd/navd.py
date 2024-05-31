@@ -100,7 +100,6 @@ class RouteEngine:
         msg.navInstruction.maneuverModifier = first.modifier
       self.pm.send('navInstruction', msg)
       self.nda_active_counter = 5
-      return
 
     if self.sm.updated['navRouteNda']:
       msg = messaging.new_message('navRoute', valid=True)
