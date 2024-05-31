@@ -52,7 +52,7 @@ class NaviRoute():
     self.send_route()
 
   def dispatch_instruction(self, json):
-    print("dispatch_instruction", json)
+    #print("dispatch_instruction", json)
     msg = messaging.new_message('navInstructionNda', valid=True)
     instruction = msg.navInstructionNda
 
