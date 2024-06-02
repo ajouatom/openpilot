@@ -796,6 +796,19 @@
     },
     {
       "group": "화면",
+      "name": "ShowCustomBrightness",
+      "title": "화면밝기비율",
+      "descr": "",
+      "egroup": "DISP",
+      "etitle": "ScreenBrightness ratio",
+      "edescr": "",
+      "min": 0,
+      "max": 100,
+      "default": 100,
+      "unit": 1
+    },
+    {
+      "group": "화면",
       "name": "ShowConnInfo",
       "title": "부가정보",
       "descr": "APM,SCC2,RadarTracks정보표시",

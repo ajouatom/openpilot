@@ -23,6 +23,8 @@ import subprocess
 from openpilot.selfdrive.navd.helpers import Coordinate
 import traceback
 
+from openpilot.selfdrive.controls.neokii.navi_controller import _V_EGO
+
 CAMERA_SPEED_FACTOR = 1.05
 
 
@@ -870,7 +872,7 @@ def main():
 
         xPosValidCount = max(0, xPosValidCount - 1)
         unix_now = time.mktime(datetime.now().timetuple())
-        v_ego = CS.vEgo if CS is not None else float(nPosSpeed)/3.6
+        _V_EGO = v_ego = CS.vEgo if CS is not None else float(nPosSpeed)/3.6
         if sdi_valid:
           if not location_valid and CS is not None:
             diff_angle = nPosAngle - bearing;

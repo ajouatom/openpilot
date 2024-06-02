@@ -456,6 +456,7 @@ def get_all_toggle_values():
     "ShowTpms",
     "ShowSteerMode",
     "ShowDeviceState",
+    "ShowCustomBrightness",
     "ShowConnInfo",
     "ShowLaneInfo",
     "ShowBlindSpot",

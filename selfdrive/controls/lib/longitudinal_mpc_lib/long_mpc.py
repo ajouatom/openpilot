@@ -447,9 +447,14 @@ class LongitudinalMpc:
     applyStopDistance = self.stop_distance  * (2.0 - self.mySafeFactor)
     t_follow = self.update_tf(v_ego, t_follow)
     t_follow = self.update_dynamic_tf(t_follow, radarstate.leadOne, a_ego, v_ego)
-    if Params().get_int("CarrotTest3") in [1,2]:
-      if radarstate.leadOne.dPath * radarstate.leadOne.vLat > 0:
+    carrotTest3 = Params().get_int("CarrotTest3")
+    if carrotTest3 in [1,2]:
+      check_cut_out = radarstate.leadOne.dPath * radarstate.leadOne.vLat
+      #print("{:.1f}, {:.1f}".format(check_cut_out, radarstate.leadOne.dPath + radarstate.leadOne.vLat))
+      if check_cut_out > 0:
         t_follow *= interp(abs(radarstate.leadOne.dPath + radarstate.leadOne.vLat), [0.5, 1.0, 2.0], [1.0, 0.5, 0.2])
+      elif carrotTest3 == 2:
+        t_follow *= interp(abs(radarstate.leadOne.vLat), [0.5, 1.0, 2.0], [1.0, 1.1, 1.3])
     self.t_follow = t_follow
     
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status

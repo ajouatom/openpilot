@@ -59,6 +59,7 @@ def plannerd_thread():
 
   while True:
     sm.update()
+    #print("planner= {:.2f}".format(sm.avg_freq['carState']))
     if sm.updated['modelV2']:
       lateral_planner.update(sm, carrot_planner)
       lateral_planner.publish(sm, pm)

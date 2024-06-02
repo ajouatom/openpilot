@@ -227,6 +227,8 @@ public:
   int show_path_color_lane = 14;
   float show_path_width = 1.0;
   int show_plot_mode = 0;
+  float show_brightness_ratio = 1.0;
+  int show_brightness_timer = 20;
 
 
   int carrot_record = 0;

@@ -49,6 +49,7 @@ def get_default_params():
     ("ShowTpms", "1"),
     ("ShowSteerMode", "2"),
     ("ShowDeviceState", "1"),
+    ("ShowCustomBrightness", "100"),
     ("ShowConnInfo", "1"),
     ("ShowLaneInfo", "1"),
     ("ShowBlindSpot", "1"),
