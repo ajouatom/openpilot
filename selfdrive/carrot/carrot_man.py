@@ -147,7 +147,7 @@ class CarrotMan:
     toggle_values = fleet.get_all_toggle_values()
     file_path = os.path.join('/data', 'toggle_values.json')
     with open(file_path, 'w') as file:
-      json.dump(modified_toggle_values, file, indent=2) 
+      json.dump(toggle_values, file, indent=2) 
 
   def carrot_cmd_zmq(self):
 
