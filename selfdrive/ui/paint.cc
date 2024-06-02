@@ -352,7 +352,7 @@ void DrawApilot::drawLaneLines(const UIState* s) {
     SubMaster& sm = *(s->sm);
     NVGcolor color;
     auto    car_state = sm["carState"].getCarState();
-    auto    controls_state = sm["controlsState"].getControlsState();
+    //auto    controls_state = sm["controlsState"].getControlsState();
     bool brake_valid = car_state.getBrakeLights();
 
     bool left_blindspot = sm["carState"].getCarState().getLeftBlindspot();
