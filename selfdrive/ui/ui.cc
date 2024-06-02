@@ -190,7 +190,7 @@ void update_line_data_dist3(const UIState* s, const cereal::XYZTData::Reader& li
     SubMaster& sm = *(s->sm);
     //auto lp = sm["lateralPlan"].getLateralPlan();
     //int show_path_color = (lp.getUseLaneLines()) ? s->show_path_color_lane : s->show_path_color;
-    //auto controls_state = sm["controlsState"].getControlsState();
+    auto controls_state = sm["controlsState"].getControlsState();
     int show_path_mode = (s->use_lane_lines) ? s->show_path_mode_lane : s->show_path_mode;
     bool longActive = controls_state.getEnabled();
     if (longActive == false) {
