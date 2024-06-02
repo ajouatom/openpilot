@@ -231,6 +231,7 @@ public:
 
   int carrot_record = 0;
   int carrot_display = 0;
+  bool use_lane_lines = false;
 
 signals:
   void uiUpdate(const UIState &s);

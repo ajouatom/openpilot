@@ -418,8 +418,6 @@ void DrawApilot::drawLaneLines(const UIState* s) {
          COLOR_BLACK_ALPHA(alpha),
     };
     if (s->show_lane_info > -1) {
-        //auto lp = sm["lateralPlan"].getLateralPlan();
-
         int show_path_color = (s->use_lane_lines) ? s->show_path_color_lane : s->show_path_color;
         int show_path_mode = (s->use_lane_lines) ? s->show_path_mode_lane : s->show_path_mode;
 

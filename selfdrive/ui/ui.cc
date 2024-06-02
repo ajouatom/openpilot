@@ -190,8 +190,8 @@ void update_line_data_dist3(const UIState* s, const cereal::XYZTData::Reader& li
     SubMaster& sm = *(s->sm);
     //auto lp = sm["lateralPlan"].getLateralPlan();
     //int show_path_color = (lp.getUseLaneLines()) ? s->show_path_color_lane : s->show_path_color;
-    auto controls_state = sm["controlsState"].getControlsState();
-    int show_path_mode = (controls_state.getUseLaneLines()) ? s->show_path_mode_lane : s->show_path_mode;
+    //auto controls_state = sm["controlsState"].getControlsState();
+    int show_path_mode = (s->use_lane_lines) ? s->show_path_mode_lane : s->show_path_mode;
     bool longActive = controls_state.getEnabled();
     if (longActive == false) {
         show_path_mode = s->show_path_mode_cruise_off;
@@ -444,7 +444,7 @@ void update_model(UIState *s,
   //auto lp = sm["lateralPlan"].getLateralPlan();
   //int show_path_color = (lp.getUseLaneLines()) ? s->show_path_color_lane : s->show_path_color;
   auto controls_state = sm["controlsState"].getControlsState();
-  int show_path_mode = (controls_state.getUseLaneLines()) ? s->show_path_mode_lane : s->show_path_mode;
+  int show_path_mode = (s->use_lane_lines) ? s->show_path_mode_lane : s->show_path_mode;
   bool longActive = controls_state.getEnabled();
   if (longActive == false) show_path_mode = s->show_path_mode_cruise_off;
   max_distance -= 2.0;
@@ -560,6 +560,15 @@ static void update_state(UIState *s) {
                                  sm.rcv_frame("liveCalibration") > scene.started_frame &&
                                  sm.rcv_frame("modelV2") > scene.started_frame &&
                                  sm.rcv_frame("uiPlan") > scene.started_frame);
+
+  if (sm.updated("lateralPlan") && sm.updated("controlsState")) {
+      auto lp = sm["lateralPlan"].getLateralPlan();
+      auto controls_state = sm["controlsState"].getControlsState();
+      if (lp.getUseLaneLines() && controls_state.getUseLaneLines()) s->use_lane_lines = true;
+      else s->use_lane_lines = false;
+  }
+  else s->use_lane_lines = false;
+
 }
 
 void ui_update_params(UIState *s) {
