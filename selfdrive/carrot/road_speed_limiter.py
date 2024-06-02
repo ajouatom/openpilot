@@ -57,10 +57,10 @@ class RoadLimitSpeedServer:
 
     self.location = None
 
-    self.gps_event = threading.Event()
-    gps_thread = Thread(target=self.gps_thread, args=[])
-    gps_thread.daemon = True
-    gps_thread.start()
+    #self.gps_event = threading.Event()
+    #gps_thread = Thread(target=self.gps_thread, args=[])
+    #gps_thread.daemon = True
+    #gps_thread.start()
 
 
     #carrot
@@ -372,9 +372,11 @@ def main():
   server = RoadLimitSpeedServer()
 
   pm = messaging.PubMaster(['roadLimitSpeed'])
-  sm = messaging.SubMaster(['carState', 'liveLocationKalman'], poll='liveLocationKalman')
+  sm = messaging.SubMaster(['carState', 'liveLocationKalman', 'naviData'], poll='liveLocationKalman')
   carState = None
   CS = None
+  naviData = None
+  naviData_update_count = 0
 
   xTurnInfo = -1
   xDistToTurn = -1
@@ -532,17 +534,17 @@ def main():
         msg = messaging.new_message('roadLimitSpeed', valid=True)
         roadLimitSpeed = msg.roadLimitSpeed
         roadLimitSpeed.active = server.active
-        roadLimitSpeed.roadLimitSpeed = server.get_limit_val("road_limit_speed", 0)
-        roadLimitSpeed.isHighway = server.get_limit_val("is_highway", False)
-        roadLimitSpeed.camType = server.get_limit_val("cam_type", 0)
-        roadLimitSpeed.camLimitSpeedLeftDist = server.get_limit_val("cam_limit_speed_left_dist", 0)
-        roadLimitSpeed.camLimitSpeed = server.get_limit_val("cam_limit_speed", 0)
-        roadLimitSpeed.sectionLimitSpeed = server.get_limit_val("section_limit_speed", 0)
-        roadLimitSpeed.sectionLeftDist = server.get_limit_val("section_left_dist", 0)
-        roadLimitSpeed.sectionAvgSpeed = server.get_limit_val("section_avg_speed", 0)
-        roadLimitSpeed.sectionLeftTime = server.get_limit_val("section_left_time", 0)
-        roadLimitSpeed.sectionAdjustSpeed = server.get_limit_val("section_adjust_speed", False)
-        roadLimitSpeed.camSpeedFactor = server.get_limit_val("cam_speed_factor", CAMERA_SPEED_FACTOR)
+        #roadLimitSpeed.roadLimitSpeed = server.get_limit_val("road_limit_speed", 0)
+        #roadLimitSpeed.isHighway = server.get_limit_val("is_highway", False)
+        #roadLimitSpeed.camType = server.get_limit_val("cam_type", 0)
+        #roadLimitSpeed.camLimitSpeedLeftDist = server.get_limit_val("cam_limit_speed_left_dist", 0)
+        #roadLimitSpeed.camLimitSpeed = server.get_limit_val("cam_limit_speed", 0)
+        #roadLimitSpeed.sectionLimitSpeed = server.get_limit_val("section_limit_speed", 0)
+        #roadLimitSpeed.sectionLeftDist = server.get_limit_val("section_left_dist", 0)
+        #roadLimitSpeed.sectionAvgSpeed = server.get_limit_val("section_avg_speed", 0)
+        #roadLimitSpeed.sectionLeftTime = server.get_limit_val("section_left_time", 0)
+        #roadLimitSpeed.sectionAdjustSpeed = server.get_limit_val("section_adjust_speed", False)
+        #roadLimitSpeed.camSpeedFactor = server.get_limit_val("cam_speed_factor", CAMERA_SPEED_FACTOR)
 
         atype = server.get_apilot_val("type")
         value = server.get_apilot_val("value")
@@ -899,6 +901,34 @@ def main():
         roadLimitSpeed.xPosLat = float(vpPosPointLat)
         roadLimitSpeed.xPosLon = float(vpPosPointLon)
         roadLimitSpeed.xPosValidCount = xPosValidCount
+
+        if sm.updated['naviData']:
+          naviData = sm['naviData']
+          naviData_update_count = 20
+          camLimitSpeedLeftDist = naviData.camLimitSpeedLeftDist
+          sectionLeftDist = naviData.sectionLeftDist
+          #print(naviData)
+
+        if naviData_update_count > 0:
+          naviData_update_count -= 1
+        else:
+          naviData = None
+        
+        if naviData is not None:
+          if naviData.active:
+            roadLimitSpeed.roadLimitSpeed = naviData.roadLimitSpeed
+            roadLimitSpeed.isHighway = naviData.isHighway
+            roadLimitSpeed.camType = naviData.camType
+            roadLimitSpeed.camLimitSpeedLeftDist = int(camLimitSpeedLeftDist)
+            roadLimitSpeed.camLimitSpeed = naviData.camLimitSpeed
+            roadLimitSpeed.sectionLimitSpeed = naviData.sectionLimitSpeed
+            roadLimitSpeed.sectionLeftDist = int(sectionLeftDist)
+            roadLimitSpeed.sectionAvgSpeed = naviData.sectionAvgSpeed
+            roadLimitSpeed.sectionLeftTime = naviData.sectionLeftTime
+            roadLimitSpeed.sectionAdjustSpeed = naviData.sectionAdjustSpeed
+            roadLimitSpeed.camSpeedFactor = naviData.camSpeedFactor
+          camLimitSpeedLeftDist -= delta_dist
+          sectionLeftDist -= delta_dist
 
         pm.send('roadLimitSpeed', msg)
 

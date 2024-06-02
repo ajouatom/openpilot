@@ -1,4 +1,4 @@
-#include "safety_hyundai_common.h"
+﻿#include "safety_hyundai_common.h"
 
 const SteeringLimits HYUNDAI_CANFD_STEERING_LIMITS = {
   .max_steer = 512, //270,
@@ -73,6 +73,7 @@ const CanMsg HYUNDAI_CANFD_HDA1_TX_MSGS[] = {
   {0x1E0, 0, 16}, // LFAHDA_CLUSTER
   {0x160, 0, 16}, // ADRV_0x160
   {0x7D0, 0, 8},  // tester present for radar ECU disable
+  {0x1AA, 2, 16}, // CRUISE_ALT_BUTTONS , carrot
 };
 
 

@@ -2,7 +2,6 @@ from cereal import log
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.realtime import DT_MDL
 import numpy as np
-from openpilot.common.filter_simple import StreamingMovingAverage
 from openpilot.common.params import Params
 from enum import Enum
 
@@ -46,6 +45,7 @@ class NooActive(Enum):
   no_new_lane_detected = 2
   new_lane_detected = 10
   road_edge_detected = 11
+  new_lane_appeared = 12
 
   def __str__(self):
     return self.name
@@ -70,8 +70,28 @@ def calculate_lane_width(lane, lane_prob, current_lane, road_edge):
   #if lane_prob < 0.3: # 차선이 없으면 없는것으로 간주시킴.
   #  distance_to_lane = min(2.0, distance_to_lane)
   distance_to_road_edge = abs(current_lane.y[index] - road_edge.y[index]);
-  return min(distance_to_lane, distance_to_road_edge), distance_to_road_edge
+  return min(distance_to_lane, distance_to_road_edge), distance_to_road_edge, lane_prob > 0.3
 
+class ExistCounter:
+  def __init__(self):
+    self.counter = 0
+    self.true_count = 0
+    self.false_count = 0
+    self.threshold = int(0.2 / DT_MDL)  # 노이즈를 무시하기 위한 임계값 설정
+
+  def update(self, exist_flag):
+    if exist_flag:
+      self.true_count += 1
+      self.false_count = 0  # false count 초기화
+      if self.true_count >= self.threshold:
+          self.counter = max(self.counter + 1, 1)
+    else:
+      self.false_count += 1
+      self.true_count = 0  # true count 초기화
+      if self.false_count >= self.threshold:
+          self.counter = min(self.counter - 1, -1)
+
+    return self.true_count
 
 class DesireHelper:
   def __init__(self):
@@ -98,16 +118,18 @@ class DesireHelper:
     self.lane_width_right = 0
     self.distance_to_road_edge_left = 0
     self.distance_to_road_edge_right = 0
-    filter_size = 6
-    self.lane_width_left_filter = StreamingMovingAverage(filter_size)
-    self.lane_width_right_filter = StreamingMovingAverage(filter_size)
-    self.distance_to_road_edge_left_filter = StreamingMovingAverage(filter_size)
-    self.distance_to_road_edge_right_filter = StreamingMovingAverage(filter_size)
 
     self.lane_change_wait_timer = 0
 
     self.lane_available_prev = False
     self.edge_available_prev = False
+    self.lane_exist_left_count = ExistCounter()
+    self.lane_exist_right_count = ExistCounter()
+    self.lane_width_left_count = ExistCounter()
+    self.lane_width_right_count = ExistCounter()
+    self.road_edge_left_count = ExistCounter()
+    self.road_edge_right_count = ExistCounter()
+
     self.blinker_bypass = False
 
     self.available_left_lane = False
@@ -132,10 +154,14 @@ class DesireHelper:
       self.debugText = log
       self._log_timer = int(2/DT_MDL) # 2s
 
+  #def update_exist_count(self, counter, exist):
+  #  return max(counter + 1, 1) if exist else min(counter - 1, -1)
+
   def update(self, carstate, modeldata, lateral_active, lane_change_prob, sm):
     self._add_log("")
     self.autoTurnControl = self.params.get_int("AutoTurnControl")
     self.laneChangeNeedTorque = self.params.get_bool("LaneChangeNeedTorque")
+    self.laneChangeLaneCheck = self.params.get_bool("LaneChangeLaneCheck")    # 0: No check, 1: Lane Only, 2: use Edge
     self.autoLaneChangeSpeed = self.params.get_int("AutoLaneChangeSpeed") / 3.6
     radarState = sm['radarState']
     self.leftSideObjectDist = 255
@@ -165,50 +191,47 @@ class DesireHelper:
 
    
       # Calculate left and right lane widths
-    lane_width_left, distance_to_road_edge_left = calculate_lane_width(modeldata.laneLines[0], modeldata.laneLineProbs[0], modeldata.laneLines[1], modeldata.roadEdges[0])
-    lane_width_right, distance_to_road_edge_right = calculate_lane_width(modeldata.laneLines[3], modeldata.laneLineProbs[3], modeldata.laneLines[2], modeldata.roadEdges[1])
-    self.lane_width_left = self.lane_width_left_filter.process(lane_width_left)
-    self.lane_width_right = self.lane_width_right_filter.process(lane_width_right)
-    self.distance_to_road_edge_left = self.distance_to_road_edge_left_filter.process(distance_to_road_edge_left)
-    self.distance_to_road_edge_right = self.distance_to_road_edge_right_filter.process(distance_to_road_edge_right)
+    self.lane_width_left, self.distance_to_road_edge_left, lane_exist_left = calculate_lane_width(modeldata.laneLines[0], modeldata.laneLineProbs[0], modeldata.laneLines[1], modeldata.roadEdges[0])
+    self.lane_width_right, self.distance_to_road_edge_right, lane_exist_right = calculate_lane_width(modeldata.laneLines[3], modeldata.laneLineProbs[3], modeldata.laneLines[2], modeldata.roadEdges[1])
 
-    if self.lane_width_left < 2.2:
-      self.available_left_lane = False
-    elif self.lane_width_left > 2.4:
-      self.available_left_lane = True
-    if self.lane_width_right < 2.2:
-      self.available_right_lane = False
-    elif self.lane_width_right > 2.4:
-      self.available_right_lane = True
+    self.lane_exist_left_count.update(lane_exist_left)
+    self.lane_exist_right_count.update(lane_exist_right)
+    self.lane_width_left_count.update(self.lane_width_left > 2.5)
+    self.lane_width_right_count.update(self.lane_width_right > 2.5)
+    self.road_edge_left_count.update(self.distance_to_road_edge_left > 2.5)
+    self.road_edge_right_count.update(self.distance_to_road_edge_right > 2.5)
 
-    if self.distance_to_road_edge_left < 2.2:
-      self.available_left_edge = False
-    elif self.distance_to_road_edge_left > 2.4:
-      self.available_left_edge = True
-    if self.distance_to_road_edge_right < 2.2:
-      self.available_right_edge = False
-    elif self.distance_to_road_edge_right > 2.4:
-      self.available_right_edge = True
+    #self.lane_exist_left_count = self.update_exist_count(self.lane_exist_left_count, lane_exist_left)
+    #self.lane_exist_right_count = self.update_exist_count(self.lane_exist_right_count, lane_exist_right)
+    #self.lane_width_left_count = self.update_exist_count(self.lane_width_left_count, self.lane_width_left > 2.5)
+    #self.lane_width_right_count = self.update_exist_count(self.lane_width_right_count, self.lane_width_right > 2.5)
+    #self.road_edge_left_count = self.update_exist_count(self.road_edge_left_count, self.distance_to_road_edge_left > 2.5)
+    #self.road_edge_right_count = self.update_exist_count(self.road_edge_right_count, self.distance_to_road_edge_right > 2.5)
+
+    available_count = int(0.2 / DT_MDL)
+    self.available_left_lane = self.lane_width_left_count.counter > available_count
+    self.available_right_lane = self.lane_width_right_count.counter > available_count
+    self.available_left_edge = self.road_edge_left_count.counter > available_count
+    self.available_right_edge = self.road_edge_right_count.counter > available_count
+
 
     # Calculate the desired lane width for nudgeless lane change with lane detection
     if not (self.lane_detection and one_blinker) or below_lane_change_speed:
       lane_available = True
       edge_available = False
+      lane_appeared = False
     else:
-      # Set the minimum lane threshold to 2.8 meters
-      #min_lane_threshold = 2.8
-      # Set the blinker index based on which signal is on
-      #blinker_index = 0 if leftBlinker else 1
-      #current_lane = modeldata.laneLines[blinker_index + 1]
-      #desired_lane = modeldata.laneLines[blinker_index if leftBlinker else blinker_index + 2]
-      #road_edge = modeldata.roadEdges[blinker_index]
-      # Check if the lane width exceeds the threshold
-      #lane_width, distance_to_road_edge = calculate_lane_width(desired_lane, current_lane, road_edge)
-      #lane_available = lane_width >= min_lane_threshold
-      #lane_width = self.lane_width_left if leftBlinker else self.lane_width_right
-      #lane_available = lane_width >= min_lane_threadhold
       lane_available = self.available_left_lane if leftBlinker else self.available_right_lane
       edge_available = self.available_left_edge if leftBlinker else self.available_right_edge
+      lane_appeared = self.lane_exist_left_count.counter == int(0.2 / DT_MDL) if leftBlinker else self.lane_exist_right_count.counter == int(0.2 / DT_MDL)
+
+      if self.laneChangeLaneCheck == 0: # 차선이 항상 존재하는것으로 처리함.
+        lane_available = True if edge_available else False
+        edge_available = False
+      elif self.laneChangeLaneCheck == 1: # 차선있을때만, edge는 항상작동안함.
+        edge_available = False
+      elif self.laneChangeLaneCheck == 2:  # 차선있을때, edge도 차선변경가능
+        pass
 
     if not lateral_active or self.lane_change_timer > LANE_CHANGE_TIME_MAX:
       self.lane_change_state = LaneChangeState.off
@@ -258,7 +281,9 @@ class DesireHelper:
         if (not carstate.leftBlinker and not carstate.rightBlinker) and blinkerExtMode > 0: # Noo Helper #0: voice etc, 1:noo helper lanechange, 2: noo helper turn
           if self.autoTurnControl == 3 or leftBlinker:
             self.noo_active = NooActive.active
-          elif not self.lane_available_prev and lane_available: # start... 차선이 생김
+          elif lane_appeared: #start... 차선이 발견됨.
+            self.noo_active = NooActive.new_lane_appeared
+          elif not self.lane_available_prev and lane_available: # start... 차선이 생김 (로드경계가 멀어짐)
             self.noo_active = NooActive.new_lane_detected
           elif not self.edge_available_prev and edge_available: # start... 에지가 멀어짐. 
             self.noo_active = NooActive.road_edge_detected
@@ -281,6 +306,8 @@ class DesireHelper:
           self._add_log("Lane change need torque to start")
         elif self.lane_change_wait_timer < self.lane_change_delay:
           self._add_log("Lane change waiting timer. {:.1f}s".format(self.lane_change_wait_timer))
+        elif blindspot_detected:
+          self._add_log("Blindspot detected")
         else:
         #if not object_detected and not need_torque and lane_available and not self.lane_change_completed and self.lane_change_wait_timer >= self.lane_change_delay:          
           torque_applied = True

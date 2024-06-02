@@ -432,6 +432,32 @@
     },
     {
       "group": "조향일반",
+      "name": "ManualSteeringOverride",
+      "title": "운전자조향개입해제",
+      "descr": "1:차선변경시, 2: 1초간 운전자가 개입하면 조향해제, 직선시 자동복귀",
+      "egroup": "LATSET",
+      "etitle": "Manual Steering Override",
+      "edescr": "1: Lanechange, 2: 1sec override",
+      "min": 0,
+      "max": 2,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "조향일반",
+      "name": "LaneChangeLaneCheck",
+      "title": "차선변경 차선검사",
+      "descr": "0:안함,1:검사,2:도로경계차선변경(NOO)",
+      "egroup": "LATSET",
+      "etitle": "LaneChangeLaneCheck",
+      "edescr": "",
+      "min": 0,
+      "max": 2,
+      "default": 1,
+      "unit": 1
+    },
+    {
+      "group": "조향일반",
       "name": "AutoTurnControlSpeedLaneChange",
       "title": "NOO Helper 차선변경속도(60)",
       "descr": "0:사용안함, 차선변경시 적용속도",
@@ -470,11 +496,11 @@
       "unit": 1
     },
     {
-      "group": "조향일반",
+      "group": "화면",
       "name": "AutoTurnMapChange",
       "title": "NOO Helper 맵전환(0)",
       "descr": "1: 맵시작시, 2: NOO 작동시 자동맵전환",
-      "egroup": "LATSET",
+      "egroup": "DISP",
       "etitle": "NOO Helper Map display(0)",
       "edescr": "",
       "min": 0,
@@ -613,11 +639,11 @@
       "unit": 10
     },
     {
-      "group": "시작",
+      "group": "화면",
       "name": "MapboxStyle",
       "title": "맵박스 스타일",
       "descr": "",
-      "egroup": "START",
+      "egroup": "DISP",
       "etitle": "MapboxStyle",
       "edescr": "",
       "min": 0,
@@ -962,6 +988,19 @@
       "max": 200,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "조향일반",
+      "name": "UseLaneLineCurveSpeed",
+      "title": "레인모드: 커브속도(0)",
+      "descr": "레인(차선)모드를 지정턴속도 이하에서는 사용하지 않습니다.",
+      "egroup": "LAT",
+      "etitle": "Laneline: Curve Speed(0)",
+      "edescr": "Lainline mode, above curve speed",
+      "min": 0,
+      "max": 200,
+      "default": 0,
+      "unit": 10
     },
     {
       "group": "조향일반",

@@ -105,6 +105,7 @@ class HyundaiExtFlags(IntFlag):
   ACAN_PANDA = 2 ** 7
   BSM_IN_ADAS = 2 ** 8
   CANFD_TPMS = 2 ** 9
+  CANFD_GEARS_69 = 2 ** 10
 
 class Footnote(Enum):
   CANFD = CarFootnote(
@@ -620,6 +621,11 @@ class CAR(Platforms):
     [HyundaiCarDocs("Kia K9 2016-2019", "All", car_parts=CarParts.common([CarHarness.hyundai_h]))],
     CarSpecs(mass=2075, wheelbase=3.15, steerRatio=14.5, tireStiffnessFactor=0.7),
     flags=HyundaiFlags.LEGACY,
+  )
+  KIA_EV_SK3 = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Kia Soul EV 2019", car_parts=CarParts.common([CarHarness.hyundai_c]))],
+    CarSpecs(mass=1695, wheelbase=2.6, steerRatio=13.75),
+    flags=HyundaiFlags.CHECKSUM_CRC8 | HyundaiFlags.EV,
   )
 
 

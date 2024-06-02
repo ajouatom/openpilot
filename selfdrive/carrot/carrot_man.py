@@ -12,6 +12,8 @@ from openpilot.common.realtime import Ratekeeper
 from openpilot.common.params import Params
 import cereal.messaging as messaging
 from cereal import log
+import openpilot.selfdrive.frogpilot.fleetmanager.helpers as fleet
+
 NetworkType = log.DeviceState.NetworkType
 
 class CarrotMan:
@@ -38,6 +40,8 @@ class CarrotMan:
     isOnroadCount = 0
     is_tmux_sent = False
     sm = messaging.SubMaster(['deviceState'])
+
+    self.save_toggle_values()
 
     while True:
       try:
@@ -116,13 +120,11 @@ class CarrotMan:
       print(f"ftp sending error...: {e}")
 
     if send_settings:
-      #try:
-      #    ftp.delete('settings.json')
-      #except Exception as e:
-      #    print(f"ftp settings.json delete error: {e}")
+      self.save_toggle_values()
       try:
-        with open("/data/backup_params.json", "rb") as file:
-          ftp.storbinary(f'STOR settings-{current_time}.json', file)
+        #with open("/data/backup_params.json", "rb") as file:
+        with open("/data/toggle_values.json", "rb") as file:
+          ftp.storbinary(f'STOR toggles-{current_time}.json', file)
       except Exception as e:
         print(f"ftp params sending error...: {e}")
 
@@ -140,6 +142,12 @@ class CarrotMan:
           time.sleep(2)
       else:
         time.sleep(1)
+
+  def save_toggle_values(self):
+    toggle_values = fleet.get_all_toggle_values()
+    file_path = os.path.join('/data', 'toggle_values.json')
+    with open(file_path, 'w') as file:
+      json.dump(toggle_values, file, indent=2) 
 
   def carrot_cmd_zmq(self):
 
@@ -173,7 +181,7 @@ class CarrotMan:
 def main():
   print("CarrotManager Started")
   #print("Carrot GitBranch = {}, {}".format(Params().get("GitBranch"), Params().get("GitCommitDate")))
-  carrot_man = CarrotMan()
+  carrot_man = CarrotMan()  
   while True:
     try:
       carrot_man.carrot_man_thread()

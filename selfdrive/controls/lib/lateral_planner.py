@@ -59,7 +59,7 @@ class LateralPlanner:
     self.lanelines_active = False
     self.lanelines_active_tmp = False
 
-    self.useLaneLineSpeeApply = self.params.get_int("UseLaneLineSpeedApply")
+    self.useLaneLineSpeedApply = self.params.get_int("UseLaneLineSpeedApply")
     self.pathOffset = float(self.params.get_int("PathOffset")) * 0.01
     self.useLaneLineMode = False
     self.plan_yaw = np.zeros((TRAJECTORY_SIZE,))
@@ -176,6 +176,11 @@ class LateralPlanner:
     plan_solution_valid = self.solution_invalid_cnt < 2
     plan_send = messaging.new_message('lateralPlan')
     plan_send.valid = sm.all_checks(service_list=['carState', 'controlsState', 'modelV2'])
+    if not plan_send.valid:
+      #print("lateralPlan_valid=", sm.valid)
+      #print("lateralPlan_alive=", sm.alive)
+      print("lateralPlan_freq_ok=", sm.freq_ok)
+      pass
 
     lateralPlan = plan_send.lateralPlan
     lateralPlan.modelMonoTime = sm.logMonoTime['modelV2']
