@@ -145,7 +145,6 @@ class CarrotMan:
 
   def save_toggle_values(self):
     toggle_values = fleet.get_all_toggle_values()
-    modified_toggle_values = {key: f"{value}cr" for key, value in toggle_values.items()}
     file_path = os.path.join('/data', 'toggle_values.json')
     with open(file_path, 'w') as file:
       json.dump(modified_toggle_values, file, indent=2) 
