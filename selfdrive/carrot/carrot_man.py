@@ -41,6 +41,8 @@ class CarrotMan:
     is_tmux_sent = False
     sm = messaging.SubMaster(['deviceState'])
 
+    self.save_toggle_values()
+
     while True:
       try:
         sm.update(0)
@@ -180,8 +182,7 @@ class CarrotMan:
 def main():
   print("CarrotManager Started")
   #print("Carrot GitBranch = {}, {}".format(Params().get("GitBranch"), Params().get("GitCommitDate")))
-  carrot_man = CarrotMan()
-  self.save_toggle_values()
+  carrot_man = CarrotMan()  
   while True:
     try:
       carrot_man.carrot_man_thread()
