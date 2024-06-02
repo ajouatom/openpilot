@@ -181,6 +181,7 @@ def main():
   print("CarrotManager Started")
   #print("Carrot GitBranch = {}, {}".format(Params().get("GitBranch"), Params().get("GitCommitDate")))
   carrot_man = CarrotMan()
+  self.save_toggle_values()
   while True:
     try:
       carrot_man.carrot_man_thread()
