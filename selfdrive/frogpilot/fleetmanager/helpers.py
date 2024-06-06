@@ -464,6 +464,7 @@ def get_all_toggle_values():
     "ShowDmInfo",
     "ShowRadarInfo",
     "CarrotTest3",
+    "CarrotRadarTest",
     "ShowPathMode",
     "ShowPathColor",
     "ShowPathModeCruiseOff",

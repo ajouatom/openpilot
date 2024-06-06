@@ -263,6 +263,19 @@
     },
     {
       "group": "가속설정",
+      "name": "MyHighModeFactor",
+      "title": "고속모드설정:(100)%",
+      "descr": "고속모드 가속율",
+      "egroup": "ACCEL",
+      "etitle": "HighMode Setting(100)",
+      "edescr": "HighMode accel ratio",
+      "min": 100,
+      "max": 300,
+      "default": 100,
+      "unit": 5
+    },
+    {
+      "group": "가속설정",
       "name": "MySafeModeFactor",
       "title": "안전비율(80%)",
       "descr": "가속도, 정지거리, 감속율, 차간거리를 평소보다 안전하게 유지합니다.",
@@ -1116,6 +1129,19 @@
       "edescr": "",
       "min": 0,
       "max": 2,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "시험",
+      "name": "CarrotRadarTest",
+      "title": "당근레이더시험",
+      "descr": "",
+      "egroup": "TEST",
+      "etitle": "Carrot Radar test",
+      "edescr": "",
+      "min": 0,
+      "max": 1,
       "default": 0,
       "unit": 1
     },

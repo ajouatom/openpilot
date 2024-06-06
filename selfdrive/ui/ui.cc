@@ -126,11 +126,11 @@ void update_line_data_dist(const UIState* s, const cereal::XYZTData::Reader& lin
         line_zs[i] = line_z[i]; 
     }
 
-    float   dist = 2.0, dist_dt = 1.;
+    float   dist = 2.0;// , dist_dt = 1.;
     bool    exit = false;
     //printf("\ndist = ");
     for (int i = 0; !exit; i++, dist = dist + dist*0.15) {
-        dist_dt += (i*0.05);
+        //dist_dt += (i*0.05);
         if (dist >= max_dist) {
             dist = max_dist;
             exit = true;
@@ -567,7 +567,7 @@ static void update_state(UIState *s) {
       if (lp.getUseLaneLines() && controls_state.getUseLaneLines()) s->use_lane_lines = true;
       else s->use_lane_lines = false;
   }
-  else s->use_lane_lines = false;
+  //else s->use_lane_lines = false;
 
 }
 
