@@ -392,14 +392,10 @@ void update_line_data(const UIState *s, const cereal::XYZTData::Reader &line,
 }
 
 void update_model(UIState *s,
-                  const cereal::ModelDataV2::Reader &model,
-                  const cereal::UiPlan::Reader &plan) {
+                  const cereal::ModelDataV2::Reader &model) {
   UIScene &scene = s->scene;
-  auto plan_position = plan.getPosition();
-  if (plan_position.getX().size() < model.getPosition().getX().size()) {
-    plan_position = model.getPosition();
-  }
-  float max_distance = std::clamp(*(plan_position.getX().end() - 1),
+  auto model_position = model.getPosition();
+  float max_distance = std::clamp(*(model_position.getX().end() - 1),
                                   MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE);
 
   auto lead_one = (*s->sm)["radarState"].getRadarState().getLeadOne();
@@ -420,10 +416,10 @@ void update_model(UIState *s,
     update_line_data(s, lane_lines[i], 0.025 * scene.lane_line_probs[i], 0.0, 0.0, &scene.lane_line_vertices[i], max_idx);
   }
   // lane barriers for blind spot
-  int max_idx_barrier_l = get_path_length_idx(plan_position, 40.0);
-  int max_idx_barrier_r = get_path_length_idx(plan_position, 40.0);
-  update_line_data(s, plan_position, 0, 1.2 - 0.05, 1.2 - 0.6, &scene.lane_barrier_vertices[0], max_idx_barrier_l, false, -1.7); // 차선폭을 알면 좋겠지만...
-  update_line_data(s, plan_position, 0, 1.2 - 0.05, 1.2 - 0.6, &scene.lane_barrier_vertices[1], max_idx_barrier_r, false, 1.7);
+  int max_idx_barrier_l = get_path_length_idx(model_position, 40.0);
+  int max_idx_barrier_r = get_path_length_idx(model_position, 40.0);
+  update_line_data(s, model_position, 0, 1.2 - 0.05, 1.2 - 0.6, &scene.lane_barrier_vertices[0], max_idx_barrier_l, false, -1.7); // 차선폭을 알면 좋겠지만...
+  update_line_data(s, model_position, 0, 1.2 - 0.05, 1.2 - 0.6, &scene.lane_barrier_vertices[1], max_idx_barrier_r, false, 1.7);
 
   // update road edges
   const auto road_edges = model.getRoadEdges();
@@ -448,19 +444,19 @@ void update_model(UIState *s,
   bool longActive = controls_state.getEnabled();
   if (longActive == false) show_path_mode = s->show_path_mode_cruise_off;
   max_distance -= 2.0;
-  max_idx = get_path_length_idx(plan_position, max_distance);
+  max_idx = get_path_length_idx(model_position, max_distance);
 
   if(s->show_mode == 0) {
-    update_line_data(s, plan_position, 0.9, 1.22, 1.22, &scene.track_vertices, max_idx, false);
+    update_line_data(s, model_position, 0.9, 1.22, 1.22, &scene.track_vertices, max_idx, false);
   }
   else if (show_path_mode == 0) {
-      update_line_data2(s, plan_position, s->show_path_width, 1.22, 1.22, &scene.track_vertices, max_idx);
+      update_line_data2(s, model_position, s->show_path_width, 1.22, 1.22, &scene.track_vertices, max_idx);
   }
   else if (show_path_mode < 9 || show_path_mode == 13 || show_path_mode == 14 || show_path_mode == 15) {
-      update_line_data_dist(s, plan_position, s->show_path_width, 1.22, 1.22, &scene.track_vertices, max_distance, false);
+      update_line_data_dist(s, model_position, s->show_path_width, 1.22, 1.22, &scene.track_vertices, max_distance, false);
   }
   else
-    update_line_data_dist3(s, plan_position, s->show_path_width, 1.22, 1.22, &scene.track_vertices, max_distance, false);
+    update_line_data_dist3(s, model_position, s->show_path_width, 1.22, 1.22, &scene.track_vertices, max_distance, false);
 
 }
 
@@ -558,8 +554,7 @@ static void update_state(UIState *s) {
   scene.world_objects_visible = scene.world_objects_visible ||
                                 (scene.started &&
                                  sm.rcv_frame("liveCalibration") > scene.started_frame &&
-                                 sm.rcv_frame("modelV2") > scene.started_frame &&
-                                 sm.rcv_frame("uiPlan") > scene.started_frame);
+                                 sm.rcv_frame("modelV2") > scene.started_frame);
 
   if (sm.updated("lateralPlan") && sm.updated("controlsState")) {
       auto lp = sm["lateralPlan"].getLateralPlan();
@@ -655,8 +650,8 @@ UIState::UIState(QObject *parent) : QObject(parent) {
   sm = std::make_unique<SubMaster, const std::initializer_list<const char *>>({
     "modelV2", "controlsState", "liveCalibration", "radarState", "deviceState",
     "pandaStates", "carParams", "driverMonitoringState", "carState", "liveLocationKalman", "driverStateV2",
-    "wideRoadCameraState", "managerState", "navInstruction", "navRoute", "uiPlan",
-    "lateralPlan", "longitudinalPlan","carControl", "liveParameters", "roadLimitSpeed", "liveTorqueParameters", "naviData"
+    "wideRoadCameraState", "managerState", "navInstruction", "navRoute",
+    "lateralPlan", "longitudinalPlan","carControl", "liveParameters", "roadLimitSpeed", "liveTorqueParameters", "naviData", "carrotModel"
   });
 
   Params params;

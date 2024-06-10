@@ -88,7 +88,7 @@ class YOLOv8:
         input_tensor = self.prepare_input(image)
         now2 = time.monotonic()
 
-        return [],[],[]
+        #return [],[],[]
         # Perform inference on the image
         print("########### YOLO... inference ##########")
 
@@ -102,12 +102,20 @@ class YOLOv8:
 
 
     def prepare_input(self, image):
-
         input_img = extract_image(image)
 
         self.img_height, self.img_width = 1208, 1928 #image.height, image.width #image.shape[:2]
 
         #input_img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        #image_path = "/home/yun/media_log/fcamera.hevc_20231212_145229.704.jpg"
+        #image = cv2.imread(image_path)
+        #if image is None:
+        #  #print(f"Error: Could not load image at {image_path}")
+        #  pass
+        #else:
+        #   cv2.imshow("hello", input_img)
+        #   cv2.waitKey(1)
+
         #input_img = image
 
         # Resize input image
@@ -125,7 +133,7 @@ class YOLOv8:
         start = time.perf_counter()
         outputs = self.session.run(self.output_names, {self.input_names[0]: input_tensor})
 
-        print(f"Inference time: {(time.perf_counter() - start)*1000:.2f} ms")
+        #print(f"Inference time: {(time.perf_counter() - start)*1000:.2f} ms")
         return outputs
 
     def process_output(self, output):

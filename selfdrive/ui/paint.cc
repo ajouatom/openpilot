@@ -227,11 +227,8 @@ float interp(float x, const T* x_list, const T* y_list, size_t size, bool extrap
 static void ui_draw_path(const UIState* s) {
     const UIScene& scene = s->scene;
     SubMaster& sm = *(s->sm);
-    auto plan_position = sm["uiPlan"].getUiPlan().getPosition();
-    if (plan_position.getX().size() < 33) {
-        plan_position = sm["modelV2"].getModelV2().getPosition();
-    }
-    float max_distance = std::clamp(plan_position.getX()[TRAJECTORY_SIZE - 1],
+    auto model_position = sm["modelV2"].getModelV2().getPosition();
+    float max_distance = std::clamp(model_position.getX()[TRAJECTORY_SIZE - 1],
         MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE);
 
     auto lead_one = sm["radarState"].getRadarState().getLeadOne();
@@ -242,7 +239,7 @@ static void ui_draw_path(const UIState* s) {
     auto    car_state = sm["carState"].getCarState();
     float   accel = car_state.getAEgo();
     float   v_ego_kph = getVEgo() * MS_TO_KPH;
-    const auto line_x = plan_position.getX(), line_y = plan_position.getY(), line_z = plan_position.getZ();
+    const auto line_x = model_position.getX(), line_y = model_position.getY(), line_z = model_position.getZ();
     float idxs[33], line_xs[33], line_ys[33], line_zs[33];
     for (int i = 0; i < 33; i++) {
         idxs[i] = (float)i;
@@ -2132,6 +2129,60 @@ void DrawApilot::drawDebugText(UIState* s, bool show) {
 DrawApilot::DrawApilot() {
 
 }
+const char* class_names_[] = {
+    "person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck",
+    "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench",
+    "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra",
+    "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee",
+    "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove",
+    "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup",
+    "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange",
+    "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "sofa",
+    "pottedplant", "bed", "diningtable", "toilet", "TV monitor", "laptop", "mouse",
+    "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
+    "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier",
+    "toothbrush"
+};
+const char* class_names_kr[] = {
+    "사람", "자전거", "자동차", "오토바이", "비행기", "버스", "기차", "트럭",
+    "보트", "신호등", "소화전", "정지 신호", "주차 요금기", "벤치",
+    "새", "고양이", "개", "말", "양", "소", "코끼리", "곰", "얼룩말",
+    "기린", "배낭", "우산", "핸드백", "넥타이", "여행 가방", "프리스비",
+    "스키", "스노보드", "스포츠 공", "연", "야구 방망이", "야구 글러브",
+    "스케이트보드", "서핑보드", "테니스 라켓", "병", "와인 잔", "컵",
+    "포크", "나이프", "숟가락", "그릇", "바나나", "사과", "샌드위치", "오렌지",
+    "브로콜리", "당근", "핫도그", "피자", "도넛", "케이크", "의자", "소파",
+    "화분", "침대", "식탁", "화장실", "TV 모니터", "노트북", "마우스",
+    "리모컨", "키보드", "휴대폰", "전자레인지", "오븐", "토스터", "싱크대",
+    "냉장고", "책", "시계", "꽃병", "가위", "테디 베어", "헤어 드라이어",
+    "칫솔"
+};
+const char* class_names[] = {
+    "green", "left turn", "red light", "yellow light"
+};
+void DrawApilot::drawCarrotModel(const UIState* s) {
+    SubMaster& sm = *(s->sm);
+    auto detections = sm["carrotModel"].getCarrotModel().getDetections();
+
+    for (auto detection : detections) {
+        auto box = detection.getBox();
+        float xMin = box.getXMin();
+        float yMin = box.getYMin();
+        float xMax = box.getXMax();
+        float yMax = box.getYMax();
+
+        // NanoVG로 바운딩 박스 그리기
+        nvgBeginPath(s->vg);
+        nvgRect(s->vg, xMin, yMin, xMax - xMin, yMax - yMin);
+        nvgStrokeColor(s->vg, nvgRGBA(255, 0, 0, 255));
+        nvgStroke(s->vg);
+        char str[128];
+        const char* className = class_names_kr[detection.getClassId()];
+        sprintf(str, "%s, %.2f", className, detection.getScore());
+        ui_draw_text(s, xMin, yMin - 10, str, 35, COLOR_WHITE, BOLD, 0.0f, 0.0f);
+    }
+}
+
 DrawApilot* drawApilot;
 Alert alert;
 NVGcolor alert_color;
@@ -2150,6 +2201,7 @@ void ui_draw(UIState *s, int w, int h) {
   drawApilot->drawLeadApilot(s);
   drawApilot->drawDebugText(s, s->show_debug>1);
   drawApilot->drawDeviceState(s, s->show_device_stat);
+  drawApilot->drawCarrotModel(s);
 
   ui_draw_text_a2(s);
 
