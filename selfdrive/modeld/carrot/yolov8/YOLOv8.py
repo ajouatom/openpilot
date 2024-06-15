@@ -76,8 +76,17 @@ class YOLOv8:
         return self.detect_objects(image)
 
     def initialize_model(self, path):
-        self.session = onnxruntime.InferenceSession(path,
-                                                    providers=onnxruntime.get_available_providers())
+        #self.session = onnxruntime.InferenceSession(path,
+        #                                            providers=onnxruntime.get_available_providers())
+        providers = ort.get_available_providers()
+        if 'CUDAExecutionProvider' in providers:
+            self.session = ort.InferenceSession(path, providers=['CUDAExecutionProvider'])
+        elif 'TensorrtExecutionProvider' in providers:
+            self.session = ort.InferenceSession(path, providers=['TensorrtExecutionProvider'])
+        else:
+            print("No GPU providers available. Using CPU.")
+            self.session = ort.InferenceSession(path, providers=['CPUExecutionProvider'])
+
         # Get model info
         self.get_input_details()
         self.get_output_details()
