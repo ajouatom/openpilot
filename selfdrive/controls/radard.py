@@ -101,7 +101,7 @@ class Track:
     if self.cnt > 0:
       self.kf.update(self.vLead)
       self.kf_y.update(self.yRel)
-      self.aLead_alpha = params.get_float("CarrotRadarTest2") / 100.
+      self.aLead_alpha = Params().get_float("CarrotRadarTest2") / 100.
       self.aLead = self.aLead * (1.0 - self.aLead_alpha) + (self.vLead - self.vLead_prev) / self.radar_ts * self.aLead_alpha
 
     self.vLat = float(self.kf_y.x[1][0])
