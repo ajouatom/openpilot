@@ -2201,7 +2201,8 @@ void ui_draw(UIState *s, int w, int h) {
   drawApilot->drawLeadApilot(s);
   drawApilot->drawDebugText(s, s->show_debug>1);
   drawApilot->drawDeviceState(s, s->show_device_stat);
-  drawApilot->drawCarrotModel(s);
+  if(s->fb_w > 1200)
+    drawApilot->drawCarrotModel(s);
 
   ui_draw_text_a2(s);
 
