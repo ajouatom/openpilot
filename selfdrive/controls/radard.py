@@ -73,7 +73,7 @@ class Track:
     self.aLeadK_prev = 0.0
     self.params = Params()
 
-    self.aLeadFilter = StreamingMovingAverage(5)
+    self.aLeadFilter = StreamingMovingAverage(3)
     self.aLead = 0.0
     self.vLead_prev = v_lead
     self.aLead_alpha = 0.2
