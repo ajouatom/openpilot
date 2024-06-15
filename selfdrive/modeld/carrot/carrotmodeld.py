@@ -47,32 +47,33 @@ def main():
 
     #sm.update(0)
 
-    t1 = time.perf_counter()
-    #print("########### CARROT.start ##########")
-    boxes, scores, class_ids = carrot(buf)
-    #print("########### CARROT.end ##########")
-    #if len(class_ids) > 0:
-    #    print("boxes={}, scores={}, class_ids={}".format(boxes, scores, class_ids))
+    if Params().get_int("ShowDebugUI") > 1:
+      t1 = time.perf_counter()
+      #print("########### CARROT.start ##########")
+      boxes, scores, class_ids = carrot(buf)
+      #print("########### CARROT.end ##########")
+      #if len(class_ids) > 0:
+      #    print("boxes={}, scores={}, class_ids={}".format(boxes, scores, class_ids))
 
-    t2 = time.perf_counter()
+      t2 = time.perf_counter()
 
-    #pm.send("driverStateV2", get_driverstate_packet(model_output, vipc_client.frame_id, vipc_client.timestamp_sof, t2 - t1, dsp_execution_time))
-    msg = messaging.new_message('carrotModel', valid=True)
-    detections = msg.carrotModel.init('detections', len(boxes))
-    for i in range(len(boxes)):
-      detection = detections[i]
-      box = detection.init('box')
-      box.xMin = float(boxes[i][0])
-      box.yMin = float(boxes[i][1])
-      box.xMax = float(boxes[i][2])
-      box.yMax = float(boxes[i][3])
-      detection.score = float(scores[i])
-      detection.classId = int(class_ids[i])
+      #pm.send("driverStateV2", get_driverstate_packet(model_output, vipc_client.frame_id, vipc_client.timestamp_sof, t2 - t1, dsp_execution_time))
+      msg = messaging.new_message('carrotModel', valid=True)
+      detections = msg.carrotModel.init('detections', len(boxes))
+      for i in range(len(boxes)):
+        detection = detections[i]
+        box = detection.init('box')
+        box.xMin = float(boxes[i][0])
+        box.yMin = float(boxes[i][1])
+        box.xMax = float(boxes[i][2])
+        box.yMax = float(boxes[i][3])
+        detection.score = float(scores[i])
+        detection.classId = int(class_ids[i])
 
     
-    pm.send("carrotModel", msg)
-    print("carrotmodeld: %.2fs, from last %.2fs\n" % (t2 - t1, t1 - last))
-    last = t1
+      pm.send("carrotModel", msg)
+      print("carrotmodeld: %.2fs, from last %.2fs\n" % (t2 - t1, t1 - last))
+      last = t1
     rk.keep_time()
 
 
