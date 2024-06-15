@@ -643,6 +643,7 @@ class LongitudinalMpc:
     elif self.lo_timer == 120:
       self.stop_distance = params.get_float("StopDistanceCarrot") / 100.
       self.carrotRadarTest = params.get_int("CarrotRadarTest")
+      self.trafficStopDistanceAdjust = params.get_int("TrafficStopDistanceAdjust") / 100.
 
   def update_stop_dist(self, stop_x):
     stop_x = self.xStopFilter.process(stop_x, median = True)

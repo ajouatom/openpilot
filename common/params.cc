@@ -268,6 +268,7 @@ std::unordered_map<std::string, uint32_t> keys = {
     { "StartAccelApply", PERSISTENT },
     { "AutoSpeedUptoRoadSpeedLimit", PERSISTENT },
     { "StopDistanceCarrot", PERSISTENT },
+    { "TrafficStopDistanceAdjust", PERSISTENT },
     { "ALeadTauPos", PERSISTENT },
     { "ALeadTauNeg", PERSISTENT },
     { "ALeadTauThreshold", PERSISTENT },

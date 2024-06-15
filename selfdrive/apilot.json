@@ -302,6 +302,19 @@
     },
     {
       "group": "주행튜닝",
+      "name": "TrafficStopDistanceAdjust",
+      "title": "TrafficStopDistance adjust (150)cm",
+      "descr": "늘리면 정지선을 지나감?????",
+      "egroup": "LONG",
+      "etitle": "TrafficStopDistance adjust (150)cm",
+      "edescr": "",
+      "min": -1000,
+      "max": 1000,
+      "default": 150,
+      "unit": 10
+    },
+    {
+      "group": "주행튜닝",
       "name": "ALeadTauPos",
       "title": "ALeadTauPos x0.01(120)",
       "descr": "비전(10~30),낮은값은 선행차의 움직임에 민감해짐",
