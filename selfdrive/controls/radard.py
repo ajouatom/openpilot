@@ -76,7 +76,7 @@ class Track:
     self.aLeadFilter = StreamingMovingAverage(5)
     self.aLead = 0.0
     self.vLead_prev = v_lead
-    self.aLead_alpha = 0.1
+    self.aLead_alpha = 0.2
 
   def update(self, d_rel: float, y_rel: float, v_rel: float, v_lead: float, measured: float, a_rel: float, aLeadTauPos: float, aLeadTauNeg: float, aLeadTauThreshold: float, a_ego: float):
 
