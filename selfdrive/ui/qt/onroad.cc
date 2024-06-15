@@ -117,8 +117,8 @@ OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   QObject::connect(uiState(), &UIState::primeChanged, this, &OnroadWindow::primeChanged);
 }
 
+int _current_carrot_display_prev = 0, _display_time_count = 0;
 void OnroadWindow::updateState(const UIState &s) {
-    static int _current_carrot_display_prev = 0, _display_time_count = 0;
     if (!s.scene.started) {
         _current_carrot_display_prev = -1;
       return;
