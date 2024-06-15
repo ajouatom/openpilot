@@ -79,6 +79,7 @@ class YOLOv8:
         #self.session = onnxruntime.InferenceSession(path,
         #                                            providers=onnxruntime.get_available_providers())
         providers = ort.get_available_providers()
+        print(providers)
         if 'CUDAExecutionProvider' in providers:
             self.session = ort.InferenceSession(path, providers=['CUDAExecutionProvider'])
         elif 'TensorrtExecutionProvider' in providers:
