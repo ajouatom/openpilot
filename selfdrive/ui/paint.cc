@@ -2174,7 +2174,7 @@ void DrawApilot::drawCarrotModel(const UIState* s) {
         // NanoVG로 바운딩 박스 그리기
         nvgBeginPath(s->vg);
         nvgRect(s->vg, xMin, yMin, xMax - xMin, yMax - yMin);
-        nvgStrokeColor(s->vg, nvgRGBA(255, 0, 0, 255));
+        nvgStrokeColor(s->vg, COLOR_GREEN);
         nvgStroke(s->vg);
         char str[128];
         const char* className = class_names_kr[detection.getClassId()];
