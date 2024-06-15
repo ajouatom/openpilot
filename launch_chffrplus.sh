@@ -85,7 +85,7 @@ function launch {
   # write tmux scrollback to a file
   tmux capture-pane -pq -S-1000 > /tmp/launch_log
 
-  #pip install opencv-python-headless
+  pip install opencv-python-headless
 
   # start manager
   cd selfdrive/manager
