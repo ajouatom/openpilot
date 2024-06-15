@@ -90,13 +90,13 @@ class YOLOv8:
 
         #return [],[],[]
         # Perform inference on the image
-        print("########### YOLO... inference ##########")
+        #print("########### YOLO... inference ##########")
 
         outputs = self.inference(input_tensor)
-        print("########### YOLO... inference ok ##########")
+        #print("########### YOLO... inference ok ##########")
         now3 = time.monotonic()
         self.boxes, self.scores, self.class_ids = self.process_output(outputs)
-        print("execTime_____ = {:.6f}, {:.6f}, {:.6f}".format(now2-now1, now3-now2, time.monotonic() - now3))
+        #print("execTime_____ = {:.6f}, {:.6f}, {:.6f}".format(now2-now1, now3-now2, time.monotonic() - now3))
 
         return self.boxes, self.scores, self.class_ids
 

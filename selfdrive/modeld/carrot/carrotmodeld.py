@@ -48,11 +48,11 @@ def main():
     #sm.update(0)
 
     t1 = time.perf_counter()
-    print("########### CARROT.start ##########")
+    #print("########### CARROT.start ##########")
     boxes, scores, class_ids = carrot(buf)
-    print("########### CARROT.end ##########")
-    if len(class_ids) > 0:
-        print("boxes={}, scores={}, class_ids={}".format(boxes, scores, class_ids))
+    #print("########### CARROT.end ##########")
+    #if len(class_ids) > 0:
+    #    print("boxes={}, scores={}, class_ids={}".format(boxes, scores, class_ids))
 
     t2 = time.perf_counter()
 
@@ -71,7 +71,7 @@ def main():
 
     
     pm.send("carrotModel", msg)
-    print("carrotmodeld: %.2fms, from last %.2fms\n" % (t2 - t1, t1 - last))
+    print("carrotmodeld: %.2fs, from last %.2fs\n" % (t2 - t1, t1 - last))
     last = t1
     rk.keep_time()
 
