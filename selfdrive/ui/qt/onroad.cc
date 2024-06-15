@@ -213,7 +213,7 @@ void OnroadWindow::updateState(const UIState &s) {
               map->setVisible(true);
               map->setFixedWidth(topWidget(this)->width() / 2 - UI_BORDER_SIZE);
               if (_display_time_count > 0) {
-                  if (_display_time_count-- <= 0) _current_carrot_display = 2; // change to road view
+                  if (--_display_time_count <= 0) _current_carrot_display = 2; // change to road view
               }
           }
           break;
