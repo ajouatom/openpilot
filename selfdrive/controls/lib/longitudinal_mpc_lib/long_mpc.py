@@ -273,7 +273,6 @@ class LongitudinalMpc:
     self.tFollowGap2 = 1.2
     self.tFollowGap3 = 1.4
     self.tFollowGap4 = 1.6
-    self.carrotRadarTest = 0
     self.lo_timer = 0 
     self.v_ego_prev = 0.0
     self.trafficState = TrafficState.off
@@ -389,7 +388,8 @@ class LongitudinalMpc:
     if lead is not None and lead.status:
       x_lead = lead.dRel
       v_lead = lead.vLead
-      a_lead = lead.aLeadK if self.carrotRadarTest == 0 else lead.aLead
+      #a_lead = lead.aLeadK
+      a_lead = lead.aLead
       a_lead_tau = lead.aLeadTau
     else:
       # Fake a fast lead car, so mpc can keep running in the same mode
@@ -642,8 +642,7 @@ class LongitudinalMpc:
       self.tFollowGap4 = params.get_float("TFollowGap4") / 100.
     elif self.lo_timer == 120:
       self.stop_distance = params.get_float("StopDistanceCarrot") / 100.
-      self.carrotRadarTest = params.get_int("CarrotRadarTest")
-      self.trafficStopDistanceAdjust = params.get_int("TrafficStopDistanceAdjust") / 100.
+      self.trafficStopDistanceAdjust = params.get_float("TrafficStopDistanceAdjust") / 100.
 
   def update_stop_dist(self, stop_x):
     stop_x = self.xStopFilter.process(stop_x, median = True)

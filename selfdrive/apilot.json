@@ -1147,15 +1147,15 @@
     },
     {
       "group": "시험",
-      "name": "CarrotRadarTest",
-      "title": "당근레이더시험",
-      "descr": "",
+      "name": "CarrotRadarTest2",
+      "title": "당근레이더시험Alpha (10)",
+      "descr": "alpha * 0.01",
       "egroup": "TEST",
-      "etitle": "Carrot Radar test",
+      "etitle": "Carrot Radar test alpha",
       "edescr": "",
-      "min": 0,
-      "max": 1,
-      "default": 0,
+      "min": 1,
+      "max": 100,
+      "default": 10,
       "unit": 1
     },
     {
