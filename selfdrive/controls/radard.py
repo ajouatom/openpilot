@@ -73,6 +73,7 @@ class Track:
     self.aLeadK_prev = 0.0
     self.params = Params()
 
+    self.aLeadFilter = StreamingMovingAverage(5)
     self.aLead = 0.0
     self.vLead_prev = v_lead
     self.aLead_alpha = 0.1
@@ -87,6 +88,7 @@ class Track:
       self.jerk = 0.0
       self.aLeadK_prev = 0.0
       self.aLead = 0.0
+      self.aLeadFilter.set(0.0)
       self.vLead_prev = v_lead
 
     # relative values, copy
@@ -101,7 +103,8 @@ class Track:
     if self.cnt > 0:
       self.kf.update(self.vLead)
       self.kf_y.update(self.yRel)
-      self.aLead = self.aLead * (1.0 - self.aLead_alpha) + (self.vLead - self.vLead_prev) / self.radar_ts * self.aLead_alpha
+      aLead = self.aLead * (1.0 - self.aLead_alpha) + (self.vLead - self.vLead_prev) / self.radar_ts * self.aLead_alpha
+      self.aLead = self.aLeadFilter.process(aLead, median = True)
 
     self.vLat = float(self.kf_y.x[1][0])
 
