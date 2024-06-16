@@ -348,6 +348,11 @@ class CAR(Platforms):
     CarSpecs(mass=1690, wheelbase=3.055, steerRatio=17),  # mass: from https://www.hyundai-motor.com.tw/clicktobuy/custin#spec_0, steerRatio: from learner
     flags=HyundaiFlags.CHECKSUM_CRC8,
   )
+  HYUNDAI_CASPER = HyundaiPlatformConfig(
+  [HyundaiCarDocs("Hyundai Casper 2022", "All", car_parts=CarParts.common([CarHarness.hyundai_a]))],
+  CarSpecs(mass=1060, wheelbase=2.4, steerRatio=14.3), # https://namu.wiki/w/%ED%98%84%EB%8C%80%20%EC%BA%90%EC%8A%A4%ED%8D%BC#s-3
+  flags=HyundaiFlags.CHECKSUM_CRC8,
+  )
 
   # Kia
   KIA_FORTE = HyundaiPlatformConfig(

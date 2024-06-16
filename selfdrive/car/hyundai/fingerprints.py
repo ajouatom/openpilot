@@ -1196,4 +1196,15 @@ FW_VERSIONS = {
       b'\xf1\x00US4_ RDR -----      1.00 1.00 99110-CG000         ',
     ],
   },
+  CAR.HYUNDAI_CASPER: {
+    (Ecu.fwdRadar, 0x7d0, None): [
+      b'\xf1\x00AX1_ RDR -----      1.00 1.00 99110-O6000         ',
+    ],
+    (Ecu.eps, 0x7d4, None): [
+      b'\xf1\x00AX  MDPS C 1.00 1.02 56340-O6000 1B18',
+    ],
+    (Ecu.fwdCamera, 0x7c4, None): [
+      b'\xf1\x00AX1 MFC  AT KOR LHD 1.00 1.03 99211-O6000 211007',
+    ],
+  },
 }
