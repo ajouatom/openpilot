@@ -106,6 +106,7 @@ def get_default_params():
     ("StoppingAccel", "-40"),
 
     ("StopDistanceCarrot", "550"), 
+    ("ComfortBrake", "250"), 
     ("TrafficStopDistanceAdjust", "150"), 
     ("ALeadTauPos", "120"), 
     ("ALeadTauNeg", "60"), 

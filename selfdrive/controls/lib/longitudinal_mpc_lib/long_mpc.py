@@ -282,7 +282,8 @@ class LongitudinalMpc:
     self.t_follow_prev = self.get_T_FOLLOW()
     self.stop_distance = STOP_DISTANCE
     self.fakeCruiseDistance = 0.0
-    self.comfort_brake = COMFORT_BRAKE
+    self.comfortBrake = COMFORT_BRAKE
+    self.comfort_brake = self.comfortBrake
     self.xState = XState.cruise
     self.xStop = 0.0
     self.stopDist = 0.0
@@ -317,7 +318,7 @@ class LongitudinalMpc:
     self.u_sol = np.zeros((N,1))
     self.params = np.zeros((N+1, PARAM_DIM))
     self.stop_distance = STOP_DISTANCE
-    self.comfort_brake = COMFORT_BRAKE
+    self.comfort_brake = self.comfortBrake
     self.xState = XState.cruise
     self.startSignCount = 0
     self.stopSignCount = 0
@@ -444,7 +445,7 @@ class LongitudinalMpc:
     a_ego = self.x0[2]
     self.trafficState = TrafficState.off
     # carrot
-    self.comfort_brake = COMFORT_BRAKE
+    self.comfort_brake = self.comfortBrake
     applyStopDistance = self.stop_distance  * (2.0 - self.mySafeFactor)
     t_follow = self.update_tf(v_ego, t_follow)
     t_follow = self.update_dynamic_tf(t_follow, radarstate.leadOne, a_ego, v_ego)
@@ -643,6 +644,7 @@ class LongitudinalMpc:
     elif self.lo_timer == 120:
       self.stop_distance = params.get_float("StopDistanceCarrot") / 100.
       self.trafficStopDistanceAdjust = params.get_float("TrafficStopDistanceAdjust") / 100.
+      self.comfortBrake = params.get_float("ComfortBrake") / 100.
 
   def update_stop_dist(self, stop_x):
     stop_x = self.xStopFilter.process(stop_x, median = True)

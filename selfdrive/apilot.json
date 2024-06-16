@@ -302,6 +302,19 @@
     },
     {
       "group": "주행튜닝",
+      "name": "ComfortBrake",
+      "title": "Comfort Brake(250)",
+      "descr": "x0.01, 값이 크면 급하게 브레이킹",
+      "egroup": "LONG",
+      "etitle": "Comfort Brake(250)",
+      "edescr": "",
+      "min": 200,
+      "max": 300,
+      "default": 250,
+      "unit": 10
+    },
+    {
+      "group": "주행튜닝",
       "name": "TrafficStopDistanceAdjust",
       "title": "TrafficStopDistance adjust (150)cm",
       "descr": "늘리면 정지선을 지나감?????",

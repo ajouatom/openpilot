@@ -501,6 +501,7 @@ def get_all_toggle_values():
     "StartAccelApply",
     "AutoSpeedUptoRoadSpeedLimit",
     "StopDistanceCarrot",
+    "ComfortBrake",
     "TrafficStopDistanceAdjust",
     "ALeadTauPos",
     "ALeadTauNeg",
