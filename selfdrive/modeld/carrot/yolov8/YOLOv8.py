@@ -65,7 +65,7 @@ def extract_image2(buf):
     return rgb
 class YOLOv8:
 
-    def __init__(self, path, conf_thres=0.7, iou_thres=0.5):
+    def __init__(self, path, conf_thres=0.5, iou_thres=0.5):
         self.conf_threshold = conf_thres
         self.iou_threshold = iou_thres
 
