@@ -561,7 +561,7 @@ def get_all_toggle_values():
     "CustomSteerDeltaUp",
     "CustomSteerDeltaDown",
     "SpeedFromPCM",
-    "MaxTimeOffroadMin"
+    "MaxTimeOffroadMin",
     "CarrotRecord",
     "CarrotDisplay",
     "MSLCEnabled",
