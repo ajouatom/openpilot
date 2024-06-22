@@ -27,9 +27,9 @@ def get_radar_can_parser_scc(CP):
 
   enable_radar_tracks = Params().get_bool("EnableRadarTracks")
 
-  # 레이더트랙만 이용하고 싶은경우
-  if enable_radar_tracks: 
-    return None
+  # 레이더트랙만 이용하고 싶은경우, => mix 시험...
+  #if enable_radar_tracks: 
+  #  return None
 
   if CP.carFingerprint in CANFD_CAR and not scc2:
     return None
