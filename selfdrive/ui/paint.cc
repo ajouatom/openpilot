@@ -1431,8 +1431,12 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             NVGcolor color = COLOR_GREEN;
             //ui_draw_bsd(s, s->xTurnInfo_vertices, &color, false);
             ui_draw_line(s, s->xTurnInfo_vertices, &color, nullptr);
-            int size_x = 348;
-            int size_y = 440;
+            float scale = 1.0;
+            if (x->xDistToTurn >= 100) scale = 0.5;
+            else if (s->xDistToTurn < 10) scale = 0.9;
+            else scale = s->xDistToTurn * 0.005;
+            int size_x = 348 * scale;
+            int size_y = 440 * scale;
             int img_x = (int)s->navi_turn_point[0].x() - size_x;
             int img_y = (int)s->navi_turn_point[0].y() - size_y;
             ui_draw_image(s, { img_x, img_y, size_x, size_y }, "ic_navi_point", 1.0f);
