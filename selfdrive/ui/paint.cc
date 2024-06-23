@@ -1432,7 +1432,7 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             //ui_draw_bsd(s, s->xTurnInfo_vertices, &color, false);
             ui_draw_line(s, s->xTurnInfo_vertices, &color, nullptr);
 
-            ui_draw_image(s, { s->navi_turn_point[0].x(), s->navi_turn_point[0].y(), 348, 440 }, "ic_navi_point", 1.0f);
+            ui_draw_image(s, { (int)s->navi_turn_point[0].x(), (int)s->navi_turn_point[0].y(), 348, 440 }, "ic_navi_point", 1.0f);
             //ui_draw_image(s, { s->navi_turn_point[1].x(), s->navi_turn_point[1].y(), 348, 440 }, "ic_navi_point", 1.0f);
 
             switch (s->xTurnInfo) {
