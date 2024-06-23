@@ -1428,9 +1428,9 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
         }
         else if (s->xTurnInfo >= 0) {
 
-            NVGcolor color = COLOR_GREEN;
+            //NVGcolor color = COLOR_GREEN;
             //ui_draw_bsd(s, s->xTurnInfo_vertices, &color, false);
-            ui_draw_line(s, s->xTurnInfo_vertices, &color, nullptr);
+            //ui_draw_line(s, s->xTurnInfo_vertices, &color, nullptr);
             float scale = 1.0;
             if (s->xDistToTurn >= 100) scale = 0.5;
             else if (s->xDistToTurn < 10) scale = 0.9;
