@@ -1429,7 +1429,8 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
         else if (s->xTurnInfo >= 0) {
 
             NVGcolor color = COLOR_GREEN;
-            ui_draw_bsd(s, s->xTurnInfo_vertices, &color, false);
+            //ui_draw_bsd(s, s->xTurnInfo_vertices, &color, false);
+            ui_draw_line(s, s->xTurnInfo_vertices, &color, nullptr);
 
             switch (s->xTurnInfo) {
             case 1: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_turn_l", 1.0f); break;
