@@ -238,6 +238,7 @@ public:
   float xDistToTurn = 0;
   int xTurnInfo = 0;
   QString xNavModifier;
+  QPointF navi_turn_point[2];
 
 
 signals:
