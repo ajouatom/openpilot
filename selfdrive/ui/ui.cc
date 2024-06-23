@@ -491,7 +491,7 @@ void update_model(UIState *s,
   update_navi_instruction(s);
   if (s->xTurnInfo >= 0) {
       int start_idx = get_path_length_idx(lane_lines[0], s->xDistToTurn);
-      int max_idx = get_path_length_idx(lane_lines[0], s->xDistToTurn + 20);
+      max_idx = get_path_length_idx(lane_lines[0], s->xDistToTurn + 20);
       update_line_data(s, lane_lines[1], 0.9, 1.22 - 0.05, 1.22 - 0.6, &s->xTurnInfo_vertices, max_idx, false, 0.0, start_idx);
   }
 }
