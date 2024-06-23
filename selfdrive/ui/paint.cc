@@ -1432,7 +1432,7 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             //ui_draw_bsd(s, s->xTurnInfo_vertices, &color, false);
             ui_draw_line(s, s->xTurnInfo_vertices, &color, nullptr);
             float scale = 1.0;
-            if (x->xDistToTurn >= 100) scale = 0.5;
+            if (s->xDistToTurn >= 100) scale = 0.5;
             else if (s->xDistToTurn < 10) scale = 0.9;
             else scale = s->xDistToTurn * 0.005;
             int size_x = 348 * scale;
