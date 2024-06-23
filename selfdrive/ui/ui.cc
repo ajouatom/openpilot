@@ -488,8 +488,11 @@ void update_model(UIState *s,
 
   update_navi_instruction(s);
   int lane_index = 0;
+  static int _kkk = 0;
+  _kkk += 1;
+  if (_kkk > 180) _kkk = 0;
   s->xTurnInfo = 2;
-  s->xDistToTurn = 50;
+  s->xDistToTurn = _kkk;
   switch (s->xTurnInfo) {
   case 1: case 3: case 5:
       lane_index = 1;
