@@ -487,8 +487,6 @@ void update_model(UIState *s,
     update_line_data_dist3(s, model_position, s->show_path_width, 1.22, 1.22, &scene.track_vertices, max_distance, false);
 
   update_navi_instruction(s);
-  s->xTurnInfo = 1;
-  s->xDistToTurn = 50;
   int lane_index = 0;
   switch (s->xTurnInfo) {
   case 1: case 3: case 5:
