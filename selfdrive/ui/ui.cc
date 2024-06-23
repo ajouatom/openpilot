@@ -489,11 +489,23 @@ void update_model(UIState *s,
     update_line_data_dist3(s, model_position, s->show_path_width, 1.22, 1.22, &scene.track_vertices, max_distance, false);
 
   update_navi_instruction(s);
-  if (s->xTurnInfo >= 0) {
-      int start_idx = get_path_length_idx(lane_lines[0], s->xDistToTurn);
-      max_idx = get_path_length_idx(lane_lines[0], s->xDistToTurn + 30);
-      update_line_data(s, lane_lines[1], 0.2, 0, 0, &s->xTurnInfo_vertices, max_idx, false, 0.0, start_idx);
-      //update_line_data(s, lane_lines[1], 0.2, 0, 0, &s->xTurnInfo_vertices, max_idx);
+  if (s->xTurnInfo >= 0 && s->xDistToTurn < 120) {
+      int lane_index = 0;
+      switch (s->xTurnInfo) {
+      case 1: case 3: case 5:
+          lane_index = 1;
+          break;
+      case 2: case 4:
+          lane_index = 2;
+          break;
+      }
+      if (lane_index > 0) {
+          int start_idx = get_path_length_idx(lane_lines[0], s->xDistToTurn);
+          max_idx = get_path_length_idx(lane_lines[0], s->xDistToTurn + 30);
+          update_line_data(s, lane_lines[lane_index], 0.2, 0, 0, &s->xTurnInfo_vertices, max_idx, false, 0.0, start_idx);
+          //update_line_data(s, lane_lines[1], 0.2, 0, 0, &s->xTurnInfo_vertices, max_idx);
+      }
+      else s->xTurnInfo_vertices.clear();
   }
 }
 
