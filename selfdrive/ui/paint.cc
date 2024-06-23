@@ -1427,7 +1427,7 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             }
         }
         else if (s->xTurnInfo >= 0) {
-            switch (x->xTurnInfo) {
+            switch (s->xTurnInfo) {
             case 1: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_turn_l", 1.0f); break;
             case 2: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_turn_r", 1.0f); break;
             case 3: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_lane_change_l", 1.0f); break;
