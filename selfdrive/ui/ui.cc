@@ -417,8 +417,6 @@ void update_navi_instruction(UIState* s) {
     }
     s->xDistToTurn = (float)xDistToTurn;
     s->xTurnInfo = xTurnInfo;
-    s->xDistToTurn = 50.0;
-    s->xTurnInfo = 1;
 }
 
 void update_model(UIState *s,
