@@ -504,9 +504,8 @@ void update_model(UIState *s,
       int idx = get_path_length_idx(lane_lines[0], xDistToTurn);
       for (int i = 0; i < 2; i++) {
           bool ret = calib_frame_to_full_frame(s, lane_lines[i+1].getX()[idx], lane_lines[i+1].getY()[idx], lane_lines[i+1].getZ()[idx], &s->navi_turn_point[i]);
-          printf("ret=%d\n", ret);
       }
-      printf("%d, %d\n", (int)s->navi_turn_point[0].x(), (int)s->navi_turn_point[0].y());
+      //printf("%d, %d\n", (int)s->navi_turn_point[0].x(), (int)s->navi_turn_point[0].y());
 
         int start_idx = get_path_length_idx(lane_lines[0], (s->xDistToTurn) < 10 ? 0 : s->xDistToTurn - 10);
         max_idx = get_path_length_idx(lane_lines[0], s->xDistToTurn + 30);
