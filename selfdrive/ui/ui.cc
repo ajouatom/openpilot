@@ -496,6 +496,8 @@ void update_model(UIState *s,
       lane_index = 2;
       break;
   }
+  s->xTurnInfo = 1;
+  s->xDistToTurn = 50;
   if (s->xTurnInfo >= 0 && s->xDistToTurn < 180 && lane_index > 0) {
 
       float xDistToTurn = (s->xDistToTurn) < 10 ? 0 : s->xDistToTurn - 10;
