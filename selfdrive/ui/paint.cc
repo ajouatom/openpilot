@@ -1432,6 +1432,9 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             //ui_draw_bsd(s, s->xTurnInfo_vertices, &color, false);
             ui_draw_line(s, s->xTurnInfo_vertices, &color, nullptr);
 
+            ui_draw_image(s, { s->navi_turn_point[0].x(), s->navi_turn_point[0].y(), 348, 440 }, "ic_navi_point", 1.0f);
+            //ui_draw_image(s, { s->navi_turn_point[1].x(), s->navi_turn_point[1].y(), 348, 440 }, "ic_navi_point", 1.0f);
+
             switch (s->xTurnInfo) {
             case 1: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_turn_l", 1.0f); break;
             case 2: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_turn_r", 1.0f); break;
@@ -2293,6 +2296,7 @@ void ui_nvg_init(UIState *s) {
   {"ic_apn", "../assets/images/img_apn.png"},
   {"ic_hda", "../assets/images/img_hda.png"},
   {"ic_osm", "../assets/images/img_osm.png"},
+  {"ic_navi_point", "../assets/images/navi_point.png"}
 
   };
   for (auto [name, file] : images) {
