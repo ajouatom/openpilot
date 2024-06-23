@@ -1433,8 +1433,9 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             //ui_draw_line(s, s->xTurnInfo_vertices, &color, nullptr);
             float scale = 1.0;
             if (s->xDistToTurn >= 200) scale = 0.5;
-            else if (s->xDistToTurn < 10) scale = 1.0;
+            else if (s->xDistToTurn <= 0) scale = 1.0;
             else scale = 1.0 - (0.5 * (s->xDistToTurn / 200.0));
+            printf("%d, %.2f\n", s->xDistToTurn, scale);
             int size_x = 348 * scale;
             int size_y = 440 * scale;
             int img_x = (int)s->navi_turn_point[0].x() - size_x;
