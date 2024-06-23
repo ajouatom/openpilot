@@ -503,7 +503,8 @@ void update_model(UIState *s,
       float xDistToTurn = (s->xDistToTurn) < 10 ? 0 : s->xDistToTurn - 10;
       int idx = get_path_length_idx(lane_lines[0], xDistToTurn);
       for (int i = 0; i < 2; i++) {
-          calib_frame_to_full_frame(s, lane_lines[i+1].getZ()[idx], lane_lines[i+1].getZ()[idx], lane_lines[i+1].getZ()[idx], &s->navi_turn_point[i]);
+          bool ret = calib_frame_to_full_frame(s, lane_lines[i+1].getZ()[idx], lane_lines[i+1].getZ()[idx], lane_lines[i+1].getZ()[idx], &s->navi_turn_point[i]);
+          print("ret=%d\n", ret);
       }
       printf("%d, %d\n", (int)s->navi_turn_point[0].x(), (int)s->navi_turn_point[0].y());
 
