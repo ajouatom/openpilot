@@ -488,6 +488,8 @@ void update_model(UIState *s,
 
   update_navi_instruction(s);
   int lane_index = 0;
+  s->xTurnInfo = 1;
+  s->xDistToTurn = 50;
   switch (s->xTurnInfo) {
   case 1: case 3: case 5:
       lane_index = 1;
@@ -496,8 +498,6 @@ void update_model(UIState *s,
       lane_index = 2;
       break;
   }
-  s->xTurnInfo = 1;
-  s->xDistToTurn = 50;
   if (s->xTurnInfo >= 0 && s->xDistToTurn < 180 && lane_index > 0) {
 
       float xDistToTurn = (s->xDistToTurn) < 10 ? 0 : s->xDistToTurn - 10;
