@@ -1439,6 +1439,10 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             int size_y = 440 * scale;
             int img_x = (int)s->navi_turn_point[0].x() - size_x;
             int img_y = (int)s->navi_turn_point[0].y() - size_y;
+            if (s->xTurnInfo == 2 || s->xTurnInfo == 4) {
+                img_x = (int)s->navi_turn_point[1].x();
+                img_y = (int)s->navi_turn_point[1].y() - size_y;
+            }
             ui_draw_image(s, { img_x, img_y, size_x, size_y }, "ic_navi_point", 1.0f);
 
             switch (s->xTurnInfo) {

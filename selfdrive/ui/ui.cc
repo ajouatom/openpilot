@@ -488,7 +488,7 @@ void update_model(UIState *s,
 
   update_navi_instruction(s);
   int lane_index = 0;
-  s->xTurnInfo = 1;
+  s->xTurnInfo = 2;
   s->xDistToTurn = 50;
   switch (s->xTurnInfo) {
   case 1: case 3: case 5:
