@@ -499,13 +499,13 @@ void update_model(UIState *s,
       break;
   }
   if (s->xTurnInfo >= 0 && s->xDistToTurn < 180 && lane_index > 0) {
-        int start_idx = get_path_length_idx(lane_lines[0], s->xDistToTurn);
-        max_idx = get_path_length_idx(lane_lines[0], s->xDistToTurn + 30);
+        int start_idx = get_path_length_idx(model_position, s->xDistToTurn);
+        max_idx = get_path_length_idx(model_position, s->xDistToTurn + 30);
         if (lane_index == 1) {
-            update_line_data(s, lane_lines[lane_index], 1.0, 1.2, 1.2, &s->xTurnInfo_vertices, max_idx, false, -1.0, start_idx);
+            update_line_data(s, model_position, 0, 1.2, 1.2 - 1.0, &s->xTurnInfo_vertices, max_idx, false, -1.7, start_idx);
         }
         else {
-            update_line_data(s, lane_lines[lane_index], 1.0, 1.2, 1.2, &s->xTurnInfo_vertices, max_idx, false, 1.0, start_idx);
+            update_line_data(s, model_position, 0, 1.2, 1.2 - 1.0, &s->xTurnInfo_vertices, max_idx, false, 1.7, start_idx);
         }
         //update_line_data(s, lane_lines[1], 0.2, 0, 0, &s->xTurnInfo_vertices, max_idx);
   }
