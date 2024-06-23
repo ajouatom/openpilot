@@ -237,6 +237,7 @@ public:
 
   float xDistToTurn = 0;
   int xTurnInfo = 0;
+  QPolygonF xTurnInfo_vertics;
 
 signals:
   void uiUpdate(const UIState &s);
