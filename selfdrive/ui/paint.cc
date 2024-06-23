@@ -1435,8 +1435,8 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             case 5:
                 if(s->xTurnInfo == 5) ui_draw_image(s, {bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size}, "ic_turn_u", 1.0f);
                 else {
-                    sprintf(str, "%s", (navModifier.length()>0)?navModifier.toStdString().c_str() : "unknown");
-                    ui_draw_text(s, bx, by + 20, str, 35, COLOR_WHITE, BOLD);
+                    //sprintf(str, "%s", (navModifier.length()>0)?navModifier.toStdString().c_str() : "unknown");
+                    //ui_draw_text(s, bx, by + 20, str, 35, COLOR_WHITE, BOLD);
                 }
                 break;
             case 6: ui_draw_text(s, bx, by + 20, "TG", 35, COLOR_WHITE, BOLD); break;
