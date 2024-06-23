@@ -414,6 +414,7 @@ void update_navi_instruction(UIState* s) {
             else if (navModifier == "slight right" || navModifier == "right") xTurnInfo = 4;
             xDistToTurn = navDistance;
         }
+        s->xNavModifier = navModifier;
     }
     s->xDistToTurn = (float)xDistToTurn;
     s->xTurnInfo = xTurnInfo;
@@ -487,35 +488,18 @@ void update_model(UIState *s,
     update_line_data_dist3(s, model_position, s->show_path_width, 1.22, 1.22, &scene.track_vertices, max_distance, false);
 
   update_navi_instruction(s);
-  int lane_index = 0;
-  switch (s->xTurnInfo) {
-  case 1: case 3: case 5:
-      lane_index = 1;
-      break;
-  case 2: case 4:
-      lane_index = 2;
-      break;
-  }
-  if (s->xTurnInfo >= 0 && s->xDistToTurn < 180 && lane_index > 0) {
+  static int _kkk = 0;
+  _kkk += 2;
+  if(_kkk > 300) _kkk = 0;
+  s->xTurnInfo = 2;
+  s->xDistToTurn = _kkk;
+  if (s->xTurnInfo >= 0 && s->xDistToTurn < 300) {
 
-      float xDistToTurn = (s->xDistToTurn) < 10 ? 0 : s->xDistToTurn - 10;
-      int idx = get_path_length_idx(lane_lines[0], xDistToTurn);
+      int idx = get_path_length_idx(lane_lines[0], s->xDistToTurn);
       for (int i = 0; i < 2; i++) {
           calib_frame_to_full_frame(s, lane_lines[i+1].getX()[idx], lane_lines[i+1].getY()[idx], lane_lines[i+1].getZ()[idx], &s->navi_turn_point[i]);
       }
-      //printf("%d, %d\n", (int)s->navi_turn_point[0].x(), (int)s->navi_turn_point[0].y());
-
-        int start_idx = get_path_length_idx(lane_lines[0], (s->xDistToTurn) < 10 ? 0 : s->xDistToTurn - 10);
-        max_idx = get_path_length_idx(lane_lines[0], s->xDistToTurn + 30);
-        if (lane_index == 1) {
-            update_line_data(s, lane_lines[lane_index], 2.5, 0, 0, &s->xTurnInfo_vertices, max_idx, false, -2.5, start_idx);
-        }
-        else {
-            update_line_data(s, lane_lines[lane_index], 2.5, 0, 0, &s->xTurnInfo_vertices, max_idx, false, 2.5, start_idx);
-        }
-        //update_line_data(s, lane_lines[1], 0.2, 0, 0, &s->xTurnInfo_vertices, max_idx);
   }
-  else s->xTurnInfo_vertices.clear();
 }
 
 void update_dmonitoring(UIState *s, const cereal::DriverStateV2::Reader &driverstate, float dm_fade_state, bool is_rhd) {

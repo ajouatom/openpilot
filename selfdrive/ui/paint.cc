@@ -1427,10 +1427,6 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             }
         }
         else if (s->xTurnInfo >= 0) {
-
-            //NVGcolor color = COLOR_GREEN;
-            //ui_draw_bsd(s, s->xTurnInfo_vertices, &color, false);
-            //ui_draw_line(s, s->xTurnInfo_vertices, &color, nullptr);
             float scale = 1.0;
             if (s->xDistToTurn >= 200) scale = 0.5;
             else if (s->xDistToTurn <= 0) scale = 1.0;
@@ -1438,13 +1434,20 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             scale *= 0.5;
             int size_x = 348 * scale;
             int size_y = 440 * scale;
-            int img_x = (int)s->navi_turn_point[0].x() - size_x;
-            int img_y = (int)s->navi_turn_point[0].y() - size_y;
-            if (s->xTurnInfo == 2 || s->xTurnInfo == 4) {
+            int img_x = 0;
+            int img_y = 0;
+            switch (s->xTurnInfo) {
+            case 1: case 3: case 5:
+                img_x = (int)s->navi_turn_point[0].x() - size_x;
+                img_y = (int)s->navi_turn_point[0].y() - size_y;
+                ui_draw_image(s, { img_x, img_y, size_x, size_y }, "ic_navi_point", 1.0f);
+                break;
+            case 2: case 4:
                 img_x = (int)s->navi_turn_point[1].x();
                 img_y = (int)s->navi_turn_point[1].y() - size_y;
+                ui_draw_image(s, { img_x, img_y, size_x, size_y }, "ic_navi_point", 1.0f);
+                break;
             }
-            ui_draw_image(s, { img_x, img_y, size_x, size_y }, "ic_navi_point", 1.0f);
 
             switch (s->xTurnInfo) {
             case 1: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_turn_l", 1.0f); break;
@@ -1454,8 +1457,8 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             case 5:
                 if(s->xTurnInfo == 5) ui_draw_image(s, {bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size}, "ic_turn_u", 1.0f);
                 else {
-                    //sprintf(str, "%s", (navModifier.length()>0)?navModifier.toStdString().c_str() : "unknown");
-                    //ui_draw_text(s, bx, by + 20, str, 35, COLOR_WHITE, BOLD);
+                    sprintf(str, "%s", (s->xNavModifier.length()>0)?s->xNavModifier.toStdString().c_str() : "unknown");
+                    ui_draw_text(s, bx, by + 20, str, 35, COLOR_WHITE, BOLD);
                 }
                 break;
             case 6: ui_draw_text(s, bx, by + 20, "TG", 35, COLOR_WHITE, BOLD); break;

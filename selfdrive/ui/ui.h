@@ -237,8 +237,7 @@ public:
 
   float xDistToTurn = 0;
   int xTurnInfo = 0;
-  QPolygonF xTurnInfo_vertices;
-  QPointF navi_turn_point[2];
+  QString xNavModifier;
 
 
 signals:
