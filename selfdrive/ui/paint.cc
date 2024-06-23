@@ -1433,7 +1433,7 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             case 3: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_lane_change_l", 1.0f); break;
             case 4: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_lane_change_r", 1.0f); break;
             case 5:
-                if(s->xTurnInfo == 5) ui_draw_image(s, {bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size}, "ic_turn_u", 1.0f);
+                if(s->xNavModifier == "uturn") ui_draw_image(s, {bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size}, "ic_turn_u", 1.0f);
                 else {
                     sprintf(str, "%s", (s->xNavModifier.length()>0)?s->xNavModifier.toStdString().c_str() : "unknown");
                     ui_draw_text(s, bx, by + 20, str, 35, COLOR_WHITE, BOLD);
