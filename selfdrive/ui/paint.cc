@@ -1432,6 +1432,7 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             else if (s->xDistToTurn <= 0) scale = 1.0;
             else scale = 1.0 - (0.5 * (s->xDistToTurn / 200.0));
             scale *= 0.5;
+            printf("%d, %.2f\n", (int)s->xDistToTurn, scale);
             int size_x = 348 * scale;
             int size_y = 440 * scale;
             int img_x = 0;
