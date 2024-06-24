@@ -1536,12 +1536,12 @@ void DrawApilot::drawTurnInfo(const UIState* s, int x, int y) {
         switch (s->xTurnInfo) {
         case 1: case 3: case 5:
             img_x = (int)s->navi_turn_point[0].x() - size_x / 2;
-            img_y = (int)s->navi_turn_point[0].y() - size_y;
+            img_y = (int)s->navi_turn_point[0].y() - size_y / 2;
             ui_draw_image(s, { img_x, img_y, size_x, size_y }, "ic_navi_point", 1.0f);
             break;
         case 2: case 4:
             img_x = (int)s->navi_turn_point[1].x() - size_x / 2;
-            img_y = (int)s->navi_turn_point[1].y() - size_y;
+            img_y = (int)s->navi_turn_point[1].y() - size_y / 2;
             ui_draw_image(s, { img_x, img_y, size_x, size_y }, "ic_navi_point", 1.0f);
             break;
         }
