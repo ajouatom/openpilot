@@ -1536,7 +1536,7 @@ void DrawApilot::drawTurnInfo(const UIState* s, int x, int y) {
         int size_y = 440 * scale;
         int img_x = 0;
         int img_y = 0;
-        float alpha = (navi_turn_flag)?1.0:0.2;
+        float alpha = (navi_turn_point_flag)?1.0:0.2;
 
         for (int i = 0; i < 2; i++) {
             navi_turn_point_x[i] = navi_turn_point_x[i] * (1.0 - alpha) + s->navi_turn_point[i].x() * alpha;
