@@ -489,7 +489,7 @@ void update_model(UIState *s,
 
   update_navi_instruction(s);
   s->xDistToTurn = 80;
-  s->xTurnInfo = 2;
+  s->xTurnInfo = 1;
   if (s->xTurnInfo >= 0 && s->xDistToTurn < 300) {
 
       int idx = get_path_length_idx(lane_lines[0], s->xDistToTurn);
