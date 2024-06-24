@@ -1523,6 +1523,9 @@ void DrawApilot::drawTurnInfo(const UIState* s, int x, int y) {
         if (bsd_r) ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, "ic_bsd_r", 1.0f);
     }   
 
+    static float navi_turn_point_x[2] = { 0.0, };
+    static float navi_turn_point_y[2] = { 0.0, };
+    static bool navi_turn_point_flag = true;
     if (s->xDistToTurn < 800 && s->xDistToTurn > 0) {
         float scale = 1.0;
         if (s->xDistToTurn >= 200) scale = 0.5;
@@ -1533,19 +1536,28 @@ void DrawApilot::drawTurnInfo(const UIState* s, int x, int y) {
         int size_y = 440 * scale;
         int img_x = 0;
         int img_y = 0;
+        float alpha = (navi_turn_flag)?1.0:0.2;
+
+        for (int i = 0; i < 2; i++) {
+            navi_turn_point_x[i] = navi_turn_point_x[i] * (1.0 - alpha) + s->navi_turn_point[i].x() * alpha;
+            navi_turn_point_y[i] = navi_turn_point_y[i] * (1.0 - alpha) + s->navi_turn_point[i].y() * alpha;
+        }
+        navi_turn_point_flag = false;
+
         switch (s->xTurnInfo) {
         case 1: case 3: case 5:
-            img_x = (int)s->navi_turn_point[0].x() - size_x / 2;
-            img_y = (int)s->navi_turn_point[0].y() - size_y;
+            img_x = (int)navi_turn_point_x[0] - size_x / 2;
+            img_y = (int)navi_turn_point_y[0] - size_y;
             ui_draw_image(s, { img_x, img_y, size_x, size_y }, "ic_navi_point", 1.0f);
             break;
         case 2: case 4:
-            img_x = (int)s->navi_turn_point[1].x() - size_x / 2;
-            img_y = (int)s->navi_turn_point[1].y() - size_y;
+            img_x = (int)navi_turn_point_x[1] - size_x / 2;
+            img_y = (int)navi_turn_point_y[1] - size_y;
             ui_draw_image(s, { img_x, img_y, size_x, size_y }, "ic_navi_point", 1.0f);
             break;
         }
     }
+    else navi_turn_point_flag = true;
 
 }
 void DrawApilot::drawSteer(const UIState* s, int x, int y) {
