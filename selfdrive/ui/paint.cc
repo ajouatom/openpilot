@@ -1521,7 +1521,7 @@ void DrawApilot::drawTurnInfo(const UIState* s, int x, int y) {
     if (false) {
         if (bsd_l) ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, "ic_bsd_l", 1.0f);
         if (bsd_r) ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, "ic_bsd_r", 1.0f);
-    }
+    }   
 
     if (s->xDistToTurn < 300 && s->xDistToTurn > 0) {
         float scale = 1.0;

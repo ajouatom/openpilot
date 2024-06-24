@@ -488,6 +488,8 @@ void update_model(UIState *s,
     update_line_data_dist3(s, model_position, s->show_path_width, 1.22, 1.22, &scene.track_vertices, max_distance, false);
 
   update_navi_instruction(s);
+  s->xDistToTurn = 80;
+  s->xTurnInfo = 2;
   if (s->xTurnInfo >= 0 && s->xDistToTurn < 300) {
 
       int idx = get_path_length_idx(lane_lines[0], s->xDistToTurn);
