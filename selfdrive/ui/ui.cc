@@ -492,11 +492,11 @@ void update_model(UIState *s,
   s->xTurnInfo = 1;
   if (s->xTurnInfo >= 0 && s->xDistToTurn < 300) {
 
-      int idx = get_path_length_idx(lane_lines[0], s->xDistToTurn);
-      int m_idx[2] = { 0, 3 };
+      int idx = get_path_length_idx(road_edges[0], s->xDistToTurn);
+      int m_idx[2] = { 0, 1 };
       for (int i = 0; i < 2; i++) {
           int m = m_idx[i];
-          calib_frame_to_full_frame(s, lane_lines[m].getX()[idx], lane_lines[m].getY()[idx], lane_lines[m].getZ()[idx], &s->navi_turn_point[i]);
+          calib_frame_to_full_frame(s, road_edges[m].getX()[idx], road_edges[m].getY()[idx], road_edges[m].getZ()[idx], &s->navi_turn_point[i]);
       }
   }
 }
