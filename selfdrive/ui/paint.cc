@@ -1347,22 +1347,24 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
                 sprintf(str, "%d", s->limit_speed);
                 ui_draw_text(s, bx, by + 25, str, 60, COLOR_BLACK, BOLD, 0.0f, 0.0f);
 
+                float scale = 0.5;
+                if (s->left_dist < 100) scale = (100 - s->left_dist) / 100;
                 bx = s->left_dist_point.x();
                 by = s->left_dist_point.y();
                 nvgBeginPath(s->vg);
-                nvgCircle(s->vg, bx, by, 140 / 2);
+                nvgCircle(s->vg, bx, by, 140 / 2 * scale);
                 nvgFillColor(s->vg, COLOR_WHITE);
                 nvgFill(s->vg);
                 nvgBeginPath(s->vg);
-                nvgCircle(s->vg, bx, by, 130 / 2);
+                nvgCircle(s->vg, bx, by, 130 / 2 * scale);
                 nvgFillColor(s->vg, COLOR_RED);
                 nvgFill(s->vg);
                 nvgBeginPath(s->vg);
-                nvgCircle(s->vg, bx, by, 110 / 2);
+                nvgCircle(s->vg, bx, by, 110 / 2 * scale);
                 nvgFillColor(s->vg, COLOR_WHITE);
                 nvgFill(s->vg);
                 sprintf(str, "%d", s->limit_speed);
-                ui_draw_text(s, bx, by + 25, str, 60, COLOR_BLACK, BOLD, 0.0f, 0.0f);
+                ui_draw_text(s, bx, by + 25*scale, str, 60 * scale, COLOR_BLACK, BOLD, 0.0f, 0.0f);
             }
             if (false && s->left_dist > 0) {
                 if (s->left_dist < 1000) sprintf(str, "%d m", s->left_dist);
