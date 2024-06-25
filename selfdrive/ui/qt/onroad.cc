@@ -135,6 +135,9 @@ void OnroadWindow::updateState(const UIState &s) {
   if (car_state.getSteeringPressed()) {
       bgColor = bg_colors[STATUS_OVERRIDE];
   }
+  else if (car_control.getLatActive()) {
+      bgColor = bg_colors[STATUS_ENGAGED];
+  }
   if (car_state.getGasPressed()) {
       bgColor_long = bg_colors[STATUS_OVERRIDE];
   }
