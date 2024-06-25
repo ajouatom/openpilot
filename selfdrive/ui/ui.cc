@@ -418,6 +418,45 @@ void update_navi_instruction(UIState* s) {
     }
     s->xDistToTurn = (float)xDistToTurn;
     s->xTurnInfo = xTurnInfo;
+
+
+
+    //int activeNDA = road_limit_speed.getActive();
+    s->roadLimitSpeed = road_limit_speed.getRoadLimitSpeed();
+    int roadLimitSpeed_OSM = lp.getLimitSpeed();
+    if (s->roadLimitSpeed < roadLimitSpeed_OSM) s->roadLimitSpeed = roadLimitSpeed_OSM;
+
+    int camLimitSpeed = road_limit_speed.getCamLimitSpeed();
+    int camLimitSpeedLeftDist = road_limit_speed.getCamLimitSpeedLeftDist();
+    int sectionLimitSpeed = road_limit_speed.getSectionLimitSpeed();
+    int sectionLeftDist = road_limit_speed.getSectionLeftDist();
+    s->camType = road_limit_speed.getCamType();
+
+    s->limit_speed = 0;
+    s->left_dist = 0;
+
+    if (camLimitSpeed > 0 && camLimitSpeedLeftDist > 0) {
+        s->limit_speed = camLimitSpeed;
+        s->left_dist = camLimitSpeedLeftDist;
+    }
+    else if (sectionLimitSpeed > 0 && sectionLeftDist > 0) {
+        s->limit_speed = sectionLimitSpeed;
+        s->left_dist = sectionLeftDist;
+    }
+    //const auto road_limit_speed = sm["roadLimitSpeed"].getRoadLimitSpeed();
+    s->xSpdLimit = road_limit_speed.getXSpdLimit();
+    s->xSignType = road_limit_speed.getXSignType();
+    s->xSpdDist = road_limit_speed.getXSpdDist();
+    s->m_navText = QString::fromStdString(road_limit_speed.getXRoadName());
+    if (s->limit_speed > 0);
+    else if (s->xSpdLimit > 0 && s->xSpdDist > 0) {
+        s->limit_speed = s->xSpdLimit;
+        s->left_dist = s->xSpdDist;
+    }
+    else if (s->xTurnInfo >= 0) {
+        s->left_dist = s->xDistToTurn;  // TODO: 이건 왜있지?
+    }
+
 }
 
 void update_model(UIState *s,

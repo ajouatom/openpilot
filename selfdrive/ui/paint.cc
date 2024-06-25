@@ -1244,82 +1244,9 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
         auto cruise_control = car_control.getCruiseControl();
         int longOverride = cruise_control.getOverride();// HW: car_control.getLongOverride();
 
-
-        //int activeNDA = road_limit_speed.getActive();
-        int roadLimitSpeed = road_limit_speed.getRoadLimitSpeed();
-        int roadLimitSpeed_OSM = lp.getLimitSpeed();
-        if (roadLimitSpeed < roadLimitSpeed_OSM) roadLimitSpeed = roadLimitSpeed_OSM;
-
-        int camLimitSpeed = road_limit_speed.getCamLimitSpeed();
-        int camLimitSpeedLeftDist = road_limit_speed.getCamLimitSpeedLeftDist();
-        int sectionLimitSpeed = road_limit_speed.getSectionLimitSpeed();
-        int sectionLeftDist = road_limit_speed.getSectionLeftDist();
-        int camType = road_limit_speed.getCamType();
-
-        int limit_speed = 0;
-        int left_dist = 0;
-
-        if (camLimitSpeed > 0 && camLimitSpeedLeftDist > 0) {
-            limit_speed = camLimitSpeed;
-            left_dist = camLimitSpeedLeftDist;
-        }
-        else if (sectionLimitSpeed > 0 && sectionLeftDist > 0) {
-            limit_speed = sectionLimitSpeed;
-            left_dist = sectionLeftDist;
-        }
-        //const auto road_limit_speed = sm["roadLimitSpeed"].getRoadLimitSpeed();
-        int xSpdLimit = road_limit_speed.getXSpdLimit();
-        int xSignType = road_limit_speed.getXSignType();
-        int xSpdDist = road_limit_speed.getXSpdDist();
-        m_navText = QString::fromStdString(road_limit_speed.getXRoadName());
-        /*
-        int xTurnInfo = road_limit_speed.getXTurnInfo();
-        int xDistToTurn = road_limit_speed.getXDistToTurn();
-
-        auto navInstruction = sm["navInstruction"].getNavInstruction();
-        float navDistance = navInstruction.getManeuverDistance();
-        //float distance_remaining = navInstruction.getDistanceRemaining();
-        QString navType = QString::fromStdString(navInstruction.getManeuverType());
-        QString navModifier = QString::fromStdString(navInstruction.getManeuverModifier());
-        if (xTurnInfo < 0 && xDistToTurn <= 0) {
-            //navText = QString::fromStdString(navInstruction.getManeuverSecondaryText());
-            if (navType == "turn") {
-                if (navModifier == "sharp left" || navModifier == "slight left" || navModifier == "left") xTurnInfo = 1; // left turn
-                else if (navModifier == "sharp right" || navModifier == "slight right" || navModifier == "right") xTurnInfo = 2;
-                else if (navModifier == "uturn") xTurnInfo = 5;
-                xDistToTurn = navDistance;
-            }
-            else if (navType == "fork" || navType == "off ramp") {
-                if (navModifier == "slight left" || navModifier == "left") xTurnInfo = 3; // left turn
-                else if (navModifier == "slight right" || navModifier == "right") xTurnInfo = 4;
-                xDistToTurn = navDistance;
-            }
-        }
-        */
-        if (limit_speed > 0);
-        else if (xSpdLimit > 0 && xSpdDist > 0) {
-            limit_speed = xSpdLimit;
-            left_dist = xSpdDist;
-        }
-        else if (s->xTurnInfo >= 0) {
-            left_dist = s->xDistToTurn;
-        }
-
         //sprintf(str, "%.1f/%.1f %s(%s)", distance, distance_remaining, type.length() ? type.toStdString().c_str() : "", modifier.length() ? modifier.toStdString().c_str() : "");
 
         //float accel = car_state.getAEgo();
-#ifdef __TEST
-        static int _ff = 0;
-        if (_ff++ > 100) _ff = 0;
-        if (_ff > 50) {
-            limit_speed = 110;
-            left_dist = _ff * 100;
-        }
-        else {
-            roadLimitSpeed = 110;
-        }
-        cur_speed = 123;
-#endif
 
         int bx = x;
         int by = y + 270;
@@ -1394,14 +1321,14 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             bx = 100;
             by = 650;
         }
-        if (left_dist > 0) {
-            if (left_dist < 1000) sprintf(str, "%d m", left_dist);
-            else  sprintf(str, "%.1f km", left_dist / 1000.f);
+        if (s->left_dist > 0) {
+            if (s->left_dist < 1000) sprintf(str, "%d m", left_dist);
+            else  sprintf(str, "%.1f km", s->left_dist / 1000.f);
             ui_draw_text(s, bx, by + 120, str, 40, COLOR_WHITE, BOLD);
         }
 
-        if (limit_speed > 0) {
-            if (xSignType == 124 || camType == 22) {
+        if (s->limit_speed > 0) {
+            if (s->xSignType == 124 || s->camType == 22) {
                 ui_draw_image(s, { bx - 60, by - 50, 120, 150 }, "ic_speed_bump", 1.0f);
             }
             else {
@@ -1417,12 +1344,12 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
                 nvgCircle(s->vg, bx, by, 110 / 2);
                 nvgFillColor(s->vg, COLOR_WHITE);
                 nvgFill(s->vg);
-                sprintf(str, "%d", limit_speed);
+                sprintf(str, "%d", s->limit_speed);
                 ui_draw_text(s, bx, by + 25, str, 60, COLOR_BLACK, BOLD, 0.0f, 0.0f);
             }
-            if (false && left_dist > 0) {
-                if (left_dist < 1000) sprintf(str, "%d m", left_dist);
-                else  sprintf(str, "%.1f km", left_dist / 1000.f);
+            if (false && s->left_dist > 0) {
+                if (s->left_dist < 1000) sprintf(str, "%d m", s->left_dist);
+                else  sprintf(str, "%.1f km", s->left_dist / 1000.f);
                 ui_draw_text(s, bx, by + 120, str, 40, COLOR_WHITE, BOLD);
             }
         }
@@ -1449,9 +1376,9 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
                 break;
             }
         }
-        else if (roadLimitSpeed >= 30 && roadLimitSpeed < 200) {
+        else if (s->roadLimitSpeed >= 30 && s->roadLimitSpeed < 200) {
             ui_draw_image(s, { bx - 60, by - 50, 120, 150 }, "ic_road_speed", 1.0f);
-            sprintf(str, "%d", roadLimitSpeed);
+            sprintf(str, "%d", s->roadLimitSpeed);
             ui_draw_text(s, bx, by + 75, str, 50, COLOR_BLACK, BOLD, 0.0f, 0.0f);
         }        
     }
