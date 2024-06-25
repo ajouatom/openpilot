@@ -248,6 +248,7 @@ public:
   int xSignType = 0;
   int xSpdDist = 0;
   QString m_navText = "";
+  QPointF left_dist_point;
 
 
 signals:

@@ -540,6 +540,12 @@ void update_model(UIState *s,
           calib_frame_to_full_frame(s, road_edges[m].getX()[idx], road_edges[m].getY()[idx], road_edges[m].getZ()[idx], &s->navi_turn_point[i]);
       }
   }
+  s->limit_speed = 80;
+  s->left_dist = 100;
+  if (s->left_dist > 0) {
+      int idx = get_path_length_idx(road_edges[0], s->left_dist);
+      calib_frame_to_full_frame(s, road_edges[1].getX()[idx], road_edges[1].getY()[idx], road_edges[1].getZ()[idx], &s->left_dist_point);
+  }
 }
 
 void update_dmonitoring(UIState *s, const cereal::DriverStateV2::Reader &driverstate, float dm_fade_state, bool is_rhd) {
