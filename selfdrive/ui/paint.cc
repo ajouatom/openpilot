@@ -1526,7 +1526,7 @@ void DrawApilot::drawTurnInfo(const UIState* s, int x, int y) {
     static float navi_turn_point_x[2] = { 0.0, };
     static float navi_turn_point_y[2] = { 0.0, };
     static bool navi_turn_point_flag = true;
-    if (s->xDistToTurn < 800 && s->xDistToTurn > 0) {
+    if (s->xDistToTurn < 1500 && s->xDistToTurn > 0) {
         float scale = 1.0;
         if (s->xDistToTurn >= 200) scale = 0.5;
         else if (s->xDistToTurn <= 0) scale = 1.0;
