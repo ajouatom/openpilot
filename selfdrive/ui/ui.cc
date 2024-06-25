@@ -422,6 +422,8 @@ void update_navi_instruction(UIState* s) {
 
 
     //int activeNDA = road_limit_speed.getActive();
+    const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
+
     s->roadLimitSpeed = road_limit_speed.getRoadLimitSpeed();
     int roadLimitSpeed_OSM = lp.getLimitSpeed();
     if (s->roadLimitSpeed < roadLimitSpeed_OSM) s->roadLimitSpeed = roadLimitSpeed_OSM;
