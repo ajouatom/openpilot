@@ -947,7 +947,7 @@ void DrawApilot::drawDateTime(const UIState* s) {
             nav_y += 70;
         }
         nvgTextAlign(s->vg, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM);
-        ui_draw_text(s, 50, nav_y, m_navText.toStdString().c_str(), 35, COLOR_WHITE, BOLD, 3.0f, 8.0f);
+        ui_draw_text(s, 50, nav_y, s->m_navText.toStdString().c_str(), 35, COLOR_WHITE, BOLD, 3.0f, 8.0f);
         nvgTextAlign(s->vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
     }
 }
