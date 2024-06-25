@@ -1322,7 +1322,7 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             by = 650;
         }
         if (s->left_dist > 0) {
-            if (s->left_dist < 1000) sprintf(str, "%d m", left_dist);
+            if (s->left_dist < 1000) sprintf(str, "%d m", s->left_dist);
             else  sprintf(str, "%.1f km", s->left_dist / 1000.f);
             ui_draw_text(s, bx, by + 120, str, 40, COLOR_WHITE, BOLD);
         }
