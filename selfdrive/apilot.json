@@ -1159,19 +1159,6 @@
       "unit": 1
     },
     {
-      "group": "시험",
-      "name": "CarrotRadarTest2",
-      "title": "당근레이더시험Alpha (10)",
-      "descr": "alpha * 0.01",
-      "egroup": "TEST",
-      "etitle": "Carrot Radar test alpha",
-      "edescr": "",
-      "min": 1,
-      "max": 100,
-      "default": 10,
-      "unit": 1
-    },
-    {
       "group": "시작",
       "name": "SccConnectedBus2",
       "title": "SCC배선개조 BUS2연결(0)",
