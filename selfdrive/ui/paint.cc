@@ -1198,7 +1198,7 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
     if (cur_speed < 0.0) cur_speed = 0.0;
     auto controls_state = sm["controlsState"].getControlsState();
     //auto carstate = sm["carState"].getCarState();
-    const auto road_limit_speed = sm["roadLimitSpeed"].getRoadLimitSpeed();
+    //const auto road_limit_speed = sm["roadLimitSpeed"].getRoadLimitSpeed();
     //const auto car_params = sm["carParams"].getCarParams();
     if (s->show_mode == 3) {
         y = -100;
