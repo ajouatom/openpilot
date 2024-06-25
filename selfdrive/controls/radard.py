@@ -73,6 +73,10 @@ class Track:
     self.aLeadK_prev = 0.0
     self.params = Params()
 
+    self.aLead = 0.0
+    self.vLead_prev = v_lead
+    self.aLead_alpha = 0.12
+
   def update(self, d_rel: float, y_rel: float, v_rel: float, v_lead: float, measured: float, a_rel: float, aLeadTauPos: float, aLeadTauNeg: float, aLeadTauThreshold: float, a_ego: float):
 
     #apilot: changed radar target
@@ -82,6 +86,9 @@ class Track:
       self.kf_y = KF1D([[y_rel], [0.0]], self.K_A, self.K_C, self.K_K)
       self.jerk = 0.0
       self.aLeadK_prev = 0.0
+      self.aLead = 0.0
+      self.vLead_prev = v_lead
+
     # relative values, copy
     self.dRel = d_rel   # LONG_DIST
     self.yRel = y_rel   # -LAT_DIST
@@ -94,6 +101,9 @@ class Track:
     if self.cnt > 0:
       self.kf.update(self.vLead)
       self.kf_y.update(self.yRel)
+      self.aLead_alpha = 0.15
+      delta_vLead = 0.0 if abs(self.vLead) < 0.5 else self.vLead - self.vLead_prev
+      self.aLead = self.aLead * (1.0 - self.aLead_alpha) + delta_vLead / self.radar_ts * self.aLead_alpha
 
     self.vLat = float(self.kf_y.x[1][0])
 
@@ -114,6 +124,7 @@ class Track:
 
     self.cnt += 1
     self.aLeadK_prev = self.aLeadK
+    self.vLead_prev = self.vLead
 
   def get_key_for_cluster(self):
     # Weigh y higher since radar is inaccurate in this dimension
@@ -144,6 +155,7 @@ class Track:
       "radarTrackId": self.identifier,
       "aRel": float(self.aRel),
       "vLat": float(self.vLat),
+      "aLead" : float(self.aLead),
     }
 
   def get_lane_position(self) -> str:
@@ -208,7 +220,7 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
   #vel_tolerance = interp(lead.prob, [0.80, 0.85, 0.98, 1.0], [10.0, 20.0, 25.0, 30.0])
   vel_sane = (abs(track.vRel + v_ego - lead.v[0]) < vel_tolerance) or (v_ego + track.vRel > 3)
   ##간혹 어수선한경우, 전방에 차가 없지만, 좌우에 차가많은경우 억지로 레이더를 가져오는 경우가 있음..(레이더트랙의 경우)
-  y_sane = (abs(-lead.y[0]-track.yRel) < 3.2 / 2.)  #lane_width assumed 3.2M, laplacian_pdf 의 prob값을 검증하려했지만, y값으로 처리해도 될듯함.
+  y_sane = (abs(-lead.y[0]-(track.yRel+track.vLat)) < 3.2 / 2.)  #lane_width assumed 3.2M, laplacian_pdf 의 prob값을 검증하려했지만, y값으로 처리해도 될듯함.
   if dist_sane and vel_sane and y_sane:
     return track
   else:
@@ -235,6 +247,7 @@ def get_RadarState_from_vision(md, lead_msg: capnp._DynamicStructReader, v_ego: 
     "status": True,
     "radar": False,
     "radarTrackId": -1,
+    "aLead": aLeadK,
   }
 
 def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego):
@@ -351,6 +364,7 @@ class VisionTrack:
 
   def get_lead(self, md):
     dPath = self.yRel + interp(self.dRel, md.position.x, md.position.y)
+    aLeadK = 0.0 if self.mixRadarInfo in [3] else clip(self.aLeadK, self.aLead - 1.0, self.aLead + 1.0)
     return {
       "dRel": self.dRel,
       "yRel": self.yRel,
@@ -358,13 +372,14 @@ class VisionTrack:
       "vRel": self.vRel,
       "vLead": self.vLead,
       "vLeadK": self.vLeadK,    ## TODO: 아직 vLeadK는 엉망인듯...
-      "aLeadK": 0.0 if self.mixRadarInfo in [3] else clip(self.aLeadK, self.aLead - 1.0, self.aLead + 1.0),
+      "aLeadK": aLeadK,
       "aLeadTau": 0.3 if self.mixRadarInfo in [3] else self.aLeadTau,
       "fcw": False,
       "modelProb": self.prob,
       "status": self.status,
       "radar": False,
       "radarTrackId": -1,
+      "aLead": aLeadK,
     }
 
   def reset(self):

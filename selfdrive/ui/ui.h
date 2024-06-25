@@ -227,11 +227,19 @@ public:
   int show_path_color_lane = 14;
   float show_path_width = 1.0;
   int show_plot_mode = 0;
+  float show_brightness_ratio = 1.0;
+  int show_brightness_timer = 20;
 
 
   int carrot_record = 0;
   int carrot_display = 0;
   bool use_lane_lines = false;
+
+  float xDistToTurn = 0;
+  int xTurnInfo = 0;
+  QString xNavModifier;
+  QPointF navi_turn_point[2];
+
 
 signals:
   void uiUpdate(const UIState &s);
@@ -289,9 +297,8 @@ Device *device();
 void ui_update_params(UIState *s);
 int get_path_length_idx(const cereal::XYZTData::Reader &line, const float path_height);
 void update_model(UIState *s,
-                  const cereal::ModelDataV2::Reader &model,
-                  const cereal::UiPlan::Reader &plan);
+                  const cereal::ModelDataV2::Reader &model);
 void update_dmonitoring(UIState *s, const cereal::DriverStateV2::Reader &driverstate, float dm_fade_state, bool is_rhd);
 void update_leads(UIState *s, const cereal::RadarState::Reader &radar_state, const cereal::XYZTData::Reader &line);
 void update_line_data(const UIState *s, const cereal::XYZTData::Reader &line,
-                      float y_off, float z_off, QPolygonF *pvd, int max_idx, bool allow_invert);
+                      float y_off, float z_off, QPolygonF *pvd, int max_idx, bool allow_invert, float y_shift, int start_idx);

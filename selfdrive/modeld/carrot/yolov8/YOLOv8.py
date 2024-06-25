@@ -1,7 +1,7 @@
 import time
 import cv2
 import numpy as np
-import onnxruntime
+import onnxruntime as ort
 
 from openpilot.selfdrive.modeld.carrot.yolov8.utils import xywh2xyxy, draw_detections, multiclass_nms
 
@@ -65,7 +65,7 @@ def extract_image2(buf):
     return rgb
 class YOLOv8:
 
-    def __init__(self, path, conf_thres=0.7, iou_thres=0.5):
+    def __init__(self, path, conf_thres=0.5, iou_thres=0.5):
         self.conf_threshold = conf_thres
         self.iou_threshold = iou_thres
 
@@ -76,8 +76,18 @@ class YOLOv8:
         return self.detect_objects(image)
 
     def initialize_model(self, path):
-        self.session = onnxruntime.InferenceSession(path,
-                                                    providers=onnxruntime.get_available_providers())
+        #self.session = onnxruntime.InferenceSession(path,
+        #                                            providers=onnxruntime.get_available_providers())
+        providers = ort.get_available_providers()
+        print(providers)
+        if 'CUDAExecutionProvider' in providers:
+            self.session = ort.InferenceSession(path, providers=['CUDAExecutionProvider'])
+        elif 'TensorrtExecutionProvider' in providers:
+            self.session = ort.InferenceSession(path, providers=['TensorrtExecutionProvider'])
+        else:
+            print("No GPU providers available. Using CPU.")
+            self.session = ort.InferenceSession(path, providers=['CPUExecutionProvider'])
+
         # Get model info
         self.get_input_details()
         self.get_output_details()
@@ -88,26 +98,34 @@ class YOLOv8:
         input_tensor = self.prepare_input(image)
         now2 = time.monotonic()
 
-        return [],[],[]
+        #return [],[],[]
         # Perform inference on the image
-        print("########### YOLO... inference ##########")
+        #print("########### YOLO... inference ##########")
 
         outputs = self.inference(input_tensor)
-        print("########### YOLO... inference ok ##########")
+        #print("########### YOLO... inference ok ##########")
         now3 = time.monotonic()
         self.boxes, self.scores, self.class_ids = self.process_output(outputs)
-        print("execTime_____ = {:.6f}, {:.6f}, {:.6f}".format(now2-now1, now3-now2, time.monotonic() - now3))
+        #print("execTime_____ = {:.6f}, {:.6f}, {:.6f}".format(now2-now1, now3-now2, time.monotonic() - now3))
 
         return self.boxes, self.scores, self.class_ids
 
 
     def prepare_input(self, image):
-
         input_img = extract_image(image)
 
         self.img_height, self.img_width = 1208, 1928 #image.height, image.width #image.shape[:2]
 
         #input_img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        #image_path = "/home/yun/media_log/fcamera.hevc_20231212_145229.704.jpg"
+        #image = cv2.imread(image_path)
+        #if image is None:
+        #  #print(f"Error: Could not load image at {image_path}")
+        #  pass
+        #else:
+        #   cv2.imshow("hello", input_img)
+        #   cv2.waitKey(1)
+
         #input_img = image
 
         # Resize input image
@@ -125,7 +143,7 @@ class YOLOv8:
         start = time.perf_counter()
         outputs = self.session.run(self.output_names, {self.input_names[0]: input_tensor})
 
-        print(f"Inference time: {(time.perf_counter() - start)*1000:.2f} ms")
+        #print(f"Inference time: {(time.perf_counter() - start)*1000:.2f} ms")
         return outputs
 
     def process_output(self, output):

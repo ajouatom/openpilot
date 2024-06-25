@@ -88,6 +88,7 @@ class LongitudinalPlanner:
     self.cruiseMaxVals5 = float(self.params.get_int("CruiseMaxVals5")) / 100.
     self.cruiseMaxVals6 = float(self.params.get_int("CruiseMaxVals6")) / 100.
     self.cruiseMinVals = -float(self.params.get_int("CruiseMinVals")) / 100.
+    self.myHighModeFactor = float(self.params.get_int("MyHighModeFactor")) / 100.
     
   def get_carrot_accel(self, v_ego, curveSpeed, angle_steers):
     cruiseMaxVals = [self.cruiseMaxVals1, self.cruiseMaxVals2, self.cruiseMaxVals3, self.cruiseMaxVals4, self.cruiseMaxVals5, self.cruiseMaxVals6]
@@ -144,7 +145,10 @@ class LongitudinalPlanner:
 
     if self.mpc.mode == 'acc':
       #accel_limits = [A_CRUISE_MIN, get_max_accel(v_ego)]
-      myMaxAccel = clip(self.get_carrot_accel(v_ego, carrot_planner.curveSpeed, sm['carState'].steeringAngleDeg)*self.mpc.mySafeFactor, 0.05, ACCEL_MAX)
+      carrot_accel = self.get_carrot_accel(v_ego, carrot_planner.curveSpeed, sm['carState'].steeringAngleDeg)*self.mpc.mySafeFactor
+      if self.mpc.myDrivingMode == 4: # high mode
+        carrot_accel *= self.myHighModeFactor
+      myMaxAccel = clip(carrot_accel, 0.05, ACCEL_MAX)
       accel_limits = [self.cruiseMinVals, myMaxAccel]      
       accel_limits_turns = limit_accel_in_turns(v_ego, sm['carState'].steeringAngleDeg, accel_limits, self.CP)
     else:

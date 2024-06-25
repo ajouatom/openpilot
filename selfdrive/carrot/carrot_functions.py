@@ -273,7 +273,8 @@ class CarrotNaviHelper(CarrotBase):
       if nav_type in ['turn', 'fork', 'off ramp'] and roadLimitSpeed.xDistToTurn <= 0 and roadLimitSpeed.xTurnInfo < 0:
         if sm.updated['navInstruction']:
           self.nav_distance = navInstruction.maneuverDistance;
-        nav_turn = True if nav_type == 'turn' and nav_modifier in ['left', 'right', 'sharp left', 'sharp right'] else False
+        #nav_turn = True if nav_type == 'turn' and nav_modifier in ['left', 'right', 'sharp left', 'sharp right'] else False
+        nav_turn = True if nav_type == 'turn' and nav_modifier in ['left', 'right'] else False
         direction = 1 if nav_modifier in ['slight left', 'left'] else 2 if nav_modifier in ['slight right', 'right'] else 0
       else:
         if sm.updated['roadLimitSpeed']:
@@ -289,7 +290,7 @@ class CarrotNaviHelper(CarrotBase):
         roadcate = 5
       turn_dist = interp(xNextRoadWidth, [5, 10], [43, 60])
       turn_speed = self.autoTurnControlSpeedTurn #interp(xNextRoadWidth, [5, 10], [self.autoTurnControlSpeedTurn, self.autoTurnControlSpeedTurn*1.5])
-      laneChange_dist = interp(roadcate, [0, 1, 2, 7], [300, 280, 200, 160])
+      laneChange_dist = interp(roadcate, [0, 1, 2, 7], [350, 300, 200, 160])
       laneChange_speed = interp(roadcate, [0, 1, 2, 7], [self.autoTurnControlSpeedLaneChange*2.0, self.autoTurnControlSpeedLaneChange*1.5, self.autoTurnControlSpeedLaneChange*1.2, self.autoTurnControlSpeedLaneChange])
 
       self.naviDistance = 0
@@ -318,7 +319,7 @@ class CarrotNaviHelper(CarrotBase):
           self.params.put_nonblocking("CarrotDisplay", "2")
 
       ## lanechange, turn : 300m left
-      if 5 < self.nav_distance < 300 and direction != 0:
+      if 5 < self.nav_distance < 350 and direction != 0:
         if nav_turn:
           if self.nav_distance < turn_dist or self.nav_turn:
             # start Turn

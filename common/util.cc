@@ -39,6 +39,7 @@ int set_realtime_priority(int level) {
   struct sched_param sa;
   memset(&sa, 0, sizeof(sa));
   sa.sched_priority = level;
+  if(level == 0) return sched_setscheduler(tid, SCHED_IDLE, &sa);
   return sched_setscheduler(tid, SCHED_FIFO, &sa);
 #else
   return -1;

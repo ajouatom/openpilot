@@ -173,6 +173,8 @@ class SubMaster:
     self.max_freq = {}
     self.min_freq = {}
 
+    self.avg_freq = {}
+
     self.poller = Poller()
     polled_services = set([poll, ] if poll is not None else services)
     self.non_polled_services = set(services) - polled_services
@@ -267,6 +269,8 @@ class SubMaster:
         except ZeroDivisionError:
           avg_freq = 0
           avg_freq_recent = 0
+
+        self.avg_freq[s] = avg_freq
 
         avg_freq_ok = self.min_freq[s] <= avg_freq <= self.max_freq[s]
         recent_freq_ok = self.min_freq[s] <= avg_freq_recent <= self.max_freq[s]

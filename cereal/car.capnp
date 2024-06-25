@@ -117,9 +117,10 @@ struct CarEvent @0x9b1657f34caf3ad3 {
     locationdPermanentError @118;
     paramsdTemporaryError @50;
     paramsdPermanentError @119;
+    actuatorsApiUnavailable @120;
    
     # ajouatom events
-    cruisePaused @120;
+    cruisePaused @142;
     cruiseResume @121;
     autoHold @122;
     trafficStopping @123;

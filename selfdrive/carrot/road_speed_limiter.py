@@ -52,130 +52,6 @@ class RoadLimitSpeedServer:
     broadcast.daemon = True
     broadcast.start()
 
-    self.gps_sm = messaging.SubMaster(['gpsLocationExternal'], poll='gpsLocationExternal')
-    self.gps_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-    self.location = None
-
-    #self.gps_event = threading.Event()
-    #gps_thread = Thread(target=self.gps_thread, args=[])
-    #gps_thread.daemon = True
-    #gps_thread.start()
-
-
-    #carrot
-    #self.carrot_route_thread = threading.Thread(target=self.carrot_route, args=[])
-    #self.carrot_route_thread.daemon = True
-    #self.carrot_route_thread.start()
-
-  def recvall(self, sock, n):
-    """n바이트를 수신할 때까지 반복적으로 데이터를 받는 함수"""
-    data = bytearray()
-    while len(data) < n:
-      packet = sock.recv(n - len(data))
-      if not packet:
-        return None
-      data.extend(packet)
-    return data
-
-  def receive_double(self, sock):
-    double_data = self.recvall(sock, 8)  # Double은 8바이트
-    return struct.unpack('!d', double_data)[0]
-
-  def receive_float(self, sock):
-    float_data = self.recvall(sock, 4)  # Float은 4바이트
-    return struct.unpack('!f', float_data)[0]
-
-  def carrot_route(self):
-    host = '0.0.0.0'  # 혹은 다른 호스트 주소
-    port = 7709  # 포트 번호
-
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-      s.bind((host, port))
-      s.listen()
-
-      while True:
-        print("################# waiting conntection from CarrotMan route #####################")
-        # 클라이언트 연결 기다림
-        conn, addr = s.accept()
-        with conn:
-          print(f"Connected by {addr}")
-
-
-          # 전체 데이터 크기 수신
-          total_size_bytes = self.recvall(conn, 4)
-          if not total_size_bytes:
-            print("Connection closed or error occurred")
-            continue
-          try:
-            total_size = struct.unpack('!I', total_size_bytes)[0]
-            # 전체 데이터를 한 번에 수신
-            all_data = self.recvall(conn, total_size)
-            if all_data is None:
-                print("Connection closed or incomplete data received")
-                continue
-
-           # 수신된 데이터를 float 값들로 분할
-            #points = []
-            #for i in range(0, len(all_data), 8):  # 각 점에 대해 8바이트(4바이트 * 2)
-            #  x, y = struct.unpack('!ff', all_data[i:i+8])
-            #  points.append((x, y))
-
-            points = []
-            for i in range(0, len(all_data), 8):
-              x, y = struct.unpack('!ff', all_data[i:i+8])
-              coord = Coordinate.from_mapbox_tuple((y, x))
-              points.append(coord)
-            coords = [c.as_dict() for c in points]
-            #points = [
-            #  {'latitude': y, 'longitude': x}
-            #  for i in range(0, len(all_data), 8) 
-            #  for x, y in [struct.unpack('!ff', all_data[i:i+8])]
-            #]
-         
-            print("Received points:", len(points))
-            print("Received points:", coords)
-
-          except Exception as e:
-            print(e)
-
-
-
-  def gps_thread(self):
-    rk = Ratekeeper(3.0, print_delay_threshold=None)
-    while True:
-      self.gps_timer()
-      rk.keep_time()
-
-  def gps_timer(self):
-    try:
-      if self.remote_gps_addr is not None:
-        self.gps_sm.update(0)
-        if self.gps_sm.updated['gpsLocationExternal']:
-          self.location = self.gps_sm['gpsLocationExternal']
-
-        if self.location is not None:
-          json_location = json.dumps({"location": [
-            self.location.latitude,
-            self.location.longitude,
-            self.location.altitude,
-            self.location.speed,
-            self.location.bearingDeg,
-            self.location.accuracy,
-            self.location.unixTimestampMillis,
-            # self.location.source,
-            # self.location.vNED,
-            self.location.verticalAccuracy,
-            self.location.bearingAccuracyDeg,
-            self.location.speedAccuracy,
-          ]})
-
-          address = (self.remote_gps_addr[0], Port.LOCATION_PORT)
-          self.gps_socket.sendto(json_location.encode(), address)
-
-    except:
-      self.remote_gps_addr = None
-
   def get_broadcast_address(self):
     try:
       with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
@@ -870,7 +746,9 @@ def main():
 
         xPosValidCount = max(0, xPosValidCount - 1)
         unix_now = time.mktime(datetime.now().timetuple())
+
         v_ego = CS.vEgo if CS is not None else float(nPosSpeed)/3.6
+
         if sdi_valid:
           if not location_valid and CS is not None:
             diff_angle = nPosAngle - bearing;
