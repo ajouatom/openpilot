@@ -1351,7 +1351,8 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
                 nvgFill(s->vg);
                 sprintf(str, "%d", s->limit_speed);
                 ui_draw_text(s, bx, by + 25, str, 60, COLOR_BLACK, BOLD, 0.0f, 0.0f);
-
+            }
+            if(true) {
                 float scale = 0.5;
                 if (s->left_dist < 100) scale = 1.0 - (0.5 * s->left_dist / 100.);
                 bx = s->left_dist_point.x() + 140 * scale;
@@ -1369,25 +1370,25 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
                 by = left_dist_y;             
                 left_dist_flag = false;
 
-                nvgBeginPath(s->vg);
-                nvgCircle(s->vg, bx, by, 140 / 2 * scale);
-                nvgFillColor(s->vg, COLOR_WHITE);
-                nvgFill(s->vg);
-                nvgBeginPath(s->vg);
-                nvgCircle(s->vg, bx, by, 130 / 2 * scale);
-                nvgFillColor(s->vg, COLOR_RED);
-                nvgFill(s->vg);
-                nvgBeginPath(s->vg);
-                nvgCircle(s->vg, bx, by, 110 / 2 * scale);
-                nvgFillColor(s->vg, COLOR_WHITE);
-                nvgFill(s->vg);
-                sprintf(str, "%d", s->limit_speed);
-                ui_draw_text(s, bx, by + 25*scale, str, 60 * scale, COLOR_BLACK, BOLD, 0.0f, 0.0f);
-            }
-            if (false && s->left_dist > 0) {
-                if (s->left_dist < 1000) sprintf(str, "%d m", s->left_dist);
-                else  sprintf(str, "%.1f km", s->left_dist / 1000.f);
-                ui_draw_text(s, bx, by + 120, str, 40, COLOR_WHITE, BOLD);
+                if (s->xSignType == 124 || s->camType == 22) {
+                    ui_draw_image(s, { bx - 60, by - 50, 120, 150 }, "ic_speed_bump", 1.0f);
+                }
+                else {
+                    nvgBeginPath(s->vg);
+                    nvgCircle(s->vg, bx, by, 140 / 2 * scale);
+                    nvgFillColor(s->vg, COLOR_WHITE);
+                    nvgFill(s->vg);
+                    nvgBeginPath(s->vg);
+                    nvgCircle(s->vg, bx, by, 130 / 2 * scale);
+                    nvgFillColor(s->vg, COLOR_RED);
+                    nvgFill(s->vg);
+                    nvgBeginPath(s->vg);
+                    nvgCircle(s->vg, bx, by, 110 / 2 * scale);
+                    nvgFillColor(s->vg, COLOR_WHITE);
+                    nvgFill(s->vg);
+                    sprintf(str, "%d", s->limit_speed);
+                    ui_draw_text(s, bx, by + 25 * scale, str, 60 * scale, COLOR_BLACK, BOLD, 0.0f, 0.0f);
+                }
             }
         }
         else if (s->xTurnInfo >= 0) {
