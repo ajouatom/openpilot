@@ -541,7 +541,7 @@ void update_model(UIState *s,
       }
   }
   s->limit_speed = 80;
-  int kkk = 300;
+  static int kkk = 300;
   kkk--;
   if (kkk < 0) kkk = 300;
   s->left_dist = kkk;
