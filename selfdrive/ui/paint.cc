@@ -1327,6 +1327,11 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             ui_draw_text(s, bx, by + 120, str, 40, COLOR_WHITE, BOLD);
         }
 
+        static float left_dist_x = 0.0;
+        static float left_dist_y = 0.0;
+        static bool left_dist_flag = true;
+        if (s->limit_speed <= 0) left_dist_flag = true;
+
         if (s->limit_speed > 0) {
             if (s->xSignType == 124 || s->camType == 22) {
                 ui_draw_image(s, { bx - 60, by - 50, 120, 150 }, "ic_speed_bump", 1.0f);
@@ -1351,6 +1356,14 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
                 if (s->left_dist < 100) scale = 1.0 - (0.5 * s->left_dist / 100.);
                 bx = s->left_dist_point.x() + 140 / 2 * scale;
                 by = s->left_dist_point.y();
+
+                left_dist_x = left_dist_x * 0.9 + bx * 0.1;
+                left_dist_y = left_dist_y * 0.9 + by * 0.1;
+
+                bx = left_dist_x;
+                by = left_dist_y;             
+                left_dist_flag = false;
+
                 nvgBeginPath(s->vg);
                 nvgCircle(s->vg, bx, by, 140 / 2 * scale);
                 nvgFillColor(s->vg, COLOR_WHITE);
