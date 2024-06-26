@@ -250,6 +250,10 @@ public:
   QString m_navText = "";
   QPointF left_dist_point;
 
+  float tf_distance = 0.0;
+  QPointF tf_distance_point;
+
+
 
 signals:
   void uiUpdate(const UIState &s);

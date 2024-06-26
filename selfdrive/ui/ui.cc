@@ -528,6 +528,13 @@ void update_model(UIState *s,
   else
     update_line_data_dist3(s, model_position, s->show_path_width, 1.22, 1.22, &scene.track_vertices, max_distance, false);
 
+  auto  lp = sm["longitudinalPlan"].getLongitudinalPlan();
+  auto  car_state = sm["carState"].getCarState();
+  float v_ego = car_state.getVEgoCluster();
+  float t_follow = lp.getTFollow();
+  s->tf_distance = t_follow * v_ego + 6;
+  calib_frame_to_full_frame(s, model_position.getX(), model_position.getY(), model_position.getZ(), &s->tf_distance_point);
+
   update_navi_instruction(s);
   //s->xDistToTurn = 80;
   //s->xTurnInfo = 1;
