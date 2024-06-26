@@ -1907,6 +1907,12 @@ void DrawApilot::drawLeadApilot(const UIState* s) {
 
     drawSteer(s, x, y);
     drawTurnInfo(s, x, y);
+
+    nvgBeginPath(s->vg);
+    nvgCircle(s->vg, s->tf_distance_point.x(), tf_distance_point.y(), 60 / 2);
+    nvgFillColor(s->vg, COLOR_RED);
+    nvgFill(s->vg);
+
     drawPathEnd(s, x, y, path_x, path_y, path_width);
     drawGapInfo(s, x, y);
     drawAccel(s, x, y);
