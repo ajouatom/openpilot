@@ -1356,9 +1356,14 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
                 if (s->left_dist < 100) scale = 1.0 - (0.5 * s->left_dist / 100.);
                 bx = s->left_dist_point.x() + 140 / 2 * scale;
                 by = s->left_dist_point.y();
-
-                left_dist_x = left_dist_x * 0.9 + bx * 0.1;
-                left_dist_y = left_dist_y * 0.9 + by * 0.1;
+                if (left_dist_flag) {
+                    left_dist_x = bx;
+                    left_dist_y = by;
+                }
+                else {
+                    left_dist_x = left_dist_x * 0.9 + bx * 0.1;
+                    left_dist_y = left_dist_y * 0.9 + by * 0.1;
+                }
 
                 bx = left_dist_x;
                 by = left_dist_y;             
