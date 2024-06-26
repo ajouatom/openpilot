@@ -533,8 +533,8 @@ void update_model(UIState *s,
   float v_ego = car_state.getVEgoCluster();
   float t_follow = lp.getTFollow();
   s->tf_distance = t_follow * v_ego + 6;
-  int idx = get_path_length_idx(model_position, s->tf_distance);
-  calib_frame_to_full_frame(s, model_position.getX()[idx], model_position.getY()[idx], model_position.getZ()[idx], &s->tf_distance_point);
+  int tf_idx = get_path_length_idx(model_position, s->tf_distance);
+  calib_frame_to_full_frame(s, model_position.getX()[tf_idx], model_position.getY()[tf_idx], model_position.getZ()[tf_idx], &s->tf_distance_point);
 
   update_navi_instruction(s);
   //s->xDistToTurn = 80;
