@@ -495,6 +495,7 @@ class CarController(CarControllerBase):
 
     accel_diff /= DT_CTRL
     self.jerk = self.jerk * 0.9 + accel_diff * 0.1
+    return self.jerk
 
   def make_jerk(self, CS, accel, actuators, hud_control):
     if False: 
@@ -512,11 +513,11 @@ class CarController(CarControllerBase):
       self.jerk_l = max(1.2, self.jerk_l) #max(0.05, self.jerk_l)
 
     else:
-      carrotTest4 = Params().get_int("CarrotTest4")
+      carrotTest4 = Params().get_float("CarrotTest4")
       if carrotTest4 > 0:
         jerk = self.cal_jerk(accel, actuators)
         a_error = accel - CS.out.aEgo
-        jerk += (a_error * carrotTest4 / 10.)
+        jerk = jerk + (a_error * carrotTest4 / 10.)
       else:
         jerk = actuators.jerk
 
