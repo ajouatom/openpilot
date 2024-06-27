@@ -1159,6 +1159,19 @@
       "unit": 1
     },
     {
+      "group": "시험",
+      "name": "CarrotTest4",
+      "title": "당근시험4",
+      "descr": "Jerk계산시험.",
+      "egroup": "TEST",
+      "etitle": "Carrot test4",
+      "edescr": "",
+      "min": 0,
+      "max": 2,
+      "default": 0,
+      "unit": 1
+    },
+    {
       "group": "시작",
       "name": "SccConnectedBus2",
       "title": "SCC배선개조 BUS2연결(0)",
