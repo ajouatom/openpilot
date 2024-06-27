@@ -1353,8 +1353,8 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
                 ui_draw_text(s, bx, by + 25, str, 60, COLOR_BLACK, BOLD, 0.0f, 0.0f);
             }
             if(true) {
-                float scale = 0.5;
-                if (s->left_dist < 100) scale = 1.0 - (0.5 * s->left_dist / 100.);
+                float scale = 0.2;
+                if (s->left_dist < 200) scale = 1.0 - (0.8 * s->left_dist / 200.);
                 bx = s->left_dist_point.x() + 140 * scale;
                 by = s->left_dist_point.y();
                 if (left_dist_flag) {
@@ -1492,10 +1492,8 @@ void DrawApilot::drawTurnInfo(const UIState* s, int x, int y) {
     static float navi_turn_point_y[2] = { 0.0, };
     static bool navi_turn_point_flag = true;
     if (s->xDistToTurn < 1500 && s->xDistToTurn > 0) {
-        float scale = 1.0;
-        if (s->xDistToTurn >= 200) scale = 0.5;
-        else if (s->xDistToTurn <= 0) scale = 1.0;
-        else scale = 1.0 - (0.5 * (s->xDistToTurn / 200.0));
+        float scale = 0.2;
+        if (s->xDistToTurn < 200) scale = 1.0 - (0.8 * s->xDistToTurn / 200.);
         scale *= 0.5;
         int size_x = 348 * scale;
         int size_y = 440 * scale;
