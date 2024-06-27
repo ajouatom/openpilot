@@ -488,7 +488,7 @@ class CarController(CarControllerBase):
   def cal_jerk(self, accel, actuators):
     if actuators.longControlState == LongCtrlState.off:
       accel_diff = 0.0
-    elif actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
+    elif actuators.longControlState == LongCtrlState.stopping:# or hud_control.softHold > 0:
       accel_diff = 0.0
     else:
       accel_diff = accel - self.accel_last
