@@ -1167,7 +1167,7 @@
       "etitle": "Carrot test4",
       "edescr": "",
       "min": 0,
-      "max": 2,
+      "max": 50,
       "default": 0,
       "unit": 1
     },
