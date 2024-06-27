@@ -535,8 +535,12 @@ class CarController(CarControllerBase):
           self.jerk_l += 0.1 if self.jerk_l < 1.0 else -0.1
           self.jerk_count = 0
         else:
-          self.jerk_u = min(max(2.5, jerk * 2.0), jerk_max)
-          self.jerk_l = min(max(2.0, -jerk * 3.0), jerkLimit) 
+          if carrotTest4 == 0:
+            self.jerk_u = min(max(2.5, jerk * 2.0), jerk_max)
+            self.jerk_l = min(max(2.0, -jerk * 3.0), jerkLimit)
+          else:
+            self.jerk_u = min(max(0.5, jerk * 2.0), jerk_max)
+            self.jerk_l = min(max(1.0, -jerk * 3.0), jerkLimit) 
       else:
         startingJerk = self.jerkStartLimit
         jerkLimit = 5.0
