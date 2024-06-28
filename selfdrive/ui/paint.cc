@@ -1371,7 +1371,7 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
                 left_dist_flag = false;
 
                 if (s->xSignType == 124 || s->camType == 22) {
-                    ui_draw_image(s, { bx - 60*scale, by - 50*scale, (int)(120*scale), (int)(150*scale) }, "ic_speed_bump", 1.0f);
+                    ui_draw_image(s, { bx - (int)(60*scale), by - (int)(50*scale), (int)(120*scale), (int)(150*scale) }, "ic_speed_bump", 1.0f);
                 }
                 else {
                     nvgBeginPath(s->vg);
