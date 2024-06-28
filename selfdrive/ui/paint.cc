@@ -1913,6 +1913,12 @@ void DrawApilot::drawLeadApilot(const UIState* s) {
     nvgCircle(s->vg, tf_distance_x, tf_distance_y, 20 / 2);
     nvgFillColor(s->vg, COLOR_RED);
     nvgFill(s->vg);
+    nvgCircle(s->vg, tf_distance_x, tf_distance_y - 50, 20 / 2);
+    nvgFillColor(s->vg, COLOR_RED);
+    nvgFill(s->vg);
+    nvgCircle(s->vg, tf_distance_x, tf_distance_y + 50, 20 / 2);
+    nvgFillColor(s->vg, COLOR_RED);
+    nvgFill(s->vg);
 
     drawPathEnd(s, x, y, path_x, path_y, path_width);
     drawGapInfo(s, x, y);
