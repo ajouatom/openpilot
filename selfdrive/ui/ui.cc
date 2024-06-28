@@ -557,8 +557,14 @@ void update_model(UIState *s,
   s->xSignType = 124;
   */
   if (s->left_dist > 0) {
-      int idx = get_path_length_idx(road_edges[0], s->left_dist);
-      calib_frame_to_full_frame(s, road_edges[1].getX()[idx], road_edges[1].getY()[idx], road_edges[1].getZ()[idx], &s->left_dist_point);
+      if (s->left_dist < 100) {
+          int idx = get_path_length_idx(lane_lines[2], s->left_dist);
+          calib_frame_to_full_frame(s, lane_lines[2].getX()[idx], lane_lines[2].getY()[idx], lane_lines[2].getZ()[idx], &s->left_dist_point);
+      }
+      else {
+          int idx = get_path_length_idx(road_edges[0], s->left_dist);
+          calib_frame_to_full_frame(s, road_edges[1].getX()[idx], road_edges[1].getY()[idx], road_edges[1].getZ()[idx], &s->left_dist_point);
+      }
   }
 }
 
