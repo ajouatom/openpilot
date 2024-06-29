@@ -456,6 +456,7 @@ def get_all_toggle_values():
     "ShowTpms",
     "ShowSteerMode",
     "ShowDeviceState",
+    "ShowCustomBrightness",
     "ShowConnInfo",
     "ShowLaneInfo",
     "ShowBlindSpot",
@@ -499,6 +500,8 @@ def get_all_toggle_values():
     "StartAccelApply",
     "AutoSpeedUptoRoadSpeedLimit",
     "StopDistanceCarrot",
+    "ComfortBrake",
+    "TrafficStopDistanceAdjust",
     "ALeadTauPos",
     "ALeadTauNeg",
     "ALeadTauThreshold",
@@ -557,9 +560,7 @@ def get_all_toggle_values():
     "CustomSteerDeltaUp",
     "CustomSteerDeltaDown",
     "SpeedFromPCM",
-    "MaxTimeOffroadMin"
-    "CarrotRecord",
-    "CarrotDisplay",
+    "MaxTimeOffroadMin",
     "MSLCEnabled",
     "NoLogging",
 

@@ -53,7 +53,19 @@ struct NaviObstacles @0xf35cc4560bbf6ec2 {
   }
 }
 
-struct CustomReserved3 @0xda96579883444c35 {
+struct CarrotDetection {
+  box @0 : CarrotBox;
+  score @1 : Float32;
+  classId @2 :UInt32;
+}
+struct CarrotBox {
+  xMin @0 :Float32;
+  yMin @1 :Float32;
+  xMax @2 :Float32;
+  yMax @3 :Float32;
+}
+struct CarrotModel @0xda96579883444c35 {
+  detections @0 :List(CarrotDetection);
 }
 
 struct CustomReserved4 @0x80ae746ee2596b11 {

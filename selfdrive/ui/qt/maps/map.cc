@@ -238,6 +238,8 @@ void MapWindow::updateState(const UIState &s) {
       // carrot
       extern int _current_carrot_display;
       _current_carrot_display = 3;
+      extern int _display_time_count;
+      _display_time_count = 100;
     }
   }
 

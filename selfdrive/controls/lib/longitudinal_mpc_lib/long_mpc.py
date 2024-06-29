@@ -282,7 +282,8 @@ class LongitudinalMpc:
     self.t_follow_prev = self.get_T_FOLLOW()
     self.stop_distance = STOP_DISTANCE
     self.fakeCruiseDistance = 0.0
-    self.comfort_brake = COMFORT_BRAKE
+    self.comfortBrake = COMFORT_BRAKE
+    self.comfort_brake = self.comfortBrake
     self.xState = XState.cruise
     self.xStop = 0.0
     self.stopDist = 0.0
@@ -317,7 +318,7 @@ class LongitudinalMpc:
     self.u_sol = np.zeros((N,1))
     self.params = np.zeros((N+1, PARAM_DIM))
     self.stop_distance = STOP_DISTANCE
-    self.comfort_brake = COMFORT_BRAKE
+    self.comfort_brake = self.comfortBrake
     self.xState = XState.cruise
     self.startSignCount = 0
     self.stopSignCount = 0
@@ -388,7 +389,8 @@ class LongitudinalMpc:
     if lead is not None and lead.status:
       x_lead = lead.dRel
       v_lead = lead.vLead
-      a_lead = lead.aLeadK
+      #a_lead = lead.aLeadK
+      a_lead = lead.aLead
       a_lead_tau = lead.aLeadTau
     else:
       # Fake a fast lead car, so mpc can keep running in the same mode
@@ -443,13 +445,18 @@ class LongitudinalMpc:
     a_ego = self.x0[2]
     self.trafficState = TrafficState.off
     # carrot
-    self.comfort_brake = COMFORT_BRAKE
+    self.comfort_brake = self.comfortBrake
     applyStopDistance = self.stop_distance  * (2.0 - self.mySafeFactor)
     t_follow = self.update_tf(v_ego, t_follow)
     t_follow = self.update_dynamic_tf(t_follow, radarstate.leadOne, a_ego, v_ego)
-    if Params().get_int("CarrotTest3") in [1,2]:
-      if radarstate.leadOne.dPath * radarstate.leadOne.vLat > 0:
+    carrotTest3 = Params().get_int("CarrotTest3")
+    if carrotTest3 in [1,2]:
+      check_cut_out = radarstate.leadOne.dPath * radarstate.leadOne.vLat
+      #print("{:.1f}, {:.1f}".format(check_cut_out, radarstate.leadOne.dPath + radarstate.leadOne.vLat))
+      if check_cut_out > 0:
         t_follow *= interp(abs(radarstate.leadOne.dPath + radarstate.leadOne.vLat), [0.5, 1.0, 2.0], [1.0, 0.5, 0.2])
+      elif carrotTest3 == 2:
+        t_follow *= interp(abs(radarstate.leadOne.vLat), [0.5, 1.0, 2.0], [1.0, 1.1, 1.3])
     self.t_follow = t_follow
     
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
@@ -636,6 +643,8 @@ class LongitudinalMpc:
       self.tFollowGap4 = params.get_float("TFollowGap4") / 100.
     elif self.lo_timer == 120:
       self.stop_distance = params.get_float("StopDistanceCarrot") / 100.
+      self.trafficStopDistanceAdjust = params.get_float("TrafficStopDistanceAdjust") / 100.
+      self.comfortBrake = params.get_float("ComfortBrake") / 100.
 
   def update_stop_dist(self, stop_x):
     stop_x = self.xStopFilter.process(stop_x, median = True)

@@ -481,6 +481,7 @@ class VCruiseHelper:
     elif self.xState == 3 and self.autoCancelFromGasMode == 2:
       self._add_log_auto_cruise("Cruise Deactivate from gas pressed: traffic stopping");
       self.cruiseActivate = -1
+      self.autoCruiseCancelTimer = 3.0 / DT_CTRL
     elif self.v_ego_kph_set > self.autoResumeFromGasSpeed > 0:
       if self.cruiseActivate <= 0:
         if self.gas_pressed_value > 0.6 or self.gas_pressed_count_prev > 3.0 / DT_CTRL:
@@ -692,7 +693,7 @@ class VCruiseHelper:
     if controls.enabled or CS.brakePressed or CS.gasPressed:
       self.cruiseActiveReady = 0
       if CS.gasPressed and self.accel_output < -0.5:
-        self.autoCruiseCancelTimer = 1.0 / DT_CTRL #잠시 오토크루멈춤
+        self.autoCruiseCancelTimer = 5.0 / DT_CTRL #잠시 오토크루멈춤
         self.cruiseActivate = -1
         self._add_log("Cruise off (GasPressed while braking)")
 
@@ -751,7 +752,7 @@ class VCruiseHelper:
           self.cruiseActivate = 1
 
     if controls.enabled and self.autoSpeedUptoRoadSpeedLimit > 0.:
-      lead_v_kph = self.lead_vLead * CV.MS_TO_KPH + 5.0
+      lead_v_kph = self.lead_vLead * CV.MS_TO_KPH + 10.0
       lead_v_kph = min(lead_v_kph, self.v_ego_kph_set + 10)
       road_speed = (30 if self.roadSpeed < 30 else self.roadSpeed) * self.autoSpeedUptoRoadSpeedLimit
       lead_v_kph = max(v_cruise_kph, min(lead_v_kph, road_speed))

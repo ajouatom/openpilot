@@ -13,9 +13,9 @@ RADAR_MSG_COUNT = 32
 # POC for parsing corner radars: https://github.com/commaai/openpilot/pull/24221/
 
 def get_radar_can_parser(CP):
-  enable_radar_tracks = Params().get_bool("EnableRadarTracks")
+  enable_radar_tracks = Params().get_int("EnableRadarTracks")
   #if DBC[CP.carFingerprint]['radar'] is None and not enable_radar_tracks:
-  if not enable_radar_tracks:
+  if enable_radar_tracks == 0:
     return None
 
   print("RadarInterface: RadarTracks...")
@@ -25,10 +25,10 @@ def get_radar_can_parser(CP):
 def get_radar_can_parser_scc(CP):
   scc2 = Params().get_int("SccConnectedBus2") > 0
 
-  enable_radar_tracks = Params().get_bool("EnableRadarTracks")
+  enable_radar_tracks = Params().get_int("EnableRadarTracks")
 
-  # 레이더트랙만 이용하고 싶은경우
-  if enable_radar_tracks: 
+  # 레이더트랙만 이용하고 싶은경우, => mix 시험...
+  if enable_radar_tracks in [1]:
     return None
 
   if CP.carFingerprint in CANFD_CAR and not scc2:
@@ -52,7 +52,7 @@ def get_radar_can_parser_scc(CP):
 class RadarInterface(RadarInterfaceBase):
   def __init__(self, CP):
     super().__init__(CP)
-    self.enable_radar_tracks = Params().get_bool("EnableRadarTracks")
+    self.enable_radar_tracks = Params().get_int("EnableRadarTracks")
 
     self.updated_messages = set()
     self.trigger_msg = RADAR_START_ADDR + RADAR_MSG_COUNT - 1

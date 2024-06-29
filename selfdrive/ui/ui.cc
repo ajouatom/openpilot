@@ -126,11 +126,11 @@ void update_line_data_dist(const UIState* s, const cereal::XYZTData::Reader& lin
         line_zs[i] = line_z[i]; 
     }
 
-    float   dist = 2.0, dist_dt = 1.;
+    float   dist = 2.0;// , dist_dt = 1.;
     bool    exit = false;
     //printf("\ndist = ");
     for (int i = 0; !exit; i++, dist = dist + dist*0.15) {
-        dist_dt += (i*0.05);
+        //dist_dt += (i*0.05);
         if (dist >= max_dist) {
             dist = max_dist;
             exit = true;
@@ -367,13 +367,13 @@ void update_leads(UIState *s, const cereal::RadarState::Reader &radar_state, con
 }
 
 void update_line_data(const UIState *s, const cereal::XYZTData::Reader &line,
-                      float y_off, float z_off_left, float z_off_right, QPolygonF* pvd, int max_idx, bool allow_invert=true, float y_shift = 0.0) {
+                      float y_off, float z_off_left, float z_off_right, QPolygonF* pvd, int max_idx, bool allow_invert=true, float y_shift = 0.0, int start_idx=0) {
   const auto line_x = line.getX(), line_y = line.getY(), line_z = line.getZ();
   QPolygonF left_points, right_points;
   left_points.reserve(max_idx + 1);
   right_points.reserve(max_idx + 1);
 
-  for (int i = 0; i <= max_idx; i++) {
+  for (int i = start_idx; i <= max_idx; i++) {
     // highly negative x positions  are drawn above the frame and cause flickering, clip to zy plane of camera
     if (line_x[i] < 0) continue;
     QPointF left, right;
@@ -390,16 +390,41 @@ void update_line_data(const UIState *s, const cereal::XYZTData::Reader &line,
   }
   *pvd = left_points + right_points;
 }
+void update_navi_instruction(UIState* s) {
+    SubMaster& sm = *(s->sm);
+    const auto road_limit_speed = sm["roadLimitSpeed"].getRoadLimitSpeed();
+    int xTurnInfo = road_limit_speed.getXTurnInfo();
+    int xDistToTurn = road_limit_speed.getXDistToTurn();
+
+    auto navInstruction = sm["navInstruction"].getNavInstruction();
+    float navDistance = navInstruction.getManeuverDistance();
+    //float distance_remaining = navInstruction.getDistanceRemaining();
+    QString navType = QString::fromStdString(navInstruction.getManeuverType());
+    QString navModifier = QString::fromStdString(navInstruction.getManeuverModifier());
+    if (xTurnInfo < 0 && xDistToTurn <= 0) {
+        //navText = QString::fromStdString(navInstruction.getManeuverSecondaryText());
+        if (navType == "turn") {
+            if (navModifier == "sharp left" || navModifier == "slight left" || navModifier == "left") xTurnInfo = 1; // left turn
+            else if (navModifier == "sharp right" || navModifier == "slight right" || navModifier == "right") xTurnInfo = 2;
+            else if (navModifier == "uturn") xTurnInfo = 5;
+            xDistToTurn = navDistance;
+        }
+        else if (navType == "fork" || navType == "off ramp") {
+            if (navModifier == "slight left" || navModifier == "left") xTurnInfo = 3; // left turn
+            else if (navModifier == "slight right" || navModifier == "right") xTurnInfo = 4;
+            xDistToTurn = navDistance;
+        }
+        s->xNavModifier = navModifier;
+    }
+    s->xDistToTurn = (float)xDistToTurn;
+    s->xTurnInfo = xTurnInfo;
+}
 
 void update_model(UIState *s,
-                  const cereal::ModelDataV2::Reader &model,
-                  const cereal::UiPlan::Reader &plan) {
+                  const cereal::ModelDataV2::Reader &model) {
   UIScene &scene = s->scene;
-  auto plan_position = plan.getPosition();
-  if (plan_position.getX().size() < model.getPosition().getX().size()) {
-    plan_position = model.getPosition();
-  }
-  float max_distance = std::clamp(*(plan_position.getX().end() - 1),
+  auto model_position = model.getPosition();
+  float max_distance = std::clamp(*(model_position.getX().end() - 1),
                                   MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE);
 
   auto lead_one = (*s->sm)["radarState"].getRadarState().getLeadOne();
@@ -420,10 +445,10 @@ void update_model(UIState *s,
     update_line_data(s, lane_lines[i], 0.025 * scene.lane_line_probs[i], 0.0, 0.0, &scene.lane_line_vertices[i], max_idx);
   }
   // lane barriers for blind spot
-  int max_idx_barrier_l = get_path_length_idx(plan_position, 40.0);
-  int max_idx_barrier_r = get_path_length_idx(plan_position, 40.0);
-  update_line_data(s, plan_position, 0, 1.2 - 0.05, 1.2 - 0.6, &scene.lane_barrier_vertices[0], max_idx_barrier_l, false, -1.7); // 차선폭을 알면 좋겠지만...
-  update_line_data(s, plan_position, 0, 1.2 - 0.05, 1.2 - 0.6, &scene.lane_barrier_vertices[1], max_idx_barrier_r, false, 1.7);
+  int max_idx_barrier_l = get_path_length_idx(model_position, 40.0);
+  int max_idx_barrier_r = get_path_length_idx(model_position, 40.0);
+  update_line_data(s, model_position, 0, 1.2 - 0.05, 1.2 - 0.6, &scene.lane_barrier_vertices[0], max_idx_barrier_l, false, -1.7); // 차선폭을 알면 좋겠지만...
+  update_line_data(s, model_position, 0, 1.2 - 0.05, 1.2 - 0.6, &scene.lane_barrier_vertices[1], max_idx_barrier_r, false, 1.7);
 
   // update road edges
   const auto road_edges = model.getRoadEdges();
@@ -448,20 +473,32 @@ void update_model(UIState *s,
   bool longActive = controls_state.getEnabled();
   if (longActive == false) show_path_mode = s->show_path_mode_cruise_off;
   max_distance -= 2.0;
-  max_idx = get_path_length_idx(plan_position, max_distance);
+  max_idx = get_path_length_idx(model_position, max_distance);
 
   if(s->show_mode == 0) {
-    update_line_data(s, plan_position, 0.9, 1.22, 1.22, &scene.track_vertices, max_idx, false);
+    update_line_data(s, model_position, 0.9, 1.22, 1.22, &scene.track_vertices, max_idx, false);
   }
   else if (show_path_mode == 0) {
-      update_line_data2(s, plan_position, s->show_path_width, 1.22, 1.22, &scene.track_vertices, max_idx);
+      update_line_data2(s, model_position, s->show_path_width, 1.22, 1.22, &scene.track_vertices, max_idx);
   }
   else if (show_path_mode < 9 || show_path_mode == 13 || show_path_mode == 14 || show_path_mode == 15) {
-      update_line_data_dist(s, plan_position, s->show_path_width, 1.22, 1.22, &scene.track_vertices, max_distance, false);
+      update_line_data_dist(s, model_position, s->show_path_width, 1.22, 1.22, &scene.track_vertices, max_distance, false);
   }
   else
-    update_line_data_dist3(s, plan_position, s->show_path_width, 1.22, 1.22, &scene.track_vertices, max_distance, false);
+    update_line_data_dist3(s, model_position, s->show_path_width, 1.22, 1.22, &scene.track_vertices, max_distance, false);
 
+  update_navi_instruction(s);
+  //s->xDistToTurn = 80;
+  //s->xTurnInfo = 1;
+  if (s->xTurnInfo >= 0 && s->xDistToTurn < 1500) {
+
+      int idx = get_path_length_idx(road_edges[0], s->xDistToTurn);
+      int m_idx[2] = { 0, 1 };
+      for (int i = 0; i < 2; i++) {
+          int m = m_idx[i];
+          calib_frame_to_full_frame(s, road_edges[m].getX()[idx], road_edges[m].getY()[idx], road_edges[m].getZ()[idx], &s->navi_turn_point[i]);
+      }
+  }
 }
 
 void update_dmonitoring(UIState *s, const cereal::DriverStateV2::Reader &driverstate, float dm_fade_state, bool is_rhd) {
@@ -558,8 +595,7 @@ static void update_state(UIState *s) {
   scene.world_objects_visible = scene.world_objects_visible ||
                                 (scene.started &&
                                  sm.rcv_frame("liveCalibration") > scene.started_frame &&
-                                 sm.rcv_frame("modelV2") > scene.started_frame &&
-                                 sm.rcv_frame("uiPlan") > scene.started_frame);
+                                 sm.rcv_frame("modelV2") > scene.started_frame);
 
   if (sm.updated("lateralPlan") && sm.updated("controlsState")) {
       auto lp = sm["lateralPlan"].getLateralPlan();
@@ -567,7 +603,7 @@ static void update_state(UIState *s) {
       if (lp.getUseLaneLines() && controls_state.getUseLaneLines()) s->use_lane_lines = true;
       else s->use_lane_lines = false;
   }
-  else s->use_lane_lines = false;
+  //else s->use_lane_lines = false;
 
 }
 
@@ -622,6 +658,7 @@ void ui_update_params(UIState *s) {
   case 80:
       s->show_path_mode_cruise_off = std::atoi(params.get("ShowPathModeCruiseOff").c_str());;
       s->show_path_color_cruise_off = std::atoi(params.get("ShowPathColorCruiseOff").c_str());;
+      s->show_brightness_ratio = std::atof(params.get("ShowCustomBrightness").c_str()) / 100.;
       break;
   }
 
@@ -654,8 +691,8 @@ UIState::UIState(QObject *parent) : QObject(parent) {
   sm = std::make_unique<SubMaster, const std::initializer_list<const char *>>({
     "modelV2", "controlsState", "liveCalibration", "radarState", "deviceState",
     "pandaStates", "carParams", "driverMonitoringState", "carState", "liveLocationKalman", "driverStateV2",
-    "wideRoadCameraState", "managerState", "navInstruction", "navRoute", "uiPlan",
-    "lateralPlan", "longitudinalPlan","carControl", "liveParameters", "roadLimitSpeed", "liveTorqueParameters", "naviData"
+    "wideRoadCameraState", "managerState", "navInstruction", "navRoute",
+    "lateralPlan", "longitudinalPlan","carControl", "liveParameters", "roadLimitSpeed", "liveTorqueParameters", "naviData", "carrotModel"
   });
 
   Params params;
@@ -738,9 +775,15 @@ void Device::updateBrightness(const UIState &s) {
     } else {
       clipped_brightness = std::pow((clipped_brightness + 16.0) / 116.0, 3.0);
     }
-
     // Scale back to 10% to 100%
     clipped_brightness = std::clamp(100.0f * clipped_brightness, 10.0f, 100.0f);
+
+    if (s.show_brightness_timer > 0) {
+        UIState* s1 = uiState();
+        s1->show_brightness_timer--;
+    }
+    else clipped_brightness *= s.show_brightness_ratio;
+
   }
 
   int brightness = brightness_filter.update(clipped_brightness);

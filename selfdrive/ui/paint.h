@@ -118,7 +118,7 @@ public:
 	void drawLeadApilot(const UIState* s);
 	void drawDebugText(UIState* s, bool show);
 	void drawDeviceState(UIState* s, bool show);
-
+	void drawCarrotModel(const UIState* s);
 
 	
 

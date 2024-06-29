@@ -117,8 +117,8 @@ OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   QObject::connect(uiState(), &UIState::primeChanged, this, &OnroadWindow::primeChanged);
 }
 
+int _current_carrot_display_prev = 0, _display_time_count = 0;
 void OnroadWindow::updateState(const UIState &s) {
-    static int _current_carrot_display_prev = 0, _display_time_count = 0;
     if (!s.scene.started) {
         _current_carrot_display_prev = -1;
       return;
@@ -134,6 +134,9 @@ void OnroadWindow::updateState(const UIState &s) {
   const auto car_state = sm["carState"].getCarState();
   if (car_state.getSteeringPressed()) {
       bgColor = bg_colors[STATUS_OVERRIDE];
+  }
+  else if (car_control.getLatActive()) {
+      bgColor = bg_colors[STATUS_ENGAGED];
   }
   if (car_state.getGasPressed()) {
       bgColor_long = bg_colors[STATUS_OVERRIDE];
@@ -212,6 +215,9 @@ void OnroadWindow::updateState(const UIState &s) {
           else {
               map->setVisible(true);
               map->setFixedWidth(topWidget(this)->width() / 2 - UI_BORDER_SIZE);
+              if (_display_time_count > 0) {
+                  if (--_display_time_count <= 0) _current_carrot_display = 2; // change to road view
+              }
           }
           break;
       case 4: // fullmap
@@ -707,8 +713,7 @@ void AnnotatedCameraWidget::drawLaneLines(QPainter &painter, const UIState *s) {
   QLinearGradient bg(0, height(), 0, 0);
   if (sm["controlsState"].getControlsState().getExperimentalMode()) {
     // The first half of track_vertices are the points for the right side of the path
-    // and the indices match the positions of accel from uiPlan
-    const auto &acceleration = sm["uiPlan"].getUiPlan().getAccel();
+    const auto &acceleration = sm["modelV2"].getModelV2().getAcceleration().getX();
     const int max_len = std::min<int>(scene.track_vertices.length() / 2, acceleration.size());
 
     for (int i = 0; i < max_len; ++i) {
@@ -880,7 +885,7 @@ void AnnotatedCameraWidget::paintEvent(QPaintEvent *event) {
   painter.setPen(Qt::NoPen);
 
   if (s->scene.world_objects_visible) {
-    update_model(s, model, sm["uiPlan"].getUiPlan());
+    update_model(s, model);
     if(s->show_mode == 0) drawLaneLines(painter, s);
 
     //if (s->scene.longitudinal_control && sm.rcv_frame("radarState") > s->scene.started_frame) {

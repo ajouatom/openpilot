@@ -227,11 +227,8 @@ float interp(float x, const T* x_list, const T* y_list, size_t size, bool extrap
 static void ui_draw_path(const UIState* s) {
     const UIScene& scene = s->scene;
     SubMaster& sm = *(s->sm);
-    auto plan_position = sm["uiPlan"].getUiPlan().getPosition();
-    if (plan_position.getX().size() < 33) {
-        plan_position = sm["modelV2"].getModelV2().getPosition();
-    }
-    float max_distance = std::clamp(plan_position.getX()[TRAJECTORY_SIZE - 1],
+    auto model_position = sm["modelV2"].getModelV2().getPosition();
+    float max_distance = std::clamp(model_position.getX()[TRAJECTORY_SIZE - 1],
         MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE);
 
     auto lead_one = sm["radarState"].getRadarState().getLeadOne();
@@ -242,7 +239,7 @@ static void ui_draw_path(const UIState* s) {
     auto    car_state = sm["carState"].getCarState();
     float   accel = car_state.getAEgo();
     float   v_ego_kph = getVEgo() * MS_TO_KPH;
-    const auto line_x = plan_position.getX(), line_y = plan_position.getY(), line_z = plan_position.getZ();
+    const auto line_x = model_position.getX(), line_y = model_position.getY(), line_z = model_position.getZ();
     float idxs[33], line_xs[33], line_ys[33], line_zs[33];
     for (int i = 0; i < 33; i++) {
         idxs[i] = (float)i;
@@ -693,6 +690,10 @@ void DrawPlot::makePlotData(const UIState* s, float& data1, float& data2, char *
         sprintf(str, "8.Detected radar(G:aLeadK, Y:aLeadTau)");
         break;
     case 9:
+        data1 = lead_radar.getALeadK();
+        data2 = lead_radar.getALead(); // getDRel();
+        sprintf(str, "9.Detected radar(G:aLead, Y:aLeadK)");
+        break;
         data1 = lead_radar.getVLeadK();
         data2 = lead_radar.getVLead(); // getDRel();
         sprintf(str, "9.Detected radar(G:vLead, Y:vLeadK)");
@@ -1000,7 +1001,7 @@ void DrawApilot::drawConnInfo(const UIState* s) {
     auto car_state = sm["carState"].getCarState();
     //const auto car_params = sm["carParams"].getCarParams();
     const auto road_limit_speed = sm["roadLimitSpeed"].getRoadLimitSpeed();
-    int radar_tracks = params.getBool("EnableRadarTracks");
+    int radar_tracks = params.getInt("EnableRadarTracks");
     int sccBus = params.getInt("SccConnectedBus2");
     int activeAPM = road_limit_speed.getActive();
     const auto naviData = sm["naviData"].getNaviData();
@@ -1267,16 +1268,13 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             left_dist = sectionLeftDist;
         }
         //const auto road_limit_speed = sm["roadLimitSpeed"].getRoadLimitSpeed();
-        int xTurnInfo = road_limit_speed.getXTurnInfo();
-        int xDistToTurn = road_limit_speed.getXDistToTurn();
-        int xSpdDist = road_limit_speed.getXSpdDist();
         int xSpdLimit = road_limit_speed.getXSpdLimit();
         int xSignType = road_limit_speed.getXSignType();
+        int xSpdDist = road_limit_speed.getXSpdDist();
         m_navText = QString::fromStdString(road_limit_speed.getXRoadName());
-#ifdef __TEST
-        xTurnInfo = 2;
-        xDistToTurn = 120;
-#endif
+        /*
+        int xTurnInfo = road_limit_speed.getXTurnInfo();
+        int xDistToTurn = road_limit_speed.getXDistToTurn();
 
         auto navInstruction = sm["navInstruction"].getNavInstruction();
         float navDistance = navInstruction.getManeuverDistance();
@@ -1297,13 +1295,14 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
                 xDistToTurn = navDistance;
             }
         }
+        */
         if (limit_speed > 0);
         else if (xSpdLimit > 0 && xSpdDist > 0) {
             limit_speed = xSpdLimit;
             left_dist = xSpdDist;
         }
-        else if (xTurnInfo >= 0) {
-            left_dist = xDistToTurn;
+        else if (s->xTurnInfo >= 0) {
+            left_dist = s->xDistToTurn;
         }
 
         //sprintf(str, "%.1f/%.1f %s(%s)", distance, distance_remaining, type.length() ? type.toStdString().c_str() : "", modifier.length() ? modifier.toStdString().c_str() : "");
@@ -1427,16 +1426,16 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
                 ui_draw_text(s, bx, by + 120, str, 40, COLOR_WHITE, BOLD);
             }
         }
-        else if (xTurnInfo >= 0) {
-            switch (xTurnInfo) {
+        else if (s->xTurnInfo >= 0) {
+            switch (s->xTurnInfo) {
             case 1: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_turn_l", 1.0f); break;
             case 2: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_turn_r", 1.0f); break;
             case 3: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_lane_change_l", 1.0f); break;
             case 4: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_lane_change_r", 1.0f); break;
             case 5:
-                if(navModifier == "uturn") ui_draw_image(s, {bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size}, "ic_turn_u", 1.0f);
+                if(s->xNavModifier == "uturn") ui_draw_image(s, {bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size}, "ic_turn_u", 1.0f);
                 else {
-                    sprintf(str, "%s", (navModifier.length()>0)?navModifier.toStdString().c_str() : "unknown");
+                    sprintf(str, "%s", (s->xNavModifier.length()>0)?s->xNavModifier.toStdString().c_str() : "unknown");
                     ui_draw_text(s, bx, by + 20, str, 35, COLOR_WHITE, BOLD);
                 }
                 break;
@@ -1445,7 +1444,7 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             case 43: ui_draw_text(s, bx, by + 20, "지하차도 우측", 35, COLOR_WHITE, BOLD, 0.0f, 0.0f); break;
             case 48: ui_draw_text(s, bx, by + 20, "휴게소", 35, COLOR_WHITE, BOLD, 0.0f, 0.0f); break;
             default:
-                sprintf(str, "%d", xTurnInfo);
+                sprintf(str, "%d", s->xTurnInfo);
                 ui_draw_text(s, bx, by + 20, str, 35, COLOR_WHITE, BOLD, 0.0f, 0.0f);
                 break;
             }
@@ -1522,7 +1521,44 @@ void DrawApilot::drawTurnInfo(const UIState* s, int x, int y) {
     if (false) {
         if (bsd_l) ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, "ic_bsd_l", 1.0f);
         if (bsd_r) ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2, icon_size, icon_size }, "ic_bsd_r", 1.0f);
+    }   
+
+    static float navi_turn_point_x[2] = { 0.0, };
+    static float navi_turn_point_y[2] = { 0.0, };
+    static bool navi_turn_point_flag = true;
+    if (s->xDistToTurn < 1500 && s->xDistToTurn > 0) {
+        float scale = 1.0;
+        if (s->xDistToTurn >= 200) scale = 0.5;
+        else if (s->xDistToTurn <= 0) scale = 1.0;
+        else scale = 1.0 - (0.5 * (s->xDistToTurn / 200.0));
+        scale *= 0.5;
+        int size_x = 348 * scale;
+        int size_y = 440 * scale;
+        int img_x = 0;
+        int img_y = 0;
+        float alpha = (navi_turn_point_flag)?1.0:0.1;
+
+        for (int i = 0; i < 2; i++) {
+            navi_turn_point_x[i] = navi_turn_point_x[i] * (1.0 - alpha) + s->navi_turn_point[i].x() * alpha;
+            navi_turn_point_y[i] = navi_turn_point_y[i] * (1.0 - alpha) + s->navi_turn_point[i].y() * alpha;
+        }
+        navi_turn_point_flag = false;
+
+        switch (s->xTurnInfo) {
+        case 1: case 3: case 5:
+            img_x = (int)navi_turn_point_x[0] - size_x / 2;
+            img_y = (int)navi_turn_point_y[0] - size_y;
+            ui_draw_image(s, { img_x, img_y, size_x, size_y }, "ic_navi_point", 1.0f);
+            break;
+        case 2: case 4:
+            img_x = (int)navi_turn_point_x[1] - size_x / 2;
+            img_y = (int)navi_turn_point_y[1] - size_y;
+            ui_draw_image(s, { img_x, img_y, size_x, size_y }, "ic_navi_point", 1.0f);
+            break;
+        }
     }
+    else navi_turn_point_flag = true;
+
 }
 void DrawApilot::drawSteer(const UIState* s, int x, int y) {
     char str[128];
@@ -1903,6 +1939,7 @@ void DrawApilot::drawLeadApilot(const UIState* s) {
     //if ((desireStateTurnLeft > 0.5) || (desireStateTurnRight > 0.5) || (desireStateLaneChangeLeft > 0.5) || (desireStateLaneChangeRight > 0.5)) {
     //    showBg = true;
     // }
+
     drawSteer(s, x, y);
     drawTurnInfo(s, x, y);
     drawPathEnd(s, x, y, path_x, path_y, path_width);
@@ -2128,6 +2165,60 @@ void DrawApilot::drawDebugText(UIState* s, bool show) {
 DrawApilot::DrawApilot() {
 
 }
+const char* class_names_[] = {
+    "person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck",
+    "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench",
+    "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra",
+    "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee",
+    "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove",
+    "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup",
+    "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange",
+    "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "sofa",
+    "pottedplant", "bed", "diningtable", "toilet", "TV monitor", "laptop", "mouse",
+    "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
+    "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier",
+    "toothbrush"
+};
+const char* class_names_kr[] = {
+    "사람", "자전거", "자동차", "오토바이", "비행기", "버스", "기차", "트럭",
+    "보트", "신호등", "소화전", "정지 신호", "주차 요금기", "벤치",
+    "새", "고양이", "개", "말", "양", "소", "코끼리", "곰", "얼룩말",
+    "기린", "배낭", "우산", "핸드백", "넥타이", "여행 가방", "프리스비",
+    "스키", "스노보드", "스포츠 공", "연", "야구 방망이", "야구 글러브",
+    "스케이트보드", "서핑보드", "테니스 라켓", "병", "와인 잔", "컵",
+    "포크", "나이프", "숟가락", "그릇", "바나나", "사과", "샌드위치", "오렌지",
+    "브로콜리", "당근", "핫도그", "피자", "도넛", "케이크", "의자", "소파",
+    "화분", "침대", "식탁", "화장실", "TV 모니터", "노트북", "마우스",
+    "리모컨", "키보드", "휴대폰", "전자레인지", "오븐", "토스터", "싱크대",
+    "냉장고", "책", "시계", "꽃병", "가위", "테디 베어", "헤어 드라이어",
+    "칫솔"
+};
+const char* class_names[] = {
+    "green", "left turn", "red light", "yellow light"
+};
+void DrawApilot::drawCarrotModel(const UIState* s) {
+    SubMaster& sm = *(s->sm);
+    auto detections = sm["carrotModel"].getCarrotModel().getDetections();
+
+    for (auto detection : detections) {
+        auto box = detection.getBox();
+        float xMin = box.getXMin();
+        float yMin = box.getYMin();
+        float xMax = box.getXMax();
+        float yMax = box.getYMax();
+
+        // NanoVG로 바운딩 박스 그리기
+        nvgBeginPath(s->vg);
+        nvgRect(s->vg, xMin, yMin, xMax - xMin, yMax - yMin);
+        nvgStrokeColor(s->vg, COLOR_GREEN);
+        nvgStroke(s->vg);
+        char str[128];
+        const char* className = class_names_kr[detection.getClassId()];
+        sprintf(str, "%s, %.2f", className, detection.getScore());
+        ui_draw_text(s, xMin, yMin - 10, str, 35, COLOR_WHITE, BOLD, 0.0f, 0.0f);
+    }
+}
+
 DrawApilot* drawApilot;
 Alert alert;
 NVGcolor alert_color;
@@ -2146,6 +2237,8 @@ void ui_draw(UIState *s, int w, int h) {
   drawApilot->drawLeadApilot(s);
   drawApilot->drawDebugText(s, s->show_debug>1);
   drawApilot->drawDeviceState(s, s->show_device_stat);
+  if(s->fb_w > 1200)
+    drawApilot->drawCarrotModel(s);
 
   ui_draw_text_a2(s);
 
@@ -2233,6 +2326,7 @@ void ui_nvg_init(UIState *s) {
   {"ic_apn", "../assets/images/img_apn.png"},
   {"ic_hda", "../assets/images/img_hda.png"},
   {"ic_osm", "../assets/images/img_osm.png"},
+  {"ic_navi_point", "../assets/images/navi_point.png"}
 
   };
   for (auto [name, file] : images) {

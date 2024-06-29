@@ -172,7 +172,7 @@ class CarInterface(CarInterfaceBase):
     ret.longitudinalActuatorDelayLowerBound = 0.5
     ret.longitudinalActuatorDelayUpperBound = 0.5
 
-    if Params().get_bool("EnableRadarTracks"):
+    if Params().get_int("EnableRadarTracks") > 0:
       ret.radarTimeStep = (1.0 / 20) # 20Hz  RadarTrack 20Hz
     else:
       ret.radarTimeStep = (1.0 / 50) # 50Hz   SCC11 50Hz
@@ -265,7 +265,7 @@ class CarInterface(CarInterfaceBase):
         addr, bus = 0x730, CanBus(CP).ECAN
       print(f"$$$$$$ Disable ECU : addr={addr}, bus={bus}")
       disable_ecu(logcan, sendcan, bus=bus, addr=addr, com_cont_req=b'\x28\x83\x01', debug=True)
-    if Params().get_bool("EnableRadarTracks"): #ajouatom
+    if Params().get_int("EnableRadarTracks") > 0:
       enable_radar_tracks(CP, logcan, sendcan) 
 
     # for blinkers
