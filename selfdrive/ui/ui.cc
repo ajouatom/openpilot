@@ -548,14 +548,14 @@ void update_model(UIState *s,
           calib_frame_to_full_frame(s, road_edges[m].getX()[idx], road_edges[m].getY()[idx], road_edges[m].getZ()[idx], &s->navi_turn_point[i]);
       }
   }
-  
+  /*
   s->limit_speed = 80;
   static int kkk = 300;
   kkk--;
   if (kkk < 0) kkk = 300;
   s->left_dist = kkk;
   s->xSignType = 124;
-  
+  */
   if (s->left_dist > 0) {
       if (s->left_dist < 100) {
           int idx = get_path_length_idx(lane_lines[2], s->left_dist);
