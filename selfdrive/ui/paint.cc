@@ -1914,11 +1914,11 @@ void DrawApilot::drawLeadApilot(const UIState* s) {
     nvgFillColor(s->vg, COLOR_RED);
     nvgFill(s->vg);
     nvgBeginPath(s->vg);
-    nvgCircle(s->vg, tf_distance_x - 100, tf_distance_y, 20 / 2);
+    nvgCircle(s->vg, tf_distance_x - 60, tf_distance_y, 20 / 2);
     nvgFillColor(s->vg, COLOR_RED);
     nvgFill(s->vg);
     nvgBeginPath(s->vg);
-    nvgCircle(s->vg, tf_distance_x + 100, tf_distance_y, 20 / 2);
+    nvgCircle(s->vg, tf_distance_x + 60, tf_distance_y, 20 / 2);
     nvgFillColor(s->vg, COLOR_RED);
     nvgFill(s->vg);
 
