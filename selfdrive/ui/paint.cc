@@ -1393,7 +1393,7 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
                     nvgFillColor(s->vg, COLOR_WHITE);
                     nvgFill(s->vg);
                     sprintf(str, "%d", s->limit_speed);
-                    ui_draw_text(s, bx, by + 25 * scale, str, 60 * scale, COLOR_BLACK, BOLD, 0.0f, 0.0f);
+                    ui_draw_text(s, bx, by + 25 * scale - 6*(1-scale), str, 60 * scale, COLOR_BLACK, BOLD, 0.0f, 0.0f);
                 }
             }
         }
