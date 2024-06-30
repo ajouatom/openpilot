@@ -554,7 +554,7 @@ void update_model(UIState *s,
   kkk--;
   if (kkk < 0) kkk = 300;
   s->left_dist = kkk;
-  s->xSignType = 1;
+  s->xSignType = 124;
   
   if (s->left_dist > 0) {
       if (s->left_dist < 100) {
