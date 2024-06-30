@@ -1370,6 +1370,12 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
                 by = left_dist_y;             
                 left_dist_flag = false;
 
+                if (s->left_dist > 0) {
+                    if (s->left_dist < 1000) sprintf(str, "%d m", s->left_dist);
+                    else  sprintf(str, "%.1f km", s->left_dist / 1000.f);
+                    ui_draw_text(s, bx, by + 120*scale, str, 40*scale, COLOR_WHITE, BOLD);
+                }
+
                 if (s->xSignType == 124 || s->camType == 22) {
                     ui_draw_image(s, { bx - (int)(60*scale), by - (int)(50*scale), (int)(120*scale), (int)(150*scale) }, "ic_speed_bump", 1.0f);
                 }
