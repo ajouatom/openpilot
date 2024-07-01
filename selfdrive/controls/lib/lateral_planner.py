@@ -180,7 +180,7 @@ class LateralPlanner:
       #print("lateralPlan_valid=", sm.valid)
       #print("lateralPlan_alive=", sm.alive)
       #print("lateralPlan_freq_ok=", sm.freq_ok)
-      print(sm.avg_freq)
+      #print(sm.avg_freq)
       pass
 
     lateralPlan = plan_send.lateralPlan
