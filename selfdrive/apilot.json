@@ -1232,7 +1232,7 @@
       "etitle": "Sound Volume adjust(100%)",
       "edescr": "",
       "min": 5,
-      "max": 100,
+      "max": 200,
       "default": 0,
       "unit": 5
     },
@@ -1245,7 +1245,7 @@
       "etitle": "Sound Volume adjust,Engage(10%)",
       "edescr": "",
       "min": 5,
-      "max": 100,
+      "max": 200,
       "default": 0,
       "unit": 5
     },
