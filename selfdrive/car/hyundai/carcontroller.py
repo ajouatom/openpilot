@@ -90,6 +90,8 @@ class CarController(CarControllerBase):
 
     self.suppress_lfa_counter = 0
 
+    self.jerk = 0.0
+
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
     hud_control = CC.hudControl
@@ -483,6 +485,18 @@ class CarController(CarControllerBase):
       self.button_spamming_count = 0
     return 0
 
+  def cal_jerk(self, accel, actuators):
+    if actuators.longControlState == LongCtrlState.off:
+      accel_diff = 0.0
+    elif actuators.longControlState == LongCtrlState.stopping:# or hud_control.softHold > 0:
+      accel_diff = 0.0
+    else:
+      accel_diff = accel - self.accel_last
+
+    accel_diff /= DT_CTRL
+    self.jerk = self.jerk * 0.9 + accel_diff * 0.1
+    return self.jerk
+
   def make_jerk(self, CS, accel, actuators, hud_control):
     if False: 
       required_jerk = min(3, abs(accel - CS.out.aEgo) * 50)
@@ -499,9 +513,11 @@ class CarController(CarControllerBase):
       self.jerk_l = max(1.2, self.jerk_l) #max(0.05, self.jerk_l)
 
     else:
-      # ajouatom: calculate jerk, cb : reverse engineer from KONA EV
+      jerk = self.cal_jerk(accel, actuators)
+      a_error = accel - CS.out.aEgo
+      jerk = jerk + (a_error * 2.0)
+
       if self.CP.carFingerprint in CANFD_CAR:
-        jerk = actuators.jerk
         startingJerk = 0.5 #self.jerkStartLimit
         jerkLimit = 5.0
         self.jerk_count += DT_CTRL
@@ -515,10 +531,11 @@ class CarController(CarControllerBase):
           self.jerk_l += 0.1 if self.jerk_l < 1.0 else -0.1
           self.jerk_count = 0
         else:
-          self.jerk_u = min(max(2.5, jerk * 2.0), jerk_max)
-          self.jerk_l = min(max(2.0, -jerk * 3.0), jerkLimit) 
+          #self.jerk_u = min(max(2.5, jerk * 2.0), jerk_max)
+          #self.jerk_l = min(max(2.0, -jerk * 3.0), jerkLimit)
+          self.jerk_u = min(max(0.5, jerk * 2.0), jerk_max)
+          self.jerk_l = min(max(1.0, -jerk * 3.0), jerkLimit) 
       else:
-        jerk = actuators.jerk
         startingJerk = self.jerkStartLimit
         jerkLimit = 5.0
         self.jerk_count += DT_CTRL
@@ -534,7 +551,7 @@ class CarController(CarControllerBase):
           self.jerk_count = 0
         else:
           self.jerk_u = min(max(0.5, jerk * 2.0), jerk_max)
-          #self.jerk_l = min(max(1.0, -jerk * 2.0), jerk_max)
-          self.jerk_l = min(max(1.2, -jerk * 2.0), jerkLimit) ## 1.0으로 하니 덜감속, 1.5로하니 너무감속, 1.2로 한번해보자(231228)
+          self.jerk_l = min(max(0.5, -jerk * 2.0), jerkLimit)
+          #self.jerk_l = min(max(1.2, -jerk * 2.0), jerkLimit) ## 1.0으로 하니 덜감속, 1.5로하니 너무감속, 1.2로 한번해보자(231228)
           self.cb_upper = clip(0.9 + accel * 0.2, 0, 1.2)
           self.cb_lower = clip(0.8 + accel * 0.2, 0, 1.2)

@@ -70,7 +70,7 @@ def calculate_lane_width(lane, lane_prob, current_lane, road_edge):
   #if lane_prob < 0.3: # 차선이 없으면 없는것으로 간주시킴.
   #  distance_to_lane = min(2.0, distance_to_lane)
   distance_to_road_edge = abs(current_lane.y[index] - road_edge.y[index]);
-  return min(distance_to_lane, distance_to_road_edge), distance_to_road_edge, lane_prob > 0.3
+  return min(distance_to_lane, distance_to_road_edge), distance_to_road_edge, lane_prob > 0.5
 
 class ExistCounter:
   def __init__(self):

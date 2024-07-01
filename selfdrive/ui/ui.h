@@ -240,6 +240,20 @@ public:
   QString xNavModifier;
   QPointF navi_turn_point[2];
 
+  int roadLimitSpeed = 0;
+  int limit_speed = 0;
+  int left_dist = 0;
+  int camType = 0;
+  int xSpdLimit = 0;
+  int xSignType = 0;
+  int xSpdDist = 0;
+  QString m_navText = "";
+  QPointF left_dist_point;
+
+  float tf_distance = 0.0;
+  QPointF tf_distance_point;
+
+
 
 signals:
   void uiUpdate(const UIState &s);

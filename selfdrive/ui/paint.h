@@ -103,9 +103,7 @@ protected:
 
 	void	drawTPMS(const UIState* s);
 	void	drawDateTime(const UIState* s);
-
-
-	QString m_navText = "";
+		
 	int icon_size = 256;
 
 	Params	params;

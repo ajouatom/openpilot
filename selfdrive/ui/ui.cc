@@ -418,6 +418,47 @@ void update_navi_instruction(UIState* s) {
     }
     s->xDistToTurn = (float)xDistToTurn;
     s->xTurnInfo = xTurnInfo;
+
+
+
+    //int activeNDA = road_limit_speed.getActive();
+    const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
+
+    s->roadLimitSpeed = road_limit_speed.getRoadLimitSpeed();
+    int roadLimitSpeed_OSM = lp.getLimitSpeed();
+    if (s->roadLimitSpeed < roadLimitSpeed_OSM) s->roadLimitSpeed = roadLimitSpeed_OSM;
+
+    int camLimitSpeed = road_limit_speed.getCamLimitSpeed();
+    int camLimitSpeedLeftDist = road_limit_speed.getCamLimitSpeedLeftDist();
+    int sectionLimitSpeed = road_limit_speed.getSectionLimitSpeed();
+    int sectionLeftDist = road_limit_speed.getSectionLeftDist();
+    s->camType = road_limit_speed.getCamType();
+
+    s->limit_speed = 0;
+    s->left_dist = 0;
+
+    if (camLimitSpeed > 0 && camLimitSpeedLeftDist > 0) {
+        s->limit_speed = camLimitSpeed;
+        s->left_dist = camLimitSpeedLeftDist;
+    }
+    else if (sectionLimitSpeed > 0 && sectionLeftDist > 0) {
+        s->limit_speed = sectionLimitSpeed;
+        s->left_dist = sectionLeftDist;
+    }
+    //const auto road_limit_speed = sm["roadLimitSpeed"].getRoadLimitSpeed();
+    s->xSpdLimit = road_limit_speed.getXSpdLimit();
+    s->xSignType = road_limit_speed.getXSignType();
+    s->xSpdDist = road_limit_speed.getXSpdDist();
+    s->m_navText = QString::fromStdString(road_limit_speed.getXRoadName());
+    if (s->limit_speed > 0);
+    else if (s->xSpdLimit > 0 && s->xSpdDist > 0) {
+        s->limit_speed = s->xSpdLimit;
+        s->left_dist = s->xSpdDist;
+    }
+    else if (s->xTurnInfo >= 0) {
+        s->left_dist = s->xDistToTurn;  // TODO: 이건 왜있지?
+    }
+
 }
 
 void update_model(UIState *s,
@@ -487,6 +528,14 @@ void update_model(UIState *s,
   else
     update_line_data_dist3(s, model_position, s->show_path_width, 1.22, 1.22, &scene.track_vertices, max_distance, false);
 
+  auto  lp = sm["longitudinalPlan"].getLongitudinalPlan();
+  auto  car_state = sm["carState"].getCarState();
+  float v_ego = car_state.getVEgoCluster();
+  float t_follow = lp.getTFollow();
+  s->tf_distance = t_follow * v_ego + 6;
+  int tf_idx = get_path_length_idx(model_position, s->tf_distance);
+  calib_frame_to_full_frame(s, model_position.getX()[tf_idx], model_position.getY()[tf_idx], model_position.getZ()[tf_idx] + 1.22, &s->tf_distance_point);
+
   update_navi_instruction(s);
   //s->xDistToTurn = 80;
   //s->xTurnInfo = 1;
@@ -497,6 +546,24 @@ void update_model(UIState *s,
       for (int i = 0; i < 2; i++) {
           int m = m_idx[i];
           calib_frame_to_full_frame(s, road_edges[m].getX()[idx], road_edges[m].getY()[idx], road_edges[m].getZ()[idx], &s->navi_turn_point[i]);
+      }
+  }
+  /*
+  s->limit_speed = 80;
+  static int kkk = 300;
+  kkk--;
+  if (kkk < 0) kkk = 300;
+  s->left_dist = kkk;
+  s->xSignType = 124;
+  */
+  if (s->left_dist > 0) {
+      if (s->left_dist < 100) {
+          int idx = get_path_length_idx(lane_lines[2], s->left_dist);
+          calib_frame_to_full_frame(s, lane_lines[2].getX()[idx], lane_lines[2].getY()[idx], lane_lines[2].getZ()[idx], &s->left_dist_point);
+      }
+      else {
+          int idx = get_path_length_idx(road_edges[0], s->left_dist);
+          calib_frame_to_full_frame(s, road_edges[1].getX()[idx], road_edges[1].getY()[idx], road_edges[1].getZ()[idx], &s->left_dist_point);
       }
   }
 }
