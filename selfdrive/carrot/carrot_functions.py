@@ -390,6 +390,8 @@ class CarrotNaviSpeedManager(CarrotBase):
 
     self.activeAPM = 0
     self.roadSpeed = 0
+    self.left_sec = 11
+    self.params.put_int_nonblocking("CarrotAudioSec", self.left_sec)
 
   def update_params(self):
     self.autoNaviSpeedBumpSpeed = float(self.params.get_int("AutoNaviSpeedBumpSpeed"))
@@ -455,8 +457,15 @@ class CarrotNaviSpeedManager(CarrotBase):
       applySpeed = decelerate_for_speed_camera(safeSpeed/3.6, safeDist, v_ego, self.autoNaviSpeedDecelRate, leftDist) * CV.MS_TO_KPH
       if isSectionLimit and applySpeed > safeSpeed:
         applySpeed = safeSpeed
+      left_sec = int(leftDist / v_ego)
+      if left_sec < self.left_sec:
+        self.params.put_int_nonblocking("CarrotAudioSec", left_sec)
+        self.left_sec = left_sec
     else:
       applySpeed = 255
+      if self.left_sec != 11:
+        self.params.put_int_nonblocking("CarrotAudioSec", 11)
+      self.left_sec = 11
 
 
     if applySpeed < 200:

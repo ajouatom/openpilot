@@ -332,6 +332,7 @@ std::unordered_map<std::string, uint32_t> keys = {
     { "MaxTimeOffroadMin", PERSISTENT },
     { "CarrotRecord", PERSISTENT },
     { "CarrotDisplay", PERSISTENT },
+    { "CarrotAudioSec", PERSISTENT },
     { "MSLCEnabled", PERSISTENT },
     { "NoLogging", PERSISTENT },
     { "CarrotException", CLEAR_ON_MANAGER_START },

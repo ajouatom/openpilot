@@ -97,6 +97,8 @@ class VCruiseHelper:
     self.traffic_light_q = collections.deque(maxlen=int(1.0/DT_CTRL))
     self.traffic_light_count = -1
     self.traffic_state = 0
+
+    self.left_sec = 11
     
     #ajouatom: params
     self.params_count = 0
@@ -283,6 +285,13 @@ class VCruiseHelper:
       if self.softHoldActive == 2 and trafficState == 2:
         self._make_event(controls, EventName.trafficSignChanged)
     self.trafficState = trafficState
+
+    left_sec = self.params.get_int("CarrotAudioSec")
+    if left_sec != self.left_sec:
+      self.left_sec = left_sec
+      if 1 <= left_sec <= 10:
+          event_name = getattr(EventName, f'audio{left_sec}')
+          controls.events.add(event_name)
 
   def _update_lead(self, controls):
     leadOne = controls.sm['radarState'].leadOne

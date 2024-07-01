@@ -145,6 +145,17 @@ struct CarEvent @0x9b1657f34caf3ad3 {
     personalityMoreRelaxed @140;
     torqueNNLoad @141;
 
+    audio1 @142;
+    audio2 @143;
+    audio3 @144;
+    audio4 @145;
+    audio5 @146;
+    audio6 @147;
+    audio7 @148;
+    audio8 @149;
+    audio9 @150;
+    audio10 @151;
+
     radarCanErrorDEPRECATED @15;
     communityFeatureDisallowedDEPRECATED @62;
     radarCommIssueDEPRECATED @67;
@@ -476,6 +487,16 @@ struct CarControl {
       stopStop @22;
       audioTurn @9;
       reverseGear @23;
+      audio1 @24;
+      audio2 @25;
+      audio3 @26;
+      audio4 @27;
+      audio5 @28;
+      audio6 @29;
+      audio7 @30;
+      audio8 @31;
+      audio9 @32;
+      audio10 @33;
     }
   }
 
