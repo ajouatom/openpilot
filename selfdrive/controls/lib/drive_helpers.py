@@ -289,7 +289,7 @@ class VCruiseHelper:
     left_sec = self.params.get_int("CarrotAudioSec")
     if left_sec != self.left_sec:
       self.left_sec = left_sec
-      max_left_sec = max(1, int(self.v_cruise_kph/10.))
+      max_left_sec = max(3, int(self.v_cruise_kph/10.))
       if 1 <= left_sec <= max_left_sec:
           event_name = getattr(EventName, f'audio{left_sec}')
           controls.events.add(event_name)
