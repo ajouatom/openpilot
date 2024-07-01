@@ -182,6 +182,14 @@ class VCruiseHelper:
       self.cruiseActivate = 0
       v_cruise_kph = self.update_apilot_cmd(controls, 30)
 
+    left_sec = self.params.get_int("CarrotAudioSec")
+    if left_sec != self.left_sec:
+      self.left_sec = left_sec
+      max_left_sec = max(3, int(self.v_ego_kph_set/10.))
+      if 1 <= left_sec <= max_left_sec:
+          event_name = getattr(EventName, f'audio{left_sec}')
+          controls.events.add(event_name)
+
   def _update_v_cruise_non_pcm(self, CS, enabled, is_metric):
     # handle button presses. TODO: this should be in state_control, but a decelCruise press
     # would have the effect of both enabling and changing speed is checked after the state transition
@@ -285,14 +293,6 @@ class VCruiseHelper:
       if self.softHoldActive == 2 and trafficState == 2:
         self._make_event(controls, EventName.trafficSignChanged)
     self.trafficState = trafficState
-
-    left_sec = self.params.get_int("CarrotAudioSec")
-    if left_sec != self.left_sec:
-      self.left_sec = left_sec
-      max_left_sec = max(3, int(self.v_ego_kph_set/10.))
-      if 1 <= left_sec <= max_left_sec:
-          event_name = getattr(EventName, f'audio{left_sec}')
-          controls.events.add(event_name)
 
   def _update_lead(self, controls):
     leadOne = controls.sm['radarState'].leadOne
