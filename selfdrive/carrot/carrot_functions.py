@@ -337,7 +337,7 @@ class CarrotNaviHelper(CarrotBase):
           nav_direction = 0
         self.nav_turn = nav_turn
 
-        left_sec = int(self.nav_distance / v_ego)
+        left_sec = int(self.nav_distance / max(1, v_ego))
         if left_sec < self.left_sec:
           self.params.put_int_nonblocking("CarrotAudioSec", left_sec)
           self.left_sec = left_sec
@@ -464,7 +464,7 @@ class CarrotNaviSpeedManager(CarrotBase):
       applySpeed = decelerate_for_speed_camera(safeSpeed/3.6, safeDist, v_ego, self.autoNaviSpeedDecelRate, leftDist) * CV.MS_TO_KPH
       if isSectionLimit and applySpeed > safeSpeed:
         applySpeed = safeSpeed
-      left_sec = int(leftDist / v_ego)
+      left_sec = int(leftDist / max(1, v_ego))
       if left_sec < self.left_sec:
         self.params.put_int_nonblocking("CarrotAudioSec", left_sec)
         self.left_sec = left_sec
