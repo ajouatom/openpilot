@@ -145,16 +145,16 @@ struct CarEvent @0x9b1657f34caf3ad3 {
     personalityMoreRelaxed @140;
     torqueNNLoad @141;
 
-    audio1 @142;
-    audio2 @143;
-    audio3 @144;
-    audio4 @145;
-    audio5 @146;
-    audio6 @147;
-    audio7 @148;
-    audio8 @149;
-    audio9 @150;
-    audio10 @151;
+    audio1 @143;
+    audio2 @144;
+    audio3 @145;
+    audio4 @146;
+    audio5 @147;
+    audio6 @148;
+    audio7 @149;
+    audio8 @150;
+    audio9 @151;
+    audio10 @152;
 
     radarCanErrorDEPRECATED @15;
     communityFeatureDisallowedDEPRECATED @62;
