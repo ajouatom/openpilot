@@ -98,6 +98,7 @@ class VCruiseHelper:
     self.traffic_light_count = -1
     self.traffic_state = 0
 
+    self.v_ego_kph_set = 0
     self.left_sec = 11
     
     #ajouatom: params
