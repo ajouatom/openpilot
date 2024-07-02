@@ -1250,6 +1250,19 @@
       "unit": 5
     },
     {
+      "group": "시작",
+      "name": "CarrotCountDownSpeed",
+      "title": "네비카운트다운작동속도",
+      "descr": "설정속도이상일때 작동함",
+      "egroup": "START",
+      "etitle": "NaviCountDownSpeed",
+      "edescr": "",
+      "min": 0,
+      "max": 200,
+      "default": 0,
+      "unit": 5
+    },
+    {
       "group": "차량간격",
       "name": "TFollowSpeedAdd",
       "title": "TF(s): 차량간격시간 추가100km/hx0.01s(0)",

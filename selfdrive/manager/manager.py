@@ -136,6 +136,7 @@ def get_default_params():
     ("CanfdHDA2", "0"),
     ("SoundVolumeAdjust", "100"),
     ("SoundVolumeAdjustEngage", "10"),
+    ("CarrotCountDownSpeed", "10"),
     ("StartRecord", "0"),
     ("StopRecord", "0"),
     ("TFollowSpeedAdd", "10"),

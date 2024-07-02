@@ -534,6 +534,7 @@ def get_all_toggle_values():
     "CanfdHDA2",
     "SoundVolumeAdjust",
     "SoundVolumeAdjustEngage",
+    "CarrotCountDownSpeed",
     "StartRecord",
     "StopRecord",
     "TFollowSpeedAdd",

@@ -182,11 +182,12 @@ class VCruiseHelper:
       self.cruiseActivate = 0
       v_cruise_kph = self.update_apilot_cmd(controls, 30)
 
-    left_sec = self.params.get_int("CarrotAudioSec")
-    if left_sec != self.left_sec:
+    count_down_kph = self.params.get_int("CarrotCountDownSpeed")
+    left_sec = self.params.get_int("CarrotCountDownSec")
+    if left_sec != self.left_sec and count_down_kph != 0:
       self.left_sec = left_sec
       max_left_sec = max(3, int(self.v_ego_kph_set/10.))
-      if 1 <= left_sec <= max_left_sec:
+      if 1 <= left_sec <= max_left_sec and self.v_ego_kph_set > count_down_kph:
           event_name = getattr(EventName, f'audio{left_sec}')
           controls.events.add(event_name)
 
