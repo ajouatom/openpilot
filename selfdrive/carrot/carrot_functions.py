@@ -400,6 +400,8 @@ class CarrotNaviSpeedManager(CarrotBase):
     self.left_sec = 11
     self.params.put_int_nonblocking("CarrotCountDownSec", self.left_sec)
 
+    self.test_count = 0
+
   def update_params(self):
     self.autoNaviSpeedBumpSpeed = float(self.params.get_int("AutoNaviSpeedBumpSpeed"))
     self.autoNaviSpeedBumpTime = float(self.params.get_int("AutoNaviSpeedBumpTime"))
@@ -470,9 +472,19 @@ class CarrotNaviSpeedManager(CarrotBase):
         self.left_sec = left_sec
     else:
       applySpeed = 255
-      if self.left_sec != 11:
-        self.params.put_int_nonblocking("CarrotCountDownSec", 11)
-      self.left_sec = 11
+      if False:
+        self.test_count += 1
+        if self.test_count > 20:
+          self.test_count = 0
+          self.left_sec -= 1
+          if self.left_sec < 0:
+            self.left_sec = 11
+          self.params.put_int_nonblocking("CarrotCountDownSec", self.left_sec)
+        pass
+      else:
+        if self.left_sec != 11:
+          self.params.put_int_nonblocking("CarrotCountDownSec", 11)
+        self.left_sec = 11
 
 
     if applySpeed < 200:

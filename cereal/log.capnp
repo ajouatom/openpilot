@@ -747,6 +747,7 @@ struct ControlsState @0x97ff69c53601abf1 {
   debugText1 @70 : Text;
   trafficLight @71 : Int32;
   useLaneLines @72 : Bool;
+  carrotAlertSound @73 :Car.CarControl.HUDControl.AudibleAlert;
 
   enum OpenpilotState @0xdbe58b96d2d1ac61 {
     disabled @0;

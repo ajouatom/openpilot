@@ -117,6 +117,8 @@ class Soundd:
 
     self.spl_filter_weighted = FirstOrderFilter(0, 2.5, FILTER_DT, initialized=False)
 
+    self.carrot_alert = AudibleAlert.none
+
   def load_sounds(self):
     self.loaded_sounds: dict[int, np.ndarray] = {}
 
@@ -183,7 +185,12 @@ class Soundd:
   def get_audible_alert(self, sm):
     if sm.updated['controlsState']:
       new_alert = sm['controlsState'].alertSound.raw
-      self.update_alert(new_alert)
+      carrot_alert = sm['controlsState'].carrotAlertSound.raw
+      if new_alert == AudibleAlert.none and carrot_alert != self.carrot_alert:
+        self.update_alert(carrot_alert)
+        self.carrot_alert = carrot_alert
+      else:
+        self.update_alert(new_alert)
     elif check_controls_timeout_alert(sm):
       self.update_alert(AudibleAlert.warningImmediate)
       self.controls_timeout_alert = True
