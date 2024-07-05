@@ -522,7 +522,7 @@ class Controls:
     gear = car.CarState.GearShifter
     drivingGear = CS.gearShifter not in (gear.neutral, gear.park, gear.reverse, gear.unknown)
     if self.CP.pcmCruise:
-      self.enable_avail = drivingGear and (self.sm['radarState'].leadOne.radar or CS.out.vEgo * CV.MS_TO_KPH > 10.0)
+      self.enable_avail = drivingGear and (self.sm['radarState'].leadOne.radar or CS.vEgo * CV.MS_TO_KPH > 10.0)
     else:
       self.enable_avail = drivingGear and not self.events.contains(ET.NO_ENTRY)
 
