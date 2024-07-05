@@ -291,7 +291,7 @@ class CarController(CarControllerBase):
         #can_sends.extend(hyundaican.create_acc_commands(self.packer, CC.enabled, accel, jerk, int(self.frame / 2),
         #                                                hud_control.leadVisible, set_speed_in_units, stopping,
         #                                                CC.cruiseControl.override, use_fca, CS.out.cruiseState.available))
-
+        print("dont call!!!!!!!!!!!!!!!", self.CP.openpilotLongitudinalControl)
         can_sends.extend(hyundaican.create_acc_commands_mix_scc(self.CP, self.packer, CC.enabled, accel, self.jerk_u, self.jerk_l, int(self.frame / 2),
                                                       hud_control, set_speed_in_units, stopping, CC, CS, self.softHoldMode, self.cb_upper, self.cb_lower, CS.out.cruiseState.available))
         self.accel_last = accel
