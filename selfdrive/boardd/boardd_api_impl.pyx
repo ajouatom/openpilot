@@ -21,7 +21,8 @@ def can_list_to_can_capnp(can_msgs, msgtype='can', valid=True):
   cdef can_frame f
   for can_msg in can_msgs:
     f.address = can_msg[0]
-    if(f.address == 1056) print("1056 sendt$$$$$$$$$$$$$$$$$$$$$$")
+    if f.address == 1056:
+      print("1056 sendt$$$$$$$$$$$$$$$$$$$$$$")
     f.busTime = can_msg[1]
     f.dat = can_msg[2]
     f.src = can_msg[3]
