@@ -446,8 +446,9 @@ class CarController(CarControllerBase):
       self.activateCruise = 0
     if CC.enabled:
       if not CS.out.cruiseState.enabled:
-        if (hud_control.leadVisible or current > 10.0):
+        if (hud_control.leadVisible or current > 10.0) and self.activateCruise == 0:
           send_button = Buttons.RES_ACCEL
+          self.activateCruise = 1
           activate_cruise = True
       elif CC.cruiseControl.resume:
         send_button = Buttons.RES_ACCEL
