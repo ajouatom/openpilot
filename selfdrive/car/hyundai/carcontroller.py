@@ -413,8 +413,6 @@ class CarController(CarControllerBase):
             can_sends.append(dat)
           self.cruise_buttons_msg_cnt += 1
 
-    if len(can_sends) > 0:
-      print(can_sends)
     return can_sends
 
   def canfd_speed_control_pcm(self, CC, CS, cruise_buttons_msg_values):
@@ -442,32 +440,27 @@ class CarController(CarControllerBase):
 
     send_button = 0
     activate_cruise = False
-    #if not CC.enabled:
-    #  self.activateCruise = 0
+
     if CC.enabled:
       if not CS.out.cruiseState.enabled:
         if (hud_control.leadVisible or current > 10.0) and self.activateCruise == 0:
           send_button = Buttons.RES_ACCEL
           self.activateCruise = 1
           activate_cruise = True
-          print("activate")
       elif CC.cruiseControl.resume:
         send_button = Buttons.RES_ACCEL
-        print("resume")
       elif target < current and current>= 31 and self.params.get_int("SpeedFromPCM") != 1:
         send_button = Buttons.SET_DECEL
-        print("decel")
       elif target > current and current < 160 and self.params.get_int("SpeedFromPCM") != 1:
         send_button = Buttons.RES_ACCEL
-        print("accel")
     elif CC.cruiseControl.activate:
       if (hud_control.leadVisible or current > 10.0) and self.activateCruise == 0:
         self.activateCruise = 1
         send_button = Buttons.RES_ACCEL
         activate_cruise = True
-        print("activate2")
-    else:
-       self.activateCruise = 0
+
+    if CS.out.brakePressed or CS.out.gasPressed:
+      self.activateCruise = 0
 
     if send_button == 0:
       self.button_spamming_count = 0
@@ -489,7 +482,6 @@ class CarController(CarControllerBase):
     send_button_allowed = (self.frame - self.last_button_frame) > self.button_wait
     CC.debugTextCC = "{} speed_diff={:.1f},{:.0f}/{:.0f}, button={}, button_wait={}, count={}".format(
       send_button_allowed, speed_diff, target, current, send_button, self.button_wait, self.button_spamming_count)
-    print(CC.debugTextCC)
     if send_button_allowed or activate_cruise:
       self.button_spamming_count = self.button_spamming_count + 1 if Buttons.RES_ACCEL else self.button_spamming_count - 1
       return send_button
