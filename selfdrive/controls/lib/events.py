@@ -1112,6 +1112,36 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   EventName.audioTurn: {
      ET.WARNING: EngagementAlert(AudibleAlert.audioTurn),
   },
+  EventName.audio1: {
+     ET.WARNING: EngagementAlert(AudibleAlert.audio1),
+  },
+  EventName.audio2: {
+     ET.WARNING: EngagementAlert(AudibleAlert.audio2),
+  },
+  EventName.audio3: {
+     ET.WARNING: EngagementAlert(AudibleAlert.audio3),
+  },
+  EventName.audio4: {
+     ET.WARNING: EngagementAlert(AudibleAlert.audio4),
+  },
+  EventName.audio5: {
+     ET.WARNING: EngagementAlert(AudibleAlert.audio5),
+  },
+  EventName.audio6: {
+     ET.WARNING: EngagementAlert(AudibleAlert.audio6),
+  },
+  EventName.audio7: {
+     ET.WARNING: EngagementAlert(AudibleAlert.audio7),
+  },
+  EventName.audio8: {
+     ET.WARNING: EngagementAlert(AudibleAlert.audio8),
+  },
+  EventName.audio9: {
+     ET.WARNING: EngagementAlert(AudibleAlert.audio9),
+  },
+  EventName.audio10: {
+     ET.WARNING: EngagementAlert(AudibleAlert.audio10),
+  },
 }
 
 

@@ -55,6 +55,16 @@ sound_list: dict[int, tuple[str, int | None, float]] = {
   AudibleAlert.speedDown:  ("audio_speed_down.wav", None, MAX_VOLUME),
   AudibleAlert.audioTurn: ("audio_turn.wav", None, MAX_VOLUME),
   AudibleAlert.reverseGear: ("reverse_gear.wav", 1, float(Params().get_int("SoundVolumeAdjustEngage"))/100.),
+  AudibleAlert.audio1: ("audio_1.wav", None, MAX_VOLUME),
+  AudibleAlert.audio2: ("audio_2.wav", None, MAX_VOLUME),
+  AudibleAlert.audio3: ("audio_3.wav", None, MAX_VOLUME),
+  AudibleAlert.audio4: ("audio_4.wav", None, MAX_VOLUME),
+  AudibleAlert.audio5: ("audio_5.wav", None, MAX_VOLUME),
+  AudibleAlert.audio6: ("audio_6.wav", None, MAX_VOLUME),
+  AudibleAlert.audio7: ("audio_7.wav", None, MAX_VOLUME),
+  AudibleAlert.audio8: ("audio_8.wav", None, MAX_VOLUME),
+  AudibleAlert.audio9: ("audio_9.wav", None, MAX_VOLUME),
+  AudibleAlert.audio10: ("audio_10.wav", None, MAX_VOLUME),
 }
 
 def check_controls_timeout_alert(sm):
@@ -106,6 +116,8 @@ class Soundd:
     self.controls_timeout_alert = False
 
     self.spl_filter_weighted = FirstOrderFilter(0, 2.5, FILTER_DT, initialized=False)
+
+    self.carrot_alert = AudibleAlert.none
 
   def load_sounds(self):
     self.loaded_sounds: dict[int, np.ndarray] = {}
@@ -173,7 +185,12 @@ class Soundd:
   def get_audible_alert(self, sm):
     if sm.updated['controlsState']:
       new_alert = sm['controlsState'].alertSound.raw
-      self.update_alert(new_alert)
+      carrot_alert = sm['controlsState'].carrotAlertSound.raw
+      if new_alert == AudibleAlert.none and carrot_alert != self.carrot_alert:
+        self.update_alert(carrot_alert)
+        self.carrot_alert = carrot_alert
+      else:
+        self.update_alert(new_alert)
     elif check_controls_timeout_alert(sm):
       self.update_alert(AudibleAlert.warningImmediate)
       self.controls_timeout_alert = True

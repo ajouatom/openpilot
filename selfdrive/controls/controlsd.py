@@ -32,6 +32,8 @@ from openpilot.selfdrive.controls.lib.vehicle_model import VehicleModel
 
 from openpilot.system.hardware import HARDWARE
 
+AudibleAlert = car.CarControl.HUDControl.AudibleAlert
+
 SOFT_DISABLE_TIME = 3  # seconds
 LDW_MIN_SPEED = 31 * CV.MPH_TO_MS
 LANE_DEPARTURE_THRESHOLD = 0.1
@@ -196,6 +198,8 @@ class Controls:
     self.carrot_tmux_sent = 0
     self.steerDisabledTemporary = False
     self.seering_pressed_count = 0
+
+    self.carrot_alert_sound = AudibleAlert.none
 
   def set_initial_state(self):
     if REPLAY:
@@ -994,6 +998,8 @@ class Controls:
     controlsState.rightBlinkerExt = self.v_cruise_helper.rightBlinkerExtCount  + self.v_cruise_helper.blinkerExtMode
 
     controlsState.useLaneLines = self.lanefull_mode_enabled
+
+    controlsState.carrotAlertSound = self.carrot_alert_sound
 
     lat_tuning = self.CP.lateralTuning.which()
     if self.joystick_mode:

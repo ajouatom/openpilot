@@ -11,6 +11,7 @@ import numpy as np
 import collections
 
 EventName = car.CarEvent.EventName
+AudibleAlert = car.CarControl.HUDControl.AudibleAlert
 
 # WARNING: this value was determined based on the model's training distribution,
 #          model predictions above this speed can be unpredictable
@@ -97,6 +98,9 @@ class VCruiseHelper:
     self.traffic_light_q = collections.deque(maxlen=int(1.0/DT_CTRL))
     self.traffic_light_count = -1
     self.traffic_state = 0
+
+    self.v_ego_kph_set = 0
+    self.left_sec = 11
     
     #ajouatom: params
     self.params_count = 0
@@ -179,6 +183,18 @@ class VCruiseHelper:
       self.v_cruise_kph_set = V_CRUISE_INITIAL#V_CRUISE_UNSET
       self.cruiseActivate = 0
       v_cruise_kph = self.update_apilot_cmd(controls, 30)
+
+    count_down_kph = self.params.get_int("CarrotCountDownSpeed")
+    left_sec = self.params.get_int("CarrotCountDownSec")
+    if left_sec != self.left_sec and count_down_kph != 0:
+      max_left_sec = min(10, max(3, int(self.v_ego_kph_set/10.)))
+      if 1 <= left_sec <= max_left_sec and self.v_ego_kph_set > count_down_kph:
+        controls.carrot_alert_sound = getattr(AudibleAlert, f'audio{left_sec}')
+        #event_name  = getattr(EventName, f'audio{left_sec}')
+        #controls.events.add(event_name)
+      elif left_sec == 0 and self.left_sec == 1:
+        controls.carrot_alert_sound = AudibleAlert.longDisengaged
+      self.left_sec = left_sec
 
   def _update_v_cruise_non_pcm(self, CS, enabled, is_metric):
     # handle button presses. TODO: this should be in state_control, but a decelCruise press
