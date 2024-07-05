@@ -450,17 +450,22 @@ class CarController(CarControllerBase):
           send_button = Buttons.RES_ACCEL
           self.activateCruise = 1
           activate_cruise = True
+          print("activate")
       elif CC.cruiseControl.resume:
         send_button = Buttons.RES_ACCEL
+        print("resume")
       elif target < current and current>= 31 and self.params.get_int("SpeedFromPCM") != 1:
         send_button = Buttons.SET_DECEL
+        print("decel")
       elif target > current and current < 160 and self.params.get_int("SpeedFromPCM") != 1:
         send_button = Buttons.RES_ACCEL
+        print("accel")
     elif CC.cruiseControl.activate and self.activateCruise == 0:
       if (hud_control.leadVisible or current > 10.0):
         self.activateCruise = 1
         send_button = Buttons.RES_ACCEL
         activate_cruise = True
+        print("activate2")
 
     if send_button == 0:
       self.button_spamming_count = 0
@@ -482,7 +487,7 @@ class CarController(CarControllerBase):
     send_button_allowed = (self.frame - self.last_button_frame) > self.button_wait
     CC.debugTextCC = "{} speed_diff={:.1f},{:.0f}/{:.0f}, button={}, button_wait={}, count={}".format(
       send_button_allowed, speed_diff, target, current, send_button, self.button_wait, self.button_spamming_count)
-    
+    print(CC.debugTextCC)
     if send_button_allowed or activate_cruise:
       self.button_spamming_count = self.button_spamming_count + 1 if Buttons.RES_ACCEL else self.button_spamming_count - 1
       return send_button
