@@ -413,7 +413,8 @@ class CarController(CarControllerBase):
             can_sends.append(dat)
           self.cruise_buttons_msg_cnt += 1
 
-    print(can_sends)
+    if len(can_sends) > 0:
+      print(can_sends)
     return can_sends
 
   def canfd_speed_control_pcm(self, CC, CS, cruise_buttons_msg_values):
