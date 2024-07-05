@@ -437,7 +437,7 @@ class CarController(CarControllerBase):
     set_speed_in_units = hud_control.setSpeed * (CV.MS_TO_KPH if CS.is_metric else CV.MS_TO_MPH)
     target = int(set_speed_in_units+0.5)
     current = int(CS.out.cruiseState.speed*CV.MS_TO_KPH + 0.5)
-    v_ego_kph = CS.vEgo * CV.MS_TO_KPH
+    v_ego_kph = CS.out.vEgo * CV.MS_TO_KPH
 
     send_button = 0
     activate_cruise = False
