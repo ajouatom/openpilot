@@ -437,13 +437,14 @@ class CarController(CarControllerBase):
     set_speed_in_units = hud_control.setSpeed * (CV.MS_TO_KPH if CS.is_metric else CV.MS_TO_MPH)
     target = int(set_speed_in_units+0.5)
     current = int(CS.out.cruiseState.speed*CV.MS_TO_KPH + 0.5)
+    v_ego_kph = CS.vEgo * CV.MS_TO_KPH
 
     send_button = 0
     activate_cruise = False
 
     if CC.enabled:
       if not CS.out.cruiseState.enabled:
-        if (hud_control.leadVisible or current > 10.0) and self.activateCruise == 0:
+        if (hud_control.leadVisible or v_ego_kph > 10.0) and self.activateCruise == 0:
           send_button = Buttons.RES_ACCEL
           self.activateCruise = 1
           activate_cruise = True
@@ -454,7 +455,7 @@ class CarController(CarControllerBase):
       elif target > current and current < 160 and self.params.get_int("SpeedFromPCM") != 1:
         send_button = Buttons.RES_ACCEL
     elif CC.cruiseControl.activate:
-      if (hud_control.leadVisible or current > 10.0) and self.activateCruise == 0:
+      if (hud_control.leadVisible or v_ego_kph > 10.0) and self.activateCruise == 0:
         self.activateCruise = 1
         send_button = Buttons.RES_ACCEL
         activate_cruise = True
