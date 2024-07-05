@@ -442,8 +442,8 @@ class CarController(CarControllerBase):
 
     send_button = 0
     activate_cruise = False
-    if not CC.enabled:
-      self.activateCruise = 0
+    #if not CC.enabled:
+    #  self.activateCruise = 0
     if CC.enabled:
       if not CS.out.cruiseState.enabled:
         if (hud_control.leadVisible or current > 10.0) and self.activateCruise == 0:
@@ -460,12 +460,14 @@ class CarController(CarControllerBase):
       elif target > current and current < 160 and self.params.get_int("SpeedFromPCM") != 1:
         send_button = Buttons.RES_ACCEL
         print("accel")
-    elif CC.cruiseControl.activate and self.activateCruise == 0:
-      if (hud_control.leadVisible or current > 10.0):
+    elif CC.cruiseControl.activate:
+      if (hud_control.leadVisible or current > 10.0) and self.activateCruise == 0:
         self.activateCruise = 1
         send_button = Buttons.RES_ACCEL
         activate_cruise = True
         print("activate2")
+    else:
+       self.activateCruise = 0
 
     if send_button == 0:
       self.button_spamming_count = 0
