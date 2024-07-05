@@ -335,6 +335,8 @@ static bool hyundai_tx_hook(const CANPacket_t *to_send) {
   else if(addr == 909)
     last_ts_fca11_from_op = (tx == 0 ? 0 : microsecond_timer_get());
 
+  if (addr == 1056) print("1056\n");
+  if (addr == 1057) print("1057\n");
   return tx;
 }
 

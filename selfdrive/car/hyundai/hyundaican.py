@@ -282,7 +282,6 @@ def create_acc_commands_mix_scc(CP, packer, enabled, accel, upper_jerk, lower_je
     fca11_values["CR_FCA_ChkSum"] = hyundai_checksum(fca11_dat[:7])
     commands.append(packer.make_can_msg("FCA11", 0, fca11_values))
 
-  print("create_acc_command_mix")
   return commands
 
 def create_acc_commands(packer, enabled, accel, upper_jerk, idx, lead_visible, set_speed, stopping, long_override, use_fca, cruise_available, hud_control):
@@ -364,7 +363,6 @@ def create_acc_opt(packer):
   }
   commands.append(packer.make_can_msg("FCA12", 0, fca12_values))
 
-  print("create_acc_command")
   return commands
 
 def create_acc_opt_copy(CS, packer):
