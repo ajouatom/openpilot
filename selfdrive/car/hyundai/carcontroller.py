@@ -255,8 +255,7 @@ class CarController(CarControllerBase):
         if CC.cruiseControl.activate and self.activateCruise == 0: ## ajouatom: send command to panda via Button spam(RES_ACCEL), for auto engage
           self.activateCruise = 1
           #can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP))
-          #can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL))
-          can_sends.append(hyundaicanfd.create_buttons_kisa(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL, CS.cruise_buttons_msg))
+          can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL))
           #print("SendActivateCanData#######")
 
       else:
@@ -388,8 +387,7 @@ class CarController(CarControllerBase):
             
             else:
               for _ in range(20):
-                #can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.CANCEL))
-                can_sends.append(hyundaicanfd.create_buttons_kisa(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.CANCEL, CS.cruise_buttons_msg))
+                can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.CANCEL))
             self.last_button_frame = self.frame
 
         # cruise standstill resume
@@ -404,8 +402,7 @@ class CarController(CarControllerBase):
                   self.cruise_buttons_msg_cnt += 1
             else:
               for _ in range(20):
-                #can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL))
-                can_sends.append(hyundaicanfd.create_buttons_kisa(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL, CS.cruise_buttons_msg))
+                can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL))
             self.last_button_frame = self.frame
 
       ## button 스패밍을 안했을때...
@@ -430,8 +427,7 @@ class CarController(CarControllerBase):
       if alt_buttons:
         return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, send_button, cruise_buttons_msg_values, self.cruise_buttons_msg_cnt)
       else:
-        #return hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, send_button)
-        return hyundaicanfd.create_buttons_kisa(self.packer, self.CP, self.CAN, CS.buttons_counter+1, send_button, CS.cruise_buttons_msg)
+        return hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, send_button)
 
     return None
 
