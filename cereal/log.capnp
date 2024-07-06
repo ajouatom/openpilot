@@ -2315,7 +2315,7 @@ struct RoadLimitSpeed {
     camLimitSpeedLeftDist @4 :Int16;
     camLimitSpeed @5 :Int16;
     sectionLimitSpeed @6 :Int16;
-    sectionLeftDist @7 :Int16;
+    sectionLeftDist @7 :Int32;
     sectionAvgSpeed @8 :Int16;
     sectionLeftTime @9 :Int16;
     sectionAdjustSpeed @10 :Bool;
