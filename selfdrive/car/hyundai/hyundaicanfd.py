@@ -116,6 +116,28 @@ def create_buttons(packer, CP, CAN, cnt, btn):
   bus = CAN.ECAN if CP.flags & HyundaiFlags.CANFD_HDA2 else CAN.CAM
   return packer.make_can_msg("CRUISE_BUTTONS", bus, values)
 
+def create_buttons_kisa(packer, CP, CAN, cnt, btn, cruise_btn_info_copy):
+  values = {s: cruise_btn_info_copy[s] for s in [
+    "_CHECKSUM",
+    "COUNTER",
+    "CRUISE_BUTTONS",
+    "ADAPTIVE_CRUISE_MAIN_BTN",
+    "NORMAL_CRUISE_MAIN_BTN",
+    "LKAS_BTN",
+    "RIGHT_PADDLE",
+    "LEFT_PADDLE",
+    "SET_ME_1",
+  ]}
+
+  values.update({
+    "COUNTER": cnt,
+    "CRUISE_BUTTONS": btn,
+    "SET_ME_1": 1,
+  })
+
+  bus = CAN.ECAN if CP.flags & HyundaiFlags.CANFD_HDA2 else CAN.CAM
+  return packer.make_can_msg("CRUISE_BUTTONS", bus, values)
+
 def create_acc_cancel(packer, CP, CAN, cruise_info_copy):
   # TODO: why do we copy different values here?
   if CP.flags & HyundaiFlags.CANFD_CAMERA_SCC.value:
