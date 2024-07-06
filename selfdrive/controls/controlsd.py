@@ -650,6 +650,7 @@ class Controls:
     if self.active:
       self.current_alert_types.append(ET.WARNING)
 
+    self.v_cruise_helper.cruiseActivate = 0
     if not self.enabled and not self.CP.pcmCruise:
       if self.carrotCruiseActivate > 0:
         print(f"self.state = {self.state}, self.enabled = {self.enabled}, pcmCruise={self.CP.pcmCruise}")
