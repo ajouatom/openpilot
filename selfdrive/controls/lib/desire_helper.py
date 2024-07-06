@@ -281,8 +281,8 @@ class DesireHelper:
         if (not carstate.leftBlinker and not carstate.rightBlinker) and blinkerExtMode > 0: # Noo Helper #0: voice etc, 1:noo helper lanechange, 2: noo helper turn
           if self.autoTurnControl == 3 or leftBlinker:
             self.noo_active = NooActive.active
-          elif lane_appeared: #start... 차선이 발견됨.
-            self.noo_active = NooActive.new_lane_appeared
+          #elif lane_appeared: #start... 차선이 발견됨.  위험해서 삭제함 240706
+          #  self.noo_active = NooActive.new_lane_appeared
           elif not self.lane_available_prev and lane_available: # start... 차선이 생김 (로드경계가 멀어짐)
             self.noo_active = NooActive.new_lane_detected
           elif not self.edge_available_prev and edge_available: # start... 에지가 멀어짐. 
