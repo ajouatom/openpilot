@@ -166,11 +166,12 @@ def fill_model_msg(base_msg: capnp._DynamicStructBuilder, extended_msg: capnp._D
   meta.hardBrakePredicted = hard_brake_predicted.item()
 
   # temporal pose
+  # TODO
   temporal_pose = modelV2.temporalPose
-  temporal_pose.trans = net_output_data['sim_pose'][0,:3].tolist()
-  temporal_pose.transStd = net_output_data['sim_pose_stds'][0,:3].tolist()
-  temporal_pose.rot = net_output_data['sim_pose'][0,3:].tolist()
-  temporal_pose.rotStd = net_output_data['sim_pose_stds'][0,3:].tolist()
+  temporal_pose.trans = np.zeros((3,), dtype=np.float32).reshape(-1).tolist()
+  temporal_pose.transStd = np.zeros((3,), dtype=np.float32).reshape(-1).tolist()
+  temporal_pose.rot = np.zeros((3,), dtype=np.float32).reshape(-1).tolist()
+  temporal_pose.rotStd = np.zeros((3,), dtype=np.float32).reshape(-1).tolist()
 
   # confidence
   if vipc_frame_id % (2*ModelConstants.MODEL_FREQ) == 0:
