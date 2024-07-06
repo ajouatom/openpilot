@@ -545,12 +545,13 @@ class Controls:
         self.carrotCruiseActivate = 1
       else:
         print("CruiseActivate: Button Enable: Cannot enabled....###")
-        self.v_cruise_helper.cruiseActivate = 0
         self.v_cruise_helper.softHoldActive = 0
+      self.v_cruise_helper.cruiseActivate = 0
     if self.enabled and self.v_cruise_helper.cruiseActivate < 0:
       print("CruiseActivate: Button Cancel: ....")
       self.events.add(EventName.buttonCancel)
       self.carrotCruiseActivate = -1
+      self.v_cruise_helper.cruiseActivate = 0
 
     # decrement the soft disable timer at every step, as it's reset on
     # entrance in SOFT_DISABLING state
