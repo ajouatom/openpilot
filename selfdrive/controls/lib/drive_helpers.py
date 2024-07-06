@@ -684,7 +684,7 @@ class VCruiseHelper:
     if CS.brakePressed:
       self.brake_pressed_count = max(1, self.brake_pressed_count + 1)
       self.softHold_count = self.softHold_count + 1 if self.softHoldMode > 0 and CS.vEgo < 0.1 else 0
-      self.softHoldActive = 1 if self.softHold_count > 60 else 0      
+      self.softHoldActive = 1 if self.softHold_count > 60 and controls.CP.openpilotLongitudinalControl else 0      
     else:
       self.softHold_count = 0
       self.brake_pressed_count = min(-1, self.brake_pressed_count - 1)

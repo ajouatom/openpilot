@@ -522,7 +522,7 @@ class Controls:
     gear = car.CarState.GearShifter
     drivingGear = CS.gearShifter not in (gear.neutral, gear.park, gear.reverse, gear.unknown)
     if self.CP.pcmCruise:
-      self.enable_avail = drivingGear
+      self.enable_avail = drivingGear and (self.sm['radarState'].leadOne.radar or CS.vEgo * CV.MS_TO_KPH > 10.0)
     else:
       self.enable_avail = drivingGear and not self.events.contains(ET.NO_ENTRY)
 
@@ -545,12 +545,13 @@ class Controls:
         self.carrotCruiseActivate = 1
       else:
         print("CruiseActivate: Button Enable: Cannot enabled....###")
-        self.v_cruise_helper.cruiseActivate = 0
         self.v_cruise_helper.softHoldActive = 0
+      self.v_cruise_helper.cruiseActivate = 0
     if self.enabled and self.v_cruise_helper.cruiseActivate < 0:
       print("CruiseActivate: Button Cancel: ....")
       self.events.add(EventName.buttonCancel)
       self.carrotCruiseActivate = -1
+      self.v_cruise_helper.cruiseActivate = 0
 
     # decrement the soft disable timer at every step, as it's reset on
     # entrance in SOFT_DISABLING state
@@ -649,6 +650,7 @@ class Controls:
     if self.active:
       self.current_alert_types.append(ET.WARNING)
 
+    self.v_cruise_helper.cruiseActivate = 0
     if not self.enabled and not self.CP.pcmCruise:
       if self.carrotCruiseActivate > 0:
         print(f"self.state = {self.state}, self.enabled = {self.enabled}, pcmCruise={self.CP.pcmCruise}")
@@ -877,7 +879,8 @@ class Controls:
     #print("setSpeed={:.1f}".format(hudControl.setSpeed * 3.6))
     hudControl.speedVisible = self.enabled
     hudControl.lanesVisible = self.enabled
-    hudControl.leadVisible = self.sm['longitudinalPlan'].hasLead
+    #hudControl.leadVisible = self.sm['longitudinalPlan'].hasLead
+    hudControl.leadVisible = self.sm['radarState'].leadOne.radar
     hudControl.leadDistanceBars = self.personality + 1
 
     carrot_plan_event = self.sm['longitudinalPlan'].carrotEvent
