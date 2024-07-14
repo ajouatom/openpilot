@@ -451,6 +451,7 @@ class VisionTrack:
     self.alpha_a = 0.02
 
     self.v_ego = 0.0
+    self.cnt = 0
 
     #self.kf: KF1D | None = None
     #self.kf_v: KF1D | None = None
@@ -498,15 +499,19 @@ class VisionTrack:
       self.dRel = float(lead_msg.x[0]) - RADAR_TO_CAMERA
       self.yRel = float(-lead_msg.y[0])
 
-      v_rel = (self.dRel - self.dRel_last) / self.radar_ts
-      self.vRel = self.vRel * (1. - self.alpha) + v_rel * self.alpha
-      self.vLead = float(v_ego + self.vRel)
+      a_lead = 0.0
+      if self.cnt < 1:
+        self.vRel = lead_v_rel_pred
+        self.vLead = float(v_ego + lead_v_rel_pred)
+      else:
+        v_rel = (self.dRel - self.dRel_last) / self.radar_ts
+        self.vRel = self.vRel * (1. - self.alpha) + v_rel * self.alpha
+        self.vLead = float(v_ego + self.vRel)
+        if self.prob > .9:
+          a_lead = (self.vLead - self.vLead_last) / self.radar_ts
+
       self.vLeadK= self.vLead
 
-      if self.prob > .9:
-        a_lead = (self.vLead - self.vLead_last) / self.radar_ts
-      else:
-        a_lead = 0.0
       self.aLead = self.aLead * (1. - self.alpha_a) + a_lead * self.alpha_a
       self.aLeadK = self.aLead
 
@@ -515,8 +520,10 @@ class VisionTrack:
         #self.kf_v = None
         pass
       self.status = True
+      self.cnt += 1
     else:
       self.reset()
+      self.cnt = 0
 
     self.dRel_last = self.dRel
     self.vLead_last = self.vLead
