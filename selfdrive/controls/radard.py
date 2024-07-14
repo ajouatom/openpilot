@@ -503,7 +503,7 @@ class VisionTrack:
       self.vLead = float(v_ego + self.vRel)
       self.vLeadK= self.vLead
 
-      a_lead = (self.vLead - self.vLead_last) / self.radar_ts
+      a_lead = (self.vLead - self.vLead_last) / self.radar_ts * 0.5
       a_lead = clip(a_lead, self.aLead - 1.0, self.aLead + 1.0)
       self.aLead = self.aLead * (1. - self.alpha_a) + a_lead * self.alpha_a
       self.aLeadK = self.aLead
