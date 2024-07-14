@@ -515,7 +515,7 @@ class VisionTrack:
       self.reset()
 
     self.dRel_last = self.dRel
-    self.vRel_last = self.vRel
+    self.vLead_last = self.vLead
     
     #if self.kf is None:
     #  self.kf = lead_kf(self.vLead, self.aLead, self.radar_ts)
