@@ -448,6 +448,7 @@ class VisionTrack:
     self.dRel_last = 0.0
     self.vLead_last = 0.0
     self.alpha = 0.05
+    self.alpha_a = 0.02
 
     self.v_ego = 0.0
 
@@ -503,7 +504,8 @@ class VisionTrack:
       self.vLeadK= self.vLead
 
       a_lead = (self.vLead - self.vLead_last) / self.radar_ts
-      self.aLead = self.aLead * (1. - self.alpha) + a_lead * self.alpha
+      a_lead = clip(a_lead, self.aLead - 0.5, self.aLead + 0.5)
+      self.aLead = self.aLead * (1. - self.alpha_a) + a_lead * self.alpha_a
       self.aLeadK = self.aLead
 
       if self.prob < 0.99:
