@@ -446,7 +446,7 @@ class VisionTrack:
     self.aLeadTauThreshold = float(Params().get_int("ALeadTauThreshold")) / 100.
 
     self.dRel_last = 0.0
-    self.vRel_last = 0.0
+    self.vLead_last = 0.0
     self.alpha = 0.01
 
     self.v_ego = 0.0
