@@ -509,10 +509,9 @@ class VisionTrack:
         self.vLead = float(v_ego + self.vRel)
         if self.prob > .99:
           a_lead = (self.vLead - self.vLead_last) / self.radar_ts
+          self.aLead = self.aLead * (1. - self.alpha_a) + a_lead * self.alpha_a
 
       self.vLeadK= self.vLead
-
-      self.aLead = self.aLead * (1. - self.alpha_a) + a_lead * self.alpha_a
       self.aLeadK = self.aLead
 
       if self.prob < 0.99:
