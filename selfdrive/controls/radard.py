@@ -388,7 +388,7 @@ class VisionTrack_old:
     self.kf_v = None
     self.aLeadTau = _LEAD_ACCEL_TAU
 
-  def update(self, lead_msg, model_v_ego, v_ego, a_ego):
+  def update(self, lead_msg, model_v_ego, v_ego):
     self.aLeadTauPos = float(Params().get_int("ALeadTauPos")) / 100. 
     self.aLeadTauNeg = float(Params().get_int("ALeadTauNeg")) / 100. 
     self.aLeadTauThreshold = float(Params().get_int("ALeadTauThreshold")) / 100.
@@ -484,7 +484,7 @@ class VisionTrack:
     self.vLead = self.vLeadK = self.v_ego
     self.aLead = self.aLeadK = 0.0
 
-  def update(self, lead_msg, model_v_ego, v_ego, a_ego):
+  def update(self, lead_msg, model_v_ego, v_ego):
     self.aLeadTauPos = float(Params().get_int("ALeadTauPos")) / 100. 
     self.aLeadTauNeg = float(Params().get_int("ALeadTauNeg")) / 100. 
     self.aLeadTauThreshold = float(Params().get_int("ALeadTauThreshold")) / 100.
@@ -502,7 +502,7 @@ class VisionTrack:
       self.vLead = float(v_ego + self.vRel)
       self.vLeadK= self.vLead
 
-      a_lead = (self.vLead - self.vLead_last) / self.radar_ts + a_ego
+      a_lead = (self.vLead - self.vLead_last) / self.radar_ts
       self.aLead = self.aLead * (1. - self.alpha) + a_lead * self.alpha
       self.aLeadK = self.aLead
 
@@ -628,8 +628,8 @@ class RadarD:
     #leads_v3 = sm['modelV2'].leadsV3
     if len(leads_v3) > 1:
       if model_updated:
-        self.vision_tracks[0].update(leads_v3[0], model_v_ego, self.v_ego, self.a_ego)
-        self.vision_tracks[1].update(leads_v3[1], model_v_ego, self.v_ego, self.a_ego)
+        self.vision_tracks[0].update(leads_v3[0], model_v_ego, self.v_ego)
+        self.vision_tracks[1].update(leads_v3[1], model_v_ego, self.v_ego)
 
       ll, lc, lr, leadCenter, self.radar_state.leadLeft, self.radar_state.leadRight = get_lead_side(self.v_ego, self.tracks, sm['modelV2'], sm['lateralPlan'].laneWidth, model_v_ego)
       self.radar_state.leadsLeft = list(ll)
