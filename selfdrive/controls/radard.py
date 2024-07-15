@@ -447,7 +447,7 @@ class VisionTrack:
 
     self.dRel_last = 0.0
     self.vLead_last = 0.0
-    self.alpha = 0.05
+    self.alpha = 0.02
     self.alpha_a = 0.02
 
     self.v_ego = 0.0
