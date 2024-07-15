@@ -501,17 +501,13 @@ class VisionTrack:
 
       a_lead = 0.0
       self.aLead = lead_msg.a[0]
-      if self.cnt < 1:
+      if self.cnt < 1 or self.prob < 0.99:
         self.vRel = lead_v_rel_pred
         self.vLead = float(v_ego + lead_v_rel_pred)
       else:
         v_rel = (self.dRel - self.dRel_last) / self.radar_ts
         self.vRel = self.vRel * (1. - self.alpha) + v_rel * self.alpha
         self.vLead = float(v_ego + self.vRel)
-        if self.prob > .99:
-          #a_lead = (self.vLead - self.vLead_last) / self.radar_ts
-          #self.aLead = self.aLead * (1. - self.alpha_a) + a_lead * self.alpha_a
-          pass
         
       self.vLeadK= self.vLead
       self.aLeadK = self.aLead
