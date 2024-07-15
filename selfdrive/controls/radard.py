@@ -499,7 +499,6 @@ class VisionTrack:
       self.dRel = float(lead_msg.x[0]) - RADAR_TO_CAMERA
       self.yRel = float(-lead_msg.y[0])
 
-      a_lead = 0.0
       self.aLead = lead_msg.a[0]
       if self.cnt < 1 or self.prob < 0.99:
         self.vRel = lead_v_rel_pred
@@ -512,10 +511,6 @@ class VisionTrack:
       self.vLeadK= self.vLead
       self.aLeadK = self.aLead
 
-      if self.prob < 0.99:
-        #self.kf = None
-        #self.kf_v = None
-        pass
       self.status = True
       self.cnt += 1
     else:
