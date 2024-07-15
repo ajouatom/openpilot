@@ -499,16 +499,22 @@ class VisionTrack:
       self.dRel = float(lead_msg.x[0]) - RADAR_TO_CAMERA
       self.yRel = float(-lead_msg.y[0])
 
-      self.aLead = lead_msg.a[0]
+      a_lead_vision = lead_msg.a[0]
       if self.cnt < 1 or self.prob < 0.99:
         self.vRel = lead_v_rel_pred
         self.vLead = float(v_ego + lead_v_rel_pred)
+        self.aLead = a_lead_vision
       else:
         v_rel = (self.dRel - self.dRel_last) / self.radar_ts
         self.vRel = self.vRel * (1. - self.alpha) + v_rel * self.alpha
         if lead_v_rel_pred < self.vRel:
           self.vRel = lead_v_rel_pred
         self.vLead = float(v_ego + self.vRel)
+
+        a_lead = (self.vLead - self.vLead_last) / self.radar_ts * 0.5
+        self.aLead = self.aLead * (1. - self.alpha_a) + a_lead * self.alpha_a
+        if abs(a_lead_vision) < abs(self.aLead):
+          self.aLead = a_lead_vision
         
       self.vLeadK= self.vLead
       self.aLeadK = self.aLead
