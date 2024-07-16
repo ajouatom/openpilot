@@ -687,10 +687,11 @@ class Controls:
     driving_gear = CS.gearShifter not in (gear.neutral, gear.park, gear.reverse, gear.unknown)
     lateral_enabled = False
     if self.always_on_lateral:
-      lateral_allowed = self.lateral_allowed
-      lateral_allowed = CS.cruiseState.available
-      lateral_allowed |= CS.cruiseState.enabled
-      self.lateral_allowed = lateral_allowed
+      #lateral_allowed = self.lateral_allowed
+      #lateral_allowed = CS.cruiseState.available
+      #lateral_allowed |= CS.cruiseState.enabled
+      #self.lateral_allowed = lateral_allowed
+      self.lateral_allowed = True # 항상 enable되도록 시험... carrot 
       
       lateral_enabled = self.lateral_allowed and driving_gear
 
