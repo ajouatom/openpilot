@@ -95,7 +95,7 @@ bool gm_cc_long = false;
 bool gm_skip_relay_check = false;
 bool gm_force_ascm = false;
 
-int lat_active_count = 0; // carrot
+extern int lat_active_count = 0; // carrot 
 
 static void handle_gm_wheel_buttons(const CANPacket_t *to_push) {
   int button = (GET_BYTE(to_push, 5) & 0x70U) >> 4;
