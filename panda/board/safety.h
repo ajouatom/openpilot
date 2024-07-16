@@ -575,12 +575,13 @@ bool steer_torque_cmd_checks(int desired_torque, int steer_req, const SteeringLi
   bool violation = false;
   uint32_t ts = microsecond_timer_get();
   // PFEIFER - AOL {{
-  bool aol_allowed = acc_main_on && (alternative_experience & ALT_EXP_ENABLE_ALWAYS_ON_LATERAL);
+  //bool aol_allowed = acc_main_on && (alternative_experience & ALT_EXP_ENABLE_ALWAYS_ON_LATERAL);
+  bool aol_allowed = (alternative_experience & ALT_EXP_ENABLE_ALWAYS_ON_LATERAL);
   if(controls_allowed) {
     // acc main must be on if controls are allowed
     acc_main_on = controls_allowed;
   }
-  if (aol_allowed && steer_req) acc_main_on = true;
+  //if (aol_allowed && steer_req) acc_main_on = true;
 
   // }} PFEIFER - AOL
 
