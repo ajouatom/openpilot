@@ -95,6 +95,8 @@ bool gm_cc_long = false;
 bool gm_skip_relay_check = false;
 bool gm_force_ascm = false;
 
+int lat_active_count = 0; // carrot
+
 static void handle_gm_wheel_buttons(const CANPacket_t *to_push) {
   int button = (GET_BYTE(to_push, 5) & 0x70U) >> 4;
 
@@ -218,10 +220,15 @@ static bool gm_tx_hook(const CANPacket_t *to_send) {
 
     bool steer_req = GET_BIT(to_send, 3U);
 
+    if (steer_req) lat_active_count = 100; // carrot, latActive message from OP
+
     if (steer_torque_cmd_checks(desired_torque, steer_req, GM_STEERING_LIMITS)) {
       tx = false;
     }
   }
+  // carrot automatic detect main enabled...
+  if (lat_active_count > 0) lat_active_count--;
+  acc_main_on = (lat_active_count > 0) || controls_allowed;
 
   // GAS: safety check (interceptor)
   if (addr == 0x200) {
