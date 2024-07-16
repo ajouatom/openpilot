@@ -580,6 +580,8 @@ bool steer_torque_cmd_checks(int desired_torque, int steer_req, const SteeringLi
     // acc main must be on if controls are allowed
     acc_main_on = controls_allowed;
   }
+  if (aol_allowed && steer_req) acc_main_on = true;
+
   // }} PFEIFER - AOL
 
   //if (controls_allowed) {
