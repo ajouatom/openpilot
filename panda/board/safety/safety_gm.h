@@ -220,15 +220,10 @@ static bool gm_tx_hook(const CANPacket_t *to_send) {
 
     bool steer_req = GET_BIT(to_send, 3U);
 
-    if (steer_req) lat_active_count = 100; // carrot, latActive message from OP
-
     if (steer_torque_cmd_checks(desired_torque, steer_req, GM_STEERING_LIMITS)) {
       tx = false;
     }
   }
-  // carrot automatic detect main enabled...
-  if (lat_active_count > 0) lat_active_count--;
-  acc_main_on = (lat_active_count > 0) || controls_allowed;
 
   // GAS: safety check (interceptor)
   if (addr == 0x200) {
