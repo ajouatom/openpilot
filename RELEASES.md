@@ -1,3 +1,9 @@
+Carrot 0.9.7 (2024-07-18)
+========================
+* AutoEngage setting
+  * 1: Steer enable, 2: Auto Engage, long ready
+* Upgrade vision radar
+
 Carrot 0.9.7 (2024-04-19)
 ========================
 * RT model
