@@ -508,7 +508,7 @@ class VisionTrack:
         v_rel = (self.dRel - self.dRel_last) / self.radar_ts
         self.vRel = self.vRel * (1. - self.alpha) + v_rel * self.alpha
 
-        self.vRel = (lead_vrel_pred + self.vRel) / 2
+        self.vRel = (lead_v_rel_pred + self.vRel) / 2
         #if lead_v_rel_pred < self.vRel:
         #  self.vRel = lead_v_rel_pred
         self.vLead = float(v_ego + self.vRel)
