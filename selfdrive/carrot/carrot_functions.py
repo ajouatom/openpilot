@@ -337,7 +337,8 @@ class CarrotNaviHelper(CarrotBase):
           nav_direction = 0
         self.nav_turn = nav_turn
 
-        left_sec = int(max(self.nav_distance - v_ego, 1) / max(1, v_ego))
+        road_width = interp(xNextRoadWidth, [5, 10], [10, 20])
+        left_sec = int(max(self.nav_distance - v_ego - road_width, 1) / max(1, v_ego))
         if left_sec < self.left_sec:
           self.params.put_int_nonblocking("CarrotCountDownSec", left_sec)
           self.left_sec = left_sec

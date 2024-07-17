@@ -629,7 +629,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
     dispToggles->addItem(new CValueControl("ShowGapInfo", "DISP:GAP Info", "0:None,1:Display", "../assets/offroad/icon_shell.png", -1, 1, 1));
     dispToggles->addItem(new CValueControl("ShowDmInfo", "DISP:DM Info", "0:None,1:Display,-1:Disable(Reboot)", "../assets/offroad/icon_shell.png", -1, 1, 1));
     dispToggles->addItem(new CValueControl("ShowRadarInfo", "DISP:Radar Info", "0:None,1:Display,2:RelPos,3:Stopped Car", "../assets/offroad/icon_shell.png", 0, 3, 1));
-    dispToggles->addItem(new CValueControl("ShowPlotMode", "DISP:Debug plot", "", "../assets/offroad/icon_shell.png", 0, 5, 1));
+    dispToggles->addItem(new CValueControl("ShowPlotMode", "DISP:Debug plot", "", "../assets/offroad/icon_shell.png", 0, 10, 1));
     dispToggles->addItem(new CValueControl("ShowCustomBrightness", "Brightness ratio", "", "../assets/offroad/icon_shell.png", 0, 100, 10));
 
 
@@ -782,6 +782,7 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
     commonToggles->addItem(new CValueControl("SpeedFromPCM", "Read Cruise Speed from PCM", "Toyota must set to 1", "../assets/offroad/icon_road.png", 0, 2, 1));
     commonToggles->addItem(new CValueControl("NNFF", "NNFF", "Twilsonco's NNFF(Reboot required)", "../assets/offroad/icon_road.png", 0, 1, 1));
     commonToggles->addItem(new CValueControl("NNFFLite", "NNFFLite", "Twilsonco's NNFF-Lite(Reboot required)", "../assets/offroad/icon_road.png", 0, 1, 1));
+    commonToggles->addItem(new CValueControl("AutoEngage", "Auto Engage control on start", "1:SteerEnable, 2:AutoEngage", "../assets/offroad/icon_road.png", 0, 2, 1));
 
     hyundaiToggles = new ListWidget(this);
     hyundaiToggles->addItem(new CValueControl("AutoCruiseControl", "(HKG) Auto Cruise control", "Softhold, Auto Cruise ON/OFF control", "../assets/offroad/icon_road.png", 0, 3, 1));

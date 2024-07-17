@@ -63,7 +63,7 @@ class CarState(CarStateBase):
     self.params = CarControllerParams(CP)
 
     # PFEIFER - AOL {{
-    self.main_enabled = False
+    self.main_enabled = True if Params().get_int("AutoEngage") == 2 else False
     # }} PFEIFER - AOL
 
     self.gear_shifter = GearShifter.drive # Gear_init for Nexo ?? unknown 21.02.23.LSW
@@ -299,6 +299,7 @@ class CarState(CarStateBase):
       ret.gasPressed = bool(cp.vl[self.accelerator_msg_canfd]["ACCELERATOR_PEDAL_PRESSED"])
 
     ret.brakePressed = cp.vl["TCS"]["DriverBraking"] == 1
+    #ret.brakeLights = bool(cp.vl["BRAKE"]["BRAKE_LIGHT"])  # 카니발등은 BRAKE can이 없음..    
 
     ret.doorOpen = cp.vl["DOORS_SEATBELTS"]["DRIVER_DOOR"] == 1
     ret.seatbeltUnlatched = cp.vl["DOORS_SEATBELTS"]["DRIVER_SEATBELT"] == 0
@@ -323,6 +324,8 @@ class CarState(CarStateBase):
     ret.vEgoRaw = (ret.wheelSpeeds.fl + ret.wheelSpeeds.fr + ret.wheelSpeeds.rl + ret.wheelSpeeds.rr) / 4.
     ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
     ret.standstill = ret.wheelSpeeds.fl <= STANDSTILL_THRESHOLD and ret.wheelSpeeds.rr <= STANDSTILL_THRESHOLD
+
+    ret.brakeLights = ret.brakePressed or (ret.aEgo < -0.5) ### TODO: 임시로 brakeLight를 구현함.
 
     ret.steeringRateDeg = cp.vl["STEERING_SENSORS"]["STEERING_RATE"]
     ret.steeringAngleDeg = cp.vl["STEERING_SENSORS"]["STEERING_ANGLE"] * -1
