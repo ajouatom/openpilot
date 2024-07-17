@@ -63,7 +63,7 @@ class CarState(CarStateBase):
     self.params = CarControllerParams(CP)
 
     # PFEIFER - AOL {{
-    self.main_enabled = True #False
+    self.main_enabled = True if Params().get_int("AutoEngage") == 2 else False
     # }} PFEIFER - AOL
 
     self.gear_shifter = GearShifter.drive # Gear_init for Nexo ?? unknown 21.02.23.LSW

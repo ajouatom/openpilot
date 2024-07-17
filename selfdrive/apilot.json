@@ -653,6 +653,19 @@
     },
     {
       "group": "시작",
+      "name": "AutoEngage",
+      "title": "오토인게이지",
+      "descr": "1:SteerEnable, 2:AutoEngage",
+      "egroup": "START",
+      "etitle": "Auto Engage",
+      "edescr": "",
+      "min": 0,
+      "max": 2,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "시작",
       "name": "SpeedFromPCM",
       "title": "PCM차량속도제어(순정SCC)",
       "descr": "1:차량속도이용(감속제어안함), 0: 신호/커브/카메라 감속, 2: 커브/카메라 감속",

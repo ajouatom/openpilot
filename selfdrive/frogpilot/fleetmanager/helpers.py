@@ -475,6 +475,7 @@ def get_all_toggle_values():
     "AutoResumeFromGasSpeed",
     "AutoCancelFromGasMode",
     "AutoCruiseControl",
+    "AutoEngage",
     "MapboxStyle",
     "AutoCurveSpeedLowerLimit",
     "AutoCurveSpeedFactor",
