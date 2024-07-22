@@ -648,6 +648,11 @@ class VCruiseHelper:
           
     elif button_type != 0 and not controls.enabled:
       self.cruiseActivate = 0
+      if self.long_pressed:
+        pass
+      else:
+        if button_type == ButtonType.cancel:       
+          controls.lateral_allowed_carrot = False if controls.lateral_allowed_carrot else True
 
     if CS.vEgo > 1.0:
       self.softHoldActive = 0

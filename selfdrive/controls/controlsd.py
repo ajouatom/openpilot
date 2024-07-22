@@ -109,6 +109,7 @@ class Controls:
 
     self.always_on_lateral = self.params.get_bool("AlwaysOnLateralEnabled")
     self.lateral_allowed = False
+    self.lateral_allowed_carrot = True
     #if self.always_on_lateral:
     #  self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ENABLE_ALWAYS_ON_LATERAL
     self.carrot_plan_event = -1
@@ -543,6 +544,7 @@ class Controls:
           print("####MakeEvent: buttonEnable3", self.CP.pcmCruise, CS.cruiseState.enabled, self._panda_controls_not_allowed)
         self.events.add(EventName.buttonEnable)
         self.carrotCruiseActivate = 1
+        self.lateral_allowed_carrot = True
       else:
         print("CruiseActivate: Button Enable: Cannot enabled....###")
         self.v_cruise_helper.softHoldActive = 0
@@ -696,7 +698,7 @@ class Controls:
         self.lateral_allowed = lateral_allowed
       
       
-      lateral_enabled = self.lateral_allowed and driving_gear
+      lateral_enabled = self.lateral_allowed and driving_gear and self.lateral_allowed_carrot
 
     manualSteeringOverride = self.params.get_int("ManualSteeringOverride")
     if CS.steeringPressed:
