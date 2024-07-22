@@ -544,7 +544,6 @@ class Controls:
           print("####MakeEvent: buttonEnable3", self.CP.pcmCruise, CS.cruiseState.enabled, self._panda_controls_not_allowed)
         self.events.add(EventName.buttonEnable)
         self.carrotCruiseActivate = 1
-        self.lateral_allowed_carrot = True
       else:
         print("CruiseActivate: Button Enable: Cannot enabled....###")
         self.v_cruise_helper.softHoldActive = 0
@@ -554,6 +553,9 @@ class Controls:
       self.events.add(EventName.buttonCancel)
       self.carrotCruiseActivate = -1
       self.v_cruise_helper.cruiseActivate = 0
+
+    if self.enabled:
+      self.lateral_allowed_carrot = True
 
     # decrement the soft disable timer at every step, as it's reset on
     # entrance in SOFT_DISABLING state
