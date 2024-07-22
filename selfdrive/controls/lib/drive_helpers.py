@@ -648,17 +648,15 @@ class VCruiseHelper:
           
     elif button_type != 0 and not controls.enabled:
       self.cruiseActivate = 0
-      if self.long_pressed:
-        pass
-      else:
-        if button_type == ButtonType.cancel:       
-          controls.lateral_allowed_carrot = False if controls.lateral_allowed_carrot else True
 
     if CS.vEgo > 1.0:
       self.softHoldActive = 0
     if self.brake_pressed_count > 0 or self.gas_pressed_count > 0 or button_type in [ButtonType.cancel, ButtonType.accelCruise, ButtonType.decelCruise]:
       if button_type == ButtonType.cancel:
-        self.autoCruiseCancelState = 0 if self.autoCruiseCancelState > 0 else 1
+        if self.autoCruiseCancelState > 0:
+          controls.lateral_allowed_carrot = False if controls.lateral_allowed_carrot else True
+        #self.autoCruiseCancelState = 0 if self.autoCruiseCancelState > 0 else 1
+        self.autoCruiseCancelState = 1
         controls.events.add(EventName.audioPrompt)
         print("autoCruiseCancelSate = {}".format(self.autoCruiseCancelState))
         self.autoCruiseCancelTimer = 0
