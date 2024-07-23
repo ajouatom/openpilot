@@ -554,9 +554,6 @@ class Controls:
       self.carrotCruiseActivate = -1
       self.v_cruise_helper.cruiseActivate = 0
 
-    if self.enabled:
-      self.lateral_allowed_carrot = True
-
     # decrement the soft disable timer at every step, as it's reset on
     # entrance in SOFT_DISABLING state
     self.soft_disable_timer = max(0, self.soft_disable_timer - 1)
@@ -653,6 +650,10 @@ class Controls:
     self.active = self.state in ACTIVE_STATES
     if self.active:
       self.current_alert_types.append(ET.WARNING)
+
+    if self.enabled:
+      self.lateral_allowed_carrot = True
+
 
     self.v_cruise_helper.cruiseActivate = 0
     if not self.enabled and not self.CP.pcmCruise:
