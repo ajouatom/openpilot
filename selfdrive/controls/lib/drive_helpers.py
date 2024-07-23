@@ -332,7 +332,7 @@ class VCruiseHelper:
       controls.events.add(EventName.audioPrompt)
       self._add_log_auto_cruise("autoCruise activated.")
 
-    if self.v_cruise_kph_set > 20:
+    if self.v_ego_kph_set > 20:
       self.autoCruiseCancelTimer = max(self.autoCruiseCancelTimer - 5, 0)
     else:
       self.autoCruiseCancelTimer = max(self.autoCruiseCancelTimer - 1, 0)
@@ -495,6 +495,7 @@ class VCruiseHelper:
       self._add_log_auto_cruise("Cruise Deactivate from gas speed:{:.0f}".format(self.autoResumeFromGasSpeed));
       self.cruiseActivate = -1
     elif self.xState == 3 and self.autoCancelFromGasMode == 2:
+      v_cruise_kph = self.v_ego_kph_set
       self._add_log_auto_cruise("Cruise Deactivate from gas pressed: traffic stopping");
       self.cruiseActivate = -1
       self.autoCruiseCancelTimer = 3.0 / DT_CTRL
@@ -651,17 +652,37 @@ class VCruiseHelper:
 
     if CS.vEgo > 1.0:
       self.softHoldActive = 0
-    if self.brake_pressed_count > 0 or self.gas_pressed_count > 0 or button_type in [ButtonType.cancel, ButtonType.accelCruise, ButtonType.decelCruise]:
+
+    if button_type in [ButtonType.cancel, ButtonType.accelCruise, ButtonType.decelCruise]:
+      self.autoCruiseCancelTimer = 0
       if button_type == ButtonType.cancel:
-        self.autoCruiseCancelState = 0 if self.autoCruiseCancelState > 0 else 1
+        self.autoCruiseCancelState = 1
+        if not controls.enabled:
+          controls.lateral_allowed_carrot = False if controls.lateral_allowed_carrot else True
         controls.events.add(EventName.audioPrompt)
         print("autoCruiseCancelSate = {}".format(self.autoCruiseCancelState))
-        self.autoCruiseCancelTimer = 0
-      elif button_type != 0:
+      else:
         self.autoCruiseCancelState = 0
-        self.autoCruiseCancelTimer = 0
+        print("autoCruiseCancelSate = {}".format(self.autoCruiseCancelState))
+
+    if self.brake_pressed_count > 0 or self.gas_pressed_count > 0:
       if self.cruiseActivate > 0:
         self.cruiseActivate = 0
+
+    #if self.brake_pressed_count > 0 or self.gas_pressed_count > 0 or button_type in [ButtonType.cancel, ButtonType.accelCruise, ButtonType.decelCruise]:
+    #  if button_type == ButtonType.cancel:
+    #    if self.autoCruiseCancelState > 0:
+    #      controls.lateral_allowed_carrot = False if controls.lateral_allowed_carrot else True
+    #    #self.autoCruiseCancelState = 0 if self.autoCruiseCancelState > 0 else 1
+    #    self.autoCruiseCancelState = 1
+    #    controls.events.add(EventName.audioPrompt)
+    #    print("autoCruiseCancelSate = {}".format(self.autoCruiseCancelState))
+    #    self.autoCruiseCancelTimer = 0
+    #  elif button_type != 0:
+    #    self.autoCruiseCancelState = 0
+    #    self.autoCruiseCancelTimer = 0
+    #  if self.cruiseActivate > 0:
+    #    self.cruiseActivate = 0
 
     return v_cruise_kph
 

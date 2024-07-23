@@ -342,7 +342,7 @@ def lead_kf(v_lead: float, a_lead: float, dt: float = 0.05):
   return kf
 
 
-class VisionTrack:
+class VisionTrack_old:
   def __init__(self, radar_ts):
     self.radar_ts = radar_ts
     self.dRel = 0.0
@@ -420,6 +420,126 @@ class VisionTrack:
     #self.vLeadK = float(self.kf.x[LEAD_KALMAN_SPEED][0])
     self.vLeadK = float(self.kf_v.x[1][0]) + model_v_ego
     self.aLeadK = float(self.kf.x[LEAD_KALMAN_ACCEL][0])
+
+    # Learn if constant acceleration
+    aLeadTauValue = self.aLeadTauPos if self.aLead > self.aLeadTauThreshold else self.aLeadTauNeg
+    if abs(self.aLead) < self.aLeadTauThreshold:
+      self.aLeadTau = aLeadTauValue
+    else:
+      self.aLeadTau = min(self.aLeadTau * 0.9, aLeadTauValue)
+
+class VisionTrack:
+  def __init__(self, radar_ts):
+    self.radar_ts = radar_ts
+    self.dRel = 0.0
+    self.vRel = 0.0
+    self.yRel = 0.0
+    self.vLead = 0.0
+    self.aLead = 0.0
+    self.vLeadK = 0.0
+    self.aLeadK = 0.0
+    self.aLeadTau = _LEAD_ACCEL_TAU
+    self.prob = 0.0
+    self.status = False
+    self.aLeadTauPos = float(Params().get_int("ALeadTauPos")) / 100. 
+    self.aLeadTauNeg = float(Params().get_int("ALeadTauNeg")) / 100. 
+    self.aLeadTauThreshold = float(Params().get_int("ALeadTauThreshold")) / 100.
+
+    self.dRel_last = 0.0
+    self.vLead_last = 0.0
+    self.alpha = 0.02
+    self.alpha_a = 0.02
+
+    self.v_ego = 0.0
+    self.cnt = 0
+
+    #self.kf: KF1D | None = None
+    #self.kf_v: KF1D | None = None
+
+  def get_lead(self, md):
+    dPath = self.yRel + interp(self.dRel, md.position.x, md.position.y)
+    #aLeadK = 0.0 if self.mixRadarInfo in [3] else clip(self.aLeadK, self.aLead - 1.0, self.aLead + 1.0)
+    return {
+      "dRel": self.dRel,
+      "yRel": self.yRel,
+      "dPath": dPath,
+      "vRel": self.vRel,
+      "vLead": self.vLead,
+      "vLeadK": self.vLeadK,    ## TODO: 아직 vLeadK는 엉망인듯...
+      "aLeadK": self.aLeadK,
+      "aLeadTau": self.aLeadTau,
+      "fcw": False,
+      "modelProb": self.prob,
+      "status": self.status,
+      "radar": False,
+      "radarTrackId": -1,
+      "aLead": self.aLead,
+    }
+
+  def reset(self):
+    self.status = False
+    #self.kf = None
+    #self.kf_v = None
+    self.aLeadTau = _LEAD_ACCEL_TAU
+
+    self.vRel = 0.0
+    self.vLead = self.vLeadK = self.v_ego
+    self.aLead = self.aLeadK = 0.0
+
+  def update(self, lead_msg, model_v_ego, v_ego):
+    self.aLeadTauPos = float(Params().get_int("ALeadTauPos")) / 100. 
+    self.aLeadTauNeg = float(Params().get_int("ALeadTauNeg")) / 100. 
+    self.aLeadTauThreshold = float(Params().get_int("ALeadTauThreshold")) / 100.
+    self.mixRadarInfo = int(Params().get_int("MixRadarInfo"))
+
+    lead_v_rel_pred = lead_msg.v[0] - model_v_ego
+    self.prob = lead_msg.prob
+    self.v_ego = v_ego
+    if self.prob > .5:
+      self.dRel = float(lead_msg.x[0]) - RADAR_TO_CAMERA
+      self.yRel = float(-lead_msg.y[0])
+
+      a_lead_vision = lead_msg.a[0]
+      if self.cnt < 1 or self.prob < 0.99:
+        self.vRel = lead_v_rel_pred
+        self.vLead = float(v_ego + lead_v_rel_pred)
+        self.aLead = a_lead_vision
+      else:
+        v_rel = (self.dRel - self.dRel_last) / self.radar_ts
+        self.vRel = self.vRel * (1. - self.alpha) + v_rel * self.alpha
+
+        self.vRel = (lead_v_rel_pred + self.vRel) / 2
+        #if lead_v_rel_pred < self.vRel:
+        #  self.vRel = lead_v_rel_pred
+        self.vLead = float(v_ego + self.vRel)
+
+        a_lead = (self.vLead - self.vLead_last) / self.radar_ts * 0.5
+        self.aLead = self.aLead * (1. - self.alpha_a) + a_lead * self.alpha_a
+        if abs(a_lead_vision) < abs(self.aLead):
+          self.aLead = a_lead_vision
+        
+      self.vLeadK= self.vLead
+      self.aLeadK = self.aLead
+
+      self.status = True
+      self.cnt += 1
+    else:
+      self.reset()
+      self.cnt = 0
+
+    self.dRel_last = self.dRel
+    self.vLead_last = self.vLead
+    
+    #if self.kf is None:
+    #  self.kf = lead_kf(self.vLead, self.aLead, self.radar_ts)
+    #  self.kf_v = lead_kf(self.dRel, self.vRel, self.radar_ts)
+    #else:
+    #  self.kf.update(self.vLead)
+    #  self.kf_v.update(self.dRel)
+
+    #self.vLeadK = float(self.kf.x[LEAD_KALMAN_SPEED][0])
+    #self.vLeadK = float(self.kf_v.x[1][0]) + model_v_ego
+    #self.aLeadK = float(self.kf.x[LEAD_KALMAN_ACCEL][0])
 
     # Learn if constant acceleration
     aLeadTauValue = self.aLeadTauPos if self.aLead > self.aLeadTauThreshold else self.aLeadTauNeg

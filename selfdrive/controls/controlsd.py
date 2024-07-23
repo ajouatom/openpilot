@@ -109,6 +109,7 @@ class Controls:
 
     self.always_on_lateral = self.params.get_bool("AlwaysOnLateralEnabled")
     self.lateral_allowed = False
+    self.lateral_allowed_carrot = True
     #if self.always_on_lateral:
     #  self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ENABLE_ALWAYS_ON_LATERAL
     self.carrot_plan_event = -1
@@ -553,6 +554,9 @@ class Controls:
       self.carrotCruiseActivate = -1
       self.v_cruise_helper.cruiseActivate = 0
 
+    if self.enabled:
+      self.lateral_allowed_carrot = True
+
     # decrement the soft disable timer at every step, as it's reset on
     # entrance in SOFT_DISABLING state
     self.soft_disable_timer = max(0, self.soft_disable_timer - 1)
@@ -687,12 +691,16 @@ class Controls:
     driving_gear = CS.gearShifter not in (gear.neutral, gear.park, gear.reverse, gear.unknown)
     lateral_enabled = False
     if self.always_on_lateral:
-      lateral_allowed = self.lateral_allowed
-      lateral_allowed = CS.cruiseState.available
-      lateral_allowed |= CS.cruiseState.enabled
-      self.lateral_allowed = lateral_allowed
+      if self.params.get_int("AutoEngage") > 0:
+        self.lateral_allowed = True # 항상 enable되도록 시험... carrot
+      else:
+        lateral_allowed = self.lateral_allowed
+        lateral_allowed = CS.cruiseState.available
+        lateral_allowed |= CS.cruiseState.enabled
+        self.lateral_allowed = lateral_allowed
       
-      lateral_enabled = self.lateral_allowed and driving_gear
+      
+      lateral_enabled = self.lateral_allowed and driving_gear and self.lateral_allowed_carrot
 
     manualSteeringOverride = self.params.get_int("ManualSteeringOverride")
     if CS.steeringPressed:
