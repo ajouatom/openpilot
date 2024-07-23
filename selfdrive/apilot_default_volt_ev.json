@@ -1,11 +1,11 @@
 [
   {
     "filename": "ALeadTauNeg",
-    "content": "0"
+    "content": "60"
   },
   {
     "filename": "ALeadTauPos",
-    "content": "0"
+    "content": "120"
   },
   {
     "filename": "ALeadTauThreshold",
@@ -13,7 +13,7 @@
   },
   {
     "filename": "AdjustCurveOffset",
-    "content": "2"
+    "content": "3"
   },
   {
     "filename": "AdjustLaneOffset",
@@ -141,19 +141,19 @@
   },
   {
     "filename": "CruiseMaxVals1",
-    "content": "170"
+    "content": "125"
   },
   {
     "filename": "CruiseMaxVals2",
-    "content": "135"
-  },
-  {
-    "filename": "CruiseMaxVals3",
     "content": "80"
   },
   {
+    "filename": "CruiseMaxVals3",
+    "content": "60"
+  },
+  {
     "filename": "CruiseMaxVals4",
-    "content": "70"
+    "content": "50"
   },
   {
     "filename": "CruiseMaxVals5",
@@ -253,7 +253,7 @@
   },
   {
     "filename": "LateralTorqueKpV",
-    "content": "95"
+    "content": "98"
   },
   {
     "filename": "LongPitch",
@@ -269,11 +269,11 @@
   },
   {
     "filename": "LongitudinalTuningKf",
-    "content": "105"
+    "content": "102"
   },
   {
     "filename": "LongitudinalTuningKiV",
-    "content": "350"
+    "content": "300"
   },
   {
     "filename": "LongitudinalTuningKpV",
@@ -330,10 +330,6 @@
   {
     "filename": "NNFFLite",
     "content": "1"
-  },
-  {
-    "filename": "NNFFModelName",
-    "content": "CHEVROLET_VOLT"
   },
   {
     "filename": "OpenpilotEnabledToggle",
@@ -485,11 +481,11 @@
   },
   {
     "filename": "SteerActuatorDelay",
-    "content": "39"
+    "content": "44"
   },
   {
     "filename": "SteerRatio",
-    "content": "150"
+    "content": "152"
   },
   {
     "filename": "StopAccelApply",
@@ -525,11 +521,11 @@
   },
   {
     "filename": "TFollowLeadCarAccel",
-    "content": "5"
+    "content": "0"
   },
   {
     "filename": "TFollowLeadCarSpeed",
-    "content": "5"
+    "content": "0"
   },
   {
     "filename": "TFollowSpeedAdd",
@@ -542,6 +538,10 @@
   {
     "filename": "TSS2Tune",
     "content": "0"
+  },
+  {
+    "filename": "TrafficStopDistanceAdjust",
+    "content": "140"
   },
   {
     "filename": "UseLaneLineCurveSpeed",
