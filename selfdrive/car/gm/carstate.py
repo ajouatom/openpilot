@@ -45,6 +45,9 @@ class CarState(CarStateBase):
     # for delay Accfault event
     self.accFaultedCount = 0
 
+    # cruiseMain default(test from nd0706-vision)
+    self.cruiseMain_on = True if Params().get_int("AutoEngage") == 2 else False
+
   def update(self, pt_cp, cam_cp, loopback_cp):
     ret = car.CarState.new_message()
 
@@ -168,6 +171,7 @@ class CarState(CarStateBase):
     self.pcm_acc_status = pt_cp.vl["AcceleratorPedal2"]["CruiseState"]
 
     ret.cruiseState.available = pt_cp.vl["ECMEngineStatus"]["CruiseMainOn"] != 0
+    self.cruiseMain_on =  ret.cruiseState.available
     ret.espDisabled = pt_cp.vl["ESPStatus"]["TractionControlOn"] != 1
     # for delay Accfault event
     accFaulted = (self.pcm_acc_status == AccState.FAULTED or \
