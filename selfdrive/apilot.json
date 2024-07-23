@@ -1171,6 +1171,22 @@
       "default": 89,
       "unit": 1
     },
+
+    {
+      "group": "시작",
+      "name": "Model",
+      "title": "모델선택",
+      "descr": "0:노스 다코다, 1:노트르담, 2:SGO",
+      "egroup": "START",
+      "etitle": "Model Select",
+      "edescr": "Model Select",
+      "min": 0,
+      "max": 2,
+      "default": 0,
+      "unit": 1
+    },
+
+
     {
       "group": "시작",
       "name": "SoftHoldMode",
