@@ -659,11 +659,17 @@ class VCruiseHelper:
         self.autoCruiseCancelState = 1
         if not controls.enabled:
           controls.lateral_allowed_carrot = False if controls.lateral_allowed_carrot else True
+          if controls.lateral_allowed_carrot:
+            self._add_log("Button cancel : lateral ON")
+          else:
+            self._add_log("Button cancel : lateral OFF")
+        else:
+          self._add_log("Button cancel : Cruise OFF")
         controls.events.add(EventName.audioPrompt)
-        print("autoCruiseCancelSate = {}".format(self.autoCruiseCancelState))
+        #print("autoCruiseCancelSate = {}".format(self.autoCruiseCancelState))
       else:
         self.autoCruiseCancelState = 0
-        print("autoCruiseCancelSate = {}".format(self.autoCruiseCancelState))
+        #print("autoCruiseCancelSate = {}".format(self.autoCruiseCancelState))
 
     if self.brake_pressed_count > 0 or self.gas_pressed_count > 0:
       if self.cruiseActivate > 0:
