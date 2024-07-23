@@ -1,11 +1,27 @@
 [
   {
+    "filename": "ALeadTauNeg",
+    "content": "0"
+  },
+  {
+    "filename": "ALeadTauPos",
+    "content": "0"
+  },
+  {
+    "filename": "ALeadTauThreshold",
+    "content": "50"
+  },
+  {
     "filename": "AdjustCurveOffset",
-    "content": "4"
+    "content": "2"
   },
   {
     "filename": "AdjustLaneOffset",
-    "content": "4"
+    "content": "5"
+  },
+  {
+    "filename": "AdjustLaneTime",
+    "content": "7"
   },
   {
     "filename": "AlwaysOnLateralEnabled",
@@ -20,16 +36,28 @@
     "content": "0"
   },
   {
+    "filename": "AutoCurveSpeedAggressiveness",
+    "content": "120"
+  },
+  {
     "filename": "AutoCurveSpeedFactor",
-    "content": "95"
+    "content": "105"
   },
   {
     "filename": "AutoCurveSpeedLowerLimit",
-    "content": "30"
+    "content": "41"
+  },
+  {
+    "filename": "AutoEngage",
+    "content": "2"
+  },
+  {
+    "filename": "AutoLaneChangeSpeed",
+    "content": "20"
   },
   {
     "filename": "AutoNaviSpeedBumpSpeed",
-    "content": "30"
+    "content": "25"
   },
   {
     "filename": "AutoNaviSpeedBumpTime",
@@ -37,7 +65,7 @@
   },
   {
     "filename": "AutoNaviSpeedCtrl",
-    "content": "2"
+    "content": "1"
   },
   {
     "filename": "AutoNaviSpeedCtrlEnd",
@@ -45,11 +73,11 @@
   },
   {
     "filename": "AutoNaviSpeedDecelRate",
-    "content": "80"
+    "content": "100"
   },
   {
     "filename": "AutoNaviSpeedSafetyFactor",
-    "content": "100"
+    "content": "95"
   },
   {
     "filename": "AutoResumeFromBrakeReleaseTrafficSign",
@@ -69,7 +97,7 @@
   },
   {
     "filename": "AutoTurnControlSpeedLaneChange",
-    "content": "60"
+    "content": "50"
   },
   {
     "filename": "AutoTurnControlSpeedTurn",
@@ -81,7 +109,23 @@
   },
   {
     "filename": "AutoTurnMapChange",
-    "content": "1"
+    "content": "0"
+  },
+  {
+    "filename": "CarrotCountDownSec",
+    "content": "11"
+  },
+  {
+    "filename": "CarrotCountDownSpeed",
+    "content": "10"
+  },
+  {
+    "filename": "CarrotTest3",
+    "content": "0"
+  },
+  {
+    "filename": "ComfortBrake",
+    "content": "250"
   },
   {
     "filename": "CompletedTrainingVersion",
@@ -97,27 +141,27 @@
   },
   {
     "filename": "CruiseMaxVals1",
-    "content": "190"
+    "content": "170"
   },
   {
     "filename": "CruiseMaxVals2",
-    "content": "160"
+    "content": "135"
   },
   {
     "filename": "CruiseMaxVals3",
-    "content": "90"
-  },
-  {
-    "filename": "CruiseMaxVals4",
     "content": "80"
   },
   {
+    "filename": "CruiseMaxVals4",
+    "content": "70"
+  },
+  {
     "filename": "CruiseMaxVals5",
-    "content": "55"
+    "content": "45"
   },
   {
     "filename": "CruiseMaxVals6",
-    "content": "50"
+    "content": "35"
   },
   {
     "filename": "CruiseMinVals",
@@ -129,11 +173,23 @@
   },
   {
     "filename": "CruiseSpeedMin",
-    "content": "10"
+    "content": "0"
   },
   {
     "filename": "CruiseSpeedUnit",
     "content": "5"
+  },
+  {
+    "filename": "CustomSteerDeltaDown",
+    "content": "7"
+  },
+  {
+    "filename": "CustomSteerDeltaUp",
+    "content": "4"
+  },
+  {
+    "filename": "CustomSteerMax",
+    "content": "300"
   },
   {
     "filename": "DisengageOnAccelerator",
@@ -160,12 +216,16 @@
     "content": "0"
   },
   {
-    "filename": "GasRegenCmd",
-    "content": "0"
-  },
-  {
     "filename": "IsMetric",
     "content": "1"
+  },
+  {
+    "filename": "LaneChangeLaneCheck",
+    "content": "1"
+  },
+  {
+    "filename": "LaneChangeNeedTorque",
+    "content": "0"
   },
   {
     "filename": "LanguageSetting",
@@ -173,7 +233,7 @@
   },
   {
     "filename": "LateralTorqueAccelFactor",
-    "content": "2100"
+    "content": "2300"
   },
   {
     "filename": "LateralTorqueCustom",
@@ -181,11 +241,19 @@
   },
   {
     "filename": "LateralTorqueFriction",
-    "content": "40"
+    "content": "60"
   },
   {
-    "filename": "LockDoors",
-    "content": "0"
+    "filename": "LateralTorqueKf",
+    "content": "100"
+  },
+  {
+    "filename": "LateralTorqueKiV",
+    "content": "15"
+  },
+  {
+    "filename": "LateralTorqueKpV",
+    "content": "95"
   },
   {
     "filename": "LongPitch",
@@ -196,16 +264,24 @@
     "content": "0"
   },
   {
+    "filename": "LongitudinalPersonalityMax",
+    "content": "3"
+  },
+  {
     "filename": "LongitudinalTuningKf",
-    "content": "100"
+    "content": "105"
   },
   {
     "filename": "LongitudinalTuningKiV",
-    "content": "0"
+    "content": "350"
   },
   {
     "filename": "LongitudinalTuningKpV",
-    "content": "107"
+    "content": "105"
+  },
+  {
+    "filename": "ManualSteeringOverride",
+    "content": "1"
   },
   {
     "filename": "MapboxStyle",
@@ -213,6 +289,14 @@
   },
   {
     "filename": "MaxAngleFrames",
+    "content": "0"
+  },
+  {
+    "filename": "MaxTimeOffroadMin",
+    "content": "120"
+  },
+  {
+    "filename": "MixRadarInfo",
     "content": "0"
   },
   {
@@ -232,8 +316,24 @@
     "content": "90"
   },
   {
+    "filename": "MyHighModeFactor",
+    "content": "100"
+  },
+  {
     "filename": "MySafeModeFactor",
     "content": "80"
+  },
+  {
+    "filename": "NNFF",
+    "content": "1"
+  },
+  {
+    "filename": "NNFFLite",
+    "content": "1"
+  },
+  {
+    "filename": "NNFFModelName",
+    "content": "CHEVROLET_VOLT"
   },
   {
     "filename": "OpenpilotEnabledToggle",
@@ -241,7 +341,7 @@
   },
   {
     "filename": "PathOffset",
-    "content": "-3"
+    "content": "-4"
   },
   {
     "filename": "RecordFront",
@@ -270,6 +370,10 @@
   {
     "filename": "ShowConnInfo",
     "content": "1"
+  },
+  {
+    "filename": "ShowCustomBrightness",
+    "content": "100"
   },
   {
     "filename": "ShowDateTime",
@@ -353,7 +457,7 @@
   },
   {
     "filename": "SoftHoldMode",
-    "content": "0"
+    "content": "1"
   },
   {
     "filename": "SoundVolumeAdjust",
@@ -373,7 +477,7 @@
   },
   {
     "filename": "StartAccelApply",
-    "content": "100"
+    "content": "90"
   },
   {
     "filename": "StartRecord",
@@ -381,7 +485,7 @@
   },
   {
     "filename": "SteerActuatorDelay",
-    "content": "38"
+    "content": "39"
   },
   {
     "filename": "SteerRatio",
@@ -401,7 +505,7 @@
   },
   {
     "filename": "StoppingAccel",
-    "content": "-80"
+    "content": "-50"
   },
   {
     "filename": "TFollowGap1",
@@ -420,6 +524,14 @@
     "content": "90"
   },
   {
+    "filename": "TFollowLeadCarAccel",
+    "content": "5"
+  },
+  {
+    "filename": "TFollowLeadCarSpeed",
+    "content": "5"
+  },
+  {
     "filename": "TFollowSpeedAdd",
     "content": "0"
   },
@@ -432,7 +544,15 @@
     "content": "0"
   },
   {
+    "filename": "UseLaneLineCurveSpeed",
+    "content": "90"
+  },
+  {
     "filename": "UseLaneLineSpeed",
+    "content": "1"
+  },
+  {
+    "filename": "UseLaneLineSpeedApply",
     "content": "1"
   }
 ]

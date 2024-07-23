@@ -19,4 +19,4 @@ for filename in os.listdir(folder_path):
 sorted_data = sorted(result, key=lambda x: x['filename'])
 #print(json.dumps(result, indent=4))
 with open(output_file, "w") as f:
-    json.dump(sorted_data, f, indent=4, ensure_ascii=False)
+    json.dump(sorted_data, f, indent=2, ensure_ascii=False)
