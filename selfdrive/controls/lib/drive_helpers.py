@@ -655,6 +655,7 @@ class VCruiseHelper:
 
     if button_type in [ButtonType.cancel, ButtonType.accelCruise, ButtonType.decelCruise]:
       self.autoCruiseCancelTimer = 0
+      print(button_type)
       if button_type == ButtonType.cancel:
         self.autoCruiseCancelState = 1
         if not controls.enabled:
