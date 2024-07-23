@@ -531,7 +531,7 @@ class CarController(CarControllerBase):
           self.jerk_u = jerkLimit
           self.jerk_l = jerkLimit          
           self.jerk_count = 0
-        elif actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
+        elif False: #actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
           self.jerk_u += 0.1 if self.jerk_u < 1.5 else -0.1
           self.jerk_l += 0.1 if self.jerk_l < 1.0 else -0.1
           self.jerk_count = 0
