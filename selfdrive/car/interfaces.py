@@ -463,7 +463,7 @@ class CarInterfaceBase(ABC):
 
         # 핸들손올림이나 일시 스티어오류가 0.5초이상일때 경고하며, 운전자 개입은 안하는 것으로 한다.
         if self.steering_unpressed > int(0.5/DT_CTRL) and self.steer_warning > int(0.5/DT_CTRL):
-          events.add(EventName.steerTempUnavailable)
+          pass # events.add(EventName.steerTempUnavailable)
         else:
           events.add(EventName.steerTempUnavailableSilent)
 
