@@ -655,10 +655,8 @@ class VCruiseHelper:
 
     if button_type in [ButtonType.cancel, ButtonType.accelCruise, ButtonType.decelCruise]:
       self.autoCruiseCancelTimer = 0
-      print(button_type)
       if button_type == ButtonType.cancel:
-        self.autoCruiseCancelState = 1
-        if not controls.enabled:
+        if self.autoCruiseCancelState > 0:
           controls.lateral_allowed_carrot = False if controls.lateral_allowed_carrot else True
           if controls.lateral_allowed_carrot:
             self._add_log("Button cancel : lateral ON")
@@ -666,6 +664,7 @@ class VCruiseHelper:
             self._add_log("Button cancel : lateral OFF")
         else:
           self._add_log("Button cancel : Cruise OFF")
+        self.autoCruiseCancelState = 1
         controls.events.add(EventName.audioPrompt)
         print("autoCruiseCancelSate = {}".format(self.autoCruiseCancelState))
       else:
