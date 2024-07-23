@@ -5,9 +5,9 @@ from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.numpy_fast import interp, clip
 from openpilot.common.realtime import DT_CTRL
 from opendbc.can.packer import CANPacker
-from openpilot.selfdrive.car import apply_driver_steer_torque_limits
+from openpilot.selfdrive.car import apply_driver_steer_torque_limits, create_gas_interceptor_command
 from openpilot.selfdrive.car.gm import gmcan
-from openpilot.selfdrive.car.gm.values import DBC, CanBus, CarControllerParams, CruiseButtons, GMFlags, CC_ONLY_CAR, SDGM_CAR, EV_CAR
+from openpilot.selfdrive.car.gm.values import DBC, CanBus, CarControllerParams, CruiseButtons, GMFlags, CC_ONLY_CAR, SDGM_CAR, EV_CAR, AccState
 from openpilot.selfdrive.car.interfaces import CarControllerBase
 from openpilot.selfdrive.controls.lib.drive_helpers import apply_deadzone
 from openpilot.selfdrive.controls.lib.vehicle_model import ACCELERATION_DUE_TO_GRAVITY
@@ -15,6 +15,8 @@ from openpilot.selfdrive.controls.lib.vehicle_model import ACCELERATION_DUE_TO_G
 VisualAlert = car.CarControl.HUDControl.VisualAlert
 NetworkLocation = car.CarParams.NetworkLocation
 LongCtrlState = car.CarControl.Actuators.LongControlState
+GearShifter = car.CarState.GearShifter
+TransmissionType = car.CarParams.TransmissionType
 
 # Camera cancels up to 0.1s after brake is pressed, ECM allows 0.5s
 CAMERA_CANCEL_DELAY_FRAMES = 10
@@ -38,6 +40,7 @@ class CarController(CarControllerBase):
     self.last_steer_frame = 0
     self.last_button_frame = 0
     self.cancel_counter = 0
+    self.pedal_steady = 0.
 
     self.lka_steering_cmd_counter = 0
     self.lka_icon_status_last = (False, False)
@@ -53,7 +56,7 @@ class CarController(CarControllerBase):
 
     self.pitch = FirstOrderFilter(0., 0.09 * 4, DT_CTRL * 4)  # runs at 25 Hz
     self.accel_g = 0.0
-	
+
   @staticmethod
   def calc_pedal_command(accel: float, long_active: bool) -> float:
     if not long_active: return 0.
@@ -75,7 +78,7 @@ class CarController(CarControllerBase):
     self.use_ev_tables = params.get_bool("EVTable")
 
     actuators = CC.actuators
-    accel = actuators.accel
+    accel = brake_accel = actuators.accel
     hud_control = CC.hudControl
     hud_alert = hud_control.visualAlert
     hud_v_cruise = hud_control.setSpeed
@@ -129,14 +132,18 @@ class CarController(CarControllerBase):
       # Gas/regen, brakes, and UI commands - all at 25Hz
       if self.frame % 4 == 0:
         stopping = actuators.longControlState == LongCtrlState.stopping
+
+        # Pitch compensated acceleration;
+        # TODO: include future pitch (sm['modelDataV2'].orientation.y) to account for long actuator delay
+        if self.long_pitch and len(CC.orientationNED) > 1:
+          self.pitch.update(CC.orientationNED[1])
+          self.accel_g = ACCELERATION_DUE_TO_GRAVITY * apply_deadzone(self.pitch.x, PITCH_DEADZONE) # driving uphill is positive pitch
+          accel += self.accel_g
+          brake_accel = actuators.accel + self.accel_g * interp(CS.out.vEgo, BRAKE_PITCH_FACTOR_BP, BRAKE_PITCH_FACTOR_V)
+
         at_full_stop = CC.longActive and CS.out.standstill
         near_stop = CC.longActive and (CS.out.vEgo < self.params.NEAR_STOP_BRAKE_PHASE)
         interceptor_gas_cmd = 0
-        # Pitch compensated acceleration;
-        # TODO: include future pitch (sm['modelDataV2'].orientation.y) to account for long actuator delay
-        self.pitch.update(CC.orientationNED[1])
-        self.accel_g = ACCELERATION_DUE_TO_GRAVITY * apply_deadzone(self.pitch.x, PITCH_DEADZONE) # driving uphill is positive pitch
-        accel += self.accel_g
         if not CC.longActive:
           # ASCM sends max regen when not enabled
           self.apply_gas = self.params.INACTIVE_REGEN
@@ -146,7 +153,6 @@ class CarController(CarControllerBase):
           self.apply_brake = int(min(-100 * self.CP.stopAccel, self.params.MAX_BRAKE))
         else:
           # Normal operation
-          brake_accel = actuators.accel + self.accel_g * interp(CS.out.vEgo, BRAKE_PITCH_FACTOR_BP, BRAKE_PITCH_FACTOR_V)
           if self.CP.carFingerprint in EV_CAR and self.use_ev_tables:
             self.params.update_ev_gas_brake_threshold(CS.out.vEgo)
             self.apply_gas = int(round(interp(accel if self.long_pitch else actuators.accel, self.params.EV_GAS_LOOKUP_BP, self.params.GAS_LOOKUP_V)))
