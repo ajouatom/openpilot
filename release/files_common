@@ -575,4 +575,3 @@ tinygrad_repo/tinygrad/*.py
 selfdrive/car/torque_data/lat_models/*.json
 selfdrive/carrot/*
 selfdrive/frogpilot/functions/map_turn_speed_controller.py
-selfdrive/frogpilot/functions/model_switcher.py
