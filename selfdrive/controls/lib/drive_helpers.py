@@ -187,7 +187,7 @@ class VCruiseHelper:
     count_down_kph = self.params.get_int("CarrotCountDownSpeed")
     left_sec = self.params.get_int("CarrotCountDownSec")
     if left_sec != self.left_sec and count_down_kph != 0:
-      max_left_sec = min(10, max(3, int(self.v_ego_kph_set/10.)))
+      max_left_sec = min(10, max(5, int(self.v_ego_kph_set/10.)))
       if 1 <= left_sec <= max_left_sec and self.v_ego_kph_set > count_down_kph:
         controls.carrot_alert_sound = getattr(AudibleAlert, f'audio{left_sec}')
         #event_name  = getattr(EventName, f'audio{left_sec}')
