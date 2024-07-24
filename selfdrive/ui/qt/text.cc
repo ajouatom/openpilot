@@ -35,18 +35,8 @@ int main(int argc, char *argv[]) {
 #ifdef __aarch64__
   btn->setText(QObject::tr("Reboot"));
   QObject::connect(btn, &QPushButton::clicked, [=]() {
-    std::remove("/data/params/d_tmp/Model");
-    std::system("python3 /data/openpilot/selfdrive/frogpilot/functions/model_switcher.py");
     Hardware::reboot();
   });
-  QPushButton *recompileBtn = new QPushButton();
-  recompileBtn->setText(QObject::tr("Recompile Model"));
-  QObject::connect(recompileBtn, &QPushButton::clicked, [=]() {
-    std::system("python3 /data/openpilot/selfdrive/frogpilot/functions/model_switcher.py");
-    Hardware::reboot();
-  });
-  main_layout->addWidget(recompileBtn, 0, 0, Qt::AlignLeft | Qt::AlignBottom);
-  main_layout->addWidget(btn, 0, 1, Qt::AlignRight | Qt::AlignBottom);
 #else
   btn->setText(QObject::tr("Exit"));
   QObject::connect(btn, &QPushButton::clicked, &a, &QApplication::quit);

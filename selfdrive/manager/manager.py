@@ -362,9 +362,6 @@ def manager_thread() -> None:
 
 def main() -> None:
   manager_init()
-
-  # Model Select
-  subprocess.run(["python3", "/data/openpilot/selfdrive/frogpilot/functions/model_switcher.py"])
   os.system("python /data/openpilot/selfdrive/car/hyundai/values.py > /data/params/d/SupportedCars")
   os.system("python /data/openpilot/selfdrive/car/gm/values.py > /data/params/d/SupportedCars_gm")
   os.system("python /data/openpilot/selfdrive/car/toyota/values.py > /data/params/d/SupportedCars_toyota")
