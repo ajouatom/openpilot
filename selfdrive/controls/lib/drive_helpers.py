@@ -439,8 +439,7 @@ class VCruiseHelper:
       self.traffic_state = 0
     return v_cruise_kph
 
-  def traffic_light(self, x, y, color):
-    self.traffic_light_q.append((x,y,color))
+  def traffic_light(self, x, y, color):    
     traffic_state1 = 0
     traffic_state2 = 0
     traffic_state11 = 0
@@ -473,6 +472,8 @@ class VCruiseHelper:
       self._add_log("Green light continued")
     else:
       self.traffic_state = 0
+
+    self.traffic_light_q.append((x,y,color))
 
   def _add_log_auto_cruise(self, log):
     if self.autoCruiseControl > 0:
