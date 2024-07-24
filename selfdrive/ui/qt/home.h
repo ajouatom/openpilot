@@ -39,6 +39,9 @@ private:
   OffroadAlert* alerts_widget;
   QPushButton* alert_notif;
   QPushButton* update_notif;
+
+  // Model Select
+  QString modelName;
 };
 
 class HomeWindow : public QWidget {

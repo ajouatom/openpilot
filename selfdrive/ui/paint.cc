@@ -1502,7 +1502,7 @@ void DrawApilot::drawTurnInfo(const UIState* s, int x, int y) {
         if (s->xDistToTurn < 200) scale = 1.0 - (0.8 * s->xDistToTurn / 200.);
         scale *= 0.5;
         int size_x = 348 * scale;
-        int size_y = 440 * scale;
+        int size_y = 540 * scale;
         int img_x = 0;
         int img_y = 0;
         float alpha = (navi_turn_point_flag)?1.0:0.1;

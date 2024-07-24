@@ -1,5 +1,14 @@
 #!/usr/bin/bash
 
+if [ ! -f "./boot_finish" ]; then
+  mount -o rw, remount /system
+
+  chmod 755 ./selfdrive/controls/neokii/ngpsd
+  chmod 755 ./selfdrive/controls/neokii/nobsd
+  touch ./boot_finish
+  mount -o ro, remount /system
+fi
+
 if [ -z "$BASEDIR" ]; then
   BASEDIR="/data/openpilot"
 fi

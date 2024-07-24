@@ -55,6 +55,45 @@
     },
     {
       "group": "조향튜닝",
+      "name": "LateralTorqueKpV",
+      "title": "_LateralTorqueKpV*0.01(100)",
+      "descr": "",
+      "egroup": "LAT",
+      "etitle": "_LateralTorqueKpV*0.01(100)",
+      "edescr": "",
+      "min": 0,
+      "max": 200,
+      "default": 100,
+      "unit": 1
+    },
+    {
+      "group": "조향튜닝",
+      "name": "LateralTorqueKiV",
+      "title": "_LateralTorqueKiV*0.01(15)",
+      "descr": "",
+      "egroup": "LAT",
+      "etitle": "_LateralTorqueKiV*0.01(15)",
+      "edescr": "",
+      "min": 0,
+      "max": 200,
+      "default": 15,
+      "unit": 1
+    },
+    {
+      "group": "조향튜닝",
+      "name": "LateralTorqueKf",
+      "title": "_LateralTorqueKf*0.01(100)",
+      "descr": "",
+      "egroup": "LAT",
+      "etitle": "_LateralTorqueKf*0.001(100)",
+      "edescr": "",
+      "min": 0,
+      "max": 200,
+      "default": 100,
+      "unit": 1
+    },
+    {
+      "group": "조향튜닝",
       "name": "CustomSteerMax",
       "title": "_CustomSteerMax(0)",
       "descr": "",
@@ -316,8 +355,8 @@
     {
       "group": "주행튜닝",
       "name": "TrafficStopDistanceAdjust",
-      "title": "TrafficStopDistance adjust (150)cm",
-      "descr": "늘리면 정지선을 지나감?????",
+      "title": "신호정지 위치조정(150)cm",
+      "descr": "높을수록 신호정지선 가까이에 서거나 정지선을 지나감.",
       "egroup": "LONG",
       "etitle": "TrafficStopDistance adjust (150)cm",
       "edescr": "",
@@ -1132,6 +1171,22 @@
       "default": 89,
       "unit": 1
     },
+
+    {
+      "group": "시작",
+      "name": "Model",
+      "title": "모델선택",
+      "descr": "0:노스 다코다, 1:노트르담, 2:SGO",
+      "egroup": "START",
+      "etitle": "Model Select",
+      "edescr": "Model Select",
+      "min": 0,
+      "max": 2,
+      "default": 0,
+      "unit": 1
+    },
+
+
     {
       "group": "시작",
       "name": "SoftHoldMode",
