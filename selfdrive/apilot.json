@@ -413,7 +413,7 @@
       "etitle": "Long KpV(100)",
       "edescr": "HKG(100)x0.01",
       "min": 50,
-      "max": 150,
+      "max": 2000,
       "default": 100,
       "unit": 5
     },
@@ -446,13 +446,13 @@
     {
       "group": "ÁÖÇàÆ©´×",
       "name": "LongitudinalTuningDeadzoneV",
-      "title": "DeadzoneV(0)",
-      "descr": "x0.01",
+      "title": "DeadzoneV(0)x0.01",
+      "descr": "",
       "egroup": "LONG",
-      "etitle": "DeadzoneV(0)",
-      "edescr": "x0.01",
+      "etitle": "DeadzoneV(0)x0.01",
+      "edescr": "",
       "min": 0,
-      "max": 2000,
+      "max": 20000,
       "default": 0,
       "unit": 1
     },
