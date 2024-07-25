@@ -296,6 +296,7 @@ std::unordered_map<std::string, uint32_t> keys = {
     { "LongitudinalTuningKpV", PERSISTENT },
     { "LongitudinalTuningKiV", PERSISTENT },
     { "LongitudinalTuningKf", PERSISTENT },
+    { "LongitudinalTuningDeadzoneV", PERSISTENT },
     { "EnableRadarTracks", PERSISTENT },
     { "EnableAVM", PERSISTENT },
     { "HotspotOnBoot", PERSISTENT },
