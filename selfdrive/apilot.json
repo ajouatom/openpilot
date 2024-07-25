@@ -426,7 +426,7 @@
       "etitle": "Long KiV(0)",
       "edescr": "x0.001",
       "min": 0,
-      "max": 2000,
+      "max": 200,
       "default": 0,
       "unit": 1
     },
@@ -452,7 +452,7 @@
       "etitle": "DeadzoneV(0)x0.01",
       "edescr": "",
       "min": 0,
-      "max": 20000,
+      "max": 100,
       "default": 0,
       "unit": 1
     },
