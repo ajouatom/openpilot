@@ -1322,8 +1322,8 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             by = 650;
         }
         if (s->left_dist > 0) {
-            if (s->left_dist < 1000) sprintf(str, "%d m", s->left_dist);
-            else  sprintf(str, "%.1f km", s->left_dist / 1000.f);
+            if (s->left_dist < 1000) sprintf(str, s->scene.is_metric ? "%.3f km" : "%.3f mi", s->left_dist / 1000.f);
+            else  sprintf(str, s->scene.is_metric ? "%.1f km" : "%.1f mi", s->left_dist / 1000.f);
             ui_draw_text(s, bx, by + 120, str, 40, COLOR_WHITE, BOLD);
         }
 
@@ -1349,7 +1349,7 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
                 nvgCircle(s->vg, bx, by, 110 / 2);
                 nvgFillColor(s->vg, COLOR_WHITE);
                 nvgFill(s->vg);
-                sprintf(str, "%d", s->limit_speed);
+                sprintf(str, s->scene.is_metric ? "%d" : "%d", s->limit_speed);
                 ui_draw_text(s, bx, by + 25, str, 60, COLOR_BLACK, BOLD, 0.0f, 0.0f);
             }
             if(true) {
@@ -1371,8 +1371,8 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
                 left_dist_flag = false;
 
                 if (s->left_dist > 0) {
-                    if (s->left_dist < 1000) sprintf(str, "%d m", s->left_dist);
-                    else  sprintf(str, "%.1f km", s->left_dist / 1000.f);
+                    if (s->left_dist < 1000) sprintf(str, s->scene.is_metric ? "%.3f km" : "%.3f mi", s->left_dist / 1000.f);
+                    else  sprintf(str, s->scene.is_metric ? "%.1f km" : "%.1f mi", s->left_dist / 1000.f);
                     ui_draw_text(s, bx, by + 120*scale, str, 40*scale, COLOR_WHITE, BOLD);
                 }
 
@@ -1392,7 +1392,7 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
                     nvgCircle(s->vg, bx, by, 110 / 2 * scale);
                     nvgFillColor(s->vg, COLOR_WHITE);
                     nvgFill(s->vg);
-                    sprintf(str, "%d", s->limit_speed);
+                    sprintf(str, s->scene.is_metric ? "%d" : "%d", s->limit_speed);
                     ui_draw_text(s, bx, by + 25 * scale - 6*(1-scale), str, 60 * scale, COLOR_BLACK, BOLD, 0.0f, 0.0f);
                 }
             }
@@ -1422,7 +1422,7 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
         }
         else if (s->roadLimitSpeed >= 30 && s->roadLimitSpeed < 200) {
             ui_draw_image(s, { bx - 60, by - 50, 120, 150 }, "ic_road_speed", 1.0f);
-            sprintf(str, "%d", s->roadLimitSpeed);
+            sprintf(str, s->scene.is_metric ? "%d" : "%d", s->roadLimitSpeed);
             ui_draw_text(s, bx, by + 75, str, 50, COLOR_BLACK, BOLD, 0.0f, 0.0f);
         }        
     }
@@ -1708,8 +1708,8 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
                 ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
             }
             else if (getStopDist() > 0.5) {
-                if (getStopDist() < 10.0) sprintf(str, "%.1fM", getStopDist());
-                else sprintf(str, "%.0fM", getStopDist());
+                if (getStopDist() < 10.0) sprintf(str, s->scene.is_metric ? "%.0fM" : "%.0fF", getStopDist() * (s->scene.is_metric ? FOOT_TO_METER : METER_TO_FOOT));
+                else sprintf(str, s->scene.is_metric ? "%.0fM" : "%.0fF", getStopDist() * (s->scene.is_metric ? FOOT_TO_METER : METER_TO_FOOT));
                 ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
             }
         }
@@ -1726,16 +1726,16 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
             //else sprintf(str, "%.0f", dist);
             //ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
             int wStr = 0, w=80;
-            float dist = getRadarDist();
+            float dist = getRadarDist() * (s->scene.is_metric ? FOOT_TO_METER : METER_TO_FOOT);
             if (dist > 0.0) {
-                sprintf(str, "%.1f", dist);
+                sprintf(str, s->scene.is_metric ? "%.1fM" : "%.1fF", dist);
                 wStr = 32 * (strlen(str) + 0);
                 ui_fill_rect(s->vg, { (int)(x - w - wStr / 2), (int)(disp_y - 35), wStr, 42 }, isLeadSCC() ? COLOR_RED : COLOR_ORANGE, 15);
                 ui_draw_text(s, x - w, disp_y, str, 40, COLOR_WHITE, BOLD);
             }
-            dist = getVisionDist();
+            dist = getVisionDist() * (s->scene.is_metric ? FOOT_TO_METER : METER_TO_FOOT);
             if (dist > 0.0) {
-                sprintf(str, "%.1f", dist);
+                sprintf(str, s->scene.is_metric ? "%.1fM" : "%.1fF", dist);
                 wStr = 32 * (strlen(str) + 0);
                 ui_fill_rect(s->vg, { (int)(x + w - wStr / 2), (int)(disp_y - 35), wStr, 42 }, COLOR_BLUE, 15);
                 ui_draw_text(s, x + w, disp_y, str, 40, COLOR_WHITE, BOLD);
