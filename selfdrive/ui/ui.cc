@@ -426,14 +426,14 @@ void update_navi_instruction(UIState* s) {
     //int activeNDA = road_limit_speed.getActive();
     const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
 
-    s->roadLimitSpeed = road_limit_speed.getRoadLimitSpeed() *(s->scene.is_metric ? 1 : KM_TO_MILE);
+    s->roadLimitSpeed = road_limit_speed.getRoadLimitSpeed();
     int roadLimitSpeed_OSM = lp.getLimitSpeed();
     if (s->roadLimitSpeed < roadLimitSpeed_OSM) s->roadLimitSpeed = roadLimitSpeed_OSM;
 
-    int camLimitSpeed = road_limit_speed.getCamLimitSpeed() * (s->scene.is_metric ? 1 : KM_TO_MILE);
-    int camLimitSpeedLeftDist = road_limit_speed.getCamLimitSpeedLeftDist() * (s->scene.is_metric ? MILE_TO_KM : KM_TO_MILE);
-    int sectionLimitSpeed = road_limit_speed.getSectionLimitSpeed() * (s->scene.is_metric ? 1 : KM_TO_MILE);
-    int sectionLeftDist = road_limit_speed.getSectionLeftDist() * (s->scene.is_metric ? MILE_TO_KM : KM_TO_MILE);
+    int camLimitSpeed = road_limit_speed.getCamLimitSpeed();
+    int camLimitSpeedLeftDist = road_limit_speed.getCamLimitSpeedLeftDist();
+    int sectionLimitSpeed = road_limit_speed.getSectionLimitSpeed();
+    int sectionLeftDist = road_limit_speed.getSectionLeftDist();
     s->camType = road_limit_speed.getCamType();
 
     s->limit_speed = 0;
@@ -448,9 +448,9 @@ void update_navi_instruction(UIState* s) {
         s->left_dist = sectionLeftDist;
     }
     //const auto road_limit_speed = sm["roadLimitSpeed"].getRoadLimitSpeed();
-    s->xSpdLimit = road_limit_speed.getXSpdLimit() * (s->scene.is_metric ? 1 : KM_TO_MILE);
+    s->xSpdLimit = road_limit_speed.getXSpdLimit();
     s->xSignType = road_limit_speed.getXSignType();
-    s->xSpdDist = road_limit_speed.getXSpdDist() * (s->scene.is_metric ? MILE_TO_KM : KM_TO_MILE);
+    s->xSpdDist = road_limit_speed.getXSpdDist();
     s->m_navText = QString::fromStdString(road_limit_speed.getXRoadName());
     if (s->limit_speed > 0);
     else if (s->xSpdLimit > 0 && s->xSpdDist > 0) {
@@ -474,7 +474,7 @@ void update_model(UIState *s,
   if (lead_one.getStatus()) {
       //const float lead_d = lead_one.getDRel() * 2.;
       //max_distance = std::clamp((float)(lead_d - fmin(lead_d * 0.35, 10.)), 0.0f, max_distance);
-      const float lead_d = lead_one.getDRel() * (s->scene.is_metric ? FOOT_TO_METER : METER_TO_FOOT);
+      const float lead_d = lead_one.getDRel();
       max_distance = std::clamp((float)lead_d, 0.0f, max_distance);
   }
   scene.max_distance = max_distance;
