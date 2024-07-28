@@ -1712,8 +1712,9 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
                 ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
             }
             else if (getStopDist() > 0.5) {
-                if (getStopDist() < 10.0) sprintf(str, "%.1fM", getStopDist());
-                else sprintf(str, "%.0fM", getStopDist());
+                float dist = getStopDist() * (s->scene.is_metric ? 1 : METER_TO_FOOT);
+                if (dist < 10.0) sprintf(str, "%.1fM", dist);
+                else sprintf(str, "%.0fM", dist);
                 ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
             }
         }
