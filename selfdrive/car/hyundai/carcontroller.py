@@ -503,62 +503,42 @@ class CarController(CarControllerBase):
     return self.jerk
 
   def make_jerk(self, CS, accel, actuators, hud_control):
-    if False: 
-      required_jerk = min(3, abs(accel - CS.out.aEgo) * 50)
-      self.jerk_l = required_jerk
-      self.jerk_u = required_jerk
-      self.cb_upper = self.cb_lower = 0
+    jerk = self.cal_jerk(accel, actuators)
+    a_error = accel - CS.out.aEgo
+    jerk = jerk + (a_error * 2.0)
 
-      if CS.out.aEgo < accel:
-        self.jerk_l = 0
+    if self.CP.carFingerprint in CANFD_CAR:
+      startingJerk = 0.5 #self.jerkStartLimit
+      jerkLimit = 5.0
+      self.jerk_count += DT_CTRL
+      jerk_max = interp(self.jerk_count, [0, 1.5, 2.5], [startingJerk, startingJerk, jerkLimit])
+      if actuators.longControlState == LongCtrlState.off:
+        self.jerk_u = jerkLimit
+        self.jerk_l = jerkLimit          
+        self.jerk_count = 0
+      elif False: #actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
+        self.jerk_u += 0.1 if self.jerk_u < 1.5 else -0.1
+        self.jerk_l += 0.1 if self.jerk_l < 1.0 else -0.1
+        self.jerk_count = 0
       else:
-        self.jerk_u = 0
-
-      self.jerk_u = max(0.5, min(3.0, self.jerk_u))
-      self.jerk_l = max(1.2, self.jerk_l) #max(0.05, self.jerk_l)
-
+        self.jerk_u = min(max(0.5, jerk * 2.0), jerk_max)
+        self.jerk_l = min(max(1.0, -jerk * 3.0), jerkLimit) 
     else:
-      jerk = self.cal_jerk(accel, actuators)
-      a_error = accel - CS.out.aEgo
-      jerk = jerk + (a_error * 2.0)
-
-      if self.CP.carFingerprint in CANFD_CAR:
-        startingJerk = 0.5 #self.jerkStartLimit
-        jerkLimit = 5.0
-        self.jerk_count += DT_CTRL
-        jerk_max = interp(self.jerk_count, [0, 1.5, 2.5], [startingJerk, startingJerk, jerkLimit])
-        if actuators.longControlState == LongCtrlState.off:
-          self.jerk_u = jerkLimit
-          self.jerk_l = jerkLimit          
-          self.jerk_count = 0
-        elif False: #actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
-          self.jerk_u += 0.1 if self.jerk_u < 1.5 else -0.1
-          self.jerk_l += 0.1 if self.jerk_l < 1.0 else -0.1
-          self.jerk_count = 0
-        else:
-          #self.jerk_u = min(max(2.5, jerk * 2.0), jerk_max)
-          #self.jerk_l = min(max(2.0, -jerk * 3.0), jerkLimit)
-          self.jerk_u = min(max(0.5, jerk * 2.0), jerk_max)
-          self.jerk_l = min(max(1.0, -jerk * 3.0), jerkLimit) 
+      startingJerk = self.jerkStartLimit
+      jerkLimit = 5.0
+      self.jerk_count += DT_CTRL
+      jerk_max = interp(self.jerk_count, [0, 1.5, 2.5], [startingJerk, startingJerk, jerkLimit])
+      self.cb_upper = self.cb_lower = 0
+      if actuators.longControlState == LongCtrlState.off:
+        self.jerk_u = jerkLimit
+        self.jerk_l = jerkLimit          
+        self.jerk_count = 0
+      elif False: #actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
+        self.jerk_u += 0.1 if self.jerk_u < 0.5 else -0.1
+        self.jerk_l += 0.1 if self.jerk_l < 1.0 else -0.1
+        self.jerk_count = 0
       else:
-        startingJerk = self.jerkStartLimit
-        jerkLimit = 5.0
-        self.jerk_count += DT_CTRL
-        jerk_max = interp(self.jerk_count, [0, 1.5, 2.5], [startingJerk, startingJerk, jerkLimit])
-        self.cb_upper = self.cb_lower = 0
-        if actuators.longControlState == LongCtrlState.off:
-          self.jerk_u = jerkLimit
-          self.jerk_l = jerkLimit          
-          self.jerk_count = 0
-        elif False: #actuators.longControlState == LongCtrlState.stopping or hud_control.softHold > 0:
-          self.jerk_u += 0.1 if self.jerk_u < 0.5 else -0.1
-          self.jerk_l += 0.1 if self.jerk_l < 1.0 else -0.1
-          self.jerk_count = 0
-        else:
-          self.jerk_u = min(max(0.5, jerk * 2.0), jerk_max)
-          self.jerk_l = min(max(0.5, -jerk * 2.0), jerkLimit)
-          #self.jerk_u = self.jerk_u * 0.8 + min(max(0.5, jerk * 2.0), jerk_max) * 0.2
-          #self.jerk_l = self.jerk_l * 0.8 + min(max(0.5, -jerk * 2.0), jerkLimit) * 0.2
-          ###self.jerk_l = min(max(1.2, -jerk * 2.0), jerkLimit) ## 1.0으로 하니 덜감속, 1.5로하니 너무감속, 1.2로 한번해보자(231228)
-          self.cb_upper = clip(0.9 + accel * 0.2, 0, 1.2)
-          self.cb_lower = clip(0.8 + accel * 0.2, 0, 1.2)
+        self.jerk_u = min(max(0.5, jerk * 2.0), jerk_max)
+        self.jerk_l = min(max(0.5, -jerk * 2.0), jerkLimit)
+        self.cb_upper = clip(0.9 + accel * 0.2, 0, 1.2)
+        self.cb_lower = clip(0.8 + accel * 0.2, 0, 1.2)
