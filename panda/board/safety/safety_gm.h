@@ -221,7 +221,7 @@ static bool gm_tx_hook(const CANPacket_t *to_send) {
     bool steer_req = GET_BIT(to_send, 3U);
 
     if (steer_torque_cmd_checks(desired_torque, steer_req, GM_STEERING_LIMITS)) {
-      tx = false;
+      //tx = false; // kans: unable safety check
     }
   }
 

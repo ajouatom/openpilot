@@ -308,6 +308,8 @@ class DesireHelper:
           self._add_log("Lane change waiting timer. {:.1f}s".format(self.lane_change_wait_timer))
         elif blindspot_detected:
           self._add_log("Blindspot detected")
+          self.lane_change_state = LaneChangeState.off
+          self.lane_change_direction = LaneChangeDirection.none
         else:
         #if not object_detected and not need_torque and lane_available and not self.lane_change_completed and self.lane_change_wait_timer >= self.lane_change_delay:          
           torque_applied = True

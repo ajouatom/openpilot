@@ -236,7 +236,15 @@ DevicePanel::DevicePanel(SettingsWindow* parent) : ListWidget(parent) {
     addItem(new LabelControl(tr("Dongle ID"), getDongleId().value_or(tr("N/A"))));
     addItem(new LabelControl(tr("Serial"), params.get("HardwareSerial").c_str()));
 
-    // offroad-only buttons
+  auto PowerOffBtn = new ButtonControl(tr("Powwer Off"), tr("SHUTDOWN"), "");
+  connect(PowerOffBtn, &ButtonControl::clicked, [&]() {
+    if (ConfirmationDialog::confirm(tr("Are you sure you want to power off?"), tr("Shutdown"), this)) {
+      params.putBool("DoShutdown", true);
+    }
+  });
+  addItem(PowerOffBtn);
+
+  // offroad-only buttons
 
     auto dcamBtn = new ButtonControl(tr("Driver Camera"), tr("PREVIEW"),
         tr("Preview the driver facing camera to ensure that driver monitoring has good visibility. (vehicle must be off)"));
@@ -285,7 +293,7 @@ DevicePanel::DevicePanel(SettingsWindow* parent) : ListWidget(parent) {
 
     QObject::connect(uiState(), &UIState::offroadTransition, [=](bool offroad) {
         for (auto btn : findChildren<ButtonControl*>()) {
-            btn->setEnabled(offroad);
+        btn->setEnabled(true);
         }
         });
 
@@ -597,6 +605,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
     latLongToggles->addItem(new CValueControl("LongitudinalTuningKpV", "LONG: P Gain(100)", "", "../assets/offroad/icon_road.png", 50, 150, 1));
     latLongToggles->addItem(new CValueControl("LongitudinalTuningKiV", "LONG: I Gain(200)", "", "../assets/offroad/icon_road.png", 0, 2000, 5));
     latLongToggles->addItem(new CValueControl("LongitudinalTuningKf", "LONG: FF Gain(100)", "", "../assets/offroad/icon_road.png", 0, 200, 1));
+    latLongToggles->addItem(new CValueControl("LongitudinalTuningDeadzoneV", "LONG: DeadzoneV(0)", "", "../assets/offroad/icon_road.png", 0, 2000, 1));
     latLongToggles->addItem(new CValueControl("StartAccelApply", "LONG: StartingAccel 2.0x(0)%", "정지->출발시 가속도의 가속율을 지정합니다 0: 사용안함.", "../assets/offroad/icon_road.png", 0, 100, 10));
     latLongToggles->addItem(new CValueControl("StopAccelApply", "LONG: StoppingAccel -2.0x(0)%", "정지유지시 브레이크압을 조정합니다. 0: 사용안함. ", "../assets/offroad/icon_road.png", 0, 100, 10));
 
@@ -776,6 +785,9 @@ CarsPanel::CarsPanel(QWidget* parent) : QWidget(parent) {
     commonToggles->addItem(new CValueControl("LateralTorqueCustom", "LAT: TorqueCustom(0)", "", "../assets/offroad/icon_road.png", 0, 2, 1));
     commonToggles->addItem(new CValueControl("LateralTorqueAccelFactor", "LAT: TorqueAccelFactor(2500)", "", "../assets/offroad/icon_road.png", 1000, 6000, 10));
     commonToggles->addItem(new CValueControl("LateralTorqueFriction", "LAT: TorqueFriction(100)", "", "../assets/offroad/icon_road.png", 0, 1000, 10));
+    commonToggles->addItem(new CValueControl("LateralTorqueKpV", "LAT: TorqueKpV(100)", "", "../assets/offroad/icon_road.png", 0, 200, 1));
+    commonToggles->addItem(new CValueControl("LateralTorqueKiV", "LAT: TorqueKiV(15)", "", "../assets/offroad/icon_road.png", 0, 200, 1));
+    commonToggles->addItem(new CValueControl("LateralTorqueKf", "LAT: TorqueKf(100)", "", "../assets/offroad/icon_road.png", 0, 200, 1));
     commonToggles->addItem(new CValueControl("CustomSteerMax", "LAT: CustomSteerMax(0)", "", "../assets/offroad/icon_road.png", 0, 512, 10));
     commonToggles->addItem(new CValueControl("CustomSteerDeltaUp", "LAT: CustomSteerDeltaUp(0)", "", "../assets/offroad/icon_road.png", 0, 50, 10));
     commonToggles->addItem(new CValueControl("CustomSteerDeltaDown", "LAT: CustomSteerDeltaDown(0)", "", "../assets/offroad/icon_road.png", 0, 50, 10));

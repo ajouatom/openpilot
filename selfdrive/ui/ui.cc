@@ -392,6 +392,8 @@ void update_line_data(const UIState *s, const cereal::XYZTData::Reader &line,
 }
 void update_navi_instruction(UIState* s) {
     SubMaster& sm = *(s->sm);
+    auto params = Params();
+    s->scene.is_metric = params.getBool("IsMetric");
     const auto road_limit_speed = sm["roadLimitSpeed"].getRoadLimitSpeed();
     int xTurnInfo = road_limit_speed.getXTurnInfo();
     int xDistToTurn = road_limit_speed.getXDistToTurn();

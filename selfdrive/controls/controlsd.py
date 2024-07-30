@@ -109,6 +109,7 @@ class Controls:
 
     self.always_on_lateral = self.params.get_bool("AlwaysOnLateralEnabled")
     self.lateral_allowed = False
+    self.lateral_allowed_carrot = True
     #if self.always_on_lateral:
     #  self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ENABLE_ALWAYS_ON_LATERAL
     self.carrot_plan_event = -1
@@ -453,7 +454,7 @@ class Controls:
     # TODO: fix simulator
     if not SIMULATION or REPLAY:
       # Not show in first 1 km to allow for driving out of garage. This event shows after 5 minutes
-      if not self.sm['liveLocationKalman'].gpsOK and self.sm['liveLocationKalman'].inputsOK and (self.distance_traveled > 1000):
+      if not self.sm['liveLocationKalman'].gpsOK and self.sm['liveLocationKalman'].inputsOK and (self.distance_traveled > 1500):
         self.events.add(EventName.noGps)
       if self.sm['liveLocationKalman'].gpsOK or self.v_cruise_helper.xPosValidCount > 0:
         self.distance_traveled = 0
@@ -650,6 +651,10 @@ class Controls:
     if self.active:
       self.current_alert_types.append(ET.WARNING)
 
+    if self.enabled:
+      self.lateral_allowed_carrot = True
+
+
     self.v_cruise_helper.cruiseActivate = 0
     if not self.enabled and not self.CP.pcmCruise:
       if self.carrotCruiseActivate > 0:
@@ -696,7 +701,7 @@ class Controls:
         self.lateral_allowed = lateral_allowed
       
       
-      lateral_enabled = self.lateral_allowed and driving_gear
+      lateral_enabled = self.lateral_allowed and driving_gear and self.lateral_allowed_carrot
 
     manualSteeringOverride = self.params.get_int("ManualSteeringOverride")
     if CS.steeringPressed:

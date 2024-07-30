@@ -95,7 +95,7 @@ class LatControlTorque(LatControl):
 
       # precompute time differences between ModelConstants.T_IDXS
       self.t_diffs = np.diff(ModelConstants.T_IDXS)
-      self.desired_lat_jerk_time = CP.steerActuatorDelay + 0.3
+      self.desired_lat_jerk_time = max(0.01, float(Params().get_int("SteerActuatorDelay")) * 0.01) + 0.1 # CP.steerActuatorDelay + 0.3
 
     if self.use_nnff:
       self.pitch = FirstOrderFilter(0.0, 0.5, 0.01)
@@ -106,7 +106,7 @@ class LatControlTorque(LatControl):
       self.nn_friction_override = CI.lat_torque_nn_model.friction_override
 
       # setup future time offsets
-      self.nn_time_offset = CP.steerActuatorDelay + 0.2
+      self.nn_time_offset = max(0.01, float(Params().get_int("SteerActuatorDelay")) * 0.01) # CP.steerActuatorDelay + 0.2
       future_times = [0.3, 0.6, 1.0, 1.5] # seconds in the future
       self.nn_future_times = [i + self.nn_time_offset for i in future_times]
       self.nn_future_times_np = np.array(self.nn_future_times)
@@ -137,6 +137,13 @@ class LatControlTorque(LatControl):
     self.paramsCount += 1
     if self.paramsCount > 30:
       self.paramsCount = 0
+      lateralTorqueKp = float(Params().get_int("LateralTorqueKpV"))*0.01
+      lateralTorqueKi = float(Params().get_int("LateralTorqueKiV"))*0.01
+      lateralTorqueKf = float(Params().get_int("LateralTorqueKf"))*0.01
+      self.pid._k_p = [[0], [lateralTorqueKp]]
+      self.pid._k_i = [[0], [lateralTorqueKi]]
+      self.pid.k_f = lateralTorqueKf
+
     elif self.paramsCount == 10:
       self.lateralTorqueCustom = Params().get_int("LateralTorqueCustom")
       self.lateralTorqueAccelFactor = float(Params().get_int("LateralTorqueAccelFactor"))*0.001
@@ -153,6 +160,7 @@ class LatControlTorque(LatControl):
     if not active:
       output_torque = 0.0
       pid_log.active = False
+      self.pid.reset()
     else:
       actual_curvature_vm = -VM.calc_curvature(math.radians(CS.steeringAngleDeg - params.angleOffsetDeg), CS.vEgo, params.roll)
       roll_compensation = params.roll * ACCELERATION_DUE_TO_GRAVITY

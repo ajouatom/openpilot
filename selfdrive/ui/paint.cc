@@ -1194,12 +1194,7 @@ void DrawApilot::drawGapInfo2(const UIState* s, int x, int y) {
 void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
     char str[128];
     SubMaster& sm = *(s->sm);
-    float cur_speed = getVEgo() * (s->scene.is_metric ? MS_TO_KPH : MS_TO_MPH);
-    if (cur_speed < 0.0) cur_speed = 0.0;
     auto controls_state = sm["controlsState"].getControlsState();
-    //auto carstate = sm["carState"].getCarState();
-    //const auto road_limit_speed = sm["roadLimitSpeed"].getRoadLimitSpeed();
-    //const auto car_params = sm["carParams"].getCarParams();
     if (s->show_mode == 3) {
         y = -100;
         if (s->fb_w < 1200) x = 650;
@@ -1228,25 +1223,17 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
         float longVCruiseTarget = lp.getVCruiseTarget();
         QString longVCruiseTargetSource = QString::fromStdString(lp.getVCruiseTargetSource().cStr());
         float curveSpeed = 0.0;
-        float lpSpeed = lp.getSpeeds()[0] * (s->scene.is_metric ? MS_TO_KPH : MS_TO_MPH);//HW: controls_state.getCurveSpeed();
+        float lpSpeed = lp.getSpeeds()[0] * MS_TO_KPH;//HW: controls_state.getCurveSpeed();
         auto carstate = sm["carState"].getCarState();
         float vCluRatio = carstate.getVCluRatio();
         vCluRatio = (vCluRatio > 0.5) ? vCluRatio : 1.0;
         cruiseAdjustment = lpSpeed / vCluRatio;// *0.1 + cruiseAdjustment * 0.9;
         bool speedCtrlActive = true;
         curveSpeed = cruiseAdjustment;
-        //float xCruiseTarget = lp.getXCruiseTarget() * 3.6;
 
-        //bool is_cruise_set = (cruiseMaxSpeed > 0 && cruiseMaxSpeed < 255);
-        //bool is_cruise_set = (applyMaxSpeed > 0 && applyMaxSpeed < 255);
-        //int longActiveUser = controls_state.getLongActiveUser();
         auto car_control = sm["carControl"].getCarControl();
         auto cruise_control = car_control.getCruiseControl();
         int longOverride = cruise_control.getOverride();// HW: car_control.getLongOverride();
-
-        //sprintf(str, "%.1f/%.1f %s(%s)", distance, distance_remaining, type.length() ? type.toStdString().c_str() : "", modifier.length() ? modifier.toStdString().c_str() : "");
-
-        //float accel = car_state.getAEgo();
 
         int bx = x;
         int by = y + 270;
@@ -1256,6 +1243,8 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             else if (getTrafficMode() == 2) ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2 + 270, icon_size, icon_size }, "ic_traffic_green", 1.0f);
         }
 
+        float cur_speed = getVEgo() * (s->scene.is_metric ? MS_TO_KPH : MS_TO_MPH);
+        if (cur_speed < 0.0) cur_speed = 0.0;
         char speed[128];
         sprintf(speed, "%.0f", cur_speed);
         ui_draw_text(s, bx, by + 50, speed, 120, COLOR_WHITE, BOLD, 3.0f, 8.0f);
@@ -1322,8 +1311,15 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
             by = 650;
         }
         if (s->left_dist > 0) {
-            if (s->left_dist < 1000) sprintf(str, "%d m", s->left_dist);
-            else  sprintf(str, "%.1f km", s->left_dist / 1000.f);
+            if (s->scene.is_metric) {
+                if (s->left_dist < 1000) sprintf(str, "%d m", s->left_dist);
+                else  sprintf(str, "%.1f km", s->left_dist / 1000.f);
+            }
+            else {
+                // 1 미터 = 3.28084 피트로 계산
+                if (s->left_dist < 1609) sprintf(str, "%d ft", (int)(s->left_dist * 3.28084)); // 1609m(1마일)보다 작으면 피트로 표시
+                else sprintf(str, "%.1f mi", s->left_dist / 1609.34f); // 1609m 이상이면 마일로 표시
+            }
             ui_draw_text(s, bx, by + 120, str, 40, COLOR_WHITE, BOLD);
         }
 
@@ -1371,8 +1367,16 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
                 left_dist_flag = false;
 
                 if (s->left_dist > 0) {
-                    if (s->left_dist < 1000) sprintf(str, "%d m", s->left_dist);
-                    else  sprintf(str, "%.1f km", s->left_dist / 1000.f);
+
+                    if (s->scene.is_metric) {
+                        if (s->left_dist < 1000) sprintf(str, "%d m", s->left_dist);
+                        else  sprintf(str, "%.1f km", s->left_dist / 1000.f);
+                    }
+                    else {
+                        // 1 미터 = 3.28084 피트로 계산
+                        if (s->left_dist < 1609) sprintf(str, "%d ft", (int)(s->left_dist * 3.28084)); // 1609m(1마일)보다 작으면 피트로 표시
+                        else sprintf(str, "%.1f mi", s->left_dist / 1609.34f); // 1609m 이상이면 마일로 표시
+                    }
                     ui_draw_text(s, bx, by + 120*scale, str, 40*scale, COLOR_WHITE, BOLD);
                 }
 
@@ -1502,7 +1506,7 @@ void DrawApilot::drawTurnInfo(const UIState* s, int x, int y) {
         if (s->xDistToTurn < 200) scale = 1.0 - (0.8 * s->xDistToTurn / 200.);
         scale *= 0.5;
         int size_x = 348 * scale;
-        int size_y = 440 * scale;
+        int size_y = 540 * scale;
         int img_x = 0;
         int img_y = 0;
         float alpha = (navi_turn_point_flag)?1.0:0.1;
@@ -1708,8 +1712,9 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
                 ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
             }
             else if (getStopDist() > 0.5) {
-                if (getStopDist() < 10.0) sprintf(str, "%.1fM", getStopDist());
-                else sprintf(str, "%.0fM", getStopDist());
+                float dist = getStopDist() * (s->scene.is_metric ? 1 : METER_TO_FOOT);
+                if (dist < 10.0) sprintf(str, "%.1fM", dist);
+                else sprintf(str, "%.0fM", dist);
                 ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
             }
         }
@@ -1726,14 +1731,14 @@ void DrawApilot::drawPathEnd(const UIState* s, int x, int y, int path_x, int pat
             //else sprintf(str, "%.0f", dist);
             //ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
             int wStr = 0, w=80;
-            float dist = getRadarDist();
+            float dist = getRadarDist() * (s->scene.is_metric ? 1 : METER_TO_FOOT);
             if (dist > 0.0) {
                 sprintf(str, "%.1f", dist);
                 wStr = 32 * (strlen(str) + 0);
                 ui_fill_rect(s->vg, { (int)(x - w - wStr / 2), (int)(disp_y - 35), wStr, 42 }, isLeadSCC() ? COLOR_RED : COLOR_ORANGE, 15);
                 ui_draw_text(s, x - w, disp_y, str, 40, COLOR_WHITE, BOLD);
             }
-            dist = getVisionDist();
+            dist = getVisionDist() * (s->scene.is_metric ? 1 : METER_TO_FOOT);
             if (dist > 0.0) {
                 sprintf(str, "%.1f", dist);
                 wStr = 32 * (strlen(str) + 0);

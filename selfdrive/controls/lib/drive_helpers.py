@@ -187,7 +187,7 @@ class VCruiseHelper:
     count_down_kph = self.params.get_int("CarrotCountDownSpeed")
     left_sec = self.params.get_int("CarrotCountDownSec")
     if left_sec != self.left_sec and count_down_kph != 0:
-      max_left_sec = min(10, max(3, int(self.v_ego_kph_set/10.)))
+      max_left_sec = min(10, max(5, int(self.v_ego_kph_set/10.)))
       if 1 <= left_sec <= max_left_sec and self.v_ego_kph_set > count_down_kph:
         controls.carrot_alert_sound = getattr(AudibleAlert, f'audio{left_sec}')
         #event_name  = getattr(EventName, f'audio{left_sec}')
@@ -332,7 +332,7 @@ class VCruiseHelper:
       controls.events.add(EventName.audioPrompt)
       self._add_log_auto_cruise("autoCruise activated.")
 
-    if self.v_cruise_kph_set > 20:
+    if self.v_ego_kph_set > 20:
       self.autoCruiseCancelTimer = max(self.autoCruiseCancelTimer - 5, 0)
     else:
       self.autoCruiseCancelTimer = max(self.autoCruiseCancelTimer - 1, 0)
@@ -439,8 +439,7 @@ class VCruiseHelper:
       self.traffic_state = 0
     return v_cruise_kph
 
-  def traffic_light(self, x, y, color):
-    self.traffic_light_q.append((x,y,color))
+  def traffic_light(self, x, y, color):    
     traffic_state1 = 0
     traffic_state2 = 0
     traffic_state11 = 0
@@ -474,6 +473,8 @@ class VCruiseHelper:
     else:
       self.traffic_state = 0
 
+    self.traffic_light_q.append((x,y,color))
+
   def _add_log_auto_cruise(self, log):
     if self.autoCruiseControl > 0:
       self._add_log(log)
@@ -495,6 +496,7 @@ class VCruiseHelper:
       self._add_log_auto_cruise("Cruise Deactivate from gas speed:{:.0f}".format(self.autoResumeFromGasSpeed));
       self.cruiseActivate = -1
     elif self.xState == 3 and self.autoCancelFromGasMode == 2:
+      v_cruise_kph = self.v_ego_kph_set
       self._add_log_auto_cruise("Cruise Deactivate from gas pressed: traffic stopping");
       self.cruiseActivate = -1
       self.autoCruiseCancelTimer = 3.0 / DT_CTRL
@@ -651,17 +653,43 @@ class VCruiseHelper:
 
     if CS.vEgo > 1.0:
       self.softHoldActive = 0
-    if self.brake_pressed_count > 0 or self.gas_pressed_count > 0 or button_type in [ButtonType.cancel, ButtonType.accelCruise, ButtonType.decelCruise]:
+
+    if button_type in [ButtonType.cancel, ButtonType.accelCruise, ButtonType.decelCruise]:
+      self.autoCruiseCancelTimer = 0
       if button_type == ButtonType.cancel:
-        self.autoCruiseCancelState = 0 if self.autoCruiseCancelState > 0 else 1
+        if self.autoCruiseCancelState > 0:
+          controls.lateral_allowed_carrot = False if controls.lateral_allowed_carrot else True
+          if controls.lateral_allowed_carrot:
+            self._add_log("Button cancel : lateral ON")
+          else:
+            self._add_log("Button cancel : lateral OFF")
+        else:
+          self._add_log("Button cancel : Cruise OFF")
+        self.autoCruiseCancelState = 1
         controls.events.add(EventName.audioPrompt)
         print("autoCruiseCancelSate = {}".format(self.autoCruiseCancelState))
-        self.autoCruiseCancelTimer = 0
-      elif button_type != 0:
+      else:
         self.autoCruiseCancelState = 0
-        self.autoCruiseCancelTimer = 0
+        print("autoCruiseCancelSate = {}".format(self.autoCruiseCancelState))
+
+    if self.brake_pressed_count > 0 or self.gas_pressed_count > 0:
       if self.cruiseActivate > 0:
         self.cruiseActivate = 0
+
+    #if self.brake_pressed_count > 0 or self.gas_pressed_count > 0 or button_type in [ButtonType.cancel, ButtonType.accelCruise, ButtonType.decelCruise]:
+    #  if button_type == ButtonType.cancel:
+    #    if self.autoCruiseCancelState > 0:
+    #      controls.lateral_allowed_carrot = False if controls.lateral_allowed_carrot else True
+    #    #self.autoCruiseCancelState = 0 if self.autoCruiseCancelState > 0 else 1
+    #    self.autoCruiseCancelState = 1
+    #    controls.events.add(EventName.audioPrompt)
+    #    print("autoCruiseCancelSate = {}".format(self.autoCruiseCancelState))
+    #    self.autoCruiseCancelTimer = 0
+    #  elif button_type != 0:
+    #    self.autoCruiseCancelState = 0
+    #    self.autoCruiseCancelTimer = 0
+    #  if self.cruiseActivate > 0:
+    #    self.cruiseActivate = 0
 
     return v_cruise_kph
 
