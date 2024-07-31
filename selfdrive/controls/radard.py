@@ -364,7 +364,7 @@ class VisionTrack_old:
 
   def get_lead(self, md):
     dPath = self.yRel + interp(self.dRel, md.position.x, md.position.y)
-    aLeadK = 0.0 if self.mixRadarInfo in [3] else clip(self.aLeadK, self.aLead - 1.0, self.aLead + 1.0)
+    aLeadK = clip(self.aLeadK, self.aLead - 1.0, self.aLead + 1.0)
     return {
       "dRel": self.dRel,
       "yRel": self.yRel,
@@ -373,7 +373,7 @@ class VisionTrack_old:
       "vLead": self.vLead,
       "vLeadK": self.vLeadK,    ## TODO: 아직 vLeadK는 엉망인듯...
       "aLeadK": aLeadK,
-      "aLeadTau": 0.3 if self.mixRadarInfo in [3] else self.aLeadTau,
+      "aLeadTau": self.aLeadTau,
       "fcw": False,
       "modelProb": self.prob,
       "status": self.status,
@@ -508,14 +508,14 @@ class VisionTrack:
         v_rel = (self.dRel - self.dRel_last) / self.radar_ts
         self.vRel = self.vRel * (1. - self.alpha) + v_rel * self.alpha
 
-        self.vRel = (lead_v_rel_pred + self.vRel) / 2
+        self.vRel = lead_v_rel_pred if self.mixRadarInfo == 3 else (lead_v_rel_pred + self.vRel) / 2
         #if lead_v_rel_pred < self.vRel:
         #  self.vRel = lead_v_rel_pred
         self.vLead = float(v_ego + self.vRel)
 
         a_lead = (self.vLead - self.vLead_last) / self.radar_ts * 0.5
         self.aLead = self.aLead * (1. - self.alpha_a) + a_lead * self.alpha_a
-        if abs(a_lead_vision) < abs(self.aLead):
+        if abs(a_lead_vision) < abs(self.aLead) or self.mixRadarInfo == 3:
           self.aLead = a_lead_vision
         
       self.vLeadK= self.vLead
@@ -652,7 +652,7 @@ class RadarD:
       if self.mixRadarInfo in [1]: ## leadOne: radar or vision, leadTwo: vision 
         self.radar_state.leadOne = self.get_lead(sm['modelV2'], self.tracks, 0, leads_v3[0], model_v_ego, low_speed_override=False)
         self.radar_state.leadTwo = self.get_lead(sm['modelV2'], self.tracks_empty, 0, leads_v3[0], model_v_ego, low_speed_override=False)
-      elif self.mixRadarInfo in [2,3]: ## vision only mode
+      elif self.mixRadarInfo in [2]: ## vision only mode
         self.radar_state.leadOne = self.get_lead(sm['modelV2'], self.tracks_empty, 0, leads_v3[0], model_v_ego, low_speed_override=False)
         self.radar_state.leadTwo = self.get_lead(sm['modelV2'], self.tracks_empty, 1, leads_v3[1], model_v_ego, low_speed_override=False)
       elif self.mixRadarInfo in [4]: ## additional radar detector
