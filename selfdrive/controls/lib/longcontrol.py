@@ -35,7 +35,8 @@ def long_control_state_trans(CP, active, long_control_state, v_ego, v_target,
       long_control_state = LongCtrlState.pid
       if stopping_condition: 
         stoppingAccel = float(Params().get_int("StoppingAccel")) * 0.01    ### pid출력이 급정지(-accel) 상태에서 stopping으로 들어가면... 차량이 너무 급하게 섬.. 기다려보자.... 시험 230911
-        if a_target_now > stoppingAccel and v_ego < CP.vEgoStopping:  
+        #if a_target_now > stoppingAccel:  
+        if a_target_now > stoppingAccel and v_ego < 0.5:
           long_control_state = LongCtrlState.stopping
 
     elif long_control_state == LongCtrlState.stopping:
