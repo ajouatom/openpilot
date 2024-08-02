@@ -9,7 +9,7 @@ from openpilot.common.params import Params
 LongCtrlState = car.CarControl.Actuators.LongControlState
 
 
-def long_control_state_trans(CP, active, long_control_state, v_ego, v_target,
+def long_control_state_trans(CP, active, long_control_state, v_ego, a_ego, v_target,
                              v_target_1sec, brake_pressed, cruise_standstill, a_target_now):
   # Ignore cruise standstill if car has a gas interceptor
   cruise_standstill = cruise_standstill and not CP.enableGasInterceptor
@@ -36,7 +36,7 @@ def long_control_state_trans(CP, active, long_control_state, v_ego, v_target,
       if stopping_condition: 
         stoppingAccel = float(Params().get_int("StoppingAccel")) * 0.01    ### pid출력이 급정지(-accel) 상태에서 stopping으로 들어가면... 차량이 너무 급하게 섬.. 기다려보자.... 시험 230911
         #if a_target_now > stoppingAccel:  
-        if a_target_now > stoppingAccel and v_ego < 0.5:
+        if a_target_now > stoppingAccel and v_ego < 0.5 and abs(a_ego) < 0.1:
           long_control_state = LongCtrlState.stopping
 
     elif long_control_state == LongCtrlState.stopping:
@@ -134,7 +134,7 @@ class LongControl:
 
     output_accel = self.last_output_accel
 
-    self.long_control_state, planned_stop = long_control_state_trans(self.CP, active, self.long_control_state, CS.vEgo,
+    self.long_control_state, planned_stop = long_control_state_trans(self.CP, active, self.long_control_state, CS.vEgo, CS.aEgo,
                                                        v_target, v_target_1sec, CS.brakePressed,
                                                        CS.cruiseState.standstill, a_target_now)
 
