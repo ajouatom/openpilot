@@ -1204,7 +1204,7 @@
       "descr": "0:레이더우선, 1:레이더+비젼, 2:비젼Only, 3:콤마, 4:당근시험",
       "egroup": "TEST",
       "etitle": "Radar test",
-      "edescr": "",
+      "edescr": "0:Default, 1:radar+vision, 2:vision only, 3:Stock, 4:Radar only(+30kph)",
       "min": 0,
       "max": 4,
       "default": 0,

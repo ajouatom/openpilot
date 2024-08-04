@@ -655,9 +655,6 @@ class RadarD:
       elif self.mixRadarInfo in [2]: ## vision only mode
         self.radar_state.leadOne = self.get_lead(sm['modelV2'], self.tracks_empty, 0, leads_v3[0], model_v_ego, low_speed_override=False)
         self.radar_state.leadTwo = self.get_lead(sm['modelV2'], self.tracks_empty, 1, leads_v3[1], model_v_ego, low_speed_override=False)
-      elif self.mixRadarInfo in [4]: ## additional radar detector
-        self.radar_state.leadOne = self.get_lead(sm['modelV2'], self.tracks, 0, leads_v3[0], model_v_ego, low_speed_override=False)
-        self.radar_state.leadTwo = leadCenter
       else: ## comma stock.
         self.radar_state.leadOne = self.get_lead(sm['modelV2'], self.tracks, 0, leads_v3[0], model_v_ego, low_speed_override=False)
         self.radar_state.leadTwo = self.get_lead(sm['modelV2'], self.tracks, 1, leads_v3[1], model_v_ego, low_speed_override=False)
@@ -714,7 +711,10 @@ class RadarD:
     if track is not None:
       lead_dict = track.get_RadarState(md, lead_msg.prob, float(-lead_msg.y[0]))
     elif (track is None) and ready and (lead_msg.prob > .5):
-      lead_dict = self.vision_tracks[index].get_lead(md)
+      if self.mixRadarInfo == 4 and v_ego * 3.6 > 30: ##
+        pass
+      else:
+        lead_dict = self.vision_tracks[index].get_lead(md)
 
     if low_speed_override:
       low_speed_tracks = [c for c in tracks.values() if c.potential_low_speed_lead(v_ego)]
