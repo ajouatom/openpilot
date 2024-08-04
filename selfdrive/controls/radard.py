@@ -711,7 +711,7 @@ class RadarD:
     if track is not None:
       lead_dict = track.get_RadarState(md, lead_msg.prob, float(-lead_msg.y[0]))
     elif (track is None) and ready and (lead_msg.prob > .5):
-      if self.mixRadarInfo == 4 and v_ego * 3.6 > 30: ##
+      if self.mixRadarInfo == 4 and v_ego * 3.6 > 30 and lead_msg.prob < 0.99: ##
         pass
       else:
         lead_dict = self.vision_tracks[index].get_lead(md)
