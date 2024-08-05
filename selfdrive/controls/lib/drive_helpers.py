@@ -462,21 +462,22 @@ class VCruiseHelper:
     if traffic_state11 > 0:
       self.traffic_state = 11
       self._add_log("Red light triggered")
-      print("Red light triggered")
+      #print("Red light triggered")
     elif traffic_state22 > 0:
       self.traffic_state = 22
       self._add_log("Green light triggered")
-      print("Green light triggered")
+      #print("Green light triggered")
     elif traffic_state1 > 0:
       self.traffic_state = 1
       self._add_log("Red light continued")
-      print("Red light continued")
+      #print("Red light continued")
     elif traffic_state2 > 0:
       self.traffic_state = 2
       self._add_log("Green light continued")
-      print("Green light continued")
+      #print("Green light continued")
     else:
-      self.traffic_state = 0
+      pass
+      #self.traffic_state = 0
       #print("TrafficLight none")
 
     self.traffic_light_q.append((x,y,color))
@@ -540,7 +541,7 @@ class VCruiseHelper:
     button_kph = v_cruise_kph
     buttonEvents = CS.buttonEvents
     button_speed_up_diff = 1
-    button_speed_dn_diff = self.cruiseSpeedUnit if self.cruiseButtonMode in [1, 2] else 1
+    button_speed_dn_diff = self.cruiseSpeedUnit if self.cruiseButtonMode in [1, 2, 3] else 1
 
     button_type = 0
     if self.button_cnt > 0:
@@ -598,7 +599,7 @@ class VCruiseHelper:
           v_cruise_kph = button_kph
           self._add_log("Button long pressed..{:.0f}".format(v_cruise_kph))
         elif button_type in [ButtonType.decelCruise]:
-          if self.cruiseButtonMode in [2] and self.params.get_int("EnableAVM") > 0:
+          if self.cruiseButtonMode in [2,3] and self.params.get_int("EnableAVM") > 0:
             self.activeAVM = 2 if self.activeAVM == 0 else 0
             self._add_log("Button long pressed..Enable AVM{}".format(self.activeAVM))
           else:
@@ -619,10 +620,14 @@ class VCruiseHelper:
           if self.softHoldActive > 0 and self.autoCruiseControl > 0:
             self.softHoldActive = 0
             self._add_log("Button softhold released ..")
+          elif self.xState == 5 and self.cruiseButtonMode in [3]: ## 5:e2eStopped
+            self.traffic_light_count = 0.5 / DT_CTRL
+            self.traffic_state = 22
+            self._add_log("Button start (traffic ignore)")
           else:
             if self.cruiseButtonMode == 0:
               v_cruise_kph = button_kph
-            elif self.cruiseButtonMode in [1,2]:
+            elif self.cruiseButtonMode in [1,2,3]:
               v_cruise_kph = self.v_cruise_speed_up(v_cruise_kph)
             self._add_log("Button speed up...{:.0f}".format(v_cruise_kph))
         elif button_type == ButtonType.decelCruise:
