@@ -293,7 +293,8 @@ class LongitudinalMpc:
     self.myEcoModeFactor = 0.8
     self.mySafeFactor = 1.0
     self.stopping_count = 0
-
+    self.traffic_starting = True
+    
     self.t_follow = 0
 
     self.mode = mode
@@ -698,6 +699,7 @@ class LongitudinalMpc:
     elif controlsState.trafficLight in [22, 2]:
       self.trafficState = TrafficState.green
       self.xState = XState.e2eCruise
+      self.traffic_starting = True  ##신호출발시 10kph가 될때까지 신호감지를 정지함.
 
     if self.xState == XState.e2eStopped:
       if carstate.gasPressed:
@@ -739,9 +741,11 @@ class LongitudinalMpc:
       elif v_ego_kph > 5.0: # and stop_x > 30.0:
         self.xState = XState.e2eCruise
     else: #XState.lead, XState.cruise, XState.e2eCruise
+      if v_ego_kph > 10.0:
+        self.traffic_starting = False
       if self.status:
         self.xState = XState.lead
-      elif self.trafficState == TrafficState.red and abs(carstate.steeringAngleDeg) < 30:
+      elif self.trafficState == TrafficState.red and abs(carstate.steeringAngleDeg) < 30 and not self.traffic_starting:
         self.xState = XState.e2eStop
         self.stopDist = self.xStop
       else:
