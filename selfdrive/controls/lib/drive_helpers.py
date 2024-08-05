@@ -639,9 +639,15 @@ class VCruiseHelper:
             self._add_log("Button speed set...{:.0f}".format(v_cruise_kph))
           else:
             #v_cruise_kph = button_kph
-            self.cruiseActiveReady = 1
-            self.cruiseActivate = -1
-            controls.events.add(EventName.audioPrompt)
+            if self.cruiseActiveReady == 0:
+              self.cruiseActiveReady = 1
+              self.cruiseActivate = -1
+              controls.events.add(EventName.audioPrompt)
+            else:
+              self.traffic_state = 11
+              self.cruiseActivate = 1
+              controls.events.add(EventName.audioPrompt)
+              self._add_log("Button force decel")
         elif button_type == ButtonType.cancel:
           print("************* cancel button pressed..")
         elif button_type == ButtonType.gapAdjustCruise:

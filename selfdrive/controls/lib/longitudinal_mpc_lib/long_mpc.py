@@ -706,6 +706,9 @@ class LongitudinalMpc:
       user_stop_decel = 1.0
       self.user_stop_distance = v_ego ** 2 / (user_stop_decel * 2)
 
+    if carstate.gasPressed or carstate.brakePressed:
+      self.user_stop_distance = -1
+
     if self.xState == XState.e2eStopped:
       if carstate.gasPressed:
         self.xState = XState.e2ePrepare
