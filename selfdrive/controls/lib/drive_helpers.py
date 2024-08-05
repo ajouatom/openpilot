@@ -604,7 +604,7 @@ class VCruiseHelper:
             self._add_log("Button long pressed..Enable AVM{}".format(self.activeAVM))
           elif self.cruiseButtonMode in [3]:
             self.traffic_light_count = 0.5 / DT_CTRL
-            self.traffic_state = 11
+            self.traffic_state = 33
             controls.events.add(EventName.audioPrompt)
             self._add_log("Button force decel")
           else:
