@@ -286,7 +286,7 @@ class LongitudinalMpc:
     self.comfort_brake = self.comfortBrake
     self.xState = XState.cruise
     self.xStop = 0.0
-    self.stopDist = 0.0
+    self.actual_stop_distance = 0.0
     self.debugLongText = ""
     self.myDrivingMode = 3 # general mode
     self.mySafeModeFactor = 0.8
@@ -480,7 +480,7 @@ class LongitudinalMpc:
     else:
       v_cruise, stop_x, self.mode = self.update_apilot(carstate, controlsState, radarstate, model, v_cruise, carrot_planner)
     #self.debugLongText = "{},{},{:.1f},tf={:.2f},{:.1f},stop={:.1f},{:.1f},xv={:.0f},{:.0f}".format(
-    #  str(self.xState), str(self.trafficState), v_cruise*3.6, t_follow, t_follow*v_ego+6.0, stop_x, self.stopDist,x[-1],v[-1])
+    #  str(self.xState), str(self.trafficState), v_cruise*3.6, t_follow, t_follow*v_ego+6.0, stop_x, self.actual_stop_distance,x[-1],v[-1])
     xe, ve = x[-1], v[-1]
     # TODO: e2eStop시 속도증가된는 문제발생, 일단 속도제한해보자.. 왜그러지? cruise_obstacle이 더 작을텐데...
     if self.xState == XState.e2eStop:
@@ -543,7 +543,7 @@ class LongitudinalMpc:
     self.params[:,7] = applyStopDistance
 
     self.debugLongText = "{},tf={:.2f},{:.1f},stop={:.1f},{:.1f},xv={:.0f},{:.0f},xt={:.0f},{:.0f}".format(
-      str(self.xState), t_follow, t_follow*v_ego+6.0, stop_x, self.stopDist,xe,ve, self.params[:,2][0], lead_0_obstacle[0])
+      str(self.xState), t_follow, t_follow*v_ego+6.0, stop_x, self.actual_stop_distance,xe,ve, self.params[:,2][0], lead_0_obstacle[0])
 
     self.run()
     if (np.any(lead_xv_0[FCW_IDXS,0] - self.x_sol[FCW_IDXS,0] < CRASH_DISTANCE) and
@@ -688,9 +688,8 @@ class LongitudinalMpc:
     self.fakeCruiseDistance = 0.0
     radar_detected = radarstate.leadOne.status & radarstate.leadOne.radar
 
-    stop_x = x[31]
-    self.xStop = self.update_stop_dist(stop_x)
-    stop_x = self.xStop
+    self.xStop = self.update_stop_dist(x[31])
+    stop_model_x = self.xStop
 
     #self.check_model_stopping(v, v_ego, self.xStop, y)
     self.check_model_stopping(v, v_ego, x[-1], y)
@@ -712,7 +711,7 @@ class LongitudinalMpc:
     if self.xState == XState.e2eStopped:
       if carstate.gasPressed:
         self.xState = XState.e2ePrepare
-      elif radar_detected and (radarstate.leadOne.dRel - stop_x) < 2.0:
+      elif radar_detected and (radarstate.leadOne.dRel - stop_model_x) < 2.0:
         self.xState = XState.lead
       elif self.stopping_count == 0:
         if self.trafficState == TrafficState.green:
@@ -723,7 +722,7 @@ class LongitudinalMpc:
       self.stopping_count = 0
       if carstate.gasPressed:
         self.xState = XState.e2ePrepare
-      elif radar_detected and (radarstate.leadOne.dRel - stop_x) < 2.0:
+      elif radar_detected and (radarstate.leadOne.dRel - stop_model_x) < 2.0:
         self.xState = XState.lead
       else:
         if self.trafficState == TrafficState.green:
@@ -733,10 +732,10 @@ class LongitudinalMpc:
           #self.comfort_brake = COMFORT_BRAKE
           self.trafficStopAdjustRatio = interp(v_ego_kph, [0, 100], [1.0, 0.7])
           stop_dist = self.xStop * interp(self.xStop, [0, 100], [1.0, self.trafficStopAdjustRatio])  ##남은거리에 따라 정지거리 비율조정
-          if stop_dist > 5.0:
-            self.stopDist = stop_dist
-          stop_x = 0
-          self.fakeCruiseDistance = 0 if self.stopDist > 10.0 else 10.0
+          if stop_dist > 10.0: ### 10M이상일때만, self.actual_stop_distance를 업데이트함.
+            self.actual_stop_distance = stop_dist
+          stop_model_x = 0
+          self.fakeCruiseDistance = 0 if self.actual_stop_distance > 10.0 else 10.0
           if v_ego < 0.3:
             self.stopping_count = 0.5 / DT_MDL
             self.xState = XState.e2eStopped
@@ -745,8 +744,8 @@ class LongitudinalMpc:
         self.xState = XState.lead
       elif v_ego_kph < 5.0 and self.trafficState != TrafficState.green:
         self.xState = XState.e2eStop
-        self.stopDist = 2.0
-      elif v_ego_kph > 5.0: # and stop_x > 30.0:
+        self.actual_stop_distance = 2.0
+      elif v_ego_kph > 5.0: # and stop_model_x > 30.0:
         self.xState = XState.e2eCruise
     else: #XState.lead, XState.cruise, XState.e2eCruise
       if v_ego_kph > 10.0:
@@ -755,31 +754,35 @@ class LongitudinalMpc:
         self.xState = XState.lead
       elif self.trafficState == TrafficState.red and abs(carstate.steeringAngleDeg) < 30 and not self.traffic_starting:
         self.xState = XState.e2eStop
-        self.stopDist = self.xStop
+        self.actual_stop_distance = self.xStop
       else:
         self.xState = XState.e2eCruise
 
     if self.trafficState in [TrafficState.off, TrafficState.green] or self.xState not in [XState.e2eStop, XState.e2eStopped]:
-      stop_x = 1000.0
+      stop_model_x = 1000.0
 
     if self.user_stop_distance >= 0:
       self.user_stop_distance = max(0, self.user_stop_distance - v_ego * DT_MDL)
-      self.stopDist = self.user_stop_distance
+      self.actual_stop_distance = self.user_stop_distance
       self.xState = XState.e2eStop if self.user_stop_distance > 0 else XState.e2eStopped
-      stop_x = 0
+      stop_model_x = 0
       
     mode = 'blended' if self.xState in [XState.e2ePrepare] else 'acc'
 
     self.comfort_brake *= self.mySafeFactor
-    self.stopDist = max(0, self.stopDist - (v_ego * DT_MDL))
-    if stop_x == 1000.0:
-      self.stopDist = 0.0
-    elif self.stopDist > 0:
-      self.stopDist = max(self.stopDist, v_ego ** 2 / (self.comfort_brake * 2))
-      stop_x = 0.0
-    #self.debugLongText = "XState({}),stop_x={:.1f},stopDist={:.1f},Traffic={}".format(str(self.xState), stop_x, self.stopDist, str(self.trafficState))
+    self.actual_stop_distance = max(0, self.actual_stop_distance - (v_ego * DT_MDL))
+    
+    if stop_model_x == 1000.0: ##  e2eCruise, lead인경우
+      self.actual_stop_distance = 0.0
+    elif self.actual_stop_distance > 0: ## e2eStop, e2eStopped인경우..
+      stop_model_x = 0.0
+      
+    #self.debugLongText = "XState({}),stop_x={:.1f},stopDist={:.1f},Traffic={}".format(str(self.xState), stop_x, self.actual_stop_distance, str(self.trafficState))
     #번호를 읽을때는 self.xState.value
-    return v_cruise, stop_x + self.stopDist, mode
+      
+    stop_dist =  stop_model_x + self.actual_stop_distance
+    stop_dist = max(stop_dist, v_ego ** 2 / (self.comfort_brake * 2))
+    return v_cruise, stop_dist, mode
 
 
 if __name__ == "__main__":
