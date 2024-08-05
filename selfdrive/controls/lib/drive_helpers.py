@@ -603,6 +603,7 @@ class VCruiseHelper:
             self.activeAVM = 2 if self.activeAVM == 0 else 0
             self._add_log("Button long pressed..Enable AVM{}".format(self.activeAVM))
           elif self.cruiseButtonMode in [3]:
+            self.traffic_light_count = 0.5 / DT_CTRL
             self.traffic_state = 11
             controls.events.add(EventName.audioPrompt)
             self._add_log("Button force decel")
@@ -624,7 +625,7 @@ class VCruiseHelper:
           if self.softHoldActive > 0 and self.autoCruiseControl > 0:
             self.softHoldActive = 0
             self._add_log("Button softhold released ..")
-          elif self.xState == 5 and self.cruiseButtonMode in [3]: ## 5:e2eStopped
+          elif self.xState in [3, 5] and self.cruiseButtonMode in [3]: ## 5:e2eStopped
             self.traffic_light_count = 0.5 / DT_CTRL
             self.traffic_state = 22
             self._add_log("Button start (traffic ignore)")

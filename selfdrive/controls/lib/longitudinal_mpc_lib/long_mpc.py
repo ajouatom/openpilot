@@ -293,7 +293,7 @@ class LongitudinalMpc:
     self.myEcoModeFactor = 0.8
     self.mySafeFactor = 1.0
     self.stopping_count = 0
-    self.traffic_starting = True
+    self.traffic_starting_count = 0
     self.user_stop_distance = -1
     
     self.t_follow = 0
@@ -699,8 +699,7 @@ class LongitudinalMpc:
     elif controlsState.trafficLight in [22, 2]:
       self.trafficState = TrafficState.green
       self.xState = XState.e2eCruise
-      self.traffic_starting = True  ##신호출발시 10kph가 될때까지 신호감지를 정지함.
-      self.user_stop_distance = -1
+      self.traffic_starting_count = 10.0 / DT_MDL  ##신호출발시 10초가 될때까지 신호감지를 정지함.
     elif controlsState.trafficLight in [11, 1] and self.user_stop_distance < 0:
       user_stop_decel = 1.0
       self.user_stop_distance = v_ego ** 2 / (user_stop_decel * 2)
@@ -748,11 +747,10 @@ class LongitudinalMpc:
       elif v_ego_kph > 5.0: # and stop_model_x > 30.0:
         self.xState = XState.e2eCruise
     else: #XState.lead, XState.cruise, XState.e2eCruise
-      if v_ego_kph > 10.0:
-        self.traffic_starting = False
+      self.traffic_starting_count = max(0, self.traffic_starting_count - 1)
       if self.status:
         self.xState = XState.lead
-      elif self.trafficState == TrafficState.red and abs(carstate.steeringAngleDeg) < 30 and not self.traffic_starting:
+      elif self.trafficState == TrafficState.red and abs(carstate.steeringAngleDeg) < 30 and self.traffic_starting_count == 0:
         self.xState = XState.e2eStop
         self.actual_stop_distance = self.xStop
       else:
@@ -765,7 +763,6 @@ class LongitudinalMpc:
       self.user_stop_distance = max(0, self.user_stop_distance - v_ego * DT_MDL)
       self.actual_stop_distance = self.user_stop_distance
       self.xState = XState.e2eStop if self.user_stop_distance > 0 else XState.e2eStopped
-      stop_model_x = 0
       
     mode = 'blended' if self.xState in [XState.e2ePrepare] else 'acc'
 
