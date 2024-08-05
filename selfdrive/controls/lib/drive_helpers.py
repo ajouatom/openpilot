@@ -602,6 +602,10 @@ class VCruiseHelper:
           if self.cruiseButtonMode in [2,3] and self.params.get_int("EnableAVM") > 0:
             self.activeAVM = 2 if self.activeAVM == 0 else 0
             self._add_log("Button long pressed..Enable AVM{}".format(self.activeAVM))
+          elif self.cruiseButtonMode in [3]:
+            self.traffic_state = 11
+            controls.events.add(EventName.audioPrompt)
+            self._add_log("Button force decel")
           else:
             v_cruise_kph = button_kph
             self._add_log("Button long pressed..{:.0f}".format(v_cruise_kph))
@@ -639,15 +643,9 @@ class VCruiseHelper:
             self._add_log("Button speed set...{:.0f}".format(v_cruise_kph))
           else:
             #v_cruise_kph = button_kph
-            if self.cruiseActiveReady == 0:
-              self.cruiseActiveReady = 1
-              self.cruiseActivate = -1
-              controls.events.add(EventName.audioPrompt)
-            else:
-              self.traffic_state = 11
-              self.cruiseActivate = 1
-              controls.events.add(EventName.audioPrompt)
-              self._add_log("Button force decel")
+            self.cruiseActiveReady = 1
+            self.cruiseActivate = -1
+            controls.events.add(EventName.audioPrompt)
         elif button_type == ButtonType.cancel:
           print("************* cancel button pressed..")
         elif button_type == ButtonType.gapAdjustCruise:
