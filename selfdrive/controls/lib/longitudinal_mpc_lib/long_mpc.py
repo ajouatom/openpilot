@@ -294,6 +294,7 @@ class LongitudinalMpc:
     self.mySafeFactor = 1.0
     self.stopping_count = 0
     self.traffic_starting = True
+    self.user_stop_distance = -1
     
     self.t_follow = 0
 
@@ -700,6 +701,10 @@ class LongitudinalMpc:
       self.trafficState = TrafficState.green
       self.xState = XState.e2eCruise
       self.traffic_starting = True  ##신호출발시 10kph가 될때까지 신호감지를 정지함.
+      self.user_stop_distance = -1
+    elif controlsState.trafficLight in [11, 1] and self.user_stop_distance < 0:
+      user_stop_decel = 1.0
+      self.user_stop_distance = v_ego ** 2 / (user_stop_decel * 2)
 
     if self.xState == XState.e2eStopped:
       if carstate.gasPressed:
@@ -754,6 +759,12 @@ class LongitudinalMpc:
     if self.trafficState in [TrafficState.off, TrafficState.green] or self.xState not in [XState.e2eStop, XState.e2eStopped]:
       stop_x = 1000.0
 
+    if self.user_stop_distance >= 0:
+      self.user_stop_distance = max(0, self.user_stop_distance - v_ego * DT_MDL)
+      self.stopDist = self.user_stop_distance
+      self.xState = XState.e2eStop if self.user_stop_distance > 0 else XState.e2eStopped
+      stop_x = 0
+      
     mode = 'blended' if self.xState in [XState.e2ePrepare] else 'acc'
 
     self.comfort_brake *= self.mySafeFactor
