@@ -458,6 +458,7 @@ class VCruiseHelper:
           elif color in ["Red", "RED_LEFT", "RED_YELLOW", "YELLOW"]:
             traffic_state1 += 1
 
+    print(self.traffic_light_q)
     if traffic_state11 > 0:
       self.traffic_state = 11
       self._add_log("Red light triggered")
@@ -476,7 +477,7 @@ class VCruiseHelper:
       print("Green light continued")
     else:
       self.traffic_state = 0
-      print("TrafficLight none")
+      #print("TrafficLight none")
 
     self.traffic_light_q.append((x,y,color))
 
