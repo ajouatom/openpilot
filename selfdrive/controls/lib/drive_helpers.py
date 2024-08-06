@@ -447,13 +447,13 @@ class VCruiseHelper:
     for pdata in self.traffic_light_q:
       px, py, pcolor = pdata
       if abs(x - px) < 0.3 and abs(y - py) < 0.3:
-        if pcolor in ["Green Light", "Left turn", "Left turn"]:
+        if pcolor in ["Green Light", "Left turn"]:
           if color in ["Red Light", "Yello Light"]:
             traffic_state11 += 1
-          elif color in ["Green Light", "Left turn", "Left turn"]:
+          elif color in ["Green Light", "Left turn"]:
             traffic_state2 += 1
         elif pcolor in ["Red Light", "Yello Light"]:
-          if color in ["Green Light", "Left turn", "Left turn"]:
+          if color in ["Green Light", "Left turn"]:
             traffic_state22 += 1
           elif color in ["Red Light", "Yello Light"]:
             traffic_state1 += 1
