@@ -33,7 +33,7 @@ class Port:
 
 
 class RoadLimitSpeedServer:
-  def __init__(self):
+  def __init__(self, sm):
     self.json_road_limit = None
     self.json_apilot = None
     self.active = 0
@@ -47,6 +47,8 @@ class RoadLimitSpeedServer:
 
     self.remote_gps_addr = None
     self.last_time_location = 0
+
+    self.sm = sm
     
     broadcast = Thread(target=self.broadcast_thread, args=[])
     broadcast.daemon = True
@@ -74,25 +76,33 @@ class RoadLimitSpeedServer:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)  ## test.. carrot
         while True:
 
-          try:
-
-            if broadcast_address is None or frame % 10 == 0:
-              broadcast_address = self.get_broadcast_address()
-
-            if broadcast_address is not None and self.remote_addr is None:
-              print('broadcast', broadcast_address)
-
+          if self.active_apilot > 0:
+            try:
               msg = self.make_msg()
-              for i in range(1, 255):
-                ip_tuple = socket.inet_aton(broadcast_address)
-                new_ip = ip_tuple[:-1] + bytes([i])
-                address = (socket.inet_ntoa(new_ip), Port.BROADCAST_PORT)
-                sock.sendto(msg.encode(), address)
-          except Exception as e:
-            print("$$$$$$RoadSpeedLimiter Exception: " + str(e))
-            pass
+              sock.sendto(msg.encode(), self.remote_addr)
+              pass
+            except Exception as e:
+              print("$$$$$$RoadSpeedLimiter Send exception: " + str(e))
+              self.active_apilot = 0
+          if frame % 10 == 0:
+            try:
+              if broadcast_address is None or frame % 100 == 0:
+                broadcast_address = self.get_broadcast_address()
 
-          time.sleep(5.)
+              if broadcast_address is not None and self.remote_addr is None:
+                print('broadcast', broadcast_address)
+
+                msg = self.make_msg()
+                for i in range(1, 255):
+                  ip_tuple = socket.inet_aton(broadcast_address)
+                  new_ip = ip_tuple[:-1] + bytes([i])
+                  address = (socket.inet_ntoa(new_ip), Port.BROADCAST_PORT)
+                  sock.sendto(msg.encode(), address)
+            except Exception as e:
+              print("$$$$$$RoadSpeedLimiter Exception: " + str(e))
+              pass
+
+          time.sleep(0.5)
           frame += 1
 
       except:
@@ -103,6 +113,15 @@ class RoadLimitSpeedServer:
     msg['Carrot'] = Params().get("Version").decode('utf-8')
     msg['IsOnroad'] = Params().get_bool("IsOnroad")
     msg['CarrotRouteActive'] = Params().get_bool("CarrotRouteActive")
+    if self.sm.updated['carState']:
+      pass
+    if self.sm.updated['controlsState']:
+      controls = self.sm['controlsState']
+      msg['active'] = controls.active
+    if self.sm.updated['longitudinalPlan']:
+      lp = self.sm['longitudinalPlan']
+      msg['xState'] = lp.xState
+      msg['trafficState'] = lp.trafficState
     return json.dumps(msg)
 
 
@@ -245,10 +264,12 @@ def estimate_position(lat, lon, speed, angle, dt):
 
 def main():
   print("RoadLimitSpeed Started.....")
-  server = RoadLimitSpeedServer()
 
   pm = messaging.PubMaster(['roadLimitSpeed'])
-  sm = messaging.SubMaster(['carState', 'liveLocationKalman', 'naviData'], poll='liveLocationKalman')
+  sm = messaging.SubMaster(['carState', 'liveLocationKalman', 'naviData', 'controlsState', 'longitudinalPlan'], poll='liveLocationKalman')
+
+  server = RoadLimitSpeedServer(sm)
+
   carState = None
   CS = None
   naviData = None
