@@ -701,7 +701,7 @@ class LongitudinalMpc:
       self.xState = XState.e2eCruise
       self.traffic_starting_count = 10.0 / DT_MDL  ##신호출발시 10초가 될때까지 신호감지를 정지함.
     elif controlsState.trafficLight in [33] and self.user_stop_distance < 0:
-      user_stop_decel = 1.0
+      user_stop_decel = 0.5
       self.user_stop_distance = v_ego ** 2 / (user_stop_decel * 2)
 
     if carstate.gasPressed or carstate.brakePressed:
