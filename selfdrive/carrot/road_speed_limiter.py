@@ -112,19 +112,27 @@ class RoadLimitSpeedServer:
         pass
 
   def make_msg(self):
+    params = Params()
     msg = {}
-    msg['Carrot'] = Params().get("Version").decode('utf-8')
-    msg['IsOnroad'] = Params().get_bool("IsOnroad")
-    msg['CarrotRouteActive'] = Params().get_bool("CarrotRouteActive")
-    if self.sm.updated['carState']:
-      pass
-    if self.sm.updated['controlsState']:
-      controls = self.sm['controlsState']
-      self.controls_active = controls.active
-    if self.sm.updated['longitudinalPlan']:
-      lp = self.sm['longitudinalPlan']
-      self.xState = lp.xState
-      self.trafficState = lp.trafficState
+    msg['Carrot'] = params.get("Version").decode('utf-8')
+    isOnroad = params.get_bool("IsOnroad")
+    msg['IsOnroad'] = isOnroad
+    msg['CarrotRouteActive'] = params.get_bool("CarrotRouteActive")
+    if not isOnroad:
+      self.controls_active = False
+      self.xState = 0
+      self.trafficState = 0
+    else:
+      if self.sm.updated['carState']:
+        pass
+      if self.sm.updated['controlsState']:
+        controls = self.sm['controlsState']
+        self.controls_active = controls.active
+      if self.sm.updated['longitudinalPlan']:
+        lp = self.sm['longitudinalPlan']
+        self.xState = lp.xState
+        self.trafficState = lp.trafficState
+        
     msg['active'] = self.controls_active
     msg['xState'] = self.xState
     msg['trafficState'] = self.trafficState
