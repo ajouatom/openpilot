@@ -1,5 +1,6 @@
 당근맨
 ------
+ * [다운로드](http://gofile.me/75fOH/FUNZrfvNv)
  * 설치
    * PC와 설치하려는 스마트폰을 USB로 연결(디버그 활성화)
    * PC에 adb설치
