@@ -49,6 +49,9 @@ class RoadLimitSpeedServer:
     self.last_time_location = 0
 
     self.sm = sm
+    self.controls_active = False
+    self.xState = 0
+    self.trafficState = 0
     
     broadcast = Thread(target=self.broadcast_thread, args=[])
     broadcast.daemon = True
@@ -117,11 +120,14 @@ class RoadLimitSpeedServer:
       pass
     if self.sm.updated['controlsState']:
       controls = self.sm['controlsState']
-      msg['active'] = controls.active
+      self.controls_active = controls.active
     if self.sm.updated['longitudinalPlan']:
       lp = self.sm['longitudinalPlan']
-      msg['xState'] = lp.xState
-      msg['trafficState'] = lp.trafficState
+      self.xState = lp.xState
+      self.trafficState = lp.trafficState
+    msg['active'] = self.controls_active
+    msg['xState'] = self.xState
+    msg['trafficState'] = self.trafficState
     return json.dumps(msg)
 
 
