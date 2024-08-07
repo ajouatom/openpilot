@@ -122,7 +122,7 @@ class RouteEngine:
         self.params.remove("NavDestination")
       if self.carrot_route_active:
         print("################# Carrot navigation terminated(no active)... ###################")
-        self.params.put_bool("CarrotRouteActive", False)
+        self.params.put_bool_nonblocking("CarrotRouteActive", False)
       self.carrot_route_active = False
 
     if self.carrot_route_active:
@@ -490,7 +490,7 @@ class RouteEngine:
             msg.navRoute.coordinates = coords
             self.pm.send('navRoute', msg)
             self.carrot_route_active = True
-            self.params.put_bool("CarrotRouteActive", True)
+            self.params.put_bool_nonblocking("CarrotRouteActive", True)
 
             if len(coords):
               dest = coords[-1]
