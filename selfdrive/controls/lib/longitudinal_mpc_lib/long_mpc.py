@@ -386,11 +386,11 @@ class LongitudinalMpc:
     lead_xv = np.column_stack((x_lead_traj, v_lead_traj))
     return lead_xv
 
-  def process_lead(self, lead):
+  def process_lead(self, lead, v_adjust):
     v_ego = self.x0[1]
     if lead is not None and lead.status:
       x_lead = lead.dRel
-      v_lead = lead.vLead
+      v_lead = lead.vLead + v_adjust
       #a_lead = lead.aLeadK
       a_lead = lead.aLead
       a_lead_tau = lead.aLeadTau
@@ -451,20 +451,23 @@ class LongitudinalMpc:
     applyStopDistance = self.stop_distance  * (2.0 - self.mySafeFactor)
     t_follow = self.update_tf(v_ego, t_follow)
     t_follow = self.update_dynamic_tf(t_follow, radarstate.leadOne, a_ego, v_ego)
+    v_adjust = 0
+
     carrotTest3 = Params().get_int("CarrotTest3")
     if carrotTest3 in [1,2]:
-      check_cut_out = radarstate.leadOne.dPath * radarstate.leadOne.vLat
+      check_cut_out = radarstate.leadOne.dPath * radarstate.leadOne.vLat #dPath:중앙에서의 위치, 속도를 곱하여 끼어들기인지 빠져나가는지 확인함.
       #print("{:.1f}, {:.1f}".format(check_cut_out, radarstate.leadOne.dPath + radarstate.leadOne.vLat))
       if check_cut_out > 0:
-        t_follow *= interp(abs(radarstate.leadOne.dPath + radarstate.leadOne.vLat), [0.5, 1.0, 2.0], [1.0, 0.5, 0.2])
+        t_follow *= interp(abs(radarstate.leadOne.dPath + radarstate.leadOne.vLat), [0.5, 1.0, 2.0], [1.0, 0.5, 0.2])   ## leadCar의 y위치와 y속도를 더해, y가 멀어지는지 예측함
+        v_adjust = abs(radarstate.leadOne.vLat) * 2.0   # leadCar y방향의 속도의 절대값에 2배를 하여, leadCar의 속도가 빠른것으로 계산하도록 유도함. 차선변경시 속도를 좀더 빠르게 하도록...
       elif carrotTest3 == 2:
         t_follow *= interp(abs(radarstate.leadOne.vLat), [0.5, 1.0, 2.0], [1.0, 1.1, 1.3])
     self.t_follow = t_follow
     
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
 
-    lead_xv_0 = self.process_lead(radarstate.leadOne)
-    lead_xv_1 = self.process_lead(radarstate.leadTwo)
+    lead_xv_0 = self.process_lead(radarstate.leadOne, v_adjust)
+    lead_xv_1 = self.process_lead(radarstate.leadTwo, v_adjust)
 
     # To estimate a safe distance from a moving lead, we calculate how much stopping
     # distance that lead needs as a minimum. We can add that to the current distance
