@@ -701,11 +701,13 @@ class RadarD:
     # vision match후 발견된 track이 없으면
     #  track_scc 가 있는 지 확인하고
     #    비전과의 차이가 35%(5M)이상 차이나면 scc가 발견못한것이기 때문에 비전것으로 처리함.
-    if track_scc is not None and track is None: 
-      track = track_scc
-      if self.vision_tracks[index].prob > .5:
-        if self.vision_tracks[index].dRel < track.dRel - 10.0: #끼어드는 차량이 있는 경우 처리..  5-> 10M바꿔보자... 240427
-          track = None
+
+    ### 240807, SCC레이더가 옆차선의것을 많이 가져옴... 사용하지 말아야겠다...
+    #if track_scc is not None and track is None:   
+    #  track = track_scc
+    #  if self.vision_tracks[index].prob > .5:
+    #    if self.vision_tracks[index].dRel < track.dRel - 10.0: #끼어드는 차량이 있는 경우 처리..  5-> 10M바꿔보자... 240427
+    #      track = None
 
     lead_dict = {'status': False}
     if track is not None:
