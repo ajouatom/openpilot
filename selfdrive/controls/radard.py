@@ -63,7 +63,6 @@ class Track:
     self.K_C = kalman_params.C
     self.K_K = kalman_params.K
     self.kf = KF1D([[v_lead], [0.0]], self.K_A, self.K_C, self.K_K)
-    self.kf_y = KF1D([[y_rel], [0.0]], self.K_A, self.K_C, self.K_K)
     self.dRel = 0.0
     self.vRel = 0.0
     self.vLat = 0.0
@@ -83,15 +82,15 @@ class Track:
     if abs(self.dRel - d_rel) > 3.0 or abs(self.vRel - v_rel) > 20.0 * self.radar_ts: # 거리3M이상, 20m/s^2이상 상대속도 차이날때 초기화
       self.cnt = 0
       self.kf = KF1D([[v_lead], [0.0]], self.K_A, self.K_C, self.K_K)
-      self.kf_y = KF1D([[y_rel], [0.0]], self.K_A, self.K_C, self.K_K)
       self.jerk = 0.0
       self.aLeadK_prev = 0.0
       self.aLead = 0.0
       self.vLead_prev = v_lead
+      self.vLat = 0.0
 
     # relative values, copy
     self.dRel = d_rel   # LONG_DIST
-    self.yRel = y_rel   # -LAT_DIST
+    #self.yRel = y_rel   # -LAT_DIST
     self.vRel = v_rel   # REL_SPEED
     self.aRel = a_rel   # REL_ACCEL: radar track만 나옴.
     self.vLead = v_lead
@@ -100,12 +99,15 @@ class Track:
     # computed velocity and accelerations
     if self.cnt > 0:
       self.kf.update(self.vLead)
-      self.kf_y.update(self.yRel)
       self.aLead_alpha = 0.15
       delta_vLead = 0.0 if abs(self.vLead) < 0.5 else self.vLead - self.vLead_prev
       self.aLead = self.aLead * (1.0 - self.aLead_alpha) + delta_vLead / self.radar_ts * self.aLead_alpha
 
-    self.vLat = float(self.kf_y.x[1][0])
+      self.vLat_alpha = 0.15
+      delta_yRel = y_rel - self.yRel
+      self.vLat = self.vLat * (1.0 - self.vLat_alpha) + delta_yRel / self.radar_ts * self.vLat_alpha
+
+    self.yRel = y_rel   # -LAT_DIST  
 
     self.vLeadK = float(self.kf.x[SPEED][0])
     self.aLeadK = float(self.kf.x[ACCEL][0])
@@ -117,8 +119,6 @@ class Track:
 
     if abs(self.aLeadK) < aLeadTauThreshold and self.jerk > -0.1:
       self.aLeadTau = aLeadTauValue
-#    elif self.jerk <= -0.1 and self.params.get_int("CarrotTest2") == 2:
-#      self.aLeadTau = 0
     else:
       self.aLeadTau = min(self.aLeadTau * 0.9, aLeadTauValue)
 
@@ -190,13 +190,9 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
 
   def prob(c, c_key):
     prob_d = laplacian_pdf(c.dRel, offset_vision_dist, lead.xStd[0])
-    prob_y = laplacian_pdf(c.yRel + c.vLat, -lead.y[0], lead.yStd[0])
+    prob_y = laplacian_pdf(c.yRel, -lead.y[0], lead.yStd[0])
     prob_v = laplacian_pdf(c.vRel + v_ego, lead.v[0], lead.vStd[0])
 
-    #속도가 빠른것에 weight를 더줌. apilot, 
-    #231120: 감속정지중, 전방차량정지상태인데, 주변의 노이즈성 레이더포인트가 검출되어 버림. 
-    #       이 포인트는 약간 먼데, 주행하고 있는것처럼.. 인식됨. 아주 잠깐 인식됨.
-    #        속도관련 weight를 없애야하나?  TG를 지나고 있는 차를 우선시하도록 만든건데...
     weight_v = interp(c.vRel + v_ego, [0, 10], [0.3, 1])
     # This is isn't exactly right, but good heuristic
     prob = prob_d * prob_y * prob_v * weight_v
@@ -207,20 +203,15 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
   track_key, track = max(tracks.items(), key=lambda item: prob(item[1], item[0]))
   #track = max(tracks.values(), key=prob)
 
-  #prob_values = {track_id: prob(track) for track_id, track in tracks.items()}
-  #max_prob_track_id = max(prob_values, key=prob_values.get)
-  #max_prob_value = prob_values[max_prob_track_id]
-  #track = tracks.get(max_prob_track_id)
   # yRel값은 왼쪽이 +값, lead.y[0]값은 왼쪽이 -값
 
   # if no 'sane' match is found return -1
   # stationary radar points can be false positives
   dist_sane = abs(track.dRel - offset_vision_dist) < max([(offset_vision_dist)*.35, 5.0])
-  vel_tolerance = 20.0 if lead.prob > 0.98 else 15.0 if lead.prob > 0.95 else 10 # high vision track prob, increase tolerance (for stopped car)
-  #vel_tolerance = interp(lead.prob, [0.80, 0.85, 0.98, 1.0], [10.0, 20.0, 25.0, 30.0])
+  vel_tolerance = 25.0 if lead.prob > 0.99 else 15.0 if lead.prob > 0.98 else 10 # high vision track prob, increase tolerance (for stopped car)
   vel_sane = (abs(track.vRel + v_ego - lead.v[0]) < vel_tolerance) or (v_ego + track.vRel > 3)
   ##간혹 어수선한경우, 전방에 차가 없지만, 좌우에 차가많은경우 억지로 레이더를 가져오는 경우가 있음..(레이더트랙의 경우)
-  y_sane = (abs(-lead.y[0]-(track.yRel+track.vLat)) < 3.2 / 2.)  #lane_width assumed 3.2M, laplacian_pdf 의 prob값을 검증하려했지만, y값으로 처리해도 될듯함.
+  y_sane = (abs(lead.y[0] + track.yRel) < 3.2 / 2.)  #lane_width assumed 3.2M, laplacian_pdf 의 prob값을 검증하려했지만, y값으로 처리해도 될듯함.
   if dist_sane and vel_sane and y_sane:
     return track
   else:
@@ -317,116 +308,6 @@ def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego):
 
   return [ll, lc, lr, leadCenter, leadLeft, leadRight]
 
-LEAD_KALMAN_SPEED, LEAD_KALMAN_ACCEL = 0, 1
-def lead_kf(v_lead: float, a_lead: float, dt: float = 0.05):
-  # Lead Kalman Filter params, calculating K from A, C, Q, R requires the control library.
-  # hardcoding a lookup table to compute K for values of radar_ts between 0.01s and 0.2s
-  assert dt > .01 and dt < .2, "Radar time step must be between .01s and 0.2s"
-  A = [[1.0, dt], [0.0, 1.0]]
-  C = [1.0, 0.0]
-  #Q = np.matrix([[10., 0.0], [0.0, 100.]])
-  #R = 1e3
-  #K = np.matrix([[ 0.05705578], [ 0.03073241]])
-  dts = [dt * 0.01 for dt in range(1, 21)]
-  K0 = [0.12287673, 0.14556536, 0.16522756, 0.18281627, 0.1988689,  0.21372394,
-        0.22761098, 0.24069424, 0.253096,   0.26491023, 0.27621103, 0.28705801,
-        0.29750003, 0.30757767, 0.31732515, 0.32677158, 0.33594201, 0.34485814,
-        0.35353899, 0.36200124]
-  K1 = [0.29666309, 0.29330885, 0.29042818, 0.28787125, 0.28555364, 0.28342219,
-        0.28144091, 0.27958406, 0.27783249, 0.27617149, 0.27458948, 0.27307714,
-        0.27162685, 0.27023228, 0.26888809, 0.26758976, 0.26633338, 0.26511557,
-        0.26393339, 0.26278425]
-  K = [[interp(dt, dts, K0)], [interp(dt, dts, K1)]]
-
-  kf = KF1D([[v_lead], [a_lead]], A, C, K)
-  return kf
-
-
-class VisionTrack_old:
-  def __init__(self, radar_ts):
-    self.radar_ts = radar_ts
-    self.dRel = 0.0
-    self.vRel = 0.0
-    self.yRel = 0.0
-    self.vLead = 0.0
-    self.aLead = 0.0
-    self.vLeadK = 0.0
-    self.aLeadK = 0.0
-    self.aLeadTau = _LEAD_ACCEL_TAU
-    self.prob = 0.0
-    self.status = False
-    self.aLeadTauPos = float(Params().get_int("ALeadTauPos")) / 100. 
-    self.aLeadTauNeg = float(Params().get_int("ALeadTauNeg")) / 100. 
-    self.aLeadTauThreshold = float(Params().get_int("ALeadTauThreshold")) / 100.
-
-    self.kf: KF1D | None = None
-    self.kf_v: KF1D | None = None
-
-  def get_lead(self, md):
-    dPath = self.yRel + interp(self.dRel, md.position.x, md.position.y)
-    aLeadK = clip(self.aLeadK, self.aLead - 1.0, self.aLead + 1.0)
-    return {
-      "dRel": self.dRel,
-      "yRel": self.yRel,
-      "dPath": dPath,
-      "vRel": self.vRel,
-      "vLead": self.vLead,
-      "vLeadK": self.vLeadK,    ## TODO: 아직 vLeadK는 엉망인듯...
-      "aLeadK": aLeadK,
-      "aLeadTau": self.aLeadTau,
-      "fcw": False,
-      "modelProb": self.prob,
-      "status": self.status,
-      "radar": False,
-      "radarTrackId": -1,
-      "aLead": aLeadK,
-    }
-
-  def reset(self):
-    self.status = False
-    self.kf = None
-    self.kf_v = None
-    self.aLeadTau = _LEAD_ACCEL_TAU
-
-  def update(self, lead_msg, model_v_ego, v_ego):
-    self.aLeadTauPos = float(Params().get_int("ALeadTauPos")) / 100. 
-    self.aLeadTauNeg = float(Params().get_int("ALeadTauNeg")) / 100. 
-    self.aLeadTauThreshold = float(Params().get_int("ALeadTauThreshold")) / 100.
-    self.mixRadarInfo = int(Params().get_int("MixRadarInfo"))
-
-    lead_v_rel_pred = lead_msg.v[0] - model_v_ego
-    self.prob = lead_msg.prob
-    self.v_ego = v_ego
-    if self.prob > .5:
-      self.dRel = float(lead_msg.x[0]) - RADAR_TO_CAMERA
-      self.yRel = float(-lead_msg.y[0])
-      self.vRel = lead_v_rel_pred
-      self.vLead = float(v_ego + lead_v_rel_pred)
-      self.aLead = lead_msg.a[0]
-      if self.prob < 0.99:
-        self.kf = None
-        self.kf_v = None
-      self.status = True
-    else:
-      self.reset()
-
-    if self.kf is None:
-      self.kf = lead_kf(self.vLead, self.aLead, self.radar_ts)
-      self.kf_v = lead_kf(self.dRel, self.vRel, self.radar_ts)
-    else:
-      self.kf.update(self.vLead)
-      self.kf_v.update(self.dRel)
-
-    #self.vLeadK = float(self.kf.x[LEAD_KALMAN_SPEED][0])
-    self.vLeadK = float(self.kf_v.x[1][0]) + model_v_ego
-    self.aLeadK = float(self.kf.x[LEAD_KALMAN_ACCEL][0])
-
-    # Learn if constant acceleration
-    aLeadTauValue = self.aLeadTauPos if self.aLead > self.aLeadTauThreshold else self.aLeadTauNeg
-    if abs(self.aLead) < self.aLeadTauThreshold:
-      self.aLeadTau = aLeadTauValue
-    else:
-      self.aLeadTau = min(self.aLeadTau * 0.9, aLeadTauValue)
 
 class VisionTrack:
   def __init__(self, radar_ts):
@@ -453,9 +334,6 @@ class VisionTrack:
     self.v_ego = 0.0
     self.cnt = 0
 
-    #self.kf: KF1D | None = None
-    #self.kf_v: KF1D | None = None
-
   def get_lead(self, md):
     dPath = self.yRel + interp(self.dRel, md.position.x, md.position.y)
     #aLeadK = 0.0 if self.mixRadarInfo in [3] else clip(self.aLeadK, self.aLead - 1.0, self.aLead + 1.0)
@@ -478,8 +356,6 @@ class VisionTrack:
 
   def reset(self):
     self.status = False
-    #self.kf = None
-    #self.kf_v = None
     self.aLeadTau = _LEAD_ACCEL_TAU
 
     self.vRel = 0.0
@@ -509,8 +385,6 @@ class VisionTrack:
         self.vRel = self.vRel * (1. - self.alpha) + v_rel * self.alpha
 
         self.vRel = lead_v_rel_pred if self.mixRadarInfo == 3 else (lead_v_rel_pred + self.vRel) / 2
-        #if lead_v_rel_pred < self.vRel:
-        #  self.vRel = lead_v_rel_pred
         self.vLead = float(v_ego + self.vRel)
 
         a_lead = (self.vLead - self.vLead_last) / self.radar_ts * 0.5
@@ -529,17 +403,6 @@ class VisionTrack:
 
     self.dRel_last = self.dRel
     self.vLead_last = self.vLead
-    
-    #if self.kf is None:
-    #  self.kf = lead_kf(self.vLead, self.aLead, self.radar_ts)
-    #  self.kf_v = lead_kf(self.dRel, self.vRel, self.radar_ts)
-    #else:
-    #  self.kf.update(self.vLead)
-    #  self.kf_v.update(self.dRel)
-
-    #self.vLeadK = float(self.kf.x[LEAD_KALMAN_SPEED][0])
-    #self.vLeadK = float(self.kf_v.x[1][0]) + model_v_ego
-    #self.aLeadK = float(self.kf.x[LEAD_KALMAN_ACCEL][0])
 
     # Learn if constant acceleration
     aLeadTauValue = self.aLeadTauPos if self.aLead > self.aLeadTauThreshold else self.aLeadTauNeg
