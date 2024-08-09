@@ -367,7 +367,6 @@ class VisionTrack:
     self.vLead = self.vLeadK = self.v_ego
     self.aLead = self.aLeadK = 0.0
     self.vLat = 0.0
-    self.dPath = 0.0
 
   def update(self, lead_msg, model_v_ego, v_ego, md):
     self.aLeadTauPos = float(Params().get_int("ALeadTauPos")) / 100. 
@@ -413,6 +412,7 @@ class VisionTrack:
     else:
       self.reset()
       self.cnt = 0
+      self.dPath = self.yRel + interp(self.dRel, md.position.x, md.position.y)
 
     self.dRel_last = self.dRel
     self.vLead_last = self.vLead
