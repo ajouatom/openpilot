@@ -135,9 +135,10 @@ class Track:
     self.aLeadK = aLeadK
     self.aLeadTau = aLeadTauInit
 
-  def get_RadarState(self, md, model_prob: float = 0.0, vision_y_rel = 0.0):
+  def get_RadarState(self, md, model_prob: float = 0.0, vision_y_rel = 0.0, vision_v_rat = 0.0):
     dRel = float(self.dRel)
-    yRel = float(self.yRel) if self.yRel != 0 else vision_y_rel
+    #yRel = float(self.yRel) if self.yRel != 0 else vision_y_rel
+    yRel = vision_y_rel if vision_y_rel != 0.0 else float(self.yRel)
     dPath = yRel + interp(dRel, md.position.x, md.position.y)
     return {
       "dRel": dRel,
@@ -269,13 +270,13 @@ def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego):
     # yRel값은 왼쪽이 +값, lead.y[0]값은 왼쪽이 -값
     d_y = c.yRel + interp(c.dRel, md_x, md_y)
     if abs(d_y) < lane_width/2:
-      ld = c.get_RadarState(md, lead_msg.prob, float(-lead_msg.y[0]))
+      ld = c.get_RadarState(md, lead_msg.prob, float(-lead_msg.y[0]), 0.0)
       leads_center[c.dRel] = ld
     elif -next_lane_y < d_y < 0:
-      ld = c.get_RadarState(md, 0.0)
+      ld = c.get_RadarState(md, 0.0, 0.0)
       leads_right[c.dRel] = ld
     elif 0 < d_y < next_lane_y:
-      ld = c.get_RadarState(md, 0.0)
+      ld = c.get_RadarState(md, 0.0, 0.0)
       leads_left[c.dRel] = ld
 
   if lead_msg.prob > 0.5:
@@ -331,6 +332,8 @@ class VisionTrack:
     self.alpha = 0.02
     self.alpha_a = 0.02
 
+    self.vLat = 0.0
+
     self.v_ego = 0.0
     self.cnt = 0
 
@@ -352,6 +355,7 @@ class VisionTrack:
       "radar": False,
       "radarTrackId": -1,
       "aLead": self.aLead,
+      "vLat": self.vLat,
     }
 
   def reset(self):
@@ -373,13 +377,14 @@ class VisionTrack:
     self.v_ego = v_ego
     if self.prob > .5:
       self.dRel = float(lead_msg.x[0]) - RADAR_TO_CAMERA
-      self.yRel = float(-lead_msg.y[0])
+      yRel = float(-lead_msg.y[0])
 
       a_lead_vision = lead_msg.a[0]
       if self.cnt < 1 or self.prob < 0.99:
         self.vRel = lead_v_rel_pred
         self.vLead = float(v_ego + lead_v_rel_pred)
         self.aLead = a_lead_vision
+        self.vLat = 0.0
       else:
         v_rel = (self.dRel - self.dRel_last) / self.radar_ts
         self.vRel = self.vRel * (1. - self.alpha) + v_rel * self.alpha
@@ -391,6 +396,10 @@ class VisionTrack:
         self.aLead = self.aLead * (1. - self.alpha_a) + a_lead * self.alpha_a
         if abs(a_lead_vision) < abs(self.aLead) or self.mixRadarInfo == 3:
           self.aLead = a_lead_vision
+
+        self.vLat = self.vLat * (1. - self.alpha) + (yRel - self.yRel) / self.radar_ts * self.alpha
+
+      self.yRel = yRel
         
       self.vLeadK= self.vLead
       self.aLeadK = self.aLead
@@ -574,7 +583,8 @@ class RadarD:
 
     lead_dict = {'status': False}
     if track is not None:
-      lead_dict = track.get_RadarState(md, lead_msg.prob, float(-lead_msg.y[0]))
+      #lead_dict = track.get_RadarState(md, lead_msg.prob, float(-lead_msg.y[0]))
+      lead_dict = track.get_RadarState(md, lead_msg.prob, self.vision_tracks[0].yRel, self.vision_tracks[0].vLat)
     elif (track is None) and ready and (lead_msg.prob > .5):
       if self.mixRadarInfo == 4 and v_ego * 3.6 > 30 and lead_msg.prob < 0.99: ##
         pass
@@ -588,7 +598,8 @@ class RadarD:
 
         # Only choose new track if it is actually closer than the previous one
         if (not lead_dict['status']) or (closest_track.dRel < lead_dict['dRel']):
-          lead_dict = closest_track.get_RadarState(md, lead_msg.prob, float(-lead_msg.y[0]))
+          #lead_dict = closest_track.get_RadarState(md, lead_msg.prob, float(-lead_msg.y[0]))
+          lead_dict = closest_track.get_RadarState(md, lead_msg.prob, self.vision_tracks[0].yRel, self.vision_tracks[0].vLat)
 
     return lead_dict
 
