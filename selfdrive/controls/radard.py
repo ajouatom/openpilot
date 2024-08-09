@@ -337,13 +337,14 @@ class VisionTrack:
     self.v_ego = 0.0
     self.cnt = 0
 
+    self.dPath = 0.0
+
   def get_lead(self, md):
-    dPath = self.yRel + interp(self.dRel, md.position.x, md.position.y)
     #aLeadK = 0.0 if self.mixRadarInfo in [3] else clip(self.aLeadK, self.aLead - 1.0, self.aLead + 1.0)
     return {
       "dRel": self.dRel,
       "yRel": self.yRel,
-      "dPath": dPath,
+      "dPath": self.dPath,
       "vRel": self.vRel,
       "vLead": self.vLead,
       "vLeadK": self.vLeadK,    ## TODO: 아직 vLeadK는 엉망인듯...
@@ -365,8 +366,10 @@ class VisionTrack:
     self.vRel = 0.0
     self.vLead = self.vLeadK = self.v_ego
     self.aLead = self.aLeadK = 0.0
+    self.vLat = 0.0
+    self.dPath = 0.0
 
-  def update(self, lead_msg, model_v_ego, v_ego):
+  def update(self, lead_msg, model_v_ego, v_ego, md):
     self.aLeadTauPos = float(Params().get_int("ALeadTauPos")) / 100. 
     self.aLeadTauNeg = float(Params().get_int("ALeadTauNeg")) / 100. 
     self.aLeadTauThreshold = float(Params().get_int("ALeadTauThreshold")) / 100.
@@ -377,7 +380,8 @@ class VisionTrack:
     self.v_ego = v_ego
     if self.prob > .5:
       self.dRel = float(lead_msg.x[0]) - RADAR_TO_CAMERA
-      yRel = float(-lead_msg.y[0])
+      self.yRel = float(-lead_msg.y[0])
+      dPath = self.yRel + interp(self.dRel, md.position.x, md.position.y)
 
       a_lead_vision = lead_msg.a[0]
       if self.cnt < 1 or self.prob < 0.99:
@@ -397,9 +401,9 @@ class VisionTrack:
         if abs(a_lead_vision) < abs(self.aLead) or self.mixRadarInfo == 3:
           self.aLead = a_lead_vision
 
-        self.vLat = self.vLat * (1. - self.alpha) + (yRel - self.yRel) / self.radar_ts * self.alpha
+        self.vLat = self.vLat * (1. - self.alpha) + (dPath - self.dPath) / self.radar_ts * self.alpha
 
-      self.yRel = yRel
+      self.dPath = dPath
         
       self.vLeadK= self.vLead
       self.aLeadK = self.aLead
@@ -513,8 +517,8 @@ class RadarD:
     #leads_v3 = sm['modelV2'].leadsV3
     if len(leads_v3) > 1:
       if model_updated:
-        self.vision_tracks[0].update(leads_v3[0], model_v_ego, self.v_ego)
-        self.vision_tracks[1].update(leads_v3[1], model_v_ego, self.v_ego)
+        self.vision_tracks[0].update(leads_v3[0], model_v_ego, self.v_ego, sm['modelV2'])
+        self.vision_tracks[1].update(leads_v3[1], model_v_ego, self.v_ego, sm['modelV2'])
 
       ll, lc, lr, leadCenter, self.radar_state.leadLeft, self.radar_state.leadRight = get_lead_side(self.v_ego, self.tracks, sm['modelV2'], sm['lateralPlan'].laneWidth, model_v_ego)
       self.radar_state.leadsLeft = list(ll)
