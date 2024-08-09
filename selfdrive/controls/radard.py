@@ -412,7 +412,7 @@ class VisionTrack:
     else:
       self.reset()
       self.cnt = 0
-      self.dPath = self.yRel + interp(self.dRel, md.position.x, md.position.y)
+      self.dPath = self.yRel + interp(v_ego ** 2 / (2 * 2.5), md.position.x, md.position.y)
 
     self.dRel_last = self.dRel
     self.vLead_last = self.vLead
