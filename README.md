@@ -26,12 +26,10 @@ What is the useful features of CarrotPilot?
   - Path UI: When long control is turned off or on, and depending on whether it's in lane mode or laneless mode, it's possible to specify different shapes and colors for the path. Above all, the moving path shape looks cool. (레인모드, 레인리스모드, 크루즈OFF에 대한 패쓰경로표시 방식 및 색상을 변경할 수 있다)
   - Debug plotting: It's a plotting tool for tuning long control and steering control. (튜닝을 위하여 차량의 주행상황, 레이더등의 그래프를 지원한다)
     
-**APILOT Traffic Stop/Go Mode: APILOT feature**
-  - If you turn off the ConditionalExperimental Setting in FrogPilot, you can experience the APILOT Traffic Stop/Go Mode in CarrotPilot. (개구리파일럿기능의 ConditionalExperimental 을 Off하면 Apilot의 신호정지/출발 기능을 경험할 수 있다)
+**APILOT Traffic Stop/Go Mode: APILOT feature**  
 
 **Custom Acceleration Based on Speed: APM**
-  - In APM, you can fine-tune the accleration based on driving speed.
-  - Accelration Profile must be set to Normal in FrogPilot.
+  - In APM, you can fine-tune the accleration based on driving speed.  
 
 **Fuel Efficiency Control Feature: APM, APILOT feature**
   - It controls to slightly exceed the set speed, then naturally reduces acceleration at the set speed to lessen engine strain (Hybrid vehicles naturally switch to EV mode).
