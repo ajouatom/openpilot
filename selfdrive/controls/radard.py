@@ -400,7 +400,7 @@ class VisionTrack:
         if abs(a_lead_vision) < abs(self.aLead) or self.mixRadarInfo == 3:
           self.aLead = a_lead_vision
 
-        vLat_alpha = 0.01
+        vLat_alpha = 0.005
         self.vLat = self.vLat * (1. - vLat_alpha) + (dPath - self.dPath) / self.radar_ts * vLat_alpha
 
       self.dPath = dPath
