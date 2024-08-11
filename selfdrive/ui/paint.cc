@@ -1244,7 +1244,6 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
         bool red_light = getTrafficMode() == 1;
         bool green_light = getTrafficMode() == 2;
 
-        traffic_light = 11;
         switch (traffic_light) {
         case 1: case 11: red_light = true; icon_red *= 1.5; break;
         case 2: case 22: green_light = true; icon_green *= 1.5; break;
