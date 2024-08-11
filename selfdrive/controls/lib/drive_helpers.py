@@ -95,7 +95,7 @@ class VCruiseHelper:
     self.xPosValidCount = 0
     self.button_long_time = 40
     self.accel_output = 0.0
-    self.traffic_light_q = collections.deque(maxlen=int(1.0/DT_CTRL))
+    self.traffic_light_q = collections.deque(maxlen=int(2.0/DT_CTRL))
     self.traffic_light_count = -1
     self.traffic_state = 0
 
@@ -446,7 +446,7 @@ class VCruiseHelper:
     traffic_state22 = 0
     for pdata in self.traffic_light_q:
       px, py, pcolor = pdata
-      if abs(x - px) < 0.3 and abs(y - py) < 0.3:
+      if abs(x - px) < 0.2 and abs(y - py) < 0.2:
         if pcolor in ["Green Light", "Left turn"]:
           if color in ["Red Light", "Yello Light"]:
             traffic_state11 += 1
