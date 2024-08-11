@@ -1238,9 +1238,21 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
         int bx = x;
         int by = y + 270;
 
+        int icon_red = icon_size;
+        int icon_green = icon_size;
+        int traffic_light = controls_state.getTrafficLight();
+        bool red_light = getTrafficMode() == 1;
+        bool green_light = getTrafficMode() == 2;
+
+        traffic_light = 11;
+        switch (traffic_light) {
+        case 1: case 11: red_light = true; icon_red *= 1.5; break;
+        case 2: case 22: green_light = true; icon_green *= 1.5; break;
+        }
+
         if (s->show_mode == 4 || s->show_mode == 5) {
-            if (getTrafficMode() == 1) ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2 + 270, icon_size, icon_size }, "ic_traffic_red", 1.0f);
-            else if (getTrafficMode() == 2) ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2 + 270, icon_size, icon_size }, "ic_traffic_green", 1.0f);
+            if (red_light) ui_draw_image(s, { x - icon_red / 2, y - icon_red / 2 + 270, icon_red, icon_red }, "ic_traffic_red", 1.0f);
+            else if (green_light) ui_draw_image(s, { x - icon_green / 2, y - icon_green / 2 + 270, icon_green, icon_green }, "ic_traffic_green", 1.0f);
         }
 
         float cur_speed = getVEgo() * (s->scene.is_metric ? MS_TO_KPH : MS_TO_MPH);
