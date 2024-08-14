@@ -445,38 +445,40 @@ class VCruiseHelper:
     return v_cruise_kph
 
   def traffic_light(self, x, y, color, cnf):    
-    traffic_state1 = 0
-    traffic_state2 = 0
-    traffic_state11 = 0
-    traffic_state22 = 0
+    traffic_red = 0
+    traffic_green = 0
+    traffic_red_trig = 0
+    traffic_green_trig = 0
     for pdata in self.traffic_light_q:
       px, py, pcolor,pcnf = pdata
       if abs(x - px) < 0.2 and abs(y - py) < 0.2:
         if pcolor in ["Green Light", "Left turn"]:
           if color in ["Red Light", "Yello Light"]:
-            traffic_state11 += cnf
+            traffic_red_trig += cnf
+            traffic_red += cnf
           elif color in ["Green Light", "Left turn"]:
-            traffic_state2 += cnf
+            traffic_green += cnf
         elif pcolor in ["Red Light", "Yello Light"]:
           if color in ["Green Light", "Left turn"]:
-            traffic_state22 += cnf
+            traffic_green_trig += cnf
+            traffic_green += cnf
           elif color in ["Red Light", "Yello Light"]:
-            traffic_state1 += cnf
+            traffic_red += cnf
 
     #print(self.traffic_light_q)
-    if traffic_state11 > 0:
+    if traffic_red_trig > 0:
       self.traffic_state = 11
       self._add_log("Red light triggered")
       #print("Red light triggered")
-    elif traffic_state22 > 0 and traffic_state22 > traffic_state1:  #주변에 red light의 cnf보다 더 크면 출발... 감지오류로 출발하는경우가 생김.
+    elif traffic_green_trig > 0 and traffic_green > traffic_red:  #주변에 red light의 cnf보다 더 크면 출발... 감지오류로 출발하는경우가 생김.
       self.traffic_state = 22
       self._add_log("Green light triggered")
       #print("Green light triggered")
-    elif traffic_state1 > 0:
+    elif traffic_red > 0:
       self.traffic_state = 1
       self._add_log("Red light continued")
       #print("Red light continued")
-    elif traffic_state2 > 0:
+    elif traffic_green > 0:
       self.traffic_state = 2
       self._add_log("Green light continued")
       #print("Green light continued")
