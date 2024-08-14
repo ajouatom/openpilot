@@ -431,7 +431,7 @@ class VCruiseHelper:
       elif msg.xCmd == "DETECT":
         self.debugText2 = "DETECT[{}]={}".format(msg.xIndex, msg.xArg)
         elements = [element.strip() for element in msg.xArg.split(',')]
-        self.traffic_light(float(elements[1]), float(elements[2]), elements[0], elements[3])
+        self.traffic_light(float(elements[1]), float(elements[2]), elements[0], float(elements[3]))
         self.traffic_light_count = 0.5 / DT_CTRL
         traffic_signal_detected = True
 
