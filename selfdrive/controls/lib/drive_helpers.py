@@ -357,6 +357,7 @@ class VCruiseHelper:
       self.roadSpeed = clip(0, msg.roadLimitSpeed, 150.0)
     self.xPosValidCount = msg.xPosValidCount
 
+    traffic_signal_detected = False
     if msg.xIndex > 0 and msg.xIndex != self.xIndex:      
       self.xIndex = msg.xIndex
       if msg.xCmd == "SPEED":
@@ -430,40 +431,44 @@ class VCruiseHelper:
       elif msg.xCmd == "DETECT":
         self.debugText2 = "DETECT[{}]={}".format(msg.xIndex, msg.xArg)
         elements = [element.strip() for element in msg.xArg.split(',')]
-        self.traffic_light(float(elements[1]), float(elements[2]), elements[0])
+        self.traffic_light(float(elements[1]), float(elements[2]), elements[0], elements[3])
         self.traffic_light_count = 0.5 / DT_CTRL
-    self.traffic_light_q.append((-1, -1, "none"))
-    self.traffic_light_count -= 1
-    if self.traffic_light_count < 0:
-      self.traffic_light_count = -1
-      self.traffic_state = 0
+        traffic_signal_detected = True
+
+    if not traffic_signal_detected:
+      self.traffic_light_q.append((-1, -1, "none", 0.0))
+      self.traffic_light_count -= 1
+      if self.traffic_light_count < 0:
+        self.traffic_light_count = -1
+        self.traffic_state = 0
+
     return v_cruise_kph
 
-  def traffic_light(self, x, y, color):    
+  def traffic_light(self, x, y, color, cnf):    
     traffic_state1 = 0
     traffic_state2 = 0
     traffic_state11 = 0
     traffic_state22 = 0
     for pdata in self.traffic_light_q:
-      px, py, pcolor = pdata
+      px, py, pcolor,pcnf = pdata
       if abs(x - px) < 0.2 and abs(y - py) < 0.2:
         if pcolor in ["Green Light", "Left turn"]:
           if color in ["Red Light", "Yello Light"]:
-            traffic_state11 += 1
+            traffic_state11 += cnf
           elif color in ["Green Light", "Left turn"]:
-            traffic_state2 += 1
+            traffic_state2 += cnf
         elif pcolor in ["Red Light", "Yello Light"]:
           if color in ["Green Light", "Left turn"]:
-            traffic_state22 += 1
+            traffic_state22 += cnf
           elif color in ["Red Light", "Yello Light"]:
-            traffic_state1 += 1
+            traffic_state1 += cnf
 
     #print(self.traffic_light_q)
     if traffic_state11 > 0:
       self.traffic_state = 11
       self._add_log("Red light triggered")
       #print("Red light triggered")
-    elif traffic_state22 > 0:
+    elif traffic_state22 > 0 and traffic_state22 > traffic_state1:  #주변에 red light의 cnf보다 더 크면 출발... 감지오류로 출발하는경우가 생김.
       self.traffic_state = 22
       self._add_log("Green light triggered")
       #print("Green light triggered")
@@ -480,7 +485,7 @@ class VCruiseHelper:
       #self.traffic_state = 0
       #print("TrafficLight none")
 
-    self.traffic_light_q.append((x,y,color))
+    self.traffic_light_q.append((x,y,color,cnf))
 
   def _add_log_auto_cruise(self, log):
     if self.autoCruiseControl > 0:
