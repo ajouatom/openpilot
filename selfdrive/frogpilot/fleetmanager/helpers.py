@@ -571,6 +571,11 @@ def get_all_toggle_values():
     "NoLogging",
 
     "AlwaysOnLateralEnabled",
+    "DisengageOnAccelerator",
+    "IsMetric",
+    "LanguageSetting",
+    "CompletedTrainingVersion",
+    "OpenpilotEnabledToggle",
     "SteerRatio",
     "MuteDoor",
     "MuteSeatbelt",

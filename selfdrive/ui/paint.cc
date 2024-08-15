@@ -681,8 +681,8 @@ void DrawPlot::makePlotData(const UIState* s, float& data1, float& data2, char *
         break;
     case 7:
         data1 = lp.getTFollow();//  //노
-        data2 = lead_radar.getVLat(); // 녹
-        sprintf(str, "7.Detected radar(G:VLat, Y:TF)");
+        data2 = lead_radar.getVLat() + lead_radar.getDPath(); // 녹
+        sprintf(str, "7.Detected radar(G:VLat+dPath, Y:TF)");
         break;
     case 8:
         data1 = lead_radar.getALeadTau();//  //노
@@ -1238,9 +1238,20 @@ void DrawApilot::drawSpeed(const UIState* s, int x, int y) {
         int bx = x;
         int by = y + 270;
 
+        int icon_red = icon_size;
+        int icon_green = icon_size;
+        int traffic_light = controls_state.getTrafficLight();
+        bool red_light = getTrafficMode() == 1;
+        bool green_light = getTrafficMode() == 2;
+
+        switch (traffic_light) {
+        case 1: case 11: red_light = true; icon_red *= 1.5; break;
+        case 2: case 22: green_light = true; icon_green *= 1.5; break;
+        }
+
         if (s->show_mode == 4 || s->show_mode == 5) {
-            if (getTrafficMode() == 1) ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2 + 270, icon_size, icon_size }, "ic_traffic_red", 1.0f);
-            else if (getTrafficMode() == 2) ui_draw_image(s, { x - icon_size / 2, y - icon_size / 2 + 270, icon_size, icon_size }, "ic_traffic_green", 1.0f);
+            if (red_light) ui_draw_image(s, { x - icon_red / 2, y - icon_red / 2 + 270, icon_red, icon_red }, "ic_traffic_red", 1.0f);
+            else if (green_light) ui_draw_image(s, { x - icon_green / 2, y - icon_green / 2 + 270, icon_green, icon_green }, "ic_traffic_green", 1.0f);
         }
 
         float cur_speed = getVEgo() * (s->scene.is_metric ? MS_TO_KPH : MS_TO_MPH);
@@ -1979,9 +1990,12 @@ void DrawApilot::drawDeviceState(UIState* s, bool show) {
     //float gpuTemp = 0.f;
 
     static int read_ip_count = 60;
+    static int info_switch = 0;
     if (read_ip_count == 60) {
         read_ip_address();
-        gitBranch = QString::fromStdString(params.get("GitBranch"));
+        info_switch = 1 - info_switch;
+        if (info_switch) gitBranch = QString::fromStdString(params.get("GitRemote"));
+        else gitBranch = QString::fromStdString(params.get("GitBranch"));
     }
     if (read_ip_count-- < 0) read_ip_count = 60;
     nvgTextAlign(s->vg, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM);

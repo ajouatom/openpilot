@@ -1,9 +1,10 @@
 당근맨
 ------
+ * [다운로드](http://gofile.me/75fOH/FUNZrfvNv)
  * 설치
    * PC와 설치하려는 스마트폰을 USB로 연결(디버그 활성화)
    * PC에 adb설치
-   * adb install -r CarrotMan16.apk 
+   * adb install -r CarrotMan.apk 
    * 스마트폰에서 당근맨의 권한은 모두 허용
    * 네비게이션을 사용한다면?
      * adb shell pm grant com.ajouatom.carrotman android.permission.READ_LOGS
