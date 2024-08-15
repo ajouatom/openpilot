@@ -55,7 +55,7 @@ def frame_processor(frame_queue, yolov8_model, debug=False):
 
         # Run YOLOv8 on the frame and get results
         #print("run yolo")
-        if False:
+        if True:
           results = run_yolov8_on_frame(yolov8_model, img_rgb)
 
           for result in results:
