@@ -1990,9 +1990,12 @@ void DrawApilot::drawDeviceState(UIState* s, bool show) {
     //float gpuTemp = 0.f;
 
     static int read_ip_count = 60;
+    static int info_switch = 0;
     if (read_ip_count == 60) {
         read_ip_address();
-        gitBranch = QString::fromStdString(params.get("GitRemote")) + "/" +  QString::fromStdString(params.get("GitBranch"));
+        info_switch = 1 - info_switch;
+        if (info_switch) gitBranch = QString::fromStdString(params.get("GitRemote"));
+        else gitBranch = QString::fromStdString(params.get("GitBranch"));
     }
     if (read_ip_count-- < 0) read_ip_count = 60;
     nvgTextAlign(s->vg, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM);
