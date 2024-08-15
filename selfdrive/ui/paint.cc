@@ -1992,7 +1992,7 @@ void DrawApilot::drawDeviceState(UIState* s, bool show) {
     static int read_ip_count = 60;
     if (read_ip_count == 60) {
         read_ip_address();
-        gitBranch = QString::fromStdString(params.get("GitBranch"));
+        gitBranch = QString::fromStdString(params.get("GithubUsername")) + "/" +  QString::fromStdString(params.get("GitBranch"));
     }
     if (read_ip_count-- < 0) read_ip_count = 60;
     nvgTextAlign(s->vg, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM);
