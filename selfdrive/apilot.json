@@ -444,19 +444,6 @@
       "unit": 1
     },
     {
-      "group": "주행튜닝",
-      "name": "LongitudinalTuningDeadzoneV",
-      "title": "DeadzoneV(0)x0.01",
-      "descr": "",
-      "egroup": "LONG",
-      "etitle": "DeadzoneV(0)x0.01",
-      "edescr": "",
-      "min": 0,
-      "max": 100,
-      "default": 0,
-      "unit": 1
-    },
-    {
       "group": "감속제어",
       "name": "AutoCurveSpeedFactor",
       "title": "커브속도 조절비율(100%)",
