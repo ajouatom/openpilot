@@ -230,7 +230,8 @@ void MapWindow::updateState(const UIState &s) {
     qWarning() << "Got new navRoute from navd. Opening map:" << allow_open;
 
     // Show map on destination set/change
-    if (allow_open && (params.getInt("AutoTurnMapChange") > 0)) {
+    int autoTurnMapChange = params.getInt("AutoTurnMapChange");
+    if (allow_open && (autoTurnMapChange > 0)) {
         printf("###########MapWindow : requestVisible\n");
       emit requestSettings(false);
       emit requestVisible(true);
@@ -239,7 +240,7 @@ void MapWindow::updateState(const UIState &s) {
       extern int _current_carrot_display;
       _current_carrot_display = 3;
       extern int _display_time_count;
-      _display_time_count = 100;
+      if (autoTurnMapChange == 2) _display_time_count = 100;
     }
   }
 
