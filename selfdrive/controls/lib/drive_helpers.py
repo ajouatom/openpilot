@@ -453,16 +453,16 @@ class VCruiseHelper:
       px, py, pcolor,pcnf = pdata
       if abs(x - px) < 0.2 and abs(y - py) < 0.2:
         if pcolor in ["Green Light", "Left turn"]:
-          if color in ["Red Light", "Yello Light"]:
+          if color in ["Red Light", "Yellow Light"]:
             traffic_red_trig += cnf
             traffic_red += cnf
           elif color in ["Green Light", "Left turn"]:
             traffic_green += cnf
-        elif pcolor in ["Red Light", "Yello Light"]:
+        elif pcolor in ["Red Light", "Yellow Light"]:
           if color in ["Green Light"]: #, "Left turn"]:
             traffic_green_trig += cnf
             traffic_green += cnf
-          elif color in ["Red Light", "Yello Light"]:
+          elif color in ["Red Light", "Yellow Light"]:
             traffic_red += cnf
 
     #print(self.traffic_light_q)
