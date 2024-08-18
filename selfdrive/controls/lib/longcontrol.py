@@ -69,7 +69,6 @@ class LongControl:
     self.longitudinalTuningKf = 1.0
     self.startAccelApply = 0.0
     self.stopAccelApply = 0.0
-    self.apply_kf = False
 
   def reset(self, v_pid):
     """Reset PID controller and change setpoint"""
@@ -91,9 +90,8 @@ class LongControl:
         self.CP.longitudinalTuning.kiV = [self.longitudinalTuningKiV]
         self.pid._k_p = (self.CP.longitudinalTuning.kpBP, self.CP.longitudinalTuning.kpV)
         self.pid._k_i = (self.CP.longitudinalTuning.kiBP, self.CP.longitudinalTuning.kiV)
-        #self.pid.k_f = self.longitudinalTuningKf
+        self.pid.k_f = self.longitudinalTuningKf
         #self.pid._k_i = ([0, 2.0, 200], [self.longitudinalTuningKiV, 0.0, 0.0]) # 정지때만.... i를 적용해보자... 시험..
-        self.apply_kf = True
     elif self.readParamCount == 30:
       pass
     elif self.readParamCount == 40:
@@ -107,7 +105,6 @@ class LongControl:
     if len(speeds) == CONTROL_N:
       v_target_now = interp(t_since_plan, ModelConstants.T_IDXS[:CONTROL_N], speeds)
       a_target_now = interp(t_since_plan, ModelConstants.T_IDXS[:CONTROL_N], long_plan.accels)
-      j_target = interp(t_since_plan, ModelConstants.T_IDXS[:CONTROL_N], long_plan.jerks)
 
       v_target_lower = interp(self.CP.longitudinalActuatorDelayLowerBound + t_since_plan, ModelConstants.T_IDXS[:CONTROL_N], speeds)
       a_target_lower = 2 * (v_target_lower - v_target_now) / self.CP.longitudinalActuatorDelayLowerBound - a_target_now
@@ -119,15 +116,11 @@ class LongControl:
       a_target = min(a_target_lower, a_target_upper)
 
       v_target_1sec = interp(self.CP.longitudinalActuatorDelayUpperBound + t_since_plan + 1.0, ModelConstants.T_IDXS[:CONTROL_N], speeds)
-
-      if self.apply_kf:
-        a_target *= interp(j_target, [-2, 0], [self.longitudinalTuningKf, 1.0])
     else:
       v_target = 0.0
       v_target_now = 0.0
       v_target_1sec = 0.0
       a_target = 0.0
-      j_target = 0.0
 
     self.pid.neg_limit = accel_limits[0]
     self.pid.pos_limit = accel_limits[1]
