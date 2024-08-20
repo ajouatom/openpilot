@@ -13,7 +13,7 @@ def long_control_state_trans(CP, active, long_control_state, v_ego, v_target,
                              v_target_1sec, brake_pressed, cruise_standstill, a_target_now):
   # Ignore cruise standstill if car has a gas interceptor
   cruise_standstill = cruise_standstill and not CP.enableGasInterceptor
-  accelerating = v_target_1sec > (v_target + 0.01)
+  accelerating = v_target_1sec > (v_target + 0.2)
   planned_stop = (v_target < CP.vEgoStopping and 
                   v_target_1sec < CP.vEgoStopping and
                   not accelerating)
