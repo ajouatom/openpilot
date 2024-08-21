@@ -7,9 +7,9 @@
    * adb install -r CarrotMan.apk 
    * 스마트폰에서 당근맨의 권한은 모두 허용
    * 네비게이션을 사용한다면?
-     * adb shell pm grant com.ajouatom.carrotman android.permission.READ_LOGS
-     * 당근전용네비는 더이상 배포하지 않습니다.
-           
+     * 네비게이션 설치 (당근전용네비는 더이상 배포하지 않습니다.)
+       * adb install -r navi_file.apk
+       * adb shell pm grant com.ajouatom.carrotman android.permission.READ_LOGS           
  * SSH입력 (CarrotMan30 부터 선택입력)
    * SSH키 입력을 안해도 작동은 하지만, git명령시 용량이 큰경우 타임아웃에러는 발생할수 있음.
    * SSH키 전송: 위에서 만든 id_rsa파일을 스마트폰에 복사
@@ -18,7 +18,7 @@
    * 오픈파일럿과 스마트폰은 동일 네트웍에 연결되어 있어야함.
    * 스마트폰에 핫스팟을 켜고, 오파를 연결시키는 방법이 제일 쉬움.
    * 연결이 성공되면 오파화면좌측상단에 APM 또는 APN이라고 아이콘이 생김.
- * 네비게이션 연결
+ * 네비게이션 연결   
    * 네비게이션 안내모드 또는 주행모드로 변경되면, 오파화면에는 APN아이콘이 생긴다.
    * 네비를 연결하면 과속카메라, 과속방지턱등 다양한 속도제어를 할 수 있다.
    * 티네비의 추가설정
