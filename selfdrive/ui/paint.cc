@@ -2201,6 +2201,9 @@ const char* class_names_kr[] = {
 const char* class_names[] = {
     "green", "left turn", "red light", "yellow light"
 };
+const char* class_names2[] = {
+    "green", "green", "red", "red_left", "yellow", "green_left", "red_yellow"
+};
 void DrawApilot::drawCarrotModel(const UIState* s) {
     SubMaster& sm = *(s->sm);
     auto detections = sm["carrotModel"].getCarrotModel().getDetections();
@@ -2218,7 +2221,7 @@ void DrawApilot::drawCarrotModel(const UIState* s) {
         nvgStrokeColor(s->vg, COLOR_GREEN);
         nvgStroke(s->vg);
         char str[128];
-        const char* className = class_names_kr[detection.getClassId()];
+        const char* className = class_names2[detection.getClassId()];
         sprintf(str, "%s, %.2f", className, detection.getScore());
         ui_draw_text(s, xMin, yMin - 10, str, 35, COLOR_WHITE, BOLD, 0.0f, 0.0f);
     }

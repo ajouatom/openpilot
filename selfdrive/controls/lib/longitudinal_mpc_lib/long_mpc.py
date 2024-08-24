@@ -700,7 +700,7 @@ class LongitudinalMpc:
     if (carstate.rightBlinker and not carstate.leftBlinker) or self.myDrivingMode == 4 or (carrot_planner.rightBlinkerExt % 10000) > 0:
       self.trafficState = TrafficState.off
     ##elif controlsState.trafficLight in [22, 2] and self.xState == XState.e2eStopped:
-    elif controlsState.trafficLight in [22] and self.xState == XState.e2eStopped:
+    elif controlsState.trafficLight in [22] and self.xState in [XState.e2eStop, XState.e2eStopped]:
       self.trafficState = TrafficState.green
       self.xState = XState.e2eCruise
       self.traffic_starting_count = 10.0 / DT_MDL  ##신호출발시 10초가 될때까지 신호감지를 정지함.

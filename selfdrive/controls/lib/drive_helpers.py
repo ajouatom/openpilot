@@ -291,7 +291,7 @@ class VCruiseHelper:
     if xState != self.xState and controls.enabled and self.brake_pressed_count < 0 and self.gas_pressed_count < 0: #0:lead, 1:cruise, 2:e2eCruise, 3:e2eStop, 4:e2ePrepare, 5:e2eStopped
       if xState == 3 and CS.vEgo > 5.0:
         self._make_event(controls, EventName.trafficStopping)  # stopping
-      elif xState == 4 and self.softHoldActive == 0:
+      elif (xState == 4 or (xState == 2 and self.xState in [3,5])) and self.softHoldActive == 0:
         self._make_event(controls, EventName.trafficSignGreen) # starting
     self.xState = xState
 
@@ -453,16 +453,16 @@ class VCruiseHelper:
       px, py, pcolor,pcnf = pdata
       if abs(x - px) < 0.2 and abs(y - py) < 0.2:
         if pcolor in ["Green Light", "Left turn"]:
-          if color in ["Red Light", "Yello Light"]:
+          if color in ["Red Light", "Yellow Light"]:
             traffic_red_trig += cnf
             traffic_red += cnf
           elif color in ["Green Light", "Left turn"]:
             traffic_green += cnf
-        elif pcolor in ["Red Light", "Yello Light"]:
-          if color in ["Green Light", "Left turn"]:
+        elif pcolor in ["Red Light", "Yellow Light"]:
+          if color in ["Green Light"]: #, "Left turn"]:
             traffic_green_trig += cnf
             traffic_green += cnf
-          elif color in ["Red Light", "Yello Light"]:
+          elif color in ["Red Light", "Yellow Light"]:
             traffic_red += cnf
 
     #print(self.traffic_light_q)

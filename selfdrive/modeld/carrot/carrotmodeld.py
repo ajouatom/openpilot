@@ -33,8 +33,8 @@ def main():
 
   #sm = SubMaster(["liveCalibration"])
   pm = PubMaster(["carrotModel"])
-  #carrot = YOLOv8(Path(__file__).parent / 'carrot-512.onnx', conf_thres=0.1, iou_thres=0.1)
-  carrot = YOLOv8(Path(__file__).parent / 'yolov8n.onnx', conf_thres=0.3, iou_thres=0.5)
+  carrot = YOLOv8(Path(__file__).parent / 'best.onnx', conf_thres=0.1, iou_thres=0.1)
+  #carrot = YOLOv8(Path(__file__).parent / 'yolov8n.onnx', conf_thres=0.3, iou_thres=0.5)
   last = 0
   rk = Ratekeeper(5, print_delay_threshold=None)
 

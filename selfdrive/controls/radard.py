@@ -212,8 +212,9 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
   vel_tolerance = 25.0 if lead.prob > 0.99 else 15.0 if lead.prob > 0.98 else 10 # high vision track prob, increase tolerance (for stopped car)
   vel_sane = (abs(track.vRel + v_ego - lead.v[0]) < vel_tolerance) or (v_ego + track.vRel > 3)
   ##간혹 어수선한경우, 전방에 차가 없지만, 좌우에 차가많은경우 억지로 레이더를 가져오는 경우가 있음..(레이더트랙의 경우)
-  y_sane = (abs(lead.y[0] + track.yRel) < 3.2 / 2.)  #lane_width assumed 3.2M, laplacian_pdf 의 prob값을 검증하려했지만, y값으로 처리해도 될듯함.
-  if dist_sane and vel_sane and y_sane:
+  # vision의 y값이 엉뚱하게 측정하는경우가 있음, 시골길 탱크로리같은것.... 위험하니 일단 삭제...
+  #y_sane = (abs(lead.y[0] + track.yRel) < 3.2 / 2.)  #lane_width assumed 3.2M, laplacian_pdf 의 prob값을 검증하려했지만, y값으로 처리해도 될듯함.
+  if dist_sane and vel_sane: # and y_sane:
     return track
   else:
     return None

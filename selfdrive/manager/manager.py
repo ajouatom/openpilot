@@ -131,7 +131,6 @@ def get_default_params():
     ("LongitudinalTuningKpV", "100"),     
     ("LongitudinalTuningKiV", "0"),     
     ("LongitudinalTuningKf", "100"),     
-    ("LongitudinalTuningDeadzoneV", "0"),     
     ("EnableRadarTracks", "0"),      
     ("EnableAVM", "0"),      
     ("SccConnectedBus2", "0"),

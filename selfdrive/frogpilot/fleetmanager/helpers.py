@@ -528,7 +528,6 @@ def get_all_toggle_values():
     "LongitudinalTuningKpV",
     "LongitudinalTuningKiV",
     "LongitudinalTuningKf",
-    "LongitudinalTuningDeadzoneV",
     "EnableRadarTracks",
     "EnableAVM",
     "HotspotOnBoot",
