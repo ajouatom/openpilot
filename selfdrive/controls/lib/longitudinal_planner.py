@@ -95,7 +95,7 @@ class LongitudinalPlanner:
   def get_carrot_accel(self, v_ego, curveSpeed, angle_steers):
     cruiseMaxVals = [self.cruiseMaxVals1, self.cruiseMaxVals2, self.cruiseMaxVals3, self.cruiseMaxVals4, self.cruiseMaxVals5, self.cruiseMaxVals6]
     #apply_curve_speed = interp(v_ego, [0, 10 * CV.KPH_TO_MS], [300, abs(curveSpeed)])
-    apply_angle_steers = interp(angle_steers, [0, 10, 50], [1.0, 0.8, 0.1])
+    apply_angle_steers = interp(angle_steers, [0, 10, 50], [1.0, 0.8, 0.5])
     #return interp(v_ego, A_CRUISE_MAX_BP_APILOT, cruiseMaxVals) * interp(apply_curve_speed, [0, 120], [0.1, 1.0]) * apply_angle_steers
     return interp(v_ego, A_CRUISE_MAX_BP_APILOT, cruiseMaxVals) * apply_angle_steers
     
