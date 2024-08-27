@@ -1196,4 +1196,30 @@ FW_VERSIONS = {
       b'\xf1\x00US4_ RDR -----      1.00 1.00 99110-CG000         ',
     ],
   },
+  CAR.HYUNDAI_CASPER: {
+    (Ecu.fwdRadar, 0x7d0, None): [
+      b'\xf1\x00AX1_ RDR -----      1.00 1.00 99110-O6000         ',
+    ],
+    (Ecu.eps, 0x7d4, None): [
+      b'\xf1\x00AX  MDPS C 1.00 1.02 56340-O6000 1B18',
+    ],
+    (Ecu.fwdCamera, 0x7c4, None): [
+      b'\xf1\x00AX1 MFC  AT KOR LHD 1.00 1.03 99211-O6000 211007',
+    ],
+    (Ecu.engine, 0x7e0, None): [
+      b'3910304150\x00',
+    ],
+    (Ecu.combinationMeter, 0x7c6, None): [
+      b'\xf1\x00008',
+    ],
+    (Ecu.hvac, 0x7b3, None): [
+      b"\xf1\x00AX    97250-O6210CONTROL ASS'Y-FATC  1.01 AX ATC 0.9 1.00     ",
+    ],
+    (Ecu.cornerRadar, 0x7b7, None): [
+      b'\xf1\x00AX  BCW RR 1.00 , 1.01 (w \x89!\x03c\x06\x12',
+    ],
+    (Ecu.transmission, 0x7e1, None): [
+      b'TAX0T10KB1',
+    ],
+  },
 }

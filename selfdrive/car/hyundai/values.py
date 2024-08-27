@@ -627,6 +627,10 @@ class CAR(Platforms):
     CarSpecs(mass=1695, wheelbase=2.6, steerRatio=13.75),
     flags=HyundaiFlags.CHECKSUM_CRC8 | HyundaiFlags.EV,
   )
+  HYUNDAI_CASPER = HyundaiPlatformConfig(
+  [HyundaiCarDocs("Hyundai Casper 2022-2024", "All", car_parts=CarParts.common([CarHarness.hyundai_a]))],
+  CarSpecs(mass=1060, wheelbase=2.4, steerRatio=14.3), # https://namu.wiki/w/%ED%98%84%EB%8C%80%20%EC%BA%90%EC%8A%A4%ED%8D%BC#s-3
+  )
 
 
 class Buttons:
