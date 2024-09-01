@@ -779,7 +779,7 @@ class VCruiseHelper:
             self._add_log("Gas tok speed up...{:.0f}".format(v_cruise_kph))
         elif self.autoResumeFromGasSpeed > 0:
           self._add_log_auto_cruise("Cruise Activate from GasTok")
-          #v_cruise_kph = self.v_ego_kph_set
+          v_cruise_kph = self.v_ego_kph_set
           self.cruiseActivate = 1
       self.gas_tok_frame = self.frame
     elif self.gas_pressed_count == -1:
