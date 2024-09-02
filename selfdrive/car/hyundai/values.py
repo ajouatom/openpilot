@@ -348,6 +348,12 @@ class CAR(Platforms):
     CarSpecs(mass=1690, wheelbase=3.055, steerRatio=17),  # mass: from https://www.hyundai-motor.com.tw/clicktobuy/custin#spec_0, steerRatio: from learner
     flags=HyundaiFlags.CHECKSUM_CRC8,
   )
+  HYUNDAI_CASPER = HyundaiPlatformConfig(
+    [
+      HyundaiCarDocs("HYUNDAI CASPER (AX1)", "All", car_parts=CarParts.common([CarHarness.hyundai_a]))
+    ],
+    CarSpecs(mass=1060, wheelbase=2.4, steerRatio=14.3),
+  )
 
   # Kia
   KIA_FORTE = HyundaiPlatformConfig(
