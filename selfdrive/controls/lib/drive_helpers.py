@@ -808,7 +808,7 @@ class VCruiseHelper:
       if 0 < self.lead_dRel or self.xState == 3:
         self._add_log_auto_cruise("Cruise Activate from Lead or Traffic sign stop")
         self.cruiseActivate = 1
-    elif not controls.enabled and self.brake_pressed_count < 0 and self.gas_pressed_count < 0 and self.autoCruiseCancelTimer == 0:
+    elif not controls.enabled and self.brake_pressed_count < 0 and self.gas_pressed_count < 0: # and self.autoCruiseCancelTimer == 0:
       cruiseOnDist = abs(self.cruiseOnDist)
       if self.autoCruiseControl >= 2 and self.lead_vRel < 0 and 0 < self.lead_dRel < CS.vEgo ** 2 / (2.0 * 2):
         self._add_log_auto_cruise("Auto Cruise Activate")
