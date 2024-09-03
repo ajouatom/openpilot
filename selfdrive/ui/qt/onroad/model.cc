@@ -4,7 +4,7 @@ constexpr int CLIP_MARGIN = 500;
 constexpr float MIN_DRAW_DISTANCE = 10.0;
 constexpr float MAX_DRAW_DISTANCE = 100.0;
 
-static int get_path_length_idx(const cereal::XYZTData::Reader &line, const float path_height) {
+int get_path_length_idx(const cereal::XYZTData::Reader &line, const float path_height) {
   const auto &line_x = line.getX();
   int max_idx = 0;
   for (int i = 1; i < line_x.size() && line_x[i] <= path_height; ++i) {
@@ -27,6 +27,7 @@ void ModelRenderer::draw(QPainter &painter, const QRect &surface_rect) {
   clip_region = surface_rect.adjusted(-CLIP_MARGIN, -CLIP_MARGIN, CLIP_MARGIN, CLIP_MARGIN);
   experimental_model = sm["selfdriveState"].getSelfdriveState().getExperimentalMode();
 
+  return;
   painter.save();
 
   const auto &model = sm["modelV2"].getModelV2();

@@ -171,6 +171,7 @@ class SelfdriveD:
 
     if not self.CP.notCar:
       self.events.add_from_msg(self.sm['driverMonitoringState'].events)
+      self.events.add_from_msg(self.sm['longitudinalPlan'].events)  ## carrot
 
     # Add car events, ignore if CAN isn't valid
     if CS.canValid:
@@ -247,6 +248,7 @@ class SelfdriveD:
                           pandaState.alternativeExperience != self.CP.alternativeExperience
       else:
         safety_mismatch = pandaState.safetyModel not in IGNORED_SAFETY_MODES
+        safety_mismatch  = False #carrot
 
       # safety mismatch allows some time for pandad to set the safety mode and publish it back from panda
       if (safety_mismatch and self.sm.frame*DT_CTRL > 10.) or pandaState.safetyRxChecksInvalid or self.mismatch_counter >= 200:
@@ -352,7 +354,8 @@ class SelfdriveD:
       # Not show in first 1.5 km to allow for driving out of garage. This event shows after 5 minutes
       gps_ok = self.sm.recv_frame[self.gps_location_service] > 0 and (self.sm.frame - self.sm.recv_frame[self.gps_location_service]) * DT_CTRL < 2.0
       if not gps_ok and self.sm['livePose'].inputsOK and (self.distance_traveled > 1500):
-        self.events.add(EventName.noGps)
+        if self.distance_traveled < 1600:
+          self.events.add(EventName.noGps)
       if gps_ok:
         self.distance_traveled = 0
       self.distance_traveled += abs(CS.vEgo) * DT_CTRL
@@ -361,11 +364,11 @@ class SelfdriveD:
         self.events.add(EventName.modeldLagging)
 
     # decrement personality on distance button press
-    if self.CP.openpilotLongitudinalControl:
-      if any(not be.pressed and be.type == ButtonType.gapAdjustCruise for be in CS.buttonEvents):
-        self.personality = (self.personality - 1) % 3
-        self.params.put_nonblocking('LongitudinalPersonality', str(self.personality))
-        self.events.add(EventName.personalityChanged)
+    #if self.CP.openpilotLongitudinalControl:
+    #  if any(not be.pressed and be.type == ButtonType.gapAdjustCruise for be in CS.buttonEvents):
+    #    self.personality = (self.personality - 1) % 3
+    #    self.params.put_nonblocking('LongitudinalPersonality', str(self.personality))
+    #    self.events.add(EventName.personalityChanged)
 
   def data_sample(self):
     car_state = messaging.recv_one(self.car_state_sock)

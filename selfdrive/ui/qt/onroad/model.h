@@ -12,6 +12,7 @@ public:
   void draw(QPainter &painter, const QRect &surface_rect);
 
 private:
+public:
   bool mapToScreen(float in_x, float in_y, float in_z, QPointF *out);
   void mapLineToPolygon(const cereal::XYZTData::Reader &line, float y_off, float z_off,
                         QPolygonF *pvd, int max_idx, bool allow_invert = true);

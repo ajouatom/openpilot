@@ -205,6 +205,7 @@ extern struct sample_t vehicle_speed;
 extern bool vehicle_moving;
 extern bool acc_main_on; // referred to as "ACC off" in ISO 15622:2018
 extern int cruise_button_prev;
+extern int cruise_main_prev;
 extern bool safety_rx_checks_invalid;
 
 // for safety modes with torque steering control

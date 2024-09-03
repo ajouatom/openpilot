@@ -1128,4 +1128,75 @@ This may take up to a minute.</source>
         <translation>삭제</translation>
     </message>
 </context>
+  <context>
+    <name>DrawCarrot</name>
+    <message>
+      <source>MANUAL</source>
+      <translation>수동운전</translation>
+    </message>
+    <message>
+      <source>CRUISE</source>
+      <translation>정속주행</translation>
+    </message>
+    <message>
+      <source>E2ECRUISE</source>
+      <translation>E2E주행</translation>
+    </message>
+    <message>
+      <source>CRUISE READY</source>
+      <translation>크루즈준비</translation>
+    </message>
+    <message>
+      <source>SIGN DETECTED</source>
+      <translation>신호감지</translation>
+    </message>
+    <message>
+      <source>ECO</source>
+      <translation>연비</translation>
+    </message>
+    <message>
+      <source>SAFE</source>
+      <translation>안전</translation>
+    </message>
+    <message>
+      <source>NORM</source>
+      <translation>일반</translation>
+    </message>
+    <message>
+      <source>FAST</source>
+      <translation>고속</translation>
+    </message>
+    <message>
+      <source>Start</source>
+      <translation>시작</translation>
+    </message>
+    <message>
+      <source>Cruise</source>
+      <translation>크루즈</translation>
+    </message>
+    <message>
+      <source>Speed</source>
+      <translation>속도</translation>
+    </message>
+    <message>
+      <source>Tuning</source>
+      <translation>튜닝</translation>
+    </message>
+    <message>
+      <source>Disp</source>
+      <translation>화면</translation>
+    </message>
+    <message>
+      <source>Path</source>
+      <translation>패쓰</translation>
+    </message>
+    <message>
+      <source>Lane Follow</source>
+      <translation>레인모드</translation>
+    </message>
+    <message>
+      <source>Laneless</source>
+      <translation>레인리스</translation>
+    </message>
+  </context>
 </TS>
