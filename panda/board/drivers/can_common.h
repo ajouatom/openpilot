@@ -227,7 +227,8 @@ void can_send(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook) {
 
     // data changed
     can_set_checksum(to_push);
-    rx_buffer_overflow += can_push(&can_rx_q, to_push) ? 0U : 1U;
+    extern bool hyundai_acan_panda;
+    if (!hyundai_acan_panda) rx_buffer_overflow += can_push(&can_rx_q, to_push) ? 0U : 1U;
   }
 }
 

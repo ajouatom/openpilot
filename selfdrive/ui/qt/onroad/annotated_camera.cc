@@ -7,6 +7,7 @@
 
 #include "common/swaglog.h"
 #include "selfdrive/ui/qt/util.h"
+#include "selfdrive/ui/carrot.h"
 
 // Window that shows camera view and variety of info drawn on top
 AnnotatedCameraWidget::AnnotatedCameraWidget(VisionStreamType type, QWidget *parent)
@@ -19,12 +20,44 @@ AnnotatedCameraWidget::AnnotatedCameraWidget(VisionStreamType type, QWidget *par
 
   experimental_btn = new ExperimentalButton(this);
   main_layout->addWidget(experimental_btn, 0, Qt::AlignTop | Qt::AlignRight);
+  
+  record_timer = std::make_shared<QTimer>();
+	QObject::connect(record_timer.get(), &QTimer::timeout, [=]() {
+    if(recorder) {
+      recorder->update_screen();
+    }
+  });
+	record_timer->start(1000/UI_FREQ);
+
+	recorder = new ScreenRecoder(this);
+	main_layout->addWidget(recorder, 0, Qt::AlignBottom | Qt::AlignRight);
+  
 }
 
 void AnnotatedCameraWidget::updateState(const UIState &s) {
   // update engageability/experimental mode button
   experimental_btn->updateState(s);
   dmon.updateState(s);
+
+  Params	params_memory{ "/dev/shm/params" };
+  QString command = QString::fromStdString(params_memory.get("CarrotManCommand"));
+  if (command.startsWith("RECORD ")) {
+      QString recording = command.mid(7);
+      if (recording == "START") {
+          recorder->start();
+          printf("Start recording\n");
+      }
+      else if (recording == "STOP") {
+          recorder->stop();
+          printf("Stop recording\n");
+      }
+      else if (recording == "TOGGLE") {
+          recorder->toggle();
+          printf("Toggle recording\n");
+      }
+      params_memory.putNonBlocking("CarrotManCommand", "");
+  }
+
 }
 
 void AnnotatedCameraWidget::initializeGL() {
@@ -34,6 +67,7 @@ void AnnotatedCameraWidget::initializeGL() {
   qInfo() << "OpenGL renderer:" << QString((const char*)glGetString(GL_RENDERER));
   qInfo() << "OpenGL language version:" << QString((const char*)glGetString(GL_SHADING_LANGUAGE_VERSION));
 
+  ui_nvg_init(uiState());
   prev_draw_t = millis_since_boot();
   setBackgroundColor(bg_colors[STATUS_DISENGAGED]);
 }
@@ -88,9 +122,14 @@ mat4 AnnotatedCameraWidget::calcFrameMatrix() {
 }
 
 void AnnotatedCameraWidget::paintGL() {
+}
+
+void AnnotatedCameraWidget::paintEvent(QPaintEvent *event) {
   UIState *s = uiState();
   SubMaster &sm = *(s->sm);
   const double start_draw_t = millis_since_boot();
+
+  QPainter painter(this);
 
   // draw camera frame
   {
@@ -120,25 +159,29 @@ void AnnotatedCameraWidget::paintGL() {
       }
       wide_cam_requested = wide_cam_requested && sm["selfdriveState"].getSelfdriveState().getExperimentalMode();
     }
+    painter.beginNativePainting();
     CameraWidget::setStreamType(wide_cam_requested ? VISION_STREAM_WIDE_ROAD : VISION_STREAM_ROAD);
     CameraWidget::setFrameId(sm["modelV2"].getModelV2().getFrameId());
     CameraWidget::paintGL();
+    painter.endNativePainting();
   }
 
-  QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing);
   painter.setPen(Qt::NoPen);
 
   model.draw(painter, rect());
+  painter.beginNativePainting();
+  ui_draw(s, &model, width(), height());
+  painter.endNativePainting();
   dmon.draw(painter, rect());
-  hud.updateState(*s);
-  hud.draw(painter, rect());
+  //hud.updateState(*s);
+  //hud.draw(painter, rect());
 
   double cur_draw_t = millis_since_boot();
   double dt = cur_draw_t - prev_draw_t;
   double fps = fps_filter.update(1. / dt * 1000);
   if (fps < 15) {
-    LOGW("slow frame rate: %.2f fps", fps);
+    //LOGW("slow frame rate: %.2f fps", fps);
   }
   prev_draw_t = cur_draw_t;
 

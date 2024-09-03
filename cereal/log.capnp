@@ -126,6 +126,30 @@ struct OnroadEvent @0xc4fa6047f024e718 {
     personalityChanged @91;
     aeb @92;
 
+    softHold @93;
+    trafficStopping @94;
+    audioPrompt @95;
+    audioRefuse @96;
+    stopStop @97;
+    audioLaneChange @98;
+    audioTurn @99;
+    trafficSignGreen @100;
+    trafficSignChanged @101;
+    turningLeft @102;
+    turningRight @103;
+    audio1 @104;
+    audio2 @105;
+    audio3 @106;
+    audio4 @107;
+    audio5 @108;
+    audio6 @109;
+    audio7 @110;
+    audio8 @111;
+    audio9 @112;
+    audio10 @113;
+    audio0 @114;
+
+
     soundsUnavailableDEPRECATED @47;
   }
 }
@@ -134,6 +158,7 @@ enum LongitudinalPersonality {
   aggressive @0;
   standard @1;
   relaxed @2;
+  moreRelaxed @3;
 }
 
 struct InitData {
@@ -725,6 +750,12 @@ struct RadarState @0x9a185389d6fdd05f {
   leadOne @3 :LeadData;
   leadTwo @4 :LeadData;
 
+  leadLeft @13 :LeadData;
+  leadRight @14 :LeadData;
+  leadsCenter @15 : List(LeadData);
+  leadsLeft @16 : List(LeadData);
+  leadsRight @17 : List(LeadData);
+
   struct LeadData {
     dRel @0 :Float32;
     yRel @1 :Float32;
@@ -742,7 +773,7 @@ struct RadarState @0x9a185389d6fdd05f {
     radar @14 :Bool;
     radarTrackId @15 :Int32 = -1;
 
-    aLeadDEPRECATED @5 :Float32;
+    aLead @5 :Float32;
   }
 
   # deprecated
@@ -816,6 +847,7 @@ struct SelfdriveState {
   # configurable driving settings
   experimentalMode @10 :Bool;
   personality @11 :LongitudinalPersonality;
+  distanceTraveled @13 :Float32;
 
   enum OpenpilotState @0xdbe58b96d2d1ac61 {
     disabled @0;
@@ -851,6 +883,8 @@ struct ControlsState @0x97ff69c53601abf1 {
   curvature @37 :Float32;  # path curvature from vehicle model
   desiredCurvature @61 :Float32;  # lag adjusted curvatures used by lateral controllers
   forceDecel @51 :Bool;
+
+  activeLaneLine @67 : Bool;
 
   lateralControlState :union {
     indiState @52 :LateralINDIState;
@@ -1078,7 +1112,7 @@ struct ModelDataV2 {
   gpuExecutionTimeDEPRECATED @17 :Float32;
   navEnabledDEPRECATED @22 :Bool;
   locationMonoTimeDEPRECATED @24 :UInt64;
-  lateralPlannerSolutionDEPRECATED @25: LateralPlannerSolution;
+  lateralPlannerSolution @25: LateralPlannerSolution;
 
   struct LeadDataV2 {
     prob @0 :Float32; # probability that car is your lead at time t
@@ -1118,6 +1152,13 @@ struct ModelDataV2 {
     hardBrakePredicted @7 :Bool;
     laneChangeState @8 :LaneChangeState;
     laneChangeDirection @9 :LaneChangeDirection;
+    laneWidthLeft @10 :Float32;
+    laneWidthRight @11 :Float32;
+    distanceToRoadEdgeLeft @12 :Float32;
+    distanceToRoadEdgeRight @13 :Float32;
+    desire @14 :Desire;
+    laneChangeProb @15 :Float32;
+    desireLog @16 : Text;
 
 
     # deprecated
@@ -1235,6 +1276,11 @@ struct LongitudinalPlan @0xe00b5b3eba12876c {
   allowThrottle @38: Bool;
   allowBrake @39: Bool;
 
+  xState @40: Int32;
+  trafficState @41: Int32;
+  events @42:List(OnroadEvent);
+  vTarget @43: Float32;
+  xTarget @44: Float32;
 
   solverExecutionTime @35 :Float32;
 
@@ -1288,7 +1334,7 @@ struct UiPlan {
 
 struct LateralPlan @0xe1e9318e2ae8b51e {
   modelMonoTime @31 :UInt64;
-  laneWidthDEPRECATED @0 :Float32;
+  laneWidth @0 :Float32;
   lProbDEPRECATED @5 :Float32;
   rProbDEPRECATED @7 :Float32;
   dPathPoints @20 :List(Float32);
@@ -1308,6 +1354,8 @@ struct LateralPlan @0xe1e9318e2ae8b51e {
   solverExecutionTime @30 :Float32;
   solverCost @32 :Float32;
   solverState @33 :SolverState;
+
+  latDebugText @34 :Text;
 
   struct SolverState {
     x @0 :List(List(Float32));
@@ -2544,7 +2592,7 @@ struct Event {
     customReservedRawData2 @126 :Data;
 
     # *********** Custom: reserved for forks ***********
-    customReserved0 @107 :Custom.CustomReserved0;
+    carrotMan @107 :Custom.CarrotMan;
     customReserved1 @108 :Custom.CustomReserved1;
     customReserved2 @109 :Custom.CustomReserved2;
     customReserved3 @110 :Custom.CustomReserved3;
@@ -2593,7 +2641,7 @@ struct Event {
     pandaStateDEPRECATED @12 :PandaState;
     driverStateDEPRECATED @59 :DriverStateDEPRECATED;
     sensorEventsDEPRECATED @11 :List(SensorEventData);
-    lateralPlanDEPRECATED @64 :LateralPlan;
+    lateralPlan @64 :LateralPlan;
     navModelDEPRECATED @104 :NavModelData;
     uiPlanDEPRECATED @106 :UiPlan;
     liveLocationKalmanDEPRECATED @72 :LiveLocationKalman;

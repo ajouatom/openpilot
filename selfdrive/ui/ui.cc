@@ -65,6 +65,7 @@ static void update_state(UIState *s) {
 void ui_update_params(UIState *s) {
   auto params = Params();
   s->scene.is_metric = params.getBool("IsMetric");
+  s->show_brightness_ratio = params.getFloat("ShowCustomBrightness") / 100.;
 }
 
 void UIState::updateStatus() {
@@ -94,6 +95,8 @@ UIState::UIState(QObject *parent) : QObject(parent) {
     "modelV2", "controlsState", "liveCalibration", "radarState", "deviceState",
     "pandaStates", "carParams", "driverMonitoringState", "carState", "driverStateV2",
     "wideRoadCameraState", "managerState", "selfdriveState", "longitudinalPlan",
+    "longitudinalPlan",
+    "carControl", "carrotMan", "liveTorqueParameters", "lateralPlan",
   });
   prime_state = new PrimeState(this);
   language = QString::fromStdString(Params().get("LanguageSetting"));
@@ -108,6 +111,9 @@ void UIState::update() {
   update_sockets(this);
   update_state(this);
   updateStatus();
+
+  if (sm->frame % 100 == 0)
+      ui_update_params(uiState());
 
   if (sm->frame % UI_FREQ == 0) {
     watchdog_kick(nanos_since_boot());
@@ -125,6 +131,7 @@ Device::Device(QObject *parent) : brightness_filter(BACKLIGHT_OFFROAD, BACKLIGHT
 void Device::update(const UIState &s) {
   updateBrightness(s);
   updateWakefulness(s);
+
 }
 
 void Device::setAwake(bool on) {
@@ -157,6 +164,15 @@ void Device::updateBrightness(const UIState &s) {
 
     // Scale back to 10% to 100%
     clipped_brightness = std::clamp(100.0f * clipped_brightness, 10.0f, 100.0f);
+  }
+
+  if (s.scene.started) {
+      if (s.show_brightness_timer > 0) {
+          UIState* s1 = uiState();
+          s1->show_brightness_timer--;
+      }
+      else clipped_brightness *= s.show_brightness_ratio;
+      //printf("show_brightness_timer: %d, clipped_brightness = %.2f ratio = %.1f\n", s.show_brightness_timer, clipped_brightness, s.show_brightness_ratio);
   }
 
   int brightness = brightness_filter.update(clipped_brightness);

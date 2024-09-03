@@ -107,6 +107,7 @@ if arch == "larch64":
   libpath = [
     "/usr/local/lib",
     "/system/vendor/lib64",
+    "#third_party/nanovg",
     f"#third_party/acados/{arch}/lib",
   ]
 
@@ -202,6 +203,7 @@ env = Environment(
     "#third_party/json11",
     "#third_party/linux/include",
     "#third_party/snpe/include",
+    "#third_party/nanovg",
     "#third_party",
     "#msgq",
   ],

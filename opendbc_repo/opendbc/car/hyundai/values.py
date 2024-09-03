@@ -13,8 +13,8 @@ Ecu = CarParams.Ecu
 
 
 class CarControllerParams:
-  ACCEL_MIN = -3.5 # m/s
-  ACCEL_MAX = 2.0 # m/s
+  ACCEL_MIN = -4.0 # m/s
+  ACCEL_MAX = 2.5 # m/s
 
   def __init__(self, CP):
     self.STEER_DELTA_UP = 3
@@ -40,15 +40,17 @@ class CarControllerParams:
                                CAR.KIA_OPTIMA_H, CAR.KIA_OPTIMA_H_G4_FL, CAR.KIA_SORENTO):
       self.STEER_MAX = 255
 
+    elif CP.carFingerprint in (CAR.HYUNDAI_SANTA_FE_PHEV_2022):
+      self.STEER_MAX = 409
     # these cars have significantly more torque than most HKG; limit to 70% of max
     elif CP.flags & HyundaiFlags.ALT_LIMITS:
-      self.STEER_MAX = 270
+      self.STEER_MAX = 384
       self.STEER_DELTA_UP = 2
       self.STEER_DELTA_DOWN = 3
 
     # Default for most HKG
     else:
-      self.STEER_MAX = 384
+      self.STEER_MAX = 409
 
 
 class HyundaiFlags(IntFlag):
@@ -79,7 +81,7 @@ class HyundaiFlags(IntFlag):
   # The radar does SCC on these cars when HDA I, rather than the camera
   RADAR_SCC = 2 ** 14
   # The camera does SCC on these cars, rather than the radar
-  CAMERA_SCC = 2 ** 15
+  CAMERA_SCC = CANFD_CAMERA_SCC #2 ** 15
   CHECKSUM_CRC8 = 2 ** 16
   CHECKSUM_6B = 2 ** 17
 
@@ -98,6 +100,18 @@ class HyundaiFlags(IntFlag):
 
   MIN_STEER_32_MPH = 2 ** 23
 
+class HyundaiExtFlags(IntFlag):
+  HAS_SCC13 = 1
+  HAS_SCC14 = 2
+  NAVI_CLUSTER = 2 ** 2
+  SCC_BUS2 = 2 ** 3
+  HAS_LFAHDA = 2 ** 4
+  HAS_LFA_BUTTON = 2 ** 5
+  CANFD_GEARS_NONE = 2 ** 6
+  ACAN_PANDA = 2 ** 7
+  BSM_IN_ADAS = 2 ** 8
+  CANFD_TPMS = 2 ** 9
+  CANFD_GEARS_69 = 2 ** 10
 
 class Footnote(Enum):
   CANFD = CarFootnote(
@@ -184,7 +198,8 @@ class CAR(Platforms):
       HyundaiCarDocs("Hyundai Genesis 2015-16", min_enable_speed=19 * CV.MPH_TO_MS, car_parts=CarParts.common([CarHarness.hyundai_j])),
       HyundaiCarDocs("Genesis G80 2017", "All", min_enable_speed=19 * CV.MPH_TO_MS, car_parts=CarParts.common([CarHarness.hyundai_j])),
     ],
-    CarSpecs(mass=2060, wheelbase=3.01, steerRatio=16.5, minSteerSpeed=60 * CV.KPH_TO_MS),
+    #CarSpecs(mass=2060, wheelbase=3.01, steerRatio=16.5, minSteerSpeed=60 * CV.KPH_TO_MS),
+    CarSpecs(mass=2060, wheelbase=3.01, steerRatio=16.5),
     flags=HyundaiFlags.CHECKSUM_6B | HyundaiFlags.LEGACY,
   )
   HYUNDAI_IONIQ = HyundaiPlatformConfig(
@@ -340,6 +355,18 @@ class CAR(Platforms):
     CarSpecs(mass=1690, wheelbase=3.055, steerRatio=17),  # mass: from https://www.hyundai-motor.com.tw/clicktobuy/custin#spec_0, steerRatio: from learner
     flags=HyundaiFlags.CHECKSUM_CRC8,
   )
+  HYUNDAI_CASPER = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Hyundai Casper 2023", "All", car_parts=CarParts.common([CarHarness.hyundai_k]))],
+    CarSpecs(mass=1060, wheelbase=2.4, steerRatio=14.3),  # mass: from https://www.hyundai-motor.com.tw/clicktobuy/custin#spec_0, steerRatio: from learner
+    flags=HyundaiFlags.CAMERA_SCC | HyundaiFlags.CHECKSUM_CRC8,
+  )
+  
+  HYUNDAI_CASPER_EV = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Hyundai Casper EV 2024", "All", car_parts=CarParts.common([CarHarness.hyundai_k]))],
+    CarSpecs(mass=1355, wheelbase=2.58, steerRatio=14.3),  # mass: from https://www.hyundai-motor.com.tw/clicktobuy/custin#spec_0, steerRatio: from learner
+    flags=HyundaiFlags.CAMERA_SCC | HyundaiFlags.CHECKSUM_CRC8 | HyundaiFlags.EV
+  )
+
 
   # Kia
   KIA_FORTE = HyundaiPlatformConfig(
@@ -555,6 +582,82 @@ class CAR(Platforms):
     CarSpecs(mass=2258, wheelbase=2.95, steerRatio=14.14),
     flags=HyundaiFlags.RADAR_SCC,
   )
+  GENESIS_GV70_EV_1ST_GEN = HyundaiCanFDPlatformConfig(
+    [HyundaiCarDocs("Genesis GV70 EV 2020-2023", "All", car_parts=CarParts.common([CarHarness.hyundai_m]))],
+    CarSpecs(mass=2230, wheelbase=2.87, steerRatio=14.6),
+    flags=HyundaiFlags.EV | HyundaiFlags.RADAR_SCC,
+  )
+  HYUNDAI_GRANDEUR_IG = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Hyundai Grandeur 2018-19", "All", car_parts=CarParts.common([CarHarness.hyundai_c]))],
+    CarSpecs(mass=1570, wheelbase=2.845, steerRatio=16., tireStiffnessFactor=0.7),
+    flags=HyundaiFlags.LEGACY | HyundaiFlags.CLUSTER_GEARS,
+  )
+  HYUNDAI_GRANDEUR_IG_HEV = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Hyundai Grandeur HEV 2018-19", "All", car_parts=CarParts.common([CarHarness.hyundai_c]))],
+    CarSpecs(mass=1570, wheelbase=2.845, steerRatio=16., tireStiffnessFactor=0.7),
+    flags=HyundaiFlags.HYBRID | HyundaiFlags.LEGACY,
+  )
+  GENESIS_EQ900 = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Genesis EQ900 2017", "All", car_parts=CarParts.common([CarHarness.hyundai_c]))],
+    CarSpecs(mass=2200, wheelbase=3.15, steerRatio=16., tireStiffnessFactor=0.7),
+    flags=HyundaiFlags.LEGACY,
+  )
+  GENESIS_EQ900_L = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Genesis EQ900 LIMOUSINE", "All", car_parts=CarParts.common([CarHarness.hyundai_c]))],
+    CarSpecs(mass=2290, wheelbase=3.45, steerRatio=16., tireStiffnessFactor=0.7),
+    flags=HyundaiFlags.LEGACY,
+  )
+  GENESIS_G90_2019 = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Genesis G90 2019", "All", car_parts=CarParts.common([CarHarness.hyundai_c]))],
+    CarSpecs(mass=2150, wheelbase=3.16, steerRatio=16., tireStiffnessFactor=0.7),
+    flags=HyundaiFlags.LEGACY,
+  )
+  HYUNDAI_NEXO = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Hyundai Nexo", "All", car_parts=CarParts.common([CarHarness.hyundai_a]))],
+    CarSpecs(mass=1885, wheelbase=2.79, steerRatio=15.3, tireStiffnessFactor=0.385),
+    flags=HyundaiFlags.EV,
+  )
+
+  KIA_MOHAVE = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Kia Mohave 2019", "All", car_parts=CarParts.common([CarHarness.hyundai_k]))],
+    CarSpecs(mass=2285, wheelbase=2.895, steerRatio=16., tireStiffnessFactor=0.7),
+    flags=HyundaiFlags.LEGACY,
+  )
+  KIA_K5 = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Kia K5 2019 & 2016", "All", car_parts=CarParts.common([CarHarness.hyundai_b]))],
+    CarSpecs(mass=1515, wheelbase=2.80, steerRatio=15.5, tireStiffnessFactor=0.7),
+    flags=HyundaiFlags.LEGACY | HyundaiFlags.TCU_GEARS,
+  )
+  KIA_K5_HEV = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Kia K5 Hybrid 2017", "All", car_parts=CarParts.common([CarHarness.hyundai_c]))],
+    CarSpecs(mass=1515, wheelbase=2.80, steerRatio=15.5, tireStiffnessFactor=0.7),
+    flags=HyundaiFlags.HYBRID | HyundaiFlags.LEGACY,
+  )
+  KIA_K5_HEV_2022 = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Kia K5 Hybrid 2022", "All", car_parts=CarParts.common([CarHarness.hyundai_c]))],
+    CarSpecs(mass=1515, wheelbase=2.85, steerRatio=15.5, tireStiffnessFactor=0.7),
+    flags=HyundaiFlags.HYBRID | HyundaiFlags.LEGACY,
+  )
+  KIA_K7 = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Kia K7 2016-2019", "All", car_parts=CarParts.common([CarHarness.hyundai_c]))],
+    CarSpecs(mass=1850, wheelbase=2.855, steerRatio=15.5, tireStiffnessFactor=0.7),
+    flags=HyundaiFlags.LEGACY | HyundaiFlags.CLUSTER_GEARS,
+  )
+  KIA_K7_HEV = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Kia K7 Hybrid 2016-2019", "All", car_parts=CarParts.common([CarHarness.hyundai_c]))],
+    CarSpecs(mass=1515, wheelbase=2.855, steerRatio=15.5, tireStiffnessFactor=0.7),
+    flags=HyundaiFlags.HYBRID | HyundaiFlags.LEGACY,
+  )
+  KIA_K9 = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Kia K9 2016-2019", "All", car_parts=CarParts.common([CarHarness.hyundai_h]))],
+    CarSpecs(mass=2075, wheelbase=3.15, steerRatio=14.5, tireStiffnessFactor=0.7),
+    flags=HyundaiFlags.LEGACY,
+  )
+  KIA_EV_SK3 = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Kia Soul EV 2019", car_parts=CarParts.common([CarHarness.hyundai_c]))],
+    CarSpecs(mass=1695, wheelbase=2.6, steerRatio=13.75),
+    flags=HyundaiFlags.CHECKSUM_CRC8 | HyundaiFlags.EV,
+  )
 
 
 class Buttons:
@@ -563,6 +666,7 @@ class Buttons:
   SET_DECEL = 2
   GAP_DIST = 3
   CANCEL = 4  # on newer models, this is a pause/resume button
+  LFA_BUTTON = 5
 
 
 def get_platform_codes(fw_versions: list[bytes]) -> set[tuple[bytes, bytes | None]]:
@@ -743,6 +847,7 @@ CAN_GEARS = {
   # which message has the gear. hybrid and EV use ELECT_GEAR
   "use_cluster_gears": CAR.with_flags(HyundaiFlags.CLUSTER_GEARS),
   "use_tcu_gears": CAR.with_flags(HyundaiFlags.TCU_GEARS),
+  "send_mdps12": {CAR.GENESIS_G90, CAR.GENESIS_G90_2019, CAR.KIA_K9},
 }
 
 CANFD_CAR = CAR.with_flags(HyundaiFlags.CANFD)
@@ -763,3 +868,12 @@ LEGACY_SAFETY_MODE_CAR = CAR.with_flags(HyundaiFlags.LEGACY)
 UNSUPPORTED_LONGITUDINAL_CAR = CAR.with_flags(HyundaiFlags.LEGACY) | CAR.with_flags(HyundaiFlags.UNSUPPORTED_LONGITUDINAL)
 
 DBC = CAR.create_dbc_map()
+
+if __name__ == "__main__":
+  cars = []
+  for platform in CAR:
+    for doc in platform.config.car_docs:
+      cars.append(doc.name)
+  cars.sort()
+  for c in cars:
+    print(c)
