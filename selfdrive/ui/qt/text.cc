@@ -5,6 +5,8 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include <QProcess>
+
 #include "system/hardware/hw.h"
 #include "selfdrive/ui/qt/util.h"
 #include "selfdrive/ui/qt/qt_window.h"
@@ -35,6 +37,8 @@ int main(int argc, char *argv[]) {
 #ifdef __aarch64__
   btn->setText(QObject::tr("Reboot"));
   QObject::connect(btn, &QPushButton::clicked, [=]() {
+    QString cmd = "git pull";
+    QProcess::execute(cmd);
     Hardware::reboot();
   });
 #else

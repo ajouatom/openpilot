@@ -1,0 +1,26 @@
+비 루팅폰 설정
+
+pc에 adb를 설치한다.
+
+command prompt창에서
+
+adb shell pm grant com.ajouatom.carrotman android.permission.READ_LOGS
+
+
+
+************ 티네비설정...
+
+권한은 모두 허가하고,
+
+블랙박스모드를 켠다.
+
+블랙박스 저장소를 Download 로 가서 
+
+Carrot폴더를 만든다. (여기서 만들어야한다.) 이유는 모름..
+
+여기서 저장소 권한을 넣는다.
+
+블백박스를 사용하지 않으면 다시 끈다.
+
+
+루팅폰 잘됨~

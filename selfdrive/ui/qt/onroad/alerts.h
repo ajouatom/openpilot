@@ -13,6 +13,7 @@ public:
   void clear();
 
 protected:
+public:
   struct Alert {
     QString text1;
     QString text2;
@@ -32,7 +33,7 @@ protected:
   };
 
   void paintEvent(QPaintEvent*) override;
-  OnroadAlerts::Alert getAlert(const SubMaster &sm, uint64_t started_frame);
+  static OnroadAlerts::Alert getAlert(const SubMaster &sm, uint64_t started_frame);
 
   QColor bg;
   Alert alert = {};

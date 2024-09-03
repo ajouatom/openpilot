@@ -79,6 +79,7 @@ struct sample_t vehicle_speed;
 bool vehicle_moving = false;
 bool acc_main_on = false;  // referred to as "ACC off" in ISO 15622:2018
 int cruise_button_prev = 0;
+int cruise_main_prev = 0;
 bool safety_rx_checks_invalid = false;
 
 // for safety modes with torque steering control
@@ -110,6 +111,7 @@ uint16_t current_safety_mode = SAFETY_SILENT;
 uint16_t current_safety_param = 0;
 static const safety_hooks *current_hooks = &nooutput_hooks;
 safety_config current_safety_config;
+uint8_t to_push_data_len_code = 0;  // carrot
 
 static bool is_msg_valid(RxCheck addr_list[], int index) {
   bool valid = true;
@@ -242,6 +244,29 @@ bool safety_tx_hook(CANPacket_t *to_send) {
   }
 
   const bool safety_allowed = current_hooks->tx(to_send);
+
+  if (!whitelisted || !safety_allowed) {
+      int addr = GET_ADDR(to_send);
+      int bus = GET_BUS(to_send);
+      int length = GET_LEN(to_send);
+      print("not allowed:");
+      if (!whitelisted) print("whitelisted,");
+      if (!safety_allowed) print("safety_allowed,");
+      print("addr = ");
+      putui((uint32_t)addr);
+      print(" bus=");
+      putui((uint32_t)bus);
+      print(" len=");
+      putui((uint32_t)length);
+      print(" ctrl=");
+      putui((uint32_t)controls_allowed);
+      print(" main=");
+      putui((uint32_t)acc_main_on);
+      print(" rely=");
+      putui((uint32_t)relay_malfunction);
+      print("\n");
+  }
+
   return !relay_malfunction && whitelisted && safety_allowed;
 }
 
@@ -568,6 +593,10 @@ int ROUND(float val) {
 
 // Safety checks for longitudinal actuation
 bool longitudinal_accel_checks(int desired_accel, const LongitudinalLimits limits) {
+    if(desired_accel != 0) {
+      if(!controls_allowed) print("@@@@@@@@ longitudinal_accel_checks... auto controls_allowed enabled...\n");
+      controls_allowed = true;
+    }
   bool accel_valid = get_longitudinal_allowed() && !max_limit_check(desired_accel, limits.max_accel, limits.min_accel);
   bool accel_inactive = desired_accel == limits.inactive_accel;
   return !(accel_valid || accel_inactive);
@@ -601,7 +630,10 @@ bool steer_torque_cmd_checks(int desired_torque, int steer_req, const SteeringLi
   bool violation = false;
   uint32_t ts = microsecond_timer_get();
 
-  if (controls_allowed) {
+  bool aol_allowed = true;
+  if (controls_allowed) acc_main_on = controls_allowed;
+  
+  if (controls_allowed || aol_allowed) {
     // *** global torque limit check ***
     violation |= max_limit_check(desired_torque, limits.max_steer, -limits.max_steer);
 
@@ -628,7 +660,7 @@ bool steer_torque_cmd_checks(int desired_torque, int steer_req, const SteeringLi
   }
 
   // no torque if controls is not allowed
-  if (!controls_allowed && (desired_torque != 0)) {
+  if (!(controls_allowed || aol_allowed) && (desired_torque != 0)) {
     violation = true;
   }
 
@@ -670,7 +702,7 @@ bool steer_torque_cmd_checks(int desired_torque, int steer_req, const SteeringLi
   }
 
   // reset to 0 if either controls is not allowed or there's a violation
-  if (violation || !controls_allowed) {
+  if (violation || !(controls_allowed || aol_allowed)) {
     valid_steer_req_count = 0;
     invalid_steer_req_count = 0;
     desired_torque_last = 0;
@@ -686,7 +718,9 @@ bool steer_torque_cmd_checks(int desired_torque, int steer_req, const SteeringLi
 bool steer_angle_cmd_checks(int desired_angle, bool steer_control_enabled, const SteeringLimits limits) {
   bool violation = false;
 
-  if (controls_allowed && steer_control_enabled) {
+  bool aol_allowed = true;
+  if (controls_allowed) acc_main_on = controls_allowed;
+  if ((controls_allowed || aol_allowed) && steer_control_enabled) {
     // convert floating point angle rate limits to integers in the scale of the desired angle on CAN,
     // add 1 to not false trigger the violation. also fudge the speed by 1 m/s so rate limits are
     // always slightly above openpilot's in case we read an updated speed in between angle commands
@@ -729,7 +763,7 @@ bool steer_angle_cmd_checks(int desired_angle, bool steer_control_enabled, const
   }
 
   // No angle control allowed when controls are not allowed
-  violation |= !controls_allowed && steer_control_enabled;
+  violation |= !(controls_allowed || aol_allowed) && steer_control_enabled;
 
   return violation;
 }

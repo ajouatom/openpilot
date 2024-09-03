@@ -124,7 +124,8 @@ void process_can(uint8_t can_number) {
           (void)memcpy(to_push.data, to_send.data, dlc_to_len[to_push.data_len_code]);
           can_set_checksum(&to_push);
 
-          rx_buffer_overflow += can_push(&can_rx_q, &to_push) ? 0U : 1U;
+          extern bool hyundai_acan_panda;
+          if (!hyundai_acan_panda) rx_buffer_overflow += can_push(&can_rx_q, &to_push) ? 0U : 1U;
         } else {
           can_health[can_number].total_tx_checksum_error_cnt += 1U;
         }
@@ -210,7 +211,8 @@ void can_rx(uint8_t can_number) {
     ignition_can_hook(&to_push);
 
     current_board->set_led(LED_BLUE, true);
-    rx_buffer_overflow += can_push(&can_rx_q, &to_push) ? 0U : 1U;
+    extern bool hyundai_acan_panda;
+    if(!hyundai_acan_panda) rx_buffer_overflow += can_push(&can_rx_q, &to_push) ? 0U : 1U;
 
     // Enable CAN FD and BRS if CAN FD message was received
     if (!(bus_config[can_number].canfd_enabled) && (canfd_frame)) {
