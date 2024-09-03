@@ -24,3 +24,9 @@ extern bool heartbeat_disabled;            // set over USB
 
 // siren state
 extern bool siren_enabled;
+uint32_t siren_countdown = 0; // siren plays while countdown > 0
+uint32_t controls_allowed_countdown = 0;
+bool lkas_msg_acan_active = false;	// carrot
+//bool lkas_acan_panda_mode = false;	// carrot
+bool hyundai_acan_panda = false;
+

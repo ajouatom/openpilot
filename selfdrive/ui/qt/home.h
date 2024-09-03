@@ -53,7 +53,7 @@ signals:
 
 public slots:
   void offroadTransition(bool offroad);
-  void showDriverView(bool show);
+  void showDriverView(bool show, bool started=false);
   void showSidebar(bool show);
 
 protected:

@@ -267,7 +267,6 @@ class CarState(CarStateBase):
       *create_button_events(self.cruise_buttons, prev_cruise_buttons, BUTTONS_DICT),
       *create_button_events(self.cruise_setting, prev_cruise_setting, SETTINGS_BUTTONS_DICT),
     ]
-
     return ret
 
   def get_can_parser(self, CP):

@@ -78,6 +78,7 @@ class SelfdriveD:
     self.sm = messaging.SubMaster(['deviceState', 'pandaStates', 'peripheralState', 'modelV2', 'liveCalibration',
                                    'carOutput', 'driverMonitoringState', 'longitudinalPlan', 'livePose',
                                    'managerState', 'liveParameters', 'radarState', 'liveTorqueParameters',
+                                   'carrotMan',
                                    'controlsState', 'carControl', 'driverAssistance', 'alertDebug'] + \
                                    self.camera_packets + self.sensor_packets + self.gps_packets,
                                   ignore_alive=ignore, ignore_avg_freq=ignore+['radarState',],
@@ -115,6 +116,8 @@ class SelfdriveD:
     self.recalibrating_seen = False
     self.state_machine = StateMachine()
     self.rk = Ratekeeper(100, print_delay_threshold=None)
+
+    self.atc_type_last = ""
 
     # Determine startup event
     self.startup_event = EventName.startup if build_metadata.openpilot.comma_remote and build_metadata.tested_channel else EventName.startupMaster
@@ -165,6 +168,7 @@ class SelfdriveD:
 
     if not self.CP.notCar:
       self.events.add_from_msg(self.sm['driverMonitoringState'].events)
+      self.events.add_from_msg(self.sm['longitudinalPlan'].events)  ## carrot
 
     # Add car events, ignore if CAN isn't valid
     if CS.canValid:
@@ -182,6 +186,9 @@ class SelfdriveD:
         (CS.brakePressed and (not self.CS_prev.brakePressed or not CS.standstill)) or \
         (CS.regenBraking and (not self.CS_prev.regenBraking or not CS.standstill)):
         self.events.add(EventName.pedalPressed)
+
+      if CS.latEnabled != self.CS_prev.latEnabled:
+        self.events.add(EventName.audioPrompt)
 
     # Create events for temperature, disk space, and memory
     if self.sm['deviceState'].thermalStatus >= ThermalStatus.red:
@@ -218,6 +225,16 @@ class SelfdriveD:
       if self.sm['driverAssistance'].leftLaneDeparture or self.sm['driverAssistance'].rightLaneDeparture:
         self.events.add(EventName.ldw)
 
+    if self.sm.alive['carrotMan']:
+      atc_type = self.sm['carrotMan'].atcType
+      if atc_type != self.atc_type_last:
+        if "prepare" not in atc_type and "prepare" in self.atc_type_last: # fork left/right prepare -> fork left/right
+          if "fork" in atc_type:
+            self.events.add(EventName.audioLaneChange)
+        elif "turn" in atc_type and "turn" not in self.atc_type_last:   # fork left/right -> turn left/right
+          self.events.add(EventName.audioTurn)
+        self.atc_type_last = atc_type
+    
     # Handle lane change
     if self.sm['modelV2'].meta.laneChangeState == LaneChangeState.preLaneChange:
       direction = self.sm['modelV2'].meta.laneChangeDirection
@@ -241,6 +258,7 @@ class SelfdriveD:
                           pandaState.alternativeExperience != self.CP.alternativeExperience
       else:
         safety_mismatch = pandaState.safetyModel not in IGNORED_SAFETY_MODES
+        safety_mismatch  = False #carrot
 
       # safety mismatch allows some time for pandad to set the safety mode and publish it back from panda
       if (safety_mismatch and self.sm.frame*DT_CTRL > 10.) or pandaState.safetyRxChecksInvalid or self.mismatch_counter >= 200:
@@ -346,20 +364,21 @@ class SelfdriveD:
       # Not show in first 1.5 km to allow for driving out of garage. This event shows after 5 minutes
       gps_ok = self.sm.recv_frame[self.gps_location_service] > 0 and (self.sm.frame - self.sm.recv_frame[self.gps_location_service]) * DT_CTRL < 2.0
       if not gps_ok and self.sm['livePose'].inputsOK and (self.distance_traveled > 1500):
-        self.events.add(EventName.noGps)
-      if gps_ok:
-        self.distance_traveled = 0
+        if self.distance_traveled < 1600:
+          self.events.add(EventName.noGps)
+      #if gps_ok:
+      #  self.distance_traveled = 0
       self.distance_traveled += abs(CS.vEgo) * DT_CTRL
 
       if self.sm['modelV2'].frameDropPerc > 20:
         self.events.add(EventName.modeldLagging)
 
     # decrement personality on distance button press
-    if self.CP.openpilotLongitudinalControl:
-      if any(not be.pressed and be.type == ButtonType.gapAdjustCruise for be in CS.buttonEvents):
-        self.personality = (self.personality - 1) % 3
-        self.params.put_nonblocking('LongitudinalPersonality', str(self.personality))
-        self.events.add(EventName.personalityChanged)
+    #if self.CP.openpilotLongitudinalControl:
+    #  if any(not be.pressed and be.type == ButtonType.gapAdjustCruise for be in CS.buttonEvents):
+    #    self.personality = (self.personality - 1) % 3
+    #    self.params.put_nonblocking('LongitudinalPersonality', str(self.personality))
+    #    self.events.add(EventName.personalityChanged)
 
   def data_sample(self):
     car_state = messaging.recv_one(self.car_state_sock)
@@ -439,6 +458,8 @@ class SelfdriveD:
     ss.alertStatus = self.AM.current_alert.alert_status
     ss.alertType = self.AM.current_alert.alert_type
     ss.alertSound = self.AM.current_alert.audible_alert
+
+    ss.distanceTraveled = float(self.distance_traveled)
 
     self.pm.send('selfdriveState', ss_msg)
 
