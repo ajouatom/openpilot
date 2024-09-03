@@ -6,6 +6,7 @@ from openpilot.common.numpy_fast import interp
 from openpilot.selfdrive.controls.lib.latcontrol import LatControl
 from openpilot.common.pid import PIDController
 from openpilot.selfdrive.controls.lib.vehicle_model import ACCELERATION_DUE_TO_GRAVITY
+from openpilot.common.params import Params
 
 # At higher speeds (25+mph) we can assume:
 # Lateral acceleration achieved by a specific car correlates to
@@ -32,12 +33,27 @@ class LatControlTorque(LatControl):
     self.use_steering_angle = self.torque_params.useSteeringAngle
     self.steering_angle_deadzone_deg = self.torque_params.steeringAngleDeadzoneDeg
 
+    # carrot
+    self.frame = 0
+    self.params = Params()
+    self.lateralTorqueCustom = self.params.get_int("LateralTorqueCustom")
+
   def update_live_torque_params(self, latAccelFactor, latAccelOffset, friction):
+    if self.lateralTorqueCustom > 0: 
+      return
+
     self.torque_params.latAccelFactor = latAccelFactor
     self.torque_params.latAccelOffset = latAccelOffset
     self.torque_params.friction = friction
 
   def update(self, active, CS, VM, params, steer_limited, desired_curvature, calibrated_pose):
+    self.frame += 1
+    if self.frame % 10 == 0:
+      self.lateralTorqueCustom = self.params.get_int("LateralTorqueCustom")
+      if self.lateralTorqueCustom > 0:
+        self.torque_params.latAccelFactor = self.params.get_float("LateralTorqueAccelFactor")*0.001
+        self.torque_params.friction = self.params.get_float("LateralTorqueFriction")*0.001
+     
     pid_log = log.ControlsState.LateralTorqueState.new_message()
     if not active:
       output_torque = 0.0

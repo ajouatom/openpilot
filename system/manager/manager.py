@@ -18,7 +18,95 @@ from openpilot.system.athena.registration import register, UNREGISTERED_DONGLE_I
 from openpilot.common.swaglog import cloudlog, add_file_handler
 from openpilot.system.version import get_build_metadata, terms_version, training_version
 
+def get_default_params():
+  default_params : list[tuple[str, str | bytes]] = [
+    ("CompletedTrainingVersion", "0"),
+    ("DisengageOnAccelerator", "0"),
+    ("GsmMetered", "1"),
+    ("HasAcceptedTerms", "0"),
+    ("LanguageSetting", "main_en"),
+    ("OpenpilotEnabledToggle", "1"),
+    ("LongitudinalPersonality", str(log.LongitudinalPersonality.standard)),
+    ("LongitudinalPersonalityMax", "3"),
+    ("ShowDebugUI", "0"),
+    ("ShowDateTime", "1"),
+    ("ShowPathEnd", "1"),
+    ("ShowLaneInfo", "1"),
+    ("ShowRadarInfo", "1"),
+    ("ShowPathMode", "9"),
+    ("ShowPathColor", "13"),
+    ("ShowPathModeCruiseOff", "0"),
+    ("ShowPathColorCruiseOff", "19"),
+    ("ShowPlotMode", "0"),
+    ("AutoCruiseControl", "0"),    
+    ("SoftHoldMode", "0"),       
 
+    ("AutoSpeedUptoRoadSpeedLimit", "0"),
+    ("AutoCurveSpeedLowerLimit", "30"),
+    ("AutoCurveSpeedFactor", "120"),
+    ("AutoCurveSpeedAggressiveness", "100"),
+
+    ("AutoTurnControl", "0"),
+    ("AutoTurnControlSpeedTurn", "20"),
+    ("AutoTurnControlTurnEnd", "6"),
+
+    ("AutoNaviSpeedCtrlEnd", "7"),
+    ("AutoNaviSpeedBumpTime", "1"),
+    ("AutoNaviSpeedBumpSpeed", "35"),
+    ("AutoNaviSpeedSafetyFactor", "105"),
+    ("AutoNaviSpeedDecelRate", "120"),
+    ("StopDistanceCarrot", "550"), 
+    ("MyDrivingMode", "3"),      
+    ("CruiseMaxVals1", "200"),
+    ("CruiseMaxVals2", "160"),
+    ("CruiseMaxVals3", "130"),
+    ("CruiseMaxVals4", "110"),
+    ("CruiseMaxVals5", "95"),
+    ("CruiseMaxVals6", "80"),
+    ("LongTuningKpV", "100"),     
+    ("LongTuningKiV", "0"),     
+    ("LongTuningKf", "100"),     
+    ("LongActuatorDelay", "20"),     
+    ("RadarReactionFactor", "100"),     
+    ("EnableRadarTracks", "0"),      
+    ("HyundaiCameraSCC", "0"),
+    ("CanfdHDA2", "0"),
+    ("SoundVolumeAdjust", "100"),
+    ("SoundVolumeAdjustEngage", "10"),
+    ("TFollowGap1", "110"),
+    ("TFollowGap2", "120"),
+    ("TFollowGap3", "140"),
+    ("TFollowGap4", "160"),
+    ("MaxAngleFrames", "89"),       
+    ("LateralTorqueCustom", "0"),       
+    ("LateralTorqueAccelFactor", "2500"),       
+    ("LateralTorqueFriction", "100"),
+    ("CustomSteerMax", "0"),       
+    ("CustomSteerDeltaUp", "0"),       
+    ("CustomSteerDeltaDown", "0"),       
+    ("SteerActuatorDelay", "30"),       
+    ("MaxTimeOffroadMin", "60"),
+  ]
+  return default_params
+
+def set_default_params():
+  params = Params()
+  default_params = get_default_params()
+  try:
+    default_params.remove(("GMapKey", "0"))
+    defulat_params.remove(("CompletedTrainingVersion", "0"))
+    default_params.remove(("LanguageSetting", "main_en"))
+    default_params.remove(("GsmMetered", "1"))
+  except ValueError:
+    pass
+  for k, v in default_params:
+    params.put(k, v)
+    print(f"SetToDefault[{k}]={v}")
+
+def get_default_params_key():
+  default_params = get_default_params()
+  all_keys = [key for key, _ in default_params]
+  return all_keys
 
 def manager_init() -> None:
   save_bootlog()
@@ -32,15 +120,7 @@ def manager_init() -> None:
   if build_metadata.release_channel:
     params.clear_all(ParamKeyType.DEVELOPMENT_ONLY)
 
-  default_params: list[tuple[str, str | bytes]] = [
-    ("CompletedTrainingVersion", "0"),
-    ("DisengageOnAccelerator", "0"),
-    ("GsmMetered", "1"),
-    ("HasAcceptedTerms", "0"),
-    ("LanguageSetting", "main_en"),
-    ("OpenpilotEnabledToggle", "1"),
-    ("LongitudinalPersonality", str(log.LongitudinalPersonality.standard)),
-  ]
+  default_params = get_default_params()
 
   if params.get_bool("RecordFrontLock"):
     params.put_bool("RecordFront", True)
@@ -131,6 +211,8 @@ def manager_thread() -> None:
   write_onroad_params(False, params)
   ensure_running(managed_processes.values(), False, params=params, CP=sm['carParams'], not_run=ignore)
 
+  print_timer = 0
+
   started_prev = False
 
   while True:
@@ -153,7 +235,9 @@ def manager_thread() -> None:
 
     running = ' '.join("{}{}\u001b[0m".format("\u001b[32m" if p.proc.is_alive() else "\u001b[31m", p.name)
                        for p in managed_processes.values() if p.proc)
-    print(running)
+    print_timer = (print_timer + 1)%10
+    if print_timer == 0:
+      print(running)
     cloudlog.debug(running)
 
     # send managerState
@@ -172,9 +256,12 @@ def manager_thread() -> None:
     if shutdown:
       break
 
-
 def main() -> None:
   manager_init()
+  os.system("python /data/openpilot/opendbc/car/hyundai/values.py > /data/params/d/SupportedCars")
+  os.system("python /data/openpilot/opendbc/car/gm/values.py > /data/params/d/SupportedCars_gm")
+  os.system("python /data/openpilot/opendbc/car/toyota/values.py > /data/params/d/SupportedCars_toyota")
+
   if os.getenv("PREPAREONLY") is not None:
     return
 

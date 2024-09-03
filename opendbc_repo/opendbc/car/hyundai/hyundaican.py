@@ -25,7 +25,7 @@ def create_lkas11(packer, frame, CP, apply_steer, steer_req,
     "CF_Lkas_LdwsOpt_USM",
   ]}
   values["CF_Lkas_LdwsSysState"] = sys_state
-  values["CF_Lkas_SysWarning"] = 3 if sys_warning else 0
+  values["CF_Lkas_SysWarning"] = 0 # 3 if sys_warning else 0
   values["CF_Lkas_LdwsLHWarning"] = left_lane_depart
   values["CF_Lkas_LdwsRHWarning"] = right_lane_depart
   values["CR_Lkas_StrToqReq"] = apply_steer
@@ -54,7 +54,7 @@ def create_lkas11(packer, frame, CP, apply_steer, steer_req,
     # SysWarning 5 = keep hands on wheel (red)
     # SysWarning 6 = keep hands on wheel (red) + beep
     # Note: the warning is hidden while the blinkers are on
-    values["CF_Lkas_SysWarning"] = 4 if sys_warning else 0
+    values["CF_Lkas_SysWarning"] = 0 #4 if sys_warning else 0
 
   # Likely cars lacking the ability to show individual lane lines in the dash
   elif CP.carFingerprint in (CAR.KIA_OPTIMA_G4, CAR.KIA_OPTIMA_G4_FL):
@@ -117,11 +117,101 @@ def create_clu11(packer, frame, clu11, button, CP):
   return packer.make_can_msg("CLU11", bus, values)
 
 
-def create_lfahda_mfc(packer, enabled):
+def create_lfahda_mfc(packer, CC, blinking_signal):
+  activeCarrot = CC.hudControl.activeCarrot
   values = {
-    "LFA_Icon_State": 2 if enabled else 0,
+    "LFA_Icon_State": 2 if CC.latActive else 1 if CC.enabled else 0,
+    "HDA_Active": 1 if activeCarrot >= 2 else 0,
+    "HDA_Icon_State": 2 if activeCarrot == 3 and blinking_signal else 2 if activeCarrot >= 2 else 0,
+    "HDA_VSetReq": 1 if activeCarrot >= 2 else 0,
+    "HDA_USM" : 2,
+    "HDA_Icon_Wheel" : 1 if CC.latActive else 0,
+    "HDA_Chime" : 1 if CC.latActive else 0,
   }
   return packer.make_can_msg("LFAHDA_MFC", 0, values)
+
+def create_acc_commands_scc(packer, enabled, accel, jerk, idx, hud_control, set_speed, stopping, long_override, use_fca, CS):
+  from opendbc.car.hyundai.carcontroller import HyundaiJerk
+  soft_hold_active = CS.softHoldActive
+  soft_hold_info = soft_hold_active > 1 and enabled
+  soft_hold_mode = 2 ## some cars can't enable while braking
+  long_enabled = enabled or (soft_hold_active > 0 and soft_hold_mode == 2)
+  stop_req = 1 if stopping or (soft_hold_active > 0 and soft_hold_mode == 2) else 0
+  if long_enabled:
+    scc12_acc_mode = 2 if long_override else 1
+    scc14_acc_mode = 4 if long_override else 1
+    if CS.out.brakeHoldActive:
+      scc12_acc_mode = 0
+      scc14_acc_mode = 0
+    elif CS.out.brakePressed:
+      scc12_acc_mode = 1
+      scc14_acc_mode = 1
+  else:
+    scc12_acc_mode = 0
+    scc14_acc_mode = 0
+
+  warning_front = False
+
+  commands = []
+  if CS.scc11 is not None:
+    values = CS.scc11
+    values["MainMode_ACC"] = 1
+    values["TauGapSet"] = hud_control.leadDistanceBars
+    values["VSetDis"] = set_speed if enabled else 0
+    values["AliveCounterACC"] = idx % 0x10
+    values["SCCInfoDisplay"] = 3 if warning_front else 4 if soft_hold_info else 0 if enabled else 0   #2: 크루즈 선택, 3: 전방상황주의, 4: 출발준비
+    values["ObjValid"] = 1
+    #values["ACC_ObjStatus"] = 1
+    #values["ACC_ObjLatPos"] = 0
+    #values["ACC_ObjRelSpd"] = hud_control.objRelSpd
+    #values["ACC_ObjDist"] = hud_control.objDist
+    values["DriverAlertDisplay"] = 0
+    commands.append(packer.make_can_msg("SCC11", 0, values))
+    
+  if CS.scc12 is not None:
+    values = CS.scc12
+    values["ACCMode"] = scc12_acc_mode #2 if enabled and long_override else 1 if long_enabled else 0
+    values["StopReq"] = stop_req
+    values["aReqRaw"] = accel
+    values["aReqValue"] = accel
+    values["ACCFailInfo"] = 0
+
+    values["CR_VSM_ChkSum"] = 0
+    values["CR_VSM_Alive"] = idx % 0xF
+    scc12_dat = packer.make_can_msg("SCC12", 0, values)[1]
+    values["CR_VSM_ChkSum"] = 0x10 - sum(sum(divmod(i, 16)) for i in scc12_dat) % 0x10
+
+    commands.append(packer.make_can_msg("SCC12", 0, values))
+
+  if CS.scc14 is not None:
+    values = CS.scc14
+    values["ComfortBandUpper"] = jerk.cb_upper
+    values["ComfortBandLower"] = jerk.cb_lower
+    values["JerkUpperLimit"] = jerk.jerk_u
+    values["JerkLowerLimit"] = jerk.jerk_l
+    values["ACCMode"] = scc14_acc_mode #2 if enabled and long_override else 1 if long_enabled else 4 # stock will always be 4 instead of 0 after first disengage
+    values["ObjGap"] = 2 if hud_control.leadVisible else 0 # 5: >30, m, 4: 25-30 m, 3: 20-25 m, 2: < 20 m, 0: no lead
+    #values["ObjGap2"] = 1
+    commands.append(packer.make_can_msg("SCC14", 0, values))
+
+  # Only send FCA11 on cars where it exists on the bus
+  if False: #use_fca:
+    # note that some vehicles most likely have an alternate checksum/counter definition
+    # https://github.com/commaai/opendbc/commit/9ddcdb22c4929baf310295e832668e6e7fcfa602
+    fca11_values = {
+      "CR_FCA_Alive": idx % 0xF,
+      "PAINT1_Status": 1,
+      "FCA_DrvSetStatus": 1,
+      "FCA_Status": 1,  # AEB disabled
+    }
+    fca11_dat = packer.make_can_msg("FCA11", 0, fca11_values)[1]
+    fca11_values["CR_FCA_ChkSum"] = hyundai_checksum(fca11_dat[:7])
+    commands.append(packer.make_can_msg("FCA11", 0, fca11_values))
+
+  return commands
+
+def create_acc_opt_copy(CS, packer):
+  return packer.make_can_msg("SCC13", 0, CS.scc13)
 
 def create_acc_commands(packer, enabled, accel, upper_jerk, idx, hud_control, set_speed, stopping, long_override, use_fca):
   commands = []
@@ -208,3 +298,15 @@ def create_frt_radar_opt(packer):
     "CF_FCA_Equip_Front_Radar": 1,
   }
   return packer.make_can_msg("FRT_RADAR11", 0, frt_radar11_values)
+def create_mdps12(packer, frame, mdps12):
+  values = mdps12
+  values["CF_Mdps_ToiActive"] = 0
+  values["CF_Mdps_ToiUnavail"] = 1
+  values["CF_Mdps_MsgCount2"] = frame % 0x100
+  values["CF_Mdps_Chksum2"] = 0
+
+  dat = packer.make_can_msg("MDPS12", 2, values)[2]
+  checksum = sum(dat) % 256
+  values["CF_Mdps_Chksum2"] = checksum
+
+  return packer.make_can_msg("MDPS12", 2, values)

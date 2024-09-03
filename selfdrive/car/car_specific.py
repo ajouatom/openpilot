@@ -7,7 +7,7 @@ from opendbc.car.volkswagen.values import CarControllerParams as VWCarController
 from opendbc.car.hyundai.interface import ENABLE_BUTTONS as HYUNDAI_ENABLE_BUTTONS
 from opendbc.car.hyundai.carstate import PREV_BUTTON_SAMPLES as HYUNDAI_PREV_BUTTON_SAMPLES
 
-from openpilot.selfdrive.selfdrived.events import Events
+from openpilot.selfdrive.selfdrived.events import Events, ET
 
 ButtonType = structs.CarState.ButtonEvent.Type
 GearShifter = structs.CarState.GearShifter
@@ -246,4 +246,13 @@ class CarSpecificEvents:
       elif not CS.cruiseState.enabled:
         events.add(EventName.pcmDisable)
 
+
+    if not self.CP.pcmCruise:
+      if CS.activateCruise > 0 and CS_prev.activateCruise <= 0:
+        if not events.contains(ET.NO_ENTRY):
+          events.add(EventName.buttonEnable)
+      elif CS.activateCruise < 0 and CS_prev.activateCruise >= 0:
+        events.add(EventName.buttonCancel)
+      if CS.softHoldActive > 0:
+        events.add(EventName.softHold)
     return events
