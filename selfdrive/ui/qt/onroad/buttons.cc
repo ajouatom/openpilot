@@ -45,5 +45,5 @@ void ExperimentalButton::updateState(const UIState &s) {
 void ExperimentalButton::paintEvent(QPaintEvent *event) {
   QPainter p(this);
   QPixmap img = experimental_mode ? experimental_img : engage_img;
-  drawIcon(p, QPoint(btn_size / 2, btn_size / 2), img, QColor(0, 0, 0, 166), (isDown() || !engageable) ? 0.6 : 1.0);
+  drawIcon(p, QPoint(btn_size / 2, btn_size / 2), img, QColor(0, 0, 0, 1), (isDown() || !engageable) ? 0.6 : 1.0);
 }

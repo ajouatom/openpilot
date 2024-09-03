@@ -1,5 +1,12 @@
 <div align="center" style="text-align: center;">
 
+<h1>carrotpilot</h1>
+
+![image](https://github.com/user-attachments/assets/beb02fee-f755-48b6-b565-fd09a933db43)
+
+
+<div align="center" style="text-align: center;">
+
 <h1>openpilot</h1>
 
 <p>

@@ -10,6 +10,7 @@ from opendbc.car.toyota.values import CAR, STATIC_DSU_MSGS, NO_STOP_TIMER_CAR, T
                                         CarControllerParams, ToyotaFlags, \
                                         UNSUPPORTED_DSU_CAR
 from opendbc.can.packer import CANPacker
+from openpilot.common.params import Params
 
 LongCtrlState = structs.CarControl.Actuators.LongControlState
 SteerControlType = structs.CarParams.SteerControlType
@@ -64,6 +65,14 @@ class CarController(CarControllerBase):
 
     # *** control msgs ***
     can_sends = []
+
+    params = Params()
+    steerMax = params.get_int("CustomSteerMax")
+    steerDeltaUp = params.get_int("CustomSteerDeltaUp")
+    steerDeltaDown = params.get_int("CustomSteerDeltaDown")
+    self.params.STEER_MAX = self.params.STEER_MAX if steerMax <= 0 else steerMax
+    self.params.STEER_DELTA_UP = self.params.STEER_DELTA_UP if steerDeltaUp <= 0 else steerDeltaUp
+    self.params.STEER_DELTA_DOWN = self.params.STEER_DELTA_DOWN if steerDeltaDown <= 0 else steerDeltaDown
 
     # *** handle secoc reset counter increase ***
     if self.CP.flags & ToyotaFlags.SECOC.value:
