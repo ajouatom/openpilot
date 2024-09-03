@@ -16,7 +16,7 @@
 
 // Projects a point in car to space to the corresponding point in full frame
 // image space.
-static bool calib_frame_to_full_frame(const UIState *s, float in_x, float in_y, float in_z, QPointF *out) {
+bool calib_frame_to_full_frame(const UIState *s, float in_x, float in_y, float in_z, QPointF *out) {
   Eigen::Vector3f input(in_x, in_y, in_z);
   auto transformed = s->car_space_transform * input;
   *out = QPointF(transformed.x() / transformed.z(), transformed.y() / transformed.z());
@@ -187,6 +187,8 @@ UIState::UIState(QObject *parent) : QObject(parent) {
     "modelV2", "controlsState", "liveCalibration", "radarState", "deviceState",
     "pandaStates", "carParams", "driverMonitoringState", "carState", "driverStateV2",
     "wideRoadCameraState", "managerState", "selfdriveState",
+    "longitudinalPlan",
+    "carControl", "carrotMan",
   });
   prime_state = new PrimeState(this);
   language = QString::fromStdString(Params().get("LanguageSetting"));

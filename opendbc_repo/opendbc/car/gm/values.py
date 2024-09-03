@@ -253,3 +253,12 @@ SDGM_CAR = {CAR.CADILLAC_XT4, CAR.CHEVROLET_VOLT_2019}
 STEER_THRESHOLD = 1.0
 
 DBC = CAR.create_dbc_map()
+
+if __name__ == "__main__":
+  cars = []
+  for platform in CAR:
+    for doc in platform.config.car_docs:
+      cars.append(doc.name)
+  cars.sort()
+  for c in cars:
+    print(c)

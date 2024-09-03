@@ -6,6 +6,7 @@
 #include "selfdrive/ui/qt/onroad/buttons.h"
 #include "selfdrive/ui/qt/onroad/driver_monitoring.h"
 #include "selfdrive/ui/qt/widgets/cameraview.h"
+#include "selfdrive/ui/qt/screenrecorder/screenrecorder.h"
 
 class AnnotatedCameraWidget : public CameraWidget {
   Q_OBJECT
@@ -35,4 +36,8 @@ protected:
 
   double prev_draw_t = 0;
   FirstOrderFilter fps_filter;
+  void paintEvent(QPaintEvent *event) override;
+private:
+  ScreenRecoder* recorder;
+  std::shared_ptr<QTimer> record_timer;
 };

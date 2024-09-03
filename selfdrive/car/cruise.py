@@ -1,3 +1,4 @@
+from calendar import c
 import math
 
 from cereal import car
@@ -133,3 +134,346 @@ class VCruiseHelper:
       self.v_cruise_kph = int(round(clip(CS.vEgo * CV.MS_TO_KPH, initial, V_CRUISE_MAX)))
 
     self.v_cruise_cluster_kph = self.v_cruise_kph
+
+
+
+import json
+from openpilot.common.params import Params
+from openpilot.selfdrive.selfdrived.events import Events
+EventName = car.OnroadEvent.EventName
+
+class VCruiseCarrot:
+  def __init__(self, CP):
+    self.CP = CP
+    self.frame = 0
+    self.params_memory = Params("/dev/shm/params")
+    self.params = Params()
+    self.v_cruise_kph = 20 #V_CRUISE_UNSET
+    self.v_cruise_cluster_kph = 20 #V_CRUISE_UNSET
+    self.v_cruise_kph_last = 20
+
+    self.long_pressed = False
+    self.button_cnt = 0
+    self.button_prev = ButtonType.unknown
+    self.button_long_time = 40
+
+    self.is_metric = True
+
+    self.v_ego_kph_set = 0
+    self._cruise_speed_min, self._cruise_speed_max = 20, 161
+    self._cruise_speed_unit = 10
+
+    self._gas_pressed_count = 0
+    self._gas_pressed_count_last = 0
+    self._gas_pressed_value = 0
+    self._gas_tok = False
+    self._brake_pressed_count = 0
+    self._soft_hold_count = 0
+    self._soft_hold_active = False
+    self._cruise_ready = False
+    self._cruise_cancel_state = False
+    
+    self.events = []
+    self.xState = 0
+    self.trafficState = 0
+    self.nRoadLimitSpeed = 30
+
+    self._cancel_timer = 0
+    self.d_rel = 0
+    self.v_rel = 0
+
+    self._log_timer = 0
+    self._log_timeout = int(3/0.01)
+    self.log = ""
+
+    self.autoCruiseControl = 0
+    
+  @property
+  def v_cruise_initialized(self):
+    return self.v_cruise_kph != V_CRUISE_UNSET
+
+  def _add_log(self, log):
+    if len(log) == 0:
+      self._log_timer = max(0, self._log_timer - 1)
+      if self._log_timer <= 0:
+        self.log = ""
+        #self.event = -1
+    else:
+      self.log = log
+      #self.event = event
+      self._log_timer = self._log_timeout
+      
+  def update_params(self):
+    if self.frame % 10 == 0:
+      self.autoCruiseControl = self.params.get_int("AutoCruiseControl")
+      
+  def update_v_cruise(self, CS, sm, is_metric):
+    self._add_log("")
+    self.update_params()
+    self.frame += 1
+    CC = sm['carControl']
+    if sm.alive['carrotMan']:
+      carrot_man = sm['carrotMan']
+      self.nRoadLimitSpeed = carrot_man.nRoadLimitSpeed
+    if sm.alive['longitudinalPlan']:
+      lp = sm['longitudinalPlan']
+      self.xState = lp.xState
+      self.trafficState = lp.trafficState
+    if sm.alive['radarState']:
+      lead = sm['radarState'].leadOne
+      self.d_rel = lead.dRel if lead.status else 0
+      self.v_rel = lead.vRel if lead.status else 0
+      
+    self.v_cruise_kph_last = self.v_cruise_kph
+    self.is_metric = is_metric
+
+    self._cancel_timer = max(0, self._cancel_timer - 1)
+
+    self.events = []
+    if CS.cruiseState.available:
+      if not self.CP.pcmCruise:
+        # if stock cruise is completely disabled, then we can use our own set speed logic
+        self.v_ego_kph_set = int(CS.vEgoCluster * CV.MS_TO_KPH + 0.5)
+        self._activate_cruise = 0
+        self._prepare_brake_gas(CS)
+        v_cruise_kph = self._update_cruise_buttons(CS, CC, self.v_cruise_kph)
+
+        if self._activate_cruise > 0:
+          self.events.append(EventName.buttonEnable)
+          self._cruise_ready = False
+        elif self._activate_cruise < 0:
+          self.events.append(EventName.buttonCancel)
+          self._cruise_ready = True if self._activate_cruise == -2 else False
+
+        self.v_cruise_kph = v_cruise_kph
+        self.v_cruise_cluster_kph = self.v_cruise_kph
+      else:
+        self.v_cruise_kph = CS.cruiseState.speed * CV.MS_TO_KPH
+        self.v_cruise_cluster_kph = CS.cruiseState.speedCluster * CV.MS_TO_KPH
+    else:
+      self.v_cruise_kph = 20 #V_CRUISE_UNSET
+      self.v_cruise_cluster_kph = 20 #V_CRUISE_UNSET
+
+  def initialize_v_cruise(self, CS, experimental_mode: bool) -> None:
+    # initializing is handled by the PCM
+    if self.CP.pcmCruise:
+      return
+
+    initial = V_CRUISE_INITIAL_EXPERIMENTAL_MODE if experimental_mode else CS.vEgo * CV.MS_TO_KPH
+
+    if any(b.type in (ButtonType.accelCruise, ButtonType.resumeCruise) for b in CS.buttonEvents): # and self.v_cruise_initialized:
+      self.v_cruise_kph = self.v_cruise_kph_last
+    else:
+      self.v_cruise_kph = int(round(clip(CS.vEgo * CV.MS_TO_KPH, initial, V_CRUISE_MAX)))
+
+    self.v_cruise_kph = clip(self.v_cruise_kph, self._cruise_speed_min, self._cruise_speed_max)
+    self.v_cruise_cluster_kph = self.v_cruise_kph
+
+  def _prepare_buttons(self, CS, v_cruise_kph):
+    ## ButtonEvent process
+    button_kph = v_cruise_kph
+    buttonEvents = CS.buttonEvents
+    button_speed_up_diff = 1
+    button_speed_dn_diff = 1
+
+    button_type = 0
+    long_pressed = False
+    if self.button_cnt > 0:
+      self.button_cnt += 1
+    for b in buttonEvents:
+      if b.pressed and self.button_cnt==0 and b.type in [ButtonType.accelCruise, ButtonType.decelCruise, ButtonType.gapAdjustCruise, ButtonType.cancel, ButtonType.lfaButton]:
+        self.button_cnt = 1
+        self.button_prev = b.type
+        if b.type in [ButtonType.accelCruise, ButtonType.decelCruise]:
+          self.button_long_time = 40
+        else:
+          self.button_long_time = 70
+      elif not b.pressed and self.button_cnt > 0:
+        if b.type == ButtonType.cancel:
+          button_type = ButtonType.cancel
+        elif not self.long_pressed and b.type == ButtonType.accelCruise:
+          button_kph += button_speed_up_diff if self.is_metric else button_speed_up_diff * CV.MPH_TO_KPH
+          button_type = ButtonType.accelCruise
+        elif not self.long_pressed and b.type == ButtonType.decelCruise:
+          button_kph -= button_speed_dn_diff if self.is_metric else button_speed_dn_diff * CV.MPH_TO_KPH
+          button_type = ButtonType.decelCruise
+        elif not self.long_pressed and b.type == ButtonType.gapAdjustCruise:
+          button_type = ButtonType.gapAdjustCruise
+        elif not self.long_pressed and b.type == ButtonType.lfaButton:
+          button_type = ButtonType.lfaButton
+
+        self.long_pressed = False
+        self.button_cnt = 0
+    if self.button_cnt > self.button_long_time:
+      self.long_pressed = True
+      V_CRUISE_DELTA = 10
+      if self.button_prev == ButtonType.cancel:
+        button_type = ButtonType.cancel
+        self.button_cnt = 0          
+      elif self.button_prev == ButtonType.accelCruise:
+        button_kph += V_CRUISE_DELTA - button_kph % V_CRUISE_DELTA
+        button_type = ButtonType.accelCruise
+        self.button_cnt %= self.button_long_time
+      elif self.button_prev == ButtonType.decelCruise:
+        button_kph -= V_CRUISE_DELTA - -button_kph % V_CRUISE_DELTA
+        button_type = ButtonType.decelCruise
+        self.button_cnt %= self.button_long_time
+      elif self.button_prev == ButtonType.gapAdjustCruise:
+        button_type = ButtonType.gapAdjustCruise
+        self.button_cnt %= self.button_long_time
+      elif self.button_prev == ButtonType.lfaButton:
+        button_type = ButtonType.lfaButton
+        self.button_cnt %= self.button_long_time
+
+    #button_kph = clip(button_kph, self._cruise_speed_min, self._cruise_speed_max)
+
+    return button_kph, button_type, self.long_pressed
+
+  def _update_cruise_buttons(self, CS, CC, v_cruise_kph):
+    button_kph, button_type, long_pressed = self._prepare_buttons(CS, v_cruise_kph)
+
+    if not long_pressed:
+      if button_type == ButtonType.accelCruise:
+        if self._soft_hold_active:
+          self._soft_hold_active = False
+        else:
+          v_cruise_kph = self._v_cruise_desired(CS, v_cruise_kph)
+
+      elif button_type == ButtonType.decelCruise:
+        if self._soft_hold_active:
+          self._cruise_control(-1, -1, "Cruise off,softhold mode (decelCruise)")
+        elif v_cruise_kph > self.v_ego_kph_set:
+          v_cruise_kph = self.v_ego_kph_set
+        else:
+          self._cruise_control(-2, -1, "Cruise off (decelCruise)")
+          self.events.append(EventName.audioPrompt)
+          
+      elif button_type == ButtonType.gapAdjustCruise:
+        longitudinalPersonalityMax = self.params.get_int("LongitudinalPersonalityMax")
+        personality = (self.params.get_int('LongitudinalPersonality') - 1) % longitudinalPersonalityMax
+        self.params.put_int_nonblocking('LongitudinalPersonality', personality)
+        #self.events.append(EventName.personalityChanged)
+      elif button_type == ButtonType.lfaButton:
+        print("lfaButton")
+        pass
+      elif button_type == ButtonType.cancel:
+        print("cancel")
+        pass
+    else:
+      if button_type == ButtonType.accelCruise:
+        v_cruise_kph = button_kph
+        self._cruise_cancel_state = False
+      elif button_type == ButtonType.decelCruise:
+        v_cruise_kph = button_kph
+        self._cruise_cancel_state = False
+      elif button_type == ButtonType.gapAdjustCruise:
+        self.params.put_int_nonblocking("MyDrivingMode", self.params.get_int("MyDrivingMode") % 4 + 1) # 1,2,3,4 (1:eco, 2:safe, 3:normal, 4:high speed)
+      elif button_type == ButtonType.lfaButton:
+        pass
+      elif button_type == ButtonType.cancel:
+        self._cruise_cancel_state = True
+
+    v_cruise_kph = self._update_cruise_state(CS, CC, v_cruise_kph)
+    return v_cruise_kph
+
+  ## desiredSpeed : 
+  #   leadCar_distance, leadCar_speed, leadCar_accel,
+  #   v_ego, tbt_distance, tbt_speed,
+  #   nRoadLimitSpeed, vTurnSpeed
+  #   gasPressed, brakePressed, standstill
+  def _v_cruise_desired(self, CS, v_cruise_kph):
+    if v_cruise_kph < self.nRoadLimitSpeed:
+      v_cruise_kph = self.nRoadLimitSpeed
+    else:
+      for speed in range (40, 160, self._cruise_speed_unit):
+        if v_cruise_kph < speed:
+          v_cruise_kph = speed
+          break;
+    return v_cruise_kph
+
+  def _cruise_control(self, enable, cancel_timer, reason):
+    if enable > 0 and self._cancel_timer > 0 and cancel_timer >= 0:
+      enable = 0
+      self._add_log(reason + " > Canceled")
+    else:
+      if self.autoCruiseControl == 0 and enable != 0:
+        enable = 0
+        return
+      self._activate_cruise = enable
+      self._cancel_timer = int(cancel_timer / 0.01)   # DT_CTRL: 0.01
+      self._add_log(reason)
+    
+  def _update_cruise_state(self, CS, CC, v_cruise_kph):
+    if not CC.enabled:
+      if self._brake_pressed_count == -1 and self._soft_hold_active:
+        self._cruise_control(1, -1, "Cruise on (soft hold)")
+
+    if self._soft_hold_active:
+      self.events.append(EventName.softHold)
+      self._cruise_cancel_state = False
+
+    if self._gas_tok:
+      if not CC.enabled:
+        self._cruise_cancel_state = False
+        self._cruise_control(1, -1, "Cruise on (gas tok)")
+        if self.v_ego_kph_set > v_cruise_kph:
+          v_cruise_kph = self.v_ego_kph_set
+      else:
+        v_cruise_kph = self._v_cruise_desired(CS, v_cruise_kph)
+    elif self._gas_pressed_count == -1:
+      if 0 < self.d_rel < CS.vEgo * 0.8:
+        self._cruise_control(-1, 0, "Cruise off (lead car too close)")
+      elif self.v_ego_kph_set < 30:
+        self._cruise_control(-1, 0, "Cruise off (gas speed)")
+      elif self.xState == 3:
+        v_cruise_kph = self.v_ego_kph_set
+        self._cruise_control(-1, 3, "Cruise off (traffic sign)")
+      elif self.v_ego_kph_set > 30: 
+        self._cruise_control(1, 0, "Cruise on (gas pressed)")
+    elif self._brake_pressed_count == -1 and not self._soft_hold_active:
+      if 40 < self.v_ego_kph_set:
+        v_cruise_kph = self.v_ego_kph_set
+        self._cruise_control(1, 0, "Cruise on (speed)")
+      elif self.xState in [3, 5]:
+        self._cruise_control(1, 0, "Cruise on (traffic sign)")
+      elif 0 < self.d_rel < 20:
+        v_cruise_kph = self.v_ego_kph_set
+        self._cruise_control(1, 0, "Cruise on (lead car)")
+    elif self._gas_pressed_count > 0:
+      if CS.aEgo < -0.5:
+        self._cruise_control(-1, 5.0, "Cruise off (gas pressed while braking)")
+      if self.v_ego_kph_set > v_cruise_kph:
+        v_cruise_kph = self.v_ego_kph_set
+
+    elif not CC.enabled and self._brake_pressed_count < 0 and self._gas_pressed_count < 0:
+      if self.v_rel < -0.2 and 0 < self.d_rel < CS.vEgo ** 2 / (2.0 * 2):
+        self._cruise_control(1, -1, "Cruise on (fcw)")
+      elif CS.vEgo > 0.02 and 0 < self.d_rel < 4:
+        self._cruise_control(1, -1, "Cruise on (fcw dist)")
+        self.events.append(EventName.stopStop)
+
+      
+    return v_cruise_kph
+  
+  def _prepare_brake_gas(self, CS):
+    if CS.gasPressed:
+      self._gas_pressed_count = max(1, self._gas_pressed_count + 1)
+      self._gas_pressed_count_last = self._gas_pressed_count
+      self._gas_pressed_value = max(CS.gas, self._gas_pressed_value) if self._gas_pressed_count > 1 else CS.gas
+      self._gas_tok = False
+      self._soft_hold_active = False
+    else:
+      self._gas_tok = True if 0 < self._gas_pressed_count < 0.4 / 0.01 else False
+      self._gas_pressed_count = min(-1, self._gas_pressed_count - 1)
+      if self._gas_pressed_count < -1:
+        self._gas_pressed_count_last = 0
+        self._gas_tok = False
+        
+    if CS.brakePressed:
+      self._cruise_ready = False
+      self._brake_pressed_count = max(1, self._brake_pressed_count + 1)
+      self._soft_hold_count = self._soft_hold_count + 1 if CS.vEgo < 0.1 else 0
+      self._soft_hold_active = True if self._soft_hold_count > 60 else False
+    else:
+      self._soft_hold_count = 0
+      self._brake_pressed_count = min(-1, self._brake_pressed_count - 1)

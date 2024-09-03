@@ -118,6 +118,29 @@ struct OnroadEvent @0x9b1657f34caf3ad3 {
     personalityChanged @122;
     aeb @123;
 
+    softHold @125;
+    trafficStopping @126;
+    audioPrompt @127;
+    audioRefuse @128;
+    stopStop @129;
+    audioLaneChange @130;
+    audioTurn @131;
+    trafficSignGreen @132;
+    trafficSignChanged @133;
+    turningLeft @134;
+    turningRight @135;
+    audio1 @136;
+    audio2 @137;
+    audio3 @138;
+    audio4 @139;
+    audio5 @140;
+    audio6 @141;
+    audio7 @142;
+    audio8 @143;
+    audio9 @144;
+    audio10 @145;
+    audio0 @146;
+
     radarCanErrorDEPRECATED @15;
     communityFeatureDisallowedDEPRECATED @62;
     radarCommIssueDEPRECATED @67;
@@ -235,6 +258,18 @@ struct CarState {
   # process meta
   cumLagMs @50 :Float32;
 
+
+  tpms @55 : Tpms;
+  vCluRatio @56 :Float32;
+  logCarrot @57 :Text;
+
+  struct Tpms {
+    fl @0 :Float32;
+    fr @1 :Float32;
+    rl @2 :Float32;
+    rr @3 :Float32;
+  }
+
   struct WheelSpeeds {
     # optional wheel speeds
     fl @0 :Float32;
@@ -284,12 +319,14 @@ struct CarState {
       setCruise @9;
       resumeCruise @10;
       gapAdjustCruise @11;
+
+      lfaButton @12;
     }
   }
 
   # deprecated
   errorsDEPRECATED @0 :List(OnroadEvent.EventName);
-  brakeLightsDEPRECATED @19 :Bool;
+  brakeLights @19 :Bool;
   steeringRateLimitedDEPRECATED @29 :Bool;
   canMonoTimesDEPRECATED @12: List(UInt64);
   canRcvTimeoutDEPRECATED @49 :Bool;
@@ -394,6 +431,8 @@ struct CarControl {
     rightLaneDepart @8: Bool;
     leftLaneDepart @9: Bool;
     leadDistanceBars @10: Int8;  # 1-3: 1 is closest, 3 is farthest. some ports may utilize 2-4 bars instead
+    softHoldActive @11: Bool;
+    activeCarrot @12: Int16;
 
     enum VisualAlert {
       # these are the choices from the Honda
@@ -421,6 +460,32 @@ struct CarControl {
       prompt @6;
       promptRepeat @7;
       promptDistracted @8;
+
+      longEngaged @10;
+      longDisengaged @11;
+      trafficSignGreen @12;
+      trafficSignChanged @13;
+      laneChange @14;
+      stopping @15;
+      autoHold @16;
+      engage2 @17;
+      disengage2 @18;
+      trafficError @19;
+      bsdWarning @20;
+      speedDown @21;
+      stopStop @22;
+      audioTurn @9;
+      reverseGear @23;
+      audio1 @24;
+      audio2 @25;
+      audio3 @26;
+      audio4 @27;
+      audio5 @28;
+      audio6 @29;
+      audio7 @30;
+      audio8 @31;
+      audio9 @32;
+      audio10 @33;
     }
   }
 
@@ -453,6 +518,7 @@ struct CarParams {
   enableDsu @5 :Bool;        # driving support unit
   enableBsm @56 :Bool;       # blind spot monitoring
   flags @64 :UInt32;         # flags for car specific quirks
+  extFlags @75 :UInt32;     # carrot ext car flags
   experimentalLongitudinalAvailable @71 :Bool;
 
   minEnableSpeed @7 :Float32;

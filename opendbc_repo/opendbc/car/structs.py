@@ -112,6 +112,16 @@ class CarState:
   # process meta
   cumLagMs: float = auto_field()
 
+  tpms: 'CarState.Tpms' = field(default_factory=lambda: CarState.Tpms())
+  vCluRatio: float = auto_field()
+
+  @auto_dataclass
+  class Tpms:
+    fl: float = auto_field()
+    fr: float = auto_field()
+    rl: float = auto_field()
+    rr: float = auto_field()
+   
   @auto_dataclass
   class WheelSpeeds:
     # optional wheel speeds
@@ -161,6 +171,7 @@ class CarState:
       setCruise = auto()
       resumeCruise = auto()
       gapAdjustCruise = auto()
+      lfaButton = auto()
 
 
 @auto_dataclass
@@ -251,6 +262,8 @@ class CarControl:
     rightLaneDepart: bool = auto_field()
     leftLaneDepart: bool = auto_field()
     leadDistanceBars: int = auto_field()  # 1-3: 1 is closest, 3 is farthest. some ports may utilize 2-4 bars instead
+    softHoldActive: bool = auto_field()
+    activeCarrot: int = auto_field()
 
     class VisualAlert(StrEnum):
       # these are the choices from the Honda
@@ -291,6 +304,7 @@ class CarParams:
   enableDsu: bool = auto_field()  # driving support unit
   enableBsm: bool = auto_field()  # blind spot monitoring
   flags: int = auto_field()  # flags for car specific quirks
+  extFlags: int = auto_field()
   experimentalLongitudinalAvailable: bool = auto_field()
 
   minEnableSpeed: float = auto_field()

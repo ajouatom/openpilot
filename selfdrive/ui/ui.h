@@ -8,6 +8,7 @@
 #include <QColor>
 #include <QFuture>
 #include <QPolygonF>
+#include "nanovg.h"
 
 #include "cereal/messaging/messaging.h"
 #include "common/mat.h"
@@ -85,7 +86,9 @@ public:
   inline bool engaged() const {
     return scene.started && (*sm)["selfdriveState"].getSelfdriveState().getEnabled();
   }
-
+  int fb_w = 0, fb_h = 0;
+  NVGcontext* vg;
+  std::map<std::string, int> images;
   std::unique_ptr<SubMaster> sm;
   UIStatus status;
   UIScene scene = {};
@@ -95,6 +98,8 @@ public:
 
   Eigen::Matrix3f car_space_transform = Eigen::Matrix3f::Zero();
   QRectF clip_region;
+
+  float max_distance = 0.0;
 
 signals:
   void uiUpdate(const UIState &s);
