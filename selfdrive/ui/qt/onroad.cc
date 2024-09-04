@@ -9,6 +9,14 @@
 #include <QDebug>
 #include <QMouseEvent>
 
+
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonValue>
+#include <QJsonArray>
+
+
+
 #include "common/swaglog.h"
 #include "common/timing.h"
 #include "selfdrive/ui/paint.h"
@@ -340,6 +348,26 @@ void OnroadWindow::updateStateText() {
     const auto cp = sm["carParams"].getCarParams();
     top.sprintf("%s Long, FPS: %d", hasLongitudinalControl(cp)?"OP":"Stock", g_fps);
     topRightLabel->setText(top);
+
+    Params params_memory = Params("/dev/shm/params");
+
+    QString navi = QString::fromStdString(params_memory.get("CarrotNavi"));
+    QJsonDocument doc = QJsonDocument::fromJson(navi.toUtf8());
+    if (doc.isObject()) {
+        QJsonObject jsonObject = doc.object();
+        if (jsonObject["active"].toBool()) {
+            QString str = QString("%8, %1Km/h, TBT(%2): %3M, CAM(%4): %5km/h, %6M, %7")
+                .arg(jsonObject["desiredSpeed"].toInt())
+                .arg(jsonObject["xTurnInfo"].toInt())
+                .arg(jsonObject["xDistToTurn"].toInt())
+                .arg(jsonObject["xSpdType"].toInt())
+                .arg(jsonObject["xSpdLimit"].toInt())
+                .arg(jsonObject["xSpdDist"].toInt())
+                .arg(jsonObject["szPosRoadName"].toString())
+                .arg(jsonObject["active"].toBool());
+            topRightLabel->setText(str);
+        }
+    }
 
     Params params = Params();
     QString carName = QString::fromStdString(params.get("CarName"));

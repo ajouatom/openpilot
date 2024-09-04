@@ -297,6 +297,7 @@ std::unordered_map<std::string, uint32_t> keys = {
     { "LongitudinalTuningKiV", PERSISTENT },
     { "LongitudinalTuningKf", PERSISTENT },
     { "EnableRadarTracks", PERSISTENT },
+    { "EnableRadarTracksResult", PERSISTENT | CLEAR_ON_MANAGER_START },
     { "EnableAVM", PERSISTENT },
     { "HotspotOnBoot", PERSISTENT },
     { "SccConnectedBus2", PERSISTENT },
@@ -378,7 +379,9 @@ std::unordered_map<std::string, uint32_t> keys = {
     {"SchedulePending", PERSISTENT},
     
     {"UseExternalNaviRoutes", CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION },
-    
+
+    { "CarrotNavi", PERSISTENT },
+
 };
 
 } // namespace

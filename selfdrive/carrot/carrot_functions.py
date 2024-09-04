@@ -223,8 +223,9 @@ class CarrotMapTurnSpeed(CarrotBase):
 
 
 class CarrotNaviHelper(CarrotBase):
-  def __init__(self, params):
+  def __init__(self, params, params_memory):
     self.params = params
+    self.params_memory = params_memory
     super().__init__()
     self.distance_traveled = 0.0
     self.nav_distance = 0  # for navInstruction
@@ -340,7 +341,7 @@ class CarrotNaviHelper(CarrotBase):
         road_width = interp(xNextRoadWidth, [5, 10], [10, 20])
         left_sec = int(max(self.nav_distance - v_ego - road_width, 1) / max(1, v_ego))
         if left_sec < self.left_sec:
-          self.params.put_int_nonblocking("CarrotCountDownSec", left_sec)
+          self.params_memory.put_int_nonblocking("CarrotCountDownSec", left_sec)
           self.left_sec = left_sec
       else:
         self.nav_turn = False
@@ -392,8 +393,9 @@ class CarrotNaviHelper(CarrotBase):
     return v_cruise_kph
 
 class CarrotNaviSpeedManager(CarrotBase):
-  def __init__(self, params):
+  def __init__(self, params, params_memory):
     self.params = params
+    self.params_memory = params_memory
     super().__init__()
 
     self.activeAPM = 0
@@ -469,7 +471,7 @@ class CarrotNaviSpeedManager(CarrotBase):
         applySpeed = safeSpeed
       left_sec = int(max(leftDist - v_ego, 1) / max(1, v_ego))
       if left_sec < self.left_sec:
-        self.params.put_int_nonblocking("CarrotCountDownSec", left_sec)
+        self.params_memory.put_int_nonblocking("CarrotCountDownSec", left_sec)
         self.left_sec = left_sec
     else:
       applySpeed = 255
@@ -480,11 +482,11 @@ class CarrotNaviSpeedManager(CarrotBase):
           self.left_sec -= 1
           if self.left_sec < 0:
             self.left_sec = 11
-          self.params.put_int_nonblocking("CarrotCountDownSec", self.left_sec)
+          self.params_memory.put_int_nonblocking("CarrotCountDownSec", self.left_sec)
         pass
       else:
         if self.left_sec != 11:
-          self.params.put_int_nonblocking("CarrotCountDownSec", 11)
+          self.params_memory.put_int_nonblocking("CarrotCountDownSec", 11)
         self.left_sec = 11
 
 
@@ -516,9 +518,9 @@ class CarrotPlannerHelper:
     self.turnSpeed = 300
     self.curveSpeed = 300
 
-    self.map_turn = CarrotMapTurnSpeed(self.params, self.params_memory)
-    self.navi_helper = CarrotNaviHelper(self.params)
-    self.navi_speed_manager = CarrotNaviSpeedManager(self.params)
+    #self.map_turn = CarrotMapTurnSpeed(self.params, self.params_memory)
+    self.navi_helper = CarrotNaviHelper(self.params, self.params_memory)
+    self.navi_speed_manager = CarrotNaviSpeedManager(self.params, self.params_memory)
     self.activeAPM = 0
 
     self.gas_override_speed = 0
@@ -531,7 +533,8 @@ class CarrotPlannerHelper:
     if self.params_count == 10:
       self.vision_turn.update_params()
     elif self.params_count == 20:
-      self.map_turn.update_params()
+      #self.map_turn.update_params()
+      pass
     elif self.params_count == 30:
       self.navi_helper.update_params()
     elif self.params_count == 40:
@@ -552,11 +555,10 @@ class CarrotPlannerHelper:
     self.curveSpeed = self.vision_turn.curveSpeed
     self.event = self.vision_turn.event
 
-    map_turn_kph = self.map_turn.update(sm, v_cruise_kph, self.v_cruise_kph)
-    self.limitSpeed = self.map_turn.limitSpeed
-    #self.log = self.map_turn.log
-    if self.map_turn.event >= 0:
-      self.event = self.map_turn.event
+    #map_turn_kph = self.map_turn.update(sm, v_cruise_kph, self.v_cruise_kph)
+    self.limitSpeed = 0#self.map_turn.limitSpeed
+    #if self.map_turn.event >= 0:
+    #  self.event = self.map_turn.event
 
     navi_helper_kph = self.navi_helper.update(sm, v_cruise_kph, self.v_cruise_kph)
     self.leftBlinkerExt = self.navi_helper.leftBlinkerExtCount + self.navi_helper.blinkerExtMode
@@ -575,10 +577,19 @@ class CarrotPlannerHelper:
     #nda_log = "nda_type={} | ".format(cam_type) if apply_limit_speed > 0 else ""
     #nda_speed_kph = apply_limit_speed  if apply_limit_speed > 0 else 255
 
+    carrot_data = self.params_memory.get("CarrotNavi")
+    if carrot_data is not None:
+      carrot_navi = json.loads(carrot_data)
+      desired_speed = int(carrot_navi.get("desiredSpeed", 250))
+      xSpdCountDown = int(carrot_navi.get("xSpdCountDown", 250))
+      xTurnCountDown = int(carrot_navi.get("xTurnCountDown", 250))
+      self.params_memory.put_int_nonblocking("CarrotCountDownSec", min(xSpdCountDown, xTurnCountDown))
+
+
     self.log = self.vision_turn.log
-    if len(self.log):
-      self.log += "|"
-    self.log += self.map_turn.log
+    #if len(self.log):
+    #  self.log += "|"
+    #self.log += self.map_turn.log
     if len(self.log):
       self.log += "|"
     self.log += self.navi_helper.log
@@ -591,9 +602,10 @@ class CarrotPlannerHelper:
 
     values_and_names = [
         (vision_turn_kph, "vTurn"),
-        (map_turn_kph, "mTurn"),
+        #(map_turn_kph, "mTurn"),
         (navi_helper_kph, "noo"),
         (navi_speed_manager_kph, "navi"),
+        (desired_speed, "Carrot"),
         #(nda_speed_kph, "nda"),
     ]
 
@@ -603,10 +615,11 @@ class CarrotPlannerHelper:
       self.source = "none"
       self.gas_override_speed = 0
     else:
-      if sm['carState'].gasPressed and self.source not in ["navi", "nda"]:
+      if sm['carState'].gasPressed and self.source not in ["navi", "nda", "Carrot"]:
         self.gas_override_speed = sm['carState'].vEgoCluster * 3.6
       elif sm['carState'].brakePressed:
         self.gas_override_speed = 0
-      self.log = self.log + "v{:.0f}:m{:.0f},n{:.0f},s{:.0f},g{:.0f}".format(vision_turn_kph, map_turn_kph, navi_helper_kph, navi_speed_manager_kph, self.gas_override_speed)
+      #self.log = self.log + "v{:.0f}:m{:.0f},n{:.0f},s{:.0f},g{:.0f}".format(vision_turn_kph, map_turn_kph, navi_helper_kph, navi_speed_manager_kph, self.gas_override_speed)
+      self.log = self.log + "v{:.0f}:,n{:.0f},s{:.0f},g{:.0f}".format(vision_turn_kph, navi_helper_kph, desired_speed, self.gas_override_speed)
       self.v_cruise_kph = max(self.v_cruise_kph, self.gas_override_speed)
     return self.v_cruise_kph
