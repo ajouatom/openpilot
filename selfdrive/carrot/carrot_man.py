@@ -93,7 +93,7 @@ class CarrotMan:
       if self.sm.updated['carState']:
         CS = self.sm['carState']
 
-      self.carrot_serv.update_navi(CS)
+      self.carrot_serv.update_navi(CS, self.sm)
       isOnroadCount = isOnroadCount + 1 if self.params.get_bool("IsOnroad") else 0
       if isOnroadCount == 0:
         is_tmux_sent = False
@@ -392,6 +392,7 @@ class CarrotServ:
     return max(safe_speed_kph, min(250, speed_mps * 3.6))
 
   def _update_tbt(self):
+    #xTurnInfo : 1: left turn, 2: right turn, 3: left lane change, 4: right lane change, 5: rotary, 6: tg, 7: arrive or uturn
     turn_type_mapping = {
       12: ("turn", "left", 1),
       16: ("turn", "sharp left", 1),
@@ -430,30 +431,33 @@ class CarrotServ:
       138: ("rotary", "sharp left", 5),
       139: ("rotary", "left", 5),
       142: ("rotary", "straight", 5),
-      14: ("turn", "uturn", 5),
-      201: ("arrive", "straight", 5),
-      51: ("notification", "straight", None),
-      52: ("notification", "straight", None),
-      53: ("notification", "straight", None),
-      54: ("notification", "straight", None),
-      55: ("notification", "straight", None),
+      14: ("turn", "uturn", 7),
+      201: ("arrive", "straight", 7),
+      51: ("notification", "straight", 0),
+      52: ("notification", "straight", 0),
+      53: ("notification", "straight", 0),
+      54: ("notification", "straight", 0),
+      55: ("notification", "straight", 0),
       153: ("", "", 6),  #TG
       154: ("", "", 6),  #TG
       249: ("", "", 6)   #TG
     }
-    self.navType, self.navModifier, xTurnInfo1 = "invalid", "", -1
+    
     if self.nTBTTurnType in turn_type_mapping:
       self.navType, self.navModifier, xTurnInfo_temp = turn_type_mapping[self.nTBTTurnType]
       xTurnInfo1 = xTurnInfo_temp if xTurnInfo_temp is not None else xTurnInfo1
+    else:
+      self.navType, self.navModifier, xTurnInfo1 = "invalid", "", -1
 
     if xTurnInfo1 < 0 and self.nTBTTurnType >= 0: #and not mappyMode_valid:
       self.xTurnInfo = -1
     else:
       self.xTurnInfo = xTurnInfo1
 
-    self.navTypeNext, self.navModifierNext, self.xTurnInfoNext = "invalid", "", -1
     if self.nTBTTurnTypeNext in turn_type_mapping:
       self.navTypeNext, self.navModifierNext, self.xTurnInfoNext = turn_type_mapping[self.nTBTTurnTypeNext]
+    else:
+      self.navTypeNext, self.navModifierNext, self.xTurnInfoNext = "invalid", "", -1
 
 
     if self.nTBTDist > 0 and self.xTurnInfo >= 0:
@@ -487,7 +491,38 @@ class CarrotServ:
       self.xSpdType = 22
     pass
 
-  def update_navi(self, CS):
+  def update_auto_turn(self, CS, sm):
+    turn_speed = 20
+    stop_speed = 5
+    turn_dist = 50
+    fork_dist = 60
+    stop_dist = 1
+    turn_info_mapping = {
+        1: {"type": "turn left", "speed": turn_speed, "dist": turn_dist},
+        2: {"type": "turn right", "speed": turn_speed, "dist": turn_dist},
+        5: {"type": "straight", "speed": turn_speed, "dist": turn_dist},
+        3: {"type": "fork left", "speed": int(self.nRoadLimitSpeed * 0.5), "dist": fork_dist},
+        4: {"type": "fork right", "speed": int(self.nRoadLimitSpeed * 0.5), "dist": fork_dist},
+        43: {"type": "fork right", "speed": int(self.nRoadLimitSpeed * 0.5), "dist": fork_dist},
+        7: {"type": "straight", "speed": stop_speed, "dist": stop_dist},
+    }
+
+    default_mapping = {"type": "none", "speed": 0, "dist": 0}
+
+    ## turn dist를 초과하면 lane_change(fork)로 변경
+    if self.xTurnInfo in [1,2] and self.xDistToTurn > turn_dist:
+      self.xTurnInfo += 2 # 1 -> 3, 2 -> 4
+
+    mapping = turn_info_mapping.get(self.xTurnInfo, default_mapping)
+
+    self.tbtType = mapping["type"]
+    self.tbtSpeed = mapping["speed"]
+    self.tbtDist = mapping["dist"]
+
+    #nav_speed_down = True if nav_turn or self.xTurnInfo in [5, 6] else False
+    #nav_direction = 1 if self.xTurnInfo in [1, 3] else 2 if self.xTurnInfo in [2, 4, 43] else 0   #nav_direction:  1: left, 2:right, 0: straight
+
+  def update_navi(self, CS, sm):
     delta_dist = 0.0
     if CS is not None:
       delta_dist = CS.totalDistance - self.totalDistance
@@ -519,6 +554,7 @@ class CarrotServ:
       left_spd_sec = int(max(self.xSpdDist - v_ego, 1) / max(1, v_ego))
 
     ### TBT 속도제어
+    self.update_auto_turn(CS, sm)
     if self.xDistToTurn > 0 and self.active:
       pass
     left_tbt_sec = 100
@@ -581,16 +617,16 @@ class CarrotServ:
         self.nSdiType = -1
         self.nSdiBlockType = -1
       elif sdi_count > 0:
-        if "sdiInfo" in json:
-          sdi_info = json.get("sdiInfo")
-          if isinstance(sdi_info, list) and len(sdi_info) > 0:
-            self.nSdiType = int(sdi_info.get("nSdiType", self.nSdiType))
-            self.nSdiSpeedLimit = int(sdi_info.get("nSdiSpeedLimit", self.nSdiSpeedLimit))
-            self.nSdiSection = int(sdi_info.get("nSdiSection", self.nSdiSection))
-            self.nSdiDist = int(sdi_info.get("nSdiDist", self.nSdiDist))
-            self.nSdiBlockType = int(sdi_info.get("nSdiBlockType", self.nSdiBlockType))
-            self.nSdiBlockSpeed = int(sdi_info.get("nSdiBlockSpeed", self.nSdiBlockSpeed))
-            self.nSdiBlockDist = int(sdi_info.get("nSdiBlockDist", self.nSdiBlockDist))
+        sdi_info_list = json.get("sdiInfo", [])
+        if isinstance(sdi_info_list, list) and sdi_info_list:
+          sdi_info = sdi_info_list[0]
+          self.nSdiType = int(sdi_info.get("nSdiType", self.nSdiType))
+          self.nSdiSpeedLimit = int(sdi_info.get("nSdiSpeedLimit", self.nSdiSpeedLimit))
+          self.nSdiSection = int(sdi_info.get("nSdiSection", self.nSdiSection))
+          self.nSdiDist = int(sdi_info.get("nSdiDist", self.nSdiDist))
+          self.nSdiBlockType = int(sdi_info.get("nSdiBlockType", self.nSdiBlockType))
+          self.nSdiBlockSpeed = int(sdi_info.get("nSdiBlockSpeed", self.nSdiBlockSpeed))
+          self.nSdiBlockDist = int(sdi_info.get("nSdiBlockDist", self.nSdiBlockDist))
 
       self.nSdiPlusType = int(json.get("nSdiPlusType", self.nSdiPlusType))
       self.nSdiPlusSpeedLimit = int(json.get("nSdiPlusSpeedLimit", self.nSdiPlusSpeedLimit))
