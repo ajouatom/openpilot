@@ -2457,7 +2457,7 @@ struct Event {
     naviGps @108 :Custom.NaviGps;
     naviObstacles @109 :Custom.NaviObstacles;
     carrotModel @110 :Custom.CarrotModel;
-    customReserved4 @111 :Custom.CustomReserved4;
+    carrotMan @111 :Custom.CarrotMan;
     customReserved5 @112 :Custom.CustomReserved5;
     customReserved6 @113 :Custom.CustomReserved6;
     customReserved7 @114 :Custom.CustomReserved7;

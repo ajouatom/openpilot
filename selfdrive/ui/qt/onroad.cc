@@ -46,24 +46,32 @@ OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   font.setPixelSize(27);
   font.setWeight(QFont::DemiBold);
   QHBoxLayout* topLayout = new QHBoxLayout();
+  topLayout->setContentsMargins(0, 0, 0, 0);  // 레이아웃 마진 설정
+
   topLeftLabel = new QLabel("", this);
   topLeftLabel->setFixedHeight(27); // 높이를 30 픽셀로 설정
   topLeftLabel->setAlignment(Qt::AlignLeft);
   topLeftLabel->setFont(font);
   topLeftLabel->setStyleSheet("QLabel { color : white; }");
+  topLeftLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);  // 크기 정책 설정
   topLayout->addWidget(topLeftLabel);
+
   topLabel = new QLabel("", this);
   topLabel->setFixedHeight(27); // 높이를 30 픽셀로 설정
   topLabel->setAlignment(Qt::AlignCenter);
   topLabel->setFont(font);
   topLabel->setStyleSheet("QLabel { color : white; }");
+  topLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);  // 크기 정책 설정
   topLayout->addWidget(topLabel);
+
   topRightLabel = new QLabel("", this);
   topRightLabel->setFixedHeight(27); // 높이를 30 픽셀로 설정
   topRightLabel->setAlignment(Qt::AlignRight);
   topRightLabel->setFont(font);
   topRightLabel->setStyleSheet("QLabel { color : white; }");
+  topRightLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);  // 크기 정책 설정
   topLayout->addWidget(topRightLabel);
+
   main_layout->addLayout(topLayout);
 
   QStackedLayout *stacked_layout = new QStackedLayout;
@@ -349,6 +357,20 @@ void OnroadWindow::updateStateText() {
     top.sprintf("%s Long, FPS: %d", hasLongitudinalControl(cp)?"OP":"Stock", g_fps);
     topRightLabel->setText(top);
 
+    const auto carrot_man = sm["carrotMan"].getCarrotMan();
+    const bool carrot_man_alive = sm.alive("carrotMan");
+    if (carrot_man_alive) {
+        QString str;
+        str.sprintf("%dkm/h TBT(%d): %dm, CAM(%d): %dkm/h, %dm",
+            carrot_man.getDesiredSpeed(),
+            carrot_man.getXTurnInfo(),
+            carrot_man.getXDistToTurn(),
+            carrot_man.getXSpdType(),
+            carrot_man.getXSpdLimit(),
+            carrot_man.getXSpdDist());
+        topLeftLabel->setText(str);
+    }
+#if 0
     Params params_memory = Params("/dev/shm/params");
 
     QString navi = QString::fromStdString(params_memory.get("CarrotNavi"));
@@ -356,18 +378,18 @@ void OnroadWindow::updateStateText() {
     if (doc.isObject()) {
         QJsonObject jsonObject = doc.object();
         if (jsonObject["active"].toBool()) {
-            QString str = QString("%8, %1Km/h, TBT(%2): %3M, CAM(%4): %5km/h, %6M, %7")
+            QString str = QString("%7, %1Km/h, TBT(%2): %3M, CAM(%4): %5km/h, %6M")
                 .arg(jsonObject["desiredSpeed"].toInt())
                 .arg(jsonObject["xTurnInfo"].toInt())
                 .arg(jsonObject["xDistToTurn"].toInt())
                 .arg(jsonObject["xSpdType"].toInt())
                 .arg(jsonObject["xSpdLimit"].toInt())
                 .arg(jsonObject["xSpdDist"].toInt())
-                .arg(jsonObject["szPosRoadName"].toString())
                 .arg(jsonObject["active"].toBool());
             topRightLabel->setText(str);
         }
     }
+#endif
 
     Params params = Params();
     QString carName = QString::fromStdString(params.get("CarName"));

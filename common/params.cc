@@ -339,7 +339,6 @@ std::unordered_map<std::string, uint32_t> keys = {
     { "CarrotRecord", PERSISTENT },
     { "CarrotDisplay", PERSISTENT },
     { "CarrotCountDownSec", PERSISTENT },
-    { "MSLCEnabled", PERSISTENT },
     { "NoLogging", PERSISTENT },
     { "CarrotException", CLEAR_ON_MANAGER_START },
     { "CarrotRouteActive", CLEAR_ON_MANAGER_START },
@@ -358,29 +357,13 @@ std::unordered_map<std::string, uint32_t> keys = {
     { "LongPitch", PERSISTENT },
     { "EVTable", PERSISTENT },
     { "TSS2Tune", PERSISTENT },
-    {"LastMapsUpdate", PERSISTENT},
-    {"MapsSelected", PERSISTENT},
-    {"MapCurvatures", PERSISTENT},
-    {"MapSpeedLimit", PERSISTENT},
-    {"NextMapSpeedLimit", PERSISTENT},
-    {"MapTargetLatA", PERSISTENT},
-    {"MapTargetVelocities", PERSISTENT},
-    {"MTSCAggressiveness", PERSISTENT},
-    {"MTSCCurvatureCheck", PERSISTENT},
-    {"MTSCEnabled", PERSISTENT},
     {"NNFF", PERSISTENT},
     {"NNFFLite", PERSISTENT},
     {"NNFFModelName", PERSISTENT},
-    {"OSMDownloadLocations", PERSISTENT},
-    {"OSMDownloadProgress", CLEAR_ON_MANAGER_START},
-    {"PreferredSchedule", PERSISTENT},
-    {"RoadName", PERSISTENT},
-    {"RoadNameUI", PERSISTENT},
-    {"SchedulePending", PERSISTENT},
     
     {"UseExternalNaviRoutes", CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION },
 
-    { "CarrotNavi", PERSISTENT },
+    //{ "CarrotNavi", PERSISTENT },
 
 };
 

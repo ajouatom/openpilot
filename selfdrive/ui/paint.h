@@ -111,6 +111,12 @@ protected:
 
 public:
 	DrawApilot();
+protected:
+	void drawLaneLinesHelper(const UIState* s, const UIScene& scene);
+	void drawBlindSpotHelper(const UIState* s, SubMaster& sm, bool left_blindspot, bool right_blindspot);
+	void drawRoadEdgesHelper(const UIState* s, const UIScene& scene);
+	void drawPath(const UIState* s, const UIScene& scene, const cereal::CarState::Reader& car_state, bool brake_valid);
+
 public:
 	void drawLaneLines(const UIState* s);
 	void drawLeadApilot(const UIState* s);

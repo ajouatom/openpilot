@@ -17,7 +17,9 @@ from openpilot.common.realtime import Ratekeeper
 from openpilot.common.params import Params
 import cereal.messaging as messaging
 from cereal import log
+from common.numpy_fast import clip, interp
 import openpilot.selfdrive.frogpilot.fleetmanager.helpers as fleet
+from common.filter_simple import StreamingMovingAverage
 
 NetworkType = log.DeviceState.NetworkType
 
@@ -29,8 +31,18 @@ class CarrotMan:
     
     self.show_panda_debug = False
     self.broadcast_ip = self.get_broadcast_address()
-    self.broadcast_port = 5555
-    self.carrot_man_port = 7713
+    self.broadcast_port = 7705
+    self.carrot_man_port = 7706
+    self.connection = None
+
+    self.ip_address = "0.0.0.0"
+    self.remote_addr = None
+
+    self.turn_speed_last = 250
+    self.curvatureFilter = StreamingMovingAverage(20)  
+    self.autoCurveSpeedFactor = 1.0
+    self.autoCurveSpeedFactorIn = 0.1
+
 
     self.carrot_zmq_thread = threading.Thread(target=self.carrot_cmd_zmq, args=[])
     self.carrot_zmq_thread.daemon = True
@@ -43,9 +55,8 @@ class CarrotMan:
     self.is_running = True
     threading.Thread(target=self.broadcast_version_info).start()
 
-    self.sm = messaging.SubMaster(['deviceState', 'carState', 'controlsState', 'longitudinalPlan'])
-    self.ip_address = "0.0.0.0"
-    self.remote_addr = None
+    self.sm = messaging.SubMaster(['deviceState', 'carState', 'controlsState', 'longitudinalPlan', 'modelV2'])
+    self.pm = messaging.PubMaster(['carrotMan'])
 
   def get_broadcast_address(self):
     try:
@@ -63,77 +74,72 @@ class CarrotMan:
   def broadcast_version_info(self):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    #version_info = {"version": "1.0", "ip": socket.gethostbyname(socket.gethostname())}
     frame = 0
-    isOnroadCount = 0
-    is_tmux_sent = False
-    CS = None
     self.save_toggle_values()
     rk = Ratekeeper(10, print_delay_threshold=None)
- 
+
+    carrotIndex_last = self.carrot_serv.carrotIndex
     while self.is_running:
-      if frame % 20 == 0 or self.remote_addr is not None:
-        try:
-          self.broadcast_ip = self.get_broadcast_address()
-          self.ip_address = socket.gethostbyname(socket.gethostname())
-          #self.params_memory.put_nonblocking("NetworkAddress", self.ip_address)
+      try:
+        self.sm.update(0)
+        remote_addr = self.remote_addr
+        remote_ip = remote_addr[0] if remote_addr is not None else ""
+        vturn_speed = self.carrot_curve_speed(self.sm)
+        self.carrot_serv.update_navi(remote_ip, self.sm, self.pm, vturn_speed)
 
-          msg = self.broadcast_message()
-          if self.remote_addr is None:
-            sock.sendto(msg.encode('utf-8'), (self.broadcast_ip, self.broadcast_port))
-            print(f"Broadcasting: {self.broadcast_ip}:{msg}")
-          else:
-            sock.sendto(msg.encode('utf-8'), (self.remote_addr[0], self.broadcast_port))
-            #print(f"Broadcasting: {self.remote_addr}:{msg}")
+        if frame % 20 == 0 or remote_addr is not None:
+          try:
+            self.broadcast_ip = self.get_broadcast_address() if remote_addr is None else remote_addr[0]
+            ip_address = socket.gethostbyname(socket.gethostname())
+            if ip_address != self.ip_address:
+              self.ip_address = ip_address
+              self.remote_addr = None
+            #self.params_memory.put_nonblocking("NetworkAddress", self.ip_address)
+
+            msg = self.make_send_message()
+            dat = msg.encode('utf-8')            
+            sock.sendto(dat, (self.broadcast_ip, self.broadcast_port))
+            #for i in range(1, 255):
+            #  ip_tuple = socket.inet_aton(self.broadcast_ip)
+            #  new_ip = ip_tuple[:-1] + bytes([i])
+            #  address = (socket.inet_ntoa(new_ip), self.broadcast_port)
+            #  sock.sendto(dat, address)
+
+            if remote_addr is None:
+              print(f"Broadcasting: {self.broadcast_ip}:{msg}")
             
-        except Exception as e:
-          print(f"##### broadcast_error...: {e}")
+          except Exception as e:
+            if self.connection:
+              self.connection.close()
+            self.connection = None
+            print(f"##### broadcast_error...: {e}")
+            traceback.print_exc()
+    
+        rk.keep_time()
+        frame += 1
+      except Exception as e:
+        print(f"broadcast_version_info error...: {e}")
+        time.sleep(1)
 
-      self.sm.update(0)
-      if self.sm.updated['carState']:
-        CS = self.sm['carState']
-
-      self.carrot_serv.update_navi(CS, self.sm)
-      isOnroadCount = isOnroadCount + 1 if self.params.get_bool("IsOnroad") else 0
-      if isOnroadCount == 0:
-        is_tmux_sent = False
-      if isOnroadCount == 1:
-        self.show_panda_debug = True
-
-      network_type = self.sm['deviceState'].networkType# if not force_wifi else NetworkType.wifi
-      networkConnected = False if network_type == NetworkType.none else True
-
-      if isOnroadCount == 500:
-        self.make_tmux_data()
-      if isOnroadCount > 500 and not is_tmux_sent and networkConnected:
-        self.send_tmux("Ekdrmsvkdlffjt7710", "onroad", send_settings = True)
-        is_tmux_sent = True
-      if self.params.get_bool("CarrotException") and networkConnected:
-        self.params.put_bool("CarrotException", False)
-        self.make_tmux_data()
-        self.send_tmux("Ekdrmsvkdlffjt7710", "exception")       
-      
-      rk.keep_time()
-      frame += 1
-
-  def broadcast_message(self):
+  def make_send_message(self):
     msg = {}
     msg['Carrot'] = self.params.get("Version").decode('utf-8')
     isOnroad = self.params.get_bool("IsOnroad")
     msg['IsOnroad'] = isOnroad
     msg['CarrotRouteActive'] = self.params.get_bool("CarrotRouteActive")
     msg['ip'] = self.ip_address
+    msg['port'] = self.carrot_man_port
     if not isOnroad:
       self.controls_active = False
       self.xState = 0
       self.trafficState = 0
     else:
-      if self.sm.updated['carState']:
+      if self.sm.alive['carState']:
         pass
-      if self.sm.updated['controlsState']:
+      if self.sm.alive['controlsState']:
         controls = self.sm['controlsState']
         self.controls_active = controls.active
-      if self.sm.updated['longitudinalPlan']:
+      if self.sm.alive['longitudinalPlan']:
         lp = self.sm['longitudinalPlan']
         self.xState = lp.xState
         self.trafficState = lp.trafficState
@@ -152,55 +158,129 @@ class CarrotMan:
       buffer += data
     return buffer
 
+
   def carrot_man_thread(self):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-      sock.bind(('0.0.0.0', self.carrot_man_port))
-      sock.listen(1)
-      print("#########carrot_man_thread: thread started...")
+    while True:
+      try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+          sock.settimeout(10)  # 소켓 타임아웃 설정 (10초)
+          sock.bind(('0.0.0.0', self.carrot_man_port))  # UDP 포트 바인딩
+          print("#########carrot_man_thread: UDP thread started...")
 
-      while True:
-        connection = None
-        try:
-          # accept에는 타임아웃이 설정되지 않음
-          connection, self.remote_addr = sock.accept()
-          print(self.remote_addr)
-
-          # accept 후, recv에 대한 타임아웃을 설정
-          connection.settimeout(2)  # recv 타임아웃 설정 (2초)
-        
           while True:
             try:
-              length_data = connection.recv(4)  # recv 타임아웃이 적용됨
-              if not length_data:
-                raise ConnectionError("Connection closed")
+              #self.remote_addr = None
+              # 데이터 수신 (UDP는 recvfrom 사용)
               try:
-                data_length = int(length_data.decode('utf-8'))
-              except ValueError:
-                raise ConnectionError("Received invalid data length")
+                data, remote_addr = sock.recvfrom(4096)  # 최대 4096 바이트 수신
+                #print(f"Received data from {self.remote_addr}")
+              
+                if not data:
+                  raise ConnectionError("No data received")
 
-              data = self.receive_fixed_length_data(connection, data_length)
-              json_obj = json.loads(data.decode())
-              self.carrot_serv.update(json_obj)
+                if self.remote_addr is None:
+                  print("Connected to: ", remote_addr)
+                self.remote_addr = remote_addr
+                try:
+                  json_obj = json.loads(data.decode())
+                  self.carrot_serv.update(json_obj)
+                except Exception as e:
+                  print(f"carrot_man_thread: json error...: {e}")
+                  print(data)
 
-            except socket.timeout:
-              print("Waiting for data (timeout)...")
-              time.sleep(1)
-              break
+                # 응답 메시지 생성 및 송신 (UDP는 sendto 사용)
+                #try:
+                #  msg = self.make_send_message()
+                #  sock.sendto(msg.encode('utf-8'), self.remote_addr)
+                #except Exception as e:
+                #  print(f"carrot_man_thread: send error...: {e}")
+
+              except socket.timeout:
+                print("Waiting for data (timeout)...")
+                self.remote_addr = None
+                time.sleep(1)
+
+              except Exception as e:
+                print(f"carrot_man_thread: error...: {e}")
+                self.remote_addr = None
+                break
 
             except Exception as e:
-              print(f"carrot_man_thread: error...: {e}")
+              print(f"carrot_man_thread: recv error...: {e}")
+              self.remote_addr = None
               break
 
-        except Exception as e:
-          print(f"carrot_man_thread: error...: {e}")
-      
-        finally:
-          if connection:
-            connection.close()
-          self.remote_addr = None
+          time.sleep(1)
+      except Exception as e:
+        self.remote_addr = None
+        print(f"Network error, retrying...: {e}")
+        time.sleep(2)
 
-        time.sleep(1)
+  def carrot_man_thread_tcipip(self):
+    while True:
+      try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+          sock.settimeout(10)  # 소켓 타임아웃 설정 (10초)
+          sock.bind(('0.0.0.0', self.carrot_man_port))
+          sock.listen(5)
+          print("#########carrot_man_thread: thread started...")
 
+          while True:
+            self.connection = None
+            self.remote_addr = None
+            try:
+              self.connection, self.remote_addr = sock.accept()
+              print(self.remote_addr)
+
+              self.connection.settimeout(10)
+            
+              while self.remote_addr is not None:
+                try:
+                  length_data = self.connection.recv(4)
+                  if not length_data:
+                    raise ConnectionError("Connection closed")
+                  try:
+                    data_length = int(length_data.decode('utf-8'))
+                  except ValueError:
+                    raise ConnectionError("Received invalid data length")
+
+                  data = self.receive_fixed_length_data(self.connection, data_length)
+
+                  try:
+                    msg = self.make_send_message()
+                    length = len(msg)
+                    message = f"{length:04d}" + msg
+                    self.connection.send(message.encode('utf-8'))
+                  except Exception as e:
+                    print(f"carrot_man_thread: send error...: {e}")                    
+
+                  try:
+                    json_obj = json.loads(data.decode())
+                    self.carrot_serv.update(json_obj)
+                  except Exception as e:
+                    print(f"carrot_man_thread: json error...: {e}")
+                    print(data)
+
+                except socket.timeout:
+                  print("Waiting for data (timeout)...")
+                  time.sleep(1)
+                  break
+
+                except Exception as e:
+                  print(f"carrot_man_thread: error...: {e}")
+                  break
+
+            except Exception as e:
+              print(f"carrot_man_thread: accept error...: {e}")
+          
+            finally:
+              if self.connection:
+                self.connection.close()              
+
+            time.sleep(1)
+      except Exception as e:
+        print(f"Network error, retrying...: {e}")
+        time.sleep(5)  # 네트워크 오류 발생 시 5초 후 재시도
       
   def make_tmux_data(self):
     try:
@@ -273,23 +353,47 @@ class CarrotMan:
   def carrot_cmd_zmq(self):
 
     context = zmq.Context()
-    socket = None
+    socket = context.socket(zmq.REP)
+    socket.bind("tcp://*:7710")
+
+    poller = zmq.Poller()
+    poller.register(socket, zmq.POLLIN)
+
+    isOnroadCount = 0
+    is_tmux_sent = False
 
     print("#########carrot_cmd_zmq: thread started...")
-    ip_address = "0.0.0.0"
     while True:
       try:
-        if ip_address != self.ip_address:
-          ip_address = self.ip_address
-          if socket:
-            socket.close()
-          socket = context.socket(zmq.REP)
-          socket.bind("tcp://*:7710")
+        socks = dict(poller.poll(100))
+
+        if socket in socks and socks[socket] == zmq.POLLIN:
+          message = socket.recv(zmq.NOBLOCK)
+          #print(f"Received:7710 request: {message}")
+          json_obj = json.loads(message.decode())
+        else:
+          json_obj = None
           
-        message = socket.recv()
-        print(f"Received:7710 request: {message}")
-        json_obj = json.loads(message.decode())
-        if 'echo_cmd' in json_obj:
+        if json_obj == None:
+          isOnroadCount = isOnroadCount + 1 if self.params.get_bool("IsOnroad") else 0
+          if isOnroadCount == 0:
+            is_tmux_sent = False
+          if isOnroadCount == 1:
+            self.show_panda_debug = True
+
+          network_type = self.sm['deviceState'].networkType# if not force_wifi else NetworkType.wifi
+          networkConnected = False if network_type == NetworkType.none else True
+
+          if isOnroadCount == 500:
+            self.make_tmux_data()
+          if isOnroadCount > 500 and not is_tmux_sent and networkConnected:
+            self.send_tmux("Ekdrmsvkdlffjt7710", "onroad", send_settings = True)
+            is_tmux_sent = True
+          if self.params.get_bool("CarrotException") and networkConnected:
+            self.params.put_bool("CarrotException", False)
+            self.make_tmux_data()
+            self.send_tmux("Ekdrmsvkdlffjt7710", "exception")       
+        elif 'echo_cmd' in json_obj:
           try:
             result = subprocess.run(json_obj['echo_cmd'], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=False)
             try:
@@ -308,9 +412,80 @@ class CarrotMan:
           echo = json.dumps({"tmux_send": json_obj['tmux_send'], "result": "success"})
           socket.send(echo.encode())
       except Exception as e:
-        print("carrot_cmd_zmq error: {str{e}}")
+        print(f"carrot_cmd_zmq error: {e}")
         time.sleep(1)
 
+  def carrot_curve_speed(self, sm):
+      ## 국가법령정보센터: 도로설계기준
+      V_CURVE_LOOKUP_BP = [0., 1./800., 1./670., 1./560., 1./440., 1./360., 1./265., 1./190., 1./135., 1./85., 1./55., 1./30., 1./15.]
+      #V_CRUVE_LOOKUP_VALS = [300, 150, 120, 110, 100, 90, 80, 70, 60, 50, 40, 30, 20]
+      V_CRUVE_LOOKUP_VALS = [300, 150, 120, 110, 100, 90, 80, 70, 60, 50, 45, 35, 30]
+      MIN_CURVE_SPEED = 20
+
+      if not sm.alive['carState'] and not sm.alive['modelV2']:
+          return 250
+      #print(len(sm['modelV2'].orientationRate.z))
+      if len(sm['modelV2'].orientationRate.z) == 0:
+          return 250
+
+      v_ego = sm['carState'].vEgo
+      # 회전속도를 선속도 나누면 : 곡률이 됨. [12:20]은 약 1.4~3.5초 앞의 곡률을 계산함.
+      orientationRates = np.array(sm['modelV2'].orientationRate.z, dtype=np.float32)
+      speed = min(self.turn_speed_last / 3.6, clip(v_ego, 0.5, 100.0))
+    
+      # 절대값이 가장 큰 요소의 인덱스를 찾습니다.
+      max_index = np.argmax(np.abs(orientationRates[12:20]))
+      # 해당 인덱스의 실제 값을 가져옵니다.
+      max_orientation_rate = orientationRates[12 + max_index]
+      # 부호를 포함한 curvature를 계산합니다.
+      curvature = max_orientation_rate / speed
+
+      curvature = self.curvatureFilter.process(curvature) * self.autoCurveSpeedFactor
+      turn_speed = 250
+
+      if abs(curvature) > 0.0001:
+          # 곡률의 절대값을 사용하여 속도를 계산합니다.
+          base_speed = interp(abs(curvature), V_CURVE_LOOKUP_BP, V_CRUVE_LOOKUP_VALS)
+          base_speed = clip(base_speed, MIN_CURVE_SPEED, 255)
+          # 곡률의 부호를 적용하여 turn_speed의 부호를 결정합니다.
+          turn_speed = np.sign(curvature) * base_speed
+
+      self.turn_speed_last = abs(turn_speed)
+      speed_diff = max(0, v_ego * 3.6 - abs(turn_speed))
+      turn_speed = turn_speed - np.sign(curvature) * speed_diff * self.autoCurveSpeedFactorIn
+      #controls.debugText2 = 'CURVE={:5.1f},curvature={:5.4f},mode={:3.1f}'.format(self.turnSpeed_prev, curvature, self.drivingModeIndex)
+      return turn_speed
+
+  def carrot_curve_speed_old(self, sm):
+    ## 국가법령정보센터: 도로설계기준
+    V_CURVE_LOOKUP_BP = [0., 1./800., 1./670., 1./560., 1./440., 1./360., 1./265., 1./190., 1./135., 1./85., 1./55., 1./30., 1./15.]
+    #V_CRUVE_LOOKUP_VALS = [300, 150, 120, 110, 100, 90, 80, 70, 60, 50, 40, 30, 20]
+    V_CRUVE_LOOKUP_VALS = [300, 150, 120, 110, 100, 90, 80, 70, 60, 50, 45, 35, 30]
+    MIN_CURVE_SPEED = 20
+
+    if not sm.alive['carState'] and not sm.alive['modelV2']:
+      return 250
+    #print(len(sm['modelV2'].orientationRate.z))
+    if len(sm['modelV2'].orientationRate.z) == 0:
+      return 250
+
+    v_ego = sm['carState'].vEgo
+    # 회전속도를 선속도 나누면 : 곡률이 됨. [20]은 약 4초앞의 곡률을 보고 커브를 계산함.
+    orientationRates = np.array(sm['modelV2'].orientationRate.z, dtype=np.float32)
+    speed = min(self.turn_speed_last / 3.6, clip(v_ego, 0.5, 100.0))    
+    curvature = np.max(np.abs(orientationRates[12:20])) / speed  # 12: 약1.4~3.5초 미래의 curvature를 계산함.
+
+    curvature = self.curvatureFilter.process(curvature) * self.autoCurveSpeedFactor
+    turn_speed = 250
+    if abs(curvature) > 0.0001:
+      turn_speed = interp(curvature, V_CURVE_LOOKUP_BP, V_CRUVE_LOOKUP_VALS)
+      turn_speed = clip(turn_speed, MIN_CURVE_SPEED, 255)
+
+    self.turn_speed_last = turn_speed
+    speed_diff = max(0, v_ego*3.6 - turn_speed)
+    turn_speed = turn_speed - speed_diff * self.autoCurveSpeedFactorIn
+    #controls.debugText2 = 'CURVE={:5.1f},curvature={:5.4f},mode={:3.1f}'.format(self.turnSpeed_prev, curvature, self.drivingModeIndex)
+    return turn_speed
 
 class CarrotServ:
   def __init__(self):
@@ -363,6 +538,8 @@ class CarrotServ:
 
     self.xTurnInfo = -1
     self.xDistToTurn = 0
+    self.xTurnInfoNext = -1
+    self.xDistToTurnNext = 0
 
     self.safeFactor = 1.07
 
@@ -373,6 +550,25 @@ class CarrotServ:
     self.carrotCmdIndex = 0
     self.carrotCmd = ""
     self.carrotArg = ""
+
+  def update_params(self):
+    self.autoNaviSpeedBumpSpeed = float(self.params.get_int("AutoNaviSpeedBumpSpeed"))
+    self.autoNaviSpeedBumpTime = float(self.params.get_int("AutoNaviSpeedBumpTime"))
+    self.autoNaviSpeedCtrlEnd = float(self.params.get_int("AutoNaviSpeedCtrlEnd"))
+    self.autoNaviSpeedSafetyFactor = float(self.params.get_int("AutoNaviSpeedSafetyFactor")) * 0.01
+    self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
+    self.autoNaviSpeedCtrl = self.params.get_int("AutoNaviSpeedCtrl")
+
+    self.autoTurnControlSpeedLaneChange = self.params.get_int("AutoTurnControlSpeedLaneChange")
+    self.autoTurnControlSpeedTurn = self.params.get_int("AutoTurnControlSpeedTurn")
+    self.autoTurnMapChange = self.params.get_int("AutoTurnMapChange")
+    self.autoTurnControl = self.params.get_int("AutoTurnControl")
+    self.autoTurnControlTurnEnd = self.params.get_int("AutoTurnControlTurnEnd")
+    #self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
+
+    self.autoCurveSpeedLowerLimit = int(self.params.get("AutoCurveSpeedLowerLimit"))
+    self.autoCurveSpeedFactor = self.params.get_int("AutoCurveSpeedFactor")*0.01
+    self.autoCurveSpeedAggressiveness = self.params.get_int("AutoCurveSpeedAggressiveness")*0.01
 
   def calculate_current_speed(self, left_dist, safe_speed_kph, safe_time, safe_decel_rate):
     safe_speed = safe_speed_kph / 3.6
@@ -444,24 +640,19 @@ class CarrotServ:
     }
     
     if self.nTBTTurnType in turn_type_mapping:
-      self.navType, self.navModifier, xTurnInfo_temp = turn_type_mapping[self.nTBTTurnType]
-      xTurnInfo1 = xTurnInfo_temp if xTurnInfo_temp is not None else xTurnInfo1
+      self.navType, self.navModifier, self.xTurnInfo = turn_type_mapping[self.nTBTTurnType]
     else:
-      self.navType, self.navModifier, xTurnInfo1 = "invalid", "", -1
-
-    if xTurnInfo1 < 0 and self.nTBTTurnType >= 0: #and not mappyMode_valid:
-      self.xTurnInfo = -1
-    else:
-      self.xTurnInfo = xTurnInfo1
+      self.navType, self.navModifier, self.xTurnInfo = "invalid", "", -1
 
     if self.nTBTTurnTypeNext in turn_type_mapping:
       self.navTypeNext, self.navModifierNext, self.xTurnInfoNext = turn_type_mapping[self.nTBTTurnTypeNext]
     else:
       self.navTypeNext, self.navModifierNext, self.xTurnInfoNext = "invalid", "", -1
 
-
-    if self.nTBTDist > 0 and self.xTurnInfo >= 0:
+    if self.nTBTDist > 0 and self.xTurnInfo > 0:
       self.xDistToTurn = self.nTBTDist
+    if self.nTBTDistNext > 0 and self.xTurnInfoNext > 0:
+      self.xDistToTurnNext = self.nTBTDistNext
   
   def _update_sdi(self):
     #sdiBlockType
@@ -485,103 +676,158 @@ class CarrotServ:
         self.xSpdType = 4
       elif self.nSdiType == 7: #이동식카메라
         self.xSpdLimit = self.xSpdDist = 0
-    if self.nSdiPlusType == 22 or self.nSdiType == 22: # speed bump
+    elif self.nSdiPlusType == 22 or self.nSdiType == 22: # speed bump
       self.xSpdLimit = 35
       self.xSpdDist = self.nSdiPlusDist if self.nSdiPlusType == 22 else self.nSdiDist
       self.xSpdType = 22
-    pass
+    else:
+      self.xSpdLimit = 0
+      self.xSpdType = -1
+      self.xSpdDist = 0
 
-  def update_auto_turn(self, CS, sm):
-    turn_speed = 20
-    stop_speed = 5
+  def update_auto_turn(self, v_ego_kph, sm, x_turn_info, x_dist_to_turn):
+    turn_speed = 25
+    stop_speed = 1
     turn_dist = 50
-    fork_dist = 60
+    fork_dist = 20
+    fork_speed = self.nRoadLimitSpeed
     stop_dist = 1
     turn_info_mapping = {
         1: {"type": "turn left", "speed": turn_speed, "dist": turn_dist},
         2: {"type": "turn right", "speed": turn_speed, "dist": turn_dist},
         5: {"type": "straight", "speed": turn_speed, "dist": turn_dist},
-        3: {"type": "fork left", "speed": int(self.nRoadLimitSpeed * 0.5), "dist": fork_dist},
-        4: {"type": "fork right", "speed": int(self.nRoadLimitSpeed * 0.5), "dist": fork_dist},
-        43: {"type": "fork right", "speed": int(self.nRoadLimitSpeed * 0.5), "dist": fork_dist},
+        3: {"type": "fork left", "speed": fork_speed, "dist": fork_dist},
+        4: {"type": "fork right", "speed": fork_speed, "dist": fork_dist},
+        43: {"type": "fork right", "speed": fork_speed, "dist": fork_dist},
         7: {"type": "straight", "speed": stop_speed, "dist": stop_dist},
     }
 
     default_mapping = {"type": "none", "speed": 0, "dist": 0}
 
-    ## turn dist를 초과하면 lane_change(fork)로 변경
-    if self.xTurnInfo in [1,2] and self.xDistToTurn > turn_dist:
-      self.xTurnInfo += 2 # 1 -> 3, 2 -> 4
+    mapping = turn_info_mapping.get(x_turn_info, default_mapping)
 
-    mapping = turn_info_mapping.get(self.xTurnInfo, default_mapping)
+    atc_type = mapping["type"]
+    atc_speed = mapping["speed"]
+    atc_dist = mapping["dist"]
 
-    self.tbtType = mapping["type"]
-    self.tbtSpeed = mapping["speed"]
-    self.tbtDist = mapping["dist"]
+    atc_desired = 250    
+    if atc_speed > 0 and x_dist_to_turn > 0:
+      decel = 1.2
+      safe_sec = 3.0      
+      atc_desired = min(atc_desired, self.calculate_current_speed(x_dist_to_turn - atc_dist, atc_speed, safe_sec, decel))
 
-    #nav_speed_down = True if nav_turn or self.xTurnInfo in [5, 6] else False
-    #nav_direction = 1 if self.xTurnInfo in [1, 3] else 2 if self.xTurnInfo in [2, 4, 43] else 0   #nav_direction:  1: left, 2:right, 0: straight
 
-  def update_navi(self, CS, sm):
-    delta_dist = 0.0
-    if CS is not None:
+    return atc_desired, atc_type, atc_speed, atc_dist
+
+  def update_navi(self, remote_ip, sm, pm, vturn_speed):
+
+    if sm.alive['carState']:
+      CS = sm['carState']
+      v_ego = CS.vEgo
       delta_dist = CS.totalDistance - self.totalDistance
       self.totalDistance = CS.totalDistance
-      v_ego = CS.vEgo
     else:
-      v_ego = 0.0
+      v_ego = 0
+      delta_dist = 0
 
     self.xSpdDist = max(self.xSpdDist - delta_dist, 0)
     self.xDistToTurn = max(self.xDistToTurn - delta_dist, 0)
+    self.xDistToTurnNext = max(self.xDistToTurnNext - delta_dist, 0)
     self.active_count = max(self.active_count - 1, 0)
     self.active = True if self.active_count > 0 else False
 
-    if self.xSpdType < 0:
-      self.xSpdDist = 0
-    if self.xTurnInfo < 0:
+    if not self.active:
+      self.xSpdType = self.navType = self.xTurnInfo = self.xTurnInfoNext = -1
+      self.nSdiType = self.nSdiBlockType = self.nSdiPlusBlockType = -1
+      self.nTBTTurnType = self.nTBTTurnTypeNext = -1
+      
+    if self.xSpdType < 0 or self.xSpdDist <= 0:
+      self.xSpdType = -1
+      self.xSpdDist = self.xSpdLimit = 0
+    if self.xTurnInfo < 0 or self.xDistToTurn <= 0:
       self.xDistToTurn = 0
+      self.xTurnInfo = -1
+      self.xDistToTurnNext = 0
+      self.xTurnInfoNext = -1
 
-    speed = 250
+    sdi_speed = 250
     ### 과속카메라, 사고방지턱
     if self.xSpdDist > 0 and self.active:
-      safe_sec = 1 if self.xSpdType == 22 else 6
+      safe_sec = 2 if self.xSpdType == 22 else 6
       decel = 1.2
-      speed = min(speed, self.calculate_current_speed(self.xSpdDist, self.xSpdLimit * self.safeFactor, safe_sec, decel))
+      sdi_speed = min(sdi_speed, self.calculate_current_speed(self.xSpdDist, self.xSpdLimit * self.safeFactor, safe_sec, decel))
       if self.xSpdType == 4:
-        speed = self.xSpdLimit
+        sdi_speed = self.xSpdLimit
+
+    ### TBT 속도제어
+    atc_desired, self.atcType, self.atcSpeed, self.atcDist = self.update_auto_turn(v_ego*3.6, sm, self.xTurnInfo, self.xDistToTurn)
+    atc_desired_next, _, _, _ = self.update_auto_turn(v_ego*3.6, sm, self.xTurnInfoNext, self.xDistToTurnNext)
+
+    speed_n_sources = [
+      (atc_desired, "atc"),
+      (atc_desired_next, "atc2"),
+      (sdi_speed, "bump" if self.xSpdType == 22 else "section" if self.xSpdType == 4 else "cam"),
+      (abs(vturn_speed), "vturn"),
+    ]
+    desired_speed, source = min(speed_n_sources, key=lambda x: x[0])
+
     left_spd_sec = 100
     if self.xSpdDist > 0:
       left_spd_sec = int(max(self.xSpdDist - v_ego, 1) / max(1, v_ego))
-
-    ### TBT 속도제어
-    self.update_auto_turn(CS, sm)
-    if self.xDistToTurn > 0 and self.active:
-      pass
     left_tbt_sec = 100
     if self.xDistToTurn > 0:
       left_tbt_sec = int(max(self.xDistToTurn - v_ego, 1) / max(1, v_ego))
 
-    data = {
-      "active" : self.active,
-      "xSpdType" : self.xSpdType,
-      "xSpdLimit": self.xSpdLimit,
-      "xSpdDist" : self.xSpdDist,
-      "xSpdCountDown" : left_spd_sec,
-      "xTurnInfo" : self.xTurnInfo,
-      "xDistToTurn" : self.xDistToTurn,
-      "xTurnCountDown" : left_tbt_sec,
-      "nRoadLimitSpeed" : self.nRoadLimitSpeed,
-      "szPosRoadName" : self.szPosRoadName,
-      "szTBTMainText" : self.szTBTMainText,
-      "desiredSpeed" : int(speed),
-      "carrotCmdIndex" : int(self.carrotCmdIndex),
-      "carrotCmd" : self.carrotCmd,
-      "carrotArg" : self.carrotArg,
-      }
-    try:
-      self.params_memory.put_nonblocking("CarrotNavi", json.dumps(data))
-    except Exception as e:
-      print(f" error...: {e}")      
+    if False:
+      data = {
+        "remote" : remote_ip,
+        "active" : self.active,
+        "xSpdType" : self.xSpdType,
+        "xSpdLimit": self.xSpdLimit,
+        "xSpdDist" : int(self.xSpdDist),
+        "xSpdCountDown" : left_spd_sec,
+        "xTurnInfo" : self.xTurnInfo,
+        "xDistToTurn" : int(self.xDistToTurn),
+        "xTurnCountDown" : left_tbt_sec,
+        "atcType" : self.atcType,
+        "vTurnSpeed" : int(vturn_speed),
+        "nRoadLimitSpeed" : self.nRoadLimitSpeed,
+        "szPosRoadName" : self.szPosRoadName,
+        "szTBTMainText" : self.szTBTMainText,
+        "desiredSpeed" : int(desired_speed),
+        "desiredSource" : source,
+        "carrotCmdIndex" : int(self.carrotCmdIndex),
+        "carrotCmd" : self.carrotCmd,
+        "carrotArg" : self.carrotArg,
+        }
+      try:
+        self.params_memory.put_nonblocking("CarrotNavi", json.dumps(data))
+      except Exception as e:
+        print(f" error...: {e}")
+
+    msg = messaging.new_message('carrotMan')
+    msg.valid = True
+    msg.carrotMan.active = self.active
+    msg.carrotMan.nRoadLimitSpeed = int(self.nRoadLimitSpeed)
+    msg.carrotMan.remote = remote_ip
+    msg.carrotMan.xSpdType = int(self.xSpdType)
+    msg.carrotMan.xSpdLimit = int(self.xSpdLimit)
+    msg.carrotMan.xSpdDist = int(self.xSpdDist)
+    msg.carrotMan.xSpdCountDown = int(left_spd_sec)
+    msg.carrotMan.xTurnInfo = int(self.xTurnInfo)
+    msg.carrotMan.xDistToTurn = int(self.xDistToTurn)
+    msg.carrotMan.xTurnCountDown = int(left_tbt_sec)
+    msg.carrotMan.atcType = self.atcType
+    msg.carrotMan.vTurnSpeed = int(vturn_speed)
+    msg.carrotMan.szPosRoadName = self.szPosRoadName
+    msg.carrotMan.szTBTMainText = self.szTBTMainText
+    msg.carrotMan.desiredSpeed = int(desired_speed)
+    msg.carrotMan.desiredSource = source
+    msg.carrotMan.carrotCmdIndex = int(self.carrotCmdIndex)
+    msg.carrotMan.carrotCmd = self.carrotCmd
+    msg.carrotMan.carrotArg = self.carrotArg
+
+    pm.send('carrotMan', msg)
     
   def update(self, json):
     if json == None:
@@ -601,7 +847,76 @@ class CarrotServ:
       self.goalPosY = float(json.get("goalPosY", self.goalPosY))
       self.szGoalName = json.get("szGoalName", self.szGoalName)
     elif "nRoadLimitSpeed" in json:
-      self.active_count = 20
+      self.active_count = 80
+      ### roadLimitSpeed
+      nRoadLimitSpeed = int(json.get("nRoadLimitSpeed", 20))
+      if nRoadLimitSpeed > 0:
+        if nRoadLimitSpeed > 200:
+          nRoadLimitSpeed = (nRoadLimitSpeed - 20) / 10
+      else:
+        nRoadLimitSpeed = 20
+      self.nRoadLimitSpeed = nRoadLimitSpeed
+
+      ### SDI
+      self.nSdiType = int(json.get("nSdiType", -1))
+      self.nSdiSpeedLimit = int(json.get("nSdiSpeedLimit", 0))
+      self.nSdiSection = int(json.get("nSdiSection", -1))
+      self.nSdiDist = int(json.get("nSdiDist", 0))
+      self.nSdiBlockType = int(json.get("nSdiBlockType", -1))
+      self.nSdiBlockSpeed = int(json.get("nSdiBlockSpeed", 0))
+      self.nSdiBlockDist = int(json.get("nSdiBlockDist", 0))
+
+      self.nSdiPlusType = int(json.get("nSdiPlusType", self.nSdiPlusType))
+      self.nSdiPlusSpeedLimit = int(json.get("nSdiPlusSpeedLimit", self.nSdiPlusSpeedLimit))
+      self.nSdiPlusDist = int(json.get("nSdiPlusDist", self.nSdiPlusDist))
+      self.nSdiPlusBlockType = int(json.get("nSdiPlusBlockType", self.nSdiPlusBlockType))
+      self.nSdiPlusBlockSpeed = int(json.get("nSdiPlusBlockSpeed", self.nSdiPlusBlockSpeed))
+      self.nSdiPlusBlockDist = int(json.get("nSdiPlusBlockDist", self.nSdiPlusBlockDist))
+
+      ## GuidePoint
+      self.nTBTDist = int(json.get("nTBTDist", 0))
+      self.nTBTTurnType = int(json.get("nTBTTurnType", -1))
+      self.szTBTMainText = json.get("szTBTMainText", "")
+      self.szNearDirName = json.get("szNearDirName", "")
+      self.szFarDirName = json.get("szFarDirName", "")
+      
+      self.nTBTNextRoadWidth = int(json.get("nTBTNextRoadWidth", 0))
+      self.nTBTDistNext = int(json.get("nTBTDist", 0))
+      self.nTBTTurnTypeNext = int(json.get("nTBTTurnType", -1))
+      self.szTBTMainTextNext = json.get("szTBTMainText", "")
+
+      self.nGoPosDist = int(json.get("nGoPosDist", 0))
+      self.nGoPosTime = int(json.get("nGoPosTime", 0))
+      self.szPosRoadName = json.get("szPosRoadName", "")
+
+      self.vpPosPointLat = float(json.get("vpPosPointLat", self.vpPosPointLat))
+      self.vpPosPointLon = float(json.get("vpPosPointLon", self.vpPosPointLon))
+      self._update_tbt()
+      self._update_sdi()
+      print(f"sdi = {self.nSdiType}, {self.nSdiSpeedLimit}, {self.nSdiPlusType}, tbt = {self.nTBTTurnType}, {self.nTBTDist}")
+    else:
+      #print(json)
+      pass
+    
+  def update_old(self, json):
+    if json == None:
+      return
+    if "carrotIndex" in json:
+      self.carrotIndex = int(json.get("carrotIndex"))
+
+    if "carrotCmd" in json:
+      print(json.get("carrotCmd"), json.get("carrotArg"))
+      self.carrotCmdIndex = self.carrotIndex
+      self.carrotCmd = json.get("carrotCmd")
+      self.carrotArg = json.get("carrotArg")
+      
+
+    if "goalPosX" in json:      
+      self.goalPosX = float(json.get("goalPosX", self.goalPosX))
+      self.goalPosY = float(json.get("goalPosY", self.goalPosY))
+      self.szGoalName = json.get("szGoalName", self.szGoalName)
+    elif "nRoadLimitSpeed" in json:
+      self.active_count = 80
       ### roadLimitSpeed
       nRoadLimitSpeed = int(json.get("nRoadLimitSpeed", 20))
       if nRoadLimitSpeed > 0:
@@ -635,8 +950,6 @@ class CarrotServ:
       self.nSdiPlusBlockSpeed = int(json.get("nSdiPlusBlockSpeed", self.nSdiPlusBlockSpeed))
       self.nSdiPlusBlockDist = int(json.get("nSdiPlusBlockDist", self.nSdiPlusBlockDist))
 
-      print(f"sdi = {self.nSdiType}, {self.nSdiSpeedLimit}, {self.nSdiPlusType}")
-
       ## GuidePoint
       if "stGuidePoint" in json:      
         guide_point = json.get("stGuidePoint")
@@ -660,10 +973,10 @@ class CarrotServ:
       self.vpPosPointLon = float(json.get("vpPosPointLon", self.vpPosPointLon))
       self._update_tbt()
       self._update_sdi()
+      print(f"sdi = {self.nSdiType}, {self.nSdiSpeedLimit}, {self.nSdiPlusType}, tbt = {self.nTBTTurnType}, {self.nTBTDist}")
     else:
       #print(json)
       pass
-    
 
 import traceback
 

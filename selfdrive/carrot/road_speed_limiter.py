@@ -53,9 +53,9 @@ class RoadLimitSpeedServer:
     self.xState = 0
     self.trafficState = 0
     
-    broadcast = Thread(target=self.broadcast_thread, args=[])
-    broadcast.daemon = True
-    broadcast.start()
+    #broadcast = Thread(target=self.broadcast_thread, args=[])
+    #broadcast.daemon = True
+    #broadcast.start()
 
   def get_broadcast_address(self):
     try:

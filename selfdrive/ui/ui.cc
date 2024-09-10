@@ -164,8 +164,123 @@ float dist_function(float t, float max_dist) {
     float dist = 3.0 * pow(1.2, t);
     return (dist >= max_dist)? max_dist: dist;
 }
-
 void update_line_data_dist3(const UIState* s, const cereal::XYZTData::Reader& line,
+    float width_apply, float z_off_start, float z_off_end, QPolygonF* pvd, float max_dist, bool allow_invert = true) {
+
+    const auto line_x = line.getX(), line_y = line.getY(), line_z = line.getZ();
+    QPolygonF left_points, right_points;
+    left_points.reserve(41);
+    right_points.reserve(41);
+
+    // Prepare line data (correcting x-axis if needed)
+    std::vector<float> idxs(line_x.size()), line_xs(line_x.size()), line_ys(line_x.size()), line_zs(line_x.size());
+    float x_prev = 0;
+    for (int i = 0; i < line_x.size(); i++) {
+        idxs[i] = static_cast<float>(i);
+        line_xs[i] = (i > 0 && line_x[i] < x_prev) ? x_prev : line_x[i];
+        x_prev = line_xs[i];
+        line_ys[i] = line_y[i];
+        line_zs[i] = line_z[i];
+    }
+
+    // Get simulation state
+    SubMaster& sm = *(s->sm);
+    auto controls_state = sm["controlsState"].getControlsState();
+    bool longActive = controls_state.getEnabled();
+    auto car_state = sm["carState"].getCarState();
+    float v_ego_kph = car_state.getVEgoCluster() * MS_TO_KPH;
+
+    // Determine path mode
+    int show_path_mode = (s->use_lane_lines) ? s->show_path_mode_lane : s->show_path_mode;
+    if (!longActive) show_path_mode = s->show_path_mode_cruise_off;
+
+    // Calculate time step and position
+    static float pos_t = 0.0f;
+    float dt = std::min(v_ego_kph * 0.01f, (show_path_mode >= 10) ? 0.6f : 1.0f);
+    if (v_ego_kph < 1) pos_t = 4.0f;
+    else if (dt < 0.2f) dt = 0.2f;
+    pos_t += dt;
+    if (pos_t > 24.0f) pos_t = pos_t - 24.0f;
+
+    // Add time points based on path mode
+    std::vector<float> draw_t;
+    draw_t.reserve(50);
+    draw_t.push_back(pos_t);
+
+    auto add_time_points = [&](int count, float interval) {
+        for (int i = 0; i < count; i++) {
+            float t = draw_t.back();
+            draw_t.push_back((t + interval > 24.0f) ? t + interval - 24.0f : t + interval);
+        }
+    };
+
+    switch (show_path_mode) {
+    case 9:
+        add_time_points(1, 3.0f);
+        add_time_points(1, 10.0f);
+        add_time_points(1, 3.0f);
+        break;
+    case 10:
+        add_time_points(7, 3.0f);
+        break;
+    case 11:
+        add_time_points(5, 3.0f);
+        break;
+    case 12: {
+        int n = std::clamp(static_cast<int>(v_ego_kph * 0.058f - 0.5f), 0, 7);
+        add_time_points(n, 3.0f);
+        break;
+    }
+    }
+
+    // Find the smallest time value
+    auto min_elem = std::min_element(draw_t.begin(), draw_t.end());
+    int draw_t_idx = std::distance(draw_t.begin(), min_elem);
+
+    // Process each time point and calculate points
+    bool exit = false;
+    //printf("draw_t.size() = %d\n", (int)draw_t.size());
+    for (int i = 0; i <= draw_t.size() && !exit; i++) {
+        float t = draw_t[draw_t_idx];
+        draw_t_idx = (draw_t_idx + 1) % draw_t.size();
+        if (t < 3.0f) continue;
+
+        float dist = dist_function(t, max_dist);
+        if (dist == max_dist) exit = true;
+
+        for (int j = 2; j >= 0; j--) {
+            dist = exit ? dist_function(100, max_dist) : dist_function(t - j * 1.0f, max_dist);
+            float z_off = interp<float>(dist, { 0.0f, 100.0f }, { z_off_start, z_off_end }, false);
+            float y_off = interp<float>(z_off, { -3.0f, 0.0f, 3.0f }, { 1.5f, 0.5f, 1.5f }, false) * width_apply;
+            float idx = interp<float>(dist, line_xs.data(), idxs.data(), line_x.size(), false);
+
+            if (idx >= line_x.size()) {
+                printf("index... %.1f\n", idx);
+                break;
+            }
+
+            float line_y1 = interp<float>(idx, idxs.data(), line_ys.data(), line_x.size(), false);
+            float line_z1 = interp<float>(idx, idxs.data(), line_zs.data(), line_x.size(), false);
+
+            QPointF left, right;
+            bool l = calib_frame_to_full_frame(s, dist, line_y1 - y_off, line_z1 + z_off, &left);
+            bool r = calib_frame_to_full_frame(s, dist, line_y1 + y_off, line_z1 + z_off, &right);
+            if (l && r) {
+                //printf("left = %.1f, %.1f, right = %.1f, %.1f\n", left.x(), left.y(), right.x(), right.y());
+
+                left_points.push_back(left);
+                right_points.push_front(right);
+            }
+
+            if (exit) break;
+        }
+    }
+
+    // Combine left and right points into the polygon
+    *pvd = left_points + right_points;
+}
+
+void update_line_data_dist3_bak(const UIState* s, const cereal::XYZTData::Reader& line,
     float width_apply, float z_off_start, float z_off_end, QPolygonF* pvd, float max_dist, bool allow_invert = true) {
     const auto line_x = line.getX(), line_y = line.getY(), line_z = line.getZ();
     QPolygonF left_points, right_points;
@@ -390,10 +505,72 @@ void update_line_data(const UIState *s, const cereal::XYZTData::Reader &line,
   }
   *pvd = left_points + right_points;
 }
+
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonValue>
+#include <QJsonArray>
+
 void update_navi_instruction(UIState* s) {
-    SubMaster& sm = *(s->sm);
     auto params = Params();
     s->scene.is_metric = params.getBool("IsMetric");
+    SubMaster& sm = *(s->sm);
+#if 1
+    const auto carrot_man = sm["carrotMan"].getCarrotMan();
+    const bool carrot_man_alive = sm.alive("carrotMan");
+    if (carrot_man_alive) {
+        s->xTurnInfo = carrot_man.getXTurnInfo();
+        s->xDistToTurn = carrot_man.getXDistToTurn();
+        s->roadLimitSpeed = carrot_man.getNRoadLimitSpeed();
+        s->xSpdLimit = carrot_man.getXSpdLimit();
+        s->xSpdDist = carrot_man.getXSpdDist();
+        s->xSignType = carrot_man.getXSpdType();
+        s->left_dist = s->xSpdDist;
+        s->m_navText = QString::fromStdString(carrot_man.getSzPosRoadName());
+        s->activeCarrot = carrot_man.getActive();
+        s->ip_address = QString::fromStdString(carrot_man.getRemote());
+        if (s->xSpdLimit > 0 && s->xSpdDist > 0) {
+            s->limit_speed = s->xSpdLimit;
+            s->left_dist = s->xSpdDist;
+        }
+        else if (s->xTurnInfo >= 0) {
+            s->left_dist = s->xDistToTurn;  // TODO: 이건 왜있지?
+            s->limit_speed = 0;
+        }
+
+        s->camType = s->xSignType;
+    }
+    /*
+
+    Params params_memory = Params("/dev/shm/params");
+    QString navi = QString::fromStdString(params_memory.get("CarrotNavi"));
+    QJsonDocument doc = QJsonDocument::fromJson(navi.toUtf8());
+    if (doc.isObject()) {
+        QJsonObject jsonObject = doc.object();
+        s->xTurnInfo = jsonObject["xTurnInfo"].toInt();
+        s->xDistToTurn = jsonObject["xDistToTurn"].toInt();
+        s->roadLimitSpeed = jsonObject["nRoadLimitSpeed"].toInt();
+        s->xSpdLimit = jsonObject["xSpdLimit"].toInt();
+        s->xSpdDist = jsonObject["xSpdDist"].toInt();
+        s->xSignType = jsonObject["xSpdType"].toInt();
+        s->left_dist = jsonObject["xSpdDist"].toInt();
+        s->m_navText = jsonObject["szPosRoadName"].toString();
+        s->activeCarrot = jsonObject["active"].toBool();
+        s->ip_address = jsonObject["remote"].toString();
+
+        if (s->xSpdLimit > 0 && s->xSpdDist > 0) {
+            s->limit_speed = s->xSpdLimit;
+            s->left_dist = s->xSpdDist;
+        }
+        else if (s->xTurnInfo >= 0) {
+            s->left_dist = s->xDistToTurn;  // TODO: 이건 왜있지?
+            s->limit_speed = 0;
+        }
+
+        s->camType = s->xSignType;
+    }
+    */
+#else
     const auto road_limit_speed = sm["roadLimitSpeed"].getRoadLimitSpeed();
     int xTurnInfo = road_limit_speed.getXTurnInfo();
     int xDistToTurn = road_limit_speed.getXDistToTurn();
@@ -460,7 +637,7 @@ void update_navi_instruction(UIState* s) {
     else if (s->xTurnInfo >= 0) {
         s->left_dist = s->xDistToTurn;  // TODO: 이건 왜있지?
     }
-
+#endif
 }
 
 void update_model(UIState *s,
@@ -761,7 +938,7 @@ UIState::UIState(QObject *parent) : QObject(parent) {
     "modelV2", "controlsState", "liveCalibration", "radarState", "deviceState",
     "pandaStates", "carParams", "driverMonitoringState", "carState", "liveLocationKalman", "driverStateV2",
     "wideRoadCameraState", "managerState", "navInstruction", "navRoute",
-    "lateralPlan", "longitudinalPlan","carControl", "liveParameters", "roadLimitSpeed", "liveTorqueParameters", "naviData", "carrotModel"
+    "lateralPlan", "longitudinalPlan","carControl", "liveParameters", "roadLimitSpeed", "liveTorqueParameters", "naviData", "carrotModel", "carrotMan"
   });
 
   Params params;

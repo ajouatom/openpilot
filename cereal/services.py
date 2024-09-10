@@ -88,6 +88,8 @@ services: dict[str, tuple] = {
   "navInstructionNda": (False, 0.),
   "navRouteNda": (False, 0.),
   "carrotModel": (False, 0.),
+  
+  "carrotMan": (False, 0.),
 
   # debug
   "uiDebug": (True, 0., 1),

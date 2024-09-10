@@ -58,8 +58,6 @@ def enable_logging(started, params, CP: car.CarParams) -> bool:
   return not params.get_bool("NoLogging")
 
 NoLogging = Params().get_bool("NoLogging")
-def osm(started, params, CP: car.CarParams) -> bool:
-  return True #params_memory.get_bool("RoadNameUI") or params_memory.get_bool("SpeedLimitController")
 
 procs = [
   DaemonProcess("manage_athenad", "selfdrive.athena.manage_athenad", "AthenadPid"),
@@ -108,7 +106,6 @@ procs = [
   PythonProcess("webjoystick", "tools.bodyteleop.web", notcar),
 
   PythonProcess("fleet_manager", "selfdrive.frogpilot.fleetmanager.fleet_manager", always_run),
-  PythonProcess("mapd", "selfdrive.frogpilot.functions.mapd", osm),
   
   PythonProcess("road_speed_limiter", "selfdrive.carrot.road_speed_limiter", always_run),
   PythonProcess("carrot_man", "selfdrive.carrot.carrot_man", always_run),

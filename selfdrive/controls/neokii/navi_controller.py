@@ -122,7 +122,7 @@ class NaviServer:
               broadcast_address = self.get_broadcast_address()
 
             if broadcast_address is not None and self.remote_addr is None:
-              print('broadcast-', broadcast_address)
+              #print('broadcast-', broadcast_address)
 
               msg = 'EON:ROAD_LIMIT_SERVICE:v1'.encode()
               for i in range(1, 255):

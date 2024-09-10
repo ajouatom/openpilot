@@ -236,22 +236,6 @@
     "content": "100"
   },
   {
-    "filename": "MSLCEnabled",
-    "content": "0"
-  },
-  {
-    "filename": "MTSCAggressiveness",
-    "content": "110"
-  },
-  {
-    "filename": "MTSCCurvatureCheck",
-    "content": "1"
-  },
-  {
-    "filename": "MTSCEnabled",
-    "content": "1"
-  },
-  {
     "filename": "MapboxStyle",
     "content": "2"
   },

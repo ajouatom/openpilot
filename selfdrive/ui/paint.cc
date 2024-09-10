@@ -340,6 +340,333 @@ static const char *get_tpms_text(float tpms) {
 int test_seq = 0;
 #endif
 
+#if 1
+// Define helper classes for drawing different components
+class LaneLineDrawer {
+public:
+    static void draw(const UIState* s, const UIScene& scene) {
+        NVGcolor color;
+        for (int i = 0; i < std::size(scene.lane_line_vertices); ++i) {
+            color = nvgRGBAf(1.0, 1.0, 1.0, (scene.lane_line_probs[i] > 0.3) ? 1.0 : 0.0);
+            ui_draw_line(s, scene.lane_line_vertices[i], &color, nullptr);
+        }
+    }
+};
+
+class BlindSpotDrawer {
+public:
+    static void draw(const UIState* s, const UIScene& scene) {
+        NVGcolor color = nvgRGBA(255, 215, 0, 150);
+        NVGcolor color2 = nvgRGBA(0, 204, 0, 150);
+
+        SubMaster& sm = *(s->sm);
+        auto car_state = sm["carState"].getCarState();
+        bool left_blindspot = car_state.getLeftBlindspot();
+        bool right_blindspot = car_state.getRightBlindspot();
+
+        auto lead_left = sm["radarState"].getRadarState().getLeadLeft();
+        auto lead_right = sm["radarState"].getRadarState().getLeadRight();
+        auto meta = sm["modelV2"].getModelV2().getMeta();
+        auto laneChangeState = meta.getLaneChangeState();
+        auto laneChangeDirection = meta.getLaneChangeDirection();
+        bool rightLaneChange = (laneChangeState == cereal::LaneChangeState::PRE_LANE_CHANGE) &&
+            (laneChangeDirection == cereal::LaneChangeDirection::RIGHT);
+        bool leftLaneChange = (laneChangeState == cereal::LaneChangeState::PRE_LANE_CHANGE) &&
+            (laneChangeDirection == cereal::LaneChangeDirection::LEFT);
+
+#ifdef __TEST
+        left_blindspot = right_blindspot = true;
+#endif
+
+        if (left_blindspot) {
+            ui_draw_bsd(s, scene.lane_barrier_vertices[0], &color, false);
+        }
+        else if (lead_left.getStatus() && lead_left.getDRel() < car_state.getVEgo() * 3.0 && leftLaneChange) {
+            ui_draw_bsd(s, scene.lane_barrier_vertices[0], &color2, false);
+        }
+
+        if (right_blindspot) {
+            ui_draw_bsd(s, scene.lane_barrier_vertices[1], &color, true);
+        }
+        else if (lead_right.getStatus() && lead_right.getDRel() < car_state.getVEgo() * 3.0 && rightLaneChange) {
+            ui_draw_bsd(s, scene.lane_barrier_vertices[1], &color2, true);
+        }
+    }
+};
+
+class RoadEdgeDrawer {
+public:
+    static void draw(const UIState* s, const UIScene& scene) {
+        NVGcolor color;
+        for (int i = 0; i < std::size(scene.road_edge_vertices); ++i) {
+            float temp_f = std::clamp<float>(scene.road_edge_stds[i] / 2.0, 0.0, 1.0);
+            color = nvgRGBAf(1.0 - temp_f, 0.0, temp_f, 1.0);
+            ui_draw_line(s, scene.road_edge_vertices[i], &color, nullptr);
+        }
+    }
+};
+
+class PathDrawer {
+public:
+    static void draw(const UIState* s, const UIScene& scene, float& pathDrawSeq) {
+        static bool forward = true;
+        int alpha = 120;
+        NVGcolor colors[10] = {
+            COLOR_RED_ALPHA(alpha),           nvgRGBA(255, 153, 0, alpha),
+            COLOR_YELLOW_ALPHA(alpha),        COLOR_GREEN_ALPHA(alpha),
+            COLOR_BLUE_ALPHA(alpha),          nvgRGBA(0, 0, 128, alpha),
+            nvgRGBA(0x8b, 0, 0xff, alpha),    COLOR_OCHRE_ALPHA(alpha),
+            COLOR_WHITE_ALPHA(alpha),         COLOR_BLACK_ALPHA(alpha),
+        };
+
+        SubMaster &sm = *(s->sm);
+        auto car_state = sm["carState"].getCarState();
+        bool brake_valid = car_state.getBrakeLights();
+        auto controls_state = sm["controlsState"].getControlsState();
+
+        int show_path_color = s->use_lane_lines ? s->show_path_color_lane : s->show_path_color;
+        int show_path_mode = s->use_lane_lines ? s->show_path_mode_lane : s->show_path_mode;
+
+        if (!controls_state.getEnabled()) {
+            show_path_color = s->show_path_color_cruise_off;
+            show_path_mode = s->show_path_mode_cruise_off;
+        }
+
+        if (show_path_mode == 0) {
+            ui_draw_line(s, scene.track_vertices, &colors[show_path_color % 10], nullptr,
+                (show_path_color >= 10 || brake_valid) ? 2.0 : 0.0,
+                brake_valid ? COLOR_RED : COLOR_WHITE);
+        }
+        else if (show_path_mode >= 13 && show_path_mode <= 15) {
+            drawSpecialModes(s, scene, show_path_mode, show_path_color, brake_valid, colors);
+        }
+        else if (show_path_mode >= 9) {
+            drawComplexPath(s, scene, show_path_color, brake_valid, colors);
+        }
+        else {
+            drawAnimatedPath(s, scene, car_state, pathDrawSeq, forward, show_path_mode, show_path_color, brake_valid, colors);
+        }
+    }
+
+private:
+    static void drawSpecialModes(const UIState* s, const UIScene& scene, int mode, int color_idx,
+        bool brake_valid, NVGcolor* colors) {
+        int track_vertices_len = scene.track_vertices.length();
+        float xp[3][128], yp[3][128];
+        float g = 0.05f, gc = 0.4f;
+
+        if (mode == 13) {
+            g = 0.2f;
+            gc = 0.10f;
+        }
+        else if (mode == 14) {
+            g = 0.45f;
+            gc = 0.05f;
+        }
+        else if (mode == 15) {
+            gc = g;
+        }
+
+        int glen = track_vertices_len / 2 - 1;
+        for (int i = 0; i < glen; i++) {
+            int e = track_vertices_len - i - 1;
+            int ge = glen * 2 - 1 - i;
+            float x1 = scene.track_vertices[i].x();
+            float y1 = scene.track_vertices[i].y();
+            float x2 = scene.track_vertices[e].x();
+            float y2 = scene.track_vertices[e].y();
+            xp[0][i] = x1;
+            yp[0][i] = y1;
+            xp[0][ge] = x1 + (x2 - x1) * g;
+            yp[0][ge] = y1 + (y2 - y1) * g;
+            xp[1][i] = x1 + (x2 - x1) * (0.5f - gc);
+            yp[1][i] = y1 + (y2 - y1) * (0.5f - gc);
+            xp[1][ge] = x1 + (x2 - x1) * (0.5f + gc);
+            yp[1][ge] = y1 + (y2 - y1) * (0.5f + gc);
+            xp[2][i] = x1 + (x2 - x1) * (1.0f - g);
+            yp[2][i] = y1 + (y2 - y1) * (1.0f - g);
+            xp[2][ge] = x2;
+            yp[2][ge] = y2;
+        }
+        if (mode == 13 || mode == 14) {
+            ui_draw_line2(s, xp[0], yp[0], glen * 2, &colors[color_idx % 10], nullptr,
+                (color_idx >= 10 || brake_valid) ? 2.0 : 0.0,
+                brake_valid ? COLOR_RED : COLOR_WHITE);
+        }
+        if (mode == 13 || mode == 15) {
+            ui_draw_line2(s, xp[1], yp[1], glen * 2, &colors[color_idx % 10], nullptr,
+                (color_idx >= 10 || brake_valid) ? 2.0 : 0.0,
+                brake_valid ? COLOR_RED : COLOR_WHITE);
+        }
+        if (mode == 13 || mode == 14) {
+            ui_draw_line2(s, xp[2], yp[2], glen * 2, &colors[color_idx % 10], nullptr,
+                (color_idx >= 10 || brake_valid) ? 2.0 : 0.0,
+                brake_valid ? COLOR_RED : COLOR_WHITE);
+        }
+    }
+
+    static void drawComplexPath(const UIState* s, const UIScene& scene, int color_idx, bool brake_valid,
+        NVGcolor* colors) {
+        int track_vertices_len = scene.track_vertices.length();
+        float x[6], y[6];
+        int color_n = 0;
+        for (int i = 0; i < track_vertices_len / 2 - 1; i += 3) {
+            int e = track_vertices_len - i - 1;
+            x[0] = scene.track_vertices[i].x();
+            y[0] = scene.track_vertices[i].y();
+            x[1] = scene.track_vertices[i + 1].x();
+            y[1] = scene.track_vertices[i + 1].y();
+            x[2] = (scene.track_vertices[i + 2].x() + scene.track_vertices[e - 2].x()) / 2;
+            y[2] = (scene.track_vertices[i + 2].y() + scene.track_vertices[e - 2].y()) / 2;
+            x[3] = scene.track_vertices[e - 1].x();
+            y[3] = scene.track_vertices[e - 1].y();
+            x[4] = scene.track_vertices[e].x();
+            y[4] = scene.track_vertices[e].y();
+            x[5] = (x[1] + x[3]) / 2;
+            y[5] = (y[1] + y[3]) / 2;
+            ui_draw_line2(s, x, y, 6, &colors[color_idx % 10], nullptr,
+                (color_idx >= 10 || brake_valid) ? 2.0 : 0.0,
+                brake_valid ? COLOR_RED : COLOR_WHITE);
+            if (++color_n > 6) color_n = 0;
+        }
+    }
+
+    static void drawAnimatedPath(const UIState* s, const UIScene& scene, const cereal::CarState::Reader& car_state,
+        float& pathDrawSeq, bool& forward, int mode, int color_idx, bool brake_valid,
+        NVGcolor* colors) {
+        int track_vertices_len = scene.track_vertices.length();
+        float accel = car_state.getAEgo();
+        float v_ego_kph = car_state.getVEgo() * MS_TO_KPH;
+
+#ifdef __TEST
+        v_ego_kph = 20.0f;
+        accel = -1.2f;
+#endif
+
+        float seq = std::max(0.3f, v_ego_kph / 100.0f);
+        if (accel < -1.0f) forward = false;
+        if (accel > -0.5f) forward = true;
+        int max_seq = std::min(track_vertices_len / 4 + 3, 16);
+
+        static int pathDrawSeq2 = -1;
+
+        if (forward) {
+            pathDrawSeq += seq;
+            if (pathDrawSeq > max_seq) {
+                pathDrawSeq = (pathDrawSeq2 >= 0) ? pathDrawSeq2 : 0;
+            }
+        }
+        else {
+            pathDrawSeq -= seq;
+            if (pathDrawSeq < 0) {
+                pathDrawSeq = (pathDrawSeq2 >= 0) ? pathDrawSeq2 : max_seq;
+            }
+        }
+        pathDrawSeq2 = (max_seq > 15) ? ((int)pathDrawSeq - max_seq / 2 + max_seq) % max_seq : -5;
+
+        //float x[6], y[6];
+        switch (mode) {
+        case 1:
+        case 2:
+        case 5:
+        case 6:
+            drawMode1To6(s, scene, pathDrawSeq, pathDrawSeq2, mode, color_idx, brake_valid, colors);
+            break;
+        case 3:
+        case 4:
+        case 7:
+        case 8:
+            drawMode3To8(s, scene, pathDrawSeq, pathDrawSeq2, mode, color_idx, brake_valid, colors);
+            break;
+        }
+    }
+
+    static void drawMode1To6(const UIState* s, const UIScene& scene, float pathDrawSeq, int pathDrawSeq2, int mode,
+        int color_idx, bool brake_valid, NVGcolor* colors) {
+        int track_vertices_len = scene.track_vertices.length();
+        float x[4], y[4];
+        for (int i = 0, color_n = 0; i < track_vertices_len / 2 - 4; i += 2) {
+            x[0] = scene.track_vertices[i].x();
+            y[0] = scene.track_vertices[i].y();
+            x[1] = scene.track_vertices[i + 2].x();
+            y[1] = scene.track_vertices[i + 2].y();
+            x[2] = scene.track_vertices[track_vertices_len - i - 3].x();
+            y[2] = scene.track_vertices[track_vertices_len - i - 3].y();
+            x[3] = scene.track_vertices[track_vertices_len - i - 1].x();
+            y[3] = scene.track_vertices[track_vertices_len - i - 1].y();
+
+            bool draw = ((int)pathDrawSeq == i / 2 || (int)pathDrawSeq == i / 2 - 2 ||
+                pathDrawSeq2 == i / 2 || pathDrawSeq2 == i / 2 - 2);
+            if (track_vertices_len / 2 < 8 || mode == 5 || mode == 6) draw = true;
+
+            if (draw) {
+                int idx = (mode == 2 || mode == 6) ? color_n : color_idx % 10;
+                ui_draw_line2(s, x, y, 4, &colors[idx], nullptr,
+                    (color_idx >= 10 || brake_valid) ? 2.0 : 0.0,
+                    brake_valid ? COLOR_RED : COLOR_WHITE);
+            }
+
+            if (i > 1) color_n = (color_n + 1) % 7;
+        }
+    }
+
+    static void drawMode3To8(const UIState* s, const UIScene& scene, float pathDrawSeq, int pathDrawSeq2, int mode,
+        int color_idx, bool brake_valid, NVGcolor* colors) {
+        int track_vertices_len = scene.track_vertices.length();
+        float x[6], y[6];
+        for (int i = 0, color_n = 0; i < track_vertices_len / 2 - 4; i += 2) {
+            x[0] = scene.track_vertices[i].x();
+            y[0] = scene.track_vertices[i].y();
+            x[1] = scene.track_vertices[i + 2].x();
+            y[1] = scene.track_vertices[i + 2].y();
+            x[2] = (scene.track_vertices[i + 4].x() + scene.track_vertices[track_vertices_len - i - 5].x()) / 2;
+            y[2] = (scene.track_vertices[i + 4].y() + scene.track_vertices[track_vertices_len - i - 5].y()) / 2;
+            x[3] = scene.track_vertices[track_vertices_len - i - 3].x();
+            y[3] = scene.track_vertices[track_vertices_len - i - 3].y();
+            x[4] = scene.track_vertices[track_vertices_len - i - 1].x();
+            y[4] = scene.track_vertices[track_vertices_len - i - 1].y();
+            x[5] = (x[1] + x[3]) / 2;
+            y[5] = (y[1] + y[3]) / 2;
+
+            bool draw = ((int)pathDrawSeq == i / 2 || (int)pathDrawSeq == i / 2 - 2 ||
+                pathDrawSeq2 == i / 2 || pathDrawSeq2 == i / 2 - 2);
+            if (track_vertices_len / 2 < 8 || mode == 7 || mode == 8) draw = true;
+
+            if (draw) {
+                int idx = (mode == 4 || mode == 8) ? color_n : color_idx % 10;
+                ui_draw_line2(s, x, y, 6, &colors[idx], nullptr,
+                    (color_idx >= 10 || brake_valid) ? 2.0 : 0.0,
+                    brake_valid ? COLOR_RED : COLOR_WHITE);
+            }
+
+            if (i > 1) color_n = (color_n + 1) % 7;
+        }
+    }
+};
+
+// Main drawing function refactored using classes
+void DrawApilot::drawLaneLines(const UIState* s) {
+    static float pathDrawSeq = 0;
+    const UIScene& scene = s->scene;
+
+    if (s->show_lane_info > 0) {
+        LaneLineDrawer::draw(s, scene);
+    }
+
+    if (s->show_blind_spot) {
+        BlindSpotDrawer::draw(s, scene);
+    }
+
+    if (s->show_lane_info > 1) {
+        RoadEdgeDrawer::draw(s, scene);
+    }
+
+    if (s->show_lane_info > -1) {
+        PathDrawer::draw(s, scene, pathDrawSeq);
+    }
+}
+
+#else
 void DrawApilot::drawLaneLines(const UIState* s) {
 
     static float pathDrawSeq = 0;
@@ -590,6 +917,7 @@ void DrawApilot::drawLaneLines(const UIState* s) {
         }
     }
 }
+#endif
 
 void DrawPlot::drawPlotting(const UIState* s, int index, int start, float x, float y[], int size, NVGcolor* color, float stroke) {
 
@@ -1000,12 +1328,16 @@ void DrawApilot::drawConnInfo(const UIState* s) {
     SubMaster& sm = *(s->sm);
     auto car_state = sm["carState"].getCarState();
     //const auto car_params = sm["carParams"].getCarParams();
-    const auto road_limit_speed = sm["roadLimitSpeed"].getRoadLimitSpeed();
+    //const auto road_limit_speed = sm["roadLimitSpeed"].getRoadLimitSpeed();
     int radar_tracks = params.getInt("EnableRadarTracks");
     int sccBus = params.getInt("SccConnectedBus2");
-    int activeAPM = road_limit_speed.getActive();
+    //int activeAPM = road_limit_speed.getActive();
     const auto naviData = sm["naviData"].getNaviData();
     int activeNDA = naviData.getActive();
+
+    int activeAPM = 0;
+    if (s->activeCarrot)  activeAPM = 100;
+    if (s->ip_address.length() > 0) activeAPM = 200;
 
     static int activeOSM = 0;
     //auto navInstruction = sm["navInstruction"].getNavInstruction();
