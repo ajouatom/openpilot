@@ -581,6 +581,7 @@ class CarrotServ:
         self.nSdiType = -1
         self.nSdiBlockType = -1
       elif sdi_count > 0:
+        print(json)
         if "sdiInfo" in json:
           sdi_info = json.get("sdiInfo")
           if isinstance(sdi_info, list) and len(sdi_info) > 0:
