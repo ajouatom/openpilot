@@ -235,7 +235,7 @@ class CAR(Platforms):
   CHEVROLET_TRAX = GMPlatformConfig(
     [GMCarDocs("Chevrolet TRAX 2024")],
     CarSpecs(mass=1365, wheelbase=2.7, steerRatio=15.7, centerToFrontRatio=0.4),
-
+  )
 
 class CruiseButtons:
   INIT = 0
