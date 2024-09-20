@@ -537,6 +537,7 @@ void update_navi_instruction(UIState* s) {
             s->left_dist = s->xDistToTurn;  // TODO: 이건 왜있지?
             s->limit_speed = 0;
         }
+        else s->limit_speed = 0;
 
         s->camType = s->xSignType;
     }

@@ -368,7 +368,7 @@ void OnroadWindow::updateStateText() {
             carrot_man.getXSpdType(),
             carrot_man.getXSpdLimit(),
             carrot_man.getXSpdDist());
-        topLeftLabel->setText(str);
+        topRightLabel->setText(str);
     }
 #if 0
     Params params_memory = Params("/dev/shm/params");
