@@ -462,6 +462,7 @@ class CarrotMan:
 
 class CarrotServ:
   def __init__(self):
+    self.params = Params()
     self.params_memory = Params("/dev/shm/params")
     
     self.nRoadLimitSpeed = 30
