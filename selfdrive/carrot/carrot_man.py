@@ -39,10 +39,8 @@ class CarrotMan:
     self.remote_addr = None
 
     self.turn_speed_last = 250
-    self.curvatureFilter = StreamingMovingAverage(20)  
-    self.autoCurveSpeedFactor = 1.0
-    self.autoCurveSpeedFactorIn = 0.1
-
+    self.curvatureFilter = StreamingMovingAverage(20)
+    self.carrot_curve_speed_params()
 
     self.carrot_zmq_thread = threading.Thread(target=self.carrot_cmd_zmq, args=[])
     self.carrot_zmq_thread.daemon = True
@@ -415,75 +413,50 @@ class CarrotMan:
         print(f"carrot_cmd_zmq error: {e}")
         time.sleep(1)
 
+  def carrot_curve_speed_params(self):
+    self.autoCurveSpeedLowerLimit = int(self.params.get("AutoCurveSpeedLowerLimit"))
+    self.autoCurveSpeedFactor = self.params.get_int("AutoCurveSpeedFactor")*0.01
+    self.autoCurveSpeedAggressiveness = self.params.get_int("AutoCurveSpeedAggressiveness")*0.01
+    self.autoCurveSpeedFactorIn = self.autoCurveSpeedAggressiveness - 1.0
+   
   def carrot_curve_speed(self, sm):
-      ## 국가법령정보센터: 도로설계기준
-      V_CURVE_LOOKUP_BP = [0., 1./800., 1./670., 1./560., 1./440., 1./360., 1./265., 1./190., 1./135., 1./85., 1./55., 1./30., 1./15.]
-      #V_CRUVE_LOOKUP_VALS = [300, 150, 120, 110, 100, 90, 80, 70, 60, 50, 40, 30, 20]
-      V_CRUVE_LOOKUP_VALS = [300, 150, 120, 110, 100, 90, 80, 70, 60, 50, 45, 35, 30]
-      MIN_CURVE_SPEED = 20
-
-      if not sm.alive['carState'] and not sm.alive['modelV2']:
-          return 250
-      #print(len(sm['modelV2'].orientationRate.z))
-      if len(sm['modelV2'].orientationRate.z) == 0:
-          return 250
-
-      v_ego = sm['carState'].vEgo
-      # 회전속도를 선속도 나누면 : 곡률이 됨. [12:20]은 약 1.4~3.5초 앞의 곡률을 계산함.
-      orientationRates = np.array(sm['modelV2'].orientationRate.z, dtype=np.float32)
-      speed = min(self.turn_speed_last / 3.6, clip(v_ego, 0.5, 100.0))
-    
-      # 절대값이 가장 큰 요소의 인덱스를 찾습니다.
-      max_index = np.argmax(np.abs(orientationRates[12:20]))
-      # 해당 인덱스의 실제 값을 가져옵니다.
-      max_orientation_rate = orientationRates[12 + max_index]
-      # 부호를 포함한 curvature를 계산합니다.
-      curvature = max_orientation_rate / speed
-
-      curvature = self.curvatureFilter.process(curvature) * self.autoCurveSpeedFactor
-      turn_speed = 250
-
-      if abs(curvature) > 0.0001:
-          # 곡률의 절대값을 사용하여 속도를 계산합니다.
-          base_speed = interp(abs(curvature), V_CURVE_LOOKUP_BP, V_CRUVE_LOOKUP_VALS)
-          base_speed = clip(base_speed, MIN_CURVE_SPEED, 255)
-          # 곡률의 부호를 적용하여 turn_speed의 부호를 결정합니다.
-          turn_speed = np.sign(curvature) * base_speed
-
-      self.turn_speed_last = abs(turn_speed)
-      speed_diff = max(0, v_ego * 3.6 - abs(turn_speed))
-      turn_speed = turn_speed - np.sign(curvature) * speed_diff * self.autoCurveSpeedFactorIn
-      #controls.debugText2 = 'CURVE={:5.1f},curvature={:5.4f},mode={:3.1f}'.format(self.turnSpeed_prev, curvature, self.drivingModeIndex)
-      return turn_speed
-
-  def carrot_curve_speed_old(self, sm):
+    self.carrot_curve_speed_params()  
     ## 국가법령정보센터: 도로설계기준
     V_CURVE_LOOKUP_BP = [0., 1./800., 1./670., 1./560., 1./440., 1./360., 1./265., 1./190., 1./135., 1./85., 1./55., 1./30., 1./15.]
     #V_CRUVE_LOOKUP_VALS = [300, 150, 120, 110, 100, 90, 80, 70, 60, 50, 40, 30, 20]
     V_CRUVE_LOOKUP_VALS = [300, 150, 120, 110, 100, 90, 80, 70, 60, 50, 45, 35, 30]
-    MIN_CURVE_SPEED = 20
 
     if not sm.alive['carState'] and not sm.alive['modelV2']:
-      return 250
+        return 250
     #print(len(sm['modelV2'].orientationRate.z))
     if len(sm['modelV2'].orientationRate.z) == 0:
-      return 250
+        return 250
 
     v_ego = sm['carState'].vEgo
-    # 회전속도를 선속도 나누면 : 곡률이 됨. [20]은 약 4초앞의 곡률을 보고 커브를 계산함.
+    # 회전속도를 선속도 나누면 : 곡률이 됨. [12:20]은 약 1.4~3.5초 앞의 곡률을 계산함.
     orientationRates = np.array(sm['modelV2'].orientationRate.z, dtype=np.float32)
-    speed = min(self.turn_speed_last / 3.6, clip(v_ego, 0.5, 100.0))    
-    curvature = np.max(np.abs(orientationRates[12:20])) / speed  # 12: 약1.4~3.5초 미래의 curvature를 계산함.
+    speed = min(self.turn_speed_last / 3.6, clip(v_ego, 0.5, 100.0))
+    
+    # 절대값이 가장 큰 요소의 인덱스를 찾습니다.
+    max_index = np.argmax(np.abs(orientationRates[12:20]))
+    # 해당 인덱스의 실제 값을 가져옵니다.
+    max_orientation_rate = orientationRates[12 + max_index]
+    # 부호를 포함한 curvature를 계산합니다.
+    curvature = max_orientation_rate / speed
 
     curvature = self.curvatureFilter.process(curvature) * self.autoCurveSpeedFactor
     turn_speed = 250
-    if abs(curvature) > 0.0001:
-      turn_speed = interp(curvature, V_CURVE_LOOKUP_BP, V_CRUVE_LOOKUP_VALS)
-      turn_speed = clip(turn_speed, MIN_CURVE_SPEED, 255)
 
-    self.turn_speed_last = turn_speed
-    speed_diff = max(0, v_ego*3.6 - turn_speed)
-    turn_speed = turn_speed - speed_diff * self.autoCurveSpeedFactorIn
+    if abs(curvature) > 0.0001:
+        # 곡률의 절대값을 사용하여 속도를 계산합니다.
+        base_speed = interp(abs(curvature), V_CURVE_LOOKUP_BP, V_CRUVE_LOOKUP_VALS)
+        base_speed = clip(base_speed, self.autoCurveSpeedLowerLimit, 255)
+        # 곡률의 부호를 적용하여 turn_speed의 부호를 결정합니다.
+        turn_speed = np.sign(curvature) * base_speed
+
+    self.turn_speed_last = abs(turn_speed)
+    speed_diff = max(0, v_ego * 3.6 - abs(turn_speed))
+    turn_speed = turn_speed - np.sign(curvature) * speed_diff * self.autoCurveSpeedFactorIn
     #controls.debugText2 = 'CURVE={:5.1f},curvature={:5.4f},mode={:3.1f}'.format(self.turnSpeed_prev, curvature, self.drivingModeIndex)
     return turn_speed
 
@@ -541,8 +514,6 @@ class CarrotServ:
     self.xTurnInfoNext = -1
     self.xDistToTurnNext = 0
 
-    self.safeFactor = 1.07
-
     self.navType, self.navModifier = "invalid", ""
     self.navTypeNext, self.navModifierNext = "invalid", ""
 
@@ -565,10 +536,6 @@ class CarrotServ:
     self.autoTurnControl = self.params.get_int("AutoTurnControl")
     self.autoTurnControlTurnEnd = self.params.get_int("AutoTurnControlTurnEnd")
     #self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
-
-    self.autoCurveSpeedLowerLimit = int(self.params.get("AutoCurveSpeedLowerLimit"))
-    self.autoCurveSpeedFactor = self.params.get_int("AutoCurveSpeedFactor")*0.01
-    self.autoCurveSpeedAggressiveness = self.params.get_int("AutoCurveSpeedAggressiveness")*0.01
 
   def calculate_current_speed(self, left_dist, safe_speed_kph, safe_time, safe_decel_rate):
     safe_speed = safe_speed_kph / 3.6
@@ -677,7 +644,7 @@ class CarrotServ:
       elif self.nSdiType == 7: #이동식카메라
         self.xSpdLimit = self.xSpdDist = 0
     elif self.nSdiPlusType == 22 or self.nSdiType == 22: # speed bump
-      self.xSpdLimit = 35
+      self.xSpdLimit = self.autoNaviSpeedBumpSpeed
       self.xSpdDist = self.nSdiPlusDist if self.nSdiPlusType == 22 else self.nSdiDist
       self.xSpdType = 22
     else:
@@ -712,7 +679,7 @@ class CarrotServ:
 
     atc_desired = 250    
     if atc_speed > 0 and x_dist_to_turn > 0:
-      decel = 1.2
+      decel = self.autoNaviSpeedDecelRate
       safe_sec = 3.0      
       atc_desired = min(atc_desired, self.calculate_current_speed(x_dist_to_turn - atc_dist, atc_speed, safe_sec, decel))
 
@@ -721,6 +688,7 @@ class CarrotServ:
 
   def update_navi(self, remote_ip, sm, pm, vturn_speed):
 
+    self.update_params()
     if sm.alive['carState']:
       CS = sm['carState']
       v_ego = CS.vEgo
@@ -753,9 +721,9 @@ class CarrotServ:
     sdi_speed = 250
     ### 과속카메라, 사고방지턱
     if self.xSpdDist > 0 and self.active:
-      safe_sec = 2 if self.xSpdType == 22 else 6
-      decel = 1.2
-      sdi_speed = min(sdi_speed, self.calculate_current_speed(self.xSpdDist, self.xSpdLimit * self.safeFactor, safe_sec, decel))
+      safe_sec = self.autoNaviSpeedBumpTime if self.xSpdType == 22 else self.autoNaviSpeedCtrlEnd
+      decel = self.autoNaviSpeedDecelRate
+      sdi_speed = min(sdi_speed, self.calculate_current_speed(self.xSpdDist, self.xSpdLimit * self.autoNaviSpeedSafetyFactor, safe_sec, decel))
       if self.xSpdType == 4:
         sdi_speed = self.xSpdLimit
 
