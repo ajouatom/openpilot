@@ -175,7 +175,7 @@ class CarrotPlannerHelper:
       self.gas_override_speed = 0
     else:
       if sm['carState'].gasPressed and self.source not in ["navi", "nda", "section", "cam"]:
-        self.gas_override_speed = sm['carState'].vEgoCluster * 3.6
+        self.gas_override_speed = v_ego_kph
       elif sm['carState'].brakePressed:
         self.gas_override_speed = 0
       #self.log = self.log + "v{:.0f}:m{:.0f},n{:.0f},s{:.0f},g{:.0f}".format(vision_turn_kph, map_turn_kph, navi_helper_kph, navi_speed_manager_kph, self.gas_override_speed)
