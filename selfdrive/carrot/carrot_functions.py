@@ -39,6 +39,9 @@ class CarrotPlannerHelper:
 
     self.log = ""
 
+    self.autoTurnMapChange = self.params.get_int("AutoTurnMapChange")
+    self.nooHelperActivateCount = 0
+
   def _params_update(self):
     self.frame += 1
     self.params_count += 1
@@ -60,6 +63,7 @@ class CarrotPlannerHelper:
   def update(self, sm, v_cruise_kph):
     self._params_update()
     enabled = sm['controlsState'].enabled
+    v_ego_kph = sm['carState'].vEgo * 3.6
     if enabled:
       self.v_cruise_kph = min(v_cruise_kph, self.v_cruise_kph)
     else:
@@ -121,7 +125,19 @@ class CarrotPlannerHelper:
       if blinkerExt > 0:
         turning =  blinkerExt >= 40000       
         self.log = "Automatic {} Started. {:.0f}m left".format("Turning" if turning else "Lanechanging", xDistToTurn)
-        self.event = EventName.audioTurn if turning else EventName.audioLaneChange 
+        self.event = EventName.audioTurn if turning else EventName.audioLaneChange
+
+      start_dist = interp(v_ego_kph, [60, 110], [300, 1000])
+      if 0 < xDistToTurn < start_dist:
+        self.nooHelperActivateCount = max(0, self.nooHelperActivateCount + 1)
+      else:
+        self.nooHelperActivateCount = min(0, self.nooHelperActivateCount - 1)
+        
+      if self.autoTurnMapChange > 1:
+        if self.nooHelperActivateCount == 10:
+          self.params.put_nonblocking("CarrotDisplay", "3")
+        elif self.nooHelperActivateCount == - 500:
+          self.params.put_nonblocking("CarrotDisplay", "2")
     else:
       desired_speed = 250
       desired_source = "none"
