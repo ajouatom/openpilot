@@ -95,8 +95,9 @@ class CarrotMan:
             #self.params_memory.put_nonblocking("NetworkAddress", self.ip_address)
 
             msg = self.make_send_message()
-            dat = msg.encode('utf-8')            
-            sock.sendto(dat, (self.broadcast_ip, self.broadcast_port))
+            if self.broadcast_ip is not None:
+              dat = msg.encode('utf-8')            
+              sock.sendto(dat, (self.broadcast_ip, self.broadcast_port))
             #for i in range(1, 255):
             #  ip_tuple = socket.inet_aton(self.broadcast_ip)
             #  new_ip = ip_tuple[:-1] + bytes([i])
