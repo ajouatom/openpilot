@@ -107,7 +107,6 @@ procs = [
 
   PythonProcess("fleet_manager", "selfdrive.frogpilot.fleetmanager.fleet_manager", always_run),
   
-  PythonProcess("road_speed_limiter", "selfdrive.carrot.road_speed_limiter", always_run),
   PythonProcess("carrot_man", "selfdrive.carrot.carrot_man", always_run),
   
   PythonProcess("navi_controller", "selfdrive.controls.neokii.navi_controller", always_run, enabled=not PC),
