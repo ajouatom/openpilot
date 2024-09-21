@@ -128,8 +128,10 @@ class CarrotMan:
     msg['CarrotRouteActive'] = self.params.get_bool("CarrotRouteActive")
     msg['ip'] = self.ip_address
     msg['port'] = self.carrot_man_port
+    self.controls_active = False
+    self.xState = 0
+    self.trafficState = 0
     if not isOnroad:
-      self.controls_active = False
       self.xState = 0
       self.trafficState = 0
     else:
@@ -532,7 +534,7 @@ class CarrotServ:
     self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
 
     self.autoTurnControlSpeedTurn = self.params.get_int("AutoTurnControlSpeedTurn")
-    self.autoTurnMapChange = self.params.get_int("AutoTurnMapChange")
+    #self.autoTurnMapChange = self.params.get_int("AutoTurnMapChange")
     self.autoTurnControl = self.params.get_int("AutoTurnControl")
     self.autoTurnControlTurnEnd = self.params.get_int("AutoTurnControlTurnEnd")
     #self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
