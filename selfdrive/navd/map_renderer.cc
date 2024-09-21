@@ -110,7 +110,7 @@ MapRenderer::MapRenderer(const QMapLibre::Settings &settings, bool online) : m_s
     vipc_server->start_listener();
 
     pm.reset(new PubMaster({"navThumbnail", "mapRenderState"}));
-    sm.reset(new SubMaster({"liveLocationKalman", "navRoute", "roadLimitSpeed"}, {"liveLocationKalman"}));
+    sm.reset(new SubMaster({"liveLocationKalman", "navRoute"}, {"liveLocationKalman"}));
 
     timer = new QTimer(this);
     timer->setSingleShot(true);
@@ -169,21 +169,6 @@ void MapRenderer::updatePosition(QMapLibre::Coordinate position, float bearing) 
     float speed;
     navi_gps_manager.update(position, bearing, speed);
   }
-
-  //printf("position = %.4f, %.4f, %.1f\n", position.first, position.second, bearing);
-    auto roadLimitSpeed = (*sm)["roadLimitSpeed"].getRoadLimitSpeed();
-    float lat = roadLimitSpeed.getXPosLat();
-    float lon = roadLimitSpeed.getXPosLon();
-    float angle = roadLimitSpeed.getXPosAngle();
-    int validCount = roadLimitSpeed.getXPosValidCount();
-    apn_valid_count = validCount;
-    //printf("roadLimit(%d) = %.4f, %.4f, %.1f\n", validCount, lat, lon, bearing);
-    if (validCount > 0) {
-        bearing = (angle > 180) ? angle - 360 : angle;
-        QMapLibre::Coordinate point = get_point_along_line(lat, lon, bearing, MAP_OFFSET);
-        position.first = point.first;
-        position.second = point.second;
-    }
 
   m_map->setCoordinate(position);
   m_map->setBearing(bearing);

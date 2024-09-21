@@ -2309,44 +2309,6 @@ struct Microphone {
   filteredSoundPressureWeightedDb @2 :Float32;
 }
 
-struct RoadLimitSpeed {
-    active @0 :Int16;
-    roadLimitSpeed @1 :Int16;
-    isHighway @2 :Bool;
-    camType @3 :Int16;
-    camLimitSpeedLeftDist @4 :Int16;
-    camLimitSpeed @5 :Int16;
-    sectionLimitSpeed @6 :Int16;
-    sectionLeftDist @7 :Int32;
-    sectionAvgSpeed @8 :Int16;
-    sectionLeftTime @9 :Int16;
-    sectionAdjustSpeed @10 :Bool;
-    camSpeedFactor @11 :Float32;
-
-    xTurnInfo @12 : Int32;
-    xDistToTurn @13 : Int32;
-    xSpdDist @14 : Int32;
-    xSpdLimit @15 : Int16;
-    xSignType @16 : Int16;
-    xRoadSignType @17 : Int16;
-    xRoadLimitSpeed @18 : Int16;
-    xRoadName @19 : Text;
-    xCmd @20 : Text;
-    xArg @21 : Text;
-    xIndex @22 : Int32;
-    roadcate @23 : Int16;
-    navInstruction @24 :NavInstruction;
-    xNextRoadWidth @25 : Int16;
-    xTurnInfoNext @26 :Int32;
-    xDistToTurnNext @27 :Int32;
-
-    xPosSpeed @28 :Float32;
-    xPosAngle @29 :Float32;
-    xPosLat @30 :Float32;
-    xPosLon @31 :Float32;
-    xPosValidCount @32 :Int32;
-}
-
 struct Event {
   logMonoTime @0 :UInt64;  # nanoseconds
   valid @67 :Bool = true;
@@ -2434,7 +2396,6 @@ struct Event {
     # UI services
     userFlag @93 :UserFlag;
     uiDebug @102 :UIDebug;
-    roadLimitSpeed @131 :RoadLimitSpeed;
     navInstructionNda @129 :NavInstruction;
     navRouteNda @130 :NavRoute;
 

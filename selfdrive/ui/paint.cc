@@ -2216,7 +2216,7 @@ void DrawApilot::drawLeadApilot(const UIState* s) {
         //printf("not ready....\n");
         return;
     }
-    if (!sm.alive("lateralPlan") || !sm.alive("longitudinalPlan") || !sm.alive("liveParameters") || !sm.alive("roadLimitSpeed") || !sm.alive("liveTorqueParameters")) {
+    if (!sm.alive("lateralPlan") || !sm.alive("longitudinalPlan") || !sm.alive("liveParameters") || !sm.alive("liveTorqueParameters")) {
         //printf("not ready 2....\n");
         return;
     }

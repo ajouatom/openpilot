@@ -112,9 +112,9 @@ class RouteEngine:
     if self.nda_active_counter > 0:
       return
 
-    roadLimitSpeed = self.sm['roadLimitSpeed']
+    #roadLimitSpeed = self.sm['roadLimitSpeed']
     #print(roadLimitSpeed.active)
-    if roadLimitSpeed.active >= 200:
+    if False: #roadLimitSpeed.active >= 200:
       pass
     else:
       if self.carrot_route_active:
@@ -503,7 +503,7 @@ class RouteEngine:
 
 def main():
   pm = messaging.PubMaster(['navInstruction', 'navRoute'])
-  sm = messaging.SubMaster(['liveLocationKalman', 'managerState', 'roadLimitSpeed', 'naviData', 'navInstructionNda', 'navRouteNda'])
+  sm = messaging.SubMaster(['liveLocationKalman', 'managerState', 'naviData', 'navInstructionNda', 'navRouteNda'])
 
   rk = Ratekeeper(1.0)
   route_engine = RouteEngine(sm, pm)

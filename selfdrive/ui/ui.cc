@@ -515,7 +515,7 @@ void update_navi_instruction(UIState* s) {
     auto params = Params();
     s->scene.is_metric = params.getBool("IsMetric");
     SubMaster& sm = *(s->sm);
-#if 1
+
     const auto carrot_man = sm["carrotMan"].getCarrotMan();
     const bool carrot_man_alive = sm.alive("carrotMan");
     if (carrot_man_alive) {
@@ -541,104 +541,6 @@ void update_navi_instruction(UIState* s) {
 
         s->camType = s->xSignType;
     }
-    /*
-
-    Params params_memory = Params("/dev/shm/params");
-    QString navi = QString::fromStdString(params_memory.get("CarrotNavi"));
-    QJsonDocument doc = QJsonDocument::fromJson(navi.toUtf8());
-    if (doc.isObject()) {
-        QJsonObject jsonObject = doc.object();
-        s->xTurnInfo = jsonObject["xTurnInfo"].toInt();
-        s->xDistToTurn = jsonObject["xDistToTurn"].toInt();
-        s->roadLimitSpeed = jsonObject["nRoadLimitSpeed"].toInt();
-        s->xSpdLimit = jsonObject["xSpdLimit"].toInt();
-        s->xSpdDist = jsonObject["xSpdDist"].toInt();
-        s->xSignType = jsonObject["xSpdType"].toInt();
-        s->left_dist = jsonObject["xSpdDist"].toInt();
-        s->m_navText = jsonObject["szPosRoadName"].toString();
-        s->activeCarrot = jsonObject["active"].toBool();
-        s->ip_address = jsonObject["remote"].toString();
-
-        if (s->xSpdLimit > 0 && s->xSpdDist > 0) {
-            s->limit_speed = s->xSpdLimit;
-            s->left_dist = s->xSpdDist;
-        }
-        else if (s->xTurnInfo >= 0) {
-            s->left_dist = s->xDistToTurn;  // TODO: 이건 왜있지?
-            s->limit_speed = 0;
-        }
-
-        s->camType = s->xSignType;
-    }
-    */
-#else
-    const auto road_limit_speed = sm["roadLimitSpeed"].getRoadLimitSpeed();
-    int xTurnInfo = road_limit_speed.getXTurnInfo();
-    int xDistToTurn = road_limit_speed.getXDistToTurn();
-
-    auto navInstruction = sm["navInstruction"].getNavInstruction();
-    float navDistance = navInstruction.getManeuverDistance();
-    //float distance_remaining = navInstruction.getDistanceRemaining();
-    QString navType = QString::fromStdString(navInstruction.getManeuverType());
-    QString navModifier = QString::fromStdString(navInstruction.getManeuverModifier());
-    if (xTurnInfo < 0 && xDistToTurn <= 0) {
-        //navText = QString::fromStdString(navInstruction.getManeuverSecondaryText());
-        if (navType == "turn") {
-            if (navModifier == "sharp left" || navModifier == "slight left" || navModifier == "left") xTurnInfo = 1; // left turn
-            else if (navModifier == "sharp right" || navModifier == "slight right" || navModifier == "right") xTurnInfo = 2;
-            else if (navModifier == "uturn") xTurnInfo = 5;
-            xDistToTurn = navDistance;
-        }
-        else if (navType == "fork" || navType == "off ramp") {
-            if (navModifier == "slight left" || navModifier == "left") xTurnInfo = 3; // left turn
-            else if (navModifier == "slight right" || navModifier == "right") xTurnInfo = 4;
-            xDistToTurn = navDistance;
-        }
-        s->xNavModifier = navModifier;
-    }
-    s->xDistToTurn = (float)xDistToTurn;
-    s->xTurnInfo = xTurnInfo;
-
-
-
-    //int activeNDA = road_limit_speed.getActive();
-    const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
-
-    s->roadLimitSpeed = road_limit_speed.getRoadLimitSpeed();
-    int roadLimitSpeed_OSM = lp.getLimitSpeed();
-    if (s->roadLimitSpeed < roadLimitSpeed_OSM) s->roadLimitSpeed = roadLimitSpeed_OSM;
-
-    int camLimitSpeed = road_limit_speed.getCamLimitSpeed();
-    int camLimitSpeedLeftDist = road_limit_speed.getCamLimitSpeedLeftDist();
-    int sectionLimitSpeed = road_limit_speed.getSectionLimitSpeed();
-    int sectionLeftDist = road_limit_speed.getSectionLeftDist();
-    s->camType = road_limit_speed.getCamType();
-
-    s->limit_speed = 0;
-    s->left_dist = 0;
-
-    if (camLimitSpeed > 0 && camLimitSpeedLeftDist > 0) {
-        s->limit_speed = camLimitSpeed;
-        s->left_dist = camLimitSpeedLeftDist;
-    }
-    else if (sectionLimitSpeed > 0 && sectionLeftDist > 0) {
-        s->limit_speed = sectionLimitSpeed;
-        s->left_dist = sectionLeftDist;
-    }
-    //const auto road_limit_speed = sm["roadLimitSpeed"].getRoadLimitSpeed();
-    s->xSpdLimit = road_limit_speed.getXSpdLimit();
-    s->xSignType = road_limit_speed.getXSignType();
-    s->xSpdDist = road_limit_speed.getXSpdDist();
-    s->m_navText = QString::fromStdString(road_limit_speed.getXRoadName());
-    if (s->limit_speed > 0);
-    else if (s->xSpdLimit > 0 && s->xSpdDist > 0) {
-        s->limit_speed = s->xSpdLimit;
-        s->left_dist = s->xSpdDist;
-    }
-    else if (s->xTurnInfo >= 0) {
-        s->left_dist = s->xDistToTurn;  // TODO: 이건 왜있지?
-    }
-#endif
 }
 
 void update_model(UIState *s,
@@ -939,7 +841,7 @@ UIState::UIState(QObject *parent) : QObject(parent) {
     "modelV2", "controlsState", "liveCalibration", "radarState", "deviceState",
     "pandaStates", "carParams", "driverMonitoringState", "carState", "liveLocationKalman", "driverStateV2",
     "wideRoadCameraState", "managerState", "navInstruction", "navRoute",
-    "lateralPlan", "longitudinalPlan","carControl", "liveParameters", "roadLimitSpeed", "liveTorqueParameters", "naviData", "carrotModel", "carrotMan"
+    "lateralPlan", "longitudinalPlan","carControl", "liveParameters", "liveTorqueParameters", "naviData", "carrotModel", "carrotMan"
   });
 
   Params params;

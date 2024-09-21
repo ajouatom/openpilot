@@ -81,7 +81,6 @@ services: dict[str, tuple] = {
   "userFlag": (True, 0., 1),
   "microphone": (True, 10., 10),
 
-  "roadLimitSpeed": (True, 0.),
   "naviData": (False, 0.),
   "naviGps": (False, 0.),
   "naviObstacles": (False, 0.),

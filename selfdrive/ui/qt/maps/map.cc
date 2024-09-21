@@ -198,21 +198,6 @@ void MapWindow::updateState(const UIState &s) {
       velocity_filter.update(std::max(10.0, locationd_velocity.getValue()[0]));
     }
   }
-  auto roadLimitSpeed = sm["roadLimitSpeed"].getRoadLimitSpeed();
-  float lat = roadLimitSpeed.getXPosLat();
-  float lon = roadLimitSpeed.getXPosLon();
-  float angle = roadLimitSpeed.getXPosAngle();
-  float speed = roadLimitSpeed.getXPosSpeed();
-
-  int validCount = roadLimitSpeed.getXPosValidCount();
-  if (validCount > 0) {
-      locationd_valid = true;
-      float bearing = (angle > 180) ? angle - 360 : angle;
-
-      last_position = QMapLibre::Coordinate(lat, lon);
-      last_bearing = bearing;
-      velocity_filter.update(std::max(10.0, (double)speed / 3.6));
-  }
 
   bool allow_open = false;  // carrot
   if (sm.updated("navRoute") && sm["navRoute"].getNavRoute().getCoordinates().size()) {
