@@ -488,7 +488,6 @@ def get_all_toggle_values():
     "LaneChangeNeedTorque", 
     "ManualSteeringOverride", 
     "LaneChangeLaneCheck", 
-    "AutoNaviSpeedCtrl",
     "AutoNaviSpeedCtrlEnd",
     "AutoNaviSpeedBumpTime",
     "AutoNaviSpeedBumpSpeed",

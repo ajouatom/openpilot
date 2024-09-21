@@ -93,7 +93,6 @@ def get_default_params():
     ("AutoTurnControlTurnEnd", "6"),
     ("AutoTurnMapChange", "0"),
 
-    ("AutoNaviSpeedCtrl", "1"),
     ("AutoNaviSpeedCtrlEnd", "7"),
     ("AutoNaviSpeedBumpTime", "1"),
     ("AutoNaviSpeedBumpSpeed", "35"),
