@@ -531,7 +531,6 @@ class CarrotServ:
     self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
     self.autoNaviSpeedCtrl = self.params.get_int("AutoNaviSpeedCtrl")
 
-    self.autoTurnControlSpeedLaneChange = self.params.get_int("AutoTurnControlSpeedLaneChange")
     self.autoTurnControlSpeedTurn = self.params.get_int("AutoTurnControlSpeedTurn")
     self.autoTurnMapChange = self.params.get_int("AutoTurnMapChange")
     self.autoTurnControl = self.params.get_int("AutoTurnControl")
@@ -654,7 +653,7 @@ class CarrotServ:
       self.xSpdDist = 0
 
   def update_auto_turn(self, v_ego_kph, sm, x_turn_info, x_dist_to_turn):
-    turn_speed = 25
+    turn_speed = self.autoTurnControlSpeedTurn
     stop_speed = 1
     turn_dist = 50
     fork_dist = 20
@@ -731,6 +730,12 @@ class CarrotServ:
     ### TBT 속도제어
     atc_desired, self.atcType, self.atcSpeed, self.atcDist = self.update_auto_turn(v_ego*3.6, sm, self.xTurnInfo, self.xDistToTurn)
     atc_desired_next, _, _, _ = self.update_auto_turn(v_ego*3.6, sm, self.xTurnInfoNext, self.xDistToTurnNext)
+
+    if self.autoTurnControl not in [2, 3]:    # auto turn speed control
+      atc_desired = atc_desired_next = 250
+
+    if self.autoTurnControl not in [1,2]:    # auto turn control
+      self.atcType = "none"
 
     speed_n_sources = [
       (atc_desired, "atc"),

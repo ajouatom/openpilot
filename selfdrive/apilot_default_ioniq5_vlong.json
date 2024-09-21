@@ -68,10 +68,6 @@
     "content": "2"
   },
   {
-    "filename": "AutoTurnControlSpeedLaneChange",
-    "content": "55"
-  },
-  {
     "filename": "AutoTurnControlSpeedTurn",
     "content": "20"
   },

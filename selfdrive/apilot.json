@@ -536,19 +536,6 @@
     },
     {
       "group": "조향일반",
-      "name": "AutoTurnControlSpeedLaneChange",
-      "title": "NOO Helper 차선변경속도(60)",
-      "descr": "0:사용안함, 차선변경시 적용속도",
-      "egroup": "LATSET",
-      "etitle": "NOO Helper LC Speed(60)",
-      "edescr": "0: Not used, Lane Change Speed",
-      "min": 0,
-      "max": 100,
-      "default": 60,
-      "unit": 5
-    },
-    {
-      "group": "조향일반",
       "name": "AutoTurnControlSpeedTurn",
       "title": "NOO Helper 턴속도(20)",
       "descr": "0:사용안함, 턴시 적용속도",

@@ -89,7 +89,6 @@ def get_default_params():
     ("ManualSteeringOverride", "0"),
     ("LaneChangeLaneCheck", "1"),
 
-    ("AutoTurnControlSpeedLaneChange", "60"),
     ("AutoTurnControlSpeedTurn", "20"),
     ("AutoTurnControlTurnEnd", "6"),
     ("AutoTurnMapChange", "0"),
