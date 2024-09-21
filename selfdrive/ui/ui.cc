@@ -521,13 +521,16 @@ void update_navi_instruction(UIState* s) {
     if (carrot_man_alive) {
         s->xTurnInfo = carrot_man.getXTurnInfo();
         s->xDistToTurn = carrot_man.getXDistToTurn();
-        s->roadLimitSpeed = carrot_man.getNRoadLimitSpeed();
+        s->activeCarrot = carrot_man.getActive();
+        if (s->activeCarrot) {
+            s->roadLimitSpeed = carrot_man.getNRoadLimitSpeed();
+        }
+        else s->roeadLimitSpeed = 0;
         s->xSpdLimit = carrot_man.getXSpdLimit();
         s->xSpdDist = carrot_man.getXSpdDist();
         s->xSignType = carrot_man.getXSpdType();
         s->left_dist = s->xSpdDist;
         s->m_navText = QString::fromStdString(carrot_man.getSzPosRoadName());
-        s->activeCarrot = carrot_man.getActive();
         s->ip_address = QString::fromStdString(carrot_man.getRemote());
         if (s->xSpdLimit > 0 && s->xSpdDist > 0) {
             s->limit_speed = s->xSpdLimit;
