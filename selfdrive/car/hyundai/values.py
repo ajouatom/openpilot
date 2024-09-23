@@ -349,11 +349,17 @@ class CAR(Platforms):
     flags=HyundaiFlags.CHECKSUM_CRC8,
   )
   HYUNDAI_CASPER = HyundaiPlatformConfig(
-    [
-      HyundaiCarDocs("HYUNDAI CASPER (AX1)", "All", car_parts=CarParts.common([CarHarness.hyundai_a]))
-    ],
-    CarSpecs(mass=1060, wheelbase=2.4, steerRatio=14.3),
+    [HyundaiCarDocs("Hyundai Casper 2023", "All", car_parts=CarParts.common([CarHarness.hyundai_k]))],
+    CarSpecs(mass=1060, wheelbase=2.4, steerRatio=14.3),  # mass: from https://www.hyundai-motor.com.tw/clicktobuy/custin#spec_0, steerRatio: from learner
+    flags=HyundaiFlags.CAMERA_SCC | HyundaiFlags.CHECKSUM_CRC8,
   )
+  
+  HYUNDAI_CASPER_EV = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Hyundai Casper EV 2024", "All", car_parts=CarParts.common([CarHarness.hyundai_k]))],
+    CarSpecs(mass=1355, wheelbase=2.58, steerRatio=14.3),  # mass: from https://www.hyundai-motor.com.tw/clicktobuy/custin#spec_0, steerRatio: from learner
+    flags=HyundaiFlags.CAMERA_SCC | HyundaiFlags.CHECKSUM_CRC8 | HyundaiFlags.EV
+  )
+
 
   # Kia
   KIA_FORTE = HyundaiPlatformConfig(
