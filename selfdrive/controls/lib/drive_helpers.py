@@ -68,6 +68,7 @@ class VCruiseHelper:
     self.button_prev = ButtonType.unknown
     self.cruiseActivate = 0
     self.params = Params()
+    self.params_memory = Params("/dev/shm/params")
     self.v_cruise_kph_set = V_CRUISE_INITIAL #V_CRUISE_UNSET
     self.cruiseSpeedTarget = 0
     self.roadSpeed = 0
@@ -185,7 +186,7 @@ class VCruiseHelper:
       v_cruise_kph = self.update_apilot_cmd(controls, 30)
 
     count_down_kph = self.params.get_int("CarrotCountDownSpeed")
-    left_sec = self.params.get_int("CarrotCountDownSec")
+    left_sec = self.params_memory.get_int("CarrotCountDownSec")
     if left_sec != self.left_sec and count_down_kph != 0:
       max_left_sec = min(10, max(5, int(self.v_ego_kph_set/10.)))
       if 1 <= left_sec <= max_left_sec and self.v_ego_kph_set > count_down_kph:
@@ -349,91 +350,31 @@ class VCruiseHelper:
     self.v_cruise_kph = v_cruise_kph_apply
 
   def update_apilot_cmd(self, controls, v_cruise_kph):
-    msg = controls.sm['roadLimitSpeed']
-    nda = controls.sm['naviData']
-    if nda.active:
-      self.roadSpeed = nda.roadLimitSpeed
-    else:
-      self.roadSpeed = clip(0, msg.roadLimitSpeed, 150.0)
-    self.xPosValidCount = msg.xPosValidCount
-
     traffic_signal_detected = False
-    if msg.xIndex > 0 and msg.xIndex != self.xIndex:      
-      self.xIndex = msg.xIndex
-      if msg.xCmd == "SPEED":
-        if msg.xArg == "UP":
-          v_cruise_kph = self.v_cruise_speed_up(v_cruise_kph)
-        elif msg.xArg == "DOWN":
-          if self.v_ego_kph_set < v_cruise_kph:
-            v_cruise_kph = self.v_ego_kph_set
-          elif v_cruise_kph > 30:
-            v_cruise_kph -= 10
-        else:
-          v_cruise_kph = clip(int(msg.xArg), self.cruiseSpeedMin, self.cruiseSpeedMax)
-      elif msg.xCmd == "CRUISE":
-        if msg.xArg == "ON":
-          if not controls.enabled:
-            self.cruiseActivate = 1
-        elif msg.xArg == "OFF":
-          if controls.enabled:
-            self.cruiseActiveReady = 1
-            self.cruiseActivate = -1
-            controls.events.add(EventName.audioPrompt)
-        elif msg.xArg == "GO":
-          if not controls.enabled:
-            self.cruiseActivate = 1
-          elif self.softHoldActive > 0:
-            self.softHoldActive = 0
-          #elif self.xState in [XState.softHold, XState.e2eStop]:
-          #  controls.cruiseButtonCounter += 1
-          else:
-            v_cruise_kph = self.v_cruise_speed_up(v_cruise_kph)
-        elif msg.xArg == "STOP":
-          #if self.xState in [XState.e2eStop, XState.e2eCruisePrepare]:
-          #  controls.cruiseButtonCounter -= 1
-          #else:
-          v_cruise_kph = 20
-      elif msg.xCmd == "LANECHANGE":
-        blinkerExtState = self.leftBlinkerExtCount + self.rightBlinkerExtCount
-        if msg.xArg == "RIGHT":
-          self.rightBlinkerExtCount = 50
-        elif msg.xArg == "LEFT":
-          self.leftBlinkerExtCount = 50
-        if blinkerExtState <= 0 and self.leftBlinkerExtCount + self.rightBlinkerExtCount > 0:
-          self._make_event(controls, EventName.audioLaneChange)
-      elif msg.xCmd == "RECORD":
-        if msg.xArg == "START":
-          self.params.put_nonblocking("CarrotRecord", "1")
-          controls.events.add(EventName.audioPrompt)
-        elif msg.xArg == "STOP":
-          self.params.put_nonblocking("CarrotRecord", "2")
-          controls.events.add(EventName.audioPrompt)
-        elif msg.xArg == "TOGGLE":
-          self.params.put_nonblocking("CarrotRecord", "3")
-          controls.events.add(EventName.audioPrompt)
-      elif msg.xCmd == "DISPLAY":
-        if msg.xArg == "MAP":
-          self.params.put_nonblocking("CarrotDisplay", "3")
-          controls.events.add(EventName.audioPrompt)
-        elif msg.xArg == "FULLMAP":
-          self.params.put_nonblocking("CarrotDisplay", "4")
-          controls.events.add(EventName.audioPrompt)
-        elif msg.xArg == "DEFAULT":
-          self.params.put_nonblocking("CarrotDisplay", "1")
-          controls.events.add(EventName.audioPrompt)
-        elif msg.xArg == "ROAD":
-          self.params.put_nonblocking("CarrotDisplay", "2")
-          controls.events.add(EventName.audioPrompt)
-        elif msg.xArg == "TOGGLE":
-          self.params.put_nonblocking("CarrotDisplay", "5")
-          controls.events.add(EventName.audioPrompt)
 
-      elif msg.xCmd == "DETECT":
-        self.debugText2 = "DETECT[{}]={}".format(msg.xIndex, msg.xArg)
-        elements = [element.strip() for element in msg.xArg.split(',')]
-        self.traffic_light(float(elements[1]), float(elements[2]), elements[0], float(elements[3]))
-        self.traffic_light_count = 0.5 / DT_CTRL
-        traffic_signal_detected = True
+    if controls.sm.alive['carrotMan']:
+      carrot_man = controls.sm['carrotMan']
+      xIndex = carrot_man.carrotCmdIndex
+      xCmd = carrot_man.carrotCmd
+      xArg = carrot_man.carrotArg
+      nRoadLimitSpeed = carrot_man.nRoadLimitSpeed
+      self.roadSpeed = clip(nRoadLimitSpeed, 0, 150)
+
+      if xIndex > 0 and xIndex != self.xIndex:
+        self.xIndex = xIndex
+
+        command_handlers = {
+          "SPEED": self._handle_speed_command,
+          "CRUISE": self._handle_cruise_command,
+          "LANECHANGE": self._handle_lane_change,
+          "RECORD": self._handle_record_command,
+          "DISPLAY": self._handle_display_command,
+          "DETECT": self._handle_detect_command,
+        }
+
+        handler = command_handlers.get(xCmd)
+        if handler:
+          v_cruise_kph = handler(xArg, controls, v_cruise_kph)
 
     if not traffic_signal_detected:
       self.traffic_light_q.append((-1, -1, "none", 0.0))
@@ -442,6 +383,81 @@ class VCruiseHelper:
         self.traffic_light_count = -1
         self.traffic_state = 0
 
+    return v_cruise_kph
+
+  def _handle_speed_command(self, xArg, controls, v_cruise_kph):
+    if xArg == "UP":
+      return self.v_cruise_speed_up(v_cruise_kph)
+    elif xArg == "DOWN":
+      if self.v_ego_kph_set < v_cruise_kph:
+        return self.v_ego_kph_set
+      elif v_cruise_kph > 30:
+        return v_cruise_kph - 10
+    else:
+      try:
+        return clip(int(xArg), self.cruiseSpeedMin, self.cruiseSpeedMax)
+      except ValueError:
+        pass
+    return v_cruise_kph
+
+  def _handle_cruise_command(self, xArg, controls, v_cruise_kph):
+    if xArg == "ON" and not controls.enabled:
+      self.cruiseActivate = 1
+    elif xArg == "OFF" and controls.enabled:
+      self.cruiseActiveReady = 1
+      self.cruiseActivate = -1
+      controls.events.add(EventName.audioPrompt)
+    elif xArg == "GO":
+      if not controls.enabled:
+        self.cruiseActivate = 1
+      elif self.softHoldActive > 0:
+        self.softHoldActive = 0
+      else:
+        return self.v_cruise_speed_up(v_cruise_kph)
+    elif xArg == "STOP":
+      return 20
+    return v_cruise_kph
+
+  def _handle_lane_change(self, xArg, controls, v_cruise_kph):
+    initial_blinker_state = self.leftBlinkerExtCount + self.rightBlinkerExtCount
+    if xArg == "RIGHT":
+      self.rightBlinkerExtCount = 50
+    elif xArg == "LEFT":
+      self.leftBlinkerExtCount = 50
+    if initial_blinker_state <= 0 and (self.leftBlinkerExtCount + self.rightBlinkerExtCount) > 0:
+      self._make_event(controls, EventName.audioLaneChange)
+    return v_cruise_kph
+
+  def _handle_record_command(self, xArg, controls, v_cruise_kph):
+    record_commands = {"START": "1", "STOP": "2", "TOGGLE": "3"}
+    command = record_commands.get(xArg)
+    if command:
+      self.params.put_nonblocking("CarrotRecord", command)
+      controls.events.add(EventName.audioPrompt)
+    return v_cruise_kph
+
+  def _handle_display_command(self, xArg, controls, v_cruise_kph):
+    display_commands = {"MAP": "3", "FULLMAP": "4", "DEFAULT": "1", "ROAD": "2", "TOGGLE": "5"}
+    command = display_commands.get(xArg)
+    if command:
+      self.params.put_nonblocking("CarrotDisplay", command)
+      controls.events.add(EventName.audioPrompt)
+    return v_cruise_kph
+
+  def _handle_detect_command(self, xArg, controls, v_cruise_kph):
+    self.debugText2 = f"DETECT[{self.xIndex}]={xArg}"
+    elements = [e.strip() for e in xArg.split(',')]
+    if len(elements) >= 4:
+      try:
+        state = elements[0]
+        value1 = float(elements[1])
+        value2 = float(elements[2])
+        value3 = float(elements[3])
+        self.traffic_light(value1, value2, state, value3)
+        self.traffic_light_count = 0.5 / DT_CTRL
+        return v_cruise_kph
+      except ValueError:
+        pass
     return v_cruise_kph
 
   def traffic_light(self, x, y, color, cnf):    
@@ -748,14 +764,13 @@ class VCruiseHelper:
     if CS.gasPressed:
       self.gas_pressed_count = max(1, self.gas_pressed_count + 1)
       self.softHoldActive = 0
-      self.gas_pressed_value = max(CS.gas, self.gas_pressed_value)
+      self.gas_pressed_value = max(CS.gas, self.gas_pressed_value) if self.gas_pressed_count > 1 else CS.gas
       self.gas_pressed_count_prev = self.gas_pressed_count
       self.gas_pressed_max_aego = max(self.gas_pressed_max_aego, CS.aEgo) if self.gas_pressed_count > 1 else 0
     else:
       gas_tok = True if 0 < self.gas_pressed_count < 0.4 / DT_CTRL else False  ## gas_tok: 0.4 seconds
       self.gas_pressed_count = min(-1, self.gas_pressed_count - 1)
       if self.gas_pressed_count < -1:
-        self.gas_pressed_max = 0
         self.gas_pressed_count_prev = 0
 
     if controls.enabled or CS.brakePressed or CS.gasPressed:
@@ -943,7 +958,7 @@ def get_friction(lateral_accel_error: float, lateral_accel_deadzone: float, fric
 
 def get_speed_error(modelV2: log.ModelDataV2, v_ego: float) -> float:
   # ToDo: Try relative error, and absolute speed
-  if len(modelV2.temporalPose.trans):
-    vel_err = clip(modelV2.temporalPose.trans[0] - v_ego, -MAX_VEL_ERR, MAX_VEL_ERR)
+  if len(modelV2.velocity.x):
+    vel_err = clip(modelV2.velocity.x[0] - v_ego, -MAX_VEL_ERR, MAX_VEL_ERR)
     return float(vel_err)
   return 0.0

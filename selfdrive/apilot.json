@@ -536,19 +536,6 @@
     },
     {
       "group": "조향일반",
-      "name": "AutoTurnControlSpeedLaneChange",
-      "title": "NOO Helper 차선변경속도(60)",
-      "descr": "0:사용안함, 차선변경시 적용속도",
-      "egroup": "LATSET",
-      "etitle": "NOO Helper LC Speed(60)",
-      "edescr": "0: Not used, Lane Change Speed",
-      "min": 0,
-      "max": 100,
-      "default": 60,
-      "unit": 5
-    },
-    {
-      "group": "조향일반",
       "name": "AutoTurnControlSpeedTurn",
       "title": "NOO Helper 턴속도(20)",
       "descr": "0:사용안함, 턴시 적용속도",
@@ -1485,19 +1472,6 @@
     },
     {
       "group": "감속제어",
-      "name": "AutoNaviSpeedCtrl",
-      "title": "과속카메라 작동방법(1)",
-      "descr": "0:사용안함, 1:APN",
-      "egroup": "SPEED",
-      "etitle": "SpeedCam Method(1)",
-      "edescr": "0:사용안함, 1:APN",
-      "min": 0,
-      "max": 1,
-      "default": 1,
-      "unit": 1
-    },
-    {
-      "group": "감속제어",
       "name": "AutoNaviSpeedCtrlEnd",
       "title": "과속카메라감속 완료 시간(6초)",
       "descr": "감속종료시점을 설정합니다.",
@@ -1508,58 +1482,6 @@
       "max": 20,
       "default": 6,
       "unit": 1
-    },
-    {
-      "group": "감속제어",
-      "name": "MSLCEnabled",
-      "title": "MSLC Enabled(0)",
-      "descr": "Map: Speed Limit control enabled",
-      "egroup": "SPEED",
-      "etitle": "MSLC Enabled(0)",
-      "edescr": "Map: Speed Limit control enabled",
-      "min": 0,
-      "max": 3,
-      "default": 0,
-      "unit": 1
-    },
-    {
-      "group": "감속제어",
-      "name": "MTSCEnabled",
-      "title": "MTSC Enabled",
-      "descr": "",
-      "egroup": "SPEED",
-      "etitle": "MTSC Enabled",
-      "edescr": "",
-      "min": 0,
-      "max": 1,
-      "default": 0,
-      "unit": 1
-    },
-    {
-      "group": "감속제어",
-      "name": "MTSCCurvatureCheck",
-      "title": "MTSC CurvatureCheck",
-      "descr": "",
-      "egroup": "SPEED",
-      "etitle": "MTSC CurvatureCheck",
-      "edescr": "",
-      "min": 0,
-      "max": 1,
-      "default": 0,
-      "unit": 1
-    },
-    {
-      "group": "감속제어",
-      "name": "MTSCAggressiveness",
-      "title": "MTSC Aggressiveness",
-      "descr": "",
-      "egroup": "SPEED",
-      "etitle": "MTSC Aggressiveness",
-      "edescr": "",
-      "min": 0,
-      "max": 200,
-      "default": 100,
-      "unit": 5
     },
     {
       "group": "시작",

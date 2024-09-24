@@ -68,7 +68,26 @@ struct CarrotModel @0xda96579883444c35 {
   detections @0 :List(CarrotDetection);
 }
 
-struct CustomReserved4 @0x80ae746ee2596b11 {
+struct CarrotMan @0x80ae746ee2596b11 {
+	active @0 : Bool;
+	nRoadLimitSpeed @1 : Int32;
+	remote @2 : Text;
+	xSpdType @3 : Int32;
+	xSpdLimit @4 : Int32;
+	xSpdDist @5 : Int32;
+	xSpdCountDown @6 : Int32;
+	xTurnInfo @7 : Int32;
+	xDistToTurn @8 : Int32;
+	xTurnCountDown @9 : Int32;
+	atcType @10 : Text;
+	vTurnSpeed @11 : Int32;
+	szPosRoadName @12 : Text;
+	szTBTMainText @13 : Text;
+	desiredSpeed @14 : Int32;
+	desiredSource @15 : Text;
+	carrotCmdIndex @16 : Int32;
+	carrotCmd @17 : Text;
+	carrotArg @18 : Text;
 }
 
 struct CustomReserved5 @0xa5cd762cd951a455 {

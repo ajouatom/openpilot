@@ -33,8 +33,8 @@ def plannerd_thread():
   carrot_planner = CarrotPlannerHelper()
 
   pm = messaging.PubMaster(['longitudinalPlan', 'lateralPlan'])
-  sm = messaging.SubMaster(['carControl', 'carState', 'controlsState', 'radarState', 'modelV2', 'navInstruction', 'roadLimitSpeed'],
-                           poll='modelV2', ignore_avg_freq=['radarState', 'navInstruction', 'roadLimitSpeed'])
+  sm = messaging.SubMaster(['carControl', 'carState', 'controlsState', 'radarState', 'modelV2', 'carrotMan'],
+                           poll='modelV2', ignore_avg_freq=['radarState', 'carrotMan'])
 
   while True:
     sm.update()

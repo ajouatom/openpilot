@@ -110,15 +110,6 @@ class CarController(CarControllerBase):
       self.button_spam2 = self.params.get_int("CruiseButtonTest2")
       self.button_spam3 = self.params.get_int("CruiseButtonTest3")
 
-
-    #self.cc_params.STEER_DRIVER_ALLOWANCE = 50
-    steerMax = self.params.get_int("CustomSteerMax")
-    steerDeltaUp = self.params.get_int("CustomSteerDeltaUp")
-    steerDeltaDown = self.params.get_int("CustomSteerDeltaDown")
-    self.cc_params.STEER_MAX = self.cc_params.STEER_MAX if steerMax <= 0 else steerMax
-    self.cc_params.STEER_DELTA_UP = self.cc_params.STEER_DELTA_UP if steerDeltaUp <= 0 else steerDeltaUp
-    self.cc_params.STEER_DELTA_DOWN = self.cc_params.STEER_DELTA_DOWN if steerDeltaDown <= 0 else steerDeltaDown
-
     # steering torque
     new_steer = int(round(actuators.steer * self.cc_params.STEER_MAX))
     apply_steer = apply_driver_steer_torque_limits(new_steer, self.apply_steer_last, CS.out.steeringTorque, self.cc_params)
@@ -539,6 +530,6 @@ class CarController(CarControllerBase):
         self.jerk_count = 0
       else:
         self.jerk_u = min(max(0.5, jerk * 2.0), jerk_max)
-        self.jerk_l = min(max(0.5, -jerk * 2.0), jerkLimit)
+        self.jerk_l = min(max(0.5, -jerk * 3.0), jerkLimit)
         self.cb_upper = clip(0.9 + accel * 0.2, 0, 1.2)
         self.cb_lower = clip(0.8 + accel * 0.2, 0, 1.2)

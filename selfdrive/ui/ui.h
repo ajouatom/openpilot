@@ -249,6 +249,8 @@ public:
   int xSpdDist = 0;
   QString m_navText = "";
   QPointF left_dist_point;
+  QString ip_address = "";
+  bool activeCarrot = false;
 
   float tf_distance = 0.0;
   QPointF tf_distance_point;

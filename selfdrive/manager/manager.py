@@ -89,12 +89,10 @@ def get_default_params():
     ("ManualSteeringOverride", "0"),
     ("LaneChangeLaneCheck", "1"),
 
-    ("AutoTurnControlSpeedLaneChange", "60"),
     ("AutoTurnControlSpeedTurn", "20"),
     ("AutoTurnControlTurnEnd", "6"),
     ("AutoTurnMapChange", "0"),
 
-    ("AutoNaviSpeedCtrl", "1"),
     ("AutoNaviSpeedCtrlEnd", "7"),
     ("AutoNaviSpeedBumpTime", "1"),
     ("AutoNaviSpeedBumpSpeed", "35"),
@@ -171,13 +169,9 @@ def get_default_params():
     ("MaxTimeOffroadMin", "60"),       
     ("SteerActuatorDelay", "50"),       
     ("CruiseOnDist", "0"),
-    ("MSLCEnabled", "0"),
     ("NoLogging", "0"),
     ("HotspotOnBoot", "0"),
 
-    ("MTSCAggressiveness", "100"),
-    ("MTSCCurvatureCheck", "1"),
-    ("MTSCEnabled", "0"),
     ("NNFF", "0"),
     ("NNFFLite", "0"),
   ]

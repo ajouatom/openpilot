@@ -42,7 +42,6 @@ class Parser:
     raw = outs[name]
     raw = raw.reshape((raw.shape[0], max(in_N, 1), -1))
 
-    pred_mu = raw[:,:,:(raw.shape[2] - out_N)//2]
     n_values = (raw.shape[2] - out_N)//2
     pred_mu = raw[:,:,:n_values]
     pred_std = np.exp(raw[:,:,n_values: 2*n_values])
@@ -88,7 +87,6 @@ class Parser:
     self.parse_mdn('road_edges', outs, in_N=0, out_N=0, out_shape=(ModelConstants.NUM_ROAD_EDGES,ModelConstants.IDX_N,ModelConstants.LANE_LINES_WIDTH))
     self.parse_mdn('pose', outs, in_N=0, out_N=0, out_shape=(ModelConstants.POSE_WIDTH,))
     self.parse_mdn('road_transform', outs, in_N=0, out_N=0, out_shape=(ModelConstants.POSE_WIDTH,))
-    self.parse_mdn('sim_pose', outs, in_N=0, out_N=0, out_shape=(ModelConstants.POSE_WIDTH,))
     self.parse_mdn('wide_from_device_euler', outs, in_N=0, out_N=0, out_shape=(ModelConstants.WIDE_FROM_DEVICE_WIDTH,))
     self.parse_mdn('lead', outs, in_N=ModelConstants.LEAD_MHP_N, out_N=ModelConstants.LEAD_MHP_SELECTION,
                    out_shape=(ModelConstants.LEAD_TRAJ_LEN,ModelConstants.LEAD_WIDTH))

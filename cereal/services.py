@@ -81,13 +81,14 @@ services: dict[str, tuple] = {
   "userFlag": (True, 0., 1),
   "microphone": (True, 10., 10),
 
-  "roadLimitSpeed": (True, 0.),
   "naviData": (False, 0.),
   "naviGps": (False, 0.),
   "naviObstacles": (False, 0.),
   "navInstructionNda": (False, 0.),
   "navRouteNda": (False, 0.),
   "carrotModel": (False, 0.),
+  
+  "carrotMan": (False, 0.),
 
   # debug
   "uiDebug": (True, 0., 1),
