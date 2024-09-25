@@ -122,7 +122,7 @@ class NaviServer:
               broadcast_address = self.get_broadcast_address()
 
             if broadcast_address is not None and self.remote_addr is None:
-              #print('broadcast-', broadcast_address)
+              print('broadcast-', broadcast_address)
 
               msg = 'EON:ROAD_LIMIT_SERVICE:v1'.encode()
               for i in range(1, 255):
@@ -278,7 +278,7 @@ def navi_gps_thread():
         dat.naviGps.longitude = floats[1]
         dat.naviGps.heading = floats[2]
         dat.naviGps.speed = floats[3]
-        #print('navi_gps_thread=', dat.naviGps)
+        print('navi_gps_thread=', dat.naviGps)
         naviGps.send(dat.to_bytes())
       except:
         pass
@@ -341,9 +341,9 @@ def publish_thread(server):
     navi.ts = ts
         
     if navi.active:
-      #print(dat.naviData.active)
-      #print('naviData.road_limit_speed=', dat.naviData.roadLimitSpeed)
-      #print(dat.naviData)
+      print(dat.naviData.active)
+      print('naviData.road_limit_speed=', dat.naviData.roadLimitSpeed)
+      print(dat.naviData)
       pass
 
     if sm.updated['carState']:
