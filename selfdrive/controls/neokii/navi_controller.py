@@ -166,6 +166,7 @@ class NaviServer:
       if ret:
         data, self.remote_addr = sock.recvfrom(2048)
         json_obj = json.loads(data.decode())
+        print('udp_recv=', json_obj)
 
         if 'cmd' in json_obj:
           try:
@@ -386,6 +387,7 @@ def main():
 
     except Exception as e:
       server.last_exception = e
+      print('!!!!!!!!!!!!!!!!!!! navi_controller: Exception:', e)
 
 class SpeedLimiter:
   __instance = None
