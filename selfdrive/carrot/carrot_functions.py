@@ -138,10 +138,19 @@ class CarrotPlannerHelper:
           self.params.put_nonblocking("CarrotDisplay", "3")
         elif self.nooHelperActivateCount == - 500:
           self.params.put_nonblocking("CarrotDisplay", "2")
+
+      self.activeAPM = carrot_man.active
+      if carrot_man.active >= 2:
+        self.activeAPM += 200   # APN active
+      elif carrot_man.active >= 1:
+        self.activeAPM += 100   # APM active
+      if carrot_man.active == 3:
+        self.activeAPM += 1000  ## decel alert to hud
     else:
       desired_speed = 250
       desired_source = "none"
       self.curveSpeed = 300
+      self.activeAPM = 0
 
 
     #self.log = self.vision_turn.log

@@ -69,7 +69,7 @@ struct CarrotModel @0xda96579883444c35 {
 }
 
 struct CarrotMan @0x80ae746ee2596b11 {
-	active @0 : Bool;
+	active @0 : Int32;
 	nRoadLimitSpeed @1 : Int32;
 	remote @2 : Text;
 	xSpdType @3 : Int32;

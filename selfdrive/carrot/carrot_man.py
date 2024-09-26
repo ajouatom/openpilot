@@ -470,8 +470,9 @@ class CarrotServ:
     
     self.nRoadLimitSpeed = 30
 
-    self.active = False
+    self.active = 0     ## 1: CarrotMan Active, 2: sdi active , 3: speed decel active, 4: section active
     self.active_count = 0
+    self.active_sdi_count = 0
     
     self.nSdiType = -1
     self.nSdiSpeedLimit = 0
@@ -704,9 +705,13 @@ class CarrotServ:
     self.xDistToTurn = max(self.xDistToTurn - delta_dist, 0)
     self.xDistToTurnNext = max(self.xDistToTurnNext - delta_dist, 0)
     self.active_count = max(self.active_count - 1, 0)
-    self.active = True if self.active_count > 0 else False
+    self.active_sdi_count = max(self.active_sdi_count - 1, 0)
+    if self.active_count > 0:
+      self.active = 2 if self.active_sdi_count > 0 else 1
+    else:
+      self.active = 0
 
-    if not self.active:
+    if self.active <= 0:
       self.xSpdType = self.navType = self.xTurnInfo = self.xTurnInfoNext = -1
       self.nSdiType = self.nSdiBlockType = self.nSdiPlusBlockType = -1
       self.nTBTTurnType = self.nTBTTurnTypeNext = -1
@@ -722,12 +727,14 @@ class CarrotServ:
 
     sdi_speed = 250
     ### 과속카메라, 사고방지턱
-    if self.xSpdDist > 0 and self.active:
+    if self.xSpdDist > 0 and self.active > 0:
       safe_sec = self.autoNaviSpeedBumpTime if self.xSpdType == 22 else self.autoNaviSpeedCtrlEnd
       decel = self.autoNaviSpeedDecelRate
       sdi_speed = min(sdi_speed, self.calculate_current_speed(self.xSpdDist, self.xSpdLimit * self.autoNaviSpeedSafetyFactor, safe_sec, decel))
+      self.active = 3
       if self.xSpdType == 4:
         sdi_speed = self.xSpdLimit
+        self.active = 4
 
     ### TBT 속도제어
     atc_desired, self.atcType, self.atcSpeed, self.atcDist = self.update_auto_turn(v_ego*3.6, sm, self.xTurnInfo, self.xDistToTurn)
@@ -848,6 +855,7 @@ class CarrotServ:
       self.nSdiPlusBlockType = int(json.get("nSdiPlusBlockType", self.nSdiPlusBlockType))
       self.nSdiPlusBlockSpeed = int(json.get("nSdiPlusBlockSpeed", self.nSdiPlusBlockSpeed))
       self.nSdiPlusBlockDist = int(json.get("nSdiPlusBlockDist", self.nSdiPlusBlockDist))
+      self.active_sdi_count = 80
 
       ## GuidePoint
       self.nTBTDist = int(json.get("nTBTDist", 0))
