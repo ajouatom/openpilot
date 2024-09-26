@@ -136,7 +136,7 @@ class CarController(CarControllerBase):
     sys_warning, sys_state, left_lane_warning, right_lane_warning = process_hud_alert(CC.enabled, self.car_fingerprint,
                                                                                       hud_control)
 
-    active_speed_decel = hud_control.activeAPM > 1000
+    active_speed_decel = hud_control.activeAPM == 3 # 3: Speed Decel
     if active_speed_decel and self.speedCameraHapticEndFrame < 0: # 과속카메라 감속시작
       self.speedCameraHapticEndFrame = self.frame + (8.0 / DT_CTRL)  #6초간 켜줌..
     elif not active_speed_decel:

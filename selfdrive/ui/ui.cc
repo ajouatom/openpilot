@@ -522,7 +522,7 @@ void update_navi_instruction(UIState* s) {
         s->xTurnInfo = carrot_man.getXTurnInfo();
         s->xDistToTurn = carrot_man.getXDistToTurn();
         s->activeCarrot = carrot_man.getActive();
-        if (s->activeCarrot) {
+        if (s->activeCarrot>=2) {
             s->roadLimitSpeed = carrot_man.getNRoadLimitSpeed();
         }
         else s->roadLimitSpeed = 0;

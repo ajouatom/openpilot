@@ -250,7 +250,7 @@ public:
   QString m_navText = "";
   QPointF left_dist_point;
   QString ip_address = "";
-  bool activeCarrot = false;
+  int activeCarrot = 0;
 
   float tf_distance = 0.0;
   QPointF tf_distance_point;

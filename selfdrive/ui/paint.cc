@@ -1335,9 +1335,7 @@ void DrawApilot::drawConnInfo(const UIState* s) {
     const auto naviData = sm["naviData"].getNaviData();
     int activeNDA = naviData.getActive();
 
-    int activeAPM = 0;
-    if (s->activeCarrot)  activeAPM = 100;
-    if (s->ip_address.length() > 0) activeAPM = 200;
+    int activeAPM = s->activeCarrot;
 
     static int activeOSM = 0;
     //auto navInstruction = sm["navInstruction"].getNavInstruction();
@@ -1358,7 +1356,7 @@ void DrawApilot::drawConnInfo(const UIState* s) {
             ui_draw_image(s, { x, y, 120, 54 }, "ic_scc2", 1.0f);
             x += 135;
         }
-        if (activeAPM >= 200) {
+        if (activeAPM >= 2) {
             ui_draw_image(s, { x, y, 120, 54 }, "ic_apn", 1.0f);
             x += 135;
         }
@@ -1366,7 +1364,7 @@ void DrawApilot::drawConnInfo(const UIState* s) {
             ui_draw_image(s, { x, y, 120, 54 }, "ic_hda", 1.0f);
             x += 135;
         }
-        else if (activeAPM >= 100) {
+        else if (activeAPM >= 1) {
             ui_draw_image(s, { x, y, 120, 54 }, "ic_apm", 1.0f);
             x += 135;
         }
