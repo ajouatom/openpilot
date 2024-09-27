@@ -794,7 +794,7 @@ class CarrotServ:
       self.xSpdDist = 0
 
   def _update_gps(self, v_ego, sm):
-    if not sm.updated['carState'] and not sm.updated['liveLocationKalman']:
+    if not sm.updated['carState'] or not sm.updated['liveLocationKalman']:
       return 0.0
     CS = sm['carState']
     location = sm['liveLocationKalman']
@@ -1037,13 +1037,14 @@ class CarrotServ:
       self.carrotCmd = json.get("carrotCmd")
       self.carrotArg = json.get("carrotArg")
       
+    self.active_count = 80
 
     if "goalPosX" in json:      
       self.goalPosX = float(json.get("goalPosX", self.goalPosX))
       self.goalPosY = float(json.get("goalPosY", self.goalPosY))
       self.szGoalName = json.get("szGoalName", self.szGoalName)
     elif "nRoadLimitSpeed" in json:
-      self.active_count = 80
+      self.active_sdi_count = self.active_sdi_count_max
       ### roadLimitSpeed
       nRoadLimitSpeed = int(json.get("nRoadLimitSpeed", 20))
       if nRoadLimitSpeed > 0:
@@ -1069,9 +1070,6 @@ class CarrotServ:
       self.nSdiPlusBlockSpeed = int(json.get("nSdiPlusBlockSpeed", 0))
       self.nSdiPlusBlockDist = int(json.get("nSdiPlusBlockDist", 0))
       self.roadcate = int(json.get("roadcate", 0))
-      
-      if self.nSdiDist >= 0:
-        self.active_sdi_count = self.active_sdi_count_max
 
       ## GuidePoint
       self.nTBTDist = int(json.get("nTBTDist", 0))
