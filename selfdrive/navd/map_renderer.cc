@@ -155,7 +155,7 @@ void MapRenderer::msgUpdate() {
   // schedule next update
   timer->start(0);
 }
-int apn_valid_count = 0;
+int carrot_man_active = 0;
 void MapRenderer::updatePosition(QMapLibre::Coordinate position, float bearing) {
   if (m_map.isNull()) {
     return;
@@ -168,6 +168,21 @@ void MapRenderer::updatePosition(QMapLibre::Coordinate position, float bearing) 
   if(navi_gps_manager.check()) {
     float speed;
     navi_gps_manager.update(position, bearing, speed);
+  }
+
+  //printf("position = %.4f, %.4f, %.1f\n", position.first, position.second, bearing);
+  auto carrot_man = (*sm)["carrotMan"].getCarrotMan();
+  float lat = carrot_man.getXPosLat();
+  float lon = carrot_man.getXPosLon();
+  float angle = carrot_man.getXPosAngle();
+  int active = carrot_man.getActive();
+  carrot_man_active = active;
+  //printf("roadLimit(%d) = %.4f, %.4f, %.1f\n", validCount, lat, lon, bearing);
+  if (active > 1) {
+      bearing = (angle > 180) ? angle - 360 : angle;
+      QMapLibre::Coordinate point = get_point_along_line(lat, lon, bearing, MAP_OFFSET);
+      position.first = point.first;
+      position.second = point.second;
   }
 
   m_map->setCoordinate(position);
@@ -205,7 +220,7 @@ void MapRenderer::publish(const double render_time, const bool loaded) {
   bool valid = loaded && (location.getStatus() == cereal::LiveLocationKalman::Status::VALID) && location.getPositionGeodetic().getValid();
   valid = valid || navi_gps_manager.isValid();
 
-  if (apn_valid_count > 0) valid = loaded;
+  if (carrot_man_active > 1) valid = loaded;
   ever_loaded = ever_loaded || loaded;
   uint64_t ts = nanos_since_boot();
   VisionBuf* buf = vipc_server->get_buffer(VisionStreamType::VISION_STREAM_MAP);
