@@ -118,6 +118,7 @@ class CarrotMan:
         frame += 1
       except Exception as e:
         print(f"broadcast_version_info error...: {e}")
+        traceback.print_exc()
         time.sleep(1)
 
   def make_send_message(self):
