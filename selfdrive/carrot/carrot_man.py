@@ -518,6 +518,7 @@ class CarrotServ:
     
     self.diff_angle_count = 0
     self.last_update_gps_time = 0
+    self.last_calculate_gps_time = 0
     self.bearing_offset = 0.0
     
     self.totalDistance = 0
@@ -826,10 +827,10 @@ class CarrotServ:
       dt += 0.2  #가상으로 0.5초만큼 더 진행한것으로 
       self.vpPosPointLat, self.vpPosPointLon = self.estimate_position(float(self.vpPosPointLat), float(self.vpPosPointLon), v_ego, bearing + self.bearing_offset, dt)
       self.last_update_gps_time = now
-      #last_calculate_gps_time = now
+      self.last_calculate_gps_time = now
     elif now - self.last_update_gps_time < 3.0:# and CS is not None:
       dt = now - self.last_calculate_gps_time
-    #  last_calculate_gps_time = now
+      self.last_calculate_gps_time = now
       self.vpPosPointLat, self.vpPosPointLon = self.estimate_position(float(self.vpPosPointLat), float(self.vpPosPointLon), v_ego, bearing + self.bearing_offset, dt)
     #roadLimitSpeed.xPosSpeed = float(nPosSpeed)
     #roadLimitSpeed.xPosAngle = float(bearing + self.bearing_offset)
