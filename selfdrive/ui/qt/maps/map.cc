@@ -204,6 +204,7 @@ void MapWindow::updateState(const UIState &s) {
   float lon = carrot_man.getXPosLon();
   float angle = carrot_man.getXPosAngle();
   float speed = carrot_man.getXPosSpeed();
+  printf("carrot_man_active = %d\n", carrot_man.getActive());
   if (carrot_man.getActive() > 1) {
       locationd_valid = true;
       float bearing = (angle > 180) ? angle - 360 : angle;
@@ -223,21 +224,6 @@ void MapWindow::updateState(const UIState &s) {
     std::exchange(last_valid_nav_dest, nav_dest);
     allow_open = nav_dest && !isVisible();
 #endif
-
-    auto carrot_man = sm["carrotMan"].getCarrotMan();
-    float lat = carrot_man.getXPosLat();
-    float lon = carrot_man.getXPosLon();
-    float angle = carrot_man.getXPosAngle();
-    float speed = carrot_man.getXPosSpeed();
-
-    if (carrot_man.getActive() >= 2) {
-        locationd_valid = true;
-        float bearing = (angle > 180) ? angle - 360 : angle;
-
-        last_position = QMapLibre::Coordinate(lat, lon);
-        last_bearing = bearing;
-        velocity_filter.update(std::max(10.0, (double)speed / 3.6));
-    }
 
     allow_open = true; // carrot : 왜? 경로가 바뀌었는데?
     qWarning() << "Got new navRoute from navd. Opening map:" << allow_open;
