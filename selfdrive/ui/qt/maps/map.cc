@@ -199,6 +199,19 @@ void MapWindow::updateState(const UIState &s) {
     }
   }
 
+  auto carrot_man = sm["carrotMan"].getCarrotMan();
+  float lat = carrot_man.getXPosLat();
+  float lon = carrot_man.getXPosLon();
+  float angle = carrot_man.getXPosAngle();
+  float speed = carrot_man.getXPosSpeed();
+  if (carrot_man.getActive() > 1) {
+      locationd_valid = true;
+      float bearing = (angle > 180) ? angle - 360 : angle;
+      last_position = QMapLibre::Coordinate(lat, lon);
+      last_bearing = bearing;
+      velocity_filter.update(std::max(10.0, (double)speed / 3.6));
+  }
+
   bool allow_open = false;  // carrot
   if (sm.updated("navRoute") && sm["navRoute"].getNavRoute().getCoordinates().size()) {
     auto nav_dest = coordinate_from_param("NavDestination");
