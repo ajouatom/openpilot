@@ -671,7 +671,7 @@ class CarrotServ:
 
   def _update_gps(self, v_ego, sm):
     if not sm.updated['carState'] and not sm.updated['liveLocationKalman']:
-      return
+      return 0.0
     CS = sm['carState']
     location = sm['liveLocationKalman']
     bearing = math.degrees(location.calibratedOrientationNED.value[2])
