@@ -214,6 +214,10 @@ void MapRenderer::sendThumbnail(const uint64_t ts, const kj::Array<capnp::byte> 
 }
 
 void MapRenderer::publish(const double render_time, const bool loaded) {
+
+    return;
+
+
   QImage cap = fbo->toImage().convertToFormat(QImage::Format_RGB888, Qt::AutoColor);
 
   auto location = (*sm)["liveLocationKalman"].getLiveLocationKalman();
