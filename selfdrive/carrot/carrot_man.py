@@ -463,6 +463,7 @@ class CarrotMan:
     #controls.debugText2 = 'CURVE={:5.1f},curvature={:5.4f},mode={:3.1f}'.format(self.turnSpeed_prev, curvature, self.drivingModeIndex)
     return turn_speed
 
+import collections
 class CarrotServ:
   def __init__(self):
     self.params = Params()
@@ -508,9 +509,13 @@ class CarrotServ:
     self.szGoalName = ""
     self.vpPosPointLat = 0.0
     self.vpPosPointLon = 0.0
+    self.roadcate = 0
+
     self.nPosSpeed = 0.0
     self.nPosAngle = 0.0
-
+    
+    self.diff_angle_count = 0
+    
     self.totalDistance = 0
     self.xSpdLimit = 0
     self.xSpdDist = 0
@@ -528,6 +533,12 @@ class CarrotServ:
     self.carrotCmdIndex = 0
     self.carrotCmd = ""
     self.carrotArg = ""
+    self.carrotCmdIndex_last = 0
+
+    self.traffic_light_q = collections.deque(maxlen=int(2.0/0.1))  # 2 secnods
+    self.traffic_light_count = -1
+    self.traffic_state = 0
+
 
   def update_params(self):
     self.autoNaviSpeedBumpSpeed = float(self.params.get_int("AutoNaviSpeedBumpSpeed"))
@@ -674,11 +685,11 @@ class CarrotServ:
           diff_angle += 360
         diff_angle = (diff_angle + 180) % 360 - 180;
         if abs(diff_angle) > 20 and v_ego > 1.0 and abs(CS.steeringAngleDeg) < 2.0:
-          diff_angle_count += 1
+          self.diff_angle_count += 1
         else:
-          diff_angle_count = 0
-        print("{:.1f} bearing_diff[{}] = {:.1f} = {:.1f} - {:.1f}, v={:.1f},st={:.1f}".format(bearing_offset, diff_angle_count, diff_angle, self.nPosAngle, bearing, CS.vEgo*3.6, CS.steeringAngleDeg))
-        if diff_angle_count > 2:
+          self.diff_angle_count = 0
+        print("{:.1f} bearing_diff[{}] = {:.1f} = {:.1f} - {:.1f}, v={:.1f},st={:.1f}".format(bearing_offset, self.diff_angle_count, diff_angle, self.nPosAngle, bearing, CS.vEgo*3.6, CS.steeringAngleDeg))
+        if self.diff_angle_count > 2:
           bearing_offset = self.nPosAngle - bearing
           print("bearing_offset = {:.1f} = {:.1f} - {:.1f}".format(bearing_offset, self.nPosAngle, bearing))
       #n초 통신 지연시간이 있다고 가정하고 좀더 진행한것으로 처리함.
@@ -905,18 +916,21 @@ class CarrotServ:
       self.nSdiType = int(json.get("nSdiType", -1))
       self.nSdiSpeedLimit = int(json.get("nSdiSpeedLimit", 0))
       self.nSdiSection = int(json.get("nSdiSection", -1))
-      self.nSdiDist = int(json.get("nSdiDist", 0))
+      self.nSdiDist = int(json.get("nSdiDist", -1))
       self.nSdiBlockType = int(json.get("nSdiBlockType", -1))
       self.nSdiBlockSpeed = int(json.get("nSdiBlockSpeed", 0))
       self.nSdiBlockDist = int(json.get("nSdiBlockDist", 0))
 
-      self.nSdiPlusType = int(json.get("nSdiPlusType", self.nSdiPlusType))
-      self.nSdiPlusSpeedLimit = int(json.get("nSdiPlusSpeedLimit", self.nSdiPlusSpeedLimit))
-      self.nSdiPlusDist = int(json.get("nSdiPlusDist", self.nSdiPlusDist))
-      self.nSdiPlusBlockType = int(json.get("nSdiPlusBlockType", self.nSdiPlusBlockType))
-      self.nSdiPlusBlockSpeed = int(json.get("nSdiPlusBlockSpeed", self.nSdiPlusBlockSpeed))
-      self.nSdiPlusBlockDist = int(json.get("nSdiPlusBlockDist", self.nSdiPlusBlockDist))
-      self.active_sdi_count = 80
+      self.nSdiPlusType = int(json.get("nSdiPlusType", -1))
+      self.nSdiPlusSpeedLimit = int(json.get("nSdiPlusSpeedLimit", 0))
+      self.nSdiPlusDist = int(json.get("nSdiPlusDist", 0))
+      self.nSdiPlusBlockType = int(json.get("nSdiPlusBlockType", -1))
+      self.nSdiPlusBlockSpeed = int(json.get("nSdiPlusBlockSpeed", 0))
+      self.nSdiPlusBlockDist = int(json.get("nSdiPlusBlockDist", 0))
+      self.roadcate = int(json.get("roadcate", 0))
+      
+      if self.nSdiDist >= 0:
+        self.active_sdi_count = 80
 
       ## GuidePoint
       self.nTBTDist = int(json.get("nTBTDist", 0))

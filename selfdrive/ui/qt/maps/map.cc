@@ -217,7 +217,7 @@ void MapWindow::updateState(const UIState &s) {
     float angle = carrot_man.getXPosAngle();
     float speed = carrot_man.getXPosSpeed();
 
-    if (carrot_man.active >= 2) {
+    if (carrot_man.getActive() >= 2) {
         locationd_valid = true;
         float bearing = (angle > 180) ? angle - 360 : angle;
 
