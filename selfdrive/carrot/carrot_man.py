@@ -475,6 +475,7 @@ class CarrotServ:
     self.active = 0     ## 1: CarrotMan Active, 2: sdi active , 3: speed decel active, 4: section active
     self.active_count = 0
     self.active_sdi_count = 0
+    self.active_sdi_count_max = 80
     
     self.nSdiType = -1
     self.nSdiSpeedLimit = 0
@@ -516,6 +517,8 @@ class CarrotServ:
     self.nPosAngle = 0.0
     
     self.diff_angle_count = 0
+    self.last_update_gps_time = 0
+    self.bearing_offset = 0.0
     
     self.totalDistance = 0
     self.xSpdLimit = 0
@@ -677,11 +680,12 @@ class CarrotServ:
     bearing = math.degrees(location.calibratedOrientationNED.value[2])
     if (location.status == log.LiveLocationKalman.Status.valid) and location.positionGeodetic.valid and location.gpsOK:            
       location_valid = True
-      bearing_offset = 0.0
+      self.bearing_offset = 0.0
     else:
       location_valid = False
- 
-    if self.active >= 2:
+
+    now = time.monotonic()
+    if self.active_sdi_count > self.active_sdi_count_max - 3:
       if not location_valid and CS is not None:
         diff_angle = self.nPosAngle - bearing;
         while diff_angle < 0.0:
@@ -691,26 +695,26 @@ class CarrotServ:
           self.diff_angle_count += 1
         else:
           self.diff_angle_count = 0
-        print("{:.1f} bearing_diff[{}] = {:.1f} = {:.1f} - {:.1f}, v={:.1f},st={:.1f}".format(bearing_offset, self.diff_angle_count, diff_angle, self.nPosAngle, bearing, CS.vEgo*3.6, CS.steeringAngleDeg))
+        print("{:.1f} bearing_diff[{}] = {:.1f} = {:.1f} - {:.1f}, v={:.1f},st={:.1f}".format(self.bearing_offset, self.diff_angle_count, diff_angle, self.nPosAngle, bearing, CS.vEgo*3.6, CS.steeringAngleDeg))
         if self.diff_angle_count > 2:
-          bearing_offset = self.nPosAngle - bearing
-          print("bearing_offset = {:.1f} = {:.1f} - {:.1f}".format(bearing_offset, self.nPosAngle, bearing))
+          self.bearing_offset = self.nPosAngle - bearing
+          print("bearing_offset = {:.1f} = {:.1f} - {:.1f}".format(self.bearing_offset, self.nPosAngle, bearing))
       #n초 통신 지연시간이 있다고 가정하고 좀더 진행한것으로 처리함.
       dt = 0 #(unix_now - timeStamp / 1000.) if timeStamp > 0 else 0.1
       dt += 0.2  #가상으로 0.5초만큼 더 진행한것으로 
-      self.vpPosPointLat, self.vpPosPointLon = self.estimate_position(float(self.vpPosPointLat), float(self.vpPosPointLon), v_ego, bearing + bearing_offset, dt)
-      #last_update_gps_time = now
+      self.vpPosPointLat, self.vpPosPointLon = self.estimate_position(float(self.vpPosPointLat), float(self.vpPosPointLon), v_ego, bearing + self.bearing_offset, dt)
+      self.last_update_gps_time = now
       #last_calculate_gps_time = now
-    #elif now - last_update_gps_time < 3.0:# and CS is not None:
-    #  dt = now - last_calculate_gps_time
+    elif now - self.last_update_gps_time < 3.0:# and CS is not None:
+      dt = now - self.last_calculate_gps_time
     #  last_calculate_gps_time = now
-    #  vpPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), v_ego, bearing + bearing_offset, dt)
+      self.vpPosPointLat, self.vpPosPointLon = self.estimate_position(float(self.vpPosPointLat), float(self.vpPosPointLon), v_ego, bearing + self.bearing_offset, dt)
     #roadLimitSpeed.xPosSpeed = float(nPosSpeed)
-    #roadLimitSpeed.xPosAngle = float(bearing + bearing_offset)
+    #roadLimitSpeed.xPosAngle = float(bearing + self.bearing_offset)
     #roadLimitSpeed.xPosLat = float(vpPosPointLat)
     #roadLimitSpeed.xPosLon = float(vpPosPointLon)
 
-    return float(bearing + bearing_offset)
+    return float(bearing + self.bearing_offset)
     
   def estimate_position(lat, lon, speed, angle, dt):
     R = 6371000
@@ -933,7 +937,7 @@ class CarrotServ:
       self.roadcate = int(json.get("roadcate", 0))
       
       if self.nSdiDist >= 0:
-        self.active_sdi_count = 80
+        self.active_sdi_count = self.active_sdi_count_max
 
       ## GuidePoint
       self.nTBTDist = int(json.get("nTBTDist", 0))
