@@ -557,6 +557,127 @@ class CarrotServ:
     self.autoTurnControlTurnEnd = self.params.get_int("AutoTurnControlTurnEnd")
     #self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
 
+
+  def _update_cmd(self):
+    if self.carrotCmdIndex != self.carrotCmdIndex_last:
+      self.carrotCmdIndex_last = self.carrotCmdIndex
+      command_handlers = {
+        "SPEED": self._handle_speed_command,
+        "CRUISE": self._handle_cruise_command,
+        "LANECHANGE": self._handle_lane_change,
+        "RECORD": self._handle_record_command,
+        "DISPLAY": self._handle_display_command,
+        "DETECT": self._handle_detect_command,
+      }
+
+      handler = command_handlers.get(self.carrotCmd)
+      if handler:
+        handler(self.carrotArg)
+
+    self.traffic_light_q.append((-1, -1, "none", 0.0))
+    self.traffic_light_count -= 1
+    if self.traffic_light_count < 0:
+      self.traffic_light_count = -1
+      self.traffic_state = 0
+
+  def _handle_speed_command(self, xArg):
+    if xArg == "UP":
+      pass
+    elif xArg == "DOWN":
+      pass
+    else:
+      try:
+        #return clip(int(xArg), self.cruiseSpeedMin, self.cruiseSpeedMax)
+        pass
+      except ValueError:
+        pass
+
+  def _handle_cruise_command(self, xArg):
+    if xArg == "ON":
+      pass
+    elif xArg == "OFF":
+      pass
+    elif xArg == "GO":
+      pass
+    elif xArg == "STOP":
+      pass
+
+  def _handle_lane_change(self, xArg):
+    if xArg == "RIGHT":
+      pass
+    elif xArg == "LEFT":
+      pass
+
+  def _handle_record_command(self, xArg):
+    record_commands = {"START": "1", "STOP": "2", "TOGGLE": "3"}
+    command = record_commands.get(xArg)
+    if command:
+      pass
+
+  def _handle_display_command(self, xArg):
+    display_commands = {"MAP": "3", "FULLMAP": "4", "DEFAULT": "1", "ROAD": "2", "TOGGLE": "5"}
+    command = display_commands.get(xArg)
+    if command:
+      pass
+
+  def _handle_detect_command(self, xArg):
+    elements = [e.strip() for e in xArg.split(',')]
+    if len(elements) >= 4:
+      try:
+        state = elements[0]
+        value1 = float(elements[1])
+        value2 = float(elements[2])
+        value3 = float(elements[3])
+        self.traffic_light(value1, value2, state, value3)
+        self.traffic_light_count = int(0.5 / 0.1)
+      except ValueError:
+        pass
+
+  def traffic_light(self, x, y, color, cnf):    
+    traffic_red = 0
+    traffic_green = 0
+    traffic_red_trig = 0
+    traffic_green_trig = 0
+    for pdata in self.traffic_light_q:
+      px, py, pcolor,pcnf = pdata
+      if abs(x - px) < 0.2 and abs(y - py) < 0.2:
+        if pcolor in ["Green Light", "Left turn"]:
+          if color in ["Red Light", "Yellow Light"]:
+            traffic_red_trig += cnf
+            traffic_red += cnf
+          elif color in ["Green Light", "Left turn"]:
+            traffic_green += cnf
+        elif pcolor in ["Red Light", "Yellow Light"]:
+          if color in ["Green Light"]: #, "Left turn"]:
+            traffic_green_trig += cnf
+            traffic_green += cnf
+          elif color in ["Red Light", "Yellow Light"]:
+            traffic_red += cnf
+
+    #print(self.traffic_light_q)
+    if traffic_red_trig > 0:
+      self.traffic_state = 1
+      #self._add_log("Red light triggered")
+      #print("Red light triggered")
+    elif traffic_green_trig > 0 and traffic_green > traffic_red:  #주변에 red light의 cnf보다 더 크면 출발... 감지오류로 출발하는경우가 생김.
+      self.traffic_state = 2
+      #self._add_log("Green light triggered")
+      #print("Green light triggered")
+    elif traffic_red > 0:
+      self.traffic_state = 1
+      #self._add_log("Red light continued")
+      #print("Red light continued")
+    elif traffic_green > 0:
+      self.traffic_state = 2
+      #self._add_log("Green light continued")
+      #print("Green light continued")
+    else:
+      self.traffic_state = 0
+      #print("TrafficLight none")
+
+    self.traffic_light_q.append((x,y,color,cnf))
+   
+
   def calculate_current_speed(self, left_dist, safe_speed_kph, safe_time, safe_decel_rate):
     safe_speed = safe_speed_kph / 3.6
     safe_dist = safe_speed * safe_time    
@@ -615,7 +736,7 @@ class CarrotServ:
       139: ("rotary", "left", 5),
       142: ("rotary", "straight", 5),
       14: ("turn", "uturn", 7),
-      201: ("arrive", "straight", 7),
+      201: ("arrive", "straight", 8),
       51: ("notification", "straight", 0),
       52: ("notification", "straight", 0),
       53: ("notification", "straight", 0),
@@ -734,23 +855,33 @@ class CarrotServ:
     fork_dist = 20
     fork_speed = self.nRoadLimitSpeed
     stop_dist = 1
+    start_fork_dist = interp(self.nRoadLimitSpeed, [30, 50, 100], [160, 200, 350])
+    start_turn_dist = interp(self.nTBTNextRoadWidth, [5, 10], [43, 60])
     turn_info_mapping = {
-        1: {"type": "turn left", "speed": turn_speed, "dist": turn_dist},
-        2: {"type": "turn right", "speed": turn_speed, "dist": turn_dist},
-        5: {"type": "straight", "speed": turn_speed, "dist": turn_dist},
-        3: {"type": "fork left", "speed": fork_speed, "dist": fork_dist},
-        4: {"type": "fork right", "speed": fork_speed, "dist": fork_dist},
-        43: {"type": "fork right", "speed": fork_speed, "dist": fork_dist},
-        7: {"type": "straight", "speed": stop_speed, "dist": stop_dist},
+        1: {"type": "turn left", "speed": turn_speed, "dist": turn_dist, "start": start_fork_dist},
+        2: {"type": "turn right", "speed": turn_speed, "dist": turn_dist, "start": start_fork_dist},
+        5: {"type": "straight", "speed": turn_speed, "dist": turn_dist, "start": start_turn_dist},
+        3: {"type": "fork left", "speed": fork_speed, "dist": fork_dist, "start": start_fork_dist},
+        4: {"type": "fork right", "speed": fork_speed, "dist": fork_dist, "start": start_fork_dist},
+        6: {"type": "straight", "speed": fork_speed, "dist": fork_dist, "start": start_fork_dist},
+        7: {"type": "straight", "speed": stop_speed, "dist": stop_dist, "start": 1000},
+        8: {"type": "straight", "speed": stop_speed, "dist": stop_dist, "start": 1000},
     }
 
-    default_mapping = {"type": "none", "speed": 0, "dist": 0}
+    default_mapping = {"type": "none", "speed": 0, "dist": 0, "start": 1000}
 
     mapping = turn_info_mapping.get(x_turn_info, default_mapping)
 
     atc_type = mapping["type"]
     atc_speed = mapping["speed"]
     atc_dist = mapping["dist"]
+    atc_start_dist = mapping["start"]
+
+    if x_dist_to_turn > atc_start_dist:
+      atc_type += " prepare"
+    elif atc_type in ["turn left", "turn right"] and x_dist_to_turn > start_turn_dist:
+      atc_type = "fork left" if atc_type == "turn left" else "fork right"
+
 
     atc_desired = 250    
     if atc_speed > 0 and x_dist_to_turn > 0:
@@ -835,6 +966,7 @@ class CarrotServ:
     if self.xDistToTurn > 0:
       left_tbt_sec = int(max(self.xDistToTurn - v_ego, 1) / max(1, v_ego))
 
+    self._update_cmd()
     if False:
       data = {
         "remote" : remote_ip,
@@ -883,6 +1015,7 @@ class CarrotServ:
     msg.carrotMan.carrotCmdIndex = int(self.carrotCmdIndex)
     msg.carrotMan.carrotCmd = self.carrotCmd
     msg.carrotMan.carrotArg = self.carrotArg
+    msg.carrotMan.trafficState = self.traffic_state
 
     msg.carrotMan.xPosSpeed = float(self.nPosSpeed)
     msg.carrotMan.xPosAngle = float(bearing)
