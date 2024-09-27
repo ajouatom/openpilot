@@ -806,6 +806,7 @@ class CarrotServ:
       location_valid = False
 
     now = time.monotonic()
+    print(self.active_sdi_count)
     if self.active_sdi_count > self.active_sdi_count_max - 3:
       if not location_valid and CS is not None:
         diff_angle = self.nPosAngle - bearing;
