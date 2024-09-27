@@ -670,7 +670,7 @@ class CarrotServ:
       self.xSpdDist = 0
 
   def _update_gps(self, v_ego, sm):
-    if not sm.updated['carState'] and not sm.updated('liveLocationKalman'):
+    if not sm.updated['carState'] and not sm.updated['liveLocationKalman']:
       return
     CS = sm['carState']
     location = sm['liveLocationKalman']
