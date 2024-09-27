@@ -88,6 +88,10 @@ struct CarrotMan @0x80ae746ee2596b11 {
 	carrotCmdIndex @16 : Int32;
 	carrotCmd @17 : Text;
 	carrotArg @18 : Text;
+	xPosLat @19 : Float32;
+	xPosLon @20 : Float32;
+	xPosAngle @21 : Float32;
+	xPosSpeed @22 : Float32;
 }
 
 struct CustomReserved5 @0xa5cd762cd951a455 {

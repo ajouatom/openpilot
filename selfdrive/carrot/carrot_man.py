@@ -53,7 +53,7 @@ class CarrotMan:
     self.is_running = True
     threading.Thread(target=self.broadcast_version_info).start()
 
-    self.sm = messaging.SubMaster(['deviceState', 'carState', 'controlsState', 'longitudinalPlan', 'modelV2'])
+    self.sm = messaging.SubMaster(['deviceState', 'carState', 'controlsState', 'longitudinalPlan', 'modelV2', 'liveLocationKalman'])
     self.pm = messaging.PubMaster(['carrotMan'])
 
   def get_broadcast_address(self):
@@ -508,6 +508,8 @@ class CarrotServ:
     self.szGoalName = ""
     self.vpPosPointLat = 0.0
     self.vpPosPointLon = 0.0
+    self.nPosSpeed = 0.0
+    self.nPosAngle = 0.0
 
     self.totalDistance = 0
     self.xSpdLimit = 0
@@ -655,6 +657,58 @@ class CarrotServ:
       self.xSpdType = -1
       self.xSpdDist = 0
 
+  def _update_gps(self, v_ego, sm):
+    CS = sm['carState']
+    location = sm['liveLocationKalman']
+    bearing = math.degrees(location.calibratedOrientationNED.value[2])
+    if (location.status == log.LiveLocationKalman.Status.valid) and location.positionGeodetic.valid and location.gpsOK:            
+      location_valid = True
+      bearing_offset = 0.0
+    else:
+      location_valid = False
+ 
+    if self.active >= 2:
+      if not location_valid and CS is not None:
+        diff_angle = self.nPosAngle - bearing;
+        while diff_angle < 0.0:
+          diff_angle += 360
+        diff_angle = (diff_angle + 180) % 360 - 180;
+        if abs(diff_angle) > 20 and v_ego > 1.0 and abs(CS.steeringAngleDeg) < 2.0:
+          diff_angle_count += 1
+        else:
+          diff_angle_count = 0
+        print("{:.1f} bearing_diff[{}] = {:.1f} = {:.1f} - {:.1f}, v={:.1f},st={:.1f}".format(bearing_offset, diff_angle_count, diff_angle, self.nPosAngle, bearing, CS.vEgo*3.6, CS.steeringAngleDeg))
+        if diff_angle_count > 2:
+          bearing_offset = self.nPosAngle - bearing
+          print("bearing_offset = {:.1f} = {:.1f} - {:.1f}".format(bearing_offset, self.nPosAngle, bearing))
+      #n초 통신 지연시간이 있다고 가정하고 좀더 진행한것으로 처리함.
+      dt = 0 #(unix_now - timeStamp / 1000.) if timeStamp > 0 else 0.1
+      dt += 0.2  #가상으로 0.5초만큼 더 진행한것으로 
+      self.vpPosPointLat, self.vpPosPointLon = self.estimate_position(float(self.vpPosPointLat), float(self.vpPosPointLon), v_ego, bearing + bearing_offset, dt)
+      #last_update_gps_time = now
+      #last_calculate_gps_time = now
+    #elif now - last_update_gps_time < 3.0:# and CS is not None:
+    #  dt = now - last_calculate_gps_time
+    #  last_calculate_gps_time = now
+    #  vpPosPointLat, vpPosPointLon = estimate_position(float(vpPosPointLat), float(vpPosPointLon), v_ego, bearing + bearing_offset, dt)
+    #roadLimitSpeed.xPosSpeed = float(nPosSpeed)
+    #roadLimitSpeed.xPosAngle = float(bearing + bearing_offset)
+    #roadLimitSpeed.xPosLat = float(vpPosPointLat)
+    #roadLimitSpeed.xPosLon = float(vpPosPointLon)
+
+    return float(bearing + bearing_offset)
+    
+  def estimate_position(lat, lon, speed, angle, dt):
+    R = 6371000
+    angle_rad = math.radians(angle)
+    delta_d = speed * dt
+    delta_lat = delta_d * math.cos(angle_rad) / R
+    new_lat = lat + math.degrees(delta_lat)
+    delta_lon = delta_d * math.sin(angle_rad) / (R * math.cos(math.radians(lat)))
+    new_lon = lon + math.degrees(delta_lon)
+    
+    return new_lat, new_lon
+
   def update_auto_turn(self, v_ego_kph, sm, x_turn_info, x_dist_to_turn):
     turn_speed = self.autoTurnControlSpeedTurn
     stop_speed = 1
@@ -700,6 +754,8 @@ class CarrotServ:
     else:
       v_ego = 0
       delta_dist = 0
+      
+    bearing = self._update_gps(v_ego, sm)
 
     self.xSpdDist = max(self.xSpdDist - delta_dist, 0)
     self.xDistToTurn = max(self.xDistToTurn - delta_dist, 0)
@@ -810,6 +866,11 @@ class CarrotServ:
     msg.carrotMan.carrotCmd = self.carrotCmd
     msg.carrotMan.carrotArg = self.carrotArg
 
+    msg.carrotMan.xPosSpeed = float(self.nPosSpeed)
+    msg.carrotMan.xPosAngle = float(bearing)
+    msg.carrotMan.xPosLat = float(self.vpPosPointLat)
+    msg.carrotMan.xPosLon = float(self.vpPosPointLon)
+
     pm.send('carrotMan', msg)
     
   def update(self, json):
@@ -875,6 +936,8 @@ class CarrotServ:
 
       self.vpPosPointLat = float(json.get("vpPosPointLat", self.vpPosPointLat))
       self.vpPosPointLon = float(json.get("vpPosPointLon", self.vpPosPointLon))
+      self.nPosSpeed = float(json.get("nPosSpeed", self.nPosSpeed))
+      self.nPosAngle = float(json.get("nPosAngle", self.nPosAngle))
       self._update_tbt()
       self._update_sdi()
       print(f"sdi = {self.nSdiType}, {self.nSdiSpeedLimit}, {self.nSdiPlusType}, tbt = {self.nTBTTurnType}, {self.nTBTDist}")

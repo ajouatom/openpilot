@@ -114,7 +114,7 @@ class RouteEngine:
 
     #roadLimitSpeed = self.sm['roadLimitSpeed']
     #print(roadLimitSpeed.active)
-    if False: #roadLimitSpeed.active >= 200:
+    if self.sm['carrotMan'].active >= 2:
       pass
     else:
       if self.carrot_route_active:
@@ -127,10 +127,10 @@ class RouteEngine:
 
     if self.carrot_route_active:
       #return
-      msg = messaging.new_message('navInstruction', valid=True)
-      msg.navInstruction = roadLimitSpeed.navInstruction
+      #msg = messaging.new_message('navInstruction', valid=True)
+      #msg.navInstruction = roadLimitSpeed.navInstruction
       #print(msg.navInstruction)
-      self.pm.send('navInstruction', msg)
+      #self.pm.send('navInstruction', msg)
       return
     try:
       self.recompute_route()
@@ -503,7 +503,7 @@ class RouteEngine:
 
 def main():
   pm = messaging.PubMaster(['navInstruction', 'navRoute'])
-  sm = messaging.SubMaster(['liveLocationKalman', 'managerState', 'naviData', 'navInstructionNda', 'navRouteNda'])
+  sm = messaging.SubMaster(['liveLocationKalman', 'managerState', 'naviData', 'navInstructionNda', 'navRouteNda', 'carrotMan'])
 
   rk = Ratekeeper(1.0)
   route_engine = RouteEngine(sm, pm)
