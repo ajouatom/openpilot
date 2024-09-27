@@ -837,7 +837,7 @@ class CarrotServ:
 
     return float(bearing + self.bearing_offset)
     
-  def estimate_position(lat, lon, speed, angle, dt):
+  def estimate_position(self, lat, lon, speed, angle, dt):
     R = 6371000
     angle_rad = math.radians(angle)
     delta_d = speed * dt
