@@ -92,6 +92,7 @@ struct CarrotMan @0x80ae746ee2596b11 {
 	xPosLon @20 : Float32;
 	xPosAngle @21 : Float32;
 	xPosSpeed @22 : Float32;
+	trafficState @23 : Int32;
 }
 
 struct CustomReserved5 @0xa5cd762cd951a455 {
