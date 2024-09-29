@@ -544,6 +544,8 @@ class CarrotServ:
     self.traffic_light_count = -1
     self.traffic_state = 0
 
+    self.debugText = ""
+
 
   def update_params(self):
     self.autoNaviSpeedBumpSpeed = float(self.params.get_int("AutoNaviSpeedBumpSpeed"))
@@ -761,8 +763,8 @@ class CarrotServ:
     if self.nTBTDist > 0 and self.xTurnInfo > 0:
       self.xDistToTurn = self.nTBTDist
     if self.nTBTDistNext > 0 and self.xTurnInfoNext > 0:
-      self.xDistToTurnNext = self.nTBTDistNext
-  
+      self.xDistToTurnNext = self.nTBTDistNext + self.nTBTDist
+    
   def _update_sdi(self):
     #sdiBlockType
     # 1: startOSEPS: 구간단속시작
@@ -946,6 +948,9 @@ class CarrotServ:
     atc_desired, self.atcType, self.atcSpeed, self.atcDist = self.update_auto_turn(v_ego*3.6, sm, self.xTurnInfo, self.xDistToTurn)
     atc_desired_next, _, _, _ = self.update_auto_turn(v_ego*3.6, sm, self.xTurnInfoNext, self.xDistToTurnNext)
 
+    if self.xTurnInfo >= 0:      
+      self.debugText = f"Atc:{atc_desired:.1f},{self.xTurnInfo}:{self.xDistToTurn:.1f}, I({self.nTBTNextRoadWidth},{self.roadcate}) Atc2:{atc_desired_next:.1f},{self.xTurnInfoNext},{self.xDistToTurnNext:.1f}"
+      
     if self.autoTurnControl not in [2, 3]:    # auto turn speed control
       atc_desired = atc_desired_next = 250
 
@@ -1009,7 +1014,7 @@ class CarrotServ:
     msg.carrotMan.xTurnCountDown = int(left_tbt_sec)
     msg.carrotMan.atcType = self.atcType
     msg.carrotMan.vTurnSpeed = int(vturn_speed)
-    msg.carrotMan.szPosRoadName = self.szPosRoadName
+    msg.carrotMan.szPosRoadName = self.szPosRoadName + self.debugText
     msg.carrotMan.szTBTMainText = self.szTBTMainText
     msg.carrotMan.desiredSpeed = int(desired_speed)
     msg.carrotMan.desiredSource = source
@@ -1079,8 +1084,8 @@ class CarrotServ:
       self.szFarDirName = json.get("szFarDirName", "")
       
       self.nTBTNextRoadWidth = int(json.get("nTBTNextRoadWidth", 0))
-      self.nTBTDistNext = int(json.get("nTBTDist", 0))
-      self.nTBTTurnTypeNext = int(json.get("nTBTTurnType", -1))
+      self.nTBTDistNext = int(json.get("nTBTDistNext", 0))
+      self.nTBTTurnTypeNext = int(json.get("nTBTTurnTypeNext", -1))
       self.szTBTMainTextNext = json.get("szTBTMainText", "")
 
       self.nGoPosDist = int(json.get("nGoPosDist", 0))
@@ -1093,7 +1098,7 @@ class CarrotServ:
       self.nPosAngle = float(json.get("nPosAngle", self.nPosAngle))
       self._update_tbt()
       self._update_sdi()
-      print(f"sdi = {self.nSdiType}, {self.nSdiSpeedLimit}, {self.nSdiPlusType}, tbt = {self.nTBTTurnType}, {self.nTBTDist}")
+      print(f"sdi = {self.nSdiType}, {self.nSdiSpeedLimit}, {self.nSdiPlusType}, tbt = {self.nTBTTurnType}, {self.nTBTDist}, next={self.nTBTTurnTypeNext},{self.nTBTDistNext}")
     else:
       #print(json)
       pass
