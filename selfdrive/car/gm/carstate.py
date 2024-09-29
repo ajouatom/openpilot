@@ -199,7 +199,8 @@ class CarState(CarStateBase):
       ret.cruiseState.speed = pt_cp.vl["ECMCruiseControl"]["CruiseSetSpeed"] * CV.KPH_TO_MS
       ret.cruiseState.enabled = pt_cp.vl["ECMCruiseControl"]["CruiseActive"] != 0
 
-    if self.CP.flags & GMFlags.SPEED_RELATED_MSG.value:
+    ret.vCluRatio = 0.96
+    if False: #self.CP.flags & GMFlags.SPEED_RELATED_MSG.value:
       # kans: use cluster speed & vCluRatio(longitudialPlanner)
       self.is_metric = Params().get_bool("IsMetric")
       speed_conv = CV.KPH_TO_MS * 1.609344 if self.is_metric else CV.MPH_TO_MS
