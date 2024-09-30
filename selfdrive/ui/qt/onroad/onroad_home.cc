@@ -174,7 +174,12 @@ void OnroadWindow::updateStateText() {
         cpuTemp /= static_cast<float>(size);
     }
 
-    top.sprintf("MEM: %d%% DISK: %.0f%% CPU: %.0f¡ÆC", memoryUsage, freeSpace, cpuTemp);
+    //top.sprintf("MEM: %d%% DISK: %.0f%% CPU: %.0f¡ÆC", memoryUsage, freeSpace, cpuTemp);
+    //top.sprintf("MEM: %d%% DISK: %.0f%% CPU: %.0f\xC2\xB0C", memoryUsage, freeSpace, cpuTemp);
+    top = QString("MEM: %1% DISK: %2% CPU: %3¡ÆC")
+        .arg(memoryUsage)
+        .arg(freeSpace, 0, 'f', 0)
+        .arg(cpuTemp, 0, 'f', 0);
     topRightLabel->setText(top);
 
     Params params = Params();
