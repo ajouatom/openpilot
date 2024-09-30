@@ -888,13 +888,14 @@ class CarrotServ:
     elif atc_type in ["turn left", "turn right"] and x_dist_to_turn > start_turn_dist:
       atc_type = "fork left" if atc_type == "turn left" else "fork right"
 
-    if x_dist_to_turn < atc_start_dist:
-      steering_pressed = sm["carState"].steeringPressed
-      steering_torque = sm["carState"].steeringTorque
-      if steering_pressed and steering_torque < 0 and atc_type == "fork left":
-        self.atc_paused = True
-      elif steering_pressed and steering_torque > 0 and atc_type == "fork right":
-        self.atc_paused = True
+    if 0 < x_dist_to_turn < atc_start_dist:
+      if not self.atc_paused:
+        steering_pressed = sm["carState"].steeringPressed
+        steering_torque = sm["carState"].steeringTorque
+        if steering_pressed and steering_torque < 0 and atc_type == "fork left":
+          self.atc_paused = True
+        elif steering_pressed and steering_torque > 0 and atc_type == "fork right":
+          self.atc_paused = True
     else:
       self.atc_paused = False
 
