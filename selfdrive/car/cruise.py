@@ -166,6 +166,7 @@ class VCruiseCarrot:
     self._gas_pressed_count = 0
     self._gas_pressed_count_last = 0
     self._gas_pressed_value = 0
+    self._gas_tok_timer = int(0.4 / 0.01) # 0.4 sec
     self._gas_tok = False
     self._brake_pressed_count = 0
     self._soft_hold_count = 0
@@ -439,11 +440,6 @@ class VCruiseCarrot:
       elif 0 < self.d_rel < 20:
         v_cruise_kph = self.v_ego_kph_set
         self._cruise_control(1, 0, "Cruise on (lead car)")
-    elif self._gas_pressed_count > 0:
-      if CS.aEgo < -0.5:
-        self._cruise_control(-1, 5.0, "Cruise off (gas pressed while braking)")
-      if self.v_ego_kph_set > v_cruise_kph:
-        v_cruise_kph = self.v_ego_kph_set
 
     elif not CC.enabled and self._brake_pressed_count < 0 and self._gas_pressed_count < 0:
       if self.v_rel < -0.2 and 0 < self.d_rel < CS.vEgo ** 2 / (2.0 * 2):
@@ -452,6 +448,11 @@ class VCruiseCarrot:
         self._cruise_control(1, -1, "Cruise on (fcw dist)")
         self.events.append(EventName.stopStop)
 
+    if self._gas_pressed_count > self._gas_tok_timer:
+      if CS.aEgo < -0.5:
+        self._cruise_control(-1, 5.0, "Cruise off (gas pressed while braking)")
+      if self.v_ego_kph_set > v_cruise_kph:
+        v_cruise_kph = self.v_ego_kph_set
       
     return v_cruise_kph
   
@@ -462,8 +463,8 @@ class VCruiseCarrot:
       self._gas_pressed_value = max(CS.gas, self._gas_pressed_value) if self._gas_pressed_count > 1 else CS.gas
       self._gas_tok = False
       self._soft_hold_active = False
-    else:
-      self._gas_tok = True if 0 < self._gas_pressed_count < 0.4 / 0.01 else False
+    else:      
+      self._gas_tok = True if 0 < self._gas_pressed_count < self._gas_tok_timer else False
       self._gas_pressed_count = min(-1, self._gas_pressed_count - 1)
       if self._gas_pressed_count < -1:
         self._gas_pressed_count_last = 0
