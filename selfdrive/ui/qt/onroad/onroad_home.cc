@@ -9,7 +9,6 @@
 #include <QJsonValue>
 #include <QJsonArray>
 
-#include <iterator>
 
 #include "selfdrive/ui/qt/util.h"
 #include "selfdrive/ui/carrot.h"
@@ -167,12 +166,14 @@ void OnroadWindow::updateStateText() {
     const auto memoryUsage = deviceState.getMemoryUsagePercent();
     const auto cpuTempC = deviceState.getCpuTempC();
     float cpuTemp = 0.0f;
-    if (std::size(cpuTempC) > 0) {
-        for (int i = 0; i < std::size(cpuTempC); i++) {
+    int   size = sizeof(cpuTempC) / sizeof(cpuTempC[0]);
+    if (size > 0) {
+        for (int i = 0; i < size; i++) {
             cpuTemp += cpuTempC[i];
         }
-        cpuTemp = cpuTemp / (float)std::size(cpuTemp);
+        cpuTemp /= static_cast<float>(size);
     }
+
     top.sprintf("MEM: %d%% DISK: %.0f%% CPU: %.0f¡ÆC", memoryUsage, freeSpace, cpuTempC);
     topRightLabel->setText(top);
 
