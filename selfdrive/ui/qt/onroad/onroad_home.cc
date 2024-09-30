@@ -9,6 +9,7 @@
 #include <QJsonValue>
 #include <QJsonArray>
 
+#include <iterator>
 
 #include "selfdrive/ui/qt/util.h"
 #include "selfdrive/ui/carrot.h"
