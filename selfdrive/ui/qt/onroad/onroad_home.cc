@@ -175,7 +175,10 @@ void OnroadWindow::updateStateText() {
     }
 
     //top.sprintf("MEM: %d%% DISK: %.0f%% CPU: %.0f¡ÆC", memoryUsage, freeSpace, cpuTemp);
-    top.sprintf("MEM: %d%% DISK: %.0f%% CPU: %.0f\xC2\xB0C", memoryUsage, freeSpace, cpuTemp);
+    //top.sprintf("MEM: %d%% DISK: %.0f%% CPU: %.0f\xC2\xB0C", memoryUsage, freeSpace, cpuTemp);
+    //top.sprintf("MEM: %d%% DISK: %.0f%% CPU: %.0f¡ÆC", memoryUsage, freeSpace, cpuTemp);
+    top.sprintf("MEM: %d%% DISK: %.0f%% CPU: %.0f\u00B0C", memoryUsage, freeSpace, cpuTemp);
+
     topRightLabel->setText(top);
 
     Params params = Params();
