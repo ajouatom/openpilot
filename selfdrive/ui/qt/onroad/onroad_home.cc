@@ -161,7 +161,18 @@ void OnroadWindow::updateStateText() {
     //extern int g_fps;
     //const auto cp = sm["carParams"].getCarParams();
     //top.sprintf("%s Long, FPS: %d", hasLongitudinalControl(cp)?"OP":"Stock", g_fps);
-    top = "topRight";
+    auto deviceState = sm["deviceState"].getDeviceState();
+    const auto freeSpace = deviceState.getFreeSpacePercent();
+    const auto memoryUsage = deviceState.getMemoryUsagePercent();
+    const auto cpuTempC = deviceState.getCpuTempC();
+    float cpuTemp = 0.0f;
+    if (std::size(cpuTempC) > 0) {
+        for (int i = 0; i < std::size(cpuTempC); i++) {
+            cpuTemp += cpuTempC[i];
+        }
+        cpuTemp = cpuTemp / (float)std::size(cpuTemp);
+    }
+    top.sprintf("MEM: %d%% DISK: %.0f%% CPU: %.0f¡ÆC", memoryUsage, freeSpace, cpuTempC);
     topRightLabel->setText(top);
 
     Params params = Params();
