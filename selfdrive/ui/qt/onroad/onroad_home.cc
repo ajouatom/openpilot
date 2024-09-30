@@ -174,7 +174,7 @@ void OnroadWindow::updateStateText() {
         cpuTemp /= static_cast<float>(size);
     }
 
-    top.sprintf("MEM: %d%% DISK: %.0f%% CPU: %.0f¡ÆC", memoryUsage, freeSpace, cpuTempC);
+    top.sprintf("MEM: %d%% DISK: %.0f%% CPU: %.0f¡ÆC", memoryUsage, freeSpace, cpuTemp);
     topRightLabel->setText(top);
 
     Params params = Params();
