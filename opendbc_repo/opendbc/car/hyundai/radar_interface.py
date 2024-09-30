@@ -3,7 +3,7 @@ import math
 from opendbc.can.parser import CANParser
 from opendbc.car import structs
 from opendbc.car.interfaces import RadarInterfaceBase
-from opendbc.car.hyundai.values import DBC, CANFD_CAR, HyundaiFlags
+from opendbc.car.hyundai.values import DBC, HyundaiFlags
 from openpilot.common.params import Params
 
 RADAR_START_ADDR = 0x500
@@ -23,7 +23,7 @@ def get_radar_can_parser(CP, radar_tracks):
   return CANParser('hyundai_kia_mando_front_radar_generated', messages, 1)
 
 def get_radar_can_parser_scc(CP):
-  if CP.carFingerprint in CANFD_CAR:
+  if CP.flags & HyundaiFlags.CANFD:
     messages = [("SCC_CONTROL", 50)]
   else:
     messages = [("SCC11", 50)]
@@ -44,7 +44,7 @@ class RadarInterface(RadarInterfaceBase):
     self.rcp = get_radar_can_parser(CP, self.radar_tracks)
 
 
-    self.canfd = True if CP.carFingerprint in CANFD_CAR else False
+    self.canfd = True if CP.flags & HyundaiFlags.CANFD else False
     if not self.radar_tracks:
       self.rcp = get_radar_can_parser_scc(CP)
       self.trigger_msg = 416 if self.canfd else 0x420

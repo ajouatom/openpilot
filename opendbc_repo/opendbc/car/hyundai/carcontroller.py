@@ -135,7 +135,7 @@ class CarController(CarControllerBase):
     # tester present - w/ no response (keeps relevant ECU disabled)
     if self.frame % 100 == 0 and not (self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC.value) and self.CP.openpilotLongitudinalControl:
       # for longitudinal control, either radar or ADAS driving ECU
-      addr, bus = 0x7d0, self.CAN.ECAN if self.CP.carFingerprint in CANFD_CAR else 0
+      addr, bus = 0x7d0, self.CAN.ECAN if self.CP.flags & HyundaiFlags.CANFD else 0
       if self.CP.flags & HyundaiFlags.CANFD_HDA2.value:
         addr, bus = 0x730, self.CAN.ECAN
       can_sends.append(make_tester_present_msg(addr, bus, suppress_response=True))
@@ -313,7 +313,7 @@ class HyundaiJerk:
       self.jerk_l = jerkLimit          
       #self.jerk_count = 0
     else:
-      if CP.carFingerprint in CANFD_CAR:
+      if CP.flags & HyundaiFlags.CANFD:
         self.jerk_u = min(max(0.5, jerk * 2.0), jerk_max)
         self.jerk_l = min(max(1.0, -jerk * 3.0), jerkLimit)
       else:
