@@ -166,7 +166,7 @@ static void ui_draw_text_a(const UIState* s, float x, float y, const char* strin
 
 
 //##################### drawPlot
-#define PLOT_MAX 300
+#define PLOT_MAX 400 //500
 class DrawPlot : public QObject {
     Q_OBJECT
 protected:
@@ -176,7 +176,7 @@ protected:
     float   plotMin = 0.;
     float   plotMax = 0.;
     float   plotShift = 0.0;
-    float   plotX = 300.0;
+    float   plotX = 400.0;// 300.0;
     float   plotWidth = 1000;
     float   plotY = 30.0;
     float   plotHeight = 300.0;
