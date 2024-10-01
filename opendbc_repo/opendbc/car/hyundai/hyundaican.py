@@ -136,6 +136,7 @@ def create_acc_commands_scc(packer, enabled, accel, jerk, idx, hud_control, set_
   soft_hold_info = soft_hold_active > 1 and enabled
   soft_hold_mode = 2 ## some cars can't enable while braking
   long_enabled = enabled or (soft_hold_active > 0 and soft_hold_mode == 2)
+  stop_req = stopping or (soft_hold_active > 0 and soft_hold_mode == 2)
   warning_front = False
 
   commands = []
@@ -157,7 +158,7 @@ def create_acc_commands_scc(packer, enabled, accel, jerk, idx, hud_control, set_
   if CS.scc12 is not None:
     values = CS.scc12
     values["ACCMode"] = 2 if enabled and long_override else 1 if long_enabled else 0
-    values["StopReq"] = 1 if stopping else 0
+    values["StopReq"] = 1 if stop_req else 0
     values["aReqRaw"] = accel
     values["aReqValue"] = accel
     values["ACCFailInfo"] = 0
