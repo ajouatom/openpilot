@@ -27,6 +27,9 @@ class CarrotMan:
   def __init__(self):
     self.params = Params()
     self.params_memory = Params("/dev/shm/params")
+    self.sm = messaging.SubMaster(['deviceState', 'carState', 'controlsState', 'longitudinalPlan', 'modelV2', 'selfdriveState'])
+    self.pm = messaging.PubMaster(['carrotMan'])
+
     self.carrot_serv = CarrotServ()
     
     self.show_panda_debug = False
@@ -53,8 +56,6 @@ class CarrotMan:
     self.is_running = True
     threading.Thread(target=self.broadcast_version_info).start()
 
-    self.sm = messaging.SubMaster(['deviceState', 'carState', 'controlsState', 'longitudinalPlan', 'modelV2', 'liveLocationKalman'])
-    self.pm = messaging.PubMaster(['carrotMan'])
 
   def get_broadcast_address(self):
     try:
@@ -424,7 +425,8 @@ class CarrotMan:
     self.autoCurveSpeedFactorIn = self.autoCurveSpeedAggressiveness - 1.0
    
   def carrot_curve_speed(self, sm):
-    self.carrot_curve_speed_params()  
+    self.carrot_curve_speed_params()
+
     ## 국가법령정보센터: 도로설계기준
     V_CURVE_LOOKUP_BP = [0., 1./800., 1./670., 1./560., 1./440., 1./360., 1./265., 1./190., 1./135., 1./85., 1./55., 1./30., 1./15.]
     #V_CRUVE_LOOKUP_VALS = [300, 150, 120, 110, 100, 90, 80, 70, 60, 50, 40, 30, 20]
@@ -436,6 +438,8 @@ class CarrotMan:
     if len(sm['modelV2'].orientationRate.z) == 0:
         return 250
 
+    return self.vturn_speed(sm['carState'], sm)
+  
     v_ego = sm['carState'].vEgo
     # 회전속도를 선속도 나누면 : 곡률이 됨. [12:20]은 약 1.4~3.5초 앞의 곡률을 계산함.
     orientationRates = np.array(sm['modelV2'].orientationRate.z, dtype=np.float32)
@@ -463,7 +467,31 @@ class CarrotMan:
     turn_speed = turn_speed - np.sign(curvature) * speed_diff * self.autoCurveSpeedFactorIn
     #controls.debugText2 = 'CURVE={:5.1f},curvature={:5.4f},mode={:3.1f}'.format(self.turnSpeed_prev, curvature, self.drivingModeIndex)
     return turn_speed
+  
+  def vturn_speed(self, CS, sm):
+    TARGET_LAT_A = 1.9  # m/s^2
+    
+    modelData = sm['modelV2']
+    v_ego = max(CS.vEgo, 0.1)
+    # Set the curve sensitivity
+    orientation_rate = np.array(modelData.orientationRate.z) * self.autoCurveSpeedFactor
+    velocity = np.array(modelData.velocity.x)
 
+    # Get the maximum lat accel from the model
+    max_index = np.argmax(np.abs(orientation_rate))
+    curv_direction = np.sign(orientation_rate[max_index])
+    max_pred_lat_acc = np.amax(np.abs(orientation_rate) * velocity)
+
+    # Get the maximum curve based on the current velocity
+    max_curve = max_pred_lat_acc / (v_ego**2)
+
+    # Set the target lateral acceleration
+    adjusted_target_lat_a = TARGET_LAT_A * self.autoCurveSpeedAggressiveness
+
+    # Get the target velocity for the maximum curve
+    turnSpeed = max(abs(adjusted_target_lat_a / max_curve)**0.5  * 3.6, self.autoCurveSpeedLowerLimit)
+    return turnSpeed * curv_direction
+  
 import collections
 class CarrotServ:
   def __init__(self):
@@ -543,6 +571,8 @@ class CarrotServ:
     self.traffic_light_q = collections.deque(maxlen=int(2.0/0.1))  # 2 secnods
     self.traffic_light_count = -1
     self.traffic_state = 0
+
+    self.atc_paused = False
 
     self.debugText = ""
 
@@ -885,6 +915,19 @@ class CarrotServ:
     elif atc_type in ["turn left", "turn right"] and x_dist_to_turn > start_turn_dist:
       atc_type = "fork left" if atc_type == "turn left" else "fork right"
 
+    if 0 < x_dist_to_turn < atc_start_dist:
+      if not self.atc_paused:
+        steering_pressed = sm["carState"].steeringPressed
+        steering_torque = sm["carState"].steeringTorque
+        if steering_pressed and steering_torque < 0 and atc_type == "fork left":
+          self.atc_paused = True
+        elif steering_pressed and steering_torque > 0 and atc_type == "fork right":
+          self.atc_paused = True
+    else:
+      self.atc_paused = False
+
+    if self.atc_paused:
+      atc_type += " canceled"
 
     atc_desired = 250    
     if atc_speed > 0 and x_dist_to_turn > 0:
@@ -1182,6 +1225,7 @@ class CarrotServ:
     else:
       #print(json)
       pass
+    
 
 import traceback
 
