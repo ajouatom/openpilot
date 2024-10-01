@@ -1496,6 +1496,7 @@ public:
     int     trafficState_carrot = 0;
     int     active_carrot = 0;
     char    carrot_man_debug[128] = "";
+    float   xTarget = 0.0;
 
     QString szPosRoadName = "";
 
@@ -1549,6 +1550,7 @@ public:
 		}
         xState = lp.getXState();
         trafficState = lp.getTrafficState();
+        xTarget = lp.getXTarget();
 
         s->max_distance = std::clamp(*(model_position.getX().end() - 1),
             MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE);
@@ -1616,13 +1618,18 @@ public:
         char apply_speed_str[32];
         int apply_x = bx + 250;
         int apply_y = by - 50;
-        sprintf(apply_speed_str, "%.0f", apply_speed);
 
         if (apply_source.length()) {
+            sprintf(apply_speed_str, "%.0f", apply_speed);
             textColor = COLOR_OCHRE;    // apply speed가 작동되면... 색을 바꾸자.
             ui_draw_text(s, apply_x, apply_y, apply_speed_str, 50, textColor, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
             ui_draw_text(s, apply_x, apply_y - 50, apply_source.toStdString().c_str(), 30, textColor, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
         }
+		else if(abs(xTarget - v_cruise) > 0.5) {
+            sprintf(apply_speed_str, "%.0f", xTarget);
+			ui_draw_text(s, apply_x, apply_y, apply_speed_str, 50, textColor, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
+            ui_draw_text(s, apply_x, apply_y - 50, "eco", 30, textColor, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
+		}
 
         // draw gap info
         char driving_mode_str[32] = "연비";

@@ -107,6 +107,9 @@ class CarrotPlanner:
 
     self.trafficState_carrot = 0
 
+    self.eco_over_speed = 2
+    self.eco_target_speed = 0
+
   def _params_update(self):
     self.frame += 1
     self.params_count += 1
@@ -187,6 +190,7 @@ class CarrotPlanner:
       self.trafficState = TrafficState.off
   
   def _update_carrot_man(self, sm, v_ego_kph, v_cruise_kph):
+    v_cruise_kph_carrot = v_cruise_kph
     if sm.alive['carrotMan']:
       carrot_man = sm['carrotMan']
       if self.trafficState_carrot == 1 and carrot_man.trafficState == 2:
@@ -197,7 +201,7 @@ class CarrotPlanner:
           self.traffic_starting_count = 10.0 / DT_MDL
       self.trafficState_carrot = carrot_man.trafficState
       
-      v_cruise_kph = min(v_cruise_kph, carrot_man.desiredSpeed)
+      v_cruise_kph_carrot = min(v_cruise_kph, carrot_man.desiredSpeed)
       xSpdCountDown = carrot_man.xSpdCountDown if carrot_man.xSpdDist > 0 else 100
       xTurnCountDown = carrot_man.xTurnCountDown if carrot_man.xDistToTurn > 0 else 100
       left_sec = min(xSpdCountDown, xTurnCountDown)
@@ -209,8 +213,32 @@ class CarrotPlanner:
           self.events.add(EventName.audio0)
         self.left_sec = left_sec
 
-    return v_cruise_kph
-  
+      if v_cruise_kph_carrot < v_cruise_kph:
+        return v_cruise_kph
+    v_cruise_kph_eco = self.cruise_eco_control(v_ego_kph, v_cruise_kph)
+    return v_cruise_kph_eco
+
+  def cruise_eco_control(self, v_ego_kph, v_cruise_kph):
+    v_cruise_kph_apply = v_cruise_kph
+    if self.eco_over_speed > 0:
+      if self.eco_target_speed > 0:
+        if self.eco_target_speed < v_cruise_kph:
+          self.eco_target_speed = v_cruise_kph
+        elif self.eco_target_speed > v_cruise_kph:
+          self.eco_target_speed = 0
+      elif self.eco_target_speed == 0 and v_ego_kph + 3 < v_cruise_kph and v_cruise_kph > 20.0:  # 주행중 속도가 떨어지면 다시 크루즈연비제어 시작.
+        self.eco_target_speed = v_cruise_kph
+
+      if self.eco_target_speed != 0:  ## 크루즈 연비 제어모드 작동중일때: 연비제어 종료지점
+        if v_ego_kph > self.eco_target_speed: # 설정속도를 초과하면..
+          self.eco_target_speed = 0
+        else:
+          v_cruise_kph_apply = self.eco_target_speed + self.eco_over_speed  # + 설정 속도로 설정함.
+    else:
+      self.eco_target_speed = 0
+
+    return v_cruise_kph_apply
+
   def update(self, sm, v_cruise_kph):
     self._params_update()
 

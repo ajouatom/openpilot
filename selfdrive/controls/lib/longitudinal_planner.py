@@ -86,6 +86,8 @@ class LongitudinalPlanner:
     self.carrot = CarrotPlanner()
     self.vCluRatio = 1.0
 
+    self.v_cruise_kph = 0.0
+
   @staticmethod
   def parse_model(model_msg, model_error):
     if (len(model_msg.position.x) == ModelConstants.IDX_N and
@@ -108,8 +110,8 @@ class LongitudinalPlanner:
     v_ego = sm['carState'].vEgo
     v_cruise_kph = min(sm['carState'].vCruise, V_CRUISE_MAX)
     
-    v_cruise_kph = self.carrot.update(sm, v_cruise_kph)
-    v_cruise = v_cruise_kph * CV.KPH_TO_MS
+    self.v_cruise_kph = self.carrot.update(sm, v_cruise_kph)
+    v_cruise = self.v_cruise_kph * CV.KPH_TO_MS
 
     vCluRatio = sm['carState'].vCluRatio
     if vCluRatio > 0.5:
@@ -203,6 +205,7 @@ class LongitudinalPlanner:
     longitudinalPlan.vTarget = v_target
     longitudinalPlan.xState = self.carrot.xState.value
     longitudinalPlan.trafficState = self.carrot.trafficState.value
+    longitudinalPlan.xTarget = self.v_cruise_kph
     longitudinalPlan.events = self.carrot.events.to_msg()
 
     pm.send('longitudinalPlan', plan_send)

@@ -1133,6 +1133,7 @@ struct LongitudinalPlan @0xe00b5b3eba12876c {
   trafficState @41: Int32;
   events @42:List(Car.OnroadEvent);
   vTarget @43: Float32;
+  xTarget @44: Float32;
 
   solverExecutionTime @35 :Float32;
 
