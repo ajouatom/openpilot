@@ -27,7 +27,7 @@ class CarrotMan:
   def __init__(self):
     self.params = Params()
     self.params_memory = Params("/dev/shm/params")
-    self.sm = messaging.SubMaster(['deviceState', 'carState', 'controlsState', 'longitudinalPlan', 'modelV2', 'selfdriveState'])
+    self.sm = messaging.SubMaster(['deviceState', 'carState', 'controlsState', 'longitudinalPlan', 'modelV2', 'liveLocationKalman'])
     self.pm = messaging.PubMaster(['carrotMan'])
 
     self.carrot_serv = CarrotServ()
