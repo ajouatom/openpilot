@@ -196,7 +196,7 @@ class CarInterface(CarInterfaceBase):
 
    
     
-    if ret.openpilotLongitudinalControl and ret.flags & HyundaiFlags.CAMERA_SCC.value and not ret.flags & HyundaiFlags.CANFD:
+    if ret.flags & HyundaiFlags.CAMERA_SCC.value:
       ret.radarTimeStep = 0.05 if params.get_int("EnableRadarTracks") > 0 else 0.02 # SCC(50Hz), radar tracks(20Hz)
 
     # Car specific configuration overrides
