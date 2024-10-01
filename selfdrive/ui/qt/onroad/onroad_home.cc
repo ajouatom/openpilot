@@ -108,9 +108,9 @@ void OnroadWindow::updateState(const UIState &s) {
   QColor bgColor_long = bg_colors[s.status];
   const SubMaster& sm = *(s.sm);
   const auto car_control = sm["carControl"].getCarControl();
-  if (s.status == STATUS_DISENGAGED && car_control.getLatActive()) {
-      bgColor = bg_colors[STATUS_LAT_ACTIVE];
-  }
+  //if (s.status == STATUS_DISENGAGED && car_control.getLatActive()) {
+  //    bgColor = bg_colors[STATUS_LAT_ACTIVE];
+  //}
   const auto car_state = sm["carState"].getCarState();
   if (car_state.getSteeringPressed()) {
       bgColor = bg_colors[STATUS_OVERRIDE];
@@ -118,13 +118,17 @@ void OnroadWindow::updateState(const UIState &s) {
   else if (car_control.getLatActive()) {
       bgColor = bg_colors[STATUS_ENGAGED];
   }
+  else
+      bgColor = bg_colors[STATUS_DISENGAGED];
+
   if (car_state.getGasPressed()) {
       bgColor_long = bg_colors[STATUS_OVERRIDE];
   }
   else if (car_control.getLongActive()) {
       bgColor_long = bg_colors[STATUS_ENGAGED];
   }
-
+  else
+      bgColor_long = bg_colors[STATUS_DISENGAGED];
   if (bg != bgColor || bg_long != bgColor_long) {
     // repaint border
     bg = bgColor;
