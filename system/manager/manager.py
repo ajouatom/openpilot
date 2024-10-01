@@ -20,6 +20,9 @@ from openpilot.system.version import get_build_metadata, terms_version, training
 
 def get_default_params():
   default_params : list[tuple[str, str | bytes]] = [
+    # kans
+    ("LongPitch", "1"),
+    ("EVTable", "1"),
     ("CompletedTrainingVersion", "0"),
     ("DisengageOnAccelerator", "0"),
     ("GsmMetered", "1"),

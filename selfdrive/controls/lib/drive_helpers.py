@@ -10,6 +10,15 @@ CAR_ROTATION_RADIUS = 0.0
 MAX_LATERAL_JERK = 5.0
 MAX_VEL_ERR = 5.0
 
+def apply_deadzone(error, deadzone):
+  if error > deadzone:
+    error -= deadzone
+  elif error < - deadzone:
+    error += deadzone
+  else:
+    error = 0.
+  return error
+
 def clip_curvature(v_ego, prev_curvature, new_curvature):
   v_ego = max(MIN_SPEED, v_ego)
   max_curvature_rate = MAX_LATERAL_JERK / (v_ego**2) # inexact calculation, check https://github.com/commaai/openpilot/pull/24755

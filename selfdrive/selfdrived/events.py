@@ -240,7 +240,7 @@ def below_steer_speed_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.S
     f"Steer Unavailable Below {get_display_speed(CP.minSteerSpeed, metric)}",
     "",
     AlertStatus.userPrompt, AlertSize.small,
-    Priority.LOW, VisualAlert.steerRequired, AudibleAlert.prompt, 0.4)
+    Priority.LOW, VisualAlert.steerRequired, AudibleAlert.none, 0.4)
 
 
 def calibration_incomplete_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
@@ -453,11 +453,11 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
       "Steering Temporarily Unavailable",
       "",
       AlertStatus.userPrompt, AlertSize.small,
-      Priority.LOW, VisualAlert.steerRequired, AudibleAlert.prompt, 1.8),
+      Priority.LOW, VisualAlert.steerRequired, AudibleAlert.none, 1.8),
   },
 
   EventName.preDriverDistracted: {
-    ET.PERMANENT: Alert(
+    ET.WARNING: Alert(
       "Pay Attention",
       "",
       AlertStatus.normal, AlertSize.small,
@@ -465,7 +465,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
 
   EventName.promptDriverDistracted: {
-    ET.PERMANENT: Alert(
+    ET.WARNING: Alert(
       "Pay Attention",
       "Driver Distracted",
       AlertStatus.userPrompt, AlertSize.mid,
@@ -473,7 +473,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
 
   EventName.driverDistracted: {
-    ET.PERMANENT: Alert(
+    ET.WARNING: Alert(
       "DISENGAGE IMMEDIATELY",
       "Driver Distracted",
       AlertStatus.critical, AlertSize.full,
@@ -481,7 +481,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
 
   EventName.preDriverUnresponsive: {
-    ET.PERMANENT: Alert(
+    ET.WARNING: Alert(
       "Touch Steering Wheel: No Face Detected",
       "",
       AlertStatus.normal, AlertSize.small,
@@ -489,7 +489,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
 
   EventName.promptDriverUnresponsive: {
-    ET.PERMANENT: Alert(
+    ET.WARNING: Alert(
       "Touch Steering Wheel",
       "Driver Unresponsive",
       AlertStatus.userPrompt, AlertSize.mid,
@@ -497,7 +497,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
 
   EventName.driverUnresponsive: {
-    ET.PERMANENT: Alert(
+    ET.WARNING: Alert(
       "DISENGAGE IMMEDIATELY",
       "Driver Unresponsive",
       AlertStatus.critical, AlertSize.full,
