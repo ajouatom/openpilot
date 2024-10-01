@@ -27,6 +27,9 @@ class CarrotMan:
   def __init__(self):
     self.params = Params()
     self.params_memory = Params("/dev/shm/params")
+    self.sm = messaging.SubMaster(['deviceState', 'carState', 'controlsState', 'longitudinalPlan', 'modelV2', 'selfdriveState'])
+    self.pm = messaging.PubMaster(['carrotMan'])
+
     self.carrot_serv = CarrotServ()
     
     self.show_panda_debug = False
@@ -53,8 +56,6 @@ class CarrotMan:
     self.is_running = True
     threading.Thread(target=self.broadcast_version_info).start()
 
-    self.sm = messaging.SubMaster(['deviceState', 'carState', 'controlsState', 'longitudinalPlan', 'modelV2', 'selfdriveState'])
-    self.pm = messaging.PubMaster(['carrotMan'])
 
   def get_broadcast_address(self):
     try:
