@@ -15,6 +15,7 @@ private:
   OnroadAlerts *alerts;
   AnnotatedCameraWidget *nvg;
   QColor bg = bg_colors[STATUS_DISENGAGED];
+  QColor bg_long = bg_colors[STATUS_DISENGAGED];
   QHBoxLayout* split;
   void updateStateText();
 
