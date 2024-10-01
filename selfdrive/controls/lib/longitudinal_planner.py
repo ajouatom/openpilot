@@ -18,6 +18,10 @@ from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
 from openpilot.common.swaglog import cloudlog
 
 from openpilot.selfdrive.carrot.carrot_functions import CarrotPlanner
+# kans
+from opendbc.car import structs
+from opendbc.car.gm.values import CAR, EV_CAR
+TransmissionType = structs.CarParams.TransmissionType
 
 LON_MPC_STEP = 0.2  # first step is 0.2s
 A_CRUISE_MIN = -2.0 #-1.2
@@ -196,8 +200,12 @@ class LongitudinalPlanner:
 
     # Interpolate 0.05 seconds and save as starting point for next iteration
     a_prev = self.a_desired
-    self.a_desired = float(interp(self.dt, CONTROL_N_T_IDX, self.a_desired_trajectory))
-    self.v_desired_filter.x = self.v_desired_filter.x + self.dt * (self.a_desired + a_prev) / 2.0
+    if self.CP.transmissionType == TransmissionType.direct and EV_CAR:
+      self.a_desired = float(interp(self.CP.radarTimeStep, CONTROL_N_T_IDX, self.a_desired_trajectory))
+      self.v_desired_filter.x = self.v_desired_filter.x + self.CP.radarTimeStep * (self.a_desired + a_prev) / 2.0
+    else:
+      self.a_desired = float(interp(self.dt, CONTROL_N_T_IDX, self.a_desired_trajectory))
+      self.v_desired_filter.x = self.v_desired_filter.x + self.dt * (self.a_desired + a_prev) / 2.0
 
   def publish(self, sm, pm):
     plan_send = messaging.new_message('longitudinalPlan')
