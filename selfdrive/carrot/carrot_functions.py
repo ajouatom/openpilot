@@ -84,7 +84,7 @@ class CarrotPlanner:
     self.comfortBrake = 2.4 #params.get_float("ComfortBrake") / 100.
     self.comfort_brake = self.comfortBrake
 
-    self.soft_hold_active = False
+    self.soft_hold_active = 0
     self.events = Events()
     self.left_sec = -1
     self.autoNaviSpeedDecelRate = 1.2
@@ -190,7 +190,7 @@ class CarrotPlanner:
     if sm.alive['carrotMan']:
       carrot_man = sm['carrotMan']
       if self.trafficState_carrot == 1 and carrot_man.trafficState == 2:
-        if self.soft_hold_active:
+        if self.soft_hold_active > 0:
           self.events.add(EventName.trafficSignChanged)
         elif self.xState in [XState.e2eStop, XState.e2eStopped]:
           self.xState = XState.e2eCruise
@@ -221,7 +221,8 @@ class CarrotPlanner:
     radarstate = sm['radarState']
     model = sm['modelV2']
 
-    self.soft_hold_active = sm['carControl'].hudControl.softHoldActive
+    #self.soft_hold_active = sm['carControl'].hudControl.softHoldActive # carrot 1
+    self.soft_hold_active = sm['carState'].softHoldActive # carrot 2
 
     self.comfort_brake = self.comfortBrake
 	

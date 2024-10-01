@@ -379,7 +379,7 @@ private:
 
     float   v_ego = 0.0;
     bool    brakeHoldActive = false;
-    bool    softHoldActive = false;
+    int    softHoldActive = 0;
     bool    longActive = false;
 
 protected:
@@ -389,7 +389,7 @@ protected:
 
         v_ego = sm["carState"].getCarState().getVEgo();
         brakeHoldActive = sm["carState"].getCarState().getBrakeHoldActive();
-        softHoldActive = sm["carControl"].getCarControl().getHudControl().getSoftHoldActive();
+        softHoldActive = sm["carState"].getCarState().getSoftHoldActive();
         longActive = sm["carControl"].getCarControl().getLongActive();
         auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
         xState = lp.getXState();

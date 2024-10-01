@@ -170,7 +170,7 @@ class VCruiseCarrot:
     self._gas_tok = False
     self._brake_pressed_count = 0
     self._soft_hold_count = 0
-    self._soft_hold_active = False
+    self._soft_hold_active = 0
     self._cruise_ready = False
     self._cruise_cancel_state = False
     
@@ -335,13 +335,13 @@ class VCruiseCarrot:
 
     if not long_pressed:
       if button_type == ButtonType.accelCruise:
-        if self._soft_hold_active:
-          self._soft_hold_active = False
+        if self._soft_hold_active > 0:
+          self._soft_hold_active = 0
         else:
           v_cruise_kph = self._v_cruise_desired(CS, v_cruise_kph)
 
       elif button_type == ButtonType.decelCruise:
-        if self._soft_hold_active:
+        if self._soft_hold_active > 0:
           self._cruise_control(-1, -1, "Cruise off,softhold mode (decelCruise)")
         elif v_cruise_kph > self.v_ego_kph_set:
           v_cruise_kph = self.v_ego_kph_set
@@ -406,10 +406,11 @@ class VCruiseCarrot:
     
   def _update_cruise_state(self, CS, CC, v_cruise_kph):
     if not CC.enabled:
-      if self._brake_pressed_count == -1 and self._soft_hold_active:
+      if self._brake_pressed_count == -1 and self._soft_hold_active > 0:
+        self._soft_hold_active = 2
         self._cruise_control(1, -1, "Cruise on (soft hold)")
 
-    if self._soft_hold_active:
+    if self._soft_hold_active > 0:
       self.events.append(EventName.softHold)
       self._cruise_cancel_state = False
 
@@ -431,7 +432,7 @@ class VCruiseCarrot:
         self._cruise_control(-1, 3, "Cruise off (traffic sign)")
       elif self.v_ego_kph_set > 30: 
         self._cruise_control(1, 0, "Cruise on (gas pressed)")
-    elif self._brake_pressed_count == -1 and not self._soft_hold_active:
+    elif self._brake_pressed_count == -1 and self._soft_hold_active == 0:
       if 40 < self.v_ego_kph_set:
         v_cruise_kph = self.v_ego_kph_set
         self._cruise_control(1, 0, "Cruise on (speed)")
@@ -462,7 +463,7 @@ class VCruiseCarrot:
       self._gas_pressed_count_last = self._gas_pressed_count
       self._gas_pressed_value = max(CS.gas, self._gas_pressed_value) if self._gas_pressed_count > 1 else CS.gas
       self._gas_tok = False
-      self._soft_hold_active = False
+      self._soft_hold_active = 0
     else:      
       self._gas_tok = True if 0 < self._gas_pressed_count < self._gas_tok_timer else False
       self._gas_pressed_count = min(-1, self._gas_pressed_count - 1)
@@ -474,7 +475,7 @@ class VCruiseCarrot:
       self._cruise_ready = False
       self._brake_pressed_count = max(1, self._brake_pressed_count + 1)
       self._soft_hold_count = self._soft_hold_count + 1 if CS.vEgo < 0.1 else 0
-      self._soft_hold_active = True if self._soft_hold_count > 60 else False
+      self._soft_hold_active = 1 if self._soft_hold_count > 60 else 0
     else:
       self._soft_hold_count = 0
       self._brake_pressed_count = min(-1, self._brake_pressed_count - 1)

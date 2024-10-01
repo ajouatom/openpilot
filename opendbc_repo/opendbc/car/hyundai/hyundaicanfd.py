@@ -15,7 +15,7 @@ class CanBus(CanBusBase):
     # have a different harness than the HDA1 and non-HDA variants in order to split
     # a different bus, since the steering is done by different ECUs.
     self._a, self._e = 1, 0
-    if hda2 and Params().get_int("HyundaiCameraSCC") == 0:  #¹è¼±°³Á¶´Â ¹«Á¶°Ç Bus0°¡ ECANÀÓ.
+    if hda2 and Params().get_int("HyundaiCameraSCC") == 0:  #ë°°ì„ ê°œì¡°ëŠ” ë¬´ì¡°ê±´ Bus0ê°€ ECANìž„.
       self._a, self._e = 0, 1
 
     if Params().get_int("HyundaiCameraSCC") == 2:
@@ -183,11 +183,12 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
   #values["SET_ME_3"] = 0x3
   values["SET_ME_TMP_64"] = 0x64
 
-  values["NEW_SIGNAL_3"] = 0  # 1ÀÌµÇ¸é Â÷¼±ÀÌÅ»¹æÁö ¾Ë¶÷ÀÌ ¶á´Ù°í...
+  values["NEW_SIGNAL_3"] = 0  # 1ì´ë˜ë©´ ì°¨ì„ ì´íƒˆë°©ì§€ ì•ŒëžŒì´ ëœ¬ë‹¤ê³ ...
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
 
-def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control, jerk_u, jerk_l):
-  enabled = enabled or hud_control.softHold > 0
+def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control, jerk_u, jerk_l, CS):
+  
+  enabled = enabled or CS.out.softHoldActive > 0
   jerk = 5
   jn = jerk / 50
   if not enabled or gas_override:
@@ -199,7 +200,7 @@ def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_ov
   values = {
     "ACCMode": 0 if not enabled else (2 if gas_override else 1),
     "MainMode_ACC": 1,
-    "StopReq": 1 if stopping or hud_control.softHoldActive > 0 else 0,
+    "StopReq": 1 if stopping or CS.out.softHoldActive > 0 else 0,
     "aReqValue": a_val,
     "aReqRaw": a_raw,
     "VSetDis": set_speed,

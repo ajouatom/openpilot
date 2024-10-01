@@ -63,8 +63,9 @@ class LongControl:
   def reset(self):
     self.pid.reset()
 
-  def update(self, active, CS, long_plan, accel_limits, t_since_plan, soft_hold_active):
+  def update(self, active, CS, long_plan, accel_limits, t_since_plan):
 
+    soft_hold_active = CS.softHoldActive > 0
     a_target = long_plan.aTarget
     v_target = long_plan.vTarget
     should_stop = long_plan.shouldStop

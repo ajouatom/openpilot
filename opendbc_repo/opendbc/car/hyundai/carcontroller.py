@@ -65,6 +65,7 @@ class CarController(CarControllerBase):
     self.max_angle_frames = MAX_ANGLE_FRAMES
     self.blinking_signal = False # 1Hz
     self.blinking_frame = int(1.0 / DT_CTRL)
+    #self.soft_hold_mode = 0
 
   def update(self, CC, CS, now_nanos):
 
@@ -80,6 +81,7 @@ class CarController(CarControllerBase):
         self.params.STEER_DELTA_UP = steerDeltaUp
       if steerDeltaDown > 0:
         self.params.STEER_DELTA_DOWN = steerDeltaDown
+      #self.soft_hold_mode = 2 if params.get_int("AutoCruiseControl") > 0 else 0
 
     actuators = CC.actuators
     hud_control = CC.hudControl
@@ -184,7 +186,7 @@ class CarController(CarControllerBase):
                                                              set_speed_in_units, hud_control, self.hyundai_jerk.jerk_u, self.hyundai_jerk.jerk_l, CS.cruise_info))
           else:
             can_sends.append(hyundaicanfd.create_acc_control(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
-                                                             set_speed_in_units, hud_control, self.hyundai_jerk.jerk_u, self.hyundai_jerk.jerk_l))
+                                                             set_speed_in_units, hud_control, self.hyundai_jerk.jerk_u, self.hyundai_jerk.jerk_l, CS))
           self.accel_last = accel
       else:
         # button presses

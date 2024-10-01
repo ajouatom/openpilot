@@ -114,6 +114,7 @@ class CarState:
 
   tpms: 'CarState.Tpms' = field(default_factory=lambda: CarState.Tpms())
   vCluRatio: float = auto_field()
+  softHoldActive: int = auto_field()
 
   @auto_dataclass
   class Tpms:
@@ -261,8 +262,7 @@ class CarControl:
     leftLaneVisible: bool = auto_field()
     rightLaneDepart: bool = auto_field()
     leftLaneDepart: bool = auto_field()
-    leadDistanceBars: int = auto_field()  # 1-3: 1 is closest, 3 is farthest. some ports may utilize 2-4 bars instead
-    softHoldActive: bool = auto_field()
+    leadDistanceBars: int = auto_field()  # 1-3: 1 is closest, 3 is farthest. some ports may utilize 2-4 bars instead    
     activeCarrot: int = auto_field()
 
     class VisualAlert(StrEnum):

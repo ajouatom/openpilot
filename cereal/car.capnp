@@ -262,6 +262,7 @@ struct CarState {
   tpms @55 : Tpms;
   vCluRatio @56 :Float32;
   logCarrot @57 :Text;
+  softHoldActive @58 :Int16;    #0: not active, 1: active ready, 2: activated
 
   struct Tpms {
     fl @0 :Float32;
@@ -431,8 +432,7 @@ struct CarControl {
     rightLaneDepart @8: Bool;
     leftLaneDepart @9: Bool;
     leadDistanceBars @10: Int8;  # 1-3: 1 is closest, 3 is farthest. some ports may utilize 2-4 bars instead
-    softHoldActive @11: Bool;
-    activeCarrot @12: Int16;
+    activeCarrot @11: Int16;
 
     enum VisualAlert {
       # these are the choices from the Honda

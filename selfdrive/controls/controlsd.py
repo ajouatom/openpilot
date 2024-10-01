@@ -92,7 +92,7 @@ class Controls:
     gear = car.CarState.GearShifter
     driving_gear = CS.gearShifter not in (gear.neutral, gear.park, gear.reverse, gear.unknown)
     lateral_enabled = driving_gear    
-    self.soft_hold_active = car.OnroadEvent.EventName.softHold in [e.name for e in self.sm['onroadEvents']]
+    #self.soft_hold_active = CS.softHoldActive #car.OnroadEvent.EventName.softHold in [e.name for e in self.sm['onroadEvents']]
 
     # Check which actuators can be enabled
     standstill = CS.vEgo <= max(self.CP.minSteerSpeed, MIN_LATERAL_CONTROL_SPEED) or CS.standstill
@@ -115,7 +115,7 @@ class Controls:
     # accel PID loop
     pid_accel_limits = self.CI.get_pid_accel_limits(self.CP, CS.vEgo, CS.vCruise * CV.KPH_TO_MS)
     t_since_plan = (self.sm.frame - self.sm.recv_frame['longitudinalPlan']) * DT_CTRL
-    actuators.accel = self.LoC.update(CC.longActive, CS, long_plan, pid_accel_limits, t_since_plan, self.soft_hold_active)
+    actuators.accel = self.LoC.update(CC.longActive, CS, long_plan, pid_accel_limits, t_since_plan)
 
     # Steering PID loop and lateral MPC
     self.desired_curvature = clip_curvature(CS.vEgo, self.desired_curvature, model_v2.action.desiredCurvature)
@@ -158,7 +158,6 @@ class Controls:
 
     hudControl = CC.hudControl
     
-    hudControl.softHoldActive = self.soft_hold_active
     hudControl.activeCarrot = self.sm['carrotMan'].active
     
     lp = self.sm['longitudinalPlan']

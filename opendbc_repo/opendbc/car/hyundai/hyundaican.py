@@ -132,6 +132,12 @@ def create_lfahda_mfc(packer, CC, blinking_signal):
 
 def create_acc_commands_scc(packer, enabled, accel, jerk, idx, hud_control, set_speed, stopping, long_override, use_fca, CS):
   from opendbc.car.hyundai.carcontroller import HyundaiJerk
+  soft_hold_active = CS.out.softHoldActive
+  soft_hold_info = soft_hold_active > 1 and enabled
+  soft_hold_mode = 2 ## some cars can't enable while braking
+  long_enabled = enabled or (soft_hold_active > 0 and soft_hold_mode == 2)
+  warning_front = False
+
   commands = []
   if CS.scc11 is not None:
     values = CS.scc11
@@ -139,7 +145,7 @@ def create_acc_commands_scc(packer, enabled, accel, jerk, idx, hud_control, set_
     values["TauGapSet"] = hud_control.leadDistanceBars
     values["VSetDis"] = set_speed if enabled else 0
     values["AliveCounterACC"] = idx % 0x10
-    #values["SCCInfoDisplay"] = 3 if longActive and radarAlarm else 4 if longActive and softHoldInfo else 0 if enabled else 0   #2: 크루즈 선택, 3: 전방상황주의, 4: 출발준비
+    values["SCCInfoDisplay"] = 3 if warning_front else 4 if soft_hold_info else 0 if enabled else 0   #2: 크루즈 선택, 3: 전방상황주의, 4: 출발준비
     values["ObjValid"] = 1
     #values["ACC_ObjStatus"] = 1
     #values["ACC_ObjLatPos"] = 0
@@ -150,7 +156,7 @@ def create_acc_commands_scc(packer, enabled, accel, jerk, idx, hud_control, set_
     
   if CS.scc12 is not None:
     values = CS.scc12
-    values["ACCMode"] = 2 if enabled and long_override else 1 if enabled else 0
+    values["ACCMode"] = 2 if enabled and long_override else 1 if long_enabled else 0
     values["StopReq"] = 1 if stopping else 0
     values["aReqRaw"] = accel
     values["aReqValue"] = accel
@@ -169,7 +175,7 @@ def create_acc_commands_scc(packer, enabled, accel, jerk, idx, hud_control, set_
     values["ComfortBandLower"] = jerk.cb_lower
     values["JerkUpperLimit"] = jerk.jerk_u
     values["JerkLowerLimit"] = jerk.jerk_l
-    values["ACCMode"] = 2 if enabled and long_override else 1 if enabled else 4 # stock will always be 4 instead of 0 after first disengage
+    values["ACCMode"] = 2 if enabled and long_override else 1 if long_enabled else 4 # stock will always be 4 instead of 0 after first disengage
     values["ObjGap"] = 2 if hud_control.leadVisible else 0 # 5: >30, m, 4: 25-30 m, 3: 20-25 m, 2: < 20 m, 0: no lead
     #values["ObjGap2"] = 1
     commands.append(packer.make_can_msg("SCC14", 0, values))
