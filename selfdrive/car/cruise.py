@@ -395,7 +395,9 @@ class VCruiseCarrot:
     return v_cruise_kph
 
   def _cruise_control(self, enable, cancel_timer, reason):
-    if enable > 0 and self._cancel_timer > 0 and cancel_timer >= 0:
+    if self._cruise_cancel_state and self._soft_hold_active != 2:
+      self._add_log(reason + " > Cancel state")
+    elif enable > 0 and self._cancel_timer > 0 and cancel_timer >= 0:
       enable = 0
       self._add_log(reason + " > Canceled")
     else:
