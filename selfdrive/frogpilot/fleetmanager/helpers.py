@@ -440,9 +440,9 @@ def transform_lng(lng, lat):
   ret += (150.0 * math.sin(lng / 12.0 * pi) + 300.0 * math.sin(lng / 30.0 * pi)) * 2.0 / 3.0
   return ret
 
-from openpilot.system.manager import manager
+from openpilot.system.manager.manager import get_default_params_key
 def get_all_toggle_values():
-  all_keys = manager.get_default_params_key()
+  all_keys = get_default_params_key()
 
   toggle_values = {}
   for key in all_keys:
