@@ -93,7 +93,7 @@ class CarState(CarStateBase):
       left_whl_sign * pt_cp.vl["EBCMWheelSpdRear"]["RLWheelSpd"],
       right_whl_sign * pt_cp.vl["EBCMWheelSpdRear"]["RRWheelSpd"],
     )
-    ret.vEgoRaw = mean([ret.wheelSpeeds.fl, ret.wheelSpeeds.fr, ret.wheelSpeeds.rl, ret.wheelSpeeds.rr])
+    ret.vEgoRaw = (ret.wheelSpeeds.fl + ret.wheelSpeeds.fr + ret.wheelSpeeds.rl + ret.wheelSpeeds.rr) / 4.
     ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
     # sample rear wheel speeds, standstill=True if ECM allows engagement with brake
     ret.standstill = abs(ret.wheelSpeeds.rl) <= STANDSTILL_THRESHOLD and abs(ret.wheelSpeeds.rr) <= STANDSTILL_THRESHOLD
@@ -200,8 +200,11 @@ class CarState(CarStateBase):
       cluSpeed = pt_cp.vl["SPEED_RELATED"]["ClusterSpeed"]
       ret.vEgoCluster = cluSpeed * speed_conv
       vEgoClu, aEgoClu = self.update_clu_speed_kf(ret.vEgoCluster)
-      ret.vCluRatio = (ret.vEgo / vEgoClu) if (vEgoClu > 3. and ret.vEgo > 3.) else 1.0
-
+      if self.CP.carFingerprint in CAR.CHEVROLET_VOLT:
+        ret.vCluRatio = (ret.vEgo / vEgoClu) if (vEgoClu > 3. and ret.vEgo > 3.) else 1.0
+        #print("vCluRatio={}".format(ret.vCluRatio))
+      else:
+        ret.vCluRatio = 0.96
 
     # Don't add event if transitioning from INIT, unless it's to an actual button
     buttonEvents = [] # kans

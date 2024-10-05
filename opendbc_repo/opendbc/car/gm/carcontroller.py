@@ -1,3 +1,5 @@
+from openpilot.common.params import Params
+from openpilot.common.filter_simple import FirstOrderFilter
 
 from opendbc.can.packer import CANPacker
 from opendbc.car import DT_CTRL, apply_driver_steer_torque_limits, structs
@@ -30,6 +32,7 @@ class CarController(CarControllerBase):
     self.apply_steer_last = 0
     self.apply_gas = 0
     self.apply_brake = 0
+    self.apply_speed = 0 # kans: button spam
     self.frame = 0
     self.last_steer_frame = 0
     self.last_button_frame = 0
@@ -39,6 +42,7 @@ class CarController(CarControllerBase):
     self.lka_icon_status_last = (False, False)
 
     self.params = CarControllerParams(self.CP)
+    self.params_ = Params() # kans: button spam
 
     self.packer_pt = CANPacker(DBC[self.CP.carFingerprint]['pt'])
     self.packer_obj = CANPacker(DBC[self.CP.carFingerprint]['radar'])
@@ -51,9 +55,20 @@ class CarController(CarControllerBase):
     self.accel_g = 0.0
 
   def update(self, CC, CS, now_nanos):
-    params = Params()
-    self.long_pitch = params.get_bool("LongPitch")
-    self.use_ev_tables = params.get_bool("EVTable")
+
+    if self.frame % 50 == 0:
+      params = Params()
+      steerMax = params.get_int("CustomSteerMax")
+      steerDeltaUp = params.get_int("CustomSteerDeltaUp")
+      steerDeltaDown = params.get_int("CustomSteerDeltaDown")
+      if steerMax > 0:
+        self.params.STEER_MAX = steerMax
+      if steerDeltaUp > 0:
+        self.params.STEER_DELTA_UP = steerDeltaUp
+      if steerDeltaDown > 0:
+        self.params.STEER_DELTA_DOWN = steerDeltaDown
+    self.long_pitch = Params().get_bool("LongPitch")
+    self.use_ev_tables = Params().get_bool("EVTable")
 
     actuators = CC.actuators
     accel = brake_accel = actuators.accel
@@ -63,12 +78,6 @@ class CarController(CarControllerBase):
     if hud_v_cruise > 70:
       hud_v_cruise = 0
 
-    steerMax = int(params.get("CustomSteerMax"))
-    steerDeltaUp = int(params.get("CustomSteerDeltaUp"))
-    steerDeltaDown = int(params.get("CustomSteerDeltaDown"))
-    self.params.STEER_MAX = self.params.STEER_MAX if steerMax <= 0 else steerMax
-    self.params.STEER_DELTA_UP = self.params.STEER_DELTA_UP if steerDeltaUp <= 0 else steerDeltaUp
-    self.params.STEER_DELTA_DOWN = self.params.STEER_DELTA_DOWN if steerDeltaDown <= 0 else steerDeltaDown
 
     # Send CAN commands.
     can_sends = []
@@ -224,7 +233,10 @@ class CarController(CarControllerBase):
       if (self.frame - self.last_button_frame) * DT_CTRL > 0.04:
         if self.cancel_counter > CAMERA_CANCEL_DELAY_FRAMES:
           self.last_button_frame = self.frame
-          can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.CAMERA, CS.buttons_counter, CruiseButtons.CANCEL))
+          if self.CP.carFingerprint in SDGM_CAR:
+            can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.POWERTRAIN, CS.buttons_counter, CruiseButtons.CANCEL))
+          else:
+            can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.CAMERA, CS.buttons_counter, CruiseButtons.CANCEL))
 
     if self.CP.networkLocation == NetworkLocation.fwdCamera:
       # Silence "Take Steering" alert sent by camera, forward PSCMStatus with HandsOffSWlDetectionStatus=1
@@ -237,6 +249,7 @@ class CarController(CarControllerBase):
     new_actuators.steerOutputCan = self.apply_steer_last
     new_actuators.gas = self.apply_gas
     new_actuators.brake = self.apply_brake
+    new_actuators.speed = self.apply_speed # kans: button spam
 
     self.frame += 1
     return new_actuators, can_sends

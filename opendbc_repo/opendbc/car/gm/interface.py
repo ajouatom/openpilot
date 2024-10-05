@@ -146,6 +146,7 @@ class CarInterface(CarInterfaceBase):
       # supports stop and go, but initial engage must (conservatively) be above 18mph
       ret.minEnableSpeed = -1 * CV.MPH_TO_MS
       ret.minSteerSpeed = (6.7 if useEVTables else 7) * CV.MPH_TO_MS
+      ret.safetyConfigs[0].safetyParam |= Panda.FLAG_GM_HW_ASCM_LONG
 
       # Tuning
       ret.longitudinalTuning.kpV = [1.15]
