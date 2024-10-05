@@ -18,19 +18,8 @@ from openpilot.system.athena.registration import register, UNREGISTERED_DONGLE_I
 from openpilot.common.swaglog import cloudlog, add_file_handler
 from openpilot.system.version import get_build_metadata, terms_version, training_version
 
-def manager_init() -> None:
-  save_bootlog()
-
-  build_metadata = get_build_metadata()
-
-  params = Params()
-  params.clear_all(ParamKeyType.CLEAR_ON_MANAGER_START)
-  params.clear_all(ParamKeyType.CLEAR_ON_ONROAD_TRANSITION)
-  params.clear_all(ParamKeyType.CLEAR_ON_OFFROAD_TRANSITION)
-  if build_metadata.release_channel:
-    params.clear_all(ParamKeyType.DEVELOPMENT_ONLY)
-
-  default_params: list[tuple[str, str | bytes]] = [
+def get_default_params():
+  default_params : list[tuple[str, str | bytes]] = [
     ("CompletedTrainingVersion", "0"),
     ("DisengageOnAccelerator", "0"),
     ("GsmMetered", "1"),
@@ -96,8 +85,41 @@ def manager_init() -> None:
     ("CustomSteerDeltaDown", "0"),       
     ("SteerActuatorDelay", "30"),       
     ("MaxTimeOffroadMin", "60"),
-
   ]
+  return default_params
+
+def set_default_params():
+  params = Params()
+  default_params = get_default_params()
+  try:
+    default_params.remove(("GMapKey", "0"))
+    defulat_params.remove(("CompletedTrainingVersion", "0"))
+    default_params.remove(("LanguageSetting", "main_en"))
+    default_params.remove(("GsmMetered", "1"))
+  except ValueError:
+    pass
+  for k, v in default_params:
+    params.put(k, v)
+    print(f"SetToDefault[{k}]={v}")
+
+def get_defalut_params_key():
+  default_params = get_default_params()
+  all_keys = [key for key, _ in default_params]
+  return all_keys
+
+def manager_init() -> None:
+  save_bootlog()
+
+  build_metadata = get_build_metadata()
+
+  params = Params()
+  params.clear_all(ParamKeyType.CLEAR_ON_MANAGER_START)
+  params.clear_all(ParamKeyType.CLEAR_ON_ONROAD_TRANSITION)
+  params.clear_all(ParamKeyType.CLEAR_ON_OFFROAD_TRANSITION)
+  if build_metadata.release_channel:
+    params.clear_all(ParamKeyType.DEVELOPMENT_ONLY)
+
+  default_params = get_default_params()
 
   if params.get_bool("RecordFrontLock"):
     params.put_bool("RecordFront", True)
