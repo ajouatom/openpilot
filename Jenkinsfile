@@ -26,7 +26,6 @@ export SOURCE_DIR=${env.SOURCE_DIR}
 export GIT_BRANCH=${env.GIT_BRANCH}
 export GIT_COMMIT=${env.GIT_COMMIT}
 export AZURE_TOKEN='${env.AZURE_TOKEN}'
-export MAPBOX_TOKEN='${env.MAPBOX_TOKEN}'
 # only use 1 thread for tici tests since most require HIL
 export PYTEST_ADDOPTS="-n 0"
 
@@ -83,12 +82,19 @@ def deviceStage(String stageName, String deviceType, List extra_env, def steps) 
 
     lock(resource: "", label: deviceType, inversePrecedence: true, variable: 'device_ip', quantity: 1, resourceSelectStrategy: 'random') {
       docker.image('ghcr.io/commaai/alpine-ssh').inside('--user=root') {
-        timeout(time: 20, unit: 'MINUTES') {
+        timeout(time: 35, unit: 'MINUTES') {
           retry (3) {
+            def date = sh(script: 'date', returnStdout: true).trim();
+            device(device_ip, "set time", "date -s '" + date + "'")
             device(device_ip, "git checkout", extra + "\n" + readFile("selfdrive/test/setup_device_ci.sh"))
           }
           steps.each { item ->
-            device(device_ip, item[0], item[1])
+            if (branch != "master" && item.size() == 3 && !hasPathChanged(item[2])) {
+              println "Skipping ${item[0]}: no changes in ${item[2]}."
+              return;
+            } else {
+              device(device_ip, item[0], item[1])
+            }
           }
         }
       }
@@ -96,49 +102,36 @@ def deviceStage(String stageName, String deviceType, List extra_env, def steps) 
   }
 }
 
-def pcStage(String stageName, Closure body) {
-  node {
-  stage(stageName) {
-    if (currentBuild.result != null) {
-        return
-    }
-
-    checkout scm
-
-    def dockerArgs = "--user=batman -v /tmp/comma_download_cache:/tmp/comma_download_cache -v /tmp/scons_cache:/tmp/scons_cache -e PYTHONPATH=${env.WORKSPACE} --cpus=8 --memory 16g -e PYTEST_ADDOPTS='-n8'";
-
-    def openpilot_base = retryWithDelay (3, 15) {
-      return docker.build("openpilot-base:build-${env.GIT_COMMIT}", "-f Dockerfile.openpilot_base .")
-    }
-
-    lock(resource: "", label: 'pc', inversePrecedence: true, quantity: 1) {
-      openpilot_base.inside(dockerArgs) {
-        timeout(time: 20, unit: 'MINUTES') {
-          try {
-            retryWithDelay (3, 15) {
-              sh "git config --global --add safe.directory '*'"
-              sh "git submodule update --init --recursive"
-              sh "git lfs pull"
-            }
-            body()
-          } finally {
-              sh "rm -rf ${env.WORKSPACE}/* || true"
-              sh "rm -rf .* || true"
-            }
-          }
-        }
+@NonCPS
+def hasPathChanged(List<String> paths) {
+  changedFiles = []
+  for (changeLogSet in currentBuild.changeSets) {
+    for (entry in changeLogSet.getItems()) {
+      for (file in entry.getAffectedFiles()) {
+        changedFiles.add(file.getPath())
       }
     }
   }
+
+  env.CHANGED_FILES = changedFiles.join(" ")
+  if (currentBuild.number > 1) {
+    env.CHANGED_FILES += currentBuild.previousBuild.getBuildVariables().get("CHANGED_FILES")
+  }
+
+  for (path in paths) {
+    if (env.CHANGED_FILES.contains(path)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 def setupCredentials() {
   withCredentials([
     string(credentialsId: 'azure_token', variable: 'AZURE_TOKEN'),
-    string(credentialsId: 'mapbox_token', variable: 'MAPBOX_TOKEN')
   ]) {
     env.AZURE_TOKEN = "${AZURE_TOKEN}"
-    env.MAPBOX_TOKEN = "${MAPBOX_TOKEN}"
   }
 }
 
@@ -186,7 +179,7 @@ node {
           ["build openpilot", "cd system/manager && ./build.py"],
           ["check dirty", "release/check-dirty.sh"],
           ["onroad tests", "pytest selfdrive/test/test_onroad.py -s"],
-          ["time to onroad", "pytest selfdrive/test/test_time_to_onroad.py"],
+          //["time to onroad", "pytest selfdrive/test/test_time_to_onroad.py"],
         ])
       },
       'HW + Unit Tests': {

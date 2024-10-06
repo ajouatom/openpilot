@@ -431,8 +431,8 @@ class Tici(HardwareBase):
 
     # *** GPU config ***
     # https://github.com/commaai/agnos-kernel-sdm845/blob/master/arch/arm64/boot/dts/qcom/sdm845-gpu.dtsi#L216
-    sudo_write("1", "/sys/class/kgsl/kgsl-3d0/min_pwrlevel")
-    sudo_write("1", "/sys/class/kgsl/kgsl-3d0/max_pwrlevel")
+    sudo_write("0", "/sys/class/kgsl/kgsl-3d0/min_pwrlevel")
+    sudo_write("0", "/sys/class/kgsl/kgsl-3d0/max_pwrlevel")
     sudo_write("1", "/sys/class/kgsl/kgsl-3d0/force_bus_on")
     sudo_write("1", "/sys/class/kgsl/kgsl-3d0/force_clk_on")
     sudo_write("1", "/sys/class/kgsl/kgsl-3d0/force_rail_on")
@@ -563,8 +563,10 @@ class Tici(HardwareBase):
 
   def reset_internal_panda(self):
     gpio_init(GPIO.STM_RST_N, True)
+    gpio_init(GPIO.STM_BOOT0, True)
 
     gpio_set(GPIO.STM_RST_N, 1)
+    gpio_set(GPIO.STM_BOOT0, 0)
     time.sleep(1)
     gpio_set(GPIO.STM_RST_N, 0)
 
