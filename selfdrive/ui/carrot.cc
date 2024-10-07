@@ -1832,6 +1832,7 @@ void ui_draw(UIState *s, ModelRenderer* model_renderer, int w, int h) {
   drawCarrot.drawDebug(s);
   drawCarrot.drawDateTime(s);
   drawCarrot.drawConnInfo(s);
+  drawCarrot.drawTpms(s);
 
   drawTurnInfo.draw(s);
 
