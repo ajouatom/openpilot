@@ -449,6 +449,8 @@ class SelfdriveD:
     ss.alertType = self.AM.current_alert.alert_type
     ss.alertSound = self.AM.current_alert.audible_alert
 
+    ss.distanceTraveled = float(self.distance_traveled)
+
     self.pm.send('selfdriveState', ss_msg)
 
     # onroadEvents - logged every second or on change

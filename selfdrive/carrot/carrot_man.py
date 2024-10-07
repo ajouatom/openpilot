@@ -1006,11 +1006,12 @@ class CarrotServ:
   def update_navi(self, remote_ip, sm, pm, vturn_speed):
 
     self.update_params()
-    if sm.alive['carState']:
+    if sm.alive['carState'] and sm.alive['selfdriveState']:
       CS = sm['carState']
       v_ego = CS.vEgo
-      delta_dist = v_ego * 0.1#CS.totalDistance - self.totalDistance
-      #self.totalDistance = CS.totalDistance
+      distanceTraveled = sm['selfdriveState'].distanceTraveled
+      delta_dist = distanceTraveled - self.totalDistance
+      self.totalDistance = distanceTraveled
     else:
       v_ego = 0
       delta_dist = 0

@@ -846,6 +846,7 @@ struct SelfdriveState {
   # configurable driving settings
   experimentalMode @10 :Bool;
   personality @11 :LongitudinalPersonality;
+  distanceTraveled @13 :Float32;
 
   enum OpenpilotState @0xdbe58b96d2d1ac61 {
     disabled @0;
