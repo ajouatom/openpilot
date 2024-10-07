@@ -296,6 +296,7 @@ class HyundaiJerk:
 
     accel_diff /= DT_CTRL
     self.jerk = self.jerk * 0.9 + accel_diff * 0.1
+    self.accel_last = accel
     return self.jerk
 
   def make_jerk(self, CP, CS, accel, actuators, hud_control):

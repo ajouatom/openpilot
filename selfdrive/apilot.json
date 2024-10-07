@@ -342,10 +342,10 @@
     {
       "group": "크루즈",
       "name": "AutoSpeedUptoRoadSpeedLimit",
-      "title": "자동속도증가모드 (100)%",
-      "descr": "전방차량따라 로드스피드까지 자동속도올림.",
+      "title": "자동속도증가 (100)%",
+      "descr": "모델에서 제공하는 속도까지 자동속도증가x로드스피드까지 자동속도올림.",
       "egroup": "CRUISE",
-      "etitle": "AutoSyncSpeedMax:LeadCar(100)%",
+      "etitle": "AutoSpeedUpx:(100)%",
       "edescr": "",
       "min": 0,
       "max": 200,

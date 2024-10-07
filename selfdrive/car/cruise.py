@@ -175,6 +175,7 @@ class VCruiseCarrot:
     self._soft_hold_active = 0
     self._cruise_ready = False
     self._cruise_cancel_state = False
+    self._activate_cruise = 0
     
     #self.events = []
     self.xState = 0
