@@ -187,6 +187,9 @@ bool longitudinal_speed_checks(int desired_speed, const LongitudinalLimits limit
 bool longitudinal_gas_checks(int desired_gas, const LongitudinalLimits limits);
 bool longitudinal_transmission_rpm_checks(int desired_transmission_rpm, const LongitudinalLimits limits);
 bool longitudinal_brake_checks(int desired_brake, const LongitudinalLimits limits);
+// gm: gas_interceptor
+bool longitudinal_interceptor_checks(const CANPacket_t *to_send);
+
 void pcm_cruise_check(bool cruise_engaged);
 
 void safety_tick(const safety_config *safety_config);
@@ -194,6 +197,10 @@ void safety_tick(const safety_config *safety_config);
 // This can be set by the safety hooks
 extern bool controls_allowed;
 extern bool relay_malfunction;
+// gm: gas_interceptor
+extern bool enable_gas_interceptor;
+extern int gas_interceptor_prev;
+
 extern bool gas_pressed;
 extern bool gas_pressed_prev;
 extern bool brake_pressed;

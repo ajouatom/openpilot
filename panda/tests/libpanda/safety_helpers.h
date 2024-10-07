@@ -42,6 +42,10 @@ int get_alternative_experience(void){
 bool get_relay_malfunction(void){
   return relay_malfunction;
 }
+// gm: gas_interceptor
+int get_gas_interceptor_prev(void){
+  return gas_interceptor_prev;
+}
 
 bool get_gas_pressed_prev(void){
   return gas_pressed_prev;

@@ -2,7 +2,7 @@ from openpilot.common.params import Params
 from openpilot.common.filter_simple import FirstOrderFilter
 
 from opendbc.can.packer import CANPacker
-from opendbc.car import DT_CTRL, apply_driver_steer_torque_limits, structs
+from opendbc.car import DT_CTRL, apply_driver_steer_torque_limits, structs, create_gas_interceptor_command # gm: gas_interceptor
 from opendbc.car.gm import gmcan
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.gm.values import DBC, CanBus, CarControllerParams, CruiseButtons, GMFlags, CC_ONLY_CAR, SDGM_CAR, EV_CAR, AccState
@@ -37,6 +37,7 @@ class CarController(CarControllerBase):
     self.last_steer_frame = 0
     self.last_button_frame = 0
     self.cancel_counter = 0
+    self.pedal_steady = 0.
 
     self.lka_steering_cmd_counter = 0
     self.lka_icon_status_last = (False, False)
@@ -53,6 +54,21 @@ class CarController(CarControllerBase):
 
     self.pitch = FirstOrderFilter(0., 0.09 * 4, DT_CTRL * 4)  # runs at 25 Hz
     self.accel_g = 0.0
+
+  # gm: gas_interceptor
+  @staticmethod
+  def calc_pedal_command(accel: float, long_active: bool) -> float:
+    if not long_active: return 0.
+
+    zero = 0.15625  # 40/256
+    if accel > 0.:
+      # Scales the accel from 0-1 to 0.156-1
+      pedal_gas = clip(((1 - zero) * accel + zero), 0., 1.)
+    else:
+      # if accel is negative, -0.1 -> 0.015625
+      pedal_gas = clip(zero + accel, 0., zero)  # Make brake the same size as gas, but clip to regen
+
+    return pedal_gas
 
   def update(self, CC, CS, now_nanos):
 
@@ -129,8 +145,8 @@ class CarController(CarControllerBase):
           brake_accel = actuators.accel + self.accel_g * interp(CS.out.vEgo, BRAKE_PITCH_FACTOR_BP, BRAKE_PITCH_FACTOR_V)
 
         at_full_stop = CC.longActive and CS.out.standstill
-        near_stop = CC.longActive and (CS.out.vEgo < self.params.NEAR_STOP_BRAKE_PHASE)
-
+        near_stop = CC.longActive and (abs(CS.out.vEgo) < self.params.NEAR_STOP_BRAKE_PHASE)
+        interceptor_gas_cmd = 0 # gm: gas_interceptor
         if not CC.longActive:
           # ASCM sends max regen when not enabled
           self.apply_gas = self.params.INACTIVE_REGEN
@@ -151,6 +167,16 @@ class CarController(CarControllerBase):
           # FIXME: brakes aren't applied immediately when enabling at a stop
           if stopping:
             self.apply_gas = self.params.INACTIVE_REGEN
+          # gm: gas_interceptor
+          if self.CP.carFingerprint in CC_ONLY_CAR:
+            # gas interceptor only used for full long control on cars without ACC
+            interceptor_gas_cmd = self.calc_pedal_command(actuators.accel, CC.longActive)
+		# gm: gas_interceptor
+        if self.CP.enableGasInterceptorDEPRECATED and self.apply_gas > self.params.INACTIVE_REGEN and CS.out.cruiseState.standstill:
+          # "Tap" the accelerator pedal to re-engage ACC
+          interceptor_gas_cmd = self.params.SNG_INTERCEPTOR_GAS
+          self.apply_brake = 0
+          self.apply_gas = self.params.INACTIVE_REGEN
 
         idx = (self.frame // 4) % 4
 
@@ -158,16 +184,16 @@ class CarController(CarControllerBase):
           if CC.longActive and CS.out.vEgo > self.CP.minEnableSpeed:
             # Using extend instead of append since the message is only sent intermittently
             can_sends.extend(gmcan.create_gm_cc_spam_command(self.packer_pt, self, CS, actuators))
+        # gm: gas_interceptor
+        if self.CP.enableGasInterceptorDEPRECATED:
+          can_sends.append(create_gas_interceptor_command(self.packer_pt, interceptor_gas_cmd, idx))
         if self.CP.carFingerprint not in CC_ONLY_CAR:
-          at_full_stop = CC.longActive and CS.out.standstill
-          near_stop = CC.longActive and (abs(CS.out.vEgo) < self.params.NEAR_STOP_BRAKE_PHASE)
           friction_brake_bus = CanBus.CHASSIS
           # GM Camera exceptions
           # TODO: can we always check the longControlState?
           if self.CP.networkLocation == NetworkLocation.fwdCamera and self.CP.carFingerprint not in CC_ONLY_CAR:
             at_full_stop = at_full_stop and stopping
             friction_brake_bus = CanBus.POWERTRAIN
-            
 
           if self.CP.autoResumeSng:
             resume = actuators.longControlState != LongCtrlState.starting or CC.cruiseControl.resume
@@ -216,9 +242,7 @@ class CarController(CarControllerBase):
         can_sends += gmcan.create_adas_keepalive(CanBus.POWERTRAIN)
 
       # TODO: integrate this with the code block below?
-      if (
-          (self.CP.flags & GMFlags.PEDAL_LONG.value)  # Always cancel stock CC when using pedal interceptor
-          or (self.CP.flags & GMFlags.CC_LONG.value and not CC.enabled)  # Cancel stock CC if OP is not active
+      if ((self.CP.flags & GMFlags.PEDAL_LONG.value)  # Always cancel stock CC when using pedal interceptor
       ) and CS.out.cruiseState.enabled:
         if (self.frame - self.last_button_frame) * DT_CTRL > 0.04:
           self.last_button_frame = self.frame
@@ -233,10 +257,7 @@ class CarController(CarControllerBase):
       if (self.frame - self.last_button_frame) * DT_CTRL > 0.04:
         if self.cancel_counter > CAMERA_CANCEL_DELAY_FRAMES:
           self.last_button_frame = self.frame
-          if self.CP.carFingerprint in SDGM_CAR:
-            can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.POWERTRAIN, CS.buttons_counter, CruiseButtons.CANCEL))
-          else:
-            can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.CAMERA, CS.buttons_counter, CruiseButtons.CANCEL))
+          can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.CAMERA, CS.buttons_counter, CruiseButtons.CANCEL))
 
     if self.CP.networkLocation == NetworkLocation.fwdCamera:
       # Silence "Take Steering" alert sent by camera, forward PSCMStatus with HandsOffSWlDetectionStatus=1
