@@ -97,7 +97,7 @@
    * cd /data
    * mv openpilot openpilot_bak
  * 데이터받기
-   * git clone -b carrot-master https://github.com/ajouatom/carrotpilot openpilot
+   * git clone -b carrot-master https://github.com/ajouatom/openpilot.git openpilot
 
 **빌드**
  * cd /data/openpilot
