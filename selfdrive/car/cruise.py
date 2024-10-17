@@ -474,7 +474,7 @@ class VCruiseCarrot:
     road_limit_kph = self.nRoadLimitSpeed * self.autoSpeedUptoRoadSpeedLimit
     if road_limit_kph < 1.0:
       return v_cruise_kph
-    if road_limit_kph < self.road_limit_kph:
+    if road_limit_kph < self.road_limit_kph and False:  # TODO: road_limit speed 자동 속도 다운.. 삭제..
       if v_cruise_kph > road_limit_kph:
         v_cruise_kph = road_limit_kph
     elif self.model_v_kph > v_cruise_kph and v_cruise_kph < road_limit_kph:
@@ -532,6 +532,7 @@ class VCruiseCarrot:
         v_cruise_kph = self.v_ego_kph_set
         self._cruise_control(1, 0, "Cruise on (speed)")
       elif self.xState in [3, 5]:
+        v_cruise_kph = self.v_ego_kph_set
         self._cruise_control(1, 0, "Cruise on (traffic sign)")
       elif 0 < self.d_rel < 20:
         v_cruise_kph = self.v_ego_kph_set
