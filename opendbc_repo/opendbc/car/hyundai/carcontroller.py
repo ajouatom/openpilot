@@ -279,7 +279,6 @@ class CarController(CarControllerBase):
 
       if self.last_button_frame != self.frame:
         send_button = self.make_spam_button(CC, CS)
-        print(f"send_button: {send_button}")
         if send_button > 0:
           can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, send_button, self.CP))
       
@@ -400,10 +399,6 @@ class CarController(CarControllerBase):
     send_button_allowed = (self.frame - self.last_button_frame) > self.button_wait
     #CC.debugTextCC = "{} speed_diff={:.1f},{:.0f}/{:.0f}, button={}, button_wait={}, count={}".format(
     #  send_button_allowed, speed_diff, target, current, send_button, self.button_wait, self.button_spamming_count)
-    #debugTextCC = "{} speed_diff={:.1f},{:.0f}/{:.0f}, button={}, button_wait={}, count={}".format(
-    #   send_button_allowed, speed_diff, target, current, send_button, self.button_wait, self.button_spamming_count)
-    #print(debugTextCC)
-    #print(f"frame={self.frame} - {self.last_button_frame} = {self.frame - self.last_button_frame}")
 
     if send_button_allowed or activate_cruise:
       self.button_spamming_count = self.button_spamming_count + 1 if send_button == Buttons.RES_ACCEL else self.button_spamming_count - 1
