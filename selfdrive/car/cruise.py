@@ -162,7 +162,7 @@ class VCruiseCarrot:
     self.is_metric = True
 
     self.v_ego_kph_set = 0
-    self._cruise_speed_min, self._cruise_speed_max = 20, 161
+    self._cruise_speed_min, self._cruise_speed_max = 10, 161
     self._cruise_speed_unit = 10
 
     self._gas_pressed_count = 0
@@ -267,7 +267,7 @@ class VCruiseCarrot:
           #self.events.append(EventName.buttonCancel)
           self._cruise_ready = True if self._activate_cruise == -2 else False
 
-        self.v_cruise_kph = v_cruise_kph
+        self.v_cruise_kph = clip(v_cruise_kph, self._cruise_speed_min, self._cruise_speed_max)
         self.v_cruise_cluster_kph = self.v_cruise_kph
       else:
         self.v_cruise_kph = CS.cruiseState.speed * CV.MS_TO_KPH
