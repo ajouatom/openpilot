@@ -27,7 +27,7 @@ import secrets
 import threading
 import time
 
-from flask import Flask, jsonify, render_template, Response, request, send_from_directory, session, redirect, url_for
+from flask import Flask, jsonify, render_template, Response, request, send_from_directory, session, redirect, url_for, abort
 import requests
 from requests.exceptions import ConnectionError
 from openpilot.common.realtime import set_core_affinity
@@ -35,6 +35,7 @@ import openpilot.selfdrive.frogpilot.fleetmanager.helpers as fleet
 from openpilot.system.hardware.hw import Paths
 from openpilot.common.swaglog import cloudlog
 import traceback
+from ftplib import FTP, error_perm
 
 app = Flask(__name__)
 
@@ -83,6 +84,85 @@ def download_dcamera(route, segment):
   file_name = Paths.log_root() + route + "--" + segment + "/"
   print("download_route=", route, file_name, segment)
   return send_from_directory(file_name, "dcamera.hevc", as_attachment=True)
+
+
+def upload_folder_to_ftp(local_folder, directory, remote_path):
+    from tqdm import tqdm  # tqdm으로 진행 바 표시
+    ftp_server = "shind0.synology.me"
+    ftp_port = 8021
+    ftp_username = "carrotpilot"
+    ftp_password = "Ekdrmsvkdlffjt7710"
+    ftp = FTP()
+    ftp.connect(ftp_server, ftp_port)
+    ftp.login(ftp_username, ftp_password)
+
+    try:
+        print(f"Create remote path = {directory}")
+        try:
+          ftp.mkd(directory)
+        except Exception as e:
+          print(f"Directory creation failed: {e}")
+        ftp.cwd(directory)
+        try:
+          ftp.mkd(remote_path)
+        except Exception as e:
+          print(f"Directory creation failed: {e}")
+        ftp.cwd(remote_path)
+
+        # 로컬 폴더의 모든 파일 가져오기
+        files = [
+            os.path.join(root, filename)
+            for root, _, filenames in os.walk(local_folder)
+            for filename in filenames
+        ]
+
+        # tqdm을 사용한 진행 바 표시
+        with tqdm(total=len(files), desc="Uploading Files", unit="file") as pbar:
+            for local_file in files:
+                filename = os.path.basename(local_file)
+                if filename in ['rlog', 'qcamera.ts']:
+                  try:
+                      with open(local_file, 'rb') as file:
+                          ftp.storbinary(f'STOR {filename}', file)
+                          print(f"Uploaded: {local_file} -> {filename}")
+                  except Exception as e:
+                      print(f"Failed to upload {local_file}: {e}")
+  
+                  pbar.update(1)  # 진행 바 업데이트
+
+        ftp.quit()
+        return True
+    except Exception as e:
+        print(f"FTP Upload Error: {e}")
+        return False
+
+@app.route("/footage/full/upload_carrot/<route>/<segment>")
+def upload_carrot(route, segment):
+    from openpilot.common.params import Params
+
+    local_folder = Paths.log_root() + f"{route}--{segment}"
+    
+    # 폴더가 존재하는지 확인
+    if not os.path.isdir(local_folder):
+        print(f"Folder not found: {local_folder}")
+        return abort(404, "Folder not found")
+
+    car_selected = Params().get("CarName")
+    if car_selected is None:
+      car_selected = "none"
+    else:
+      car_selected = car_selected.decode('utf-8')
+
+    directory = "routes " + car_selected + " " + Params().get("DongleId").decode('utf-8')
+
+    # FTP로 폴더와 파일 업로드 수행
+    #remote_path = f"{directory}/{route}--{segment}"
+    success = upload_folder_to_ftp(local_folder, directory, f"{route}--{segment}")
+
+    if success:
+        return "All files uploaded successfully", 200
+    else:
+        return "Failed to upload files", 500
 
 @app.route("/footage/<cameratype>/<segment>")
 def fcamera(cameratype, segment):
