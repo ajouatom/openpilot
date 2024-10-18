@@ -630,6 +630,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
 
 
 
+    startToggles->addItem(new CValueControl("SpeedFromPCM", "Read Cruise Speed from PCM", "Toyota must set to 1", "../assets/offroad/icon_road.png", 0, 2, 1));
     startToggles->addItem(new CValueControl("SoundVolumeAdjust", "Adjust Sound Volume(100%)", "", "../assets/offroad/icon_shell.png", 5, 200, 5));
     startToggles->addItem(new CValueControl("SoundVolumeAdjustEngage", "Adjust Sound Volume, Engage(10%)", "", "../assets/offroad/icon_shell.png", 5, 200, 5));
     startToggles->addItem(new CValueControl("MaxTimeOffroadMin", "Power off time (min)", "", "../assets/offroad/icon_shell.png", 1, 600, 10));

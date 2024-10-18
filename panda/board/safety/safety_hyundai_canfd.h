@@ -323,8 +323,9 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
     int button = GET_BYTE(to_send, 2) & 0x7U;
     bool is_cancel = (button == HYUNDAI_BTN_CANCEL);
     bool is_resume = (button == HYUNDAI_BTN_RESUME);
+    bool is_set = (button == HYUNDAI_BTN_SET);
 
-    bool allowed = (is_cancel && cruise_engaged_prev) || (is_resume && controls_allowed);
+    bool allowed = (is_cancel && cruise_engaged_prev) || (is_resume && controls_allowed) || (is_set && controls_allowed);
     if (!allowed) {
       tx = false;
     }

@@ -62,6 +62,8 @@ void OnroadWindow::updateState(const UIState &s) {
   QColor bgColor_long = bg_colors[s.status];
   const SubMaster& sm = *(s.sm);
   const auto car_control = sm["carControl"].getCarControl();
+  auto selfdrive_state = sm["selfdriveState"].getSelfdriveState();
+
   //if (s.status == STATUS_DISENGAGED && car_control.getLatActive()) {
   //    bgColor = bg_colors[STATUS_LAT_ACTIVE];
   //}
@@ -81,7 +83,7 @@ void OnroadWindow::updateState(const UIState &s) {
   if (car_state.getGasPressed()) {
       bgColor_long = bg_colors[STATUS_OVERRIDE];
   }
-  else if (car_control.getLongActive()) {
+  else if (selfdrive_state.getEnabled()) {
       bgColor_long = bg_colors[STATUS_ENGAGED];
   }
   else if (car_state.getCruiseState().getAvailable()) {

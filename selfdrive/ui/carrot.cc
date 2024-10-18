@@ -494,7 +494,10 @@ protected:
         v_ego = sm["carState"].getCarState().getVEgo();
         brakeHoldActive = sm["carState"].getCarState().getBrakeHoldActive();
         softHoldActive = sm["carState"].getCarState().getSoftHoldActive();
-        longActive = sm["carControl"].getCarControl().getLongActive();
+        auto selfdrive_state = sm["selfdriveState"].getSelfdriveState();
+        longActive = selfdrive_state.getEnabled();
+        //longActive = sm["carControl"].getCarControl().getLongActive();
+        //longActive = sm["carControl"].getCarControl().getEnabled();
         auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
         xState = lp.getXState();
         trafficState = lp.getTrafficState();
@@ -1736,7 +1739,8 @@ public:
         auto model_position = model.getPosition();
 
         if (!cs_alive || !car_control_alive || !car_state_alive || !lp_alive) return;
-        longActive = car_control.getLongActive();
+        auto selfdrive_state = sm["selfdriveState"].getSelfdriveState();
+        longActive = selfdrive_state.getEnabled();
         latActive = car_control.getLatActive();
 
         v_cruise = car_state.getVCruiseCluster();

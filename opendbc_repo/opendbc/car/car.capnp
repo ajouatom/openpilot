@@ -235,13 +235,13 @@ struct CarState {
   # process meta
   cumLagMs @50 :Float32;
 
-
   tpms @57 : Tpms;
   vCluRatio @58 :Float32;
   logCarrot @59 :Text;
   softHoldActive @60 :Int16;    #0: not active, 1: active ready, 2: activated
   activateCruise @61 :Int16;
   latEnabled @62 :Bool;
+  pcmCruiseGap @63 :Int16;      #0: can't read, 1,2,3,4: gap setting
 
   struct Tpms {
     fl @0 :Float32;
@@ -415,6 +415,7 @@ struct CarControl {
     rightLaneDepart @8: Bool;
     leftLaneDepart @9: Bool;
     leadDistanceBars @10: Int8;  # 1-3: 1 is closest, 3 is farthest. some ports may utilize 2-4 bars instead
+
     activeCarrot @11: Int16;
     leadDistance @12: Float32;
     leadRelSpeed @13: Float32;

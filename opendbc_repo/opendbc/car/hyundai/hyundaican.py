@@ -330,6 +330,16 @@ def create_frt_radar_opt(packer):
     "CF_FCA_Equip_Front_Radar": 1,
   }
   return packer.make_can_msg("FRT_RADAR11", 0, frt_radar11_values)
+
+def create_clu11_button(packer, frame, clu11, button, CP):
+  values = clu11
+  values["CF_Clu_CruiseSwState"] = button
+  #values["CF_Clu_AliveCnt1"] = frame % 0x10
+  values["CF_Clu_AliveCnt1"] = (values["CF_Clu_AliveCnt1"] + 1) % 0x10
+  # send buttons to camera on camera-scc based cars
+  bus = 2 if CP.flags & HyundaiFlags.CAMERA_SCC else 0
+  return packer.make_can_msg("CLU11", bus, values)
+
 def create_mdps12(packer, frame, mdps12):
   values = mdps12
   values["CF_Mdps_ToiActive"] = 0

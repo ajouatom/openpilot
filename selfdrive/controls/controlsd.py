@@ -169,7 +169,16 @@ class Controls:
     hudControl.activeCarrot = self.sm['carrotMan'].active
     
     lp = self.sm['longitudinalPlan']
-    hudControl.setSpeed = setSpeed if lp.xState == 3 else float(desired_kph * CV.KPH_TO_MS)
+    if self.CP.pcmCruise:
+      speed_from_pcm = self.params.get_int("SpeedFromPCM")
+      if speed_from_pcm == 1:
+        hudControl.setSpeed = float(CS.vCruiseCluster * CV.KPH_TO_MS)
+      elif speed_from_pcm == 2:
+        hudControl.setSpeed = float(max(30/3.6, desired_kph * CV.KPH_TO_MS))
+      else:
+        hudControl.setSpeed = float(max(30/3.6, setSpeed))
+    else:
+      hudControl.setSpeed = setSpeed if lp.xState == 3 else float(desired_kph * CV.KPH_TO_MS)
     hudControl.speedVisible = CC.enabled
     hudControl.lanesVisible = CC.enabled
     hudControl.leadVisible = self.sm['longitudinalPlan'].hasLead

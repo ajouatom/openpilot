@@ -66,6 +66,16 @@ class CarController(CarControllerBase):
     self.blinking_frame = int(1.0 / DT_CTRL)
     self.soft_hold_mode = 2
 
+    self.activateCruise = 0
+    self.button_wait = 12
+    self.cruise_buttons_msg_values = None
+    self.cruise_buttons_msg_cnt = 0
+    self.button_spamming_count = 0
+    self.prev_clu_speed = 0
+    self.button_spam1 = 8
+    self.button_spam2 = 30
+    self.button_spam3 = 1
+
     self.suppress_lfa_counter = 0
 
   def update(self, CC, CS, now_nanos):
@@ -84,6 +94,12 @@ class CarController(CarControllerBase):
         self.params.STEER_DELTA_DOWN = steerDeltaDown
       self.soft_hold_mode = 1 if params.get_int("AutoCruiseControl") > 1 else 2
       self.hapticFeedbackWhenSpeedCamera = int(params.get_int("HapticFeedbackWhenSpeedCamera"))
+      
+      self.button_spam1 = params.get_int("CruiseButtonTest1")
+      self.button_spam2 = params.get_int("CruiseButtonTest2")
+      self.button_spam3 = params.get_int("CruiseButtonTest3")
+      self.speed_from_pcm = params.get_int("SpeedFromPCM")
+      
 
     actuators = CC.actuators
     hud_control = CC.hudControl
@@ -248,30 +264,55 @@ class CarController(CarControllerBase):
 
   def create_button_messages(self, CC: structs.CarControl, CS: CarState, use_clu11: bool):
     can_sends = []
+    if CS.out.brakePressed or CS.out.brakeHoldActive:
+      return can_sends
     if use_clu11:
       if CC.cruiseControl.cancel:
         can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.CANCEL, self.CP))
-      elif CC.cruiseControl.resume:
+      elif False: #CC.cruiseControl.resume:
         # send resume at a max freq of 10Hz
         if (self.frame - self.last_button_frame) * DT_CTRL > 0.1:
           # send 25 messages at a time to increases the likelihood of resume being accepted
           can_sends.extend([hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.RES_ACCEL, self.CP)] * 25)
           if (self.frame - self.last_button_frame) * DT_CTRL >= 0.15:
             self.last_button_frame = self.frame
+
+      if self.last_button_frame != self.frame:
+        send_button = self.make_spam_button(CC, CS)
+        if send_button > 0:
+          can_sends.append(hyundaican.create_clu11_button(self.packer, self.frame, CS.clu11, send_button, self.CP))
+      
     else:
+
+      # carrot.. 왜 alt_cruise_button는 값이 리스트일까?, 그리고 왜? 빈데이터가 들어오는것일까?
+      if CS.cruise_buttons_msg is not None and self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS:
+        try:
+          cruise_buttons_msg_values = {key: value[0] for key, value in CS.cruise_buttons_msg.items()}
+        except IndexError:
+          #print("IndexError....")
+          cruise_buttons_msg_values = None
+          self.cruise_buttons_msg_cnt += 1
+        if cruise_buttons_msg_values is not None:
+          self.cruise_buttons_msg_values = cruise_buttons_msg_values
+          self.cruise_buttons_msg_cnt = 0
+
       if (self.frame - self.last_button_frame) * DT_CTRL > 0.25:
         # cruise cancel
         if CC.cruiseControl.cancel:
-          if self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS:
-            can_sends.append(hyundaicanfd.create_acc_cancel(self.packer, self.CP, self.CAN, CS.cruise_info))
-            self.last_button_frame = self.frame
-          else:
-            for _ in range(20):
-              can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.CANCEL))
+          if (self.frame - self.last_button_frame) * DT_CTRL > 0.1:
+            print("cruiseControl.cancel222222")
+            if self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS:
+              #can_sends.append(hyundaicanfd.create_acc_cancel(self.packer, self.CP, self.CAN, CS.cruise_info))
+              if self.cruise_buttons_msg_values is not None:
+                can_sends.append(hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.CANCEL, self.cruise_buttons_msg_values, self.cruise_buttons_msg_cnt))
+            
+            else:
+              for _ in range(20):
+                can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.CANCEL))
             self.last_button_frame = self.frame
 
         # cruise standstill resume
-        elif CC.cruiseControl.resume:
+        elif False: #CC.cruiseControl.resume:
           if self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS:
             # TODO: resume for alt button cars
             pass
@@ -280,8 +321,91 @@ class CarController(CarControllerBase):
               can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL))
             self.last_button_frame = self.frame
 
+      ## button 스패밍을 안했을때...
+      if self.last_button_frame != self.frame:
+        dat = self.canfd_speed_control_pcm(CC, CS, self.cruise_buttons_msg_values)
+        if dat is not None:
+          for _ in range(self.button_spam3):
+            can_sends.append(dat)
+          self.cruise_buttons_msg_cnt += 1
+
     return can_sends
 
+  def canfd_speed_control_pcm(self, CC, CS, cruise_buttons_msg_values):
+
+    alt_buttons = True if self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS else False
+
+    if alt_buttons and cruise_buttons_msg_values is None:
+      return None
+
+    send_button = self.make_spam_button(CC, CS)
+    if send_button > 0:
+      if alt_buttons:
+        return hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, send_button, cruise_buttons_msg_values, self.cruise_buttons_msg_cnt)
+      else:
+        return hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, send_button)
+
+    return None
+
+
+  def make_spam_button(self, CC, CS):
+    hud_control = CC.hudControl
+    set_speed_in_units = hud_control.setSpeed * (CV.MS_TO_KPH if CS.is_metric else CV.MS_TO_MPH)
+    target = int(set_speed_in_units+0.5)
+    current = int(CS.out.cruiseState.speed*CV.MS_TO_KPH + 0.5)
+    v_ego_kph = CS.out.vEgo * CV.MS_TO_KPH
+
+    send_button = 0
+    activate_cruise = False
+
+    if CC.enabled:
+      if not CS.out.cruiseState.enabled:
+        if (hud_control.leadVisible or v_ego_kph > 10.0) and self.activateCruise == 0:
+          send_button = Buttons.RES_ACCEL
+          self.activateCruise = 1
+          activate_cruise = True
+      elif CC.cruiseControl.resume:
+        send_button = Buttons.RES_ACCEL
+      elif target < current and current>= 31 and self.speed_from_pcm != 1:
+        send_button = Buttons.SET_DECEL
+      elif target > current and current < 160 and self.speed_from_pcm != 1:
+        send_button = Buttons.RES_ACCEL
+    elif CS.out.activateCruise: #CC.cruiseControl.activate:
+      if (hud_control.leadVisible or v_ego_kph > 10.0) and self.activateCruise == 0:
+        self.activateCruise = 1
+        send_button = Buttons.RES_ACCEL
+        activate_cruise = True
+
+    if CS.out.brakePressed or CS.out.gasPressed:
+      self.activateCruise = 0
+
+    if send_button == 0:
+      self.button_spamming_count = 0
+      self.prev_clu_speed = current      
+      return 0
+
+    speed_diff = self.prev_clu_speed - current
+    spamming_max = self.button_spam1
+    if CS.cruise_buttons[-1] != Buttons.NONE:
+      self.last_button_frame = self.frame
+      self.button_wait = self.button_spam2
+      self.button_spamming_count = 0
+    elif abs(self.button_spamming_count) >= spamming_max or abs(speed_diff) > 0:
+      self.last_button_frame = self.frame
+      self.button_wait = self.button_spam2 if abs(self.button_spamming_count) >= spamming_max else 7
+      self.button_spamming_count = 0
+
+    self.prev_clu_speed = current
+    send_button_allowed = (self.frame - self.last_button_frame) > self.button_wait
+    #CC.debugTextCC = "{} speed_diff={:.1f},{:.0f}/{:.0f}, button={}, button_wait={}, count={}".format(
+    #  send_button_allowed, speed_diff, target, current, send_button, self.button_wait, self.button_spamming_count)
+
+    if send_button_allowed or activate_cruise or (CC.cruiseControl.resume and self.frame % 2 == 0):
+      self.button_spamming_count = self.button_spamming_count + 1 if send_button == Buttons.RES_ACCEL else self.button_spamming_count - 1
+      return send_button
+    else:
+      self.button_spamming_count = 0
+    return 0
 
 class HyundaiJerk:
   def __init__(self):

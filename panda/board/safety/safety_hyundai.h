@@ -242,9 +242,11 @@ static bool hyundai_tx_hook(const CANPacket_t *to_send) {
   if ((addr == 0x4F1) && !hyundai_longitudinal) {
     int button = GET_BYTE(to_send, 0) & 0x7U;
 
-    bool allowed_resume = (button == 1) && controls_allowed;
+    bool allowed_resume = (button == 1);// && controls_allowed;
+    bool allowed_set_decel = (button == 2) && controls_allowed;
     bool allowed_cancel = (button == 4) && cruise_engaged_prev;
-    if (!(allowed_resume || allowed_cancel)) {
+    bool allowed_gap_dist = (button == 3) && controls_allowed;
+    if (!(allowed_resume || allowed_set_decel || allowed_cancel || allowed_gap_dist)) {
       tx = false;
     }
   }

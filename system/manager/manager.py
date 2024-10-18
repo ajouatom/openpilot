@@ -65,6 +65,9 @@ def get_default_params():
     ("AutoNaviCountDownMode", "2"),
     ("StoppingAccel", "0"),
     ("StopDistanceCarrot", "550"), 
+    ("CruiseButtonTest1", "8"),      
+    ("CruiseButtonTest2", "30"),      
+    ("CruiseButtonTest3", "1"),      
     ("MyDrivingMode", "3"),      
     ("CruiseMaxVals1", "200"),
     ("CruiseMaxVals2", "160"),
@@ -100,6 +103,7 @@ def get_default_params():
     ("CustomSteerMax", "0"),       
     ("CustomSteerDeltaUp", "0"),       
     ("CustomSteerDeltaDown", "0"),       
+    ("SpeedFromPCM", "2"),       
     ("SteerActuatorDelay", "30"),       
     ("MaxTimeOffroadMin", "60"),
   ]
