@@ -84,6 +84,83 @@ def download_dcamera(route, segment):
   print("download_route=", route, file_name, segment)
   return send_from_directory(file_name, "dcamera.hevc", as_attachment=True)
 
+
+# FTP 서버 정보
+FTP_HOST = "shind0.synology.me"
+FTP_USER = "carrotpilot"
+FTP_PORT = 8021
+FTP_PASS = "Ekdrmsvkdlffjt7710"
+def create_ftp_connection():
+    """FTP 연결을 생성하고 로그인합니다."""
+    try:
+        ftp = FTP()
+        ftp.connect(FTP_HOST, FTP_PORT)  # 호스트와 포트에 연결
+        ftp.login(FTP_USER, FTP_PASS)  # 로그인
+        print(f"Connected to FTP: {FTP_HOST}:{FTP_PORT}")
+        return ftp
+    except Exception as e:
+        print(f"FTP Connection Error: {e}")
+        return None
+
+def create_remote_directory(ftp, remote_path):
+    """원격 경로에 폴더를 생성합니다. 이미 존재하면 무시합니다."""
+    try:
+        ftp.mkd(remote_path)
+    except error_perm as e:
+        # 이미 존재하는 폴더인 경우 무시
+        if not str(e).startswith('550'):
+            raise
+
+def upload_folder_to_ftp(local_folder, remote_path):
+    """로컬 폴더의 모든 파일을 FTP로 업로드합니다."""
+    ftp = create_ftp_connection()
+    if not ftp:
+        return False
+
+    try:
+        # 원격 경로에 폴더 생성
+        create_remote_directory(ftp, remote_path)
+
+        # 로컬 폴더 순회하며 파일을 업로드
+        for root, _, files in os.walk(local_folder):
+            for filename in files:
+                local_file = os.path.join(root, filename)
+                relative_path = os.path.relpath(root, local_folder)
+                remote_subdir = os.path.join(remote_path, relative_path).replace("\\", "/")
+
+                # 하위 디렉토리가 있다면 FTP 상에 생성
+                create_remote_directory(ftp, remote_subdir)
+
+                # 파일 업로드
+                with open(local_file, 'rb') as file:
+                    ftp.storbinary(f'STOR {remote_subdir}/{filename}', file)
+                    print(f"Uploaded: {local_file} -> {remote_subdir}/{filename}")
+
+        ftp.quit()
+        return True
+    except Exception as e:
+        print(f"FTP Upload Error: {e}")
+        return False
+
+@app.route("/footage/full/upload_carrot/<route>/<segment>")
+def upload_carrot(route, segment):
+    # 업로드할 로컬 폴더 경로
+    local_folder = Paths.log_root() + f"{route}--{segment}"
+    
+    # 폴더가 존재하는지 확인
+    if not os.path.isdir(local_folder):
+        print(f"Folder not found: {local_folder}")
+        return abort(404, "Folder not found")
+
+    # FTP로 폴더와 파일 업로드 수행
+    remote_path = f"/ftp/uploads/{route}--{segment}"
+    success = upload_folder_to_ftp(local_folder, remote_path)
+
+    if success:
+        return "All files uploaded successfully", 200
+    else:
+        return "Failed to upload files", 500
+
 @app.route("/footage/<cameratype>/<segment>")
 def fcamera(cameratype, segment):
   if not fleet.is_valid_segment(segment):
