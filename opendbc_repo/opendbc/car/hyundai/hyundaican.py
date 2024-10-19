@@ -143,16 +143,16 @@ def create_acc_commands_scc(packer, enabled, accel, jerk, idx, hud_control, set_
 
   if long_enabled:
     scc12_acc_mode = 2 if long_override else 1
-    scc14_acc_mode = 4 if long_override else 1
+    scc14_acc_mode = 2 if long_override else 1
     if CS.out.brakeHoldActive:
       scc12_acc_mode = 0
-      scc14_acc_mode = 0
+      scc14_acc_mode = 4
     elif CS.out.brakePressed:
       scc12_acc_mode = 1
       scc14_acc_mode = 1
   else:
     scc12_acc_mode = 0
-    scc14_acc_mode = 0
+    scc14_acc_mode = 4
 
   warning_front = False
 
@@ -230,16 +230,16 @@ def create_acc_commands(packer, enabled, accel, jerk, idx, hud_control, set_spee
 
   if long_enabled:
     scc12_acc_mode = 2 if long_override else 1
-    scc14_acc_mode = 4 if long_override else 1
+    scc14_acc_mode = 2 if long_override else 1
     if CS.out.brakeHoldActive:
       scc12_acc_mode = 0
-      scc14_acc_mode = 0
+      scc14_acc_mode = 4
     elif CS.out.brakePressed:
       scc12_acc_mode = 1
       scc14_acc_mode = 1
   else:
     scc12_acc_mode = 0
-    scc14_acc_mode = 0
+    scc14_acc_mode = 4
 
   warning_front = False
 
