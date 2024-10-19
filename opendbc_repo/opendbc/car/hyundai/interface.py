@@ -155,7 +155,7 @@ class CarInterface(CarInterfaceBase):
       ret.radarUnavailable = False
       ret.openpilotLongitudinalControl = True
 
-    ret.radarUnavailable = False  # carrot, hyundai cars have radar 
+    #ret.radarUnavailable = False  # TODO: canfd... carrot, hyundai cars have radar 
 
     ret.pcmCruise = not ret.openpilotLongitudinalControl
     ret.startingState = False # True  # carrot
