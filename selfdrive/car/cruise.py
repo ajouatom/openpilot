@@ -188,6 +188,7 @@ class VCruiseCarrot:
     self._cancel_timer = 0
     self.d_rel = 0
     self.v_rel = 0
+    self.v_lead_kph = 0
 
     self._log_timer = 0
     self._log_timeout = int(3/0.01)
