@@ -241,8 +241,9 @@ class VCruiseCarrot:
       lead = sm['radarState'].leadOne
       self.d_rel = lead.dRel if lead.status else 0
       self.v_rel = lead.vRel if lead.status else 0
+      self.v_lead_kph = lead.vLeadK * CV.MS_TO_KPH if lead.status else 0
     if sm.alive['modelV2']:
-      self.model_v_kph = max(sm['modelV2'].velocity.x[0], sm['modelV2'].velocity.x[-1]) * CV.MS_TO_KPH
+      self.model_v_kph = sm['modelV2'].velocity.x[0] * CV.MS_TO_KPH
     else:
       self.model_v_kph = 0
       
@@ -484,6 +485,8 @@ class VCruiseCarrot:
     if road_limit_kph < self.road_limit_kph and False:  # TODO: road_limit speed 자동 속도 다운.. 삭제..
       if v_cruise_kph > road_limit_kph:
         v_cruise_kph = road_limit_kph
+    elif self.v_lead_kph > v_cruise_kph and v_cruise_kph < road_limit_kph:
+      v_cruise_kph += 2
     elif self.model_v_kph > v_cruise_kph and v_cruise_kph < road_limit_kph:
       v_cruise_kph += 2
 
