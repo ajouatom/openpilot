@@ -486,7 +486,7 @@ class VCruiseCarrot:
     if road_limit_kph < self.road_limit_kph and False:  # TODO: road_limit speed 자동 속도 다운.. 삭제..
       if v_cruise_kph > road_limit_kph:
         v_cruise_kph = road_limit_kph
-    elif self.v_lead_kph > v_cruise_kph and v_cruise_kph < road_limit_kph:
+    elif self.v_lead_kph > v_cruise_kph and v_cruise_kph < road_limit_kph and self.d_rel < 50:
       v_cruise_kph += 2
     elif self.model_v_kph > v_cruise_kph and v_cruise_kph < road_limit_kph:
       v_cruise_kph += 2
