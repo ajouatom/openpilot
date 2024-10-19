@@ -162,7 +162,7 @@ class VCruiseCarrot:
     self.is_metric = True
 
     self.v_ego_kph_set = 0
-    self._cruise_speed_min, self._cruise_speed_max = 10, 161
+    self._cruise_speed_min, self._cruise_speed_max = 5, 161
     self._cruise_speed_unit = 10
 
     self._gas_pressed_count = 0
@@ -445,6 +445,7 @@ class VCruiseCarrot:
         v_cruise_kph = button_kph
         self._cruise_cancel_state = False
       elif button_type == ButtonType.decelCruise:
+        print(f"decelCruise: v_cruise_kph = {v_cruise_kph}, button_kph = {button_kph}")
         v_cruise_kph = button_kph
         self._cruise_cancel_state = False
       elif button_type == ButtonType.gapAdjustCruise:
