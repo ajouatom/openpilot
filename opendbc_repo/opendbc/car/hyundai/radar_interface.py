@@ -5,7 +5,6 @@ from opendbc.car import structs
 from opendbc.car.interfaces import RadarInterfaceBase
 from opendbc.car.hyundai.values import DBC, HyundaiFlags
 from openpilot.common.params import Params
-from opendbc.car.hyundai.hyundaicanfd import CanBus
 
 RADAR_START_ADDR = 0x500
 RADAR_MSG_COUNT = 32
