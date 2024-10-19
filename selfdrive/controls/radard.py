@@ -344,10 +344,13 @@ class VisionTrack:
     self.prob = lead_msg.prob
     self.v_ego = v_ego
     if self.prob > .5:
-      self.dRel = float(lead_msg.x[0]) - RADAR_TO_CAMERA
+      dRel = float(lead_msg.x[0]) - RADAR_TO_CAMERA
+      if abs(self.dRel - dRel) > 5.0:
+        cnt = 0
+      self.dRel = dRel
+
       self.yRel = float(-lead_msg.y[0])
       dPath = self.yRel + interp(self.dRel, md.position.x, md.position.y)
-
       a_lead_vision = lead_msg.a[0]
       if self.cnt < 1 or self.prob < 0.99:
         self.vRel = lead_v_rel_pred
