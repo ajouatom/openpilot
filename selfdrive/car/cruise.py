@@ -536,8 +536,8 @@ class VCruiseCarrot:
       elif self.xState == 3:
         v_cruise_kph = self.v_ego_kph_set
         self._cruise_control(-1, 3, "Cruise off (traffic sign)")
-      elif self.v_ego_kph_set > 30:
-        v_cruise_kph = max(v_cruise_kph, self.v_ego_kph_set)
+      elif self.v_ego_kph_set >= 30 and not CC.enabled:
+        v_cruise_kph = self.v_ego_kph_set
         self._cruise_control(1, 0, "Cruise on (gas pressed)")
     elif self._brake_pressed_count == -1 and self._soft_hold_active == 0:
       if 40 < self.v_ego_kph_set:
