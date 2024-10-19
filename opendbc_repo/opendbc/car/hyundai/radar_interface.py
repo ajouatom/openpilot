@@ -5,6 +5,7 @@ from opendbc.car import structs
 from opendbc.car.interfaces import RadarInterfaceBase
 from opendbc.car.hyundai.values import DBC, HyundaiFlags
 from openpilot.common.params import Params
+from opendbc.car.hyundai.hyundaicanfd import CanBus
 
 RADAR_START_ADDR = 0x500
 RADAR_MSG_COUNT = 32
@@ -25,10 +26,12 @@ def get_radar_can_parser(CP, radar_tracks):
 def get_radar_can_parser_scc(CP):
   if CP.flags & HyundaiFlags.CANFD:
     messages = [("SCC_CONTROL", 50)]
+    bus = CanBus.ECAN
   else:
     messages = [("SCC11", 50)]
+    bus = 0
     
-  bus = 2 if CP.flags & HyundaiFlags.CAMERA_SCC else 0
+  bus = 2 if CP.flags & HyundaiFlags.CAMERA_SCC else bus
   return CANParser(DBC[CP.carFingerprint]['pt'], messages, bus)
 
 class RadarInterface(RadarInterfaceBase):
