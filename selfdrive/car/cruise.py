@@ -445,7 +445,7 @@ class VCruiseCarrot:
         v_cruise_kph = button_kph
         self._cruise_cancel_state = False
       elif button_type == ButtonType.decelCruise:
-        print(f"decelCruise: v_cruise_kph = {v_cruise_kph}, button_kph = {button_kph}")
+        self._pause_auto_speed_up = True
         v_cruise_kph = button_kph
         self._cruise_cancel_state = False
       elif button_type == ButtonType.gapAdjustCruise:
