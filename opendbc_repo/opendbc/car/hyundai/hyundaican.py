@@ -195,7 +195,7 @@ def create_acc_commands_scc(packer, enabled, accel, jerk, idx, hud_control, set_
     values["JerkLowerLimit"] = jerk.jerk_l
     values["ACCMode"] = scc14_acc_mode #2 if enabled and long_override else 1 if long_enabled else 4 # stock will always be 4 instead of 0 after first disengage
     values["ObjGap"] = objGap #2 if hud_control.leadVisible else 0 # 5: >30, m, 4: 25-30 m, 3: 20-25 m, 2: < 20 m, 0: no lead
-    values["ObjGap2"] = objGap2
+    values["ObjDistStat"] = objGap2
     commands.append(packer.make_can_msg("SCC14", 0, values))
 
   # Only send FCA11 on cars where it exists on the bus
@@ -286,7 +286,7 @@ def create_acc_commands(packer, enabled, accel, jerk, idx, hud_control, set_spee
     "JerkLowerLimit": jerk.jerk_l, # stock usually is 0.5 but sometimes uses higher values
     "ACCMode": scc14_acc_mode, # if enabled and long_override else 1 if enabled else 4, # stock will always be 4 instead of 0 after first disengage
     "ObjGap": objGap, #2 if hud_control.leadVisible else 0, # 5: >30, m, 4: 25-30 m, 3: 20-25 m, 2: < 20 m, 0: no lead
-    "ObjGap2": objGap2,
+    "ObjDistStat": objGap2,
   }
   commands.append(packer.make_can_msg("SCC14", 0, scc14_values))
 
