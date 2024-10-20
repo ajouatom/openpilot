@@ -178,6 +178,7 @@ class VCruiseCarrot:
     self._pause_auto_speed_up = False
     self._activate_cruise = 0
     self._lat_enabled = self.params.get_int("AutoEngage") > 0
+    self._v_cruise_kph_at_brake = 0
     
     #self.events = []
     self.xState = 0
@@ -407,6 +408,9 @@ class VCruiseCarrot:
         self._pause_auto_speed_up = False
         if self._soft_hold_active > 0:
           self._soft_hold_active = 0
+        elif self._v_cruise_kph_at_brake > 0 and v_cruise_kph < self._v_cruise_kph_at_brake:
+          v_cruise_kph = self._v_cruise_kph_at_brake
+          self._v_cruise_kph_at_brake = 0
         else:
           v_cruise_kph = self._v_cruise_desired(CS, v_cruise_kph)
 
@@ -421,6 +425,7 @@ class VCruiseCarrot:
         else:
           self._cruise_control(-2, -1, "Cruise off (decelCruise)")
           #self.events.append(EventName.audioPrompt)
+        self._v_cruise_kph_at_brake = 0
           
       elif button_type == ButtonType.gapAdjustCruise:
         longitudinalPersonalityMax = self.params.get_int("LongitudinalPersonalityMax")
@@ -440,15 +445,18 @@ class VCruiseCarrot:
           self._lat_enabled = not self._lat_enabled
           self._add_log("Lateral " + "enabled" if self._lat_enabled else "disabled")
         self._cruise_cancel_state = True
+        self._v_cruise_kph_at_brake = 0
         pass
     else:
       if button_type == ButtonType.accelCruise:
         v_cruise_kph = button_kph
         self._cruise_cancel_state = False
+        self._v_cruise_kph_at_brake = 0
       elif button_type == ButtonType.decelCruise:
         self._pause_auto_speed_up = True
         v_cruise_kph = button_kph
         self._cruise_cancel_state = False
+        self._v_cruise_kph_at_brake = 0
       elif button_type == ButtonType.gapAdjustCruise:
         self.params.put_int_nonblocking("MyDrivingMode", self.params.get_int("MyDrivingMode") % 4 + 1) # 1,2,3,4 (1:eco, 2:safe, 3:normal, 4:high speed)
       elif button_type == ButtonType.lfaButton:
@@ -586,6 +594,8 @@ class VCruiseCarrot:
     if CS.brakePressed:
       self._cruise_ready = False
       self._brake_pressed_count = max(1, self._brake_pressed_count + 1)
+      if self._brake_pressed_count == 1:
+        self._v_cruise_kph_at_brake = self.v_cruise_kph
       self._soft_hold_count = self._soft_hold_count + 1 if CS.vEgo < 0.1 and CS.gearShifter == GearShifter.drive else 0
       if self.autoCruiseControl == 0 or self.CP.pcmCruise:
         self._soft_hold_active = 0
