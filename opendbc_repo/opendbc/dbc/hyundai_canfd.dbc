@@ -372,9 +372,6 @@ BO_ 490 ADRV_0x1ea: 32 ADRV
  SG_ SET_ME_FF : 120|8@1+ (1,0) [0|255] "" XXX
  SG_ SET_ME_TMP_F : 232|5@1+ (1,0) [0|31] "" XXX
  SG_ SET_ME_TMP_F_2 : 240|5@1+ (1,0) [0|31] "" XXX
- SG_ DATA26 : 26|1@1+ (1,0) [0|255] "" XXX
- SG_ DATA32 : 32|3@1+ (1,0) [0|255] "" XXX
-
 
 BO_ 507 CAM_0x1fb: 32 CAMERA
  SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
