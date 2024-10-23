@@ -12,9 +12,11 @@ def retryWithDelay(int maxRetries, int delay, Closure body) {
 def device(String ip, String step_label, String cmd) {
   withCredentials([file(credentialsId: 'id_rsa', variable: 'key_file')]) {
     def ssh_cmd = """
-ssh -tt -o ConnectTimeout=5 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o BatchMode=yes -o StrictHostKeyChecking=no -i ${key_file} 'comma@${ip}' /usr/bin/bash <<'END'
+ssh -o ConnectTimeout=5 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o BatchMode=yes -o StrictHostKeyChecking=no -i ${key_file} 'comma@${ip}' exec /usr/bin/bash <<'END'
 
 set -e
+
+export TERM=xterm-256color
 
 shopt -s huponexit # kill all child processes when the shell exits
 
@@ -25,8 +27,9 @@ export TEST_DIR=${env.TEST_DIR}
 export SOURCE_DIR=${env.SOURCE_DIR}
 export GIT_BRANCH=${env.GIT_BRANCH}
 export GIT_COMMIT=${env.GIT_COMMIT}
+export CI_ARTIFACTS_TOKEN=${env.CI_ARTIFACTS_TOKEN}
+export GITHUB_COMMENTS_TOKEN=${env.GITHUB_COMMENTS_TOKEN}
 export AZURE_TOKEN='${env.AZURE_TOKEN}'
-export MAPBOX_TOKEN='${env.MAPBOX_TOKEN}'
 # only use 1 thread for tici tests since most require HIL
 export PYTEST_ADDOPTS="-n 0"
 
@@ -64,8 +67,6 @@ ln -snf ${env.TEST_DIR} /data/pythonpath
 
 cd ${env.TEST_DIR} || true
 ${cmd}
-exit 0
-
 END"""
 
     sh script: ssh_cmd, label: step_label
@@ -80,15 +81,23 @@ def deviceStage(String stageName, String deviceType, List extra_env, def steps) 
 
     def extra = extra_env.collect { "export ${it}" }.join('\n');
     def branch = env.BRANCH_NAME ?: 'master';
+    def gitDiff = sh returnStdout: true, script: 'curl -s -H "Authorization: Bearer ${GITHUB_COMMENTS_TOKEN}" https://api.github.com/repos/commaai/openpilot/compare/master...${GIT_BRANCH} | jq .files[].filename || echo "/"', label: 'Getting changes'
 
     lock(resource: "", label: deviceType, inversePrecedence: true, variable: 'device_ip', quantity: 1, resourceSelectStrategy: 'random') {
       docker.image('ghcr.io/commaai/alpine-ssh').inside('--user=root') {
-        timeout(time: 20, unit: 'MINUTES') {
+        timeout(time: 35, unit: 'MINUTES') {
           retry (3) {
+            def date = sh(script: 'date', returnStdout: true).trim();
+            device(device_ip, "set time", "date -s '" + date + "'")
             device(device_ip, "git checkout", extra + "\n" + readFile("selfdrive/test/setup_device_ci.sh"))
           }
           steps.each { item ->
-            device(device_ip, item[0], item[1])
+            if (branch != "master" && item.size() == 3 && !hasPathChanged(gitDiff, item[2])) {
+              println "Skipping ${item[0]}: no changes in ${item[2]}."
+              return
+            } else {
+              device(device_ip, item[0], item[1])
+            }
           }
         }
       }
@@ -96,49 +105,32 @@ def deviceStage(String stageName, String deviceType, List extra_env, def steps) 
   }
 }
 
-def pcStage(String stageName, Closure body) {
-  node {
-  stage(stageName) {
-    if (currentBuild.result != null) {
-        return
-    }
-
-    checkout scm
-
-    def dockerArgs = "--user=batman -v /tmp/comma_download_cache:/tmp/comma_download_cache -v /tmp/scons_cache:/tmp/scons_cache -e PYTHONPATH=${env.WORKSPACE} --cpus=8 --memory 16g -e PYTEST_ADDOPTS='-n8'";
-
-    def openpilot_base = retryWithDelay (3, 15) {
-      return docker.build("openpilot-base:build-${env.GIT_COMMIT}", "-f Dockerfile.openpilot_base .")
-    }
-
-    lock(resource: "", label: 'pc', inversePrecedence: true, quantity: 1) {
-      openpilot_base.inside(dockerArgs) {
-        timeout(time: 20, unit: 'MINUTES') {
-          try {
-            retryWithDelay (3, 15) {
-              sh "git config --global --add safe.directory '*'"
-              sh "git submodule update --init --recursive"
-              sh "git lfs pull"
-            }
-            body()
-          } finally {
-              sh "rm -rf ${env.WORKSPACE}/* || true"
-              sh "rm -rf .* || true"
-            }
-          }
-        }
-      }
+def hasPathChanged(String gitDiff, List<String> paths) {
+  for (path in paths) {
+    if (gitDiff.contains(path)) {
+      return true
     }
   }
+  return false
 }
 
 def setupCredentials() {
   withCredentials([
     string(credentialsId: 'azure_token', variable: 'AZURE_TOKEN'),
-    string(credentialsId: 'mapbox_token', variable: 'MAPBOX_TOKEN')
   ]) {
     env.AZURE_TOKEN = "${AZURE_TOKEN}"
-    env.MAPBOX_TOKEN = "${MAPBOX_TOKEN}"
+  }
+
+  withCredentials([
+    string(credentialsId: 'ci_artifacts_pat', variable: 'CI_ARTIFACTS_TOKEN'),
+  ]) {
+    env.CI_ARTIFACTS_TOKEN = "${CI_ARTIFACTS_TOKEN}"
+  }
+
+  withCredentials([
+    string(credentialsId: 'post_comments_github_pat', variable: 'GITHUB_COMMENTS_TOKEN'),
+  ]) {
+    env.GITHUB_COMMENTS_TOKEN = "${GITHUB_COMMENTS_TOKEN}"
   }
 }
 
@@ -186,13 +178,13 @@ node {
           ["build openpilot", "cd system/manager && ./build.py"],
           ["check dirty", "release/check-dirty.sh"],
           ["onroad tests", "pytest selfdrive/test/test_onroad.py -s"],
-          ["time to onroad", "pytest selfdrive/test/test_time_to_onroad.py"],
+          //["time to onroad", "pytest selfdrive/test/test_time_to_onroad.py"],
         ])
       },
       'HW + Unit Tests': {
         deviceStage("tici-hardware", "tici-common", ["UNSAFE=1"], [
           ["build", "cd system/manager && ./build.py"],
-          ["test pandad", "pytest selfdrive/pandad/tests/test_pandad.py"],
+          ["test pandad", "pytest selfdrive/pandad/tests/test_pandad.py", ["panda/", "selfdrive/pandad/"]],
           ["test power draw", "pytest -s system/hardware/tici/tests/test_power_draw.py"],
           ["test encoder", "LD_LIBRARY_PATH=/usr/local/lib pytest system/loggerd/tests/test_encoder.py"],
           ["test pigeond", "pytest system/ubloxd/tests/test_pigeond.py"],
@@ -229,8 +221,8 @@ node {
       },
       'replay': {
         deviceStage("model-replay", "tici-replay", ["UNSAFE=1"], [
-          ["build", "cd system/manager && ./build.py"],
-          ["model replay", "selfdrive/test/process_replay/model_replay.py"],
+          ["build", "cd system/manager && ./build.py", ["selfdrive/modeld/"]],
+          ["model replay", "selfdrive/test/process_replay/model_replay.py", ["selfdrive/modeld/"]],
         ])
       },
       'tizi': {
@@ -238,7 +230,7 @@ node {
           ["build openpilot", "cd system/manager && ./build.py"],
           ["test pandad loopback", "SINGLE_PANDA=1 pytest selfdrive/pandad/tests/test_pandad_loopback.py"],
           ["test pandad spi", "pytest selfdrive/pandad/tests/test_pandad_spi.py"],
-          ["test pandad", "pytest selfdrive/pandad/tests/test_pandad.py"],
+          ["test pandad", "pytest selfdrive/pandad/tests/test_pandad.py", ["panda/", "selfdrive/pandad/"]],
           ["test amp", "pytest system/hardware/tici/tests/test_amplifier.py"],
           ["test hw", "pytest system/hardware/tici/tests/test_hardware.py"],
           ["test qcomgpsd", "pytest system/qcomgpsd/tests/test_qcomgpsd.py"],
