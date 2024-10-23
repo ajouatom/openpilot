@@ -257,17 +257,18 @@ protected:
     float   plotMin = 0.;
     float   plotMax = 0.;
     float   plotShift = 0.0;
-    float   plotX = 100.0;// 300.0;
+    float   plotX = 40.0;// 300.0;
     float   plotWidth = 1000;
-    float   plotY = 30.0;
+    float   plotY = 120.0;// 30.0;
     float   plotHeight = 300.0;
     float   plotRatio = 1.0;
+    float   plotDx = 2.0;
     int     show_plot_mode = 0;
     int     show_plot_mode_prev = -1;
     void	drawPlotting(const UIState* s, int index, int start, float x, float y[], int size, NVGcolor* color, float stroke = 0.0) {
         nvgBeginPath(s->vg);
         plotRatio = (plotMax - plotMin) < 1.0 ? plotHeight : plotHeight / (plotMax - plotMin);
-        float dx = 2.0;
+        float dx = plotDx;
         char str[128];
 
         for (int i = 0; i < size; i++) {
@@ -367,6 +368,9 @@ public:
         if (sm.alive("carState") && sm.alive("longitudinalPlan"));
         else return;
 
+        ui_fill_rect(s->vg, { (int)plotX - 10, (int)plotY - 50, (int)(PLOT_MAX * plotDx) + 150, (int)plotHeight + 100}, COLOR_BLACK_ALPHA(90), 30);
+
+
         float plot_data[3] =  {0., 0., 0. };
         char title[128] = "";
 
@@ -389,7 +393,7 @@ public:
         for (int i = 0; i < 3; i++) {
             drawPlotting(s, i, plotIndex, plotX, plotQueue[i], plotSize, &color[i], 3.0f);
         }
-        ui_draw_text(s, 400, 20, title, 25, COLOR_WHITE, BOLD);
+        ui_draw_text(s, 400, plotY - 20, title, 25, COLOR_WHITE, BOLD);
     }
 };
 
@@ -1815,6 +1819,8 @@ public:
         int bx = x;
         int by = y + 270;
 
+        ui_fill_rect(s->vg, { bx - 120, by - 145, 420, 270}, COLOR_BLACK_ALPHA(90), 30);
+
 
         // draw traffic light
         int icon_red = icon_size;
@@ -2012,7 +2018,7 @@ public:
         }
         str.sprintf("MEM:%d%% DISK:%.0f%% CPU:%.0f%%,%.0f\u00B0C", memoryUsage, freeSpace, cpuUsage, cpuTemp);
         NVGcolor top_right_color = (cpuTemp > 85.0 || memoryUsage > 85.0) ? COLOR_ORANGE : COLOR_WHITE;
-		ui_draw_text(s, s->fb_w - 10, 2, str.toStdString().c_str(), 30, top_right_color, BOLD, 1.0f, 1.0f);
+		ui_draw_text(s, s->fb_w - 10, 2, str.toStdString().c_str(), 30, top_right_color, BOLD, 3.0f, 1.0f);
     }
 
 };
@@ -2058,9 +2064,9 @@ void ui_draw(UIState *s, ModelRenderer* model_renderer, int w, int h) {
 
   drawPlot.draw(s);
 
-  drawCarrot.drawHud(s);
-
   drawBlindSpot.draw(s);
+
+  drawCarrot.drawHud(s);
 
   drawCarrot.drawDebug(s);
   drawCarrot.drawDateTime(s);
@@ -2084,10 +2090,10 @@ protected:
     float steering_angle_pos = 0.0;
     NVGcolor get_tpms_color(float tpms) {
         if (tpms < 5 || tpms > 60) // N/A
-            return nvgRGBA(255, 255, 255, 220);
+            return COLOR_GREEN;
         if (tpms < 31)
-            return nvgRGBA(255, 90, 90, 220);
-        return nvgRGBA(255, 255, 255, 220);
+            return COLOR_RED;
+        return COLOR_GREEN;
     }
 
     const char* get_tpms_text(float tpms) {
@@ -2110,10 +2116,12 @@ public:
         float rl = tpms.getRl();
         float rr = tpms.getRr();
 
-        ui_draw_text_vg(vg, 15, h/2 - 115, get_tpms_text(fl), 20, get_tpms_color(fl), BOLD, 1);
-        ui_draw_text_vg(vg, w - 15, h/2 - 115, get_tpms_text(fr), 20, get_tpms_color(fr), BOLD, 1);
-        ui_draw_text_vg(vg, 15, h/2 + 135, get_tpms_text(rl), 20, get_tpms_color(rl), BOLD, 1);
-        ui_draw_text_vg(vg, w - 15, h/2 + 135, get_tpms_text(rr), 20, get_tpms_color(rr), BOLD, 1);
+        //fl = fr = rl = rr = 29;
+        //fl = fr = 40;
+        ui_draw_text_vg(vg, 25, 30, get_tpms_text(fl), 30, get_tpms_color(fl), BOLD, 3);
+        ui_draw_text_vg(vg, w - 25, 30, get_tpms_text(fr), 30, get_tpms_color(fr), BOLD, 3);
+        ui_draw_text_vg(vg, 25, h, get_tpms_text(rl), 30, get_tpms_color(rl), BOLD, 3);
+        ui_draw_text_vg(vg, w - 25, h, get_tpms_text(rr), 30, get_tpms_color(rr), BOLD, 3);
     }
     void draw(UIState *s, int w, int h, NVGcolor bg, NVGcolor bg_long) {
         NVGcontext* vg = s->vg_border;
@@ -2131,7 +2139,7 @@ public:
         a_ego_width = a_ego_width * 0.5 + (w * std::abs(a_ego) / 4.0) * 0.5;
         ui_fill_rect(vg, { w/2 - (int)(a_ego_width / 2), h - 30, (int)a_ego_width, 30 }, (a_ego >= 0)? COLOR_YELLOW : COLOR_RED, 15);
 
-        steering_angle_pos = steering_angle_pos * 0.5 + (w / 2. - w / 2. * car_state.getSteeringAngleDeg() / 180) * 0.5;
+        steering_angle_pos = steering_angle_pos * 0.5 + (w / 2. - w / 2. * car_state.getSteeringAngleDeg() / 90) * 0.5;
         int x_st = (int)steering_angle_pos - 50;
         int x_ed = (int)steering_angle_pos + 50;
         if (x_st < 0) x_st = 0;
@@ -2187,7 +2195,7 @@ public:
             sprintf(bottom_right, "%s", ipAddress.toStdString().c_str());
         }
 
-        int text_margin = 30;
+        int text_margin = 60;
         // top
         nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
         ui_draw_text_vg(vg, w / 2, 0, top, 30, COLOR_WHITE, BOLD);
