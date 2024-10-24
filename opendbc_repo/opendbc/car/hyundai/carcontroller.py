@@ -197,7 +197,7 @@ class CarController(CarControllerBase):
 
         if not camera_scc:
           if hda2:
-            can_sends.extend(hyundaicanfd.create_adrv_messages(self.CP, self.packer, self.CAN, self.frame))
+            can_sends.extend(hyundaicanfd.create_adrv_messages(self.CP, self.packer, self.CAN, self.frame, CS))
           else:
             can_sends.extend(hyundaicanfd.create_fca_warning_light(self.packer, self.CAN, self.frame))
         if self.frame % 2 == 0:

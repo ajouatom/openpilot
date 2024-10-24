@@ -93,6 +93,9 @@ class CarInterface(CarInterfaceBase):
         else:
           ret.flags |= HyundaiFlags.CANFD_ALT_GEARS.value
           print("$$$CANFD ALT_GEARS")
+      if 0x161 in fingerprint[CAN.ECAN]: # 0x161(353)
+        ret.extFlags |= HyundaiExtFlags.CANFD_161.value
+        print("$$$CANFD 161")
       cfgs = [get_safety_config(structs.CarParams.SafetyModel.hyundaiCanfd), ]
       if CAN.ECAN >= 4:
         cfgs.insert(0, get_safety_config(structs.CarParams.SafetyModel.noOutput))

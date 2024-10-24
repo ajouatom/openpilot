@@ -256,7 +256,7 @@ def create_fca_warning_light(packer, CAN, frame):
   return ret
 
 
-def create_adrv_messages(CP, packer, CAN, frame):
+def create_adrv_messages(CP, packer, CAN, frame, CS):
   # messages needed to car happy after disabling
   # the ADAS Driving ECU to do longitudinal control
 
@@ -298,6 +298,12 @@ def create_adrv_messages(CP, packer, CAN, frame):
         'SET_ME_41': 0x41,
       }
       ret.append(packer.make_can_msg("ADRV_0x1da", CAN.ECAN, values))
+
+    if frame % 5 == 0:
+      if CP.flags & HyundaiExtFlags.CANFD_161.value:
+        values = CS.adrv_info_161
+        values["vSetDis"] = 175
+        ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values))
 
   return ret
 
