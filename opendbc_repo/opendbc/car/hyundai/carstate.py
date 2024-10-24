@@ -585,7 +585,7 @@ class CarState(CarStateBase):
         ("SCC_CONTROL", 50),
         ("LFA", 20),
       ]
-    if CP.flags & HyundaiExtFlags.CANFD_161:
+    if CP.extFlags & HyundaiExtFlags.CANFD_161:
       messages += [
         ("ADRV_0x161", 20),
       ]
