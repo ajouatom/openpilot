@@ -267,6 +267,13 @@ def create_adrv_messages(CP, packer, CAN, frame, CS):
   if not (CP.flags & HyundaiFlags.CAMERA_SCC.value) or CP.extFlags & HyundaiExtFlags.ACAN_PANDA.value:
     ret.append(packer.make_can_msg("ADRV_0x51", CAN.ACAN, values))
 
+    if frame % 5 == 0:
+      if CP.flags & HyundaiExtFlags.CANFD_161.value:
+        values = CS.adrv_info_161
+        values["vSetDis"] = 175
+        ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values))
+
+
   if not (CP.flags & HyundaiFlags.CAMERA_SCC.value):
     ret.extend(create_fca_warning_light(packer, CAN, frame))
     if frame % 5 == 0:
@@ -298,12 +305,6 @@ def create_adrv_messages(CP, packer, CAN, frame, CS):
         'SET_ME_41': 0x41,
       }
       ret.append(packer.make_can_msg("ADRV_0x1da", CAN.ECAN, values))
-
-    if frame % 5 == 0:
-      if CP.flags & HyundaiExtFlags.CANFD_161.value:
-        values = CS.adrv_info_161
-        values["vSetDis"] = 175
-        ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values))
 
   return ret
 
