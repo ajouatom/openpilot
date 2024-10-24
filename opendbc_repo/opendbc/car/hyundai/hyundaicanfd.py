@@ -267,6 +267,7 @@ def create_adrv_messages(CP, packer, CAN, frame, CS):
 
   values = {
   }
+  print("CP.flags & HyundaiFlags.CAMERA_SCC.value: ", CP.flags & HyundaiFlags.CAMERA_SCC.value)
   if CP.flags & HyundaiFlags.CAMERA_SCC.value:
     print("CAMERA_SCC")
     if frame % 5 == 0:

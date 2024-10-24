@@ -49,6 +49,7 @@ class CarInterface(CarInterfaceBase):
 
       # detect HDA2 with ADAS Driving ECU
       if hda2:
+        print("$$$CANFD HDA2")
         ret.flags |= HyundaiFlags.CANFD_HDA2.value
         if camera_scc > 0:
           if 0x110 in fingerprint[CAN.ACAN]:

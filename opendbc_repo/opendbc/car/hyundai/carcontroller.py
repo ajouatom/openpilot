@@ -196,6 +196,7 @@ class CarController(CarControllerBase):
         self.hyundai_jerk.make_jerk(self.CP, CS, accel, actuators, hud_control)
 
         if True: #not camera_scc:
+          print(f"hda2 = {hda2}")
           if hda2:
             can_sends.extend(hyundaicanfd.create_adrv_messages(self.CP, self.packer, self.CAN, self.frame, CS))
           else:
