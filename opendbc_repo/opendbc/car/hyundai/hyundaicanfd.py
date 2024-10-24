@@ -269,11 +269,14 @@ def create_adrv_messages(CP, packer, CAN, frame, CS):
   }
   if CP.flags & HyundaiFlags.CAMERA_SCC.value:
     if frame % 5 == 0:
-      if CP.extFlags & HyundaiExtFlags.CANFD_161.value and CS.adrv_info_161 is not None:
-        values = CS.adrv_info_161
-        values["vSetDis"] = 175
-        ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values))
-        print(values)
+      if CP.extFlags & HyundaiExtFlags.CANFD_161.value:
+        if CS.adrv_info_161 is not None:
+          values = CS.adrv_info_161
+          print("adrv_info_161 = ", CS.adrv_info_161)
+          values["vSetDis"] = 175
+          ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values))
+        else:
+          print("no adrv_info_161")
 
   if not (CP.flags & HyundaiFlags.CAMERA_SCC.value) or CP.extFlags & HyundaiExtFlags.ACAN_PANDA.value:
     ret.append(packer.make_can_msg("ADRV_0x51", CAN.ACAN, values))
