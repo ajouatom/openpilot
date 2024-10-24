@@ -267,8 +267,10 @@ def create_adrv_messages(CP, packer, CAN, frame, CS):
 
   values = {
   }
-  if (CP.flags & HyundaiFlags.CAMERA_SCC.value):
+  if CP.flags & HyundaiFlags.CAMERA_SCC.value:
+    print("CAMERA_SCC")
     if frame % 5 == 0:
+      print("frame % 5 == 0")
       if CP.flags & HyundaiExtFlags.CANFD_161.value:
         values = CS.adrv_info_161
         values["vSetDis"] = 175
