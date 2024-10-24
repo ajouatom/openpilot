@@ -1989,6 +1989,25 @@ public:
         ui_draw_text(s, bx - 90, by + 80, get_tpms_text(rl), 38, get_tpms_color(rl), BOLD);
         ui_draw_text(s, bx + 90, by + 80, get_tpms_text(rr), 38, get_tpms_color(rr), BOLD);
     }
+    void drawTpms2(const UIState* s) {
+        nvgTextAlign(s->vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
+        SubMaster& sm = *(s->sm);
+        auto car_state = sm["carState"].getCarState();
+
+        int bx = s->fb_w - 125;
+        int by = 130;
+        auto tpms = car_state.getTpms();
+        float fl = tpms.getFl();
+        float fr = tpms.getFr();
+        float rl = tpms.getRl();
+        float rr = tpms.getRr();
+        //fl = fr = rl = rr = 29;
+        int dw = 80;
+        ui_draw_text(s, bx - dw, by - 55, get_tpms_text(fl), 30, get_tpms_color(fl), BOLD);
+        ui_draw_text(s, bx + dw, by - 55, get_tpms_text(fr), 30, get_tpms_color(fr), BOLD);
+        ui_draw_text(s, bx - dw, by + 70, get_tpms_text(rl), 30, get_tpms_color(rl), BOLD);
+        ui_draw_text(s, bx + dw, by + 70, get_tpms_text(rr), 30, get_tpms_color(rr), BOLD);
+    }
     void drawDeviceInfo(const UIState* s) {
         nvgTextAlign(s->vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
         SubMaster& sm = *(s->sm);
@@ -2072,7 +2091,7 @@ void ui_draw(UIState *s, ModelRenderer* model_renderer, int w, int h) {
   drawCarrot.drawDateTime(s);
   drawCarrot.drawConnInfo(s);
   drawCarrot.drawDeviceInfo(s);
-  //drawCarrot.drawTpms(s);
+  drawCarrot.drawTpms2(s);
 
   drawTurnInfo.draw(s);
 
@@ -2195,7 +2214,7 @@ public:
             sprintf(bottom_right, "%s", ipAddress.toStdString().c_str());
         }
 
-        int text_margin = 60;
+        int text_margin = 30;
         // top
         nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
         ui_draw_text_vg(vg, w / 2, 0, top, 30, COLOR_WHITE, BOLD);
@@ -2215,7 +2234,7 @@ public:
         nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM);
         ui_draw_text_vg(vg, w- text_margin, h, bottom_right, 30, COLOR_WHITE, BOLD);
 
-        drawTpms(s, w, h);
+        //drawTpms(s, w, h);
     }
 };
 NVGcolor QColorToNVGcolor(const QColor& color) {
