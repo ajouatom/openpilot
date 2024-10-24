@@ -281,13 +281,13 @@ class CarrotPlanner:
     v = model.velocity.x
 
     self.fakeCruiseDistance = 0.0
-    radar_detected = radarstate.leadOne.status & radarstate.leadOne.radar
+    lead_detected = radarstate.leadOne.status # & radarstate.leadOne.radar
 
     self.xStop = self.update_stop_dist(x[31])
     stop_model_x = self.xStop
 
     #self.check_model_stopping(v, v_ego, self.xStop, y)
-    self.check_model_stopping(v, v_ego, x[-1], y, radarstate.leadOne.dRel if radarstate.leadOne.status else 1000)
+    self.check_model_stopping(v, v_ego, x[-1], y, radarstate.leadOne.dRel if lead_detected else 1000)
 
     if self.myDrivingMode == 4:
       self.trafficState = TrafficState.off
@@ -300,7 +300,7 @@ class CarrotPlanner:
     if self.xState == XState.e2eStopped:
       if carstate.gasPressed:
         self.xState = XState.e2ePrepare
-      elif radar_detected and (radarstate.leadOne.dRel - stop_model_x) < 2.0:
+      elif lead_detected and (radarstate.leadOne.dRel - stop_model_x) < 2.0:
         self.xState = XState.lead
       elif self.stopping_count == 0:
         if self.trafficState == TrafficState.green and not self.carrot_stay_stop and not carstate.leftBlinker:
@@ -313,7 +313,7 @@ class CarrotPlanner:
         #self.xState = XState.e2ePrepare
         self.xState = XState.e2eCruise
         self.traffic_starting_count = 10.0 / DT_MDL
-      elif radar_detected and (radarstate.leadOne.dRel - stop_model_x) < 2.0:
+      elif lead_detected and (radarstate.leadOne.dRel - stop_model_x) < 2.0:
         self.xState = XState.lead
       else:
         if self.trafficState == TrafficState.green:
@@ -332,7 +332,7 @@ class CarrotPlanner:
             self.stopping_count = 0.5 / DT_MDL
             self.xState = XState.e2eStopped
     elif self.xState == XState.e2ePrepare:
-      if radar_detected:
+      if lead_detected:
         self.xState = XState.lead
       elif v_ego_kph < 5.0 and self.trafficState != TrafficState.green:
         self.xState = XState.e2eStop
@@ -341,7 +341,7 @@ class CarrotPlanner:
         self.xState = XState.e2eCruise
     else: #XState.lead, XState.cruise, XState.e2eCruise
       self.traffic_starting_count = max(0, self.traffic_starting_count - 1)
-      if radar_detected:
+      if lead_detected:
         self.xState = XState.lead
       elif self.trafficState == TrafficState.red and abs(carstate.steeringAngleDeg) < 30 and self.traffic_starting_count == 0:
         self.events.add(EventName.trafficStopping)
