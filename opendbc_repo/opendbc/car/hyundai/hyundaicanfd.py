@@ -243,6 +243,9 @@ def create_spas_messages(packer, CAN, frame, left_blink, right_blink):
 
 def create_fca_warning_light(packer, CAN, frame):
   ret = []
+  if CP.flags & HyundaiFlags.CAMERA_SCC.value:
+    return ret
+
   if frame % 2 == 0:
     values = {
       'AEB_SETTING': 0x1,  # show AEB disabled icon
@@ -264,15 +267,15 @@ def create_adrv_messages(CP, packer, CAN, frame, CS):
 
   values = {
   }
+  if (CP.flags & HyundaiFlags.CAMERA_SCC.value):
+    if frame % 5 == 0:
+    if CP.flags & HyundaiExtFlags.CANFD_161.value:
+      values = CS.adrv_info_161
+      values["vSetDis"] = 175
+      ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values))
+
   if not (CP.flags & HyundaiFlags.CAMERA_SCC.value) or CP.extFlags & HyundaiExtFlags.ACAN_PANDA.value:
     ret.append(packer.make_can_msg("ADRV_0x51", CAN.ACAN, values))
-
-    if frame % 5 == 0:
-      if CP.flags & HyundaiExtFlags.CANFD_161.value:
-        values = CS.adrv_info_161
-        values["vSetDis"] = 175
-        ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values))
-
 
   if not (CP.flags & HyundaiFlags.CAMERA_SCC.value):
     ret.extend(create_fca_warning_light(packer, CAN, frame))

@@ -195,7 +195,7 @@ class CarController(CarControllerBase):
       if self.CP.openpilotLongitudinalControl:
         self.hyundai_jerk.make_jerk(self.CP, CS, accel, actuators, hud_control)
 
-        if not camera_scc:
+        if True: #not camera_scc:
           if hda2:
             can_sends.extend(hyundaicanfd.create_adrv_messages(self.CP, self.packer, self.CAN, self.frame, CS))
           else:
