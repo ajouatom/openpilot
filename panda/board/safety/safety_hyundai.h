@@ -460,7 +460,7 @@ static safety_config hyundai_legacy_init(uint16_t param) {
   // older hyundai models have less checks due to missing counters and checksums
   static RxCheck hyundai_legacy_rx_checks[] = {
     HYUNDAI_COMMON_RX_CHECKS(true)
-    HYUNDAI_SCC12_ADDR_CHECK(0)
+    //HYUNDAI_SCC12_ADDR_CHECK(0)
   };
 
   hyundai_common_init(param);
