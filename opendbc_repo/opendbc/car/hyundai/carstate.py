@@ -364,9 +364,9 @@ class CarState(CarStateBase):
       self.lfa_info = copy.copy(cp_cam.vl["LFA"])
 
     if self.CP.extFlags & HyundaiExtFlags.CANFD_161.value:
-      if "ADAS_0x161" in cp_cam.vl:
-        self.adrv_info_161 = copy.copy(cp_cam.vl.get("ADAS_0x161", {}))
-        print("ADAS_0x161: {}".format(self.adrv_info_161))
+      if "ADRV_0x161" in cp_cam.vl:
+        self.adrv_info_161 = copy.copy(cp_cam.vl.get("ADRV_0x161", {}))
+        print("ADRV_0x161: {}".format(self.adrv_info_161))
 
     # Manual Speed Limit Assist is a feature that replaces non-adaptive cruise control on EV CAN FD platforms.
     # It limits the vehicle speed, overridable by pressing the accelerator past a certain point.
