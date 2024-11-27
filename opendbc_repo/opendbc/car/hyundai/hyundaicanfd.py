@@ -466,6 +466,28 @@ def create_adrv_messages(CP, packer, CAN, frame, CC, CS, hud_control):
         values["SIGNAL240"] = 0
         values["SIGNAL246"] = 0
         ret.append(packer.make_can_msg("CORNER_RADAR_HIGHWAY", CAN.ECAN, values))
+
+    if frame % 20 == 0 and False: # 아직 시험중..
+      if CS.hda_info_4a3 is not None:
+        values = CS.hda_info_4a3
+        # SIGNAL_4: 7, SIGNAL_0: 0 으로 해도 .. 옆두부는 나오기도 함.. 아오5
+        values["SIGNAL_4"] = 10 if CC.enabled else 0   # 0, 5(고속도로진입), 10(고속도로), 7,5(국도에서 간혹), 0,10(카니발)      , 5(고속도로진입,EV6), 11(고속도로,EV6)
+        values["SIGNAL_0"] = 5 if CC.enabled else 0  # 0, 2(고속도로진입), 1(고속도로),                      5(카니발은 항상)  , 2(고속도로진입,EV6), 1(고속도로,EV6)
+        values["NEW_SIGNAL_1"] = 4
+        values["NEW_SIGNAL_2"] = 0
+        values["NEW_SIGNAL_3"] = 154
+        values["NEW_SIGNAL_4"] = 9
+        values["NEW_SIGNAL_5"] = 0
+        values["NEW_SIGNAL_6"] = 256
+        values["NEW_SIGNAL_7"] = 0
+        ret.append(packer.make_can_msg("HDA_INFO_4A3", CAN.CAM, values))
+    if frame % 10 == 0:
+      if CS.new_msg_4b4 is not None:
+        values = CS.new_msg_4b4
+        values["NEW_SIGNAL_4"] = 146
+        values["NEW_SIGNAL_5"] = 72
+        values["NEW_SIGNAL_6"] = 44
+        ret.append(packer.make_can_msg("NEW_MSG_4B4", CAN.CAM, values))
     return ret
   else:
     values = {}

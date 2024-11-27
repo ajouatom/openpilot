@@ -69,6 +69,8 @@ const CanMsg HYUNDAI_CANFD_HDA2_LONG_TX_MSGS[] = {
   {353, 0, 32}, // ADRV_353
   {354, 0, 32}, // CORNER_RADAR_HIGHWAY
   {512, 0, 8}, // ADRV_0x200
+  {1187, 2, 8}, // 4A3
+  {1204, 2, 8}, // 4B4
 };
 
 const CanMsg HYUNDAI_CANFD_HDA1_TX_MSGS[] = {
@@ -179,7 +181,7 @@ const int HYUNDAI_PARAM_CANFD_HDA2_ALT_STEERING = 128;
 bool hyundai_canfd_alt_buttons = false;
 bool hyundai_canfd_hda2_alt_steering = false;
 
-int canfd_tx_addr[32] = { 80, 81, 272, 282, 298, 352, 353, 354, 442, 485, 416, 437, 506, 474, 480, 490, 512, 676, 866, 837, 1402, 908, 1848, 0, };
+int canfd_tx_addr[32] = { 80, 81, 272, 282, 298, 352, 353, 354, 442, 485, 416, 437, 506, 474, 480, 490, 512, 676, 866, 837, 1402, 908, 1848, 1187, 1204, 0, };
 uint32_t canfd_tx_time[32] = { 0, };
 
 int hyundai_canfd_hda2_get_lkas_addr(void) {
