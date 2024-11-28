@@ -1,4 +1,4 @@
-from openpilot.common.params import Params
+﻿from openpilot.common.params import Params
 from openpilot.common.filter_simple import FirstOrderFilter
 
 from opendbc.can.packer import CANPacker
@@ -14,8 +14,8 @@ from openpilot.selfdrive.controls.lib.vehicle_model import ACCELERATION_DUE_TO_G
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 NetworkLocation = structs.CarParams.NetworkLocation
 LongCtrlState = structs.CarControl.Actuators.LongControlState
-GearShifter = structs.CarState.GearShifter
-TransmissionType = structs.CarParams.TransmissionType
+#GearShifter = structs.CarState.GearShifter # 아래까지, 두 줄은 전혀 쓰이지 않고 있습니다.
+#TransmissionType = structs.CarParams.TransmissionType # 
 
 # Camera cancels up to 0.1s after brake is pressed, ECM allows 0.5s
 CAMERA_CANCEL_DELAY_FRAMES = 10
