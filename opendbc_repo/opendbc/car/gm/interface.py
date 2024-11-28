@@ -157,7 +157,7 @@ class CarInterface(CarInterfaceBase):
       ret.longitudinalTuning.kiV = [0.]
 
       # TODO: Test for CADILLAC_CT6_ACC
-      if ret.enableGasInterceptor:
+      if ret.enableGasInterceptorDEPRECATED:
         # Need to set ASCM long limits when using pedal interceptor, instead of camera ACC long limits
         ret.safetyConfigs[0].safetyParam |= Panda.FLAG_GM_HW_ASCM_LONG
 
