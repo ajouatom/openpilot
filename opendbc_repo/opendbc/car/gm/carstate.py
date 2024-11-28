@@ -1,4 +1,4 @@
-import copy
+﻿import copy
 from cereal import car
 from openpilot.common.params import Params #kans
 from opendbc.can.can_define import CANDefine
@@ -42,11 +42,11 @@ class CarState(CarStateBase):
     self.single_pedal_mode = False
     self.pedal_steady = 0.
 
-    # for delay Accfault event
-    self.accFaultedCount = 0
+    # for delay Accfault event # 적용될 필요가 없어진 코드입니다. 아래 관련된 코드포함.
+    # self.accFaultedCount = 0
 
     # cruiseMain default(test from nd0706-vision)
-    self.cruiseMain_on = True #if Params().get_int("AutoEngage") == 2 else False
+    self.cruiseMain_on = True if Params().get_int("AutoEngage") == 2 else False
 
   def update(self, can_parsers) -> structs.CarState:
     pt_cp = can_parsers[Bus.pt]
@@ -72,13 +72,13 @@ class CarState(CarStateBase):
       self.cruise_buttons = CruiseButtons.GAP_DIST
 
     if self.CP.enableBsm:
-      # kans
-      if self.CP.carFingerprint in SDGM_CAR:
-        ret.leftBlindspot = cam_cp.vl["BCMBlindSpotMonitor"]["LeftBSM"] == 1
-        ret.rightBlindspot = cam_cp.vl["BCMBlindSpotMonitor"]["RightBSM"] == 1
-      else:
+      # kans:  not in SDGM 조건으로 해야 코드가 단순해집니다.
+      if self.CP.carFingerprint not in SDGM_CAR:
         ret.leftBlindspot = pt_cp.vl["BCMBlindSpotMonitor"]["LeftBSM"] == 1
         ret.rightBlindspot = pt_cp.vl["BCMBlindSpotMonitor"]["RightBSM"] == 1
+      else:
+        ret.leftBlindspot = cam_cp.vl["BCMBlindSpotMonitor"]["LeftBSM"] == 1
+        ret.rightBlindspot = cam_cp.vl["BCMBlindSpotMonitor"]["RightBSM"] == 1
 
     # Variables used for avoiding LKAS faults
     self.loopback_lka_steering_cmd_updated = len(loopback_cp.vl_all["ASCMLKASteeringCmd"]["RollingCounter"]) > 0
@@ -172,20 +172,18 @@ class CarState(CarStateBase):
 
       ret.parkingBrake = cam_cp.vl["BCMGeneralPlatformStatus"]["ParkBrakeSwActive"] == 1
 
-    self.pcm_acc_status = pt_cp.vl["AcceleratorPedal2"]["CruiseState"]
-
+    # self.pcm_acc_status = pt_cp.vl["AcceleratorPedal2"]["CruiseState"] 아래쪽(204라인)으로 위치시키는게 accFault관련코드가 단순해집니다. 이 라인도 삭제하면 됩니다.
+    # accFault지연코드는 적용될 필요가 없으므로, 삭제합니다.
     ret.cruiseState.available = pt_cp.vl["ECMEngineStatus"]["CruiseMainOn"] != 0
     self.cruiseMain_on =  ret.cruiseState.available
     ret.espDisabled = pt_cp.vl["ESPStatus"]["TractionControlOn"] != 1
-    # for delay Accfault event
-    accFaulted = (self.pcm_acc_status == AccState.FAULTED or \
+    ret.accFaulted = (pt_cp.vl["AcceleratorPedal2"]["CruiseState"] == AccState.FAULTED or
                       pt_cp.vl["EBCMFrictionBrakeStatus"]["FrictionBrakeUnavailable"] == 1)
-    startingState = LongCtrlState.starting
-    self.accFaultedCount = self.accFaultedCount + 1 if accFaulted else 0
-    ret.accFaulted = True if self.accFaultedCount > 50 else False
 
-    ret.cruiseState.enabled = self.pcm_acc_status != AccState.OFF
-    ret.cruiseState.standstill = self.pcm_acc_status == AccState.STANDSTILL
+    ret.cruiseState.enabled = pt_cp.vl["AcceleratorPedal2"]["CruiseState"] != AccState.OFF
+    ret.cruiseState.standstill = pt_cp.vl["AcceleratorPedal2"]["CruiseState"] == AccState.STANDSTILL
+    # kans(Button or Auto Resume)
+    startingState = LongCtrlState.starting
     if startingState:
       ret.cruiseState.standstill = False
     if self.CP.networkLocation == NetworkLocation.fwdCamera and not self.CP.flags & GMFlags.NO_CAMERA.value:
@@ -202,10 +200,12 @@ class CarState(CarStateBase):
       ret.accFaulted = False
       ret.cruiseState.speed = pt_cp.vl["ECMCruiseControl"]["CruiseSetSpeed"] * CV.KPH_TO_MS
       ret.cruiseState.enabled = pt_cp.vl["ECMCruiseControl"]["CruiseActive"] != 0
-
-    if True:
-      ret.vCluRatio = 0.96
-    elif self.CP.flags & GMFlags.SPEED_RELATED_MSG.value:
+    # 위에서 삭제된 것을 아랫줄에 위치했습니다.
+    self.pcm_acc_status = pt_cp.vl["AcceleratorPedal2"]["CruiseState"]
+    #if True: 이 부분에서 전체적으로 true 해버리면 SPEED_RELATED_MSG.value 조건이 아무 의미가 없습니다. 일관 .96이 되어버립니다.
+    #  ret.vCluRatio = 0.96
+    # 아래코드는 차량속도와 계기판 속도를 일치시키기위한 Volt용. 그외 차량은 vCluRatio = 0.96으로 지정함.
+    if self.CP.flags & GMFlags.SPEED_RELATED_MSG.value:
       # kans: use cluster speed & vCluRatio(longitudialPlanner)
       self.is_metric = Params().get_bool("IsMetric")
       speed_conv = CV.KPH_TO_MS * 1.609344 if self.is_metric else CV.MPH_TO_MS
@@ -270,9 +270,10 @@ class CarState(CarStateBase):
       pt_messages += [
         ("ASCMLKASteeringCmd", 0),
       ]
-      if CP.flags & GMFlags.NO_ACCELERATOR_POS_MSG.value:
-        pt_messages.remove(("ECMAcceleratorPos", 80))
-        pt_messages.append(("EBCMBrakePedalPosition", 100))
+    # 이 부분은 위 조건아래 들어와야 하는 것이 아니므로 내어쓰기 해야 합니다.
+    if CP.flags & GMFlags.NO_ACCELERATOR_POS_MSG.value:
+      pt_messages.remove(("ECMAcceleratorPos", 80))
+      pt_messages.append(("EBCMBrakePedalPosition", 100))
 
     if CP.transmissionType == TransmissionType.direct:
       pt_messages += [
@@ -284,11 +285,14 @@ class CarState(CarStateBase):
       pt_messages += [
         ("ECMCruiseControl", 10),
       ]
-    if CP.enableGasInterceptorDEPRECATED:
-      pt_messages += [
-        ("GAS_SENSOR", 50),
-      ]
-    
+    if CP.enableGasInterceptorDEPRECATED: #위에 적용된 SDGM차량과 연관되어 있으므로 SDGM조건이 추가되어야 합니다.
+      if CP.carFingerprint in SDGM_CAR:
+        pt_messages.remove(("AcceleratorPedal2", 40)),
+        pt_messages.append(("GAS_SENSOR", 50)),
+      else:
+        pt_messages.remove(("AcceleratorPedal2", 33)),
+        pt_messages.append(("GAS_SENSOR", 50)),
+
     cam_messages = []
     if CP.networkLocation == NetworkLocation.fwdCamera and not CP.flags & GMFlags.NO_CAMERA.value:
       cam_messages += [
