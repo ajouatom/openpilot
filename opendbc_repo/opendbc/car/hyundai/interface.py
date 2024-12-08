@@ -157,8 +157,8 @@ class CarInterface(CarInterfaceBase):
         ret.lateralTuning.pid.kf = 0.00
         ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kpBP = [[0.], [0]]
         ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[1.0], [0.1]]
-
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      else:
+        CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     if ret.flags & HyundaiFlags.ALT_LIMITS:
       ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_ALT_LIMITS
