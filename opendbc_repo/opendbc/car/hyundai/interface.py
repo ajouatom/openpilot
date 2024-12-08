@@ -149,11 +149,15 @@ class CarInterface(CarInterfaceBase):
     ret.steerActuatorDelay = 0.1
     ret.steerLimitTimer = 0.4
 
-    if params.get_int("CarrotLatControl") > 1:
-      ret.steerControlType = SteerControlType.pid
-    elif ret.flags & HyundaiFlags.ANGLE_CONTROL:
+    if ret.flags & HyundaiFlags.ANGLE_CONTROL:
       ret.steerControlType = SteerControlType.angle
     else:
+      if params.get_int("CarrotLatControl") > 1:
+        ret.lateralTuning.init('pid')
+        ret.lateralTuning.pid.kf = 0.00
+        ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kpBP = [[0.], [0]]
+        ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[1.0], [0.1]]
+
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     if ret.flags & HyundaiFlags.ALT_LIMITS:
