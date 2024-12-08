@@ -25,9 +25,9 @@ class LatControlPID(LatControl):
   def update(self, active, CS, VM, params, steer_limited, desired_curvature, desired_curvature_now, calibrated_pose):
     self.frame += 1
     if self.frame % 10 == 0:
-      lateralTorqueKp = self.params.get_float("LateralTorqueKp")*0.01
-      lateralTorqueKi = self.params.get_float("LateralTorqueKi")*0.01
-      lateralTorqueKd = self.params.get_float("LateralTorqueKd")*0.01
+      lateralTorqueKp = self.params.get_float("LateralTorqueKp")*0.001
+      lateralTorqueKi = self.params.get_float("LateralTorqueKi")*0.001
+      lateralTorqueKd = self.params.get_float("LateralTorqueKd")*0.001
       self.pid._k_p = [[0], [lateralTorqueKp]]
       self.pid._k_i = [[0], [lateralTorqueKi]]
       self.pid._k_d = [[0], [lateralTorqueKd]]

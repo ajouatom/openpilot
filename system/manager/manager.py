@@ -115,7 +115,7 @@ def get_default_params():
     ("LateralTorqueAccelFactor", "2500"),       
     ("LateralTorqueFriction", "100"),
     ("LateralTorqueKp", "100"),
-    ("LateralTorqueKi", "10"),
+    ("LateralTorqueKi", "20"),
     ("LateralTorqueKd", "0"),
     ("CustomSteerMax", "0"),       
     ("CustomSteerDeltaUp", "0"),       

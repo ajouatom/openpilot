@@ -69,14 +69,14 @@
     {
       "group": "Á¶ÇâÆ©´×",
       "name": "LateralTorqueKi",
-      "title": "_LateralTorqueKi*0.01(10)",
+      "title": "_LateralTorqueKi*0.01(20)",
       "descr": "",
       "egroup": "LAT",
-      "etitle": "_LateralTorqueKi*0.01(10)",
+      "etitle": "_LateralTorqueKi*0.01(20)",
       "edescr": "",
       "min": 0,
       "max": 10000,
-      "default": 10,
+      "default": 20,
       "unit": 10
     },
     {
