@@ -101,7 +101,7 @@ class HyundaiFlags(IntFlag):
   TCU_GEARS = 2 ** 22
 
   MIN_STEER_32_MPH = 2 ** 23
-  
+
   ANGLE_CONTROL = 2 ** 24
 
   CC_ONLY_CAR = 2 ** 25
@@ -338,6 +338,14 @@ class CAR(Platforms):
     CarSpecs(mass=1948, wheelbase=2.97, steerRatio=14.26, tireStiffnessFactor=0.65),
     flags=HyundaiFlags.EV,
   )
+  HYUNDAI_IONIQ5_PE = HyundaiCanFDPlatformConfig(
+    [
+      HyundaiCarDocs("HYUNDAI IONIQ 5 PE (NE1)", car_parts=CarParts.common([CarHarness.hyundai_q])),
+      HyundaiCarDocs("Hyundai Ioniq 5 PE (with HDA II) 2024", "Highway Driving Assist II", car_parts=CarParts.common([CarHarness.hyundai_q])),
+    ],
+    CarSpecs(mass=2012, wheelbase=3.0, steerRatio=14.26, tireStiffnessFactor=0.65),
+    flags=HyundaiFlags.EV | HyundaiFlags.ANGLE_CONTROL,
+  )
   HYUNDAI_IONIQ_5_N = HyundaiCanFDPlatformConfig(
     [HyundaiCarDocs("Hyundai Ioniq 5 N (with HDA II) 2024", "Highway Driving Assist II", car_parts=CarParts.common([CarHarness.hyundai_m]))],
     CarSpecs(mass=2200, wheelbase=3.00, steerRatio=12.54),
@@ -372,7 +380,7 @@ class CAR(Platforms):
     CarSpecs(mass=1060, wheelbase=2.4, steerRatio=14.3),  # mass: from https://www.hyundai-motor.com.tw/clicktobuy/custin#spec_0, steerRatio: from learner
     flags=HyundaiFlags.CAMERA_SCC | HyundaiFlags.CHECKSUM_CRC8,
   )
-  
+
   HYUNDAI_CASPER_EV = HyundaiPlatformConfig(
     [HyundaiCarDocs("Hyundai Casper EV 2024", "All", car_parts=CarParts.common([CarHarness.hyundai_k]))],
     CarSpecs(mass=1355, wheelbase=2.58, steerRatio=14.3),  # mass: from https://www.hyundai-motor.com.tw/clicktobuy/custin#spec_0, steerRatio: from learner
@@ -546,6 +554,14 @@ class CAR(Platforms):
     CarSpecs(mass=2055, wheelbase=2.9, steerRatio=16, tireStiffnessFactor=0.65),
     flags=HyundaiFlags.EV,
   )
+  KIA_EV6_PE = HyundaiCanFDPlatformConfig(
+    [
+      HyundaiCarDocs("KIA EV6 PE (CV1)", car_parts=CarParts.common([CarHarness.hyundai_p])),
+      HyundaiCarDocs("Kia EV6 PE (with HDA II) 2025", "Highway Driving Assist II", car_parts=CarParts.common([CarHarness.hyundai_p]))
+    ],
+    CarSpecs(mass=2055, wheelbase=2.9, steerRatio=16, tireStiffnessFactor=0.65),
+    flags=HyundaiFlags.EV | HyundaiFlags.ANGLE_CONTROL,
+  )
   KIA_CARNIVAL_4TH_GEN = HyundaiCanFDPlatformConfig(
     [
       HyundaiCarDocs("Kia Carnival 2022-24", car_parts=CarParts.common([CarHarness.hyundai_a])),
@@ -648,7 +664,6 @@ class CAR(Platforms):
     CarSpecs(mass=1885, wheelbase=2.79, steerRatio=15.3, tireStiffnessFactor=0.385),
     flags=HyundaiFlags.EV,
   )
-
   KIA_MOHAVE = HyundaiPlatformConfig(
     [HyundaiCarDocs("Kia Mohave 2019", "All", car_parts=CarParts.common([CarHarness.hyundai_k]))],
     CarSpecs(mass=2285, wheelbase=2.895, steerRatio=16., tireStiffnessFactor=0.7),
