@@ -149,7 +149,7 @@ class CarInterface(CarInterfaceBase):
     ret.steerActuatorDelay = 0.1
     ret.steerLimitTimer = 0.4
 
-    if params.get_bool("CarrotLatControl") > 1:
+    if params.get_int("CarrotLatControl") > 1:
       ret.steerControlType = SteerControlType.pid
     elif ret.flags & HyundaiFlags.ANGLE_CONTROL:
       ret.steerControlType = SteerControlType.angle
