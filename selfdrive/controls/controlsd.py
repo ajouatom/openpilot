@@ -126,7 +126,7 @@ class Controls:
     curve_speed_abs = abs(self.sm['carrotMan'].vTurnSpeed)
     self.lanefull_mode_enabled = lat_plan.useLaneLines and self.params.get_int("UseLaneLineSpeedApply") > 0 and curve_speed_abs > self.params.get_int("UseLaneLineCurveSpeed")
     
-    if self.params.get_bool("CarrotLatControl"):
+    if self.params.get_int("CarrotLatControl") > 0:
       model_actuator_delay = self.params.get_float("ModelActuatorDelay") * 0.01
       desired_curvature_now = get_lag_adjusted_curvature(self.CP, CS.vEgo, lat_plan.psis, lat_plan.curvatures, model_actuator_delay)
       # desired_curvature_now: curvature at SAD applied time

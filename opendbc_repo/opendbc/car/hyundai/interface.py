@@ -148,7 +148,10 @@ class CarInterface(CarInterfaceBase):
     ret.centerToFront = ret.wheelbase * 0.4
     ret.steerActuatorDelay = 0.1
     ret.steerLimitTimer = 0.4
-    if ret.flags & HyundaiFlags.ANGLE_CONTROL:
+
+    if params.get_bool("CarrotLatControl") > 1:
+      ret.steerControlType = SteerControlType.pid
+    elif ret.flags & HyundaiFlags.ANGLE_CONTROL:
       ret.steerControlType = SteerControlType.angle
     else:
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)

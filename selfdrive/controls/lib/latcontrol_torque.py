@@ -40,7 +40,7 @@ class LatControlTorque(LatControl):
     self.latAccelFactor_default = self.torque_params.latAccelFactor
     self.latAccelOffset_default = self.torque_params.latAccelOffset
     self.friction_default = self.torque_params.friction
-    self.carrotLatControl = False
+    self.carrotLatControl = 0
     self.dampingFactor = 0
     self.error_last = 0.0
 
@@ -96,7 +96,7 @@ class LatControlTorque(LatControl):
 
       low_speed_factor = interp(CS.vEgo, LOW_SPEED_X, LOW_SPEED_Y)**2
       desired_lateral_accel_now = desired_curvature_now * CS.vEgo ** 2
-      if self.carrotLatControl:
+      if self.carrotLatControl > 0:
         setpoint = desired_lateral_accel_now + low_speed_factor * desired_curvature_now
       else:
         setpoint = desired_lateral_accel + low_speed_factor * desired_curvature

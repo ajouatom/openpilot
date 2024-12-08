@@ -55,6 +55,32 @@
     },
     {
       "group": "Á¶ÇâÆ©´×",
+      "name": "LateralTorqueKp",
+      "title": "_LateralTorqueKp*0.01(100)",
+      "descr": "",
+      "egroup": "LAT",
+      "etitle": "_LateralTorqueKp*0.01(100)",
+      "edescr": "",
+      "min": 0,
+      "max": 10000,
+      "default": 100,
+      "unit": 10
+    },
+    {
+      "group": "Á¶ÇâÆ©´×",
+      "name": "LateralTorqueKi",
+      "title": "_LateralTorqueKi*0.01(10)",
+      "descr": "",
+      "egroup": "LAT",
+      "etitle": "_LateralTorqueKi*0.01(10)",
+      "edescr": "",
+      "min": 0,
+      "max": 10000,
+      "default": 10,
+      "unit": 10
+    },
+    {
+      "group": "Á¶ÇâÆ©´×",
       "name": "CarrotLatControl",
       "title": "´ç±ÙÁ¶ÇâÁ¦¾î(0)",
       "descr": "0:Default, 1:´ç±ÙÁ¦¾î",
@@ -62,7 +88,7 @@
       "etitle": "Carrot method lateral control(0)",
       "edescr": "",
       "min": 0,
-      "max": 1,
+      "max": 2,
       "default": 1,
       "unit": 1
     },
