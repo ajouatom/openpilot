@@ -72,9 +72,9 @@ class CarInterface(CarInterfaceBase):
         if 0x1cf not in fingerprint[CAN.ECAN]:
           ret.flags |= HyundaiFlags.CANFD_ALT_BUTTONS.value
           print("$$$CANFD ALT_BUTTONS")
-        if not ret.flags & HyundaiFlags.RADAR_SCC:
-          ret.flags |= HyundaiFlags.CANFD_CAMERA_SCC.value
-          print("$$$CANFD CAMERA_SCC")
+        #if not ret.flags & HyundaiFlags.RADAR_SCC:
+        #  ret.flags |= HyundaiFlags.CANFD_CAMERA_SCC.value
+        #  print("$$$CANFD CAMERA_SCC")
       # Some HDA2 cars have alternative messages for gear checks
       # ICE cars do not have 0x130; GEARS message on 0x40 or 0x70 instead
       if 0x40 in fingerprint[CAN.ECAN]:  # 0x40(64): GEAR_ALT
