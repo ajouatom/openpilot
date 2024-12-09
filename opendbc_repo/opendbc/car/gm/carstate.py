@@ -202,10 +202,9 @@ class CarState(CarStateBase):
       ret.cruiseState.enabled = pt_cp.vl["ECMCruiseControl"]["CruiseActive"] != 0
     # 위에서 삭제된 것을 아랫줄에 위치했습니다.
     self.pcm_acc_status = pt_cp.vl["AcceleratorPedal2"]["CruiseState"]
-    #if True: 이 부분에서 전체적으로 true 해버리면 SPEED_RELATED_MSG.value 조건이 아무 의미가 없습니다. 일관 .96이 되어버립니다.
-    #  ret.vCluRatio = 0.96
-    # 아래코드는 차량속도와 계기판 속도를 일치시키기위한 Volt용. 그외 차량은 vCluRatio = 0.96으로 지정함.
-    if self.CP.flags & GMFlags.SPEED_RELATED_MSG.value:
+    if self.CP.carFingerpint in (CAR.CHEVROLET_TRAX): 
+      ret.vCluRatio = 0.96
+    elif self.CP.flags & GMFlags.SPEED_RELATED_MSG.value:
       # kans: use cluster speed & vCluRatio(longitudialPlanner)
       self.is_metric = Params().get_bool("IsMetric")
       speed_conv = CV.KPH_TO_MS * 1.609344 if self.is_metric else CV.MPH_TO_MS
