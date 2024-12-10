@@ -9,6 +9,8 @@ from opendbc.car.hyundai.carstate import PREV_BUTTON_SAMPLES as HYUNDAI_PREV_BUT
 
 from openpilot.selfdrive.selfdrived.events import Events, ET
 
+from openpilot.common.params import Params
+
 ButtonType = structs.CarState.ButtonEvent.Type
 GearShifter = structs.CarState.GearShifter
 EventName = log.OnroadEvent.EventName
@@ -40,6 +42,8 @@ class CarSpecificEvents:
     self.silent_steer_warning = True
 
     self.cruise_buttons: deque = deque([], maxlen=HYUNDAI_PREV_BUTTON_SAMPLES)
+
+    self.do_shutdown = False
 
   def update(self, CS: car.CarState, CS_prev: car.CarState, CC: car.CarControl):
     if self.CP.carName in ('body', 'mock'):
@@ -218,6 +222,9 @@ class CarSpecificEvents:
       # Disable on rising and falling edge of cancel for both stock and OP long
       if b.type == ButtonType.cancel:
         events.add(EventName.buttonCancel)
+        if CS.gearShifter == GearShifter.park and not self.do_shutdown:
+          self.do_shutdown = True
+          Params().put_bool("DoShutdown", True)
 
     # Handle permanent and temporary steering faults
     self.steering_unpressed = 0 if CS.steeringPressed else self.steering_unpressed + 1
