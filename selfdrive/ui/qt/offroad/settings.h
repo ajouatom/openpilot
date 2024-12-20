@@ -97,53 +97,52 @@ private:
   ParamWatcher *fs_watch;
 };
 
-
-
-
 class CarrotPanel : public QWidget {
-    Q_OBJECT
+  Q_OBJECT
 
 private:
-    QStackedLayout* main_layout = nullptr;
-    QWidget* homeScreen = nullptr;
+  QStackedLayout* main_layout = nullptr;
+  QWidget* homeScreen = nullptr;
+  int currentCarrotIndex = 0;
 
-    QWidget* homeWidget;
-    QVBoxLayout* carrotLayout;
+  QWidget* homeWidget;
+  QVBoxLayout* carrotLayout;
 
-    ListWidget* cruiseToggles;
-    ListWidget* latLongToggles;
-    ListWidget* pathToggles;
-    ListWidget* dispToggles;
-    ListWidget* startToggles;
-    ListWidget* speedToggles;
+  ListWidget* cruiseToggles;
+  ListWidget* latLongToggles;
+  ListWidget* pathToggles;
+  ListWidget* dispToggles;
+  ListWidget* startToggles;
+  ListWidget* speedToggles;
 
-    void togglesCarrot(int widgetIndex);
+  void togglesCarrot(int widgetIndex);
+  void updateButtonStyles();
 
 public:
-    explicit CarrotPanel(QWidget* parent = nullptr);
+  explicit CarrotPanel(QWidget* parent = nullptr);
 };
 
 class CValueControl : public AbstractControl {
-    Q_OBJECT
+  Q_OBJECT
 
 public:
-    CValueControl(const QString& params, const QString& title, const QString& desc, const QString& icon, int min, int max, int unit = 1);
+  CValueControl(const QString& params, const QString& title, const QString& desc, const QString& icon, int min, int max, int unit = 1);
 
 private slots:
-    void increaseValue();
-    void decreaseValue();
+  void increaseValue();
+  void decreaseValue();
 
 private:
-    void showEvent(QShowEvent* event) override;
-    void refresh();
-    void adjustValue(int delta);
+  void showEvent(QShowEvent* event) override;
+  void refresh();
+  void adjustValue(int delta);
 
-    QPushButton btnplus;
-    QPushButton btnminus;
-    QLabel label;
+  QPushButton btnplus;
+  QPushButton btnminus;
+  QLabel label;
 
-    QString m_params;
-    int m_min;
-    int m_max;
-    int m_unit;
+  QString m_params;
+  int m_min;
+  int m_max;
+  int m_unit;
 };
