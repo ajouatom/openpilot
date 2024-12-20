@@ -18,9 +18,6 @@ class CanBus(CanBusBase):
     if hda2 and Params().get_int("HyundaiCameraSCC") == 0:  #배선개조는 무조건 Bus0가 ECAN임.
       self._a, self._e = 0, 1
 
-    if Params().get_int("HyundaiCameraSCC") == 2:
-      self.offset = 0
-
     self._a += self.offset
     self._e += self.offset
     self._cam = 2 + self.offset
@@ -100,8 +97,8 @@ def create_steering_messages_camera_scc(packer, CP, CAN, enabled, lat_active, ap
   ret = []
   if angle_control:
     # EV9(ADRV)
-    #203(0xcb), 298(0x12a), 352(0x160), 416(0x1a0), 282(0x11a), 437(0x1b5), 506(0x1fa), 
-    #698(0x2ba), 353(0x161), 354(0x162), 442(0x1ba), 480(0x1e0), 485(0x1e5), 490(0x1ea), 
+    #203(0xcb), 298(0x12a), 352(0x160), 416(0x1a0), 282(0x11a), 437(0x1b5), 506(0x1fa),
+    #698(0x2ba), 353(0x161), 354(0x162), 442(0x1ba), 480(0x1e0), 485(0x1e5), 490(0x1ea),
     #512(0x200), 837(0x345), 908(0x38c), 1402(0x57a), 474(0x1da)
     values = {
       "LKA_MODE": 0,
@@ -118,12 +115,12 @@ def create_steering_messages_camera_scc(packer, CP, CAN, enabled, lat_active, ap
       # "UNKNOWN": 50 if lat_active and not steering_pressed else 0,
       "UNKNOWN": max_torque if lat_active else 0,
     }
-  
+
   else:
 
     values = CS.lfa_info
     value_104 = 100 if not lat_active else 60 + CS.out.vEgo * 3.6
-  
+
     canival_mode = True
     k8_mode = False
     if True:
@@ -135,9 +132,9 @@ def create_steering_messages_camera_scc(packer, CP, CAN, enabled, lat_active, ap
       values["VALUE64"] = 0  # STEER_MODE, NEW_SIGNAL_2
       values["HAS_LANE_SAFETY"] = 0
       values["LKA_ACTIVE"] = 0 # NEW_SIGNAL_1
-      
+
       #values["VALUE63"] = 0
-  
+
       #values["VALUE104"] = 3 if lat_active else 100
       #values["VALUE82_SET256"] = 0
     elif canival_mode:
@@ -146,7 +143,7 @@ def create_steering_messages_camera_scc(packer, CP, CAN, enabled, lat_active, ap
       values["STEER_REQ"] = 1 if lat_active else 0
       values["VALUE63"] = 0
       values["VALUE64"] = 0
-  
+
       values["LKA_MODE"] = 0
       values["LKA_ACTIVE"] = 0
       values["HAS_LANE_SAFETY"] = 0
@@ -159,7 +156,7 @@ def create_steering_messages_camera_scc(packer, CP, CAN, enabled, lat_active, ap
       values["STEER_REQ"] = 1 if lat_active else 0
       values["VALUE63"] = 0
       values["VALUE64"] = 0
-  
+
       values["LKA_MODE"] = 6
       values["LKA_ACTIVE"] = 3
       values["HAS_LANE_SAFETY"] = 1
@@ -172,7 +169,7 @@ def create_steering_messages_camera_scc(packer, CP, CAN, enabled, lat_active, ap
       values["STEER_REQ"] = 1 if lat_active else 0
       values["VALUE63"] = 0
       values["VALUE64"] = 0
-  
+
       values["LKA_MODE"] = 2
       values["LKA_ACTIVE"] = 0
       values["HAS_LANE_SAFETY"] = 0
@@ -217,7 +214,7 @@ def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_steer, 
 
   if CP.flags & HyundaiFlags.CANFD_HDA2:
     hda2_lkas_msg = "LKAS_ALT" if CP.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING else "LKAS"
-    if CP.openpilotLongitudinalControl: 
+    if CP.openpilotLongitudinalControl:
       ret.append(packer.make_can_msg("LFA", CAN.ECAN, values))
     if not (CP.flags & HyundaiFlags.CAMERA_SCC.value):
       ret.append(packer.make_can_msg(hda2_lkas_msg, CAN.ACAN, values))
@@ -225,20 +222,6 @@ def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_steer, 
     ret.append(packer.make_can_msg("LFA", CAN.ECAN, values))
 
   return ret
-
-def create_suppress_lfa_scc2(packer, CAN, hda2_alt_steering, counter):
-  suppress_msg = "CAM_0x362" if hda2_alt_steering else "CAM_0x2a4"
-  msg_bytes = 32 if hda2_alt_steering else 24
-
-  values = {}
-  values["BYTE5"] = 34
-  values["BYTE8"] = 34
-  values["COUNTER"] = counter % 256
-  values["SET_ME_0"] = 0
-  values["SET_ME_0_2"] = 0
-  values["LEFT_LANE_LINE"] = 0
-  values["RIGHT_LANE_LINE"] = 0
-  return packer.make_can_msg(suppress_msg, CAN.ACAN, values)
 
 def create_suppress_lfa(packer, CAN, hda2_lfa_block_msg, hda2_alt_steering):
   suppress_msg = "CAM_0x362" if hda2_alt_steering else "CAM_0x2a4"
@@ -332,7 +315,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
   values["SET_ME_TMP_64"] = 0x64
 
   values["NEW_SIGNAL_3"] = 1 if hud_control.leadVisible else 0 #0  # 1이되면 차선이탈방지 알람이 뜬다고...  => 앞에 차가 있으면, 1또는 2가 됨. 전방두부?
-  
+
   #values["NEW_SIGNAL_4"] = 2
 
   values["ZEROS_5"] = 0
@@ -347,7 +330,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
 
 def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control, jerk_u, jerk_l, CS):
-  
+
   enabled = enabled or CS.softHoldActive > 0
   jerk = 5
   jn = jerk / 50
@@ -474,7 +457,7 @@ def create_adrv_messages(CP, packer, CAN, frame, CC, CS, hud_control):
           values["LANE_ASSIST_R"] = 2
 
           values["NEW_SIGNAL_12"] = 0   ## 띠링 경고
-          
+
           ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values))
         else:
           print("no adrv_info_161")

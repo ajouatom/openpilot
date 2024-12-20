@@ -67,8 +67,6 @@ void PandaSafety::setSafetyMode(const std::string &params_string) {
   auto safety_configs = car_params.getSafetyConfigs();
   uint16_t alternative_experience = car_params.getAlternativeExperience();
 
-  bool adas_red_panda = params_.getInt("HyundaiCameraSCC") == 2;
-
   for (int i = 0; i < pandas_.size(); ++i) {
     // Default to SILENT safety model if not specified
     cereal::CarParams::SafetyModel safety_model = cereal::CarParams::SafetyModel::SILENT;
@@ -77,11 +75,6 @@ void PandaSafety::setSafetyMode(const std::string &params_string) {
       safety_model = safety_configs[i].getSafetyModel();
       safety_param = safety_configs[i].getSafetyParam();
     }
-
-    if(i == 1 && adas_red_panda) {
-	  safety_model = cereal::CarParams::SafetyModel::HYUNDAI_CANFD;
-      safety_param = 512U;
-	}
 
     LOGW("Panda %d: setting safety model: %d, param: %d, alternative experience: %d", i, (int)safety_model, safety_param, alternative_experience);
     pandas_[i]->set_alternative_experience(alternative_experience);
