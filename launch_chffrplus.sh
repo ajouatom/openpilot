@@ -92,6 +92,19 @@ function launch {
     echo "shapely installing."
     pip install shapely
   fi
+
+  # events language init
+  LANG=$(cat ${PARAMS_ROOT}/d/LanguageSetting)
+  EVENTSTAT=$(git status)
+
+  # events.py 한글로 변경 및 파일이 교체된 상태인지 확인
+  if [ "${LANG}" = "main_ko" ] && [[ ! "${EVENTSTAT}" == *"modified:   selfdrive/controls/lib/events.py"* ]]; then
+    cp -f $BASEDIR/selfdrive/selfdrived/events.py $BASEDIR/scripts/add/events_en.py
+    cp -f $BASEDIR/scripts/add/events_ko.py $BASEDIR/selfdrive/selfdrived/events.py
+  elif [ "${LANG}" = "main_en" ] && [[ "${EVENTSTAT}" == *"modified:   selfdrive/controls/lib/events.py"* ]]; then
+    cp -f $BASEDIR/scripts/add/events_en.py $BASEDIR/selfdrive/selfdrived/events.py
+  fi
+
   # start manager
   cd system/manager
   if [ ! -f $DIR/prebuilt ]; then
