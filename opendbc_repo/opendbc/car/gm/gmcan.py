@@ -1,8 +1,22 @@
-from opendbc.car import DT_CTRL
+﻿from opendbc.car import DT_CTRL
 from opendbc.car.can_definitions import CanData
 from opendbc.car.gm.values import CAR, CruiseButtons, CanBus
 from opendbc.car.common.conversions import Conversions as CV
 
+# GM: AutoResume: brake signal to CAN
+def create_brake_command(packer, bus, apply_brake, idx):
+  mode = 0xA if apply_brake > 0 else 0x1
+  brake = (0x1000 - apply_brake) & 0xFFF
+  checksum = (0x10000 - (mode << 12) - brake - idx) & 0xFFFF
+
+  values = {
+    "RollingCounter": idx,
+    "FrictionBrakeMode": mode,
+    "FrictionBrakeChecksum": checksum,
+    "FrictionBrakeCmd": -apply_brake
+  }
+
+  return packer.make_can_msg("EBCMFrictionBrakeCmd", bus, values)
 
 def create_buttons(packer, bus, idx, button):
   values = {
@@ -177,14 +191,7 @@ def create_lka_icon_command(bus, active, critical, steer):
 
 def create_regen_paddle_command(packer, bus):
   values = {
-    # "RegenPaddle": 2
-    "RegenPaddle": 0x20,
-    "Byte1": 0x00,
-    "Byte2": 0x00,
-    "Byte3": 0x00,
-    "Byte4": 0x00,
-    "Byte5": 0x00,
-    "Byte6": 0x00
+    "RegenPaddle": 0x20, #이 값은 패들의 강도일 가능성이 있음.
   }
   return packer.make_can_msg("EBCMRegenPaddle", bus, values)
 

@@ -42,13 +42,12 @@ class CarState(CarStateBase):
     self.single_pedal_mode = False
     self.pedal_steady = 0.
 
-    # for delay Accfault event # 적용될 필요가 없어진 코드입니다. 아래 관련된 코드포함.
-    # self.accFaultedCount = 0
 
     # cruiseMain default(test from nd0706-vision)
     self.cruiseMain_on = True if Params().get_int("AutoEngage") == 2 else False
 
   def update(self, can_parsers) -> structs.CarState:
+    global LongCtrlState
     pt_cp = can_parsers[Bus.pt]
     cam_cp = can_parsers[Bus.cam]
     loopback_cp = can_parsers[Bus.loopback]
@@ -72,7 +71,6 @@ class CarState(CarStateBase):
       self.cruise_buttons = CruiseButtons.GAP_DIST
 
     if self.CP.enableBsm:
-      # kans:  not in SDGM 조건으로 해야 코드가 단순해집니다.
       if self.CP.carFingerprint not in SDGM_CAR:
         ret.leftBlindspot = pt_cp.vl["BCMBlindSpotMonitor"]["LeftBSM"] == 1
         ret.rightBlindspot = pt_cp.vl["BCMBlindSpotMonitor"]["RightBSM"] == 1
@@ -172,8 +170,6 @@ class CarState(CarStateBase):
 
       ret.parkingBrake = cam_cp.vl["BCMGeneralPlatformStatus"]["ParkBrakeSwActive"] == 1
 
-    # self.pcm_acc_status = pt_cp.vl["AcceleratorPedal2"]["CruiseState"] 아래쪽(204라인)으로 위치시키는게 accFault관련코드가 단순해집니다. 이 라인도 삭제하면 됩니다.
-    # accFault지연코드는 적용될 필요가 없으므로, 삭제합니다.
     ret.cruiseState.available = pt_cp.vl["ECMEngineStatus"]["CruiseMainOn"] != 0
     self.cruiseMain_on =  ret.cruiseState.available
     ret.espDisabled = pt_cp.vl["ESPStatus"]["TractionControlOn"] != 1
@@ -182,10 +178,11 @@ class CarState(CarStateBase):
 
     ret.cruiseState.enabled = pt_cp.vl["AcceleratorPedal2"]["CruiseState"] != AccState.OFF
     ret.cruiseState.standstill = pt_cp.vl["AcceleratorPedal2"]["CruiseState"] == AccState.STANDSTILL
-    # kans(Button or Auto Resume)
-    startingState = LongCtrlState.starting
-    if startingState:
-      ret.cruiseState.standstill = False
+    # GM: AutoResume
+    CC = car.CarControl.new_message()
+    actuators = CC.actuators
+    if actuators.longControlState == LongCtrlState.starting:
+      ret.cruiseState.standstill = False # starting후 크리핑 조건.
     if self.CP.networkLocation == NetworkLocation.fwdCamera and not self.CP.flags & GMFlags.NO_CAMERA.value:
       if self.CP.carFingerprint not in CC_ONLY_CAR:
         ret.cruiseState.speed = cam_cp.vl["ASCMActiveCruiseControlStatus"]["ACCSpeedSetpoint"] * CV.KPH_TO_MS
@@ -207,7 +204,7 @@ class CarState(CarStateBase):
     elif self.CP.flags & GMFlags.SPEED_RELATED_MSG.value:
       # kans: use cluster speed & vCluRatio(longitudialPlanner)
       self.is_metric = Params().get_bool("IsMetric")
-      speed_conv = CV.KPH_TO_MS * 1.609344 if self.is_metric else CV.MPH_TO_MS
+      speed_conv = CV.MPH_TO_MS if self.is_metric else CV.KPH_TO_MS
       cluSpeed = pt_cp.vl["SPEED_RELATED"]["ClusterSpeed"]
       ret.vEgoCluster = cluSpeed * speed_conv
       vEgoClu, aEgoClu = self.update_clu_speed_kf(ret.vEgoCluster)
@@ -284,13 +281,10 @@ class CarState(CarStateBase):
       pt_messages += [
         ("ECMCruiseControl", 10),
       ]
-    if CP.enableGasInterceptorDEPRECATED: #위에 적용된 SDGM차량과 연관되어 있으므로 SDGM조건이 추가되어야 합니다.
-      if CP.carFingerprint in SDGM_CAR:
-        #pt_messages.remove(("AcceleratorPedal2", 40)),
-        pt_messages.append(("GAS_SENSOR", 50)),
-      else:
-        #pt_messages.remove(("AcceleratorPedal2", 33)),
-        pt_messages.append(("GAS_SENSOR", 50)),
+    if CP.enableGasInterceptorDEPRECATED:
+      pt_messages += [
+        ("GAS_SENSOR", 50),
+      ]
 
     cam_messages = []
     if CP.networkLocation == NetworkLocation.fwdCamera and not CP.flags & GMFlags.NO_CAMERA.value:

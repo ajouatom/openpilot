@@ -590,6 +590,10 @@ class VCruiseCarrot:
       if self._brake_pressed_count == -1 and self._soft_hold_active > 0:
         self._soft_hold_active = 2
         self._cruise_control(1, -1, "Cruise on (soft hold)")
+      # GM: autoResume
+      elif self.params.get_bool("ActivateCruiseAfterBrake"):
+        self.params.put_bool_nonblocking("ActivateCruiseAfterBrake", False)
+        self._cruise_control(1, -1, "Cruise on (brake)")
       elif self.v_cruise_kph < self.v_ego_kph_set:
         self.v_cruise_kph = self.v_ego_kph_set
 

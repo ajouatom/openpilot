@@ -14,8 +14,6 @@ from openpilot.selfdrive.controls.lib.vehicle_model import ACCELERATION_DUE_TO_G
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 NetworkLocation = structs.CarParams.NetworkLocation
 LongCtrlState = structs.CarControl.Actuators.LongControlState
-#GearShifter = structs.CarState.GearShifter # 아래까지, 두 줄은 전혀 쓰이지 않고 있습니다.
-#TransmissionType = structs.CarParams.TransmissionType # 
 
 # Camera cancels up to 0.1s after brake is pressed, ECM allows 0.5s
 CAMERA_CANCEL_DELAY_FRAMES = 10
@@ -56,6 +54,8 @@ class CarController(CarControllerBase):
 
     self.pitch = FirstOrderFilter(0., 0.09 * 4, DT_CTRL * 4)  # runs at 25 Hz
     self.accel_g = 0.0
+    # GM: AutoResume
+    self.activateCruise_after_brake = False
 
   @staticmethod
   def calc_pedal_command(accel: float, long_active: bool, car_velocity) -> tuple[float, bool]:
@@ -135,13 +135,26 @@ class CarController(CarControllerBase):
 
     if self.CP.openpilotLongitudinalControl:
 
-      # Auto Cruise Test...
+      # Auto Cruise
       if CS.out.activateCruise and not CS.out.cruiseState.enabled:
-        can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.POWERTRAIN, CS.buttons_counter, CruiseButtons.DECEL_SET))
+        self.activateCruise_after_brake = False
+        if (self.frame - self.last_button_frame) * DT_CTRL > 0.03:
+          can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.POWERTRAIN, (CS.buttons_counter + 1) % 4, CruiseButtons.DECEL_SET))
+          self.last_button_frame = self.frame
+      # GM: AutoResume
+      elif actuators.longControlState == LongCtrlState.starting:
+        if CS.out.cruiseState.enabled and not self.activateCruise_after_brake:
+          idx = (self.frame // 4) % 4
+          brake_force = -0.5
+          apply_brake = self.brake_input(brake_force)
+          can_sends.append(gmcan.create_brake_command(self.packer_pt, CanBus.POWERTRAIN, apply_brake, idx))
+          Params().put_bool_nonblocking("ActivateCruiseAfterBrake", True)
+          self.activateCruise_after_brake = True
         
       # Gas/regen, brakes, and UI commands - all at 25Hz
       if self.frame % 4 == 0:
-        stopping = actuators.longControlState == LongCtrlState.stopping
+      # GM: softHold
+        stopping = actuators.longControlState == LongCtrlState.stopping or CS.out.softHoldActive > 0
 
         # Pitch compensated acceleration;
         # TODO: include future pitch (sm['modelDataV2'].orientation.y) to account for long actuator delay
@@ -152,7 +165,7 @@ class CarController(CarControllerBase):
           brake_accel = actuators.accel + self.accel_g * interp(CS.out.vEgo, BRAKE_PITCH_FACTOR_BP, BRAKE_PITCH_FACTOR_V)
 
         at_full_stop = CC.longActive and CS.out.standstill
-        near_stop = CC.longActive and (CS.out.vEgo < self.params.NEAR_STOP_BRAKE_PHASE)
+        near_stop = CC.longActive and (abs(CS.out.vEgo) < self.params.NEAR_STOP_BRAKE_PHASE)
         interceptor_gas_cmd = 0
         press_regen_paddle = False
         if not CC.longActive:
@@ -292,3 +305,14 @@ class CarController(CarControllerBase):
 
     self.frame += 1
     return new_actuators, can_sends
+
+  # GM: AutoResume
+  def brake_input(self, brake_force):
+    MAX_BRAKE = 400
+    ZERO_GAS = 2048
+
+    if brake_force > 0.0:
+      raise ValueError("brake_force는 0.0이하라야 됨.")
+
+    scaled_brake = max(0, min(MAX_BRAKE, int(brake_force * -100)))  # -를 +로 변환
+    return ZERO_GAS - scaled_brake

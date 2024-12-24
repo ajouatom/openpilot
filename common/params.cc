@@ -314,6 +314,8 @@ std::unordered_map<std::string, uint32_t> keys = {
 
     {"EVTable", PERSISTENT},
     {"LongPitch", PERSISTENT},
+    # GM: AutoResume
+    {"ActivateCruiseAfterBrake", CLEAR_ON_MANAGER_START},
 
     { "CustomSR", PERSISTENT },
     { "SteerRatioRate", PERSISTENT },
