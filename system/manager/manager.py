@@ -28,7 +28,7 @@ def get_default_params():
     ("DisengageOnAccelerator", "0"),
     ("GsmMetered", "1"),
     ("HasAcceptedTerms", "0"),
-    ("LanguageSetting", "main_en"),
+    ("LanguageSetting", "main_ko"),
     ("OpenpilotEnabledToggle", "1"),
     ("LongitudinalPersonality", str(log.LongitudinalPersonality.standard)),
     ("LongitudinalPersonalityMax", "3"),
@@ -51,17 +51,14 @@ def get_default_params():
     ("AutoEngage", "0"),
     ("DisableMinSteerSpeed", "0"),
     ("SoftHoldMode", "0"),
-
     ("AutoSpeedUptoRoadSpeedLimit", "0"),
     ("AutoRoadSpeedAdjust", "50"),
     ("AutoCurveSpeedLowerLimit", "30"),
     ("AutoCurveSpeedFactor", "120"),
     ("AutoCurveSpeedAggressiveness", "100"),
-
     ("AutoTurnControl", "0"),
     ("AutoTurnControlSpeedTurn", "20"),
     ("AutoTurnControlTurnEnd", "6"),
-
     ("AutoNaviSpeedCtrlEnd", "7"),
     ("AutoNaviSpeedBumpTime", "1"),
     ("AutoNaviSpeedBumpSpeed", "35"),
