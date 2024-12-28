@@ -272,29 +272,29 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
       print("\n");
     }
 #if 1
-  bus_fwd = 0;
-  for (int i = 0; canfd_tx_addr[i] > 0; i++) {
-    if (addr == canfd_tx_addr[i] && (now - canfd_tx_time[i]) < OP_CAN_SEND_TIMEOUT) {
-      bus_fwd = -1;
-      break;
-    }
-  }
-#else
-  // LKAS for HDA2, LFA for HDA1
-  int hda2_lfa_block_addr = hyundai_canfd_hda2_alt_steering ? 0x362 : 0x2a4;
-  bool is_lkas_msg = ((addr == hyundai_canfd_hda2_get_lkas_addr()) || (addr == hda2_lfa_block_addr)) && hyundai_canfd_hda2;
-  bool is_lfa_msg = ((addr == 0x12a) && !hyundai_canfd_hda2);
-
-  // HUD icons
-  bool is_lfahda_msg = ((addr == 0x1e0) && !hyundai_canfd_hda2);
-
-  // CRUISE_INFO for non-HDA2, we send our own longitudinal commands
-  bool is_scc_msg = ((addr == 0x1a0) && hyundai_longitudinal && !hyundai_canfd_hda2);
-
-  bool block_msg = is_lkas_msg || is_lfa_msg || is_lfahda_msg || is_scc_msg;
-  if (!block_msg) {
     bus_fwd = 0;
-  }
+    for (int i = 0; canfd_tx_addr[i] > 0; i++) {
+      if (addr == canfd_tx_addr[i] && (now - canfd_tx_time[i]) < OP_CAN_SEND_TIMEOUT) {
+        bus_fwd = -1;
+        break;
+      }
+    }
+#else
+    // LKAS for HDA2, LFA for HDA1
+    int hda2_lfa_block_addr = hyundai_canfd_hda2_alt_steering ? 0x362 : 0x2a4;
+    bool is_lkas_msg = ((addr == hyundai_canfd_hda2_get_lkas_addr()) || (addr == hda2_lfa_block_addr)) && hyundai_canfd_hda2;
+    bool is_lfa_msg = ((addr == 0x12a) && !hyundai_canfd_hda2);
+
+    // HUD icons
+    bool is_lfahda_msg = ((addr == 0x1e0) && !hyundai_canfd_hda2);
+
+    // CRUISE_INFO for non-HDA2, we send our own longitudinal commands
+    bool is_scc_msg = ((addr == 0x1a0) && hyundai_longitudinal && !hyundai_canfd_hda2);
+
+    bool block_msg = is_lkas_msg || is_lfa_msg || is_lfahda_msg || is_scc_msg;
+    if (!block_msg) {
+      bus_fwd = 0;
+    }
 #endif
   }
 
