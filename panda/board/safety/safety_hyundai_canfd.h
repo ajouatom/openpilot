@@ -320,43 +320,36 @@ static safety_config hyundai_canfd_init(uint16_t param) {
 
   const CanMsg HYUNDAI_CANFD_HDA2_LONG_TX_MSGS[] = {
     {0x50, 0, 16},  // LKAS
+    {0x50, 1, 16},  // LKAS
     {0x1CF, 1, 8},  // CRUISE_BUTTON
     {0x2A4, 0, 24}, // CAM_0x2A4
-    {0x51, 0, 32},  // ADRV_0x51
-    {0x730, 1, 8},  // tester present for ADAS ECU disable
-    {0x12A, 1, 16}, // LFA
-    {0x160, 1, 16}, // ADRV_0x160
-    {0x1E0, 1, 16}, // LFAHDA_CLUSTER
-    {0x1A0, 1, 32}, // CRUISE_INFO
-    {0x1EA, 1, 32}, // ADRV_0x1ea
-    {0x200, 1, 8},  // ADRV_0x200
-    {0x345, 1, 8},  // ADRV_0x345
-    {0x1DA, 1, 32}, // ADRV_0x1da
-
-    {0x12A, 0, 16}, // LFA
-    {0x1E0, 0, 16}, // LFAHDA_CLUSTER
-    {0x160, 0, 16}, // ADRV_0x160
-    {0x1EA, 0, 32}, // ADRV_0x1ea
-    {0x200, 0, 8},  // ADRV_0x200
-    {0x1A0, 0, 32}, // CRUISE_INFO
-    {0x345, 0, 8},  // ADRV_0x345
-    {0x1DA, 0, 32}, // ADRV_0x1da
-
-    {0x362, 1, 32}, // CAM_0x362
     {0x2a4, 1, 24}, // CAM_0x2a4
-
+    {0x51, 0, 32},  // ADRV_0x51
+    {0x51, 1, 32},  // ADRV_0x51
+    {0x730, 1, 8},  // tester present for ADAS ECU disable
+    {0x12A, 0, 16}, // LFA
+    {0x12A, 1, 16}, // LFA
+    {0x160, 0, 16}, // ADRV_0x160
+    {0x160, 1, 16}, // ADRV_0x160
+    {0x161, 0, 32}, // ADRV_353
+    {0x162, 0, 32}, // CORNER_RADAR_HIGHWAY
+    {0x1E0, 0, 16}, // LFAHDA_CLUSTER
+    {0x1E0, 1, 16}, // LFAHDA_CLUSTER
+    {0x1A0, 0, 32}, // CRUISE_INFO
+    {0x1A0, 1, 32}, // CRUISE_INFO
+    {0x1EA, 0, 32}, // ADRV_0x1ea
+    {0x1EA, 1, 32}, // ADRV_0x1ea
+    {0x200, 0, 8},  // ADRV_0x200
+    {0x200, 1, 8},  // ADRV_0x200
+    {0x345, 0, 8},  // ADRV_0x345
+    {0x345, 1, 8},  // ADRV_0x345
+    {0x362, 1, 32}, // CAM_0x362
+    {0x1DA, 0, 32}, // ADRV_0x1da
+    {0x1DA, 1, 32}, // ADRV_0x1da
     {0x110, 1, 32}, // LKAS_ALT (272)
-
-    {0x50, 1, 16}, //
-    {0x51, 1, 32}, //
-
-    {353, 0, 32}, // ADRV_353
-    {354, 0, 32}, // CORNER_RADAR_HIGHWAY
-    {512, 0, 8}, // ADRV_0x200
-    {1187, 2, 8}, // 4A3
-    {1204, 2, 8}, // 4B4
-
-    {203, 0, 24}, // CB
+    {0xCB, 0, 24},  // CB
+    {0x4A3, 2, 8},  // 4A3
+    {0x4B4, 2, 8},  // 4B4
   };
 
   const CanMsg HYUNDAI_CANFD_HDA1_TX_MSGS[] = {
