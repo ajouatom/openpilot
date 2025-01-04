@@ -287,7 +287,8 @@ class DesireHelper:
     else:
       self.desire = DESIRES[self.lane_change_direction][self.lane_change_state]
 
-    self.desireLog = f"desire = {self.desire}"
+    #self.desireLog = f"desire = {self.desire}"
+    self.desireLog = f"rlane={self.distance_to_road_edge_right:.1f},{self.distance_to_road_edge_right_far:.1f}"
 
     # Send keep pulse once per second during LaneChangeStart.preLaneChange
     if self.lane_change_state in (LaneChangeState.off, LaneChangeState.laneChangeStarting):
