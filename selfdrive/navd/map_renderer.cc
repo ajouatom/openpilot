@@ -42,19 +42,13 @@ QMapLibre::Coordinate get_point_along_line(float lat, float lon, float bearing, 
 
 
 MapRenderer::MapRenderer(const QMapLibre::Settings &settings, bool online) : m_settings(settings) {
-    printf("##########MapRenderer::MapRenderer1\n");
-
   QSurfaceFormat fmt;
   if(Hardware::PC()) {
      fmt.setRenderableType(QSurfaceFormat::OpenGL);
   }
   else {
       fmt.setRenderableType(QSurfaceFormat::OpenGLES);
-      fmt.setVersion(2, 0);
-      fmt.setProfile(QSurfaceFormat::NoProfile);
-      QSurfaceFormat::setDefaultFormat(fmt);
   }
-  printf("##########MapRenderer::MapRenderer\n");
   ctx = std::make_unique<QOpenGLContext>();
   ctx->setFormat(fmt);
   ctx->create();
@@ -64,20 +58,16 @@ MapRenderer::MapRenderer(const QMapLibre::Settings &settings, bool online) : m_s
       exit(-1);
   }
   assert(ctx->isValid());
-  printf("##########MapRenderer::MapRenderer2\n");
 
   surface = std::make_unique<QOffscreenSurface>();
   surface->setFormat(ctx->format());
   surface->create();
-  printf("##########MapRenderer::MapRenderer3\n");
 
   ctx->makeCurrent(surface.get());
   assert(QOpenGLContext::currentContext() == ctx.get());
-  printf("##########MapRenderer::MapRenderer4\n");
 
   gl_functions.reset(ctx->functions());
   gl_functions->initializeOpenGLFunctions();
-  printf("##########MapRenderer::MapRenderer54\n");
 
   QOpenGLFramebufferObjectFormat fbo_format;
   fbo.reset(new QOpenGLFramebufferObject(WIDTH, HEIGHT, fbo_format));
@@ -91,6 +81,10 @@ MapRenderer::MapRenderer(const QMapLibre::Settings &settings, bool online) : m_s
 
   m_map->resize(fbo->size());
   m_map->setFramebufferObject(fbo->handle(), fbo->size());
+
+  //int y_offset = 100;// 120;
+  //m_map->setMargins({ 0, 256 - y_offset, 0, y_offset });
+
   gl_functions->glViewport(0, 0, WIDTH, HEIGHT);
 
   QObject::connect(m_map.data(), &QMapLibre::Map::mapChanged, [=](QMapLibre::Map::MapChange change) {
@@ -161,7 +155,6 @@ void MapRenderer::msgUpdate() {
       for (int i = 0; i < 5 && !rendered(); i++) {
         QApplication::processEvents(QEventLoop::AllEvents, 100);
         update();
-        printf("###### rendered\n");
         if (rendered()) {
           LOGW("rendered after %d retries", i+1);
           break;

@@ -34,3 +34,4 @@ def make_onnx_cpu_runner(model_path):
   options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
   model_data = convert_fp16_to_fp32(onnx.load(model_path))
   return ort.InferenceSession(model_data,  options, providers=['CPUExecutionProvider'])
+

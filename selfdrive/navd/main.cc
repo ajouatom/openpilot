@@ -37,28 +37,22 @@ void customMessageHandler(QtMsgType type, const QMessageLogContext& context, con
 }
 
 int main(int argc, char *argv[]) {
-	printf("##########main\n");
   Hardware::config_cpu_rendering(true);
 
-  printf("##########main1\n");
   qInstallMessageHandler(customMessageHandler);
   setpriority(PRIO_PROCESS, 0, -20);
   int ret = util::set_core_affinity({0, 1, 2, 3});
   assert(ret == 0);
 
-  printf("##########main2\n");
-  setenv("QT_QPA_PLATFORM", "xcb", 1);
-  setenv("LIBGL_ALWAYS_SOFTWARE", "1", 1);
-  setenv("QT_LOGGING_RULES", "qt.qpa.*=true;qt.opengl.*=true", 1);
+  //setenv("QT_QPA_PLATFORM", "xcb", 1);
+  //setenv("LIBGL_ALWAYS_SOFTWARE", "1", 1);
+  //setenv("QT_LOGGING_RULES", "qt.qpa.*=true;qt.opengl.*=true", 1);
 
   QApplication app(argc, argv);
-  printf("##########main3\n");
   std::signal(SIGINT, sigTermHandler);
   std::signal(SIGTERM, sigTermHandler);
 
-  printf("##########main4\n");
   MapRenderer * m = new MapRenderer(get_mapbox_settings());
-  printf("##########main5\n");
   assert(m);
 
   return app.exec();

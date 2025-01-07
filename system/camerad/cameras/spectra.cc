@@ -196,9 +196,9 @@ void SpectraMaster::init() {
   assert(isp_fd >= 0);
   LOGD("opened isp");
 
-  icp_fd = open_v4l_by_name_and_index("cam-icp");
-  assert(icp_fd >= 0);
-  LOGD("opened icp");
+  //icp_fd = open_v4l_by_name_and_index("cam-icp");
+  //assert(icp_fd >= 0);
+  //LOGD("opened icp");
 
   // query ISP for MMU handles
   LOG("-- Query for MMU handles");
@@ -215,6 +215,7 @@ void SpectraMaster::init() {
   cdm_iommu = isp_query_cap_cmd.cdm_iommu.non_secure;
 
   // query ICP for MMU handles
+  /*
   struct cam_icp_query_cap_cmd icp_query_cap_cmd = {0};
   query_cap_cmd.caps_handle = (uint64_t)&icp_query_cap_cmd;
   query_cap_cmd.size = sizeof(icp_query_cap_cmd);
@@ -222,6 +223,7 @@ void SpectraMaster::init() {
   assert(ret == 0);
   LOGD("using ICP MMU handle: %x", icp_query_cap_cmd.dev_iommu_handle.non_secure);
   icp_device_iommu = icp_query_cap_cmd.dev_iommu_handle.non_secure;
+  */
 
   // subscribe
   LOG("-- Subscribing");
@@ -705,6 +707,7 @@ void SpectraCamera::enqueue_buffer(int i, bool dp) {
   }
   sync_objs[i] = sync_create.sync_obj;
 
+  /*
   if (icp_dev_handle > 0) {
     ret = do_cam_control(m->cam_sync_fd, CAM_SYNC_CREATE, &sync_create, sizeof(sync_create));
     if (ret != 0) {
@@ -712,6 +715,7 @@ void SpectraCamera::enqueue_buffer(int i, bool dp) {
     }
     sync_objs_bps_out[i] = sync_create.sync_obj;
   }
+  */
 
   // schedule request with camera request manager
   struct cam_req_mgr_sched_request req_mgr_sched_request = {0};
@@ -756,10 +760,12 @@ void SpectraCamera::camera_map_bufs() {
     mem_mgr_map_cmd.flags = CAM_MEM_FLAG_HW_READ_WRITE;
     mem_mgr_map_cmd.mmu_hdls[0] = m->device_iommu;
     mem_mgr_map_cmd.num_hdl = 1;
+    /*
     if (icp_dev_handle > 0) {
       mem_mgr_map_cmd.num_hdl = 2;
       mem_mgr_map_cmd.mmu_hdls[1] = m->icp_device_iommu;
     }
+    */
 
     if (is_raw) {
       // RAW bayer images
@@ -919,6 +925,7 @@ void SpectraCamera::configICP() {
   /*
     Configures both the ICP and BPS.
   */
+  if (!enabled) return;
 
   struct cam_icp_acquire_dev_info icp_info = {
     .scratch_mem_size = 0x0,
@@ -1063,10 +1070,12 @@ void SpectraCamera::camera_close() {
 
     // release devices
     LOGD("-- Release devices");
+    /*
     if (icp_dev_handle > 0) {
       ret = device_control(m->icp_fd, CAM_RELEASE_DEV, session_handle, icp_dev_handle);
       LOGD("release icp: %d", ret);
     }
+    */
     ret = device_control(m->isp_fd, CAM_RELEASE_DEV, session_handle, isp_dev_handle);
     LOGD("release isp: %d", ret);
     ret = device_control(csiphy_fd, CAM_RELEASE_DEV, session_handle, csiphy_dev_handle);

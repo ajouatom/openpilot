@@ -168,7 +168,7 @@ class CarInterface(CarInterfaceBase):
     if ret.flags & HyundaiFlags.CAMERA_SCC.value or params.get_int("EnableRadarTracks") > 0:
       ret.radarUnavailable = False
       ret.openpilotLongitudinalControl = True
-      print(f"$$$OenpilotLongitudinalControl = True, CAMERA_SCC({ret.flags & HyundaiFlags.CAMERA_SCC.value}) or RadarTracks{params.get_int("EnableRadarTracks")}")
+      print(f"$$$OenpilotLongitudinalControl = True, CAMERA_SCC({ret.flags & HyundaiFlags.CAMERA_SCC.value}) or RadarTracks{params.get_int('EnableRadarTracks')}")
     else:
       print(f"$$$OenpilotLongitudinalControl = {experimental_long}")
 
