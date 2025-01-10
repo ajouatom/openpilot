@@ -47,7 +47,6 @@ class CarState(CarStateBase):
     self.cruiseMain_on = True if Params().get_int("AutoEngage") == 2 else False
 
   def update(self, can_parsers) -> structs.CarState:
-    global LongCtrlState
     pt_cp = can_parsers[Bus.pt]
     cam_cp = can_parsers[Bus.cam]
     loopback_cp = can_parsers[Bus.loopback]
@@ -178,6 +177,9 @@ class CarState(CarStateBase):
 
     ret.cruiseState.enabled = pt_cp.vl["AcceleratorPedal2"]["CruiseState"] != AccState.OFF
     ret.cruiseState.standstill = pt_cp.vl["AcceleratorPedal2"]["CruiseState"] == AccState.STANDSTILL
+    # kans: avoid to accFault
+    if self.CP.carFingerprint not in CAR.CHEVROLET_VOLT:
+      ret.cruiseState.standstill = False
     if self.CP.networkLocation == NetworkLocation.fwdCamera and not self.CP.flags & GMFlags.NO_CAMERA.value:
       if self.CP.carFingerprint not in CC_ONLY_CAR:
         ret.cruiseState.speed = cam_cp.vl["ASCMActiveCruiseControlStatus"]["ACCSpeedSetpoint"] * CV.KPH_TO_MS

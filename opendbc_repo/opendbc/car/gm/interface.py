@@ -98,6 +98,7 @@ class CarInterface(CarInterfaceBase):
     ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.gm)]
     ret.autoResumeSng = False
     ret.enableBsm = 0x142 in fingerprint[CanBus.POWERTRAIN] or 0x142 in fingerprint[CanBus.CAMERA]
+    ret.startAccel = 1.0
 
     useEVTables = Params().get_bool("EVTable")
 
@@ -123,11 +124,12 @@ class CarInterface(CarInterfaceBase):
       ret.minSteerSpeed = 10 * CV.KPH_TO_MS
 
       # Tuning for experimental long
-      ret.longitudinalTuning.kpV = [1.5, 0.2]
-      ret.longitudinalTuning.kiV = [2.0, 1.5]
+      ret.longitudinalTuning.kpV = [1.0]
+      ret.longitudinalTuning.kiV = [1.0]
       ret.stoppingDecelRate = 2.0  # reach brake quickly after enabling
-      ret.vEgoStopping = 0.25
-      ret.vEgoStarting = 0.25
+      ret.stopAccel = -0.4
+      ret.startingState = True
+      ret.startAccel = 1.5
 
       if experimental_long:
         ret.pcmCruise = False
@@ -154,7 +156,8 @@ class CarInterface(CarInterfaceBase):
       ret.minSteerSpeed = (6.7 if useEVTables else 7) * CV.MPH_TO_MS
 
       # Tuning
-      ret.longitudinalTuning.kiV = [0.]
+      ret.longitudinalTuning.kpV = [1.0]
+      ret.longitudinalTuning.kiV = [0.3]
 
       # TODO: Test for CADILLAC_CT6_ACC
       if ret.enableGasInterceptorDEPRECATED:
