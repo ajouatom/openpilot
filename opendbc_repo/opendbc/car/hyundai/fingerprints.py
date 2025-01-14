@@ -1267,6 +1267,12 @@ FW_VERSIONS = {
       b'\xf1\x00MV  MFC  AT EUR LHD 1.00 1.02 99211-DO000 230616',
     ],
   },
+  CAR.KIA_EV3: {  # (SV1)
+    (Ecu.fwdRadar, 0x7d0, None): [
+    ],
+    (Ecu.fwdCamera, 0x7c4, None): [
+    ],
+  },
   CAR.HYUNDAI_SANTAFE_MX5: {  # (MX5)
     (Ecu.fwdRadar, 0x7d0, None): [
     ],
