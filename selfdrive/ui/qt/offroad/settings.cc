@@ -36,6 +36,12 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
       "../assets/offroad/icon_speed_limit.png",
     },
     {
+      "ModifiedStockLong",
+      tr("Enable Modified Stock Longitudinal Control"),
+      tr("On this car it works by multiplying a percentage smooth rate based on the distance of front cars detected by mrr."),
+      "../assets/offroad/icon_speed_limit.png",
+    },
+    {
       "ExperimentalMode",
       tr("Experimental Mode"),
       "",
@@ -108,6 +114,10 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
   connect(toggles["ExperimentalLongitudinalEnabled"], &ToggleControl::toggleFlipped, [=]() {
     updateToggles();
   });
+
+  connect(toggles["CustomStockLong"], &ToggleControl::toggleFlipped, [=]() {
+    updateToggles();
+  });
 }
 
 void TogglesPanel::updateState(const UIState &s) {
@@ -133,6 +143,7 @@ void TogglesPanel::showEvent(QShowEvent *event) {
 void TogglesPanel::updateToggles() {
   auto experimental_mode_toggle = toggles["ExperimentalMode"];
   auto op_long_toggle = toggles["ExperimentalLongitudinalEnabled"];
+  auto modify_stocklong_toggle = toggles["ModifiedStockLong"];
   const QString e2e_description = QString("%1<br>"
                                           "<h4>%2</h4><br>"
                                           "%3<br>"
@@ -161,11 +172,13 @@ void TogglesPanel::updateToggles() {
       // normal description and toggle
       experimental_mode_toggle->setEnabled(true);
       experimental_mode_toggle->setDescription(e2e_description);
+      modify_stocklong_toggle->setEnabled(true);
       long_personality_setting->setEnabled(true);
     } else {
       // no long for now
       experimental_mode_toggle->setEnabled(false);
       long_personality_setting->setEnabled(false);
+      modify_stocklong_toggle->setEnabled(false);
       params.remove("ExperimentalMode");
 
       const QString unavailable = tr("Experimental mode is currently unavailable on this car since the car's stock ACC is used for longitudinal control.");
@@ -183,6 +196,7 @@ void TogglesPanel::updateToggles() {
     }
 
     experimental_mode_toggle->refresh();
+    modify_stocklong_toggle->refresh();
   } else {
     experimental_mode_toggle->setDescription(e2e_description);
     op_long_toggle->setVisible(false);
@@ -207,6 +221,13 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   poweroff_btn->setObjectName("poweroff_btn");
   power_layout->addWidget(poweroff_btn);
   QObject::connect(poweroff_btn, &QPushButton::clicked, this, &DevicePanel::poweroff);
+
+  offroadswitch_btn = new QPushButton(tr("Force Offroad"));
+  offroadswitch_btn->setObjectName("offroadswitch_btn");
+  power_layout->addWidget(offroadswitch_btn);
+  QObject::connect(offroadswitch_btn, &QPushButton::clicked, this, &DevicePanel::offroadswitch);
+
+  updateLabels();
 
   if (false && !Hardware::PC()) {
       connect(uiState(), &UIState::offroadTransition, poweroff_btn, &QPushButton::setVisible);
@@ -417,8 +438,49 @@ void DevicePanel::poweroff() {
   }
 }
 
+void DevicePanel::offroadswitch() {
+  if (!uiState()->engaged()) {
+    if (params.getBool("ForceOffroad")) {
+      if (ConfirmationDialog::confirm(tr("Are you sure you want to go ONroad?"), tr("Unforce"), this)) {
+        // Check engaged again in case it changed while the dialog was open
+        if (!uiState()->engaged()) {
+          params.remove("ForceOffroad");
+        }
+      }
+    } else {
+      if (ConfirmationDialog::confirm(tr("Are you sure you want to go OFFroad?"), tr("Force"), this)) {
+        // Check engaged again in case it changed while the dialog was open
+        if (!uiState()->engaged()) {
+          params.putBool("ForceOffroad", true);
+        }
+      }
+    }
+  } else {
+    ConfirmationDialog::alert(tr("Disengage to Force Offroad"), this);
+  }
+
+  updateLabels();
+}
+
 void SettingsWindow::showEvent(QShowEvent *event) {
   setCurrentPanel(0);
+}
+
+void DevicePanel::updateLabels() {
+//  if (!isVisible()) {
+//    return;
+//  }
+
+  bool force_offroad_param = params.getBool("ForceOffroad");
+  QString offroad_btn_style = force_offroad_param ? "#999233" : "#297fb8";
+  QString offroad_btn_pressed_style = force_offroad_param ? "#dad047" : "#33a2ec";
+  QString btn_common_style = QString("QPushButton { height: 150px; border-radius: 15px; background-color: %1; }"
+                                     "QPushButton:pressed { background-color: %2; }")
+                             .arg(offroad_btn_style,
+                                  offroad_btn_pressed_style);
+
+  offroadswitch_btn->setText(force_offroad_param ? tr("Go ONroad") : tr("Go OFFroad"));
+  offroadswitch_btn->setStyleSheet(btn_common_style + offroad_btn_style + offroad_btn_pressed_style);
 }
 
 void SettingsWindow::setCurrentPanel(int index, const QString &param) {
@@ -466,11 +528,11 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
   QObject::connect(uiState()->prime_state, &PrimeState::changed, networking, &Networking::setPrimeType);
 
   QList<QPair<QString, QWidget *>> panels = {
-    {tr("Device"), device},
-    {tr("Network"), networking},
-    {tr("Toggles"), toggles},
-    {tr("Software"), new SoftwarePanel(this)},
     {tr("Carrot"), new CarrotPanel(this)},
+    {tr("Device"), device},
+    {tr("Toggles"), toggles},
+    {tr("Network"), networking},
+    {tr("Software"), new SoftwarePanel(this)},
     {tr("Developer"), new DeveloperPanel(this)},
   };
 
@@ -636,10 +698,10 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   //cruiseToggles->addItem(new CValueControl("AutoResumeFromGasSpeed", "GAS CRUISE ON: Speed(30)", "Driving speed exceeds the set value, Cruise ON", "../assets/offroad/icon_road.png", 20, 140, 5));
   //cruiseToggles->addItem(new CValueControl("TFollowSpeedAddM", "GAP: Additional TFs 40km/h(0)x0.01s", "Speed-dependent additional max(100km/h) TFs", "../assets/offroad/icon_road.png", -100, 200, 5));
   //cruiseToggles->addItem(new CValueControl("TFollowSpeedAdd", "GAP: Additional TFs 100Km/h(0)x0.01s", "Speed-dependent additional max(100km/h) TFs", "../assets/offroad/icon_road.png", -100, 200, 5));
-  cruiseToggles->addItem(new CValueControl("TFollowGap1", "GAP1: Apply TFollow (110)x0.01s", "", "../assets/offroad/icon_road.png", 70, 300, 5));
-  cruiseToggles->addItem(new CValueControl("TFollowGap2", "GAP2: Apply TFollow (120)x0.01s", "", "../assets/offroad/icon_road.png", 70, 300, 5));
-  cruiseToggles->addItem(new CValueControl("TFollowGap3", "GAP3: Apply TFollow (160)x0.01s", "", "../assets/offroad/icon_road.png", 70, 300, 5));
-  cruiseToggles->addItem(new CValueControl("TFollowGap4", "GAP4: Apply TFollow (180)x0.01s", "", "../assets/offroad/icon_road.png", 70, 300, 5));
+  cruiseToggles->addItem(new CValueControl("TFollowGap1", "GAP1: Apply TFollow (110)x0.01s", "", "../assets/offroad/icon_road.png", 70, 300, 5, 2));
+  cruiseToggles->addItem(new CValueControl("TFollowGap2", "GAP2: Apply TFollow (120)x0.01s", "", "../assets/offroad/icon_road.png", 70, 300, 5, 2));
+  cruiseToggles->addItem(new CValueControl("TFollowGap3", "GAP3: Apply TFollow (160)x0.01s", "", "../assets/offroad/icon_road.png", 70, 300, 5, 2));
+  cruiseToggles->addItem(new CValueControl("TFollowGap4", "GAP4: Apply TFollow (180)x0.01s", "", "../assets/offroad/icon_road.png", 70, 300, 5, 2));
   cruiseToggles->addItem(new CValueControl("DynamicTFollow", "Dynamic GAP control", "", "../assets/offroad/icon_road.png", 0, 100, 5));
   cruiseToggles->addItem(new CValueControl("DynamicTFollowLC", "Dynamic GAP control (LaneChange)", "", "../assets/offroad/icon_road.png", 0, 100, 5));
   cruiseToggles->addItem(new CValueControl("MyDrivingMode", "DRIVEMODE: Select", "1:ECO,2:SAFE,3:NORMAL,4:HIGH", "../assets/offroad/icon_road.png", 1, 4, 1));
@@ -650,52 +712,56 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   //cruiseToggles->addItem(new CValueControl("MyHighModeFactor", "DRIVEMODE: HIGH ratio(100%)", "AccelRatio control ratio", "../assets/offroad/icon_road.png", 100, 300, 10));
 
   latLongToggles = new ListWidget(this);
-  //latLongToggles->addItem(new CValueControl("AutoLaneChangeSpeed", "LaneChangeSpeed(20)", "", "../assets/offroad/icon_road.png", 1, 100, 5));
+  latLongToggles->addItem(new CValueControl("LateralTorqueAccelFactor", "LAT: TorqAccelFactor*0.001(2500)", "", "../assets/offroad/icon_logic.png", 1000, 6000, 10, 3));
+  latLongToggles->addItem(new CValueControl("LateralTorqueFriction", "LAT: TorqFriction*0.001(100)", "", "../assets/offroad/icon_logic.png", 0, 1000, 5, 3));
+  latLongToggles->addItem(new CValueControl("LateralTorqueKp", "LAT: TorqKp*0.01(1000)", "", "../assets/offroad/icon_logic.png", 0, 1000, 1, 2));
+  latLongToggles->addItem(new CValueControl("LateralTorqueKi", "LAT: TorqKi*0.01(100)", "", "../assets/offroad/icon_logic.png", 0, 800, 1, 2));
+  latLongToggles->addItem(new CValueControl("LateralTorqueKd", "LAT: TorqKd*0.01(800)", "", "../assets/offroad/icon_logic.png", 0, 800, 1, 2));
+  latLongToggles->addItem(new CValueControl("LateralTorqueCustom", "LAT: TorqueCustom(0)", "0:Off, 1:PID, 2:Default", "../assets/offroad/icon_logic.png", 0, 2, 1));
+  //latLongToggles->addItem(new CValueControl("MaxAngleFrames", "MaxAngleFrames(89)", "89:默认,方向盘传感器错误时85~87", "../assets/offroad/icon_logic.png", 80, 100, 1));
+  latLongToggles->addItem(new CValueControl("SteerActuatorDelay", "LAT:SteerActuatorDelay*0.01(80)", "标准", "../assets/offroad/icon_logic.png", 1, 100, 1, 2));
+  //latLongToggles->addItem(new CValueControl("CustomSteerMax", "LAT: CustomSteerMax(0)", "", "../assets/offroad/icon_logic.png", 0, 30000, 5));
+  //latLongToggles->addItem(new CValueControl("CustomSteerDeltaUp", "LAT: CustomSteerDeltaUp(0)", "", "../assets/offroad/icon_logic.png", 0, 50, 1));
+  //latLongToggles->addItem(new CValueControl("CustomSteerDeltaDown", "LAT: CustomSteerDeltaDown(0)", "", "../assets/offroad/icon_logic.png", 0, 50, 1));
+  //latLongToggles->addItem(new CValueControl("AutoLaneChangeSpeed", "LaneChangeSpeed(20)", "", "../assets/offroad/icon_road.png", 1, 100, 1));
   latLongToggles->addItem(new CValueControl("UseLaneLineSpeed", "Laneline mode speed(0)", "Laneline mode, lat_mpc control used", "../assets/offroad/icon_logic.png", 0, 200, 5));
   latLongToggles->addItem(new CValueControl("UseLaneLineCurveSpeed", "Laneline mode curve speed(0)", "Laneline mode, high speed only", "../assets/offroad/icon_logic.png", 0, 200, 5));
   latLongToggles->addItem(new CValueControl("AdjustLaneOffset", "AdjustLaneOffset(0)cm", "", "../assets/offroad/icon_logic.png", 0, 500, 5));
   latLongToggles->addItem(new CValueControl("AdjustCurveOffset", "AdjustLaneCurveOffset(0)cm", "", "../assets/offroad/icon_logic.png", 0, 500, 5));
-  latLongToggles->addItem(new CValueControl("AdjustLaneTime", "AdjustLaneTimeOffset(5)x0.01s", "", "../assets/offroad/icon_logic.png", 0, 20, 1));
-  latLongToggles->addItem(new CValueControl("CustomSR", "LAT: SteerRatiox0.1(0)", "Custom SteerRatio", "../assets/offroad/icon_logic.png", 0, 300, 1));
-  latLongToggles->addItem(new CValueControl("SteerRatioRate", "LAT: SteerRatioRatex0.01(100)", "SteerRatio apply rate", "../assets/offroad/icon_logic.png", 30, 170, 1));
+  latLongToggles->addItem(new CValueControl("AdjustLaneTime", "AdjustLaneTimeOffset(5)x0.01s", "", "../assets/offroad/icon_logic.png", 0, 20, 1, 2));
+  latLongToggles->addItem(new CValueControl("CustomSR", "LAT: SteerRatiox0.1(0)", "Custom SteerRatio", "../assets/offroad/icon_logic.png", 0, 300, 1, 1));
+  latLongToggles->addItem(new CValueControl("SteerRatioRate", "LAT: SteerRatioRatex0.01(100)", "SteerRatio apply rate", "../assets/offroad/icon_logic.png", 30, 170, 1, 2));
   //latLongToggles->addItem(new CValueControl("PathOffset", "PathOffset", "(-)left, (+)right, when UseLaneLineSpeed > 0", "../assets/offroad/icon_road.png", -50, 50, 1));
   //latLongToggles->addItem(horizontal_line());
   //latLongToggles->addItem(new CValueControl("JerkStartLimit", "LONG: JERK START(10)x0.1", "Starting Jerk.", "../assets/offroad/icon_road.png", 1, 50, 1));
   //latLongToggles->addItem(new CValueControl("LongitudinalTuningApi", "LONG: ControlType", "0:velocity pid, 1:accel pid, 2:accel pid(comma)", "../assets/offroad/icon_road.png", 0, 2, 1));
-  latLongToggles->addItem(new CValueControl("LongTuningKpV", "LONG: P Gain(100)", "", "../assets/offroad/icon_logic.png", 0, 150, 5));
-  latLongToggles->addItem(new CValueControl("LongTuningKiV", "LONG: I Gain(200)", "", "../assets/offroad/icon_logic.png", 0, 2000, 5));
-  latLongToggles->addItem(new CValueControl("LongTuningKf", "LONG: FF Gain(100)", "", "../assets/offroad/icon_logic.png", 0, 200, 5));
-  latLongToggles->addItem(new CValueControl("LongActuatorDelay", "LONG: ActuatorDelay(20)", "", "../assets/offroad/icon_logic.png", 0, 200, 5));
-  latLongToggles->addItem(new CValueControl("RadarReactionFactor", "LONG: Radar reaction factor(10)", "", "../assets/offroad/icon_logic.png", 0, 200, 10));
-  //latLongToggles->addItem(new CValueControl("StartAccelApply", "LONG: StartingAccel 2.0x(0)%", "정지->출발시 가속도의 가속율을 지정합니다 0: 사용안함.", "../assets/offroad/icon_road.png", 0, 100, 10));
-  //latLongToggles->addItem(new CValueControl("StopAccelApply", "LONG: StoppingAccel -2.0x(0)%", "정지유지시 브레이크압을 조정합니다. 0: 사용안함. ", "../assets/offroad/icon_road.png", 0, 100, 10));
+  latLongToggles->addItem(new CValueControl("LongTuningKpV", "LONG: P Gain(100)", "", "../assets/offroad/icon_logic.png", 0, 150, 5, 2));
+  latLongToggles->addItem(new CValueControl("LongTuningKiV", "LONG: I Gain(200)", "", "../assets/offroad/icon_logic.png", 0, 2000, 5, 2));
+  latLongToggles->addItem(new CValueControl("LongTuningKf", "LONG: FF Gain(100)", "", "../assets/offroad/icon_logic.png", 0, 200, 5, 2));
+  latLongToggles->addItem(new CValueControl("LongActuatorDelay", "LONG: ActuatorDelay(20)", "", "../assets/offroad/icon_logic.png", 0, 200, 5, 2));
+  latLongToggles->addItem(new CValueControl("RadarReactionFactor", "LONG: Radar reaction factor(10)", "", "../assets/offroad/icon_logic.png", 0, 200, 10, 2));
+  //latLongToggles->addItem(new CValueControl("StartAccelApply", "LONG: StartingAccel 2.0x(0)%", "车辆从静止到起步时的加速度比率，0:不使用。", "../assets/offroad/icon_road.png", 0, 100, 10));
+  //latLongToggles->addItem(new CValueControl("StopAccelApply", "LONG: StoppingAccel -2.0x(0)%", "车辆保持停止时的制动力调整，0:不使用。", "../assets/offroad/icon_road.png", 0, 100, 10));
   latLongToggles->addItem(new CValueControl("LaneChangeNeedTorque", "LaneChange need torque", "", "../assets/offroad/icon_logic.png", 0, 1, 1));
-  latLongToggles->addItem(new CValueControl("StoppingAccel", "LONG: StoppingStartAccelx0.01(-40)", "", "../assets/offroad/icon_logic.png", -100, 0, 5));
+  latLongToggles->addItem(new CValueControl("StoppingAccel", "LONG: StoppingStartAccelx0.01(-40)", "", "../assets/offroad/icon_logic.png", -100, 0, 5, 2));
   latLongToggles->addItem(new CValueControl("StopDistanceCarrot", "LONG: StopDistance (600)cm", "", "../assets/offroad/icon_logic.png", 300, 1000, 10));
   //latLongToggles->addItem(new CValueControl("TraffStopDistanceAdjust", "LONG: TrafficStopDistance adjust(150)cm", "", "../assets/offroad/icon_road.png", -1000, 1000, 10));
-  latLongToggles->addItem(new CValueControl("ComfortBrake", "LONG: Comfort Brake (240)", "x0.01", "../assets/offroad/icon_logic.png", 200, 300, 1));
-  latLongToggles->addItem(new CValueControl("CruiseMaxVals1", "ACCEL:0km/h(160)", "속도별 가속도를 지정합니다.(x0.01m/s^2)", "../assets/offroad/icon_logic.png", 1, 250, 5));
-  latLongToggles->addItem(new CValueControl("CruiseMaxVals2", "ACCEL:40km/h(120)", "속도별 가속도를 지정합니다.(x0.01m/s^2)", "../assets/offroad/icon_logic.png", 1, 250, 5));
-  latLongToggles->addItem(new CValueControl("CruiseMaxVals3", "ACCEL:60km/h(100)", "속도별 가속도를 지정합니다.(x0.01m/s^2)", "../assets/offroad/icon_logic.png", 1, 250, 5));
-  latLongToggles->addItem(new CValueControl("CruiseMaxVals4", "ACCEL:80km/h(80)", "속도별 가속도를 지정합니다.(x0.01m/s^2)", "../assets/offroad/icon_logic.png", 1, 250, 5));
-  latLongToggles->addItem(new CValueControl("CruiseMaxVals5", "ACCEL:110km/h(70)", "속도별 가속도를 지정합니다.(x0.01m/s^2)", "../assets/offroad/icon_logic.png", 1, 250, 5));
-  latLongToggles->addItem(new CValueControl("CruiseMaxVals6", "ACCEL:140km/h(60)", "속도별 가속도를 지정합니다.(x0.01m/s^2)", "../assets/offroad/icon_logic.png", 1, 250, 5));
-  //latLongToggles->addItem(new CValueControl("CruiseMinVals", "DECEL:(120)", "감속도를 설정합니다.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 50, 250, 5));
-  latLongToggles->addItem(new CValueControl("MaxAngleFrames", "MaxAngleFrames(89)", "89:기본, 스티어계기판에러시 85~87", "../assets/offroad/icon_logic.png", 80, 100, 1));
-  latLongToggles->addItem(new CValueControl("SteerActuatorDelay", "LAT:SteerActuatorDelay(40)", "표준", "../assets/offroad/icon_logic.png", 1, 100, 1));
-  latLongToggles->addItem(new CValueControl("LateralTorqueCustom", "LAT: TorqueCustom(0)", "", "../assets/offroad/icon_logic.png", 0, 2, 1));
-  latLongToggles->addItem(new CValueControl("LateralTorqueAccelFactor", "LAT: TorqueAccelFactor(2500)", "", "../assets/offroad/icon_logic.png", 1000, 6000, 10));
-  latLongToggles->addItem(new CValueControl("LateralTorqueFriction", "LAT: TorqueFriction(100)", "", "../assets/offroad/icon_logic.png", 0, 1000, 10));
-  latLongToggles->addItem(new CValueControl("CustomSteerMax", "LAT: CustomSteerMax(0)", "", "../assets/offroad/icon_logic.png", 0, 30000, 5));
-  latLongToggles->addItem(new CValueControl("CustomSteerDeltaUp", "LAT: CustomSteerDeltaUp(0)", "", "../assets/offroad/icon_logic.png", 0, 50, 1));
-  latLongToggles->addItem(new CValueControl("CustomSteerDeltaDown", "LAT: CustomSteerDeltaDown(0)", "", "../assets/offroad/icon_logic.png", 0, 50, 1));
+  latLongToggles->addItem(new CValueControl("ComfortBrake", "LONG: Comfort Brake (240)", "x0.01", "../assets/offroad/icon_logic.png", 200, 300, 1, 2));
+  latLongToggles->addItem(new CValueControl("CruiseMaxVals1", "ACCEL:0km/h(160)", "设置不同速度下的加速度.(x0.01m/s^2)", "../assets/offroad/icon_logic.png", 1, 250, 5, 2));
+  latLongToggles->addItem(new CValueControl("CruiseMaxVals2", "ACCEL:40km/h(120)", "设置不同速度下的加速度.(x0.01m/s^2)", "../assets/offroad/icon_logic.png", 1, 250, 5, 2));
+  latLongToggles->addItem(new CValueControl("CruiseMaxVals3", "ACCEL:60km/h(100)", "设置不同速度下的加速度.(x0.01m/s^2)", "../assets/offroad/icon_logic.png", 1, 250, 5, 2));
+  latLongToggles->addItem(new CValueControl("CruiseMaxVals4", "ACCEL:80km/h(80)", "设置不同速度下的加速度.(x0.01m/s^2)", "../assets/offroad/icon_logic.png", 1, 250, 5, 2));
+  latLongToggles->addItem(new CValueControl("CruiseMaxVals5", "ACCEL:110km/h(70)", "设置不同速度下的加速度.(x0.01m/s^2)", "../assets/offroad/icon_logic.png", 1, 250, 5, 2));
+  latLongToggles->addItem(new CValueControl("CruiseMaxVals6", "ACCEL:140km/h(60)", "设置不同速度下的加速度.(x0.01m/s^2)", "../assets/offroad/icon_logic.png", 1, 250, 5, 2));
+  //latLongToggles->addItem(new CValueControl("CruiseMinVals", "DECEL:(120)", "设置减速度.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 50, 250, 5, 2));
+
 
   dispToggles = new ListWidget(this);
   //dispToggles->addItem(new CValueControl("ShowHudMode", "DISP:Display Mode", "0:Frog,1:APilot,2:Bottom,3:Top,4:Left,5:Left-Bottom", "../assets/offroad/icon_shell.png", 0, 5, 1));
   dispToggles->addItem(new CValueControl("ShowDebugUI", "DISP:Debug Info", "", "../assets/offroad/icon_shell.png", 0, 2, 1));
-  dispToggles->addItem(new CValueControl("ShowDateTime", "DISP:Time Info", "0:None,1:Time/Date,2:Time,3:Date", "../assets/offroad/icon_calendar.png", 0, 3, 1));
+  dispToggles->addItem(new CValueControl("ShowDateTime", "DISP:Time Info", "0:None, 1:Time/Date, 2:Time,3:Date", "../assets/offroad/icon_calendar.png", 0, 3, 1));
   //dispToggles->addItem(new CValueControl("ShowSteerRotate", "DISP:Handle rotate", "0:None,1:Rotate", "../assets/offroad/icon_shell.png", 0, 1, 1));
-  dispToggles->addItem(new CValueControl("ShowPathEnd", "DISP:Path End", "0:None,1:Display", "../assets/offroad/icon_shell.png", 0, 1, 1));
+  dispToggles->addItem(new CValueControl("ShowPathEnd", "DISP:Path End", "0:None, 1:Display", "../assets/offroad/icon_shell.png", 0, 1, 1));
   //dispToggles->addItem(new CValueControl("ShowAccelRpm", "DISP:Accel meter", "0:None,1:Display,1:Accel+RPM", "../assets/offroad/icon_shell.png", 0, 2, 1));
   //dispToggles->addItem(new CValueControl("ShowTpms", "DISP:TPMS", "0:None,1:Display", "../assets/offroad/icon_shell.png", 0, 1, 1));
   //dispToggles->addItem(new CValueControl("ShowSteerMode", "DISP:Handle Display Mode", "0:Black,1:Color,2:None", "../assets/offroad/icon_shell.png", 0, 2, 1));
@@ -705,13 +771,13 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   //dispToggles->addItem(new CValueControl("ShowBlindSpot", "DISP:BSD Info", "0:None,1:Display", "../assets/offroad/icon_shell.png", 0, 1, 1));
   //dispToggles->addItem(new CValueControl("ShowGapInfo", "DISP:GAP Info", "0:None,1:Display", "../assets/offroad/icon_shell.png", -1, 1, 1));
   //dispToggles->addItem(new CValueControl("ShowDmInfo", "DISP:DM Info", "0:None,1:Display,-1:Disable(Reboot)", "../assets/offroad/icon_shell.png", -1, 1, 1));
-  dispToggles->addItem(new CValueControl("ShowRadarInfo", "DISP:Radar Info", "0:None,1:Display,2:RelPos,3:Stopped Car", "../assets/offroad/icon_shell.png", 0, 3, 1));
-  dispToggles->addItem(new CValueControl("ShowRouteInfo", "DISP:Route Info", "0:None,1:Display", "../assets/offroad/icon_shell.png", 0, 1, 1));
-  dispToggles->addItem(new CValueControl("ShowPlotMode", "DISP:Debug plot", "", "../assets/offroad/icon_shell.png", 0, 10, 1));
+  dispToggles->addItem(new CValueControl("ShowRadarInfo", "DISP:Radar Info", "0:None, 1:Display, 2:RelPos, 3:Stopped Car", "../assets/offroad/icon_shell.png", 0, 3, 1));
+  dispToggles->addItem(new CValueControl("ShowRouteInfo", "DISP:Route Info", "0:None, 1:Display", "../assets/offroad/icon_shell.png", 0, 1, 1));
+  dispToggles->addItem(new CValueControl("ShowPlotMode", "DISP:Debug plot", "0:None, 1:Accel, 2:Speed, 3:Model, 4.Lead, 5,Lead2, 6:Steer, 7:SteerA", "../assets/offroad/icon_shell.png", 0, 10, 1));
   dispToggles->addItem(new CValueControl("ShowCustomBrightness", "Brightness ratio", "", "../assets/offroad/icon_brightness.png", 0, 100, 10));
 
   pathToggles = new ListWidget(this);
-  pathToggles->addItem(new CValueControl("ShowPathModeCruiseOff", "DISP: Path Mode: Cruise OFFF", "0:Normal,1,2:Rec,3,4:^^,5,6:Rec,7,8:^^,9,10,11,12:Smooth^^", "../assets/offroad/icon_shell.png", 0, 15, 1));
+  pathToggles->addItem(new CValueControl("ShowPathModeCruiseOff", "DISP: Path Mode: Cruise OFF", "0:Normal,1,2:Rec,3,4:^^,5,6:Rec,7,8:^^,9,10,11,12:Smooth^^", "../assets/offroad/icon_shell.png", 0, 15, 1));
   pathToggles->addItem(new CValueControl("ShowPathColorCruiseOff", "DISP: Path Color: Cruise OFF", "(+10:Stroke)0:Red,1:Orange,2:Yellow,3:Green,4:Blue,5:Indigo,6:Violet,7:Brown,8:White,9:Black", "../assets/offroad/icon_shell.png", 0, 19, 1));
   pathToggles->addItem(new CValueControl("ShowPathMode", "DISP:Path Mode: Laneless", "0:Normal,1,2:Rec,3,4:^^,5,6:Rec,7,8:^^,9,10,11,12:Smooth^^", "../assets/offroad/icon_shell.png", 0, 15, 1));
   pathToggles->addItem(new CValueControl("ShowPathColor", "DISP:Path Color: Laneless", "(+10:Stroke)0:Red,1:Orange,2:Yellow,3:Green,4:Blue,5:Indigo,6:Violet,7:Brown,8:White,9:Black", "../assets/offroad/icon_shell.png", 0, 19, 1));
@@ -737,9 +803,9 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
     QString selected = QString::fromStdString(Params().get("CarSelected3"));
 
     QStringList all_items = get_list((QString::fromStdString(Params().getParamPath()) + "/SupportedCars").toStdString().c_str());
-    all_items.append(get_list((QString::fromStdString(Params().getParamPath()) + "/SupportedCars_gm").toStdString().c_str()));
-    all_items.append(get_list((QString::fromStdString(Params().getParamPath()) + "/SupportedCars_toyota").toStdString().c_str()));
-    all_items.append(get_list((QString::fromStdString(Params().getParamPath()) + "/SupportedCars_mazda").toStdString().c_str()));
+    //all_items.append(get_list((QString::fromStdString(Params().getParamPath()) + "/SupportedCars_gm").toStdString().c_str()));
+    //all_items.append(get_list((QString::fromStdString(Params().getParamPath()) + "/SupportedCars_toyota").toStdString().c_str()));
+    //all_items.append(get_list((QString::fromStdString(Params().getParamPath()) + "/SupportedCars_mazda").toStdString().c_str()));
 
     QMap<QString, QStringList> car_groups;
     for (const QString& car : all_items) {
@@ -775,9 +841,10 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   });
 
   startToggles->addItem(selectCarBtn);
-  startToggles->addItem(new ParamControl("HyundaiCameraSCC", "HYUNDAI: CAMERA SCC", "Connect the SCC's CAN line to CAM", "../assets/offroad/icon_shell.png", this));
+  // startToggles->addItem(new ParamControl("HyundaiCameraSCC", "HYUNDAI: CAMERA SCC", "Connect the SCC's CAN line to CAM", "../assets/offroad/icon_shell.png", this));
   startToggles->addItem(new ParamControl("EnableRadarTracks", "Enable RadarTrack", "", "../assets/offroad/icon_shell.png", this));
-  startToggles->addItem(new ParamControl("CanfdHDA2", "CANFD: HDA2 mode", "", "../assets/offroad/icon_shell.png", this));
+  startToggles->addItem(new ParamControl("AlwaysOnLKAS", "Enable Always-On Lkas", "", "../assets/offroad/icon_shell.png", this));
+  // startToggles->addItem(new ParamControl("CanfdHDA2", "CANFD: HDA2 mode", "", "../assets/offroad/icon_shell.png", this));
   startToggles->addItem(new CValueControl("AutoCruiseControl", "Auto Cruise control", "Softhold, Auto Cruise ON/OFF control", "../assets/offroad/icon_road.png", 0, 3, 1));
   startToggles->addItem(new CValueControl("CruiseOnDist", "CRUISE: Auto ON distance(0cm)", "When GAS/Brake is OFF, Cruise ON when the lead car gets closer.", "../assets/offroad/icon_road.png", 0, 2500, 50));
   startToggles->addItem(new CValueControl("AutoEngage", "Auto Engage control on start", "1:SteerEnable, 2:Steer/Cruise Engage", "../assets/offroad/icon_road.png", 0, 2, 1));
@@ -797,23 +864,22 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   //startToggles->addItem(new CValueControl("LaneChangeLaneCheck", "LaneChange: Check lane exist", "(0:No,1:Lane,2:+Edge)", "../assets/offroad/icon_shell.png", 0, 2, 1));
 
   speedToggles = new ListWidget(this);
-  speedToggles->addItem(new CValueControl("AutoCurveSpeedLowerLimit", "CURVE: Lower limit speed(30)", "곡선도로를 만나면 속도를 줄여줍니다. 최저속도", "../assets/offroad/icon_road.png", 30, 200, 5));
+  speedToggles->addItem(new CValueControl("AutoCurveSpeedLowerLimit", "CURVE: Lower limit speed(30)", "遇到曲线道路时减速。最低速度", "../assets/offroad/icon_road.png", 30, 200, 5));
   speedToggles->addItem(new CValueControl("AutoCurveSpeedFactor", "CURVE: Auto Control ratio(100%)", "", "../assets/offroad/icon_road.png", 50, 300, 1));
   speedToggles->addItem(new CValueControl("AutoCurveSpeedAggressiveness", "CURVE: Aggressiveness (100%)", "", "../assets/offroad/icon_road.png", 50, 300, 1));
-  speedToggles->addItem(new CValueControl("AutoNaviSpeedCtrlEnd", "SpeedCameraDecelEnd(6s)", "감속완료시점을 설정합니다.값이 크면 카메라에서 멀리 감속 완료", "../assets/offroad/icon_road.png", 3, 20, 1));
-  speedToggles->addItem(new CValueControl("AutoNaviSpeedDecelRate", "SpeedCameraDecelRatex0.01m/s^2(80)", "낮으면 멀리서부터 감속함", "../assets/offroad/icon_road.png", 10, 200, 10));
+  speedToggles->addItem(new CValueControl("AutoNaviSpeedCtrlEnd", "SpeedCameraDecelEnd(6s)", "设置减速完成时间点。值越大，距离摄像头越远完成减速", "../assets/offroad/icon_road.png", 3, 20, 1));
+  speedToggles->addItem(new CValueControl("AutoNaviSpeedDecelRate", "SpeedCameraDecelRatex0.01m/s^2(80)", "值越小，越早开始减速", "../assets/offroad/icon_road.png", 10, 200, 10));
   speedToggles->addItem(new CValueControl("AutoNaviSpeedSafetyFactor", "SpeedCameraSafetyFactor(105%)", "", "../assets/offroad/icon_road.png", 80, 120, 1));
   speedToggles->addItem(new CValueControl("AutoNaviSpeedBumpTime", "SpeedBumpTimeDistance(1s)", "", "../assets/offroad/icon_road.png", 1, 50, 1));
   speedToggles->addItem(new CValueControl("AutoNaviSpeedBumpSpeed", "SpeedBumpSpeed(35Km/h)", "", "../assets/offroad/icon_road.png", 10, 100, 5));
-  speedToggles->addItem(new CValueControl("AutoNaviCountDownMode", "NaviCountDown mode(2)", "0: off, 1:tbt+camera, 2:tbt+camera+bump", "../assets/offroad/icon_road.png", 0, 2, 1));
-  speedToggles->addItem(new CValueControl("TurnSpeedControlMode", "Turn Speed control mode(1)", "0: off, 1:vision, 2:vision+route, 3: route", "../assets/offroad/icon_road.png", 0, 3, 1));
+  speedToggles->addItem(new CValueControl("AutoNaviCountDownMode", "NaviCountDown mode(2)", "0: 关闭, 1:tbt+摄像头, 2:tbt+摄像头+减速带", "../assets/offroad/icon_road.png", 0, 2, 1));
+  speedToggles->addItem(new CValueControl("TurnSpeedControlMode", "Turn Speed control mode(1)", "0: 关闭, 1:视觉, 2:视觉+路线, 3: 路线", "../assets/offroad/icon_road.png", 0, 3, 1));
   speedToggles->addItem(new CValueControl("MapTurnSpeedFactor", "Map TurnSpeed Factor(100)", "", "../assets/offroad/icon_map.png", 50, 300, 5));
-  speedToggles->addItem(new CValueControl("AutoTurnControl", "ATC: Auto turn control(0)", "0:없음,1:차선변경,2:차선변경+속도,3:속도", "../assets/offroad/icon_road.png", 0, 3, 1));
-  speedToggles->addItem(new CValueControl("AutoTurnControlSpeedTurn", "ATC: Turn Speed (20)", "0:없음, 턴속도", "../assets/offroad/icon_road.png", 0, 100, 5));
+  speedToggles->addItem(new CValueControl("AutoTurnControl", "ATC: Auto turn control(0)", "0:无,1:变道,2:变道+速度,3:速度", "../assets/offroad/icon_road.png", 0, 3, 1));
+  speedToggles->addItem(new CValueControl("AutoTurnControlSpeedTurn", "ATC: Turn Speed (20)", "0:无, 转弯速度", "../assets/offroad/icon_road.png", 0, 100, 5));
   speedToggles->addItem(new CValueControl("AutoTurnControlTurnEnd", "ATC: Turn CtrlDistTime (6)", "dist=speed*time", "../assets/offroad/icon_road.png", 0, 30, 1));
   speedToggles->addItem(new CValueControl("AutoRoadSpeedAdjust", "Auto Roadlimit Speed adjust (50%)", "", "../assets/offroad/icon_road.png", 0, 100, 10));
   speedToggles->addItem(new CValueControl("AutoTurnMapChange", "ATC Auto Map Change(0)", "", "../assets/offroad/icon_road.png", 0, 1, 1));
-
   toggles_layout->addWidget(cruiseToggles);
   toggles_layout->addWidget(latLongToggles);
   toggles_layout->addWidget(dispToggles);
@@ -874,8 +940,8 @@ void CarrotPanel::updateButtonStyles() {
 }
 
 
-CValueControl::CValueControl(const QString& params, const QString& title, const QString& desc, const QString& icon, int min, int max, int unit)
-    : AbstractControl(title, desc, icon), m_params(params), m_min(min), m_max(max), m_unit(unit) {
+CValueControl::CValueControl(const QString& params, const QString& title, const QString& desc, const QString& icon, int min, int max, int unit, int dp)
+    : AbstractControl(title, desc, icon), m_params(params), m_min(min), m_max(max), m_unit(unit), m_dp(dp) {
 
     label.setAlignment(Qt::AlignVCenter | Qt::AlignRight);
     label.setStyleSheet("color: #e0e879");
@@ -916,7 +982,11 @@ void CValueControl::showEvent(QShowEvent* event) {
 }
 
 void CValueControl::refresh() {
-    label.setText(QString::fromStdString(Params().get(m_params.toStdString())));
+    float scale = 1.0;
+    if(m_dp > 0)
+        scale = pow(0.1, m_dp);
+    QString formattedValue = QString::number(QString::fromStdString(Params().get(m_params.toStdString())).toInt() * scale, 'f', m_dp);
+    label.setText(formattedValue);
 }
 
 void CValueControl::adjustValue(int delta) {
