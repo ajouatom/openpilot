@@ -217,8 +217,6 @@ std::unordered_map<std::string, uint32_t> keys = {
     {"GMapKey", PERSISTENT},
     {"SearchInput", PERSISTENT},
 
-
-
     {"CarSelected3", PERSISTENT},
     {"SupportedCars", PERSISTENT},
     {"SupportedCars_gm", PERSISTENT},
@@ -236,6 +234,8 @@ std::unordered_map<std::string, uint32_t> keys = {
     {"ShowPathModeLane", PERSISTENT},
     {"ShowPathColorLane", PERSISTENT},
     {"ShowPlotMode", PERSISTENT},
+    {"RecordRoadCam", PERSISTENT },
+
     {"AutoCruiseControl", PERSISTENT},
     {"CruiseEcoControl", PERSISTENT},
     {"AutoGasTokSpeed", PERSISTENT},
@@ -309,9 +309,11 @@ std::unordered_map<std::string, uint32_t> keys = {
     {"LaneChangeNeedTorque", PERSISTENT},
     {"MaxAngleFrames", PERSISTENT},
     {"SoftHoldMode", PERSISTENT},
-    {"CarrotLatControl", PERSISTENT },
+    {"CarrotLatControl", PERSISTENT},
+    {"CarrotLatFilter", PERSISTENT},
     {"LatMpcPathCost", PERSISTENT },
     {"LatMpcMotionCost", PERSISTENT },
+    {"LatMpcMotionCost2", PERSISTENT },
     {"LatMpcAccelCost", PERSISTENT},
     {"LatMpcJerkCost", PERSISTENT},
     {"LatMpcSteeringRateCost", PERSISTENT},

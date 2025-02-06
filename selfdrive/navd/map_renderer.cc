@@ -122,34 +122,26 @@ MapRenderer::MapRenderer(const QMapLibre::Settings &settings, bool online) : m_s
 void MapRenderer::msgUpdate() {
   sm->update(1000);
 
-  float lat = 0.0;
-  float lon = 0.0;
-  float bearing = 0.0;
-  bool gps_updated = false;
   auto carrotMan = (*sm)["carrotMan"].getCarrotMan();
   bool active_carrot_man = carrotMan.getActiveCarrot() > 1;
 
-  if (!active_carrot_man && sm->updated("liveLocationKalman")) {
+  if (sm->updated("liveLocationKalman")) {
     auto location = (*sm)["liveLocationKalman"].getLiveLocationKalman();
     auto pos = location.getPositionGeodetic();
     auto orientation = location.getCalibratedOrientationNED();
 
     if ((sm->rcv_frame("liveLocationKalman") % LLK_DECIMATION) == 0) {
-      bearing = RAD2DEG(orientation.getValue()[2]);
-      lat = pos.getValue()[0];
-      lon = pos.getValue()[1];
-      gps_updated = true;
-    }
-  }
-  if (active_carrot_man && sm->updated("carrotMan")) {
-    bearing = carrotMan.getXPosAngle();
-    lat = carrotMan.getXPosLat();
-    lon = carrotMan.getXPosLon();
-    gps_updated = true;
-  }
+      float bearing = RAD2DEG(orientation.getValue()[2]);
+      float lat = pos.getValue()[0];
+      float lon = pos.getValue()[1];
+    
+      if (active_carrot_man) {
+        bearing = carrotMan.getXPosAngle();
+        lat = carrotMan.getXPosLat();
+        lon = carrotMan.getXPosLon();
+      }
         
-  if(gps_updated) {
-      updatePosition(get_point_along_line(lat, lon, bearing, MAP_OFFSET), bearing);  
+      updatePosition(get_point_along_line(lat, lon, bearing, MAP_OFFSET), bearing);
       // TODO: use the static rendering mode instead
       // retry render a few times
       for (int i = 0; i < 5 && !rendered(); i++) {
@@ -164,7 +156,9 @@ void MapRenderer::msgUpdate() {
       // fallback to sending a blank frame
       if (!rendered()) {
         publish(0, false);
+        printf("blank frame\n");
       }
+    }
   }
 
   if (sm->updated("navRoute")) {
@@ -227,6 +221,9 @@ void MapRenderer::publish(const double render_time, const bool loaded) {
   auto carrotMan = (*sm)["carrotMan"].getCarrotMan();
   auto location = (*sm)["liveLocationKalman"].getLiveLocationKalman();
   bool valid = loaded && ((carrotMan.getActiveCarrot() > 1) || ((location.getStatus() == cereal::LiveLocationKalman::Status::VALID) && location.getPositionGeodetic().getValid()));
+  if (!valid) {
+    printf("loaded %d, active_carrot %d, status %d, valid %d\n", loaded, carrotMan.getActiveCarrot(), (int)location.getStatus(), location.getPositionGeodetic().getValid());
+  }
   ever_loaded = ever_loaded || loaded;
   uint64_t ts = nanos_since_boot();
   VisionBuf* buf = vipc_server->get_buffer(VisionStreamType::VISION_STREAM_MAP);
