@@ -23,52 +23,7 @@ def apply_deadzone(error, deadzone):
     error = 0.
   return error
 
-def get_lag_adjusted_curvature(CP, v_ego, psis, curvatures, desired_curvature_last, model_delay, steer_actuator_delay, t_since_plan, lat_filter):
-  if len(psis) != CONTROL_N:
-    psis = [0.0]*CONTROL_N
-    curvatures = [0.0]*CONTROL_N
-
-  v_ego = max(MIN_SPEED, v_ego)
-
-  delay = max(0.01, steer_actuator_delay)
-
-  current_curvature_desired = desired_curvature_last
-
-  window_size =  lat_filter
-  if window_size > 0:
-    #def moving_average(data, window_size):
-    #    kernel = np.ones(window_size) / window_size
-    #    return np.convolve(data, kernel, mode='same')
-    def moving_average(data, window_size):
-      data = np.array(data, dtype=float)
-
-      kernel = np.ones(window_size) / window_size
-      smoothed = np.convolve(data, kernel, mode='same')
-
-      half_window = window_size // 2
-      smoothed[:half_window] = (
-          np.cumsum(data[:window_size])[:half_window] / np.arange(1, half_window + 1)
-      )
-      smoothed[-half_window:] = (
-          np.cumsum(data[-window_size:][::-1])[:half_window][::-1] / np.arange(1, half_window + 1)
-      )
-      return smoothed.tolist()
-
-    curvatures = moving_average(curvatures, window_size)
-  
-  desired_curvature = np.interp(model_delay + t_since_plan, ModelConstants.T_IDXS[:CONTROL_N], curvatures)
-  desired_curvature_ff = np.interp(model_delay + steer_actuator_delay + t_since_plan, ModelConstants.T_IDXS[:CONTROL_N], curvatures)
-
-  max_curvature_rate = MAX_LATERAL_JERK / (v_ego**2) # inexact calculation, check https://github.com/commaai/openpilot/pull/24755
-  safe_desired_curvature = np.clip(desired_curvature,
-                                current_curvature_desired - max_curvature_rate * DT_MDL,
-                                current_curvature_desired + max_curvature_rate * DT_MDL)
-  #safe_desired_curvature_ff = clip(desired_curvature_ff,
-  #                              current_curvature_desired - max_curvature_rate * DT_MDL,
-  #                              current_curvature_desired + max_curvature_rate * DT_MDL)
-  return safe_desired_curvature, desired_curvature_ff
-
-def get_lag_adjusted_curvature1(CP, v_ego, psis, curvatures, steer_actuator_delay):
+def get_lag_adjusted_curvature(CP, v_ego, psis, curvatures, steer_actuator_delay):
   if len(psis) != CONTROL_N:
     psis = [0.0]*CONTROL_N
     curvatures = [0.0]*CONTROL_N

@@ -73,13 +73,6 @@ class LateralPlanner:
     self.reset_mpc(np.zeros(4))
     self.curve_speed = 0
     
-    self.prev_path_xyz = None
-    self.carrot_lat_control = 0
-    self.carrot_lat_filter = 5
-    self.path_history = deque(maxlen=self.carrot_lat_filter)
-
-    self.lateralMotionCost = LATERAL_MOTION_COST
-    self.lateralMotionCost2 = LATERAL_MOTION_COST
 
   def reset_mpc(self, x0=None):
     if x0 is None:
@@ -100,11 +93,6 @@ class LateralPlanner:
       LATERAL_ACCEL_COST = self.params.get_float("LatMpcAccelCost") * 0.01
       LATERAL_JERK_COST = self.params.get_float("LatMpcJerkCost") * 0.01
       STEERING_RATE_COST = self.params.get_float("LatMpcSteeringRateCost")
-      self.carrot_lat_control = self.params.get_int("CarrotLatControl")
-      carrot_lat_filter = self.params.get_int("CarrotLatFilter")
-      if carrot_lat_filter != self.carrot_lat_filter:
-        self.carrot_lat_filter = carrot_lat_filter
-        self.path_history = deque(maxlen=self.carrot_lat_filter)
 
     # clip speed , lateral planning is not possible at 0 speed
     measured_curvature = sm['controlsState'].curvature
@@ -150,12 +138,15 @@ class LateralPlanner:
       self.LP.lane_change_multiplier = 1.0
 
     lateral_motion_cost = self.lateralMotionCost
+    path_cost = PATH_COST
     atc_type = sm['carrotMan'].atcType
     if atc_activate:
-      if atc_type == "turn left" and md.meta.desireState[1] > 0.1:
+      if atc_type == "turn left" and (md.orientationRate.z[-1] > 0.1 or md.meta.desireState[1] > 0.1):
         lateral_motion_cost = self.lateralMotionCost2
-      elif atc_type == "turn right" and md.meta.desireState[2] > 0.1:
+        #path_cost *= 2
+      elif atc_type == "turn right" and (md.orientationRate.z[-1] < -0.1 or md.meta.desireState[2] > 0.1):
         lateral_motion_cost = self.lateralMotionCost2
+        #path_cost *= 2
 
     # lanelines calculation?
     self.LP.lanefull_mode = self.useLaneLineMode
@@ -170,22 +161,7 @@ class LateralPlanner:
 
     self.path_xyz[:, 1] += self.pathOffset
 
-    """
-    # Smooth path
-    self.alpha = 0.2
-    if self.prev_path_xyz is None:
-      self.prev_path_xyz = self.path_xyz.copy()
-    self.path_xyz = self.alpha * self.path_xyz + (1 - self.alpha) * self.prev_path_xyz
-    self.prev_path_xyz = self.path_xyz
-    """
-    if self.carrot_lat_control in [1,2]:
-      if False: #self.plan_a[0] < -1.0:
-        self.path_history.clear()
-      
-      self.path_history.append(self.path_xyz)
-      self.path_xyz = np.mean(np.array(self.path_history), axis=0)
-
-    self.lat_mpc.set_weights(PATH_COST, lateral_motion_cost,
+    self.lat_mpc.set_weights(path_cost, lateral_motion_cost,
                              LATERAL_ACCEL_COST, LATERAL_JERK_COST,
                              STEERING_RATE_COST)
 

@@ -68,19 +68,6 @@
     },
     {
       "group": "조향튜닝",
-      "name": "CarrotLatFilter",
-      "title": "*당근조향제어필터(5)",
-      "descr": "필터링개수",
-      "egroup": "LAT",
-      "etitle": "*Carrot lateral filter(5)",
-      "edescr": "",
-      "min": 2,
-      "max": 30,
-      "default": 5,
-      "unit": 1
-    },
-    {
-      "group": "조향튜닝",
       "name": "LatMpcPathCost",
       "title": "*LATMPC.PathCost(100)",
       "descr": "경로추종가중치, 높으면 경로우선시함.",
@@ -220,19 +207,6 @@
       "min": 1,
       "max": 300,
       "default": 40,
-      "unit": 1
-    },
-    {
-      "group": "조향튜닝",
-      "name": "ModelActuatorDelay",
-      "title": "*ModelActuatorDelay(80)x0.01",
-      "descr": "모델지연값, 커브진입시점로 조절",
-      "egroup": "LAT",
-      "etitle": "*ModelActuatorDelay(80)",
-      "edescr": "",
-      "min": 1,
-      "max": 300,
-      "default": 80,
       "unit": 1
     },
     {
