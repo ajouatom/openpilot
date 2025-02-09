@@ -3,6 +3,7 @@
 #include <string>
 #include <tuple>
 #include <vector>
+#include <thread> //차선캘리
 
 #include <QDebug>
 #include <QProcess>
@@ -181,6 +182,11 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   reboot_btn->setObjectName("reboot_btn");
   power_layout->addWidget(reboot_btn);
   QObject::connect(reboot_btn, &QPushButton::clicked, this, &DevicePanel::reboot);
+  //차선캘리
+  QPushButton *reset_CalibBtn = new QPushButton(tr("ReCalibration"));
+  reset_CalibBtn->setObjectName("reset_CalibBtn");
+  power_layout->addWidget(reset_CalibBtn);
+  QObject::connect(reset_CalibBtn, &QPushButton::clicked, this, &DevicePanel::calibration);
 
   QPushButton* poweroff_btn = new QPushButton(tr("Power Off"));
   poweroff_btn->setObjectName("poweroff_btn");
@@ -268,6 +274,8 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   setStyleSheet(R"(
     #reboot_btn { height: 120px; border-radius: 15px; background-color: #2CE22C; }
     #reboot_btn:pressed { background-color: #24FF24; }
+    #reset_CalibBtn { height: 120px; border-radius: 15px; background-color: #FFBB00; }
+    #reset_CalibBtn:pressed { background-color: #FF2424; }
     #poweroff_btn { height: 120px; border-radius: 15px; background-color: #E22C2C; }
     #poweroff_btn:pressed { background-color: #FF2424; }
     #init_btn { height: 120px; border-radius: 15px; background-color: #2C2CE2; }
@@ -385,6 +393,25 @@ void DevicePanel::reboot() {
     }
   } else {
     ConfirmationDialog::alert(tr("Disengage to Reboot"), this);
+  }
+}
+
+//차선캘리
+void execAndReboot(const std::string& cmd) {
+    system(cmd.c_str());
+    Params().putBool("DoReboot", true);
+}
+
+void DevicePanel::calibration() {
+  if (!uiState()->engaged()) {
+    if (ConfirmationDialog::confirm(tr("Are you sure you want to reset calibration?"), tr("ReCalibration"), this)) {
+      if (!uiState()->engaged()) {
+        std::thread worker(execAndReboot, "cd /data/params/d_tmp;  rm -f CalibrationParams");
+        worker.detach();
+      }
+    }
+  } else {
+    ConfirmationDialog::alert(tr("Reboot & Disengage to Calibration"), this);
   }
 }
 
@@ -643,7 +670,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   latLongToggles->addItem(new CValueControl("AdjustLaneTime", "AdjustLaneTimeOffset(5)x0.01s", "", "../assets/offroad/icon_logic.png", 0, 20, 1));
   latLongToggles->addItem(new CValueControl("CustomSR", "LAT: SteerRatiox0.1(0)", "Custom SteerRatio", "../assets/offroad/icon_logic.png", 0, 300, 1));
   latLongToggles->addItem(new CValueControl("SteerRatioRate", "LAT: SteerRatioRatex0.01(100)", "SteerRatio apply rate", "../assets/offroad/icon_logic.png", 30, 170, 1));
-  //latLongToggles->addItem(new CValueControl("PathOffset", "PathOffset", "(-)left, (+)right, when UseLaneLineSpeed > 0", "../assets/offroad/icon_road.png", -50, 50, 1));
+  latLongToggles->addItem(new CValueControl("PathOffset", "LAT: PathOffset", "(-)left, (+)right", "../assets/offroad/icon_logic.png", -150, 150, 1));
   //latLongToggles->addItem(horizontal_line());
   //latLongToggles->addItem(new CValueControl("JerkStartLimit", "LONG: JERK START(10)x0.1", "Starting Jerk.", "../assets/offroad/icon_road.png", 1, 50, 1));
   //latLongToggles->addItem(new CValueControl("LongitudinalTuningApi", "LONG: ControlType", "0:velocity pid, 1:accel pid, 2:accel pid(comma)", "../assets/offroad/icon_road.png", 0, 2, 1));

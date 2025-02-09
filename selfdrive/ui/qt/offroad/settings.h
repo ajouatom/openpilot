@@ -50,6 +50,8 @@ signals:
 private slots:
   void poweroff();
   void reboot();
+  //re_Calibration
+  void calibration();
   void updateCalibDescription();
 
 private:

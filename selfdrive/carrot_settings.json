@@ -2,6 +2,19 @@
   "apilot": 20220111,
   "params": [
     {
+      "group": "조향일반",
+      "name": "PathOffset",
+      "title": "차선치우침 좌우보정(0)",
+      "descr": "(-)좌측,(+)우측",
+      "egroup": "LAT",
+      "etitle": "PathOffset (0)",
+      "edescr": "(-)Left,(+)Right",
+      "min": -150,
+      "max": 150,
+      "default": 0,
+      "unit": 1
+    },
+    {
       "group": "조향튜닝",
       "name": "LateralTorqueCustom",
       "title": "_LateralTorqueCustom(0)",

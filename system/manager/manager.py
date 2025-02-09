@@ -116,6 +116,7 @@ def get_default_params():
     ("DynamicTFollowLC", "100"),
     ("HapticFeedbackWhenSpeedCamera", "0"),
     ("UseLaneLineSpeed", "0"),
+    ("PathOffset", "0"),
     ("UseLaneLineCurveSpeed", "0"),
     ("UseLaneLineSpeedApply", "0"),
     ("AdjustLaneOffset", "0"),
