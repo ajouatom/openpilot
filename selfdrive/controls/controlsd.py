@@ -130,7 +130,10 @@ class Controls:
     if self.params.get_bool("CarrotLatControl"):
       model_turn_delay = self.params.get_float("ModelTurnDelay") * 0.01
       desire_state =  self.sm['modelV2'].meta.desireState
-      turn_state = desire_state[1] + desire_state[2]
+      if len(desire_state) > 0:
+        turn_state = desire_state[1] + desire_state[2]
+      else:
+        turn_state = 0.0
       desired_curvature = get_lag_adjusted_curvature(self.CP, CS.vEgo, lat_plan.psis, lat_plan.curvatures, steer_actuator_delay if turn_state < 0.1 else model_turn_delay)
       self.desired_curvature = clip_curvature(CS.vEgo, self.desired_curvature, desired_curvature)
     else:

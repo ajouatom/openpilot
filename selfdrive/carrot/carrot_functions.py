@@ -360,6 +360,7 @@ class CarrotPlanner:
     self.xStop = self.update_stop_dist(x[31])
     stop_model_x = self.xStop
 
+    trafficState_last = self.trafficState
     #self.check_model_stopping(v, v_ego, self.xStop, y)
     self.check_model_stopping(v, v_ego, a_ego, x[-1], y, radarstate.leadOne.dRel if lead_detected else 1000)
 
@@ -377,6 +378,8 @@ class CarrotPlanner:
 
     if self.soft_hold_active > 0:
       self.xState = XState.e2eStopped
+      if trafficState_last in [TrafficState.off, TrafficState.red] and self.trafficState == TrafficState.green:
+        self.events.add(EventName.trafficSignChanged)
     elif self.xState == XState.e2eStopped:
       if carstate.gasPressed:
         self.xState = XState.e2ePrepare
