@@ -75,7 +75,7 @@ static void gm_rx_hook(const CANPacket_t *to_push) {
     // Reference for brake pressed signals:
     // https://github.com/commaai/openpilot/blob/master/selfdrive/car/gm/carstate.py
     if ((addr == 0xBE) && (gm_hw == GM_ASCM)) {
-      brake_pressed = GET_BYTE(to_push, 1) >= 8U;
+      brake_pressed = GET_BYTE(to_push, 1) >= 10U;
     }
 
     if ((addr == 0xC9) && ((gm_hw == GM_CAM) || (gm_hw == GM_SDGM))) {
@@ -105,11 +105,7 @@ static void gm_rx_hook(const CANPacket_t *to_push) {
     }
 
     if (addr == 0xBD) {
-      regen_braking = (GET_BYTE(to_push, 0) >> 4) != 0U; // 1. 리젠 브레이크 상태 확인
-      // 2. 롱컨트롤 허용 여부 확인
-      if (!get_longitudinal_allowed()) {
-        //tx = false;
-      }
+      regen_braking = (GET_BYTE(to_push, 0) >> 4) != 0U;
     }
 
     // Pedal Interceptor

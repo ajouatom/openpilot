@@ -116,7 +116,7 @@ class CarState(CarStateBase):
       # that the brake is being intermittently pressed without user interaction.
       # To avoid a cruise fault we need to use a conservative brake position threshold
       # https://static.nhtsa.gov/odi/tsbs/2017/MC-10137629-9999.pdf
-      ret.brakePressed = ret.brake >= 8
+      ret.brakePressed = ret.brake >= 10
 
     # Regen braking is braking
     if self.CP.transmissionType == TransmissionType.direct:
@@ -194,7 +194,7 @@ class CarState(CarStateBase):
       ret.accFaulted = False
       ret.cruiseState.speed = pt_cp.vl["ECMCruiseControl"]["CruiseSetSpeed"] * CV.KPH_TO_MS
       ret.cruiseState.enabled = pt_cp.vl["ECMCruiseControl"]["CruiseActive"] != 0
-    # 위에서 삭제된 것을 아랫줄에 위치했습니다.
+
     self.pcm_acc_status = pt_cp.vl["AcceleratorPedal2"]["CruiseState"]
     if self.CP.carFingerprint in (CAR.CHEVROLET_TRAX, CAR.CHEVROLET_TRAILBLAZER, CAR.CHEVROLET_TRAILBLAZER_CC): 
       ret.vCluRatio = 0.96
@@ -207,7 +207,6 @@ class CarState(CarStateBase):
       vEgoClu, aEgoClu = self.update_clu_speed_kf(ret.vEgoCluster)
       if self.CP.carFingerprint in CAR.CHEVROLET_VOLT:
         ret.vCluRatio = (ret.vEgo / vEgoClu) if (vEgoClu > 3. and ret.vEgo > 3.) else 1.0
-        #print("vCluRatio={}".format(ret.vCluRatio))
       else:
         ret.vCluRatio = 0.96
 

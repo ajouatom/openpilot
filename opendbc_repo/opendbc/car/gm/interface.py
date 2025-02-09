@@ -181,19 +181,19 @@ class CarInterface(CarInterfaceBase):
       ret.longitudinalTuning.kpBP = [0.]
       ret.longitudinalTuning.kpV = [1.0]
       ret.longitudinalTuning.kiBP = [0.]
-      ret.longitudinalTuning.kiV = [.3]
+      ret.longitudinalTuning.kiV = [.35]
       ret.longitudinalTuning.kf = 1.0
       ret.stoppingDecelRate = 0.2 # brake_travel/s while trying to stop
       ret.stopAccel = -0.5
       ret.startingState = True
-      ret.startAccel = 1.5
+      ret.startAccel = 1.9
 
       # softer long tune for ev table
       if useEVTables:
         ret.longitudinalTuning.kpBP = [0.]
         ret.longitudinalTuning.kpV = [1.0]
         ret.longitudinalTuning.kiBP = [0.]
-        ret.longitudinalTuning.kiV = [.05]
+        ret.longitudinalTuning.kiV = [.35]
         ret.longitudinalTuning.kf = 1.0
         ret.stoppingDecelRate = 1.0 # brake_travel/s while trying to stop
         ret.stopAccel = -0.5
