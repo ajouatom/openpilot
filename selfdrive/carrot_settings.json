@@ -212,10 +212,10 @@
     {
       "group": "조향튜닝",
       "name": "ModelTurnDelay",
-      "title": "*ModelTurnDelay(40)",
+      "title": "*ModelTurnDelay(90)",
       "descr": "",
       "egroup": "LAT",
-      "etitle": "ModelTurnDelay(40)",
+      "etitle": "ModelTurnDelay(90)",
       "edescr": "",
       "min": 1,
       "max": 300,
