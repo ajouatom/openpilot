@@ -248,6 +248,7 @@ class LanePlanner:
 
     return path_xyz
 
+
   def calculate_plan_yaw_and_yaw_rate(self, path_xyz):
     x = path_xyz[:, 0]
     y = path_xyz[:, 1]
