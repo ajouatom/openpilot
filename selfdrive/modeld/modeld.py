@@ -188,8 +188,9 @@ def main(demo=False):
 
   DH = DesireHelper()
 
+  turn_state = False
   while True:
-    steer_delay = params.get_float("SteerActuatorDelay") * 0.01 #CP.steerActuatorDelay + .2
+    steer_delay = params.get_float("SteerActuatorDelay") * 0.01 if not turn_state else params.get_float("ModelTurnDelay") * 0.01
 
     # Keep receiving frames until we are at least 1 frame ahead of previous extra frame
     while meta_main.timestamp_sof < meta_extra.timestamp_sof + 25000000:
@@ -308,6 +309,8 @@ def main(demo=False):
       modelv2_send.modelV2.meta.desireLog = DH.desireLog #carrot
       #drivingdata_send.drivingModelData.meta.laneChangeState = DH.lane_change_state
       #drivingdata_send.drivingModelData.meta.laneChangeDirection = DH.lane_change_direction
+
+      turn_state = (desire_state[1] + desire_state[2]) > 0.1
 
       modelv2_send.modelV2.meta.laneWidthLeft = float(DH.lane_width_left)
       modelv2_send.modelV2.meta.laneWidthRight = float(DH.lane_width_right)

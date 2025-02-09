@@ -210,6 +210,19 @@
       "unit": 1
     },
     {
+      "group": "조향튜닝",
+      "name": "ModelTurnDelay",
+      "title": "*ModelTurnDelay(40)",
+      "descr": "",
+      "egroup": "LAT",
+      "etitle": "ModelTurnDelay(40)",
+      "edescr": "",
+      "min": 1,
+      "max": 300,
+      "default": 40,
+      "unit": 10
+    },
+    {
       "group": "크루즈",
       "name": "CruiseOnDist",
       "title": "크루즈ON거리(0cm)",
