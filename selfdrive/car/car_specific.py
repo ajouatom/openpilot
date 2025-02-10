@@ -1,4 +1,4 @@
-from collections import deque
+﻿from collections import deque
 from cereal import car, log
 import cereal.messaging as messaging
 from opendbc.car import DT_CTRL, structs
@@ -45,6 +45,14 @@ class CarSpecificEvents:
 
     self.do_shutdown = False
 
+    # 조향경고반복 무력화
+    self.belowSteerSpeed_shown = False
+    self.disable_belowSteerSpeed = False
+    self.resumeRequired_shown = False
+    self.disable_resumeRequired = False
+
+    # 핸들손올림경고 무력화
+    self.steer_warning = 0
   def update(self, CS: car.CarState, CS_prev: car.CarState, CC: car.CarControl):
     if self.CP.brand in ('body', 'mock'):
       events = Events()
@@ -119,10 +127,27 @@ class CarSpecificEvents:
       if CS.vEgo < self.CP.minEnableSpeed and not (CS.standstill and CS.brake >= 20 and
                                                    self.CP.networkLocation == NetworkLocation.fwdCamera):
         events.add(EventName.belowEngageSpeed)
-      if CS.cruiseState.standstill:
+
+      ## 조향경고반복 무력화 ##
+      # 정지 상태이면서, 자동재개 신호(self.CP.autoResumeSng)나 resumeRequired 이벤트가 비활성화 상태가 아니면, 
+      # resumeRequired 이벤트를 활성화하여 true 되게 한다.
+      if CS.cruiseState.standstill and not (self.CP.autoResumeSng or self.disable_resumeRequired):
         events.add(EventName.resumeRequired)
-      if CS.vEgo < self.CP.minSteerSpeed:
+        self.resumeRequired_shown = True
+
+      # resumeRequired 이벤트가 한번 표시된 이후, 차가 정지된 상태가 아니면 resumeRequired이벤트 비활성화가 true 되게 한다.
+      if self.resumeRequired_shown and not CS.cruiseState.standstill:
+        self.disable_resumeRequired = True
+
+      # 속도가 최소조향속도 미만이고, belowSteerSpeed이벤트 비활성화 상태가 아니면, 
+      # belowSteerSpeed 이벤트를 활성화하고 true 되게 한다.
+      if CS.vEgo < self.CP.minSteerSpeed and not self.disable_belowSteerSpeed:
         events.add(EventName.belowSteerSpeed)
+        self.belowSteerSpeed_shown = True
+
+      # belowSteerSpeed 이벤트가 한번 표시된 후에는, 최소조향속도보다 높아질 때까지 belowSteerSpeed 이벤트를 비활성화한다.
+      if self.belowSteerSpeed_shown and CS.vEgo >= self.CP.minSteerSpeed:
+        self.disable_belowSteerSpeed = True
 
     elif self.CP.brand == 'volkswagen':
       events = self.create_common_events(CS, CS_prev, extra_gears=[GearShifter.eco, GearShifter.sport, GearShifter.manumatic],
@@ -229,24 +254,31 @@ class CarSpecificEvents:
           Params().put_bool("DoShutdown", True)
 
     # Handle permanent and temporary steering faults
+    # 핸들손올림 이벤트 변경
+    self.steer_warning = self.steer_warning + 1 if CS.steerFaultTemporary else 0
     self.steering_unpressed = 0 if CS.steeringPressed else self.steering_unpressed + 1
-    if CS.steerFaultTemporary:
+    if CS.steerFaultPermanent:  # 1. 불가이벤트 선행.
+      events.add(EventName.steerUnavailable)
+
+    elif CS.steerFaultTemporary:  # 2. 일시불가 체크.
       if CS.steeringPressed and (not CS_prev.steerFaultTemporary or self.no_steer_warning):
         self.no_steer_warning = True
       else:
         self.no_steer_warning = False
 
-        # if the user overrode recently, show a less harsh alert
-        if self.silent_steer_warning or CS.standstill or self.steering_unpressed < int(1.5 / DT_CTRL):
-          self.silent_steer_warning = True
-          events.add(EventName.steerTempUnavailableSilent)
-        else:
-          events.add(EventName.steerTempUnavailable)
+        # 3.핸들손올림이나 일시오류가 0.5초이상일때 패스시켜서 핸들손올림 개입을 안하는 것으로 한다.
+        if self.steering_unpressed > int(0.5 / DT_CTRL) and self.steer_warning > int(0.5 / DT_CTRL):
+          pass  # 핸들 손올림 경고 비활성화
+        # 음성경고 이벤트까지 비활성화
+        #else:
+          #events.add(EventName.steerTempUnavailableSilent)
+
     else:
       self.no_steer_warning = False
       self.silent_steer_warning = False
-    if CS.steerFaultPermanent:
-      events.add(EventName.steerUnavailable)
+    # 앞쪽으로 이동됨
+    #if CS.steerFaultPermanent:
+    #  events.add(EventName.steerUnavailable)
 
     # we engage when pcm is active (rising edge)
     # enabling can optionally be blocked by the car interface

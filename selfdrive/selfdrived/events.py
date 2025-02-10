@@ -9,6 +9,7 @@ from cereal import log, car
 import cereal.messaging as messaging
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.git import get_short_branch
+from openpilot.common.params import Params # NNFF sound
 from openpilot.common.realtime import DT_CTRL
 from openpilot.selfdrive.locationd.calibrationd import MIN_SPEED_FILTER
 
@@ -239,7 +240,7 @@ def below_steer_speed_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.S
   return Alert(
     f"Steer Unavailable Below {get_display_speed(CP.minSteerSpeed, metric)}",
     "",
-    AlertStatus.userPrompt, AlertSize.small,
+    AlertStatus.userPrompt, AlertSize.none,
     Priority.LOW, VisualAlert.steerRequired, AudibleAlert.none, 0.4)
 
 
@@ -251,6 +252,21 @@ def calibration_incomplete_alert(CP: car.CarParams, CS: car.CarState, sm: messag
     AlertStatus.normal, AlertSize.mid,
     Priority.LOWEST, VisualAlert.none, AudibleAlert.none, .2)
 
+# NNFF sound
+def torque_nn_load_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
+  model_name = Params().get("NNFFModelName", encoding='utf-8')
+  if model_name == "":
+    return Alert(
+      "NNFF Torque Controller not available",
+      "Donate logs to Twilsonco to get it added!",
+      AlertStatus.userPrompt, AlertSize.mid,
+      Priority.LOW, VisualAlert.none, AudibleAlert.prompt, 6.0)
+  else:
+    return Alert(
+      "NNFF Torque Controller loaded",
+      model_name,
+      AlertStatus.userPrompt, AlertSize.mid,
+      Priority.LOW, VisualAlert.none, AudibleAlert.nnff, 5.0)
 
 # *** debug alerts ***
 
@@ -905,9 +921,9 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
     ET.PERMANENT: Alert(
       "Reverse\nGear",
       "",
-      AlertStatus.normal, AlertSize.full,
-      Priority.LOWEST, VisualAlert.none, AudibleAlert.none, .2, creation_delay=0.5),
-    ET.USER_DISABLE: ImmediateDisableAlert("Reverse Gear"),
+      AlertStatus.normal, AlertSize.none,
+      Priority.LOWEST, VisualAlert.none, AudibleAlert.reverseGear, .2, creation_delay=0.5),
+    ET.SOFT_DISABLE: SoftDisableAlert("Reverse Gear"),
     ET.NO_ENTRY: NoEntryAlert("Reverse Gear"),
   },
 
@@ -1047,6 +1063,10 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
   EventName.audio0: {
      ET.WARNING: EngagementAlert(AudibleAlert.longDisengaged),
+  },
+  # NNFF sound
+  EventName.torqueNNLoad: {
+    ET.PERMANENT: torque_nn_load_alert,
   },
 
 }

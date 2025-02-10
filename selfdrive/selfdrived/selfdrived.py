@@ -377,7 +377,9 @@ class SelfdriveD:
 
       if self.sm['modelV2'].frameDropPerc > 20:
         self.events.add(EventName.modeldLagging)
-
+    # NNFF sound
+    if self.sm.frame == 550 and Params().get("NNFFModelName", encoding='utf-8') is not None:
+      self.events.add(EventName.torqueNNLoad)
     # decrement personality on distance button press
     #if self.CP.openpilotLongitudinalControl:
     #  if any(not be.pressed and be.type == ButtonType.gapAdjustCruise for be in CS.buttonEvents):
