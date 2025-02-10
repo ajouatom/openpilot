@@ -129,6 +129,9 @@ def get_default_params():
     ("LateralTorqueCustom", "0"),
     ("LateralTorqueAccelFactor", "2500"),
     ("LateralTorqueFriction", "100"),
+    ("LateralTorqueKpV", "100"),
+    ("LateralTorqueKiV", "10"),
+    ("LateralTorqueKf", "100"),
     ("LateralTorqueKd", "0"),
     ("LatMpcPathCost", "100"),
     ("LatMpcMotionCost", "11"),
@@ -149,7 +152,7 @@ def get_default_params():
     ("HotspotOnBoot", "0"),
     ("CustomSR", "0"),
     ("SteerRatioRate", "100"),
-    ("NNFF", "0"),
+    ("NNFF", "1"),
     ("NNFFLite", "0"),
   ]
   return default_params
