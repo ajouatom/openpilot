@@ -79,7 +79,7 @@ class CarrotPlanner:
     self.stopSignCount = 0
 
     self.stop_distance = 6.0
-    self.trafficStopDistanceAdjust = 1.0 #params.get_float("TrafficStopDistanceAdjust") / 100.
+    self.trafficStopDistanceAdjust = 1.6 #kans: 신호정지간격 늘림(옵션으로?)params.get_float("TrafficStopDistanceAdjust") / 100.
     self.comfortBrake = 2.4 #params.get_float("ComfortBrake") / 100.
     self.comfort_brake = self.comfortBrake
 
