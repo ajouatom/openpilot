@@ -1458,7 +1458,7 @@ class CarrotServ:
         source = "gas"
         desired_speed = self.gas_override_speed
 
-      self.debugText = ""#f"desired={desired_speed:.1f},{source},g={self.gas_override_speed:.0f}"
+      self.debugText = f"route={route_speed:.1f}"#f"desired={desired_speed:.1f},{source},g={self.gas_override_speed:.0f}"
 
     left_spd_sec = 100
     left_tbt_sec = 100
