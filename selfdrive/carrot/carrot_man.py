@@ -358,8 +358,8 @@ class CarrotMan:
                   speed = max(speed, self.carrot_serv.nRoadLimitSpeed)
                 speeds.append(speed)
                 distances.append(distance)
-            print("curvatures=",curvatures)
-            print("speeds=", speeds)
+            print(f"curvatures= {[round(s, 4) for s in curvatures]}")
+            print(f"speeds= {[round(s, 1) for s in speeds]}")
             # Apply acceleration limits in reverse to adjust speeds
             accel_limit = self.carrot_serv.autoNaviSpeedDecelRate # m/s^2
             accel_limit_kmh = accel_limit * 3.6  # Convert to km/h per second
@@ -394,7 +394,7 @@ class CarrotMan:
             #distance_advance = self.sm['carState'].vEgo * 3.0  # Advance distance by 3.0 seconds
             #out_speed = interp(distance_advance, distances, out_speeds)
             out_speed = out_speeds[0]
-            print("out_speeds=", out_speeds)
+            print(f"out_speeds= {[round(s, 1) for s in out_speeds]}")
     else:
         resampled_points = []
         curvatures = []
