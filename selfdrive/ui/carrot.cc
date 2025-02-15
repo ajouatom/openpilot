@@ -1897,6 +1897,7 @@ public:
     QPointF nav_path_vertex[150];
     QPointF nav_path_vertex_xy[150];
     int     nav_path_vertex_count = 0;
+    bool    nav_path_display = false;
 
     std::vector<lead_vertex_data> lead_vertices_side;
 
@@ -1917,6 +1918,7 @@ public:
         auto lead_one = radar_state.getLeadOne();
         auto model_position = model.getPosition();
         const auto lane_lines = model.getLaneLines();
+        nav_path_display = params.getInt("ShowRouteInfo");
 
         if (!cs_alive || !car_control_alive || !car_state_alive || !lp_alive) return;
         auto selfdrive_state = sm["selfdriveState"].getSelfdriveState();
@@ -1938,6 +1940,28 @@ public:
             trafficState_carrot = carrot_man.getTrafficState();
             const auto velocity = model.getVelocity();
 
+            if (nav_path_display) {
+              QString naviPaths = QString::fromStdString(carrot_man.getNaviPaths());
+              QStringList pairs = naviPaths.split(";");
+              nav_path_vertex_count = 0;
+              int max_z = lane_lines[2].getZ().size();
+              float z_offset = 0.0;
+              foreach(const QString & pair, pairs) {
+                QStringList xy = pair.split(",");  // ","로 x와 y 구분                
+                if (xy.size() == 3) {
+                  //printf("coords = x: %.1f, y: %.1f, d:%.1f\n", xy[0].toFloat(), xy[1].toFloat(), xy[2].toFloat());
+                  float x = xy[0].toFloat();
+                  float y = xy[1].toFloat();
+                  float d = xy[2].toFloat();
+                  int idx = get_path_length_idx(lane_lines[2], d);
+
+                  if (idx >= max_z) z_offset -= 0.05;
+                  nav_path_vertex_xy[nav_path_vertex_count] = QPointF(y, -x);
+                  _model->mapToScreen((x < 3.0) ? 5.0 : x, y, lane_lines[2].getZ()[idx] + z_offset, &nav_path_vertex[nav_path_vertex_count++]);
+                  if (nav_path_vertex_count >= 150) break;
+                }
+              }
+            }
             auto meta = sm["modelV2"].getModelV2().getMeta();
             QString desireLog = QString::fromStdString(meta.getDesireLog());
             sprintf(carrot_man_debug, "model_kph= %d, %s, %dkm/h TBT(%d): %dm, CAM(%d): %dkm/h, %dm, ATC(%s), T(%d)",
@@ -2038,6 +2062,58 @@ public:
             nvgTextAlign(s->vg, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM);
             ui_draw_text(s, s->fb_w, s->fb_h - 10, carrot_man_debug, 35, COLOR_WHITE, BOLD, 1.0f, 1.0f);
         }
+    }
+    void drawNaviPath(UIState* s) {
+      if (!nav_path_display) return;
+#if 0
+        if (nav_path_vertex_count > 0) {
+			nvgBeginPath(s->vg);
+			nvgMoveTo(s->vg, nav_path_vertex[0].x(), nav_path_vertex[0].y());
+			for (int i = 1; i < nav_path_vertex_count; i++) {
+                float x = nav_path_vertex[i].x();
+                float y = nav_path_vertex[i].y();
+                if (isnan(x) || isnan(y)) continue;
+                nvgLineTo(s->vg, x, y);
+			}
+			nvgStrokeColor(s->vg, COLOR_GREEN);
+			nvgStrokeWidth(s->vg, 20.0f);
+			nvgStroke(s->vg);
+		}
+#elif 1
+        if (nav_path_vertex_count > 1) {
+            for(int i = 1; i < nav_path_vertex_count; i++) {
+                float x = nav_path_vertex[i].x();
+                float y = nav_path_vertex[i].y();
+                if(isnan(x) || isnan(y)) continue;
+				nvgBeginPath(s->vg);
+                nvgCircle(s->vg, x, y, 10);
+                nvgFillColor(s->vg, COLOR_GREEN);
+                nvgFill(s->vg);
+			}
+        }
+
+#else
+        if (nav_path_vertex_count) {
+            nvgBeginPath(s->vg);
+            int bx = s->fb_w - 400;
+            int by = s->fb_h - 400;
+            float scale = 1.0;
+            nvgSave(s->vg);
+            nvgScissor(s->vg, bx - 350, by - 250, 700, 300);
+            nvgMoveTo(s->vg, bx + nav_path_vertex_xy[0].x() * scale, by + nav_path_vertex_xy[0].y() * scale);
+            for (int i = 1; i < nav_path_vertex_count; i++) {
+                float x = nav_path_vertex_xy[i].x();
+                float y = nav_path_vertex_xy[i].y();
+                if (isnan(x) || isnan(y)) continue;
+                nvgLineTo(s->vg, bx + x * scale, by + y * scale);
+            }
+            nvgStrokeColor(s->vg, COLOR_GREEN);
+            nvgStrokeWidth(s->vg, 10.0f);
+            nvgStroke(s->vg);
+
+            nvgRestore(s->vg);
+        }
+#endif
     }
     char    cruise_speed_last[32] = "";
     char    driving_mode_str_last[32] = "";
@@ -2549,6 +2625,7 @@ void ui_draw(UIState *s, ModelRenderer* model_renderer, int w, int h) {
   //ui_draw_text(s, 500, 500, "Carrot", 100, COLOR_GREEN, BOLD);
   Params params;
   drawCarrot.updateState(s);
+  drawCarrot.drawNaviPath(s);
   static float pathDrawSeq = 0.0;
   int show_lane_info = params.getInt("ShowLaneInfo");
   if(show_lane_info >= 0) drawPath.draw(s, pathDrawSeq);

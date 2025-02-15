@@ -39,7 +39,7 @@ struct CarrotMan @0x81c2f05a394cf4af {
 	nGoPosDist @24 : Int32;
 	nGoPosTime @25 : Int32;
 	szSdiDescr @26 : Text;
-	naviPathsNotUsed @27 : Text;
+	naviPaths @27 : Text;
 	leftSec @28 : Int32;
 }
 

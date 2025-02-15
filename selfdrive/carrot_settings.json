@@ -913,6 +913,19 @@
       "unit": 1
     },
     {
+      "group": "화면",
+      "name": "ShowRouteInfo",
+      "title": "경로AR표시(0)",
+      "descr": "0:안함,1:표시함",
+      "egroup": "DISP",
+      "etitle": "Show Route Info",
+      "edescr": "",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
       "group": "화면패스",
       "name": "ShowPathMode",
       "title": "패스종류,레인리스(9)",
@@ -1410,14 +1423,27 @@
       "group": "감속제어",
       "name": "TurnSpeedControlMode",
       "title": "턴속도제어방법",
-      "descr": "0: 속도제어안함,1:비젼",
+      "descr": "0: 속도제어안함,1:비젼,2:비젼+경로,3:경로",
       "egroup": "SPEED",
       "etitle": "TurnSpeedControlMode",
       "edescr": "",
       "min": 0,
-      "max": 1,
+      "max": 3,
       "default": 1,
       "unit": 1
+    },
+    {
+      "group": "감속제어",
+      "name": "MapTurnSpeedFactor",
+      "title": "경로턴속도반영비율(100%)",
+      "descr": "작으면 속도가 줄어듬",
+      "egroup": "SPEED",
+      "etitle": "MapTurnSpeedFactor",
+      "edescr": "",
+      "min": 50,
+      "max": 300,
+      "default": 100,
+      "unit": 10
     },
     {
       "group": "감속제어",
