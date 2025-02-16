@@ -128,6 +128,7 @@ class DesireHelper:
 
     self.laneChangeNeedTorque = False
     self.driver_blinker_state = BLINKER_NONE
+    self.atc_type = ""
 
   def check_lane_state(self, modeldata):
     self.lane_width_left, self.distance_to_road_edge_left, self.distance_to_road_edge_left_far, lane_prob_left = calculate_lane_width(modeldata.laneLines[0], modeldata.laneLineProbs[0],
@@ -192,6 +193,11 @@ class DesireHelper:
       atc_blinker_state = BLINKER_NONE
       driver_desire_enabled = False
 
+    if self.atc_type != atc_type:
+      atc_desire_enabled = False
+
+    self.atc_type = atc_type
+
     desire_enabled = driver_desire_enabled or atc_desire_enabled
     blinker_state = driver_blinker_state if driver_desire_enabled else atc_blinker_state
     
@@ -218,7 +224,7 @@ class DesireHelper:
     edge_availabled = not self.edge_available_last and edge_available
     side_object_detected = self.object_detected_count > -0.3 / DT_MDL
     
-    auto_lane_change_blocked = atc_blinker_state == BLINKER_LEFT
+    auto_lane_change_blocked = (atc_blinker_state == BLINKER_LEFT) and (driver_blinker_state != BLINKER_LEFT)
     auto_lane_change_available = not auto_lane_change_blocked and lane_availabled and edge_availabled and not side_object_detected
 
     if not lateral_active or self.lane_change_timer > LANE_CHANGE_TIME_MAX:
