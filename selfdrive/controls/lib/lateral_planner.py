@@ -138,10 +138,10 @@ class LateralPlanner:
     lateral_motion_cost = self.lateralMotionCost
     path_cost = self.lateralPathCost
     if carrot.atc_active:
-      if carrot.atcType == "turn left" and (md.orientationRate.z[-1] > 0.1 or md.meta.desireState[1] > 0.1):
+      if carrot.atcType == "turn left" and (md.orientationRate.z[-1] > 0.1 or md.meta.desireState[1] > 0.01):
         lateral_motion_cost = self.lateralMotionCostTurn
         path_cost = self.lateralPathCostTurn
-      elif carrot.atcType == "turn right" and (md.orientationRate.z[-1] < -0.1 or md.meta.desireState[2] > 0.1):
+      elif carrot.atcType == "turn right" and (md.orientationRate.z[-1] < -0.1 or md.meta.desireState[2] > 0.01):
         lateral_motion_cost = self.lateralMotionCostTurn
         path_cost = self.lateralPathCostTurn
 

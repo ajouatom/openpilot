@@ -134,7 +134,7 @@ class Controls:
         turn_state = desire_state[1] + desire_state[2]
       else:
         turn_state = 0.0
-      desired_curvature = get_lag_adjusted_curvature(self.CP, CS.vEgo, lat_plan.psis, lat_plan.curvatures, steer_actuator_delay if turn_state < 0.1 else model_turn_delay)
+      desired_curvature = get_lag_adjusted_curvature(self.CP, CS.vEgo, lat_plan.psis, lat_plan.curvatures, steer_actuator_delay if turn_state < 0.01 else model_turn_delay)
       self.desired_curvature = clip_curvature(CS.vEgo, self.desired_curvature, desired_curvature)
     else:
       if self.lanefull_mode_enabled:
