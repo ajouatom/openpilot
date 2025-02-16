@@ -214,10 +214,11 @@ class DesireHelper:
       lane_appeared = False
       self.object_detected_count = 0
 
-    auto_lane_change_blocked = blinker_state == BLINKER_LEFT
     lane_availabled = not self.lane_available_last and lane_available
     edge_availabled = not self.edge_available_last and edge_available
     side_object_detected = self.object_detected_count > -0.3 / DT_MDL
+    
+    auto_lane_change_blocked = atc_blinker_state == BLINKER_LEFT
     auto_lane_change_available = not auto_lane_change_blocked and lane_availabled and edge_availabled and not side_object_detected
 
     if not lateral_active or self.lane_change_timer > LANE_CHANGE_TIME_MAX:
