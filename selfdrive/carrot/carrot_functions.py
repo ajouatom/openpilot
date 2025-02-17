@@ -451,7 +451,7 @@ class CarrotPlanner:
       else:
         self.xState = XState.e2eCruise
 
-    elif self.trafficState in [TrafficState.off, TrafficState.green] or self.xState not in [XState.e2eStop, XState.e2eStopped]:
+    if self.trafficState in [TrafficState.off, TrafficState.green] or self.xState not in [XState.e2eStop, XState.e2eStopped]:
       stop_model_x = 1000.0
 
     if self.user_stop_distance >= 0:
