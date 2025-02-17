@@ -703,7 +703,7 @@ public:
 #endif
             }
             else if (xState == 4) {     //XState.e2ePrepare
-				      //ui_draw_text(s, x, disp_y, "신호출발중", disp_size, COLOR_WHITE, BOLD);
+				      ui_draw_text(s, x, disp_y, "E2E주행중", disp_size, COLOR_WHITE, BOLD);
 			      }
             else if (xState == 0 || xState == 1 || xState == 2) {     //XState.lead
                 draw_dist = true;
