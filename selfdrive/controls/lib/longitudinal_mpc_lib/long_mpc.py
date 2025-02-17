@@ -91,10 +91,10 @@ def get_safe_obstacle_distance(v_ego, t_follow=None, comfort_brake=COMFORT_BRAKE
     t_follow = get_T_FOLLOW()
   return (v_ego**2) / (2 * comfort_brake) + t_follow * v_ego + stop_distance
 
-def desired_follow_distance(v_ego, v_lead, comfort_brake, t_follow=None):
+def desired_follow_distance(v_ego, v_lead, comfort_brake, stop_distance, t_follow=None):
   if t_follow is None:
     t_follow = get_T_FOLLOW()
-  return get_safe_obstacle_distance(v_ego, t_follow) - get_stopped_equivalence_factor(v_lead, comfort_brake)
+  return get_safe_obstacle_distance(v_ego, t_follow, comfort_brake, stop_distance) - get_stopped_equivalence_factor(v_lead, comfort_brake)
 
 
 def gen_long_model():
@@ -363,7 +363,7 @@ class LongitudinalMpc:
       stop_x = 1000.0
     else:
       v_cruise, stop_x, mode = carrot.v_cruise, carrot.stop_dist, carrot.mode
-      desired_distance = desired_follow_distance(v_ego, radarstate.leadOne.vLead, comfort_brake, t_follow)
+      desired_distance = desired_follow_distance(v_ego, radarstate.leadOne.vLead, comfort_brake, stop_distance, t_follow)
       t_follow = carrot.dynamic_t_follow(t_follow, radarstate.leadOne, desired_distance)
 
     # To estimate a safe distance from a moving lead, we calculate how much stopping
@@ -372,7 +372,7 @@ class LongitudinalMpc:
     lead_0_obstacle = lead_xv_0[:,0] + get_stopped_equivalence_factor(lead_xv_0[:,1], comfort_brake)
     lead_1_obstacle = lead_xv_1[:,0] + get_stopped_equivalence_factor(lead_xv_1[:,1], comfort_brake)
     
-    self.desired_distance = desired_follow_distance(v_ego, radarstate.leadOne.vLead, comfort_brake, t_follow)
+    self.desired_distance = desired_follow_distance(v_ego, radarstate.leadOne.vLead, comfort_brake, stop_distance, t_follow)
 
     self.params[:,0] = ACCEL_MIN if not reset_state else a_ego
     # negative accel constraint causes problems because negative speed is not allowed
