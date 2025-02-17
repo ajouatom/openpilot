@@ -235,6 +235,7 @@ class DesireHelper:
       self.lane_change_state = LaneChangeState.off
       self.turn_direction = TurnDirection.turnLeft if blinker_state == BLINKER_LEFT else TurnDirection.turnRight
       self.lane_change_direction = self.turn_direction #LaneChangeDirection.none
+      desire_enabled = False
     else:
       self.turn_direction = TurnDirection.none
       # LaneChangeState.off
