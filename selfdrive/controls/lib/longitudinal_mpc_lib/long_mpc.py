@@ -83,8 +83,8 @@ def get_T_FOLLOW(personality=log.LongitudinalPersonality.standard):
   else:
     raise NotImplementedError("Longitudinal personality not supported")
 
-def get_stopped_equivalence_factor(v_lead, comfort_brake):
-  return (v_lead**2) / (2 * comfort_brake)
+def get_stopped_equivalence_factor(v_lead):
+  return (v_lead**2) / (2 * COMFORT_BRAKE)
 
 def get_safe_obstacle_distance(v_ego, t_follow=None, comfort_brake=COMFORT_BRAKE, stop_distance=STOP_DISTANCE):
   if t_follow is None:
@@ -94,7 +94,7 @@ def get_safe_obstacle_distance(v_ego, t_follow=None, comfort_brake=COMFORT_BRAKE
 def desired_follow_distance(v_ego, v_lead, comfort_brake, stop_distance, t_follow=None):
   if t_follow is None:
     t_follow = get_T_FOLLOW()
-  return get_safe_obstacle_distance(v_ego, t_follow, comfort_brake, stop_distance) - get_stopped_equivalence_factor(v_lead, comfort_brake)
+  return get_safe_obstacle_distance(v_ego, t_follow, comfort_brake, stop_distance) - get_stopped_equivalence_factor(v_lead)
 
 
 def gen_long_model():
@@ -369,8 +369,8 @@ class LongitudinalMpc:
     # To estimate a safe distance from a moving lead, we calculate how much stopping
     # distance that lead needs as a minimum. We can add that to the current distance
     # and then treat that as a stopped car/obstacle at this new distance.
-    lead_0_obstacle = lead_xv_0[:,0] + get_stopped_equivalence_factor(lead_xv_0[:,1], comfort_brake)
-    lead_1_obstacle = lead_xv_1[:,0] + get_stopped_equivalence_factor(lead_xv_1[:,1], comfort_brake)
+    lead_0_obstacle = lead_xv_0[:,0] + get_stopped_equivalence_factor(lead_xv_0[:,1])
+    lead_1_obstacle = lead_xv_1[:,0] + get_stopped_equivalence_factor(lead_xv_1[:,1])
     
     self.desired_distance = desired_follow_distance(v_ego, radarstate.leadOne.vLead, comfort_brake, stop_distance, t_follow)
 
