@@ -179,10 +179,11 @@ def calculate_curvature(p1, p2, p3):
 
 class CarrotMan:
   def __init__(self):
+    print("************************************************CarrotMan init************************************************")
     self.params = Params()
     self.params_memory = Params("/dev/shm/params")
-    self.sm = messaging.SubMaster(['deviceState', 'carState', 'controlsState', 'longitudinalPlan', 'modelV2', 'selfdriveState', 'carControl'])
-    self.pm = messaging.PubMaster(['carrotMan', "navRoute", "navInstruction"])
+    self.sm = messaging.SubMaster(['deviceState', 'carState', 'controlsState', 'longitudinalPlan', 'modelV2', 'selfdriveState', 'carControl', 'navRouteNavd'])
+    self.pm = messaging.PubMaster(['carrotMan', "navRoute", "navInstructionCarrot"])
 
     self.carrot_serv = CarrotServ()
 
@@ -217,6 +218,7 @@ class CarrotMan:
     self.navi_points = []
     self.navi_points_start_index = 0
     self.navi_points_active = False
+    self.navd_active = False
 
     self.active_carrot_last = False
 
@@ -257,6 +259,8 @@ class CarrotMan:
     while self.is_running:
       try:
         self.sm.update(0)
+        if self.sm.updated['navRouteNavd']:
+          self.send_routes(self.sm['navRouteNavd'].coordinates, True)
         remote_addr = self.remote_addr
         remote_ip = remote_addr[0] if remote_addr is not None else ""
         vturn_speed = self.carrot_curve_speed(self.sm)
@@ -290,8 +294,9 @@ class CarrotMan:
 
             if remote_addr is None:
               print(f"Broadcasting: {self.broadcast_ip}:{msg}")
-              self.navi_points = []
-              self.navi_points_active = False
+              if not self.navd_active:
+                self.navi_points = []
+                self.navi_points_active = False
 
           except Exception as e:
             if self.connection:
@@ -309,14 +314,15 @@ class CarrotMan:
 
   def carrot_navi_route(self):
 
-    if not self.navi_points_active or not SHAPELY_AVAILABLE or self.carrot_serv.active_carrot <= 1:
+    if not self.navi_points_active or not SHAPELY_AVAILABLE or (self.carrot_serv.active_carrot <= 1 and not self.navd_active):
       #print(f"navi_points_active: {self.navi_points_active}, active_carrot: {self.carrot_serv.active_carrot}")
       #haversine_cache.clear()
       #curvature_cache.clear()
       self.navi_points = []
       self.navi_points_active = False
       if self.active_carrot_last > 1:
-        self.params.remove("NavDestination")
+        #self.params.remove("NavDestination")
+        pass
       self.active_carrot_last = self.carrot_serv.active_carrot
       return [],[],300
 
@@ -397,10 +403,11 @@ class CarrotMan:
             #print(f"out_speeds= {[round(s, 1) for s in out_speeds]}")
     else:
         resampled_points = []
+        resampled_distances = []
         curvatures = []
         speeds = []
         distances = []
-        self.params.remove("NavDestination")
+        #self.params.remove("NavDestination")
 
     return resampled_points, resampled_distances, out_speed #speeds, distances
 
@@ -677,6 +684,25 @@ class CarrotMan:
     return struct.unpack('!f', float_data)[0]
 
 
+  def send_routes(self, coords, from_navd=False):
+    if from_navd:
+      if len(coords) > 0:
+        self.navi_points = [(c.longitude, c.latitude) for c in coords]
+        self.navi_points_start_index = 0
+        self.navi_points_active = True
+        print("Received points from navd:", len(self.navi_points))
+        self.navd_active = True
+
+        coords = [{"latitude": c.latitude, "longitude": c.longitude} for c in coords]
+        #print("navdNaviPoints=", self.navi_points)
+      else:
+        print("Received points from navd: 0")
+        self.navd_active = False
+
+    msg = messaging.new_message('navRoute', valid=True)
+    msg.navRoute.coordinates = coords
+    self.pm.send('navRoute', msg)
+
   def carrot_route(self):
     host = '0.0.0.0'  # 혹은 다른 호스트 주소
     port = 7709  # 포트 번호
@@ -718,11 +744,23 @@ class CarrotMan:
             print("Received points:", len(self.navi_points))
             #print("Received points:", self.navi_points)
 
-            msg = messaging.new_message('navRoute', valid=True)
-            msg.navRoute.coordinates = coords
-            self.pm.send('navRoute', msg)
-            #self.carrot_route_active = True
-            #self.params.put_bool_nonblocking("CarrotRouteActive", True)
+            self.send_routes(coords)
+            """
+            try:
+              module_name = "route_engine"
+              class_name = "RouteEngine"
+              moduel = importlib.import_module(module_name)
+              cls = getattr(moduel, class_name)
+              route_engine_instance = cls(name="Loaded at Runtime")
+
+              route_engine_instance.send_route_coords(coords, True)
+            except Exception as e:
+              print(f"route_engine error: {e}")
+
+            #msg = messaging.new_message('navRoute', valid=True)
+            #msg.navRoute.coordinates = coords
+            #self.pm.send('navRoute', msg)
+            """
 
             if len(coords):
               dest = coords[-1]
@@ -1588,10 +1626,10 @@ class CarrotServ:
       249: ("", "", 6)   #TG
     }
 
-    msg = messaging.new_message('navInstruction')
+    msg = messaging.new_message('navInstructionCarrot')
     msg.valid = True
     
-    instruction = msg.navInstruction
+    instruction = msg.navInstructionCarrot
     instruction.distanceRemaining = self.nGoPosDist
     instruction.timeRemaining = self.nGoPosTime
     instruction.speedLimit = self.nRoadLimitSpeed / 3.6 if self.nRoadLimitSpeed > 0 else 0
@@ -1628,7 +1666,7 @@ class CarrotServ:
 
     instruction.allManeuvers = maneuvers
 
-    pm.send('navInstruction', msg)
+    pm.send('navInstructionCarrot', msg)
 
   def _update_system_time(self, epoch_time_remote, timezone_remote):
     epoch_time = int(time.time())
@@ -1781,6 +1819,8 @@ def main():
   print("CarrotManager Started")
   #print("Carrot GitBranch = {}, {}".format(Params().get("GitBranch"), Params().get("GitCommitDate")))
   carrot_man = CarrotMan()
+
+  print(f"CarrotMan {carrot_man}")
   while True:
     try:
       carrot_man.carrot_man_thread()

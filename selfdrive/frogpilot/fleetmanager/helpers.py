@@ -329,6 +329,7 @@ def set_destination(postvars, valid_addr):
   return postvars, valid_addr
 
 def nav_confirmed(postvars):
+  print(f"nav_confirmed {postvars}")
   if postvars is not None:
     lat = float(postvars.get("lat"))
     lng = float(postvars.get("lon"))
@@ -337,6 +338,7 @@ def nav_confirmed(postvars):
     if params.get_int("SearchInput") == 1:
       lng, lat = gcj02towgs84(lng, lat)
     params.put("NavDestination", f'{{"latitude": {lat:.6f}, "longitude": {lng:.6f}, "place_name": "{name}"}}')
+    print(f"nav_confirmed {lat}, {lng}, {name}")
     if name == "":
       name =  str(lat) + "," + str(lng)
     new_dest = {"latitude": float(lat), "longitude": float(lng), "place_name": name}

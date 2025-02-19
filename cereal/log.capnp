@@ -2615,8 +2615,8 @@ struct Event {
     # DO change the name of the field
     # DON'T change anything after the "@"
     customReservedRawData0 @124 :Data;
-    customReservedRawData1 @125 :Data;
-    customReservedRawData2 @126 :Data;
+    navRouteNavd @125 :NavRoute;
+    navInstructionCarrot @126 :NavInstruction;
 
     # *********** Custom: reserved for forks ***********
     carrotMan @107 :Custom.CarrotMan;

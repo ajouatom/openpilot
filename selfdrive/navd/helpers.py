@@ -106,19 +106,19 @@ def distance_along_geometry(geometry: List[Coordinate], pos: Coordinate) -> floa
   return total_distance_closest
 
 
-def coordinate_from_param(param: str, params: Optional[Params] = None) -> Optional[Coordinate]:
+def coordinate_from_param(param: str, params: Optional[Params] = None) -> Tuple[Optional[Coordinate], Optional[str]]:
   if params is None:
     params = Params()
 
   json_str = params.get(param)
   if json_str is None:
-    return None
+    return None, None
 
   pos = json.loads(json_str)
   if 'latitude' not in pos or 'longitude' not in pos:
-    return None
-
-  return Coordinate(pos['latitude'], pos['longitude'])
+    return None, None
+  place_name = pos.get('place_name', None)
+  return Coordinate(pos['latitude'], pos['longitude']), place_name
 
 
 def string_to_direction(direction: str) -> str:
@@ -156,6 +156,7 @@ def parse_banner_instructions(banners: Any, distance_to_maneuver: float = 0.0) -
   instruction['showFull'] = distance_to_maneuver < current_banner['distanceAlongGeometry']
 
   # Primary
+  #print(f"current_banner: {current_banner}")
   p = current_banner['primary']
   if field_valid(p, 'text'):
     instruction['maneuverPrimaryText'] = p['text']

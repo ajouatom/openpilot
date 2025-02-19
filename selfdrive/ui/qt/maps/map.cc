@@ -279,14 +279,14 @@ void MapWindow::updateState(const UIState &s) {
     interaction_counter--;
   }
 
-  if (sm.updated("navInstruction")) {
+  if (sm.updated("navInstruction") || sm.updated("navInstructionCarrot")) {
     // an invalid navInstruction packet with a nav destination is only possible if:
     // - API exception/no internet
     // - route response is empty
     // - any time navd is waiting for recompute_countdown
     routing_problem = !sm.valid("navInstruction") && coordinate_from_param("NavDestination").has_value();
 
-    if (sm.valid("navInstruction")) {
+    if (sm.valid("navInstruction") || sm.valid("navInstructionCarrot")) {
       //auto i = sm["navInstruction"].getNavInstruction();
       //map_eta->updateETA(i.getTimeRemaining(), i.getTimeRemainingTypical(), i.getDistanceRemaining());
 

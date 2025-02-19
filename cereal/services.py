@@ -71,6 +71,7 @@ _services: dict[str, tuple] = {
   "uploaderState": (True, 0., 1),
   "navInstruction": (True, 1., 10),
   "navRoute": (True, 0.),
+  "navRouteNavd": (True, 0.),
   "navThumbnail": (True, 0.),
   "navModel": (True, 2., 4.),
   "mapRenderState": (True, 2., 1.),
@@ -79,6 +80,7 @@ _services: dict[str, tuple] = {
   "microphone": (True, 10., 10),
 
   "carrotMan": (True, 0.),
+  "navInstructionCarrot": (True, 1., 10),
 
   # debug
   "uiDebug": (True, 0., 1),
