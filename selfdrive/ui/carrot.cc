@@ -1146,7 +1146,7 @@ public:
           szPosRoadName = QString::fromStdString(carrot_man.getSzPosRoadName());
           szTBTMainText = QString::fromStdString(carrot_man.getSzTBTMainText());
           
-        } else if(sm.valid("navInstruction")) {
+        } else if(sm.alive("navInstruction") && sm.valid("navInstruction")) {
           xTurnInfo = 0;
           xDistToTurn = nav_inst.getManeuverDistance();
           nRoadLimitSpeed = nav_inst.getSpeedLimit();
