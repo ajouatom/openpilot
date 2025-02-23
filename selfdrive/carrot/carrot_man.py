@@ -966,11 +966,6 @@ class CarrotServ:
     if self.carrotCmdIndex != self.carrotCmdIndex_last:
       self.carrotCmdIndex_last = self.carrotCmdIndex
       command_handlers = {
-        "SPEED": self._handle_speed_command,
-        "CRUISE": self._handle_cruise_command,
-        "LANECHANGE": self._handle_lane_change,
-        "RECORD": self._handle_record_command,
-        "DISPLAY": self._handle_display_command,
         "DETECT": self._handle_detect_command,
       }
 
@@ -983,29 +978,6 @@ class CarrotServ:
     if self.traffic_light_count < 0:
       self.traffic_light_count = -1
       self.traffic_state = 0
-
-  def _handle_speed_command(self, xArg):
-    self.params_memory.put_nonblocking("CarrotManCommand", "SPEED " + xArg)
-
-  def _handle_cruise_command(self, xArg):
-    self.params_memory.put_nonblocking("CarrotManCommand", "CRUISE " + xArg)
-
-  def _handle_lane_change(self, xArg):
-    self.params_memory.put_nonblocking("CarrotManCommand", "LANECHANGE " + xArg)
-    #if xArg == "RIGHT":
-    #  pass
-    #elif xArg == "LEFT":
-    #  pass
-
-  def _handle_record_command(self, xArg):
-    self.params_memory.put_nonblocking("CarrotManCommand", "RECORD " + xArg)
-
-  def _handle_display_command(self, xArg):
-    self.params_memory.put_nonblocking("CarrotManCommand", "DISPLAY " + xArg)
-    display_commands = {"MAP": "3", "FULLMAP": "4", "DEFAULT": "1", "ROAD": "2", "TOGGLE": "5"}
-    command = display_commands.get(xArg)    
-    if command:
-      pass
 
   def _handle_detect_command(self, xArg):
     elements = [e.strip() for e in xArg.split(',')]
@@ -1347,9 +1319,13 @@ class CarrotServ:
       #print(f"x_dist_to_turn: {x_dist_to_turn}, atc_start_dist: {atc_start_dist}")
       #print(f"atc_activate_count: {self.atc_activate_count}")
       if self.atc_activate_count == 2:
-        self.params_memory.put_nonblocking("CarrotManCommand", "DISPLAY MAP")
+        self.carrotCmdIndex += 100
+        self.carrotCmd = "DISPLAY";
+        self.carrotArg = "MAP";
       elif self.atc_activate_count == -50:
-        self.params_memory.put_nonblocking("CarrotManCommand", "DISPLAY ROAD")
+        self.carrotCmdIndex += 100
+        self.carrotCmd = "DISPLAY";
+        self.carrotArg = "ROAD";
 
     if check_steer:
       if 0 <= x_dist_to_turn < atc_start_dist and atc_type in ["fork left", "fork right"]:
@@ -1734,10 +1710,11 @@ class CarrotServ:
       #self._update_system_time(int(json.get("epochTime")), timezone_remote)
 
     if "carrotCmd" in json:
-      print(json.get("carrotCmd"), json.get("carrotArg"))
+      #print(json.get("carrotCmd"), json.get("carrotArg"))
       self.carrotCmdIndex = self.carrotIndex
       self.carrotCmd = json.get("carrotCmd")
       self.carrotArg = json.get("carrotArg")
+      print(f"carrotCmd = {self.carrotCmd}, {self.carrotArg}")
 
     self.active_count = 80
 

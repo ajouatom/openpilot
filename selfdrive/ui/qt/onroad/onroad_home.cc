@@ -133,35 +133,41 @@ void OnroadWindow::updateState(const UIState &s) {
     //update();
   }
   update();
-  if (true) { //carrot_display > 0) {
+  if (true) { 
       int carrot_display = 0;
-      Params	params_memory{ "/dev/shm/params" };
-      QString command = QString::fromStdString(params_memory.get("CarrotManCommand"));
-      if (command.startsWith("DISPLAY ")) {
-        QString display_cmd = command.mid(8);
-        if (display_cmd == "TOGGLE") {
-          carrot_display = 5;
-          printf("Display toggle\n");
-        }
-        else if (display_cmd == "DEFAULT") {
-          carrot_display = 1;
-          printf("Display 1\n");
-        }
-        else if (display_cmd == "ROAD") {
-          carrot_display = 2;
-          printf("Display 2\n");
-        }
-        else if (display_cmd == "MAP") {
-          carrot_display = 3;
-          printf("Display 3\n");
-        }
-        else if (display_cmd == "FULLMAP") {
-          carrot_display = 4;
-          printf("Display 4\n");
-        }
-        params_memory.putNonBlocking("CarrotManCommand", "");
-      }
 
+      static int carrot_cmd_index_last = 0;
+      if (sm.alive("carrotMan")) {
+        const auto& carrot = sm["carrotMan"].getCarrotMan();
+        int carrot_cmd_index = carrot.getCarrotCmdIndex();
+        if (carrot_cmd_index != carrot_cmd_index_last) {
+          carrot_cmd_index_last = carrot_cmd_index;
+          QString carrot_cmd = QString::fromStdString(carrot.getCarrotCmd());
+          QString carrot_arg = QString::fromStdString(carrot.getCarrotArg());
+          if (carrot_cmd == "DISPLAY") {
+            if (carrot_arg == "TOGGLE") {
+              carrot_display = 5;
+              //printf("Display toggle\n");
+            }
+            else if (carrot_arg == "DEFAULT") {
+              carrot_display = 1;
+              //printf("Display 1\n");
+            }
+            else if (carrot_arg == "ROAD") {
+              carrot_display = 2;
+              //printf("Display 2\n");
+            }
+            else if (carrot_arg == "MAP") {
+              carrot_display = 3;
+              //printf("Display 3\n");
+            }
+            else if (carrot_arg == "FULLMAP") {
+              carrot_display = 4;
+              //printf("Display 4\n");
+            }
+          }
+        }
+      }
 
       if (carrot_display == 5) ss->scene._current_carrot_display = (ss->scene._current_carrot_display % 3) + 1;
       else if(carrot_display > 0) ss->scene._current_carrot_display = carrot_display;

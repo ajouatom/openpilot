@@ -191,6 +191,12 @@ class VCruiseCarrot:
     self.desiredSpeed = 250
     self.road_limit_kph = 30
 
+    self.carrot_cmd_index_last = 0
+    self.carrot_cmd_index = 0
+    self.carrot_cmd = ""
+    self.carrot_arg = ""
+
+
     self._cancel_timer = 0
     self.d_rel = 0
     self.v_rel = 0
@@ -253,6 +259,9 @@ class VCruiseCarrot:
       carrot_man = sm['carrotMan']
       self.nRoadLimitSpeed = carrot_man.nRoadLimitSpeed
       self.desiredSpeed = carrot_man.desiredSpeed
+      self.carrot_cmd_index = carrot_man.carrotCmdIndex
+      self.carrot_cmd = carrot_man.carrotCmd
+      self.carrot_arg = carrot_man.carrotArg
     if sm.alive['longitudinalPlan']:
       lp = sm['longitudinalPlan']
       self.xState = lp.xState
@@ -400,41 +409,37 @@ class VCruiseCarrot:
     return button_kph, button_type, self.long_pressed
 
   def _carrot_command(self, v_cruise_kph, button_type, long_pressed):
-
-    command = self.params_memory.get("CarrotManCommand")
-    if command is not None:
-      command = command.decode()
-      print("command: ", command)
-      if command.startswith("CRUISE "):
-        cruise = command[7:]
-        if cruise == "OFF":
+    if self.carrot_cmd_index_last != self.carrot_cmd_index:
+      self.carrot_cmd_index_last = self.carrot_cmd_index
+      print(f"Carrot command(cruise.py): {self.carrot_cmd} {self.carrot_arg}")
+      if self.carrot_cmd == "CRUISE":
+        if self.carrot_arg == "OFF":
           self._cruise_control(-2, -1, "Cruise off (carrot command)")
-        elif cruise == "ON":
+        elif self.carrot_arg == "ON":
           self._cruise_control(1, -1, "Cruise on (carrot command)")
-        elif cruise == "GO":
+        elif self.carrot_arg == "GO":
           if button_type == 0:
             button_type = ButtonType.accelCruise
             long_pressed = False
-            self._add_log("Cruise accelCruisep (carrot command)")
-        elif cruise == "STOP":
+            self._add_log("Cruise accelCruise (carrot command)")
+        elif self.carrot_arg == "STOP":
           v_cruise_kph = 5
           self._add_log("Cruise stop (carrot command)")
-        self.params_memory.put_nonblocking("CarrotManCommand", "")
-      elif command.startswith("SPEED "):
-        speed = command[6:]
-        if speed == "UP":
+
+      elif self.carrot_cmd == "SPEED":
+        if self.carrot_arg == "UP":
           v_cruise_kph = self._auto_speed_up(v_cruise_kph)
           self._add_log("Cruise speed up (carrot command)")
-        elif speed == "DOWN":
+        elif self.carrot_arg == "DOWN":
           if v_cruise_kph > 20:
             v_cruise_kph -= 10
             self._add_log("Cruise speed downup (carrot command)")
         else:
-          speed_kph = int(speed)
+          speed_kph = int(self.carrot_arg)
           if 0 < speed_kph < 200:
             v_cruise_kph = speed_kph
-            self._add_log(f"Cruise speed set to {v_cruise_kph} (carrot command)")
-        self.params_memory.put_nonblocking("CarrotManCommand", "")
+            self._add_log(f"Cruise speed set to {v_cruise_kph} (carrot command)")       
+    
     return v_cruise_kph, button_type, long_pressed
 
   def _update_cruise_buttons(self, CS, CC, v_cruise_kph):
