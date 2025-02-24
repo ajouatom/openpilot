@@ -5,17 +5,17 @@ from openpilot.common.params import Params
 
 
 class CanBus(CanBusBase):
-  def __init__(self, CP, fingerprint=None, hda2=None) -> None:
+  def __init__(self, CP, fingerprint=None, lka_steering=None) -> None:
     super().__init__(CP, fingerprint)
 
-    if hda2 is None:
-      hda2 = CP.flags & HyundaiFlags.CANFD_HDA2.value if CP is not None else False
+    if lka_steering is None:
+      lka_steering = CP.flags & HyundaiFlags.CANFD_HDA2.value if CP is not None else False
 
-    # On the CAN-FD platforms, the LKAS camera is on both A-CAN and E-CAN. HDA2 cars
-    # have a different harness than the HDA1 and non-HDA variants in order to split
+    # On the CAN-FD platforms, the LKAS camera is on both A-CAN and E-CAN. LKA steering cars
+    # have a different harness than the LFA steering variants in order to split
     # a different bus, since the steering is done by different ECUs.
     self._a, self._e = 1, 0
-    if hda2 and Params().get_int("HyundaiCameraSCC") == 0:  #배선개조는 무조건 Bus0가 ECAN임.
+    if lka_steering and Params().get_int("HyundaiCameraSCC") == 0:  #배선개조는 무조건 Bus0가 ECAN임.
       self._a, self._e = 0, 1
 
     self._a += self.offset
@@ -108,7 +108,7 @@ def create_steering_messages_camera_scc(packer, CP, CAN, enabled, lat_active, ap
       "LKAS_ANGLE_CMD": -apply_angle,
       "LKAS_ANGLE_MAX_TORQUE": max_torque if lat_active else 0,
     }
-    ret.append(packer.make_can_msg("LFA_ANGLE_MAYBE_CB", CAN.ECAN, values))
+    ret.append(packer.make_can_msg("LFA_ALT", CAN.ECAN, values))
 
     values = CS.lfa_info
     values["LKA_MODE"] = 0
@@ -227,22 +227,22 @@ def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_steer, 
     }
 
   if CP.flags & HyundaiFlags.CANFD_HDA2:
-    hda2_lkas_msg = "LKAS_ALT" if CP.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING else "LKAS"
+    lkas_msg = "LKAS_ALT" if CP.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING else "LKAS"
     if CP.openpilotLongitudinalControl:
       ret.append(packer.make_can_msg("LFA", CAN.ECAN, values))
     if not (CP.flags & HyundaiFlags.CAMERA_SCC.value):
-      ret.append(packer.make_can_msg(hda2_lkas_msg, CAN.ACAN, values))
+      ret.append(packer.make_can_msg(lkas_msg, CAN.ACAN, values))
   else:
     ret.append(packer.make_can_msg("LFA", CAN.ECAN, values))
 
   return ret
 
-def create_suppress_lfa(packer, CAN, hda2_lfa_block_msg, hda2_alt_steering):
-  suppress_msg = "CAM_0x362" if hda2_alt_steering else "CAM_0x2a4"
-  msg_bytes = 32 if hda2_alt_steering else 24
+def create_suppress_lfa(packer, CAN, lfa_block_msg, lka_steering_alt):
+  suppress_msg = "CAM_0x362" if lka_steering_alt else "CAM_0x2a4"
+  msg_bytes = 32 if lka_steering_alt else 24
 
-  values = {f"BYTE{i}": hda2_lfa_block_msg[f"BYTE{i}"] for i in range(3, msg_bytes) if i != 7}
-  values["COUNTER"] = hda2_lfa_block_msg["COUNTER"]
+  values = {f"BYTE{i}": lfa_block_msg[f"BYTE{i}"] for i in range(3, msg_bytes) if i != 7}
+  values["COUNTER"] = lfa_block_msg["COUNTER"]
   values["SET_ME_0"] = 0
   values["SET_ME_0_2"] = 0
   values["LEFT_LANE_LINE"] = 0
@@ -334,7 +334,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
 
   values["ZEROS_5"] = 0
 
-  values["NEW_SIGNAL_15_DESIRE_DIST"] = CS.out.vEgo * 1.0 + 4.0
+  values["TARGET_DISTANCE"] = CS.out.vEgo * 1.0 + 4.0
 
   values["CRUISE_STANDSTILL"] = 1 if stopping and CS.out.aEgo > -0.1 else 0
 
@@ -442,13 +442,13 @@ def create_adrv_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           values["SETSPEED_HUD"] = 5 if hdp_active else 2 if cruise_enabled else 1
           values["vSetDis"] = int(hud_control.setSpeed * 3.6 + 0.5)
 
-          values["DISTANCE"] = hud_control.leadDistanceBars
-          values["DISTANCE_LEAD"] = 1 if cruise_enabled and hud_control.leadVisible else 0
+          values["DISTANCE"] = 4 if hdp_active else hud_control.leadDistanceBars
+          values["DISTANCE_LEAD"] = 2 if cruise_enabled and hud_control.leadVisible else 0
           values["DISTANCE_CAR"] = 3 if hdp_active else 2 if cruise_enabled else 1 if main_enabled else 0
           values["DISTANCE_SPACING"] = 5 if hdp_active else 1 if cruise_enabled else 0
 
           values["TARGET"] = 1 if cruise_enabled else 0
-          values["TARGET_POSITION"] = int(hud_control.leadDistance)
+          values["TARGET_DISTANCE"] = int(hud_control.leadDistance)
 
           values["BACKGROUND"] = 1 if cruise_enabled else 3 if main_enabled else 7
           values["CENTERLINE"] = 1 if lat_active else 0
@@ -523,42 +523,45 @@ def create_adrv_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         values["FAULT_LFA"] = 0
         values["FAULT_LCA"] = 0
         values["FAULT_DAS"] = 0
+        values["FAULT_HDA"] = 0
+
         if left_lane_warning or right_lane_warning:
           values["VIBRATE"] = 1
         ret.append(packer.make_can_msg("ADRV_0x162", CAN.ECAN, values))
 
-    if frame % 20 == 0 and canfd_debug > 0: # 아직 시험중..
-      if CS.hda_info_4a3 is not None:
-        values = CS.hda_info_4a3
-        # SIGNAL_4: 7, SIGNAL_0: 0 으로 해도 .. 옆두부는 나오기도 함.. 아오5
-        if canfd_debug == 1:
-          test4 = 10
-          test0 = 5
-        elif canfd_debug == 2:
-          test4 = 11
-          test0 = 1
-        elif canfd_debug == 3:
-          test4 = 5
-          test0 = 2
-        values["SIGNAL_4"] = test4 if CC.enabled else 0   # 0, 5(고속도로진입), 10(고속도로), 7,5(국도에서 간혹), 0,10(카니발)      , 5(고속도로진입,EV6), 11(고속도로,EV6)
-        values["SIGNAL_0"] = test0 if CC.enabled else 0  # 0, 2(고속도로진입), 1(고속도로),                      5(카니발은 항상)  , 2(고속도로진입,EV6), 1(고속도로,EV6)
-        values["NEW_SIGNAL_1"] = 4
-        values["NEW_SIGNAL_2"] = 0
-        values["NEW_SIGNAL_3"] = 154
-        values["NEW_SIGNAL_4"] = 9
-        values["NEW_SIGNAL_5"] = 0
-        values["NEW_SIGNAL_6"] = 256
-        values["NEW_SIGNAL_7"] = 0
-        ret.append(packer.make_can_msg("HDA_INFO_4A3", CAN.CAM, values))
-    if frame % 10 == 0:
-      if CS.new_msg_4b4 is not None: #G80 HDA2개조차량은 안나옴...
-        values = CS.new_msg_4b4
-        values["NEW_SIGNAL_1"] = 8
-        values["NEW_SIGNAL_3"] = (frame / 100) % 10
-        values["NEW_SIGNAL_4"] = 146
-        values["NEW_SIGNAL_5"] = 68
-        values["NEW_SIGNAL_6"] = 76
-        ret.append(packer.make_can_msg("NEW_MSG_4B4", CAN.CAM, values))
+    if canfd_debug > 0:
+      if frame % 20 == 0: # 아직 시험중..
+        if CS.hda_info_4a3 is not None:
+          values = CS.hda_info_4a3
+          # SIGNAL_4: 7, SIGNAL_0: 0 으로 해도 .. 옆두부는 나오기도 함.. 아오5
+          if canfd_debug == 1:
+            test4 = 10
+            test0 = 5
+          elif canfd_debug == 2:
+            test4 = 11
+            test0 = 1
+          elif canfd_debug == 3:
+            test4 = 5
+            test0 = 2
+          values["SIGNAL_4"] = test4 if CC.enabled else 0   # 0, 5(고속도로진입), 10(고속도로), 7,5(국도에서 간혹), 0,10(카니발)      , 5(고속도로진입,EV6), 11(고속도로,EV6)
+          values["SIGNAL_0"] = test0 if CC.enabled else 0  # 0, 2(고속도로진입), 1(고속도로),                      5(카니발은 항상)  , 2(고속도로진입,EV6), 1(고속도로,EV6)
+          values["NEW_SIGNAL_1"] = 4
+          values["NEW_SIGNAL_2"] = 0
+          values["NEW_SIGNAL_3"] = 154
+          values["NEW_SIGNAL_4"] = 9
+          values["NEW_SIGNAL_5"] = 0
+          values["NEW_SIGNAL_6"] = 256
+          values["NEW_SIGNAL_7"] = 0
+          ret.append(packer.make_can_msg("HDA_INFO_4A3", CAN.CAM, values))
+      if frame % 10 == 0:
+        if CS.new_msg_4b4 is not None: #G80 HDA2개조차량은 안나옴...
+          values = CS.new_msg_4b4
+          values["NEW_SIGNAL_1"] = 8
+          values["NEW_SIGNAL_3"] = (frame / 100) % 10
+          values["NEW_SIGNAL_4"] = 146
+          values["NEW_SIGNAL_5"] = 68
+          values["NEW_SIGNAL_6"] = 76
+          ret.append(packer.make_can_msg("NEW_MSG_4B4", CAN.CAM, values))
     return ret
   else:
     values = {}
