@@ -1117,11 +1117,15 @@ public:
             return;
         }
         const auto carrot_man = sm["carrotMan"].getCarrotMan();
-        const auto nav_inst = sm["navInstruction"].getNavInstruction();
-        //const auto car_state = sm["carState"].getCarState();
+        float maneuverDistance = 0;
+        if (sm.alive("navInstruction")) {
+          const auto nav_inst = sm["navInstruction"].getNavInstruction();
+          maneuverDistance = nav_inst.getManeuverDistance();
+        }
+          
         active_carrot = carrot_man.getActiveCarrot();
         //printf("active_carrot: %d\n", active_carrot);
-        if (active_carrot <= 1 || (carrot_man.getNGoPosDist() <= 0 && nav_inst.getManeuverDistance() > 0)) active_navi_inst = true;
+        if (active_carrot <= 1 || (carrot_man.getNGoPosDist() <= 0 && maneuverDistance > 0)) active_navi_inst = true;
         else active_navi_inst = false;
 
         if (active_carrot > 1) {
@@ -1147,6 +1151,7 @@ public:
           szTBTMainText = QString::fromStdString(carrot_man.getSzTBTMainText());
           
         } else if(sm.alive("navInstruction") && sm.valid("navInstruction")) {
+          const auto nav_inst = sm["navInstruction"].getNavInstruction();
           xTurnInfo = 0;
           xDistToTurn = nav_inst.getManeuverDistance();
           nRoadLimitSpeed = nav_inst.getSpeedLimit();
