@@ -182,7 +182,7 @@ class CarrotMan:
     print("************************************************CarrotMan init************************************************")
     self.params = Params()
     self.params_memory = Params("/dev/shm/params")
-    self.sm = messaging.SubMaster(['deviceState', 'carState', 'controlsState', 'longitudinalPlan', 'modelV2', 'selfdriveState', 'carControl', 'navRouteNavd'])
+    self.sm = messaging.SubMaster(['deviceState', 'carState', 'controlsState', 'longitudinalPlan', 'modelV2', 'selfdriveState', 'carControl', 'navRouteNavd', 'liveLocationKalman'])
     self.pm = messaging.PubMaster(['carrotMan', "navRoute", "navInstructionCarrot"])
 
     self.carrot_serv = CarrotServ()
@@ -895,7 +895,6 @@ class CarrotServ:
     self.nPosAngle = 0.0
 
     self.diff_angle_count = 0
-    self.last_update_gps_time = 0
     self.last_calculate_gps_time = 0
     self.bearing_offset = 0.0
     self.bearing_measured = 0.0
@@ -948,6 +947,7 @@ class CarrotServ:
     self.autoNaviSpeedBumpSpeed = float(self.params.get_int("AutoNaviSpeedBumpSpeed"))
     self.autoNaviSpeedBumpTime = float(self.params.get_int("AutoNaviSpeedBumpTime"))
     self.autoNaviSpeedCtrlEnd = float(self.params.get_int("AutoNaviSpeedCtrlEnd"))
+    self.autoNaviSpeedCtrlMode = self.params.get_int("AutoNaviSpeedCtrlMode")
     self.autoNaviSpeedSafetyFactor = float(self.params.get_int("AutoNaviSpeedSafetyFactor")) * 0.01
     self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
     self.autoNaviCountDownMode = self.params.get_int("AutoNaviCountDownMode")
@@ -1205,16 +1205,17 @@ class CarrotServ:
     # 1: startOSEPS: 구간단속시작
     # 2: inOSEPS: 구간단속중
     # 3: endOSEPS: 구간단속종료
-    if self.nSdiType in [0,1,2,3,4,7,8, 75, 76] and self.nSdiSpeedLimit > 0:
+    # 0:감속안함,1:과속카메라,2:+사고방지턱,3:+이동식카메라
+    if self.nSdiType in [0,1,2,3,4,7,8, 75, 76] and self.nSdiSpeedLimit > 0 and self.autoNaviSpeedCtrlMode > 0:
       self.xSpdLimit = self.nSdiSpeedLimit * self.autoNaviSpeedSafetyFactor
       self.xSpdDist = self.nSdiDist
       self.xSpdType = self.nSdiType
       if self.nSdiBlockType in [2,3]:
         self.xSpdDist = self.nSdiBlockDist
         self.xSpdType = 4
-      elif self.nSdiType == 7: #이동식카메라
+      elif self.nSdiType == 7 and self.autoNaviSpeedCtrlMode < 3: #이동식카메라
         self.xSpdLimit = self.xSpdDist = 0
-    elif (self.nSdiPlusType == 22 or self.nSdiType == 22) and self.roadcate > 1: # speed bump, roadcate:0,1: highway
+    elif (self.nSdiPlusType == 22 or self.nSdiType == 22) and self.roadcate > 1 and self.autoNaviSpeedCtrlMode >= 2: # speed bump, roadcate:0,1: highway
       self.xSpdLimit = self.autoNaviSpeedBumpSpeed
       self.xSpdDist = self.nSdiPlusDist if self.nSdiPlusType == 22 else self.nSdiDist
       self.xSpdType = 22
@@ -1224,22 +1225,30 @@ class CarrotServ:
       self.xSpdDist = 0
 
   def _update_gps(self, v_ego, sm):
-    if not sm.updated['carState'] or not sm.updated['carControl']:
+    llk = 'liveLocationKalman'
+    location = sm[llk]
+    #print(f"location = {sm.valid[llk]}, {sm.updated[llk]}, {sm.recv_frame[llk]}, {sm.recv_time[llk]}")
+    if not sm.updated['carState'] or not sm.updated['carControl'] or not sm.updated[llk]:
       return self.nPosAngle
     CS = sm['carState']
     CC = sm['carControl']
-    if len(CC.orientationNED) == 3:
-      bearing = math.degrees(CC.orientationNED[2])
+    self.gps_valid = (location.status == log.LiveLocationKalman.Status.valid) and location.positionGeodetic.valid
+
+    now = time.monotonic()
+
+    if sm.valid[llk]:
+      bearing = math.degrees(location.calibratedOrientationNED.value[2])
     else:
-      bearing = 0.0
-      return self.nPosAngle
+      bearing = self.nPosAngle
 
-    if not self.gps_valid:
-      if self.params_memory.get("LastGPSPosition"):
-        self.gps_valid = True
-
+    #print(f"gps_valid = {self.gps_valid}, bearing = {bearing:.1f}, pos = {location.positionGeodetic.value[0]:.6f}, {location.positionGeodetic.value[1]:.6f}")
     if self.gps_valid:    # liveLocationKalman일때는 정확하나, livePose일때는 불안정함.
       self.bearing_offset = 0.0
+      if self.active_carrot <= 1:
+        self.vpPosPointLatNavi = location.positionGeodetic.value[0]
+        self.vpPosPointLonNavi = location.positionGeodetic.value[1]
+        self.last_calculate_gps_time = sm.recv_time[llk]
+        self.gpsDelayTimeAdjust = 0.0
     else:
       if abs(self.bearing_measured - bearing) < 0.1:
           self.diff_angle_count += 1
@@ -1255,10 +1264,14 @@ class CarrotServ:
 
     bearing_calculated = (bearing + self.bearing_offset) % 360
 
-    now = time.monotonic()
     dt = now - self.last_calculate_gps_time
-    #self.last_calculate_gps_time = now
-    self.vpPosPointLat, self.vpPosPointLon = self.estimate_position(float(self.vpPosPointLatNavi), float(self.vpPosPointLonNavi), v_ego, bearing_calculated, dt + self.gpsDelayTimeAdjust)
+    #print(f"dt = {dt:.1f}, {self.vpPosPointLatNavi}, {self.vpPosPointLonNavi}")
+    if dt > 5.0:
+      self.vpPosPointLat, self.vpPosPointLon = 0.0, 0.0
+    elif dt == 0:
+      self.vpPosPointLat, self.vpPosPointLon = self.vpPosPointLatNavi, self.vpPosPointLonNavi
+    else:
+      self.vpPosPointLat, self.vpPosPointLon = self.estimate_position(float(self.vpPosPointLatNavi), float(self.vpPosPointLonNavi), v_ego, bearing_calculated, dt + self.gpsDelayTimeAdjust)
 
     #self.debugText = " {} {:.1f},{:.1f}={:.1f}+{:.1f}".format(self.active_sdi_count, self.nPosAngle, bearing_calculated, bearing, self.bearing_offset)
     #print("nPosAngle = {:.1f},{:.1f} = {:.1f}+{:.1f}".format(self.nPosAngle, bearing_calculated, bearing, self.bearing_offset))
@@ -1397,7 +1410,7 @@ class CarrotServ:
 
     sdi_speed = 250
     hda_active = False
-    ### 과속카메라, 사고방지턱
+    ### 과속카메라, 사고방지턱    
     if self.xSpdDist > 0 and self.active_carrot > 0:
       safe_sec = self.autoNaviSpeedBumpTime if self.xSpdType == 22 else self.autoNaviSpeedCtrlEnd
       decel = self.autoNaviSpeedDecelRate
@@ -1510,7 +1523,6 @@ class CarrotServ:
 
 
     self._update_cmd()
-
     msg = messaging.new_message('carrotMan')
     msg.valid = True
     msg.carrotMan.activeCarrot = self.active_carrot

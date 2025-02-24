@@ -217,10 +217,11 @@ class LongitudinalPlanner:
     longitudinalPlan.fcw = self.fcw
         
     longitudinalActuatorDelay = Params().get_float("LongActuatorDelay")*0.01
+    vegoStopping = Params().get_float("VegoStopping") * 0.01
     action_t =  longitudinalActuatorDelay + DT_MDL
 
     a_target, should_stop, v_target, j_target = get_accel_from_plan(longitudinalPlan.speeds, longitudinalPlan.accels, longitudinalPlan.jerks,
-                                                action_t=action_t, vEgoStopping=self.CP.vEgoStopping)
+                                                action_t=action_t, vEgoStopping=vegoStopping)
     longitudinalPlan.aTarget = float(a_target)
     longitudinalPlan.shouldStop = bool(should_stop)
     longitudinalPlan.allowBrake = True

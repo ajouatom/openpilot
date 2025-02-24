@@ -94,19 +94,14 @@ class RouteEngine:
       cloudlog.exception("navd.failed_to_compute")
 
   def update_location(self):
-    location = self.sm['liveLocationKalman']
-    self.gps_ok = location.gpsOK
-
-    self.localizer_valid = (location.status == log.LiveLocationKalman.Status.valid) and location.positionGeodetic.valid
 
     carrot_man = self.sm['carrotMan']
-    if carrot_man.activeCarrot > 1:
+    if carrot_man.xPosLat > 0.0:
       self.last_bearing = carrot_man.xPosAngle;
       self.last_position = Coordinate(carrot_man.xPosLat, carrot_man.xPosLon)
-      self.gps_ok = True
-    elif self.localizer_valid:
-      self.last_bearing = math.degrees(location.calibratedOrientationNED.value[2])
-      self.last_position = Coordinate(location.positionGeodetic.value[0], location.positionGeodetic.value[1])
+      self.localizer_valid = self.gps_ok = True
+    else:
+      self.localizer_valid = self.gps_ok = False
       self.carrot_route_active = False
 
   def recompute_route(self):
@@ -119,10 +114,10 @@ class RouteEngine:
       self.reset_recompute_limits()
       return
     #print(f"new_destination: {new_destination} nav_destination: {self.nav_destination}")
-    should_recompute = self.should_recompute()
+    should_recompute = self.should_recompute() and place_name != "External Navi"
     if new_destination != self.nav_destination and place_name != "External Navi":
       cloudlog.warning(f"Got new destination from NavDestination param {new_destination}")
-      print(f"Got new destination from NavDestination param {new_destination} {self.nav_destination}")
+      print(f"Got new destination from NavDestination param {new_destination} {self.nav_destination} {place_name}")
       should_recompute = True
 
     # Don't recompute when GPS drifts in tunnels
@@ -381,7 +376,7 @@ class RouteEngine:
 
 def main():
   pm = messaging.PubMaster(['navInstruction', 'navRouteNavd'])
-  sm = messaging.SubMaster(['liveLocationKalman', 'managerState', 'carrotMan'])
+  sm = messaging.SubMaster(['managerState', 'carrotMan'])
 
   rk = Ratekeeper(1.0)
   route_engine = RouteEngine(sm, pm)

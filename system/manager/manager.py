@@ -73,6 +73,7 @@ def get_default_params():
     ("AutoTurnMapChange", "0"),
 
     ("AutoNaviSpeedCtrlEnd", "7"),
+    ("AutoNaviSpeedCtrlMode", "2"),
     ("AutoNaviSpeedBumpTime", "1"),
     ("AutoNaviSpeedBumpSpeed", "35"),
     ("AutoNaviSpeedSafetyFactor", "105"),
@@ -101,6 +102,7 @@ def get_default_params():
     ("LongTuningKiV", "0"),
     ("LongTuningKf", "100"),
     ("LongActuatorDelay", "20"),
+    ("VegoStopping", "5"),
     ("RadarReactionFactor", "10"),
     ("EnableRadarTracks", "0"),
     ("HyundaiCameraSCC", "0"),

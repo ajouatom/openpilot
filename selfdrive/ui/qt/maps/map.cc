@@ -182,34 +182,14 @@ void MapWindow::updateState(const UIState &s) {
   bool gps_updated = false;
 
   auto carrotMan = sm["carrotMan"].getCarrotMan();
-  bool active_carrot_man = carrotMan.getActiveCarrot() > 1;
+  //bool active_carrot_man = carrotMan.getActiveCarrot() > 1;
 
-  if (!active_carrot_man && sm.updated("liveLocationKalman")) {
-    auto locationd_location = sm["liveLocationKalman"].getLiveLocationKalman();
-    auto locationd_pos = locationd_location.getPositionGeodetic();
-    auto locationd_orientation = locationd_location.getCalibratedOrientationNED();
-    auto locationd_velocity = locationd_location.getVelocityCalibrated();
-    auto locationd_ecef = locationd_location.getPositionECEF();
-
-    locationd_valid = (locationd_pos.getValid() && locationd_orientation.getValid() && locationd_velocity.getValid() && locationd_ecef.getValid());
-    if (locationd_valid) {
-      // Check std norm
-      auto pos_ecef_std = locationd_ecef.getStd();
-      bool pos_accurate_enough = sqrt(pow(pos_ecef_std[0], 2) + pow(pos_ecef_std[1], 2) + pow(pos_ecef_std[2], 2)) < 100;
-      locationd_valid = pos_accurate_enough;
-    }
-    lat = locationd_pos.getValue()[0];
-    lon = locationd_pos.getValue()[1];
-    bearing = RAD2DEG(locationd_orientation.getValue()[2]);
-    velocity = locationd_velocity.getValue()[0];
-    gps_updated = true;
-  }
-
-  if (active_carrot_man && sm.updated("carrotMan")) {
+  //printf("CarrotMan: %f %f %f %f\n", carrotMan.getXPosLat(), carrotMan.getXPosLon(), carrotMan.getXPosAngle(), carrotMan.getXPosSpeed());
+  if (carrotMan.getXPosLat() > 0.0) {
     lat = carrotMan.getXPosLat();
     lon = carrotMan.getXPosLon();
     bearing = carrotMan.getXPosAngle();
-    velocity = carrotMan.getXPosSpeed()/3.6;
+    velocity = carrotMan.getXPosSpeed() / 3.6;
     gps_updated = true;
     locationd_valid = true;
   }
@@ -249,7 +229,7 @@ void MapWindow::updateState(const UIState &s) {
   initLayers();
 
   if (!locationd_valid) {
-    setError(tr("Waiting for APN"));
+    setError(tr("Waiting for GPS(APN)"));
   } else if (routing_problem) {
     setError(tr("Waiting for route"));
   } else {
@@ -284,7 +264,7 @@ void MapWindow::updateState(const UIState &s) {
     // - API exception/no internet
     // - route response is empty
     // - any time navd is waiting for recompute_countdown
-    routing_problem = !sm.valid("navInstruction") && coordinate_from_param("NavDestination").has_value();
+    routing_problem = !(sm.valid("navInstruction") || sm.valid("navInstructionCarrot")) && coordinate_from_param("NavDestination").has_value();
 
     if (sm.valid("navInstruction") || sm.valid("navInstructionCarrot")) {
       //auto i = sm["navInstruction"].getNavInstruction();
@@ -316,7 +296,9 @@ void MapWindow::updateState(const UIState &s) {
   }
   if (loaded_once && (sm.rcv_frame("modelV2") != model_rcv_frame)) {
     auto locationd_location = sm["liveLocationKalman"].getLiveLocationKalman();
-    auto model_path = model_to_collection(locationd_location.getCalibratedOrientationECEF(), locationd_location.getPositionECEF(), sm["modelV2"].getModelV2().getPosition(), last_position->first, last_position->second);
+    //auto carrot_man = sm["carrotMan"].getCarrotMan();
+    auto model_path = model_to_collection(locationd_location.getCalibratedOrientationECEF(), locationd_location.getPositionECEF(), sm["modelV2"].getModelV2().getPosition(), carrotMan.getXPosLat(), carrotMan.getXPosLon());
+    //auto model_path = model_to_collection(sm["modelV2"].getModelV2().getPosition(), carrotMan.getXPosLat(), carrotMan.getXPosLon(), carrotMan.getXPosAngle());
     QMapLibre::Feature model_path_feature(QMapLibre::Feature::LineStringType, model_path, {}, {});
     QVariantMap modelV2Path;
     modelV2Path["type"] =  "geojson";

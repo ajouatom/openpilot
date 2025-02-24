@@ -497,6 +497,19 @@
     },
     {
       "group": "주행튜닝",
+      "name": "VegoStopping",
+      "title": "정지출발민감도(5)x0.01",
+      "descr": "값을 올리면 늦게 출발함, 너무낮추면 추돌위험이 있을수 있음.",
+      "egroup": "LONG",
+      "etitle": "VegoStopping(5)x0.01",
+      "edescr": "",
+      "min": 1,
+      "max": 10,
+      "default": 20,
+      "unit": 5
+    },
+    {
+      "group": "주행튜닝",
       "name": "RadarReactionFactor",
       "title": "Radar reaction factor (10)%",
       "descr": "값이 낮아지면 선행차량에 대한 반응이 빨라짐.",
@@ -1365,6 +1378,19 @@
       "min": 3,
       "max": 20,
       "default": 6,
+      "unit": 1
+    },
+    {
+      "group": "감속제어",
+      "name": "AutoNaviSpeedCtrlMode",
+      "title": "네비게이션감속모드(2)",
+      "descr": "0:감속안함,1:과속카메라,2:+사고방지턱,3:+이동식카메라",
+      "egroup": "SPEED",
+      "etitle": "NaviSpeedControlMode(2)",
+      "edescr": "",
+      "min": 0,
+      "max": 3,
+      "default": 2,
       "unit": 1
     },
     {
