@@ -847,6 +847,7 @@ class CarrotServ:
     self.params_memory = Params("/dev/shm/params")
 
     self.nRoadLimitSpeed = 30
+    self.nRoadLimitSpeed_counter = 0
 
     self.active_carrot = 0     ## 1: CarrotMan Active, 2: sdi active , 3: speed decel active, 4: section active, 5: bump active, 6: speed limit active
     self.active_count = 0
@@ -1746,7 +1747,13 @@ class CarrotServ:
           nRoadLimitSpeed = 30
       else:
         nRoadLimitSpeed = 30
-      self.nRoadLimitSpeed = nRoadLimitSpeed
+      #self.nRoadLimitSpeed = nRoadLimitSpeed
+      if self.nRoadLimitSpeed != nRoadLimitSpeed:
+        self.nRoadLimitSpeed_counter += 1
+        if self.nRoadLimitSpeed_counter > 5:
+          self.nRoadLimitSpeed = nRoadLimitSpeed
+      else:
+        self.nRoadLimitSpeed_counter = 0
 
       ### SDI
       self.nSdiType = int(json.get("nSdiType", -1))

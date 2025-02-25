@@ -1155,7 +1155,7 @@ public:
           const auto nav_inst = sm["navInstruction"].getNavInstruction();
           xTurnInfo = 0;
           xDistToTurn = nav_inst.getManeuverDistance();
-          nRoadLimitSpeed = nav_inst.getSpeedLimit();
+          nRoadLimitSpeed = nav_inst.getSpeedLimit() * 3.6;
           QString maneuverType = QString::fromStdString(nav_inst.getManeuverType());
           QString manuverModifier = QString::fromStdString(nav_inst.getManeuverModifier());
           if (maneuverType == "turn") {

@@ -298,6 +298,8 @@ class RouteEngine:
 
     if ('maxspeed' in closest.annotations) and self.localizer_valid:
       msg.navInstruction.speedLimit = closest.annotations['maxspeed']
+      print(closest.annotations)
+
 
     # Speed limit sign type
     if 'speedLimitSign' in step:
