@@ -96,7 +96,7 @@ class RouteEngine:
   def update_location(self):
 
     carrot_man = self.sm['carrotMan']
-    if carrot_man.xPosLat > 0.0:
+    if carrot_man.xPosLat != 0.0 and carrot_man.xPosLon != 0.0:
       self.last_bearing = carrot_man.xPosAngle;
       self.last_position = Coordinate(carrot_man.xPosLat, carrot_man.xPosLon)
       self.localizer_valid = self.gps_ok = True

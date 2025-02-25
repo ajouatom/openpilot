@@ -185,7 +185,7 @@ void MapWindow::updateState(const UIState &s) {
   //bool active_carrot_man = carrotMan.getActiveCarrot() > 1;
 
   //printf("CarrotMan: %f %f %f %f\n", carrotMan.getXPosLat(), carrotMan.getXPosLon(), carrotMan.getXPosAngle(), carrotMan.getXPosSpeed());
-  if (carrotMan.getXPosLat() > 0.0) {
+  if (carrotMan.getXPosLat() != 0.0 && carrotMan.getXPosLon() != 0.0) {
     lat = carrotMan.getXPosLat();
     lon = carrotMan.getXPosLon();
     bearing = carrotMan.getXPosAngle();

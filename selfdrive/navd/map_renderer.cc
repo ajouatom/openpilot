@@ -213,7 +213,7 @@ void MapRenderer::publish(const double render_time, const bool loaded) {
   QImage cap = fbo->toImage().convertToFormat(QImage::Format_RGB888, Qt::AutoColor);
 
   auto carrotMan = (*sm)["carrotMan"].getCarrotMan();
-  bool valid = loaded && (carrotMan.getXPosLat() > 0.0);
+  bool valid = loaded && (carrotMan.getXPosLat() != 0.0 && carrotMan.getXPosLon() != 0.0);
   ever_loaded = ever_loaded || loaded;
   uint64_t ts = nanos_since_boot();
   VisionBuf* buf = vipc_server->get_buffer(VisionStreamType::VISION_STREAM_MAP);
