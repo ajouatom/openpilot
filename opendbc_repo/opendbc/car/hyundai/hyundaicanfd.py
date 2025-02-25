@@ -460,7 +460,7 @@ def create_adrv_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           values["LKA_ICON"] = 4 if lat_active else 3
           values["FCA_ALT_ICON"] = 0
 
-          if values["ALERTS_2"] == 5:
+          if values["ALERTS_2"] <= 5:
             values["ALERTS_2"] = 0
             values["SOUNDS_2"] = 0
             values["DAW_ICON"] = 0
