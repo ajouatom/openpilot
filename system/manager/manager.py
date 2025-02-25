@@ -44,6 +44,7 @@ def get_default_params():
     ("ShowCustomBrightness", "100"),
     ("ShowLaneInfo", "1"),
     ("ShowRadarInfo", "1"),
+    ("ShowDeviceState", "1"),
     ("ShowRouteInfo", "1"),
     ("ShowPathMode", "9"),
     ("ShowPathColor", "13"),

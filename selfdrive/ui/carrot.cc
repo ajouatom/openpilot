@@ -1035,8 +1035,6 @@ protected:
 
         //if (active_carrot <= 1) return;
         //printf("nGoPosDist=%d, nGoPosTime=%d\n", nGoPosDist, nGoPosTime);
-        if (nGoPosDist > 0 && nGoPosTime > 0);
-		    else return;
 
         //if (xDistToTurn <= 0 || nGoPosDist <= 0) return;
         char str[128] = "";
@@ -1047,6 +1045,9 @@ protected:
         if (s->scene._current_carrot_display == 3) {
           ui_fill_rect(s->vg, { tbt_x, 5, 790, s->fb_h - 15 }, COLOR_BLACK_ALPHA(120), 30, 2, &stroke_color);
         }
+        if (nGoPosDist > 0 && nGoPosTime > 0);
+        else return;
+        if (s->scene._current_carrot_display == 3);
         else {
           ui_fill_rect(s->vg, { tbt_x, tbt_y - 60, 790, 240 + 60 }, COLOR_BLACK_ALPHA(120), 30, 2, &stroke_color);
         }
@@ -2124,6 +2125,7 @@ public:
     int   memoryUsage = 0;
     float freeSpace = 0.0f;
     void drawHud(UIState* s) {
+        int show_device_state = params.getInt("ShowDeviceState");
         blink_timer = (blink_timer + 1) % 16;
         nvgTextAlign(s->vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
 
@@ -2140,7 +2142,12 @@ public:
         if (xSpdLimit > 0 && xSignType != 22 && xSignType != 4) cam_detected = true;
         NVGcolor stroke_color = COLOR_WHITE;
         NVGcolor bg_color = (cam_detected && blink_timer > 8)?COLOR_RED_ALPHA(180):COLOR_BLACK_ALPHA(90);
-        ui_fill_rect(s->vg, { bx - 120, by - 270, 475, 495}, bg_color, 30, 2, &stroke_color);
+        if (show_device_state > 0) {
+          ui_fill_rect(s->vg, { bx - 120, by - 270, 475, 495 }, bg_color, 30, 2, &stroke_color);
+        }
+        else {
+          ui_fill_rect(s->vg, { bx - 120, by - 270 + 140, 475, 495 - 140 }, bg_color, 30, 2, &stroke_color);
+        }
 
 
         // draw traffic light
@@ -2214,7 +2221,7 @@ public:
         int dx = bx - 50;
         int dy = by + 175;
         ui_fill_rect(s->vg, { dx - 55, dy - 38, 110, 48 }, mode_color, 15, 2);
-        ui_draw_text(s, dx, dy, driving_mode_str, 40, text_color, BOLD);
+        ui_draw_text(s, dx, dy, driving_mode_str, 35, text_color, BOLD);
         if (strcmp(driving_mode_str, driving_mode_str_last)) ui_draw_text_a(s, dx, dy, driving_mode_str, 30, COLOR_WHITE, BOLD);
         strcpy(driving_mode_str_last, driving_mode_str);
 
@@ -2317,7 +2324,7 @@ public:
             ui_draw_text(s, dx, dy, QString::number(disp_speed).toStdString().c_str(), 40, COLOR_WHITE, BOLD);
         }
 
-        if (true) {
+        if (show_device_state) {
             char str[128];
             dx = bx - 35;
             dy = by - 200;

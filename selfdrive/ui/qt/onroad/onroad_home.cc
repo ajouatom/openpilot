@@ -217,14 +217,43 @@ void OnroadWindow::mousePressEvent(QMouseEvent* e) {
   // propagation event to parent(HomeWindow)
   int x = e->x();   // 430 - 500 : gap window
   int y = height() - e->y();  // 60 - 180 : gap window
-  if (x > 350 && x < 550 && y > 20 && y < 250) {
-    Params	params;
+  int ey = e->y();
+  printf("x=%d, y=%d, ey=%d\n", x, y, ey);
+  double now = millis_since_boot();
+  static double last_click_time = 0;
+  static int _click_count = 0;
+  // 40,150, 200, 150
+  Params	params;
+  if (x > 40 && x < 370 && ey > 30 && ey < 240) {   // date & time
+    int show_date_time = params.getInt("ShowDateTime");
+    params.putIntNonBlocking("ShowDateTime", (show_date_time + 1) % 3);
+  }
+  else if (x > 40 && x < 500 && y > 400 && y < 530) {   // device info
+    int show_device_state = params.getInt("ShowDeviceState");
+    params.putIntNonBlocking("ShowDeviceState", (show_device_state + 1) % 2);
+  }
+  else if (x > 40 && x < 200 && y > 20 && y < 150) {   // driving mode
+    int my_driving_mode = params.getInt("MyDrivingMode");
+    params.putIntNonBlocking("MyDrivingMode", (my_driving_mode) % 4 + 1);
+  }
+  else if (x > 350 && x < 550 && y > 20 && y < 250) { // gap control
     int longitudinalPersonalityMax = params.getInt("LongitudinalPersonalityMax");
     int personality = (params.getInt("LongitudinalPersonality") - 1 + longitudinalPersonalityMax) % longitudinalPersonalityMax;
     params.putIntNonBlocking("LongitudinalPersonality", personality);
 
   }
   else {
+    if (now - last_click_time < 500) {
+      _click_count++;
+    }
+    else {
+      _click_count = 0;
+    }
+    last_click_time = now;
+    if (_click_count == 3) {
+      params.putIntNonBlocking("SoftRestartTriggered", 1);
+    }
+    
     UIState* s = uiState();
     s->scene._current_carrot_display = (s->scene._current_carrot_display % 3) + 1;  // 4번: full map은 안보여줌.
     printf("_current_carrot_display1=%d\n", s->scene._current_carrot_display);
