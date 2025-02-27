@@ -1,0 +1,49 @@
+{% extends "layout.html" %}
+{% block title %}Vehicle Information{% endblock %}
+{% block main %}
+
+<div class="container">
+    <h1 class="text-center mb-4">Vehicle Information</h1>
+
+    {% if car_info %}
+        {% if car_info.get("error") %}
+            <div class="alert alert-danger">
+                {{ car_info.get("error") }}
+            </div>
+        {% else %}
+            {% for section, data in car_info.items() %}
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5 class="mb-0">{{ section }}</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if data is mapping %}
+                            {% for key, value in data.items() %}
+                                <div class="row mb-2">
+                                    <div class="col-6">
+                                        <strong>{{ key }}</strong>
+                                    </div>
+                                    <div class="col-6">
+                                        {% if value is string and "km/h" in value %}
+                                            <span class="badge bg-primary">{{ value }}</span>
+                                        {% else %}
+                                            {{ value }}
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            {{ data }}
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% else %}
+        <div class="alert alert-warning">
+            Unable to retrieve vehicle information
+        </div>
+    {% endif %}
+</div>
+
+{% endblock %}

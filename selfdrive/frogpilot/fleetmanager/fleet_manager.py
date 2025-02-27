@@ -33,6 +33,17 @@ from openpilot.common.swaglog import cloudlog
 import traceback
 from ftplib import FTP
 
+from openpilot.common.params import Params
+from cereal import log, messaging
+from cereal import log, messaging
+import time
+from functools import wraps
+from openpilot.opendbc_repo.opendbc.car.interfaces import CarInterfaceBase
+from openpilot.opendbc_repo.opendbc.car.values import PLATFORMS
+
+# Initialize messaging
+sm = messaging.SubMaster(['carState'])
+
 app = Flask(__name__)
 
 @app.route("/")
@@ -134,8 +145,6 @@ def upload_folder_to_ftp(local_folder, directory, remote_path):
 
 @app.route("/footage/full/upload_carrot/<route>/<segment>")
 def upload_carrot(route, segment):
-    from openpilot.common.params import Params
-
     local_folder = Paths.log_root() + f"{route}--{segment}"
 
     # ������ �����ϴ��� Ȯ��
@@ -443,6 +452,139 @@ def store_toggle_values_route():
     return jsonify({"message": "Values updated successfully"}), 200
   except Exception as e:
     return jsonify({"error": "Failed to update values", "details": str(e)}), 400
+
+@app.route("/carinfo")
+def carinfo():
+    try:
+        params = Params()
+        # 更新消息
+        sm.update()
+
+        # 获取车辆基本信息
+        try:
+            car_name = params.get("CarName", encoding='utf8')
+            if car_name in PLATFORMS:
+                platform = PLATFORMS[car_name]
+                car_fingerprint = platform.config.platform_str
+                car_specs = platform.config.specs
+            else:
+                car_fingerprint = "Unknown Fingerprint"
+                car_specs = None
+        except Exception as e:
+            print(f"Failed to get vehicle basic info: {e}")
+            car_name = "Unknown Model"
+            car_fingerprint = "Unknown Fingerprint"
+            car_specs = None
+
+        # 获取车辆状态信息
+        try:
+            CS = sm['carState']
+
+            # 基本状态判断
+            is_car_started = CS.vEgo > 0.1
+            is_car_engaged = CS.cruiseState.enabled
+
+            # 构建基础信息
+            car_info = {
+                "Vehicle Status": {
+                    "Running Status": "Moving" if is_car_started else "Stopped",
+                    "Cruise System": "Enabled" if is_car_engaged else "Disabled",
+                    "Current Speed": f"{CS.vEgo * 3.6:.1f} km/h",
+                    "Engine RPM": f"{CS.engineRPM:.0f} RPM" if hasattr(CS, 'engineRPM') and CS.engineRPM > 0 else "Unknown",
+                    "Gear Position": str(CS.gearShifter) if hasattr(CS, 'gearShifter') else "Unknown"
+                },
+                "Basic Information": {
+                    "Car Model": car_name,
+                    "Fingerprint": str(car_fingerprint),
+                    "Weight": f"{car_specs.mass:.0f} kg" if car_specs and hasattr(car_specs, 'mass') else "Unknown",
+                    "Wheelbase": f"{car_specs.wheelbase:.3f} m" if car_specs and hasattr(car_specs, 'wheelbase') else "Unknown",
+                    "Steering Ratio": f"{car_specs.steerRatio:.1f}" if car_specs and hasattr(car_specs, 'steerRatio') else "Unknown"
+                }
+            }
+
+            # 详细信息
+            if is_car_started or is_car_engaged:
+                car_info.update({
+                    "Cruise Information": {
+                        "Cruise Status": "On" if CS.cruiseState.enabled else "Off",
+                        "Adaptive Cruise": "On" if CS.cruiseState.available else "Off",
+                        "Set Speed": f"{CS.cruiseState.speed * 3.6:.1f} km/h" if CS.cruiseState.speed > 0 else "Not Set",
+                        "Following Distance": str(CS.cruiseState.followDistance) if hasattr(CS.cruiseState, 'followDistance') else "Unknown"
+                    },
+                    "Wheel Speeds": {
+                        "Front Left": f"{CS.wheelSpeeds.fl * 3.6:.1f} km/h",
+                        "Front Right": f"{CS.wheelSpeeds.fr * 3.6:.1f} km/h",
+                        "Rear Left": f"{CS.wheelSpeeds.rl * 3.6:.1f} km/h",
+                        "Rear Right": f"{CS.wheelSpeeds.rr * 3.6:.1f} km/h"
+                    },
+                    "Steering System": {
+                        "Steering Angle": f"{CS.steeringAngleDeg:.1f}°",
+                        "Steering Torque": f"{CS.steeringTorque:.1f} Nm",
+                        "Steering Rate": f"{CS.steeringRateDeg:.1f}°/s",
+                        "Lane Departure": "Yes" if CS.leftBlinker or CS.rightBlinker else "No"
+                    },
+                    "Pedal Status": {
+                        "Throttle Position": f"{CS.gas * 100:.1f}%",
+                        "Brake Pressure": f"{CS.brake * 100:.1f}%",
+                        "Gas Pedal": "Pressed" if CS.gasPressed else "Released",
+                        "Brake Pedal": "Pressed" if CS.brakePressed else "Released"
+                    },
+                    "Safety Systems": {
+                        "ESP Status": "Active" if CS.espDisabled else "Normal",
+                        "ABS Status": "Active" if hasattr(CS, 'absActive') and CS.absActive else "Normal",
+                        "Traction Control": "Active" if hasattr(CS, 'tcsActive') and CS.tcsActive else "Normal",
+                        "Collision Warning": "Warning" if hasattr(CS, 'collisionWarning') and CS.collisionWarning else "Normal"
+                    },
+                    "Door Status": {
+                        "Driver Door": "Open" if CS.doorOpen else "Closed",
+                        "Passenger Door": "Open" if hasattr(CS, 'passengerDoorOpen') and CS.passengerDoorOpen else "Closed",
+                        "Trunk": "Open" if hasattr(CS, 'trunkOpen') and CS.trunkOpen else "Closed",
+                        "Hood": "Open" if hasattr(CS, 'hoodOpen') and CS.hoodOpen else "Closed",
+                        "Seatbelt": "Unbuckled" if CS.seatbeltUnlatched else "Buckled"
+                    },
+                    "Light Status": {
+                        "Left Turn Signal": "On" if CS.leftBlinker else "Off",
+                        "Right Turn Signal": "On" if CS.rightBlinker else "Off",
+                        "High Beam": "On" if CS.genericToggle else "Off",
+                        "Low Beam": "On" if hasattr(CS, 'lowBeamOn') and CS.lowBeamOn else "Off"
+                    },
+                    "Blind Spot Monitor": {
+                        "Left Side": "Vehicle Detected" if CS.leftBlindspot else "Clear",
+                        "Right Side": "Vehicle Detected" if CS.rightBlindspot else "Clear"
+                    }
+                })
+
+                # 添加可选的其他信息
+                other_info = {}
+                if hasattr(CS, 'outsideTemp'):
+                    other_info["Outside Temperature"] = f"{CS.outsideTemp:.1f}°C"
+                if hasattr(CS, 'fuelGauge'):
+                    other_info["Range"] = f"{CS.fuelGauge:.1f}km"
+                if hasattr(CS, 'odometer'):
+                    other_info["Odometer"] = f"{CS.odometer:.1f}km"
+                if hasattr(CS, 'instantFuelConsumption'):
+                    other_info["Instant Fuel Consumption"] = f"{CS.instantFuelConsumption:.1f}L/100km"
+
+                if other_info:
+                    car_info["Other Information"] = other_info
+
+        except Exception as e:
+            print(f"Error getting vehicle state info: {str(e)}")
+            traceback.print_exc()
+            car_info = {
+                "Basic Information": {
+                    "Car Model": car_name,
+                    "Fingerprint": str(car_fingerprint)
+                },
+                "Status": "Unable to get vehicle state information, please check if the vehicle is started"
+            }
+
+        return render_template("carinfo.html", car_info=car_info)
+
+    except Exception as e:
+        print(f"Error rendering carinfo page: {str(e)}")
+        traceback.print_exc()
+        return render_template("carinfo.html", car_info={"error": f"Error getting vehicle information: {str(e)}"})
 
 def main():
   try:
