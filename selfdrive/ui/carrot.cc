@@ -219,8 +219,8 @@ static inline void fill_rect(NVGcontext* vg, const Rect1& r, const NVGcolor* col
     if (stroke_width > 0) {
         nvgStrokeWidth(vg, stroke_width);
         if (stroke_color) nvgStrokeColor(vg, *stroke_color);
-		else nvgStrokeColor(vg, nvgRGB(0, 0, 0));   
-        nvgStroke(vg);                         
+		else nvgStrokeColor(vg, nvgRGB(0, 0, 0));
+        nvgStroke(vg);
     }
 }
 
@@ -1117,7 +1117,7 @@ public:
             return;
         }
         const auto carrot_man = sm["carrotMan"].getCarrotMan();
-          
+
         active_carrot = carrot_man.getActiveCarrot();
 
         if (active_carrot > 1) {
@@ -1141,7 +1141,7 @@ public:
           szSdiDescr = QString::fromStdString(carrot_man.getSzSdiDescr());
           szPosRoadName = QString::fromStdString(carrot_man.getSzPosRoadName());
           szTBTMainText = QString::fromStdString(carrot_man.getSzTBTMainText());
-          
+
         }
         else {
           xTurnInfo = -1;
@@ -1918,7 +1918,7 @@ public:
               int max_z = lane_lines[2].getZ().size();
               float z_offset = 0.0;
               foreach(const QString & pair, pairs) {
-                QStringList xy = pair.split(",");  // ","로 x와 y 구분                
+                QStringList xy = pair.split(",");  // ","로 x와 y 구분
                 if (xy.size() == 3) {
                   //printf("coords = x: %.1f, y: %.1f, d:%.1f\n", xy[0].toFloat(), xy[1].toFloat(), xy[2].toFloat());
                   float x = xy[0].toFloat();
@@ -2613,7 +2613,7 @@ void ui_draw(UIState *s, ModelRenderer* model_renderer, int w, int h) {
   int path_x = drawPathEnd.getPathX();
   int path_y = drawPathEnd.getPathY();
   drawDesire.draw(s, path_x, path_y - 135);
-  
+
 
   drawPlot.draw(s);
 
@@ -2751,8 +2751,26 @@ public:
         strcpy(bottom, str.toStdString().c_str());
 
         // bottom_left
+        // CSLC (Custom Speed Limit Control):
+        // SACC ( Radar Cruise Control):
+        // OPCS (OpenPilot Control System):
+
         QString gitBranch = QString::fromStdString(params.get("GitBranch"));
-        sprintf(bottom_left, "%s", gitBranch.toStdString().c_str());
+        int speedFromPCM = params.getInt("SpeedFromPCM");
+        switch (speedFromPCM) {
+          case 0:
+            sprintf(bottom_left, "%s - CSLC", gitBranch.toStdString().c_str());
+            break;
+          case 1:
+            sprintf(bottom_left, "%s - SACC", gitBranch.toStdString().c_str());
+            break;
+          case 2:
+            sprintf(bottom_left, "%s - OPCS", gitBranch.toStdString().c_str());
+            break;
+          default:
+            sprintf(bottom_left, "%s", gitBranch.toStdString().c_str());
+            break;
+        }
 
         // bottom_right
         Params params_memory = Params("/dev/shm/params");
