@@ -877,7 +877,6 @@ private:
     int xDistToTurn = 0;
     int nRoadLimitSpeed = 20;
     int active_carrot = 0;
-    bool active_navi_inst = false;
 
     int nGoPosDist = 0;
     int nGoPosTime = 0;
@@ -1118,16 +1117,8 @@ public:
             return;
         }
         const auto carrot_man = sm["carrotMan"].getCarrotMan();
-        float maneuverDistance = 0;
-        if (sm.alive("navInstruction")) {
-          const auto nav_inst = sm["navInstruction"].getNavInstruction();
-          maneuverDistance = nav_inst.getManeuverDistance();
-        }
           
         active_carrot = carrot_man.getActiveCarrot();
-        //printf("active_carrot: %d\n", active_carrot);
-        if (active_carrot <= 1 || (carrot_man.getNGoPosDist() <= 0 && maneuverDistance > 0)) active_navi_inst = true;
-        else active_navi_inst = false;
 
         if (active_carrot > 1) {
           xSpdLimit = carrot_man.getXSpdLimit();
@@ -1139,7 +1130,7 @@ public:
           xSpdDist = 0;
           xSignType = 0;
         }
-        if (active_carrot > 1 and !active_navi_inst) {
+        if (active_carrot > 1 || carrot_man.getNGoPosDist() > 0) {
           xTurnInfo = carrot_man.getXTurnInfo();
           xDistToTurn = carrot_man.getXDistToTurn();
           nRoadLimitSpeed = carrot_man.getNRoadLimitSpeed();
@@ -1151,29 +1142,17 @@ public:
           szPosRoadName = QString::fromStdString(carrot_man.getSzPosRoadName());
           szTBTMainText = QString::fromStdString(carrot_man.getSzTBTMainText());
           
-        } else if(sm.alive("navInstruction") && sm.valid("navInstruction")) {
-          const auto nav_inst = sm["navInstruction"].getNavInstruction();
-          xTurnInfo = 0;
-          xDistToTurn = nav_inst.getManeuverDistance();
-          nRoadLimitSpeed = nav_inst.getSpeedLimit() * 3.6;
-          QString maneuverType = QString::fromStdString(nav_inst.getManeuverType());
-          QString manuverModifier = QString::fromStdString(nav_inst.getManeuverModifier());
-          if (maneuverType == "turn") {
-            if (manuverModifier == "sharp left" || manuverModifier == "slight left" || manuverModifier == "left") xTurnInfo = 1; // left turn
-            else if (manuverModifier == "sharp right" || manuverModifier == "slight right" || manuverModifier == "right") xTurnInfo = 2;
-            else if (manuverModifier == "uturn") xTurnInfo = 5;
-          }
-          else if (maneuverType == "fork" || maneuverType == "off ramp") {
-            if (manuverModifier == "slight left" || manuverModifier == "left") xTurnInfo = 3; // left turn
-            else if (manuverModifier == "slight right" || manuverModifier == "right") xTurnInfo = 4;
-          }
-
-          atc_type = maneuverType + " " + manuverModifier;
-          nGoPosDist = nav_inst.getDistanceRemaining();
-          nGoPosTime = nav_inst.getTimeRemaining();
+        }
+        else {
+          xTurnInfo = -1;
+          xDistToTurn = 0;
+          nRoadLimitSpeed = 20;
+          atc_type = "";
+          nGoPosDist = 0;
+          nGoPosTime = 0;
           szSdiDescr = "";
           szPosRoadName = "";
-          szTBTMainText = QString::fromStdString(nav_inst.getManeuverPrimaryText());          
+          szTBTMainText = "";
         }
 
 #ifdef __UI_TEST
@@ -1879,7 +1858,6 @@ public:
     int     trafficState = 0;
     int     trafficState_carrot = 0;
     int     active_carrot = 0;
-    bool    active_navi_inst = false;
     float   xTarget = 0.0;
     int     myDrivingMode = 1;
 
@@ -1977,12 +1955,6 @@ public:
             szPosRoadName = "";
             nRoadLimitSpeed = 30;
 		}
-    const auto nav_inst = sm["navInstruction"].getNavInstruction();
-    if (active_carrot <= 1 || (carrot_man.getNGoPosDist() <= 0 && nav_inst.getManeuverDistance() > 0)) active_navi_inst = true;
-    else active_navi_inst = false;
-    if (active_navi_inst) {
-      nRoadLimitSpeed = carrot_man.getNRoadLimitSpeed();
-    }
 
         xState = lp.getXState();
         trafficState = lp.getTrafficState();
@@ -2294,7 +2266,7 @@ public:
             ui_fill_rect(s->vg, { dx - 55, dy - 38, 110, 48 }, COLOR_BLUE_ALPHA(210), 15, 2);
             ui_draw_text(s, dx, dy, "APM", 40, COLOR_WHITE, BOLD);
         }
-        if (nav_path_vertex_count > 0) {
+        if (nav_path_vertex_count > 1) {
             ui_draw_text(s, dx, dy - 45, "ROUTE", 30, COLOR_WHITE, BOLD);
 		}
 #ifdef __UI_TEST
@@ -2304,7 +2276,7 @@ public:
         xSignType = 1;
 #endif
 
-        if (active_carrot >= 2 || active_navi_inst) {
+        if (active_carrot >= 2) {
             dx = bx + 75;
             dy = by + 175;
             int disp_speed = 0;

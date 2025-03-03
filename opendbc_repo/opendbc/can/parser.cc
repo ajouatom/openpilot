@@ -4,6 +4,7 @@
 #include <limits>
 #include <stdexcept>
 #include <sstream>
+#include <unistd.h>
 
 #include "opendbc/can/common.h"
 
@@ -210,8 +211,10 @@ void CANParser::UpdateCans(const CanData &can, std::set<uint32_t> &updated_addre
   bus_timeout = (can.nanos - last_nonempty_nanos) > bus_timeout_threshold;
 }
 
-int error_print_count = 0;
 void CANParser::UpdateValid(uint64_t nanos) {
+  static uint64_t last_log_time = 0;
+  const uint64_t LOG_INTERVAL = 2e9;
+
   const bool show_missing = (nanos - first_nanos) > 8e9;
 
   bool _valid = true;
@@ -227,14 +230,22 @@ void CANParser::UpdateValid(uint64_t nanos) {
     const bool timed_out = (nanos - state.last_seen_nanos) > state.check_threshold;
     if (state.check_threshold > 0 && (missing || timed_out)) {
       if (show_missing && !bus_timeout) {
+        char str[256];
+        const char* parser_result_params = "/data/params/d/CanParserResult";
         if (missing) {
-            if (error_print_count++ < 20) {
-                LOGE_100("0x%X '%s' NOT SEEN", state.address, state.name.c_str());
-            }
+          if ((nanos - last_log_time) > LOG_INTERVAL) {
+            last_log_time = nanos;
+            LOGE_100("0x%X '%s' NOT SEEN", state.address, state.name.c_str());
+            sprintf(str, "echo -n \"0x%X '%s' NOT SEEN\" > %s", state.address, state.name.c_str(), parser_result_params);
+            system(str);
+          }
         } else if (timed_out) {
-            if (error_print_count++ < 20) {
-                LOGE_100("0x%X '%s' TIMED OUT", state.address, state.name.c_str());
-            }
+          if ((nanos - last_log_time) > LOG_INTERVAL) {
+            last_log_time = nanos;
+            LOGE_100("0x%X '%s' TIMED OUT", state.address, state.name.c_str());
+            sprintf(str, "echo -n \"0x%X '%s' TIMED OUT\" > %s", state.address, state.name.c_str(), parser_result_params);
+            system(str);
+          }
         }
       }
       _valid = false;

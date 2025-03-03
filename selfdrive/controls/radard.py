@@ -84,7 +84,8 @@ class Track:
     if self.cnt > 0:
       self.kf.update(self.vLead)
       alpha = 0.15
-      dv = 0.0 if abs(self.vLead) < 0.5 else self.vLead - self.vLead_last
+      #dv = 0.0 if abs(self.vLead) < 0.5 else self.vLead - self.vLead_last
+      dv = self.vLead - self.vLead_last
       self.aLead = self.aLead * (1 - alpha) + dv / DT_MDL * alpha
 
     self.vLeadK = float(self.kf.x[SPEED][0])
@@ -407,6 +408,7 @@ class RadarD:
     self.kalman_params = KalmanParams(DT_MDL)
 
     self.v_ego = 0.0
+    print("###RadarD.. : delay = ", delay, int(round(delay / DT_MDL))+1)
     self.v_ego_hist = deque([0.0], maxlen=int(round(delay / DT_MDL))+1)
     self.last_v_ego_frame = -1
 
@@ -421,6 +423,7 @@ class RadarD:
   def update(self, sm: messaging.SubMaster, rr: car.RadarData):
     self.ready = sm.seen['modelV2']
     self.current_time = 1e-9*max(sm.logMonoTime.values())
+
 
     leads_v3 = sm['modelV2'].leadsV3
     if sm.recv_frame['carState'] != self.last_v_ego_frame:

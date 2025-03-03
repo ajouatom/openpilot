@@ -426,6 +426,15 @@ def create_adrv_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
   values = {
   }
   if CP.flags & HyundaiFlags.CAMERA_SCC.value:
+    if frame % 2 == 0:
+      if CS.adrv_info_160 is not None:
+        values = CS.adrv_info_160
+        values["NEW_SIGNAL_1"] = 0 # steer_temp관련없음, 계기판에러
+        values["SET_ME_9"] = 17 # steer_temp관련없음, 계기판에러
+        values["SET_ME_2"] = 0   #커멘트해도 steer_temp에러남, 2값은 콤마에서 찾은거니...
+        values["DATA102"] = 0  # steer_temp관련없음
+        ret.append(packer.make_can_msg("ADRV_0x160", CAN.ECAN, values))
+
     if frame % 5 == 0:
       if CP.extFlags & HyundaiExtFlags.CANFD_161.value:
         if CS.adrv_info_161 is not None:
@@ -507,14 +516,6 @@ def create_adrv_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         values["HDA_MODE1"] = 8
         values["HDA_MODE2"] = 1
         ret.append(packer.make_can_msg("ADRV_0x1ea", CAN.ECAN, values))
-
-      if CS.adrv_info_160 is not None:
-        values = CS.adrv_info_160
-        values["NEW_SIGNAL_1"] = 0 # steer_temp관련없음, 계기판에러
-        values["SET_ME_9"] = 17 # steer_temp관련없음, 계기판에러
-        values["SET_ME_2"] = 0   #커멘트해도 steer_temp에러남, 2값은 콤마에서 찾은거니...
-        values["DATA102"] = 0  # steer_temp관련없음
-        ret.append(packer.make_can_msg("ADRV_0x160", CAN.ECAN, values))
 
       if CS.adrv_info_162 is not None:
         values = CS.adrv_info_162

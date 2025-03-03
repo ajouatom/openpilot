@@ -28,6 +28,62 @@ except ImportError:
 
 NetworkType = log.DeviceState.NetworkType
 
+nav_type_mapping = {
+  12: ("turn", "left", 1),
+  16: ("turn", "sharp left", 1),
+  1000: ("turn", "slight left", 1),
+  1001: ("turn", "slight right", 2),
+  1002: ("fork", "slight left", 3),
+  1003: ("fork", "slight right", 4),
+  1006: ("off ramp", "left", 3),
+  1007: ("off ramp", "right", 4),
+  13: ("turn", "right", 2),
+  19: ("turn", "sharp right", 2),
+  102: ("off ramp", "slight left", 3),
+  105: ("off ramp", "slight left", 3),
+  112: ("off ramp", "slight left", 3),
+  115: ("off ramp", "slight left", 3),
+  101: ("off ramp", "slight right", 4),
+  104: ("off ramp", "slight right", 4),
+  111: ("off ramp", "slight right", 4),
+  114: ("off ramp", "slight right", 4),
+  7: ("fork", "left", 3),
+  44: ("fork", "left", 3),
+  17: ("fork", "left", 3),
+  75: ("fork", "left", 3),
+  76: ("fork", "left", 3),
+  118: ("fork", "left", 3),
+  6: ("fork", "right", 4),
+  43: ("fork", "right", 4),
+  73: ("fork", "right", 4),
+  74: ("fork", "right", 4),
+  123: ("fork", "right", 4),
+  124: ("fork", "right", 4),
+  117: ("fork", "right", 4),
+  131: ("rotary", "slight right", 5),
+  132: ("rotary", "slight right", 5),
+  140: ("rotary", "slight left", 5),
+  141: ("rotary", "slight left", 5),
+  133: ("rotary", "right", 5),
+  134: ("rotary", "sharp right", 5),
+  135: ("rotary", "sharp right", 5),
+  136: ("rotary", "sharp left", 5),
+  137: ("rotary", "sharp left", 5),
+  138: ("rotary", "sharp left", 5),
+  139: ("rotary", "left", 5),
+  142: ("rotary", "straight", 5),
+  14: ("turn", "uturn", 5),
+  201: ("arrive", "straight", 5),
+  51: ("notification", "straight", None),
+  52: ("notification", "straight", None),
+  53: ("notification", "straight", None),
+  54: ("notification", "straight", None),
+  55: ("notification", "straight", None),
+  153: ("", "", 6),  #TG
+  154: ("", "", 6),  #TG
+  249: ("", "", 6)   #TG
+}
+
 ################ CarrotNavi
 ## 국가법령정보센터: 도로설계기준
 #V_CURVE_LOOKUP_BP = [0., 1./800., 1./670., 1./560., 1./440., 1./360., 1./265., 1./190., 1./135., 1./85., 1./55., 1./30., 1./15.]
@@ -182,7 +238,7 @@ class CarrotMan:
     print("************************************************CarrotMan init************************************************")
     self.params = Params()
     self.params_memory = Params("/dev/shm/params")
-    self.sm = messaging.SubMaster(['deviceState', 'carState', 'controlsState', 'longitudinalPlan', 'modelV2', 'selfdriveState', 'carControl', 'navRouteNavd', 'liveLocationKalman'])
+    self.sm = messaging.SubMaster(['deviceState', 'carState', 'controlsState', 'longitudinalPlan', 'modelV2', 'selfdriveState', 'carControl', 'navRouteNavd', 'liveLocationKalman', 'navInstruction'])
     self.pm = messaging.PubMaster(['carrotMan', "navRoute", "navInstructionCarrot"])
 
     self.carrot_serv = CarrotServ()
@@ -295,6 +351,7 @@ class CarrotMan:
             if remote_addr is None:
               print(f"Broadcasting: {self.broadcast_ip}:{msg}")
               if not self.navd_active:
+                #print("clear path_points: navd_active: ", self.navd_active)
                 self.navi_points = []
                 self.navi_points_active = False
 
@@ -314,15 +371,21 @@ class CarrotMan:
 
   def carrot_navi_route(self):
 
+    if self.carrot_serv.active_carrot > 1:
+      if self.navd_active:
+        self.navd_active = False
+        self.params.remove("NavDestination")
     if not self.navi_points_active or not SHAPELY_AVAILABLE or (self.carrot_serv.active_carrot <= 1 and not self.navd_active):
       #print(f"navi_points_active: {self.navi_points_active}, active_carrot: {self.carrot_serv.active_carrot}")
-      #haversine_cache.clear()
-      #curvature_cache.clear()
-      self.navi_points = []
-      self.navi_points_active = False
-      if self.active_carrot_last > 1:
-        #self.params.remove("NavDestination")
-        pass
+      if self.navi_points_active:
+        print("navi_points_active: ", self.navi_points_active, "active_carrot: ", self.carrot_serv.active_carrot, "navd_active: ", self.navd_active)
+        #haversine_cache.clear()
+        #curvature_cache.clear()
+        self.navi_points = []
+        self.navi_points_active = False
+        if self.active_carrot_last > 1:
+          #self.params.remove("NavDestination")
+          pass
       self.active_carrot_last = self.carrot_serv.active_carrot
       return [],[],300
 
@@ -1364,9 +1427,29 @@ class CarrotServ:
 
 
     return atc_desired, atc_type, atc_speed, atc_dist
+  
+  def update_nav_instruction(self, sm):
+    if sm.alive['navInstruction'] and sm.valid['navInstruction']:
+      msg_nav = sm['navInstruction']
 
+      self.nGoPosDist = int(msg_nav.distanceRemaining)
+      self.nGoPosTime = int(msg_nav.timeRemaining)
+      self.nRoadLimitSpeed = max(30, int(msg_nav.speedLimit * 3.6))
+      self.xDistToTurn = int(msg_nav.maneuverDistance)
+      self.szTBTMainText = msg_nav.maneuverPrimaryText
+      self.xTurnInfo = -1
+      for key, value in nav_type_mapping.items():
+        if value[0] == msg_nav.maneuverType and value[1] == msg_nav.maneuverModifier:
+          self.xTurnInfo = value[2]
+          break
+
+      self.debugText = f"{msg_nav.maneuverType},{msg_nav.maneuverModifier} "
+      #print(msg_nav)
+      #print(f"navInstruction: {self.xTurnInfo}, {self.xDistToTurn}, {self.szTBTMainText}")
+    
   def update_navi(self, remote_ip, sm, pm, vturn_speed, coords, distances, route_speed):
 
+    self.debugText = ""
     self.update_params()
     if sm.alive['carState'] and sm.alive['selfdriveState']:
       CS = sm['carState']
@@ -1399,6 +1482,7 @@ class CarrotServ:
       self.nTBTTurnType = self.nTBTTurnTypeNext = -1
       self.roadcate = 8
       self.nGoPosDist = 0
+      self.update_nav_instruction(sm)
 
     if self.xSpdType < 0 or self.xSpdDist <= 0:
       self.xSpdType = -1
@@ -1486,7 +1570,7 @@ class CarrotServ:
         source = "gas"
         desired_speed = self.gas_override_speed
 
-      self.debugText = f"route={route_speed:.1f}"#f"desired={desired_speed:.1f},{source},g={self.gas_override_speed:.0f}"
+      self.debugText += f"route={route_speed:.1f}"#f"desired={desired_speed:.1f},{source},g={self.gas_override_speed:.0f}"
 
     left_spd_sec = 100
     left_tbt_sec = 100
@@ -1561,101 +1645,52 @@ class CarrotServ:
     msg.carrotMan.naviPaths = coords_str
 
     msg.carrotMan.leftSec = int(self.carrot_left_sec)
-
     pm.send('carrotMan', msg)
 
-
-    nav_type_mapping = {
-      12: ("turn", "left", 1),
-      16: ("turn", "sharp left", 1),
-      13: ("turn", "right", 2),
-      19: ("turn", "sharp right", 2),
-      102: ("off ramp", "slight left", 3),
-      105: ("off ramp", "slight left", 3),
-      112: ("off ramp", "slight left", 3),
-      115: ("off ramp", "slight left", 3),
-      101: ("off ramp", "slight right", 4),
-      104: ("off ramp", "slight right", 4),
-      111: ("off ramp", "slight right", 4),
-      114: ("off ramp", "slight right", 4),
-      7: ("fork", "left", 3),
-      44: ("fork", "left", 3),
-      17: ("fork", "left", 3),
-      75: ("fork", "left", 3),
-      76: ("fork", "left", 3),
-      118: ("fork", "left", 3),
-      6: ("fork", "right", 4),
-      43: ("fork", "right", 4),
-      73: ("fork", "right", 4),
-      74: ("fork", "right", 4),
-      123: ("fork", "right", 4),
-      124: ("fork", "right", 4),
-      117: ("fork", "right", 4),
-      131: ("rotary", "slight right", 5),
-      132: ("rotary", "slight right", 5),
-      140: ("rotary", "slight left", 5),
-      141: ("rotary", "slight left", 5),
-      133: ("rotary", "right", 5),
-      134: ("rotary", "sharp right", 5),
-      135: ("rotary", "sharp right", 5),
-      136: ("rotary", "sharp left", 5),
-      137: ("rotary", "sharp left", 5),
-      138: ("rotary", "sharp left", 5),
-      139: ("rotary", "left", 5),
-      142: ("rotary", "straight", 5),
-      14: ("turn", "uturn", 5),
-      201: ("arrive", "straight", 5),
-      51: ("notification", "straight", None),
-      52: ("notification", "straight", None),
-      53: ("notification", "straight", None),
-      54: ("notification", "straight", None),
-      55: ("notification", "straight", None),
-      153: ("", "", 6),  #TG
-      154: ("", "", 6),  #TG
-      249: ("", "", 6)   #TG
-    }
-
-    msg = messaging.new_message('navInstructionCarrot')
-    msg.valid = True
+    inst = messaging.new_message('navInstructionCarrot')
+    if self.active_carrot > 1:
+      inst.valid = True
     
-    instruction = msg.navInstructionCarrot
-    instruction.distanceRemaining = self.nGoPosDist
-    instruction.timeRemaining = self.nGoPosTime
-    instruction.speedLimit = self.nRoadLimitSpeed / 3.6 if self.nRoadLimitSpeed > 0 else 0
-    instruction.maneuverDistance = float(self.nTBTDist)
-    instruction.maneuverSecondaryText = self.szNearDirName
-    if self.szFarDirName and len(self.szFarDirName):
-      instruction.maneuverSecondaryText += "[{}]".format(self.szFarDirName)
-    instruction.maneuverPrimaryText = self.szTBTMainText
-    instruction.timeRemainingTypical = self.nGoPosTime
+      instruction = inst.navInstructionCarrot
+      instruction.distanceRemaining = self.nGoPosDist
+      instruction.timeRemaining = self.nGoPosTime
+      instruction.speedLimit = self.nRoadLimitSpeed / 3.6 if self.nRoadLimitSpeed > 0 else 0
+      instruction.maneuverDistance = float(self.nTBTDist)
+      instruction.maneuverSecondaryText = self.szNearDirName
+      if self.szFarDirName and len(self.szFarDirName):
+        instruction.maneuverSecondaryText += "[{}]".format(self.szFarDirName)
+      instruction.maneuverPrimaryText = self.szTBTMainText
+      instruction.timeRemainingTypical = self.nGoPosTime
 
-    navType, navModifier, xTurnInfo1 = "invalid", "", -1
-    if self.nTBTTurnType in nav_type_mapping:
-      navType, navModifier, xTurnInfo1 = nav_type_mapping[self.nTBTTurnType]
-    navTypeNext, navModifierNext, xTurnInfoNext = "invalid", "", -1
-    if self.nTBTTurnTypeNext in nav_type_mapping:
-      navTypeNext, navModifierNext, xTurnInfoNext = nav_type_mapping[self.nTBTTurnTypeNext]
+      navType, navModifier, xTurnInfo1 = "invalid", "", -1
+      if self.nTBTTurnType in nav_type_mapping:
+        navType, navModifier, xTurnInfo1 = nav_type_mapping[self.nTBTTurnType]
+      navTypeNext, navModifierNext, xTurnInfoNext = "invalid", "", -1
+      if self.nTBTTurnTypeNext in nav_type_mapping:
+        navTypeNext, navModifierNext, xTurnInfoNext = nav_type_mapping[self.nTBTTurnTypeNext]
       
-    instruction.maneuverType = navType
-    instruction.maneuverModifier = navModifier
+      instruction.maneuverType = navType
+      instruction.maneuverModifier = navModifier
 
-    maneuvers = []
-    if self.nTBTTurnType >= 0:
-      maneuver = {}
-      maneuver['distance'] = float(self.xDistToTurn)
-      maneuver['type'] = navType
-      maneuver['modifier'] = navModifier
-      maneuvers.append(maneuver)
-      if self.nTBTDistNext >= self.nTBTDist:
+      maneuvers = []
+      if self.nTBTTurnType >= 0:
         maneuver = {}
-        maneuver['distance'] = float(self.nTBTDistNext)
-        maneuver['type'] = navTypeNext
-        maneuver['modifier'] = navModifierNext
+        maneuver['distance'] = float(self.xDistToTurn)
+        maneuver['type'] = navType
+        maneuver['modifier'] = navModifier
         maneuvers.append(maneuver)
+        if self.nTBTDistNext >= self.nTBTDist:
+          maneuver = {}
+          maneuver['distance'] = float(self.nTBTDistNext)
+          maneuver['type'] = navTypeNext
+          maneuver['modifier'] = navModifierNext
+          maneuvers.append(maneuver)
 
-    instruction.allManeuvers = maneuvers
+      instruction.allManeuvers = maneuvers
+    elif sm.alive['navInstruction'] and sm.valid['navInstruction']:
+      inst.navInstructionCarrot = sm['navInstruction']
 
-    pm.send('navInstructionCarrot', msg)
+    pm.send('navInstructionCarrot', inst)
 
   def _update_system_time(self, epoch_time_remote, timezone_remote):
     epoch_time = int(time.time())

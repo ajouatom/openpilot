@@ -533,7 +533,7 @@ class CarState(CarStateBase):
         cam_messages += [
           ("ADRV_0x200", 20),
           ("ADRV_0x1ea", 20),
-          ("ADRV_0x160", 20),
+          ("ADRV_0x160", 50),
         ]
       if CP.extFlags & HyundaiExtFlags.CANFD_161:
         cam_messages += [
