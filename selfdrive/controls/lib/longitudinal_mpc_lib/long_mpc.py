@@ -323,6 +323,7 @@ class LongitudinalMpc:
     a_lead_traj = np.zeros_like(T_IDXS)
     a_lead_traj[0] = a_lead 
 
+    
     for i in range(1, len(T_IDXS)):
         dt = T_IDXS[i] - T_IDXS[i - 1]
         a_lead_traj[i] = (
@@ -435,7 +436,7 @@ class LongitudinalMpc:
       x[:], v[:], a[:], j[:] = 0.0, 0.0, 0.0, 0.0
 
       safe_distance = lead_0_obstacle[0] - get_safe_obstacle_distance(v_ego, comfort_brake, stop_distance)
-      lead_danger_factor = np.interp(safe_distance, [-50.0, 0.0], [2.0, LEAD_DANGER_FACTOR])
+      lead_danger_factor = np.interp(safe_distance, [-30.0, 0.0], [1.0, LEAD_DANGER_FACTOR])
       self.lead_danger_factor = self.lead_danger_factor * 0.9 + lead_danger_factor * 0.1
       self.params[:,5] = self.lead_danger_factor
       

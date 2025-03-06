@@ -960,6 +960,7 @@ class CarrotServ:
 
     self.diff_angle_count = 0
     self.last_calculate_gps_time = 0
+    self.last_update_gps_time = 0
     self.bearing_offset = 0.0
     self.bearing_measured = 0.0
     self.bearing = 0.0
@@ -1308,7 +1309,7 @@ class CarrotServ:
     #print(f"gps_valid = {self.gps_valid}, bearing = {bearing:.1f}, pos = {location.positionGeodetic.value[0]:.6f}, {location.positionGeodetic.value[1]:.6f}")
     if self.gps_valid:    # liveLocationKalman일때는 정확하나, livePose일때는 불안정함.
       self.bearing_offset = 0.0
-      if self.active_carrot <= 1:
+      if time.monotonic() - self.last_update_gps_time > 2:
         self.vpPosPointLatNavi = location.positionGeodetic.value[0]
         self.vpPosPointLonNavi = location.positionGeodetic.value[1]
         self.last_calculate_gps_time = sm.recv_time[llk]
@@ -1748,6 +1749,7 @@ class CarrotServ:
     if "carrotIndex" in json:
       self.carrotIndex = int(json.get("carrotIndex"))
 
+    print(json)
     if self.carrotIndex % 60 == 0 and "epochTime" in json:
       # op는 ntp를 사용하기때문에... 필요없는 루틴으로 보임.
       timezone_remote = json.get("timezone", "Asia/Seoul")
@@ -1827,10 +1829,10 @@ class CarrotServ:
 
       self.vpPosPointLatNavi = float(json.get("vpPosPointLat", self.vpPosPointLatNavi))
       self.vpPosPointLonNavi = float(json.get("vpPosPointLon", self.vpPosPointLonNavi))
-      self.last_calculate_gps_time = time.monotonic()
+      self.last_update_gps_time = self.last_calculate_gps_time = time.monotonic()
+      self.nPosAngle = float(json.get("nPosAngle", self.nPosAngle))
 
       self.nPosSpeed = float(json.get("nPosSpeed", self.nPosSpeed))
-      self.nPosAngle = float(json.get("nPosAngle", self.nPosAngle))
       self._update_tbt()
       self._update_sdi()
       print(
@@ -1839,6 +1841,12 @@ class CarrotServ:
         f"next = {self.nTBTTurnTypeNext}, {self.nTBTDistNext}"
       )
       #print(json)
+    elif "latitude" in json:  
+      self.vpPosPointLatNavi = float(json.get("latitude", self.vpPosPointLatNavi))
+      self.vpPosPointLonNavi = float(json.get("longitude", self.vpPosPointLonNavi))
+      self.nPosAngle = float(json.get("heading", self.nPosAngle))
+      self.last_update_gps_time = self.last_calculate_gps_time = time.monotonic()
+  
     else:
       #print(json)
       pass
