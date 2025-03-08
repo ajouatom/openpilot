@@ -190,6 +190,7 @@ class VCruiseCarrot:
     self.nRoadLimitSpeed = 30
     self.desiredSpeed = 250
     self.road_limit_kph = 30
+    self.nRoadLimitSpeed_last = 30
 
     self.carrot_cmd_index_last = 0
     self.carrot_cmd_index = 0
@@ -549,11 +550,12 @@ class VCruiseCarrot:
 
     if self.v_lead_kph + 5 > v_cruise_kph and v_cruise_kph < road_limit_kph and self.d_rel < 60:
       v_cruise_kph = min(v_cruise_kph + 5, road_limit_kph)
-    elif road_limit_kph < self.road_limit_kph and self.autoRoadSpeedAdjust > 0:
-      new_road_limit_kph = road_limit_kph * self.autoRoadSpeedAdjust + self.road_limit_kph * (1 - self.autoRoadSpeedAdjust)
+    elif self.nRoadLimitSpeed < self.nRoadLImitSpeed_last and self.autoRoadSpeedAdjust > 0:
+      new_road_limit_kph = self.nRoadLimitSpeed_last * self.autoRoadSpeedAdjust + self.nRoadLimitSpeed * (1 - self.autoRoadSpeedAdjust)
+      self._add_log(f"AutoSpeed change {v_cruise_kph} -> {new_road_limit_kph}")
       v_cruise_kph = min(v_cruise_kph, new_road_limit_kph)
-      self._add_log(f"AutoSpeed change {self.road_limit_kph} -> {new_road_limit_kph}")
     self.road_limit_kph = road_limit_kph
+    self.nRoadLimitSpeed_last = self.nRoadLimitSpeed
     return v_cruise_kph
 
   def _cruise_control(self, enable, cancel_timer, reason):
