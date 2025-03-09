@@ -490,7 +490,7 @@ def carinfo():
                     "Running Status": "Moving" if is_car_started else "Stopped",
                     "Cruise System": "Enabled" if is_car_engaged else "Disabled",
                     "Current Speed": f"{CS.vEgo * 3.6:.1f} km/h",
-                    "Engine RPM": f"{CS.engineRPM:.0f} RPM" if hasattr(CS, 'engineRPM') and CS.engineRPM > 0 else "Unknown",
+                    "Engine RPM": f"{CS.engineRpm:.0f} RPM" if hasattr(CS, 'engineRpm') and CS.engineRpm > 0 else "Unknown",
                     "Gear Position": str(CS.gearShifter) if hasattr(CS, 'gearShifter') else "Unknown"
                 },
                 "Basic Information": {
