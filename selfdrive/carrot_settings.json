@@ -744,6 +744,19 @@
     },
     {
       "group": "시작",
+      "name": "HDPuse",
+      "title": "HDP 사용(CCNC)",
+      "descr": "1:APN사용시, 2:항상",
+      "egroup": "START",
+      "etitle": "Use HDP(CCNC)",
+      "edescr": "1:While using APN, 2:Always",
+      "min": 0,
+      "max": 2,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "시작",
       "name": "MapboxStyle",
       "title": "맵박스 스타일",
       "descr": "",
