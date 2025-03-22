@@ -444,7 +444,15 @@ def create_adrv_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           cruise_enabled = CC.enabled
           lat_active = CC.latActive
           nav_active = hud_control.activeCarrot > 1
-          hdp_active = cruise_enabled and nav_active
+
+        
+          hdp_use = int(Params().get("HDPuse"))
+
+          hdp_active = False
+          if hdp_use == 1:
+              hdp_active = cruise_enabled and nav_active
+          elif hdp_use == 2:
+              hdp_active = cruise_enabled
 
           values = CS.adrv_info_161
           #print("adrv_info_161 = ", CS.adrv_info_161)
