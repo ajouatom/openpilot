@@ -153,6 +153,7 @@ def get_default_params():
     ("MaxTimeOffroadMin", "60"),
     ("DisableDM", "0"),
     ("RecordRoadCam", "0"),
+    ("HDPuse", "1"),
     ("CruiseOnDist", "400"),
     ("HotspotOnBoot", "0"),
     ("CustomSR", "0"),
