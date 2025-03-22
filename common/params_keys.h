@@ -153,6 +153,7 @@ inline static std::unordered_map<std::string, uint32_t> keys = {
     {"ShowPathColorLane", PERSISTENT},
     {"ShowPlotMode", PERSISTENT},
     {"RecordRoadCam", PERSISTENT },
+    {"HDPuse", PERSISTENT },
 
     {"AutoCruiseControl", PERSISTENT},
     {"CruiseEcoControl", PERSISTENT},
