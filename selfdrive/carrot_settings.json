@@ -752,7 +752,7 @@
       "edescr": "1:While using APN, 2:Always",
       "min": 0,
       "max": 2,
-      "default": 0,
+      "default": 1,
       "unit": 1
     },
     {
