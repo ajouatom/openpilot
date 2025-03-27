@@ -43,6 +43,8 @@ from openpilot.opendbc_repo.opendbc.car.values import PLATFORMS
 
 # Initialize messaging
 sm = messaging.SubMaster(['carState'])
+tempseg = -1
+temproute = "None"
 
 app = Flask(__name__)
 
@@ -213,21 +215,24 @@ def check_folder_exists():
 
 @app.route("/footage/full/upload_carrot/<route>/<segment>", methods=['POST'])
 def upload_carrot(route, segment):
-    local_folder = os.path.join(Paths.log_root(), f"{route}--{segment}")
-    
-    if not os.path.isdir(local_folder):
-        return abort(404, "Folder not found")
-
-    car_selected = Params().get("CarName", "none").decode('utf-8')
-    dongle_id = Params().get("DongleId", "unknown").decode('utf-8')
-    directory = f"routes {car_selected} {dongle_id}"
-
-    success = upload_folder_to_ftp(local_folder, directory, f"{route}--{segment}")
-
-    if success:
-        return "All files uploaded successfully", 200
+    global tempseg
+    global temproute
+    if tempseg != segment or temproute != route:
+        local_folder = os.path.join(Paths.log_root(), f"{route}--{segment}")
+        if not os.path.isdir(local_folder):
+            abort(404, "Folder not found")
+        car_selected = Params().get("CarName", "none").decode('utf-8')
+        dongle_id = Params().get("DongleId", "unknown").decode('utf-8')
+        directory = f"routes {car_selected} {dongle_id}"
+        success = upload_folder_to_ftp(local_folder, directory, f"{route}--{segment}")
+        if success:
+            temproute = route
+            tempseg = segment
+            return "All files uploaded successfully", 200
+        else:
+            return "Failed to upload files", 500
     else:
-        return "Failed to upload files", 500
+        return "Segment already uploaded", 200
         
 @app.template_filter('datetimeformat')
 def datetimeformat_filter(filename):
