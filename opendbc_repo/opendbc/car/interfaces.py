@@ -104,26 +104,6 @@ class CarInterfaceBase(ABC):
     self.CC: CarControllerBase = CarController(dbc_names, CP)
 
     Params().put('LongitudinalPersonalityMax', "3")
-    eps_firmware = str(next((fw.fwVersion for fw in CP.carFw if fw.ecu == "eps"), ""))
-
-    comma_nnff_supported = self.check_comma_nn_ff_support(CP.carFingerprint)
-    nnff_supported = self.initialize_lat_torque_nn(CP.carFingerprint, eps_firmware)
-
-    self.use_nnff = not comma_nnff_supported and nnff_supported and Params().get_bool("NNFF")
-    self.use_nnff_lite = not self.use_nnff and Params().get_bool("NNFFLite")
-    
-  def get_ff_nn(self, x):
-    return self.lat_torque_nn_model.evaluate(x)
-
-  def check_comma_nn_ff_support(self, car):
-    with open(NEURAL_PARAMS_PATH, 'r') as file:
-      data = json.load(file)
-    return car in data
-
-  def initialize_lat_torque_nn(self, car, eps_firmware) -> bool:
-    self.lat_torque_nn_model = get_nn_model(car, eps_firmware)
-    return self.lat_torque_nn_model is not None
-    
 
   def apply(self, c: structs.CarControl, now_nanos: int | None = None) -> tuple[structs.CarControl.Actuators, list[CanData]]:
     if now_nanos is None:
