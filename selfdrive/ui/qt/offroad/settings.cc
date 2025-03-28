@@ -309,6 +309,10 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   });
   addItem(retrainingBtn);
 
+  auto statusCalibBtn = new ButtonControl(tr("Calibration Status"), tr("SHOW"), "");
+  connect(statusCalibBtn, &ButtonControl::showDescriptionEvent, this, &DevicePanel::updateCalibDescription);
+  addItem(statusCalibBtn);
+  
   if (Hardware::TICI()) {
     auto regulatoryBtn = new ButtonControl(tr("Regulatory"), tr("VIEW"), "");
     connect(regulatoryBtn, &ButtonControl::clicked, [=]() {
@@ -341,6 +345,7 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
       }
     }
     translateBtn->setEnabled(true);
+    statusCalibBtn->setEnabled(true);
   });
 
 }
