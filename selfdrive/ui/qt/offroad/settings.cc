@@ -355,6 +355,7 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
       }
     }
     resetCalibBtn->setEnabled(true);
+    translateBtn->setEnabled(true);
   });
 
 }
