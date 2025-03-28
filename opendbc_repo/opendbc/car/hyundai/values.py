@@ -24,8 +24,8 @@ class CarControllerParams:
   # 250 can at least achieve 4 m/s^2, 80 corresponds to ~2.5 m/s^2
   ANGLE_MAX_TORQUE = 200  # The maximum amount of torque that will be allowed
   ANGLE_MIN_TORQUE = 25  # equivalent to ~0.8 m/s^2 of torque (based on ANGLE_MAX_TORQUE) when overriding
-  ANGLE_TORQUE_UP_RATE = 2  # Indicates how fast the torque ramps up after user intervention.
-  ANGLE_TORQUE_DOWN_RATE = 4  # Indicates how fast the torque ramps down during user intervention (handing off).
+  ANGLE_TORQUE_UP_RATE = 1 #2  # Indicates how fast the torque ramps up after user intervention.
+  ANGLE_TORQUE_DOWN_RATE = 3 #4  # Indicates how fast the torque ramps down during user intervention (handing off).
   
   def __init__(self, CP):
     self.STEER_DELTA_UP = 3
