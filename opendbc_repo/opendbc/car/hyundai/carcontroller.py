@@ -180,17 +180,21 @@ class CarController(CarControllerBase):
                                                                                       hud_control)
 
     active_speed_decel = hud_control.activeCarrot == 3 # 3: Speed Decel
-    if active_speed_decel and self.speedCameraHapticEndFrame < 0: # 과속카메라 감속시작
+    if active_speed_decel and self.speedCameraHapticEndFrame < 0: # 과속카메라 감속시작      
       self.speedCameraHapticEndFrame = self.frame + (8.0 / DT_CTRL)  #8초간 켜줌.
     elif not active_speed_decel:
       self.speedCameraHapticEndFrame = -1
 
-    if self.frame < self.speedCameraHapticEndFrame and self.hapticFeedbackWhenSpeedCamera>0:
-      t = (self.frame - self.speedCameraHapticStartFrame) * DT_CTRL
+    if 0 <= self.speedCameraHapticEndFrame - self.frame < int(8.0 / DT_CTRL) and self.hapticFeedbackWhenSpeedCamera > 0:
+      t = (self.frame - (self.speedCameraHapticEndFrame - int(8.0 / DT_CTRL))) * DT_CTRL
+
       for start, end in vibrate_intervals:
         if start <= t < end:
           left_lane_warning = right_lane_warning = self.hapticFeedbackWhenSpeedCamera
           break
+
+    if self.frame >= self.speedCameraHapticEndFrame:
+      self.speedCameraHapticEndFrame = -1
 
     if self.frame % self.blinking_frame == 0:
       self.blinking_signal = True
