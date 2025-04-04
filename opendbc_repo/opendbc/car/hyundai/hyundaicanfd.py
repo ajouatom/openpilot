@@ -70,9 +70,9 @@ def create_steering_messages_camera_scc(packer, CP, CAN, CC, lat_active, apply_s
   ret = []
   if angle_control:
     values = CS.lfa_alt_info
-    values["LKAS_ANGLE_ACTIVE"] = 2 if CC.latActive else 1,
-    values["LKAS_ANGLE_CMD"] = -apply_angle,
-    values["LKAS_ANGLE_MAX_TORQUE"] = max_torque if CC.latActive else 0,
+    values["LKAS_ANGLE_ACTIVE"] = 2 if CC.latActive else 1
+    values["LKAS_ANGLE_CMD"] = -apply_angle
+    values["LKAS_ANGLE_MAX_TORQUE"] = max_torque if CC.latActive else 0
     ret.append(packer.make_can_msg("LFA_ALT", CAN.ECAN, values))
 
     values = CS.lfa_info
@@ -215,8 +215,8 @@ def create_acc_cancel(packer, CP, CAN, cruise_info_copy):
 
 def create_lfahda_cluster(packer, CS, CAN, enabled):
   values = CS.lfahda_cluster_info
-  values["HDA_ICON"] = 1 if enabled else 0,
-  values["LFA_ICON"] = 2 if enabled else 0,
+  values["HDA_ICON"] = 1 if enabled else 0
+  values["LFA_ICON"] = 2 if enabled else 0
   return packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, values)
 
 
