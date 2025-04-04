@@ -139,7 +139,7 @@ class CarController(CarControllerBase):
     else:
       target_torque = np.interp(abs(actuators.curvature), [0.0, 0.003, 0.006], [0.5 * self.angle_max_torque, 0.75 * self.angle_max_torque, self.angle_max_torque])
 
-      max_steering_tq = self.params.STEER_DRIVER_ALLOWANCE * 0.7
+      max_steering_tq = self.params.STEER_DRIVER_ALLOWANCE * 0.5
       rate_ratio = max(0, max_steering_tq - abs(CS.out.steeringTorque)) / max_steering_tq
       rate_up = self.params.ANGLE_TORQUE_UP_RATE * rate_ratio
       rate_down = self.params.ANGLE_TORQUE_DOWN_RATE * rate_ratio
