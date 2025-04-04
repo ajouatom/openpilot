@@ -267,7 +267,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
   values["CRUISE_STANDSTILL"] = 1 if stopping and CS.out.aEgo > -0.1 else 0
 
   values["NEW_SIGNAL_2"] = 0    # 이것이 켜지면 가속을 안하는듯함.
-  #values["NEW_SIGNAL_4"] = 0    # signal2와 조합하여.. 앞차와 깜박이등이 인식되는것 같음..
+  values["NEW_SIGNAL_4"] = 7  
   values["NEW_SIGNAL_1"] = 0    # 눈이 묻어 레이더오류시... 2가 됨. 이때 가속을 안함...
 
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
