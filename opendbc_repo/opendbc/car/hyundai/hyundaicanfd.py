@@ -213,11 +213,10 @@ def create_acc_cancel(packer, CP, CAN, cruise_info_copy):
   })
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
 
-def create_lfahda_cluster(packer, CAN, enabled):
-  values = {
-    "HDA_ICON": 1 if enabled else 0,
-    "LFA_ICON": 2 if enabled else 0,
-  }
+def create_lfahda_cluster(packer, CS, CAN, enabled):
+  values = CS.lfahda_cluster_info
+  values["HDA_ICON"] = 1 if enabled else 0,
+  values["LFA_ICON"] = 2 if enabled else 0,
   return packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, values)
 
 
