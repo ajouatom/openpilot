@@ -58,9 +58,9 @@ class CarState(CarStateBase):
     self.is_metric = False
     self.buttons_counter = 0
 
-    self.cruise_info = None
-    self.lfa_info = None
-    self.lfa_alt_info = None
+    self.cruise_info = {}
+    self.lfa_info = {}
+    self.lfa_alt_info = {}
     self.adrv_info_161 = None
     self.adrv_info_200 = None
     self.adrv_info_1ea = None
