@@ -20,6 +20,15 @@ MAX_ANGLE = 85
 MAX_ANGLE_FRAMES = 89
 MAX_ANGLE_CONSECUTIVE_FRAMES = 2
 
+vibrate_intervals = [
+  (0.0, 0.5),
+  (1.0, 1.5),
+  (2.5, 3.0),
+  (3.5, 4.0),
+  (5.0, 5.5),
+  (6.0, 6.5),
+  (7.5, 8.0),
+]
 
 def process_hud_alert(enabled, fingerprint, hud_control):
   sys_warning = (hud_control.visualAlert in (VisualAlert.steerRequired, VisualAlert.ldw))
@@ -178,11 +187,11 @@ class CarController(CarControllerBase):
       self.speedCameraHapticEndFrame = -1
 
     if self.frame < self.speedCameraHapticEndFrame and self.hapticFeedbackWhenSpeedCamera>0:
-      haptic_stop = (self.speedCameraHapticEndFrame - (5.0/DT_CTRL)) < self.frame < (self.speedCameraHapticEndFrame - (3.0/DT_CTRL))
-      if not haptic_stop:
-         left_lane_warning = right_lane_warning = self.hapticFeedbackWhenSpeedCamera
-      if self.speedCameraHapticEndFrame < self.frame:
-        self.speedCameraHapticEndFrame = -1
+      t = (self.frame - self.speedCameraHapticStartFrame) * DT_CTRL
+      for start, end in vibrate_intervals:
+        if start <= t < end:
+          left_lane_warning = right_lane_warning = self.hapticFeedbackWhenSpeedCamera
+          break
 
     if self.frame % self.blinking_frame == 0:
       self.blinking_signal = True
