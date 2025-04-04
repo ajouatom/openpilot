@@ -379,7 +379,7 @@ BO_ 416 SCC_CONTROL: 32 ADRV
  SG_ VSetDis : 103|8@0+ (1,0) [0|255] "km/h or mph" XXX
  SG_ NEW_SIGNAL_6 : 104|1@0+ (1,0) [0|1] "" XXX
  SG_ SET_ME_2 : 105|3@1+ (1,0) [0|7] "" XXX
- SG_ NEW_SIGNAL_3 : 109|2@0+ (1,0) [0|1] "" XXX
+ SG_ HUD_LEAD_INFO : 109|2@0+ (1,0) [0|1] "" XXX
  SG_ ZEROS_10 : 111|2@0+ (1,0) [0|3] "" XXX
  SG_ ZEROS_6 : 119|16@0+ (1,0) [0|65535] "" XXX
  SG_ aReqValue : 128|11@1+ (0.01,-10.23) [-10.23|10.24] "m/s^2" XXX
