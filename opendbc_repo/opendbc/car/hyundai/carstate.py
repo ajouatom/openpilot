@@ -58,8 +58,9 @@ class CarState(CarStateBase):
     self.is_metric = False
     self.buttons_counter = 0
 
-    self.cruise_info = {}
-    self.lfa_info = {}
+    self.cruise_info = None
+    self.lfa_info = None
+    self.lfa_alt_info = None
     self.adrv_info_161 = None
     self.adrv_info_200 = None
     self.adrv_info_1ea = None
@@ -402,6 +403,8 @@ class CarState(CarStateBase):
     if self.CP.flags & HyundaiFlags.CAMERA_SCC.value:
       self.cruise_info = copy.copy(cp_cam.vl["SCC_CONTROL"])
       self.lfa_info = copy.copy(cp_cam.vl["LFA"])
+      if self.CP.flags & HyundaiFlags.ANGLE_CONTROL.value:
+        self.lfa_alt_info = copy.copy(cp_cam.vl["LFA_ALT"])
 
       if self.CP.extFlags & HyundaiExtFlags.CANFD_161.value:
         if "ADRV_0x161" in cp_cam.vl:
@@ -573,6 +576,10 @@ class CarState(CarStateBase):
         cam_messages += [
           ("ADRV_0x161", 20),
           ("ADRV_0x162", 20),
+        ]
+      if CP.flags & HyundaiFlags.ANGLE_CONTROL:
+        cam_messages += [
+          ("LFA_ALT", 100),
         ]
 
     #if not (CP.flags & HyundaiFlags.CANFD_HDA2) and CP.extFlags & HyundaiExtFlags.NAVI_CLUSTER.value and (CP.extFlags & HyundaiExtFlags.SCC_BUS2.value) :
