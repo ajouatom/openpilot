@@ -160,7 +160,6 @@ class CarController(CarControllerBase):
 
 
     if not CC.latActive:
-      apply_angle = CS.out.steeringAngleDeg
       apply_torque = 0
       self.lkas_max_torque = 0
 
