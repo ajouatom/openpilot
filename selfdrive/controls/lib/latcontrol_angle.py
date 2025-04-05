@@ -34,7 +34,7 @@ class LatControlAngle(LatControl):
       angle_steers_des += params.angleOffsetDeg
 
     self.angle_steers_des_alpha = np.interp(self.yStd, [0.3, 0.5], [1.0, 0.1])
-    self.angle_steers_des = angle_steers_des * (1 - self.angle_steers_des_alpha) + self.angle_steers_des_alpha * self.angle_steers_des
+    self.angle_steers_des = self.angle_steers_des * (1 - self.angle_steers_des_alpha) + self.angle_steers_des_alpha * angle_steers_des
 
     angle_control_saturated = abs(self.angle_steers_des - CS.steeringAngleDeg) > STEER_ANGLE_SATURATION_THRESHOLD
     angle_log.saturated = bool(self._check_saturation(angle_control_saturated, CS, False, curvature_limited))
