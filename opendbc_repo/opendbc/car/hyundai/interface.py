@@ -235,7 +235,7 @@ class CarInterface(CarInterfaceBase):
     ret.dashcamOnly = candidate in {CAR.KIA_OPTIMA_H, }
 
 
-    ret.flags |= HyundaiFlags.ENABLE_BLINKERS.value
+    ret.flags |= HyundaiFlags.ENABLE_BLINKERS
 
     return ret
 
