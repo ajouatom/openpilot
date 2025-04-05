@@ -19,8 +19,9 @@ class LatControlAngle(LatControl):
   def update(self, active, CS, VM, params, steer_limited_by_controls, desired_curvature, llk, curvature_limited, model_data=None):  
     angle_log = log.ControlsState.LateralAngleState.new_message()
 
-    if model_data is not None:
+    if model_data is not None and len(model_data.position.yStd) > 0:
       yStd = model_data.position.yStd[5]
+      print(yStd)
     else:
       yStd = 0.0
     self.yStd = self.yStd * (1 - self.yStd_alpha) + yStd * self.yStd_alpha    
