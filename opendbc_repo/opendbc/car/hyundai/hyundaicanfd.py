@@ -481,7 +481,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         values = CS.adrv_info_162
         if hud_control.leadDistance > 0:
           values["FF_DETECT_POS"] = hud_control.leadDistance
-          values["FF_DETECT"] = 2 if hud_control.leadRelSpeed > -0.1 else 1
+          values["FF_DETECT"] = 12 if hud_control.leadRelSpeed > -0.1 else 11
         values["FAULT_FCA"] = 0
         values["FAULT_LSS"] = 0
         values["FAULT_LFA"] = 0
