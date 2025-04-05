@@ -40,5 +40,5 @@ class LatControlAngle(LatControl):
     angle_control_saturated = abs(self.angle_steers_des - CS.steeringAngleDeg) > STEER_ANGLE_SATURATION_THRESHOLD
     angle_log.saturated = bool(self._check_saturation(angle_control_saturated, CS, False, curvature_limited))
     angle_log.steeringAngleDeg = float(CS.steeringAngleDeg)
-    angle_log.steeringAngleDesiredDeg = self.angle_steers_des if not CS.steeringPressed else float(CS.steeringAngleDeg)
+    angle_log.steeringAngleDesiredDeg = float(self.angle_steers_des) if not CS.steeringPressed else float(CS.steeringAngleDeg)
     return 0, float(self.angle_steers_des), angle_log
