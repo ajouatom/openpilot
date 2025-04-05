@@ -137,10 +137,7 @@ class CarController(CarControllerBase):
                                                                        self.angle_limit_counter, self.max_angle_frames,
                                                                        MAX_ANGLE_CONSECUTIVE_FRAMES)
 
-    steer_angle_alpha = np.interp(CS.out.vEgo * CV.MS_TO_KPH, [0.0, 20.0, 40], [0.1, 0.3, 1.0])  
-    steer_angle_deg = (1.0 - steer_angle_alpha) * self.apply_angle_last + steer_angle_alpha * actuators.steeringAngleDeg
-
-    apply_angle = apply_std_steer_angle_limits(steer_angle_deg, self.apply_angle_last, CS.out.vEgoRaw, 
+    apply_angle = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgoRaw, 
                                                CS.out.steeringAngleDeg, CC.latActive, self.params.ANGLE_LIMITS)
 
     if angle_control:
