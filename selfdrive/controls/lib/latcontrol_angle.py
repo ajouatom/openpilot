@@ -21,7 +21,6 @@ class LatControlAngle(LatControl):
 
     if model_data is not None and len(model_data.position.yStd) > 0:
       yStd = model_data.position.yStd[5]
-      print(yStd)
     else:
       yStd = 0.0
     self.yStd = self.yStd * (1 - self.yStd_alpha) + yStd * self.yStd_alpha    
