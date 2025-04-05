@@ -217,9 +217,9 @@ class CarController(CarControllerBase):
         addr, bus = 0x730, self.CAN.ECAN
       can_sends.append(make_tester_present_msg(addr, bus, suppress_response=True))
 
-    # for blinkers
-    if self.frame % 100 == 0 and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
-      can_sends.append(make_tester_present_msg(0x7b1, self.CAN.ECAN, suppress_response=True))
+      # for blinkers
+      if self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
+        can_sends.append(make_tester_present_msg(0x7b1, self.CAN.ECAN, suppress_response=True))
 
     camera_scc = self.CP.flags & HyundaiFlags.CAMERA_SCC
     # CAN-FD platforms

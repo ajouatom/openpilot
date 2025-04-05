@@ -234,9 +234,6 @@ class CarInterface(CarInterfaceBase):
     # TODO: Optima Hybrid 2017 uses a different SCC12 checksum
     ret.dashcamOnly = candidate in {CAR.KIA_OPTIMA_H, }
 
-
-    ret.flags |= HyundaiFlags.ENABLE_BLINKERS
-
     return ret
 
   @staticmethod
