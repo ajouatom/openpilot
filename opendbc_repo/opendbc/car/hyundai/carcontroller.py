@@ -147,8 +147,9 @@ class CarController(CarControllerBase):
       self.apply_angle_last = actuators.steeringAngleDeg
       self.lkas_max_torque = self.lkas_max_torque = max(self.lkas_max_torque - 20, 25)
     else:
-      
-      target_torque = np.interp(abs(actuators.curvature), [0.0, 0.003, 0.006], [0.5 * self.angle_max_torque, 0.75 * self.angle_max_torque, self.angle_max_torque])
+
+      angle_max_torque = np.interp(CS.out.vEgo * CV.MS_TO_KPH, [0, 20, 30], [25, 50, self.angle_max_torque])
+      target_torque = np.interp(abs(actuators.curvature), [0.0, 0.003, 0.006], [0.5 * angle_max_torque, 0.75 * angle_max_torque, angle_max_torque])
 
       max_steering_tq = self.params.STEER_DRIVER_ALLOWANCE * 0.7
       rate_ratio = max(20, max_steering_tq - abs(CS.out.steeringTorque)) / max_steering_tq
