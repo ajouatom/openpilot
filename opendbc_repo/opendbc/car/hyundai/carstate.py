@@ -427,8 +427,10 @@ class CarState(CarStateBase):
 
       if "HDA_INFO_4A3" in cp.vl:
         self.hda_info_4a3 = copy.copy(cp.vl.get("HDA_INFO_4A3", {}))
-        #speedLimit = self.hda_info_4a3["SPEED_LIMIT"]
-        #ret.speedLimit = speedLimit if speedLimit < 255 else 0 # 안됨.. 고속화도로나 고속도로는....
+        speedLimit = self.hda_info_4a3["SPEED_LIMIT"]
+        if Params().get_int("DecelFromHDA") == 1:
+          if int(self.hda_info_4a3["NEW_SIGNAL_4"]) == 17:
+            ret.speedLimit = speedLimit if speedLimit < 255 else 0
         
       if "NEW_MSG_4B4" in cp.vl:
         self.new_msg_4b4 = copy.copy(cp.vl.get("NEW_MSG_4B4", {}))

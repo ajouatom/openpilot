@@ -1408,6 +1408,19 @@
     },
     {
       "group": "감속제어",
+      "name": "DecelFromHDA",
+      "title": "CAN-FD 신호로 과속카메라 감속(0)",
+      "descr": "",
+      "egroup": "SPEED",
+      "etitle": "Decel From CAN-FD signal(0)",
+      "edescr": "",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "감속제어",
       "name": "AutoNaviSpeedCtrlMode",
       "title": "네비게이션감속모드(2)",
       "descr": "0:감속안함,1:과속카메라,2:+사고방지턱,3:+이동식카메라",
