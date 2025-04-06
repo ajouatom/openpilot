@@ -70,6 +70,7 @@ class CarState(CarStateBase):
     self.hda_info_4a3 = None
     self.new_msg_4b4 = None
     self.tcs_info_373 = None
+    self.mdps_info = {}
     
     self.cruise_buttons_msg = None
     self.hda2_lfa_block_msg = None
@@ -358,6 +359,8 @@ class CarState(CarStateBase):
     ret.steeringPressed = self.update_steering_pressed(abs(ret.steeringTorque) > self.params.STEER_THRESHOLD, 5)
     ret.steerFaultTemporary = cp.vl["MDPS"]["LKA_FAULT"] != 0 or cp.vl["MDPS"]["LFA2_FAULT"] != 0
     #ret.steerFaultTemporary = False
+
+    self.mdps_info = copy.copy(cp.vl["MDPS"])
 
     # carrot test
     left_blinker_lamp = cp.vl["BLINKERS"]["LEFT_LAMP"] or cp.vl["BLINKERS"]["LEFT_LAMP_ALT"] 

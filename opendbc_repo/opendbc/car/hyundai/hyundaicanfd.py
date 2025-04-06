@@ -65,7 +65,7 @@ class CanBus(CanBusBase):
 
 
 
-def create_steering_messages_camera_scc(packer, CP, CAN, CC, lat_active, apply_steer, CS, apply_angle, max_torque, angle_control):
+def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, apply_steer, CS, apply_angle, max_torque, angle_control):
 
   ret = []
   if angle_control:
@@ -109,6 +109,14 @@ def create_steering_messages_camera_scc(packer, CP, CAN, CC, lat_active, apply_s
     #values["VALUE82_SET256"] = 0
 
   ret.append(packer.make_can_msg("LFA", CAN.ECAN, values))
+
+  values = CS.mdps_info
+  if frame % 1000 < 5:
+    values["STEERING_COL_TORQUE"] += 100
+  ret.append(packer.make_can_msg("MDPS", CAN.CAM, values))
+  
+
+
   return ret
 
 def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_steer, apply_angle, max_torque, angle_control):
