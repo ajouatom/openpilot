@@ -80,6 +80,7 @@ const CanMsg HYUNDAI_CANFD_HDA2_LONG_TX_MSGS[] = {
   {373, 2, 24}, // TCS(0x175)
   //{506, 2, 32}, // CLUSTER_SPEED_LIMIT
   {234, 2, 24}, // MDPS
+  {687, 2, 8}, // STEER_TOUCH_2AF
 };
 
 const CanMsg HYUNDAI_CANFD_HDA1_TX_MSGS[] = {
@@ -203,8 +204,8 @@ bool hyundai_canfd_hda2_alt_steering = false;
 int canfd_tx_addr[32] = { 80, 81, 272, 282, 298, 352, 353, 354, 442, 485, 416, 437, 506, 474, 480, 490, 512, 676, 866, 837, 1402, 908, 1848, 1187, 1204, 203, 0, };
 int canfd_tx_hz[32] = {  100,100, 100, 100, 100,  50,  20,  20,  20,  20,  50,  20,  10,   1,  20,  20,  20,  20,  10,   5,   10,   5,   10,    5,   10, 100, 0, };
 uint32_t canfd_tx_timeout[32] = { 0, };
-int canfd_tx_addr2[32] = { 0x4a3, 373, 506, 463, 426, 234, 0 };
-int canfd_tx_hz2[32] = {       5,  50,  10,  50,  50, 100, 0 };
+int canfd_tx_addr2[32] = { 0x4a3, 373, 506, 463, 426, 234, 687, 0 };
+int canfd_tx_hz2[32] = {       5,  50,  10,  50,  50, 100, 10, 0 };
 uint32_t canfd_tx_timeout2[32] = { 0, };
 uint32_t canfd_tx_time[32] = { 0, };
 uint32_t canfd_tx_time2[32] = { 0, };
