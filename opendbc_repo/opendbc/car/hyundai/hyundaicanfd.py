@@ -114,8 +114,6 @@ def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, 
   if frame % 1000 < 5:
     values["STEERING_COL_TORQUE"] += 100
   ret.append(packer.make_can_msg("MDPS", CAN.CAM, values))
-  
-
 
   return ret
 
