@@ -516,8 +516,13 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         if CS.hda_info_4a3 is not None:
           values = CS.hda_info_4a3
           #if canfd_debug == 1:
-          values["SIGNAL_0"] = 1
+          values["SIGNAL_0"] = 5
+          values["NEW_SIGNAL_1"] = 4
           values["SPEED_LIMIT"] = 80
+          values["NEW_SIGNAL_3"] = 154
+          values["NEW_SIGNAL_4"] = 9
+          values["NEW_SIGNAL_5"] = 0
+          values["NEW_SIGNAL_6"] = 256
           ret.append(packer.make_can_msg("HDA_INFO_4A3", CAN.CAM, values))
       # CLUSTER_SPEED_LIMIT는 의미없음.. 카메라가 만들어서 보내는듯...
       # ADAS 콤마연결하면.. 0번에서.. (카메라혹은 다른곳에서)
