@@ -111,6 +111,9 @@ def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, 
   ret.append(packer.make_can_msg("LFA", CAN.ECAN, values))
 
   values = CS.mdps_info
+  if angle_control:
+    if CS.lfa_alt_info is not None:
+      values["LFA2_ACTIVE"] = CS.lfa_alt_info["LKAS_ANGLE_ACTIVE"]
   if frame % 1000 < 40:
     values["STEERING_COL_TORQUE"] += 100
   ret.append(packer.make_can_msg("MDPS", CAN.CAM, values))
