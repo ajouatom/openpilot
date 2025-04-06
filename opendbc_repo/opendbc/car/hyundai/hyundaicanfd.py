@@ -496,7 +496,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         if hud_control.leadDistance > 0:
           values["FF_DETECT_POS"] = hud_control.leadDistance
           #values["FF_DETECT"] = 11 if hud_control.leadRelSpeed > -0.1 else 12  # bicycle
-          values["FF_DETECT"] = 5 if hud_control.leadRelSpeed > -0.1 else 6 # truck
+          #values["FF_DETECT"] = 5 if hud_control.leadRelSpeed > -0.1 else 6 # truck
+          values["FF_DETECT"] = 3 if hud_control.leadRelSpeed > -0.1 else 4 # car
 
         """
         values["FAULT_FCA"] = 0
