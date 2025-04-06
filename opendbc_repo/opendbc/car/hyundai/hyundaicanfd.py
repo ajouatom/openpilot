@@ -490,12 +490,15 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           values["FF_DETECT_POS"] = hud_control.leadDistance
           #values["FF_DETECT"] = 11 if hud_control.leadRelSpeed > -0.1 else 12  # bicycle
           values["FF_DETECT"] = 5 if hud_control.leadRelSpeed > -0.1 else 6 # truck
+
+        """
         values["FAULT_FCA"] = 0
         values["FAULT_LSS"] = 0
         values["FAULT_LFA"] = 0
         values["FAULT_LCA"] = 0
         values["FAULT_DAS"] = 0
         values["FAULT_HDA"] = 0
+        """
 
         if left_lane_warning or right_lane_warning:
           values["VIBRATE"] = 1
