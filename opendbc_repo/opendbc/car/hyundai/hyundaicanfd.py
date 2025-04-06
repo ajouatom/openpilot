@@ -499,6 +499,10 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           #values["FF_DETECT"] = 5 if hud_control.leadRelSpeed > -0.1 else 6 # truck
           values["FF_DETECT"] = 3 if hud_control.leadRelSpeed > -0.1 else 4 # car
 
+          values["FF_DETECT_POS"] = 10
+          values["FF_DETECT"] = 4
+          values["FF_DETEFT_LAT"] = 15
+
         """
         values["FAULT_FCA"] = 0
         values["FAULT_LSS"] = 0
