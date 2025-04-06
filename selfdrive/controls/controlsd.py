@@ -52,8 +52,6 @@ class Controls:
 
     self.steer_limited_by_controls = False
     self.desired_curvature = 0.0
-    self.yStd = 0.0
-
 
     self.LoC = LongControl(self.CP)
     self.VM = VehicleModel(self.CP)
@@ -151,15 +149,7 @@ class Controls:
         desired_curvature = 0.0
       else:
         curvature = np.interp(steer_actuator_delay + t_since_plan, ModelConstants.T_IDXS[:CONTROL_N], lat_plan.curvatures)
-        alpha = carrot_lat_control2 * 0.001
-
-        yStd = model_v2.position.yStd[5] if len(model_v2.position.yStd) > 0 else 0.0
-        self.yStd = self.yStd * (1 - 0.1) + yStd * 0.1
-        if abs(curvature) < abs(self.desired_curvature): # steering 복원시
-          curvature_alpha = (alpha + 1.) / 2. #np.interp(self.yStd, [0.2, 0.3, 0.4], [1.0, 0.5, 0.2])
-        else:
-          curvature_alpha = np.interp(self.yStd, [0.2, 0.3, 0.4], [alpha * 1.0, alpha * 0.1, alpha * 0.01])
-
+        curvature_alpha = carrot_lat_control2 * 0.001
         desired_curvature = curvature * curvature_alpha + self.desired_curvature * (1.0 - curvature_alpha)
       self.desired_curvature, curvature_limited = clip_curvature(CS.vEgo, self.desired_curvature, desired_curvature, lp.roll)
 
