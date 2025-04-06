@@ -65,40 +65,40 @@ class CanBus(CanBusBase):
 
 
 
-def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, apply_steer, CS, apply_angle, max_torque, angle_control):
+def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, apply_steer, CS, apply_angle, angle_max_torque, angle_control):
 
   ret = []
   values = CS.mdps_info
   if angle_control:
     if CS.lfa_alt_info is not None:
-      values["LFA2_ACTIVE"] = CS.lfa_alt_info["LKAS_ANGLE_ACTIVE"]
+      values["LKA_ANGLE_ACTIVE"] = CS.lfa_alt_info["LKAS_ANGLE_ACTIVE"]
   else:
     if CS.lfa_info is not None:
-      values["LKA_ACTIVE"] = 1 if CS.lfa_info["STEER_REQ"] == 1 else 0
-      
+      values["LKA_AVAILABLE"] = 1 if CS.lfa_info["STEER_REQ"] == 1 else 0
+
   if frame % 1000 < 40:
     values["STEERING_COL_TORQUE"] += 100
   ret.append(packer.make_can_msg("MDPS", CAN.CAM, values))
 
   if angle_control:
     values = {} #CS.lfa_alt_info
+    values["LKAS_ANGLE_CMD"] = apply_angle
     values["LKAS_ANGLE_ACTIVE"] = 2 if CC.latActive else 1
-    values["LKAS_ANGLE_CMD"] = -apply_angle
-    values["LKAS_ANGLE_MAX_TORQUE"] = max_torque if CC.latActive else 0
+    values["LKAS_ANGLE_MAX_TORQUE"] = angle_max_torque if CC.latActive else 0
     ret.append(packer.make_can_msg("LFA_ALT", CAN.ECAN, values))
 
     values = CS.lfa_info
     values["LKA_MODE"] = 0
     values["LKA_ICON"] = 2 if CC.latActive else 1
-    values["TORQUE_REQUEST"] = -1024  # apply_steer,
+    values["TORQUE_REQUEST"] = 0  # apply_steer,
     values["VALUE63"] = 0 # LKA_ASSIST
     values["STEER_REQ"] = 0  # 1 if lat_active else 0,
     values["HAS_LANE_SAFETY"] = 0  # hide LKAS settings
-    values["LKA_ACTIVE"] = 3 if CC.latActive else 0  # this changes sometimes, 3 seems to indicate engaged
+    values["LKA_AVAILABLE"] = 3 if CC.latActive else 0  # this changes sometimes, 3 seems to indicate engaged
     values["VALUE64"] = 0  #STEER_MODE, NEW_SIGNAL_2
-    values["LKAS_ANGLE_CMD"] = -25.6 #-apply_angle,
-    values["LKAS_ANGLE_ACTIVE"] = 0 #2 if lat_active else 1,
-    values["LKAS_ANGLE_MAX_TORQUE"] = 0 #max_torque if lat_active else 0,
+    #values["LKAS_ANGLE_CMD"] = -25.6 #apply_angle,
+    #values["LKAS_ANGLE_ACTIVE"] = 0 #2 if lat_active else 1,
+    #values["LKAS_ANGLE_MAX_TORQUE"] = 0 #angle_max_torque if lat_active else 0,
     values["NEW_SIGNAL_1"] = 10
 
   else:
@@ -113,7 +113,7 @@ def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, 
     values["STEER_REQ"] = 1 if lat_active else 0
     values["VALUE64"] = 0  # STEER_MODE, NEW_SIGNAL_2
     values["HAS_LANE_SAFETY"] = 0
-    values["LKA_ACTIVE"] = 0 # NEW_SIGNAL_1
+    values["LKA_AVAILABLE"] = 0 # NEW_SIGNAL_1
 
     #values["VALUE63"] = 0
 
@@ -124,7 +124,7 @@ def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, 
 
   return ret
 
-def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_steer, apply_angle, max_torque, angle_control):
+def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_steer, apply_angle, angle_max_torque, angle_control):
 
   ret = []
   if angle_control:
@@ -135,11 +135,11 @@ def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_steer, 
       "VALUE63": 0, # LKA_ASSIST
       "STEER_REQ": 0,  # 1 if lat_active else 0,
       "HAS_LANE_SAFETY": 0,  # hide LKAS settings
-      "LKA_ACTIVE": 3 if lat_active else 0,  # this changes sometimes, 3 seems to indicate engaged
+      "LKA_AVAILABLE": 3 if lat_active else 0,  # this changes sometimes, 3 seems to indicate engaged
       "VALUE64": 0,  #STEER_MODE, NEW_SIGNAL_2
-      "LKAS_ANGLE_CMD": -apply_angle,
+      "LKAS_ANGLE_CMD": apply_angle,
       "LKAS_ANGLE_ACTIVE": 2 if lat_active else 1,
-      "LKAS_ANGLE_MAX_TORQUE": max_torque if lat_active else 0,
+      "LKAS_ANGLE_MAX_TORQUE": angle_max_torque if lat_active else 0,
 
       # test for EV6PE
       "NEW_SIGNAL_1": 10, #2,
@@ -394,7 +394,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           #ret.append(packer.make_can_msg(CS.cruise_btns_msg_canfd, CAN.ECAN, values))
         ret.append(packer.make_can_msg(CS.cruise_btns_msg_canfd, CAN.CAM, values))
       """
-        
+
 
     if frame % 5 == 0:
       if CP.extFlags & HyundaiExtFlags.CANFD_161.value:
@@ -403,7 +403,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           cruise_enabled = CC.enabled
           lat_active = CC.latActive
           nav_active = hud_control.activeCarrot > 1
-          
+
           # hdpuse carrot
           hdp_use = int(Params().get("HDPuse"))
           hdp_active = False
@@ -441,7 +441,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           if values["ALERTS_2"] in [1, 2, 5]:
             values["ALERTS_2"] = 0
             values["DAW_ICON"] = 0
-            
+
           values["SOUNDS_2"] = 0  # 2: STEER중지 경고후에도 사운드가 나옴.
 
           if values["ALERTS_3"] in [3, 4, 17, 26]:
@@ -496,7 +496,11 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         if hud_control.leadDistance > 0:
           values["FF_DETECT_POS"] = hud_control.leadDistance
           #values["FF_DETECT"] = 11 if hud_control.leadRelSpeed > -0.1 else 12  # bicycle
-          values["FF_DETECT"] = 5 if hud_control.leadRelSpeed > -0.1 else 6 # truck
+          #values["FF_DETECT"] = 5 if hud_control.leadRelSpeed > -0.1 else 6 # truck
+          values["FF_DETECT"] = 3 if hud_control.leadRelSpeed > -0.1 else 4 # car
+
+          values["FF_DETECT_LAT"] = canfd_debug
+
 
         """
         values["FAULT_FCA"] = 0
@@ -528,9 +532,9 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
       # ADAS 콤마연결하면.. 0번에서.. (카메라혹은 다른곳에서)
       # 카메라 콤마연결+롱컨개조 하면.. 2번에서 데이터가 나옴..(카메라혹은 ADAS)
       if frame % 10 == 0:
-        
+
         pass
-        
+
   return ret
 
 def create_adrv_messages(CP, packer, CAN, frame):
