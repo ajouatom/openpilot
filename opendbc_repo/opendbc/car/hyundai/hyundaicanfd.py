@@ -431,8 +431,9 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
             
           values["SOUNDS_2"] = 0  # 2: STEER중지 경고후에도 사운드가 나옴.
 
-          if values["ALERTS_3"] in [17, 26]:
+          if values["ALERTS_3"] in [3, 4, 17, 26]:
             values["ALERTS_3"] = 0
+            values["SOUNDS_3"] = 0
 
           if values["ALERTS_5"] in [1, 4, 5]:
             values["ALERTS_5"] = 0
