@@ -95,7 +95,7 @@ def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, 
   else:
     if CS.lfa_info is not None:
       values["LKA_ACTIVE"] = 1 if CS.lfa_info["STEER_REQ"] == 1 else 0
-      
+
   if frame % 1000 < 40:
     values["STEERING_COL_TORQUE"] += 100
   ret.append(packer.make_can_msg("MDPS", CAN.CAM, values))
@@ -436,7 +436,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           #ret.append(packer.make_can_msg(CS.cruise_btns_msg_canfd, CAN.ECAN, values))
         ret.append(packer.make_can_msg(CS.cruise_btns_msg_canfd, CAN.CAM, values))
       """
-        
+
 
     if frame % 5 == 0:
       if CP.extFlags & HyundaiExtFlags.CANFD_161.value:
@@ -445,7 +445,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           cruise_enabled = CC.enabled
           lat_active = CC.latActive
           nav_active = hud_control.activeCarrot > 1
-          
+
           # hdpuse carrot
           hdp_use = int(Params().get("HDPuse"))
           hdp_active = False
@@ -483,7 +483,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           if values["ALERTS_2"] in [1, 2, 5]:
             values["ALERTS_2"] = 0
             values["DAW_ICON"] = 0
-            
+
           values["SOUNDS_2"] = 0  # 2: STEER중지 경고후에도 사운드가 나옴.
           values["SOUNDS_4"] = 0  # 차선변경알림? 에이 그냥0으로..
 
@@ -537,13 +537,24 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
       if CS.adrv_info_162 is not None:
         values = CS.adrv_info_162
         if hud_control.leadDistance > 0:
-          values["FF_DETECT_POS"] = hud_control.leadDistance
+          values["FF_DISTANCE"] = hud_control.leadDistance
           #values["FF_DETECT"] = 11 if hud_control.leadRelSpeed > -0.1 else 12  # bicycle
           #values["FF_DETECT"] = 5 if hud_control.leadRelSpeed > -0.1 else 6 # truck
           ff_type = 3 if hud_control.leadRadar == 1 else 13
           values["FF_DETECT"] = ff_type if hud_control.leadRelSpeed > -0.1 else ff_type + 1
           #values["FF_DETECT_LAT"] = - hud_control.leadDPath
 
+        sensors = [
+          ('lf', 'LF_DETECT'),
+          ('rf', 'RF_DETECT'),
+          ('lr', 'LR_DETECT'),
+          ('rr', 'RR_DETECT')
+        ]
+
+        for sensor_key, detect_key in sensors:
+          distance = getattr(CS, f"{sensor_key}_distance")
+          if distance > 0:
+            values[detect_key] = 3 if distance > 30 else 4
 
         """
         values["FAULT_FCA"] = 0
@@ -575,9 +586,9 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
       # ADAS 콤마연결하면.. 0번에서.. (카메라혹은 다른곳에서)
       # 카메라 콤마연결+롱컨개조 하면.. 2번에서 데이터가 나옴..(카메라혹은 ADAS)
       if frame % 10 == 0:
-        
+
         pass
-        
+
   return ret
 
 def create_adrv_messages(CP, packer, CAN, frame):

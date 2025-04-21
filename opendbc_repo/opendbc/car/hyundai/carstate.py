@@ -72,7 +72,7 @@ class CarState(CarStateBase):
     self.tcs_info_373 = None
     self.mdps_info = {}
     self.steer_touch_info = {}
-    
+
     self.cruise_buttons_msg = None
     self.hda2_lfa_block_msg = None
 
@@ -84,7 +84,7 @@ class CarState(CarStateBase):
 
     self.main_enabled = True if Params().get_int("AutoEngage") == 2 else False
     self.gear_shifter = GearShifter.drive # Gear_init for Nexo ?? unknown 21.02.23.LSW
-    
+
     self.totalDistance = 0.0
     self.speedLimitDistance = 0
     self.pcmCruiseGap = 0
@@ -93,6 +93,11 @@ class CarState(CarStateBase):
     self.MainMode_ACC = False
     self.LFA_ICON = 0
     self.paddle_button_prev = 0
+
+    self.lf_distance = 0
+    self.rf_distance = 0
+    self.lr_distance = 0
+    self.rr_distance = 0
 
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
@@ -292,16 +297,16 @@ class CarState(CarStateBase):
     else:
       ret.speedLimit = 0
       ret.speedLimitDistance = 0
-      
+
     self.update_speed_limit(ret)
 
     if prev_main_buttons == 0 and self.main_buttons[-1] != 0:
       self.main_enabled = not self.main_enabled
 
     return ret
-  
+
   def update_speed_limit(self, ret):
-    self.totalDistance += ret.vEgo * DT_CTRL 
+    self.totalDistance += ret.vEgo * DT_CTRL
     if ret.speedLimit > 0 and not ret.gasPressed:
       if self.speedLimitDistance <= self.totalDistance:
         self.speedLimitDistance = self.totalDistance + ret.speedLimit * 6
@@ -309,7 +314,7 @@ class CarState(CarStateBase):
     else:
       self.speedLimitDistance = self.totalDistance
     ret.speedLimitDistance = self.speedLimitDistance - self.totalDistance
-    
+
   def update_canfd(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
@@ -367,8 +372,8 @@ class CarState(CarStateBase):
       self.steer_touch_info = copy.copy(cp.vl["STEER_TOUCH_2AF"])
 
     # carrot test
-    left_blinker_lamp = cp.vl["BLINKERS"]["LEFT_LAMP"] or cp.vl["BLINKERS"]["LEFT_LAMP_ALT"] 
-    right_blinker_lamp = cp.vl["BLINKERS"]["RIGHT_LAMP"] or cp.vl["BLINKERS"]["RIGHT_LAMP_ALT"] 
+    left_blinker_lamp = cp.vl["BLINKERS"]["LEFT_LAMP"] or cp.vl["BLINKERS"]["LEFT_LAMP_ALT"]
+    right_blinker_lamp = cp.vl["BLINKERS"]["RIGHT_LAMP"] or cp.vl["BLINKERS"]["RIGHT_LAMP_ALT"]
     ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_lamp(50, left_blinker_lamp, right_blinker_lamp)
 
     # TODO: alt signal usage may be described by cp.vl['BLINKERS']['USE_ALT_LAMP']
@@ -424,6 +429,10 @@ class CarState(CarStateBase):
           self.adrv_info_161 = copy.copy(cp_cam.vl.get("ADRV_0x161", {}))
         if "ADRV_0x162" in cp_cam.vl:
           self.adrv_info_162 = copy.copy(cp_cam.vl.get("ADRV_0x162", {}))
+          self.lf_distance = cp_cam.vl["CCNC_0x162"]["LF_DETECT_DISTANCE"]
+          self.rf_distance = cp_cam.vl["CCNC_0x162"]["RF_DETECT_DISTANCE"]
+          self.lr_distance = cp_cam.vl["CCNC_0x162"]["LR_DETECT_DISTANCE"]
+          self.rr_distance = cp_cam.vl["CCNC_0x162"]["RR_DETECT_DISTANCE"]
       if "ADRV_0x200" in cp_cam.vl:
         self.adrv_info_200 = copy.copy(cp_cam.vl.get("ADRV_0x200", {}))
       if "ADRV_0x1ea" in cp_cam.vl:
@@ -436,7 +445,7 @@ class CarState(CarStateBase):
         if int(self.hda_info_4a3["NEW_SIGNAL_4"]) == 17:
           speedLimit = self.hda_info_4a3["SPEED_LIMIT"]
           ret.speedLimit = speedLimit if speedLimit < 255 else 0 # 안됨.. 고속화도로나 고속도로는....
-        
+
       if "NEW_MSG_4B4" in cp.vl:
         self.new_msg_4b4 = copy.copy(cp.vl.get("NEW_MSG_4B4", {}))
 
@@ -466,7 +475,7 @@ class CarState(CarStateBase):
 
     self.cruise_buttons.extend(cruise_button)
     # }} carrot
-    
+
 
     if self.cruise_btns_msg_canfd in cp.vl:
       self.cruise_buttons_msg = copy.copy(cp.vl[self.cruise_btns_msg_canfd])
@@ -547,7 +556,7 @@ class CarState(CarStateBase):
       pt_messages += [
         ("CRUISE_BUTTONS", 50)
       ]
-      
+
     if CP.extFlags & HyundaiExtFlags.STEER_TOUCH:
       pt_messages += [
         ("STEER_TOUCH_2AF", 10),
@@ -576,7 +585,7 @@ class CarState(CarStateBase):
         #("NEW_MSG_4B4", 10),  # G80 hda2개조차량은 안나옴. 원래그런건지.. 어짜피 안쓰는데이터이니깐...
       ]
     #if CP.flags & HyundaiFlags.CANFD_HDA2 and CP.extFlags & HyundaiExtFlags.NAVI_CLUSTER.value and not (CP.extFlags & HyundaiExtFlags.SCC_BUS2.value):
-    # 어떤차는 bus2에 있음, 내차는 bus0에 있는데.... 이건 옆두부와 관련이 없나?   
+    # 어떤차는 bus2에 있음, 내차는 bus0에 있는데.... 이건 옆두부와 관련이 없나?
     #if CP.flags & HyundaiFlags.CANFD_HDA2:
     #  pt_messages.append(("CLUSTER_SPEED_LIMIT", 10))
 
@@ -641,7 +650,7 @@ class CarState(CarStateBase):
       ("CGW4", 5),
       ("WHL_SPD11", 50),
       ("SAS11", 100),
-      ("TPMS11", 5), 
+      ("TPMS11", 5),
     ]
     if CP.flags & HyundaiFlags.CC_ONLY_CAR:
       pt_messages.remove(("TCS11", 100))
@@ -682,7 +691,7 @@ class CarState(CarStateBase):
     else:
       pt_messages.append(("LVR12", 100))
       pt_messages.append(("LVR11", 100))
-      
+
     if CP.extFlags & HyundaiExtFlags.HAS_LFA_BUTTON.value:
       pt_messages.append(("BCM_PO_11", 50))
 
@@ -709,7 +718,7 @@ class CarState(CarStateBase):
       if CP.extFlags & HyundaiExtFlags.HAS_SCC14.value:
         cam_messages += [
           ("SCC14", 50),
-        ]      
+        ]
       if CP.flags & HyundaiFlags.USE_FCA.value:
         cam_messages += [
           ("FCA11", 50),
