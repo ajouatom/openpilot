@@ -310,6 +310,9 @@ protected:
         }
 
     }
+    Params  params;
+    std::deque<float> minDeque[3];  // 최소값을 유지하는 덱
+    std::deque<float> maxDeque[3];  // 최대값을 유지하는 덱
     void	makePlotData(const UIState* s, float data[], char* title) {
 
         SubMaster& sm = *(s->sm);
@@ -395,13 +398,13 @@ protected:
             plotIndex = 0;
             plotMin = 0.;
             plotMax = 0.;
+            for (int i = 0; i < 3; i++) {
+              minDeque[i].clear();
+              maxDeque[i].clear();
+            }
             show_plot_mode_prev = show_plot_mode;
         }
     }
-
-    Params  params;
-    std::deque<float> minDeque[3];  // 최소값을 유지하는 덱
-    std::deque<float> maxDeque[3];  // 최대값을 유지하는 덱
 
     void updatePlotQueue(float plot_data[3]) {
         // plotIndex 업데이트
