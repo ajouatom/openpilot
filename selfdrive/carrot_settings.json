@@ -212,14 +212,14 @@
     {
       "group": "조향튜닝",
       "name": "SteerActuatorDelay",
-      "title": "SteerActuatorDelay(40)",
+      "title": "SteerActuatorDelay(30)",
       "descr": "조향지연값",
       "egroup": "LAT",
-      "etitle": "SteerActuatorDelay(40)",
+      "etitle": "SteerActuatorDelay(30)",
       "edescr": "",
       "min": 1,
       "max": 300,
-      "default": 40,
+      "default": 30,
       "unit": 1
     },
     {
@@ -368,14 +368,14 @@
     {
       "group": "주행튜닝",
       "name": "ComfortBrake",
-      "title": "Comfort Brake(240)",
+      "title": "Comfort Brake(250)",
       "descr": "x0.01, 값이 크면 급하게 브레이킹",
       "egroup": "LONG",
-      "etitle": "Comfort Brake(240)",
+      "etitle": "Comfort Brake(250)",
       "edescr": "",
       "min": 200,
       "max": 300,
-      "default": 240,
+      "default": 250,
       "unit": 5
     },
     {
