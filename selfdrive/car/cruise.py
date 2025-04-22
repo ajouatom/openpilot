@@ -463,6 +463,8 @@ class VCruiseCarrot:
         self._pause_auto_speed_up = False
         if self._soft_hold_active > 0:
           self._soft_hold_active = 0
+        elif self._cruise_ready:
+          pass
         elif self._v_cruise_kph_at_brake > 0 and v_cruise_kph < self._v_cruise_kph_at_brake:
           v_cruise_kph = self._v_cruise_kph_at_brake
           self._v_cruise_kph_at_brake = 0
@@ -476,6 +478,8 @@ class VCruiseCarrot:
         self._pause_auto_speed_up = True
         if self._soft_hold_active > 0:
           self._cruise_control(-1, -1, "Cruise off,softhold mode (decelCruise)")
+        elif self._cruise_ready:
+          pass
         elif self.v_ego_kph_set > v_cruise_kph + 2:
           v_cruise_kph = max(self.v_ego_kph_set, self._cruise_speed_min)
         elif self._cruise_button_mode in [0, 1]:
