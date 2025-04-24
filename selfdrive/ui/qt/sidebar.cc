@@ -28,6 +28,7 @@ Sidebar::Sidebar(QWidget *parent) : QFrame(parent), onroad(false), flag_pressed(
   home_img = loadPixmap("../assets/images/button_home.png", home_btn.size());
   flag_img = loadPixmap("../assets/images/button_flag.png", home_btn.size());
   settings_img = loadPixmap("../assets/images/button_settings.png", settings_btn.size(), Qt::IgnoreAspectRatio);
+  c3x_img = loadPixmap("../assets/img_c3x.png", home_btn.size());
 
   connect(this, &Sidebar::valueChanged, [=] { update(); });
 
@@ -115,11 +116,20 @@ void Sidebar::paintEvent(QPaintEvent *event) {
 
   p.fillRect(rect(), QColor(57, 57, 57));
 
+  QString c3x_position = QString("%1").arg(QString::fromStdString(params.get("DevicePosition")));
+
   // buttons
   p.setOpacity(settings_pressed ? 0.65 : 1.0);
   p.drawPixmap(settings_btn.x(), settings_btn.y(), settings_img);
   p.setOpacity(onroad && flag_pressed ? 0.65 : 1.0);
-  p.drawPixmap(home_btn.x(), home_btn.y(), onroad ? flag_img : home_img);
+  //p.drawPixmap(home_btn.x(), home_btn.y(), onroad ? flag_img : home_img);
+  p.drawPixmap(home_btn.x(), home_btn.y(), c3x_img);
+
+  const QRect r3 = QRect(0, 967, event->rect().width(), 50);
+  p.setFont(InterFont(30));
+  p.setPen(QColor(0xff, 0xff, 0xff));
+  p.drawText(r3, Qt::AlignCenter, c3x_position);
+
   p.setOpacity(1.0);
 
   // network
