@@ -1834,7 +1834,6 @@ class CarrotServ:
     # 3초간 navi 데이터가 없으면, phone gps로 업데이트
     if "latitude" in json:
       self.nPosAnglePhone = float(json.get("heading", self.nPosAngle))
-      self.nPosAngle = self.nPosAnglePhone
       if (now - self.last_update_gps_time_navi) > 3.0:
         self.vpPosPointLatNavi = float(json.get("latitude", self.vpPosPointLatNavi))
         self.vpPosPointLonNavi = float(json.get("longitude", self.vpPosPointLonNavi))
