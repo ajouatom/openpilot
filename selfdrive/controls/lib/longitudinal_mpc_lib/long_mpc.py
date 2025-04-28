@@ -413,12 +413,10 @@ class LongitudinalMpc:
       lead_0_velocity = lead_xv_0[:, 1]
       lead_v = lead_0_velocity
       lead_a = np.gradient(lead_v, T_IDXS)
-      ego_v = self.x0[1]
-      ego_a = self.x0[2]
       dRel = lead_0_obstacle[0]
       lead_weight = np.clip(np.interp(dRel, [0.0, 15.0, 30.0], [1.0, 0.5, 0.0]), 0.0, 1.0)
-      v = (1.0 - lead_weight) * ego_v + lead_weight * lead_v
-      a = (1.0 - lead_weight) * ego_a + lead_weight * lead_a
+      v = (1.0 - lead_weight) * v_ego + lead_weight * lead_v
+      a = (1.0 - lead_weight) * a_ego + lead_weight * lead_a
 
 
       safe_distance = lead_0_obstacle[0] - get_safe_obstacle_distance(v_ego, comfort_brake, stop_distance)
