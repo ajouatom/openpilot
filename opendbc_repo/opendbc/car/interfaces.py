@@ -123,9 +123,10 @@ class MyTrack:
     v_lead = self.vLead_avg.update(self.vLead)
     if abs(v_lead) < 0.5:
       v_lead = 0.0
+      self.cnt = 0
     a_raw = (v_lead - self.vLead_averaged) / self.dt
     self.vLead_averaged = v_lead
-    a_lead = self.aLead_avg.update(a_raw)
+    a_lead = self.aLead_avg.update(a_raw if self.cnt > 1 else 0.0)
 
     j_lead = (a_lead - self.aLead) / self.dt
     self.aLead = a_lead
