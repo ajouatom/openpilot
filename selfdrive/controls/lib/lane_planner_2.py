@@ -246,15 +246,18 @@ class LanePlanner:
     x = path_xyz[:, 0]
     y = path_xyz[:, 1]
 
-    # yaw 계산
-    yaw = np.arctan2(np.diff(y), np.diff(x))  # 각도 계산 (길이: N-1)
-    yaw = np.append(yaw, yaw[-1])  # 마지막 점의 yaw 보정 (길이: N)
+    # yaw 계산 (방향 각도)
+    yaw = np.arctan2(np.diff(y), np.diff(x))  # 길이 N-1
+    yaw = np.append(yaw, yaw[-1])  # 마지막 점 복사해서 길이 N으로
 
-    # yaw_rate 계산 (yaw 변화율)
+    # unwrap 추가 (중요!)
+    yaw = np.unwrap(yaw)
+
+    # yaw_rate 계산 (방향 변화율)
     dx = np.diff(x)
-    dx = np.where(dx == 0, 1e-6, dx)  # 0으로 나누는 경우 방지
-    yaw_rate = np.diff(yaw) / dx  # yaw 변화율 계산 (길이: N-2)
-    yaw_rate = np.append(yaw_rate, yaw_rate[-1])  # 마지막 점의 yaw_rate 보정 (길이: N-1)
-    yaw_rate = np.append(yaw_rate, 0.0)  # 최종적으로 길이를 N으로 맞춤
+    dx = np.where(dx == 0, 1e-6, dx)  # 0으로 나누기 방지
+    yaw_rate = np.diff(yaw) / dx  # 길이 N-2
+    yaw_rate = np.append(yaw_rate, yaw_rate[-1])  # 길이 N-1
+    yaw_rate = np.append(yaw_rate, 0.0)  # 최종 길이 N 맞춤
 
     return yaw, yaw_rate
