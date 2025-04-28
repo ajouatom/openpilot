@@ -400,7 +400,7 @@
       "etitle": "CarrotMpc1(0)",
       "edescr": "",
       "min": 0,
-      "max": 100,
+      "max": 200,
       "default": 0,
       "unit": 10
     },
