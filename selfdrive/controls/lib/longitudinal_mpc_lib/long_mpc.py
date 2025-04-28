@@ -238,6 +238,7 @@ class LongitudinalMpc:
     self.solver = AcadosOcpSolverCython(MODEL_NAME, ACADOS_SOLVER_TYPE, N)
 
     self.va_cost = 0.0
+    self.j_lead = 0.0
 
     self.reset()
     self.source = SOURCES[2]
@@ -434,9 +435,11 @@ class LongitudinalMpc:
       '''
       if radarstate.leadOne.status:
         j_lead = radarstate.leadOne.jLead
-        cost_scale = np.interp(abs(j_lead), [0.5, 2.0], [0.0, 1.0])
+        self.j_lead = j_lead * 0.1 + self.j_lead * 0.9
+        cost_scale = np.interp(abs(self.j_lead), [0.5, 2.0], [0.0, 1.0])
       else:
-        cost_scale = 0.0  
+        cost_scale = 0.0
+        self.j_lead = 0.0
       self.va_cost = carrot.carrot_mpc1 * cost_scale
 
       safe_distance = lead_0_obstacle[0] - get_safe_obstacle_distance(v_ego, comfort_brake, stop_distance)
