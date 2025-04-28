@@ -121,7 +121,7 @@ class MyTrack:
     self.yRel = radar_point.yRel
 
     v_lead = self.vLead_avg.update(self.vLead)
-    if abs(v_lead) < 0.2:
+    if abs(v_lead) < 0.5:
       v_lead = 0.0
     a_raw = (v_lead - self.vLead_averaged) / self.dt
     self.vLead_averaged = v_lead
