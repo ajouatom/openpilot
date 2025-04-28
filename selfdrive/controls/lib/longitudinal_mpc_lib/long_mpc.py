@@ -237,7 +237,7 @@ class LongitudinalMpc:
     self.dt = dt
     self.solver = AcadosOcpSolverCython(MODEL_NAME, ACADOS_SOLVER_TYPE, N)
 
-    self.carrot_mpc1 = 0.0
+    self.va_cost = 0.0
 
     self.reset()
     self.source = SOURCES[2]
@@ -297,7 +297,7 @@ class LongitudinalMpc:
     if self.mode == 'acc':
       a_change_cost = A_CHANGE_COST if prev_accel_constraint else A_CHANGE_COST_STARTING
       #cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, V_EGO_COST, A_EGO_COST, jerk_factor * a_change_cost, jerk_factor * J_EGO_COST]
-      cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, self.carrot_mpc1, self.carrot_mpc1, jerk_factor * a_change_cost, jerk_factor * J_EGO_COST]
+      cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, self.va_cost, self.va_cost, jerk_factor * a_change_cost, jerk_factor * J_EGO_COST]
       constraint_cost_weights = [LIMIT_COST, LIMIT_COST, LIMIT_COST, DANGER_ZONE_COST]
     elif self.mode == 'blended':
       a_change_cost = 40.0 if prev_accel_constraint else 0
@@ -353,7 +353,6 @@ class LongitudinalMpc:
     self.max_a = max_a
 
   def update(self, carrot, reset_state, radarstate, v_cruise, x, v, a, j, personality=log.LongitudinalPersonality.standard):
-    self.carrot_mpc1 = carrot.carrot_mpc1
     t_follow = carrot.get_T_FOLLOW(personality)
     v_ego = self.x0[1]
     a_ego = self.x0[2]
@@ -417,6 +416,8 @@ class LongitudinalMpc:
       lead_weight = np.clip(np.interp(dRel, [0.0, 15.0, 30.0], [1.0, 0.5, 0.0]), 0.0, 1.0)
       v = (1.0 - lead_weight) * v_ego + lead_weight * lead_v
       a = (1.0 - lead_weight) * a_ego + lead_weight * lead_a
+      cost_scale = np.clip(np.interp(dRel, [0.0, 15.0, 30.0], [0.0, 0.5, 1.0]), 0.0, 1.0)
+      self.va_cost = carrot.carrot_mpc1 * cost_scale
 
 
       safe_distance = lead_0_obstacle[0] - get_safe_obstacle_distance(v_ego, comfort_brake, stop_distance)
