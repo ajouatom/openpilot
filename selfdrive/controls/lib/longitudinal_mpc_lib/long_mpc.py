@@ -420,6 +420,7 @@ class LongitudinalMpc:
 
 
       #cost_scale = np.clip(np.interp(dRel, [0.0, 15.0, 30.0], [0.0, 0.5, 1.0]), 0.0, 1.0)
+      '''
       v_now = lead_0_velocity[0]
       v_soon = np.interp(2.0, T_IDXS, lead_0_velocity)
       delta_v = v_soon - v_now
@@ -430,6 +431,12 @@ class LongitudinalMpc:
         cost_scale = np.interp(delta_v,
                                [-2.0, -0.5, 0.0, 0.5, 2.0],
                                [1.0,  0.5,  0.0, 0.4, 0.8])
+      '''
+      if radarstate.leadOne.status:
+        j_lead = radarstate.leadOne.jLead
+        cost_scale = np.interp(abs(j_lead), [0.5, 2.0], [0.0, 1.0])
+      else:
+        cost_scale = 0.0  
       self.va_cost = carrot.carrot_mpc1 * cost_scale
 
       safe_distance = lead_0_obstacle[0] - get_safe_obstacle_distance(v_ego, comfort_brake, stop_distance)
