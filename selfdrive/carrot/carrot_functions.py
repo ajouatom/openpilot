@@ -121,6 +121,7 @@ class CarrotPlanner:
     self.jerk_factor_apply = 1.0
 
     self.j_lead_factor = 0.0
+    self.carrot_mpc1 = 0.0
 
     self.activeCarrot = 0
     self.xDistToTurn = 0
@@ -171,6 +172,7 @@ class CarrotPlanner:
       self.comfortBrake = self.params.get_float("ComfortBrake") / 100.
       self.j_lead_factor = self.params.get_float("JLeadFactor2") / 100.
       self.eco_over_speed = self.params.get_int("CruiseEcoControl")
+      self.carrot_mpc1 = self.params.get_float("CarrotMpc1") / 100.
 
     elif self.params_count >= 100:
 

@@ -393,6 +393,19 @@
     },
     {
       "group": "주행튜닝",
+      "name": "CarrotMpc1",
+      "title": "CarrotMpc1(0)",
+      "descr": "당근롱컨시험1",
+      "egroup": "LONG",
+      "etitle": "CarrotMpc1(0)",
+      "edescr": "",
+      "min": 0,
+      "max": 100,
+      "default": 0,
+      "unit": 10
+    },
+    {
+      "group": "주행튜닝",
       "name": "LongTuningKpV",
       "title": "Long KpV(100)x0.01",
       "descr": "HKG: AccelPid:0, VelocityPid:100",

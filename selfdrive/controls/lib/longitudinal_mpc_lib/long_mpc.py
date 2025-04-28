@@ -243,6 +243,8 @@ class LongitudinalMpc:
     self.desired_distance = 0.0
     self.lead_danger_factor = LEAD_DANGER_FACTOR
 
+    self.carrot_mpc1 = 0.0
+
   def reset(self):
     # self.solver = AcadosOcpSolverCython(MODEL_NAME, ACADOS_SOLVER_TYPE, N)
     self.solver.reset()
@@ -292,7 +294,8 @@ class LongitudinalMpc:
     #jerk_factor = get_jerk_factor(personality)
     if self.mode == 'acc':
       a_change_cost = A_CHANGE_COST if prev_accel_constraint else A_CHANGE_COST_STARTING
-      cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, V_EGO_COST, A_EGO_COST, jerk_factor * a_change_cost, jerk_factor * J_EGO_COST]
+      #cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, V_EGO_COST, A_EGO_COST, jerk_factor * a_change_cost, jerk_factor * J_EGO_COST]
+      cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, self.carrot_mpc1, self.carrot_mpc1, jerk_factor * a_change_cost, jerk_factor * J_EGO_COST]
       constraint_cost_weights = [LIMIT_COST, LIMIT_COST, LIMIT_COST, DANGER_ZONE_COST]
     elif self.mode == 'blended':
       a_change_cost = 40.0 if prev_accel_constraint else 0
@@ -348,6 +351,7 @@ class LongitudinalMpc:
     self.max_a = max_a
 
   def update(self, carrot, reset_state, radarstate, v_cruise, x, v, a, j, personality=log.LongitudinalPersonality.standard):
+    self.carrot_mpc1 = carrot.carrot_mpc1
     t_follow = carrot.get_T_FOLLOW(personality)
     v_ego = self.x0[1]
     a_ego = self.x0[2]
@@ -402,6 +406,18 @@ class LongitudinalMpc:
 
       # These are not used in ACC mode
       x[:], v[:], a[:], j[:] = 0.0, 0.0, 0.0, 0.0
+
+
+      lead_0_velocity = lead_xv_0[:, 1]
+      lead_v = lead_0_velocity
+      lead_a = np.gradient(lead_v, T_IDXS)
+      ego_v = self.x0[1]
+      ego_a = self.x0[2]
+      dRel = lead_0_obstacle[0]
+      lead_weight = np.clip(np.interp(dRel, [0.0, 15.0, 30.0], [1.0, 0.5, 0.0]), 0.0, 1.0)
+      v = (1.0 - lead_weight) * ego_v + lead_weight * lead_v
+      a = (1.0 - lead_weight) * ego_a + lead_weight * lead_a
+
 
       safe_distance = lead_0_obstacle[0] - get_safe_obstacle_distance(v_ego, comfort_brake, stop_distance)
       self.lead_danger_factor = np.interp(safe_distance, [-30.0, 0.0], [0.9, LEAD_DANGER_FACTOR])
