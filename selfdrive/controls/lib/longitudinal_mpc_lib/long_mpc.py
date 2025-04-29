@@ -324,7 +324,7 @@ class LongitudinalMpc:
     lead_xv = np.column_stack((x_lead_traj, v_lead_traj))
     return lead_xv
   
-  def process_lead(self, lead):
+  def process_lead(self, lead, j_lead):
     v_ego = self.x0[1]
     if lead is not None and lead.status:
       x_lead = lead.dRel
@@ -344,6 +344,8 @@ class LongitudinalMpc:
     x_lead = np.clip(x_lead, min_x_lead, 1e8)
     v_lead = np.clip(v_lead, 0.0, 1e8)
     a_lead = np.clip(a_lead, -10., 5.)
+
+    a_lead = a_lead + j_lead
     lead_xv = self.extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau)
     return lead_xv, v_lead
 
@@ -359,8 +361,14 @@ class LongitudinalMpc:
     a_ego = self.x0[2]
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
 
-    lead_xv_0, lead_v_0 = self.process_lead(radarstate.leadOne)
-    lead_xv_1, _ = self.process_lead(radarstate.leadTwo)
+    if radarstate.leadOne.status:
+      j_lead = radarstate.leadOne.jLead
+      self.j_lead = j_lead * 0.1 + self.j_lead * 0.9
+    else:
+      self.j_lead = 0.0
+
+    lead_xv_0, lead_v_0 = self.process_lead(radarstate.leadOne, np.clip(self.j_lead * carrot.j_lead_factor, -2.0, 2.0))
+    lead_xv_1, _ = self.process_lead(radarstate.leadTwo, 0.0)
 
     mode = self.mode
     comfort_brake = carrot.comfort_brake
@@ -434,12 +442,9 @@ class LongitudinalMpc:
                                [1.0,  0.5,  0.0, 0.4, 0.8])
       '''
       if radarstate.leadOne.status:
-        j_lead = radarstate.leadOne.jLead
-        self.j_lead = j_lead * 0.1 + self.j_lead * 0.9
         cost_scale = np.interp(abs(self.j_lead), [0.5, 2.0], [0.0, 1.0])
       else:
         cost_scale = 0.0
-        self.j_lead = 0.0
       self.va_cost = carrot.carrot_mpc1 * cost_scale
 
       safe_distance = lead_0_obstacle[0] - get_safe_obstacle_distance(v_ego, comfort_brake, stop_distance)

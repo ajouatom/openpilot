@@ -184,7 +184,7 @@ inline static std::unordered_map<std::string, uint32_t> keys = {
     {"AutoRoadSpeedAdjust", PERSISTENT},
     {"StopDistanceCarrot", PERSISTENT},
     {"ComfortBrake", PERSISTENT},
-    {"JLeadFactor2", PERSISTENT},
+    {"JLeadFactor3", PERSISTENT},
     {"CarrotMpc1", PERSISTENT},
     {"CruiseButtonMode", PERSISTENT},
     {"CruiseButtonTest1", PERSISTENT},

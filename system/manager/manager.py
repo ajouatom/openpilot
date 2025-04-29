@@ -84,7 +84,7 @@ def get_default_params():
     ("StoppingAccel", "0"),
     ("StopDistanceCarrot", "550"),
     ("ComfortBrake", "250"),
-    ("JLeadFactor2", "100"),
+    ("JLeadFactor3", "0"),
     ("CarrotMpc1", "0"),
     ("CruiseButtonMode", "2"),
     ("CruiseButtonTest1", "8"),

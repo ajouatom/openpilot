@@ -76,15 +76,18 @@ class LongControl:
     should_stop = long_plan.shouldStop
     velocity_pid = self.params.get_float("LongVelocityControl")
     long_delay = self.params.get_float("LongActuatorDelay")*0.01 + t_since_plan
-    
+
+    '''
     j_lead_factor = (1 - self.params.get_float("JLeadFactor2") * 0.01) * 2.0 # 최대 2 sec 미래를 봄..  # JLeadFactor2가 0에 가까우면 더 민감함. 100이면 안함.
-    if j_lead_factor > 0.0 and radarState.leadOne.status and velocity_pid == 0:
+    if False: #j_lead_factor > 0.0 and radarState.leadOne.status and velocity_pid == 0:
       j_lead = np.clip(radarState.leadOne.jLead, -2.0, 2.0)
       self.j_lead = j_lead * 0.1 + self.j_lead * 0.9
       plan_alpha = np.interp(abs(self.j_lead), [0.0, 2.0], [0.0, j_lead_factor])
     else:
       self.j_lead = 0.0
       plan_alpha = 0.0
+    '''
+    plan_alpha = 0.0
       
     speeds = long_plan.speeds
     if len(speeds) == CONTROL_N:
