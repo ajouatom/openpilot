@@ -97,7 +97,7 @@ class MyTrack:
     self.vRel = radar_point.vRel
     self.yRel = radar_point.yRel
     self.vLead = radar_point.vLead
-    self.vLead_averaged = self.vLead
+    self.v_lead_filtered_last = self.vLead
     self.aLead = 0.0
     self.jLead = 0.0
     self.dt = dt
@@ -115,18 +115,16 @@ class MyTrack:
       self.vLead_avg.x = self.vLead
       self.aLead_avg.x = self.aLead
       self.jLead_avg.x = self.jLead
-      self.vLead_averaged = self.vLead
+      self.v_lead_filtered_last = self.vLead
     """
 
     self.yRel = radar_point.yRel
 
-    v_lead = self.vLead_avg.update(self.vLead)
-    if abs(v_lead) < 0.5:
-      v_lead = 0.0
-      self.cnt = 0
-    a_raw = (v_lead - self.vLead_averaged) / self.dt
-    self.vLead_averaged = v_lead
-    a_lead = self.aLead_avg.update(a_raw if self.cnt > 1 else 0.0)
+    v_lead_filtered = self.vLead_avg.update(self.vLead)
+    pseudo_stop = abs(v_lead_filtered) < 0.3 and abs(self.vLead - v_lead_filtered) < 0.05
+    a_raw = (v_lead_filtered - self.v_lead_filtered_last) / self.dt
+    self.v_lead_filtered_last = v_lead_filtered
+    a_lead = self.aLead_avg.update(a_raw if not pseudo_stop else 0.0)
 
     j_lead = (a_lead - self.aLead) / self.dt
     self.aLead = a_lead
@@ -139,8 +137,6 @@ class MyTrack:
     self.cnt += 1
 
 # generic car and radar interfaces
-
-
 class RadarInterfaceBase(ABC):
   def __init__(self, CP: structs.CarParams):
     self.CP = CP
