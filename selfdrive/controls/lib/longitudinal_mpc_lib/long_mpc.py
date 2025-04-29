@@ -444,7 +444,8 @@ class LongitudinalMpc:
       '''
       if radarstate.leadOne.status:
         cost_scale = np.interp(abs(self.j_lead), [0.5, 2.0], [0.0, 1.0])
-        self.a_change_cost = np.interp(abs(self.j_lead) * carrot.j_lead_factor, [0.3, 1.0], [A_CHANGE_COST, 20])
+        #self.a_change_cost = np.interp(abs(self.j_lead) * carrot.j_lead_factor, [0.3, 1.0], [A_CHANGE_COST, 20])
+        self.a_change_cost = np.interp(abs(self.j_lead), [0.3, 2.0], [A_CHANGE_COST, 20])
       else:
         cost_scale = 0.0
         self.a_change_cost = A_CHANGE_COST
