@@ -216,10 +216,13 @@ class CarInterface(CarInterfaceBase):
         print("$$$$ NaviCluster = True")
       if 1157 in fingerprint[0] or 1157 in fingerprint[2]:
         ret.extFlags |= HyundaiExtFlags.HAS_LFAHDA.value
+        print("$$$$ HasLFAHDA")
       if 913 in fingerprint[0]:
         ret.extFlags |= HyundaiExtFlags.HAS_LFA_BUTTON.value
+        print("$$$$ hasLFAButton")
       if 1007 in fingerprint[0]:
         ret.extFlags |= HyundaiExtFlags.CRUISE_BUTTON_ALT.value
+        print("#### cruiseButtonAlt")
 
     print(f"$$$$ enableBsm = {ret.enableBsm}")
 
