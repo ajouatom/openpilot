@@ -319,7 +319,7 @@ class LongitudinalMpc:
 
   @staticmethod
   def extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau, j_lead):
-    j_lead_tau = np.interp(j_lead, [-2.0, 0.0, 2.0], [2.0, 2.0, 0.1]) # tau: 2: 2sec, 1: 4sec, 0.5: 10sec
+    j_lead_tau = np.interp(j_lead, [-2.0, 0.0, 2.0], [0.2, 2.0, 0.1]) # tau: 2: 2sec, 1: 4sec, 0.5: 10sec
     j_lead_traj = j_lead * np.exp(-j_lead_tau * (T_IDXS**2)/2.)
     a_lead_traj = a_lead * np.exp(-a_lead_tau * (T_IDXS**2)/2.) + j_lead_traj
     v_lead_traj = np.clip(v_lead + np.cumsum(T_DIFFS * a_lead_traj), 0.0, 1e8)
