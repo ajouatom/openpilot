@@ -94,10 +94,13 @@ class LongControl:
       j_target_now = long_plan.jerks[0] #np.interp(long_delay, ModelConstants.T_IDXS[:CONTROL_N], long_plan.jerks)
       if j_target_now < 0.2 and self.j_lead > 0.0:
         plan_alpha = 0.0
-      v_target_now = np.interp(long_delay + plan_alpha, ModelConstants.T_IDXS[:CONTROL_N], long_plan.speeds)
-      a_target_now = np.interp(long_delay + plan_alpha, ModelConstants.T_IDXS[:CONTROL_N], long_plan.accels)
+      v_target_now = long_plan.speeds[0]
+      #v_target_ff = np.interp(long_delay + plan_alpha, ModelConstants.T_IDXS[:CONTROL_N], long_plan.speeds)
+      a_target_ff = np.interp(long_delay + plan_alpha, ModelConstants.T_IDXS[:CONTROL_N], long_plan.accels)
     else:
-      v_target_now = a_target_now = j_target_now = 0.0
+      v_target_now = 0.0
+      #v_target_ff = 0.0
+      a_target_ff = j_target_now = 0.0     
 
     self.readParamCount += 1
     if self.readParamCount >= 100:
@@ -144,11 +147,12 @@ class LongControl:
 
     else:  # LongCtrlState.pid
       if velocity_pid == 0:
-        error = a_target_now - CS.aEgo
+        error = a_target_ff - CS.aEgo
       else:
+        #error = v_target_ff - CS.vEgo
         error = v_target_now - CS.vEgo
       output_accel = self.pid.update(error, speed=CS.vEgo,
-                                     feedforward=a_target_now)
+                                     feedforward=a_target_ff)
 
     self.last_output_accel = np.clip(output_accel, accel_limits[0], accel_limits[1])
-    return self.last_output_accel, a_target_now, j_target_now
+    return self.last_output_accel, a_target_ff, j_target_now
