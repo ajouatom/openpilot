@@ -298,15 +298,15 @@ class DesireHelper:
         blindspot_detected = blindspot_cond
 
         if blindspot_detected:
-          self.blindspot_detected_counter = int(0.5 / DT_MDL)
+          self.blindspot_detected_counter = int(1.5 / DT_MDL)
           # BSD검출시.. 아래 두줄로 자동차선변경 해제함.. 위험해서 자동차선변경기능은 안하는걸로...
-          self.lane_change_state = LaneChangeState.off
-          self.lane_change_direction = LaneChangeDirection.none
+          #self.lane_change_state = LaneChangeState.off
+          #self.lane_change_direction = LaneChangeDirection.none
         if not desire_enabled or below_lane_change_speed:
           self.lane_change_state = LaneChangeState.off
           self.lane_change_direction = LaneChangeDirection.none
-        elif self.blindspot_detected_counter == 0:
-          if self.laneChangeNeedTorque > 0:
+        else:
+          if self.laneChangeNeedTorque > 0 or self.blindspot_detected_counter > 0:
             if torque_applied and lane_available:
               self.lane_change_state = LaneChangeState.laneChangeStarting
           # 운전자가 깜박이켠경우는 바로 차선변경 시작
