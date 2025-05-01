@@ -241,7 +241,7 @@ class LanePlanner:
 
     return path_xyz, laneline_active
 
-  def calculate_plan_yaw_and_yaw_rate(path_xyz):
+  def calculate_plan_yaw_and_yaw_rate(self, path_xyz):
     if path_xyz.shape[0] < 3:
         # 너무 짧으면 직진 가정
         N = path_xyz.shape[0]
