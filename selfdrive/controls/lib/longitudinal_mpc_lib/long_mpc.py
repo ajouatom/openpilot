@@ -238,7 +238,6 @@ class LongitudinalMpc:
     self.solver = AcadosOcpSolverCython(MODEL_NAME, ACADOS_SOLVER_TYPE, N)
 
     self.a_change_cost = A_CHANGE_COST
-    self.va_cost = 0.0
     self.j_lead = 0.0
 
     self.reset()
@@ -298,8 +297,7 @@ class LongitudinalMpc:
     #jerk_factor = get_jerk_factor(personality)
     if self.mode == 'acc':
       a_change_cost = self.a_change_cost if prev_accel_constraint else A_CHANGE_COST_STARTING
-      #cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, V_EGO_COST, A_EGO_COST, jerk_factor * a_change_cost, jerk_factor * J_EGO_COST]
-      cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, self.va_cost, self.va_cost, jerk_factor * a_change_cost, jerk_factor * J_EGO_COST]
+      cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, V_EGO_COST, A_EGO_COST, jerk_factor * a_change_cost, jerk_factor * J_EGO_COST]
       constraint_cost_weights = [LIMIT_COST, LIMIT_COST, LIMIT_COST, DANGER_ZONE_COST]
     elif self.mode == 'blended':
       a_change_cost = 40.0 if prev_accel_constraint else 0
@@ -419,38 +417,10 @@ class LongitudinalMpc:
       # These are not used in ACC mode
       x[:], v[:], a[:], j[:] = 0.0, 0.0, 0.0, 0.0
 
-
-      lead_0_velocity = lead_xv_0[:, 1]
-      lead_v = lead_0_velocity
-      lead_a = np.gradient(lead_v, T_IDXS)
-      dRel = lead_0_obstacle[0]
-      lead_weight = np.clip(np.interp(dRel, [0.0, 15.0, 30.0], [1.0, 0.5, 0.0]), 0.0, 1.0)
-      v = (1.0 - lead_weight) * v_ego + lead_weight * lead_v
-      a = (1.0 - lead_weight) * a_ego + lead_weight * lead_a
-
-
-
-      #cost_scale = np.clip(np.interp(dRel, [0.0, 15.0, 30.0], [0.0, 0.5, 1.0]), 0.0, 1.0)
-      '''
-      v_now = lead_0_velocity[0]
-      v_soon = np.interp(2.0, T_IDXS, lead_0_velocity)
-      delta_v = v_soon - v_now
-
-      if v_now < 0.5 and v_soon < 0.5:
-        cost_scale = 0.0
-      else:
-        cost_scale = np.interp(delta_v,
-                               [-2.0, -0.5, 0.0, 0.5, 2.0],
-                               [1.0,  0.5,  0.0, 0.4, 0.8])
-      '''
       if radarstate.leadOne.status:
-        cost_scale = np.interp(abs(self.j_lead), [0.5, 2.0], [0.0, 1.0])
-        #self.a_change_cost = np.interp(abs(self.j_lead) * carrot.j_lead_factor, [0.3, 1.0], [A_CHANGE_COST, 20])
         self.a_change_cost = np.interp(abs(self.j_lead), [0.3, 2.0], [A_CHANGE_COST, 20])
       else:
-        cost_scale = 0.0
         self.a_change_cost = A_CHANGE_COST
-      self.va_cost = carrot.carrot_mpc1 * cost_scale
 
       #safe_distance = lead_0_obstacle[0] - get_safe_obstacle_distance(v_ego, comfort_brake, stop_distance)
       self.lead_danger_factor = LEAD_DANGER_FACTOR #np.interp(safe_distance, [-30.0, 0.0], [0.9, LEAD_DANGER_FACTOR]) # 이걸적용하니, 사고방지턱 감속시 너무 급정거하는것 같음.
