@@ -39,7 +39,7 @@ class CarSpecificEvents:
     self.steering_unpressed = 0
     self.low_speed_alert = False
     self.no_steer_warning = False
-    self.silent_steer_warning = True
+    self.silent_steer_warning = 1
 
     self.cruise_buttons: deque = deque([], maxlen=HYUNDAI_PREV_BUTTON_SAMPLES)
 
@@ -229,14 +229,15 @@ class CarSpecificEvents:
         self.no_steer_warning = False
 
         # if the user overrode recently, show a less harsh alert
-        if self.silent_steer_warning or CS.standstill or self.steering_unpressed < int(1.5 / DT_CTRL):
-          self.silent_steer_warning = True
-          events.add(EventName.steerTempUnavailableSilent)
+        if self.silent_steer_warning > 0 or CS.standstill or self.steering_unpressed < int(1.5 / DT_CTRL):
+          self.silent_steer_warning += 1
+          if self.silent_steer_warning > 5:
+            events.add(EventName.steerTempUnavailableSilent)
         else:
           events.add(EventName.steerTempUnavailable)
     else:
       self.no_steer_warning = False
-      self.silent_steer_warning = False
+      self.silent_steer_warning = 0
     if CS.steerFaultPermanent:
       events.add(EventName.steerUnavailable)
 
