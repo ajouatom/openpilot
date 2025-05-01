@@ -498,7 +498,6 @@ struct CarControl {
       audio9 @32;
       audio10 @33;
 
-      nnff @34;
     }
   }
 

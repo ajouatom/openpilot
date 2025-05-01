@@ -2764,10 +2764,6 @@ public:
         else if (longitudinal_control) {
             carName += " - OP Long";
         }
-        QString NNFFModelName = QString::fromStdString(params.get("NNFFModelName"));
-        if (NNFFModelName.length() > 0) {
-            carName += ",NNFF";
-        }
         sprintf(top_left, "%s", carName.toStdString().c_str());
 
         // bottom

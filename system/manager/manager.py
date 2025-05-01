@@ -31,6 +31,7 @@ def get_default_params():
     ("LanguageSetting", "main_en"),
     ("OpenpilotEnabledToggle", "1"),
     ("LongitudinalPersonality", str(log.LongitudinalPersonality.standard)),
+    ("IsMetric", "1"),
 
     ("SearchInput", "0"),
     ("GMapKey", "0"),
@@ -153,8 +154,6 @@ def get_default_params():
     ("HotspotOnBoot", "0"),
     ("CustomSR", "0"),
     ("SteerRatioRate", "100"),
-    ("NNFF", "0"),
-    ("NNFFLite", "0"),
   ]
   return default_params
 
