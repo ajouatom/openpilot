@@ -367,19 +367,6 @@
     },
     {
       "group": "주행튜닝",
-      "name": "ComfortBrake",
-      "title": "Comfort Brake(250)",
-      "descr": "x0.01, 값이 크면 급하게 브레이킹",
-      "egroup": "LONG",
-      "etitle": "Comfort Brake(250)",
-      "edescr": "",
-      "min": 200,
-      "max": 300,
-      "default": 250,
-      "unit": 5
-    },
-    {
-      "group": "주행튜닝",
       "name": "JLeadFactor3",
       "title": "JerkLeadFactor(0)",
       "descr": "값이 크면 전방차량의 가속도변화율에 민감하게 반응",

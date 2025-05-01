@@ -83,7 +83,6 @@ def get_default_params():
     ("MapTurnSpeedFactor", "90"),
     ("StoppingAccel", "0"),
     ("StopDistanceCarrot", "550"),
-    ("ComfortBrake", "250"),
     ("JLeadFactor3", "0"),
     ("CarrotMpc1", "0"),
     ("CruiseButtonMode", "2"),
