@@ -29,7 +29,7 @@ from openpilot.system.qcomgpsd.structs import (dict_unpacker, position_report, r
                                               LOG_GNSS_POSITION_REPORT, LOG_GNSS_OEMDRE_MEASUREMENT_REPORT,
                                               LOG_GNSS_OEMDRE_SVPOLY_REPORT)
 
-DEBUG = int(os.getenv("DEBUG", "0"))==1
+DEBUG = True #int(os.getenv("DEBUG", "0"))==1
 ASSIST_DATA_FILE = '/tmp/xtra3grc.bin'
 ASSIST_DATA_FILE_DOWNLOAD = ASSIST_DATA_FILE + '.download'
 ASSISTANCE_URL = 'http://xtrapath3.izatcloud.net/xtra3grc.bin'
