@@ -185,6 +185,7 @@ class Car:
     #RD: structs.RadarDataT | None = self.RI.update_carrot(CS.vEgo, can_list)
 
     self.sm.update(0)
+    self.t1 = time.monotonic()
 
     can_rcv_valid = len(can_strs) > 0
 
@@ -195,7 +196,6 @@ class Car:
     if can_rcv_valid and REPLAY:
       self.can_log_mono_time = messaging.log_from_bytes(can_strs[0]).logMonoTime
 
-    self.t1 = time.monotonic()
     RD: structs.RadarDataT | None = self.RI.update_carrot(CS.vEgo, rcv_time, can_list)
     self.t2 = time.monotonic()
 
@@ -257,6 +257,7 @@ class Car:
       self.CI.init(self.CP, *self.can_callbacks)
       # signal pandad to switch to car safety mode
       self.params.put_bool_nonblocking("ControlsReady", True)
+      self.rk = Ratekeeper(100)
 
     if self.sm.all_alive(['carControl']):
       # send car controls over can
@@ -294,7 +295,7 @@ class Car:
         start = time.monotonic()
         self.step()
         if self.sm.frame % 100 == 0:
-          print(f"elapsed time = {(self.t1 - start)*1000.:.2f}, {(self.t2 - self.t1)*1000.:.2f}, {(self.t3 - self.t2)*1000.:.2f}, {(time.monotonic() - start)*1000.:.2f}")
+          print(f"elapsed time = {(self.t1 - start)*1000.:.2f}, {(self.t2 - self.t1)*1000.:.2f}, {(self.t3 - self.t1)*1000.:.2f}, {(time.monotonic() - start)*1000.:.2f}")
         self.rk.monitor_time()
     finally:
       e.set()
