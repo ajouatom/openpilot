@@ -285,7 +285,7 @@ class Car:
       self.experimental_mode = self.params.get_bool("ExperimentalMode") and self.CP.openpilotLongitudinalControl
       time.sleep(0.1)
 
-  def card_thread1(self):
+  def card_thread(self):
     e = threading.Event()
     t = threading.Thread(target=self.params_thread, args=(e, ))
     try:
