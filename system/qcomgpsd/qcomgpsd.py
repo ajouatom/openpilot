@@ -333,7 +333,7 @@ def main() -> NoReturn:
       pm.send('qcomGnss', msg)
     elif log_type == LOG_GNSS_POSITION_REPORT:
       report = unpack_position(log_payload)
-      print(report)
+      #print(report)
       if report["u_PosSource"] != 2:
         continue
       vNED = [report["q_FltVelEnuMps[1]"], report["q_FltVelEnuMps[0]"], -report["q_FltVelEnuMps[2]"]]
