@@ -257,7 +257,6 @@ class Car:
       self.CI.init(self.CP, *self.can_callbacks)
       # signal pandad to switch to car safety mode
       self.params.put_bool_nonblocking("ControlsReady", True)
-      self.rk = Ratekeeper(100)
 
     if self.sm.all_alive(['carControl']):
       # send car controls over can
