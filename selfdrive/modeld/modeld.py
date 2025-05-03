@@ -218,7 +218,7 @@ def main(demo=False):
 
   # messaging
   pm = PubMaster(["modelV2", "drivingModelData", "cameraOdometry"])
-  sm = SubMaster(["deviceState", "carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "carControl", "carrotMan", "radarState"])
+  sm = SubMaster(["deviceState", "carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "carControl", "liveDelay", "carrotMan", "radarState"])
 
   publish_state = PublishState()
   params = Params()
@@ -251,8 +251,12 @@ def main(demo=False):
 
   DH = DesireHelper()
 
+  frame = 0
   while True:
-    lat_delay = params.get_float("SteerActuatorDelay") * 0.01 + LAT_SMOOTH_SECONDS
+    frame += 1
+    if frame % 100 == 0:
+      lat_delay = params.get_float("SteerActuatorDelay") * 0.01 + LAT_SMOOTH_SECONDS
+      print(sm["liveDelay"].lateralDelay)
 
     # Keep receiving frames until we are at least 1 frame ahead of previous extra frame
     while meta_main.timestamp_sof < meta_extra.timestamp_sof + 25000000:

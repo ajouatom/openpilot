@@ -11,7 +11,7 @@ from cereal.services import SERVICE_LIST
 from openpilot.common.params import Params
 from openpilot.common.realtime import config_realtime_process
 from openpilot.common.swaglog import cloudlog
-from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose, fft_next_good_size, parabolic_peak_interp
+from openpilot.selfdrive.locationd.helpers import fft_next_good_size, parabolic_peak_interp
 
 BLOCK_SIZE = 100
 BLOCK_NUM = 50
@@ -148,7 +148,7 @@ class BlockAverage:
 
 
 class LateralLagEstimator:
-  inputs = {"carControl", "carState", "controlsState", "liveCalibration", "livePose"}
+  inputs = {"carControl", "carState", "controlsState", "liveLocationKalman"}
 
   def __init__(self, CP: car.CarParams, dt: float,
                block_count: int = BLOCK_NUM, min_valid_block_count: int = BLOCK_NUM_NEEDED, block_size: int = BLOCK_SIZE,
@@ -185,7 +185,7 @@ class LateralLagEstimator:
     self.last_pose_invalid_t = 0.0
     self.last_estimate_t = 0.0
 
-    self.calibrator = PoseCalibrator()
+    self.calib_valid = False
 
     self.reset(self.initial_lag, 0)
 
@@ -237,14 +237,11 @@ class LateralLagEstimator:
     elif which == "controlsState":
       self.steering_saturated = getattr(msg.lateralControlState, msg.lateralControlState.which()).saturated
       self.desired_curvature = msg.desiredCurvature
-    elif which == "liveCalibration":
-      self.calibrator.feed_live_calib(msg)
-    elif which == "livePose":
-      device_pose = Pose.from_live_pose(msg)
-      calibrated_pose = self.calibrator.build_calibrated_pose(device_pose)
-      self.yaw_rate = calibrated_pose.angular_velocity.yaw
-      self.yaw_rate_std = calibrated_pose.angular_velocity.yaw_std
-      self.pose_valid = msg.angularVelocityDevice.valid and msg.posenetOK and msg.inputsOK
+    elif which == 'liveLocationKalman':
+      self.yaw_rate = msg.angularVelocityCalibrated.value[2]
+      self.yaw_rate_std = msg.angularVelocityCalibrated.std[2]    
+      self.pose_valid = msg.angularVelocityCalibrated.valid and msg.posenetOK and msg.inputsOK  
+      self.calib_valid = msg.status == log.LiveLocationKalman.Status.valid
     self.t = t
 
   def points_enough(self):
@@ -261,7 +258,7 @@ class LateralLagEstimator:
     turning = np.abs(self.yaw_rate) >= self.min_yr
     sensors_valid = self.pose_valid and np.abs(self.yaw_rate) < MAX_YAW_RATE_SANITY_CHECK and self.yaw_rate_std < MAX_YAW_RATE_SANITY_CHECK
     la_valid = np.abs(la_actual_pose) <= self.max_lat_accel and np.abs(la_desired - la_actual_pose) <= self.max_lat_accel_diff
-    calib_valid = self.calibrator.calib_valid
+    calib_valid = self.calib_valid #self.calibrator.calib_valid
 
     if not self.lat_active:
       self.last_lat_inactive_t = self.t
