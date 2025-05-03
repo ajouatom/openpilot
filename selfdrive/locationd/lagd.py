@@ -340,12 +340,12 @@ def main():
   DEBUG = bool(int(os.getenv("DEBUG", "0")))
 
   pm = messaging.PubMaster(['liveDelay'])
-  sm = messaging.SubMaster(['livePose', 'liveCalibration', 'carState', 'controlsState', 'carControl'], poll='livePose')
+  sm = messaging.SubMaster(['liveLocationKalman', 'carState', 'controlsState', 'carControl'], poll='liveLocationKalman')
 
   params_reader = Params()
   CP = messaging.log_from_bytes(params_reader.get("CarParams", block=True), car.CarParams)
 
-  lag_learner = LateralLagEstimator(CP, 1. / SERVICE_LIST['livePose'].frequency)
+  lag_learner = LateralLagEstimator(CP, 1. / SERVICE_LIST['liveLocationKalman'].frequency)
   if (initial_lag_params := retrieve_initial_lag(params_reader, CP)) is not None:
     lag, valid_blocks = initial_lag_params
     lag_learner.reset(lag, valid_blocks)
