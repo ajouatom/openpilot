@@ -162,6 +162,9 @@ class Car:
     self.is_metric = self.params.get_bool("IsMetric")
     self.experimental_mode = self.params.get_bool("ExperimentalMode")
 
+    self.t1 = time.monotonic()
+    self.t2 = self.t1
+    self.t3 = self.t2
     # card is driven by can recv, expected at 100Hz
     self.rk = Ratekeeper(100, print_delay_threshold=None)
 
@@ -192,10 +195,13 @@ class Car:
     if can_rcv_valid and REPLAY:
       self.can_log_mono_time = messaging.log_from_bytes(can_strs[0]).logMonoTime
 
+    self.t1 = time.monotonic()
     RD: structs.RadarDataT | None = self.RI.update_carrot(CS.vEgo, rcv_time, can_list)
+    self.t2 = time.monotonic()
 
     #self.v_cruise_helper.update_v_cruise(CS, self.sm['carControl'].enabled, self.is_metric)
     self.v_cruise_helper.update_v_cruise(CS, self.sm, self.is_metric)
+    self.t3 = time.monotonic()
     if self.sm['carControl'].enabled and not self.CC_prev.enabled:
       # Use CarState w/ buttons from the step selfdrived enables on
       self.v_cruise_helper.initialize_v_cruise(self.CS_prev, self.experimental_mode)
@@ -285,40 +291,10 @@ class Car:
     try:
       t.start()
       while True:
-        self.step()
-        self.rk.monitor_time()
-    finally:
-      e.set()
-      t.join()
-
-  def card_thread(self):
-    e = threading.Event()
-    t = threading.Thread(target=self.params_thread, args=(e, ))
-    try:
-      t.start()
-
-      # 시간 측정용 변수 초기화
-      count = 0
-      total_time = 0.0
-      last_print = time.monotonic()
-      print_interval = 5.0  # 5초마다 출력
-
-      while True:
         start = time.monotonic()
         self.step()
-        elapsed = (time.monotonic() - start) * 1000.0  # ms 단위
-        total_time += elapsed
-        count += 1
-
-        # 평균 시간 출력
-        now = time.monotonic()
-        if now - last_print > print_interval:
-          avg_time = total_time / count if count > 0 else 0.0
-          print(f"[card_thread] avg step time over last {print_interval}s: {avg_time:.2f} ms")
-          count = 0
-          total_time = 0.0
-          last_print = now
-
+        if self.sm.frame % 100 == 0:
+          print(f"elapsed time = {self.t1 - start:.2f}, {self.t2 - self.t1:.2f}, {self.t3 - self.t2:.2f}, {time.monotonic() - start}")
         self.rk.monitor_time()
     finally:
       e.set()
