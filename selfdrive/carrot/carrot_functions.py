@@ -121,7 +121,6 @@ class CarrotPlanner:
     self.jerk_factor_apply = 1.0
 
     self.j_lead_factor = 0.0
-    self.carrot_mpc1 = 0.0
 
     self.activeCarrot = 0
     self.xDistToTurn = 0
