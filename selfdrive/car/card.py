@@ -294,7 +294,7 @@ class Car:
         start = time.monotonic()
         self.step()
         if self.sm.frame % 100 == 0:
-          print(f"elapsed time = {self.t1 - start:.2f}, {self.t2 - self.t1:.2f}, {self.t3 - self.t2:.2f}, {time.monotonic() - start}")
+          print(f"elapsed time = {(self.t1 - start)*1000.:.2f}, {(self.t2 - self.t1)*1000.:.2f}, {(self.t3 - self.t2)*1000.:.2f}, {(time.monotonic() - start)*1000.:.2f}")
         self.rk.monitor_time()
     finally:
       e.set()
