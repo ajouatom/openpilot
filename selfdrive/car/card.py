@@ -279,7 +279,7 @@ class Car:
       self.experimental_mode = self.params.get_bool("ExperimentalMode") and self.CP.openpilotLongitudinalControl
       time.sleep(0.1)
 
-  def card_thread(self):
+  def card_thread1(self):
     e = threading.Event()
     t = threading.Thread(target=self.params_thread, args=(e, ))
     try:
@@ -291,7 +291,39 @@ class Car:
       e.set()
       t.join()
 
+  def card_thread(self):
+    e = threading.Event()
+    t = threading.Thread(target=self.params_thread, args=(e, ))
+    try:
+      t.start()
 
+      # 시간 측정용 변수 초기화
+      count = 0
+      total_time = 0.0
+      last_print = time.monotonic()
+      print_interval = 5.0  # 5초마다 출력
+
+      while True:
+        start = time.monotonic()
+        self.step()
+        elapsed = (time.monotonic() - start) * 1000.0  # ms 단위
+        total_time += elapsed
+        count += 1
+
+        # 평균 시간 출력
+        now = time.monotonic()
+        if now - last_print > print_interval:
+          avg_time = total_time / count if count > 0 else 0.0
+          print(f"[card_thread] avg step time over last {print_interval}s: {avg_time:.2f} ms")
+          count = 0
+          total_time = 0.0
+          last_print = now
+
+        self.rk.monitor_time()
+    finally:
+      e.set()
+      t.join()
+    
 def main():
   config_realtime_process(4, Priority.CTRL_HIGH)
   car = Car()
