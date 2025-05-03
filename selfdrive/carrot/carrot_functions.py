@@ -80,7 +80,7 @@ class CarrotPlanner:
 
     self.stop_distance = 6.0
     self.trafficStopDistanceAdjust = 1.0 #params.get_float("TrafficStopDistanceAdjust") / 100.
-    self.comfortBrake = 2.5
+    self.comfortBrake = 2.4
     self.comfort_brake = self.comfortBrake
 
     self.soft_hold_active = 0
