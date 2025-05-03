@@ -335,6 +335,7 @@ def main() -> NoReturn:
       report = unpack_position(log_payload)
       #print(report)
       if report["u_PosSource"] != 2:
+        print("u_PosSource =", report["u_PosSource"])
         continue
       vNED = [report["q_FltVelEnuMps[1]"], report["q_FltVelEnuMps[0]"], -report["q_FltVelEnuMps[2]"]]
       vNEDsigma = [report["q_FltVelSigmaMps[1]"], report["q_FltVelSigmaMps[0]"], -report["q_FltVelSigmaMps[2]"]]
