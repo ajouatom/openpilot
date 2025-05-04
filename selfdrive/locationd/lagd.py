@@ -277,7 +277,9 @@ class LateralLagEstimator:
            fast and turning and has_recovered and calib_valid and sensors_valid and la_valid
 
     if not okay and self.lat_active and not self.steering_pressed and not self.steering_saturated and fast:
-      print(f"lagd: {self.t:.3f} {self.v_ego:.2f} {self.yaw_rate:.2f} {la_desired:.2f} {la_actual_pose:.2f} {self.yaw_rate_std:.2f} {self.calib_valid} {self.pose_valid} {la_valid} {sensors_valid} {okay}")
+      print(f"lagd: {self.t:.3f} {self.yaw_rate:.4f} {la_desired:.4f} {la_actual_pose:.4f} {self.yaw_rate_std:.2f} {has_recovered} {turning} {self.t - self.last_pos_invalid_t}")
+      if not la_valid:
+        print(f"la_valid: {self.t:.3f} {la_desired:.4f} {la_actual_pose:.4f} {self.yaw_rate_std:.2f} {turning} {self.t - self.last_pos_invalid_t}")
     self.points.update(self.t, la_desired, la_actual_pose, okay)
 
   def update_estimate(self):
