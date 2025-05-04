@@ -339,7 +339,7 @@ def retrieve_initial_lag(params_reader: Params, CP: car.CarParams):
 def main():
   config_realtime_process([0, 1, 2, 3], 5)
 
-  DEBUG = bool(int(os.getenv("DEBUG", "0")))
+  DEBUG = True #bool(int(os.getenv("DEBUG", "0")))
 
   pm = messaging.PubMaster(['liveDelay'])
   sm = messaging.SubMaster(['liveLocationKalman', 'carState', 'controlsState', 'carControl'], poll='liveLocationKalman')
