@@ -252,11 +252,18 @@ def main(demo=False):
   DH = DesireHelper()
 
   frame = 0
+  custom_lat_delay = 0.0
+  lat_smooth_seconds = LAT_SMOOTH_SECONDS
   while True:
     frame += 1
     if frame % 100 == 0:
-      lat_delay = params.get_float("SteerActuatorDelay") * 0.01 + LAT_SMOOTH_SECONDS
-      print(sm["liveDelay"].lateralDelay)
+      custom_lat_delay = params.get_float("SteerActuatorDelay") * 0.01
+      lat_smooth_seconds = params.get_float("SteerSmoothSec") * 0.01
+      
+    if custom_lat_delay > 0.0:
+      lat_delay = custom_lat_delay + lat_smooth_seconds
+    else:
+      lat_delay = sm["liveDelay"].lateralDelay + lat_smooth_seconds
 
     # Keep receiving frames until we are at least 1 frame ahead of previous extra frame
     while meta_main.timestamp_sof < meta_extra.timestamp_sof + 25000000:

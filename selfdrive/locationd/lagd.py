@@ -106,8 +106,8 @@ class Points:
     self.okay.append(okay)
     self.desired.append(desired)
     self.actual.append(actual)
-    if okay:
-      print(f"lagd: {t:.3f} {desired:.4f} {actual:.4f} {self.num_okay}/{self.num_points}")
+    #if okay:
+    #  print(f"lagd: {t:.3f} {desired:.4f} {actual:.4f} {self.num_okay}/{self.num_points}")
 
   def get(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     return np.array(self.times), np.array(self.desired), np.array(self.actual), np.array(self.okay)
@@ -278,10 +278,6 @@ class LateralLagEstimator:
     okay = self.lat_active and not self.steering_pressed and not self.steering_saturated and \
            fast and turning and has_recovered and calib_valid and sensors_valid and la_valid
 
-    if not okay and self.lat_active and not self.steering_pressed and not self.steering_saturated and fast:
-      print(f"lagd: {self.t:.3f} {self.yaw_rate:.4f} {la_desired:.4f} {la_actual_pose:.4f} {self.yaw_rate_std:.2f} {has_recovered} {turning} {self.t - self.last_pose_invalid_t}")
-      if not la_valid:
-        print(f"la_valid: {self.t:.3f} {la_desired:.4f} {la_actual_pose:.4f} {self.yaw_rate_std:.2f} {turning} {self.t - self.last_pose_invalid_t}")
     self.points.update(self.t, la_desired, la_actual_pose, okay)
 
   def update_estimate(self):
