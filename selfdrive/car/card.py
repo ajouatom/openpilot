@@ -162,6 +162,9 @@ class Car:
     self.is_metric = self.params.get_bool("IsMetric")
     self.experimental_mode = self.params.get_bool("ExperimentalMode")
 
+    #self.t1 = time.monotonic()
+    #self.t2 = self.t1
+    #self.t3 = self.t2
     # card is driven by can recv, expected at 100Hz
     self.rk = Ratekeeper(100, print_delay_threshold=None)
 
@@ -182,6 +185,7 @@ class Car:
     #RD: structs.RadarDataT | None = self.RI.update_carrot(CS.vEgo, can_list)
 
     self.sm.update(0)
+    #self.t1 = time.monotonic()
 
     can_rcv_valid = len(can_strs) > 0
 
@@ -193,9 +197,11 @@ class Car:
       self.can_log_mono_time = messaging.log_from_bytes(can_strs[0]).logMonoTime
 
     RD: structs.RadarDataT | None = self.RI.update_carrot(CS.vEgo, rcv_time, can_list)
+    #self.t2 = time.monotonic()
 
     #self.v_cruise_helper.update_v_cruise(CS, self.sm['carControl'].enabled, self.is_metric)
     self.v_cruise_helper.update_v_cruise(CS, self.sm, self.is_metric)
+    #self.t3 = time.monotonic()
     if self.sm['carControl'].enabled and not self.CC_prev.enabled:
       # Use CarState w/ buttons from the step selfdrived enables on
       self.v_cruise_helper.initialize_v_cruise(self.CS_prev, self.experimental_mode)
@@ -285,13 +291,15 @@ class Car:
     try:
       t.start()
       while True:
+        #start = time.monotonic()
         self.step()
+        #if self.sm.frame % 100 == 0:
+        #  print(f"elapsed time = {(self.t1 - start)*1000.:.2f}, {(self.t2 - self.t1)*1000.:.2f}, {(self.t3 - self.t1)*1000.:.2f}, {(time.monotonic() - self.t1)*1000.:.2f}")
         self.rk.monitor_time()
     finally:
       e.set()
       t.join()
-
-
+    
 def main():
   config_realtime_process(4, Priority.CTRL_HIGH)
   car = Car()

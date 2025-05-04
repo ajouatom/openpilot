@@ -48,7 +48,7 @@ LONG_SMOOTH_SECONDS = 0.3
 
 
 def get_action_from_model(model_output: dict[str, np.ndarray], prev_action: log.ModelDataV2.Action,
-                          lat_action_t: float, long_action_t: float,) -> log.ModelDataV2.Action:
+                          lat_action_t: float, long_action_t: float, lat_smooth_seconds: float) -> log.ModelDataV2.Action:
     plan = model_output['plan'][0]
     desired_accel, should_stop = get_accel_from_plan(plan[:,Plan.VELOCITY][:,0],
                                                      plan[:,Plan.ACCELERATION][:,0],
@@ -57,7 +57,7 @@ def get_action_from_model(model_output: dict[str, np.ndarray], prev_action: log.
     desired_accel = smooth_value(desired_accel, prev_action.desiredAcceleration, LONG_SMOOTH_SECONDS)
 
     desired_curvature = model_output['desired_curvature'][0, 0]
-    desired_curvature = smooth_value(desired_curvature, prev_action.desiredCurvature, LAT_SMOOTH_SECONDS)
+    desired_curvature = smooth_value(desired_curvature, prev_action.desiredCurvature, lat_smooth_seconds)
 
     return log.ModelDataV2.Action(desiredCurvature=float(desired_curvature),
                                   desiredAcceleration=float(desired_accel),
@@ -218,7 +218,7 @@ def main(demo=False):
 
   # messaging
   pm = PubMaster(["modelV2", "drivingModelData", "cameraOdometry"])
-  sm = SubMaster(["deviceState", "carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "carControl", "carrotMan", "radarState"])
+  sm = SubMaster(["deviceState", "carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "carControl", "liveDelay", "carrotMan", "radarState"])
 
   publish_state = PublishState()
   params = Params()
@@ -251,8 +251,19 @@ def main(demo=False):
 
   DH = DesireHelper()
 
+  frame = 0
+  custom_lat_delay = 0.0
+  lat_smooth_seconds = LAT_SMOOTH_SECONDS
   while True:
-    lat_delay = params.get_float("SteerActuatorDelay") * 0.01 + LAT_SMOOTH_SECONDS
+    frame += 1
+    if frame % 100 == 0:
+      custom_lat_delay = params.get_float("SteerActuatorDelay") * 0.01
+      lat_smooth_seconds = params.get_float("SteerSmoothSec") * 0.01
+      
+    if custom_lat_delay > 0.0:
+      lat_delay = custom_lat_delay + lat_smooth_seconds
+    else:
+      lat_delay = sm["liveDelay"].lateralDelay + lat_smooth_seconds
 
     # Keep receiving frames until we are at least 1 frame ahead of previous extra frame
     while meta_main.timestamp_sof < meta_extra.timestamp_sof + 25000000:
@@ -335,7 +346,7 @@ def main(demo=False):
       drivingdata_send = messaging.new_message('drivingModelData')
       posenet_send = messaging.new_message('cameraOdometry')
 
-      action = get_action_from_model(model_output, prev_action, lat_delay + DT_MDL, long_delay + DT_MDL)
+      action = get_action_from_model(model_output, prev_action, lat_delay + DT_MDL, long_delay + DT_MDL, lat_smooth_seconds)
       prev_action = action
       fill_model_msg(drivingdata_send, modelv2_send, model_output, action,
                      publish_state, meta_main.frame_id, meta_extra.frame_id, frame_id,

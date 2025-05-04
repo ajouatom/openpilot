@@ -25,7 +25,6 @@ from openpilot.selfdrive.controls.lib.longcontrol import LongControl
 from openpilot.common.realtime import DT_CTRL, DT_MDL
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N
-from selfdrive.modeld.modeld import LAT_SMOOTH_SECONDS
 
 State = log.SelfdriveState.OpenpilotState
 LaneChangeState = log.LaneChangeState
@@ -47,7 +46,7 @@ class Controls:
 
     self.sm = messaging.SubMaster(['liveParameters', 'liveTorqueParameters', 'modelV2', 'selfdriveState',
                                    'liveCalibration', 'liveLocationKalman', 'longitudinalPlan', 'carState', 'carOutput',
-                                   'carrotMan', 'lateralPlan', 'radarState',
+                                   'liveDelay', 'carrotMan', 'lateralPlan', 'radarState',
                                    'driverMonitoringState', 'onroadEvents', 'driverAssistance'], poll='selfdriveState')
     self.pm = messaging.PubMaster(['carControl', 'controlsState'])
 
@@ -134,11 +133,13 @@ class Controls:
     curve_speed_abs = abs(self.sm['carrotMan'].vTurnSpeed)
     self.lanefull_mode_enabled = (lat_plan.useLaneLines and self.params.get_int("UseLaneLineSpeedApply") > 0 and
                                   curve_speed_abs > self.params.get_int("UseLaneLineCurveSpeed"))
-
-    steer_actuator_delay = self.params.get_float("SteerActuatorDelay") * 0.01 + LAT_SMOOTH_SECONDS
+    lat_smooth_seconds = self.params.get_float("SteerSmoothSec") * 0.01
+    steer_actuator_delay = self.params.get_float("SteerActuatorDelay") * 0.01
+    if steer_actuator_delay == 0.0:
+      steer_actuator_delay = self.sm['liveDelay'].lateralDelay 
 
     if len(model_v2.position.yStd) > 0:
-      yStd = np.interp(steer_actuator_delay + LAT_SMOOTH_SECONDS, ModelConstants.T_IDXS, model_v2.position.yStd)
+      yStd = np.interp(steer_actuator_delay + lat_smooth_seconds, ModelConstants.T_IDXS, model_v2.position.yStd)
       self.yStd = yStd * 0.1 + self.yStd * 0.9
     else:
       self.yStd = 0.0
@@ -154,8 +155,8 @@ class Controls:
           return alpha * val + (1 - alpha) * prev_val
 
         t_since_plan = (self.sm.frame - self.sm.recv_frame['lateralPlan']) * DT_CTRL
-        curvature = np.interp(steer_actuator_delay + t_since_plan, ModelConstants.T_IDXS[:CONTROL_N], lat_plan.curvatures)          
-        new_desired_curvature = smooth_value(curvature, self.desired_curvature, LAT_SMOOTH_SECONDS)
+        curvature = np.interp(steer_actuator_delay + lat_smooth_seconds + t_since_plan, ModelConstants.T_IDXS[:CONTROL_N], lat_plan.curvatures)          
+        new_desired_curvature = smooth_value(curvature, self.desired_curvature, lat_smooth_seconds)
     else:
       new_desired_curvature = model_v2.action.desiredCurvature
 

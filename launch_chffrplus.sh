@@ -90,7 +90,8 @@ function launch {
   fi
 
   # events language init
-  LANG=$(cat ${PARAMS_ROOT}/d/LanguageSetting)
+  #LANG=$(cat ${PARAMS_ROOT}/d/LanguageSetting)
+  LANG=$(cat /data/params/d/LanguageSetting)
   EVENTSTAT=$(git status)
 
   # events.py 한글로 변경 및 파일이 교체된 상태인지 확인
