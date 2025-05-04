@@ -2737,7 +2737,7 @@ public:
         const auto live_delay = sm["liveDelay"].getLiveDelay();
         const auto live_torque_params = sm["liveTorqueParameters"].getLiveTorqueParameters();
         const auto live_params = sm["liveParameters"].getLiveParameters();
-        str.sprintf("LD["%d,%.2f],LT[%.0f,%s](%.2f/%.2f), SR(%.1f,%.1f)",
+        str.sprintf("LD[%d,%.2f],LT[%.0f,%s](%.2f/%.2f), SR(%.1f,%.1f)",
             live_delay.getValidBlocks(), live_delay.getLateralDelay(),
             live_torque_params.getTotalBucketPoints(), live_torque_params.getLiveValid() ? "ON" : "OFF",
             live_torque_params.getLatAccelFactorFiltered(), live_torque_params.getFrictionCoefficientFiltered(),
