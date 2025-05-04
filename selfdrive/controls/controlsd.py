@@ -157,7 +157,7 @@ class Controls:
 
         t_since_plan = (self.sm.frame - self.sm.recv_frame['lateralPlan']) * DT_CTRL
         curvature = np.interp(steer_actuator_delay + lat_smooth_seconds + t_since_plan, ModelConstants.T_IDXS[:CONTROL_N], lat_plan.curvatures)          
-        new_desired_curvature = smooth_value(curvature, self.desired_curvature, LAT_SMOOTH_SECONDS)
+        new_desired_curvature = smooth_value(curvature, self.desired_curvature, lat_smooth_seconds)
     else:
       new_desired_curvature = model_v2.action.desiredCurvature
 
