@@ -106,6 +106,8 @@ class Points:
     self.okay.append(okay)
     self.desired.append(desired)
     self.actual.append(actual)
+    if okay:
+      print(f"lagd: {t:.3f} {desired:.4f} {actual:.4f} {self.num_okay}/{self.num_points}")
 
   def get(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     return np.array(self.times), np.array(self.desired), np.array(self.actual), np.array(self.okay)
