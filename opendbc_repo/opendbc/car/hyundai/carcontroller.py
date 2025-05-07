@@ -152,7 +152,7 @@ class CarController(CarControllerBase):
       else:
         curv = abs(actuators.curvature)
         y_std = actuators.yStd
-        curvature_threshold = np.interp(y_std, [0.0, 0.15], [0.5, 0.006])
+        curvature_threshold = np.interp(y_std, [0.0, 0.12], [0.5, 0.006])
 
         curve_scale = np.clip(curv / curvature_threshold, 0.0, 1.0)
         torque_pts = [
