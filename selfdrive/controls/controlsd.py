@@ -154,15 +154,7 @@ class Controls:
           alpha = 1 - np.exp(-DT_CTRL / tau) if tau > 0 else 1
           return alpha * val + (1 - alpha) * prev_val
 
-        curvs = np.array(lat_plan.curvatures)
-        delay_idx = int(0.5 / DT_MDL)
-        early_mean = np.mean(np.abs(curvs[:3]))
-        delay_mean = np.mean(np.abs(curvs[delay_idx:]))
-        if delay_mean < early_mean * 0.3: # 직선도로 drift현상 방지용
-          curvs[delay_idx:] = early_mean
-
-        t_since_plan = (self.sm.frame - self.sm.recv_frame['lateralPlan']) * DT_CTRL
-        curvature = np.interp(steer_actuator_delay + lat_smooth_seconds + t_since_plan, ModelConstants.T_IDXS[:CONTROL_N], curvs)
+        curvature = get_lag_adjusted_curvature(self.CP, CS.vEgo, model_v2.position.psis, model_v2.action.curvatures, steer_actuator_delay + lat_smooth_seconds)
 
         new_desired_curvature = smooth_value(curvature, self.desired_curvature, lat_smooth_seconds)
     else:
