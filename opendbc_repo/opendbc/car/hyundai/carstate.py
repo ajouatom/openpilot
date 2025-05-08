@@ -502,7 +502,7 @@ class CarState(CarStateBase):
 
     speed_conv = CV.KPH_TO_MS if self.is_metric else CV.MPH_TO_MS
     cluSpeed = cp.vl["CRUISE_BUTTONS_ALT"]["CLU_SPEED"]
-    ret.vEgoCluster = cluSpeed * speed_conv
+    ret.vEgoCluster = cluSpeed # * speed_conv # MPH단위에서도 KPH로 나오는듯..
     vEgoClu, aEgoClu = self.update_clu_speed_kf(ret.vEgoCluster)
     ret.vCluRatio = (ret.vEgo / vEgoClu) if (vEgoClu > 3. and ret.vEgo > 3.) else 1.0
 
