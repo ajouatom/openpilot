@@ -154,7 +154,7 @@ class Controls:
           alpha = 1 - np.exp(-DT_CTRL / tau) if tau > 0 else 1
           return alpha * val + (1 - alpha) * prev_val
 
-        curvature = get_lag_adjusted_curvature(self.CP, CS.vEgo, lat_plan.psis, lat_plan.curvatures, lat_plan.curvatureRates, steer_actuator_delay + lat_smooth_seconds)
+        curvature = get_lag_adjusted_curvature(self.CP, CS.vEgo, lat_plan.psis, lat_plan.curvatures, steer_actuator_delay + lat_smooth_seconds)
 
         new_desired_curvature = smooth_value(curvature, self.desired_curvature, lat_smooth_seconds)
     else:
