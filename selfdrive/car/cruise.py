@@ -660,14 +660,14 @@ class VCruiseCarrot:
         elif not safe_state:
           self._cruise_control(1, -1, "Cruise on (fcw)")
         elif self.d_rel < self.cruiseOnDist:
-          self._cruise_control(1, -1, "Cruise on (fcw dist)")
+          self._cruise_control(1, 0, "Cruise on (fcw dist)")
         else:
           self._add_log(f"leadCar d={self.d_rel:.1f},v={self.v_rel:.1f},{CS.vEgo:.1f}, {safe_dist:.1f}")
           #self.events.append(EventName.stopStop)
       if self.desiredSpeed < self.v_ego_kph_set:
         self._cruise_control(1, -1, "Cruise on (desired speed)")
       if self._cruise_ready and self.xState in [3]:
-        self._cruise_control(1, -1, "Cruise on (traffic sign)")
+        self._cruise_control(1, 0, "Cruise on (traffic sign)")
 
     if self._gas_pressed_count > self._gas_tok_timer:
       if CS.aEgo < -0.5:
