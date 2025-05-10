@@ -105,7 +105,7 @@ def get_default_params():
     ("LongTuningKf", "100"),
     ("LongActuatorDelay", "20"),
     ("VEgoStopping", "50"),
-    ("RadarReactionFactor", "10"),
+    ("RadarReactionFactor", "100"),
     ("EnableRadarTracks", "0"),
     ("HyundaiCameraSCC", "0"),
     ("CanfdHDA2", "0"),
