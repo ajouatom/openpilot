@@ -2184,7 +2184,7 @@ public:
             ui_draw_text(s, apply_x, apply_y - 50, apply_source.toStdString().c_str(), 30, textColor, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
         }
 		    else if(abs(cruiseTarget - v_cruise) > 0.5) {
-            sprintf(apply_speed_str, "%.0f", (s->scene.is_metric)?cruiseTarget:cruise_target * KM_TO_MILE);
+            sprintf(apply_speed_str, "%.0f", (s->scene.is_metric)?cruiseTarget: cruiseTarget * KM_TO_MILE);
 			      ui_draw_text(s, apply_x, apply_y, apply_speed_str, 50, textColor, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
             ui_draw_text(s, apply_x, apply_y - 50, "eco", 30, textColor, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
 		    }
