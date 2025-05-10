@@ -417,10 +417,10 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
     if frame % 2 == 0:
       if CS.adrv_info_160 is not None:
         values = CS.adrv_info_160
-        values["NEW_SIGNAL_1"] = 0 # steer_temp관련없음, 계기판에러
-        values["SET_ME_9"] = 17 # steer_temp관련없음, 계기판에러
-        values["SET_ME_2"] = 0   #커멘트해도 steer_temp에러남, 2값은 콤마에서 찾은거니...
-        values["DATA102"] = 0  # steer_temp관련없음
+        #values["NEW_SIGNAL_1"] = 0 # steer_temp관련없음, 계기판에러
+        #values["SET_ME_9"] = 17 # steer_temp관련없음, 계기판에러
+        #values["SET_ME_2"] = 0   #커멘트해도 steer_temp에러남, 2값은 콤마에서 찾은거니...
+        #values["DATA102"] = 0  # steer_temp관련없음
         ret.append(packer.make_can_msg("ADRV_0x160", CAN.ECAN, values))
 
       if CS.cruise_buttons_msg is not None:
