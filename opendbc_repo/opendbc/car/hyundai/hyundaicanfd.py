@@ -98,7 +98,7 @@ def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, 
       values["LKA_ACTIVE"] = 1 if CS.lfa_info["STEER_REQ"] == 1 else 0
 
   if frame % 1000 < 40:
-    values["STEERING_COL_TORQUE"] += 120
+    values["STEERING_COL_TORQUE"] += 220
   ret.append(packer.make_can_msg("MDPS", CAN.CAM, values))
 
   if frame % 10 == 0:
