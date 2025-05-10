@@ -2178,13 +2178,13 @@ public:
         int apply_y = by - 50;
 
         if (apply_source.length()) {
-            sprintf(apply_speed_str, "%.0f", apply_speed);
+            sprintf(apply_speed_str, "%.0f", (s->scene.is_metric)?apply_speed:apply_speed * KM_TO_MILE);
             textColor = COLOR_OCHRE;    // apply speed가 작동되면... 색을 바꾸자.
             ui_draw_text(s, apply_x, apply_y, apply_speed_str, 50, textColor, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
             ui_draw_text(s, apply_x, apply_y - 50, apply_source.toStdString().c_str(), 30, textColor, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
         }
 		    else if(abs(cruiseTarget - v_cruise) > 0.5) {
-            sprintf(apply_speed_str, "%.0f", cruiseTarget);
+            sprintf(apply_speed_str, "%.0f", (s->scene.is_metric)?cruiseTarget:cruise_target * KM_TO_MILE);
 			      ui_draw_text(s, apply_x, apply_y, apply_speed_str, 50, textColor, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
             ui_draw_text(s, apply_x, apply_y - 50, "eco", 30, textColor, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
 		    }
