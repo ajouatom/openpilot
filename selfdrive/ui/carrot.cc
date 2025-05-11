@@ -2161,7 +2161,7 @@ public:
         char cruise_speed[32];
         int cruise_x = bx + 170;
         int cruise_y = by + 15;
-        if(longActive) sprintf(cruise_speed, "%.0f", v_cruise);
+        if(longActive) sprintf(cruise_speed, "%.0f", (s->scene.is_metric)?v_cruise: v_cruise * KM_TO_MILE);
 		    else sprintf(cruise_speed, "--");
         if (strcmp(cruise_speed_last, cruise_speed) != 0) {
 			    strcpy(cruise_speed_last, cruise_speed);
