@@ -484,8 +484,8 @@ class VCruiseCarrot:
           pass
         elif self.v_ego_kph_set > v_cruise_kph + 2:
           v_cruise_kph = max(self.v_ego_kph_set, self._cruise_speed_min)
-        elif self._cruise_button_mode in [0, 1]:
-          v_cruise_kph = button_kph
+        #elif self._cruise_button_mode in [0, 1]:
+        #  v_cruise_kph = button_kph
         elif self.v_ego_kph_set > self._cruise_speed_min and v_cruise_kph > self.v_ego_kph_set:
           v_cruise_kph = self.v_ego_kph_set
         else:
