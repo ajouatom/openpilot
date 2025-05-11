@@ -95,14 +95,14 @@
     {
       "group": "조향튜닝",
       "name": "LateralTorqueKd",
-      "title": "_LateralTorqueKd*0.01(800)",
+      "title": "_LateralTorqueKd*0.01(0)",
       "descr": "",
       "egroup": "LAT",
-      "etitle": "_LateralTorqueKd*0.01(800)",
+      "etitle": "_LateralTorqueKd*0.01(0)",
       "edescr": "",
       "min": 0,
       "max": 10000,
-      "default": 100,
+      "default": 0,
       "unit": 10
     },
     {
