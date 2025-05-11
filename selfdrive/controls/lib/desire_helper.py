@@ -128,6 +128,7 @@ class DesireHelper:
 
     self.laneChangeNeedTorque = 0
     self.ignore_bsd = False
+    self.torque_always = False
     self.driver_blinker_state = BLINKER_NONE
     self.atc_type = ""
 
@@ -185,6 +186,8 @@ class DesireHelper:
 
     if self.laneChangeNeedTorque == 3:
       self.ignore_bsd = True
+    if self.laneChangeNeedTorque == 4:
+      self.torque_always = True
 
     self.blindspot_detected_counter = max(0, self.blindspot_detected_counter - 1)
 
@@ -310,9 +313,9 @@ class DesireHelper:
           self.lane_change_state = LaneChangeState.off
           self.lane_change_direction = LaneChangeDirection.none
         else:
-          if self.blindspot_detected_counter > 0:
+          if self.blindspot_detected_counter > 0 and not self.torque_always
             pass
-          elif self.laneChangeNeedTorque > 0:
+          elif self.laneChangeNeedTorque == 1:  # 1: need torque, 2: no lanechange, 3: ignore bsd
             if torque_applied and lane_available:
               self.lane_change_state = LaneChangeState.laneChangeStarting
           # 운전자가 깜박이켠경우는 바로 차선변경 시작
