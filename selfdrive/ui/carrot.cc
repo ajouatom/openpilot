@@ -2010,7 +2010,7 @@ public:
                 auto [rx, ry, rd, rv, ry_rel, v_lat, radar] = vrd;
 
                 if (rv < -1.0 || rv > 1.0) {
-                    sprintf(str, "%.0f", rv * 3.6);
+                    sprintf(str, "%.0f", (s->scene.is_metric)? rv * MS_TO_KPH : rv * MS_TO_MPH);
                     wStr = 35 * (strlen(str) + 0);
                     ui_fill_rect(s->vg, { (int)(rx - wStr / 2), (int)(ry - 35), wStr, 42 }, (!radar) ? COLOR_BLUE : (rv > 0.) ? COLOR_GREEN : COLOR_RED, 15);
                     ui_draw_text(s, rx, ry, str, 40, COLOR_WHITE, BOLD);
@@ -2153,7 +2153,7 @@ public:
 
         // draw speed
         char speed[32];
-        sprintf(speed, "%.0f", v_ego * 3.6);
+        sprintf(speed, "%.0f", (s->scene.is_metric)? v_ego * MS_TO_KPH : v_ego * MS_TO_MPH);
         ui_draw_text(s, bx, by + 50, speed, 120, COLOR_WHITE, BOLD, 3.0f, 8.0f);
         ui_draw_image(s, { bx - 100, by - 60, 350, 150 }, "ic_speed_bg", 1.0f);
 
