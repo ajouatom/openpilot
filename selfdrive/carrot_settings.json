@@ -1062,7 +1062,7 @@
       "descr": "1: 차선변경시 조향토크를 줘야 작동함, 2: 깜박이 차선변경안함, 3: BSD무시함",
       "egroup": "LAT",
       "etitle": "LaneChange use steering torque",
-      "edescr": "1: need torque, 2:no lanechange",
+      "edescr": "1: need torque, 2:no lanechange, 3:ignore BSD",
       "min": 0,
       "max": 3,
       "default": 0,
