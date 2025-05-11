@@ -251,7 +251,10 @@ BO_ 352 ADRV_0x160: 16 ADRV
  SG_ COUNTER : 16|8@1+ (1,0) [0|255] "" XXX
  SG_ AEB_SETTING : 24|2@1+ (1,0) [0|255] "" XXX
  SG_ NEW_SIGNAL_1 : 30|1@0+ (1,0) [0|1] "" XXX
- SG_ NEW_SIGNAL_2 : 48|1@0+ (1,0) [0|1] "" XXX
+ SG_ NEW_SIGNAL_4 : 31|1@0+ (1,0) [0|1] "" XXX
+ SG_ NEW_SIGNAL_5 : 39|8@0+ (1,0) [0|255] "" XXX
+ SG_ NEW_SIGNAL_6 : 47|8@0+ (1,0) [0|255] "" XXX
+ SG_ NEW_SIGNAL_2 : 55|8@0+ (1,0) [0|255] "" XXX
  SG_ SET_ME_2 : 56|8@1+ (1,0) [0|1] "" XXX
  SG_ SET_ME_FF : 64|8@1+ (1,0) [0|255] "" XXX
  SG_ SET_ME_FC : 72|8@1+ (1,0) [0|255] "" XXX
