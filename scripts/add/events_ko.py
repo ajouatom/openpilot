@@ -571,7 +571,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
       "핸들을 잡아주세요",
       "회전이 조향 한도를 초과함",
       AlertStatus.userPrompt, AlertSize.mid,
-      Priority.LOW, VisualAlert.steerRequired, AudibleAlert.promptRepeat, 2.),
+      Priority.LOW, VisualAlert.none, AudibleAlert.none, 2.),
   },
 
   # Thrown when the fan is driven at >50% but is not rotating

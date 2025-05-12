@@ -39,6 +39,7 @@ def max_abs(a, b):
 
 class LanePlanner:
   def __init__(self):
+    self.ll_t = np.zeros((TRAJECTORY_SIZE,))
     self.ll_x = np.zeros((TRAJECTORY_SIZE,))
     self.lll_y = np.zeros((TRAJECTORY_SIZE,))
     self.rll_y = np.zeros((TRAJECTORY_SIZE,))
@@ -77,7 +78,8 @@ class LanePlanner:
     lane_lines = md.laneLines
     edges = md.roadEdges
 
-    if len(lane_lines) >= 4 and len(lane_lines[0].x) == TRAJECTORY_SIZE:
+    if len(lane_lines) >= 4 and len(lane_lines[0].t) == TRAJECTORY_SIZE:
+      self.ll_t = (np.array(lane_lines[1].t) + np.array(lane_lines[2].t))/2
       # left and right ll x is the same
       self.ll_x = lane_lines[1].x
       self.lll_y = np.array(lane_lines[1].y)
@@ -231,8 +233,15 @@ class LanePlanner:
     laneline_active = False
     if self.lanefull_mode and self.d_prob > 0.3:
       laneline_active = True
-      lane_path_y_interp = np.interp(path_xyz[:,0] + v_ego * adjustLaneTime*0.01, self.ll_x, lane_path_y)
-      path_xyz[:,1] = self.d_prob * lane_path_y_interp + (1.0 - self.d_prob) * path_xyz[:,1]
+      use_dist_mode = False  ## 아무리생각해봐도.. 같은 방법인듯...
+      if use_dist_mode:
+        lane_path_y_interp = np.interp(path_xyz[:,0] + v_ego * adjustLaneTime*0.01, self.ll_x, lane_path_y)
+        path_xyz[:,1] = self.d_prob * lane_path_y_interp + (1.0 - self.d_prob) * path_xyz[:,1]
+      else:
+        safe_idxs = np.isfinite(self.ll_t)
+        if safe_idxs[0]:
+          lane_path_y_interp = np.interp(path_t * (1.0 + adjustLaneTime*0.01), self.ll_t[safe_idxs], lane_path_y[safe_idxs])
+          path_xyz[:,1] = self.d_prob * lane_path_y_interp + (1.0 - self.d_prob) * path_xyz[:,1]
 
 
     path_xyz[:, 1] += (CAMERA_OFFSET + self.lane_offset_filtered.x)

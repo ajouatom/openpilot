@@ -346,6 +346,11 @@ class LongitudinalMpc:
     v_lead = np.clip(v_lead, 0.0, 1e8)
     a_lead = np.clip(a_lead, -10., 5.)
 
+    if a_lead < -2.0 and j_lead > 0.5:
+      a_lead = a_lead + j_lead
+      a_lead = min(a_lead, -0.5)
+      a_lead_tau = max(a_lead_tau, 1.5)
+
     lead_xv = self.extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau, j_lead)
     return lead_xv, v_lead
 

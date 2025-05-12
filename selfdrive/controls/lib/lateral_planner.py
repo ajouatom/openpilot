@@ -187,6 +187,8 @@ class LateralPlanner:
     else:
       self.solution_invalid_cnt = 0
   
+    self.x_sol = self.lat_mpc.x_sol
+
   def publish(self, sm, pm, carrot):
     plan_solution_valid = self.solution_invalid_cnt < 2
     plan_send = messaging.new_message('lateralPlan')
@@ -202,8 +204,13 @@ class LateralPlanner:
     lateralPlan.modelMonoTime = sm.logMonoTime['modelV2']
     lateralPlan.dPathPoints = self.y_pts.tolist()
     lateralPlan.psis = self.lat_mpc.x_sol[0:CONTROL_N, 2].tolist()
+    lateralPlan.distances = self.lat_mpc.x_sol[0:CONTROL_N, 0].tolist()
 
-    lateralPlan.curvatures = (self.lat_mpc.x_sol[0:CONTROL_N, 3]/self.v_ego).tolist()
+    if len(self.v_plan) == TRAJECTORY_SIZE:
+      lateralPlan.curvatures = (self.lat_mpc.x_sol[0:CONTROL_N, 3] / self.v_plan[0:CONTROL_N]).tolist()
+    else:
+      lateralPlan.curvatures = (self.lat_mpc.x_sol[0:CONTROL_N, 3] / self.v_ego).tolist()
+
     lateralPlan.curvatureRates = [float(x.item() / self.v_ego) for x in self.lat_mpc.u_sol[0:CONTROL_N - 1]] + [0.0]
 
     lateralPlan.mpcSolutionValid = bool(plan_solution_valid)
