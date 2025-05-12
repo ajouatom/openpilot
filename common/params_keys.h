@@ -195,7 +195,7 @@ inline static std::unordered_map<std::string, uint32_t> keys = {
     {"MyDrivingModeAuto", PERSISTENT},
     {"TrafficLightDetectMode", PERSISTENT},
     {"SteerActuatorDelay", PERSISTENT},
-    {"SteerSmoothSec", PERSISTENT },
+    {"SteerSmoothSec", PERSISTENT},
     {"SteerLagGain", PERSISTENT },
     {"CruiseOnDist", PERSISTENT},
     {"CruiseMaxVals1", PERSISTENT},
