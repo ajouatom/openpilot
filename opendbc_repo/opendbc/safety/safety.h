@@ -618,8 +618,9 @@ bool longitudinal_accel_checks(int desired_accel, const LongitudinalLimits limit
       if(!controls_allowed) print("@@@@@@@@ longitudinal_accel_checks... auto controls_allowed enabled...\n");
       controls_allowed = true;
     }
-  bool accel_valid = get_longitudinal_allowed() && !max_limit_check(desired_accel, limits.max_accel, limits.min_accel);
-  bool accel_inactive = desired_accel == limits.inactive_accel;
+    //bool accel_valid = get_longitudinal_allowed() && !max_limit_check(desired_accel, limits.max_accel, limits.min_accel);
+    bool accel_valid = !max_limit_check(desired_accel, limits.max_accel, limits.min_accel);
+    bool accel_inactive = desired_accel == limits.inactive_accel;
   return !(accel_valid || accel_inactive);
 }
 
