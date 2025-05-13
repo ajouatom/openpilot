@@ -6,7 +6,7 @@ from opendbc.can.packer import CANPacker
 from opendbc.car import Bus, DT_CTRL, apply_driver_steer_torque_limits, structs, create_gas_interceptor_command
 from opendbc.car.gm import gmcan
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.gm.values import DBC, CanBus, CarControllerParams, CruiseButtons, GMFlags, CC_ONLY_CAR, EV_CAR, AccState, CC_REGEN_PADDLE_CAR, CAR
+from opendbc.car.gm.values import DBC, CanBus, CarControllerParams, CruiseButtons, GMFlags, CC_ONLY_CAR, EV_CAR, AccState, CC_REGEN_PADDLE_CAR, CAR, SDGM_CAR
 from opendbc.car.interfaces import CarControllerBase
 from openpilot.selfdrive.controls.lib.drive_helpers import apply_deadzone
 from opendbc.car.vehicle_model import ACCELERATION_DUE_TO_GRAVITY
@@ -33,7 +33,8 @@ class CarController(CarControllerBase):
     self.apply_torque_last = 0
     self.apply_gas = 0
     self.apply_brake = 0
-    self.apply_speed = 0 # kans: button spam
+    # kans: button spam
+    self.apply_speed = 0
     self.frame = 0
     self.last_steer_frame = 0
     self.last_button_frame = 0
@@ -45,6 +46,13 @@ class CarController(CarControllerBase):
 
     self.params = CarControllerParams(self.CP)
     self.params_ = Params() # kans: button spam
+
+    # for SDGM
+    self.mass = CP.mass
+    self.tireRadius = 0.075 * CP.wheelbase + 0.1453
+    self.frontalArea = 1.05 * CP.wheelbase + 0.0679
+    self.coeffDrag = 0.30
+    self.airDensity = 1.225
 
     self.packer_pt = CANPacker(DBC[self.CP.carFingerprint][Bus.pt])
     self.packer_obj = CANPacker(DBC[self.CP.carFingerprint][Bus.radar])
@@ -171,7 +179,7 @@ class CarController(CarControllerBase):
         
       # Gas/regen, brakes, and UI commands - all at 25Hz
       if self.frame % 4 == 0:
-      # GM: softHold
+        # GM: softHold
         stopping = actuators.longControlState == LongCtrlState.stopping or CS.out.softHoldActive > 0
 
         # Pitch compensated acceleration;
@@ -201,8 +209,27 @@ class CarController(CarControllerBase):
             self.apply_gas = int(round(np.interp(accel if self.long_pitch else actuators.accel, self.params.EV_GAS_LOOKUP_BP, self.params.GAS_LOOKUP_V)))
             self.apply_brake = int(round(np.interp(brake_accel if self.long_pitch else actuators.accel, self.params.EV_BRAKE_LOOKUP_BP, self.params.BRAKE_LOOKUP_V)))
           else:
-            self.apply_gas = int(round(np.interp(accel if self.long_pitch else actuators.accel, self.params.GAS_LOOKUP_BP, self.params.GAS_LOOKUP_V)))
-            self.apply_brake = int(round(np.interp(brake_accel if self.long_pitch else actuators.accel, self.params.BRAKE_LOOKUP_BP, self.params.BRAKE_LOOKUP_V)))
+            #kans: TORQUE CONTROL for SDGM
+            #self.apply_gas = int(round(np.interp(accel if self.long_pitch else actuators.accel, self.params.GAS_LOOKUP_BP, self.params.GAS_LOOKUP_V)))
+            #self.apply_brake = int(round(np.interp(brake_accel if self.long_pitch else actuators.accel, self.params.BRAKE_LOOKUP_BP, self.params.BRAKE_LOOKUP_V)))
+            if len(CC.orientationNED) == 3 and CS.out.vEgo > self.CP.vEgoStopping:
+              accel_due_to_pitch = math.sin(CC.orientationNED[1]) * ACCELERATION_DUE_TO_GRAVITY
+            else:
+              accel_due_to_pitch = 0.0
+           
+            accel = np.clip(actuators.accel + accel_due_to_pitch, self.params.ACCEL_MIN, self.params.ACCEL_MAX)
+ 
+            torque = self.tireRadius * ((self.mass*accel) + (0.5*self.coeffDrag*self.frontalArea*self.airDensity*CS.out.vEgo**2))
+            scaled_torque = torque + self.params.ZERO_GAS
+            apply_gas_torque = np.clip(scaled_torque, self.params.MAX_ACC_REGEN, self.params.MAX_GAS)
+            BRAKE_SWITCH = int(round(np.interp(CS.out.vEgo, self.params.BRAKE_SWITCH_LOOKUP_BP, self.params.BRAKE_SWITCH_LOOKUP_V)))
+            brake_accel = min((scaled_torque - BRAKE_SWITCH)/(self.tireRadius*self.mass), 0)
+ 
+            self.apply_gas = int(round(apply_gas_torque))
+            self.apply_brake = int(round(np.interp(brake_accel, self.params.BRAKE_LOOKUP_BP, self.params.BRAKE_LOOKUP_V)))
+            if self.apply_brake > 0:
+              self.apply_gas = self.params.INACTIVE_REGEN
+ 
           # Don't allow any gas above inactive regen while stopping
           # FIXME: brakes aren't applied immediately when enabling at a stop
           if stopping:
@@ -237,6 +264,8 @@ class CarController(CarControllerBase):
           if self.CP.networkLocation == NetworkLocation.fwdCamera and self.CP.carFingerprint not in CC_ONLY_CAR:
             at_full_stop = at_full_stop and stopping
             friction_brake_bus = CanBus.POWERTRAIN
+            if self.CP.carFingerprint in SDGM_CAR:
+               friction_brake_bus = CanBus.CAMERA
 
 
           if self.CP.autoResumeSng:
@@ -267,7 +296,7 @@ class CarController(CarControllerBase):
 
       # Radar needs to know current speed and yaw rate (50hz),
       # and that ADAS is alive (10hz)
-      if not self.CP.radarUnavailable:
+      if not self.CP.radarUnavailable and self.CP.carFingerprint not in SDGM_CAR:
         tt = self.frame * DT_CTRL
         time_and_headlights_step = 10
         if self.frame % time_and_headlights_step == 0:
