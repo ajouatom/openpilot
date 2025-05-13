@@ -172,7 +172,6 @@ void OnroadWindow::updateState(const UIState &s) {
       if (carrot_display == 5) ss->scene._current_carrot_display = (ss->scene._current_carrot_display % 3) + 1;
       else if(carrot_display > 0) ss->scene._current_carrot_display = carrot_display;
       if (map == nullptr && ss->scene._current_carrot_display > 2) ss->scene._current_carrot_display = 1;
-      //printf("_current_carrot_display2=%d\n", _current_carrot_display);
       //if (offroad) _current_carrot_display = 1;
       switch (ss->scene._current_carrot_display) {
       case 1: // default

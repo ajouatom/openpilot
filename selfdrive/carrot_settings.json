@@ -236,6 +236,19 @@
       "unit": 1
     },
     {
+      "group": "조향튜닝",
+      "name": "SteerLagGain",
+      "title": "조향래그게인x0.01(200)",
+      "descr": "레인모드 시험용",
+      "egroup": "LAT",
+      "etitle": "SteerLagGainx0.01(200)",
+      "edescr": "",
+      "min": 1,
+      "max": 300,
+      "default": 200,
+      "unit": 10
+    },
+    {
       "group": "크루즈",
       "name": "CruiseOnDist",
       "title": "크루즈ON거리(0cm)",
