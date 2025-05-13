@@ -242,6 +242,18 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
     }
     });
 
+  QPushButton* remove_mapbox_key_btn = new QPushButton(tr("Remove MapboxKey"));
+  remove_mapbox_key_btn->setObjectName("remove_mapbox_key_btn");
+  init_layout->addWidget(remove_mapbox_key_btn);
+  QObject::connect(remove_mapbox_key_btn, &QPushButton::clicked, [&]() {
+    if (ConfirmationDialog::confirm(tr("Remove Mapbox key?"), tr("Yes"), this)) {
+      QTimer::singleShot(1000, []() {
+        Params().put("MapboxPublicKey", "");
+        Params().put("MapboxSecretKey", "");
+        });
+    }
+    });
+
   setStyleSheet(R"(
     #reboot_btn { height: 120px; border-radius: 15px; background-color: #2CE22C; }
     #reboot_btn:pressed { background-color: #24FF24; }
@@ -253,6 +265,8 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
     #init_btn:pressed { background-color: #2424FF; }
     #default_btn { height: 120px; border-radius: 15px; background-color: #BDBDBD; }
     #default_btn:pressed { background-color: #A9A9A9; }
+    #remove_mapbox_key_btn { height: 120px; border-radius: 15px; background-color: #BDBDBD; }
+    #remove_mapbox_key_btn:pressed { background-color: #A9A9A9; }
   )");
   addItem(init_layout);
 
