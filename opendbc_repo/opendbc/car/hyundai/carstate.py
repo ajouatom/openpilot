@@ -1,6 +1,7 @@
 from collections import deque
 import copy
 import math
+import numpy as np
 
 from opendbc.can.parser import CANParser
 from opendbc.can.can_define import CANDefine
@@ -398,20 +399,22 @@ class CarState(CarStateBase):
       self.main_enabled = True
     # CAN FD cars enable on main button press, set available if no TCS faults preventing engagement
     ret.cruiseState.available = self.main_enabled #cp.vl["TCS"]["ACCEnable"] == 0
+    if self.CP.flags & HyundaiFlags.CAMERA_SCC.value:
+      self.MainMode_ACC = cp_cam.vl["SCC_CONTROL"]["MainMode_ACC"] == 1
+      self.LFA_ICON = cp_cam.vl["LFAHDA_CLUSTER"]["LFA_ICON"]
+      
     if self.CP.openpilotLongitudinalControl:
       # These are not used for engage/disengage since openpilot keeps track of state using the buttons
       ret.cruiseState.enabled = cp.vl["TCS"]["ACC_REQ"] == 1
       ret.cruiseState.standstill = False
-      if self.CP.flags & HyundaiFlags.CAMERA_SCC.value:
-        self.MainMode_ACC = cp_cam.vl["SCC_CONTROL"]["MainMode_ACC"] == 1
-        self.LFA_ICON = cp_cam.vl["LFAHDA_CLUSTER"]["LFA_ICON"]
-        if self.MainMode_ACC:
-          self.main_enabled = True
+      if self.MainMode_ACC:
+        self.main_enabled = True
     else:
       cp_cruise_info = cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else cp
       ret.cruiseState.enabled = cp_cruise_info.vl["SCC_CONTROL"]["ACCMode"] in (1, 2)
       if cp_cruise_info.vl["SCC_CONTROL"]["MainMode_ACC"] == 1: # carrot
         ret.cruiseState.available = self.main_enabled = True
+        ret.pcmCruiseGap = int(np.clip(cp_cruise_info.vl["SCC_CONTROL"]["DISTANCE_SETTING"], 1, 4))
       ret.cruiseState.standstill = cp_cruise_info.vl["SCC_CONTROL"]["CRUISE_STANDSTILL"] == 1
       ret.cruiseState.speed = cp_cruise_info.vl["SCC_CONTROL"]["VSetDis"] * speed_factor
       self.cruise_info = copy.copy(cp_cruise_info.vl["SCC_CONTROL"])
