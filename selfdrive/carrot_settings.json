@@ -174,7 +174,7 @@
       "group": "조향튜닝",
       "name": "SteerDelayOffset",
       "title": "레인모드보상x0.01(13)",
-      "descr": "작은값이면 레인모드시 인코스로 감",
+      "descr": "커브시 레인모드 센터 보정",
       "egroup": "LAT",
       "etitle": "SteerDelayOffsetx0.01(13)",
       "edescr": "for lanemode",
