@@ -164,7 +164,7 @@ class CAR(Platforms):
     [GMCarDocs("Chevrolet Malibu Premier 2017")],
     GMCarSpecs(mass=1496, wheelbase=2.83, steerRatio=15.8, centerToFrontRatio=0.4),
   )
-  CHEVROLET_MALIBU_2019 = GMSDGMPlatformConfig(
+  CHEVROLET_MALIBU_2019 = GMPlatformConfig(
     [GMCarDocs("Chevrolet The New Malibu 2019")],
     GMCarSpecs(mass=1496, wheelbase=2.83, steerRatio=15.8, centerToFrontRatio=0.4),
   )
@@ -218,7 +218,7 @@ class CAR(Platforms):
     [GMCarDocs("Cadillac XT4 2023", "Driver Assist Package")],
     GMCarSpecs(mass=1660, wheelbase=2.78, steerRatio=14.4, centerToFrontRatio=0.4),
   )
-  CADILLAC_CT6_2019 = GMCT6PlatformConfig(
+  CADILLAC_CT6_2019 = GMPlatformConfig(
     [GMCarDocs("Cadillac CT6 2019", "Driver Assist Package")],
     GMCarSpecs(mass=2358, wheelbase=3.11, steerRatio=17.7, centerToFrontRatio=0.4),
   ) 

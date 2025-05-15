@@ -186,7 +186,7 @@ class CarState(CarStateBase):
           # openpilot controls nonAdaptive when not pcmCruise
           ret.cruiseState.nonAdaptive = cam_cp.vl["ASCMActiveCruiseControlStatus"]["ACCCruiseState"] not in (2, 3)
 
-      if self.CP.carFingerprint not in (SDGM_CAR, CAR.CHEVROLET_EQUINOX):
+      if self.CP.carFingerprint not in (SDGM_CAR, CAR.CHEVROLET_EQUINOX, CAMERA_ACC_CAR):
         ret.stockAeb = cam_cp.vl["AEBCmd"]["AEBCmdActive"] != 0
 
     if self.CP.carFingerprint in CC_ONLY_CAR:
@@ -256,7 +256,7 @@ class CarState(CarStateBase):
       else:
         cam_messages.append(("ASCMActiveCruiseControlStatus", 25))
 
-      if CP.carFingerprint not in (SDGM_CAR, CAR.CHEVROLET_EQUINOX):
+      if CP.carFingerprint not in (SDGM_CAR, CAR.CHEVROLET_EQUINOX, CAMERA_ACC_CAR):
         cam_messages += [
           ("AEBCmd", 10),
         ]
