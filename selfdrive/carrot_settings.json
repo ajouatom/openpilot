@@ -237,15 +237,15 @@
     },
     {
       "group": "조향튜닝",
-      "name": "SteerLagGain",
-      "title": "조향래그게인x0.01(200)",
+      "name": "SteerDelayOffset",
+      "title": "레인모드딜레이x0.01(0)",
       "descr": "레인모드 시험용",
       "egroup": "LAT",
-      "etitle": "SteerLagGainx0.01(200)",
-      "edescr": "",
+      "etitle": "SteerDelayOffsetx0.01(0)",
+      "edescr": "for lanemode",
       "min": 1,
       "max": 300,
-      "default": 200,
+      "default": 0,
       "unit": 10
     },
     {

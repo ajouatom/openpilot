@@ -26,7 +26,7 @@ def apply_deadzone(error, deadzone):
     error = 0.
   return error
 
-def get_lag_adjusted_curvature(CP, v_ego, psis, curvatures, steer_actuator_delay, distances, lag_gain):
+def get_lag_adjusted_curvature(CP, v_ego, psis, curvatures, steer_actuator_delay, distances):
   if len(psis) != CONTROL_N:
     psis = [0.0]*CONTROL_N
     curvatures = [0.0]*CONTROL_N
@@ -44,8 +44,7 @@ def get_lag_adjusted_curvature(CP, v_ego, psis, curvatures, steer_actuator_delay
   distance = max(np.interp(delay, ModelConstants.T_IDXS[:CONTROL_N], distances), 0.001)
   #average_curvature_desired = psi / (v_ego * delay)
   average_curvature_desired = psi / distance
-  #desired_curvature = 2 * average_curvature_desired - current_curvature_desired
-  desired_curvature = lag_gain * average_curvature_desired - current_curvature_desired
+  desired_curvature = 2 * average_curvature_desired - current_curvature_desired
 
   # This is the "desired rate of the setpoint" not an actual desired rate
   max_curvature_rate = MAX_LATERAL_JERK / (v_ego**2) # inexact calculation, check https://github.com/commaai/openpilot/pull/24755
