@@ -238,14 +238,14 @@
     {
       "group": "조향튜닝",
       "name": "SteerDelayOffset",
-      "title": "레인모드딜레이x0.01(0)",
-      "descr": "레인모드 시험용",
+      "title": "레인모드보상x0.01(13)",
+      "descr": "작은값이면 레인모드시 인코스로 감",
       "egroup": "LAT",
-      "etitle": "SteerDelayOffsetx0.01(0)",
+      "etitle": "SteerDelayOffsetx0.01(13)",
       "edescr": "for lanemode",
       "min": 1,
       "max": 300,
-      "default": 0,
+      "default": 13,
       "unit": 10
     },
     {
@@ -1054,19 +1054,6 @@
       "max": 500,
       "default": 0,
       "unit": 10
-    },
-    {
-      "group": "조향일반",
-      "name": "AdjustLaneTime",
-      "title": "레인모드: 시간지연보상 (13)x0.01",
-      "descr": "레인제어기의 지연시간을 보상하여, 빠른 조향을 유도함",
-      "egroup": "LAT",
-      "etitle": "LaneLine: AdjustLaneTime (13)x0.01",
-      "edescr": "LaneLine controller delay compensation",
-      "min": 0,
-      "max": 50,
-      "default": 13,
-      "unit": 1
     },
     {
       "group": "조향일반",
