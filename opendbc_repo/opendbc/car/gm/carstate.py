@@ -203,15 +203,13 @@ class CarState(CarStateBase):
     ret.vCluRatio = 1.0 if self.CP.carFingerprint in CAR.CHEVROLET_VOLT else 0.96
 
     # Don't add event if transitioning from INIT, unless it's to an actual button
-    buttonEvents = [] # kans
     if self.cruise_buttons != CruiseButtons.UNPRESS or prev_cruise_buttons != CruiseButtons.INIT:
-      buttonEvents.extend(create_button_events(self.cruise_buttons, prev_cruise_buttons, BUTTONS_DICT,
-                                               unpressed_btn=CruiseButtons.UNPRESS)) # kans
-    # kans : long_button GAP for cruise Mode(safety, ecco, high-speed..)
-    if self.distance_button_pressed:
-      buttonEvents.append(car.CarState.ButtonEvent(pressed=True, type=ButtonType.gapAdjustCruise))
-    ret.buttonEvents = buttonEvents # kans
-
+      ret.buttonEvents = [
+        *create_button_events(self.cruise_buttons, prev_cruise_buttons, BUTTONS_DICT,
+                              unpressed_btn=CruiseButtons.UNPRESS),
+        *create_button_events(self.distance_button, prev_distance_button,
+                              {1: ButtonType.gapAdjustCruise})
+      ]
 
     return ret
 
