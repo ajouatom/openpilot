@@ -266,7 +266,6 @@ class CarState(CarStateBase):
         pt_messages.append(("ECMCruiseControl", 10))
       else:
         cam_messages.append(("ASCMActiveCruiseControlStatus", 25))
-        ]
 
     loopback_messages = [
       ("ASCMLKASteeringCmd", 0),
