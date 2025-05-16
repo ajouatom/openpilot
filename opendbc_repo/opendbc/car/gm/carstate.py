@@ -94,7 +94,7 @@ class CarState(CarStateBase):
     self.loopback_lka_steering_cmd_updated = len(loopback_cp.vl_all["ASCMLKASteeringCmd"]["RollingCounter"]) > 0
     if self.loopback_lka_steering_cmd_updated:
       self.loopback_lka_steering_cmd_ts_nanos = loopback_cp.ts_nanos["ASCMLKASteeringCmd"]["RollingCounter"]
-    if self.CP.networkLocation == NetworkLocation.fwdCamera and not self.CP.flags & GMFlags.NO_CAMERA.value:
+    if self.CP.networkLocation == NetworkLocation.fwdCamera:
       self.pt_lka_steering_cmd_counter = pt_cp.vl["ASCMLKASteeringCmd"]["RollingCounter"]
       self.cam_lka_steering_cmd_counter = cam_cp.vl["ASCMLKASteeringCmd"]["RollingCounter"]
 
@@ -145,6 +145,7 @@ class CarState(CarStateBase):
 
     if self.CP.enableGasInterceptorDEPRECATED:
       ret.gas = (pt_cp.vl["GAS_SENSOR"]["INTERCEPTOR_GAS"] + pt_cp.vl["GAS_SENSOR"]["INTERCEPTOR_GAS2"]) / 2.
+      # Panda 515 threshold = 10.88. Set lower to avoid panda blocking messages and GasInterceptor faulting.
       threshold = 20 if self.CP.carFingerprint in CAMERA_ACC_CAR else 4
       ret.gasPressed = ret.gas > threshold
     else:
@@ -186,12 +187,11 @@ class CarState(CarStateBase):
     # kans: avoid to accFault
     if self.CP.carFingerprint not in CAR.CHEVROLET_VOLT:
       ret.cruiseState.standstill = False
-    if self.CP.networkLocation == NetworkLocation.fwdCamera and not self.CP.flags & GMFlags.NO_CAMERA.value:
-      if self.CP.carFingerprint not in CC_ONLY_CAR:
+    if self.CP.networkLocation == NetworkLocation.fwdCamera:
+      if self.CP.carFingerprint not in (ALT_ACCS | CC_ONLY_CAR):
         ret.cruiseState.speed = cam_cp.vl["ASCMActiveCruiseControlStatus"]["ACCSpeedSetpoint"] * CV.KPH_TO_MS
-      ret.stockAeb = cam_cp.vl["AEBCmd"]["AEBCmdActive"] != 0
       # openpilot controls nonAdaptive when not pcmCruise
-      if self.CP.pcmCruise and self.CP.carFingerprint not in CC_ONLY_CAR: 
+      if self.CP.pcmCruise: 
         ret.cruiseState.nonAdaptive = cam_cp.vl["ASCMActiveCruiseControlStatus"]["ACCCruiseState"] not in (2, 3)
     if self.CP.carFingerprint in CC_ONLY_CAR:
       ret.accFaulted = False
@@ -238,12 +238,6 @@ class CarState(CarStateBase):
     if CP.enableBsm:
       pt_messages.append(("BCMBlindSpotMonitor", 10))
 
-    # Used to read back last counter sent to PT by camera
-    if CP.networkLocation == NetworkLocation.fwdCamera:
-      pt_messages += [
-        ("ASCMLKASteeringCmd", 0),
-      ]
-    # 이 부분은 위 조건아래 들어와야 하는 것이 아니므로 내어쓰기 해야 합니다.
     if CP.flags & GMFlags.NO_ACCELERATOR_POS_MSG.value:
       pt_messages.remove(("ECMAcceleratorPos", 80))
       pt_messages.append(("EBCMBrakePedalPosition", 100))
@@ -254,25 +248,24 @@ class CarState(CarStateBase):
         ("EVDriveMode", 0),
       ]
 
-    if CP.carFingerprint in CC_ONLY_CAR:
-      pt_messages += [
-        ("ECMCruiseControl", 10),
-      ]
     if CP.enableGasInterceptorDEPRECATED:
       pt_messages += [
         ("GAS_SENSOR", 50),
       ]
 
     cam_messages = []
-    if CP.networkLocation == NetworkLocation.fwdCamera and not CP.flags & GMFlags.NO_CAMERA.value:
+    if CP.networkLocation == NetworkLocation.fwdCamera:
+      pt_messages += [
+        ("ASCMLKASteeringCmd", 0),
+      ]
       cam_messages += [
         ("ASCMLKASteeringCmd", 10),
-        ("AEBCmd", 10),
       ]
 
-      if CP.carFingerprint not in CC_ONLY_CAR:
-        cam_messages += [
-          ("ASCMActiveCruiseControlStatus", 25),
+      if CP.carFingerprint in (ALT_ACCS | CC_ONLY_CAR):
+        pt_messages.append(("ECMCruiseControl", 10))
+      else:
+        cam_messages.append(("ASCMActiveCruiseControlStatus", 25))
         ]
 
     loopback_messages = [

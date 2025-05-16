@@ -78,11 +78,10 @@ class GMSafetyFlags(IntFlag):
   HW_CAM = 1
   HW_CAM_LONG = 2
   CC_LONG = 4
-  NO_CAMERA = 8
-  HW_ASCM_LONG = 16
-  NO_ACC = 32
-  PEDAL_LONG = 64  # TODO: This can be inferred
-  GAS_INTERCEPTOR = 128
+  HW_ASCM_LONG = 8
+  NO_ACC = 16
+  PEDAL_LONG = 32  # TODO: This can be inferred
+  GAS_INTERCEPTOR = 64
 
 @dataclass
 class GMCarDocs(CarDocs):
@@ -282,9 +281,8 @@ class CanBus:
 class GMFlags(IntFlag):
   PEDAL_LONG = 1
   CC_LONG = 2
-  NO_CAMERA = 4
-  NO_ACCELERATOR_POS_MSG = 8
-  TPMS_MSG = 16
+  NO_ACCELERATOR_POS_MSG = 4
+  TPMS_MSG = 8
 
 
 # In a Data Module, an identifier is a string used to recognize an object,
