@@ -21,6 +21,7 @@ NetworkLocation = structs.CarParams.NetworkLocation
 CAM_MSG = 0x320  # AEBCmd
                  # TODO: Is this always linked to camera presence?
 ACCELERATOR_POS_MSG = 0xbe
+TPMS_POS_MSG = 0x52B ## TPMS
 
 NON_LINEAR_TORQUE_PARAMS = {
   CAR.CHEVROLET_BOLT_EUV: [2.6531724862969748, 1.0, 0.1919764879840985, 0.009054123646805178],
@@ -104,7 +105,6 @@ class CarInterface(CarInterfaceBase):
     ret.autoResumeSng = False
     ret.enableBsm = 0x142 in fingerprint[CanBus.POWERTRAIN] or 0x142 in fingerprint[CanBus.CAMERA]
     ret.startAccel = 1.0
-
     useEVTables = Params().get_bool("EVTable")
 
     if PEDAL_MSG in fingerprint[0]:
@@ -392,8 +392,8 @@ class CarInterface(CarInterfaceBase):
     if ACCELERATOR_POS_MSG not in fingerprint[CanBus.POWERTRAIN]:
       ret.flags |= GMFlags.NO_ACCELERATOR_POS_MSG.value
 
-    if 608 in fingerprint[CanBus.POWERTRAIN]:
-      ret.flags |= GMFlags.SPEED_RELATED_MSG.value
-
+    # kans: TPMS
+    if TPMS_POS_MSG in fingerprint[CanBus.POWERTRAIN]:
+      ret.flags |= GMFlags.TPMS_MSG.value
 
     return ret
