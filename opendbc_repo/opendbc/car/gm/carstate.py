@@ -1,4 +1,5 @@
 import copy
+import time # DBC signal checker
 from cereal import car
 from openpilot.common.params import Params #kans
 import numpy as np
@@ -7,14 +8,15 @@ from opendbc.can.parser import CANParser
 from opendbc.car import Bus, create_button_events, structs
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.interfaces import CarStateBase
-from opendbc.car.gm.values import DBC, AccState, CruiseButtons, STEER_THRESHOLD, CAR, DBC, CanBus, GMFlags, CC_ONLY_CAR, CAMERA_ACC_CAR
+from opendbc.car.gm.values import DBC, AccState, CruiseButtons, STEER_THRESHOLD, CAR, DBC, GMFlags, ALT_ACCS, \
+  CC_ONLY_CAR, CAMERA_ACC_CAR
 
 ButtonType = structs.CarState.ButtonEvent.Type
 TransmissionType = structs.CarParams.TransmissionType
 NetworkLocation = structs.CarParams.NetworkLocation
 GearShifter = structs.CarState.GearShifter
 STANDSTILL_THRESHOLD = 10 * 0.0311 * CV.KPH_TO_MS
-LongCtrlState = car.CarControl.Actuators.LongControlState # kans
+
 BUTTONS_DICT = {CruiseButtons.RES_ACCEL: ButtonType.accelCruise, CruiseButtons.DECEL_SET: ButtonType.decelCruise,
                 CruiseButtons.MAIN: ButtonType.mainCruise, CruiseButtons.CANCEL: ButtonType.cancel,
                 CruiseButtons.GAP_DIST: ButtonType.gapAdjustCruise}
@@ -31,20 +33,19 @@ class CarState(CarStateBase):
     self.loopback_lka_steering_cmd_ts_nanos = 0
     self.pt_lka_steering_cmd_counter = 0
     self.cam_lka_steering_cmd_counter = 0
-    self.is_metric = False
-
-    # GAP_DIST
-    self.prev_distance_button = False
-    self.distance_button_pressed = False
-
-    self.cruise_buttons = 0
     self.buttons_counter = 0
     self.single_pedal_mode = False
     self.pedal_steady = 0.
-
+    self.cruise_buttons = 0
+    # GAP_DIST
+    self.distance_button = 0
 
     # cruiseMain default(test from nd0706-vision)
     self.cruiseMain_on = True if Params().get_int("AutoEngage") == 2 else False
+
+    # DBC signal checker
+    self.signal_last_time = None
+    self.signal_periods = []
 
   def update_button_enable(self, buttonEvents: list[structs.CarState.ButtonEvent]):
     if not self.CP.pcmCruise:
@@ -60,17 +61,29 @@ class CarState(CarStateBase):
     cam_cp = can_parsers[Bus.cam]
     loopback_cp = can_parsers[Bus.loopback]
 
+    """# DBC signal checker
+    if "TPMS" in pt_cp.vl:
+      now = time.monotonic()
+      if self.signal_last_time is not None:
+        period = now - self.signal_last_time
+        self.signal_periods.append(period)
+        print(f"[TPMS &etc] Period: {period * 1000:.1f} ms ({1.0 / period:.2f} Hz)")
+        if len(self.signal_periods) > 100:
+          self.signal_periods.pop(0)
+
+      self.tpms_last_time = now """
+
     ret = structs.CarState()
 
     prev_cruise_buttons = self.cruise_buttons
-    self.prev_distance_button = self.distance_button_pressed
+    prev_distance_button = self.distance_button
     self.cruise_buttons = pt_cp.vl["ASCMSteeringButton"]["ACCButtons"]
-    self.distance_button_pressed = pt_cp.vl["ASCMSteeringButton"]["DistanceButton"] != 0
+    self.distance_button = pt_cp.vl["ASCMSteeringButton"]["DistanceButton"]
     self.buttons_counter = pt_cp.vl["ASCMSteeringButton"]["RollingCounter"]
 
     self.pscm_status = copy.copy(pt_cp.vl["PSCMStatus"])
     # GAP_DIST
-    if self.cruise_buttons in [CruiseButtons.UNPRESS, CruiseButtons.INIT] and self.distance_button_pressed:
+    if self.cruise_buttons in [CruiseButtons.UNPRESS, CruiseButtons.INIT] and self.distance_button:
       self.cruise_buttons = CruiseButtons.GAP_DIST
 
     if self.CP.enableBsm:

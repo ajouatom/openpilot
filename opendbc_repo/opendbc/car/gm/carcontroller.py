@@ -33,7 +33,8 @@ class CarController(CarControllerBase):
     self.apply_torque_last = 0
     self.apply_gas = 0
     self.apply_brake = 0
-    self.apply_speed = 0 # kans: button spam
+    # kans: button spam
+    self.apply_speed = 0
     self.frame = 0
     self.last_steer_frame = 0
     self.last_button_frame = 0
@@ -171,7 +172,7 @@ class CarController(CarControllerBase):
         
       # Gas/regen, brakes, and UI commands - all at 25Hz
       if self.frame % 4 == 0:
-      # GM: softHold
+        # GM: softHold
         stopping = actuators.longControlState == LongCtrlState.stopping or CS.out.softHoldActive > 0
 
         # Pitch compensated acceleration;
