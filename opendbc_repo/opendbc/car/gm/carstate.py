@@ -9,7 +9,7 @@ from opendbc.car import Bus, create_button_events, structs
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.interfaces import CarStateBase
 from opendbc.car.gm.values import DBC, AccState, CruiseButtons, STEER_THRESHOLD, CAR, DBC, GMFlags, ALT_ACCS, \
-  CC_ONLY_CAR, CAMERA_ACC_CAR
+  CC_ONLY_CAR, CAMERA_ACC_CAR, SDGM_CAR
 
 ButtonType = structs.CarState.ButtonEvent.Type
 TransmissionType = structs.CarParams.TransmissionType
@@ -119,11 +119,15 @@ class CarState(CarStateBase):
       ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(pt_cp.vl["ECMPRDNL2"]["PRNDL2"], None))
 
     if self.CP.flags & GMFlags.NO_ACCELERATOR_POS_MSG.value:
-      ret.brake = pt_cp.vl["EBCMBrakePedalPosition"]["BrakePedalPosition"] / 0xd0
+      ret.brake = pt_cp.vl["EBCMBrakePedalPosition"]["BrakePedalPosition"] / 0xd0 #241
     else:
-      ret.brake = pt_cp.vl["ECMAcceleratorPos"]["BrakePedalPos"]
+      ret.brake = pt_cp.vl["ECMAcceleratorPos"]["BrakePedalPos"] #190
     if self.CP.networkLocation == NetworkLocation.fwdCamera:
-      ret.brakePressed = pt_cp.vl["ECMEngineStatus"]["BrakePressed"] != 0
+      if self.CP.carFingerprint in SDGM_CAR:
+        brake_pressure = pt_cp.vl["ECMEngineStatus"]["BrakePressed"]  # 예: 201 메시지, 1번 바이트가 BrakePressure
+        ret.brakePressed = brake_pressure >= 5
+      else:
+        ret.brakePressed = pt_cp.vl["ECMEngineStatus"]["BrakePressed"] != 0 #201
     else:
       # Some Volt 2016-17 have loose brake pedal push rod retainers which causes the ECM to believe
       # that the brake is being intermittently pressed without user interaction.
