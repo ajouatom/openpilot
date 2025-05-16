@@ -1044,6 +1044,19 @@
     },
     {
       "group": "조향일반",
+      "name": "AdjustCurveOffset",
+      "title": "레인모드: 커브조절옵셋 (0)cm",
+      "descr": "커브시 안쪽으로 돌도록합니다.",
+      "egroup": "LAT",
+      "etitle": "LaneLine: AdjustCurveOffset (0)cm",
+      "edescr": "",
+      "min": 0,
+      "max": 500,
+      "default": 0,
+      "unit": 10
+    },
+    {
+      "group": "조향일반",
       "name": "LaneChangeNeedTorque",
       "title": "차선변경 조향토크 사용",
       "descr": "1: 차선변경시 조향토크를 줘야 작동함, 2: 깜박이 차선변경안함, 3: BSD무시함, 4:토크우선",

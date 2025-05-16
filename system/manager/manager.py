@@ -124,6 +124,7 @@ def get_default_params():
     ("UseLaneLineCurveSpeed", "0"),
     ("UseLaneLineSpeedApply", "0"),
     ("AdjustLaneOffset", "0"),
+    ("AdjustCurveOffset", "0"),
     ("LaneChangeNeedTorque", "0"),
     ("MaxAngleFrames", "89"),
     ("LateralTorqueCustom", "0"),
