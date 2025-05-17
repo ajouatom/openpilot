@@ -85,8 +85,7 @@ static void gm_rx_hook(const CANPacket_t *to_push) {
 
     if (addr == 0xC9) {
       if (gm_hw == GM_CAM) {
-        //brake_pressed = GET_BIT(to_push, 40U);  // CAM_ACC차량용 브레이크 체크(201핑거 40번째 비트)
-        brake_pressed = (GET_BYTE(to_push, 1) >= 5U);  //브레이크 답력(5)으로 변경
+        brake_pressed = GET_BIT(to_push, 40U);  // CAM_ACC차량용 브레이크 체크(201핑거 40번째 비트)
       }
       acc_main_on = GET_BIT(to_push, 29U);  // (오토)크루즈 메인스위치 체크(201핑거 29번째 비트)
     }
