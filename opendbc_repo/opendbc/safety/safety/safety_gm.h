@@ -77,7 +77,7 @@ static void gm_rx_hook(const CANPacket_t *to_push) {
     if ((gm_hw == GM_ASCM) || (gm_hw == GM_CAM)) {
       if (addr == 0xBE) {
         if (gm_hw == GM_CAM) {
-          brake_pressed = GET_BYTE(to_push, 1) >= 7U; //핑거190 말리부2019 브레이크답력
+          brake_pressed = GET_BYTE(to_push, 1) >= 10U; //핑거190 말리부2019 브레이크답력
         }
         else if (gm_hw == GM_ASCM) {
           brake_pressed = GET_BYTE(to_push, 1) >= 10U; //핑거190 ASCM 브레이크답력
