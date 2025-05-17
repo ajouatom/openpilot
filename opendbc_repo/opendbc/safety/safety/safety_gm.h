@@ -13,8 +13,7 @@ enum {
 
 typedef enum {
   GM_ASCM,
-  GM_CAM,
-  GM_SDGM
+  GM_CAM
 } GmHardware;
 static GmHardware gm_hw = GM_ASCM;
 static bool gm_cam_long = false;
@@ -24,7 +23,6 @@ static bool gm_pedal_long = false;
 static bool gm_cc_long = false;
 static bool gm_skip_relay_check = false;
 static bool gm_force_ascm = false;
-static bool gm_sdgm = false;
 
 static void handle_gm_wheel_buttons(const CANPacket_t *to_push) {
   int button = (GET_BYTE(to_push, 5) & 0x70U) >> 4;
@@ -45,10 +43,6 @@ static void handle_gm_wheel_buttons(const CANPacket_t *to_push) {
 }
 
 static void gm_rx_hook(const CANPacket_t *to_push) {
-  if ((GET_BUS(to_push) == 2U) && (GET_ADDR(to_push) == 0x1E1) && (gm_hw == GM_SDGM)) {
-    // SDGM은 BUS2(Camera버스) 사용.
-    handle_gm_wheel_buttons(to_push);
-  }
 
   const int GM_STANDSTILL_THRSLD = 10;  // 0.311kph
   // panda interceptor threshold needs to be equivalent to openpilot threshold to avoid controls mismatches
@@ -73,16 +67,21 @@ static void gm_rx_hook(const CANPacket_t *to_push) {
       vehicle_moving = (left_rear_speed > GM_STANDSTILL_THRSLD) || (right_rear_speed > GM_STANDSTILL_THRSLD);
     }
 
-    // ACC steering wheel buttons (GM_CAM and GM_SDGM are tied to the PCM)
-    if ((addr == 0x1E1) && (!gm_pcm_cruise || gm_cc_long) && (gm_hw != GM_SDGM)) {
+    // ACC steering wheel buttons (GM_CAM is tied to the PCM)
+    if ((addr == 0x1E1) && (!gm_pcm_cruise || gm_cc_long)) {
       handle_gm_wheel_buttons(to_push);
     }
 
     // Reference for brake pressed signals:
     // https://github.com/commaai/openpilot/blob/master/selfdrive/car/gm/carstate.py
-    if (gm_hw == GM_ASCM) {
+    if ((gm_hw == GM_ASCM) || (gm_hw == GM_CAM)) {
       if (addr == 0xBE) {
-        brake_pressed = GET_BYTE(to_push, 1) >= 10U; //핑거190 브레이크답력
+        if (gm_hw == GM_CAM) {
+          brake_pressed = GET_BYTE(to_push, 1) >= 10U; //핑거190 말리부2019 브레이크답력
+        }
+        else if (gm_hw == GM_ASCM) {
+          brake_pressed = GET_BYTE(to_push, 1) >= 10U; //핑거190 ASCM 브레이크답력
+        }
       }
       if (addr == 0xF1) {
         brake_pressed = GET_BYTE(to_push, 1) >= 15U; //핑거241 브레이크답력
@@ -90,8 +89,8 @@ static void gm_rx_hook(const CANPacket_t *to_push) {
     }
 
     if (addr == 0xC9) {
-      if ((gm_hw == GM_CAM) || (gm_hw == GM_SDGM)) {
-        brake_pressed = GET_BIT(to_push, 40U);  // Bolt,SDGM용 브레이크 체크(201핑거 40번째 비트)
+      if (gm_hw == GM_CAM) {
+        brake_pressed = GET_BIT(to_push, 40U);  // CAM_ACC차량용 브레이크 체크(201핑거 40번째 비트)
       }
       acc_main_on = GET_BIT(to_push, 29U);  // (오토)크루즈 메인스위치 체크(201핑거 29번째 비트)
     }
@@ -223,7 +222,7 @@ static bool gm_tx_hook(const CANPacket_t *to_send) {
 static int gm_fwd_hook(int bus_num, int addr) {
   int bus_fwd = -1;
 
-  if ((gm_hw == GM_CAM) || (gm_hw == GM_SDGM)) {
+  if (gm_hw == GM_CAM) {
     if (bus_num == 0) {
       // block PSCMStatus; forwarded through openpilot to hide an alert from the camera
       bool is_pscm_msg = (addr == 0x184);
@@ -253,15 +252,6 @@ static safety_config gm_init(uint16_t param) {
   const uint16_t GM_PARAM_HW_ASCM_LONG = 16;
   const uint16_t GM_PARAM_NO_ACC = 32;
   const uint16_t GM_PARAM_PEDAL_LONG = 64;  // TODO: this can be inferred
-  const uint16_t GM_PARAM_HW_SDGM = 256;
-
-  if GET_FLAG(param, GM_PARAM_HW_CAM) {
-    gm_hw = GM_CAM;
-  } else if GET_FLAG(param, GM_PARAM_HW_SDGM) {
-    gm_hw = GM_SDGM;
-  } else {
-    gm_hw = GM_ASCM;
-  }
 
   static const LongitudinalLimits GM_ASCM_LONG_LIMITS = {
     .max_gas = 3072,
@@ -288,8 +278,6 @@ static safety_config gm_init(uint16_t param) {
 
   static const CanMsg GM_CAM_LONG_TX_MSGS[] = {{0x180, 0, 4}, {0x315, 0, 5}, {0x2CB, 0, 8}, {0x370, 0, 6}, {0x200, 0, 6}, {0x1E1, 0, 7},  // pt bus
                                                {0x315, 2, 5}, {0x184, 2, 8}};  // camera bus
-  static const CanMsg GM_SDGM_TX_MSGS[] = {{0x180, 0, 4}, {0x1E1, 0, 7},  // pt bus
-                                           {0x184, 2, 8}, {0x1E1, 2, 7}};  // add 0x1E1 to camera bus
 
 
   // TODO: do checksum and counter checks. Add correct timestep, 0.1s for now.
@@ -309,13 +297,12 @@ static safety_config gm_init(uint16_t param) {
                                           {0x1E1, 2, 7}, {0x184, 2, 8}};  // camera bus
 
 
-  //gm_hw = GET_FLAG(param, GM_PARAM_HW_CAM) ? GM_CAM : GM_ASCM;
+  gm_hw = GET_FLAG(param, GM_PARAM_HW_CAM) ? GM_CAM : GM_ASCM;
   gm_force_ascm = GET_FLAG(param, GM_PARAM_HW_ASCM_LONG);
-  gm_sdgm = GET_FLAG(param, GM_PARAM_HW_SDGM);
 
   if ((gm_hw == GM_ASCM) || gm_force_ascm) {
     gm_long_limits = &GM_ASCM_LONG_LIMITS;
-  } else if ((gm_hw == GM_CAM) || gm_sdgm) {
+  } else if (gm_hw == GM_CAM) {
       gm_long_limits = &GM_CAM_LONG_LIMITS;
   } else {
   }
@@ -326,7 +313,7 @@ static safety_config gm_init(uint16_t param) {
 #endif
   gm_pedal_long = GET_FLAG(param, GM_PARAM_PEDAL_LONG);
   gm_cc_long = GET_FLAG(param, GM_PARAM_CC_LONG);
-  gm_pcm_cruise = ((gm_hw == GM_CAM) && !gm_cam_long && !gm_force_ascm && !gm_pedal_long) || (gm_hw == GM_SDGM);
+  gm_pcm_cruise = (gm_hw == GM_CAM) && !gm_cam_long && !gm_force_ascm && !gm_pedal_long;
   gm_skip_relay_check = GET_FLAG(param, GM_PARAM_NO_CAMERA);
   gm_has_acc = !GET_FLAG(param, GM_PARAM_NO_ACC);
 
@@ -349,8 +336,6 @@ static safety_config gm_init(uint16_t param) {
       ret = BUILD_SAFETY_CFG(gm_rx_checks, GM_CAM_TX_MSGS);
       print("GM CAM\n");
     }
-  } else if (gm_hw == GM_SDGM) {
-    ret = BUILD_SAFETY_CFG(gm_rx_checks, GM_SDGM_TX_MSGS);
   }
   return ret;
 }

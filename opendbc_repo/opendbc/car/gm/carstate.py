@@ -8,7 +8,7 @@ from opendbc.can.parser import CANParser
 from opendbc.car import Bus, create_button_events, structs
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.interfaces import CarStateBase
-from opendbc.car.gm.values import DBC, AccState, CruiseButtons, STEER_THRESHOLD, CAR, DBC, GMFlags, SDGM_CAR, ALT_ACCS, \
+from opendbc.car.gm.values import DBC, AccState, CruiseButtons, STEER_THRESHOLD, CAR, DBC, GMFlags, ALT_ACCS, \
   CC_ONLY_CAR, CAMERA_ACC_CAR
 
 ButtonType = structs.CarState.ButtonEvent.Type
@@ -118,9 +118,15 @@ class CarState(CarStateBase):
     else:
       ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(pt_cp.vl["ECMPRDNL2"]["PRNDL2"], None))
 
-    ret.brake = pt_cp.vl["ECMAcceleratorPos"]["BrakePedalPos"]
-    if self.CP.networkLocation == NetworkLocation.fwdCamera and self.CP.carFingerprint not in SDGM_CAR:
-      ret.brakePressed = pt_cp.vl["ECMEngineStatus"]["BrakePressed"] != 0
+    if self.CP.flags & GMFlags.NO_ACCELERATOR_POS_MSG.value:
+      ret.brake = pt_cp.vl["EBCMBrakePedalPosition"]["BrakePedalPosition"] / 0xd0
+    else:
+      ret.brake = pt_cp.vl["ECMAcceleratorPos"]["BrakePedalPos"]
+    if self.CP.networkLocation == NetworkLocation.fwdCamera:
+      if self.CP.carFingerprint in (CAR.CHEVROLET_MALIBU_2019, CAR.CHEVROLET_EQUINOX):
+        ret.brakePressed = ret.brake >= 10
+      else:
+        ret.brakePressed = pt_cp.vl["ECMEngineStatus"]["BrakePressed"] != 0
     else:
       # Some Volt 2016-17 have loose brake pedal push rod retainers which causes the ECM to believe
       # that the brake is being intermittently pressed without user interaction.
@@ -133,10 +139,12 @@ class CarState(CarStateBase):
       ret.regenBraking = pt_cp.vl["EBCMRegenPaddle"]["RegenPaddle"] != 0
       self.single_pedal_mode = ret.gearShifter == GearShifter.low or pt_cp.vl["EVDriveMode"]["SinglePedalModeActive"] == 1
 
-    ret.tpms.rr = pt_cp.vl["TPMS"]["PRESSURE_RR"]
-    ret.tpms.rl = pt_cp.vl["TPMS"]["PRESSURE_RL"]
-    ret.tpms.fl = pt_cp.vl["TPMS"]["PRESSURE_FL"]
-    ret.tpms.fr = pt_cp.vl["TPMS"]["PRESSURE_FR"]
+    # kans: TPMS
+    if self.CP.flags & GMFlags.TPMS_MSG.value:
+      ret.tpms.rr = pt_cp.vl["TPMS"]["PRESSURE_RR"]
+      ret.tpms.rl = pt_cp.vl["TPMS"]["PRESSURE_RL"]
+      ret.tpms.fl = pt_cp.vl["TPMS"]["PRESSURE_FL"]
+      ret.tpms.fr = pt_cp.vl["TPMS"]["PRESSURE_FR"]
 
     if self.CP.enableGasInterceptorDEPRECATED:
       ret.gas = (pt_cp.vl["GAS_SENSOR"]["INTERCEPTOR_GAS"] + pt_cp.vl["GAS_SENSOR"]["INTERCEPTOR_GAS2"]) / 2.
@@ -185,15 +193,9 @@ class CarState(CarStateBase):
     if self.CP.networkLocation == NetworkLocation.fwdCamera:
       if self.CP.carFingerprint not in (ALT_ACCS | CC_ONLY_CAR):
         ret.cruiseState.speed = cam_cp.vl["ASCMActiveCruiseControlStatus"]["ACCSpeedSetpoint"] * CV.KPH_TO_MS
-        # This FCW signal only works for SDGM cars. CAM cars send FCW on GMLAN but this bit is always 0 for them
-        ret.stockFcw = cam_cp.vl["ASCMActiveCruiseControlStatus"]["FCWAlert"] != 0
-        if self.CP.pcmCruise:
-          # openpilot controls nonAdaptive when not pcmCruise
-          ret.cruiseState.nonAdaptive = cam_cp.vl["ASCMActiveCruiseControlStatus"]["ACCCruiseState"] not in (2, 3)
-
-      if self.CP.carFingerprint not in (SDGM_CAR, CAR.CHEVROLET_EQUINOX):
-        ret.stockAeb = cam_cp.vl["AEBCmd"]["AEBCmdActive"] != 0
-
+      # openpilot controls nonAdaptive when not pcmCruise
+      if self.CP.pcmCruise: 
+        ret.cruiseState.nonAdaptive = cam_cp.vl["ASCMActiveCruiseControlStatus"]["ACCCruiseState"] not in (2, 3)
     if self.CP.carFingerprint in CC_ONLY_CAR:
       ret.accFaulted = False
       ret.cruiseState.speed = pt_cp.vl["ECMCruiseControl"]["CruiseSetSpeed"] * CV.KPH_TO_MS
@@ -231,11 +233,17 @@ class CarState(CarStateBase):
       ("ECMEngineStatus", 100),
       ("PSCMSteeringAngle", 100),
       ("ECMAcceleratorPos", 80),
-      ("TPMS", 5),
     ]
+
+    if CP.flags & GMFlags.TPMS_MSG.value:
+      pt_messages.append(("TPMS", 5))
 
     if CP.enableBsm:
       pt_messages.append(("BCMBlindSpotMonitor", 10))
+
+    if CP.flags & GMFlags.NO_ACCELERATOR_POS_MSG.value:
+      pt_messages.remove(("ECMAcceleratorPos", 80))
+      pt_messages.append(("EBCMBrakePedalPosition", 100))
 
     if CP.transmissionType == TransmissionType.direct:
       pt_messages += [
@@ -261,11 +269,6 @@ class CarState(CarStateBase):
         pt_messages.append(("ECMCruiseControl", 10))
       else:
         cam_messages.append(("ASCMActiveCruiseControlStatus", 25))
-
-      if CP.carFingerprint not in (SDGM_CAR, CAR.CHEVROLET_EQUINOX):
-        cam_messages += [
-          ("AEBCmd", 10),
-        ]
 
     loopback_messages = [
       ("ASCMLKASteeringCmd", 0),

@@ -408,6 +408,23 @@ def create_tcs_messages(packer, CAN, CS):
     ret.append(packer.make_can_msg("TCS", CAN.CAM, values))
   return ret
 
+def forward_button_message(packer, CAN, frame, CS, cruise_button, MainMode_ACC_trigger, LFA_trigger):
+  ret = []
+  if frame % 2 == 0:
+    if CS.cruise_buttons_msg is not None:
+      values = CS.cruise_buttons_msg
+      cruise_button_driver = values["CRUISE_BUTTONS"]
+      if cruise_button_driver == 0:
+        values["CRUISE_BUTTONS"] = cruise_button
+      if MainMode_ACC_trigger > 0:
+        #values["ADAPTIVE_CRUISE_MAIN_BTN"] = 1
+        pass
+      elif LFA_trigger > 0:
+        values["LFA_BTN"] = 1
+        
+      ret.append(packer.make_can_msg(CS.cruise_btns_msg_canfd, CAN.CAM, values))
+  return ret
+
 def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle, left_lane_warning, right_lane_warning, canfd_debug, MainMode_ACC_trigger, LFA_trigger):
   ret = []
 

@@ -261,12 +261,12 @@ class CarController(CarControllerBase):
       if hda2 and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker))
 
+      if self.camera_scc_params in [2, 3]:
+        self.canfd_toggle_adas(CC, CS)
       if self.CP.openpilotLongitudinalControl:
         self.hyundai_jerk.make_jerk(self.CP, CS, accel, actuators, hud_control)
 
         if True: #not camera_scc:
-          if self.camera_scc_params == 2:
-            self.canfd_toggle_adas(CC, CS)
           can_sends.extend(hyundaicanfd.create_ccnc_messages(self.CP, self.packer, self.CAN, self.frame, CC, CS, hud_control, apply_angle, left_lane_warning, right_lane_warning, self.canfd_debug, self.MainMode_ACC_trigger, self.LFA_trigger))
           if hda2:
             can_sends.extend(hyundaicanfd.create_adrv_messages(self.CP, self.packer, self.CAN, self.frame))
@@ -283,7 +283,12 @@ class CarController(CarControllerBase):
           self.accel_last = accel
       else:
         # button presses
-        can_sends.extend(self.create_button_messages(CC, CS, use_clu11=False))
+        if self.camera_scc_params == 3: # camera scc but stock long
+          send_button = self.make_spam_button(CC, CS)
+          can_sends.extend(hyundaicanfd.forward_button_message(self.packer, self.CAN, self.frame, CS, send_button, self.MainMode_ACC_trigger, self.LFA_trigger))
+        else:
+          can_sends.extend(self.create_button_messages(CC, CS, use_clu11=False))
+        
     else:
       can_sends.append(hyundaican.create_lkas11(self.packer, self.frame, self.CP, apply_torque, apply_steer_req,
                                                 torque_fault, CS.lkas11, sys_warning, sys_state, CC.enabled,
@@ -335,6 +340,7 @@ class CarController(CarControllerBase):
 
     self.frame += 1
     return new_actuators, can_sends
+
 
   def create_button_messages(self, CC: structs.CarControl, CS: CarState, use_clu11: bool):
     can_sends = []
