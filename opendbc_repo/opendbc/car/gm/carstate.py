@@ -123,7 +123,10 @@ class CarState(CarStateBase):
     else:
       ret.brake = pt_cp.vl["ECMAcceleratorPos"]["BrakePedalPos"]
     if self.CP.networkLocation == NetworkLocation.fwdCamera:
-      ret.brakePressed = pt_cp.vl["ECMEngineStatus"]["BrakePressed"] != 0
+      if self.CP.carFingerprint in (CAR.CHEVROLET_MALIBU_2019, CAR.CHEVROLET_EQUINOX):
+        ret.brakePressed = ret.brake >= 5
+      else:
+        ret.brakePressed = pt_cp.vl["ECMEngineStatus"]["BrakePressed"] != 0
     else:
       # Some Volt 2016-17 have loose brake pedal push rod retainers which causes the ECM to believe
       # that the brake is being intermittently pressed without user interaction.
