@@ -229,7 +229,7 @@ class LanePlanner:
     #  self.d_prob, self.lanefull_mode,
     #  self.lane_width_left_filtered.x, self.lane_width, self.lane_width_right_filtered.x)
 
-    adjustLaneTime = 0.07 #self.params.get_int("AdjustLaneTime")
+    adjustLaneTime = 0.08 #self.params.get_int("AdjustLaneTime")
     laneline_active = False
     if self.lanefull_mode and self.d_prob > 0.3:
       laneline_active = True
