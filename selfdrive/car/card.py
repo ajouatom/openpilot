@@ -208,9 +208,14 @@ class Car:
 
     # TODO: mirror the carState.cruiseState struct?
     #self.v_cruise_helper.update_v_cruise(CS, self.sm['carControl'].enabled, self.is_metric)
+    if self.v_cruise_helper._paddle_decel_active:
+      v_cruise_kph = v_cruise_cluster_kph = 0
+    else:
+      v_cruise_kph = self.v_cruise_helper.v_cruise_kph
+      v_cruise_cluster_kph = self.v_cruise_helper.v_cruise_cluster_kph
     CS.logCarrot = self.v_cruise_helper.log
-    CS.vCruise = float(self.v_cruise_helper.v_cruise_kph)
-    CS.vCruiseCluster = float(self.v_cruise_helper.v_cruise_cluster_kph)
+    CS.vCruise = float(v_cruise_kph)
+    CS.vCruiseCluster = float(v_cruise_cluster_kph)
     CS.softHoldActive = self.v_cruise_helper._soft_hold_active
     CS.activateCruise = self.v_cruise_helper._activate_cruise
     CS.latEnabled = self.v_cruise_helper._lat_enabled
