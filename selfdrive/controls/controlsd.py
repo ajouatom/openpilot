@@ -136,7 +136,7 @@ class Controls:
                                   curve_speed_abs > self.params.get_int("UseLaneLineCurveSpeed"))
     lat_smooth_seconds = LAT_SMOOTH_SECONDS #self.params.get_float("SteerSmoothSec") * 0.01
     steer_actuator_delay = self.params.get_float("SteerActuatorDelay") * 0.01
-    mpc_delay_offset = 0.06
+    mpc_delay_offset = 0.05
     if steer_actuator_delay == 0.0:
       steer_actuator_delay = self.sm['liveDelay'].lateralDelay 
 
