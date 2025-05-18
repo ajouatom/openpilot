@@ -115,6 +115,8 @@ class CarrotPlanner:
 
     self.eco_over_speed = 2
     self.eco_target_speed = 0
+    
+    self.autoNaviSpeedDecelRate = 1.5
 
     self.desireState = 0.0
     self.jerk_factor = 1.0
@@ -170,6 +172,7 @@ class CarrotPlanner:
       self.stop_distance = self.params.get_float("StopDistanceCarrot") / 100.
       self.j_lead_factor = self.params.get_float("JLeadFactor3") / 100.
       self.eco_over_speed = self.params.get_int("CruiseEcoControl")
+      self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
 
     elif self.params_count >= 100:
 

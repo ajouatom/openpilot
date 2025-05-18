@@ -421,7 +421,7 @@ class LongitudinalMpc:
       self.source = SOURCES[np.argmin(x_obstacles[0])]
 
       if v_cruise == 0 and self.source == 'cruise':
-        self.params[:,0] = -1.5
+        self.params[:,0] = - carrot.autoNaviSpeedDecelRate
 
       # These are not used in ACC mode
       x[:], v[:], a[:], j[:] = 0.0, 0.0, 0.0, 0.0
