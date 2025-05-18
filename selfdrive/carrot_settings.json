@@ -236,19 +236,6 @@
       "unit": 1
     },
     {
-      "group": "조향튜닝",
-      "name": "SteerDelayOffset",
-      "title": "레인모드딜레이x0.01(0)",
-      "descr": "레인모드 시험용",
-      "egroup": "LAT",
-      "etitle": "SteerDelayOffsetx0.01(0)",
-      "edescr": "for lanemode",
-      "min": 1,
-      "max": 300,
-      "default": 0,
-      "unit": 10
-    },
-    {
       "group": "크루즈",
       "name": "CruiseOnDist",
       "title": "크루즈ON거리(0cm)",
@@ -1033,40 +1020,14 @@
       "group": "조향일반",
       "name": "AdjustLaneOffset",
       "title": "레인모드: 차선조절옵셋 (0)cm",
-      "descr": "도로경계쪽으로 주행합니다.",
+      "descr": "도로경계쪽/커브안쪽으로 보정합니다.",
       "egroup": "LAT",
       "etitle": "LaneLine: AdjustLaneOffset (0)cm",
-      "edescr": "",
+      "edescr": "to roadedge offset",
       "min": 0,
       "max": 500,
       "default": 0,
       "unit": 10
-    },
-    {
-      "group": "조향일반",
-      "name": "AdjustCurveOffset",
-      "title": "레인모드: 커브조절옵셋 (0)cm",
-      "descr": "커브시 안쪽으로 돌도록합니다.",
-      "egroup": "LAT",
-      "etitle": "LaneLine: AdjustCurveOffset (0)cm",
-      "edescr": "",
-      "min": 0,
-      "max": 500,
-      "default": 0,
-      "unit": 10
-    },
-    {
-      "group": "조향일반",
-      "name": "AdjustLaneTime",
-      "title": "레인모드: 시간지연보상 (13)x0.01",
-      "descr": "레인제어기의 지연시간을 보상하여, 빠른 조향을 유도함",
-      "egroup": "LAT",
-      "etitle": "LaneLine: AdjustLaneTime (13)x0.01",
-      "edescr": "LaneLine controller delay compensation",
-      "min": 0,
-      "max": 50,
-      "default": 13,
-      "unit": 1
     },
     {
       "group": "조향일반",

@@ -158,7 +158,7 @@ class LanePlanner:
       #self.lane_width_right_filtered.x = self.lane_width_right #바로적용
 
     self.adjustLaneOffset = float(self.params.get_int("AdjustLaneOffset")) * 0.01
-    self.adjustCurveOffset = float(self.params.get_int("AdjustCurveOffset")) * 0.01
+    self.adjustCurveOffset = self.adjustLaneOffset #float(self.params.get_int("AdjustCurveOffset")) * 0.01
     ADJUST_OFFSET_LIMIT = 0.4 #max(self.adjustLaneOffset, self.adjustCurveOffset)
     offset_curve = 0.0
     ## curve offset
@@ -229,7 +229,7 @@ class LanePlanner:
     #  self.d_prob, self.lanefull_mode,
     #  self.lane_width_left_filtered.x, self.lane_width, self.lane_width_right_filtered.x)
 
-    adjustLaneTime = self.params.get_int("AdjustLaneTime")
+    adjustLaneTime = 0.06 #self.params.get_int("AdjustLaneTime")
     laneline_active = False
     if self.lanefull_mode and self.d_prob > 0.3:
       laneline_active = True
