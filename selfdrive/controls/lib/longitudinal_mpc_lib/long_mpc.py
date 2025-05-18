@@ -453,6 +453,11 @@ class LongitudinalMpc:
     else:
       raise NotImplementedError(f'Planner mode {self.mode} not recognized in planner update')
 
+    if v_cruise == 0:
+      print(f"[DEBUG] v_cruise={v_cruise:.2f}")
+      print(f"[DEBUG] lead0_obst={lead_0_obstacle[0]:.2f}, lead1_obst={lead_1_obstacle[0]:.2f}, cruise_obst={cruise_obstacle[0]:.2f}")
+      print(f"[DEBUG] source={self.source}")
+
     self.yref[:,1] = x
     self.yref[:,2] = v
     self.yref[:,3] = a
