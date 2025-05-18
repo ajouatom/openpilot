@@ -420,10 +420,8 @@ class LongitudinalMpc:
       x_obstacles = np.column_stack([lead_0_obstacle, lead_1_obstacle, cruise_obstacle, x2])
       self.source = SOURCES[np.argmin(x_obstacles[0])]
 
-      if v_cruise == 0 and carrot.xState == XState.e2eCruise:
-        print(f"[DEBUG] v_cruise={v_cruise:.2f}, xState={carrot.xState}")
-        print(f"[DEBUG] lead0_obst={lead_0_obstacle[0]:.2f}, lead1_obst={lead_1_obstacle[0]:.2f}, cruise_obst={cruise_obstacle[0]:.2f}, x2={x2[0]:.2f}")
-        print(f"[DEBUG] source={self.source}")
+      if v_cruise == 0 and self.source == 'cruise':
+        self.params[:,0] = -1.5
 
       # These are not used in ACC mode
       x[:], v[:], a[:], j[:] = 0.0, 0.0, 0.0, 0.0
