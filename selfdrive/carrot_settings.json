@@ -1122,6 +1122,19 @@
     },
     {
       "group": "시작",
+      "name": "SoftwareMenu",
+      "title": "소프트웨어메뉴활성화",
+      "descr": "메모리오류가 있을때는 비활성화",
+      "egroup": "START",
+      "etitle": "Enable Software menu",
+      "edescr": "",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "시작",
       "name": "SoundVolumeAdjust",
       "title": "사운드볼륨조절(100%)",
       "descr": "",

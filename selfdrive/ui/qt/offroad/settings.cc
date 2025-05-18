@@ -490,11 +490,15 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
     {tr("Device"), device},
     {tr("Network"), networking},
     {tr("Toggles"), toggles},
-    //{tr("Software"), new SoftwarePanel(this)},
-    //{tr("Firehose"), new FirehosePanel(this)},
-    {tr("Carrot"), new CarrotPanel(this)},
-    {tr("Developer"), new DeveloperPanel(this)},
   };
+  if(Params().getBool("SoftwareMenu")) {
+    panels.append({tr("Software"), new SoftwarePanel(this)});
+  }
+  if(false) {
+    panels.append({tr("Firehose"), new FirehosePanel(this)});
+  }
+  panels.append({ tr("Carrot"), new CarrotPanel(this) });
+  panels.append({ tr("Developer"), new DeveloperPanel(this) });
 
   nav_btns = new QButtonGroup(this);
   for (auto &[name, panel] : panels) {
@@ -815,6 +819,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   startToggles->addItem(new CValueControl("RecordRoadCam", "Record Road camera(0)", "1:RoadCam, 2:RoadCam+WideRoadCam", "../assets/offroad/icon_shell.png", 0, 2, 1));
   startToggles->addItem(new CValueControl("HDPuse", "Use HDP(CCNC)(0)", "1:While Using APN, 2:Always", "../assets/offroad/icon_shell.png", 0, 2, 1));
   startToggles->addItem(new ParamControl("HotspotOnBoot", "Hotspot enabled on boot", "", "../assets/offroad/icon_shell.png", this));
+  startToggles->addItem(new ParamControl("SoftwareMenu", "Enable Software Menu", "", "../assets/offroad/icon_shell.png", this));
   //startToggles->addItem(new ParamControl("NoLogging", "Disable Logger", "", "../assets/offroad/icon_shell.png", this));
   //startToggles->addItem(new ParamControl("LaneChangeNeedTorque", "LaneChange: Need Torque", "", "../assets/offroad/icon_shell.png", this));
   //startToggles->addItem(new CValueControl("LaneChangeLaneCheck", "LaneChange: Check lane exist", "(0:No,1:Lane,2:+Edge)", "../assets/offroad/icon_shell.png", 0, 2, 1));
