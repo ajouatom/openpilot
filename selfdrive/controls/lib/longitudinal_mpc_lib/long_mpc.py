@@ -10,6 +10,7 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.modeld.constants import index_function
 from openpilot.selfdrive.controls.radard import _LEAD_ACCEL_TAU
 # from openpilot.selfdrive.carrot.carrot_functions import CarrotPlanner
+from openpilot.selfdrive.carrot.carrot_function import XState
 
 if __name__ == '__main__':  # generating code
   from openpilot.third_party.acados.acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
@@ -424,6 +425,11 @@ class LongitudinalMpc:
       x_obstacles = np.column_stack([lead_0_obstacle, lead_1_obstacle, cruise_obstacle, x2])
       self.source = SOURCES[np.argmin(x_obstacles[0])]
 
+      if v_cruise == 0 and carrot.xState == XState.e2eCruise:
+        print(f"[DEBUG] v_cruise={v_cruise:.2f}, xState={carrot.xState}")
+        print(f"[DEBUG] lead0_obst={lead_0_obstacle[0]:.2f}, lead1_obst={lead_1_obstacle[0]:.2f}, cruise_obst={cruise_obstacle[0]:.2f}, x2={x2[0]:.2f}")
+        print(f"[DEBUG] source={self.source}")
+
       # These are not used in ACC mode
       x[:], v[:], a[:], j[:] = 0.0, 0.0, 0.0, 0.0
 
@@ -452,11 +458,6 @@ class LongitudinalMpc:
 
     else:
       raise NotImplementedError(f'Planner mode {self.mode} not recognized in planner update')
-
-    if v_cruise == 0:
-      print(f"[DEBUG] v_cruise={v_cruise:.2f}")
-      print(f"[DEBUG] lead0_obst={lead_0_obstacle[0]:.2f}, lead1_obst={lead_1_obstacle[0]:.2f}, cruise_obst={cruise_obstacle[0]:.2f}")
-      print(f"[DEBUG] source={self.source}")
 
     self.yref[:,1] = x
     self.yref[:,2] = v
