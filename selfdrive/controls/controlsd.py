@@ -25,6 +25,7 @@ from openpilot.selfdrive.controls.lib.longcontrol import LongControl
 from openpilot.common.realtime import DT_CTRL, DT_MDL
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N
+from selfdrive.modeld.modeld import LAT_SMOOTH_SECONDS
 
 State = log.SelfdriveState.OpenpilotState
 LaneChangeState = log.LaneChangeState
@@ -133,7 +134,7 @@ class Controls:
     curve_speed_abs = abs(self.sm['carrotMan'].vTurnSpeed)
     self.lanefull_mode_enabled = (lat_plan.useLaneLines and self.params.get_int("UseLaneLineSpeedApply") > 0 and
                                   curve_speed_abs > self.params.get_int("UseLaneLineCurveSpeed"))
-    lat_smooth_seconds = self.params.get_float("SteerSmoothSec") * 0.01
+    lat_smooth_seconds = LAT_SMOOTH_SECONDS #self.params.get_float("SteerSmoothSec") * 0.01
     steer_actuator_delay = self.params.get_float("SteerActuatorDelay") * 0.01
     mpc_delay_offset = 0.06
     if steer_actuator_delay == 0.0:
