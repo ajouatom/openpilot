@@ -145,6 +145,8 @@ def get_default_params():
     ("SteerActuatorDelay", "0"),
     ("MaxTimeOffroadMin", "60"),
     ("DisableDM", "0"),
+    ("MuteDoor", "0"),
+    ("MuteSeatbelt", "0"),
     ("RecordRoadCam", "0"),
     ("HDPuse", "0"),
     ("CruiseOnDist", "400"),

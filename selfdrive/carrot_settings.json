@@ -743,6 +743,32 @@
       "unit": 1
     },
     {
+      "group": "시작",
+      "name": "MuteDoor",
+      "title": "도어감지안함",
+      "descr": "",
+      "egroup": "START",
+      "etitle": "MuteDoor",
+      "edescr": "",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "시작",
+      "name": "MuteSeatbelt",
+      "title": "안전벨트감지안함",
+      "descr": "",
+      "egroup": "START",
+      "etitle": "MuteSeatbelt",
+      "edescr": "",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
       "group": "크루즈",
       "name": "AutoSpeedUptoRoadSpeedLimit",
       "title": "자동속도증가 (100)%",
