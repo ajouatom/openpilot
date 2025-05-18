@@ -176,9 +176,9 @@ class CarSpecificEvents:
                            allow_enable=True, allow_button_cancel=True):
     events = Events()
     
-    if CS.doorOpen and self.mute_door:
+    if CS.doorOpen and not self.mute_door:
       events.add(EventName.doorOpen)
-    if CS.seatbeltUnlatched and self.mute_seatbelt:
+    if CS.seatbeltUnlatched and not self.mute_seatbelt:
       events.add(EventName.seatbeltNotLatched)
     if CS.gearShifter == GearShifter.park:
       events.add(EventName.wrongGear)
