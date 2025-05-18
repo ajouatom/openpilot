@@ -325,13 +325,18 @@ class LongitudinalMpc:
     lead_xv = np.column_stack((x_lead_traj, v_lead_traj))
     return lead_xv
   
-  def process_lead(self, lead, j_lead):
+  def process_lead(self, lead, j_lead, v_cruise):
     v_ego = self.x0[1]
     if lead is not None and lead.status:
       x_lead = lead.dRel
       v_lead = lead.vLead
       a_lead = lead.aLeadK
       a_lead_tau = lead.aLeadTau
+    elif v_cruise == 0:
+      x_lead = 1e6
+      v_lead = 0.0
+      a_lead = 0.0
+      a_lead_tau = _LEAD_ACCEL_TAU
     else:
       # Fake a fast lead car, so mpc can keep running in the same mode
       x_lead = 50.0
@@ -372,8 +377,8 @@ class LongitudinalMpc:
     else:
       self.j_lead = 0.0
 
-    lead_xv_0, lead_v_0 = self.process_lead(radarstate.leadOne, np.clip(self.j_lead * carrot.j_lead_factor, -2.0, 2.0))
-    lead_xv_1, _ = self.process_lead(radarstate.leadTwo, 0.0)
+    lead_xv_0, lead_v_0 = self.process_lead(radarstate.leadOne, np.clip(self.j_lead * carrot.j_lead_factor, -2.0, 2.0), v_cruise)
+    lead_xv_1, _ = self.process_lead(radarstate.leadTwo, 0.0, v_cruise)
 
     mode = self.mode
     comfort_brake = carrot.comfort_brake
