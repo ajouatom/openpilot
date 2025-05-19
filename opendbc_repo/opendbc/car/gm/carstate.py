@@ -268,7 +268,7 @@ class CarState(CarStateBase):
         ("ASCMLKASteeringCmd", 10),
       ]
 
-      if CP.carFingerprint in (CC_ONLY_CAR or CAR.CHEVROLET_TRAILBLAZER):
+      if CP.carFingerprint in CC_ONLY_CAR:
         pt_messages.append(("ECMCruiseControl", 10))
       else:
         cam_messages.append(("ASCMActiveCruiseControlStatus", 25))
