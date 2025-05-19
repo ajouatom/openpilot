@@ -513,7 +513,7 @@ class VCruiseCarrot:
           self._lat_enabled = not self._lat_enabled
           self._add_log("Lateral " + "enabled" if self._lat_enabled else "disabled")
         else:
-          if CC.enabled and self._paddle_decel_active:
+          if False: #CC.enabled and self._paddle_decel_active:  # 수정필요...
             self._paddle_decel_active = False
           else:          
             self._paddle_decel_active = True
