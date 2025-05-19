@@ -513,7 +513,10 @@ class VCruiseCarrot:
           self._lat_enabled = not self._lat_enabled
           self._add_log("Lateral " + "enabled" if self._lat_enabled else "disabled")
         else:
-          self._paddle_decel_active = True
+          if CC.enabled and self._paddle_decel_active:
+            self._paddle_decel_active = False
+          else:          
+            self._paddle_decel_active = True
         print("lfaButton")
       elif button_type == ButtonType.cancel:
         self._paddle_decel_active = False
