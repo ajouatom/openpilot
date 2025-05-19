@@ -48,6 +48,7 @@ class CarSpecificEvents:
     self.frame = 0
     self.mute_door = False
     self.mute_seatbelt = False
+    self.vCruise_prev = 250
 
   def update_params(self):
     if self.frame % 100 == 0:
@@ -170,6 +171,12 @@ class CarSpecificEvents:
     else:
       events = self.create_common_events(CS, CS_prev)
 
+    if CC.enabled:
+      if self.vCruise_prev == 0 and CS.vCruise > 0:
+        events.add(EventName.audioPrompt)
+
+    self.vCruise_prev = CS.vCruise
+
     return events
 
   def create_common_events(self, CS: structs.CarState, CS_prev: car.CarState, extra_gears=None, pcm_enable=True,
@@ -269,4 +276,5 @@ class CarSpecificEvents:
         events.add(EventName.buttonCancel)
       if CS.softHoldActive > 0:
         events.add(EventName.softHold)
+
     return events
