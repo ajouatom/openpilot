@@ -160,7 +160,8 @@ class CarController(CarControllerBase):
           (1 - curve_scale) * self.angle_max_torque + curve_scale * 50,
           self.angle_max_torque
         ]        
-        base_max_torque = np.interp(CS.out.vEgo * CV.MS_TO_KPH, [0, 30, 60], torque_pts)
+        #base_max_torque = np.interp(CS.out.vEgo * CV.MS_TO_KPH, [0, 30, 60], torque_pts)
+        base_max_torque = np.interp(CS.out.vEgo * CV.MS_TO_KPH, [0, 20, 30], torque_pts)
       
       target_torque = np.interp(abs(actuators.curvature), [0.0, 0.003, 0.006], [0.5 * base_max_torque, 0.75 * base_max_torque, base_max_torque])
 
