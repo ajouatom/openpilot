@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "safety_declarations.h"
 
@@ -8,7 +8,6 @@ enum {
   GM_BTN_UNPRESS = 1,
   GM_BTN_RESUME = 2,
   GM_BTN_SET = 3,
-  GM_BTN_MAIN = 5,
   GM_BTN_CANCEL = 6,
 };
 
@@ -25,6 +24,24 @@ static bool gm_cc_long = false;
 static bool gm_skip_relay_check = false;
 static bool gm_force_ascm = false;
 
+static void handle_gm_wheel_buttons(const CANPacket_t *to_push) {
+  int button = (GET_BYTE(to_push, 5) & 0x70U) >> 4;
+
+  // enter controls on falling edge of set or rising edge of resume (avoids fault)
+  bool set = (button != GM_BTN_SET) && (cruise_button_prev == GM_BTN_SET);
+  bool res = (button == GM_BTN_RESUME) && (cruise_button_prev != GM_BTN_RESUME);
+  if (set || res) {
+    controls_allowed = true;
+  }
+
+  // exit controls on cancel press
+  if (button == GM_BTN_CANCEL) {
+    controls_allowed = false;
+  }
+
+  cruise_button_prev = button;
+}
+
 static void gm_rx_hook(const CANPacket_t *to_push) {
 
   const int GM_STANDSTILL_THRSLD = 10;  // 0.311kph
@@ -32,8 +49,6 @@ static void gm_rx_hook(const CANPacket_t *to_push) {
   // If thresholds are mismatched then it is possible for panda to see the gas fall and rise while openpilot is in the pre-enabled state
   const int GM_GAS_INTERCEPTOR_THRESHOLD = 550; // (675 + 355) / 2 ratio between offset and gain from dbc file
   #define GM_GET_INTERCEPTOR(msg) (((GET_BYTE((msg), 0) << 8) + GET_BYTE((msg), 1) + (GET_BYTE((msg), 2) << 8) + GET_BYTE((msg), 3)) / 2U) // avg between 2 tracks
-
-
 
   if (GET_BUS(to_push) == 0U) {
     int addr = GET_ADDR(to_push);
@@ -54,31 +69,25 @@ static void gm_rx_hook(const CANPacket_t *to_push) {
 
     // ACC steering wheel buttons (GM_CAM is tied to the PCM)
     if ((addr == 0x1E1) && (!gm_pcm_cruise || gm_cc_long)) {
-      int button = (GET_BYTE(to_push, 5) & 0x70U) >> 4;
-
-      // enter controls on falling edge of set or rising edge of resume (avoids fault)
-      bool set = (button != GM_BTN_SET) && (cruise_button_prev == GM_BTN_SET);
-      bool res = (button == GM_BTN_RESUME) && (cruise_button_prev != GM_BTN_RESUME);
-      if (set || res) {
-        controls_allowed = true;
-      }
-
-      // exit controls on cancel press
-      if (button == GM_BTN_CANCEL) {
-        controls_allowed = false;
-      }
-
-      cruise_button_prev = button;
+      handle_gm_wheel_buttons(to_push);
     }
 
     // Reference for brake pressed signals:
     // https://github.com/commaai/openpilot/blob/master/selfdrive/car/gm/carstate.py
-    if ((addr == 0xBE) && (gm_hw == GM_ASCM)) {
-      brake_pressed = GET_BYTE(to_push, 1) >= 10U;
+    if ((gm_hw == GM_ASCM) || (gm_hw == GM_CAM)) {  //CAM_ACC도 190브레이크답력을 적용하기 위함(단,carstate.py에서 말리부와 이쿼녹스에 한정시킴).
+      if (addr == 0xBE) {
+        brake_pressed = GET_BYTE(to_push, 1) >= 10U; //핑거190 브레이크답력
+      }
+      if (addr == 0xF1) {
+        brake_pressed = GET_BYTE(to_push, 1) >= 15U; //핑거241 브레이크답력
+      }
     }
 
-    if ((addr == 0xC9) && (gm_hw == GM_CAM)) {
-      brake_pressed = GET_BIT(to_push, 40U);
+    if (addr == 0xC9) {
+      if (gm_hw == GM_CAM) {
+        brake_pressed = GET_BIT(to_push, 40U);  // CAM_ACC용 브레이크on/off 체크(201핑거 40번째 비트)
+      }
+      acc_main_on = GET_BIT(to_push, 29U);  // 크루즈 메인스위치 체크(201핑거 29번째 비트)
     }
 
     if (addr == 0x1C4) {
@@ -112,7 +121,7 @@ static void gm_rx_hook(const CANPacket_t *to_push) {
       int gas_interceptor = GM_GET_INTERCEPTOR(to_push);
       gas_pressed = gas_interceptor > GM_GAS_INTERCEPTOR_THRESHOLD;
       gas_interceptor_prev = gas_interceptor;
-//      gm_pcm_cruise = false;
+      // gm_pcm_cruise = false;
     }
 
     bool stock_ecu_detected = (addr == 0x180);  // ASCMLKASteeringCmd
@@ -289,7 +298,7 @@ static safety_config gm_init(uint16_t param) {
   if ((gm_hw == GM_ASCM) || gm_force_ascm) {
     gm_long_limits = &GM_ASCM_LONG_LIMITS;
   } else if (gm_hw == GM_CAM) {
-    gm_long_limits = &GM_CAM_LONG_LIMITS;
+      gm_long_limits = &GM_CAM_LONG_LIMITS;
   } else {
   }
 
