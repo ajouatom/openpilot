@@ -70,6 +70,7 @@ class LanePlanner:
     self.lane_offset_filtered = FirstOrderFilter(0.0, 2.0, DT_MDL)
 
     self.lanefull_mode = False
+    self.d_prob_count = 0
 
     self.params = Params()
 
@@ -231,7 +232,8 @@ class LanePlanner:
 
     adjustLaneTime = 0.05 #self.params.get_int("AdjustLaneTime") * 0.01
     laneline_active = False
-    if self.lanefull_mode and self.d_prob > 0.3:
+    self.d_prob_count = self.d_prob_count + 1 if self.d_prob > 0.3 else 0
+    if self.lanefull_mode and self.d_prob_count > int(1 / DT_MDL):
       laneline_active = True
       use_dist_mode = False  ## 아무리생각해봐도.. 같은 방법인듯...
       if use_dist_mode:
