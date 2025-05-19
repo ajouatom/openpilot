@@ -226,8 +226,8 @@ class CarInterface(CarInterfaceBase):
       ret.longitudinalTuning.kiV = [0.]
       ret.longitudinalTuning.kf = 1.0
       ret.stoppingDecelRate = 0.2 # brake_travel/s while trying to stop
-      ret.vEgoStopping = 0.2
-      ret.vEgoStarting = 0.15
+      ret.vEgoStopping = 0.4
+      ret.vEgoStarting = 0.3
       ret.stopAccel = -0.4
       ret.startingState = True
       ret.startAccel = 1.9
