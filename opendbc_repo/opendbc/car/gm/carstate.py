@@ -192,9 +192,6 @@ class CarState(CarStateBase):
       ret.cruiseState.standstill = False
     if self.CP.networkLocation == NetworkLocation.fwdCamera:
       if self.CP.carFingerprint not in CC_ONLY_CAR:
-        if self.CP.carFingerprint in CAR.CHEVROLET_TRAILBLAZER:
-          ret.accFaulted = False
-
         ret.cruiseState.speed = cam_cp.vl["ASCMActiveCruiseControlStatus"]["ACCSpeedSetpoint"] * CV.KPH_TO_MS
       # openpilot controls nonAdaptive when not pcmCruise
       if self.CP.pcmCruise: 
