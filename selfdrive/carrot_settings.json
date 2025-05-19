@@ -549,6 +549,19 @@
     },
     {
       "group": "버튼설정",
+      "name": "LfaButtonMode",
+      "title": "LFA버튼작동모드(0)",
+      "descr": "0:일반,1:감속정지&Ready",
+      "egroup": "BUTN",
+      "etitle": "LFA Button Mode(0)",
+      "edescr": "0:General,1:Decel&Stop, leadCar ready",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "버튼설정",
       "name": "CruiseButtonTest1",
       "title": "크루즈버튼스팸쏘기(8)",
       "descr": "속도버튼신호 발송제한시간,비롱컨에서 사용",

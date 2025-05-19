@@ -169,6 +169,7 @@ class VCruiseCarrot:
     self._cruise_speed_min, self._cruise_speed_max = 5, 161
     self._cruise_speed_unit = 10
     self._cruise_button_mode = 2
+    self._lfa_button_mode = 0
 
     self._gas_pressed_count = 0
     self._gas_pressed_count_last = 0
@@ -250,6 +251,7 @@ class VCruiseCarrot:
       self._cruise_speed_unit = self.params.get_int("CruiseSpeedUnit")
       self._paddle_mode = self.params.get_int("PaddleMode")
       self._cruise_button_mode = self.params.get_int("CruiseButtonMode")
+      self._lfa_button_mode = self.params.get_int("LfaButtonMode")
       self.cruiseOnDist = self.params.get_float("CruiseOnDist") * 0.01
 
   def update_v_cruise(self, CS, sm, is_metric):
@@ -507,8 +509,11 @@ class VCruiseCarrot:
         self.params.put_int_nonblocking('LongitudinalPersonality', personality)
         #self.events.append(EventName.personalityChanged)
       elif button_type == ButtonType.lfaButton:
-        self._lat_enabled = not self._lat_enabled
-        self._add_log("Lateral " + "enabled" if self._lat_enabled else "disabled")
+        if self._lfa_button_mode == 0:
+          self._lat_enabled = not self._lat_enabled
+          self._add_log("Lateral " + "enabled" if self._lat_enabled else "disabled")
+        else:
+          self._paddle_decel_active = True
         print("lfaButton")
       elif button_type == ButtonType.cancel:
         self._paddle_decel_active = False
