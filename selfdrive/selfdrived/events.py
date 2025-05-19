@@ -881,7 +881,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
 
   EventName.accFaulted: {
-    ET.IMMEDIATE_DISABLE: ImmediateDisableAlert("Cruise accFault: Restart the Car"),
+    #ET.IMMEDIATE_DISABLE: ImmediateDisableAlert("Cruise accFault: Restart the Car"),
     #ET.PERMANENT: NormalPermanentAlert("Cruise Fault: Restart the car to engage"),
     ET.NO_ENTRY: NoEntryAlert("Cruise Fault: Restart the Car"),
   },
