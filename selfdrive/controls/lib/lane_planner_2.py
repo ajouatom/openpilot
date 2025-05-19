@@ -158,7 +158,7 @@ class LanePlanner:
       #self.lane_width_right_filtered.x = self.lane_width_right #바로적용
 
     self.adjustLaneOffset = float(self.params.get_int("AdjustLaneOffset")) * 0.01
-    self.adjustCurveOffset = float(self.params.get_int("AdjustCurveOffset")) * 0.01
+    self.adjustCurveOffset = self.adjustLaneOffset #float(self.params.get_int("AdjustCurveOffset")) * 0.01
     ADJUST_OFFSET_LIMIT = 0.4 #max(self.adjustLaneOffset, self.adjustCurveOffset)
     offset_curve = 0.0
     ## curve offset
@@ -229,18 +229,18 @@ class LanePlanner:
     #  self.d_prob, self.lanefull_mode,
     #  self.lane_width_left_filtered.x, self.lane_width, self.lane_width_right_filtered.x)
 
-    adjustLaneTime = self.params.get_int("AdjustLaneTime")
+    adjustLaneTime = 0.05 #self.params.get_int("AdjustLaneTime") * 0.01
     laneline_active = False
     if self.lanefull_mode and self.d_prob > 0.3:
       laneline_active = True
       use_dist_mode = False  ## 아무리생각해봐도.. 같은 방법인듯...
       if use_dist_mode:
-        lane_path_y_interp = np.interp(path_xyz[:,0] + v_ego * adjustLaneTime*0.01, self.ll_x, lane_path_y)
+        lane_path_y_interp = np.interp(path_xyz[:,0] + v_ego * adjustLaneTime, self.ll_x, lane_path_y)
         path_xyz[:,1] = self.d_prob * lane_path_y_interp + (1.0 - self.d_prob) * path_xyz[:,1]
       else:
         safe_idxs = np.isfinite(self.ll_t)
         if safe_idxs[0]:
-          lane_path_y_interp = np.interp(path_t * (1.0 + adjustLaneTime*0.01), self.ll_t[safe_idxs], lane_path_y[safe_idxs])
+          lane_path_y_interp = np.interp(path_t * (1.0 + adjustLaneTime), self.ll_t[safe_idxs], lane_path_y[safe_idxs])
           path_xyz[:,1] = self.d_prob * lane_path_y_interp + (1.0 - self.d_prob) * path_xyz[:,1]
 
 

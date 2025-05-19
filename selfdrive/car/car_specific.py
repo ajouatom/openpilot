@@ -44,8 +44,19 @@ class CarSpecificEvents:
     self.cruise_buttons: deque = deque([], maxlen=HYUNDAI_PREV_BUTTON_SAMPLES)
 
     self.do_shutdown = False
+    self.params = Params()
+    self.frame = 0
+    self.mute_door = False
+    self.mute_seatbelt = False
 
+  def update_params(self):
+    if self.frame % 100 == 0:
+      self.mute_seatbelt = self.params.get_bool("MuteSeatbelt")
+      self.mute_door = self.params.get_bool("MuteDoor")
+    
   def update(self, CS: car.CarState, CS_prev: car.CarState, CC: car.CarControl):
+    self.frame += 1
+    self.update_params()
     if self.CP.brand in ('body', 'mock'):
       events = Events()
 
@@ -164,10 +175,10 @@ class CarSpecificEvents:
   def create_common_events(self, CS: structs.CarState, CS_prev: car.CarState, extra_gears=None, pcm_enable=True,
                            allow_enable=True, allow_button_cancel=True):
     events = Events()
-
-    if CS.doorOpen:
+    
+    if CS.doorOpen and not self.mute_door:
       events.add(EventName.doorOpen)
-    if CS.seatbeltUnlatched:
+    if CS.seatbeltUnlatched and not self.mute_seatbelt:
       events.add(EventName.seatbeltNotLatched)
     if CS.gearShifter == GearShifter.park:
       events.add(EventName.wrongGear)
@@ -218,7 +229,7 @@ class CarSpecificEvents:
         events.add(EventName.buttonCancel)
         if CS.gearShifter == GearShifter.park and not self.do_shutdown:
           self.do_shutdown = True
-          Params().put_bool("DoShutdown", True)
+          self.params.put_bool("DoShutdown", True)
 
     # Handle permanent and temporary steering faults
     self.steering_unpressed = 0 if CS.steeringPressed else self.steering_unpressed + 1

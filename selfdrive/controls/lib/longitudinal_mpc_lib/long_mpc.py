@@ -10,6 +10,7 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.modeld.constants import index_function
 from openpilot.selfdrive.controls.radard import _LEAD_ACCEL_TAU
 # from openpilot.selfdrive.carrot.carrot_functions import CarrotPlanner
+from openpilot.selfdrive.carrot.carrot_functions import XState
 
 if __name__ == '__main__':  # generating code
   from openpilot.third_party.acados.acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
@@ -418,6 +419,9 @@ class LongitudinalMpc:
 
       x_obstacles = np.column_stack([lead_0_obstacle, lead_1_obstacle, cruise_obstacle, x2])
       self.source = SOURCES[np.argmin(x_obstacles[0])]
+
+      if v_cruise == 0 and self.source == 'cruise':
+        self.params[:,0] = - carrot.autoNaviSpeedDecelRate
 
       # These are not used in ACC mode
       x[:], v[:], a[:], j[:] = 0.0, 0.0, 0.0, 0.0

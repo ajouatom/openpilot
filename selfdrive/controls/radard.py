@@ -45,8 +45,8 @@ class Track:
     self.jLead = j_lead
     
     self.measured = measured   # measured or estimate
-
-    if abs(self.aLead) < 0.5 and abs(j_lead) < 0.5:
+    a_lead_threshold = 0.5 * self.radar_reaction_factor
+    if abs(self.aLead) < a_lead_threshold and abs(j_lead) < 0.5:
       self.aLeadTau.x = _LEAD_ACCEL_TAU * self.radar_reaction_factor
     else:
       self.aLeadTau.update(0.0)

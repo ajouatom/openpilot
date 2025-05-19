@@ -57,6 +57,9 @@ def only_onroad(started: bool, params: Params, CP: car.CarParams) -> bool:
 def only_offroad(started: bool, params: Params, CP: car.CarParams) -> bool:
   return not started
 
+def enable_updated(started: bool, params: Params, CP: car.CarParams) -> bool:
+  return not started and params.get_bool("SoftwareMenu")
+
 def check_fleet(started, params, CP: car.CarParams) -> bool:
   return FLASK_AVAILABLE
 
@@ -117,7 +120,7 @@ procs = [
   PythonProcess("radard", "selfdrive.controls.radard", only_onroad),
   PythonProcess("hardwared", "system.hardware.hardwared", always_run),
   PythonProcess("tombstoned", "system.tombstoned", always_run, enabled=not PC),
-  #PythonProcess("updated", "system.updated.updated", only_offroad, enabled=not PC),
+  PythonProcess("updated", "system.updated.updated", enable_updated, enabled=not PC),
   #PythonProcess("uploader", "system.loggerd.uploader", always_run),
   PythonProcess("statsd", "system.statsd", always_run),
 

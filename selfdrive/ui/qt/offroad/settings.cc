@@ -490,11 +490,15 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
     {tr("Device"), device},
     {tr("Network"), networking},
     {tr("Toggles"), toggles},
-    //{tr("Software"), new SoftwarePanel(this)},
-    //{tr("Firehose"), new FirehosePanel(this)},
-    {tr("Carrot"), new CarrotPanel(this)},
-    {tr("Developer"), new DeveloperPanel(this)},
   };
+  if(Params().getBool("SoftwareMenu")) {
+    panels.append({tr("Software"), new SoftwarePanel(this)});
+  }
+  if(false) {
+    panels.append({tr("Firehose"), new FirehosePanel(this)});
+  }
+  panels.append({ tr("Carrot"), new CarrotPanel(this) });
+  panels.append({ tr("Developer"), new DeveloperPanel(this) });
 
   nav_btns = new QButtonGroup(this);
   for (auto &[name, panel] : panels) {
@@ -676,8 +680,6 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   latLongToggles->addItem(new CValueControl("UseLaneLineSpeed", "Laneline mode speed(0)", "Laneline mode, lat_mpc control used", "../assets/offroad/icon_logic.png", 0, 200, 5));
   latLongToggles->addItem(new CValueControl("UseLaneLineCurveSpeed", "Laneline mode curve speed(0)", "Laneline mode, high speed only", "../assets/offroad/icon_logic.png", 0, 200, 5));
   latLongToggles->addItem(new CValueControl("AdjustLaneOffset", "AdjustLaneOffset(0)cm", "", "../assets/offroad/icon_logic.png", 0, 500, 5));
-  latLongToggles->addItem(new CValueControl("AdjustCurveOffset", "AdjustLaneCurveOffset(0)cm", "", "../assets/offroad/icon_logic.png", 0, 500, 5));
-  latLongToggles->addItem(new CValueControl("AdjustLaneTime", "AdjustLaneTimeOffset(5)x0.01s", "", "../assets/offroad/icon_logic.png", 0, 20, 1));
   latLongToggles->addItem(new CValueControl("CustomSR", "LAT: SteerRatiox0.1(0)", "Custom SteerRatio", "../assets/offroad/icon_logic.png", 0, 300, 1));
   latLongToggles->addItem(new CValueControl("SteerRatioRate", "LAT: SteerRatioRatex0.01(100)", "SteerRatio apply rate", "../assets/offroad/icon_logic.png", 30, 170, 1));
   latLongToggles->addItem(new CValueControl("PathOffset", "LAT: PathOffset", "(-)left, (+)right", "../assets/offroad/icon_logic.png", -150, 150, 1));
@@ -706,7 +708,6 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   //latLongToggles->addItem(new CValueControl("CruiseMinVals", "DECEL:(120)", "감속도를 설정합니다.(x0.01m/s^2)", "../assets/offroad/icon_road.png", 50, 250, 5));
   latLongToggles->addItem(new CValueControl("MaxAngleFrames", "MaxAngleFrames(89)", "89:기본, 스티어계기판에러시 85~87", "../assets/offroad/icon_logic.png", 80, 100, 1));
   latLongToggles->addItem(new CValueControl("SteerActuatorDelay", "LAT:SteerActuatorDelay(30)", "x0.01, 0:LiveDelay", "../assets/offroad/icon_logic.png", 0, 100, 1));
-  latLongToggles->addItem(new CValueControl("SteerSmoothSec", "LAT:SteerSmoothSec(13)", "x0.01", "../assets/offroad/icon_logic.png", 1, 100, 1));
   latLongToggles->addItem(new CValueControl("LateralTorqueCustom", "LAT: TorqueCustom(0)", "", "../assets/offroad/icon_logic.png", 0, 2, 1));
   latLongToggles->addItem(new CValueControl("LateralTorqueAccelFactor", "LAT: TorqueAccelFactor(2500)", "", "../assets/offroad/icon_logic.png", 1000, 6000, 10));
   latLongToggles->addItem(new CValueControl("LateralTorqueFriction", "LAT: TorqueFriction(100)", "", "../assets/offroad/icon_logic.png", 0, 1000, 10));
@@ -818,6 +819,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   startToggles->addItem(new CValueControl("RecordRoadCam", "Record Road camera(0)", "1:RoadCam, 2:RoadCam+WideRoadCam", "../assets/offroad/icon_shell.png", 0, 2, 1));
   startToggles->addItem(new CValueControl("HDPuse", "Use HDP(CCNC)(0)", "1:While Using APN, 2:Always", "../assets/offroad/icon_shell.png", 0, 2, 1));
   startToggles->addItem(new ParamControl("HotspotOnBoot", "Hotspot enabled on boot", "", "../assets/offroad/icon_shell.png", this));
+  startToggles->addItem(new ParamControl("SoftwareMenu", "Enable Software Menu", "", "../assets/offroad/icon_shell.png", this));
   //startToggles->addItem(new ParamControl("NoLogging", "Disable Logger", "", "../assets/offroad/icon_shell.png", this));
   //startToggles->addItem(new ParamControl("LaneChangeNeedTorque", "LaneChange: Need Torque", "", "../assets/offroad/icon_shell.png", this));
   //startToggles->addItem(new CValueControl("LaneChangeLaneCheck", "LaneChange: Check lane exist", "(0:No,1:Lane,2:+Edge)", "../assets/offroad/icon_shell.png", 0, 2, 1));
