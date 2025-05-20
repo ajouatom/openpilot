@@ -13,14 +13,13 @@ from opendbc.car.gm.radar_interface import RadarInterface, RADAR_HEADER_MSG
 from opendbc.car.gm.values import CAR, CarControllerParams, EV_CAR, CAMERA_ACC_CAR, CanBus, GMFlags, CC_ONLY_CAR, SDGM_CAR, CruiseButtons, GMSafetyFlags, ALT_ACCS
 from opendbc.car.interfaces import CarInterfaceBase, TorqueFromLateralAccelCallbackType, FRICTION_THRESHOLD, LatControlInputs, NanoFFModel
 
-#ButtonType = structs.CarState.ButtonEvent.Type 이 두 줄도 사용되지 않습니다.
-#GearShifter = structs.CarState.GearShifter
 TransmissionType = structs.CarParams.TransmissionType
 NetworkLocation = structs.CarParams.NetworkLocation
 
 CAM_MSG = 0x320  # AEBCmd
                  # TODO: Is this always linked to camera presence?
 ACCELERATOR_POS_MSG = 0xbe
+TPMS_POS_MSG = 0x52B ## TPMS
 
 NON_LINEAR_TORQUE_PARAMS = {
   CAR.CHEVROLET_BOLT_EUV: [2.6531724862969748, 1.0, 0.1919764879840985, 0.009054123646805178],
@@ -386,14 +385,13 @@ class CarInterface(CarInterfaceBase):
     # Exception for flashed cars, or cars whose camera was removed
     if (ret.networkLocation == NetworkLocation.fwdCamera or candidate in CC_ONLY_CAR) and CAM_MSG not in fingerprint[
       CanBus.CAMERA] and not candidate in SDGM_CAR:
-      ret.flags |= GMFlags.NO_CAMERA.value
       ret.safetyConfigs[0].safetyParam |= GMSafetyFlags.NO_CAMERA.value
 
     if ACCELERATOR_POS_MSG not in fingerprint[CanBus.POWERTRAIN]:
       ret.flags |= GMFlags.NO_ACCELERATOR_POS_MSG.value
 
-    if 608 in fingerprint[CanBus.POWERTRAIN]:
-      ret.flags |= GMFlags.SPEED_RELATED_MSG.value
-
+    # kans: TPMS
+    if TPMS_POS_MSG in fingerprint[CanBus.POWERTRAIN]:
+      ret.flags |= GMFlags.TPMS_MSG.value
 
     return ret
