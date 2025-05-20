@@ -623,6 +623,7 @@ class VCruiseCarrot:
 
   def _update_cruise_state(self, CS, CC, v_cruise_kph):
     if not CC.enabled:
+      self._pause_auto_speed_up = False
       if self._brake_pressed_count == -1 and self._soft_hold_active > 0:
         self._soft_hold_active = 2
         self._cruise_control(1, -1, "Cruise on (soft hold)")
