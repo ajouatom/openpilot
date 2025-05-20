@@ -422,8 +422,8 @@ class LongitudinalMpc:
 
       if v_cruise == 0 and self.source == 'cruise':
         self.params[:,0] = - carrot.autoNaviSpeedDecelRate
-      elif self.source in ['cruise', 'e2e']:
-        self.params[:,0] = - COMFORT_BRAKE
+      #elif self.source in ['cruise', 'e2e']:
+      #  self.params[:,0] = - COMFORT_BRAKE
 
       # These are not used in ACC mode
       x[:], v[:], a[:], j[:] = 0.0, 0.0, 0.0, 0.0
