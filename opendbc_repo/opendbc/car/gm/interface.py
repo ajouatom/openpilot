@@ -16,8 +16,6 @@ from opendbc.car.interfaces import CarInterfaceBase, TorqueFromLateralAccelCallb
 TransmissionType = structs.CarParams.TransmissionType
 NetworkLocation = structs.CarParams.NetworkLocation
 
-CAM_MSG = 0x320  # AEBCmd
-                 # TODO: Is this always linked to camera presence?
 ACCELERATOR_POS_MSG = 0xbe
 TPMS_POS_MSG = 0x52B ## TPMS
 
@@ -160,10 +158,9 @@ class CarInterface(CarInterfaceBase):
       ret.longitudinalTuning.kpV = [1.0]
       ret.longitudinalTuning.kiV = [0.3]
 
-      # TODO: Test for CADILLAC_CT6_ACC
       if ret.enableGasInterceptorDEPRECATED:
         # Need to set ASCM long limits when using pedal interceptor, instead of camera ACC long limits
-        ret.safetyConfigs[0].safetyParam |= GMSafetyFlags.HW_ASCM_LONG.value
+        ret.safetyConfigs[0].safetyParam |= GMSafetyFlags.GAS_INTERCEPTOR.value
 
     # These cars have been put into dashcam only due to both a lack of users and test coverage.
     # These cars likely still work fine. Once a user confirms each car works and a test route is
@@ -381,11 +378,6 @@ class CarInterface(CarInterfaceBase):
 
     if candidate in CC_ONLY_CAR:
       ret.safetyConfigs[0].safetyParam |= GMSafetyFlags.NO_ACC.value
-
-    # Exception for flashed cars, or cars whose camera was removed
-    if (ret.networkLocation == NetworkLocation.fwdCamera or candidate in CC_ONLY_CAR) and CAM_MSG not in fingerprint[
-      CanBus.CAMERA] and not candidate in SDGM_CAR:
-      ret.safetyConfigs[0].safetyParam |= GMSafetyFlags.NO_CAMERA.value
 
     if ACCELERATOR_POS_MSG not in fingerprint[CanBus.POWERTRAIN]:
       ret.flags |= GMFlags.NO_ACCELERATOR_POS_MSG.value
