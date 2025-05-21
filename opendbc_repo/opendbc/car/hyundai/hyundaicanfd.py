@@ -85,7 +85,7 @@ def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, 
   if CP.extFlags & HyundaiExtFlags.CANFD_161.value:
     if CS.adrv_info_161 is not None:
       values = CS.adrv_info_161
-      emergency_steering = values["ALERTS_2"] in [11, 12, 13, 14, 15, 21, 22, 23, 24, 25, 26]
+      emergency_steering = values["ALERTS_1"] in [11, 12, 13, 14, 15, 21, 22, 23, 24, 25, 26]
 
 
   ret = []
