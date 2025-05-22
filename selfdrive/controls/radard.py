@@ -299,7 +299,7 @@ class VisionTrack:
       self.yRel = float(-lead_msg.y[0])
       dPath = self.yRel + np.interp(self.dRel, md.position.x, md.position.y)
       a_lead_vision = lead_msg.a[0]
-      if self.cnt < 2 or self.prob < 0.97:
+      if self.cnt < 20 or self.prob < 0.97: # 레이더측정시 cnt는 0, 레이더사라지고 1초간 비젼데이터 그대로 사용
         self.vRel = lead_v_rel_pred
         self.vLead = float(v_ego + lead_v_rel_pred)
         self.aLead = a_lead_vision
@@ -366,6 +366,8 @@ class RadarD:
     self.params = Params()
     self.enable_radar_tracks = self.params.get_int("EnableRadarTracks")
 
+    self.radar_detected = False
+
 
   def update(self, sm: messaging.SubMaster, rr: car.RadarData):
     self.ready = sm.seen['modelV2']
@@ -426,13 +428,16 @@ class RadarD:
     if len(leads_v3) > 1:
 
       if model_updated:
+        if self.radar_detected:
+          self.vision_tracks[0].cnt = 0
+          self.vision_tracks[1].cnt = 0
         self.vision_tracks[0].update(leads_v3[0], model_v_ego, self.v_ego, sm['modelV2'])
         self.vision_tracks[1].update(leads_v3[1], model_v_ego, self.v_ego, sm['modelV2'])
 
       #self.radar_state.leadOne = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[0], model_v_ego, low_speed_override=False)
       #self.radar_state.leadTwo = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[1], model_v_ego, low_speed_override=False)
-      self.radar_state.leadOne = self.get_lead(sm['modelV2'], self.tracks, 0, leads_v3[0], model_v_ego, low_speed_override=False)
-      self.radar_state.leadTwo = self.get_lead(sm['modelV2'], self.tracks, 1, leads_v3[1], model_v_ego, low_speed_override=False)
+      self.radar_state.leadOne, self.radar_detected = self.get_lead(sm['modelV2'], self.tracks, 0, leads_v3[0], model_v_ego, low_speed_override=False)
+      self.radar_state.leadTwo, _ = self.get_lead(sm['modelV2'], self.tracks, 1, leads_v3[1], model_v_ego, low_speed_override=False)
 
       # ll, lc, lr, leadCenter, self.radar_state.leadLeft, self.radar_state.leadRight = get_lead_side(self.v_ego, self.tracks, sm['modelV2'],
       #                                                                                               sm['lateralPlan'].laneWidth, model_v_ego)
@@ -482,9 +487,11 @@ class RadarD:
     #      track = None
 
     lead_dict = {'status': False}
+    radar = False
     if track is not None:
       #lead_dict = track.get_RadarState(md, lead_msg.prob, self.vision_tracks[0].yRel, self.vision_tracks[0].vLat)
       lead_dict = track.get_RadarState(md, lead_msg.prob, self.vision_tracks[0].yRel)
+      radar = True
     elif (track is None) and ready and (lead_msg.prob > .8):
       #if self.mixRadarInfo == 4 and v_ego * 3.6 > 30 and lead_msg.prob < 0.99: ##
       #  pass
@@ -501,7 +508,7 @@ class RadarD:
           #lead_dict = closest_track.get_RadarState(md, lead_msg.prob, self.vision_tracks[0].yRel, self.vision_tracks[0].vLat)
           lead_dict = closest_track.get_RadarState(md, lead_msg.prob, self.vision_tracks[0].yRel)
 
-    return lead_dict
+    return lead_dict, radar
 
 # fuses camera and radar data for best lead detection
 def main() -> None:
