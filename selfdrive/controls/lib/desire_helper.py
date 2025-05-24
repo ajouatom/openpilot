@@ -92,6 +92,7 @@ class ExistCounter:
 class DesireHelper:
   def __init__(self):
     self.params = Params()
+    self.frame = 0
     self.lane_change_state = LaneChangeState.off
     self.lane_change_direction = LaneChangeDirection.none
     self.lane_change_timer = 0.0
@@ -127,8 +128,7 @@ class DesireHelper:
     self.object_detected_count = 0
 
     self.laneChangeNeedTorque = 0
-    self.ignore_bsd = False
-    self.torque_always = False
+    self.laneChangeBsd = 0
     self.driver_blinker_state = BLINKER_NONE
     self.atc_type = ""
 
@@ -169,7 +169,10 @@ class DesireHelper:
 
   def update(self, carstate, modeldata, lateral_active, lane_change_prob, carrotMan, radarState):
 
-    self.laneChangeNeedTorque = self.params.get_int("LaneChangeNeedTorque")
+    if self.frame % 100 == 0:
+      self.laneChangeNeedTorque = self.params.get_int("LaneChangeNeedTorque")
+      self.laneChangeBsd = self.params.get_int("LaneChangeBsd")
+    self.frame += 1
 
     self.carrot_lane_change_count = max(0, self.carrot_lane_change_count - 1)
 
@@ -181,13 +184,11 @@ class DesireHelper:
     driver_blinker_changed = driver_blinker_state != self.driver_blinker_state
     self.driver_blinker_state = driver_blinker_state
     driver_desire_enabled = driver_blinker_state in [BLINKER_LEFT, BLINKER_RIGHT]
-    if self.laneChangeNeedTorque == 2:
+    if self.laneChangeNeedTorque < 0: # 운전자가 깜박이 켜도 차선변경 안함.
       driver_desire_enabled = False
 
-    if self.laneChangeNeedTorque == 3:
-      self.ignore_bsd = True
-    if self.laneChangeNeedTorque == 4:
-      self.torque_always = True
+    ignore_bsd = True if self.laneChangeBsd < 0 else False
+    block_lanechange_bsd = True if self.laneChangeBsd == 1 else False
 
     self.blindspot_detected_counter = max(0, self.blindspot_detected_counter - 1)
 
@@ -304,7 +305,7 @@ class DesireHelper:
         torque_applied = carstate.steeringPressed and torque_cond
         blindspot_detected = blindspot_cond
 
-        if blindspot_detected and not self.ignore_bsd:
+        if blindspot_detected and not ignore_bsd:
           self.blindspot_detected_counter = int(1.5 / DT_MDL)
           # BSD검출시.. 아래 두줄로 자동차선변경 해제함.. 위험해서 자동차선변경기능은 안하는걸로...
           #self.lane_change_state = LaneChangeState.off
@@ -313,19 +314,19 @@ class DesireHelper:
           self.lane_change_state = LaneChangeState.off
           self.lane_change_direction = LaneChangeDirection.none
         else:
-          if self.blindspot_detected_counter > 0 or self.torque_always:
-            if torque_applied and lane_available or self.torque_always:
+          if lane_available:
+            if self.blindspot_detected_counter > 0 and not ignore_bsd:  # BSD검출시
+              if torque_applied and not block_lanechange_bsd:
+                self.lane_change_state = LaneChangeState.laneChangeStarting
+            elif self.laneChangeNeedTorque > 0: # 조향토크필요
+              if torque_applied:
+                self.lane_change_state = LaneChangeState.laneChangeStarting
+            elif driver_desire_enabled:
               self.lane_change_state = LaneChangeState.laneChangeStarting
-          elif self.laneChangeNeedTorque == 1:  # 1: need torque, 2: no lanechange, 3: ignore bsd
-            if torque_applied and lane_available:
+            # ATC작동인경우 차선이 나타나거나 차선이 생기면 차선변경 시작
+            # lane_appeared: 차선이 생기는건 안함.. 위험.
+            elif torque_applied or auto_lane_change_available:
               self.lane_change_state = LaneChangeState.laneChangeStarting
-          # 운전자가 깜박이켠경우는 바로 차선변경 시작
-          elif driver_desire_enabled and lane_available:
-            self.lane_change_state = LaneChangeState.laneChangeStarting
-          # ATC작동인경우 차선이 나타나거나 차선이 생기면 차선변경 시작
-          # lane_appeared: 차선이 생기는건 안함.. 위험.
-          elif torque_applied or auto_lane_change_available:
-            self.lane_change_state = LaneChangeState.laneChangeStarting
 
       # LaneChangeState.laneChangeStarting
       elif self.lane_change_state == LaneChangeState.laneChangeStarting:

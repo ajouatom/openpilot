@@ -126,6 +126,7 @@ def get_default_params():
     ("UseLaneLineSpeedApply", "0"),
     ("AdjustLaneOffset", "0"),
     ("LaneChangeNeedTorque", "0"),
+    ("LaneChangeBsd", "0"),
     ("MaxAngleFrames", "89"),
     ("LateralTorqueCustom", "0"),
     ("LateralTorqueAccelFactor", "2500"),
