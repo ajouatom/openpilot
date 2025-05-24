@@ -127,7 +127,8 @@ class DesireHelper:
     self.object_detected_count = 0
 
     self.laneChangeNeedTorque = 0
-    self.torque_always = 0
+    self.ignore_bsd = False
+    self.torque_always = False
     self.driver_blinker_state = BLINKER_NONE
     self.atc_type = ""
 
@@ -180,12 +181,13 @@ class DesireHelper:
     driver_blinker_changed = driver_blinker_state != self.driver_blinker_state
     self.driver_blinker_state = driver_blinker_state
     driver_desire_enabled = driver_blinker_state in [BLINKER_LEFT, BLINKER_RIGHT]
-    ignore_bsd = False
     if self.laneChangeNeedTorque == 2:
       driver_desire_enabled = False
-    elif self.laneChangeNeedTorque == 3:
-      ignore_bsd = True
-    
+
+    if self.laneChangeNeedTorque == 3:
+      self.ignore_bsd = True
+    if self.laneChangeNeedTorque == 4:
+      self.torque_always = True
 
     self.blindspot_detected_counter = max(0, self.blindspot_detected_counter - 1)
 
@@ -302,7 +304,7 @@ class DesireHelper:
         torque_applied = carstate.steeringPressed and torque_cond
         blindspot_detected = blindspot_cond
 
-        if blindspot_detected and not ignore_bsd:
+        if blindspot_detected and not self.ignore_bsd:
           self.blindspot_detected_counter = int(1.5 / DT_MDL)
           # BSD검출시.. 아래 두줄로 자동차선변경 해제함.. 위험해서 자동차선변경기능은 안하는걸로...
           #self.lane_change_state = LaneChangeState.off
@@ -311,9 +313,9 @@ class DesireHelper:
           self.lane_change_state = LaneChangeState.off
           self.lane_change_direction = LaneChangeDirection.none
         else:
-          if self.laneChangeNeedTorque == 4:
-            if self.blindspot_detected_counter <= 0 and torque_applied and lane_available:
-              self.lane_change_state = LaneChangeState.laneChangeStarting  
+          if self.blindspot_detected_counter > 0 or self.torque_always:
+            if torque_applied and lane_available or self.torque_always:
+              self.lane_change_state = LaneChangeState.laneChangeStarting
           elif self.laneChangeNeedTorque == 1:  # 1: need torque, 2: no lanechange, 3: ignore bsd
             if torque_applied and lane_available:
               self.lane_change_state = LaneChangeState.laneChangeStarting
