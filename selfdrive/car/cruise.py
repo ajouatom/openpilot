@@ -485,10 +485,11 @@ class VCruiseCarrot:
         self._pause_auto_speed_up = True
         if self._soft_hold_active > 0:
           self._cruise_control(-1, -1, "Cruise off,softhold mode (decelCruise)")
+        elif self._cruise_ready:
+          self._paddle_decel_active = True
+          pass
         elif not CC.enabled:
           v_cruise_kph = max(self.v_ego_kph_set, self._cruise_speed_min)
-        elif self._cruise_ready:
-          pass
         elif self.v_ego_kph_set > v_cruise_kph + 2 and self._cruise_button_mode in [2]:
           v_cruise_kph = max(self.v_ego_kph_set, self._cruise_speed_min)
         elif self._cruise_button_mode in [0, 1]:
