@@ -228,7 +228,7 @@ class CarrotPlanner:
     stop_x = self.xStopFilter2.process(stop_x)
     return stop_x
 
-  def check_model_stopping(self, v, v_ego, a_ego, model_x, y, d_rel):
+  def check_model_stopping(self, v_cruise, v, v_ego, a_ego, model_x, y, d_rel):
     v_ego_kph = v_ego * CV.MS_TO_KPH
     model_v = self.vFilter.process(v[-1])
     startSign = model_v > 5.0 or model_v > (v[0]+2)
@@ -240,8 +240,8 @@ class CarrotPlanner:
                   model_x < np.interp(v[0], [60/3.6, 80/3.6], [120.0, 150]) and
                   ((model_v < 3.0) or (model_v < v[0]*0.7)) and
                   abs(y[-1]) < 5.0)
-      # 정상주행중 감속하는 경우(카메라 감속등), 오감지가 많음.
-      if self.xState == XState.e2eCruise and a_ego < -1.0:
+      # 정상주행중 감속하는 경우(카메라 감속등), 오감지가 많음. (회생감속시:v_cruise=0에는 신호호감지하도록함.)
+      if v_cruise != 0 and (self.xState == XState.e2eCruise and a_ego < -1.0):
         stopSign = False
     else:
       stopSign = False
@@ -383,7 +383,7 @@ class CarrotPlanner:
 
     trafficState_last = self.trafficState
     #self.check_model_stopping(v, v_ego, self.xStop, y)
-    self.check_model_stopping(v, v_ego, a_ego, x[-1], y, radarstate.leadOne.dRel if lead_detected else 1000)
+    self.check_model_stopping(v_cruise, v, v_ego, a_ego, x[-1], y, radarstate.leadOne.dRel if lead_detected else 1000)
 
     if self.myDrivingMode == DrivingMode.High or self.trafficLightDetectMode == 0:
       self.trafficState = TrafficState.off
