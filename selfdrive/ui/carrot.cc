@@ -1139,10 +1139,10 @@ public:
           xSpdDist = 0;
           xSignType = 0;
         }
+        xTurnInfo = carrot_man.getXTurnInfo();
+        xDistToTurn = carrot_man.getXDistToTurn();
+        nRoadLimitSpeed = carrot_man.getNRoadLimitSpeed();
         if (active_carrot > 1 || carrot_man.getNGoPosDist() > 0) {
-          xTurnInfo = carrot_man.getXTurnInfo();
-          xDistToTurn = carrot_man.getXDistToTurn();
-          nRoadLimitSpeed = carrot_man.getNRoadLimitSpeed();
           atc_type = QString::fromStdString(carrot_man.getAtcType());
 
           nGoPosDist = carrot_man.getNGoPosDist();
@@ -1153,9 +1153,9 @@ public:
           
         }
         else {
-          xTurnInfo = -1;
-          xDistToTurn = 0;
-          nRoadLimitSpeed = 20;
+          //xTurnInfo = -1;
+          //xDistToTurn = 0;
+          //nRoadLimitSpeed = 20;
           atc_type = "";
           nGoPosDist = 0;
           nGoPosTime = 0;
@@ -1958,15 +1958,15 @@ public:
                 atcType.toStdString().c_str(),
                 carrot_man.getTrafficState());
         }
-		else {
-            active_carrot = 0;
-			apply_speed = 250.0;
-            apply_source = "";
-            carrot_man_debug[0] = 0;
-            szPosRoadName = "";
-            nRoadLimitSpeed = 30;
-            nGoPosDist = 0;
-		}
+		    else {
+          active_carrot = 0;
+			    apply_speed = 250.0;
+          apply_source = "";
+          carrot_man_debug[0] = 0;
+          szPosRoadName = "";
+          nRoadLimitSpeed = 30;
+          nGoPosDist = 0;
+		    }
 
         xState = lp.getXState();
         trafficState = lp.getTrafficState();
@@ -2000,7 +2000,7 @@ public:
                 }
             }
         }
-	}
+	  }
     void drawRadarInfo(UIState* s) {
         char str[128];
         int show_radar_info = params.getInt("ShowRadarInfo");
@@ -2288,7 +2288,8 @@ public:
         xSignType = 1;
 #endif
 
-        if (active_carrot >= 2 || nGoPosDist > 0) {
+        //if (active_carrot >= 2 || nGoPosDist > 0) {
+        if (true) {
             dx = bx + 75;
             dy = by + 175;
             int disp_speed = 0;
