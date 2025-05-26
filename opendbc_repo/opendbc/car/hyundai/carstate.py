@@ -294,7 +294,7 @@ class CarState(CarStateBase):
     if self.CP.extFlags & HyundaiExtFlags.NAVI_CLUSTER.value:
       speedLimit = cp.vl["Navi_HU"]["SpeedLim_Nav_Clu"]
       speedLimitCam = cp.vl["Navi_HU"]["SpeedLim_Nav_Cam"]
-      ret.speedLimit = speedLimit if speedLimit < 255 and speedLimitCam == 1 else 0
+      ret.speedLimit = speedLimit if speedLimit < 255 else 0
       speed_limit_cam = speedLimitCam == 1
     else:
       ret.speedLimit = 0
@@ -449,9 +449,9 @@ class CarState(CarStateBase):
       if "HDA_INFO_4A3" in cp.vl:
         self.hda_info_4a3 = copy.copy(cp.vl.get("HDA_INFO_4A3", {}))
         speedLimit = self.hda_info_4a3["SPEED_LIMIT"]
+        ret.speedLimit = speedLimit if speedLimit < 255 else 0
         if int(self.hda_info_4a3["NEW_SIGNAL_4"]) == 17:
           speed_limit_cam = True
-          ret.speedLimit = speedLimit if speedLimit < 255 else 0 # 안됨.. 고속화도로나 고속도로는....
 
       if "NEW_MSG_4B4" in cp.vl:
         self.new_msg_4b4 = copy.copy(cp.vl.get("NEW_MSG_4B4", {}))
