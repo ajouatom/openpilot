@@ -295,20 +295,22 @@ class CarState(CarStateBase):
       speedLimit = cp.vl["Navi_HU"]["SpeedLim_Nav_Clu"]
       speedLimitCam = cp.vl["Navi_HU"]["SpeedLim_Nav_Cam"]
       ret.speedLimit = speedLimit if speedLimit < 255 and speedLimitCam == 1 else 0
+      speed_limit_cam = speedLimitCam == 1
     else:
       ret.speedLimit = 0
       ret.speedLimitDistance = 0
+      speed_limit_cam = False
 
-    self.update_speed_limit(ret)
+    self.update_speed_limit(ret, speed_limit_cam)
 
     if prev_main_buttons == 0 and self.main_buttons[-1] != 0:
       self.main_enabled = not self.main_enabled
 
     return ret
 
-  def update_speed_limit(self, ret):
+  def update_speed_limit(self, ret, speed_limit_cam):
     self.totalDistance += ret.vEgo * DT_CTRL
-    if ret.speedLimit > 0 and not ret.gasPressed:
+    if ret.speedLimit > 0 and not ret.gasPressed and speed_limit_cam:
       if self.speedLimitDistance <= self.totalDistance:
         self.speedLimitDistance = self.totalDistance + ret.speedLimit * 6
       self.speedLimitDistance = max(self.totalDistance + 1, self.speedLimitDistance)
@@ -443,9 +445,11 @@ class CarState(CarStateBase):
       if "ADRV_0x160" in cp_cam.vl:
         self.adrv_info_160 = copy.copy(cp_cam.vl.get("ADRV_0x160", {}))
 
+      speed_limit_cam = False
       if "HDA_INFO_4A3" in cp.vl:
         self.hda_info_4a3 = copy.copy(cp.vl.get("HDA_INFO_4A3", {}))
         if int(self.hda_info_4a3["NEW_SIGNAL_4"]) == 17:
+          speed_limit_cam = True
           speedLimit = self.hda_info_4a3["SPEED_LIMIT"]
           ret.speedLimit = speedLimit if speedLimit < 255 else 0 # 안됨.. 고속화도로나 고속도로는....
 
@@ -509,7 +513,7 @@ class CarState(CarStateBase):
     vEgoClu, aEgoClu = self.update_clu_speed_kf(ret.vEgoCluster)
     ret.vCluRatio = (ret.vEgo / vEgoClu) if (vEgoClu > 3. and ret.vEgo > 3.) else 1.0
 
-    self.update_speed_limit(ret)
+    self.update_speed_limit(ret, speed_limit_cam)
 
     paddle_button = self.paddle_button_prev
     if self.cruise_btns_msg_canfd == "CRUISE_BUTTONS":

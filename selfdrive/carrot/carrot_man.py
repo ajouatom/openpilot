@@ -1451,6 +1451,8 @@ class CarrotServ:
       distanceTraveled = sm['selfdriveState'].distanceTraveled
       delta_dist = distanceTraveled - self.totalDistance
       self.totalDistance = distanceTraveled
+      if CS.speedLimit > 0:
+        self.nRoadLimitSpeed = CS.speedLimit
     else:
       v_ego = v_ego_kph = 0
       delta_dist = 0
