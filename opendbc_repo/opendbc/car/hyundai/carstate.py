@@ -294,7 +294,7 @@ class CarState(CarStateBase):
     if self.CP.extFlags & HyundaiExtFlags.NAVI_CLUSTER.value:
       speedLimit = cp.vl["Navi_HU"]["SpeedLim_Nav_Clu"]
       speedLimitCam = cp.vl["Navi_HU"]["SpeedLim_Nav_Cam"]
-      ret.speedLimit = speedLimit if speedLimit < 255 else 0
+      ret.speedLimit = speedLimit if speedLimit < 255 and speedLimitCam == 1 else 0
       speed_limit_cam = speedLimitCam == 1
     else:
       ret.speedLimit = 0
