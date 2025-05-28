@@ -49,10 +49,10 @@ def get_lag_adjusted_curvature(CP, v_ego, psis, curvatures, steer_actuator_delay
   average_curvature_desired = psi / distance
   desired_curvature = 2 * average_curvature_desired - current_curvature_desired
 
-  curv_now = np.mean([abs(c) for c in curvatures[0:3]])
-  curv_future = np.mean([abs(c) for c in curvatures[9:13]])
-  if (curv_now - curv_future) > 0.002 and curv_future < 0.001:
-    desired_curvature = delayed_curvature_desired
+  #curv_now = np.mean([abs(c) for c in curvatures[0:3]])
+  #curv_future = np.mean([abs(c) for c in curvatures[9:13]])
+  #if (curv_now - curv_future) > 0.002 and curv_future < 0.001:
+  #  desired_curvature = delayed_curvature_desired
 
 
   # This is the "desired rate of the setpoint" not an actual desired rate
