@@ -40,7 +40,20 @@ def get_lag_adjusted_curvature(CP, v_ego, psis, curvatures, steer_actuator_delay
   # in high delay cases some corrections never even get commanded. So just use
   # psi to calculate a simple linearization of desired curvature
   current_curvature_desired = curvatures[0]
+
+
+  curv_now = np.mean([abs(c) for c in curvatures[0:3]])
+  curv_future = np.mean([abs(c) for c in curvatures[5:8]])
+  curv_now = max(curv_now, 1e-6)
+  ratio = np.clip(curv_future / curv_now, 0.0, 1.0)  # 0.0 = 완전 직선, 1.0 = 변화 없음
+  straightness = 1.0 - np.clip(curv_future / 0.001, 0.0, 1.0)  # 곡률 0.001 기준으로 정규화
+  curve_to_str_score = (1.0 - ratio) * straightness
+  psis_damping = 1.0 - curve_to_str_score
+
   psi = np.interp(delay, ModelConstants.T_IDXS[:CONTROL_N], psis)
+
+  psi *= psis_damping
+  
   distance = max(np.interp(delay, ModelConstants.T_IDXS[:CONTROL_N], distances), 0.001)
   #average_curvature_desired = psi / (v_ego * delay)
   average_curvature_desired = psi / distance
