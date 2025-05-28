@@ -43,7 +43,7 @@ def get_lag_adjusted_curvature(CP, v_ego, psis, curvatures, steer_actuator_delay
 
 
   curv_now = np.mean([abs(c) for c in curvatures[0:3]])
-  curv_future = np.mean([abs(c) for c in curvatures[5:8]])
+  curv_future = np.mean([abs(c) for c in curvatures[10:13]])
   curv_now = max(curv_now, 1e-6)
   ratio = np.clip(curv_future / curv_now, 0.0, 1.0)  # 0.0 = 완전 직선, 1.0 = 변화 없음
   straightness = 1.0 - np.clip(curv_future / 0.001, 0.0, 1.0)  # 곡률 0.001 기준으로 정규화
