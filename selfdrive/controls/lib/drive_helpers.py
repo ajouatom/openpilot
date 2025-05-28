@@ -40,12 +40,20 @@ def get_lag_adjusted_curvature(CP, v_ego, psis, curvatures, steer_actuator_delay
   # in high delay cases some corrections never even get commanded. So just use
   # psi to calculate a simple linearization of desired curvature
   current_curvature_desired = curvatures[0]
+  delayed_curvature_desired = np.interp(delay, ModelConstants.T_IDXS[:CONTROL_N], curvatures)
+
   psi = np.interp(delay, ModelConstants.T_IDXS[:CONTROL_N], psis)
 
   distance = max(np.interp(delay, ModelConstants.T_IDXS[:CONTROL_N], distances), 0.001)
   #average_curvature_desired = psi / (v_ego * delay)
   average_curvature_desired = psi / distance
   desired_curvature = 2 * average_curvature_desired - current_curvature_desired
+
+  curv_now = np.mean([abs(c) for c in curvatures[0:3]])
+  curv_future = np.mean([abs(c) for c in curvatures[9:13]])
+  if (curv_now - curv_future) > 0.002 and curv_future < 0.001:
+    desired_curvature = delayed_curvature_desired
+
 
   # This is the "desired rate of the setpoint" not an actual desired rate
   max_curvature_rate = MAX_LATERAL_JERK / (v_ego**2) # inexact calculation, check https://github.com/commaai/openpilot/pull/24755
