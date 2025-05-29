@@ -2104,13 +2104,16 @@ public:
     int     gap_last = 0;
     char    gear_str_last[32] = "";
     int     blink_timer = 0;
+    int     disp_timer = 0;
     float cpuTemp = 0.0f;
     float cpuUsage = 0.0f;
     int   memoryUsage = 0;
     float freeSpace = 0.0f;
+    float voltage = 0.0f;
     void drawHud(UIState* s) {
         int show_device_state = params.getInt("ShowDeviceState");
         blink_timer = (blink_timer + 1) % 16;
+        disp_timer = (disp_timer + 1) % 64; 
         nvgTextAlign(s->vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
 
         int x = 140;// 120;
@@ -2326,10 +2329,18 @@ public:
             ui_draw_text(s, dx, dy + 40, str, 40, COLOR_WHITE, BOLD);
 
             dx += 150;
-            ui_fill_rect(s->vg, { dx - 65, dy - 38, 130, 90 }, mode_color, 15, 2);
-            ui_draw_text(s, dx, dy-5, "DISK", 25, COLOR_WHITE, BOLD);
-            sprintf(str, "%.0f%%", 100 - freeSpace);
-            ui_draw_text(s, dx, dy + 40, str, 40, COLOR_WHITE, BOLD);
+            if (disp_timer < 32) {
+              ui_fill_rect(s->vg, { dx - 65, dy - 38, 130, 90 }, mode_color, 15, 2);
+              ui_draw_text(s, dx, dy - 5, "DISK", 25, COLOR_WHITE, BOLD);
+              sprintf(str, "%.0f%%", 100 - freeSpace);
+              ui_draw_text(s, dx, dy + 40, str, 40, COLOR_WHITE, BOLD);
+            }
+            else {
+              ui_fill_rect(s->vg, { dx - 65, dy - 38, 130, 90 }, mode_color, 15, 2);
+              ui_draw_text(s, dx, dy - 5, "VOLT", 25, COLOR_WHITE, BOLD);
+              sprintf(str, "%.2f%%", voltage);
+              ui_draw_text(s, dx, dy + 40, str, 40, COLOR_WHITE, BOLD);
+            }
         }
     }
     void drawDateTime(const UIState* s) {
@@ -2469,6 +2480,9 @@ public:
             }
             if (cpu_size > 0) cpuUsage /= cpu_size;
         }
+
+        auto peripheralState = sm["peripheralState"].getPeripheralState();
+        voltage = peripheralState.getVoltage() / 1000.0;
     }
     void drawDeviceInfo(const UIState* s) {
 #ifdef WSL2
