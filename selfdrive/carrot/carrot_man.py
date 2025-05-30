@@ -19,6 +19,7 @@ from openpilot.common.params import Params
 from openpilot.common.filter_simple import MyMovingAverage
 from openpilot.system.hardware import PC, TICI
 from openpilot.selfdrive.navd.helpers import Coordinate
+from opendbc.car.common.conversions import Conversions as CV
 
 try:
   from shapely.geometry import LineString
@@ -277,6 +278,8 @@ class CarrotMan:
     self.navd_active = False
 
     self.active_carrot_last = False
+
+    self.is_metric = self.params.get_bool("IsMetric")
 
   def get_broadcast_address(self):
     if PC:
@@ -580,6 +583,81 @@ class CarrotMan:
           time.sleep(1)
       except Exception as e:
         self.remote_addr = None
+        print(f"Network error, retrying...: {e}")
+        time.sleep(2)
+
+
+  def parse_kisa_data(self, data: bytes):
+    result = {}
+    
+    try:
+      decoded = data.decode('utf-8')
+    except UnicodeDecodeError:
+      print("Decoding error:", data)
+      return result
+
+    parts = decoded.split('/')
+    for part in parts:
+      if ':' in part:
+        key, value = part.split(':', 1)
+        try:
+          result[key] = int(value)
+        except ValueError:
+          result[key] = value
+    return result
+  
+  def kisa_app_thread(self):
+    while True:
+      try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+          sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+          sock.settimeout(10)  # 소켓 타임아웃 설정 (10초)
+          sock.bind(('', 12345))  # UDP 포트 바인딩
+          print("#########kisa_app_thread: UDP thread started...")
+
+          while True:
+            try:
+              #self.remote_addr = None
+              # 데이터 수신 (UDP는 recvfrom 사용)
+              try:
+                data, remote_addr = sock.recvfrom(4096)  # 최대 4096 바이트 수신
+                #print(f"Received data from {self.remote_addr}")
+
+                if not data:
+                  raise ConnectionError("No data received")
+
+                #if self.remote_addr is None:
+                #  print("Connected to: ", remote_addr)
+                #self.remote_addr = remote_addr
+                try:
+                  print(data)
+                  kisa_data = self.parse_kisa_data(data)
+                  self.carrot_serv.update_kisa(kisa_data)
+                  #json_obj = json.loads(data.decode())
+                  #print(json_obj)
+                except Exception as e:
+                  traceback.print_exc()
+                  print(f"kisa_app_thread: json error...: {e}")
+                  print(data)
+
+              except TimeoutError:
+                print("Waiting for data (timeout)...")
+                #self.remote_addr = None
+                time.sleep(1)
+
+              except Exception as e:
+                print(f"kisa_app_thread: error...: {e}")
+                #self.remote_addr = None
+                break
+
+            except Exception as e:
+              print(f"kisa_app_thread: recv error...: {e}")
+              #self.remote_addr = None
+              break
+
+          time.sleep(1)
+      except Exception as e:
+        #self.remote_addr = None
         print(f"Network error, retrying...: {e}")
         time.sleep(2)
 
@@ -893,6 +971,8 @@ class CarrotServ:
     self.active_sdi_count = 0
     self.active_sdi_count_max = 200 # 20 sec
 
+    self.active_kisa_count = 0
+
     self.nSdiType = -1
     self.nSdiSpeedLimit = 0
     self.nSdiSection = 0
@@ -1006,6 +1086,7 @@ class CarrotServ:
     self.autoTurnControlTurnEnd = self.params.get_int("AutoTurnControlTurnEnd")
     #self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
     self.autoCurveSpeedLowerLimit = int(self.params.get("AutoCurveSpeedLowerLimit"))
+    self.is_metric = self.params.get_bool("IsMetric")
 
 
   def _update_cmd(self):
@@ -1440,6 +1521,42 @@ class CarrotServ:
       self.debugText = f"{self.nRoadLimitSpeed},{msg_nav.maneuverType},{msg_nav.maneuverModifier} "
       #print(msg_nav)
       #print(f"navInstruction: {self.xTurnInfo}, {self.xDistToTurn}, {self.szTBTMainText}")
+
+  def update_kisa(self, data):
+    self.active_kisa_count = 100
+    if "kisawazecurrentspd" in data:
+      pass
+    if "kisawazeroadspdlimit" in data:
+      road_limit_speed = data["kisawazeroadspdlimit"]
+      if road_limit_speed > 0:
+        print(f"kisawazeroadspdlimit: {road_limit_speed} km/h")
+        if not self.is_metric:
+          road_limit_speed *= CV.MPH_TO_KPH
+        self.nRoadLimitSpeed = road_limit_speed 
+    if "kisawazealert" in data:
+      pass
+    if "kisawazeendalert" in data:
+      pass
+    if "kisawazeroadname" in data:
+      print(f"kisawazeroadname: {data['kisawazeroadname']}")
+      self.szPosRoadName = data["kisawazeroadname"]
+    if "kisawazereportid" in data and "kisawazealertdist" in data:
+      id_str = data["kisawazereportid"]
+      dist_str = data["kisawazealertdist"].lower()
+      import re
+      match = re.search(r'(\d+)', dist_str)
+      distance = int(match.group(1)) if match else 0
+      print(f"{id_str}: {distance} m")
+      xSpdType = -1
+      if 'camera' in id_str:
+        xSpdType = 1
+      elif 'police' in id_str:
+        xSpdType = 7
+
+      if xSpdType >= 0:
+        self.xSpdLimit = self.nRoadLimitSpeed
+        self.xSpdDist = distance
+        self.xSpdType =xSpdType 
     
   def update_navi(self, remote_ip, sm, pm, vturn_speed, coords, distances, route_speed):
 
@@ -1452,7 +1569,7 @@ class CarrotServ:
       distanceTraveled = sm['selfdriveState'].distanceTraveled
       delta_dist = distanceTraveled - self.totalDistance
       self.totalDistance = distanceTraveled
-      if CS.speedLimit > 0:
+      if CS.speedLimit > 0 and self.active_carrot <= 1:
         self.nRoadLimitSpeed = CS.speedLimit
     else:
       v_ego = v_ego_kph = 0
@@ -1467,7 +1584,11 @@ class CarrotServ:
     self.xDistToTurnNext = max(self.xDistToTurnNext - delta_dist, 0)
     self.active_count = max(self.active_count - 1, 0)
     self.active_sdi_count = max(self.active_sdi_count - 1, 0)
-    if self.active_count > 0:
+    self.active_kisa_count = max(self.active_kisa_count - 1, 0)
+    if self.active_kisa_count > 0:
+      self.active_carrot = 2
+      
+    elif self.active_count > 0:
       self.active_carrot = 2 if self.active_sdi_count > 0 else 1
     else:
       self.active_carrot = 0
@@ -1867,6 +1988,7 @@ def main():
   carrot_man = CarrotMan()
 
   print(f"CarrotMan {carrot_man}")
+  threading.Thread(target=carrot_man.kisa_app_thread).start()
   while True:
     try:
       carrot_man.carrot_man_thread()

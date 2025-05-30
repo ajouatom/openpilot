@@ -54,6 +54,9 @@ class CarInterface(CarInterfaceBase):
       if 0x105 in fingerprint[CAN.ECAN]:
         ret.flags |= HyundaiFlags.HYBRID.value
 
+      if 0x4a3 in fingerprint[CAN.ECAN]:
+        ret.extFlags |= HyundaiExtFlags.CANFD_4A3.value
+
       # detect HDA2 with ADAS Driving ECU
       if hda2:
         print("$$$CANFD HDA2")
