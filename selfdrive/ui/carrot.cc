@@ -1607,7 +1607,7 @@ public:
         if (!make_data(s)) return;
         int temp = params.getInt("UseLaneLineSpeedApply");
         if (temp != use_lane_line_speed_apply) {
-            ui_draw_text_a(s, 0, 0, (temp>0)?"LaneMode":"Laneless", 30, COLOR_GREEN, BOLD);
+            ui_draw_text_a(s, 0, 0, (temp>0)?"LaneMode":"Laneless", 30, (temp>0)?COLOR_GREEN:COLOR_YELLOW, BOLD);
             use_lane_line_speed_apply = temp;
         }
         static bool forward = true;
