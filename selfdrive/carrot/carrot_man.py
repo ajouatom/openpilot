@@ -1612,7 +1612,8 @@ class CarrotServ:
 
     sdi_speed = 250
     hda_active = False
-    ### 과속카메라, 사고방지턱    
+    ### 과속카메라, 사고방지턱
+    print(f"xSpdType: {self.xSpdType}, xSpdDist: {self.xSpdDist}, xSpdLimit: {self.xSpdLimit}, active_carrot: {self.active_carrot}, v_ego_kph: {v_ego_kph}, nRoadLimitSpeed: {self.nRoadLimitSpeed}")
     if self.xSpdDist > 0 and self.active_carrot > 0:
       safe_sec = self.autoNaviSpeedBumpTime if self.xSpdType == 22 else self.autoNaviSpeedCtrlEnd
       decel = self.autoNaviSpeedDecelRate
