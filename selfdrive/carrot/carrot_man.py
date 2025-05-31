@@ -1690,7 +1690,7 @@ class CarrotServ:
       if source != self.source_last:
         self.gas_override_speed = 0
         self.gas_pressed_state = CS.gasPressed
-      if CS.vEgo < 0.1 or desired_speed > 150 or source in ["cam", "section"] or CS.brakePressed:
+      if CS.vEgo < 0.1 or desired_speed > 150 or source in ["cam", "section", "road", "police"] or CS.brakePressed:
         self.gas_override_speed = 0
       elif CS.gasPressed and not self.gas_pressed_state:
         self.gas_override_speed = max(v_ego_kph, self.gas_override_speed)
