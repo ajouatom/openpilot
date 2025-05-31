@@ -1595,13 +1595,13 @@ class CarrotServ:
       self.active_carrot = 0
 
     if self.autoRoadSpeedLimitOffset >= 0 and self.active_carrot>=2:
-      if self.xSpdType < 0 and self.nRoadLimitSpeed >= 30:
-        self.xSpdType = 4
+      if self.nRoadLimitSpeed >= 30:
         road_speed_limit_offset = self.autoRoadSpeedLimitOffset
         if not self.is_metric:
           road_speed_limit_offset *= CV.KPH_TO_MPH
-        self.xSpdLimit = self.nRoadLimitSpeed + road_speed_limit_offset
-        self.xSpdDist = 1000
+        limit_speed = self.nRoadLimitSpeed + road_speed_limit_offset
+    else:
+      limit_speed = 200
 
     if self.active_carrot <= 1:
       self.xSpdType = self.navType = self.xTurnInfo = self.xTurnInfoNext = -1
@@ -1672,6 +1672,7 @@ class CarrotServ:
       (atc_desired, "atc"),
       (atc_desired_next, "atc2"),
       (sdi_speed, "hda" if hda_active else "bump" if self.xSpdType == 22 else "section" if self.xSpdType == 4 else "police" if self.xSpdType == 100 else "cam"),
+      (limit_speed, "road"),
     ]
     if self.turnSpeedControlMode in [1,2]:
       speed_n_sources.append((max(abs(vturn_speed), self.autoCurveSpeedLowerLimit), "vturn"))
