@@ -172,6 +172,32 @@
     },
     {
       "group": "조향튜닝",
+      "name": "LatMpcInputOffset",
+      "title": "*LATMPC.InputOffset(6)",
+      "descr": "LaneMode Mpc입력보상, 값이 크면 일찍커브에 진입함",
+      "egroup": "LAT",
+      "etitle": "*LATMPC.InputOffset(6)",
+      "edescr": "",
+      "min": 0,
+      "max": 20,
+      "default": 1,
+      "unit": 1
+    },
+    {
+      "group": "조향튜닝",
+      "name": "LatMpcOutputOffset",
+      "title": "*LATMPC.OutputOffset(5)",
+      "descr": "LaneMode Mpc지연보상, 값이 크면??",
+      "egroup": "LAT",
+      "etitle": "*LATMPC.OutputOffset(5)",
+      "edescr": "",
+      "min": 0,
+      "max": 20,
+      "default": 1,
+      "unit": 1
+    },
+    {
+      "group": "조향튜닝",
       "name": "CustomSteerMax",
       "title": "_CustomSteerMax(0)",
       "descr": "토크제어: 270,384,409",

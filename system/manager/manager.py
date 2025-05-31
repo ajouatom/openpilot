@@ -140,6 +140,8 @@ def get_default_params():
     ("LatMpcAccelCost", "0"),
     ("LatMpcJerkCost", "4"),
     ("LatMpcSteeringRateCost", "700"),
+    ("LatMpcInputOffset", "6"),
+    ("LatMpcOutputOffset", "5"),
     ("CustomSteerMax", "0"),
     ("CustomSteerDeltaUp", "0"),
     ("CustomSteerDeltaDown", "0"),
