@@ -172,6 +172,7 @@ inline static std::unordered_map<std::string, uint32_t> keys = {
     {"AutoTurnMapChange", PERSISTENT },
     {"AutoNaviSpeedCtrlEnd", PERSISTENT},
     {"AutoNaviSpeedCtrlMode", PERSISTENT},
+    {"AutoRoadSpeedLimitOffset", PERSISTENT},
     {"AutoNaviSpeedBumpTime", PERSISTENT},
     {"AutoNaviSpeedBumpSpeed", PERSISTENT},
     {"AutoNaviSpeedDecelRate", PERSISTENT},

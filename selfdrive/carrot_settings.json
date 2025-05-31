@@ -1408,6 +1408,19 @@
     },
     {
       "group": "감속제어",
+      "name": "AutoRoadSpeedLimitOffset",
+      "title": "도로제한속도맞춤(-1)",
+      "descr": "-1:안함, 도로제한속도 + 설정값",
+      "egroup": "SPEED",
+      "etitle": "RoadSpeedLimitOffset(-1)",
+      "edescr": "-1:NotUsed, RoadLimitSpeed+Offset",
+      "min": -1,
+      "max": 100,
+      "default": -1,
+      "unit": 1
+    },
+    {
+      "group": "감속제어",
       "name": "AutoNaviSpeedBumpTime",
       "title": "사고방지턱 감속완료시간시점(1s)",
       "descr": "",

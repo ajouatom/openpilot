@@ -1087,6 +1087,7 @@ class CarrotServ:
     #self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
     self.autoCurveSpeedLowerLimit = int(self.params.get("AutoCurveSpeedLowerLimit"))
     self.is_metric = self.params.get_bool("IsMetric")
+    self.autoRoadSpeedLimitOffset = self.params.get_int("AutoRoadSpeedLimitOffset")
 
 
   def _update_cmd(self):
@@ -1592,6 +1593,15 @@ class CarrotServ:
       self.active_carrot = 2 if self.active_sdi_count > 0 else 1
     else:
       self.active_carrot = 0
+
+    if self.autoRoadSpeedLimitOffset >= 0 and self.active_carrot>=2:
+      if self.xSpdType < 0 and self.nRoadLimitSpeed >= 30:
+        self.xSpdType = 4
+        road_speed_limit_offset = self.autoRoadSpeedLimitOffset
+        if not self.is_metric:
+          road_speed_limit_offset *= CV.KPH_TO_MPH
+        self.xSpdLimit = self.nRoadLimitSpeed + road_speed_limit_offset
+        self.xSpdDist = 1000
 
     if self.active_carrot <= 1:
       self.xSpdType = self.navType = self.xTurnInfo = self.xTurnInfoNext = -1
