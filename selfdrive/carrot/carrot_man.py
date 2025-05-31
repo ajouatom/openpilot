@@ -1551,7 +1551,7 @@ class CarrotServ:
       if 'camera' in id_str:
         xSpdType = 1
       elif 'police' in id_str:
-        xSpdType = 7
+        xSpdType = 100
 
       if xSpdType >= 0:
         self.xSpdLimit = self.nRoadLimitSpeed
@@ -1661,7 +1661,7 @@ class CarrotServ:
     speed_n_sources = [
       (atc_desired, "atc"),
       (atc_desired_next, "atc2"),
-      (sdi_speed, "hda" if hda_active else "bump" if self.xSpdType == 22 else "section" if self.xSpdType == 4 else "cam"),
+      (sdi_speed, "hda" if hda_active else "bump" if self.xSpdType == 22 else "section" if self.xSpdType == 4 else "police" if self.xSpdType == 100 else "cam"),
     ]
     if self.turnSpeedControlMode in [1,2]:
       speed_n_sources.append((max(abs(vturn_speed), self.autoCurveSpeedLowerLimit), "vturn"))
