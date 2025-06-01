@@ -1024,7 +1024,7 @@ protected:
                 nvgCircle(s->vg, bx, by, 110 / 2 * scale);
                 nvgFillColor(s->vg, COLOR_WHITE);
                 nvgFill(s->vg);
-                sprintf(str, "%d", xSpdLimit);
+                sprintf(str, "%d", xSpdLimit * ((s->scene.is_metric)?1:KM_TO_MILE);
                 ui_draw_text(s, bx, by + 25 * scale - 6 * (1 - scale), str, 60 * scale, COLOR_BLACK, BOLD, 0.0f, 0.0f);
             }
         }
@@ -2298,7 +2298,7 @@ public:
             int disp_speed = 0;
             NVGcolor limit_color = COLOR_GREEN_ALPHA(210);
             if (xSpdLimit > 0 && xSignType != 22) {
-                disp_speed = xSpdLimit;
+                disp_speed = xSpdLimit * ((s->scene.is_metric)?1:KM_TO_MILE);
                 limit_color = (blink_timer <= 8) ? COLOR_RED_ALPHA(210) : COLOR_YELLOW_ALPHA(210);
                 ui_draw_text(s, dx, dy-45, "CAM", 30, COLOR_WHITE, BOLD);
             }
