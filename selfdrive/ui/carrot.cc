@@ -1024,7 +1024,7 @@ protected:
                 nvgCircle(s->vg, bx, by, 110 / 2 * scale);
                 nvgFillColor(s->vg, COLOR_WHITE);
                 nvgFill(s->vg);
-                sprintf(str, "%d", xSpdLimit * ((s->scene.is_metric)?1:KM_TO_MILE));
+                sprintf(str, "%d", (int)(xSpdLimit * ((s->scene.is_metric)?1:KM_TO_MILE)));
                 ui_draw_text(s, bx, by + 25 * scale - 6 * (1 - scale), str, 60 * scale, COLOR_BLACK, BOLD, 0.0f, 0.0f);
             }
         }
