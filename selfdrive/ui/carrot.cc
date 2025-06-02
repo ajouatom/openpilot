@@ -2304,7 +2304,8 @@ public:
             }
             else {
                 disp_speed = nRoadLimitSpeed;
-                limit_color = (v_ego * 3.6 > nRoadLimitSpeed + 2) ? COLOR_RED_ALPHA(210) : COLOR_WHITE_ALPHA(210);
+		disp_speed = disp_speed * ((s->scene.is_metric)?1:KM_TO_MILE);
+                limit_color = (v_ego * 3.6 > disp_speed + 2) ? COLOR_RED_ALPHA(210) : COLOR_WHITE_ALPHA(210);
                 ui_draw_text(s, dx, dy - 45, "LIMIT", 30, COLOR_WHITE, BOLD);
             }
 
