@@ -1582,7 +1582,7 @@ class CarrotServ:
     #self.bearing = self.nPosAngle #self._update_gps(v_ego, sm)
     self.bearing = self._update_gps(v_ego, sm)
 
-    self.xSpdDist = max(self.xSpdDist - delta_dist, 0)
+    self.xSpdDist = max(self.xSpdDist - delta_dist, -1000)
     self.xDistToTurn = max(self.xDistToTurn - delta_dist, 0)
     self.xDistToTurnNext = max(self.xDistToTurnNext - delta_dist, 0)
     self.active_count = max(self.active_count - 1, 0)
@@ -1613,7 +1613,7 @@ class CarrotServ:
       self.nGoPosDist = 0
       self.update_nav_instruction(sm)
 
-    if self.xSpdType < 0 or self.xSpdDist <= 0:
+    if self.xSpdType < 0 or (self.xSpdType != 100 and self.xSpdDist <= 0) or (self.xSpdType == 100 and self.xSpdDist < -250):
       self.xSpdType = -1
       self.xSpdDist = self.xSpdLimit = 0
     if self.xTurnInfo < 0 or self.xDistToTurn < -50:
@@ -1625,12 +1625,12 @@ class CarrotServ:
     sdi_speed = 250
     hda_active = False
     ### 과속카메라, 사고방지턱
-    if self.xSpdDist > 0 and self.active_carrot > 0:
+    if (self.xSpdDist > 0 or self.xSpdType == 100) and self.active_carrot > 0:
       safe_sec = self.autoNaviSpeedBumpTime if self.xSpdType == 22 else self.autoNaviSpeedCtrlEnd
       decel = self.autoNaviSpeedDecelRate
       sdi_speed = min(sdi_speed, self.calculate_current_speed(self.xSpdDist, self.xSpdLimit, safe_sec, decel))
       self.active_carrot = 5 if self.xSpdType == 22 else 3
-      if self.xSpdType == 4:
+      if self.xSpdType in [4, 100]:
         sdi_speed = self.xSpdLimit
         self.active_carrot = 4
     elif CS is not None and CS.speedLimit > 0 and CS.speedLimitDistance > 0:
