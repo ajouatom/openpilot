@@ -47,11 +47,19 @@ def get_lag_adjusted_curvature(CP, v_ego, psis, curvatures, steer_actuator_delay
 
   distance = max(np.interp(delay, ModelConstants.T_IDXS[:CONTROL_N], distances), 0.001)
   #average_curvature_desired = psi / (v_ego * delay)
+
+  # curve -> straight or reverse curve
+  if abs(current_curvature_desired) > 0.002 and \
+     (abs(future_curvature_desired) < 0.001 or np.sign(current_curvature_desired) != np.sign(future_curvature_desired)):
+    psis_damping = 0.2
+  else:
+    psis_damping = 1.0
+  psi *= psis_damping
+
+
   average_curvature_desired = psi / distance
   desired_curvature = 2 * average_curvature_desired - current_curvature_desired
 
-  #curv_now = np.mean([abs(c) for c in curvatures[0:3]])
-  #curv_future = np.mean([abs(c) for c in curvatures[9:13]])
   if (abs(current_curvature_desired) - abs(future_curvature_desired)) > 0.002 and abs(future_curvature_desired) < 0.001:
     desired_curvature = delayed_curvature_desired
 
