@@ -1630,7 +1630,7 @@ class CarrotServ:
       decel = self.autoNaviSpeedDecelRate
       sdi_speed = min(sdi_speed, self.calculate_current_speed(self.xSpdDist, self.xSpdLimit, safe_sec, decel))
       self.active_carrot = 5 if self.xSpdType == 22 else 3
-      if self.xSpdType in [4, 100]:
+      if self.xSpdType == 4 or (self.xSpdType == 100 and self.xSpdDist <= 0):
         sdi_speed = self.xSpdLimit
         self.active_carrot = 4
     elif CS is not None and CS.speedLimit > 0 and CS.speedLimitDistance > 0:
