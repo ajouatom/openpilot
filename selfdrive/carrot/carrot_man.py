@@ -1547,6 +1547,8 @@ class CarrotServ:
       import re
       match = re.search(r'(\d+)', dist_str)
       distance = int(match.group(1)) if match else 0
+      if not self.is_metric:
+        distance = int(distance * 0.3048)
       print(f"{id_str}: {distance} m")
       xSpdType = -1
       if 'camera' in id_str:

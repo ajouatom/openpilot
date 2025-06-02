@@ -1024,7 +1024,7 @@ protected:
                 nvgCircle(s->vg, bx, by, 110 / 2 * scale);
                 nvgFillColor(s->vg, COLOR_WHITE);
                 nvgFill(s->vg);
-                sprintf(str, "%d", (int)(xSpdLimit * ((s->scene.is_metric)?1:KM_TO_MILE)));
+                sprintf(str, "%d", (int)(xSpdLimit * ((s->scene.is_metric)?1:KM_TO_MILE) + 0.5));
                 ui_draw_text(s, bx, by + 25 * scale - 6 * (1 - scale), str, 60 * scale, COLOR_BLACK, BOLD, 0.0f, 0.0f);
             }
         }
@@ -2164,7 +2164,7 @@ public:
         char cruise_speed[32];
         int cruise_x = bx + 170;
         int cruise_y = by + 15;
-        if(longActive) sprintf(cruise_speed, "%.0f", (s->scene.is_metric)?v_cruise: v_cruise * KM_TO_MILE);
+        if(longActive) sprintf(cruise_speed, "%d", (int)((s->scene.is_metric)?v_cruise: v_cruise * KM_TO_MILE + 0.5));
 		    else sprintf(cruise_speed, "--");
         if (strcmp(cruise_speed_last, cruise_speed) != 0) {
 			    strcpy(cruise_speed_last, cruise_speed);
@@ -2181,13 +2181,13 @@ public:
         int apply_y = by - 50;
 
         if (apply_source.length()) {
-            sprintf(apply_speed_str, "%.0f", (s->scene.is_metric)?apply_speed:apply_speed * KM_TO_MILE);
+            sprintf(apply_speed_str, "%d", (int)((s->scene.is_metric)?apply_speed:apply_speed * KM_TO_MILE + 0.5));
             textColor = COLOR_OCHRE;    // apply speed가 작동되면... 색을 바꾸자.
             ui_draw_text(s, apply_x, apply_y, apply_speed_str, 50, textColor, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
             ui_draw_text(s, apply_x, apply_y - 50, apply_source.toStdString().c_str(), 30, textColor, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
         }
 		    else if(abs(cruiseTarget - v_cruise) > 0.5) {
-            sprintf(apply_speed_str, "%.0f", (s->scene.is_metric)?cruiseTarget: cruiseTarget * KM_TO_MILE);
+            sprintf(apply_speed_str, "%d", (int)((s->scene.is_metric)?cruiseTarget: cruiseTarget * KM_TO_MILE + 0.5));
 			      ui_draw_text(s, apply_x, apply_y, apply_speed_str, 50, textColor, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
             ui_draw_text(s, apply_x, apply_y - 50, "eco", 30, textColor, BOLD, 1.0, 5.0, COLOR_BLACK, COLOR_BLACK);
 		    }
@@ -2298,13 +2298,13 @@ public:
             int disp_speed = 0;
             NVGcolor limit_color = COLOR_GREEN_ALPHA(210);
             if (xSpdLimit > 0 && xSignType != 22) {
-                disp_speed = xSpdLimit * ((s->scene.is_metric)?1:KM_TO_MILE);
+                disp_speed = (int)(xSpdLimit * ((s->scene.is_metric)?1:KM_TO_MILE) + 0.5);
                 limit_color = (blink_timer <= 8) ? COLOR_RED_ALPHA(210) : COLOR_YELLOW_ALPHA(210);
                 ui_draw_text(s, dx, dy-45, "CAM", 30, COLOR_WHITE, BOLD);
             }
             else {
                 disp_speed = nRoadLimitSpeed;
-		disp_speed = disp_speed * ((s->scene.is_metric)?1:KM_TO_MILE);
+		            disp_speed = (int)(disp_speed * ((s->scene.is_metric)?1.0:KM_TO_MILE) + 0.5);
                 limit_color = (v_ego * 3.6 > disp_speed + 2) ? COLOR_RED_ALPHA(210) : COLOR_WHITE_ALPHA(210);
                 ui_draw_text(s, dx, dy - 45, "LIMIT", 30, COLOR_WHITE, BOLD);
             }
