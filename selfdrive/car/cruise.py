@@ -253,6 +253,12 @@ class VCruiseCarrot:
       self._cruise_button_mode = self.params.get_int("CruiseButtonMode")
       self._lfa_button_mode = self.params.get_int("LfaButtonMode")
       self.cruiseOnDist = self.params.get_float("CruiseOnDist") * 0.01
+      cruiseSpeed1 = self.params.get_float("CruiseSpeed1")
+      cruiseSpeed2 = self.params.get_float("CruiseSpeed2")
+      cruiseSpeed3 = self.params.get_float("CruiseSpeed3")
+      cruiseSpeed4 = self.params.get_float("CruiseSpeed4")
+      cruiseSpeed5 = self.params.get_float("CruiseSpeed5")
+      self._cruise_speed_table = [cruiseSpeed1, cruiseSpeed2, cruiseSpeed3, cruiseSpeed4, cruiseSpeed5]
 
   def update_v_cruise(self, CS, sm, is_metric):
     self._add_log("")
@@ -490,7 +496,7 @@ class VCruiseCarrot:
           pass
         elif not CC.enabled:
           v_cruise_kph = max(self.v_ego_kph_set, self._cruise_speed_min)
-        elif self.v_ego_kph_set > v_cruise_kph + 2 and self._cruise_button_mode in [2]:
+        elif self.v_ego_kph_set > v_cruise_kph + 2 and self._cruise_button_mode in [2, 3]:
           v_cruise_kph = max(self.v_ego_kph_set, self._cruise_speed_min)
         elif self._cruise_button_mode in [0, 1]:
           v_cruise_kph = button_kph
@@ -562,7 +568,15 @@ class VCruiseCarrot:
   #   nRoadLimitSpeed, vTurnSpeed
   #   gasPressed, brakePressed, standstill
   def _v_cruise_desired(self, CS, v_cruise_kph):
-    if v_cruise_kph < 30: #self.nRoadLimitSpeed:
+    if self._cruise_button_mode == 3:
+      for speed in self._cruise_speed_table:
+        if v_cruise_kph < speed:
+          v_cruise_kph = speed
+          break
+      else:
+        v_cruise_kph = ((v_cruise_kph // self._cruise_speed_unit) + 1) * self._cruise_speed_unit
+
+    elif v_cruise_kph < 30: #self.nRoadLimitSpeed:
       v_cruise_kph = 30 #self.nRoadLimitSpeed
     else:
       for speed in range (40, 160, self._cruise_speed_unit):
