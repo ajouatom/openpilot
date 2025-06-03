@@ -2425,7 +2425,7 @@ public:
         SubMaster& sm = *(s->sm);
         auto car_state = sm["carState"].getCarState();
 
-        int bx = s->fb_w - 130; // (192 - 24) / 2 + UI_BORDER_SIZE + 10;
+        int bx = (192 - 24) / 2 + UI_BORDER_SIZE + 10;
         int by = s->fb_h - 280 / 2 + 10;
         auto tpms = car_state.getTpms();
         float fl = tpms.getFl();
@@ -2457,6 +2457,27 @@ public:
         ui_draw_text(s, bx + dw, by - 55, get_tpms_text(fr), 40, get_tpms_color(fr), BOLD);
         ui_draw_text(s, bx - dw, by + 70, get_tpms_text(rl), 40, get_tpms_color(rl), BOLD);
         ui_draw_text(s, bx + dw, by + 70, get_tpms_text(rr), 40, get_tpms_color(rr), BOLD);
+    }
+    void drawTpms3(const UIState* s) {
+      nvgTextAlign(s->vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
+      SubMaster& sm = *(s->sm);
+      auto car_state = sm["carState"].getCarState();
+
+      int bx = s->fb_w - 130;
+      int by = s->fb_h - 280 / 2 + 10;
+      auto tpms = car_state.getTpms();
+      float fl = tpms.getFl();
+      float fr = tpms.getFr();
+      float rl = tpms.getRl();
+      float rr = tpms.getRr();
+#ifdef __UI_TEST
+      fl = fr = rl = rr = 29;
+#endif
+      int dw = 80;
+      ui_draw_text(s, bx - dw, by - 55, get_tpms_text(fl), 40, get_tpms_color(fl), BOLD);
+      ui_draw_text(s, bx + dw, by - 55, get_tpms_text(fr), 40, get_tpms_color(fr), BOLD);
+      ui_draw_text(s, bx - dw, by + 70, get_tpms_text(rl), 40, get_tpms_color(rl), BOLD);
+      ui_draw_text(s, bx + dw, by + 70, get_tpms_text(rr), 40, get_tpms_color(rr), BOLD);
     }
     void makeDeviceInfo(const UIState* s) {
         SubMaster& sm = *(s->sm);
@@ -2656,7 +2677,7 @@ void ui_draw(UIState *s, ModelRenderer* model_renderer, int w, int h) {
   //drawCarrot.drawConnInfo(s);
   drawCarrot.drawDeviceInfo(s);
   drawCarrot.drawTpms2(s);
-  drawCarrot.drawTpms(s);
+  drawCarrot.drawTpms3(s);
 
   drawTurnInfo.draw(s);
 
