@@ -1029,8 +1029,8 @@ protected:
             }
         }
 	}
-    void drawTurnInfoHud(const UIState* s) {
-      if (s->fb_w < 1200) return;
+    int  drawTurnInfoHud(const UIState* s) {
+      if (s->fb_w < 1200) return -1;
 #ifdef __UI_TEST
         active_carrot = 2;
         nGoPosDist = 500000;
@@ -1054,7 +1054,7 @@ protected:
           ui_fill_rect(s->vg, { tbt_x, 5, 790, s->fb_h - 15 }, COLOR_BLACK_ALPHA(120), 30, 2, &stroke_color);
         }
         if (nGoPosDist > 0 && nGoPosTime > 0);
-        else return;
+        else return -1;
         if (s->scene._current_carrot_display == 3);
         else {
           ui_fill_rect(s->vg, { tbt_x, tbt_y - 60, 790, 240 + 60 }, COLOR_BLACK_ALPHA(120), 30, 2, &stroke_color);
@@ -1116,9 +1116,10 @@ protected:
             sprintf(str, "%.1fkm", nGoPosDist / 1000.);
             ui_draw_text(s, tbt_x + 190 + 120, tbt_y + 130, str, 50, COLOR_WHITE, BOLD);
         }
+        return 0;
     }
 public:
-    void draw(const UIState* s) {
+    int draw(const UIState* s) {
         nvgTextAlign(s->vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
         SubMaster& sm = *(s->sm);
         if (!sm.alive("modelV2") || !sm.alive("carrotMan") || !sm.alive("carState")) {
@@ -1172,7 +1173,7 @@ public:
 #endif
         drawTurnInfo(s);
         drawSpeedLimit(s);
-        drawTurnInfoHud(s);
+        return drawTurnInfoHud(s);
 
     }
 };
@@ -2677,9 +2678,12 @@ void ui_draw(UIState *s, ModelRenderer* model_renderer, int w, int h) {
   //drawCarrot.drawConnInfo(s);
   drawCarrot.drawDeviceInfo(s);
   drawCarrot.drawTpms2(s);
-  drawCarrot.drawTpms3(s);
 
-  drawTurnInfo.draw(s);
+  int draw_turn_info = drawTurnInfo.draw(s);
+
+  if (draw_turn_info < 0) {
+    drawCarrot.drawTpms3(s);
+  }
 
 
   ui_draw_text_a2(s);
