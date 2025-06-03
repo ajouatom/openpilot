@@ -2464,8 +2464,8 @@ public:
       SubMaster& sm = *(s->sm);
       auto car_state = sm["carState"].getCarState();
 
-      int bx = s->fb_w - 130;
-      int by = s->fb_h - 280 / 2 + 10;
+      int bx = s->fb_w - 125;
+      int by = s->fb_h - 280 / 2 + 15;
       auto tpms = car_state.getTpms();
       float fl = tpms.getFl();
       float fr = tpms.getFr();
