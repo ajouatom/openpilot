@@ -964,6 +964,7 @@ class CarrotServ:
     self.params_memory = Params("/dev/shm/params")
 
     self.nRoadLimitSpeed = 30
+    self.nRoadLimitSpeed_last = 30
     self.nRoadLimitSpeed_counter = 0
 
     self.active_carrot = 0     ## 1: CarrotMan Active, 2: sdi active , 3: speed decel active, 4: section active, 5: bump active, 6: speed limit active
@@ -1579,6 +1580,8 @@ class CarrotServ:
       delta_dist = 0
       CS = None
 
+    road_speed_limit_changed = True if self.nRoadLimitSpeed != self.nRoadLimitSpeed_last else False
+    self.nRoadLimitSpeed_last = self.nRoadLimitSpeed
     #self.bearing = self.nPosAngle #self._update_gps(v_ego, sm)
     self.bearing = self._update_gps(v_ego, sm)
 
@@ -1692,7 +1695,7 @@ class CarrotServ:
       if source != self.source_last:
         self.gas_override_speed = 0
         self.gas_pressed_state = CS.gasPressed
-      if CS.vEgo < 0.1 or desired_speed > 150 or source in ["cam", "section", "road", "police"] or CS.brakePressed:
+      if CS.vEgo < 0.1 or desired_speed > 150 or source in ["cam", "section", "police"] or CS.brakePressed or road_speed_limit_changed:
         self.gas_override_speed = 0
       elif CS.gasPressed and not self.gas_pressed_state:
         self.gas_override_speed = max(v_ego_kph, self.gas_override_speed)
