@@ -2339,7 +2339,7 @@ public:
             else {
               ui_fill_rect(s->vg, { dx - 65, dy - 38, 130, 90 }, mode_color, 15, 2);
               ui_draw_text(s, dx, dy - 5, "VOLT", 25, COLOR_WHITE, BOLD);
-              sprintf(str, "%.2fV", voltage);
+              sprintf(str, "%.1fV", voltage);
               ui_draw_text(s, dx, dy + 40, str, 40, COLOR_WHITE, BOLD);
             }
         }
