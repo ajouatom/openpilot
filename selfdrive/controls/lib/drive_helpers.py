@@ -60,10 +60,6 @@ def get_lag_adjusted_curvature(CP, v_ego, psis, curvatures, steer_actuator_delay
   average_curvature_desired = psi / distance
   desired_curvature = 2 * average_curvature_desired - current_curvature_desired
 
-  if (abs(current_curvature_desired) - abs(future_curvature_desired)) > 0.002 and abs(future_curvature_desired) < 0.001:
-    desired_curvature = delayed_curvature_desired
-
-
   # This is the "desired rate of the setpoint" not an actual desired rate
   max_curvature_rate = MAX_LATERAL_JERK / (v_ego**2) # inexact calculation, check https://github.com/commaai/openpilot/pull/24755
   safe_desired_curvature = np.clip(desired_curvature,
