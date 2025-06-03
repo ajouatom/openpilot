@@ -2656,6 +2656,7 @@ void ui_draw(UIState *s, ModelRenderer* model_renderer, int w, int h) {
   //drawCarrot.drawConnInfo(s);
   drawCarrot.drawDeviceInfo(s);
   drawCarrot.drawTpms2(s);
+  drawCarrot.drawTpms(s);
 
   drawTurnInfo.draw(s);
 
