@@ -1161,6 +1161,19 @@
     },
     {
       "group": "조향일반",
+      "name": "LaneChangeDelay",
+      "title": "차선변경 지연x0.1s(0)",
+      "descr": "",
+      "egroup": "LAT",
+      "etitle": "LaneChange delayx0.1s(0)",
+      "edescr": "",
+      "min": 0,
+      "max": 100,
+      "default": 0,
+      "unit": 10
+    },
+    {
+      "group": "조향일반",
       "name": "LaneChangeBsd",
       "title": "차선변경 BSD",
       "descr": "0:BSD검출(조향토크허용), 1: 조향토크불허, -1: BSD사용안함",

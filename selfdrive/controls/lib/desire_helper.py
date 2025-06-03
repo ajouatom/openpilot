@@ -125,10 +125,12 @@ class DesireHelper:
 
     self.lane_available_last = False
     self.edge_available_last = False
-    self.object_detected_count = 0
+    self.object_detected_count = 0    
 
     self.laneChangeNeedTorque = 0
     self.laneChangeBsd = 0
+    self.laneChangeDelay = 0
+    self.lane_change_delay = 0.0
     self.driver_blinker_state = BLINKER_NONE
     self.atc_type = ""
 
@@ -172,9 +174,11 @@ class DesireHelper:
     if self.frame % 100 == 0:
       self.laneChangeNeedTorque = self.params.get_int("LaneChangeNeedTorque")
       self.laneChangeBsd = self.params.get_int("LaneChangeBsd")
+      self.laneChangeDelay = self.params.get_float("LaneChangeDelay") * 0.1
     self.frame += 1
 
     self.carrot_lane_change_count = max(0, self.carrot_lane_change_count - 1)
+    self.lane_change_delay = max(0, self.lane_change_delay - DT_MDL)
 
     v_ego = carstate.vEgo
     below_lane_change_speed = v_ego < LANE_CHANGE_SPEED_MIN
@@ -290,6 +294,7 @@ class DesireHelper:
       if self.lane_change_state == LaneChangeState.off and desire_enabled and not self.prev_desire_enabled and not below_lane_change_speed:
         self.lane_change_state = LaneChangeState.preLaneChange
         self.lane_change_ll_prob = 1.0
+        self.lane_change_delay = self.laneChangeDelay
 
       # LaneChangeState.preLaneChange
       elif self.lane_change_state == LaneChangeState.preLaneChange:
@@ -314,7 +319,7 @@ class DesireHelper:
           self.lane_change_state = LaneChangeState.off
           self.lane_change_direction = LaneChangeDirection.none
         else:
-          if lane_available:
+          if lane_available and self.lane_change_delay == 0:
             if self.blindspot_detected_counter > 0 and not ignore_bsd:  # BSD검출시
               if torque_applied and not block_lanechange_bsd:
                 self.lane_change_state = LaneChangeState.laneChangeStarting
