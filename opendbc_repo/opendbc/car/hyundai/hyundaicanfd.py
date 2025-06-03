@@ -421,7 +421,7 @@ def forward_button_message(packer, CAN, frame, CS, cruise_button, MainMode_ACC_t
         pass
       elif LFA_trigger > 0:
         values["LFA_BTN"] = 1
-        
+
       ret.append(packer.make_can_msg(CS.cruise_btns_msg_canfd, CAN.CAM, values))
   return ret
 
@@ -509,11 +509,11 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           if values["ALERTS_5"] in [11] and CS.softHoldActive == 0:
             values["ALERTS_5"] = 0
 
-          curvature = {
-            i: (31 if i == -1 else 13 - abs(i + 15)) if i < 0 else 15 + i
-            for i in range(-15, 16)
-          }
-          values["LANELINE_CURVATURE"] = curvature.get(max(-15, min(round(disp_angle / 3), 15)), 14)
+          curvature = round(CS.out.steeringAngleDeg / 3)
+
+          values["LANELINE_CURVATURE"] = (min(abs(curvature), 15) + (-1 if curvature < 0 else 0)) if lat_active else 0
+          values["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 and lat_active else 0
+
           if hud_control.leftLaneDepart:
             values["LANELINE_LEFT"] = 4 if (frame // 50) % 2 == 0 else 1
           else:
