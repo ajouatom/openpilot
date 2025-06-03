@@ -195,6 +195,13 @@ class Controls:
     if len(angular_rate_value) > 2:
       CC.angularVelocity = angular_rate_value
 
+    acceleration_value = list(self.sm['liveLocationKalman'].accelerationCalibrated.value)
+    if len(acceleration_value) > 2:
+      if abs(acceleration_value[0]) > 16.0:
+        print("Collision detected. disable openpilot, restart")
+        self.params.put_bool("OpenpilotEnabledToggle", False)
+        self.params.put_int("SoftRestartTriggered", 1)
+
     CC.cruiseControl.override = CC.enabled and not CC.longActive and self.CP.openpilotLongitudinalControl
     CC.cruiseControl.cancel = CS.cruiseState.enabled and (not CC.enabled or not self.CP.pcmCruise)
 
