@@ -1124,7 +1124,7 @@ public:
         SubMaster& sm = *(s->sm);
         if (!sm.alive("modelV2") || !sm.alive("carrotMan") || !sm.alive("carState")) {
             active_carrot = -1;
-            return;
+            return -1;
         }
         const auto carrot_man = sm["carrotMan"].getCarrotMan();
           
