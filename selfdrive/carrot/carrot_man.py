@@ -1616,7 +1616,7 @@ class CarrotServ:
       self.nGoPosDist = 0
       self.update_nav_instruction(sm)
 
-    if self.xSpdType < 0 or (self.xSpdType != 100 and self.xSpdDist <= 0) or (self.xSpdType == 100 and self.xSpdDist < -250):
+    if self.xSpdType < 0 or (self.xSpdType not in [100,101] and self.xSpdDist <= 0) or (self.xSpdType in [100,101] and self.xSpdDist < -250):
       self.xSpdType = -1
       self.xSpdDist = self.xSpdLimit = 0
     if self.xTurnInfo < 0 or self.xDistToTurn < -50:
