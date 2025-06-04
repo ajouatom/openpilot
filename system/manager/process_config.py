@@ -72,6 +72,9 @@ def and_(*fns):
 def enable_dm(started, params, CP: car.CarParams) -> bool:
   return (started or params.get_bool("IsDriverViewEnabled")) and params.get_int("DisableDM") == 0
 
+def enable_connect(started, params, CP: car.CarParams) -> bool:
+  return params.get_int("EnableConnect") >= 0
+
 procs = [
   DaemonProcess("manage_athenad", "system.athena.manage_athenad", "AthenadPid"),
 
@@ -121,7 +124,7 @@ procs = [
   PythonProcess("hardwared", "system.hardware.hardwared", always_run),
   PythonProcess("tombstoned", "system.tombstoned", always_run, enabled=not PC),
   PythonProcess("updated", "system.updated.updated", enable_updated, enabled=not PC),
-  #PythonProcess("uploader", "system.loggerd.uploader", always_run),
+  PythonProcess("uploader", "system.loggerd.uploader", enable_connect),
   PythonProcess("statsd", "system.statsd", always_run),
 
   # debug procs

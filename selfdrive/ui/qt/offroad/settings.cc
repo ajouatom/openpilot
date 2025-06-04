@@ -818,6 +818,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   startToggles->addItem(new CValueControl("SoundVolumeAdjustEngage", "Sound Volume, Engage(10%)", "", "../assets/offroad/icon_sound.png", 5, 200, 5));
   startToggles->addItem(new CValueControl("MaxTimeOffroadMin", "Power off time (min)", "", "../assets/offroad/icon_sandtimer.png", 1, 600, 10));
   startToggles->addItem(new ParamControl("DisableDM", "Disable DM", "", "../assets/img_driver_face_static_x.png", this));
+  startToggles->addItem(new CValueControl("EnableConnect", "EnableConnect", "Your device may be banned by Comma", "../assets/offroad/icon_sandtimer.png", 0, 1, 1));
   //startToggles->addItem(new CValueControl("CarrotCountDownSpeed", "NaviCountDown Speed(10)", "", "../assets/offroad/icon_shell.png", 0, 200, 5));
   startToggles->addItem(new CValueControl("MapboxStyle", "Mapbox Style(0)", "", "../assets/offroad/icon_shell.png", 0, 2, 1));
   startToggles->addItem(new CValueControl("RecordRoadCam", "Record Road camera(0)", "1:RoadCam, 2:RoadCam+WideRoadCam", "../assets/offroad/icon_shell.png", 0, 2, 1));
