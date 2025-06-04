@@ -387,8 +387,6 @@ class CarrotPlanner:
 
     if self.myDrivingMode == DrivingMode.High or self.trafficLightDetectMode == 0:
       self.trafficState = TrafficState.off
-    if self.trafficState == TrafficState.green and self.trafficLightDetectMode == 1:  # Stopping only
-      self.trafficState = TrafficState.off
     if abs(carstate.steeringAngleDeg) > 20:
       self.trafficState = TrafficState.off
 
@@ -407,7 +405,7 @@ class CarrotPlanner:
       elif lead_detected and (radarstate.leadOne.dRel - stop_model_x) < 2.0:
         self.xState = XState.lead
       elif self.stopping_count == 0:
-        if self.trafficState == TrafficState.green and not self.carrot_stay_stop and not carstate.leftBlinker:
+        if self.trafficState == TrafficState.green and not self.carrot_stay_stop and not carstate.leftBlinker and self.trafficLightDetectMode != 1:
           self.xState = XState.e2ePrepare
           self.events.add(EventName.trafficSignGreen)
       self.stopping_count = max(0, self.stopping_count - 1)
