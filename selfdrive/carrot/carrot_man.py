@@ -1553,7 +1553,7 @@ class CarrotServ:
       print(f"{id_str}: {distance} m")
       xSpdType = -1
       if 'camera' in id_str:
-        xSpdType = 1
+        xSpdType = 101    # 101: waze speed cam, 100: police
       elif 'police' in id_str:
         xSpdType = 100
 
@@ -1628,12 +1628,12 @@ class CarrotServ:
     sdi_speed = 250
     hda_active = False
     ### 과속카메라, 사고방지턱
-    if (self.xSpdDist > 0 or self.xSpdType == 100) and self.active_carrot > 0:
+    if (self.xSpdDist > 0 or self.xSpdType in [100, 101]) and self.active_carrot > 0:
       safe_sec = self.autoNaviSpeedBumpTime if self.xSpdType == 22 else self.autoNaviSpeedCtrlEnd
       decel = self.autoNaviSpeedDecelRate
       sdi_speed = min(sdi_speed, self.calculate_current_speed(self.xSpdDist, self.xSpdLimit, safe_sec, decel))
       self.active_carrot = 5 if self.xSpdType == 22 else 3
-      if self.xSpdType == 4 or (self.xSpdType == 100 and self.xSpdDist <= 0):
+      if self.xSpdType == 4 or (self.xSpdType in [100, 101] and self.xSpdDist <= 0):
         sdi_speed = self.xSpdLimit
         self.active_carrot = 4
     elif CS is not None and CS.speedLimit > 0 and CS.speedLimitDistance > 0:
