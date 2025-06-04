@@ -2677,12 +2677,19 @@ void ui_draw(UIState *s, ModelRenderer* model_renderer, int w, int h) {
   drawCarrot.drawDateTime(s);
   //drawCarrot.drawConnInfo(s);
   drawCarrot.drawDeviceInfo(s);
-  drawCarrot.drawTpms2(s);
-
-  int draw_turn_info = drawTurnInfo.draw(s);
-
-  if (draw_turn_info < 0) {
+  int show_tpms = params.getInt("ShowTpms");
+  switch (show_tpms) {
+  case 0: break;
+  case 1:
+    drawCarrot.drawTpms2(s);
+    break;
+  case 2:
     drawCarrot.drawTpms3(s);
+    break;
+  case 3:
+    drawCarrot.drawTpms2(s);
+    drawCarrot.drawTpms3(s);
+    break;
   }
 
 

@@ -927,6 +927,19 @@
     },
     {
       "group": "화면",
+      "name": "ShowTpms",
+      "title": "TPMS정보 표시",
+      "descr": "0:None, 1: 위, 2: 아래, 3: 둘다",
+      "egroup": "DISP",
+      "etitle": "Show TPMS Info",
+      "edescr": "0:None, 1: Upper, 2:Lower, 3: Both",
+      "min": 0,
+      "max": 3,
+      "default": 1,
+      "unit": 1
+    },
+    {
+      "group": "화면",
       "name": "ShowDateTime",
       "title": "시간정보표시",
       "descr": "",
