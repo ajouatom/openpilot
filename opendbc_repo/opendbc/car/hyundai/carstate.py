@@ -422,6 +422,7 @@ class CarState(CarStateBase):
       self.cruise_info = copy.copy(cp_cruise_info.vl["SCC_CONTROL"])
       ret.brakeHoldActive = cp.vl["ESP_STATUS"]["AUTO_HOLD"] == 1 and cp_cruise_info.vl["SCC_CONTROL"]["ACCMode"] not in (1, 2)
 
+    speed_limit_cam = False
     if self.CP.flags & HyundaiFlags.CAMERA_SCC.value:
       self.cruise_info = copy.copy(cp_cam.vl["SCC_CONTROL"])
       self.lfa_info = copy.copy(cp_cam.vl["LFA"])
@@ -445,7 +446,6 @@ class CarState(CarStateBase):
       if "ADRV_0x160" in cp_cam.vl:
         self.adrv_info_160 = copy.copy(cp_cam.vl.get("ADRV_0x160", {}))
 
-      speed_limit_cam = False
       if "HDA_INFO_4A3" in cp.vl:
         self.hda_info_4a3 = copy.copy(cp.vl.get("HDA_INFO_4A3", {}))
         speedLimit = self.hda_info_4a3["SPEED_LIMIT"]
