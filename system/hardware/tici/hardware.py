@@ -3,7 +3,6 @@ import math
 import os
 import subprocess
 import time
-import tempfile
 from enum import IntEnum
 from functools import cached_property, lru_cache
 from pathlib import Path
@@ -62,25 +61,6 @@ NetworkStrength = log.DeviceState.NetworkStrength
 MM_MODEM_ACCESS_TECHNOLOGY_UMTS = 1 << 5
 MM_MODEM_ACCESS_TECHNOLOGY_LTE = 1 << 14
 
-
-def sudo_write(val, path):
-  try:
-    with open(path, 'w') as f:
-      f.write(str(val))
-  except PermissionError:
-    os.system(f"sudo chmod a+w {path}")
-    try:
-      with open(path, 'w') as f:
-        f.write(str(val))
-    except PermissionError:
-      # fallback for debugfs files
-      os.system(f"sudo su -c 'echo {val} > {path}'")
-
-def sudo_read(path: str) -> str:
-  try:
-    return subprocess.check_output(f"sudo cat {path}", shell=True, encoding='utf8').strip()
-  except Exception:
-    return ""
 
 def affine_irq(val, action):
   irqs = get_irqs_for_action(action)
