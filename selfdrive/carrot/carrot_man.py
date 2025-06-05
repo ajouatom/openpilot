@@ -853,69 +853,72 @@ class CarrotMan:
     host = '0.0.0.0'  # 혹은 다른 호스트 주소
     port = 7709  # 포트 번호
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-      s.bind((host, port))
-      s.listen()
+    try:
+      with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((host, port))
+        s.listen()
 
-      while True:
-        print("################# waiting connection from CarrotMan route #####################")
-        conn, addr = s.accept()
-        with conn:
-          print(f"Connected by {addr}")
-          #self.clear_route()
+        while True:
+          print("################# waiting connection from CarrotMan route #####################")
+          conn, addr = s.accept()
+          with conn:
+            print(f"Connected by {addr}")
+            #self.clear_route()
 
-          # 전체 데이터 크기 수신
-          total_size_bytes = self.recvall(conn, 4)
-          if not total_size_bytes:
-            print("Connection closed or error occurred")
-            continue
-          try:
-            total_size = struct.unpack('!I', total_size_bytes)[0]
-            # 전체 데이터를 한 번에 수신
-            all_data = self.recvall(conn, total_size)
-            if all_data is None:
-                print("Connection closed or incomplete data received")
-                continue
-
-            self.navi_points = []
-            points = []
-            for i in range(0, len(all_data), 8):
-              x, y = struct.unpack('!ff', all_data[i:i+8])
-              self.navi_points.append((x, y))
-              coord = Coordinate.from_mapbox_tuple((x, y))
-              points.append(coord)
-            coords = [c.as_dict() for c in points]
-            self.navi_points_start_index = 0
-            self.navi_points_active = True
-            print("Received points:", len(self.navi_points))
-            #print("Received points:", self.navi_points)
-
-            self.send_routes(coords)
-            """
+            # 전체 데이터 크기 수신
+            total_size_bytes = self.recvall(conn, 4)
+            if not total_size_bytes:
+              print("Connection closed or error occurred")
+              continue
             try:
-              module_name = "route_engine"
-              class_name = "RouteEngine"
-              moduel = importlib.import_module(module_name)
-              cls = getattr(moduel, class_name)
-              route_engine_instance = cls(name="Loaded at Runtime")
+              total_size = struct.unpack('!I', total_size_bytes)[0]
+              # 전체 데이터를 한 번에 수신
+              all_data = self.recvall(conn, total_size)
+              if all_data is None:
+                  print("Connection closed or incomplete data received")
+                  continue
 
-              route_engine_instance.send_route_coords(coords, True)
+              self.navi_points = []
+              points = []
+              for i in range(0, len(all_data), 8):
+                x, y = struct.unpack('!ff', all_data[i:i+8])
+                self.navi_points.append((x, y))
+                coord = Coordinate.from_mapbox_tuple((x, y))
+                points.append(coord)
+              coords = [c.as_dict() for c in points]
+              self.navi_points_start_index = 0
+              self.navi_points_active = True
+              print("Received points:", len(self.navi_points))
+              #print("Received points:", self.navi_points)
+
+              self.send_routes(coords)
+              """
+              try:
+                module_name = "route_engine"
+                class_name = "RouteEngine"
+                moduel = importlib.import_module(module_name)
+                cls = getattr(moduel, class_name)
+                route_engine_instance = cls(name="Loaded at Runtime")
+
+                route_engine_instance.send_route_coords(coords, True)
+              except Exception as e:
+                print(f"route_engine error: {e}")
+
+              #msg = messaging.new_message('navRoute', valid=True)
+              #msg.navRoute.coordinates = coords
+              #self.pm.send('navRoute', msg)
+              """
+
+              if len(coords):
+                dest = coords[-1]
+                dest['place_name'] = "External Navi"
+                self.params.put("NavDestination", json.dumps(dest))
+
             except Exception as e:
-              print(f"route_engine error: {e}")
-
-            #msg = messaging.new_message('navRoute', valid=True)
-            #msg.navRoute.coordinates = coords
-            #self.pm.send('navRoute', msg)
-            """
-
-            if len(coords):
-              dest = coords[-1]
-              dest['place_name'] = "External Navi"
-              self.params.put("NavDestination", json.dumps(dest))
-
-          except Exception as e:
-            print(e)
-
+              print(e)
+    except Exception as e:
+      print("################# CarrotMan route server error #####################")
+      print(e)
 
   def carrot_curve_speed_params(self):
     self.autoCurveSpeedFactor = self.params.get_int("AutoCurveSpeedFactor")*0.01
