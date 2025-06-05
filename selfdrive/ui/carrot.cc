@@ -1030,6 +1030,7 @@ protected:
         }
 	}
     int  drawTurnInfoHud(const UIState* s) {
+      printf("drawTurnInfoHud.......\n");
       if (s->fb_w < 1200) return -1;
 #ifdef __UI_TEST
         active_carrot = 2;
@@ -1175,6 +1176,7 @@ public:
 #endif
         drawTurnInfo(s);
         drawSpeedLimit(s);
+        printf("call drawTurnInfoHud\n");
         return drawTurnInfoHud(s);
 
     }
