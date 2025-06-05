@@ -1030,7 +1030,6 @@ protected:
         }
 	}
     int  drawTurnInfoHud(const UIState* s) {
-      printf("drawTurnInfoHud.......\n");
       if (s->fb_w < 1200) return -1;
 #ifdef __UI_TEST
         active_carrot = 2;
@@ -1054,7 +1053,6 @@ protected:
         if (s->scene._current_carrot_display == 3) {
           ui_fill_rect(s->vg, { tbt_x, 5, 790, s->fb_h - 15 }, COLOR_BLACK_ALPHA(120), 30, 2, &stroke_color);
         }
-        printf("GoPos=%d,%d\n", nGoPosDist, nGoPosTime);
         if (nGoPosDist > 0 && nGoPosTime > 0);
         else return -1;
         if (s->scene._current_carrot_display == 3);
@@ -1066,7 +1064,6 @@ protected:
           ui_draw_text(s, tbt_x + 20, tbt_y - 15, szTBTMainText.toStdString().c_str(), 40, COLOR_WHITE, BOLD);
           //ui_draw_text(s, tbt_x + 190, tbt_y - 5, szPosRoadName.toStdString().c_str(), 40, COLOR_WHITE, BOLD);
         }
-        printf("xTurnInfo = %d\n", xTurnInfo);
 
         if(xTurnInfo > 0) {
             nvgTextAlign(s->vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
@@ -1176,7 +1173,6 @@ public:
 #endif
         drawTurnInfo(s);
         drawSpeedLimit(s);
-        printf("call drawTurnInfoHud\n");
         return drawTurnInfoHud(s);
 
     }
@@ -2696,6 +2692,7 @@ void ui_draw(UIState *s, ModelRenderer* model_renderer, int w, int h) {
     break;
   }
 
+  drawTurnInfo.draw(s);
 
   ui_draw_text_a2(s);
   ui_draw_alert(s);
