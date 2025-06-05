@@ -49,7 +49,7 @@ def get_lag_adjusted_curvature(CP, v_ego, psis, curvatures, steer_actuator_delay
   #average_curvature_desired = psi / (v_ego * delay)
 
   # curve -> straight or reverse curve
-  if abs(current_curvature_desired) > 0.002 and \
+  if v_ego > 5 and abs(current_curvature_desired) > 0.002 and \
      (abs(future_curvature_desired) < 0.001 or np.sign(current_curvature_desired) != np.sign(future_curvature_desired)):
     psis_damping = 0.2
   else:
