@@ -117,6 +117,8 @@ class Soundd:
     self.selfdrive_timeout_alert = False
 
     self.spl_filter_weighted = FirstOrderFilter(0, 2.5, FILTER_DT, initialized=False)
+    self.lang = self.params.get('LanguageSetting', encoding='utf8')
+
 
   def load_sounds(self):
     self.loaded_sounds: dict[int, np.ndarray] = {}
@@ -125,7 +127,10 @@ class Soundd:
     for sound in sound_list:
       filename, play_count, volume = sound_list[sound]
 
-      wavefile = wave.open(BASEDIR + "/selfdrive/assets/sounds/" + filename, 'r')
+      if self.lang == "main_ko":
+        wavefile = wave.open(BASEDIR + "/selfdrive/assets/sounds/" + filename, 'r')
+      else:
+        wavefile = wave.open(BASEDIR + "/selfdrive/assets/sounds_en/" + filename, 'r')
 
       #assert wavefile.getnchannels() == 1
       assert wavefile.getsampwidth() == 2

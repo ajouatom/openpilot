@@ -236,7 +236,7 @@ class VCruiseCarrot:
       #self.event = event
       self._log_timer = self._log_timeout
 
-  def update_params(self):
+  def update_params(self, is_metric):
     if self.frame % 10 == 0:
       self.autoCruiseControl = self.params.get_int("AutoCruiseControl")
       self.autoGasTokSpeed = self.params.get_int("AutoGasTokSpeed")
@@ -254,18 +254,19 @@ class VCruiseCarrot:
       self._lfa_button_mode = self.params.get_int("LfaButtonMode")
       self.autoRoadSpeedLimitOffset = self.params.get_int("AutoRoadSpeedLimitOffset")
       self.cruiseOnDist = self.params.get_float("CruiseOnDist") * 0.01
-      cruiseSpeed1 = self.params.get_float("CruiseSpeed1")
-      cruiseSpeed2 = self.params.get_float("CruiseSpeed2")
-      cruiseSpeed3 = self.params.get_float("CruiseSpeed3")
-      cruiseSpeed4 = self.params.get_float("CruiseSpeed4")
-      cruiseSpeed5 = self.params.get_float("CruiseSpeed5")
+      unit_factor = 1.0 if is_metric else CV.MPH_TO_KPH
+      cruiseSpeed1 = self.params.get_float("CruiseSpeed1") * unit_factor
+      cruiseSpeed2 = self.params.get_float("CruiseSpeed2") * unit_factor
+      cruiseSpeed3 = self.params.get_float("CruiseSpeed3") * unit_factor
+      cruiseSpeed4 = self.params.get_float("CruiseSpeed4") * unit_factor
+      cruiseSpeed5 = self.params.get_float("CruiseSpeed5") * unit_factor
       if cruiseSpeed1 <= 0:
         cruiseSpeed1 = self.nRoadLimitSpeed + self.autoRoadSpeedLimitOffset
       self._cruise_speed_table = [cruiseSpeed1, cruiseSpeed2, cruiseSpeed3, cruiseSpeed4, cruiseSpeed5]
 
   def update_v_cruise(self, CS, sm, is_metric):
     self._add_log("")
-    self.update_params()
+    self.update_params(is_metric)
     self.frame += 1
     if CS.gearShifter != GearShifter.drive:
       self.autoCruiseControl_cancel_timer = 20 * 100  # 20 sec
