@@ -154,8 +154,12 @@ class RadarInterfaceBase(ABC):
     self.init_done = False
 
   def estimate_dt(self, rcv_time):
-    if len(self.init_samples) > 50:
-      estimated_dt = np.mean(np.diff(self.init_samples[20:]))
+    if self.CP.radarTimeStep > 0.0:
+      self.dt = self.CP.radarTimeStep
+      self.init_done = True
+      print(f"Using radar dt: {self.dt} sec")
+    elif len(self.init_samples) > 100:
+      estimated_dt = np.mean(np.diff(self.init_samples[50:]))
       self.dt = estimated_dt
       self.init_done = True
       print(f"Estimated radar dt: {self.dt} sec")
