@@ -108,6 +108,7 @@ class Soundd:
     self.soundVolumeAdjust = 1.0
     self.carrot_count_down = 0
 
+    self.lang = self.params.get('LanguageSetting', encoding='utf8')
     self.load_sounds()
 
     self.current_alert = AudibleAlert.none
@@ -117,7 +118,6 @@ class Soundd:
     self.selfdrive_timeout_alert = False
 
     self.spl_filter_weighted = FirstOrderFilter(0, 2.5, FILTER_DT, initialized=False)
-    self.lang = self.params.get('LanguageSetting', encoding='utf8')
 
 
   def load_sounds(self):
