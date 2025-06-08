@@ -499,7 +499,7 @@ class DrivingModeDetector:
         self.speed_threshold = 2  # (km/h)
         self.accel_threshold = 1.5  # (m/s^2)
         self.distance_threshold = 12  # (m)
-        self.lead_speed_exit_threshold = 20  # (km/h)
+        self.lead_speed_exit_threshold = 35  # (km/h)
 
     def update_data(self, my_speed, lead_speed, my_accel, lead_accel, distance):
         # 1. 정체 조건: 앞차가 가까이 있고 정지된 상황
