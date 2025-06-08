@@ -54,7 +54,7 @@ def get_lag_adjusted_curvature(CP, v_ego, psis, curvatures, steer_actuator_delay
     psis_damping = 0.2
   else:
     psis_damping = 1.0
-  psi *= psis_damping
+  #psi *= psis_damping
 
 
   average_curvature_desired = psi / distance
