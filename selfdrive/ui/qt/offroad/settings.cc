@@ -702,7 +702,8 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   latLongToggles->addItem(new CValueControl("StopDistanceCarrot", "LONG: StopDistance (600)cm", "", "../assets/offroad/icon_logic.png", 300, 1000, 10));
   //latLongToggles->addItem(new CValueControl("TraffStopDistanceAdjust", "LONG: TrafficStopDistance adjust(150)cm", "", "../assets/offroad/icon_road.png", -1000, 1000, 10));
   latLongToggles->addItem(new CValueControl("JLeadFactor3", "LONG: Jerk Lead Factor (0)", "x0.01", "../assets/offroad/icon_logic.png", 0, 100, 5));
-  latLongToggles->addItem(new CValueControl("CruiseMaxVals1", "ACCEL:0km/h(160)", "Acceleration needed at specified speed.(x0.01m/s^2)", "../assets/offroad/icon_logic.png", 1, 250, 5));
+  latLongToggles->addItem(new CValueControl("CruiseMaxVals0", "ACCEL:0km/h(160)", "Acceleration needed at specified speed.(x0.01m/s^2)", "../assets/offroad/icon_logic.png", 1, 250, 5));
+  latLongToggles->addItem(new CValueControl("CruiseMaxVals1", "ACCEL:10km/h(160)", "Acceleration needed at specified speed.(x0.01m/s^2)", "../assets/offroad/icon_logic.png", 1, 250, 5));
   latLongToggles->addItem(new CValueControl("CruiseMaxVals2", "ACCEL:40km/h(120)", "Acceleration needed at specified speed.(x0.01m/s^2)", "../assets/offroad/icon_logic.png", 1, 250, 5));
   latLongToggles->addItem(new CValueControl("CruiseMaxVals3", "ACCEL:60km/h(100)", "Acceleration needed at specified speed.(x0.01m/s^2)", "../assets/offroad/icon_logic.png", 1, 250, 5));
   latLongToggles->addItem(new CValueControl("CruiseMaxVals4", "ACCEL:80km/h(80)", "Acceleration needed at specified speed.(x0.01m/s^2)", "../assets/offroad/icon_logic.png", 1, 250, 5));

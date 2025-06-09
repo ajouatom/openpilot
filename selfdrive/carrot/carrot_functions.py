@@ -39,7 +39,7 @@ class TrafficState(Enum):
   def __str__(self):
     return self.name
 
-A_CRUISE_MAX_BP_CARROT = [0., 40 * CV.KPH_TO_MS, 60 * CV.KPH_TO_MS, 80 * CV.KPH_TO_MS, 110 * CV.KPH_TO_MS, 140 * CV.KPH_TO_MS]
+A_CRUISE_MAX_BP_CARROT = [0., 10 * CV.KPH_TO_MS, 40 * CV.KPH_TO_MS, 60 * CV.KPH_TO_MS, 80 * CV.KPH_TO_MS, 110 * CV.KPH_TO_MS, 140 * CV.KPH_TO_MS]
 
 class CarrotPlanner:
   def __init__(self):
@@ -102,6 +102,7 @@ class CarrotPlanner:
     self.dynamicTFollow = 0.0
     self.dynamicTFollowLC = 0.0
 
+    self.cruiseMaxVals0 = 1.6
     self.cruiseMaxVals1 = 1.6
     self.cruiseMaxVals2 = 1.2
     self.cruiseMaxVals3 = 1.0
@@ -162,6 +163,7 @@ class CarrotPlanner:
       self.dynamicTFollow = self.params.get_float("DynamicTFollow") / 100.
       self.dynamicTFollowLC = self.params.get_float("DynamicTFollowLC") / 100.
     elif self.params_count == 30:
+      self.cruiseMaxVals0 = self.params.get_float("CruiseMaxVals0") / 100.
       self.cruiseMaxVals1 = self.params.get_float("CruiseMaxVals1") / 100.
       self.cruiseMaxVals2 = self.params.get_float("CruiseMaxVals2") / 100.
       self.cruiseMaxVals3 = self.params.get_float("CruiseMaxVals3") / 100.
@@ -179,7 +181,7 @@ class CarrotPlanner:
       self.params_count = 0
 
   def get_carrot_accel(self, v_ego):
-    cruiseMaxVals = [self.cruiseMaxVals1, self.cruiseMaxVals2, self.cruiseMaxVals3, self.cruiseMaxVals4, self.cruiseMaxVals5, self.cruiseMaxVals6]
+    cruiseMaxVals = [self.cruiseMaxVals0, self.cruiseMaxVals1, self.cruiseMaxVals2, self.cruiseMaxVals3, self.cruiseMaxVals4, self.cruiseMaxVals5, self.cruiseMaxVals6]
     factor = self.myHighModeFactor if self.myDrivingMode == DrivingMode.High else self.mySafeFactor
     return np.interp(v_ego, A_CRUISE_MAX_BP_CARROT, cruiseMaxVals) * factor
 
