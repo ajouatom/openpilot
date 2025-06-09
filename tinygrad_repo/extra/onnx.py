@@ -89,7 +89,7 @@ required_input_python_consts: dict[str, tuple[int, ...]] = {
 }
 
 cache_misses = 0
-@functools.lru_cache(None)
+@functools.cache
 def _cached_to_python_const(t:Tensor):
   if t.dtype is dtypes.uint8: return t.data().tobytes()
   if 0 in t.shape: return []
@@ -150,6 +150,9 @@ class OnnxRunner:
       else: real_fxn = fxn
       return real_fxn(*inps, **opts)
     raise NotImplementedError(f"{op=} not supported")
+
+  def get_empty_input_data(self, device:str|None=None) -> dict[str, Tensor]:
+    return {name:Tensor.empty(*spec.shape, device=device, dtype=spec.dtype) for name, spec in self.graph_inputs.items()}
 
   def __call__(self, inputs:dict[str, Any], debug=debug):
     for name, input_spec in self.graph_inputs.items():
@@ -281,6 +284,7 @@ def get_onnx_ops():
   # ***** Unary Ops (math) *****
   def Not(x:Tensor): return x.logical_not()
   def Clip(x: Tensor, min:Tensor|None=None, max:Tensor|None=None): return x if min is None and max is None else x.clip(min, max)
+  def IsInf(x:Tensor, detect_negative:int=1, detect_positive:int=1): return x.isinf(bool(detect_positive), bool(detect_negative))
 
   # ***** Unary Ops (activation) *****
   def Softmax_1(x:Tensor, axis:int=1): return x.softmax(axis)
@@ -289,13 +293,8 @@ def get_onnx_ops():
   def HardSigmoid(x:Tensor, alpha:float=0.2, beta:float=0.5): return (alpha*x + beta).clip(0, 1)
   def Gelu(x:Tensor, approximate:str|None=None): return x.gelu() if approximate == "tanh" else 0.5 * x * (1 + (x/math.sqrt(2)).erf())
   def BiasGelu(x: Tensor, bias: Tensor, approximate: str | None = None) -> Tensor: return Gelu(x + bias, approximate)
-  def FastGelu(x:Tensor, bias:Tensor|None=None):
-    # this is tanh approximated
-    return (x + bias).gelu() if bias is not None else x.gelu()
-  # TODO: fix this
-  def PRelu(X:Tensor, slope:Tensor):
-    slope = slope[0] if slope.shape[-1] != X.shape[-1] else slope
-    return (X > 0).where(X, X * slope)
+  def FastGelu(x:Tensor, bias:Tensor|None=None): return (x + bias).gelu() if bias is not None else x.gelu() # this is tanh approximated
+  def PRelu(X:Tensor, slope:Tensor): return (X > 0).where(X, X * slope)
   def LeakyRelu(X:Tensor, alpha:float=0.01): return X.leaky_relu(alpha)
   def ThresholdedRelu(X:Tensor, alpha:float=1.0): return (X > alpha).where(X, 0)
   def LogSoftmax(x: Tensor, axis:int=-1): return x.log_softmax(axis)
@@ -365,7 +364,6 @@ def get_onnx_ops():
   def Shrink(x:Tensor, bias:float=0.0, lambd:float=0.5): return (x < -lambd)*(x+bias) + (x > lambd)*(x-bias)
   def Transpose(x:Tensor, perm:list[int]|None=None): return x.permute(order=perm or list(range(x.ndim)[::-1]))
 
-  # TODO: add test for when axes is None
   def Squeeze(data:Tensor, axes:list[int]|None=None):
     return data.squeeze() if axes is None else functools.reduce(lambda d, dim: d.squeeze(dim), sorted(axes, reverse=True), data)
   def Unsqueeze(data:Tensor, axes:list[int]): return functools.reduce(lambda d, dim: d.unsqueeze(dim), sorted(axes), data)
@@ -724,8 +722,6 @@ def get_onnx_ops():
       ret = _clamp_cast((x / y_scale + 0.4999999 + y_zero_point).int(), out_dtype)
     else:
       ret = _clamp_cast(((x / y_scale).round() + y_zero_point), out_dtype)
-    # you need both NHWC=1 DONT_GROUP_REDUCES=1 for this to work
-    if getenv("NHWC") and len(ret.shape) == 4: return ret.permute(0,2,3,1).contiguous().permute(0,3,1,2)
     return ret.contiguous()
 
   def DynamicQuantizeLinear(x: Tensor):
@@ -737,10 +733,6 @@ def get_onnx_ops():
     return y, scale, zero_point
 
   def DequantizeLinear(x:Tensor, x_scale:Tensor, x_zero_point:Tensor|int=0, axis:int=1, block_size:int=0):
-    WEIGHT_SHIFT = 4
-    if getenv("NHWC") and len(x.shape) == 4 and x.shape[2:] == (1,1) and x.shape[1]%WEIGHT_SHIFT == 0:
-      # DSP swizzle memory
-      x = x.reshape(x.shape[0], x.shape[1]//WEIGHT_SHIFT, WEIGHT_SHIFT).permute(1,0,2).contiguous().permute(1,0,2).reshape(x.shape)
     x_scale, x_zero_point = _prepare_quantize(x, x_scale, x_zero_point, axis, block_size)
     return ((x.int() - x_zero_point) * x_scale).cast(x_scale.dtype)
 
@@ -769,7 +761,6 @@ def get_onnx_ops():
     return _op_integer(Tensor.matmul, [A,B], [a_zero_point,b_zero_point])
 
   # ***** Training Ops *****
-  # NOTE: onnx test coverage only covers `T==0` cases, so for all `T>0` this isn't tested
   # NOTE: onnx training ops actually don't need the state for optim, all the ops work in a functional way, but we still can reuse optim.py code
   @_onnx_training(3)
   def Adagrad(R:Tensor, T:int, *inputs:Tensor, decay_factor:float=0.0, epsilon:float=0.0, norm_coefficient:float=0.0):
@@ -786,7 +777,7 @@ def get_onnx_ops():
           norm_coefficient_post:float=0.0):
     from tinygrad.nn.optim import Adam as TinyAdam
     X, G, V, H = inputs
-    G, V, H = G.detach(), V.detach(), H.detach()  # TODO we shouldn't need these detaches
+    G, V, H = G.detach(), V.detach(), H.detach()
     X.grad = norm_coefficient * X.detach() + G
     opt = TinyAdam([X], b1=alpha, b2=beta, eps=epsilon)
     opt.m, opt.v, opt.lr = [V], [H], R
@@ -802,13 +793,12 @@ def get_onnx_ops():
 
   @_onnx_training(3)
   def Momentum(R:Tensor, T:int, *inputs:Tensor, alpha:float, beta:float, mode:str, norm_coefficient:float):
-    from tinygrad.nn.optim import SGD
-    X, G, V = inputs
-    G, V = G.detach(), V.detach()
-    X.grad = (norm_coefficient * X.detach() + G) * (beta if T > 0 else 1)
-    opt = SGD([X], momentum=alpha, nesterov=(mode=="nesterov"))
-    opt.b, opt.lr = [V], R
-    opt.step()
+    X, G, V = (i.detach() for i in inputs)
+    grad = norm_coefficient * X + G
+    # NOTE: this beta_adjusted term makes it so we can't use SGD for nesterov
+    beta_adjusted = beta if T > 0 else 1
+    V.assign(alpha * V + grad * beta_adjusted)
+    X.assign(X - R * (V if mode == "standard" else (grad + alpha * V)))
     return [X, V]
 
   def Gradient(*inputs:Tensor, y:str, intermediate_tensors:dict[str, Tensor], **_):
@@ -818,7 +808,7 @@ def get_onnx_ops():
   return {
     # Tensor ops
     **{op: getattr(Tensor, op.lower()) for op in ("Neg", "Reciprocal", "Pow", "Sqrt", "Sign", "Abs", "Exp", "Log", "Mish", "Sin", "Cos", "Tan",
-    "Asin", "Acos", "Atan", "Relu", "Sigmoid", "MatMul", "Floor", "Ceil", "IsInf", "IsNaN", "Softplus", "HardSwish", "Where", "Mul", "Sinh", "Cosh",
+    "Asin", "Acos", "Atan", "Relu", "Sigmoid", "MatMul", "Floor", "Ceil", "IsNaN", "Softplus", "HardSwish", "Where", "Mul", "Sinh", "Cosh",
     "Tanh", "Softsign", "Asinh", "Acosh", "Atanh",  "Elu", "Celu", "Selu", "Round", "Erf")},
     # Implemented ops
     **{name:obj for name,obj in locals().items() if isinstance(obj, types.FunctionType) and not name.startswith("_") and name[0].isupper()},

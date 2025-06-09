@@ -1,6 +1,6 @@
 from __future__ import annotations
 import os, functools, platform, time, re, contextlib, operator, hashlib, pickle, sqlite3, tempfile, pathlib, string, ctypes, sys, gzip, getpass
-import urllib.request, subprocess, shutil, math, contextvars, types, copyreg, inspect, importlib
+import urllib.request, subprocess, shutil, math, types, copyreg, inspect, importlib
 from dataclasses import dataclass
 from typing import Union, ClassVar, Optional, Iterable, Any, TypeVar, Callable, Sequence, TypeGuard, Iterator, Generic
 
@@ -50,7 +50,7 @@ def lo32(x:Any) -> Any: return x & 0xFFFFFFFF # Any is sint
 def hi32(x:Any) -> Any: return x >> 32 # Any is sint
 def data64(data:Any) -> tuple[Any, Any]: return (data >> 32, data & 0xFFFFFFFF) # Any is sint
 def data64_le(data:Any) -> tuple[Any, Any]: return (data & 0xFFFFFFFF, data >> 32) # Any is sint
-def getbits(value: int, start: int, end: int): return (value >> start) & ((1 << end-start+1) - 1)
+def getbits(value: int, start: int, end: int): return (value >> start) & ((1 << (end - start + 1)) - 1)
 def i2u(bits: int, value: int): return value if value >= 0 else (1<<bits)+value
 def merge_dicts(ds:Iterable[dict[T,U]]) -> dict[T,U]:
   kvs = set([(k,v) for d in ds for k,v in d.items()])
@@ -78,9 +78,9 @@ def pluralize(st:str, cnt:int): return f"{cnt} {st}"+('' if cnt == 1 else 's')
 # for length N coefficients `p`, returns p[0] * x**(N-1) + p[1] * x**(N-2) + ... + p[-2] * x + p[-1]
 def polyN(x:T, p:list[float]) -> T: return functools.reduce(lambda acc,c: acc*x+c, p, 0.0)  # type: ignore
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def to_function_name(s:str): return ''.join([c if c in (string.ascii_letters+string.digits+'_') else f'{ord(c):02X}' for c in ansistrip(s)])
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def getenv(key:str, default=0): return type(default)(os.getenv(key, default))
 def temp(x:str, append_user:bool=False) -> str:
   return (pathlib.Path(tempfile.gettempdir()) / (f"{x}.{getpass.getuser()}" if append_user else x)).as_posix()
@@ -115,8 +115,10 @@ FUSE_ARANGE, FUSE_CONV_BW = ContextVar("FUSE_ARANGE", 0), ContextVar("FUSE_CONV_
 SPLIT_REDUCEOP, NO_MEMORY_PLANNER, RING = ContextVar("SPLIT_REDUCEOP", 1), ContextVar("NO_MEMORY_PLANNER", 0), ContextVar("RING", 1)
 PICKLE_BUFFERS, PROFILE, LRU = ContextVar("PICKLE_BUFFERS", 1), ContextVar("PROFILE", getenv("VIZ")), ContextVar("LRU", 1)
 CACHELEVEL, IGNORE_BEAM_CACHE, DEVECTORIZE = ContextVar("CACHELEVEL", 2), ContextVar("IGNORE_BEAM_CACHE", 0), ContextVar("DEVECTORIZE", 1)
+DISABLE_COMPILER_CACHE = ContextVar("DISABLE_COMPILER_CACHE", 0)
 DONT_REALIZE_EXPAND, DONT_GROUP_REDUCES = ContextVar("DONT_REALIZE_EXPAND", 0), ContextVar("DONT_GROUP_REDUCES", 0)
-QUANTIZE, VALIDATE_WITH_CPU = ContextVar("QUANTIZE", 0), ContextVar("VALIDATE_WITH_CPU", 0)
+QUANTIZE, VALIDATE_WITH_CPU, IGNORE_OOB = ContextVar("QUANTIZE", 0), ContextVar("VALIDATE_WITH_CPU", 0), ContextVar("IGNORE_OOB", 1)
+CORRECT_DIVMOD_FOLDING = ContextVar("CORRECT_DIVMOD_FOLDING", 0)
 
 @dataclass(frozen=True)
 class Metadata:
@@ -126,7 +128,6 @@ class Metadata:
   def __hash__(self): return hash(self.name)
   def __repr__(self): return str(self) + (f" - {self.caller}" if self.caller else "")
   def __str__(self): return self.name + (" bw" if self.backward else "")
-_METADATA: contextvars.ContextVar[Optional[Metadata]] = contextvars.ContextVar("_METADATA", default=None)
 
 # **************** global state Counters ****************
 
@@ -184,7 +185,7 @@ def db_connection():
     # another connection has set it already or is in the process of setting it
     # that connection will lock the database
     with contextlib.suppress(sqlite3.OperationalError): _db_connection.execute("PRAGMA journal_mode=WAL").fetchone()
-    if DEBUG >= 7: _db_connection.set_trace_callback(print)
+    if DEBUG >= 8: _db_connection.set_trace_callback(print)
   return _db_connection
 
 def diskcache_clear():
@@ -228,7 +229,7 @@ def diskcache(func):
 
 # *** process replay ***
 
-CAPTURE_PROCESS_REPLAY = getenv("RUN_PROCESS_REPLAY") or getenv("CAPTURE_PROCESS_REPLAY")
+CAPTURE_PROCESS_REPLAY = getenv("CAPTURE_PROCESS_REPLAY")
 
 # *** http support ***
 
@@ -250,7 +251,7 @@ def fetch(url:str, name:Optional[Union[pathlib.Path, str]]=None, subdir:Optional
   else: fp = _ensure_downloads_dir() / (subdir or "") / ((name or hashlib.md5(url.encode('utf-8')).hexdigest()) + (".gunzip" if gunzip else ""))
   if not fp.is_file() or not allow_caching:
     (_dir := fp.parent).mkdir(parents=True, exist_ok=True)
-    with urllib.request.urlopen(url, timeout=10) as r:
+    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "tinygrad 0.10.3"}), timeout=10) as r:
       assert r.status == 200, r.status
       length = int(r.headers.get('content-length', 0)) if not gunzip else None
       readfile = gzip.GzipFile(fileobj=r) if gunzip else r
@@ -295,7 +296,7 @@ def to_mv(ptr:int, sz:int) -> memoryview: return memoryview(ctypes.cast(ptr, cty
 def mv_address(mv): return ctypes.addressof(ctypes.c_char.from_buffer(mv))
 def to_char_p_p(options: list[bytes], to_type=ctypes.c_char):
   return (ctypes.POINTER(to_type) * len(options))(*[ctypes.cast(ctypes.create_string_buffer(o), ctypes.POINTER(to_type)) for o in options])
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def init_c_struct_t(fields: tuple[tuple[str, ctypes._SimpleCData], ...]):
   class CStruct(ctypes.Structure):
     _pack_, _fields_ = 1, fields

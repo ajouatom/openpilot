@@ -12,6 +12,8 @@ function intersectRect(r1, r2) {
   return {x:r1.x+dx*scale, y:r1.y+dy*scale};
 }
 
+const rect = (s) => document.querySelector(s).getBoundingClientRect();
+
 let [workerUrl, worker, timeout] = [null, null, null];
 async function renderDag(graph, additions, recenter=false) {
   // start calculating the new layout (non-blocking)
@@ -33,16 +35,17 @@ async function renderDag(graph, additions, recenter=false) {
     d3.select("#bars").html("");
     const g = dagre.graphlib.json.read(e.data);
     // draw nodes
+    const STROKE_WIDTH = 1.4;
     const nodes = d3.select("#nodes").selectAll("g").data(g.nodes().map(id => g.node(id)), d => d).join("g")
       .attr("transform", d => `translate(${d.x},${d.y})`);
     nodes.selectAll("rect").data(d => [d]).join("rect").attr("width", d => d.width).attr("height", d => d.height).attr("fill", d => d.color)
-      .attr("x", d => -d.width/2).attr("y", d => -d.height/2).attr("style", d => d.style);
+      .attr("x", d => -d.width/2).attr("y", d => -d.height/2).attr("style", d => `stroke:#4a4b57; stroke-width:${STROKE_WIDTH}px; ${d.style}`);
     nodes.selectAll("g.label").data(d => [d]).join("g").attr("class", "label").attr("transform", d => {
       const x = (d.width-d.padding*2)/2;
-      const y = (d.height-d.padding*2)/2;
+      const y = (d.height-d.padding*2)/2+STROKE_WIDTH;
       return `translate(-${x}, -${y})`;
-     }).selectAll("text").data(d => [d.label.split("\n")]).join("text").selectAll("tspan").data(d => d).join("tspan").text(d => d).attr("x", "1")
-       .attr("dy", 14).attr("xml:space", "preserve");
+    }).selectAll("text").data(d => [d.label.split("\n")]).join("text").selectAll("tspan").data(d => d).join("tspan").text(d => d).attr("x", "0")
+      .attr("dy", 14).attr("xml:space", "preserve");
     // draw edges
     const line = d3.line().x(d => d.x).y(d => d.y).curve(d3.curveBasis);
     d3.select("#edges").selectAll("path.edgePath").data(g.edges()).join("path").attr("class", "edgePath").attr("d", (e) => {
@@ -52,6 +55,25 @@ async function renderDag(graph, additions, recenter=false) {
       points.push(intersectRect(g.node(e.w), points[points.length-1]));
       return line(points);
     }).attr("marker-end", "url(#arrowhead)");
+    const edgeLabels = d3.select("#edge-labels").selectAll("g").data(g.edges().filter(e => g.edge(e).label != null)).join("g").attr("transform", (e) => {
+      // get a point near the end
+      const [p1, p2] = g.edge(e).points.slice(-2);
+      const dx = p2.x-p1.x;
+      const dy = p2.y-p1.y;
+      // normalize to the unit vector
+      const len = Math.sqrt(dx*dx + dy*dy);
+      const ux = dx / len;
+      const uy = dy / len;
+      // avoid overlap with the arrowhead
+      const offset = 17;
+      const x = p2.x - ux * offset;
+      const y = p2.y - uy * offset;
+      return `translate(${x}, ${y})`
+    });
+    edgeLabels.selectAll("circle").data(e => [g.edge(e).label]).join("circle").attr("r", 5).attr("fill", "#FFD700").attr("stroke", "#B8860B")
+      .attr("stroke-width", 0.8);
+    edgeLabels.selectAll("text").data(e => [g.edge(e).label]).join("text").text(d => d).attr("text-anchor", "middle").attr("dy", "0.35em")
+      .attr("font-size", "6px").attr("fill", "black");
     if (recenter) document.getElementById("zoom-to-fit-btn").click();
   };
 
@@ -62,7 +84,7 @@ async function renderDag(graph, additions, recenter=false) {
 DTYPE_SIZE = {"bool": 1, "char": 1, "uchar": 1, "short": 2, "ushort": 2, "int": 4, "uint": 4,
               "long": 8, "ulong": 8, "half": 2, "bfloat": 2, "float": 4, "double": 8}
 function getBuffer(e) {
-  const [_, size, dtype, device, num] = e.label.split("\n");
+  const [_, size, dtype, num, device] = e.label.split("\n");
   return {nbytes:size*DTYPE_SIZE[dtype.split("dtypes.")[1]], dtype, device:device.split(" ")[1], num:parseInt(num.split(" ")[1])};
 }
 
@@ -164,7 +186,7 @@ function renderMemoryGraph(graph) {
     return `${p0.join(' ')} ${p1.join(' ')}`;
   }).attr("fill", d => `#${colors[d.buf.num % colors.length]}`).on("mouseover", (e, { id, buf, x }) => {
     d3.select(e.currentTarget).attr("stroke", "rgba(26, 27, 38, 0.8)").attr("stroke-width", 0.8);
-    const metadata = document.querySelector(".container.metadata");
+    const metadata = document.querySelector(".metadata");
     document.getElementById("current-buf")?.remove();
     const { num, dtype, nbytes, ...rest } = buf;
     let label = `<BUFFER n${num} ${dtype} ${nbytes_format(nbytes)}>\nalive for ${pluralize(x[x.length-1]-x[0], 'timestep')}`;
@@ -188,18 +210,18 @@ function renderMemoryGraph(graph) {
 
 // ** zoom and recentering
 
-const zoom = d3.zoom().scaleExtent([0.05, 2]).on("zoom", (e) => d3.select("#render").attr("transform", e.transform));
+const zoom = d3.zoom().on("zoom", (e) => d3.select("#render").attr("transform", e.transform));
 d3.select("#graph-svg").call(zoom);
 // zoom to fit into view
 document.getElementById("zoom-to-fit-btn").addEventListener("click", () => {
   const svg = d3.select("#graph-svg");
   svg.call(zoom.transform, d3.zoomIdentity);
-  const mainRect = document.querySelector(".main-container").getBoundingClientRect();
-  const x0 = document.querySelector(".kernel-list-parent").getBoundingClientRect().right;
-  const x1 = document.querySelector(".metadata").getBoundingClientRect().left;
+  const mainRect = rect(".main-container");
+  const x0 = rect(".kernel-list-parent").right;
+  const x1 = rect(".metadata-parent").left;
   const pad = 16;
   const R = { x: x0+pad, y: mainRect.top+pad, width: (x1>0 ? x1-x0 : mainRect.width)-2*pad, height: mainRect.height-2*pad };
-  const r = document.querySelector("#render").getBoundingClientRect();
+  const r = rect("#render");
   if (r.width === 0) return;
   const scale = Math.min(R.width/r.width, R.height/r.height);
   const [tx, ty] = [R.x+(R.width-r.width*scale)/2, R.y+(R.height-r.height*scale)/2];
@@ -274,8 +296,12 @@ async function main() {
     }
     for (const [j,u] of k[1].entries()) {
       const inner = ul.appendChild(document.createElement("ul"));
-      if (i === currentKernel && j === currentUOp) inner.className = "active";
+      if (i === currentKernel && j === currentUOp) {
+        inner.className = "active";
+        requestAnimationFrame(() => inner.scrollIntoView({ behavior: "auto", block: "nearest" }));
+      }
       inner.innerText = `${u.name ?? u.loc[0].replaceAll("\\", "/").split("/").pop()+':'+u.loc[1]} - ${u.match_count}`;
+      inner.style.marginLeft = `${8*u.depth}px`;
       inner.style.display = i === currentKernel && expandKernel ? "block" : "none";
       inner.onclick = (e) => {
         e.stopPropagation();
@@ -323,7 +349,6 @@ async function main() {
   const metadata = document.querySelector(".metadata");
   const [code, lang] = kernel.kernel_code != null ? [kernel.kernel_code, "cpp"] : [ret[currentRewrite].uop, "python"];
   metadata.replaceChildren(codeBlock(kernel.code_line, "python", { loc:kernel.loc, wrap:true }), codeBlock(code, lang, { wrap:false }));
-  appendResizer(metadata, { minWidth: 20, maxWidth: 50 });
   // ** rewrite steps
   if (kernel.match_count >= 1) {
     const rewriteList = metadata.appendChild(document.createElement("div"));
@@ -337,11 +362,13 @@ async function main() {
       if (s > 0 && s === currentRewrite) {
         const { upat, diff } = ret[s];
         metadata.appendChild(codeBlock(upat[1], "python", { loc:upat[0], wrap:true }));
-        const diffCode = metadata.appendChild(document.createElement("pre"));
-        diffCode.innerHTML = `<code>`+diff.map((line) => {
-          const color = line.startsWith("+") ? "#3aa56d" : line.startsWith("-") ? "#d14b4b" : "#f0f0f5";
-          return `<span style="color: ${color};">${line}</span>`;
-        }).join("<br>")+`</code>`;
+        const diffCode = metadata.appendChild(document.createElement("pre")).appendChild(document.createElement("code"));
+        for (const line of diff) {
+          const span = diffCode.appendChild(document.createElement("span"));
+          span.style.color = line.startsWith("+") ? "#3aa56d" : line.startsWith("-") ? "#d14b4b" : "#f0f0f5";
+          span.innerText = line;
+          diffCode.appendChild(document.createElement("br"));
+        }
         diffCode.className = "wrap";
       }
     }
@@ -351,10 +378,9 @@ async function main() {
 // **** collapse/expand
 
 let isCollapsed = false;
-const mainContainer = document.querySelector('.main-container');
 document.querySelector(".collapse-btn").addEventListener("click", (e) => {
   isCollapsed = !isCollapsed;
-  mainContainer.classList.toggle("collapsed", isCollapsed);
+  document.querySelector(".main-container").classList.toggle("collapsed", isCollapsed);
   e.currentTarget.blur();
   e.currentTarget.style.transform = isCollapsed ? "rotate(180deg)" : "rotate(0deg)";
 });
@@ -372,7 +398,7 @@ function appendResizer(element, { minWidth, maxWidth }, left=false) {
   handle.addEventListener("mousedown", (e) => {
     e.preventDefault();
     element.dataset.startX = e.clientX;
-    element.dataset.containerWidth = mainContainer.getBoundingClientRect().width;
+    element.dataset.containerWidth = rect(".main-container").width;
     element.dataset.startWidth = element.getBoundingClientRect().width;
     document.documentElement.addEventListener("mousemove", resize, false);
     document.documentElement.addEventListener("mouseup", () => {
@@ -382,37 +408,35 @@ function appendResizer(element, { minWidth, maxWidth }, left=false) {
   });
 }
 appendResizer(document.querySelector(".kernel-list-parent"), { minWidth: 15, maxWidth: 50 }, left=true);
+appendResizer(document.querySelector(".metadata-parent"), { minWidth: 20, maxWidth: 50 });
 
 // **** keyboard shortcuts
 
 document.addEventListener("keydown", async function(event) {
   const { currentKernel, currentUOp, currentRewrite, expandKernel } = state;
   // up and down change the UOp or kernel from the list
-  if (!expandKernel) {
-    if (event.key == "ArrowUp") {
-      event.preventDefault()
-      return setState({ currentUOp:0, currentRewrite:0, currentKernel:Math.max(0, currentKernel-1) });
+  if (event.key == "ArrowUp") {
+    event.preventDefault();
+    if (expandKernel) {
+      return setState({ currentRewrite:0, currentUOp:Math.max(0, currentUOp-1) });
     }
-    if (event.key == "ArrowDown") {
-      event.preventDefault()
-      return setState({ currentUOp:0, currentRewrite:0, currentKernel:Math.min(kernels.length-1, currentKernel+1) });
-    }
+    return setState({ currentUOp:0, currentRewrite:0, currentKernel:Math.max(0, currentKernel-1) });
   }
+  if (event.key == "ArrowDown") {
+    event.preventDefault();
+    if (expandKernel) {
+      const totalUOps = kernels[currentKernel][1].length-1;
+      return setState({ currentRewrite:0, currentUOp:Math.min(totalUOps, currentUOp+1) });
+    }
+    return setState({ currentUOp:0, currentRewrite:0, currentKernel:Math.min(kernels.length-1, currentKernel+1) });
+  }
+  // enter toggles focus on a single rewrite stage
   if (event.key == "Enter") {
     event.preventDefault()
     if (state.currentKernel === -1) {
       return setState({ currentKernel:0, expandKernel:true });
     }
     return setState({ currentUOp:0, currentRewrite:0, expandKernel:!expandKernel });
-  }
-  if (event.key == "ArrowUp") {
-    event.preventDefault()
-    return setState({ currentRewrite:0, currentUOp:Math.max(0, currentUOp-1) });
-  }
-  if (event.key == "ArrowDown") {
-    event.preventDefault()
-    const totalUOps = kernels[currentKernel][1].length-1;
-    return setState({ currentRewrite:0, currentUOp:Math.min(totalUOps, currentUOp+1) });
   }
   // left and right go through rewrites in a single UOp
   if (event.key == "ArrowLeft") {
@@ -424,7 +448,9 @@ document.addEventListener("keydown", async function(event) {
     const totalRewrites = ret.length-1;
     return setState({ currentRewrite:Math.min(totalRewrites, currentRewrite+1) });
   }
+  // space recenters the graph
   if (event.key == " ") {
+    event.preventDefault()
     document.getElementById("zoom-to-fit-btn").click();
   }
 });

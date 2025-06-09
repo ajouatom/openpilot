@@ -227,6 +227,19 @@ class TestOps(unittest.TestCase):
     for i in range(len(tor)):
       helper_test_op([], lambda: tor[i], lambda: ten[i], forward_only=True)
 
+  def test_unfold(self):
+    helper_test_op([(8,)], lambda x: x.unfold(0, 2, 1))
+    helper_test_op([(8,)], lambda x: x.unfold(0, 2, 2))
+    helper_test_op([(8,)], lambda x: x.unfold(0, 7, 3))
+    helper_test_op([(3,3,3)], lambda x: x.unfold(2, 2, 8))
+    helper_test_op([(3,3,3)], lambda x: x.unfold(1, 0, 8))
+    helper_test_op([(3,3,3,3,3)], lambda x: x.unfold(-1, 2, 2))
+
+    self.helper_test_exception([(8,)], lambda x: x.unfold(0, 9, 3), lambda x: x.unfold(0, 9, 3), expected=RuntimeError)
+    self.helper_test_exception([(8,)], lambda x: x.unfold(1, 8, 3), lambda x: x.unfold(1, 8, 3), expected=IndexError)
+    self.helper_test_exception([(8,)], lambda x: x.unfold(0, -1, 3), lambda x: x.unfold(0, 9, 3), expected=RuntimeError)
+    self.helper_test_exception([(8,)], lambda x: x.unfold(0, 1, -1), lambda x: x.unfold(0, 9, 3), expected=RuntimeError)
+
   def test_meshgrid(self):
     x, xt = torch.tensor([0.,1.,2.], requires_grad=True), Tensor([0.,1.,2.], requires_grad=True)
     y, yt = torch.tensor([3.,4.,5.,6.], requires_grad=True), Tensor([3.,4.,5.,6.], requires_grad=True)
@@ -556,6 +569,12 @@ class TestOps(unittest.TestCase):
       helper_test_op(None, lambda x,y: x.div(y, rounding_mode="trunc"), forward_only=True, vals=[[5.0, 6, 7, 0, -5, -6, -7], [denominator]])
       helper_test_op(None, lambda x,y: x.div(y, rounding_mode="floor"), forward_only=True, vals=[[5.0, 6, 7, 0, -5, -6, -7], [denominator]])
 
+    for numerator in [110, 111, -110, -111]:
+      for denominator in [55, -55]:
+        helper_test_op(None, lambda x,y: x.div(y, rounding_mode=None), forward_only=True, vals=[[numerator], [denominator]])
+        helper_test_op(None, lambda x,y: x.div(y, rounding_mode="trunc"), forward_only=True, vals=[[numerator], [denominator]])
+        helper_test_op(None, lambda x,y: x.div(y, rounding_mode="floor"), forward_only=True, vals=[[numerator], [denominator]])
+
     self.helper_test_exception(None, lambda x,y: x.div(y, rounding_mode="typo"), lambda x,y: x.div(y, rounding_mode="typo"), forward_only=True,
                                vals=[[5], [0]], expected=RuntimeError)
 
@@ -571,7 +590,7 @@ class TestOps(unittest.TestCase):
       np.testing.assert_equal(x.numpy(), 2**64 - 1)
     # 1 // 0 is device dependent, but it should not raise
     Tensor([1]).idiv(1).realize()
-    if not (CI and (Device.DEFAULT=="LLVM" or getenv("PTX"))):  # TODO: crashed in CI
+    if not CI:  # TODO: crashed in CI on some devices
       # ... because if might be in a where branch that the output is well defined
       t = Tensor([-1, 0, 1, 2])
       np.testing.assert_equal((t > 0).where(1//t, t).numpy(), [-1, 0, 1, 0])
@@ -2473,8 +2492,6 @@ class TestOps(unittest.TestCase):
       lambda x: torch.nn.functional.avg_pool2d(x, kernel_size=(111,28)),
       lambda x: Tensor.avg_pool2d(x, kernel_size=(111,28)), rtol=1e-5)
 
-  # TODO: linearizer block error
-  @unittest.expectedFailure
   def test_avg_pool3d_failure(self):
     with Context(NOOPT=0):
       helper_test_op([(1,1,16,16,16)],
@@ -3002,6 +3019,14 @@ class TestOpsUint8(unittest.TestCase):
     helper_test_op(None,
       lambda x: x.type(torch.uint8).min(),
       lambda x: x.cast(dtypes.uint8).min(), forward_only=True, vals=[[0, 128, 255, 64, 32, 16]])
+
+@unittest.skipUnless(is_dtype_supported(dtypes.bfloat16), f"no bfloat16 on {Device.DEFAULT}")
+class TestOpsBFloat16(unittest.TestCase):
+  def test_cast(self):
+    # TODO: helper_test_op breaks in unrelated part
+    # TODO: wrong output with GPU=1 / PYTHON=1 on mac
+    data = [60000.0, 70000.0, 80000.0]
+    np.testing.assert_allclose(Tensor(data).cast("bfloat16").numpy(), torch.tensor(data).type(torch.bfloat16).float().numpy())
 
 if __name__ == '__main__':
   np.random.seed(1337)

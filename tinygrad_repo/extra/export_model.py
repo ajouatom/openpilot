@@ -6,7 +6,7 @@ from tinygrad.engine.jit import TinyJit
 from tinygrad.nn.state import get_state_dict
 from tinygrad.helpers import Context
 from tinygrad.dtype import dtypes
-from tinygrad.ops import Ops
+from tinygrad.uop.ops import Ops
 import json
 from collections import OrderedDict
 
@@ -238,7 +238,7 @@ export default {model_name};
 """
 
 def export_model(model, target:str, *inputs, model_name: Optional[str] = "model", stream_weights=False):
-  assert Device.DEFAULT in EXPORT_SUPPORTED_DEVICE, "only WEBGPU, CPU, CUDA, GPU, METAL are supported"
+  assert Device.DEFAULT in EXPORT_SUPPORTED_DEVICE, f"only {', '.join(EXPORT_SUPPORTED_DEVICE)} are supported"
   with Context(JIT=2): run,special_names = jit_model(model, *inputs)
   functions, statements, bufs, bufs_to_save = compile_net(run, special_names)
   state = get_state_dict(model)
