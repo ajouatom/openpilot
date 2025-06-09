@@ -33,6 +33,10 @@ ACCEL_MAX = 2.5
 ACCEL_MIN = -4.0 #3.5
 FRICTION_THRESHOLD = 0.3
 
+# ISO 11270
+ISO_LATERAL_ACCEL = 3.0  # m/s^2
+ISO_LATERAL_JERK = 5.0  # m/s^3
+
 TORQUE_PARAMS_PATH = os.path.join(BASEDIR, 'torque_data/params.toml')
 TORQUE_OVERRIDE_PATH = os.path.join(BASEDIR, 'torque_data/override.toml')
 TORQUE_SUBSTITUTE_PATH = os.path.join(BASEDIR, 'torque_data/substitute.toml')
@@ -243,11 +247,11 @@ class CarInterfaceBase(ABC):
     """
     Parameters essential to controlling the car may be incomplete or wrong without FW versions or fingerprints.
     """
-    return cls.get_params(candidate, gen_empty_fingerprint(), list(), False, False)
+    return cls.get_params(candidate, gen_empty_fingerprint(), list(), False, False, False)
 
   @classmethod
   def get_params(cls, candidate: str, fingerprint: dict[int, dict[int, int]], car_fw: list[structs.CarParams.CarFw],
-                 alpha_long: bool, docs: bool) -> structs.CarParams:
+                 alpha_long: bool, is_release: bool, docs: bool) -> structs.CarParams:
     ret = CarInterfaceBase.get_std_params(candidate)
 
     platform = PLATFORMS[candidate]
@@ -260,7 +264,7 @@ class CarInterfaceBase(ABC):
     ret.tireStiffnessFactor = platform.config.specs.tireStiffnessFactor
     ret.flags |= int(platform.config.flags)
 
-    ret = cls._get_params(ret, candidate, fingerprint, car_fw, alpha_long, docs)
+    ret = cls._get_params(ret, candidate, fingerprint, car_fw, alpha_long, is_release, docs)
    
 
     if Params().get_bool("DisableMinSteerSpeed"):
@@ -279,7 +283,7 @@ class CarInterfaceBase(ABC):
   @staticmethod
   @abstractmethod
   def _get_params(ret: structs.CarParams, candidate, fingerprint: dict[int, dict[int, int]],
-                  car_fw: list[structs.CarParams.CarFw], alpha_long: bool, docs: bool) -> structs.CarParams:
+                  car_fw: list[structs.CarParams.CarFw], alpha_long: bool, is_release: bool, docs: bool) -> structs.CarParams:
     raise NotImplementedError
 
   @staticmethod
@@ -351,9 +355,6 @@ class CarInterfaceBase(ABC):
     tune.torque.latAccelOffset = 0.0
     tune.torque.steeringAngleDeadzoneDeg = steering_angle_deadzone_deg
 
-  def _update(self) -> structs.CarState:
-    return self.CS.update(self.can_parsers)
-
   def update(self, can_packets: list[tuple[int, list[CanData]]]) -> structs.CarState:
     # parse can
     for cp in self.can_parsers.values():
@@ -361,7 +362,7 @@ class CarInterfaceBase(ABC):
         cp.update_strings(can_packets)
 
     # get CarState
-    ret = self._update()
+    ret = self.CS.update(self.can_parsers)
 
     ret.canValid = all(cp.can_valid for cp in self.can_parsers.values())
     ret.canTimeout = any(cp.bus_timeout for cp in self.can_parsers.values())
@@ -399,6 +400,7 @@ class CarStateBase(ABC):
     self.steering_pressed_cnt = 0
     self.left_blinker_prev = False
     self.right_blinker_prev = False
+    self.low_speed_alert = False
     self.cluster_speed_hyst_gap = 0.0
     self.cluster_min_speed = 0.0  # min speed before dropping to 0
     self.secoc_key: bytes = b"00" * 16
