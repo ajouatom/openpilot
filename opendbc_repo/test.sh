@@ -7,10 +7,15 @@ cd $DIR
 source ./setup.sh
 
 # *** build ***
-scons -j8 "$@"
+scons -j8
 
-# *** lint + test ***
-lefthook run test
+# *** lint ***
+# TODO: pre-commit is slow; replace it with openpilot's "op lint"
+#pre-commit run --all-files
+ruff check .
+
+# *** test ***
+pytest -n8 --ignore opendbc/safety
 
 # *** all done ***
 GREEN='\033[0;32m'

@@ -19,7 +19,7 @@ def set_time(new_time):
 
   cloudlog.debug(f"Setting time to {new_time}")
   print(f"GPS Setting time to {new_time}   => ignored")
-  #return
+  return
   try:
     subprocess.run(f"TZ=UTC date -s '{new_time}'", shell=True, check=True)
   except subprocess.CalledProcessError:

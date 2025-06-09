@@ -194,12 +194,10 @@ struct CarState {
   steeringTorque @8 :Float32;      # TODO: standardize units
   steeringTorqueEps @27 :Float32;  # TODO: standardize units
   steeringPressed @9 :Bool;        # if the user is using the steering wheel
-  steeringDisengage @58 :Bool;     # more force than steeringPressed, disengages for applicable brands
   steerFaultTemporary @35 :Bool;   # temporary EPS fault
   steerFaultPermanent @36 :Bool;   # permanent EPS fault
   invalidLkasSetting @55 :Bool;    # stock LKAS is incorrectly configured (i.e. on or off)
   stockAeb @30 :Bool;
-  stockLkas @59 :Bool;
   stockFcw @31 :Bool;
   espDisabled @32 :Bool;
   accFaulted @42 :Bool;
@@ -207,7 +205,6 @@ struct CarState {
   espActive @51 :Bool;
   vehicleSensorsInvalid @52 :Bool;  # invalid steering angle readings, etc.
   lowSpeedAlert @56 :Bool;  # lost steering control due to a dynamic min steering speed
-  blockPcmEnable @60 :Bool;  # whether to allow PCM to enable this frame
 
   # cruise state
   cruiseState @10 :CruiseState;
@@ -239,9 +236,9 @@ struct CarState {
   # process meta
   cumLagMs @50 :Float32;
 
-  vCluRatio @68 :Float32;
-  logCarrot @69 :Text;
-  softHoldActive @70 :Int16;    #0: not active, 1: active ready, 2: activated
+  vCluRatio @58 :Float32;
+  logCarrot @59 :Text;
+  softHoldActive @60 :Int16;    #0: not active, 1: active ready, 2: activated
   activateCruise @61 :Int16;
   latEnabled @62 :Bool;
   pcmCruiseGap @63 :Int16;      #0: can't read, 1,2,3,4: gap setting

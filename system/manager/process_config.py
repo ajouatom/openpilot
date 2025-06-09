@@ -1,6 +1,6 @@
 import os
 import operator
-import platform
+import importlib.util
 
 from cereal import car
 from openpilot.common.params import Params
@@ -85,18 +85,19 @@ procs = [
 
   NativeProcess("camerad", "system/camerad", ["./camerad"], driverview, enabled=not WEBCAM),
   PythonProcess("webcamerad", "tools.webcam.camerad", driverview, enabled=WEBCAM),
-  NativeProcess("logcatd", "system/logcatd", ["./logcatd"], only_onroad, platform.system() != "Darwin"),
-  NativeProcess("proclogd", "system/proclogd", ["./proclogd"], only_onroad, platform.system() != "Darwin"),
+  NativeProcess("logcatd", "system/logcatd", ["./logcatd"], only_onroad),
+  NativeProcess("proclogd", "system/proclogd", ["./proclogd"], only_onroad),
   PythonProcess("micd", "system.micd", iscar),
   PythonProcess("timed", "system.timed", always_run, enabled=not PC),
 
-  PythonProcess("modeld", "selfdrive.modeld.modeld", only_onroad),
-  PythonProcess("dmonitoringmodeld", "selfdrive.modeld.dmonitoringmodeld", enable_dm, enabled=(WEBCAM or not PC)),
-
-  PythonProcess("sensord", "system.sensord.sensord", only_onroad, enabled=not PC),
+  # TODO: Make python process once TG allows opening QCOM from child pro
+  # https://github.com/tinygrad/tinygrad/blob/ac9c96dae1656dc220ee4acc39cef4dd449aa850/tinygrad/device.py#L26
+  NativeProcess("modeld", "selfdrive/modeld", ["./modeld.py"], only_onroad),
+  NativeProcess("dmonitoringmodeld", "selfdrive/modeld", ["./dmonitoringmodeld.py"], enable_dm, enabled=(WEBCAM or not PC)),
   #NativeProcess("mapsd", "selfdrive/navd", ["./mapsd"], only_onroad),
   #NativeProcess("mapsd", "selfdrive/navd", ["./mapsd"], always_run),
   #PythonProcess("navmodeld", "selfdrive.modeld.navmodeld", only_onroad),
+  NativeProcess("sensord", "system/sensord", ["./sensord"], only_onroad, enabled=not PC),
   NativeProcess("ui", "selfdrive/ui", ["./ui"], always_run, watchdog_max_dt=(5 if not PC else None)),
   PythonProcess("soundd", "selfdrive.ui.soundd", only_onroad),
   NativeProcess("locationd", "selfdrive/locationd", ["./locationd"], only_onroad),
