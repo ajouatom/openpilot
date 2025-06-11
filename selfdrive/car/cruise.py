@@ -253,6 +253,7 @@ class VCruiseCarrot:
       self._cruise_button_mode = self.params.get_int("CruiseButtonMode")
       self._lfa_button_mode = self.params.get_int("LfaButtonMode")
       self.autoRoadSpeedLimitOffset = self.params.get_int("AutoRoadSpeedLimitOffset")
+      self.autoNaviSpeedSafetyFactor = self.params.get_float("AutoNaviSpeedSafetyFactor") * 0.01
       self.cruiseOnDist = self.params.get_float("CruiseOnDist") * 0.01
       unit_factor = 1.0 if is_metric else CV.MPH_TO_KPH
       cruiseSpeed1 = self.params.get_float("CruiseSpeed1") * unit_factor
@@ -261,7 +262,10 @@ class VCruiseCarrot:
       cruiseSpeed4 = self.params.get_float("CruiseSpeed4") * unit_factor
       cruiseSpeed5 = self.params.get_float("CruiseSpeed5") * unit_factor
       if cruiseSpeed1 <= 0:
-        cruiseSpeed1 = self.nRoadLimitSpeed + self.autoRoadSpeedLimitOffset
+        if self.autoRoadSpeedLimitOffset < 0:
+          cruiseSpeed1 = self.nRoadLimitSpeed * self.autoNaviSpeedSafetyFactor
+        else:
+          cruiseSpeed1 = self.nRoadLimitSpeed + self.autoRoadSpeedLimitOffset
       self._cruise_speed_table = [cruiseSpeed1, cruiseSpeed2, cruiseSpeed3, cruiseSpeed4, cruiseSpeed5]
 
   def update_v_cruise(self, CS, sm, is_metric):
