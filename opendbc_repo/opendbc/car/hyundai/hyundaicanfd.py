@@ -598,8 +598,13 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
       # ADAS 콤마연결하면.. 0번에서.. (카메라혹은 다른곳에서)
       # 카메라 콤마연결+롱컨개조 하면.. 2번에서 데이터가 나옴..(카메라혹은 ADAS)
       if frame % 10 == 0:
-
-        pass
+        if CS.cluster_speed_limit_msg is not None:
+          values = CS.cluster_speed_limit_msg
+          values["SPEED_LIMIT_1"] = 100
+          values["SPEED_LIMIT_2"] = 100
+          values["SPEED_LIMIT_3"] = 105
+          #values["COUNTER"] = (values["COUNTER"] + 1) % 256
+          ret.append(packer.make_can_msg("CLUSTER_SPEED_LIMIT", CAN.CAM, values))
 
   return ret
 

@@ -76,6 +76,7 @@ class CarState(CarStateBase):
 
     self.cruise_buttons_msg = None
     self.hda2_lfa_block_msg = None
+    self.cluster_speed_limit_msg = None
 
     # On some cars, CLU15->CF_Clu_VehicleSpeed can oscillate faster than the dash updates. Sample at 5 Hz
     self.cluster_speed = 0
@@ -461,6 +462,9 @@ class CarState(CarStateBase):
       if "TCS" in cp.vl:
         self.tcs_info_373 = copy.copy(cp.vl.get("TCS", {}))
 
+      if "CLUSTER_SPEED_LIMIT" in cp.vl:
+        self.cluster_speed_limit_msg = copy.copy(cp.vl.get("CLUSTER_SPEED_LIMIT", {}))
+
     if "GEAR" in cp.vl:
       ret.gearStep = cp.vl["GEAR"]["GEAR_STEP"]
     elif "GEAR_ALT" in cp.vl:
@@ -625,6 +629,8 @@ class CarState(CarStateBase):
 
     #if not (CP.flags & HyundaiFlags.CANFD_HDA2) and CP.extFlags & HyundaiExtFlags.NAVI_CLUSTER.value and (CP.extFlags & HyundaiExtFlags.SCC_BUS2.value) :
     #  cam_messages.append(("CLUSTER_SPEED_LIMIT", 10))
+    if Params().get_int("CanfdDebug") > 0:
+      cam_messages.append(("CLUSTER_SPEED_LIMIT", 10))
 
     ## BSM신호가 ADAS인경우 BUS2로 개조되고, 독립인경우 ECAN에서 들어옴.
     # 개조, 독립 EV6: 1, 1 => False, inADAS: 1, 0 => True
