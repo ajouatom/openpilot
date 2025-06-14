@@ -141,6 +141,7 @@ class DesireHelper:
     self.turn_desire_state = False
     self.desire_disable_count = 0
     self.blindspot_detected_counter = 0
+    self.lane_width_base = 1.8
 
   def check_lane_state(self, modeldata):
     self.lane_width_left, self.distance_to_road_edge_left, self.distance_to_road_edge_left_far, lane_prob_left = calculate_lane_width(modeldata.laneLines[0], modeldata.laneLineProbs[0],
@@ -149,7 +150,7 @@ class DesireHelper:
                                                                                                     modeldata.laneLines[2], modeldata.roadEdges[1])
     self.lane_exist_left_count.update(lane_prob_left)
     self.lane_exist_right_count.update(lane_prob_right)
-    min_lane_width = 2.8
+    min_lane_width = self.lane_width_base + 0.8 #2.8
     self.lane_width_left_count.update(self.lane_width_left > min_lane_width)
     self.lane_width_right_count.update(self.lane_width_right > min_lane_width)
     self.road_edge_left_count.update(self.distance_to_road_edge_left > min_lane_width)
@@ -217,8 +218,11 @@ class DesireHelper:
       if self.atc_active != 2:
         below_lane_change_speed = False
         atc_blinker_state = BLINKER_LEFT if atc_type in ["fork left", "atc left"] else BLINKER_RIGHT
+        if self.atc_active != 1:
+          self.lane_width_base = self.lane_width_left if atc_blinker_state == BLINKER_LEFT else self.lane_width_left
         self.atc_active = 1
     else:
+      self.lane_width_base = 1.8
       self.atc_active = 0
     if driver_blinker_state != BLINKER_NONE and atc_blinker_state != BLINKER_NONE and driver_blinker_state != atc_blinker_state:
       atc_blinker_state = BLINKER_NONE
