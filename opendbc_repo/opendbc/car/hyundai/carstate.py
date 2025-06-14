@@ -600,6 +600,8 @@ class CarState(CarStateBase):
     # 어떤차는 bus2에 있음, 내차는 bus0에 있는데.... 이건 옆두부와 관련이 없나?
     #if CP.flags & HyundaiFlags.CANFD_HDA2:
     #  pt_messages.append(("CLUSTER_SPEED_LIMIT", 10))
+    if Params().get_int("CanfdDebug") > 0:
+      pt_messages.append(("CLUSTER_SPEED_LIMIT", 10))
 
     cam_messages = []
     if CP.flags & HyundaiFlags.CANFD_HDA2 and not (CP.flags & HyundaiFlags.CAMERA_SCC.value):
@@ -629,8 +631,6 @@ class CarState(CarStateBase):
 
     #if not (CP.flags & HyundaiFlags.CANFD_HDA2) and CP.extFlags & HyundaiExtFlags.NAVI_CLUSTER.value and (CP.extFlags & HyundaiExtFlags.SCC_BUS2.value) :
     #  cam_messages.append(("CLUSTER_SPEED_LIMIT", 10))
-    if Params().get_int("CanfdDebug") > 0:
-      cam_messages.append(("CLUSTER_SPEED_LIMIT", 10))
 
     ## BSM신호가 ADAS인경우 BUS2로 개조되고, 독립인경우 ECAN에서 들어옴.
     # 개조, 독립 EV6: 1, 1 => False, inADAS: 1, 0 => True
