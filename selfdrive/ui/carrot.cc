@@ -499,7 +499,8 @@ public:
     }
 };
 
-class ModelDrawer {
+class ModelDrawer : public QObject{
+      Q_OBJECT
 protected:
     template <class T>
     float interp(float x, std::initializer_list<T> x_list, std::initializer_list<T> y_list, bool extrapolate)
