@@ -4,6 +4,11 @@
 #include <cmath>
 #include <limits>
 
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonValue>
+#include <QJsonArray>
+
 //#define __TEST
 //#define __UI_TEST
 
@@ -1837,11 +1842,6 @@ private:
     }
 };
 
-
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonValue>
-#include <QJsonArray>
 
 typedef struct {
     float x, y, d, v, y_rel, v_lat, radar;
