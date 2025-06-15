@@ -1254,9 +1254,13 @@ This may take up to a minute.</source>
       <source>Laneless</source>
       <translation>레인리스</translation>
     </message>
+  </context>
+  <context>
+  <name>PathEndDrawer</name>
     <message>
       <source>Signal slowing</source>
       <translation>신호감속중</translation>
     </message>
   </context>
+
 </TS>
