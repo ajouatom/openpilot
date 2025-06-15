@@ -4,6 +4,7 @@ from openpilot.common.realtime import DT_MDL
 import numpy as np
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.common.params import Params
+from collections import deque
 
 LaneChangeState = log.LaneChangeState
 LaneChangeDirection = log.LaneChangeDirection
@@ -106,6 +107,8 @@ class DesireHelper:
     self.desireLog = ""
     self.lane_width_left = 0
     self.lane_width_right = 0
+    self.lane_width_left_diff = 0
+    self.lane_width_right_diff = 0
     self.distance_to_road_edge_left = 0
     self.distance_to_road_edge_right = 0
     self.distance_to_road_edge_left_far = 0
@@ -122,6 +125,8 @@ class DesireHelper:
     self.available_right_lane = False
     self.available_left_edge = False
     self.available_right_edge = False
+    self.lane_width_left_queue = deque(maxlen=int(0.2/DT_MDL))
+    self.lane_width_right_queue = deque(maxlen=int(0.2/DT_MDL))
 
     self.lane_available_last = False
     self.edge_available_last = False
@@ -141,16 +146,23 @@ class DesireHelper:
     self.turn_desire_state = False
     self.desire_disable_count = 0
     self.blindspot_detected_counter = 0
-    self.lane_width_base = 1.8
 
   def check_lane_state(self, modeldata):
-    self.lane_width_left, self.distance_to_road_edge_left, self.distance_to_road_edge_left_far, lane_prob_left = calculate_lane_width(modeldata.laneLines[0], modeldata.laneLineProbs[0],
+    lane_width_left, self.distance_to_road_edge_left, self.distance_to_road_edge_left_far, lane_prob_left = calculate_lane_width(modeldata.laneLines[0], modeldata.laneLineProbs[0],
                                                                                                  modeldata.laneLines[1], modeldata.roadEdges[0])
-    self.lane_width_right, self.distance_to_road_edge_right, self.distance_to_road_edge_right_far, lane_prob_right = calculate_lane_width(modeldata.laneLines[3], modeldata.laneLineProbs[3],
+    lane_width_right, self.distance_to_road_edge_right, self.distance_to_road_edge_right_far, lane_prob_right = calculate_lane_width(modeldata.laneLines[3], modeldata.laneLineProbs[3],
                                                                                                     modeldata.laneLines[2], modeldata.roadEdges[1])
     self.lane_exist_left_count.update(lane_prob_left)
     self.lane_exist_right_count.update(lane_prob_right)
-    min_lane_width = self.lane_width_base + 0.8 #2.8
+    
+    self.lane_width_left_queue.append(lane_width_left)
+    self.lane_width_right_queue.append(lane_width_right)
+    self.lane_width_left = np.mean(self.lane_width_left_queue)
+    self.lane_width_right = np.mean(self.lane_width_right_queue)
+    self.lane_width_left_diff = self.lane_width_left_queue[-1] - self.lane_width_left_queue[0]
+    self.lane_width_right_diff = self.lane_width_right_queue[-1] - self.lane_width_right_queue[0]
+    
+    min_lane_width = 2.0
     self.lane_width_left_count.update(self.lane_width_left > min_lane_width)
     self.lane_width_right_count.update(self.lane_width_right > min_lane_width)
     self.road_edge_left_count.update(self.distance_to_road_edge_left > min_lane_width)
@@ -218,11 +230,8 @@ class DesireHelper:
       if self.atc_active != 2:
         below_lane_change_speed = False
         atc_blinker_state = BLINKER_LEFT if atc_type in ["fork left", "atc left"] else BLINKER_RIGHT
-        if self.atc_active != 1:
-          self.lane_width_base = self.lane_width_left if atc_blinker_state == BLINKER_LEFT else self.lane_width_left
         self.atc_active = 1
     else:
-      self.lane_width_base = 1.8
       self.atc_active = 0
     if driver_blinker_state != BLINKER_NONE and atc_blinker_state != BLINKER_NONE and driver_blinker_state != atc_blinker_state:
       atc_blinker_state = BLINKER_NONE
@@ -264,7 +273,11 @@ class DesireHelper:
       lane_appeared = False
       self.object_detected_count = 0
 
-    lane_availabled = not self.lane_available_last and lane_available
+    #lane_availabled = not self.lane_available_last and lane_available
+    lane_availabled = False
+    lane_width_diff = self.lane_width_left_diff if atc_blinker_state == BLINKER_LEFT else self.lane_width_right_diff
+    if lane_width_diff > 0.8:
+      lane_availabled = True
     edge_availabled = not self.edge_available_last and edge_available
     side_object_detected = self.object_detected_count > -0.3 / DT_MDL
 
@@ -273,7 +286,8 @@ class DesireHelper:
       auto_lane_change_available = lane_available
     else:
       auto_lane_change_blocked = ((atc_blinker_state == BLINKER_LEFT) and (driver_blinker_state != BLINKER_LEFT))
-      auto_lane_change_available = not auto_lane_change_blocked and (lane_availabled or edge_availabled or lane_appeared) and not side_object_detected
+      #auto_lane_change_available = not auto_lane_change_blocked and edge_available and (lane_availabled or edge_availabled or lane_appeared) and not side_object_detected
+      auto_lane_change_available = not auto_lane_change_blocked and edge_available and (lane_availabled or lane_appeared) and not side_object_detected
 
     if not lateral_active or self.lane_change_timer > LANE_CHANGE_TIME_MAX:
       #print("Desire canceled")
