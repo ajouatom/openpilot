@@ -67,7 +67,7 @@ def calculate_lane_width(lane, lane_prob, current_lane, road_edge):
   road_edge_y = np.interp(t, ModelConstants.T_IDXS, road_edge.y)
   distance_to_road_edge = abs(current_lane_y - road_edge_y)
   distance_to_road_edge_far = abs(current_lane_y - np.interp(2.0, ModelConstants.T_IDXS, road_edge.y))
-  return min(distance_to_lane, distance_to_road_edge), distance_to_road_edge, distance_to_road_edge_far, lane_prob > 0.5
+  return min(distance_to_lane, distance_to_road_edge), distance_to_road_edge, distance_to_road_edge_far, lane_prob > 0.3
 
 class ExistCounter:
   def __init__(self):
@@ -276,7 +276,7 @@ class DesireHelper:
     #lane_availabled = not self.lane_available_last and lane_available
     lane_availabled = False
     lane_width_diff = self.lane_width_left_diff if atc_blinker_state == BLINKER_LEFT else self.lane_width_right_diff
-    if lane_width_diff > 0.8:
+    if lane_width_diff > 0.5:
       lane_availabled = True
     edge_availabled = not self.edge_available_last and edge_available
     side_object_detected = self.object_detected_count > -0.3 / DT_MDL
