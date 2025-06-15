@@ -237,6 +237,32 @@
     },
     {
       "group": "조향튜닝",
+      "name": "CustomSteerDeltaUpLC",
+      "title": "_CustomSteerDeltaUpLC(0)",
+      "descr": "차선변경시 적용, 토크조향",
+      "egroup": "LAT",
+      "etitle": "_CustomSteerDeltaUpLC(0)",
+      "edescr": "for LaneChange, torque steer only",
+      "min": 0,
+      "max": 50,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "조향튜닝",
+      "name": "CustomSteerDeltaDownLC",
+      "title": "_CustomSteerDeltaDownLC(0)",
+      "descr": "차선변경시 적용, 토크조향",
+      "egroup": "LAT",
+      "etitle": "_CustomSteerDeltaDownLC(0)",
+      "edescr": "for LaneChange, torque steer only",
+      "min": 0,
+      "max": 50,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "조향튜닝",
       "name": "SteerActuatorDelay",
       "title": "SteerActuatorDelay(30)",
       "descr": "조향지연값, 0:LiveDelay",

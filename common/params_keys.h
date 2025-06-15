@@ -261,6 +261,8 @@ inline static std::unordered_map<std::string, uint32_t> keys = {
     {"CustomSteerMax", PERSISTENT},
     {"CustomSteerDeltaUp", PERSISTENT},
     {"CustomSteerDeltaDown", PERSISTENT},
+    {"CustomSteerDeltaUpLC", PERSISTENT},
+    {"CustomSteerDeltaDownLC", PERSISTENT},
     {"SpeedFromPCM", PERSISTENT},
     {"MaxTimeOffroadMin", PERSISTENT},
     {"DisableDM", PERSISTENT},

@@ -96,6 +96,9 @@ class CarController(CarControllerBase):
     self.activeCarrot = 0
     self.camera_scc_params = Params().get_int("HyundaiCameraSCC")
 
+    self.steerDeltaUpOrg = self.steerDeltaUp = self.steerDeltaUpLC = self.params.STEER_DELTA_UP
+    self.steerDeltaDownOrg = self.steerDeltaDown = self.steerDeltaDownLC = self.params.STEER_DELTA_DOWN
+
   def update(self, CC, CS, now_nanos):
 
     if self.frame % 50 == 0:
@@ -104,14 +107,30 @@ class CarController(CarControllerBase):
       steerMax = params.get_int("CustomSteerMax")
       steerDeltaUp = params.get_int("CustomSteerDeltaUp")
       steerDeltaDown = params.get_int("CustomSteerDeltaDown")
+      steerDeltaUpLC = params.get_int("CustomSteerDeltaUpLC")
+      steerDeltaDownLC = params.get_int("CustomSteerDeltaDownLC")
       if steerMax > 0:
         self.params.STEER_MAX = steerMax
       if steerDeltaUp > 0:
-        self.params.STEER_DELTA_UP = steerDeltaUp
+        self.steerDeltaUp = steerDeltaUp
         #self.params.ANGLE_TORQUE_UP_RATE = steerDeltaUp
+      else:
+        self.steerDeltaUp = self.steerDeltaUpOrg
       if steerDeltaDown > 0:
-        self.params.STEER_DELTA_DOWN = steerDeltaDown
+        self.steerDeltaDown = steerDeltaDown
         #self.params.ANGLE_TORQUE_DOWN_RATE = steerDeltaDown
+      else:
+        self.steerDeltaDown = self.steerDeltaDownOrg
+
+      if steerDeltaUpLC > 0:
+        self.steerDeltaUpLC = steerDeltaUpLC
+      else:
+        self.steerDeltaUpLC = self.steerDeltaUp
+      if steerDeltaDownLC > 0:
+        self.steerDeltaDownLC = steerDeltaDownLC
+      else:
+        self.steerDeltaDownLC = self.steerDeltaDown
+        
       self.soft_hold_mode = 1 if params.get_int("AutoCruiseControl") > 1 else 2
       self.hapticFeedbackWhenSpeedCamera = int(params.get_int("HapticFeedbackWhenSpeedCamera"))
 
@@ -125,6 +144,13 @@ class CarController(CarControllerBase):
 
     actuators = CC.actuators
     hud_control = CC.hudControl
+
+    if hud_control.modelDesire in [3,4]:
+      self.params.STEER_DELTA_UP = self.steerDeltaUpLC
+      self.params.STEER_DELTA_DOWN = self.steerDeltaDownLC
+    else:
+      self.params.STEER_DELTA_UP = self.steerDeltaUp
+      self.params.STEER_DELTA_DOWN = self.steerDeltaDown
     
     angle_control = self.CP.flags & HyundaiFlags.ANGLE_CONTROL
 
