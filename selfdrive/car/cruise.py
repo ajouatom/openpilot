@@ -604,7 +604,10 @@ class VCruiseCarrot:
     if self.v_lead_kph + 5 > v_cruise_kph and v_cruise_kph < road_limit_kph and self.d_rel < 60:
       v_cruise_kph = min(v_cruise_kph + 5, road_limit_kph)
     elif self.autoRoadSpeedAdjust < 0 and self.nRoadLimitSpeed != self.nRoadLimitSpeed_last:  # 도로제한속도가 바뀌면, 바뀐속도로 속도를 바꿈.
-      v_cruise_kph = self.nRoadLimitSpeed + self.autoRoadSpeedLimitOffset
+      if self.autoRoadSpeedLimitOffset < 0:
+        v_cruise_kph = self.nRoadLimitSpeed * self.autoNaviSpeedSafetyFactor
+      else:
+        v_cruise_kph = self.nRoadLimitSpeed + self.autoRoadSpeedLimitOffset
     elif self.nRoadLimitSpeed < self.nRoadLimitSpeed_last and self.autoRoadSpeedAdjust > 0:
       new_road_limit_kph = self.nRoadLimitSpeed * self.autoRoadSpeedAdjust + v_cruise_kph * (1 - self.autoRoadSpeedAdjust)
       self._add_log(f"AutoSpeed change {v_cruise_kph} -> {new_road_limit_kph}")
