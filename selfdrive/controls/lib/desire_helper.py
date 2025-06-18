@@ -274,13 +274,14 @@ class DesireHelper:
       lane_appeared = False
       self.object_detected_count = 0
 
-    #lane_availabled = not self.lane_available_last and lane_available
-    lane_availabled = False
+    #lane_available_trigger = not self.lane_available_last and lane_available
+    lane_change_available = lane_available or edge_available  
+    lane_available_trigger = False
     lane_width_diff = self.lane_width_left_diff if atc_blinker_state == BLINKER_LEFT else self.lane_width_right_diff
     distance_to_road_edge = self.distance_to_road_edge_left if atc_blinker_state == BLINKER_LEFT else self.distance_to_road_edge_right
     lane_width_side = self.lane_width_left if atc_blinker_state == BLINKER_LEFT else self.lane_width_right
     if lane_width_diff > 0.5 and (lane_width_side < distance_to_road_edge):
-      lane_availabled = True
+      lane_available_trigger = True
     edge_availabled = not self.edge_available_last and edge_available
     side_object_detected = self.object_detected_count > -0.3 / DT_MDL
     lane_exist_counter = self.lane_exist_left_count.counter if blinker_state == BLINKER_LEFT else self.lane_exist_right_count.counter
@@ -288,12 +289,12 @@ class DesireHelper:
 
     if self.carrot_lane_change_count > 0:
       auto_lane_change_blocked = False
-      auto_lane_change_available = lane_available
+      auto_lane_change_trigger = lane_change_available
     else:
       auto_lane_change_blocked = ((atc_blinker_state == BLINKER_LEFT) and (driver_blinker_state != BLINKER_LEFT))
-      #auto_lane_change_available = not auto_lane_change_blocked and edge_available and (lane_availabled or edge_availabled or lane_appeared) and not side_object_detected
-      auto_lane_change_available = self.auto_lane_change_enable and not auto_lane_change_blocked and edge_available and (lane_availabled or lane_appeared) and not side_object_detected
-      self.desireLog = f"L:{self.auto_lane_change_enable},{auto_lane_change_blocked},E:{edge_available},A:{lane_availabled},{lane_appeared}={auto_lane_change_available}"
+      #auto_lane_change_trigger = not auto_lane_change_blocked and edge_available and (lane_available_trigger or edge_availabled or lane_appeared) and not side_object_detected
+      auto_lane_change_trigger = self.auto_lane_change_enable and not auto_lane_change_blocked and edge_available and (lane_available_trigger or lane_appeared) and not side_object_detected
+      self.desireLog = f"L:{self.auto_lane_change_enable},{auto_lane_change_blocked},E:{lane_available},{edge_available},A:{lane_available_trigger},{lane_appeared}={auto_lane_change_trigger}"
 
     if not lateral_active or self.lane_change_timer > LANE_CHANGE_TIME_MAX:
       #print("Desire canceled")
@@ -338,7 +339,7 @@ class DesireHelper:
         torque_applied = carstate.steeringPressed and torque_cond
         blindspot_detected = blindspot_cond
 
-        if not self.auto_lane_change_enable and lane_exist_counter > int(0.2 / DT_MDL):
+        if not self.auto_lane_change_enable and lane_exist_counter > int(0.2 / DT_MDL) and not lane_change_available:
           self.auto_lane_change_enable = True
 
         if blindspot_detected and not ignore_bsd:
@@ -350,7 +351,7 @@ class DesireHelper:
           self.lane_change_state = LaneChangeState.off
           self.lane_change_direction = LaneChangeDirection.none
         else:
-          if lane_available and self.lane_change_delay == 0:
+          if lane_change_available and self.lane_change_delay == 0:
             if self.blindspot_detected_counter > 0 and not ignore_bsd:  # BSD검출시
               if torque_applied and not block_lanechange_bsd:
                 self.lane_change_state = LaneChangeState.laneChangeStarting
@@ -361,7 +362,7 @@ class DesireHelper:
               self.lane_change_state = LaneChangeState.laneChangeStarting
             # ATC작동인경우 차선이 나타나거나 차선이 생기면 차선변경 시작
             # lane_appeared: 차선이 생기는건 안함.. 위험.
-            elif torque_applied or auto_lane_change_available:
+            elif torque_applied or auto_lane_change_trigger:
               self.lane_change_state = LaneChangeState.laneChangeStarting
 
       # LaneChangeState.laneChangeStarting
