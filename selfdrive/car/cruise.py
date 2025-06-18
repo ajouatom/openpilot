@@ -594,14 +594,14 @@ class VCruiseCarrot:
     return v_cruise_kph
 
   def _auto_speed_up(self, v_cruise_kph):
-    if self._pause_auto_speed_up:
-      return v_cruise_kph
+    #if self._pause_auto_speed_up:
+    #  return v_cruise_kph
 
     road_limit_kph = self.nRoadLimitSpeed * self.autoSpeedUptoRoadSpeedLimit
     if road_limit_kph < 1.0:
       return v_cruise_kph
 
-    if self.v_lead_kph + 5 > v_cruise_kph and v_cruise_kph < road_limit_kph and self.d_rel < 60:
+    if not self._pause_auto_speed_up and self.v_lead_kph + 5 > v_cruise_kph and v_cruise_kph < road_limit_kph and self.d_rel < 60:
       v_cruise_kph = min(v_cruise_kph + 5, road_limit_kph)
     elif self.autoRoadSpeedAdjust < 0 and self.nRoadLimitSpeed != self.nRoadLimitSpeed_last:  # 도로제한속도가 바뀌면, 바뀐속도로 속도를 바꿈.
       if self.autoRoadSpeedLimitOffset < 0:
