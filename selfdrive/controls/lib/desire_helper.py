@@ -291,6 +291,7 @@ class DesireHelper:
       auto_lane_change_blocked = ((atc_blinker_state == BLINKER_LEFT) and (driver_blinker_state != BLINKER_LEFT))
       #auto_lane_change_available = not auto_lane_change_blocked and edge_available and (lane_availabled or edge_availabled or lane_appeared) and not side_object_detected
       auto_lane_change_available = self.auto_lane_change_enable and not auto_lane_change_blocked and edge_available and (lane_availabled or lane_appeared) and not side_object_detected
+      self.desireLog = f"L:{self.auto_lane_change_enable},{auto_lane_change_blocked},E:{edge_available},A:{lane_availabled},{lane_appeared}={auto_lane_change_available}"
 
     if not lateral_active or self.lane_change_timer > LANE_CHANGE_TIME_MAX:
       #print("Desire canceled")
@@ -405,7 +406,7 @@ class DesireHelper:
 
     #print(f"desire = {self.desire}")
     #self.desireLog = f"desire = {self.desire}"
-    self.desireLog = f"rlane={self.distance_to_road_edge_right:.1f},{self.distance_to_road_edge_right_far:.1f}"
+    #self.desireLog = f"rlane={self.distance_to_road_edge_right:.1f},{self.distance_to_road_edge_right_far:.1f}"
 
     # Send keep pulse once per second during LaneChangeStart.preLaneChange
     if self.lane_change_state in (LaneChangeState.off, LaneChangeState.laneChangeStarting):
