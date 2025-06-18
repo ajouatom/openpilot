@@ -1561,7 +1561,9 @@ class CarrotServ:
         xSpdType = 100
 
       if xSpdType >= 0:
-        self.xSpdLimit = self.nRoadLimitSpeed
+        offset = 5 if self.is_metric else 5 * CV.MPH_TO_KPH
+        self.xSpdLimit = self.nRoadLimitSpeed + offset
+        
         self.xSpdDist = distance
         self.xSpdType =xSpdType 
     
