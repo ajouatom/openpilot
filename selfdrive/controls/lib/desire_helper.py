@@ -283,6 +283,8 @@ class DesireHelper:
       lane_availabled = True
     edge_availabled = not self.edge_available_last and edge_available
     side_object_detected = self.object_detected_count > -0.3 / DT_MDL
+    lane_exist_counter = self.lane_exist_left_count.counter if blinker_state == BLINKER_LEFT else self.lane_exist_right_count.counter
+
 
     if self.carrot_lane_change_count > 0:
       auto_lane_change_blocked = False
@@ -319,7 +321,6 @@ class DesireHelper:
         self.lane_change_delay = self.laneChangeDelay
 
         # 맨끝차선이 아니면(측면에 차선이 있으면), ATC 자동작동 안함.
-        lane_exist_counter = self.lane_exist_left_count.counter if blinker_state == BLINKER_LEFT else self.lane_exist_right_count.counter
         self.auto_lane_change_enable = False if lane_exist_counter > 0 else True
          
 
@@ -336,6 +337,9 @@ class DesireHelper:
         torque_cond, blindspot_cond = dir_map.get(self.lane_change_direction, (False, False))
         torque_applied = carstate.steeringPressed and torque_cond
         blindspot_detected = blindspot_cond
+
+        if not self.auto_lane_change_enable and lane_exist_counter > int(0.2 / DT_MDL):
+          self.auto_lane_change_enable = True
 
         if blindspot_detected and not ignore_bsd:
           self.blindspot_detected_counter = int(1.5 / DT_MDL)
