@@ -322,7 +322,8 @@ class DesireHelper:
         self.lane_change_delay = self.laneChangeDelay
 
         # 맨끝차선이 아니면(측면에 차선이 있으면), ATC 자동작동 안함.
-        self.auto_lane_change_enable = False if lane_exist_counter > 0 else True
+        #self.auto_lane_change_enable = False if lane_exist_counter > 0 else True
+        self.auto_lane_change_enable = False if lane_exist_counter > 0 or lane_change_available else True
          
 
       # LaneChangeState.preLaneChange
