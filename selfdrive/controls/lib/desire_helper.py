@@ -125,8 +125,8 @@ class DesireHelper:
     self.available_right_lane = False
     self.available_left_edge = False
     self.available_right_edge = False
-    self.lane_width_left_queue = deque(maxlen=int(0.5/DT_MDL))
-    self.lane_width_right_queue = deque(maxlen=int(0.5/DT_MDL))
+    self.lane_width_left_queue = deque(maxlen=int(1.0/DT_MDL))
+    self.lane_width_right_queue = deque(maxlen=int(1.0/DT_MDL))
 
     self.lane_available_last = False
     self.edge_available_last = False
