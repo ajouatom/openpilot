@@ -340,7 +340,7 @@ class DesireHelper:
         torque_applied = carstate.steeringPressed and torque_cond
         blindspot_detected = blindspot_cond
 
-        if not self.auto_lane_change_enable and lane_exist_counter > int(0.2 / DT_MDL) and not lane_change_available:
+        if not self.auto_lane_change_enable and not lane_available: #lane_exist_counter > int(0.2 / DT_MDL) and not lane_change_available:
           self.auto_lane_change_enable = True
 
         if blindspot_detected and not ignore_bsd:
