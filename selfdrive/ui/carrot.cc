@@ -1948,9 +1948,9 @@ public:
             }
             auto meta = sm["modelV2"].getModelV2().getMeta();
             QString desireLog = QString::fromStdString(meta.getDesireLog());
-            sprintf(carrot_man_debug, "model_kph= %d, %s, %dkm/h TBT(%d): %dm, CAM(%d): %dkm/h, %dm, ATC(%s), T(%d)",
-                (int)(velocity.getX()[32] * 3.6),
+            sprintf(carrot_man_debug, "%s, m_kph= %d, %dkm/h TBT(%d): %dm, CAM(%d): %dkm/h, %dm, ATC(%s), T(%d)",
                 desireLog.toStdString().c_str(),
+                (int)(velocity.getX()[32] * 3.6),
                 carrot_man.getDesiredSpeed(),
                 carrot_man.getXTurnInfo(),
                 carrot_man.getXDistToTurn(),
@@ -2046,7 +2046,7 @@ public:
     void drawDebug(UIState* s) {
         if (params.getInt("ShowDebugUI") > 1) {
             nvgTextAlign(s->vg, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM);
-            ui_draw_text(s, s->fb_w, s->fb_h - 10, carrot_man_debug, 35, COLOR_WHITE, BOLD, 1.0f, 1.0f);
+            ui_draw_text(s, s->fb_w, s->fb_h - 10, carrot_man_debug, 25, COLOR_WHITE, BOLD, 1.0f, 1.0f);
         }
     }
     void drawNaviPath(UIState* s) {

@@ -160,8 +160,8 @@ class DesireHelper:
     self.lane_width_right_queue.append(lane_width_right)
     self.lane_width_left = np.mean(self.lane_width_left_queue)
     self.lane_width_right = np.mean(self.lane_width_right_queue)
-    self.lane_width_left_diff = self.lane_width_left_queue[-1] - self.lane_width_left_queue[0]
-    self.lane_width_right_diff = self.lane_width_right_queue[-1] - self.lane_width_right_queue[0]
+    self.lane_width_left_diff = self.lane_width_left_queue[-1] - self.lane_width_left #self.lane_width_left_queue[0]
+    self.lane_width_right_diff = self.lane_width_right_queue[-1] - self.lane_width_right #self.lane_width_right_queue[0]
     
     min_lane_width = 2.0
     self.lane_width_left_count.update(self.lane_width_left > min_lane_width)
@@ -294,7 +294,7 @@ class DesireHelper:
       auto_lane_change_blocked = ((atc_blinker_state == BLINKER_LEFT) and (driver_blinker_state != BLINKER_LEFT))
       #auto_lane_change_trigger = not auto_lane_change_blocked and edge_available and (lane_available_trigger or edge_availabled or lane_appeared) and not side_object_detected
       auto_lane_change_trigger = self.auto_lane_change_enable and not auto_lane_change_blocked and edge_available and (lane_available_trigger or lane_appeared) and not side_object_detected
-      self.desireLog = f"L:{self.auto_lane_change_enable},{auto_lane_change_blocked},E:{lane_available},{edge_available},A:{lane_available_trigger},{lane_appeared}={auto_lane_change_trigger}"
+      self.desireLog = f"L:{self.auto_lane_change_enable},{auto_lane_change_blocked},E:{lane_available},{edge_available},A:{lane_available_trigger},{lane_appeared},{lane_width_diff:.1f},{lane_width_side:.1f},{distance_to_road_edge:.1f}={auto_lane_change_trigger}"
 
     if not lateral_active or self.lane_change_timer > LANE_CHANGE_TIME_MAX:
       #print("Desire canceled")
