@@ -125,8 +125,8 @@ class DesireHelper:
     self.available_right_lane = False
     self.available_left_edge = False
     self.available_right_edge = False
-    self.lane_width_left_queue = deque(maxlen=int(0.2/DT_MDL))
-    self.lane_width_right_queue = deque(maxlen=int(0.2/DT_MDL))
+    self.lane_width_left_queue = deque(maxlen=int(0.5/DT_MDL))
+    self.lane_width_right_queue = deque(maxlen=int(0.5/DT_MDL))
 
     self.lane_available_last = False
     self.edge_available_last = False
@@ -160,8 +160,8 @@ class DesireHelper:
     self.lane_width_right_queue.append(lane_width_right)
     self.lane_width_left = np.mean(self.lane_width_left_queue)
     self.lane_width_right = np.mean(self.lane_width_right_queue)
-    self.lane_width_left_diff = self.lane_width_left_queue[-1] - self.lane_width_left #self.lane_width_left_queue[0]
-    self.lane_width_right_diff = self.lane_width_right_queue[-1] - self.lane_width_right #self.lane_width_right_queue[0]
+    self.lane_width_left_diff = self.lane_width_left_queue[-1] - self.lane_width_left_queue[0]
+    self.lane_width_right_diff = self.lane_width_right_queue[-1] - self.lane_width_right_queue[0]
     
     min_lane_width = 2.0
     self.lane_width_left_count.update(self.lane_width_left > min_lane_width)
