@@ -1602,6 +1602,8 @@ protected:
     int use_lane_line_speed_apply = 0;
 public:
     void draw(const UIState* s, float& pathDrawSeq) {
+        SubMaster& sm = *(s->sm);
+        auto car_state = sm["carState"].getCarState();
         params_count = (params_count + 1) % 20;
         if (params_count == 0) {
             show_path_mode_normal = params.getInt("ShowPathMode");
@@ -1612,7 +1614,7 @@ public:
             show_path_color_cruise_off = params.getInt("ShowPathColorCruiseOff");
         }
         if (!make_data(s)) return;
-        int temp = params.getInt("UseLaneLineSpeedApply");
+        int temp = (int)car_state.getUseLaneLineSpeed();
         if (temp != use_lane_line_speed_apply) {
             ui_draw_text_a(s, 0, 0, (temp>0)?"LaneMode":"Laneless", 30, (temp>0)?COLOR_GREEN:COLOR_YELLOW, BOLD);
             use_lane_line_speed_apply = temp;
@@ -1627,8 +1629,6 @@ public:
             COLOR_WHITE_ALPHA(alpha),         COLOR_BLACK_ALPHA(alpha),
         };
 
-        SubMaster& sm = *(s->sm);
-        auto car_state = sm["carState"].getCarState();
         bool brake_valid = car_state.getBrakeLights();
 
         if (show_path_mode == 0) {

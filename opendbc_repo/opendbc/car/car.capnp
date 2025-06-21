@@ -246,6 +246,7 @@ struct CarState {
   speedLimitDistance @65 :Float32;
   gearStep @66 :Int16;          
   tpms @67 : Tpms;
+  useLaneLineSpeed @68 : Float32;
 
   struct Tpms {
     fl @0 :Float32;
