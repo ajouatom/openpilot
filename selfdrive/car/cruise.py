@@ -237,15 +237,16 @@ class VCruiseCarrot:
       self._log_timer = self._log_timeout
 
   def update_params(self, is_metric):
+    unit_factor = 1.0 if is_metric else CV.MPH_TO_KPH
     if self.frame % 10 == 0:
-      self.autoCruiseControl = self.params.get_int("AutoCruiseControl")
-      self.autoGasTokSpeed = self.params.get_int("AutoGasTokSpeed")
-      self.autoGasSyncSpeed = self.params.get_bool("AutoGasSyncSpeed")
+      self.autoCruiseControl = self.params.get_int("AutoCruiseControl") * unit_factor
+      self.autoGasTokSpeed = self.params.get_int("AutoGasTokSpeed") * unit_factor
+      self.autoGasSyncSpeed = self.params.get_bool("AutoGasSyncSpeed") * unit_factor
       self.autoSpeedUptoRoadSpeedLimit = self.params.get_float("AutoSpeedUptoRoadSpeedLimit") * 0.01
       self.autoRoadSpeedAdjust = self.params.get_float("AutoRoadSpeedAdjust") * 0.01
-      useLaneLineSpeed = self.params.get_int("UseLaneLineSpeed")
+      useLaneLineSpeed = self.params.get_int("UseLaneLineSpeed") * unit_factor
       if self.useLaneLineSpeed != useLaneLineSpeed:
-        self.params.put_int_nonblocking("UseLaneLineSpeedApply", useLaneLineSpeed)
+        self.params.put_int_nonblocking("UseLaneLineSpeedApply", useLaneLineSpeed) * unit_factor
       self.useLaneLineSpeed = useLaneLineSpeed
       self.speed_from_pcm = self.params.get_int("SpeedFromPCM")
       self._cruise_speed_unit = self.params.get_int("CruiseSpeedUnit")
@@ -255,7 +256,6 @@ class VCruiseCarrot:
       self.autoRoadSpeedLimitOffset = self.params.get_int("AutoRoadSpeedLimitOffset")
       self.autoNaviSpeedSafetyFactor = self.params.get_float("AutoNaviSpeedSafetyFactor") * 0.01
       self.cruiseOnDist = self.params.get_float("CruiseOnDist") * 0.01
-      unit_factor = 1.0 if is_metric else CV.MPH_TO_KPH
       cruiseSpeed1 = self.params.get_float("CruiseSpeed1") * unit_factor
       cruiseSpeed2 = self.params.get_float("CruiseSpeed2") * unit_factor
       cruiseSpeed3 = self.params.get_float("CruiseSpeed3") * unit_factor
@@ -686,11 +686,11 @@ class VCruiseCarrot:
       elif self.xState == 3:
         v_cruise_kph = self.v_ego_kph_set
         self._cruise_control(-1, 3, "Cruise off (traffic sign)")
-      elif self.v_ego_kph_set >= 30 and not CC.enabled:
+      elif self.v_ego_kph_set >= self.autoGasTokSpeed and not CC.enabled:
         v_cruise_kph = self.v_ego_kph_set
         self._cruise_control(1, -1 if self.aTarget > 0.0 else 0, "Cruise on (gas pressed)")
     elif self._brake_pressed_count == -1 and self._soft_hold_active == 0:
-      if self.v_ego_kph_set > 40:
+      if self.v_ego_kph_set > self.autoGasTokSpeed:
         v_cruise_kph = self.v_ego_kph_set
         self._cruise_control(1, -1 if self.aTarget > 0.0 else 0, "Cruise on (speed)")
       elif abs(CS.steeringAngleDeg) < 20:
