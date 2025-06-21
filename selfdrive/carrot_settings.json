@@ -762,7 +762,7 @@
       "descr": "1:SOFTHOLD, Auto Cruise, 2:SoftHold오류시",
       "egroup": "START",
       "etitle": "Auto Cruise control(HKG only)",
-      "edescr": "Softhold, Auto Cruise ON/OFF control, 2:if softhold error",
+      "edescr": "1:Softhold, Auto Cruise ON/OFF control, 2:if softhold error",
       "min": 0,
       "max": 3,
       "default": 0,
