@@ -330,7 +330,7 @@ class CarInterface(CarInterfaceBase):
       ret.minEnableSpeed = -1.
       ret.stopAccel = -0.5
       ret.startingState = True
-      ret.startAccel = 1.5
+      ret.startAccel = 1.0
     elif candidate == CAR.CHEVROLET_TRAVERSE:
       ret.steerActuatorDelay = 0.2
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
