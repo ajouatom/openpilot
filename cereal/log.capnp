@@ -2337,6 +2337,7 @@ struct LiveTorqueParametersData {
   points @10 :List(List(Float32));
   version @11 :Int32;
   useParams @12 :Bool;
+  calPerc @13 :Int8;
 }
 
 struct LiveDelayData {
@@ -2347,6 +2348,7 @@ struct LiveDelayData {
   lateralDelayEstimate @3 :Float32;
   lateralDelayEstimateStd @5 :Float32;
   points @4 :List(Float32);
+  calPerc @6 :Int8;
 
   enum Status {
     unestimated @0;
