@@ -2210,7 +2210,7 @@ public:
         int dx = bx - 50;
         int dy = by + 175;
         ui_fill_rect(s->vg, { dx - 55, dy - 38, 110, 48 }, mode_color, 15, 2);
-        ui_draw_text(s, dx, dy, driving_mode_str, 35, text_color, BOLD);
+        ui_draw_text(s, dx, dy, driving_mode_str, 32, text_color, BOLD);
         if (strcmp(driving_mode_str, driving_mode_str_last)) ui_draw_text_a(s, dx, dy, driving_mode_str, 30, COLOR_WHITE, BOLD);
         strcpy(driving_mode_str_last, driving_mode_str);
 
