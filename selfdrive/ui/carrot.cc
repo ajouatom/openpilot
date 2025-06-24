@@ -749,11 +749,13 @@ public:
             }
         }
         QPolygonF tf_vertext;
-        tf_vertext.push_back(tf_vertex_left);
-        tf_vertext.push_back(tf_vertex_right);
-        ui_draw_line(s, tf_vertext, nullptr, nullptr, 3.0, COLOR_WHITE);
-        sprintf(str, "%.1f(%.2f)", tf_distance, t_follow);
-        ui_draw_text(s, tf_vertex_right.x(), tf_vertex_right.y(), str, 25, COLOR_WHITE, BOLD);
+        if (tf_distance > 0) {
+          tf_vertext.push_back(tf_vertex_left);
+          tf_vertext.push_back(tf_vertex_right);
+          ui_draw_line(s, tf_vertext, nullptr, nullptr, 3.0, COLOR_WHITE);
+          sprintf(str, "%.1f(%.2f)", tf_distance, t_follow);
+          ui_draw_text(s, tf_vertex_right.x(), tf_vertex_right.y(), str, 25, COLOR_WHITE, BOLD);
+        }
 
 
         float px[7], py[7];
