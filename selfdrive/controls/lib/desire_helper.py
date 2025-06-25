@@ -163,7 +163,7 @@ class DesireHelper:
     self.lane_width_left_diff = self.lane_width_left_queue[-1] - self.lane_width_left_queue[0]
     self.lane_width_right_diff = self.lane_width_right_queue[-1] - self.lane_width_right_queue[0]
     
-    min_lane_width = 2.0
+    min_lane_width = 2.5
     self.lane_width_left_count.update(self.lane_width_left > min_lane_width)
     self.lane_width_right_count.update(self.lane_width_right > min_lane_width)
     self.road_edge_left_count.update(self.distance_to_road_edge_left > min_lane_width)
@@ -259,9 +259,10 @@ class DesireHelper:
     blinker_state = driver_blinker_state if driver_desire_enabled else atc_blinker_state
     
     if desire_enabled:
+      lane_exist_counter = self.lane_exist_left_count.counter if blinker_state == BLINKER_LEFT else self.lane_exist_right_count.counter
       lane_available = self.available_left_lane if blinker_state == BLINKER_LEFT else self.available_right_lane
       edge_available = self.available_left_edge if blinker_state == BLINKER_LEFT else self.available_right_edge
-      lane_appeared = self.lane_exist_left_count.counter == int(0.2 / DT_MDL) if blinker_state == BLINKER_LEFT else self.lane_exist_right_count.counter == int(0.2 / DT_MDL)
+      lane_appeared = lane_exist_counter == int(0.2 / DT_MDL)
 
       radar = radarState.leadLeft if blinker_state == BLINKER_LEFT else radarState.leadRight
       side_object_dist = radar.dRel + radar.vLead * 4.0 if radar.status else 255
@@ -269,6 +270,7 @@ class DesireHelper:
       self.object_detected_count = max(1, self.object_detected_count + 1) if object_detected else min(-1, self.object_detected_count - 1)
 
     else:
+      lane_exist_counter = 0
       lane_available = True
       edge_available = True
       lane_appeared = False
@@ -284,7 +286,6 @@ class DesireHelper:
       lane_available_trigger = True
     edge_availabled = not self.edge_available_last and edge_available
     side_object_detected = self.object_detected_count > -0.3 / DT_MDL
-    lane_exist_counter = self.lane_exist_left_count.counter if blinker_state == BLINKER_LEFT else self.lane_exist_right_count.counter
 
 
     if self.carrot_lane_change_count > 0:
@@ -340,7 +341,7 @@ class DesireHelper:
         torque_applied = carstate.steeringPressed and torque_cond
         blindspot_detected = blindspot_cond
 
-        if not self.auto_lane_change_enable and not lane_available: #lane_exist_counter > int(0.2 / DT_MDL) and not lane_change_available:
+        if not lane_available or lane_exist_counter < int(2.0 / DT_MDL): #lane_exist_counter > int(0.2 / DT_MDL) and not lane_change_available:
           self.auto_lane_change_enable = True
 
         if blindspot_detected and not ignore_bsd:
