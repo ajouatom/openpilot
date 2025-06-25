@@ -1591,8 +1591,8 @@ class CarrotServ:
     self.bearing = self._update_gps(v_ego, sm)
 
     self.xSpdDist = max(self.xSpdDist - delta_dist, -1000)
-    self.xDistToTurn = max(self.xDistToTurn - delta_dist, 0)
-    self.xDistToTurnNext = max(self.xDistToTurnNext - delta_dist, 0)
+    self.xDistToTurn = self.xDistToTurn - delta_dist
+    self.xDistToTurnNext = self.xDistToTurnNext - delta_dist
     self.active_count = max(self.active_count - 1, 0)
     self.active_sdi_count = max(self.active_sdi_count - 1, 0)
     self.active_kisa_count = max(self.active_kisa_count - 1, 0)
@@ -1625,7 +1625,8 @@ class CarrotServ:
       self.xSpdType = -1
       self.xSpdDist = self.xSpdLimit = 0
     if self.xTurnInfo < 0 or self.xDistToTurn < -50:
-      self.xDistToTurn = 0
+      if self.xDistToTurn > 0:
+        self.xDistToTurn = 0
       self.xTurnInfo = -1
       self.xDistToTurnNext = 0
       self.xTurnInfoNext = -1
@@ -1689,7 +1690,7 @@ class CarrotServ:
 
     route_speed = max(route_speed * self.mapTurnSpeedFactor, self.autoCurveSpeedLowerLimit)
     if self.turnSpeedControlMode == 2:
-      if 0 < self.xDistToTurn < 300:
+      if -500 < self.xDistToTurn < 500:
         speed_n_sources.append((route_speed, "route"))
     elif self.turnSpeedControlMode == 3:
       speed_n_sources.append((route_speed, "route"))
