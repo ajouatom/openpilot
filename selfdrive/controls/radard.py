@@ -290,7 +290,7 @@ class VisionTrack:
     lead_v_rel_pred = lead_msg.v[0] - model_v_ego
     self.prob = lead_msg.prob
     self.v_ego = v_ego
-    if self.prob > .8:
+    if self.prob > .5:
       dRel = float(lead_msg.x[0]) - RADAR_TO_CAMERA
       if abs(self.dRel - dRel) > 5.0:
         self.cnt = 0
