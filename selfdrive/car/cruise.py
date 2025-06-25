@@ -579,6 +579,8 @@ class VCruiseCarrot:
   #   gasPressed, brakePressed, standstill
   def _v_cruise_desired(self, CS, v_cruise_kph):
     if self._cruise_button_mode == 3:
+      if self.autoRoadSpeedLimitOffset > 0:
+        v_cruise_kph = 0
       for speed in self._cruise_speed_table:
         if v_cruise_kph < speed:
           v_cruise_kph = speed
