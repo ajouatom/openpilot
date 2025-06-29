@@ -96,6 +96,13 @@ class CarState(CarStateBase):
     self.LFA_ICON = 0
     self.paddle_button_prev = 0
 
+    self.lf_distance = 0
+    self.rf_distance = 0
+    self.lr_distance = 0
+    self.rr_distance = 0
+    #self.lf_lateral = 0
+    #self.rf_lateral = 0
+
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
@@ -431,10 +438,10 @@ class CarState(CarStateBase):
           self.adrv_info_161 = copy.copy(cp_cam.vl.get("ADRV_0x161", {}))
         if "CCNC_0x162" in cp_cam.vl:
           self.adrv_info_162 = copy.copy(cp_cam.vl.get("CCNC_0x162", {}))
-          ret.leftLongDist = cp_cam.vl["CCNC_0x162"]["LF_DETECT_DISTANCE"]
-          ret.rightLongDist = cp_cam.vl["CCNC_0x162"]["RF_DETECT_DISTANCE"]
-          #self.lr_distance = cp_cam.vl["CCNC_0x162"]["LR_DETECT_DISTANCE"]
-          #self.rr_distance = cp_cam.vl["CCNC_0x162"]["RR_DETECT_DISTANCE"]
+          ret.leftLongDist = self.lf_distance = cp_cam.vl["CCNC_0x162"]["LF_DETECT_DISTANCE"]
+          ret.rightLongDist = self.rf_distance = cp_cam.vl["CCNC_0x162"]["RF_DETECT_DISTANCE"]
+          self.lr_distance = cp_cam.vl["CCNC_0x162"]["LR_DETECT_DISTANCE"]
+          self.rr_distance = cp_cam.vl["CCNC_0x162"]["RR_DETECT_DISTANCE"]
           ret.leftLatDist = cp_cam.vl["CCNC_0x162"]["LF_DETECT_LATERAL"]
           ret.rightLatDist = cp_cam.vl["CCNC_0x162"]["RF_DETECT_LATERAL"]
       if "ADRV_0x200" in cp_cam.vl:
