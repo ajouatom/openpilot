@@ -120,6 +120,7 @@ class CarrotPlanner:
     self.autoNaviSpeedDecelRate = 1.5
 
     self.desireState = 0.0
+    self.desireStateCount = 0
     self.jerk_factor = 1.0
     self.jerk_factor_apply = 1.0
 
@@ -206,13 +207,15 @@ class CarrotPlanner:
     carState = sm['carState']
     if meta.laneChangeState == LaneChangeState.laneChangeStarting: # laneChangig
       self.desireState = meta.desireState[3] if carState.leftBlinker else meta.desireState[4]
+      self.desireStateCount += 1
     else:
       self.desireState = 0.0
+      self.desireStateCount = 0
 
   def dynamic_t_follow(self, t_follow, lead, desired_follow_distance):
 
     self.jerk_factor_apply = self.jerk_factor
-    if self.desireState > 0.9:  # lane change state
+    if self.desireState > 0.9 and self.desireStateCount < int(1.5 / DT_MDL):  # lane change state, 1.5초동안만.
       t_follow *= self.dynamicTFollowLC   # 차선변경시 t_follow를 줄임.
       self.jerk_factor_apply = self.jerk_factor * self.dynamicTFollowLC   # 차선변경시 jerk factor를 줄여 aggresive하게
     elif lead.status:      
