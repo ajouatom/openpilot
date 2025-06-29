@@ -1330,6 +1330,19 @@
     },
     {
       "group": "시작",
+      "name": "EnableCornerRadar",
+      "title": "코너레이더 사용(0)",
+      "descr": "끼어드는 차량 검출(ccnc차량)",
+      "egroup": "START",
+      "etitle": "Enable Corner radar(0)",
+      "edescr": "Cutin Detection for CCNC car",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "시작",
       "name": "HotspotOnBoot",
       "title": "부팅시 핫스팟켜기",
       "descr": "COMMA에 USIM을 장착한경우 핫스팟을 자동으로 켜주는 기능",

@@ -247,6 +247,10 @@ struct CarState {
   gearStep @66 :Int16;          
   tpms @67 : Tpms;
   useLaneLineSpeed @68 : Float32;
+  leftLatDist @69 : Float32;  # distance to left lane line
+  rightLatDist @70 : Float32; # distance to right lane line
+  leftLongDist @71 : Float32; # distance to left lane line in the direction of travel
+  rightLongDist @72 : Float32; # distance to right lane line in the direction of travel
 
   struct Tpms {
     fl @0 :Float32;

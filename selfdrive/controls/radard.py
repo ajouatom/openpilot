@@ -365,6 +365,7 @@ class RadarD:
 
     self.params = Params()
     self.enable_radar_tracks = self.params.get_int("EnableRadarTracks")
+    self.enable_corner_radar = self.params.get_int("EnableCornerRadar")
 
     self.radar_detected = False
 
@@ -374,6 +375,7 @@ class RadarD:
     self.current_time = 1e-9*max(sm.logMonoTime.values())
 
     self.enable_radar_tracks = self.params.get_int("EnableRadarTracks")
+    self.enable_corner_radar = self.params.get_int("EnableCornerRadar")
 
 
     leads_v3 = sm['modelV2'].leadsV3
@@ -436,8 +438,8 @@ class RadarD:
 
       #self.radar_state.leadOne = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[0], model_v_ego, low_speed_override=False)
       #self.radar_state.leadTwo = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[1], model_v_ego, low_speed_override=False)
-      self.radar_state.leadOne, self.radar_detected = self.get_lead(sm['modelV2'], self.tracks, 0, leads_v3[0], model_v_ego, low_speed_override=False)
-      self.radar_state.leadTwo, _ = self.get_lead(sm['modelV2'], self.tracks, 1, leads_v3[1], model_v_ego, low_speed_override=False)
+      self.radar_state.leadOne, self.radar_detected = self.get_lead(sm['carState'], sm['modelV2'], self.tracks, 0, leads_v3[0], model_v_ego, low_speed_override=False)
+      self.radar_state.leadTwo, _ = self.get_lead(sm['carState'], sm['modelV2'], self.tracks, 1, leads_v3[1], model_v_ego, low_speed_override=False)
 
       # ll, lc, lr, leadCenter, self.radar_state.leadLeft, self.radar_state.leadRight = get_lead_side(self.v_ego, self.tracks, sm['modelV2'],
       #                                                                                               sm['lateralPlan'].laneWidth, model_v_ego)
@@ -455,7 +457,7 @@ class RadarD:
     radar_msg.radarState = self.radar_state
     pm.send("radarState", radar_msg)
 
-  def get_lead(self, md, tracks: dict[int, Track], index: int, lead_msg: capnp._DynamicStructReader,
+  def get_lead(self, CS, md, tracks: dict[int, Track], index: int, lead_msg: capnp._DynamicStructReader,
                model_v_ego: float, low_speed_override: bool = True) -> dict[str, Any]:
 
     v_ego = self.v_ego
@@ -498,6 +500,9 @@ class RadarD:
       #else:
         lead_dict = self.vision_tracks[index].get_lead(md)
 
+    if self.enable_corner_radar > 0:
+      lead_dict = self.corner_radar(CS, lead_dict)
+
     if low_speed_override:
       low_speed_tracks = [c for c in tracks.values() if c.potential_low_speed_lead(v_ego)]
       if len(low_speed_tracks) > 0:
@@ -509,6 +514,38 @@ class RadarD:
           lead_dict = closest_track.get_RadarState(md, lead_msg.prob, self.vision_tracks[0].yRel)
 
     return lead_dict, radar
+  
+  def corner_radar(self, CS, lead_dict):
+    lat_dist = float('inf')
+    long_dist = 0.0
+    if CS.leftLatDist > 0:
+      lat_dist = CS.leftLatDist
+      long_dist = CS.leftLongDist
+    if CS.rightLatDist > 0 and CS.rightLatDist < lat_dist:
+      lat_dist = CS.rightLatDist
+      long_dist = CS.rightLongDist
+
+    if lat_dist == 0.0 or lat_dist > 2.6:
+      return lead_dict
+    
+    if lead_dict['status']:
+      if lead_dict['dRel'] < long_dist:
+        lead_dict['dRel'] = long_dist
+    else:
+      lead_dict['status'] = True
+      lead_dict['dRel'] = long_dist
+      lead_dict['yRel'] = lat_dist
+      lead_dict['vRel'] = 0.0
+      lead_dict['vLead'] = CS.vEgo
+      lead_dict['vLeadK'] = CS.vEgo
+      lead_dict['aLead'] = CS.aEgo
+      lead_dict['aLeadK'] = CS.aEgo
+      lead_dict['aLeadTau'] = _LEAD_ACCEL_TAU
+      lead_dict['jLead'] = 0.0
+      lead_dict['modelProb'] = 1.0
+      lead_dict['radarTrackId'] = -1
+
+    return lead_dict
 
 # fuses camera and radar data for best lead detection
 def main() -> None:
