@@ -516,12 +516,12 @@ class RadarD:
     return lead_dict, radar
   
   def corner_radar(self, CS, lead_dict):
-    lat_dist = float('inf')
-    long_dist = 0.0
-    if CS.leftLatDist > 0:
+    lat_dist = 1e6
+    long_dist = 1e6
+    if 0 < CS.leftLatDist < 2.6:
       lat_dist = CS.leftLatDist
       long_dist = CS.leftLongDist
-    if CS.rightLatDist > 0 and CS.rightLatDist < lat_dist:
+    if 0 < CS.rightLatDist < 2.6 and CS.rightLatDist < lat_dist:
       lat_dist = CS.rightLatDist
       long_dist = CS.rightLongDist
 
@@ -544,6 +544,7 @@ class RadarD:
       lead_dict['jLead'] = 0.0
       lead_dict['modelProb'] = 1.0
       lead_dict['radarTrackId'] = -1
+      lead_dict['radar'] = True
 
     return lead_dict
 
