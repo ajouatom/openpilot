@@ -1,5 +1,9 @@
 // **** graph renderers
 
+const displayGraph = (cls) => {
+  for (const e of document.getElementsByClassName("view")) e.style.display = e.classList.contains(cls) ? "flex" : "none";
+}
+
 // ** UOp graph
 
 function intersectRect(r1, r2) {
@@ -12,7 +16,7 @@ function intersectRect(r1, r2) {
   return {x:r1.x+dx*scale, y:r1.y+dy*scale};
 }
 
-const rect = (s) => document.querySelector(s).getBoundingClientRect();
+const rect = (s) => (typeof s === "string" ? document.querySelector(s) : s).getBoundingClientRect();
 
 let [workerUrl, worker, timeout] = [null, null, null];
 async function renderDag(graph, additions, recenter=false) {
@@ -30,6 +34,7 @@ async function renderDag(graph, additions, recenter=false) {
   timeout = setTimeout(() => {progressMessage.style.display = "block"}, 2000);
   worker.postMessage({graph, additions, ctxs});
   worker.onmessage = (e) => {
+    displayGraph("graph");
     progressMessage.style.display = "none";
     clearTimeout(timeout);
     d3.select("#bars").html("");
@@ -96,6 +101,7 @@ function pluralize(num, name, alt=null) {
 }
 
 function renderMemoryGraph(graph) {
+  displayGraph("graph");
   // ** construct alloc/free traces
   // we can map reads/writes from the kernel graph
   const actions = [];
@@ -211,6 +217,175 @@ function renderMemoryGraph(graph) {
   document.getElementById("zoom-to-fit-btn").click();
 }
 
+const ANSI_COLORS = ["#b3b3b3", "#ff6666", "#66b366", "#ffff66", "#6666ff", "#ff66ff", "#66ffff", "#ffffff"];
+const parseColors = (name) => [...name.matchAll(/(?:\u001b\[(\d+)m([\s\S]*?)\u001b\[0m)|([^\u001b]+)/g)].map(([_, code, colored_st, st]) =>
+  ({ st: colored_st ?? st, color: code != null ? ANSI_COLORS[(parseInt(code)-30+60)%60] : "#ffffff" }));
+
+// ** profiler graph
+
+function formatTime(ts, dur) {
+  if (dur<=1e3) return `${ts}us`;
+  if (dur<=1e6) return `${(ts*1e-3).toFixed(2)}ms`;
+  return `${(ts*1e-6).toFixed(2)}s`;
+}
+
+const colors = ["#1D1F2A", "#2A2D3D", "#373B4F", "#444862", "#12131A", "#2F3244", "#3B3F54", "#4A4E65", "#181A23", "#232532", "#313548", "#404459"];
+
+var data, canvasZoom, zoomLevel = d3.zoomIdentity;
+async function renderProfiler() {
+  displayGraph("profiler");
+  d3.select(".metadata").html("");
+  if (data != null) return;
+  // fetch and process data
+  const { traceEvents } = await (await fetch("/get_profile")).json();
+  let st, et;
+  const events = new Map();
+  for (const e of traceEvents) {
+    if (e.name === "process_name") events.set(e.pid, { name:e.args.name, events:[] });
+    if (e.ph === "X") {
+      if (st == null) [st, et] = [e.ts, e.ts+e.dur];
+      else {
+        st = Math.min(st, e.ts);
+        et = Math.max(et, e.ts+e.dur);
+      }
+      events.get(e.pid).events.push(e);
+    }
+  }
+  const kernelMap = new Map();
+  for (const [i, c] of ctxs.entries()) kernelMap.set(c.name.replace(/\x1b\[\d+m(.*?)\x1b\[0m/g, "$1"), { name:c.name, i });
+  // place devices on the y axis and set vertical positions
+  const [tickSize, padding] = [10, 8];
+  const deviceList = document.getElementById("device-list");
+  deviceList.style.paddingTop = `${tickSize+padding}px`;
+  const canvas = document.getElementById("timeline");
+  const ctx = canvas.getContext("2d");
+  const canvasTop = rect(canvas).top;
+  // color by name
+  const nameMap = new Map();
+  data = [];
+  for (const [k, v] of events) {
+    if (v.events.length === 0) continue;
+    const div = deviceList.appendChild(document.createElement("div"));
+    div.id = `pid-${k}`;
+    div.innerText = v.name;
+    div.style.padding = `${padding}px`;
+    const { y:baseY, height:baseHeight } = rect(`#pid-${k}`);
+    // position events on the y axis, stack ones that overlap
+    const levels = [];
+    v.events.sort((a,b) => (a.ts-st) - (b.ts-st));
+    for (const [i,e] of v.events.entries()) {
+      // assign to the first free depth
+      const start = e.ts-st;
+      const end = start+e.dur;
+      let depth = levels.findIndex(l => start >= l);
+      if (depth === -1) {
+        depth = levels.length;
+        levels.push(end);
+      } else {
+        levels[depth] = end;
+      }
+      // offset y by depth
+      const height = baseHeight-padding;
+      const y = (baseY-canvasTop+padding/2)+height*depth;
+      if (!nameMap.has(e.name)) {
+        const labelParts = parseColors(kernelMap.get(e.name)?.name ?? e.name).map(({ color, st }) => ({ color, st, width:ctx.measureText(st).width }));
+        nameMap.set(e.name, { bgColor:colors[i%colors.length], labelParts });
+      }
+      data.push({ x:start, dur:e.dur, name:e.name, height, y, ...nameMap.get(e.name) });
+    }
+    // lastly, adjust device rect by number of levels
+    div.style.height = `${baseHeight*levels.length}px`;
+  }
+  // draw events on a timeline
+  const dpr = window.devicePixelRatio || 1;
+  const ellipsisWidth = ctx.measureText("...").width;
+  const rectLst = [];
+  function render(transform=null) {
+    if (transform != null) zoomLevel = transform;
+    rectLst.length = 0;
+    ctx.save();
+    ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+    // time axis
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(canvas.clientWidth, 0);
+    ctx.fillStyle = ctx.strokeStyle = "#f0f0f5";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // xticks
+    const scale = d3.scaleLinear().domain([0, et-st]).range([0, canvas.clientWidth]);
+    scale.domain(scale.range().map(zoomLevel.invertX, zoomLevel).map(scale.invert, scale));
+    const ticks = scale.ticks();
+    for (const [i, tick] of ticks.entries()) {
+      ctx.beginPath();
+      const x = (i/(ticks.length-1))*canvas.clientWidth;
+      ctx.moveTo(x, ctx.lineWidth);
+      ctx.lineTo(x, tickSize+ctx.lineWidth);
+      ctx.stroke();
+      ctx.fontSize = "10px";
+      ctx.textBaseline = "top";
+      ctx.textAlign = i === ticks.length-1 ? "right" : "left";
+      const padding = i === ticks.length-1 ? -1 : 1;
+      ctx.fillText(formatTime(tick, et-st), x+(ctx.lineWidth+2)*padding, tickSize);
+    }
+    // programs
+    for (const e of data) {
+      // zoom only changes x and width
+      const x = scale(e.x);
+      const width = scale(e.x+e.dur)-x;
+      ctx.fillStyle = e.bgColor;
+      ctx.fillRect(x, e.y, width, e.height);
+      rectLst.push({ y0:e.y, y1:e.y+e.height, x0:x, x1:x+width, name:e.name })
+      // add labels
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      let [labelX, labelWidth] = [x+2, 0];
+      const labelY = e.y+e.height/2;
+      for (const [i,l] of e.labelParts.entries()) {
+        if (labelWidth+l.width+(i===e.labelParts.length-1 ? 0 : ellipsisWidth)+2 > width) {
+          if (labelWidth !== 0) ctx.fillText("...", labelX, labelY);
+          break;
+        }
+        ctx.fillStyle = l.color;
+        ctx.fillText(l.st, labelX, labelY);
+        labelWidth += l.width;
+        labelX += l.width;
+      }
+    }
+    ctx.restore();
+  }
+
+  function resize() {
+    let { width, height } = rect(".profiler");
+    width -= rect("#device-list").width+padding;
+    canvas.width = width*dpr;
+    canvas.height = height*dpr;
+    canvas.style.height = `${height}px`;
+    canvas.style.width = `${width}px`;
+    ctx.scale(dpr, dpr);
+    render();
+  }
+
+  resize();
+  window.addEventListener("resize", resize);
+  canvasZoom = d3.zoom().filter(e => (!e.ctrlKey || e.type === 'wheel' || e.type === 'mousedown') && !e.button)
+    .scaleExtent([1, Infinity]).translateExtent([[0,0], [Infinity,0]]).on("zoom", e => render(e.transform));
+  d3.select(canvas).call(canvasZoom);
+  document.addEventListener("contextmenu", e => e.ctrlKey && e.preventDefault());
+
+  canvas.addEventListener("click", e => {
+    e.preventDefault();
+    const { top, left, width, height } = rect(canvas);
+    const clickX = ((e.clientX-left) * (canvas.width/width))/dpr;
+    const clickY = ((e.clientY-top) * (canvas.height/height))/dpr;
+    for (const r of rectLst) {
+      if (clickY>=r.y0 && clickY<=r.y1 && clickX>=r.x0 && clickX<=r.x1) {
+        return setCtxWithHistory(kernelMap.get(r.name)?.i);
+      }
+    }
+  });
+}
+
 // ** zoom and recentering
 
 const svgZoom = d3.zoom().on("zoom", (e) => d3.select("#render").attr("transform", e.transform));
@@ -218,6 +393,10 @@ d3.select("#graph-svg").call(svgZoom);
 
 // zoom to fit into view
 document.getElementById("zoom-to-fit-btn").addEventListener("click", () => {
+  const canvas = d3.select("#timeline");
+  if (rect(canvas.node()).width !== 0) {
+    return canvas.call(canvasZoom.transform, d3.zoomIdentity);
+  }
   const svg = d3.select("#graph-svg");
   svg.call(svgZoom.transform, d3.zoomIdentity);
   const mainRect = rect(".main-container");
@@ -250,6 +429,7 @@ function codeBlock(st, language, { loc, wrap }) {
 }
 
 function setActive(e) {
+  if (e == null) return;
   e.classList.add("active");
   requestAnimationFrame(() => e.scrollIntoView({ behavior: "auto", block: "nearest" }));
 }
@@ -313,16 +493,14 @@ window.addEventListener("popstate", (e) => {
 async function main() {
   // ** left sidebar context list
   if (ctxs == null) {
-    ctxs = await (await fetch("/ctxs")).json();
+    ctxs = [{ name:"Profiler", steps:[] }];
+    for (const r of (await (await fetch("/ctxs")).json())) ctxs.push(r);
     const ctxList = document.querySelector(".ctx-list");
     for (const [i,{name, steps}] of ctxs.entries()) {
       const ul = ctxList.appendChild(document.createElement("ul"));
       ul.id = `ctx-${i}`;
       const p = ul.appendChild(document.createElement("p"));
-      p.innerHTML = name.replace(/\u001b\[(\d+)m(.*?)\u001b\[0m/g, (_, code, st) => {
-        const colors = ['gray','red','green','yellow','blue','magenta','cyan','white'];
-        return `<span style="${`color: color-mix(in srgb, ${colors[(parseInt(code)-30+60)%60]} 60%, white)`}">${st}</span>`;
-      });
+      p.innerHTML = parseColors(name).map(c => `<span style="color: ${c.color}">${c.st}</span>`).join("");
       p.onclick = () => {
         setState(i === state.currentCtx ? { expandSteps:!state.expandSteps } : { expandSteps:true, currentCtx:i, currentStep:0, currentRewrite:0 });
       }
@@ -343,8 +521,9 @@ async function main() {
   const { currentCtx, currentStep, currentRewrite, expandSteps } = state;
   if (currentCtx == -1) return;
   const ctx = ctxs[currentCtx];
+  if (ctx.name === "Profiler") return renderProfiler();
   const step = ctx.steps[currentStep];
-  const ckey = `ctx=${currentCtx}&idx=${currentStep}`;
+  const ckey = `ctx=${currentCtx-1}&idx=${currentStep}`;
   // close any pending event sources
   let activeSrc = null;
   for (const e of evtSources) {
@@ -415,6 +594,7 @@ document.querySelector(".collapse-btn").addEventListener("click", (e) => {
   document.querySelector(".main-container").classList.toggle("collapsed", isCollapsed);
   e.currentTarget.blur();
   e.currentTarget.style.transform = isCollapsed ? "rotate(180deg)" : "rotate(0deg)";
+  window.dispatchEvent(new Event("resize"));
 });
 
 // **** resizer
