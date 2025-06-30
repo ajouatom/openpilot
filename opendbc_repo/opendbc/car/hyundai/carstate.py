@@ -93,6 +93,7 @@ class CarState(CarStateBase):
 
     self.cruise_buttons_alt = False # for CASPER_EV
     self.MainMode_ACC = False
+    self.ACCMode = 0
     self.LFA_ICON = 0
     self.paddle_button_prev = 0
 
@@ -406,6 +407,7 @@ class CarState(CarStateBase):
     ret.cruiseState.available = self.main_enabled #cp.vl["TCS"]["ACCEnable"] == 0
     if self.CP.flags & HyundaiFlags.CAMERA_SCC.value:
       self.MainMode_ACC = cp_cam.vl["SCC_CONTROL"]["MainMode_ACC"] == 1
+      self.ACCMode = cp_cam.vl["SCC_CONTROL"]["ACCMode"]
       self.LFA_ICON = cp_cam.vl["LFAHDA_CLUSTER"]["LFA_ICON"]
       
     if self.CP.openpilotLongitudinalControl:
