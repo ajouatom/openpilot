@@ -540,11 +540,11 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         values["TauGapSet"] = hud_control.leadDistanceBars
         ret.append(packer.make_can_msg("ADRV_0x200", CAN.ECAN, values))
 
-      if CS.adrv_info_1ea is not None:
-        values = CS.adrv_info_1ea
-        values["HDA_MODE1"] = 8
-        values["HDA_MODE2"] = 1
-        ret.append(packer.make_can_msg("ADRV_0x1ea", CAN.ECAN, values))
+      #if CS.adrv_info_1ea is not None:
+      #  values = CS.adrv_info_1ea
+      #  values["HDA_MODE1"] = 8
+      #  values["HDA_MODE2"] = 1
+      #  ret.append(packer.make_can_msg("ADRV_0x1ea", CAN.ECAN, values))
 
       if CS.adrv_info_162 is not None:
         values = CS.adrv_info_162

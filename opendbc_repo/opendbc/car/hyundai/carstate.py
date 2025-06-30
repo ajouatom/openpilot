@@ -448,6 +448,10 @@ class CarState(CarStateBase):
         self.adrv_info_200 = copy.copy(cp_cam.vl.get("ADRV_0x200", {}))
       if "ADRV_0x1ea" in cp_cam.vl:
         self.adrv_info_1ea = copy.copy(cp_cam.vl.get("ADRV_0x1ea", {}))
+        ret.leftLongDist = cp_cam.vl["ADRV_0x1ea"]["LF_DETECT_DISTANCE"]
+        ret.rightLongDist = cp_cam.vl["ADRV_0x1ea"]["RF_DETECT_DISTANCE"]
+        ret.leftLatDist = cp_cam.vl["ADRV_0x1ea"]["LF_DETECT_LATERAL"]
+        ret.rightLatDist = cp_cam.vl["ADRV_0x1ea"]["RF_DETECT_LATERAL"]
       if "ADRV_0x160" in cp_cam.vl:
         self.adrv_info_160 = copy.copy(cp_cam.vl.get("ADRV_0x160", {}))
 
