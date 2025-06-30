@@ -560,6 +560,7 @@ class VCruiseCarrot:
         self._cruise_cancel_state = True
         self._lat_enabled = False
         self._paddle_decel_active = False
+        self.params.put_bool_nonblocking("ExperimentalMode", not self.params.get_bool("ExperimentalMode"))
 
     if self._paddle_mode > 0 and button_type in [ButtonType.paddleLeft, ButtonType.paddleRight]:  # paddle button
       self._cruise_control(-2, -1, "Cruise off & Ready (paddle)")
