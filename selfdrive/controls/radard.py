@@ -531,6 +531,17 @@ class RadarD:
     if lead_dict['status']:
       if lead_dict['dRel'] > long_dist:
         lead_dict['dRel'] = long_dist
+        lead_dict['yRel'] = lat_dist
+        lead_dict['vRel'] = 0.0
+        lead_dict['vLead'] = CS.vEgo
+        lead_dict['vLeadK'] = CS.vEgo
+        lead_dict['aLead'] = CS.aEgo
+        lead_dict['aLeadK'] = CS.aEgo
+        lead_dict['aLeadTau'] = _LEAD_ACCEL_TAU
+        lead_dict['jLead'] = 0.0
+        lead_dict['modelProb'] = 1.0
+        lead_dict['radarTrackId'] = -1
+        lead_dict['radar'] = True
     else:
       lead_dict['status'] = True
       lead_dict['dRel'] = long_dist
