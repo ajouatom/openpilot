@@ -274,7 +274,7 @@ def create_lfahda_cluster(packer, CS, CAN, enabled):
 def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control, jerk_u, jerk_l, CS):
   enabled = (enabled or CS.softHoldActive > 0) and CS.paddle_button_prev == 0
 
-  if CS.carrotCruise > 0:
+  if CS.out.carrotCruise > 0:
     if CS.softHoldActive == 0:
       if accel > -0.2 and not stopping:
         enabled = False
