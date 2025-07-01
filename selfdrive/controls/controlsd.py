@@ -108,6 +108,9 @@ class Controls:
                     not CS.steerFaultTemporary and not CS.steerFaultPermanent and not standstill)
     CC.longActive = CC.enabled and not any(e.overrideLongitudinal for e in self.sm['onroadEvents']) and self.CP.openpilotLongitudinalControl
 
+    if CS.carrotCruise and long_plan.accels[0] < 0.2 and not CC.longActive:
+      CC.longActive = True
+
     actuators = CC.actuators
     actuators.longControlState = self.LoC.long_control_state
 

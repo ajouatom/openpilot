@@ -220,6 +220,7 @@ class Car:
     CS.activateCruise = self.v_cruise_helper._activate_cruise
     CS.latEnabled = self.v_cruise_helper._lat_enabled
     CS.useLaneLineSpeed = self.v_cruise_helper.useLaneLineSpeedApply
+    CS.carrotCruise = self.v_cruise_helper._cruise_cancel_state
 
     self.CI.CS.softHoldActive = CS.softHoldActive
     return CS, RD
