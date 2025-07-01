@@ -188,6 +188,7 @@ class VCruiseCarrot:
     self.cruise_state_available_last = False
 
     self._paddle_decel_active = False
+    self.carrot_cruise_active = False
 
     #self.events = []
     self.xState = 0
@@ -473,6 +474,7 @@ class VCruiseCarrot:
 
     if button_type in [ButtonType.accelCruise, ButtonType.decelCruise]:
       self._paddle_decel_active = False
+      self.carrot_cruise_active = False
       if self.autoCruiseControl_cancel_timer > 0:
         self._add_log(f"AutoCruiseControl cancel timer RESET {button_type}")
         self.autoCruiseControl_cancel_timer = 0
@@ -553,8 +555,9 @@ class VCruiseCarrot:
       elif button_type == ButtonType.gapAdjustCruise:
         self.params.put_int_nonblocking("MyDrivingMode", self.params.get_int("MyDrivingMode") % 4 + 1) # 1,2,3,4 (1:eco, 2:safe, 3:normal, 4:high speed)
       elif button_type == ButtonType.lfaButton:
-        useLaneLineSpeed = max(1, self.useLaneLineSpeed)
-        self.useLaneLineSpeedApply = useLaneLineSpeed if self.useLaneLineSpeedApply == 0 else 0
+        #useLaneLineSpeed = max(1, self.useLaneLineSpeed)
+        #self.useLaneLineSpeedApply = useLaneLineSpeed if self.useLaneLineSpeedApply == 0 else 0
+        self.carrot_cruise_active = True
 
       elif button_type == ButtonType.cancel:
         self._cruise_cancel_state = True
