@@ -531,6 +531,8 @@ class VCruiseCarrot:
         if self._lfa_button_mode == 0:
           self._lat_enabled = not self._lat_enabled
           self._add_log("Lateral " + "enabled" if self._lat_enabled else "disabled")
+        elif self._lfa_button_mode == 2:
+          self.carrot_cruise_active = True
         else:
           if False: #CC.enabled and self._paddle_decel_active:  # 수정필요...
             self._paddle_decel_active = False
@@ -555,9 +557,8 @@ class VCruiseCarrot:
       elif button_type == ButtonType.gapAdjustCruise:
         self.params.put_int_nonblocking("MyDrivingMode", self.params.get_int("MyDrivingMode") % 4 + 1) # 1,2,3,4 (1:eco, 2:safe, 3:normal, 4:high speed)
       elif button_type == ButtonType.lfaButton:
-        #useLaneLineSpeed = max(1, self.useLaneLineSpeed)
-        #self.useLaneLineSpeedApply = useLaneLineSpeed if self.useLaneLineSpeedApply == 0 else 0
-        self.carrot_cruise_active = True
+        useLaneLineSpeed = max(1, self.useLaneLineSpeed)
+        self.useLaneLineSpeedApply = useLaneLineSpeed if self.useLaneLineSpeedApply == 0 else 0
 
       elif button_type == ButtonType.cancel:
         self._cruise_cancel_state = True
