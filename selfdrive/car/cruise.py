@@ -416,10 +416,10 @@ class VCruiseCarrot:
       self.long_pressed = True
       bt = self.button_prev
 
-      if bt == ButtonType.cancel:
-        button_type = bt
-        self.button_cnt = 0
-      elif bt in [ButtonType.accelCruise, ButtonType.decelCruise]:
+      #if bt == ButtonType.cancel:
+      #  button_type = bt
+      #  self.button_cnt = 0
+      if bt in [ButtonType.accelCruise, ButtonType.decelCruise]:
         mod = button_kph % V_CRUISE_DELTA
         if bt == ButtonType.accelCruise:
           button_kph += V_CRUISE_DELTA - mod
@@ -427,9 +427,10 @@ class VCruiseCarrot:
           button_kph -= V_CRUISE_DELTA - (-mod % V_CRUISE_DELTA)
         button_type = bt
         self.button_cnt %= self.button_long_time
-      elif bt in [ButtonType.gapAdjustCruise, ButtonType.lfaButton]:
-        button_type = bt
-        self.button_cnt %= self.button_long_time
+      else: #if bt in [ButtonType.gapAdjustCruise, ButtonType.lfaButton]:
+        if self.button_cnt < self.button_long_time + 1:
+          button_type = bt
+        #self.button_cnt %= self.button_long_time
 
     return button_kph, button_type, self.long_pressed
 
