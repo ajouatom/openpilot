@@ -37,8 +37,8 @@ void ExperimentalButton::updateState(const UIState &s) {
   bool eng = cs.getEngageable() || cs.getEnabled();
   if ((s.scene.carrot_experimental_mode != experimental_mode) || (eng != engageable)) {
     engageable = eng;
-    //experimental_mode = cs.getExperimentalMode();
-    experimental_mode = s.scene.carrot_experimental_mode;
+    experimental_mode = cs.getExperimentalMode();
+    experimental_mode |= s.scene.carrot_experimental_mode;
     update();
   }
 }

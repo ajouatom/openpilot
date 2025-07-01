@@ -23,8 +23,8 @@ void ModelRenderer::draw(QPainter &painter, const QRect &surface_rect) {
   }
 
   clip_region = surface_rect.adjusted(-CLIP_MARGIN, -CLIP_MARGIN, CLIP_MARGIN, CLIP_MARGIN);
-  //experimental_mode = sm["selfdriveState"].getSelfdriveState().getExperimentalMode();
-  experimental_mode = s->scene.carrot_experimental_mode;
+  experimental_mode = sm["selfdriveState"].getSelfdriveState().getExperimentalMode();
+  experimental_mode |= s->scene.carrot_experimental_mode;
   longitudinal_control = sm["carParams"].getCarParams().getOpenpilotLongitudinalControl();
   path_offset_z = sm["liveCalibration"].getLiveCalibration().getHeight()[0];
 
