@@ -591,6 +591,7 @@ private:
     float   v_ego = 0.0;
     bool    brakeHoldActive = false;
     int    softHoldActive = 0;
+    int    carrotCruise = 0;
     bool    longActive = false;
 
     float   t_follow = 0.0;
@@ -606,6 +607,7 @@ protected:
         v_ego = sm["carState"].getCarState().getVEgo();
         brakeHoldActive = sm["carState"].getCarState().getBrakeHoldActive();
         softHoldActive = sm["carState"].getCarState().getSoftHoldActive();
+        carrotCruise = sm["carState"].getCarState().getCarrotCruise();
         auto selfdrive_state = sm["selfdriveState"].getSelfdriveState();
         longActive = selfdrive_state.getEnabled();
         //longActive = sm["carControl"].getCarControl().getLongActive();
@@ -695,8 +697,8 @@ public:
         int disp_y = y + 195;// 175;
         bool draw_dist = false;
         float disp_size = 50;
-        if (softHoldActive || brakeHoldActive) {
-            sprintf(str, "%s", (brakeHoldActive) ? "AUTOHOLD" : "SOFTHOLD");
+        if (softHoldActive || brakeHoldActive || carrotCruise) {
+            sprintf(str, "%s", (brakeHoldActive) ? "AUTOHOLD" : (softHoldActive) ? "SOFTHOLD": "CARROT");
             ui_draw_text(s, x, disp_y, str, disp_size, COLOR_WHITE, BOLD);
         }
         else if (longActive) {
