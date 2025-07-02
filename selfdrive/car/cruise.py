@@ -428,7 +428,7 @@ class VCruiseCarrot:
         button_type = bt
         self.button_cnt %= self.button_long_time
       else: #if bt in [ButtonType.gapAdjustCruise, ButtonType.lfaButton]:
-        if self.button_cnt < self.button_long_time + 1:
+        if self.button_cnt < self.button_long_time + 2:
           button_type = bt
         #self.button_cnt %= self.button_long_time
 
