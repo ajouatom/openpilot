@@ -224,6 +224,7 @@ inline static std::unordered_map<std::string, uint32_t> keys = {
     {"HotspotOnBoot", PERSISTENT},
     {"SoftwareMenu", PERSISTENT},
     {"HyundaiCameraSCC", PERSISTENT},
+    {"IsLdwsCar", PERSISTENT},
     {"CanfdHDA2", PERSISTENT},
     {"CanfdDebug", PERSISTENT},
     {"SoundVolumeAdjust", PERSISTENT},

@@ -1291,6 +1291,19 @@
     },
     {
       "group": "시작",
+      "name": "IsLdwsCar",
+      "title": "HYUNDAI: LDWS ONLY CAR(0)",
+      "descr": "LDWS ONLY CAR는 ON",
+      "egroup": "START",
+      "etitle": "HYUNDAI: LDWS ONLY CAR(0)",
+      "edescr": "LDWS ONLY CAR",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "시작",
       "name": "CanfdHDA2",
       "title": "CANFD HDA2지원(0)",
       "descr": "1: HDA2 강제인식, 2: HDA2+BSM",
