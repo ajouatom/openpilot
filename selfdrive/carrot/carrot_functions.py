@@ -331,7 +331,7 @@ class CarrotPlanner:
 
     return v_cruise_kph_apply
 
-  def update(self, sm, v_cruise_kph):
+  def update(self, sm, v_cruise_kph, mode):
     self._params_update()
 
     self._update_model_desire(sm)
@@ -470,7 +470,8 @@ class CarrotPlanner:
       self.actual_stop_distance = self.user_stop_distance
       self.xState = XState.e2eStop if self.user_stop_distance > 0 else XState.e2eStopped
 
-    mode = 'blended' if self.xState in [XState.e2ePrepare] else 'acc'
+    if mode == 'acc':
+      mode = 'blended' if self.xState in [XState.e2ePrepare] else 'acc'
 
     self.comfort_brake *= self.mySafeFactor
     self.actual_stop_distance = max(0, self.actual_stop_distance - (v_ego * DT_MDL))
