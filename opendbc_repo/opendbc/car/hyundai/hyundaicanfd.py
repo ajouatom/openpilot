@@ -326,7 +326,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
   soft_hold_info = 1 if CS.softHoldActive > 1 and enabled else 0
 
   #values["CRUISE_STANDSTILL"] = soft_hold_info # 이건 button 누르라는 display message로 보임.. # 1 if stopping and CS.out.aEgo > -0.1 else 0
-  values["CRUISE_STANDSTILL"] = 1 if stopping and CS.out.aEgo > -0.1 else 0 # 이거안하면 정지중 뒤로 밀리는 현상 발생하는듯.. (신호정지중에 뒤로 밀리는 경험함.. 시험해봐야)
+  values["CRUISE_STANDSTILL"] = 1 if stopping and CS.out.aEgo > -0.3 else 0 # 이거안하면 정지중 뒤로 밀리는 현상 발생하는듯.. (신호정지중에 뒤로 밀리는 경험함.. 시험해봐야)
 
   values["NEW_SIGNAL_2"] = 0    # 이것이 켜지면 가속을 안하는듯함.
   values["NEW_SIGNAL_4"] = 9 if hud_control.leadVisible else 0
