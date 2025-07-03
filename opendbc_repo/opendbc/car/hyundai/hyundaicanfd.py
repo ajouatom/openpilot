@@ -275,7 +275,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
   enabled = (enabled or CS.softHoldActive > 0) and CS.paddle_button_prev == 0
 
   acc_mode = 0 if not enabled else (2 if gas_override else 1)
-  if CS.out.carrotCruise > 0:
+  if CS.out.carrotCruise > 0 and not gas_override:
     if CS.softHoldActive == 0 and not stopping:
       if (a_target_now > -0.1 or accel > -0.1) and CS.out.vEgo > 10 / 3.6:
         acc_mode = 4 if enabled else 0

@@ -145,7 +145,7 @@ def create_acc_commands_scc(packer, enabled, accel, jerk, idx, hud_control, set_
 
   if long_enabled:
     
-    if CS.out.carrotCruise > 0:
+    if CS.out.carrotCruise > 0 and not long_override:
       if soft_hold_active <= 0 and not stopping:
         if(a_target_now > -0.1 or accel > -0.1) and CS.out.vEgo > 10/3.6:
           long_override = True
