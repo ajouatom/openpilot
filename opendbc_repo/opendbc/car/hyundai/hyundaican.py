@@ -129,7 +129,7 @@ def create_lfahda_mfc(packer, CC, blinking_signal):
   }
   return packer.make_can_msg("LFAHDA_MFC", 0, values)
 
-def create_acc_commands_scc(packer, enabled, accel, jerk, idx, hud_control, set_speed, stopping, long_override, use_fca, CS, soft_hold_mode):
+def create_acc_commands_scc(packer, enabled, accel, jerk, idx, hud_control, set_speed, stopping, long_override, use_fca, CS, soft_hold_mode, a_target_now):
   from opendbc.car.hyundai.carcontroller import HyundaiJerk
   cruise_available = CS.out.cruiseState.available
   if CS.paddle_button_prev > 0:
@@ -144,6 +144,13 @@ def create_acc_commands_scc(packer, enabled, accel, jerk, idx, hud_control, set_
   objGap2 = 0 if objGap == 0 else 2 if hud_control.leadRelSpeed < -0.2 else 1
 
   if long_enabled:
+    
+    if CS.out.carrotCruise > 0:
+      if soft_hold_active <= 0 and not stopping:
+        if(a_target_now > -0.1 or accel > -0.1) and CS.out.vEgo > 10/3.6:
+          long_override = True
+          long_enabled = False
+          
     scc12_acc_mode = 2 if long_override else 1
     scc14_acc_mode = 2 if long_override else 1
     if CS.out.brakeHoldActive:
