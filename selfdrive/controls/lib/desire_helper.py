@@ -1,3 +1,4 @@
+from turtle import distance
 from cereal import log
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.realtime import DT_MDL
@@ -282,10 +283,11 @@ class DesireHelper:
     lane_width_diff = self.lane_width_left_diff if atc_blinker_state == BLINKER_LEFT else self.lane_width_right_diff
     distance_to_road_edge = self.distance_to_road_edge_left if atc_blinker_state == BLINKER_LEFT else self.distance_to_road_edge_right
     lane_width_side = self.lane_width_left if atc_blinker_state == BLINKER_LEFT else self.lane_width_right
-    if lane_width_diff > 0.5 and (lane_width_side < distance_to_road_edge):
+    if lane_width_diff > 1.2 and (lane_width_side < distance_to_road_edge):
       lane_available_trigger = True
     edge_availabled = not self.edge_available_last and edge_available
     side_object_detected = self.object_detected_count > -0.3 / DT_MDL
+    lane_appeared = lane_appeared and distance_to_road_edge < 4.0
 
 
     if self.carrot_lane_change_count > 0:
