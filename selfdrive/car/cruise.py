@@ -489,7 +489,7 @@ class VCruiseCarrot:
         self._pause_auto_speed_up = False
         if self._soft_hold_active > 0:
           self._soft_hold_active = 0
-        elif self._cruise_ready or not CC.enabled or CS.cruiseState.standstill:
+        elif self._cruise_ready or not CC.enabled or CS.cruiseState.standstill or self.carrot_cruise_active:
           pass
         elif self._v_cruise_kph_at_brake > 0 and v_cruise_kph < self._v_cruise_kph_at_brake:
           v_cruise_kph = self._v_cruise_kph_at_brake
@@ -516,7 +516,8 @@ class VCruiseCarrot:
         elif self.v_ego_kph_set > self._cruise_speed_min and v_cruise_kph > self.v_ego_kph_set:
           v_cruise_kph = self.v_ego_kph_set
         else:
-          self._cruise_control(-2, -1, "Cruise off (decelCruise)")
+          #self._cruise_control(-2, -1, "Cruise off (decelCruise)")
+          self.carrot_cruise_active = True
           #self.events.append(EventName.audioPrompt)
         self._v_cruise_kph_at_brake = 0
 
