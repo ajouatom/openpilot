@@ -517,6 +517,8 @@ class VCruiseCarrot:
           v_cruise_kph = button_kph
         elif self.v_ego_kph_set > self._cruise_speed_min and v_cruise_kph > self.v_ego_kph_set:
           v_cruise_kph = self.v_ego_kph_set
+        elif self.v_ego_kph_set < 1.0:
+          self.carrot_cruise_active = True
         else:
           #self._cruise_control(-2, -1, "Cruise off (decelCruise)")
           self.carrot_cruise_active = True
