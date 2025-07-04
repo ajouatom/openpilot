@@ -502,7 +502,7 @@ class VCruiseCarrot:
       elif button_type == ButtonType.decelCruise:
         self._lat_enabled = True
         self._pause_auto_speed_up = True
-        self.carrot_cruise_active = False
+        #self.carrot_cruise_active = False
 
         if self._soft_hold_active > 0:
           self._cruise_control(-1, -1, "Cruise off,softhold mode (decelCruise)")
