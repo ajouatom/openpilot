@@ -539,8 +539,8 @@ class HyundaiJerk:
     self.carrot_cruise_accel = 0.0
 
   def check_carrot_cruise(self, CC, CS, hud_control, stopping, accel, a_target_now):
-    carrot_cruise_decel = self.params.get_bool("CarrotCruiseDecel")
-    carrot_cruise_atc_decel = self.params.get_bool("CarrotCruiseAtcDecel")
+    carrot_cruise_decel = self.params.get_float("CarrotCruiseDecel")
+    carrot_cruise_atc_decel = self.params.get_float("CarrotCruiseAtcDecel")
     if carrot_cruise_atc_decel >= 0 and 0 < hud_control.atcDistance < 500:
       carrot_cruise_decel = max(carrot_cruise_decel, carrot_cruise_atc_decel) * 0.01
     self.carrot_cruise = 0
