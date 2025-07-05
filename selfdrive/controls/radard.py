@@ -518,14 +518,14 @@ class RadarD:
   def corner_radar(self, CS, lead_dict):
     lat_dist = 1e6
     long_dist = 1e6
-    if 0 < CS.leftLatDist < 2.6:
+    if 0 < CS.leftLatDist < 2.5:
       lat_dist = CS.leftLatDist
       long_dist = CS.leftLongDist
-    if 0 < CS.rightLatDist < 2.6 and CS.rightLatDist < lat_dist:
+    if 0 < CS.rightLatDist < 2.5 and CS.rightLongDist < long_dist:
       lat_dist = CS.rightLatDist
       long_dist = CS.rightLongDist
 
-    if lat_dist == 0.0 or lat_dist > 2.6 or long_dist == 1e6:
+    if lat_dist == 0.0 or lat_dist >= 2.5 or long_dist == 1e6:
       return lead_dict
     
     if lead_dict['status']:
