@@ -215,6 +215,7 @@ class Controls:
     hudControl = CC.hudControl
 
     hudControl.activeCarrot = self.sm['carrotMan'].activeCarrot
+    hudControl.atcDistance = self.sm['carrotMan'].xDistToTurn
 
     lp = self.sm['longitudinalPlan']
     if self.CP.pcmCruise:

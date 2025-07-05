@@ -301,6 +301,32 @@
       "unit": 1
     },
     {
+      "group": "크루즈",
+      "name": "CarrotCruiseDecel",
+      "title": "당근크루즈감속도x0.01(-1)",
+      "descr": "-1:CruiseOFF 또는 감속도 지정",
+      "egroup": "CRUISE",
+      "etitle": "CarrotCruiseDecel(2km/h)",
+      "edescr": "-1:CruiseOFF, ",
+      "min": -1,
+      "max": 200,
+      "default": -1,
+      "unit": 10
+    },
+    {
+      "group": "크루즈",
+      "name": "CarrotCruiseAtcDecel",
+      "title": "당근크루즈감속도ATCx0.01(-1)",
+      "descr": "-1:변경안함",
+      "egroup": "CRUISE",
+      "etitle": "CarrotCruiseDecelATCx0.01(-1)",
+      "edescr": "-1:변경안함,",
+      "min": -1,
+      "max": 200,
+      "default": -1,
+      "unit": 10
+    },
+    {
       "group": "조향튜닝",
       "name": "CustomSR",
       "title": "CustomSteerRatiox0.1(0)",
