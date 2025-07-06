@@ -306,7 +306,7 @@
       "title": "당근크루즈감속도x0.01(-1)",
       "descr": "-1:CruiseOFF 또는 감속도 지정",
       "egroup": "CRUISE",
-      "etitle": "CarrotCruiseDecel(2km/h)",
+      "etitle": "CarrotCruiseDecel(-1)",
       "edescr": "-1:CruiseOFF, ",
       "min": -1,
       "max": 200,
