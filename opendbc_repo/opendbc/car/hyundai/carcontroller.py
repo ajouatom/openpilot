@@ -553,7 +553,10 @@ class HyundaiJerk:
               self.carrot_cruise_accel = 0.0
           else:
             self.carrot_cruise = 2
-            self.carrot_cruise_accel = min(accel, -carrot_cruise_decel * 0.01)
+            carrot_cruise = min(accel, -carrot_cruise_decel * 0.01)
+            self.carrot_cruise_accel = max(carrot_cruise, self.carrot_cruise_accel - 1.0 * DT_CTRL) #  점진적으로 줄임.
+    if self.carrot_cruise == 0:
+      self.carrot_cruise_accel = CS.out.aEgo
     
   def make_jerk(self, CP, CS, accel, actuators, hud_control):
     if actuators.longControlState == LongCtrlState.stopping:
