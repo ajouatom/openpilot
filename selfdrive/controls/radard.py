@@ -533,10 +533,10 @@ class RadarD:
         lead_dict['dRel'] = long_dist
         lead_dict['yRel'] = lat_dist
         lead_dict['vRel'] = 0.0
-        lead_dict['vLead'] = CS.vEgo
-        lead_dict['vLeadK'] = CS.vEgo
-        lead_dict['aLead'] = CS.aEgo
-        lead_dict['aLeadK'] = CS.aEgo
+        lead_dict['vLead'] = CS.vEgo if CS.vEgo < lead_dict['vLead'] else lead_dict['vLead']
+        lead_dict['vLeadK'] = lead_dict['vLead']
+        lead_dict['aLead'] = CS.aEgo if CS.aEgo < lead_dict['aLead'] else lead_dict['aLead']
+        lead_dict['aLeadK'] = lead_dict['aLead']
         lead_dict['aLeadTau'] = _LEAD_ACCEL_TAU
         lead_dict['jLead'] = 0.0
         lead_dict['modelProb'] = 1.0
