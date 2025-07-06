@@ -542,7 +542,7 @@ class HyundaiJerk:
     carrot_cruise_decel = self.params.get_float("CarrotCruiseDecel")
     carrot_cruise_atc_decel = self.params.get_float("CarrotCruiseAtcDecel")
     if carrot_cruise_atc_decel >= 0 and 0 < hud_control.atcDistance < 500:
-      carrot_cruise_decel = max(carrot_cruise_decel, carrot_cruise_atc_decel) * 0.01
+      carrot_cruise_decel = max(carrot_cruise_decel, carrot_cruise_atc_decel)
     self.carrot_cruise = 0
     if CS.out.carrotCruise > 0 and not CC.cruiseControl.override:
       if CS.softHoldActive == 0 and not stopping:

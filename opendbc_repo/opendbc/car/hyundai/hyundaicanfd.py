@@ -279,9 +279,10 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
   if hyundai_jerk.carrot_cruise == 1:
     acc_mode = 4 if enabled else 0
     enabled = False
-    accel = 0.5
+    accel = accel_last = 0.5
+   
   elif hyundai_jerk.carrot_cruise == 2:
-    accel = hyundai_jerk.carrot_cruise_accel
+    accel = accel_last = hyundai_jerk.carrot_cruise_accel
 
   jerk_u = hyundai_jerk.jerk_u
   jerk_l = hyundai_jerk.jerk_l
