@@ -1682,7 +1682,7 @@ class CarrotServ:
     speed_n_sources = [
       (atc_desired, "atc"),
       (atc_desired_next, "atc2"),
-      (sdi_speed, "hda" if hda_active else "bump" if self.xSpdType == 22 else "section" if self.xSpdType == 4 else "police" if self.xSpdType == 100 else "cam"),
+      (sdi_speed, "hda" if hda_active else "bump" if self.xSpdType == 22 else "section" if self.xSpdType == 4 else "police" if self.xSpdType == 100 else "waze" if self.xSpdType == 101 else "cam"),
       (limit_speed, "road"),
     ]
     if self.turnSpeedControlMode in [1,2]:
