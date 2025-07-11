@@ -72,24 +72,10 @@ class LongControl:
   def update(self, active, CS, long_plan, accel_limits, t_since_plan, radarState):
 
     soft_hold_active = CS.softHoldActive > 0
-    a_target = long_plan.aTarget
+    a_target_ff = long_plan.aTarget
+    v_target_now = long_plan.vTargetNow
+    j_target_now = long_plan.jTargetNow
     should_stop = long_plan.shouldStop
-    velocity_pid = True
-    long_delay = self.params.get_float("LongActuatorDelay")*0.01 + t_since_plan
-
-    speeds = long_plan.speeds
-    if len(speeds) == CONTROL_N:
-      t_idxs = ModelConstants.T_IDXS[:CONTROL_N]
-      j_target_now = long_plan.jerks[0]
-      a_target_now = long_plan.accels[0]
-      v_target_now = long_plan.speeds[0]
-      #v_target_ff = np.interp(long_delay, t_idxs, long_plan.speeds)
-      a_target_ff = np.interp(long_delay, t_idxs, long_plan.accels)
-    else:
-      a_target_now = 0.0
-      v_target_now = 0.0
-      #v_target_ff = 0.0
-      a_target_ff = j_target_now = 0.0     
 
     self.readParamCount += 1
     if self.readParamCount >= 100:
@@ -143,4 +129,4 @@ class LongControl:
                                      feedforward=a_target_ff)
 
     self.last_output_accel = np.clip(output_accel, accel_limits[0], accel_limits[1])
-    return self.last_output_accel, a_target_now, j_target_now
+    return self.last_output_accel, a_target_ff, j_target_now

@@ -410,7 +410,7 @@ struct CarControl {
     speed @6: Float32;  # m/s
 
     jerk @9: Float32;  # m/s^3
-    aTargetNow @10: Float32;  # m/s^2
+    aTarget @10: Float32;  # m/s^2
     yStd @11: Float32;  
 
     enum LongControlState @0xe40f3a917d908282{

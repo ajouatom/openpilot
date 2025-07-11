@@ -52,13 +52,15 @@ MIN_LAT_CONTROL_SPEED = 0.3
 
 
 def get_action_from_model(model_output: dict[str, np.ndarray], prev_action: log.ModelDataV2.Action,
-                          lat_action_t: float, long_action_t: float, v_ego: float, lat_smooth_seconds: float) -> log.ModelDataV2.Action:
+                          lat_action_t: float, long_action_t: float, v_ego: float, lat_smooth_seconds: float, vEgoStopping: float) -> log.ModelDataV2.Action:
     plan = model_output['plan'][0]
-    desired_accel, should_stop = get_accel_from_plan(plan[:,Plan.VELOCITY][:,0],
+    desired_accel, should_stop, desired_velocity_now = get_accel_from_plan(plan[:,Plan.VELOCITY][:,0],
                                                      plan[:,Plan.ACCELERATION][:,0],
                                                      ModelConstants.T_IDXS,
-                                                     action_t=long_action_t)
+                                                     action_t=long_action_t,
+                                                     vEgoStopping=vEgoStopping)
     desired_accel = smooth_value(desired_accel, prev_action.desiredAcceleration, LONG_SMOOTH_SECONDS)
+    desired_velocity = smooth_value(desired_velocity, prev_action.desiredVelocity, LONG_SMOOTH_SECONDS)
 
     desired_curvature = get_curvature_from_plan(plan[:,Plan.T_FROM_CURRENT_EULER][:,2],
                                                 plan[:,Plan.ORIENTATION_RATE][:,2],
@@ -72,7 +74,8 @@ def get_action_from_model(model_output: dict[str, np.ndarray], prev_action: log.
 
     return log.ModelDataV2.Action(desiredCurvature=float(desired_curvature),
                                   desiredAcceleration=float(desired_accel),
-                                  shouldStop=bool(should_stop))
+                                  shouldStop=bool(should_stop),
+                                  desiredVelocity=float(desired_velocity_now))
 
 class FrameMeta:
   frame_id: int = 0
@@ -266,11 +269,14 @@ def main(demo=False):
   frame = 0
   custom_lat_delay = 0.0
   lat_smooth_seconds = LAT_SMOOTH_SECONDS
+  vEgoStopping = params.get_float("VEgoStopping") * 0.01
   while True:
     frame += 1
     if frame % 100 == 0:
       custom_lat_delay = params.get_float("SteerActuatorDelay") * 0.01
       #lat_smooth_seconds = params.get_float("SteerSmoothSec") * 0.01
+      long_delay = params.get_float("LongActuatorDelay")*0.01
+      vEgoStopping = params.get_float("VEgoStopping") * 0.01
       
     if custom_lat_delay > 0.0:
       lat_delay = custom_lat_delay + lat_smooth_seconds
@@ -360,7 +366,7 @@ def main(demo=False):
       drivingdata_send = messaging.new_message('drivingModelData')
       posenet_send = messaging.new_message('cameraOdometry')
 
-      action = get_action_from_model(model_output, prev_action, lat_delay + DT_MDL, long_delay + DT_MDL, v_ego, lat_smooth_seconds)
+      action = get_action_from_model(model_output, prev_action, lat_delay + DT_MDL, long_delay + DT_MDL, v_ego, lat_smooth_seconds, vEgoStopping)
       prev_action = action
       fill_model_msg(drivingdata_send, modelv2_send, model_output, action,
                      publish_state, meta_main.frame_id, meta_extra.frame_id, frame_id,

@@ -294,7 +294,7 @@ class CarController(CarControllerBase):
         self.canfd_toggle_adas(CC, CS)
       if self.CP.openpilotLongitudinalControl:
         self.hyundai_jerk.make_jerk(self.CP, CS, accel, actuators, hud_control)
-        self.hyundai_jerk.check_carrot_cruise(CC, CS, hud_control, stopping, accel, actuators.aTargetNow)
+        self.hyundai_jerk.check_carrot_cruise(CC, CS, hud_control, stopping, accel, actuators.aTarget)
 
         if True: #not camera_scc:
           can_sends.extend(hyundaicanfd.create_ccnc_messages(self.CP, self.packer, self.CAN, self.frame, CC, CS, hud_control, apply_angle, left_lane_warning, right_lane_warning, self.canfd_debug, self.MainMode_ACC_trigger, self.LFA_trigger))
@@ -332,7 +332,7 @@ class CarController(CarControllerBase):
 
       if self.frame % 2 == 0 and self.CP.openpilotLongitudinalControl:
         self.hyundai_jerk.make_jerk(self.CP, CS, accel, actuators, hud_control)
-        self.hyundai_jerk.check_carrot_cruise(CC, CS, hud_control, stopping, accel, actuators.aTargetNow)
+        self.hyundai_jerk.check_carrot_cruise(CC, CS, hud_control, stopping, accel, actuators.aTarget)
         #jerk = 3.0 if actuators.longControlState == LongCtrlState.pid else 1.0
         use_fca = self.CP.flags & HyundaiFlags.USE_FCA.value
         if camera_scc:
@@ -538,7 +538,7 @@ class HyundaiJerk:
     self.carrot_cruise = 1
     self.carrot_cruise_accel = 0.0
 
-  def check_carrot_cruise(self, CC, CS, hud_control, stopping, accel, a_target_now):
+  def check_carrot_cruise(self, CC, CS, hud_control, stopping, accel, a_target):
     carrot_cruise_decel = self.params.get_float("CarrotCruiseDecel")
     carrot_cruise_atc_decel = self.params.get_float("CarrotCruiseAtcDecel")
     if carrot_cruise_atc_decel >= 0 and 0 < hud_control.atcDistance < 500:
@@ -548,7 +548,7 @@ class HyundaiJerk:
       if CS.softHoldActive == 0 and not stopping:
         if CS.out.vEgo > 10/3.6:
           if carrot_cruise_decel < 0:
-            if (a_target_now > -0.1 or accel > -0.1):
+            if (a_target > -0.1 or accel > -0.1):
               self.carrot_cruise = 1
               self.carrot_cruise_accel = 0.0
           else:
@@ -563,7 +563,7 @@ class HyundaiJerk:
       self.jerk = self.jerk_u_min / 2 - CS.out.aEgo
     else:
       jerk = actuators.jerk if actuators.longControlState == LongCtrlState.pid else 0.0
-      #a_error = actuators.aTargetNow - CS.out.aEgo
+      #a_error = actuators.aTarget - CS.out.aEgo
       self.jerk = jerk# + a_error
 
     jerk_max_l = 5.0
