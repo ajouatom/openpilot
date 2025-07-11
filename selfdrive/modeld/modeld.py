@@ -60,7 +60,7 @@ def get_action_from_model(model_output: dict[str, np.ndarray], prev_action: log.
                                                      action_t=long_action_t,
                                                      vEgoStopping=vEgoStopping)
     desired_accel = smooth_value(desired_accel, prev_action.desiredAcceleration, LONG_SMOOTH_SECONDS)
-    desired_velocity = smooth_value(desired_velocity, prev_action.desiredVelocity, LONG_SMOOTH_SECONDS)
+    desired_velocity_now = smooth_value(desired_velocity_now, prev_action.desiredVelocity, LONG_SMOOTH_SECONDS)
 
     desired_curvature = get_curvature_from_plan(plan[:,Plan.T_FROM_CURRENT_EULER][:,2],
                                                 plan[:,Plan.ORIENTATION_RATE][:,2],
