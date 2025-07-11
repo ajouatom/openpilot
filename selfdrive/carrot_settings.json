@@ -327,6 +327,19 @@
       "unit": 10
     },
     {
+      "group": "크루즈",
+      "name": "CommaLongAcc",
+      "title": "콤마크루즈(0)",
+      "descr": "",
+      "egroup": "CRUISE",
+      "etitle": "CommaCruise",
+      "edescr": "",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
       "group": "조향튜닝",
       "name": "CustomSR",
       "title": "CustomSteerRatiox0.1(0)",

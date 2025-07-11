@@ -162,6 +162,7 @@ inline static std::unordered_map<std::string, uint32_t> keys = {
     {"CruiseEcoControl", PERSISTENT},
     {"CarrotCruiseDecel", PERSISTENT},
     {"CarrotCruiseAtcDecel", PERSISTENT},
+    {"CommaLongAcc", PERSISTENT},
     {"AutoGasTokSpeed", PERSISTENT},
     {"AutoGasSyncSpeed", PERSISTENT},
     {"AutoEngage", PERSISTENT},

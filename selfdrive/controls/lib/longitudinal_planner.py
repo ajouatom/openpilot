@@ -77,6 +77,8 @@ class LongitudinalPlanner:
 
     self.v_cruise_kph = 0.0
 
+    self.params = Params()
+
   @staticmethod
   def parse_model(model_msg):
     if (len(model_msg.position.x) == ModelConstants.IDX_N and
@@ -151,7 +153,10 @@ class LongitudinalPlanner:
     self.v_desired_filter.x = max(0.0, self.v_desired_filter.update(v_ego))
     x, v, a, j, throttle_prob = self.parse_model(sm['modelV2'])
     # Don't clip at low speeds since throttle_prob doesn't account for creep
-    self.allow_throttle = throttle_prob > ALLOW_THROTTLE_THRESHOLD or v_ego <= MIN_ALLOW_THROTTLE_SPEED  or self.mpc.mode == 'acc' # carrot: always allow
+    if self.params.get_int("CommaLongAcc") > 0:
+      self.allow_throttle = throttle_prob > ALLOW_THROTTLE_THRESHOLD or v_ego <= MIN_ALLOW_THROTTLE_SPEED
+    else:
+      self.allow_throttle = True
 
     if not self.allow_throttle:
       clipped_accel_coast = max(accel_coast, accel_limits_turns[0])
@@ -183,8 +188,8 @@ class LongitudinalPlanner:
     self.a_desired = float(np.interp(self.dt, CONTROL_N_T_IDX, self.a_desired_trajectory))
     self.v_desired_filter.x = self.v_desired_filter.x + self.dt * (self.a_desired + a_prev) / 2.0
 
-    longitudinalActuatorDelay = Params().get_float("LongActuatorDelay")*0.01
-    vEgoStopping = Params().get_float("VEgoStopping") * 0.01
+    longitudinalActuatorDelay = self.params.get_float("LongActuatorDelay")*0.01
+    vEgoStopping = self.params.get_float("VEgoStopping") * 0.01
     action_t =  longitudinalActuatorDelay + DT_MDL
 
     output_a_target_mpc, output_should_stop_mpc = get_accel_from_plan(self.v_desired_trajectory, self.a_desired_trajectory, CONTROL_N_T_IDX,
