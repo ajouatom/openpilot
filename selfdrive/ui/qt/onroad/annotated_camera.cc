@@ -4,6 +4,7 @@
 #include <QPainter>
 #include <algorithm>
 #include <cmath>
+#include <unistd.h>
 #include <exception>
 #include <iostream>
 #include <execinfo.h>
