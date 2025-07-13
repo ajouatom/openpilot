@@ -58,6 +58,12 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
       "../assets/offroad/icon_monitoring.png",
     },
     {
+      "RecordAudio",
+      tr("Record and Upload Microphone Audio"),
+      tr("Record and store microphone audio while driving. The audio will be included in the dashcam video in comma connect."),
+      "../assets/offroad/microphone.png",
+    },
+    {
       "IsMetric",
       tr("Use Metric System"),
       tr("Display speed in km/h instead of mph."),
