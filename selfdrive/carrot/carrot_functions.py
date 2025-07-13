@@ -412,8 +412,7 @@ class CarrotPlanner:
         self.xState = XState.lead
       elif self.stopping_count == 0:
         if self.trafficState == TrafficState.green and not self.carrot_stay_stop and not carstate.leftBlinker and self.trafficLightDetectMode != 1:
-          #self.xState = XState.e2ePrepare
-          self.xState = XState.e2eCruise  # 실험모드를 거치지 않고 바로 출발.
+          self.xState = XState.e2ePrepare
           self.events.add(EventName.trafficSignGreen)
       self.stopping_count = max(0, self.stopping_count - 1)
       v_cruise = 0
