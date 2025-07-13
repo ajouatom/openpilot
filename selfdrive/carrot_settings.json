@@ -134,10 +134,10 @@
     {
       "group": "조향튜닝",
       "name": "LatMpcAccelCost",
-      "title": "*LATMPC.AccelCost(100)",
+      "title": "*LATMPC.AccelCost(120)",
       "descr": "횡가속도제한, 낮으면 민첩성증가 안정성감소",
       "egroup": "LAT",
-      "etitle": "*LATMPC.AccelCost(100)",
+      "etitle": "*LATMPC.AccelCost(120)",
       "edescr": "",
       "min": 0,
       "max": 500,

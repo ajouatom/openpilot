@@ -151,7 +151,7 @@ def get_default_params():
     ("LateralTorqueKd", "0"),
     ("LatMpcPathCost", "200"),
     ("LatMpcMotionCost", "7"),
-    ("LatMpcAccelCost", "100"),
+    ("LatMpcAccelCost", "120"),
     ("LatMpcJerkCost", "4"),
     ("LatMpcSteeringRateCost", "7"),
     ("LatMpcInputOffset", "4"),
