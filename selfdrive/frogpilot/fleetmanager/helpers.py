@@ -195,6 +195,9 @@ def ffmpeg_mp4_wrap_process_builder(filename):
   command_line += ["-r", "20"]
   command_line += ["-i", filename]
   command_line += ["-c", "copy"]
+
+  command_line += ["-bsf:a", "aac_adtstoasc"]
+  
   command_line += ["-map", "0"]
   if extension == "hevc":
     command_line += ["-vtag", "hvc1"]
