@@ -440,8 +440,6 @@ def forward_button_message(packer, CAN, frame, CS, cruise_button, MainMode_ACC_t
 def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle, left_lane_warning, right_lane_warning, canfd_debug, MainMode_ACC_trigger, LFA_trigger):
   ret = []
 
-  values = {
-  }
   if CP.flags & HyundaiFlags.CAMERA_SCC.value:
     if frame % 2 == 0:
       if CS.adrv_info_160 is not None:
@@ -466,6 +464,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         if CS.adrv_info_161 is not None:
           main_enabled = CS.out.cruiseState.available
           cruise_enabled = CC.enabled
+          lat_enabled = CS.latEnabled
           lat_active = CC.latActive
           nav_active = hud_control.activeCarrot > 1
 
@@ -481,27 +480,27 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           values = CS.adrv_info_161
           #print("adrv_info_161 = ", CS.adrv_info_161)
 
-          values["SETSPEED"] = 6 if hdp_active else 3 if main_enabled else 0
-          values["SETSPEED_HUD"] = 5 if hdp_active else 2 if cruise_enabled else 1
+          values["SETSPEED"] = (6 if hdp_active else 3 if cruise_enabled else 1) if main_enabled else 0
+          values["SETSPEED_HUD"] = (5 if hdp_active else 3 if cruise_enabled else 1) if main_enabled else 0
           set_speed_in_units = hud_control.setSpeed * (CV.MS_TO_KPH if CS.is_metric else CV.MS_TO_MPH)
           values["vSetDis"] = int(set_speed_in_units + 0.5)
 
           values["DISTANCE"] = 4 if hdp_active else hud_control.leadDistanceBars
-          values["DISTANCE_LEAD"] = 2 if cruise_enabled and hud_control.leadVisible else 0
+          values["DISTANCE_LEAD"] = 2 if cruise_enabled and hud_control.leadVisible else 1 if main_enabled and hud_control.leadVisible else 0
           values["DISTANCE_CAR"] = 3 if hdp_active else 2 if cruise_enabled else 1 if main_enabled else 0
           values["DISTANCE_SPACING"] = 5 if hdp_active else 1 if cruise_enabled else 0
 
-          values["TARGET"] = 1 if cruise_enabled else 0
+          values["TARGET"] = 1 if main_enabled else 0
           values["TARGET_DISTANCE"] = int(hud_control.leadDistance)
 
           values["BACKGROUND"] = 6 if CS.paddle_button_prev > 0 else 1 if cruise_enabled else 3 if main_enabled else 7
-          values["CENTERLINE"] = 1 if lat_active else 0
-          values["CAR_CIRCLE"] = 2 if hdp_active else 1 if lat_active else 0
+          values["CENTERLINE"] = 1 if lat_enabled else 0
+          values["CAR_CIRCLE"] = 2 if hdp_active else 1 if cruise_enabled else 0
 
-          values["NAV_ICON"] = 2 if nav_active else 1
-          values["HDA_ICON"] = 5 if hdp_active else 2 if lat_active else 1
-          values["LFA_ICON"] = 5 if hdp_active else 2 if lat_active else 1
-          values["LKA_ICON"] = 4 if lat_active else 3
+          values["NAV_ICON"] = 2 if nav_active else 0
+          values["HDA_ICON"] = 5 if hdp_active else 2 if cruise_enabled else 1 if main_enabled else 0
+          values["LFA_ICON"] = 5 if hdp_active else 2 if lat_active else 1 if lat_enabled else 0
+          values["LKA_ICON"] = 4 if lat_active else 3 if lat_enabled else 1
           values["FCA_ALT_ICON"] = 0
 
           if values["ALERTS_2"] in [1, 2, 5]:
