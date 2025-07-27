@@ -2041,7 +2041,7 @@ public:
             int wStr = 40;
             for (auto const& vrd : lead_vertices_side) {
                 auto [rx, ry, rd, rv, ry_rel, v_lat, radar] = vrd;
-                v_sum = rv + yv_rel;
+                float v_sum = rv + yv_rel;
                 if (v_sum < -1.0 || v_sum > 1.0) {
                     sprintf(str, "%.0f", (s->scene.is_metric)? v_sum * MS_TO_KPH : v_sum * MS_TO_MPH);
                     wStr = 35 * (strlen(str) + 0);
