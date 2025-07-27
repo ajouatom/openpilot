@@ -485,8 +485,8 @@ class CarState(CarStateBase):
 
     if self.CP.extFlags & HyundaiExtFlags.HAS_ACAN.value and cp_alt:
       if "CAM_0x362" in cp_alt.vl:
-        left_lane_prob = cp_alt.vl["CAM_0x362"]["LEFT_LANE_LINE_PROB"]
-        right_lane_prob = cp_alt.vl["CAM_0x362"]["RIGHT_LANE_LINE_PROB"]
+        left_lane_prob = cp_alt.vl["CAM_0x362"]["LEFT_LANE_PROB"]
+        right_lane_prob = cp_alt.vl["CAM_0x362"]["RIGHT_LANE_PROB"]
         left_lane_type = cp_alt.vl["CAM_0x362"]["LEFT_LANE_TYPE"]
         right_lane_type = cp_alt.vl["CAM_0x362"]["RIGHT_LANE_TYPE"]
         left_lane_color = cp_alt.vl["CAM_0x362"]["LEFT_LANE_COLOR"]
