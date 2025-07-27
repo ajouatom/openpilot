@@ -149,6 +149,7 @@ class HyundaiExtFlags(IntFlag):
   HAS_LFAHDA = 2 ** 4
   HAS_LFA_BUTTON = 2 ** 5
   CANFD_GEARS_NONE = 2 ** 6
+  RADAR_GROUP1 = 2 ** 7  # 0x210 radar group 1, 0x3A5 radar group 2
   #ACAN_PANDA = 2 ** 7
   BSM_IN_ADAS = 2 ** 8
   CANFD_TPMS = 2 ** 9
