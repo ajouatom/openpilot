@@ -325,6 +325,7 @@ class CarState(CarStateBase):
   def update_canfd(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
+    cp_alt = can_parsers[Bus.alt] if Bus.alt in can_parsers else None
 
     ret = structs.CarState()
 
@@ -481,6 +482,19 @@ class CarState(CarStateBase):
       ret.gearStep = cp.vl["GEAR"]["GEAR_STEP"]
     elif "GEAR_ALT" in cp.vl:
       ret.gearStep = cp.vl["GEAR_ALT"]["GEAR_STEP"]
+
+    if self.CP.extFlags & HyundaiExtFlags.HAS_ACAN.value and cp_alt:
+      if "CAM_0x362" in cp_alt.vl:
+        left_lane_prob = cp_alt.vl["CAM_0x362"]["LEFT_LANE_LINE_PROB"]
+        right_lane_prob = cp_alt.vl["CAM_0x362"]["RIGHT_LANE_LINE_PROB"]
+        left_lane_type = cp_alt.vl["CAM_0x362"]["LEFT_LANE_TYPE"]
+        right_lane_type = cp_alt.vl["CAM_0x362"]["RIGHT_LANE_TYPE"]
+        left_lane_color = cp_alt.vl["CAM_0x362"]["LEFT_LANE_COLOR"]
+        right_lane_color = cp_alt.vl["CAM_0x362"]["RIGHT_LANE_COLOR"]
+        left_lane_info = left_lane_color * 10 + left_lane_type
+        right_lane_info = right_lane_color * 10 + right_lane_type
+        ret.leftLaneLine = left_lane_info
+        ret.rightLaneLine = right_lane_info
 
     # Manual Speed Limit Assist is a feature that replaces non-adaptive cruise control on EV CAN FD platforms.
     # It limits the vehicle speed, overridable by pressing the accelerator past a certain point.
@@ -653,9 +667,16 @@ class CarState(CarStateBase):
           ("BLINDSPOTS_REAR_CORNERS", 20),
         ]
 
+    alt_message = []
+    if CP.extFlags & HyundaiExtFlags.HAS_ACAN.value:
+      alt_message += [
+          ("CAM_0x362", 20),
+        ]
+
     return {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], pt_messages, CanBus(CP).ECAN),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], cam_messages, CanBus(CP).CAM),
+      Bus.alt: CANParser(DBC[CP.carFingerprint][Bus.pt], alt_message, CanBus(CP).ACAN),
     }
 
   def get_can_parsers(self, CP):

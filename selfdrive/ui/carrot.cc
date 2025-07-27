@@ -840,11 +840,14 @@ private:
     float road_edge_stds[2];
     QPolygonF lane_line_vertices[4];
     QPolygonF road_edge_vertices[2];
+    int  left_lane_line = 0;
+    int  right_lane_line = 0;
 
 protected:
     bool make_data(const UIState* s) {
         SubMaster& sm = *(s->sm);
         if (!sm.alive("modelV2")) return false;
+        if (!sm.alive("carState")) return false;
         const cereal::ModelDataV2::Reader& model = sm["modelV2"].getModelV2();
         const auto model_lane_lines = model.getLaneLines();
         const auto model_lane_line_probs = model.getLaneLineProbs();
@@ -862,7 +865,8 @@ protected:
             road_edge_stds[i] = model_road_edge_stds[i];
             update_line_data(s, model_road_edges[i], 0.025, 0.0, 0.0, &road_edge_vertices[i], max_idx_road_edge);
         }
-
+        left_lane_line = sm["carState"].getCarState().getLeftLaneLine();
+        right_lane_line = sm["carState"].getCarState().getRightLaneLine();
         return true;
     }
     void drawRoadEdge(const UIState* s) {
@@ -880,8 +884,11 @@ public:
         if(!make_data(s)) return;
         NVGcolor color;
         for (int i = 0; i < std::size(lane_line_vertices); ++i) {
-            color = nvgRGBAf(1.0, 1.0, 1.0, (lane_line_probs[i] > 0.3) ? 1.0 : 0.0);
-            ui_draw_line(s, lane_line_vertices[i], &color, nullptr);
+          int alpha = lane_line_probs[i] > 0.3) ? 1.0 : 0.0;
+          if (i == 1) color = (left_lane_line >= 20) ? COLOR_YELLOW_ALPHA(alpha) : COLOR_WHITE_ALPHA(alpha);
+          else if (i == 2) color = (right_lane_line >= 20) ? COLOR_YELLOW_ALPHA(alpha) : COLOR_WHITE_ALPHA(alpha);
+          else color = COLOR_WHITE_ALPHA(alpha);
+          ui_draw_line(s, lane_line_vertices[i], &color, nullptr);
         }
         if(show_lane_info > 1) drawRoadEdge(s);
     }
