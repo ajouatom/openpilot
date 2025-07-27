@@ -884,7 +884,7 @@ public:
         if(!make_data(s)) return;
         NVGcolor color;
         for (int i = 0; i < std::size(lane_line_vertices); ++i) {
-          int alpha = (lane_line_probs[i] > 0.3) ? 220 : 0.0;
+          int alpha = (lane_line_probs[i] > 0.3) ? 220 : 0;
           if (i == 1) color = (left_lane_line >= 20) ? COLOR_YELLOW_ALPHA(alpha) : COLOR_WHITE_ALPHA(alpha);
           else if (i == 2) color = (right_lane_line >= 20) ? COLOR_YELLOW_ALPHA(alpha) : COLOR_WHITE_ALPHA(alpha);
           else color = COLOR_WHITE_ALPHA(alpha);
