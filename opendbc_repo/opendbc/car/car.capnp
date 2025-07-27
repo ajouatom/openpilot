@@ -252,6 +252,8 @@ struct CarState {
   leftLongDist @71 : Float32; # distance to left lane line in the direction of travel
   rightLongDist @72 : Float32; # distance to right lane line in the direction of travel
   carrotCruise @73 : Int16;
+  leftLaneLine @74 : Int16; # -1: no lane, 0: dashed, 1: solid, +10: white, +20: yellow, ex) 21: solid yellow
+  rightLaneLine @75 : Int16; # -1: no lane, 0: dashed, 1: solid, +10: white, +20: yellow, ex) 21: solid yellow
 
   struct Tpms {
     fl @0 :Float32;

@@ -145,6 +145,7 @@ class HyundaiExtFlags(IntFlag):
   HAS_SCC14 = 2
   NAVI_CLUSTER = 2 ** 2
   #SCC_BUS2 = 2 ** 3
+  HAS_ACAN = 2 ** 3
   HAS_LFAHDA = 2 ** 4
   HAS_LFA_BUTTON = 2 ** 5
   CANFD_GEARS_NONE = 2 ** 6
