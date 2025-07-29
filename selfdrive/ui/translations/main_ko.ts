@@ -256,7 +256,7 @@
     </message>
     <message>
         <source>Disengage to Reboot</source>
-        <translation>재부팅하려면 연결을 해제하세요</translation>
+        <translation>재부팅하려면 인게이지를 해제하세요</translation>
     </message>
     <message>
         <source>Are you sure you want to power off?</source>
@@ -264,7 +264,7 @@
     </message>
     <message>
         <source>Disengage to Power Off</source>
-        <translation>전원을 끄려면 연결을 해제하세요</translation>
+        <translation>전원을 끄려면 인게이지를 해제하세요</translation>
     </message>
     <message>
         <source>Reset</source>
