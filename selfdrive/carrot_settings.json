@@ -1358,7 +1358,7 @@
       "group": "시작",
       "name": "EnableRadarTracks",
       "title": "레이더트랙,SCC레이더설정(0)",
-      "descr": "-1: 레이더트랙 미사용\n 0: 레이더트랙 미사용(SCC 항시사용)\n 1: 레이더트랙 사용(SCC 항시사용)\n 2: 레이더트랙 사용",
+      "descr": "-1: 레이더트랙 미사용(SCC 항시사용)\n 0: 레이더트랙 미사용\n 1: 레이더트랙 사용\n 2: 레이더트랙 사용(SCC 항시사용)",
       "egroup": "START",
       "etitle": "Enable radar tracks(0)",
       "edescr": "-1: Radar Track Disabled, 0: Radar Track Disabled (SCC Always On), 1: Radar Track Enabled (SCC Always On), 2: Radar Track Enabled",
