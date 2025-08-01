@@ -59,13 +59,12 @@ function install_ubuntu_common_requirements() {
     ocl-icd-libopencl1 \
     ocl-icd-opencl-dev \
     portaudio19-dev \
-    qtlocation5-dev \
-    qtpositioning5-dev \
     qttools5-dev-tools \
     libqt5svg5-dev \
     libqt5serialbus5-dev  \
     libqt5x11extras5-dev \
-    libqt5opengl5-dev
+    libqt5opengl5-dev \
+    xvfb
 }
 
 # Install Ubuntu 24.04 LTS packages

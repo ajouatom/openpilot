@@ -1,24 +1,27 @@
 import os
 import re
+import requests
 from functools import cache
 from urllib.parse import urlparse
 from collections import defaultdict
 from itertools import chain
 
 from openpilot.tools.lib.auth_config import get_token
-from openpilot.tools.lib.api import CommaApi
+from openpilot.tools.lib.api import APIError, CommaApi
 from openpilot.tools.lib.helpers import RE
 
-QLOG_FILENAMES = ['qlog', 'qlog.bz2', 'qlog.zst']
-QCAMERA_FILENAMES = ['qcamera.ts']
-LOG_FILENAMES = ['rlog', 'rlog.bz2', 'raw_log.bz2', 'rlog.zst']
-CAMERA_FILENAMES = ['fcamera.hevc', 'video.hevc']
-DCAMERA_FILENAMES = ['dcamera.hevc']
-ECAMERA_FILENAMES = ['ecamera.hevc']
+QLOG_FILENAMES = ('qlog.bz2', 'qlog.zst', 'qlog')
+QCAMERA_FILENAMES = ('qcamera.ts',)
+LOG_FILENAMES = ('rlog.bz2', 'raw_log.bz2', 'rlog.zst', 'rlog')
+CAMERA_FILENAMES = ('fcamera.hevc', 'video.hevc')
+DCAMERA_FILENAMES = ('dcamera.hevc',)
+ECAMERA_FILENAMES = ('ecamera.hevc',)
+BOOTLOG_FILENAMES = ('bootlog.zst', 'bootlog.bz2', 'bootlog')
 
 
 class Route:
   def __init__(self, name, data_dir=None):
+    self._metadata = None
     self._name = RouteName(name)
     self.files = None
     if data_dir is not None:
@@ -26,6 +29,13 @@ class Route:
     else:
       self._segments = self._get_segments_remote()
     self.max_seg_number = self._segments[-1].name.segment_num
+
+  @property
+  def metadata(self):
+    if not self._metadata:
+      api = CommaApi(get_token())
+      self._metadata = api.get('v1/route/' + self.name.canonical_name)
+    return self._metadata
 
   @property
   def name(self):
@@ -78,6 +88,7 @@ class Route:
           url if fn in DCAMERA_FILENAMES else segments[segment_name].dcamera_path,
           url if fn in ECAMERA_FILENAMES else segments[segment_name].ecamera_path,
           url if fn in QCAMERA_FILENAMES else segments[segment_name].qcamera_path,
+          self.metadata['url'],
         )
       else:
         segments[segment_name] = Segment(
@@ -88,6 +99,7 @@ class Route:
           url if fn in DCAMERA_FILENAMES else None,
           url if fn in ECAMERA_FILENAMES else None,
           url if fn in QCAMERA_FILENAMES else None,
+          self.metadata['url'],
         )
 
     return sorted(segments.values(), key=lambda seg: seg.name.segment_num)
@@ -153,7 +165,7 @@ class Route:
       except StopIteration:
         qcamera_path = None
 
-      segments.append(Segment(segment, log_path, qlog_path, camera_path, dcamera_path, ecamera_path, qcamera_path))
+      segments.append(Segment(segment, log_path, qlog_path, camera_path, dcamera_path, ecamera_path, qcamera_path, self.metadata['url']))
 
     if len(segments) == 0:
       raise ValueError(f'Could not find segments for route {self.name.canonical_name} in data directory {data_dir}')
@@ -161,8 +173,10 @@ class Route:
 
 
 class Segment:
-  def __init__(self, name, log_path, qlog_path, camera_path, dcamera_path, ecamera_path, qcamera_path):
+  def __init__(self, name, log_path, qlog_path, camera_path, dcamera_path, ecamera_path, qcamera_path, url):
+    self._events = None
     self._name = SegmentName(name)
+    self.url = f'{url}/{self._name.segment_num}'
     self.log_path = log_path
     self.qlog_path = qlog_path
     self.camera_path = camera_path
@@ -173,6 +187,17 @@ class Segment:
   @property
   def name(self):
     return self._name
+
+  @property
+  def events(self):
+    if not self._events:
+      try:
+        resp = requests.get(f'{self.url}/events.json')
+        resp.raise_for_status()
+        self._events = resp.json()
+      except Exception as e:
+        raise APIError(f'error getting events for segment {self._name}') from e
+    return self._events
 
 
 class RouteName:
@@ -192,9 +217,17 @@ class RouteName:
   def dongle_id(self) -> str: return self._dongle_id
 
   @property
+  def log_id(self) -> str: return self._time_str
+
+  @property
   def time_str(self) -> str: return self._time_str
 
+  @property
+  def azure_prefix(self):
+    return f'{self.dongle_id}/{self.log_id}'
+
   def __str__(self) -> str: return self._canonical_name
+
 
 
 class SegmentName:
@@ -217,11 +250,22 @@ class SegmentName:
   @property
   def canonical_name(self) -> str: return self._canonical_name
 
+  #TODO should only use one name
+  @property
+  def data_name(self) -> str: return f"{self._route_name.canonical_name}/{self._num}"
+
+  @property
+  def azure_prefix(self):
+    return f'{self.dongle_id}/{self.log_id}/{self._num}'
+
   @property
   def dongle_id(self) -> str: return self._route_name.dongle_id
 
   @property
   def time_str(self) -> str: return self._route_name.time_str
+
+  @property
+  def log_id(self) -> str: return self._route_name.time_str
 
   @property
   def segment_num(self) -> int: return self._num
@@ -234,6 +278,29 @@ class SegmentName:
 
   def __str__(self) -> str: return self._canonical_name
 
+  @staticmethod
+  def from_file_name(file_name):
+    # ??????/xxxxxxxxxxxxxxxx|1111-11-11-11--11-11-11/1/rlog.bz2
+    dongle_id, route_name, segment_num = file_name.replace('|','/').split('/')[-4:-1]
+    return SegmentName(dongle_id + "|" + route_name + "--" + segment_num)
+
+  @staticmethod
+  def from_device_key(dongle_id, key):
+    # 2018-05-07--18-56-13--5/rlog.bz2
+    segment_name = key.split('/')[0]
+    return SegmentName(dongle_id + "|" + segment_name)
+
+  @staticmethod
+  def from_file_key(key):
+    # 38c52c217150700f/2018-05-07--18-56-13/5/rlog.bz2
+    az_prefix = '/'.join(key.split('/')[:3])
+    return SegmentName.from_azure_prefix(az_prefix)
+
+  @staticmethod
+  def from_azure_prefix(prefix):
+    # xxxxxxxx/1111-11-11-11--11-11-11/0
+    dongle_id, route_name, segment_num = prefix.split("/")
+    return SegmentName(dongle_id + "|" + route_name + "--" + segment_num)
 
 @cache
 def get_max_seg_number_cached(sr: 'SegmentRange') -> int:
@@ -296,3 +363,4 @@ class SegmentRange:
 
   def __repr__(self) -> str:
     return self.__str__()
+
