@@ -164,6 +164,7 @@ def ffmpeg_mp4_concat_wrap_process_builder(file_list, cameratype, chunk_size=102
   command_line += ["-r", "20"]
   command_line += ["-i", "concat:" + file_list]
   command_line += ["-c", "copy"]
+  command_line += ["-bsf:a", "aac_adtstoasc"]
   command_line += ["-map", "0"]
   if not cameratype == "qcamera":
     command_line += ["-vtag", "hvc1"]
