@@ -140,18 +140,13 @@ void ScreenRecoder::encoding_thread_func() {
 
       QImage image = popImage.convertToFormat(QImage::Format_RGBA8888);
 
-      try {
-        libyuv::ARGBScale(image.bits(), image.width()*4,
-              image.width(), image.height(),
-              rgb_scale_buffer.get(), dst_width*4,
-              dst_width, dst_height,
-              libyuv::kFilterLinear);
-  
-        encoder->encode_frame_rgba(rgb_scale_buffer.get(), dst_width, dst_height, ((uint64_t)nanos_since_boot() - start_time ));
-      } catch (...) {
-        printf("Encoding failed, skipping frame\n");
-        continue;
-      }
+      libyuv::ARGBScale(image.bits(), image.width()*4,
+            image.width(), image.height(),
+            rgb_scale_buffer.get(), dst_width*4,
+            dst_width, dst_height,
+            libyuv::kFilterLinear);
+
+      encoder->encode_frame_rgba(rgb_scale_buffer.get(), dst_width, dst_height, ((uint64_t)nanos_since_boot() - start_time ));
     }
   }
 }
@@ -172,7 +167,7 @@ void ScreenRecoder::update_screen() {
 
   if(recording) {
 
-    if(milliseconds() - started > 1000*60*3) {
+    if(milliseconds() - started > 1000*60*60) {
       stop();
       start();
       return;
