@@ -524,6 +524,8 @@ class CarState(CarStateBase):
       self.tcs_info_373 = cp.vl["TCS"]
     
     ret.gearStep = cp.vl["GEAR"]["GEAR_STEP"] if self.GEAR else 0
+    if 1 <= ret.gearStep <= 8 and ret.gearShifter == GearShifter.unknown:
+      ret.gearShifter = GearShifter.drive
     ret.gearStep = cp.vl["GEAR_ALT"]["GEAR_STEP"] if self.GEAR_ALT else ret.gearStep
 
     if cp_alt and self.CP.flags & HyundaiFlags.CAMERA_SCC:
