@@ -132,7 +132,7 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
       best_score = score
       best_track = c
 
-  if best_track is not None:
+  if False: #best_track is not None:  # 빗길에서 레이더정보가 사라지는 경우가 있음... 이때는 표지판등이 정지차로 오인됨...
     if abs(lead.v[0] - best_track.vLead) > max_offset_vision_vel:
       best_track.is_stopped_car_count += 1
       # 직전에 사용되었던것이라면 재사용, 2초간 유지된다면 정지차로 간주.
