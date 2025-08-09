@@ -111,8 +111,8 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
     #if abs(lead.v[0] - c.vLead) > max_offset_vision_vel:
     #    return -1e6
 
-    if abs(c.yRel + c.yvLead * radar_lat_factor + lead.y[0]) > 3.0: # lead.y[0]는 반대..
-      return -1e6
+    #if abs(c.yRel + c.yvLead * radar_lat_factor + lead.y[0]) > 3.0: # lead.y[0]는 반대..
+    #  return -1e6
       
     prob_d = laplacian_pdf(c.dRel, offset_vision_dist, lead.xStd[0])
     prob_y = laplacian_pdf(c.yRel + c.yvLead * radar_lat_factor, -lead.y[0], lead.yStd[0])
@@ -132,7 +132,7 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
       best_score = score
       best_track = c
 
-  if False: #best_track is not None:  # 빗길에서 레이더정보가 사라지는 경우가 있음... 이때는 표지판등이 정지차로 오인됨...
+  if best_track is not None:  # 빗길에서 레이더정보가 사라지는 경우가 있음... 이때는 표지판등이 정지차로 오인됨...  레이더는 아직 나옴. y sane으로 발생한문제로 보임.. 다시..
     if abs(lead.v[0] - best_track.vLead) > max_offset_vision_vel:
       best_track.is_stopped_car_count += 1
       # 직전에 사용되었던것이라면 재사용, 2초간 유지된다면 정지차로 간주.
