@@ -821,7 +821,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   startToggles->addItem(new CValueControl("SoundVolumeAdjust", "Sound Volume(100%)", "", 5, 200, 5));
   startToggles->addItem(new CValueControl("SoundVolumeAdjustEngage", "Sound Volume, Engage(10%)", "", 5, 200, 5));
   startToggles->addItem(new CValueControl("MaxTimeOffroadMin", "Power off time (min)", "", 1, 600, 10));
-  startToggles->addItem(new CValueControl("EnableConnect", "EnableConnect", "Your device may be banned by Comma", 0, 1, 1));
+  startToggles->addItem(new CValueControl("EnableConnect", "EnableConnect", "Your device may be banned by Comma", 0, 2, 1));
   startToggles->addItem(new CValueControl("MapboxStyle", "Mapbox Style(0)", "", 0, 2, 1));
   startToggles->addItem(new CValueControl("RecordRoadCam", "Record Road camera(0)", "1:RoadCam, 2:RoadCam+WideRoadCam", 0, 2, 1));
   startToggles->addItem(new CValueControl("HDPuse", "Use HDP(CCNC)(0)", "1:While Using APN, 2:Always", 0, 2, 1));
