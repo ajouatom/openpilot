@@ -132,13 +132,13 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
       best_score = score
       best_track = c
 
-  if offset_vision_dist - c.dRel > max_offset_vision_dist: 
+  if offset_vision_dist - best_track.dRel > max_offset_vision_dist: 
     best_track = None
 
-  #if lead.v[0] - c.vLead > max_offset_vision_vel:
+  #if lead.v[0] - best_track.vLead > max_offset_vision_vel:
   #  best_track = None
 
-  if abs(c.yRel + c.yvLead * radar_lat_factor + lead.y[0]) > 3.0: # lead.y[0]는 반대..
+  if abs(best_track.yRel + best_track.yvLead * radar_lat_factor + lead.y[0]) > 3.0: # lead.y[0]는 반대..
     best_track = None
 
   if best_track is not None:
