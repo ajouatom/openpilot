@@ -836,9 +836,10 @@ class CarrotMan:
         self.navd_active = True
 
         # 경로수신 -> carrotman active되고 약간의 시간지연이 발생함..
-        self.carrot_serv.active_count = 80
-        self.carrot_serv.active_sdi_count = self.carrot_serv.active_sdi_count_max
-        self.carrot_serv.active_carrot = 2
+        if not from_navd:
+          self.carrot_serv.active_count = 80
+          self.carrot_serv.active_sdi_count = self.carrot_serv.active_sdi_count_max
+          self.carrot_serv.active_carrot = 2
 
         coords = [{"latitude": c.latitude, "longitude": c.longitude} for c in coords]
         #print("navdNaviPoints=", self.navi_points)
