@@ -135,7 +135,7 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
   if best_track is not None and offset_vision_dist - best_track.dRel > max_offset_vision_dist: 
     best_track = None
 
-  #if lead.v[0] - best_track.vLead > max_offset_vision_vel:
+  #if best_track is not None and lead.v[0] - best_track.vLead > max_offset_vision_vel:
   #  best_track = None
 
   if best_track is not None and abs(best_track.yRel + best_track.yvLead * radar_lat_factor + lead.y[0]) > 3.0: # lead.y[0]는 반대..
