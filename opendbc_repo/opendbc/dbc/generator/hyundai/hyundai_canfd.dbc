@@ -492,7 +492,7 @@ BO_ 474 ADRV_0x1da: 32 ADRV
  SG_ SET_ME_22 : 31|8@0+ (1,0) [0|255] "" XXX
  SG_ SET_ME_41 : 47|8@0+ (1,0) [0|255] "" XXX
 
-BO_ 480 ADAS_CMD_31_50ms: 16 FR_CMR
+BO_ 480 LFAHDA_CLUSTER: 16 FR_CMR
  SG_ ADAS_CMD_Crc31Val : 0|16@1+ (1,0) [0|0] ""  CGW
  SG_ ADAS_CMD_AlvCnt31Val : 16|8@1+ (1,0) [0|0] ""  CGW
  SG_ HDA_OptUsmSta : 24|3@1+ (1,0) [0|0] ""  CGW
