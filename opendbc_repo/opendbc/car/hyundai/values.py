@@ -748,7 +748,7 @@ class CAR(Platforms):
   )
   KIA_K5_HEV = HyundaiPlatformConfig(
     [HyundaiCarDocs("Kia K5 Hybrid 2017", "All", car_parts=CarParts.common([CarHarness.hyundai_c]))],
-    CarSpecs(mass=1515, wheelbase=2.80, steerRatio=15.5, tireStiffnessFactor=0.7),
+    CarSpecs(mass=1705, wheelbase=2.80, steerRatio=15.5, tireStiffnessFactor=0.7),
     flags=HyundaiFlags.HYBRID | HyundaiFlags.LEGACY,
   )
   KIA_K5_HEV_2022 = HyundaiPlatformConfig(
