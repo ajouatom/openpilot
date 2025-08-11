@@ -492,17 +492,21 @@ BO_ 474 ADRV_0x1da: 32 ADRV
  SG_ SET_ME_22 : 31|8@0+ (1,0) [0|255] "" XXX
  SG_ SET_ME_41 : 47|8@0+ (1,0) [0|255] "" XXX
 
-BO_ 480 LFAHDA_CLUSTER: 16 ADRV
- SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
- SG_ COUNTER : 16|8@1+ (1,0) [0|255] "" XXX
- SG_ OptUsmState : 26|3@0+ (1,0) [0|7] "" XXX
- SG_ HDA_ICON : 30|2@1+ (1,0) [0|3] "" XXX
- SG_ LFA_State : 34|3@0+ (1,0) [0|7] "" XXX
- SG_ LFA_ICON : 47|2@1+ (1,0) [0|3] "" XXX
- SG_ LFA_WrnSnd : 49|2@1+ (1,0) [0|3] "" XXX
- SG_ HDA_InfoPopup : 51|3@1+ (1,0) [0|7] "" XXX
- SG_ LFA_Deactive : 54|2@1+ (1,0) [0|3] "" XXX
-
+BO_ 480 ADAS_CMD_31_50ms: 16 FR_CMR
+ SG_ ADAS_CMD_Crc31Val : 0|16@1+ (1,0) [0|0] ""  CGW
+ SG_ ADAS_CMD_AlvCnt31Val : 16|8@1+ (1,0) [0|0] ""  CGW
+ SG_ HDA_OptUsmSta : 24|3@1+ (1,0) [0|0] ""  CGW
+ SG_ LFA_OptUsmSta : 27|3@1+ (1,0) [0|0] ""  CGW
+ SG_ HDA_CntrlModSta : 30|2@1+ (1,0) [0|0] ""  CGW
+ SG_ HDA_InfoPUDis : 32|3@1+ (1,0) [0|0] ""  CGW
+ SG_ HDA_AutoSetSpdSta : 35|2@1+ (1,0) [0|0] ""  CGW
+ SG_ HDA_AutoSetSpdUpdtSta : 37|2@1+ (1,0) [0|0] ""  CGW
+ SG_ HDA_AutoSetSpdVal : 39|8@1+ (1,0) [0|0] "km/h"  CGW
+ SG_ HDA_LFA_SymSta : 47|2@1+ (1,0) [0|0] ""  CGW
+ SG_ HDA_LFA_WrnSnd : 49|2@1+ (1,0) [0|0] ""  Dummy
+ SG_ HDA_InfoPUDis1 : 51|3@1+ (1,0) [0|7] ""  CLU,CGW
+ SG_ HDA_TDMRMDclReq : 54|2@1+ (1,0) [0|3] ""  Dummy
+ 
 BO_ 490 ADRV_0x1ea: 32 ADRV
  SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
  SG_ COUNTER : 16|8@1+ (1,0) [0|255] "" XXX
@@ -975,6 +979,16 @@ VAL_ 426 CRUISE_BUTTONS 0 "none" 1 "res_accel" 2 "set_decel" 3 "gap_distance" 4 
 VAL_ 463 CRUISE_BUTTONS 0 "none" 1 "res_accel" 2 "set_decel" 3 "gap_distance" 4 "pause_resume" ;
 VAL_ 463 RIGHT_PADDLE 0 "Not Pulled" 1 "Pulled";
 VAL_ 463 LEFT_PADDLE 0 "Not Pulled" 1 "Pulled";
+VAL_ 480 HDA_OptUsmSta 0 "Not Applied" 1 "Function Off" 2 "Function On" 3 "Reserved" 4 "Reserved" 5 "Reserved" 6 "Reserved" 7 "Invalid (Fail)" ;
+VAL_ 480 LFA_OptUsmSta 0 "Not Applied" 1 "Function Off" 2 "Function On" 3 "Reserved" 4 "Reserved" 5 "Reserved" 6 "Reserved" 7 "Invalid (Fail)" ;
+VAL_ 480 HDA_CntrlModSta 0 "System Deactive (Default)" 1 "System Ready" 2 "System Active" 3 "Reserved" ;
+VAL_ 480 HDA_InfoPUDis 0 "No pop-up" 1 "system start pop-up" 2 "system auto disengaged pop-up by highway off" 3 "system auto disengaged pop-up" 4 "system Fail pop-up" 5 "Hands-off pop up" 6 "Hands-off pop up w/ sound" 7 "System Automatic off" ;
+VAL_ 480 HDA_AutoSetSpdSta 0 "Auto Set Speed Off" 1 "Auto Set Speed On" 2 "Reserved" 3 "Error indicator" ;
+VAL_ 480 HDA_AutoSetSpdUpdtSta 0 "Auto Set Speed Update Off" 1 "Auto Set Speed Update On" 2 "Reserved" 3 "Error indicator" ;
+VAL_ 480 HDA_LFA_SymSta 0 "Off" 1 "Gray" 2 "Green" 3 "Green blink" ;
+VAL_ 480 HDA_LFA_WrnSnd 0 "Off " 1 "Additional Warning Sound" 2 "Reserved" 3 "Error indicator" ;
+VAL_ 480 HDA_InfoPUDis1 0 "No Pop-up" 1 "System Automatic off (LFA)" 2 "System Automatic off (HDA)" 3 "Reserved" 4 "Reserved" 5 "Reserved" 6 "Not Used" 7 "Error Indicator" ;
+VAL_ 480 HDA_TDMRMDclReq 0 "Not automatically deactivated state of LFA (default)" 1 "Automatically deactivated state of LFA" 2 "Reserved" 3 "Reserved" ;
 VAL_ 676 LEFT_LANE_LINE 0 "Not Detected" 1 "Low Confidence" 2 "Medium Confidence" 3 "High Confidence";
 VAL_ 676 RIGHT_LANE_LINE 0 "Not Detected" 1 "Low Confidence" 2 "Medium Confidence" 3 "High Confidence";
 VAL_ 736 MSLA_STATUS 0 "disabled" 1 "active" 2 "paused";
