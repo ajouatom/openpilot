@@ -55,7 +55,7 @@ class Track:
     if self.cnt == 0:
       self.yRel_filtered = self.yRel
     else:
-      self.yRel_filtered = self.yRel_filtered * 0.98 + self.yRel * 0.02
+      self.yRel_filtered = self.yRel_filtered * 0.95 + self.yRel * 0.05
 
     a_lead_threshold = 0.5 * radar_reaction_factor
     if abs(self.aLead) < a_lead_threshold and abs(self.jLead) < 0.5:
@@ -225,7 +225,7 @@ def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego, radar_lat_factor =
       ld = c.get_RadarState(0, 0)
       leads_left[c.dRel] = ld
 
-    if abs(d_y) < 2.3 and 4 < c.dRel < 20.0 and c.vLead > 4.0:
+    if abs(d_y) < 2.1 and 4 < c.dRel < 20.0 and c.vLead > 4.0 and c.cnt > int(2.0/DT_MDL):
       if leadCutIn['status'] is False or c.dRel < leadCutIn['dRel']:
         leadCutIn = c.get_RadarState(lead_msg.prob)
 
