@@ -225,7 +225,8 @@ def get_lead_side(v_ego, tracks, md, lane_width, model_v_ego, radar_lat_factor =
       ld = c.get_RadarState(0, 0)
       leads_left[c.dRel] = ld
 
-    if abs(d_y) < 2.1 and 4 < c.dRel < 20.0 and c.vLead > 4.0 and c.cnt > int(2.0/DT_MDL):
+    # 레이더가 3.4m 차폭보다 적으면, 
+    if abs(d_y) < 3.4/2 and 4 < c.dRel < 20.0 and c.vLead > 4.0 and c.cnt > int(2.0/DT_MDL):
       if leadCutIn['status'] is False or c.dRel < leadCutIn['dRel']:
         leadCutIn = c.get_RadarState(lead_msg.prob)
 
