@@ -54,10 +54,10 @@ class Track:
 
     if self.cnt == 0:
       self.yRel_filtered = self.yRel
-      self.yvRel_filtered = self.yvLead
+      self.yvLead_filtered = self.yvLead
     else:
       self.yRel_filtered = self.yRel_filtered * 0.95 + self.yRel * 0.05
-      self.yvRel_filtered = self.yvRel_filtered * 0.95 + self.yvLead * 0.05
+      self.yvLead_filtered = self.yvLead_filtered * 0.95 + self.yvLead * 0.05
 
     a_lead_threshold = 0.5 * radar_reaction_factor
     if abs(self.aLead) < a_lead_threshold and abs(self.jLead) < 0.5:
