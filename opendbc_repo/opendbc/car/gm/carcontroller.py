@@ -302,7 +302,7 @@ class CarController(CarControllerBase):
       if (self.frame - self.last_button_frame) * DT_CTRL > 0.04:
         if self.cancel_counter > CAMERA_CANCEL_DELAY_FRAMES:
           self.last_button_frame = self.frame
-          can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.CAMERA, CS.buttons_counter, CruiseButtons.CANCEL))
+          can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.CAMERA, (CS.buttons_counter + 1) % 4, CruiseButtons.CANCEL))
 
     if self.CP.networkLocation == NetworkLocation.fwdCamera:
       # Silence "Take Steering" alert sent by camera, forward PSCMStatus with HandsOffSWlDetectionStatus=1
@@ -323,10 +323,10 @@ class CarController(CarControllerBase):
   # GM: AutoResume
   def brake_input(self, brake_force):
     MAX_BRAKE = 400
-    ZERO_GAS = 2048
+    ZERO_GAS = 0.0
 
     if brake_force > 0.0:
       raise ValueError("brake_force는 0.0이하라야 됨.")
 
     scaled_brake = max(0, min(MAX_BRAKE, int(brake_force * -100)))  # -를 +로 변환
-    return ZERO_GAS - scaled_brake
+    return -scaled_brake

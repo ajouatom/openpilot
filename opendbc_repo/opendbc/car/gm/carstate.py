@@ -13,7 +13,7 @@ TransmissionType = structs.CarParams.TransmissionType
 NetworkLocation = structs.CarParams.NetworkLocation
 GearShifter = structs.CarState.GearShifter
 STANDSTILL_THRESHOLD = 10 * 0.0311 * CV.KPH_TO_MS
-LongCtrlState = car.CarControl.Actuators.LongControlState # kans
+
 BUTTONS_DICT = {CruiseButtons.RES_ACCEL: ButtonType.accelCruise, CruiseButtons.DECEL_SET: ButtonType.decelCruise,
                 CruiseButtons.MAIN: ButtonType.mainCruise, CruiseButtons.CANCEL: ButtonType.cancel,
                 CruiseButtons.GAP_DIST: ButtonType.gapAdjustCruise}
@@ -32,15 +32,12 @@ class CarState(CarStateBase):
     self.cam_lka_steering_cmd_counter = 0
     self.is_metric = False
 
-    # GAP_DIST
-    self.prev_distance_button = False
-    self.distance_button_pressed = False
-
-    self.cruise_buttons = 0
     self.buttons_counter = 0
     self.single_pedal_mode = False
     self.pedal_steady = 0.
-
+    self.cruise_buttons = 0
+    # GAP_DIST
+    self.distance_button = 0
 
     # cruiseMain default(test from nd0706-vision)
     self.cruiseMain_on = True if Params().get_int("AutoEngage") == 2 else False
@@ -62,14 +59,14 @@ class CarState(CarStateBase):
     ret = structs.CarState()
 
     prev_cruise_buttons = self.cruise_buttons
-    self.prev_distance_button = self.distance_button_pressed
+    prev_distance_button = self.distance_button
     self.cruise_buttons = pt_cp.vl["ASCMSteeringButton"]["ACCButtons"]
-    self.distance_button_pressed = pt_cp.vl["ASCMSteeringButton"]["DistanceButton"] != 0
+    self.distance_button = pt_cp.vl["ASCMSteeringButton"]["DistanceButton"]
     self.buttons_counter = pt_cp.vl["ASCMSteeringButton"]["RollingCounter"]
 
     self.pscm_status = copy.copy(pt_cp.vl["PSCMStatus"])
     # GAP_DIST
-    if self.cruise_buttons in [CruiseButtons.UNPRESS, CruiseButtons.INIT] and self.distance_button_pressed:
+    if self.cruise_buttons in [CruiseButtons.UNPRESS, CruiseButtons.INIT] and self.distance_button:
       self.cruise_buttons = CruiseButtons.GAP_DIST
 
     if self.CP.enableBsm:
@@ -168,7 +165,7 @@ class CarState(CarStateBase):
     if self.CP.networkLocation == NetworkLocation.fwdCamera and not self.CP.flags & GMFlags.NO_CAMERA.value:
       if self.CP.carFingerprint not in CC_ONLY_CAR:
         ret.cruiseState.speed = cam_cp.vl["ASCMActiveCruiseControlStatus"]["ACCSpeedSetpoint"] * CV.KPH_TO_MS
-      ret.stockAeb = cam_cp.vl["AEBCmd"]["AEBCmdActive"] != 0
+      ret.stockAeb = False
       # openpilot controls nonAdaptive when not pcmCruise
       if self.CP.pcmCruise and self.CP.carFingerprint not in CC_ONLY_CAR: 
         ret.cruiseState.nonAdaptive = cam_cp.vl["ASCMActiveCruiseControlStatus"]["ACCCruiseState"] not in (2, 3)
@@ -176,6 +173,8 @@ class CarState(CarStateBase):
       ret.accFaulted = False
       ret.cruiseState.speed = pt_cp.vl["ECMCruiseControl"]["CruiseSetSpeed"] * CV.KPH_TO_MS
       ret.cruiseState.enabled = pt_cp.vl["ECMCruiseControl"]["CruiseActive"] != 0
+    prev_lkas_enabled = self.lkas_enabled
+    self.lkas_enabled = pt_cp.vl["ASCMSteeringButton"]["LKAButton"]
 
     self.pcm_acc_status = pt_cp.vl["AcceleratorPedal2"]["CruiseState"]
     if self.CP.carFingerprint in (CAR.CHEVROLET_TRAX, CAR.CHEVROLET_TRAILBLAZER, CAR.CHEVROLET_TRAILBLAZER_CC): 
@@ -193,15 +192,15 @@ class CarState(CarStateBase):
         ret.vCluRatio = 0.96
 
     # Don't add event if transitioning from INIT, unless it's to an actual button
-    buttonEvents = [] # kans
     if self.cruise_buttons != CruiseButtons.UNPRESS or prev_cruise_buttons != CruiseButtons.INIT:
-      buttonEvents.extend(create_button_events(self.cruise_buttons, prev_cruise_buttons, BUTTONS_DICT,
-                                               unpressed_btn=CruiseButtons.UNPRESS)) # kans
-    # kans : long_button GAP for cruise Mode(safety, ecco, high-speed..)
-    if self.distance_button_pressed:
-      buttonEvents.append(car.CarState.ButtonEvent(pressed=True, type=ButtonType.gapAdjustCruise))
-    ret.buttonEvents = buttonEvents # kans
-
+      ret.buttonEvents = [
+        *create_button_events(self.cruise_buttons, prev_cruise_buttons, BUTTONS_DICT,
+                              unpressed_btn=CruiseButtons.UNPRESS),
+        *create_button_events(self.distance_button, prev_distance_button,
+                              {1: ButtonType.gapAdjustCruise}),
+        *create_button_events(self.lkas_enabled, prev_lkas_enabled,
+                              {1: ButtonType.lkas})
+      ]
 
     return ret
 
@@ -217,7 +216,6 @@ class CarState(CarStateBase):
         ("EBCMRegenPaddle", 50),
         ("EVDriveMode", 0),
       ]
-
     loopback_messages = [
       ("ASCMLKASteeringCmd", float('nan')),
     ]
