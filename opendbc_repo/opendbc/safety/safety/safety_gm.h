@@ -238,6 +238,7 @@ static safety_config gm_init(uint16_t param) {
   const uint16_t GM_PARAM_HW_ASCM_LONG = 16;
   const uint16_t GM_PARAM_NO_ACC = 32;
   const uint16_t GM_PARAM_PEDAL_LONG = 64;  // TODO: this can be inferred
+  const uint16_t GM_PARAM_EV = 256;
 
   static const LongitudinalLimits GM_ASCM_LONG_LIMITS = {
     .max_gas = 3072,
