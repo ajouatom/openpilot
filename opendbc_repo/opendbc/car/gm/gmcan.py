@@ -72,17 +72,14 @@ def create_gas_regen_command(packer, bus, throttle, idx, enabled, at_full_stop):
   values = {
     "GasRegenCmdActive": enabled,
     "RollingCounter": idx,
-    "GasRegenCmdActiveInv": 1 - enabled,
     "GasRegenCmd": throttle,
     "GasRegenFullStopActive": at_full_stop,
-    "GasRegenAlwaysOne": 1,
-    "GasRegenAlwaysOne2": 1,
-    "GasRegenAlwaysOne3": 1,
-    #"NEW_SIGNAL_1" : 0 if at_full_stop else 3,
+    "GasRegenAccType": 1,
   }
 
   dat = packer.make_can_msg("ASCMGasRegenCmd", bus, values)[1]
-  values["GasRegenChecksum"] = (((0xff - dat[1]) & 0xff) << 16) | \
+  values["GasRegenChecksum"] = ((1 - enabled) << 24) | \
+                               (((0xff - dat[1]) & 0xff) << 16) | \
                                (((0xff - dat[2]) & 0xff) << 8) | \
                                ((0x100 - dat[3] - idx) & 0xff)
 
@@ -106,6 +103,7 @@ def create_friction_brake_command(packer, bus, apply_brake, idx, enabled, near_s
     #elif near_stop:
     #  mode = 0xb
 
+  apply_brake = max(0, min(0xFFF, apply_brake))
   brake = (0x1000 - apply_brake) & 0xfff
   checksum = (0x10000 - (mode << 12) - brake - idx) & 0xffff
 
@@ -113,7 +111,7 @@ def create_friction_brake_command(packer, bus, apply_brake, idx, enabled, near_s
     "RollingCounter": idx,
     "FrictionBrakeMode": mode,
     "FrictionBrakeChecksum": checksum,
-    "FrictionBrakeCmd": -apply_brake
+    "FrictionBrakeCmd": (0x1000 - apply_brake) & 0xfff,
   }
 
   return packer.make_can_msg("EBCMFrictionBrakeCmd", bus, values)

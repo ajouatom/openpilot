@@ -104,6 +104,8 @@ class CarInterface(CarInterfaceBase):
     ret.autoResumeSng = False
     ret.enableBsm = 0x142 in fingerprint[CanBus.POWERTRAIN] or 0x142 in fingerprint[CanBus.CAMERA]
     ret.startAccel = 1.0
+    ret.radarTimeStep = 0.067
+    ret.alternativeExperience = 0
 
     useEVTables = Params().get_bool("EVTable")
 
@@ -120,7 +122,7 @@ class CarInterface(CarInterfaceBase):
     ret.longitudinalTuning.kiBP = [0.]
 
     if candidate in (CAMERA_ACC_CAR | SDGM_CAR):
-      ret.alphaLongitudinalAvailable = candidate not in (CC_ONLY_CAR | SDGM_CAR)
+      ret.alphaLongitudinalAvailable = candidate not in SDGM_CAR
       ret.networkLocation = NetworkLocation.fwdCamera
       ret.radarUnavailable = True  # no radar
       ret.pcmCruise = True
@@ -129,14 +131,13 @@ class CarInterface(CarInterfaceBase):
       ret.minSteerSpeed = 10 * CV.KPH_TO_MS
 
       # Tuning for experimental long
-      ret.longitudinalTuning.kpV = [1.0]
-      ret.longitudinalTuning.kiV = [1.0]
+      ret.longitudinalTuning.kiV = [1.7]
       ret.stoppingDecelRate = 2.0  # reach brake quickly after enabling
-      ret.vEgoStopping = 0.25
-      ret.vEgoStarting = 0.25
+      ret.vEgoStopping = 0.5
+      ret.vEgoStarting = 0.4
       ret.stopAccel = -0.4
       ret.startingState = True
-      ret.startAccel = 1.5
+      ret.startAccel = 1.0
 
       if alpha_long:
         ret.pcmCruise = False
@@ -161,7 +162,6 @@ class CarInterface(CarInterfaceBase):
       ret.longitudinalTuning.kpV = [1.0]
       ret.longitudinalTuning.kiV = [0.3]
 
-      # TODO: Test for CADILLAC_CT6_ACC
       if ret.enableGasInterceptorDEPRECATED:
         # Need to set ASCM long limits when using pedal interceptor, instead of camera ACC long limits
         ret.safetyConfigs[0].safetyParam |= GMSafetyFlags.HW_ASCM_LONG.value
@@ -186,8 +186,8 @@ class CarInterface(CarInterfaceBase):
       ret.longitudinalTuning.kiV = [.35]
       ret.longitudinalTuning.kf = 1.0
       ret.stoppingDecelRate = 0.2 # brake_travel/s while trying to stop
-      ret.vEgoStopping = 0.1
-      ret.vEgoStarting = 0.05
+      ret.vEgoStopping = 0.25
+      ret.vEgoStarting = 0.15
       ret.stopAccel = -0.5
       ret.startingState = True
       ret.startAccel = 1.9
