@@ -2,19 +2,6 @@
 
 #include "safety_declarations.h"
 
-// TODO: do checksum and counter checks. Add correct timestep, 0.1s for now.
-#define GM_COMMON_RX_CHECKS \
-    {.msg = {{0x184, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U}, { 0 }, { 0 }}}, \
-    {.msg = {{0x34A, 0, 5, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U}, { 0 }, { 0 }}}, \
-    {.msg = {{0x1E1, 0, 7, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U}, { 0 }, { 0 }}}, \
-    {.msg = {{0x1C4, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U}, { 0 }, { 0 }}}, \
-    {.msg = {{0xC9, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U}, { 0 }, { 0 }}}, \
-
-#define GM_ACC_RX_CHECKS \
-    {.msg = {{0xBE, 0, 6, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U},    /* Volt, Silverado, Acadia Denali */ \
-             {0xBE, 0, 7, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U},    /* Bolt EUV */ \
-             {0xBE, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U}}},  /* Escalade */ \
-
 static const LongitudinalLimits *gm_long_limits;
 
 enum {
@@ -89,11 +76,9 @@ static void gm_rx_hook(const CANPacket_t *to_push) {
     if ((addr == 0xBE) && (gm_hw == GM_ASCM)) {
       brake_pressed = GET_BYTE(to_push, 1) >= 10U;
     }
-    if (addr == 0xC9) {
-      if (gm_hw == GM_CAM) {
-        brake_pressed = (GET_BYTE(to_push, 5) & 0x01U) != 0U;
-      }
-      acc_main_on = (GET_BYTE(to_push, 3) & 0x20U) != 0U;
+
+    if ((addr == 0xC9) && (gm_hw == GM_CAM)) {
+      brake_pressed = GET_BIT(to_push, 40U);
     }
 
     if (addr == 0x1C4) {
@@ -127,13 +112,13 @@ static void gm_rx_hook(const CANPacket_t *to_push) {
       int gas_interceptor = GM_GET_INTERCEPTOR(to_push);
       gas_pressed = gas_interceptor > GM_GAS_INTERCEPTOR_THRESHOLD;
       gas_interceptor_prev = gas_interceptor;
-      // gm_pcm_cruise = false;
+//      gm_pcm_cruise = false;
     }
 
     bool stock_ecu_detected = (addr == 0x180);  // ASCMLKASteeringCmd
 
     // Check ASCMGasRegenCmd only if we're blocking it
-    if (!gm_pcm_cruise && (addr == 0x2CB)) {
+    if (!gm_pcm_cruise && !gm_pedal_long && (addr == 0x2CB)) {
       stock_ecu_detected = true;
     }
     generic_rx_checks(stock_ecu_detected);
@@ -143,8 +128,8 @@ static void gm_rx_hook(const CANPacket_t *to_push) {
 static bool gm_tx_hook(const CANPacket_t *to_send) {
   const TorqueSteeringLimits GM_STEERING_LIMITS = {
     .max_steer = 300,
-    .max_rate_up = 20,
-    .max_rate_down = 25,
+    .max_rate_up = 10,
+    .max_rate_down = 15,
     .driver_torque_allowance = 65,
     .driver_torque_multiplier = 4,
     .max_rt_delta = 128,
@@ -186,11 +171,11 @@ static bool gm_tx_hook(const CANPacket_t *to_send) {
   // GAS/REGEN: safety check
   if (addr == 0x2CB) {
     bool apply = GET_BIT(to_send, 0U);
-    if (apply && !controls_allowed) {
-      controls_allowed = true;        
+    if (apply) {
+        if(!controls_allowed) print("@@auto cruise control enabled....\n");
+        controls_allowed = true;        
     }
-    // convert float CAN signal to an int for gas checks: 22534 / 0.125 = 180272
-    int gas_regen = (((GET_BYTE(to_send, 1) & 0x7U) << 16) | (GET_BYTE(to_send, 2) << 8) | GET_BYTE(to_send, 3)) - 180272U;
+    int gas_regen = ((GET_BYTE(to_send, 2) & 0x7FU) << 5) + ((GET_BYTE(to_send, 3) & 0xF8U) >> 3);
 
     bool violation = false;
     // Allow apply bit in pre-enabled and overriding states
@@ -203,15 +188,13 @@ static bool gm_tx_hook(const CANPacket_t *to_send) {
   }
 
   // BUTTONS: used for resume spamming and cruise cancellation with stock longitudinal
-  if (addr == 0x1E1) {
+  if ((addr == 0x1E1) && (gm_pcm_cruise || gm_pedal_long || gm_cc_long)) {
     int button = (GET_BYTE(to_send, 5) >> 4) & 0x7U;
-    bool allowed_btn = (button == GM_BTN_CANCEL) && cruise_engaged_prev;
 
-    if (!gm_pcm_cruise) {
-      allowed_btn |= (button == GM_BTN_SET || button == GM_BTN_RESUME || button == GM_BTN_UNPRESS);
-    }
+    bool allowed_btn = (button == GM_BTN_CANCEL) && cruise_engaged_prev;
+    // For standard CC, allow spamming of SET / RESUME
     if (gm_cc_long) {
-      allowed_btn |= cruise_engaged_prev && (button == GM_BTN_SET || button == GM_BTN_RESUME || button == GM_BTN_UNPRESS);
+      allowed_btn |= cruise_engaged_prev && ((button == GM_BTN_SET) || (button == GM_BTN_RESUME) || (button == GM_BTN_UNPRESS));
     }
 
     if (!allowed_btn) {
@@ -256,13 +239,10 @@ static safety_config gm_init(uint16_t param) {
   const uint16_t GM_PARAM_NO_ACC = 32;
   const uint16_t GM_PARAM_PEDAL_LONG = 64;  // TODO: this can be inferred
 
-  // common safety checks assume unscaled integer values
-  static const int GM_GAS_TO_CAN = 8;  // 1 / 0.125
-
   static const LongitudinalLimits GM_ASCM_LONG_LIMITS = {
-    .max_gas = 1018 * GM_GAS_TO_CAN,
-    .min_gas = -650 * GM_GAS_TO_CAN,
-    .inactive_gas = -650 * GM_GAS_TO_CAN,
+    .max_gas = 3072,
+    .min_gas = 1404,
+    .inactive_gas = 1404,
     .max_brake = 400,
   };
 
@@ -271,52 +251,38 @@ static safety_config gm_init(uint16_t param) {
                                            {0x315, 2, 5}};  // ch bus
 
 
+  static const CanMsg GM_CC_LONG_TX_MSGS[] = {{0x180, 0, 4}, {0x1E1, 0, 7},  // pt bus
+                                              {0x184, 2, 8}, {0x1E1, 2, 7}};  // camera bus
+
+
   static const LongitudinalLimits GM_CAM_LONG_LIMITS = {
-    .max_gas = 1346 * GM_GAS_TO_CAN,
-    .min_gas = -540 * GM_GAS_TO_CAN,
-    .inactive_gas = -500 * GM_GAS_TO_CAN,
+    .max_gas = 3400,
+    .min_gas = 1514,
+    .inactive_gas = 1554,
     .max_brake = 400,
   };
 
   static const CanMsg GM_CAM_LONG_TX_MSGS[] = {{0x180, 0, 4}, {0x315, 0, 5}, {0x2CB, 0, 8}, {0x370, 0, 6}, {0x200, 0, 6}, {0x1E1, 0, 7},  // pt bus
                                                {0x184, 2, 8}};  // camera bus
 
+
   // TODO: do checksum and counter checks. Add correct timestep, 0.1s for now.
   static RxCheck gm_rx_checks[] = {
-    GM_COMMON_RX_CHECKS
-    GM_ACC_RX_CHECKS
-  };
-
-  static RxCheck gm_ev_rx_checks[] = {
-    GM_COMMON_RX_CHECKS
-    GM_ACC_RX_CHECKS
-    {.msg = {{0xBD, 0, 7, .ignore_checksum = true, .ignore_counter = true, .frequency = 40U}, { 0 }, { 0 }}},
-  };
-
-  static RxCheck gm_no_acc_rx_checks[] = {
-    GM_COMMON_RX_CHECKS
-    {.msg = {{0x3D1, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U}, { 0 }, { 0 }}},  // Non-ACC PCM
-  };
-
-  static RxCheck gm_no_acc_ev_rx_checks[] = {
-    GM_COMMON_RX_CHECKS
-    {.msg = {{0xBD, 0, 7, .ignore_checksum = true, .ignore_counter = true, .frequency = 40U}, { 0 }, { 0 }}},
-    {.msg = {{0x3D1, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U}, { 0 }, { 0 }}},  // Non-ACC PCM
-  };
-
-  static RxCheck gm_pedal_rx_checks[] = {
-    GM_COMMON_RX_CHECKS
-    {.msg = {{0xBD, 0, 7, .ignore_checksum = true, .ignore_counter = true, .frequency = 40U}, { 0 }, { 0 }}},
-    {.msg = {{0x3D1, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U}, { 0 }, { 0 }}},  // Non-ACC PCM
-    {.msg = {{0x201, 0, 6, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U}, { 0 }, { 0 }}},  // pedal
+    {.msg = {{0x184, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U}, { 0 }, { 0 }}},
+    {.msg = {{0x34A, 0, 5, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U}, { 0 }, { 0 }}},
+    {.msg = {{0x1E1, 0, 7, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U}, { 0 }, { 0 }}},
+    {.msg = {{0xBE, 0, 6, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U},    // Volt, Silverado, Acadia Denali
+             {0xBE, 0, 7, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U},    // Bolt EUV
+             {0xBE, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U}}},  // Escalade
+    {.msg = {{0xF1, 0, 6, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U}, { 0 }, { 0 }}},
+    {.msg = {{0x1C4, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U}, { 0 }, { 0 }}},
+    {.msg = {{0xC9, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U}, { 0 }, { 0 }}},
   };
 
   static const CanMsg GM_CAM_TX_MSGS[] = {{0x180, 0, 4}, {0x200, 0, 6}, {0x1E1, 0, 7},  // pt bus
                                           {0x1E1, 2, 7}, {0x184, 2, 8}};  // camera bus
 
 
-  static const CanMsg GM_CC_LONG_TX_MSGS[] = {{0x180, 0, 4}, {0x1E1, 0, 7},  // pt bus
-                                              {0x184, 2, 8}, {0x1E1, 2, 7}};  // camera bus
   gm_hw = GET_FLAG(param, GM_PARAM_HW_CAM) ? GM_CAM : GM_ASCM;
   gm_force_ascm = GET_FLAG(param, GM_PARAM_HW_ASCM_LONG);
 
@@ -333,7 +299,7 @@ static safety_config gm_init(uint16_t param) {
 #endif
   gm_pedal_long = GET_FLAG(param, GM_PARAM_PEDAL_LONG);
   gm_cc_long = GET_FLAG(param, GM_PARAM_CC_LONG);
-  gm_pcm_cruise = (gm_hw == GM_CAM) && (!gm_cam_long || gm_cc_long) && !gm_force_ascm && !gm_pedal_long;
+  gm_pcm_cruise = (gm_hw == GM_CAM) && !gm_cam_long && !gm_force_ascm && !gm_pedal_long;
   gm_skip_relay_check = GET_FLAG(param, GM_PARAM_NO_CAMERA);
   gm_has_acc = !GET_FLAG(param, GM_PARAM_NO_ACC);
 
@@ -344,7 +310,7 @@ static safety_config gm_init(uint16_t param) {
   }
   else print("GM Pedal Interceptor Disabled\n");
 
-  safety_config ret;
+  safety_config ret = BUILD_SAFETY_CFG(gm_rx_checks, GM_ASCM_TX_MSGS);
   if (gm_hw == GM_CAM) {
     if (gm_cc_long) {
       ret = BUILD_SAFETY_CFG(gm_rx_checks, GM_CC_LONG_TX_MSGS);
@@ -356,21 +322,7 @@ static safety_config gm_init(uint16_t param) {
       ret = BUILD_SAFETY_CFG(gm_rx_checks, GM_CAM_TX_MSGS);
       print("GM CAM\n");
     }
-  } else {
-    ret = BUILD_SAFETY_CFG(gm_rx_checks, GM_ASCM_TX_MSGS);
   }
-
-  const bool gm_ev = GET_FLAG(param, GM_PARAM_EV);
-  if (enable_gas_interceptor) {
-    SET_RX_CHECKS(gm_pedal_rx_checks, ret);
-  } else if (!gm_has_acc && gm_ev) {
-    SET_RX_CHECKS(gm_no_acc_ev_rx_checks, ret);
-  } else if (!gm_has_acc && !gm_ev) {
-    SET_RX_CHECKS(gm_no_acc_rx_checks, ret);
-  } else if (gm_ev) {
-    SET_RX_CHECKS(gm_ev_rx_checks, ret);
-  } else {}
-
   return ret;
 }
 

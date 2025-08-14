@@ -19,7 +19,7 @@ class CarControllerParams:
   STEER_DRIVER_ALLOWANCE = 65
   STEER_DRIVER_MULTIPLIER = 4
   STEER_DRIVER_FACTOR = 100
-  NEAR_STOP_BRAKE_PHASE = 0.4
+  NEAR_STOP_BRAKE_PHASE = 0.1 #0.5  # m/s
   SNG_INTERCEPTOR_GAS = 18. / 255.
   SNG_TIME = 30  # frames until the above is reached
 
@@ -37,21 +37,21 @@ class CarControllerParams:
 
   def __init__(self, CP):
     # Gas/brake lookups
-    self.ZERO_GAS = 0.0  # Coasting
+    self.ZERO_GAS = 2048  # Coasting
     self.MAX_BRAKE = 400  # ~ -4.0 m/s^2 with regen
 
     if CP.carFingerprint in (CAMERA_ACC_CAR | SDGM_CAR) and CP.carFingerprint not in CC_ONLY_CAR:
-      self.MAX_GAS = 1346.0
-      self.MAX_ACC_REGEN = -540.0
-      self.INACTIVE_REGEN = -500.0
+      self.MAX_GAS = 3400
+      self.MAX_ACC_REGEN = 1514
+      self.INACTIVE_REGEN = 1554
       # Camera ACC vehicles have no regen while enabled.
       # Camera transitions to MAX_ACC_REGEN from ZERO_GAS and uses friction brakes instantly
       max_regen_acceleration = 0.
 
     else:
-      self.MAX_GAS = 1018.0  # Safety limit, not ACC max. Stock ACC >2042 from standstill.
-      self.MAX_ACC_REGEN = -650.0  # Max ACC regen is slightly less than max paddle regen
-      self.INACTIVE_REGEN = -650.0
+      self.MAX_GAS = 3072  # Safety limit, not ACC max. Stock ACC >4096 from standstill.
+      self.MAX_ACC_REGEN = 1404  # Max ACC regen is slightly less than max paddle regen
+      self.INACTIVE_REGEN = 1404
       # ICE has much less engine braking force compared to regen in EVs,
       # lower threshold removes some braking deadzone
       max_regen_acceleration = -1. if CP.carFingerprint in EV_CAR else -0.1
@@ -268,7 +268,6 @@ class CruiseButtons:
 class AccState:
   OFF = 0
   ACTIVE = 1
-  STANDBY = 2
   FAULTED = 3
   STANDSTILL = 4
 
