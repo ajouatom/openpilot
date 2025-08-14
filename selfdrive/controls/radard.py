@@ -111,17 +111,8 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
   max_offset_vision_vel = max(lead.v[0] * np.interp(lead.prob, [0.8, 0.98], [0.3, 0.5]), 5.0) # 확률이 낮으면 속도오차를 줄임.
 
   def prob(c):
-    #if abs(offset_vision_dist - c.dRel) > max_offset_vision_dist: 
-    #  return -1e6
-
-    #if abs(lead.v[0] - c.vLead) > max_offset_vision_vel:
-    #    return -1e6
-
-    #if abs(c.yRel + c.yvLead * radar_lat_factor + lead.y[0]) > 3.0: # lead.y[0]는 반대..
-    #  return -1e6
-      
     prob_d = laplacian_pdf(c.dRel, offset_vision_dist, lead.xStd[0])
-    prob_y = laplacian_pdf(c.yRel + c.yvLead * radar_lat_factor, -lead.y[0], lead.yStd[0])
+    prob_y = laplacian_pdf(c.yRel + c.yvLead_filtered * radar_lat_factor, -lead.y[0], lead.yStd[0])
     prob_v = laplacian_pdf(c.vLead, lead.v[0], lead.vStd[0])
 
     weight_v = np.interp(c.vLead, [0, 10], [0.3, 1])
@@ -144,7 +135,7 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
   #if best_track is not None and lead.v[0] - best_track.vLead > max_offset_vision_vel:
   #  best_track = None
 
-  if best_track is not None and abs(best_track.yRel + best_track.yvLead * radar_lat_factor + lead.y[0]) > 3.0: # lead.y[0]는 반대..
+  if best_track is not None and abs(best_track.yRel + best_track.yvLead_filtered * radar_lat_factor + lead.y[0]) > 3.0: # lead.y[0]는 반대..
     best_track = None
 
   if best_track is not None:
