@@ -255,6 +255,7 @@ static safety_config gm_init(uint16_t param) {
   const uint16_t GM_PARAM_HW_ASCM_LONG = 16;
   const uint16_t GM_PARAM_NO_ACC = 32;
   const uint16_t GM_PARAM_PEDAL_LONG = 64;  // TODO: this can be inferred
+  const uint16_t GM_PARAM_EV = 256;
 
   // common safety checks assume unscaled integer values
   static const int GM_GAS_TO_CAN = 8;  // 1 / 0.125
