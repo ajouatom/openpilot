@@ -1516,7 +1516,7 @@ class CarrotServ:
 
       self.nGoPosDist = int(msg_nav.distanceRemaining)
       self.nGoPosTime = int(msg_nav.timeRemaining)
-      if self.active_kisa_count <= 0:
+      if self.active_kisa_count <= 0 and msg_nav.speedLimit > 0:
         self.nRoadLimitSpeed = max(30, round(msg_nav.speedLimit * CV.MS_TO_KPH))
       self.xDistToTurn = int(msg_nav.maneuverDistance)
       self.szTBTMainText = msg_nav.maneuverPrimaryText
