@@ -91,6 +91,11 @@ def register(show_spinner=False) -> str | None:
         backoff = min(backoff + 1, 15)
         time.sleep(backoff)
 
+      if time.monotonic() - start_time > 120:
+        cloudlog.error("pilotauth timed out; continuing as UNREGISTERED")
+        dongle_id = UNREGISTERED_DONGLE_ID
+        break
+
       if time.monotonic() - start_time > 60 and show_spinner:
         spinner.update(f"registering device - serial: {serial}, IMEI: ({imei1}, {imei2})")
 
