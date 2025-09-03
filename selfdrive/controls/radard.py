@@ -129,7 +129,7 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
 
 
   # 끼어드는차량을 간헐적 멀리있는 차량으로 검출하는 문제가 있음..
-  y_gate  = min(1.7,  lead.yStd[0] * 2.0)
+  y_gate  = 2.0 #min(1.7,  lead.yStd[0] * 2.0)
   v_gate  = max(5.0,  lead.vStd[0] * 2.0)
 
   yv_candidates = [
