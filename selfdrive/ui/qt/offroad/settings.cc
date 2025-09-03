@@ -813,7 +813,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   startToggles->addItem(selectCarBtn);
   startToggles->addItem(new CValueControl("HyundaiCameraSCC", "HYUNDAI: CAMERA SCC", "1:Connect the SCC's CAN line to CAM, 2:Sync Cruise state, 3:StockLong", 0, 3, 1));
   startToggles->addItem(new CValueControl("CanfdHDA2", "CANFD: HDA2 mode", "1:HDA2,2:HDA2+BSM", 0, 2, 1));
-  startToggles->addItem(new CValueControl("EnableRadarTracks", "Enable Radar Track", "1:Enable RadarTrack, -1,2:Disable use HKG SCC radar at all times", -1, 2, 1));
+  startToggles->addItem(new CValueControl("EnableRadarTracks", "Enable Radar Track", "1:Enable RadarTrack, -1,2:Disable use HKG SCC radar at all times", -1, 3, 1));
   startToggles->addItem(new CValueControl("AutoCruiseControl", "Auto Cruise control", "Softhold, Auto Cruise ON/OFF control", 0, 3, 1));
   startToggles->addItem(new CValueControl("CruiseOnDist", "CRUISE: Auto ON distance(0cm)", "When GAS/Brake is OFF, Cruise ON when the lead car gets closer.", 0, 2500, 50));
   startToggles->addItem(new CValueControl("AutoEngage", "Auto Engage control on start", "1:SteerEnable, 2:Steer/Cruise Engage", 0, 2, 1));

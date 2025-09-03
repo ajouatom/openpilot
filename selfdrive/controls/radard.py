@@ -455,7 +455,8 @@ class RadarD:
       self.radar_state.leadTwo, _ = self.get_lead(sm['carState'], sm['modelV2'], alive_tracks, 1, leads_v3[1], model_v_ego, low_speed_override=False)
 
       self.compute_leads(self.v_ego, alive_tracks, sm['modelV2'], lane_width=3.2, model_v_ego=model_v_ego)
-      self._pick_lead_one_from_state()
+      if self.enable_radar_tracks == 3:
+        self._pick_lead_one_from_state()
 
   def publish(self, pm: messaging.PubMaster):
     assert self.radar_state is not None
