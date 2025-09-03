@@ -486,7 +486,7 @@ class RadarD:
     else:
       track = None
 
-    if self.enable_radar_tracks in [-1, 2]:  
+    if self.enable_radar_tracks in [-1, 2] or model_v_ego < 5:
       if track is None and track_scc is not None and track_scc.measured:
         track = track_scc
 
