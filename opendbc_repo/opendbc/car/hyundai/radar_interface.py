@@ -147,7 +147,7 @@ class RadarInterface(RadarInterfaceBase):
         self.pts[t_id].yRel = 0
         self.pts[t_id].vRel = 0
         self.pts[t_id].vLead = self.pts[t_id].vRel + self.v_ego
-        self.pts[t_id].aRel = 0
+        self.pts[t_id].aRel = float('nan')
         self.pts[t_id].yvRel = 0
       elif self.radar_group1:
         self.pts[t_id].dRel = msg['LONG_DIST1']
@@ -185,7 +185,7 @@ class RadarInterface(RadarInterfaceBase):
           self.pts[t_id].yRel = 0
           self.pts[t_id].vRel = 0
           self.pts[t_id].vLead = self.pts[t_id].vRel + self.v_ego
-          self.pts[t_id].aRel = 0
+          self.pts[t_id].aRel = float('nan')
           self.pts[t_id].yvRel = 0
         else:
           self.pts[t_id].dRel = msg['LONG_DIST2']
@@ -212,14 +212,14 @@ class RadarInterface(RadarInterfaceBase):
         self.pts[t_id].yRel = 0
         self.pts[t_id].vRel = 0
         self.pts[t_id].vLead = self.pts[t_id].vRel + self.v_ego
-        self.pts[t_id].aRel = 0
+        self.pts[t_id].aRel = float('nan')
         self.pts[t_id].yvRel = 0
       else:
         self.pts[t_id].dRel = dRel
         self.pts[t_id].yRel = 0
         self.pts[t_id].vRel = vRel
         self.pts[t_id].vLead = vLead
-        self.pts[t_id].aRel = 0 #float('nan')
+        self.pts[t_id].aRel = float('nan')
         self.pts[t_id].yvRel = 0 #float('nan')
     else:
       dRel = cpt["SCC11"]['ACC_ObjDist']
@@ -233,14 +233,14 @@ class RadarInterface(RadarInterfaceBase):
         self.pts[t_id].yRel = 0
         self.pts[t_id].vRel = 0
         self.pts[t_id].vLead = self.pts[t_id].vRel + self.v_ego
-        self.pts[t_id].aRel = 0
+        self.pts[t_id].aRel = float('nan')
         self.pts[t_id].yvRel = 0
       else:
         self.pts[t_id].dRel = dRel
         self.pts[t_id].yRel = -cpt["SCC11"]['ACC_ObjLatPos']  # in car frame's y axis, left is negative
         self.pts[t_id].vRel = vRel
         self.pts[t_id].vLead = vLead
-        self.pts[t_id].aRel = 0 #float('nan')
+        self.pts[t_id].aRel = float('nan')
         self.pts[t_id].yvRel = 0 #float('nan')
 
     self.dRel_last = dRel
