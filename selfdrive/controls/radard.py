@@ -443,18 +443,20 @@ class RadarD:
 
     if len(leads_v3) > 1:
 
+      md = sm['modelV2']
       if model_updated:
         if self.radar_detected:
           self.vision_tracks[0].cnt = 0
           self.vision_tracks[1].cnt = 0
-        self.vision_tracks[0].update(leads_v3[0], model_v_ego, self.v_ego, sm['modelV2'])
-        self.vision_tracks[1].update(leads_v3[1], model_v_ego, self.v_ego, sm['modelV2'])
+        self.vision_tracks[0].update(leads_v3[0], model_v_ego, self.v_ego, md)
+        self.vision_tracks[1].update(leads_v3[1], model_v_ego, self.v_ego, md)
 
       alive_tracks = {tid: trk for tid, trk in self.tracks.items() if trk.measured }
-      self.radar_state.leadOne, self.radar_detected = self.get_lead(sm['carState'], sm['modelV2'], alive_tracks, 0, leads_v3[0], model_v_ego, low_speed_override=False)
-      self.radar_state.leadTwo, _ = self.get_lead(sm['carState'], sm['modelV2'], alive_tracks, 1, leads_v3[1], model_v_ego, low_speed_override=False)
+      self.radar_state.leadOne, self.radar_detected = self.get_lead(sm['carState'], md, alive_tracks, 0, leads_v3[0], model_v_ego, low_speed_override=False)
+      self.radar_state.leadTwo, _ = self.get_lead(sm['carState'], md, alive_tracks, 1, leads_v3[1], model_v_ego, low_speed_override=False)
 
-      self.compute_leads(self.v_ego, alive_tracks, sm['modelV2'], lane_width=3.2, model_v_ego=model_v_ego)
+      self.lane_line_available = md.laneLineProbs[1] > 0.5 and md.laneLineProbs[2] > 0.5
+      self.compute_leads(self.v_ego, alive_tracks, md, lane_width=3.2, model_v_ego=model_v_ego)
       if self.enable_radar_tracks == 3:
         self._pick_lead_one_from_state()
 
@@ -527,7 +529,6 @@ class RadarD:
     lane_xs = md.laneLines[1].x
     left_ys = md.laneLines[1].y
     right_ys = md.laneLines[2].y
-    lane_line_available = md.laneLineProbs[1] > 0.5 and md.laneLineProbs[2] > 0.5
     
     left_list, right_list, center_list = [], [], []
 
@@ -555,7 +556,7 @@ class RadarD:
 
       # cut-in
       #cut_in_width = 3.0 #3.4  # 끼어들기 차폭
-      if lane_line_available and left_y < - y_with_vel < right_y and (3 < c.dRel < 20 and c.vLead > 4 and c.cnt > int(2.0/DT_MDL) and  c.yRel_filtered * c.yvLead_filtered < 0):
+      if self.lane_line_available and left_y < - y_with_vel < right_y and (3 < c.dRel < 20 and c.vLead > 4 and c.cnt > int(2.0/DT_MDL) and  c.yRel_filtered * c.yvLead_filtered < 0):
       #if abs(dy_with_vel) < cut_in_width / 2 and (3 < c.dRel < 20 and c.vLead > 4 and c.cnt > int(2.0/DT_MDL) and  dy * c.yvLead_filtered < 0):
         if not self.leadCutIn['status'] or c.dRel < self.leadCutIn['dRel']:
           c.cut_in_count += 1
@@ -580,9 +581,9 @@ class RadarD:
         key=lambda d: d['dRel'],
         default={'status': False}
     )
-    if lane_line_available:
+    if self.lane_line_available:
       self.leadCenter = min(
-          (ld for ld in center_list if ld['vLead'] > 5 and ld['radar']),
+          (ld for ld in center_list if ld['vLead'] > 5 and ld['radar'] and abs(ld['yRel']) < 5.0),
           key=lambda d: d['dRel'],
           default={'status': False}
       )
