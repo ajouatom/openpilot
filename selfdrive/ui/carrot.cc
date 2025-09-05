@@ -1895,7 +1895,7 @@ private:
 
 
 typedef struct {
-    float x, y, d, v, y_rel, v_lat, radar;
+    float x, y, d, v, y_rel, v_lat, radar, model_prob, score;
 } lead_vertex_data;
 
 char    carrot_man_debug[128] = "";
@@ -2048,6 +2048,8 @@ public:
                     vd.y_rel = l.getDPath();// l.getYRel();
                     vd.v_lat = l.getVLat();
                     vd.radar = l.getRadar();
+                    vd.model_prob = l.getModelProb();
+                    vd.score = l.getScore();
                     lead_vertices_side.push_back(vd);
                 }
             }
@@ -2059,7 +2061,7 @@ public:
         if (show_radar_info > 0) {
             int wStr = 40;
             for (auto const& vrd : lead_vertices_side) {
-                auto [rx, ry, rd, rv, ry_rel, v_lat, radar] = vrd;
+                auto [rx, ry, rd, rv, ry_rel, v_lat, radar, model_prob, score] = vrd;
                 float v_abs = 0.0;
                 float v_sum = 0.0;
                 if (v_ego > 1.0) v_sum = v_abs = rv;
@@ -2071,12 +2073,12 @@ public:
                 if (v_sum < -1.0 || v_sum > 1.0) {
                     sprintf(str, "%.0f", (s->scene.is_metric)? v_sum * MS_TO_KPH : v_sum * MS_TO_MPH);
                     wStr = 35 * (strlen(str) + 0);
-                    ui_fill_rect(s->vg, { (int)(rx - wStr / 2), (int)(ry - 35), wStr, 42 }, (!radar) ? COLOR_BLUE : (v_sum > 0.) ? COLOR_GREEN : COLOR_RED, 15);
+                    ui_fill_rect(s->vg, { (int)(rx - wStr / 2), (int)(ry - 35), wStr, 42 }, (!radar) ? COLOR_BLUE : (model_prob==0.01f) ? COLOR_ORANGE : (v_sum > 0.) ? COLOR_GREEN : COLOR_RED, 15);
                     ui_draw_text(s, rx, ry, str, 40, COLOR_WHITE, BOLD);
                     if (show_radar_info >= 2) {
                         sprintf(str, "%.1f", ry_rel);
                         ui_draw_text(s, rx, ry - 40, str, 30, COLOR_WHITE, BOLD);
-                        sprintf(str, "%.2f", v_lat);
+                        sprintf(str, "%.3f", score);
                         //sprintf(str, "%.2f", rd);
                         ui_draw_text(s, rx, ry + 30, str, 30, COLOR_WHITE, BOLD);
                     }
