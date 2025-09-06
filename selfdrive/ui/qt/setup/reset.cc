@@ -8,7 +8,7 @@
 #include "selfdrive/ui/qt/qt_window.h"
 #include "selfdrive/ui/qt/setup/reset.h"
 
-#define NVME "/dev/sdg1"
+#define NVME "/dev/nvme0n1"
 #define USERDATA "/dev/disk/by-partlabel/userdata"
 
 void Reset::doErase() {
