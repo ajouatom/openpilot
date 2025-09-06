@@ -9,7 +9,7 @@ from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.button import gui_button, ButtonStyle
 from openpilot.system.ui.lib.label import gui_label, gui_text_box
 
-NVME = "/dev/nvme0n1"
+NVME = "/dev/sdg1"
 USERDATA = "/dev/disk/by-partlabel/userdata"
 
 

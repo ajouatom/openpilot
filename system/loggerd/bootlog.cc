@@ -32,7 +32,7 @@ static kj::Array<capnp::word> build_boot_log() {
   };
 
   if (Hardware::TICI()) {
-    bootlog_commands.push_back("[ -e /dev/nvme0 ] && sudo nvme smart-log --output-format=json /dev/nvme0");
+    bootlog_commands.push_back("[ -e /dev/sdg1 ] && sudo nvme smart-log --output-format=json /dev/sdg1");
   }
 
   auto commands = boot.initCommands().initEntries(bootlog_commands.size());
