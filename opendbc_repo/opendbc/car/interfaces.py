@@ -218,8 +218,8 @@ class MyTrack:
     self.vLead_avg = FirstOrderFilter(self.vLead, 0.1, self.dt)
     self.aLead_avg = FirstOrderFilter(self.aLead, 0.15, self.dt)
     self.jLead_avg = FirstOrderFilter(self.jLead, 0.4, self.dt)
-    self.yRel_avg = FirstOrderFilter(self.yRel, 0.02, self.dt)
-    self.yvRel_avg = FirstOrderFilter(self.yvRel, 0.02, self.dt)
+    self.yRel_avg = FirstOrderFilter(self.yRel, 0.1, self.dt)
+    self.yvRel_avg = FirstOrderFilter(self.yvRel, 0.1, self.dt)
     self.cnt = 0
 
   def init_point(self, radar_point):
