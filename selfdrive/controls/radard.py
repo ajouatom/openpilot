@@ -144,7 +144,7 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
   #best_track = max(tracks.values(), key=prob)
 
   if dist_sane(best_track) and y_sane(best_track):
-    if vel_sane(best_track) and lead.prob < 0.45:  # 근처에 달리고 있는차를 오감지 했을수 있음
+    if vel_sane(best_track) and lead.prob < 0.5:  # 근처에 달리고 있는차를 오감지 했을수 있음
       best_track = None
     elif not vel_sane(best_track) or lead.prob < 0.5:  # 속도가 안맞거나 희미하게 감지된 차인경우
       if best_track.selected_count < 1: # 이전에 선택된 경우에는 그냥 통과함.
