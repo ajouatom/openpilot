@@ -2100,7 +2100,8 @@ public:
 
               if (v_abs > 3.0f) {
                 // 미래점(월드) 계산
-                float a_dRel = std::max(dRel + v * t, 0);
+                float a_dRel = dRel + v * t;
+                if (a_dRel < 2.0f) a_dRel = 2.0f;
                 float a_yRel = y_rel + v_lat * t;
 
                 // 미래점 투영 (y는 기존과 동일하게 부호 반전)
