@@ -74,10 +74,9 @@ class Track:
     self.cnt += 1
 
   def get_RadarState(self, model_prob: float = 0.0, vision_y_rel = 0.0):
-    yRel = vision_y_rel if vision_y_rel != 0.0 else float(self.yRel)
     return {
       "dRel": float(self.dRel),
-      "yRel": float(self.yRel_filtered) if vision_y_rel == 0.0 else vision_y_rel,
+      "yRel": float(self.yRel_filtered) if self.yRel_filtered != 0.0 else vision_y_rel,
       "dPath" : float(self.dPath),
       "vRel": float(self.vRel),
       "vLead": float(self.vLead),
@@ -400,7 +399,7 @@ class RadarD:
         self.vision_tracks[0].update(leads_v3[0], model_v_ego, self.v_ego, md)
         self.vision_tracks[1].update(leads_v3[1], model_v_ego, self.v_ego, md)
 
-      alive_tracks = {tid: trk for tid, trk in self.tracks.items() if trk.measured }
+      alive_tracks = {tid: trk for tid, trk in self.tracks.items() if trk.cnt > 2 }
       self.radar_state.leadOne, self.radar_detected = self.get_lead(sm['carState'], md, alive_tracks, 0, leads_v3[0], model_v_ego, low_speed_override=False)
       self.radar_state.leadTwo, _ = self.get_lead(sm['carState'], md, alive_tracks, 1, leads_v3[1], model_v_ego, low_speed_override=False)
 
@@ -435,7 +434,7 @@ class RadarD:
     else:
       track = None
 
-    if track is None and track_scc is not None and track_scc.measured:
+    if track is None and track_scc is not None and track_scc.cnt > 2:
       if self.enable_radar_tracks in [-1, 2] or model_v_ego < 5 or track_scc.vLead < 5.0:
         track = track_scc
 

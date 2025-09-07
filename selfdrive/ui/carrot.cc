@@ -2098,9 +2098,9 @@ public:
               float v_abs = std::sqrt(v * v + v_lat * v_lat);
               float v_sum = (v >= 0.f) ? v_abs : -v_abs;
 
-              if (std::fabs(v_sum) > 3.0f) {
+              if (v_abs > 3.0f) {
                 // 미래점(월드) 계산
-                float a_dRel = dRel + v * t;
+                float a_dRel = std::max(dRel + v * t, 0);
                 float a_yRel = y_rel + v_lat * t;
 
                 // 미래점 투영 (y는 기존과 동일하게 부호 반전)
