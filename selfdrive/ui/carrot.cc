@@ -1893,10 +1893,11 @@ private:
     }
 };
 
-
+#if 0
 typedef struct {
     float x, y, d, v, y_rel, v_lat, radar, model_prob, score;
 } lead_vertex_data;
+#endif
 
 char    carrot_man_debug[128] = "";
 class DrawCarrot : public QObject {
@@ -1932,9 +1933,9 @@ public:
     int     nav_path_vertex_count = 0;
     bool    nav_path_display = false;
 
-    std::vector<lead_vertex_data> lead_vertices_side;
+    //std::vector<lead_vertex_data> lead_vertices_side;
 
-    void updateState(UIState *s) {
+    bool updateState(UIState *s) {
         const SubMaster& sm = *(s->sm);
         const bool cs_alive = sm.alive("carState");
         const bool car_state_alive = sm.alive("carState");
@@ -1953,7 +1954,7 @@ public:
         const auto lane_lines = model.getLaneLines();
         nav_path_display = params.getInt("ShowRouteInfo");
 
-        if (!cs_alive || !car_control_alive || !car_state_alive || !lp_alive) return;
+        if (!cs_alive || !car_control_alive || !car_state_alive || !lp_alive) return false;
         auto selfdrive_state = sm["selfdriveState"].getSelfdriveState();
         longActive = selfdrive_state.getEnabled();
         latActive = car_control.getLatActive();
@@ -2033,6 +2034,7 @@ public:
             s->max_distance = std::clamp((float)lead_d, 0.0f, s->max_distance);
         }
 
+#if 0
         lead_vertices_side.clear();
         for (auto const& rs : { radar_state.getLeadsLeft(), radar_state.getLeadsRight(), radar_state.getLeadsCenter() }) {
             for (auto const& l : rs) {
@@ -2054,8 +2056,96 @@ public:
                 }
             }
         }
+#endif
+        return true;
 	  }
     void drawRadarInfo(UIState* s) {
+      char str[128];
+      int show_radar_info = params.getInt("ShowRadarInfo");
+      float radar_lat_factor = params.getFloat("RadarLatFactor") / 100;
+      if (show_radar_info > 0) {
+        const SubMaster& sm = *(s->sm);
+        const auto radar_state = sm["radarState"].getRadarState();
+        const cereal::ModelDataV2::Reader& model = sm["modelV2"].getModelV2();
+        const auto lane_lines = model.getLaneLines();
+        int wStr = 40;
+
+        for (auto const& rs : { radar_state.getLeadsLeft(), radar_state.getLeadsRight(), radar_state.getLeadsCenter() }) {
+          for (auto const& l : rs) {
+            QPointF side, a_side;
+            float x, y, z, ax, ay;
+            float v, v_lat, y_rel;
+            float t = radar_lat_factor;   // 예측 시간
+            float model_prob = 0.0f;
+            float score = 0.0f;
+
+            // 현재점 투영
+            z = lane_lines[2].getZ()[get_path_length_idx(lane_lines[2], l.getDRel())] - 0.61f;
+            if (_model->mapToScreen(l.getDRel(), -l.getYRel(), z, &side)) {
+              x = side.x();
+              y = side.y();
+
+              float dRel = l.getDRel();
+              v = l.getVLeadK();
+              v_lat = l.getVLat();
+              y_rel = l.getYRel();
+
+              bool radar = l.getRadar();
+              model_prob = l.getModelProb();
+              score = l.getScore();
+
+              // 속도 크기/표시값 (v_ego 없이 간단 처리)
+              float v_abs = std::sqrt(v * v + v_lat * v_lat);
+              float v_sum = (v >= 0.f) ? v_abs : -v_abs;
+
+              if (std::fabs(v) > 1.0f || std::fabs(v_lat) > 1.0f) {
+                // 미래점(월드) 계산
+                float a_dRel = dRel + v * t;
+                float a_yRel = y_rel + v_lat * t;
+
+                // 미래점 투영 (y는 기존과 동일하게 부호 반전)
+                if (_model->mapToScreen(a_dRel, -a_yRel, z, &a_side)) {  // (필요시 z를 a_dRel로 재계산 권장)
+                  ax = a_side.x();
+                  ay = a_side.y();
+
+                  QPolygonF vertext;
+                  vertext.push_back(side);
+                  vertext.push_back(a_side);
+                  ui_draw_line(s, vertext, nullptr, nullptr, 3.0, (v_sum > 0.f)? COLOR_GREEN: COLOR_RED);
+                  nvgBeginPath(s->vg);
+                  nvgCircle(s->vg, ax, ay, 10);
+                  nvgFillColor(s->vg, (v_sum > 0.f) ? COLOR_GREEN : COLOR_RED);
+                  nvgFill(s->vg);
+                }
+
+                // 속도 텍스트/박스
+                sprintf(str, "%.0f", (s->scene.is_metric) ? v_sum * MS_TO_KPH : v_sum * MS_TO_MPH);
+                wStr = 35 * (int)strlen(str);
+                ui_fill_rect(s->vg,
+                  { (int)(x - wStr / 2), (int)(y - 35), wStr, 42 },
+                  (!radar) ? COLOR_BLUE : (model_prob == 0.01f) ? COLOR_ORANGE : (v_sum > 0.f) ? COLOR_GREEN : COLOR_RED,
+                  15);
+                ui_draw_text(s, x, y, str, 40, COLOR_WHITE, BOLD);
+
+                if (show_radar_info >= 2) {
+                  sprintf(str, "%.1f", y_rel);
+                  ui_draw_text(s, x, y - 40, str, 30, COLOR_WHITE, BOLD);
+
+                  sprintf(str, "%.3f", score);
+                  ui_draw_text(s, x, y + 30, str, 30, COLOR_WHITE, BOLD);
+                }
+              }
+              else if (show_radar_info >= 3) {
+                strcpy(str, "*");
+                ui_draw_text(s, x, y, str, 40, COLOR_WHITE, BOLD);
+              }
+            }
+          }
+        }
+      }
+    }
+#if 0
+    void drawRadarInfo_old(UIState* s) {
         char str[128];
         int show_radar_info = params.getInt("ShowRadarInfo");
         if (show_radar_info > 0) {
@@ -2083,18 +2173,6 @@ public:
                         ui_draw_text(s, rx, ry + 30, str, 30, COLOR_WHITE, BOLD);
                     }
                 }
-#if 0
-                else if (v_lat < -1.0 || v_lat > 1.0) {
-                    sprintf(str, "%.0f", (rv + v_lat) * 3.6);
-                    wStr = 35 * (strlen(str) + 0);
-                    ui_fill_rect(s->vg, { (int)(rx - wStr / 2), (int)(ry - 35), wStr, 42 }, COLOR_ORANGE, 15);
-                    ui_draw_text(s, rx, ry, str, 40, COLOR_WHITE, BOLD);
-                    if (s->show_radar_info >= 2) {
-                        sprintf(str, "%.1f", ry_rel);
-                        ui_draw_text(s, rx, ry - 40, str, 30, COLOR_WHITE, BOLD);
-                    }
-                }
-#endif
                 else if (show_radar_info >= 3) {
                     strcpy(str, "*");
                     ui_draw_text(s, rx, ry, str, 40, COLOR_WHITE, BOLD);
@@ -2103,6 +2181,7 @@ public:
         }
 
     }
+#endif
     void drawDebug(UIState* s) {
         if (params.getInt("ShowDebugUI") > 1) {
             nvgTextAlign(s->vg, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM);
@@ -2713,7 +2792,7 @@ void ui_draw(UIState *s, ModelRenderer* model_renderer, int w, int h) {
   //nvgTextAlign(s->vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
   //ui_draw_text(s, 500, 500, "Carrot", 100, COLOR_GREEN, BOLD);
   Params params;
-  drawCarrot.updateState(s);
+  bool draw_carrot = drawCarrot.updateState(s);
   drawCarrot.drawNaviPath(s);
   static float pathDrawSeq = 0.0;
   int show_lane_info = params.getInt("ShowLaneInfo");
@@ -2730,7 +2809,8 @@ void ui_draw(UIState *s, ModelRenderer* model_renderer, int w, int h) {
 
   drawBlindSpot.draw(s);
 
-  drawCarrot.drawRadarInfo(s);
+  if(draw_carrot)
+    drawCarrot.drawRadarInfo(s);
 
   drawCarrot.drawHud(s);
 

@@ -77,7 +77,7 @@ class Track:
     yRel = vision_y_rel if vision_y_rel != 0.0 else float(self.yRel)
     return {
       "dRel": float(self.dRel),
-      "yRel": float(self.yRel) if vision_y_rel == 0.0 else vision_y_rel,
+      "yRel": float(self.yRel_filtered) if vision_y_rel == 0.0 else vision_y_rel,
       "dPath" : float(self.dPath),
       "vRel": float(self.vRel),
       "vLead": float(self.vLead),
@@ -86,7 +86,7 @@ class Track:
       "aLeadK": float(self.aLeadK),
       "aLeadTau": float(self.aLeadTau.x),
       "jLead": float(self.jLead),
-      "vLat": float(self.yvLead), 
+      "vLat": float(self.yvLead_filtered), 
       "status": True,
       "fcw": self.is_potential_fcw(model_prob),
       "modelProb": model_prob,
@@ -111,7 +111,7 @@ def laplacian_pdf(x: float, mu: float, b: float):
   diff = abs(x - mu) / max(b, 1e-4)
   return 0.0 if diff > 50.0 else math.exp(-diff)
 
-def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks: dict[int, Track], radar_lat_factor = 0.0):
+def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks: dict[int, Track]):
   offset_vision_dist = lead.x[0] - RADAR_TO_CAMERA
   #vel_tolerance = 25.0 if lead.prob > 0.99 else 10.0
   max_vision_dist = max(offset_vision_dist * 1.25, 5.0)
@@ -174,66 +174,6 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
       c.is_stopped_car_count = 0
     else:
       c.selected_count = 0      
-      
-  return best_track
-
-def match_vision_to_track_old(v_ego: float, lead: capnp._DynamicStructReader, tracks: dict[int, Track], radar_lat_factor = 0.0):
-  offset_vision_dist = lead.x[0] - RADAR_TO_CAMERA
-  #vel_tolerance = 25.0 if lead.prob > 0.99 else 10.0
-  max_offset_vision_dist = max(offset_vision_dist * 0.35, 5.0)
-  max_offset_vision_vel = max(lead.v[0] * np.interp(lead.prob, [0.8, 0.98], [0.3, 0.5]), 5.0) # 확률이 낮으면 속도오차를 줄임.
-
-  def prob(c):
-    #if abs(offset_vision_dist - c.dRel) > max_offset_vision_dist: 
-    #  return -1e6
-
-    #if abs(lead.v[0] - c.vLead) > max_offset_vision_vel:
-    #    return -1e6
-
-    #if abs(c.yRel + c.yvLead * radar_lat_factor + lead.y[0]) > 3.0: # lead.y[0]는 반대..
-    #  return -1e6
-      
-    prob_d = laplacian_pdf(c.dRel, offset_vision_dist, lead.xStd[0])
-    prob_y = laplacian_pdf(c.yRel + c.yvLead * radar_lat_factor, -lead.y[0], lead.yStd[0])
-    prob_v = laplacian_pdf(c.vLead, lead.v[0], lead.vStd[0])
-
-    weight_v = np.interp(c.vLead, [0, 10], [0.3, 1])
-
-    return prob_d * prob_y * prob_v * weight_v
-
-  #track = max(tracks.values(), key=prob, default=None)
-  #return track if track and prob(track) > -1e6 else None
-  best_track = None
-  best_score = -1e6
-  for c in tracks.values():
-    score = prob(c)
-    if score > best_score:
-      best_score = score
-      best_track = c
-
-  if best_track is not None and offset_vision_dist - best_track.dRel > max_offset_vision_dist: 
-    best_track = None
-
-  #if best_track is not None and lead.v[0] - best_track.vLead > max_offset_vision_vel:
-  #  best_track = None
-
-  if best_track is not None and abs(best_track.yRel + best_track.yvLead * radar_lat_factor + lead.y[0]) > 3.0: # lead.y[0]는 반대..
-    best_track = None
-
-  if best_track is not None:
-
-    if lead.v[0] - best_track.vLead > max_offset_vision_vel:
-      best_track.is_stopped_car_count += 1
-      # 직전에 사용되었던것이라면 재사용, 2초간 유지된다면 정지차로 간주.
-      if best_track.selected_count < 1 and best_track.is_stopped_car_count < int(2.0/DT_MDL):
-        best_track = None
-
-    if best_track is not None:
-      best_track.selected_count += 1
-
-  for c in tracks.values():
-    if c is not best_track:
-      c.selected_count = 0
       
   return best_track
 
@@ -491,7 +431,7 @@ class RadarD:
 
     # Determine leads, this is where the essential logic happens
     if len(tracks) > 0 and ready and lead_msg.prob > .3:
-      track = match_vision_to_track(v_ego, lead_msg, tracks, self.radar_lat_factor)
+      track = match_vision_to_track(v_ego, lead_msg, tracks)
     else:
       track = None
 
