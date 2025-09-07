@@ -329,8 +329,8 @@ class RadarInterfaceBase(ABC):
 
         radar_point.aLead = float(new_tracks[track_id].aLead)
         radar_point.jLead = float(new_tracks[track_id].jLead)
-        radar_point.yRel = float(new_tracks[track_id].yRel)
-        radar_point.yvRel = float(new_tracks[track_id].yvRel)
+        #radar_point.yRel = float(new_tracks[track_id].yRel)
+        #radar_point.yvRel = float(new_tracks[track_id].yvRel)
                 
       self.tracks = new_tracks
       """
