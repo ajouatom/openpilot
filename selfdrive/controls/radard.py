@@ -163,8 +163,10 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
     if not vel_sane(best_track) or lead.prob < 0.5:
       best_track = None
   elif second_track is not None and dist_sane(second_track, True):
-    if vel_sane(second_track) and lead.prob > 0.5:
+    if vel_sane(second_track) and lead.prob > 0.5 and second_score > 0.001:
       best_track = second_track
+    else:
+      best_track = None
   else:
     best_track.is_stopped_car_count = max(0, best_track.is_stopped_car_count - 1)
     best_track = None
