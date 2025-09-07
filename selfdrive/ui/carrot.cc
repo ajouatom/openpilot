@@ -2098,13 +2098,13 @@ public:
               float v_abs = std::sqrt(v * v + v_lat * v_lat);
               float v_sum = (v >= 0.f) ? v_abs : -v_abs;
 
-              if (std::fabs(v) > 1.0f || std::fabs(v_lat) > 1.0f) {
+              if (std::fabs(v_sum) > 3.0f) {
                 // 미래점(월드) 계산
                 float a_dRel = dRel + v * t;
                 float a_yRel = y_rel + v_lat * t;
 
                 // 미래점 투영 (y는 기존과 동일하게 부호 반전)
-                if (_model->mapToScreen(a_dRel, -a_yRel, z, &a_side)) {  // (필요시 z를 a_dRel로 재계산 권장)
+                if (std::fabs(v) > 3.0f && _model->mapToScreen(a_dRel, -a_yRel, z, &a_side)) {  // (필요시 z를 a_dRel로 재계산 권장)
                   ax = a_side.x();
                   ay = a_side.y();
 
