@@ -58,13 +58,6 @@ class Track:
     if ready:
       self.dPath = self.yRel + np.interp(self.dRel, md.position.x, md.position.y)
 
-    if self.cnt == 0:
-      self.yRel_filtered = self.yRel
-      self.yvLead_filtered = self.yvLead
-    else:
-      self.yRel_filtered = self.yRel_filtered * 0.9 + self.yRel * 0.1
-      self.yvLead_filtered = self.yvLead_filtered * 0.9 + self.yvLead * 0.1
-
     a_lead_threshold = 0.5 * radar_reaction_factor
     if abs(self.aLead) < a_lead_threshold and abs(self.jLead) < 0.5:
       self.aLeadTau.x = _LEAD_ACCEL_TAU * radar_reaction_factor
@@ -76,7 +69,7 @@ class Track:
   def get_RadarState(self, model_prob: float = 0.0, vision_y_rel = 0.0):
     return {
       "dRel": float(self.dRel),
-      "yRel": float(self.yRel_filtered) if self.yRel_filtered != 0.0 else vision_y_rel,
+      "yRel": float(self.yRel) if self.yRel != 0.0 else vision_y_rel,
       "dPath" : float(self.dPath),
       "vRel": float(self.vRel),
       "vLead": float(self.vLead),
@@ -85,7 +78,7 @@ class Track:
       "aLeadK": float(self.aLeadK),
       "aLeadTau": float(self.aLeadTau.x),
       "jLead": float(self.jLead),
-      "vLat": float(self.yvLead_filtered), 
+      "vLat": float(self.yvLead), 
       "status": True,
       "fcw": self.is_potential_fcw(model_prob),
       "modelProb": model_prob,
@@ -481,9 +474,9 @@ class RadarD:
     left_list, right_list, center_list, cutin_list = [], [], [], []
 
     for c in tracks.values():
-      #dy = c.yRel_filtered + np.interp(c.dRel, md_x, md_y) # + c.yvLead_filtered * self.radar_lat_factor
-      #dy_with_vel = dy + c.yvLead_filtered * self.radar_lat_factor
-      y_with_vel_neg = -(c.yRel_filtered + c.yvLead_filtered * self.radar_lat_factor)
+      #dy = c.yRel + np.interp(c.dRel, md_x, md_y) # + c.yvLead * self.radar_lat_factor
+      #dy_with_vel = dy + c.yvLead * self.radar_lat_factor
+      y_with_vel_neg = -(c.yRel + c.yvLead * self.radar_lat_factor)
       left_lane_y = np.interp(c.dRel, lane_xs, left_ys)
       right_lane_y = np.interp(c.dRel, lane_xs, right_ys)
 
@@ -517,7 +510,7 @@ class RadarD:
       """
       # cut-in
       #cut_in_width = 3.0 #3.4  # 끼어들기 차폭
-      #if self.lane_line_available and left_y < y_with_vel_neg < right_y and (3 < c.dRel < 20 and c.vLead > 4 and c.cnt > int(2.0/DT_MDL) and  c.yRel_filtered * c.yvLead_filtered < 0):        
+      #if self.lane_line_available and left_y < y_with_vel_neg < right_y and (3 < c.dRel < 20 and c.vLead > 4 and c.cnt > int(2.0/DT_MDL) and  c.yRel * c.yvLead < 0):        
       if self.lane_line_available and 3 < c.dRel < 50 and c.vLead > 4 and c.cnt > int(0.5/DT_MDL):
         if (y_rel_neg < left_lane_y and y_with_vel_neg > left_lane_y) or (y_rel_neg > right_lane_y and y_with_vel_neg < right_lane_y):
           c.cut_in_count += 1            
