@@ -2078,14 +2078,14 @@ public:
             float t = radar_lat_factor;   // 예측 시간
             float model_prob = 0.0f;
             float score = 0.0f;
+            float dRel = l.getDRel();
 
             // 현재점 투영
             z = lane_lines[2].getZ()[get_path_length_idx(lane_lines[2], l.getDRel())] - 0.61f;
-            if (_model->mapToScreen(l.getDRel(), -l.getYRel(), z, &side)) {
+            if (dRel > 2.5 && _model->mapToScreen(dRel, -l.getYRel(), z, &side)) {
               x = side.x();
               y = side.y();
 
-              float dRel = l.getDRel();
               v = l.getVLeadK();
               v_lat = l.getVLat();
               y_rel = l.getYRel();
