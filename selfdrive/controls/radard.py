@@ -131,34 +131,43 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
     return abs(c.yRel + lead.y[0]) < 2.0
  
 
-  best_track, second_track = None, None
-  best_score, second_score = -1e6, -1e6
+  first_track, second_track = None, None
+  first_score, second_score = -1e6, -1e6
   for c in tracks.values():
     c.score = prob(c)
-    if c.score > best_score:
-      second_score = best_score
-      second_track = best_track
-      best_score = c.score
-      best_track = c
+    if c.score > first_score:
+      second_score = first_score
+      second_track = first_track
+      first_score = c.score
+      first_track = c
 
   #best_track = max(tracks.values(), key=prob)
 
-  if dist_sane(best_track) and y_sane(best_track):
-    if vel_sane(best_track) and lead.prob < 0.5:  # 근처에 달리고 있는차를 오감지 했을수 있음
-      best_track = None
-    elif not vel_sane(best_track) or lead.prob < 0.5:  # 속도가 안맞거나 희미하게 감지된 차인경우
-      if best_track.selected_count < 1: # 이전에 선택된 경우에는 그냥 통과함.
-        best_track.is_stopped_car_count += 1
-        if best_track.is_stopped_car_count < int(1.0/DT_MDL):  # 2초 -> 1초
-          best_track = None
-  elif dist_sane(best_track):
-    if not vel_sane(best_track) or lead.prob < 0.5:
-      best_track = None
-  elif second_track is not None and dist_sane(second_track, True) and vel_sane(second_track) and lead.prob > 0.5 and second_score > 0.001:
-    best_track = second_track
-  else:
-    best_track.is_stopped_car_count = max(0, best_track.is_stopped_car_count - 1)
+  def select_track(track, score):
+    if score < 0.0001:
+      return None
     best_track = None
+    if dist_sane(track) and vel_sane(track) and y_sane(track):
+      if lead.prob > 0.5:
+        best_track = track
+      elif lead.prob > 0.4 and track.selected_count > 0: # 비젼이 희미하지만 직전에 선택된 트랙인경우
+        best_track = track
+    elif dist_sane(track) and y_sane(best_track):  # stopped-car
+      if track.selected_count > 0:
+        best_track = track
+      else:
+        track.is_stopped_car_count += 1
+        if track.is_stopped_car_count > int(1.0/DT_MDL):
+          best_track = track
+    elif dist_sane(track) and vel_sane(track) and lead.prob > 0.5:
+      best_track = track
+    elif dist_sane(track, True) and vel_sane(track):# cut-in detect(vision)
+      best_track = track
+    return best_track
+    
+  best_track = select_track(first_track, first_score)
+  if best_track is None:
+    best_track = select_track(second_track, second_score)
 
   for c in tracks.values():
     if c is best_track:
