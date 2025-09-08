@@ -321,7 +321,7 @@ class RadarInterfaceBase(ABC):
           new_tracks[track_id] = self.tracks[track_id]
         new_tracks[track_id].update(radar_point)
 
-        if self.cnt < 6:
+        if new_tracks[track_id].cnt < 6:
           radar_point.aLead = 0
           radar_point.jLead = 0
           radar_point.yRel = float(new_tracks[track_id].yRel)
