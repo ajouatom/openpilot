@@ -247,17 +247,6 @@ class MyTrack:
       self.cnt += 1
     else:      
       self.vLead = radar_point.vLead
-      """
-      if abs(radar_point.dRel - self.dRel) > 3.0 or abs(self.vRel - radar_point.vRel) > 20.0 * self.dt:
-        self.cnt = 0
-        self.jLead = 0.0
-        self.aLead = 0.0
-        self.vLead_avg.x = self.vLead
-        self.aLead_avg.x = self.aLead
-        self.jLead_avg.x = self.jLead
-        self.v_lead_filtered_last = self.vLead
-      """
-
       self.yRel = self.yRel_avg.update(radar_point.yRel)
       self.yvRel = self.yvRel_avg.update(radar_point.yvRel)
 
@@ -265,7 +254,12 @@ class MyTrack:
       pseudo_stop = abs(v_lead_filtered) < 0.3 and abs(self.vLead - v_lead_filtered) < 0.05
       a_raw = (v_lead_filtered - self.v_lead_filtered_last) / self.dt
       self.v_lead_filtered_last = v_lead_filtered
-      a_lead = self.aLead_avg.update(a_raw if not pseudo_stop else 0.0)
+
+      self.noisy = abs(a_raw - self.aLead) > 3.0
+      if self.noisy:
+        self.cnt = 0
+        
+      a_lead = self.aLead_avg.update(np.clip(a_raw, -10.0, 5.0) if not pseudo_stop else 0.0)
 
       j_lead = (a_lead - self.aLead) / self.dt
       self.aLead = a_lead
@@ -327,10 +321,16 @@ class RadarInterfaceBase(ABC):
           new_tracks[track_id] = self.tracks[track_id]
         new_tracks[track_id].update(radar_point)
 
-        radar_point.aLead = float(new_tracks[track_id].aLead)
-        radar_point.jLead = float(new_tracks[track_id].jLead)
-        #radar_point.yRel = float(new_tracks[track_id].yRel)
-        #radar_point.yvRel = float(new_tracks[track_id].yvRel)
+        if self.cnt < 6:
+          radar_point.aLead = 0
+          radar_point.jLead = 0
+          radar_point.yRel = float(new_tracks[track_id].yRel)
+          radar_point.yvRel = float(new_tracks[track_id].yvRel)
+        else:
+          radar_point.aLead = float(new_tracks[track_id].aLead)
+          radar_point.jLead = float(new_tracks[track_id].jLead)
+          radar_point.yRel = float(new_tracks[track_id].yRel)
+          radar_point.yvRel = float(new_tracks[track_id].yvRel)
                 
       self.tracks = new_tracks
       """
