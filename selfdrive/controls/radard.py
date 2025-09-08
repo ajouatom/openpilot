@@ -172,9 +172,9 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
   for c in tracks.values():
     if c is best_track:
       best_track.selected_count += 1
-      c.is_stopped_car_count = 0
     else:
-      c.selected_count = 0      
+      c.selected_count = 0
+      c.is_stopped_car_count = max(0, c.is_stopped_car_count - 1)
       
   return best_track
 
