@@ -147,11 +147,12 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
     if score < 0.0001:
       return None
     best_track = None
-    if dist_sane(track) and vel_sane(track):# and y_sane(track):
-      if lead.prob > 0.5:
-        best_track = track
-      elif lead.prob > 0.4 and track.selected_count > 0: # 비젼이 희미하지만 직전에 선택된 트랙인경우
-        best_track = track
+    if dist_sane(track) and vel_sane(track):
+      if y_sane(track):
+        if lead.prob > 0.5:
+          best_track = track
+        elif lead.prob > 0.4 and track.selected_count > 0: # 비젼이 희미하지만 직전에 선택된 트랙인경우
+          best_track = track
     elif dist_sane(track) and y_sane(track):  # stopped-car
       if track.selected_count > 0:
         best_track = track
