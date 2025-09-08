@@ -116,8 +116,8 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
     prob_y = laplacian_pdf(c.yRel, -lead.y[0], lead.yStd[0])
     prob_v = laplacian_pdf(c.vLead, lead.v[0], lead.vStd[0])
 
-    weight_v = np.interp(c.vLead, [0, 10], [0.3, 1])
-    c.score = prob_d * prob_y * prob_v * weight_v
+    #weight_v = np.interp(c.vLead, [0, 10], [0.3, 1])
+    c.score = prob_d * prob_y * prob_v # * weight_v
 
     return c.score #prob_d * prob_y * prob_v * weight_v
   
@@ -144,13 +144,16 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
   #best_track = max(tracks.values(), key=prob)
 
   def select_track(track, score):
+    found_best = False
     if score < 0.0001:
-      return None
+      return None, found_best
+    
     best_track = None
     if dist_sane(track) and vel_sane(track):
       if y_sane(track):
         if lead.prob > 0.5:
           best_track = track
+          found_best = True
         elif lead.prob > 0.4 and track.selected_count > 0: # 비젼이 희미하지만 직전에 선택된 트랙인경우
           best_track = track
     elif dist_sane(track) and y_sane(track):  # stopped-car
@@ -164,11 +167,13 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
     #  best_track = track
     elif dist_sane(track, True) and vel_sane(track):# cut-in detect(vision)
       best_track = track
-    return best_track
+    return best_track, found_best
     
-  best_track = select_track(first_track, first_score)
-  if best_track is None:
-    best_track = select_track(second_track, second_score)
+  best_track, found_best = select_track(first_track, first_score)
+  if best_track is None or not found_best:
+    second_track, found_best = select_track(second_track, second_score)
+    if best_track is None or found_best:
+      best_track = second_track
 
   for c in tracks.values():
     if c is best_track:
