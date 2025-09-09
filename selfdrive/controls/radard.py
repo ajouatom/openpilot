@@ -167,7 +167,7 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
           best_track = track
     #elif dist_sane(track) and vel_sane(track) and lead.prob > 0.5:
     #  best_track = track
-    elif dist_sane(track, True) and vel_sane(track):# cut-in detect(vision)
+    elif dist_sane(track, True) and vel_sane(track) and lead.prob > 0.6:# cut-in detect(vision)
       best_track = track
     return best_track, found_best
     
@@ -439,7 +439,7 @@ class RadarD:
       track_scc = tracks.pop(0, None)
 
     # Determine leads, this is where the essential logic happens
-    if len(tracks) > 0 and ready and lead_msg.prob > .3:
+    if len(tracks) > 0 and ready and lead_msg.prob > .4:
       track = match_vision_to_track(v_ego, lead_msg, tracks)
     else:
       track = None
