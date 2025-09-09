@@ -143,23 +143,23 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
 
   #best_track = max(tracks.values(), key=prob)
 
-  def select_track(track, score):
-    found_best = False
+  def select_track(track, score, track2, score2):
     if score < 0.0001:
-      return None, found_best
+      return None
     
     best_track = None
     if dist_sane(track) and vel_sane(track):
       if y_sane(track):
         if lead.prob > 0.5:
           best_track = track
-          found_best = True
         elif lead.prob > 0.4 and track.selected_count > 0: # 비젼이 희미하지만 직전에 선택된 트랙인경우
           best_track = track
       elif lead.prob > 0.6:
         best_track = track
     elif dist_sane(track) and y_sane(track):  # stopped-car
-      if track.selected_count > 0:
+      if score2 > 0.00001 and dist_sane(track2) and y_sane(track2) and vel_sane(track2):
+        best_track = track2
+      elif track.selected_count > 0:
         best_track = track
       else:
         track.is_stopped_car_count += 2
@@ -167,15 +167,13 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
           best_track = track
     #elif dist_sane(track) and vel_sane(track) and lead.prob > 0.5:
     #  best_track = track
+    elif score2 > 0.00001 and dist_sane(track2) and vel_sane(track2):
+      best_track = track2
     elif dist_sane(track, True) and vel_sane(track) and lead.prob > 0.6:# cut-in detect(vision)
       best_track = track
-    return best_track, found_best
+    return best_track
     
-  best_track, found_best = select_track(first_track, first_score)
-  if best_track is None or not found_best:
-    second_track, found_best = select_track(second_track, second_score)
-    if best_track is None or found_best:
-      best_track = second_track
+  best_track = select_track(first_track, first_score, second_track, second_score)
 
   for c in tracks.values():
     if c is best_track:
