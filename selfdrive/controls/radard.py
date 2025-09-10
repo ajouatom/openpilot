@@ -498,8 +498,9 @@ class RadarD:
       #dy = c.yRel + np.interp(c.dRel, md_x, md_y) # + c.yvLead * self.radar_lat_factor
       #dy_with_vel = dy + c.yvLead * self.radar_lat_factor
       y_with_vel_neg = -(c.yRel + c.yvLead * self.radar_lat_factor)
-      left_lane_y = np.interp(c.dRel, lane_xs, left_ys)
-      right_lane_y = np.interp(c.dRel, lane_xs, right_ys)
+      offset = np.interp(c.dRel, [10, 50], [0.0, 0.3])
+      left_lane_y = np.interp(c.dRel, lane_xs, left_ys) + offset
+      right_lane_y = np.interp(c.dRel, lane_xs, right_ys) - offset
 
       y_rel_neg = - c.yRel
       # center
