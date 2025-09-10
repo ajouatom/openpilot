@@ -2124,7 +2124,7 @@ public:
                 wStr = 35 * (int)strlen(str);
                 ui_fill_rect(s->vg,
                   { (int)(x - wStr / 2), (int)(y - 35), wStr, 42 },
-                  (!radar) ? COLOR_BLUE : (model_prob == 0.01f) ? COLOR_ORANGE : (v_sum > 0.f) ? COLOR_GREEN : COLOR_RED,
+                  (!radar) ? COLOR_BLUE : (model_prob == 0.01f) ? COLOR_GREEN : (v_sum > 0.f) ? COLOR_ORANGE : COLOR_RED,
                   15);
                 ui_draw_text(s, x, y, str, 40, COLOR_WHITE, BOLD);
 
