@@ -2077,7 +2077,7 @@ public:
             float v, v_lat, y_rel;
             float t = radar_lat_factor;   // 예측 시간
             float model_prob = 0.0f;
-            float score = 0.0f;
+            //float score = 0.0f;
             float dRel = l.getDRel();
 
             // 현재점 투영
@@ -2092,7 +2092,7 @@ public:
 
               bool radar = l.getRadar();
               model_prob = l.getModelProb();
-              score = l.getScore();
+              //score = l.getScore();
 
               // 속도 크기/표시값 (v_ego 없이 간단 처리)
               float v_abs = std::sqrt(v * v + v_lat * v_lat);
