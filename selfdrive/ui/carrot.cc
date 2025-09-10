@@ -2132,7 +2132,7 @@ public:
                   sprintf(str, "%.1f", y_rel);
                   ui_draw_text(s, x, y - 40, str, 30, COLOR_WHITE, BOLD);
 
-                  sprintf(str, "%.3f", score);
+                  sprintf(str, "%.1f", (s->scene.is_metric)? dRel : dRel * KM_TO_MILE);
                   ui_draw_text(s, x, y + 30, str, 30, COLOR_WHITE, BOLD);
                 }
               }
