@@ -4,6 +4,7 @@ import numpy as np
 from collections import deque
 from typing import Any
 import heapq
+import copy
 
 import capnp
 from cereal import messaging, log, car
@@ -106,8 +107,9 @@ def laplacian_pdf(x: float, mu: float, b: float):
 def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks: dict[int, Track]):
   offset_vision_dist = lead.x[0] - RADAR_TO_CAMERA
   #vel_tolerance = 25.0 if lead.prob > 0.99 else 10.0
-  max_vision_dist = max(offset_vision_dist * 1.45, 5.0)
+  max_vision_dist = max(offset_vision_dist * 1.25, 5.0)
   min_vision_dist = max(offset_vision_dist * 0.6, 1.0)
+  max_vision_dist2 = max(offset_vision_dist * 1.45, 5.0)
   min_vision_dist2 = 1.5 #max(offset_vision_dist * 0.3, 1.0)
   max_offset_vision_vel = max(lead.v[0] * np.interp(lead.prob, [0.8, 0.98], [0.3, 0.5]), 5.0) # 확률이 낮으면 속도오차를 줄임.
 
@@ -125,9 +127,11 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
     return (abs(c.vLead - lead.v[0]) < max_offset_vision_vel) or (c.vLead > 3)
   def dist_sane(c, second=False):
     if second:
-      return min_vision_dist2 < c.dRel < max_vision_dist
+      return min_vision_dist2 < c.dRel < max_vision_dist2
     return min_vision_dist < c.dRel < max_vision_dist
-  def y_sane(c):
+  def y_sane(c, second=False):
+    if second:
+      return abs(c.yRel + lead.y[0]) < 4.0
     return abs(c.yRel + lead.y[0]) < 2.0
  
 
@@ -167,9 +171,9 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
           best_track = track
     #elif dist_sane(track) and vel_sane(track) and lead.prob > 0.5:
     #  best_track = track
-    elif score2 > 0.00001 and dist_sane(track2) and vel_sane(track2):
+    elif score2 > 0.00001 and dist_sane(track2, True) and vel_sane(track2) and y_sane(track2, True):
       best_track = track2
-    elif dist_sane(track, True) and vel_sane(track) and lead.prob > 0.6:# cut-in detect(vision)
+    elif dist_sane(track, True) and vel_sane(track) and y_sane(track, True) and lead.prob > 0.6:# cut-in detect(vision)
       best_track = track
     return best_track
     
@@ -413,6 +417,8 @@ class RadarD:
 
       self.lane_line_available = md.laneLineProbs[1] > 0.5 and md.laneLineProbs[2] > 0.5
       self.compute_leads(self.v_ego, alive_tracks, md)
+      if self.leadTwo is not None:
+        self.radar_state.leadTwo = self.leadTwo
       if self.enable_radar_tracks == 3:
         self._pick_lead_one_from_state()
 
@@ -498,7 +504,7 @@ class RadarD:
       y_rel_neg = - c.yRel
       # center
       if left_lane_y < y_rel_neg < right_lane_y:
-        if c.cnt > 6:
+        if c.cnt > 3:
           ld = c.get_RadarState(lead_msg.prob, float(-lead_msg.y[0]))
           ld['modelProb'] = 0.01
           center_list.append(ld)
@@ -559,12 +565,23 @@ class RadarD:
         default={'status': False}
     )
    
+    self.leadTwo = None
     if self.lane_line_available:
       self.leadCenter = min(
           (ld for ld in center_list if ld['vLead'] > 5 and ld['radar'] and abs(ld['yRel']) < 5.0 and ld['dRel'] > 3.5),
           key=lambda d: d['dRel'],
-          default={'status': False}
+          default=None
       )
+      if self.radar_state.leadOne.status and self.radar_state.leadOne.radar:
+        self.leadTwo = min(
+            (ld for ld in center_list if ld['vLead'] > 5 and ld['radar'] and abs(ld['yRel']) < 5.0 and self.radar_state.leadOne.dRel < ld['dRel'] < 80),
+            key=lambda d: d['dRel'],
+            default=None
+        )
+        if self.leadTwo is not None:
+          self.leadTwo = copy.deepcopy(self.leadTwo)
+          offset = float(np.interp(v_ego * 3.6, [30, 80, 100], [3.0, 5.0, 10.0]))
+          self.leadTwo['dRel'] = self.radar_state.leadOne.dRel + offset
     else:
       self.leadCenter = None
 
