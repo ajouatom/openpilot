@@ -581,7 +581,8 @@ class RadarD:
         )
         if self.leadTwo is not None:
           self.leadTwo = copy.deepcopy(self.leadTwo)
-          offset = float(np.interp(v_ego * 3.6, [30, 80, 100], [3.0, 5.0, 10.0]))
+          gap = self.leadTwo['dRel'] - self.radar_state.leadOne.dRel
+          offset = 3.0 + min(gap * 0.1, 10)
           self.leadTwo['dRel'] = self.radar_state.leadOne.dRel + offset
     else:
       self.leadCenter = None
