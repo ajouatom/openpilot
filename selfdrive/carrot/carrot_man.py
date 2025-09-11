@@ -634,7 +634,7 @@ class CarrotMan:
       ftp.mkd(git_branch)
     except Exception as e:
       print(f"Directory creation failed: {e}")
-    ftp.cwd(directory)
+    ftp.cwd(git_branch)
     
     directory = car_selected + " " + Params().get("DongleId").decode('utf-8')
     current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
