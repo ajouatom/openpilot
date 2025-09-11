@@ -160,7 +160,7 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
           best_track = track
       elif lead.prob > 0.6:
         best_track = track
-    elif dist_sane(track) and y_sane(track):  # stopped-car
+    elif dist_sane(track) and y_sane(track, True):  # stopped-car
       if score2 > 0.00001 and dist_sane(track2) and y_sane(track2) and vel_sane(track2):
         best_track = track2
       elif track.selected_count > 0:
