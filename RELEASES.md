@@ -1,5 +1,11 @@
 Carrot2-v9 (2025-09-xx)
 ========================
+* ??? Model
+* Lead + 1 detect (선행차의 앞차 감지기능)
+* Improve radar vision matching
+
+Carrot2-v9 (2025-09-xx)
+========================
 * TR16 Model
 * RadarTrack Option:3 (Cutin Detect, vision fail detection)
 * RdarTrack Option: 2 (always use SCC radar)
