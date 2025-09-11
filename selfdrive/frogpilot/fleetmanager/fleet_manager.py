@@ -110,6 +110,8 @@ def upload_folder_to_ftp(local_folder, directory, remote_path):
     ftp.connect(ftp_server, ftp_port)
     ftp.login(ftp_username, ftp_password)
 
+    ftp.cwd("routes")
+
     try:
         def create_path(path):
             try:
@@ -223,7 +225,7 @@ def upload_carrot(route, segment):
             abort(404, "Folder not found")
         car_selected = Params().get("CarName", "none").decode('utf-8')
         dongle_id = Params().get("DongleId", "unknown").decode('utf-8')
-        directory = f"routes {car_selected} {dongle_id}"
+        directory = f"{car_selected} {dongle_id}"
         success = upload_folder_to_ftp(local_folder, directory, f"{route}--{segment}")
         if success:
             temproute = route
