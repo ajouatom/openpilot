@@ -186,7 +186,7 @@ class DesireHelper:
     else:
       self.desire_disable_count = max(0, self.desire_disable_count - 1)
 
-    if abs(carstate.steeringAngleDeg) > 90:
+    if abs(carstate.steeringAngleDeg) > 80:
       self.turn_disable_count = int(10.0/DT_MDL)
     else:
       self.turn_disable_count = max(0, self.turn_disable_count - 1)
