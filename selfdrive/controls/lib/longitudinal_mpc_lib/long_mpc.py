@@ -369,7 +369,7 @@ class LongitudinalMpc:
 
     if radarstate.leadOne.status:
       j_lead = radarstate.leadOne.jLead
-      self.j_lead = j_lead * 0.1 + self.j_lead * 0.9
+      self.j_lead = j_lead * 0.3 + self.j_lead * 0.7
     else:
       self.j_lead = 0.0
 
