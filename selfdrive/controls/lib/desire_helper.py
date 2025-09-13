@@ -147,6 +147,7 @@ class DesireHelper:
 
     self.turn_desire_state = False
     self.desire_disable_count = 0
+    self.turn_disable_count = 0
     self.blindspot_detected_counter = 0
     self.auto_lane_change_enable = False
     self.next_lane_change = False
@@ -177,13 +178,18 @@ class DesireHelper:
     self.available_left_edge = self.road_edge_left_count.counter > available_count and self.distance_to_road_edge_left_far > min_lane_width
     self.available_right_edge = self.road_edge_right_count.counter > available_count and self.distance_to_road_edge_right_far > min_lane_width
 
-  def check_desire_state(self, modeldata):
+  def check_desire_state(self, modeldata, carstate):
     desire_state  = modeldata.meta.desireState
     self.turn_desire_state = (desire_state[1] + desire_state[2]) > 0.1
     if self.turn_desire_state:
       self.desire_disable_count = int(2.0/DT_MDL)
     else:
       self.desire_disable_count = max(0, self.desire_disable_count - 1)
+
+    if abs(carstate.steeringAngleDeg) > 90:
+      self.turn_disable_count = int(10.0/DT_MDL)
+    else:
+      self.turn_disable_count = max(0, self.turn_disable_count - 1)
     #print(f"desire_state = {desire_state}, turn_desire_state = {self.turn_desire_state}, disable_count = {self.desire_disable_count}")
 
   def update(self, carstate, modeldata, lateral_active, lane_change_prob, carrotMan, radarState):
@@ -202,7 +208,7 @@ class DesireHelper:
 
     ##### check lane state
     self.check_lane_state(modeldata)
-    self.check_desire_state(modeldata)
+    self.check_desire_state(modeldata, carstate)
 
     #### check driver's blinker state
     driver_blinker_state = carstate.leftBlinker * 1 + carstate.rightBlinker * 2
@@ -312,8 +318,12 @@ class DesireHelper:
     elif desire_enabled and ((below_lane_change_speed and not carstate.standstill and self.enable_turn_desires) or self.turn_desire_state):
       #print("Desire Turning")
       self.lane_change_state = LaneChangeState.off
-      self.turn_direction = TurnDirection.turnLeft if blinker_state == BLINKER_LEFT else TurnDirection.turnRight
-      self.lane_change_direction = self.turn_direction #LaneChangeDirection.none
+      if self.turn_disable_count > 0:
+        self.turn_direction = TurnDirection.none
+        self.lane_change_direction = LaneChangeDirection.none
+      else:
+        self.turn_direction = TurnDirection.turnLeft if blinker_state == BLINKER_LEFT else TurnDirection.turnRight
+        self.lane_change_direction = self.turn_direction #LaneChangeDirection.none
       desire_enabled = False
     elif self.desire_disable_count > 0: # Turn 후 일정시간 동안 차선변경 불가능
       #print("Desire after turning")
