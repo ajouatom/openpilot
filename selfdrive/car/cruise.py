@@ -576,7 +576,7 @@ class VCruiseCarrot:
         self._cruise_cancel_state = True
         self._lat_enabled = False
         self._paddle_decel_active = False
-        self.params.put_bool_nonblocking("ExperimentalMode", not self.params.get_bool("ExperimentalMode"))
+        #self.params.put_bool_nonblocking("ExperimentalMode", not self.params.get_bool("ExperimentalMode"))
         self._add_log("Lateral " + "enabled" if self._lat_enabled else "disabled")
 
     if self._paddle_mode > 0 and button_type in [ButtonType.paddleLeft, ButtonType.paddleRight]:  # paddle button
