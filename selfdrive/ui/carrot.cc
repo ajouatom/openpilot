@@ -824,7 +824,7 @@ public:
               ui_fill_rect(
                 s->vg,
                 { (int)(lead_two_xl - 10), (int)(lead_two_yl - path_width2 * 0.8), (int)(path_width2 + 20), (int)(path_width2 * 0.8) },
-                (lead_two_status == 2) ? COLOR_RED_ALPHA(30) : COLOR_BLACK_ALPHA(20),
+                (lead_two_status == 2) ? COLOR_RED_ALPHA(50) : COLOR_BLACK_ALPHA(20),
                 15, 3, &radar_stroke
               );
             }
