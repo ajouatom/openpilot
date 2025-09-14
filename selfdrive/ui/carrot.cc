@@ -599,6 +599,13 @@ private:
     QPointF tf_vertex_left;
     QPointF tf_vertex_right;
 
+    QPointF lead_two_left;
+    QPointF lead_two_right;
+    float   lead_two_xl = 0.0;
+    float   lead_two_xr = 0.0;
+    float   lead_two_y = 0.0;
+    int     lead_two_status = 0;
+
 protected:
     bool make_data(const UIState* s) {
 		SubMaster& sm = *(s->sm);
@@ -640,6 +647,35 @@ protected:
         }
         _model->mapToScreen(max_distance, y - 1.2, z + 1.22, &path_end_left_vertex);
         _model->mapToScreen(max_distance, y + 1.2, z + 1.22, &path_end_right_vertex);
+
+        auto lead_two = sm["radarState"].getRadarState().getLeadTwo();
+        if (lead_two.getRadar() && lead_two.getDRel() > lead_one.getDRel() + 3.0) {
+          z = line.getZ()[get_path_length_idx(line, lead_two.getDRel())];
+          y = -lead_two.getYRel();
+
+          _model->mapToScreen(lead_two.getDRel(), y - 1.2, z + 1.22, &lead_two_left);
+          _model->mapToScreen(lead_two.getDRel(), y + 1.2, z + 1.22, &lead_two_right);
+          if (lead_two_status > 0) {
+            lead_two_xl = lead_two_xl * 0.9 + lead_two_left.x() * 0.1;
+            lead_two_xr = lead_two_xr * 0.9 + lead_two_right.x() * 0.1;
+            lead_two_y = lead_two_y * 0.9 + lead_two_left.y() * 0.1;
+          }
+          else {
+            lead_two_xl = lead_two_left.x();
+            lead_two_xr = lead_two_right.x();
+            lead_two_y = lead_two_left.y();
+          }
+          if(lp.getLongitudinalPlanSource() == cereal::LongitudinalPlan::LongitudinalPlanSource::LEAD1) {
+            lead_two_status = 2;
+          }
+          else {
+            lead_two_status = 1;
+          }
+          lead_two_status = 2;
+        }
+        else {
+          lead_two_status = 0;
+        }
 
         float lex = path_end_left_vertex.x();
         float ley = path_end_left_vertex.y();
@@ -784,6 +820,16 @@ public:
         if (isLeadDetected()) {
             NVGcolor radar_stroke = isRadarDetected() ? rcolor : COLOR_BLUE;
             ui_fill_rect(s->vg, { (int)(path_x - path_width / 2 - 10), (int)(path_y - path_width * 0.8), (int)(path_width + 20), (int)(path_width * 0.8) }, COLOR_BLACK_ALPHA(20), 15, 3, &radar_stroke);
+            if (lead_two_status > 0) {
+              radar_stroke = COLOR_OCHRE;
+              int path_width2 = lead_two_xr - lead_two_xl;
+              ui_fill_rect(
+                s->vg,
+                { (int)(lead_two_xl - 10), (int)(lead_two_xl - path_width2 * 0.8), (int)(path_width2 + 20), (int)(path_width2 * 0.8) },
+                (lead_two_status == 2) ? COLOR_RED_ALPHA(30) : COLOR_BLACK_ALPHA(20),
+                15, 3, &radar_stroke
+              );
+            }
 #if 0
             px[0] = path_x - path_width / 2 - 10;
             px[1] = px[0] + path_width + 20;
