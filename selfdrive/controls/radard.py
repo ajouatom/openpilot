@@ -39,8 +39,10 @@ class Track:
     self.cut_in_count = 0
     self.measured = False
     self.score = 0.0
+    self.in_lane_prob = 0.0
+    self.in_lane_prob_future = 0.0
 
-  def update(self, md, pt, ready, radar_reaction_factor):
+  def update(self, md, pt, ready, radar_reaction_factor, radar_lat_factor):
 
     #pt_yRel = -leads_v3[0].y[0] if track_id in [0, 1] and pt.yRel == 0 and self.ready and leads_v3[0].prob > 0.5 else pt.yRel
     self.dRel = pt.dRel
@@ -56,8 +58,10 @@ class Track:
     if not self.measured:
       self.cnt = 0
 
+    self.yRel_future = self.yRel + self.yvLead * radar_lat_factor
+    self.dRel_future = self.dRel + self.vLead * radar_lat_factor
     if ready:
-      self.dPath = self.yRel + np.interp(self.dRel, md.position.x, md.position.y)
+      self.d_path(md) #self.yRel + np.interp(self.dRel, md.position.x, md.position.y)
 
     a_lead_threshold = 0.5 * radar_reaction_factor
     if abs(self.aLead) < a_lead_threshold and abs(self.jLead) < 0.5:
@@ -66,6 +70,21 @@ class Track:
       self.aLeadTau.update(0.0)
 
     self.cnt += 1
+
+  def d_path(self, md):
+    lane_xs = md.laneLines[1].x
+    left_ys = md.laneLines[1].y
+    right_ys = md.laneLines[2].y
+    def d_path_interp(dRel, yRel):
+      left_lane_y = np.interp(dRel, lane_xs, left_ys)
+      right_lane_y = np.interp(dRel, lane_xs, right_ys)
+      center_y = (left_lane_y + right_lane_y) / 2.0
+      lane_half_width = abs(right_lane_y - left_lane_y) / 2.0
+      dist_from_center = yRel + center_y
+      in_lane_prob = max(0.0, 1.0 - (abs(dist_from_center) / lane_half_width))
+      return dist_from_center, in_lane_prob
+    self.dPath, self.in_lane_prob = d_path_interp(self.dRel, self.yRel)
+    self.dPath_future, self.in_lane_prob_future = d_path_interp(self.dRel_future, self.yRel_future)
 
   def get_RadarState(self, model_prob: float = 0.0, vision_y_rel = 0.0):
     return {
@@ -108,7 +127,7 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
   offset_vision_dist = lead.x[0] - RADAR_TO_CAMERA
   #vel_tolerance = 25.0 if lead.prob > 0.99 else 10.0
   max_vision_dist = max(offset_vision_dist * 1.25, 5.0)
-  min_vision_dist = max(offset_vision_dist * 0.6, 1.0)
+  min_vision_dist = max(offset_vision_dist * 0.8, 1.0)
   max_vision_dist2 = max(offset_vision_dist * 1.45, 5.0)
   min_vision_dist2 = 1.5 #max(offset_vision_dist * 0.3, 1.0)
   max_offset_vision_vel = max(lead.v[0] * np.interp(lead.prob, [0.8, 0.98], [0.3, 0.5]), 5.0) # 확률이 낮으면 속도오차를 줄임.
@@ -116,12 +135,14 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
   def prob(c):
     prob_d = laplacian_pdf(c.dRel, offset_vision_dist, lead.xStd[0])
     prob_y = laplacian_pdf(c.yRel, -lead.y[0], lead.yStd[0])
+    prob_y2 = laplacian_pdf(c.yRel, -lead.y[0], lead.yStd[0] * 2)  # for cut-in
     prob_v = laplacian_pdf(c.vLead, lead.v[0], lead.vStd[0])
 
     #weight_v = np.interp(c.vLead, [0, 10], [0.3, 1])
-    c.score = prob_d * prob_y * prob_v # * weight_v
+    score = prob_d * prob_y * prob_v # * weight_v
+    score2 = prob_d * prob_y2 * prob_v # * weight_v
 
-    return c.score #prob_d * prob_y * prob_v * weight_v
+    return score, score2 #prob_d * prob_y * prob_v * weight_v
   
   def vel_sane(c):
     return (abs(c.vLead - lead.v[0]) < max_offset_vision_vel) or (c.vLead > 3)
@@ -135,19 +156,23 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
     return abs(c.yRel + lead.y[0]) < 2.0
  
 
-  first_track, second_track = None, None
-  first_score, second_score = -1e6, -1e6
+  first_track, second_track, extra_track = None, None, None
+  first_score, second_score, extra_score = -1e6, -1e6, -1e6
   for c in tracks.values():
-    c.score = prob(c)
+    c.score, score2 = prob(c)
     if c.score > first_score:
       second_score = first_score
       second_track = first_track
       first_score = c.score
       first_track = c
+    if score2 > extra_score:
+      extra_score = score2
+      extra_track = c
+      
 
   #best_track = max(tracks.values(), key=prob)
 
-  def select_track(track, score, track2, score2):
+  def select_track(track, score, track2, score2, extra_track, extra_score):
     if score < 0.0001:
       return None
     
@@ -172,13 +197,17 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
     #elif dist_sane(track) and vel_sane(track) and lead.prob > 0.5:
     #  best_track = track
     elif offset_vision_dist < 90 and lead.prob > 0.65:
-      if score2 > 0.00001 and dist_sane(track2, True) and vel_sane(track2) and y_sane(track2, True):
-        best_track = track2
-      elif dist_sane(track, True) and vel_sane(track) and y_sane(track, True):# cut-in detect(vision)
+      # wide y detect, for cut-in
+      if extra_score > score and dist_sane(extra_track, True) and vel_sane(extra_track) and y_sane(extra_track, True):
+        best_track = extra_track
+      # wide dRel, y detect, for cut-in
+      elif dist_sane(track, True) and vel_sane(track) and y_sane(track, True):
         best_track = track
+      elif score2 > 0.0001 and dist_sane(track2, True) and vel_sane(track2) and y_sane(track2, True):
+        best_track = track2
     return best_track
     
-  best_track = select_track(first_track, first_score, second_track, second_score)
+  best_track = select_track(first_track, first_score, second_track, second_score, extra_track, extra_score)
 
   for c in tracks.values():
     if c is best_track:
@@ -381,7 +410,7 @@ class RadarD:
       if track_id not in self.tracks:
         self.tracks[track_id] = Track(track_id)
 
-      self.tracks[track_id].update(sm['modelV2'], pt, self.ready, self.radar_reaction_factor)
+      self.tracks[track_id].update(sm['modelV2'], pt, self.ready, self.radar_reaction_factor, self.radar_lat_factor)
 
     for tid in list(self.tracks.keys()):
       if tid not in valid_ids:
@@ -488,64 +517,36 @@ class RadarD:
       self.radar_state.leadLeft = {'status': False}
       self.radar_state.leadRight = {'status': False}
       return
-
-    #md_x, md_y = md.position.x, md.position.y
-    lane_xs = md.laneLines[1].x
-    left_ys = md.laneLines[1].y
-    right_ys = md.laneLines[2].y
     
     left_list, right_list, center_list, cutin_list = [], [], [], []
-
     for c in tracks.values():
-      #dy = c.yRel + np.interp(c.dRel, md_x, md_y) # + c.yvLead * self.radar_lat_factor
-      #dy_with_vel = dy + c.yvLead * self.radar_lat_factor
-      y_with_vel_neg = -(c.yRel + c.yvLead * self.radar_lat_factor)
-      offset = np.interp(c.dRel, [10, 50], [0.0, 0.3])
-      left_lane_y = np.interp(c.dRel, lane_xs, left_ys) + offset
-      right_lane_y = np.interp(c.dRel, lane_xs, right_ys) - offset
-
       y_rel_neg = - c.yRel
       # center
-      if left_lane_y < y_rel_neg < right_lane_y:
+      if c.in_lane_prob > 0.1:
         if c.cnt > 3:
           ld = c.get_RadarState(lead_msg.prob, float(-lead_msg.y[0]))
           ld['modelProb'] = 0.01
           center_list.append(ld)
 
       # left/right
-      elif y_rel_neg < left_lane_y:
+      elif y_rel_neg < 0: #left_lane_y:
         ld = c.get_RadarState(0, 0)
-        if self.lane_line_available and y_with_vel_neg > left_lane_y and c.cnt > int(2.0/DT_MDL):
-          if c.cut_in_count > int(0.2/DT_MDL):
+        if self.lane_line_available and c.in_lane_prob_future > 0.1 and c.cnt > int(2.0/DT_MDL):
+          if c.cut_in_count > int(0.1/DT_MDL):
             ld['modelProb'] = 0.03
             cutin_list.append(ld)
           c.cut_in_count += 2
         left_list.append(ld)
       else:
         ld = c.get_RadarState(0, 0)
-        if self.lane_line_available and y_with_vel_neg < right_lane_y and c.cnt > int(2.0/DT_MDL):
-          if c.cut_in_count > int(0.2/DT_MDL):
+        if self.lane_line_available and c.in_lane_prob_future > 0.1 and c.cnt > int(2.0/DT_MDL):
+          if c.cut_in_count > int(0.1/DT_MDL):
             ld['modelProb'] = 0.03
             cutin_list.append(ld)
           c.cut_in_count += 2
         right_list.append(ld)
 
       c.cut_in_count = max(c.cut_in_count - 1, 0)
-      """
-      # cut-in
-      #cut_in_width = 3.0 #3.4  # 끼어들기 차폭
-      #if self.lane_line_available and left_y < y_with_vel_neg < right_y and (3 < c.dRel < 20 and c.vLead > 4 and c.cnt > int(2.0/DT_MDL) and  c.yRel * c.yvLead < 0):        
-      if self.lane_line_available and 3 < c.dRel < 50 and c.vLead > 4 and c.cnt > int(0.5/DT_MDL):
-        if (y_rel_neg < left_lane_y and y_with_vel_neg > left_lane_y) or (y_rel_neg > right_lane_y and y_with_vel_neg < right_lane_y):
-          c.cut_in_count += 1            
-          print(f"### cut-in detected! dRel: {c.dRel:.1f}, yRel: {c.yRel:.1f}, yvRel: {c.yvLead:.1f}, left_y: {left_lane_y:.1f}, right_y: {right_lane_y:.1f}, c: {c.cut_in_count}")
-          if c.cut_in_count > int(0.1/DT_MDL):
-            cutin_list.append(c.get_RadarState(lead_msg.prob))
-        else:
-          c.cut_in_count = max(c.cut_in_count - 1, 0)
-      else:
-        c.cut_in_count = 0
-      """
 
     self.radar_state.leadsLeft   = left_list
     self.radar_state.leadsRight  = right_list
@@ -571,21 +572,22 @@ class RadarD:
     self.leadTwo = None
     if self.lane_line_available:
       self.leadCenter = min(
-          (ld for ld in center_list if ld['vLead'] > 5 and ld['radar'] and abs(ld['yRel']) < 5.0 and ld['dRel'] > 3.5),
+          (ld for ld in center_list if ld['vLead'] > 5 and ld['radar'] and ld['dRel'] > 3.5),
           key=lambda d: d['dRel'],
           default=None
       )
       if self.radar_state.leadOne.status and self.radar_state.leadOne.radar:
         self.leadTwo = min(
-            (ld for ld in center_list if ld['vLead'] > 5 and ld['radar'] and abs(ld['yRel']) < 5.0 and self.radar_state.leadOne.dRel < ld['dRel'] < 80),
+            (ld for ld in center_list if ld['vLead'] > 5 and ld['radar'] and self.radar_state.leadOne.dRel < ld['dRel'] < 80),
             key=lambda d: d['dRel'],
             default=None
         )
         if self.leadTwo is not None:
           self.leadTwo = copy.deepcopy(self.leadTwo)
-          gap = self.leadTwo['dRel'] - self.radar_state.leadOne.dRel
-          offset = 3.0 + min(gap * 0.2, 10)
-          self.leadTwo['dRel'] = self.radar_state.leadOne.dRel + offset
+          #gap = self.leadTwo['dRel'] - self.radar_state.leadOne.dRel
+          #offset = 3.0 + min(gap * 0.2, 10)
+          #self.leadTwo['dRel'] = self.radar_state.leadOne.dRel + offset
+          self.leadTwo['dRel'] = max(self.radar_state.leadOne.dRel + 3.0, self.leadTwo['dRel'] - 8.0) # lead+1 차를 뒤로 8M후퇴하여, mpc에서  감자하도록함.. 최소 lead보다 3M앞에 위치하도록
     else:
       self.leadCenter = None
 
@@ -614,7 +616,7 @@ class RadarD:
     chosen = None
     detected = self.radar_detected
 
-    if False and self.leadCutIn and self.leadCutIn.get("status") and self.detect_cut_in:
+    if self.leadCutIn and self.leadCutIn.get("status") and self.detect_cut_in:
       if self.radar_state.leadOne.status:
         if self.leadCutIn["dRel"] < self.radar_state.leadOne.dRel:
           chosen = self.leadCutIn

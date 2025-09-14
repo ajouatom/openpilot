@@ -86,8 +86,8 @@ class Uploader:
 
     self.immediate_folders = ["crash/", "boot/"]
     self.immediate_priority = {"qlog": 0, "qlog.zst": 0, "qcamera.ts": 1}
-    if (self.params.get_int("EnableConnect") == 2):
-      self.immediate_priority.update({"rlog": 0, "rlog.zst": 0})
+    #if (self.params.get_int("EnableConnect") == 2):
+    #  self.immediate_priority.update({"rlog": 0, "rlog.zst": 0})
 
   def list_upload_files(self, metered: bool) -> Iterator[tuple[str, str, str]]:
     r = self.params.get("AthenadRecentlyViewedRoutes", encoding="utf8")

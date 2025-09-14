@@ -237,7 +237,7 @@ class MyTrack:
     self.yRel_avg.x = self.yRel
     self.yvRel_avg.x = self.yvRel
         
-  def update(self, radar_point):
+  def update(self, radar_point, a_ego):
     if not radar_point.measured:
       if self.cnt > 0:
         self.init_point(radar_point)
@@ -250,20 +250,26 @@ class MyTrack:
       self.yRel = self.yRel_avg.update(radar_point.yRel)
       self.yvRel = self.yvRel_avg.update(radar_point.yvRel)
 
-      v_lead_filtered = self.vLead_avg.update(self.vLead)
-      pseudo_stop = abs(v_lead_filtered) < 0.3 and abs(self.vLead - v_lead_filtered) < 0.05
-      a_raw = (v_lead_filtered - self.v_lead_filtered_last) / self.dt
-      self.v_lead_filtered_last = v_lead_filtered
+      if True: #math.isnan(radar_point.aRel): # 
+        v_lead_filtered = self.vLead_avg.update(self.vLead)
+        pseudo_stop = abs(v_lead_filtered) < 0.3 and abs(self.vLead - v_lead_filtered) < 0.05
+        a_raw = (v_lead_filtered - self.v_lead_filtered_last) / self.dt
+        self.v_lead_filtered_last = v_lead_filtered
 
-      self.noisy = abs(a_raw - self.aLead) > 3.0
-      if self.noisy:
-        self.cnt = 0
+        self.noisy = abs(a_raw - self.aLead) > 3.0
+        if self.noisy:
+          self.cnt = 0
         
-      a_lead = self.aLead_avg.update(np.clip(a_raw, -10.0, 5.0) if not pseudo_stop else 0.0)
+        a_lead = self.aLead_avg.update(np.clip(a_raw, -10.0, 5.0) if not pseudo_stop else 0.0)
 
-      j_lead = (a_lead - self.aLead) / self.dt
-      self.aLead = a_lead
-      self.jLead = self.jLead_avg.update(j_lead if self.cnt > 2 else 0.0)
+        j_lead = (a_lead - self.aLead) / self.dt
+        self.aLead = a_lead
+        self.jLead = self.jLead_avg.update(j_lead if self.cnt > 2 else 0.0)
+      else:
+        a_lead = radar_point.aRel + a_ego
+        j_lead = (a_lead - self.aLead) / self.dt
+        self.aLead = a_lead
+        self.jLead = self.jLead_avg.update(j_lead if self.cnt > 2 else 0.0)
 
       # Store latest values
       self.dRel = radar_point.dRel
@@ -282,6 +288,8 @@ class RadarInterfaceBase(ABC):
     delay = CP.radarDelay
     self.v_ego_hist = deque([0.0], maxlen=int(round(delay / DT_CTRL)) + 1)
     self.v_ego = 0.0
+    self.a_ego_hist = deque([0.0], maxlen=int(round(delay / DT_CTRL)) + 1)
+    self.a_ego = 0.0
     self.last_timestamp = None
     self.dt = None
 
@@ -302,9 +310,11 @@ class RadarInterfaceBase(ABC):
       self.init_samples.append(rcv_time)
 
      
-  def update_carrot(self, v_ego, rcv_time, can_packets: list[tuple[int, list[CanData]]]) -> structs.RadarDataT | None:
+  def update_carrot(self, v_ego, a_ego, rcv_time, can_packets: list[tuple[int, list[CanData]]]) -> structs.RadarDataT | None:
     self.v_ego_hist.append(v_ego)
     self.v_ego = self.v_ego_hist[0]
+    self.a_ego_hist.append(a_ego)
+    self.a_ego = self.a_ego_hist[0]
     ret = self.update(can_packets)
 
     if ret is not None:
@@ -319,7 +329,7 @@ class RadarInterfaceBase(ABC):
           new_tracks[track_id] = MyTrack(track_id, radar_point, self.dt)
         else:
           new_tracks[track_id] = self.tracks[track_id]
-        new_tracks[track_id].update(radar_point)
+        new_tracks[track_id].update(radar_point, self.a_ego)
 
         if new_tracks[track_id].cnt < 6:
           radar_point.aLead = 0

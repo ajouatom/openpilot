@@ -369,11 +369,11 @@ class LongitudinalMpc:
 
     if radarstate.leadOne.status:
       j_lead = radarstate.leadOne.jLead
-      self.j_lead = j_lead * 0.3 + self.j_lead * 0.7
+      self.j_lead = j_lead * 0.1 + self.j_lead * 0.9
     else:
       self.j_lead = 0.0
 
-    lead_xv_0, lead_v_0 = self.process_lead(radarstate.leadOne, np.clip(self.j_lead * carrot.j_lead_factor, -2.0, 2.0))
+    lead_xv_0, lead_v_0 = self.process_lead(radarstate.leadOne, np.clip(self.j_lead * carrot.j_lead_factor, -1.0, 1.0))
     lead_xv_1, _ = self.process_lead(radarstate.leadTwo, 0.0)
 
     mode = self.mode
@@ -385,7 +385,7 @@ class LongitudinalMpc:
     else:
       v_cruise, stop_x, mode = carrot.v_cruise, carrot.stop_dist, carrot.mode
       desired_distance = desired_follow_distance(v_ego, lead_v_0, comfort_brake, stop_distance, t_follow)
-      t_follow = carrot.dynamic_t_follow(t_follow, radarstate.leadOne, desired_distance)
+      t_follow = carrot.dynamic_t_follow(t_follow, radarstate.leadOne, desired_distance, self.prev_a)
 
     # To estimate a safe distance from a moving lead, we calculate how much stopping
     # distance that lead needs as a minimum. We can add that to the current distance

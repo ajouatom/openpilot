@@ -656,9 +656,9 @@ protected:
           _model->mapToScreen(lead_two.getDRel(), y - 1.2, z + 1.22, &lead_two_left);
           _model->mapToScreen(lead_two.getDRel(), y + 1.2, z + 1.22, &lead_two_right);
           if (lead_two_status > 0) {
-            lead_two_xl = lead_two_xl * 0.9 + lead_two_left.x() * 0.1;
-            lead_two_xr = lead_two_xr * 0.9 + lead_two_right.x() * 0.1;
-            lead_two_y = lead_two_y * 0.9 + lead_two_left.y() * 0.1;
+            lead_two_xl = lead_two_xl * 0.8 + lead_two_left.x() * 0.2;
+            lead_two_xr = lead_two_xr * 0.8 + lead_two_right.x() * 0.2;
+            lead_two_y = lead_two_y * 0.8 + lead_two_left.y() * 0.2;
           }
           else {
             lead_two_xl = lead_two_left.x();
