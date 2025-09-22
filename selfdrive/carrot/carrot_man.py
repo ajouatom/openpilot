@@ -438,6 +438,7 @@ class CarrotMan:
     v_ego_kph = 0
     log_carrot = ""
     v_cruise_kph = 0
+    carcruiseSpeed = 0
     if not isOnroad:
       self.xState = 0
       self.trafficState = 0
@@ -447,6 +448,7 @@ class CarrotMan:
         v_ego_kph = int(carState.vEgoCluster * 3.6 + 0.5)
         log_carrot = carState.logCarrot
         v_cruise_kph = carState.vCruise
+        carcruiseSpeed = carState.cruiseState.speed * 3.6
       if self.sm.alive['selfdriveState']:
         selfdrive = self.sm['selfdriveState']
         self.controls_active = selfdrive.active
@@ -457,6 +459,7 @@ class CarrotMan:
 
     msg['log_carrot'] = log_carrot
     msg['v_cruise_kph'] = v_cruise_kph
+    msg['carcruiseSpeed'] = carcruiseSpeed
     msg['v_ego_kph'] = v_ego_kph
     msg['tbt_dist'] = self.carrot_serv.xDistToTurn
     msg['sdi_dist'] = self.carrot_serv.xSpdDist
@@ -535,7 +538,7 @@ class CarrotMan:
 
   def parse_kisa_data(self, data: bytes):
     result = {}
-    
+
     try:
       decoded = data.decode('utf-8')
     except UnicodeDecodeError:
@@ -551,7 +554,7 @@ class CarrotMan:
         except ValueError:
           result[key] = value
     return result
-  
+
   def kisa_app_thread(self):
     while True:
       try:
@@ -635,7 +638,7 @@ class CarrotMan:
     except Exception as e:
       print(f"Directory creation failed: {e}")
     ftp.cwd(git_branch)
-    
+
     directory = car_selected + " " + Params().get("DongleId").decode('utf-8')
     current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
     filename = tmux_why + "-" + current_time + "-" + git_branch + ".txt"
@@ -756,7 +759,7 @@ class CarrotMan:
       except Exception as e:
         print(f"carrot_cmd_zmq error: {e}")
         socket.close()
-        time.sleep(1) 
+        time.sleep(1)
         socket, poller = setup_socket()
 
   def recvall(self, sock, n):
