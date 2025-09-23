@@ -147,7 +147,7 @@ class CarrotServ:
 
     self.gps_accuracy_phone = 0.0
     self.gps_accuracy_device = 0.0
-    
+
     self.totalDistance = 0
     self.xSpdLimit = 0
     self.xSpdDist = 0
@@ -187,6 +187,10 @@ class CarrotServ:
 
     self.debugText = ""
 
+    # 默认语言，稍后在 update_params 中从 Params 读取覆盖，
+    # 规则：main_ko -> 韩语；main_zh-CHS -> 中文；其他 -> 英文
+    self.lang = "en"
+
     self.update_params()
 
   def update_params(self):
@@ -208,6 +212,23 @@ class CarrotServ:
     self.autoCurveSpeedLowerLimit = int(self.params.get("AutoCurveSpeedLowerLimit"))
     self.is_metric = self.params.get_bool("IsMetric")
     self.autoRoadSpeedLimitOffset = self.params.get_int("AutoRoadSpeedLimitOffset")
+
+    # 读取语言设置：优先使用 LanguageSetting，与 UI 保持一致；回退读取可能存在的 "lang"
+    try:
+      lang_val = self.params.get('LanguageSetting', encoding='utf8') or self.params.get('lang', encoding='utf8')
+    except Exception:
+      lang_val = None
+    if isinstance(lang_val, bytes):
+      try:
+        lang_val = lang_val.decode('utf8')
+      except Exception:
+        lang_val = None
+    if lang_val == "main_ko":
+      self.lang = "ko"
+    elif lang_val == "main_zh-CHS":
+      self.lang = "zh"
+    else:
+      self.lang = "en"
 
 
   def _update_cmd(self):
@@ -377,7 +398,8 @@ class CarrotServ:
       self.xDistToTurnNext = self.nTBTDistNext + self.nTBTDist
 
   def _get_sdi_descr(self, nSdiType):
-    sdi_types = {
+    # 多语言映射：ko（韩语，原始），zh（简体中文），en（英文）。
+    sdi_ko = {
         0: "신호과속",
         1: "과속 (고정식)",
         2: "구간단속 시작",
@@ -444,9 +466,156 @@ class CarrotServ:
         63: "졸음 쉼터 안내",
         64: "노후경유차단속",
         65: "터널내 차로변경단속",
-        66: ""
+        66: "",
     }
-    return sdi_types.get(nSdiType, "")
+
+    sdi_en = {
+        0: "Signal speed enforcement",
+        1: "Speed camera (fixed)",
+        2: "Section control start",
+        3: "Section control end",
+        4: "Under section control",
+        5: "Block-the-box camera",
+        6: "Signal violation enforcement",
+        7: "Speed camera (mobile)",
+        8: "Fixed speed camera zone (box)",
+        9: "Bus-only lane zone",
+        10: "Reversible/variable lane enforcement",
+        11: "Shoulder surveillance point",
+        12: "No cut-in",
+        13: "Traffic data collection point",
+        14: "Security CCTV",
+        15: "Overloaded vehicle risk zone",
+        16: "Improper loading enforcement",
+        17: "Parking enforcement point",
+        18: "One-way road",
+        19: "Railroad crossing",
+        20: "School zone start",
+        21: "School zone end",
+        22: "Speed bump",
+        23: "LPG station",
+        24: "Tunnel section",
+        25: "Rest area",
+        26: "Toll gate",
+        27: "Fog caution area",
+        28: "Hazardous materials area",
+        29: "Accident-prone section",
+        30: "Sharp curve area",
+        31: "Sharp curve section 1",
+        32: "Steep slope section",
+        33: "Wild animal crossing area",
+        34: "Poor visibility (right)",
+        35: "Poor visibility",
+        36: "Poor visibility (left)",
+        37: "Frequent signal violations",
+        38: "Frequent speeding",
+        39: "Traffic congestion area",
+        40: "Lane selection by direction",
+        41: "Frequent jaywalking accidents",
+        42: "Frequent shoulder accidents",
+        43: "Frequent speeding accidents",
+        44: "Frequent drowsy driving accidents",
+        45: "Accident-prone spot",
+        46: "Frequent pedestrian accidents",
+        47: "Frequent vehicle theft",
+        48: "Falling rock caution area",
+        49: "Icy road caution area",
+        50: "Bottleneck point",
+        51: "Merging road",
+        52: "Cliff/Drop caution area",
+        53: "Underpass section",
+        54: "Residential area (traffic calming)",
+        55: "Interchange",
+        56: "Junction",
+        57: "Rest area (LPG available)",
+        58: "Bridge",
+        59: "Frequent brake failure accidents",
+        60: "Center line invasion accidents",
+        61: "Violation-of-passage accidents",
+        62: "Destination on opposite side",
+        63: "Drowsy rest area",
+        64: "Old diesel control",
+        65: "Lane change enforcement in tunnel",
+        66: "",
+    }
+
+    sdi_zh = {
+        0: "信号测速/闯灯取缔",
+        1: "固定测速摄像头",
+        2: "区间测速开始",
+        3: "区间测速结束",
+        4: "区间测速中",
+        5: "路口压线取缔摄像头",
+        6: "闯红灯取缔",
+        7: "移动测速摄像头",
+        8: "固定测速区（箱式）",
+        9: "公交专用车道区间",
+        10: "可变/潮汐车道取缔",
+        11: "应急车道监控点",
+        12: "禁止加塞",
+        13: "交通信息采集点",
+        14: "治安监控",
+        15: "超载车辆风险区",
+        16: "装载不当取缔",
+        17: "违停取缔点",
+        18: "单行道",
+        19: "铁路道口",
+        20: "学校区域开始",
+        21: "学校区域结束",
+        22: "减速带",
+        23: "LPG加气站",
+        24: "隧道区间",
+        25: "服务区",
+        26: "收费站",
+        27: "多雾路段",
+        28: "危险品区域",
+        29: "事故多发路段",
+        30: "急弯路段",
+        31: "急弯区段1",
+        32: "陡坡路段",
+        33: "野生动物出没路段",
+        34: "右侧视野不良点",
+        35: "视野不良点",
+        36: "左侧视野不良点",
+        37: "闯红灯多发",
+        38: "超速多发",
+        39: "交通拥堵区域",
+        40: "按方向选择车道点",
+        41: "行人乱穿马路多发处",
+        42: "应急车道事故多发",
+        43: "超速事故多发",
+        44: "疲劳驾驶事故多发",
+        45: "事故多发点",
+        46: "行人事故多发点",
+        47: "车辆盗窃多发点",
+        48: "落石危险路段",
+        49: "路面结冰危险",
+        50: "瓶颈路段",
+        51: "汇入道路",
+        52: "坠落危险路段",
+        53: "地下车道区间",
+        54: "居民区（交通缓和）",
+        55: "立交",
+        56: "分岔点",
+        57: "服务区（可加气）",
+        58: "桥梁",
+        59: "制动故障事故多发点",
+        60: "越线事故多发点",
+        61: "违法通行事故多发点",
+        62: "目的地在对面",
+        63: "瞌睡停车区",
+        64: "老旧柴油车管制",
+        65: "隧道内变道取缔",
+        66: "",
+    }
+
+    sdi_map = sdi_en
+    if self.lang == "ko":
+      sdi_map = sdi_ko
+    elif self.lang == "zh":
+      sdi_map = sdi_zh
+
+    return sdi_map.get(nSdiType, "")
 
   def _update_sdi(self):
     #sdiBlockType
@@ -588,7 +757,7 @@ class CarrotServ:
       if atc_type in ["turn left", "turn right"] and x_dist_to_turn > start_turn_dist:
         atc_type = "atc left" if atc_type == "turn left" else "atc right"
 
-    if self.autoTurnMapChange > 0 and check_steer: 
+    if self.autoTurnMapChange > 0 and check_steer:
       #print(f"x_dist_to_turn: {x_dist_to_turn}, atc_start_dist: {atc_start_dist}")
       #print(f"atc_activate_count: {self.atc_activate_count}")
       if self.atc_activate_count == 2:
@@ -623,7 +792,7 @@ class CarrotServ:
 
 
     return atc_desired, atc_type, atc_speed, atc_dist
-  
+
   def update_nav_instruction(self, sm):
     if sm.alive['navInstruction'] and sm.valid['navInstruction']:
       msg_nav = sm['navInstruction']
@@ -654,7 +823,7 @@ class CarrotServ:
         print(f"kisawazeroadspdlimit: {road_limit_speed} km/h")
         if not self.is_metric:
           road_limit_speed *= CV.MPH_TO_KPH
-        self.nRoadLimitSpeed = road_limit_speed 
+        self.nRoadLimitSpeed = road_limit_speed
     if "kisawazealert" in data:
       pass
     if "kisawazeendalert" in data:
@@ -680,10 +849,10 @@ class CarrotServ:
       if xSpdType >= 0:
         offset = 5 if self.is_metric else 5 * CV.MPH_TO_KPH
         self.xSpdLimit = self.nRoadLimitSpeed + offset
-        
+
         self.xSpdDist = distance
-        self.xSpdType =xSpdType 
-    
+        self.xSpdType =xSpdType
+
   def update_navi(self, remote_ip, sm, pm, vturn_speed, coords, distances, route_speed):
 
     self.debugText = ""
@@ -715,7 +884,7 @@ class CarrotServ:
     self.active_kisa_count = max(self.active_kisa_count - 1, 0)
     if self.active_kisa_count > 0:
       self.active_carrot = 2
-      
+
     elif self.active_count > 0:
       self.active_carrot = 2 if self.active_sdi_count > 0 else 1
     else:
@@ -912,7 +1081,7 @@ class CarrotServ:
     inst = messaging.new_message('navInstructionCarrot')
     if self.active_carrot > 1 and self.active_kisa_count <= 0:
       inst.valid = True
-    
+
       instruction = inst.navInstructionCarrot
       instruction.distanceRemaining = self.nGoPosDist
       instruction.timeRemaining = self.nGoPosTime
@@ -930,7 +1099,7 @@ class CarrotServ:
       navTypeNext, navModifierNext, xTurnInfoNext = "invalid", "", -1
       if self.nTBTTurnTypeNext in nav_type_mapping:
         navTypeNext, navModifierNext, xTurnInfoNext = nav_type_mapping[self.nTBTTurnTypeNext]
-      
+
       instruction.maneuverType = navType
       instruction.maneuverModifier = navModifier
 
@@ -1128,6 +1297,8 @@ import traceback
 def main():
   print("CarrotManager Started")
   #print("Carrot GitBranch = {}, {}".format(Params().get("GitBranch"), Params().get("GitCommitDate")))
+  # 延迟导入，避免与 carrot_man 中导入 CarrotServ 的循环依赖
+  from openpilot.selfdrive.carrot.carrot_man import CarrotMan
   carrot_man = CarrotMan()
 
   print(f"CarrotMan {carrot_man}")
