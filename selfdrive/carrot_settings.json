@@ -447,10 +447,10 @@
       "group": "주행튜닝",
       "name": "StopDistanceCarrot",
       "title": "StopDistance(600)cm",
-      "descr": "신호등 감지 시 정지위치",
+      "descr": "정지위치 * 0.8",
       "egroup": "LONG",
       "etitle": "StopDistance(600)cm",
-      "edescr": "Stop Position When Traffic Light Detected",
+      "edescr": "Stop Distance * 0.8",
       "min": 400,
       "max": 1000,
       "default": 600,
@@ -468,6 +468,19 @@
       "max": 200,
       "default": 10,
       "unit": 10
+    },
+    {
+      "group": "주행튜닝",
+      "name": "TrafficStopDistanceAdjust",
+      "title": "TrafficStopDistanceAdjust(400)",
+      "descr": "신호정지위치 보정",
+      "egroup": "LONG",
+      "etitle": "TrafficStopDistanceAdjust",
+      "edescr": "",
+      "min": -600,
+      "max": 600,
+      "default": 400,
+      "unit": 100
     },
     {
       "group": "주행튜닝",
