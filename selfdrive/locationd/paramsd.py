@@ -55,7 +55,8 @@ class ParamsLearner:
       if roll_valid:
         roll = localizer_roll
         # Experimentally found multiplier of 2 to be best trade-off between stability and accuracy or similar?
-        roll_std = 2 * localizer_roll_std
+        #roll_std = 2 * localizer_roll_std
+        roll_std = 3.5 * localizer_roll_std
       else:
         # This is done to bound the road roll estimate when localizer values are invalid
         roll = 0.0
