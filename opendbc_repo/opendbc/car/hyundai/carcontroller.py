@@ -355,9 +355,8 @@ class CarController(CarControllerBase):
       # 5 Hz ACC options
       if self.frame % 20 == 0 and self.CP.openpilotLongitudinalControl:
         if camera_scc:
-          #if CS.scc13 is not None:
-          #  can_sends.append(hyundaican.create_acc_opt_copy(CS, self.packer))
-          pass
+          if CS.scc13 is not None:
+            can_sends.append(hyundaican.create_acc_opt_copy(CS, self.packer))
         else:
           can_sends.extend(hyundaican.create_acc_opt(self.packer, self.CP))
 
