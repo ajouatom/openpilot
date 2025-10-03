@@ -1494,6 +1494,7 @@ BO_ 905 SCC14: 8 SCC
  SG_ NEW_SIGNAL_1 : 26|6@1+ (1,0) [0|63] "" XXX
  SG_ ACCMode : 32|3@1+ (1,0) [0|7] "" CLU,HUD,LDWS_LKAS,ESC
  SG_ ObjDistStat : 42|2@1+ (1,0) [0|3] "" XXX
+ SG_ NEW_SIGNAL_2 : 55|8@0+ (1,0) [0|255] "" XXX
  SG_ ObjGap : 56|8@1+ (1,0) [0|255] "" CLU,HUD,ESC
 
 BO_ 1157 LFAHDA_MFC: 8 XXX
