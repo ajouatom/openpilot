@@ -197,7 +197,7 @@ class DesireHelper:
 
   def make_model_turn_speed(self, modeldata):
     if self.modelTurnSpeedFactor > 0:
-      model_turn_speed = np.interp(self.modelTurnSpeedFactor, modeldata.velocity.t, modeldata.velocity.x) * CV.MS_TO_KPH * 1.15
+      model_turn_speed = np.interp(self.modelTurnSpeedFactor, modeldata.velocity.t, modeldata.velocity.x) * CV.MS_TO_KPH * 1.2
       self.model_turn_speed = self.model_turn_speed * 0.9 + model_turn_speed * 0.1
     else:
       self.model_turn_speed = 200.0
