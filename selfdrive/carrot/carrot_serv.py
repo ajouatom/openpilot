@@ -814,11 +814,6 @@ class CarrotServ:
       speed_n_sources.append((route_speed, "route"))
       #speed_n_sources.append((self.calculate_current_speed(dist, speed * self.mapTurnSpeedFactor, 0, 1.2), "route"))
 
-
-    model_turn_speed = max(sm['modelV2'].meta.modelTurnSpeed, self.autoCurveSpeedLowerLimit)
-    if model_turn_speed < 200 and abs(vturn_speed) < 120:
-      speed_n_sources.append((model_turn_speed, "model"))
-
     desired_speed, source = min(speed_n_sources, key=lambda x: x[0])
 
     if CS is not None:

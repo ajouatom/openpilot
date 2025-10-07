@@ -857,7 +857,6 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   speedToggles->addItem(new CValueControl("AutoNaviCountDownMode", tr("NaviCountDown mode(2)"), tr("0: off, 1:tbt+camera, 2:tbt+camera+bump"), 0, 2, 1));
   speedToggles->addItem(new CValueControl("TurnSpeedControlMode", tr("Turn Speed control mode(1)"), tr("0: off, 1:vision, 2:vision+route, 3: route"), 0, 3, 1));
   speedToggles->addItem(new CValueControl("MapTurnSpeedFactor", tr("Map TurnSpeed Factor(100)"), "", 50, 300, 5));
-  speedToggles->addItem(new CValueControl("ModelTurnSpeedFactor", tr("Model TurnSpeed Factor(0)"), "", 0, 80, 10));
   speedToggles->addItem(new CValueControl("AutoTurnControl", tr("ATC: Auto turn control(0)"), tr("0:None, 1: lane change, 2: lane change + speed, 3: speed"), 0, 3, 1));
   speedToggles->addItem(new CValueControl("AutoTurnControlSpeedTurn", tr("ATC: Turn Speed (20)"), tr("0:None, turn speed"), 0, 100, 5));
   speedToggles->addItem(new CValueControl("AutoTurnControlTurnEnd", tr("ATC: Turn CtrlDistTime (6)"), tr("dist=speed*time"), 0, 30, 1));

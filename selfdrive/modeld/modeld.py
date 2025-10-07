@@ -425,7 +425,6 @@ def main(demo=False):
       modelv2_send.modelV2.meta.distanceToRoadEdgeRight = float(DH.distance_to_road_edge_right)
       modelv2_send.modelV2.meta.desire = DH.desire
       modelv2_send.modelV2.meta.laneChangeProb = DH.lane_change_ll_prob
-      modelv2_send.modelV2.meta.modelTurnSpeed = float(DH.model_turn_speed)
 
       fill_pose_msg(posenet_send, model_output, meta_main.frame_id, vipc_dropped_frames, meta_main.timestamp_eof, live_calib_seen)
       pm.send('modelV2', modelv2_send)

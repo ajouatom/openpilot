@@ -1746,19 +1746,6 @@
     },
     {
       "group": "감속제어",
-      "name": "ModelTurnSpeedFactor",
-      "title": "모델턴속도반영시간(0)x0.1sec",
-      "descr": "클수록 모델의 미래속도가 반영됩니다.",
-      "egroup": "SPEED",
-      "etitle": "ModelTurnSpeed time(0)x0.1sec",
-      "edescr": "future model speed",
-      "min": 0,
-      "max": 80,
-      "default": 0,
-      "unit": 10
-    },
-    {
-      "group": "감속제어",
       "name": "AutoNaviSpeedSafetyFactor",
       "title": "과속카메라 제한속도적용율(105)%",
       "descr": "과속카메라에서 도로제한속도*설정값으로 감속합니다",

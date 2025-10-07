@@ -1179,7 +1179,6 @@ struct ModelDataV2 {
     desire @14 :Desire;
     laneChangeProb @15 :Float32;
     desireLog @16 : Text;
-    modelTurnSpeed @17 :Float32;
 
 
     # deprecated
