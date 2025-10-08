@@ -676,7 +676,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   cruiseToggles->addItem(new CValueControl("MyDrivingModeAuto", tr("DRIVEMODE: Auto"), tr("NORMAL mode only"), 0, 1, 1));
   cruiseToggles->addItem(new CValueControl("TrafficLightDetectMode", tr("TrafficLight DetectMode"), tr("0:None, 1:Stopping only, 2: Stop & Go"), 0, 2, 1));
   cruiseToggles->addItem(new CValueControl("AChangeCostStarting", tr("AChangeCostStarting"), "", 0, 200, 10));
-  cruiseToggles->addItem(new CValueControl("TrafficStopDistanceAdjust", tr("TrafficStopDistanceAdjust"), "", -600, 600, 50));  
+  cruiseToggles->addItem(new CValueControl("TrafficStopDistanceAdjust", tr("TrafficStopDistanceAdjust"), "", -600, 600, 50));
   //cruiseToggles->addItem(new CValueControl("CruiseSpeedMin", "CRUISE: Speed Lower limit(10)", "Cruise control MIN speed", 5, 50, 1));
   //cruiseToggles->addItem(new CValueControl("AutoResumeFromGas", "GAS CRUISE ON: Use", "Auto Cruise on when GAS pedal released, 60% Gas Cruise On automatically", 0, 3, 1));
   //cruiseToggles->addItem(new CValueControl("AutoResumeFromGasSpeed", "GAS CRUISE ON: Speed(30)", "Driving speed exceeds the set value, Cruise ON", 20, 140, 5));
@@ -836,6 +836,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   startToggles->addItem(new CValueControl("HotspotOnBoot", tr("Hotspot enabled on boot"), "", 0, 1, 1));
   startToggles->addItem(new CValueControl("SoftwareMenu", tr("Enable Software Menu"), "", 0, 1, 1));
   startToggles->addItem(new CValueControl("IsLdwsCar", tr("IsLdwsCar"), "", 0, 1, 1));
+  startToggles->addItem(new CValueControl("HardwareC3xLite", tr("Hardware is C3x Lite"), "", 0, 1, 1));
 
   //startToggles->addItem(new CValueControl("CarrotCountDownSpeed", "NaviCountDown Speed(10)", "", 0, 200, 5));
   //startToggles->addItem(new ParamControl("NoLogging", "Disable Logger", "", this));
