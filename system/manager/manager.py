@@ -301,7 +301,8 @@ def manager_thread() -> None:
   ignore += [x for x in os.getenv("BLOCK", "").split(",") if len(x) > 0]
 
   if params.get("HardwareC3xLite"):
-    ignore += ["micd", "soundd"]
+    ignore += ["micd", "soundd", "loggerd"]
+    params.put("RecordAudio", "0")
 
   sm = messaging.SubMaster(['deviceState', 'carParams'], poll='deviceState')
   pm = messaging.PubMaster(['managerState'])
