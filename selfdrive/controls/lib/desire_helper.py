@@ -133,6 +133,7 @@ class DesireHelper:
     self.object_detected_count = 0
     self.lane_available_trigger = False
     self.lane_appeared = False
+    self.lane_line_info = 0
 
     self.laneChangeNeedTorque = 0
     self.laneChangeBsd = 0
