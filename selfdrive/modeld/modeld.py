@@ -311,7 +311,7 @@ def main(demo=False):
     frame += 1
     if frame % 100 == 0:
       custom_lat_delay = params.get_float("SteerActuatorDelay") * 0.01
-      #lat_smooth_seconds = params.get_float("SteerSmoothSec") * 0.01
+      lat_smooth_seconds = params.get_float("LatSmoothSec") * 0.01
       long_delay = params.get_float("LongActuatorDelay")*0.01
       vEgoStopping = params.get_float("VEgoStopping") * 0.01
       
