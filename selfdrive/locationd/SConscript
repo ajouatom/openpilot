@@ -7,6 +7,13 @@ rednose_gen_dir = 'models/generated'
 rednose_gen_deps = [
   "models/constants.py",
 ]
+pose_ekf = env.RednoseCompileFilter(
+  target='pose',
+  filter_gen_script='models/pose_kf.py',
+  output_dir=rednose_gen_dir,
+  extra_gen_artifacts=[],
+  gen_script_deps=rednose_gen_deps,
+)
 live_ekf = env.RednoseCompileFilter(
   target='live',
   filter_gen_script='models/live_kf.py',
