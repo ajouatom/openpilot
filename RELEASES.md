@@ -1,3 +1,10 @@
+Carrot2-v9 (2025-10-17)
+========================
+* Nuggets In Dijon model
+* Setting: Adjust traffic stop distance
+* liveLocationKalman -> livePose
+* C3x lite
+
 Carrot2-v9 (2025-09-21)
 ========================
 * GWM Model
