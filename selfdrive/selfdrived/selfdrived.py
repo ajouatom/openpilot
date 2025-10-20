@@ -16,6 +16,7 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.common.gps import get_gps_location_service
 
 from openpilot.selfdrive.car.car_specific import CarSpecificEvents
+from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
 from openpilot.selfdrive.selfdrived.events import Events, ET
 from openpilot.selfdrive.selfdrived.state import StateMachine
 from openpilot.selfdrive.selfdrived.alertmanager import AlertManager, set_offroad_alert
@@ -57,6 +58,8 @@ class SelfdriveD:
 
     self.car_events = CarSpecificEvents(self.CP)
     self.disengage_on_accelerator = not (self.CP.alternativeExperience & ALTERNATIVE_EXPERIENCE.DISABLE_DISENGAGE_ON_GAS)
+    self.pose_calibrator = PoseCalibrator()
+    self.calibrated_pose: Pose | None = None
 
     # Setup sockets
     self.pm = messaging.PubMaster(['selfdriveState', 'onroadEvents'])
@@ -82,7 +85,7 @@ class SelfdriveD:
       # no vipc in replay will make them ignored anyways
       ignore += ['roadCameraState', 'wideRoadCameraState']
     self.sm = messaging.SubMaster(['deviceState', 'pandaStates', 'peripheralState', 'modelV2', 'liveCalibration',
-                                   'carOutput', 'driverMonitoringState', 'longitudinalPlan', 'liveLocationKalman', # 'liveDelay',
+                                   'carOutput', 'driverMonitoringState', 'longitudinalPlan', 'livePose', # 'liveDelay',
                                    'managerState', 'liveParameters', 'radarState', 'liveTorqueParameters',
                                    'carrotMan',
                                    'controlsState', 'carControl', 'driverAssistance', 'alertDebug'] + \
@@ -239,6 +242,12 @@ class SelfdriveD:
       if self.sm['driverAssistance'].leftLaneDeparture or self.sm['driverAssistance'].rightLaneDeparture:
         self.events.add(EventName.ldw)
 
+    if self.sm.updated['liveCalibration']:
+      self.pose_calibrator.feed_live_calib(self.sm['liveCalibration'])
+    if self.sm.updated['livePose']:
+      device_pose = Pose.from_live_pose(self.sm['livePose'])
+      self.calibrated_pose = self.pose_calibrator.build_calibrated_pose(device_pose)
+
     if self.sm.alive['carrotMan']:
       atc_type = self.sm['carrotMan'].atcType
       if atc_type != self.atc_type_last:
@@ -340,11 +349,9 @@ class SelfdriveD:
       self.logged_comm_issue = None
 
     if not self.CP.notCar:
-      if not self.sm['liveLocationKalman'].posenetOK:
+      if not self.sm['livePose'].posenetOK:
         self.events.add(EventName.posenetInvalid)
-      if not self.sm['liveLocationKalman'].deviceStable:
-        self.events.add(EventName.deviceFalling)
-      if not self.sm['liveLocationKalman'].inputsOK:
+      if not self.sm['livePose'].inputsOK:
         self.events.add(EventName.locationdTemporaryError)
       if not self.sm['liveParameters'].valid and not TESTING_CLOSET and (not SIMULATION or REPLAY):
         self.events.add(EventName.paramsdTemporaryError)
@@ -387,7 +394,7 @@ class SelfdriveD:
     if not SIMULATION or REPLAY:
       # Not show in first 1.5 km to allow for driving out of garage. This event shows after 5 minutes
       gps_ok = self.sm.recv_frame[self.gps_location_service] > 0 and (self.sm.frame - self.sm.recv_frame[self.gps_location_service]) * DT_CTRL < 2.0
-      if not gps_ok and self.sm['liveLocationKalman'].inputsOK and (self.distance_traveled > 1500):
+      if not gps_ok and self.sm['livePose'].inputsOK and (self.distance_traveled > 1500):
         if self.distance_traveled < 1600:
           self.events.add(EventName.noGps)
       #if gps_ok:

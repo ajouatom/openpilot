@@ -675,6 +675,8 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   cruiseToggles->addItem(new CValueControl("MyDrivingMode", tr("DRIVEMODE: Select"), tr("1:ECO,2:SAFE,3:NORMAL,4:HIGH"), 1, 4, 1));
   cruiseToggles->addItem(new CValueControl("MyDrivingModeAuto", tr("DRIVEMODE: Auto"), tr("NORMAL mode only"), 0, 1, 1));
   cruiseToggles->addItem(new CValueControl("TrafficLightDetectMode", tr("TrafficLight DetectMode"), tr("0:None, 1:Stopping only, 2: Stop & Go"), 0, 2, 1));
+  cruiseToggles->addItem(new CValueControl("AChangeCostStarting", tr("AChangeCostStarting"), "", 0, 200, 10));
+  cruiseToggles->addItem(new CValueControl("TrafficStopDistanceAdjust", tr("TrafficStopDistanceAdjust"), "", -600, 600, 50));
   //cruiseToggles->addItem(new CValueControl("CruiseSpeedMin", "CRUISE: Speed Lower limit(10)", "Cruise control MIN speed", 5, 50, 1));
   //cruiseToggles->addItem(new CValueControl("AutoResumeFromGas", "GAS CRUISE ON: Use", "Auto Cruise on when GAS pedal released, 60% Gas Cruise On automatically", 0, 3, 1));
   //cruiseToggles->addItem(new CValueControl("AutoResumeFromGasSpeed", "GAS CRUISE ON: Speed(30)", "Driving speed exceeds the set value, Cruise ON", 20, 140, 5));
@@ -695,6 +697,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   latLongToggles->addItem(new CValueControl("SteerRatioRate", tr("LAT: SteerRatioRatex0.01(100)"), tr("SteerRatio apply rate"), 30, 170, 1));
   latLongToggles->addItem(new CValueControl("PathOffset", tr("LAT: PathOffset"), tr("(-)left, (+)right"), -150, 150, 1));
   latLongToggles->addItem(new CValueControl("SteerActuatorDelay", tr("LAT:SteerActuatorDelay(30)"), tr("x0.01, 0:LiveDelay"), 0, 100, 1));
+  latLongToggles->addItem(new CValueControl("LatSmoothSec", tr("LAT:LatSmoothSec(13)"), tr("x0.01"), 1, 30, 1));
   latLongToggles->addItem(new CValueControl("LateralTorqueCustom", tr("LAT: TorqueCustom(0)"), "", 0, 2, 1));
   latLongToggles->addItem(new CValueControl("LateralTorqueAccelFactor", tr("LAT: TorqueAccelFactor(2500)"), "", 1000, 6000, 10));
   latLongToggles->addItem(new CValueControl("LateralTorqueFriction", tr("LAT: TorqueFriction(100)"), "", 0, 1000, 10));
@@ -834,6 +837,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   startToggles->addItem(new CValueControl("HotspotOnBoot", tr("Hotspot enabled on boot"), "", 0, 1, 1));
   startToggles->addItem(new CValueControl("SoftwareMenu", tr("Enable Software Menu"), "", 0, 1, 1));
   startToggles->addItem(new CValueControl("IsLdwsCar", tr("IsLdwsCar"), "", 0, 1, 1));
+  startToggles->addItem(new CValueControl("HardwareC3xLite", tr("Hardware is C3x Lite"), "", 0, 1, 1));
 
   //startToggles->addItem(new CValueControl("CarrotCountDownSpeed", "NaviCountDown Speed(10)", "", 0, 200, 5));
   //startToggles->addItem(new ParamControl("NoLogging", "Disable Logger", "", this));
@@ -855,6 +859,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   speedToggles->addItem(new CValueControl("AutoNaviCountDownMode", tr("NaviCountDown mode(2)"), tr("0: off, 1:tbt+camera, 2:tbt+camera+bump"), 0, 2, 1));
   speedToggles->addItem(new CValueControl("TurnSpeedControlMode", tr("Turn Speed control mode(1)"), tr("0: off, 1:vision, 2:vision+route, 3: route"), 0, 3, 1));
   speedToggles->addItem(new CValueControl("MapTurnSpeedFactor", tr("Map TurnSpeed Factor(100)"), "", 50, 300, 5));
+  speedToggles->addItem(new CValueControl("ModelTurnSpeedFactor", tr("Model TurnSpeed Factor(0)"), "", 0, 80, 10));
   speedToggles->addItem(new CValueControl("AutoTurnControl", tr("ATC: Auto turn control(0)"), tr("0:None, 1: lane change, 2: lane change + speed, 3: speed"), 0, 3, 1));
   speedToggles->addItem(new CValueControl("AutoTurnControlSpeedTurn", tr("ATC: Turn Speed (20)"), tr("0:None, turn speed"), 0, 100, 5));
   speedToggles->addItem(new CValueControl("AutoTurnControlTurnEnd", tr("ATC: Turn CtrlDistTime (6)"), tr("dist=speed*time"), 0, 30, 1));

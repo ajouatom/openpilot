@@ -311,7 +311,7 @@ def main(demo=False):
     frame += 1
     if frame % 100 == 0:
       custom_lat_delay = params.get_float("SteerActuatorDelay") * 0.01
-      #lat_smooth_seconds = params.get_float("SteerSmoothSec") * 0.01
+      lat_smooth_seconds = params.get_float("LatSmoothSec") * 0.01
       long_delay = params.get_float("LongActuatorDelay")*0.01
       vEgoStopping = params.get_float("VEgoStopping") * 0.01
       
@@ -357,7 +357,7 @@ def main(demo=False):
     is_rhd = sm["driverMonitoringState"].isRHD
     frame_id = sm["roadCameraState"].frameId
     v_ego = max(sm["carState"].vEgo, 0.)
-    #lat_delay = sm["liveDelay"].lateralDelay + LAT_SMOOTH_SECONDS
+    #lateral_control_params = np.array([v_ego, lat_delay], dtype=np.float32)
     if sm.updated["liveCalibration"] and sm.seen['roadCameraState'] and sm.seen['deviceState']:
       device_from_calib_euler = np.array(sm["liveCalibration"].rpyCalib, dtype=np.float32)
       dc = DEVICE_CAMERAS[(str(sm['deviceState'].deviceType), str(sm['roadCameraState'].sensor))]
@@ -425,6 +425,7 @@ def main(demo=False):
       modelv2_send.modelV2.meta.distanceToRoadEdgeRight = float(DH.distance_to_road_edge_right)
       modelv2_send.modelV2.meta.desire = DH.desire
       modelv2_send.modelV2.meta.laneChangeProb = DH.lane_change_ll_prob
+      modelv2_send.modelV2.meta.modelTurnSpeed = float(DH.model_turn_speed)
 
       fill_pose_msg(posenet_send, model_output, meta_main.frame_id, vipc_dropped_frames, meta_main.timestamp_eof, live_calib_seen)
       pm.send('modelV2', modelv2_send)

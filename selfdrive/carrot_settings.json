@@ -262,6 +262,19 @@
       "unit": 1
     },
     {
+      "group": "조향튜닝",
+      "name": "LatSmoothSec",
+      "title": "LatSmoothSec(13)x0.01",
+      "descr": "조향필터링값\n 높으면 부드러운조향",
+      "egroup": "LAT",
+      "etitle": "LatSmoothSec(30)",
+      "edescr": "Lat smoothing values — Higher values smoother",
+      "min": 1,
+      "max": 30,
+      "default": 13,
+      "unit": 1
+    },
+    {
       "group": "크루즈",
       "name": "CruiseOnDist",
       "title": "크루즈ON거리(0cm)",
@@ -447,14 +460,40 @@
       "group": "주행튜닝",
       "name": "StopDistanceCarrot",
       "title": "StopDistance(600)cm",
-      "descr": "신호등 감지 시 정지위치",
+      "descr": "정지위치 * 0.8",
       "egroup": "LONG",
       "etitle": "StopDistance(600)cm",
-      "edescr": "Stop Position When Traffic Light Detected",
+      "edescr": "Stop Distance * 0.8",
       "min": 400,
       "max": 1000,
       "default": 600,
       "unit": 10
+    },
+    {
+      "group": "주행튜닝",
+      "name": "AChangeCostStarting",
+      "title": "AChangeCostStarting",
+      "descr": "출발가속도제한, 0:빠른가속도",
+      "egroup": "LONG",
+      "etitle": "AChangeCostStarting",
+      "edescr": "AccelCost Starting, 0:rapid starting",
+      "min": 0,
+      "max": 200,
+      "default": 10,
+      "unit": 10
+    },
+    {
+      "group": "주행튜닝",
+      "name": "TrafficStopDistanceAdjust",
+      "title": "TrafficStopDistanceAdjust(400)",
+      "descr": "신호정지위치 보정",
+      "egroup": "LONG",
+      "etitle": "TrafficStopDistanceAdjust",
+      "edescr": "",
+      "min": -600,
+      "max": 600,
+      "default": 400,
+      "unit": 100
     },
     {
       "group": "주행튜닝",
@@ -1716,6 +1755,19 @@
       "min": 50,
       "max": 300,
       "default": 100,
+      "unit": 10
+    },
+    {
+      "group": "감속제어",
+      "name": "ModelTurnSpeedFactor",
+      "title": "모델턴속도반영시간(0)x0.1sec",
+      "descr": "클수록 모델의 미래속도가 반영됩니다.",
+      "egroup": "SPEED",
+      "etitle": "ModelTurnSpeed time(0)x0.1sec",
+      "edescr": "future model speed",
+      "min": 0,
+      "max": 80,
+      "default": 0,
       "unit": 10
     },
     {

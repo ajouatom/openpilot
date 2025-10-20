@@ -90,7 +90,6 @@ function launch {
   fi
 
   # events language init
-  #LANG=$(cat ${PARAMS_ROOT}/d/LanguageSetting)
   LANG=$(cat /data/params/d/LanguageSetting)
   EVENTSTAT=$(git status)
 
@@ -100,6 +99,16 @@ function launch {
     cp -f $DIR/scripts/add/events_ko.py $DIR/selfdrive/selfdrived/events.py
   elif [ "${LANG}" = "main_en" ] && [[ "${EVENTSTAT}" == *"modified:   selfdrive/controls/lib/events.py"* ]]; then
     cp -f $DIR/scripts/add/events_en.py $DIR/selfdrive/selfdrived/events.py
+  fi
+
+  # c3xl amplifier file change
+  C3XL=$(cat /data/params/d/HardwareC3xLite)
+
+  if [ "${C3XL}" = "1" ] && [[ ! "${EVENTSTAT}" == *"modified:   system/hardware/tici/amplifier.py"* ]]; then
+    cp -f $DIR/system/hardware/tici/amplifier.py $DIR/scripts/add/amplifier_org.py
+    cp -f $DIR/scripts/add/amplifier_c3xl.py $DIR/system/hardware/tici/amplifier.py
+  elif [ "${C3XL}" = "0" ] && [[ "${EVENTSTAT}" == *"modified:   system/hardware/tici/amplifier.py"* ]]; then
+    cp -f $DIR/scripts/add/amplifier_org.py $DIR/system/hardware/tici/amplifier.py
   fi
 
   # start manager

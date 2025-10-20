@@ -11,7 +11,7 @@ from cereal.services import SERVICE_LIST
 from openpilot.common.params import Params
 from openpilot.common.realtime import config_realtime_process
 from openpilot.common.swaglog import cloudlog
-from openpilot.selfdrive.locationd.helpers import fft_next_good_size, parabolic_peak_interp
+from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose, fft_next_good_size, parabolic_peak_interp
 
 BLOCK_SIZE = 100
 BLOCK_NUM = 50
@@ -151,14 +151,13 @@ class BlockAverage:
 
 
 class LateralLagEstimator:
-  inputs = {"carControl", "carState", "controlsState", "liveLocationKalman"}
+  inputs = {"carControl", "carState", "controlsState", "liveCalibration", "livePose"}
 
   def __init__(self, CP: car.CarParams, dt: float,
                block_count: int = BLOCK_NUM, min_valid_block_count: int = BLOCK_NUM_NEEDED, block_size: int = BLOCK_SIZE,
                window_sec: float = MOVING_WINDOW_SEC, okay_window_sec: float = MIN_OKAY_WINDOW_SEC, min_recovery_buffer_sec: float = MIN_RECOVERY_BUFFER_SEC,
                min_vego: float = MIN_VEGO, min_yr: float = MIN_ABS_YAW_RATE, min_ncc: float = MIN_NCC,
-               max_lat_accel: float = MAX_LAT_ACCEL, max_lat_accel_diff: float = MAX_LAT_ACCEL_DIFF, min_confidence: float = MIN_CONFIDENCE,
-               enabled: bool = True):
+               max_lat_accel: float = MAX_LAT_ACCEL, max_lat_accel_diff: float = MAX_LAT_ACCEL_DIFF, min_confidence: float = MIN_CONFIDENCE):
     self.dt = dt
     self.window_sec = window_sec
     self.okay_window_sec = okay_window_sec
@@ -173,7 +172,6 @@ class LateralLagEstimator:
     self.min_confidence = min_confidence
     self.max_lat_accel = max_lat_accel
     self.max_lat_accel_diff = max_lat_accel_diff
-    self.enabled = enabled
 
     self.t = 0.0
     self.lat_active = False
@@ -191,7 +189,7 @@ class LateralLagEstimator:
     self.last_pose_invalid_t = 0.0
     self.last_estimate_t = 0.0
 
-    self.calib_valid = False
+    self.calibrator = PoseCalibrator()
 
     self.reset(self.initial_lag, 0)
 
@@ -208,7 +206,7 @@ class LateralLagEstimator:
     liveDelay = msg.liveDelay
 
     valid_mean_lag, valid_std, current_mean_lag, current_std = self.block_avg.get()
-    if self.enabled and self.block_avg.valid_blocks >= self.min_valid_block_count and not np.isnan(valid_mean_lag) and not np.isnan(valid_std):
+    if self.block_avg.valid_blocks >= self.min_valid_block_count and not np.isnan(valid_mean_lag) and not np.isnan(valid_std):
       if valid_std > MAX_LAG_STD:
         liveDelay.status = log.LiveDelayData.Status.invalid
       else:
@@ -245,11 +243,14 @@ class LateralLagEstimator:
     elif which == "controlsState":
       self.steering_saturated = getattr(msg.lateralControlState, msg.lateralControlState.which()).saturated
       self.desired_curvature = msg.desiredCurvature
-    elif which == 'liveLocationKalman':
-      self.yaw_rate = msg.angularVelocityCalibrated.value[2]
-      self.yaw_rate_std = msg.angularVelocityCalibrated.std[2]    
-      self.pose_valid = msg.angularVelocityCalibrated.valid and msg.posenetOK and msg.inputsOK  
-      self.calib_valid = msg.status == log.LiveLocationKalman.Status.valid
+    elif which == "liveCalibration":
+      self.calibrator.feed_live_calib(msg)
+    elif which == "livePose":
+      device_pose = Pose.from_live_pose(msg)
+      calibrated_pose = self.calibrator.build_calibrated_pose(device_pose)
+      self.yaw_rate = calibrated_pose.angular_velocity.yaw
+      self.yaw_rate_std = calibrated_pose.angular_velocity.yaw_std
+      self.pose_valid = msg.angularVelocityDevice.valid and msg.posenetOK and msg.inputsOK
     self.t = t
 
   def points_enough(self):
@@ -266,7 +267,7 @@ class LateralLagEstimator:
     turning = np.abs(self.yaw_rate) >= self.min_yr
     sensors_valid = self.pose_valid and np.abs(self.yaw_rate) < MAX_YAW_RATE_SANITY_CHECK and self.yaw_rate_std < MAX_YAW_RATE_SANITY_CHECK
     la_valid = np.abs(la_actual_pose) <= self.max_lat_accel and np.abs(la_desired - la_actual_pose) <= self.max_lat_accel_diff
-    calib_valid = self.calib_valid #self.calibrator.calib_valid
+    calib_valid = self.calibrator.calib_valid
 
     if not self.lat_active:
       self.last_lat_inactive_t = self.t
@@ -363,15 +364,12 @@ def main():
   DEBUG = bool(int(os.getenv("DEBUG", "0")))
 
   pm = messaging.PubMaster(['liveDelay'])
-  sm = messaging.SubMaster(['liveLocationKalman', 'carState', 'controlsState', 'carControl'], poll='liveLocationKalman')
+  sm = messaging.SubMaster(['livePose', 'liveCalibration', 'carState', 'controlsState', 'carControl'], poll='livePose')
 
   params = Params()
   CP = messaging.log_from_bytes(params.get("CarParams", block=True), car.CarParams)
 
-  # TODO: remove me, lagd is in shadow mode on release
-  is_release = params.get_bool("IsReleaseBranch")
-
-  lag_learner = LateralLagEstimator(CP, 1. / SERVICE_LIST['liveLocationKalman'].frequency, enabled=True)
+  lag_learner = LateralLagEstimator(CP, 1. / SERVICE_LIST['livePose'].frequency)
   if (initial_lag_params := retrieve_initial_lag(params, CP)) is not None:
     lag, valid_blocks = initial_lag_params
     lag_learner.reset(lag, valid_blocks)

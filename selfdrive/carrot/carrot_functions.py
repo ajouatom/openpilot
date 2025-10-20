@@ -79,7 +79,7 @@ class CarrotPlanner:
     self.stopSignCount = 0
 
     self.stop_distance = 6.0
-    self.trafficStopDistanceAdjust = 2.0 #params.get_float("TrafficStopDistanceAdjust") / 100.
+    self.trafficStopDistanceAdjust = 2.5 #params.get_float("TrafficStopDistanceAdjust") / 100.
     self.comfortBrake = 2.4
     self.comfort_brake = self.comfortBrake
 
@@ -109,6 +109,8 @@ class CarrotPlanner:
     self.cruiseMaxVals4 = 0.8
     self.cruiseMaxVals5 = 0.7
     self.cruiseMaxVals6 = 0.6
+
+    self.aChangeCostStarting = 10.0
 
     self.trafficLightDetectMode = 2 # 0: None, 1:Stop, 2:Stop&Go
     self.trafficState_carrot = 0
@@ -170,7 +172,8 @@ class CarrotPlanner:
       self.j_lead_factor = self.params.get_float("JLeadFactor3") / 100.
       self.eco_over_speed = self.params.get_int("CruiseEcoControl")
       self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
-
+      self.aChangeCostStaring = self.params.get_float("AChangeCostStarting")
+      self.trafficStopDistanceAdjust = self.params.get_float("TrafficStopDistanceAdjust") / 100.
     elif self.params_count >= 100:
 
       self.params_count = 0
@@ -213,7 +216,7 @@ class CarrotPlanner:
       t_follow *= self.dynamicTFollowLC   # 차선변경시 t_follow를 줄임.
       self.jerk_factor_apply = self.jerk_factor * self.dynamicTFollowLC   # 차선변경시 jerk factor를 줄여 aggresive하게
     elif lead.status:
-      t_follow += np.interp(prev_a[0], [-2.0, -0.5], [0.2, 0.0])
+      t_follow += np.interp(prev_a[0], [-2.0, -0.5], [0.1, 0.0])
       if self.dynamicTFollow > 0.0:
         gap_dist_adjust = np.clip((desired_follow_distance - lead.dRel) * self.dynamicTFollow, - 0.1, 1.0) * 0.1
         t_follow += gap_dist_adjust
@@ -350,9 +353,9 @@ class CarrotPlanner:
 
     leadOne = radarstate.leadOne
     self.mySafeFactor = 1.0
-    if leadOne.status and leadOne.vLead < 5:
-      self.mySafeFactor = self.mySafeModeFactor
-    elif self.myDrivingMode == DrivingMode.Eco: # eco
+    if leadOne.status and leadOne.vLead < 5 and leadOne.aLead < 0.2 and v_ego > 1.0: # 앞차가 매우 느리거나 정지한경우
+      self.myDrivingMode = DrivingMode.Safe
+    if self.myDrivingMode == DrivingMode.Eco: # eco
       self.mySafeFactor = self.myEcoModeFactor
     elif self.myDrivingMode == DrivingMode.Safe: #safe
       self.mySafeFactor = self.mySafeModeFactor

@@ -26,6 +26,7 @@ from openpilot.common.realtime import DT_CTRL, DT_MDL
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N
 from selfdrive.modeld.modeld import LAT_SMOOTH_SECONDS
+from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
 
 State = log.SelfdriveState.OpenpilotState
 LaneChangeState = log.LaneChangeState
@@ -45,15 +46,19 @@ class Controls:
 
     self.disable_dm = False
 
-    self.sm = messaging.SubMaster(['liveParameters', 'liveTorqueParameters', 'modelV2', 'selfdriveState',
-                                   'liveCalibration', 'liveLocationKalman', 'longitudinalPlan', 'carState', 'carOutput',
-                                   'liveDelay', 'carrotMan', 'lateralPlan', 'radarState',
+    self.sm = messaging.SubMaster(['liveDelay', 'liveParameters', 'liveTorqueParameters', 'modelV2', 'selfdriveState',
+                                   'liveCalibration', 'livePose', 'longitudinalPlan', 'carState', 'carOutput',
+                                   'carrotMan', 'lateralPlan', 'radarState', 'liveLocationKalman', 
                                    'driverMonitoringState', 'onroadEvents', 'driverAssistance'], poll='selfdriveState')
     self.pm = messaging.PubMaster(['carControl', 'controlsState'])
 
     self.steer_limited_by_controls = False
     self.curvature = 0.0
     self.desired_curvature = 0.0
+
+    self.pose_calibrator = PoseCalibrator()
+    self.calibrated_pose: Pose | None = None
+    
     self.yStd = 0.0
 
     self.side_state = {
@@ -73,6 +78,11 @@ class Controls:
 
   def update(self):
     self.sm.update(15)
+    if self.sm.updated["liveCalibration"]:
+      self.pose_calibrator.feed_live_calib(self.sm['liveCalibration'])
+    if self.sm.updated["livePose"]:
+      device_pose = Pose.from_live_pose(self.sm['livePose'])
+      self.calibrated_pose = self.pose_calibrator.build_calibrated_pose(device_pose)
 
   def state_control(self):
     CS = self.sm['carState']
@@ -138,7 +148,7 @@ class Controls:
     lat_plan = self.sm['lateralPlan']
     curve_speed_abs = abs(self.sm['carrotMan'].vTurnSpeed)
     self.lanefull_mode_enabled = (lat_plan.useLaneLines and curve_speed_abs > self.params.get_int("UseLaneLineCurveSpeed"))
-    lat_smooth_seconds = LAT_SMOOTH_SECONDS #self.params.get_float("SteerSmoothSec") * 0.01
+    lat_smooth_seconds = self.params.get_float("LatSmoothSec") * 0.01
     steer_actuator_delay = self.params.get_float("SteerActuatorDelay") * 0.01
     if steer_actuator_delay == 0.0:
       steer_actuator_delay = self.sm['liveDelay'].lateralDelay 
@@ -227,6 +237,10 @@ class Controls:
 
     # Orientation and angle rates can be useful for carcontroller
     # Only calibrated (car) frame is relevant for the carcontroller
+    #if self.calibrated_pose is not None:
+    #  CC.orientationNED = self.calibrated_pose.orientation.xyz.tolist()
+    #  CC.angularVelocity = self.calibrated_pose.angular_velocity.xyz.tolist()
+
     orientation_value = list(self.sm['liveLocationKalman'].calibratedOrientationNED.value)
     if len(orientation_value) > 2:
       CC.orientationNED = orientation_value
