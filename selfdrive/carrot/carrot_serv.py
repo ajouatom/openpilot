@@ -540,24 +540,24 @@ class CarrotServ:
     }
 
     sdi_zh = {
-        0: "信号测速/闯灯取缔",
+        0: "信号测速/闯灯拍照",
         1: "固定测速摄像头",
         2: "区间测速开始",
         3: "区间测速结束",
         4: "区间测速中",
-        5: "路口压线取缔摄像头",
-        6: "闯红灯取缔",
-        7: "移动测速摄像头",
-        8: "固定测速区（箱式）",
+        5: "路口压线摄像头",
+        6: "闯红灯拍照",
+        7: "流动测速摄像头",
+        8: "测速拍照",
         9: "公交专用车道区间",
-        10: "可变/潮汐车道取缔",
-        11: "应急车道监控点",
+        10: "可变/潮汐车道拍照",
+        11: "应急车道拍照",
         12: "禁止加塞",
         13: "交通信息采集点",
         14: "治安监控",
         15: "超载车辆风险区",
-        16: "装载不当取缔",
-        17: "违停取缔点",
+        16: "装载不当拍照",
+        17: "违停拍照点",
         18: "单行道",
         19: "铁路道口",
         20: "学校区域开始",
@@ -566,7 +566,7 @@ class CarrotServ:
         23: "LPG加气站",
         24: "隧道区间",
         25: "服务区",
-        26: "收费站",
+        26: "ETC计费拍照",
         27: "多雾路段",
         28: "危险品区域",
         29: "事故多发路段",
@@ -605,7 +605,7 @@ class CarrotServ:
         62: "目的地在对面",
         63: "瞌睡停车区",
         64: "老旧柴油车管制",
-        65: "隧道内变道取缔",
+        65: "隧道内变道拍照",
         66: "",
     }
 
@@ -979,14 +979,9 @@ class CarrotServ:
     if self.turnSpeedControlMode == 2:
       if -500 < self.xDistToTurn < 500:
         speed_n_sources.append((route_speed, "route"))
-    elif self.turnSpeedControlMode in [3, 4]:
+    elif self.turnSpeedControlMode == 3:
       speed_n_sources.append((route_speed, "route"))
       #speed_n_sources.append((self.calculate_current_speed(dist, speed * self.mapTurnSpeedFactor, 0, 1.2), "route"))
-
-
-    model_turn_speed = max(sm['modelV2'].meta.modelTurnSpeed, self.autoCurveSpeedLowerLimit)
-    if model_turn_speed < 200 and abs(vturn_speed) < 120:
-      speed_n_sources.append((model_turn_speed, "model"))
 
     desired_speed, source = min(speed_n_sources, key=lambda x: x[0])
 
@@ -1218,7 +1213,7 @@ class CarrotServ:
         if nRoadLimitSpeed > 200:
           nRoadLimitSpeed = (nRoadLimitSpeed - 20) / 10
         elif nRoadLimitSpeed == 120:
-          nRoadLimitSpeed = 30
+          nRoadLimitSpeed = 115 # 120 -> 115 fix bug
       else:
         nRoadLimitSpeed = 30
       #self.nRoadLimitSpeed = nRoadLimitSpeed
