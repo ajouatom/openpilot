@@ -133,7 +133,7 @@ class CValueControl : public AbstractControl {
   Q_OBJECT
 
 public:
-  CValueControl(const QString& params, const QString& title, const QString& desc, int min, int max, int unit = 1);
+  CValueControl(const QString& params, const QString& title, const QString& desc, int min, int max, int unit = 1, int dp = 0);
 
 private slots:
   void increaseValue();
@@ -152,4 +152,5 @@ private:
   int m_min;
   int m_max;
   int m_unit;
+  int m_dp;
 };
