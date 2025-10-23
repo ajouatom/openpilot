@@ -215,19 +215,24 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   //QObject::connect(init_btn, &QPushButton::clicked, this, &DevicePanel::reboot);
   QObject::connect(init_btn, &QPushButton::clicked, [&]() {
     if (ConfirmationDialog::confirm(tr("Git pull & Reboot?"), tr("Yes"), this)) {
-      QString cmd =
-        "bash -c 'cd /data/openpilot && "
-        "git fetch && "
-        "if git status -uno | grep -q \"Your branch is behind\"; then "
-        "git pull && reboot; "
+      QString pullscript = "cd /data/openpilot && "
+        "git fetch origin && "
+        "LOCAL=$(git rev-parse HEAD) && "
+        "BRANCH=$(git branch --show-current) && "
+        "REMOTE=$(git rev-parse origin/$BRANCH) && "
+        "if [ $LOCAL != $REMOTE ]; then "
+        "echo 'Local is behind. Pulling updates...' && "
+        "git pull --ff-only && "
+        "sudo reboot; "
         "else "
-        "echo \"Already up to date.\"; "
+        "echo 'Already up to date.'; "
         "fi'";
 
-      if (!QProcess::startDetached(cmd)) {
+      bool success = QProcess::startDetached("/bin/sh", QStringList() << "-c" << pullscript);
+
+      if (!success) {
         ConfirmationDialog::alert(tr("Failed to start update process."), this);
-      }
-      else {
+      } else {
         ConfirmationDialog::alert(tr("Update process started. Device will reboot if updates are applied."), this);
       }
     }
@@ -858,6 +863,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   speedToggles->addItem(new CValueControl("AutoNaviSpeedBumpSpeed", tr("SpeedBumpSpeed(35Km/h)"), "", 10, 100, 5));
   speedToggles->addItem(new CValueControl("AutoNaviCountDownMode", tr("NaviCountDown mode(2)"), tr("0: off, 1:tbt+camera, 2:tbt+camera+bump"), 0, 2, 1));
   speedToggles->addItem(new CValueControl("TurnSpeedControlMode", tr("Turn Speed control mode(1)"), tr("0: off, 1:vision, 2:vision+route, 3: route"), 0, 3, 1));
+  speedToggles->addItem(new CValueControl("CarrotSmartSpeedControl", tr("Smart Speed Control(0)"), tr("0: off, 1:accel, 2:decel, 3: all"), 0, 3, 1));  
   speedToggles->addItem(new CValueControl("MapTurnSpeedFactor", tr("Map TurnSpeed Factor(100)"), "", 50, 300, 5));
   speedToggles->addItem(new CValueControl("ModelTurnSpeedFactor", tr("Model TurnSpeed Factor(0)"), "", 0, 80, 10));
   speedToggles->addItem(new CValueControl("AutoTurnControl", tr("ATC: Auto turn control(0)"), tr("0:None, 1: lane change, 2: lane change + speed, 3: speed"), 0, 3, 1));

@@ -210,6 +210,14 @@ def create_acc_commands_scc(packer, enabled, accel, jerk, idx, hud_control, set_
     values["ObjDistStat"] = objGap2
     commands.append(packer.make_can_msg("SCC14", 0, values))
 
+  if CS.fca11 is not None and use_fca: # CASPER_EV의 경우 FCA11에서 fail이 간헐적 발생함.. 그냥막자.. 원인불명..
+    values = copy.copy(CS.fca11)
+    if values["FCA_Failinfo"] != 0:
+      values["FCA_Status"] = 2
+    values["FCA_Failinfo"] = 0
+    fca11_dat = packer.make_can_msg("FCA11", 0, values)[1]
+    values["CR_FCA_ChkSum"] = hyundai_checksum(fca11_dat[:7])
+    commands.append(packer.make_can_msg("FCA11", 0, values))
   # Only send FCA11 on cars where it exists on the bus
   if False: #use_fca:
     # note that some vehicles most likely have an alternate checksum/counter definition
@@ -227,6 +235,10 @@ def create_acc_commands_scc(packer, enabled, accel, jerk, idx, hud_control, set_
   return commands
 
 def create_acc_opt_copy(CS, packer):
+  values = copy.copy(CS.scc13)
+  if values["NEW_SIGNAL_1"]  == 255:
+    values["NEW_SIGNAL_1"]  = 218
+    values["NEW_SIGNAL_2"]  = 0
   return packer.make_can_msg("SCC13", 0, CS.scc13)
 
 def create_acc_commands(packer, enabled, accel, jerk, idx, hud_control, set_speed, stopping, long_override, use_fca, CP, CS, soft_hold_mode):

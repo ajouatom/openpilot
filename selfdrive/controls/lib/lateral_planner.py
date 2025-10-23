@@ -95,12 +95,16 @@ class LateralPlanner:
 
     # clip speed , lateral planning is not possible at 0 speed
     measured_curvature = sm['controlsState'].curvature
-    v_ego_car = sm['carState'].vEgo
+    v_ego_car = max(sm['carState'].vEgo, MIN_SPEED)
+    speed_kph = v_ego_car * 3.6
+    self.v_ego = v_ego_car
     self.curve_speed = sm['carrotMan'].vTurnSpeed
 
     # Parse model predictions
     md = sm['modelV2']
+    model_active = False
     if len(md.position.x) == TRAJECTORY_SIZE and len(md.orientation.x) == TRAJECTORY_SIZE:
+      model_active = True
       self.path_xyz = np.column_stack([md.position.x, md.position.y, md.position.z])
       self.t_idxs = np.array(md.position.t)
       self.plan_yaw = np.array(md.orientation.z)
@@ -125,9 +129,9 @@ class LateralPlanner:
 
     if self.useLaneLineSpeedApply == 0 or self.laneless_only:
       self.useLaneLineMode = False
-    elif self.v_ego*3.6 >= self.useLaneLineSpeedApply + 2:
+    elif speed_kph >= self.useLaneLineSpeedApply + 2:
       self.useLaneLineMode = True
-    elif self.v_ego*3.6 < self.useLaneLineSpeedApply - 2:
+    elif speed_kph < self.useLaneLineSpeedApply - 2:
       self.useLaneLineMode = False
 
     # Turn off lanes during lane change
@@ -143,10 +147,15 @@ class LateralPlanner:
     self.LP.lane_width_left = md.meta.laneWidthLeft
     self.LP.lane_width_right = md.meta.laneWidthRight
     self.LP.curvature = measured_curvature
-    self.path_xyz, self.lanelines_active = self.LP.get_d_path(sm['carState'], self.v_ego, self.t_idxs, self.path_xyz, self.curve_speed)
-    
-    #if self.LP.lanefull_mode:
-    #  self.plan_yaw, self.plan_yaw_rate = self.LP.calculate_plan_yaw_and_yaw_rate(self.path_xyz)
+    self.path_xyz, self.lanelines_active = self.LP.get_d_path(sm['carState'], v_ego_car, self.t_idxs, self.path_xyz, self.curve_speed)
+
+    if self.lanelines_active:
+      self.plan_yaw, self.plan_yaw_rate = yaw_from_path_no_scipy(
+        self.path_xyz, self.v_plan,
+        smooth_window=5,
+        clip_rate=2.0,
+        align_first_yaw=None #md.orientation.z[0]  # 초기 정렬
+      )
       
     self.latDebugText = self.LP.debugText
     #self.lanelines_active = True if self.LP.d_prob > 0.3 and self.LP.lanefull_mode else False
@@ -212,12 +221,14 @@ class LateralPlanner:
     lateralPlan.psis = self.lat_mpc.x_sol[0:CONTROL_N, 2].tolist()
     lateralPlan.distances = self.lat_mpc.x_sol[0:CONTROL_N, 0].tolist()
 
+    v_div = np.maximum(self.v_plan[:CONTROL_N], 6.0)
     if len(self.v_plan) == TRAJECTORY_SIZE:
-      lateralPlan.curvatures = (self.lat_mpc.x_sol[0:CONTROL_N, 3] / self.v_plan[0:CONTROL_N]).tolist()
+      lateralPlan.curvatures = (self.lat_mpc.x_sol[0:CONTROL_N, 3] / v_div).tolist()
     else:
       lateralPlan.curvatures = (self.lat_mpc.x_sol[0:CONTROL_N, 3] / self.v_ego).tolist()
 
-    lateralPlan.curvatureRates = [float(x.item() / self.v_ego) for x in self.lat_mpc.u_sol[0:CONTROL_N - 1]] + [0.0]
+    v_div2 = max(self.v_ego, 6.0)
+    lateralPlan.curvatureRates = [float(x.item() / v_div2) for x in self.lat_mpc.u_sol[0:CONTROL_N - 1]] + [0.0]
 
     lateralPlan.mpcSolutionValid = bool(plan_solution_valid)
     lateralPlan.solverExecutionTime = self.lat_mpc.solve_time
@@ -263,3 +274,74 @@ class LateralPlanner:
     pm.send('lateralPlan', plan_send)
 
 
+def smooth_moving_avg(arr, window=5):
+  if window < 2:
+    return arr
+  if window % 2 == 0:
+    window += 1
+  pad = window // 2
+  arr_pad = np.pad(arr, (pad, pad), mode='edge')
+  kernel = np.ones(window) / window
+  return np.convolve(arr_pad, kernel, mode='same')[pad:-pad]
+
+def yaw_from_path_no_scipy(path_xyz, v_plan, smooth_window=5,
+                           clip_rate=2.0, align_first_yaw=None):
+
+  v0 = float(np.asarray(v_plan)[0]) if len(v_plan) else 0.0
+  # 저속(≤6 m/s)에서는 창을 크게
+  if v0 <= 6.0:
+    smooth_window = max(smooth_window, 9)   # 9~11 권장
+    
+  N = path_xyz.shape[0]
+  x = path_xyz[:, 0].astype(float)
+  y = path_xyz[:, 1].astype(float)
+
+  if N < 5:
+    return np.zeros(N, np.float32), np.zeros(N, np.float32)
+
+  # 1) s(호길이) 계산
+  dx = np.diff(x)
+  dy = np.diff(y)
+  ds_seg = np.sqrt(dx*dx + dy*dy)
+  ds_seg[ds_seg < 0.05] = 0.05
+  s = np.zeros(N, float)
+  s[1:] = np.cumsum(ds_seg)
+  if s[-1] < 0.5:  # 총 호길이 < 0.5m면 미분 결과 의미가 약함
+    return np.zeros(N, np.float32), np.zeros(N, np.float32)
+
+  # 2) smoothing (이동평균)
+  x_smooth = smooth_moving_avg(x, smooth_window)
+  y_smooth = smooth_moving_avg(y, smooth_window)
+
+  # 3) 1·2차 도함수(s축 미분)
+  dx_ds  = np.gradient(x_smooth, s)
+  dy_ds  = np.gradient(y_smooth, s)
+  d2x_ds2 = np.gradient(dx_ds, s)
+  d2y_ds2 = np.gradient(dy_ds, s)
+
+  # 4) yaw = atan2(dy/ds, dx/ds)
+  yaw = np.unwrap(np.arctan2(dy_ds, dx_ds))
+
+  # 5) 곡률 kappa = ...
+  denom = (dx_ds*dx_ds + dy_ds*dy_ds)**1.5
+  denom[denom < 1e-9] = 1e-9
+  kappa = (dx_ds * d2y_ds2 - dy_ds * d2x_ds2) / denom
+
+  # 6) yaw_rate = kappa * v
+  v = np.asarray(v_plan, float)
+  yaw_rate = kappa * v
+  if v0 <= 6.0:
+    # 이동평균으로 미세 요동 감쇄(창 5~7)
+    yaw_rate = smooth_moving_avg(yaw_rate, window=7)
+
+  # 7) 초기 yaw 정렬 (선택)
+  if align_first_yaw is not None:
+    bias = yaw[0] - float(align_first_yaw)
+    yaw = yaw - bias
+
+  # 8) 안정화
+  yaw     = np.where(np.isfinite(yaw), yaw, 0.0)
+  yaw_rate = np.where(np.isfinite(yaw_rate), yaw_rate, 0.0)
+  yaw_rate = np.clip(yaw_rate, -abs(clip_rate), abs(clip_rate))
+
+  return yaw.astype(np.float32), yaw_rate.astype(np.float32)
