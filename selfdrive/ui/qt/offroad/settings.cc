@@ -215,19 +215,24 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   //QObject::connect(init_btn, &QPushButton::clicked, this, &DevicePanel::reboot);
   QObject::connect(init_btn, &QPushButton::clicked, [&]() {
     if (ConfirmationDialog::confirm(tr("Git pull & Reboot?"), tr("Yes"), this)) {
-      QString cmd =
-        "bash -c 'cd /data/openpilot && "
-        "git fetch && "
-        "if git status -uno | grep -q \"Your branch is behind\"; then "
-        "git pull && reboot; "
+      QString pullscript = "cd /data/openpilot && "
+        "git fetch origin && "
+        "LOCAL=$(git rev-parse HEAD) && "
+        "BRANCH=$(git branch --show-current) && "
+        "REMOTE=$(git rev-parse origin/$BRANCH) && "
+        "if [ $LOCAL != $REMOTE ]; then "
+        "echo 'Local is behind. Pulling updates...' && "
+        "git pull --ff-only && "
+        "sudo reboot; "
         "else "
-        "echo \"Already up to date.\"; "
+        "echo 'Already up to date.'; "
         "fi'";
 
-      if (!QProcess::startDetached(cmd)) {
+      bool success = QProcess::startDetached("/bin/sh", QStringList() << "-c" << pullscript);
+
+      if (!success) {
         ConfirmationDialog::alert(tr("Failed to start update process."), this);
-      }
-      else {
+      } else {
         ConfirmationDialog::alert(tr("Update process started. Device will reboot if updates are applied."), this);
       }
     }
