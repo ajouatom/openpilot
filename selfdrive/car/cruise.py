@@ -247,6 +247,7 @@ class VCruiseCarrot:
       self.autoGasSyncSpeed = self.params.get_bool("AutoGasSyncSpeed") * unit_factor
       self.autoSpeedUptoRoadSpeedLimit = self.params.get_float("AutoSpeedUptoRoadSpeedLimit") * 0.01
       self.autoRoadSpeedAdjust = self.params.get_float("AutoRoadSpeedAdjust") * 0.01
+      self.smartSpeedControl = self.params.get_int("CarrotSmartSpeedControl")
 
       useLaneLineSpeed = self.params.get_int("UseLaneLineSpeed") * unit_factor
       if self.useLaneLineSpeed != useLaneLineSpeed:
@@ -441,6 +442,20 @@ class VCruiseCarrot:
     return button_kph, button_type, self.long_pressed
 
   def _carrot_command(self, v_cruise_kph, button_type, long_pressed):
+    carrot_speed = self.params_memory.get_int("CarrotSpeed")
+    if carrot_speed != 0:
+      if carrot_speed > 0:
+        if self.smartSpeedControl in [1,3]:
+          v_cruise_kph = max(carrot_speed, v_cruise_kph)
+      else:
+        if self.smartSpeedControl == 3:
+          v_cruise_kph = -carrot_speed
+        #elif self.smartSpeedControl == 1:
+        #  v_cruise_kph = max(-carrot_speed, v_cruise_kph)
+        elif self.smartSpeedControl == 2:
+          v_cruise_kph = min(-carrot_speed, v_cruise_kph)
+      self.params_memory.put_int_nonblocking("CarrotSpeed", 0)
+      self._add_log(f"Carrot speed set to {v_cruise_kph}")
     if self.carrot_cmd_index_last != self.carrot_cmd_index:
       self.carrot_cmd_index_last = self.carrot_cmd_index
       print(f"Carrot command(cruise.py): {self.carrot_cmd} {self.carrot_arg}")

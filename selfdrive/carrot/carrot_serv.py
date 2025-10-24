@@ -145,8 +145,11 @@ class CarrotServ:
     self.bearing = 0.0
     self.gps_valid = False
 
-    self.gps_accuracy_phone = 0.0
+    self.phone_gps_accuracy = 0.0
     self.gps_accuracy_device = 0.0
+    self.phone_latitude = 0.0
+    self.phone_longitude = 0.0
+    self.phone_gps_frame = 0
 
     self.totalDistance = 0
     self.xSpdLimit = 0
@@ -1286,15 +1289,19 @@ class CarrotServ:
     # 3초간 navi 데이터가 없으면, phone gps로 업데이트
     if "latitude" in json:
       self.nPosAnglePhone = float(json.get("heading", self.nPosAngle))
+      self.phone_latitude = float(json.get("latitude", self.vpPosPointLatNavi))
+      self.phone_longitude = float(json.get("longitude", self.vpPosPointLonNavi))
+      self.phone_gps_accuracy = float(json.get("accuracy", 0))
+      if self.phone_gps_accuracy < 15.0:
+        self.phone_gps_frame += 1
       if (now - self.last_update_gps_time_navi) > 3.0:
-        self.vpPosPointLatNavi = float(json.get("latitude", self.vpPosPointLatNavi))
-        self.vpPosPointLonNavi = float(json.get("longitude", self.vpPosPointLonNavi))
+        self.vpPosPointLatNavi = self.phone_latitude
+        self.vpPosPointLonNavi = self.phone_longitude
         self.nPosAngle = self.nPosAnglePhone
         # self.nPosSpeed = self.ve # TODO speed from v_ego
-        self.last_update_gps_time_phone = self.last_calculate_gps_time = now
-        self.gps_accuracy_phone = float(json.get("accuracy", 0))
+        self.last_update_gps_time_phone = self.last_calculate_gps_time = now        
         self.nPosSpeed = float(json.get("gps_speed", 0))
-        print(f"phone gps: {self.vpPosPointLatNavi}, {self.vpPosPointLonNavi}, {self.gps_accuracy_phone}, {self.nPosSpeed}")
+        print(f"phone gps: {self.vpPosPointLatNavi}, {self.vpPosPointLonNavi}, {self.phone_gps_accuracy}, {self.nPosSpeed}")
 
 
 import traceback

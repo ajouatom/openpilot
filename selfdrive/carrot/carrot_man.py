@@ -22,6 +22,7 @@ from openpilot.selfdrive.navd.helpers import Coordinate
 from opendbc.car.common.conversions import Conversions as CV
 
 from openpilot.selfdrive.carrot.carrot_serv import CarrotServ
+from openpilot.selfdrive.carrot.carrot_speed import CarrotSpeed
 
 try:
   from shapely.geometry import LineString
@@ -185,7 +186,7 @@ class CarrotMan:
     print("************************************************CarrotMan init************************************************")
     self.params = Params()
     self.params_memory = Params("/dev/shm/params")
-    self.sm = messaging.SubMaster(['deviceState', 'carState', 'controlsState', 'longitudinalPlan', 'modelV2', 'selfdriveState', 'carControl', 'navRouteNavd', 'liveLocationKalman', 'navInstruction'])
+    self.sm = messaging.SubMaster(['deviceState', 'carState', 'controlsState', 'radarState', 'longitudinalPlan', 'modelV2', 'selfdriveState', 'carControl', 'navRouteNavd', 'liveLocationKalman', 'navInstruction'])
     self.pm = messaging.PubMaster(['carrotMan', "navRoute", "navInstructionCarrot"])
 
     self.carrot_serv = CarrotServ()
@@ -258,9 +259,18 @@ class CarrotMan:
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     frame = 0
     self.save_toggle_values()
+
+    carrot_speed = CarrotSpeed(neighbor_ring=2)
+    self.params_memory.put_int_nonblocking("CarrotSpeed", 0)
+
     rk = Ratekeeper(10, print_delay_threshold=None)
 
     carrotIndex_last = self.carrot_serv.carrotIndex
+    phone_gps_frame = self.carrot_serv.phone_gps_frame
+    carrot_speed_active_count = 0
+    self.v_cruise = 0
+    self.long_active = False
+    self.v_cruise_change = 0
     while self.is_running:
       try:
         self.sm.update(0)
@@ -274,6 +284,15 @@ class CarrotMan:
         #print("coords=", coords)
         #print("curvatures=", curvatures)
         self.carrot_serv.update_navi(remote_ip, self.sm, self.pm, vturn_speed, coords, distances, route_speed)
+
+        if phone_gps_frame != self.carrot_serv.phone_gps_frame:
+          phone_gps_frame = self.carrot_serv.phone_gps_frame
+          carrot_speed_active_count = 3
+        else:
+          carrot_speed_active_count -= 1
+
+        if carrot_speed_active_count > 0:
+          self.carrot_speed_serv(carrot_speed, frame)
 
         if frame % 20 == 0 or remote_addr is not None:
           try:
@@ -318,6 +337,44 @@ class CarrotMan:
         traceback.print_exc()
         time.sleep(1)
 
+  def carrot_speed_serv(self, carrot_speed, frame):
+    v_ego = 0.0
+    if self.sm.alive['carState'] and self.sm.alive['carControl']:
+      CS = self.sm['carState']
+      CC = self.sm['carControl']
+      v_ego = CS.vEgo
+      v_ego_kph = v_ego * 3.6
+      if self.long_active and CC.longActive:
+        if self.v_cruise > CS.vCruise:
+          self.v_cruise_change = 30
+        elif self.v_cruise < CS.vCruise:
+          if v_ego_kph < CS.vCruise:
+            self.v_cruise_change = 30
+          else:
+            self.v_cruise_change = -30
+      else:
+        self.v_cruise_change = 0
+      self.long_active = CC.longActive
+      self.v_cruise = CS.vCruise
+    else:
+      self.v_cruise_change = 0
+
+    lat, lon, heading = self.carrot_serv.phone_latitude, self.carrot_serv.phone_longitude, self.carrot_serv.nPosAnglePhone
+    vt = carrot_speed.query_target(lat, lon, heading, v_ego, lookahead_s=0.0)
+    print("carrot_speed_serv: target speed=", vt)
+    if self.v_cruise_change != 0:
+      carrot_speed.add_sample(lat, lon, heading, self.v_cruise if self.v_cruise_change > 0 else (- self.v_cruise))
+      if self.v_cruise_change > 0:
+        self.v_cruise_change -= 1
+      if self.v_cruise_change < 0:
+        self.v_cruise_change += 1
+    elif vt != 0.0:
+      self.params_memory.put_int_nonblocking("CarrotSpeed", int(vt))  # m/s to km/h
+      
+    carrot_speed.maybe_save()
+
+
+  
   def carrot_navi_route(self):
 
     if self.carrot_serv.active_carrot > 1:
