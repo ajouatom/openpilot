@@ -10,6 +10,7 @@ import cereal.messaging as messaging
 from cereal import log
 
 from openpilot.common.params import Params
+from openpilot.common.filter_simple import FirstOrderFilter
 #from openpilot.selfdrive.controls.lib.lane_planner import LanePlanner
 from openpilot.selfdrive.controls.lib.lane_planner_2 import LanePlanner
 from collections import deque
@@ -73,6 +74,9 @@ class LateralPlanner:
     self.curve_speed = 0
     self.lanemode_possible_count = 0
     self.laneless_only = True
+    self.laneless_only_count = 0
+    # Smoothing filter for lanemode transitions to reduce steering jerk
+    self.useLaneLineMode_filter = FirstOrderFilter(0.0, 1.5, DT_MDL)  # 1.5초 tau로 부드러운 전환
 
   def reset_mpc(self, x0=None):
     if x0 is None:
@@ -110,29 +114,74 @@ class LateralPlanner:
       self.v_plan = np.clip(car_speed, MIN_SPEED, np.inf)
       self.v_ego = self.v_plan[0]
       self.plan_a = np.array(md.acceleration.x)
-      if md.velocity.x[-1] < md.velocity.x[0] * 0.7:  # TODO: 모델이 감속을 요청하는 경우 속도테이블이 레인모드를 할수 없음. 속도테이블을 새로 만들어야함..
-        self.lanemode_possible_count = 0
-        self.laneless_only = True
-      else:
+      # UseLaneLineSpeed가 활성화되어 있으면 lanemode로 고정 사용 (laneless_only 조건 무시)
+      if self.useLaneLineSpeedApply > 0:
+        # lanemode 고정 모드: 감속 조건을 무시하고 항상 lanemode 가능 상태 유지
         self.lanemode_possible_count += 1
-        if self.lanemode_possible_count > int(1/DT_MDL):
-          self.laneless_only = False
+        self.laneless_only = False
+        self.laneless_only_count = 0
+      else:
+        # UseLaneLineSpeed가 0일 때만 기존 로직 적용 (완화된 조건)
+        decel_threshold = 0.5  # 감속 임계값 완화 (기존 0.7 -> 0.5)
+        if md.velocity.x[-1] < md.velocity.x[0] * decel_threshold:
+          self.lanemode_possible_count = 0
+          self.laneless_only_count += 1
+          # 3초 이상 지속되어야 laneless로 확정 전환 (즉시 전환 방지)
+          if self.laneless_only_count > int(3.0/DT_MDL):
+            self.laneless_only = True
+        else:
+          self.lanemode_possible_count += 1
+          self.laneless_only_count = max(0, self.laneless_only_count - 2)  # 점진적으로 감소
+          if self.lanemode_possible_count > int(1/DT_MDL):
+            # laneless_only_count가 충분히 낮아야 False로 전환 (지연된 복귀)
+            if self.laneless_only_count < int(1.5/DT_MDL):
+              self.laneless_only = False
 
     # Parse model predictions
     self.LP.parse_model(md)
     #lane_change_prob = self.LP.l_lane_change_prob + self.LP.r_lane_change_prob
     #self.DH.update(sm['carState'], md, sm['carControl'].latActive, lane_change_prob, sm)
 
-    if self.useLaneLineSpeedApply == 0 or self.laneless_only:
-      self.useLaneLineMode = False
-    elif self.v_ego*3.6 >= self.useLaneLineSpeedApply + 2:
-      self.useLaneLineMode = True
-    elif self.v_ego*3.6 < self.useLaneLineSpeedApply - 2:
-      self.useLaneLineMode = False
+    # Determine target lanemode state
+    target_useLaneLineMode = False
+    if self.useLaneLineSpeedApply == 0:
+      # UseLaneLineSpeed가 0이면 laneless 모드
+      if self.laneless_only:
+        target_useLaneLineMode = False
+      else:
+        # 속도 조건에 따라 결정
+        target_useLaneLineMode = False
+    elif self.useLaneLineSpeedApply > 0:
+      # UseLaneLineSpeed가 활성화되어 있으면 lanemode로 고정
+      # 속도 조건은 유지하되, laneless_only는 무시
+      if self.v_ego*3.6 >= self.useLaneLineSpeedApply + 2:
+        target_useLaneLineMode = True
+      elif self.v_ego*3.6 < self.useLaneLineSpeedApply - 2:
+        # 속도가 낮아도 최소한의 지연 후에만 laneless로 전환 (부드러운 전환을 위해)
+        target_useLaneLineMode = False
+      else:
+        # 속도가 경계 근처일 때는 현재 상태 유지
+        target_useLaneLineMode = self.useLaneLineMode
+
+    # Smooth transition to prevent sudden steering changes
+    if self.useLaneLineSpeedApply > 0:
+      # UseLaneLineSpeed가 활성화되어 있으면 lanemode 고정 모드
+      # 속도 조건에 맞으면 즉시 lanemode 활성화 (필터는 부드러운 전환만 보조)
+      if target_useLaneLineMode:
+        self.useLaneLineMode_filter.update(1.0)  # 강제로 1.0으로 수렴
+        self.useLaneLineMode = True
+      else:
+        # 속도가 낮을 때만 필터 적용 (부드러운 전환)
+        self.useLaneLineMode_filter.update(target_useLaneLineMode)
+        self.useLaneLineMode = self.useLaneLineMode_filter.x > 0.1
+    else:
+      # UseLaneLineSpeed가 0일 때는 기존 로직 (부드러운 전환)
+      self.useLaneLineMode_filter.update(target_useLaneLineMode)
+      self.useLaneLineMode = self.useLaneLineMode_filter.x > 0.3
 
     # Turn off lanes during lane change
     #if self.DH.desire == log.Desire.laneChangeRight or self.DH.desire == log.Desire.laneChangeLeft:
-      
+
     if md.meta.desire != log.Desire.none or carrot.atc_active:
       self.LP.lane_change_multiplier = 0.0 #md.meta.laneChangeProb
     else:
@@ -144,10 +193,10 @@ class LateralPlanner:
     self.LP.lane_width_right = md.meta.laneWidthRight
     self.LP.curvature = measured_curvature
     self.path_xyz, self.lanelines_active = self.LP.get_d_path(sm['carState'], self.v_ego, self.t_idxs, self.path_xyz, self.curve_speed)
-    
+
     #if self.LP.lanefull_mode:
     #  self.plan_yaw, self.plan_yaw_rate = self.LP.calculate_plan_yaw_and_yaw_rate(self.path_xyz)
-      
+
     self.latDebugText = self.LP.debugText
     #self.lanelines_active = True if self.LP.d_prob > 0.3 and self.LP.lanefull_mode else False
 
@@ -192,7 +241,7 @@ class LateralPlanner:
       self.solution_invalid_cnt += 1
     else:
       self.solution_invalid_cnt = 0
-  
+
     self.x_sol = self.lat_mpc.x_sol
 
   def publish(self, sm, pm, carrot):
