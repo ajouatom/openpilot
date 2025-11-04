@@ -186,7 +186,7 @@ class LanePlanner:
         lane_path_y = path_from_left_lane if l_prob > 0.5 or l_prob > r_prob else path_from_right_lane
     elif l_prob > 0.7 and r_prob > 0.7:
       lane_path_y = (path_from_left_lane + path_from_right_lane) / 2.
-      # lane_width filtering에 의해서, 점점 줄어들때, 중앙선으로 붙어가는 현상이 생김.. 
+      # lane_width filtering에 의해서, 점점 줄어들때, 중앙선으로 붙어가는 현상이 생김..
       #if self.lane_width > 3.2:
       #  lane_path_y = path_from_right_lane
       #else:
@@ -221,7 +221,9 @@ class LanePlanner:
       self.lane_offset_filtered.update(np.interp(self.d_prob, [0, 0.3], [0, offset_total]))
 
     ## laneless at lowspeed
-    self.d_prob *= np.interp(v_ego*3.6, [5., 10.], [0.0, 1.0])
+    # 레인모드 강제 시(lanefull_mode=True) 저속에서도 차선 사용 저하를 적용하지 않음
+    if not self.lanefull_mode:
+      self.d_prob *= np.interp(v_ego*3.6, [5., 10.], [0.0, 1.0])
 
     #self.debugText = "OFFSET({:.2f}={:.2f}+{:.2f}+{:.2f}),Vc:{:.2f},dp:{:.1f},lf:{},lrw={:.1f}|{:.1f}|{:.1f}".format(
     #  self.lane_offset_filtered.x,
@@ -230,7 +232,7 @@ class LanePlanner:
     #  self.d_prob, self.lanefull_mode,
     #  self.lane_width_left_filtered.x, self.lane_width, self.lane_width_right_filtered.x)
 
-    adjustLaneTime = self.params.get_float("LatMpcInputOffset") * 0.01 # 0.06 
+    adjustLaneTime = self.params.get_float("LatMpcInputOffset") * 0.01 # 0.06
     laneline_active = False
     self.d_prob_count = self.d_prob_count + 1 if self.d_prob > 0.3 else 0
     if self.lanefull_mode and self.d_prob_count > int(1 / DT_MDL):
