@@ -346,12 +346,12 @@ class CarrotMan:
       v_ego_kph = v_ego * 3.6
       if self.long_active and CC.longActive:
         if self.v_cruise > CS.vCruise:
-          self.v_cruise_change = 30
+          self.v_cruise_change = 1
         elif self.v_cruise < CS.vCruise:
           if v_ego_kph < CS.vCruise:
-            self.v_cruise_change = 30
+            self.v_cruise_change = 1
           else:
-            self.v_cruise_change = -30
+            self.v_cruise_change = -1
       else:
         self.v_cruise_change = 0
       self.long_active = CC.longActive
