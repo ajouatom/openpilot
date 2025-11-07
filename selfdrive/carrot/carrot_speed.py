@@ -148,6 +148,11 @@ class CarrotSpeed:
         
     def query_target(self, lat: float, lon: float, heading_deg: float, v_ego: float,
                      lookahead_s: float = 2.0, neighbor_fallback: bool = True) -> float:
+        dist = max(0.0, float(v_ego) * float(lookahead_s))
+        return self.query_target_dist(lat, lon, heading_deg, dist, neighbor_fallback)
+    
+    def query_target_dist(self, lat: float, lon: float, heading_deg: float, dist: float,
+                     neighbor_fallback: bool = True) -> float:
         """
         전방 lookahead 위치의 속도 반환.
         ⚠️ 항상 '오래된 데이터( age >= neighbor_old_threshold_s )'만 사용.
@@ -155,7 +160,6 @@ class CarrotSpeed:
            - 없으면 이웃(ring)에서 같은 규칙 적용
            - 그래도 없으면 0.0
         """
-        dist = max(0.0, float(v_ego) * float(lookahead_s))
         lat2, lon2 = project_point(lat, lon, heading_deg, dist)
         gy, gx = quantize_1e4(lat2, lon2)
         b = heading_to_bucket(heading_deg)

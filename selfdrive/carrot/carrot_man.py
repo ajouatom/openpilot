@@ -360,7 +360,7 @@ class CarrotMan:
       self.v_cruise_change = 0
 
     lat, lon, heading = self.carrot_serv.phone_latitude, self.carrot_serv.phone_longitude, self.carrot_serv.nPosAnglePhone
-    vt = carrot_speed.query_target(lat, lon, heading, v_ego, lookahead_s=0.0)
+    vt = carrot_speed.query_target_dist(lat, lon, heading, 15.0)
     print("carrot_speed_serv: target speed=", vt)
     if self.v_cruise_change != 0:
       carrot_speed.add_sample(lat, lon, heading, self.v_cruise_last if self.v_cruise_change > 0 else (- self.v_cruise_last))
