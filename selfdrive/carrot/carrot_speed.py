@@ -105,6 +105,27 @@ class CarrotSpeed:
                     continue
                 out.append((gy + dy, gx + dx))
         return out
+    def _pick_old_v(self, arr, bi):
+        v, ts = arr[bi]
+        if v is None or ts is None:
+            return None
+        if self._now() - int(ts) < self.neighbor_old_threshold_s:
+            return None
+        return float(v)
+
+    def _neighbors_8(self, gy, gx):
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                if dy == 0 and dx == 0:
+                    continue
+                yield gy + dy, gx + dx
+    def _try_cell_buckets_old(self, arr, b):
+        v = self._pick_old_v(arr, b)
+        if v is not None: return v
+        v = self._pick_old_v(arr, (b - 1) % self.buckets)
+        if v is not None: return v
+        v = self._pick_old_v(arr, (b + 1) % self.buckets)
+        return v
 
     # ----- 공용 API -----
 
@@ -152,67 +173,47 @@ class CarrotSpeed:
         return self.query_target_dist(lat, lon, heading_deg, dist, neighbor_fallback)
     
     def query_target_dist(self, lat: float, lon: float, heading_deg: float, dist: float,
-                     neighbor_fallback: bool = True) -> float:
+                          neighbor_fallback: bool = True) -> float:
         """
-        전방 lookahead 위치의 속도 반환.
-        ⚠️ 항상 '오래된 데이터( age >= neighbor_old_threshold_s )'만 사용.
-           - 본셀 우선(같은 버킷 → 좌/우 보간)
-           - 없으면 이웃(ring)에서 같은 규칙 적용
-           - 그래도 없으면 0.0
+        간단 전략:
+          - 거리 후보: [dist, dist+3, max(0, dist-3), dist+6, max(0, dist-6)]
+          - 각 지점에서:   해당 셀의 b → b±1 (old-only)
+          - 그래도 없으면: 그 셀의 8-이웃에서 b → b±1 (old-only)
+          - 전부 실패하면 0.0
         """
-        lat2, lon2 = project_point(lat, lon, heading_deg, dist)
-        gy, gx = quantize_1e4(lat2, lon2)
         b = heading_to_bucket(heading_deg)
 
-        def pick_old(arr, bi):
-            v, ts = arr[bi]
-            if v is None or ts is None:
-                return None
-            age = self._now() - int(ts)
-            if age >= self.neighbor_old_threshold_s:
-                return float(v)
-            return None
+        cand_ds = [dist]
+        for off in (3.0, -3.0, 6.0, -6.0):
+            d2 = dist + off
+            if d2 >= 0.0:
+                cand_ds.append(d2)
 
         with self._lock:
-            # 1) 본셀: old-only
-            arr = self._cells.get((gy, gx))
-            if arr:
-                v = pick_old(arr, b)
-                if v is not None:
-                    return v
-                if neighbor_fallback:
-                    left  = pick_old(arr, (b - 1) % self.buckets)
-                    right = pick_old(arr, (b + 1) % self.buckets)
-                    if (left is not None) and (right is not None):
-                        return 0.6 * left + 0.4 * right
-                    if left is not None:  return left
-                    if right is not None: return right
+            for d in cand_ds:
+                y, x = project_point(lat, lon, heading_deg, d)
+                gy, gx = quantize_1e4(y, x)
 
-            if not neighbor_fallback:
-                return 0.0
+                # 1) 해당 셀: b → b±1
+                arr = self._cells.get((gy, gx))
+                if arr:
+                    v = self._try_cell_buckets_old(arr, b)
+                    if v is not None:
+                        return v
 
-            # 2) 이웃: old-only
-            for ny, nx in self._neighbor_indices(gy, gx):
-                arr2 = self._cells.get((ny, nx))
-                if not arr2: 
+                if not neighbor_fallback:
                     continue
-                v = pick_old(arr2, b)
-                if v is not None:
-                    return v
 
-            # 3) 이웃 좌/우 보간: old-only
-            for ny, nx in self._neighbor_indices(gy, gx):
-                arr2 = self._cells.get((ny, nx))
-                if not arr2: 
-                    continue
-                left  = pick_old(arr2, (b - 1) % self.buckets)
-                right = pick_old(arr2, (b + 1) % self.buckets)
-                if (left is not None) and (right is not None):
-                    return 0.6 * left + 0.4 * right
-                if left is not None:  return left
-                if right is not None: return right
+                # 2) 같은 지점의 8-이웃: b → b±1
+                for ny, nx in self._neighbors_8(gy, gx):
+                    arr2 = self._cells.get((ny, nx))
+                    if not arr2:
+                        continue
+                    v2 = self._try_cell_buckets_old(arr2, b)
+                    if v2 is not None:
+                        return v2
 
-            return 0.0
+        return 0.0
 
     def maybe_save(self, interval_s: int = 60) -> None:
         now = self._now()
