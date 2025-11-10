@@ -110,10 +110,9 @@ class LateralPlanner:
       self.plan_yaw = np.array(md.orientation.z)
       self.plan_yaw_rate = np.array(md.orientationRate.z)
       self.velocity_xyz = np.column_stack([md.velocity.x, md.velocity.y, md.velocity.z])
-      #car_speed = np.linalg.norm(self.velocity_xyz, axis=1) - get_speed_error(md, v_ego_car)
-      #self.v_plan = np.clip(car_speed, MIN_SPEED, np.inf)
-      self.v_plan = np.full(TRAJECTORY_SIZE, max(self.v_ego, MIN_SPEED), dtype=float)
-      #self.v_ego = self.v_plan[0]
+      car_speed = np.linalg.norm(self.velocity_xyz, axis=1) - get_speed_error(md, v_ego_car)
+      self.v_plan = np.clip(car_speed, MIN_SPEED, np.inf)
+      self.v_ego = self.v_plan[0]
       self.plan_a = np.array(md.acceleration.x)
       if v_ego_car < 5.0:  #md.velocity.x[-1] < md.velocity.x[0] * 0.7:  # TODO: 모델이 감속을 요청하는 경우 속도테이블이 레인모드를 할수 없음. 속도테이블을 새로 만들어야함..
         self.lanemode_possible_count = 0
