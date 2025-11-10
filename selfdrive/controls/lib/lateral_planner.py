@@ -154,7 +154,7 @@ class LateralPlanner:
         self.path_xyz, self.v_plan,
         smooth_window=5,
         clip_rate=2.0,
-        align_first_yaw=md.orientation.z[0]  # 초기 정렬
+        align_first_yaw=None #md.orientation.z[0]  # 초기 정렬
       )
       
     self.latDebugText = self.LP.debugText
@@ -286,6 +286,12 @@ def smooth_moving_avg(arr, window=5):
 
 def yaw_from_path_no_scipy(path_xyz, v_plan, smooth_window=5,
                            clip_rate=2.0, align_first_yaw=None):
+
+  v0 = float(np.asarray(v_plan)[0]) if len(v_plan) else 0.0
+  # 저속(≤6 m/s)에서는 창을 크게
+  if v0 <= 6.0:
+    smooth_window = max(smooth_window, 9)   # 9~11 권장
+    
   N = path_xyz.shape[0]
   x = path_xyz[:, 0].astype(float)
   y = path_xyz[:, 1].astype(float)
@@ -297,9 +303,11 @@ def yaw_from_path_no_scipy(path_xyz, v_plan, smooth_window=5,
   dx = np.diff(x)
   dy = np.diff(y)
   ds_seg = np.sqrt(dx*dx + dy*dy)
-  ds_seg[ds_seg < 1e-6] = 1e-6
+  ds_seg[ds_seg < 0.05] = 0.05
   s = np.zeros(N, float)
   s[1:] = np.cumsum(ds_seg)
+  if s[-1] < 0.5:  # 총 호길이 < 0.5m면 미분 결과 의미가 약함
+    return np.zeros(N, np.float32), np.zeros(N, np.float32)
 
   # 2) smoothing (이동평균)
   x_smooth = smooth_moving_avg(x, smooth_window)
@@ -322,6 +330,9 @@ def yaw_from_path_no_scipy(path_xyz, v_plan, smooth_window=5,
   # 6) yaw_rate = kappa * v
   v = np.asarray(v_plan, float)
   yaw_rate = kappa * v
+  if v0 <= 6.0:
+    # 이동평균으로 미세 요동 감쇄(창 5~7)
+    yaw_rate = smooth_moving_avg(yaw_rate, window=7)
 
   # 7) 초기 yaw 정렬 (선택)
   if align_first_yaw is not None:
