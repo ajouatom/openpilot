@@ -1297,6 +1297,7 @@ class CarrotServ:
       if (now - self.last_update_gps_time_navi) > 3.0:
         self.vpPosPointLatNavi = self.phone_latitude
         self.vpPosPointLonNavi = self.phone_longitude
+
         self.nPosAngle = self.nPosAnglePhone
         # self.nPosSpeed = self.ve # TODO speed from v_ego
         self.last_update_gps_time_phone = self.last_calculate_gps_time = now        

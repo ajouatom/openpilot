@@ -288,7 +288,7 @@ class CarrotMan:
 
         if phone_gps_frame != self.carrot_serv.phone_gps_frame:
           phone_gps_frame = self.carrot_serv.phone_gps_frame
-          carrot_speed_active_count = 3
+          carrot_speed_active_count = 10
         else:
           carrot_speed_active_count -= 1
 
@@ -362,7 +362,10 @@ class CarrotMan:
     else:
       self.v_cruise_change = 0
 
-    lat, lon, heading = self.carrot_serv.phone_latitude, self.carrot_serv.phone_longitude, self.carrot_serv.nPosAnglePhone
+    now = time.monotonic()
+    heading = self.carrot_serv.nPosAnglePhone
+    lat, lon = self.carrot_serv.estimate_position(self.carrot_serv.phone_latitude, self.carrot_serv.phone_longitude, heading, now - self.carrot_serv.last_update_gps_time_phone)
+    #lat, lon, heading = self.carrot_serv.phone_latitude, self.carrot_serv.phone_longitude, self.carrot_serv.nPosAnglePhone
     if self.v_cruise_change != 0:
       carrot_speed.add_sample(lat, lon, heading, self.v_cruise_last if self.v_cruise_change > 0 else (- self.v_cruise_last))
       if self.v_cruise_change > 0:
