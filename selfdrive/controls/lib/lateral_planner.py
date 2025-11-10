@@ -96,6 +96,8 @@ class LateralPlanner:
     # clip speed , lateral planning is not possible at 0 speed
     measured_curvature = sm['controlsState'].curvature
     v_ego_car = sm['carState'].vEgo
+    speed_kph = v_ego_car * 3.6
+    self.v_ego = v_ego_car
     self.curve_speed = sm['carrotMan'].vTurnSpeed
 
     # Parse model predictions
@@ -111,7 +113,7 @@ class LateralPlanner:
       #car_speed = np.linalg.norm(self.velocity_xyz, axis=1) - get_speed_error(md, v_ego_car)
       #self.v_plan = np.clip(car_speed, MIN_SPEED, np.inf)
       self.v_plan = np.full(TRAJECTORY_SIZE, max(self.v_ego, MIN_SPEED), dtype=float)
-      self.v_ego = self.v_plan[0]
+      #self.v_ego = self.v_plan[0]
       self.plan_a = np.array(md.acceleration.x)
       if False: #md.velocity.x[-1] < md.velocity.x[0] * 0.7:  # TODO: 모델이 감속을 요청하는 경우 속도테이블이 레인모드를 할수 없음. 속도테이블을 새로 만들어야함..
         self.lanemode_possible_count = 0
@@ -128,9 +130,9 @@ class LateralPlanner:
 
     if self.useLaneLineSpeedApply == 0 or self.laneless_only:
       self.useLaneLineMode = False
-    elif self.v_ego*3.6 >= self.useLaneLineSpeedApply + 2:
+    elif speed_kph >= self.useLaneLineSpeedApply + 2:
       self.useLaneLineMode = True
-    elif self.v_ego*3.6 < self.useLaneLineSpeedApply - 2:
+    elif speed_kph < self.useLaneLineSpeedApply - 2:
       self.useLaneLineMode = False
 
     # Turn off lanes during lane change
@@ -146,7 +148,7 @@ class LateralPlanner:
     self.LP.lane_width_left = md.meta.laneWidthLeft
     self.LP.lane_width_right = md.meta.laneWidthRight
     self.LP.curvature = measured_curvature
-    self.path_xyz, self.lanelines_active = self.LP.get_d_path(sm['carState'], self.v_ego, self.t_idxs, self.path_xyz, self.curve_speed)
+    self.path_xyz, self.lanelines_active = self.LP.get_d_path(sm['carState'], v_ego_car, self.t_idxs, self.path_xyz, self.curve_speed)
 
     if self.LP.lanefull_mode:
       self.plan_yaw, self.plan_yaw_rate = yaw_from_path_no_scipy(
