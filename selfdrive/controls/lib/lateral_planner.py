@@ -155,7 +155,7 @@ class LateralPlanner:
         self.path_xyz, self.v_plan,
         smooth_window=5,
         clip_rate=2.0,
-        align_first_yaw=None #md.orientation.z[0]  # 초기 정렬
+        align_first_yaw=md.orientation.z[0]  # 초기 정렬
       )
       
     self.latDebugText = self.LP.debugText
