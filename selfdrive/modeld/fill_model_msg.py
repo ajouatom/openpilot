@@ -1,6 +1,7 @@
 import os
 import capnp
 import numpy as np
+import math
 from cereal import log
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan, Meta
 
@@ -129,8 +130,15 @@ def fill_model_msg(base_msg: capnp._DynamicStructBuilder, extended_msg: capnp._D
     #  next_x_val - current_x_val) > 1e-9 else float('nan')
     #LINE_T_IDXS[xidx] = p * ModelConstants.T_IDXS[tidx + 1] + (1 - p) * ModelConstants.T_IDXS[tidx]
 
-  LINE_T_IDXS = [Tmax if not (v == v) else v for v in LINE_T_IDXS]     # // 추가 (NaN → Tmax)
-  LINE_T_IDXS = list(np.maximum.accumulate(LINE_T_IDXS))               # // 추가 (단조성 보장)
+  LINE_T_IDXS = [float(Tmax if math.isnan(float(v)) else float(v)) for v in LINE_T_IDXS]
+
+  # 비내림(monotonic non-decreasing) 보정 (순수 파이썬, numpy 불사용)
+  running = LINE_T_IDXS[0]
+  for i in range(1, len(LINE_T_IDXS)):
+      if LINE_T_IDXS[i] < running:
+          LINE_T_IDXS[i] = running
+      else:
+          running = LINE_T_IDXS[i]
 
   # lane lines
   modelV2.init('laneLines', 4)
