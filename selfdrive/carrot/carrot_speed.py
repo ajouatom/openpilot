@@ -76,6 +76,9 @@ class CarrotSpeed:
 
         self._load_from_params_if_exists()
 
+        self._last_hit = None        # (gy, gx, b, ts_when_read)
+        self._last_hit_read_ms = 0   # 밀리초
+
     # ----- 내부 유틸 -----
 
     def _ensure_cell(self, gy: int, gx: int) -> List[List[Optional[float]]]:
@@ -105,13 +108,6 @@ class CarrotSpeed:
                     continue
                 out.append((gy + dy, gx + dx))
         return out
-    def _pick_old_v(self, arr, bi):
-        v, ts = arr[bi]
-        if v is None or ts is None:
-            return None
-        if self._now() - int(ts) < self.neighbor_old_threshold_s:
-            return None
-        return float(v)
 
     def _neighbors_8(self, gy, gx):
         for dy in (-1, 0, 1):
@@ -119,14 +115,17 @@ class CarrotSpeed:
                 if dy == 0 and dx == 0:
                     continue
                 yield gy + dy, gx + dx
-    def _try_cell_buckets_old(self, arr, b):
-        v = self._pick_old_v(arr, b)
-        if v is not None: return v
-        v = self._pick_old_v(arr, (b - 1) % self.buckets)
-        if v is not None: return v
-        v = self._pick_old_v(arr, (b + 1) % self.buckets)
-        return v
 
+    def _try_cell_buckets_old(self, arr, b):
+        for off in (0, -1, +1):
+            bi = (b + off) % self.buckets
+            v, ts = arr[bi]
+            if v is None or ts is None:
+                continue
+            if self._now() - int(ts) < self.neighbor_old_threshold_s:
+                continue
+            return float(v), bi
+        return None, None
     # ----- 공용 API -----
 
     def add_sample(self, lat: float, lon: float, heading_deg: float, speed_signed: float):
@@ -147,7 +146,7 @@ class CarrotSpeed:
         with self._lock:
             arr = self._ensure_cell(gy, gx)
             v_old, ts_old = arr[b]
-
+            
             if v_old is None:
                 arr[b] = [v_in, now]
                 self._dirty = True
@@ -155,17 +154,17 @@ class CarrotSpeed:
                 new_val = round((v_old + v_in) / 2.0, 1)
                 if v_in > 0.0:
                     if v_old < 0.0:
-                        arr[b] = [v_in, now]
+                        arr[b] = [v_in, ts_old]
                     else:
-                        arr[b] = [new_val, now]
+                        arr[b] = [new_val, ts_old]
                 else:  # v_in < 0
-                  arr[b] = [v_in, now]  
+                  arr[b] = [v_in, ts_old]  
                   #if v_old > 0.0: # 기존에 양수이면 돌발상황 감속이므로 저장안함.
                   #  pass  
                   #else:
                   #  arr[b] = [new_val, now]
 
-                self._dirty = True
+            self._dirty = True
         
     def query_target(self, lat: float, lon: float, heading_deg: float, v_ego: float,
                      lookahead_s: float = 2.0, neighbor_fallback: bool = True) -> float:
@@ -197,8 +196,11 @@ class CarrotSpeed:
                 # 1) 해당 셀: b → b±1
                 arr = self._cells.get((gy, gx))
                 if arr:
-                    v = self._try_cell_buckets_old(arr, b)
+                    v, b_sel = self._try_cell_buckets_old(arr, b)
                     if v is not None:
+                        now_sec = int(time.time())
+                        self._last_hit = (gy, gx, b_sel, now_sec)
+                        self._last_hit_read_ms = int(time.time() * 1000)  
                         return v
 
                 if not neighbor_fallback:
@@ -209,11 +211,46 @@ class CarrotSpeed:
                     arr2 = self._cells.get((ny, nx))
                     if not arr2:
                         continue
-                    v2 = self._try_cell_buckets_old(arr2, b)
+                    v2, b_sel2 = self._try_cell_buckets_old(arr2, b)
                     if v2 is not None:
+                        now_sec = int(time.time())
+                        self._last_hit = (ny, nx, b_sel2, now_sec)
+                        self._last_hit_read_ms = int(time.time() * 1000)  
                         return v2
 
         return 0.0
+
+    def invalidate_last_hit(self, window_s: float = 2.0, action: str = "clear") -> bool:
+        """
+        최근 query에서 읽은 셀/버킷을 window_s 이내면 무효화.
+        action:
+          - "clear": 아예 None 처리
+          - "age_bump": ts를 지금 시각으로 덮어써서 120s 동안 old-only에 걸리게 함
+        반환: 무효화 여부
+        """
+        if self._last_hit is None:
+            return False
+        gy, gx, b, read_ts = self._last_hit
+        now = int(time.time())
+        if (now - int(read_ts)) > window_s:
+            return False
+
+        with self._lock:
+            arr = self._cells.get((gy, gx))
+            if not arr:
+                return False
+            v, ts = arr[b]
+            if action == "clear":
+                arr[b] = [None, None]
+            else:  # "age_bump"
+                # 값은 유지하되 방금 값으로 만들어서 old-only 필터에 120s 동안 걸리게
+                if v is not None:
+                    arr[b] = [v, now]
+                else:
+                    # 값 자체가 없으면 할 게 없음
+                    return False
+            self._dirty = True
+        return True
 
     def maybe_save(self, interval_s: int = 60) -> None:
         now = self._now()

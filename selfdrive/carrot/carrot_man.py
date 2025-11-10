@@ -271,6 +271,7 @@ class CarrotMan:
     self.v_cruise_last = 0
     self.long_active = False
     self.v_cruise_change = 0
+    self._last_vt = 0.0
     while self.is_running:
       try:
         self.sm.update(0)
@@ -339,10 +340,12 @@ class CarrotMan:
 
   def carrot_speed_serv(self, carrot_speed, frame):
     v_ego = 0.0
+    gas_pressed = False
     if self.sm.alive['carState'] and self.sm.alive['carControl']:
       CS = self.sm['carState']
       CC = self.sm['carControl']
       v_ego = CS.vEgo
+      gas_pressed = CS.gasPressed
       v_ego_kph = v_ego * 3.6
       if self.long_active and CC.longActive:
         if self.v_cruise_last < CS.vCruise:  # 속도가 증가하면
@@ -360,17 +363,21 @@ class CarrotMan:
       self.v_cruise_change = 0
 
     lat, lon, heading = self.carrot_serv.phone_latitude, self.carrot_serv.phone_longitude, self.carrot_serv.nPosAnglePhone
-    vt = carrot_speed.query_target_dist(lat, lon, heading, 15.0)
-    print("carrot_speed_serv: target speed=", vt)
     if self.v_cruise_change != 0:
       carrot_speed.add_sample(lat, lon, heading, self.v_cruise_last if self.v_cruise_change > 0 else (- self.v_cruise_last))
       if self.v_cruise_change > 0:
         self.v_cruise_change -= 1
       if self.v_cruise_change < 0:
         self.v_cruise_change += 1
-    elif vt != 0.0:
-      self.params_memory.put_int_nonblocking("CarrotSpeed", int(vt))  # m/s to km/h
-      
+    else:
+      vt = carrot_speed.query_target_dist(lat, lon, heading, 0.0)
+      print("carrot_speed_serv: target speed=", vt)
+      if vt != 0.0:
+        self.params_memory.put_int_nonblocking("CarrotSpeed", int(vt))
+        self._last_vt = vt
+
+    if gas_pressed and self._last_vt < 0.0:
+      carrot_speed.invalidate_last_hit(window_s=2.0, action="clear")      
     carrot_speed.maybe_save()
 
 
