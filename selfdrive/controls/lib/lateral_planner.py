@@ -95,7 +95,7 @@ class LateralPlanner:
 
     # clip speed , lateral planning is not possible at 0 speed
     measured_curvature = sm['controlsState'].curvature
-    v_ego_car = sm['carState'].vEgo
+    v_ego_car = max(sm['carState'].vEgo, MIN_SPEED)
     speed_kph = v_ego_car * 3.6
     self.v_ego = v_ego_car
     self.curve_speed = sm['carrotMan'].vTurnSpeed
