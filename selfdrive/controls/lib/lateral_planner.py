@@ -149,7 +149,7 @@ class LateralPlanner:
     self.LP.curvature = measured_curvature
     self.path_xyz, self.lanelines_active = self.LP.get_d_path(sm['carState'], v_ego_car, self.t_idxs, self.path_xyz, self.curve_speed)
 
-    if self.LP.lanefull_mode:
+    if self.lanelines_active:
       self.plan_yaw, self.plan_yaw_rate = yaw_from_path_no_scipy(
         self.path_xyz, self.v_plan,
         smooth_window=5,
