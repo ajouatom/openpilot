@@ -221,6 +221,15 @@ class CarController(CarControllerBase):
 
     # accel + longitudinal
     accel = float(np.clip(actuators.accel, CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX))
+
+    # Respect autohold/idle stop: when autohold is active and at standstill,
+    # don't send gas command to prevent engine from starting automatically
+    # This allows the car's original autohold/idle stop behavior to work properly
+    if CS.out.brakeHoldActive and CS.out.standstill and not CS.out.brakePressed:
+      # Autohold is active, at standstill, and brake is released
+      # Set accel to 0 to prevent engine from starting
+      accel = 0.0
+    
     stopping = actuators.longControlState == LongCtrlState.stopping
     set_speed_in_units = hud_control.setSpeed * (CV.MS_TO_KPH if CS.is_metric else CV.MS_TO_MPH)
 
