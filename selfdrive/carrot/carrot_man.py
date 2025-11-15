@@ -349,7 +349,7 @@ class CarrotMan:
       v_ego_kph = v_ego * 3.6
       if self.long_active and CC.longActive:
         if self.v_cruise_last < CS.vCruise:  # 속도가 증가하면
-          self.v_cruise_change = 20
+          self.v_cruise_change = 120
         elif self.v_cruise_last > CS.vCruise: # 속도가 감소하면
           if v_ego_kph < CS.vCruise: # 주행속도가 느리면
             self.v_cruise_change = 120
