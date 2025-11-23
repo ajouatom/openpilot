@@ -263,7 +263,7 @@ class CarrotMan:
     carrot_speed = CarrotSpeed(neighbor_ring=2)
     self.params_memory.put_int_nonblocking("CarrotSpeed", 0)
 
-    rk = Ratekeeper(10, print_delay_threshold=None)
+    rk = Ratekeeper(20, print_delay_threshold=None)
 
     carrotIndex_last = self.carrot_serv.carrotIndex
     phone_gps_frame = self.carrot_serv.phone_gps_frame
@@ -350,16 +350,16 @@ class CarrotMan:
       gas_pressed = CS.gasPressed
       v_ego_kph = v_ego * 3.6
       if gas_pressed:
-        self.gas_pressed_count = 120
+        self.gas_pressed_count = 200
         self.v_cruise_change = 0
       elif self.long_active and CC.longActive:
         if self.v_cruise_last < CS.vCruise:  # 속도가 증가하면
-          self.v_cruise_change = 120
+          self.v_cruise_change = 200
         elif self.v_cruise_last > CS.vCruise: # 속도가 감소하면
           if v_ego_kph < CS.vCruise: # 주행속도가 느리면
-            self.v_cruise_change = 120
+            self.v_cruise_change = 200
           else:                       # 주행속도가 빠르면
-            self.v_cruise_change = -120
+            self.v_cruise_change = -200
 
         if self.v_cruise_change != 0:
           self.gas_pressed_count = 0
