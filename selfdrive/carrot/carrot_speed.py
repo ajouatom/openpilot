@@ -208,7 +208,8 @@ class CarrotSpeed:
                     continue
 
                 # 2) 같은 지점의 8-이웃: b → b±1
-                for ny, nx in self._neighbors_8(gy, gx):
+                #for ny, nx in self._neighbors_8(gy, gx):
+                for ny, nx in ((gy, gx-1), (gy, gx+1)):    
                     arr2 = self._cells.get((ny, nx))
                     if not arr2:
                         continue
