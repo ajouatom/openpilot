@@ -153,14 +153,14 @@ void MapWindow::initLayers() {
     if (!m_map->sourceExists("carrotSpeedSource")) {
       qDebug() << "Initializing carrotSpeedSource";
 
-      // 빈 FeatureCollection GeoJSON
-      QJsonObject fc;
+      // 빈 FeatureCollection GeoJSON (QVariantMap 버전)
+      QVariantMap fc;
       fc["type"] = "FeatureCollection";
-      fc["features"] = QJsonArray();
+      fc["features"] = QVariantList{};   // 빈 리스트
 
       QVariantMap src;
       src["type"] = "geojson";
-      src["data"] = QString(QJsonDocument(fc).toJson(QJsonDocument::Compact));
+      src["data"] = fc;
       m_map->addSource("carrotSpeedSource", src);
     }
 
@@ -171,17 +171,14 @@ void MapWindow::initLayers() {
       layer["source"] = "carrotSpeedSource";
       m_map->addLayer("carrotSpeedLayer", layer);
 
-      // properties.speed 를 텍스트로 표시
-      m_map->setLayoutProperty("carrotSpeedLayer", "text-field",
-        QVariant::fromValue(QVariantList{
-          "to-string", QVariantList{"get", "speed"}
-          }));
+      // properties.speed 를 텍스트로 표시 (토큰 방식)
+      // "{speed}" 라고 쓰면 properties.speed 값을 문자열로 넣어줌
+      m_map->setLayoutProperty("carrotSpeedLayer", "text-field", "{speed}");
       m_map->setLayoutProperty("carrotSpeedLayer", "text-size", 14.0);
       m_map->setLayoutProperty("carrotSpeedLayer", "text-offset", QVariantList{ 0.0, -1.5 });
       m_map->setLayoutProperty("carrotSpeedLayer", "text-anchor", "top");
       m_map->setLayoutProperty("carrotSpeedLayer", "icon-allow-overlap", true);
     }
-
     m_map->setPaintProperty("buildingsLayer", "fill-extrusion-color", QColor("grey"));
     m_map->setPaintProperty("buildingsLayer", "fill-extrusion-opacity", fillExtrusionOpacity);
     m_map->setPaintProperty("buildingsLayer", "fill-extrusion-height", fillExtrusionHight);
@@ -267,8 +264,7 @@ void MapWindow::updateState(const UIState &s) {
     std::string raw = params_memory.get("CarrotSpeedViz");
     if (!raw.empty()) {
       QString qraw = QString::fromStdString(raw);
-
-      // 같은 내용이면 파싱 생략 (옵션)
+      printf("%s\n", qraw.toStdString().c_str());
       if (qraw != last_viz_raw) {
         last_viz_raw = qraw;
 
@@ -278,8 +274,9 @@ void MapWindow::updateState(const UIState &s) {
           QJsonObject obj = doc.object();
           QJsonArray pts = obj["pts"].toArray();
 
-          // GeoJSON FeatureCollection 구성
-          QJsonArray features;
+          // GeoJSON FeatureCollection → QVariantMap 트리로 만들기
+          QVariantList features;  // Feature 리스트
+
           for (const QJsonValue& v : pts) {
             QJsonArray arr = v.toArray();
             if (arr.size() < 3) continue;
@@ -288,45 +285,45 @@ void MapWindow::updateState(const UIState &s) {
             double plon = arr[1].toDouble();
             double spd = arr[2].toDouble();
 
-            // GeoJSON Feature
-            QJsonObject feature;
-            feature["type"] = "Feature";
-
-            // geometry: Point (주의: GeoJSON은 [lon, lat] 순서)
-            QJsonObject geom;
-            geom["type"] = "Point";
-            QJsonArray coords;
+            // geometry: Point (GeoJSON: [lon, lat] 순서)
+            QVariantList coords;
             coords.append(plon);
             coords.append(plat);
+
+            QVariantMap geom;
+            geom["type"] = "Point";
             geom["coordinates"] = coords;
-            feature["geometry"] = geom;
 
             // properties: speed
-            QJsonObject props;
+            QVariantMap props;
             props["speed"] = static_cast<int>(std::round(spd));
+
+            // Feature
+            QVariantMap feature;
+            feature["type"] = "Feature";
+            feature["geometry"] = geom;
             feature["properties"] = props;
 
             features.append(feature);
           }
 
-          QJsonObject fc;
+          QVariantMap fc;
           fc["type"] = "FeatureCollection";
           fc["features"] = features;
 
           QVariantMap src;
           src["type"] = "geojson";
-          src["data"] = QString(QJsonDocument(fc).toJson(QJsonDocument::Compact));
+          src["data"] = fc;   // ★ 문자열이 아니라 QVariantMap 트리
           m_map->updateSource("carrotSpeedSource", src);
           m_map->setLayoutProperty("carrotSpeedLayer", "visibility", "visible");
         }
       }
     }
     else {
-      // 데이터 없으면 숨기고 싶으면 이걸 풀면 됨
+      // 필요하면 숨기기
       // m_map->setLayoutProperty("carrotSpeedLayer", "visibility", "none");
     }
   }
-
 
   if (!locationd_valid) {
     setError(tr("Waiting for GPS(APN)"));
