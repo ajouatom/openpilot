@@ -106,7 +106,7 @@ UIState::UIState(QObject *parent) : QObject(parent) {
     "wideRoadCameraState", "managerState", "selfdriveState", "longitudinalPlan",
     "longitudinalPlan",
     "carControl", "carrotMan", "liveTorqueParameters", "lateralPlan", "liveParameters",
-    "navRoute", "navInstruction", "navInstructionCarrot", gps_service.c_str(), "liveDelay",
+    "navRoute", "navInstruction", "navInstructionCarrot", gps_service, "liveDelay",
     "peripheralState",
   });
   prime_state = new PrimeState(this);
