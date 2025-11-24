@@ -397,7 +397,7 @@ class CarrotMan:
       carrot_speed.invalidate_last_hit(window_s=2.0, action="clear")
     self.gas_pressed_count = max(0, self.gas_pressed_count - 1)
 
-    if now - self._last_viz_t > 1.0:   # 1Hz 정도
+    if now - self._last_viz_t > 0.5: # 2Hz
         self._last_viz_t = now
         viz_json = carrot_speed.export_cells_around(lat, lon, heading, ring=2, max_points=64)
         # 메모리 Params에 쓰는 게 좋음 (디스크 말고)
