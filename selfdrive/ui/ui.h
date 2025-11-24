@@ -98,7 +98,7 @@ public:
   float show_brightness_ratio = 1.0;
   int show_brightness_timer = 20;
 
-  std:string gps;
+  auto gps;
 
 signals:
   void uiUpdate(const UIState &s);
