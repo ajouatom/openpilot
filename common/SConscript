@@ -5,7 +5,7 @@ common_libs = [
   'swaglog.cc',
   'util.cc',
   'watchdog.cc',
-  'ratekeeper.cc'
+  'ratekeeper.cc',
   'clutil.cc',
 ]
 
