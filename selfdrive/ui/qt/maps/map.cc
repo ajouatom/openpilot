@@ -311,9 +311,12 @@ void MapWindow::updateState(const UIState &s) {
           fc["type"] = "FeatureCollection";
           fc["features"] = features;
 
+          QJsonDocument fc_doc = QJsonDocument::fromVariant(fc);
+          QByteArray fc_bytes = fc_doc.toJson(QJsonDocument::Compact);
+
           QVariantMap src;
           src["type"] = "geojson";
-          src["data"] = fc;   // ★ 문자열이 아니라 QVariantMap 트리
+          src["data"] = fc_bytes;
           m_map->updateSource("carrotSpeedSource", src);
           m_map->setLayoutProperty("carrotSpeedLayer", "visibility", "visible");
         }
