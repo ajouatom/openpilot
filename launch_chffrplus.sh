@@ -88,6 +88,12 @@ function launch {
     echo "shapely installing."
     pip install shapely
   fi
+  if python -c "import kaitaistruct" > /dev/null 2>&1; then
+    echo "kaitaistruct already installed."
+  else
+    echo "kaitaistruct installing."
+    pip install kaitaistruct
+  fi
 
   # events language init
   LANG=$(cat /data/params/d/LanguageSetting)
