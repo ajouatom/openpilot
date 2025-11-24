@@ -98,15 +98,18 @@ void UIState::updateStatus() {
 }
 
 UIState::UIState(QObject *parent) : QObject(parent) {
+  bool ublox_avaliable = Params().getBool("UbloxAvailable")
+  std::string gps_service = (ublox_avaliable) ? "gpsLocationExternal" : "gpsLocation";
   sm = std::make_unique<SubMaster>(std::vector<const char*>{
     "modelV2", "controlsState", "liveCalibration", "radarState", "deviceState",
     "pandaStates", "carParams", "driverMonitoringState", "carState", "driverStateV2",
     "wideRoadCameraState", "managerState", "selfdriveState", "longitudinalPlan",
     "longitudinalPlan",
     "carControl", "carrotMan", "liveTorqueParameters", "lateralPlan", "liveParameters",
-    "navRoute", "navInstruction", "navInstructionCarrot", "liveLocationKalman", "liveDelay",
+    "navRoute", "navInstruction", "navInstructionCarrot", gps_service.c_str(), "liveDelay",
     "peripheralState",
   });
+  gps = (ublox_avaliable)? sm[gps_service].getGpsLocationExternal() : sm[gps_service].getGpsLocation();
   prime_state = new PrimeState(this);
   language = QString::fromStdString(Params().get("LanguageSetting"));
 

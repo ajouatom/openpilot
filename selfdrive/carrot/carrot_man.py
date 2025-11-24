@@ -24,6 +24,8 @@ from opendbc.car.common.conversions import Conversions as CV
 from openpilot.selfdrive.carrot.carrot_serv import CarrotServ
 from openpilot.selfdrive.carrot.carrot_speed import CarrotSpeed
 
+from openpilot.common.gps import get_gps_location_service
+
 try:
   from shapely.geometry import LineString
   SHAPELY_AVAILABLE = True
@@ -186,7 +188,8 @@ class CarrotMan:
     print("************************************************CarrotMan init************************************************")
     self.params = Params()
     self.params_memory = Params("/dev/shm/params")
-    self.sm = messaging.SubMaster(['deviceState', 'carState', 'controlsState', 'radarState', 'longitudinalPlan', 'modelV2', 'selfdriveState', 'carControl', 'navRouteNavd', 'liveLocationKalman', 'navInstruction'])
+    self.gps_location_service = get_gps_location_service(self.params)
+    self.sm = messaging.SubMaster(['deviceState', 'carState', 'controlsState', 'radarState', 'longitudinalPlan', 'modelV2', 'selfdriveState', 'carControl', 'navRouteNavd', self.gps_location_service, 'navInstruction'])
     self.pm = messaging.PubMaster(['carrotMan', "navRoute", "navInstructionCarrot"])
 
     self.carrot_serv = CarrotServ()
@@ -287,7 +290,7 @@ class CarrotMan:
 
         #print("coords=", coords)
         #print("curvatures=", curvatures)
-        self.carrot_serv.update_navi(remote_ip, self.sm, self.pm, vturn_speed, coords, distances, route_speed)
+        self.carrot_serv.update_navi(remote_ip, self.sm, self.pm, vturn_speed, coords, distances, route_speed, self.gps_location_service)
 
         if phone_gps_frame != self.carrot_serv.phone_gps_frame:
           phone_gps_frame = self.carrot_serv.phone_gps_frame

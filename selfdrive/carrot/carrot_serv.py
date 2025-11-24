@@ -19,6 +19,7 @@ from openpilot.common.filter_simple import MyMovingAverage
 from openpilot.system.hardware import PC, TICI
 from openpilot.selfdrive.navd.helpers import Coordinate
 from opendbc.car.common.conversions import Conversions as CV
+from openpilot.common.gps import get_gps_location_service
 
 nav_type_mapping = {
   12: ("turn", "left", 1),
@@ -644,15 +645,14 @@ class CarrotServ:
       self.xSpdType = -1
       self.xSpdDist = 0
 
-  def _update_gps(self, v_ego, sm):
-    llk = 'liveLocationKalman'
-    location = sm[llk]
+  def _update_gps(self, v_ego, sm, gps_service):
+    gps = sm[gps_service]
     #print(f"location = {sm.valid[llk]}, {sm.updated[llk]}, {sm.recv_frame[llk]}, {sm.recv_time[llk]}")
     if not sm.updated['carState'] or not sm.updated['carControl']: # or not sm.updated[llk]:
       return self.nPosAngle
     CS = sm['carState']
     CC = sm['carControl']
-    self.gps_valid = (location.status == log.LiveLocationKalman.Status.valid) and location.positionGeodetic.valid
+    self.gps_valid = sm.updated[gps_service] and gps.hasFix
 
     now = time.monotonic()
     gps_updated_phone = (now - self.last_update_gps_time_phone) < 3
@@ -661,8 +661,8 @@ class CarrotServ:
     bearing = self.nPosAngle
     if gps_updated_phone:
       self.bearing_offset = 0.0
-    elif sm.valid[llk]:
-      bearing = math.degrees(location.calibratedOrientationNED.value[2])
+    elif self.gps_valid:
+      bearing = gps.bearingDeg
       if self.gps_valid:
         self.bearing_offset = 0.0
       elif self.active_carrot > 0:
@@ -677,8 +677,8 @@ class CarrotServ:
     external_gps_update_timedout = not (gps_updated_phone or gps_updated_navi)
     #print(f"gps_valid = {self.gps_valid}, bearing = {bearing:.1f}, pos = {location.positionGeodetic.value[0]:.6f}, {location.positionGeodetic.value[1]:.6f}")
     if self.gps_valid and external_gps_update_timedout:    # 내부GPS가 자동하고 carrotman으로부터 gps신호가 없는경우
-      self.vpPosPointLatNavi = location.positionGeodetic.value[0]
-      self.vpPosPointLonNavi = location.positionGeodetic.value[1]
+      self.vpPosPointLatNavi = gps.latitude
+      self.vpPosPointLonNavi = gps.longitude
       self.last_calculate_gps_time = now #sm.recv_time[llk]
     elif gps_updated_navi:  # carrot navi로부터 gps신호가 수신되는 경우..
       if abs(self.bearing_measured - bearing) < 0.1:
@@ -856,7 +856,7 @@ class CarrotServ:
         self.xSpdDist = distance
         self.xSpdType =xSpdType
 
-  def update_navi(self, remote_ip, sm, pm, vturn_speed, coords, distances, route_speed):
+  def update_navi(self, remote_ip, sm, pm, vturn_speed, coords, distances, route_speed, gps_service):
 
     self.debugText = ""
     self.update_params()
@@ -877,7 +877,7 @@ class CarrotServ:
     road_speed_limit_changed = True if self.nRoadLimitSpeed != self.nRoadLimitSpeed_last else False
     self.nRoadLimitSpeed_last = self.nRoadLimitSpeed
     #self.bearing = self.nPosAngle #self._update_gps(v_ego, sm)
-    self.bearing = self._update_gps(v_ego, sm)
+    self.bearing = self._update_gps(v_ego, sm, gps_service)
 
     self.xSpdDist = max(self.xSpdDist - delta_dist, -1000)
     self.xDistToTurn = self.xDistToTurn - delta_dist

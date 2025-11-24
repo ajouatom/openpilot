@@ -13,7 +13,7 @@ from openpilot.common.realtime import Ratekeeper
 
 
 MOCK_GENERATOR = {
-  "livePose": generate_livePose
+  "livePose": generate_livePose,
   "liveLocationKalman": generate_liveLocationKalman
 }
 

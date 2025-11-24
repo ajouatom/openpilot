@@ -392,17 +392,16 @@ void MapWindow::updateState(const UIState &s) {
     updateDestinationMarker();
   }
   if (loaded_once && (sm.rcv_frame("modelV2") != model_rcv_frame)) {
-    auto locationd_location = sm["liveLocationKalman"].getLiveLocationKalman();
-    if (locationd_location.getGpsOK()) {
-      //auto carrot_man = sm["carrotMan"].getCarrotMan();
+    /*
+    if (gps.getHasFix()) {
       auto model_path = model_to_collection(locationd_location.getCalibratedOrientationECEF(), locationd_location.getPositionECEF(), sm["modelV2"].getModelV2().getPosition(), carrotMan.getXPosLat(), carrotMan.getXPosLon());
-      //auto model_path = model_to_collection(sm["modelV2"].getModelV2().getPosition(), carrotMan.getXPosLat(), carrotMan.getXPosLon(), carrotMan.getXPosAngle());
       QMapLibre::Feature model_path_feature(QMapLibre::Feature::LineStringType, model_path, {}, {});
       QVariantMap modelV2Path;
       modelV2Path["type"] = "geojson";
       modelV2Path["data"] = QVariant::fromValue<QMapLibre::Feature>(model_path_feature);
       m_map->updateSource("modelPathSource", modelV2Path);
     }
+    */
     model_rcv_frame = sm.rcv_frame("modelV2");
   }
 }

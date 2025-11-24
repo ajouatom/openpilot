@@ -48,7 +48,7 @@ class Controls:
 
     self.sm = messaging.SubMaster(['liveDelay', 'liveParameters', 'liveTorqueParameters', 'modelV2', 'selfdriveState',
                                    'liveCalibration', 'livePose', 'longitudinalPlan', 'carState', 'carOutput',
-                                   'carrotMan', 'lateralPlan', 'radarState', 'liveLocationKalman', 
+                                   'carrotMan', 'lateralPlan', 'radarState'
                                    'driverMonitoringState', 'onroadEvents', 'driverAssistance'], poll='selfdriveState')
     self.pm = messaging.PubMaster(['carControl', 'controlsState'])
 
@@ -180,7 +180,7 @@ class Controls:
     actuators.curvature = float(self.desired_curvature)
     steer, steeringAngleDeg, lac_log = self.LaC.update(CC.latActive, CS, self.VM, lp,
                                                        self.steer_limited_by_controls, self.desired_curvature,
-                                                       self.sm['liveLocationKalman'], curvature_limited,
+                                                       CC, curvature_limited,
                                                        model_data=self.sm['modelV2'])
     actuators.torque = float(steer)
     actuators.steeringAngleDeg = float(steeringAngleDeg)
@@ -237,23 +237,16 @@ class Controls:
 
     # Orientation and angle rates can be useful for carcontroller
     # Only calibrated (car) frame is relevant for the carcontroller
-    #if self.calibrated_pose is not None:
-    #  CC.orientationNED = self.calibrated_pose.orientation.xyz.tolist()
-    #  CC.angularVelocity = self.calibrated_pose.angular_velocity.xyz.tolist()
+    if self.calibrated_pose is not None:
+      CC.orientationNED = self.calibrated_pose.orientation.xyz.tolist()
+      CC.angularVelocity = self.calibrated_pose.angular_velocity.xyz.tolist()
 
-    orientation_value = list(self.sm['liveLocationKalman'].calibratedOrientationNED.value)
-    if len(orientation_value) > 2:
-      CC.orientationNED = orientation_value
-    angular_rate_value = list(self.sm['liveLocationKalman'].angularVelocityCalibrated.value)
-    if len(angular_rate_value) > 2:
-      CC.angularVelocity = angular_rate_value
-
-    acceleration_value = list(self.sm['liveLocationKalman'].accelerationCalibrated.value)
-    if len(acceleration_value) > 2:
-      if abs(acceleration_value[0]) > 16.0:
-        print("Collision detected. disable openpilot, restart")
-        self.params.put_bool("OpenpilotEnabledToggle", False)
-        self.params.put_int("SoftRestartTriggered", 1)
+    #acceleration_value = list(self.sm['liveLocationKalman'].accelerationCalibrated.value)
+    #if len(acceleration_value) > 2:
+    #  if abs(acceleration_value[0]) > 16.0:
+    #    print("Collision detected. disable openpilot, restart")
+    #    self.params.put_bool("OpenpilotEnabledToggle", False)
+    #    self.params.put_int("SoftRestartTriggered", 1)
 
     CC.cruiseControl.override = CC.enabled and not CC.longActive and self.CP.openpilotLongitudinalControl
     CC.cruiseControl.cancel = CS.cruiseState.enabled and (not CC.enabled or not self.CP.pcmCruise)

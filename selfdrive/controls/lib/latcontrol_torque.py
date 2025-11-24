@@ -139,7 +139,7 @@ class LatControlTorque(LatControl):
     self.torque_params.latAccelOffset = latAccelOffset
     self.torque_params.friction = friction
 
-  def update(self, active, CS, VM, params, steer_limited_by_controls, desired_curvature, llk, curvature_limited, model_data=None):
+  def update(self, active, CS, VM, params, steer_limited_by_controls, desired_curvature, CC, curvature_limited, model_data=None):
     self.frame += 1
     if self.frame % 10 == 0:
       lateralTorqueCustom = self.params.get_int("LateralTorqueCustom")
@@ -181,7 +181,7 @@ class LatControlTorque(LatControl):
           actual_curvature_rate = -VM.calc_curvature(math.radians(CS.steeringRateDeg), CS.vEgo, 0.0)
           actual_lateral_jerk = actual_curvature_rate * CS.vEgo ** 2
       else:
-        actual_curvature_llk = llk.angularVelocityCalibrated.value[2] / CS.vEgo
+        actual_curvature_llk = CC.angularVelocity[2] / CS.vEgo #llk.angularVelocityCalibrated.value[2] / CS.vEgo
         actual_curvature = np.interp(CS.vEgo, [2.0, 5.0], [actual_curvature_vm, actual_curvature_llk])
         curvature_deadzone = 0.0
       desired_lateral_accel = desired_curvature * CS.vEgo ** 2
@@ -219,8 +219,8 @@ class LatControlTorque(LatControl):
         # update past data
         pitch = 0
         roll = params.roll
-        if len(llk.calibratedOrientationNED.value) > 1:
-          pitch = self.pitch.update(llk.calibratedOrientationNED.value[1])
+        if len(CC.orientionNED) > 1:
+          pitch = self.pitch.update(CC.orientationNED[1])
           roll = roll_pitch_adjust(roll, pitch)
         self.roll_deque.append(roll)
         self.lateral_accel_desired_deque.append(desired_lateral_accel)
