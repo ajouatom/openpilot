@@ -399,6 +399,7 @@ class CarrotMan:
         viz_json = carrot_speed.export_cells_around(lat, lon, ring=1, max_points=64)
         # 메모리 Params에 쓰는 게 좋음 (디스크 말고)
         self.params_memory.put_nonblocking("CarrotSpeedViz", viz_json)
+        print(viz_json)
 
     carrot_speed.maybe_save()
 
