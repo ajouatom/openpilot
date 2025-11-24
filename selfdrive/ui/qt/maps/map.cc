@@ -152,12 +152,15 @@ void MapWindow::initLayers() {
 
     if (!m_map->sourceExists("carrotSpeedSource")) {
       qDebug() << "Initializing carrotSpeedSource";
+
+      // 빈 FeatureCollection GeoJSON
+      QJsonObject fc;
+      fc["type"] = "FeatureCollection";
+      fc["features"] = QJsonArray();
+
       QVariantMap src;
       src["type"] = "geojson";
-
-      QMapLibre::FeatureCollection empty_fc;
-      src["data"] = QVariant::fromValue<QMapLibre::FeatureCollection>(empty_fc);
-
+      src["data"] = QString(QJsonDocument(fc).toJson(QJsonDocument::Compact));
       m_map->addSource("carrotSpeedSource", src);
     }
 
@@ -168,10 +171,11 @@ void MapWindow::initLayers() {
       layer["source"] = "carrotSpeedSource";
       m_map->addLayer("carrotSpeedLayer", layer);
 
-      // speed 값을 텍스트로 표시
+      // properties.speed 를 텍스트로 표시
       m_map->setLayoutProperty("carrotSpeedLayer", "text-field",
-        QVariant::fromValue(QVariantList{ "to-string",
-                                         QVariantList{"get", "speed"} }));
+        QVariant::fromValue(QVariantList{
+          "to-string", QVariantList{"get", "speed"}
+          }));
       m_map->setLayoutProperty("carrotSpeedLayer", "text-size", 14.0);
       m_map->setLayoutProperty("carrotSpeedLayer", "text-offset", QVariantList{ 0.0, -1.5 });
       m_map->setLayoutProperty("carrotSpeedLayer", "text-anchor", "top");
@@ -260,11 +264,11 @@ void MapWindow::updateState(const UIState &s) {
   initLayers();
 
   {
-    // Params에서 JSON 문자열 읽기
-    std::string raw = params_memory.get("CarrotSpeedViz");
+    std::string raw = params_mem.get("CarrotSpeedViz");
     if (!raw.empty()) {
       QString qraw = QString::fromStdString(raw);
-      // 같은 내용이면 파싱 스킵 (선택사항)
+
+      // 같은 내용이면 파싱 생략 (옵션)
       if (qraw != last_viz_raw) {
         last_viz_raw = qraw;
 
@@ -274,36 +278,51 @@ void MapWindow::updateState(const UIState &s) {
           QJsonObject obj = doc.object();
           QJsonArray pts = obj["pts"].toArray();
 
-          QMapLibre::FeatureCollection fc;
-          fc.reserve(pts.size());
-
+          // GeoJSON FeatureCollection 구성
+          QJsonArray features;
           for (const QJsonValue& v : pts) {
             QJsonArray arr = v.toArray();
             if (arr.size() < 3) continue;
+
             double plat = arr[0].toDouble();
             double plon = arr[1].toDouble();
             double spd = arr[2].toDouble();
 
-            QMapLibre::Coordinate coord(plat, plon);
-            auto geom = coordinate_to_collection(coord);
+            // GeoJSON Feature
+            QJsonObject feature;
+            feature["type"] = "Feature";
 
-            QVariantMap props;
-            props["speed"] = (int)std::round(spd);
+            // geometry: Point (주의: GeoJSON은 [lon, lat] 순서)
+            QJsonObject geom;
+            geom["type"] = "Point";
+            QJsonArray coords;
+            coords.append(plon);
+            coords.append(plat);
+            geom["coordinates"] = coords;
+            feature["geometry"] = geom;
 
-            QMapLibre::Feature f(QMapLibre::Feature::PointType, geom, props, {});
-            fc.push_back(f);
+            // properties: speed
+            QJsonObject props;
+            props["speed"] = static_cast<int>(std::round(spd));
+            feature["properties"] = props;
+
+            features.append(feature);
           }
+
+          QJsonObject fc;
+          fc["type"] = "FeatureCollection";
+          fc["features"] = features;
 
           QVariantMap src;
           src["type"] = "geojson";
-          src["data"] = QVariant::fromValue<QMapLibre::FeatureCollection>(fc);
+          src["data"] = QString(QJsonDocument(fc).toJson(QJsonDocument::Compact));
           m_map->updateSource("carrotSpeedSource", src);
           m_map->setLayoutProperty("carrotSpeedLayer", "visibility", "visible");
         }
       }
     }
     else {
-      // 데이터 없으면 감추고 싶으면
+      // 데이터 없으면 숨기고 싶으면 이걸 풀면 됨
       // m_map->setLayoutProperty("carrotSpeedLayer", "visibility", "none");
     }
   }
