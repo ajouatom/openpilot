@@ -652,7 +652,7 @@ class CarrotServ:
       return self.nPosAngle
     CS = sm['carState']
     CC = sm['carControl']
-    self.gps_valid = sm.updated[gps_service] and gps.hasFix
+    self.gps_valid = sm.updated[gps_service] and gps.hasFix and False # 일단 내부GPS는 사용안함.
 
     now = time.monotonic()
     gps_updated_phone = (now - self.last_update_gps_time_phone) < 3
@@ -1294,7 +1294,7 @@ class CarrotServ:
       self.phone_gps_accuracy = float(json.get("accuracy", 0))
       if self.phone_gps_accuracy < 15.0:
         self.phone_gps_frame += 1
-      if (now - self.last_update_gps_time_navi) > 3.0:
+      if (now - self.last_update_gps_time_navi) > 3.0 or True: # 일단 phone gps로 강제 업데이트
         self.vpPosPointLatNavi = self.phone_latitude
         self.vpPosPointLonNavi = self.phone_longitude
 
