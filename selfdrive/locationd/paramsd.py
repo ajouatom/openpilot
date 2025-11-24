@@ -293,8 +293,6 @@ def main():
         if sm.updated[which]:
           t = sm.logMonoTime[which] * 1e-9
           learner.handle_log(t, which, sm[which])
-        else:
-          print(which)
 
     if sm.updated[gps_location_service]:
       gps = sm[gps_location_service]
