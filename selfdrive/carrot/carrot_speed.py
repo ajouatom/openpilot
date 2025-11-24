@@ -128,6 +128,7 @@ class CarrotSpeed:
         return None, None
     # ----- 공용 API -----
     def export_cells_around(self, lat: float, lon: float,
+                            heading_deg: float,
                             ring: int = 1, max_points: int = 64) -> str:
         """
         현재 lat, lon 기준 주변 그리드(ring 범위)에서
@@ -135,6 +136,7 @@ class CarrotSpeed:
         Params("CarrotSpeedViz")에 그대로 넣을 용도.
         """
         gy0, gx0 = quantize_1e4(lat, lon)
+        b0 = heading_to_bucket(heading_deg)
         pts = []
 
         with self._lock:
@@ -146,20 +148,28 @@ class CarrotSpeed:
                     if not arr:
                         continue
 
-                    # 각 버킷 중 값 있는 것만
-                    for b in range(self.buckets):
-                        v, ts = arr[b]
-                        if v is None:
-                            continue
-
+                    # 먼저 exact bucket(b0)
+                    v, ts = arr[b0]
+                    if v is not None:
                         cell_lat = (gy + 0.5) * 1e-4
                         cell_lon = (gx + 0.5) * 1e-4
                         pts.append([cell_lat, cell_lon, float(v)])
                         if len(pts) >= max_points:
-                            return json.dumps({"pts": pts}, separators=(",", ":"))
+                            return json.dumps({"pts": pts}, separators=(",",":"))
 
-        return json.dumps({"pts": pts}, separators=(",", ":"))
-    
+                    # 없다면 좌/우
+                    for b in ((b0 - 1) % self.buckets, (b0 + 1) % self.buckets):
+                        v, ts = arr[b]
+                        if v is None:
+                            continue
+                        cell_lat = (gy + 0.5) * 1e-4
+                        cell_lon = (gx + 0.5) * 1e-4
+                        pts.append([cell_lat, cell_lon, float(v)])
+                        if len(pts) >= max_points:
+                            return json.dumps({"pts": pts}, separators=(",",":"))
+
+        return json.dumps({"pts": pts}, separators=(",",":"))
+
     def add_sample(self, lat: float, lon: float, heading_deg: float, speed_signed: float):
         """
         단일 speed(부호 포함) 저장. 한 셀만 기록.

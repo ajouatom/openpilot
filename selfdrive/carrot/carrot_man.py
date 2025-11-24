@@ -399,7 +399,7 @@ class CarrotMan:
 
     if now - self._last_viz_t > 1.0:   # 1Hz 정도
         self._last_viz_t = now
-        viz_json = carrot_speed.export_cells_around(lat, lon, ring=2, max_points=64)
+        viz_json = carrot_speed.export_cells_around(lat, lon, heading, ring=2, max_points=64)
         # 메모리 Params에 쓰는 게 좋음 (디스크 말고)
         self.params_memory.put_nonblocking("CarrotSpeedViz", viz_json)
 
