@@ -393,6 +393,7 @@ void MapWindow::updateState(const UIState &s) {
   }
   if (loaded_once && (sm.rcv_frame("modelV2") != model_rcv_frame)) {
     /*
+    gps = (ublox_avaliable)? sm[gps_service].getGpsLocationExternal() : sm[gps_service].getGpsLocation();
     if (gps.getHasFix()) {
       auto model_path = model_to_collection(locationd_location.getCalibratedOrientationECEF(), locationd_location.getPositionECEF(), sm["modelV2"].getModelV2().getPosition(), carrotMan.getXPosLat(), carrotMan.getXPosLon());
       QMapLibre::Feature model_path_feature(QMapLibre::Feature::LineStringType, model_path, {}, {});
