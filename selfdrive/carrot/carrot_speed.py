@@ -22,8 +22,8 @@ from openpilot.common.params import Params
 # ---------- 지오/도우미 ----------
 
 def quantize_1e4(lat: float, lon: float) -> Tuple[int, int]:
-    gy = int(math.floor(lat * 1e4))
-    gx = int(math.floor(lon * 1e4))
+    gy = int(math.floor(lat * 1e4 + 0.5))
+    gx = int(math.floor(lon * 1e4 + 0.5))
     return gy, gx
 
 def heading_to_bucket(heading_deg: float) -> int:
