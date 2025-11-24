@@ -264,7 +264,7 @@ void MapWindow::updateState(const UIState &s) {
   initLayers();
 
   {
-    std::string raw = params_mem.get("CarrotSpeedViz");
+    std::string raw = params_memory.get("CarrotSpeedViz");
     if (!raw.empty()) {
       QString qraw = QString::fromStdString(raw);
 
