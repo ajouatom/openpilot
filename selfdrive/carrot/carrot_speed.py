@@ -127,7 +127,39 @@ class CarrotSpeed:
             return float(v), bi
         return None, None
     # ----- 공용 API -----
+    def export_cells_around(self, lat: float, lon: float,
+                            ring: int = 1, max_points: int = 64) -> str:
+        """
+        현재 lat, lon 기준 주변 그리드(ring 범위)에서
+        값이 있는 셀들을 (lat, lon, speed) 리스트로 JSON으로 반환.
+        Params("CarrotSpeedViz")에 그대로 넣을 용도.
+        """
+        gy0, gx0 = quantize_1e4(lat, lon)
+        pts = []
 
+        with self._lock:
+            for dy in range(-ring, ring + 1):
+                for dx in range(-ring, ring + 1):
+                    gy = gy0 + dy
+                    gx = gx0 + dx
+                    arr = self._cells.get((gy, gx))
+                    if not arr:
+                        continue
+
+                    # 각 버킷 중 값 있는 것만
+                    for b in range(self.buckets):
+                        v, ts = arr[b]
+                        if v is None:
+                            continue
+
+                        cell_lat = (gy + 0.5) * 1e-4
+                        cell_lon = (gx + 0.5) * 1e-4
+                        pts.append([cell_lat, cell_lon, float(v)])
+                        if len(pts) >= max_points:
+                            return json.dumps({"pts": pts}, separators=(",", ":"))
+
+        return json.dumps({"pts": pts}, separators=(",", ":"))
+    
     def add_sample(self, lat: float, lon: float, heading_deg: float, speed_signed: float):
         """
         단일 speed(부호 포함) 저장. 한 셀만 기록.

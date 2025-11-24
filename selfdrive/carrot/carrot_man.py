@@ -273,6 +273,8 @@ class CarrotMan:
     self.v_cruise_change = 0
     self._last_vt = 0.0
     self.gas_pressed_count = 0
+    self._last_viz_t = 0.0
+
     while self.is_running:
       try:
         self.sm.update(0)
@@ -390,8 +392,14 @@ class CarrotMan:
     self._last_vt = vt
     if gas_pressed and a_ego < -0.5: #self._last_vt < 0.0:
       carrot_speed.invalidate_last_hit(window_s=2.0, action="clear")
-
     self.gas_pressed_count = max(0, self.gas_pressed_count - 1)
+
+    if now - self._last_viz_t > 1.0:   # 1Hz 정도
+        self._last_viz_t = now
+        viz_json = carrot_speed.export_cells_around(lat, lon, ring=1, max_points=64)
+        # 메모리 Params에 쓰는 게 좋음 (디스크 말고)
+        self.params_memory.put_nonblocking("CarrotSpeedViz", viz_json)
+
     carrot_speed.maybe_save()
 
 

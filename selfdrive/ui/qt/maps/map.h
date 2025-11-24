@@ -69,6 +69,7 @@ private:
   MapInstructions* map_instructions;
   MapETA* map_eta;
 
+
   // Blue with normal nav, green when nav is input into the model
   QColor getNavPathColor(bool nav_enabled) {
     return nav_enabled ? QColor("#31ee73") : QColor("#31a1ee");
@@ -78,9 +79,11 @@ private:
   void updateDestinationMarker();
   uint64_t route_rcv_frame = 0;
 
-  // FrogPilot variables
   Params params;
   uint64_t model_rcv_frame = 0;
+
+  Params	params_memory{ "/dev/shm/params" };
+  QString last_viz_raw;
 
   float MAX_ZOOM = 17;  // carrot
 private slots:

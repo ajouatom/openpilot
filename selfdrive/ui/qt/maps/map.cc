@@ -4,6 +4,9 @@
 #include <eigen3/Eigen/Dense>
 
 #include <QDebug>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 
 #include "selfdrive/ui/qt/maps/map_helpers.h"
 #include "selfdrive/ui/qt/util.h"
@@ -147,6 +150,34 @@ void MapWindow::initLayers() {
       20, 0
     };
 
+    if (!m_map->sourceExists("carrotSpeedSource")) {
+      qDebug() << "Initializing carrotSpeedSource";
+      QVariantMap src;
+      src["type"] = "geojson";
+
+      QMapLibre::FeatureCollection empty_fc;
+      src["data"] = QVariant::fromValue<QMapLibre::FeatureCollection>(empty_fc);
+
+      m_map->addSource("carrotSpeedSource", src);
+    }
+
+    if (!m_map->layerExists("carrotSpeedLayer")) {
+      qDebug() << "Initializing carrotSpeedLayer";
+      QVariantMap layer;
+      layer["type"] = "symbol";
+      layer["source"] = "carrotSpeedSource";
+      m_map->addLayer("carrotSpeedLayer", layer);
+
+      // speed 값을 텍스트로 표시
+      m_map->setLayoutProperty("carrotSpeedLayer", "text-field",
+        QVariant::fromValue(QVariantList{ "to-string",
+                                         QVariantList{"get", "speed"} }));
+      m_map->setLayoutProperty("carrotSpeedLayer", "text-size", 14.0);
+      m_map->setLayoutProperty("carrotSpeedLayer", "text-offset", QVariantList{ 0.0, -1.5 });
+      m_map->setLayoutProperty("carrotSpeedLayer", "text-anchor", "top");
+      m_map->setLayoutProperty("carrotSpeedLayer", "icon-allow-overlap", true);
+    }
+
     m_map->setPaintProperty("buildingsLayer", "fill-extrusion-color", QColor("grey"));
     m_map->setPaintProperty("buildingsLayer", "fill-extrusion-opacity", fillExtrusionOpacity);
     m_map->setPaintProperty("buildingsLayer", "fill-extrusion-height", fillExtrusionHight);
@@ -227,6 +258,56 @@ void MapWindow::updateState(const UIState &s) {
   }
 
   initLayers();
+
+  {
+    // Params에서 JSON 문자열 읽기
+    std::string raw = params_memory.get("CarrotSpeedViz");
+    if (!raw.empty()) {
+      QString qraw = QString::fromStdString(raw);
+      // 같은 내용이면 파싱 스킵 (선택사항)
+      if (qraw != last_viz_raw) {
+        last_viz_raw = qraw;
+
+        QJsonParseError err;
+        QJsonDocument doc = QJsonDocument::fromJson(qraw.toUtf8(), &err);
+        if (err.error == QJsonParseError::NoError && doc.isObject()) {
+          QJsonObject obj = doc.object();
+          QJsonArray pts = obj["pts"].toArray();
+
+          QMapLibre::FeatureCollection fc;
+          fc.reserve(pts.size());
+
+          for (const QJsonValue& v : pts) {
+            QJsonArray arr = v.toArray();
+            if (arr.size() < 3) continue;
+            double plat = arr[0].toDouble();
+            double plon = arr[1].toDouble();
+            double spd = arr[2].toDouble();
+
+            QMapLibre::Coordinate coord(plat, plon);
+            auto geom = coordinate_to_collection(coord);
+
+            QVariantMap props;
+            props["speed"] = (int)std::round(spd);
+
+            QMapLibre::Feature f(QMapLibre::Feature::PointType, geom, props, {});
+            fc.push_back(f);
+          }
+
+          QVariantMap src;
+          src["type"] = "geojson";
+          src["data"] = QVariant::fromValue<QMapLibre::FeatureCollection>(fc);
+          m_map->updateSource("carrotSpeedSource", src);
+          m_map->setLayoutProperty("carrotSpeedLayer", "visibility", "visible");
+        }
+      }
+    }
+    else {
+      // 데이터 없으면 감추고 싶으면
+      // m_map->setLayoutProperty("carrotSpeedLayer", "visibility", "none");
+    }
+  }
+
 
   if (!locationd_valid) {
     setError(tr("Waiting for GPS(APN)"));
