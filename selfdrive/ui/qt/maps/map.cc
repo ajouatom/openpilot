@@ -178,8 +178,11 @@ void MapWindow::initLayers() {
       m_map->setLayoutProperty("carrotSpeedLayer", "text-offset", QVariantList{ 0.0, -1.5 });
       m_map->setLayoutProperty("carrotSpeedLayer", "text-anchor", "top");
       m_map->setLayoutProperty("carrotSpeedLayer", "icon-allow-overlap", true);
+      m_map->setPaintProperty("carrotSpeedLayer", "text-color", QColor("white"));
+      m_map->setPaintProperty("carrotSpeedLayer", "text-halo-color", QColor("black"));
+      m_map->setPaintProperty("carrotSpeedLayer", "text-halo-width", 1.0);
     }
-    m_map->setPaintProperty("buildingsLayer", "fill-extrusion-color", QColor("white"));
+    m_map->setPaintProperty("buildingsLayer", "fill-extrusion-color", QColor("grey"));
     m_map->setPaintProperty("buildingsLayer", "fill-extrusion-opacity", fillExtrusionOpacity);
     m_map->setPaintProperty("buildingsLayer", "fill-extrusion-height", fillExtrusionHight);
     m_map->setPaintProperty("buildingsLayer", "fill-extrusion-base", fillExtrusionBase);
