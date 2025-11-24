@@ -264,7 +264,7 @@ void MapWindow::updateState(const UIState &s) {
     std::string raw = params_memory.get("CarrotSpeedViz");
     if (!raw.empty()) {
       QString qraw = QString::fromStdString(raw);
-      printf("%s\n", qraw.toStdString().c_str());
+      //printf("%s\n", qraw.toStdString().c_str());
       if (qraw != last_viz_raw) {
         last_viz_raw = qraw;
 
