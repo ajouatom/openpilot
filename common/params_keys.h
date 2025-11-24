@@ -283,7 +283,7 @@ inline static std::unordered_map<std::string, uint32_t> keys = {
     {"MuteSeatbelt", PERSISTENT},
     {"CarrotException", CLEAR_ON_MANAGER_START},
     {"CarrotSpeed", PERSISTENT},
-    {"CarrotSpeedViz", PERSISTENT | CLEAR_ON_OFFROAD_TRANSITION }
+    {"CarrotSpeedViz", PERSISTENT | CLEAR_ON_OFFROAD_TRANSITION },
     {"CarrotSpeedTable", PERSISTENT},
     {"CarName", PERSISTENT},
     {"EVTable", PERSISTENT},
