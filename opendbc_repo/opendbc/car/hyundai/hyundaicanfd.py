@@ -517,10 +517,11 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         values["LKA_ICON"] = 4 if lat_active else 3 if lat_enabled else 0
         values["FCA_ALT_ICON"] = 0
 
-        if values["ALERTS_2"] in [1, 2, 5]:
+        if values["ALERTS_2"] in [1, 2, 5, 10, 22]:  # 10,22: 운전자모니터 알람/경고
           values["ALERTS_2"] = 0
           values["DAW_ICON"] = 0
 
+        values["SOUNDS_1"] = 0  # 운전자모니터경고음.
         values["SOUNDS_2"] = 0  # 2: STEER중지 경고후에도 사운드가 나옴.
         values["SOUNDS_4"] = 0  # 차선변경알림? 에이 그냥0으로..
 
