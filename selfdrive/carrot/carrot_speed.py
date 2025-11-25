@@ -116,7 +116,7 @@ class CarrotSpeed:
                     continue
                 yield gy + dy, gx + dx
 
-    def _try_cell_buckets_old(self, arr, b):
+    def _try_cell_bucket_old(self, arr, b):
         v, ts = arr[b]
         if v is None or ts is None:
             return None, None
