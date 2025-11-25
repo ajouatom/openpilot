@@ -174,13 +174,15 @@ void MapWindow::initLayers() {
       // properties.speed 를 텍스트로 표시 (토큰 방식)
       // "{speed}" 라고 쓰면 properties.speed 값을 문자열로 넣어줌
       m_map->setLayoutProperty("carrotSpeedLayer", "text-field", "{speed}");
-      m_map->setLayoutProperty("carrotSpeedLayer", "text-size", 20.0);
+      m_map->setLayoutProperty("carrotSpeedLayer", "text-size", 16.0);
       m_map->setLayoutProperty("carrotSpeedLayer", "text-offset", QVariantList{ 0.0, -1.5 });
       m_map->setLayoutProperty("carrotSpeedLayer", "text-anchor", "top");
       m_map->setLayoutProperty("carrotSpeedLayer", "icon-allow-overlap", true);
       m_map->setPaintProperty("carrotSpeedLayer", "text-color", QColor("white"));
       m_map->setPaintProperty("carrotSpeedLayer", "text-halo-color", QColor("black"));
       m_map->setPaintProperty("carrotSpeedLayer", "text-halo-width", 1.0);
+      m_map->setLayoutProperty("carrotSpeedLayer", "text-allow-overlap", true);
+
     }
     m_map->setPaintProperty("buildingsLayer", "fill-extrusion-color", QColor("grey"));
     m_map->setPaintProperty("buildingsLayer", "fill-extrusion-opacity", fillExtrusionOpacity);
