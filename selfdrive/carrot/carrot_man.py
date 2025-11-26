@@ -376,8 +376,8 @@ class CarrotMan:
       self.v_cruise_change = 0
 
     now = time.monotonic()
-    heading = self.carrot_serv.nPosAnglePhone
-    lat, lon = self.carrot_serv.estimate_position(self.carrot_serv.phone_latitude, self.carrot_serv.phone_longitude, heading, v_ego, now - self.carrot_serv.last_update_gps_time_phone)
+    heading = self.carrot_serv.bearing #nPosAnglePhone
+    lat, lon = self.carrot_serv.vpPosPointLat, self.carrot_serv.vpPosPointLon #self.carrot_serv.estimate_position(self.carrot_serv.phone_latitude, self.carrot_serv.phone_longitude, heading, v_ego, now - self.carrot_serv.last_update_gps_time_phone)
     vt = carrot_speed.query_target_dist(lat, lon, heading, 0.0)
     if self.v_cruise_change != 0:
       carrot_speed.add_sample(lat, lon, heading, self.v_cruise_last if self.v_cruise_change > 0 else (- self.v_cruise_last))
