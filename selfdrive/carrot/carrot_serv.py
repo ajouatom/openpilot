@@ -696,7 +696,7 @@ class CarrotServ:
     bearing_calculated = (bearing + self.bearing_offset) % 360
 
     dt = now - self.last_calculate_gps_time
-    #print(f"dt = {dt:.1f}, {self.vpPosPointLatNavi}, {self.vpPosPointLonNavi}")
+    print(f"dt = {dt:.1f}, {self.vpPosPointLatNavi}, {self.vpPosPointLonNavi}")
     if dt > 5.0:
       self.vpPosPointLat, self.vpPosPointLon = 0.0, 0.0
     elif dt == 0:
