@@ -34,6 +34,17 @@ def heading_to_bucket(heading_deg: float) -> int:
     if i > 7: return 7
     return i
 
+DIR_8 = {
+    0: ( 1,  0),  # 북
+    1: ( 1,  1),  # 북동
+    2: ( 0,  1),  # 동
+    3: (-1,  1),  # 남동
+    4: (-1,  0),  # 남
+    5: (-1, -1),  # 남서
+    6: ( 0, -1),  # 서
+    7: ( 1, -1),  # 북서
+}
+
 def project_point(lat: float, lon: float, heading_deg: float, distance_m: float) -> Tuple[float, float]:
     if distance_m <= 0.0:
         return lat, lon
@@ -170,7 +181,8 @@ class CarrotSpeed:
     def add_sample(self, lat: float, lon: float, heading_deg: float, speed_signed: float):
         """
         단일 speed(부호 포함) 저장.
-        - 현재 heading 버킷 b와 b±1 세 개 버킷 모두 같은 값으로 갱신.
+        - 기준 셀(현재 위치) + heading 기준 좌/우 1셀, 2셀까지 동일 speed 기록
+        - 각 셀 안에서는 heading 버킷 b와 b±1 세 개 버킷 모두 같은 값으로 갱신.
         - >0: 기존 음수/None도 교체, 기존 양수면 평균으로 완만하게 갱신.
         - <0: 항상 새 음수로 덮어쓰기(돌발 감속 우선).
         ==0: 무시
@@ -179,45 +191,66 @@ class CarrotSpeed:
         if v_in == 0.0:
             return
 
-        gy, gx = quantize_1e4(lat, lon)
+        # 현재 위치를 그리드로
+        gy0, gx0 = quantize_1e4(lat, lon)
         b = heading_to_bucket(heading_deg)
         now = self._now()
 
+        # bucket에 해당하는 전진 방향 그리드 벡터
+        dy_f, dx_f = DIR_8[b]
+
+        # heading 기준 좌/우 1셀, 2셀 (project_point 사용 X)
+        # 좌 = 전진벡터를 90° 회전 (dy,dx) -> (dx,-dy)
+        # 우 = 전진벡터를 -90° 회전 (dy,dx) -> (-dx,dy)
+        dy_l1, dx_l1 = dx_f, -dy_f
+        dy_r1, dx_r1 = -dx_f, dy_f
+
+        dy_l2, dx_l2 = 2 * dy_l1, 2 * dx_l1
+        dy_r2, dx_r2 = 2 * dy_r1, 2 * dx_r1
+
+        # 기록할 셀들: 중앙 + 좌/우 1칸 + 좌/우 2칸
+        target_cells = {
+            (gy0, gx0),
+            (gy0 + dy_l1, gx0 + dx_l1),
+            (gy0 + dy_r1, gx0 + dx_r1),
+            (gy0 + dy_l2, gx0 + dx_l2),
+            (gy0 + dy_r2, gx0 + dx_r2),
+        }
+
         with self._lock:
-            arr = self._ensure_cell(gy, gx)
+            for gy, gx in target_cells:
+                arr = self._ensure_cell(gy, gx)
 
-            # b, b-1, b+1 세 버킷 모두 같은 정책으로 업데이트
-            for off in (0, -1, +1):
-                bi = (b + off) % self.buckets
-                v_old, ts_old = arr[bi]
+                # b, b-1, b+1 세 버킷 모두 같은 정책으로 업데이트
+                for off in (0, -1, +1):
+                    bi = (b + off) % self.buckets
+                    v_old, ts_old = arr[bi]
 
-                if v_old is None:
-                    # 처음 쓰는 버킷
-                    arr[bi] = [v_in, now]
-                else:
-                    # 이미 값이 있던 버킷
-                    if v_in > 0.0:
-                        # 가속 정보: 기존 양수면 평균, 음수면 교체
-                        if v_old < 0.0:
-                            # 음수 -> 양수로 바뀌면 새 양수로 교체 (ts는 최초 ts 유지)
-                            arr[bi] = [v_in, ts_old]
-                        else:
-                            new_val = round((v_old + v_in) / 2.0, 1)
-                            arr[bi] = [new_val, ts_old]
+                    if v_old is None:
+                        # 처음 쓰는 버킷
+                        arr[bi] = [v_in, now]
                     else:
-                        # 감속 정보: 항상 새 음수로 덮어쓰기, ts는 최초 ts 유지
-                        arr[bi] = [v_in, ts_old]
+                        if v_in > 0.0:
+                            # 가속 정보: 기존 양수면 평균, 음수면 교체
+                            if v_old < 0.0:
+                                # 음수 -> 양수로 바뀌면 새 양수로 교체 (ts는 기존 유지)
+                                arr[bi] = [v_in, ts_old]
+                            else:
+                                new_val = round((v_old + v_in) / 2.0, 1)
+                                arr[bi] = [new_val, ts_old]
+                        else:
+                            # 감속 정보: 항상 새 음수로 덮어쓰기, ts는 기존 유지
+                            arr[bi] = [v_in, ts_old]
 
             self._dirty = True
 
        
     def query_target(self, lat: float, lon: float, heading_deg: float, v_ego: float,
-                     lookahead_s: float = 2.0, neighbor_fallback: bool = True) -> float:
+                     lookahead_s: float = 2.0) -> float:
         dist = max(0.0, float(v_ego) * float(lookahead_s))
-        return self.query_target_dist(lat, lon, heading_deg, dist, neighbor_fallback)
+        return self.query_target_dist(lat, lon, heading_deg, dist)
     
-    def query_target_dist(self, lat: float, lon: float, heading_deg: float, dist: float,
-                          neighbor_fallback: bool = True) -> float:
+    def query_target_dist(self, lat: float, lon: float, heading_deg: float, dist: float) -> float:
         b = heading_to_bucket(heading_deg)
 
         cand_ds = [dist]
@@ -231,30 +264,16 @@ class CarrotSpeed:
                 y, x = project_point(lat, lon, heading_deg, d)
                 gy, gx = quantize_1e4(y, x)
 
-                # 1) 해당 셀: 정확히 bucket b만
                 arr = self._cells.get((gy, gx))
-                if arr:
-                    v, b_sel = self._try_cell_bucket_old(arr, b)
-                    if v is not None:
-                        now_sec = int(time.time())
-                        self._last_hit = (gy, gx, b_sel, now_sec)
-                        self._last_hit_read_ms = int(time.time() * 1000)
-                        return v
-
-                if not neighbor_fallback:
+                if not arr:
                     continue
 
-                # 2) 같은 gy, 좌/우 gx±1 셀: bucket b만
-                for ny, nx in ((gy, gx - 1), (gy, gx + 1)):
-                    arr2 = self._cells.get((ny, nx))
-                    if not arr2:
-                        continue
-                    v2, b_sel2 = self._try_cell_bucket_old(arr2, b)
-                    if v2 is not None:
-                        now_sec = int(time.time())
-                        self._last_hit = (ny, nx, b_sel2, now_sec)
-                        self._last_hit_read_ms = int(time.time() * 1000)
-                        return v2
+                v, b_sel = self._try_cell_bucket_old(arr, b)
+                if v is not None:
+                    now_sec = int(time.time())
+                    self._last_hit = (gy, gx, b_sel, now_sec)
+                    self._last_hit_read_ms = int(time.time() * 1000)
+                    return v
 
         return 0.0
     
