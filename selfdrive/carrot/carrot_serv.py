@@ -662,7 +662,7 @@ class CarrotServ:
     if gps_updated_phone:
       self.bearing_offset = 0.0
     elif self.gps_valid:
-      bearing = gps.bearingDeg
+      bearing = self.nPosAngle = gps.bearingDeg
       if self.gps_valid:
         self.bearing_offset = 0.0
       elif self.active_carrot > 0:
