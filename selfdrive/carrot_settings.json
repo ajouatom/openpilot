@@ -1747,10 +1747,10 @@
     {
       "group": "감속제어",
       "name": "CarrotSmartSpeedControl",
-      "title": "스마트속도제어",
+      "title": "스마트속도제어(속도재생)",
       "descr": "0: 속도제어안함\n 1: 가속만, 2: 감속만, 3: 모두",
       "egroup": "SPEED",
-      "etitle": "Smart Speed Control",
+      "etitle": "Smart Speed Control(Replay)",
       "edescr": "0:not use, 1:accel, 2:decel, 3:all",
       "min": 0,
       "max": 3,
