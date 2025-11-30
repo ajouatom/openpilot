@@ -357,6 +357,8 @@ class CarrotMan:
       if gas_pressed:
         self.gas_pressed_count = 200
         self.v_cruise_change = 0
+      elif self._last_vt == CS.vCruise:
+        self.v_cruise_last = CS.vCruise
       elif self.long_active and CC.longActive:
         if self.v_cruise_last < CS.vCruise:  # 속도가 증가하면
           self.v_cruise_change = 100
