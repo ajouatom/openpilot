@@ -25,7 +25,7 @@ The developer does **not take any responsibility** for real-world installation o
 
 <div align="center" style="text-align: center;">
 
-<h1>SorentoPilot (from CarrotPilot)</h1>
+<h1>carrotpilot</h1>
 
 <h3>
   <a href="https://g4iwnl.gitbook.io/carrotpilot">Manual</a>

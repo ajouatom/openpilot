@@ -1,3 +1,25 @@
+Carrot2-v9 (2025-10-17)
+========================
+* Nuggets In Dijon model
+* Setting: Adjust traffic stop distance
+* liveLocationKalman -> livePose
+* C3x lite
+
+Carrot2-v9 (2025-09-21)
+========================
+* GWM Model
+* Lead + 1 detect (전전차 감지기능)
+* Improve radar vision matching
+* Auto safe-mode on stopped vehicle detection
+
+Carrot2-v9 (2025-09-xx)
+========================
+* TR16 Model
+* RadarTrack Option:3 (Cutin Detect, vision fail detection)
+* RdarTrack Option: 2 (always use SCC radar)
+* Brake light (CANFD)
+
+
 Carrot2-v9 (2025-08-12)
 ========================
 * TombRaider16 v2 model.
