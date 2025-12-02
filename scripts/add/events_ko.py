@@ -567,7 +567,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.laneChangeBlocked: {
     ET.WARNING: Alert(
-      "사각지대에 차량이 감지되니 대기하세요",
+      "사각지대에 차량이 감지되었습니다",
       "",
       AlertStatus.userPrompt, AlertSize.small,
       Priority.LOW, VisualAlert.none, AudibleAlert.prompt, .1),
@@ -926,12 +926,12 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.reverseGear: {
     ET.PERMANENT: Alert(
-      "기어 [R] 상태",
+      " 후진 중 ",
       "",
       AlertStatus.normal, AlertSize.full,
       Priority.LOWEST, VisualAlert.none, AudibleAlert.none, .2, creation_delay=0.5),
-    ET.USER_DISABLE: SoftDisableAlert("기어 [R] 상태"),
-    ET.NO_ENTRY: NoEntryAlert("기어 [R] 상태"),
+    ET.USER_DISABLE: SoftDisableAlert(" 후진 중 "),
+    ET.NO_ENTRY: NoEntryAlert(" 후진 중 "),
   },
 
   # On cars that use stock ACC the car can decide to cancel ACC for various reasons.
@@ -980,7 +980,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.softHold: {
     ET.WARNING: Alert(
-      "SoftHold",
+      "소프트 홀드드",
       "",
       AlertStatus.normal, AlertSize.small,
       Priority.LOW, VisualAlert.none, AudibleAlert.none, .1),
