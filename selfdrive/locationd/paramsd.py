@@ -170,7 +170,7 @@ class VehicleParamsLearner:
     liveParameters.stiffnessFactor = float(x[States.STIFFNESS].item())
     liveParameters.roll = float(self.roll)
     liveParameters.angleOffsetAverageDeg = float(self.avg_angle_offset)
-    liveParameters.angleOffsetDeg = float(self.angle_offset)
+    liveParameters.angleOffsetDeg = float(self.avg_angle_offset) #float(self.angle_offset)
     liveParameters.steerRatioValid = self.min_sr <= liveParameters.steerRatio <= self.max_sr
     liveParameters.stiffnessFactorValid = 0.2 <= liveParameters.stiffnessFactor <= 5.0
     liveParameters.angleOffsetAverageValid = bool(self.avg_offset_valid)
@@ -247,9 +247,7 @@ def retrieve_initial_vehicle_params(params: Params, CP: car.CarParams, replay: b
         if debug and len(initial_filter_std) != 0:
           p_initial = np.diag(initial_filter_std)
 
-        #steer_ratio, stiffness_factor, angle_offset_deg = lp.steerRatio, lp.stiffnessFactor, lp.angleOffsetAverageDeg
-        #steer_ratio, stiffness_factor, angle_offset_deg = lp.steerRatio, lp.stiffnessFactor, lp.angleOffsetDeg
-        steer_ratio, stiffness_factor = lp.steerRatio, lp.stiffnessFactor
+        steer_ratio, stiffness_factor, angle_offset_deg = lp.steerRatio, lp.stiffnessFactor, lp.angleOffsetAverageDeg
         retrieve_success = True
     except Exception as e:
       cloudlog.error(f"Failed to retrieve initial values: {e}")
