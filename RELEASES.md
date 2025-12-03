@@ -1,3 +1,11 @@
+Carrot2-v9 (2025-12-03)
+========================
+* ST model
+* fix CasperEV FCA11
+* fix DriverMonitoring alert (for USA)
+* apply livePose
+* update sensor code
+
 Carrot2-v9 (2025-10-17)
 ========================
 * Nuggets In Dijon model
