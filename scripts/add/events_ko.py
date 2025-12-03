@@ -171,7 +171,7 @@ class UserSoftDisableAlert(SoftDisableAlert):
 
 class ImmediateDisableAlert(Alert):
   def __init__(self, alert_text_2: str):
-    super().__init__("핸들을 즉시 잡아주세요", alert_text_2,
+    super().__init__("핸들을 잡으세요", alert_text_2,
                      AlertStatus.critical, AlertSize.full,
                      Priority.HIGHEST, VisualAlert.steerRequired,
                      AudibleAlert.warningImmediate, 4.),
@@ -383,7 +383,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   EventName.longitudinalManeuver: {
     ET.WARNING: longitudinal_maneuver_alert,
     ET.PERMANENT: NormalPermanentAlert("롱컨 가동 모드",
-                                       "전방 도로에 장애물이 없는지 확인하세요"),
+                                       "전방을 항상 주시하세요요"),
   },
 
   EventName.selfdriveInitializing: {
@@ -551,7 +551,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.preLaneChangeLeft: {
     ET.WARNING: Alert(
-      "좌측 차선이 안전한지 확인하세요",
+      "좌측 차선에 차량을 확인하세요",
       "",
       AlertStatus.normal, AlertSize.small,
       Priority.LOW, VisualAlert.none, AudibleAlert.none, .1),
@@ -559,7 +559,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.preLaneChangeRight: {
     ET.WARNING: Alert(
-      "우측 차선이 안전한지 확인하세요",
+      "우측 차선에 차량을을 확인하세요",
       "",
       AlertStatus.normal, AlertSize.small,
       Priority.LOW, VisualAlert.none, AudibleAlert.none, .1),
@@ -567,7 +567,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.laneChangeBlocked: {
     ET.WARNING: Alert(
-      "사각지대에 차량이 감지되었습니다",
+      "사각지대에 차량이 있습니다",
       "",
       AlertStatus.userPrompt, AlertSize.small,
       Priority.LOW, VisualAlert.none, AudibleAlert.prompt, .1),
@@ -778,7 +778,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   EventName.calibrationIncomplete: {
     ET.PERMANENT: calibration_incomplete_alert,
     ET.SOFT_DISABLE: soft_disable_alert("캘리브레이션이 완료되지않았습니다"),
-    ET.NO_ENTRY: NoEntryAlert("캘리브레이션이 진행중입니다"),
+    ET.NO_ENTRY: NoEntryAlert("캘리브레이션이 진행 중"),
   },
 
   EventName.calibrationRecalibrating: {
