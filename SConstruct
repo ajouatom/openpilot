@@ -3,17 +3,12 @@ import subprocess
 import sys
 import sysconfig
 import platform
+import shlex
 import numpy as np
 
 import SCons.Errors
 
 SCons.Warnings.warningAsException(True)
-
-# pending upstream fix - https://github.com/SCons/scons/issues/4461
-#SetOption('warn', 'all')
-
-TICI = os.path.isfile('/TICI')
-AGNOS = TICI
 
 Decider('MD5-timestamp')
 

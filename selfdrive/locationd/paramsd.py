@@ -298,7 +298,7 @@ def main():
         bearing = gps.bearingDeg
         lat = gps.latitude
         lon = gps.longitude
-        params_memory.put("LastGPSPosition", json.dumps({"latitude": lat, "longitude": lon, "bearing": bearing}))
+        params_memory.put_nonblocking("LastGPSPosition", json.dumps({"latitude": lat, "longitude": lon, "bearing": bearing}))
         
 
     if sm.updated['livePose']:
