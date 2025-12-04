@@ -10,6 +10,9 @@ import SCons.Errors
 
 SCons.Warnings.warningAsException(True)
 
+TICI = os.path.isfile('/TICI')
+AGNOS = TICI
+
 Decider('MD5-timestamp')
 
 SetOption('num_jobs', int(os.cpu_count()/2))
