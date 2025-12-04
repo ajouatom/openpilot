@@ -219,7 +219,7 @@ class LatControlTorque(LatControl):
         # update past data
         pitch = 0
         roll = params.roll
-        if len(CC.orientionNED) > 1:
+        if len(CC.orientationNED) > 1:
           pitch = self.pitch.update(CC.orientationNED[1])
           roll = roll_pitch_adjust(roll, pitch)
         self.roll_deque.append(roll)
