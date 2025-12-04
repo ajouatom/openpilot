@@ -517,7 +517,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         values["LKA_ICON"] = 4 if lat_active else 3 if lat_enabled else 0
         values["FCA_ALT_ICON"] = 0
 
-        if values["ALERTS_2"] in [1, 2, 5, 10, 22]:  # 10,22: 운전자모니터 알람/경고
+        if values["ALERTS_2"] in [1, 2, 5, 10, 21, 22]:  # 10,21,22: 운전자모니터 알람/경고
           values["ALERTS_2"] = 0
           values["DAW_ICON"] = 0
 
