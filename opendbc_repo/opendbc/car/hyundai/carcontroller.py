@@ -96,7 +96,6 @@ class CarController(CarControllerBase):
     self.activeCarrot = 0
     self.camera_scc_params = Params().get_int("HyundaiCameraSCC")
     self.is_ldws_car = Params().get_bool("IsLdwsCar")
-    self.angle_control_mode = Params().get_int("AngleControlMode")
 
     self.steerDeltaUpOrg = self.steerDeltaUp = self.steerDeltaUpLC = self.params.STEER_DELTA_UP
     self.steerDeltaDownOrg = self.steerDeltaDown = self.steerDeltaDownLC = self.params.STEER_DELTA_DOWN
@@ -143,7 +142,6 @@ class CarController(CarControllerBase):
 
       self.canfd_debug = params.get_int("CanfdDebug")
       self.camera_scc_params = params.get_int("HyundaiCameraSCC")
-      self.angle_control_mode = params.get_int("AngleControlMode")
 
     actuators = CC.actuators
     hud_control = CC.hudControl
@@ -180,13 +178,13 @@ class CarController(CarControllerBase):
       self.apply_angle_last = actuators.steeringAngleDeg
       self.lkas_max_torque = self.lkas_max_torque = max(self.lkas_max_torque - 20, 25)
     else:
-      if self.angle_control_mode in [0, 1]:
+      if False: #self.angle_control_mode in [0, 1]:
+        # not used.
         if hud_control.modelDesire in [1,2] or self.angle_control_mode == 1:
           base_max_torque = self.angle_max_torque
         else:
           curv = abs(actuators.curvature)
           y_std = actuators.yStd
-          #curvature_threshold = np.interp(y_std, [0.0, 0.2], [0.5, 0.006])
           curvature_threshold = np.interp(y_std, [0.0, 0.1], [0.5, 0.006])
 
           curve_scale = np.clip(curv / curvature_threshold, 0.0, 1.0)

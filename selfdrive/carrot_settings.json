@@ -1382,19 +1382,6 @@
     },
     {
       "group": "시작",
-      "name": "AngleControlMode",
-      "title": "HYUNDAI: Angle Control Mode(0)",
-      "descr": "0: Smooth, 1: Curvature torque, 2: max torque",
-      "egroup": "START",
-      "etitle": "HYUNDAI: Angle Control Mode(0)",
-      "edescr": "0: Smooth, 1: Curvature torque, 2: max torque",
-      "min": 0,
-      "max": 2,
-      "default": 0,
-      "unit": 1
-    },
-    {
-      "group": "시작",
       "name": "CanfdHDA2",
       "title": "CANFD HDA2지원(0)",
       "descr": "1: HDA2 차량\n 2: HDA2 + BSM 차량",
