@@ -127,7 +127,7 @@ def get_default_params():
     ("EnableCornerRadar", "0"),
     ("HyundaiCameraSCC", "0"),
     ("IsLdwsCar", "0"),
-    ("AngleControlMode", "0"),
+    ("AngleControlMode", "2"),
     ("CanfdHDA2", "0"),
     ("CanfdDebug", "0"),
     ("SoundVolumeAdjust", "100"),
