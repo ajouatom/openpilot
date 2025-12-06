@@ -235,6 +235,7 @@ inline static std::unordered_map<std::string, uint32_t> keys = {
     {"HyundaiCameraSCC", PERSISTENT},
     {"FingerPrints", PERSISTENT | CLEAR_ON_MANAGER_START},
     {"IsLdwsCar", PERSISTENT},
+    {"AngleControlMode", PERSISTENT},
     {"CanfdHDA2", PERSISTENT},
     {"CanfdDebug", PERSISTENT},
     {"SoundVolumeAdjust", PERSISTENT},
