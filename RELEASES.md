@@ -1,3 +1,9 @@
+Carrot2-v9 (2025-12-06)
+========================
+* PP(planplus) model
+* fixDM
+* fix angle steering torque(HKG car)
+
 Carrot2-v9 (2025-12-03)
 ========================
 * ST model
