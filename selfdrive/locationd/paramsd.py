@@ -170,7 +170,7 @@ class VehicleParamsLearner:
     liveParameters.stiffnessFactor = float(x[States.STIFFNESS].item())
     liveParameters.roll = float(self.roll)
     liveParameters.angleOffsetAverageDeg = float(self.avg_angle_offset)
-    liveParameters.angleOffsetDeg = float(self.avg_angle_offset) #float(self.angle_offset)
+    liveParameters.angleOffsetDeg = float(self.angle_offset)
     liveParameters.steerRatioValid = self.min_sr <= liveParameters.steerRatio <= self.max_sr
     liveParameters.stiffnessFactorValid = 0.2 <= liveParameters.stiffnessFactor <= 5.0
     liveParameters.angleOffsetAverageValid = bool(self.avg_offset_valid)
