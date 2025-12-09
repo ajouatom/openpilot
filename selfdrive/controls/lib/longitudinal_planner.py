@@ -26,8 +26,9 @@ ALLOW_THROTTLE_THRESHOLD = 0.5
 MIN_ALLOW_THROTTLE_SPEED = 2.5
 
 # Lookup table for turns
-_A_TOTAL_MAX_V = [1.7, 3.2]
+_A_TOTAL_MAX_V = [2.4, 4.8] #[1.7, 3.2]
 _A_TOTAL_MAX_BP = [20., 40.]
+LAT_WEIGHT = 0.7
 
 
 def get_max_accel(v_ego):
@@ -48,7 +49,7 @@ def limit_accel_in_turns(v_ego, angle_steers, a_target, CP):
   if v_ego > 20 or (v_ego > 25 and steer_abs < 3.0):
     return a_target
   a_total_max = np.interp(v_ego, _A_TOTAL_MAX_BP, _A_TOTAL_MAX_V)
-  a_y = v_ego ** 2 * angle_steers * CV.DEG_TO_RAD / (CP.steerRatio * CP.wheelbase)
+  a_y = v_ego ** 2 * angle_steers * CV.DEG_TO_RAD / (CP.steerRatio * CP.wheelbase) * LAT_WEIGHT
   a_x_allowed = math.sqrt(max(a_total_max ** 2 - a_y ** 2, 0.))
 
   return [a_target[0], min(a_target[1], a_x_allowed)]
