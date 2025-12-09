@@ -168,7 +168,8 @@ class CarController(CarControllerBase):
                                                CS.out.steeringAngleDeg, CC.latActive, self.params.ANGLE_LIMITS)
 
     if abs(apply_angle - self.apply_angle_last) > 0.1:
-      alpha = min(0.1 + 0.9 * CS.out.vEgoRaw / (30.0 * CV.KPH_TO_MS), 1.0)
+      #alpha = min(0.1 + 0.9 * CS.out.vEgoRaw / (30.0 * CV.KPH_TO_MS), 1.0)
+      alpha = min(0.1 + 0.9 * CS.out.vEgoRaw / (15.0 * CV.KPH_TO_MS), 1.0)
       apply_angle = self.apply_angle_last * (1 - alpha) + apply_angle * alpha
 
     if angle_control:
