@@ -376,7 +376,7 @@ class CarrotMan:
       else:
         self.v_cruise_change = 0
       self.long_active = CC.longActive
-      self.v_cruise_last = CS.vCruise
+      self.v_cruise_last = min(CS.vCruise, v_ego_kph)
     else:
       self.v_cruise_change = 0
 
