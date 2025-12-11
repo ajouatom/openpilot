@@ -376,23 +376,24 @@ class CarrotMan:
       else:
         self.v_cruise_change = 0
       self.long_active = CC.longActive
-      self.v_cruise_last = min(CS.vCruise, v_ego_kph)
+      self.v_cruise_last = CS.vCruise
     else:
       self.v_cruise_change = 0
+    v_cruise_apply = max(min(CS.vCruise, v_ego_kph), 20)
 
     now = time.monotonic()
     heading = self.carrot_serv.bearing #nPosAnglePhone
     lat, lon = self.carrot_serv.vpPosPointLat, self.carrot_serv.vpPosPointLon #self.carrot_serv.estimate_position(self.carrot_serv.phone_latitude, self.carrot_serv.phone_longitude, heading, v_ego, now - self.carrot_serv.last_update_gps_time_phone)
     vt = carrot_speed.query_target_dist(lat, lon, heading, 0.0)
     if self.v_cruise_change != 0:
-      carrot_speed.add_sample(lat, lon, heading, self.v_cruise_last if self.v_cruise_change > 0 else (- self.v_cruise_last))
+      carrot_speed.add_sample(lat, lon, heading, v_cruise_apply if self.v_cruise_change > 0 else (- v_cruise_apply))
       if self.v_cruise_change > 0:
         self.v_cruise_change -= 1
       if self.v_cruise_change < 0:
         self.v_cruise_change += 1
     else:
       if self.gas_pressed_count > 0:
-        vt = max(vt, self.v_cruise_last)
+        vt = max(vt, v_cruise_apply)
         carrot_speed.add_sample(lat, lon, heading, vt)
 
       self.params_memory.put_int_nonblocking("CarrotSpeed", int(vt))
