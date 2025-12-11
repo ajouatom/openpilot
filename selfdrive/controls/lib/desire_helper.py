@@ -182,6 +182,10 @@ class DesireHelper:
     self.desireLog = ""
     self.object_detected_count = 0
 
+    # ★ 현재 차선 확률 (Ego 기준 좌/우)
+    self.cur_left_prob = 1.0   # laneLineProbs[1]
+    self.cur_right_prob = 1.0  # laneLineProbs[2]
+    self.current_lane_missing = False
   # ─────────────────────────────────────────────
   #  Config / Model 관련
   # ─────────────────────────────────────────────
@@ -243,6 +247,9 @@ class DesireHelper:
     self.available_right_lane = self.lane_width_right_count.counter > available_count
     self.available_left_edge = self.road_edge_left_count.counter > available_count and self.distance_to_road_edge_left_far > min_lane_width
     self.available_right_edge = self.road_edge_right_count.counter > available_count and self.distance_to_road_edge_right_far > min_lane_width
+
+    self.cur_left_prob = modeldata.laneLineProbs[1]
+    self.cur_right_prob = modeldata.laneLineProbs[2]
 
   # ─────────────────────────────────────────────
   #  모델 내 desire 상태 (turn 예측 등)
@@ -351,10 +358,14 @@ class DesireHelper:
       lane_exist_counter = self.lane_exist_left_count.counter
       lane_available = self.available_left_lane
       edge_available = self.available_left_edge
+      lane_prob_side = self.cur_left_prob
+      edge_dist = self.distance_to_road_edge_left
     else:
       lane_exist_counter = self.lane_exist_right_count.counter
       lane_available = self.available_right_lane
       edge_available = self.available_right_edge
+      lane_prob_side = self.cur_right_prob
+      edge_dist = self.distance_to_road_edge_right
 
     score_turn = 0
 
@@ -384,8 +395,15 @@ class DesireHelper:
     elif self.atc_type in ["fork left", "fork right", "atc left", "atc right"]:
       score_turn -= 1  # fork/atc는 lanechange 쪽에 더 가깝게
 
+    # ★ road edge가 충분히 멀면(교차로/넓은 공간으로 판단) 턴 쪽으로 가산점
+    edge_far = edge_dist > 4.0  # 튜닝 포인트 (4~6m 정도가 무난)
+    if edge_far:
+      score_turn += 1
+      
+    current_lane_missing = lane_prob_side < 0.3
+    self.current_lane_missing = current_lane_missing
     # 튜닝 포인트: score_turn 임계값
-    if score_turn >= 2:
+    if score_turn >= 2 and current_lane_missing and edge_far:
       return "turn"
     else:
       return "lane_change"
@@ -509,12 +527,17 @@ class DesireHelper:
       else:
         new_type = "none"
 
-      # LaneChangeState가 off 또는 pre일 때만 maneuver_type 변경 허용
-      if self.lane_change_state in (LaneChangeState.off, LaneChangeState.preLaneChange):
+      # ★ 1) 원래 lane_change였는데 새로 보니 turn 조건 + 차선 없음이면 → 강제 전환 허용
+      if self.maneuver_type == "lane_change" and new_type == "turn":
+        # 차선변경 도중에도 조건 만족 시 턴으로 스위칭
+        self.maneuver_type = "turn"
+        self.lane_change_state = LaneChangeState.off  # FSM 리셋 후 turn 루트로
+      # ★ 2) 그 외에는 off/pre 상태에서만 모드 변경
+      elif self.lane_change_state in (LaneChangeState.off, LaneChangeState.preLaneChange):
         self.maneuver_type = new_type
 
       # ─ TURN 모드 처리 ─
-      if desire_enabled and self.maneuver_type == "turn" and self.enable_turn_desires and not carstate.standstill:
+      if desire_enabled and self.maneuver_type == "turn" and self.enable_turn_desires: # and not carstate.standstill:
         self.lane_change_state = LaneChangeState.off
         if self.turn_disable_count > 0:
           self.turn_direction = TurnDirection.none
