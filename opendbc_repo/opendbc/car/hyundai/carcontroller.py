@@ -204,7 +204,7 @@ class CarController(CarControllerBase):
     MAX_RATE_HIGH = 40 # 고속, deg/s
     rate_deg_s = calc_rate_limit_by_lat_accel(self.apply_angle_last, CS.out.vEgoRaw, self.CP.wheelbase, MAX_LAT_ACCEL, MAX_RATE_LOW, MAX_RATE_HIGH)
     rate_deg_per_tick = rate_deg_s * DT_CTRL
-    apply_angle = np.clip(apply_angle,
+    apply_angle = np.clip(actuators.steeringAngleDeg,
                         self.apply_angle_last - rate_deg_per_tick,
                         self.apply_angle_last + rate_deg_per_tick)
 
