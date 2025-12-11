@@ -53,6 +53,38 @@ def process_hud_alert(enabled, fingerprint, hud_control):
 
   return sys_warning, sys_state, left_lane_warning, right_lane_warning
 
+def calc_rate_limit_by_lat_accel(delta_deg: float,
+                                 v_ego: float,
+                                 wheelbase: float,
+                                 max_lat_accel: float,
+                                 max_rate_low: float,
+                                 max_rate_high: float) -> float:
+  """
+  반환값: 허용 스티어링휠 각속도 (deg/s)
+  delta_deg : 현재 스티어링휠 각도 (deg)
+  v_ego     : 속도 (m/s)
+  wheelbase : 축거 (m)
+  """
+
+  # v가 너무 작으면 공식이 터지니까, 저속 전용 상수 사용
+  if v_ego < 0.5:
+    return max_rate_low   # 예: 300 deg/s
+
+  delta_rad = np.radians(delta_deg)
+
+  # cos^2 항이 0에 가까워지면 rate가 폭발하니 하한 넣어줌
+  cos_delta = np.cos(delta_rad)
+  cos2 = max(cos_delta * cos_delta, 0.05)   # 0.05 정도면 충분
+
+  # 물리식: |δ̇| <= L * a_lat_max / (v^2 * sec^2(δ))
+  # 여기서 sec^2(δ) = 1 / cos^2(δ)
+  delta_rate_rad_s = (wheelbase * max_lat_accel) / (v_ego * v_ego * cos2)
+
+  delta_rate_deg_s = np.degrees(delta_rate_rad_s)
+
+  # 저속에서는 너무 크지 않게, 고속에서는 너무 작지 않게 clip
+  #   max_rate_high <= delta_rate_deg_s <= max_rate_low
+  return float(np.clip(delta_rate_deg_s, max_rate_high, max_rate_low))
 
 class CarController(CarControllerBase):
   def __init__(self, dbc_names, CP):
@@ -164,8 +196,20 @@ class CarController(CarControllerBase):
                                                                        self.angle_limit_counter, self.max_angle_frames,
                                                                        MAX_ANGLE_CONSECUTIVE_FRAMES)
 
-    apply_angle = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgoRaw, 
-                                               CS.out.steeringAngleDeg, CC.latActive, self.params.ANGLE_LIMITS)
+    #apply_angle = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgoRaw, 
+    #                                           CS.out.steeringAngleDeg, CC.latActive, self.params.ANGLE_LIMITS)
+
+    MAX_LAT_ACCEL = 2.5
+    MAX_RATE_LOW = 300 # 저속, deg/s
+    MAX_RATE_HIGH = 40 # 고속, deg/s
+    rate_deg_s = calc_rate_limit_by_lat_accel(self.apply_angle_last, CS.out.vEgoRaw, self.CP.wheelbase, MAX_LAT_ACCEL, MAX_RATE_LOW, MAX_RATE_HIGH)
+    rate_deg_per_tick = rate_deg_s * DT_CTRL
+    apply_angle = np.clip(apply_angle,
+                        self.apply_angle_last - rate_deg_per_tick,
+                        self.apply_angle_last + rate_deg_per_tick)
+
+    angle_limits = self.params.ANGLE_LIMITS
+    apply_angle = np.clip(apply_angle, -angle_limits.STEER_ANGLE_MAX, angle_limits.STEER_ANGLE_MAX)
 
     if abs(apply_angle - self.apply_angle_last) > 0.1:
       #alpha = min(0.1 + 0.9 * CS.out.vEgoRaw / (30.0 * CV.KPH_TO_MS), 1.0)
