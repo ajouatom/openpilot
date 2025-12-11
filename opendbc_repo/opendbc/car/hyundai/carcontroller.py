@@ -199,8 +199,8 @@ class CarController(CarControllerBase):
     #apply_angle = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgoRaw, 
     #                                           CS.out.steeringAngleDeg, CC.latActive, self.params.ANGLE_LIMITS)
 
-    MAX_LAT_ACCEL = 2.5
-    MAX_RATE_LOW = 300 # 저속, deg/s
+    MAX_LAT_ACCEL = 8.0
+    MAX_RATE_LOW = 600 # 저속, deg/s
     MAX_RATE_HIGH = 40 # 고속, deg/s
     rate_deg_s = calc_rate_limit_by_lat_accel(self.apply_angle_last, CS.out.vEgoRaw, self.CP.wheelbase, MAX_LAT_ACCEL, MAX_RATE_LOW, MAX_RATE_HIGH)
     rate_deg_per_tick = rate_deg_s * DT_CTRL
@@ -219,7 +219,7 @@ class CarController(CarControllerBase):
     if abs(apply_angle - self.apply_angle_last) < 0.1:
       alpha = min(0.05 + 0.45 * v_ego_kph / 30.0, 0.5)
     else:
-      alpha = min(0.1 + 0.9 * v_ego_kph / 30.0, 1.0)
+      alpha = 1.0 # min(0.1 + 0.9 * v_ego_kph / 30.0, 1.0)
 
     apply_angle = self.apply_angle_last * (1 - alpha) + apply_angle * alpha
 
