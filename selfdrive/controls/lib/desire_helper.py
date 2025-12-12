@@ -528,7 +528,7 @@ class DesireHelper:
         new_type = "none"
 
       # ★ 1) 원래 lane_change였는데 새로 보니 turn 조건 + 차선 없음이면 → 강제 전환 허용
-      if self.maneuver_type == "lane_change" and new_type == "turn":
+      if False: #self.maneuver_type == "lane_change" and new_type == "turn":
         # 차선변경 도중에도 조건 만족 시 턴으로 스위칭
         self.maneuver_type = "turn"
         self.lane_change_state = LaneChangeState.off  # FSM 리셋 후 turn 루트로
