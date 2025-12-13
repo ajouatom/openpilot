@@ -393,7 +393,7 @@ class DesireHelper:
     if self.atc_type in ["turn left", "turn right"]:
       score_turn += 2
     elif self.atc_type in ["fork left", "fork right", "atc left", "atc right"]:
-      score_turn -= 1  # fork/atc는 lanechange 쪽에 더 가깝게
+      score_turn -= 2  # fork/atc는 lanechange 쪽에 더 가깝게
 
     # ★ road edge가 충분히 멀면(교차로/넓은 공간으로 판단) 턴 쪽으로 가산점
     edge_far = edge_dist > 4.0  # 튜닝 포인트 (4~6m 정도가 무난)
