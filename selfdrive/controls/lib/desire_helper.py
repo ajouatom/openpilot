@@ -255,15 +255,15 @@ class DesireHelper:
   #  모델 내 desire 상태 (turn 예측 등)
   # ─────────────────────────────────────────────
 
-  def _check_desire_state(self, modeldata, carstate):
+  def _check_desire_state(self, modeldata, carstate, maneuver_type):
     desire_state = modeldata.meta.desireState
     # turnLeft + turnRight 확률
     self.turn_desire_state = (desire_state[1] + desire_state[2]) > 0.1
 
-    if self.turn_desire_state:
-      self.desire_disable_count = int(2.0 / DT_MDL)
-    else:
-      self.desire_disable_count = max(0, self.desire_disable_count - 1)
+    #if self.turn_desire_state:
+    #  self.desire_disable_count = int(2.0 / DT_MDL)
+    #else:
+    #  self.desire_disable_count = max(0, self.desire_disable_count - 1)
 
     # steeringAngle 너무 크면 turn 자체를 일정 시간 막기
     if abs(carstate.steeringAngleDeg) > 80:
@@ -342,7 +342,7 @@ class DesireHelper:
   #  Turn / LaneChange 모드 분류
   # ─────────────────────────────────────────────
 
-  def _classify_maneuver_type(self, blinker_state, carstate):
+  def _classify_maneuver_type(self, blinker_state, carstate, old_type):
     """
     깜빡이가 들어왔을 때 이번 조작이 turn인지 lane_change인지 분류.
     - 너무 복잡하게 가지 않고, 현재 속도/감속/차선상태/모델 turn 상태 기준으로 점수화.
@@ -407,7 +407,7 @@ class DesireHelper:
       if current_lane_missing and edge_far:
         return "turn"
       else:
-        return "none"
+        return old_type
     else:
       return "lane_change"
 
@@ -526,7 +526,7 @@ class DesireHelper:
     else:
       # 깜빡이 켜져 있을 때, 이번 조작이 turn인지 lane_change인지 먼저 분류
       if desire_enabled:
-        new_type = self._classify_maneuver_type(blinker_state, carstate)
+        new_type = self._classify_maneuver_type(blinker_state, carstate, self.maneuver_type)
       else:
         new_type = "none"
 
