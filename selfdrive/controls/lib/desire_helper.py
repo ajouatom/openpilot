@@ -430,7 +430,7 @@ class DesireHelper:
 
     # Lane / desire 상태 갱신
     self._check_lane_state(modeldata)
-    self._check_desire_state(modeldata, carstate)
+    self._check_desire_state(modeldata, carstate, self.maneuver_type)
 
     # 운전자 깜빡이
     driver_blinker_state, driver_blinker_changed, driver_desire_enabled = self._update_driver_blinker(carstate)
