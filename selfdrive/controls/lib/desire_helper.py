@@ -372,14 +372,14 @@ class DesireHelper:
     # 네가 말한 조건들을 기본으로 사용
     if v_kph < 30.0:
       score_turn += 1
-    if v_kph < 40.0 and accel < -0.4:
+    elif v_kph < 40.0 and accel < -0.4:
       score_turn += 1
-    if v_kph < 40.0 and not lane_available and not edge_available:
-      score_turn += 1
+    #if v_kph < 40.0 and not lane_available and not edge_available:
+    #  score_turn += 1
 
     # 차선이 잘 안 보이거나(교차로/삼거리 등)
-    if lane_exist_counter < int(0.5 / DT_MDL):
-      score_turn += 1
+    #if lane_exist_counter < int(0.5 / DT_MDL):
+    #  score_turn += 1
 
     # steeringAngle이 크면 턴에 가깝다고 본다
     if abs(carstate.steeringAngleDeg) > 45.0:
@@ -391,7 +391,7 @@ class DesireHelper:
 
     # ATC가 turn 안내 중이면 가중치
     if self.atc_type in ["turn left", "turn right"]:
-      score_turn += 1
+      score_turn += 2
     elif self.atc_type in ["fork left", "fork right", "atc left", "atc right"]:
       score_turn -= 1  # fork/atc는 lanechange 쪽에 더 가깝게
 
@@ -403,8 +403,11 @@ class DesireHelper:
     current_lane_missing = lane_prob_side < 0.3
     self.current_lane_missing = current_lane_missing
     # 튜닝 포인트: score_turn 임계값
-    if score_turn >= 2 and current_lane_missing and edge_far:
-      return "turn"
+    if score_turn >= 2:
+      if current_lane_missing and edge_far:
+        return "turn"
+      else:
+        return "none"
     else:
       return "lane_change"
 
@@ -528,7 +531,7 @@ class DesireHelper:
         new_type = "none"
 
       # ★ 1) 원래 lane_change였는데 새로 보니 turn 조건 + 차선 없음이면 → 강제 전환 허용
-      if False: #self.maneuver_type == "lane_change" and new_type == "turn":
+      if self.maneuver_type == "lane_change" and new_type == "turn" and self.lane_change_state not in [LaneChangeState.preLaneChange, LaneChangeState.laneChangeStarting]:
         # 차선변경 도중에도 조건 만족 시 턴으로 스위칭
         self.maneuver_type = "turn"
         self.lane_change_state = LaneChangeState.off  # FSM 리셋 후 turn 루트로
