@@ -202,7 +202,16 @@ class CarController(CarControllerBase):
     MAX_LAT_ACCEL = 8.0
     MAX_RATE_LOW = 200 # 저속, deg/s
     MAX_RATE_HIGH = 40 # 고속, deg/s
+    UNWIND_SCALE = 1.5
+    UNWIND_MAX = 300
+
+    delta = actuators.steeringAngleDeg - self.apply_angle_last
+    same_dir = (np.sign(delta) == np.sign(self.apply_angle_last)) or (abs(self.apply_angle_last) < 2.0)
+
     rate_deg_s = calc_rate_limit_by_lat_accel(self.apply_angle_last, CS.out.vEgoRaw, self.CP.wheelbase, MAX_LAT_ACCEL, MAX_RATE_LOW, MAX_RATE_HIGH)
+    if not same_dir:
+      rate_deg_s = min(rate_deg_s * UNWIND_SCALE, UNWIND_MAX)
+      
     rate_deg_per_tick = rate_deg_s * DT_CTRL
     apply_angle = np.clip(actuators.steeringAngleDeg,
                         self.apply_angle_last - rate_deg_per_tick,
@@ -227,7 +236,7 @@ class CarController(CarControllerBase):
       apply_steer_req = CC.latActive
 
     if CS.out.steeringPressed:
-      self.apply_angle_last = actuators.steeringAngleDeg
+      self.apply_angle_last = CS.out.steeringAngleDeg
       self.lkas_max_torque = self.lkas_max_torque = max(self.lkas_max_torque - 20, 25)
     else:
       target_torque = self.angle_max_torque
