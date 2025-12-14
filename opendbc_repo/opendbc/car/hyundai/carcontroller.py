@@ -132,6 +132,88 @@ class CarController(CarControllerBase):
     self.steerDeltaUpOrg = self.steerDeltaUp = self.steerDeltaUpLC = self.params.STEER_DELTA_UP
     self.steerDeltaDownOrg = self.steerDeltaDown = self.steerDeltaDownLC = self.params.STEER_DELTA_DOWN
 
+    self.steer_pressed_prev = False
+    self.unwind_timer = 0.0
+    self.unwind_stuck_timer = 0.0
+    self.actual_prev = 0.0
+
+  def _calc_apply_angle_unwind(self, desired_deg, actual_deg, v_ego, steeringPressed):
+    """
+    desired_deg: actuators.steeringAngleDeg (desired)
+    actual_deg : CS.out.steeringAngleDeg (actual)
+    v_ego      : CS.out.vEgoRaw (m/s)
+    steeringPressed: CS.out.steeringPressed
+    """
+    v_ego_kph = v_ego * CV.MS_TO_KPH
+
+    # release edge detect
+    just_released = self.steer_pressed_prev and (not steeringPressed)
+    self.steer_pressed_prev = steeringPressed
+
+    if just_released:
+      self.unwind_timer = 0.8          # 튜닝: 0.3~1.2s
+      self.unwind_stuck_timer = 0.0
+      self.actual_prev = actual_deg
+
+    self.unwind_timer = max(0.0, self.unwind_timer - DT_CTRL)
+
+    BIG_ANGLE = 80.0
+    DESIRED_NEAR_ZERO = 8.0
+    need_unwind = (abs(actual_deg) > BIG_ANGLE) and (abs(desired_deg) < DESIRED_NEAR_ZERO)
+
+    # natural unwind progress check (abs(angle) decreasing?)
+    abs_dec = abs(self.actual_prev) - abs(actual_deg)   # +면 자연 복귀 중
+    UNWIND_DEC_MIN = 0.02                               # deg/tick (튜닝)
+    unwinding_ok = (abs_dec > UNWIND_DEC_MIN)
+
+    if (self.unwind_timer > 0.0) and need_unwind:
+      if unwinding_ok:
+        self.unwind_stuck_timer = 0.0
+      else:
+        self.unwind_stuck_timer += DT_CTRL
+
+    self.actual_prev = actual_deg
+
+    STUCK_TIME = 0.25  # 튜닝: 0.15~0.4s
+    force_unwind = (self.unwind_timer > 0.0) and need_unwind and (self.unwind_stuck_timer > STUCK_TIME)
+    if v_ego_kph > 40.0:
+      force_unwind = force_unwind or ((self.unwind_timer > 0.0) and need_unwind and (self.unwind_stuck_timer > 0.12))
+
+    # --- angle generation (rate limited around actual) ---
+    MAX_LAT_ACCEL = 8.0
+    MAX_RATE_LOW = 200   # 저속, deg/s
+    MAX_RATE_HIGH = 40   # 고속, deg/s
+
+    base = actual_deg
+    rate_deg_s = calc_rate_limit_by_lat_accel(base, v_ego, self.CP.wheelbase,
+                                             MAX_LAT_ACCEL, MAX_RATE_LOW, MAX_RATE_HIGH)
+
+    if force_unwind:
+      rate_deg_s *= 3.0            # 튜닝: 2.0~4.0
+      rate_deg_s = min(rate_deg_s, 450.0)
+
+    rate_deg_per_tick = rate_deg_s * DT_CTRL
+    apply_angle = np.clip(desired_deg,
+                          base - rate_deg_per_tick,
+                          base + rate_deg_per_tick)
+
+    angle_limits = self.params.ANGLE_LIMITS
+    apply_angle = np.clip(apply_angle, -angle_limits.STEER_ANGLE_MAX, angle_limits.STEER_ANGLE_MAX)
+
+    # --- alpha (mode-dependent) ---
+    if force_unwind:
+      alpha = 1.0
+    elif (self.unwind_timer > 0.0) and need_unwind:
+      alpha = 0.2                 # 자연복귀 우선(개입 약하게), 튜닝: 0.1~0.4
+    else:
+      if abs(apply_angle - self.apply_angle_last) < 0.1:
+        alpha = min(0.05 + 0.45 * v_ego_kph / 30.0, 0.5)
+      else:
+        alpha = 1.0
+
+    apply_angle = self.apply_angle_last * (1 - alpha) + apply_angle * alpha
+    return apply_angle
+
   def update(self, CC, CS, now_nanos):
 
     if self.frame % 50 == 0:
@@ -199,35 +281,14 @@ class CarController(CarControllerBase):
     #apply_angle = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgoRaw, 
     #                                           CS.out.steeringAngleDeg, CC.latActive, self.params.ANGLE_LIMITS)
 
-    MAX_LAT_ACCEL = 8.0
-    MAX_RATE_LOW = 200 # 저속, deg/s
-    MAX_RATE_HIGH = 40 # 고속, deg/s
-    rate_deg_s = calc_rate_limit_by_lat_accel(self.apply_angle_last, CS.out.vEgoRaw, self.CP.wheelbase, MAX_LAT_ACCEL, MAX_RATE_LOW, MAX_RATE_HIGH)
-    rate_deg_per_tick = rate_deg_s * DT_CTRL
-    apply_angle = np.clip(actuators.steeringAngleDeg,
-                        self.apply_angle_last - rate_deg_per_tick,
-                        self.apply_angle_last + rate_deg_per_tick)
-
-    angle_limits = self.params.ANGLE_LIMITS
-    apply_angle = np.clip(apply_angle, -angle_limits.STEER_ANGLE_MAX, angle_limits.STEER_ANGLE_MAX)
-
-    #if abs(apply_angle - self.apply_angle_last) > 0.1:
-    #  alpha = min(0.1 + 0.9 * CS.out.vEgoRaw / (30.0 * CV.KPH_TO_MS), 1.0)
-    #  apply_angle = self.apply_angle_last * (1 - alpha) + apply_angle * alpha
-
-    v_ego_kph = CS.out.vEgoRaw * CV.MS_TO_KPH
-    if abs(apply_angle - self.apply_angle_last) < 0.1:
-      alpha = min(0.05 + 0.45 * v_ego_kph / 30.0, 0.5)
-    else:
-      alpha = 1.0 # min(0.1 + 0.9 * v_ego_kph / 30.0, 1.0)
-
-    apply_angle = self.apply_angle_last * (1 - alpha) + apply_angle * alpha
-
+    apply_angle = self._calc_apply_angle_unwind(actuators.steeringAngleDeg, CS.out.steeringAngleDeg, CS.out.vEgoRaw, CS.out.steeringPressed)
+    
     if angle_control:
       apply_steer_req = CC.latActive
 
     if CS.out.steeringPressed:
-      self.apply_angle_last = actuators.steeringAngleDeg
+      #self.apply_angle_last = actuators.steeringAngleDeg
+      self.apply_angle_last = CS.out.steeringAngleDeg
       self.lkas_max_torque = self.lkas_max_torque = max(self.lkas_max_torque - 20, 25)
     else:
       target_torque = self.angle_max_torque
