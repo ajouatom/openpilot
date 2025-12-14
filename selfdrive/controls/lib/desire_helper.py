@@ -359,31 +359,32 @@ class DesireHelper:
       lane_available = self.available_left_lane
       edge_available = self.available_left_edge
       lane_prob_side = self.cur_left_prob
-      edge_dist = self.distance_to_road_edge_left
+      edge_dist = self.distance_to_road_edge_left_far
     else:
       lane_exist_counter = self.lane_exist_right_count.counter
       lane_available = self.available_right_lane
       edge_available = self.available_right_edge
       lane_prob_side = self.cur_right_prob
-      edge_dist = self.distance_to_road_edge_right
+      edge_dist = self.distance_to_road_edge_right_far
 
     score_turn = 0
 
-    # 네가 말한 조건들을 기본으로 사용
     if v_kph < 30.0:
       score_turn += 1
-    elif v_kph < 40.0 and accel < -0.4:
+    elif v_kph < 40.0 and accel < -1.0:
       score_turn += 1
-    #if v_kph < 40.0 and not lane_available and not edge_available:
-    #  score_turn += 1
+
+    # 차로가 없고, 로드에지도 여유없고..
+    if v_kph < 40.0 and not lane_available and not edge_available:
+      score_turn += 1
 
     # 차선이 잘 안 보이거나(교차로/삼거리 등)
-    #if lane_exist_counter < int(0.5 / DT_MDL):
-    #  score_turn += 1
+    if v_kph < 40.0 and lane_exist_counter < int(0.5 / DT_MDL):
+      score_turn += 1
 
     # steeringAngle이 크면 턴에 가깝다고 본다
-    if abs(carstate.steeringAngleDeg) > 45.0:
-      score_turn += 1
+    #if abs(carstate.steeringAngleDeg) > 45.0:
+    #  score_turn += 1
 
     # 모델이 이미 turn을 예측 중이면 가중치
     if self.turn_desire_state:
@@ -397,14 +398,15 @@ class DesireHelper:
 
     # ★ road edge가 충분히 멀면(교차로/넓은 공간으로 판단) 턴 쪽으로 가산점
     edge_far = edge_dist > 4.0  # 튜닝 포인트 (4~6m 정도가 무난)
-    if edge_far:
-      score_turn += 1
+    #if edge_far:
+    #  score_turn += 1
       
     current_lane_missing = lane_prob_side < 0.3
     self.current_lane_missing = current_lane_missing
     # 튜닝 포인트: score_turn 임계값
     if score_turn >= 2:
-      if current_lane_missing and edge_far:
+      #if current_lane_missing and edge_far:
+      if edge_far:
         return "turn"
       else:
         return old_type
