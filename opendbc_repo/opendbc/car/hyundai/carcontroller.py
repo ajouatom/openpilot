@@ -203,7 +203,7 @@ class CarController(CarControllerBase):
     MAX_RATE_LOW = 200 # 저속, deg/s
     MAX_RATE_HIGH = 40 # 고속, deg/s
     UNWIND_SCALE = 1.5
-    UNWIND_MAX = 250
+    UNWIND_MAX = 200
 
     delta = actuators.steeringAngleDeg - self.apply_angle_last
     same_dir = (np.sign(delta) == np.sign(self.apply_angle_last)) or (abs(self.apply_angle_last) < 2.0)
