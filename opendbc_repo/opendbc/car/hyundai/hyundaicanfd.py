@@ -589,7 +589,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           values['RR_DETECT_LATERAL'] = hud_control.leadRightLat2
         """
         if canfd_debug > 0:
-          values['LEFT_LANE_CHANGING'] = 1
+          values['LANE_CHANGING'] = 1
+          values['LEFT1'] = 1
         ret.append(packer.make_can_msg("ADRV_0x1ea", CAN.ECAN, values))
 
       if CS.adrv_info_162 is not None:
