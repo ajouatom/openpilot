@@ -149,7 +149,7 @@ def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, 
     values["HAS_LANE_SAFETY"] = 0
     values["LKA_ACTIVE"] = 0 # NEW_SIGNAL_1
 
-    values["DampingGain"] = 0 if lat_active else 100  
+    values["DampingGain"] = 0 if lat_active else 100
     #values["VALUE63"] = 0
 
     #values["VALUE82_SET256"] = 0
@@ -274,7 +274,7 @@ def create_lfahda_cluster(packer, CS, CAN, long_active, lat_active):
     values["HDA_CntrlModSta"] = 2 if long_active else 0
     values["HDA_LFA_SymSta"] = 2 if lat_active else 0
 
-    # 
+    #
   else:
     return []
   return [packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, values)]
@@ -289,7 +289,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
     acc_mode = 4 if enabled else 0
     enabled = False
     accel = accel_last = 0.5
-   
+
   elif hyundai_jerk.carrot_cruise == 2:
     accel = accel_last = hyundai_jerk.carrot_cruise_accel
 
@@ -346,7 +346,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
   # AccelLimitBandUpper, Lower
   values["SysFailState"] = 0    # 1: Performance degredation, 2: system temporairy unavailble, 3: SCC Service required , 눈이 묻어 레이더오류시... 2가 됨. 이때 가속을 안함...
 
-  values["AccelLimitBandUpper"] = 0.0   # 이값이 1.26일때 가속을 안하는 증상이 보임.. 
+  values["AccelLimitBandUpper"] = 0.0   # 이값이 1.26일때 가속을 안하는 증상이 보임..
   values["AccelLimitBandLower"] = 0.0
 
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
@@ -540,7 +540,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         values["LANELINE_CURVATURE"] = (min(abs(curvature), 15) + (-1 if curvature < 0 else 0)) if lat_active else 0
         values["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 and lat_active else 0
 
-        # lane_color = 6 if lat_active else 2 
+        # lane_color = 6 if lat_active else 2
         lane_color = 2 # 6: green, 2: white, 4: yellow
         if hud_control.leftLaneDepart:
           values["LANELINE_LEFT"] = 4 if (frame // 50) % 2 == 0 else 1
@@ -568,6 +568,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
 
       if CS.adrv_info_1ea is not None:
         values = copy.copy(CS.adrv_info_1ea)
+        lat_active = CC.latActive
+
         #values["HDA_MODE1"] = 8
         #values["HDA_MODE2"] = 1
         if values['LF_DETECT'] == 0 and hud_control.leadLeftDist > 0:
@@ -589,8 +591,95 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           values['RR_DETECT_LATERAL'] = hud_control.leadRightLat2
         """
         if canfd_debug > 0:
-          values['LANE_CHANGING'] = 1
-          values['LEFT1'] = 1
+          # values['LEFTBLINK1'] = 1
+
+          values['AUTOLANECHANGE_MSG_MAYBE'] = canfd_debug # 급커브 구간입니다.
+
+          # values['AUTOLANECHANGE_MSG_MAYBE'] =  1 # 주변 상황을 확인하세요
+          # values['AUTOLANECHANGE_MSG_MAYBE'] =  2 # 작동 조건이 아닙니다
+          # values['AUTOLANECHANGE_MSG_MAYBE'] =  3 # 주행 차로를 분석중입니다
+          # values['AUTOLANECHANGE_MSG_MAYBE'] =  4 # 급커브 구간입니다
+          # values['AUTOLANECHANGE_MSG_MAYBE'] =  5 # 주행 중인 차로의 폭이 좁습니다
+          # values['AUTOLANECHANGE_MSG_MAYBE'] =  6 # 작동 구간이 아닙니다.
+          # values['AUTOLANECHANGE_MSG_MAYBE'] =  7 # 비상등이 켜져있습니다
+          # values['AUTOLANECHANGE_MSG_MAYBE'] =  8 # 주행속도가 낮습니다
+          # values['AUTOLANECHANGE_MSG_MAYBE'] =  9 # 핸들을 잡으십시오
+          # values['AUTOLANECHANGE_MSG_MAYBE'] = 10 # 작동 가능한 차로가 아닙니다
+          # values['AUTOLANECHANGE_MSG_MAYBE'] = 11 # 핸들 조작이 감지되었습니다.
+          # values['AUTOLANECHANGE_MSG_MAYBE'] = 12 # ok 버튼을 누르면 차로변경 보조기능이 켜집니다
+          # values['AUTOLANECHANGE_MSG_MAYBE'] = 13 # 없음.
+          # values['AUTOLANECHANGE_MSG_MAYBE'] = 14 # 없음.
+          # values['AUTOLANECHANGE_MSG_MAYBE'] = 15 # 없음.
+
+          # SG_ HDA_MODE2 : 32|3@1+ (1,0) [0|3] "" XXX
+          # values['HDA_MODE2'] = 1 # 0b001 차선변경 아이콘 회색
+          # values['HDA_MODE2'] = 2 # 0b010 옆차선 녹색 + 차선변경 아이콘 녹색
+          # values['HDA_MODE2'] = 3 # 0b011 옆차선 녹색 + 차선변경 아이콘 녹색 둘이 같이 점멸
+          # values['HDA_MODE2'] = 4 # 0b100 옆차선 흰색 + 차선변경 아이콘 흰색 둘이 같이 삐르게 점멸
+          # values['HDA_MODE2'] = 5 # 0b101 차로변경보조 기능 점검 경고
+          # values['HDA_MODE2'] = 6 # 0b110 딱히 뭐 없음
+          # values['HDA_MODE2'] = 7 # 0b111 딱히 뭐 없음
+
+          # 0 "IDLE" 1 "LEFT_CHECK" 3 "LEFT_CHANGING" 2 "RIGHT_CHECK" 4 "RIGHT_CHANGING";
+          # 0 "IDLE" 1 "ON_SOURCE" 2 "ON_TARGET";
+
+          # SG_ LANE_CHANGING_1 : 45|3@0+ (1,0) [0|1] "" XXX
+          # values['LANE_CHANGING_1'] = 1 # 왼쪽 화살표
+          # values['LANE_CHANGING_1'] = 2 # 오른쪽 화살표
+          # values['LANE_CHANGING_1'] = 3 # 왼쪽 화살표 + 바닥 # 차선하나 넘어가면 꺼지는듯
+          # values['LANE_CHANGING_1'] = 4 # 오른쪽 화살표 + 바닥 # 차선하나 넘어가면 꺼지는듯
+          # values['LANE_CHANGING_1'] = 5 # 딱히 뭐 없음
+          # values['LANE_CHANGING_1'] = 6 # 딱히 뭐 없음
+          # values['LANE_CHANGING_1'] = 7 # 딱히 뭐 없음
+
+
+
+
+          # 차선 커브
+          curvature = round(CS.out.steeringAngleDeg / 3)
+          # print(f"curvature1: {curvature}")
+          # print(f"curvature2: {max(0,min(abs(curvature), 15) + (-1 if curvature < 0 else 0)) if lat_active else 0}")
+          # print(f"curvature3: {1 if curvature < 0 and lat_active else 0}")
+          # print(f"curvature2: {max(0,min(abs(curvature), 15) + (-1 if curvature < 0 else 0)) }")
+          # print(f"curvature3: {1 if curvature < 0 else 0}")
+
+          values["LANELINE_CURVATURE"] = max(0,min(abs(curvature), 15) + (-1 if curvature < 0 else 0))
+          values["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 else 0
+
+
+          # SG_ NEW_SIGNAL_3 : 239|8@0+ (1,0) [0|255] "" XXX
+          # SG_ NEW_SIGNAL_1 : 247|8@0+ (1,0) [0|255] "" XXX
+          # 15:15 둘이 합계가 30 임 차선이동간격인듯?
+          # 반응 없음
+          # values['NEW_SIGNAL_3'] = 15
+          # values['NEW_SIGNAL_1'] = 15
+
+          # LANE_CHANGING_1 이걸 같이 줘야 클러스터에서도 켜져있음.. 안주면 HUD 만 나옴
+          # 차선변경 진행에 따라서 주면 될듯
+          # print(f"FRAME: {frame}")
+          # tttctu = ((frame / 5) % 31)
+          # values['NEW_SIGNAL_3'] = (tttctu + 15) % 31
+          # values['NEW_SIGNAL_1'] = (15 + 31 - tttctu) % 31
+          # values['HDA_MODE2'] = 2
+
+
+          # 차선변경 애니메이션
+          # values['RIGHTBLINK1'] = 1 # 깜빡이 홀드
+          # if tttctu == 0 :
+          #   # 초기화를 안해주면 화살표가 안나옴
+          #   values['RIGHTBLINK1'] = 0 # 깜빡이 홀드 해제
+          #   values['LANE_CHANGING_1'] = 0
+          # elif tttctu < 5 :
+          #   values['LANE_CHANGING_1'] = 2 # 오른쪽 화살표
+          # else:
+          #   values['LANE_CHANGING_1'] = 4 # 오른쪽 화살표 + 바닥
+
+
+          # tttctu = ((frame / 5) % 31)
+          # values['NEW_SIGNAL_3'] = 0 + tttctu
+          # values['NEW_SIGNAL_1'] = 30 - tttctu
+
+
         ret.append(packer.make_can_msg("ADRV_0x1ea", CAN.ECAN, values))
 
       if CS.adrv_info_162 is not None:
@@ -714,7 +803,7 @@ def alt_cruise_buttons(packer, CP, CAN, buttons, cruise_btns_msg, cnt):
   cruise_btns_msg["COUNTER"] = (cruise_btns_msg["COUNTER"] + 1 + cnt) % 256
   bus = CAN.ECAN if CP.flags & HyundaiFlags.CANFD_HDA2 else CAN.CAM
   return packer.make_can_msg("CRUISE_BUTTONS_ALT", bus, cruise_btns_msg)
-  
+
 def hkg_can_fd_checksum(address: int, sig, d: bytearray) -> int:
   crc = 0
   for i in range(2, len(d)):
