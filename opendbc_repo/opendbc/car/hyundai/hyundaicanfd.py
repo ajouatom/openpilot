@@ -590,94 +590,94 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           values['RR_DETECT_DISTANCE'] = 2
           values['RR_DETECT_LATERAL'] = hud_control.leadRightLat2
         """
+        # 차선 커브 HUD 랑 클러스터 둘다 휘어짐
+        if lat_active or canfd_debug > 0:
+          curvature = round(CS.out.steeringAngleDeg / 3)
+          values["LANELINE_CURVATURE"] = max(0,min(abs(curvature), 15) + (-1 if curvature < 0 else 0))
+          values["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 else 0
+        else:
+          # 설정 안하면 0 이니까 굳이 할필요 있나?
+          values["LANELINE_CURVATURE"] = 0
+          values["LANELINE_CURVATURE_DIRECTION"] = 0
+
         if canfd_debug > 0:
-          # values['LEFTBLINK1'] = 1
+          # values['LEFTBLINK1'] = 1 # 좌깜빡이 켜진상태 유지
+          # values['RIGHTBLINK1'] = 1 # 우깜빡이 켜진상태 유지
 
-          values['AUTOLANECHANGE_MSG_MAYBE'] = canfd_debug # 급커브 구간입니다.
+          # 이것들은 hud랑 연비막대 자리에 텍스트로 나옴
+          # values['AUTOLANECHANGE_MSG'] =  1 # 주변 상황을 확인하세요
+          # values['AUTOLANECHANGE_MSG'] =  2 # 작동 조건이 아닙니다
+          # values['AUTOLANECHANGE_MSG'] =  3 # 주행 차로를 분석중입니다
+          # values['AUTOLANECHANGE_MSG'] =  4 # 급커브 구간입니다
+          # values['AUTOLANECHANGE_MSG'] =  5 # 주행 중인 차로의 폭이 좁습니다
+          # values['AUTOLANECHANGE_MSG'] =  6 # 작동 구간이 아닙니다.
+          # values['AUTOLANECHANGE_MSG'] =  7 # 비상등이 켜져있습니다
+          # values['AUTOLANECHANGE_MSG'] =  8 # 주행속도가 낮습니다
+          # values['AUTOLANECHANGE_MSG'] =  9 # 핸들을 잡으십시오
+          # values['AUTOLANECHANGE_MSG'] = 10 # 작동 가능한 차로가 아닙니다
+          # values['AUTOLANECHANGE_MSG'] = 11 # 핸들 조작이 감지되었습니다.
+          # 얘는 우측 RPM 게이지에 크게 나옴
+          # values['AUTOLANECHANGE_MSG'] = 12 # ok 버튼을 누르면 차로변경 보조기능이 켜집니다
+          # values['AUTOLANECHANGE_MSG'] = 13 # 없음.
+          # values['AUTOLANECHANGE_MSG'] = 14 # 없음.
+          # values['AUTOLANECHANGE_MSG'] = 15 # 없음.
 
-          # values['AUTOLANECHANGE_MSG_MAYBE'] =  1 # 주변 상황을 확인하세요
-          # values['AUTOLANECHANGE_MSG_MAYBE'] =  2 # 작동 조건이 아닙니다
-          # values['AUTOLANECHANGE_MSG_MAYBE'] =  3 # 주행 차로를 분석중입니다
-          # values['AUTOLANECHANGE_MSG_MAYBE'] =  4 # 급커브 구간입니다
-          # values['AUTOLANECHANGE_MSG_MAYBE'] =  5 # 주행 중인 차로의 폭이 좁습니다
-          # values['AUTOLANECHANGE_MSG_MAYBE'] =  6 # 작동 구간이 아닙니다.
-          # values['AUTOLANECHANGE_MSG_MAYBE'] =  7 # 비상등이 켜져있습니다
-          # values['AUTOLANECHANGE_MSG_MAYBE'] =  8 # 주행속도가 낮습니다
-          # values['AUTOLANECHANGE_MSG_MAYBE'] =  9 # 핸들을 잡으십시오
-          # values['AUTOLANECHANGE_MSG_MAYBE'] = 10 # 작동 가능한 차로가 아닙니다
-          # values['AUTOLANECHANGE_MSG_MAYBE'] = 11 # 핸들 조작이 감지되었습니다.
-          # values['AUTOLANECHANGE_MSG_MAYBE'] = 12 # ok 버튼을 누르면 차로변경 보조기능이 켜집니다
-          # values['AUTOLANECHANGE_MSG_MAYBE'] = 13 # 없음.
-          # values['AUTOLANECHANGE_MSG_MAYBE'] = 14 # 없음.
-          # values['AUTOLANECHANGE_MSG_MAYBE'] = 15 # 없음.
+          # values['HDA_MODE2'] = 1 # 차선변경 아이콘 회색
+          # values['HDA_MODE2'] = 2 # 옆차선 녹색 + 차선변경 아이콘 녹색
+          # values['HDA_MODE2'] = 3 # 옆차선 녹색 + 차선변경 아이콘 녹색 둘이 같이 점멸
+          # values['HDA_MODE2'] = 4 # 옆차선 흰색 + 차선변경 아이콘 흰색 둘이 같이 삐르게 점멸
+          # values['HDA_MODE2'] = 5 # 차로변경보조 기능 점검 경고
+          # values['HDA_MODE2'] = 6 # 딱히 뭐 없음
+          # values['HDA_MODE2'] = 7 # 딱히 뭐 없음
 
-          # SG_ HDA_MODE2 : 32|3@1+ (1,0) [0|3] "" XXX
-          # values['HDA_MODE2'] = 1 # 0b001 차선변경 아이콘 회색
-          # values['HDA_MODE2'] = 2 # 0b010 옆차선 녹색 + 차선변경 아이콘 녹색
-          # values['HDA_MODE2'] = 3 # 0b011 옆차선 녹색 + 차선변경 아이콘 녹색 둘이 같이 점멸
-          # values['HDA_MODE2'] = 4 # 0b100 옆차선 흰색 + 차선변경 아이콘 흰색 둘이 같이 삐르게 점멸
-          # values['HDA_MODE2'] = 5 # 0b101 차로변경보조 기능 점검 경고
-          # values['HDA_MODE2'] = 6 # 0b110 딱히 뭐 없음
-          # values['HDA_MODE2'] = 7 # 0b111 딱히 뭐 없음
-
-          # 0 "IDLE" 1 "LEFT_CHECK" 3 "LEFT_CHANGING" 2 "RIGHT_CHECK" 4 "RIGHT_CHANGING";
-          # 0 "IDLE" 1 "ON_SOURCE" 2 "ON_TARGET";
-
-          # SG_ LANE_CHANGING_1 : 45|3@0+ (1,0) [0|1] "" XXX
+          # LANELINE_X_POSITION 값을 줘서 차선을 하나 넘어가면 화살표가 사라지는데 0 한번 넣어주면 다시 나옴.
           # values['LANE_CHANGING_1'] = 1 # 왼쪽 화살표
           # values['LANE_CHANGING_1'] = 2 # 오른쪽 화살표
-          # values['LANE_CHANGING_1'] = 3 # 왼쪽 화살표 + 바닥 # 차선하나 넘어가면 꺼지는듯
-          # values['LANE_CHANGING_1'] = 4 # 오른쪽 화살표 + 바닥 # 차선하나 넘어가면 꺼지는듯
+          # values['LANE_CHANGING_1'] = 3 # 왼쪽 화살표 + 바닥
+          # values['LANE_CHANGING_1'] = 4 # 오른쪽 화살표 + 바닥
           # values['LANE_CHANGING_1'] = 5 # 딱히 뭐 없음
           # values['LANE_CHANGING_1'] = 6 # 딱히 뭐 없음
           # values['LANE_CHANGING_1'] = 7 # 딱히 뭐 없음
 
+          # 자동차선변경할때 차선 포지션 15 중앙 0~30
+          # 좌, 우 둘다 중앙 기준에서 각 방향으로 멀어짐
+          # L30 R30 이면 아주 넓은 차선을 가짐.
+          # 어쩌면 콤마가 인식하는 차선폭 보고 조정 가능할듯..
+          # 새로운 차선이 생기는게 아니라 그냥 반대방향으로 텔레포트 시킴.. ㅋㅋ
+          # LANE_CHANGING_1 이거 안켜주면 hud 에서만 움직임..
+          if canfd_debug == 1:
+            # 중앙
+            values['HDA_MODE2'] = 2
+            values['LANE_CHANGING_1'] = 0
+            values['LANELINE_LEFT_POSITION'] = 15
+            values['LANELINE_RIGHT_POSITION'] = 15
+          elif canfd_debug == 2:
+            # 왼쪽
+            values['HDA_MODE2'] = 3
+            lp_counter = (frame / 5) % 31
+            if lp_counter == 0 :
+              values['LANE_CHANGING_1'] = 0
+            else:
+              # values['LANE_CHANGING_1'] = 1 # 왼쪽 화살표
+              values['LANE_CHANGING_1'] = 3 # 왼쪽 화살표 + 바닥
+
+            values['LANELINE_LEFT_POSITION'] = (15 - lp_counter + 31) % 31
+            values['LANELINE_RIGHT_POSITION'] = (lp_counter + 15) % 31
+
+          elif canfd_debug == 3:
+            # 오른쪽
+            values['HDA_MODE2'] = 3
+            lp_counter = (frame / 5) % 31
+            if lp_counter == 0 :
+              values['LANE_CHANGING_1'] = 0
+            else:
+              # values['LANE_CHANGING_1'] = 2 # 오른쪽 화살표
+              values['LANE_CHANGING_1'] = 4 # 오른쪽 화살표 + 바닥
+
+            values['LANELINE_LEFT_POSITION'] = (lp_counter + 15) % 31
+            values['LANELINE_RIGHT_POSITION'] = (15 - lp_counter + 31) % 31
 
 
-
-          # 차선 커브
-          curvature = round(CS.out.steeringAngleDeg / 3)
-          # print(f"curvature1: {curvature}")
-          # print(f"curvature2: {max(0,min(abs(curvature), 15) + (-1 if curvature < 0 else 0)) if lat_active else 0}")
-          # print(f"curvature3: {1 if curvature < 0 and lat_active else 0}")
-          # print(f"curvature2: {max(0,min(abs(curvature), 15) + (-1 if curvature < 0 else 0)) }")
-          # print(f"curvature3: {1 if curvature < 0 else 0}")
-
-          values["LANELINE_CURVATURE"] = max(0,min(abs(curvature), 15) + (-1 if curvature < 0 else 0))
-          values["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 else 0
-
-
-          # SG_ NEW_SIGNAL_3 : 239|8@0+ (1,0) [0|255] "" XXX
-          # SG_ NEW_SIGNAL_1 : 247|8@0+ (1,0) [0|255] "" XXX
-          # 15:15 둘이 합계가 30 임 차선이동간격인듯?
-          # 반응 없음
-          # values['NEW_SIGNAL_3'] = 15
-          # values['NEW_SIGNAL_1'] = 15
-
-          # LANE_CHANGING_1 이걸 같이 줘야 클러스터에서도 켜져있음.. 안주면 HUD 만 나옴
-          # 차선변경 진행에 따라서 주면 될듯
-          # print(f"FRAME: {frame}")
-          # tttctu = ((frame / 5) % 31)
-          # values['NEW_SIGNAL_3'] = (tttctu + 15) % 31
-          # values['NEW_SIGNAL_1'] = (15 + 31 - tttctu) % 31
-          # values['HDA_MODE2'] = 2
-
-
-          # 차선변경 애니메이션
-          # values['RIGHTBLINK1'] = 1 # 깜빡이 홀드
-          # if tttctu == 0 :
-          #   # 초기화를 안해주면 화살표가 안나옴
-          #   values['RIGHTBLINK1'] = 0 # 깜빡이 홀드 해제
-          #   values['LANE_CHANGING_1'] = 0
-          # elif tttctu < 5 :
-          #   values['LANE_CHANGING_1'] = 2 # 오른쪽 화살표
-          # else:
-          #   values['LANE_CHANGING_1'] = 4 # 오른쪽 화살표 + 바닥
-
-
-          # tttctu = ((frame / 5) % 31)
-          # values['NEW_SIGNAL_3'] = 0 + tttctu
-          # values['NEW_SIGNAL_1'] = 30 - tttctu
 
 
         ret.append(packer.make_can_msg("ADRV_0x1ea", CAN.ECAN, values))
