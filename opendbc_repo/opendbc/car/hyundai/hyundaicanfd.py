@@ -591,7 +591,17 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           values['RR_DETECT_DISTANCE'] = 2
           values['RR_DETECT_LATERAL'] = hud_control.leadRightLat2
         """
-        if canfd_debug > 0:
+        # 차선 커브 HUD 랑 클러스터 둘다 휘어짐
+        if lat_active or canfd_debug > 0:
+          curvature = round(CS.out.steeringAngleDeg / 3)
+          values["LANELINE_CURVATURE"] = max(0,min(abs(curvature), 15) + (-1 if curvature < 0 else 0))
+          values["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 else 0
+        else:
+          # 설정 안하면 0 이니까 굳이 할필요 있나?
+          values["LANELINE_CURVATURE"] = 0
+          values["LANELINE_CURVATURE_DIRECTION"] = 0
+
+        # if canfd_debug > 0:
           # values['LF_DETECT'] = 0 안나옴
           # values['LF_DETECT'] = 1 회색
           # values['LF_DETECT'] = 2 흰색
@@ -605,22 +615,22 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           # 0 ~ 150. 근데 100 부터는 동일함
           # values['LF_DETECT_DISTANCE'] = 50
 
-          values['LF_DETECT'] = 3
-          values['LF_DETECT_LATERAL'] = 3.0
-          values['LF_DETECT_DISTANCE'] = 0
+          # values['LF_DETECT'] = 3
+          # values['LF_DETECT_LATERAL'] = 3.0
+          # values['LF_DETECT_DISTANCE'] = 0
 
-          values['RF_DETECT'] = 3
-          values['RF_DETECT_LATERAL'] = 3.0
-          values['RF_DETECT_DISTANCE'] = 0
+          # values['RF_DETECT'] = 3
+          # values['RF_DETECT_LATERAL'] = 3.0
+          # values['RF_DETECT_DISTANCE'] = 0
 
 
-          values['CORNER_LR_SIG'] = 1
-          values['CORNER_LR_DETECT'] = 3.0
-          values['CORNER_LR_DIST'] = 10 # 0 ~ 14 15부터 안보임
+          # values['CORNER_LR_SIG'] = 1
+          # values['CORNER_LR_DETECT'] = 3.0
+          # values['CORNER_LR_DIST'] = 10 # 0 ~ 14 15부터 안보임
 
-          values['CORNER_RR_SIG'] = 1
-          values['CORNER_RR_DETECT'] = 3.0
-          values['CORNER_RR_DIST'] = 10 # 0 ~ 14 15부터 안보임
+          # values['CORNER_RR_SIG'] = 1
+          # values['CORNER_RR_DETECT'] = 3.0
+          # values['CORNER_RR_DIST'] = 10 # 0 ~ 14 15부터 안보임
 
 
           # if canfd_debug == 1:
@@ -684,12 +694,12 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           # 어쩌면 콤마가 인식하는 차선폭 보고 조정 가능할듯..
           # 새로운 차선이 생기는게 아니라 그냥 반대방향으로 텔레포트 시킴.. ㅋㅋ
           # LANE_CHANGING_1 이거 안켜주면 hud 에서만 움직임..
-          if canfd_debug > 0:
+          # if canfd_debug > 0:
             # 중앙
-            values['HDA_MODE2'] = 2
-            values['LANE_CHANGING_1'] = 0
-            values['LANELINE_LEFT_POSITION'] = 15
-            values['LANELINE_RIGHT_POSITION'] = 15
+            # values['HDA_MODE2'] = 2
+            # values['LANE_CHANGING_1'] = 0
+            # values['LANELINE_LEFT_POSITION'] = 15
+            # values['LANELINE_RIGHT_POSITION'] = 15
           # elif canfd_debug == 2:
           #   # 왼쪽
           #   values['HDA_MODE2'] = 3
@@ -771,19 +781,15 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           values["VIBRATE"] = 1
         ret.append(packer.make_can_msg("CCNC_0x162", CAN.ECAN, values))
 
-    if canfd_debug > 0:
-      if frame % 20 == 0: # 아직 시험중..
-        if CS.hda_info_4a3 is not None:
-          values = copy.copy(CS.hda_info_4a3)
-          #if canfd_debug == 1:
-          values["SIGNAL_0"] = 5
-          values["NEW_SIGNAL_1"] = 4
-          values["SPEED_LIMIT"] = 80
-          values["NEW_SIGNAL_3"] = 154
-          values["NEW_SIGNAL_4"] = 9
-          values["NEW_SIGNAL_5"] = 0
-          values["NEW_SIGNAL_6"] = 256
-          ret.append(packer.make_can_msg("HDA_INFO_4A3", CAN.CAM, values))
+    if frame % 20 == 0: # 아직 시험중..
+      if CS.hda_info_4a3 is not None:
+        values = copy.copy(CS.hda_info_4a3)
+        if canfd_debug > 0:
+          values["LinkClass"] = 1
+          values["SpeedUnit"] = 1
+          values["SPEED_LIMIT"] = 100
+
+        ret.append(packer.make_can_msg("HDA_INFO_4A3", CAN.CAM, values))
 
   return ret
 
