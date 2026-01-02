@@ -163,7 +163,7 @@ class CarController(CarControllerBase):
         self.steerDeltaDownLC = steerDeltaDownLC
       else:
         self.steerDeltaDownLC = self.steerDeltaDown
-        
+
       self.soft_hold_mode = 1 if params.get_int("AutoCruiseControl") > 1 else 2
       self.hapticFeedbackWhenSpeedCamera = int(params.get_int("HapticFeedbackWhenSpeedCamera"))
 
@@ -184,7 +184,7 @@ class CarController(CarControllerBase):
     else:
       self.params.STEER_DELTA_UP = self.steerDeltaUp
       self.params.STEER_DELTA_DOWN = self.steerDeltaDown
-    
+
     angle_control = self.CP.flags & HyundaiFlags.ANGLE_CONTROL
 
     # steering torque
@@ -196,7 +196,7 @@ class CarController(CarControllerBase):
                                                                        self.angle_limit_counter, self.max_angle_frames,
                                                                        MAX_ANGLE_CONSECUTIVE_FRAMES)
 
-    #apply_angle = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgoRaw, 
+    #apply_angle = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgoRaw,
     #                                           CS.out.steeringAngleDeg, CC.latActive, self.params.ANGLE_LIMITS)
 
     MAX_LAT_ACCEL = 8.0
@@ -211,7 +211,7 @@ class CarController(CarControllerBase):
     rate_deg_s = calc_rate_limit_by_lat_accel(self.apply_angle_last, CS.out.vEgoRaw, self.CP.wheelbase, MAX_LAT_ACCEL, MAX_RATE_LOW, MAX_RATE_HIGH)
     if not same_dir:
       rate_deg_s = min(rate_deg_s * UNWIND_SCALE, UNWIND_MAX)
-      
+
     rate_deg_per_tick = rate_deg_s * DT_CTRL
     apply_angle = np.clip(actuators.steeringAngleDeg,
                         self.apply_angle_last - rate_deg_per_tick,
@@ -274,7 +274,7 @@ class CarController(CarControllerBase):
 
     active_speed_decel = hud_control.activeCarrot == 3 and self.activeCarrot != 3 # 3: Speed Decel
     self.activeCarrot = hud_control.activeCarrot
-    if active_speed_decel and self.speedCameraHapticEndFrame < 0: # 과속카메라 감속시작      
+    if active_speed_decel and self.speedCameraHapticEndFrame < 0: # 과속카메라 감속시작
       self.speedCameraHapticEndFrame = self.frame + (8.0 / DT_CTRL)  #8초간 켜줌.
     elif not active_speed_decel:
       self.speedCameraHapticEndFrame = -1
@@ -331,7 +331,7 @@ class CarController(CarControllerBase):
 
       # LFA and HDA icons
       if self.frame % 5 == 0 and camera_scc:
-        can_sends.extend(hyundaicanfd.create_lfahda_cluster(self.packer, CS, self.CAN, CC.longActive, CC.latActive))
+        can_sends.extend(hyundaicanfd.create_lfahda_cluster(self.packer, CS, self.CAN, CC.longActive, CC.latActive, self.canfd_debug))
 
       # blinkers
       if hda2 and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
@@ -365,7 +365,7 @@ class CarController(CarControllerBase):
           can_sends.extend(hyundaicanfd.forward_button_message(self.packer, self.CAN, self.frame, CS, send_button, self.MainMode_ACC_trigger, self.LFA_trigger))
         else:
           can_sends.extend(self.create_button_messages(CC, CS, use_clu11=False))
-        
+
     else:
       can_sends.append(hyundaican.create_lkas11(self.packer, self.frame, self.CP, apply_torque, apply_steer_req,
                                                 torque_fault, CS.lkas11, sys_warning, sys_state, CC.enabled,
@@ -384,7 +384,7 @@ class CarController(CarControllerBase):
         #jerk = 3.0 if actuators.longControlState == LongCtrlState.pid else 1.0
         use_fca = self.CP.flags & HyundaiFlags.USE_FCA.value
         if camera_scc:
-          
+
           can_sends.extend(hyundaican.create_acc_commands_scc(self.packer, CC.enabled, accel, self.hyundai_jerk, int(self.frame / 2),
                                                           hud_control, set_speed_in_units, stopping,
                                                           CC.cruiseControl.override, casper_opt, CS, self.soft_hold_mode))
@@ -609,7 +609,7 @@ class HyundaiJerk:
             self.carrot_cruise_accel = max(carrot_cruise, self.carrot_cruise_accel - 1.0 * DT_CTRL) #  점진적으로 줄임.
     if self.carrot_cruise == 0:
       self.carrot_cruise_accel = CS.out.aEgo
-    
+
   def make_jerk(self, CP, CS, accel, actuators, hud_control):
     if actuators.longControlState == LongCtrlState.stopping:
       self.jerk = self.jerk_u_min / 2 - CS.out.aEgo

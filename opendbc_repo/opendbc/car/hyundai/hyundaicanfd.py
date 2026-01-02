@@ -267,14 +267,12 @@ def create_acc_cancel(packer, CP, CAN, cruise_info_copy):
   })
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
 
-def create_lfahda_cluster(packer, CS, CAN, long_active, lat_active):
+def create_lfahda_cluster(packer, CS, CAN, long_active, lat_active, canfd_debug):
 
   if CS.lfahda_cluster_info is not None:
-    values = {} #
+    values = {}
     values["HDA_CntrlModSta"] = 2 if long_active else 0
     values["HDA_LFA_SymSta"] = 2 if lat_active else 0
-
-    #
   else:
     return []
   return [packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, values)]
@@ -671,6 +669,16 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           # values['AUTOLANECHANGE_MSG'] = 14 # 없음.
           # values['AUTOLANECHANGE_MSG'] = 15 # 없음.
 
+        if canfd_debug > 0 :
+          # print(f"CS.lfahda_cluster_info {CS.lfahda_cluster_info is not None}\r\n")
+          if CS.lfahda_cluster_info is not None:
+            if CS.lfahda_cluster_info["HDA_CntrlModSta"] == 0:
+              values['HDA_MODE2'] = 1 # 차선변경 아이콘 회색
+            elif CS.lfahda_cluster_info["HDA_CntrlModSta"] == 1:
+              values['HDA_MODE2'] = 3 # 옆차선 녹색 + 차선변경 아이콘 녹색 둘이 같이 점멸
+            elif CS.lfahda_cluster_info["HDA_CntrlModSta"] == 2:
+              values['HDA_MODE2'] = 2 # 옆차선 녹색 + 차선변경 아이콘 녹색
+
           # values['HDA_MODE2'] = 1 # 차선변경 아이콘 회색
           # values['HDA_MODE2'] = 2 # 옆차선 녹색 + 차선변경 아이콘 녹색
           # values['HDA_MODE2'] = 3 # 옆차선 녹색 + 차선변경 아이콘 녹색 둘이 같이 점멸
@@ -787,10 +795,20 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         if canfd_debug > 0:
           values["LinkClass"] = 1
           values["SpeedUnit"] = 1
+          values["Frwinfo"] = 0
           values["SPEED_LIMIT"] = 100
 
         ret.append(packer.make_can_msg("HDA_INFO_4A3", CAN.CAM, values))
-
+    if frame % 10 == 0:
+      if CS.new_msg_4b4 is not None:
+        if canfd_debug > 0:
+          values = copy.copy(CS.new_msg_4b4)
+          values["NEW_SIGNAL_2"] = 59
+          values["NEW_SIGNAL_7"] = 2
+          values["NEW_SIGNAL_5"] = 2
+          values["NEW_SIGNAL_4"] = 76
+          values["NEW_SIGNAL_6"] = 4
+          ret.append(packer.make_can_msg("NEW_MSG_4B4", CAN.CAM, values))
   return ret
 
 def create_adrv_messages(CP, packer, CAN, frame):
