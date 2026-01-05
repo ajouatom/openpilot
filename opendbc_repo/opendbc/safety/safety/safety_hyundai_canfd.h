@@ -70,14 +70,22 @@ const CanMsg HYUNDAI_CANFD_HDA2_LONG_TX_MSGS[] = {
   {0x110, 0, 32}, // LKAS_ALT (272)
   {0x110, 1, 32}, // LKAS_ALT (272)
 
-  {0x50, 1, 16}, // 
-  {0x51, 1, 32}, // 
+  {0x50, 1, 16}, //
+  {0x51, 1, 32}, //
 
   {353, 0, 32}, // ADRV_353
   {354, 0, 32}, // CORNER_RADAR_HIGHWAY
   {512, 0, 8}, // ADRV_0x200
-  {1187, 2, 8}, // 4A3
-  {1204, 2, 8}, // 4B4
+  {0x4a3, 2, 8}, // 4A3 1187
+  {0x4b4, 2, 8}, // 4B4 1204
+
+  {0x4b8, 2, 8}, // test
+  {0x4b9, 2, 8}, // test
+  {0x4ba, 2, 8}, // test
+  {0x4be, 2, 8}, // test
+  {0x4bf, 2, 8}, // test
+  {0x4c1, 2, 8}, // test
+  {0x4DC, 2, 8}, // test
 
   {203, 0, 24}, // CB
   {373, 2, 24}, // TCS(0x175)
@@ -198,7 +206,7 @@ RxCheck hyundai_canfd_hda2_long_rx_checks[] = {
 };
 RxCheck hyundai_canfd_hda2_long_rx_checks_scc2[] = {
   HYUNDAI_CANFD_COMMON_RX_CHECKS(0)
-  HYUNDAI_CANFD_BUTTONS_ADDR_CHECK(0)  
+  HYUNDAI_CANFD_BUTTONS_ADDR_CHECK(0)
 };
 RxCheck hyundai_canfd_hda2_long_alt_buttons_rx_checks[] = {
   HYUNDAI_CANFD_COMMON_RX_CHECKS(1)
@@ -215,8 +223,8 @@ const int HYUNDAI_PARAM_CANFD_HDA2_ALT_STEERING = 128;
 bool hyundai_canfd_alt_buttons = false;
 bool hyundai_canfd_hda2_alt_steering = false;
 
-int canfd_tx_addr[32] = { 80, 81, 272, 282, 298, 352, 353, 354, 442, 485, 416, 437, 506, 474, 480, 490, 512, 676, 866, 837, 1402, 908, 1848, 1187, 1204, 203, 0, };
-int canfd_tx_hz[32] = {  100,100, 100, 100, 100,  50,  20,  20,  20,  20,  50,  20,  10,   1,  20,  20,  20,  20,  10,   5,   10,   5,   10,    5,   10, 100, 0, };
+int canfd_tx_addr[64] = { 80, 81, 272, 282, 298, 352, 353, 354, 442, 485, 416, 437, 506, 474, 480, 490, 512, 676, 866, 837, 1402, 908, 1848, 1187, 1204, 203,  1208,1209,1210,1214,1215,1217,1244, 0,};
+int canfd_tx_hz[64] = {  100,100, 100, 100, 100,  50,  20,  20,  20,  20,  50,  20,  10,   1,  20,  20,  20,  20,  10,   5,   10,   5,   10,    5,   10, 100,     5,   5,   5,   5,   5,   5,   5, 0,};
 uint32_t canfd_tx_timeout[32] = { 0, };
 int canfd_tx_addr2[32] = { 0x4a3, 373, 506, 463, 426, 234, 687, 0 };
 int canfd_tx_hz2[32] = {       5,  50,  10,  50,  50, 100, 10, 0 };
@@ -485,7 +493,7 @@ static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
       //if (addr == 908) bus_fwd = -1;
       //else if (addr == 1402) bus_fwd = -1;
       //
-      // ¾Æ·¡ÄÚµåÁß ¿ÀÅä»óÇâµîÄÚµå ÀÖÀ½.. ¤»
+      // ï¿½Æ·ï¿½ï¿½Úµï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Úµï¿½ ï¿½ï¿½ï¿½ï¿½.. ï¿½ï¿½
       //if (addr == 698) bus_fwd = -1;
       //if (addr == 1848) bus_fwd = -1;
       //if (addr == 1996) bus_fwd = -1;
@@ -536,7 +544,7 @@ static safety_config hyundai_canfd_init(uint16_t param) {
         else print("no camera_scc \n");
         if (hyundai_canfd_alt_buttons) {          // carrot : for CANIVAL 4TH HDA2
             print("hyundai safety canfd_hda2 long_alt_buttons\n");
-            if (hyundai_camera_scc) ret = BUILD_SAFETY_CFG(hyundai_canfd_hda2_long_alt_buttons_rx_checks_scc2, HYUNDAI_CANFD_HDA2_LONG_TX_MSGS);                
+            if (hyundai_camera_scc) ret = BUILD_SAFETY_CFG(hyundai_canfd_hda2_long_alt_buttons_rx_checks_scc2, HYUNDAI_CANFD_HDA2_LONG_TX_MSGS);
             else ret = BUILD_SAFETY_CFG(hyundai_canfd_hda2_long_alt_buttons_rx_checks, HYUNDAI_CANFD_HDA2_LONG_TX_MSGS);
         }
         else {

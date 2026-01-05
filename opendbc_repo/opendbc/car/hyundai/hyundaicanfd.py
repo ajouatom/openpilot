@@ -472,7 +472,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         ret.append(packer.make_can_msg(CS.cruise_btns_msg_canfd, CAN.CAM, values))
 
 
-    if frame % 5 == 0:
+    if frame % 5 == 0: # 20hz
       if CS.adrv_info_161 is not None:
         main_enabled = CS.out.cruiseState.available
         cruise_enabled = CC.enabled
@@ -789,7 +789,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           values["VIBRATE"] = 1
         ret.append(packer.make_can_msg("CCNC_0x162", CAN.ECAN, values))
 
-    if frame % 20 == 0: # 아직 시험중..
+    if frame % 20 == 0: # 5hz
       if CS.hda_info_4a3 is not None:
         values = copy.copy(CS.hda_info_4a3)
         if canfd_debug > 0:
@@ -805,6 +805,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
             values["SPEED_LIMIT"] = 100
         ret.append(packer.make_can_msg("HDA_INFO_4A3", CAN.CAM, values))
 
+    if frame % 10 == 0: # 10hz
       if CS.new_msg_4b4 is not None:
         if canfd_debug > 0:
           values = copy.copy(CS.new_msg_4b4)
