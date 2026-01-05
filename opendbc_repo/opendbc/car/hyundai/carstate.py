@@ -88,6 +88,15 @@ class CarState(CarStateBase):
     self.hda_info_4a3 = None
     self.cluster_speed_limit = None
     self.new_msg_4b4 = None
+
+    self.new_msg_4b8 = None
+    self.new_msg_4b9 = None
+    self.new_msg_4ba = None
+    self.new_msg_4be = None
+    self.new_msg_4bf = None
+    self.new_msg_4c1 = None
+    self.new_msg_4dc = None
+
     self.tcs_info_373 = None
     self.mdps_info = {}
     self.steer_touch_info = {}
@@ -155,6 +164,15 @@ class CarState(CarStateBase):
     self.CLUSTER_SPEED_LIMIT = True if 0x1fa in fingerprints[pt_bus] else False
     self.HDA_INFO_4A3 = True if 0x4a3 in fingerprints[pt_bus] else False
     self.NEW_MSG_4B4 = True if 0x4b4 in fingerprints[pt_bus] else False
+
+    self.NEW_MSG_4B8 = True if 0x4B8 in fingerprints[pt_bus] else False
+    self.NEW_MSG_4B9 = True if 0x4B9 in fingerprints[pt_bus] else False
+    self.NEW_MSG_4BA = True if 0x4BA in fingerprints[pt_bus] else False
+    self.NEW_MSG_4BE = True if 0x4BE in fingerprints[pt_bus] else False
+    self.NEW_MSG_4BF = True if 0x4BF in fingerprints[pt_bus] else False
+    self.NEW_MSG_4C1 = True if 0x4C1 in fingerprints[pt_bus] else False
+    self.NEW_MSG_4DC = True if 0x4DC in fingerprints[pt_bus] else False
+
     self.GEAR = True if 69 in fingerprints[pt_bus] else False
     self.GEAR_ALT = True if 64 in fingerprints[pt_bus] else False
     self.CAM_0x362 = True if 0x362 in fingerprints[alt_bus] else False
@@ -563,6 +581,18 @@ class CarState(CarStateBase):
           self.time_zone = ZoneInfo(NUMERIC_TO_TZ.get(country_code, "UTC"))
 
       self.new_msg_4b4 = cp.vl["NEW_MSG_4B4"] if self.NEW_MSG_4B4 else None
+
+      self.new_msg_4b8 = cp.vl["NEW_MSG_4B8"] if self.NEW_MSG_4B8 else None
+      self.new_msg_4b9 = cp.vl["NEW_MSG_4B9"] if self.NEW_MSG_4B9 else None
+      self.new_msg_4ba = cp.vl["NEW_MSG_4BA"] if self.NEW_MSG_4BA else None
+      self.new_msg_4be = cp.vl["NEW_MSG_4BE"] if self.NEW_MSG_4BE else None
+      self.new_msg_4bf = cp.vl["NEW_MSG_4BF"] if self.NEW_MSG_4BF else None
+      self.new_msg_4c1 = cp.vl["NEW_MSG_4C1"] if self.NEW_MSG_4C1 else None
+      self.new_msg_4dc = cp.vl["NEW_MSG_4DC"] if self.NEW_MSG_4DC else None
+
+
+
+
       self.tcs_info_373 = cp.vl["TCS"]
 
     ret.gearStep = cp.vl["GEAR"]["GEAR_STEP"] if self.GEAR else 0
