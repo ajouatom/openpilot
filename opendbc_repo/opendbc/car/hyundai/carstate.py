@@ -86,6 +86,7 @@ class CarState(CarStateBase):
     self.adrv_info_160 = None
     self.adrv_info_162 = None
     self.hda_info_4a3 = None
+    self.cluster_speed_limit = None
     self.new_msg_4b4 = None
     self.tcs_info_373 = None
     self.mdps_info = {}
@@ -138,7 +139,7 @@ class CarState(CarStateBase):
       self.SCC14 = True if 905 in fingerprints[bus_cruise] else False
     self.FCA11 = False
     self.FCA11_bus = Bus.cam
-      
+
     self.HAS_LFA_BUTTON = True if 913 in fingerprints[0] else False
     self.CRUISE_BUTTON_ALT = True if 1007 in fingerprints[0] else False
 
@@ -151,6 +152,7 @@ class CarState(CarStateBase):
     self.ADRV_0x1ea = True if 0x1ea in fingerprints[cam_bus] else False
     self.ADRV_0x160 = True if 0x160 in fingerprints[cam_bus] else False
     self.LFAHDA_CLUSTER = True if 480 in fingerprints[cam_bus] else False
+    self.CLUSTER_SPEED_LIMIT = True if 0x1fa in fingerprints[pt_bus] else False
     self.HDA_INFO_4A3 = True if 0x4a3 in fingerprints[pt_bus] else False
     self.NEW_MSG_4B4 = True if 0x4b4 in fingerprints[pt_bus] else False
     self.GEAR = True if 69 in fingerprints[pt_bus] else False
@@ -163,7 +165,7 @@ class CarState(CarStateBase):
 
     self.cp_bsm = None
     self.time_zone = "UTC"
-    
+
     self.controls_ready_count = 0
 
   def update(self, can_parsers) -> structs.CarState:
@@ -459,7 +461,7 @@ class CarState(CarStateBase):
       ret.steeringAngleDeg = cp.vl["MDPS"]["STEERING_ANGLE_2"] * -1
     else:
       ret.steeringAngleDeg = cp.vl["STEERING_SENSORS"]["STEERING_ANGLE"] * -1
-    
+
     ret.steeringTorque = cp.vl["MDPS"]["STEERING_COL_TORQUE"]
     ret.steeringTorqueEps = cp.vl["MDPS"]["STEERING_OUT_TORQUE"]
     ret.steeringPressed = self.update_steering_pressed(abs(ret.steeringTorque) > self.params.STEER_THRESHOLD, 5)
@@ -470,7 +472,7 @@ class CarState(CarStateBase):
     if self.STEER_TOUCH_2AF:
       self.steer_touch_info = cp.vl["STEER_TOUCH_2AF"]
 
-    blinkers_info = cp.vl["BLINKERS"]  
+    blinkers_info = cp.vl["BLINKERS"]
     left_blinker_lamp = blinkers_info["LEFT_LAMP"] or blinkers_info["LEFT_LAMP_ALT"]
     right_blinker_lamp = blinkers_info["RIGHT_LAMP"] or blinkers_info["RIGHT_LAMP_ALT"]
     ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_lamp(50, left_blinker_lamp, right_blinker_lamp)
@@ -497,7 +499,7 @@ class CarState(CarStateBase):
       self.MainMode_ACC = cp_cam.vl["SCC_CONTROL"]["MainMode_ACC"] == 1
       self.ACCMode = cp_cam.vl["SCC_CONTROL"]["ACCMode"]
       self.LFA_ICON = cp_cam.vl["LFAHDA_CLUSTER"]["HDA_LFA_SymSta"]
-      
+
     if self.CP.openpilotLongitudinalControl:
       # These are not used for engage/disengage since openpilot keeps track of state using the buttons
       ret.cruiseState.enabled = cp.vl["TCS"]["ACC_REQ"] == 1
@@ -524,7 +526,7 @@ class CarState(CarStateBase):
 
       if self.LFAHDA_CLUSTER:
         self.lfahda_cluster_info = cp_cam.vl["LFAHDA_CLUSTER"]
-        
+
       corner = False
       self.adrv_info_161 = cp_cam.vl["ADRV_0x161"] if self.CCNC_0x161 else None
       self.adrv_info_162 = cp_cam.vl["CCNC_0x162"] if self.CCNC_0x162 else None
@@ -547,6 +549,7 @@ class CarState(CarStateBase):
       self.adrv_info_160 = cp_cam.vl["ADRV_0x160"] if self.ADRV_0x160 else None
 
       self.hda_info_4a3 = cp.vl["HDA_INFO_4A3"] if self.HDA_INFO_4A3 else None
+      self.cluster_speed_limit = cp.vl["CLUSTER_SPEED_LIMIT"] if self.CLUSTER_SPEED_LIMIT else None
       if self.hda_info_4a3 is not None:
         speedLimit = self.hda_info_4a3["SPEED_LIMIT"]
         if not self.is_metric:
@@ -561,7 +564,7 @@ class CarState(CarStateBase):
 
       self.new_msg_4b4 = cp.vl["NEW_MSG_4B4"] if self.NEW_MSG_4B4 else None
       self.tcs_info_373 = cp.vl["TCS"]
-    
+
     ret.gearStep = cp.vl["GEAR"]["GEAR_STEP"] if self.GEAR else 0
     if 1 <= ret.gearStep <= 8 and ret.gearShifter == GearShifter.unknown:
       ret.gearShifter = GearShifter.drive

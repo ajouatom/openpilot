@@ -797,18 +797,26 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           values["SpeedUnit"] = 1
           values["Frwinfo"] = 0
           values["SPEED_LIMIT"] = 100
-
         ret.append(packer.make_can_msg("HDA_INFO_4A3", CAN.CAM, values))
-    if frame % 10 == 0:
+
       if CS.new_msg_4b4 is not None:
         if canfd_debug > 0:
           values = copy.copy(CS.new_msg_4b4)
-          values["NEW_SIGNAL_2"] = 59
-          values["NEW_SIGNAL_7"] = 2
+          values["NEW_SIGNAL_2"] = 7
+          values["NEW_SIGNAL_7"] = 1
           values["NEW_SIGNAL_5"] = 2
-          values["NEW_SIGNAL_4"] = 76
-          values["NEW_SIGNAL_6"] = 4
+          values["NEW_SIGNAL_4"] = 80
+          values["NEW_SIGNAL_6"] = 5
           ret.append(packer.make_can_msg("NEW_MSG_4B4", CAN.CAM, values))
+      if CS.cluster_speed_limit is not None:
+        if canfd_debug > 0:
+          values = copy.copy(CS.cluster_speed_limit)
+          values["SPEED_LIMIT_1"] = 100
+          values["SPEED_LIMIT_2"] = 100
+          values["SPEED_LIMIT_3"] = 105
+          ret.append(packer.make_can_msg("CLUSTER_SPEED_LIMIT",CAN.CAM,values))
+
+
   return ret
 
 def create_adrv_messages(CP, packer, CAN, frame):
