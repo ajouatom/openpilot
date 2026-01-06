@@ -133,7 +133,7 @@ class CarState(CarStateBase):
 
     fingerprints_str = Params().get("FingerPrints", encoding='utf-8')
     fingerprints = ast.literal_eval(fingerprints_str)
-    #print("fingerprints =", fingerprints)
+    # print("fingerprints =", fingerprints)
     ecu_disabled = False
     if self.CP.openpilotLongitudinalControl and not (self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC):
       ecu_disabled = True
@@ -165,13 +165,13 @@ class CarState(CarStateBase):
     self.HDA_INFO_4A3 = True if 0x4a3 in fingerprints[pt_bus] else False
     self.NEW_MSG_4B4 = True if 0x4b4 in fingerprints[pt_bus] else False
 
-    self.NEW_MSG_4B8 = True if 0x4B8 in fingerprints[pt_bus] else False
-    self.NEW_MSG_4B9 = True if 0x4B9 in fingerprints[pt_bus] else False
-    self.NEW_MSG_4BA = True if 0x4BA in fingerprints[pt_bus] else False
-    self.NEW_MSG_4BE = True if 0x4BE in fingerprints[pt_bus] else False
-    self.NEW_MSG_4BF = True if 0x4BF in fingerprints[pt_bus] else False
-    self.NEW_MSG_4C1 = True if 0x4C1 in fingerprints[pt_bus] else False
-    self.NEW_MSG_4DC = True if 0x4DC in fingerprints[pt_bus] else False
+    self.NEW_MSG_4B8 = True if 0x4b8 in fingerprints[pt_bus] else False
+    self.NEW_MSG_4B9 = True if 0x4b9 in fingerprints[pt_bus] else False
+    self.NEW_MSG_4BA = True if 0x4ba in fingerprints[pt_bus] else False
+    self.NEW_MSG_4BE = True if 0x4be in fingerprints[pt_bus] else False
+    self.NEW_MSG_4BF = True if 0x4bf in fingerprints[pt_bus] else False
+    self.NEW_MSG_4C1 = True if 0x4c1 in fingerprints[pt_bus] else False
+    self.NEW_MSG_4DC = True if 0x4dc in fingerprints[pt_bus] else False
 
     self.GEAR = True if 69 in fingerprints[pt_bus] else False
     self.GEAR_ALT = True if 64 in fingerprints[pt_bus] else False

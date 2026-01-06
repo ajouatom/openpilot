@@ -453,7 +453,14 @@ def forward_button_message(packer, CAN, frame, CS, cruise_button, MainMode_ACC_t
 def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle, left_lane_warning, right_lane_warning, canfd_debug, MainMode_ACC_trigger, LFA_trigger):
   ret = []
 
+  # if CS.new_msg_4b9 is not None:
+    # print(f"============new_msg_4b9==========\r\n")
+
+  # if CS.new_msg_4b4 is not None:
+    # print(f"============new_msg_4b4==========\r\n")
+
   if CP.flags & HyundaiFlags.CAMERA_SCC.value:
+
     if frame % 2 == 0:
       if CS.adrv_info_160 is not None:
         values = copy.copy(CS.adrv_info_160)
@@ -789,44 +796,44 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           values["VIBRATE"] = 1
         ret.append(packer.make_can_msg("CCNC_0x162", CAN.ECAN, values))
 
-    if frame % 20 == 0: # 5hz
-      if CS.hda_info_4a3 is not None:
-        values = copy.copy(CS.hda_info_4a3)
-        if canfd_debug > 0:
-          if canfd_debug == 1:
-            values["LinkClass"] = 2
-            values["SpeedUnit"] = 1
-            values["Frwinfo"] = 0
-            values["SPEED_LIMIT"] = 40
-          elif canfd_debug == 2:
-            values["LinkClass"] = 1
-            values["SpeedUnit"] = 1
-            values["Frwinfo"] = 0
-            values["SPEED_LIMIT"] = 100
-        ret.append(packer.make_can_msg("HDA_INFO_4A3", CAN.CAM, values))
-
-    if canfd_debug != 3:
-      if CS.new_msg_4b8 is not None:
-        values = copy.copy(CS.new_msg_4b8)
-        ret.append(packer.make_can_msg("NEW_MSG_4B8", CAN.CAM, values))
-      if CS.new_msg_4b9 is not None:
-        values = copy.copy(CS.new_msg_4b9)
-        ret.append(packer.make_can_msg("NEW_MSG_4B9", CAN.CAM, values))
-      if CS.new_msg_4ba is not None:
-        values = copy.copy(CS.new_msg_4ba)
-        ret.append(packer.make_can_msg("NEW_MSG_4BA", CAN.CAM, values))
-      if CS.new_msg_4be is not None:
-        values = copy.copy(CS.new_msg_4be)
-        ret.append(packer.make_can_msg("NEW_MSG_4BE", CAN.CAM, values))
-      if CS.new_msg_4bf is not None:
-        values = copy.copy(CS.new_msg_4bf)
-        ret.append(packer.make_can_msg("NEW_MSG_4BF", CAN.CAM, values))
-      if CS.new_msg_4c1 is not None:
-        values = copy.copy(CS.new_msg_4c1)
-        ret.append(packer.make_can_msg("NEW_MSG_4C1", CAN.CAM, values))
-      if CS.new_msg_4dc is not None:
-        values = copy.copy(CS.new_msg_4dc)
-        ret.append(packer.make_can_msg("NEW_MSG_4DC", CAN.CAM, values))
+    # if frame % 20 == 0: # 5hz
+    #   if CS.hda_info_4a3 is not None:
+    #     values = copy.copy(CS.hda_info_4a3)
+    #     if canfd_debug > 0:
+    #       if canfd_debug == 1:
+    #         values["LinkClass"] = 2
+    #         values["SpeedUnit"] = 1
+    #         values["Frwinfo"] = 0
+    #         values["SPEED_LIMIT"] = 40
+    #       elif canfd_debug == 2:
+    #         values["LinkClass"] = 1
+    #         values["SpeedUnit"] = 1
+    #         values["Frwinfo"] = 0
+    #         values["SPEED_LIMIT"] = 100
+    #     ret.append(packer.make_can_msg("HDA_INFO_4A3", CAN.CAM, values))
+    if frame % 100 == 0: # 1hz
+      if canfd_debug > 0:
+        if CS.new_msg_4b8 is not None:
+          values = copy.copy(CS.new_msg_4b8)
+          ret.append(packer.make_can_msg("NEW_MSG_4B8", CAN.CAM, values))
+        if CS.new_msg_4b9 is not None:
+          values = copy.copy(CS.new_msg_4b9)
+          ret.append(packer.make_can_msg("NEW_MSG_4B9", CAN.CAM, values))
+        if CS.new_msg_4ba is not None:
+          values = copy.copy(CS.new_msg_4ba)
+          ret.append(packer.make_can_msg("NEW_MSG_4BA", CAN.CAM, values))
+        if CS.new_msg_4be is not None:
+          values = copy.copy(CS.new_msg_4be)
+          ret.append(packer.make_can_msg("NEW_MSG_4BE", CAN.CAM, values))
+        if CS.new_msg_4bf is not None:
+          values = copy.copy(CS.new_msg_4bf)
+          ret.append(packer.make_can_msg("NEW_MSG_4BF", CAN.CAM, values))
+        if CS.new_msg_4c1 is not None:
+          values = copy.copy(CS.new_msg_4c1)
+          ret.append(packer.make_can_msg("NEW_MSG_4C1", CAN.CAM, values))
+        if CS.new_msg_4dc is not None:
+          values = copy.copy(CS.new_msg_4dc)
+          ret.append(packer.make_can_msg("NEW_MSG_4DC", CAN.CAM, values))
 
     if frame % 10 == 0: # 10hz
       if CS.cluster_speed_limit is not None:
@@ -842,8 +849,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
             values["SPEED_LIMIT_3"] = 105
           ret.append(packer.make_can_msg("CLUSTER_SPEED_LIMIT",CAN.CAM,values))
 
-      if CS.new_msg_4b4 is not None:
-        values = copy.copy(CS.new_msg_4b4)
+      # if CS.new_msg_4b4 is not None:
+      #   values = copy.copy(CS.new_msg_4b4)
       #   if canfd_debug > 0:
       #     if canfd_debug == 1:
       #       values["NEW_SIGNAL_2"] = 54
@@ -857,7 +864,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
       #       values["NEW_SIGNAL_5"] = 2
       #       values["NEW_SIGNAL_4"] = 80
       #       values["NEW_SIGNAL_6"] = 5
-        ret.append(packer.make_can_msg("NEW_MSG_4B4", CAN.CAM, values))
+      #   ret.append(packer.make_can_msg("NEW_MSG_4B4", CAN.CAM, values))
 
 
   return ret
