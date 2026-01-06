@@ -807,7 +807,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
 
 
 
-      if canfd_debug != 2:
+      if canfd_debug <= 2:
         if CS.new_msg_4b8 is not None:
           values = copy.copy(CS.new_msg_4b8)
           ret.append(packer.make_can_msg("NEW_MSG_4B8", CAN.CAM, values))
@@ -838,7 +838,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
             values["SPEED_LIMIT_1"] = 0
             values["SPEED_LIMIT_2"] = 0
             values["SPEED_LIMIT_3"] = 0
-          elif canfd_debug == 2:
+          elif canfd_debug >= 2:
             values["SPEED_LIMIT_1"] = 100
             values["SPEED_LIMIT_2"] = 100
             values["SPEED_LIMIT_3"] = 105
@@ -853,13 +853,13 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
             values["NEW_SIGNAL_5"] = 1
             values["NEW_SIGNAL_4"] = 73
             values["NEW_SIGNAL_6"] = 2
-          elif canfd_debug == 2:
+          elif canfd_debug >= 2:
             values["NEW_SIGNAL_2"] = 54
             values["NEW_SIGNAL_7"] = 1
             values["NEW_SIGNAL_5"] = 2
             values["NEW_SIGNAL_4"] = 80
             values["NEW_SIGNAL_6"] = 5
-        # ret.append(packer.make_can_msg("NEW_MSG_4B4", CAN.CAM, values))
+        ret.append(packer.make_can_msg("NEW_MSG_4B4", CAN.CAM, values))
 
   return ret
 

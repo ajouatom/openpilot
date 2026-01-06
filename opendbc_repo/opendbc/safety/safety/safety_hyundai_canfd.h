@@ -85,7 +85,7 @@ const CanMsg HYUNDAI_CANFD_HDA2_LONG_TX_MSGS[] = {
   {0x4be, 2, 8}, // test
   {0x4bf, 2, 8}, // test
   {0x4c1, 2, 8}, // test
-  {0x4DC, 2, 8}, // test
+  {0x4dc, 2, 8}, // test
 
   {203, 0, 24}, // CB
   {373, 2, 24}, // TCS(0x175)
@@ -226,8 +226,8 @@ bool hyundai_canfd_hda2_alt_steering = false;
 int canfd_tx_addr[64] = { 80, 81, 272, 282, 298, 352, 353, 354, 442, 485, 416, 437, 506, 474, 480, 490, 512, 676, 866, 837, 1402, 908, 1848, 0x4a3, 0x4b4, 203,  1208,1209,1210,1214,1215,1217,1244, 0,};
 int canfd_tx_hz[64] = {  100,100, 100, 100, 100,  50,  20,  20,  20,  20,  50,  20,  10,   1,  20,  20,  20,  20,  10,   5,   10,   5,   10,     5,    10, 100,     5,   5,   5,   5,   5,   5,   5, 0,};
 uint32_t canfd_tx_timeout[32] = { 0, };
-int canfd_tx_addr2[32] = { 0x4a3, 0x4b4, 373, 506, 463, 426, 234, 687, 1208,1209,1210,1214,1215,1217,1244, 0 };
-int canfd_tx_hz2[32] = {       5,    10,  50,  10,  50,  50, 100,  10,    5,   5,   5,   5,   5,   5,   5, 0 };
+int canfd_tx_addr2[32] = { 0x4a3, 373, 506, 463, 426, 234, 687, 1208,1209,1210,1214,1215,1217,1244, 0 };
+int canfd_tx_hz2[32] = {       5,   50,  10,  50,  50, 100,  10,    5,   5,   5,   5,   5,   5,   5, 0 };
 uint32_t canfd_tx_timeout2[32] = { 0, };
 uint32_t canfd_tx_time[32] = { 0, };
 uint32_t canfd_tx_time2[32] = { 0, };
@@ -441,11 +441,21 @@ int addr_list_count2 = 0;
 static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
   int bus_fwd = -1;
   uint32_t now = microsecond_timer_get();
+  if (addr == 0x4a3) { return -1; }
+  if (addr == 0x4b4) { return -1; }
+  if (addr == 0x4b8) { return -1; }
+  if (addr == 0x4b9) { return -1; }
+  if (addr == 0x4ba) { return -1; }
+  if (addr == 0x4be) { return -1; }
+  if (addr == 0x4bf) { return -1; }
+  if (addr == 0x4c1) { return -1; }
+  if (addr == 0x4dc) { return -1; }
 
   if (bus_num == 0) {
     bus_fwd = 2;
+
     for (int i = 0; canfd_tx_addr2[i] > 0; i++) {
-        if ((addr == 0x4b4) || (addr == canfd_tx_addr2[i] && (now - canfd_tx_time2[i]) < canfd_tx_timeout2[i])) {
+        if (addr == canfd_tx_addr2[i] && (now - canfd_tx_time2[i]) < canfd_tx_timeout2[i]) {
             bus_fwd = -1;
             break;
         }
