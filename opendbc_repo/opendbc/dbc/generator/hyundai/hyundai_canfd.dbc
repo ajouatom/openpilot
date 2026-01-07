@@ -928,6 +928,7 @@ BO_ 1187 HDA_INFO_4A3: 8 XXX
  SG_ CountryCode : 16|10@1+ (1,0) [0|1023] "" XXX
  SG_ MapSource : 27|3@1+ (1,0) [0|7] "" XXX
  SG_ TollExist : 30|2@1+ (1,0) [0|3] "" XXX
+ SG_ NEW_SIGNAL_1 : 37|6@0+ (1,0) [0|63] "" XXX
  SG_ TunnelExist : 38|2@1+ (1,0) [0|3] "" XXX
  SG_ NEW_SIGNAL_6 : 47|24@0+ (1,0) [0|16777215] "" XXX
 

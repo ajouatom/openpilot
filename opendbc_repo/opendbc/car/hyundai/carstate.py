@@ -89,13 +89,8 @@ class CarState(CarStateBase):
     self.cluster_speed_limit = None
     self.new_msg_4b4 = None
 
-    self.new_msg_4b8 = None
+    self.hda2_counter = 99
     self.new_msg_4b9 = None
-    self.new_msg_4ba = None
-    self.new_msg_4be = None
-    self.new_msg_4bf = None
-    self.new_msg_4c1 = None
-    self.new_msg_4dc = None
 
     self.tcs_info_373 = None
     self.mdps_info = {}
@@ -164,14 +159,6 @@ class CarState(CarStateBase):
     self.CLUSTER_SPEED_LIMIT = True if 0x1fa in fingerprints[pt_bus] else False
     self.HDA_INFO_4A3 = True if 0x4a3 in fingerprints[pt_bus] else False
     self.NEW_MSG_4B4 = True if 0x4b4 in fingerprints[pt_bus] else False
-
-    self.NEW_MSG_4B8 = True if 0x4b8 in fingerprints[pt_bus] else False
-    self.NEW_MSG_4B9 = True if 0x4b9 in fingerprints[pt_bus] else False
-    self.NEW_MSG_4BA = True if 0x4ba in fingerprints[pt_bus] else False
-    self.NEW_MSG_4BE = True if 0x4be in fingerprints[pt_bus] else False
-    self.NEW_MSG_4BF = True if 0x4bf in fingerprints[pt_bus] else False
-    self.NEW_MSG_4C1 = True if 0x4c1 in fingerprints[pt_bus] else False
-    self.NEW_MSG_4DC = True if 0x4dc in fingerprints[pt_bus] else False
 
     self.GEAR = True if 69 in fingerprints[pt_bus] else False
     self.GEAR_ALT = True if 64 in fingerprints[pt_bus] else False
@@ -565,9 +552,10 @@ class CarState(CarStateBase):
           ret.leftLatDist = self.adrv_info_1ea["LF_DETECT_LATERAL"]
           ret.rightLatDist = self.adrv_info_1ea["RF_DETECT_LATERAL"]
       self.adrv_info_160 = cp_cam.vl["ADRV_0x160"] if self.ADRV_0x160 else None
+      self.cluster_speed_limit = cp.vl["CLUSTER_SPEED_LIMIT"] if self.CLUSTER_SPEED_LIMIT else None
 
       self.hda_info_4a3 = cp.vl["HDA_INFO_4A3"] if self.HDA_INFO_4A3 else None
-      self.cluster_speed_limit = cp.vl["CLUSTER_SPEED_LIMIT"] if self.CLUSTER_SPEED_LIMIT else None
+
       if self.hda_info_4a3 is not None:
         speedLimit = self.hda_info_4a3["SPEED_LIMIT"]
         if not self.is_metric:
@@ -582,16 +570,13 @@ class CarState(CarStateBase):
 
       self.new_msg_4b4 = cp.vl["NEW_MSG_4B4"] if self.NEW_MSG_4B4 else None
 
-      self.new_msg_4b8 = cp.vl["NEW_MSG_4B8"] if self.NEW_MSG_4B8 else None
-      self.new_msg_4b9 = cp.vl["NEW_MSG_4B9"] if self.NEW_MSG_4B9 else None
-      self.new_msg_4ba = cp.vl["NEW_MSG_4BA"] if self.NEW_MSG_4BA else None
-      self.new_msg_4be = cp.vl["NEW_MSG_4BE"] if self.NEW_MSG_4BE else None
-      self.new_msg_4bf = cp.vl["NEW_MSG_4BF"] if self.NEW_MSG_4BF else None
-      self.new_msg_4c1 = cp.vl["NEW_MSG_4C1"] if self.NEW_MSG_4C1 else None
-      self.new_msg_4dc = cp.vl["NEW_MSG_4DC"] if self.NEW_MSG_4DC else None
-
-
-
+      # self.new_msg_4b8 = cp.vl["NEW_MSG_4B8"] # if self.NEW_MSG_4B8 else None
+      # self.new_msg_4b9 = cp.vl["NEW_MSG_4B9"] # if self.NEW_MSG_4B9 else None
+      # self.new_msg_4ba = cp.vl["NEW_MSG_4BA"] # if self.NEW_MSG_4BA else None
+      # self.new_msg_4be = cp.vl["NEW_MSG_4BE"] # if self.NEW_MSG_4BE else None
+      # self.new_msg_4bf = cp.vl["NEW_MSG_4BF"] # if self.NEW_MSG_4BF else None
+      # self.new_msg_4c1 = cp.vl["NEW_MSG_4C1"] # if self.NEW_MSG_4C1 else None
+      # self.new_msg_4dc = cp.vl["NEW_MSG_4DC"] # if self.NEW_MSG_4DC else None
 
       self.tcs_info_373 = cp.vl["TCS"]
 
