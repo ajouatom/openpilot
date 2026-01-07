@@ -441,13 +441,13 @@ int addr_list_count2 = 0;
 static int hyundai_canfd_fwd_hook(int bus_num, int addr) {
   int bus_fwd = -1;
   uint32_t now = microsecond_timer_get();
-  // if (bus_num == 0 && addr == 0x4b8) { return -1; }
-  // if (bus_num == 0 && addr == 0x4b9) { return -1; }
-  // if (bus_num == 0 && addr == 0x4ba) { return -1; }
-  // if (bus_num == 0 && addr == 0x4be) { return -1; }
-  // if (bus_num == 0 && addr == 0x4bf) { return -1; }
-  // if (bus_num == 0 && addr == 0x4c1) { return -1; }
-  // if (bus_num == 0 && addr == 0x4dc) { return -1; }
+  if (addr == 0x4b8) { return -1; }
+  if (addr == 0x4b9) { return -1; }
+  if (addr == 0x4ba) { return -1; }
+  if (addr == 0x4be) { return -1; }
+  if (addr == 0x4bf) { return -1; }
+  if (addr == 0x4c1) { return -1; }
+  if (addr == 0x4dc) { return -1; }
 
   if (bus_num == 0) {
     bus_fwd = 2;
