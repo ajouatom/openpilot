@@ -601,17 +601,21 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         if values['LR_DETECT'] == 4:  values['LR_DETECT'] = 2
         if values['RR_DETECT'] == 4:  values['RR_DETECT'] = 2
 
-        if values['LANE_LEFT'] > 0: # 1=ckeck 2=chaning
-          if values['LANE_LEFT'] == 1 and values["LANELINE_LEFT_POSITION"] == 15:
-            values['LANE_CHANGING'] = 1 # 왼쪽 화살표
-          else:
-            values['LANE_CHANGING'] = 3 # 왼쪽 화살표 + 바닥
+        #차선변경중 상태 표시
+        llpos = values["LANELINE_LEFT_POSITION"] # 0~15~30
+        lrpos = values["LANELINE_RIGHT_POSITION"] # 0~15~30
+        lc = CS.lane_changing
+        if lc == 0: # 차선변경중이 아니면
+          if llpos < 13: CS.lane_changing = 1 # 왼쪽 화살표
+          if lrpos < 13: CS.lane_changing = 2 # 오른쪽 화살표
+        elif llpos == 15 or lrpos == 15: # 중앙이면
+          CS.lane_changing = 0
+        else:
+          if lc == 1 and llpos < 12: CS.lane_changing = 3 # 왼쪽 화살표 + 바닥
+          if lc == 2 and lrpos < 12: CS.lane_changing = 4 # 오른쪽 화살표 + 바닥
 
-        if values['LANE_RIGHT'] > 0: # 1=ckeck 2=chaning
-          if values['LANE_RIGHT'] == 1 and values["LANELINE_RIGHT_POSITION"] == 15:
-            values['LANE_CHANGING'] = 2 # 오른쪽 화살표
-          else:
-            values['LANE_CHANGING'] = 4 # 오른쪽 화살표 + 바닥
+        values['LANE_CHANGING'] = CS.lane_changing
+
 
         ret.append(packer.make_can_msg("ADRV_0x1ea", CAN.ECAN, values))
 
