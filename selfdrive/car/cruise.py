@@ -733,10 +733,10 @@ class VCruiseCarrot:
       elif self.v_ego_kph_set < 30:
         self._cruise_control(-1, 0, "Cruise off (gas speed)")
       elif self.xState == 3:
-        v_cruise_kph = self.v_ego_kph_set
+        v_cruise_kph = min(self.v_ego_kph_set, v_cruise_kph)
         self._cruise_control(-1, 3, "Cruise off (traffic sign)")
       elif self.v_ego_kph_set >= self.autoGasTokSpeed and not CC.enabled:
-        v_cruise_kph = self.v_ego_kph_set
+        v_cruise_kph = min(self.v_ego_kph_set, v_cruise_kph)
         self._cruise_control(1, -1 if self.aTarget > 0.0 else 0, "Cruise on (gas pressed)")
     elif self._brake_pressed_count == -1 and self._soft_hold_active == 0:
       if self.v_ego_kph_set > self.autoGasTokSpeed:
