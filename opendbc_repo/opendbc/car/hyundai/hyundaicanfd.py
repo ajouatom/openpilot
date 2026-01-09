@@ -596,6 +596,12 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           pass
 
         if canfd_debug > 0:
+          # 조향 동기화 차선커브
+          curvature = round(CS.out.steeringAngleDeg / 3)
+          values["LANELINE_CURVATURE"] = max(0,min(abs(curvature), 15) + (-1 if curvature < 0 else 0))
+          values["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 else 0
+
+        if canfd_debug > 0:
           # 정차, 저속시 클러스터에 보이게.
           if values['LF_DETECT'] == 4 and values['LF_DETECT_DISTANCE'] != 0:  values['LF_DETECT'] = 2
           if values['RF_DETECT'] == 4 and values['RF_DETECT_DISTANCE'] != 0:  values['RF_DETECT'] = 2
