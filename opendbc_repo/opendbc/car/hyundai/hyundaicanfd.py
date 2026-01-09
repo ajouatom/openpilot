@@ -457,7 +457,7 @@ def forward_button_message(packer, CAN, frame, CS, cruise_button, MainMode_ACC_t
       ret.append(packer.make_can_msg(CS.cruise_btns_msg_canfd, CAN.CAM, values))
   return ret
 
-def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle, left_lane_warning, right_lane_warning, enable_corner_radar):
+def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle, left_lane_warning, right_lane_warning, enable_corner_radar,canfd_debug):
   ret = []
 
   if CP.flags & HyundaiFlags.CAMERA_SCC.value:
