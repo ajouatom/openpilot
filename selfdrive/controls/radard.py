@@ -522,7 +522,7 @@ class RadarD:
     for c in tracks.values():
       y_rel_neg = - c.yRel
       # center
-      if c.in_lane_prob > 0.1:
+      if c.in_lane_prob > 0.3:
         if c.cnt > 3:
           ld = c.get_RadarState(lead_msg.prob, float(-lead_msg.y[0]))
           ld['modelProb'] = 0.01
