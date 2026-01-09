@@ -595,23 +595,24 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           #values['RIGHT_BLINK_HOLD'] = 1
           pass
 
-        # 정차, 저속시 클러스터에 보이게.
-        if values['LF_DETECT'] == 4 and values['LF_DETECT_DISTANCE'] != 0:  values['LF_DETECT'] = 2
-        if values['RF_DETECT'] == 4 and values['RF_DETECT_DISTANCE'] != 0:  values['RF_DETECT'] = 2
-        if values['LR_DETECT'] == 4 and values['LR_DETECT_DISTANCE'] != 0:  values['LR_DETECT'] = 2
-        if values['RR_DETECT'] == 4 and values['RR_DETECT_DISTANCE'] != 0:  values['RR_DETECT'] = 2
+        if canfd_debug > 0:
+          # 정차, 저속시 클러스터에 보이게.
+          if values['LF_DETECT'] == 4 and values['LF_DETECT_DISTANCE'] != 0:  values['LF_DETECT'] = 2
+          if values['RF_DETECT'] == 4 and values['RF_DETECT_DISTANCE'] != 0:  values['RF_DETECT'] = 2
+          if values['LR_DETECT'] == 4 and values['LR_DETECT_DISTANCE'] != 0:  values['LR_DETECT'] = 2
+          if values['RR_DETECT'] == 4 and values['RR_DETECT_DISTANCE'] != 0:  values['RR_DETECT'] = 2
 
         if canfd_debug == 1:
-          print(f"hud_control= {hud_control.modelDesire}")
-          if hud_control.modelDesire == 1: #
-            values['LANE_CHANGING'] = 1
-            values["LANELINE_CURVATURE"] = 15
-            values["LANELINE_CURVATURE_DIRECTION"] = 0
+          # print(f"hud_control= {hud_control.modelDesire}")
+          if hud_control.modelDesire == 1: # # 좌회전
+            values['LANE_CHANGING'] = 1 # 왼쪽 화살표
+            values["LANELINE_CURVATURE"] = 15 # 커브 최대
+            values["LANELINE_CURVATURE_DIRECTION"] = 0 # 왼쪽으로
 
           elif hud_control.modelDesire == 2: # 우회전
-            values['LANE_CHANGING'] = 2
-            values["LANELINE_CURVATURE"] = 15
-            values["LANELINE_CURVATURE_DIRECTION"] = 1
+            values['LANE_CHANGING'] = 2 # 오른쪽 화살표
+            values["LANELINE_CURVATURE"] = 15 # 차선커브 최대로
+            values["LANELINE_CURVATURE_DIRECTION"] = 1 # 오른쪽으로
 
           elif hud_control.modelDesire == 3: # 좌차선변경
             values['LANE_CHANGING'] = 3 # 왼쪽 화살표 + 바닥
@@ -619,7 +620,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           elif hud_control.modelDesire == 4: # 우차선변경
             values['LANE_CHANGING'] = 4 # 오른쪽 화살표 + 바닥
 
-        elif canfd_debug == 4:
+        if canfd_debug == 2:
           #차선변경중 상태 표시
           llpos = values["LANELINE_LEFT_POSITION"] # 0~15~30
           lrpos = values["LANELINE_RIGHT_POSITION"] # 0~15~30
