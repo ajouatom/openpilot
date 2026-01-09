@@ -609,10 +609,17 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           if values['RR_DETECT'] == 4 and values['RR_DETECT_DISTANCE'] != 0:  values['RR_DETECT'] = 2
 
           if values['LR_DETECT_DISTANCE'] > 14:
-            values['LR_DETECT'] = 2 if int(values['LR_DETECT_DISTANCE']*10) % 2 == 0 else 1
+            d = min(values['LR_DETECT_DISTANCE'], 100.0)
+            hz = 1 + 99 * (1 - d / 100.0)          # d=100→1Hz, d=0→100Hz
+            blink = int(frame * hz / FPS) & 1
+            values['LR_DETECT'] = 2 - blink # 멀수록 천천히 점멸
             values['LR_DETECT_DISTANCE'] = 14
+
           if values['RR_DETECT_DISTANCE'] > 14:
-            values['RR_DETECT'] = 2 if int(values['RR_DETECT_DISTANCE']*10) % 2 == 0 else 1
+            d = min(values['RR_DETECT_DISTANCE'], 100.0)
+            hz = 1 + 99 * (1 - d / 100.0)          # d=100→1Hz, d=0→100Hz
+            blink = int(frame * hz / FPS) & 1
+            values['RR_DETECT'] = 2 - blink # 멀수록 천천히 점멸
             values['RR_DETECT_DISTANCE'] = 14
 
         if canfd_debug == 1:
