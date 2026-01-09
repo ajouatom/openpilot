@@ -608,6 +608,13 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           if values['LR_DETECT'] == 4 and values['LR_DETECT_DISTANCE'] != 0:  values['LR_DETECT'] = 2
           if values['RR_DETECT'] == 4 and values['RR_DETECT_DISTANCE'] != 0:  values['RR_DETECT'] = 2
 
+          if values['LR_DETECT_DISTANCE'] > 14:
+            values['LR_DETECT'] = 2 if int(values['LR_DETECT_DISTANCE']*10) % 2 == 0 else 1
+            values['LR_DETECT_DISTANCE'] = 14
+          if values['RR_DETECT_DISTANCE'] > 14:
+            values['RR_DETECT'] = 2 if int(values['RR_DETECT_DISTANCE']*10) % 2 == 0 else 1
+            values['RR_DETECT_DISTANCE'] = 14
+
         if canfd_debug == 1:
           # print(f"hud_control= {hud_control.modelDesire}")
           if hud_control.modelDesire == 1: # # 좌회전
