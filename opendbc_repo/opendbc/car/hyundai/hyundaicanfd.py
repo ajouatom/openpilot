@@ -149,7 +149,7 @@ def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, 
     values["HAS_LANE_SAFETY"] = 0
     values["LKA_ACTIVE"] = 0 # NEW_SIGNAL_1
 
-    values["DampingGain"] = 0 if lat_active else 100  
+    values["DampingGain"] = 0 if lat_active else 100
     #values["VALUE63"] = 0
 
     #values["VALUE82_SET256"] = 0
@@ -274,7 +274,7 @@ def create_lfahda_cluster(packer, CS, CAN, long_active, lat_active):
     values["HDA_CntrlModSta"] = 2 if long_active else 0
     values["HDA_LFA_SymSta"] = 2 if lat_active else 0
 
-    # 
+    #
   else:
     return []
   return [packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, values)]
@@ -289,7 +289,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
     acc_mode = 4 if enabled else 0
     enabled = False
     accel = accel_last = 0.5
-   
+
   elif hyundai_jerk.carrot_cruise == 2:
     accel = accel_last = hyundai_jerk.carrot_cruise_accel
 
@@ -346,7 +346,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
   # AccelLimitBandUpper, Lower
   values["SysFailState"] = 0    # 1: Performance degredation, 2: system temporairy unavailble, 3: SCC Service required , 눈이 묻어 레이더오류시... 2가 됨. 이때 가속을 안함...
 
-  values["AccelLimitBandUpper"] = 0.0   # 이값이 1.26일때 가속을 안하는 증상이 보임.. 
+  values["AccelLimitBandUpper"] = 0.0   # 이값이 1.26일때 가속을 안하는 증상이 보임..
   values["AccelLimitBandLower"] = 0.0
 
   values["ZEROS_7"] = 1
@@ -464,7 +464,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
     HDA_CntrlModSta = 0
     if CS.lfahda_cluster_info is not None:
       HDA_CntrlModSta = CS.lfahda_cluster_info["HDA_CntrlModSta"]
-    
+
     if frame % 2 == 0:
       if CS.adrv_info_160 is not None:
         values = copy.copy(CS.adrv_info_160)
@@ -475,7 +475,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         ret.append(packer.make_can_msg("ADRV_0x160", CAN.ECAN, values))
 
       if CS.cruise_buttons_msg is not None:
-        values = copy.copy(CS.cruise_buttons_msg)        
+        values = copy.copy(CS.cruise_buttons_msg)
         if CS.lfahda_cluster_info["HDA_LFA_SymSta"] == 0 and 0 < frame % 200 < 12:
           values["LFA_BTN"] = 1
         else:
@@ -488,7 +488,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           values["ADAPTIVE_CRUISE_MAIN_BTN"] = 1
         else:
           values["ADAPTIVE_CRUISE_MAIN_BTN"] = 0
-          
+
         ret.append(packer.make_can_msg(CS.cruise_btns_msg_canfd, CAN.CAM, values))
 
 
@@ -558,7 +558,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         values["LANELINE_CURVATURE"] = (min(abs(curvature), 15) + (-1 if curvature < 0 else 0)) if lat_active else 0
         values["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 and lat_active else 0
 
-        # lane_color = 6 if lat_active else 2 
+        # lane_color = 6 if lat_active else 2
         lane_color = 2 # 6: green, 2: white, 4: yellow
         if hud_control.leftLaneDepart:
           values["LANELINE_LEFT"] = 4 if (frame // 50) % 2 == 0 else 1
@@ -594,6 +594,25 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         if CC.rightBlinker:
           #values['RIGHT_BLINK_HOLD'] = 1
           pass
+
+        # 정차, 저속시 클러스터에 보이게.
+        if values['LF_DETECT'] == 4:  values['LF_DETECT'] = 2
+        if values['RF_DETECT'] == 4:  values['RF_DETECT'] = 2
+        if values['LR_DETECT'] == 4:  values['LR_DETECT'] = 2
+        if values['RR_DETECT'] == 4:  values['RR_DETECT'] = 2
+
+        if values['LANE_LEFT'] > 0: # 1=ckeck 2=chaning
+          if values['LANE_LEFT'] == 1 and values["LANELINE_LEFT_POSITION"] == 15:
+            values['LANE_CHANGING'] = 1 # 왼쪽 화살표
+          else:
+            values['LANE_CHANGING'] = 3 # 왼쪽 화살표 + 바닥
+
+        if values['LANE_RIGHT'] > 0: # 1=ckeck 2=chaning
+          if values['LANE_RIGHT'] == 1 and values["LANELINE_RIGHT_POSITION"] == 15:
+            values['LANE_CHANGING'] = 2 # 오른쪽 화살표
+          else:
+            values['LANE_CHANGING'] = 4 # 오른쪽 화살표 + 바닥
+
         ret.append(packer.make_can_msg("ADRV_0x1ea", CAN.ECAN, values))
 
       if CS.adrv_info_162 is not None:
@@ -706,7 +725,7 @@ def alt_cruise_buttons(packer, CP, CAN, buttons, cruise_btns_msg, cnt):
   cruise_btns_msg["COUNTER"] = (cruise_btns_msg["COUNTER"] + 1 + cnt) % 256
   bus = CAN.ECAN if CP.flags & HyundaiFlags.CANFD_HDA2 else CAN.CAM
   return packer.make_can_msg("CRUISE_BUTTONS_ALT", bus, cruise_btns_msg)
-  
+
 def hkg_can_fd_checksum(address: int, sig, d: bytearray) -> int:
   crc = 0
   for i in range(2, len(d)):
