@@ -601,20 +601,38 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         if values['LR_DETECT'] == 4:  values['LR_DETECT'] = 2
         if values['RR_DETECT'] == 4:  values['RR_DETECT'] = 2
 
-        #차선변경중 상태 표시
-        llpos = values["LANELINE_LEFT_POSITION"] # 0~15~30
-        lrpos = values["LANELINE_RIGHT_POSITION"] # 0~15~30
-        lc = CS.lane_changing
-        if lc == 0: # 차선변경중이 아니면
-          if llpos < 13: CS.lane_changing = 1 # 왼쪽 화살표
-          if lrpos < 13: CS.lane_changing = 2 # 오른쪽 화살표
-        elif llpos == 15 or lrpos == 15: # 중앙이면
-          CS.lane_changing = 0
-        else:
-          if lc == 1 and llpos < 12: CS.lane_changing = 3 # 왼쪽 화살표 + 바닥
-          if lc == 2 and lrpos < 12: CS.lane_changing = 4 # 오른쪽 화살표 + 바닥
+        if canfd_debug in [1,2]:
 
-        values['LANE_CHANGING'] = CS.lane_changing
+          if hud_control.modelDesire == 0: # 주행
+          elif hud_control.modelDesire == 1: # 좌회전
+            values["LANELINE_CURVATURE"] = 15 if canfd_debug == 1 else 30
+            values["LANELINE_CURVATURE_DIRECTION"] = 0
+
+          elif hud_control.modelDesire == 2: # 우회전
+            values["LANELINE_CURVATURE"] = 15 if canfd_debug == 1 else 30
+            values["LANELINE_CURVATURE_DIRECTION"] = 1
+
+          elif hud_control.modelDesire == 3: # 좌차선변경
+            values['LANE_CHANGING'] = 3
+
+          elif hud_control.modelDesire == 4: # 우차선변경
+            values['LANE_CHANGING'] = 4
+
+        elif canfd_debug in [3]:
+          #차선변경중 상태 표시
+          llpos = values["LANELINE_LEFT_POSITION"] # 0~15~30
+          lrpos = values["LANELINE_RIGHT_POSITION"] # 0~15~30
+          lc = CS.lane_changing
+          if lc == 0: # 차선변경중이 아니면
+            if llpos < 13: CS.lane_changing = 1 # 왼쪽 화살표
+            if lrpos < 13: CS.lane_changing = 2 # 오른쪽 화살표
+          elif llpos == 15 or lrpos == 15: # 중앙이면
+            CS.lane_changing = 0
+          else:
+            if lc == 1 and llpos < 12: CS.lane_changing = 3 # 왼쪽 화살표 + 바닥
+            if lc == 2 and lrpos < 12: CS.lane_changing = 4 # 오른쪽 화살표 + 바닥
+
+          values['LANE_CHANGING'] = CS.lane_changing
 
 
         ret.append(packer.make_can_msg("ADRV_0x1ea", CAN.ECAN, values))
