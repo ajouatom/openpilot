@@ -610,15 +610,15 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
 
           if values['LR_DETECT_DISTANCE'] > 14:
             d = min(values['LR_DETECT_DISTANCE'], 100.0)
-            hz = 1 + 99 * (1 - d / 100.0)          # d=100→1Hz, d=0→100Hz
-            blink = int(frame * hz / FPS) & 1
+            interval = int(1 + 99 * (d / 100.0))   # 1..100 frames
+            blink = (frame // interval) & 1
             values['LR_DETECT'] = 2 - blink # 멀수록 천천히 점멸
             values['LR_DETECT_DISTANCE'] = 14
 
           if values['RR_DETECT_DISTANCE'] > 14:
             d = min(values['RR_DETECT_DISTANCE'], 100.0)
-            hz = 1 + 99 * (1 - d / 100.0)          # d=100→1Hz, d=0→100Hz
-            blink = int(frame * hz / FPS) & 1
+            interval = int(1 + 99 * (d / 100.0))   # 1..100 frames
+            blink = (frame // interval) & 1
             values['RR_DETECT'] = 2 - blink # 멀수록 천천히 점멸
             values['RR_DETECT_DISTANCE'] = 14
 
