@@ -38,8 +38,6 @@ class LatControlPID(LatControl):
 
       output_steer = self.pid.update(error, override=CS.steeringPressed,
                                      feedforward=steer_feedforward, speed=CS.vEgo)
-
-      output_steer = output_steer * self._get_steer_pressed_factor(CS, model_data)
       pid_log.active = True
       pid_log.p = float(self.pid.p)
       pid_log.i = float(self.pid.i)

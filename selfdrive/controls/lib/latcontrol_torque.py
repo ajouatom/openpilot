@@ -288,7 +288,6 @@ class LatControlTorque(LatControl):
                                       speed=CS.vEgo,
                                       freeze_integrator=freeze_integrator)
 
-      output_torque = output_torque * self._get_steer_pressed_factor(CS, model_data)
       pid_log.active = True
       pid_log.p = float(self.pid.p)
       pid_log.i = float(self.pid.i)
