@@ -603,8 +603,9 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
 
         if canfd_debug in [1,2]:
 
-          if hud_control.modelDesire == 0: # 주행
-          elif hud_control.modelDesire == 1: # 좌회전
+          # if hud_control.modelDesire == 0: # 주행
+          # el
+          if hud_control.modelDesire == 1: # 좌회전
             values["LANELINE_CURVATURE"] = 15 if canfd_debug == 1 else 30
             values["LANELINE_CURVATURE_DIRECTION"] = 0
 
