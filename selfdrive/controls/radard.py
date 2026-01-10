@@ -688,7 +688,7 @@ class RadarD:
     if left_state > 0:
       left_ok = left_lat < ENTER_LAT
     elif left_state == 0:
-      left_ok = left_lat < KEEP_LAT
+      left_ok = 0 < left_lat < KEEP_LAT
     else:  # leaving
       left_ok = left_lat <= EXIT_LAT
 
@@ -697,7 +697,7 @@ class RadarD:
     if right_state > 0:
       right_ok = right_lat < ENTER_LAT
     elif right_state == 0:
-      right_ok = right_lat < KEEP_LAT
+      right_ok = 0 < right_lat < KEEP_LAT
     else:
       right_ok = right_lat <= EXIT_LAT
 
