@@ -133,6 +133,8 @@ class CarrotPlanner:
     self.atcType = ""
     self.atc_active = False
 
+    self._stop_x_rl = None
+
 
   def _params_update(self):
     self.frame += 1
@@ -172,7 +174,7 @@ class CarrotPlanner:
       self.j_lead_factor = self.params.get_float("JLeadFactor3") / 100.
       self.eco_over_speed = self.params.get_int("CruiseEcoControl")
       self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
-      self.aChangeCostStaring = self.params.get_float("AChangeCostStarting")
+      self.aChangeCostStarting = self.params.get_float("AChangeCostStarting")
       self.trafficStopDistanceAdjust = self.params.get_float("TrafficStopDistanceAdjust") / 100.
     elif self.params_count >= 100:
 
@@ -280,7 +282,7 @@ class CarrotPlanner:
     if sm.alive['carrotMan']:
       carrot_man = sm['carrotMan']
       atc_turn_left = carrot_man.atcType in ["turn left", "atc left"]
-      trigger_start = self.carrot_staty_stop = False
+      trigger_start = self.carrot_stay_stop = False
       if atc_turn_left or sm['carState'].leftBlinker:
         if self.trafficState_carrot == 1 and carrot_man.trafficState == 3: # red -> left triggered
           trigger_start = True
@@ -389,7 +391,17 @@ class CarrotPlanner:
     lead_detected = radarstate.leadOne.status # & radarstate.leadOne.radar
 
     self.xStop = self.update_stop_dist(x[31])
-    stop_model_x = self.xStop
+    stop_model_x_raw = self.xStop
+    if self._stop_x_rl is None:
+      self._stop_x_rl = stop_model_x_raw
+    else:
+      max_close = v_ego * DT_MDL + 0.5
+      if stop_model_x_raw > self._stop_x_rl:
+        self._stop_x_rl = stop_model_x_raw
+      else:
+        self._stop_x_rl = max(self._stop_x_rl - max_close, stop_model_x_raw)
+
+    stop_model_x = self._stop_x_rl
 
     trafficState_last = self.trafficState
     #self.check_model_stopping(v, v_ego, self.xStop, y)
@@ -401,6 +413,8 @@ class CarrotPlanner:
       self.trafficState = TrafficState.off
 
     #self.update_user_control()
+    if self.xState not in [XState.e2eStop, XState.e2eStopped]:
+      self._stop_x_rl = stop_model_x_raw
 
     if carstate.gasPressed or carstate.brakePressed:
       self.user_stop_distance = -1
@@ -495,7 +509,12 @@ class CarrotPlanner:
     #��ȣ�� �������� self.xState.value
 
     stop_dist =  stop_model_x + self.actual_stop_distance
-    stop_dist = max(stop_dist, v_ego ** 2 / (self.comfort_brake * 2))
+    stop_dist = max(stop_dist, 0.0)
+
+    stopping_active = (self.xState in [XState.e2eStop, XState.e2eStopped])
+    if stopping_active and stop_dist < 300.0:
+      v_soft = float(np.sqrt(max(0.0, 2.0 * self.comfort_brake * stop_dist)))
+      v_cruise = min(v_cruise, v_soft)
 
     self.v_cruise = v_cruise
     self.stop_dist = stop_dist
