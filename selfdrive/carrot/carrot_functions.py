@@ -402,6 +402,7 @@ class CarrotPlanner:
         self._stop_x_rl = max(self._stop_x_rl - max_close, stop_model_x_raw)
 
     stop_model_x = self._stop_x_rl
+    stop_model_x_rl = self._stop_x_rl
 
     trafficState_last = self.trafficState
     #self.check_model_stopping(v, v_ego, self.xStop, y)
@@ -413,9 +414,6 @@ class CarrotPlanner:
       self.trafficState = TrafficState.off
 
     #self.update_user_control()
-    if self.xState not in [XState.e2eStop, XState.e2eStopped]:
-      self._stop_x_rl = stop_model_x_raw
-
     if carstate.gasPressed or carstate.brakePressed:
       self.user_stop_distance = -1
 
@@ -426,7 +424,7 @@ class CarrotPlanner:
     elif self.xState == XState.e2eStopped:
       if carstate.gasPressed:
         self.xState = XState.e2eCruise #XState.e2ePrepare
-      elif lead_detected and (radarstate.leadOne.dRel - stop_model_x) < 2.0:
+      elif lead_detected and (radarstate.leadOne.dRel - stop_model_x_rl) < 2.0:
         self.xState = XState.lead
       elif self.stopping_count == 0:
         if self.trafficState == TrafficState.green and not self.carrot_stay_stop and not carstate.leftBlinker and self.trafficLightDetectMode != 1:
@@ -441,7 +439,7 @@ class CarrotPlanner:
         #self.xState = XState.e2ePrepare
         self.xState = XState.e2eCruise
         self.traffic_starting_count = 10.0 / DT_MDL
-      elif lead_detected and (radarstate.leadOne.dRel - stop_model_x) < 2.0:
+      elif lead_detected and (radarstate.leadOne.dRel - stop_model_x_rl) < 2.0:
         self.xState = XState.lead
       else:
         if self.trafficState == TrafficState.green:
@@ -500,6 +498,10 @@ class CarrotPlanner:
     elif self.actual_stop_distance > 0: ## e2eStop, e2eStopped�ΰ��..
       stop_model_x = 0.0
 
+    stopping_active = self.xState not in [XState.e2eStop, XState.e2eStopped]
+    if not stopping_active:
+      self._stop_x_rl = stop_model_x_raw
+
     # self.debugLongText = (
     #   f"XState({str(self.xState)})," +
     #   f"stop_x={stop_x:.1f}," +
@@ -513,7 +515,8 @@ class CarrotPlanner:
 
     stopping_active = (self.xState in [XState.e2eStop, XState.e2eStopped])
     if stopping_active and stop_dist < 300.0:
-      v_soft = float(np.sqrt(max(0.0, 2.0 * self.comfort_brake * stop_dist)))
+      stop_dist_soft = max(stop_dist - 1.0, 0.0)
+      v_soft = float(np.sqrt(max(0.0, 2.0 * self.comfort_brake * stop_dist_soft)))
       v_cruise = min(v_cruise, v_soft)
 
     self.v_cruise = v_cruise
