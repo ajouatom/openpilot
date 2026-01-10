@@ -522,10 +522,10 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         else:
           values["LFA_BTN"] = 0
 
-        if CS.MainMode_ACC:
+        if CC.enabled and CS.MainMode_ACC:
           if CS.ACCMode in [0, 4] and 10 < frame % 200 < 22:
             values["CRUISE_BUTTONS"] = 2
-        elif 10 < frame % 200 <= 16:
+        elif CC.enabled and 10 < frame % 200 <= 16:
           values["ADAPTIVE_CRUISE_MAIN_BTN"] = 1
         else:
           values["ADAPTIVE_CRUISE_MAIN_BTN"] = 0
