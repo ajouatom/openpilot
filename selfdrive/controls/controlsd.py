@@ -257,14 +257,15 @@ class Controls:
     """
 
     hud_desire = 0
-    if meta.desireState[1] > 0.1:
-      hud_desire = 1   # turnLeft
-    elif meta.desireState[2] > 0.1:
-      hud_desire = 2   # turnRight
-    elif meta.desireState[3] > 0.1:
-      hud_desire = 3   # laneChangeLeft
-    elif meta.desireState[4] > 0.1:
-      hud_desire = 4   # laneChangeRight
+    if len(meta.desireState) > 4:
+      if meta.desireState[1] > 0.1:
+        hud_desire = 1   # turnLeft
+      elif meta.desireState[2] > 0.1:
+        hud_desire = 2   # turnRight
+      elif meta.desireState[3] > 0.1:
+        hud_desire = 3   # laneChangeLeft
+      elif meta.desireState[4] > 0.1:
+        hud_desire = 4   # laneChangeRight
     hudControl.modelDesire = hud_desire
 
     hudControl.rightLaneVisible = True
