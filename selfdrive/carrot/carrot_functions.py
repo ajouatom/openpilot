@@ -449,7 +449,7 @@ class CarrotPlanner:
           self.comfort_brake = self.comfortBrake * 0.9
           #self.comfort_brake = COMFORT_BRAKE
           self.trafficStopAdjustRatio = np.interp(v_ego_kph, [0, 100], [1.0, 0.7])
-          stop_dist = self.xStop * np.interp(self.xStop, [0, 50], [1.0, self.trafficStopAdjustRatio])  ##�����Ÿ��� ���� �����Ÿ� ��������
+          stop_dist = stop_model_x_rl * np.interp(stop_model_x_rl, [0, 50], [1.0, self.trafficStopAdjustRatio])  ##�����Ÿ��� ���� �����Ÿ� ��������
           if stop_dist > 10.0: ### 10M�̻��϶���, self.actual_stop_distance�� ������Ʈ��.
             self.actual_stop_distance = stop_dist
           stop_model_x = 0
@@ -475,7 +475,7 @@ class CarrotPlanner:
       elif self.trafficState == TrafficState.red and abs(carstate.steeringAngleDeg) < 30 and self.traffic_starting_count == 0:
         self.events.add(EventName.trafficStopping)
         self.xState = XState.e2eStop
-        self.actual_stop_distance = self.xStop
+        self.actual_stop_distance = stop_model_x_rl
       else:
         self.xState = XState.e2eCruise
 
