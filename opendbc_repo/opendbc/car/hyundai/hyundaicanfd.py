@@ -594,7 +594,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         if values["ALERTS_5"] in [11] and CS.softHoldActive == 0:
           values["ALERTS_5"] = 0
 
-        _make_ccnc_values(values, CS, lat_active, frame, hud_control, lane_line = True)
+        _make_ccnc_values(values, CS, lat_active, frame, hud_control, lane_line = True, corner_radar=False)
 
         # lane_color = 6 if lat_active else 2 
         lane_color = 2 # 6: green, 2: white, 4: yellow
