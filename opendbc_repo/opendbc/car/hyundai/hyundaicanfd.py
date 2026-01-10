@@ -519,8 +519,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         values = copy.copy(CS.cruise_buttons_msg)        
         if CS.lfahda_cluster_info["HDA_LFA_SymSta"] == 0 and 0 < frame % 200 < 12:
           values["LFA_BTN"] = 1
-        else:
-          values["LFA_BTN"] = 0
+        #else:
+        #  values["LFA_BTN"] = 0
 
         if CC.enabled and CS.MainMode_ACC:
           if CS.ACCMode in [0, 4] and 10 < frame % 200 < 22:
