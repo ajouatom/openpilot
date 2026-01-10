@@ -457,44 +457,46 @@ def forward_button_message(packer, CAN, frame, CS, cruise_button, MainMode_ACC_t
       ret.append(packer.make_can_msg(CS.cruise_btns_msg_canfd, CAN.CAM, values))
   return ret
 
-def _make_ccnc_values(values, CS, lat_active, frame, hud_control):
-  curvature = round(CS.out.steeringAngleDeg / 3)
-  values["LANELINE_CURVATURE"] = (min(abs(curvature), 15) + (-1 if curvature < 0 else 0)) if lat_active else 0
-  values["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 and lat_active else 0
+def _make_ccnc_values(values, CS, lat_active, frame, hud_control, lane_line = True, corner_radar = True):
+  if lane_line:
+    curvature = round(CS.out.steeringAngleDeg / 3)
+    values["LANELINE_CURVATURE"] = (min(abs(curvature), 15) + (-1 if curvature < 0 else 0)) if lat_active else 0
+    values["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 and lat_active else 0
 
-  if hud_control.modelDesire == 1: # # 좌회전
-    values['LANE_CHANGING'] = 1 # 왼쪽 화살표
-    values["LANELINE_CURVATURE"] = 15 # 커브 최대
-    values["LANELINE_CURVATURE_DIRECTION"] = 0 # 왼쪽으로
+    if hud_control.modelDesire == 1: # # 좌회전
+      values['LANE_CHANGING'] = 1 # 왼쪽 화살표
+      values["LANELINE_CURVATURE"] = 15 # 커브 최대
+      values["LANELINE_CURVATURE_DIRECTION"] = 0 # 왼쪽으로
 
-  elif hud_control.modelDesire == 2: # 우회전
-    values['LANE_CHANGING'] = 2 # 오른쪽 화살표
-    values["LANELINE_CURVATURE"] = 15 # 차선커브 최대로
-    values["LANELINE_CURVATURE_DIRECTION"] = 1 # 오른쪽으로
+    elif hud_control.modelDesire == 2: # 우회전
+      values['LANE_CHANGING'] = 2 # 오른쪽 화살표
+      values["LANELINE_CURVATURE"] = 15 # 차선커브 최대로
+      values["LANELINE_CURVATURE_DIRECTION"] = 1 # 오른쪽으로
 
-  elif hud_control.modelDesire == 3: # 좌차선변경
-    values['LANE_CHANGING'] = 3 # 왼쪽 화살표 + 바닥
+    elif hud_control.modelDesire == 3: # 좌차선변경
+      values['LANE_CHANGING'] = 3 # 왼쪽 화살표 + 바닥
 
-  elif hud_control.modelDesire == 4: # 우차선변경
-    values['LANE_CHANGING'] = 4 # 오른쪽 화살표 + 바닥
+    elif hud_control.modelDesire == 4: # 우차선변경
+      values['LANE_CHANGING'] = 4 # 오른쪽 화살표 + 바닥
 
-  if values['LF_DETECT'] == 4 and values['LF_DETECT_DISTANCE'] != 0:  values['LF_DETECT'] = 2
-  if values['RF_DETECT'] == 4 and values['RF_DETECT_DISTANCE'] != 0:  values['RF_DETECT'] = 2
-  if values['LR_DETECT'] == 4 and values['LR_DETECT_DISTANCE'] != 0:  values['LR_DETECT'] = 2
-  if values['RR_DETECT'] == 4 and values['RR_DETECT_DISTANCE'] != 0:  values['RR_DETECT'] = 2
-  if values['LR_DETECT_DISTANCE'] > 14:
-    d = min(values['LR_DETECT_DISTANCE'], 100.0)
-    interval = int(1 + 99 * (d / 100.0))   # 1..100 frames
-    blink = (frame // interval) & 1
-    values['LR_DETECT'] = 2 - blink # 멀수록 천천히 점멸
-    values['LR_DETECT_DISTANCE'] = 14
+  if corner_radar:
+    if values['LF_DETECT'] == 4 and values['LF_DETECT_DISTANCE'] != 0:  values['LF_DETECT'] = 2
+    if values['RF_DETECT'] == 4 and values['RF_DETECT_DISTANCE'] != 0:  values['RF_DETECT'] = 2
+    if values['LR_DETECT'] == 4 and values['LR_DETECT_DISTANCE'] != 0:  values['LR_DETECT'] = 2
+    if values['RR_DETECT'] == 4 and values['RR_DETECT_DISTANCE'] != 0:  values['RR_DETECT'] = 2
+    if values['LR_DETECT_DISTANCE'] > 14:
+      d = min(values['LR_DETECT_DISTANCE'], 100.0)
+      interval = int(1 + 99 * (d / 100.0))   # 1..100 frames
+      blink = (frame // interval) & 1
+      values['LR_DETECT'] = 2 - blink # 멀수록 천천히 점멸
+      values['LR_DETECT_DISTANCE'] = 14
 
-  if values['RR_DETECT_DISTANCE'] > 14:
-    d = min(values['RR_DETECT_DISTANCE'], 100.0)
-    interval = int(1 + 99 * (d / 100.0))   # 1..100 frames
-    blink = (frame // interval) & 1
-    values['RR_DETECT'] = 2 - blink # 멀수록 천천히 점멸
-    values['RR_DETECT_DISTANCE'] = 14
+    if values['RR_DETECT_DISTANCE'] > 14:
+      d = min(values['RR_DETECT_DISTANCE'], 100.0)
+      interval = int(1 + 99 * (d / 100.0))   # 1..100 frames
+      blink = (frame // interval) & 1
+      values['RR_DETECT'] = 2 - blink # 멀수록 천천히 점멸
+      values['RR_DETECT_DISTANCE'] = 14
     
 def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle, left_lane_warning, right_lane_warning, enable_corner_radar):
   ret = []
@@ -592,7 +594,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         if values["ALERTS_5"] in [11] and CS.softHoldActive == 0:
           values["ALERTS_5"] = 0
 
-        _make_ccnc_values(values, CS, lat_active, frame, hud_control)
+        _make_ccnc_values(values, CS, lat_active, frame, hud_control, lane_line = True)
 
         # lane_color = 6 if lat_active else 2 
         lane_color = 2 # 6: green, 2: white, 4: yellow
@@ -643,6 +645,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           ff_type = 3 if hud_control.leadRadar == 1 else 13
           values["FF_DETECT"] = ff_type if hud_control.leadRelSpeed > -0.1 else ff_type + 1
           #values["FF_DETECT_LAT"] = - hud_control.leadDPath
+        _make_ccnc_values(values, CS, lat_active, frame, hud_control, lane_line = False, corner_radar= True)
 
         """
         values["FAULT_FCA"] = 0
