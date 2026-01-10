@@ -534,11 +534,11 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
 
 
     if frame % 5 == 0:
+      lat_active = CC.latActive
       if CS.adrv_info_161 is not None:
         main_enabled = CS.out.cruiseState.available
         cruise_enabled = CC.enabled
         lat_enabled = CS.out.latEnabled
-        lat_active = CC.latActive
         nav_active = hud_control.activeCarrot > 1
 
         # hdpuse carrot
