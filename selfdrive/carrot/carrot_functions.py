@@ -424,7 +424,7 @@ class CarrotPlanner:
     elif self.xState == XState.e2eStopped:
       if carstate.gasPressed:
         self.xState = XState.e2eCruise #XState.e2ePrepare
-      elif lead_detected and (radarstate.leadOne.dRel - stop_model_x_rl) < 2.0:
+      elif lead_detected and (radarstate.leadOne.dRel - stop_model_x_raw) < 2.0:
         self.xState = XState.lead
       elif self.stopping_count == 0:
         if self.trafficState == TrafficState.green and not self.carrot_stay_stop and not carstate.leftBlinker and self.trafficLightDetectMode != 1:
@@ -439,7 +439,7 @@ class CarrotPlanner:
         #self.xState = XState.e2ePrepare
         self.xState = XState.e2eCruise
         self.traffic_starting_count = 10.0 / DT_MDL
-      elif lead_detected and (radarstate.leadOne.dRel - stop_model_x_rl) < 2.0:
+      elif lead_detected and (radarstate.leadOne.dRel - stop_model_x_raw) < 2.0:
         self.xState = XState.lead
       else:
         if self.trafficState == TrafficState.green:
