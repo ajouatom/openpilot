@@ -246,8 +246,14 @@ class Controls:
     hudControl.leadDPath = leadOne.dPath
 
     meta = self.sm['modelV2'].meta
-    if True: # command
-      hudControl.modelDesire = int(meta.desire)
+    if False: # command
+      desire_map = {
+        log.Desire.turnLeft: 1,
+        log.Desire.turnRight: 2,
+        log.Desire.laneChangeLeft: 3,
+        log.Desire.laneChangeRight: 4,
+      }
+      hudControl.modelDesire = desire_map.get(meta.desire, 0)
     else: # model.
       hud_desire = 0
       if len(meta.desireState) > 4:
