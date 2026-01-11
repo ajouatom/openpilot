@@ -246,27 +246,26 @@ class Controls:
     hudControl.leadDPath = leadOne.dPath
 
     meta = self.sm['modelV2'].meta
-    """
-    desire_map = {
-      log.Desire.turnLeft: 1,
-      log.Desire.turnRight: 2,
-      log.Desire.laneChangeLeft: 3,
-      log.Desire.laneChangeRight: 4,
-    }
-    hudControl.modelDesire = desire_map.get(meta.desire, 0)
-    """
-
-    hud_desire = 0
-    if len(meta.desireState) > 4:
-      if meta.desireState[1] > 0.1:
-        hud_desire = 1   # turnLeft
-      elif meta.desireState[2] > 0.1:
-        hud_desire = 2   # turnRight
-      elif meta.desireState[3] > 0.1:
-        hud_desire = 3   # laneChangeLeft
-      elif meta.desireState[4] > 0.1:
-        hud_desire = 4   # laneChangeRight
-    hudControl.modelDesire = hud_desire
+    if True: # command
+      desire_map = {
+        log.Desire.turnLeft: 1,
+        log.Desire.turnRight: 2,
+        log.Desire.laneChangeLeft: 3,
+        log.Desire.laneChangeRight: 4,
+      }
+      hudControl.modelDesire = desire_map.get(meta.desire, 0)
+    else: # model.
+      hud_desire = 0
+      if len(meta.desireState) > 4:
+        if meta.desireState[1] > 0.1:
+          hud_desire = 1   # turnLeft
+        elif meta.desireState[2] > 0.1:
+          hud_desire = 2   # turnRight
+        elif meta.desireState[3] > 0.1:
+          hud_desire = 3   # laneChangeLeft
+        elif meta.desireState[4] > 0.1:
+          hud_desire = 4   # laneChangeRight
+      hudControl.modelDesire = hud_desire
 
     hudControl.rightLaneVisible = True
     hudControl.leftLaneVisible = True

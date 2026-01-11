@@ -594,8 +594,11 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         if values["ALERTS_5"] in [11] and CS.softHoldActive == 0:
           values["ALERTS_5"] = 0
 
-        _make_ccnc_values(values, CS, lat_active, frame, hud_control, lane_line = True, corner_radar=False)
+        curvature = round(CS.out.steeringAngleDeg / 3)
 
+        values["LANELINE_CURVATURE"] = (min(abs(curvature), 15) + (-1 if curvature < 0 else 0)) if lat_active else 0
+        values["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 and lat_active else 0
+        
         # lane_color = 6 if lat_active else 2 
         lane_color = 2 # 6: green, 2: white, 4: yellow
         if hud_control.leftLaneDepart:
@@ -614,6 +617,9 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
 
         values["LCA_LEFT_ICON"] = 1 if CS.out.leftBlindspot else 2
         values["LCA_RIGHT_ICON"] = 1 if CS.out.rightBlindspot else 2
+
+        values["LANE_LEFT"] = 1 if hud_control.modelDesire in [1,3] else 0
+        values["LANE_RIGHT"] = 1 if hud_control.modelDesire in [2,4] else 0
 
         ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values))
 
