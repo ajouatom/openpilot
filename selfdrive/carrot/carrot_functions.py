@@ -550,7 +550,7 @@ class DrivingModeDetector:
         # ---- 탈출 조건(더 보수적으로) ----
         exit_ = (
             (lead_accel > self.accel_threshold) or
-            (my_speed > self.lead_speed_exit_threshold) or
+            (my_speed > self.lead_speed_exit_threshold and lead_speed < 5) or
             (distance >= 200)
         )
 
