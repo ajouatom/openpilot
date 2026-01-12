@@ -5,6 +5,12 @@ from opendbc.car.crc import CRC16_XMODEM
 from opendbc.car.hyundai.values import HyundaiFlags, HyundaiExtFlags
 from openpilot.common.params import Params
 from opendbc.car.common.conversions import Conversions as CV
+from cereal import log
+
+LaneChangeState = log.LaneChangeState
+LaneChangeDirection = log.LaneChangeDirection
+TurnDirection = log.Desire
+
 
 def hyundai_crc8(data: bytes) -> int:
   poly = 0x2F
@@ -463,21 +469,24 @@ def _make_ccnc_values(values, CS, lat_active, frame, hud_control, lane_line = Tr
     values["LANELINE_CURVATURE"] = (min(abs(curvature), 15) + (-1 if curvature < 0 else 0)) if lat_active else 0
     values["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 and lat_active else 0
 
-    if hud_control.modelDesire == 1: # # 좌회전
-      values['LANE_CHANGING'] = 1 # 왼쪽 화살표
-      values["LANELINE_CURVATURE"] = 15 # 커브 최대
-      values["LANELINE_CURVATURE_DIRECTION"] = 0 # 왼쪽으로
+    md = CS.MD
+    if md is not None:
+      desire = md.meta.desire.raw
+      if desire == 1: # # 좌회전
+        values['LANE_CHANGING'] = 1 # 왼쪽 화살표
+        values["LANELINE_CURVATURE"] = 15 # 커브 최대
+        values["LANELINE_CURVATURE_DIRECTION"] = 0 # 왼쪽으로
 
-    elif hud_control.modelDesire == 2: # 우회전
-      values['LANE_CHANGING'] = 2 # 오른쪽 화살표
-      values["LANELINE_CURVATURE"] = 15 # 차선커브 최대로
-      values["LANELINE_CURVATURE_DIRECTION"] = 1 # 오른쪽으로
+      elif desire == 2: # 우회전
+        values['LANE_CHANGING'] = 2 # 오른쪽 화살표
+        values["LANELINE_CURVATURE"] = 15 # 차선커브 최대로
+        values["LANELINE_CURVATURE_DIRECTION"] = 1 # 오른쪽으로
 
-    elif hud_control.modelDesire == 3: # 좌차선변경
-      values['LANE_CHANGING'] = 3 # 왼쪽 화살표 + 바닥
+      elif desire == 3: # 좌차선변경
+        values['LANE_CHANGING'] = 3 # 왼쪽 화살표 + 바닥
 
-    elif hud_control.modelDesire == 4: # 우차선변경
-      values['LANE_CHANGING'] = 4 # 오른쪽 화살표 + 바닥
+      elif desire == 4: # 우차선변경
+        values['LANE_CHANGING'] = 4 # 오른쪽 화살표 + 바닥
 
   if corner_radar:
     if values['LF_DETECT'] == 4 and values['LF_DETECT_DISTANCE'] != 0:  values['LF_DETECT'] = 2
@@ -500,7 +509,7 @@ def _make_ccnc_values(values, CS, lat_active, frame, hud_control, lane_line = Tr
     
 def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle, left_lane_warning, right_lane_warning, enable_corner_radar):
   ret = []
-
+  md = CS.MD
   if CP.flags & HyundaiFlags.CAMERA_SCC.value:
     HDA_CntrlModSta = 0
     if CS.lfahda_cluster_info is not None:
@@ -620,8 +629,16 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         values["LCA_LEFT_ICON"] = 1 if CS.out.leftBlindspot else 2
         values["LCA_RIGHT_ICON"] = 1 if CS.out.rightBlindspot else 2
 
-        values["LANE_LEFT"] = 1 if hud_control.modelDesire in [1,3] else 0
-        values["LANE_RIGHT"] = 1 if hud_control.modelDesire in [2,4] else 0
+        if md is not None:
+          desire = md.meta.desire.raw
+          lane_left = desire in (1, 3)
+          lane_right = desire in (2, 4)
+          #lane_left = md.meta.desireStat[1] > 0.1 or md.meta.desireStat[3] > 0.1
+          #lane_right = md.meta.desireStat[2] > 0.1 or md.meta.desireStat[4] > 0.1
+          values["LANE_LEFT"] = 1 if lane_left else 0
+          values["LANE_RIGHT"] = 1 if lane_right else 0
+          #values["LANE_LEFT"] = 1 if hud_control.modelDesire in [1,3] else 0
+          #values["LANE_RIGHT"] = 1 if hud_control.modelDesire in [2,4] else 0
 
         ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values))
 
@@ -641,7 +658,22 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           #values['RIGHT_BLINK_HOLD'] = 1
           pass
         _make_ccnc_values(values, CS, lat_active, frame, hud_control)
-
+          # values['AUTOLANECHANGE_MSG'] =  1 # 주변 상황을 확인하세요
+          # values['AUTOLANECHANGE_MSG'] =  2 # 작동 조건이 아닙니다
+          # values['AUTOLANECHANGE_MSG'] =  3 # 주행 차로를 분석중입니다
+          # values['AUTOLANECHANGE_MSG'] =  4 # 급커브 구간입니다
+          # values['AUTOLANECHANGE_MSG'] =  5 # 주행 중인 차로의 폭이 좁습니다
+          # values['AUTOLANECHANGE_MSG'] =  6 # 작동 구간이 아닙니다.
+          # values['AUTOLANECHANGE_MSG'] =  7 # 비상등이 켜져있습니다
+          # values['AUTOLANECHANGE_MSG'] =  8 # 주행속도가 낮습니다
+          # values['AUTOLANECHANGE_MSG'] =  9 # 핸들을 잡으십시오
+          # values['AUTOLANECHANGE_MSG'] = 10 # 작동 가능한 차로가 아닙니다
+          # values['AUTOLANECHANGE_MSG'] = 11 # 핸들 조작이 감지되었습니다.
+          # 얘는 우측 RPM 게이지에 크게 나옴
+          # values['AUTOLANECHANGE_MSG'] = 12 # ok 버튼을 누르면 차로변경 보조기능이 켜집니다
+          # values['AUTOLANECHANGE_MSG'] = 13 # 없음.
+          # values['AUTOLANECHANGE_MSG'] = 14 # 없음.
+          # values['AUTOLANECHANGE_MSG'] = 15 # 없음.
         ret.append(packer.make_can_msg("ADRV_0x1ea", CAN.ECAN, values))
 
       if CS.adrv_info_162 is not None:

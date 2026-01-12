@@ -542,8 +542,19 @@ class CarState(CarStateBase):
         if not corner:
           ret.leftLongDist = self.adrv_info_1ea["LF_DETECT_DISTANCE"]
           ret.rightLongDist = self.adrv_info_1ea["RF_DETECT_DISTANCE"]
+          self.lr_distance = self.adrv_info_1ea["LR_DETECT_DISTANCE"]
+          self.rr_distance = self.adrv_info_1ea["RR_DETECT_DISTANCE"]
           ret.leftLatDist = self.adrv_info_1ea["LF_DETECT_LATERAL"]
           ret.rightLatDist = self.adrv_info_1ea["RF_DETECT_LATERAL"]
+          corner = True
+      if corner:
+        left_block = True if 0 < ret.leftLongDist < 9.0 or 0 < self.lr_distance < 20 else False
+        right_block = True if 0 < ret.rightLongDist < 9.0 or 0 < self.rr_distance < 20 else False
+        if left_block and not ret.leftBlindspot:
+          ret.leftBlindspot = True
+        if right_block and not ret.rightBlindspot:
+          ret.rightBlindspot = True
+        
       self.adrv_info_160 = cp_cam.vl["ADRV_0x160"] if self.ADRV_0x160 else None
 
       self.hda_info_4a3 = cp.vl["HDA_INFO_4A3"] if self.HDA_INFO_4A3 else None

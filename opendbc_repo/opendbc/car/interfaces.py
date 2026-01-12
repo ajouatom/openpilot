@@ -402,9 +402,10 @@ class CarInterfaceBase(ABC):
     return self.lat_torque_nn_model is not None
     
 
-  def apply(self, c: structs.CarControl, now_nanos: int | None = None) -> tuple[structs.CarControl.Actuators, list[CanData]]:
+  def apply(self, c: structs.CarControl, now_nanos: int | None = None, MD = None) -> tuple[structs.CarControl.Actuators, list[CanData]]:
     if now_nanos is None:
       now_nanos = int(time.monotonic() * 1e9)
+    self.CS.MD = MD
     return self.CC.update(c, self.CS, now_nanos)
 
   @staticmethod
@@ -598,6 +599,8 @@ class CarStateBase(ABC):
     self.softHoldActive = 0
     self.is_metric = True
     self.lkas_enabled = False
+
+    self.MD = None
 
   @abstractmethod
   def update(self, can_parsers) -> structs.CarState:
