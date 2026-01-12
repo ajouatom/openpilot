@@ -548,11 +548,11 @@ class CarState(CarStateBase):
           ret.rightLatDist = self.adrv_info_1ea["RF_DETECT_LATERAL"]
           corner = True
       if corner:
-        left_block = True if 0 < ret.leftLongDist < 9.0 or 0 < self.lr_distance < 20 else False
-        right_block = True if 0 < ret.rightLongDist < 9.0 or 0 < self.rr_distance < 20 else False
-        if left_block and not ret.leftBlindspot:
+        left_block = True if 0 < ret.leftLongDist < 7.0 or 0 < self.lr_distance < 7.0 else False
+        right_block = True if 0 < ret.rightLongDist < 7.0 or 0 < self.rr_distance < 7.0 else False
+        if left_block:
           ret.leftBlindspot = True
-        if right_block and not ret.rightBlindspot:
+        if right_block:
           ret.rightBlindspot = True
         
       self.adrv_info_160 = cp_cam.vl["ADRV_0x160"] if self.ADRV_0x160 else None
