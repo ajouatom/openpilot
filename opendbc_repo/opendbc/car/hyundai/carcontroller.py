@@ -7,6 +7,7 @@ from opendbc.car.hyundai.carstate import CarState
 from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.values import HyundaiFlags, Buttons, CarControllerParams, CAR, CAN_GEARS, HyundaiExtFlags
 from opendbc.car.interfaces import CarControllerBase
+from opendbc.car.vehicle_model import VehicleModel
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -53,39 +54,58 @@ def process_hud_alert(enabled, fingerprint, hud_control):
 
   return sys_warning, sys_state, left_lane_warning, right_lane_warning
 
-def calc_rate_limit_by_lat_accel(delta_deg: float,
-                                 v_ego: float,
-                                 wheelbase: float,
-                                 max_lat_accel: float,
-                                 max_rate_low: float,
-                                 max_rate_high: float) -> float:
-  """
-  반환값: 허용 스티어링휠 각속도 (deg/s)
-  delta_deg : 현재 스티어링휠 각도 (deg)
-  v_ego     : 속도 (m/s)
-  wheelbase : 축거 (m)
-  """
+def rate_limit(x, x_last, lo, hi):
+  return float(np.clip(x, x_last + lo, x_last + hi))
 
-  # v가 너무 작으면 공식이 터지니까, 저속 전용 상수 사용
-  if v_ego < 0.5:
-    return max_rate_low   # 예: 300 deg/s
+def apply_steer_angle_limits_physics(desired_sw_deg: float,
+                                     last_sw_deg: float,
+                                     v_ego: float,
+                                     steering_sw_deg: float,
+                                     lat_active: bool,
+                                     wheelbase_m: float,
+                                     steer_ratio: float,
+                                     steer_sw_max_deg: float) -> float:
+  max_lat_accel = 5.0   # m/s^2
+  max_lat_jerk  = 4.0   # m/s^3
+  max_sw_rate_deg_per_tick = 2.0   # ★ EPS 보호용 상한
 
-  delta_rad = np.radians(delta_deg)
+  v = max(float(v_ego), 1.0)
 
-  # cos^2 항이 0에 가까워지면 rate가 폭발하니 하한 넣어줌
-  cos_delta = np.cos(delta_rad)
-  cos2 = max(cos_delta * cos_delta, 0.05)   # 0.05 정도면 충분
+  target_sw = float(np.clip(desired_sw_deg, -steer_sw_max_deg, steer_sw_max_deg))
 
-  # 물리식: |δ̇| <= L * a_lat_max / (v^2 * sec^2(δ))
-  # 여기서 sec^2(δ) = 1 / cos^2(δ)
-  delta_rate_rad_s = (wheelbase * max_lat_accel) / (v_ego * v_ego * cos2)
+  target_rw = target_sw / steer_ratio
+  last_rw   = float(last_sw_deg) / steer_ratio
 
-  delta_rate_deg_s = np.degrees(delta_rate_rad_s)
+  # --- accel limit ---
+  rw_max_rad = np.arctan((max_lat_accel * wheelbase_m) / (v * v))
+  rw_max = float(np.degrees(rw_max_rad))
 
-  # 저속에서는 너무 크지 않게, 고속에서는 너무 작지 않게 clip
-  #   max_rate_high <= delta_rate_deg_s <= max_rate_low
-  return float(np.clip(delta_rate_deg_s, max_rate_high, max_rate_low))
+  # --- jerk -> rate limit ---
+  sec2 = 1.2
+  max_drw_dt = (max_lat_jerk * wheelbase_m) / (v * v * sec2)     # rad/s
+  max_drw_per_tick = max_drw_dt * DT_CTRL                        # rad/tick
+  max_drw_per_tick_deg = float(np.degrees(max_drw_per_tick))
 
+  max_drw_per_tick_deg = min(
+    max_drw_per_tick_deg,
+    max_sw_rate_deg_per_tick / steer_ratio
+  )
+  err = abs(target_sw - last_sw_deg)
+  if err > 20.0:
+    max_drw_per_tick_deg *= 0.5
+  
+  # --- rate limit ---
+  cmd_rw = rate_limit(target_rw, last_rw, -max_drw_per_tick_deg, max_drw_per_tick_deg)
+
+  # --- accel clip ---
+  cmd_rw = float(np.clip(cmd_rw, -rw_max, rw_max))
+
+  if not lat_active:
+    cmd_rw = float(steering_sw_deg) / steer_ratio
+
+  cmd_sw = cmd_rw * steer_ratio
+  return float(np.clip(cmd_sw, -steer_sw_max_deg, steer_sw_max_deg))
+  
 class CarController(CarControllerBase):
   def __init__(self, dbc_names, CP):
     super().__init__(dbc_names, CP)
@@ -201,45 +221,24 @@ class CarController(CarControllerBase):
     #apply_angle = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgoRaw, 
     #                                           CS.out.steeringAngleDeg, CC.latActive, self.params.ANGLE_LIMITS)
 
-    MAX_LAT_ACCEL = 8.0
-    MAX_RATE_LOW = 200 # 저속, deg/s
-    MAX_RATE_HIGH = 40 # 고속, deg/s
-    UNWIND_SCALE = 1.5
-    UNWIND_MAX = 200
+    apply_angle = apply_steer_angle_limits_physics(
+      actuators.steeringAngleDeg,
+      self.apply_angle_last,
+      CS.out.vEgoRaw,
+      CS.out.steeringAngleDeg,
+      CC.latActive,
+      self.CP.wheelbase,
+      self.CP.steerRatio,
+      self.params.ANGLE_LIMITS.STEER_ANGLE_MAX
+    )
 
-    delta = actuators.steeringAngleDeg - self.apply_angle_last
-    same_dir = (np.sign(delta) == np.sign(self.apply_angle_last)) or (abs(self.apply_angle_last) < 2.0)
-
-    rate_deg_s = calc_rate_limit_by_lat_accel(self.apply_angle_last, CS.out.vEgoRaw, self.CP.wheelbase, MAX_LAT_ACCEL, MAX_RATE_LOW, MAX_RATE_HIGH)
-    if not same_dir:
-      rate_deg_s = min(rate_deg_s * UNWIND_SCALE, UNWIND_MAX)
-      
-    rate_deg_per_tick = rate_deg_s * DT_CTRL
-    apply_angle = np.clip(actuators.steeringAngleDeg,
-                        self.apply_angle_last - rate_deg_per_tick,
-                        self.apply_angle_last + rate_deg_per_tick)
-
-    angle_limits = self.params.ANGLE_LIMITS
-    apply_angle = np.clip(apply_angle, -angle_limits.STEER_ANGLE_MAX, angle_limits.STEER_ANGLE_MAX)
-
-    #if abs(apply_angle - self.apply_angle_last) > 0.1:
-    #  alpha = min(0.1 + 0.9 * CS.out.vEgoRaw / (30.0 * CV.KPH_TO_MS), 1.0)
-    #  apply_angle = self.apply_angle_last * (1 - alpha) + apply_angle * alpha
-
-    v_ego_kph = CS.out.vEgoRaw * CV.MS_TO_KPH
-    #if abs(apply_angle - self.apply_angle_last) < 0.1:
-    #  alpha = min(0.05 + 0.45 * v_ego_kph / 30.0, 0.5)
-    #else:
-    #  alpha = 1.0 # min(0.1 + 0.9 * v_ego_kph / 30.0, 1.0)
-    alpha = np.interp(v_ego_kph, [0, 20, 30], [0.5, 0.8, 1.0])
-    apply_angle = self.apply_angle_last * (1 - alpha) + apply_angle * alpha
-
+    
     if angle_control:
       apply_steer_req = CC.latActive
 
     if CS.out.steeringPressed:
       #self.apply_angle_last = CS.out.steeringAngleDeg
-      self.lkas_max_torque = self.lkas_max_torque = max(self.lkas_max_torque - 20, 25)
+      self.lkas_max_torque = max(self.lkas_max_torque - 20, 25)
     else:
       target_torque = self.angle_max_torque
 
