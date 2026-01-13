@@ -194,7 +194,8 @@ class CarrotPlanner:
       tf = np.interp(v_kph, [0, 30, 60, 90], [self.tFollowGap1, self.tFollowGap2, self.tFollowGap3, self.tFollowGap4])
       self.jerk_factor = np.interp(v_ego * CV.MS_TO_KPH, [0, 30, 60, 90], [1.0, 0.7, 0.5, 0.5])
       personality = int(np.clip(np.digitize(v_kph, [30, 60, 90], right=False), 0, 3))
-      if self.personality != personality or self.params_count % 100 == 0:
+      #if self.personality != personality or self.params_count % 100 == 0:
+      if self.params_count % 100 == 0:
         self.params.put_int_nonblocking("LongitudinalPersonality", personality)
         self.personality = personality
       return tf
