@@ -1564,6 +1564,19 @@
     },
     {
       "group": "차량간격",
+      "name": "EnableSpeedTF",
+      "title": "속도별 차간거리 설정(0)",
+      "descr": "-1: 자동단계선택, >0: 저속 차간거리 비율 감소",
+      "egroup": "FDIST",
+      "etitle": "EnableSpeedTF(0)",
+      "edescr": "-1:Auto select by speed, >0: Reduce TFs by ratio",
+      "min": -1,
+      "max": 50,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "차량간격",
       "name": "DynamicTFollowLC",
       "title": "동적 차간거리 설정 차선변경(100)%",
       "descr": "차선변경시작시 일시적으로 차량간격을 좁힙니다.",
