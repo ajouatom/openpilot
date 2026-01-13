@@ -191,9 +191,9 @@ class CarrotPlanner:
   def get_T_FOLLOW(self, personality=log.LongitudinalPersonality.standard, v_ego = 0):
     if self.enableSpeedTF < 0:
       v_kph = v_ego * CV.MS_TO_KPH
-      tf = np.interp(v_kph, [0, 40, 80, 120], [self.tFollowGap1, self.tFollowGap2, self.tFollowGap3, self.tFollowGap4])
-      self.jerk_factor = np.interp(v_ego * CV.MS_TO_KPH, [0, 40, 80, 120], [1.0, 0.7, 0.5, 0.5])
-      personality = int(np.clip(np.digitize(v_kph, [40, 80, 120], right=False), 0, 3))
+      tf = np.interp(v_kph, [0, 30, 60, 90], [self.tFollowGap1, self.tFollowGap2, self.tFollowGap3, self.tFollowGap4])
+      self.jerk_factor = np.interp(v_ego * CV.MS_TO_KPH, [0, 30, 60, 90], [1.0, 0.7, 0.5, 0.5])
+      personality = int(np.clip(np.digitize(v_kph, [30, 60, 90], right=False), 0, 3))
       if self.personality != personality:
         self.params.put_int_nonblocking("LongitudinalPersonality", personality)
         self.personality = personality
