@@ -495,7 +495,7 @@ def _make_ccnc_values(values, CS, lat_active, frame, hud_control, lane_line = Tr
     if values['RR_DETECT'] == 4 and values['RR_DETECT_DISTANCE'] != 0:  values['RR_DETECT'] = 2
 
     disp_dist = 30.0
-    min_dist = 12.0
+    min_dist = 10.0
     max_interval = 100
     t = 1.0   # 이 값만 바꾸면 전체 깜빡임 속도 조절됨 (0.6 빠름, 1.0 기본, 1.5 느림)
     def apply_one(detect_key, dist_key):
