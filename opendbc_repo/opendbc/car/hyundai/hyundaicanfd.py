@@ -515,6 +515,16 @@ def _make_ccnc_values(values, CS, lat_active, frame, hud_control, lane_line = Tr
 def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle, left_lane_warning, right_lane_warning, enable_corner_radar):
   ret = []
   md = CS.MD
+  desire = 0
+  lane_changing = 0
+  if md is not None:
+    desire = md.meta.desire.raw
+    desire_stat = md.meta.desireStat
+    if desire_stat[1] > 0.1 : lane_changing = 1
+    if desire_stat[2] > 0.1 : lane_changing = 2
+    if desire_stat[3] > 0.1 : lane_changing = 3
+    if desire_stat[4] > 0.1 : lane_changing = 4
+
   if CP.flags & HyundaiFlags.CAMERA_SCC.value:
     HDA_CntrlModSta = 0
     if CS.lfahda_cluster_info is not None:
@@ -634,16 +644,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         values["LCA_LEFT_ICON"] = 1 if CS.out.leftBlindspot else 2
         values["LCA_RIGHT_ICON"] = 1 if CS.out.rightBlindspot else 2
 
-        if md is not None:
-          desire = md.meta.desire.raw
-          lane_left = desire in (1, 3)
-          lane_right = desire in (2, 4)
-          #lane_left = md.meta.desireStat[1] > 0.1 or md.meta.desireStat[3] > 0.1
-          #lane_right = md.meta.desireStat[2] > 0.1 or md.meta.desireStat[4] > 0.1
-          values["LANE_LEFT"] = 1 if lane_left else 0
-          values["LANE_RIGHT"] = 1 if lane_right else 0
-          #values["LANE_LEFT"] = 1 if hud_control.modelDesire in [1,3] else 0
-          #values["LANE_RIGHT"] = 1 if hud_control.modelDesire in [2,4] else 0
+        values["LANE_LEFT"] = 1 if desire in (1, 3) else 0
+        values["LANE_RIGHT"] = 1 if desire in (2, 4) else 0
 
         ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values))
 
@@ -656,12 +658,11 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         values = copy.copy(CS.adrv_info_1ea)
         #values["HDA_MODE1"] = 8
         #values["HDA_MODE2"] = 1
-        if CC.leftBlinker:
-          #values['LEFT_BLINK_HOLD'] = 1
-          pass
-        if CC.rightBlinker:
-          #values['RIGHT_BLINK_HOLD'] = 1
-          pass
+        if lane_changing == 3:
+          values['LEFT_BLINK_HOLD'] = 1
+        elif lane_changing == 4:
+          values['RIGHT_BLINK_HOLD'] = 1
+
         _make_ccnc_values(values, CS, lat_active, frame, hud_control)
           # values['AUTOLANECHANGE_MSG'] =  1 # 주변 상황을 확인하세요
           # values['AUTOLANECHANGE_MSG'] =  2 # 작동 조건이 아닙니다
