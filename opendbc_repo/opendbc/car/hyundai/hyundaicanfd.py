@@ -489,10 +489,10 @@ def _make_ccnc_values(values, CS, lat_active, frame, hud_control, lane_line = Tr
         values['LANE_CHANGING'] = 4 # 오른쪽 화살표 + 바닥
 
   if corner_radar:
-    if values['LF_DETECT'] == 4 and values['LF_DETECT_DISTANCE'] != 0:  values['LF_DETECT'] = 2
-    if values['RF_DETECT'] == 4 and values['RF_DETECT_DISTANCE'] != 0:  values['RF_DETECT'] = 2
-    if values['LR_DETECT'] == 4 and values['LR_DETECT_DISTANCE'] != 0:  values['LR_DETECT'] = 2
-    if values['RR_DETECT'] == 4 and values['RR_DETECT_DISTANCE'] != 0:  values['RR_DETECT'] = 2
+    if values['LF_DETECT'] >= 4 and values['LF_DETECT_DISTANCE'] != 0:  values['LF_DETECT'] = 2
+    if values['RF_DETECT'] >= 4 and values['RF_DETECT_DISTANCE'] != 0:  values['RF_DETECT'] = 2
+    if values['LR_DETECT'] >= 4 and values['LR_DETECT_DISTANCE'] != 0:  values['LR_DETECT'] = 2
+    if values['RR_DETECT'] >= 4 and values['RR_DETECT_DISTANCE'] != 0:  values['RR_DETECT'] = 2
 
     disp_dist = 30.0
     min_dist = 10.0
