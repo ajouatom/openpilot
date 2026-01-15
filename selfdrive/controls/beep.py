@@ -32,7 +32,7 @@ class Beepd:
                    encoding='utf8')
 
   def _beep(self, on):
-    if self.params.get_int("SoundVolumeAdjust") <= 5:
+    if self.params.get_bool("HardwareC3xLite") and self.params.get_int("SoundVolumeAdjust") <= 5:
       on = False
     val = "1" if on else "0"
     subprocess.run(f"echo \"{val}\" | sudo tee /sys/class/gpio/gpio42/value",
