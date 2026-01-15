@@ -188,39 +188,82 @@ class CarrotPlanner:
     factor = self.myHighModeFactor if self.myDrivingMode == DrivingMode.High else self.mySafeFactor
     return np.interp(v_ego, A_CRUISE_MAX_BP_CARROT, cruiseMaxVals) * factor
 
-  def get_T_FOLLOW(self, personality=log.LongitudinalPersonality.standard, v_ego = 0):
+  def get_T_FOLLOW(self, personality=log.LongitudinalPersonality.standard, v_ego=0.0):
+    # ------------------------------------------------------------
+    # 1) Compute tf_target (your existing logic, unchanged behavior)
+    # ------------------------------------------------------------
     if self.enableSpeedTF < 0:
       v_kph = v_ego * CV.MS_TO_KPH
-      tf = np.interp(v_kph, [0, 30, 60, 90], [self.tFollowGap1, self.tFollowGap2, self.tFollowGap3, self.tFollowGap4])
-      self.jerk_factor = np.interp(v_ego * CV.MS_TO_KPH, [0, 30, 60, 90], [1.0, 0.7, 0.5, 0.5])
+
+      tf_target = float(np.interp(v_kph,
+                                  [0, 30, 60, 90],
+                                  [self.tFollowGap1, self.tFollowGap2, self.tFollowGap3, self.tFollowGap4]))
+
+      self.jerk_factor = float(np.interp(v_kph, [0, 30, 60, 90], [1.0, 0.7, 0.5, 0.5]))
+
       personality = int(np.clip(np.digitize(v_kph, [30, 60, 90], right=False), 0, 3))
-      #if self.personality != personality or self.params_count % 100 == 0:
+
       if self.params_count % 100 == 0:
         self.params.put_int_nonblocking("LongitudinalPersonality", personality)
         self.personality = personality
-      return tf
+
     else:
-      tf = 1.0
-      if personality==log.LongitudinalPersonality.moreRelaxed:
+      tf_target = 1.0
+      if personality == log.LongitudinalPersonality.moreRelaxed:
         self.jerk_factor = 1.0
-        tf = self.tFollowGap4
-      elif personality==log.LongitudinalPersonality.relaxed:
+        tf_target = self.tFollowGap4
+      elif personality == log.LongitudinalPersonality.relaxed:
         self.jerk_factor = 1.0
-        tf = self.tFollowGap3
-      elif personality==log.LongitudinalPersonality.standard:
+        tf_target = self.tFollowGap3
+      elif personality == log.LongitudinalPersonality.standard:
         self.jerk_factor = 1.0 if self.myDrivingMode == DrivingMode.Safe else 0.7
-        tf = self.tFollowGap2
-      elif personality==log.LongitudinalPersonality.aggressive:
+        tf_target = self.tFollowGap2
+      elif personality == log.LongitudinalPersonality.aggressive:
         self.jerk_factor = 1.0 if self.myDrivingMode == DrivingMode.Safe else 0.5
-        tf = self.tFollowGap1
+        tf_target = self.tFollowGap1
       else:
         raise NotImplementedError("Longitudinal personality not supported")
+
       if self.enableSpeedTF > 0:
         reduce = self.enableSpeedTF * 0.01
-        s = np.clip(v_ego * CV.MS_TO_KPH / 100, 0, 1.0)
+        s = float(np.clip(v_ego * CV.MS_TO_KPH / 100.0, 0.0, 1.0))
         scale = (1.0 - reduce) + reduce * s
-        tf = tf * scale
-      return tf
+        tf_target *= scale
+
+    # ------------------------------------------------------------
+    # 2) Apply "slow decrease / fast increase" smoothing to TF
+    #    + optional rate-limit (prevents sudden drops)
+    # ------------------------------------------------------------
+    # lazy-init so you don't have to touch __init__
+    if not hasattr(self, "_tf_applied") or self._tf_applied <= 0.0:
+      self._tf_applied = float(tf_target)
+
+    dt = float(DT_MDL)  # openpilot control loop dt
+
+    # Tune here
+    TF_DEC_TAU = 6.0     # seconds (smaller TF: go SLOW)
+    TF_INC_TAU = 1.0     # seconds (bigger TF: go FAST)
+    MAX_DOWN_PER_S = 0.05  # TF can shrink at most 0.05 per second
+    MAX_UP_PER_S   = 0.20  # TF can grow at most 0.20 per second
+
+    # asymmetric 1st-order filter
+    tau = TF_DEC_TAU if tf_target < self._tf_applied else TF_INC_TAU
+    alpha = dt / (tau + dt)
+    tf_filt = self._tf_applied + alpha * (float(tf_target) - self._tf_applied)
+
+    # rate limit (extra safety against fast drops)
+    max_down = MAX_DOWN_PER_S * dt
+    max_up   = MAX_UP_PER_S * dt
+    delta = float(np.clip(tf_filt - self._tf_applied, -max_down, max_up))
+    tf_applied = self._tf_applied + delta
+
+    # clamp to sensible range (using your configured gaps)
+    tf_min = float(min(self.tFollowGap1, self.tFollowGap2, self.tFollowGap3, self.tFollowGap4))
+    tf_max = float(max(self.tFollowGap1, self.tFollowGap2, self.tFollowGap3, self.tFollowGap4))
+    tf_applied = float(np.clip(tf_applied, tf_min, tf_max))
+
+    self._tf_applied = tf_applied
+    return tf_applied
 
   def _update_model_desire(self, sm):
     meta = sm['modelV2'].meta
