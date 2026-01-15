@@ -241,7 +241,7 @@ class CarrotPlanner:
     dt = float(DT_MDL)  # openpilot control loop dt
 
     # Tune here
-    TF_DEC_TAU = 6.0     # seconds (smaller TF: go SLOW)
+    TF_DEC_TAU = 20.0     # seconds (smaller TF: go SLOW)
     TF_INC_TAU = 1.0     # seconds (bigger TF: go FAST)
     MAX_DOWN_PER_S = 0.05  # TF can shrink at most 0.05 per second
     MAX_UP_PER_S   = 0.20  # TF can grow at most 0.20 per second
