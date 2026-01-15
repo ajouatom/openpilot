@@ -386,8 +386,8 @@ class RadarD:
     self.radar_detected = False
 
     self._corner_lat_hist = {
-      "L": deque(maxlen=20),
-      "R": deque(maxlen=20),
+      "L": deque(maxlen=10),
+      "R": deque(maxlen=10),
     }
     self._corner_state = {"L": 0, "R": 0}  # -1,0,+1
 
@@ -647,7 +647,7 @@ class RadarD:
         self.radar_state.leadOne = chosen
         self.radar_detected = detected
 
-  def _corner_update_state(self, side: str, cur_lat: float, enter_lat: float = 2.5) -> int:
+  def _corner_update_state(self, side: str, cur_lat: float, enter_lat: float = 2.8) -> int:
     # 유효 범위 밖이면 리셋
     if not (0.0 < cur_lat < enter_lat):
       self._corner_lat_hist[side].clear()
@@ -663,7 +663,7 @@ class RadarD:
       return self._corner_state[side]
 
     delta = h[-1] - h[0]
-    th = 0.3 * (20 / n)
+    th = 0.15 # 3 * (20 / n)
 
     if delta < -th:
       self._corner_state[side] = +1   # approaching
