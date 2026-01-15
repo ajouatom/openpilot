@@ -981,9 +981,10 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           values["ALERTS_2"] = 0
           values["DAW_ICON"] = 0
 
-        values["SOUNDS_1"] = 0
-        values["SOUNDS_2"] = 0
-        values["SOUNDS_4"] = 0
+        if values["ALERTS_1"] == 0: # alerts가 있으면 사운드도 같이 나옴
+          values["SOUNDS_1"] = 0
+          values["SOUNDS_2"] = 0
+          values["SOUNDS_4"] = 0
 
         if values["ALERTS_3"] in [3, 4, 13, 17, 19, 26, 7, 8, 9, 10]:
           values["ALERTS_3"] = 0
