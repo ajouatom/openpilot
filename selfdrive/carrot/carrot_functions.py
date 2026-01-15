@@ -594,8 +594,7 @@ class DrivingModeDetector:
     def __init__(self):
         self.congested = False
 
-        self.enter_count = 0
-        self.exit_count = 0
+        self.counter = 0
         self.enter_needed = 3
         self.exit_needed = 3
 
@@ -620,22 +619,16 @@ class DrivingModeDetector:
 
         # ---- 디바운스 로직 ----
         if enter:
-            self.enter_count += 1
-        else:
-            self.enter_count = 0
+          self.counter += 1  
+        elif exit_:
+          self.counter -= 1
 
-        if exit_:
-            self.exit_count += 1
-        else:
-            self.exit_count = 0
-
-        if not self.congested and self.enter_count >= self.enter_needed:
-            self.congested = True
-            self.exit_count = 0  # 진입 시 반대 카운터 리셋
-
-        if self.congested and self.exit_count >= self.exit_needed:
-            self.congested = False
-            self.enter_count = 0
+        if self.counter >= self.enter_needed:
+          self.congested = True
+          self.counter = self.enter_needed
+        elif self.counter <= - self.exit_needed:
+          self.congested = False
+          self.counter = - self.exit_needed
 
     def get_mode(self):
         return DrivingMode.Safe if self.congested else DrivingMode.Normal
