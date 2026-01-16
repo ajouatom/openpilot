@@ -1570,7 +1570,7 @@
       "egroup": "FDIST",
       "etitle": "EnableSpeedTF(0)",
       "edescr": "-1:Auto select by speed, >0: Reduce TFs by ratio",
-      "min": -1,
+      "min": -3,
       "max": 50,
       "default": 0,
       "unit": 1

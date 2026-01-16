@@ -193,15 +193,20 @@ class CarrotPlanner:
     # 1) Compute tf_target (your existing logic, unchanged behavior)
     # ------------------------------------------------------------
     if self.enableSpeedTF < 0:
+      TF_SPEED_BPS = {
+        -1, [0, 30, 60, 90]
+        -2, [0, 40, 80, 120]
+        -3, [0, 50, 100, 150]
+      }
       v_kph = v_ego * CV.MS_TO_KPH
+      bp = TF_SPEED_BPS.get(self.enableSpeedTF, [0, 30, 60, 90])
 
-      tf_target = float(np.interp(v_kph,
-                                  [0, 30, 60, 90],
+      tf_target = float(np.interp(v_kph,bp,
                                   [self.tFollowGap1, self.tFollowGap2, self.tFollowGap3, self.tFollowGap4]))
 
-      self.jerk_factor = float(np.interp(v_kph, [0, 30, 60, 90], [1.0, 0.7, 0.5, 0.5]))
+      self.jerk_factor = float(np.interp(v_kph, bp, [1.0, 0.7, 0.5, 0.5]))
 
-      personality = int(np.clip(np.digitize(v_kph, [30, 60, 90], right=False), 0, 3))
+      personality = int(np.clip(np.digitize(v_kph, bp[1:], right=False), 0, 3))
 
       if self.params_count % 100 == 0:
         self.params.put_int_nonblocking("LongitudinalPersonality", personality)
