@@ -194,9 +194,9 @@ class CarrotPlanner:
     # ------------------------------------------------------------
     if self.enableSpeedTF < 0:
       TF_SPEED_BPS = {
-        -1, [0, 30, 60, 90]
-        -2, [0, 40, 80, 120]
-        -3, [0, 50, 100, 150]
+        -1: [0, 30, 60, 90],
+        -2: [0, 40, 80, 120],
+        -3: [0, 50, 100, 150],
       }
       v_kph = v_ego * CV.MS_TO_KPH
       bp = TF_SPEED_BPS.get(self.enableSpeedTF, [0, 30, 60, 90])
