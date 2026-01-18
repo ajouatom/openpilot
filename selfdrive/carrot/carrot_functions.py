@@ -429,16 +429,8 @@ class CarrotPlanner:
     elif self.myDrivingMode == DrivingMode.Safe: #safe
       self.mySafeFactor = self.mySafeModeFactor
 
-    if self.frame % 20 == 0: # every 1 sec
-      vLead = 0
-      aLead = 0
-      dRel = 200
-      if leadOne.status:
-        vLead = leadOne.vLead * CV.MS_TO_KPH
-        aLead = leadOne.aLead
-        dRel = leadOne.dRel
 
-      self.drivingModeDetector.update_data(v_ego_kph, vLead, carstate.aEgo, aLead, dRel)
+    self.drivingModeDetector.update_data(carstate, leadOne)
 
     v_cruise_kph = self.cruise_eco_control(v_ego_cluster_kph, v_cruise_kph)
     v_cruise_kph, atc_active = self._update_carrot_man(sm, v_ego_kph, v_cruise_kph)
@@ -600,15 +592,25 @@ class DrivingModeDetector:
         self.congested = False
 
         self.counter = 0
-        self.enter_needed = 3
-        self.exit_needed = 3
+        self.enter_needed = 5
+        self.exit_needed = 5
 
         self.distance_threshold = 12
         self.speed_threshold = 2
         self.accel_threshold = 1.5
         self.lead_speed_exit_threshold = 35
 
-    def update_data(self, my_speed, lead_speed, my_accel, lead_accel, distance):
+    def update_data(self, carstate, leadOne):
+      my_speed = carstate.vEgo * CV.MS_TO_KPH
+      my_accel = carstate.aEgo
+      lead_speed = 0
+      lead_accel = 0
+      distance = 200
+      if leadOne.status:
+        lead_speed = leadOne.vLead * CV.MS_TO_KPH
+        lead_accel = leadOne.aLead
+        distance = leadOne.dRel
+
         # ---- 진입 조건(OR로 묶기) ----
         enter = (
             (distance <= self.distance_threshold and lead_speed <= self.speed_threshold) or
