@@ -1,6 +1,6 @@
 Carrot2-v9 (2026-01-xx)
 ========================
-* ?? model
+* WMI model
 * Activate corner radar(HDA2)
 * fix Angle Steering(HKG car)
 * Keep blinker while LaneChange
