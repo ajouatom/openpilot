@@ -597,31 +597,31 @@ class DrivingModeDetector:
         lead_accel = leadOne.aLead
         distance = leadOne.dRel
 
-        # ---- 진입 조건(OR로 묶기) ----
-        enter = (
-            (distance <= self.distance_threshold and lead_speed <= self.speed_threshold) or
-            (lead_speed < 5 and lead_accel < 0.2 and my_speed > 1.0 and distance < 200)
-        )
+      # ---- 진입 조건(OR로 묶기) ----
+      enter = (
+          (distance <= self.distance_threshold and lead_speed <= self.speed_threshold) or
+          (lead_speed < 5 and lead_accel < 0.2 and my_speed > 1.0 and distance < 200)
+      )
 
-        # ---- 탈출 조건(더 보수적으로) ----
-        exit_ = (
-            (lead_accel > self.accel_threshold) or
-            (my_speed > self.lead_speed_exit_threshold) or
-            (distance >= 200)
-        )
+      # ---- 탈출 조건(더 보수적으로) ----
+      exit_ = (
+          (lead_accel > self.accel_threshold) or
+          (my_speed > self.lead_speed_exit_threshold) or
+          (distance >= 200)
+      )
 
-        # ---- 디바운스 로직 ----
-        if enter:
-          self.counter += 1  
-        elif exit_:
-          self.counter -= 1
+      # ---- 디바운스 로직 ----
+      if enter:
+        self.counter += 1  
+      elif exit_:
+        self.counter -= 1
 
-        if self.counter >= self.enter_needed:
-          self.congested = True
-          self.counter = self.enter_needed
-        elif self.counter <= - self.exit_needed:
-          self.congested = False
-          self.counter = - self.exit_needed
+      if self.counter >= self.enter_needed:
+        self.congested = True
+        self.counter = self.enter_needed
+      elif self.counter <= - self.exit_needed:
+        self.congested = False
+        self.counter = - self.exit_needed
 
     def get_mode(self):
         return DrivingMode.Safe if self.congested else DrivingMode.Normal
