@@ -188,7 +188,7 @@ class CarrotPlanner:
     factor = self.myHighModeFactor if self.myDrivingMode == DrivingMode.High else self.mySafeFactor
     return np.interp(v_ego, A_CRUISE_MAX_BP_CARROT, cruiseMaxVals) * factor
 
-  def get_T_FOLLOW(self, personality=log.LongitudinalPersonality.standard, v_ego=0.0):
+  def get_T_FOLLOW(self, personality=log.LongitudinalPersonality.standard, v_ego=0.0, a_ego=0.0):
     # ------------------------------------------------------------
     # 1) Compute tf_target (your existing logic, unchanged behavior)
     # ------------------------------------------------------------
@@ -201,11 +201,10 @@ class CarrotPlanner:
       v_kph = v_ego * CV.MS_TO_KPH
       bp = TF_SPEED_BPS.get(self.enableSpeedTF, [0, 30, 60, 90])
 
-      tf_target = float(np.interp(v_kph,bp,
+      tf_target = float(np.interp(v_kph, bp,
                                   [self.tFollowGap1, self.tFollowGap2, self.tFollowGap3, self.tFollowGap4]))
 
       self.jerk_factor = float(np.interp(v_kph, bp, [1.0, 0.7, 0.5, 0.5]))
-
       personality = int(np.clip(np.digitize(v_kph, bp[1:], right=False), 0, 3))
 
       if self.params_count % 100 == 0:
@@ -236,31 +235,18 @@ class CarrotPlanner:
         tf_target *= scale
 
     # ------------------------------------------------------------
-    # 2) Apply "slow decrease / fast increase" smoothing to TF
-    #    + optional rate-limit (prevents sudden drops)
+    # 2) Decel-hold only (no smoothing constants)
     # ------------------------------------------------------------
-    # lazy-init so you don't have to touch __init__
     if not hasattr(self, "_tf_applied") or self._tf_applied <= 0.0:
       self._tf_applied = float(tf_target)
 
-    dt = float(DT_MDL)  # openpilot control loop dt
+    DECEL_HOLD_A = -0.2  # m/s^2
 
-    # Tune here
-    TF_DEC_TAU = 20.0     # seconds (smaller TF: go SLOW)
-    TF_INC_TAU = 1.0     # seconds (bigger TF: go FAST)
-    MAX_DOWN_PER_S = 0.05  # TF can shrink at most 0.05 per second
-    MAX_UP_PER_S   = 0.20  # TF can grow at most 0.20 per second
-
-    # asymmetric 1st-order filter
-    tau = TF_DEC_TAU if tf_target < self._tf_applied else TF_INC_TAU
-    alpha = dt / (tau + dt)
-    tf_filt = self._tf_applied + alpha * (float(tf_target) - self._tf_applied)
-
-    # rate limit (extra safety against fast drops)
-    max_down = MAX_DOWN_PER_S * dt
-    max_up   = MAX_UP_PER_S * dt
-    delta = float(np.clip(tf_filt - self._tf_applied, -max_down, max_up))
-    tf_applied = self._tf_applied + delta
+    # Only block TF shrink while decelerating strongly
+    if a_ego <= DECEL_HOLD_A and tf_target < self._tf_applied:
+      tf_applied = self._tf_applied
+    else:
+      tf_applied = tf_target
 
     # clamp to sensible range (using your configured gaps)
     tf_min = float(min(self.tFollowGap1, self.tFollowGap2, self.tFollowGap3, self.tFollowGap4))

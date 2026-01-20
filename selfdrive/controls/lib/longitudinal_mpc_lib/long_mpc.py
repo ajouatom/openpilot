@@ -364,7 +364,7 @@ class LongitudinalMpc:
   def update(self, carrot, reset_state, radarstate, v_cruise, x, v, a, j, personality=log.LongitudinalPersonality.standard):
     v_ego = self.x0[1]
     a_ego = self.x0[2]
-    t_follow = carrot.get_T_FOLLOW(personality, v_ego)
+    t_follow = carrot.get_T_FOLLOW(personality, v_ego, a_ego)
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
 
     if radarstate.leadOne.status:
