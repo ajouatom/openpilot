@@ -1415,7 +1415,7 @@
       "etitle": "Enable radar tracks(0)",
       "edescr": "-1: use SCC(Stopped car), 0: SCC Radar\n, 1: RadarTrack, 2: RadarTrack(use SCC)\n 3:RadarTrack(Cutin detect and etc)",
       "min": -1,
-      "max": 3,
+      "max": 4,
       "default": 0,
       "unit": 1
     },
