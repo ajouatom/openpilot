@@ -13,7 +13,7 @@ from openpilot.common.params import Params
 from openpilot.common.realtime import DT_MDL, Priority, config_realtime_process
 from openpilot.common.swaglog import cloudlog
 from openpilot.common.simple_kalman import KF1D
-from openpilot.selfdrive.carrot.carrot_radar import LinearVisionRadarMatcher
+
 
 # Default lead acceleration decay set to 50% at 1s
 _LEAD_ACCEL_TAU = 1.5
@@ -27,12 +27,14 @@ V_EGO_STATIONARY = 4.   # no stationary object flag below this speed
 RADAR_TO_CENTER = 2.7   # (deprecated) RADAR is ~ 2.7m ahead from center of car
 RADAR_TO_CAMERA = 1.52  # RADAR is ~ 1.5m ahead from center of mesh frame
 
-def clamp(x: float, lo: float, hi: float) -> float:
-  return float(np.clip(x, lo, hi))
 
 def laplacian_pdf(x: float, mu: float, b: float):
   diff = abs(x - mu) / max(b, 1e-4)
   return 0.0 if diff > 50.0 else math.exp(-diff)
+
+def clamp(x: float, lo: float, hi: float) -> float:
+  return float(np.clip(x, lo, hi))
+
 
 class Track:
   def __init__(self, identifier: int):
@@ -476,8 +478,6 @@ class RadarD:
     }
     self._corner_state = {"L": 0, "R": 0}  # -1,0,+1
 
-    self.matcher = [LinearVisionRadarMatcher(), LinearVisionRadarMatcher()]
-
 
   def update(self, sm: messaging.SubMaster, rr: car.RadarData):
     self.ready = sm.seen['modelV2']
@@ -542,7 +542,7 @@ class RadarD:
       self.compute_leads(self.v_ego, alive_tracks, md)
       if self.leadTwo is not None:
         self.radar_state.leadTwo = self.leadTwo
-      if self.enable_radar_tracks >= 3:
+      if self.enable_radar_tracks == 3:
         self._pick_lead_one_from_state()
 
   def publish(self, pm: messaging.PubMaster):
@@ -567,10 +567,7 @@ class RadarD:
 
     # Determine leads, this is where the essential logic happens
     if len(tracks) > 0 and ready and lead_msg.prob > .4:
-      if self.enable_radar_tracks < 4:
-        track = match_vision_to_track(v_ego, lead_msg, tracks)
-      else:
-        track = self.matcher[index].match_vision_to_track(v_ego, lead_msg, tracks)
+      track = match_vision_to_track(v_ego, lead_msg, tracks)
     else:
       track = None
 
