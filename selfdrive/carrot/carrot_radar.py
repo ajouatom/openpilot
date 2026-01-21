@@ -64,7 +64,7 @@ class LinearVisionRadarMatcher:
       self.w = np.array([
         -1.00,  # 0: dx2
         -1.30,  # 1: dy2
-        -1.00,  # 2: dv2  (정지차에서는 dv_scale로 추가 축소)
+        -0.35,  # 2: dv2  (정지차에서는 dv_scale로 추가 축소)
         -0.80,  # 3: lane_pen (1-in_lane)
         +1.60,  # 4: same_as_last  (sticky 강화)
         +0.40,  # 5: measured
@@ -144,8 +144,7 @@ class LinearVisionRadarMatcher:
     """
     xStd = max(float(xStd), 1e-3)
     yStd = max(float(yStd), 1e-3)
-    vStd_raw = max(float(vStd), 1e-3)
-    vStd = min(max(vStd_raw, 1e-3), 5.0)
+    vStd = max(float(vStd), 1e-3)
 
     dx = (d - float(offset_d)) / xStd
     dy = (y + float(lead_y))  / yStd
