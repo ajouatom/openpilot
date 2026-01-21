@@ -753,7 +753,7 @@ class RadarD:
       return self._corner_state[side]
 
     delta = h[-1] - h[0]
-    th = 0.15 # 3 * (20 / n)
+    th = 0.02 # 3 * (20 / n)
 
     if delta < -th:
       self._corner_state[side] = +1   # approaching
