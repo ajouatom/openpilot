@@ -542,7 +542,7 @@ class RadarD:
       self.compute_leads(self.v_ego, alive_tracks, md)
       if self.leadTwo is not None:
         self.radar_state.leadTwo = self.leadTwo
-      if self.enable_radar_tracks == 3:
+      if self.enable_radar_tracks >= 3:
         self._pick_lead_one_from_state()
 
   def publish(self, pm: messaging.PubMaster):
