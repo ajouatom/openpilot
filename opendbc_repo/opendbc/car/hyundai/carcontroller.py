@@ -365,6 +365,7 @@ class CarController(CarControllerBase):
           send_button = self.make_spam_button(CC, CS)
           can_sends.extend(hyundaicanfd.forward_button_message(self.packer, self.CAN, self.frame, CS, send_button, self.MainMode_ACC_trigger, self.LFA_trigger))
           if self.camera_scc_params == 4:
+            can_sends.extend(hyundaicanfd.create_ccnc_messages(self.CP, self.packer, self.CAN, self.frame, CC, CS, hud_control, apply_angle, left_lane_warning, right_lane_warning, self.enable_corner_radar))
             if self.frame % 2 == 0:
               can_sends.append(hyundaicanfd.create_acc_control_scc2_4(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
                                                              set_speed_in_units, hud_control, self.hyundai_jerk, CS))

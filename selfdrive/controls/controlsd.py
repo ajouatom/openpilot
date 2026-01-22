@@ -56,6 +56,8 @@ class Controls:
     self.curvature = 0.0
     self.desired_curvature = 0.0
 
+    self.op_long = False
+
     self.pose_calibrator = PoseCalibrator()
     self.calibrated_pose: Pose | None = None
     
@@ -119,7 +121,8 @@ class Controls:
     standstill = abs(CS.vEgo) <= max(self.CP.minSteerSpeed, MIN_LATERAL_CONTROL_SPEED) or CS.standstill
     CC.latActive = ((self.sm['selfdriveState'].active or lateral_enabled) and CS.latEnabled and
                     not CS.steerFaultTemporary and not CS.steerFaultPermanent and not standstill)
-    CC.longActive = CC.enabled and not any(e.overrideLongitudinal for e in self.sm['onroadEvents']) and self.CP.openpilotLongitudinalControl
+    self.op_long = self.CP.openpilotLongitudinalControl or self.params.get_int("HyundaiCameraSCC") == 4
+    CC.longActive = CC.enabled and not any(e.overrideLongitudinal for e in self.sm['onroadEvents']) and self.op_long
 
     actuators = CC.actuators
     actuators.longControlState = self.LoC.long_control_state
@@ -203,7 +206,7 @@ class Controls:
     #    self.params.put_bool("OpenpilotEnabledToggle", False)
     #    self.params.put_int("SoftRestartTriggered", 1)
 
-    CC.cruiseControl.override = CC.enabled and not CC.longActive and self.CP.openpilotLongitudinalControl
+    CC.cruiseControl.override = CC.enabled and not CC.longActive and self.op_long
     CC.cruiseControl.cancel = CS.cruiseState.enabled and (not CC.enabled or not self.CP.pcmCruise)
 
     desired_kph = min(CS.vCruiseCluster, self.sm['carrotMan'].desiredSpeed)
