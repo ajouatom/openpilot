@@ -109,6 +109,7 @@ const CanMsg HYUNDAI_CANFD_HDA1_TX_MSGS[] = {
   {234, 2, 24}, // MDPS
   {687, 2, 8}, // STEER_TOUCH_2AF
 
+  {0x1A0, 0, 32}, // CRUISE_INFO
 };
 
 

@@ -338,12 +338,12 @@ class CarController(CarControllerBase):
       if hda2 and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker))
 
-      if self.camera_scc_params in [2, 3]:
+      if self.camera_scc_params in [2, 3, 4]:
         self.canfd_toggle_adas(CC, CS)
-      if self.CP.openpilotLongitudinalControl:
-        self.hyundai_jerk.make_jerk(self.CP, CS, accel, actuators, hud_control)
-        self.hyundai_jerk.check_carrot_cruise(CC, CS, hud_control, stopping, accel, actuators.aTarget)
 
+      self.hyundai_jerk.make_jerk(self.CP, CS, accel, actuators, hud_control)
+      self.hyundai_jerk.check_carrot_cruise(CC, CS, hud_control, stopping, accel, actuators.aTarget)
+      if self.CP.openpilotLongitudinalControl:
         if True: #not camera_scc:
           can_sends.extend(hyundaicanfd.create_ccnc_messages(self.CP, self.packer, self.CAN, self.frame, CC, CS, hud_control, apply_angle, left_lane_warning, right_lane_warning, self.enable_corner_radar))
           if hda2:
@@ -361,9 +361,13 @@ class CarController(CarControllerBase):
           self.accel_last = accel
       else:
         # button presses
-        if self.camera_scc_params == 3: # camera scc but stock long
+        if self.camera_scc_params in [3, 4]: # camera scc but stock long
           send_button = self.make_spam_button(CC, CS)
           can_sends.extend(hyundaicanfd.forward_button_message(self.packer, self.CAN, self.frame, CS, send_button, self.MainMode_ACC_trigger, self.LFA_trigger))
+          if self.camera_scc_params == 4:
+            if self.frame % 2 == 0:
+              can_sends.append(hyundaicanfd.create_acc_control_scc2_4(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
+                                                             set_speed_in_units, hud_control, self.hyundai_jerk, CS))
         else:
           can_sends.extend(self.create_button_messages(CC, CS, use_clu11=False))
         
