@@ -179,14 +179,11 @@ class NativeProcess(ManagerProcess):
     self.watchdog_max_dt = watchdog_max_dt
     self.launcher = nativelauncher
 
-    print(f"NativeProcess {name} initialized with cmdline: {cmdline} should_run: {should_run} enabled: {enabled}")
-
   def prepare(self) -> None:
     pass
 
   def start(self) -> None:
     # In case we only tried a non blocking stop we need to stop it before restarting
-    print(f"#### starting native {self.name} with cmdline: {self.cmdline}")
     if self.shutting_down:
       self.stop()
 
@@ -195,22 +192,10 @@ class NativeProcess(ManagerProcess):
 
     cwd = os.path.join(BASEDIR, self.cwd)
     cloudlog.info(f"starting process {self.name}")
-    print(f"########starting native {self.name} with cmdline: {self.cmdline}")
     self.proc = Process(name=self.name, target=self.launcher, args=(self.cmdline, cwd, self.name))
     self.proc.start()
     self.watchdog_seen = False
     self.shutting_down = False
-
-    time.sleep(0.1)
-    if not self.proc.is_alive():
-      print(f"{self.name} failed to start (not alive)")
-      self.proc = None
-      return
-    if self.proc.exitcode is not None:
-      print(f"{self.name} exited immediately with code {self.proc.exitcode}")
-      self.proc = None
-      return
-
 
 class PythonProcess(ManagerProcess):
   def __init__(self, name, module, should_run, enabled=True, sigkill=False, watchdog_max_dt=None):
@@ -302,8 +287,6 @@ def ensure_running(procs: ValuesView[ManagerProcess], started: bool, params=None
 
   running = []
   for p in procs:
-    if p.name == "loggerd":
-      print(f"Checking loggerd: enabled={p.enabled}, should_run={p.should_run(started, params, CP)}")
     if p.enabled and p.name not in not_run and p.should_run(started, params, CP):
       running.append(p)
     else:
@@ -312,8 +295,6 @@ def ensure_running(procs: ValuesView[ManagerProcess], started: bool, params=None
     p.check_watchdog(started)
 
   for p in running:
-    if p.name == "loggerd":
-      print(f"Starting loggerd: proc={p.proc}")
     p.start()
 
   return running
