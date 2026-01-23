@@ -186,6 +186,7 @@ class NativeProcess(ManagerProcess):
 
   def start(self) -> None:
     # In case we only tried a non blocking stop we need to stop it before restarting
+    print(f"#### starting native {self.name} with cmdline: {self.cmdline}")
     if self.shutting_down:
       self.stop()
 
@@ -194,7 +195,7 @@ class NativeProcess(ManagerProcess):
 
     cwd = os.path.join(BASEDIR, self.cwd)
     cloudlog.info(f"starting process {self.name}")
-    print(f"starting native {self.name} with cmdline: {self.cmdline}")
+    print(f"########starting native {self.name} with cmdline: {self.cmdline}")
     self.proc = Process(name=self.name, target=self.launcher, args=(self.cmdline, cwd, self.name))
     self.proc.start()
     self.watchdog_seen = False
