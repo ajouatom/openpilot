@@ -194,10 +194,18 @@ class NativeProcess(ManagerProcess):
 
     cwd = os.path.join(BASEDIR, self.cwd)
     cloudlog.info(f"starting process {self.name}")
+    print(f"starting native {self.name} with cmdline: {self.cmdline}")
     self.proc = Process(name=self.name, target=self.launcher, args=(self.cmdline, cwd, self.name))
     self.proc.start()
     self.watchdog_seen = False
     self.shutting_down = False
+
+    time.sleep(0.1)
+
+    if self.proc.exitcode is not None:
+      cloudlog.error(f"{self.name} exited immediately with code {self.proc.exitcode}")
+      self.proc = None
+      return
 
 
 class PythonProcess(ManagerProcess):
