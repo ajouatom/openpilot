@@ -353,7 +353,7 @@ int main(int argc, char** argv) {
     //ret = util::set_realtime_priority(1);
     //assert(ret == 0);
   }
-  printf("loggerd running\n");
+  printf("loggerd runningq\n");
   loggerd_thread();
   printf("loggerd exiting\n");
   return 0;
