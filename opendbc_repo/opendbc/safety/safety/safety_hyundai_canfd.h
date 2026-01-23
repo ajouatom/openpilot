@@ -392,8 +392,9 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
 
     bool violation = false;
 
-    if (hyundai_longitudinal) {
-      int cruise_status = ((GET_BYTE(to_send, 8) >> 4) & 0x7U);
+    //if (hyundai_longitudinal) {
+    if (true) {
+        int cruise_status = ((GET_BYTE(to_send, 8) >> 4) & 0x7U);
       bool cruise_engaged = (cruise_status == 1) || (cruise_status == 2) || (cruise_status == 4);
       if (cruise_engaged) {
         if (!controls_allowed) print("automatic controls_allowed enabled....\n");
