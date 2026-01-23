@@ -179,6 +179,8 @@ class NativeProcess(ManagerProcess):
     self.watchdog_max_dt = watchdog_max_dt
     self.launcher = nativelauncher
 
+    print(f"NativeProcess {name} initialized with cmdline: {cmdline} should_run: {should_run} enabled: {enabled}")
+
   def prepare(self) -> None:
     pass
 
