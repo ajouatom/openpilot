@@ -236,7 +236,7 @@ class CarInterface(CarInterfaceBase):
   @staticmethod
   def init(CP, can_recv, can_send):
 
-    Params().put('LongitudinalPersonalityMax', "4")
+    Params().put_int('LongitudinalPersonalityMax', 4)
 
     if CP.openpilotLongitudinalControl and not (CP.flags & HyundaiFlags.CANFD_CAMERA_SCC):
       addr, bus = 0x7d0, 0

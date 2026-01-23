@@ -64,7 +64,7 @@ def write_time_to_param(params, param) -> None:
   params.put(param, t.isoformat().encode('utf8'))
 
 def read_time_from_param(params, param) -> datetime.datetime | None:
-  t = params.get(param, encoding='utf8')
+  t = params.get(param)
   try:
     return datetime.datetime.fromisoformat(t)
   except (TypeError, ValueError):
@@ -242,7 +242,7 @@ class Updater:
 
   @property
   def target_branch(self) -> str:
-    b: str | None = self.params.get("UpdaterTargetBranch", encoding='utf-8')
+    b: str | None = self.params.get("UpdaterTargetBranch")
     if b is None:
       b = self.get_branch(BASEDIR)
     return b

@@ -8,7 +8,7 @@ import traceback
 from cereal import log
 import cereal.messaging as messaging
 import openpilot.system.sentry as sentry
-from openpilot.common.params import Params, ParamKeyType
+from openpilot.common.params import Params, ParamKeyFlag
 from openpilot.common.text_window import TextWindow
 from openpilot.system.hardware import HARDWARE
 from openpilot.system.manager.helpers import unblock_stdout, write_onroad_params, save_bootlog
@@ -19,193 +19,19 @@ from openpilot.common.swaglog import cloudlog, add_file_handler
 from openpilot.system.version import get_build_metadata, terms_version, training_version
 from openpilot.system.hardware.hw import Paths
 
-def get_default_params():
-  default_params : list[tuple[str, str | bytes]] = [
-    # kans
-    ("LongPitch", "1"),
-    ("EVTable", "1"),
-    ("CompletedTrainingVersion", "0"),
-    ("DisengageOnAccelerator", "0"),
-    ("GsmMetered", "1"),
-    ("HasAcceptedTerms", "0"),
-    ("LanguageSetting", "main_en"),
-    ("OpenpilotEnabledToggle", "1"),
-    ("LongitudinalPersonality", str(log.LongitudinalPersonality.standard)),
-    ("IsMetric", "1"),
-    ("RecordAudio", "1"),
-
-    ("SearchInput", "0"),
-    ("GMapKey", "0"),
-    ("MapboxStyle", "0"),
-
-
-    ("LongitudinalPersonalityMax", "3"),
-    ("ShowDebugUI", "0"),
-    ("ShowTpms", "1"),
-    ("ShowDateTime", "1"),
-    ("ShowPathEnd", "1"),
-    ("ShowCustomBrightness", "100"),
-    ("ShowLaneInfo", "1"),
-    ("ShowRadarInfo", "1"),
-    ("ShowDeviceState", "1"),
-    ("ShowRouteInfo", "1"),
-    ("ShowPathMode", "9"),
-    ("ShowPathColor", "13"),
-    ("ShowPathColorCruiseOff", "19"),
-    ("ShowPathModeLane", "14"),
-    ("ShowPathColorLane", "13"),
-    ("ShowPlotMode", "0"),
-    ("AutoCruiseControl", "0"),
-    ("CruiseEcoControl", "2"),
-    ("CarrotCruiseDecel", "-1"),
-    ("CarrotCruiseAtcDecel", "-1"),
-    ("CommaLongAcc", "0"),
-    ("AutoGasTokSpeed", "0"),
-    ("AutoGasSyncSpeed", "1"),
-    ("AutoEngage", "0"),
-    ("DisableMinSteerSpeed", "0"),
-    ("SoftHoldMode", "0"),
-
-    ("AutoSpeedUptoRoadSpeedLimit", "0"),
-    ("AutoRoadSpeedAdjust", "50"),
-    ("AutoCurveSpeedLowerLimit", "30"),
-    ("AutoCurveSpeedFactor", "120"),
-    ("AutoCurveSpeedAggressiveness", "100"),
-
-    ("AutoTurnControl", "0"),
-    ("AutoTurnControlSpeedTurn", "20"),
-    ("AutoTurnControlTurnEnd", "6"),
-    ("AutoTurnMapChange", "0"),
-
-    ("AutoNaviSpeedCtrlEnd", "7"),
-    ("AutoNaviSpeedCtrlMode", "2"),
-    ("AutoNaviSpeedBumpTime", "1"),
-    ("AutoNaviSpeedBumpSpeed", "35"),
-    ("AutoNaviSpeedSafetyFactor", "105"),
-    ("AutoNaviSpeedDecelRate", "120"),
-    ("AutoRoadSpeedLimitOffset", "-1"),
-    ("AutoNaviCountDownMode", "2"),
-    ("TurnSpeedControlMode", "1"),
-    ("CarrotSmartSpeedControl", "0"),
-    ("MapTurnSpeedFactor", "90"),
-    ("ModelTurnSpeedFactor", "0"),
-    ("StoppingAccel", "0"),
-    ("StopDistanceCarrot", "550"),
-    ("JLeadFactor3", "0"),
-    ("CruiseButtonMode", "0"),
-    ("CancelButtonMode", "0"),
-    ("LfaButtonMode", "0"),
-    ("CruiseButtonTest1", "8"),
-    ("CruiseButtonTest2", "30"),
-    ("CruiseButtonTest3", "1"),
-    ("CruiseSpeedUnit", "10"),
-    ("CruiseSpeedUnitBasic", "1"),
-    ("CruiseSpeed1", "30"),
-    ("CruiseSpeed2", "50"),
-    ("CruiseSpeed3", "80"),
-    ("CruiseSpeed4", "110"),
-    ("CruiseSpeed5", "130"),
-    ("PaddleMode", "0"),
-    ("MyDrivingMode", "3"),
-    ("MyDrivingModeAuto", "0"),
-    ("TrafficLightDetectMode", "2"),
-    ("CruiseMaxVals0", "160"),
-    ("CruiseMaxVals1", "200"),
-    ("CruiseMaxVals2", "160"),
-    ("CruiseMaxVals3", "130"),
-    ("CruiseMaxVals4", "110"),
-    ("CruiseMaxVals5", "95"),
-    ("CruiseMaxVals6", "80"),
-    ("LongTuningKpV", "100"),
-    ("LongTuningKiV", "0"),
-    ("LongTuningKf", "100"),
-    ("LongActuatorDelay", "20"),
-    ("VEgoStopping", "50"),
-    ("RadarReactionFactor", "100"),
-    ("EnableRadarTracks", "0"),
-    ("RadarLatFactor", "0"),
-    ("EnableCornerRadar", "0"),
-    ("HyundaiCameraSCC", "0"),
-    ("IsLdwsCar", "0"),
-    ("CanfdHDA2", "0"),
-    ("CanfdDebug", "0"),
-    ("SoundVolumeAdjust", "100"),
-    ("SoundVolumeAdjustEngage", "10"),
-    ("TFollowGap1", "110"),
-    ("TFollowGap2", "120"),
-    ("TFollowGap3", "140"),
-    ("TFollowGap4", "160"),
-    ("DynamicTFollow", "0"),
-    ("EnableSpeedTF", "0"),
-    ("AChangeCostStarting", "10"),
-    ("TrafficStopDistanceAdjust", "400"),
-    ("DynamicTFollowLC", "100"),
-    ("HapticFeedbackWhenSpeedCamera", "0"),
-    ("UseLaneLineSpeed", "0"),
-    ("PathOffset", "0"),
-    ("UseLaneLineCurveSpeed", "0"),
-    ("AdjustLaneOffset", "0"),
-    ("LaneChangeNeedTorque", "0"),
-    ("LaneChangeDelay", "0"),
-    ("LaneChangeBsd", "0"),
-    ("MaxAngleFrames", "89"),
-    ("LateralTorqueCustom", "0"),
-    ("LateralTorqueAccelFactor", "2500"),
-    ("LateralTorqueFriction", "100"),
-    ("LateralTorqueKpV", "100"),
-    ("LateralTorqueKiV", "10"),
-    ("LateralTorqueKf", "100"),
-    ("LateralTorqueKd", "0"),
-    ("LatMpcPathCost", "200"),
-    ("LatMpcMotionCost", "7"),
-    ("LatMpcAccelCost", "120"),
-    ("LatMpcJerkCost", "4"),
-    ("LatMpcSteeringRateCost", "7"),
-    ("LatMpcInputOffset", "4"),
-    ("CustomSteerMax", "0"),
-    ("CustomSteerDeltaUp", "0"),
-    ("CustomSteerDeltaDown", "0"),
-    ("CustomSteerDeltaUpLC", "0"),
-    ("CustomSteerDeltaDownLC", "0"),
-    ("SpeedFromPCM", "2"),
-    ("SteerActuatorDelay", "0"),
-    ("LatSmoothSec", "13"),
-    ("MaxTimeOffroadMin", "60"),
-    ("DisableDM", "0"),
-    ("EnableConnect", "0"),
-    ("MuteDoor", "0"),
-    ("MuteSeatbelt", "0"),
-    ("RecordRoadCam", "0"),
-    ("HDPuse", "0"),
-    ("CruiseOnDist", "400"),
-    ("HotspotOnBoot", "0"),
-    ("SoftwareMenu", "1"),
-    ("CustomSR", "0"),
-    ("SteerRatioRate", "100"),
-    ("NNFF", "0"),
-    ("NNFFLite", "0"),
-    ("ShareData", "0"),
-  ]
-  return default_params
-
 def set_default_params():
   params = Params()
-  default_params = get_default_params()
-  try:
-    default_params.remove(("GMapKey", "0"))
-    default_params.remove(("CompletedTrainingVersion", "0"))
-    default_params.remove(("LanguageSetting", "main_en"))
-    default_params.remove(("GsmMetered", "1"))
-  except ValueError:
-    pass
-  for k, v in default_params:
-    params.put(k, v)
-    print(f"SetToDefault[{k}]={v}")
+  for k in params.all_keys():
+    default_value = params.get_default_value(k)
+    if default_value is not None:
+      params.put(k, default_value)
+      print(f"SetToDefault[{k}]={default_value}")
 
 def get_default_params_key():
-  default_params = get_default_params()
-  all_keys = [key for key, _ in default_params]
-  return all_keys
+  return Params().all_keys()
+  #default_params = get_default_params()
+  #all_keys = [key for key, _ in default_params]
+  #return all_keys
 
 def manager_init() -> None:
   save_bootlog()
@@ -213,21 +39,21 @@ def manager_init() -> None:
   build_metadata = get_build_metadata()
 
   params = Params()
-  params.clear_all(ParamKeyType.CLEAR_ON_MANAGER_START)
-  params.clear_all(ParamKeyType.CLEAR_ON_ONROAD_TRANSITION)
-  params.clear_all(ParamKeyType.CLEAR_ON_OFFROAD_TRANSITION)
+  params.clear_all(ParamKeyFlag.CLEAR_ON_MANAGER_START)
+  params.clear_all(ParamKeyFlag.CLEAR_ON_ONROAD_TRANSITION)
+  params.clear_all(ParamKeyFlag.CLEAR_ON_OFFROAD_TRANSITION)
+  params.clear_all(ParamKeyFlag.CLEAR_ON_IGNITION_ON)
   if build_metadata.release_channel:
-    params.clear_all(ParamKeyType.DEVELOPMENT_ONLY)
-
-  default_params = get_default_params()
+    params.clear_all(ParamKeyFlag.DEVELOPMENT_ONLY)
 
   if params.get_bool("RecordFrontLock"):
     params.put_bool("RecordFront", True)
 
-  # set unset params
-  for k, v in default_params:
-    if params.get(k) is None:
-      params.put(k, v)
+  # set unset params to their default value
+  for k in params.all_keys():
+    default_value = params.get_default_value(k)
+    if default_value is not None and params.get(k) is None:
+      params.put(k, default_value)
 
   # Create folders needed for msgq
   try:
@@ -299,7 +125,7 @@ def manager_thread() -> None:
   params = Params()
 
   ignore: list[str] = []
-  if params.get("DongleId", encoding='utf8') in (None, UNREGISTERED_DONGLE_ID):
+  if params.get("DongleId") in (None, UNREGISTERED_DONGLE_ID):
     ignore += ["manage_athenad", "uploader"]
   if os.getenv("NOBOARD") is not None:
     ignore.append("pandad")
@@ -309,7 +135,7 @@ def manager_thread() -> None:
     ignore += ["micd", "soundd", "loggerd"]
     params.put("RecordAudio", "0")
 
-  sm = messaging.SubMaster(['deviceState', 'carParams'], poll='deviceState')
+  sm = messaging.SubMaster(['deviceState', 'carParams', 'pandaStates'], poll='deviceState')
   pm = messaging.PubMaster(['managerState'])
 
   write_onroad_params(False, params)
@@ -319,6 +145,7 @@ def manager_thread() -> None:
   print_timer = 0
 
   started_prev = False
+  ignition_prev = False
 
   while True:
     sm.update(1000)
@@ -326,15 +153,20 @@ def manager_thread() -> None:
     started = sm['deviceState'].started
 
     if started and not started_prev:
-      params.clear_all(ParamKeyType.CLEAR_ON_ONROAD_TRANSITION)
+      params.clear_all(ParamKeyFlag.CLEAR_ON_ONROAD_TRANSITION)
     elif not started and started_prev:
-      params.clear_all(ParamKeyType.CLEAR_ON_OFFROAD_TRANSITION)
+      params.clear_all(ParamKeyFlag.CLEAR_ON_OFFROAD_TRANSITION)
+
+    ignition = any(ps.ignitionLine or ps.ignitionCan for ps in sm['pandaStates'] if ps.pandaType != log.PandaState.PandaType.unknown)
+    if ignition and not ignition_prev:
+      params.clear_all(ParamKeyFlag.CLEAR_ON_IGNITION_ON)
 
     # update onroad params, which drives pandad's safety setter thread
     if started != started_prev:
       write_onroad_params(started, params)
 
     started_prev = started
+    ignition_prev = ignition
 
     ensure_running(managed_processes.values(), started, params=params, CP=sm['carParams'], not_run=ignore)
 

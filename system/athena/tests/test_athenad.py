@@ -380,11 +380,11 @@ class TestAthenadMethods:
 
   def test_get_ssh_authorized_keys(self):
     keys = dispatcher["getSshAuthorizedKeys"]()
-    assert keys == self.default_params["GithubSshKeys"].decode('utf-8')
+    assert keys == self.default_params["GithubSshKeys"]
 
   def test_get_github_username(self):
     keys = dispatcher["getGithubUsername"]()
-    assert keys == self.default_params["GithubUsername"].decode('utf-8')
+    assert keys == self.default_params["GithubUsername"]
 
   def test_get_version(self):
     resp = dispatcher["getVersion"]()

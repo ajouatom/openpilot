@@ -223,26 +223,26 @@ def ffplay_mp4_wrap_process_builder(file_name):
   )
 
 def get_nav_active():
-  if params.get("NavDestination", encoding='utf8') is not None:
+  if params.get("NavDestination") is not None:
     return True
   else:
     return False
 
 def get_public_token():
-  token = params.get("MapboxPublicKey", encoding='utf8')
+  token = params.get("MapboxPublicKey")
   return token.strip() if token is not None else None
 
 def get_app_token():
-  token = params.get("MapboxSecretKey", encoding='utf8')
+  token = params.get("MapboxSecretKey")
   return token.strip() if token is not None else None
 
 def get_gmap_key():
-  token = params.get("GMapKey", encoding='utf8')
+  token = params.get("GMapKey")
   return token.strip() if token is not None else None
 
 def get_amap_key():
-  token = params.get("AMapKey1", encoding='utf8')
-  token2 = params.get("AMapKey2", encoding='utf8')
+  token = params.get("AMapKey1")
+  token2 = params.get("AMapKey2")
   return (token.strip() if token is not None else None, token2.strip() if token2 is not None else None)
 
 def get_SearchInput():
@@ -262,11 +262,11 @@ def get_last_lon_lat():
   return l["longitude"], l["latitude"]
 
 def get_locations():
-  data = params.get("ApiCache_NavDestinations", encoding='utf-8')
+  data = params.get("ApiCache_NavDestinations")
   return data
 
 def preload_favs():
-  raw_json = params.get("ApiCache_NavDestinations", encoding='utf8')
+  raw_json = params.get("ApiCache_NavDestinations")
   if raw_json is None:
     return (None, None, None, None, None)
 
@@ -289,7 +289,7 @@ def parse_addr(postvars, lon, lat, valid_addr, token):
   real_addr = None
   if addr != "favorites":
     try:
-      dests = json.loads(params.get("ApiCache_NavDestinations", encoding='utf8'))
+      dests = json.loads(params.get("ApiCache_NavDestinations"))
     except TypeError:
       dests = json.loads("[]")
     for item in dests:
@@ -355,7 +355,7 @@ def nav_confirmed(postvars):
     else:
       new_dest["save_type"] = "favorite"
       new_dest["label"] = save_type
-    val = params.get("ApiCache_NavDestinations", encoding='utf8')
+    val = params.get("ApiCache_NavDestinations")
     if val is not None:
       val = val.rstrip('\x00')
     dests = [] if val is None else json.loads(val)

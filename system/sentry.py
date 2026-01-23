@@ -50,7 +50,7 @@ def init(project: SentryProject) -> bool:
     return False
 
   env = "release" if build_metadata.tested_channel else "master"
-  dongle_id = Params().get("DongleId", encoding='utf-8')
+  dongle_id = Params().get("DongleId")
 
   integrations = []
   if project == SentryProject.SELFDRIVE:

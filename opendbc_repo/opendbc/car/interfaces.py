@@ -380,7 +380,7 @@ class CarInterfaceBase(ABC):
     dbc_names = {bus: cp.dbc_name for bus, cp in self.can_parsers.items()}
     self.CC: CarControllerBase = self.CarController(dbc_names, CP)
 
-    Params().put('LongitudinalPersonalityMax', "3")
+    Params().put_int('LongitudinalPersonalityMax', 3)
     eps_firmware = str(next((fw.fwVersion for fw in CP.carFw if fw.ecu == "eps"), ""))
 
     comma_nnff_supported = self.check_comma_nn_ff_support(CP.carFingerprint)

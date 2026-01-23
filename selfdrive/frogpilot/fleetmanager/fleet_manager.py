@@ -223,8 +223,8 @@ def upload_carrot(route, segment):
         local_folder = os.path.join(Paths.log_root(), f"{route}--{segment}")
         if not os.path.isdir(local_folder):
             abort(404, "Folder not found")
-        car_selected = Params().get("CarName", "none").decode('utf-8')
-        dongle_id = Params().get("DongleId", "unknown").decode('utf-8')
+        car_selected = Params().get("CarName", "none")
+        dongle_id = Params().get("DongleId", "unknown")
         directory = f"{car_selected} {dongle_id}"
         success = upload_folder_to_ftp(local_folder, directory, f"{route}--{segment}")
         if success:
@@ -574,7 +574,7 @@ def carinfo():
 
         # 获取车辆基本信息
         try:
-            car_name = params.get("CarName", encoding='utf8')
+            car_name = params.get("CarName")
             if car_name in PLATFORMS:
                 platform = PLATFORMS[car_name]
                 car_fingerprint = platform.config.platform_str

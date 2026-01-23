@@ -219,12 +219,12 @@ class CarrotServ:
 
     # 读取语言设置：优先使用 LanguageSetting，与 UI 保持一致；回退读取可能存在的 "lang"
     try:
-      lang_val = self.params.get('LanguageSetting', encoding='utf8') or self.params.get('lang', encoding='utf8')
+      lang_val = self.params.get('LanguageSetting') or self.params.get('lang')
     except Exception:
       lang_val = None
     if isinstance(lang_val, bytes):
       try:
-        lang_val = lang_val.decode('utf8')
+        lang_val = lang_val
       except Exception:
         lang_val = None
     if lang_val == "main_ko":

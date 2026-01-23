@@ -183,12 +183,12 @@ def get_car(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_multip
           if name == doc.name:
             return platform
       return None
-    found_car = find_car(selected_car.decode("utf-8"))
+    found_car = find_car(selected_car)
     if found_car is not None:
       candidate = found_car
 
   print(f"SelectedCar = {candidate}")
-  Params().put("CarName", candidate)
+  Params().put("CarName", str(candidate))
 
   Params().put("FingerPrints", str(fingerprints))
   CarInterface = interfaces[candidate]

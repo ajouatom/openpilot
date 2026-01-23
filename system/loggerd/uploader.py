@@ -90,7 +90,7 @@ class Uploader:
     #  self.immediate_priority.update({"rlog": 0, "rlog.zst": 0})
 
   def list_upload_files(self, metered: bool) -> Iterator[tuple[str, str, str]]:
-    r = self.params.get("AthenadRecentlyViewedRoutes", encoding="utf8")
+    r = self.params.get("AthenadRecentlyViewedRoutes")
     requested_routes = [] if r is None else [route for route in r.split(",") if route]
 
     for logdir in listdir_by_creation(self.root):
@@ -240,7 +240,7 @@ def main(exit_event: threading.Event = None) -> None:
   clear_locks(Paths.log_root())
 
   params = Params()
-  dongle_id = params.get("DongleId", encoding='utf8')
+  dongle_id = params.get("DongleId")
 
   if dongle_id is None:
     cloudlog.info("uploader missing dongle_id")

@@ -533,7 +533,7 @@ class CarrotMan:
 
   def make_send_message(self):
     msg = {}
-    msg['Carrot2'] = self.params.get("Version").decode('utf-8')
+    msg['Carrot2'] = self.params.get("Version")
     isOnroad = self.params.get_bool("IsOnroad")
     msg['IsOnroad'] = isOnroad
     msg['CarrotRouteActive'] = self.navi_points_active
@@ -737,16 +737,16 @@ class CarrotMan:
     if car_selected is None:
       car_selected = "none"
     else:
-      car_selected = car_selected.decode('utf-8')
+      car_selected = car_selected
 
-    git_branch = Params().get("GitBranch").decode('utf-8')
+    git_branch = Params().get("GitBranch")
     try:
       ftp.mkd(git_branch)
     except Exception as e:
       print(f"Directory creation failed: {e}")
     ftp.cwd(git_branch)
 
-    directory = car_selected + " " + Params().get("DongleId").decode('utf-8')
+    directory = car_selected + " " + Params().get("DongleId")
     current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
     filename = tmux_why + "-" + current_time + "-" + git_branch + ".txt"
 

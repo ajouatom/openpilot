@@ -200,7 +200,7 @@ class CarrotSpeed:
           if sR != 0.0:
             speed = sR
 
-    return json.dumps({"pts": pts}, separators=(",", ":")), float(speed)
+    return {"pts": pts}, float(speed)
 
   def export_cells_around1(self, lat: float, lon: float,
                           heading_deg: float,

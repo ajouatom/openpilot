@@ -121,7 +121,7 @@ class CarState(CarStateBase):
     #self.lf_lateral = 0
     #self.rf_lateral = 0
 
-    fingerprints_str = Params().get("FingerPrints", encoding='utf-8')
+    fingerprints_str = Params().get("FingerPrints")
     fingerprints = ast.literal_eval(fingerprints_str)
     #print("fingerprints =", fingerprints)
     ecu_disabled = False

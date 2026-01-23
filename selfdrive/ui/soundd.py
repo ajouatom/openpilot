@@ -108,7 +108,7 @@ class Soundd:
     self.soundVolumeAdjust = 1.0
     self.carrot_count_down = 0
 
-    self.lang = self.params.get('LanguageSetting', encoding='utf8')
+    self.lang = self.params.get('LanguageSetting')
     self.load_sounds()
 
     self.current_alert = AudibleAlert.none
