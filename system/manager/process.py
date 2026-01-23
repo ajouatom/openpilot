@@ -201,9 +201,12 @@ class NativeProcess(ManagerProcess):
     self.shutting_down = False
 
     time.sleep(0.1)
-
+    if not self.proc.is_alive():
+      print(f"{self.name} failed to start (not alive)")
+      self.proc = None
+      return
     if self.proc.exitcode is not None:
-      cloudlog.error(f"{self.name} exited immediately with code {self.proc.exitcode}")
+      print(f"{self.name} exited immediately with code {self.proc.exitcode}")
       self.proc = None
       return
 
