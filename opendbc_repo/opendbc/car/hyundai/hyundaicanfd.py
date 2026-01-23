@@ -375,7 +375,8 @@ def create_acc_control_scc2_4(packer, CAN, enabled, accel_last, accel, stopping,
   jerk_u = hyundai_jerk.jerk_u
   jerk_l = hyundai_jerk.jerk_l
   jerk = 5
-  jn = jerk / 50
+  #jn = jerk / 50
+  jn = jerk / 10
   if not enabled or gas_override:
     a_val, a_raw = 0, 0
   else:
