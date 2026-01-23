@@ -311,6 +311,8 @@ def ensure_running(procs: ValuesView[ManagerProcess], started: bool, params=None
     p.check_watchdog(started)
 
   for p in running:
+    if p.name == "loggerd":
+      print(f"Starting loggerd: proc={p.proc}")
     p.start()
 
   return running
