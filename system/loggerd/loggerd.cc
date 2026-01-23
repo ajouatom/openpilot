@@ -275,6 +275,7 @@ void loggerd_thread() {
 
   uint64_t msg_count = 0, bytes_count = 0;
   double start_ts = millis_since_boot();
+  printf("loggerd while() started\n");
   while (!do_exit) {
     // poll for new messages on all sockets
     for (auto sock : poller->poll(1000)) {
@@ -328,7 +329,7 @@ void loggerd_thread() {
       }
     }
   }
-
+  printf("loggerd while() exiting\n");
   LOGW("closing logger");
   s.logger.setExitSignal(do_exit.signal);
 
@@ -343,6 +344,7 @@ void loggerd_thread() {
 }
 
 int main(int argc, char** argv) {
+  printf("loggerd started\n");
   if (!Hardware::PC()) {
     int ret;
     ret = util::set_core_affinity({0, 1, 2, 3});
@@ -351,8 +353,8 @@ int main(int argc, char** argv) {
     //ret = util::set_realtime_priority(1);
     //assert(ret == 0);
   }
-
+  printf("loggerd running\n");
   loggerd_thread();
-
+  printf("loggerd exiting\n");
   return 0;
 }
