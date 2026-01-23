@@ -22,6 +22,7 @@ def iscar(started: bool, params: Params, CP: car.CarParams) -> bool:
 
 def logging(started: bool, params: Params, CP: car.CarParams) -> bool:
   run = (not CP.notCar) or not params.get_bool("DisableLogging")
+  print(f"logging check: notCar={CP.notCar}, DisableLogging={params.get_bool('DisableLogging')}, run={run}")
   return started and run
 
 def ublox_available() -> bool:
