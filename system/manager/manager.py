@@ -313,6 +313,7 @@ def manager_thread() -> None:
   pm = messaging.PubMaster(['managerState'])
 
   write_onroad_params(False, params)
+  print(f"################# ignore process list: {ignore} #################")
   ensure_running(managed_processes.values(), False, params=params, CP=sm['carParams'], not_run=ignore)
 
   print_timer = 0
