@@ -301,6 +301,8 @@ def ensure_running(procs: ValuesView[ManagerProcess], started: bool, params=None
 
   running = []
   for p in procs:
+    if p.name == "loggerd":
+      print(f"Checking loggerd: enabled={p.enabled}, should_run={p.should_run(started, params, CP)}")
     if p.enabled and p.name not in not_run and p.should_run(started, params, CP):
       running.append(p)
     else:
