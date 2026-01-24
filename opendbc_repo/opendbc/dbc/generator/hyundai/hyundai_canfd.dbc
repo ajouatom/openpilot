@@ -231,20 +231,24 @@ BO_ 373 TCS: 24 XXX
  SG_ NEW_SIGNAL_9 : 31|1@0+ (1,0) [0|1] "" XXX
  SG_ aBasis : 32|11@1+ (0.01,-10.23) [0|7] "m/s^2" XXX
  SG_ ACCEL_REF_ACC : 48|11@1- (1,0) [0|1023] "" XXX
- SG_ EQUIP_MAYBE : 64|1@0+ (1,0) [0|1] "" XXX
+ SG_ SCC_OptTyp : 64|2@1+ (1,0) [0|0] ""  AWD,EMS,FR_CMR,HCU,H_U_MM,TCU,VCU,vBDM
  SG_ ACCEnable : 67|2@0+ (1,0) [0|3] "" XXX
  SG_ ACC_REQ : 68|1@0+ (1,0) [0|1] "" XXX
- SG_ NEW_SIGNAL_5 : 72|1@0+ (1,0) [0|1] "" XXX
+ SG_ SCC_ReqLimSta : 70|2@1+ (1,0) [0|0] ""  ADAS_DRV,AWD,Dummy,EMS,FR_CMR,H_U_MM,TCU,vBDM
+ SG_ ESC_StdStillVal : 72|2@1+ (1,0) [0|3] ""  ADAS_DRV,AWD,Dummy,EMS,FR_CMR,H_U_MM,TCU,vBDM
  SG_ BrakeLight : 74|2@1+ (1,0) [0|3] "" XXX
- SG_ NEW_SIGNAL_3 : 76|1@0+ (1,0) [0|1] "" XXX
- SG_ NEW_SIGNAL_1 : 80|1@0+ (1,0) [0|1] "" XXX
+ SG_ ESC_DclEnblReq : 76|2@1+ (1,0) [0|3] ""  AWD,Dummy,EMS,FR_CMR,H_U_MM,TCU,vBDM
+ SG_ ESC_DrvOvrdSta : 80|2@1+ (1,0) [0|3] ""  ADAS_DRV,ADAS_PRK,AWD,Dummy,EMS,FR_CMR,H_U_MM,TCU,vBDM
  SG_ DriverBraking : 81|1@0+ (1,0) [0|1] "" XXX
  SG_ DriverBrakingLowSens : 84|1@1+ (1,0) [0|1] "" XXX
- SG_ AEB_EQUIP_MAYBE : 96|1@0+ (1,0) [0|1] "" XXX
+ SG_ ESC_PrkBrkActvSta : 86|2@1+ (1,0) [0|3] ""  ADAS_DRV,AWD,Dummy,EMS,FR_CMR,H_U_MM,RR_C_RDR,TCU,vBDM
+ SG_ FCA_EquipSta : 96|2@1+ (1,0) [0|3] ""  ADAS_DRV,FR_CMR,H_U_MM,vBDM
+ SG_ FCA_AvlblSta : 98|2@1+ (1,0) [0|3] ""  ADAS_DRV,AFCU_DRV,CLU,Dummy,FR_CMR,H_U_MM,vBDM
  SG_ NEW_SIGNAL_6 : 128|4@1+ (1,0) [0|15] "" XXX
  SG_ NEW_SIGNAL_7 : 135|2@0+ (1,0) [0|3] "" XXX
  SG_ PROBABLY_EQUIP : 136|2@1+ (1,0) [0|3] "" XXX
  SG_ NEW_SIGNAL_8 : 183|16@0+ (1,0) [0|65535] "" XXX
+
 
 BO_ 352 ADRV_0x160: 16 ADRV
  SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
@@ -1004,6 +1008,14 @@ VAL_ 354 FAULT_ESS 0 "HIDDEN" 1 "CHECK_EMERGENCY_STOPPING_FUNCTION" 2 "EMERGENCY
 
 VAL_ 362 BLINKER_CONTROL 1 "hazards" 2 "hazards button backlight" 3 "left blinkers" 4 "right blinkers";
 VAL_ 373 ACCEnable 0 "SCC ready" 1 "SCC temp fault" 2 "SCC permanent fault" 3 "SCC permanent fault, communication issue";
+VAL_ 373 SCC_OptTyp 0 "SCC is not equipped" 1 "SCC is equipped" 2 "Not used" 3 "Error Indicator" ;
+VAL_ 373 SCC_ReqLimSta 0 "No request" 1 "Limited No Limitation" 2 "Acceleration Limited" 3 "Deceleration Limited" ;
+VAL_ 373 ESC_StdStillVal 0 "No stand still detected" 1 "stand still detected" 2 "Not used" 3 "Error Indicator" ;
+VAL_ 373 ESC_DclEnblReq 0 "Disable deceleration control" 1 "Enable deceleration control" 2 "Not used" 3 "Error Indicator" ;
+VAL_ 373 ESC_DrvOvrdSta 0 "No override" 1 "Override by acceleration pedal" 2 "Override by deceleration" 3 "Error Indicator" ;
+VAL_ 373 ESC_PrkBrkActvSta 0 "Parking brake is not activated" 1 "Parking brake is activated" 2 "Not used" 3 "Error Indicator" ;
+VAL_ 373 FCA_EquipSta 0 "FCA is not equipped" 1 "FCA is equipped" 2 "Not used" 3 "Error Indicator" ;
+VAL_ 373 FCA_AvlblSta 0 "Available" 1 "Temporarily not available" 2 "Permanently not available" 3 "FCA Communication Error" ;
 VAL_ 416 ACCMode 0 "off" 1 "enabled" 2 "driver_override" 3 "off_maybe_fault" 4 "cancelled" ;
 VAL_ 426 CRUISE_BUTTONS 0 "none" 1 "res_accel" 2 "set_decel" 3 "gap_distance" 4 "pause_resume" ;
 VAL_ 463 CRUISE_BUTTONS 0 "none" 1 "res_accel" 2 "set_decel" 3 "gap_distance" 4 "pause_resume" ;
