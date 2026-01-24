@@ -369,6 +369,7 @@ class CarController(CarControllerBase):
             if self.frame % 2 == 0:
               can_sends.append(hyundaicanfd.create_acc_control_scc2_4(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
                                                              set_speed_in_units, hud_control, self.hyundai_jerk, CS))
+              self.accel_last = accel
         else:
           can_sends.extend(self.create_button_messages(CC, CS, use_clu11=False))
         
