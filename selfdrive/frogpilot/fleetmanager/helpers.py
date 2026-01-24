@@ -29,7 +29,7 @@ import subprocess
 # otisserv conversion
 from pathlib import Path
 
-from openpilot.common.params import Params
+from openpilot.common.params import Params, ParamKeyType
 from openpilot.system.hardware import PC
 from openpilot.system.hardware.hw import Paths
 from openpilot.system.loggerd.uploader import listdir_by_creation
@@ -447,28 +447,116 @@ def transform_lng(lng, lat):
   ret += (150.0 * math.sin(lng / 12.0 * pi) + 300.0 * math.sin(lng / 30.0 * pi)) * 2.0 / 3.0
   return ret
 
-from openpilot.system.manager.manager import get_default_params_key
-def get_all_toggle_values():
-  all_keys = get_default_params_key()
+def get_keys_with_default(exclude_types=(ParamKeyType.BYTES, ParamKeyType.JSON)):
+  keys = []
+  for k in params.all_keys():  # raw keys
+    if isinstance(k, (bytes, bytearray, memoryview)):
+      try:
+        k_str = k.decode("utf-8")
+      except Exception:
+        continue
+    else:
+      k_str = str(k)
 
-  toggle_values = {}
-  for key in all_keys:
     try:
-      value = params.get(key)
+      t = params.get_type(k_str)   # = getKeyType
     except Exception:
-      value = b"0"
-    toggle_values[key] = value.decode('utf-8') if value is not None else "0"
+      continue
+    if t in exclude_types:
+      continue
+
+    # default 존재 여부
+    try:
+      dv = params.get_default_value(k_str)  # optional 없으면 None
+    except Exception:
+      continue
+
+    if dv is None:
+      continue
+
+    keys.append(k_str)
+
+  return keys
+
+def get_all_toggle_values():
+  toggle_values = {}
+
+  for k in params.all_keys():
+    # key 정리
+    if isinstance(k, (bytes, bytearray, memoryview)):
+      try:
+        key = k.decode("utf-8")
+      except Exception:
+        continue
+    else:
+      key = str(k)
+
+    # 타입 확인 + 제외
+    try:
+      t = params.get_type(key)
+    except Exception:
+      continue
+    if t in (ParamKeyType.BYTES, ParamKeyType.JSON):
+      continue
+
+    # default 없는 키 제외
+    try:
+      dv = params.get_default_value(key)
+    except Exception:
+      continue
+    if dv is None:
+      continue
+
+    # 값 읽기 (이미 Params.get()이 타입 변환까지 해줌)
+    try:
+      v = params.get(key, block=False, return_default=False)
+    except Exception:
+      v = None
+
+    # v가 None이면 default로 채우고 싶으면 dv로 대체 (선택)
+    if v is None:
+      v = dv
+
+    # 최종 stringify (jsonify 용)
+    if isinstance(v, (dict, list)):
+      toggle_values[key] = json.dumps(v, ensure_ascii=False)
+    else:
+      toggle_values[key] = str(v)
 
   return toggle_values
 
 def store_toggle_values(updated_values):
   for key, value in updated_values.items():
     try:
-      params.put(key, value.encode('utf-8'))
-      #params_storage.put(key, value.encode('utf-8'))
+      # key 타입 확인
+      t = params.get_type(key)
+
+      # 문자열 → 실제 타입으로 변환
+      if t == ParamKeyType.BOOL:
+        v = value in ("1", "true", "True", "on", "yes")
+        params.put_bool(key, v)
+
+      elif t == ParamKeyType.INT:
+        params.put_int(key, int(value))
+
+      elif t == ParamKeyType.FLOAT:
+        params.put_float(key, float(value))
+
+      elif t == ParamKeyType.TIME:
+        # ISO format 문자열이라고 가정
+        params.put(key, value)   # Params 내부에서 isoformat string 처리
+
+      elif t == ParamKeyType.STRING:
+        params.put(key, value)
+
+      elif t == ParamKeyType.JSON:
+        # 이미 JSON 문자열로 넘어왔다고 가정
+        obj = json.loads(value) if isinstance(value, str) else value
+        params.put(key, obj)
+
+      else:
+        print(f"Skip unsupported param type: {key} type={t}")
+        continue
+
     except Exception as e:
       print(f"Failed to update {key}: {e}")
-
-  #params_memory.put_bool("FrogPilotTogglesUpdated", True)
-  #time.sleep(1)
-  #params_memory.put_bool("FrogPilotTogglesUpdated", False)
