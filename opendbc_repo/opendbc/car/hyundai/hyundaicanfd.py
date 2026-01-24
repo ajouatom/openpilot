@@ -381,7 +381,7 @@ def create_acc_control_scc2_4(packer, CAN, enabled, accel_last, accel, stopping,
     a_val, a_raw = 0, 0
   else:
     a_raw = accel
-    a_val = np.clip(accel, accel_last - jn, accel_last + jn)
+    a_val = accel #np.clip(accel, accel_last - jn, accel_last + jn)
 
   values = copy.copy(CS.cruise_info)
   #values["ACCMode"] = acc_mode
