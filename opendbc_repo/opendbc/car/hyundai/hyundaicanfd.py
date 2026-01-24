@@ -387,11 +387,10 @@ def create_acc_control_scc2_4(packer, CAN, enabled, accel_last, accel, stopping,
   values["StopReq"] = 1 if stopping or CS.softHoldActive > 0 else 0  # 1: Stop control is required, 2: Not used, 3: Error Indicator
   values["aReqValue"] = a_val
   values["aReqRaw"] = a_raw
-  """
   values["VSetDis"] = set_speed
   values["JerkLowerLimit"] = jerk_l if enabled else 1
   values["JerkUpperLimit"] = 2.0 if stopping or CS.softHoldActive else jerk_u
-
+  
   values["DISTANCE_SETTING"] = hud_control.leadDistanceBars # + 5
 
   hud_lead_info = 0
@@ -407,7 +406,7 @@ def create_acc_control_scc2_4(packer, CAN, enabled, accel_last, accel, stopping,
   # 이거안하면 정지중 뒤로 밀리는 현상 발생하는듯.. (신호정지중에 뒤로 밀리는 경험함.. 시험해봐야)
   if values["InfoDisplay"] != 5: #5: Front Car Departure Notice
     values["InfoDisplay"] = 4 if stopping and CS.out.aEgo > -0.3 else 0  # 1: SCC Mode, 2: Convention Cruise Mode, 3: Object disappered at low speed, 4: Available to resume acceleration control, 5: Front vehicle departure notice, 6: Reserved, 7: Invalid
-  """
+
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
 
 def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control, jerk_u, jerk_l, CS):
