@@ -387,11 +387,11 @@ def create_acc_control_scc2_4(packer, CAN, enabled, accel_last, accel, stopping,
   values["StopReq"] = 1 if stopping or CS.softHoldActive > 0 else 0  # 1: Stop control is required, 2: Not used, 3: Error Indicator
   values["aReqValue"] = a_val
   values["aReqRaw"] = a_raw
+  """
   values["VSetDis"] = set_speed
   values["JerkLowerLimit"] = jerk_l if enabled else 1
   values["JerkUpperLimit"] = 2.0 if stopping or CS.softHoldActive else jerk_u
 
-  """
   values["DISTANCE_SETTING"] = hud_control.leadDistanceBars # + 5
 
   hud_lead_info = 0
