@@ -384,34 +384,21 @@ def create_acc_control_scc2_4(packer, CAN, enabled, accel_last, accel, stopping,
     a_val = accel #np.clip(accel, accel_last - jn, accel_last + jn)
 
   values = copy.copy(CS.cruise_info)
-  #values["ACCMode"] = acc_mode
-  #values["MainMode_ACC"] = 1
   values["StopReq"] = 1 if stopping or CS.softHoldActive > 0 else 0  # 1: Stop control is required, 2: Not used, 3: Error Indicator
   values["aReqValue"] = a_val
   values["aReqRaw"] = a_raw
   values["VSetDis"] = set_speed
-  #values["JerkLowerLimit"] = jerk if enabled else 1
-  #values["JerkUpperLimit"] = 3.0
   values["JerkLowerLimit"] = jerk_l if enabled else 1
   values["JerkUpperLimit"] = 2.0 if stopping or CS.softHoldActive else jerk_u
-  values["DISTANCE_SETTING"] = hud_control.leadDistanceBars # + 5
-  #values["DISTANCE_SETTING"] = hud_control.leadDistanceBars  + 5
 
-  #values["ACC_ObjDist"] = 1
-  #values["ObjValid"] = 0
-  #values["OBJ_STATUS"] =  2
-  #values["NSCCOper"] = 1 if enabled else 0 # 0: off, 1: Ready, 2: Act, 3: Error Indicator
-  #values["NSCCOnOff"] = 2  # 0: Default, 1: Off, 2: On, 3: Invalid
-  #values["SET_ME_3"] = 0x3  # objRelsped와 충돌
-  #values["ACC_ObjLatPos"] = - hud_control.leadDPath
-  #values["DriveMode"] = 0 # 0: Default, 1: Comfort Mode, 2:Normal mode, 3:Dynamic mode, reserved
+  """
+  values["DISTANCE_SETTING"] = hud_control.leadDistanceBars # + 5
 
   hud_lead_info = 0
   if hud_control.leadVisible:
     hud_lead_info = 1 if values["ACC_ObjRelSpd"] > 0 else 2
   values["HUD_LEAD_INFO"] = hud_lead_info  #1: in-path object detected(uncontrollable), 2: controllable long, 3: controllable long & lat, ... reserved
 
-  #values["DriverAlert"] = 0   # 1: SCC Disengaged, 2: No SCC Engage condition, 3: SCC Disenganed when the vehicle stops
 
   values["TARGET_DISTANCE"] = CS.out.vEgo * 1.0 + 4.0
 
@@ -420,15 +407,7 @@ def create_acc_control_scc2_4(packer, CAN, enabled, accel_last, accel, stopping,
   # 이거안하면 정지중 뒤로 밀리는 현상 발생하는듯.. (신호정지중에 뒤로 밀리는 경험함.. 시험해봐야)
   if values["InfoDisplay"] != 5: #5: Front Car Departure Notice
     values["InfoDisplay"] = 4 if stopping and CS.out.aEgo > -0.3 else 0  # 1: SCC Mode, 2: Convention Cruise Mode, 3: Object disappered at low speed, 4: Available to resume acceleration control, 5: Front vehicle departure notice, 6: Reserved, 7: Invalid
-
-  #values["TakeOverReq"] = 0    # 1: Takeover request, 2: Not used, 3: Error indicator , 이것이 켜지면 가속을 안하는듯함.
-  #values["SysFailState"] = 0    # 1: Performance degredation, 2: system temporairy unavailble, 3: SCC Service required , 눈이 묻어 레이더오류시... 2가 됨. 이때 가속을 안함...
-
-  #values["AccelLimitBandUpper"] = 0.0   # 이값이 1.26일때 가속을 안하는 증상이 보임.. 
-  #values["AccelLimitBandLower"] = 0.0
-
-  #values["ZEROS_7"] = 1
-
+  """
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
 
 def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control, jerk_u, jerk_l, CS):
