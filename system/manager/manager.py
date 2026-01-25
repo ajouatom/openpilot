@@ -24,7 +24,7 @@ def get_default_params():
     # kans
     ("LongPitch", "1"),
     ("EVTable", "1"),
-    ("CompletedTrainingVersion", "0.2.0
+    ("CompletedTrainingVersion", "0.2.0"),
     ("DisengageOnAccelerator", "0"),
     ("GsmMetered", "1"),
     ("HasAcceptedTerms", "2"),
