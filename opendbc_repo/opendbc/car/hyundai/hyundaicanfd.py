@@ -489,6 +489,8 @@ def create_tcs_messages(packer, CAN, CS):
   ret = []
   if CS.tcs_info_373 is not None:
     values = copy.copy(CS.tcs_info_373)
+    if values["DriverBraking"] == 1:
+      values["ESC_DrvOvrdSta"] = 0
     values["DriverBraking"] = 0
     values["DriverBrakingLowSens"] = 0
     #values["NEW_SIGNAL_1"] = 0 # accel과 관련..  옆두부 꺼지는것과 관련? 확인필요

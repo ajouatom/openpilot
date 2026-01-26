@@ -230,25 +230,38 @@ BO_ 373 TCS: 24 XXX
  SG_ NEW_SIGNAL_4 : 24|7@1+ (1,0) [0|127] "" XXX
  SG_ NEW_SIGNAL_9 : 31|1@0+ (1,0) [0|1] "" XXX
  SG_ aBasis : 32|11@1+ (0.01,-10.23) [0|7] "m/s^2" XXX
+ SG_ NEW_SIGNAL_1 : 47|5@0+ (1,0) [0|31] "" XXX
  SG_ ACCEL_REF_ACC : 48|11@1- (1,0) [0|1023] "" XXX
- SG_ SCC_OptTyp : 64|2@1+ (1,0) [0|0] ""  AWD,EMS,FR_CMR,HCU,H_U_MM,TCU,VCU,vBDM
+ SG_ NEW_SIGNAL_2 : 63|5@0+ (1,0) [0|31] "" XXX
+ SG_ SCC_OptTyp : 64|2@1+ (1,0) [0|0] "" AWD,EMS,FR_CMR,HCU,H_U_MM,TCU,VCU,vBDM
  SG_ ACCEnable : 67|2@0+ (1,0) [0|3] "" XXX
  SG_ ACC_REQ : 68|1@0+ (1,0) [0|1] "" XXX
- SG_ SCC_ReqLimSta : 70|2@1+ (1,0) [0|0] ""  ADAS_DRV,AWD,Dummy,EMS,FR_CMR,H_U_MM,TCU,vBDM
- SG_ ESC_StdStillVal : 72|2@1+ (1,0) [0|3] ""  ADAS_DRV,AWD,Dummy,EMS,FR_CMR,H_U_MM,TCU,vBDM
+ SG_ NEW_SIGNAL_3 : 69|1@0+ (1,0) [0|1] "" XXX
+ SG_ SCC_ReqLimSta : 70|2@1+ (1,0) [0|0] "" ADAS_DRV,AWD,Dummy,EMS,FR_CMR,H_U_MM,TCU,vBDM
+ SG_ ESC_StdStillVal : 72|2@1+ (1,0) [0|3] "" ADAS_DRV,AWD,Dummy,EMS,FR_CMR,H_U_MM,TCU,vBDM
  SG_ BrakeLight : 74|2@1+ (1,0) [0|3] "" XXX
- SG_ ESC_DclEnblReq : 76|2@1+ (1,0) [0|3] ""  AWD,Dummy,EMS,FR_CMR,H_U_MM,TCU,vBDM
- SG_ ESC_DrvOvrdSta : 80|2@1+ (1,0) [0|3] ""  ADAS_DRV,ADAS_PRK,AWD,Dummy,EMS,FR_CMR,H_U_MM,TCU,vBDM
- SG_ DriverBraking : 81|1@0+ (1,0) [0|1] "" XXX
+ SG_ ESC_DclEnblReq : 76|2@1+ (1,0) [0|3] "" AWD,Dummy,EMS,FR_CMR,H_U_MM,TCU,vBDM
+ SG_ NEW_SIGNAL_5 : 79|2@0+ (1,0) [0|3] "" XXX
+ SG_ ESC_DrvOvrdSta : 80|2@1+ (1,0) [0|3] "" ADAS_DRV,ADAS_PRK,AWD,Dummy,EMS,FR_CMR,H_U_MM,TCU,vBDM
+ SG_ DriverBraking : 82|1@0+ (1,0) [0|1] "" XXX
+ SG_ NEW_SIGNAL_11 : 83|1@0+ (1,0) [0|1] "" XXX
  SG_ DriverBrakingLowSens : 84|1@1+ (1,0) [0|1] "" XXX
- SG_ ESC_PrkBrkActvSta : 86|2@1+ (1,0) [0|3] ""  ADAS_DRV,AWD,Dummy,EMS,FR_CMR,H_U_MM,RR_C_RDR,TCU,vBDM
- SG_ FCA_EquipSta : 96|2@1+ (1,0) [0|3] ""  ADAS_DRV,FR_CMR,H_U_MM,vBDM
- SG_ FCA_AvlblSta : 98|2@1+ (1,0) [0|3] ""  ADAS_DRV,AFCU_DRV,CLU,Dummy,FR_CMR,H_U_MM,vBDM
+ SG_ NEW_SIGNAL_10 : 85|1@0+ (1,0) [0|1] "" XXX
+ SG_ ESC_PrkBrkActvSta : 86|2@1+ (1,0) [0|3] "" ADAS_DRV,AWD,Dummy,EMS,FR_CMR,H_U_MM,RR_C_RDR,TCU,vBDM
+ SG_ NEW_SIGNAL_12 : 95|8@0+ (1,0) [0|255] "" XXX
+ SG_ FCA_EquipSta : 96|2@1+ (1,0) [0|3] "" ADAS_DRV,FR_CMR,H_U_MM,vBDM
+ SG_ FCA_AvlblSta : 98|2@1+ (1,0) [0|3] "" ADAS_DRV,AFCU_DRV,CLU,Dummy,FR_CMR,H_U_MM,vBDM
+ SG_ NEW_SIGNAL_13 : 103|4@0+ (1,0) [0|15] "" XXX
+ SG_ NEW_SIGNAL_14 : 111|8@0+ (1,0) [0|255] "" XXX
+ SG_ NEW_SIGNAL_15 : 119|8@0+ (1,0) [0|255] "" XXX
+ SG_ NEW_SIGNAL_16 : 127|8@0+ (1,0) [0|255] "" XXX
  SG_ NEW_SIGNAL_6 : 128|4@1+ (1,0) [0|15] "" XXX
+ SG_ NEW_SIGNAL_17 : 133|2@0+ (1,0) [0|3] "" XXX
  SG_ NEW_SIGNAL_7 : 135|2@0+ (1,0) [0|3] "" XXX
  SG_ PROBABLY_EQUIP : 136|2@1+ (1,0) [0|3] "" XXX
+ SG_ NEW_SIGNAL_18 : 143|6@0+ (1,0) [0|63] "" XXX
+ SG_ NEW_SIGNAL_19 : 151|8@0+ (1,0) [0|255] "" XXX
  SG_ NEW_SIGNAL_8 : 183|16@0+ (1,0) [0|65535] "" XXX
-
 
 BO_ 352 ADRV_0x160: 16 ADRV
  SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
@@ -514,10 +527,16 @@ BO_ 480 LFAHDA_CLUSTER: 16 FR_CMR
 BO_ 490 ADRV_0x1ea: 32 ADRV
  SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
  SG_ COUNTER : 16|8@1+ (1,0) [0|255] "" XXX
+ SG_ NEW_SIGNAL_4 : 25|2@0+ (1,0) [0|3] "" XXX
+ SG_ NEW_SIGNAL_3 : 26|1@0+ (1,0) [0|1] "" XXX
+ SG_ NEW_SIGNAL_2 : 27|1@0+ (1,0) [0|1] "" XXX
+ SG_ NEW_SIGNAL_1 : 28|1@0+ (1,0) [0|1] "" XXX
  SG_ LEFT_BLINK_HOLD : 29|1@0+ (1,0) [0|1] "" XXX
  SG_ RIGHT_BLINK_HOLD : 30|1@0+ (1,0) [0|1] "" XXX
+ SG_ NEW_SIGNAL_5 : 31|1@0+ (1,0) [0|1] "" XXX
  SG_ HDA_MODE2 : 32|3@1+ (1,0) [0|3] "" XXX
  SG_ LANE_LEFT : 36|2@0+ (1,0) [0|3] "" XXX
+ SG_ NEW_SIGNAL_6 : 39|3@0+ (1,0) [0|7] "" XXX
  SG_ LANE_RIGHT : 41|2@0+ (1,0) [0|3] "" XXX
  SG_ LANE_CHANGING : 45|3@0+ (1,0) [0|1] "" XXX
  SG_ LF_DETECT_DISTANCE : 46|11@1+ (0.1,0) [0|2047] "" XXX
@@ -550,7 +569,9 @@ BO_ 512 ADRV_0x200: 8 ADRV
  SG_ SET_ME_E1 : 24|8@1+ (1,0) [0|255] "" XXX
  SG_ TauGapSet : 32|3@1+ (1,0) [0|7] "" XXX
  SG_ NEW_SIGNAL_2 : 35|2@1+ (1,0) [0|3] "" XXX
+ SG_ NEW_SIGNAL_1 : 39|3@0+ (1,0) [0|7] "" XXX
  SG_ TauGapSet_ : 42|3@0+ (1,0) [0|31] "" XXX
+ SG_ NEW_SIGNAL_3 : 47|5@0+ (1,0) [0|31] "" XXX
 
 BO_ 513 RADAR_0x201: 32 FRONT_RADAR
  SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
