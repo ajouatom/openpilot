@@ -360,56 +360,6 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
 
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
 
-def create_acc_control_scc2_4(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control, hyundai_jerk, CS):
-  enabled = (enabled or CS.softHoldActive > 0) and CS.paddle_button_prev == 0
-
-  acc_mode = 0 if not enabled else (2 if gas_override else 1)
-
-  if hyundai_jerk.carrot_cruise == 1:
-    acc_mode = 4 if enabled else 0
-    enabled = False
-    accel = accel_last = 0.5
-   
-  elif hyundai_jerk.carrot_cruise == 2:
-    accel = accel_last = hyundai_jerk.carrot_cruise_accel
-
-  jerk_u = hyundai_jerk.jerk_u
-  jerk_l = hyundai_jerk.jerk_l
-  jerk = 5
-  jn = jerk / 50
-  #jn = jerk / 10
-  if not enabled or gas_override:
-    a_val, a_raw = 0, 0
-  else:
-    a_raw = accel
-    a_val = accel #np.clip(accel, accel_last - jn, accel_last + jn)
-
-  values = copy.copy(CS.cruise_info)
-  values.pop("COUNTER", None)
-  values["StopReq"] = 1 if stopping or CS.softHoldActive > 0 else 0  # 1: Stop control is required, 2: Not used, 3: Error Indicator
-  values["aReqValue"] = a_val
-  values["aReqRaw"] = a_raw
-  values["VSetDis"] = set_speed
-  values["JerkLowerLimit"] = jerk_l if enabled else 1
-  values["JerkUpperLimit"] = 2.0 if stopping or CS.softHoldActive else jerk_u
-  
-  values["DISTANCE_SETTING"] = hud_control.leadDistanceBars # + 5
-
-  hud_lead_info = 0
-  if hud_control.leadVisible:
-    hud_lead_info = 1 if values["ACC_ObjRelSpd"] > 0 else 2
-  values["HUD_LEAD_INFO"] = hud_lead_info  #1: in-path object detected(uncontrollable), 2: controllable long, 3: controllable long & lat, ... reserved
-
-
-  values["TARGET_DISTANCE"] = CS.out.vEgo * 1.0 + 4.0
-
-  soft_hold_info = 1 if CS.softHoldActive > 1 and enabled else 0
-
-  # 이거안하면 정지중 뒤로 밀리는 현상 발생하는듯.. (신호정지중에 뒤로 밀리는 경험함.. 시험해봐야)
-  if values["InfoDisplay"] != 5: #5: Front Car Departure Notice
-    values["InfoDisplay"] = 4 if stopping and CS.out.aEgo > -0.3 else 0  # 1: SCC Mode, 2: Convention Cruise Mode, 3: Object disappered at low speed, 4: Available to resume acceleration control, 5: Front vehicle departure notice, 6: Reserved, 7: Invalid
-  return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
-
 def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control, jerk_u, jerk_l, CS):
 
   enabled = enabled or CS.softHoldActive > 0
@@ -969,7 +919,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values = copy.copy(CS.adrv_info_160)
         ret.append(packer.make_can_msg("ADRV_0x160", CAN.ECAN, values))
 
-      if CS.cruise_buttons_msg is not None and not CP.pcmCruise:
+      if CS.cruise_buttons_msg is not None:
         values = copy.copy(CS.cruise_buttons_msg)
 
         if CS.lfahda_cluster_info["HDA_LFA_SymSta"] == 0 and 0 < frame % 200 < 12:
