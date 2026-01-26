@@ -439,7 +439,7 @@ def create_tcs_messages(packer, CAN, CS):
   ret = []
   if CS.tcs_info_373 is not None:
     values = copy.copy(CS.tcs_info_373)
-    if values["DriverBraking"] == 1:
+    if values["ESC_DrvOvrdSta"] == 2:
       values["ESC_DrvOvrdSta"] = 0
     values["DriverBraking"] = 0
     values["DriverBrakingLowSens"] = 0
