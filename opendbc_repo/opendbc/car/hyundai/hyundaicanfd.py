@@ -327,8 +327,8 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
   #values["ACC_ObjDist"] = 1
   #values["ObjValid"] = 0
   #values["OBJ_STATUS"] =  2
-  values["NSCCOper"] = 1 if enabled else 0 # 0: off, 1: Ready, 2: Act, 3: Error Indicator
-  values["NSCCOnOff"] = 2  # 0: Default, 1: Off, 2: On, 3: Invalid
+  #values["NSCCOper"] = 1 if enabled else 0 # 0: off, 1: Ready, 2: Act, 3: Error Indicator
+  #values["NSCCOnOff"] = 2  # 0: Default, 1: Off, 2: On, 3: Invalid
   #values["SET_ME_3"] = 0x3  # objRelsped와 충돌
   #values["ACC_ObjLatPos"] = - hud_control.leadDPath
   values["DriveMode"] = 0 # 0: Default, 1: Comfort Mode, 2:Normal mode, 3:Dynamic mode, reserved
