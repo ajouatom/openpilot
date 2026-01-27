@@ -422,7 +422,7 @@ class CarState(CarStateBase):
     else:
       ret.gasPressed = bool(cp.vl[self.accelerator_msg_canfd]["ACCELERATOR_PEDAL_PRESSED"])
 
-    ret.brakePressed = cp.vl["TCS"]["DriverBraking"] == 1 or cp.vl["TCS"]["ESC_DrvOvrdSta"] > 1
+    ret.brakePressed = cp.vl["TCS"]["DriverBraking"] == 1
     #print(cp.vl["TCS"], cp.vl_all["TCS"]["DriverBraking"][-10:])
 
     ret.doorOpen = cp.vl["DOORS_SEATBELTS"]["DRIVER_DOOR"] == 1

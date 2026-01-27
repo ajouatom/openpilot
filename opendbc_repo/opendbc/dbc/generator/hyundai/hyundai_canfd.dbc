@@ -242,8 +242,9 @@ BO_ 373 TCS: 24 XXX
  SG_ BrakeLight : 74|2@1+ (1,0) [0|3] "" XXX
  SG_ ESC_DclEnblReq : 76|2@1+ (1,0) [0|3] "" AWD,Dummy,EMS,FR_CMR,H_U_MM,TCU,vBDM
  SG_ NEW_SIGNAL_5 : 79|2@0+ (1,0) [0|3] "" XXX
- SG_ ESC_DrvOvrdSta : 80|2@1+ (1,0) [0|3] "" ADAS_DRV,ADAS_PRK,AWD,Dummy,EMS,FR_CMR,H_U_MM,TCU,vBDM
- SG_ DriverBraking : 82|1@0+ (1,0) [0|1] "" XXX
+ SG_ NEW_SIGNAL_21 : 80|1@0+ (1,0) [0|1] "" XXX
+ SG_ DriverBraking : 81|1@0+ (1,0) [0|1] "" XXX
+ SG_ NEW_SIGNAL_20 : 82|1@0+ (1,0) [0|1] "" XXX
  SG_ NEW_SIGNAL_11 : 83|1@0+ (1,0) [0|1] "" XXX
  SG_ DriverBrakingLowSens : 84|1@1+ (1,0) [0|1] "" XXX
  SG_ NEW_SIGNAL_10 : 85|1@0+ (1,0) [0|1] "" XXX
@@ -1033,7 +1034,6 @@ VAL_ 373 SCC_OptTyp 0 "SCC is not equipped" 1 "SCC is equipped" 2 "Not used" 3 "
 VAL_ 373 SCC_ReqLimSta 0 "No request" 1 "Limited No Limitation" 2 "Acceleration Limited" 3 "Deceleration Limited" ;
 VAL_ 373 ESC_StdStillVal 0 "No stand still detected" 1 "stand still detected" 2 "Not used" 3 "Error Indicator" ;
 VAL_ 373 ESC_DclEnblReq 0 "Disable deceleration control" 1 "Enable deceleration control" 2 "Not used" 3 "Error Indicator" ;
-VAL_ 373 ESC_DrvOvrdSta 0 "No override" 1 "Override by acceleration pedal" 2 "Override by deceleration" 3 "Error Indicator" ;
 VAL_ 373 ESC_PrkBrkActvSta 0 "Parking brake is not activated" 1 "Parking brake is activated" 2 "Not used" 3 "Error Indicator" ;
 VAL_ 373 FCA_EquipSta 0 "FCA is not equipped" 1 "FCA is equipped" 2 "Not used" 3 "Error Indicator" ;
 VAL_ 373 FCA_AvlblSta 0 "Available" 1 "Temporarily not available" 2 "Permanently not available" 3 "FCA Communication Error" ;
