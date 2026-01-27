@@ -913,9 +913,9 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
       HDA_CntrlModSta = CS.lfahda_cluster_info["HDA_CntrlModSta"]
 
     if frame % 2 == 0:
-      if CS.adrv_info_160 is not None:
-        values = copy.copy(CS.adrv_info_160)
-        ret.append(packer.make_can_msg("ADRV_0x160", CAN.ECAN, values))
+      #if CS.adrv_info_160 is not None:
+      #  values = copy.copy(CS.adrv_info_160)
+      #  ret.append(packer.make_can_msg("ADRV_0x160", CAN.ECAN, values))
 
       if CS.cruise_buttons_msg is not None:
         values = copy.copy(CS.cruise_buttons_msg)
