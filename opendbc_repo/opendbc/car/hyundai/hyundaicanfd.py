@@ -96,7 +96,6 @@ def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, 
 
   ret = []
   values = copy.copy(CS.mdps_info)
-  values.pop("COUNTER", None)
   if angle_control:
     if CS.lfa_alt_info is not None:
       values["LFA2_ACTIVE"] = CS.lfa_alt_info["LKAS_ANGLE_ACTIVE"]
@@ -111,7 +110,6 @@ def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, 
   if frame % 10 == 0:
     if CS.steer_touch_info is not None:
       values = copy.copy(CS.steer_touch_info)
-      values.pop("COUNTER", None)
       if frame % 1000 < 40:
         values["TOUCH_DETECT"] = 3
         values["TOUCH1"] = 50
@@ -125,7 +123,6 @@ def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, 
   if angle_control:
     if emergency_steering:
       values = copy.copy(CS.lfa_alt_info)
-      values.pop("COUNTER", None)
     else:
       values = {} #CS.lfa_alt_info
       values["LKAS_ANGLE_ACTIVE"] = 2 if CC.latActive else 1
@@ -134,7 +131,6 @@ def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, 
     ret.append(packer.make_can_msg("LFA_ALT", CAN.ECAN, values))
 
     values = copy.copy(CS.lfa_info)
-    values.pop("COUNTER", None)
     if not emergency_steering:
       values["LKA_MODE"] = 0
       values["LKA_ICON"] = 2 if CC.latActive else 1
@@ -229,8 +225,7 @@ def create_suppress_lfa(packer, CAN, CS):
 
   #values = {f"BYTE{i}": lfa_block_msg[f"BYTE{i}"] for i in range(3, msg_bytes) if i != 7}
   values = copy.copy(lfa_block_msg)
-  #values["COUNTER"] = lfa_block_msg["COUNTER"]
-  values.pop("COUNTER", None)
+  values["COUNTER"] = lfa_block_msg["COUNTER"]
   values["SET_ME_0"] = 0
   values["SET_ME_0_2"] = 0
   values["LEFT_LANE_LINE"] = 0
@@ -924,7 +919,6 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
 
       if CS.cruise_buttons_msg is not None:
         values = copy.copy(CS.cruise_buttons_msg)
-        values.pop("COUNTER", None)
 
         if CS.lfahda_cluster_info["HDA_LFA_SymSta"] == 0 and 0 < frame % 200 < 12:
           values["LFA_BTN"] = 1
@@ -959,7 +953,6 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         # hdpuse carrot
 
         values = copy.copy(CS.adrv_info_161)
-        values.pop("COUNTER", None)
 
         values["SETSPEED"] = (6 if hdp_active else 3 if cruise_enabled else 1) if main_enabled else 0
         values["SETSPEED_HUD"] = (5 if hdp_active else 3 if cruise_enabled else 1) if main_enabled else 0
@@ -1034,13 +1027,11 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
 
       if CS.adrv_info_200 is not None:
         values = copy.copy(CS.adrv_info_200)
-        values.pop("COUNTER", None)
         values["TauGapSet"] = hud_control.leadDistanceBars
         ret.append(packer.make_can_msg("ADRV_0x200", CAN.ECAN, values))
 
       if CS.adrv_info_1ea is not None:
         values = copy.copy(CS.adrv_info_1ea)
-        values.pop("COUNTER", None)
 
         # blinker hold
         values['LEFT_BLINK_HOLD'] = 1 if lane_changing == 3 else 0
@@ -1061,7 +1052,6 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
 
       if CS.adrv_info_162 is not None:
         values = copy.copy(CS.adrv_info_162)
-        values.pop("COUNTER", None)
 
         if hud_control.leadDistance > 0:
           values["FF_DISTANCE"] = hud_control.leadDistance
