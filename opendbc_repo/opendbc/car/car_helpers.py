@@ -166,6 +166,13 @@ def get_car(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_multip
       from opendbc.car.gm.values import CAR as GM
       from opendbc.car.toyota.values import CAR as TOYOTA
       from opendbc.car.mazda.values import CAR as MAZDA
+      from opendbc.car.honda.values import CAR as HONDA
+      from opendbc.car.ford.values import CAR as FORD
+      from opendbc.car.tesla.values import CAR as TESLA
+      from opendbc.car.volkswagen.values import CAR as VOLKSWAGEN
+      from opendbc.car.chrysler.values import CAR as CHRYSLER
+      from opendbc.car.nissan.values import CAR as NISSAN
+      from opendbc.car.subaru.values import CAR as SUBARU
       for platform in GM:
         for doc in platform.config.car_docs:
           if name == doc.name:
@@ -179,6 +186,34 @@ def get_car(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_multip
           if name == doc.name:
             return platform
       for platform in MAZDA:
+        for doc in platform.config.car_docs:
+          if name == doc.name:
+            return platform
+      for platform in HONDA:
+        for doc in platform.config.car_docs:
+          if name == doc.name:
+            return platform
+      for platform in FORD:
+        for doc in platform.config.car_docs:
+          if name == doc.name:
+            return platform
+      for platform in TESLA:
+        for doc in platform.config.car_docs:
+          if name == doc.name:
+            return platform
+      for platform in VOLKSWAGEN:
+        for doc in platform.config.car_docs:
+          if name == doc.name:
+            return platform
+      for platform in CHRYSLER:
+        for doc in platform.config.car_docs:
+          if name == doc.name:
+            return platform
+      for platform in NISSAN:
+        for doc in platform.config.car_docs:
+          if name == doc.name:
+            return platform
+      for platform in SUBARU:
         for doc in platform.config.car_docs:
           if name == doc.name:
             return platform

@@ -784,6 +784,10 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
     all_items.append(get_list((QString::fromStdString(Params().getParamPath()) + "/SupportedCars_gm").toStdString().c_str()));
     all_items.append(get_list((QString::fromStdString(Params().getParamPath()) + "/SupportedCars_toyota").toStdString().c_str()));
     all_items.append(get_list((QString::fromStdString(Params().getParamPath()) + "/SupportedCars_mazda").toStdString().c_str()));
+    all_items.append(get_list((QString::fromStdString(Params().getParamPath()) + "/SupportedCars_honda").toStdString().c_str()));
+    all_items.append(get_list((QString::fromStdString(Params().getParamPath()) + "/SupportedCars_ford").toStdString().c_str()));
+    all_items.append(get_list((QString::fromStdString(Params().getParamPath()) + "/SupportedCars_tesla").toStdString().c_str()));
+    all_items.append(get_list((QString::fromStdString(Params().getParamPath()) + "/SupportedCars_volkswagen").toStdString().c_str()));
 
     QMap<QString, QStringList> car_groups;
     for (const QString& car : all_items) {
