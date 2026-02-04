@@ -508,7 +508,7 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
   if(false) {
     panels.append({tr("Firehose"), new FirehosePanel(this)});
   }
-  panels.append({ tr("Carrot"), new CarrotPanel(this) });
+  panels.append({ tr("CarrotPilot"), new CarrotPanel(this) });
   panels.append({ tr("Developer"), new DeveloperPanel(this) });
 
   nav_btns = new QButtonGroup(this);
@@ -799,11 +799,11 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
     }
 
     QStringList manufacturers = car_groups.keys();
-    QString selectedManufacturer = MultiOptionDialog::getSelection("Select Manufacturer", manufacturers, manufacturers.isEmpty() ? "" : manufacturers.first(), this);
+    QString selectedManufacturer = MultiOptionDialog::getSelection(tr("Select Manufacturer"), manufacturers, manufacturers.isEmpty() ? "" : manufacturers.first(), this);
 
     if (!selectedManufacturer.isEmpty()) {
       QStringList cars = car_groups[selectedManufacturer];
-      QString selectedCar = MultiOptionDialog::getSelection("Select your car", cars, selected, this);
+      QString selectedCar = MultiOptionDialog::getSelection(tr("Select your car"), cars, selected, this);
 
       if (!selectedCar.isEmpty()) {
         if (selectedCar == "[ Not Selected ]") {
@@ -847,7 +847,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   startToggles->addItem(new CValueControl("SoftwareMenu", tr("Enable Software Menu"), "", 0, 1, 1));
   startToggles->addItem(new CValueControl("IsLdwsCar", tr("IsLdwsCar"), "", 0, 1, 1));
   startToggles->addItem(new CValueControl("HardwareC3xLite", tr("Hardware is C3x Lite"), "", 0, 1, 1));
-  startToggles->addItem(new CValueControl("ShareData", "Share Data", tr("0:None, 1:TCP JSON Data(Reboot required)"), 0, 1, 1));
+  startToggles->addItem(new CValueControl("ShareData", tr("Share Data"), tr("0:None, 1:TCP JSON Data(Reboot required)"), 0, 1, 1));
   //startToggles->addItem(new CValueControl("CarrotCountDownSpeed", "NaviCountDown Speed(10)", "", 0, 200, 5));
   //startToggles->addItem(new ParamControl("NoLogging", "Disable Logger", "", this));
   //startToggles->addItem(new ParamControl("LaneChangeNeedTorque", "LaneChange: Need Torque", "", this));

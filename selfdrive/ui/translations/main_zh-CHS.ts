@@ -245,7 +245,15 @@
     </message>
     <message>
         <source>0:None, 1:Stopping only, 2: Stop &amp; Go</source>
-        <translation>0:关闭, 1:仅停车, 2:停走</translation>
+        <translation>0:无, 1:仅停止, 2:停走</translation>
+    </message>
+    <message>
+        <source>AChangeCostStarting</source>
+        <translation>加速度变化步长</translation>
+    </message>
+    <message>
+        <source>TrafficStopDistanceAdjust</source>
+        <translation>红绿灯停止距离调整</translation>
     </message>
     <message>
         <source>Laneline mode speed(0)</source>
@@ -774,6 +782,50 @@
     <message>
         <source>ATC Auto Map Change(0)</source>
         <translation>ATC 自动地图切换(0)</translation>
+    </message>
+    <message>
+        <source>Share Data</source>
+        <translation>分享数据</translation>
+    </message>
+    <message>
+        <source>Hardware is C3x Lite</source>
+        <translation>硬件为 C3x Lite</translation>
+    </message>
+    <message>
+        <source>0:None, 1:TCP JSON Data(Reboot required)</source>
+        <translation>0:无, 1:TCP JSON 数据(需重启)</translation>
+    </message>
+    <message>
+        <source>Smart Speed Control(0)</source>
+        <translation>智能速度控制(0)</translation>
+    </message>
+    <message>
+        <source>0: off, 1:accel, 2:decel, 3: all</source>
+        <translation>0:关闭, 1:加速, 2:减速, 3:全部</translation>
+    </message>
+    <message>
+        <source>Model TurnSpeed Factor(0)</source>
+        <translation>模型转弯速度系数(0)</translation>
+    </message>
+    <message>
+        <source>Enable Software Menu</source>
+        <translation>启用软件菜单</translation>
+    </message>
+    <message>
+        <source>Select your car</source>
+        <translation>选择你的车型</translation>
+    </message>
+    <message>
+        <source>Wait for list...</source>
+        <translation>等待列表...</translation>
+    </message>
+    <message>
+        <source>Select Manufacturer</source>
+        <translation>选择厂商</translation>
+    </message>
+    <message>
+        <source>SELECT YOUR CAR</source>
+        <translation>选择你的车型</translation>
     </message>
 </context>
 <context>
@@ -1515,7 +1567,7 @@ Firehose Mode allows you to maximize your training data uploads to improve openp
     </message>
     <message>
         <source>0:None, 1:Stopping only, 2: Stop &amp; Go</source>
-        <translation >0:关闭, 1:仅停车, 2:停车后起步</translation>
+        <translation >0:无, 1:仅停止, 2:停走</translation>
     </message>
     <message>
         <source>Laneline mode speed(0)</source>
@@ -1915,6 +1967,118 @@ This may take up to a minute.</source>
         <source>Carrot</source>
         <translation>Carrot</translation>
     </message>
+    <message>
+        <source>Share Data</source>
+        <translation>分享数据</translation>
+    </message>
+    <message>
+        <source>0:None, 1:TCP JSON Data(Reboot required)</source>
+        <translation>0:无, 1:TCP JSON数据(需重启)</translation>
+    </message>
+    <message>
+        <source>Hardware is C3x Lite</source>
+        <translation>硬件为 C3x Lite</translation>
+    </message>
+    <message>
+        <source>Hardware is C3x</source>
+        <translation>硬件为 C3x</translation>
+    </message>
+    <message>
+        <source>Hardware is C3</source>
+        <translation>硬件为 C3</translation>
+    </message>
+    <message>
+        <source>Hardware is TICI</source>
+        <translation>硬件为 TICI</translation>
+    </message>
+    <message>
+        <source>Hardware is EON</source>
+        <translation>硬件为 EON</translation>
+    </message>
+    <message>
+        <source>Hardware is Unknown</source>
+        <translation>硬件未知</translation>
+    </message>
+    <message>
+        <source>Open SSH</source>
+        <translation>开启 SSH</translation>
+    </message>
+    <message>
+        <source>Record UI</source>
+        <translation>录制 UI</translation>
+    </message>
+    <message>
+        <source>Stop Recording UI</source>
+        <translation>停止录制 UI</translation>
+    </message>
+    <message>
+        <source>Reset UI</source>
+        <translation>重置 UI</translation>
+    </message>
+    <message>
+        <source>Developer Menu</source>
+        <translation>开发者菜单</translation>
+    </message>
+    <message>
+        <source>Reset Calibration</source>
+        <translation>重置校准</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to reset calibration?</source>
+        <translation>您确定要重置校准吗？</translation>
+    </message>
+    <message>
+        <source>Review Training Guide</source>
+        <translation>查看训练指南</translation>
+    </message>
+    <message>
+        <source>Regulatory</source>
+        <translation>监管信息</translation>
+    </message>
+    <message>
+        <source>Change Language</source>
+        <translation>修改语言</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to reset all settings?</source>
+        <translation>您确定要重置所有设置吗？</translation>
+    </message>
+    <message>
+        <source>Reset</source>
+        <translation>重置</translation>
+    </message>
+    <message>
+        <source>Disengaged</source>
+        <translation>控制取消</translation>
+    </message>
+    <message>
+        <source>Engaged</source>
+        <translation>控制激活</translation>
+    </message>
+    <message>
+        <source>Warning</source>
+        <translation>警告</translation>
+    </message>
+    <message>
+        <source>Critical</source>
+        <translation>严重</translation>
+    </message>
+    <message>
+        <source>openpilot Longitudinal Control (Alpha)</source>
+        <translation>openpilot 纵向控制 (Alpha)</translation>
+    </message>
+    <message>
+        <source>WARNING: openpilot longitudinal control is in alpha for this car and will take over the gas and stop buttons. Look for once it has been tested and verified.</source>
+        <translation>警告：此车辆的 openpilot 纵向控制处于 alpha 阶段，将接管加速和停止按钮。请等待测试和验证完成。</translation>
+    </message>
+    <message>
+        <source>Show Debug UI</source>
+        <translation>显示调试 UI</translation>
+    </message>
+    <message>
+        <source>Display debug UI elements.</source>
+        <translation>显示调试 UI 元素。</translation>
+    </message>
 </context>
 <context>
     <name>Setup</name>
@@ -2174,6 +2338,33 @@ This may take up to a minute.</source>
     <message>
         <source>never</source>
         <translation>从未更新</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsWindow</name>
+    <message>
+        <source>CarrotPilot</source>
+        <translation>CarrotPilot</translation>
+    </message>
+    <message>
+        <source>Device</source>
+        <translation>设备</translation>
+    </message>
+    <message>
+        <source>Network</source>
+        <translation>网络</translation>
+    </message>
+    <message>
+        <source>Toggles</source>
+        <translation>设置</translation>
+    </message>
+    <message>
+        <source>Software</source>
+        <translation>软件</translation>
+    </message>
+    <message>
+        <source>Developer</source>
+        <translation>开发者</translation>
     </message>
 </context>
 <context>
