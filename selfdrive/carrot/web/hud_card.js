@@ -73,8 +73,9 @@
     const wrap = $("hudBars");
     if (!wrap) return;
     const bars = wrap.querySelectorAll(".hudBar");
-    const k = Math.max(0, Math.min(4, Number(n)||0));
-    bars.forEach((b, i) => b.classList.toggle("on", i >= k));
+    const k = Math.max(0, Math.min(bars.length, Number(n) || 0));
+    const start = bars.length - k;
+    bars.forEach((b, i) => b.classList.toggle("on", i >= start));
   }
 
   function setGapNum(n){
