@@ -242,6 +242,8 @@ class CarrotPlanner:
         s = float(np.clip(v_ego * CV.MS_TO_KPH / 100.0, 0.0, 1.0))
         scale = (1.0 - reduce) + reduce * s
         tf_target *= scale
+      else:
+        return tf_target
 
     # ------------------------------------------------------------
     # 2) Decel-hold only (no smoothing constants)
