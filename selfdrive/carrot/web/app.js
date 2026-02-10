@@ -13,6 +13,7 @@ let CURRENT_MAKER = null;
 
 const btnHome = document.getElementById("btnHome");
 const btnSetting = document.getElementById("btnSetting");
+const btnFleet = document.getElementById("btnFleet");
 const btnLang = document.getElementById("btnLang");
 const langLabel = document.getElementById("langLabel");
 const btnTools = document.getElementById("btnTools");
@@ -45,6 +46,13 @@ const modelMeta = document.getElementById("modelMeta");
 
 btnHome.onclick = () => showPage("home", true);
 btnSetting.onclick = () => showPage("setting", true);
+
+btnFleet.onclick = () => {
+  const ip = location.hostname;
+  const url = `http://${ip}:8082/`;
+  window.open(url, "_blank", "noopener");
+};
+
 btnLang.onclick = () => toggleLang();
 
 btnChangeCar.onclick = () => showPage("car", true);
