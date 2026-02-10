@@ -624,11 +624,11 @@ async def api_tools(request: web.Request) -> web.Response:
       if not argv:
         return web.json_response({"ok": False, "error": "empty cmd"}, status=400)
 
-      """
       allowed_top = {"git", "df", "free", "uptime"}
       if argv[0] not in allowed_top:
         return web.json_response({"ok": False, "error": f"not allowed: {argv[0]}"}, status=403)
 
+      """
       # git subcommand 제한
       if argv[0] == "git":
         if len(argv) < 2:
