@@ -495,6 +495,23 @@
             * restore 후 reboot 권장
           </div>
         </div>
+        <div class="card">
+          <h4 style="margin:0 0 6px 0;">System Command</h4>
+
+          <div class="muted" style="margin-bottom:8px;">
+            Allowed: git pull/status/branch/log, df, free, uptime (whitelist)
+          </div>
+
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+            <input id="sysCmdInput"
+                   type="text"
+                   placeholder='e.g. git pull'
+                   style="flex:1; min-width:220px; padding:10px; border-radius:12px; border:1px solid #2a3542; background:#0c1118; color:#e8eef5;" />
+            <button id="btnSysCmdRun" class="smallBtn">Run</button>
+          </div>
+
+          <pre id="sysCmdOut" class="pill" style="display:block; padding:10px; border-radius:14px; margin-top:10px;">(waiting)</pre>
+        </div>
 
         <div style="height:12px;"></div>
 

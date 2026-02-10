@@ -29,6 +29,7 @@ from typing import Dict, Any, Tuple, Optional, List
 from aiohttp import web, ClientSession
 from cereal import messaging
 from opendbc.car import structs
+import shlex
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -607,6 +608,55 @@ async def api_tools(request: web.Request) -> web.Response:
     if action == "reboot":
       subprocess.Popen(["sudo", "reboot"])
       return web.json_response({"ok": True, "out": "reboot requested"})
+
+
+    if action == "shell_cmd":
+      cmd_str = (body.get("cmd") or "").strip()
+      if not cmd_str:
+        return web.json_response({"ok": False, "error": "missing cmd"}, status=400)
+
+      # 화이트리스트: "첫 토큰" 기준 + git은 서브커맨드 제한
+      try:
+        argv = shlex.split(cmd_str)
+      except Exception:
+        return web.json_response({"ok": False, "error": "bad cmd format"}, status=400)
+
+      if not argv:
+        return web.json_response({"ok": False, "error": "empty cmd"}, status=400)
+
+      """
+      allowed_top = {"git", "df", "free", "uptime"}
+      if argv[0] not in allowed_top:
+        return web.json_response({"ok": False, "error": f"not allowed: {argv[0]}"}, status=403)
+
+      # git subcommand 제한
+      if argv[0] == "git":
+        if len(argv) < 2:
+          return web.json_response({"ok": False, "error": "git needs subcommand"}, status=400)
+        allowed_git = {"pull", "status", "branch", "log", "rev-parse"}
+        if argv[1] not in allowed_git:
+          return web.json_response({"ok": False, "error": f"git subcommand not allowed: {argv[1]}"}, status=403)
+      """
+      # 실행 (shell=False 유지)
+      try:
+        p = subprocess.run(
+          argv,
+          cwd="/data/openpilot",     # 필요시 조정
+          capture_output=True,
+          text=True,
+          timeout=10
+        )
+        out = ""
+        if p.stdout: out += p.stdout
+        if p.stderr: out += ("\n" + p.stderr if out else p.stderr)
+        out = out.strip() or "(no output)"
+        return web.json_response({"ok": True, "out": out, "returncode": p.returncode})
+      except subprocess.TimeoutExpired:
+        return web.json_response({"ok": False, "error": "timeout"}, status=504)
+      except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
 
     return web.json_response({"ok": False, "error": f"unknown action: {action}"}, status=400)
 
