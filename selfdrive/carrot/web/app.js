@@ -599,6 +599,12 @@ function confirmText(msg, placeholder = "") {
   return String(v).trim();
 }
 
+function sysCmdOutSet(s) {
+  const out = document.getElementById("sysCmdOut");
+  if (out) out.textContent = String(s);
+}
+
+
 function initToolsPage() {
   // 버튼 바인딩 (한 번만)
   const bindOnce = (id, fn) => {
