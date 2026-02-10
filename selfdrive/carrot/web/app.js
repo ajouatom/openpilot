@@ -599,11 +599,6 @@ function confirmText(msg, placeholder = "") {
   return String(v).trim();
 }
 
-function sysCmdOutSet(s) {
-  const out = document.getElementById("sysCmdOut");
-  if (out) out.textContent = String(s);
-}
-
 
 function initToolsPage() {
   // 버튼 바인딩 (한 번만)
@@ -763,14 +758,14 @@ function initToolsPage() {
     const cmd = (inp?.value || "").trim();
     if (!cmd) return;
 
-    sysCmdOutSet("running: " + cmd + "\n");
+    toolsOutSet("running: " + cmd + "\n");
 
     try {
       const j = await runTool("shell_cmd", { cmd });
       // j.out에 stdout/stderr 합친 결과
-      sysCmdOutSet(j.out || "(no output)");
+      toolsOutSet(j.out || "(no output)");
     } catch (e) {
-      sysCmdOutSet("error: " + e.message);
+      toolsOutSet("error: " + e.message);
       alert(e.message);
     }
   });
