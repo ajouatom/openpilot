@@ -825,7 +825,7 @@ async def ws_carstate(request: web.Request) -> web.WebSocketResponse:
       await ws.send_str(json.dumps(payload))
       await asyncio.sleep(0.1)  # 10Hz
   except Exception:
-    traceback.print_exc()
+    #traceback.print_exc()
     pass
 
   try:

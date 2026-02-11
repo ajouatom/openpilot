@@ -1175,7 +1175,7 @@ function carWsConnect() {
     }
   };
 
-  CAR_WS.onerror = () => {
+  CAR_WS.onerror = (e) => {
     console.log("[CAR_WS] error", e);
   };
 
