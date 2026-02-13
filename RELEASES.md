@@ -1,6 +1,6 @@
 Carrot2-v9 (2026-02-xx)
 ========================
-* WMI model
+* CD210 model
 * web carrot_man (http://ip:7000)
 * fix speed based TF
 
