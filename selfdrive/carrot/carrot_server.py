@@ -500,7 +500,7 @@ async def api_tools(request: web.Request) -> web.Response:
       branch = (body.get("branch") or "").strip()
       if not branch:
         return web.json_response({"ok": False, "error": "missing branch"}, status=400)
-      rc, out = run(["git", "checkout", branch], cwd=REPO_DIR)
+      rc, out = run(["git", "checkout", "-f", branch], cwd=REPO_DIR)
       return web.json_response({"ok": rc == 0, "rc": rc, "out": out})
 
     if action == "git_branch_list":
