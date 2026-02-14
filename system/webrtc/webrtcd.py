@@ -42,7 +42,7 @@ class CerealOutgoingMessageProxy:
 
     return msg_dict
 
-  def update(self):
+  async def update(self):
     # this is blocking in async context...
     self.sm.update(0)
     for service, updated in self.sm.updated.items():
@@ -53,7 +53,11 @@ class CerealOutgoingMessageProxy:
       outgoing_msg = {"type": service, "logMonoTime": mono_time, "valid": valid, "data": msg_dict}
       encoded_msg = json.dumps(outgoing_msg).encode()
       for channel in self.channels:
-        channel.send(encoded_msg)
+        #channel.send(encoded_msg)
+        if isinstance(channel, web.WebSocketResponse):
+          await channel.send_bytes(encoded_msg)
+        else:
+          channel.send(encoded_msg)
 
 
 class CerealIncomingMessageProxy:
@@ -94,7 +98,7 @@ class CerealProxyRunner:
 
     while True:
       try:
-        self.proxy.update()
+        await self.proxy.update()
       except InvalidStateError:
         self.logger.warning("Cereal outgoing proxy invalid state (connection closed)")
         break
@@ -126,12 +130,19 @@ class StreamSession:
     from teleoprtc import WebRTCAnswerBuilder
     from teleoprtc.info import parse_info_from_offer
 
+    self.logger = logging.getLogger("webrtcd")
     config = parse_info_from_offer(sdp)
     builder = WebRTCAnswerBuilder(sdp)
 
     assert len(cameras) == config.n_expected_camera_tracks, "Incoming stream has misconfigured number of video tracks"
     for cam in cameras:
-      builder.add_video_stream(cam, LiveStreamVideoStreamTrack(cam) if not debug_mode else VideoStreamTrack())
+      try:
+        track = LiveStreamVideoStreamTrack(cam) if not debug_mode else VideoStreamTrack()
+        builder.add_video_stream(cam, track)
+        self.logger.info("added camera track: %s", cam)
+      except Exception:
+        self.logger.exception("failed to create camera track: %s", cam)
+        raise
     if config.expected_audio_track:
       builder.add_audio_stream(AudioInputStreamTrack() if not debug_mode else AudioStreamTrack())
     if config.incoming_audio_track:
@@ -153,15 +164,19 @@ class StreamSession:
 
     self.audio_output: AudioOutputSpeaker | MediaBlackhole | None = None
     self.run_task: asyncio.Task | None = None
-    self.logger = logging.getLogger("webrtcd")
     self.logger.info("New stream session (%s), cameras %s, audio in %s out %s, incoming services %s, outgoing services %s",
                       self.identifier, cameras, config.incoming_audio_track, config.expected_audio_track, incoming_services, outgoing_services)
+    config = parse_info_from_offer(sdp)
+    self.logger.info("offer expects video tracks=%d, audio_expected=%s, audio_incoming=%s",
+                     config.n_expected_camera_tracks, config.expected_audio_track, config.incoming_audio_track)
+    self.logger.info("request cameras=%s", cameras)
+
 
   def start(self):
     self.run_task = asyncio.create_task(self.run())
 
   def stop(self):
-    if self.run_task.done():
+    if self.run_task is None or self.run_task.done():
       return
     self.run_task.cancel()
     self.run_task = None
@@ -229,7 +244,7 @@ async def get_stream(request: 'web.Request'):
 
   stream_dict[session.identifier] = session
 
-  return web.json_response({"sdp": answer.sdp, "type": answer.type})
+  return web.json_response({"sdp": answer.sdp, "type": answer.type}, headers={'Access-Control-Allow-Origin': '*'})
 
 
 async def get_schema(request: 'web.Request'):
@@ -245,21 +260,41 @@ async def on_shutdown(app: 'web.Application'):
     session.stop()
   del app['streams']
 
+@web.middleware
+async def cors_middleware(request, handler):
+    response = await handler(request)
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    return response
+
+async def handle_cors_preflight(request):
+    if request.method == 'OPTIONS':
+        headers = {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Max-Age': '86400',
+        }
+        return web.Response(status=200, headers=headers)
+    return await request.app['handler'](request)
 
 def webrtcd_thread(host: str, port: int, debug: bool):
   logging.basicConfig(level=logging.CRITICAL, handlers=[logging.StreamHandler()])
+  #logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
   logging_level = logging.DEBUG if debug else logging.INFO
   logging.getLogger("WebRTCStream").setLevel(logging_level)
   logging.getLogger("webrtcd").setLevel(logging_level)
 
-  app = web.Application()
+  app = web.Application(middlewares=[cors_middleware])
 
   app['streams'] = dict()
   app['debug'] = debug
   app.on_shutdown.append(on_shutdown)
   app.router.add_post("/stream", get_stream)
   app.router.add_get("/schema", get_schema)
-
+  app.router.add_route('OPTIONS', '/{tail:.*}', handle_cors_preflight)
+  
   web.run_app(app, host=host, port=port)
 
 

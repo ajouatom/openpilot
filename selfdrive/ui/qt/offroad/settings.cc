@@ -842,7 +842,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   startToggles->addItem(new CValueControl("NNFFLite", tr("NNFFLite"), tr("Twilsonco's NNFF-Lite(Reboot required)"), 0, 1, 1));
   startToggles->addItem(new CValueControl("AutoGasSyncSpeed", tr("Auto update Cruise speed"), "", 0, 1, 1));
   startToggles->addItem(new CValueControl("DisableMinSteerSpeed", tr("Disable Min.SteerSpeed"), "", 0, 1, 1));
-  startToggles->addItem(new CValueControl("DisableDM", tr("Disable DM"), "", 0, 1, 1));
+  startToggles->addItem(new CValueControl("DisableDM", tr("Disable DM"), "", 0, 2, 1));
   startToggles->addItem(new CValueControl("HotspotOnBoot", tr("Hotspot enabled on boot"), "", 0, 1, 1));
   startToggles->addItem(new CValueControl("SoftwareMenu", tr("Enable Software Menu"), "", 0, 1, 1));
   startToggles->addItem(new CValueControl("IsLdwsCar", tr("IsLdwsCar"), "", 0, 1, 1));

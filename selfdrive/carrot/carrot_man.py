@@ -13,6 +13,10 @@ from datetime import datetime
 
 from ftplib import FTP
 from cereal import log
+import urllib.request
+import urllib.error
+import ssl
+
 import cereal.messaging as messaging
 from openpilot.common.realtime import Ratekeeper
 from openpilot.common.params import Params
@@ -256,6 +260,55 @@ class CarrotMan:
       except Exception as e:
           return f"Error: {e}"
 
+  def register_my_ip(self):
+    try:
+      token = "12345678"
+      local_ip = self.get_local_ip()
+      version = self.params.get("Version")
+      github_id = self.params.get("GithubUsername")
+      port = 7000
+      is_onroad = self.params.get_bool("IsOnroad")
+      ts = int(time.time())
+      url = "https://shind0.synology.me/carrot/api_heartbeat.php"
+      timeout_s = 3.5
+      payload = {
+        "github_id": github_id,
+        "token": token,
+        "local_ip": local_ip,
+        "port": int(port),
+        "version": version,
+        "is_onroad": bool(is_onroad),
+        "ts": int(time.time()),
+      }
+      #if extra:
+      #  payload.update(extra)
+
+      data = json.dumps(payload).encode("utf-8")
+      print(data)
+      req = urllib.request.Request(
+        url=url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+      )
+
+      try:
+        ctx = ssl._create_unverified_context()
+        with urllib.request.urlopen(req, timeout=timeout_s, context=ctx) as resp:
+          body = resp.read().decode("utf-8", errors="replace")
+          # 서버가 {"ok":true} 같은 JSON을 주는 경우가 많음
+          return (200 <= resp.status < 300), body
+      except urllib.error.HTTPError as e:
+        try:
+          body = e.read().decode("utf-8", errors="replace")
+        except Exception:
+          body = ""
+        return False, f"HTTPError {e.code}: {body}"
+      except Exception as e:
+        return False, f"Exception: {e}"     
+    except Exception as e:
+      print(f"register_my_ip error: {e}")
+      
   # 브로드캐스트 메시지 전송
   def broadcast_version_info(self):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -302,6 +355,9 @@ class CarrotMan:
         if carrot_speed_active_count > 0:
           self.carrot_speed_serv(carrot_speed, frame)
 
+        if frame % (20 * 30) == 0:
+          ok, msg = self.register_my_ip()
+          print(f"[heartbeat] ok: {ok}, msg: {msg}")
         if frame % 20 == 0 or remote_addr is not None:
           try:
             self.broadcast_ip = self.get_broadcast_address() if remote_addr is None else remote_addr[0]
@@ -325,7 +381,7 @@ class CarrotMan:
             #  sock.sendto(dat, address)
 
             if remote_addr is None:
-              print(f"Broadcasting: {self.broadcast_ip}:{msg}")
+              print(f"Broadcasting: {self.broadcast_ip}") #:{msg}")
               if not self.navd_active:
                 #print("clear path_points: navd_active: ", self.navd_active)
                 self.navi_points = []

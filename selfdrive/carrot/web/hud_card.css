@@ -1,0 +1,280 @@
+/* ===== Driving HUD card ===== */
+#driveHudCard { padding: 10px; }
+.hudWrap{
+  border: 2px solid rgba(255,255,255,0.65);
+  border-radius: 18px;
+  padding: 10px;
+  background: rgba(0,0,0,0.22);
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  max-width: 320px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.hudTop{
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+.hudMini{
+  background: #1e8f3f;
+  border: 2px solid rgba(0,0,0,0.35);
+  border-radius: 10px;
+  padding: 6px 8px;
+  text-align: center;
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15);
+}
+.hudMiniLabel{
+  font-weight: 900;
+  font-size: 12px;
+  line-height: 1.0;
+}
+.hudMiniVal{
+  font-weight: 900;
+  font-size: 16px;
+  line-height: 1.1;
+  margin-top: 2px;
+}
+
+.hudMain {
+  position: relative;
+  height: 140px
+}
+.hudLowerGroup {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hudSpeedBg {
+  position: absolute;
+  width: 225px; 
+  height: 180px;
+  left: 40%;
+  top: 6px;
+  transform: translateX(-50%);
+  background-image: url("/speed_bg.png");
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: center;
+  pointer-events: none;
+  opacity: 0.95;
+}
+
+.hudSpeed{
+  position: absolute;
+  font-size: 78px;
+  font-weight: 1000;
+  letter-spacing: -2px;
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(0,0,0,0.45);
+  left: 12%;
+  top: 18px;
+}
+
+.hudRedDot{
+  position: absolute;
+  left: 12px;
+  top: 30px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #ff2a2a;
+  box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
+}
+
+.hudSignalDot{
+  position: absolute;
+  left: 2px;
+  top: 6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #15d14b; /* green default */
+  box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
+}
+
+.hudTempReason {
+  position: absolute;
+  left: 73%;
+  top: 13px;
+  font-weight: 900;
+  font-size: 14px;
+  color: #22ff61;
+}
+.hudTempSpeed{
+  position: absolute;
+  left:73%;
+  top: 22px;
+  font-weight: 1000;
+  font-size: 33px;
+  color: #22ff61;
+  letter-spacing: -1px;
+}
+
+.hudSetSpeed{
+  font-weight: 1000;
+  font-size: 33px;
+  color: #22ff61;
+  letter-spacing: -1px;
+  position: absolute;
+  left: 55%;
+  top: 56px;
+}
+
+.hudGapNum{
+  position: absolute;
+  left: 69%;
+  top: 109px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight: 900;
+  font-size: 20px;
+  color:#fff;
+}
+
+.hudGear{
+  position: absolute;
+  right: 0%;
+  bottom: 0%;
+  align-items:center;
+  justify-content:center;
+  font-weight: 1000;
+  font-size: 48px;
+  border: 2px solid rgba(255,255,255,0.65);
+  border-radius: 14px;
+  color:#1cff57;
+}
+
+.hudBottom{
+  display:flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.hudLeftStack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0px;
+}
+
+.hudGps{
+  padding: 6px 10px;
+  border-radius: 12px;
+  color: #fff;
+  font-weight: 900;
+  font-size: 14px;
+  min-width: 54px;
+  text-align:center;
+}
+
+.hudGps.off{
+  color: rgba(255,255,255,0.75);
+}
+
+.hudDriveMode {
+  padding: 4px 10px;
+  align-items: center;
+  border-radius: 12px;
+  border: 2px solid rgba(0,0,0,0.35);
+  font-weight: 900;
+  font-size: 14px;
+  min-width: 66px;
+  text-align: center;
+  background: #e7eef7;
+  color: #1a1f26;
+}
+.hudDriveMode.mode_normal{ background:#e7eef7; color:#1a1f26; }
+.hudDriveMode.mode_eco{ background:#10c248; color:#fff; }
+.hudDriveMode.mode_safe{ background:#ff9c2a; color:#1a1f26; }
+.hudDriveMode.mode_sport{ background:#ff2a2a; color:#fff; }
+
+.hudRoadLimitLabel {
+  padding: 6px 10px;
+  border-radius: 12px;
+  color: #fff;
+  font-weight: 900;
+  font-size: 14px;
+  min-width: 54px;
+  text-align: center;
+}
+
+.hudRoadLimitVal {
+  padding: 4px 10px;
+  align-items: center;
+  border-radius: 12px;
+  border: 2px solid rgba(0,0,0,0.35);
+  font-weight: 900;
+  font-size: 14px;
+  min-width: 66px;
+  text-align: center;
+  color: #fff;
+}
+.hudRoadLimitVal.over{
+  background: #ff2a2a;
+  border-color: rgba(0,0,0,0.35);
+}
+
+.hudBars{
+  display:flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-end;
+  height: 75px;
+}
+.hudBar {
+  width: 40px;
+  height: 16px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.28);
+  border: 1px solid rgba(0,0,0,0.35);
+  transition: height 0.15s ease, background 0.15s ease;
+}
+.hudBar.on{
+  background: #1cff57;
+}
+
+@media (max-width: 360px){
+  #driveHudCard .hudWrap{ max-width: 280px; }
+  #driveHudCard .hudSpeed{ font-size: 68px; }
+  #driveHudCard .hudSetSpeed{ font-size: 40px; }
+}
+
+/* ===== WebRTC overlay dock ===== */
+.hudOverlayHost{
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+}
+
+/* default: top-center overlay (non-fullscreen) */
+.hudOverlayHost.dock_top .hudWrap{
+  position:absolute;
+  top:10px;
+  left:50%;
+  transform: translateX(-50%) scale(0.82);
+  transform-origin: top center;
+  width: 320px;
+  max-width: 320px;
+}
+
+/* fullscreen/landscape: bottom-left overlay */
+.hudOverlayHost.dock_bl .hudWrap{
+  position:absolute;
+  left:12px;
+  bottom:12px;
+  transform: scale(0.86);
+  transform-origin: left bottom;
+  width: 320px;
+  max-width: 320px;
+}
+

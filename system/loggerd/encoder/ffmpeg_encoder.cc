@@ -59,7 +59,15 @@ void FfmpegEncoder::encoder_open() {
   this->codec_ctx->height = frame->height;
   this->codec_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
   this->codec_ctx->time_base = (AVRational){ 1, encoder_info.fps };
-  int err = avcodec_open2(this->codec_ctx, codec, NULL);
+  //int err = avcodec_open2(this->codec_ctx, codec, NULL);
+  bool env_dashy = true;
+  AVDictionary* opts = NULL;
+  if (env_dashy && codec_id == AV_CODEC_ID_H264) {
+    av_dict_set(&opts, "preset", "ultrafast", 0);
+    av_dict_set(&opts, "tune", "zerolatency", 0);
+  }
+  int err = avcodec_open2(this->codec_ctx, codec, &opts);
+  av_dict_free(&opts);
   assert(err >= 0);
 
   is_open = true;

@@ -1,0 +1,541 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Carrot</title>
+  <link rel="stylesheet" href="/hud_card.css?v=2602-01" />
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      background: #0b0d10;
+      color: #e8eef5;
+    }
+
+    .topbar {
+      display: flex;
+      gap: 10px;
+      padding: 12px;
+      background: #11161d;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .btn {
+      padding: 10px 14px;
+      border: 1px solid #2a3542;
+      background: #141b24;
+      color: #e8eef5;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+
+      .btn.active {
+        background: #1e2a3a;
+        border-color: #3b5168;
+      }
+
+    .wrap {
+      padding: 12px;
+    }
+
+    .card {
+      border: 1px solid #253040;
+      background: #0f141c;
+      border-radius: 14px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .muted {
+      color: #9bb0c6;
+      font-size: 12px;
+    }
+
+    .groupBtn {
+      width: 100%;
+      text-align: left;
+      margin-bottom: 8px;
+    }
+
+    .setting {
+      border: 1px solid #253040;
+      border-radius: 14px;
+      padding: 12px;
+      margin-bottom: 10px;
+      background: #0c1118;
+    }
+
+    .settingTop {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .title {
+      font-weight: 700;
+      font-size: 15px;
+    }
+
+    .name {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      color: #9bb0c6;
+    }
+
+    .descr {
+      white-space: pre-wrap;
+      margin-top: 6px;
+      color: #c7d6e6;
+      font-size: 13px;
+    }
+
+    .ctrl {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .pill {
+      border: 1px solid #2a3542;
+      background: #141b24;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      color: #c7d6e6;
+    }
+
+    .smallBtn {
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid #2a3542;
+      background: #141b24;
+      color: #e8eef5;
+      cursor: pointer;
+    }
+
+    .val {
+      min-width: 84px;
+      text-align: center;
+      font-weight: 700;
+    }
+
+    .langToggle {
+      margin-left: auto;
+    }
+
+    .btnRow {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .backupRow {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .restoreRow {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .restoreRow input[type="file"] {
+      flex: 1;
+      min-width: 180px;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      overflow: auto;
+    }
+
+    /* screen transition */
+    .screen {
+      transition: opacity .16s ease, transform .16s ease;
+      will-change: opacity, transform;
+    }
+
+      .screen.hidden {
+        opacity: 0;
+        transform: translateX(12px);
+        pointer-events: none;
+      }
+
+    /* Mobile improvements */
+    @media (max-width: 640px) {
+      .topbar {
+        gap: 8px;
+        padding: 10px;
+      }
+
+      .btn {
+        padding: 10px 12px;
+        border-radius: 12px;
+      }
+
+      .settingTop {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .ctrl {
+        justify-content: flex-start;
+      }
+
+      .val {
+        min-width: 120px;
+      }
+
+      .smallBtn {
+        padding: 10px 12px;
+      }
+    }
+
+    .rtcVideo {
+      width: 100%;
+      border-radius: 14px;
+      background: #000;
+      object-fit: contain;
+      /* 세로모드 기본: 너무 작게 안 만들고 싶으면 제한 안 둬도 됨 */
+    }
+
+    @media (orientation: landscape) {
+      .rtcVideo {
+        max-height: 40vh; /* 35~50vh 사이에서 취향 */
+        width: auto; /* 가로모드에서 “폭 100%” 강제 안 함 */
+        max-width: 100%;
+        margin: 0 auto;
+      }
+    }
+
+    /* ===== Fullscreen override (video or wrapper) ===== */
+    /* ===== Fullscreen override (wrapper) ===== */
+    #rtcWrap:fullscreen,
+    #rtcWrap:-webkit-full-screen {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      margin: 0 !important;
+      border-radius: 0 !important;
+      background: #000 !important;
+      z-index: 9999 !important;
+      /* fullscreen에서만 중앙정렬 */
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+    }
+
+    /* fullscreen일 때 video는 무조건 꽉 채움 */
+    #rtcWrap:fullscreen #rtcVideo,
+    #rtcWrap:-webkit-full-screen #rtcVideo {
+      width: 100vw !important;
+      height: 100vh !important;
+      max-width: none !important;
+      max-height: none !important;
+      margin: 0 !important;
+      border-radius: 0 !important;
+      object-fit: contain !important;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="topbar">
+    <button id="btnHome" class="btn active">Home</button>
+    <button id="btnSetting" class="btn">Setting</button>
+    <button id="btnTools" class="btn">Tools</button>
+    <button id="btnFleet" class="btn">Fleet</button>
+    <button id="btnLang" class="btn langToggle">Lang: <span id="langLabel">KO</span></button>
+  </div>
+
+  <div class="wrap">
+    <!-- HOME -->
+    <div id="pageHome" class="card">
+      <h3 style="margin:0 0 8px 0;">Home</h3>
+
+      <!-- Driving HUD (card mode). JS will auto-dock this into WebRTC overlay when video is visible. -->
+      <div id="driveHudCard" class="card" style="margin:12px 0 0 0;">
+        <div class="hudWrap" id="hudRoot">
+          <div class="hudTop">
+            <div class="hudMini">
+              <div class="hudMiniLabel">CPU</div>
+              <div class="hudMiniVal" id="hudCpuVal">--°C</div>
+            </div>
+            <div class="hudMini">
+              <div class="hudMiniLabel">MEM</div>
+              <div class="hudMiniVal" id="hudMemVal">--%</div>
+            </div>
+            <div class="hudMini">
+              <div class="hudMiniLabel" id="hudDiskLabel">DISK</div>
+              <div class="hudMiniVal" id="hudDiskVal">--%</div>
+            </div>
+          </div>
+
+          <div class="hudLowerGroup">
+            <div class="hudMain">
+              <div class="hudSpeedBg" aria-hidden="true"></div>
+              <div class="hudRedDot" id="hudRedDot" style="display:none;"></div>
+              <div class="hudSpeed" id="hudSpeed">--</div>
+
+              <div class="hudSignalDot" id="hudSignalDot"></div>
+
+              <div class="hudTempReason" id="hudTempReason">eco</div>
+              <div class="hudTempSpeed" id="hudTempSpeed">--</div>
+
+              <div class="hudSetSpeed" id="hudSetSpeed">--</div>
+
+              <div class="hudGapNum" id="hudGapNum">-</div>
+              <div class="hudGear" id="hudGear">U</div>
+
+            </div>
+
+            <div class="hudBottom">
+              <div class="hudLeftStack">
+                <div class="hudGps" id="hudGps">GPS</div>
+                <div class="hudDriveMode mode_normal" id="hudDriveMode">일반</div>
+              </div>
+
+              <div class="hudRoadLimitBox">
+                <div class="hudRoadLimitLabel">LIMIT</div>
+                <div class="hudRoadLimitVal" id="hudRoadLimitVal">--</div>
+              </div>
+
+              <div class="hudBars" id="hudBars">
+                <div class="hudBar"></div>
+                <div class="hudBar"></div>
+                <div class="hudBar"></div>
+                <div class="hudBar"></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- Server State (기존 유지) -->
+      <div id="rtcCard" class="card" style="margin:12px 0 0 0; display:none;">
+        <h4 style="margin:0 0 8px 0;">WebRTC</h4>
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+          <div class="muted" id="rtcStatus">connecting...</div>
+          <button id="btnRtcFs" class="smallBtn">Full</button>
+        </div>
+        <div style="height:8px;"></div>
+
+        <!-- wrapper 추가 (relative) -->
+        <div id="rtcWrap" style="position:relative;">
+          <video id="rtcVideo"
+                 class="rtcVideo"
+                 autoplay playsinline muted style="display:none;">
+          </video>
+
+          <!-- HUD overlay host (video overlay mode) -->
+          <div id="hudOverlayHost" class="hudOverlayHost" style="display:none;"></div>
+        </div>
+      </div>
+      <div style="height:10px;"></div>
+
+      <div class="card" style="margin:0;">
+        <h4 style="margin:0 0 6px 0;">Server State</h4>
+        <pre id="stateBox" class="pill" style="display:block; padding:10px; border-radius:14px;">connecting...</pre>
+      </div>
+      <div class="card" style="margin-top:12px;">
+        <h4 style="margin:0 0 6px 0;">Quick Link</h4>
+
+        <a id="quickLink" href="#" target="_blank" rel="noopener"
+           style="word-break:break-all; display:none; text-decoration:none; color:#9bb0c6;">
+        </a>
+
+        <div class="muted" style="margin-top:6px;">
+          * 길게 눌러 링크저장
+        </div>
+      </div>
+    </div>
+
+    <!-- CAR SELECT (new page) -->
+    <div id="pageCar" class="card" style="display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <h3 id="carTitle" style="margin:0 0 8px 0; cursor:pointer;">Car Select</h3>
+        <button id="btnBackCar" class="btn">Back</button>
+      </div>
+      <!-- Current Car -->
+      <div class="card" style="margin:0 0 12px 0;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+          <!-- 여기 헤더가 차량명 -->
+          <div id="curCarLabelCar" style="font-weight:900; font-size:14px; line-height:1.2;">-</div>
+        </div>
+      </div>
+
+      <div class="muted" id="carMeta">loading...</div>
+      <div style="height:10px;"></div>
+
+      <!-- Maker screen -->
+      <div id="carScreenMakers" class="screen">
+        <div class="card" style="margin:0;">
+          <h4 style="margin:0 0 10px 0;">Makers</h4>
+          <div id="makerList"></div>
+        </div>
+      </div>
+
+      <!-- Model screen -->
+      <div id="carScreenModels" class="screen hidden" style="display:none;">
+        <div class="card" style="margin:0;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+            <h4 id="modelTitle" style="margin:0; cursor:pointer;">Models</h4>
+            <div class="muted" id="modelMeta">-</div>
+          </div>
+          <div style="height:10px;"></div>
+          <div id="modelList"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTING -->
+    <div id="pageSetting" class="card" style="display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <h3 id="settingTitle" style="margin:0 0 8px 0; cursor:pointer;">Setting</h3>
+        <button id="btnBackGroups" class="btn" style="display:none;">Back</button>
+      </div>
+
+      <div class="muted" id="settingsMeta">loading...</div>
+      <div style="height:10px;"></div>
+
+      <!-- Current Car -->
+      <div class="card" style="margin:0 0 12px 0;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+          <!-- 여기 헤더가 차량명 -->
+          <div id="curCarLabelSetting" style="font-weight:900; font-size:14px; line-height:1.2;">-</div>
+          <button id="btnChangeCar" class="btn">Change</button>
+        </div>
+      </div>
+
+      <!-- Groups Screen -->
+      <div id="settingScreenGroups" class="screen">
+        <div class="card" style="margin:0;">
+          <h4 style="margin:0 0 10px 0;">Groups</h4>
+          <div id="groupList"></div>
+        </div>
+      </div>
+
+      <!-- Items Screen -->
+      <div id="settingScreenItems" class="screen hidden" style="display:none;">
+        <div class="card" style="margin:0;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+            <h4 id="itemsTitle" style="margin:0; cursor:pointer;">Items</h4>
+            <div class="muted" id="groupMeta">-</div>
+          </div>
+          <div style="height:10px;"></div>
+          <div id="items"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOOLS -->
+    <div id="pageTools" class="card" style="display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <h3 style="margin:0 0 8px 0;">Tools</h3>
+        <button id="btnToolsBack" class="btn">Back</button>
+      </div>
+
+      <div class="muted" id="toolsMeta">-</div>
+      <div style="height:10px;"></div>
+
+      <!-- Git / Update -->
+      <div class="card" style="margin:0 0 12px 0;">
+        <h4 style="margin:0 0 10px 0;">Git Commands</h4>
+
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button id="btnGitPull" class="btn">git pull</button>
+          <button id="btnGitSync" class="btn">git sync</button>
+          <button id="btnGitReset" class="btn">git reset</button>
+          <button id="btnGitBranch" class="btn">change branch</button>
+        </div>
+
+        <div class="muted" style="margin-top:10px;">
+          * reset/branch는 위험할 수 있으니 confirm 뜹니다.
+        </div>
+      </div>
+
+      <!-- System / User -->
+      <div class="card" style="margin:0;">
+        <h4 style="margin:0 0 10px 0;">User / System</h4>
+
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button id="btnSendTmuxLog" class="btn">tmux log</button>
+          <button id="btnDeleteVideos" class="btn">delete all videos</button>
+          <button id="btnDeleteLogs" class="btn">delete all logs</button>
+          <button id="btnReboot" class="btn">reboot</button>
+        </div>
+
+        <div class="muted" style="margin-top:10px;">
+          * delete/reboot는 confirm 후 실행합니다.
+        </div>
+
+        <!-- Backup / Restore -->
+        <div class="card">
+          <div class="backupRow">
+            <button id="btnBackupSettings" class="btn">backup settings</button>
+          </div>
+
+          <div class="restoreRow">
+            <input id="restoreFile" type="file" accept="application/json" />
+            <button id="btnRestoreSettings" class="btn">restore settings</button>
+          </div>
+
+          <div class="muted">
+            * restore 후 reboot 권장
+          </div>
+        </div>
+        <div class="card">
+          <h4 style="margin:0 0 6px 0;">System Command</h4>
+
+          <div class="muted" style="margin-bottom:8px;">
+            Allowed: git pull/status/branch/log, df, free, uptime (whitelist)
+          </div>
+
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+            <input id="sysCmdInput"
+                   type="text"
+                   placeholder='e.g. git pull'
+                   style="flex:1; min-width:220px; padding:10px; border-radius:12px; border:1px solid #2a3542; background:#0c1118; color:#e8eef5;" />
+            <button id="btnSysCmdRun" class="smallBtn">Run</button>
+          </div>
+
+        </div>
+
+        <div style="height:12px;"></div>
+
+        <!-- output -->
+        <div class="card" style="margin:0;">
+          <h4 style="margin:0 0 8px 0;">Output</h4>
+          <pre id="toolsOut" class="pill" style="display:block; padding:10px; border-radius:14px; min-height:120px;">-</pre>
+        </div>
+      </div>
+    </div>
+    <!-- BRANCH SELECT -->
+    <div id="pageBranch" class="card" style="display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <h3 id="branchTitle" style="margin:0 0 8px 0; cursor:pointer;">Branch Select</h3>
+        <button id="btnBackBranch" class="btn">Back</button>
+      </div>
+
+      <div class="muted" id="branchMeta">-</div>
+      <div style="height:10px;"></div>
+
+      <div id="branchList"></div>
+    </div>
+  </div>
+
+  <script src="/hud_card.js?v=2602-02"></script>
+  <script src="/app.js?v=2602-02"></script>
+</body>
+</html>

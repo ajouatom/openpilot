@@ -22,11 +22,16 @@ class LiveStreamVideoStreamTrack(TiciVideoStreamTrack):
     self._pts = 0
 
   async def recv(self):
+    waited = 0
     while True:
       msg = messaging.recv_one_or_none(self._sock)
       if msg is not None:
         break
       await asyncio.sleep(0.005)
+      waited += 0.005
+      if waited > 1.0:
+        print("########### recv timedout....")
+        waited = 0
 
     evta = getattr(msg, msg.which())
 

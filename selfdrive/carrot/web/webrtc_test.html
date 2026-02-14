@@ -1,0 +1,217 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>webrtcd browser test</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 16px;
+    }
+
+    video {
+      width: 48%;
+      background: #000;
+      margin: 4px;
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    pre {
+      background: #111;
+      color: #0f0;
+      padding: 8px;
+      height: 220px;
+      overflow: auto;
+    }
+
+    input, button {
+      padding: 6px;
+      margin: 4px 0;
+    }
+  </style>
+</head>
+<body>
+  <h2>webrtcd browser test</h2>
+
+  <label>Device IP:Port (webrtcd)</label><br />
+  <input id="baseUrl" style="width:420px" value="http://192.168.0.171:5001" />
+  <br />
+
+  <label>Cameras (comma separated)</label><br />
+  <input id="cameras" style="width:420px" value="road" />
+  <div style="opacity:0.8">예: road / wideRoad / driver 등 (서버가 기대하는 개수와 맞추세요)</div>
+
+  <label><input type="checkbox" id="sendMic" /> Send microphone to device (incoming_audio_track)</label><br />
+  <label><input type="checkbox" id="recvAudio" checked /> Receive audio from device (expected_audio_track)</label><br />
+  <label><input type="checkbox" id="useDataChannel" checked /> Create datachannel (messaging)</label><br />
+
+  <button id="btnStart">Start</button>
+  <button id="btnStop" disabled>Stop</button>
+
+  <h3>Remote streams</h3>
+  <div class="row" id="videos"></div>
+
+  <h3>Log</h3>
+  <pre id="log"></pre>
+
+  <script>
+    const logEl = document.getElementById("log");
+    function log(...args) {
+    const s = args.map(a => (typeof a === "string" ? a : JSON.stringify(a))).join(" ");
+    console.log(s);
+    logEl.textContent += s + "\n";
+    logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    let pc = null;
+    let dc = null;
+    let localStream = null;
+
+    async function start() {
+    const baseUrl = document.getElementById("baseUrl").value.trim().replace(/\/+$/, "");
+    const cameras = document.getElementById("cameras").value.split(",").map(s => s.trim()).filter(Boolean);
+    const sendMic = document.getElementById("sendMic").checked;
+    const recvAudio = document.getElementById("recvAudio").checked;
+    const useDataChannel = document.getElementById("useDataChannel").checked;
+
+    if (!baseUrl) return log("baseUrl empty");
+    if (!cameras.length) return log("cameras empty");
+
+    pc = new RTCPeerConnection({
+    // 같은 LAN이면 STUN 없어도 되는 경우가 많습니다.
+    iceServers: []
+    });
+
+    pc.oniceconnectionstatechange = () => log("ICE:", pc.iceConnectionState);
+    pc.onconnectionstatechange = () => log("PC :", pc.connectionState);
+
+    // --- Remote track handler ---
+    const videosDiv = document.getElementById("videos");
+    videosDiv.innerHTML = "";
+    let videoCount = 0;
+    pc.ontrack = (ev) => {
+    log("ontrack kind=", ev.track.kind, "streams=", ev.streams.length);
+    const stream = ev.streams[0] || new MediaStream([ev.track]);
+
+    if (ev.track.kind === "video") {
+    videoCount++;
+    const v = document.createElement("video");
+    v.autoplay = true;
+    v.playsInline = true;
+    v.controls = true;
+    v.muted = true; // 브라우저 자동재생 정책 회피 (영상은 mute)
+    v.srcObject = stream;
+    v.title = "remote video " + videoCount;
+    videosDiv.appendChild(v);
+    } else if (ev.track.kind === "audio") {
+    // 오디오는 mute 하면 안 들리니 별도 오디오 엘리먼트
+    const a = document.createElement("audio");
+    a.autoplay = true;
+    a.controls = true;
+    a.srcObject = stream;
+    videosDiv.appendChild(a);
+    }
+    };
+
+    // --- DataChannel (optional) ---
+    if (useDataChannel) {
+    dc = pc.createDataChannel("messaging"); // label이 서버 기대와 다르면 안 붙을 수 있음
+    dc.onopen = () => log("DC open");
+    dc.onclose = () => log("DC close");
+    dc.onerror = (e) => log("DC error", e);
+    dc.onmessage = (e) => {
+    // 서버는 json bytes를 보냅니다.
+    try {
+    const txt = typeof e.data === "string" ? e.data : new TextDecoder().decode(e.data);
+    const obj = JSON.parse(txt);
+    log("DC msg:", obj.type);
+    } catch (err) {
+    log("DC raw msg:", e.data);
+    }
+    };
+    }
+
+    // --- Transceivers: video recvonly for each camera ---
+    for (let i = 0; i < cameras.length; i++) {
+    pc.addTransceiver("video", { direction: "recvonly" });
+    }
+
+    // --- Audio: receive from device (expected_audio_track) ---
+    if (recvAudio) {
+    pc.addTransceiver("audio", { direction: "recvonly" });
+    }
+
+    // --- Audio: send mic to device (incoming_audio_track) ---
+    if (sendMic) {
+    // getUserMedia는 보통 HTTPS 또는 localhost에서만 됩니다.
+    // (LAN IP로 열면 막힐 수 있어요)
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    for (const track of localStream.getAudioTracks()) {
+    pc.addTrack(track, localStream);
+    }
+    }
+
+    // Create offer
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    // Wait ICE gathering complete (간단히)
+    await new Promise((resolve) => {
+    if (pc.iceGatheringState === "complete") return resolve();
+    pc.onicegatheringstatechange = () => {
+    if (pc.iceGatheringState === "complete") resolve();
+    };
+    });
+
+    log("POST /stream ...");
+    const res = await fetch(baseUrl + "/stream", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+    sdp: pc.localDescription.sdp,
+    cameras: cameras,
+    bridge_services_in: [],   // 필요하면 예: ["controlsState"]
+    bridge_services_out: []   // 필요하면 예: ["carState","deviceState"]
+    })
+    });
+
+    if (!res.ok) {
+    const t = await res.text();
+    throw new Error("stream failed: " + res.status + " " + t);
+    }
+
+    const answer = await res.json();
+    log("answer type:", answer.type);
+    await pc.setRemoteDescription({ type: answer.type, sdp: answer.sdp });
+
+    document.getElementById("btnStart").disabled = true;
+    document.getElementById("btnStop").disabled = false;
+    log("started.");
+    }
+
+    async function stop() {
+    if (dc) { try { dc.close(); } catch(e) {} dc = null; }
+    if (pc) {
+    try { pc.getSenders().forEach(s => s.track && s.track.stop && s.track.stop()); } catch(e) {}
+    try { pc.close(); } catch(e) {}
+    pc = null;
+    }
+    if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+    }
+    document.getElementById("btnStart").disabled = false;
+    document.getElementById("btnStop").disabled = true;
+    log("stopped.");
+    }
+
+    document.getElementById("btnStart").onclick = () => start().catch(e => log("ERR:", e.message));
+    document.getElementById("btnStop").onclick = () => stop();
+  </script>
+</body>
+</html>

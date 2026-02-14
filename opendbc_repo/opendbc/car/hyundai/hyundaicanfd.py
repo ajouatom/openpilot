@@ -307,7 +307,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
     a_val, a_raw = 0, 0
   else:
     a_raw = accel
-    a_val = np.clip(accel, accel_last - jn, accel_last + jn)
+    a_val = accel #np.clip(accel, accel_last - jn, accel_last + jn)
 
   values = copy.copy(CS.cruise_info)
   values.pop("COUNTER", None)
@@ -440,6 +440,8 @@ def create_tcs_messages(packer, CAN, CS):
   if CS.tcs_info_373 is not None:
     values = copy.copy(CS.tcs_info_373)
     values["DriverBraking"] = 0
+    values["NEW_SIGNAL_20"] = 0
+    values["NEW_SIGNAL_11"] = 0
     values["DriverBrakingLowSens"] = 0
     #values["NEW_SIGNAL_1"] = 0 # accel과 관련..  옆두부 꺼지는것과 관련? 확인필요
     #values["ACC_REQ"] = 1 # 옆두부 꺼지는것과 관련? 확인필요.. 항상 켜지게함..
@@ -991,7 +993,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           values["ALERTS_3"] = 0
           values["SOUNDS_3"] = 0
 
-        if values["ALERTS_5"] in [1, 2, 4, 5]:
+        if values["ALERTS_5"] in [1, 2, 3, 4, 5]:
           values["ALERTS_5"] = 0
 
         if values["ALERTS_5"] in [11] and CS.softHoldActive == 0:
@@ -1002,13 +1004,13 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["LANELINE_CURVATURE"] = (min(abs(curvature), 15) + (-1 if curvature < 0 else 0)) if lat_active else 0
         values["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 and lat_active else 0
 
-        lane_color = 2 if CS.out.leftLaneLine < 20 else 4
+        lane_color = 4 if CS.out.leftLaneLine >= 20 or CS.out.leftBlindspot else 2
         if hud_control.leftLaneDepart:
           values["LANELINE_LEFT"] = 4 if (frame // 50) % 2 == 0 else 1
         else:
           values["LANELINE_LEFT"] = lane_color if hud_control.leftLaneVisible else 0
 
-        lane_color = 2 if CS.out.rightLaneLine < 20 else 4
+        lane_color = 4 if CS.out.rightLaneLine >= 20 or CS.out.rightBlindspot else 2
         if hud_control.rightLaneDepart:
           values["LANELINE_RIGHT"] = 4 if (frame // 50) % 2 == 0 else 1
         else:
