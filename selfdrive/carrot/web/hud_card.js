@@ -49,7 +49,13 @@
   function setDriveMode(name, kind){
     const el = $("hudDriveMode");
     if (!el) return;
-    el.textContent = name || "일반";
+
+    let modeName = name;
+    if (window.DRIVE_MODES && window.LANG) {
+      modeName = window.DRIVE_MODES[window.LANG][kind] || name;
+    }
+
+    el.textContent = modeName || (window.DRIVE_MODES && window.LANG ? window.DRIVE_MODES[window.LANG].normal : "Normal");
     el.classList.remove("mode_normal","mode_eco","mode_safe","mode_sport");
     if (kind === "eco") el.classList.add("mode_eco");
     else if (kind === "safe") el.classList.add("mode_safe");
@@ -133,7 +139,7 @@
       setBars(0);
       setSignalDot("off");
       setGps(false);
-      setDriveMode("일반","normal");
+      setDriveMode("","normal");
       setRoadLimit(null, false);
       setGapNum(null);
       setGear("U");

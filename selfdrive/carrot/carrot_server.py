@@ -109,7 +109,7 @@ async def on_cleanup(app: web.Application):
   sess = app.get("http")
   if sess:
     await sess.close()
-    
+
 # -----------------------
 # Settings cache (mtime based)
 # -----------------------
@@ -133,20 +133,28 @@ def _group_index(settings: Dict[str, Any]) -> Tuple[Dict[str, list], Dict[str, D
 
   params = settings.get("params", [])
   for p in params:
-    g = p.get("group", "UNGROUPED")
+    g = p.get("group", "기타")
+    if g == "기타":
+        if "egroup" not in p: p["egroup"] = "Other"
+        if "cgroup" not in p: p["cgroup"] = "其他"
+
     groups.setdefault(g, []).append(p)
     n = p.get("name")
     if n:
       by_name[n] = p
 
-  # group list with egroup guess
+  # group list with egroup/cgroup guess
   for g, items in groups.items():
     egroup = None
+    cgroup = None
     for it in items:
-      if it.get("egroup"):
+      if not egroup and it.get("egroup"):
         egroup = it.get("egroup")
+      if not cgroup and it.get("cgroup"):
+        cgroup = it.get("cgroup")
+      if egroup and cgroup:
         break
-    groups_list.append({"group": g, "egroup": egroup, "count": len(items)})
+    groups_list.append({"group": g, "egroup": egroup, "cgroup": cgroup, "count": len(items)})
 
   return groups, by_name, groups_list
 
@@ -662,7 +670,7 @@ async def api_tools(request: web.Request) -> web.Response:
 
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
-  
+
 async def ws_state(request: web.Request) -> web.WebSocketResponse:
   ws = web.WebSocketResponse(heartbeat=20)
   await ws.prepare(request)
@@ -767,13 +775,13 @@ async def ws_carstate(request: web.Request) -> web.WebSocketResponse:
         temp_speed = { "speed": apply_speed, "source": apply_source if apply_speed >= v_cruise else "", "is_decel": True if apply_speed < v_cruise else False}
         drive_mode = lp.myDrivingMode
         if drive_mode == 1:
-          drive_mode_obj = {"name": "연비", "kind": "eco"}
+          drive_mode_obj = {"name": "Eco", "kind": "eco"}
         elif drive_mode == 2:
-          drive_mode_obj = {"name": "안전", "kind": "safe"}
+          drive_mode_obj = {"name": "Safe", "kind": "safe"}
         elif drive_mode == 4:
-          drive_mode_obj = {"name": "고속", "kind": "sport"}
+          drive_mode_obj = {"name": "Sport", "kind": "sport"}
         else:
-          drive_mode_obj = {"name": "일반", "kind": "normal"}
+          drive_mode_obj = {"name": "Normal", "kind": "normal"}
 
 
         gps_ok = True
@@ -973,7 +981,7 @@ def make_app() -> web.Application:
   app = web.Application(middlewares=[log_mw])
   app.on_startup.append(on_startup)
   app.on_cleanup.append(on_cleanup)
-  
+
   # static-like routes
   app.router.add_get("/", handle_index)
   app.router.add_get("/app.js", handle_appjs)
