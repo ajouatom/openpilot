@@ -267,12 +267,25 @@
       "title": "LatSmoothSec(13)x0.01",
       "descr": "조향필터링값\n 높으면 부드러운조향",
       "egroup": "LAT",
-      "etitle": "LatSmoothSec(30)",
+      "etitle": "LatSmoothSec(13)",
       "edescr": "Lat smoothing values — Higher values smoother",
       "min": 1,
       "max": 30,
       "default": 13,
       "unit": 1
+    },
+    {
+      "group": "조향튜닝",
+      "name": "LatSuspendAngleDeg",
+      "title": "자동조향일시중지각도(300)",
+      "descr": "조향각이 커지면 자동조향을 일시중지. 15도 이내도 조향각이 돌아오면 재개함.",
+      "egroup": "LAT",
+      "etitle": "AutoSteering Suspend Angle(300)",
+      "edescr": "Auto steering pauses at large steering angles and resumes when it returns within 15.",
+      "min": 45,
+      "max": 300,
+      "default": 300,
+      "unit": 10
     },
     {
       "group": "크루즈",
