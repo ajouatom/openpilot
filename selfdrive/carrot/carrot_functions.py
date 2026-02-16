@@ -73,7 +73,7 @@ class CarrotPlanner:
     self.traffic_starting_count = 0
     self.user_stop_distance = -1
 
-    #self.t_follow = 0
+    self.t_follow_last = 1.5
 
     self.startSignCount = 0
     self.stopSignCount = 0
@@ -281,8 +281,9 @@ class CarrotPlanner:
 
     self.jerk_factor_apply = self.jerk_factor
     if self.desireState > 0.9 and self.desireStateCount < int(1.5 / DT_MDL):  # lane change state, 1.5초동안만.
-      t_follow *= self.dynamicTFollowLC   # 차선변경시 t_follow를 줄임.
-      self.jerk_factor_apply = self.jerk_factor * self.dynamicTFollowLC   # 차선변경시 jerk factor를 줄여 aggresive하게
+      dynamicTFollowLC = max(0.2, self.dynamicTFollowLC)
+      t_follow *= dynamicTFollowLC   # 차선변경시 t_follow를 줄임.
+      self.jerk_factor_apply = self.jerk_factor * dynamicTFollowLC   # 차선변경시 jerk factor를 줄여 aggresive하게
     elif lead.status:
       t_follow += np.interp(prev_a[0], [-2.0, -0.5], [0.1, 0.0])
       if self.dynamicTFollow > 0.0:
@@ -292,6 +293,10 @@ class CarrotPlanner:
           self.jerk_factor_apply = self.jerk_factor * 0.5 # 전방차량을 따라갈때는 aggressive하게.
         #self.jerk_factor_apply = np.interp(abs(lead.jLead), [0, 2], [self.jerk_factor, self.jerk_factor * self.j_lead_factor])
 
+    if t_follow > self.t_follow_last:
+      t_follow = min(t_follow, self.t_follow_last + 0.1 * DT_MDL)
+      pass
+    self.t_follow_last = t_follow
     return t_follow
 
   def update_stop_dist(self, stop_x):

@@ -1583,7 +1583,7 @@
       "egroup": "FDIST",
       "etitle": "Dynamic TFollow LaneChange(100)%",
       "edescr": "Temporarily reduces the gap between vehicles when starting a lane change",
-      "min": 0,
+      "min": 20,
       "max": 100,
       "default": 0,
       "unit": 5
