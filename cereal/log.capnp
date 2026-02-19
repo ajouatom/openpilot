@@ -1180,7 +1180,8 @@ struct ModelDataV2 {
     laneChangeProb @15 :Float32;
     desireLog @16 : Text;
     modelTurnSpeed @17 :Float32;
-
+    laneChangeAvailableLeft @18 :Bool;
+    laneChangeAvailableRight @19 :Bool;
 
     # deprecated
     brakeDisengageProbDEPRECATED @2 :Float32;

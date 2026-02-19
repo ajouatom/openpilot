@@ -8,7 +8,7 @@ class CANPacker:
     self.dbc = DBC(dbc_name)
     self.counters: dict[int, int] = {}
 
-  def pack(self, address: int, values: dict[str, float]) -> bytearray:
+  def pack(self, address: int, values: dict[str, float], rx_counter: int | None = None) -> bytearray:
     msg = self.dbc.addr_to_msg.get(address)
     if msg is None:
       return bytearray()
@@ -27,8 +27,8 @@ class CANPacker:
         counter_set = True
     sig_counter = next((s for s in msg.sigs.values() if s.type == SignalType.COUNTER or s.name == "COUNTER"), None)
     if sig_counter and not counter_set:
-      if address not in self.counters:
-        self.counters[address] = 0
+      if address not in self.counters:        
+        self.counters[address] = 0 if rx_counter is None else (int(rx_counter) + 1) % (1 << sig_counter.size)
       set_value(dat, sig_counter, self.counters[address])
       self.counters[address] = (self.counters[address] + 1) % (1 << sig_counter.size)
     sig_checksum = next((s for s in msg.sigs.values() if s.type > SignalType.COUNTER), None)
@@ -37,7 +37,7 @@ class CANPacker:
       set_value(dat, sig_checksum, checksum)
     return dat
 
-  def make_can_msg(self, name_or_addr, bus: int, values: dict[str, float]):
+  def make_can_msg(self, name_or_addr, bus: int, values: dict[str, float], rx_counter: int | None = None):
     if isinstance(name_or_addr, int):
       addr = name_or_addr
     else:
@@ -45,7 +45,7 @@ class CANPacker:
       if msg is None:
         return 0, b'', bus
       addr = msg.address
-    dat = self.pack(addr, values)
+    dat = self.pack(addr, values, rx_counter = rx_counter)
     if len(dat) == 0:
       return 0, b'', bus
     return addr, bytes(dat), bus

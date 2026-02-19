@@ -319,13 +319,12 @@ class CarController(CarControllerBase):
     if self.CP.flags & HyundaiFlags.CANFD:
       hda2 = self.CP.flags & HyundaiFlags.CANFD_HDA2
       hda2_long = hda2 and self.CP.openpilotLongitudinalControl
-
       # steering control
       if camera_scc:
         can_sends.extend(hyundaicanfd.create_steering_messages_camera_scc(self.frame, self.packer, self.CP, self.CAN, CC, apply_steer_req, apply_torque, CS, apply_angle, self.lkas_max_torque, angle_control))
       else:
         can_sends.extend(hyundaicanfd.create_steering_messages(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_torque, apply_angle, self.lkas_max_torque, angle_control))
-
+              
       # prevent LFA from activating on HDA2 by sending "no lane lines detected" to ADAS ECU
       if self.frame % 5 == 0 and hda2 and not camera_scc:
         can_sends.extend(hyundaicanfd.create_suppress_lfa(self.packer, self.CAN, CS))
@@ -352,8 +351,10 @@ class CarController(CarControllerBase):
             can_sends.extend(hyundaicanfd.create_fca_warning_light(self.CP, self.packer, self.CAN, self.frame))
         if self.frame % 2 == 0:
           if self.CP.flags & HyundaiFlags.CAMERA_SCC.value:
-            can_sends.append(hyundaicanfd.create_acc_control_scc2(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
-                                                             set_speed_in_units, hud_control, self.hyundai_jerk, CS))
+            msg = hyundaicanfd.create_acc_control_scc2(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
+                                                             set_speed_in_units, hud_control, self.hyundai_jerk, CS)
+            if msg is not None:
+              can_sends.append(msg)
             can_sends.extend(hyundaicanfd.create_tcs_messages(self.packer, self.CAN, CS)) # for sorento SCC radar...
           else:
             can_sends.append(hyundaicanfd.create_acc_control(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
@@ -366,16 +367,16 @@ class CarController(CarControllerBase):
           can_sends.extend(hyundaicanfd.forward_button_message(self.packer, self.CAN, self.frame, CS, send_button, self.MainMode_ACC_trigger, self.LFA_trigger))
         else:
           can_sends.extend(self.create_button_messages(CC, CS, use_clu11=False))
-        
     else:
-      can_sends.append(hyundaican.create_lkas11(self.packer, self.frame, self.CP, apply_torque, apply_steer_req,
-                                                torque_fault, CS.lkas11, sys_warning, sys_state, CC.enabled,
-                                                hud_control.leftLaneVisible, hud_control.rightLaneVisible,
-                                                left_lane_warning, right_lane_warning, self.is_ldws_car))
+      if CS.lkas11 is not None:
+        can_sends.append(hyundaican.create_lkas11(self.packer, self.frame, self.CP, apply_torque, apply_steer_req,
+                                                  torque_fault, CS.lkas11, sys_warning, sys_state, CC.enabled,
+                                                  hud_control.leftLaneVisible, hud_control.rightLaneVisible,
+                                                  left_lane_warning, right_lane_warning, self.is_ldws_car))
 
       if not self.CP.openpilotLongitudinalControl:
         can_sends.extend(self.create_button_messages(CC, CS, use_clu11=True))
-      if self.CP.carFingerprint in CAN_GEARS["send_mdps12"]:  # send mdps12 to LKAS to prevent LKAS error
+      if self.CP.carFingerprint in CAN_GEARS["send_mdps12"] and CS.mdps12 is not None:  # send mdps12 to LKAS to prevent LKAS error
         can_sends.append(hyundaican.create_mdps12(self.packer, self.frame, CS.mdps12))
 
       casper_opt = self.CP.carFingerprint in (CAR.HYUNDAI_CASPER_EV)
@@ -464,7 +465,7 @@ class CarController(CarControllerBase):
           if (self.frame - self.last_button_frame) * DT_CTRL > 0.1:
             print("cruiseControl.cancel222222")
             if self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS:
-              #can_sends.append(hyundaicanfd.create_acc_cancel(self.packer, self.CP, self.CAN, CS.cruise_info))
+              #can_sends.append(hyundaicanfd.create_acc_cancel(self.packer, self.CP, self.CAN, CS.scc_control))
               if self.cruise_buttons_msg_values is not None:
                 can_sends.append(hyundaicanfd.alt_cruise_buttons(self.packer, self.CP, self.CAN, Buttons.CANCEL, self.cruise_buttons_msg_values, self.cruise_buttons_msg_cnt))
 

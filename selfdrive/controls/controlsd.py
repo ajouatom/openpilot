@@ -28,6 +28,8 @@ from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N
 from selfdrive.modeld.modeld import LAT_SMOOTH_SECONDS
 from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
 
+from openpilot.selfdrive.carrot.carrot_controls import CarrotControls
+
 State = log.SelfdriveState.OpenpilotState
 LaneChangeState = log.LaneChangeState
 LaneChangeDirection = log.LaneChangeDirection
@@ -56,10 +58,6 @@ class Controls:
     self.curvature = 0.0
     self.desired_curvature = 0.0
 
-    self.lat_suspend_active = False
-    self.lat_suspend_enter_t = 0.0
-    self.lat_suspend_hold_t = 0.0
-
     self.pose_calibrator = PoseCalibrator()
     self.calibrated_pose: Pose | None = None
     
@@ -77,6 +75,7 @@ class Controls:
       self.LaC = LatControlPID(self.CP, self.CI)
     elif self.CP.lateralTuning.which() == 'torque':
       self.LaC = LatControlTorque(self.CP, self.CI)
+    self.carrot_controls = CarrotControls(self.CP)
 
   def update(self):
     self.sm.update(15)
@@ -123,35 +122,7 @@ class Controls:
     standstill = abs(CS.vEgo) <= max(self.CP.minSteerSpeed, MIN_LATERAL_CONTROL_SPEED) or CS.standstill
     CC.latActive = ((self.sm['selfdriveState'].active or lateral_enabled) and CS.latEnabled and
                     not CS.steerFaultTemporary and not CS.steerFaultPermanent and not standstill)
-
-    suspend_angle = float(self.params.get_int("LatSuspendAngleDeg"))
-    resume_angle  = 15
-    delay_sec     = 1.0
-    hold_sec      = 0.5
-
-    # 1) enter condition timer
-    enter_cond = CS.steeringPressed and abs(CS.steeringAngleDeg) > suspend_angle
-    if not self.lat_suspend_active:
-      if enter_cond:
-        self.lat_suspend_enter_t += DT_CTRL
-        if self.lat_suspend_enter_t >= delay_sec:
-          self.lat_suspend_active = True
-          self.lat_suspend_hold_t = 0.0
-      else:
-        self.lat_suspend_enter_t = 0.0
-
-    # 2) while suspended: enforce minimum hold time + hysteresis exit
-    if self.lat_suspend_active:
-      self.lat_suspend_hold_t += DT_CTRL
-
-      exit_cond = (abs(CS.steeringAngleDeg) < resume_angle) and (not CS.steeringPressed)
-      if (self.lat_suspend_hold_t >= hold_sec) and exit_cond:
-        self.lat_suspend_active = False
-        self.lat_suspend_enter_t = 0.0
-
-    if self.lat_suspend_active:
-      CC.latActive = False
-      
+    CC.latActive = self.carrot_controls.lat_suspend_control(CS, CC.latActive)
     CC.longActive = CC.enabled and not any(e.overrideLongitudinal for e in self.sm['onroadEvents']) and self.CP.openpilotLongitudinalControl
 
     actuators = CC.actuators

@@ -261,7 +261,7 @@
   <div class="wrap">
     <!-- HOME -->
     <div id="pageHome" class="card">
-      <h3 style="margin:0 0 8px 0;">Home</h3>
+      <h3 id="homeTitle" style="margin:0 0 8px 0;">Home</h3>
 
       <!-- Driving HUD (card mode). JS will auto-dock this into WebRTC overlay when video is visible. -->
       <div id="driveHudCard" class="card" style="margin:12px 0 0 0;">
@@ -301,8 +301,8 @@
 
             <div class="hudBottom">
               <div class="hudLeftStack">
-                <div class="hudGps" id="hudGps">GPS</div>
-                <div class="hudDriveMode mode_normal" id="hudDriveMode">일반</div>
+                <div id="hudGps" class="hudGps">GPS</div>
+                <div class="hudDriveMode mode_normal" id="hudDriveMode">Normal</div>
               </div>
 
               <div class="hudRoadLimitBox">
@@ -324,7 +324,7 @@
 
       <!-- Server State (기존 유지) -->
       <div id="rtcCard" class="card" style="margin:12px 0 0 0; display:none;">
-        <h4 style="margin:0 0 8px 0;">WebRTC</h4>
+        <h4 id="webrtcTitle" style="margin:0 0 8px 0;">WebRTC</h4>
         <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
           <div class="muted" id="rtcStatus">connecting...</div>
           <button id="btnRtcFs" class="smallBtn">Full</button>
@@ -345,17 +345,17 @@
       <div style="height:10px;"></div>
 
       <div class="card" style="margin:0;">
-        <h4 style="margin:0 0 6px 0;">Server State</h4>
+        <h4 id="serverStateTitle" style="margin:0 0 6px 0;">Server State</h4>
         <pre id="stateBox" class="pill" style="display:block; padding:10px; border-radius:14px;">connecting...</pre>
       </div>
       <div class="card" style="margin-top:12px;">
-        <h4 style="margin:0 0 6px 0;">Quick Link</h4>
+        <h4 id="quickLinkTitle" style="margin:0 0 6px 0;">Quick Link</h4>
 
         <a id="quickLink" href="#" target="_blank" rel="noopener"
            style="word-break:break-all; display:none; text-decoration:none; color:#9bb0c6;">
         </a>
 
-        <div class="muted" style="margin-top:6px;">
+        <div id="quickLinkHint" class="muted" style="margin-top:6px;">
           * 길게 눌러 링크저장
         </div>
       </div>
@@ -381,7 +381,7 @@
       <!-- Maker screen -->
       <div id="carScreenMakers" class="screen">
         <div class="card" style="margin:0;">
-          <h4 style="margin:0 0 10px 0;">Makers</h4>
+          <h4 id="makersTitle" style="margin:0 0 10px 0;">Makers</h4>
           <div id="makerList"></div>
         </div>
       </div>
@@ -402,7 +402,7 @@
     <!-- SETTING -->
     <div id="pageSetting" class="card" style="display:none;">
       <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-        <h3 id="settingTitle" style="margin:0 0 8px 0; cursor:pointer;">Setting</h3>
+        <h3 id="settingTitle" style="margin:0 0 8px 0; cursor:pointer;"><span id="settingTitleText">Setting</span></h3>
         <button id="btnBackGroups" class="btn" style="display:none;">Back</button>
       </div>
 
@@ -421,7 +421,7 @@
       <!-- Groups Screen -->
       <div id="settingScreenGroups" class="screen">
         <div class="card" style="margin:0;">
-          <h4 style="margin:0 0 10px 0;">Groups</h4>
+          <h4 id="groupsTitle" style="margin:0 0 10px 0;">Groups</h4>
           <div id="groupList"></div>
         </div>
       </div>
@@ -442,7 +442,7 @@
     <!-- TOOLS -->
     <div id="pageTools" class="card" style="display:none;">
       <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-        <h3 style="margin:0 0 8px 0;">Tools</h3>
+        <h3 id="toolsTitle" style="margin:0 0 8px 0;">Tools</h3>
         <button id="btnToolsBack" class="btn">Back</button>
       </div>
 
@@ -451,7 +451,7 @@
 
       <!-- Git / Update -->
       <div class="card" style="margin:0 0 12px 0;">
-        <h4 style="margin:0 0 10px 0;">Git Commands</h4>
+        <h4 id="gitCommandsTitle" style="margin:0 0 10px 0;">Git Commands</h4>
 
         <div style="display:flex; gap:10px; flex-wrap:wrap;">
           <button id="btnGitPull" class="btn">git pull</button>
@@ -460,14 +460,14 @@
           <button id="btnGitBranch" class="btn">change branch</button>
         </div>
 
-        <div class="muted" style="margin-top:10px;">
+        <div id="gitHint" class="muted" style="margin-top:10px;">
           * reset/branch는 위험할 수 있으니 confirm 뜹니다.
         </div>
       </div>
 
       <!-- System / User -->
       <div class="card" style="margin:0;">
-        <h4 style="margin:0 0 10px 0;">User / System</h4>
+        <h4 id="userSystemTitle" style="margin:0 0 10px 0;">User / System</h4>
 
         <div style="display:flex; gap:10px; flex-wrap:wrap;">
           <button id="btnSendTmuxLog" class="btn">tmux log</button>
@@ -476,7 +476,7 @@
           <button id="btnReboot" class="btn">reboot</button>
         </div>
 
-        <div class="muted" style="margin-top:10px;">
+        <div id="sysHint" class="muted" style="margin-top:10px;">
           * delete/reboot는 confirm 후 실행합니다.
         </div>
 
@@ -491,7 +491,7 @@
             <button id="btnRestoreSettings" class="btn">restore settings</button>
           </div>
 
-          <div class="muted">
+          <div id="restoreHint" class="muted">
             * restore 후 reboot 권장
           </div>
         </div>

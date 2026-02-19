@@ -2,7 +2,148 @@ const DEBUG_UI = false;
 
 let SETTINGS = null;
 let CURRENT_GROUP = null;
-let LANG = "ko"; // "ko" | "en"
+let LANG = "ko"; // "ko" | "en" | "zh"
+
+const UI_STRINGS = {
+  ko: {
+    home: "í™ˆ",
+    setting: "ì„¤ì •",
+    tools: "ë„êµ¬",
+    fleet: "í”Œë¦¿",
+    lang: "ì–¸ì–´",
+    server_state: "ì„œë²„ ìƒíƒœ",
+    quick_link: "í€µ ë§í¬",
+    car_select: "ì°¨ëŸ‰ ì„ íƒ",
+    makers: "ì œì¡°ì‚¬",
+    models: "ëª¨ë¸",
+    groups: "ê·¸ë£¹",
+    items: "í•­ëª©",
+    back: "ë’¤ë¡œ",
+    change: "ë³€ê²½",
+    git_commands: "Git ëª…ë ¹",
+    user_system: "ì‚¬ìš©ìž / ì‹œìŠ¤í…œ",
+    reboot: "ìž¬ë¶€íŒ…",
+    backup: "ë°±ì—…",
+    restore: "ë³µêµ¬",
+    apply: "ì ìš©",
+    confirm_car: "ì´ ì°¨ëŸ‰ì„ ì„ íƒí•˜ì‹œê² ìŠµë‹ˆê¹Œ?",
+    confirm_reboot: "ì§€ê¸ˆ ìž¬ë¶€íŒ…í•˜ì‹œê² ìŠµë‹ˆê¹Œ?",
+    reboot_later: "ì„ íƒë˜ì—ˆìŠµë‹ˆë‹¤. ì ìš©í•˜ë ¤ë©´ ë‚˜ì¤‘ì— ìž¬ë¶€íŒ…í•˜ì„¸ìš”.",
+    rebooting: "ìž¬ë¶€íŒ… ì¤‘...",
+    git_sync_confirm: "Git syncë¥¼ ì‹¤í–‰í•˜ì‹œê² ìŠµë‹ˆê¹Œ?",
+    git_reset_confirm: "Git resetì„ ì‹¤í–‰í•˜ì‹œê² ìŠµë‹ˆê¹Œ? (ìœ„í—˜)",
+    delete_videos_confirm: "ëª¨ë“  ë¹„ë””ì˜¤ë¥¼ ì‚­ì œí•˜ì‹œê² ìŠµë‹ˆê¹Œ? (ìœ„í—˜)",
+    delete_logs_confirm: "ëª¨ë“  ë¡œê·¸ë¥¼ ì‚­ì œí•˜ì‹œê² ìŠµë‹ˆê¹Œ? (ìœ„í—˜)",
+    select_backup_file: "ë¨¼ì € ë°±ì—… json íŒŒì¼ì„ ì„ íƒí•˜ì„¸ìš”.",
+    restore_confirm: "íŒŒì¼ì—ì„œ ì„¤ì •ì„ ë³µêµ¬í•˜ì‹œê² ìŠµë‹ˆê¹Œ?\n\në§Žì€ Params ê°’ì´ ë®ì–´ì”Œì›Œì§‘ë‹ˆë‹¤.",
+    restore_done_reboot: "ë³µêµ¬ê°€ ì™„ë£Œë˜ì—ˆìŠµë‹ˆë‹¤.\nì§€ê¸ˆ ìž¬ë¶€íŒ…í•˜ì‹œê² ìŠµë‹ˆê¹Œ?",
+    checkout_confirm: "ë¸Œëžœì¹˜ë¥¼ ì²´í¬ì•„ì›ƒí•˜ì‹œê² ìŠµë‹ˆê¹Œ?",
+    branch_changed: "ë¸Œëžœì¹˜ê°€ ë³€ê²½ë˜ì—ˆìŠµë‹ˆë‹¤.",
+    quick_link_hint: "* ê¸¸ê²Œ ëˆŒëŸ¬ ë§í¬ì €ìž¥",
+    git_hint: "* reset/branchëŠ” ìœ„í—˜í•  ìˆ˜ ìžˆìœ¼ë‹ˆ confirm ëœ¹ë‹ˆë‹¤.",
+    sys_hint: "* delete/rebootëŠ” confirm í›„ ì‹¤í–‰í•©ë‹ˆë‹¤.",
+    restore_hint: "* restore í›„ reboot ê¶Œìž¥",
+    failed_set_car: "ì°¨ëŸ‰ ì„ íƒ ì €ìž¥ ì‹¤íŒ¨: ",
+    reboot_failed: "ìž¬ë¶€íŒ… ì‹¤íŒ¨: ",
+    set_failed: "ì„¤ì • ì‹¤íŒ¨: ",
+    branch_dom_missing: "ë¸Œëžœì¹˜ DOM ìš”ì†Œë¥¼ ì°¾ì„ ìˆ˜ ì—†ìŠµë‹ˆë‹¤.",
+    fullscreen_not_supported: "ì´ ë¸Œë¼ìš°ì €ëŠ” ì „ì²´í™”ë©´ì„ ì§€ì›í•˜ì§€ ì•ŠìŠµë‹ˆë‹¤.",
+  },
+  en: {
+    home: "Home",
+    setting: "Setting",
+    tools: "Tools",
+    fleet: "Fleet",
+    lang: "Lang",
+    server_state: "Server State",
+    quick_link: "Quick Link",
+    car_select: "Car Select",
+    makers: "Makers",
+    models: "Models",
+    groups: "Groups",
+    items: "Items",
+    back: "Back",
+    change: "Change",
+    git_commands: "Git Commands",
+    user_system: "User / System",
+    reboot: "Reboot",
+    backup: "Backup",
+    restore: "Restore",
+    apply: "Apply",
+    confirm_car: "Select this car?",
+    confirm_reboot: "Reboot now?",
+    reboot_later: "Selected. Reboot later to apply.",
+    rebooting: "Rebooting...",
+    git_sync_confirm: "Run git sync?",
+    git_reset_confirm: "Run git reset? (DANGEROUS)",
+    delete_videos_confirm: "Delete ALL videos? (DANGEROUS)",
+    delete_logs_confirm: "Delete ALL logs? (DANGEROUS)",
+    select_backup_file: "Select a backup json file first.",
+    restore_confirm: "Restore settings from file?\n\nThis will overwrite many Params values.",
+    restore_done_reboot: "Restore done.\nReboot now?",
+    checkout_confirm: "Checkout branch?",
+    branch_changed: "Branch changed.",
+    quick_link_hint: "* Long press to save link",
+    git_hint: "* Reset/branch will prompt for confirmation.",
+    sys_hint: "* Delete/reboot will prompt for confirmation.",
+    restore_hint: "* Reboot recommended after restore.",
+    failed_set_car: "Failed to set car: ",
+    reboot_failed: "Reboot failed: ",
+    set_failed: "Set failed: ",
+    branch_dom_missing: "Branch DOM elements missing.",
+    fullscreen_not_supported: "Fullscreen not supported on this browser.",
+  },
+  zh: {
+    home: "é¦–é¡µ",
+    setting: "è®¾ç½®",
+    tools: "å·¥å…·",
+    fleet: "è½¦é˜Ÿ",
+    lang: "è¯­è¨€",
+    server_state: "æœåŠ¡å™¨çŠ¶æ€",
+    quick_link: "å¿«é€Ÿé“¾æŽ¥",
+    car_select: "è½¦è¾†é€‰æ‹©",
+    makers: "åˆ¶é€ å•†",
+    models: "è½¦åž‹",
+    groups: "åˆ†ç»„",
+    items: "é¡¹",
+    back: "è¿”å›ž",
+    change: "ä¿®æ”¹",
+    git_commands: "Git å‘½ä»¤",
+    user_system: "ç”¨æˆ· / ç³»ç»Ÿ",
+    reboot: "é‡å¯",
+    backup: "å¤‡ä»½",
+    restore: "è¿˜åŽŸ",
+    apply: "åº”ç”¨",
+    confirm_car: "é€‰æ‹©æ­¤è½¦è¾†å—ï¼Ÿ",
+    confirm_reboot: "çŽ°åœ¨é‡å¯å—ï¼Ÿ",
+    reboot_later: "å·²é€‰æ‹©ã€‚è¯·ç¨åŽé‡å¯ä»¥åº”ç”¨æ›´æ”¹ã€‚",
+    rebooting: "æ­£åœ¨é‡å¯...",
+    git_sync_confirm: "æ‰§è¡Œ Git åŒæ­¥å—ï¼Ÿ",
+    git_reset_confirm: "æ‰§è¡Œ Git é‡ç½®å—ï¼Ÿï¼ˆå±é™©ï¼‰",
+    delete_videos_confirm: "åˆ é™¤æ‰€æœ‰è§†é¢‘å—ï¼Ÿï¼ˆå±é™©ï¼‰",
+    delete_logs_confirm: "åˆ é™¤æ‰€æœ‰æ—¥å¿—å—ï¼Ÿï¼ˆå±é™©ï¼‰",
+    select_backup_file: "è¯·å…ˆé€‰æ‹©ä¸€ä¸ªå¤‡ä»½ JSON æ–‡ä»¶ã€‚",
+    restore_confirm: "ä»Žæ–‡ä»¶è¿˜åŽŸè®¾ç½®å—ï¼Ÿ\n\nè¿™å°†è¦†ç›–è®¸å¤šå‚æ•°å€¼ã€‚",
+    restore_done_reboot: "è¿˜åŽŸå®Œæˆã€‚\nçŽ°åœ¨é‡å¯å—ï¼Ÿ",
+    checkout_confirm: "åˆ‡æ¢åˆ†æ”¯å—ï¼Ÿ",
+    branch_changed: "åˆ†æ”¯å·²åˆ‡æ¢ã€‚",
+    quick_link_hint: "* é•¿æŒ‰ä¿å­˜é“¾æŽ¥",
+    git_hint: "* é‡ç½®/åˆ†æ”¯æ“ä½œä¼šå¼¹å‡ºç¡®è®¤æç¤ºã€‚",
+    sys_hint: "* åˆ é™¤/é‡å¯æ“ä½œä¼šå¼¹å‡ºç¡®è®¤æç¤ºã€‚",
+    restore_hint: "* è¿˜åŽŸåŽå»ºè®®é‡å¯ã€‚",
+    failed_set_car: "ä¿å­˜è½¦è¾†é€‰æ‹©å¤±è´¥: ",
+    reboot_failed: "é‡å¯å¤±è´¥: ",
+    set_failed: "è®¾ç½®å¤±è´¥: ",
+    branch_dom_missing: "æ‰¾ä¸åˆ°åˆ†æ”¯ DOM å…ƒç´ ã€‚",
+    fullscreen_not_supported: "æ­¤æµè§ˆå™¨ä¸æ”¯æŒå…¨å±ã€‚",
+  }
+};
+
+const DRIVE_MODES = {
+  ko: { normal: "ì¼ë°˜", eco: "ì—°ë¹„", safe: "ì•ˆì „", sport: "ê³ ì†" },
+  en: { normal: "Normal", eco: "Eco", safe: "Safe", sport: "Sport" },
+  zh: { normal: "æ ‡å‡†", eco: "ç»æµŽ", safe: "å®‰å…¨", sport: "è¿åŠ¨" }
+};
 
 let UNIT_CYCLE = [1, 2, 5, 10, 50, 100];
 const UNIT_INDEX = {}; // per name
@@ -58,7 +199,7 @@ btnLang.onclick = () => toggleLang();
 btnChangeCar.onclick = () => showPage("car", true);
 btnBackCar.onclick = () => history.back();
 carTitle.onclick = () => history.back();
-modelTitle.onclick = () => showCarScreen("makers"); // ¸ðµ¨È­¸é¿¡¼­ Å¸ÀÌÆ² ´­·¯ makers·Î
+modelTitle.onclick = () => showCarScreen("makers"); // ï¿½ï¿½È­ï¿½é¿¡ï¿½ï¿½ Å¸ï¿½ï¿½Æ² ï¿½ï¿½ï¿½ï¿½ makersï¿½ï¿½
 
 // Branch select
 let BRANCHES = [];
@@ -155,12 +296,67 @@ function showCarScreen(which, pushHistory = false) {
 }
 
 function toggleLang() {
-  LANG = (LANG === "ko") ? "en" : "ko";
-  langLabel.textContent = (LANG === "ko") ? "KO" : "EN";
+  if (LANG === "ko") LANG = "en";
+  else if (LANG === "en") LANG = "zh";
+  else LANG = "ko";
+
+  langLabel.textContent = LANG.toUpperCase();
+
+  // Update static UI text
+  renderUIText();
+
   if (SETTINGS) {
     renderGroups();
     if (CURRENT_GROUP) renderItems(CURRENT_GROUP);
   }
+}
+
+function renderUIText() {
+  const s = UI_STRINGS[LANG];
+  if (!s) return;
+
+  setText("btnHome", s.home);
+  setText("btnSetting", s.setting);
+  setText("btnTools", s.tools);
+  setText("btnFleet", s.fleet);
+  // langLabel is handled in toggleLang
+
+  // Home
+  setText("homeTitle", s.home);
+  setText("serverStateTitle", s.server_state);
+  setText("quickLinkTitle", s.quick_link);
+
+  // Car Select
+  setText("carTitle", s.car_select);
+  setText("btnBackCar", s.back);
+  setText("makersTitle", s.makers);
+  setText("modelTitle", s.models);
+
+  // Setting
+  setText("settingTitleText", s.setting); // Use a specific ID if needed
+  setText("btnBackGroups", s.back);
+  setText("btnChangeCar", s.change);
+  setText("groupsTitle", s.groups);
+  setText("itemsTitle", s.items);
+
+  // Tools
+  setText("toolsTitle", s.tools);
+  setText("btnToolsBack", s.back);
+  setText("gitCommandsTitle", s.git_commands);
+  setText("userSystemTitle", s.user_system);
+  setText("btnReboot", s.reboot);
+  setText("btnBackupSettings", s.backup);
+  setText("btnRestoreSettings", s.restore);
+
+  setText("quickLinkHint", s.quick_link_hint);
+  setText("gitHint", s.git_hint);
+  setText("sysHint", s.sys_hint);
+  setText("restoreHint", s.restore_hint);
+}
+
+function setText(id, txt) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = txt;
 }
 
 function escapeHtml(s) {
@@ -173,6 +369,7 @@ function escapeHtml(s) {
 }
 
 function formatItemText(p, keyKo, keyEn, fallback = "") {
+  if (LANG === "zh") return (p["c" + keyEn.slice(1)] || p[keyEn] || p[keyKo] || fallback);
   if (LANG === "ko") return (p[keyKo] ?? fallback);
   return (p[keyEn] ?? p[keyKo] ?? fallback);
 }
@@ -263,10 +460,10 @@ function renderModels(maker) {
   modelTitle.textContent = maker;
   modelMeta.textContent = `${arr.length} models`;
 
-  // ±ä ¸ñ·ÏÀÌ´Ï±î ¹öÆ° Æø/ÅÇ ÆíÇÏ°Ô: groupBtn Àç»ç¿ë
+  // ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ì´Ï±ï¿½ ï¿½ï¿½Æ° ï¿½ï¿½/ï¿½ï¿½ ï¿½ï¿½ï¿½Ï°ï¿½: groupBtn ï¿½ï¿½ï¿½ï¿½
   for (const fullLine of arr) {
-    // fullLine ¿¹: "Hyundai Grandeur 2018-19"
-    // CarSelected3¿¡´Â maker¸¦ »©°í ³Ö¾î¾ß ÇÔ ¡æ "Grandeur 2018-19"
+    // fullLine ï¿½ï¿½: "Hyundai Grandeur 2018-19"
+    // CarSelected3ï¿½ï¿½ï¿½ï¿½ makerï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ö¾ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ "Grandeur 2018-19"
     const modelOnly = stripMaker(fullLine, maker);
 
     const b = document.createElement("button");
@@ -278,33 +475,33 @@ function renderModels(maker) {
 }
 
 function stripMaker(fullLine, maker) {
-  // maker + °ø¹éÀ» 1¹ø¸¸ Á¦°Å
+  // maker + ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ 1ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
   const prefix = maker + " ";
   if (fullLine.startsWith(prefix)) return fullLine.slice(prefix.length).trim();
-  // È¤½Ã "Hyundai"°¡ ¾Æ´Ñ ´Ù¸¥ Ç¥±â¸é fallback: Ã¹ ´Ü¾î Á¦°Å
+  // È¤ï¿½ï¿½ "Hyundai"ï¿½ï¿½ ï¿½Æ´ï¿½ ï¿½Ù¸ï¿½ Ç¥ï¿½ï¿½ï¿½ fallback: Ã¹ ï¿½Ü¾ï¿½ ï¿½ï¿½ï¿½ï¿½
   const sp = fullLine.split(" ");
   if (sp.length >= 2) return sp.slice(1).join(" ").trim();
   return fullLine.trim();
 }
 
 async function onSelectCar(maker, modelOnly, fullLine) {
-  const ok = confirm(`Select this car?\n\n${maker} ${modelOnly}\n\nThis will set CarSelected3 = "${modelOnly}".`);
-  if (!ok) return;
+  const msg = (UI_STRINGS[LANG].confirm_car || "Select this car?") + `\n\n${maker} ${modelOnly}\n\nThis will set CarSelected3 = "${modelOnly}".`;
+  if (!confirm(msg)) return;
 
   try {
     await setParam("CarSelected3", fullLine);
   } catch (e) {
-    alert("Failed to set CarSelected3: " + e.message);
+    alert((UI_STRINGS[LANG].failed_set_car || "Failed to set car: ") + e.message);
     return;
   }
 
-  // Home Ç¥½Ã ¾÷µ¥ÀÌÆ®
+  // Home Ç¥ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
   curCarLabelCar.textContent = modelOnly;
   curCarLabelSetting.textContent = modelOnly;
 
-  const rb = confirm("Reboot now?");
+  const rb = confirm(UI_STRINGS[LANG].confirm_reboot || "Reboot now?");
   if (!rb) {
-    alert("Selected. Reboot later to apply.");
+    alert(UI_STRINGS[LANG].reboot_later || "Selected. Reboot later to apply.");
     return;
   }
 
@@ -312,9 +509,9 @@ async function onSelectCar(maker, modelOnly, fullLine) {
     const r = await fetch("/api/reboot", { method: "POST" });
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || "reboot failed");
-    alert("Rebooting...");
+    alert(UI_STRINGS[LANG].rebooting || "Rebooting...");
   } catch (e) {
-    alert("Reboot failed: " + e.message);
+    alert((UI_STRINGS[LANG].reboot_failed || "Reboot failed: ") + e.message);
   }
 }
 
@@ -353,7 +550,10 @@ function renderGroups() {
   box.innerHTML = "";
 
   (SETTINGS.groups || []).forEach(g => {
-    const label = (LANG === "ko") ? g.group : (g.egroup || g.group);
+    let label = g.group;
+    if (LANG === "zh") label = g.cgroup || g.egroup || g.group;
+    else if (LANG === "en") label = g.egroup || g.group;
+
     const b = document.createElement("button");
     b.className = "btn groupBtn";
     b.textContent = `${label} (${g.count})`;
@@ -466,7 +666,7 @@ async function renderItems(group) {
         await setParam(name, next);
         val.textContent = String(next);
       } catch (e) {
-        alert("set failed: " + e.message);
+        alert((UI_STRINGS[LANG].set_failed || "set failed: ") + e.message);
       }
     }
 
@@ -546,7 +746,7 @@ window.addEventListener("popstate", async (ev) => {
 
   if (st.page === "branch") {
     showPage("branch", false);
-    // ºê·£Ä¡ ¸ñ·ÏÀÌ ¾øÀ¸¸é ´Ù½Ã ·Îµå
+    // ï¿½ê·£Ä¡ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ù½ï¿½ ï¿½Îµï¿½
     if (!BRANCHES || !BRANCHES.length) {
       loadBranchesAndShow().catch(() => {});
     }
@@ -580,7 +780,7 @@ async function runTool(action, payload) {
   toolsMetaSet("running: " + action);
   toolsOutSet("...");
 
-  // ¼­¹ö¿¡¼­ { ok:true, out:"...", rc:0 } ÀÌ·± ÇüÅÂ·Î ÁÖ¸é °¡Àå ÁÁÀ½
+  // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ { ok:true, out:"...", rc:0 } ï¿½Ì·ï¿½ ï¿½ï¿½ï¿½Â·ï¿½ ï¿½Ö¸ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
   const j = await postJson("/api/tools", { action, ...(payload || {}) });
 
   toolsMetaSet("done: " + action);
@@ -601,7 +801,7 @@ function confirmText(msg, placeholder = "") {
 
 
 function initToolsPage() {
-  // ¹öÆ° ¹ÙÀÎµù (ÇÑ ¹ø¸¸)
+  // ï¿½ï¿½Æ° ï¿½ï¿½ï¿½Îµï¿½ (ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
   const bindOnce = (id, fn) => {
     const el = document.getElementById(id);
     if (!el || el.dataset.bound === "1") return;
@@ -622,7 +822,7 @@ function initToolsPage() {
   });
 
   bindOnce("btnGitSync", async () => {
-    if (!confirm("Run git sync?")) return;
+    if (!confirm(UI_STRINGS[LANG].git_sync_confirm || "Run git sync?")) return;
     try {
       await runTool("git_sync");
     } catch (e) {
@@ -633,10 +833,10 @@ function initToolsPage() {
   });
 
   bindOnce("btnGitReset", async () => {
-    if (!confirm("Run git reset? (DANGEROUS)")) return;
+    if (!confirm(UI_STRINGS[LANG].git_reset_confirm || "Run git reset? (DANGEROUS)")) return;
 
-    // ¿É¼Ç ÇÊ¿äÇÏ¸é prompt·Î ¹Þ±â
-    // ¿¹: hard / soft, target
+    // ï¿½É¼ï¿½ ï¿½Ê¿ï¿½ï¿½Ï¸ï¿½ promptï¿½ï¿½ ï¿½Þ±ï¿½
+    // ï¿½ï¿½: hard / soft, target
     const mode = confirmText("reset mode? (hard/soft/mixed)", "hard");
     if (!mode) return;
 
@@ -671,7 +871,7 @@ function initToolsPage() {
   });
 
   bindOnce("btnDeleteVideos", async () => {
-    if (!confirm("Delete ALL videos? (DANGEROUS)")) return;
+    if (!confirm(UI_STRINGS[LANG].delete_videos_confirm || "Delete ALL videos? (DANGEROUS)")) return;
     try {
       await runTool("delete_all_videos");
     } catch (e) {
@@ -682,7 +882,7 @@ function initToolsPage() {
   });
 
   bindOnce("btnDeleteLogs", async () => {
-    if (!confirm("Delete ALL logs? (DANGEROUS)")) return;
+    if (!confirm(UI_STRINGS[LANG].delete_logs_confirm || "Delete ALL logs? (DANGEROUS)")) return;
     try {
       await runTool("delete_all_logs");
     } catch (e) {
@@ -695,7 +895,7 @@ function initToolsPage() {
   bindOnce("btnBackupSettings", async () => {
     try {
       const j = await runTool("backup_settings");
-      if (j.file) window.location.href = j.file; //  ´Ù¿î·Îµå
+      if (j.file) window.location.href = j.file; //  ï¿½Ù¿ï¿½Îµï¿½
     } catch (e) {
       toolsMetaSet("error");
       toolsOutSet("backup failed: " + e.message);
@@ -706,11 +906,11 @@ function initToolsPage() {
   bindOnce("btnRestoreSettings", async () => {
     const inp = document.getElementById("restoreFile");
     if (!inp || !inp.files || !inp.files[0]) {
-      alert("Select a backup json file first.");
+      alert(UI_STRINGS[LANG].select_backup_file || "Select a backup json file first.");
       return;
     }
 
-    if (!confirm("Restore settings from file?\n\nThis will overwrite many Params values.")) return;
+    if (!confirm(UI_STRINGS[LANG].restore_confirm || "Restore settings from file?\n\nThis will overwrite many Params values.")) return;
 
     try {
       toolsMetaSet("uploading...");
@@ -726,7 +926,7 @@ function initToolsPage() {
       toolsMetaSet("restore done");
       toolsOutSet(JSON.stringify(j.result, null, 2));
 
-      if (confirm("Restore done.\nReboot now?")) {
+      if (confirm(UI_STRINGS[LANG].restore_done_reboot || "Restore done.\nReboot now?")) {
         await runTool("reboot");
         toolsMetaSet("rebooting...");
         toolsOutSet("reboot requested");
@@ -739,9 +939,9 @@ function initToolsPage() {
   });
 
   bindOnce("btnReboot", async () => {
-    if (!confirm("Reboot now?")) return;
+    if (!confirm(UI_STRINGS[LANG].confirm_reboot || "Reboot now?")) return;
     try {
-      // ³×°¡ ÀÌ¹Ì ¸¸µç /api/reboot¸¦ ¾µ °Å¸é ÀÌ°É·Î ¹Ù²ãµµ µÊ:
+      // ï¿½×°ï¿½ ï¿½Ì¹ï¿½ ï¿½ï¿½ï¿½ï¿½ /api/rebootï¿½ï¿½ ï¿½ï¿½ ï¿½Å¸ï¿½ ï¿½Ì°É·ï¿½ ï¿½Ù²ãµµ ï¿½ï¿½:
       // await postJson("/api/reboot", {});
       await runTool("reboot");
       toolsMetaSet("rebooting...");
@@ -762,7 +962,7 @@ function initToolsPage() {
 
     try {
       const j = await runTool("shell_cmd", { cmd });
-      // j.out¿¡ stdout/stderr ÇÕÄ£ °á°ú
+      // j.outï¿½ï¿½ stdout/stderr ï¿½ï¿½Ä£ ï¿½ï¿½ï¿½
       toolsOutSet(j.out || "(no output)");
     } catch (e) {
       toolsOutSet("error: " + e.message);
@@ -774,7 +974,7 @@ function initToolsPage() {
 async function loadBranchesAndShow() {
   showPage("branch", true);
   if (!branchMeta || !branchList) {
-    alert("Branch DOM missing (branchMeta / branchList)");
+    alert(UI_STRINGS[LANG].branch_dom_missing || "Branch DOM missing");
     return;
   }
   branchMeta.textContent = "loading...";
@@ -805,22 +1005,22 @@ function renderBranchList() {
 }
 
 async function onSelectBranch(branch) {
-  if (!confirm(`Checkout branch?\n\n${branch}\n\nContinue?`)) return;
+  if (!confirm((UI_STRINGS[LANG].checkout_confirm || "Checkout branch?") + `\n\n${branch}\n\nContinue?`)) return;
 
   try {
     await runTool("git_checkout", { branch });
-    alert("Branch changed.");
+    alert(UI_STRINGS[LANG].branch_changed || "Branch changed.");
   } catch (e) {
-    alert("Checkout failed: " + e.message);
+    alert((UI_STRINGS[LANG].set_failed || "Checkout failed: ") + e.message);
     return;
   }
 
-  const rb = confirm("Reboot now?");
+  const rb = confirm(UI_STRINGS[LANG].confirm_reboot || "Reboot now?");
   if (!rb) return;
 
   try {
-    await runTool("reboot"); // ¶Ç´Â /api/reboot
-    alert("Rebooting...");
+    await runTool("reboot"); // ë˜ëŠ” /api/reboot
+    alert(UI_STRINGS[LANG].rebooting || "Rebooting...");
   } catch (e) {
     alert("Reboot failed: " + e.message);
   }
@@ -846,7 +1046,7 @@ function rtcCancelRetry() {
 }
 
 async function rtcDisconnect() {
-  rtcCancelRetry(); // Ãß°¡
+  rtcCancelRetry(); // ï¿½ß°ï¿½
   try { if (RTC_PC) RTC_PC.close(); } catch {}
   RTC_PC = null;
   const v = document.getElementById("rtcVideo");
@@ -859,7 +1059,7 @@ async function rtcDisconnect() {
 }
 
 function rtcScheduleRetry(ms = 2000) {
-  rtcCancelRetry(); // Ç×»ó »õ·Î Àâ´Â´Ù
+  rtcCancelRetry(); // ï¿½×»ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Â´ï¿½
   RTC_RETRY_T = setTimeout(async () => {
     RTC_RETRY_T = null;
     await rtcConnectOnce().catch(() => {});
@@ -968,7 +1168,7 @@ async function rtcConnectOnce() {
 
     await waitIceComplete(pc, 8000);
 
-    const url = "/stream";   
+    const url = "/stream";
     const body = {
       sdp: pc.localDescription.sdp,
       cameras: ["road"],
@@ -997,8 +1197,8 @@ async function rtcConnectOnce() {
 
   } catch (e) {
     rtcStatusSet("error: " + e.message);
-    await rtcDisconnect();        //  ½ÇÆÐ ½Ã ±ú²ýÀÌ Á¤¸®
-    rtcScheduleRetry(2000);       //  ¿©±â¼­µµ ¹«Á¶°Ç Àç½Ãµµ
+    await rtcDisconnect();        //  ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
+    rtcScheduleRetry(2000);       //  ï¿½ï¿½ï¿½â¼­ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ãµï¿½
     throw e;
   }
 }
@@ -1007,7 +1207,7 @@ async function waitServerReady(timeoutMs = 8000) {
   const t0 = Date.now();
   while (Date.now() - t0 < timeoutMs) {
     try {
-      // ¼­¹ö »ì¾ÆÀÖ´ÂÁö¸¸ È®ÀÎ (°¡º­¿î API)
+      // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ö´ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ API)
       const r = await fetch("/api/settings", { cache: "no-store" });
       if (r.ok) return true;
     } catch {}
@@ -1019,7 +1219,7 @@ async function waitServerReady(timeoutMs = 8000) {
 function rtcInitAuto() {
   (async () => {
     rtcStatusSet("waiting server...");
-    await waitServerReady(8000);   // ½ÇÆÐÇØµµ °è¼Ó ÁøÇà
+    await waitServerReady(8000);   // ï¿½ï¿½ï¿½ï¿½ï¿½Øµï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     await rtcConnectOnce().catch(() => {});
   })();
 
@@ -1031,11 +1231,11 @@ const btnRtcFs = document.getElementById("btnRtcFs");
 const rtcVideoEl = document.getElementById("rtcVideo");
 const rtcWrap = document.getElementById("rtcWrap");
 
-// À¯Àú Á¦½ºÃ³¿¡¼­¸¸ È£ÃâµÇµµ·Ï: ¹öÆ° Å¬¸¯ / ºñµð¿À ÅÇ ÀÌº¥Æ®¿¡¼­¸¸ ½ÇÇà
+// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ã³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È£ï¿½ï¿½Çµï¿½ï¿½ï¿½: ï¿½ï¿½Æ° Å¬ï¿½ï¿½ / ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ìºï¿½Æ®ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 async function rtcToggleFullscreen() {
   const target = rtcWrap || rtcVideoEl;
 
-  // ÀÌ¹Ì Ç®½ºÅ©¸°ÀÌ¸é Á¾·á
+  // ï¿½Ì¹ï¿½ Ç®ï¿½ï¿½Å©ï¿½ï¿½ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½ï¿½
   const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
   if (fsEl) {
     if (document.exitFullscreen) await document.exitFullscreen().catch(()=>{});
@@ -1043,32 +1243,32 @@ async function rtcToggleFullscreen() {
     return;
   }
 
-  // 1) Ç¥ÁØ Fullscreen API (´ëºÎºÐÀÇ Å©·Ò/¾Èµå/µ¥½ºÅ©Å¾)
+  // 1) Ç¥ï¿½ï¿½ Fullscreen API (ï¿½ï¿½Îºï¿½ï¿½ï¿½ Å©ï¿½ï¿½/ï¿½Èµï¿½/ï¿½ï¿½ï¿½ï¿½Å©Å¾)
   if (target.requestFullscreen) {
     await target.requestFullscreen().catch(()=>{});
     return;
   }
 
-  // 2) Safari (ÀÏºÎ´Â webkitRequestFullscreen)
+  // 2) Safari (ï¿½ÏºÎ´ï¿½ webkitRequestFullscreen)
   if (target.webkitRequestFullscreen) {
     target.webkitRequestFullscreen();
     return;
   }
 
-  // 3) iOS Safari: video Àü¿ë ÀüÃ¼È­¸é (°¡Àå Àß ¸ÔÈû)
-  //    (ÁÖÀÇ: iOS´Â inline Àç»ý/Á¤Ã¥ ¶§¹®¿¡ ÀÌ ¹æ¹ýÀÌ ´õ ¾ÈÁ¤Àû)
+  // 3) iOS Safari: video ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã¼È­ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
+  //    (ï¿½ï¿½ï¿½ï¿½: iOSï¿½ï¿½ inline ï¿½ï¿½ï¿½/ï¿½ï¿½Ã¥ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½)
   if (target.webkitEnterFullscreen) {
     target.webkitEnterFullscreen();
     return;
   }
 
-  alert("Fullscreen not supported on this browser.");
+  alert(UI_STRINGS[LANG].fullscreen_not_supported || "Fullscreen not supported on this browser.");
 }
 
-// ¹öÆ°
+// ï¿½ï¿½Æ°
 if (btnRtcFs) btnRtcFs.onclick = rtcToggleFullscreen;
 
-// ºñµð¿À ÅÇ(¿øÇÏ¸é)
+// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½(ï¿½ï¿½ï¿½Ï¸ï¿½)
 if (rtcVideoEl) {
   rtcVideoEl.style.cursor = "pointer";
   rtcVideoEl.addEventListener("click", rtcToggleFullscreen);
@@ -1153,7 +1353,7 @@ function drivingHudUpdateFromCarPayload(j) {
   window.DrivingHud.update(payload);
 }
 function carWsConnect() {
-  // ÀÌ¹Ì »ì¾ÆÀÖÀ¸¸é ÆÐ½º
+  // ï¿½Ì¹ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ð½ï¿½
   if (CAR_WS && (CAR_WS.readyState === WebSocket.OPEN || CAR_WS.readyState === WebSocket.CONNECTING)) return;
 
   const wsProto = (location.protocol === "https:") ? "wss" : "ws";
@@ -1224,6 +1424,7 @@ async function updateQuickLink() {
 
 
 function startAll() {
+  renderUIText();
   showPage("home", false);
   rtcInitAuto();
   updateQuickLink().catch(() => {});

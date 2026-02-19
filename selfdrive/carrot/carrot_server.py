@@ -30,6 +30,11 @@ from aiohttp import web, ClientSession
 from cereal import messaging
 from opendbc.car import structs
 import shlex
+import shutil
+import socket
+import urllib.request
+import urllib.error
+import ssl
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -82,6 +87,93 @@ async def log_mw(request, handler):
 
 WEBRTCD_URL = "http://127.0.0.1:5001/stream"
 
+def _get_local_ip() -> str:
+  try:
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+      s.connect(("8.8.8.8", 80))
+      return s.getsockname()[0]
+  except Exception:
+    # fallback: hostname 방식(가끔 127.0.1.1 나올 수 있음)
+    try:
+      return socket.gethostbyname(socket.gethostname())
+    except Exception:
+      return "0.0.0.0"
+
+
+def _register_my_ip_sync(params: "Params") -> tuple[bool, str]:
+  """
+  기존 carrot_man.py의 register_my_ip()를 그대로 옮긴 버전 (동기)
+  """
+  try:
+    token = "12345678"
+    local_ip = _get_local_ip()
+    version = params.get("Version")
+    github_id = params.get("GithubUsername")
+    port = 7000
+    is_onroad = params.get_bool("IsOnroad")
+    url = "https://shind0.synology.me/carrot/api_heartbeat.php"
+    timeout_s = 3.5
+
+    payload = {
+      "github_id": github_id,
+      "token": token,
+      "local_ip": local_ip,
+      "port": int(port),
+      "version": version,
+      "is_onroad": bool(is_onroad),
+      "ts": int(time.time()),
+    }
+
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+      url=url,
+      data=data,
+      headers={"Content-Type": "application/json"},
+      method="POST",
+    )
+
+    ctx = ssl._create_unverified_context()
+    with urllib.request.urlopen(req, timeout=timeout_s, context=ctx) as resp:
+      body = resp.read().decode("utf-8", errors="replace")
+      return (200 <= resp.status < 300), body
+
+  except urllib.error.HTTPError as e:
+    try:
+      body = e.read().decode("utf-8", errors="replace")
+    except Exception:
+      body = ""
+    return False, f"HTTPError {e.code}: {body}"
+  except Exception as e:
+    return False, f"Exception: {e}"
+
+
+async def heartbeat_loop(app: web.Application):
+  """
+  aiohttp startup에서 create_task로 돌릴 백그라운드 루프
+  - 이벤트 루프 블로킹 방지 위해 to_thread 사용
+  """
+  if not HAS_PARAMS:
+    app["hb_last"] = {"ok": False, "msg": "Params not available"}
+    return
+
+  params = Params()
+  interval_s = 30.0  # 기존: frame%(20*30) = 30초
+  while True:
+    try:
+      ok, msg = await asyncio.to_thread(_register_my_ip_sync, params)
+      app["hb_last"] = {
+        "ok": bool(ok),
+        "msg": str(msg)[:800],
+        "ts": time.time(),
+        "local_ip": _get_local_ip(),
+      }
+      # 원하면 로그
+      # print(f"[heartbeat] ok:{ok}, msg:{msg}")
+    except asyncio.CancelledError:
+      break
+    except Exception as e:
+      app["hb_last"] = {"ok": False, "msg": f"Exception: {e}", "ts": time.time()}
+    await asyncio.sleep(interval_s)
 
 
 async def proxy_stream(request: web.Request) -> web.StreamResponse:
@@ -102,14 +194,28 @@ async def proxy_stream(request: web.Request) -> web.StreamResponse:
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=502)
 
+async def api_heartbeat_status(request: web.Request) -> web.Response:
+  return web.json_response({"ok": True, "hb": request.app.get("hb_last")})
+
 async def on_startup(app: web.Application):
   app["http"] = ClientSession()
-
+  app["hb_last"] = {"ok": None, "msg": "not yet", "ts": 0}
+  if HAS_PARAMS:
+    app["hb_task"] = asyncio.create_task(heartbeat_loop(app))
+    
 async def on_cleanup(app: web.Application):
+  t = app.get("hb_task")
+  if t:
+    t.cancel()
+    try:
+      await t
+    except Exception:
+      pass
+
   sess = app.get("http")
   if sess:
     await sess.close()
-    
+
 # -----------------------
 # Settings cache (mtime based)
 # -----------------------
@@ -133,20 +239,28 @@ def _group_index(settings: Dict[str, Any]) -> Tuple[Dict[str, list], Dict[str, D
 
   params = settings.get("params", [])
   for p in params:
-    g = p.get("group", "UNGROUPED")
+    g = p.get("group", "기타")
+    if g == "기타":
+        if "egroup" not in p: p["egroup"] = "Other"
+        if "cgroup" not in p: p["cgroup"] = "其他"
+
     groups.setdefault(g, []).append(p)
     n = p.get("name")
     if n:
       by_name[n] = p
 
-  # group list with egroup guess
+  # group list with egroup/cgroup guess
   for g, items in groups.items():
     egroup = None
+    cgroup = None
     for it in items:
-      if it.get("egroup"):
+      if not egroup and it.get("egroup"):
         egroup = it.get("egroup")
+      if not cgroup and it.get("cgroup"):
+        cgroup = it.get("cgroup")
+      if egroup and cgroup:
         break
-    groups_list.append({"group": g, "egroup": egroup, "count": len(items)})
+    groups_list.append({"group": g, "egroup": egroup, "cgroup": cgroup, "count": len(items)})
 
   return groups, by_name, groups_list
 
@@ -549,13 +663,21 @@ async def api_tools(request: web.Request) -> web.Response:
       for pth in paths:
         if not os.path.isdir(pth):
           continue
-        for fn in glob.glob(os.path.join(pth, "*")):
+
+        for name in os.listdir(pth):
+          full_path = os.path.join(pth, name)
           try:
-            os.remove(fn)
-            deleted += 1
-          except Exception:
-            pass
-      return web.json_response({"ok": True, "out": f"deleted files: {deleted}"})
+            if os.path.isfile(full_path) or os.path.islink(full_path):
+              os.remove(full_path)
+              deleted += 1
+            elif os.path.isdir(full_path):
+              shutil.rmtree(full_path)
+              deleted += 1
+          except Exception as e:
+            print("delete error:", e)
+
+      return web.json_response({"ok": True, "out": f"deleted entries: {deleted}"})
+
 
 
     if action == "send_tmux_log":
@@ -662,7 +784,7 @@ async def api_tools(request: web.Request) -> web.Response:
 
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
-  
+
 async def ws_state(request: web.Request) -> web.WebSocketResponse:
   ws = web.WebSocketResponse(heartbeat=20)
   await ws.prepare(request)
@@ -767,13 +889,13 @@ async def ws_carstate(request: web.Request) -> web.WebSocketResponse:
         temp_speed = { "speed": apply_speed, "source": apply_source if apply_speed >= v_cruise else "", "is_decel": True if apply_speed < v_cruise else False}
         drive_mode = lp.myDrivingMode
         if drive_mode == 1:
-          drive_mode_obj = {"name": "연비", "kind": "eco"}
+          drive_mode_obj = {"name": "Eco", "kind": "eco"}
         elif drive_mode == 2:
-          drive_mode_obj = {"name": "안전", "kind": "safe"}
+          drive_mode_obj = {"name": "Safe", "kind": "safe"}
         elif drive_mode == 4:
-          drive_mode_obj = {"name": "고속", "kind": "sport"}
+          drive_mode_obj = {"name": "Sport", "kind": "sport"}
         else:
-          drive_mode_obj = {"name": "일반", "kind": "normal"}
+          drive_mode_obj = {"name": "Normal", "kind": "normal"}
 
 
         gps_ok = True
@@ -822,10 +944,23 @@ async def ws_carstate(request: web.Request) -> web.WebSocketResponse:
         "apm": " ",
       }
 
-      await ws.send_str(json.dumps(payload))
+      try:
+        await ws.send_str(json.dumps(payload))
+      except (asyncio.CancelledError, GeneratorExit):
+        raise
+      except (ConnectionResetError, BrokenPipeError, web.HTTPException):
+        break
+      except Exception as e:
+        # aiohttp에서 클라이언트가 끊길 때 나는 대표 예외
+        if isinstance(e, (aiohttp.client_exceptions.ClientConnectionResetError,)):
+          break
+        if "Cannot write to closing transport" in str(e):
+          break
+        # traceback.print_exc()
+        break
       await asyncio.sleep(0.1)  # 10Hz
   except Exception:
-    #traceback.print_exc()
+    traceback.print_exc()
     pass
 
   try:
@@ -973,7 +1108,7 @@ def make_app() -> web.Application:
   app = web.Application(middlewares=[log_mw])
   app.on_startup.append(on_startup)
   app.on_cleanup.append(on_cleanup)
-  
+
   # static-like routes
   app.router.add_get("/", handle_index)
   app.router.add_get("/app.js", handle_appjs)
