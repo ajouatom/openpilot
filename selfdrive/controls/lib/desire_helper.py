@@ -365,8 +365,9 @@ class DesireHelper:
                            side.lane_line_info_edge_detect or solid_line_blocked
 
               if start_gate:
-                if solid_line_blocked and not torque_applied:
-                  pass  # 실선: 토크 없으면 대기
+                if solid_line_blocked:
+                  if torque_applied and not (bsd_active and block_lanechange_bsd):
+                    self.lane_change_state = LaneChangeState.laneChangeStarting
                 elif bsd_active:
                   if torque_applied and (not block_lanechange_bsd):
                     self.lane_change_state = LaneChangeState.laneChangeStarting
