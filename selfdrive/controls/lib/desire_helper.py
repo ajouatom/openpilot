@@ -57,6 +57,7 @@ class DesireHelper:
     # params
     self.laneChangeNeedTorque = 0
     self.laneChangeBsd = 0
+    self.laneLineCheck = 0
     self.laneChangeDelay = 0.0
     self.modelTurnSpeedFactor = 0.0
     self.model_turn_speed = 200.0
@@ -76,6 +77,7 @@ class DesireHelper:
     if self.frame % 100 == 0:
       self.laneChangeNeedTorque = self.params.get_int("LaneChangeNeedTorque")
       self.laneChangeBsd = self.params.get_int("LaneChangeBsd")
+      self.laneLineCheck = self.params.get_int("LaneLineCheck")
       self.laneChangeDelay = self.params.get_float("LaneChangeDelay") * 0.1
       self.modelTurnSpeedFactor = self.params.get_float("ModelTurnSpeedFactor") * 0.1
 
@@ -191,8 +193,14 @@ class DesireHelper:
     self.right.update_obstacles(v_ego, radarState.leadRight, carstate.rightBlindspot, ignore_bsd, bsd_hold_sec=2.0)
 
     # compute available (include BSD+object)
-    self.left.compute_lane_change_available(lane_line_info_lt_20=(self.left.lane_line_info_raw < 20), ignore_bsd=ignore_bsd)
-    self.right.compute_lane_change_available(lane_line_info_lt_20=(self.right.lane_line_info_raw < 20), ignore_bsd=ignore_bsd)
+    if self.laneLineCheck == 1:
+      left_line_ok = self.left.lane_line_info_mod in (0, 5)
+      right_line_ok = self.right.lane_line_info_mod in (0, 5)
+    else:
+      left_line_ok = self.left.lane_line_info_raw < 20
+      right_line_ok = self.right.lane_line_info_raw < 20
+    self.left.compute_lane_change_available(lane_line_info_lt_20=left_line_ok, ignore_bsd=ignore_bsd)
+    self.right.compute_lane_change_available(lane_line_info_lt_20=right_line_ok, ignore_bsd=ignore_bsd)
 
     self.left.update_triggers()
     self.right.update_triggers()
