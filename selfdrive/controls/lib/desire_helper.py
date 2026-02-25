@@ -193,7 +193,7 @@ class DesireHelper:
     self.right.update_obstacles(v_ego, radarState.leadRight, carstate.rightBlindspot, ignore_bsd, bsd_hold_sec=2.0)
 
     # compute available (include BSD+object)
-    if self.laneLineCheck == 1:
+    if self.laneLineCheck >= 1:
       left_line_ok = self.left.lane_line_info_mod in (0, 5)
       right_line_ok = self.right.lane_line_info_mod in (0, 5)
     else:
@@ -358,10 +358,16 @@ class DesireHelper:
               # 차선변경 시작 조건:
               # - side.lane_change_available는 BSD+object 포함(요구사항)
               # - 하지만 BSD 중에도 torque override 허용해야 하므로, BSD 분기를 별도로 둠(원본 동작 유지)
-              start_gate = (side.lane_change_available_geom and self.lane_change_delay == 0) or side.lane_line_info_edge_detect
+              # LaneLineCheck=2: 실선에서도 토크 override 허용
+              solid_line_blocked = (self.laneLineCheck >= 2) and (not side.lane_change_available_geom) and \
+                                   (side.lane_available or side.edge_available)
+              start_gate = (side.lane_change_available_geom and self.lane_change_delay == 0) or \
+                           side.lane_line_info_edge_detect or solid_line_blocked
 
               if start_gate:
-                if bsd_active:
+                if solid_line_blocked and not torque_applied:
+                  pass  # 실선: 토크 없으면 대기
+                elif bsd_active:
                   if torque_applied and (not block_lanechange_bsd):
                     self.lane_change_state = LaneChangeState.laneChangeStarting
                 elif self.laneChangeNeedTorque > 0 or self.next_lane_change:
