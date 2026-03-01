@@ -130,8 +130,8 @@ class Controls:
 
     # Enable blinkers while lane changing
     if model_v2.meta.laneChangeState != LaneChangeState.off:
-      CC.leftBlinker = (model_v2.meta.laneChangeDirection == LaneChangeDirection.left) and CS.leftBlinker
-      CC.rightBlinker = (model_v2.meta.laneChangeDirection == LaneChangeDirection.right) and CS.rightBlinker
+      CC.leftBlinker = model_v2.meta.laneChangeDirection == LaneChangeDirection.left
+      CC.rightBlinker = model_v2.meta.laneChangeDirection == LaneChangeDirection.right
 
     if not CC.latActive:
       self.LaC.reset()
