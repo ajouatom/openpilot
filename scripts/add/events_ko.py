@@ -483,7 +483,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.preDriverDistracted: {
     ET.WARNING: Alert(
-      "도로를 주시하세요",
+      "전방을 주시하세요",
       "",
       AlertStatus.normal, AlertSize.small,
       Priority.LOW, VisualAlert.none, AudibleAlert.prompt, 1.),
@@ -491,7 +491,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.promptDriverDistracted: {
     ET.WARNING: Alert(
-      "도로를 주시하세요",
+      "전방을을 주시하세요",
       "운전자 도로주시 불안",
       AlertStatus.userPrompt, AlertSize.mid,
       Priority.MID, VisualAlert.steerRequired, AudibleAlert.promptDistracted, .1),
@@ -551,7 +551,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.preLaneChangeLeft: {
     ET.WARNING: Alert(
-      "좌측 차선이 안전한지 확인하세요",
+      "좌측 차선에 차량을 확인하세요",
       "",
       AlertStatus.normal, AlertSize.small,
       Priority.LOW, VisualAlert.none, AudibleAlert.none, .1),
@@ -559,7 +559,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.preLaneChangeRight: {
     ET.WARNING: Alert(
-      "우측 차선이 안전한지 확인하세요",
+      "우측 차선에 차량을 확인하세요",
       "",
       AlertStatus.normal, AlertSize.small,
       Priority.LOW, VisualAlert.none, AudibleAlert.none, .1),
@@ -567,7 +567,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.laneChangeBlocked: {
     ET.WARNING: Alert(
-      "사각지대에 차량이 감지되니 대기하세요",
+      "사각지대 차량 감지!!!",
       "",
       AlertStatus.userPrompt, AlertSize.small,
       Priority.LOW, VisualAlert.none, AudibleAlert.prompt, .1),
@@ -709,7 +709,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.wrongCruiseMode: {
     ET.USER_DISABLE: EngagementAlert(AudibleAlert.disengage),
-    ET.NO_ENTRY: NoEntryAlert("어뎁티브크루즈를 활성화하세요"),
+    ET.NO_ENTRY: NoEntryAlert("ACC를 활성화하세요"),
   },
 
   EventName.steerTempUnavailable: {
@@ -869,9 +869,9 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
 
   EventName.accFaulted: {
-    ET.IMMEDIATE_DISABLE: ImmediateDisableAlert("크루즈 오류 : 차량을 재가동 하세요"),
-    ET.PERMANENT: NormalPermanentAlert("크루즈 오류 : 차량을 재가동 하세요"),
-    ET.NO_ENTRY: NoEntryAlert("크루즈 오류 : 차량을 재가동 하세요"),
+    ET.IMMEDIATE_DISABLE: ImmediateDisableAlert("크루즈 오류 : 차량을 재시동 하세요"),
+    ET.PERMANENT: NormalPermanentAlert("크루즈 오류 : 차량을 재시동 하세요"),
+    ET.NO_ENTRY: NoEntryAlert("크루즈 오류 : 차량을 재시동 하세요"),
   },
 
   EventName.espActive: {
@@ -926,12 +926,12 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.reverseGear: {
     ET.PERMANENT: Alert(
-      "기어 [R] 상태",
+      "후진진",
       "",
       AlertStatus.normal, AlertSize.full,
       Priority.LOWEST, VisualAlert.none, AudibleAlert.none, .2, creation_delay=0.5),
-    ET.USER_DISABLE: SoftDisableAlert("기어 [R] 상태"),
-    ET.NO_ENTRY: NoEntryAlert("기어 [R] 상태"),
+    ET.USER_DISABLE: SoftDisableAlert("후진"),
+    ET.NO_ENTRY: NoEntryAlert("후진"),
   },
 
   # On cars that use stock ACC the car can decide to cancel ACC for various reasons.
@@ -1018,7 +1018,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
   EventName.trafficSignChanged: {
     ET.WARNING: Alert(
-      "신호가바뀌었어요.",
+      "신호가 바꼈어요.",
       "",
       AlertStatus.normal, AlertSize.small,
       Priority.LOW, VisualAlert.none, AudibleAlert.trafficSignChanged, 1.),
