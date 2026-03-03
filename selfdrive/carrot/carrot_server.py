@@ -35,6 +35,8 @@ import socket
 import urllib.request
 import urllib.error
 import ssl
+from openpilot.common.realtime import set_core_affinity
+
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -614,29 +616,73 @@ async def api_tools(request: web.Request) -> web.Response:
       branch = (body.get("branch") or "").strip()
       if not branch:
         return web.json_response({"ok": False, "error": "missing branch"}, status=400)
-      rc, out = run(["git", "checkout", "-f", branch], cwd=REPO_DIR)
-      return web.json_response({"ok": rc == 0, "rc": rc, "out": out})
+
+      rc_fetch, out_fetch = run(["git", "fetch", "--all", "--prune"], cwd=REPO_DIR)
+      if rc_fetch != 0:
+        return web.json_response({"ok": False, "rc": rc_fetch, "out": out_fetch})
+
+      is_remote = branch.startswith("origin/")
+      try:
+        if is_remote:
+          local_branch = branch.replace("origin/", "", 1)
+          rc_check, _ = run(["git", "rev-parse", "--verify", local_branch], cwd=REPO_DIR)
+          if rc_check == 0:
+            rc, out = run(["git", "switch", local_branch], cwd=REPO_DIR)
+          else:
+            rc, out = run(
+              ["git", "switch", "-c", local_branch, "--track", branch],
+              cwd=REPO_DIR
+            )
+        else:
+          rc, out = run(["git", "switch", branch], cwd=REPO_DIR)
+          if rc != 0:
+            rc2, out2 = run(
+              ["git", "switch", "-c", branch, "--track", f"origin/{branch}"],
+              cwd=REPO_DIR
+            )
+            rc, out = rc2, out2
+        return web.json_response({"ok": rc == 0, "rc": rc, "out": out})
+      except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+  
 
     if action == "git_branch_list":
+      # 1) 원격 브랜치/삭제 반영(동기화) 먼저
+      rc0, out0 = run(["git", "fetch", "--all", "--prune"], cwd=REPO_DIR)
+      if rc0 != 0:
+        return web.json_response({"ok": False, "rc": rc0, "out": out0})
+
+      # 2) 로컬/원격 브랜치 목록 출력
       rc, out = run(
         ["git", "branch", "-a", "--format=%(refname:short)"],
         cwd=REPO_DIR
       )
       if rc != 0:
-        return web.json_response({"ok": False, "rc": rc, "out": out})
+        # fetch 결과도 함께 반환해서 디버깅 쉽게
+        merged = (out0 + "\n\n" + out).strip()
+        return web.json_response({"ok": False, "rc": rc, "out": merged})
 
-      branches = []
+      # 3) 정리: "remotes/" 제거, HEAD 같은 노이즈 제거, 중복 제거
+      branches: list[str] = []
       for line in out.splitlines():
         line = line.strip()
         if not line:
           continue
+
+        # 예: "remotes/origin/HEAD -> origin/main" 같은 라인은 제거
+        if "->" in line:
+          continue
+
+        # "remotes/origin/foo" -> "origin/foo"
         if line.startswith("remotes/"):
           line = line.replace("remotes/", "", 1)
+
         branches.append(line)
 
-      # 중복 제거 + 정렬
       branches = sorted(set(branches))
-      return web.json_response({"ok": True, "branches": branches})
+
+      # fetch 출력도 같이 주면 UI에서 "동기화됨" 로그 확인 가능 (원치 않으면 빼도 됨)
+      return web.json_response({"ok": True, "branches": branches, "fetch": out0.strip()})
 
 
     if action == "delete_all_videos":
@@ -731,6 +777,14 @@ async def api_tools(request: web.Request) -> web.Response:
       subprocess.Popen(["sudo", "reboot"])
       return web.json_response({"ok": True, "out": "reboot requested"})
 
+    if action == "rebuild_all":
+      # cd /data/openpilot
+      # scons -c
+      # rm -rf prebuilt
+      # sudo reboot
+      cmd = "cd /data/openpilot && scons -c && rm -rf prebuilt && sudo reboot"
+      subprocess.Popen(cmd, shell=True)
+      return web.json_response({"ok": True, "out": "rebuild_all requested (clean + remove prebuilt + reboot)"})
 
     if action == "shell_cmd":
       cmd_str = (body.get("cmd") or "").strip()
@@ -746,7 +800,7 @@ async def api_tools(request: web.Request) -> web.Response:
       if not argv:
         return web.json_response({"ok": False, "error": "empty cmd"}, status=400)
 
-      allowed_top = {"git", "df", "free", "uptime"}
+      allowed_top = {"git", "df", "free", "uptime", "scons"}
       if argv[0] not in allowed_top:
         return web.json_response({"ok": False, "error": f"not allowed: {argv[0]}"}, status=403)
 
@@ -913,7 +967,7 @@ async def ws_carstate(request: web.Request) -> web.WebSocketResponse:
         if math.isfinite(free_pct):
           disk_pct = 100.0 - free_pct
 
-        volt_v = ps.voltage
+        volt_v = ps.voltage / 1000.0
 
         # gap/driving mode from Params (same as your C++)
         tf_gap = int(params.get_int("LongitudinalPersonality") or 0) + 1
@@ -1137,6 +1191,11 @@ def make_app() -> web.Application:
 
 
 def main():
+  try:
+    set_core_affinity([0, 1, 2, 3])
+  except Exception:
+    print("[carrot_man] failed to set core affinity")
+
   parser = argparse.ArgumentParser()
   parser.add_argument("--host", type=str, default="0.0.0.0")
   parser.add_argument("--port", type=int, default=7000)

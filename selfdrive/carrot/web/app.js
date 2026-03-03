@@ -892,6 +892,17 @@ function initToolsPage() {
     }
   });
 
+  bindOnce("btnRebuildAll", async () => {
+    if (!confirm("Rebuild all?\n\ncd /data/openpilot\nscons -c\nrm -rf prebuilt\nsudo reboot")) return;
+    try {
+      await runTool("rebuild_all");
+    } catch (e) {
+      toolsMetaSet("error");
+      toolsOutSet("rebuild_all failed: " + e.message);
+      alert(e.message);
+    }
+  });
+
   bindOnce("btnBackupSettings", async () => {
     try {
       const j = await runTool("backup_settings");

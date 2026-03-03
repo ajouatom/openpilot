@@ -45,19 +45,28 @@ class CerealOutgoingMessageProxy:
   async def update(self):
     # this is blocking in async context...
     self.sm.update(0)
+
     for service, updated in self.sm.updated.items():
       if not updated:
         continue
+
       msg_dict = self.to_json(self.sm[service])
       mono_time, valid = self.sm.logMonoTime[service], self.sm.valid[service]
       outgoing_msg = {"type": service, "logMonoTime": mono_time, "valid": valid, "data": msg_dict}
       encoded_msg = json.dumps(outgoing_msg).encode()
+
+      alive_channels = []
       for channel in self.channels:
-        #channel.send(encoded_msg)
-        if isinstance(channel, web.WebSocketResponse):
-          await channel.send_bytes(encoded_msg)
-        else:
-          channel.send(encoded_msg)
+        try:
+          if isinstance(channel, web.WebSocketResponse):
+            await channel.send_bytes(encoded_msg)
+          else:
+            channel.send(encoded_msg)
+          alive_channels.append(channel)
+        except Exception:
+          continue
+
+      self.channels = alive_channels
 
 
 class CerealIncomingMessageProxy:
@@ -175,12 +184,26 @@ class StreamSession:
   def start(self):
     self.run_task = asyncio.create_task(self.run())
 
-  def stop(self):
-    if self.run_task is None or self.run_task.done():
+  async def stop(self):
+    if self.run_task is None:
       return
-    self.run_task.cancel()
+
+    if not self.run_task.done():
+      self.run_task.cancel()
+      try:
+        await self.run_task
+      except asyncio.CancelledError:
+        pass
+
     self.run_task = None
-    asyncio.run(self.post_run_cleanup())
+    await self.post_run_cleanup()
+
+    try:
+      if hasattr(self, "stream_dict"):
+        self.stream_dict.pop(self.identifier, None)
+    except Exception:
+      self.logger.exception("Failed removing session from streams in stop()")
+    
 
   async def get_answer(self):
     return await self.stream.start()
@@ -216,7 +239,14 @@ class StreamSession:
       self.logger.info("Stream session (%s) ended", self.identifier)
     except Exception:
       self.logger.exception("Stream session failure")
-
+    finally:
+      await self.post_run_cleanup()
+      try:
+        if hasattr(self, "stream_dict"):
+          self.stream_dict.pop(self.identifier, None)
+      except Exception:
+        self.logger.exception("Failed removing session from streams")
+      
   async def post_run_cleanup(self):
     await self.stream.stop()
     if self.outgoing_bridge is not None:
@@ -239,6 +269,7 @@ async def get_stream(request: 'web.Request'):
   body = StreamRequestBody(**raw_body)
 
   session = StreamSession(body.sdp, body.cameras, body.bridge_services_in, body.bridge_services_out, debug_mode)
+  session.stream_dict = stream_dict
   answer = await session.get_answer()
   session.start()
 
@@ -256,9 +287,10 @@ async def get_schema(request: 'web.Request'):
 
 
 async def on_shutdown(app: 'web.Application'):
-  for session in app['streams'].values():
-    session.stop()
-  del app['streams']
+  sessions = list(app['streams'].values())
+  for session in sessions:
+    await session.stop()
+  app['streams'].clear()
 
 @web.middleware
 async def cors_middleware(request, handler):

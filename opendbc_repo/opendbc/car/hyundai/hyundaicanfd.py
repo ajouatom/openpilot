@@ -97,7 +97,7 @@ def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, 
   ret = []
   if CS.mdps is not None:
     values = copy.copy(CS.mdps)
-    rx_counter = values.pop("COUNTER", None)
+    #rx_counter = values.pop("COUNTER", None)
     if angle_control:
       if CS.lfa_alt is not None:
         values["LFA2_ACTIVE"] = CS.lfa_alt["LKAS_ANGLE_ACTIVE"]
@@ -107,7 +107,8 @@ def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, 
 
     if frame % 1000 < 40:
       values["STEERING_COL_TORQUE"] += 220
-    ret.append(packer.make_can_msg("MDPS", CAN.CAM, values, rx_counter = rx_counter))
+    #ret.append(packer.make_can_msg("MDPS", CAN.CAM, values, rx_counter = rx_counter))
+    ret.append(packer.make_can_msg("MDPS", CAN.CAM, values))
 
   if frame % 10 == 0:
     if CS.steer_touch_2af is not None:
@@ -283,16 +284,49 @@ def create_acc_cancel(packer, CP, CAN, cruise_info_copy):
 
 def create_lfahda_cluster(packer, CS, CAN, long_active, lat_active):
 
+
   if CS.lfahda_cluster is not None:
-    values = {} #
-    values["HDA_CntrlModSta"] = 2 if long_active else 0
-    values["HDA_LFA_SymSta"] = 2 if lat_active else 0
-
-    # 
+    values = copy.copy(CS.lfahda_cluster)
+    rx_counter = values.pop("COUNTER", None)
   else:
-    return []
-  return [packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, values)]
+    values = {}
+    rx_counter = None
+    values["LFA_OptUsmSta"] = 2
+    values["HDA_OptUsmSta"] = 2
+  values["HDA_CntrlModSta"] = 2 if long_active else 0
+  values["HDA_LFA_SymSta"] = 2 if lat_active else 0
+  return [packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, values, rx_counter=rx_counter)]
 
+def create_lfa_icon_non_camera_scc(packer, CS, CAN, CC):
+  ret = []
+  if CS.adrv_0x161 is not None:
+    values = copy.copy(CS.adrv_0x161)
+    rx_counter = values.pop("COUNTER", None)
+
+    lat_active = CC.latActive
+    lat_enabled = CS.out.latEnabled
+
+    values["LFA_ICON"] = 2 if lat_active else 1 if lat_enabled else 0
+    values["LKA_ICON"] = 4 if lat_active else 3 if lat_enabled else 0
+
+    if values["ALERTS_2"] in [1, 2, 5, 6, 10, 21, 22]:
+      values["ALERTS_2"] = 0
+      values["DAW_ICON"] = 0
+
+    if values["ALERTS_1"] == 0:
+      values["SOUNDS_1"] = 0
+      values["SOUNDS_2"] = 0
+      values["SOUNDS_4"] = 0
+
+    if values["ALERTS_3"] in [3, 4, 11, 12, 13, 14, 17, 19, 26, 7, 8, 9, 10]:
+      values["ALERTS_3"] = 0
+      values["SOUNDS_3"] = 0
+
+    if values["ALERTS_5"] in [1, 2, 3, 4, 5]:
+      values["ALERTS_5"] = 0
+
+    ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values, rx_counter=rx_counter))
+  return ret
 
 def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control, hyundai_jerk, CS):
   
@@ -450,7 +484,7 @@ def create_tcs_messages(packer, CAN, CS):
   ret = []
   if CS.tcs is not None:
     values = copy.copy(CS.tcs)
-    rx_counter = values.pop("COUNTER", None)
+    #rx_counter = values.pop("COUNTER", None)
     values["DriverBraking"] = 0
     values["NEW_SIGNAL_20"] = 0
     values["NEW_SIGNAL_11"] = 0
@@ -458,7 +492,8 @@ def create_tcs_messages(packer, CAN, CS):
     #values["NEW_SIGNAL_1"] = 0 # accel과 관련..  옆두부 꺼지는것과 관련? 확인필요
     #values["ACC_REQ"] = 1 # 옆두부 꺼지는것과 관련? 확인필요.. 항상 켜지게함..
     values["NEW_SIGNAL_1"] = 0 if values["ACC_REQ"] == 1 else 1 # 옆두부..
-    ret.append(packer.make_can_msg("TCS", CAN.CAM, values, rx_counter = rx_counter))
+    #ret.append(packer.make_can_msg("TCS", CAN.CAM, values, rx_counter = rx_counter))
+    ret.append(packer.make_can_msg("TCS", CAN.CAM, values))
   return ret
 
 def forward_button_message(packer, CAN, frame, CS, cruise_button, MainMode_ACC_trigger, LFA_trigger):
@@ -466,7 +501,7 @@ def forward_button_message(packer, CAN, frame, CS, cruise_button, MainMode_ACC_t
   if frame % 2 == 0:
     if CS.cruise_buttons_msg is not None:
       values = copy.copy(CS.cruise_buttons_msg)
-      rx_counter = values.pop("COUNTER", None)
+      #rx_counter = values.pop("COUNTER", None)
       cruise_button_driver = values["CRUISE_BUTTONS"]
       if cruise_button_driver == 0:
         values["CRUISE_BUTTONS"] = cruise_button
@@ -476,7 +511,8 @@ def forward_button_message(packer, CAN, frame, CS, cruise_button, MainMode_ACC_t
       elif LFA_trigger > 0:
         values["LFA_BTN"] = 1
 
-      ret.append(packer.make_can_msg(CS.cruise_btns_msg_canfd, CAN.CAM, values, rx_counter = rx_counter))
+      #ret.append(packer.make_can_msg(CS.cruise_btns_msg_canfd, CAN.CAM, values, rx_counter = rx_counter))
+      ret.append(packer.make_can_msg(CS.cruise_btns_msg_canfd, CAN.CAM, values))
   return ret
 
 def create_adrv_messages(CP, packer, CAN, frame):
@@ -561,10 +597,10 @@ def _get_desire_and_lane_changing(md):
     desire = md.meta.desire.raw
     ds = md.meta.desireState
     if len(ds) > 4:
-      if ds[1] > 0.3: lane_changing = 1
-      if ds[2] > 0.3: lane_changing = 2
-      if ds[3] > 0.3: lane_changing = 3
-      if ds[4] > 0.3: lane_changing = 4
+      if ds[1] > 0.8: lane_changing = 1
+      if ds[2] > 0.8: lane_changing = 2
+      if ds[3] > 0.8: lane_changing = 3
+      if ds[4] > 0.8: lane_changing = 4
   return desire, lane_changing
 
 def _apply_lane_desire(values, desire):
@@ -641,6 +677,9 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
   ret = []
 
   md = CS.MD
+  if not hasattr(create_ccnc_messages, '_lane_line_check') or frame % 100 == 0:
+    create_ccnc_messages._lane_line_check = Params().get_int("LaneLineCheck")
+  lane_line_check = create_ccnc_messages._lane_line_check
   desire, lane_changing = _get_desire_and_lane_changing(md)
 
   if CP.flags & HyundaiFlags.CAMERA_SCC.value:
@@ -661,13 +700,12 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         if  HDA_LFA_SymSta == 0 and 0 < frame % 200 < 12:
           values["LFA_BTN"] = 1
 
-        if CC.enabled and CS.MainMode_ACC:
-          if CS.ACCMode in [0, 4] and 10 < frame % 200 < 22:
-            values["CRUISE_BUTTONS"] = 2
-        elif CC.enabled and (not CS.MainMode_ACC) and 10 < frame % 200 <= 16 and CS.out.vEgo > 3.:
-          values["ADAPTIVE_CRUISE_MAIN_BTN"] = 1
-        else:
-          values["ADAPTIVE_CRUISE_MAIN_BTN"] = 0
+        if CC.enabled and 10 < frame % 200 <= 16 and CS.out.vEgo > 3.:
+          if not CS.MainMode_ACC:
+            values["ADAPTIVE_CRUISE_MAIN_BTN"] = 1
+          else:
+            if CS.ACCMode in [0, 4]:
+              values["CRUISE_BUTTONS"] = 2
 
         ret.append(packer.make_can_msg(CS.cruise_btns_msg_canfd, CAN.CAM, values))
 
@@ -741,14 +779,22 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 and lat_active else 0
 
         lane_color = 6 if md is not None and md.meta.laneChangeAvailableLeft else 2
-        lane_color = 4 if CS.out.leftLaneLine >= 20 or CS.out.leftBlindspot else lane_color
+        if lane_line_check >= 1:
+          lane_line_warn_left = CS.out.leftLaneLine % 10 not in (0, 5)   # 실선이면 주황
+        else:
+          lane_line_warn_left = CS.out.leftLaneLine >= 20                  # 노란색이면 주황
+        lane_color = 4 if lane_line_warn_left or CS.out.leftBlindspot else lane_color
         if hud_control.leftLaneDepart:
           values["LANELINE_LEFT"] = 4 if (frame // 50) % 2 == 0 else 1
         else:
           values["LANELINE_LEFT"] = lane_color if hud_control.leftLaneVisible else 0
 
         lane_color = 6 if md is not None and md.meta.laneChangeAvailableRight else 2
-        lane_color = 4 if CS.out.rightLaneLine >= 20 or CS.out.rightBlindspot else lane_color
+        if lane_line_check >= 1:
+          lane_line_warn_right = CS.out.rightLaneLine % 10 not in (0, 5)
+        else:
+          lane_line_warn_right = CS.out.rightLaneLine >= 20
+        lane_color = 4 if lane_line_warn_right or CS.out.rightBlindspot else lane_color
         if hud_control.rightLaneDepart:
           values["LANELINE_RIGHT"] = 4 if (frame // 50) % 2 == 0 else 1
         else:

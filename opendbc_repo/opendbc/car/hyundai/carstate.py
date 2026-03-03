@@ -503,10 +503,11 @@ class CarState(CarStateBase):
 
     # steering angle deg값이 이상함. mdps값이 더 신뢰가 가는듯.. torque steering 차량도 확인해야함.
     #ret.steeringAngleDeg = cp.vl["STEERING_SENSORS"]["STEERING_ANGLE"] * -1
-    if self.CP.flags & HyundaiFlags.ANGLE_CONTROL:
-      ret.steeringAngleDeg = cp.vl["MDPS"]["STEERING_ANGLE_2"] * -1
-    else:
-      ret.steeringAngleDeg = cp.vl["STEERING_SENSORS"]["STEERING_ANGLE"] * -1
+    ret.steeringAngleDeg = cp.vl["MDPS"]["STEERING_ANGLE"] * -1
+    #if self.CP.flags & HyundaiFlags.ANGLE_CONTROL:
+    #  ret.steeringAngleDeg = cp.vl["MDPS"]["STEERING_ANGLE_2"] * -1
+    #else:
+    #  ret.steeringAngleDeg = cp.vl["STEERING_SENSORS"]["STEERING_ANGLE"] * -1
     
     ret.steeringTorque = cp.vl["MDPS"]["STEERING_COL_TORQUE"]
     ret.steeringTorqueEps = cp.vl["MDPS"]["STEERING_OUT_TORQUE"]
@@ -546,7 +547,7 @@ class CarState(CarStateBase):
       # These are not used for engage/disengage since openpilot keeps track of state using the buttons
       ret.cruiseState.enabled = cp.vl["TCS"]["ACC_REQ"] == 1
       ret.cruiseState.standstill = False
-      if self.MainMode_ACC:
+      if self.MainMode_ACC or self.main_enabled:
         self.main_enabled = True
     else:
       cp_cruise_info = cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else cp
@@ -559,64 +560,62 @@ class CarState(CarStateBase):
       ret.brakeHoldActive = cp.vl["ESP_STATUS"]["AUTO_HOLD"] == 1 and cp_cruise_info.vl["SCC_CONTROL"]["ACCMode"] not in (1, 2)
 
     speed_limit_cam = False
-    if self.CP.flags & HyundaiFlags.CAMERA_SCC.value:
-      corner = False
-      if self.ccnc_0x162 is not None:
-        ret.leftLongDist = self.lf_distance = self.ccnc_0x162["LF_DETECT_DISTANCE"]
-        ret.rightLongDist = self.rf_distance = self.ccnc_0x162["RF_DETECT_DISTANCE"]
-        self.lr_distance = self.ccnc_0x162["LR_DETECT_DISTANCE"]
-        self.rr_distance = self.ccnc_0x162["RR_DETECT_DISTANCE"]
-        ret.leftLatDist = self.ccnc_0x162["LF_DETECT_LATERAL"]
-        ret.rightLatDist = self.ccnc_0x162["RF_DETECT_LATERAL"]
+    corner = False
+    if self.ccnc_0x162 is not None:
+      ret.leftLongDist = self.lf_distance = self.ccnc_0x162["LF_DETECT_DISTANCE"]
+      ret.rightLongDist = self.rf_distance = self.ccnc_0x162["RF_DETECT_DISTANCE"]
+      self.lr_distance = self.ccnc_0x162["LR_DETECT_DISTANCE"]
+      self.rr_distance = self.ccnc_0x162["RR_DETECT_DISTANCE"]
+      ret.leftLatDist = self.ccnc_0x162["LF_DETECT_LATERAL"]
+      ret.rightLatDist = self.ccnc_0x162["RF_DETECT_LATERAL"]
+      corner = True
+    if self.adrv_0x1ea is not None:
+      if not corner:
+        ret.leftLongDist = self.adrv_0x1ea["LF_DETECT_DISTANCE"]
+        ret.rightLongDist = self.adrv_0x1ea["RF_DETECT_DISTANCE"]
+        self.lr_distance = self.adrv_0x1ea["LR_DETECT_DISTANCE"]
+        self.rr_distance = self.adrv_0x1ea["RR_DETECT_DISTANCE"]
+        ret.leftLatDist = self.adrv_0x1ea["LF_DETECT_LATERAL"]
+        ret.rightLatDist = self.adrv_0x1ea["RF_DETECT_LATERAL"]
         corner = True
-      if self.adrv_0x1ea is not None:
-        if not corner:
-          ret.leftLongDist = self.adrv_0x1ea["LF_DETECT_DISTANCE"]
-          ret.rightLongDist = self.adrv_0x1ea["RF_DETECT_DISTANCE"]
-          self.lr_distance = self.adrv_0x1ea["LR_DETECT_DISTANCE"]
-          self.rr_distance = self.adrv_0x1ea["RR_DETECT_DISTANCE"]
-          ret.leftLatDist = self.adrv_0x1ea["LF_DETECT_LATERAL"]
-          ret.rightLatDist = self.adrv_0x1ea["RF_DETECT_LATERAL"]
-          corner = True
-      if corner:
-        left_block = True if 0 < ret.leftLongDist < 7.0 or 0 < self.lr_distance < 7.0 else False
-        right_block = True if 0 < ret.rightLongDist < 7.0 or 0 < self.rr_distance < 7.0 else False
-        if left_block:
-          ret.leftBlindspot = True
-        if right_block:
-          ret.rightBlindspot = True
+    if corner:
+      left_block = True if 0 < ret.leftLongDist < 7.0 or 0 < self.lr_distance < 7.0 else False
+      right_block = True if 0 < ret.rightLongDist < 7.0 or 0 < self.rr_distance < 7.0 else False
+      if left_block:
+        ret.leftBlindspot = True
+      if right_block:
+        ret.rightBlindspot = True
         
-      if self.hda_info_4a3 is not None:
-        speedLimit = self.hda_info_4a3["SPEED_LIMIT"]
-        if not self.is_metric:
-          speedLimit *= CV.MPH_TO_KPH
-        ret.speedLimit = speedLimit if speedLimit < 255 else 0
-        if int(self.hda_info_4a3["MapSource"]) == 2:
-          speed_limit_cam = True
+    if self.hda_info_4a3 is not None:
+      speedLimit = self.hda_info_4a3["SPEED_LIMIT"]
+      if not self.is_metric:
+        speedLimit *= CV.MPH_TO_KPH
+      ret.speedLimit = speedLimit if speedLimit < 255 else 0
+      if int(self.hda_info_4a3["MapSource"]) == 2:
+        speed_limit_cam = True
 
-        if self.time_zone == "UTC":
-          country_code = int(self.hda_info_4a3["CountryCode"])
-          self.time_zone = ZoneInfo(NUMERIC_TO_TZ.get(country_code, "UTC"))
+      if self.time_zone == "UTC":
+        country_code = int(self.hda_info_4a3["CountryCode"])
+        self.time_zone = ZoneInfo(NUMERIC_TO_TZ.get(country_code, "UTC"))
 
     ret.gearStep = cp.vl["GEAR"]["GEAR_STEP"] if self.GEAR else 0
     if 1 <= ret.gearStep <= 8 and ret.gearShifter == GearShifter.unknown:
       ret.gearShifter = GearShifter.drive
     ret.gearStep = cp.vl["GEAR_ALT"]["GEAR_STEP"] if self.GEAR_ALT else ret.gearStep
 
-    if cp_alt and self.CP.flags & HyundaiFlags.CAMERA_SCC:
-      lane_info = self.cam_0x2a4 if self.cam_0x2a4 is not None else self.cam_0x362
+    lane_info = self.cam_0x2a4 if self.cam_0x2a4 is not None else self.cam_0x362
 
-      if lane_info is not None:
-        left_lane_prob = lane_info["LEFT_LANE_PROB"]
-        right_lane_prob = lane_info["RIGHT_LANE_PROB"]
-        left_lane_type = lane_info["LEFT_LANE_TYPE"] # 0: dashed, 1: solid, 2: undecided, 3: road edge, 4: DLM Inner Solid, 5: DLM InnerDashed, 6:DLM Inner Undecided, 7: Botts Dots, 8: Barrier
-        right_lane_type = lane_info["RIGHT_LANE_TYPE"]
-        left_lane_color = lane_info["LEFT_LANE_COLOR"]
-        right_lane_color = lane_info["RIGHT_LANE_COLOR"]
-        left_lane_info = left_lane_color * 10 + left_lane_type
-        right_lane_info = right_lane_color * 10 + right_lane_type
-        ret.leftLaneLine = left_lane_info
-        ret.rightLaneLine = right_lane_info
+    if lane_info is not None:
+      left_lane_prob = lane_info["LEFT_LANE_PROB"]
+      right_lane_prob = lane_info["RIGHT_LANE_PROB"]
+      left_lane_type = lane_info["LEFT_LANE_TYPE"] # 0: dashed, 1: solid, 2: undecided, 3: road edge, 4: DLM Inner Solid, 5: DLM InnerDashed, 6:DLM Inner Undecided, 7: Botts Dots, 8: Barrier
+      right_lane_type = lane_info["RIGHT_LANE_TYPE"]
+      left_lane_color = lane_info["LEFT_LANE_COLOR"]
+      right_lane_color = lane_info["RIGHT_LANE_COLOR"]
+      left_lane_info = left_lane_color * 10 + left_lane_type
+      right_lane_info = right_lane_color * 10 + right_lane_type
+      ret.leftLaneLine = left_lane_info
+      ret.rightLaneLine = right_lane_info
 
     # Manual Speed Limit Assist is a feature that replaces non-adaptive cruise control on EV CAN FD platforms.
     # It limits the vehicle speed, overridable by pressing the accelerator past a certain point.

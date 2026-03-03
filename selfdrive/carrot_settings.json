@@ -1650,6 +1650,22 @@
       "cdescr": "0: BSD 检测 (允许转向力矩), 1: 阻止转向力矩, -1: 忽略 BSD"
     },
     {
+      "group": "조향일반",
+      "name": "LaneLineCheck",
+      "title": "차선변경 차선판단",
+      "descr": "0: 색상+타입(노란선차단)\n1: 타입만(점선/실선)\n2: 타입만+실선토크override",
+      "egroup": "LAT",
+      "etitle": "LaneChange LineCheck",
+      "edescr": "0: Color+Type(block yellow), 1: Type only, 2: Type+torque override solid",
+      "min": 0,
+      "max": 2,
+      "default": 0,
+      "unit": 1,
+      "cgroup": "转向",
+      "ctitle": "变道车道判断",
+      "cdescr": "0: 颜色+类型(黄线阻止), 1: 仅类型(虚线/实线), 2: 仅类型+实线扭矩override"
+    },
+    {
       "group": "시작",
       "name": "HapticFeedbackWhenSpeedCamera",
       "title": "핸들햅틱기능사용(0)",

@@ -126,7 +126,19 @@ def curv_from_psis(psi_target, psi_rate, vego, action_t):
   curv_from_psi = psi_target / (vego * action_t)
   return 2*curv_from_psi - psi_rate / vego
 
-def get_curvature_from_plan(yaws, yaw_rates, t_idxs, vego, action_t):
+def get_curvature_from_plan_org(yaws, yaw_rates, t_idxs, vego, action_t):
   psi_target = np.interp(action_t, t_idxs, yaws)
   psi_rate = yaw_rates[0]
   return curv_from_psis(psi_target, psi_rate, vego, action_t)
+
+def curv_from_psis_dist(psi_target, psi_rate, distance, vego):
+  vego = np.clip(vego, MIN_SPEED, np.inf)
+  distance = np.clip(distance, 1e-3, np.inf)   
+  avg_curv = psi_target / distance             
+  return 2.0 * avg_curv - (psi_rate / vego)    
+
+def get_curvature_from_plan(yaws, yaw_rates, distances, t_idxs, vego, action_t):
+  psi_target = np.interp(action_t, t_idxs, yaws)
+  psi_rate = yaw_rates[0]
+  dist = max(MIN_SPEED * action_t, np.interp(action_t, t_idxs, distances))
+  return curv_from_psis_dist(psi_target, psi_rate, dist, vego)
