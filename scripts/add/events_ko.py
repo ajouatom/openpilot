@@ -167,7 +167,7 @@ class SoftDisableAlert(Alert):
 class UserSoftDisableAlert(SoftDisableAlert):
   def __init__(self, alert_text_2: str):
     super().__init__(alert_text_2),
-    self.alert_text_1 = "오픈파일럿이 해제됩니다"
+    self.alert_text_1 = "오픈파일럿이 해제됩니다",
 
 class ImmediateDisableAlert(Alert):
   def __init__(self, alert_text_2: str):
@@ -417,7 +417,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.aeb: {
     ET.PERMANENT: Alert(
-      "브레이크!",
+      "정지! 정지!",
       "추돌 위험: 긴급제동 작동",
       AlertStatus.critical, AlertSize.full,
       Priority.HIGHEST, VisualAlert.fcw, AudibleAlert.none, 2.),
@@ -426,7 +426,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.stockAeb: {
     ET.PERMANENT: Alert(
-      "브레이크!",
+      "정지! 정지!",
       "추돌 위험: 차량 AEB 작동",
       AlertStatus.critical, AlertSize.full,
       Priority.HIGHEST, VisualAlert.fcw, AudibleAlert.warningSoft, 2.),
@@ -435,7 +435,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.fcw: {
     ET.PERMANENT: Alert(
-      "브레이크!",
+      "정지! 정지!",
       "추돌 위험",
       AlertStatus.critical, AlertSize.full,
       Priority.HIGHEST, VisualAlert.fcw, AudibleAlert.warningSoft, 2.),
@@ -884,7 +884,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
       AlertStatus.normal, AlertSize.full,
       Priority.LOWEST, VisualAlert.none, AudibleAlert.none, .2, creation_delay=0.5),
     ET.USER_DISABLE: SoftDisableAlert("후진 중"),
-    ET.NO_ENTRY: NoEntryAlert("후진 중중"),
+    ET.NO_ENTRY: NoEntryAlert("후진 중"),
   },
 
   # On cars that use stock ACC the car can decide to cancel ACC for various reasons.
