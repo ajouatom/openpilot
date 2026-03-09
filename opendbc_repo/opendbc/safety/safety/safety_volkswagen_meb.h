@@ -51,12 +51,15 @@ static void volkswagen_meb_rx_hook(const CANPacket_t *to_push) {
     // Signal: ESC_51.VL_Radgeschw, VR_Radgeschw, HL_Radgeschw, HR_Radgeschw
     if (addr == MSG_ESC_51) {
       // Check all wheel speeds for any movement
-      int speed = 0;
-      speed += GET_BYTE(to_push, 0) | ((GET_BYTE(to_push, 1) & 0xFFU) << 8);
-      speed += GET_BYTE(to_push, 8) | ((GET_BYTE(to_push, 9) & 0xFFU) << 8);
-      speed += GET_BYTE(to_push, 16) | ((GET_BYTE(to_push, 17) & 0xFFU) << 8);
-      speed += GET_BYTE(to_push, 24) | ((GET_BYTE(to_push, 25) & 0xFFU) << 8);
-      vehicle_moving = speed > 0;
+      // HL_Radgeschw: bit 64 = bytes 8-9
+      // HR_Radgeschw: bit 80 = bytes 10-11
+      // VL_Radgeschw: bit 96 = bytes 12-13
+      // VR_Radgeschw: bit 112 = bytes 14-15
+      uint32_t fl = GET_BYTES(to_push, 8, 2);
+      uint32_t fr = GET_BYTES(to_push, 10, 2);
+      uint32_t rl = GET_BYTES(to_push, 12, 2);
+      uint32_t rr = GET_BYTES(to_push, 14, 2);
+      vehicle_moving = (fl + fr + rl + rr) > 0U;
     }
 
     // Update driver input torque samples

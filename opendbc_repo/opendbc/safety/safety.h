@@ -19,12 +19,12 @@
 #include "safety/safety_nissan.h"
 #include "safety/safety_volkswagen_mqb.h"
 #include "safety/safety_volkswagen_pq.h"
-#include "safety/safety_volkswagen_meb.h"
 #include "safety/safety_elm327.h"
 #include "safety/safety_body.h"
 
 // CAN-FD only safety modes
 #ifdef CANFD
+#include "safety/safety_volkswagen_meb.h"
 #include "safety/safety_hyundai_canfd.h"
 #endif
 
@@ -421,8 +421,8 @@ int set_safety_hooks(uint16_t mode, uint16_t param) {
     {SAFETY_BODY, &body_hooks},
     {SAFETY_FORD, &ford_hooks},
     {SAFETY_RIVIAN, &rivian_hooks},
-    {SAFETY_VOLKSWAGEN_MEB, &volkswagen_meb_hooks},
 #ifdef CANFD
+    {SAFETY_VOLKSWAGEN_MEB, &volkswagen_meb_hooks},
     {SAFETY_HYUNDAI_CANFD, &hyundai_canfd_hooks},
 #endif
 #ifdef ALLOW_DEBUG
