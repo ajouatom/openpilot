@@ -895,6 +895,8 @@ async def ws_carstate(request: web.Request) -> web.WebSocketResponse:
       gps_ok = None
 
       cpu_temp_c = None
+      cpu_temp_avg_c = None
+      cpu_temp_max_c = None
       mem_pct = None
       disk_pct = None
       volt_v = None
@@ -948,11 +950,32 @@ async def ws_carstate(request: web.Request) -> web.WebSocketResponse:
 
         # deviceState
         ds = sm['deviceState']
-        # cpuTempC can be list; use max
+        # cpuTempC can be an array on comma hardware. Match stock/CarrotLink
+        # semantics by using the average as the primary HUD temperature while
+        # still exposing max for diagnostics.
         c = ds.cpuTempC
+        cpu_temp_values = []
         if c is not None:
-          if isinstance(c, (list, tuple)) and len(c) > 0:
-            cpu_temp_c = float(max(c))
+          try:
+            for v in c:
+              fv = float(v)
+              if math.isfinite(fv) and fv > 0.0:
+                cpu_temp_values.append(fv)
+          except TypeError:
+            try:
+              fv = float(c)
+              if math.isfinite(fv) and fv > 0.0:
+                cpu_temp_values.append(fv)
+            except Exception:
+              pass
+          except Exception:
+            cpu_temp_values = []
+        if cpu_temp_values:
+          cpu_temp_avg_c = float(sum(cpu_temp_values) / len(cpu_temp_values))
+          cpu_temp_max_c = float(max(cpu_temp_values))
+          # Keep the legacy field for older clients, but point it at the
+          # average temperature so the existing HUD reflects stock behavior.
+          cpu_temp_c = cpu_temp_avg_c
 
         mem_pct = ds.memoryUsagePercent
         free_pct = ds.freeSpacePercent
@@ -973,6 +996,8 @@ async def ws_carstate(request: web.Request) -> web.WebSocketResponse:
         "gpsOk": gps_ok,
 
         "cpuTempC": cpu_temp_c,
+        "cpuTempAvgC": cpu_temp_avg_c,
+        "cpuTempMaxC": cpu_temp_max_c,
         "memPct": mem_pct,
         "diskPct": (volt_v if show_volt else disk_pct),
         "diskLabel": ("VOLT" if show_volt else "DISK"),
