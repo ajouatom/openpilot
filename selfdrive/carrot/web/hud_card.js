@@ -158,7 +158,10 @@
     update(p) {
       if (!p) return;
 
-      setSys(p.cpuTempC, p.memPct, p.diskPct, p.diskLabel);
+      const cpuTemp = (p.cpuTempAvgC != null && isFinite(p.cpuTempAvgC))
+        ? p.cpuTempAvgC
+        : p.cpuTempC;
+      setSys(cpuTemp, p.memPct, p.diskPct, p.diskLabel);
       setSpeed(p.vEgoKph);
       setSetSpeed(p.vSetKph);
       setSignalDot(p.tlight || "off");
