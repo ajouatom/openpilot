@@ -767,6 +767,15 @@ class CAR(Platforms):
     CarSpecs(mass=1515, wheelbase=2.855, steerRatio=15.5, tireStiffnessFactor=0.7),
     flags=HyundaiFlags.HYBRID | HyundaiFlags.LEGACY,
   )
+  KIA_K7_PE = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Kia K7 2020", "All", car_parts=CarParts.common([CarHarness.hyundai_c]))],
+    CarSpecs(mass=1850, wheelbase=2.855, steerRatio=15.5, tireStiffnessFactor=0.7),
+  )
+  KIA_K7_HEV_PE = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Kia K7 Hybrid 2020", "All", car_parts=CarParts.common([CarHarness.hyundai_c]))],
+    CarSpecs(mass=1515, wheelbase=2.855, steerRatio=15.5, tireStiffnessFactor=0.7),
+    flags=HyundaiFlags.HYBRID,
+  )
   KIA_K9 = HyundaiPlatformConfig(
     [HyundaiCarDocs("Kia K9 2016-2019", "All", car_parts=CarParts.common([CarHarness.hyundai_h]))],
     CarSpecs(mass=2075, wheelbase=3.15, steerRatio=14.5, tireStiffnessFactor=0.7),
