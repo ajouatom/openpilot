@@ -485,14 +485,12 @@ class CAR(Platforms):
   )
   KIA_K5_DL3_24 = HyundaiCanFDPlatformConfig(
     [
-      HyundaiCarDocs("KIA K5 2024 (DL3)", car_parts=CarParts.common([CarHarness.hyundai_k])),
       HyundaiCarDocs("Kia K5 2024", "Highway Driving Assist II", car_parts=CarParts.common([CarHarness.hyundai_k])),
     ],
     CarSpecs(mass=1553, wheelbase=2.85, steerRatio=13.27, tireStiffnessFactor=0.5),
   )
   KIA_K5_DL3_24_HEV = HyundaiCanFDPlatformConfig(
     [
-      HyundaiCarDocs("KIA K5 HYBRID 2024 (DL3)", car_parts=CarParts.common([CarHarness.hyundai_k])),
       HyundaiCarDocs("Kia K5 Hybrid 2024", "Highway Driving Assist II", car_parts=CarParts.common([CarHarness.hyundai_k])),
     ],
     CarSpecs(mass=1553, wheelbase=2.85, steerRatio=13.27, tireStiffnessFactor=0.5),
@@ -795,14 +793,14 @@ class CAR(Platforms):
   )
   KIA_EV3 = HyundaiCanFDPlatformConfig(
     [
-      HyundaiCarDocs("KIA EV3 (SV1)", car_parts=CarParts.common([CarHarness.hyundai_n])),
+      HyundaiCarDocs("Kia EV3 (SV1)", car_parts=CarParts.common([CarHarness.hyundai_n])),
     ],
     CarSpecs(mass=2055, wheelbase=2.90, steerRatio=16.0, tireStiffnessFactor=0.65),
     flags=HyundaiFlags.EV,
   )
   KIA_PV5 = HyundaiCanFDPlatformConfig(
     [
-      HyundaiCarDocs("KIA PV5 (SW1)", car_parts=CarParts.common([CarHarness.hyundai_n])),
+      HyundaiCarDocs("Kia PV5 (SW1)", car_parts=CarParts.common([CarHarness.hyundai_n])),
     ],
     CarSpecs(mass=2600, wheelbase=2.995, steerRatio=16.0, tireStiffnessFactor=0.65),
     flags=HyundaiFlags.EV,
