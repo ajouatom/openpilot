@@ -45,7 +45,7 @@ def get_all_footnotes() -> dict[Enum, int]:
 
 
 def _natural_sort_key(s):
-  # NFKD normalization ensures accented characters sort with their base letter (e.g., ? sorts with S)
+  # NFKD normalization ensures accented characters sort with their base letter (e.g., Š sorts with S)
   normalized = unicodedata.normalize('NFKD', s)
   return [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', normalized) if t]
 

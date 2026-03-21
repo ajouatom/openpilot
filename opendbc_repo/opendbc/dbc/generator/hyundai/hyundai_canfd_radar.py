@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-import os
 
-if __name__ == "__main__":
-  dbc_name = os.path.basename(__file__).replace(".py", ".dbc")
-  hyundai_path = os.path.dirname(os.path.realpath(__file__))
-  with open(os.path.join(hyundai_path, dbc_name), "w", encoding='utf-8') as f:
-    f.write("""
+def generate():
+  parts = []
+  parts.append("""
 VERSION ""
 
 
@@ -42,10 +39,10 @@ NS_ :
 BS_:
 
 BU_: XXX
-    """)
-        
-    for a in range(0x210, 0x210 + 16):
-        f.write(f"""
+""")
+
+  for a in range(0x210, 0x210 + 16):
+    parts.append(f"""
 BO_ {a} RADAR_TRACK_{a:x}: 32 RADAR
  SG_ NEW_SIGNAL_25 : 26|3@0+ (1,0) [0|7] "" XXX
  SG_ NEW_SIGNAL_24 : 28|2@0+ (1,0) [0|3] "" XXX
@@ -75,9 +72,10 @@ BO_ {a} RADAR_TRACK_{a:x}: 32 RADAR
  SG_ NEW_SIGNAL_17 : 231|2@0+ (1,0) [0|3] "" XXX
  SG_ LAT_SPEED2 : 232|13@1- (0.01,0) [0|8191] "" XXX
  SG_ REL_ACCEL2 : 246|10@1- (0.05,0) [0|1023] "" XXX
-    """)
-    for a in range(0x3a5, 0x3a5 + 32):
-        f.write(f"""
+""")
+
+  for a in range(0x3a5, 0x3a5 + 32):
+    parts.append(f"""
 BO_ {a} RADAR_TRACK_{a:x}: 24 RADAR
  SG_ VALID : 25|2@0+ (1,0) [0|3] "" XXX
  SG_ VALID2 : 28|2@0+ (1,0) [0|3] "" XXX
@@ -91,5 +89,7 @@ BO_ {a} RADAR_TRACK_{a:x}: 24 RADAR
  SG_ REL_SPEED : 88|14@1- (0.01,0) [0|16383] "" XXX
  SG_ IN_MYLANE : 103|2@0+ (1,0) [0|3] "" XXX
  SG_ LAT_SPEED : 104|13@1- (0.01,0) [0|8191] "" XXX
- SG_ REL_ACCEL : 118|10@1- (0.05,0) [0|1023] "" XXX 
-    """)
+ SG_ REL_ACCEL : 118|10@1- (0.05,0) [0|1023] "" XXX
+""")
+
+  return {"hyundai_canfd_radar.dbc": "".join(parts)}
