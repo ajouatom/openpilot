@@ -25,11 +25,11 @@ async function loadRecordState() {
 
     btnRecordToggle.classList.toggle("active", isOn);
     btnRecordToggle.textContent = isOn
-      ? `${UI_STRINGS[LANG].record} ON`
-      : `${UI_STRINGS[LANG].record} OFF`;
+      ? (UI_STRINGS[LANG].record_on || UI_STRINGS[LANG].record || "Recording")
+      : (UI_STRINGS[LANG].record_off || UI_STRINGS[LANG].record || "Idle");
   } catch (e) {
     btnRecordToggle.classList.remove("active");
-    btnRecordToggle.textContent = UI_STRINGS[LANG].record || "Record";
+    btnRecordToggle.textContent = UI_STRINGS[LANG].record_off || UI_STRINGS[LANG].record || "Record";
   }
 }
 async function toggleRecord() {
@@ -65,7 +65,7 @@ async function loadCars() {
     carMeta.textContent = "Failed: " + (j.error || "unknown");
     return;
   }
-  CARS = j; // { ok:true, sources:[...], makers:{Hyundai:[...],Genesis:[...]} ... }
+  CARS = j;
 
   const sources = (j.sources || []).join(", ");
   carMeta.textContent = sources ? ("sources: " + sources) : "ok";
@@ -98,10 +98,7 @@ function renderModels(maker) {
   modelTitle.textContent = maker;
   modelMeta.textContent = `${arr.length} models`;
 
-  // �� ����̴ϱ� ��ư ��/�� ���ϰ�: groupBtn ����
   for (const fullLine of arr) {
-    // fullLine ��: "Hyundai Grandeur 2018-19"
-    // CarSelected3���� maker�� ���� �־�� �� �� "Grandeur 2018-19"
     const modelOnly = stripMaker(fullLine, maker);
 
     const b = document.createElement("button");
@@ -113,17 +110,15 @@ function renderModels(maker) {
 }
 
 function stripMaker(fullLine, maker) {
-  // maker + ������ 1���� ����
   const prefix = maker + " ";
   if (fullLine.startsWith(prefix)) return fullLine.slice(prefix.length).trim();
-  // Ȥ�� "Hyundai"�� �ƴ� �ٸ� ǥ��� fallback: ù �ܾ� ����
   const sp = fullLine.split(" ");
   if (sp.length >= 2) return sp.slice(1).join(" ").trim();
   return fullLine.trim();
 }
 
 async function onSelectCar(maker, modelOnly, fullLine) {
-  const msg = (UI_STRINGS[LANG].confirm_car || "Select this car?") + `\n\n${maker} ${modelOnly}\n\nThis will set CarSelected3 = "${modelOnly}".`;
+  const msg = (UI_STRINGS[LANG].confirm_car || "Select this car?") + `\n\n${maker} ${modelOnly}`;
   if (!confirm(msg)) return;
 
   try {
@@ -133,7 +128,6 @@ async function onSelectCar(maker, modelOnly, fullLine) {
     return;
   }
 
-  // Home ǥ�� ������Ʈ
   curCarLabelCar.textContent = modelOnly;
   curCarLabelSetting.textContent = modelOnly;
 
@@ -179,6 +173,7 @@ async function loadSettings() {
   }
 
   renderGroups();
+  renderSettingSubnav();
   CURRENT_GROUP = null;
   showSettingScreen("groups", false);
 }
@@ -188,9 +183,7 @@ function renderGroups() {
   box.innerHTML = "";
 
   (SETTINGS.groups || []).forEach(g => {
-    let label = g.group;
-    if (LANG === "zh") label = g.cgroup || g.egroup || g.group;
-    else if (LANG === "en") label = g.egroup || g.group;
+    const label = getSettingGroupLabel(g.group);
 
     const b = document.createElement("button");
     b.className = "btn groupBtn";
@@ -200,9 +193,129 @@ function renderGroups() {
   });
 }
 
-function selectGroup(group) {
+function getSettingGroupMeta(group) {
+  const groups = SETTINGS?.groups || [];
+  return groups.find((entry) => entry.group === group) || null;
+}
+
+function getSettingGroupLabel(group) {
+  const meta = getSettingGroupMeta(group);
+  if (!meta) return group;
+  if (LANG === "zh") return meta.cgroup || meta.egroup || meta.group;
+  if (LANG === "en") return meta.egroup || meta.group;
+  return meta.group;
+}
+
+let settingSubnavSettleTimer = null;
+let settingSubnavProgrammaticScroll = false;
+let settingSubnavFocusTimer = null;
+
+function updateSettingSubnavLayoutState() {
+  if (!settingSubnav || !settingSubnavWrap) return;
+
+  const maxScrollLeft = Math.max(settingSubnav.scrollWidth - settingSubnav.clientWidth, 0);
+  const isScrollable = maxScrollLeft > 4;
+  settingSubnavWrap.classList.toggle("is-scrollable", isScrollable);
+}
+
+function getCenteredSettingSubnavGroup() {
+  if (!settingSubnav) return null;
+  const tabs = Array.from(settingSubnav.querySelectorAll(".setting-subnav__tab"));
+  if (!tabs.length) return null;
+
+  const viewport = settingSubnav.getBoundingClientRect();
+  const centerX = viewport.left + (viewport.width / 2);
+  let bestGroup = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  tabs.forEach((tab) => {
+    const rect = tab.getBoundingClientRect();
+    const tabCenter = rect.left + (rect.width / 2);
+    const distance = Math.abs(tabCenter - centerX);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestGroup = tab.dataset.group || null;
+    }
+  });
+
+  return bestGroup;
+}
+
+function centerActiveSettingSubnavTab(behavior = "smooth") {
+  if (!settingSubnav) return;
+  const activeTab = settingSubnav.querySelector(".setting-subnav__tab.is-active");
+  if (activeTab) {
+    const maxScrollLeft = Math.max(settingSubnav.scrollWidth - settingSubnav.clientWidth, 0);
+    const targetLeft = activeTab.offsetLeft - ((settingSubnav.clientWidth - activeTab.offsetWidth) / 2);
+    const nextLeft = Math.max(0, Math.min(targetLeft, maxScrollLeft));
+    settingSubnavProgrammaticScroll = true;
+    settingSubnav.scrollTo({ left: nextLeft, behavior });
+    window.setTimeout(() => {
+      settingSubnavProgrammaticScroll = false;
+      updateSettingSubnavLayoutState();
+    }, behavior === "smooth" ? 260 : 80);
+  }
+  updateSettingSubnavLayoutState();
+}
+
+function scheduleSettingSubnavFocus() {
+  if (settingSubnavFocusTimer) clearTimeout(settingSubnavFocusTimer);
+
+  requestAnimationFrame(() => centerActiveSettingSubnavTab("auto"));
+  settingSubnavFocusTimer = window.setTimeout(() => {
+    centerActiveSettingSubnavTab("auto");
+    settingSubnavFocusTimer = window.setTimeout(() => {
+      centerActiveSettingSubnavTab("auto");
+      settingSubnavFocusTimer = null;
+    }, 180);
+  }, 60);
+}
+
+function renderSettingSubnav() {
+  if (!settingSubnav) return;
+  settingSubnav.innerHTML = "";
+
+  const groups = SETTINGS?.groups || [];
+  groups.forEach((entry) => {
+    const button = document.createElement("button");
+    button.className = "setting-subnav__tab";
+    if (entry.group === CURRENT_GROUP) button.classList.add("is-active");
+    button.dataset.group = entry.group;
+    button.textContent = getSettingGroupLabel(entry.group);
+    button.type = "button";
+    button.onclick = () => selectGroup(entry.group, screenItems?.style.display === "none");
+    settingSubnav.appendChild(button);
+  });
+
+  scheduleSettingSubnavFocus();
+}
+
+if (settingSubnav) {
+  settingSubnav.addEventListener("scroll", () => {
+    updateSettingSubnavLayoutState();
+    if (settingSubnavProgrammaticScroll) return;
+
+    if (settingSubnavSettleTimer) clearTimeout(settingSubnavSettleTimer);
+    settingSubnavSettleTimer = window.setTimeout(() => {
+      settingSubnavSettleTimer = null;
+      const centeredGroup = getCenteredSettingSubnavGroup();
+      if (!centeredGroup) return;
+      if (centeredGroup !== CURRENT_GROUP) {
+        selectGroup(centeredGroup, false);
+        return;
+      }
+      centerActiveSettingSubnavTab("smooth");
+    }, 120);
+  }, { passive: true });
+  window.addEventListener("resize", () => requestAnimationFrame(updateSettingSubnavLayoutState));
+}
+
+function selectGroup(group, pushHistory = true) {
   CURRENT_GROUP = group;
-  showSettingScreen("items", true);
+  showSettingScreen("items", pushHistory);
+  if (!pushHistory) {
+    history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
+  }
   renderItems(group);
 }
 
@@ -210,10 +323,13 @@ async function renderItems(group) {
   const meta = document.getElementById("groupMeta");
   const itemsBox = document.getElementById("items");
   itemsBox.innerHTML = "";
+  renderSettingSubnav();
 
   const list = SETTINGS.items_by_group[group] || [];
   if (meta) meta.textContent = `${group} / ${list.length}`;
-  settingTitle.textContent = "Setting - " + group;
+  const groupLabel = getSettingGroupLabel(group);
+  settingTitle.textContent = (UI_STRINGS[LANG].setting || "Setting") + " - " + groupLabel;
+  if (itemsTitle) itemsTitle.textContent = groupLabel;
 
   const names = list.map(p => p.name);
   let values = {};
@@ -240,7 +356,7 @@ async function renderItems(group) {
     left.innerHTML = `
       <div class="title">${escapeHtml(title)}</div>
       <div class="name">${escapeHtml(name)}</div>
-      <div class="muted" style="margin-top:6px;">
+      <div class="muted mt-sm">
         min=${p.min}, max=${p.max}, default=${p.default}
       </div>
     `;
@@ -261,11 +377,11 @@ async function renderItems(group) {
 
     const unitBtn = document.createElement("button");
     unitBtn.className = "smallBtn";
-    unitBtn.textContent = "unit: " + UNIT_CYCLE[UNIT_INDEX[name]];
+    unitBtn.textContent = "x" + UNIT_CYCLE[UNIT_INDEX[name]];
 
     unitBtn.onclick = () => {
       UNIT_INDEX[name] = (UNIT_INDEX[name] + 1) % UNIT_CYCLE.length;
-      unitBtn.textContent = "unit: " + UNIT_CYCLE[UNIT_INDEX[name]];
+      unitBtn.textContent = "x" + UNIT_CYCLE[UNIT_INDEX[name]];
     };
 
     ctrl.appendChild(btnMinus);
@@ -364,7 +480,6 @@ window.addEventListener("popstate", async (ev) => {
 
   if (st.page === "branch") {
     showPage("branch", false);
-    // �귣ġ ����� ������ �ٽ� �ε�
     if (!BRANCHES || !BRANCHES.length) {
       loadBranchesAndShow().catch(() => {});
     }
@@ -391,12 +506,17 @@ async function postJson(url, bodyObj) {
     body: JSON.stringify(bodyObj || {})
   });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok || !j.ok) throw new Error(j.error || ("HTTP " + r.status));
+  if (!r.ok || !j.ok) {
+    const msg = friendlyError(j) || j.error || ("HTTP " + r.status);
+    throw new Error(msg);
+  }
   return j;
 }
 
 async function runTool(action, payload) {
-  toolsMetaSet("running: " + action);
+  const labels = getActionLabel(action);
+
+  toolsMetaSet(labels.running);
   toolsOutSet("...");
 
   const j = await postJson("/api/tools", { action, ...(payload || {}) });
@@ -408,11 +528,11 @@ async function runTool(action, payload) {
   }
 
   if (!j.ok) {
-    toolsMetaSet("failed: " + action);
-    throw new Error(j.out || `${action} failed (rc=${j.rc})`);
+    toolsMetaSet(labels.failed);
+    throw new Error(friendlyError(j) || j.out || labels.failed);
   }
 
-  toolsMetaSet("done: " + action);
+  toolsMetaSet(labels.done);
   return j;
 }
 
@@ -422,9 +542,15 @@ function confirmText(msg, placeholder = "") {
   return String(v).trim();
 }
 
+function showError(action, error) {
+  const labels = getActionLabel(action);
+  const title = labels.failed;
+  const msg = (typeof error === "object" && error.message) ? error.message : String(error);
+  alert(`${title}\n\n${msg}`);
+}
+
 
 function initToolsPage() {
-  // ��ư ���ε� (�� ����)
   const bindOnce = (id, fn) => {
     const el = document.getElementById(id);
     if (!el || el.dataset.bound === "1") return;
@@ -432,15 +558,13 @@ function initToolsPage() {
     el.onclick = fn;
   };
 
-  toolsMetaSet("ready");
+  toolsMetaSet(UI_STRINGS[LANG].ready || "Ready");
 
   bindOnce("btnGitPull", async () => {
     try {
       await runTool("git_pull");
     } catch (e) {
-      toolsMetaSet("error");
-      toolsOutSet("git pull failed: " + e.message);
-      alert(e.message);
+      showError("git_pull", e);
     }
   });
 
@@ -449,29 +573,23 @@ function initToolsPage() {
     try {
       await runTool("git_sync");
     } catch (e) {
-      toolsMetaSet("error");
-      toolsOutSet("git sync failed: " + e.message);
-      alert(e.message);
+      showError("git_sync", e);
     }
   });
 
   bindOnce("btnGitReset", async () => {
-    if (!confirm(UI_STRINGS[LANG].git_reset_confirm || "Run git reset? (DANGEROUS)")) return;
+    if (!confirm(UI_STRINGS[LANG].git_reset_confirm || "Run git reset?")) return;
 
-    // �ɼ� �ʿ��ϸ� prompt�� �ޱ�
-    // ��: hard / soft, target
-    const mode = confirmText("reset mode? (hard/soft/mixed)", "hard");
+    const mode = confirmText(UI_STRINGS[LANG].git_reset_mode_prompt || "reset mode? (hard/soft/mixed)", "hard");
     if (!mode) return;
 
-    const target = confirmText("reset target? (e.g. HEAD~1 or origin/master)", "HEAD");
+    const target = confirmText(UI_STRINGS[LANG].git_reset_target_prompt || "reset target?", "HEAD");
     if (!target) return;
 
     try {
       await runTool("git_reset", { mode, target });
     } catch (e) {
-      toolsMetaSet("error");
-      toolsOutSet("git reset failed: " + e.message);
-      alert(e.message);
+      showError("git_reset", e);
     }
   });
   bindOnce("btnGitBranch", async () => {
@@ -482,117 +600,81 @@ function initToolsPage() {
   bindOnce("btnSendTmuxLog", async () => {
     try {
       const j = await runTool("send_tmux_log");
-
       if (j.file) {
         window.location.href = j.file;
       }
     } catch (e) {
-      toolsMetaSet("error");
-      toolsOutSet("send tmux log failed: " + e.message);
-      alert(e.message);
+      showError("send_tmux_log", e);
     }
   });
 
-bindOnce("btnSendTmuxServerLog", async () => {
-  try {
-    toolsMetaSet("working");
-    toolsOutSet("triggering server tmux send...");
-
-    const j = await runTool("server_tmux_log");
-
-    toolsMetaSet(j.ok ? "ok" : "error");
-    toolsOutSet(j.out || j.error || "done");
-
-    if (j.file) {
-      window.location.href = j.file;
-    }
-  } catch (e) {
-    toolsMetaSet("error");
-    toolsOutSet("send tmux server log failed: " + e.message);
-    alert(e.message);
-  }
-});
-
-bindOnce("btnInstallRequired", async () => {
-
-  try {
-    toolsMetaSet("working");
-    toolsOutSet("installing required packages...");
-
-    const j = await runTool("install_required");
-
-    toolsMetaSet(j.ok ? "ok" : "error");
-
-    let msg = j.out || j.error || "done";
-
-    if (j.results && Array.isArray(j.results)) {
-      const lines = j.results.map(r => {
-        return `${r.package}: ${r.status}`;
-      });
-      msg += "\n" + lines.join("\n");
-    }
-
-    toolsOutSet(msg);
-
-    if (j.file) {
-      window.location.href = j.file;
-    }
-
-    if (j.need_reboot) {
-      const yes = confirm(UI_STRINGS[LANG].confirm_reboot_after_install);
-      if (yes) {
-        const r = await runTool("reboot");
-        toolsMetaSet(r.ok ? "ok" : "error");
-        toolsOutSet((msg + "\n\n" + (r.out || r.error || "reboot requested")).trim());
+  bindOnce("btnSendTmuxServerLog", async () => {
+    try {
+      const j = await runTool("server_tmux_log");
+      if (j.file) {
+        window.location.href = j.file;
       }
+    } catch (e) {
+      showError("server_tmux_log", e);
     }
-  } catch (e) {
-    toolsMetaSet("error");
-    toolsOutSet("install required failed: " + e.message);
-    alert(e.message);
-  }
-});
+  });
+
+  bindOnce("btnInstallRequired", async () => {
+    try {
+      const j = await runTool("install_required");
+
+      let msg = j.out || j.error || "";
+      if (j.results && Array.isArray(j.results)) {
+        const lines = j.results.map(r => `${r.package}: ${r.status}`);
+        msg += "\n" + lines.join("\n");
+      }
+      toolsOutSet(msg);
+
+      if (j.need_reboot) {
+        const yes = confirm(UI_STRINGS[LANG].confirm_reboot_after_install);
+        if (yes) {
+          const r = await runTool("reboot");
+          toolsOutSet((msg + "\n\n" + (r.out || "")).trim());
+        }
+      }
+    } catch (e) {
+      showError("install_required", e);
+    }
+  });
+
   bindOnce("btnDeleteVideos", async () => {
-    if (!confirm(UI_STRINGS[LANG].delete_videos_confirm || "Delete ALL videos? (DANGEROUS)")) return;
+    if (!confirm(UI_STRINGS[LANG].delete_videos_confirm || "Delete ALL videos?")) return;
     try {
       await runTool("delete_all_videos");
     } catch (e) {
-      toolsMetaSet("error");
-      toolsOutSet("delete videos failed: " + e.message);
-      alert(e.message);
+      showError("delete_all_videos", e);
     }
   });
 
   bindOnce("btnDeleteLogs", async () => {
-    if (!confirm(UI_STRINGS[LANG].delete_logs_confirm || "Delete ALL logs? (DANGEROUS)")) return;
+    if (!confirm(UI_STRINGS[LANG].delete_logs_confirm || "Delete ALL logs?")) return;
     try {
       await runTool("delete_all_logs");
     } catch (e) {
-      toolsMetaSet("error");
-      toolsOutSet("delete logs failed: " + e.message);
-      alert(e.message);
+      showError("delete_all_logs", e);
     }
   });
 
   bindOnce("btnRebuildAll", async () => {
-    if (!confirm("Rebuild all?\n\ncd /data/openpilot\nscons -c\nrm -rf prebuilt\nsudo reboot")) return;
+    if (!confirm(UI_STRINGS[LANG].rebuild_confirm || "Rebuild all?")) return;
     try {
       await runTool("rebuild_all");
     } catch (e) {
-      toolsMetaSet("error");
-      toolsOutSet("rebuild_all failed: " + e.message);
-      alert(e.message);
+      showError("rebuild_all", e);
     }
   });
 
   bindOnce("btnBackupSettings", async () => {
     try {
       const j = await runTool("backup_settings");
-      if (j.file) window.location.href = j.file; //  �ٿ�ε�
+      if (j.file) window.location.href = j.file;
     } catch (e) {
-      toolsMetaSet("error");
-      toolsOutSet("backup failed: " + e.message);
-      alert(e.message);
+      showError("backup_settings", e);
     }
   });
 
@@ -605,33 +687,31 @@ bindOnce("btnInstallRequired", async () => {
     inp.onchange = async () => {
       if (!inp.files || !inp.files[0]) return;
 
-      if (!confirm(UI_STRINGS[LANG].restore_confirm || "Restore settings from file?\n\nThis will overwrite many Params values.")) {
+      if (!confirm(UI_STRINGS[LANG].restore_confirm || "Restore settings from file?")) {
         return;
       }
 
       try {
-        toolsMetaSet("uploading...");
-        toolsOutSet("restoring settings...");
+        const labels = getActionLabel("backup_settings");
+        toolsMetaSet(labels.running);
+        toolsOutSet("...");
 
         const fd = new FormData();
         fd.append("file", inp.files[0]);
 
         const r = await fetch("/api/params_restore", { method: "POST", body: fd });
         const j = await r.json().catch(() => ({}));
-        if (!r.ok || !j.ok) throw new Error(j.error || ("HTTP " + r.status));
+        if (!r.ok || !j.ok) throw new Error(friendlyError(j) || j.error || ("HTTP " + r.status));
 
-        toolsMetaSet("restore done");
+        toolsMetaSet(labels.done);
         toolsOutSet(JSON.stringify(j.result, null, 2));
 
         if (confirm(UI_STRINGS[LANG].restore_done_reboot || "Restore done.\nReboot now?")) {
           const rebootRes = await runTool("reboot");
-          toolsMetaSet(rebootRes.ok ? "rebooting..." : "error");
-          toolsOutSet(rebootRes.out || rebootRes.error || "reboot requested");
+          toolsOutSet(rebootRes.out || "");
         }
       } catch (e) {
-        toolsMetaSet("error");
-        toolsOutSet("restore failed: " + e.message);
-        alert(e.message);
+        showError("backup_settings", e);
       } finally {
         inp.remove();
       }
@@ -644,15 +724,9 @@ bindOnce("btnInstallRequired", async () => {
   bindOnce("btnReboot", async () => {
     if (!confirm(UI_STRINGS[LANG].confirm_reboot || "Reboot now?")) return;
     try {
-      // �װ� �̹� ���� /api/reboot�� �� �Ÿ� �̰ɷ� �ٲ㵵 ��:
-      // await postJson("/api/reboot", {});
       await runTool("reboot");
-      toolsMetaSet("rebooting...");
-      toolsOutSet("reboot requested");
     } catch (e) {
-      toolsMetaSet("error");
-      toolsOutSet("reboot failed: " + e.message);
-      alert(e.message);
+      showError("reboot", e);
     }
   });
 
@@ -661,15 +735,11 @@ bindOnce("btnInstallRequired", async () => {
     const cmd = (inp?.value || "").trim();
     if (!cmd) return;
 
-    toolsOutSet("running: " + cmd + "\n");
-
     try {
       const j = await runTool("shell_cmd", { cmd });
-      // j.out�� stdout/stderr ��ģ ���
       toolsOutSet(j.out || "(no output)");
     } catch (e) {
-      toolsOutSet("error: " + e.message);
-      alert(e.message);
+      showError("shell_cmd", e);
     }
   });
 }
@@ -691,7 +761,7 @@ async function loadBranchesAndShow() {
 
     renderBranchList();
   } catch (e) {
-    branchMeta.textContent = "Failed: " + e.message;
+    branchMeta.textContent = e.message;
   }
 }
 
@@ -708,13 +778,13 @@ function renderBranchList() {
 }
 
 async function onSelectBranch(branch) {
-  if (!confirm((UI_STRINGS[LANG].checkout_confirm || "Checkout branch?") + `\n\n${branch}\n\nContinue?`)) return;
+  if (!confirm((UI_STRINGS[LANG].checkout_confirm || "Switch to this branch?") + `\n\n${branch}`)) return;
 
   try {
     await runTool("git_checkout", { branch });
     alert(UI_STRINGS[LANG].branch_changed || "Branch changed.");
   } catch (e) {
-    alert((UI_STRINGS[LANG].set_failed || "Checkout failed: ") + e.message);
+    showError("git_checkout", e);
     return;
   }
 
@@ -722,39 +792,9 @@ async function onSelectBranch(branch) {
   if (!rb) return;
 
   try {
-    await runTool("reboot"); // 또는 /api/reboot
+    await runTool("reboot");
     alert(UI_STRINGS[LANG].rebooting || "Rebooting...");
   } catch (e) {
-    alert("Reboot failed: " + e.message);
-  }
-}
-
-
-
-
-
-async function updateQuickLink() {
-  const el = document.getElementById("quickLink");
-  if (!el) return;
-
-  try {
-    const v = await bulkGet(["GithubUsername"]);
-    const githubId = (v["GithubUsername"] || "").trim();
-
-    if (!githubId) {
-      el.style.display = "";
-      el.textContent = "GithubUsername empty (bulkGet ok)";
-      return;
-    }
-
-    const url = `https://shind0.synology.me/carrot/go/?id=${encodeURIComponent(githubId)}`;
-    el.href = url;
-    el.textContent = url;
-    el.style.display = "";
-  } catch (e) {
-    el.style.display = "";
-    el.removeAttribute("href");
-    el.textContent = "QuickLink error: " + (e?.message || e);
-    console.log("[QuickLink] failed:", e);
+    showError("reboot", e);
   }
 }
