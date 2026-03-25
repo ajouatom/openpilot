@@ -30,12 +30,12 @@
 }
 .hudMiniLabel{
   font-weight: 900;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.0;
 }
 .hudMiniVal{
   font-weight: 900;
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1.1;
   margin-top: 2px;
 }
@@ -68,7 +68,7 @@
 
 .hudSpeed{
   position: absolute;
-  font-size: 78px;
+  font-size: 88px;
   font-weight: 1000;
   letter-spacing: -2px;
   color: #fff;
@@ -104,7 +104,7 @@
   left: 73%;
   top: 13px;
   font-weight: 900;
-  font-size: 14px;
+  font-size: 16px;
   color: #22ff61;
 }
 .hudTempSpeed{
@@ -112,14 +112,14 @@
   left:73%;
   top: 22px;
   font-weight: 1000;
-  font-size: 33px;
+  font-size: 38px;
   color: #22ff61;
   letter-spacing: -1px;
 }
 
 .hudSetSpeed{
   font-weight: 1000;
-  font-size: 33px;
+  font-size: 38px;
   color: #22ff61;
   letter-spacing: -1px;
   position: absolute;
@@ -135,7 +135,7 @@
   align-items:center;
   justify-content:center;
   font-weight: 900;
-  font-size: 20px;
+  font-size: 24px;
   color:#fff;
 }
 
@@ -146,7 +146,7 @@
   align-items:center;
   justify-content:center;
   font-weight: 1000;
-  font-size: 48px;
+  font-size: 56px;
   border: 2px solid rgba(255,255,255,0.65);
   border-radius: 14px;
   color:#1cff57;
@@ -168,12 +168,12 @@
 }
 
 .hudGps{
-  padding: 6px 10px;
+  padding: 7px 12px;
   border-radius: 12px;
   color: #fff;
   font-weight: 900;
-  font-size: 14px;
-  min-width: 54px;
+  font-size: 16px;
+  min-width: 60px;
   text-align:center;
 }
 
@@ -182,13 +182,13 @@
 }
 
 .hudDriveMode {
-  padding: 4px 10px;
+  padding: 6px 12px;
   align-items: center;
   border-radius: 12px;
   border: 2px solid rgba(0,0,0,0.35);
   font-weight: 900;
-  font-size: 14px;
-  min-width: 66px;
+  font-size: 16px;
+  min-width: 82px;
   text-align: center;
   background: #e7eef7;
   color: #1a1f26;
@@ -199,23 +199,23 @@
 .hudDriveMode.mode_sport{ background:#ff2a2a; color:#fff; }
 
 .hudRoadLimitLabel {
-  padding: 6px 10px;
+  padding: 7px 12px;
   border-radius: 12px;
   color: #fff;
   font-weight: 900;
-  font-size: 14px;
-  min-width: 54px;
+  font-size: 16px;
+  min-width: 60px;
   text-align: center;
 }
 
 .hudRoadLimitVal {
-  padding: 4px 10px;
+  padding: 6px 12px;
   align-items: center;
   border-radius: 12px;
   border: 2px solid rgba(0,0,0,0.35);
   font-weight: 900;
-  font-size: 14px;
-  min-width: 66px;
+  font-size: 16px;
+  min-width: 82px;
   text-align: center;
   color: #fff;
 }

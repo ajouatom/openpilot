@@ -1,0 +1,60 @@
+/* ── Carrot Design Tokens — Material 3 Dark ───────────────── */
+
+:root {
+  /* ── Surface (Material 3 tonal elevation) ── */
+  --md-surface:        #111318;
+  --md-surface-cont:   #1a1c22;
+  --md-surface-cont-h: #242630;
+  --md-surface-cont-hh:#2e303a;
+  --md-surface-bright: #393b44;
+
+  /* ── On Surface (text) ── */
+  --md-on-surface:     #e3e2e8;
+  --md-on-surface-var: #c5c5ce;
+  --md-outline:        #8f909a;
+  --md-outline-var:    #44464f;
+
+  /* ── Primary — Carrot Dark Orange ── */
+  --md-primary:        #e8915a;
+  --md-on-primary:     #3a1800;
+  --md-primary-cont:   #5c2e0e;
+  --md-on-primary-cont:#ffdbc8;
+
+  /* ── Error ── */
+  --md-error:          #ffb4ab;
+  --md-on-error:       #690005;
+  --md-error-cont:     #93000a;
+  --md-on-error-cont:  #ffdad6;
+
+  /* ── Spacing ── */
+  --sp-xs:   4px;
+  --sp-sm:   8px;
+  --sp-md:   12px;
+  --sp-lg:   16px;
+  --sp-xl:   24px;
+  --sp-2xl:  32px;
+  --content-max-width: 720px;
+
+  /* ── Border Radius (Material 3) ── */
+  --r-xs:    4px;
+  --r-sm:    8px;
+  --r-md:    12px;
+  --r-lg:    16px;
+  --r-xl:    28px;
+  --r-pill:  999px;
+
+  /* ── Typography ── */
+  --font-sans:  "Roboto", system-ui, -apple-system, sans-serif;
+  --font-mono:  ui-monospace, "Roboto Mono", SFMono-Regular, Menlo, monospace;
+
+  --fs-headline: 24px;
+  --fs-title-lg: 20px;
+  --fs-title-md: 18px;
+  --fs-title-sm: 16px;
+  --fs-body-lg:  18px;
+  --fs-body-md:  16px;
+  --fs-body-sm:  14px;
+  --fs-label-lg: 16px;
+  --fs-label-md: 14px;
+  --fs-label-sm: 13px;
+}

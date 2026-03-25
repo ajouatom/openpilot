@@ -1,19 +1,58 @@
 /* ---------- Home WS state ---------- */
+function setHomeServerState(summary, detail = summary, tone = "idle") {
+  if (typeof setServerStateStatus === "function") {
+    setServerStateStatus(summary, detail, tone);
+    return;
+  }
+
+  const box = document.getElementById("stateBox");
+  if (box) box.textContent = String(detail || summary || "");
+}
+
+function summarizeServerStatePayload(payload) {
+  const statusText = [
+    payload?.status,
+    payload?.state,
+    payload?.message,
+    payload?.result,
+    payload?.summary,
+    payload?.text,
+  ].find((value) => value != null && String(value).trim() !== "");
+
+  const hasError = Boolean(payload?.error || payload?.error_code || payload?.ok === false);
+  let summary = statusText ? String(statusText) : (hasError ? getUIText("error", "Error") : getUIText("connected", "Connected"));
+  if (summary.length > 72) summary = `${summary.slice(0, 69)}...`;
+
+  return {
+    summary,
+    tone: hasError ? "error" : "connected",
+  };
+}
+
 function wsConnect() {
   const wsProto = (location.protocol === "https:") ? "wss" : "ws";
   const ws = new WebSocket(wsProto + "://" + location.host + "/ws/state");
-  const box = document.getElementById("stateBox");
-  ws.onopen = () => box.textContent = "connected";
+  ws.onopen = () => {
+    const connected = getUIText("connected", "Connected");
+    setHomeServerState(connected, connected, "connected");
+  };
   ws.onmessage = (ev) => {
     try {
       const j = JSON.parse(ev.data);
-      box.textContent = JSON.stringify(j, null, 2);
+      const { summary, tone } = summarizeServerStatePayload(j);
+      setHomeServerState(summary, JSON.stringify(j, null, 2), tone);
     } catch (e) {
-      box.textContent = ev.data;
+      const text = String(ev.data || "").trim() || getUIText("connected", "Connected");
+      setHomeServerState(text, text, "connected");
     }
   };
+  ws.onerror = () => {
+    const error = getUIText("error", "Error");
+    setHomeServerState(error, error, "error");
+  };
   ws.onclose = () => {
-    box.textContent = "disconnected (reconnecting...)";
+    const reconnecting = getUIText("reconnecting", "Reconnecting...");
+    setHomeServerState(reconnecting, reconnecting, "error");
     setTimeout(wsConnect, 1000);
   };
 }
@@ -382,39 +421,6 @@ async function carWsDisconnect() {
   try { if (CAR_WS) CAR_WS.close(); } catch {}
   CAR_WS = null;
 }
-
-async function updateQuickLink() {
-  const el = document.getElementById("quickLink");
-  if (!el) return;
-
-  try {
-    const v = await bulkGet(["GithubUsername"]);
-    const githubId = (v["GithubUsername"] || "").trim();
-
-    if (!githubId) {
-      el.style.display = "";
-      el.textContent = "GithubUsername empty (bulkGet ok)";
-      return;
-    }
-
-    const url = `https://shind0.synology.me/carrot/go/?id=${encodeURIComponent(githubId)}`;
-    el.href = url;
-    el.textContent = url;
-    el.style.display = "";
-  } catch (e) {
-    el.style.display = "";
-    el.removeAttribute("href");
-    el.textContent = "QuickLink error: " + (e?.message || e);
-    console.log("[QuickLink] failed:", e);
-  }
-}
-
-
-
-
-
-
-
 
 async function syncServerTimeOnConnect() {
   try {

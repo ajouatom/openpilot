@@ -2,31 +2,66 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Carrot</title>
-  <link rel="stylesheet" href="/css/hud_card.css?v=2603-10" />
-  <link rel="stylesheet" href="/css/app.css?v=2603-10" />
+  <link rel="stylesheet" href="/css/tokens.css?v=2603-44" />
+  <link rel="stylesheet" href="/css/hud_card.css?v=2603-44" />
+  <link rel="stylesheet" href="/css/app.css?v=2603-44" />
 </head>
 
 <body>
-  <div class="topbar">
-    <button id="btnHome" class="btn active">Home</button>
-    <button id="btnSetting" class="btn">Setting</button>
-    <button id="btnTools" class="btn">Tools</button>
-    <button id="btnFleet" class="btn">Fleet</button>
-    <button id="btnLang" class="btn langToggle">Lang: <span id="langLabel">KO</span></button>
-  </div>
 
-  <div class="wrap">
-    <!-- HOME -->
-    <div id="pageHome" class="card">
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin:0 0 8px 0;">
-        <h3 id="homeTitle" style="margin:0;">Home</h3>
-        <button id="btnRecordToggle" class="btn" style="padding:8px 12px;">Record</button>
+  <div class="wrap swipe-container" id="swipeContainer">
+    <!-- ════════════ HOME ════════════ -->
+    <div id="pageHome" class="page">
+
+      <!-- Top Utility: Server State + Quick Link -->
+      <div class="home-utility">
+        <div class="setting home-utility-item">
+          <div class="home-utility-head">
+            <div id="chipServerLabel" class="title home-utility-title">Server State</div>
+            <button id="btnToggleServerState" class="smallBtn home-utility-actionBtn" type="button" aria-expanded="false" aria-controls="utilityStatePane">Open</button>
+          </div>
+          <div class="home-utility-content">
+            <div class="home-utility-meta">
+              <span class="chip-dot" id="chipDot"></span>
+              <span id="chipStateText" class="muted home-utility-value">connecting...</span>
+            </div>
+          </div>
+          <div id="utilityStatePane" class="home-utility-pane" hidden>
+            <hr class="divider--thin" />
+            <pre id="stateBox" class="home-utility-pre">connecting...</pre>
+          </div>
+        </div>
+
+        <div class="setting home-utility-item">
+          <div class="home-utility-head">
+            <div id="chipQuickLabel" class="title home-utility-title">Quick Link</div>
+            <button id="btnSaveQuickLink" class="smallBtn home-utility-actionBtn home-utility-actionBtn--save" type="button">Save</button>
+          </div>
+          <div class="home-utility-content">
+            <a id="quickLink" class="home-utility-linkInline" href="#" target="_blank" rel="noopener">Quick Link</a>
+          </div>
+        </div>
       </div>
 
-      <!-- Driving HUD (card mode). JS will auto-dock this into WebRTC overlay when video is visible. -->
-      <div id="driveHudCard" class="card" style="margin:12px 0 0 0;">
+      <!-- WebRTC -->
+      <div id="rtcCard" class="card" style="display:none;">
+        <div class="row-between mb-sm">
+          <h4 id="webrtcTitle" style="margin:0; font-size:var(--fs-title-sm); font-weight:600;">WebRTC</h4>
+          <div class="row-between" style="gap:8px;">
+            <span class="muted" id="rtcStatus">connecting...</span>
+            <button id="btnRtcFs" class="smallBtn">Full</button>
+          </div>
+        </div>
+        <div id="rtcWrap" style="position:relative;">
+          <video id="rtcVideo" class="rtcVideo" autoplay playsinline muted style="display:none;"></video>
+          <div id="hudOverlayHost" class="hudOverlayHost" style="display:none;"></div>
+        </div>
+      </div>
+
+      <!-- HUD Widget -->
+      <div id="driveHudCard">
         <div class="hudWrap" id="hudRoot">
           <div class="hudTop">
             <div class="hudMini">
@@ -42,36 +77,27 @@
               <div class="hudMiniVal" id="hudDiskVal">--%</div>
             </div>
           </div>
-
           <div class="hudLowerGroup">
             <div class="hudMain">
               <div class="hudSpeedBg" aria-hidden="true"></div>
               <div class="hudRedDot" id="hudRedDot" style="display:none;"></div>
               <div class="hudSpeed" id="hudSpeed">--</div>
-
               <div class="hudSignalDot" id="hudSignalDot"></div>
-
               <div class="hudTempReason" id="hudTempReason">eco</div>
               <div class="hudTempSpeed" id="hudTempSpeed">--</div>
-
               <div class="hudSetSpeed" id="hudSetSpeed">--</div>
-
               <div class="hudGapNum" id="hudGapNum">-</div>
               <div class="hudGear" id="hudGear">U</div>
-
             </div>
-
             <div class="hudBottom">
               <div class="hudLeftStack">
                 <div id="hudGps" class="hudGps">GPS</div>
                 <div class="hudDriveMode mode_normal" id="hudDriveMode">Normal</div>
               </div>
-
               <div class="hudRoadLimitBox">
                 <div class="hudRoadLimitLabel">LIMIT</div>
                 <div class="hudRoadLimitVal" id="hudRoadLimitVal">--</div>
               </div>
-
               <div class="hudBars" id="hudBars">
                 <div class="hudBar"></div>
                 <div class="hudBar"></div>
@@ -79,217 +105,198 @@
                 <div class="hudBar"></div>
               </div>
             </div>
-
           </div>
         </div>
       </div>
 
-      <!-- Server State (기존 유지) -->
-      <div id="rtcCard" class="card" style="margin:12px 0 0 0; display:none;">
-        <h4 id="webrtcTitle" style="margin:0 0 8px 0;">WebRTC</h4>
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-          <div class="muted" id="rtcStatus">connecting...</div>
-          <button id="btnRtcFs" class="smallBtn">Full</button>
-        </div>
-        <div style="height:8px;"></div>
-
-        <!-- wrapper 추가 (relative) -->
-        <div id="rtcWrap" style="position:relative;">
-          <video id="rtcVideo"
-                 class="rtcVideo"
-                 autoplay playsinline muted style="display:none;">
-          </video>
-
-          <!-- HUD overlay host (video overlay mode) -->
-          <div id="hudOverlayHost" class="hudOverlayHost" style="display:none;"></div>
-        </div>
-      </div>
-      <div style="height:10px;"></div>
-
-      <div class="card" style="margin:0;">
-        <h4 id="serverStateTitle" style="margin:0 0 6px 0;">Server State</h4>
-        <pre id="stateBox" class="pill" style="display:block; padding:10px; border-radius:14px;">connecting...</pre>
-      </div>
-      <div class="card" style="margin-top:12px;">
-        <h4 id="quickLinkTitle" style="margin:0 0 6px 0;">Quick Link</h4>
-
-        <a id="quickLink" href="#" target="_blank" rel="noopener"
-           style="word-break:break-all; display:none; text-decoration:none; color:#9bb0c6;">
-        </a>
-
-        <div id="quickLinkHint" class="muted" style="margin-top:6px;">
-          * 길게 눌러 링크저장
-        </div>
-      </div>
     </div>
 
-    <!-- CAR SELECT (new page) -->
-    <div id="pageCar" class="card" style="display:none;">
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-        <h3 id="carTitle" style="margin:0 0 8px 0; cursor:pointer;">Car Select</h3>
+    <!-- ════════════ CAR SELECT ════════════ -->
+    <div id="pageCar" class="page" style="display:none;">
+      <div class="page-header">
+        <h2 id="carTitle" class="page-title" style="cursor:pointer;">Car Select</h2>
         <button id="btnBackCar" class="btn">Back</button>
       </div>
+
       <!-- Current Car -->
-      <div class="card" style="margin:0 0 12px 0;">
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-          <!-- 여기 헤더가 차량명 -->
-          <div id="curCarLabelCar" style="font-weight:900; font-size:14px; line-height:1.2;">-</div>
-        </div>
+      <div class="row-between mb-md" style="padding:var(--sp-md) 0; border-bottom:1px solid var(--md-outline-var);">
+        <div id="curCarLabelCar" style="font-weight:700; font-size:var(--fs-title-md);">-</div>
       </div>
 
-      <div class="muted" id="carMeta">loading...</div>
-      <div style="height:10px;"></div>
+      <div class="muted mb-sm" id="carMeta">loading...</div>
 
       <!-- Maker screen -->
       <div id="carScreenMakers" class="screen">
-        <div class="card" style="margin:0;">
-          <h4 id="makersTitle" style="margin:0 0 10px 0;">Makers</h4>
-          <div id="makerList"></div>
-        </div>
+        <h3 id="makersTitle" class="section-title">Makers</h3>
+        <div id="makerList"></div>
       </div>
 
       <!-- Model screen -->
       <div id="carScreenModels" class="screen hidden" style="display:none;">
-        <div class="card" style="margin:0;">
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-            <h4 id="modelTitle" style="margin:0; cursor:pointer;">Models</h4>
-            <div class="muted" id="modelMeta">-</div>
-          </div>
-          <div style="height:10px;"></div>
-          <div id="modelList"></div>
+        <div class="row-between mb-sm">
+          <h3 id="modelTitle" class="section-title" style="cursor:pointer; margin:0;">Models</h3>
+          <span class="muted" id="modelMeta">-</span>
         </div>
+        <div id="modelList"></div>
       </div>
     </div>
 
-    <!-- SETTING -->
-    <div id="pageSetting" class="card" style="display:none;">
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-        <h3 id="settingTitle" style="margin:0 0 8px 0; cursor:pointer;"><span id="settingTitleText">Setting</span></h3>
-        <button id="btnBackGroups" class="btn" style="display:none;">Back</button>
+    <!-- ════════════ SETTING ════════════ -->
+    <div id="pageSetting" class="page" style="display:none;">
+      <div class="page-header">
+        <h2 id="settingTitle" style="margin:0; font-size:var(--fs-headline); font-weight:700; cursor:pointer;"><span id="settingTitleText">Setting</span></h2>
       </div>
 
-      <div class="muted" id="settingsMeta">loading...</div>
-      <div style="height:10px;"></div>
+      <div class="muted mb-sm" id="settingsMeta">loading...</div>
 
       <!-- Current Car -->
-      <div class="card" style="margin:0 0 12px 0;">
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-          <!-- 여기 헤더가 차량명 -->
-          <div id="curCarLabelSetting" style="font-weight:900; font-size:14px; line-height:1.2;">-</div>
-          <button id="btnChangeCar" class="btn">Change</button>
-        </div>
+      <div id="settingCarRow" class="row-between mb-md" style="padding:var(--sp-md) 0; border-bottom:1px solid var(--md-outline-var);">
+        <div id="curCarLabelSetting" style="font-weight:700; font-size:var(--fs-title-md);">-</div>
+        <button id="btnChangeCar" class="btn">Change</button>
       </div>
 
-      <!-- Groups Screen -->
-      <div id="settingScreenGroups" class="screen">
-        <div class="card" style="margin:0;">
-          <h4 id="groupsTitle" style="margin:0 0 10px 0;">Groups</h4>
+      <div id="settingScreenHost" class="screen-host">
+        <!-- Groups Screen -->
+        <div id="settingScreenGroups" class="screen">
+          <h3 id="groupsTitle" class="section-title">Groups</h3>
           <div id="groupList"></div>
         </div>
-      </div>
 
-      <!-- Items Screen -->
-      <div id="settingScreenItems" class="screen hidden" style="display:none;">
-        <div class="card" style="margin:0;">
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-            <h4 id="itemsTitle" style="margin:0; cursor:pointer;">Items</h4>
-            <div class="muted" id="groupMeta">-</div>
+        <!-- Items Screen -->
+        <div id="settingScreenItems" class="screen hidden" style="display:none;">
+          <div id="settingSubnavWrap" class="setting-subnav-wrap">
+            <div id="settingSubnav" class="setting-subnav" aria-label="Setting groups"></div>
           </div>
-          <div style="height:10px;"></div>
+          <div class="row-between mb-sm">
+            <h3 id="itemsTitle" class="section-title" style="cursor:pointer; margin:0;">Items</h3>
+            <span class="muted" id="groupMeta">-</span>
+          </div>
           <div id="items"></div>
         </div>
       </div>
     </div>
 
-    <!-- TOOLS -->
-    <div id="pageTools" class="card" style="display:none;">
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-        <h3 id="toolsTitle" style="margin:0 0 8px 0;">Tools</h3>
-        <button id="btnToolsBack" class="btn">Back</button>
+    <!-- ════════════ TOOLS ════════════ -->
+    <div id="pageTools" class="page" style="display:none;">
+      <div class="page-header">
+        <h2 id="toolsTitle" class="page-title">Tools</h2>
       </div>
 
-      <div class="muted" id="toolsMeta">-</div>
-      <div style="height:10px;"></div>
+      <div class="muted mb-md" id="toolsMeta">-</div>
 
-      <!-- Git / Update -->
-      <div class="card" style="margin:0 0 12px 0;">
-        <h4 id="gitCommandsTitle" style="margin:0 0 10px 0;">Git Commands</h4>
-
-        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <!-- Git Commands -->
+      <div class="section">
+        <h3 id="gitCommandsTitle" class="section-title">Git Commands</h3>
+        <div class="row-wrap">
           <button id="btnGitPull" class="btn">git pull</button>
           <button id="btnGitSync" class="btn">git sync</button>
           <button id="btnGitReset" class="btn">git reset</button>
           <button id="btnGitBranch" class="btn">change branch</button>
         </div>
-
       </div>
 
-      <!-- System / User -->
-      <div class="card" style="margin:0;">
-        <h4 id="userSystemTitle" style="margin:0 0 10px 0;">User / System</h4>
+      <hr class="divider">
 
-        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <!-- User / System -->
+      <div class="section">
+        <h3 id="userSystemTitle" class="section-title">User / System</h3>
+        <div class="row-wrap">
           <button id="btnSendTmuxLog" class="btn">capture tmux</button>
           <button id="btnSendTmuxServerLog" class="btn">send tmux</button>
           <button id="btnInstallRequired" class="btn">install flask</button>
-          <button id="btnDeleteVideos" class="btn">delete all videos</button>
-          <button id="btnDeleteLogs" class="btn">delete all logs</button>
-          <button id="btnRebuildAll" class="smallBtn">Rebuild All</button>
+          <button id="btnDeleteVideos" class="btn btn--danger">delete all videos</button>
+          <button id="btnDeleteLogs" class="btn btn--danger">delete all logs</button>
+          <button id="btnRebuildAll" class="smallBtn btn--danger">Rebuild All</button>
           <button id="btnReboot" class="btn">reboot</button>
         </div>
+      </div>
 
-        <!-- Backup / Restore -->
-        <div class="card">
-          <h4 id="userSettingsTitle" style="margin:0 0 10px 0;">Settings</h4>
-          <div class="backupRow">
-            <button id="btnBackupSettings" class="btn">backup settings</button>
-            <button id="btnRestoreSettings" class="btn">restore settings</button>
-          </div>
+      <hr class="divider">
 
-        </div>
-        <div class="card">
-          <h4 style="margin:0 0 6px 0;">System Command</h4>
-
-          <div class="muted" style="margin-bottom:8px;">
-            Allowed: git pull/status/branch/log, df, free, uptime (whitelist)
-          </div>
-
-          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-            <input id="sysCmdInput"
-                   type="text"
-                   placeholder='e.g. git pull'
-                   style="flex:1; min-width:220px; padding:10px; border-radius:12px; border:1px solid #2a3542; background:#0c1118; color:#e8eef5;" />
-            <button id="btnSysCmdRun" class="smallBtn">Run</button>
-          </div>
-
-        </div>
-
-        <div style="height:12px;"></div>
-
-        <!-- output -->
-        <div class="card" style="margin:0;">
-          <h4 style="margin:0 0 8px 0;">Output</h4>
-          <pre id="toolsOut" class="pill" style="display:block; padding:10px; border-radius:14px; min-height:120px;">-</pre>
+      <!-- Settings Backup -->
+      <div class="section">
+        <h3 id="userSettingsTitle" class="section-title">Settings</h3>
+        <div class="row-wrap">
+          <button id="btnBackupSettings" class="btn">backup settings</button>
+          <button id="btnRestoreSettings" class="btn">restore settings</button>
         </div>
       </div>
+
+      <hr class="divider">
+
+      <!-- System Command -->
+      <div class="section">
+        <h3 id="sysCmdTitle" class="section-title">System Command</h3>
+        <div class="muted mb-sm" id="sysCmdHelp">
+          Allowed: git pull/status/branch/log, df, free, uptime
+        </div>
+        <div class="row-wrap" style="align-items:center;">
+          <input id="sysCmdInput" type="text" class="input-text" placeholder="e.g. git pull" />
+          <button id="btnSysCmdRun" class="smallBtn">Run</button>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <!-- Output -->
+      <div class="section">
+        <h3 id="outputTitle" class="section-title">Output</h3>
+        <pre id="toolsOut" class="pill" style="display:block; padding:var(--sp-md); min-height:100px;">-</pre>
+      </div>
     </div>
-    <!-- BRANCH SELECT -->
-    <div id="pageBranch" class="card" style="display:none;">
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-        <h3 id="branchTitle" style="margin:0 0 8px 0; cursor:pointer;">Branch Select</h3>
+
+    <!-- ════════════ BRANCH SELECT ════════════ -->
+    <div id="pageBranch" class="page" style="display:none;">
+      <div class="page-header">
+        <h2 id="branchTitle" class="page-title" style="cursor:pointer;">Branch Select</h2>
         <button id="btnBackBranch" class="btn">Back</button>
       </div>
 
-      <div class="muted" id="branchMeta">-</div>
-      <div style="height:10px;"></div>
-
+      <div class="muted mb-sm" id="branchMeta">-</div>
       <div id="branchList"></div>
     </div>
   </div>
 
-  <script src="/js/hud_card.js?v=2603-10"></script>
-  <script src="/js/app_core.js?v=2603-10"></script>
-  <script src="/js/app_pages.js?v=2603-10"></script>
-  <script src="/js/app_realtime.js?v=2603-10"></script>
+  <!-- Record FAB -->
+  <button id="btnRecordToggle" class="fab">REC</button>
+
+  <!-- Bottom Navigation (Material 3 style) -->
+  <nav class="topbar">
+    <button id="btnHome" class="nav-btn active">
+      <span class="nav-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+      </span>
+      <span>Home</span>
+    </button>
+    <button id="btnSetting" class="nav-btn">
+      <span class="nav-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1115.6 12 3.611 3.611 0 0112 15.6z"/></svg>
+      </span>
+      <span>Setting</span>
+    </button>
+    <button id="btnTools" class="nav-btn">
+      <span class="nav-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/></svg>
+      </span>
+      <span>Tools</span>
+    </button>
+    <button id="btnFleet" class="nav-btn">
+      <span class="nav-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
+      </span>
+      <span>Fleet</span>
+    </button>
+    <button id="btnLang" class="nav-btn langToggle">
+      <span class="nav-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12.87 15.07l-2.54-2.51.03-.03A17.52 17.52 0 0014.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/></svg>
+      </span>
+      <span id="langLabel">lang(ko)</span>
+    </button>
+  </nav>
+
+  <script src="/js/hud_card.js?v=2603-44"></script>
+  <script src="/js/app_core.js?v=2603-44"></script>
+  <script src="/js/app_pages.js?v=2603-44"></script>
+  <script src="/js/app_realtime.js?v=2603-44"></script>
 </body>
 </html>
