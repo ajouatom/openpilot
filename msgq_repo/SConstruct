@@ -14,12 +14,7 @@ cpppath = [
   f"#/",
   '#msgq/',
   '/usr/lib/include',
-  '/opt/homebrew/include',
   sysconfig.get_paths()['include'],
-]
-
-libpath = [
-  '/opt/homebrew/lib',
 ]
 
 AddOption('--minimal',
@@ -67,7 +62,6 @@ env = Environment(
   CFLAGS="-std=gnu11",
   CXXFLAGS="-std=c++1z",
   CPPPATH=cpppath,
-  LIBPATH=libpath,
   CYTHONCFILESUFFIX=".cpp",
   tools=["default", "cython"]
 )
