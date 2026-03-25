@@ -32,6 +32,7 @@ class UIState:
 
   def _initialize(self):
     self.params = Params()
+    self.params_memory = Params("/dev/shm/params")
     self.sm = messaging.SubMaster(
       [
         "modelV2",

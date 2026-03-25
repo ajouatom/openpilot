@@ -1,3 +1,5 @@
+import json
+import time
 import pyray as rl
 from dataclasses import dataclass
 from typing import Optional
@@ -192,6 +194,7 @@ class HudRenderer(Widget):
     self._set_speed_alpha_filter = FirstOrderFilter(0.0, 0.1, 1 / gui_app.target_fps)
     
     self._set_speed_override = SetSpeedOverride()
+    self._debug_traffic_light = False
 
   def _draw_text_with_outline(self, text, pos, font_size,
                               text_color,
@@ -435,6 +438,15 @@ class HudRenderer(Widget):
         )
 
         time_block_right = time_x + date_size.x
+
+    # --------------------------------------------------------------------------
+    # Traffic Light (always higher priority than debug UI)
+    # --------------------------------------------------------------------------
+    traffic_x = int(time_block_right + 12)
+    traffic_y = int(pos_y)
+
+    if self._draw_traffic_light_info(traffic_x, traffic_y):
+      return
 
     # --------------------------------------------------------------------------
     # Debug UI
@@ -768,3 +780,112 @@ class HudRenderer(Widget):
     unit_text_size = measure_text_cached(self._font_medium, unit_text, FONT_SIZES.speed_unit)
     unit_pos = rl.Vector2(rect.x + rect.width / 2 - unit_text_size.x / 2, 290 - unit_text_size.y / 2)
     rl.draw_text_ex(self._font_medium, unit_text, unit_pos, FONT_SIZES.speed_unit, 0, COLORS.WHITE_TRANSLUCENT)
+
+
+  def _get_traffic_light_info(self):
+    # debug demo
+    if self._debug_traffic_light:
+      demo_list = [
+        {"lamp": "red", "remain": 13, "ts": time.monotonic()},
+        {"lamp": "green", "remain": 8, "ts": time.monotonic()},
+        {"lamp": "left", "remain": 7, "ts": time.monotonic()},
+        {"lamp": "right", "remain": 5, "ts": time.monotonic()},
+        {"lamp": "uturn", "remain": 4, "ts": time.monotonic()},
+      ]
+      idx = int(time.monotonic() // 2) % len(demo_list)
+      return demo_list[idx]
+
+    try:
+      raw = ui_state.params_memory.get("TrafficLight", encoding="utf-8")
+      if not raw:
+        return None
+
+      d = json.loads(raw)
+      lamp = str(d.get("lamp", "")).strip()
+      remain = int(d.get("remain", 0))
+      ts = float(d.get("ts", 0.0))
+
+      if lamp not in ("red", "green", "left", "right", "uturn"):
+        return None
+
+      if remain <= 0:
+        return None
+
+      # 1초마다 들어온다고 했으니, 2.5초 정도 지나면 stale로 보고 숨김
+      if ts > 0.0 and (time.monotonic() - ts) > 2.5:
+        return None
+
+      return {
+        "lamp": lamp,
+        "remain": remain,
+      }
+    except Exception:
+      return None
+
+  def _draw_traffic_light_lamp(self, lamp: str, cx: int, cy: int, size: int) -> None:
+    if lamp == "red":
+      rl.draw_circle(cx, cy, size, rl.Color(255, 70, 70, 245))
+      rl.draw_circle_lines(cx, cy, size, rl.Color(255, 255, 255, 220))
+      return
+
+    if lamp == "green":
+      rl.draw_circle(cx, cy, size, rl.Color(0, 220, 80, 245))
+      rl.draw_circle_lines(cx, cy, size, rl.Color(255, 255, 255, 220))
+      return
+
+    if lamp == "left":
+      txt = "<-"
+      color = rl.Color(0, 255, 100, 240)
+    elif lamp == "right":
+      txt = "->"
+      color = rl.Color(0, 255, 100, 240)
+    elif lamp == "uturn":
+      txt = "U"
+      color = rl.Color(255, 220, 80, 240)
+    else:
+      return
+
+    font_size = int(size * 2.0)
+    text_size = measure_text_cached(self._font_display, txt, font_size)
+    self._draw_text_with_outline(
+      txt,
+      rl.Vector2(cx - text_size.x * 0.5, cy - text_size.y * 0.5),
+      font_size,
+      color,
+      rl.BLACK,
+      thickness=1
+    )
+  
+  def _draw_traffic_light_info(self, pos_x: int, pos_y: int) -> bool:
+    info = self._get_traffic_light_info()
+    if not info:
+      return False
+
+    lamp = info["lamp"]
+    remain = str(info["remain"])
+
+    lamp_size = 24
+    remain_font = 28
+    gap = 5
+
+    remain_size = measure_text_cached(self._font_semi_bold, remain, remain_font)
+
+    lamp_cx = pos_x + lamp_size
+    lamp_cy = int(pos_y)
+
+    self._draw_traffic_light_lamp(lamp, lamp_cx, lamp_cy, lamp_size)
+
+    text_x = lamp_cx + lamp_size + gap
+    text_y = int(pos_y - remain_size.y / 2)
+
+    self._draw_text_with_outline(
+      remain,
+      rl.Vector2(text_x, text_y),
+      remain_font,
+      rl.Color(255, 255, 255, 235),
+      rl.BLACK,
+      thickness=1
+    )
+
+    return True
+
