@@ -645,25 +645,38 @@ body.dialog-open {
 }
 
 #pageTools {
-  --tools-console-bottom: calc(var(--nav-bar-height) + 12px + env(safe-area-inset-bottom, 0px));
+  --tools-console-bottom: calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px));
+  --tools-page-height: calc(100dvh - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px) - (var(--sp-lg) * 2));
   --tools-console-form-height: 40px;
-  --tools-console-log-lines: 4;
   --tools-console-log-font-size: 12px;
   --tools-console-log-line-height: 1.45;
-  --tools-console-log-padding-y: calc(var(--sp-md) + var(--sp-lg));
-  --tools-console-height: calc(
-    var(--tools-console-form-height) +
+  --tools-console-log-lines: 5;
+  --tools-console-log-pad-top: 12px;
+  --tools-console-log-pad-bottom: 16px;
+  --tools-console-log-height: calc(
     (var(--tools-console-log-font-size) * var(--tools-console-log-line-height) * var(--tools-console-log-lines)) +
-    var(--tools-console-log-padding-y)
+    var(--tools-console-log-pad-top) +
+    var(--tools-console-log-pad-bottom)
   );
+  --tools-console-height: calc(var(--tools-console-form-height) + var(--tools-console-log-height) + 1px);
   --tools-console-inline: max(var(--sp-lg), calc((100vw - var(--content-max-width)) / 2));
   --tools-console-bg: color-mix(in srgb, var(--md-surface) 92%, #000);
   --tools-console-divider: color-mix(in srgb, var(--md-stroke-soft) 46%, transparent);
-  padding-bottom: calc(var(--tools-console-height) + var(--tools-console-bottom) + var(--sp-md));
+  display: flex;
+  flex-direction: column;
+  min-height: var(--tools-page-height);
+  height: var(--tools-page-height);
+  max-height: var(--tools-page-height);
   background: var(--tools-console-bg);
+  overflow: hidden;
 }
 
 .tools-scroll-stack {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding-bottom: var(--sp-lg);
 }
 
@@ -700,12 +713,12 @@ body.dialog-open {
 }
 
 .tools-console-dock {
-  position: sticky;
-  bottom: var(--tools-console-bottom);
-  z-index: 45;
-  margin-top: var(--sp-lg);
+  position: relative;
   width: 100dvw;
   margin-inline: calc(50% - 50dvw);
+  z-index: 45;
+  flex: none;
+  background: var(--tools-console-bg);
 }
 
 .tools-console-shell {
@@ -734,7 +747,8 @@ body.dialog-open {
   gap: var(--sp-sm);
   align-items: center;
   margin: 0;
-  min-height: 40px;
+  height: var(--tools-console-form-height);
+  min-height: var(--tools-console-form-height);
   padding: 8px var(--tools-console-inline);
   border-bottom: 1px solid var(--tools-console-divider);
   background: var(--tools-console-bg);
@@ -816,10 +830,15 @@ body.dialog-open {
 
 .tools-console-log {
   display: block;
-  flex: 1;
-  min-height: 0;
+  flex: none;
+  height: var(--tools-console-log-height);
+  min-height: var(--tools-console-log-height);
+  max-height: var(--tools-console-log-height);
   margin: 0;
-  padding: var(--sp-md) var(--tools-console-inline) var(--sp-lg);
+  padding:
+    var(--tools-console-log-pad-top)
+    var(--tools-console-inline)
+    var(--tools-console-log-pad-bottom);
   border: 0;
   border-radius: 0;
   background: var(--tools-console-bg);
@@ -1344,6 +1363,13 @@ body[data-page="terminal"] .app-toast-host {
 .setting-subnav-wrap {
   margin: 0 0 var(--sp-md);
   touch-action: pan-y;
+  position: sticky;
+  top: 0;
+  z-index: 18;
+  padding-top: 2px;
+  background: color-mix(in srgb, var(--md-surface) 96%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .setting-subnav {
@@ -1382,7 +1408,6 @@ body[data-page="terminal"] .app-toast-host {
   flex: 0 0 var(--setting-subnav-tab-width);
   appearance: none;
   border: none;
-  border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--md-outline);
   padding: 0 0 var(--sp-sm);
@@ -1403,7 +1428,6 @@ body[data-page="terminal"] .app-toast-host {
 .setting-subnav__tab.is-active {
   color: var(--md-primary);
   font-weight: 800;
-  border-bottom-color: var(--md-primary);
 }
 
 .setting-subnav__tab:active {
@@ -1610,8 +1634,8 @@ pre {
   }
 
   #pageTools {
-    --tools-console-bottom: calc(var(--nav-bar-height-desktop) + 14px + env(safe-area-inset-bottom, 0px));
-    --tools-console-log-lines: 5;
+    --tools-console-bottom: calc(var(--nav-bar-height-desktop) + env(safe-area-inset-bottom, 0px));
+    --tools-page-height: calc(100dvh - var(--nav-bar-height-desktop) - env(safe-area-inset-bottom, 0px) - (var(--sp-lg) * 2));
   }
 
   .topbar {
@@ -1713,6 +1737,10 @@ pre {
 }
 
 @media (max-height: 760px) {
+  #pageTools {
+    --tools-console-log-lines: 4;
+  }
+
   .setting-search-panel {
     --setting-search-results-max-height: min(34vh, 280px);
     gap: 16px;
@@ -1721,10 +1749,6 @@ pre {
 }
 
 @media (max-width: 430px) {
-  #pageTools {
-    --tools-console-log-lines: 3;
-  }
-
   .terminal-toolbar {
     gap: 10px;
     padding: 9px var(--terminal-inline);

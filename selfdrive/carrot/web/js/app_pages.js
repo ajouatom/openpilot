@@ -335,6 +335,8 @@ function focusSettingItem(name, behavior = "smooth") {
 
 function closeSettingSearchPanel(options = {}) {
   const clear = Boolean(options.clear);
+  const syncHistory = Boolean(options.syncHistory);
+  const fromHistory = Boolean(options.fromHistory);
   if (settingSearchDebounceTimer) {
     clearTimeout(settingSearchDebounceTimer);
     settingSearchDebounceTimer = null;
@@ -353,6 +355,16 @@ function closeSettingSearchPanel(options = {}) {
   if (clear && settingSearchInput) settingSearchInput.value = "";
   if (clear && settingSearchResults) settingSearchResults.innerHTML = "";
   syncModalBodyLock();
+
+  const state = history.state || {};
+  if (!fromHistory && state.page === "setting" && state.search) {
+    if (syncHistory) history.back();
+    else history.replaceState({
+      page: "setting",
+      screen: (screenItems && screenItems.style.display !== "none") ? "items" : "groups",
+      group: CURRENT_GROUP || null,
+    }, "");
+  }
 }
 
 function renderSettingSearchResults(query = "") {
@@ -401,7 +413,7 @@ function renderSettingSearchResults(query = "") {
     button.onclick = async () => {
       try {
         pendingSettingFocus = { group: entry.group, name: entry.name };
-        closeSettingSearchPanel();
+        closeSettingSearchPanel({ syncHistory: false });
         if (CURRENT_GROUP === entry.group && screenItems && screenItems.style.display !== "none") {
           focusSettingItem(entry.name);
           return;
@@ -415,7 +427,8 @@ function renderSettingSearchResults(query = "") {
   });
 }
 
-async function openSettingSearchPanel() {
+async function openSettingSearchPanel(options = {}) {
+  const pushHistory = options.pushHistory !== false;
   if (CURRENT_PAGE !== "setting") return;
   if (!SETTINGS) {
     try {
@@ -433,6 +446,15 @@ async function openSettingSearchPanel() {
     btnSettingSearch.setAttribute("aria-expanded", "true");
   }
   if (settingPageRoot) settingPageRoot.classList.add("setting-search-open");
+  const state = history.state || {};
+  if (pushHistory && !(state.page === "setting" && state.search)) {
+    history.pushState({
+      page: "setting",
+      screen: (screenItems && screenItems.style.display !== "none") ? "items" : "groups",
+      group: CURRENT_GROUP || null,
+      search: true,
+    }, "");
+  }
   syncModalBodyLock();
   renderSettingSearchResults(settingSearchInput?.value || "");
   requestAnimationFrame(() => {
@@ -446,7 +468,7 @@ function toggleSettingSearchPanel() {
   if (settingSearchPanel.hidden) {
     openSettingSearchPanel().catch(() => {});
   }
-  else closeSettingSearchPanel();
+  else closeSettingSearchPanel({ syncHistory: true });
 }
 
 if (btnSettingSearch) {
@@ -454,7 +476,7 @@ if (btnSettingSearch) {
 }
 
 if (settingSearchBackdrop) {
-  settingSearchBackdrop.onclick = () => closeSettingSearchPanel();
+  settingSearchBackdrop.onclick = () => closeSettingSearchPanel({ syncHistory: true });
 }
 
 if (settingSearchForm) {
@@ -477,7 +499,7 @@ if (settingSearchInput) {
 
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && settingSearchPanel && !settingSearchPanel.hidden) {
-    closeSettingSearchPanel();
+    closeSettingSearchPanel({ syncHistory: true });
   }
 });
 
@@ -916,6 +938,10 @@ history.replaceState({ page: "home" }, "");
 window.addEventListener("popstate", async (ev) => {
   const st = ev.state || { page: "home" };
 
+  if (settingSearchPanel && !settingSearchPanel.hidden && !st.search) {
+    closeSettingSearchPanel({ clear: false, fromHistory: true });
+  }
+
   if (st.page === "home") {
     CURRENT_GROUP = null;
     CURRENT_MAKER = null;
@@ -933,6 +959,9 @@ window.addEventListener("popstate", async (ev) => {
       renderItems(CURRENT_GROUP);
     } else {
       showSettingScreen("groups", false);
+    }
+    if (st.search) {
+      openSettingSearchPanel({ pushHistory: false }).catch(() => {});
     }
     return;
   }
@@ -974,13 +1003,60 @@ window.addEventListener("popstate", async (ev) => {
 });
 
 
-function toolsOutSet(s) {
+let toolsOutHistory = "";
+let toolsOutCurrentBlock = "";
+
+function normalizeToolsOutText(s) {
+  return String(s ?? "").replace(/\s+$/, "");
+}
+
+function renderToolsOut() {
   const out = document.getElementById("toolsOut");
   if (!out) return;
-  out.textContent = String(s);
+  const next = [toolsOutHistory, toolsOutCurrentBlock].filter(Boolean).join("\n\n");
+  out.textContent = next || " ";
   requestAnimationFrame(() => {
     out.scrollTop = out.scrollHeight;
   });
+}
+
+function toolsOutSet(s) {
+  toolsOutCurrentBlock = normalizeToolsOutText(s);
+  renderToolsOut();
+}
+
+function toolsOutAppend(s) {
+  const next = normalizeToolsOutText(s);
+  if (!next) return;
+  toolsOutHistory = toolsOutHistory ? `${toolsOutHistory}\n\n${next}` : next;
+  renderToolsOut();
+}
+
+function toolsOutCommitCurrent() {
+  if (!toolsOutCurrentBlock) return;
+  toolsOutAppend(toolsOutCurrentBlock);
+  toolsOutCurrentBlock = "";
+  renderToolsOut();
+}
+
+function getToolCommandPreview(action, payload = {}) {
+  switch (action) {
+    case "shell_cmd": return String(payload.cmd || "").trim() || "command";
+    case "git_pull": return "git pull";
+    case "git_sync": return "git sync";
+    case "git_reset": return `git reset --${payload.mode || "hard"} ${payload.target || "HEAD"}`.trim();
+    case "git_checkout": return `git checkout ${payload.branch || ""}`.trim();
+    case "git_branch_list": return "change branch";
+    case "send_tmux_log": return "capture tmux";
+    case "server_tmux_log": return "send tmux";
+    case "install_required": return "install flask";
+    case "delete_all_videos": return "delete all videos";
+    case "delete_all_logs": return "delete all logs";
+    case "rebuild_all": return "rebuild all";
+    case "backup_settings": return "backup settings";
+    case "reboot": return "reboot";
+    default: return action;
+  }
 }
 
 function toolsMetaSet(s) {
@@ -1064,9 +1140,11 @@ function updateToolsRunningState(labels, snapshot) {
 async function runTool(action, payload) {
   const labels = getActionLabel(action);
   const runToken = ++activeToolRunToken;
+  const commandPreview = getToolCommandPreview(action, payload || {});
 
   toolsMetaSet(labels.running);
-  toolsOutSet(labels.running);
+  toolsOutCommitCurrent();
+  toolsOutSet(`> ${commandPreview}\n${labels.running}`);
   toolsProgressSet(null, { active: true, indeterminate: true });
 
   const started = await postJson("/api/tools/start", { action, ...(payload || {}) });
@@ -1077,7 +1155,8 @@ async function runTool(action, payload) {
     snapshot = await getJson(`/api/tools/job?id=${encodeURIComponent(jobId)}`);
 
     if (snapshot.log != null) {
-      toolsOutSet(snapshot.log || " ");
+      const body = normalizeToolsOutText(snapshot.log) || labels.running;
+      toolsOutSet(`> ${commandPreview}\n${body}`);
     }
 
     if (!snapshot.done) {
@@ -1088,11 +1167,17 @@ async function runTool(action, payload) {
 
     const result = snapshot.result || snapshot;
     if (!result.ok) {
+      const errMsg = friendlyError(result) || result.error || snapshot.error || labels.failed;
+      toolsOutSet(`> ${commandPreview}\n${normalizeToolsOutText(snapshot?.log) || errMsg}`);
+      toolsOutCommitCurrent();
       toolsMetaSet(labels.failed);
       toolsProgressSet(null, { active: false });
-      throw new Error(friendlyError(result) || result.error || snapshot.error || labels.failed);
+      throw new Error(errMsg);
     }
 
+    const finalBody = normalizeToolsOutText(result.out ?? snapshot.log) || labels.done;
+    toolsOutSet(`> ${commandPreview}\n${finalBody}`);
+    toolsOutCommitCurrent();
     toolsMetaSet(labels.done);
     toolsProgressSet(100, { active: true, indeterminate: false });
     window.setTimeout(() => {
@@ -1188,8 +1273,7 @@ function initToolsPage() {
     if (!cmd) return;
 
     try {
-      const j = await runTool("shell_cmd", { cmd });
-      toolsOutSet(j.out || "(no output)");
+      await runTool("shell_cmd", { cmd });
     } catch (e) {
       showError("shell_cmd", e);
     }
@@ -1261,20 +1345,19 @@ function initToolsPage() {
     try {
       const j = await runTool("install_required");
 
-      let msg = j.out || j.error || "";
+      let summary = "";
       if (j.results && Array.isArray(j.results)) {
         const lines = j.results.map(r => `${r.package}: ${r.status}`);
-        msg += "\n" + lines.join("\n");
+        summary = lines.join("\n");
       }
-      toolsOutSet(msg);
+      if (summary.trim()) toolsOutAppend(summary);
 
       if (j.need_reboot) {
         const yes = await appConfirm(UI_STRINGS[LANG].confirm_reboot_after_install, {
           title: UI_STRINGS[LANG].reboot || "Reboot",
         });
         if (yes) {
-          const r = await runTool("reboot");
-          toolsOutSet((msg + "\n\n" + (r.out || "")).trim());
+          await runTool("reboot");
         }
       }
     } catch (e) {
@@ -1336,7 +1419,8 @@ function initToolsPage() {
       try {
         const labels = getActionLabel("backup_settings");
         toolsMetaSet(labels.running);
-        toolsOutSet(labels.running);
+        toolsOutCommitCurrent();
+        toolsOutSet(`> restore settings\n${labels.running}`);
         toolsProgressSet(null, { active: true, indeterminate: true });
 
         const fd = new FormData();
@@ -1348,13 +1432,13 @@ function initToolsPage() {
 
         toolsMetaSet(labels.done);
         toolsProgressSet(100, { active: true, indeterminate: false });
-        toolsOutSet(JSON.stringify(j.result, null, 2));
+        toolsOutSet(`> restore settings\n${JSON.stringify(j.result, null, 2)}`);
+        toolsOutCommitCurrent();
 
         if (await appConfirm(UI_STRINGS[LANG].restore_done_reboot || "Restore done.\nReboot now?", {
           title: UI_STRINGS[LANG].reboot || "Reboot",
         })) {
-          const rebootRes = await runTool("reboot");
-          toolsOutSet(rebootRes.out || "");
+          await runTool("reboot");
         }
       } catch (e) {
         showError("backup_settings", e);

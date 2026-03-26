@@ -1648,8 +1648,9 @@ def _tmux_ctrl_c(session: str) -> None:
   _tmux_send_keys(session, "C-c")
 
 def _tmux_clear(session: str) -> None:
+  _tmux_send_line(session, "clear")
+  time.sleep(0.04)
   _tmux_run(["tmux", "clear-history", "-t", session], timeout=4.0, check=False)
-  _tmux_send_keys(session, "C-l")
 
 async def ws_terminal(request: web.Request) -> web.WebSocketResponse:
   ws = web.WebSocketResponse(heartbeat=20)
