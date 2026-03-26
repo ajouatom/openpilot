@@ -1,4 +1,42 @@
 /* ---------- Home: current car ---------- */
+let recordStateIsOn = false;
+let recordTogglePending = false;
+let recordStateResyncTimer = null;
+
+function parseRecordStateValue(value) {
+  return (
+    value === true ||
+    value === 1 ||
+    value === "1" ||
+    value === "true" ||
+    value === "True"
+  );
+}
+
+function scheduleRecordStateResync(delay = 520) {
+  if (recordStateResyncTimer) {
+    clearTimeout(recordStateResyncTimer);
+    recordStateResyncTimer = null;
+  }
+  recordStateResyncTimer = window.setTimeout(() => {
+    recordStateResyncTimer = null;
+    loadRecordState({ force: true }).catch(() => {});
+  }, delay);
+}
+
+function applyRecordFabState(isOn) {
+  recordStateIsOn = Boolean(isOn);
+  if (!btnRecordToggle) return;
+
+  btnRecordToggle.classList.toggle("active", recordStateIsOn);
+  btnRecordToggle.textContent = recordStateIsOn ? "ON" : "OFF";
+  const label = recordStateIsOn
+    ? (UI_STRINGS[LANG].record_on || UI_STRINGS[LANG].record || "Recording")
+    : (UI_STRINGS[LANG].record_off || UI_STRINGS[LANG].record || "Idle");
+  btnRecordToggle.setAttribute("aria-label", label);
+  btnRecordToggle.title = label;
+}
+
 async function loadCurrentCar() {
   try {
     const values = await bulkGet(["CarSelected3"]);
@@ -11,43 +49,35 @@ async function loadCurrentCar() {
   }
 }
 
-async function loadRecordState() {
+async function loadRecordState(options = {}) {
+  if (recordTogglePending && !options.force) return;
   try {
     const values = await bulkGet(["ScreenRecord"]);
-    const v = values["ScreenRecord"];
-
-    const isOn =
-      v === true ||
-      v === 1 ||
-      v === "1" ||
-      v === "true" ||
-      v === "True";
-
-    btnRecordToggle.classList.toggle("active", isOn);
-    btnRecordToggle.textContent = isOn
-      ? (UI_STRINGS[LANG].record_on || UI_STRINGS[LANG].record || "Recording")
-      : (UI_STRINGS[LANG].record_off || UI_STRINGS[LANG].record || "Idle");
+    applyRecordFabState(parseRecordStateValue(values["ScreenRecord"]));
   } catch (e) {
-    btnRecordToggle.classList.remove("active");
-    btnRecordToggle.textContent = UI_STRINGS[LANG].record_off || UI_STRINGS[LANG].record || "Record";
+    applyRecordFabState(false);
   }
 }
 async function toggleRecord() {
+  if (recordTogglePending) return;
+
+  const prev = recordStateIsOn;
+  const next = !prev;
+  recordTogglePending = true;
+  if (recordStateResyncTimer) {
+    clearTimeout(recordStateResyncTimer);
+    recordStateResyncTimer = null;
+  }
+  applyRecordFabState(next);
+
   try {
-    const values = await bulkGet(["ScreenRecord"]);
-    const v = values["ScreenRecord"];
-
-    const isOn =
-      v === true ||
-      v === 1 ||
-      v === "1" ||
-      v === "true" ||
-      v === "True";
-
-    await setParam("ScreenRecord", !isOn);
-    await loadRecordState();
+    await setParam("ScreenRecord", next);
+    scheduleRecordStateResync();
   } catch (e) {
+    applyRecordFabState(prev);
     showAppToast((UI_STRINGS[LANG].record || "Failed to toggle record: ") + e.message, { tone: "error" });
+  } finally {
+    recordTogglePending = false;
   }
 }
 
@@ -161,12 +191,14 @@ async function loadSettings() {
   const r = await fetch("/api/settings");
   const j = await r.json();
   if (!j.ok) {
+    settingSearchEntries = [];
     meta.textContent = "Failed: " + (j.error || "unknown");
     return;
   }
 
   SETTINGS = j;
   UNIT_CYCLE = j.unit_cycle || UNIT_CYCLE;
+  rebuildSettingSearchEntries();
 
   meta.textContent = `path: ${j.path} | has_params: ${j.has_params} | type_api: ${j.has_param_type}`;
 
@@ -182,6 +214,9 @@ async function loadSettings() {
   renderSettingSubnav();
   CURRENT_GROUP = null;
   showSettingScreen("groups", false);
+  if (settingSearchPanel && !settingSearchPanel.hidden) {
+    renderSettingSearchResults(settingSearchInput?.value || "");
+  }
 }
 
 function renderGroups() {
@@ -218,6 +253,233 @@ let settingSubnavFocusTimer = null;
 const SETTING_SUBNAV_PAGE_STEP = 1;
 let settingGroupTransitionLock = false;
 let settingRenderToken = 0;
+let pendingSettingFocus = null;
+let settingFocusClearTimer = null;
+let settingSearchDebounceTimer = null;
+let settingSearchEntries = [];
+const settingPageRoot = document.getElementById("pageSetting");
+
+function rebuildSettingSearchEntries() {
+  const groups = SETTINGS?.groups || [];
+  const entries = [];
+
+  groups.forEach((groupMeta) => {
+    const group = groupMeta.group;
+    const groupLabel = getSettingGroupLabel(group);
+    const list = SETTINGS?.items_by_group?.[group] || [];
+
+    list.forEach((item) => {
+      const title = formatItemText(item, "title", "etitle", "");
+      const descr = formatItemText(item, "descr", "edescr", "");
+      entries.push({
+        group,
+        groupLabel,
+        name: item.name,
+        title,
+        descr,
+        haystack: [groupLabel, item.name, title, descr].join("\n").toLowerCase(),
+      });
+    });
+  });
+
+  settingSearchEntries = entries;
+  return entries;
+}
+
+function getSettingSearchEntries() {
+  return settingSearchEntries;
+}
+
+function highlightSettingSearchText(text, query) {
+  const raw = String(text ?? "");
+  const q = String(query || "").trim().toLowerCase();
+  if (!raw || !q) return escapeHtml(raw);
+
+  const lower = raw.toLowerCase();
+  const start = lower.indexOf(q);
+  if (start < 0) return escapeHtml(raw);
+
+  const end = start + q.length;
+  return `${escapeHtml(raw.slice(0, start))}<mark class="setting-search-result__mark">${escapeHtml(raw.slice(start, end))}</mark>${escapeHtml(raw.slice(end))}`;
+}
+
+function clearSettingItemFocus() {
+  if (settingFocusClearTimer) {
+    clearTimeout(settingFocusClearTimer);
+    settingFocusClearTimer = null;
+  }
+  document.querySelectorAll(".setting.is-focus-hit").forEach((el) => el.classList.remove("is-focus-hit"));
+}
+
+function focusSettingItem(name, behavior = "smooth") {
+  const itemsBox = document.getElementById("items");
+  if (!itemsBox || !name) return false;
+
+  const target = Array.from(itemsBox.querySelectorAll(".setting")).find(
+    (el) => el.dataset.settingName === name,
+  );
+  if (!target) return false;
+
+  clearSettingItemFocus();
+  target.classList.add("is-focus-hit");
+  target.scrollIntoView({ behavior, block: "center" });
+
+  settingFocusClearTimer = window.setTimeout(() => {
+    target.classList.remove("is-focus-hit");
+    settingFocusClearTimer = null;
+  }, 2200);
+
+  pendingSettingFocus = null;
+  return true;
+}
+
+function closeSettingSearchPanel(options = {}) {
+  const clear = Boolean(options.clear);
+  if (settingSearchDebounceTimer) {
+    clearTimeout(settingSearchDebounceTimer);
+    settingSearchDebounceTimer = null;
+  }
+  if (settingSearchPanel) {
+    settingSearchPanel.hidden = true;
+    settingSearchPanel.setAttribute("aria-hidden", "true");
+  }
+  if (settingSearchBackdrop) settingSearchBackdrop.hidden = true;
+  if (btnSettingSearch) {
+    btnSettingSearch.classList.remove("active");
+    btnSettingSearch.setAttribute("aria-expanded", "false");
+  }
+  if (settingPageRoot) settingPageRoot.classList.remove("setting-search-open");
+
+  if (clear && settingSearchInput) settingSearchInput.value = "";
+  if (clear && settingSearchResults) settingSearchResults.innerHTML = "";
+  syncModalBodyLock();
+}
+
+function renderSettingSearchResults(query = "") {
+  if (!settingSearchResults) return;
+
+  const trimmed = String(query || "").trim();
+  if (!SETTINGS) {
+    settingSearchResults.innerHTML = "";
+    return;
+  }
+
+  if (!trimmed) {
+    settingSearchResults.innerHTML = "";
+    return;
+  }
+
+  if (!settingSearchEntries.length && SETTINGS) {
+    rebuildSettingSearchEntries();
+  }
+
+  const q = trimmed.toLowerCase();
+  const matches = getSettingSearchEntries()
+    .filter((entry) => entry.haystack.includes(q))
+    .slice(0, 24);
+
+  settingSearchResults.innerHTML = "";
+
+  if (!matches.length) {
+    const empty = document.createElement("div");
+    empty.className = "setting-search-result setting-search-result--empty";
+    empty.textContent = getUIText("setting_search_empty", "No matching settings found.");
+    settingSearchResults.appendChild(empty);
+    return;
+  }
+
+  matches.forEach((entry) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "setting-search-result";
+    button.innerHTML = `
+      <div class="setting-search-result__group">${highlightSettingSearchText(entry.groupLabel, trimmed)}</div>
+      <div class="setting-search-result__title">${highlightSettingSearchText(entry.title || entry.name, trimmed)}</div>
+      ${entry.name && entry.name !== entry.title ? `<div class="setting-search-result__name">${highlightSettingSearchText(entry.name, trimmed)}</div>` : ""}
+      ${entry.descr ? `<div class="setting-search-result__descr">${highlightSettingSearchText(entry.descr, trimmed)}</div>` : ""}
+    `;
+    button.onclick = async () => {
+      try {
+        pendingSettingFocus = { group: entry.group, name: entry.name };
+        closeSettingSearchPanel();
+        if (CURRENT_GROUP === entry.group && screenItems && screenItems.style.display !== "none") {
+          focusSettingItem(entry.name);
+          return;
+        }
+        await activateSettingGroup(entry.group, true);
+      } catch (e) {
+        showAppToast(e.message || "Search jump failed", { tone: "error" });
+      }
+    };
+    settingSearchResults.appendChild(button);
+  });
+}
+
+async function openSettingSearchPanel() {
+  if (CURRENT_PAGE !== "setting") return;
+  if (!SETTINGS) {
+    try {
+      await loadSettings();
+    } catch (_) {
+      // no-op
+    }
+  }
+  if (!settingSearchPanel) return;
+  settingSearchPanel.hidden = false;
+  settingSearchPanel.setAttribute("aria-hidden", "false");
+  if (settingSearchBackdrop) settingSearchBackdrop.hidden = false;
+  if (btnSettingSearch) {
+    btnSettingSearch.classList.add("active");
+    btnSettingSearch.setAttribute("aria-expanded", "true");
+  }
+  if (settingPageRoot) settingPageRoot.classList.add("setting-search-open");
+  syncModalBodyLock();
+  renderSettingSearchResults(settingSearchInput?.value || "");
+  requestAnimationFrame(() => {
+    settingSearchInput?.focus({ preventScroll: true });
+    settingSearchInput?.select();
+  });
+}
+
+function toggleSettingSearchPanel() {
+  if (!settingSearchPanel) return;
+  if (settingSearchPanel.hidden) {
+    openSettingSearchPanel().catch(() => {});
+  }
+  else closeSettingSearchPanel();
+}
+
+if (btnSettingSearch) {
+  btnSettingSearch.onclick = () => toggleSettingSearchPanel();
+}
+
+if (settingSearchBackdrop) {
+  settingSearchBackdrop.onclick = () => closeSettingSearchPanel();
+}
+
+if (settingSearchForm) {
+  settingSearchForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const firstResult = settingSearchResults?.querySelector("button.setting-search-result");
+    if (firstResult) firstResult.click();
+  });
+}
+
+if (settingSearchInput) {
+  settingSearchInput.addEventListener("input", () => {
+    if (settingSearchDebounceTimer) clearTimeout(settingSearchDebounceTimer);
+    settingSearchDebounceTimer = window.setTimeout(() => {
+      settingSearchDebounceTimer = null;
+      renderSettingSearchResults(settingSearchInput.value);
+    }, 70);
+  });
+}
+
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && settingSearchPanel && !settingSearchPanel.hidden) {
+    closeSettingSearchPanel();
+  }
+});
 
 function updateSettingSubnavLayoutState() {
   if (!settingSubnav || !settingSubnavWrap) return;
@@ -561,6 +823,8 @@ async function renderItems(group) {
 
     const el = document.createElement("div");
     el.className = "setting";
+    el.dataset.settingName = name;
+    el.dataset.settingGroup = group;
 
     const top = document.createElement("div");
     top.className = "settingTop";
@@ -638,6 +902,10 @@ async function renderItems(group) {
 
     btnMinus.onclick = () => applyDelta(-1);
     btnPlus.onclick = () => applyDelta(+1);
+  }
+
+  if (pendingSettingFocus?.group === group) {
+    requestAnimationFrame(() => focusSettingItem(pendingSettingFocus.name));
   }
 }
 
@@ -1319,6 +1587,12 @@ function pinTerminalToBottom() {
   });
 }
 
+function clearTerminalViewport() {
+  terminalLastScreen = "";
+  if (terminalOutputEl) terminalOutputEl.innerHTML = "";
+  pinTerminalToBottom();
+}
+
 function setTerminalScreen(text, forceStick = false) {
   if (!terminalOutputEl) return;
   const nextText = sanitizeTerminalScreen(text);
@@ -1532,7 +1806,7 @@ function initTerminalBindings() {
 
   bindNodeOnce(btnTerminalClearEl, "clickBound", () => {
     terminalFollowOutput = true;
-    pinTerminalToBottom();
+    clearTerminalViewport();
     sendTerminalControl("clear");
   });
 
