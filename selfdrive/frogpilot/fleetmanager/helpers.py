@@ -163,7 +163,7 @@ def video_to_img(input_path, output_path, fps=1, duration=6):
     return True
 
   result = subprocess.run(
-    ['ffmpeg', '-y', '-ss', '5', '-i', input_path, '-vframes', '1', output_path],
+    ['ffmpeg', '-y', '-ss', '1', '-i', input_path, '-vframes', '1', output_path],
     capture_output=True, text=True
   )
 
