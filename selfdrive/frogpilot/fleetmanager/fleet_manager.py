@@ -302,14 +302,14 @@ def route(route):
 @app.route("/footage")
 def footage():
   route_paths = fleet.all_routes()
-  gifs = []
+  previews = []
   for route_path in route_paths:
     input_path = Paths.log_root() + route_path + "--0/qcamera.ts"
-    output_path = Paths.log_root() + route_path + "--0/preview.gif"
-    fleet.video_to_gif(input_path, output_path)
-    gif_path = route_path + "--0/preview.gif"
-    gifs.append(gif_path)
-  zipped = zip(route_paths, gifs, strict=False)
+    output_path = Paths.log_root() + route_path + "--0/preview.jpg"
+    fleet.video_to_img(input_path, output_path)
+    preview_path = route_path + "--0/preview.jpg"
+    previews.append(preview_path)
+  zipped = zip(route_paths, previews, strict=False)
   return render_template("footage.html", zipped=zipped)
 
 @app.route("/preserved/")
@@ -317,18 +317,20 @@ def footage():
 def preserved():
   query_type = "qcamera"
   route_paths = []
-  gifs = []
+  previews = []
   segments = fleet.preserved_routes()
   for segment in segments:
     input_path = Paths.log_root() + segment + "/qcamera.ts"
-    output_path = Paths.log_root() + segment + "/preview.gif"
-    fleet.video_to_gif(input_path, output_path)
+    output_path = Paths.log_root() + segment + "/preview.jpg"
+    fleet.video_to_img(input_path, output_path)
+
     split_segment = segment.split("--")
     route_paths.append(f"{split_segment[0]}--{split_segment[1]}?{split_segment[2]},{query_type}")
-    gif_path = segment + "/preview.gif"
-    gifs.append(gif_path)
 
-  zipped = zip(route_paths, gifs, segments, strict=False)
+    preview_path = segment + "/preview.jpg"
+    previews.append(preview_path)
+
+  zipped = zip(route_paths, previews, segments, strict=False)
   return render_template("preserved.html", zipped=zipped)
 
 @app.route("/screenrecords/")
@@ -542,8 +544,8 @@ def find_navicon(file_name):
   directory = "/data/openpilot/selfdrive/assets/navigation/"
   return send_from_directory(directory, file_name, as_attachment=True)
 
-@app.route("/previewgif/<path:file_path>", methods=['GET'])
-def find_previewgif(file_path):
+@app.route("/preview/<path:file_path>", methods=['GET'])
+def find_preview(file_path):
   directory = "/data/media/0/realdata/"
   return send_from_directory(directory, file_path, as_attachment=True)
 
