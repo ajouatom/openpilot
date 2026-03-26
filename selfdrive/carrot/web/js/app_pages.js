@@ -1013,8 +1013,35 @@ function normalizeToolsOutText(s) {
 function renderToolsOut() {
   const out = document.getElementById("toolsOut");
   if (!out) return;
-  const next = [toolsOutHistory, toolsOutCurrentBlock].filter(Boolean).join("\n\n");
-  out.textContent = next || " ";
+  const historyText = normalizeToolsOutText(toolsOutHistory);
+  const currentText = normalizeToolsOutText(toolsOutCurrentBlock);
+
+  if (!historyText && !currentText) {
+    out.textContent = " ";
+  } else {
+    const frag = document.createDocumentFragment();
+
+    if (historyText) {
+      const historyBlock = document.createElement("span");
+      historyBlock.className = "tools-console-log__history";
+      historyBlock.textContent = historyText;
+      frag.appendChild(historyBlock);
+    }
+
+    if (historyText && currentText) {
+      frag.appendChild(document.createTextNode("\n\n"));
+    }
+
+    if (currentText) {
+      const currentBlock = document.createElement("span");
+      currentBlock.className = "tools-console-log__current";
+      currentBlock.textContent = currentText;
+      frag.appendChild(currentBlock);
+    }
+
+    out.replaceChildren(frag);
+  }
+
   requestAnimationFrame(() => {
     out.scrollTop = out.scrollHeight;
   });
@@ -1671,9 +1698,17 @@ function pinTerminalToBottom() {
   });
 }
 
+function updateTerminalOverflowState() {
+  if (!terminalScreenEl || !terminalOutputEl) return;
+  const overflowX = (terminalOutputEl.scrollWidth - terminalScreenEl.clientWidth) > 20;
+  const atRight = (terminalScreenEl.scrollWidth - terminalScreenEl.scrollLeft - terminalScreenEl.clientWidth) < 8;
+  terminalScreenEl.classList.toggle("is-x-overflow", overflowX && !atRight);
+}
+
 function clearTerminalViewport() {
   terminalLastScreen = "";
   if (terminalOutputEl) terminalOutputEl.innerHTML = "";
+  updateTerminalOverflowState();
   pinTerminalToBottom();
 }
 
@@ -1690,6 +1725,7 @@ function setTerminalScreen(text, forceStick = false) {
     setTerminalSessionMeta(nextCwd);
   }
   terminalOutputEl.innerHTML = renderTerminalScreenMarkup(nextText);
+  requestAnimationFrame(updateTerminalOverflowState);
 
   if (shouldStick) pinTerminalToBottom();
 }
@@ -1728,6 +1764,7 @@ function bindTerminalLayoutObservers() {
   const handleLayout = () => requestAnimationFrame(() => {
     updateTerminalViewportMetrics();
     updateTerminalToastAnchor();
+    updateTerminalOverflowState();
   });
   window.addEventListener("resize", handleLayout, { passive: true });
   window.addEventListener("orientationchange", handleLayout, { passive: true });
@@ -1869,6 +1906,7 @@ function initTerminalBindings() {
 
   bindNodeOnce(terminalScreenEl, "scrollBound", () => {
     terminalFollowOutput = isTerminalPinnedToBottom();
+    updateTerminalOverflowState();
   }, "scroll");
 
   bindNodeOnce(terminalFormEl, "submitBound", (ev) => {
@@ -1917,6 +1955,7 @@ function initTerminalPage() {
   updateTerminalViewportMetrics();
   if (!terminalLastScreen) setTerminalScreen(" ", true);
   requestAnimationFrame(updateTerminalToastAnchor);
+  requestAnimationFrame(updateTerminalOverflowState);
   window.setTimeout(updateTerminalToastAnchor, 90);
   connectTerminal(false);
 }
