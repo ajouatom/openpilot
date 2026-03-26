@@ -586,7 +586,7 @@ body.dialog-open {
 
 #pageTerminal {
   --terminal-inline: max(var(--sp-lg), calc((100vw - var(--content-max-width)) / 2));
-  --terminal-height: calc(100dvh - (124px + var(--nav-bar-height) + env(safe-area-inset-bottom, 0px)));
+  --terminal-height: calc(100dvh - (124px + env(safe-area-inset-bottom, 0px)));
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -601,7 +601,6 @@ body.dialog-open {
   display: flex;
   flex-direction: column;
   background: color-mix(in srgb, var(--md-surface) 92%, #000);
-  border-top: 1px solid color-mix(in srgb, var(--md-stroke-soft) 52%, transparent);
   overflow: hidden;
   box-sizing: border-box;
 }
@@ -676,12 +675,17 @@ body.dialog-open {
   word-break: break-word;
 }
 
+.terminal-output__promptHost {
+  color: color-mix(in srgb, #67e27a 88%, #d7ffe0);
+  font-weight: 700;
+}
+
 .terminal-form {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: var(--sp-sm);
   align-items: center;
-  margin: 12px var(--terminal-inline) calc(12px + env(safe-area-inset-bottom, 0px));
+  margin: 8px var(--terminal-inline) calc(8px + env(safe-area-inset-bottom, 0px));
   padding-left: 14px;
   border: 1px solid color-mix(in srgb, var(--md-stroke-soft) 56%, transparent);
   border-radius: var(--r-pill);
@@ -929,12 +933,40 @@ body[data-page="terminal"] .app-toast-host {
 .app-branch-picker__item {
   width: 100%;
   margin-bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-md);
   text-align: left;
+  font-family: var(--font-mono);
+  font-size: var(--fs-body-sm);
+}
+
+.app-branch-picker__label {
+  min-width: 0;
+  flex: 1 1 auto;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family: var(--font-mono);
-  font-size: var(--fs-body-sm);
+}
+
+.app-branch-picker__badge {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid color-mix(in srgb, var(--md-primary) 42%, transparent);
+  background: color-mix(in srgb, var(--md-primary-cont) 62%, transparent);
+  color: var(--md-primary);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.app-branch-picker__item.is-current {
+  border-color: color-mix(in srgb, var(--md-primary) 56%, var(--md-stroke-soft));
+  background: color-mix(in srgb, var(--md-primary-cont) 34%, var(--md-surface-cont-h));
+  color: var(--md-primary);
+  font-weight: 800;
 }
 
 /* ── Surface Card (only HUD, WebRTC, output) ──────────────── */

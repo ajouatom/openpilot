@@ -13,6 +13,7 @@ const UI_STRINGS = {
     fleet: "플릿",
     lang: "언어",
     branch_select: "브랜치 선택",
+    branch_current: "현재",
     server_state: "서버 상태",
     quick_link: "퀵 링크",
     car_select: "차량 선택",
@@ -94,6 +95,7 @@ const UI_STRINGS = {
     fleet: "Fleet",
     lang: "Lang",
     branch_select: "Branch Select",
+    branch_current: "Current",
     server_state: "Server Status",
     quick_link: "Quick Link",
     car_select: "Car Select",
@@ -174,6 +176,7 @@ const UI_STRINGS = {
     fleet: "车队",
     lang: "语言",
     branch_select: "分支选择",
+    branch_current: "当前",
     server_state: "服务器状态",
     quick_link: "快速链接",
     car_select: "车辆选择",
@@ -471,6 +474,7 @@ modelTitle.onclick = () => showCarScreen("makers");
 
 // Branch select
 let BRANCHES = [];
+let CURRENT_BRANCH_NAME = "";
 const branchTitle = document.getElementById("branchTitle");
 const btnBackBranch = document.getElementById("btnBackBranch");
 const branchMeta = document.getElementById("branchMeta");

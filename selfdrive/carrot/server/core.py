@@ -875,6 +875,15 @@ async def _run_tool_job(job: Dict[str, Any]) -> None:
         _tool_job_finish(job, ok=False, result=_tool_result_from_log(job, rc))
         return
 
+      rc_current, current_branch = await _tool_capture_exec(
+        ["git", "branch", "--show-current"],
+        cwd=repo_dir,
+        timeout=15,
+      )
+      if rc_current != 0:
+        current_branch = ""
+      current_branch = (current_branch or "").strip()
+
       branches: list[str] = []
       for line in out.splitlines():
         line = line.strip()
@@ -884,7 +893,12 @@ async def _run_tool_job(job: Dict[str, Any]) -> None:
           line = line.replace("remotes/", "", 1)
         branches.append(line)
       branches = sorted(set(branches))
-      result = {"ok": True, "branches": branches, "fetch": (job.get("log") or "").strip()}
+      result = {
+        "ok": True,
+        "branches": branches,
+        "current_branch": current_branch,
+        "fetch": (job.get("log") or "").strip(),
+      }
       _tool_job_finish(job, ok=True, result=result)
       return
 
@@ -1252,6 +1266,9 @@ async def api_tools(request: web.Request) -> web.Response:
         merged = (out0 + "\n\n" + out).strip()
         return web.json_response({"ok": False, "rc": rc, "out": merged})
 
+      rc_current, out_current = run(["git", "branch", "--show-current"], cwd=REPO_DIR)
+      current_branch = out_current.strip() if rc_current == 0 else ""
+
       # 3) 정리: "remotes/" 제거, HEAD 같은 노이즈 제거, 중복 제거
       branches: list[str] = []
       for line in out.splitlines():
@@ -1272,7 +1289,12 @@ async def api_tools(request: web.Request) -> web.Response:
       branches = sorted(set(branches))
 
       # fetch 출력도 같이 주면 UI에서 "동기화됨" 로그 확인 가능 (원치 않으면 빼도 됨)
-      return web.json_response({"ok": True, "branches": branches, "fetch": out0.strip()})
+      return web.json_response({
+        "ok": True,
+        "branches": branches,
+        "current_branch": current_branch,
+        "fetch": out0.strip(),
+      })
 
 
     if action == "delete_all_videos":
@@ -1626,6 +1648,7 @@ def _tmux_ctrl_c(session: str) -> None:
   _tmux_send_keys(session, "C-c")
 
 def _tmux_clear(session: str) -> None:
+  _tmux_run(["tmux", "clear-history", "-t", session], timeout=4.0, check=False)
   _tmux_send_keys(session, "C-l")
 
 async def ws_terminal(request: web.Request) -> web.WebSocketResponse:

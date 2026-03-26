@@ -1156,10 +1156,12 @@ async function loadBranchesAndShow() {
   appBranchPickerMeta.textContent = "loading...";
   appBranchPickerList.innerHTML = "";
   BRANCHES = [];
+  CURRENT_BRANCH_NAME = "";
 
   try {
     const j = await runTool("git_branch_list");
     BRANCHES = j.branches || [];
+    CURRENT_BRANCH_NAME = (j.current_branch || "").trim();
     appBranchPickerMeta.textContent = `${BRANCHES.length} branches`;
 
     renderBranchList();
@@ -1183,7 +1185,22 @@ function renderBranchList() {
   for (const br of BRANCHES) {
     const b = document.createElement("button");
     b.className = "btn groupBtn app-branch-picker__item";
-    b.textContent = br;
+    if (CURRENT_BRANCH_NAME && br === CURRENT_BRANCH_NAME) {
+      b.classList.add("is-current");
+    }
+
+    const label = document.createElement("span");
+    label.className = "app-branch-picker__label";
+    label.textContent = br;
+    b.appendChild(label);
+
+    if (CURRENT_BRANCH_NAME && br === CURRENT_BRANCH_NAME) {
+      const badge = document.createElement("span");
+      badge.className = "app-branch-picker__badge";
+      badge.textContent = getUIText("branch_current", "Current");
+      b.appendChild(badge);
+    }
+
     b.onclick = () => onSelectBranch(br);
     appBranchPickerList.appendChild(b);
   }
@@ -1265,6 +1282,18 @@ function sanitizeTerminalScreen(text) {
   return nextText;
 }
 
+function renderTerminalScreenMarkup(text) {
+  return String(text || " ")
+    .split("\n")
+    .map((line) => {
+      const match = line.match(/^([^\s:@]+@[^\s:]+)(?=:[^$]*\$ ?)/);
+      if (!match) return escapeHtml(line);
+      const promptHost = match[1];
+      return `<span class="terminal-output__promptHost">${escapeHtml(promptHost)}</span>${escapeHtml(line.slice(promptHost.length))}`;
+    })
+    .join("\n");
+}
+
 function isTerminalPinnedToBottom() {
   if (!terminalScreenEl) return true;
   return (terminalScreenEl.scrollHeight - terminalScreenEl.scrollTop - terminalScreenEl.clientHeight) < 28;
@@ -1277,7 +1306,7 @@ function setTerminalScreen(text, forceStick = false) {
 
   const shouldStick = forceStick || isTerminalPinnedToBottom();
   terminalLastScreen = nextText;
-  terminalOutputEl.textContent = nextText;
+  terminalOutputEl.innerHTML = renderTerminalScreenMarkup(nextText);
 
   if (shouldStick && terminalScreenEl) {
     requestAnimationFrame(() => {
@@ -1463,7 +1492,9 @@ function initTerminalBindings() {
 
   bindNodeOnce(btnTerminalClearEl, "clickBound", () => {
     sendTerminalControl("clear");
-    sendTerminalControl("refresh", { quiet: true });
+    window.setTimeout(() => {
+      sendTerminalControl("refresh", { quiet: true });
+    }, 120);
   });
 
   bindNodeOnce(btnTerminalReconnectEl, "clickBound", () => {
