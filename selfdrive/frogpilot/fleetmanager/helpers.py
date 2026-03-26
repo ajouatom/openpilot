@@ -132,24 +132,42 @@ def get_preserved_segments(dirs_by_creation: list[str]) -> list[str]:
 
   return preserved
 
-def video_to_gif(input_path, output_path, fps=1, duration=6): # not used right now but can if want longer animated gif
+def video_to_gif(input_path, output_path, fps=1, duration=6):
   if os.path.exists(output_path):
     return
+
   command = [
     'ffmpeg', '-y', '-i', input_path,
     '-filter_complex',
     f'fps={fps},scale=240:-1:flags=lanczos,setpts=0.1*PTS,split[s0][s1];[s0]palettegen=max_colors=32[p];[s1][p]paletteuse=dither=bayer',
     '-t', str(duration), output_path
   ]
-  subprocess.run(command)
+
+  result = subprocess.run(command, capture_output=True, text=True)
+  if result.returncode != 0:
+    print("video_to_gif failed")
+    print(result.stderr)
+    return False
+
   print(f"GIF file created: {output_path}")
+  return True
 
 def video_to_img(input_path, output_path, fps=1, duration=6):
   if os.path.exists(output_path):
     print("video_to_img path exist=", output_path)
-    return
-  subprocess.run(['ffmpeg', '-y', '-i', input_path, '-ss', '5', '-vframes', '1', output_path])
-  print(f"GIF file created: {output_path}")
+    return True
+
+  result = subprocess.run(
+    ['ffmpeg', '-y', '-i', input_path, '-ss', '5', '-vframes', '1', output_path],
+    capture_output=True, text=True
+  )
+  if result.returncode != 0:
+    print("video_to_img failed")
+    print(result.stderr)
+    return False
+
+  print(f"Image file created: {output_path}")
+  return True
 
 def segments_in_route(route):
   segment_names = [segment_name for segment_name in all_segment_names() if segment_name.time_str == route]
