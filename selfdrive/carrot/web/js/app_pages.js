@@ -1251,14 +1251,15 @@ let terminalSessionName = "carrot-web";
 let terminalLastScreen = "";
 let terminalLayoutBound = false;
 let terminalFollowOutput = true;
+let terminalCurrentCwd = "/data/openpilot";
 
 function setTerminalMeta(text) {
   if (terminalMetaEl) terminalMetaEl.textContent = String(text || "");
 }
 
-function setTerminalSessionMeta() {
+function setTerminalSessionMeta(cwd = terminalCurrentCwd) {
   if (!terminalSessionMetaEl) return;
-  terminalSessionMetaEl.textContent = "IP";
+  terminalSessionMetaEl.textContent = String(cwd || "/data/openpilot");
 }
 
 function setTerminalSessionInfo(session = terminalSessionName) {
@@ -1281,6 +1282,17 @@ function sanitizeTerminalScreen(text) {
   }
 
   return nextText;
+}
+
+function extractTerminalCwd(text) {
+  const lines = String(text || "").split("\n");
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const match = line.match(/^[^\s:@]+@[^\s:]+:(.+?)[#$]\s*$/);
+    if (match) return match[1].trim();
+  }
+  return "";
 }
 
 function renderTerminalScreenMarkup(text) {
@@ -1314,6 +1326,11 @@ function setTerminalScreen(text, forceStick = false) {
 
   const shouldStick = forceStick || terminalFollowOutput || isTerminalPinnedToBottom();
   terminalLastScreen = nextText;
+  const nextCwd = extractTerminalCwd(nextText);
+  if (nextCwd && nextCwd !== terminalCurrentCwd) {
+    terminalCurrentCwd = nextCwd;
+    setTerminalSessionMeta(nextCwd);
+  }
   terminalOutputEl.innerHTML = renderTerminalScreenMarkup(nextText);
 
   if (shouldStick) pinTerminalToBottom();
@@ -1517,9 +1534,6 @@ function initTerminalBindings() {
     terminalFollowOutput = true;
     pinTerminalToBottom();
     sendTerminalControl("clear");
-    window.setTimeout(() => {
-      sendTerminalControl("refresh", { quiet: true });
-    }, 120);
   });
 
   bindNodeOnce(btnTerminalReconnectEl, "clickBound", () => {
@@ -1539,6 +1553,7 @@ function initTerminalBindings() {
 function initTerminalPage() {
   terminalPageActive = true;
   terminalFollowOutput = true;
+  terminalCurrentCwd = "/data/openpilot";
   initTerminalBindings();
   setTerminalSessionMeta();
   updateTerminalViewportMetrics();

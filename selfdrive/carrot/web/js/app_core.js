@@ -530,6 +530,7 @@ function setDisplayedPage(page) {
 }
 
 function getSwipeTransition(fromPage, toPage) {
+  if (fromPage === "terminal" || toPage === "terminal") return null;
   const fromIdx = SWIPE_PAGES.indexOf(fromPage);
   const toIdx = SWIPE_PAGES.indexOf(toPage);
   if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return null;
@@ -729,8 +730,11 @@ function showPage(page, pushHistory = false, transition = null) {
   btnTools.classList.toggle("active", page === "tools");
   btnTerminal.classList.toggle("active", page === "terminal");
 
-  // Scroll to top on page change
-  window.scrollTo(0, 0);
+  // Terminal uses its own fixed viewport layout. Resetting the window scroll
+  // while entering/leaving it causes visible jumps on mobile.
+  if (prevPage !== "terminal" && page !== "terminal") {
+    window.scrollTo(0, 0);
+  }
 
   if (page === "home") {
     loadCurrentCar().catch(() => {});
@@ -872,7 +876,7 @@ function renderUIText() {
   setText("sysCmdHelp", s.sys_cmd_help);
   setText("outputTitle", s.section_output);
   setText("terminalTitle", s.terminal);
-  setText("terminalSessionMeta", "IP");
+  setText("terminalSessionMeta", "/data/openpilot");
   setText("btnTerminalCtrlC", s.terminal_ctrl_c);
   setText("btnTerminalClear", s.terminal_clear);
   setText("btnTerminalReconnect", s.terminal_reconnect);
@@ -1329,7 +1333,7 @@ async function setParam(name, value) {
 }
 
 /* ── Swipe Navigation ──────────────────────────────────── */
-const SWIPE_PAGES = ["home", "setting", "tools", "terminal"];
+const SWIPE_PAGES = ["home", "setting", "tools"];
 const SETTING_BACK_EDGE_WIDTH = 32;
 
 function prepareSettingBackFrame() {

@@ -413,6 +413,8 @@ body.dialog-open {
   --tools-console-inline: max(var(--sp-lg), calc((100vw - var(--content-max-width)) / 2));
   --tools-console-bg: color-mix(in srgb, var(--md-surface) 92%, #000);
   --tools-console-divider: color-mix(in srgb, var(--md-stroke-soft) 46%, transparent);
+  padding-bottom: calc(var(--tools-console-height) + var(--tools-console-bottom) + var(--sp-md));
+  background: var(--tools-console-bg);
 }
 
 .tools-scroll-stack {
