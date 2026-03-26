@@ -708,12 +708,38 @@ window.addEventListener("popstate", async (ev) => {
 
 function toolsOutSet(s) {
   const out = document.getElementById("toolsOut");
-  if (out) out.textContent = String(s);
+  if (!out) return;
+  out.textContent = String(s);
+  requestAnimationFrame(() => {
+    out.scrollTop = out.scrollHeight;
+  });
 }
 
 function toolsMetaSet(s) {
   const meta = document.getElementById("toolsMeta");
   if (meta) meta.textContent = String(s);
+}
+
+function toolsProgressSet(percent = null, opts = {}) {
+  const host = document.getElementById("toolsProgress");
+  const bar = document.getElementById("toolsProgressBar");
+  if (!host || !bar) return;
+
+  const active = opts.active !== false;
+  const indeterminate = Boolean(opts.indeterminate);
+  if (!active) {
+    host.hidden = true;
+    host.classList.remove("is-indeterminate");
+    bar.style.width = "0%";
+    return;
+  }
+
+  host.hidden = false;
+  host.classList.toggle("is-indeterminate", indeterminate);
+
+  const hasPercent = Number.isFinite(percent);
+  const safePercent = hasPercent ? Math.max(4, Math.min(100, Number(percent))) : 28;
+  bar.style.width = `${safePercent}%`;
 }
 
 async function postJson(url, bodyObj) {
@@ -730,27 +756,84 @@ async function postJson(url, bodyObj) {
   return j;
 }
 
+async function getJson(url) {
+  const r = await fetch(url);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.ok) {
+    const msg = friendlyError(j) || j.error || ("HTTP " + r.status);
+    throw new Error(msg);
+  }
+  return j;
+}
+
+function waitMs(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+let activeToolRunToken = 0;
+
+function updateToolsRunningState(labels, snapshot) {
+  const message = String(snapshot?.message || labels.running || "");
+  const stepCurrent = Number(snapshot?.step_current || 0);
+  const stepTotal = Number(snapshot?.step_total || 0);
+  const progressValue = Number(snapshot?.progress);
+  const hasProgress = Number.isFinite(progressValue) && progressValue > 0;
+
+  let metaText = message || labels.running;
+  if (hasProgress && progressValue < 100) {
+    metaText = `${metaText} · ${Math.round(progressValue)}%`;
+  } else if (stepTotal > 1 && stepCurrent > 0) {
+    metaText = `${metaText} · ${stepCurrent}/${stepTotal}`;
+  }
+
+  toolsMetaSet(metaText);
+  toolsProgressSet(hasProgress ? progressValue : null, {
+    active: true,
+    indeterminate: !hasProgress || progressValue >= 100,
+  });
+}
+
 async function runTool(action, payload) {
   const labels = getActionLabel(action);
+  const runToken = ++activeToolRunToken;
 
   toolsMetaSet(labels.running);
-  toolsOutSet("...");
+  toolsOutSet(labels.running);
+  toolsProgressSet(null, { active: true, indeterminate: true });
 
-  const j = await postJson("/api/tools", { action, ...(payload || {}) });
+  const started = await postJson("/api/tools/start", { action, ...(payload || {}) });
+  const jobId = started.job_id;
+  let snapshot = null;
 
-  if (j.out != null) {
-    toolsOutSet(j.out);
-  } else {
-    toolsOutSet(JSON.stringify(j, null, 2));
+  while (runToken === activeToolRunToken) {
+    snapshot = await getJson(`/api/tools/job?id=${encodeURIComponent(jobId)}`);
+
+    if (snapshot.log != null) {
+      toolsOutSet(snapshot.log || " ");
+    }
+
+    if (!snapshot.done) {
+      updateToolsRunningState(labels, snapshot);
+      await waitMs(320);
+      continue;
+    }
+
+    const result = snapshot.result || snapshot;
+    if (!result.ok) {
+      toolsMetaSet(labels.failed);
+      toolsProgressSet(null, { active: false });
+      throw new Error(friendlyError(result) || result.error || snapshot.error || labels.failed);
+    }
+
+    toolsMetaSet(labels.done);
+    toolsProgressSet(100, { active: true, indeterminate: false });
+    window.setTimeout(() => {
+      if (activeToolRunToken === runToken) toolsProgressSet(null, { active: false });
+    }, 900);
+    return result;
   }
 
-  if (!j.ok) {
-    toolsMetaSet(labels.failed);
-    throw new Error(friendlyError(j) || j.out || labels.failed);
-  }
-
-  toolsMetaSet(labels.done);
-  return j;
+  throw new Error("tool run cancelled");
 }
 
 async function confirmText(msg, placeholder = "") {
@@ -767,6 +850,8 @@ function showError(action, error) {
   const labels = getActionLabel(action);
   const title = labels.failed;
   const msg = (typeof error === "object" && error.message) ? error.message : String(error);
+  toolsMetaSet(title);
+  toolsProgressSet(null, { active: false });
   appAlert(msg, { title });
 }
 
@@ -843,6 +928,7 @@ function initToolsPage() {
   };
 
   toolsMetaSet(UI_STRINGS[LANG].ready || "Ready");
+  toolsProgressSet(null, { active: false });
 
   bindOnce("btnGitPull", async () => {
     try {
@@ -982,7 +1068,8 @@ function initToolsPage() {
       try {
         const labels = getActionLabel("backup_settings");
         toolsMetaSet(labels.running);
-        toolsOutSet("...");
+        toolsOutSet(labels.running);
+        toolsProgressSet(null, { active: true, indeterminate: true });
 
         const fd = new FormData();
         fd.append("file", inp.files[0]);
@@ -992,6 +1079,7 @@ function initToolsPage() {
         if (!r.ok || !j.ok) throw new Error(friendlyError(j) || j.error || ("HTTP " + r.status));
 
         toolsMetaSet(labels.done);
+        toolsProgressSet(100, { active: true, indeterminate: false });
         toolsOutSet(JSON.stringify(j.result, null, 2));
 
         if (await appConfirm(UI_STRINGS[LANG].restore_done_reboot || "Restore done.\nReboot now?", {
@@ -1003,6 +1091,7 @@ function initToolsPage() {
       } catch (e) {
         showError("backup_settings", e);
       } finally {
+        window.setTimeout(() => toolsProgressSet(null, { active: false }), 900);
         inp.remove();
       }
     };
@@ -1037,7 +1126,7 @@ function initToolsPage() {
     const cooldownUntil = Number(sysCmdInput.dataset.hintCooldownUntil || "0");
     if (now < cooldownUntil) return;
     sysCmdInput.dataset.hintCooldownUntil = String(now + 3200);
-    showAppToast(getUIText("sys_cmd_help", "Allowed: git pull/status/branch/log, df, free, uptime"), {
+    showAppToast(getUIText("sys_cmd_help", "Allowed: pull, status, branch, log, git ..., df, free, uptime"), {
       tone: "hint",
       duration: 1700,
     });
@@ -1361,6 +1450,13 @@ function initTerminalBindings() {
   });
 
   bindNodeOnce(btnTerminalReconnectEl, "clickBound", () => {
+    const metaText = String(terminalMetaEl?.textContent || "");
+    const blockedByPassword = terminalLastScreen.includes("Password:");
+    const blockedByStartup = metaText.includes("returned non-zero exit status");
+    if ((blockedByPassword || blockedByStartup) && sendTerminalControl("new_session", { quiet: true })) {
+      setTerminalMeta(getUIText("connecting", "connecting..."));
+      return;
+    }
     connectTerminal(true);
   });
 }

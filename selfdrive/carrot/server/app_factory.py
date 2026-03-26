@@ -22,6 +22,8 @@ def make_app() -> web.Application:
   app.router.add_get("/api/cars", routes_api.api_cars)
   app.router.add_post("/api/reboot", routes_api.api_reboot)
   app.router.add_post("/api/tools", routes_api.api_tools)
+  app.router.add_post("/api/tools/start", routes_api.api_tools_start)
+  app.router.add_get("/api/tools/job", routes_api.api_tools_job)
   app.router.add_post("/api/params_restore", routes_api.api_params_restore)
   app.router.add_get("/api/heartbeat_status", routes_api.api_heartbeat_status)
   app.router.add_post("/api/time_sync", routes_api.api_time_sync)

@@ -419,6 +419,38 @@ body.dialog-open {
   padding-bottom: var(--sp-lg);
 }
 
+.tools-progress {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  margin: -4px 0 var(--sp-md);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-stroke-soft) 26%, transparent);
+  overflow: hidden;
+}
+
+.tools-progress__bar {
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--md-primary) 58%, transparent), var(--md-primary));
+  transition: width 180ms ease, transform 220ms ease, opacity 180ms ease;
+}
+
+.tools-progress.is-indeterminate .tools-progress__bar {
+  width: 34%;
+  animation: tools-progress-sweep 1.1s linear infinite;
+}
+
+@keyframes tools-progress-sweep {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
 .tools-console-dock {
   position: sticky;
   bottom: var(--tools-console-bottom);
