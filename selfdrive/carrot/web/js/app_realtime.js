@@ -292,7 +292,9 @@ async function rtcToggleFullscreen() {
     return;
   }
 
-  alert(UI_STRINGS[LANG].fullscreen_not_supported || "Fullscreen not supported on this browser.");
+  showAppToast(UI_STRINGS[LANG].fullscreen_not_supported || "Fullscreen not supported on this browser.", {
+    tone: "error",
+  });
 }
 
 // ��ư

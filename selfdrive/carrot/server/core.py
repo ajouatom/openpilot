@@ -27,7 +27,7 @@ import traceback
 import numpy as np
 from typing import Dict, Any, Tuple, Optional, List
 
-from aiohttp import web, ClientSession
+from aiohttp import web, ClientSession, WSMsgType
 from cereal import messaging
 from opendbc.car import structs
 import shlex
@@ -36,6 +36,8 @@ import socket
 import urllib.request
 import urllib.error
 import ssl
+import getpass
+import uuid
 from openpilot.common.realtime import set_core_affinity
 
 
@@ -94,6 +96,9 @@ async def log_mw(request, handler):
 
 
 WEBRTCD_URL = "http://127.0.0.1:5001/stream"
+TMUX_WEB_SESSION = "carrot-web"
+TMUX_CAPTURE_LINES = 160
+TMUX_START_DIR = "/data/openpilot"
 
 def _get_local_ip() -> str:
   try:
@@ -606,6 +611,564 @@ async def api_reboot(request: web.Request) -> web.Response:
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
 
+
+TOOL_JOB_MAX_LOG_CHARS = 180000
+TOOL_JOB_KEEP_COUNT = 24
+_tool_jobs: Dict[str, Dict[str, Any]] = {}
+
+
+def _tool_job_touch(job: Dict[str, Any]) -> None:
+  job["updated_at"] = time.time()
+
+
+def _tool_job_trim_log(job: Dict[str, Any]) -> None:
+  text = job.get("log") or ""
+  if len(text) <= TOOL_JOB_MAX_LOG_CHARS:
+    return
+  job["log"] = text[-TOOL_JOB_MAX_LOG_CHARS:]
+
+
+def _tool_job_append(job: Dict[str, Any], text: Any) -> None:
+  if text is None:
+    return
+  chunk = str(text).replace("\r\n", "\n").replace("\r", "\n")
+  if not chunk:
+    return
+  cur = job.get("log") or ""
+  if cur and not cur.endswith("\n") and not chunk.startswith("\n"):
+    cur += "\n"
+  job["log"] = cur + chunk
+  _tool_job_trim_log(job)
+  _tool_job_touch(job)
+
+
+def _tool_job_progress(job: Dict[str, Any], *, message: Optional[str] = None,
+                       current: Optional[int] = None, total: Optional[int] = None,
+                       percent: Optional[int] = None) -> None:
+  if message is not None:
+    job["message"] = str(message)
+  if current is not None:
+    job["step_current"] = max(0, int(current))
+  if total is not None:
+    job["step_total"] = max(0, int(total))
+  if percent is None:
+    c = job.get("step_current")
+    t = job.get("step_total")
+    if isinstance(c, int) and isinstance(t, int) and t > 0:
+      percent = int(max(0, min(100, round((c / t) * 100))))
+  job["progress"] = percent
+  _tool_job_touch(job)
+
+
+def _tool_job_snapshot(job: Dict[str, Any]) -> Dict[str, Any]:
+  result = job.get("result")
+  return {
+    "ok": True,
+    "id": job["id"],
+    "action": job["action"],
+    "status": job["status"],
+    "done": job["status"] in ("done", "failed"),
+    "log": job.get("log") or "",
+    "progress": job.get("progress"),
+    "message": job.get("message") or "",
+    "step_current": job.get("step_current"),
+    "step_total": job.get("step_total"),
+    "error": job.get("error"),
+    "error_code": job.get("error_code"),
+    "error_detail": job.get("error_detail"),
+    "created_at": job.get("created_at"),
+    "updated_at": job.get("updated_at"),
+    "result": result,
+  }
+
+
+def _tool_job_finish(job: Dict[str, Any], *, ok: bool, result: Optional[Dict[str, Any]] = None,
+                     error: Optional[str] = None, error_code: Optional[str] = None,
+                     error_detail: Optional[str] = None) -> None:
+  job["status"] = "done" if ok else "failed"
+  job["result"] = result or {"ok": bool(ok)}
+  if error is None and result:
+    error = result.get("error") or (None if result.get("ok", ok) else result.get("out"))
+  job["error"] = error
+  job["error_code"] = error_code or (result.get("error_code") if result else None)
+  job["error_detail"] = error_detail or (result.get("error_detail") if result else None)
+  if ok:
+    job["progress"] = 100
+  _tool_job_touch(job)
+  _tool_job_prune()
+
+
+def _tool_job_prune() -> None:
+  finished = [
+    item for item in _tool_jobs.values()
+    if item.get("status") in ("done", "failed")
+  ]
+  if len(finished) <= TOOL_JOB_KEEP_COUNT:
+    return
+  finished.sort(key=lambda item: float(item.get("updated_at") or 0), reverse=True)
+  for old in finished[TOOL_JOB_KEEP_COUNT:]:
+    _tool_jobs.pop(old["id"], None)
+
+
+async def _tool_stream_exec(job: Dict[str, Any], cmd: List[str], *, cwd: Optional[str] = None,
+                            timeout: Optional[float] = None) -> int:
+  proc = await asyncio.create_subprocess_exec(
+    *cmd,
+    cwd=cwd,
+    stdout=asyncio.subprocess.PIPE,
+    stderr=asyncio.subprocess.STDOUT,
+  )
+
+  async def _consume() -> int:
+    assert proc.stdout is not None
+    while True:
+      chunk = await proc.stdout.read(1024)
+      if not chunk:
+        break
+      _tool_job_append(job, chunk.decode("utf-8", errors="replace"))
+    return await proc.wait()
+
+  try:
+    if timeout is not None:
+      return await asyncio.wait_for(_consume(), timeout=timeout)
+    return await _consume()
+  except asyncio.TimeoutError:
+    try:
+      proc.kill()
+    except Exception:
+      pass
+    try:
+      await proc.wait()
+    except Exception:
+      pass
+    _tool_job_append(job, "\n[timeout]\n")
+    raise
+
+
+async def _tool_capture_exec(cmd: List[str], *, cwd: Optional[str] = None,
+                             timeout: Optional[float] = None) -> Tuple[int, str]:
+  proc = await asyncio.create_subprocess_exec(
+    *cmd,
+    cwd=cwd,
+    stdout=asyncio.subprocess.PIPE,
+    stderr=asyncio.subprocess.STDOUT,
+  )
+  try:
+    stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout) if timeout is not None else await proc.communicate()
+  except asyncio.TimeoutError:
+    try:
+      proc.kill()
+    except Exception:
+      pass
+    try:
+      await proc.wait()
+    except Exception:
+      pass
+    raise
+  return proc.returncode, (stdout or b"").decode("utf-8", errors="replace").strip()
+
+
+def _tool_result_from_log(job: Dict[str, Any], rc: int, **extra: Any) -> Dict[str, Any]:
+  out = (job.get("log") or "").strip() or "(no output)"
+  return {"ok": rc == 0, "rc": rc, "out": out, **extra}
+
+
+async def _run_tool_job(job: Dict[str, Any]) -> None:
+  action = job["action"]
+  body = job.get("payload") or {}
+  repo_dir = "/data/openpilot"
+
+  try:
+    if action == "git_pull":
+      _tool_job_progress(job, message="git pull", current=1, total=1)
+      rc = await _tool_stream_exec(job, ["git", "pull"], cwd=repo_dir, timeout=180)
+      result = _tool_result_from_log(job, rc)
+      _tool_job_finish(job, ok=rc == 0, result=result)
+      return
+
+    if action == "git_sync":
+      _tool_job_progress(job, message="delete local branches", current=1, total=2)
+      rc1 = await _tool_stream_exec(
+        job,
+        ["bash", "-lc", "git branch | grep -v '^\\*' | xargs -r git branch -D"],
+        cwd=repo_dir,
+        timeout=120,
+      )
+      if rc1 != 0:
+        _tool_job_finish(job, ok=False, result=_tool_result_from_log(job, rc1))
+        return
+
+      _tool_job_progress(job, message="fetch --all --prune", current=2, total=2)
+      rc2 = await _tool_stream_exec(job, ["git", "fetch", "--all", "--prune"], cwd=repo_dir, timeout=180)
+      _tool_job_finish(job, ok=rc2 == 0, result=_tool_result_from_log(job, rc2))
+      return
+
+    if action == "git_reset":
+      mode = (body.get("mode") or "hard").strip()
+      target = (body.get("target") or "HEAD").strip()
+      if mode not in ("hard", "soft", "mixed"):
+        _tool_job_finish(
+          job,
+          ok=False,
+          result={"ok": False, "error": "bad mode", "error_code": "INVALID_RESET_MODE"},
+          error="bad mode",
+          error_code="INVALID_RESET_MODE",
+        )
+        return
+
+      _tool_job_progress(job, message=f"git reset --{mode} {target}", current=1, total=1)
+      rc = await _tool_stream_exec(job, ["git", "reset", f"--{mode}", target], cwd=repo_dir, timeout=120)
+      _tool_job_finish(job, ok=rc == 0, result=_tool_result_from_log(job, rc))
+      return
+
+    if action == "git_checkout":
+      branch = (body.get("branch") or "").strip()
+      if not branch:
+        _tool_job_finish(
+          job,
+          ok=False,
+          result={"ok": False, "error": "missing branch", "error_code": "MISSING_BRANCH"},
+          error="missing branch",
+          error_code="MISSING_BRANCH",
+        )
+        return
+
+      _tool_job_progress(job, message="fetch --all --prune", current=1, total=2)
+      rc_fetch = await _tool_stream_exec(job, ["git", "fetch", "--all", "--prune"], cwd=repo_dir, timeout=180)
+      if rc_fetch != 0:
+        _tool_job_finish(job, ok=False, result=_tool_result_from_log(job, rc_fetch))
+        return
+
+      _tool_job_progress(job, message=f"switch {branch}", current=2, total=2)
+      if branch.startswith("origin/"):
+        local_branch = branch.replace("origin/", "", 1)
+        script = (
+          f"if git rev-parse --verify {shlex.quote(local_branch)} >/dev/null 2>&1; "
+          f"then git switch {shlex.quote(local_branch)}; "
+          f"else git switch -c {shlex.quote(local_branch)} --track {shlex.quote(branch)}; fi"
+        )
+      else:
+        script = (
+          f"git switch {shlex.quote(branch)} || "
+          f"git switch -c {shlex.quote(branch)} --track {shlex.quote(f'origin/{branch}')}"
+        )
+      rc = await _tool_stream_exec(job, ["bash", "-lc", script], cwd=repo_dir, timeout=180)
+      _tool_job_finish(job, ok=rc == 0, result=_tool_result_from_log(job, rc))
+      return
+
+    if action == "git_branch_list":
+      _tool_job_progress(job, message="fetch --all --prune", current=1, total=2)
+      rc_fetch = await _tool_stream_exec(job, ["git", "fetch", "--all", "--prune"], cwd=repo_dir, timeout=180)
+      if rc_fetch != 0:
+        _tool_job_finish(job, ok=False, result=_tool_result_from_log(job, rc_fetch))
+        return
+
+      _tool_job_progress(job, message="git branch -a", current=2, total=2)
+      rc, out = await _tool_capture_exec(
+        ["git", "branch", "-a", "--format=%(refname:short)"],
+        cwd=repo_dir,
+        timeout=30,
+      )
+      if out:
+        _tool_job_append(job, "\n" + out + "\n")
+      if rc != 0:
+        _tool_job_finish(job, ok=False, result=_tool_result_from_log(job, rc))
+        return
+
+      rc_current, current_branch = await _tool_capture_exec(
+        ["git", "branch", "--show-current"],
+        cwd=repo_dir,
+        timeout=15,
+      )
+      if rc_current != 0:
+        current_branch = ""
+      current_branch = (current_branch or "").strip()
+
+      branches: list[str] = []
+      for line in out.splitlines():
+        line = line.strip()
+        if not line or "->" in line:
+          continue
+        if line.startswith("remotes/"):
+          line = line.replace("remotes/", "", 1)
+        branches.append(line)
+      branches = sorted(set(branches))
+      result = {
+        "ok": True,
+        "branches": branches,
+        "current_branch": current_branch,
+        "fetch": (job.get("log") or "").strip(),
+      }
+      _tool_job_finish(job, ok=True, result=result)
+      return
+
+    if action == "delete_all_videos":
+      _tool_job_progress(job, message="delete videos", current=1, total=1)
+      deleted = 0
+      for path in ["/data/media/0/videos"]:
+        if not os.path.isdir(path):
+          continue
+        for fn in glob.glob(os.path.join(path, "*")):
+          try:
+            os.remove(fn)
+            deleted += 1
+            _tool_job_append(job, f"deleted: {os.path.basename(fn)}")
+          except Exception as e:
+            _tool_job_append(job, f"delete error: {e}")
+      result = {"ok": True, "out": f"deleted files: {deleted}"}
+      _tool_job_finish(job, ok=True, result=result)
+      return
+
+    if action == "delete_all_logs":
+      _tool_job_progress(job, message="delete logs", current=1, total=1)
+      deleted = 0
+      for path in ["/data/media/0/realdata"]:
+        if not os.path.isdir(path):
+          continue
+        for name in os.listdir(path):
+          full_path = os.path.join(path, name)
+          try:
+            if os.path.isfile(full_path) or os.path.islink(full_path):
+              os.remove(full_path)
+            elif os.path.isdir(full_path):
+              shutil.rmtree(full_path)
+            else:
+              continue
+            deleted += 1
+            _tool_job_append(job, f"deleted: {name}")
+          except Exception as e:
+            _tool_job_append(job, f"delete error: {e}")
+      result = {"ok": True, "out": f"deleted entries: {deleted}"}
+      _tool_job_finish(job, ok=True, result=result)
+      return
+
+    if action == "send_tmux_log":
+      _tool_job_progress(job, message="capture tmux", current=1, total=1)
+      cmd = "rm -f /data/media/tmux.log && tmux capture-pane -pq -S-1000 > /data/media/tmux.log"
+      rc = await asyncio.to_thread(
+        lambda: subprocess.run(cmd, shell=True, capture_output=True, text=True).returncode
+      )
+      if rc != 0:
+        _tool_job_finish(
+          job,
+          ok=False,
+          result={"ok": False, "error": "tmux capture failed", "error_code": "TMUX_CAPTURE_FAIL"},
+          error="tmux capture failed",
+          error_code="TMUX_CAPTURE_FAIL",
+        )
+        return
+      result = {"ok": True, "out": "tmux log captured", "file": "/download/tmux.log"}
+      _tool_job_finish(job, ok=True, result=result)
+      return
+
+    if action == "server_tmux_log":
+      _tool_job_progress(job, message="send tmux", current=1, total=1)
+      params = Params()
+      params.put_nonblocking("CarrotException", "tmux_send")
+      _tool_job_finish(job, ok=True, result={"ok": True, "out": "tmux send triggered"})
+      return
+
+    if action == "install_required":
+      import importlib.util
+
+      packages = [
+        {"pip": "flask", "import": "flask"},
+        {"pip": "shapely", "import": "shapely"},
+        {"pip": "kaitaistruct", "import": "kaitaistruct"},
+      ]
+      results = []
+      installed_any = False
+
+      for idx, item in enumerate(packages, start=1):
+        pip_name = item["pip"]
+        import_name = item["import"]
+        _tool_job_progress(job, message=f"checking {pip_name}", current=idx - 1, total=len(packages))
+
+        if importlib.util.find_spec(import_name) is not None:
+          results.append({"package": pip_name, "status": "already_installed"})
+          _tool_job_append(job, f"{pip_name}: already installed")
+          continue
+
+        _tool_job_progress(job, message=f"installing {pip_name}", current=idx, total=len(packages))
+        _tool_job_append(job, f"$ pip install {pip_name}")
+        rc = await _tool_stream_exec(job, ["pip", "install", pip_name], timeout=300)
+        results.append({"package": pip_name, "status": "installed" if rc == 0 else "failed", "returncode": rc})
+        if rc != 0:
+          _tool_job_finish(
+            job,
+            ok=False,
+            result={
+              "ok": False,
+              "error": f"pip install failed: {pip_name}",
+              "results": results,
+              "need_reboot": False,
+            },
+            error=f"pip install failed: {pip_name}",
+          )
+          return
+        installed_any = True
+
+      result = {
+        "ok": True,
+        "out": "required packages installed. reboot is required to apply changes." if installed_any else "all required packages are already installed.",
+        "results": results,
+        "need_reboot": installed_any,
+      }
+      _tool_job_finish(job, ok=True, result=result)
+      return
+
+    if action == "backup_settings":
+      if not HAS_PARAMS or ParamKeyType is None:
+        _tool_job_finish(
+          job,
+          ok=False,
+          result={"ok": False, "error": "Params/ParamKeyType not available"},
+          error="Params/ParamKeyType not available",
+        )
+        return
+
+      _tool_job_progress(job, message="backup settings", current=1, total=1)
+      values = _get_all_param_values_for_backup()
+      os.makedirs(os.path.dirname(PARAMS_BACKUP_PATH), exist_ok=True)
+      with open(PARAMS_BACKUP_PATH, "w", encoding="utf-8") as f:
+        json.dump(values, f, ensure_ascii=False, indent=2)
+      result = {"ok": True, "out": f"backup saved ({len(values)} keys)", "file": "/download/params_backup.json"}
+      _tool_job_finish(job, ok=True, result=result)
+      return
+
+    if action == "reboot":
+      _tool_job_progress(job, message="request reboot", current=1, total=1)
+      subprocess.Popen(["sudo", "reboot"])
+      _tool_job_finish(job, ok=True, result={"ok": True, "out": "reboot requested"})
+      return
+
+    if action == "rebuild_all":
+      _tool_job_progress(job, message="rebuild all", current=1, total=1)
+      cmd = "cd /data/openpilot && scons -c && rm -rf prebuilt && sudo reboot"
+      subprocess.Popen(cmd, shell=True)
+      _tool_job_finish(job, ok=True, result={"ok": True, "out": "rebuild_all requested (clean + remove prebuilt + reboot)"})
+      return
+
+    if action == "shell_cmd":
+      cmd_str = (body.get("cmd") or "").strip()
+      if not cmd_str:
+        _tool_job_finish(job, ok=False, result={"ok": False, "error": "missing cmd"}, error="missing cmd")
+        return
+      try:
+        argv = shlex.split(cmd_str)
+      except Exception:
+        _tool_job_finish(job, ok=False, result={"ok": False, "error": "bad cmd format"}, error="bad cmd format")
+        return
+      if not argv:
+        _tool_job_finish(job, ok=False, result={"ok": False, "error": "empty cmd"}, error="empty cmd")
+        return
+
+      alias_map = {
+        "pull": ["git", "pull"],
+        "status": ["git", "status"],
+        "branch": ["git", "branch"],
+        "log": ["git", "log"],
+      }
+      if argv[0] in alias_map:
+        argv = alias_map[argv[0]] + argv[1:]
+
+      allowed_top = {"git", "df", "free", "uptime", "scons"}
+      if argv[0] not in allowed_top:
+        _tool_job_finish(
+          job,
+          ok=False,
+          result={
+            "ok": False,
+            "error": f"not allowed: {argv[0]}",
+            "error_code": "CMD_NOT_ALLOWED",
+            "error_detail": argv[0],
+          },
+          error=f"not allowed: {argv[0]}",
+          error_code="CMD_NOT_ALLOWED",
+          error_detail=argv[0],
+        )
+        return
+
+      _tool_job_progress(job, message=cmd_str, current=1, total=1)
+      _tool_job_append(job, f"$ {cmd_str}")
+      try:
+        rc = await _tool_stream_exec(job, argv, cwd="/data/openpilot", timeout=10)
+      except asyncio.TimeoutError:
+        _tool_job_finish(
+          job,
+          ok=False,
+          result={"ok": False, "error": "timeout", "error_code": "CMD_TIMEOUT"},
+          error="timeout",
+          error_code="CMD_TIMEOUT",
+        )
+        return
+      result = {
+        "ok": rc == 0,
+        "out": (job.get("log") or "").strip() or "(no output)",
+        "returncode": rc,
+      }
+      _tool_job_finish(job, ok=rc == 0, result=result)
+      return
+
+    _tool_job_finish(job, ok=False, result={"ok": False, "error": f"unknown action: {action}"}, error=f"unknown action: {action}")
+  except asyncio.TimeoutError:
+    _tool_job_finish(
+      job,
+      ok=False,
+      result={"ok": False, "error": "timeout", "error_code": "CMD_TIMEOUT"},
+      error="timeout",
+      error_code="CMD_TIMEOUT",
+    )
+  except Exception as e:
+    _tool_job_append(job, f"\n{traceback.format_exc()}")
+    _tool_job_finish(job, ok=False, result={"ok": False, "error": str(e)}, error=str(e))
+
+
+async def api_tools_start(request: web.Request) -> web.Response:
+  try:
+    body = await request.json()
+  except Exception:
+    return web.json_response({"ok": False, "error": "invalid json"}, status=400)
+
+  action = body.get("action")
+  if not action:
+    return web.json_response({"ok": False, "error": "missing action"}, status=400)
+
+  job_id = uuid.uuid4().hex[:12]
+  job = {
+    "id": job_id,
+    "action": str(action),
+    "payload": dict(body),
+    "status": "running",
+    "log": "",
+    "progress": 0,
+    "message": "",
+    "step_current": 0,
+    "step_total": 0,
+    "error": None,
+    "error_code": None,
+    "error_detail": None,
+    "result": None,
+    "created_at": time.time(),
+    "updated_at": time.time(),
+  }
+  _tool_jobs[job_id] = job
+  _tool_job_prune()
+  asyncio.create_task(_run_tool_job(job))
+  return web.json_response({"ok": True, "job_id": job_id, "status": job["status"]})
+
+
+async def api_tools_job(request: web.Request) -> web.Response:
+  job_id = (request.query.get("id") or request.match_info.get("job_id") or "").strip()
+  if not job_id:
+    return web.json_response({"ok": False, "error": "missing job id"}, status=400)
+
+  job = _tool_jobs.get(job_id)
+  if not job:
+    return web.json_response({"ok": False, "error": "job not found"}, status=404)
+
+  return web.json_response(_tool_job_snapshot(job))
+
 async def api_tools(request: web.Request) -> web.Response:
   try:
     body = await request.json()
@@ -703,6 +1266,9 @@ async def api_tools(request: web.Request) -> web.Response:
         merged = (out0 + "\n\n" + out).strip()
         return web.json_response({"ok": False, "rc": rc, "out": merged})
 
+      rc_current, out_current = run(["git", "branch", "--show-current"], cwd=REPO_DIR)
+      current_branch = out_current.strip() if rc_current == 0 else ""
+
       # 3) 정리: "remotes/" 제거, HEAD 같은 노이즈 제거, 중복 제거
       branches: list[str] = []
       for line in out.splitlines():
@@ -723,7 +1289,12 @@ async def api_tools(request: web.Request) -> web.Response:
       branches = sorted(set(branches))
 
       # fetch 출력도 같이 주면 UI에서 "동기화됨" 로그 확인 가능 (원치 않으면 빼도 됨)
-      return web.json_response({"ok": True, "branches": branches, "fetch": out0.strip()})
+      return web.json_response({
+        "ok": True,
+        "branches": branches,
+        "current_branch": current_branch,
+        "fetch": out0.strip(),
+      })
 
 
     if action == "delete_all_videos":
@@ -918,6 +1489,15 @@ async def api_tools(request: web.Request) -> web.Response:
       if not argv:
         return web.json_response({"ok": False, "error": "empty cmd"}, status=400)
 
+      alias_map = {
+        "pull": ["git", "pull"],
+        "status": ["git", "status"],
+        "branch": ["git", "branch"],
+        "log": ["git", "log"],
+      }
+      if argv[0] in alias_map:
+        argv = alias_map[argv[0]] + argv[1:]
+
       allowed_top = {"git", "df", "free", "uptime", "scons"}
       if argv[0] not in allowed_top:
         return web.json_response({"ok": False, "error": f"not allowed: {argv[0]}"}, status=403)
@@ -979,6 +1559,200 @@ async def ws_state(request: web.Request) -> web.WebSocketResponse:
     await ws.close()
   except Exception:
     pass
+  return ws
+
+def _tmux_run(args: List[str], timeout: float = 5.0, check: bool = False) -> subprocess.CompletedProcess:
+  return subprocess.run(
+    args,
+    capture_output=True,
+    text=True,
+    timeout=timeout,
+    check=check,
+  )
+
+def _tmux_has_session(session: str) -> bool:
+  p = _tmux_run(["tmux", "has-session", "-t", session], timeout=2.5)
+  return p.returncode == 0
+
+def _tmux_send_keys(session: str, *keys: str, literal: bool = False) -> None:
+  cmd = ["tmux", "send-keys", "-t", session]
+  if literal:
+    cmd.append("-l")
+  cmd.extend(keys)
+  _tmux_run(cmd, timeout=4.0, check=True)
+
+def _tmux_bootstrap_shell(cwd: str = TMUX_START_DIR) -> str:
+  return f"cd {shlex.quote(cwd)} && exec bash -il"
+
+def _tmux_start_command() -> str:
+  if os.name != "posix":
+    return "powershell"
+
+  current_user = (
+    os.environ.get("USER")
+    or os.environ.get("USERNAME")
+    or getpass.getuser()
+  )
+  geteuid = getattr(os, "geteuid", None)
+  euid = geteuid() if callable(geteuid) else None
+  bootstrap = _tmux_bootstrap_shell()
+
+  if current_user == "comma":
+    return bootstrap
+
+  if euid == 0:
+    return f"exec su - comma -c {shlex.quote(bootstrap)}"
+
+  if shutil.which("sudo"):
+    try:
+      probe = subprocess.run(
+        ["sudo", "-n", "-u", "comma", "true"],
+        capture_output=True,
+        text=True,
+        timeout=2,
+      )
+      if probe.returncode == 0:
+        return f"exec sudo -n -u comma -i bash -lc {shlex.quote(bootstrap)}"
+    except Exception:
+      pass
+
+  return bootstrap
+
+def _tmux_ensure_session(session: str = TMUX_WEB_SESSION) -> bool:
+  created = False
+  if not _tmux_has_session(session):
+    _tmux_run(
+      ["tmux", "new-session", "-d", "-s", session, _tmux_start_command()],
+      timeout=5.0,
+      check=True,
+    )
+    created = True
+  return created
+
+def _tmux_capture(session: str = TMUX_WEB_SESSION, lines: int = TMUX_CAPTURE_LINES) -> str:
+  p = _tmux_run(
+    ["tmux", "capture-pane", "-p", "-J", "-t", session, "-S", f"-{max(lines, 40)}"],
+    timeout=4.0,
+    check=False,
+  )
+  if p.returncode != 0:
+    return ""
+  return (p.stdout or "").rstrip() or " "
+
+def _tmux_send_line(session: str, line: str) -> None:
+  if line:
+    _tmux_send_keys(session, line, literal=True)
+  _tmux_send_keys(session, "Enter")
+
+def _tmux_ctrl_c(session: str) -> None:
+  _tmux_send_keys(session, "C-c")
+
+def _tmux_clear(session: str) -> None:
+  _tmux_run(["tmux", "clear-history", "-t", session], timeout=4.0, check=False)
+  _tmux_send_keys(session, "C-l")
+
+async def ws_terminal(request: web.Request) -> web.WebSocketResponse:
+  ws = web.WebSocketResponse(heartbeat=20)
+  await ws.prepare(request)
+
+  session = (request.query.get("session") or TMUX_WEB_SESSION).strip() or TMUX_WEB_SESSION
+  last_screen = None
+
+  try:
+    created = await asyncio.to_thread(_tmux_ensure_session, session)
+    await ws.send_str(json.dumps({
+      "type": "meta",
+      "session": session,
+      "created": created,
+      "user": "comma",
+    }))
+  except Exception as e:
+    await ws.send_str(json.dumps({
+      "type": "error",
+      "error": str(e),
+      "session": session,
+    }))
+    await ws.close()
+    return ws
+
+  async def pump_screen():
+    nonlocal last_screen
+    while not ws.closed:
+      try:
+        screen = await asyncio.to_thread(_tmux_capture, session)
+        if screen != last_screen:
+          last_screen = screen
+          await ws.send_str(json.dumps({
+            "type": "screen",
+            "session": session,
+            "text": screen,
+          }))
+      except asyncio.CancelledError:
+        raise
+      except Exception as e:
+        await ws.send_str(json.dumps({
+          "type": "error",
+          "error": str(e),
+          "session": session,
+        }))
+        break
+      await asyncio.sleep(0.35)
+
+  pump_task = asyncio.create_task(pump_screen())
+
+  try:
+    async for msg in ws:
+      if msg.type == WSMsgType.TEXT:
+        try:
+          data = json.loads(msg.data)
+        except Exception:
+          continue
+
+        typ = data.get("type")
+        try:
+          if typ == "input":
+            await asyncio.to_thread(_tmux_send_line, session, str(data.get("data") or ""))
+          elif typ == "control":
+            action = (data.get("action") or "").strip()
+            if action == "ctrl_c":
+              await asyncio.to_thread(_tmux_ctrl_c, session)
+            elif action == "clear":
+              await asyncio.to_thread(_tmux_clear, session)
+            elif action == "refresh":
+              screen = await asyncio.to_thread(_tmux_capture, session)
+              last_screen = screen
+              await ws.send_str(json.dumps({
+                "type": "screen",
+                "session": session,
+                "text": screen,
+              }))
+            elif action == "new_session":
+              await asyncio.to_thread(_tmux_run, ["tmux", "kill-session", "-t", session], 3.0, False)
+              created = await asyncio.to_thread(_tmux_ensure_session, session)
+              await ws.send_str(json.dumps({
+                "type": "meta",
+                "session": session,
+                "created": created,
+                "user": "comma",
+              }))
+        except Exception as e:
+          await ws.send_str(json.dumps({
+            "type": "error",
+            "error": str(e),
+            "session": session,
+          }))
+      elif msg.type in (WSMsgType.ERROR, WSMsgType.CLOSE, WSMsgType.CLOSING):
+        break
+  finally:
+    pump_task.cancel()
+    try:
+      await pump_task
+    except Exception:
+      pass
+    try:
+      await ws.close()
+    except Exception:
+      pass
   return ws
 
 async def handle_download_tmux(request: web.Request) -> web.Response:

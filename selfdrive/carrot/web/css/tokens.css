@@ -2,26 +2,28 @@
 
 :root {
   /* ── Surface (Material 3 tonal elevation) ── */
-  --md-surface:        #111318;
-  --md-surface-cont:   #1a1c22;
-  --md-surface-cont-h: #242630;
-  --md-surface-cont-hh:#2e303a;
-  --md-surface-bright: #393b44;
+  --md-surface:        #090c10;
+  --md-surface-cont:   #11161d;
+  --md-surface-cont-h: #1b222c;
+  --md-surface-cont-hh:#262f3b;
+  --md-surface-bright: #5e6879;
 
   /* ── On Surface (text) ── */
-  --md-on-surface:     #e3e2e8;
-  --md-on-surface-var: #c5c5ce;
-  --md-outline:        #8f909a;
-  --md-outline-var:    #44464f;
+  --md-on-surface:     #ffffff;
+  --md-on-surface-var: #eef2f8;
+  --md-outline:        #cbd2de;
+  --md-outline-var:    #7c8594;
+  --md-stroke-soft:    #788191;
+  --md-stroke-strong:  #aeb7c8;
 
   /* ── Primary — Carrot Dark Orange ── */
-  --md-primary:        #e8915a;
+  --md-primary:        #ffb06d;
   --md-on-primary:     #3a1800;
-  --md-primary-cont:   #5c2e0e;
-  --md-on-primary-cont:#ffdbc8;
+  --md-primary-cont:   #7b3e10;
+  --md-on-primary-cont:#fff0e2;
 
   /* ── Error ── */
-  --md-error:          #ffb4ab;
+  --md-error:          #ff9d94;
   --md-on-error:       #690005;
   --md-error-cont:     #93000a;
   --md-on-error-cont:  #ffdad6;
@@ -34,6 +36,8 @@
   --sp-xl:   24px;
   --sp-2xl:  32px;
   --content-max-width: 720px;
+  --nav-bar-height: 74px;
+  --nav-bar-height-desktop: 82px;
 
   /* ── Border Radius (Material 3) ── */
   --r-xs:    4px;
@@ -57,4 +61,25 @@
   --fs-label-lg: 16px;
   --fs-label-md: 14px;
   --fs-label-sm: 13px;
+  --fs-nav:      clamp(15px, 4.4vw, 18px);
+  --fs-nav-desktop: clamp(16px, 1.3vw, 19px);
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --md-surface:        #05070a;
+    --md-surface-cont:   #0d1117;
+    --md-surface-cont-h: #171d26;
+    --md-surface-cont-hh:#232b36;
+    --md-surface-bright: #667185;
+    --md-on-surface:     #ffffff;
+    --md-on-surface-var: #f7f9ff;
+    --md-outline:        #e4e9f3;
+    --md-outline-var:    #9aa4b6;
+    --md-stroke-soft:    #959fb2;
+    --md-stroke-strong:  #d2d9e8;
+    --md-primary:        #ffc087;
+    --md-primary-cont:   #8b4713;
+    --md-on-primary-cont:#fff4eb;
+  }
 }

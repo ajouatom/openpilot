@@ -5,6 +5,8 @@ from .core import (
   api_cars,
   api_reboot,
   api_tools,
+  api_tools_start,
+  api_tools_job,
   api_params_restore,
   api_heartbeat_status,
   api_time_sync,

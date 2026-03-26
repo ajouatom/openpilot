@@ -47,7 +47,7 @@ async function toggleRecord() {
     await setParam("ScreenRecord", !isOn);
     await loadRecordState();
   } catch (e) {
-    alert((UI_STRINGS[LANG].record || "Failed to toggle record: ") + e.message);
+    showAppToast((UI_STRINGS[LANG].record || "Failed to toggle record: ") + e.message, { tone: "error" });
   }
 }
 
@@ -119,21 +119,25 @@ function stripMaker(fullLine, maker) {
 
 async function onSelectCar(maker, modelOnly, fullLine) {
   const msg = (UI_STRINGS[LANG].confirm_car || "Select this car?") + `\n\n${maker} ${modelOnly}`;
-  if (!confirm(msg)) return;
+  if (!await appConfirm(msg, { title: UI_STRINGS[LANG].car_select || "Car Select" })) return;
 
   try {
     await setParam("CarSelected3", fullLine);
   } catch (e) {
-    alert((UI_STRINGS[LANG].failed_set_car || "Failed to set car: ") + e.message);
+    await appAlert((UI_STRINGS[LANG].failed_set_car || "Failed to set car: ") + e.message, {
+      title: UI_STRINGS[LANG].error || "Error",
+    });
     return;
   }
 
   curCarLabelCar.textContent = modelOnly;
   curCarLabelSetting.textContent = modelOnly;
 
-  const rb = confirm(UI_STRINGS[LANG].confirm_reboot || "Reboot now?");
+  const rb = await appConfirm(UI_STRINGS[LANG].confirm_reboot || "Reboot now?", {
+    title: UI_STRINGS[LANG].reboot || "Reboot",
+  });
   if (!rb) {
-    alert(UI_STRINGS[LANG].reboot_later || "Selected. Reboot later to apply.");
+    showAppToast(UI_STRINGS[LANG].reboot_later || "Selected. Reboot later to apply.");
     return;
   }
 
@@ -141,9 +145,11 @@ async function onSelectCar(maker, modelOnly, fullLine) {
     const r = await fetch("/api/reboot", { method: "POST" });
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || "reboot failed");
-    alert(UI_STRINGS[LANG].rebooting || "Rebooting...");
+    showAppToast(UI_STRINGS[LANG].rebooting || "Rebooting...", { tone: "success" });
   } catch (e) {
-    alert((UI_STRINGS[LANG].reboot_failed || "Reboot failed: ") + e.message);
+    await appAlert((UI_STRINGS[LANG].reboot_failed || "Reboot failed: ") + e.message, {
+      title: UI_STRINGS[LANG].error || "Error",
+    });
   }
 }
 
@@ -209,6 +215,9 @@ function getSettingGroupLabel(group) {
 let settingSubnavSettleTimer = null;
 let settingSubnavProgrammaticScroll = false;
 let settingSubnavFocusTimer = null;
+const SETTING_SUBNAV_PAGE_STEP = 1;
+let settingGroupTransitionLock = false;
+let settingRenderToken = 0;
 
 function updateSettingSubnavLayoutState() {
   if (!settingSubnav || !settingSubnavWrap) return;
@@ -216,6 +225,95 @@ function updateSettingSubnavLayoutState() {
   const maxScrollLeft = Math.max(settingSubnav.scrollWidth - settingSubnav.clientWidth, 0);
   const isScrollable = maxScrollLeft > 4;
   settingSubnavWrap.classList.toggle("is-scrollable", isScrollable);
+}
+
+function getSettingSubnavGroups() {
+  return SETTINGS?.groups || [];
+}
+
+function getSettingSubnavGroupIndex(group = CURRENT_GROUP) {
+  const groups = getSettingSubnavGroups();
+  return groups.findIndex((entry) => entry.group === group);
+}
+
+function getSettingSubnavShiftTarget(direction) {
+  const groups = getSettingSubnavGroups();
+  if (!groups.length) return null;
+
+  const currentIndex = Math.max(0, getSettingSubnavGroupIndex());
+  const delta = direction === "forward" ? SETTING_SUBNAV_PAGE_STEP : -SETTING_SUBNAV_PAGE_STEP;
+  const nextIndex = Math.max(0, Math.min(currentIndex + delta, groups.length - 1));
+
+  return {
+    currentIndex,
+    nextIndex,
+    group: groups[nextIndex]?.group || null,
+    reachedEdge: nextIndex === currentIndex,
+  };
+}
+
+function stripIdsFromClone(root) {
+  if (!root) return;
+  if (root.id) root.removeAttribute("id");
+  root.querySelectorAll("[id]").forEach((node) => node.removeAttribute("id"));
+}
+
+async function activateSettingGroup(group, pushHistory = true) {
+  CURRENT_GROUP = group;
+  showSettingScreen("items", pushHistory);
+  if (!pushHistory) {
+    history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
+  }
+  await renderItems(group);
+}
+
+async function animateSettingGroupSwitch(group, direction = "forward") {
+  if (!group || group === CURRENT_GROUP) {
+    centerActiveSettingSubnavTab("smooth");
+    return;
+  }
+
+  if (settingGroupTransitionLock || !settingScreenHost || !screenItems || screenItems.style.display === "none") {
+    await activateSettingGroup(group, false);
+    return;
+  }
+
+  settingGroupTransitionLock = true;
+  if (typeof stopSettingSubnavMotion === "function") stopSettingSubnavMotion();
+
+  const snapshot = screenItems.cloneNode(true);
+  stripIdsFromClone(snapshot);
+  snapshot.setAttribute("aria-hidden", "true");
+  snapshot.style.pointerEvents = "none";
+
+  try {
+    settingScreenHost.appendChild(snapshot);
+    prepareSwipeFrame(settingScreenHost, snapshot);
+    screenItems.style.visibility = "hidden";
+    await activateSettingGroup(group, false);
+    screenItems.style.visibility = "";
+    const frame = prepareSwipeFrame(settingScreenHost, snapshot, screenItems);
+    if (!frame) {
+      snapshot.remove();
+      settingGroupTransitionLock = false;
+      return;
+    }
+
+    applySwipeDrag(frame, 0, direction);
+    settleSwipe(frame, direction, true, () => {
+      clearPageTransitionClasses(screenItems);
+      resetPageRuntimeStyles(screenItems);
+      if (snapshot.parentElement) snapshot.remove();
+      settingScreenHost.style.minHeight = "";
+      settingGroupTransitionLock = false;
+    });
+  } catch (e) {
+    screenItems.style.visibility = "";
+    if (snapshot.parentElement) snapshot.remove();
+    settingScreenHost.style.minHeight = "";
+    settingGroupTransitionLock = false;
+    throw e;
+  }
 }
 
 function getCenteredSettingSubnavGroup() {
@@ -271,6 +369,22 @@ function scheduleSettingSubnavFocus() {
   }, 60);
 }
 
+function stopSettingSubnavMotion() {
+  if (settingSubnavSettleTimer) {
+    clearTimeout(settingSubnavSettleTimer);
+    settingSubnavSettleTimer = null;
+  }
+  if (settingSubnavFocusTimer) {
+    clearTimeout(settingSubnavFocusTimer);
+    settingSubnavFocusTimer = null;
+  }
+  if (!settingSubnav) return;
+
+  settingSubnavProgrammaticScroll = false;
+  settingSubnav.scrollTo({ left: settingSubnav.scrollLeft, behavior: "auto" });
+  updateSettingSubnavLayoutState();
+}
+
 function renderSettingSubnav() {
   if (!settingSubnav) return;
   settingSubnav.innerHTML = "";
@@ -310,18 +424,113 @@ if (settingSubnav) {
   window.addEventListener("resize", () => requestAnimationFrame(updateSettingSubnavLayoutState));
 }
 
+if (settingSubnavWrap) {
+  let gesture = null;
+
+  settingSubnavWrap.addEventListener("touchstart", (e) => {
+    if (
+      e.touches.length !== 1 ||
+      CURRENT_PAGE !== "setting" ||
+      !screenItems ||
+      screenItems.style.display === "none"
+    ) {
+      gesture = null;
+      return;
+    }
+
+    const touch = e.touches[0];
+    gesture = {
+      dragging: false,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      dx: 0,
+      velocity: 0,
+      lastX: touch.clientX,
+      lastTime: performance.now(),
+    };
+  }, { passive: true });
+
+  settingSubnavWrap.addEventListener("touchmove", (e) => {
+    if (!gesture || e.touches.length !== 1) return;
+
+    const touch = e.touches[0];
+    const dx = touch.clientX - gesture.startX;
+    const dy = touch.clientY - gesture.startY;
+
+    if (!gesture.dragging) {
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      if (Math.abs(dy) > Math.abs(dx) * 0.9) {
+        gesture = null;
+        return;
+      }
+      gesture.dragging = true;
+    }
+
+    e.preventDefault();
+
+    const now = performance.now();
+    const dt = Math.max(now - gesture.lastTime, 1);
+    gesture.velocity = (touch.clientX - gesture.lastX) / dt;
+    gesture.lastX = touch.clientX;
+    gesture.lastTime = now;
+    gesture.dx = dx;
+  }, { passive: false });
+
+  settingSubnavWrap.addEventListener("touchend", () => {
+    if (!gesture) return;
+    if (!gesture.dragging) {
+      gesture = null;
+      return;
+    }
+
+    const dx = gesture.dx;
+    const direction = dx < 0 ? "forward" : "backward";
+    const velocityOk =
+      (direction === "forward" && gesture.velocity < -SWIPE_VELOCITY_THRESHOLD) ||
+      (direction === "backward" && gesture.velocity > SWIPE_VELOCITY_THRESHOLD);
+    const shouldShift = Math.abs(dx) > 48 || velocityOk;
+    const shiftTarget = shouldShift ? getSettingSubnavShiftTarget(direction) : null;
+
+    gesture = null;
+
+    if (!shouldShift || !shiftTarget) {
+      centerActiveSettingSubnavTab("smooth");
+      return;
+    }
+
+    if (typeof stopSettingSubnavMotion === "function") stopSettingSubnavMotion();
+
+    if (direction === "backward" && shiftTarget.reachedEdge) {
+      history.back();
+      return;
+    }
+
+    if (direction === "forward" && shiftTarget.reachedEdge) {
+      showPage("tools", true, getSwipeTransition(CURRENT_PAGE, "tools"));
+      return;
+    }
+
+    if (shiftTarget.group && shiftTarget.group !== CURRENT_GROUP) {
+      animateSettingGroupSwitch(shiftTarget.group, direction).catch((e) => console.log("[SettingSubnav] switch failed:", e));
+      return;
+    }
+
+    centerActiveSettingSubnavTab("smooth");
+  }, { passive: true });
+
+  settingSubnavWrap.addEventListener("touchcancel", () => {
+    gesture = null;
+  }, { passive: true });
+}
+
 function selectGroup(group, pushHistory = true) {
-  CURRENT_GROUP = group;
-  showSettingScreen("items", pushHistory);
-  if (!pushHistory) {
-    history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
-  }
-  renderItems(group);
+  activateSettingGroup(group, pushHistory).catch((e) => console.log("[Setting] selectGroup failed:", e));
 }
 
 async function renderItems(group) {
   const meta = document.getElementById("groupMeta");
   const itemsBox = document.getElementById("items");
+  const renderToken = ++settingRenderToken;
   itemsBox.innerHTML = "";
   renderSettingSubnav();
 
@@ -337,6 +546,10 @@ async function renderItems(group) {
     values = await bulkGet(names);
   } catch (e) {
     values = {};
+  }
+
+  if (renderToken !== settingRenderToken || CURRENT_GROUP !== group || screenItems?.style.display === "none") {
+    return;
   }
 
   for (const p of list) {
@@ -400,7 +613,6 @@ async function renderItems(group) {
     el.appendChild(d);
     itemsBox.appendChild(el);
 
-    // initial value
     const cur = (name in values) ? values[name] : p.default;
     val.textContent = String(cur);
 
@@ -420,7 +632,7 @@ async function renderItems(group) {
         await setParam(name, next);
         val.textContent = String(next);
       } catch (e) {
-        alert((UI_STRINGS[LANG].set_failed || "set failed: ") + e.message);
+        showAppToast((UI_STRINGS[LANG].set_failed || "set failed: ") + e.message, { tone: "error" });
       }
     }
 
@@ -444,9 +656,9 @@ window.addEventListener("popstate", async (ev) => {
   }
 
   if (st.page === "setting") {
-    showPage("setting", false);
     const screen = st.screen || "groups";
     CURRENT_GROUP = st.group || null;
+    showPage("setting", false);
 
     if (screen === "items" && CURRENT_GROUP) {
       showSettingScreen("items", false);
@@ -478,6 +690,11 @@ window.addEventListener("popstate", async (ev) => {
     return;
   }
 
+  if (st.page === "terminal") {
+    showPage("terminal", false);
+    return;
+  }
+
   if (st.page === "branch") {
     showPage("branch", false);
     if (!BRANCHES || !BRANCHES.length) {
@@ -491,12 +708,38 @@ window.addEventListener("popstate", async (ev) => {
 
 function toolsOutSet(s) {
   const out = document.getElementById("toolsOut");
-  if (out) out.textContent = String(s);
+  if (!out) return;
+  out.textContent = String(s);
+  requestAnimationFrame(() => {
+    out.scrollTop = out.scrollHeight;
+  });
 }
 
 function toolsMetaSet(s) {
   const meta = document.getElementById("toolsMeta");
   if (meta) meta.textContent = String(s);
+}
+
+function toolsProgressSet(percent = null, opts = {}) {
+  const host = document.getElementById("toolsProgress");
+  const bar = document.getElementById("toolsProgressBar");
+  if (!host || !bar) return;
+
+  const active = opts.active !== false;
+  const indeterminate = Boolean(opts.indeterminate);
+  if (!active) {
+    host.hidden = true;
+    host.classList.remove("is-indeterminate");
+    bar.style.width = "0%";
+    return;
+  }
+
+  host.hidden = false;
+  host.classList.toggle("is-indeterminate", indeterminate);
+
+  const hasPercent = Number.isFinite(percent);
+  const safePercent = hasPercent ? Math.max(4, Math.min(100, Number(percent))) : 28;
+  bar.style.width = `${safePercent}%`;
 }
 
 async function postJson(url, bodyObj) {
@@ -513,31 +756,92 @@ async function postJson(url, bodyObj) {
   return j;
 }
 
-async function runTool(action, payload) {
-  const labels = getActionLabel(action);
-
-  toolsMetaSet(labels.running);
-  toolsOutSet("...");
-
-  const j = await postJson("/api/tools", { action, ...(payload || {}) });
-
-  if (j.out != null) {
-    toolsOutSet(j.out);
-  } else {
-    toolsOutSet(JSON.stringify(j, null, 2));
+async function getJson(url) {
+  const r = await fetch(url);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.ok) {
+    const msg = friendlyError(j) || j.error || ("HTTP " + r.status);
+    throw new Error(msg);
   }
-
-  if (!j.ok) {
-    toolsMetaSet(labels.failed);
-    throw new Error(friendlyError(j) || j.out || labels.failed);
-  }
-
-  toolsMetaSet(labels.done);
   return j;
 }
 
-function confirmText(msg, placeholder = "") {
-  const v = prompt(msg, placeholder);
+function waitMs(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+let activeToolRunToken = 0;
+
+function updateToolsRunningState(labels, snapshot) {
+  const message = String(snapshot?.message || labels.running || "");
+  const stepCurrent = Number(snapshot?.step_current || 0);
+  const stepTotal = Number(snapshot?.step_total || 0);
+  const progressValue = Number(snapshot?.progress);
+  const hasProgress = Number.isFinite(progressValue) && progressValue > 0;
+
+  let metaText = message || labels.running;
+  if (hasProgress && progressValue < 100) {
+    metaText = `${metaText} · ${Math.round(progressValue)}%`;
+  } else if (stepTotal > 1 && stepCurrent > 0) {
+    metaText = `${metaText} · ${stepCurrent}/${stepTotal}`;
+  }
+
+  toolsMetaSet(metaText);
+  toolsProgressSet(hasProgress ? progressValue : null, {
+    active: true,
+    indeterminate: !hasProgress || progressValue >= 100,
+  });
+}
+
+async function runTool(action, payload) {
+  const labels = getActionLabel(action);
+  const runToken = ++activeToolRunToken;
+
+  toolsMetaSet(labels.running);
+  toolsOutSet(labels.running);
+  toolsProgressSet(null, { active: true, indeterminate: true });
+
+  const started = await postJson("/api/tools/start", { action, ...(payload || {}) });
+  const jobId = started.job_id;
+  let snapshot = null;
+
+  while (runToken === activeToolRunToken) {
+    snapshot = await getJson(`/api/tools/job?id=${encodeURIComponent(jobId)}`);
+
+    if (snapshot.log != null) {
+      toolsOutSet(snapshot.log || " ");
+    }
+
+    if (!snapshot.done) {
+      updateToolsRunningState(labels, snapshot);
+      await waitMs(320);
+      continue;
+    }
+
+    const result = snapshot.result || snapshot;
+    if (!result.ok) {
+      toolsMetaSet(labels.failed);
+      toolsProgressSet(null, { active: false });
+      throw new Error(friendlyError(result) || result.error || snapshot.error || labels.failed);
+    }
+
+    toolsMetaSet(labels.done);
+    toolsProgressSet(100, { active: true, indeterminate: false });
+    window.setTimeout(() => {
+      if (activeToolRunToken === runToken) toolsProgressSet(null, { active: false });
+    }, 900);
+    return result;
+  }
+
+  throw new Error("tool run cancelled");
+}
+
+async function confirmText(msg, placeholder = "") {
+  const v = await appPrompt(msg, {
+    title: UI_STRINGS[LANG].input_title || "Input",
+    defaultValue: placeholder,
+    placeholder,
+  });
   if (v === null) return null;
   return String(v).trim();
 }
@@ -546,8 +850,54 @@ function showError(action, error) {
   const labels = getActionLabel(action);
   const title = labels.failed;
   const msg = (typeof error === "object" && error.message) ? error.message : String(error);
-  alert(`${title}\n\n${msg}`);
+  toolsMetaSet(title);
+  toolsProgressSet(null, { active: false });
+  appAlert(msg, { title });
 }
+
+let branchPickerCloseTimer = null;
+
+function openBranchPicker() {
+  if (!appBranchPicker) return false;
+  if (branchPickerCloseTimer) {
+    clearTimeout(branchPickerCloseTimer);
+    branchPickerCloseTimer = null;
+  }
+  appBranchPicker.hidden = false;
+  syncModalBodyLock();
+  requestAnimationFrame(() => {
+    appBranchPicker.classList.add("is-open");
+  });
+  return true;
+}
+
+function closeBranchPicker(immediate = false) {
+  if (!appBranchPicker || appBranchPicker.hidden) return;
+  appBranchPicker.classList.remove("is-open");
+
+  if (branchPickerCloseTimer) {
+    clearTimeout(branchPickerCloseTimer);
+    branchPickerCloseTimer = null;
+  }
+
+  const finishClose = () => {
+    appBranchPicker.hidden = true;
+    syncModalBodyLock();
+  };
+
+  if (immediate) {
+    finishClose();
+    return;
+  }
+
+  branchPickerCloseTimer = window.setTimeout(() => {
+    branchPickerCloseTimer = null;
+    finishClose();
+  }, 180);
+}
+
+if (appBranchPickerBackdrop) appBranchPickerBackdrop.onclick = () => closeBranchPicker();
+if (appBranchPickerClose) appBranchPickerClose.onclick = () => closeBranchPicker();
 
 
 function initToolsPage() {
@@ -558,7 +908,27 @@ function initToolsPage() {
     el.onclick = fn;
   };
 
+  const bindNodeOnce = (node, key, fn, eventName = "click") => {
+    if (!node || node.dataset[key] === "1") return;
+    node.dataset[key] = "1";
+    node.addEventListener(eventName, fn);
+  };
+
+  const runSystemCommand = async () => {
+    const inp = document.getElementById("sysCmdInput");
+    const cmd = (inp?.value || "").trim();
+    if (!cmd) return;
+
+    try {
+      const j = await runTool("shell_cmd", { cmd });
+      toolsOutSet(j.out || "(no output)");
+    } catch (e) {
+      showError("shell_cmd", e);
+    }
+  };
+
   toolsMetaSet(UI_STRINGS[LANG].ready || "Ready");
+  toolsProgressSet(null, { active: false });
 
   bindOnce("btnGitPull", async () => {
     try {
@@ -569,7 +939,7 @@ function initToolsPage() {
   });
 
   bindOnce("btnGitSync", async () => {
-    if (!confirm(UI_STRINGS[LANG].git_sync_confirm || "Run git sync?")) return;
+    if (!await appConfirm(UI_STRINGS[LANG].git_sync_confirm || "Run git sync?", { title: "git sync" })) return;
     try {
       await runTool("git_sync");
     } catch (e) {
@@ -578,12 +948,12 @@ function initToolsPage() {
   });
 
   bindOnce("btnGitReset", async () => {
-    if (!confirm(UI_STRINGS[LANG].git_reset_confirm || "Run git reset?")) return;
+    if (!await appConfirm(UI_STRINGS[LANG].git_reset_confirm || "Run git reset?", { title: "git reset" })) return;
 
-    const mode = confirmText(UI_STRINGS[LANG].git_reset_mode_prompt || "reset mode? (hard/soft/mixed)", "hard");
+    const mode = await confirmText(UI_STRINGS[LANG].git_reset_mode_prompt || "reset mode? (hard/soft/mixed)", "hard");
     if (!mode) return;
 
-    const target = confirmText(UI_STRINGS[LANG].git_reset_target_prompt || "reset target?", "HEAD");
+    const target = await confirmText(UI_STRINGS[LANG].git_reset_target_prompt || "reset target?", "HEAD");
     if (!target) return;
 
     try {
@@ -631,7 +1001,9 @@ function initToolsPage() {
       toolsOutSet(msg);
 
       if (j.need_reboot) {
-        const yes = confirm(UI_STRINGS[LANG].confirm_reboot_after_install);
+        const yes = await appConfirm(UI_STRINGS[LANG].confirm_reboot_after_install, {
+          title: UI_STRINGS[LANG].reboot || "Reboot",
+        });
         if (yes) {
           const r = await runTool("reboot");
           toolsOutSet((msg + "\n\n" + (r.out || "")).trim());
@@ -643,7 +1015,7 @@ function initToolsPage() {
   });
 
   bindOnce("btnDeleteVideos", async () => {
-    if (!confirm(UI_STRINGS[LANG].delete_videos_confirm || "Delete ALL videos?")) return;
+    if (!await appConfirm(UI_STRINGS[LANG].delete_videos_confirm || "Delete ALL videos?", { title: "delete videos" })) return;
     try {
       await runTool("delete_all_videos");
     } catch (e) {
@@ -652,7 +1024,7 @@ function initToolsPage() {
   });
 
   bindOnce("btnDeleteLogs", async () => {
-    if (!confirm(UI_STRINGS[LANG].delete_logs_confirm || "Delete ALL logs?")) return;
+    if (!await appConfirm(UI_STRINGS[LANG].delete_logs_confirm || "Delete ALL logs?", { title: "delete logs" })) return;
     try {
       await runTool("delete_all_logs");
     } catch (e) {
@@ -661,7 +1033,7 @@ function initToolsPage() {
   });
 
   bindOnce("btnRebuildAll", async () => {
-    if (!confirm(UI_STRINGS[LANG].rebuild_confirm || "Rebuild all?")) return;
+    if (!await appConfirm(UI_STRINGS[LANG].rebuild_confirm || "Rebuild all?", { title: "Rebuild All" })) return;
     try {
       await runTool("rebuild_all");
     } catch (e) {
@@ -687,14 +1059,17 @@ function initToolsPage() {
     inp.onchange = async () => {
       if (!inp.files || !inp.files[0]) return;
 
-      if (!confirm(UI_STRINGS[LANG].restore_confirm || "Restore settings from file?")) {
+      if (!await appConfirm(UI_STRINGS[LANG].restore_confirm || "Restore settings from file?", {
+        title: UI_STRINGS[LANG].restore || "Restore",
+      })) {
         return;
       }
 
       try {
         const labels = getActionLabel("backup_settings");
         toolsMetaSet(labels.running);
-        toolsOutSet("...");
+        toolsOutSet(labels.running);
+        toolsProgressSet(null, { active: true, indeterminate: true });
 
         const fd = new FormData();
         fd.append("file", inp.files[0]);
@@ -704,15 +1079,19 @@ function initToolsPage() {
         if (!r.ok || !j.ok) throw new Error(friendlyError(j) || j.error || ("HTTP " + r.status));
 
         toolsMetaSet(labels.done);
+        toolsProgressSet(100, { active: true, indeterminate: false });
         toolsOutSet(JSON.stringify(j.result, null, 2));
 
-        if (confirm(UI_STRINGS[LANG].restore_done_reboot || "Restore done.\nReboot now?")) {
+        if (await appConfirm(UI_STRINGS[LANG].restore_done_reboot || "Restore done.\nReboot now?", {
+          title: UI_STRINGS[LANG].reboot || "Reboot",
+        })) {
           const rebootRes = await runTool("reboot");
           toolsOutSet(rebootRes.out || "");
         }
       } catch (e) {
         showError("backup_settings", e);
       } finally {
+        window.setTimeout(() => toolsProgressSet(null, { active: false }), 900);
         inp.remove();
       }
     };
@@ -722,7 +1101,9 @@ function initToolsPage() {
   });
 
   bindOnce("btnReboot", async () => {
-    if (!confirm(UI_STRINGS[LANG].confirm_reboot || "Reboot now?")) return;
+    if (!await appConfirm(UI_STRINGS[LANG].confirm_reboot || "Reboot now?", {
+      title: UI_STRINGS[LANG].reboot || "Reboot",
+    })) return;
     try {
       await runTool("reboot");
     } catch (e) {
@@ -730,71 +1111,448 @@ function initToolsPage() {
     }
   });
 
-  bindOnce("btnSysCmdRun", async () => {
-    const inp = document.getElementById("sysCmdInput");
-    const cmd = (inp?.value || "").trim();
-    if (!cmd) return;
+  const sysCmdForm = document.getElementById("sysCmdForm");
+  const sysCmdInput = document.getElementById("sysCmdInput");
+  bindNodeOnce(sysCmdForm, "submitBound", (ev) => {
+    ev.preventDefault();
+    runSystemCommand();
+  }, "submit");
 
-    try {
-      const j = await runTool("shell_cmd", { cmd });
-      toolsOutSet(j.out || "(no output)");
-    } catch (e) {
-      showError("shell_cmd", e);
-    }
+  const btnSysCmdInfo = document.getElementById("btnSysCmdInfo");
+  const sysCmdHelpPanel = document.getElementById("sysCmdHelpPanel");
+  const maybeShowSysCmdHint = () => {
+    if (!sysCmdInput || !sysCmdHelpPanel || !sysCmdHelpPanel.hidden) return;
+    const now = Date.now();
+    const cooldownUntil = Number(sysCmdInput.dataset.hintCooldownUntil || "0");
+    if (now < cooldownUntil) return;
+    sysCmdInput.dataset.hintCooldownUntil = String(now + 3200);
+    showAppToast(getUIText("sys_cmd_help", "Allowed: pull, status, branch, log, git ..., df, free, uptime"), {
+      tone: "hint",
+      duration: 1700,
+    });
+  };
+
+  bindNodeOnce(sysCmdInput, "hintFocusBound", () => {
+    if (!sysCmdInput.value.trim()) maybeShowSysCmdHint();
+  }, "focus");
+
+  bindNodeOnce(sysCmdInput, "hintInputBound", () => {
+    if (sysCmdInput.value.trim().length === 1) maybeShowSysCmdHint();
+  }, "input");
+
+  bindNodeOnce(btnSysCmdInfo, "toggleBound", () => {
+    if (!sysCmdHelpPanel) return;
+    const nextOpen = sysCmdHelpPanel.hidden;
+    sysCmdHelpPanel.hidden = !nextOpen;
+    btnSysCmdInfo.setAttribute("aria-expanded", nextOpen ? "true" : "false");
   });
 }
 
 async function loadBranchesAndShow() {
-  showPage("branch", true);
-  if (!branchMeta || !branchList) {
-    alert(UI_STRINGS[LANG].branch_dom_missing || "Branch DOM missing");
+  if (!appBranchPickerMeta || !appBranchPickerList || !openBranchPicker()) {
+    showAppToast(UI_STRINGS[LANG].branch_dom_missing || "Branch DOM missing", { tone: "error" });
     return;
   }
-  branchMeta.textContent = "loading...";
-  branchList.innerHTML = "";
+  appBranchPickerMeta.textContent = "loading...";
+  appBranchPickerList.innerHTML = "";
   BRANCHES = [];
+  CURRENT_BRANCH_NAME = "";
 
   try {
     const j = await runTool("git_branch_list");
     BRANCHES = j.branches || [];
-    branchMeta.textContent = `${BRANCHES.length} branches`;
+    CURRENT_BRANCH_NAME = (j.current_branch || "").trim();
+    appBranchPickerMeta.textContent = `${BRANCHES.length} branches`;
 
     renderBranchList();
   } catch (e) {
-    branchMeta.textContent = e.message;
+    appBranchPickerMeta.textContent = e.message;
   }
 }
 
 function renderBranchList() {
-  branchList.innerHTML = "";
+  if (!appBranchPickerList) return;
+  appBranchPickerList.innerHTML = "";
+
+  if (!BRANCHES.length) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = "-";
+    appBranchPickerList.appendChild(empty);
+    return;
+  }
 
   for (const br of BRANCHES) {
     const b = document.createElement("button");
-    b.className = "btn groupBtn";
-    b.textContent = br;
+    b.className = "btn groupBtn app-branch-picker__item";
+    if (CURRENT_BRANCH_NAME && br === CURRENT_BRANCH_NAME) {
+      b.classList.add("is-current");
+    }
+
+    const label = document.createElement("span");
+    label.className = "app-branch-picker__label";
+    label.textContent = br;
+    b.appendChild(label);
+
+    if (CURRENT_BRANCH_NAME && br === CURRENT_BRANCH_NAME) {
+      const badge = document.createElement("span");
+      badge.className = "app-branch-picker__badge";
+      badge.textContent = getUIText("branch_current", "Current");
+      b.appendChild(badge);
+    }
+
     b.onclick = () => onSelectBranch(br);
-    branchList.appendChild(b);
+    appBranchPickerList.appendChild(b);
   }
 }
 
 async function onSelectBranch(branch) {
-  if (!confirm((UI_STRINGS[LANG].checkout_confirm || "Switch to this branch?") + `\n\n${branch}`)) return;
+  closeBranchPicker(true);
+  if (!await appConfirm((UI_STRINGS[LANG].checkout_confirm || "Switch to this branch?") + `\n\n${branch}`, {
+    title: "git checkout",
+  })) return;
 
   try {
     await runTool("git_checkout", { branch });
-    alert(UI_STRINGS[LANG].branch_changed || "Branch changed.");
+    showAppToast(UI_STRINGS[LANG].branch_changed || "Branch changed.", { tone: "success" });
   } catch (e) {
     showError("git_checkout", e);
     return;
   }
 
-  const rb = confirm(UI_STRINGS[LANG].confirm_reboot || "Reboot now?");
+  const rb = await appConfirm(UI_STRINGS[LANG].confirm_reboot || "Reboot now?", {
+    title: UI_STRINGS[LANG].reboot || "Reboot",
+  });
   if (!rb) return;
 
   try {
     await runTool("reboot");
-    alert(UI_STRINGS[LANG].rebooting || "Rebooting...");
+    showAppToast(UI_STRINGS[LANG].rebooting || "Rebooting...", { tone: "success" });
   } catch (e) {
     showError("reboot", e);
   }
+}
+
+/* ---------- Terminal ---------- */
+const terminalMetaEl = document.getElementById("terminalMeta");
+const terminalSessionMetaEl = document.getElementById("terminalSessionMeta");
+const terminalScreenEl = document.getElementById("terminalScreen");
+const terminalOutputEl = document.getElementById("terminalOutput");
+const terminalFormEl = document.getElementById("terminalForm");
+const terminalInputEl = document.getElementById("terminalInput");
+const btnTerminalCtrlCEl = document.getElementById("btnTerminalCtrlC");
+const btnTerminalClearEl = document.getElementById("btnTerminalClear");
+const btnTerminalReconnectEl = document.getElementById("btnTerminalReconnect");
+
+let terminalWs = null;
+let terminalReconnectTimer = null;
+let terminalPageActive = false;
+let terminalSessionName = "carrot-web";
+let terminalLastScreen = "";
+let terminalLayoutBound = false;
+let terminalFollowOutput = true;
+
+function setTerminalMeta(text) {
+  if (terminalMetaEl) terminalMetaEl.textContent = String(text || "");
+}
+
+function setTerminalSessionMeta() {
+  if (!terminalSessionMetaEl) return;
+  terminalSessionMetaEl.textContent = "IP";
+}
+
+function setTerminalSessionInfo(session = terminalSessionName) {
+  terminalSessionName = session || terminalSessionName;
+  setTerminalSessionMeta();
+}
+
+function sanitizeTerminalScreen(text) {
+  let nextText = String(text || " ");
+  const headLimit = Math.min(nextText.length, 640);
+  const head = nextText.slice(0, headLimit);
+  const sanitizedHead = head.replace(
+    /[^\n]*\$\s*cd(?:\s+\/data\/openpilot)?\n(?:\/data\/openpilot\n)?(?=[^\n]*:\/data\/openpilot\$)/,
+    "",
+  );
+
+  if (sanitizedHead !== head) {
+    nextText = sanitizedHead + nextText.slice(headLimit);
+    nextText = nextText.replace(/^\n+/, "");
+  }
+
+  return nextText;
+}
+
+function renderTerminalScreenMarkup(text) {
+  return String(text || " ")
+    .split("\n")
+    .map((line) => {
+      const match = line.match(/^([^\s:@]+@[^\s:]+)(?=:[^$]*\$ ?)/);
+      if (!match) return escapeHtml(line);
+      const promptHost = match[1];
+      return `<span class="terminal-output__promptHost">${escapeHtml(promptHost)}</span>${escapeHtml(line.slice(promptHost.length))}`;
+    })
+    .join("\n");
+}
+
+function isTerminalPinnedToBottom() {
+  if (!terminalScreenEl) return true;
+  return (terminalScreenEl.scrollHeight - terminalScreenEl.scrollTop - terminalScreenEl.clientHeight) < 28;
+}
+
+function pinTerminalToBottom() {
+  if (!terminalScreenEl) return;
+  requestAnimationFrame(() => {
+    terminalScreenEl.scrollTop = terminalScreenEl.scrollHeight;
+  });
+}
+
+function setTerminalScreen(text, forceStick = false) {
+  if (!terminalOutputEl) return;
+  const nextText = sanitizeTerminalScreen(text);
+  if (nextText === terminalLastScreen) return;
+
+  const shouldStick = forceStick || terminalFollowOutput || isTerminalPinnedToBottom();
+  terminalLastScreen = nextText;
+  terminalOutputEl.innerHTML = renderTerminalScreenMarkup(nextText);
+
+  if (shouldStick) pinTerminalToBottom();
+}
+
+function clearTerminalReconnectTimer() {
+  if (terminalReconnectTimer) {
+    clearTimeout(terminalReconnectTimer);
+    terminalReconnectTimer = null;
+  }
+}
+
+function updateTerminalToastAnchor() {
+  if (!terminalFormEl || document.body?.dataset?.page !== "terminal") {
+    document.documentElement.style.removeProperty("--terminal-toast-bottom");
+    return;
+  }
+
+  const rect = terminalFormEl.getBoundingClientRect();
+  const gap = 10;
+  const offset = Math.max(0, Math.round(window.innerHeight - rect.top + gap));
+  document.documentElement.style.setProperty("--terminal-toast-bottom", `${offset}px`);
+}
+
+function updateTerminalViewportMetrics() {
+  const vv = window.visualViewport;
+  const height = Math.max(320, Math.round(vv?.height || window.innerHeight || 0));
+  const top = Math.max(0, Math.round(vv?.offsetTop || 0));
+  document.documentElement.style.setProperty("--terminal-vv-height", `${height}px`);
+  document.documentElement.style.setProperty("--terminal-vv-top", `${top}px`);
+}
+
+function bindTerminalLayoutObservers() {
+  if (terminalLayoutBound) return;
+  terminalLayoutBound = true;
+
+  const handleLayout = () => requestAnimationFrame(() => {
+    updateTerminalViewportMetrics();
+    updateTerminalToastAnchor();
+  });
+  window.addEventListener("resize", handleLayout, { passive: true });
+  window.addEventListener("orientationchange", handleLayout, { passive: true });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", handleLayout, { passive: true });
+    window.visualViewport.addEventListener("scroll", handleLayout, { passive: true });
+  }
+}
+
+function closeTerminalSocket() {
+  if (!terminalWs) return;
+  const ws = terminalWs;
+  terminalWs = null;
+  try {
+    ws.onopen = null;
+    ws.onmessage = null;
+    ws.onclose = null;
+    ws.onerror = null;
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close();
+  } catch (e) {
+    console.log("[Terminal] ws close failed:", e);
+  }
+}
+
+function getTerminalWsUrl() {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  return `${proto}://${location.host}/ws/terminal?session=${encodeURIComponent(terminalSessionName)}`;
+}
+
+function scheduleTerminalReconnect(delay = 1200) {
+  clearTerminalReconnectTimer();
+  if (!terminalPageActive) return;
+  setTerminalMeta(getUIText("reconnecting", "reconnecting..."));
+  terminalReconnectTimer = window.setTimeout(() => {
+    terminalReconnectTimer = null;
+    connectTerminal();
+  }, delay);
+}
+
+function sendTerminalPacket(payload, options = {}) {
+  const { quiet = false } = options;
+  if (!terminalWs || terminalWs.readyState !== WebSocket.OPEN) {
+    if (!quiet) showAppToast(getUIText("terminal_offline", "terminal offline"), { tone: "error" });
+    return false;
+  }
+
+  try {
+    terminalWs.send(JSON.stringify(payload));
+    return true;
+  } catch (e) {
+    if (!quiet) showAppToast(e.message || "Terminal send failed", { tone: "error" });
+    return false;
+  }
+}
+
+function sendTerminalControl(action, options = {}) {
+  return sendTerminalPacket({ type: "control", action }, options);
+}
+
+function connectTerminal(force = false) {
+  clearTerminalReconnectTimer();
+
+  if (terminalWs && (terminalWs.readyState === WebSocket.OPEN || terminalWs.readyState === WebSocket.CONNECTING)) {
+    if (!force) return;
+    closeTerminalSocket();
+  }
+
+  setTerminalMeta(getUIText("connecting", "connecting..."));
+
+  let ws;
+  try {
+    ws = new WebSocket(getTerminalWsUrl());
+  } catch (e) {
+    setTerminalMeta(e.message || getUIText("terminal_unavailable", "terminal unavailable"));
+    scheduleTerminalReconnect(1600);
+    return;
+  }
+
+  terminalWs = ws;
+
+  ws.onopen = () => {
+    if (terminalWs !== ws) return;
+    setTerminalMeta(getUIText("connecting", "connecting..."));
+  };
+
+  ws.onmessage = (ev) => {
+    if (terminalWs !== ws) return;
+
+    let data;
+    try {
+      data = JSON.parse(ev.data);
+    } catch (e) {
+      return;
+    }
+
+    if (data.type === "meta") {
+      setTerminalSessionInfo(data.session || terminalSessionName);
+      setTerminalMeta(data.created ? getUIText("terminal_ready", "tmux ready") : getUIText("connected", "connected"));
+      return;
+    }
+
+    if (data.type === "screen") {
+      setTerminalScreen(data.text, false);
+      if (terminalMetaEl && terminalMetaEl.textContent === getUIText("connecting", "connecting...")) {
+        setTerminalMeta(getUIText("connected", "connected"));
+      }
+      return;
+    }
+
+    if (data.type === "error") {
+      const errorText = String(data.error || getUIText("error", "Error"));
+      setTerminalMeta(errorText);
+      showAppToast(errorText, { tone: "error" });
+    }
+  };
+
+  ws.onclose = () => {
+    if (terminalWs !== ws) return;
+    terminalWs = null;
+    if (!terminalPageActive) return;
+    setTerminalMeta(getUIText("terminal_disconnected", "disconnected"));
+    scheduleTerminalReconnect(1250);
+  };
+
+  ws.onerror = () => {
+    if (terminalWs !== ws) return;
+    setTerminalMeta(getUIText("terminal_unavailable", "terminal unavailable"));
+  };
+}
+
+function initTerminalBindings() {
+  const bindNodeOnce = (node, key, fn, eventName = "click") => {
+    if (!node || node.dataset[key] === "1") return;
+    node.dataset[key] = "1";
+    node.addEventListener(eventName, fn);
+  };
+
+  bindTerminalLayoutObservers();
+
+  bindNodeOnce(terminalScreenEl, "scrollBound", () => {
+    terminalFollowOutput = isTerminalPinnedToBottom();
+  }, "scroll");
+
+  bindNodeOnce(terminalFormEl, "submitBound", (ev) => {
+    ev.preventDefault();
+    const line = (terminalInputEl?.value || "").trim();
+    if (!line) return;
+    terminalFollowOutput = true;
+    pinTerminalToBottom();
+    if (sendTerminalPacket({ type: "input", data: line })) {
+      terminalInputEl.value = "";
+    }
+  }, "submit");
+
+  bindNodeOnce(btnTerminalCtrlCEl, "clickBound", () => {
+    terminalFollowOutput = true;
+    pinTerminalToBottom();
+    sendTerminalControl("ctrl_c");
+  });
+
+  bindNodeOnce(btnTerminalClearEl, "clickBound", () => {
+    terminalFollowOutput = true;
+    pinTerminalToBottom();
+    sendTerminalControl("clear");
+    window.setTimeout(() => {
+      sendTerminalControl("refresh", { quiet: true });
+    }, 120);
+  });
+
+  bindNodeOnce(btnTerminalReconnectEl, "clickBound", () => {
+    terminalFollowOutput = true;
+    pinTerminalToBottom();
+    const metaText = String(terminalMetaEl?.textContent || "");
+    const blockedByPassword = terminalLastScreen.includes("Password:");
+    const blockedByStartup = metaText.includes("returned non-zero exit status");
+    if ((blockedByPassword || blockedByStartup) && sendTerminalControl("new_session", { quiet: true })) {
+      setTerminalMeta(getUIText("connecting", "connecting..."));
+      return;
+    }
+    connectTerminal(true);
+  });
+}
+
+function initTerminalPage() {
+  terminalPageActive = true;
+  terminalFollowOutput = true;
+  initTerminalBindings();
+  setTerminalSessionMeta();
+  updateTerminalViewportMetrics();
+  if (!terminalLastScreen) setTerminalScreen(" ", true);
+  requestAnimationFrame(updateTerminalToastAnchor);
+  window.setTimeout(updateTerminalToastAnchor, 90);
+  connectTerminal(false);
+}
+
+function teardownTerminalPage() {
+  terminalPageActive = false;
+  clearTerminalReconnectTimer();
+  closeTerminalSocket();
+  document.documentElement.style.removeProperty("--terminal-vv-height");
+  document.documentElement.style.removeProperty("--terminal-vv-top");
+  document.documentElement.style.removeProperty("--terminal-toast-bottom");
 }
