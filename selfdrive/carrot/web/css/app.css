@@ -587,16 +587,41 @@ body.dialog-open {
 #pageTerminal {
   --terminal-inline: max(var(--sp-lg), calc((100vw - var(--content-max-width)) / 2));
   --terminal-height: calc(100dvh - (124px + var(--nav-bar-height) + env(safe-area-inset-bottom, 0px)));
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .terminal-shell {
   width: 100dvw;
   margin-inline: calc(50% - 50dvw);
+  height: max(320px, var(--terminal-height));
   min-height: max(320px, var(--terminal-height));
+  max-height: max(320px, var(--terminal-height));
   display: flex;
   flex-direction: column;
   background: color-mix(in srgb, var(--md-surface) 92%, #000);
   border-top: 1px solid color-mix(in srgb, var(--md-stroke-soft) 52%, transparent);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.terminal-head {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  background: color-mix(in srgb, var(--md-surface) 92%, #000);
+  box-shadow: 0 8px 18px color-mix(in srgb, #000 22%, transparent);
+}
+
+.terminal-pageHeader {
+  margin: 0;
+  padding: 14px var(--terminal-inline) 6px;
+}
+
+.terminal-meta {
+  margin: 0;
+  padding: 0 var(--terminal-inline) 10px;
 }
 
 .terminal-toolbar {
@@ -605,6 +630,7 @@ body.dialog-open {
   gap: var(--sp-md);
   align-items: center;
   padding: 10px var(--terminal-inline);
+  border-top: 1px solid color-mix(in srgb, var(--md-stroke-soft) 18%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 42%, transparent);
 }
 
@@ -632,7 +658,7 @@ body.dialog-open {
 }
 
 .terminal-screen {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
   padding: var(--sp-md) var(--terminal-inline);

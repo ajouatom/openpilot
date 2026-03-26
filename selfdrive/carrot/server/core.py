@@ -98,6 +98,7 @@ async def log_mw(request, handler):
 WEBRTCD_URL = "http://127.0.0.1:5001/stream"
 TMUX_WEB_SESSION = "carrot-web"
 TMUX_CAPTURE_LINES = 160
+TMUX_START_DIR = "/data/openpilot"
 
 def _get_local_ip() -> str:
   try:
@@ -1558,6 +1559,9 @@ def _tmux_send_keys(session: str, *keys: str, literal: bool = False) -> None:
   cmd.extend(keys)
   _tmux_run(cmd, timeout=4.0, check=True)
 
+def _tmux_bootstrap_shell(cwd: str = TMUX_START_DIR) -> str:
+  return f"cd {shlex.quote(cwd)} && exec bash -il"
+
 def _tmux_start_command() -> str:
   if os.name != "posix":
     return "powershell"
@@ -1569,12 +1573,13 @@ def _tmux_start_command() -> str:
   )
   geteuid = getattr(os, "geteuid", None)
   euid = geteuid() if callable(geteuid) else None
+  bootstrap = _tmux_bootstrap_shell()
 
   if current_user == "comma":
-    return "exec bash -il"
+    return bootstrap
 
   if euid == 0:
-    return "exec su - comma"
+    return f"exec su - comma -c {shlex.quote(bootstrap)}"
 
   if shutil.which("sudo"):
     try:
@@ -1585,11 +1590,11 @@ def _tmux_start_command() -> str:
         timeout=2,
       )
       if probe.returncode == 0:
-        return "exec sudo -n -u comma -i"
+        return f"exec sudo -n -u comma -i bash -lc {shlex.quote(bootstrap)}"
     except Exception:
       pass
 
-  return "exec bash -il"
+  return bootstrap
 
 def _tmux_ensure_session(session: str = TMUX_WEB_SESSION) -> bool:
   created = False
@@ -1600,9 +1605,6 @@ def _tmux_ensure_session(session: str = TMUX_WEB_SESSION) -> bool:
       check=True,
     )
     created = True
-    time.sleep(0.24)
-    _tmux_send_keys(session, "cd /data/openpilot", literal=True)
-    _tmux_send_keys(session, "Enter")
   return created
 
 def _tmux_capture(session: str = TMUX_WEB_SESSION, lines: int = TMUX_CAPTURE_LINES) -> str:

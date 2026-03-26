@@ -1248,6 +1248,23 @@ function setTerminalSessionInfo(session = terminalSessionName) {
   setTerminalSessionMeta();
 }
 
+function sanitizeTerminalScreen(text) {
+  let nextText = String(text || " ");
+  const headLimit = Math.min(nextText.length, 640);
+  const head = nextText.slice(0, headLimit);
+  const sanitizedHead = head.replace(
+    /[^\n]*\$\s*cd(?:\s+\/data\/openpilot)?\n(?:\/data\/openpilot\n)?(?=[^\n]*:\/data\/openpilot\$)/,
+    "",
+  );
+
+  if (sanitizedHead !== head) {
+    nextText = sanitizedHead + nextText.slice(headLimit);
+    nextText = nextText.replace(/^\n+/, "");
+  }
+
+  return nextText;
+}
+
 function isTerminalPinnedToBottom() {
   if (!terminalScreenEl) return true;
   return (terminalScreenEl.scrollHeight - terminalScreenEl.scrollTop - terminalScreenEl.clientHeight) < 28;
@@ -1255,7 +1272,7 @@ function isTerminalPinnedToBottom() {
 
 function setTerminalScreen(text, forceStick = false) {
   if (!terminalOutputEl) return;
-  const nextText = String(text || " ");
+  const nextText = sanitizeTerminalScreen(text);
   if (nextText === terminalLastScreen) return;
 
   const shouldStick = forceStick || isTerminalPinnedToBottom();
