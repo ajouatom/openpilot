@@ -1334,11 +1334,22 @@ function updateTerminalToastAnchor() {
   document.documentElement.style.setProperty("--terminal-toast-bottom", `${offset}px`);
 }
 
+function updateTerminalViewportMetrics() {
+  const vv = window.visualViewport;
+  const height = Math.max(320, Math.round(vv?.height || window.innerHeight || 0));
+  const top = Math.max(0, Math.round(vv?.offsetTop || 0));
+  document.documentElement.style.setProperty("--terminal-vv-height", `${height}px`);
+  document.documentElement.style.setProperty("--terminal-vv-top", `${top}px`);
+}
+
 function bindTerminalLayoutObservers() {
   if (terminalLayoutBound) return;
   terminalLayoutBound = true;
 
-  const handleLayout = () => requestAnimationFrame(updateTerminalToastAnchor);
+  const handleLayout = () => requestAnimationFrame(() => {
+    updateTerminalViewportMetrics();
+    updateTerminalToastAnchor();
+  });
   window.addEventListener("resize", handleLayout, { passive: true });
   window.addEventListener("orientationchange", handleLayout, { passive: true });
   if (window.visualViewport) {
@@ -1513,6 +1524,7 @@ function initTerminalPage() {
   terminalPageActive = true;
   initTerminalBindings();
   setTerminalSessionMeta();
+  updateTerminalViewportMetrics();
   if (!terminalLastScreen) setTerminalScreen(" ", true);
   requestAnimationFrame(updateTerminalToastAnchor);
   window.setTimeout(updateTerminalToastAnchor, 90);
@@ -1523,5 +1535,7 @@ function teardownTerminalPage() {
   terminalPageActive = false;
   clearTerminalReconnectTimer();
   closeTerminalSocket();
+  document.documentElement.style.removeProperty("--terminal-vv-height");
+  document.documentElement.style.removeProperty("--terminal-vv-top");
   document.documentElement.style.removeProperty("--terminal-toast-bottom");
 }
