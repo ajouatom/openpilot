@@ -30,6 +30,7 @@ def make_app() -> web.Application:
   # ws
   app.router.add_get("/ws/state", routes_ws.ws_state)
   app.router.add_get("/ws/carstate", routes_ws.ws_carstate)
+  app.router.add_get("/ws/terminal", routes_ws.ws_terminal)
 
   # downloads
   app.router.add_get("/download/tmux.log", routes_api.handle_download_tmux)

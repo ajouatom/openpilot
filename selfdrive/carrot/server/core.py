@@ -27,7 +27,7 @@ import traceback
 import numpy as np
 from typing import Dict, Any, Tuple, Optional, List
 
-from aiohttp import web, ClientSession
+from aiohttp import web, ClientSession, WSMsgType
 from cereal import messaging
 from opendbc.car import structs
 import shlex
@@ -94,6 +94,8 @@ async def log_mw(request, handler):
 
 
 WEBRTCD_URL = "http://127.0.0.1:5001/stream"
+TMUX_WEB_SESSION = "carrot-web"
+TMUX_CAPTURE_LINES = 160
 
 def _get_local_ip() -> str:
   try:
@@ -979,6 +981,163 @@ async def ws_state(request: web.Request) -> web.WebSocketResponse:
     await ws.close()
   except Exception:
     pass
+  return ws
+
+def _tmux_run(args: List[str], timeout: float = 5.0, check: bool = False) -> subprocess.CompletedProcess:
+  return subprocess.run(
+    args,
+    capture_output=True,
+    text=True,
+    timeout=timeout,
+    check=check,
+  )
+
+def _tmux_has_session(session: str) -> bool:
+  p = _tmux_run(["tmux", "has-session", "-t", session], timeout=2.5)
+  return p.returncode == 0
+
+def _tmux_send_keys(session: str, *keys: str, literal: bool = False) -> None:
+  cmd = ["tmux", "send-keys", "-t", session]
+  if literal:
+    cmd.append("-l")
+  cmd.extend(keys)
+  _tmux_run(cmd, timeout=4.0, check=True)
+
+def _tmux_ensure_session(session: str = TMUX_WEB_SESSION) -> bool:
+  created = False
+  if not _tmux_has_session(session):
+    _tmux_run(
+      ["tmux", "new-session", "-d", "-s", session, "exec su - comma"],
+      timeout=5.0,
+      check=True,
+    )
+    created = True
+    time.sleep(0.24)
+    _tmux_send_keys(session, "cd /data/openpilot", literal=True)
+    _tmux_send_keys(session, "Enter")
+  return created
+
+def _tmux_capture(session: str = TMUX_WEB_SESSION, lines: int = TMUX_CAPTURE_LINES) -> str:
+  p = _tmux_run(
+    ["tmux", "capture-pane", "-p", "-J", "-t", session, "-S", f"-{max(lines, 40)}"],
+    timeout=4.0,
+    check=True,
+  )
+  return (p.stdout or "").rstrip() or " "
+
+def _tmux_send_line(session: str, line: str) -> None:
+  if line:
+    _tmux_send_keys(session, line, literal=True)
+  _tmux_send_keys(session, "Enter")
+
+def _tmux_ctrl_c(session: str) -> None:
+  _tmux_send_keys(session, "C-c")
+
+def _tmux_clear(session: str) -> None:
+  _tmux_send_keys(session, "C-l")
+
+async def ws_terminal(request: web.Request) -> web.WebSocketResponse:
+  ws = web.WebSocketResponse(heartbeat=20)
+  await ws.prepare(request)
+
+  session = (request.query.get("session") or TMUX_WEB_SESSION).strip() or TMUX_WEB_SESSION
+  last_screen = None
+
+  try:
+    created = await asyncio.to_thread(_tmux_ensure_session, session)
+    await ws.send_str(json.dumps({
+      "type": "meta",
+      "session": session,
+      "created": created,
+      "user": "comma",
+    }))
+  except Exception as e:
+    await ws.send_str(json.dumps({
+      "type": "error",
+      "error": str(e),
+      "session": session,
+    }))
+    await ws.close()
+    return ws
+
+  async def pump_screen():
+    nonlocal last_screen
+    while not ws.closed:
+      try:
+        screen = await asyncio.to_thread(_tmux_capture, session)
+        if screen != last_screen:
+          last_screen = screen
+          await ws.send_str(json.dumps({
+            "type": "screen",
+            "session": session,
+            "text": screen,
+          }))
+      except asyncio.CancelledError:
+        raise
+      except Exception as e:
+        await ws.send_str(json.dumps({
+          "type": "error",
+          "error": str(e),
+          "session": session,
+        }))
+        break
+      await asyncio.sleep(0.35)
+
+  pump_task = asyncio.create_task(pump_screen())
+
+  try:
+    async for msg in ws:
+      if msg.type == WSMsgType.TEXT:
+        try:
+          data = json.loads(msg.data)
+        except Exception:
+          continue
+
+        typ = data.get("type")
+        try:
+          if typ == "input":
+            await asyncio.to_thread(_tmux_send_line, session, str(data.get("data") or ""))
+          elif typ == "control":
+            action = (data.get("action") or "").strip()
+            if action == "ctrl_c":
+              await asyncio.to_thread(_tmux_ctrl_c, session)
+            elif action == "clear":
+              await asyncio.to_thread(_tmux_clear, session)
+            elif action == "refresh":
+              screen = await asyncio.to_thread(_tmux_capture, session)
+              last_screen = screen
+              await ws.send_str(json.dumps({
+                "type": "screen",
+                "session": session,
+                "text": screen,
+              }))
+            elif action == "new_session":
+              await asyncio.to_thread(_tmux_run, ["tmux", "kill-session", "-t", session], 3.0, False)
+              created = await asyncio.to_thread(_tmux_ensure_session, session)
+              await ws.send_str(json.dumps({
+                "type": "meta",
+                "session": session,
+                "created": created,
+                "user": "comma",
+              }))
+        except Exception as e:
+          await ws.send_str(json.dumps({
+            "type": "error",
+            "error": str(e),
+            "session": session,
+          }))
+      elif msg.type in (WSMsgType.ERROR, WSMsgType.CLOSE, WSMsgType.CLOSING):
+        break
+  finally:
+    pump_task.cancel()
+    try:
+      await pump_task
+    except Exception:
+      pass
+    try:
+      await ws.close()
+    except Exception:
+      pass
   return ws
 
 async def handle_download_tmux(request: web.Request) -> web.Response:
