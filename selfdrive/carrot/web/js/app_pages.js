@@ -1250,6 +1250,7 @@ let terminalPageActive = false;
 let terminalSessionName = "carrot-web";
 let terminalLastScreen = "";
 let terminalLayoutBound = false;
+let terminalFollowOutput = true;
 
 function setTerminalMeta(text) {
   if (terminalMetaEl) terminalMetaEl.textContent = String(text || "");
@@ -1299,20 +1300,23 @@ function isTerminalPinnedToBottom() {
   return (terminalScreenEl.scrollHeight - terminalScreenEl.scrollTop - terminalScreenEl.clientHeight) < 28;
 }
 
+function pinTerminalToBottom() {
+  if (!terminalScreenEl) return;
+  requestAnimationFrame(() => {
+    terminalScreenEl.scrollTop = terminalScreenEl.scrollHeight;
+  });
+}
+
 function setTerminalScreen(text, forceStick = false) {
   if (!terminalOutputEl) return;
   const nextText = sanitizeTerminalScreen(text);
   if (nextText === terminalLastScreen) return;
 
-  const shouldStick = forceStick || isTerminalPinnedToBottom();
+  const shouldStick = forceStick || terminalFollowOutput || isTerminalPinnedToBottom();
   terminalLastScreen = nextText;
   terminalOutputEl.innerHTML = renderTerminalScreenMarkup(nextText);
 
-  if (shouldStick && terminalScreenEl) {
-    requestAnimationFrame(() => {
-      terminalScreenEl.scrollTop = terminalScreenEl.scrollHeight;
-    });
-  }
+  if (shouldStick) pinTerminalToBottom();
 }
 
 function clearTerminalReconnectTimer() {
@@ -1488,20 +1492,30 @@ function initTerminalBindings() {
 
   bindTerminalLayoutObservers();
 
+  bindNodeOnce(terminalScreenEl, "scrollBound", () => {
+    terminalFollowOutput = isTerminalPinnedToBottom();
+  }, "scroll");
+
   bindNodeOnce(terminalFormEl, "submitBound", (ev) => {
     ev.preventDefault();
     const line = (terminalInputEl?.value || "").trim();
     if (!line) return;
+    terminalFollowOutput = true;
+    pinTerminalToBottom();
     if (sendTerminalPacket({ type: "input", data: line })) {
       terminalInputEl.value = "";
     }
   }, "submit");
 
   bindNodeOnce(btnTerminalCtrlCEl, "clickBound", () => {
+    terminalFollowOutput = true;
+    pinTerminalToBottom();
     sendTerminalControl("ctrl_c");
   });
 
   bindNodeOnce(btnTerminalClearEl, "clickBound", () => {
+    terminalFollowOutput = true;
+    pinTerminalToBottom();
     sendTerminalControl("clear");
     window.setTimeout(() => {
       sendTerminalControl("refresh", { quiet: true });
@@ -1509,6 +1523,8 @@ function initTerminalBindings() {
   });
 
   bindNodeOnce(btnTerminalReconnectEl, "clickBound", () => {
+    terminalFollowOutput = true;
+    pinTerminalToBottom();
     const metaText = String(terminalMetaEl?.textContent || "");
     const blockedByPassword = terminalLastScreen.includes("Password:");
     const blockedByStartup = metaText.includes("returned non-zero exit status");
@@ -1522,6 +1538,7 @@ function initTerminalBindings() {
 
 function initTerminalPage() {
   terminalPageActive = true;
+  terminalFollowOutput = true;
   initTerminalBindings();
   setTerminalSessionMeta();
   updateTerminalViewportMetrics();
