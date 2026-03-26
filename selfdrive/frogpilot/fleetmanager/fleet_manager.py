@@ -306,7 +306,7 @@ def footage():
   for route_path in route_paths:
     input_path = Paths.log_root() + route_path + "--0/qcamera.ts"
     output_path = Paths.log_root() + route_path + "--0/preview.gif"
-    fleet.video_to_img(input_path, output_path)
+    fleet.video_to_gif(input_path, output_path)
     gif_path = route_path + "--0/preview.gif"
     gifs.append(gif_path)
   zipped = zip(route_paths, gifs, strict=False)
@@ -322,7 +322,7 @@ def preserved():
   for segment in segments:
     input_path = Paths.log_root() + segment + "/qcamera.ts"
     output_path = Paths.log_root() + segment + "/preview.gif"
-    fleet.video_to_img(input_path, output_path)
+    fleet.video_to_gif(input_path, output_path)
     split_segment = segment.split("--")
     route_paths.append(f"{split_segment[0]}--{split_segment[1]}?{split_segment[2]},{query_type}")
     gif_path = segment + "/preview.gif"
