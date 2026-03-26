@@ -1660,6 +1660,13 @@ function sanitizeTerminalScreen(text) {
     nextText = nextText.replace(/^\n+/, "");
   }
 
+  const lines = nextText.replace(/\r/g, "").split("\n");
+  while (lines.length > 1 && !lines[lines.length - 1].trim()) {
+    lines.pop();
+  }
+  nextText = lines.join("\n");
+
+  if (!nextText.trim()) return " ";
   return nextText;
 }
 
