@@ -985,7 +985,6 @@ body.dialog-open {
   display: inline-block;
   width: max-content;
   min-width: 100%;
-  padding-right: var(--sp-md);
 }
 
 .terminal-output__promptHost {
