@@ -252,17 +252,17 @@ def calibration_incomplete_alert(CP: car.CarParams, CS: car.CarState, sm: messag
     AlertStatus.normal, AlertSize.mid,
     Priority.LOWEST, VisualAlert.none, AudibleAlert.none, .2)
 
-def torque_nn_load_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
-  def read_param_text(key: str) -> str:
-    value = params.get(key)
-    if isinstance(value, bytes):
-      return value.decode("utf-8", errors="replace")
-    return value or ""
+def read_param_text(params: Params, key: str) -> str:
+  value = params.get(key)
+  if isinstance(value, bytes):
+    return value.decode("utf-8", errors="replace")
+  return value or ""
 
+def torque_nn_load_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
   params = Params()
   lateral_nn_mode = params.get_int("LateralNNMode")
-  nnff_model_name = read_param_text("NNFFModelName")
-  neurodob_model_name = read_param_text("NeuroDOBModelName")
+  nnff_model_name = read_param_text(params, "NNFFModelName")
+  neurodob_model_name = read_param_text(params, "NeuroDOBModelName")
 
   if lateral_nn_mode == 1:
     if nnff_model_name == "":
@@ -410,9 +410,7 @@ def personality_changed_alert(CP: car.CarParams, CS: car.CarState, sm: messaging
   return NormalPermanentAlert(f"Driving Personality: {personality}", duration=1.5)
 
 def car_parser_result(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
-  results = Params().get("CanParserResult")
-  if results is None:
-    results = ""
+  results = read_param_text(Params(), "CanParserResult")
   return Alert(
     "CAN Error: Check Connections!!",
     results,
