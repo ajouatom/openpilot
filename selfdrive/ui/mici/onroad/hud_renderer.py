@@ -748,7 +748,7 @@ class HudRenderer(Widget):
     if carState.brakeHoldActive:
       return tr("brake hold"), rl.Color(255, 0, 0, 230)
     elif carState.softHoldActive:
-      return tr("soft hold"), rl.Color(0, 0, 255, 230)
+      return tr("soft hold"), rl.Color(255, 165, 0, 230)
     elif carState.carrotCruise:
       return tr("carrot"), rl.Color(0, 255, 0, 230)
     
