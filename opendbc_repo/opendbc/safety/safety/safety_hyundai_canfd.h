@@ -269,6 +269,8 @@ CanfdTxState canfd_tx_states[] = {
   {0x0CB, 0, 100, 0U, 0U}, // 203: LFA_ALT
 
   {0x175, 2, 50,  0U, 0U}, // 373: TCS
+  {0x1AA, 2, 50,  0U, 0U}, // 426: CRUISE_ALT_BUTTONS
+  {0x1CF, 2, 50,  0U, 0U}, // 463: CRUISE_BUTTON
   {0x1FA, 2, 10,  0U, 0U}, // 506: CLUSTER_SPEED_LIMIT
   {0x0EA, 2, 100, 0U, 0U}, // 234: MDPS
   {0x2AF, 2, 10,  0U, 0U}, // 687: STEER_TOUCH_2AF
