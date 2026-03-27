@@ -10,7 +10,7 @@ const UI_STRINGS = {
     setting: "설정",
     tools: "도구",
     terminal: "터미널",
-    fleet: "플릿",
+    fleet: "Fleet",
     lang: "언어",
     branch_select: "브랜치 선택",
     branch_current: "현재",
@@ -46,6 +46,7 @@ const UI_STRINGS = {
     restore_done_reboot: "복구가 완료되었습니다.\n지금 재부팅하시겠습니까?",
     checkout_confirm: "브랜치를 변경하시겠습니까?",
     branch_changed: "브랜치가 변경되었습니다.",
+    fleet_open_confirm: "Fleet를 여시겠습니까?",
     quick_link_hint: "길게 눌러 링크 저장",
     failed_set_car: "차량 선택 저장 실패: ",
     reboot_failed: "재부팅 실패: ",
@@ -86,6 +87,11 @@ const UI_STRINGS = {
     terminal_disconnected: "연결끊김",
     terminal_unavailable: "터미널 접속 실패",
     terminal_offline: "터미널 오프라인",
+    setting_search: "설정 검색",
+    setting_search_placeholder: "이름, 설명, 그룹 검색",
+    setting_search_empty: "검색 결과가 없습니다.",
+    setting_search_idle: "검색어를 입력하면 세부 설정을 찾을 수 있습니다.",
+    setting_search_results: "검색 결과",
   },
   en: {
     home: "Home",
@@ -128,6 +134,7 @@ const UI_STRINGS = {
     restore_done_reboot: "Restore done.\nReboot now?",
     checkout_confirm: "Switch to this branch?",
     branch_changed: "Branch changed.",
+    fleet_open_confirm: "Open Fleet?",
     quick_link_hint: "Long press to save link",
     failed_set_car: "Failed to set car: ",
     reboot_failed: "Reboot failed: ",
@@ -167,6 +174,11 @@ const UI_STRINGS = {
     terminal_disconnected: "disconnected",
     terminal_unavailable: "terminal unavailable",
     terminal_offline: "terminal offline",
+    setting_search: "Search Settings",
+    setting_search_placeholder: "Search name, description, group",
+    setting_search_empty: "No matching settings found.",
+    setting_search_idle: "Type to find detailed settings.",
+    setting_search_results: "results",
   },
   zh: {
     home: "首页",
@@ -209,6 +221,7 @@ const UI_STRINGS = {
     restore_done_reboot: "还原完成。\n现在重启吗？",
     checkout_confirm: "切换到此分支吗？",
     branch_changed: "分支已切换。",
+    fleet_open_confirm: "要打开 Fleet 吗？",
     quick_link_hint: "长按保存链接",
     failed_set_car: "保存车辆选择失败: ",
     reboot_failed: "重启失败: ",
@@ -248,6 +261,11 @@ const UI_STRINGS = {
     terminal_disconnected: "连接已断开",
     terminal_unavailable: "终端不可用",
     terminal_offline: "终端离线",
+    setting_search: "设置搜索",
+    setting_search_placeholder: "搜索名称、描述、分组",
+    setting_search_empty: "没有匹配的设置项。",
+    setting_search_idle: "输入关键词以查找详细设置。",
+    setting_search_results: "项结果",
   }
 };
 
@@ -379,6 +397,15 @@ const btnLang = document.getElementById("btnLang");
 const langLabel = document.getElementById("langLabel");
 const btnTools = document.getElementById("btnTools");
 const btnRecordToggle = document.getElementById("btnRecordToggle");
+const btnSettingSearch = document.getElementById("btnSettingSearch");
+const settingSearchBackdrop = document.getElementById("settingSearchBackdrop");
+const settingSearchPanel = document.getElementById("settingSearchPanel");
+const settingSearchTitle = document.getElementById("settingSearchTitle");
+const settingSearchForm = document.getElementById("settingSearchForm");
+const settingSearchInput = document.getElementById("settingSearchInput");
+const btnSettingSearchSubmit = document.getElementById("btnSettingSearchSubmit");
+const settingSearchMeta = document.getElementById("settingSearchMeta");
+const settingSearchResults = document.getElementById("settingSearchResults");
 const appToastHost = document.getElementById("appToastHost");
 const appDialog = document.getElementById("appDialog");
 const appDialogBackdrop = document.getElementById("appDialogBackdrop");
@@ -459,9 +486,14 @@ btnRecordToggle.onclick = () => toggleRecord();
 btnSetting.onclick = () => showPage("setting", true, getSwipeTransition(CURRENT_PAGE, "setting"));
 btnTerminal.onclick = () => showPage("terminal", true, getSwipeTransition(CURRENT_PAGE, "terminal"));
 
-btnFleet.onclick = () => {
+btnFleet.onclick = async () => {
   const ip = location.hostname;
   const url = `http://${ip}:8082/`;
+  const ok = await appConfirm(
+    `${getUIText("fleet_open_confirm", "Open Fleet?")}\n\n${url}`,
+    { title: UI_STRINGS[LANG].fleet || "Fleet" },
+  );
+  if (!ok) return;
   window.open(url, "_blank", "noopener");
 };
 
@@ -530,6 +562,7 @@ function setDisplayedPage(page) {
 }
 
 function getSwipeTransition(fromPage, toPage) {
+  if (fromPage === "terminal" || toPage === "terminal") return null;
   const fromIdx = SWIPE_PAGES.indexOf(fromPage);
   const toIdx = SWIPE_PAGES.indexOf(toPage);
   if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return null;
@@ -723,14 +756,20 @@ function showPage(page, pushHistory = false, transition = null) {
 
   document.body.dataset.page = page;
 
-  btnRecordToggle.style.display = (page === "home") ? "" : "none";
   btnHome.classList.toggle("active", page === "home");
   btnSetting.classList.toggle("active", page === "setting");
   btnTools.classList.toggle("active", page === "tools");
   btnTerminal.classList.toggle("active", page === "terminal");
 
-  // Scroll to top on page change
-  window.scrollTo(0, 0);
+  if (page !== "setting" && typeof closeSettingSearchPanel === "function") {
+    closeSettingSearchPanel({ clear: false });
+  }
+
+  // Terminal uses its own fixed viewport layout. Resetting the window scroll
+  // while entering/leaving it causes visible jumps on mobile.
+  if (prevPage !== "terminal" && page !== "terminal") {
+    window.scrollTo(0, 0);
+  }
 
   if (page === "home") {
     loadCurrentCar().catch(() => {});
@@ -826,6 +865,7 @@ function toggleLang() {
   loadRecordState().catch(() => {});
 
   if (SETTINGS) {
+    if (typeof rebuildSettingSearchEntries === "function") rebuildSettingSearchEntries();
     renderGroups();
     if (typeof renderSettingSubnav === "function") renderSettingSubnav();
     if (CURRENT_GROUP) renderItems(CURRENT_GROUP);
@@ -872,13 +912,29 @@ function renderUIText() {
   setText("sysCmdHelp", s.sys_cmd_help);
   setText("outputTitle", s.section_output);
   setText("terminalTitle", s.terminal);
-  setText("terminalSessionMeta", "IP");
+  setText("terminalSessionMeta", "/data/openpilot");
   setText("btnTerminalCtrlC", s.terminal_ctrl_c);
   setText("btnTerminalClear", s.terminal_clear);
   setText("btnTerminalReconnect", s.terminal_reconnect);
   setText("btnTerminalSend", s.terminal_send);
   const terminalInput = document.getElementById("terminalInput");
   if (terminalInput) terminalInput.placeholder = "";
+  setText("settingSearchTitle", s.setting_search);
+  if (settingSearchInput) settingSearchInput.placeholder = s.setting_search_placeholder || "";
+  if (settingSearchMeta && (!settingSearchInput || !settingSearchInput.value.trim())) {
+    settingSearchMeta.textContent = s.setting_search_idle || "";
+  }
+  if (btnSettingSearch) {
+    btnSettingSearch.setAttribute("aria-label", s.setting_search || "Search Settings");
+    btnSettingSearch.title = s.setting_search || "Search Settings";
+  }
+  if (btnSettingSearchSubmit) {
+    btnSettingSearchSubmit.setAttribute("aria-label", s.setting_search || "Search Settings");
+    btnSettingSearchSubmit.title = s.setting_search || "Search Settings";
+  }
+  if (typeof renderSettingSearchResults === "function" && settingSearchPanel && !settingSearchPanel.hidden) {
+    renderSettingSearchResults(settingSearchInput?.value || "");
+  }
   setText("appBranchPickerTitle", s.branch_select);
   setText("appBranchPickerClose", s.close);
   updateLangLabel();
@@ -926,7 +982,8 @@ function getUIText(key, fallback = "") {
 function syncModalBodyLock() {
   const hasOpenDialog =
     Boolean(appDialog && !appDialog.hidden) ||
-    Boolean(appBranchPicker && !appBranchPicker.hidden);
+    Boolean(appBranchPicker && !appBranchPicker.hidden) ||
+    Boolean(settingSearchPanel && !settingSearchPanel.hidden);
   document.body.classList.toggle("dialog-open", hasOpenDialog);
 }
 
@@ -1329,7 +1386,7 @@ async function setParam(name, value) {
 }
 
 /* ── Swipe Navigation ──────────────────────────────────── */
-const SWIPE_PAGES = ["home", "setting", "tools", "terminal"];
+const SWIPE_PAGES = ["home", "setting", "tools"];
 const SETTING_BACK_EDGE_WIDTH = 32;
 
 function prepareSettingBackFrame() {

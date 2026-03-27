@@ -6,7 +6,7 @@
   <title>Carrot</title>
   <link rel="stylesheet" href="/css/tokens.css?v=2603-73" />
   <link rel="stylesheet" href="/css/hud_card.css?v=2603-73" />
-  <link rel="stylesheet" href="/css/app.css?v=2603-81" />
+  <link rel="stylesheet" href="/css/app.css?v=2603-115" />
 </head>
 
 <body>
@@ -14,6 +14,9 @@
   <div class="wrap swipe-container" id="swipeContainer">
     <!-- ════════════ HOME ════════════ -->
     <div id="pageHome" class="page">
+      <div class="page-fab-layer page-fab-layer--home" aria-hidden="true">
+        <button id="btnRecordToggle" class="fab fab--round fab--record" aria-label="Record">OFF</button>
+      </div>
 
       <!-- Top Utility: Server State + Quick Link -->
       <div class="home-utility">
@@ -143,6 +146,13 @@
 
     <!-- ════════════ SETTING ════════════ -->
     <div id="pageSetting" class="page" style="display:none;">
+      <div class="page-fab-layer page-fab-layer--setting" aria-hidden="true">
+        <button id="btnSettingSearch" class="fab fab--round fab--icon fab--setting-search" type="button" aria-label="Search settings" aria-expanded="false" aria-controls="settingSearchPanel">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16a6.47 6.47 0 0 0 4.23-1.57l.27.28v.79L19 20.49 20.49 19zM9.5 14A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14"/>
+          </svg>
+        </button>
+      </div>
       <div class="page-header">
         <h2 id="settingTitle" style="margin:0; font-size:var(--fs-headline); font-weight:700; cursor:pointer;"><span id="settingTitleText">Setting</span></h2>
       </div>
@@ -171,6 +181,19 @@
           </div>
           <div id="items"></div>
         </div>
+      </div>
+
+      <button id="settingSearchBackdrop" class="setting-search-backdrop" type="button" hidden aria-label="Close search"></button>
+      <div id="settingSearchPanel" class="setting-search-panel" hidden aria-hidden="true">
+        <form id="settingSearchForm" class="setting-search-form">
+          <input id="settingSearchInput" type="text" class="setting-search-form__input" placeholder="설정 검색" autocomplete="off" />
+          <button id="btnSettingSearchSubmit" class="setting-search-form__submit" type="submit" aria-label="Search settings">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16a6.47 6.47 0 0 0 4.23-1.57l.27.28v.79L19 20.49 20.49 19zM9.5 14A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14"/>
+            </svg>
+          </button>
+        </form>
+        <div id="settingSearchResults" class="setting-search-results"></div>
       </div>
     </div>
 
@@ -233,7 +256,7 @@
           </div>
           <form id="sysCmdForm" class="tools-console-form">
             <span class="tools-console-prompt" aria-hidden="true">&gt;_</span>
-            <input id="sysCmdInput" type="text" class="input-text" placeholder="git pull" />
+            <input id="sysCmdInput" type="text" class="input-text" placeholder="" />
             <button id="btnSysCmdInfo" class="tools-console-iconBtn" type="button" aria-expanded="false" aria-controls="sysCmdHelpPanel" aria-label="Allowed commands">
               <svg class="tools-console-iconBtn__svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path fill="currentColor" d="M11 17h2v-6h-2zm0-8h2V7h-2zm1 13C6.48 22 2 17.52 2 12S6.48 2 12 2s10 4.48 10 10-4.48 10-10 10m0-18a8 8 0 1 0 0 16 8 8 0 0 0 0-16"/>
@@ -289,9 +312,6 @@
       </div>
     </div>
   </div>
-
-  <!-- Record FAB -->
-  <button id="btnRecordToggle" class="fab">REC</button>
 
   <!-- Bottom Navigation (Material 3 style) -->
   <nav class="topbar">
@@ -370,8 +390,8 @@
   </div>
 
   <script src="/js/hud_card.js?v=2603-73"></script>
-  <script src="/js/app_core.js?v=2603-79"></script>
-  <script src="/js/app_pages.js?v=2603-81"></script>
+  <script src="/js/app_core.js?v=2603-97"></script>
+  <script src="/js/app_pages.js?v=2603-108"></script>
   <script src="/js/app_realtime.js?v=2603-74"></script>
 </body>
 </html>
