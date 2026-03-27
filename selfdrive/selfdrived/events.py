@@ -253,10 +253,16 @@ def calibration_incomplete_alert(CP: car.CarParams, CS: car.CarState, sm: messag
     Priority.LOWEST, VisualAlert.none, AudibleAlert.none, .2)
 
 def torque_nn_load_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
+  def read_param_text(key: str) -> str:
+    value = params.get(key)
+    if isinstance(value, bytes):
+      return value.decode("utf-8", errors="replace")
+    return value or ""
+
   params = Params()
   lateral_nn_mode = params.get_int("LateralNNMode")
-  nnff_model_name = params.get("NNFFModelName") or ""
-  neurodob_model_name = params.get("NeuroDOBModelName") or ""
+  nnff_model_name = read_param_text("NNFFModelName")
+  neurodob_model_name = read_param_text("NeuroDOBModelName")
 
   if lateral_nn_mode == 1:
     if nnff_model_name == "":
