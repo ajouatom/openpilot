@@ -1797,18 +1797,18 @@
       "group": "차량간격",
       "name": "DynamicTFollow",
       "title": "동적 차간거리 설정(0)",
-      "descr": "선행차와 거리에따른 동적 설정",
+      "descr": "선행차의 움직임 변화에 따라 차간거리를 동적으로 조절",
       "egroup": "FDIST",
       "etitle": "Dynamic TFollow",
-      "edescr": "Dynamic setting based on distance to lead vehicle",
+      "edescr": "Dynamically adjusts following distance based on changes in lead vehicle motion",
       "min": 0,
       "max": 100,
       "default": 0,
       "unit": 1,
       "cgroup": "跟车距离",
       "ctitle": "动态跟车时间",
-      "cdescr": "根据与前车距离的动态设置"
-    },
+      "cdescr": "根据前车运动变化动态调整跟车距离"
+    }
     {
       "group": "차량간격",
       "name": "EnableSpeedTF",
