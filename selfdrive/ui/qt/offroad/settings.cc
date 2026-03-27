@@ -744,7 +744,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   dispToggles->addItem(new CValueControl("ShowLaneInfo", tr("Lane Info"), tr("-1:None, 0:Path, 1:Path+Lane, 2: Path+Lane+RoadEdge"), -1, 2, 1));
   dispToggles->addItem(new CValueControl("ShowRadarInfo", tr("Radar Info"), tr("0:None,1:Display,2:RelPos,3:Stopped Car"), 0, 3, 1));
   dispToggles->addItem(new CValueControl("ShowRouteInfo", tr("Route Info"), tr("0:None,1:Display"), 0, 1, 1));
-  dispToggles->addItem(new CValueControl("ShowPlotMode", tr("Debug plot"), "", 0, 10, 1));
+  dispToggles->addItem(new CValueControl("ShowPlotMode", tr("Debug plot"), tr("0:None,1:Accel,2:Speed,3:Model,4:Lead,5:Lead2,6:Steer,7:SteerAngle,8:Curvature,9:NeuroDOB Apply,10:NeuroDOB Track"), 0, 10, 1));
   dispToggles->addItem(new CValueControl("ShowCustomBrightness", tr("Brightness ratio"), "", 0, 100, 10));
   //dispToggles->addItem(new CValueControl("ShowHudMode", "Display Mode", "0:Frog,1:APilot,2:Bottom,3:Top,4:Left,5:Left-Bottom", 0, 5, 1));
   //dispToggles->addItem(new CValueControl("ShowSteerRotate", "Handle rotate", "0:None,1:Rotate", 0, 1, 1));
@@ -839,8 +839,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   startToggles->addItem(new CValueControl("MapboxStyle", tr("Mapbox Style(0)"), "", 0, 2, 1));
   startToggles->addItem(new CValueControl("RecordRoadCam", tr("Record Road camera(0)"), tr("1:RoadCam, 2:RoadCam+WideRoadCam"), 0, 2, 1));
   startToggles->addItem(new CValueControl("HDPuse", tr("Use HDP(CCNC)(0)"), tr("1:While Using APN, 2:Always"), 0, 2, 1));
-  startToggles->addItem(new CValueControl("NNFF", tr("NNFF"), tr("Twilsonco's NNFF(Reboot required)"), 0, 1, 1));
-  startToggles->addItem(new CValueControl("NNFFLite", tr("NNFFLite"), tr("Twilsonco's NNFF-Lite(Reboot required)"), 0, 1, 1));
+  startToggles->addItem(new CValueControl("LateralNNMode", tr("Lateral NN Mode"), tr("0:Stock, 1:NNFF, 2:NNFFLite, 3:NeuroDOB (Reboot required)"), 0, 3, 1));
   startToggles->addItem(new CValueControl("AutoGasSyncSpeed", tr("Auto update Cruise speed"), "", 0, 1, 1));
   startToggles->addItem(new CValueControl("DisableMinSteerSpeed", tr("Disable Min.SteerSpeed"), "", 0, 1, 1));
   startToggles->addItem(new CValueControl("DisableDM", tr("Disable DM"), "", 0, 2, 1));

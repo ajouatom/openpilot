@@ -330,9 +330,11 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"SoftRestartTriggered", {CLEAR_ON_MANAGER_START, INT}},
 
     {"DevicePosition", {CLEAR_ON_MANAGER_START, STRING}},
+    {"LateralNNMode", {PERSISTENT, INT, "0"}},
     {"NNFF", {PERSISTENT, INT, "0"}},
     {"NNFFLite", {PERSISTENT, INT, "0"}},
     {"NNFFModelName", {CLEAR_ON_OFFROAD_TRANSITION, STRING}},
+    {"NeuroDOBModelName", {CLEAR_ON_OFFROAD_TRANSITION, STRING}},
 
     {"HardwareC3xLite", {PERSISTENT, INT, "0"}},
     {"ShareData", {PERSISTENT, INT, "0"}},

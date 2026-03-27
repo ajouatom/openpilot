@@ -326,6 +326,7 @@ protected:
         auto    car_control = sm["carControl"].getCarControl();
         auto    controls_state = sm["controlsState"].getControlsState();
         auto    torque_state = controls_state.getLateralControlState().getTorqueState();
+        auto    nn_log = torque_state.getNnLog();
 
         float   a_ego = car_state.getAEgo();
         float   v_ego = car_state.getVEgo();
@@ -341,6 +342,9 @@ protected:
 
         auto lead_radar = sm["radarState"].getRadarState().getLeadOne();
         auto live_params = sm["liveParameters"].getLiveParameters();
+        float   neurodob_base = nn_log.size() > 0 ? nn_log[0] : 0.0f;
+        float   neurodob_delta = nn_log.size() > 1 ? nn_log[1] : 0.0f;
+        float   neurodob_final = nn_log.size() > 2 ? nn_log[2] : 0.0f;
 
         // 0: yellow, 1: green, 2: orange
         switch (show_plot_mode) {
@@ -392,6 +396,18 @@ protected:
             data[1] = car_control.getActuators().getCurvature()*10000;
             data[2] = car_control.getActuators().getCurvature()*10000;
             sprintf(title, "8.SteerA (Y:Actual, G:Target, O:Offset*10)");
+            break;
+        case 9:
+            data[0] = neurodob_base * 10.0;
+            data[1] = neurodob_final * 10.0;
+            data[2] = neurodob_delta * 100.0;
+            sprintf(title, "9.NeuroDOB(Y:base, G:final, O:delta*100)");
+            break;
+        case 10:
+            data[0] = torque_state.getDesiredLateralAccel() * 10.0;
+            data[1] = torque_state.getActualLateralAccel() * 10.0;
+            data[2] = neurodob_delta * 100.0;
+            sprintf(title, "10.NeuroDOB(Y:desire, G:actual, O:delta*100)");
             break;
         default:
             data[0] = data[1] = data[2] = 0;
@@ -2991,8 +3007,14 @@ public:
             carName += " - OP Long";
         }
         QString NNFFModelName = QString::fromStdString(params.get("NNFFModelName"));
-        if (NNFFModelName.length() > 0) {
+        QString NeuroDOBModelName = QString::fromStdString(params.get("NeuroDOBModelName"));
+        int lateralNNMode = params.getInt("LateralNNMode");
+        if (lateralNNMode == 1 && NNFFModelName.length() > 0) {
             carName += ",NNFF";
+        } else if (lateralNNMode == 2) {
+            carName += ",NNFFLite";
+        } else if (lateralNNMode == 3 && NeuroDOBModelName.length() > 0) {
+            carName += ",NeuroDOB";
         }
         sprintf(top_left, "%s", carName.toStdString().c_str());
 

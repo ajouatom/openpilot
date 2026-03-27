@@ -253,17 +253,47 @@ def calibration_incomplete_alert(CP: car.CarParams, CS: car.CarState, sm: messag
     Priority.LOWEST, VisualAlert.none, AudibleAlert.none, .2)
 
 def torque_nn_load_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
-  model_name = Params().get("NNFFModelName")
-  if model_name == "":
-    return Alert(
-      "NNFF Torque Controller not available",
-      "Donate logs to Twilsonco to get it added!",
-      AlertStatus.userPrompt, AlertSize.mid,
-      Priority.LOW, VisualAlert.none, AudibleAlert.prompt, 6.0)
-  else:
+  params = Params()
+  lateral_nn_mode = params.get_int("LateralNNMode")
+  nnff_model_name = params.get("NNFFModelName") or ""
+  neurodob_model_name = params.get("NeuroDOBModelName") or ""
+
+  if lateral_nn_mode == 1:
+    if nnff_model_name == "":
+      return Alert(
+        "NNFF Torque Controller not available",
+        "No matching NNFF model was found for this car.",
+        AlertStatus.userPrompt, AlertSize.mid,
+        Priority.LOW, VisualAlert.none, AudibleAlert.prompt, 6.0)
     return Alert(
       "NNFF Torque Controller loaded",
-      model_name,
+      nnff_model_name,
+      AlertStatus.userPrompt, AlertSize.mid,
+      Priority.LOW, VisualAlert.none, AudibleAlert.prompt, 5.0)
+
+  if lateral_nn_mode == 2:
+    return Alert(
+      "NNFF Lite Controller loaded",
+      "Using NNFF Lite mode",
+      AlertStatus.userPrompt, AlertSize.mid,
+      Priority.LOW, VisualAlert.none, AudibleAlert.prompt, 5.0)
+
+  if lateral_nn_mode == 3:
+    if neurodob_model_name == "":
+      return Alert(
+        "NeuroDOB Controller not available",
+        "No matching NeuroDOB JSON model was found for this car.",
+        AlertStatus.userPrompt, AlertSize.mid,
+        Priority.LOW, VisualAlert.none, AudibleAlert.prompt, 6.0)
+    return Alert(
+      "NeuroDOB Controller loaded",
+      neurodob_model_name,
+      AlertStatus.userPrompt, AlertSize.mid,
+      Priority.LOW, VisualAlert.none, AudibleAlert.prompt, 5.0)
+
+  return Alert(
+      "Lateral NN Controller disabled",
+      "Using stock lateral control",
       AlertStatus.userPrompt, AlertSize.mid,
       Priority.LOW, VisualAlert.none, AudibleAlert.prompt, 5.0)
 

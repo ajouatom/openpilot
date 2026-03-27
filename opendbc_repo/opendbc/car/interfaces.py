@@ -23,6 +23,7 @@ from opendbc.can import CANParser
 
 from openpilot.common.params import Params
 from openpilot.common.filter_simple import FirstOrderFilter
+from openpilot.selfdrive.controls.lib.neurodob import get_neurodob_model
 
 GearShifter = structs.CarState.GearShifter
 ButtonType = structs.CarState.ButtonEvent.Type
@@ -32,6 +33,10 @@ MAX_CTRL_SPEED = (V_CRUISE_MAX + 4) * CV.KPH_TO_MS
 ACCEL_MAX = 2.5
 ACCEL_MIN = -4.0 #3.5
 FRICTION_THRESHOLD = 0.3
+LATERAL_NN_MODE_STOCK = 0
+LATERAL_NN_MODE_NNFF = 1
+LATERAL_NN_MODE_NNFF_LITE = 2
+LATERAL_NN_MODE_NEURODOB = 3
 
 NEURAL_PARAMS_PATH = os.path.join(BASEDIR, 'torque_data/neural_ff_weights.json')
 TORQUE_NN_MODEL_PATH = os.path.join(BASEDIR, 'torque_data/lat_models')
@@ -54,6 +59,11 @@ GEAR_SHIFTER_MAP: dict[str, structs.CarState.GearShifter] = {
 
 def similarity(s1: str, s2: str) -> float:
   return SequenceMatcher(None, s1, s2).ratio()
+
+
+def get_lateral_nn_mode(params: Params | None = None) -> int:
+  params = params or Params()
+  return params.get_int("LateralNNMode")
 
 class LatControlInputs(NamedTuple):
   lateral_acceleration: float
@@ -189,10 +199,10 @@ def get_nn_model_path(car, eps_firmware) -> tuple[str | None, float]:
   else:
     check_model = car
   model_path, max_similarity = check_nn_path(check_model)
-  if car not in model_path or 0.0 <= max_similarity < 0.9:
+  if model_path is None or car not in model_path or 0.0 <= max_similarity < 0.9:
     check_model = car
     model_path, max_similarity = check_nn_path(check_model)
-    if car not in model_path or 0.0 <= max_similarity < 0.9:
+    if model_path is None or car not in model_path or 0.0 <= max_similarity < 0.9:
       model_path = None
   return model_path
 
@@ -380,14 +390,37 @@ class CarInterfaceBase(ABC):
     dbc_names = {bus: cp.dbc_name for bus, cp in self.can_parsers.items()}
     self.CC: CarControllerBase = self.CarController(dbc_names, CP)
 
-    Params().put_int('LongitudinalPersonalityMax', 3)
+    params = Params()
+    params.put_int('LongitudinalPersonalityMax', 3)
     eps_firmware = str(next((fw.fwVersion for fw in CP.carFw if fw.ecu == "eps"), ""))
+    lateral_nn_mode = get_lateral_nn_mode(params)
+
+    control_type = None
+    if CP.steerControlType == structs.CarParams.SteerControlType.angle:
+      control_type = "angle"
+    elif CP.lateralTuning.which() == 'torque':
+      control_type = "torque"
 
     comma_nnff_supported = self.check_comma_nn_ff_support(CP.carFingerprint)
     nnff_supported = self.initialize_lat_torque_nn(CP.carFingerprint, eps_firmware)
 
-    self.use_nnff = not comma_nnff_supported and nnff_supported and Params().get_bool("NNFF")
-    self.use_nnff_lite = not self.use_nnff and Params().get_bool("NNFFLite")
+    self.use_nnff = control_type == "torque" and lateral_nn_mode == LATERAL_NN_MODE_NNFF and not comma_nnff_supported and nnff_supported
+    self.use_nnff_lite = control_type == "torque" and lateral_nn_mode == LATERAL_NN_MODE_NNFF_LITE
+    self.use_neurodob = False
+    self.neurodob_model = None
+
+    if not self.use_nnff:
+      params.remove("NNFFModelName")
+    params.remove("NeuroDOBModelName")
+
+    if self.use_nnff:
+      params.put_nonblocking("NNFFModelName", CP.carFingerprint.replace("_", " "))
+
+    if lateral_nn_mode == LATERAL_NN_MODE_NEURODOB and control_type is not None:
+      self.neurodob_model = get_neurodob_model(CP.carFingerprint, control_type)
+      self.use_neurodob = self.neurodob_model is not None
+      if self.use_neurodob:
+        params.put_nonblocking("NeuroDOBModelName", CP.carFingerprint.replace("_", " "))
     
   def get_ff_nn(self, x):
     return self.lat_torque_nn_model.evaluate(x)
@@ -436,8 +469,10 @@ class CarInterfaceBase(ABC):
 
     ret = cls._get_params(ret, candidate, fingerprint, car_fw, alpha_long, is_release, docs)
    
+    lateral_nn_mode = get_lateral_nn_mode()
+
     # Enable torque controller for all cars that do not use angle based steering
-    if ret.steerControlType != structs.CarParams.SteerControlType.angle and Params().get_bool("NNFF"):
+    if ret.steerControlType != structs.CarParams.SteerControlType.angle and lateral_nn_mode == LATERAL_NN_MODE_NNFF:
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
       eps_firmware = str(next((fw.fwVersion for fw in car_fw if fw.ecu == "eps"), ""))
       model = get_nn_model_path(candidate, eps_firmware)

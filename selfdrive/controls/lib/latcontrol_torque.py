@@ -14,6 +14,7 @@ from openpilot.selfdrive.controls.lib.latcontrol import LatControl
 from openpilot.common.pid import PIDController
 
 from openpilot.common.params import Params
+from openpilot.common.realtime import DT_CTRL
 
 # At higher speeds (25+mph) we can assume:
 # Lateral acceleration achieved by a specific car correlates to
@@ -86,6 +87,9 @@ class LatControlTorque(LatControl):
     # Twilsonco's Lateral Neural Network Feedforward
     self.use_nnff = CI.use_nnff
     self.use_nnff_lite = CI.use_nnff_lite
+    self.use_neurodob = getattr(CI, "use_neurodob", False)
+    self.neurodob_model = getattr(CI, "neurodob_model", None)
+    self._prev_lat_error = 0.0
 
     if self.use_nnff or self.use_nnff_lite:
       # Instantaneous lateral jerk changes very rapidly, making it not useful on its own,
@@ -291,6 +295,32 @@ class LatControlTorque(LatControl):
                                       speed=CS.vEgo,
                                       freeze_integrator=freeze_integrator)
 
+      if self.use_neurodob and self.neurodob_model is not None:
+        try:
+          lateral_error = desired_lateral_accel - actual_lateral_accel
+          lateral_error_rate = (lateral_error - self._prev_lat_error) / DT_CTRL
+          desired_yaw_rate = desired_curvature * CS.vEgo
+          yaw_rate_error = desired_yaw_rate - CS.yawRate
+          base_output_torque = -output_torque
+          state_features = [
+            lateral_error,
+            lateral_error_rate,
+            yaw_rate_error,
+            CS.steeringRateDeg,
+            base_output_torque,
+            CS.vEgo,
+            params.roll,
+            desired_lateral_accel,
+          ]
+          neurodob_delta = self.neurodob_model.predict(state_features)
+          output_torque = np.clip(output_torque - neurodob_delta, -self.steer_max, self.steer_max)
+          self._prev_lat_error = lateral_error
+          pid_log.nnLog = [float(base_output_torque), float(neurodob_delta), float(-output_torque)]
+        except Exception as e:
+          print(f"NeuroDOB predict failed, disabling model: {e}")
+          self.use_neurodob = False
+          self.neurodob_model = None
+
       pid_log.active = True
       pid_log.p = float(self.pid.p)
       pid_log.i = float(self.pid.i)
@@ -305,3 +335,9 @@ class LatControlTorque(LatControl):
 
     # TODO left is positive in this convention
     return -output_torque,angle_steers_des, pid_log
+
+  def reset(self):
+    super().reset()
+    self._prev_lat_error = 0.0
+    if self.use_neurodob and self.neurodob_model is not None:
+      self.neurodob_model.reset()
