@@ -1,4 +1,42 @@
 /* ---------- Home: current car ---------- */
+let recordStateIsOn = false;
+let recordTogglePending = false;
+let recordStateResyncTimer = null;
+
+function parseRecordStateValue(value) {
+  return (
+    value === true ||
+    value === 1 ||
+    value === "1" ||
+    value === "true" ||
+    value === "True"
+  );
+}
+
+function scheduleRecordStateResync(delay = 520) {
+  if (recordStateResyncTimer) {
+    clearTimeout(recordStateResyncTimer);
+    recordStateResyncTimer = null;
+  }
+  recordStateResyncTimer = window.setTimeout(() => {
+    recordStateResyncTimer = null;
+    loadRecordState({ force: true }).catch(() => {});
+  }, delay);
+}
+
+function applyRecordFabState(isOn) {
+  recordStateIsOn = Boolean(isOn);
+  if (!btnRecordToggle) return;
+
+  btnRecordToggle.classList.toggle("active", recordStateIsOn);
+  btnRecordToggle.textContent = recordStateIsOn ? "ON" : "OFF";
+  const label = recordStateIsOn
+    ? (UI_STRINGS[LANG].record_on || UI_STRINGS[LANG].record || "Recording")
+    : (UI_STRINGS[LANG].record_off || UI_STRINGS[LANG].record || "Idle");
+  btnRecordToggle.setAttribute("aria-label", label);
+  btnRecordToggle.title = label;
+}
+
 async function loadCurrentCar() {
   try {
     const values = await bulkGet(["CarSelected3"]);
@@ -11,43 +49,35 @@ async function loadCurrentCar() {
   }
 }
 
-async function loadRecordState() {
+async function loadRecordState(options = {}) {
+  if (recordTogglePending && !options.force) return;
   try {
     const values = await bulkGet(["ScreenRecord"]);
-    const v = values["ScreenRecord"];
-
-    const isOn =
-      v === true ||
-      v === 1 ||
-      v === "1" ||
-      v === "true" ||
-      v === "True";
-
-    btnRecordToggle.classList.toggle("active", isOn);
-    btnRecordToggle.textContent = isOn
-      ? (UI_STRINGS[LANG].record_on || UI_STRINGS[LANG].record || "Recording")
-      : (UI_STRINGS[LANG].record_off || UI_STRINGS[LANG].record || "Idle");
+    applyRecordFabState(parseRecordStateValue(values["ScreenRecord"]));
   } catch (e) {
-    btnRecordToggle.classList.remove("active");
-    btnRecordToggle.textContent = UI_STRINGS[LANG].record_off || UI_STRINGS[LANG].record || "Record";
+    applyRecordFabState(false);
   }
 }
 async function toggleRecord() {
+  if (recordTogglePending) return;
+
+  const prev = recordStateIsOn;
+  const next = !prev;
+  recordTogglePending = true;
+  if (recordStateResyncTimer) {
+    clearTimeout(recordStateResyncTimer);
+    recordStateResyncTimer = null;
+  }
+  applyRecordFabState(next);
+
   try {
-    const values = await bulkGet(["ScreenRecord"]);
-    const v = values["ScreenRecord"];
-
-    const isOn =
-      v === true ||
-      v === 1 ||
-      v === "1" ||
-      v === "true" ||
-      v === "True";
-
-    await setParam("ScreenRecord", !isOn);
-    await loadRecordState();
+    await setParam("ScreenRecord", next);
+    scheduleRecordStateResync();
   } catch (e) {
+    applyRecordFabState(prev);
     showAppToast((UI_STRINGS[LANG].record || "Failed to toggle record: ") + e.message, { tone: "error" });
+  } finally {
+    recordTogglePending = false;
   }
 }
 
@@ -161,12 +191,14 @@ async function loadSettings() {
   const r = await fetch("/api/settings");
   const j = await r.json();
   if (!j.ok) {
+    settingSearchEntries = [];
     meta.textContent = "Failed: " + (j.error || "unknown");
     return;
   }
 
   SETTINGS = j;
   UNIT_CYCLE = j.unit_cycle || UNIT_CYCLE;
+  rebuildSettingSearchEntries();
 
   meta.textContent = `path: ${j.path} | has_params: ${j.has_params} | type_api: ${j.has_param_type}`;
 
@@ -182,6 +214,9 @@ async function loadSettings() {
   renderSettingSubnav();
   CURRENT_GROUP = null;
   showSettingScreen("groups", false);
+  if (settingSearchPanel && !settingSearchPanel.hidden) {
+    renderSettingSearchResults(settingSearchInput?.value || "");
+  }
 }
 
 function renderGroups() {
@@ -218,6 +253,255 @@ let settingSubnavFocusTimer = null;
 const SETTING_SUBNAV_PAGE_STEP = 1;
 let settingGroupTransitionLock = false;
 let settingRenderToken = 0;
+let pendingSettingFocus = null;
+let settingFocusClearTimer = null;
+let settingSearchDebounceTimer = null;
+let settingSearchEntries = [];
+const settingPageRoot = document.getElementById("pageSetting");
+
+function rebuildSettingSearchEntries() {
+  const groups = SETTINGS?.groups || [];
+  const entries = [];
+
+  groups.forEach((groupMeta) => {
+    const group = groupMeta.group;
+    const groupLabel = getSettingGroupLabel(group);
+    const list = SETTINGS?.items_by_group?.[group] || [];
+
+    list.forEach((item) => {
+      const title = formatItemText(item, "title", "etitle", "");
+      const descr = formatItemText(item, "descr", "edescr", "");
+      entries.push({
+        group,
+        groupLabel,
+        name: item.name,
+        title,
+        descr,
+        haystack: [groupLabel, item.name, title, descr].join("\n").toLowerCase(),
+      });
+    });
+  });
+
+  settingSearchEntries = entries;
+  return entries;
+}
+
+function getSettingSearchEntries() {
+  return settingSearchEntries;
+}
+
+function highlightSettingSearchText(text, query) {
+  const raw = String(text ?? "");
+  const q = String(query || "").trim().toLowerCase();
+  if (!raw || !q) return escapeHtml(raw);
+
+  const lower = raw.toLowerCase();
+  const start = lower.indexOf(q);
+  if (start < 0) return escapeHtml(raw);
+
+  const end = start + q.length;
+  return `${escapeHtml(raw.slice(0, start))}<mark class="setting-search-result__mark">${escapeHtml(raw.slice(start, end))}</mark>${escapeHtml(raw.slice(end))}`;
+}
+
+function clearSettingItemFocus() {
+  if (settingFocusClearTimer) {
+    clearTimeout(settingFocusClearTimer);
+    settingFocusClearTimer = null;
+  }
+  document.querySelectorAll(".setting.is-focus-hit").forEach((el) => el.classList.remove("is-focus-hit"));
+}
+
+function focusSettingItem(name, behavior = "smooth") {
+  const itemsBox = document.getElementById("items");
+  if (!itemsBox || !name) return false;
+
+  const target = Array.from(itemsBox.querySelectorAll(".setting")).find(
+    (el) => el.dataset.settingName === name,
+  );
+  if (!target) return false;
+
+  clearSettingItemFocus();
+  target.classList.add("is-focus-hit");
+  target.scrollIntoView({ behavior, block: "center" });
+
+  settingFocusClearTimer = window.setTimeout(() => {
+    target.classList.remove("is-focus-hit");
+    settingFocusClearTimer = null;
+  }, 2200);
+
+  pendingSettingFocus = null;
+  return true;
+}
+
+function closeSettingSearchPanel(options = {}) {
+  const clear = Boolean(options.clear);
+  const syncHistory = Boolean(options.syncHistory);
+  const fromHistory = Boolean(options.fromHistory);
+  if (settingSearchDebounceTimer) {
+    clearTimeout(settingSearchDebounceTimer);
+    settingSearchDebounceTimer = null;
+  }
+  if (settingSearchPanel) {
+    settingSearchPanel.hidden = true;
+    settingSearchPanel.setAttribute("aria-hidden", "true");
+  }
+  if (settingSearchBackdrop) settingSearchBackdrop.hidden = true;
+  if (btnSettingSearch) {
+    btnSettingSearch.classList.remove("active");
+    btnSettingSearch.setAttribute("aria-expanded", "false");
+  }
+  if (settingPageRoot) settingPageRoot.classList.remove("setting-search-open");
+
+  if (clear && settingSearchInput) settingSearchInput.value = "";
+  if (clear && settingSearchResults) settingSearchResults.innerHTML = "";
+  syncModalBodyLock();
+
+  const state = history.state || {};
+  if (!fromHistory && state.page === "setting" && state.search) {
+    if (syncHistory) history.back();
+    else history.replaceState({
+      page: "setting",
+      screen: (screenItems && screenItems.style.display !== "none") ? "items" : "groups",
+      group: CURRENT_GROUP || null,
+    }, "");
+  }
+}
+
+function renderSettingSearchResults(query = "") {
+  if (!settingSearchResults) return;
+
+  const trimmed = String(query || "").trim();
+  if (!SETTINGS) {
+    settingSearchResults.innerHTML = "";
+    return;
+  }
+
+  if (!trimmed) {
+    settingSearchResults.innerHTML = "";
+    return;
+  }
+
+  if (!settingSearchEntries.length && SETTINGS) {
+    rebuildSettingSearchEntries();
+  }
+
+  const q = trimmed.toLowerCase();
+  const matches = getSettingSearchEntries()
+    .filter((entry) => entry.haystack.includes(q))
+    .slice(0, 24);
+
+  settingSearchResults.innerHTML = "";
+
+  if (!matches.length) {
+    const empty = document.createElement("div");
+    empty.className = "setting-search-result setting-search-result--empty";
+    empty.textContent = getUIText("setting_search_empty", "No matching settings found.");
+    settingSearchResults.appendChild(empty);
+    return;
+  }
+
+  matches.forEach((entry) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "setting-search-result";
+    button.innerHTML = `
+      <div class="setting-search-result__group">${highlightSettingSearchText(entry.groupLabel, trimmed)}</div>
+      <div class="setting-search-result__title">${highlightSettingSearchText(entry.title || entry.name, trimmed)}</div>
+      ${entry.name && entry.name !== entry.title ? `<div class="setting-search-result__name">${highlightSettingSearchText(entry.name, trimmed)}</div>` : ""}
+      ${entry.descr ? `<div class="setting-search-result__descr">${highlightSettingSearchText(entry.descr, trimmed)}</div>` : ""}
+    `;
+    button.onclick = async () => {
+      try {
+        pendingSettingFocus = { group: entry.group, name: entry.name };
+        closeSettingSearchPanel({ syncHistory: false });
+        if (CURRENT_GROUP === entry.group && screenItems && screenItems.style.display !== "none") {
+          focusSettingItem(entry.name);
+          return;
+        }
+        await activateSettingGroup(entry.group, true);
+      } catch (e) {
+        showAppToast(e.message || "Search jump failed", { tone: "error" });
+      }
+    };
+    settingSearchResults.appendChild(button);
+  });
+}
+
+async function openSettingSearchPanel(options = {}) {
+  const pushHistory = options.pushHistory !== false;
+  if (CURRENT_PAGE !== "setting") return;
+  if (!SETTINGS) {
+    try {
+      await loadSettings();
+    } catch (_) {
+      // no-op
+    }
+  }
+  if (!settingSearchPanel) return;
+  settingSearchPanel.hidden = false;
+  settingSearchPanel.setAttribute("aria-hidden", "false");
+  if (settingSearchBackdrop) settingSearchBackdrop.hidden = false;
+  if (btnSettingSearch) {
+    btnSettingSearch.classList.add("active");
+    btnSettingSearch.setAttribute("aria-expanded", "true");
+  }
+  if (settingPageRoot) settingPageRoot.classList.add("setting-search-open");
+  const state = history.state || {};
+  if (pushHistory && !(state.page === "setting" && state.search)) {
+    history.pushState({
+      page: "setting",
+      screen: (screenItems && screenItems.style.display !== "none") ? "items" : "groups",
+      group: CURRENT_GROUP || null,
+      search: true,
+    }, "");
+  }
+  syncModalBodyLock();
+  renderSettingSearchResults(settingSearchInput?.value || "");
+  requestAnimationFrame(() => {
+    settingSearchInput?.focus({ preventScroll: true });
+    settingSearchInput?.select();
+  });
+}
+
+function toggleSettingSearchPanel() {
+  if (!settingSearchPanel) return;
+  if (settingSearchPanel.hidden) {
+    openSettingSearchPanel().catch(() => {});
+  }
+  else closeSettingSearchPanel({ syncHistory: true });
+}
+
+if (btnSettingSearch) {
+  btnSettingSearch.onclick = () => toggleSettingSearchPanel();
+}
+
+if (settingSearchBackdrop) {
+  settingSearchBackdrop.onclick = () => closeSettingSearchPanel({ syncHistory: true });
+}
+
+if (settingSearchForm) {
+  settingSearchForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const firstResult = settingSearchResults?.querySelector("button.setting-search-result");
+    if (firstResult) firstResult.click();
+  });
+}
+
+if (settingSearchInput) {
+  settingSearchInput.addEventListener("input", () => {
+    if (settingSearchDebounceTimer) clearTimeout(settingSearchDebounceTimer);
+    settingSearchDebounceTimer = window.setTimeout(() => {
+      settingSearchDebounceTimer = null;
+      renderSettingSearchResults(settingSearchInput.value);
+    }, 70);
+  });
+}
+
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && settingSearchPanel && !settingSearchPanel.hidden) {
+    closeSettingSearchPanel({ syncHistory: true });
+  }
+});
 
 function updateSettingSubnavLayoutState() {
   if (!settingSubnav || !settingSubnavWrap) return;
@@ -561,6 +845,8 @@ async function renderItems(group) {
 
     const el = document.createElement("div");
     el.className = "setting";
+    el.dataset.settingName = name;
+    el.dataset.settingGroup = group;
 
     const top = document.createElement("div");
     top.className = "settingTop";
@@ -639,6 +925,10 @@ async function renderItems(group) {
     btnMinus.onclick = () => applyDelta(-1);
     btnPlus.onclick = () => applyDelta(+1);
   }
+
+  if (pendingSettingFocus?.group === group) {
+    requestAnimationFrame(() => focusSettingItem(pendingSettingFocus.name));
+  }
 }
 
 
@@ -647,6 +937,10 @@ history.replaceState({ page: "home" }, "");
 
 window.addEventListener("popstate", async (ev) => {
   const st = ev.state || { page: "home" };
+
+  if (settingSearchPanel && !settingSearchPanel.hidden && !st.search) {
+    closeSettingSearchPanel({ clear: false, fromHistory: true });
+  }
 
   if (st.page === "home") {
     CURRENT_GROUP = null;
@@ -665,6 +959,9 @@ window.addEventListener("popstate", async (ev) => {
       renderItems(CURRENT_GROUP);
     } else {
       showSettingScreen("groups", false);
+    }
+    if (st.search) {
+      openSettingSearchPanel({ pushHistory: false }).catch(() => {});
     }
     return;
   }
@@ -706,13 +1003,87 @@ window.addEventListener("popstate", async (ev) => {
 });
 
 
-function toolsOutSet(s) {
+let toolsOutHistory = "";
+let toolsOutCurrentBlock = "";
+
+function normalizeToolsOutText(s) {
+  return String(s ?? "").replace(/\s+$/, "");
+}
+
+function renderToolsOut() {
   const out = document.getElementById("toolsOut");
   if (!out) return;
-  out.textContent = String(s);
+  const historyText = normalizeToolsOutText(toolsOutHistory);
+  const currentText = normalizeToolsOutText(toolsOutCurrentBlock);
+
+  if (!historyText && !currentText) {
+    out.textContent = " ";
+  } else {
+    const frag = document.createDocumentFragment();
+
+    if (historyText) {
+      const historyBlock = document.createElement("span");
+      historyBlock.className = "tools-console-log__history";
+      historyBlock.textContent = historyText;
+      frag.appendChild(historyBlock);
+    }
+
+    if (historyText && currentText) {
+      frag.appendChild(document.createTextNode("\n\n"));
+    }
+
+    if (currentText) {
+      const currentBlock = document.createElement("span");
+      currentBlock.className = "tools-console-log__current";
+      currentBlock.textContent = currentText;
+      frag.appendChild(currentBlock);
+    }
+
+    out.replaceChildren(frag);
+  }
+
   requestAnimationFrame(() => {
     out.scrollTop = out.scrollHeight;
   });
+}
+
+function toolsOutSet(s) {
+  toolsOutCurrentBlock = normalizeToolsOutText(s);
+  renderToolsOut();
+}
+
+function toolsOutAppend(s) {
+  const next = normalizeToolsOutText(s);
+  if (!next) return;
+  toolsOutHistory = toolsOutHistory ? `${toolsOutHistory}\n\n${next}` : next;
+  renderToolsOut();
+}
+
+function toolsOutCommitCurrent() {
+  if (!toolsOutCurrentBlock) return;
+  toolsOutAppend(toolsOutCurrentBlock);
+  toolsOutCurrentBlock = "";
+  renderToolsOut();
+}
+
+function getToolCommandPreview(action, payload = {}) {
+  switch (action) {
+    case "shell_cmd": return String(payload.cmd || "").trim() || "command";
+    case "git_pull": return "git pull";
+    case "git_sync": return "git sync";
+    case "git_reset": return `git reset --${payload.mode || "hard"} ${payload.target || "HEAD"}`.trim();
+    case "git_checkout": return `git checkout ${payload.branch || ""}`.trim();
+    case "git_branch_list": return "change branch";
+    case "send_tmux_log": return "capture tmux";
+    case "server_tmux_log": return "send tmux";
+    case "install_required": return "install flask";
+    case "delete_all_videos": return "delete all videos";
+    case "delete_all_logs": return "delete all logs";
+    case "rebuild_all": return "rebuild all";
+    case "backup_settings": return "backup settings";
+    case "reboot": return "reboot";
+    default: return action;
+  }
 }
 
 function toolsMetaSet(s) {
@@ -796,9 +1167,11 @@ function updateToolsRunningState(labels, snapshot) {
 async function runTool(action, payload) {
   const labels = getActionLabel(action);
   const runToken = ++activeToolRunToken;
+  const commandPreview = getToolCommandPreview(action, payload || {});
 
   toolsMetaSet(labels.running);
-  toolsOutSet(labels.running);
+  toolsOutCommitCurrent();
+  toolsOutSet(`> ${commandPreview}\n${labels.running}`);
   toolsProgressSet(null, { active: true, indeterminate: true });
 
   const started = await postJson("/api/tools/start", { action, ...(payload || {}) });
@@ -809,7 +1182,8 @@ async function runTool(action, payload) {
     snapshot = await getJson(`/api/tools/job?id=${encodeURIComponent(jobId)}`);
 
     if (snapshot.log != null) {
-      toolsOutSet(snapshot.log || " ");
+      const body = normalizeToolsOutText(snapshot.log) || labels.running;
+      toolsOutSet(`> ${commandPreview}\n${body}`);
     }
 
     if (!snapshot.done) {
@@ -820,11 +1194,17 @@ async function runTool(action, payload) {
 
     const result = snapshot.result || snapshot;
     if (!result.ok) {
+      const errMsg = friendlyError(result) || result.error || snapshot.error || labels.failed;
+      toolsOutSet(`> ${commandPreview}\n${normalizeToolsOutText(snapshot?.log) || errMsg}`);
+      toolsOutCommitCurrent();
       toolsMetaSet(labels.failed);
       toolsProgressSet(null, { active: false });
-      throw new Error(friendlyError(result) || result.error || snapshot.error || labels.failed);
+      throw new Error(errMsg);
     }
 
+    const finalBody = normalizeToolsOutText(result.out ?? snapshot.log) || labels.done;
+    toolsOutSet(`> ${commandPreview}\n${finalBody}`);
+    toolsOutCommitCurrent();
     toolsMetaSet(labels.done);
     toolsProgressSet(100, { active: true, indeterminate: false });
     window.setTimeout(() => {
@@ -920,8 +1300,7 @@ function initToolsPage() {
     if (!cmd) return;
 
     try {
-      const j = await runTool("shell_cmd", { cmd });
-      toolsOutSet(j.out || "(no output)");
+      await runTool("shell_cmd", { cmd });
     } catch (e) {
       showError("shell_cmd", e);
     }
@@ -993,20 +1372,19 @@ function initToolsPage() {
     try {
       const j = await runTool("install_required");
 
-      let msg = j.out || j.error || "";
+      let summary = "";
       if (j.results && Array.isArray(j.results)) {
         const lines = j.results.map(r => `${r.package}: ${r.status}`);
-        msg += "\n" + lines.join("\n");
+        summary = lines.join("\n");
       }
-      toolsOutSet(msg);
+      if (summary.trim()) toolsOutAppend(summary);
 
       if (j.need_reboot) {
         const yes = await appConfirm(UI_STRINGS[LANG].confirm_reboot_after_install, {
           title: UI_STRINGS[LANG].reboot || "Reboot",
         });
         if (yes) {
-          const r = await runTool("reboot");
-          toolsOutSet((msg + "\n\n" + (r.out || "")).trim());
+          await runTool("reboot");
         }
       }
     } catch (e) {
@@ -1068,7 +1446,8 @@ function initToolsPage() {
       try {
         const labels = getActionLabel("backup_settings");
         toolsMetaSet(labels.running);
-        toolsOutSet(labels.running);
+        toolsOutCommitCurrent();
+        toolsOutSet(`> restore settings\n${labels.running}`);
         toolsProgressSet(null, { active: true, indeterminate: true });
 
         const fd = new FormData();
@@ -1080,13 +1459,13 @@ function initToolsPage() {
 
         toolsMetaSet(labels.done);
         toolsProgressSet(100, { active: true, indeterminate: false });
-        toolsOutSet(JSON.stringify(j.result, null, 2));
+        toolsOutSet(`> restore settings\n${JSON.stringify(j.result, null, 2)}`);
+        toolsOutCommitCurrent();
 
         if (await appConfirm(UI_STRINGS[LANG].restore_done_reboot || "Restore done.\nReboot now?", {
           title: UI_STRINGS[LANG].reboot || "Reboot",
         })) {
-          const rebootRes = await runTool("reboot");
-          toolsOutSet(rebootRes.out || "");
+          await runTool("reboot");
         }
       } catch (e) {
         showError("backup_settings", e);
@@ -1251,14 +1630,15 @@ let terminalSessionName = "carrot-web";
 let terminalLastScreen = "";
 let terminalLayoutBound = false;
 let terminalFollowOutput = true;
+let terminalCurrentCwd = "/data/openpilot";
 
 function setTerminalMeta(text) {
   if (terminalMetaEl) terminalMetaEl.textContent = String(text || "");
 }
 
-function setTerminalSessionMeta() {
+function setTerminalSessionMeta(cwd = terminalCurrentCwd) {
   if (!terminalSessionMetaEl) return;
-  terminalSessionMetaEl.textContent = "IP";
+  terminalSessionMetaEl.textContent = String(cwd || "/data/openpilot");
 }
 
 function setTerminalSessionInfo(session = terminalSessionName) {
@@ -1280,7 +1660,25 @@ function sanitizeTerminalScreen(text) {
     nextText = nextText.replace(/^\n+/, "");
   }
 
+  const lines = nextText.replace(/\r/g, "").split("\n");
+  while (lines.length > 1 && !lines[lines.length - 1].trim()) {
+    lines.pop();
+  }
+  nextText = lines.join("\n");
+
+  if (!nextText.trim()) return " ";
   return nextText;
+}
+
+function extractTerminalCwd(text) {
+  const lines = String(text || "").split("\n");
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const match = line.match(/^[^\s:@]+@[^\s:]+:(.+?)[#$]\s*$/);
+    if (match) return match[1].trim();
+  }
+  return "";
 }
 
 function renderTerminalScreenMarkup(text) {
@@ -1307,6 +1705,20 @@ function pinTerminalToBottom() {
   });
 }
 
+function updateTerminalOverflowState() {
+  if (!terminalScreenEl || !terminalOutputEl) return;
+  const overflowX = (terminalOutputEl.scrollWidth - terminalScreenEl.clientWidth) > 20;
+  const atRight = (terminalScreenEl.scrollWidth - terminalScreenEl.scrollLeft - terminalScreenEl.clientWidth) < 8;
+  terminalScreenEl.classList.toggle("is-x-overflow", overflowX && !atRight);
+}
+
+function clearTerminalViewport() {
+  terminalLastScreen = "";
+  if (terminalOutputEl) terminalOutputEl.innerHTML = "";
+  updateTerminalOverflowState();
+  pinTerminalToBottom();
+}
+
 function setTerminalScreen(text, forceStick = false) {
   if (!terminalOutputEl) return;
   const nextText = sanitizeTerminalScreen(text);
@@ -1314,7 +1726,13 @@ function setTerminalScreen(text, forceStick = false) {
 
   const shouldStick = forceStick || terminalFollowOutput || isTerminalPinnedToBottom();
   terminalLastScreen = nextText;
+  const nextCwd = extractTerminalCwd(nextText);
+  if (nextCwd && nextCwd !== terminalCurrentCwd) {
+    terminalCurrentCwd = nextCwd;
+    setTerminalSessionMeta(nextCwd);
+  }
   terminalOutputEl.innerHTML = renderTerminalScreenMarkup(nextText);
+  requestAnimationFrame(updateTerminalOverflowState);
 
   if (shouldStick) pinTerminalToBottom();
 }
@@ -1353,6 +1771,7 @@ function bindTerminalLayoutObservers() {
   const handleLayout = () => requestAnimationFrame(() => {
     updateTerminalViewportMetrics();
     updateTerminalToastAnchor();
+    updateTerminalOverflowState();
   });
   window.addEventListener("resize", handleLayout, { passive: true });
   window.addEventListener("orientationchange", handleLayout, { passive: true });
@@ -1494,6 +1913,7 @@ function initTerminalBindings() {
 
   bindNodeOnce(terminalScreenEl, "scrollBound", () => {
     terminalFollowOutput = isTerminalPinnedToBottom();
+    updateTerminalOverflowState();
   }, "scroll");
 
   bindNodeOnce(terminalFormEl, "submitBound", (ev) => {
@@ -1515,11 +1935,8 @@ function initTerminalBindings() {
 
   bindNodeOnce(btnTerminalClearEl, "clickBound", () => {
     terminalFollowOutput = true;
-    pinTerminalToBottom();
+    clearTerminalViewport();
     sendTerminalControl("clear");
-    window.setTimeout(() => {
-      sendTerminalControl("refresh", { quiet: true });
-    }, 120);
   });
 
   bindNodeOnce(btnTerminalReconnectEl, "clickBound", () => {
@@ -1539,11 +1956,13 @@ function initTerminalBindings() {
 function initTerminalPage() {
   terminalPageActive = true;
   terminalFollowOutput = true;
+  terminalCurrentCwd = "/data/openpilot";
   initTerminalBindings();
   setTerminalSessionMeta();
   updateTerminalViewportMetrics();
   if (!terminalLastScreen) setTerminalScreen(" ", true);
   requestAnimationFrame(updateTerminalToastAnchor);
+  requestAnimationFrame(updateTerminalOverflowState);
   window.setTimeout(updateTerminalToastAnchor, 90);
   connectTerminal(false);
 }

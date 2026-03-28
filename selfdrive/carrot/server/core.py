@@ -1648,8 +1648,9 @@ def _tmux_ctrl_c(session: str) -> None:
   _tmux_send_keys(session, "C-c")
 
 def _tmux_clear(session: str) -> None:
+  _tmux_send_line(session, "clear")
+  time.sleep(0.04)
   _tmux_run(["tmux", "clear-history", "-t", session], timeout=4.0, check=False)
-  _tmux_send_keys(session, "C-l")
 
 async def ws_terminal(request: web.Request) -> web.WebSocketResponse:
   ws = web.WebSocketResponse(heartbeat=20)
@@ -1675,18 +1676,23 @@ async def ws_terminal(request: web.Request) -> web.WebSocketResponse:
     await ws.close()
     return ws
 
-  async def pump_screen():
+  async def push_screen(force: bool = False, delay: float = 0.0) -> None:
     nonlocal last_screen
+    if delay > 0:
+      await asyncio.sleep(delay)
+    screen = await asyncio.to_thread(_tmux_capture, session)
+    if force or screen != last_screen:
+      last_screen = screen
+      await ws.send_str(json.dumps({
+        "type": "screen",
+        "session": session,
+        "text": screen,
+      }))
+
+  async def pump_screen():
     while not ws.closed:
       try:
-        screen = await asyncio.to_thread(_tmux_capture, session)
-        if screen != last_screen:
-          last_screen = screen
-          await ws.send_str(json.dumps({
-            "type": "screen",
-            "session": session,
-            "text": screen,
-          }))
+        await push_screen(force=False)
       except asyncio.CancelledError:
         raise
       except Exception as e:
@@ -1696,11 +1702,12 @@ async def ws_terminal(request: web.Request) -> web.WebSocketResponse:
           "session": session,
         }))
         break
-      await asyncio.sleep(0.35)
+      await asyncio.sleep(0.18)
 
   pump_task = asyncio.create_task(pump_screen())
 
   try:
+    await push_screen(force=True, delay=0.02)
     async for msg in ws:
       if msg.type == WSMsgType.TEXT:
         try:
@@ -1712,20 +1719,17 @@ async def ws_terminal(request: web.Request) -> web.WebSocketResponse:
         try:
           if typ == "input":
             await asyncio.to_thread(_tmux_send_line, session, str(data.get("data") or ""))
+            await push_screen(force=True, delay=0.03)
           elif typ == "control":
             action = (data.get("action") or "").strip()
             if action == "ctrl_c":
               await asyncio.to_thread(_tmux_ctrl_c, session)
+              await push_screen(force=True, delay=0.03)
             elif action == "clear":
               await asyncio.to_thread(_tmux_clear, session)
+              await push_screen(force=True, delay=0.05)
             elif action == "refresh":
-              screen = await asyncio.to_thread(_tmux_capture, session)
-              last_screen = screen
-              await ws.send_str(json.dumps({
-                "type": "screen",
-                "session": session,
-                "text": screen,
-              }))
+              await push_screen(force=True)
             elif action == "new_session":
               await asyncio.to_thread(_tmux_run, ["tmux", "kill-session", "-t", session], 3.0, False)
               created = await asyncio.to_thread(_tmux_ensure_session, session)
@@ -1735,6 +1739,7 @@ async def ws_terminal(request: web.Request) -> web.WebSocketResponse:
                 "created": created,
                 "user": "comma",
               }))
+              await push_screen(force=True, delay=0.08)
         except Exception as e:
           await ws.send_str(json.dumps({
             "type": "error",
