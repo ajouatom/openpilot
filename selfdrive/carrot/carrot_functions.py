@@ -312,7 +312,7 @@ class CarrotPlanner:
     elif lead.status and self.dynamicTFollow > 0.0:
       # lead.jLead < 0 : 앞차가 감속 방향으로 변함 -> 차간거리 증가
       # lead.jLead > 0 : 앞차가 가속 방향으로 변함 -> 차간거리 감소
-      t_follow += np.interp(lead.jLead, [-3.0, 0.0, 2.0], [0.4, 0.0, -0.2]) * self.dynamicTFollow
+      t_follow += np.interp(lead.jLead, [-3.0, -0.5, 0.5, 2.0], [1.0, 0.0, 0.0, -1.0]) * self.dynamicTFollow
 
       # 앞차가 풀어주는 상황에서는 jerk factor 약간 낮춰서 더 민첩하게
       if lead.jLead > 0.2:
