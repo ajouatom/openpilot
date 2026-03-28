@@ -2,6 +2,33 @@
 let recordStateIsOn = false;
 let recordTogglePending = false;
 let recordStateResyncTimer = null;
+let appViewportMetricsBound = false;
+
+function updateAppViewportMetrics() {
+  const vv = window.visualViewport;
+  const height = Math.max(320, Math.round(vv?.height || window.innerHeight || 0));
+  const top = Math.max(0, Math.round(vv?.offsetTop || 0));
+  const width = Math.max(320, Math.round(vv?.width || window.innerWidth || 0));
+  document.documentElement.style.setProperty("--app-vv-height", `${height}px`);
+  document.documentElement.style.setProperty("--app-vv-top", `${top}px`);
+  document.documentElement.style.setProperty("--app-vv-width", `${width}px`);
+}
+
+function bindAppViewportObservers() {
+  if (appViewportMetricsBound) return;
+  appViewportMetricsBound = true;
+
+  const handleLayout = () => requestAnimationFrame(updateAppViewportMetrics);
+  updateAppViewportMetrics();
+  window.addEventListener("resize", handleLayout, { passive: true });
+  window.addEventListener("orientationchange", handleLayout, { passive: true });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", handleLayout, { passive: true });
+    window.visualViewport.addEventListener("scroll", handleLayout, { passive: true });
+  }
+}
+
+bindAppViewportObservers();
 
 function parseRecordStateValue(value) {
   return (
@@ -213,7 +240,14 @@ async function loadSettings() {
   renderGroups();
   renderSettingSubnav();
   CURRENT_GROUP = null;
-  showSettingScreen("groups", false);
+  syncSettingSearchFabState();
+  if (isCompactLandscapeMode()) {
+    const initialGroup = getLandscapeDefaultSettingGroup();
+    if (initialGroup) await activateSettingGroup(initialGroup, false);
+    else showSettingScreen("groups", false);
+  } else {
+    showSettingScreen("groups", false);
+  }
   if (settingSearchPanel && !settingSearchPanel.hidden) {
     renderSettingSearchResults(settingSearchInput?.value || "");
   }
@@ -228,6 +262,7 @@ function renderGroups() {
 
     const b = document.createElement("button");
     b.className = "btn groupBtn";
+    if (g.group === CURRENT_GROUP) b.classList.add("active");
     b.textContent = `${label} (${g.count})`;
     b.onclick = () => selectGroup(g.group);
     box.appendChild(b);
@@ -258,6 +293,32 @@ let settingFocusClearTimer = null;
 let settingSearchDebounceTimer = null;
 let settingSearchEntries = [];
 const settingPageRoot = document.getElementById("pageSetting");
+
+function isCompactLandscapeMode() {
+  return window.matchMedia("(orientation: landscape) and (max-height: 560px) and (pointer: coarse)").matches;
+}
+
+function getLandscapeDefaultSettingGroup() {
+  const groups = SETTINGS?.groups || [];
+  if (!groups.length) return null;
+
+  const match = groups.find((entry) => {
+    const raw = String(entry.group || "").trim().toLowerCase();
+    const label = String(getSettingGroupLabel(entry.group) || "").trim().toLowerCase();
+    return raw === "시작" || raw === "start" || label === "시작" || label === "start";
+  });
+
+  return match?.group || CURRENT_GROUP || groups[0]?.group || null;
+}
+
+function syncSettingSearchFabState() {
+  const isOpen = Boolean(settingSearchPanel && !settingSearchPanel.hidden);
+  if (settingPageRoot) settingPageRoot.classList.toggle("setting-search-open", isOpen);
+  if (btnSettingSearch) {
+    btnSettingSearch.classList.toggle("active", isOpen);
+    btnSettingSearch.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  }
+}
 
 function rebuildSettingSearchEntries() {
   const groups = SETTINGS?.groups || [];
@@ -311,6 +372,13 @@ function clearSettingItemFocus() {
   document.querySelectorAll(".setting.is-focus-hit").forEach((el) => el.classList.remove("is-focus-hit"));
 }
 
+function resetSettingItemsViewport() {
+  if (screenItems) screenItems.scrollTop = 0;
+  if (settingScreenHost) settingScreenHost.scrollTop = 0;
+  const itemsBox = document.getElementById("items");
+  if (itemsBox) itemsBox.scrollTop = 0;
+}
+
 function focusSettingItem(name, behavior = "smooth") {
   const itemsBox = document.getElementById("items");
   if (!itemsBox || !name) return false;
@@ -346,11 +414,7 @@ function closeSettingSearchPanel(options = {}) {
     settingSearchPanel.setAttribute("aria-hidden", "true");
   }
   if (settingSearchBackdrop) settingSearchBackdrop.hidden = true;
-  if (btnSettingSearch) {
-    btnSettingSearch.classList.remove("active");
-    btnSettingSearch.setAttribute("aria-expanded", "false");
-  }
-  if (settingPageRoot) settingPageRoot.classList.remove("setting-search-open");
+  syncSettingSearchFabState();
 
   if (clear && settingSearchInput) settingSearchInput.value = "";
   if (clear && settingSearchResults) settingSearchResults.innerHTML = "";
@@ -441,11 +505,7 @@ async function openSettingSearchPanel(options = {}) {
   settingSearchPanel.hidden = false;
   settingSearchPanel.setAttribute("aria-hidden", "false");
   if (settingSearchBackdrop) settingSearchBackdrop.hidden = false;
-  if (btnSettingSearch) {
-    btnSettingSearch.classList.add("active");
-    btnSettingSearch.setAttribute("aria-expanded", "true");
-  }
-  if (settingPageRoot) settingPageRoot.classList.add("setting-search-open");
+  syncSettingSearchFabState();
   const state = history.state || {};
   if (pushHistory && !(state.page === "setting" && state.search)) {
     history.pushState({
@@ -544,6 +604,14 @@ function stripIdsFromClone(root) {
 
 async function activateSettingGroup(group, pushHistory = true) {
   CURRENT_GROUP = group;
+  renderGroups();
+  if (isCompactLandscapeMode() && CURRENT_PAGE === "setting") {
+    showSettingScreen("items", false);
+    history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
+    await renderItems(group);
+    return;
+  }
+
   showSettingScreen("items", pushHistory);
   if (!pushHistory) {
     history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
@@ -808,13 +876,15 @@ if (settingSubnavWrap) {
 }
 
 function selectGroup(group, pushHistory = true) {
-  activateSettingGroup(group, pushHistory).catch((e) => console.log("[Setting] selectGroup failed:", e));
+  const shouldPush = pushHistory && !(isCompactLandscapeMode() && CURRENT_PAGE === "setting");
+  activateSettingGroup(group, shouldPush).catch((e) => console.log("[Setting] selectGroup failed:", e));
 }
 
 async function renderItems(group) {
   const meta = document.getElementById("groupMeta");
   const itemsBox = document.getElementById("items");
   const renderToken = ++settingRenderToken;
+  resetSettingItemsViewport();
   itemsBox.innerHTML = "";
   renderSettingSubnav();
 
@@ -926,10 +996,45 @@ async function renderItems(group) {
     btnPlus.onclick = () => applyDelta(+1);
   }
 
+  requestAnimationFrame(() => resetSettingItemsViewport());
+
   if (pendingSettingFocus?.group === group) {
     requestAnimationFrame(() => focusSettingItem(pendingSettingFocus.name));
   }
 }
+
+async function syncSettingViewportLayout() {
+  if (CURRENT_PAGE !== "setting" || !SETTINGS) return;
+  syncSettingSearchFabState();
+
+  if (isCompactLandscapeMode()) {
+    const targetGroup = CURRENT_GROUP || getLandscapeDefaultSettingGroup();
+    if (!targetGroup) return;
+    await activateSettingGroup(targetGroup, false);
+    return;
+  }
+
+  renderGroups();
+  renderSettingSubnav();
+  if (CURRENT_GROUP) {
+    showSettingScreen("items", false);
+    await renderItems(CURRENT_GROUP);
+  } else {
+    showSettingScreen("groups", false);
+  }
+}
+
+window.addEventListener("resize", () => {
+  if (CURRENT_PAGE === "setting" && SETTINGS) {
+    syncSettingViewportLayout().catch(() => {});
+  }
+}, { passive: true });
+
+window.addEventListener("orientationchange", () => {
+  if (CURRENT_PAGE === "setting" && SETTINGS) {
+    syncSettingViewportLayout().catch(() => {});
+  }
+}, { passive: true });
 
 
 /* ---------- Back key / history ---------- */
@@ -953,6 +1058,20 @@ window.addEventListener("popstate", async (ev) => {
     const screen = st.screen || "groups";
     CURRENT_GROUP = st.group || null;
     showPage("setting", false);
+
+    if (isCompactLandscapeMode()) {
+      const targetGroup = CURRENT_GROUP || getLandscapeDefaultSettingGroup();
+      if (targetGroup) {
+        CURRENT_GROUP = targetGroup;
+        await activateSettingGroup(targetGroup, false);
+      } else {
+        showSettingScreen("groups", false);
+      }
+      if (st.search) {
+        openSettingSearchPanel({ pushHistory: false }).catch(() => {});
+      }
+      return;
+    }
 
     if (screen === "items" && CURRENT_GROUP) {
       showSettingScreen("items", false);
@@ -1757,6 +1876,7 @@ function updateTerminalToastAnchor() {
 }
 
 function updateTerminalViewportMetrics() {
+  updateAppViewportMetrics();
   const vv = window.visualViewport;
   const height = Math.max(320, Math.round(vv?.height || window.innerHeight || 0));
   const top = Math.max(0, Math.round(vv?.offsetTop || 0));

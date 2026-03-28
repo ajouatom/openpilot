@@ -1,5 +1,26 @@
 const DEBUG_UI = false;
 
+function disableViewportZoomGestures() {
+  const preventGesture = (e) => e.preventDefault();
+
+  ["gesturestart", "gesturechange", "gestureend"].forEach((type) => {
+    document.addEventListener(type, preventGesture, { passive: false });
+  });
+
+  document.addEventListener("touchmove", (e) => {
+    if (e.touches && e.touches.length > 1) e.preventDefault();
+  }, { passive: false });
+
+  let lastTouchEnd = 0;
+  document.addEventListener("touchend", (e) => {
+    const now = Date.now();
+    if (now - lastTouchEnd <= 300) e.preventDefault();
+    lastTouchEnd = now;
+  }, { passive: false });
+}
+
+disableViewportZoomGestures();
+
 let SETTINGS = null;
 let CURRENT_GROUP = null;
 let LANG = "ko"; // "ko" | "en" | "zh"
@@ -778,8 +799,10 @@ function showPage(page, pushHistory = false, transition = null) {
   }
 
   if (page === "setting") {
-    if (pushHistory || !CURRENT_GROUP) showSettingScreen("groups", false);
     if (!SETTINGS) loadSettings();
+    else if (typeof syncSettingViewportLayout === "function" && typeof isCompactLandscapeMode === "function" && isCompactLandscapeMode()) {
+      syncSettingViewportLayout().catch(() => {});
+    } else if (pushHistory || !CURRENT_GROUP) showSettingScreen("groups", false);
   }
 
   if (page === "car") {
@@ -814,10 +837,29 @@ function showSettingScreen(which, pushHistory = false) {
   const currentGroupLabel = (!isGroups && CURRENT_GROUP && typeof getSettingGroupLabel === "function")
     ? getSettingGroupLabel(CURRENT_GROUP)
     : (CURRENT_GROUP || "");
+  const splitLandscape = (CURRENT_PAGE === "setting" && typeof isCompactLandscapeMode === "function" && isCompactLandscapeMode());
+
+  if (splitLandscape) {
+    settingTitle.textContent = UI_STRINGS[LANG].setting || "Setting";
+    if (settingSubnavWrap) settingSubnavWrap.style.display = "none";
+    if (showEl) {
+      showEl.style.display = "";
+      showEl.classList.remove("hidden");
+    }
+    if (hideEl) {
+      hideEl.style.display = "";
+      hideEl.classList.remove("hidden");
+    }
+    if (pushHistory) {
+      history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
+    }
+    if (settingScreenHost) settingScreenHost.style.minHeight = "";
+    return;
+  }
 
   if (btnBackGroups) btnBackGroups.style.display = "none";
   settingTitle.textContent = isGroups ? (UI_STRINGS[LANG].setting || "Setting") : ((UI_STRINGS[LANG].setting || "Setting") + " - " + currentGroupLabel);
-  if (settingSubnav) settingSubnav.style.display = isGroups ? "none" : "";
+  if (settingSubnavWrap) settingSubnavWrap.style.display = isGroups ? "none" : "";
 
   showEl.style.display = "";
   requestAnimationFrame(() => showEl.classList.remove("hidden"));
@@ -1389,6 +1431,10 @@ async function setParam(name, value) {
 const SWIPE_PAGES = ["home", "setting", "tools"];
 const SETTING_BACK_EDGE_WIDTH = 32;
 
+function isLandscapeRailMode() {
+  return window.matchMedia("(orientation: landscape) and (max-height: 560px) and (pointer: coarse)").matches;
+}
+
 function prepareSettingBackFrame() {
   if (!settingScreenHost || !screenItems || !screenGroups) return null;
   if (typeof stopSettingSubnavMotion === "function") stopSettingSubnavMotion();
@@ -1424,6 +1470,10 @@ function cleanupSettingBackFrame() {
   let gesture = null;
 
   el.addEventListener("touchstart", (e) => {
+    if (isLandscapeRailMode()) {
+      gesture = null;
+      return;
+    }
     const inSettingItems = CURRENT_PAGE === "setting" && screenItems && screenItems.style.display !== "none";
     if (
       e.touches.length !== 1 ||
@@ -1453,6 +1503,10 @@ function cleanupSettingBackFrame() {
   }, { passive: true });
 
   el.addEventListener("touchmove", (e) => {
+    if (isLandscapeRailMode()) {
+      gesture = null;
+      return;
+    }
     if (!gesture?.tracking || e.touches.length !== 1) return;
 
     const touch = e.touches[0];
@@ -1527,6 +1581,10 @@ function cleanupSettingBackFrame() {
   }, { passive: false });
 
   el.addEventListener("touchend", (e) => {
+    if (isLandscapeRailMode()) {
+      gesture = null;
+      return;
+    }
     if (!gesture) return;
 
     if (!gesture.dragging) {
@@ -1621,6 +1679,10 @@ function cleanupSettingBackFrame() {
   let gesture = null;
 
   host.addEventListener("touchstart", (e) => {
+    if (isLandscapeRailMode()) {
+      gesture = null;
+      return;
+    }
     if (
       e.touches.length !== 1 ||
       CURRENT_PAGE !== "setting" ||
@@ -1646,6 +1708,10 @@ function cleanupSettingBackFrame() {
   }, { passive: true });
 
   host.addEventListener("touchmove", (e) => {
+    if (isLandscapeRailMode()) {
+      gesture = null;
+      return;
+    }
     if (!gesture || e.touches.length !== 1) return;
 
     const touch = e.touches[0];
@@ -1678,6 +1744,10 @@ function cleanupSettingBackFrame() {
   }, { passive: false });
 
   host.addEventListener("touchend", () => {
+    if (isLandscapeRailMode()) {
+      gesture = null;
+      return;
+    }
     if (!gesture) return;
     if (!gesture.dragging || !gesture.frame) {
       gesture = null;
