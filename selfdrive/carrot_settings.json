@@ -963,6 +963,22 @@
     },
     {
       "group": "버튼설정",
+      "name": "CruiseButtonLongDelay",
+      "title": "크루즈버튼롱딜레이(40)",
+      "descr": "버튼을 길게 눌렀을 때 기능이 작동하기 전까지의 지연 시간입니다.",
+      "egroup": "Button Settings",
+      "etitle": "Cruise Button Long Delay (40)",
+      "edescr": "Delay before the long-press action is triggered.",
+      "min": 30,
+      "max": 100,
+      "default": 40,
+      "unit": 10,
+      "cgroup": "按键设置",
+      "ctitle": "巡航按键长按延迟(40)",
+      "cdescr": "长按按钮后，功能触发前的延迟时间。"
+    },
+    {
+      "group": "버튼설정",
       "name": "CruiseSpeedUnitBasic",
       "title": "크루즈버튼속도단위 기본(1)",
       "descr": "크루즈버튼 속도조절 단위(기본단위)",
