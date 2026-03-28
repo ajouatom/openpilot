@@ -269,7 +269,7 @@ class CarrotPlanner:
     decel_boost = float(np.interp(a_ego, [-2.5, -1.0, -0.2, 0.0],
                                   [0.25, 0.12, 0.02, 0.0]))
 
-    return float(tf_held + decel_boost)
+    return float(tf_held + decel_boost * 0.3)
 
 
   def _clip_t_follow(self, t_follow):
