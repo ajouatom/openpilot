@@ -12,7 +12,7 @@ class CarrotControls:
   def lat_suspend_control(self, CS, latActive):
     suspend_angle = float(self.params.get_int("LatSuspendAngleDeg"))
     resume_angle  = 15
-    delay_sec     = 1.0
+    delay_sec     = 0.2 #1.0
     hold_sec      = 0.5
 
     # 1) enter condition timer
