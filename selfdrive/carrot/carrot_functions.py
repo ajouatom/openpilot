@@ -165,6 +165,7 @@ class CarrotPlanner:
       self.dynamicTFollow = self.params.get_float("DynamicTFollow") / 100.
       self.dynamicTFollowLC = self.params.get_float("DynamicTFollowLC") / 100.
       self.enableSpeedTF = self.params.get_int("EnableSpeedTF")
+      self.tFollowDecelBoost = self.params.get_float("TFollowDecelBoost") / 100.
     elif self.params_count == 30:
       self.cruiseMaxVals0 = self.params.get_float("CruiseMaxVals0") / 100.
       self.cruiseMaxVals1 = self.params.get_float("CruiseMaxVals1") / 100.
@@ -269,7 +270,7 @@ class CarrotPlanner:
     decel_boost = float(np.interp(a_ego, [-2.5, -1.0, -0.2, 0.0],
                                   [0.25, 0.12, 0.02, 0.0]))
 
-    return float(tf_held + decel_boost * 0.3)
+    return float(tf_held + decel_boost * self.tFollowDecelBoost)
 
 
   def _clip_t_follow(self, t_follow):
