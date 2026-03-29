@@ -103,6 +103,7 @@ class CarrotPlanner:
     self.dynamicTFollow = 0.0
     self.dynamicTFollowLC = 0.0
     self.enableSpeedTF = 0
+    self.tFollowDecelBoost = 0.0
     self.personality = 1
 
     self.cruiseMaxVals0 = 1.6
