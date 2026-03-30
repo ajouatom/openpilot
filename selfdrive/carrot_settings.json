@@ -434,22 +434,6 @@
       "cdescr": "胡萝卜巡航 ATC 减速度设置，-1: 不改变"
     },
     {
-      "group": "크루즈",
-      "name": "CommaLongAcc",
-      "title": "콤마크루즈(0)",
-      "descr": "콤마 롱컨트롤 사용",
-      "egroup": "CRUISE",
-      "etitle": "Use Comma Long",
-      "edescr": "",
-      "min": 0,
-      "max": 1,
-      "default": 0,
-      "unit": 1,
-      "cgroup": "巡航设置",
-      "ctitle": "使用 Comma 纵向控制",
-      "cdescr": ""
-    },
-    {
       "group": "조향튜닝",
       "name": "CustomSR",
       "title": "CustomSteerRatiox0.1(0)",

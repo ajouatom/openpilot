@@ -189,10 +189,7 @@ class LongitudinalPlanner:
     self.v_desired_filter.x = max(0.0, self.v_desired_filter.update(v_ego))
     x, v, a, j, throttle_prob = self.parse_model(sm['modelV2'])
     # Don't clip at low speeds since throttle_prob doesn't account for creep
-    if self.params.get_int("CommaLongAcc") > 0:
-      self.allow_throttle = throttle_prob > ALLOW_THROTTLE_THRESHOLD or v_ego <= MIN_ALLOW_THROTTLE_SPEED
-    else:
-      self.allow_throttle = True
+    self.allow_throttle = True #throttle_prob > ALLOW_THROTTLE_THRESHOLD or v_ego <= MIN_ALLOW_THROTTLE_SPEED
 
     if not self.allow_throttle:
       clipped_accel_coast = max(accel_coast, accel_limits_turns[0])
