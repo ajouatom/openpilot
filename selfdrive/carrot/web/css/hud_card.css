@@ -5,6 +5,7 @@
   border-radius: 18px;
   padding: 10px;
   background: rgba(0,0,0,0.22);
+  box-shadow: 0 0 0 4px var(--md-surface);
   aspect-ratio: 1 / 1;
   width: 100%;
   max-width: 320px;

@@ -872,6 +872,9 @@ function showSettingScreen(which, pushHistory = false) {
   }
 
   if (settingScreenHost) settingScreenHost.style.minHeight = "";
+  if (isGroups && typeof setSettingItemsScrollTop === "function") {
+    requestAnimationFrame(() => setSettingItemsScrollTop(0));
+  }
 }
 
 if (btnBackGroups) btnBackGroups.onclick = () => history.back();
@@ -910,7 +913,12 @@ function toggleLang() {
     if (typeof rebuildSettingSearchEntries === "function") rebuildSettingSearchEntries();
     renderGroups();
     if (typeof renderSettingSubnav === "function") renderSettingSubnav();
-    if (CURRENT_GROUP) renderItems(CURRENT_GROUP);
+    if (CURRENT_GROUP) {
+      const currentTop = typeof getSettingItemsScrollTop === "function"
+        ? getSettingItemsScrollTop()
+        : 0;
+      renderItems(CURRENT_GROUP, { scrollMode: "restore", scrollTop: currentTop });
+    }
   }
 }
 
@@ -1245,7 +1253,7 @@ function syncUtilityToggle(btn, isOpen) {
 function syncHomeUtilityButtons() {
   syncUtilityToggle(btnToggleServerState, isUtilityPaneOpen(utilityStatePane));
   if (btnSaveQuickLink) {
-    const label = getUIText("save", "Save");
+    const label = getUIText("open", "Open");
     btnSaveQuickLink.textContent = label;
     btnSaveQuickLink.setAttribute("aria-label", label);
     btnSaveQuickLink.title = label;
@@ -1349,40 +1357,14 @@ if (btnToggleServerState) {
   };
 }
 
-async function saveQuickLink() {
+async function openQuickLink() {
   if (!QUICK_LINK_URL) return;
-
-  const url = QUICK_LINK_URL;
-
-  if (navigator.share) {
-    try {
-      await navigator.share({
-        title: getUIText("quick_link", "Quick Link"),
-        text: url,
-        url,
-      });
-      return;
-    } catch (e) {
-      if (e?.name === "AbortError") return;
-    }
-  }
-
-  if (navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(url);
-      flashQuickLinkActionLabel(getUIText("copied", "Copied"));
-      return;
-    } catch (e) {
-      console.log("[QuickLink] clipboard failed:", e);
-    }
-  }
-
-  window.open(url, "_blank", "noopener");
+  window.open(QUICK_LINK_URL, "_blank", "noopener");
 }
 
 if (btnSaveQuickLink) {
   btnSaveQuickLink.onclick = () => {
-    saveQuickLink().catch((e) => console.log("[QuickLink] save failed:", e));
+    openQuickLink().catch((e) => console.log("[QuickLink] open failed:", e));
   };
 }
 
@@ -1428,11 +1410,20 @@ async function setParam(name, value) {
 }
 
 /* ── Swipe Navigation ──────────────────────────────────── */
-const SWIPE_PAGES = ["home", "setting", "tools"];
+const SWIPE_PAGES = ["home", "setting", "tools", "terminal"];
 const SETTING_BACK_EDGE_WIDTH = 32;
 
 function isLandscapeRailMode() {
   return window.matchMedia("(orientation: landscape) and (max-height: 560px) and (pointer: coarse)").matches;
+}
+
+function isSettingItemsScreenActive() {
+  return Boolean(
+    CURRENT_PAGE === "setting" &&
+    screenItems &&
+    screenItems.style.display !== "none" &&
+    !screenItems.classList.contains("hidden")
+  );
 }
 
 function prepareSettingBackFrame() {
@@ -1474,10 +1465,11 @@ function cleanupSettingBackFrame() {
       gesture = null;
       return;
     }
-    const inSettingItems = CURRENT_PAGE === "setting" && screenItems && screenItems.style.display !== "none";
+    const inSettingItems = isSettingItemsScreenActive();
     if (
       e.touches.length !== 1 ||
       !SWIPE_PAGES.includes(CURRENT_PAGE) ||
+      inSettingItems ||
       (inSettingItems && e.target?.closest?.("#settingSubnavWrap"))
     ) {
       gesture = null;
@@ -1507,6 +1499,11 @@ function cleanupSettingBackFrame() {
       gesture = null;
       return;
     }
+    const inSettingItems = isSettingItemsScreenActive();
+    if (inSettingItems) {
+      gesture = null;
+      return;
+    }
     if (!gesture?.tracking || e.touches.length !== 1) return;
 
     const touch = e.touches[0];
@@ -1520,7 +1517,7 @@ function cleanupSettingBackFrame() {
         return;
       }
 
-      const inSettingItems = CURRENT_PAGE === "setting" && screenItems && screenItems.style.display !== "none";
+      const inSettingItems = isSettingItemsScreenActive();
       const direction = dx < 0 ? "forward" : "backward";
       const isSettingEdgeBack = inSettingItems && direction === "backward" && gesture.startX <= SETTING_BACK_EDGE_WIDTH;
       if (isSettingEdgeBack) {
@@ -1582,6 +1579,11 @@ function cleanupSettingBackFrame() {
 
   el.addEventListener("touchend", (e) => {
     if (isLandscapeRailMode()) {
+      gesture = null;
+      return;
+    }
+    const inSettingItems = isSettingItemsScreenActive();
+    if (inSettingItems) {
       gesture = null;
       return;
     }
@@ -1685,8 +1687,7 @@ function cleanupSettingBackFrame() {
     }
     if (
       e.touches.length !== 1 ||
-      CURRENT_PAGE !== "setting" ||
-      screenItems.style.display === "none" ||
+      !isSettingItemsScreenActive() ||
       e.target?.closest?.("#settingSubnav") ||
       e.touches[0].clientX > SETTING_BACK_EDGE_WIDTH
     ) {

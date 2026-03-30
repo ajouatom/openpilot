@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>Carrot</title>
   <link rel="stylesheet" href="/css/tokens.css?v=2603-73" />
-  <link rel="stylesheet" href="/css/hud_card.css?v=2603-73" />
-  <link rel="stylesheet" href="/css/app.css?v=2603-137" />
+  <link rel="stylesheet" href="/css/hud_card.css?v=2603-74" />
+  <link rel="stylesheet" href="/css/app.css?v=2603-151" />
 </head>
 
 <body>
@@ -14,10 +14,6 @@
   <div class="wrap swipe-container" id="swipeContainer">
     <!-- ════════════ HOME ════════════ -->
     <div id="pageHome" class="page">
-      <div class="page-fab-layer page-fab-layer--home" aria-hidden="true">
-        <button id="btnRecordToggle" class="fab fab--round fab--record" aria-label="Record">OFF</button>
-      </div>
-
       <!-- Top Utility: Server State + Quick Link -->
       <div class="home-utility">
         <div class="setting home-utility-item">
@@ -312,6 +308,10 @@
     </div>
   </div>
 
+  <div class="global-home-record-fab" aria-hidden="true">
+    <button id="btnRecordToggle" class="fab fab--round fab--record" aria-label="Record">OFF</button>
+  </div>
+
   <!-- Bottom Navigation (Material 3 style) -->
   <nav class="topbar">
     <button id="btnHome" class="nav-btn active">
@@ -389,8 +389,8 @@
   </div>
 
   <script src="/js/hud_card.js?v=2603-73"></script>
-  <script src="/js/app_core.js?v=2603-101"></script>
-  <script src="/js/app_pages.js?v=2603-113"></script>
+  <script src="/js/app_core.js?v=2603-103"></script>
+  <script src="/js/app_pages.js?v=2603-115"></script>
   <script src="/js/app_realtime.js?v=2603-76"></script>
 </body>
 </html>

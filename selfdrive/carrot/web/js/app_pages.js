@@ -57,11 +57,19 @@ function applyRecordFabState(isOn) {
 
   btnRecordToggle.classList.toggle("active", recordStateIsOn);
   btnRecordToggle.textContent = recordStateIsOn ? "ON" : "OFF";
+  if (typeof btnHome !== "undefined" && btnHome) {
+    btnHome.classList.toggle("recording", recordStateIsOn);
+    btnHome.setAttribute("data-record-badge", recordStateIsOn ? "REC" : "");
+  }
   const label = recordStateIsOn
     ? (UI_STRINGS[LANG].record_on || UI_STRINGS[LANG].record || "Recording")
     : (UI_STRINGS[LANG].record_off || UI_STRINGS[LANG].record || "Idle");
   btnRecordToggle.setAttribute("aria-label", label);
   btnRecordToggle.title = label;
+  if (typeof btnHome !== "undefined" && btnHome) {
+    btnHome.setAttribute("aria-label", recordStateIsOn ? `${UI_STRINGS[LANG].home || "Home"} (${label})` : (UI_STRINGS[LANG].home || "Home"));
+    btnHome.title = recordStateIsOn ? label : (UI_STRINGS[LANG].home || "Home");
+  }
 }
 
 async function loadCurrentCar() {
@@ -372,11 +380,69 @@ function clearSettingItemFocus() {
   document.querySelectorAll(".setting.is-focus-hit").forEach((el) => el.classList.remove("is-focus-hit"));
 }
 
+const settingGroupScrollTops = new Map();
+
+function getSettingItemsScrollContainer() {
+  if (isCompactLandscapeMode() && screenItems) return screenItems;
+  return document.scrollingElement || document.documentElement || document.body;
+}
+
+function getSettingItemsScrollTop() {
+  const scroller = getSettingItemsScrollContainer();
+  if (!scroller) return 0;
+  if (
+    scroller === document.body ||
+    scroller === document.documentElement ||
+    scroller === document.scrollingElement
+  ) {
+    return window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+  }
+  return scroller.scrollTop || 0;
+}
+
+function setSettingItemsScrollTop(top = 0) {
+  const nextTop = Math.max(0, Number(top) || 0);
+  const scroller = getSettingItemsScrollContainer();
+  if (!scroller) return;
+  if (
+    scroller === document.body ||
+    scroller === document.documentElement ||
+    scroller === document.scrollingElement
+  ) {
+    window.scrollTo(0, nextTop);
+    return;
+  }
+  scroller.scrollTop = nextTop;
+}
+
+function saveCurrentSettingScrollPosition(group = CURRENT_GROUP) {
+  if (!group) return;
+  settingGroupScrollTops.set(group, getSettingItemsScrollTop());
+}
+
+function getSavedSettingScrollPosition(group) {
+  return settingGroupScrollTops.get(group) || 0;
+}
+
 function resetSettingItemsViewport() {
-  if (screenItems) screenItems.scrollTop = 0;
-  if (settingScreenHost) settingScreenHost.scrollTop = 0;
+  setSettingItemsScrollTop(0);
+}
+
+function hasRenderedSettingItems(group = CURRENT_GROUP) {
   const itemsBox = document.getElementById("items");
-  if (itemsBox) itemsBox.scrollTop = 0;
+  if (!itemsBox || !group) return false;
+  return itemsBox.dataset.renderedGroup === group && itemsBox.childElementCount > 0;
+}
+
+function syncSettingGroupChrome(group = CURRENT_GROUP) {
+  const meta = document.getElementById("groupMeta");
+  const list = SETTINGS?.items_by_group?.[group] || [];
+  if (meta && group) meta.textContent = `${group} / ${list.length}`;
+  const groupLabel = group ? getSettingGroupLabel(group) : "";
+  if (group) {
+    settingTitle.textContent = (UI_STRINGS[LANG].setting || "Setting") + " - " + groupLabel;
+    if (itemsTitle) itemsTitle.textContent = groupLabel;
+  }
 }
 
 function focusSettingItem(name, behavior = "smooth") {
@@ -602,13 +668,24 @@ function stripIdsFromClone(root) {
   root.querySelectorAll("[id]").forEach((node) => node.removeAttribute("id"));
 }
 
-async function activateSettingGroup(group, pushHistory = true) {
+async function activateSettingGroup(group, pushHistory = true, options = {}) {
+  const nextGroup = group || CURRENT_GROUP;
+  const previousGroup = CURRENT_GROUP;
+  const scrollMode = options.scrollMode || "top";
+
+  if (previousGroup && previousGroup !== nextGroup) {
+    saveCurrentSettingScrollPosition(previousGroup);
+  }
+
   CURRENT_GROUP = group;
   renderGroups();
   if (isCompactLandscapeMode() && CURRENT_PAGE === "setting") {
     showSettingScreen("items", false);
     history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
-    await renderItems(group);
+    await renderItems(group, {
+      scrollMode,
+      scrollTop: options.scrollTop,
+    });
     return;
   }
 
@@ -616,7 +693,10 @@ async function activateSettingGroup(group, pushHistory = true) {
   if (!pushHistory) {
     history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
   }
-  await renderItems(group);
+  await renderItems(group, {
+    scrollMode,
+    scrollTop: options.scrollTop,
+  });
 }
 
 async function animateSettingGroupSwitch(group, direction = "forward") {
@@ -780,6 +860,10 @@ if (settingSubnavWrap) {
   let gesture = null;
 
   settingSubnavWrap.addEventListener("touchstart", (e) => {
+    if (CURRENT_PAGE === "setting") {
+      gesture = null;
+      return;
+    }
     if (
       e.touches.length !== 1 ||
       CURRENT_PAGE !== "setting" ||
@@ -803,6 +887,10 @@ if (settingSubnavWrap) {
   }, { passive: true });
 
   settingSubnavWrap.addEventListener("touchmove", (e) => {
+    if (CURRENT_PAGE === "setting") {
+      gesture = null;
+      return;
+    }
     if (!gesture || e.touches.length !== 1) return;
 
     const touch = e.touches[0];
@@ -829,6 +917,10 @@ if (settingSubnavWrap) {
   }, { passive: false });
 
   settingSubnavWrap.addEventListener("touchend", () => {
+    if (CURRENT_PAGE === "setting") {
+      gesture = null;
+      return;
+    }
     if (!gesture) return;
     if (!gesture.dragging) {
       gesture = null;
@@ -880,12 +972,14 @@ function selectGroup(group, pushHistory = true) {
   activateSettingGroup(group, shouldPush).catch((e) => console.log("[Setting] selectGroup failed:", e));
 }
 
-async function renderItems(group) {
+async function renderItems(group, options = {}) {
   const meta = document.getElementById("groupMeta");
   const itemsBox = document.getElementById("items");
   const renderToken = ++settingRenderToken;
-  resetSettingItemsViewport();
+  const scrollMode = options.scrollMode || "top";
+  const requestedScrollTop = Number.isFinite(options.scrollTop) ? options.scrollTop : null;
   itemsBox.innerHTML = "";
+  delete itemsBox.dataset.renderedGroup;
   renderSettingSubnav();
 
   const list = SETTINGS.items_by_group[group] || [];
@@ -996,29 +1090,48 @@ async function renderItems(group) {
     btnPlus.onclick = () => applyDelta(+1);
   }
 
-  requestAnimationFrame(() => resetSettingItemsViewport());
+  itemsBox.dataset.renderedGroup = group;
 
   if (pendingSettingFocus?.group === group) {
     requestAnimationFrame(() => focusSettingItem(pendingSettingFocus.name));
+    return;
   }
+
+  requestAnimationFrame(() => {
+    if (scrollMode === "restore") {
+      setSettingItemsScrollTop(requestedScrollTop ?? getSavedSettingScrollPosition(group));
+      return;
+    }
+    resetSettingItemsViewport();
+  });
 }
 
 async function syncSettingViewportLayout() {
   if (CURRENT_PAGE !== "setting" || !SETTINGS) return;
   syncSettingSearchFabState();
+  renderGroups();
+  renderSettingSubnav();
 
   if (isCompactLandscapeMode()) {
     const targetGroup = CURRENT_GROUP || getLandscapeDefaultSettingGroup();
     if (!targetGroup) return;
-    await activateSettingGroup(targetGroup, false);
+    CURRENT_GROUP = targetGroup;
+    showSettingScreen("items", false);
+    syncSettingGroupChrome(targetGroup);
+    if (typeof centerActiveSettingSubnavTab === "function") centerActiveSettingSubnavTab("auto");
+    if (!hasRenderedSettingItems(targetGroup)) {
+      await renderItems(targetGroup, { scrollMode: "restore" });
+    }
     return;
   }
 
-  renderGroups();
-  renderSettingSubnav();
   if (CURRENT_GROUP) {
+    syncSettingGroupChrome(CURRENT_GROUP);
     showSettingScreen("items", false);
-    await renderItems(CURRENT_GROUP);
+    if (typeof centerActiveSettingSubnavTab === "function") centerActiveSettingSubnavTab("auto");
+    if (!hasRenderedSettingItems(CURRENT_GROUP)) {
+      await renderItems(CURRENT_GROUP, { scrollMode: "restore" });
+    }
   } else {
     showSettingScreen("groups", false);
   }
@@ -1063,7 +1176,7 @@ window.addEventListener("popstate", async (ev) => {
       const targetGroup = CURRENT_GROUP || getLandscapeDefaultSettingGroup();
       if (targetGroup) {
         CURRENT_GROUP = targetGroup;
-        await activateSettingGroup(targetGroup, false);
+        await activateSettingGroup(targetGroup, false, { scrollMode: "restore" });
       } else {
         showSettingScreen("groups", false);
       }
@@ -1075,7 +1188,7 @@ window.addEventListener("popstate", async (ev) => {
 
     if (screen === "items" && CURRENT_GROUP) {
       showSettingScreen("items", false);
-      renderItems(CURRENT_GROUP);
+      renderItems(CURRENT_GROUP, { scrollMode: "restore" });
     } else {
       showSettingScreen("groups", false);
     }
@@ -1866,22 +1979,42 @@ function clearTerminalReconnectTimer() {
 function updateTerminalToastAnchor() {
   if (!terminalFormEl || document.body?.dataset?.page !== "terminal") {
     document.documentElement.style.removeProperty("--terminal-toast-bottom");
+    document.documentElement.style.removeProperty("--terminal-toast-left");
+    document.documentElement.style.removeProperty("--terminal-toast-width");
     return;
   }
 
   const rect = terminalFormEl.getBoundingClientRect();
+  if (!rect.width || !rect.height) {
+    document.documentElement.style.removeProperty("--terminal-toast-bottom");
+    document.documentElement.style.removeProperty("--terminal-toast-left");
+    document.documentElement.style.removeProperty("--terminal-toast-width");
+    return;
+  }
   const gap = 10;
   const offset = Math.max(0, Math.round(window.innerHeight - rect.top + gap));
   document.documentElement.style.setProperty("--terminal-toast-bottom", `${offset}px`);
+  document.documentElement.style.setProperty("--terminal-toast-left", `${Math.round(rect.left)}px`);
+  document.documentElement.style.setProperty("--terminal-toast-width", `${Math.round(rect.width)}px`);
 }
 
 function updateTerminalViewportMetrics() {
   updateAppViewportMetrics();
   const vv = window.visualViewport;
   const height = Math.max(320, Math.round(vv?.height || window.innerHeight || 0));
-  const top = Math.max(0, Math.round(vv?.offsetTop || 0));
+  const top = (typeof isLandscapeRailMode === "function" && isLandscapeRailMode())
+    ? Math.max(0, Math.round(vv?.offsetTop || 0))
+    : 0;
+  const keyboardInset = Math.max(0, Math.round((window.innerHeight || 0) - height - top));
+  const keyboardOpen = !(typeof isLandscapeRailMode === "function" && isLandscapeRailMode()) && keyboardInset > 120;
   document.documentElement.style.setProperty("--terminal-vv-height", `${height}px`);
   document.documentElement.style.setProperty("--terminal-vv-top", `${top}px`);
+  document.documentElement.style.setProperty(
+    "--terminal-bottom-gap",
+    keyboardOpen
+      ? `calc(6px + env(safe-area-inset-bottom, 0px))`
+      : `calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px))`,
+  );
 }
 
 function bindTerminalLayoutObservers() {
@@ -2093,5 +2226,8 @@ function teardownTerminalPage() {
   closeTerminalSocket();
   document.documentElement.style.removeProperty("--terminal-vv-height");
   document.documentElement.style.removeProperty("--terminal-vv-top");
+  document.documentElement.style.removeProperty("--terminal-bottom-gap");
   document.documentElement.style.removeProperty("--terminal-toast-bottom");
+  document.documentElement.style.removeProperty("--terminal-toast-left");
+  document.documentElement.style.removeProperty("--terminal-toast-width");
 }
