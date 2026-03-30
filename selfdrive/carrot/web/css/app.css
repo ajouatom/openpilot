@@ -97,6 +97,40 @@ body.dialog-open {
   font-weight: 900;
 }
 
+.topbar .nav-btn.recording,
+.topbar .nav-btn.recording.active {
+  color: #ff8f84;
+}
+
+.topbar .nav-btn.recording.active {
+  background: color-mix(in srgb, #ff6b6b 18%, transparent);
+}
+
+.topbar .nav-btn.recording::before {
+  content: attr(data-record-badge);
+  position: absolute;
+  top: 5px;
+  right: 8px;
+  min-width: 26px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: rgba(118, 18, 20, 0.92);
+  color: #ffd7d3;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-align: center;
+  opacity: 0;
+  transform: scale(0.92);
+  pointer-events: none;
+}
+
+.topbar .nav-btn.recording[data-record-badge="REC"]::before {
+  opacity: 1;
+  animation: nav-rec-badge-blink 1s steps(1, end) infinite;
+}
+
 .topbar .nav-btn.active > span:last-child::after {
   content: "";
   position: absolute;
@@ -107,6 +141,10 @@ body.dialog-open {
   border-radius: var(--r-pill);
   background: currentColor;
   opacity: 0.95;
+}
+
+.topbar .nav-btn.recording.active > span:last-child::after {
+  background: currentColor;
 }
 
 .topbar .nav-btn:active {
@@ -159,6 +197,25 @@ body.dialog-open {
   position: absolute;
   top: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px) - var(--fab-size) - 10px - var(--sp-lg));
   right: 0;
+  pointer-events: auto;
+}
+
+.global-home-record-fab {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  display: none;
+}
+
+body[data-page="home"] .global-home-record-fab {
+  display: block;
+}
+
+.global-home-record-fab .fab {
+  position: fixed;
+  right: max(var(--sp-lg), calc((100vw - var(--content-max-width)) / 2));
+  bottom: calc(var(--nav-bar-height) + 10px + env(safe-area-inset-bottom, 0px));
   pointer-events: auto;
 }
 
@@ -220,6 +277,15 @@ body.dialog-open {
   50% {
     border-color: color-mix(in srgb, #ff6b6b 82%, var(--md-outline-var));
     box-shadow: 0 0 0 1px rgba(255, 107, 107, 0.28), 0 0 22px rgba(255, 107, 107, 0.24);
+  }
+}
+
+@keyframes nav-rec-badge-blink {
+  0%, 49% {
+    opacity: 1;
+  }
+  50%, 100% {
+    opacity: 0.28;
   }
 }
 
@@ -698,6 +764,14 @@ body.dialog-open {
   overflow: hidden;
 }
 
+#toolsMeta {
+  min-height: 1.5em;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .tools-scroll-stack {
   flex: 1 1 auto;
   min-height: 0;
@@ -1109,6 +1183,9 @@ body[data-page="terminal"] .wrap {
 body[data-page="terminal"] .app-toast-host {
   top: auto;
   bottom: var(--terminal-toast-bottom, calc(var(--nav-bar-height) + 96px + env(safe-area-inset-bottom, 0px)));
+  left: var(--terminal-toast-left, var(--sp-lg));
+  right: auto;
+  width: var(--terminal-toast-width, calc(100vw - (var(--sp-lg) * 2)));
   z-index: 148;
 }
 
@@ -1733,6 +1810,7 @@ pre {
   transform-origin: top center;
   width: 320px !important;
   max-width: 320px !important;
+  box-shadow: none !important;
 }
 
 #rtcWrap:fullscreen .hudOverlayHost.dock_bl .hudWrap,
@@ -1744,6 +1822,7 @@ pre {
   transform-origin: left bottom;
   width: 320px !important;
   max-width: 320px !important;
+  box-shadow: none !important;
 }
 
 /* ── Desktop: full-width footer with centered content ─────────────────── */
@@ -1795,6 +1874,11 @@ pre {
 
   .page-fab-layer .fab {
     top: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height-desktop) - env(safe-area-inset-bottom, 0px) - var(--fab-size) - 12px - var(--sp-lg));
+  }
+
+  .global-home-record-fab .fab {
+    right: max(var(--sp-lg), calc((100vw - var(--content-max-width)) / 2));
+    bottom: calc(var(--nav-bar-height-desktop) + 12px + env(safe-area-inset-bottom, 0px));
   }
 
   .setting-search-panel {
@@ -2015,19 +2099,41 @@ pre {
     grid-template-columns: var(--home-landscape-media-size) minmax(248px, 312px);
     column-gap: 24px;
     row-gap: 0;
-    align-items: center;
+    align-items: start;
     justify-content: center;
     min-height: calc(var(--app-vv-height, 100dvh) - 28px);
-    padding: 12px 10px;
+    padding: 18px 10px 12px;
   }
 
   body[data-page="home"] #pageHome > .home-utility {
     grid-column: 2;
     grid-row: 1;
     width: 100%;
-    max-width: 312px;
-    align-self: center;
+    max-width: 340px;
+    align-self: start;
+    max-height: min(calc(var(--app-vv-height, 100dvh) - 36px), var(--home-landscape-media-size));
+    overflow-y: auto;
+    padding-right: 6px;
+    scrollbar-gutter: stable;
     margin-bottom: 0;
+  }
+
+  body[data-page="home"] #pageHome > .home-utility .home-utility-title {
+    font-size: calc(var(--fs-title-xs) * 1.18);
+    font-weight: 800;
+  }
+
+  body[data-page="home"] #pageHome > .home-utility .home-utility-value,
+  body[data-page="home"] #pageHome > .home-utility .home-utility-linkInline {
+    font-size: calc(var(--fs-body-md) * 1.16);
+    line-height: 1.35;
+  }
+
+  body[data-page="home"] #pageHome > .home-utility .home-utility-actionBtn {
+    min-height: 48px;
+    padding: 10px 18px;
+    font-size: 15px;
+    font-weight: 700;
   }
 
   body[data-page="home"] #pageHome > .home-utility .home-utility-item:last-child {
@@ -2039,7 +2145,9 @@ pre {
     grid-row: 1;
     width: var(--home-landscape-media-size);
     padding: 0;
-    align-self: center;
+    position: relative;
+    z-index: 2;
+    align-self: start;
     justify-self: center;
   }
 
@@ -2055,8 +2163,10 @@ pre {
     width: var(--home-landscape-media-size);
     max-width: var(--home-landscape-media-size);
     margin: 0;
-    align-self: center;
+    align-self: start;
     justify-self: center;
+    position: relative;
+    z-index: 1;
     background: transparent;
     border: 0;
     padding: 0;
@@ -2065,9 +2175,10 @@ pre {
 
   body[data-page="home"] #pageHome > #rtcCard > .row-between {
     position: absolute;
-    top: 12px;
-    right: 12px;
-    z-index: 3;
+    top: 8px;
+    left: -10px;
+    right: auto;
+    z-index: 4;
     margin: 0;
     gap: 0;
   }
@@ -2142,6 +2253,7 @@ pre {
     grid-column: 1;
     grid-row: 1;
     align-self: start;
+    min-height: 1.5em;
   }
 
   body[data-page="tools"] #pageTools > #toolsProgress {
@@ -2228,6 +2340,35 @@ pre {
     scrollbar-gutter: stable;
   }
 
+  body[data-page="setting"] #settingCarRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+  }
+
+  body[data-page="setting"] #curCarLabelSetting {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 16px !important;
+    line-height: 1.15;
+  }
+
+  body[data-page="setting"] #btnChangeCar {
+    flex: none;
+    min-width: 72px;
+    min-height: 40px;
+    padding: 8px 14px;
+    font-size: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+    writing-mode: horizontal-tb;
+    text-orientation: mixed;
+    line-height: 1;
+  }
+
   body[data-page="setting"] #settingSubnavWrap {
     display: none !important;
   }
@@ -2291,6 +2432,20 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
     width: calc(100vw - var(--nav-rail-width) - 24px);
   }
 
+  .app-toast-host {
+    left: calc(var(--nav-rail-width) + 20px);
+    right: 20px;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    width: auto;
+  }
+
+  body[data-page="terminal"] .app-toast-host {
+    left: var(--terminal-toast-left, calc(var(--nav-rail-width) + 20px));
+    right: auto;
+    width: var(--terminal-toast-width, calc(100vw - var(--nav-rail-width) - 40px));
+    bottom: var(--terminal-toast-bottom, calc(16px + env(safe-area-inset-bottom, 0px)));
+  }
+
   .fab {
     --fab-size: 56px;
     font-size: 10px;
@@ -2300,32 +2455,24 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
     top: calc(var(--app-vv-height, 100dvh) - env(safe-area-inset-bottom, 0px) - var(--fab-size) - 18px);
   }
 
-  body[data-page="home"] #pageHome > .page-fab-layer {
-    position: fixed;
-    top: auto;
+  .global-home-record-fab .fab {
     left: calc(var(--nav-rail-width) + 24px);
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
-    height: auto;
-    width: auto;
-    z-index: 60;
-  }
-
-  body[data-page="home"] #pageHome > .page-fab-layer .fab {
-    position: static;
-    left: auto;
-    top: auto;
     right: auto;
+    top: auto;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+    margin: 0;
+    transform: none !important;
   }
 
   #pageTools {
     --tools-page-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px) - 24px);
-    --tools-console-form-height: 36px;
-    --tools-console-log-font-size: 11px;
-    --tools-console-log-line-height: 1.35;
+    --tools-console-form-height: 40px;
+    --tools-console-log-font-size: 14px;
+    --tools-console-log-line-height: 1.55;
     --tools-console-log-lines: 4;
-    --tools-console-log-pad-top: 10px;
-    --tools-console-log-pad-bottom: 10px;
-    --tools-console-inline: 12px;
+    --tools-console-log-pad-top: 14px;
+    --tools-console-log-pad-bottom: 14px;
+    --tools-console-inline: 16px;
   }
 
   #pageTools .section {
@@ -2334,9 +2481,21 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
 
   #pageTools .btn,
   #pageTools .smallBtn {
-    min-height: 40px;
-    padding: 9px 14px;
-    font-size: 13px;
+    min-height: 44px;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  body[data-page="tools"] #toolsMeta {
+    min-height: 1.5em;
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  body[data-page="tools"] #pageTools .section h4 {
+    font-size: calc(var(--fs-title-xs) * 1.16);
+    font-weight: 800;
   }
 
   .tools-scroll-stack {
@@ -2348,6 +2507,16 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
     padding: 6px var(--tools-console-inline);
   }
 
+  .tools-console-prompt {
+    font-size: 17px;
+    font-weight: 800;
+  }
+
+  .tools-console-input {
+    font-size: 16px;
+    font-weight: 600;
+  }
+
   .tools-console-iconBtn {
     min-width: 32px;
     width: 32px;
@@ -2356,6 +2525,12 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
 
   .tools-console-log {
     padding-right: max(var(--tools-console-inline), 14px);
+  }
+
+  .tools-console-log__history,
+  .tools-console-log__current {
+    font-size: 14px;
+    line-height: 1.55;
   }
 
   #pageTerminal {
@@ -2371,7 +2546,8 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
 
   .terminal-meta {
     padding: 0 var(--terminal-inline) 8px;
-    font-size: 13px;
+    font-size: 15px;
+    font-weight: 600;
   }
 
   .terminal-toolbar {
@@ -2388,9 +2564,10 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
   }
 
   .terminal-toolbar__actions .smallBtn {
-    min-height: 30px;
-    padding: 5px 10px;
-    font-size: 11px;
+    min-height: 36px;
+    padding: 7px 13px;
+    font-size: 13px;
+    font-weight: 700;
   }
 
   .terminal-screen {
@@ -2399,8 +2576,8 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
   }
 
   .terminal-output {
-    font-size: 11px;
-    line-height: 1.3;
+    font-size: 13px;
+    line-height: 1.45;
   }
 
   .terminal-form {
@@ -2411,12 +2588,41 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
   .terminal-form__input {
     min-height: 38px;
     padding: 8px 0;
-    font-size: 13px;
+    font-size: 15px;
+    font-weight: 600;
   }
 
   .terminal-form .smallBtn {
-    padding: 0 14px;
-    font-size: 11px;
+    padding: 0 16px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  body[data-page="setting"] #settingScreenItems .title {
+    font-size: calc(var(--fs-body-lg) * 1.22);
+    font-weight: 700;
+  }
+
+  body[data-page="setting"] #settingScreenItems .name {
+    font-size: calc(var(--fs-label-md) * 1.12);
+  }
+
+  body[data-page="setting"] #settingScreenItems .muted,
+  body[data-page="setting"] #settingScreenItems .descr {
+    font-size: calc(var(--fs-body-sm) * 1.18);
+    line-height: 1.45;
+  }
+
+  body[data-page="setting"] #settingScreenItems .smallBtn {
+    min-height: 48px;
+    padding: 10px 16px;
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  body[data-page="setting"] #settingScreenItems .val {
+    min-width: 92px;
+    font-size: 15px;
   }
 
   .setting-search-panel {
