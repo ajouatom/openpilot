@@ -615,6 +615,11 @@ class CAR(Platforms):
     CarSpecs(mass=1450, wheelbase=2.65, steerRatio=13.75, tireStiffnessFactor=0.5),
     flags=HyundaiFlags.LEGACY,
   )
+  KIA_EV4 = HyundaiCanFDPlatformConfig(
+    [HyundaiCarDocs("Kia EV4 2025", "All", car_parts=CarParts.common([CarHarness.hyundai_q]))],
+    CarSpecs(mass=1710, wheelbase=2.83, steerRatio=14.5, tireStiffnessFactor=0.65),
+    flags=HyundaiFlags.EV,
+  )
   KIA_EV6 = HyundaiCanFDPlatformConfig(
     [
       HyundaiCarDocs("Kia EV6 (Southeast Asia only) 2022-24", "All", car_parts=CarParts.common([CarHarness.hyundai_p])),
