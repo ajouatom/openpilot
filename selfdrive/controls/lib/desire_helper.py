@@ -348,8 +348,8 @@ class DesireHelper:
             bsd_active = (side.bsd_hold_counter > 0) and (not ignore_bsd)
 
             # 차선이 일정시간 이상 안보이면 auto 허용(원본 유지)
-            if (not side.lane_available) or (side.lane_exist_count.counter < int(2.0 / DT_MDL)):
-              self.auto_lane_change_enable = True
+            #if (not side.lane_available) or (side.lane_exist_count.counter < int(2.0 / DT_MDL)):
+            #  self.auto_lane_change_enable = True
 
             if not desire_enabled or below_lane_change_speed:
               self.lane_change_state = LaneChangeState.off
@@ -363,7 +363,7 @@ class DesireHelper:
                                    (side.lane_available or side.edge_available)
               start_gate = (side.lane_change_available_geom and self.lane_change_delay == 0) or \
                            side.lane_line_info_edge_detect or solid_line_blocked
-
+                
               if start_gate:
                 if solid_line_blocked:
                   if torque_applied and not (bsd_active and block_lanechange_bsd):
