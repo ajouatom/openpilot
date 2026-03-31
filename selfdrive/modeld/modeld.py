@@ -324,9 +324,9 @@ def main(demo=False):
       camera_yaw_trim_deg = params.get_float("CameraYawTrimDeg") * 0.01
       
     if custom_lat_delay > 0.0:
-      lat_delay = custom_lat_delay + lat_smooth_seconds + 0.1
+      lat_delay = custom_lat_delay + lat_smooth_seconds
     else:
-      lat_delay = sm["liveDelay"].lateralDelay + lat_smooth_seconds + 0.1
+      lat_delay = sm["liveDelay"].lateralDelay + lat_smooth_seconds
 
     # Keep receiving frames until we are at least 1 frame ahead of previous extra frame
     while meta_main.timestamp_sof < meta_extra.timestamp_sof + 25000000:
