@@ -39,7 +39,7 @@ import ssl
 import getpass
 import uuid
 from openpilot.common.realtime import set_core_affinity
-
+from openpilot.system.hardware import HARDWARE
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
@@ -773,6 +773,28 @@ def _tool_result_from_log(job: Dict[str, Any], rc: int, **extra: Any) -> Dict[st
   return {"ok": rc == 0, "rc": rc, "out": out, **extra}
 
 
+def _get_branch_prefix() -> str:
+  try:
+    return "c4" if HARDWARE.get_device_type() == "mici" else "c3"
+  except Exception:
+    return "c3"
+
+def _filter_branch_list(branches: list[str]) -> list[str]:
+  prefix = _get_branch_prefix()
+
+  filtered = []
+  for branch in branches:
+    name = branch.strip()
+    if not name:
+      continue
+
+    # local branch: c3-xxx / c4-xxx
+    # remote branch: origin/c3-xxx / origin/c4-xxx
+    if name.startswith(prefix) or name.startswith(f"origin/{prefix}"):
+      filtered.append(name)
+
+  return sorted(set(filtered))
+
 async def _run_tool_job(job: Dict[str, Any]) -> None:
   action = job["action"]
   body = job.get("payload") or {}
@@ -892,12 +914,16 @@ async def _run_tool_job(job: Dict[str, Any]) -> None:
         if line.startswith("remotes/"):
           line = line.replace("remotes/", "", 1)
         branches.append(line)
-      branches = sorted(set(branches))
+
+      branches = _filter_branch_list(branches)
+
       result = {
         "ok": True,
         "branches": branches,
         "current_branch": current_branch,
         "fetch": (job.get("log") or "").strip(),
+        "device_type": HARDWARE.get_device_type(),
+        "branch_prefix": _get_branch_prefix(),
       }
       _tool_job_finish(job, ok=True, result=result)
       return
@@ -1251,51 +1277,43 @@ async def api_tools(request: web.Request) -> web.Response:
   
 
     if action == "git_branch_list":
-      # 1) 원격 브랜치/삭제 반영(동기화) 먼저
       rc0, out0 = run(["git", "fetch", "--all", "--prune"], cwd=REPO_DIR)
       if rc0 != 0:
         return web.json_response({"ok": False, "rc": rc0, "out": out0})
 
-      # 2) 로컬/원격 브랜치 목록 출력
       rc, out = run(
         ["git", "branch", "-a", "--format=%(refname:short)"],
         cwd=REPO_DIR
       )
       if rc != 0:
-        # fetch 결과도 함께 반환해서 디버깅 쉽게
         merged = (out0 + "\n\n" + out).strip()
         return web.json_response({"ok": False, "rc": rc, "out": merged})
 
       rc_current, out_current = run(["git", "branch", "--show-current"], cwd=REPO_DIR)
       current_branch = out_current.strip() if rc_current == 0 else ""
 
-      # 3) 정리: "remotes/" 제거, HEAD 같은 노이즈 제거, 중복 제거
       branches: list[str] = []
       for line in out.splitlines():
         line = line.strip()
         if not line:
           continue
-
-        # 예: "remotes/origin/HEAD -> origin/main" 같은 라인은 제거
         if "->" in line:
           continue
-
-        # "remotes/origin/foo" -> "origin/foo"
         if line.startswith("remotes/"):
           line = line.replace("remotes/", "", 1)
-
         branches.append(line)
 
-      branches = sorted(set(branches))
+      branches = _filter_branch_list(branches)
 
-      # fetch 출력도 같이 주면 UI에서 "동기화됨" 로그 확인 가능 (원치 않으면 빼도 됨)
       return web.json_response({
         "ok": True,
         "branches": branches,
         "current_branch": current_branch,
         "fetch": out0.strip(),
+        "device_type": HARDWARE.get_device_type(),
+        "branch_prefix": _get_branch_prefix(),
       })
-
+    
 
     if action == "delete_all_videos":
       # 경로는 환경 맞춰 조정
