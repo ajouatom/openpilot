@@ -789,8 +789,9 @@ def _filter_branch_list(branches: list[str]) -> list[str]:
       continue
 
     # local branch: c3-xxx / c4-xxx
-    # remote branch: origin/c3-xxx / origin/c4-xxx
-    if name.startswith(prefix) or name.startswith(f"origin/{prefix}"):
+    # remote branch: origin/c3-xxx, ajouatom/c3-xxx, etc.
+    branch_name = name.split("/", 1)[-1] if "/" in name else name
+    if branch_name.startswith(prefix):
       filtered.append(name)
 
   return sorted(set(filtered))
