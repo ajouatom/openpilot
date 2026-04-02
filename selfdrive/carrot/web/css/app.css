@@ -1644,7 +1644,7 @@ body[data-page="carrot"] #pageCarrot {
 
 body[data-page="carrot"] .wrap {
   max-width: none;
-  padding: 0 0 calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px));
+  padding: 0;
 }
 
 body[data-page="carrot"] #pageCarrot > .page-header--hidden {
@@ -1667,7 +1667,7 @@ body[data-page="carrot"] .carrot-hud-dock {
   justify-content: center;
   width: 100%;
   min-height: var(--carrot-dock-panel-height, auto);
-  padding: 0 4px;
+  padding: 0;
   margin: 0;
   margin-top: auto;
   background: #0b0e12;
@@ -1685,6 +1685,7 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--overlay {
   inset-inline-end: auto !important;
   top: auto !important;
   width: auto;
+  max-width: calc(100% - (var(--carrot-hud-left, 12px) * 2));
 }
 
 body[data-page="carrot"] #driveHudCard.driveHudCard--overlay .hudWrap {
@@ -1779,16 +1780,17 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--overlay .hudWrap {
     flex: 0 0 var(--carrot-dock-panel-height, auto);
     padding-inline: 0;
     padding-bottom: 0;
-    align-items: stretch;
+    align-items: center;
   }
 
   body[data-page="carrot"] #driveHudCard.driveHudCard--inline {
-    width: 100%;
-    justify-content: stretch;
+    width: auto;
+    max-width: 100%;
+    justify-content: center;
   }
 
   body[data-page="carrot"] #driveHudCard.driveHudCard--inline .hudWrap {
-    width: 100%;
+    width: min(100%, var(--hud-card-width, var(--hud-max-width)));
     margin: 0;
     border-radius: 0;
     border-left: 0;

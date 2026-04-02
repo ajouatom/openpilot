@@ -791,20 +791,10 @@ window.HomeDrive = (() => {
     }
     const stageRect = stageEl.getBoundingClientRect();
     if (!stageRect.width || !stageRect.height) return;
-    const displayModeKey = DISPLAY_MODES[displayModeIndex]?.key || "normal";
-
-    const viewport = viewportRect || {
-      left: 0,
-      top: 0,
-      right: stageRect.width,
-      bottom: stageRect.height,
-      width: stageRect.width,
-      height: stageRect.height,
-    };
-    const overlayInsetX = displayModeKey === "fit" ? 8 : 12;
-    const overlayInsetY = displayModeKey === "fit" ? 8 : 12;
-    const stageLeft = Math.round(viewport.left + overlayInsetX);
-    const stageBottom = Math.round(Math.max(12, stageRect.height - viewport.bottom + overlayInsetY));
+    const overlayInsetX = clamp(stageRect.width * 0.028, 16, 28);
+    const overlayInsetY = clamp(stageRect.height * 0.034, 16, 24);
+    const stageLeft = Math.round(overlayInsetX);
+    const stageBottom = Math.round(overlayInsetY);
 
     driveHudCardEl.style.setProperty("--carrot-hud-left", `${stageLeft}px`);
     driveHudCardEl.style.setProperty("--carrot-hud-bottom", `${stageBottom}px`);

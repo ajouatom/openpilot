@@ -110,6 +110,7 @@
     const vv = window.visualViewport;
     const viewportWidth = Math.max(320, Math.round(vv?.width || window.innerWidth || 0));
     const viewportHeight = Math.max(320, Math.round(vv?.height || window.innerHeight || 0));
+    const isPortrait = viewportHeight > viewportWidth;
     const overlayMount = isOverlayMount();
     const target = getSurfaceTarget();
     const rect = target?.getBoundingClientRect?.() || null;
@@ -120,22 +121,24 @@
     if (surface === SURFACE_HOME) {
       if (overlayMount) {
         return {
-          width: clamp(width * 0.70, 460, 1180),
-          height: clamp(height * 0.92, 280, 620),
+          width: clamp(width - 36, 560, 980),
+          height: clamp(height - 36, 320, 620),
         };
       }
-      const viewportAwareHudCap = clamp(viewportHeight * 0.32, 220, 520);
+      const viewportAwareHudCap = isPortrait
+        ? clamp(viewportHeight * 0.46, 280, 420)
+        : clamp(viewportHeight * 0.32, 220, 520);
       const homeHudHeightCap = (() => {
         switch (windowClass) {
-          case "compact": return clamp(viewportAwareHudCap, 220, 360);
-          case "medium": return clamp(viewportAwareHudCap, 240, 390);
-          case "expanded": return clamp(viewportAwareHudCap, 260, 420);
+          case "compact": return clamp(viewportAwareHudCap, isPortrait ? 280 : 220, isPortrait ? 380 : 360);
+          case "medium": return clamp(viewportAwareHudCap, isPortrait ? 300 : 240, isPortrait ? 400 : 390);
+          case "expanded": return clamp(viewportAwareHudCap, isPortrait ? 320 : 260, isPortrait ? 420 : 420);
           case "large": return clamp(viewportAwareHudCap, 280, 450);
           default: return clamp(viewportAwareHudCap, 300, 480);
         }
       })();
       return {
-        width: Math.min(Math.max(280, width), viewportWidth - 24),
+        width: Math.min(Math.max(isPortrait ? 320 : 280, width), viewportWidth - (isPortrait ? 8 : 24)),
         height: homeHudHeightCap,
       };
     }
