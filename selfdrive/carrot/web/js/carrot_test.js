@@ -77,6 +77,7 @@ window.CarrotTest = (() => {
   const TEST_LANE_PROB_BOOST = 6;
 
   const defaultParams = {
+    ShowPathEnd: 0,
     ShowLaneInfo: 2,
     ShowPathMode: 0,
     ShowPathColor: 13,
@@ -420,9 +421,35 @@ window.CarrotTest = (() => {
     return first.concat(second.reverse());
   }
 
+  function interp1D(x, xs, ys) {
+    if (!Array.isArray(xs) || !Array.isArray(ys) || xs.length < 2 || ys.length < 2) return NaN;
+    const target = finiteNumber(x, NaN);
+    if (!Number.isFinite(target)) return NaN;
+    const lastIdx = Math.min(xs.length, ys.length) - 1;
+    if (target <= finiteNumber(xs[0], 0)) return finiteNumber(ys[0], NaN);
+
+    for (let i = 1; i <= lastIdx; i += 1) {
+      const x0 = finiteNumber(xs[i - 1], NaN);
+      const x1 = finiteNumber(xs[i], NaN);
+      if (!Number.isFinite(x0) || !Number.isFinite(x1)) continue;
+      if (target > x1 && i < lastIdx) continue;
+
+      const y0 = finiteNumber(ys[i - 1], NaN);
+      const y1 = finiteNumber(ys[i], NaN);
+      if (!Number.isFinite(y0) || !Number.isFinite(y1)) return NaN;
+      if (Math.abs(x1 - x0) < 1e-5) return y1;
+
+      const ratio = clamp((target - x0) / (x1 - x0), 0, 1);
+      return y0 + (y1 - y0) * ratio;
+    }
+
+    return finiteNumber(ys[lastIdx], NaN);
+  }
+
   function normalizeVisualParams(values, fallback = defaultParams) {
     const source = values && typeof values === "object" ? values : {};
     return {
+      ShowPathEnd: finiteNumber(source.ShowPathEnd, fallback.ShowPathEnd),
       ShowLaneInfo: finiteNumber(source.ShowLaneInfo, fallback.ShowLaneInfo),
       ShowPathMode: finiteNumber(source.ShowPathMode, fallback.ShowPathMode),
       ShowPathColor: finiteNumber(source.ShowPathColor, fallback.ShowPathColor),
@@ -442,10 +469,14 @@ window.CarrotTest = (() => {
 
     const normalized = normalizeVisualParams(runtimeParams, paramsState);
     const hasPathKeys = (
+      runtimeParams.ShowPathEnd != null ||
       runtimeParams.ShowPathMode != null ||
       runtimeParams.ShowPathColor != null ||
       runtimeParams.ShowPathModeLane != null ||
-      runtimeParams.ShowPathColorLane != null
+      runtimeParams.ShowPathColorLane != null ||
+      runtimeParams.ShowLaneInfo != null ||
+      runtimeParams.ShowRadarInfo != null ||
+      runtimeParams.ShowPlotMode != null
     );
     if (!hasPathKeys) return null;
     return normalized;
@@ -1008,6 +1039,26 @@ window.CarrotTest = (() => {
     return finiteNumber(zs[idx], 0);
   }
 
+  function samplePathY(position, distance) {
+    return interp1D(
+      distance,
+      Array.isArray(position?.x) ? position.x : [],
+      Array.isArray(position?.y) ? position.y : [],
+    );
+  }
+
+  function circlePolygon(cx, cy, radius, points = 12) {
+    const polygon = [];
+    for (let i = 0; i < points; i += 1) {
+      const theta = (Math.PI * 2 * i) / points;
+      polygon.push({
+        x: cx + Math.cos(theta) * radius,
+        y: cy + Math.sin(theta) * radius,
+      });
+    }
+    return polygon;
+  }
+
   function buildVerticalRibbon(calibTransform, line, centerShift, topZOffset, bottomZOffset, maxDistance) {
     const xs = Array.isArray(line?.x) ? line.x : [];
     const ys = Array.isArray(line?.y) ? line.y : [];
@@ -1227,6 +1278,161 @@ window.CarrotTest = (() => {
     ctx.restore();
   }
 
+  function drawCanvasOutlinedText(text, x, y, {
+    fontSize = 18,
+    fontWeight = 800,
+    fillStyle = "#ffffff",
+    strokeStyle = "rgba(0,0,0,0.86)",
+    strokeWidth = 3.4,
+    align = "center",
+    baseline = "middle",
+  } = {}) {
+    if (!text) return;
+    ctx.save();
+    ctx.font = `${fontWeight} ${fontSize}px ${HUD_TEXT_FONT}`;
+    ctx.textAlign = align;
+    ctx.textBaseline = baseline;
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = strokeStyle;
+    ctx.fillStyle = fillStyle;
+    ctx.lineWidth = strokeWidth;
+    ctx.strokeText(text, x, y);
+    ctx.fillText(text, x, y);
+    ctx.restore();
+  }
+
+  function clampTextAnchor(point, text, fontSize, videoWidth, videoHeight) {
+    const anchor = { x: finiteNumber(point?.x, 0), y: finiteNumber(point?.y, 0) };
+    ctx.save();
+    ctx.font = `800 ${fontSize}px ${HUD_TEXT_FONT}`;
+    const textWidth = Math.max(ctx.measureText(String(text || "")).width, 1);
+    ctx.restore();
+    const padding = 8;
+    anchor.x = clamp(anchor.x, padding, Math.max(padding, videoWidth - textWidth - padding));
+    anchor.y = clamp(anchor.y, fontSize + padding, Math.max(fontSize + padding, videoHeight - padding));
+    return anchor;
+  }
+
+  function drawRadarSpeedBadge(center, text, accentColor) {
+    if (!center || !text) return;
+    const badgeWidth = Math.max(52, 28 + String(text).length * 18);
+    const badgeHeight = 34;
+    const badgeX = center.x - badgeWidth * 0.5;
+    const badgeY = center.y - badgeHeight * 0.5;
+    fillRoundedRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, 14, accentColor);
+    drawCanvasOutlinedText(String(text), center.x, badgeY + badgeHeight * 0.56, {
+      fontSize: 21,
+      fontWeight: 900,
+      strokeWidth: 3.6,
+    });
+  }
+
+  function drawProjectedTfMarker(modelPath, longitudinalPlan, calibTransform, videoWidth, videoHeight) {
+    if (finiteNumber(paramsState.ShowPathEnd, 0) <= 0) return;
+
+    const tfDistance = finiteNumber(longitudinalPlan?.desiredDistance, 0);
+    if (!Number.isFinite(tfDistance) || tfDistance <= 0) return;
+
+    const xs = Array.isArray(modelPath?.x) ? modelPath.x : [];
+    if (xs.length < 2) return;
+    const lastX = finiteNumber(xs[xs.length - 1], 0);
+    if (!lastX || tfDistance > lastX) return;
+
+    const lineY = samplePathY(modelPath, tfDistance);
+    const lineZ = interp1D(tfDistance, xs, Array.isArray(modelPath?.z) ? modelPath.z : []);
+    if (!Number.isFinite(lineY) || !Number.isFinite(lineZ)) return;
+
+    const left = projectPoint(calibTransform, tfDistance, lineY - 1.0, lineZ + PATH_Z_OFFSET);
+    const right = projectPoint(calibTransform, tfDistance, lineY + 1.0, lineZ + PATH_Z_OFFSET);
+    if (!left || !right) return;
+
+    drawPolyline([left, right], "rgba(255,255,255,0.92)", 3.0);
+    const labelText = `${tfDistance.toFixed(1)}(${finiteNumber(longitudinalPlan?.tFollow, 0).toFixed(2)})`;
+    const labelAnchor = clampTextAnchor(
+      { x: right.x + 10, y: right.y - 4 },
+      labelText,
+      20,
+      videoWidth,
+      videoHeight,
+    );
+    drawCanvasOutlinedText(labelText, labelAnchor.x, labelAnchor.y, {
+      fontSize: 20,
+      fontWeight: 800,
+      align: "left",
+    });
+  }
+
+  function getRadarTracks(radarState) {
+    const source = radarState && typeof radarState === "object" ? radarState : {};
+    const tracks = [
+      ...(Array.isArray(source.leadsLeft) ? source.leadsLeft : []),
+      ...(Array.isArray(source.leadsCenter) ? source.leadsCenter : []),
+      ...(Array.isArray(source.leadsRight) ? source.leadsRight : []),
+    ];
+    if (tracks.length) return tracks;
+
+    const fallback = [];
+    if (source.leadOne?.status) fallback.push(source.leadOne);
+    if (source.leadTwo?.status) fallback.push(source.leadTwo);
+    return fallback;
+  }
+
+  function drawRadarTargets(radarState, modelPath, calibTransform) {
+    const showRadarInfo = finiteNumber(paramsState.ShowRadarInfo, 0);
+    if (showRadarInfo <= 0) return;
+
+    for (const radar of getRadarTracks(radarState)) {
+      const dRel = finiteNumber(radar?.dRel, 0);
+      if (!Number.isFinite(dRel) || dRel <= 2.5) continue;
+
+      const z = samplePathZ(modelPath, dRel) - 0.61;
+      const center = projectPoint(calibTransform, dRel, -finiteNumber(radar?.yRel, 0), z);
+      if (!center) continue;
+
+      const vLead = finiteNumber(radar?.vLeadK, finiteNumber(radar?.vRel, 0));
+      const vLat = finiteNumber(radar?.vLat, 0);
+      const vAbs = Math.sqrt((vLead * vLead) + (vLat * vLat));
+      const vSigned = vLead >= 0 ? vAbs : -vAbs;
+      const radarDetected = Boolean(radar?.radar);
+      const modelProb = finiteNumber(radar?.modelProb, 0);
+
+      if (vAbs > 3.0) {
+        const futureDRel = Math.max(2.0, dRel + vLead * 0.35);
+        const futureYRel = finiteNumber(radar?.yRel, 0) + vLat * 0.35;
+        const futureZ = samplePathZ(modelPath, futureDRel) - 0.61;
+        const future = projectPoint(calibTransform, futureDRel, -futureYRel, futureZ);
+        if (future) {
+          const vectorColor = vSigned >= 0 ? "rgba(35,213,93,0.94)" : "rgba(255,59,48,0.94)";
+          drawPolyline([center, future], vectorColor, 3.0);
+          drawPolygon(circlePolygon(future.x, future.y, 7, 18), vectorColor);
+        }
+
+        let badgeColor = "rgba(255,59,48,0.96)";
+        if (!radarDetected) badgeColor = "rgba(61,123,255,0.96)";
+        else if (Math.abs(modelProb - 0.01) < 1e-3) badgeColor = "rgba(35,213,93,0.96)";
+        else if (vSigned > 0) badgeColor = "rgba(255,167,38,0.96)";
+
+        drawRadarSpeedBadge({ x: center.x, y: center.y - 18 }, (vSigned * 3.6).toFixed(0), badgeColor);
+
+        if (showRadarInfo >= 2) {
+          drawCanvasOutlinedText(finiteNumber(radar?.yRel, 0).toFixed(1), center.x, center.y - 48, {
+            fontSize: 18,
+            fontWeight: 800,
+          });
+          drawCanvasOutlinedText(dRel.toFixed(1), center.x, center.y + 30, {
+            fontSize: 18,
+            fontWeight: 800,
+          });
+        }
+      } else if (showRadarInfo >= 3) {
+        drawCanvasOutlinedText("*", center.x, center.y, {
+          fontSize: 28,
+          fontWeight: 900,
+        });
+      }
+    }
+  }
+
   function drawRadarLeadBoxes(model, overlayState, hudState, calibTransform, videoWidth, videoHeight) {
     const radarState = overlayState?.radarState || {};
     const modelPath = model?.position || null;
@@ -1265,7 +1471,7 @@ window.CarrotTest = (() => {
         drawLeadBoxCard(leadTwoBox, "#b68a3a", "rgba(0,0,0,0.20)", false);
       }
     }
-
+    drawRadarTargets(radarState, modelPath, calibTransform);
   }
 
   function roundedRectPath(context, x, y, width, height, radius) {
@@ -1788,6 +1994,7 @@ window.CarrotTest = (() => {
       if (showLaneInfo >= 1) drawLaneLines(model, hudState, transform.calibTransform);
       if (showLaneInfo > 1) drawRoadEdges(model, transform.calibTransform);
       if (showLaneInfo >= 0) drawPath(selectedPath.pathData, model, transform.calibTransform, videoHeight, pathStyle);
+      drawProjectedTfMarker(model?.position, hudState?.longitudinalPlan, transform.calibTransform, videoWidth, videoHeight);
       drawBlindspotBarriers(model?.position, overlayState, hudState, transform.calibTransform);
       drawRadarLeadBoxes(model, overlayState, hudState, transform.calibTransform, videoWidth, videoHeight);
     }
