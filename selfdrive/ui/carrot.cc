@@ -2536,6 +2536,8 @@ public:
         // 시간표시
         int show_datetime = params.getInt("ShowDateTime");
         if (show_datetime) {
+            setenv("TZ", "KST-9", 1);
+            tzset();
             time_t now = time(nullptr);
             struct tm* local = localtime(&now);
 
