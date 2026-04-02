@@ -109,6 +109,29 @@ window.CarrotRawCapnp = (() => {
     },
   };
 
+  const RADAR_LEAD_SCHEMA = {
+    fields: {
+      dRel: { kind: "float32", offset: 0 },
+      yRel: { kind: "float32", offset: 1 },
+      vRel: { kind: "float32", offset: 2 },
+      aRel: { kind: "float32", offset: 3 },
+      vLead: { kind: "float32", offset: 4 },
+      aLead: { kind: "float32", offset: 5 },
+      dPath: { kind: "float32", offset: 6 },
+      vLat: { kind: "float32", offset: 7 },
+      vLeadK: { kind: "float32", offset: 8 },
+      aLeadK: { kind: "float32", offset: 9 },
+      fcw: { kind: "bool", offset: 10 },
+      status: { kind: "bool", offset: 11 },
+      aLeadTau: { kind: "float32", offset: 12 },
+      modelProb: { kind: "float32", offset: 13 },
+      radar: { kind: "bool", offset: 14 },
+      radarTrackId: { kind: "int32", offset: 15 },
+      jLead: { kind: "float32", offset: 16 },
+      score: { kind: "float32", offset: 17 },
+    },
+  };
+
   const MODEL_META_SCHEMA = {
     fields: {
       laneChangeState: { kind: "enum", offset: 9 },
@@ -165,21 +188,12 @@ window.CarrotRawCapnp = (() => {
     },
     radarState: {
       fields: {
-        leadOne: {
-          kind: "struct",
-          offset: 0,
-          schema: {
-            fields: {
-              dRel: { kind: "float32", offset: 0 },
-              yRel: { kind: "float32", offset: 1 },
-              vRel: { kind: "float32", offset: 2 },
-              aLead: { kind: "float32", offset: 5 },
-              aLeadK: { kind: "float32", offset: 9 },
-              jLead: { kind: "float32", offset: 16 },
-              status: { kind: "bool", offset: 11 },
-            },
-          },
-        },
+        // RadarState keeps older deprecated pointer fields ahead of the modern
+        // lead slots, so these offsets follow the pointer-section layout.
+        leadOne: { kind: "struct", offset: 1, schema: RADAR_LEAD_SCHEMA },
+        leadTwo: { kind: "struct", offset: 2, schema: RADAR_LEAD_SCHEMA },
+        leadRight: { kind: "struct", offset: 5, schema: RADAR_LEAD_SCHEMA },
+        leadLeft: { kind: "struct", offset: 9, schema: RADAR_LEAD_SCHEMA },
       },
     },
     carControl: {
