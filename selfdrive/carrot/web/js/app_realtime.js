@@ -105,9 +105,55 @@ scheduleLiveRuntimeStateFetch(1500);
 let RTC_PC = null;
 let RTC_RETRY_T = null;
 let RTC_WAIT_TRACK_T = null;
+const RTC_DEV_PREVIEW_ENABLED = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+const RTC_DEV_PREVIEW_KEY = "carrot.rtc.devPreview";
+let RTC_DEV_PREVIEW = false;
+
 function rtcHasLiveTrack() {
   const video = document.getElementById("rtcVideo");
   return Boolean(video && video.srcObject);
+}
+
+function rtcSyncDevToggleUi() {
+  const tools = document.getElementById("rtcDevTools");
+  const btn = document.getElementById("btnRtcDevToggle");
+  if (!tools || !btn) return;
+
+  tools.hidden = !RTC_DEV_PREVIEW_ENABLED;
+  btn.classList.toggle("is-on", RTC_DEV_PREVIEW);
+  btn.setAttribute("aria-pressed", RTC_DEV_PREVIEW ? "true" : "false");
+  btn.textContent = RTC_DEV_PREVIEW ? "RTC Preview ON" : "RTC Preview";
+}
+
+function rtcApplyDevPreview() {
+  const rtcCard = document.getElementById("rtcCard");
+  const rtcWrapEl = document.getElementById("rtcWrap");
+  const video = document.getElementById("rtcVideo");
+  if (!rtcCard || !rtcWrapEl || !video) return;
+
+  const showPreview = RTC_DEV_PREVIEW_ENABLED && RTC_DEV_PREVIEW && !rtcHasLiveTrack();
+  rtcWrapEl.classList.toggle("rtcWrap--dev-preview", showPreview);
+  video.classList.toggle("rtcVideo--dev-preview", showPreview);
+
+  if (showPreview) {
+    rtcCard.style.display = "block";
+    video.style.display = "block";
+    rtcStatusSet("dev preview");
+  } else if (!rtcHasLiveTrack()) {
+    video.style.display = "none";
+    rtcCard.style.display = "none";
+  }
+
+  rtcSyncDevToggleUi();
+}
+
+function rtcSetDevPreview(next) {
+  RTC_DEV_PREVIEW = Boolean(next && RTC_DEV_PREVIEW_ENABLED);
+  try {
+    if (RTC_DEV_PREVIEW) localStorage.setItem(RTC_DEV_PREVIEW_KEY, "1");
+    else localStorage.removeItem(RTC_DEV_PREVIEW_KEY);
+  } catch {}
+  rtcApplyDevPreview();
 }
 
 function rtcStatusSet(s) {
@@ -133,6 +179,9 @@ async function rtcDisconnect() {
     video.srcObject = null;
     video.style.display = "none";
   }
+  const rtcCard = document.getElementById("rtcCard");
+  if (rtcCard) rtcCard.style.display = "none";
+  rtcApplyDevPreview();
 }
 
 function rtcScheduleRetry(ms = 2000) {
@@ -198,6 +247,7 @@ async function rtcConnectOnce() {
     pc.addTransceiver("video", { direction: "recvonly" });
 
     pc.ontrack = async (ev) => {
+      const rtcCard = document.getElementById("rtcCard");
       const videoEl = document.getElementById("rtcVideo");
       if (!videoEl) return;
 
@@ -207,7 +257,11 @@ async function rtcConnectOnce() {
       }
 
       videoEl.srcObject = stream;
+      videoEl.classList.remove("rtcVideo--dev-preview");
+      const rtcWrapEl = document.getElementById("rtcWrap");
+      if (rtcWrapEl) rtcWrapEl.classList.remove("rtcWrap--dev-preview");
       videoEl.style.display = "block";
+      if (rtcCard) rtcCard.style.display = "block";
       try { await videoEl.play(); } catch (e) { console.log("[RTC] play() failed", e); }
       rtcStatusSet("track: " + ev.track.kind);
       rtcDisarmTrackTimeout();
@@ -292,6 +346,11 @@ function rtcInitAuto() {
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) rtcConnectOnce().catch(() => {});
   });
+}
+const btnRtcDevToggle = document.getElementById("btnRtcDevToggle");
+
+if (btnRtcDevToggle) {
+  btnRtcDevToggle.onclick = () => rtcSetDevPreview(!RTC_DEV_PREVIEW);
 }
 
 const RAW_HUD_LOG_PREFIX = "[raw hud]";
@@ -527,6 +586,14 @@ async function syncServerTimeOnConnect() {
 }
 
 function startAll() {
+  try {
+    RTC_DEV_PREVIEW = RTC_DEV_PREVIEW_ENABLED && localStorage.getItem(RTC_DEV_PREVIEW_KEY) === "1";
+  } catch {
+    RTC_DEV_PREVIEW = false;
+  }
+  rtcSyncDevToggleUi();
+  rtcApplyDevPreview();
+
   renderUIText();
   showPage("home", false);
   console.log("[time_sync] syncing server time on page load");

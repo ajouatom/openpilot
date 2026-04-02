@@ -8,10 +8,8 @@ window.CarrotTest = (() => {
   const statusEl = document.getElementById("carrotStageStatus");
   const metaEl = document.getElementById("carrotStageMeta");
   const debugEl = document.getElementById("carrotStageDebug");
-  const driveHudCardEl = document.getElementById("driveHudCard");
   const sourceVideoEl = document.getElementById("rtcVideo");
   const zoomButtons = Array.from(document.querySelectorAll(".carrot-zoom__btn"));
-  const leadPreviewToggleEl = document.getElementById("carrotTestLeadPreview");
 
   if (!stageEl || !videoEl || !canvasEl || !hudCanvasEl || !statusEl || !metaEl || !debugEl || !sourceVideoEl) {
     return {};
@@ -47,7 +45,6 @@ window.CarrotTest = (() => {
   ];
   const HUD_TEXT_FONT = "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
   const DISPLAY_MODE_STORAGE_KEY = "carrot_test_display_mode_index";
-  const TEST_FLAGS_STORAGE_KEY = "carrot_test_flags";
   const PATH_PALETTE = [
     { r: 255, g: 82, b: 82 },
     { r: 255, g: 153, b: 0 },
@@ -70,17 +67,12 @@ window.CarrotTest = (() => {
   const PATH_Z_OFFSET = 1.22;
   const MIN_DRAW_DISTANCE = 10;
   const MAX_DRAW_DISTANCE = 100;
-  const RADAR_INTERPOLATION_MIN_MS = 16;
-  const RADAR_INTERPOLATION_DEFAULT_MS = 50;
-  const RADAR_INTERPOLATION_MAX_MS = 120;
-  const RADAR_INTERPOLATION_LEAD_MS = 12;
   const TEST_PATH_VISIBILITY_SOLID_ALPHA = 0.50;
   const TEST_PATH_VISIBILITY_MID_ALPHA = 0.24;
   const TEST_LANE_PROB_MIN = 0.003;
   const TEST_LANE_PROB_BOOST = 6;
 
   const defaultParams = {
-    ShowPathEnd: 0,
     ShowLaneInfo: 2,
     ShowPathMode: 0,
     ShowPathColor: 13,
@@ -104,29 +96,12 @@ window.CarrotTest = (() => {
   let lastDebug = "";
   let lastPlotMode = -1;
   let plotHistory = [[], [], []];
-  let radarInterpolationState = {
-    signature: "",
-    previous: null,
-    current: null,
-    previousAtMs: 0,
-    currentAtMs: 0,
-  };
-  let testFlags = {
-    leadPreview: false,
-  };
 
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
   }
 
   function finiteNumber(value, fallback = 0) {
-    const num = Number(value);
-    return Number.isFinite(num) ? num : fallback;
-  }
-
-  function finiteParamNumber(value, fallback = 0) {
-    if (value == null) return fallback;
-    if (typeof value === "string" && !value.trim()) return fallback;
     const num = Number(value);
     return Number.isFinite(num) ? num : fallback;
   }
@@ -149,32 +124,6 @@ window.CarrotTest = (() => {
     const text = String(value || "").trim();
     if (!text) return "";
     return text.length > maxLength ? `${text.slice(0, maxLength - 1)}...` : text;
-  }
-
-  function loadTestFlags() {
-    try {
-      const raw = localStorage.getItem(TEST_FLAGS_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === "object") {
-        testFlags = {
-          ...testFlags,
-          leadPreview: Boolean(parsed.leadPreview),
-        };
-      }
-    } catch {}
-  }
-
-  function persistTestFlags() {
-    try {
-      localStorage.setItem(TEST_FLAGS_STORAGE_KEY, JSON.stringify(testFlags));
-    } catch {}
-  }
-
-  function syncTestFlagInputs() {
-    if (leadPreviewToggleEl) {
-      leadPreviewToggleEl.checked = Boolean(testFlags.leadPreview);
-    }
   }
 
   function rgba(rgb, alpha) {
@@ -373,7 +322,7 @@ window.CarrotTest = (() => {
     return maxDistance;
   }
 
-  function buildRibbon(calibTransform, line, halfWidth, zOffset, maxDistance, allowInvert = false, centerShift = 0) {
+  function buildRibbon(calibTransform, line, halfWidth, zOffset, maxDistance, allowInvert = false) {
     const xs = Array.isArray(line?.x) ? line.x : [];
     const ys = Array.isArray(line?.y) ? line.y : [];
     const zs = Array.isArray(line?.z) ? line.z : [];
@@ -386,7 +335,7 @@ window.CarrotTest = (() => {
       const x = finiteNumber(xs[i], NaN);
       if (!Number.isFinite(x) || x < 0) continue;
 
-      const y = finiteNumber(ys[i], 0) + centerShift;
+      const y = finiteNumber(ys[i], 0);
       const z = finiteNumber(zs[i], 0) + zOffset;
       const leftPt = projectPoint(calibTransform, x, y - halfWidth, z);
       const rightPt = projectPoint(calibTransform, x, y + halfWidth, z);
@@ -460,45 +409,19 @@ window.CarrotTest = (() => {
     return first.concat(second.reverse());
   }
 
-  function interp1D(x, xs, ys) {
-    if (!Array.isArray(xs) || !Array.isArray(ys) || xs.length < 2 || ys.length < 2) return NaN;
-    const target = finiteNumber(x, NaN);
-    if (!Number.isFinite(target)) return NaN;
-    const lastIdx = Math.min(xs.length, ys.length) - 1;
-    if (target <= finiteNumber(xs[0], 0)) return finiteNumber(ys[0], NaN);
-
-    for (let i = 1; i <= lastIdx; i += 1) {
-      const x0 = finiteNumber(xs[i - 1], NaN);
-      const x1 = finiteNumber(xs[i], NaN);
-      if (!Number.isFinite(x0) || !Number.isFinite(x1)) continue;
-      if (target > x1 && i < lastIdx) continue;
-
-      const y0 = finiteNumber(ys[i - 1], NaN);
-      const y1 = finiteNumber(ys[i], NaN);
-      if (!Number.isFinite(y0) || !Number.isFinite(y1)) return NaN;
-      if (Math.abs(x1 - x0) < 1e-5) return y1;
-
-      const ratio = clamp((target - x0) / (x1 - x0), 0, 1);
-      return y0 + (y1 - y0) * ratio;
-    }
-
-    return finiteNumber(ys[lastIdx], NaN);
-  }
-
   function normalizeVisualParams(values, fallback = defaultParams) {
     const source = values && typeof values === "object" ? values : {};
     return {
-      ShowPathEnd: finiteParamNumber(source.ShowPathEnd, fallback.ShowPathEnd),
-      ShowLaneInfo: finiteParamNumber(source.ShowLaneInfo, fallback.ShowLaneInfo),
-      ShowPathMode: finiteParamNumber(source.ShowPathMode, fallback.ShowPathMode),
-      ShowPathColor: finiteParamNumber(source.ShowPathColor, fallback.ShowPathColor),
-      ShowPathModeLane: finiteParamNumber(source.ShowPathModeLane, fallback.ShowPathModeLane),
-      ShowPathColorLane: finiteParamNumber(source.ShowPathColorLane, fallback.ShowPathColorLane),
-      ShowPathColorCruiseOff: finiteParamNumber(source.ShowPathColorCruiseOff, fallback.ShowPathColorCruiseOff),
-      ShowPathWidth: finiteParamNumber(source.ShowPathWidth, fallback.ShowPathWidth),
-      ShowPlotMode: finiteParamNumber(source.ShowPlotMode, fallback.ShowPlotMode),
-      ShowRadarInfo: finiteParamNumber(source.ShowRadarInfo, fallback.ShowRadarInfo),
-      CustomSR: finiteParamNumber(source.CustomSR, fallback.CustomSR),
+      ShowLaneInfo: finiteNumber(source.ShowLaneInfo, fallback.ShowLaneInfo),
+      ShowPathMode: finiteNumber(source.ShowPathMode, fallback.ShowPathMode),
+      ShowPathColor: finiteNumber(source.ShowPathColor, fallback.ShowPathColor),
+      ShowPathModeLane: finiteNumber(source.ShowPathModeLane, fallback.ShowPathModeLane),
+      ShowPathColorLane: finiteNumber(source.ShowPathColorLane, fallback.ShowPathColorLane),
+      ShowPathColorCruiseOff: finiteNumber(source.ShowPathColorCruiseOff, fallback.ShowPathColorCruiseOff),
+      ShowPathWidth: finiteNumber(source.ShowPathWidth, fallback.ShowPathWidth),
+      ShowPlotMode: finiteNumber(source.ShowPlotMode, fallback.ShowPlotMode),
+      ShowRadarInfo: finiteNumber(source.ShowRadarInfo, fallback.ShowRadarInfo),
+      CustomSR: finiteNumber(source.CustomSR, fallback.CustomSR),
     };
   }
 
@@ -508,14 +431,10 @@ window.CarrotTest = (() => {
 
     const normalized = normalizeVisualParams(runtimeParams, paramsState);
     const hasPathKeys = (
-      runtimeParams.ShowPathEnd != null ||
       runtimeParams.ShowPathMode != null ||
       runtimeParams.ShowPathColor != null ||
       runtimeParams.ShowPathModeLane != null ||
-      runtimeParams.ShowPathColorLane != null ||
-      runtimeParams.ShowLaneInfo != null ||
-      runtimeParams.ShowRadarInfo != null ||
-      runtimeParams.ShowPlotMode != null
+      runtimeParams.ShowPathColorLane != null
     );
     if (!hasPathKeys) return null;
     return normalized;
@@ -532,194 +451,8 @@ window.CarrotTest = (() => {
     return { ...raw, ...live };
   }
 
-  function mergeDefinedState(baseState, preferredState) {
-    const merged = baseState && typeof baseState === "object" ? { ...baseState } : {};
-    if (!preferredState || typeof preferredState !== "object") return merged;
-    for (const [key, value] of Object.entries(preferredState)) {
-      if (value !== undefined && value !== null) merged[key] = value;
-    }
-    return merged;
-  }
-
-  function mergeRadarLead(rawLead, liveLead) {
-    return mergeDefinedState(liveLead, rawLead);
-  }
-
-  function mergeRadarState(rawState, liveState) {
-    const raw = rawState && typeof rawState === "object" ? rawState : {};
-    const live = liveState && typeof liveState === "object" ? liveState : {};
-
-    return {
-      ...live,
-      ...raw,
-      leadOne: mergeRadarLead(raw.leadOne, live.leadOne),
-      leadTwo: mergeRadarLead(raw.leadTwo, live.leadTwo),
-      leadLeft: mergeRadarLead(raw.leadLeft, live.leadLeft),
-      leadRight: mergeRadarLead(raw.leadRight, live.leadRight),
-      leadsLeft: Array.isArray(raw.leadsLeft) && raw.leadsLeft.length ? raw.leadsLeft : live.leadsLeft,
-      leadsCenter: Array.isArray(raw.leadsCenter) && raw.leadsCenter.length ? raw.leadsCenter : live.leadsCenter,
-      leadsRight: Array.isArray(raw.leadsRight) && raw.leadsRight.length ? raw.leadsRight : live.leadsRight,
-    };
-  }
-
-  function cloneRadarLead(lead) {
-    if (!lead || typeof lead !== "object") return null;
-    return {
-      dRel: finiteNumber(lead.dRel, 0),
-      yRel: finiteNumber(lead.yRel, 0),
-      vRel: finiteNumber(lead.vRel, 0),
-      aRel: finiteNumber(lead.aRel, 0),
-      vLead: finiteNumber(lead.vLead, 0),
-      dPath: finiteNumber(lead.dPath, 0),
-      vLat: finiteNumber(lead.vLat, 0),
-      vLeadK: finiteNumber(lead.vLeadK, 0),
-      aLead: finiteNumber(lead.aLead, 0),
-      aLeadK: finiteNumber(lead.aLeadK, 0),
-      aLeadTau: finiteNumber(lead.aLeadTau, 0),
-      modelProb: finiteNumber(lead.modelProb, 0),
-      score: finiteNumber(lead.score, 0),
-      jLead: finiteNumber(lead.jLead, 0),
-      fcw: Boolean(lead.fcw),
-      status: Boolean(lead.status),
-      radar: Boolean(lead.radar),
-      radarTrackId: finiteNumber(lead.radarTrackId, -1),
-    };
-  }
-
-  function cloneRadarState(radarState) {
-    const source = radarState && typeof radarState === "object" ? radarState : {};
-    return {
-      ...source,
-      leadOne: cloneRadarLead(source.leadOne),
-      leadTwo: cloneRadarLead(source.leadTwo),
-      leadLeft: cloneRadarLead(source.leadLeft),
-      leadRight: cloneRadarLead(source.leadRight),
-      leadsLeft: Array.isArray(source.leadsLeft) ? source.leadsLeft.slice() : source.leadsLeft,
-      leadsCenter: Array.isArray(source.leadsCenter) ? source.leadsCenter.slice() : source.leadsCenter,
-      leadsRight: Array.isArray(source.leadsRight) ? source.leadsRight.slice() : source.leadsRight,
-    };
-  }
-
-  function radarLeadSignature(lead) {
-    if (!lead || typeof lead !== "object") return "null";
-    return [
-      Boolean(lead.status) ? 1 : 0,
-      Boolean(lead.radar) ? 1 : 0,
-      finiteNumber(lead.radarTrackId, -1),
-      finiteNumber(lead.dRel, 0).toFixed(3),
-      finiteNumber(lead.yRel, 0).toFixed(3),
-      finiteNumber(lead.vRel, 0).toFixed(3),
-      finiteNumber(lead.modelProb, 0).toFixed(3),
-      finiteNumber(lead.score, 0).toFixed(3),
-    ].join("|");
-  }
-
-  function radarStateSignature(radarState) {
-    const source = radarState && typeof radarState === "object" ? radarState : {};
-    return [
-      radarLeadSignature(source.leadOne),
-      radarLeadSignature(source.leadTwo),
-      radarLeadSignature(source.leadLeft),
-      radarLeadSignature(source.leadRight),
-    ].join("||");
-  }
-
-  function lerpNumber(a, b, t) {
-    return a + (b - a) * t;
-  }
-
-  function canInterpolateRadarLead(previousLead, currentLead) {
-    if (!previousLead || !currentLead) return false;
-    if (!previousLead.status || !currentLead.status) return false;
-
-    const previousTrackId = finiteNumber(previousLead.radarTrackId, -1);
-    const currentTrackId = finiteNumber(currentLead.radarTrackId, -1);
-    if (previousTrackId >= 0 && currentTrackId >= 0) {
-      return previousTrackId === currentTrackId;
-    }
-
-    const distanceDelta = Math.abs(finiteNumber(previousLead.dRel, 0) - finiteNumber(currentLead.dRel, 0));
-    const lateralDelta = Math.abs(finiteNumber(previousLead.yRel, 0) - finiteNumber(currentLead.yRel, 0));
-    return distanceDelta < 12 && lateralDelta < 2.5;
-  }
-
-  function lerpRadarLead(previousLead, currentLead, t) {
-    if (!previousLead) return cloneRadarLead(currentLead);
-    if (!currentLead) return cloneRadarLead(previousLead);
-    if (!canInterpolateRadarLead(previousLead, currentLead)) {
-      return cloneRadarLead(currentLead);
-    }
-
-    return {
-      dRel: lerpNumber(previousLead.dRel, currentLead.dRel, t),
-      yRel: lerpNumber(previousLead.yRel, currentLead.yRel, t),
-      vRel: lerpNumber(previousLead.vRel, currentLead.vRel, t),
-      aRel: lerpNumber(previousLead.aRel, currentLead.aRel, t),
-      vLead: lerpNumber(previousLead.vLead, currentLead.vLead, t),
-      dPath: lerpNumber(previousLead.dPath, currentLead.dPath, t),
-      vLat: lerpNumber(previousLead.vLat, currentLead.vLat, t),
-      vLeadK: lerpNumber(previousLead.vLeadK, currentLead.vLeadK, t),
-      aLead: lerpNumber(previousLead.aLead, currentLead.aLead, t),
-      aLeadK: lerpNumber(previousLead.aLeadK, currentLead.aLeadK, t),
-      aLeadTau: lerpNumber(previousLead.aLeadTau, currentLead.aLeadTau, t),
-      modelProb: lerpNumber(previousLead.modelProb, currentLead.modelProb, t),
-      score: lerpNumber(previousLead.score, currentLead.score, t),
-      jLead: lerpNumber(previousLead.jLead, currentLead.jLead, t),
-      fcw: t < 0.5 ? previousLead.fcw : currentLead.fcw,
-      status: t < 0.5 ? previousLead.status : currentLead.status,
-      radar: t < 0.5 ? previousLead.radar : currentLead.radar,
-      radarTrackId: t < 0.5 ? previousLead.radarTrackId : currentLead.radarTrackId,
-    };
-  }
-
-  function getInterpolatedRadarState(radarState, nowMs) {
-    const signature = radarStateSignature(radarState);
-    if (!radarInterpolationState.current) {
-      const initial = cloneRadarState(radarState);
-      radarInterpolationState = {
-        signature,
-        previous: initial,
-        current: initial,
-        previousAtMs: nowMs,
-        currentAtMs: nowMs,
-      };
-      return initial;
-    }
-
-    if (signature !== radarInterpolationState.signature) {
-      radarInterpolationState = {
-        signature,
-        previous: radarInterpolationState.current,
-        current: cloneRadarState(radarState),
-        previousAtMs: radarInterpolationState.currentAtMs || nowMs,
-        currentAtMs: nowMs,
-      };
-    }
-
-    const previous = radarInterpolationState.previous || radarInterpolationState.current;
-    const current = radarInterpolationState.current || cloneRadarState(radarState);
-    if (!previous || !current) return radarState;
-    if (previous === current) return current;
-
-    const intervalMs = clamp(
-      radarInterpolationState.currentAtMs - radarInterpolationState.previousAtMs || RADAR_INTERPOLATION_DEFAULT_MS,
-      RADAR_INTERPOLATION_MIN_MS,
-      RADAR_INTERPOLATION_MAX_MS,
-    );
-    const t = clamp((nowMs - radarInterpolationState.currentAtMs + RADAR_INTERPOLATION_LEAD_MS) / intervalMs, 0, 1);
-
-    return {
-      ...current,
-      leadOne: lerpRadarLead(previous.leadOne, current.leadOne, t),
-      leadTwo: lerpRadarLead(previous.leadTwo, current.leadTwo, t),
-      leadLeft: lerpRadarLead(previous.leadLeft, current.leadLeft, t),
-      leadRight: lerpRadarLead(previous.leadRight, current.leadRight, t),
-    };
-  }
-
   function mergeRuntimeState(rawHudState, rawOverlayState) {
     const liveServices = readLiveRuntimeServices();
-    const radarState = mergeRadarState(rawOverlayState?.radarState, liveServices.radarState);
     const mergedHudState = {
       ...rawHudState,
       carState: mergeServiceState(rawHudState?.carState, liveServices.carState),
@@ -728,7 +461,7 @@ window.CarrotTest = (() => {
       longitudinalPlan: mergeServiceState(rawHudState?.longitudinalPlan, liveServices.longitudinalPlan),
       carrotMan: mergeServiceState(rawHudState?.carrotMan, liveServices.carrotMan),
       lateralPlan: mergeServiceState(rawOverlayState?.lateralPlan, liveServices.lateralPlan),
-      radarState,
+      radarState: mergeServiceState(rawOverlayState?.radarState, liveServices.radarState),
     };
 
     const mergedOverlayState = {
@@ -793,54 +526,11 @@ window.CarrotTest = (() => {
     }
 
     const hasStream = Boolean(stream);
+    videoEl.style.display = hasStream ? "block" : "none";
     if (hasStream && videoEl.paused) {
       videoEl.play().catch(() => {});
     }
     return hasStream;
-  }
-
-  function setStageReady(ready) {
-    stageEl.classList.toggle("is-stream-ready", Boolean(ready));
-    videoEl.style.display = ready ? "block" : "none";
-  }
-
-  function resetCarrotHudLayout() {
-    if (!driveHudCardEl) return;
-    driveHudCardEl.style.removeProperty("--carrot-hud-left");
-    driveHudCardEl.style.removeProperty("--carrot-hud-bottom");
-    driveHudCardEl.style.removeProperty("--carrot-hud-scale");
-  }
-
-  function applyCarrotHudLayout(viewportRect) {
-    if (!driveHudCardEl) return;
-    const stageRect = stageEl.getBoundingClientRect();
-    if (!stageRect.width || !stageRect.height) return;
-    const displayModeKey = DISPLAY_MODES[displayModeIndex]?.key || "normal";
-
-    const viewport = viewportRect || {
-      left: 0,
-      top: 0,
-      right: stageRect.width,
-      bottom: stageRect.height,
-      width: stageRect.width,
-      height: stageRect.height,
-    };
-    const overlayInsetX = displayModeKey === "fit" ? 8 : 12;
-    const overlayInsetY = displayModeKey === "fit" ? 8 : 12;
-    const overlayHeight = clamp(viewport.height * (displayModeKey === "fit" ? 0.27 : 0.29), 184, 304);
-    const overlayWidth = overlayHeight * 1.02;
-    const scale = clamp((overlayWidth / 320) * 0.9, 0.65, 0.9);
-    const scaledHudSize = 320 * scale;
-    const minAbsLeft = stageRect.left + viewport.left + overlayInsetX;
-    const maxAbsLeft = stageRect.left + viewport.right - scaledHudSize - overlayInsetX;
-    const absLeft = Math.round(clamp(minAbsLeft, minAbsLeft, Math.max(minAbsLeft, maxAbsLeft)));
-    const absBottom = Math.round(
-      Math.max(12, window.innerHeight - (stageRect.top + viewport.bottom) + overlayInsetY),
-    );
-
-    driveHudCardEl.style.setProperty("--carrot-hud-left", `${absLeft}px`);
-    driveHudCardEl.style.setProperty("--carrot-hud-bottom", `${absBottom}px`);
-    driveHudCardEl.style.setProperty("--carrot-hud-scale", scale.toFixed(3));
   }
 
   function syncCanvasSize(videoWidth, videoHeight, stageWidth, stageHeight) {
@@ -967,17 +657,23 @@ window.CarrotTest = (() => {
   function drawPathRibbon(ribbon, style, canvasHeight) {
     if (!ribbon.polygon.length) return;
     const baseColor = paletteColor(style.paletteIndex);
-    if (style.mode === 0) {
-      drawPolygon(
-        ribbon.polygon,
-        rgba(baseColor, 0.42),
-        style.emphasisStroke ? style.strokeColor : "",
-        style.emphasisStroke ? 2.0 : 0,
-      );
-      return;
-    }
     const fill = createPathGradient(baseColor, canvasHeight, style);
     drawPolygon(ribbon.polygon, fill, style.emphasisStroke ? style.strokeColor : "", style.emphasisStroke ? 1.7 : 0);
+  }
+
+  function drawPathVisibilityFloor(ribbon, style) {
+    if (!Array.isArray(ribbon?.center) || ribbon.center.length < 2) return;
+
+    const baseColor = paletteColor(style.paletteIndex);
+    const outerAlpha = style.isCruiseOff ? 0.84 : 0.70;
+    const innerAlpha = style.isCruiseOff ? 0.96 : 0.80;
+    const outerWidth = style.isCruiseOff ? 3.6 : 2.8;
+    const innerWidth = style.isCruiseOff ? 2.3 : 1.8;
+    const outerColor = style.emphasisStroke ? style.strokeColor : `rgba(255, 255, 255, ${outerAlpha.toFixed(3)})`;
+    const innerColor = rgba(baseColor, innerAlpha);
+
+    drawPolyline(ribbon.center, outerColor, outerWidth);
+    drawPolyline(ribbon.center, innerColor, innerWidth);
   }
 
   function drawAnimatedPath(ribbon, style) {
@@ -1034,6 +730,9 @@ window.CarrotTest = (() => {
     if (ribbon.polygon.length < 3) return;
 
     drawPathRibbon(ribbon, style, canvasHeight);
+    if (style.mode === 0 || style.isCruiseOff) {
+      drawPathVisibilityFloor(ribbon, style);
+    }
     if (style.mode === 0) return;
     if (style.mode >= 13 && style.mode <= 15) {
       drawSpecialPath(ribbon, style);
@@ -1046,13 +745,11 @@ window.CarrotTest = (() => {
     drawAnimatedPath(ribbon, style);
   }
 
-  function drawLaneLines(model, hudState, calibTransform) {
+  function drawLaneLines(model, calibTransform) {
     const laneLines = Array.isArray(model?.laneLines) ? model.laneLines : [];
     const laneLineProbs = Array.isArray(model?.laneLineProbs) ? model.laneLineProbs : [];
     if (!laneLines.length) return;
 
-    const leftLaneLine = finiteNumber(hudState?.carState?.leftLaneLine, 0);
-    const rightLaneLine = finiteNumber(hudState?.carState?.rightLaneLine, 0);
     const maxIdx = getPathLengthIdx(laneLines[0], getModelMaxDistance(model));
     for (let i = 0; i < laneLines.length; i += 1) {
       const prob = clamp(finiteNumber(laneLineProbs[i], 0), 0, 0.9);
@@ -1061,38 +758,16 @@ window.CarrotTest = (() => {
 
       // Keep native probability-driven lanes, but allow a small test-page floor so
       // very low-confidence indoor/stationary lanes are still inspectable.
-      const highlightedLeft = i === 1 && leftLaneLine >= 20;
-      const highlightedRight = i === 2 && rightLaneLine >= 20;
-      const laneColor = highlightedLeft || highlightedRight ? { r: 255, g: 217, b: 94 } : { r: 255, g: 255, b: 255 };
-      const halfWidth = Math.max(highlightedLeft || highlightedRight ? 0.025 : 0.010, 0.025 * renderProb);
+      const halfWidth = Math.max(0.010, 0.025 * renderProb);
       const fillAlpha = prob >= 0.02 ? clamp(renderProb, 0.12, 0.7) : clamp(renderProb * 3.0, 0.16, 0.26);
       const strokeAlpha = prob >= 0.02 ? 0.20 : 0.24;
       const ribbon = buildRibbon(calibTransform, laneLines[i], halfWidth, 0, finiteNumber(laneLines[i]?.x?.[maxIdx], MAX_DRAW_DISTANCE), false);
       drawPolygon(
         ribbon.polygon,
-        `rgba(${laneColor.r},${laneColor.g},${laneColor.b},${fillAlpha.toFixed(3)})`,
-        `rgba(${laneColor.r},${laneColor.g},${laneColor.b},${strokeAlpha.toFixed(3)})`,
+        `rgba(255,255,255,${fillAlpha.toFixed(3)})`,
+        `rgba(255,255,255,${strokeAlpha.toFixed(3)})`,
         1,
       );
-
-      if ((i === 1 && (leftLaneLine % 10) === 4) || (i === 2 && (rightLaneLine % 10) === 4)) {
-        const shift = i === 1 ? -0.3 : 0.3;
-        const doubleRibbon = buildRibbon(
-          calibTransform,
-          laneLines[i],
-          halfWidth,
-          0,
-          finiteNumber(laneLines[i]?.x?.[maxIdx], MAX_DRAW_DISTANCE),
-          false,
-          shift,
-        );
-        drawPolygon(
-          doubleRibbon.polygon,
-          `rgba(${laneColor.r},${laneColor.g},${laneColor.b},${fillAlpha.toFixed(3)})`,
-          `rgba(${laneColor.r},${laneColor.g},${laneColor.b},${strokeAlpha.toFixed(3)})`,
-          1,
-        );
-      }
     }
   }
 
@@ -1121,26 +796,6 @@ window.CarrotTest = (() => {
     return finiteNumber(zs[idx], 0);
   }
 
-  function samplePathY(position, distance) {
-    return interp1D(
-      distance,
-      Array.isArray(position?.x) ? position.x : [],
-      Array.isArray(position?.y) ? position.y : [],
-    );
-  }
-
-  function circlePolygon(cx, cy, radius, points = 12) {
-    const polygon = [];
-    for (let i = 0; i < points; i += 1) {
-      const theta = (Math.PI * 2 * i) / points;
-      polygon.push({
-        x: cx + Math.cos(theta) * radius,
-        y: cy + Math.sin(theta) * radius,
-      });
-    }
-    return polygon;
-  }
-
   function buildVerticalRibbon(calibTransform, line, centerShift, topZOffset, bottomZOffset, maxDistance) {
     const xs = Array.isArray(line?.x) ? line.x : [];
     const ys = Array.isArray(line?.y) ? line.y : [];
@@ -1165,6 +820,47 @@ window.CarrotTest = (() => {
     }
 
     return top.length >= 2 && bottom.length >= 2 ? top.concat(bottom) : [];
+  }
+
+  function drawLeadChevron(point, size, alpha) {
+    const glow = [
+      { x: point.x + size * 1.35 + size / 5, y: point.y + size + size / 10 },
+      { x: point.x, y: point.y - size / 10 },
+      { x: point.x - size * 1.35 - size / 5, y: point.y + size + size / 10 },
+    ];
+    const chevron = [
+      { x: point.x + size * 1.25, y: point.y + size },
+      { x: point.x, y: point.y },
+      { x: point.x - size * 1.25, y: point.y + size },
+    ];
+
+    drawPolygon(glow, `rgba(255, 224, 92, ${alpha.toFixed(3)})`);
+    drawPolygon(chevron, `rgba(224, 62, 72, ${clamp(alpha + 0.18, 0.2, 1).toFixed(3)})`);
+  }
+
+  function drawLegacyLeads(model, pathData, calibTransform, transform) {
+    const leads = Array.isArray(model?.leadsV3) ? model.leadsV3 : [];
+    if (!leads.length) return;
+
+    const leadPoints = leads
+      .map((lead) => ({
+        prob: finiteNumber(lead?.prob, 0),
+        x: finiteNumber(lead?.x?.[0], NaN),
+        y: finiteNumber(lead?.y?.[0], 0),
+      }))
+      .filter((lead) => Number.isFinite(lead.x) && lead.x > 0 && lead.prob > 0.4)
+      .sort((a, b) => a.x - b.x)
+      .slice(0, 2);
+
+    for (const lead of leadPoints) {
+      const z = samplePathZ(pathData, lead.x) + PATH_Z_OFFSET;
+      const point = projectPoint(calibTransform, lead.x, lead.y, z);
+      if (!point) continue;
+      const displaySize = clamp((25 * 30) / (lead.x / 3 + 30), 15, 30) * 2.35;
+      const rawSize = displaySize / Math.max(transform.scale, 0.01);
+      const alpha = clamp(0.28 + lead.prob * 0.5, 0.26, 0.96);
+      drawLeadChevron(point, rawSize, alpha);
+    }
   }
 
   function hasNearbyAssistLead(lead, speedMps) {
@@ -1248,27 +944,6 @@ window.CarrotTest = (() => {
     };
   }
 
-  function createPreviewLead(modelPath) {
-    const xs = Array.isArray(modelPath?.x) ? modelPath.x : [];
-    if (xs.length < 2) return null;
-    const lastX = finiteNumber(xs[xs.length - 1], 0);
-    if (!lastX || lastX < 6) return null;
-
-    const dRel = clamp(lastX * 0.35, 14, 28);
-    const pathY = samplePathY(modelPath, dRel);
-    if (!Number.isFinite(pathY)) return null;
-
-    return {
-      status: true,
-      dRel,
-      yRel: -pathY,
-      radar: false,
-      radarTrackId: -99999,
-      modelProb: 0,
-      __preview: true,
-    };
-  }
-
   function drawLeadBoxCard(box, strokeColor, fillColor, primary = true) {
     if (!box?.rect) return;
     const { x, y, width, height } = box.rect;
@@ -1300,272 +975,10 @@ window.CarrotTest = (() => {
     ctx.restore();
   }
 
-  function leadStateAccentColor(xState) {
-    switch (xState) {
-      case 3:
-      case 5:
-        return "rgba(255, 167, 38, 0.82)";
-      case 4:
-        return "rgba(35, 213, 93, 0.82)";
-      case 1:
-        return "rgba(145, 164, 191, 0.82)";
-      default:
-        return "rgba(255, 255, 255, 0.82)";
-    }
-  }
-
-  function drawPreviewLeadBox(box) {
-    if (!box?.rect) return;
-    const { x, y, width, height } = box.rect;
-    ctx.save();
-    fillRoundedRect(ctx, x, y, width, height, 16, "rgba(24, 31, 42, 0.14)");
-    roundedRectPath(ctx, x, y, width, height, 16);
-    ctx.setLineDash([10, 8]);
-    ctx.lineWidth = 2.6;
-    ctx.strokeStyle = "rgba(145, 164, 191, 0.82)";
-    ctx.stroke();
-    ctx.restore();
-    drawCanvasOutlinedText("TEST", box.centerX, y + height + 22, {
-      fontSize: 15,
-      fontWeight: 800,
-      fillStyle: "rgba(232, 239, 247, 0.94)",
-      strokeWidth: 3.2,
-    });
-  }
-
-  function getLeadStateText(overlayState, hudState) {
-    const carrotMan = overlayState?.carrotMan || hudState?.carrotMan || {};
-    const xStateRaw = String(carrotMan?.xState || "").trim();
-    const trafficStateRaw = String(carrotMan?.trafficState || "").trim();
-    const xState = finiteNumber(xStateRaw, -1);
-    const trafficState = finiteNumber(trafficStateRaw, -1);
-    const longActive = Boolean(overlayState?.carControl?.longActive);
-    const vEgoMps = finiteNumber(hudState?.carState?.vEgo, finiteNumber(hudState?.carState?.vEgoCluster, 0));
-
-    if (!longActive) return null;
-    if (xState === 3 || xState === 5) {
-      return {
-        text: vEgoMps < 1.0 ? (trafficState >= 1000 ? "Signal Error" : "Signal Ready") : "Signal slowing",
-        xState,
-        showDistanceBadge: false,
-      };
-    }
-    if (xState === 4) {
-      return {
-        text: "E2E 주행중",
-        xState,
-        showDistanceBadge: false,
-      };
-    }
-    if (xState === 0 || xState === 1 || xState === 2) {
-      return {
-        text: "",
-        xState,
-        showDistanceBadge: true,
-      };
-    }
-    if (xStateRaw) {
-      return {
-        text: xStateRaw,
-        xState,
-        showDistanceBadge: false,
-      };
-    }
-    return {
-      text: "",
-      xState,
-      showDistanceBadge: false,
-    };
-  }
-
-  function drawLeadStateBadge(box, text, xState) {
-    if (!box?.rect || !text) return;
-    const badgeWidth = Math.max(108, Math.min(170, box.rect.width * 0.72));
-    const badgeHeight = 32;
-    const badgeX = box.centerX - badgeWidth * 0.5;
-    const badgeY = box.rect.y + box.rect.height + 10;
-    const accentColor = leadStateAccentColor(xState);
-    fillRoundedRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, 14, "rgba(16, 21, 28, 0.88)");
-    strokeRoundedRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, 14, accentColor, 2.2);
-    ctx.save();
-    ctx.font = `900 18px ${HUD_TEXT_FONT}`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = "rgba(0,0,0,0.88)";
-    ctx.fillStyle = "#ffffff";
-    ctx.lineWidth = 3.6;
-    ctx.strokeText(text, box.centerX, badgeY + badgeHeight * 0.56);
-    ctx.fillText(text, box.centerX, badgeY + badgeHeight * 0.56);
-    ctx.restore();
-  }
-
-  function drawCanvasOutlinedText(text, x, y, {
-    fontSize = 18,
-    fontWeight = 800,
-    fillStyle = "#ffffff",
-    strokeStyle = "rgba(0,0,0,0.86)",
-    strokeWidth = 3.4,
-    align = "center",
-    baseline = "middle",
-  } = {}) {
-    if (!text) return;
-    ctx.save();
-    ctx.font = `${fontWeight} ${fontSize}px ${HUD_TEXT_FONT}`;
-    ctx.textAlign = align;
-    ctx.textBaseline = baseline;
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = strokeStyle;
-    ctx.fillStyle = fillStyle;
-    ctx.lineWidth = strokeWidth;
-    ctx.strokeText(text, x, y);
-    ctx.fillText(text, x, y);
-    ctx.restore();
-  }
-
-  function clampTextAnchor(point, text, fontSize, videoWidth, videoHeight) {
-    const anchor = { x: finiteNumber(point?.x, 0), y: finiteNumber(point?.y, 0) };
-    ctx.save();
-    ctx.font = `800 ${fontSize}px ${HUD_TEXT_FONT}`;
-    const textWidth = Math.max(ctx.measureText(String(text || "")).width, 1);
-    ctx.restore();
-    const padding = 8;
-    anchor.x = clamp(anchor.x, padding, Math.max(padding, videoWidth - textWidth - padding));
-    anchor.y = clamp(anchor.y, fontSize + padding, Math.max(fontSize + padding, videoHeight - padding));
-    return anchor;
-  }
-
-  function drawRadarSpeedBadge(center, text, accentColor) {
-    if (!center || !text) return;
-    const badgeWidth = Math.max(52, 28 + String(text).length * 18);
-    const badgeHeight = 34;
-    const badgeX = center.x - badgeWidth * 0.5;
-    const badgeY = center.y - badgeHeight * 0.5;
-    fillRoundedRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, 14, accentColor);
-    drawCanvasOutlinedText(String(text), center.x, badgeY + badgeHeight * 0.56, {
-      fontSize: 21,
-      fontWeight: 900,
-      strokeWidth: 3.6,
-    });
-  }
-
-  function drawProjectedTfMarker(modelPath, longitudinalPlan, calibTransform, videoWidth, videoHeight) {
-    if (finiteNumber(paramsState.ShowPathEnd, 0) <= 0) return;
-
-    const tfDistance = finiteNumber(longitudinalPlan?.desiredDistance, 0);
-    if (!Number.isFinite(tfDistance) || tfDistance <= 0) return;
-
-    const xs = Array.isArray(modelPath?.x) ? modelPath.x : [];
-    if (xs.length < 2) return;
-    const lastX = finiteNumber(xs[xs.length - 1], 0);
-    if (!lastX || tfDistance > lastX) return;
-
-    const lineY = samplePathY(modelPath, tfDistance);
-    const lineZ = interp1D(tfDistance, xs, Array.isArray(modelPath?.z) ? modelPath.z : []);
-    if (!Number.isFinite(lineY) || !Number.isFinite(lineZ)) return;
-
-    const left = projectPoint(calibTransform, tfDistance, lineY - 1.0, lineZ + PATH_Z_OFFSET);
-    const right = projectPoint(calibTransform, tfDistance, lineY + 1.0, lineZ + PATH_Z_OFFSET);
-    if (!left || !right) return;
-
-    drawPolyline([left, right], "rgba(255,255,255,0.92)", 3.0);
-    const labelText = `${tfDistance.toFixed(1)}(${finiteNumber(longitudinalPlan?.tFollow, 0).toFixed(2)})`;
-    const labelAnchor = clampTextAnchor(
-      { x: right.x + 10, y: right.y - 4 },
-      labelText,
-      20,
-      videoWidth,
-      videoHeight,
-    );
-    drawCanvasOutlinedText(labelText, labelAnchor.x, labelAnchor.y, {
-      fontSize: 20,
-      fontWeight: 800,
-      align: "left",
-    });
-  }
-
-  function getRadarTracks(radarState) {
-    const source = radarState && typeof radarState === "object" ? radarState : {};
-    const tracks = [
-      ...(Array.isArray(source.leadsLeft) ? source.leadsLeft : []),
-      ...(Array.isArray(source.leadsCenter) ? source.leadsCenter : []),
-      ...(Array.isArray(source.leadsRight) ? source.leadsRight : []),
-    ];
-    if (tracks.length) return tracks;
-
-    const fallback = [];
-    if (source.leadOne?.status) fallback.push(source.leadOne);
-    if (source.leadTwo?.status) fallback.push(source.leadTwo);
-    return fallback;
-  }
-
-  function drawRadarTargets(radarState, modelPath, calibTransform) {
-    const showRadarInfo = finiteNumber(paramsState.ShowRadarInfo, 0);
-    if (showRadarInfo <= 0) return;
-
-    for (const radar of getRadarTracks(radarState)) {
-      const dRel = finiteNumber(radar?.dRel, 0);
-      if (!Number.isFinite(dRel) || dRel <= 2.5) continue;
-
-      const z = samplePathZ(modelPath, dRel) - 0.61;
-      const center = projectPoint(calibTransform, dRel, -finiteNumber(radar?.yRel, 0), z);
-      if (!center) continue;
-
-      const vLead = finiteNumber(radar?.vLeadK, finiteNumber(radar?.vRel, 0));
-      const vLat = finiteNumber(radar?.vLat, 0);
-      const vAbs = Math.sqrt((vLead * vLead) + (vLat * vLat));
-      const vSigned = vLead >= 0 ? vAbs : -vAbs;
-      const radarDetected = Boolean(radar?.radar);
-      const modelProb = finiteNumber(radar?.modelProb, 0);
-
-      if (vAbs > 3.0) {
-        const futureDRel = Math.max(2.0, dRel + vLead * 0.35);
-        const futureYRel = finiteNumber(radar?.yRel, 0) + vLat * 0.35;
-        const futureZ = samplePathZ(modelPath, futureDRel) - 0.61;
-        const future = projectPoint(calibTransform, futureDRel, -futureYRel, futureZ);
-        if (future) {
-          const vectorColor = vSigned >= 0 ? "rgba(35,213,93,0.94)" : "rgba(255,59,48,0.94)";
-          drawPolyline([center, future], vectorColor, 3.0);
-          drawPolygon(circlePolygon(future.x, future.y, 7, 18), vectorColor);
-        }
-
-        let badgeColor = "rgba(255,59,48,0.96)";
-        if (!radarDetected) badgeColor = "rgba(61,123,255,0.96)";
-        else if (Math.abs(modelProb - 0.01) < 1e-3) badgeColor = "rgba(35,213,93,0.96)";
-        else if (vSigned > 0) badgeColor = "rgba(255,167,38,0.96)";
-
-        drawRadarSpeedBadge({ x: center.x, y: center.y - 18 }, (vSigned * 3.6).toFixed(0), badgeColor);
-
-        if (showRadarInfo >= 2) {
-          drawCanvasOutlinedText(finiteNumber(radar?.yRel, 0).toFixed(1), center.x, center.y - 48, {
-            fontSize: 18,
-            fontWeight: 800,
-          });
-          drawCanvasOutlinedText(dRel.toFixed(1), center.x, center.y + 30, {
-            fontSize: 18,
-            fontWeight: 800,
-          });
-        }
-      } else if (showRadarInfo >= 3) {
-        drawCanvasOutlinedText("*", center.x, center.y, {
-          fontSize: 28,
-          fontWeight: 900,
-        });
-      }
-    }
-  }
-
-  function drawRadarLeadBoxes(model, overlayState, hudState, calibTransform, videoWidth, videoHeight) {
+  function drawRadarLeadBoxes(model, overlayState, hudState, calibTransform, videoWidth, videoHeight, transform) {
     const radarState = overlayState?.radarState || {};
     const modelPath = model?.position || null;
     const showRadarInfo = finiteNumber(paramsState.ShowRadarInfo, defaultParams.ShowRadarInfo);
-    const leadState = getLeadStateText(overlayState, hudState);
-    const previewLead = testFlags.leadPreview && modelPath ? createPreviewLead(modelPath) : null;
-    const previewBox = previewLead ? projectLeadBox(previewLead, modelPath, calibTransform, videoWidth, videoHeight) : null;
-
-    if (previewBox) {
-      drawPreviewLeadBox(previewBox);
-    }
 
     const leadOneBox = projectLeadBox(radarState?.leadOne, modelPath, calibTransform, videoWidth, videoHeight);
     if (leadOneBox) {
@@ -1573,18 +986,13 @@ window.CarrotTest = (() => {
       const strokeColor = !leadOneBox.radar ? "#3d7bff" : (isLeadScc ? "#ff3b30" : "#ffa726");
       drawLeadBoxCard(leadOneBox, strokeColor, "rgba(0,0,0,0.20)", true);
 
-      if (showRadarInfo > 0 && leadState?.showDistanceBadge !== false) {
+      if (showRadarInfo > 0) {
         const radarDist = leadOneBox.radar ? Math.max(0, finiteNumber(radarState?.leadOne?.dRel, 0)) : 0;
         const visionDist = leadOneBox.modelProb > 0.5 ? Math.max(0, leadOneBox.dRel - 1.52) : 0;
         const primaryDistance = radarDist > 0 ? radarDist : visionDist;
         if (primaryDistance > 0) {
-          const badgeTextColor = leadState?.xState === 0 ? "#ffffff" : (leadState?.xState === 1 ? "#b0b0b0" : "#23d55d");
-          drawLeadDistanceBadge(leadOneBox, primaryDistance.toFixed(1), strokeColor, badgeTextColor);
+          drawLeadDistanceBadge(leadOneBox, primaryDistance.toFixed(1), strokeColor, isLeadScc ? "#23d55d" : "#ffffff");
         }
-      }
-
-      if (leadState?.text) {
-        drawLeadStateBadge(leadOneBox, leadState.text, leadState.xState);
       }
     }
 
@@ -1599,7 +1007,10 @@ window.CarrotTest = (() => {
         drawLeadBoxCard(leadTwoBox, "#b68a3a", "rgba(0,0,0,0.20)", false);
       }
     }
-    drawRadarTargets(radarState, modelPath, calibTransform);
+
+    if (!leadOneBox && !validLeadTwo) {
+      drawLegacyLeads(model, modelPath, calibTransform, transform);
+    }
   }
 
   function roundedRectPath(context, x, y, width, height, radius) {
@@ -1976,16 +1387,14 @@ window.CarrotTest = (() => {
     return { min, max };
   }
 
-  function drawPlot(stageWidth, stageHeight, viewportRect, plotData) {
+  function drawPlot(stageWidth, stageHeight, plotData) {
     if (!plotData) return;
-    const viewportWidth = finiteNumber(viewportRect?.width, stageWidth);
-    const viewportHeight = finiteNumber(viewportRect?.height, stageHeight);
-    if (viewportWidth < 560 || viewportHeight < 260) return;
+    if (stageWidth < 900) return;
 
-    const panelWidth = clamp(viewportWidth * 0.42, 340, 560);
-    const panelHeight = clamp(viewportHeight * 0.22, 156, 200);
-    const panelX = finiteNumber(viewportRect?.left, 0) + Math.max(14, viewportWidth * 0.018);
-    const panelY = finiteNumber(viewportRect?.top, 0) + Math.max(46, viewportHeight * 0.05);
+    const panelWidth = Math.min(stageWidth * 0.52, 640);
+    const panelHeight = Math.min(stageHeight * 0.24, 220);
+    const panelX = 18;
+    const panelY = 58;
     const graphX = panelX + 16;
     const graphY = panelY + 40;
     const graphWidth = panelWidth - 32;
@@ -2063,42 +1472,41 @@ window.CarrotTest = (() => {
 
   function renderActiveFrame() {
     refreshParams();
-    const stageWidth = Math.max(1, stageEl.clientWidth);
-    const stageHeight = Math.max(1, stageEl.clientHeight);
 
     const hasStream = syncSourceStream();
     if (!hasStream || !videoEl.videoWidth || !videoEl.videoHeight) {
-      setStageReady(false);
       clearOverlay(canvasEl.width || 1, canvasEl.height || 1);
       clearHud(hudCanvasEl.width || 1, hudCanvasEl.height || 1);
       setStatus("waiting road camera stream...");
       setMeta("road:- model:- path:-");
       setDebug("LD:- LT:- SR:-");
-      applyCarrotHudLayout({
+      const fallbackViewport = {
         left: 0,
         top: 0,
-        right: stageWidth,
-        bottom: stageHeight,
-        width: stageWidth,
-        height: stageHeight,
-      });
+        right: stageEl.clientWidth || 1,
+        bottom: stageEl.clientHeight || 1,
+        width: stageEl.clientWidth || 1,
+        height: stageEl.clientHeight || 1,
+        centerX: (stageEl.clientWidth || 1) / 2,
+        centerY: (stageEl.clientHeight || 1) / 2,
+      };
+      drawHudLeftCenterLogs(fallbackViewport.width, fallbackViewport.height, fallbackViewport, lastStatus, lastMeta, 0);
+      drawHudTopRightText(fallbackViewport.width, fallbackViewport.height, fallbackViewport, lastDebug, 0);
       return;
     }
 
     const videoWidth = videoEl.videoWidth;
     const videoHeight = videoEl.videoHeight;
+    const stageWidth = Math.max(1, stageEl.clientWidth);
+    const stageHeight = Math.max(1, stageEl.clientHeight);
     syncCanvasSize(videoWidth, videoHeight, stageWidth, stageHeight);
 
     const rawOverlayState = window.CarrotOverlayState || {};
     const rawHudState = window.CarrotHudState || {};
     const runtimeState = mergeRuntimeState(rawHudState, rawOverlayState);
-    let overlayState = runtimeState.overlayState;
+    const overlayState = runtimeState.overlayState;
     const hudState = runtimeState.hudState;
     const brokerServices = runtimeState.brokerServices;
-    overlayState = {
-      ...overlayState,
-      radarState: getInterpolatedRadarState(overlayState?.radarState, performance.now()),
-    };
     const model = overlayState.modelV2 || null;
     const liveCalibration = overlayState.liveCalibration || null;
     const roadCameraState = overlayState.roadCameraState || null;
@@ -2114,21 +1522,18 @@ window.CarrotTest = (() => {
     const viewportRect = getHudViewportRect(videoWidth, videoHeight, stageWidth, stageHeight, transform);
 
     applyStageTransform(transform);
-    setStageReady(true);
-    applyCarrotHudLayout(viewportRect);
     clearOverlay(videoWidth, videoHeight);
     clearHud(stageWidth, stageHeight);
 
     if (model) {
-      if (showLaneInfo >= 1) drawLaneLines(model, hudState, transform.calibTransform);
+      if (showLaneInfo >= 1) drawLaneLines(model, transform.calibTransform);
       if (showLaneInfo > 1) drawRoadEdges(model, transform.calibTransform);
       if (showLaneInfo >= 0) drawPath(selectedPath.pathData, model, transform.calibTransform, videoHeight, pathStyle);
-      drawProjectedTfMarker(model?.position, hudState?.longitudinalPlan, transform.calibTransform, videoWidth, videoHeight);
       drawBlindspotBarriers(model?.position, overlayState, hudState, transform.calibTransform);
-      drawRadarLeadBoxes(model, overlayState, hudState, transform.calibTransform, videoWidth, videoHeight);
+      drawRadarLeadBoxes(model, overlayState, hudState, transform.calibTransform, videoWidth, videoHeight, transform);
     }
 
-    drawPlot(stageWidth, stageHeight, viewportRect, plotData);
+    drawPlot(stageWidth, stageHeight, plotData);
 
     const laneCount = Array.isArray(model?.laneLines) ? model.laneLines.length : 0;
     const edgeCount = Array.isArray(model?.roadEdges) ? model.roadEdges.length : 0;
@@ -2147,23 +1552,19 @@ window.CarrotTest = (() => {
       `road:${roadCameraState?.frameId ?? "-"} model:${model?.frameId ?? "-"} path:${selectedPath.pathSource}/${pathStyle.mode}:${pathStyle.colorIndex} width:${finiteNumber(paramsState.ShowPathWidth, 100)} laneInfo:${showLaneInfo} lane:${laneCount} edge:${edgeCount} lead:${leadCount} plot:${finiteNumber(paramsState.ShowPlotMode, 0)} rpy:${rpy.join(",") || "-"} h:${finiteNumber(liveCalibration?.height?.[0], 0).toFixed(2)}`,
     );
     setDebug(firstNonEmptyText(brokerServices?.carrotMan?.stockDebugTopRightText, overlayState?.carrotMan?.stockDebugTopRightText, formatDebugText(overlayState)));
+    drawHudLeftCenterLogs(stageWidth, stageHeight, viewportRect, lastStatus, lastMeta, pathStyle.mode);
     drawHudTopRightText(stageWidth, stageHeight, viewportRect, lastDebug, pathStyle.mode);
     drawHudBottomText(stageWidth, stageHeight, viewportRect, selectedPath.latDebugText, hudState, pathStyle.mode);
   }
 
   function scheduleNext() {
-    if (isActive()) {
-      loopToken = window.requestAnimationFrame(runLoop);
-      return;
-    }
-    loopToken = window.setTimeout(() => runLoop(performance.now()), 180);
+    loopToken = window.setTimeout(runLoop, isActive() ? 16 : 180);
   }
 
   function runLoop() {
     if (isActive()) {
       renderActiveFrame();
     } else {
-      resetCarrotHudLayout();
       syncSourceStream();
     }
     scheduleNext();
@@ -2193,19 +1594,8 @@ window.CarrotTest = (() => {
     }
   } catch {}
 
-  loadTestFlags();
   syncDisplayModeButtons();
-  syncTestFlagInputs();
   refreshParams(true);
-
-  if (leadPreviewToggleEl) {
-    leadPreviewToggleEl.addEventListener("change", () => {
-      testFlags.leadPreview = Boolean(leadPreviewToggleEl.checked);
-      persistTestFlags();
-      renderActiveFrame();
-    });
-  }
-
   runLoop();
 
   return {

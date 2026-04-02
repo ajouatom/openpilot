@@ -6,7 +6,7 @@
   <title>Carrot</title>
   <link rel="stylesheet" href="/css/tokens.css?v=2603-73" />
   <link rel="stylesheet" href="/css/hud_card.css?v=2603-75" />
-  <link rel="stylesheet" href="/css/app.css?v=2603-163" />
+  <link rel="stylesheet" href="/css/app.css?v=2603-159" />
 </head>
 
 <body>
@@ -40,10 +40,72 @@
           </div>
           <div class="home-utility-content">
             <a id="quickLink" class="home-utility-linkInline" href="#" target="_blank" rel="noopener">Quick Link</a>
+            <div id="rtcDevTools" class="home-utility-dev" hidden>
+              <button id="btnRtcDevToggle" class="smallBtn home-utility-devBtn" type="button" aria-pressed="false">RTC Preview</button>
+            </div>
           </div>
         </div>
       </div>
 
+      <!-- Road Camera -->
+      <div id="rtcCard" class="card" style="display:none;">
+        <div class="row-between mb-sm">
+          <h4 id="webrtcTitle" style="margin:0; font-size:var(--fs-title-sm); font-weight:600;">Road Camera</h4>
+          <span class="muted" id="rtcStatus">connecting...</span>
+        </div>
+        <div id="rtcWrap" style="position:relative;">
+          <video id="rtcVideo" class="rtcVideo" autoplay playsinline muted style="display:none;"></video>
+        </div>
+      </div>
+
+      <!-- HUD Widget -->
+      <div id="driveHudCard">
+        <div class="hudWrap" id="hudRoot">
+          <div class="hudTop">
+            <div class="hudMini">
+              <div class="hudMiniLabel">CPU</div>
+              <div class="hudMiniVal" id="hudCpuVal">--°C</div>
+            </div>
+            <div class="hudMini">
+              <div class="hudMiniLabel">MEM</div>
+              <div class="hudMiniVal" id="hudMemVal">--%</div>
+            </div>
+            <div class="hudMini">
+              <div class="hudMiniLabel" id="hudDiskLabel">DISK</div>
+              <div class="hudMiniVal" id="hudDiskVal">--%</div>
+            </div>
+          </div>
+          <div class="hudLowerGroup">
+            <div class="hudMain">
+              <div class="hudSpeedBg" aria-hidden="true"></div>
+              <div class="hudRedDot" id="hudRedDot" style="display:none;"></div>
+              <div class="hudSpeed" id="hudSpeed">--</div>
+              <div class="hudSignalDot" id="hudSignalDot"></div>
+              <div class="hudTempReason" id="hudTempReason">eco</div>
+              <div class="hudTempSpeed" id="hudTempSpeed">--</div>
+              <div class="hudSetSpeed" id="hudSetSpeed">--</div>
+              <div class="hudGapNum" id="hudGapNum">-</div>
+              <div class="hudGear" id="hudGear">U</div>
+            </div>
+            <div class="hudBottom">
+              <div class="hudLeftStack">
+                <div id="hudGps" class="hudGps">GPS</div>
+                <div class="hudDriveMode mode_normal" id="hudDriveMode">Normal</div>
+              </div>
+              <div class="hudRoadLimitBox">
+                <div class="hudRoadLimitLabel">LIMIT</div>
+                <div class="hudRoadLimitVal" id="hudRoadLimitVal">--</div>
+              </div>
+              <div class="hudBars" id="hudBars">
+                <div class="hudBar"></div>
+                <div class="hudBar"></div>
+                <div class="hudBar"></div>
+                <div class="hudBar"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ════════════ CAR SELECT ════════════ -->
@@ -261,67 +323,11 @@
           <button class="smallBtn carrot-zoom__btn" type="button" data-display-index="1">정사이즈</button>
           <button class="smallBtn carrot-zoom__btn" type="button" data-display-index="2">크롭</button>
         </div>
-        <div class="carrot-test-menu" aria-label="Carrot test options">
-          <label class="carrot-test-menu__item">
-            <input id="carrotTestLeadPreview" class="carrot-test-menu__check" type="checkbox" />
-            <span>리드박스 프리뷰</span>
-          </label>
-        </div>
 
         <div id="carrotStageMeta" class="carrot-stage__meta">model:- road:- cal:-</div>
       </div>
     </div>
   </div>
-
-  <div id="driveHudCard">
-    <div class="hudWrap" id="hudRoot">
-      <div class="hudTop">
-        <div class="hudMini">
-          <div class="hudMiniLabel">CPU</div>
-          <div class="hudMiniVal" id="hudCpuVal">--°C</div>
-        </div>
-        <div class="hudMini">
-          <div class="hudMiniLabel">MEM</div>
-          <div class="hudMiniVal" id="hudMemVal">--%</div>
-        </div>
-        <div class="hudMini">
-          <div class="hudMiniLabel" id="hudDiskLabel">DISK</div>
-          <div class="hudMiniVal" id="hudDiskVal">--%</div>
-        </div>
-      </div>
-      <div class="hudLowerGroup">
-        <div class="hudMain">
-          <div class="hudSpeedBg" aria-hidden="true"></div>
-          <div class="hudRedDot" id="hudRedDot" style="display:none;"></div>
-          <div class="hudSpeed" id="hudSpeed">--</div>
-          <div class="hudSignalDot" id="hudSignalDot"></div>
-          <div class="hudTempReason" id="hudTempReason">eco</div>
-          <div class="hudTempSpeed" id="hudTempSpeed">--</div>
-          <div class="hudSetSpeed" id="hudSetSpeed">--</div>
-          <div class="hudGapNum" id="hudGapNum">-</div>
-          <div class="hudGear" id="hudGear">U</div>
-        </div>
-        <div class="hudBottom">
-          <div class="hudLeftStack">
-            <div id="hudGps" class="hudGps">GPS</div>
-            <div class="hudDriveMode mode_normal" id="hudDriveMode">Normal</div>
-          </div>
-          <div class="hudRoadLimitBox">
-            <div class="hudRoadLimitLabel">LIMIT</div>
-            <div class="hudRoadLimitVal" id="hudRoadLimitVal">--</div>
-          </div>
-          <div class="hudBars" id="hudBars">
-            <div class="hudBar"></div>
-            <div class="hudBar"></div>
-            <div class="hudBar"></div>
-            <div class="hudBar"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <video id="rtcVideo" class="rtcVideo rtcVideo--shared" autoplay playsinline muted></video>
 
   <div class="global-home-record-fab" aria-hidden="true">
     <button id="btnRecordToggle" class="fab fab--round fab--record" aria-label="Record">OFF</button>
@@ -412,8 +418,8 @@
   <script src="/js/hud_card.js?v=2603-75"></script>
   <script src="/js/app_core.js?v=2603-105"></script>
   <script src="/js/app_pages.js?v=2603-116"></script>
-  <script src="/js/raw_capnp.js?v=2603-85"></script>
-  <script src="/js/app_realtime.js?v=2603-88"></script>
-  <script src="/js/carrot_test.js?v=2603-19"></script>
+  <script src="/js/raw_capnp.js?v=2603-84"></script>
+  <script src="/js/app_realtime.js?v=2603-87"></script>
+  <script src="/js/carrot_test.js?v=2603-10"></script>
 </body>
 </html>
