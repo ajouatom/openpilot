@@ -333,7 +333,7 @@ window.CarrotTest = (() => {
     return maxDistance;
   }
 
-  function buildRibbon(calibTransform, line, halfWidth, zOffset, maxDistance, allowInvert = false) {
+  function buildRibbon(calibTransform, line, halfWidth, zOffset, maxDistance, allowInvert = false, centerShift = 0) {
     const xs = Array.isArray(line?.x) ? line.x : [];
     const ys = Array.isArray(line?.y) ? line.y : [];
     const zs = Array.isArray(line?.z) ? line.z : [];
@@ -346,7 +346,7 @@ window.CarrotTest = (() => {
       const x = finiteNumber(xs[i], NaN);
       if (!Number.isFinite(x) || x < 0) continue;
 
-      const y = finiteNumber(ys[i], 0);
+      const y = finiteNumber(ys[i], 0) + centerShift;
       const z = finiteNumber(zs[i], 0) + zOffset;
       const leftPt = projectPoint(calibTransform, x, y - halfWidth, z);
       const rightPt = projectPoint(calibTransform, x, y + halfWidth, z);
@@ -854,6 +854,15 @@ window.CarrotTest = (() => {
   function drawPathRibbon(ribbon, style, canvasHeight) {
     if (!ribbon.polygon.length) return;
     const baseColor = paletteColor(style.paletteIndex);
+    if (style.mode === 0) {
+      drawPolygon(
+        ribbon.polygon,
+        rgba(baseColor, 0.42),
+        style.emphasisStroke ? style.strokeColor : "",
+        style.emphasisStroke ? 2.0 : 0,
+      );
+      return;
+    }
     const fill = createPathGradient(baseColor, canvasHeight, style);
     drawPolygon(ribbon.polygon, fill, style.emphasisStroke ? style.strokeColor : "", style.emphasisStroke ? 1.7 : 0);
   }
@@ -924,11 +933,13 @@ window.CarrotTest = (() => {
     drawAnimatedPath(ribbon, style);
   }
 
-  function drawLaneLines(model, calibTransform) {
+  function drawLaneLines(model, hudState, calibTransform) {
     const laneLines = Array.isArray(model?.laneLines) ? model.laneLines : [];
     const laneLineProbs = Array.isArray(model?.laneLineProbs) ? model.laneLineProbs : [];
     if (!laneLines.length) return;
 
+    const leftLaneLine = finiteNumber(hudState?.carState?.leftLaneLine, 0);
+    const rightLaneLine = finiteNumber(hudState?.carState?.rightLaneLine, 0);
     const maxIdx = getPathLengthIdx(laneLines[0], getModelMaxDistance(model));
     for (let i = 0; i < laneLines.length; i += 1) {
       const prob = clamp(finiteNumber(laneLineProbs[i], 0), 0, 0.9);
@@ -937,16 +948,38 @@ window.CarrotTest = (() => {
 
       // Keep native probability-driven lanes, but allow a small test-page floor so
       // very low-confidence indoor/stationary lanes are still inspectable.
-      const halfWidth = Math.max(0.010, 0.025 * renderProb);
+      const highlightedLeft = i === 1 && leftLaneLine >= 20;
+      const highlightedRight = i === 2 && rightLaneLine >= 20;
+      const laneColor = highlightedLeft || highlightedRight ? { r: 255, g: 217, b: 94 } : { r: 255, g: 255, b: 255 };
+      const halfWidth = Math.max(highlightedLeft || highlightedRight ? 0.025 : 0.010, 0.025 * renderProb);
       const fillAlpha = prob >= 0.02 ? clamp(renderProb, 0.12, 0.7) : clamp(renderProb * 3.0, 0.16, 0.26);
       const strokeAlpha = prob >= 0.02 ? 0.20 : 0.24;
       const ribbon = buildRibbon(calibTransform, laneLines[i], halfWidth, 0, finiteNumber(laneLines[i]?.x?.[maxIdx], MAX_DRAW_DISTANCE), false);
       drawPolygon(
         ribbon.polygon,
-        `rgba(255,255,255,${fillAlpha.toFixed(3)})`,
-        `rgba(255,255,255,${strokeAlpha.toFixed(3)})`,
+        `rgba(${laneColor.r},${laneColor.g},${laneColor.b},${fillAlpha.toFixed(3)})`,
+        `rgba(${laneColor.r},${laneColor.g},${laneColor.b},${strokeAlpha.toFixed(3)})`,
         1,
       );
+
+      if ((i === 1 && (leftLaneLine % 10) === 4) || (i === 2 && (rightLaneLine % 10) === 4)) {
+        const shift = i === 1 ? -0.3 : 0.3;
+        const doubleRibbon = buildRibbon(
+          calibTransform,
+          laneLines[i],
+          halfWidth,
+          0,
+          finiteNumber(laneLines[i]?.x?.[maxIdx], MAX_DRAW_DISTANCE),
+          false,
+          shift,
+        );
+        drawPolygon(
+          doubleRibbon.polygon,
+          `rgba(${laneColor.r},${laneColor.g},${laneColor.b},${fillAlpha.toFixed(3)})`,
+          `rgba(${laneColor.r},${laneColor.g},${laneColor.b},${strokeAlpha.toFixed(3)})`,
+          1,
+        );
+      }
     }
   }
 
@@ -1113,10 +1146,92 @@ window.CarrotTest = (() => {
     ctx.restore();
   }
 
-  function drawRadarLeadBoxes(model, overlayState, calibTransform, videoWidth, videoHeight) {
+  function leadStateAccentColor(xState) {
+    switch (xState) {
+      case 3:
+      case 5:
+        return "rgba(255, 167, 38, 0.82)";
+      case 4:
+        return "rgba(35, 213, 93, 0.82)";
+      case 1:
+        return "rgba(145, 164, 191, 0.82)";
+      default:
+        return "rgba(255, 255, 255, 0.82)";
+    }
+  }
+
+  function getLeadStateText(overlayState, hudState) {
+    const carrotMan = overlayState?.carrotMan || hudState?.carrotMan || {};
+    const xStateRaw = String(carrotMan?.xState || "").trim();
+    const trafficStateRaw = String(carrotMan?.trafficState || "").trim();
+    const xState = finiteNumber(xStateRaw, -1);
+    const trafficState = finiteNumber(trafficStateRaw, -1);
+    const longActive = Boolean(overlayState?.carControl?.longActive);
+    const vEgoMps = finiteNumber(hudState?.carState?.vEgo, finiteNumber(hudState?.carState?.vEgoCluster, 0));
+
+    if (!longActive) return null;
+    if (xState === 3 || xState === 5) {
+      return {
+        text: vEgoMps < 1.0 ? (trafficState >= 1000 ? "Signal Error" : "Signal Ready") : "Signal slowing",
+        xState,
+        showDistanceBadge: false,
+      };
+    }
+    if (xState === 4) {
+      return {
+        text: "E2E 주행중",
+        xState,
+        showDistanceBadge: false,
+      };
+    }
+    if (xState === 0 || xState === 1 || xState === 2) {
+      return {
+        text: "",
+        xState,
+        showDistanceBadge: true,
+      };
+    }
+    if (xStateRaw) {
+      return {
+        text: xStateRaw,
+        xState,
+        showDistanceBadge: false,
+      };
+    }
+    return {
+      text: "",
+      xState,
+      showDistanceBadge: false,
+    };
+  }
+
+  function drawLeadStateBadge(box, text, xState) {
+    if (!box?.rect || !text) return;
+    const badgeWidth = Math.max(108, Math.min(170, box.rect.width * 0.72));
+    const badgeHeight = 32;
+    const badgeX = box.centerX - badgeWidth * 0.5;
+    const badgeY = box.rect.y + box.rect.height + 10;
+    const accentColor = leadStateAccentColor(xState);
+    fillRoundedRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, 14, "rgba(16, 21, 28, 0.88)");
+    strokeRoundedRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, 14, accentColor, 2.2);
+    ctx.save();
+    ctx.font = `900 18px ${HUD_TEXT_FONT}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "rgba(0,0,0,0.88)";
+    ctx.fillStyle = "#ffffff";
+    ctx.lineWidth = 3.6;
+    ctx.strokeText(text, box.centerX, badgeY + badgeHeight * 0.56);
+    ctx.fillText(text, box.centerX, badgeY + badgeHeight * 0.56);
+    ctx.restore();
+  }
+
+  function drawRadarLeadBoxes(model, overlayState, hudState, calibTransform, videoWidth, videoHeight) {
     const radarState = overlayState?.radarState || {};
     const modelPath = model?.position || null;
     const showRadarInfo = finiteNumber(paramsState.ShowRadarInfo, defaultParams.ShowRadarInfo);
+    const leadState = getLeadStateText(overlayState, hudState);
 
     const leadOneBox = projectLeadBox(radarState?.leadOne, modelPath, calibTransform, videoWidth, videoHeight);
     if (leadOneBox) {
@@ -1124,13 +1239,18 @@ window.CarrotTest = (() => {
       const strokeColor = !leadOneBox.radar ? "#3d7bff" : (isLeadScc ? "#ff3b30" : "#ffa726");
       drawLeadBoxCard(leadOneBox, strokeColor, "rgba(0,0,0,0.20)", true);
 
-      if (showRadarInfo > 0) {
+      if (showRadarInfo > 0 && leadState?.showDistanceBadge !== false) {
         const radarDist = leadOneBox.radar ? Math.max(0, finiteNumber(radarState?.leadOne?.dRel, 0)) : 0;
         const visionDist = leadOneBox.modelProb > 0.5 ? Math.max(0, leadOneBox.dRel - 1.52) : 0;
         const primaryDistance = radarDist > 0 ? radarDist : visionDist;
         if (primaryDistance > 0) {
-          drawLeadDistanceBadge(leadOneBox, primaryDistance.toFixed(1), strokeColor, isLeadScc ? "#23d55d" : "#ffffff");
+          const badgeTextColor = leadState?.xState === 0 ? "#ffffff" : (leadState?.xState === 1 ? "#b0b0b0" : "#23d55d");
+          drawLeadDistanceBadge(leadOneBox, primaryDistance.toFixed(1), strokeColor, badgeTextColor);
         }
+      }
+
+      if (leadState?.text) {
+        drawLeadStateBadge(leadOneBox, leadState.text, leadState.xState);
       }
     }
 
@@ -1665,11 +1785,11 @@ window.CarrotTest = (() => {
     clearHud(stageWidth, stageHeight);
 
     if (model) {
-      if (showLaneInfo >= 1) drawLaneLines(model, transform.calibTransform);
+      if (showLaneInfo >= 1) drawLaneLines(model, hudState, transform.calibTransform);
       if (showLaneInfo > 1) drawRoadEdges(model, transform.calibTransform);
       if (showLaneInfo >= 0) drawPath(selectedPath.pathData, model, transform.calibTransform, videoHeight, pathStyle);
       drawBlindspotBarriers(model?.position, overlayState, hudState, transform.calibTransform);
-      drawRadarLeadBoxes(model, overlayState, transform.calibTransform, videoWidth, videoHeight);
+      drawRadarLeadBoxes(model, overlayState, hudState, transform.calibTransform, videoWidth, videoHeight);
     }
 
     drawPlot(stageWidth, stageHeight, plotData);
