@@ -12,8 +12,6 @@ def make_app() -> web.Application:
   # static-like routes
   app.router.add_get("/", routes_static.handle_index)
   app.router.add_get("/app.js", routes_static.handle_appjs)
-  app.router.add_get("/hud_card.js", routes_static.handle_hudjs)
-  app.router.add_get("/hud_card.css", routes_static.handle_hudcss)
 
   # api
   app.router.add_get("/api/settings", routes_api.api_settings)
@@ -26,12 +24,13 @@ def make_app() -> web.Application:
   app.router.add_get("/api/tools/job", routes_api.api_tools_job)
   app.router.add_post("/api/params_restore", routes_api.api_params_restore)
   app.router.add_get("/api/heartbeat_status", routes_api.api_heartbeat_status)
+  app.router.add_get("/api/live_runtime", routes_api.api_live_runtime)
   app.router.add_post("/api/time_sync", routes_api.api_time_sync)
   app.router.add_post("/stream", routes_api.proxy_stream)
 
   # ws
-  app.router.add_get("/ws/state", routes_ws.ws_state)
-  app.router.add_get("/ws/carstate", routes_ws.ws_carstate)
+  app.router.add_get("/ws/raw/{service}", routes_ws.ws_raw)
+  app.router.add_get("/ws/camera/{camera}", routes_ws.ws_camera)
   app.router.add_get("/ws/terminal", routes_ws.ws_terminal)
 
   # downloads
