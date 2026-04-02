@@ -30,6 +30,84 @@ function bindAppViewportObservers() {
 
 bindAppViewportObservers();
 
+const driveHudCardEl = document.getElementById("driveHudCard");
+const homePageEl = document.getElementById("pageHome");
+const homeUtilityEl = homePageEl?.querySelector(".home-utility") || null;
+const appTopbarEl = document.querySelector(".topbar");
+let driveHudLayoutObserversBound = false;
+let driveHudLayoutRaf = 0;
+
+function isCoarseLandscapeHudMode() {
+  return window.matchMedia("(orientation: landscape) and (max-height: 560px) and (pointer: coarse)").matches;
+}
+
+function clearHomeHudDockLayout() {
+  if (!driveHudCardEl) return;
+  driveHudCardEl.style.removeProperty("--home-hud-left");
+  driveHudCardEl.style.removeProperty("--home-hud-top");
+  driveHudCardEl.style.removeProperty("--home-hud-bottom");
+  driveHudCardEl.style.removeProperty("--home-hud-transform");
+  driveHudCardEl.style.removeProperty("--home-hud-width");
+}
+
+function syncHomeHudDockLayout() {
+  driveHudLayoutRaf = 0;
+  if (!driveHudCardEl) return;
+
+  const page = document.body?.dataset?.page || "";
+  if (page !== "home" || isCoarseLandscapeHudMode()) {
+    clearHomeHudDockLayout();
+    return;
+  }
+
+  const utilityRect = homeUtilityEl?.getBoundingClientRect();
+  const topbarRect = appTopbarEl?.getBoundingClientRect();
+  const vv = window.visualViewport;
+  const viewportWidth = Math.max(320, Math.round(vv?.width || window.innerWidth || 0));
+  const viewportTop = Math.max(0, Math.round(vv?.offsetTop || 0));
+  const hudWidth = Math.round(clamp(viewportWidth - 28, 280, 360));
+  driveHudCardEl.style.setProperty("--home-hud-width", `${hudWidth}px`);
+
+  const hudWrapEl = driveHudCardEl.querySelector(".hudWrap");
+  const hudHeight = Math.max(220, Math.round(hudWrapEl?.getBoundingClientRect?.().height || hudWidth));
+  const minTop = Math.max(viewportTop + 14, Math.round((utilityRect?.bottom || 0) + 18));
+  const navTop = topbarRect ? topbarRect.top : (window.innerHeight - 72);
+  const maxTop = Math.max(minTop, Math.round(navTop - hudHeight - 12));
+  const top = Math.round(minTop + Math.max(0, (maxTop - minTop) / 2));
+
+  driveHudCardEl.style.setProperty("--home-hud-left", "50%");
+  driveHudCardEl.style.setProperty("--home-hud-top", `${top}px`);
+  driveHudCardEl.style.setProperty("--home-hud-bottom", "auto");
+  driveHudCardEl.style.setProperty("--home-hud-transform", "translateX(-50%)");
+}
+
+function scheduleHomeHudDockLayout() {
+  if (driveHudLayoutRaf) return;
+  driveHudLayoutRaf = requestAnimationFrame(syncHomeHudDockLayout);
+}
+
+function bindDriveHudLayoutObservers() {
+  if (driveHudLayoutObserversBound) return;
+  driveHudLayoutObserversBound = true;
+
+  const handleLayout = () => scheduleHomeHudDockLayout();
+  window.addEventListener("resize", handleLayout, { passive: true });
+  window.addEventListener("orientationchange", handleLayout, { passive: true });
+  window.addEventListener("carrot:pagechange", handleLayout);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", handleLayout, { passive: true });
+    window.visualViewport.addEventListener("scroll", handleLayout, { passive: true });
+  }
+  if (typeof ResizeObserver === "function") {
+    const observer = new ResizeObserver(handleLayout);
+    if (homeUtilityEl) observer.observe(homeUtilityEl);
+  }
+
+  scheduleHomeHudDockLayout();
+}
+
+bindDriveHudLayoutObservers();
+
 function parseRecordStateValue(value) {
   return (
     value === true ||

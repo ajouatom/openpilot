@@ -782,6 +782,7 @@ function showPage(page, pushHistory = false, transition = null) {
   else setDisplayedPage(page);
 
   document.body.dataset.page = page;
+  window.dispatchEvent(new CustomEvent("carrot:pagechange", { detail: { page, prevPage } }));
 
   btnHome.classList.toggle("active", page === "home");
   btnSetting.classList.toggle("active", page === "setting");
