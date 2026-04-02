@@ -41,7 +41,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: var(--hud-section-gap);
+  gap: 0;
   aspect-ratio: var(--hud-aspect);
   padding: var(--hud-padding);
   border-radius: var(--hud-radius);
@@ -72,15 +72,17 @@
 .hudMetricBar,
 .hudBottomStrip {
   min-height: var(--hud-band-height);
-  border-radius: calc(var(--hud-radius) - 8px);
-  background: var(--hud-panel-soft);
-  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 0;
+  background: transparent;
+  border: 0;
   overflow: hidden;
 }
 
 .hudMetricBar {
   display: flex;
   align-items: stretch;
+  margin-bottom: calc(var(--hud-section-gap) * 0.28);
+  padding: 0 calc(var(--hud-section-gap) * 0.08);
 }
 
 .hudMetricCell {
@@ -102,7 +104,9 @@
 
 .hudMetricDivider {
   width: 1px;
-  align-self: stretch;
+  align-self: center;
+  height: calc(var(--hud-band-height) - 10px);
+  background: rgba(255,255,255,0.08);
 }
 
 .hudMetricIcon {
@@ -134,18 +138,24 @@
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1.08fr) auto minmax(0, 0.92fr);
-  gap: calc(var(--hud-section-gap) * 0.18);
+  grid-template-columns: minmax(0, 5fr) auto minmax(0, 4fr);
+  gap: 0;
+  margin-bottom: calc(var(--hud-section-gap) * 0.26);
 }
 
 .hudBodyDivider {
   width: 1px;
-  margin: calc(var(--hud-metric-gap) * 0.10) 0;
+  margin: calc(var(--hud-metric-gap) * 0.12) calc(var(--hud-section-gap) * 0.18);
   display: none;
 }
 
 .hudWrap[data-surface="homePreview"] .hudBodyDivider {
   display: block;
+  background: rgba(255,255,255,0.12);
+}
+
+.hudWrap[data-surface="homePreview"][data-wide="1"] .hudBody {
+  grid-template-columns: minmax(0, 6fr) auto minmax(0, 5fr);
 }
 
 .hudSpeedColumn,
@@ -205,7 +215,7 @@
 .hudInlineDivider {
   width: 100%;
   height: 1px;
-  margin: calc(var(--hud-metric-gap) * 0.18) 0;
+  margin: calc(var(--hud-metric-gap) * 0.04) 0;
 }
 
 .hudSupportLine,
@@ -325,6 +335,7 @@
   display: flex;
   align-items: center;
   padding: clamp(2px, calc((var(--hud-band-height) - (var(--hud-chip-font) + 4px)) / 2), 4px) calc(var(--hud-section-gap) * 0.12);
+  margin-top: auto;
 }
 
 .hudSignalSlot {
@@ -427,6 +438,39 @@
 
 .hudWrap[data-density="spacious"] .hudBottomStrip {
   padding-inline: calc(var(--hud-section-gap) * 0.18);
+}
+
+.hudWrap[data-surface="homePreview"] .hudSupportLine {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: calc(var(--hud-metric-gap) * 0.10);
+}
+
+.hudWrap[data-surface="homePreview"] .hudSupportValue {
+  align-self: flex-end;
+  text-align: right;
+}
+
+.hudWrap[data-surface="homePreview"] .hudSupportDetail {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: calc(var(--hud-metric-gap) * 0.24);
+}
+
+.hudWrap[data-surface="homePreview"] .hudGapStatus {
+  flex-direction: column;
+  align-items: stretch;
+  gap: calc(var(--hud-metric-gap) * 0.14);
+}
+
+.hudWrap[data-surface="homePreview"] .hudGapText {
+  text-align: right;
+}
+
+.hudWrap[data-surface="homePreview"] .hudGearStatus {
+  align-self: flex-end;
 }
 
 @media (max-width: 430px) {

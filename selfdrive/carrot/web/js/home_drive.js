@@ -777,7 +777,6 @@ window.HomeDrive = (() => {
     if (!driveHudCardEl) return;
     driveHudCardEl.style.removeProperty("--carrot-hud-left");
     driveHudCardEl.style.removeProperty("--carrot-hud-bottom");
-    driveHudCardEl.style.removeProperty("--carrot-hud-scale");
   }
 
   function applyCarrotHudLayout(viewportRect) {
@@ -796,18 +795,11 @@ window.HomeDrive = (() => {
     };
     const overlayInsetX = displayModeKey === "fit" ? 8 : 12;
     const overlayInsetY = displayModeKey === "fit" ? 8 : 12;
-    const overlayHeight = clamp(viewport.height * (displayModeKey === "fit" ? 0.27 : 0.29), 184, 304);
-    const overlayWidth = overlayHeight * 1.02;
-    const scale = clamp((overlayWidth / 320) * 1.08, 0.78, 1.08);
-    const scaledHudSize = 320 * scale;
-    const minStageLeft = viewport.left + overlayInsetX;
-    const maxStageLeft = viewport.right - scaledHudSize - overlayInsetX;
-    const stageLeft = Math.round(clamp(minStageLeft, minStageLeft, Math.max(minStageLeft, maxStageLeft)));
+    const stageLeft = Math.round(viewport.left + overlayInsetX);
     const stageBottom = Math.round(Math.max(12, stageRect.height - viewport.bottom + overlayInsetY));
 
     driveHudCardEl.style.setProperty("--carrot-hud-left", `${stageLeft}px`);
     driveHudCardEl.style.setProperty("--carrot-hud-bottom", `${stageBottom}px`);
-    driveHudCardEl.style.setProperty("--carrot-hud-scale", scale.toFixed(3));
   }
 
   function syncCanvasSize(videoWidth, videoHeight, stageWidth, stageHeight) {

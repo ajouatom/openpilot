@@ -1680,7 +1680,7 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--overlay {
 
 body[data-page="carrot"] #driveHudCard.driveHudCard--overlay .hudWrap {
   margin: 0;
-  transform: scale(var(--carrot-hud-scale, 1));
+  transform: none;
   transform-origin: left bottom;
 }
 

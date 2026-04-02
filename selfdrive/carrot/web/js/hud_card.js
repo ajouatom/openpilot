@@ -141,8 +141,8 @@
     }
 
     return {
-      width: clamp((rect?.width || viewportWidth) * 0.34, 260, 820),
-      height: clamp((rect?.height || viewportHeight) * 0.30, 184, 304),
+      width: clamp((rect?.width || viewportWidth) * 0.42, 320, 980),
+      height: clamp((rect?.height || viewportHeight) * 0.36, 210, 360),
     };
   }
 
@@ -185,7 +185,7 @@
         labelFontSize: 13.5,
         chipFontSize: 12.5,
         gearFontSize: 38,
-        maxWidth: surface === SURFACE_OVERLAY ? 452 : surface === SURFACE_INLINE ? 404 : 360,
+        maxWidth: surface === SURFACE_OVERLAY ? 542 : surface === SURFACE_INLINE ? 404 : 360,
       };
     }
 
@@ -209,7 +209,7 @@
         labelFontSize: 14.5,
         chipFontSize: 13.5,
         gearFontSize: 46,
-        maxWidth: surface === SURFACE_OVERLAY ? 540 : surface === SURFACE_INLINE ? 476 : 428,
+        maxWidth: surface === SURFACE_OVERLAY ? 648 : surface === SURFACE_INLINE ? 476 : 428,
       };
     }
 
@@ -233,7 +233,7 @@
         labelFontSize: 15.5,
         chipFontSize: 14.5,
         gearFontSize: 56,
-        maxWidth: surface === SURFACE_OVERLAY ? 670 : surface === SURFACE_INLINE ? 604 : 536,
+        maxWidth: surface === SURFACE_OVERLAY ? 804 : surface === SURFACE_INLINE ? 604 : 536,
       };
     }
 
@@ -256,7 +256,7 @@
       labelFontSize: 16.5,
       chipFontSize: 15.5,
       gearFontSize: 68,
-      maxWidth: surface === SURFACE_OVERLAY ? 820 : surface === SURFACE_INLINE ? 734 : 668,
+      maxWidth: surface === SURFACE_OVERLAY ? 984 : surface === SURFACE_INLINE ? 734 : 668,
     };
   }
 
@@ -448,7 +448,6 @@
 
     update(payload) {
       if (!payload) return;
-      scheduleHudProfileApply();
       syncStaticHudText();
       setMetrics(payload.cpuTempC, payload.memPct, payload.diskPct);
       setSpeed(payload.vEgoKph);
