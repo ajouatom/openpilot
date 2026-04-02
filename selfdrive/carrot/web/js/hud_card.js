@@ -1,29 +1,43 @@
 /* Adaptive driving HUD
- * - Exposes: window.DrivingHud.init(), window.DrivingHud.update(payload)
- * - Mirrors CarrotLink HUD layout profiles for homePreview / driveInline / driveOverlay
+ * - Uses CarrotLink drive surfaces directly:
+ *   driveInline / driveOverlay
+ * - Same data model, different mount target + layout profile per surface
  */
 (function () {
   function $(id) { return document.getElementById(id); }
-  function setText(id, v) { const el = $(id); if (el) el.textContent = (v == null ? "" : String(v)); }
-  function show(id, on) { const el = $(id); if (el) el.style.display = on ? "" : "none"; }
   function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
+  function setText(id, v) {
+    const el = $(id);
+    if (el) el.textContent = v == null ? "" : String(v);
+  }
 
-  const SURFACE_HOME = "homePreview";
   const SURFACE_INLINE = "driveInline";
   const SURFACE_OVERLAY = "driveOverlay";
+  const STRONG_TEXT_SHADOW = "0 1.4px 3.6px rgba(0,0,0,0.94), 0 0 1.2px rgba(0,0,0,0.62)";
+  const DRIVE_MODE_TEXT = {
+    normal: "일반",
+    eco: "에코",
+    safe: "안전",
+    sport: "고속",
+    fast: "고속",
+  };
 
   let hudLayoutBound = false;
   let hudLayoutRaf = 0;
+
+  function getHudCard() {
+    return $("driveHudCard");
+  }
 
   function getHudRoot() {
     return $("hudRoot");
   }
 
   function getHudSurface() {
-    const page = document.body?.dataset?.page || "home";
-    const coarseLandscape = window.matchMedia("(orientation: landscape) and (max-height: 560px) and (pointer: coarse)").matches;
-    if (page === "carrot") return coarseLandscape ? SURFACE_OVERLAY : SURFACE_INLINE;
-    return SURFACE_HOME;
+    const page = document.body?.dataset?.page || "carrot";
+    const landscape = window.matchMedia("(orientation: landscape)").matches;
+    if (page === "carrot") return landscape ? SURFACE_OVERLAY : SURFACE_INLINE;
+    return SURFACE_INLINE;
   }
 
   function getHudWindowClass(width) {
@@ -43,32 +57,44 @@
     }
   }
 
+  function getSurfaceTarget(surface) {
+    if (surface === SURFACE_INLINE) return $("carrotHudDock");
+    return $("carrotStage");
+  }
+
+  function mountHudToSurface(surface) {
+    const card = getHudCard();
+    const target = getSurfaceTarget(surface);
+    if (!card || !target) return;
+
+    if (card.parentElement !== target) {
+      target.appendChild(card);
+    }
+
+    card.classList.remove("driveHudCard--inline", "driveHudCard--overlay");
+    if (surface === SURFACE_INLINE) card.classList.add("driveHudCard--inline");
+    else card.classList.add("driveHudCard--overlay");
+  }
+
   function getHudConstraints(surface) {
     const vv = window.visualViewport;
     const viewportWidth = Math.max(320, Math.round(vv?.width || window.innerWidth || 0));
     const viewportHeight = Math.max(320, Math.round(vv?.height || window.innerHeight || 0));
-    const navRect = document.querySelector(".topbar")?.getBoundingClientRect();
-    const navTop = navRect ? navRect.top : (window.innerHeight - 72);
-    const utilityRect = document.querySelector("#pageHome .home-utility")?.getBoundingClientRect();
-    const rootRect = getHudRoot()?.getBoundingClientRect();
-
-    if (surface === SURFACE_HOME) {
-      return {
-        width: clamp(viewportWidth - 28, 280, 428),
-        height: clamp(navTop - ((utilityRect?.bottom || 0) + 24), 180, Math.max(180, viewportHeight * 0.44)),
-      };
-    }
+    const target = getSurfaceTarget(surface);
+    const rect = target?.getBoundingClientRect?.() || null;
+    const width = rect?.width || viewportWidth;
+    const height = rect?.height || viewportHeight;
 
     if (surface === SURFACE_INLINE) {
       return {
-        width: clamp(viewportWidth - 12, 304, 476),
-        height: clamp(viewportHeight * 0.42, 190, 470),
+        width: clamp(width - 4, 304, 734),
+        height: clamp(height || viewportHeight * 0.30, 190, 440),
       };
     }
 
     return {
-      width: clamp(rootRect?.width || (viewportWidth * 0.34), 260, 540),
-      height: clamp(rootRect?.height || (viewportHeight * 0.30), 184, 304),
+      width: clamp((rect?.width || viewportWidth) * 0.34, 260, 820),
+      height: clamp((rect?.height || viewportHeight) * 0.30, 184, 304),
     };
   }
 
@@ -88,7 +114,6 @@
         : heightWeightedShortest < 420
           ? "regular"
           : "spacious";
-
     const wideThreshold = surface === SURFACE_OVERLAY
       ? 1.12
       : surface === SURFACE_INLINE
@@ -102,16 +127,17 @@
         wide: false,
         preferredAspectRatio: surface === SURFACE_OVERLAY ? 1.02 : surface === SURFACE_INLINE ? 0.98 : 1.24,
         borderRadius: 18,
-        dockInset: surface === SURFACE_OVERLAY ? 4 : surface === SURFACE_HOME ? 2 : 6,
-        padding: surface === SURFACE_HOME ? 10 : 13,
-        sectionGap: surface === SURFACE_HOME ? 8 : 11,
-        metricGap: surface === SURFACE_HOME ? 7 : 9,
+        dockInset: surface === SURFACE_OVERLAY ? 4 : 6,
+        padding: 13,
+        sectionGap: 11,
+        metricGap: 9,
         speedFontSize: 74,
         primaryValueFontSize: 34,
         secondaryValueFontSize: 24,
         labelFontSize: 13.5,
         chipFontSize: 12.5,
         gearFontSize: 38,
+        maxWidth: surface === SURFACE_OVERLAY ? 452 : 404,
       };
     }
 
@@ -125,16 +151,17 @@
             ? (wide ? 0.96 : 0.80)
             : (wide ? 1.34 : 1.24),
         borderRadius: 20,
-        dockInset: surface === SURFACE_OVERLAY ? 6 : surface === SURFACE_HOME ? 3 : 8,
-        padding: surface === SURFACE_HOME ? 12 : 16,
-        sectionGap: surface === SURFACE_HOME ? 10 : 13,
-        metricGap: surface === SURFACE_HOME ? 8 : 10,
+        dockInset: surface === SURFACE_OVERLAY ? 6 : 8,
+        padding: 16,
+        sectionGap: 13,
+        metricGap: 10,
         speedFontSize: 90,
         primaryValueFontSize: 38,
         secondaryValueFontSize: 26,
         labelFontSize: 14.5,
         chipFontSize: 13.5,
         gearFontSize: 46,
+        maxWidth: surface === SURFACE_OVERLAY ? 540 : 476,
       };
     }
 
@@ -148,16 +175,17 @@
             ? (wide ? 1.00 : 0.84)
             : (wide ? 1.44 : 1.30),
         borderRadius: 24,
-        dockInset: surface === SURFACE_OVERLAY ? 8 : surface === SURFACE_HOME ? 4 : 10,
-        padding: surface === SURFACE_HOME ? 14 : 20,
-        sectionGap: surface === SURFACE_HOME ? 12 : 15,
-        metricGap: surface === SURFACE_HOME ? 9 : 11,
+        dockInset: surface === SURFACE_OVERLAY ? 8 : 10,
+        padding: 20,
+        sectionGap: 15,
+        metricGap: 11,
         speedFontSize: 110,
         primaryValueFontSize: 45,
         secondaryValueFontSize: 31,
         labelFontSize: 15.5,
         chipFontSize: 14.5,
         gearFontSize: 56,
+        maxWidth: surface === SURFACE_OVERLAY ? 670 : 604,
       };
     }
 
@@ -170,29 +198,33 @@
           ? (wide ? 1.16 : 0.90)
           : (wide ? 1.56 : 1.38),
       borderRadius: 28,
-      dockInset: surface === SURFACE_OVERLAY ? 10 : surface === SURFACE_HOME ? 5 : 12,
-      padding: surface === SURFACE_HOME ? 16 : 24,
-      sectionGap: surface === SURFACE_HOME ? 14 : 18,
-      metricGap: surface === SURFACE_HOME ? 10 : 13,
+      dockInset: surface === SURFACE_OVERLAY ? 10 : 12,
+      padding: 24,
+      sectionGap: 18,
+      metricGap: 13,
       speedFontSize: 128,
       primaryValueFontSize: 52,
       secondaryValueFontSize: 36,
       labelFontSize: 16.5,
       chipFontSize: 15.5,
       gearFontSize: 68,
+      maxWidth: surface === SURFACE_OVERLAY ? 820 : 734,
     };
   }
 
   function applyHudProfile() {
     const root = getHudRoot();
-    if (!root) return;
+    const card = getHudCard();
+    if (!root || !card) return;
 
     const surface = getHudSurface();
+    mountHudToSurface(surface);
+
     const constraints = getHudConstraints(surface);
     const profile = buildHudProfile(constraints.width, constraints.height, surface);
     const style = root.style;
-    const bandHeight = getBandHeight(profile.density);
 
+    card.dataset.surface = surface;
     root.dataset.surface = surface;
     root.dataset.density = profile.density;
     root.dataset.wide = profile.wide ? "1" : "0";
@@ -209,14 +241,10 @@
     style.setProperty("--hud-label-font", `${profile.labelFontSize}px`);
     style.setProperty("--hud-chip-font", `${profile.chipFontSize}px`);
     style.setProperty("--hud-gear-font", `${profile.gearFontSize}px`);
-    style.setProperty("--hud-band-height", `${bandHeight}px`);
-
-    if (surface === SURFACE_INLINE) {
-      const portraitHudHeight = Math.round(constraints.width / Math.max(profile.preferredAspectRatio, 0.76));
-      document.body.style.setProperty("--carrot-portrait-hud-height", `${portraitHudHeight}px`);
-    } else {
-      document.body.style.removeProperty("--carrot-portrait-hud-height");
-    }
+    style.setProperty("--hud-band-height", `${getBandHeight(profile.density)}px`);
+    style.setProperty("--hud-max-width", `${Math.round(profile.maxWidth)}px`);
+    style.setProperty("--hud-dock-inset", `${profile.dockInset}px`);
+    style.setProperty("--hud-text-shadow-strong", STRONG_TEXT_SHADOW);
   }
 
   function scheduleHudProfileApply() {
@@ -239,138 +267,134 @@
       window.visualViewport.addEventListener("resize", handleLayout, { passive: true });
       window.visualViewport.addEventListener("scroll", handleLayout, { passive: true });
     }
+    if (typeof ResizeObserver === "function") {
+      const observer = new ResizeObserver(handleLayout);
+      const carrotDock = $("carrotHudDock");
+      const carrotStage = $("carrotStage");
+      if (carrotDock) observer.observe(carrotDock);
+      if (carrotStage) observer.observe(carrotStage);
+    }
     scheduleHudProfileApply();
   }
 
   function setSignalDot(kind) {
     const el = $("hudSignalDot");
     if (!el) return;
-    if (kind === "red") el.style.background = "#ff5c5c";
-    else if (kind === "green") el.style.background = "#34c96e";
-    else if (kind === "yellow") el.style.background = "#ffc94a";
-    else el.style.background = "rgba(255,255,255,0.22)";
-  }
-
-  function setGear(txt) {
-    const el = $("hudGear");
-    if (!el) return;
-    el.textContent = txt || "U";
-    const t = String(txt || "U").toUpperCase();
-    if (t === "R") el.style.color = "#ffc94a";
-    else if (t === "N") el.style.color = "#7ec8ff";
-    else if (t === "U") el.style.color = "rgba(255,255,255,0.72)";
-    else el.style.color = "#ffffff";
+    const state = String(kind || "off").toLowerCase();
+    el.dataset.state = state;
   }
 
   function setDriveMode(name, kind) {
     const el = $("hudDriveMode");
     if (!el) return;
-
-    let modeName = name;
-    if (window.DRIVE_MODES && window.LANG) {
-      modeName = window.DRIVE_MODES[window.LANG][kind] || name;
-    }
-
-    el.textContent = modeName || (window.DRIVE_MODES && window.LANG ? window.DRIVE_MODES[window.LANG].normal : "Normal");
-    el.classList.remove("mode_normal", "mode_eco", "mode_safe", "mode_sport");
-    if (kind === "eco") el.classList.add("mode_eco");
-    else if (kind === "safe") el.classList.add("mode_safe");
-    else if (kind === "sport") el.classList.add("mode_sport");
-    else el.classList.add("mode_normal");
-  }
-
-  function setGps(ok) {
-    const el = $("hudGps");
-    if (!el) return;
-    el.classList.toggle("off", !ok);
+    const normalized = String(kind || "").toLowerCase();
+    const translated = DRIVE_MODE_TEXT[normalized] || name || DRIVE_MODE_TEXT.normal;
+    el.textContent = translated;
+    el.dataset.kind = normalized || "normal";
   }
 
   function setRoadLimit(speedKph, over) {
-    const box = $("hudRoadLimitVal");
-    setText("hudRoadLimitVal", (speedKph == null || !isFinite(speedKph)) ? "--" : Math.round(speedKph));
-    if (box) box.classList.toggle("over", !!over);
+    const el = $("hudRoadLimitDisplay");
+    if (!el) return;
+    const text = speedKph == null || !isFinite(speedKph) ? "LIMIT --" : `LIMIT ${Math.round(speedKph)}`;
+    el.textContent = text;
+    el.dataset.over = over ? "1" : "0";
+  }
+
+  function setConnectivity(text) {
+    setText("hudConnectivity", text && String(text).trim() ? String(text).trim() : "--");
   }
 
   function setBars(n) {
     const wrap = $("hudBars");
     if (!wrap) return;
-    const bars = wrap.querySelectorAll(".hudBar");
-    const k = Math.max(0, Math.min(bars.length, Number(n) || 0));
-    const start = bars.length - k;
-    bars.forEach((b, i) => b.classList.toggle("on", i >= start));
+    const bars = wrap.querySelectorAll(".hudGapBar");
+    const count = clamp(Number(n) || 0, 0, bars.length);
+    bars.forEach((bar, index) => {
+      bar.classList.toggle("is-on", index < count);
+    });
   }
 
   function setGapNum(n) {
-    const el = $("hudGapNum");
-    if (!el) return;
-    el.textContent = (n == null || !isFinite(n)) ? "-" : String(Math.round(n));
+    const display = n == null || !isFinite(n) ? "(--)" : `(${Math.round(n)})`;
+    setText("hudGapNum", display);
   }
 
   function setTemp(temp) {
-    if (!temp || temp.speed == null || !isFinite(temp.speed) || !temp.source) return;
-    $("hudTempReason").textContent = String(temp.source);
-    $("hudTempSpeed").textContent = String(Math.round(temp.speed));
+    const reasonEl = $("hudTempReason");
+    const speedEl = $("hudTempSpeed");
+    if (!reasonEl || !speedEl) return;
 
-    const isDecel = !!temp.is_decel;
-    const color = isDecel ? "#ffc94a" : "#34c96e";
-    $("hudTempReason").style.color = color;
-    $("hudTempSpeed").style.color = color;
+    if (!temp || temp.speed == null || !isFinite(temp.speed)) {
+      reasonEl.textContent = "TEMP";
+      speedEl.textContent = "--";
+      reasonEl.style.color = "rgba(255,255,255,0.84)";
+      speedEl.style.color = "rgba(255,255,255,0.88)";
+      return;
+    }
+
+    const reason = String(temp.source || "TEMP").trim();
+    const color = temp.is_decel ? "#FFC94A" : "#34C96E";
+    reasonEl.textContent = reason || "TEMP";
+    speedEl.textContent = `${Math.round(temp.speed)}`;
+    reasonEl.style.color = color;
+    speedEl.style.color = color;
   }
 
   function setSpeed(vEgoKph) {
-    const el = $("hudSpeed");
-    if (!el) return;
-    el.textContent = (vEgoKph == null || !isFinite(vEgoKph)) ? "--" : String(Math.round(vEgoKph));
+    setText("hudSpeed", vEgoKph == null || !isFinite(vEgoKph) ? "--" : `${Math.round(vEgoKph)}`);
   }
 
   function setSetSpeed(vSetKph) {
-    const el = $("hudSetSpeed");
+    setText("hudSetSpeed", vSetKph == null || !isFinite(vSetKph) ? "--" : `${Math.round(vSetKph)}`);
+  }
+
+  function setGear(txt) {
+    const el = $("hudGear");
     if (!el) return;
-    el.textContent = (vSetKph == null || !isFinite(vSetKph)) ? "--" : String(Math.round(vSetKph));
+    const value = String(txt || "U").trim().toUpperCase() || "U";
+    const unknown = value === "U" || value === "X";
+    el.textContent = unknown ? "–" : value;
+    el.dataset.unknown = unknown ? "1" : "0";
   }
 
-  function setRedDot(on) {
-    show("hudRedDot", !!on);
-  }
-
-  function setSys(cpuTempC, memPct, diskPct, diskLabel) {
-    setText("hudCpuVal", (cpuTempC == null || !isFinite(cpuTempC)) ? "--°C" : `${cpuTempC.toFixed(0)}°C`);
-    setText("hudMemVal", (memPct == null || !isFinite(memPct)) ? "--%" : `${memPct.toFixed(0)}%`);
-    if (diskPct == null || !isFinite(diskPct)) setText("hudDiskVal", "--V");
-    else setText("hudDiskVal", `${Number(diskPct).toFixed(1)}V`);
-    if (diskLabel) setText("hudDiskLabel", diskLabel);
+  function setMetrics(cpuTempC, memPct, diskPct) {
+    setText("hudCpuVal", cpuTempC == null || !isFinite(cpuTempC) ? "--°" : `${cpuTempC.toFixed(0)}°`);
+    setText("hudMemVal", memPct == null || !isFinite(memPct) ? "--%" : `${memPct.toFixed(0)}%`);
+    setText("hudDiskVal", diskPct == null || !isFinite(diskPct) ? "--.-V" : `${Number(diskPct).toFixed(1)}V`);
   }
 
   const DrivingHud = {
     init() {
       bindHudLayout();
-      scheduleHudProfileApply();
+      setMetrics(null, null, null);
+      setSpeed(null);
+      setSetSpeed(null);
+      setTemp(null);
       setBars(0);
-      setSignalDot("off");
-      setGps(false);
-      setDriveMode("", "normal");
-      setRoadLimit(null, false);
       setGapNum(null);
       setGear("U");
-      setRedDot(false);
-      setTemp(null);
+      setSignalDot("off");
+      setDriveMode("", "normal");
+      setRoadLimit(null, false);
+      setConnectivity("--");
     },
 
-    update(p) {
-      if (!p) return;
+    update(payload) {
+      if (!payload) return;
       scheduleHudProfileApply();
-      setSys(p.cpuTempC, p.memPct, p.diskPct, p.diskLabel);
-      setSpeed(p.vEgoKph);
-      setSetSpeed(p.vSetKph);
-      setSignalDot(p.tlight || "off");
-      setRedDot(p.redDot);
-      setTemp(p.temp);
-      setGapNum(p.tfGap);
-      setBars(p.tfBars != null ? p.tfBars : p.tfGap);
-      setGear(p.gear);
-      setGps(!!p.gpsOk);
-      if (p.driveMode) setDriveMode(p.driveMode.name, p.driveMode.kind);
-      setRoadLimit(p.speedLimitKph, p.speedLimitOver);
+      setMetrics(payload.cpuTempC, payload.memPct, payload.diskPct);
+      setSpeed(payload.vEgoKph);
+      setSetSpeed(payload.vSetKph);
+      setTemp(payload.temp);
+      setBars(payload.tfBars != null ? payload.tfBars : payload.tfGap);
+      setGapNum(payload.tfGap);
+      setGear(payload.gear);
+      setSignalDot(payload.tlight || "off");
+      if (payload.driveMode) setDriveMode(payload.driveMode.name, payload.driveMode.kind);
+      else setDriveMode("", "normal");
+      setRoadLimit(payload.speedLimitKph, payload.speedLimitOver);
+      setConnectivity(payload.apm);
     },
 
     relayout() {

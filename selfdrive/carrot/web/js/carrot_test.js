@@ -831,15 +831,13 @@ window.CarrotTest = (() => {
     const overlayWidth = overlayHeight * 1.02;
     const scale = clamp((overlayWidth / 320) * 0.9, 0.65, 0.9);
     const scaledHudSize = 320 * scale;
-    const minAbsLeft = stageRect.left + viewport.left + overlayInsetX;
-    const maxAbsLeft = stageRect.left + viewport.right - scaledHudSize - overlayInsetX;
-    const absLeft = Math.round(clamp(minAbsLeft, minAbsLeft, Math.max(minAbsLeft, maxAbsLeft)));
-    const absBottom = Math.round(
-      Math.max(12, window.innerHeight - (stageRect.top + viewport.bottom) + overlayInsetY),
-    );
+    const minStageLeft = viewport.left + overlayInsetX;
+    const maxStageLeft = viewport.right - scaledHudSize - overlayInsetX;
+    const stageLeft = Math.round(clamp(minStageLeft, minStageLeft, Math.max(minStageLeft, maxStageLeft)));
+    const stageBottom = Math.round(Math.max(12, stageRect.height - viewport.bottom + overlayInsetY));
 
-    driveHudCardEl.style.setProperty("--carrot-hud-left", `${absLeft}px`);
-    driveHudCardEl.style.setProperty("--carrot-hud-bottom", `${absBottom}px`);
+    driveHudCardEl.style.setProperty("--carrot-hud-left", `${stageLeft}px`);
+    driveHudCardEl.style.setProperty("--carrot-hud-bottom", `${stageBottom}px`);
     driveHudCardEl.style.setProperty("--carrot-hud-scale", scale.toFixed(3));
   }
 
