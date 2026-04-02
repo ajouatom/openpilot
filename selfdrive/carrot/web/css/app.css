@@ -1763,8 +1763,8 @@ body[data-page="carrot"] #driveHudCard {
   max-width: none;
   margin: 0;
   background:
-    linear-gradient(180deg, rgba(16, 56, 37, 0.96), rgba(7, 24, 16, 0.94)),
-    radial-gradient(circle at 18% 14%, rgba(255,255,255,0.08), transparent 28%);
+    linear-gradient(180deg, rgba(21, 25, 31, 0.96), rgba(9, 11, 15, 0.94)),
+    radial-gradient(circle at 18% 14%, rgba(255,255,255,0.06), transparent 28%);
   border-color: rgba(255,255,255,0.18);
   box-shadow:
     0 14px 34px rgba(0,0,0,0.44),
@@ -1783,8 +1783,8 @@ body[data-page="carrot"] #driveHudCard .hudWrap {
   transform: scale(var(--carrot-hud-scale, 0.84));
   transform-origin: left bottom;
   background:
-    linear-gradient(180deg, rgba(19, 62, 41, 0.92), rgba(7, 24, 16, 0.90)),
-    radial-gradient(circle at 18% 14%, rgba(255,255,255,0.08), transparent 28%);
+    linear-gradient(180deg, rgba(19, 23, 29, 0.92), rgba(8, 10, 14, 0.90)),
+    radial-gradient(circle at 18% 14%, rgba(255,255,255,0.05), transparent 28%);
   border-color: rgba(255,255,255,0.14);
   box-shadow:
     0 18px 40px rgba(0,0,0,0.42),
@@ -2359,12 +2359,20 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
       calc(var(--nav-rail-width) + 12px),
       calc(var(--nav-rail-width) + (((100vw - var(--nav-rail-width)) - (var(--home-landscape-media-size) + 24px + var(--home-landscape-utility-size))) / 2))
     );
+    top: 50%;
+    bottom: auto;
+    transform: translateY(-50%);
   }
 
   body[data-page="home"] #driveHudCard .hudWrap {
     width: var(--home-landscape-media-size);
     transform: none;
     opacity: 1;
+  }
+
+  body[data-page="carrot"] #driveHudCard {
+    top: auto;
+    transform: none;
   }
 
   body[data-page="carrot"] #driveHudCard .hudWrap {
