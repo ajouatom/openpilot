@@ -355,6 +355,10 @@ CanfdBufferedFwd canfd_bfwd[] = {
   {.addr = 0x1A0, .dst_bus = 0, .enabled = true },  // SCC_CONTROL
   {.addr = 0x12A, .dst_bus = 0, .enabled = true },  // LFA
   {.addr = 0x0CB, .dst_bus = 0, .enabled = true },  // LFA_ALT
+  {.addr = 0x0EA, .dst_bus = 2, .enabled = true },  // MDPS
+  {.addr = 0x1AA, .dst_bus = 2, .enabled = true },  // CRUISE_ALT_BUTTONS
+  {.addr = 0x1CF, .dst_bus = 2, .enabled = true },  // CRUISE_BUTTON
+  {.addr = 0x175, .dst_bus = 2, .enabled = true },  // TCS
   { 0 },
 };
 
