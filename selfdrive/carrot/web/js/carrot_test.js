@@ -792,11 +792,15 @@ window.CarrotTest = (() => {
     }
 
     const hasStream = Boolean(stream);
-    videoEl.style.display = hasStream ? "block" : "none";
     if (hasStream && videoEl.paused) {
       videoEl.play().catch(() => {});
     }
     return hasStream;
+  }
+
+  function setStageReady(ready) {
+    stageEl.classList.toggle("is-stream-ready", Boolean(ready));
+    videoEl.style.display = ready ? "block" : "none";
   }
 
   function syncCanvasSize(videoWidth, videoHeight, stageWidth, stageHeight) {
@@ -2020,23 +2024,12 @@ window.CarrotTest = (() => {
 
     const hasStream = syncSourceStream();
     if (!hasStream || !videoEl.videoWidth || !videoEl.videoHeight) {
+      setStageReady(false);
       clearOverlay(canvasEl.width || 1, canvasEl.height || 1);
       clearHud(hudCanvasEl.width || 1, hudCanvasEl.height || 1);
       setStatus("waiting road camera stream...");
       setMeta("road:- model:- path:-");
       setDebug("LD:- LT:- SR:-");
-      const fallbackViewport = {
-        left: 0,
-        top: 0,
-        right: stageEl.clientWidth || 1,
-        bottom: stageEl.clientHeight || 1,
-        width: stageEl.clientWidth || 1,
-        height: stageEl.clientHeight || 1,
-        centerX: (stageEl.clientWidth || 1) / 2,
-        centerY: (stageEl.clientHeight || 1) / 2,
-      };
-      drawHudLeftCenterLogs(fallbackViewport.width, fallbackViewport.height, fallbackViewport, lastStatus, lastMeta, 0);
-      drawHudTopRightText(fallbackViewport.width, fallbackViewport.height, fallbackViewport, lastDebug, 0);
       return;
     }
 
@@ -2071,6 +2064,7 @@ window.CarrotTest = (() => {
     const viewportRect = getHudViewportRect(videoWidth, videoHeight, stageWidth, stageHeight, transform);
 
     applyStageTransform(transform);
+    setStageReady(true);
     clearOverlay(videoWidth, videoHeight);
     clearHud(stageWidth, stageHeight);
 
