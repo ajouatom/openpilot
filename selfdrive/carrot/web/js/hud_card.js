@@ -114,11 +114,22 @@
     const rect = target?.getBoundingClientRect?.() || null;
     const width = rect?.width || viewportWidth;
     const height = rect?.height || viewportHeight;
+    const windowClass = getHudWindowClass(viewportWidth);
 
     if (surface === SURFACE_HOME) {
+      const viewportAwareHudCap = clamp(viewportHeight * 0.32, 220, 520);
+      const homeHudHeightCap = (() => {
+        switch (windowClass) {
+          case "compact": return clamp(viewportAwareHudCap, 220, 360);
+          case "medium": return clamp(viewportAwareHudCap, 240, 390);
+          case "expanded": return clamp(viewportAwareHudCap, 260, 420);
+          case "large": return clamp(viewportAwareHudCap, 280, 450);
+          default: return clamp(viewportAwareHudCap, 300, 480);
+        }
+      })();
       return {
-        width: clamp(width - 8, 280, 668),
-        height: clamp(Math.max(height || 0, viewportHeight * 0.52), 220, Math.max(220, viewportHeight - 96)),
+        width: Math.min(Math.max(280, width), viewportWidth - 24),
+        height: homeHudHeightCap,
       };
     }
 
@@ -260,7 +271,9 @@
     const constraints = getHudConstraints(surface);
     const profile = buildHudProfile(constraints.width, constraints.height, surface);
     const style = root.style;
-    const panelWidth = Math.min(constraints.width, profile.maxWidth);
+    const panelWidth = surface === SURFACE_HOME
+      ? Math.min(constraints.width, profile.maxWidth, constraints.height * profile.preferredAspectRatio)
+      : Math.min(constraints.width, profile.maxWidth);
     const panelHeight = Math.round(panelWidth / Math.max(profile.preferredAspectRatio, 0.1));
 
     card.dataset.surface = surface;

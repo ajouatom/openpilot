@@ -11,7 +11,6 @@ window.HomeDrive = (() => {
   const driveHudCardEl = document.getElementById("driveHudCard");
   const sourceVideoEl = document.getElementById("rtcVideo");
   const zoomButtons = Array.from(document.querySelectorAll(".carrot-zoom__btn"));
-  const leadPreviewToggleEl = document.getElementById("homeDriveLeadPreview");
 
   if (!stageEl || !videoEl || !canvasEl || !hudCanvasEl || !statusEl || !metaEl || !debugEl || !sourceVideoEl) {
     return {};
@@ -47,7 +46,6 @@ window.HomeDrive = (() => {
   ];
   const HUD_TEXT_FONT = "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
   const DISPLAY_MODE_STORAGE_KEY = "home_drive_display_mode_index";
-  const TEST_FLAGS_STORAGE_KEY = "home_drive_flags";
   const PATH_PALETTE = [
     { r: 255, g: 82, b: 82 },
     { r: 255, g: 153, b: 0 },
@@ -111,9 +109,6 @@ window.HomeDrive = (() => {
     previousAtMs: 0,
     currentAtMs: 0,
   };
-  let testFlags = {
-    leadPreview: false,
-  };
 
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
@@ -149,32 +144,6 @@ window.HomeDrive = (() => {
     const text = String(value || "").trim();
     if (!text) return "";
     return text.length > maxLength ? `${text.slice(0, maxLength - 1)}...` : text;
-  }
-
-  function loadTestFlags() {
-    try {
-      const raw = localStorage.getItem(TEST_FLAGS_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === "object") {
-        testFlags = {
-          ...testFlags,
-          leadPreview: Boolean(parsed.leadPreview),
-        };
-      }
-    } catch {}
-  }
-
-  function persistTestFlags() {
-    try {
-      localStorage.setItem(TEST_FLAGS_STORAGE_KEY, JSON.stringify(testFlags));
-    } catch {}
-  }
-
-  function syncTestFlagInputs() {
-    if (leadPreviewToggleEl) {
-      leadPreviewToggleEl.checked = Boolean(testFlags.leadPreview);
-    }
   }
 
   function rgba(rgb, alpha) {
@@ -829,7 +798,7 @@ window.HomeDrive = (() => {
     const overlayInsetY = displayModeKey === "fit" ? 8 : 12;
     const overlayHeight = clamp(viewport.height * (displayModeKey === "fit" ? 0.27 : 0.29), 184, 304);
     const overlayWidth = overlayHeight * 1.02;
-    const scale = clamp((overlayWidth / 320) * 0.9, 0.65, 0.9);
+    const scale = clamp((overlayWidth / 320) * 1.08, 0.78, 1.08);
     const scaledHudSize = 320 * scale;
     const minStageLeft = viewport.left + overlayInsetX;
     const maxStageLeft = viewport.right - scaledHudSize - overlayInsetX;
@@ -1246,27 +1215,6 @@ window.HomeDrive = (() => {
     };
   }
 
-  function createPreviewLead(modelPath) {
-    const xs = Array.isArray(modelPath?.x) ? modelPath.x : [];
-    if (xs.length < 2) return null;
-    const lastX = finiteNumber(xs[xs.length - 1], 0);
-    if (!lastX || lastX < 6) return null;
-
-    const dRel = clamp(lastX * 0.35, 14, 28);
-    const pathY = samplePathY(modelPath, dRel);
-    if (!Number.isFinite(pathY)) return null;
-
-    return {
-      status: true,
-      dRel,
-      yRel: -pathY,
-      radar: false,
-      radarTrackId: -99999,
-      modelProb: 0,
-      __preview: true,
-    };
-  }
-
   function drawLeadBoxCard(box, strokeColor, fillColor, primary = true) {
     if (!box?.rect) return;
     const { x, y, width, height } = box.rect;
@@ -1310,25 +1258,6 @@ window.HomeDrive = (() => {
       default:
         return "rgba(255, 255, 255, 0.82)";
     }
-  }
-
-  function drawPreviewLeadBox(box) {
-    if (!box?.rect) return;
-    const { x, y, width, height } = box.rect;
-    ctx.save();
-    fillRoundedRect(ctx, x, y, width, height, 16, "rgba(24, 31, 42, 0.14)");
-    roundedRectPath(ctx, x, y, width, height, 16);
-    ctx.setLineDash([10, 8]);
-    ctx.lineWidth = 2.6;
-    ctx.strokeStyle = "rgba(145, 164, 191, 0.82)";
-    ctx.stroke();
-    ctx.restore();
-    drawCanvasOutlinedText("TEST", box.centerX, y + height + 22, {
-      fontSize: 15,
-      fontWeight: 800,
-      fillStyle: "rgba(232, 239, 247, 0.94)",
-      strokeWidth: 3.2,
-    });
   }
 
   function getLeadStateText(overlayState, hudState) {
@@ -1558,12 +1487,6 @@ window.HomeDrive = (() => {
     const modelPath = model?.position || null;
     const showRadarInfo = finiteNumber(paramsState.ShowRadarInfo, defaultParams.ShowRadarInfo);
     const leadState = getLeadStateText(overlayState, hudState);
-    const previewLead = testFlags.leadPreview && modelPath ? createPreviewLead(modelPath) : null;
-    const previewBox = previewLead ? projectLeadBox(previewLead, modelPath, calibTransform, videoWidth, videoHeight) : null;
-
-    if (previewBox) {
-      drawPreviewLeadBox(previewBox);
-    }
 
     const leadOneBox = projectLeadBox(radarState?.leadOne, modelPath, calibTransform, videoWidth, videoHeight);
     if (leadOneBox) {
@@ -2191,18 +2114,8 @@ window.HomeDrive = (() => {
     }
   } catch {}
 
-  loadTestFlags();
   syncDisplayModeButtons();
-  syncTestFlagInputs();
   refreshParams(true);
-
-  if (leadPreviewToggleEl) {
-    leadPreviewToggleEl.addEventListener("change", () => {
-      testFlags.leadPreview = Boolean(leadPreviewToggleEl.checked);
-      persistTestFlags();
-      renderActiveFrame();
-    });
-  }
 
   runLoop();
 

@@ -1679,7 +1679,6 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--overlay {
 }
 
 body[data-page="carrot"] #driveHudCard.driveHudCard--overlay .hudWrap {
-  width: clamp(260px, 28vw, 340px);
   margin: 0;
   transform: scale(var(--carrot-hud-scale, 1));
   transform-origin: left bottom;
@@ -1868,70 +1867,36 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
   bottom: 14px;
   z-index: 4;
   display: inline-flex;
-  gap: 8px;
-  padding: 6px;
-  border-radius: 16px;
-  background: rgba(5, 8, 12, 0.52);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  gap: 6px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
   pointer-events: auto;
 }
 
 .carrot-zoom__btn {
-  min-width: 66px;
-  min-height: 34px;
-  border-radius: 12px;
-  border-color: rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.88);
+  min-width: 54px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 13px;
   font-weight: 800;
+  box-shadow: none;
 }
 
 .carrot-zoom__btn.is-active {
-  background: color-mix(in srgb, var(--md-primary) 76%, #fff);
-  border-color: transparent;
-  color: #071219;
-  box-shadow: 0 10px 24px rgba(80, 189, 255, 0.18);
+  background: transparent;
+  border-color: color-mix(in srgb, var(--md-primary) 76%, #fff);
+  color: color-mix(in srgb, var(--md-primary) 76%, #fff);
+  box-shadow: none;
 }
 
 .carrot-zoom__btn:hover {
-  border-color: rgba(255, 255, 255, 0.14);
-}
-
-.home-drive-menu {
-  position: absolute;
-  right: 14px;
-  bottom: 72px;
-  z-index: 4;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  border-radius: 14px;
-  background: rgba(5, 8, 12, 0.56);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  pointer-events: auto;
-}
-
-.home-drive-menu__item {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1;
-  user-select: none;
-}
-
-.home-drive-menu__check {
-  width: 18px;
-  height: 18px;
-  margin: 0;
-  accent-color: color-mix(in srgb, var(--md-primary) 76%, #fff);
+  border-color: rgba(255, 255, 255, 0.34);
 }
 
 /* ── Desktop: full-width footer with centered content ─────────────────── */
@@ -2316,11 +2281,6 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
   body[data-page="carrot"] #pageCarrot .carrot-zoom {
     right: 12px;
     bottom: 12px;
-  }
-
-body[data-page="carrot"] #pageCarrot .home-drive-menu {
-    right: 12px;
-    bottom: 70px;
   }
 
   body[data-page="setting"] #pageSetting {
