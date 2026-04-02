@@ -815,6 +815,7 @@ window.CarrotTest = (() => {
     if (!driveHudCardEl) return;
     const stageRect = stageEl.getBoundingClientRect();
     if (!stageRect.width || !stageRect.height) return;
+    const displayModeKey = DISPLAY_MODES[displayModeIndex]?.key || "normal";
 
     const viewport = viewportRect || {
       left: 0,
@@ -824,13 +825,17 @@ window.CarrotTest = (() => {
       width: stageRect.width,
       height: stageRect.height,
     };
-    const overlayInset = 12;
-    const overlayHeight = clamp(viewport.height * 0.29, 184, 304);
+    const overlayInsetX = displayModeKey === "fit" ? 8 : 12;
+    const overlayInsetY = displayModeKey === "fit" ? 8 : 12;
+    const overlayHeight = clamp(viewport.height * (displayModeKey === "fit" ? 0.27 : 0.29), 184, 304);
     const overlayWidth = overlayHeight * 1.02;
     const scale = clamp((overlayWidth / 320) * 0.9, 0.65, 0.9);
-    const absLeft = Math.round(stageRect.left + viewport.left + overlayInset);
+    const scaledHudSize = 320 * scale;
+    const minAbsLeft = stageRect.left + viewport.left + overlayInsetX;
+    const maxAbsLeft = stageRect.left + viewport.right - scaledHudSize - overlayInsetX;
+    const absLeft = Math.round(clamp(minAbsLeft, minAbsLeft, Math.max(minAbsLeft, maxAbsLeft)));
     const absBottom = Math.round(
-      Math.max(12, window.innerHeight - (stageRect.top + viewport.bottom) + overlayInset),
+      Math.max(12, window.innerHeight - (stageRect.top + viewport.bottom) + overlayInsetY),
     );
 
     driveHudCardEl.style.setProperty("--carrot-hud-left", `${absLeft}px`);
@@ -1971,14 +1976,16 @@ window.CarrotTest = (() => {
     return { min, max };
   }
 
-  function drawPlot(stageWidth, stageHeight, plotData) {
+  function drawPlot(stageWidth, stageHeight, viewportRect, plotData) {
     if (!plotData) return;
-    if (stageWidth < 900) return;
+    const viewportWidth = finiteNumber(viewportRect?.width, stageWidth);
+    const viewportHeight = finiteNumber(viewportRect?.height, stageHeight);
+    if (viewportWidth < 560 || viewportHeight < 260) return;
 
-    const panelWidth = Math.min(stageWidth * 0.52, 640);
-    const panelHeight = Math.min(stageHeight * 0.24, 220);
-    const panelX = 18;
-    const panelY = 58;
+    const panelWidth = clamp(viewportWidth * 0.42, 340, 560);
+    const panelHeight = clamp(viewportHeight * 0.22, 156, 200);
+    const panelX = finiteNumber(viewportRect?.left, 0) + Math.max(14, viewportWidth * 0.018);
+    const panelY = finiteNumber(viewportRect?.top, 0) + Math.max(46, viewportHeight * 0.05);
     const graphX = panelX + 16;
     const graphY = panelY + 40;
     const graphWidth = panelWidth - 32;
@@ -2121,7 +2128,7 @@ window.CarrotTest = (() => {
       drawRadarLeadBoxes(model, overlayState, hudState, transform.calibTransform, videoWidth, videoHeight);
     }
 
-    drawPlot(stageWidth, stageHeight, plotData);
+    drawPlot(stageWidth, stageHeight, viewportRect, plotData);
 
     const laneCount = Array.isArray(model?.laneLines) ? model.laneLines.length : 0;
     const edgeCount = Array.isArray(model?.roadEdges) ? model.roadEdges.length : 0;
@@ -2140,7 +2147,6 @@ window.CarrotTest = (() => {
       `road:${roadCameraState?.frameId ?? "-"} model:${model?.frameId ?? "-"} path:${selectedPath.pathSource}/${pathStyle.mode}:${pathStyle.colorIndex} width:${finiteNumber(paramsState.ShowPathWidth, 100)} laneInfo:${showLaneInfo} lane:${laneCount} edge:${edgeCount} lead:${leadCount} plot:${finiteNumber(paramsState.ShowPlotMode, 0)} rpy:${rpy.join(",") || "-"} h:${finiteNumber(liveCalibration?.height?.[0], 0).toFixed(2)}`,
     );
     setDebug(firstNonEmptyText(brokerServices?.carrotMan?.stockDebugTopRightText, overlayState?.carrotMan?.stockDebugTopRightText, formatDebugText(overlayState)));
-    drawHudLeftCenterLogs(stageWidth, stageHeight, viewportRect, lastStatus, lastMeta, pathStyle.mode);
     drawHudTopRightText(stageWidth, stageHeight, viewportRect, lastDebug, pathStyle.mode);
     drawHudBottomText(stageWidth, stageHeight, viewportRect, selectedPath.latDebugText, hudState, pathStyle.mode);
   }
