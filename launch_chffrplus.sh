@@ -67,7 +67,9 @@ function launch {
 
   # handle pythonpath
   ln -sfn $(pwd) /data/pythonpath
-  export PYTHONPATH="$PWD"
+  PYDEPS="$DIR/pydeps"
+  mkdir -p "$PYDEPS"
+  export PYTHONPATH="$PYDEPS:$PWD${PYTHONPATH:+:$PYTHONPATH}"
 
   # hardware specific init
   if [ -f /AGNOS ]; then
@@ -93,6 +95,24 @@ function launch {
   else
     echo "kaitaistruct installing."
     pip install kaitaistruct
+  fi
+  if python3 -c "import msgpack" > /dev/null 2>&1; then
+    echo "msgpack already installed."
+  else
+    MSGPACK_WHEEL_DIR="$DIR/third_party/wheels"
+    if ls "$MSGPACK_WHEEL_DIR"/msgpack-*.whl > /dev/null 2>&1; then
+      echo "msgpack installing from local wheel to pydeps."
+      python3 -m pip install --no-index --find-links "$MSGPACK_WHEEL_DIR" --target "$PYDEPS" --upgrade msgpack || python3 -m pip install --target "$PYDEPS" --upgrade msgpack
+    else
+      echo "msgpack local wheel missing, installing to pydeps from network."
+      python3 -m pip install --target "$PYDEPS" --upgrade msgpack
+    fi
+
+    if python3 -c "import msgpack" > /dev/null 2>&1; then
+      echo "msgpack installed for python3."
+    else
+      echo "msgpack install failed for python3."
+    fi
   fi
 
   # events language init

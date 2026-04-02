@@ -54,7 +54,7 @@
 
 .hudSpeedBg {
   position: absolute;
-  width: 225px; 
+  width: 225px;
   height: 180px;
   left: 40%;
   top: 6px;
@@ -96,7 +96,7 @@
   width: 20px;
   height: 20px;
   border-radius: 999px;
-  background: #15d14b; /* green default */
+  background: #15d14b;
   box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
 }
 
@@ -249,33 +249,3 @@
   #driveHudCard .hudSpeed{ font-size: 68px; }
   #driveHudCard .hudSetSpeed{ font-size: 40px; }
 }
-
-/* ===== WebRTC overlay dock ===== */
-.hudOverlayHost{
-  position:absolute;
-  inset:0;
-  pointer-events:none;
-}
-
-/* default: top-center overlay (non-fullscreen) */
-.hudOverlayHost.dock_top .hudWrap{
-  position:absolute;
-  top:10px;
-  left:50%;
-  transform: translateX(-50%) scale(0.82);
-  transform-origin: top center;
-  width: 320px;
-  max-width: 320px;
-}
-
-/* fullscreen/landscape: bottom-left overlay */
-.hudOverlayHost.dock_bl .hudWrap{
-  position:absolute;
-  left:12px;
-  bottom:12px;
-  transform: scale(0.86);
-  transform-origin: left bottom;
-  width: 320px;
-  max-width: 320px;
-}
-

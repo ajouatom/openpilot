@@ -41,6 +41,10 @@ import uuid
 from openpilot.common.realtime import set_core_affinity
 from openpilot.system.hardware import HARDWARE
 
+from ..realtime.raw_protocol import build_raw_hello
+from ..realtime.transports import CameraWsHub, RawWsHub
+from .live_compat.broker import RealtimeBroker
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
 
@@ -210,34 +214,109 @@ async def proxy_stream(request: web.Request) -> web.StreamResponse:
 async def api_heartbeat_status(request: web.Request) -> web.Response:
   return web.json_response({"ok": True, "hb": request.app.get("hb_last")})
 
+
+async def api_live_runtime(request: web.Request) -> web.Response:
+  broker: RealtimeBroker | None = request.app.get("realtime_broker")
+  broker_error = request.app.get("realtime_broker_error")
+  if broker is None:
+    return web.json_response({"ok": False, "error": broker_error or "realtime broker unavailable"}, status=503)
+
+  force = request.query.get("force") == "1"
+  runtime = broker.last_snapshot.get("runtime") if isinstance(broker.last_snapshot, dict) else None
+  if not isinstance(runtime, dict):
+    runtime = {}
+
+  age_ms = broker.snapshot_age_ms()
+  if force or age_ms is None or age_ms > 250 or not runtime.get("params"):
+    try:
+      await asyncio.to_thread(broker.poll, 0)
+    except Exception as exc:
+      return web.json_response({"ok": False, "error": str(exc)}, status=500)
+    runtime = broker.last_snapshot.get("runtime") if isinstance(broker.last_snapshot, dict) else {}
+
+  meta = broker.last_snapshot.get("meta") if isinstance(broker.last_snapshot, dict) else {}
+  services = _select_live_runtime_services(broker.last_snapshot if isinstance(broker.last_snapshot, dict) else {})
+  return web.json_response({
+    "ok": True,
+    "meta": meta if isinstance(meta, dict) else {},
+    "runtime": runtime if isinstance(runtime, dict) else {},
+    "services": services,
+    "snapshotAgeMs": broker.snapshot_age_ms(),
+  })
+
+
+_LIVE_RUNTIME_SERVICE_NAMES = (
+  "selfdriveState",
+  "carState",
+  "controlsState",
+  "longitudinalPlan",
+  "lateralPlan",
+  "radarState",
+  "carrotMan",
+)
+
+
+def _select_live_runtime_services(snapshot: dict[str, Any]) -> dict[str, Any]:
+  services = snapshot.get("services")
+  if not isinstance(services, dict):
+    return {}
+  out: dict[str, Any] = {}
+  for name in _LIVE_RUNTIME_SERVICE_NAMES:
+    value = services.get(name)
+    if isinstance(value, dict):
+      out[name] = value
+  return out
+
+
+def _do_gc_and_trim() -> None:
+  """gc.collect + malloc_trim — runs in thread pool (GIL acquired there)."""
+  import gc as _gc
+  _gc.collect()
+  try:
+    import ctypes
+    libc = ctypes.CDLL("libc.so.6")
+    libc.malloc_trim(0)
+  except Exception:
+    pass
+
+async def _malloc_trim_loop():
+  """Periodic gc + malloc_trim to reclaim leaked objects and return C heap.
+  Runs via to_thread so the event loop is never blocked."""
+  while True:
+    await asyncio.sleep(30.0)
+    await asyncio.to_thread(_do_gc_and_trim)
+
 async def on_startup(app: web.Application):
   app["http"] = ClientSession()
   app["hb_last"] = {"ok": None, "msg": "not yet", "ts": 0}
+  # Eager broker creation — single SubMaster via RealtimeBroker
+  try:
+    broker = RealtimeBroker(repo_flavor="c3")
+    app["realtime_broker"] = broker
+    app["realtime_broker_error"] = None
+  except Exception as exc:
+    app["realtime_broker"] = None
+    app["realtime_broker_error"] = str(exc)
+  app["realtime_camera_hub"] = CameraWsHub(messaging)
+  app["realtime_raw_hub"] = RawWsHub(messaging)
   if HAS_PARAMS:
     app["hb_task"] = asyncio.create_task(heartbeat_loop(app))
-  global _ws_carstate_task, _ws_carstate_lock
-  _ws_carstate_lock = asyncio.Lock()
-  _ws_carstate_task = asyncio.create_task(carstate_updater(app))
-  
+  asyncio.create_task(_malloc_trim_loop())
+
 async def on_cleanup(app: web.Application):
-  global _ws_carstate_task
-
-  for ws in list(_ws_carstate_clients):
+  realtime_camera_hub = app.get("realtime_camera_hub")
+  if realtime_camera_hub is not None:
     try:
-      await ws.close()
-    except Exception:
-      pass
-  _ws_carstate_clients.clear()
-
-  if _ws_carstate_task is not None:
-    _ws_carstate_task.cancel()
-    try:
-      await _ws_carstate_task
-    except asyncio.CancelledError:
-      pass
+      await realtime_camera_hub.stop_all()
     except Exception:
       traceback.print_exc()
-    _ws_carstate_task = None
+
+  realtime_raw_hub = app.get("realtime_raw_hub")
+  if realtime_raw_hub is not None:
+    try:
+      await realtime_raw_hub.stop_all()
+    except Exception:
+      traceback.print_exc()
     
   t = app.get("hb_task")
   if t:
@@ -459,12 +538,6 @@ async def handle_index(request: web.Request) -> web.Response:
 # Legacy direct-file routes kept for backward compatibility.
 async def handle_appjs(request: web.Request) -> web.Response:
   return web.FileResponse(os.path.join(JS_DIR, "app_core.js"))
-
-async def handle_hudjs(request: web.Request) -> web.Response:
-  return web.FileResponse(os.path.join(JS_DIR, "hud_card.js"))
-
-async def handle_hudcss(request: web.Request) -> web.Response:
-  return web.FileResponse(os.path.join(CSS_DIR, "hud_card.css"))
 
 async def handle_appcss(request: web.Request) -> web.Response:
   return web.FileResponse(os.path.join(CSS_DIR, "app.css"))
@@ -1556,29 +1629,33 @@ async def api_tools(request: web.Request) -> web.Response:
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
 
-async def ws_state(request: web.Request) -> web.WebSocketResponse:
-  ws = web.WebSocketResponse(heartbeat=20)
+async def ws_raw(request: web.Request) -> web.WebSocketResponse:
+  service = (request.match_info.get("service") or "").strip()
+  hub: RawWsHub | None = request.app.get("realtime_raw_hub")
+  if hub is None:
+    raise web.HTTPServiceUnavailable(text="realtime raw hub unavailable")
+  if not service or not hub.is_allowed_service(service):
+    raise web.HTTPNotFound(text=f"unknown raw service: {service}")
+
+  ws = web.WebSocketResponse(heartbeat=20, max_msg_size=8 * 1024 * 1024, compress=False)
   await ws.prepare(request)
-
-  while True:
-    payload = {
-      "ts": time.time(),
-      "pid": os.getpid(),
-      "has_params": HAS_PARAMS,
-      "settings_path": _settings_cache["path"],
-      "settings_exists": os.path.exists(_settings_cache["path"]),
-    }
-    try:
-      await ws.send_str(json.dumps(payload))
-    except Exception:
-      break
-    await asyncio.sleep(2.0)  # 폰에서 부담 줄이려고 2초
-
+  await ws.send_str(json.dumps(build_raw_hello(service=service), separators=(",", ":")))
+  await hub.register(service, ws)
   try:
-    await ws.close()
-  except Exception:
-    pass
+    async for msg in ws:
+      if msg.type in (WSMsgType.CLOSE, WSMsgType.CLOSING, WSMsgType.ERROR):
+        break
+  finally:
+    await hub.unregister(service, ws)
+
   return ws
+
+
+async def ws_camera(request: web.Request) -> web.WebSocketResponse:
+  hub: CameraWsHub | None = request.app.get("realtime_camera_hub")
+  if hub is None:
+    raise web.HTTPServiceUnavailable(text="realtime camera hub unavailable")
+  return await hub.ws_camera(request)
 
 def _tmux_run(args: List[str], timeout: float = 5.0, check: bool = False) -> subprocess.CompletedProcess:
   return subprocess.run(
@@ -1672,7 +1749,7 @@ def _tmux_clear(session: str) -> None:
   _tmux_run(["tmux", "clear-history", "-t", session], timeout=4.0, check=False)
 
 async def ws_terminal(request: web.Request) -> web.WebSocketResponse:
-  ws = web.WebSocketResponse(heartbeat=20)
+  ws = web.WebSocketResponse(heartbeat=20, compress=False)
   await ws.prepare(request)
 
   session = (request.query.get("session") or TMUX_WEB_SESSION).strip() or TMUX_WEB_SESSION
@@ -1790,197 +1867,6 @@ async def handle_download_tmux(request: web.Request) -> web.Response:
       "Content-Disposition": "attachment; filename=tmux.log"
     }
   )
-
-_ws_carstate_task = None
-_ws_carstate_payload_json = "{}"
-_ws_carstate_lock = None
-_ws_carstate_clients = set()
-async def carstate_updater(app: web.Application):
-  global _ws_carstate_payload_json, _ws_carstate_lock
-
-  sm = messaging.SubMaster([
-    'carState',
-    'carControl',
-    'deviceState',
-    'longitudinalPlan',
-    'carrotMan',
-    'peripheralState',
-  ])
-
-  params = Params() if HAS_PARAMS else None
-
-  last_toggle_t = 0.0
-  show_volt = False
-
-  last_tf_gap_read_t = 0.0
-  cached_tf_gap = None
-
-  while True:
-    try:
-      sm.update(0)
-      now = time.time()
-
-      if now - last_toggle_t > 3.2:
-        last_toggle_t = now
-        show_volt = not show_volt
-
-      # Params는 매 루프마다 읽지 말고 1초에 1번만
-      if params is not None and (now - last_tf_gap_read_t > 1.0):
-        last_tf_gap_read_t = now
-        try:
-          cached_tf_gap = int(params.get_int("LongitudinalPersonality") or 0) + 1
-        except Exception:
-          cached_tf_gap = None
-
-      v_ego = None
-      v_cruise = None
-      gear = None
-      temp = None
-      gps_ok = None
-
-      cpu_temp_c = None
-      mem_pct = None
-      disk_pct = None
-      volt_v = None
-      drive_mode_obj = None
-      temp_speed = None
-
-      if sm.alive['carState'] and sm.alive['carControl']:
-        CS = sm['carState']
-        CC = sm['carControl']
-        CM = sm['carrotMan']
-        lp = sm['longitudinalPlan']
-        ps = sm['peripheralState']
-        ds = sm['deviceState']
-
-        v_ego = CS.vEgoCluster
-        v_cruise = CS.vCruiseCluster
-
-        gs = CS.gearShifter
-        step = CS.gearStep
-        if gs == GearShifter.unknown:
-          gear = "U"
-        elif gs == GearShifter.park:
-          gear = "P"
-        elif gs == GearShifter.drive:
-          gear = str(step) if step > 0 else "D"
-        elif gs == GearShifter.neutral:
-          gear = "N"
-        elif gs == GearShifter.reverse:
-          gear = "R"
-        elif gs == GearShifter.low:
-          gear = "L"
-        elif gs == GearShifter.sport:
-          gear = "S"
-        else:
-          gear = "X"
-
-        apply_speed = CM.desiredSpeed
-        apply_source = CM.desiredSource
-        temp_speed = {
-          "speed": apply_speed,
-          "source": apply_source if v_cruise is not None and apply_speed >= v_cruise else "",
-          "is_decel": True if v_cruise is not None and apply_speed < v_cruise else False,
-        }
-
-        drive_mode = lp.myDrivingMode
-        if drive_mode == 1:
-          drive_mode_obj = {"name": "Eco", "kind": "eco"}
-        elif drive_mode == 2:
-          drive_mode_obj = {"name": "Safe", "kind": "safe"}
-        elif drive_mode == 4:
-          drive_mode_obj = {"name": "Sport", "kind": "sport"}
-        else:
-          drive_mode_obj = {"name": "Normal", "kind": "normal"}
-
-        gps_ok = True
-
-        if sm.alive['deviceState']:
-          c = ds.cpuTempC
-          cpu_temp_c = np.mean(c)
-        else:
-          cpu_temp_c = 0
-        mem_pct = ds.memoryUsagePercent
-        free_pct = ds.freeSpacePercent
-        if math.isfinite(free_pct):
-          disk_pct = 100.0 - free_pct
-
-        volt_v = ps.voltage / 1000.0 if ps.voltage is not None else None
-
-      payload = {
-        "ts": now,
-        "vEgo": v_ego,
-        "vSetKph": v_cruise,
-        "gear": gear,
-        "gpsOk": gps_ok,
-
-        "cpuTempC": cpu_temp_c,
-        "memPct": mem_pct,
-        "diskPct": (volt_v if show_volt else disk_pct),
-        "diskLabel": ("VOLT" if show_volt else "DISK"),
-
-        "tfGap": cached_tf_gap,
-        "tfBars": cached_tf_gap,
-        "driveMode": drive_mode_obj,
-
-        "tlight": "off",
-        "redDot": False,
-        "temp": temp_speed,
-        "speedLimitKph": None,
-        "speedLimitOver": False,
-        "apm": " ",
-      }
-
-      payload_json = json.dumps(payload, separators=(",", ":"))
-
-      async with _ws_carstate_lock:
-        _ws_carstate_payload_json = payload_json
-
-    except asyncio.CancelledError:
-      raise
-    except Exception:
-      traceback.print_exc()
-
-    await asyncio.sleep(0.2)
-    
-async def ws_carstate(request: web.Request) -> web.WebSocketResponse:
-  ws = web.WebSocketResponse(heartbeat=20)
-  await ws.prepare(request)
-
-  _ws_carstate_clients.add(ws)
-
-  try:
-    while True:
-      async with _ws_carstate_lock:
-        payload_json = _ws_carstate_payload_json
-
-      try:
-        await ws.send_str(payload_json)
-      except (asyncio.CancelledError, GeneratorExit):
-        raise
-      except (ConnectionResetError, BrokenPipeError, web.HTTPException):
-        break
-      except Exception as e:
-        if isinstance(e, (aiohttp.client_exceptions.ClientConnectionResetError,)):
-          break
-        if "Cannot write to closing transport" in str(e):
-          break
-        break
-
-      await asyncio.sleep(0.1)
-
-  except asyncio.CancelledError:
-    raise
-  except Exception:
-    traceback.print_exc()
-
-  try:
-    _ws_carstate_clients.discard(ws)
-    await ws.close()
-  except Exception:
-    pass
-
-  return ws
 
 PARAMS_BACKUP_PATH = "/data/media/params_backup.json"
 def _get_all_param_values_for_backup() -> Dict[str, str]:

@@ -32,6 +32,7 @@ const UI_STRINGS = {
     tools: "도구",
     terminal: "터미널",
     fleet: "Fleet",
+    carrot: "Carrot",
     lang: "언어",
     branch_select: "브랜치 선택",
     branch_current: "현재",
@@ -120,6 +121,7 @@ const UI_STRINGS = {
     tools: "Tools",
     terminal: "Terminal",
     fleet: "Fleet",
+    carrot: "Carrot",
     lang: "Lang",
     branch_select: "Branch Select",
     branch_current: "Current",
@@ -207,6 +209,7 @@ const UI_STRINGS = {
     tools: "工具",
     terminal: "终端",
     fleet: "车队",
+    carrot: "Carrot",
     lang: "语言",
     branch_select: "分支选择",
     branch_current: "当前",
@@ -415,6 +418,7 @@ const btnSetting = document.getElementById("btnSetting");
 const btnTerminal = document.getElementById("btnTerminal");
 const btnFleet = document.getElementById("btnFleet");
 const btnLang = document.getElementById("btnLang");
+const btnCarrot = document.getElementById("btnCarrot");
 const langLabel = document.getElementById("langLabel");
 const btnTools = document.getElementById("btnTools");
 const btnRecordToggle = document.getElementById("btnRecordToggle");
@@ -450,6 +454,7 @@ const PAGE_ELEMENTS = {
   tools: document.getElementById("pageTools"),
   terminal: document.getElementById("pageTerminal"),
   branch: document.getElementById("pageBranch"),
+  carrot: document.getElementById("pageCarrot"),
 };
 const PAGE_TRANSITION_CLASSES = [
   "page-transitioning",
@@ -506,6 +511,7 @@ btnHome.onclick = () => showPage("home", true, getSwipeTransition(CURRENT_PAGE, 
 btnRecordToggle.onclick = () => toggleRecord();
 btnSetting.onclick = () => showPage("setting", true, getSwipeTransition(CURRENT_PAGE, "setting"));
 btnTerminal.onclick = () => showPage("terminal", true, getSwipeTransition(CURRENT_PAGE, "terminal"));
+btnCarrot.onclick = () => showPage("carrot", true, getSwipeTransition(CURRENT_PAGE, "carrot"));
 
 btnFleet.onclick = async () => {
   const ip = location.hostname;
@@ -781,6 +787,7 @@ function showPage(page, pushHistory = false, transition = null) {
   btnSetting.classList.toggle("active", page === "setting");
   btnTools.classList.toggle("active", page === "tools");
   btnTerminal.classList.toggle("active", page === "terminal");
+  btnCarrot.classList.toggle("active", page === "carrot");
 
   if (page !== "setting" && typeof closeSettingSearchPanel === "function") {
     closeSettingSearchPanel({ clear: false });
@@ -815,6 +822,9 @@ function showPage(page, pushHistory = false, transition = null) {
   if (page === "terminal" && typeof initTerminalPage === "function") {
     initTerminalPage();
   }
+  if (page === "carrot" && window.CarrotTest && typeof window.CarrotTest.refresh === "function") {
+    window.CarrotTest.refresh();
+  }
 
   const state =
     (page === "home") ? { page: "home" } :
@@ -822,6 +832,7 @@ function showPage(page, pushHistory = false, transition = null) {
     (page === "car") ? { page: "car", screen: "makers", maker: null } :
     (page === "tools") ? { page: "tools" } :
     (page === "terminal") ? { page: "terminal" } :
+    (page === "carrot") ? { page: "carrot" } :
     (page === "branch") ? { page: "branch" } :
     { page: "home" };
 
@@ -932,6 +943,7 @@ function renderUIText() {
   setNavText("btnTools", s.tools);
   setNavText("btnTerminal", s.terminal);
   setNavText("btnFleet", s.fleet);
+  setNavText("btnCarrot", s.carrot || "Carrot");
 
   // Home
   setText("chipServerLabel", s.server_state);
@@ -1410,7 +1422,7 @@ async function setParam(name, value) {
 }
 
 /* ── Swipe Navigation ──────────────────────────────────── */
-const SWIPE_PAGES = ["home", "setting", "tools", "terminal"];
+const SWIPE_PAGES = ["home", "setting", "tools", "terminal", "carrot"];
 const SETTING_BACK_EDGE_WIDTH = 32;
 
 function isLandscapeRailMode() {
