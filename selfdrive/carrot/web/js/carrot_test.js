@@ -1516,6 +1516,12 @@ window.CarrotTest = (() => {
     const modelPath = model?.position || null;
     const showRadarInfo = finiteNumber(paramsState.ShowRadarInfo, defaultParams.ShowRadarInfo);
     const leadState = getLeadStateText(overlayState, hudState);
+    const previewLead = testFlags.leadPreview && modelPath ? createPreviewLead(modelPath) : null;
+    const previewBox = previewLead ? projectLeadBox(previewLead, modelPath, calibTransform, videoWidth, videoHeight) : null;
+
+    if (previewBox) {
+      drawPreviewLeadBox(previewBox);
+    }
 
     const leadOneBox = projectLeadBox(radarState?.leadOne, modelPath, calibTransform, videoWidth, videoHeight);
     if (leadOneBox) {
@@ -1535,12 +1541,6 @@ window.CarrotTest = (() => {
 
       if (leadState?.text) {
         drawLeadStateBadge(leadOneBox, leadState.text, leadState.xState);
-      }
-    } else if (testFlags.leadPreview && modelPath) {
-      const previewLead = createPreviewLead(modelPath);
-      const previewBox = projectLeadBox(previewLead, modelPath, calibTransform, videoWidth, videoHeight);
-      if (previewBox) {
-        drawPreviewLeadBox(previewBox);
       }
     }
 
