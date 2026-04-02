@@ -1,6 +1,6 @@
 "use strict";
 
-window.CarrotTest = (() => {
+window.HomeDrive = (() => {
   const stageEl = document.getElementById("carrotStage");
   const videoEl = document.getElementById("carrotRoadVideo");
   const canvasEl = document.getElementById("carrotOverlayCanvas");
@@ -11,7 +11,7 @@ window.CarrotTest = (() => {
   const driveHudCardEl = document.getElementById("driveHudCard");
   const sourceVideoEl = document.getElementById("rtcVideo");
   const zoomButtons = Array.from(document.querySelectorAll(".carrot-zoom__btn"));
-  const leadPreviewToggleEl = document.getElementById("carrotTestLeadPreview");
+  const leadPreviewToggleEl = document.getElementById("homeDriveLeadPreview");
 
   if (!stageEl || !videoEl || !canvasEl || !hudCanvasEl || !statusEl || !metaEl || !debugEl || !sourceVideoEl) {
     return {};
@@ -46,8 +46,8 @@ window.CarrotTest = (() => {
     { key: "crop", label: "크롭" },
   ];
   const HUD_TEXT_FONT = "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-  const DISPLAY_MODE_STORAGE_KEY = "carrot_test_display_mode_index";
-  const TEST_FLAGS_STORAGE_KEY = "carrot_test_flags";
+  const DISPLAY_MODE_STORAGE_KEY = "home_drive_display_mode_index";
+  const TEST_FLAGS_STORAGE_KEY = "home_drive_flags";
   const PATH_PALETTE = [
     { r: 255, g: 82, b: 82 },
     { r: 255, g: 153, b: 0 },

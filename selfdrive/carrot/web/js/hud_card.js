@@ -1,6 +1,6 @@
 /* Adaptive driving HUD
- * - Uses CarrotLink drive surfaces directly:
- *   driveInline / driveOverlay
+ * - Uses CarrotLink surface variants directly:
+ *   homePreview / driveInline / driveOverlay
  * - Same data model, different mount target + layout profile per surface
  */
 (function () {
@@ -11,15 +11,37 @@
     if (el) el.textContent = v == null ? "" : String(v);
   }
 
+  const SURFACE_HOME = "homePreview";
   const SURFACE_INLINE = "driveInline";
   const SURFACE_OVERLAY = "driveOverlay";
   const STRONG_TEXT_SHADOW = "0 1.4px 3.6px rgba(0,0,0,0.94), 0 0 1.2px rgba(0,0,0,0.62)";
   const DRIVE_MODE_TEXT = {
-    normal: "일반",
-    eco: "에코",
-    safe: "안전",
-    sport: "고속",
-    fast: "고속",
+    ko: {
+      normal: "일반",
+      eco: "에코",
+      safe: "안전",
+      sport: "고속",
+      fast: "고속",
+    },
+    en: {
+      normal: "Normal",
+      eco: "Eco",
+      safe: "Safe",
+      sport: "Fast",
+      fast: "Fast",
+    },
+    zh: {
+      normal: "普通",
+      eco: "经济",
+      safe: "安全",
+      sport: "高速",
+      fast: "高速",
+    },
+  };
+  const HUD_LABELS = {
+    ko: { speed: "현재속도", setSpeed: "설정속도", temp: "TEMP", gear: "GEAR", limit: "LIMIT" },
+    en: { speed: "Speed", setSpeed: "Set Speed", temp: "TEMP", gear: "GEAR", limit: "LIMIT" },
+    zh: { speed: "当前速度", setSpeed: "设定速度", temp: "TEMP", gear: "GEAR", limit: "LIMIT" },
   };
 
   let hudLayoutBound = false;
@@ -36,8 +58,8 @@
   function getHudSurface() {
     const page = document.body?.dataset?.page || "carrot";
     const landscape = window.matchMedia("(orientation: landscape)").matches;
-    if (page === "carrot") return landscape ? SURFACE_OVERLAY : SURFACE_INLINE;
-    return SURFACE_INLINE;
+    if (page === "carrot") return landscape ? SURFACE_OVERLAY : SURFACE_HOME;
+    return SURFACE_HOME;
   }
 
   function getHudWindowClass(width) {
@@ -46,6 +68,14 @@
     if (width < 1200) return "expanded";
     if (width < 1600) return "large";
     return "extraLarge";
+  }
+
+  function currentLang() {
+    return typeof LANG === "string" && HUD_LABELS[LANG] ? LANG : "ko";
+  }
+
+  function getHudLabels() {
+    return HUD_LABELS[currentLang()] || HUD_LABELS.ko;
   }
 
   function getBandHeight(density) {
@@ -58,7 +88,7 @@
   }
 
   function getSurfaceTarget(surface) {
-    if (surface === SURFACE_INLINE) return $("carrotHudDock");
+    if (surface === SURFACE_HOME || surface === SURFACE_INLINE) return $("carrotHudDock");
     return $("carrotStage");
   }
 
@@ -72,7 +102,7 @@
     }
 
     card.classList.remove("driveHudCard--inline", "driveHudCard--overlay");
-    if (surface === SURFACE_INLINE) card.classList.add("driveHudCard--inline");
+    if (surface === SURFACE_HOME || surface === SURFACE_INLINE) card.classList.add("driveHudCard--inline");
     else card.classList.add("driveHudCard--overlay");
   }
 
@@ -84,6 +114,13 @@
     const rect = target?.getBoundingClientRect?.() || null;
     const width = rect?.width || viewportWidth;
     const height = rect?.height || viewportHeight;
+
+    if (surface === SURFACE_HOME) {
+      return {
+        width: clamp(width - 8, 280, 668),
+        height: clamp(Math.max(height || 0, viewportHeight * 0.52), 220, Math.max(220, viewportHeight - 96)),
+      };
+    }
 
     if (surface === SURFACE_INLINE) {
       return {
@@ -127,17 +164,17 @@
         wide: false,
         preferredAspectRatio: surface === SURFACE_OVERLAY ? 1.02 : surface === SURFACE_INLINE ? 0.98 : 1.24,
         borderRadius: 18,
-        dockInset: surface === SURFACE_OVERLAY ? 4 : 6,
-        padding: 13,
-        sectionGap: 11,
-        metricGap: 9,
+        dockInset: surface === SURFACE_OVERLAY ? 4 : surface === SURFACE_HOME ? 2 : 6,
+        padding: surface === SURFACE_HOME ? 10 : 13,
+        sectionGap: surface === SURFACE_HOME ? 8 : 11,
+        metricGap: surface === SURFACE_HOME ? 7 : 9,
         speedFontSize: 74,
         primaryValueFontSize: 34,
         secondaryValueFontSize: 24,
         labelFontSize: 13.5,
         chipFontSize: 12.5,
         gearFontSize: 38,
-        maxWidth: surface === SURFACE_OVERLAY ? 452 : 404,
+        maxWidth: surface === SURFACE_OVERLAY ? 452 : surface === SURFACE_INLINE ? 404 : 360,
       };
     }
 
@@ -151,17 +188,17 @@
             ? (wide ? 0.96 : 0.80)
             : (wide ? 1.34 : 1.24),
         borderRadius: 20,
-        dockInset: surface === SURFACE_OVERLAY ? 6 : 8,
-        padding: 16,
-        sectionGap: 13,
-        metricGap: 10,
+        dockInset: surface === SURFACE_OVERLAY ? 6 : surface === SURFACE_HOME ? 3 : 8,
+        padding: surface === SURFACE_HOME ? 12 : 16,
+        sectionGap: surface === SURFACE_HOME ? 10 : 13,
+        metricGap: surface === SURFACE_HOME ? 8 : 10,
         speedFontSize: 90,
         primaryValueFontSize: 38,
         secondaryValueFontSize: 26,
         labelFontSize: 14.5,
         chipFontSize: 13.5,
         gearFontSize: 46,
-        maxWidth: surface === SURFACE_OVERLAY ? 540 : 476,
+        maxWidth: surface === SURFACE_OVERLAY ? 540 : surface === SURFACE_INLINE ? 476 : 428,
       };
     }
 
@@ -175,17 +212,17 @@
             ? (wide ? 1.00 : 0.84)
             : (wide ? 1.44 : 1.30),
         borderRadius: 24,
-        dockInset: surface === SURFACE_OVERLAY ? 8 : 10,
-        padding: 20,
-        sectionGap: 15,
-        metricGap: 11,
+        dockInset: surface === SURFACE_OVERLAY ? 8 : surface === SURFACE_HOME ? 4 : 10,
+        padding: surface === SURFACE_HOME ? 14 : 20,
+        sectionGap: surface === SURFACE_HOME ? 12 : 15,
+        metricGap: surface === SURFACE_HOME ? 9 : 11,
         speedFontSize: 110,
         primaryValueFontSize: 45,
         secondaryValueFontSize: 31,
         labelFontSize: 15.5,
         chipFontSize: 14.5,
         gearFontSize: 56,
-        maxWidth: surface === SURFACE_OVERLAY ? 670 : 604,
+        maxWidth: surface === SURFACE_OVERLAY ? 670 : surface === SURFACE_INLINE ? 604 : 536,
       };
     }
 
@@ -198,17 +235,17 @@
           ? (wide ? 1.16 : 0.90)
           : (wide ? 1.56 : 1.38),
       borderRadius: 28,
-      dockInset: surface === SURFACE_OVERLAY ? 10 : 12,
-      padding: 24,
-      sectionGap: 18,
-      metricGap: 13,
+      dockInset: surface === SURFACE_OVERLAY ? 10 : surface === SURFACE_HOME ? 5 : 12,
+      padding: surface === SURFACE_HOME ? 16 : 24,
+      sectionGap: surface === SURFACE_HOME ? 14 : 18,
+      metricGap: surface === SURFACE_HOME ? 10 : 13,
       speedFontSize: 128,
       primaryValueFontSize: 52,
       secondaryValueFontSize: 36,
       labelFontSize: 16.5,
       chipFontSize: 15.5,
       gearFontSize: 68,
-      maxWidth: surface === SURFACE_OVERLAY ? 820 : 734,
+      maxWidth: surface === SURFACE_OVERLAY ? 820 : surface === SURFACE_INLINE ? 734 : 668,
     };
   }
 
@@ -223,6 +260,8 @@
     const constraints = getHudConstraints(surface);
     const profile = buildHudProfile(constraints.width, constraints.height, surface);
     const style = root.style;
+    const panelWidth = Math.min(constraints.width, profile.maxWidth);
+    const panelHeight = Math.round(panelWidth / Math.max(profile.preferredAspectRatio, 0.1));
 
     card.dataset.surface = surface;
     root.dataset.surface = surface;
@@ -245,6 +284,10 @@
     style.setProperty("--hud-max-width", `${Math.round(profile.maxWidth)}px`);
     style.setProperty("--hud-dock-inset", `${profile.dockInset}px`);
     style.setProperty("--hud-text-shadow-strong", STRONG_TEXT_SHADOW);
+    style.setProperty("--hud-card-width", `${Math.round(panelWidth)}px`);
+    style.setProperty("--hud-card-height", `${panelHeight}px`);
+    document.documentElement.style.setProperty("--carrot-dock-panel-height", `${Math.round(panelHeight + profile.dockInset * 2)}px`);
+    document.documentElement.style.setProperty("--carrot-dock-panel-width", `${Math.round(panelWidth)}px`);
   }
 
   function scheduleHudProfileApply() {
@@ -288,7 +331,8 @@
     const el = $("hudDriveMode");
     if (!el) return;
     const normalized = String(kind || "").toLowerCase();
-    const translated = DRIVE_MODE_TEXT[normalized] || name || DRIVE_MODE_TEXT.normal;
+    const labels = DRIVE_MODE_TEXT[currentLang()] || DRIVE_MODE_TEXT.ko;
+    const translated = labels[normalized] || name || labels.normal;
     el.textContent = translated;
     el.dataset.kind = normalized || "normal";
   }
@@ -296,7 +340,8 @@
   function setRoadLimit(speedKph, over) {
     const el = $("hudRoadLimitDisplay");
     if (!el) return;
-    const text = speedKph == null || !isFinite(speedKph) ? "LIMIT --" : `LIMIT ${Math.round(speedKph)}`;
+    const limitLabel = getHudLabels().limit;
+    const text = speedKph == null || !isFinite(speedKph) ? `${limitLabel} --` : `${limitLabel} ${Math.round(speedKph)}`;
     el.textContent = text;
     el.dataset.over = over ? "1" : "0";
   }
@@ -326,14 +371,14 @@
     if (!reasonEl || !speedEl) return;
 
     if (!temp || temp.speed == null || !isFinite(temp.speed)) {
-      reasonEl.textContent = "TEMP";
+      reasonEl.textContent = getHudLabels().temp;
       speedEl.textContent = "--";
       reasonEl.style.color = "rgba(255,255,255,0.84)";
       speedEl.style.color = "rgba(255,255,255,0.88)";
       return;
     }
 
-    const reason = String(temp.source || "TEMP").trim();
+    const reason = String(temp.source || getHudLabels().temp).trim();
     const color = temp.is_decel ? "#FFC94A" : "#34C96E";
     reasonEl.textContent = reason || "TEMP";
     speedEl.textContent = `${Math.round(temp.speed)}`;
@@ -364,9 +409,17 @@
     setText("hudDiskVal", diskPct == null || !isFinite(diskPct) ? "--.-V" : `${Number(diskPct).toFixed(1)}V`);
   }
 
+  function syncStaticHudText() {
+    const labels = getHudLabels();
+    setText("hudSpeedLabel", labels.speed);
+    setText("hudSetSpeedLabel", labels.setSpeed);
+    setText("hudGearLabel", labels.gear);
+  }
+
   const DrivingHud = {
     init() {
       bindHudLayout();
+      syncStaticHudText();
       setMetrics(null, null, null);
       setSpeed(null);
       setSetSpeed(null);
@@ -383,6 +436,7 @@
     update(payload) {
       if (!payload) return;
       scheduleHudProfileApply();
+      syncStaticHudText();
       setMetrics(payload.cpuTempC, payload.memPct, payload.diskPct);
       setSpeed(payload.vEgoKph);
       setSetSpeed(payload.vSetKph);
@@ -399,6 +453,12 @@
 
     relayout() {
       scheduleHudProfileApply();
+    },
+
+    renderText() {
+      syncStaticHudText();
+      setDriveMode("", "normal");
+      setRoadLimit(null, false);
     },
   };
 

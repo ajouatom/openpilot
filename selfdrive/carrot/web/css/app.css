@@ -1621,13 +1621,18 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--inline {
   inset: auto !important;
   transform: none !important;
   width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
 }
 
 body[data-page="carrot"] #pageCarrot {
   display: flex !important;
   flex-direction: column;
+  height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px));
   min-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px));
   padding: 0;
+  overflow: hidden;
 }
 
 body[data-page="carrot"] .wrap {
@@ -1642,7 +1647,7 @@ body[data-page="carrot"] #pageCarrot > .page-header--hidden {
 body[data-page="carrot"] #pageCarrot > .carrot-stage {
   flex: 1 1 auto;
   height: auto;
-  min-height: 0;
+  min-height: 200px;
   border-radius: 0;
   border-left: 0;
   border-right: 0;
@@ -1653,9 +1658,11 @@ body[data-page="carrot"] .carrot-hud-dock {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  padding: 0 6px;
+  width: 100%;
+  min-height: var(--carrot-dock-panel-height, auto);
+  padding: 0 4px;
   margin: 0;
-  background: transparent;
+  background: #0b0e12;
 }
 
 body[data-page="carrot"] #driveHudCard.driveHudCard--inline .hudWrap {
@@ -1748,6 +1755,17 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--overlay .hudWrap {
   display: block;
   opacity: 0;
   transition: opacity 0.14s ease;
+}
+
+@media (orientation: portrait) {
+  body[data-page="carrot"] #pageCarrot > .carrot-stage {
+    flex: 1 1 0;
+    min-height: 180px;
+  }
+
+  body[data-page="carrot"] .carrot-hud-dock {
+    flex: 0 0 var(--carrot-dock-panel-height, auto);
+  }
 }
 
 .carrot-stage.is-stream-ready .carrot-stage__video,
@@ -1881,7 +1899,7 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
   border-color: rgba(255, 255, 255, 0.14);
 }
 
-.carrot-test-menu {
+.home-drive-menu {
   position: absolute;
   right: 14px;
   bottom: 72px;
@@ -1898,7 +1916,7 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
   pointer-events: auto;
 }
 
-.carrot-test-menu__item {
+.home-drive-menu__item {
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -1909,7 +1927,7 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
   user-select: none;
 }
 
-.carrot-test-menu__check {
+.home-drive-menu__check {
   width: 18px;
   height: 18px;
   margin: 0;
@@ -2300,7 +2318,7 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
     bottom: 12px;
   }
 
-  body[data-page="carrot"] #pageCarrot .carrot-test-menu {
+body[data-page="carrot"] #pageCarrot .home-drive-menu {
     right: 12px;
     bottom: 70px;
   }

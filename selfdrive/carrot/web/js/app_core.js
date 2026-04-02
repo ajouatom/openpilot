@@ -24,6 +24,7 @@ disableViewportZoomGestures();
 let SETTINGS = null;
 let CURRENT_GROUP = null;
 let LANG = "ko"; // "ko" | "en" | "zh"
+const LANG_STORAGE_KEY = "carrot_web_lang";
 
 const UI_STRINGS = {
   ko: {
@@ -454,6 +455,32 @@ const PAGE_ELEMENTS = {
   branch: document.getElementById("pageBranch"),
   carrot: document.getElementById("pageCarrot"),
 };
+
+function normalizeLangCode(raw) {
+  const value = String(raw || "").trim().toLowerCase();
+  if (value.startsWith("ko")) return "ko";
+  if (value.startsWith("zh")) return "zh";
+  if (value.startsWith("en")) return "en";
+  return "";
+}
+
+function detectDefaultLang() {
+  try {
+    const stored = normalizeLangCode(localStorage.getItem(LANG_STORAGE_KEY));
+    if (stored) return stored;
+  } catch {}
+
+  const browserLangs = Array.isArray(navigator.languages) && navigator.languages.length
+    ? navigator.languages
+    : [navigator.language, navigator.userLanguage];
+  for (const candidate of browserLangs) {
+    const normalized = normalizeLangCode(candidate);
+    if (normalized) return normalized;
+  }
+  return "ko";
+}
+
+LANG = detectDefaultLang();
 const PAGE_TRANSITION_CLASSES = [
   "page-transitioning",
   "page-active",
@@ -806,8 +833,8 @@ function showPage(page, pushHistory = false, transition = null) {
   if (page === "terminal" && typeof initTerminalPage === "function") {
     initTerminalPage();
   }
-  if (page === "carrot" && window.CarrotTest && typeof window.CarrotTest.refresh === "function") {
-    window.CarrotTest.refresh();
+  if (page === "carrot" && window.HomeDrive && typeof window.HomeDrive.refresh === "function") {
+    window.HomeDrive.refresh();
   }
   if (page === "carrot") {
     loadRecordState().catch(() => {});
@@ -899,6 +926,9 @@ function toggleLang() {
   if (LANG === "ko") LANG = "en";
   else if (LANG === "en") LANG = "zh";
   else LANG = "ko";
+  try {
+    localStorage.setItem(LANG_STORAGE_KEY, LANG);
+  } catch {}
 
   updateLangLabel();
 
@@ -922,6 +952,7 @@ function toggleLang() {
 function renderUIText() {
   const s = UI_STRINGS[LANG];
   if (!s) return;
+  document.title = s.home || "Home";
 
   // Nav bar (nested spans — set last child text)
   setNavText("btnHome", s.home);
@@ -986,6 +1017,9 @@ function renderUIText() {
   setText("appBranchPickerClose", s.close);
   updateLangLabel();
   syncHomeUtilityButtons();
+  if (window.DrivingHud && typeof window.DrivingHud.renderText === "function") {
+    window.DrivingHud.renderText();
+  }
   renderQuickLinkUI();
 }
 
@@ -1009,16 +1043,18 @@ function updateLangLabel() {
   const main = langLabel.querySelector(".lang-label__main");
   const sub = langLabel.querySelector(".lang-label__sub");
   if (main && sub) {
-    main.textContent = "lang";
+    main.textContent = getUIText("lang", "lang");
     sub.textContent = `(${LANG})`;
   } else {
-    langLabel.textContent = `lang (${LANG})`;
+    langLabel.textContent = `${getUIText("lang", "lang")} (${LANG})`;
   }
 
   if (btnLang) {
-    btnLang.setAttribute("aria-label", `lang (${LANG})`);
-    btnLang.title = `lang (${LANG})`;
+    const text = `${getUIText("lang", "lang")} (${LANG})`;
+    btnLang.setAttribute("aria-label", text);
+    btnLang.title = text;
   }
+  document.documentElement.lang = LANG;
 }
 
 function getUIText(key, fallback = "") {
