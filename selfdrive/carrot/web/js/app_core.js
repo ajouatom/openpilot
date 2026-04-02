@@ -30,11 +30,6 @@ const LANG_EMOJI = {
   en: "🇺🇸",
   zh: "🇨🇳",
 };
-const LANG_SHORT_LABEL = {
-  ko: "KO",
-  en: "EN",
-  zh: "ZH",
-};
 
 const UI_STRINGS = {
   ko: {
@@ -1053,12 +1048,12 @@ function updateLangLabel() {
   const main = langLabel.querySelector(".lang-label__main");
   const sub = langLabel.querySelector(".lang-label__sub");
   const emoji = LANG_EMOJI[LANG] || "🌐";
-  const shortCode = LANG_SHORT_LABEL[LANG] || String(LANG || "").toUpperCase();
   if (main && sub) {
     main.textContent = emoji;
-    sub.textContent = shortCode;
+    sub.textContent = "";
+    sub.hidden = true;
   } else {
-    langLabel.textContent = `${emoji} ${shortCode}`;
+    langLabel.textContent = emoji;
   }
 
   if (btnLang) {

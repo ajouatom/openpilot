@@ -96,10 +96,7 @@ body.dialog-open {
 }
 
 .lang-label__sub {
-  margin-top: 2px;
-  font-size: 0.66em;
-  letter-spacing: 0.08em;
-  opacity: 0.9;
+  display: none;
 }
 
 .topbar .nav-btn.active {
@@ -1674,6 +1671,7 @@ body[data-page="carrot"] .carrot-hud-dock {
   margin: 0;
   margin-top: auto;
   background: #0b0e12;
+  overflow: hidden;
 }
 
 body[data-page="carrot"] #driveHudCard.driveHudCard--inline .hudWrap {

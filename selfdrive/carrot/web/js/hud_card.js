@@ -60,8 +60,6 @@
   }
 
   function getHudSurface() {
-    const page = document.body?.dataset?.page || "carrot";
-    if (page === "carrot" && !isOverlayMount()) return SURFACE_INLINE;
     return SURFACE_HOME;
   }
 
