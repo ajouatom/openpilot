@@ -1,4 +1,4 @@
-/* ---------- Home: current car ---------- */
+/* ---------- Shared runtime ---------- */
 let recordStateIsOn = false;
 let recordTogglePending = false;
 let recordStateResyncTimer = null;
@@ -29,6 +29,39 @@ function bindAppViewportObservers() {
 }
 
 bindAppViewportObservers();
+
+const driveHudCardEl = document.getElementById("driveHudCard");
+let driveHudLayoutObserversBound = false;
+let driveHudLayoutRaf = 0;
+
+function syncDriveHudLayout() {
+  driveHudLayoutRaf = 0;
+  if (!driveHudCardEl || !window.DrivingHud) return;
+  window.DrivingHud.relayout();
+}
+
+function scheduleDriveHudLayout() {
+  if (driveHudLayoutRaf) return;
+  driveHudLayoutRaf = requestAnimationFrame(syncDriveHudLayout);
+}
+
+function bindDriveHudLayoutObservers() {
+  if (driveHudLayoutObserversBound) return;
+  driveHudLayoutObserversBound = true;
+
+  const handleLayout = () => scheduleDriveHudLayout();
+  window.addEventListener("resize", handleLayout, { passive: true });
+  window.addEventListener("orientationchange", handleLayout, { passive: true });
+  window.addEventListener("carrot:pagechange", handleLayout);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", handleLayout, { passive: true });
+    window.visualViewport.addEventListener("scroll", handleLayout, { passive: true });
+  }
+
+  scheduleDriveHudLayout();
+}
+
+bindDriveHudLayoutObservers();
 
 function parseRecordStateValue(value) {
   return (
@@ -1151,19 +1184,19 @@ window.addEventListener("orientationchange", () => {
 
 
 /* ---------- Back key / history ---------- */
-history.replaceState({ page: "home" }, "");
+history.replaceState({ page: "carrot" }, "");
 
 window.addEventListener("popstate", async (ev) => {
-  const st = ev.state || { page: "home" };
+  const st = ev.state || { page: "carrot" };
 
   if (settingSearchPanel && !settingSearchPanel.hidden && !st.search) {
     closeSettingSearchPanel({ clear: false, fromHistory: true });
   }
 
-  if (st.page === "home") {
+  if (st.page === "home" || st.page === "carrot") {
     CURRENT_GROUP = null;
     CURRENT_MAKER = null;
-    showPage("home", false);
+    showPage("carrot", false);
     return;
   }
 
@@ -1238,6 +1271,8 @@ window.addEventListener("popstate", async (ev) => {
   }
 
 });
+
+showPage("carrot", false);
 
 
 let toolsOutHistory = "";

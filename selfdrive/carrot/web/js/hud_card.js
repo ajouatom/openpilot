@@ -1,145 +1,593 @@
-/* Driving HUD widget (standalone)
- * - Exposes: window.DrivingHud.init(), window.DrivingHud.update(payload)
+/* Adaptive driving HUD
+ * - Reuses CarrotLink homePreview surface as the primary web HUD layout.
+ * - Mount position (inline vs overlay) is handled separately from the visual surface.
  */
 (function () {
   function $(id) { return document.getElementById(id); }
-  function setText(id, v) { const el = $(id); if (el) el.textContent = (v == null ? "" : String(v)); }
-  function show(id, on) { const el = $(id); if (el) el.style.display = on ? "" : "none"; }
+  function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
+  function setText(id, v) {
+    const el = $(id);
+    if (el) el.textContent = v == null ? "" : String(v);
+  }
+
+  const SURFACE_HOME = "homePreview";
+  const SURFACE_INLINE = "driveInline";
+  const SURFACE_OVERLAY = "driveOverlay";
+  const STRONG_TEXT_SHADOW = "0 1.4px 3.6px rgba(0,0,0,0.94), 0 0 1.2px rgba(0,0,0,0.62)";
+  const DRIVE_MODE_TEXT = {
+    ko: {
+      normal: "일반",
+      eco: "에코",
+      safe: "안전",
+      sport: "고속",
+      fast: "고속",
+    },
+    en: {
+      normal: "Normal",
+      eco: "Eco",
+      safe: "Safe",
+      sport: "Fast",
+      fast: "Fast",
+    },
+    zh: {
+      normal: "普通",
+      eco: "经济",
+      safe: "安全",
+      sport: "高速",
+      fast: "高速",
+    },
+  };
+  const HUD_LABELS = {
+    ko: { speed: "현재속도", setSpeed: "설정속도", temp: "TEMP", gear: "GEAR", limit: "LIMIT" },
+    en: { speed: "Speed", setSpeed: "Set Speed", temp: "TEMP", gear: "GEAR", limit: "LIMIT" },
+    zh: { speed: "当前速度", setSpeed: "设定速度", temp: "TEMP", gear: "GEAR", limit: "LIMIT" },
+  };
+
+  let hudLayoutBound = false;
+  let hudLayoutRaf = 0;
+
+  function getHudCard() {
+    return $("driveHudCard");
+  }
+
+  function getHudRoot() {
+    return $("hudRoot");
+  }
+
+  function isOverlayMount() {
+    const page = document.body?.dataset?.page || "carrot";
+    return page === "carrot" && window.matchMedia("(orientation: landscape)").matches;
+  }
+
+  function getHudSurface() {
+    const page = document.body?.dataset?.page || "carrot";
+    if (page !== "carrot") return SURFACE_HOME;
+    return window.matchMedia("(orientation: landscape)").matches ? SURFACE_OVERLAY : SURFACE_INLINE;
+  }
+
+  function getPreferredAspectRatioForWindow(windowClass, wide) {
+    if (wide) {
+      switch (windowClass) {
+        case "compact": return 1.24;
+        case "medium": return 1.30;
+        case "expanded": return 1.36;
+        case "large": return 1.42;
+        default: return 1.46;
+      }
+    }
+
+    switch (windowClass) {
+      case "compact": return 0.92;
+      case "medium": return 0.96;
+      case "expanded": return 1.00;
+      case "large": return 1.04;
+      default: return 1.06;
+    }
+  }
+
+  function getHudWindowClass(width) {
+    if (width < 600) return "compact";
+    if (width < 840) return "medium";
+    if (width < 1200) return "expanded";
+    if (width < 1600) return "large";
+    return "extraLarge";
+  }
+
+  function currentLang() {
+    return typeof LANG === "string" && HUD_LABELS[LANG] ? LANG : "ko";
+  }
+
+  function getHudLabels() {
+    return HUD_LABELS[currentLang()] || HUD_LABELS.ko;
+  }
+
+  function getBandHeight(density) {
+    switch (density) {
+      case "micro": return 30;
+      case "compact": return 34;
+      case "regular": return 38;
+      default: return 42;
+    }
+  }
+
+  function getSurfaceTarget() {
+    if (isOverlayMount()) return $("carrotStage");
+    return $("carrotHudDock");
+  }
+
+  function mountHudToSurface(surface) {
+    const card = getHudCard();
+    const target = getSurfaceTarget();
+    if (!card || !target) return;
+
+    if (card.parentElement !== target) {
+      target.appendChild(card);
+    }
+
+    card.classList.remove("driveHudCard--inline", "driveHudCard--overlay");
+    card.classList.add(isOverlayMount() ? "driveHudCard--overlay" : "driveHudCard--inline");
+  }
+
+  function getHudConstraints(surface) {
+    const vv = window.visualViewport;
+    const viewportWidth = Math.max(320, Math.round(vv?.width || window.innerWidth || 0));
+    const viewportHeight = Math.max(320, Math.round(vv?.height || window.innerHeight || 0));
+    const isPortrait = viewportHeight > viewportWidth;
+    const overlayMount = isOverlayMount();
+    const target = getSurfaceTarget();
+    const rect = target?.getBoundingClientRect?.() || null;
+    const width = rect?.width || viewportWidth;
+    const height = rect?.height || viewportHeight;
+    const windowClass = getHudWindowClass(viewportWidth);
+
+    if (surface === SURFACE_OVERLAY) {
+      const drawWidth = width;
+      const drawHeight = height;
+      const base = Math.min(drawWidth, drawHeight);
+      const ratio = (() => {
+        switch (windowClass) {
+          case "compact": return 0.30;
+          case "medium": return 0.29;
+          case "expanded": return 0.28;
+          case "large": return 0.27;
+          default: return 0.26;
+        }
+      })();
+      const minSize = (() => {
+        switch (windowClass) {
+          case "compact": return 184;
+          case "medium": return 196;
+          case "expanded": return 208;
+          case "large": return 220;
+          default: return 232;
+        }
+      })();
+      const maxSize = (() => {
+        switch (windowClass) {
+          case "compact": return 304;
+          case "medium": return 324;
+          case "expanded": return 344;
+          case "large": return 364;
+          default: return 384;
+        }
+      })();
+      const viewportCap = drawHeight * 0.44;
+      const upperBound = Math.max(minSize, Math.min(maxSize, viewportCap));
+      const overlayHeight = clamp(base * ratio, minSize, upperBound);
+      const overlayWidth = Math.min(
+        Math.max(320, drawWidth - 32),
+        overlayHeight * getPreferredAspectRatioForWindow(windowClass, true),
+      );
+      return {
+        width: overlayWidth,
+        height: overlayHeight,
+      };
+    }
+
+    if (surface === SURFACE_INLINE) {
+      const horizontalInset = (() => {
+        switch (windowClass) {
+          case "compact": return 12;
+          case "medium": return 14;
+          case "expanded": return 16;
+          default: return 18;
+        }
+      })();
+      const usableWidth = Math.max(1, viewportWidth - (horizontalInset * 2));
+      const desiredHeight = usableWidth / getPreferredAspectRatioForWindow(windowClass, true);
+      const minHeight = (() => {
+        switch (windowClass) {
+          case "compact": return 190;
+          case "medium": return 204;
+          case "expanded": return 216;
+          case "large": return 228;
+          default: return 236;
+        }
+      })();
+      const maxHeight = (() => {
+        switch (windowClass) {
+          case "compact": return Math.min(430, viewportHeight * 0.42);
+          case "medium": return Math.min(450, viewportHeight * 0.41);
+          case "expanded": return Math.min(470, viewportHeight * 0.40);
+          case "large": return Math.min(490, viewportHeight * 0.39);
+          default: return Math.min(510, viewportHeight * 0.38);
+        }
+      })();
+      return {
+        width: viewportWidth,
+        height: clamp(desiredHeight, minHeight, maxHeight),
+      };
+    }
+
+    if (surface === SURFACE_HOME) {
+      if (overlayMount) {
+        return {
+          width: clamp(width - 36, 560, 980),
+          height: clamp(height - 36, 320, 620),
+        };
+      }
+      const viewportAwareHudCap = isPortrait
+        ? clamp(viewportHeight * 0.46, 280, 420)
+        : clamp(viewportHeight * 0.32, 220, 520);
+      const homeHudHeightCap = (() => {
+        switch (windowClass) {
+          case "compact": return clamp(viewportAwareHudCap, isPortrait ? 280 : 220, isPortrait ? 380 : 360);
+          case "medium": return clamp(viewportAwareHudCap, isPortrait ? 300 : 240, isPortrait ? 400 : 390);
+          case "expanded": return clamp(viewportAwareHudCap, isPortrait ? 320 : 260, isPortrait ? 420 : 420);
+          case "large": return clamp(viewportAwareHudCap, 280, 450);
+          default: return clamp(viewportAwareHudCap, 300, 480);
+        }
+      })();
+      return {
+        width: Math.min(Math.max(isPortrait ? 320 : 280, width), viewportWidth - (isPortrait ? 8 : 24)),
+        height: homeHudHeightCap,
+      };
+    }
+
+    return {
+      width: clamp((rect?.width || viewportWidth) * 0.42, 320, 980),
+      height: clamp((rect?.height || viewportHeight) * 0.36, 210, 360),
+    };
+  }
+
+  function buildHudProfile(width, height, surface) {
+    const shortest = Math.min(width, height);
+    const aspect = width / Math.max(height, 1);
+    const heightBudget = surface === SURFACE_OVERLAY
+      ? height * 0.76
+      : surface === SURFACE_INLINE
+        ? height * 0.84
+        : height;
+    const heightWeightedShortest = Math.min(shortest, heightBudget);
+    const density = heightWeightedShortest < 190
+      ? "micro"
+      : heightWeightedShortest < 280
+        ? "compact"
+        : heightWeightedShortest < 420
+          ? "regular"
+          : "spacious";
+    const wideThreshold = surface === SURFACE_OVERLAY
+      ? 1.12
+      : surface === SURFACE_INLINE
+        ? 1.18
+        : 1.26;
+    const wide = aspect >= wideThreshold;
+
+    if (density === "micro") {
+      return {
+        density,
+        wide: false,
+        preferredAspectRatio: surface === SURFACE_OVERLAY ? 1.02 : surface === SURFACE_INLINE ? 0.98 : 1.24,
+        borderRadius: 18,
+        dockInset: surface === SURFACE_OVERLAY ? 4 : surface === SURFACE_HOME ? 2 : 6,
+        padding: surface === SURFACE_HOME ? 10 : 13,
+        sectionGap: surface === SURFACE_HOME ? 8 : 11,
+        metricGap: surface === SURFACE_HOME ? 7 : 9,
+        speedFontSize: 74,
+        primaryValueFontSize: 34,
+        secondaryValueFontSize: 24,
+        labelFontSize: 13.5,
+        chipFontSize: 12.5,
+        gearFontSize: 38,
+        maxWidth: surface === SURFACE_OVERLAY ? 542 : surface === SURFACE_INLINE ? 404 : 360,
+      };
+    }
+
+    if (density === "compact") {
+      return {
+        density,
+        wide,
+        preferredAspectRatio: surface === SURFACE_OVERLAY
+          ? (wide ? 1.02 : 0.94)
+          : surface === SURFACE_INLINE
+            ? (wide ? 0.96 : 0.80)
+            : (wide ? 1.34 : 1.24),
+        borderRadius: 20,
+        dockInset: surface === SURFACE_OVERLAY ? 6 : surface === SURFACE_HOME ? 3 : 8,
+        padding: surface === SURFACE_HOME ? 12 : 16,
+        sectionGap: surface === SURFACE_HOME ? 10 : 13,
+        metricGap: surface === SURFACE_HOME ? 8 : 10,
+        speedFontSize: 90,
+        primaryValueFontSize: 38,
+        secondaryValueFontSize: 26,
+        labelFontSize: 14.5,
+        chipFontSize: 13.5,
+        gearFontSize: 46,
+        maxWidth: surface === SURFACE_OVERLAY ? 648 : surface === SURFACE_INLINE ? 476 : 428,
+      };
+    }
+
+    if (density === "regular") {
+      return {
+        density,
+        wide,
+        preferredAspectRatio: surface === SURFACE_OVERLAY
+          ? (wide ? 1.08 : 0.98)
+          : surface === SURFACE_INLINE
+            ? (wide ? 1.00 : 0.84)
+            : (wide ? 1.44 : 1.30),
+        borderRadius: 24,
+        dockInset: surface === SURFACE_OVERLAY ? 8 : surface === SURFACE_HOME ? 4 : 10,
+        padding: surface === SURFACE_HOME ? 14 : 20,
+        sectionGap: surface === SURFACE_HOME ? 12 : 15,
+        metricGap: surface === SURFACE_HOME ? 9 : 11,
+        speedFontSize: 110,
+        primaryValueFontSize: 45,
+        secondaryValueFontSize: 31,
+        labelFontSize: 15.5,
+        chipFontSize: 14.5,
+        gearFontSize: 56,
+        maxWidth: surface === SURFACE_OVERLAY ? 804 : surface === SURFACE_INLINE ? 604 : 536,
+      };
+    }
+
+    return {
+      density: "spacious",
+      wide,
+      preferredAspectRatio: surface === SURFACE_OVERLAY
+        ? (wide ? 1.26 : 1.02)
+        : surface === SURFACE_INLINE
+          ? (wide ? 1.16 : 0.90)
+          : (wide ? 1.56 : 1.38),
+      borderRadius: 28,
+      dockInset: surface === SURFACE_OVERLAY ? 10 : surface === SURFACE_HOME ? 5 : 12,
+      padding: surface === SURFACE_HOME ? 16 : 24,
+      sectionGap: surface === SURFACE_HOME ? 14 : 18,
+      metricGap: surface === SURFACE_HOME ? 10 : 13,
+      speedFontSize: 128,
+      primaryValueFontSize: 52,
+      secondaryValueFontSize: 36,
+      labelFontSize: 16.5,
+      chipFontSize: 15.5,
+      gearFontSize: 68,
+      maxWidth: surface === SURFACE_OVERLAY ? 984 : surface === SURFACE_INLINE ? 734 : 668,
+    };
+  }
+
+  function applyHudProfile() {
+    const root = getHudRoot();
+    const card = getHudCard();
+    if (!root || !card) return;
+
+    const surface = getHudSurface();
+    mountHudToSurface(surface);
+
+    const constraints = getHudConstraints(surface);
+    const profile = buildHudProfile(constraints.width, constraints.height, surface);
+    const style = root.style;
+    const portraitInline = surface === SURFACE_INLINE && !isOverlayMount();
+    const exactSizedSurface = surface === SURFACE_INLINE || surface === SURFACE_OVERLAY;
+    const panelWidth = exactSizedSurface
+      ? Math.round(constraints.width)
+      : surface === SURFACE_HOME
+        ? Math.min(constraints.width, profile.maxWidth, constraints.height * profile.preferredAspectRatio)
+        : Math.min(constraints.width, profile.maxWidth);
+    const panelHeight = exactSizedSurface
+      ? Math.round(constraints.height)
+      : Math.round(panelWidth / Math.max(profile.preferredAspectRatio, 0.1));
+
+    card.dataset.surface = surface;
+    root.dataset.surface = surface;
+    root.dataset.density = profile.density;
+    root.dataset.wide = profile.wide ? "1" : "0";
+    root.dataset.windowClass = getHudWindowClass(constraints.width);
+
+    style.setProperty("--hud-aspect", String(profile.preferredAspectRatio));
+    style.setProperty("--hud-radius", `${portraitInline ? 0 : profile.borderRadius}px`);
+    style.setProperty("--hud-padding", `${profile.padding}px`);
+    style.setProperty("--hud-section-gap", `${profile.sectionGap}px`);
+    style.setProperty("--hud-metric-gap", `${profile.metricGap}px`);
+    style.setProperty("--hud-speed-font", `${profile.speedFontSize}px`);
+    style.setProperty("--hud-primary-font", `${profile.primaryValueFontSize}px`);
+    style.setProperty("--hud-secondary-font", `${profile.secondaryValueFontSize}px`);
+    style.setProperty("--hud-label-font", `${profile.labelFontSize}px`);
+    style.setProperty("--hud-chip-font", `${profile.chipFontSize}px`);
+    style.setProperty("--hud-gear-font", `${profile.gearFontSize}px`);
+    style.setProperty("--hud-band-height", `${getBandHeight(profile.density)}px`);
+    style.setProperty("--hud-max-width", `${Math.round(profile.maxWidth)}px`);
+    style.setProperty("--hud-dock-inset", `${profile.dockInset}px`);
+    style.setProperty("--hud-text-shadow-strong", STRONG_TEXT_SHADOW);
+    style.setProperty("--hud-card-width", `${Math.round(panelWidth)}px`);
+    style.setProperty("--hud-card-height", `${panelHeight}px`);
+    document.documentElement.style.setProperty("--carrot-dock-panel-height", `${Math.round(panelHeight + (portraitInline ? 0 : profile.dockInset * 2))}px`);
+    document.documentElement.style.setProperty("--carrot-dock-panel-width", `${Math.round(panelWidth)}px`);
+  }
+
+  function scheduleHudProfileApply() {
+    if (hudLayoutRaf) return;
+    hudLayoutRaf = requestAnimationFrame(() => {
+      hudLayoutRaf = 0;
+      applyHudProfile();
+    });
+  }
+
+  function bindHudLayout() {
+    if (hudLayoutBound) return;
+    hudLayoutBound = true;
+
+    const handleLayout = () => scheduleHudProfileApply();
+    window.addEventListener("resize", handleLayout, { passive: true });
+    window.addEventListener("orientationchange", handleLayout, { passive: true });
+    window.addEventListener("carrot:pagechange", handleLayout);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", handleLayout, { passive: true });
+      window.visualViewport.addEventListener("scroll", handleLayout, { passive: true });
+    }
+    if (typeof ResizeObserver === "function") {
+      const observer = new ResizeObserver(handleLayout);
+      const carrotDock = $("carrotHudDock");
+      const carrotStage = $("carrotStage");
+      if (carrotDock) observer.observe(carrotDock);
+      if (carrotStage) observer.observe(carrotStage);
+    }
+    scheduleHudProfileApply();
+  }
 
   function setSignalDot(kind) {
     const el = $("hudSignalDot");
     if (!el) return;
-    if (kind === "red") el.style.background = "#ff2a2a";
-    else if (kind === "green") el.style.background = "#15d14b";
-    else el.style.background = "rgba(255,255,255,0.18)";
-  }
-
-  function setGear(txt) {
-    const el = $("hudGear");
-    if (!el) return;
-    el.textContent = txt || "U";
-    const t = String(txt || "U").toUpperCase();
-    if (t === "R") el.style.color = "#ff9c2a";
-    else if (t === "N") el.style.color = "#7ec8ff";
-    else if (t === "U") el.style.color = "rgba(255,255,255,0.7)";
-    else el.style.color = "#1cff57";
+    const state = String(kind || "off").toLowerCase();
+    el.dataset.state = state;
   }
 
   function setDriveMode(name, kind) {
     const el = $("hudDriveMode");
     if (!el) return;
-
-    let modeName = name;
-    if (window.DRIVE_MODES && window.LANG) {
-      modeName = window.DRIVE_MODES[window.LANG][kind] || name;
-    }
-
-    el.textContent = modeName || (window.DRIVE_MODES && window.LANG ? window.DRIVE_MODES[window.LANG].normal : "Normal");
-    el.classList.remove("mode_normal", "mode_eco", "mode_safe", "mode_sport");
-    if (kind === "eco") el.classList.add("mode_eco");
-    else if (kind === "safe") el.classList.add("mode_safe");
-    else if (kind === "sport") el.classList.add("mode_sport");
-    else el.classList.add("mode_normal");
+    const normalized = String(kind || "").toLowerCase();
+    const labels = DRIVE_MODE_TEXT[currentLang()] || DRIVE_MODE_TEXT.ko;
+    const translated = labels[normalized] || name || labels.normal;
+    el.textContent = translated;
+    el.dataset.kind = normalized || "normal";
   }
 
-  function setGps(ok) {
-    const el = $("hudGps");
+  function setRoadLimit(speedKph, over, blink) {
+    const el = $("hudRoadLimitDisplay");
     if (!el) return;
-    el.classList.toggle("off", !ok);
+    const limitLabel = getHudLabels().limit;
+    const text = speedKph == null || !isFinite(speedKph) ? `${limitLabel} --` : `${limitLabel} ${Math.round(speedKph)}`;
+    el.textContent = text;
+    el.dataset.over = over ? "1" : "0";
+    setCameraBlink(blink);
   }
 
-  function setRoadLimit(speedKph, over) {
-    const box = $("hudRoadLimitVal");
-    setText("hudRoadLimitVal", (speedKph == null || !isFinite(speedKph)) ? "--" : Math.round(speedKph));
-    if (box) box.classList.toggle("over", !!over);
+  function setCameraBlink(on) {
+    const root = getHudRoot();
+    if (!root) return;
+    root.dataset.cameraBlink = on ? "1" : "0";
+  }
+
+  function setConnectivity(text) {
+    setText("hudConnectivity", text && String(text).trim() ? String(text).trim() : "--");
   }
 
   function setBars(n) {
     const wrap = $("hudBars");
     if (!wrap) return;
-    const bars = wrap.querySelectorAll(".hudBar");
-    const k = Math.max(0, Math.min(bars.length, Number(n) || 0));
-    const start = bars.length - k;
-    bars.forEach((b, i) => b.classList.toggle("on", i >= start));
+    const bars = wrap.querySelectorAll(".hudGapBar");
+    const count = clamp(Number(n) || 0, 0, bars.length);
+    bars.forEach((bar, index) => {
+      bar.classList.toggle("is-on", index < count);
+    });
   }
 
   function setGapNum(n) {
-    const el = $("hudGapNum");
-    if (!el) return;
-    if (n == null || !isFinite(n)) el.textContent = "-";
-    else el.textContent = String(Math.round(n));
+    const display = n == null || !isFinite(n) ? "(--)" : `(${Math.round(n)})`;
+    setText("hudGapNum", display);
   }
 
   function setTemp(temp) {
-    if (!temp || temp.speed == null || !isFinite(temp.speed) || !temp.source) return;
-    $("hudTempReason").textContent = String(temp.source);
-    $("hudTempSpeed").textContent = String(Math.round(temp.speed));
+    const reasonEl = $("hudTempReason");
+    const speedEl = $("hudTempSpeed");
+    if (!reasonEl || !speedEl) return;
 
-    const isDecel = !!temp.is_decel;
-    const color = isDecel ? "#ff9c2a" : "#22ff61";
-    $("hudTempReason").style.color = color;
-    $("hudTempSpeed").style.color = color;
+    if (!temp || temp.speed == null || !isFinite(temp.speed)) {
+      reasonEl.textContent = getHudLabels().temp;
+      speedEl.textContent = "--";
+      reasonEl.style.color = "rgba(255,255,255,0.84)";
+      speedEl.style.color = "rgba(255,255,255,0.88)";
+      return;
+    }
+
+    const reason = String(temp.source || getHudLabels().temp).trim();
+    const color = temp.is_decel ? "#FFC94A" : "#34C96E";
+    reasonEl.textContent = reason || "TEMP";
+    speedEl.textContent = `${Math.round(temp.speed)}`;
+    reasonEl.style.color = color;
+    speedEl.style.color = color;
   }
 
   function setSpeed(vEgoKph) {
-    const el = $("hudSpeed");
-    if (!el) return;
-    if (vEgoKph == null || !isFinite(vEgoKph)) {
-      el.textContent = "--";
-      return;
-    }
-    el.textContent = String(Math.round(vEgoKph));
+    setText("hudSpeed", vEgoKph == null || !isFinite(vEgoKph) ? "--" : `${Math.round(vEgoKph)}`);
   }
 
   function setSetSpeed(vSetKph) {
-    const el = $("hudSetSpeed");
+    setText("hudSetSpeed", vSetKph == null || !isFinite(vSetKph) ? "--" : `${Math.round(vSetKph)}`);
+  }
+
+  function setGear(txt) {
+    const el = $("hudGear");
     if (!el) return;
-    if (vSetKph == null || !isFinite(vSetKph)) {
-      el.textContent = "--";
-      return;
-    }
-    el.textContent = String(Math.round(vSetKph));
+    const value = String(txt || "U").trim().toUpperCase() || "U";
+    const unknown = value === "U" || value === "X";
+    el.textContent = unknown ? "–" : value;
+    el.dataset.unknown = unknown ? "1" : "0";
   }
 
-  function setRedDot(on) {
-    show("hudRedDot", !!on);
+  function setMetrics(cpuTempC, memPct, diskPct) {
+    setText("hudCpuVal", cpuTempC == null || !isFinite(cpuTempC) ? "--°" : `${cpuTempC.toFixed(0)}°`);
+    setText("hudMemVal", memPct == null || !isFinite(memPct) ? "--%" : `${memPct.toFixed(0)}%`);
+    setText("hudDiskVal", diskPct == null || !isFinite(diskPct) ? "--.-V" : `${Number(diskPct).toFixed(1)}V`);
   }
 
-  function setSys(cpuTempC, memPct, diskPct, diskLabel) {
-    setText("hudCpuVal", (cpuTempC == null || !isFinite(cpuTempC)) ? "--°C" : `${cpuTempC.toFixed(0)}°C`);
-    setText("hudMemVal", (memPct == null || !isFinite(memPct)) ? "--%" : `${memPct.toFixed(0)}%`);
-    if (diskPct == null || !isFinite(diskPct)) setText("hudDiskVal", "--V");
-    else setText("hudDiskVal", `${Number(diskPct).toFixed(1)}V`);
-    if (diskLabel) setText("hudDiskLabel", diskLabel);
+  function syncStaticHudText() {
+    const labels = getHudLabels();
+    setText("hudSpeedLabel", labels.speed);
+    setText("hudSetSpeedLabel", labels.setSpeed);
+    setText("hudGearLabel", labels.gear);
   }
 
   const DrivingHud = {
     init() {
+      bindHudLayout();
+      syncStaticHudText();
+      setMetrics(null, null, null);
+      setSpeed(null);
+      setSetSpeed(null);
+      setTemp(null);
       setBars(0);
-      setSignalDot("off");
-      setGps(false);
-      setDriveMode("", "normal");
-      setRoadLimit(null, false);
       setGapNum(null);
       setGear("U");
-      setRedDot(false);
-      setTemp(null);
+      setSignalDot("off");
+      setDriveMode("", "normal");
+      setRoadLimit(null, false);
+      setConnectivity("--");
     },
 
-    update(p) {
-      if (!p) return;
-      setSys(p.cpuTempC, p.memPct, p.diskPct, p.diskLabel);
-      setSpeed(p.vEgoKph);
-      setSetSpeed(p.vSetKph);
-      setSignalDot(p.tlight || "off");
-      setRedDot(p.redDot);
-      setTemp(p.temp);
-      setGapNum(p.tfGap);
-      setBars(p.tfBars != null ? p.tfBars : p.tfGap);
-      setGear(p.gear);
-      setGps(!!p.gpsOk);
-      if (p.driveMode) setDriveMode(p.driveMode.name, p.driveMode.kind);
-      setRoadLimit(p.speedLimitKph, p.speedLimitOver);
+    update(payload) {
+      if (!payload) return;
+      syncStaticHudText();
+      setMetrics(payload.cpuTempC, payload.memPct, payload.diskPct);
+      setSpeed(payload.vEgoKph);
+      setSetSpeed(payload.vSetKph);
+      setTemp(payload.temp);
+      setBars(payload.tfBars != null ? payload.tfBars : payload.tfGap);
+      setGapNum(payload.tfGap);
+      setGear(payload.gear);
+      setSignalDot(payload.tlight || "off");
+      if (payload.driveMode) setDriveMode(payload.driveMode.name, payload.driveMode.kind);
+      else setDriveMode("", "normal");
+      setRoadLimit(payload.speedLimitKph, payload.speedLimitOver, payload.speedLimitBlink);
+      setConnectivity(payload.apm);
+    },
+
+    relayout() {
+      scheduleHudProfileApply();
+    },
+
+    renderText() {
+      syncStaticHudText();
+      setDriveMode("", "normal");
+      setRoadLimit(null, false);
     },
   };
 

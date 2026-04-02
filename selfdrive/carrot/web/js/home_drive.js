@@ -1,6 +1,6 @@
 "use strict";
 
-window.CarrotTest = (() => {
+window.HomeDrive = (() => {
   const stageEl = document.getElementById("carrotStage");
   const videoEl = document.getElementById("carrotRoadVideo");
   const canvasEl = document.getElementById("carrotOverlayCanvas");
@@ -11,7 +11,6 @@ window.CarrotTest = (() => {
   const driveHudCardEl = document.getElementById("driveHudCard");
   const sourceVideoEl = document.getElementById("rtcVideo");
   const zoomButtons = Array.from(document.querySelectorAll(".carrot-zoom__btn"));
-  const leadPreviewToggleEl = document.getElementById("carrotTestLeadPreview");
 
   if (!stageEl || !videoEl || !canvasEl || !hudCanvasEl || !statusEl || !metaEl || !debugEl || !sourceVideoEl) {
     return {};
@@ -46,8 +45,7 @@ window.CarrotTest = (() => {
     { key: "crop", label: "크롭" },
   ];
   const HUD_TEXT_FONT = "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-  const DISPLAY_MODE_STORAGE_KEY = "carrot_test_display_mode_index";
-  const TEST_FLAGS_STORAGE_KEY = "carrot_test_flags";
+  const DISPLAY_MODE_STORAGE_KEY = "home_drive_display_mode_index";
   const PATH_PALETTE = [
     { r: 255, g: 82, b: 82 },
     { r: 255, g: 153, b: 0 },
@@ -111,9 +109,6 @@ window.CarrotTest = (() => {
     previousAtMs: 0,
     currentAtMs: 0,
   };
-  let testFlags = {
-    leadPreview: false,
-  };
 
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
@@ -149,32 +144,6 @@ window.CarrotTest = (() => {
     const text = String(value || "").trim();
     if (!text) return "";
     return text.length > maxLength ? `${text.slice(0, maxLength - 1)}...` : text;
-  }
-
-  function loadTestFlags() {
-    try {
-      const raw = localStorage.getItem(TEST_FLAGS_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === "object") {
-        testFlags = {
-          ...testFlags,
-          leadPreview: Boolean(parsed.leadPreview),
-        };
-      }
-    } catch {}
-  }
-
-  function persistTestFlags() {
-    try {
-      localStorage.setItem(TEST_FLAGS_STORAGE_KEY, JSON.stringify(testFlags));
-    } catch {}
-  }
-
-  function syncTestFlagInputs() {
-    if (leadPreviewToggleEl) {
-      leadPreviewToggleEl.checked = Boolean(testFlags.leadPreview);
-    }
   }
 
   function rgba(rgb, alpha) {
@@ -256,12 +225,15 @@ window.CarrotTest = (() => {
     const containScale = Math.min(stageWidth / videoWidth, stageHeight / videoHeight);
     const coverScale = Math.max(stageWidth / videoWidth, stageHeight / videoHeight);
     const mode = DISPLAY_MODES[displayModeIndex] || DISPLAY_MODES[1];
+    const isPortrait = stageHeight > stageWidth;
 
     let scale = containScale;
     if (mode.key === "fit") {
       scale = containScale * 0.94;
     } else if (mode.key === "crop") {
       scale = coverScale;
+    } else if (mode.key === "normal" && isPortrait) {
+      scale = containScale * 0.985;
     }
 
     return {
@@ -808,39 +780,24 @@ window.CarrotTest = (() => {
     if (!driveHudCardEl) return;
     driveHudCardEl.style.removeProperty("--carrot-hud-left");
     driveHudCardEl.style.removeProperty("--carrot-hud-bottom");
-    driveHudCardEl.style.removeProperty("--carrot-hud-scale");
   }
 
   function applyCarrotHudLayout(viewportRect) {
     if (!driveHudCardEl) return;
+    if (window.matchMedia("(orientation: portrait)").matches) {
+      driveHudCardEl.style.removeProperty("--carrot-hud-left");
+      driveHudCardEl.style.removeProperty("--carrot-hud-bottom");
+      return;
+    }
     const stageRect = stageEl.getBoundingClientRect();
     if (!stageRect.width || !stageRect.height) return;
-    const displayModeKey = DISPLAY_MODES[displayModeIndex]?.key || "normal";
+    const overlayInsetX = clamp(stageRect.width * 0.028, 16, 28);
+    const overlayInsetY = clamp(stageRect.height * 0.034, 16, 24);
+    const stageLeft = Math.round(overlayInsetX);
+    const stageBottom = Math.round(overlayInsetY);
 
-    const viewport = viewportRect || {
-      left: 0,
-      top: 0,
-      right: stageRect.width,
-      bottom: stageRect.height,
-      width: stageRect.width,
-      height: stageRect.height,
-    };
-    const overlayInsetX = displayModeKey === "fit" ? 8 : 12;
-    const overlayInsetY = displayModeKey === "fit" ? 8 : 12;
-    const overlayHeight = clamp(viewport.height * (displayModeKey === "fit" ? 0.27 : 0.29), 184, 304);
-    const overlayWidth = overlayHeight * 1.02;
-    const scale = clamp((overlayWidth / 320) * 0.9, 0.65, 0.9);
-    const scaledHudSize = 320 * scale;
-    const minAbsLeft = stageRect.left + viewport.left + overlayInsetX;
-    const maxAbsLeft = stageRect.left + viewport.right - scaledHudSize - overlayInsetX;
-    const absLeft = Math.round(clamp(minAbsLeft, minAbsLeft, Math.max(minAbsLeft, maxAbsLeft)));
-    const absBottom = Math.round(
-      Math.max(12, window.innerHeight - (stageRect.top + viewport.bottom) + overlayInsetY),
-    );
-
-    driveHudCardEl.style.setProperty("--carrot-hud-left", `${absLeft}px`);
-    driveHudCardEl.style.setProperty("--carrot-hud-bottom", `${absBottom}px`);
-    driveHudCardEl.style.setProperty("--carrot-hud-scale", scale.toFixed(3));
+    driveHudCardEl.style.setProperty("--carrot-hud-left", `${stageLeft}px`);
+    driveHudCardEl.style.setProperty("--carrot-hud-bottom", `${stageBottom}px`);
   }
 
   function syncCanvasSize(videoWidth, videoHeight, stageWidth, stageHeight) {
@@ -1248,27 +1205,6 @@ window.CarrotTest = (() => {
     };
   }
 
-  function createPreviewLead(modelPath) {
-    const xs = Array.isArray(modelPath?.x) ? modelPath.x : [];
-    if (xs.length < 2) return null;
-    const lastX = finiteNumber(xs[xs.length - 1], 0);
-    if (!lastX || lastX < 6) return null;
-
-    const dRel = clamp(lastX * 0.35, 14, 28);
-    const pathY = samplePathY(modelPath, dRel);
-    if (!Number.isFinite(pathY)) return null;
-
-    return {
-      status: true,
-      dRel,
-      yRel: -pathY,
-      radar: false,
-      radarTrackId: -99999,
-      modelProb: 0,
-      __preview: true,
-    };
-  }
-
   function drawLeadBoxCard(box, strokeColor, fillColor, primary = true) {
     if (!box?.rect) return;
     const { x, y, width, height } = box.rect;
@@ -1312,25 +1248,6 @@ window.CarrotTest = (() => {
       default:
         return "rgba(255, 255, 255, 0.82)";
     }
-  }
-
-  function drawPreviewLeadBox(box) {
-    if (!box?.rect) return;
-    const { x, y, width, height } = box.rect;
-    ctx.save();
-    fillRoundedRect(ctx, x, y, width, height, 16, "rgba(24, 31, 42, 0.14)");
-    roundedRectPath(ctx, x, y, width, height, 16);
-    ctx.setLineDash([10, 8]);
-    ctx.lineWidth = 2.6;
-    ctx.strokeStyle = "rgba(145, 164, 191, 0.82)";
-    ctx.stroke();
-    ctx.restore();
-    drawCanvasOutlinedText("TEST", box.centerX, y + height + 22, {
-      fontSize: 15,
-      fontWeight: 800,
-      fillStyle: "rgba(232, 239, 247, 0.94)",
-      strokeWidth: 3.2,
-    });
   }
 
   function getLeadStateText(overlayState, hudState) {
@@ -1560,12 +1477,6 @@ window.CarrotTest = (() => {
     const modelPath = model?.position || null;
     const showRadarInfo = finiteNumber(paramsState.ShowRadarInfo, defaultParams.ShowRadarInfo);
     const leadState = getLeadStateText(overlayState, hudState);
-    const previewLead = testFlags.leadPreview && modelPath ? createPreviewLead(modelPath) : null;
-    const previewBox = previewLead ? projectLeadBox(previewLead, modelPath, calibTransform, videoWidth, videoHeight) : null;
-
-    if (previewBox) {
-      drawPreviewLeadBox(previewBox);
-    }
 
     const leadOneBox = projectLeadBox(radarState?.leadOne, modelPath, calibTransform, videoWidth, videoHeight);
     if (leadOneBox) {
@@ -2193,18 +2104,8 @@ window.CarrotTest = (() => {
     }
   } catch {}
 
-  loadTestFlags();
   syncDisplayModeButtons();
-  syncTestFlagInputs();
   refreshParams(true);
-
-  if (leadPreviewToggleEl) {
-    leadPreviewToggleEl.addEventListener("change", () => {
-      testFlags.leadPreview = Boolean(leadPreviewToggleEl.checked);
-      persistTestFlags();
-      renderActiveFrame();
-    });
-  }
 
   runLoop();
 

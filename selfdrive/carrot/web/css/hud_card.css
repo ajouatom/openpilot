@@ -1,251 +1,509 @@
-/* ===== Driving HUD card ===== */
-#driveHudCard { padding: 10px; }
-.hudWrap{
-  border: 2px solid rgba(255,255,255,0.65);
-  border-radius: 18px;
-  padding: 10px;
-  background: rgba(0,0,0,0.22);
-  box-shadow: 0 0 0 4px var(--md-surface);
-  aspect-ratio: 1 / 1;
+/* CarrotLink adaptive HUD surface */
+#driveHudCard {
   width: 100%;
-  max-width: 320px;
-  margin: 0 auto;
-  box-sizing: border-box;
-  position: relative;
-}
-
-.hudTop{
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 10px;
-}
-
-.hudMini{
-  background: #1e8f3f;
-  border: 2px solid rgba(0,0,0,0.35);
-  border-radius: 10px;
-  padding: 6px 8px;
-  text-align: center;
-  color: #fff;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15);
-}
-.hudMiniLabel{
-  font-weight: 900;
-  font-size: 13px;
-  line-height: 1.0;
-}
-.hudMiniVal{
-  font-weight: 900;
-  font-size: 18px;
-  line-height: 1.1;
-  margin-top: 2px;
-}
-
-.hudMain {
-  position: relative;
-  height: 140px
-}
-.hudLowerGroup {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.hudSpeedBg {
-  position: absolute;
-  width: 225px;
-  height: 180px;
-  left: 40%;
-  top: 6px;
-  transform: translateX(-50%);
-  background-image: url("/assets/speed_bg.png");
-  background-repeat: no-repeat;
-  background-size: contain;
-  background-position: center;
+  max-width: 100%;
   pointer-events: none;
-  opacity: 0.95;
 }
 
-.hudSpeed{
-  position: absolute;
-  font-size: 88px;
-  font-weight: 1000;
-  letter-spacing: -2px;
-  color: #fff;
-  text-shadow: 0 2px 0 rgba(0,0,0,0.45);
-  left: 12%;
-  top: 18px;
-}
-
-.hudRedDot{
-  position: absolute;
-  left: 12px;
-  top: 30px;
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  background: #ff2a2a;
-  box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
-}
-
-.hudSignalDot{
-  position: absolute;
-  left: 2px;
-  top: 6px;
-  width: 20px;
-  height: 20px;
-  border-radius: 999px;
-  background: #15d14b;
-  box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
-}
-
-.hudTempReason {
-  position: absolute;
-  left: 73%;
-  top: 13px;
-  font-weight: 900;
-  font-size: 16px;
-  color: #22ff61;
-}
-.hudTempSpeed{
-  position: absolute;
-  left:73%;
-  top: 22px;
-  font-weight: 1000;
-  font-size: 38px;
-  color: #22ff61;
-  letter-spacing: -1px;
-}
-
-.hudSetSpeed{
-  font-weight: 1000;
-  font-size: 38px;
-  color: #22ff61;
-  letter-spacing: -1px;
-  position: absolute;
-  left: 55%;
-  top: 56px;
-}
-
-.hudGapNum{
-  position: absolute;
-  left: 69%;
-  top: 109px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-weight: 900;
-  font-size: 24px;
-  color:#fff;
-}
-
-.hudGear{
-  position: absolute;
-  right: 0%;
-  bottom: 0%;
-  align-items:center;
-  justify-content:center;
-  font-weight: 1000;
-  font-size: 56px;
-  border: 2px solid rgba(255,255,255,0.65);
-  border-radius: 14px;
-  color:#1cff57;
-}
-
-.hudBottom{
-  display:flex;
-  gap: 10px;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 10px;
-}
-
-.hudLeftStack {
+.hudWrap {
+  --hud-aspect: 1.24;
+  --hud-radius: 20px;
+  --hud-padding: 12px;
+  --hud-section-gap: 10px;
+  --hud-metric-gap: 8px;
+  --hud-speed-font: 90px;
+  --hud-primary-font: 38px;
+  --hud-secondary-font: 26px;
+  --hud-label-font: 14.5px;
+  --hud-chip-font: 13.5px;
+  --hud-gear-font: 46px;
+  --hud-band-height: 34px;
+  --hud-max-width: 428px;
+  --hud-panel-top: rgba(13, 56, 38, 1);
+  --hud-panel-mid: rgba(18, 65, 44, 1);
+  --hud-panel-bottom: rgba(8, 31, 21, 1);
+  --hud-panel-soft: rgba(17, 74, 49, 0.85);
+  --hud-panel-border: rgba(255, 255, 255, 0.18);
+  --hud-divider: rgba(255, 255, 255, 0.10);
+  --hud-bar-bg: rgba(255, 255, 255, 0.08);
+  --hud-shadow: 0 12px 20px rgba(0, 0, 0, 0.54);
+  --hud-text-shadow-strong: 0 1.4px 3.6px rgba(0,0,0,0.94), 0 0 1.2px rgba(0,0,0,0.62);
+  --hud-green: #34c96e;
+  --hud-amber: #ffc94a;
+  --hud-red: #ff5c5c;
+  width: min(100%, var(--hud-card-width, var(--hud-max-width)));
+  max-width: 100%;
+  height: auto;
+  margin: 0;
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 0px;
-}
-
-.hudGps{
-  padding: 7px 12px;
-  border-radius: 12px;
+  gap: 0;
+  aspect-ratio: var(--hud-aspect);
+  padding: var(--hud-padding);
+  border-radius: var(--hud-radius);
+  border: 1px solid var(--hud-panel-border);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01) 38%, transparent 72%),
+    linear-gradient(145deg, var(--hud-panel-top), var(--hud-panel-mid) 58%, var(--hud-panel-bottom));
+  box-shadow: var(--hud-shadow);
+  isolation: isolate;
   color: #fff;
-  font-weight: 900;
-  font-size: 16px;
-  min-width: 60px;
-  text-align:center;
+  transition: border-color 0.14s ease;
 }
 
-.hudGps.off{
-  color: rgba(255,255,255,0.75);
+/* camera alert blink overlay */
+.hudWrap::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--hud-radius);
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  background: linear-gradient(135deg, rgba(168,25,25,0.78), rgba(255,92,87,0.56), rgba(10,4,4,0.40));
+  transition: opacity 0.14s ease;
 }
 
-.hudDriveMode {
-  padding: 6px 12px;
+.hudWrap[data-camera-blink="1"]::after {
+  animation: hudCameraBlink 1.6s ease-in-out infinite;
+}
+
+.hudWrap[data-camera-blink="1"] {
+  border-color: rgba(255,105,97,0.58) !important;
+}
+
+@keyframes hudCameraBlink {
+  0%, 49.9% { opacity: 0; }
+  50%, 100% { opacity: 1; }
+}
+
+.hudWrap[data-surface="driveInline"],
+.hudWrap[data-surface="driveOverlay"] {
+  aspect-ratio: auto;
+  height: var(--hud-card-height);
+}
+
+.hudWrap[data-surface="driveOverlay"] {
+  width: var(--hud-card-width, var(--hud-max-width));
+  max-width: none;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.008) 38%, transparent 72%),
+    linear-gradient(145deg, rgba(17,68,46,0.87), rgba(10,40,27,0.80));
+  box-shadow: none;
+  border-color: rgba(255,255,255,0.12);
+  transform: scale(0.8);
+  transform-origin: bottom left;
+}
+
+.hudWrap::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 16% 12%, rgba(255,255,255,0.05), transparent 28%),
+    linear-gradient(180deg, rgba(255,255,255,0.04), transparent 22%);
+  pointer-events: none;
+}
+
+.hudWrap > * {
+  position: relative;
+  z-index: 1;
+}
+
+.hudMetricBar,
+.hudBottomStrip {
+  min-height: var(--hud-band-height);
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  overflow: hidden;
+}
+
+.hudMetricBar {
+  display: flex;
+  align-items: stretch;
+  margin-bottom: calc(var(--hud-section-gap) * 0.28);
+  padding: 0 calc(var(--hud-section-gap) * 0.08);
+}
+
+.hudMetricCell {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
   align-items: center;
-  border-radius: 12px;
-  border: 2px solid rgba(0,0,0,0.35);
-  font-weight: 900;
-  font-size: 16px;
-  min-width: 82px;
-  text-align: center;
-  background: #e7eef7;
-  color: #1a1f26;
-}
-.hudDriveMode.mode_normal{ background:#e7eef7; color:#1a1f26; }
-.hudDriveMode.mode_eco{ background:#10c248; color:#fff; }
-.hudDriveMode.mode_safe{ background:#ff9c2a; color:#1a1f26; }
-.hudDriveMode.mode_sport{ background:#ff2a2a; color:#fff; }
-
-.hudRoadLimitLabel {
-  padding: 7px 12px;
-  border-radius: 12px;
-  color: #fff;
-  font-weight: 900;
-  font-size: 16px;
-  min-width: 60px;
-  text-align: center;
+  justify-content: center;
+  gap: calc(var(--hud-metric-gap) * 0.42);
+  padding: 0 calc(var(--hud-section-gap) * 0.30);
 }
 
-.hudRoadLimitVal {
-  padding: 6px 12px;
+.hudMetricDivider,
+.hudBodyDivider,
+.hudInlineDivider {
+  background: rgba(255,255,255,0.10);
+  flex: none;
+}
+
+.hudMetricDivider {
+  width: 1px;
+  align-self: center;
+  height: calc(var(--hud-band-height) - 10px);
+  background: rgba(255,255,255,0.08);
+}
+
+.hudMetricIcon {
+  display: inline-flex;
   align-items: center;
-  border-radius: 12px;
-  border: 2px solid rgba(0,0,0,0.35);
-  font-weight: 900;
-  font-size: 16px;
-  min-width: 82px;
-  text-align: center;
-  color: #fff;
-}
-.hudRoadLimitVal.over{
-  background: #ff2a2a;
-  border-color: rgba(0,0,0,0.35);
+  justify-content: center;
+  width: calc(var(--hud-chip-font) + 6px);
+  height: calc(var(--hud-chip-font) + 6px);
+  color: rgba(255,255,255,0.92);
 }
 
-.hudBars{
-  display:flex;
+.hudMetricIcon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.hudMetricValue {
+  min-width: 0;
+  font-size: calc(var(--hud-chip-font) + 2.9px);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  text-shadow: var(--hud-text-shadow-strong);
+  white-space: nowrap;
+}
+
+.hudBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) auto minmax(0, 4fr);
+  gap: 0;
+  margin-bottom: calc(var(--hud-section-gap) * 0.26);
+}
+
+.hudBodyDivider {
+  width: 1px;
+  margin: calc(var(--hud-metric-gap) * 0.12) calc(var(--hud-section-gap) * 0.18);
+  display: none;
+}
+
+.hudWrap[data-surface="homePreview"] .hudBodyDivider {
+  display: block;
+  background: rgba(255,255,255,0.12);
+}
+
+.hudWrap[data-surface="homePreview"][data-wide="1"] .hudBody {
+  grid-template-columns: minmax(0, 5fr) auto minmax(0, 5fr);
+}
+
+.hudWrap[data-surface="homePreview"][data-wide="1"][data-density="regular"] .hudBody,
+.hudWrap[data-surface="homePreview"][data-wide="1"][data-density="spacious"] .hudBody {
+  grid-template-columns: minmax(0, 6fr) auto minmax(0, 5fr);
+}
+
+.hudSpeedColumn,
+.hudSupportColumn {
+  min-width: 0;
+  display: flex;
   flex-direction: column;
-  gap: 5px;
-  align-items: flex-end;
-  height: 75px;
-}
-.hudBar {
-  width: 40px;
-  height: 16px;
-  border-radius: 4px;
-  background: rgba(255,255,255,0.28);
-  border: 1px solid rgba(0,0,0,0.35);
-  transition: height 0.15s ease, background 0.15s ease;
-}
-.hudBar.on{
-  background: #1cff57;
 }
 
-@media (max-width: 360px){
-  #driveHudCard .hudWrap{ max-width: 280px; }
-  #driveHudCard .hudSpeed{ font-size: 68px; }
-  #driveHudCard .hudSetSpeed{ font-size: 40px; }
+.hudSpeedColumn {
+  padding: calc(var(--hud-padding) * 0.18) calc(var(--hud-padding) * 0.10) calc(var(--hud-padding) * 0.10) calc(var(--hud-padding) * 0.16);
+}
+
+.hudSupportColumn {
+  padding: calc(var(--hud-padding) * 0.18) calc(var(--hud-padding) * 0.12) calc(var(--hud-padding) * 0.10) calc(var(--hud-padding) * 0.10);
+}
+
+.hudSectionLabel {
+  color: rgba(255,255,255,0.56);
+  font-size: calc(var(--hud-chip-font) + 1.4px);
+  font-weight: 900;
+  letter-spacing: 0.3px;
+  line-height: 1.1;
+  text-shadow: var(--hud-text-shadow-strong);
+}
+
+.hudSpeedValue {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  font-size: calc(var(--hud-speed-font) + 14px);
+  font-weight: 900;
+  line-height: 0.84;
+  letter-spacing: -0.06em;
+  color: #fff;
+  text-shadow: var(--hud-text-shadow-strong);
+  white-space: nowrap;
+}
+
+.hudSetSpeedValue {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  font-size: calc(var(--hud-primary-font) + 8px);
+  font-weight: 900;
+  line-height: 0.92;
+  letter-spacing: -0.04em;
+  color: #f4f7fb;
+  text-shadow: var(--hud-text-shadow-strong);
+  white-space: nowrap;
+}
+
+.hudInlineDivider {
+  width: 100%;
+  height: 1px;
+  margin: calc(var(--hud-metric-gap) * 0.04) 0;
+}
+
+.hudSupportLine,
+.hudSupportDetail {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.hudSupportLine {
+  justify-content: space-between;
+  gap: calc(var(--hud-metric-gap) * 0.44);
+}
+
+.hudSupportKey,
+.hudSupportValue,
+.hudGapText,
+.hudGearLabel,
+.hudGearValue {
+  text-shadow: var(--hud-text-shadow-strong);
+}
+
+.hudSupportKey {
+  min-width: 0;
+  color: rgba(255,255,255,0.96);
+  font-size: calc(var(--hud-label-font) + 1.8px);
+  font-weight: 900;
+  letter-spacing: 0.22px;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.hudSupportValue {
+  flex: none;
+  color: rgba(255,255,255,0.86);
+  font-size: calc(var(--hud-label-font) + 2.4px);
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.hudSupportDetail {
+  justify-content: space-between;
+  gap: calc(var(--hud-metric-gap) * 0.34);
+}
+
+.hudGapStatus {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--hud-metric-gap) * 0.26);
+}
+
+.hudGapBars {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--hud-metric-gap) * 0.18);
+}
+
+.hudGapBar {
+  flex: 1 1 0;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.22);
+  transition: background 0.14s ease, height 0.14s ease, box-shadow 0.14s ease;
+}
+
+.hudGapBar.is-on {
+  height: 10px;
+  background: rgba(255,255,255,0.96);
+  box-shadow: 0 0 10px rgba(255,255,255,0.12);
+}
+
+.hudGapText {
+  flex: none;
+  color: rgba(255,255,255,0.84);
+  font-size: calc(var(--hud-label-font) + 0.9px);
+  font-weight: 900;
+  letter-spacing: 0.16px;
+  white-space: nowrap;
+}
+
+.hudGearStatus {
+  flex: none;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.hudGearLabel {
+  color: rgba(255,255,255,0.58);
+  font-size: calc(var(--hud-chip-font) - 0.8px);
+  font-weight: 800;
+  letter-spacing: 0.26px;
+  line-height: 1;
+}
+
+.hudGearValue {
+  margin-top: 3px;
+  color: rgba(255,255,255,0.95);
+  font-size: calc(var(--hud-secondary-font) - 2.2px);
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.hudGearValue[data-unknown="1"] {
+  color: rgba(255,255,255,0.42);
+}
+
+.hudBottomStrip {
+  display: flex;
+  align-items: center;
+  padding: clamp(2px, calc((var(--hud-band-height) - (var(--hud-chip-font) + 4px)) / 2), 4px) calc(var(--hud-section-gap) * 0.12);
+  margin-top: auto;
+}
+
+.hudSignalSlot {
+  width: calc(var(--hud-chip-font) + 12px);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.hudSignalDot {
+  width: calc(var(--hud-label-font) + 8px);
+  height: calc(var(--hud-label-font) + 8px);
+  border-radius: 999px;
+  background: rgba(255,255,255,0.22);
+  box-shadow: 0 0 0 3px rgba(0,0,0,0.16);
+}
+
+.hudSignalDot[data-state="red"] {
+  background: var(--hud-red);
+  box-shadow: 0 0 10px rgba(255,92,92,0.32);
+}
+
+.hudSignalDot[data-state="green"] {
+  background: var(--hud-green);
+  box-shadow: 0 0 10px rgba(52,201,110,0.32);
+}
+
+.hudSignalDot[data-state="yellow"] {
+  background: var(--hud-amber);
+  box-shadow: 0 0 10px rgba(255,201,74,0.32);
+}
+
+.hudBottomSegment {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: calc(var(--hud-chip-font) + 2.8px);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.18px;
+  text-align: center;
+  color: rgba(255,255,255,0.92);
+  text-shadow: var(--hud-text-shadow-strong);
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+#hudRoadLimitDisplay[data-over="1"] {
+  color: #ff6961;
+}
+
+.hudWrap[data-density="micro"] .hudGapBar.is-on {
+  height: 8px;
+}
+
+.hudWrap[data-density="micro"] .hudSupportDetail {
+  gap: calc(var(--hud-metric-gap) * 0.24);
+}
+
+.hudWrap[data-density="micro"] .hudSpeedValue {
+  font-size: calc(var(--hud-speed-font) + 8px);
+}
+
+.hudWrap[data-density="micro"] .hudSetSpeedValue {
+  font-size: calc(var(--hud-primary-font) + 4px);
+}
+
+.hudWrap[data-density="micro"] .hudSupportLine,
+.hudWrap[data-density="micro"] .hudSupportDetail {
+  flex-wrap: nowrap;
+}
+
+.hudWrap[data-density="micro"] .hudGearLabel {
+  display: none;
+}
+
+.hudWrap[data-density="micro"] .hudGearValue {
+  margin-top: 0;
+  font-size: calc(var(--hud-secondary-font) - 6px);
+}
+
+.hudWrap[data-density="spacious"] .hudBottomStrip {
+  padding-inline: calc(var(--hud-section-gap) * 0.18);
+}
+
+.hudWrap[data-surface="homePreview"] .hudSupportLine {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: calc(var(--hud-metric-gap) * 0.10);
+}
+
+.hudWrap[data-surface="homePreview"] .hudSupportValue {
+  align-self: flex-end;
+  text-align: right;
+}
+
+.hudWrap[data-surface="homePreview"] .hudSupportDetail {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: calc(var(--hud-metric-gap) * 0.24);
+}
+
+.hudWrap[data-surface="homePreview"] .hudGapStatus {
+  flex-direction: column;
+  align-items: stretch;
+  gap: calc(var(--hud-metric-gap) * 0.14);
+}
+
+.hudWrap[data-surface="homePreview"] .hudGapText {
+  text-align: right;
+}
+
+.hudWrap[data-surface="homePreview"] .hudGearStatus {
+  align-self: flex-end;
+}
+
+@media (max-width: 430px) {
+  .hudWrap {
+    width: min(100%, var(--hud-max-width));
+  }
 }

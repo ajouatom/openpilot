@@ -3,49 +3,15 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>Carrot</title>
+  <title>Home</title>
   <link rel="stylesheet" href="/css/tokens.css?v=2603-73" />
-  <link rel="stylesheet" href="/css/hud_card.css?v=2603-75" />
-  <link rel="stylesheet" href="/css/app.css?v=2603-163" />
+  <link rel="stylesheet" href="/css/hud_card.css?v=2603-83" />
+  <link rel="stylesheet" href="/css/app.css?v=2603-175" />
 </head>
 
 <body>
 
   <div class="wrap swipe-container" id="swipeContainer">
-    <!-- ════════════ HOME ════════════ -->
-    <div id="pageHome" class="page">
-      <!-- Top Utility: Server State + Quick Link -->
-      <div class="home-utility">
-        <div class="setting home-utility-item">
-          <div class="home-utility-head">
-            <div id="chipServerLabel" class="title home-utility-title">Server State</div>
-            <button id="btnToggleServerState" class="smallBtn home-utility-actionBtn" type="button" aria-expanded="false" aria-controls="utilityStatePane">Open</button>
-          </div>
-          <div class="home-utility-content">
-            <div class="home-utility-meta">
-              <span class="chip-dot" id="chipDot"></span>
-              <span id="chipStateText" class="muted home-utility-value">connecting...</span>
-            </div>
-          </div>
-          <div id="utilityStatePane" class="home-utility-pane" hidden>
-            <hr class="divider--thin" />
-            <pre id="stateBox" class="home-utility-pre">connecting...</pre>
-          </div>
-        </div>
-
-        <div class="setting home-utility-item">
-          <div class="home-utility-head">
-            <div id="chipQuickLabel" class="title home-utility-title">Quick Link</div>
-            <button id="btnSaveQuickLink" class="smallBtn home-utility-actionBtn home-utility-actionBtn--save" type="button">Save</button>
-          </div>
-          <div class="home-utility-content">
-            <a id="quickLink" class="home-utility-linkInline" href="#" target="_blank" rel="noopener">Quick Link</a>
-          </div>
-        </div>
-      </div>
-
-    </div>
-
     <!-- ════════════ CAR SELECT ════════════ -->
     <div id="pageCar" class="page" style="display:none;">
       <div class="page-header">
@@ -169,6 +135,18 @@
         <hr class="divider">
 
         <div class="section">
+          <h3 id="toolsQuickLinkTitle" class="section-title">Quick Link</h3>
+          <div class="row-wrap">
+            <button id="btnToolsQuickLink" class="btn">open</button>
+          </div>
+          <div class="muted mt-sm">
+            <a id="toolsQuickLink" class="home-utility-linkInline" href="#" target="_blank" rel="noopener">Quick Link</a>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="section">
           <h3 id="userSettingsTitle" class="section-title">Settings</h3>
           <div class="row-wrap">
             <button id="btnBackupSettings" class="btn">backup settings</button>
@@ -244,7 +222,7 @@
     <!-- ════════════ CARROT TEST ════════════ -->
     <div id="pageCarrot" class="page" style="display:none;">
       <div class="page-header page-header--hidden" aria-hidden="true">
-        <h2 id="carrotTitle" class="page-title">Carrot</h2>
+        <h2 id="carrotTitle" class="page-title">Home</h2>
       </div>
 
       <div id="carrotStage" class="carrot-stage">
@@ -261,62 +239,87 @@
           <button class="smallBtn carrot-zoom__btn" type="button" data-display-index="1">정사이즈</button>
           <button class="smallBtn carrot-zoom__btn" type="button" data-display-index="2">크롭</button>
         </div>
-        <div class="carrot-test-menu" aria-label="Carrot test options">
-          <label class="carrot-test-menu__item">
-            <input id="carrotTestLeadPreview" class="carrot-test-menu__check" type="checkbox" />
-            <span>리드박스 프리뷰</span>
-          </label>
-        </div>
 
         <div id="carrotStageMeta" class="carrot-stage__meta">model:- road:- cal:-</div>
       </div>
+      <div id="carrotHudDock" class="carrot-hud-dock"></div>
     </div>
   </div>
 
   <div id="driveHudCard">
     <div class="hudWrap" id="hudRoot">
-      <div class="hudTop">
-        <div class="hudMini">
-          <div class="hudMiniLabel">CPU</div>
-          <div class="hudMiniVal" id="hudCpuVal">--°C</div>
+      <div class="hudMetricBar" role="presentation">
+        <div class="hudMetricCell">
+          <span class="hudMetricIcon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path fill="currentColor" d="M15 13.76V5a3 3 0 1 0-6 0v8.76A5 5 0 1 0 15 13.76M11 5a1 1 0 1 1 2 0v9.66l.59.3A3 3 0 1 1 10.41 15l.59-.34z"/>
+            </svg>
+          </span>
+          <span id="hudCpuVal" class="hudMetricValue">--°</span>
         </div>
-        <div class="hudMini">
-          <div class="hudMiniLabel">MEM</div>
-          <div class="hudMiniVal" id="hudMemVal">--%</div>
+        <div class="hudMetricDivider" aria-hidden="true"></div>
+        <div class="hudMetricCell">
+          <span class="hudMetricIcon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path fill="currentColor" d="M7 7h10v10H7zm-2 2H3v6h2zm16 0h-2v6h2zM9 3H7v2h2zm4 0h-2v2h2zm4 0h-2v2h2zm-8 16H7v2h2zm4 0h-2v2h2zm4 0h-2v2h2z"/>
+            </svg>
+          </span>
+          <span id="hudMemVal" class="hudMetricValue">--%</span>
         </div>
-        <div class="hudMini">
-          <div class="hudMiniLabel" id="hudDiskLabel">DISK</div>
-          <div class="hudMiniVal" id="hudDiskVal">--%</div>
+        <div class="hudMetricDivider" aria-hidden="true"></div>
+        <div class="hudMetricCell">
+          <span class="hudMetricIcon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path fill="currentColor" d="M11 21h-1l1-7H8.5a.5.5 0 0 1-.39-.81L13 3h1l-1 7h2.5a.5.5 0 0 1 .39.81z"/>
+            </svg>
+          </span>
+          <span id="hudDiskVal" class="hudMetricValue">--.-V</span>
         </div>
       </div>
-      <div class="hudLowerGroup">
-        <div class="hudMain">
-          <div class="hudSpeedBg" aria-hidden="true"></div>
-          <div class="hudRedDot" id="hudRedDot" style="display:none;"></div>
-          <div class="hudSpeed" id="hudSpeed">--</div>
-          <div class="hudSignalDot" id="hudSignalDot"></div>
-          <div class="hudTempReason" id="hudTempReason">eco</div>
-          <div class="hudTempSpeed" id="hudTempSpeed">--</div>
-          <div class="hudSetSpeed" id="hudSetSpeed">--</div>
-          <div class="hudGapNum" id="hudGapNum">-</div>
-          <div class="hudGear" id="hudGear">U</div>
+
+      <div class="hudBody">
+        <div class="hudSpeedColumn">
+          <div id="hudSpeedLabel" class="hudSectionLabel">현재속도</div>
+          <div id="hudSpeed" class="hudSpeedValue">--</div>
         </div>
-        <div class="hudBottom">
-          <div class="hudLeftStack">
-            <div id="hudGps" class="hudGps">GPS</div>
-            <div class="hudDriveMode mode_normal" id="hudDriveMode">Normal</div>
+        <div class="hudBodyDivider" aria-hidden="true"></div>
+        <div class="hudSupportColumn">
+          <div id="hudSetSpeedLabel" class="hudSectionLabel">설정속도</div>
+          <div id="hudSetSpeed" class="hudSetSpeedValue">--</div>
+          <div class="hudInlineDivider" aria-hidden="true"></div>
+          <div class="hudSupportLine">
+            <span id="hudTempReason" class="hudSupportKey">TEMP</span>
+            <span id="hudTempSpeed" class="hudSupportValue">--</span>
           </div>
-          <div class="hudRoadLimitBox">
-            <div class="hudRoadLimitLabel">LIMIT</div>
-            <div class="hudRoadLimitVal" id="hudRoadLimitVal">--</div>
-          </div>
-          <div class="hudBars" id="hudBars">
-            <div class="hudBar"></div>
-            <div class="hudBar"></div>
-            <div class="hudBar"></div>
-            <div class="hudBar"></div>
+          <div class="hudInlineDivider" aria-hidden="true"></div>
+          <div class="hudSupportDetail">
+            <div class="hudGapStatus">
+              <div id="hudBars" class="hudGapBars">
+                <div class="hudGapBar"></div>
+                <div class="hudGapBar"></div>
+                <div class="hudGapBar"></div>
+                <div class="hudGapBar"></div>
+              </div>
+              <div id="hudGapNum" class="hudGapText">(--)</div>
+            </div>
+            <div class="hudGearStatus">
+              <div id="hudGearLabel" class="hudGearLabel">GEAR</div>
+              <div id="hudGear" class="hudGearValue">P</div>
+            </div>
           </div>
         </div>
+      </div>
+
+      <div class="hudBottomStrip">
+        <div class="hudSignalSlot">
+          <span id="hudSignalDot" class="hudSignalDot" aria-hidden="true"></span>
+        </div>
+        <div class="hudMetricDivider" aria-hidden="true"></div>
+        <div id="hudDriveMode" class="hudBottomSegment">일반</div>
+        <div class="hudMetricDivider" aria-hidden="true"></div>
+        <div id="hudRoadLimitDisplay" class="hudBottomSegment">LIMIT --</div>
+        <div class="hudMetricDivider" aria-hidden="true"></div>
+        <div id="hudConnectivity" class="hudBottomSegment">--</div>
       </div>
     </div>
   </div>
@@ -364,15 +367,9 @@
         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12.87 15.07l-2.54-2.51.03-.03A17.52 17.52 0 0014.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/></svg>
       </span>
       <span id="langLabel" class="lang-label">
-        <span class="lang-label__main">lang</span>
-        <span class="lang-label__sub">(ko)</span>
+        <span class="lang-label__main">🇰🇷</span>
+        <span class="lang-label__sub"></span>
       </span>
-    </button>
-    <button id="btnCarrot" class="nav-btn">
-      <span class="nav-icon">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c1.66 0 3 1.34 3 3 0 .35-.06.68-.17.99 1.32.34 2.41 1.23 3 2.41.48-.25 1.03-.4 1.61-.4 1.93 0 3.5 1.57 3.5 3.5S21.37 15 19.44 15H19v1c0 3.31-2.69 6-6 6h-2c-3.31 0-6-2.69-6-6v-1h-.44C2.63 15 1.06 13.43 1.06 11.5S2.63 8 4.56 8c.58 0 1.13.15 1.61.4.59-1.18 1.68-2.07 3-2.41C9.06 5.68 9 5.35 9 5c0-1.66 1.34-3 3-3m0 2c-.55 0-1 .45-1 1 0 .24.08.46.23.64l.82.99-1.27.15c-1.28.15-2.33 1.01-2.72 2.2l-.34 1.06-.94-.59a1.49 1.49 0 0 0-.82-.24c-.83 0-1.5.67-1.5 1.5S4.13 12 4.96 12H7v4c0 2.21 1.79 4 4 4h2c2.21 0 4-1.79 4-4v-4h2.04c.83 0 1.5-.67 1.5-1.5S19.87 9 19.04 9c-.29 0-.57.08-.82.24l-.94.59-.34-1.06c-.39-1.19-1.44-2.05-2.72-2.2l-1.27-.15.82-.99c.15-.18.23-.4.23-.64 0-.55-.45-1-1-1"/></svg>
-      </span>
-      <span>Carrot</span>
     </button>
   </nav>
 
@@ -409,11 +406,11 @@
     </div>
   </div>
 
-  <script src="/js/hud_card.js?v=2603-75"></script>
-  <script src="/js/app_core.js?v=2603-105"></script>
-  <script src="/js/app_pages.js?v=2603-116"></script>
+  <script src="/js/hud_card.js?v=2603-85"></script>
+  <script src="/js/app_core.js?v=2603-110"></script>
+  <script src="/js/app_pages.js?v=2603-119"></script>
   <script src="/js/raw_capnp.js?v=2603-85"></script>
-  <script src="/js/app_realtime.js?v=2603-88"></script>
-  <script src="/js/carrot_test.js?v=2603-19"></script>
+  <script src="/js/app_realtime.js?v=2603-89"></script>
+  <script src="/js/home_drive.js?v=2603-27"></script>
 </body>
 </html>

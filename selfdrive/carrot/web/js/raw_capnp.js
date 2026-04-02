@@ -622,6 +622,7 @@ window.CarrotRawCapnp = (() => {
       driveMode: rawHudDriveMode(state),
       speedLimitKph,
       speedLimitOver: isFinite(vEgo) && isFinite(speedLimitKph) ? (vEgo * 3.6) > speedLimitKph : false,
+      speedLimitBlink: isFinite(Number(carrotMan?.xSpdLimit)) && Number(carrotMan.xSpdLimit) > 0,
       apm: carrotMan?.activeCarrot ?? " ",
     };
   }

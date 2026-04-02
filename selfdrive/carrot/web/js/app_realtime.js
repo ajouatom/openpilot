@@ -1,12 +1,8 @@
 /* ---------- Home Runtime State ---------- */
 function setHomeServerState(summary, detail = summary, tone = "idle") {
-  if (typeof setServerStateStatus === "function") {
-    setServerStateStatus(summary, detail, tone);
-    return;
-  }
-
-  const box = document.getElementById("stateBox");
-  if (box) box.textContent = String(detail || summary || "");
+  void summary;
+  void detail;
+  void tone;
 }
 
 function summarizeLiveRuntimeState(payload, errorMessage = "") {
@@ -328,6 +324,7 @@ function drivingHudUpdateFromCarPayload(j) {
     driveMode: j.driveMode,
     speedLimitKph: j.speedLimitKph,
     speedLimitOver: j.speedLimitOver,
+    speedLimitBlink: j.speedLimitBlink,
     apm: j.apm,
   };
 
@@ -528,11 +525,10 @@ async function syncServerTimeOnConnect() {
 
 function startAll() {
   renderUIText();
-  showPage("home", false);
+  showPage("carrot", false);
   console.log("[time_sync] syncing server time on page load");
   syncServerTimeOnConnect().catch(() => {});
   rtcInitAuto();
-  updateQuickLink().catch(() => {});
 
   if (window.DrivingHud) {
     window.DrivingHud.init();
