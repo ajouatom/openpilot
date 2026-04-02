@@ -1774,24 +1774,16 @@ body[data-page="home"] #driveHudCard .hudWrap {
   width: clamp(260px, 28vw, 340px);
   max-width: none;
   margin: 0;
-  background:
-    linear-gradient(180deg, rgba(21, 25, 31, 0.96), rgba(9, 11, 15, 0.94)),
-    radial-gradient(circle at 18% 14%, rgba(255,255,255,0.06), transparent 28%);
-  border-color: rgba(255,255,255,0.18);
-  box-shadow:
-    0 14px 34px rgba(0,0,0,0.44),
-    0 0 0 1px rgba(255,255,255,0.04) inset;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
 }
 
 body[data-page="carrot"] {
-  --carrot-portrait-hud-size: min(calc(100vw - 12px), 308px);
+  --carrot-portrait-hud-size: min(calc(100vw - 12px), 348px);
+  --carrot-portrait-hud-height: var(--carrot-portrait-hud-size);
 }
 
 body[data-page="carrot"] .wrap {
   max-width: none;
-  padding: 0 0 calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px) + var(--carrot-portrait-hud-size));
+  padding: 0 0 calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px) + var(--carrot-portrait-hud-height));
 }
 
 body[data-page="carrot"] #pageCarrot {
@@ -1805,7 +1797,7 @@ body[data-page="carrot"] #pageCarrot > .page-header--hidden {
 }
 
 body[data-page="carrot"] #pageCarrot > .carrot-stage {
-  height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px) - var(--carrot-portrait-hud-size));
+  height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px) - var(--carrot-portrait-hud-height));
   min-height: 260px;
   border-radius: 0;
   border-left: 0;
@@ -1822,13 +1814,6 @@ body[data-page="carrot"] #driveHudCard {
 body[data-page="carrot"] #driveHudCard .hudWrap {
   width: var(--carrot-portrait-hud-size);
   transform: none;
-  background:
-    linear-gradient(180deg, rgba(19, 23, 29, 0.92), rgba(8, 10, 14, 0.90)),
-    radial-gradient(circle at 18% 14%, rgba(255,255,255,0.05), transparent 28%);
-  border-color: rgba(255,255,255,0.14);
-  box-shadow:
-    0 18px 40px rgba(0,0,0,0.42),
-    0 0 0 1px rgba(255,255,255,0.03) inset;
   opacity: 0.9;
 }
 
