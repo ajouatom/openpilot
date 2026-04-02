@@ -6,7 +6,7 @@
   <title>Carrot</title>
   <link rel="stylesheet" href="/css/tokens.css?v=2603-73" />
   <link rel="stylesheet" href="/css/hud_card.css?v=2603-75" />
-  <link rel="stylesheet" href="/css/app.css?v=2603-160" />
+  <link rel="stylesheet" href="/css/app.css?v=2603-161" />
 </head>
 
 <body>
@@ -44,54 +44,6 @@
         </div>
       </div>
 
-      <!-- HUD Widget -->
-      <div id="driveHudCard">
-        <div class="hudWrap" id="hudRoot">
-          <div class="hudTop">
-            <div class="hudMini">
-              <div class="hudMiniLabel">CPU</div>
-              <div class="hudMiniVal" id="hudCpuVal">--°C</div>
-            </div>
-            <div class="hudMini">
-              <div class="hudMiniLabel">MEM</div>
-              <div class="hudMiniVal" id="hudMemVal">--%</div>
-            </div>
-            <div class="hudMini">
-              <div class="hudMiniLabel" id="hudDiskLabel">DISK</div>
-              <div class="hudMiniVal" id="hudDiskVal">--%</div>
-            </div>
-          </div>
-          <div class="hudLowerGroup">
-            <div class="hudMain">
-              <div class="hudSpeedBg" aria-hidden="true"></div>
-              <div class="hudRedDot" id="hudRedDot" style="display:none;"></div>
-              <div class="hudSpeed" id="hudSpeed">--</div>
-              <div class="hudSignalDot" id="hudSignalDot"></div>
-              <div class="hudTempReason" id="hudTempReason">eco</div>
-              <div class="hudTempSpeed" id="hudTempSpeed">--</div>
-              <div class="hudSetSpeed" id="hudSetSpeed">--</div>
-              <div class="hudGapNum" id="hudGapNum">-</div>
-              <div class="hudGear" id="hudGear">U</div>
-            </div>
-            <div class="hudBottom">
-              <div class="hudLeftStack">
-                <div id="hudGps" class="hudGps">GPS</div>
-                <div class="hudDriveMode mode_normal" id="hudDriveMode">Normal</div>
-              </div>
-              <div class="hudRoadLimitBox">
-                <div class="hudRoadLimitLabel">LIMIT</div>
-                <div class="hudRoadLimitVal" id="hudRoadLimitVal">--</div>
-              </div>
-              <div class="hudBars" id="hudBars">
-                <div class="hudBar"></div>
-                <div class="hudBar"></div>
-                <div class="hudBar"></div>
-                <div class="hudBar"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- ════════════ CAR SELECT ════════════ -->
@@ -321,6 +273,54 @@
     </div>
   </div>
 
+  <div id="driveHudCard">
+    <div class="hudWrap" id="hudRoot">
+      <div class="hudTop">
+        <div class="hudMini">
+          <div class="hudMiniLabel">CPU</div>
+          <div class="hudMiniVal" id="hudCpuVal">--°C</div>
+        </div>
+        <div class="hudMini">
+          <div class="hudMiniLabel">MEM</div>
+          <div class="hudMiniVal" id="hudMemVal">--%</div>
+        </div>
+        <div class="hudMini">
+          <div class="hudMiniLabel" id="hudDiskLabel">DISK</div>
+          <div class="hudMiniVal" id="hudDiskVal">--%</div>
+        </div>
+      </div>
+      <div class="hudLowerGroup">
+        <div class="hudMain">
+          <div class="hudSpeedBg" aria-hidden="true"></div>
+          <div class="hudRedDot" id="hudRedDot" style="display:none;"></div>
+          <div class="hudSpeed" id="hudSpeed">--</div>
+          <div class="hudSignalDot" id="hudSignalDot"></div>
+          <div class="hudTempReason" id="hudTempReason">eco</div>
+          <div class="hudTempSpeed" id="hudTempSpeed">--</div>
+          <div class="hudSetSpeed" id="hudSetSpeed">--</div>
+          <div class="hudGapNum" id="hudGapNum">-</div>
+          <div class="hudGear" id="hudGear">U</div>
+        </div>
+        <div class="hudBottom">
+          <div class="hudLeftStack">
+            <div id="hudGps" class="hudGps">GPS</div>
+            <div class="hudDriveMode mode_normal" id="hudDriveMode">Normal</div>
+          </div>
+          <div class="hudRoadLimitBox">
+            <div class="hudRoadLimitLabel">LIMIT</div>
+            <div class="hudRoadLimitVal" id="hudRoadLimitVal">--</div>
+          </div>
+          <div class="hudBars" id="hudBars">
+            <div class="hudBar"></div>
+            <div class="hudBar"></div>
+            <div class="hudBar"></div>
+            <div class="hudBar"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <video id="rtcVideo" class="rtcVideo rtcVideo--shared" autoplay playsinline muted></video>
 
   <div class="global-home-record-fab" aria-hidden="true">
@@ -414,6 +414,6 @@
   <script src="/js/app_pages.js?v=2603-116"></script>
   <script src="/js/raw_capnp.js?v=2603-85"></script>
   <script src="/js/app_realtime.js?v=2603-88"></script>
-  <script src="/js/carrot_test.js?v=2603-15"></script>
+  <script src="/js/carrot_test.js?v=2603-16"></script>
 </body>
 </html>

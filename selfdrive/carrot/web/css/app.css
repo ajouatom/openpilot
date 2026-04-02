@@ -1743,6 +1743,27 @@ pre {
   z-index: -1;
 }
 
+#driveHudCard {
+  display: none;
+  position: fixed;
+  left: max(12px, calc((100vw - var(--content-max-width)) / 2));
+  bottom: calc(var(--nav-bar-height-desktop) + 12px + env(safe-area-inset-bottom, 0px));
+  z-index: 18;
+  padding: 0;
+  pointer-events: none;
+}
+
+body[data-page="home"] #driveHudCard,
+body[data-page="carrot"] #driveHudCard {
+  display: block;
+}
+
+#driveHudCard .hudWrap {
+  width: clamp(228px, 24vw, 310px);
+  max-width: none;
+  margin: 0;
+}
+
 #rtcWrap.rtcWrap--dev-preview {
   position: relative;
   background:
@@ -1811,6 +1832,14 @@ pre {
   top: 0;
   left: 0;
   display: block;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+
+.carrot-stage.is-stream-ready .carrot-stage__video,
+.carrot-stage.is-stream-ready .carrot-stage__canvas,
+.carrot-stage.is-stream-ready .carrot-stage__hud {
+  opacity: 1;
 }
 
 .carrot-stage__video {
@@ -2288,21 +2317,15 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
     margin-bottom: 0;
   }
 
-  body[data-page="home"] #pageHome > #driveHudCard {
-    grid-column: 1;
-    grid-row: 1;
-    width: var(--home-landscape-media-size);
-    padding: 0;
-    position: relative;
-    z-index: 2;
-    align-self: end;
-    justify-self: start;
+  body[data-page="home"] #driveHudCard,
+  body[data-page="carrot"] #driveHudCard {
+    left: calc(var(--nav-rail-width) + 12px);
+    bottom: 12px;
   }
 
-  body[data-page="home"] #pageHome > #driveHudCard .hudWrap {
-    width: 100%;
-    max-width: none;
-    margin: 0;
+  body[data-page="home"] #driveHudCard .hudWrap,
+  body[data-page="carrot"] #driveHudCard .hudWrap {
+    width: min(300px, calc(100vw - var(--nav-rail-width) - 24px));
   }
 
   body[data-page="tools"] #pageTools {
