@@ -451,8 +451,39 @@ window.CarrotTest = (() => {
     return { ...raw, ...live };
   }
 
+  function mergeDefinedState(baseState, preferredState) {
+    const merged = baseState && typeof baseState === "object" ? { ...baseState } : {};
+    if (!preferredState || typeof preferredState !== "object") return merged;
+    for (const [key, value] of Object.entries(preferredState)) {
+      if (value !== undefined && value !== null) merged[key] = value;
+    }
+    return merged;
+  }
+
+  function mergeRadarLead(rawLead, liveLead) {
+    return mergeDefinedState(liveLead, rawLead);
+  }
+
+  function mergeRadarState(rawState, liveState) {
+    const raw = rawState && typeof rawState === "object" ? rawState : {};
+    const live = liveState && typeof liveState === "object" ? liveState : {};
+
+    return {
+      ...live,
+      ...raw,
+      leadOne: mergeRadarLead(raw.leadOne, live.leadOne),
+      leadTwo: mergeRadarLead(raw.leadTwo, live.leadTwo),
+      leadLeft: mergeRadarLead(raw.leadLeft, live.leadLeft),
+      leadRight: mergeRadarLead(raw.leadRight, live.leadRight),
+      leadsLeft: Array.isArray(raw.leadsLeft) && raw.leadsLeft.length ? raw.leadsLeft : live.leadsLeft,
+      leadsCenter: Array.isArray(raw.leadsCenter) && raw.leadsCenter.length ? raw.leadsCenter : live.leadsCenter,
+      leadsRight: Array.isArray(raw.leadsRight) && raw.leadsRight.length ? raw.leadsRight : live.leadsRight,
+    };
+  }
+
   function mergeRuntimeState(rawHudState, rawOverlayState) {
     const liveServices = readLiveRuntimeServices();
+    const radarState = mergeRadarState(rawOverlayState?.radarState, liveServices.radarState);
     const mergedHudState = {
       ...rawHudState,
       carState: mergeServiceState(rawHudState?.carState, liveServices.carState),
@@ -461,7 +492,7 @@ window.CarrotTest = (() => {
       longitudinalPlan: mergeServiceState(rawHudState?.longitudinalPlan, liveServices.longitudinalPlan),
       carrotMan: mergeServiceState(rawHudState?.carrotMan, liveServices.carrotMan),
       lateralPlan: mergeServiceState(rawOverlayState?.lateralPlan, liveServices.lateralPlan),
-      radarState: mergeServiceState(rawOverlayState?.radarState, liveServices.radarState),
+      radarState,
     };
 
     const mergedOverlayState = {
@@ -661,21 +692,6 @@ window.CarrotTest = (() => {
     drawPolygon(ribbon.polygon, fill, style.emphasisStroke ? style.strokeColor : "", style.emphasisStroke ? 1.7 : 0);
   }
 
-  function drawPathVisibilityFloor(ribbon, style) {
-    if (!Array.isArray(ribbon?.center) || ribbon.center.length < 2) return;
-
-    const baseColor = paletteColor(style.paletteIndex);
-    const outerAlpha = style.isCruiseOff ? 0.84 : 0.70;
-    const innerAlpha = style.isCruiseOff ? 0.96 : 0.80;
-    const outerWidth = style.isCruiseOff ? 3.6 : 2.8;
-    const innerWidth = style.isCruiseOff ? 2.3 : 1.8;
-    const outerColor = style.emphasisStroke ? style.strokeColor : `rgba(255, 255, 255, ${outerAlpha.toFixed(3)})`;
-    const innerColor = rgba(baseColor, innerAlpha);
-
-    drawPolyline(ribbon.center, outerColor, outerWidth);
-    drawPolyline(ribbon.center, innerColor, innerWidth);
-  }
-
   function drawAnimatedPath(ribbon, style) {
     if (!ribbon.center.length) return;
     const dashPresets = {
@@ -730,9 +746,6 @@ window.CarrotTest = (() => {
     if (ribbon.polygon.length < 3) return;
 
     drawPathRibbon(ribbon, style, canvasHeight);
-    if (style.mode === 0 || style.isCruiseOff) {
-      drawPathVisibilityFloor(ribbon, style);
-    }
     if (style.mode === 0) return;
     if (style.mode >= 13 && style.mode <= 15) {
       drawSpecialPath(ribbon, style);
@@ -820,47 +833,6 @@ window.CarrotTest = (() => {
     }
 
     return top.length >= 2 && bottom.length >= 2 ? top.concat(bottom) : [];
-  }
-
-  function drawLeadChevron(point, size, alpha) {
-    const glow = [
-      { x: point.x + size * 1.35 + size / 5, y: point.y + size + size / 10 },
-      { x: point.x, y: point.y - size / 10 },
-      { x: point.x - size * 1.35 - size / 5, y: point.y + size + size / 10 },
-    ];
-    const chevron = [
-      { x: point.x + size * 1.25, y: point.y + size },
-      { x: point.x, y: point.y },
-      { x: point.x - size * 1.25, y: point.y + size },
-    ];
-
-    drawPolygon(glow, `rgba(255, 224, 92, ${alpha.toFixed(3)})`);
-    drawPolygon(chevron, `rgba(224, 62, 72, ${clamp(alpha + 0.18, 0.2, 1).toFixed(3)})`);
-  }
-
-  function drawLegacyLeads(model, pathData, calibTransform, transform) {
-    const leads = Array.isArray(model?.leadsV3) ? model.leadsV3 : [];
-    if (!leads.length) return;
-
-    const leadPoints = leads
-      .map((lead) => ({
-        prob: finiteNumber(lead?.prob, 0),
-        x: finiteNumber(lead?.x?.[0], NaN),
-        y: finiteNumber(lead?.y?.[0], 0),
-      }))
-      .filter((lead) => Number.isFinite(lead.x) && lead.x > 0 && lead.prob > 0.4)
-      .sort((a, b) => a.x - b.x)
-      .slice(0, 2);
-
-    for (const lead of leadPoints) {
-      const z = samplePathZ(pathData, lead.x) + PATH_Z_OFFSET;
-      const point = projectPoint(calibTransform, lead.x, lead.y, z);
-      if (!point) continue;
-      const displaySize = clamp((25 * 30) / (lead.x / 3 + 30), 15, 30) * 2.35;
-      const rawSize = displaySize / Math.max(transform.scale, 0.01);
-      const alpha = clamp(0.28 + lead.prob * 0.5, 0.26, 0.96);
-      drawLeadChevron(point, rawSize, alpha);
-    }
   }
 
   function hasNearbyAssistLead(lead, speedMps) {
@@ -975,7 +947,7 @@ window.CarrotTest = (() => {
     ctx.restore();
   }
 
-  function drawRadarLeadBoxes(model, overlayState, hudState, calibTransform, videoWidth, videoHeight, transform) {
+  function drawRadarLeadBoxes(model, overlayState, calibTransform, videoWidth, videoHeight) {
     const radarState = overlayState?.radarState || {};
     const modelPath = model?.position || null;
     const showRadarInfo = finiteNumber(paramsState.ShowRadarInfo, defaultParams.ShowRadarInfo);
@@ -1008,9 +980,6 @@ window.CarrotTest = (() => {
       }
     }
 
-    if (!leadOneBox && !validLeadTwo) {
-      drawLegacyLeads(model, modelPath, calibTransform, transform);
-    }
   }
 
   function roundedRectPath(context, x, y, width, height, radius) {
@@ -1530,7 +1499,7 @@ window.CarrotTest = (() => {
       if (showLaneInfo > 1) drawRoadEdges(model, transform.calibTransform);
       if (showLaneInfo >= 0) drawPath(selectedPath.pathData, model, transform.calibTransform, videoHeight, pathStyle);
       drawBlindspotBarriers(model?.position, overlayState, hudState, transform.calibTransform);
-      drawRadarLeadBoxes(model, overlayState, hudState, transform.calibTransform, videoWidth, videoHeight, transform);
+      drawRadarLeadBoxes(model, overlayState, transform.calibTransform, videoWidth, videoHeight);
     }
 
     drawPlot(stageWidth, stageHeight, plotData);
