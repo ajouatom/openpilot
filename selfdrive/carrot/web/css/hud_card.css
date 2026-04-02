@@ -93,6 +93,8 @@
     linear-gradient(145deg, rgba(17,68,46,0.87), rgba(10,40,27,0.80));
   box-shadow: none;
   border-color: rgba(255,255,255,0.12);
+  transform: scale(0.8);
+  transform-origin: bottom left;
 }
 
 .hudWrap::before {
