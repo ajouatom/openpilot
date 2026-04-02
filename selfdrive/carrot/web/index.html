@@ -6,7 +6,7 @@
   <title>Carrot</title>
   <link rel="stylesheet" href="/css/tokens.css?v=2603-73" />
   <link rel="stylesheet" href="/css/hud_card.css?v=2603-75" />
-  <link rel="stylesheet" href="/css/app.css?v=2603-159" />
+  <link rel="stylesheet" href="/css/app.css?v=2603-160" />
 </head>
 
 <body>
@@ -40,21 +40,7 @@
           </div>
           <div class="home-utility-content">
             <a id="quickLink" class="home-utility-linkInline" href="#" target="_blank" rel="noopener">Quick Link</a>
-            <div id="rtcDevTools" class="home-utility-dev" hidden>
-              <button id="btnRtcDevToggle" class="smallBtn home-utility-devBtn" type="button" aria-pressed="false">RTC Preview</button>
-            </div>
           </div>
-        </div>
-      </div>
-
-      <!-- Road Camera -->
-      <div id="rtcCard" class="card" style="display:none;">
-        <div class="row-between mb-sm">
-          <h4 id="webrtcTitle" style="margin:0; font-size:var(--fs-title-sm); font-weight:600;">Road Camera</h4>
-          <span class="muted" id="rtcStatus">connecting...</span>
-        </div>
-        <div id="rtcWrap" style="position:relative;">
-          <video id="rtcVideo" class="rtcVideo" autoplay playsinline muted style="display:none;"></video>
         </div>
       </div>
 
@@ -335,6 +321,8 @@
     </div>
   </div>
 
+  <video id="rtcVideo" class="rtcVideo rtcVideo--shared" autoplay playsinline muted></video>
+
   <div class="global-home-record-fab" aria-hidden="true">
     <button id="btnRecordToggle" class="fab fab--round fab--record" aria-label="Record">OFF</button>
   </div>
@@ -425,7 +413,7 @@
   <script src="/js/app_core.js?v=2603-105"></script>
   <script src="/js/app_pages.js?v=2603-116"></script>
   <script src="/js/raw_capnp.js?v=2603-85"></script>
-  <script src="/js/app_realtime.js?v=2603-87"></script>
+  <script src="/js/app_realtime.js?v=2603-88"></script>
   <script src="/js/carrot_test.js?v=2603-15"></script>
 </body>
 </html>

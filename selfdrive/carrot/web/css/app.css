@@ -1727,6 +1727,22 @@ pre {
   object-fit: contain;
 }
 
+.rtcVideo--shared {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  width: 1px !important;
+  height: 1px !important;
+  min-width: 1px !important;
+  min-height: 1px !important;
+  max-width: 1px !important;
+  max-height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  border-radius: 0;
+  z-index: -1;
+}
+
 #rtcWrap.rtcWrap--dev-preview {
   position: relative;
   background:
@@ -2231,7 +2247,7 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
     grid-template-columns: var(--home-landscape-media-size) minmax(248px, 312px);
     column-gap: 24px;
     row-gap: 0;
-    align-items: start;
+    align-items: stretch;
     justify-content: center;
     min-height: calc(var(--app-vv-height, 100dvh) - 28px);
     padding: 18px 10px 12px;
@@ -2279,76 +2295,14 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
     padding: 0;
     position: relative;
     z-index: 2;
-    align-self: start;
-    justify-self: center;
+    align-self: end;
+    justify-self: start;
   }
 
   body[data-page="home"] #pageHome > #driveHudCard .hudWrap {
     width: 100%;
     max-width: none;
     margin: 0;
-  }
-
-  body[data-page="home"] #pageHome > #rtcCard {
-    grid-column: 1;
-    grid-row: 1;
-    width: var(--home-landscape-media-size);
-    max-width: var(--home-landscape-media-size);
-    margin: 0;
-    align-self: start;
-    justify-self: center;
-    position: relative;
-    z-index: 1;
-    background: transparent;
-    border: 0;
-    padding: 0;
-    box-shadow: none;
-  }
-
-  body[data-page="home"] #pageHome > #rtcCard > .row-between {
-    position: absolute;
-    top: 8px;
-    left: -10px;
-    right: auto;
-    z-index: 4;
-    margin: 0;
-    gap: 0;
-  }
-
-  body[data-page="home"] #pageHome > #rtcCard > .row-between > h4,
-  body[data-page="home"] #pageHome > #rtcCard > .row-between #rtcStatus {
-    display: none;
-  }
-
-  body[data-page="home"] #pageHome > #rtcCard .mb-sm {
-    margin-bottom: 0 !important;
-  }
-
-  body[data-page="home"] #pageHome > #rtcCard > .row-between .row-between {
-    gap: 0 !important;
-  }
-
-  body[data-page="home"] #pageHome > #rtcCard #rtcWrap {
-    position: relative;
-    width: 100%;
-    aspect-ratio: 1 / 1;
-    border: 0;
-    border-radius: var(--r-xl);
-    background: #000;
-    overflow: hidden;
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.24);
-  }
-
-  body[data-page="home"] #pageHome > #rtcCard .rtcVideo,
-  body[data-page="home"] #pageHome > #rtcCard .rtcVideo--dev-preview {
-    display: block;
-    width: 100%;
-    height: 100%;
-    max-width: none;
-    max-height: none;
-    min-height: 0;
-    margin: 0;
-    object-fit: contain;
   }
 
   body[data-page="tools"] #pageTools {
