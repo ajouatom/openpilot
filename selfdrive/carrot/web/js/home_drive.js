@@ -225,12 +225,18 @@ window.HomeDrive = (() => {
     const containScale = Math.min(stageWidth / videoWidth, stageHeight / videoHeight);
     const coverScale = Math.max(stageWidth / videoWidth, stageHeight / videoHeight);
     const mode = DISPLAY_MODES[displayModeIndex] || DISPLAY_MODES[1];
+    const isPortrait = stageHeight > stageWidth;
 
     let scale = containScale;
     if (mode.key === "fit") {
       scale = containScale * 0.94;
     } else if (mode.key === "crop") {
-      scale = coverScale;
+      if (isPortrait) {
+        const cropBlend = 0.72;
+        scale = containScale + ((coverScale - containScale) * cropBlend);
+      } else {
+        scale = coverScale;
+      }
     }
 
     return {
@@ -781,6 +787,11 @@ window.HomeDrive = (() => {
 
   function applyCarrotHudLayout(viewportRect) {
     if (!driveHudCardEl) return;
+    if (window.matchMedia("(orientation: portrait)").matches) {
+      driveHudCardEl.style.removeProperty("--carrot-hud-left");
+      driveHudCardEl.style.removeProperty("--carrot-hud-bottom");
+      return;
+    }
     const stageRect = stageEl.getBoundingClientRect();
     if (!stageRect.width || !stageRect.height) return;
     const displayModeKey = DISPLAY_MODES[displayModeIndex]?.key || "normal";

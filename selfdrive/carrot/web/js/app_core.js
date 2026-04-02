@@ -25,6 +25,16 @@ let SETTINGS = null;
 let CURRENT_GROUP = null;
 let LANG = "ko"; // "ko" | "en" | "zh"
 const LANG_STORAGE_KEY = "carrot_web_lang";
+const LANG_EMOJI = {
+  ko: "🇰🇷",
+  en: "🇺🇸",
+  zh: "🇨🇳",
+};
+const LANG_SHORT_LABEL = {
+  ko: "KO",
+  en: "EN",
+  zh: "ZH",
+};
 
 const UI_STRINGS = {
   ko: {
@@ -1042,11 +1052,13 @@ function updateLangLabel() {
 
   const main = langLabel.querySelector(".lang-label__main");
   const sub = langLabel.querySelector(".lang-label__sub");
+  const emoji = LANG_EMOJI[LANG] || "🌐";
+  const shortCode = LANG_SHORT_LABEL[LANG] || String(LANG || "").toUpperCase();
   if (main && sub) {
-    main.textContent = getUIText("lang", "lang");
-    sub.textContent = `(${LANG})`;
+    main.textContent = emoji;
+    sub.textContent = shortCode;
   } else {
-    langLabel.textContent = `${getUIText("lang", "lang")} (${LANG})`;
+    langLabel.textContent = `${emoji} ${shortCode}`;
   }
 
   if (btnLang) {

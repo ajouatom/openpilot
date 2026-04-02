@@ -81,15 +81,25 @@ body.dialog-open {
   line-height: 1;
 }
 
+.topbar .nav-btn.langToggle .nav-icon {
+  display: none;
+}
+
 .lang-label__main,
 .lang-label__sub {
   display: block;
 }
 
+.lang-label__main {
+  font-size: 1.18em;
+  line-height: 1;
+}
+
 .lang-label__sub {
-  margin-top: 1px;
-  font-size: 0.84em;
-  letter-spacing: 0.05px;
+  margin-top: 2px;
+  font-size: 0.66em;
+  letter-spacing: 0.08em;
+  opacity: 0.9;
 }
 
 .topbar .nav-btn.active {
@@ -1662,6 +1672,7 @@ body[data-page="carrot"] .carrot-hud-dock {
   min-height: var(--carrot-dock-panel-height, auto);
   padding: 0 4px;
   margin: 0;
+  margin-top: auto;
   background: #0b0e12;
 }
 
@@ -1757,6 +1768,10 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--overlay .hudWrap {
 }
 
 @media (orientation: portrait) {
+  body[data-page="carrot"] #pageCarrot {
+    justify-content: stretch;
+  }
+
   body[data-page="carrot"] #pageCarrot > .carrot-stage {
     flex: 1 1 0;
     min-height: 180px;
@@ -1764,6 +1779,17 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--overlay .hudWrap {
 
   body[data-page="carrot"] .carrot-hud-dock {
     flex: 0 0 var(--carrot-dock-panel-height, auto);
+    padding-inline: 0;
+    padding-bottom: 0;
+  }
+
+  body[data-page="carrot"] #driveHudCard.driveHudCard--inline {
+    width: 100%;
+    justify-content: center;
+  }
+
+  body[data-page="carrot"] #driveHudCard.driveHudCard--inline .hudWrap {
+    margin-inline: auto;
   }
 }
 
