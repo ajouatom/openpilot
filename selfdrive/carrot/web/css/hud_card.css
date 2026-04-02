@@ -33,6 +33,7 @@
   --hud-red: #ff5c5c;
   width: min(100%, var(--hud-card-width, var(--hud-max-width)));
   max-width: 100%;
+  height: auto;
   margin: 0;
   position: relative;
   overflow: hidden;
@@ -49,6 +50,17 @@
   box-shadow: var(--hud-shadow);
   isolation: isolate;
   color: #fff;
+}
+
+.hudWrap[data-surface="driveInline"],
+.hudWrap[data-surface="driveOverlay"] {
+  aspect-ratio: auto;
+  height: var(--hud-card-height);
+}
+
+.hudWrap[data-surface="driveOverlay"] {
+  width: var(--hud-card-width, var(--hud-max-width));
+  max-width: none;
 }
 
 .hudWrap::before {

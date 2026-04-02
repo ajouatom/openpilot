@@ -1666,6 +1666,7 @@ body[data-page="carrot"] .carrot-hud-dock {
   align-items: center;
   justify-content: center;
   width: 100%;
+  height: var(--carrot-dock-panel-height, auto);
   min-height: var(--carrot-dock-panel-height, auto);
   padding: 0;
   margin: 0;
@@ -1780,17 +1781,18 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--overlay .hudWrap {
     flex: 0 0 var(--carrot-dock-panel-height, auto);
     padding-inline: 0;
     padding-bottom: 0;
-    align-items: center;
+    align-items: stretch;
   }
 
   body[data-page="carrot"] #driveHudCard.driveHudCard--inline {
-    width: auto;
-    max-width: 100%;
-    justify-content: center;
+    width: 100%;
+    max-width: none;
+    justify-content: stretch;
   }
 
   body[data-page="carrot"] #driveHudCard.driveHudCard--inline .hudWrap {
-    width: min(100%, var(--hud-card-width, var(--hud-max-width)));
+    width: 100%;
+    height: var(--hud-card-height);
     margin: 0;
     border-radius: 0;
     border-left: 0;

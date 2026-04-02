@@ -60,7 +60,29 @@
   }
 
   function getHudSurface() {
-    return SURFACE_HOME;
+    const page = document.body?.dataset?.page || "carrot";
+    if (page !== "carrot") return SURFACE_HOME;
+    return window.matchMedia("(orientation: landscape)").matches ? SURFACE_OVERLAY : SURFACE_INLINE;
+  }
+
+  function getPreferredAspectRatioForWindow(windowClass, wide) {
+    if (wide) {
+      switch (windowClass) {
+        case "compact": return 1.24;
+        case "medium": return 1.30;
+        case "expanded": return 1.36;
+        case "large": return 1.42;
+        default: return 1.46;
+      }
+    }
+
+    switch (windowClass) {
+      case "compact": return 0.92;
+      case "medium": return 0.96;
+      case "expanded": return 1.00;
+      case "large": return 1.04;
+      default: return 1.06;
+    }
   }
 
   function getHudWindowClass(width) {
@@ -118,6 +140,85 @@
     const height = rect?.height || viewportHeight;
     const windowClass = getHudWindowClass(viewportWidth);
 
+    if (surface === SURFACE_OVERLAY) {
+      const drawWidth = width;
+      const drawHeight = height;
+      const base = Math.min(drawWidth, drawHeight);
+      const ratio = (() => {
+        switch (windowClass) {
+          case "compact": return 0.30;
+          case "medium": return 0.29;
+          case "expanded": return 0.28;
+          case "large": return 0.27;
+          default: return 0.26;
+        }
+      })();
+      const minSize = (() => {
+        switch (windowClass) {
+          case "compact": return 184;
+          case "medium": return 196;
+          case "expanded": return 208;
+          case "large": return 220;
+          default: return 232;
+        }
+      })();
+      const maxSize = (() => {
+        switch (windowClass) {
+          case "compact": return 304;
+          case "medium": return 324;
+          case "expanded": return 344;
+          case "large": return 364;
+          default: return 384;
+        }
+      })();
+      const viewportCap = drawHeight * 0.44;
+      const upperBound = Math.max(minSize, Math.min(maxSize, viewportCap));
+      const overlayHeight = clamp(base * ratio, minSize, upperBound);
+      const overlayWidth = Math.min(
+        Math.max(320, drawWidth - 32),
+        overlayHeight * getPreferredAspectRatioForWindow(windowClass, true),
+      );
+      return {
+        width: overlayWidth,
+        height: overlayHeight,
+      };
+    }
+
+    if (surface === SURFACE_INLINE) {
+      const horizontalInset = (() => {
+        switch (windowClass) {
+          case "compact": return 12;
+          case "medium": return 14;
+          case "expanded": return 16;
+          default: return 18;
+        }
+      })();
+      const usableWidth = Math.max(1, viewportWidth - (horizontalInset * 2));
+      const desiredHeight = usableWidth / getPreferredAspectRatioForWindow(windowClass, true);
+      const minHeight = (() => {
+        switch (windowClass) {
+          case "compact": return 190;
+          case "medium": return 204;
+          case "expanded": return 216;
+          case "large": return 228;
+          default: return 236;
+        }
+      })();
+      const maxHeight = (() => {
+        switch (windowClass) {
+          case "compact": return Math.min(430, viewportHeight * 0.42);
+          case "medium": return Math.min(450, viewportHeight * 0.41);
+          case "expanded": return Math.min(470, viewportHeight * 0.40);
+          case "large": return Math.min(490, viewportHeight * 0.39);
+          default: return Math.min(510, viewportHeight * 0.38);
+        }
+      })();
+      return {
+        width: viewportWidth,
+        height: clamp(desiredHeight, minHeight, maxHeight),
+      };
+    }
+
     if (surface === SURFACE_HOME) {
       if (overlayMount) {
         return {
@@ -140,13 +241,6 @@
       return {
         width: Math.min(Math.max(isPortrait ? 320 : 280, width), viewportWidth - (isPortrait ? 8 : 24)),
         height: homeHudHeightCap,
-      };
-    }
-
-    if (surface === SURFACE_INLINE) {
-      return {
-        width: clamp(width, 320, 980),
-        height: clamp(height || viewportHeight * 0.34, 220, 520),
       };
     }
 
@@ -282,12 +376,15 @@
     const profile = buildHudProfile(constraints.width, constraints.height, surface);
     const style = root.style;
     const portraitInline = surface === SURFACE_INLINE && !isOverlayMount();
-    const panelWidth = portraitInline
+    const exactSizedSurface = surface === SURFACE_INLINE || surface === SURFACE_OVERLAY;
+    const panelWidth = exactSizedSurface
       ? Math.round(constraints.width)
       : surface === SURFACE_HOME
-      ? Math.min(constraints.width, profile.maxWidth, constraints.height * profile.preferredAspectRatio)
-      : Math.min(constraints.width, profile.maxWidth);
-    const panelHeight = Math.round(panelWidth / Math.max(profile.preferredAspectRatio, 0.1));
+        ? Math.min(constraints.width, profile.maxWidth, constraints.height * profile.preferredAspectRatio)
+        : Math.min(constraints.width, profile.maxWidth);
+    const panelHeight = exactSizedSurface
+      ? Math.round(constraints.height)
+      : Math.round(panelWidth / Math.max(profile.preferredAspectRatio, 0.1));
 
     card.dataset.surface = surface;
     root.dataset.surface = surface;
@@ -312,7 +409,7 @@
     style.setProperty("--hud-text-shadow-strong", STRONG_TEXT_SHADOW);
     style.setProperty("--hud-card-width", `${Math.round(panelWidth)}px`);
     style.setProperty("--hud-card-height", `${panelHeight}px`);
-    document.documentElement.style.setProperty("--carrot-dock-panel-height", `${Math.round(panelHeight + profile.dockInset * 2)}px`);
+    document.documentElement.style.setProperty("--carrot-dock-panel-height", `${Math.round(panelHeight + (portraitInline ? 0 : profile.dockInset * 2))}px`);
     document.documentElement.style.setProperty("--carrot-dock-panel-width", `${Math.round(panelWidth)}px`);
   }
 
