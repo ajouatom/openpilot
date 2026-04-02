@@ -118,6 +118,13 @@ window.CarrotTest = (() => {
     return Number.isFinite(num) ? num : fallback;
   }
 
+  function finiteParamNumber(value, fallback = 0) {
+    if (value == null) return fallback;
+    if (typeof value === "string" && !value.trim()) return fallback;
+    const num = Number(value);
+    return Number.isFinite(num) ? num : fallback;
+  }
+
   function finiteList(value) {
     if (!Array.isArray(value)) return [];
     return value.map((item) => Number(item)).filter((item) => Number.isFinite(item));
@@ -449,17 +456,17 @@ window.CarrotTest = (() => {
   function normalizeVisualParams(values, fallback = defaultParams) {
     const source = values && typeof values === "object" ? values : {};
     return {
-      ShowPathEnd: finiteNumber(source.ShowPathEnd, fallback.ShowPathEnd),
-      ShowLaneInfo: finiteNumber(source.ShowLaneInfo, fallback.ShowLaneInfo),
-      ShowPathMode: finiteNumber(source.ShowPathMode, fallback.ShowPathMode),
-      ShowPathColor: finiteNumber(source.ShowPathColor, fallback.ShowPathColor),
-      ShowPathModeLane: finiteNumber(source.ShowPathModeLane, fallback.ShowPathModeLane),
-      ShowPathColorLane: finiteNumber(source.ShowPathColorLane, fallback.ShowPathColorLane),
-      ShowPathColorCruiseOff: finiteNumber(source.ShowPathColorCruiseOff, fallback.ShowPathColorCruiseOff),
-      ShowPathWidth: finiteNumber(source.ShowPathWidth, fallback.ShowPathWidth),
-      ShowPlotMode: finiteNumber(source.ShowPlotMode, fallback.ShowPlotMode),
-      ShowRadarInfo: finiteNumber(source.ShowRadarInfo, fallback.ShowRadarInfo),
-      CustomSR: finiteNumber(source.CustomSR, fallback.CustomSR),
+      ShowPathEnd: finiteParamNumber(source.ShowPathEnd, fallback.ShowPathEnd),
+      ShowLaneInfo: finiteParamNumber(source.ShowLaneInfo, fallback.ShowLaneInfo),
+      ShowPathMode: finiteParamNumber(source.ShowPathMode, fallback.ShowPathMode),
+      ShowPathColor: finiteParamNumber(source.ShowPathColor, fallback.ShowPathColor),
+      ShowPathModeLane: finiteParamNumber(source.ShowPathModeLane, fallback.ShowPathModeLane),
+      ShowPathColorLane: finiteParamNumber(source.ShowPathColorLane, fallback.ShowPathColorLane),
+      ShowPathColorCruiseOff: finiteParamNumber(source.ShowPathColorCruiseOff, fallback.ShowPathColorCruiseOff),
+      ShowPathWidth: finiteParamNumber(source.ShowPathWidth, fallback.ShowPathWidth),
+      ShowPlotMode: finiteParamNumber(source.ShowPlotMode, fallback.ShowPlotMode),
+      ShowRadarInfo: finiteParamNumber(source.ShowRadarInfo, fallback.ShowRadarInfo),
+      CustomSR: finiteParamNumber(source.CustomSR, fallback.CustomSR),
     };
   }
 
