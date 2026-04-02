@@ -1,7 +1,6 @@
 /* Adaptive driving HUD
- * - Uses CarrotLink surface variants directly:
- *   homePreview / driveInline / driveOverlay
- * - Same data model, different mount target + layout profile per surface
+ * - Reuses CarrotLink homePreview surface as the primary web HUD layout.
+ * - Mount position (inline vs overlay) is handled separately from the visual surface.
  */
 (function () {
   function $(id) { return document.getElementById(id); }
@@ -55,10 +54,12 @@
     return $("hudRoot");
   }
 
-  function getHudSurface() {
+  function isOverlayMount() {
     const page = document.body?.dataset?.page || "carrot";
-    const landscape = window.matchMedia("(orientation: landscape)").matches;
-    if (page === "carrot") return landscape ? SURFACE_OVERLAY : SURFACE_HOME;
+    return page === "carrot" && window.matchMedia("(orientation: landscape)").matches;
+  }
+
+  function getHudSurface() {
     return SURFACE_HOME;
   }
 
@@ -87,14 +88,14 @@
     }
   }
 
-  function getSurfaceTarget(surface) {
-    if (surface === SURFACE_HOME || surface === SURFACE_INLINE) return $("carrotHudDock");
-    return $("carrotStage");
+  function getSurfaceTarget() {
+    if (isOverlayMount()) return $("carrotStage");
+    return $("carrotHudDock");
   }
 
   function mountHudToSurface(surface) {
     const card = getHudCard();
-    const target = getSurfaceTarget(surface);
+    const target = getSurfaceTarget();
     if (!card || !target) return;
 
     if (card.parentElement !== target) {
@@ -102,21 +103,27 @@
     }
 
     card.classList.remove("driveHudCard--inline", "driveHudCard--overlay");
-    if (surface === SURFACE_HOME || surface === SURFACE_INLINE) card.classList.add("driveHudCard--inline");
-    else card.classList.add("driveHudCard--overlay");
+    card.classList.add(isOverlayMount() ? "driveHudCard--overlay" : "driveHudCard--inline");
   }
 
   function getHudConstraints(surface) {
     const vv = window.visualViewport;
     const viewportWidth = Math.max(320, Math.round(vv?.width || window.innerWidth || 0));
     const viewportHeight = Math.max(320, Math.round(vv?.height || window.innerHeight || 0));
-    const target = getSurfaceTarget(surface);
+    const overlayMount = isOverlayMount();
+    const target = getSurfaceTarget();
     const rect = target?.getBoundingClientRect?.() || null;
     const width = rect?.width || viewportWidth;
     const height = rect?.height || viewportHeight;
     const windowClass = getHudWindowClass(viewportWidth);
 
     if (surface === SURFACE_HOME) {
+      if (overlayMount) {
+        return {
+          width: clamp(width * 0.70, 460, 1180),
+          height: clamp(height * 0.92, 280, 620),
+        };
+      }
       const viewportAwareHudCap = clamp(viewportHeight * 0.32, 220, 520);
       const homeHudHeightCap = (() => {
         switch (windowClass) {

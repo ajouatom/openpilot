@@ -1,7 +1,4 @@
-/* CarrotLink adaptive HUD surfaces
- * - driveInline
- * - driveOverlay
- */
+/* CarrotLink adaptive HUD surface */
 #driveHudCard {
   width: 100%;
   max-width: 100%;
@@ -155,6 +152,11 @@
 }
 
 .hudWrap[data-surface="homePreview"][data-wide="1"] .hudBody {
+  grid-template-columns: minmax(0, 5fr) auto minmax(0, 5fr);
+}
+
+.hudWrap[data-surface="homePreview"][data-wide="1"][data-density="regular"] .hudBody,
+.hudWrap[data-surface="homePreview"][data-wide="1"][data-density="spacious"] .hudBody {
   grid-template-columns: minmax(0, 6fr) auto minmax(0, 5fr);
 }
 
@@ -245,8 +247,8 @@
   font-weight: 900;
   letter-spacing: 0.22px;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .hudSupportValue {
@@ -379,31 +381,12 @@
   color: rgba(255,255,255,0.92);
   text-shadow: var(--hud-text-shadow-strong);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 #hudRoadLimitDisplay[data-over="1"] {
   color: #ff6961;
-}
-
-.hudWrap[data-surface="driveOverlay"] {
-  --hud-panel-top: rgba(17, 68, 46, 0.86);
-  --hud-panel-mid: rgba(10, 40, 27, 0.82);
-  --hud-panel-bottom: rgba(10, 32, 22, 0.84);
-  --hud-panel-soft: rgba(17, 74, 49, 0.58);
-  --hud-panel-border: rgba(255,255,255,0.12);
-  --hud-bar-bg: rgba(255,255,255,0.06);
-  --hud-shadow: 0 10px 22px rgba(0, 0, 0, 0.24);
-}
-
-.hudWrap[data-surface="driveOverlay"] .hudBodyDivider {
-  display: none;
-}
-
-.hudWrap[data-surface="driveOverlay"] .hudSpeedColumn,
-.hudWrap[data-surface="driveOverlay"] .hudSupportColumn {
-  padding-top: calc(var(--hud-padding) * 0.10);
 }
 
 .hudWrap[data-density="micro"] .hudGapBar.is-on {
