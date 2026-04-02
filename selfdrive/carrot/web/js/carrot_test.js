@@ -827,7 +827,7 @@ window.CarrotTest = (() => {
     const overlayInset = 12;
     const overlayHeight = clamp(viewport.height * 0.29, 184, 304);
     const overlayWidth = overlayHeight * 1.02;
-    const scale = clamp(overlayWidth / 320, 0.72, 0.96);
+    const scale = clamp((overlayWidth / 320) * 0.9, 0.65, 0.9);
     const absLeft = Math.round(stageRect.left + viewport.left + overlayInset);
     const absBottom = Math.round(
       Math.max(12, window.innerHeight - (stageRect.top + viewport.bottom) + overlayInset),
