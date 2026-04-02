@@ -60,6 +60,8 @@
   }
 
   function getHudSurface() {
+    const page = document.body?.dataset?.page || "carrot";
+    if (page === "carrot" && !isOverlayMount()) return SURFACE_INLINE;
     return SURFACE_HOME;
   }
 
@@ -142,8 +144,8 @@
 
     if (surface === SURFACE_INLINE) {
       return {
-        width: clamp(width - 4, 304, 734),
-        height: clamp(height || viewportHeight * 0.30, 190, 440),
+        width: clamp(width, 320, 980),
+        height: clamp(height || viewportHeight * 0.34, 220, 520),
       };
     }
 
@@ -278,7 +280,10 @@
     const constraints = getHudConstraints(surface);
     const profile = buildHudProfile(constraints.width, constraints.height, surface);
     const style = root.style;
-    const panelWidth = surface === SURFACE_HOME
+    const portraitInline = surface === SURFACE_INLINE && !isOverlayMount();
+    const panelWidth = portraitInline
+      ? Math.round(constraints.width)
+      : surface === SURFACE_HOME
       ? Math.min(constraints.width, profile.maxWidth, constraints.height * profile.preferredAspectRatio)
       : Math.min(constraints.width, profile.maxWidth);
     const panelHeight = Math.round(panelWidth / Math.max(profile.preferredAspectRatio, 0.1));
@@ -290,7 +295,7 @@
     root.dataset.windowClass = getHudWindowClass(constraints.width);
 
     style.setProperty("--hud-aspect", String(profile.preferredAspectRatio));
-    style.setProperty("--hud-radius", `${profile.borderRadius}px`);
+    style.setProperty("--hud-radius", `${portraitInline ? 0 : profile.borderRadius}px`);
     style.setProperty("--hud-padding", `${profile.padding}px`);
     style.setProperty("--hud-section-gap", `${profile.sectionGap}px`);
     style.setProperty("--hud-metric-gap", `${profile.metricGap}px`);

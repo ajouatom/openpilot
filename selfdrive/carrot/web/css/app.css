@@ -1774,22 +1774,28 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--overlay .hudWrap {
 
   body[data-page="carrot"] #pageCarrot > .carrot-stage {
     flex: 1 1 0;
-    min-height: 180px;
+    min-height: 0;
   }
 
   body[data-page="carrot"] .carrot-hud-dock {
     flex: 0 0 var(--carrot-dock-panel-height, auto);
     padding-inline: 0;
     padding-bottom: 0;
+    align-items: stretch;
   }
 
   body[data-page="carrot"] #driveHudCard.driveHudCard--inline {
     width: 100%;
-    justify-content: center;
+    justify-content: stretch;
   }
 
   body[data-page="carrot"] #driveHudCard.driveHudCard--inline .hudWrap {
-    margin-inline: auto;
+    width: 100%;
+    margin: 0;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+    box-shadow: none;
   }
 }
 

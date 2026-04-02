@@ -231,12 +231,9 @@ window.HomeDrive = (() => {
     if (mode.key === "fit") {
       scale = containScale * 0.94;
     } else if (mode.key === "crop") {
-      if (isPortrait) {
-        const cropBlend = 0.72;
-        scale = containScale + ((coverScale - containScale) * cropBlend);
-      } else {
-        scale = coverScale;
-      }
+      scale = coverScale;
+    } else if (mode.key === "normal" && isPortrait) {
+      scale = containScale * 0.985;
     }
 
     return {
