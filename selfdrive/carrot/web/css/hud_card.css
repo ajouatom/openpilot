@@ -50,6 +50,33 @@
   box-shadow: var(--hud-shadow);
   isolation: isolate;
   color: #fff;
+  transition: border-color 0.14s ease;
+}
+
+/* camera alert blink overlay */
+.hudWrap::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--hud-radius);
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  background: linear-gradient(135deg, rgba(168,25,25,0.78), rgba(255,92,87,0.56), rgba(10,4,4,0.40));
+  transition: opacity 0.14s ease;
+}
+
+.hudWrap[data-camera-blink="1"]::after {
+  animation: hudCameraBlink 1.6s ease-in-out infinite;
+}
+
+.hudWrap[data-camera-blink="1"] {
+  border-color: rgba(255,105,97,0.58) !important;
+}
+
+@keyframes hudCameraBlink {
+  0%, 49.9% { opacity: 0; }
+  50%, 100% { opacity: 1; }
 }
 
 .hudWrap[data-surface="driveInline"],
@@ -61,6 +88,11 @@
 .hudWrap[data-surface="driveOverlay"] {
   width: var(--hud-card-width, var(--hud-max-width));
   max-width: none;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.008) 38%, transparent 72%),
+    linear-gradient(145deg, rgba(17,68,46,0.87), rgba(10,40,27,0.80));
+  box-shadow: none;
+  border-color: rgba(255,255,255,0.12);
 }
 
 .hudWrap::before {

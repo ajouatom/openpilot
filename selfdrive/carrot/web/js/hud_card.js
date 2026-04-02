@@ -146,29 +146,29 @@
       const base = Math.min(drawWidth, drawHeight);
       const ratio = (() => {
         switch (windowClass) {
-          case "compact": return 0.30;
-          case "medium": return 0.29;
-          case "expanded": return 0.28;
-          case "large": return 0.27;
-          default: return 0.26;
+          case "compact": return 0.24;
+          case "medium": return 0.23;
+          case "expanded": return 0.22;
+          case "large": return 0.22;
+          default: return 0.21;
         }
       })();
       const minSize = (() => {
         switch (windowClass) {
-          case "compact": return 184;
-          case "medium": return 196;
-          case "expanded": return 208;
-          case "large": return 220;
-          default: return 232;
+          case "compact": return 148;
+          case "medium": return 157;
+          case "expanded": return 166;
+          case "large": return 176;
+          default: return 186;
         }
       })();
       const maxSize = (() => {
         switch (windowClass) {
-          case "compact": return 304;
-          case "medium": return 324;
-          case "expanded": return 344;
-          case "large": return 364;
-          default: return 384;
+          case "compact": return 243;
+          case "medium": return 259;
+          case "expanded": return 275;
+          case "large": return 291;
+          default: return 307;
         }
       })();
       const viewportCap = drawHeight * 0.44;
@@ -460,13 +460,20 @@
     el.dataset.kind = normalized || "normal";
   }
 
-  function setRoadLimit(speedKph, over) {
+  function setRoadLimit(speedKph, over, blink) {
     const el = $("hudRoadLimitDisplay");
     if (!el) return;
     const limitLabel = getHudLabels().limit;
     const text = speedKph == null || !isFinite(speedKph) ? `${limitLabel} --` : `${limitLabel} ${Math.round(speedKph)}`;
     el.textContent = text;
     el.dataset.over = over ? "1" : "0";
+    setCameraBlink(blink);
+  }
+
+  function setCameraBlink(on) {
+    const root = getHudRoot();
+    if (!root) return;
+    root.dataset.cameraBlink = on ? "1" : "0";
   }
 
   function setConnectivity(text) {
@@ -569,7 +576,7 @@
       setSignalDot(payload.tlight || "off");
       if (payload.driveMode) setDriveMode(payload.driveMode.name, payload.driveMode.kind);
       else setDriveMode("", "normal");
-      setRoadLimit(payload.speedLimitKph, payload.speedLimitOver);
+      setRoadLimit(payload.speedLimitKph, payload.speedLimitOver, payload.speedLimitBlink);
       setConnectivity(payload.apm);
     },
 

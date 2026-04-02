@@ -324,6 +324,7 @@ function drivingHudUpdateFromCarPayload(j) {
     driveMode: j.driveMode,
     speedLimitKph: j.speedLimitKph,
     speedLimitOver: j.speedLimitOver,
+    speedLimitBlink: j.speedLimitBlink,
     apm: j.apm,
   };
 
