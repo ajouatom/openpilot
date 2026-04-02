@@ -1922,6 +1922,41 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
   border-color: rgba(255, 255, 255, 0.14);
 }
 
+.carrot-test-menu {
+  position: absolute;
+  right: 14px;
+  bottom: 72px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(5, 8, 12, 0.56);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  pointer-events: auto;
+}
+
+.carrot-test-menu__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  user-select: none;
+}
+
+.carrot-test-menu__check {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: color-mix(in srgb, var(--md-primary) 76%, #fff);
+}
+
 /* ── Desktop: full-width footer with centered content ─────────────────── */
 @media (min-width: 769px) {
   #pageTerminal {
@@ -2421,6 +2456,11 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
   body[data-page="carrot"] #pageCarrot .carrot-zoom {
     right: 12px;
     bottom: 12px;
+  }
+
+  body[data-page="carrot"] #pageCarrot .carrot-test-menu {
+    right: 12px;
+    bottom: 70px;
   }
 
   body[data-page="setting"] #pageSetting {
