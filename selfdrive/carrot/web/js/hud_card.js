@@ -1,32 +1,12 @@
 /* Driving HUD widget (standalone)
  * - Exposes: window.DrivingHud.init(), window.DrivingHud.update(payload)
- * Payload (suggested):
- *  {
- *    cpuTempC, memPct, diskPct, diskLabel,
- *    vEgoKph, vSetKph,
- *    temp: { reason, speedKph, isDecel },   // optional
- *    redDot, tlight,  // tlight: "green"|"red"|"off"
- *    tfGap, gear, gpsOk,
- *    driveMode: { name, kind },             // kind: "normal"|"eco"|"safe"|"sport"
- *    speedLimitKph, speedLimitOver,
- *    apm, tfBars
- *  }
  */
 (function () {
   function $(id) { return document.getElementById(id); }
-  function setText(id, v) { const el=$(id); if (el) el.textContent = (v==null? "" : String(v)); }
-  function show(id, on) { const el=$(id); if (el) el.style.display = on ? "" : "none"; }
+  function setText(id, v) { const el = $(id); if (el) el.textContent = (v == null ? "" : String(v)); }
+  function show(id, on) { const el = $(id); if (el) el.style.display = on ? "" : "none"; }
 
-  function clamp01(x){ x = Number(x); if (!isFinite(x)) return 0; return Math.max(0, Math.min(1, x)); }
-
-  function setMini(elId, labelId, label, valueText, good=true){
-    const el = $(elId);
-    if (!el) return;
-    if (labelId) setText(labelId, label);
-    setText(elId, valueText);
-  }
-
-  function setSignalDot(kind){
+  function setSignalDot(kind) {
     const el = $("hudSignalDot");
     if (!el) return;
     if (kind === "red") el.style.background = "#ff2a2a";
@@ -34,11 +14,10 @@
     else el.style.background = "rgba(255,255,255,0.18)";
   }
 
-  function setGear(txt){
+  function setGear(txt) {
     const el = $("hudGear");
     if (!el) return;
     el.textContent = txt || "U";
-    // green for D/number, gray for unknown, orange for R, blue for N (taste)
     const t = String(txt || "U").toUpperCase();
     if (t === "R") el.style.color = "#ff9c2a";
     else if (t === "N") el.style.color = "#7ec8ff";
@@ -46,7 +25,7 @@
     else el.style.color = "#1cff57";
   }
 
-  function setDriveMode(name, kind){
+  function setDriveMode(name, kind) {
     const el = $("hudDriveMode");
     if (!el) return;
 
@@ -56,26 +35,26 @@
     }
 
     el.textContent = modeName || (window.DRIVE_MODES && window.LANG ? window.DRIVE_MODES[window.LANG].normal : "Normal");
-    el.classList.remove("mode_normal","mode_eco","mode_safe","mode_sport");
+    el.classList.remove("mode_normal", "mode_eco", "mode_safe", "mode_sport");
     if (kind === "eco") el.classList.add("mode_eco");
     else if (kind === "safe") el.classList.add("mode_safe");
     else if (kind === "sport") el.classList.add("mode_sport");
     else el.classList.add("mode_normal");
   }
 
-  function setGps(ok){
+  function setGps(ok) {
     const el = $("hudGps");
     if (!el) return;
     el.classList.toggle("off", !ok);
   }
 
-  function setRoadLimit(speedKph, over){
+  function setRoadLimit(speedKph, over) {
     const box = $("hudRoadLimitVal");
-    setText("hudRoadLimitVal", (speedKph==null || !isFinite(speedKph)) ? "--" : Math.round(speedKph));
+    setText("hudRoadLimitVal", (speedKph == null || !isFinite(speedKph)) ? "--" : Math.round(speedKph));
     if (box) box.classList.toggle("over", !!over);
   }
 
-  function setBars(n){
+  function setBars(n) {
     const wrap = $("hudBars");
     if (!wrap) return;
     const bars = wrap.querySelectorAll(".hudBar");
@@ -84,20 +63,15 @@
     bars.forEach((b, i) => b.classList.toggle("on", i >= start));
   }
 
-  function setGapNum(n){
+  function setGapNum(n) {
     const el = $("hudGapNum");
     if (!el) return;
     if (n == null || !isFinite(n)) el.textContent = "-";
     else el.textContent = String(Math.round(n));
   }
 
-  function setTemp(temp){
-    //const row = $("hudTemphudTempReason");
-    if (!temp || temp.speed == null || !isFinite(temp.speed) || !temp.source) {
-      //row.style.display = "none";
-      return;
-    }
-    //row.style.display = "";
+  function setTemp(temp) {
+    if (!temp || temp.speed == null || !isFinite(temp.speed) || !temp.source) return;
     $("hudTempReason").textContent = String(temp.source);
     $("hudTempSpeed").textContent = String(Math.round(temp.speed));
 
@@ -107,47 +81,44 @@
     $("hudTempSpeed").style.color = color;
   }
 
-  function setSpeed(vEgoKph){
+  function setSpeed(vEgoKph) {
     const el = $("hudSpeed");
-    //console.log("[HUD] setSpeed", vEgoKph, "el?", !!el);
     if (!el) return;
-    if (vEgoKph == null || !isFinite(vEgoKph)) { el.textContent = "--"; return; }
+    if (vEgoKph == null || !isFinite(vEgoKph)) {
+      el.textContent = "--";
+      return;
+    }
     el.textContent = String(Math.round(vEgoKph));
   }
 
-  function setSetSpeed(vSetKph){
+  function setSetSpeed(vSetKph) {
     const el = $("hudSetSpeed");
     if (!el) return;
-    if (vSetKph == null || !isFinite(vSetKph)) { el.textContent = "--"; return; }
+    if (vSetKph == null || !isFinite(vSetKph)) {
+      el.textContent = "--";
+      return;
+    }
     el.textContent = String(Math.round(vSetKph));
   }
 
-  function setRedDot(on){
+  function setRedDot(on) {
     show("hudRedDot", !!on);
   }
 
-  function setSys(cpuTempC, memPct, diskPct, diskLabel){
-    setText("hudCpuVal", (cpuTempC==null || !isFinite(cpuTempC)) ? "--°C" : `${cpuTempC.toFixed(0)}°C`);
-    setText("hudMemVal", (memPct==null || !isFinite(memPct)) ? "--%" : `${memPct.toFixed(0)}%`);
-
-    // VOLT 표시로 변경
-    if (diskPct == null || !isFinite(diskPct)) {
-      setText("hudDiskVal", "--V");
-    } else {
-      const volt = Number(diskPct);
-      setText("hudDiskVal", `${volt.toFixed(1)}V`);
-    }
-
+  function setSys(cpuTempC, memPct, diskPct, diskLabel) {
+    setText("hudCpuVal", (cpuTempC == null || !isFinite(cpuTempC)) ? "--°C" : `${cpuTempC.toFixed(0)}°C`);
+    setText("hudMemVal", (memPct == null || !isFinite(memPct)) ? "--%" : `${memPct.toFixed(0)}%`);
+    if (diskPct == null || !isFinite(diskPct)) setText("hudDiskVal", "--V");
+    else setText("hudDiskVal", `${Number(diskPct).toFixed(1)}V`);
     if (diskLabel) setText("hudDiskLabel", diskLabel);
   }
 
   const DrivingHud = {
     init() {
-      // default visuals
       setBars(0);
       setSignalDot("off");
       setGps(false);
-      setDriveMode("","normal");
+      setDriveMode("", "normal");
       setRoadLimit(null, false);
       setGapNum(null);
       setGear("U");
@@ -157,7 +128,6 @@
 
     update(p) {
       if (!p) return;
-
       setSys(p.cpuTempC, p.memPct, p.diskPct, p.diskLabel);
       setSpeed(p.vEgoKph);
       setSetSpeed(p.vSetKph);
@@ -165,12 +135,12 @@
       setRedDot(p.redDot);
       setTemp(p.temp);
       setGapNum(p.tfGap);
-      setBars(p.tfBars != null ? p.tfBars : p.tfGap); // default same meaning
+      setBars(p.tfBars != null ? p.tfBars : p.tfGap);
       setGear(p.gear);
       setGps(!!p.gpsOk);
       if (p.driveMode) setDriveMode(p.driveMode.name, p.driveMode.kind);
       setRoadLimit(p.speedLimitKph, p.speedLimitOver);
-    }
+    },
   };
 
   window.DrivingHud = DrivingHud;

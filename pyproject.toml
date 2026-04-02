@@ -16,6 +16,7 @@ dependencies = [
   "sympy",        # rednose + friends
   "crcmod-plus",  # cars + qcomgpsd
   "tqdm",         # cars (fw_versions.py) on start + many one-off uses
+  "msgpack",      # realtime broker / carrot live payload transport
 
   # core
   "cffi",
