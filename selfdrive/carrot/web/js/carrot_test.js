@@ -8,6 +8,7 @@ window.CarrotTest = (() => {
   const statusEl = document.getElementById("carrotStageStatus");
   const metaEl = document.getElementById("carrotStageMeta");
   const debugEl = document.getElementById("carrotStageDebug");
+  const driveHudCardEl = document.getElementById("driveHudCard");
   const sourceVideoEl = document.getElementById("rtcVideo");
   const zoomButtons = Array.from(document.querySelectorAll(".carrot-zoom__btn"));
   const leadPreviewToggleEl = document.getElementById("carrotTestLeadPreview");
@@ -801,6 +802,40 @@ window.CarrotTest = (() => {
   function setStageReady(ready) {
     stageEl.classList.toggle("is-stream-ready", Boolean(ready));
     videoEl.style.display = ready ? "block" : "none";
+  }
+
+  function resetCarrotHudLayout() {
+    if (!driveHudCardEl) return;
+    driveHudCardEl.style.removeProperty("--carrot-hud-left");
+    driveHudCardEl.style.removeProperty("--carrot-hud-bottom");
+    driveHudCardEl.style.removeProperty("--carrot-hud-scale");
+  }
+
+  function applyCarrotHudLayout(viewportRect) {
+    if (!driveHudCardEl) return;
+    const stageRect = stageEl.getBoundingClientRect();
+    if (!stageRect.width || !stageRect.height) return;
+
+    const viewport = viewportRect || {
+      left: 0,
+      top: 0,
+      right: stageRect.width,
+      bottom: stageRect.height,
+      width: stageRect.width,
+      height: stageRect.height,
+    };
+    const overlayInset = 12;
+    const overlayHeight = clamp(viewport.height * 0.29, 184, 304);
+    const overlayWidth = overlayHeight * 1.02;
+    const scale = clamp(overlayWidth / 320, 0.72, 0.96);
+    const absLeft = Math.round(stageRect.left + viewport.left + overlayInset);
+    const absBottom = Math.round(
+      Math.max(12, window.innerHeight - (stageRect.top + viewport.bottom) + overlayInset),
+    );
+
+    driveHudCardEl.style.setProperty("--carrot-hud-left", `${absLeft}px`);
+    driveHudCardEl.style.setProperty("--carrot-hud-bottom", `${absBottom}px`);
+    driveHudCardEl.style.setProperty("--carrot-hud-scale", scale.toFixed(3));
   }
 
   function syncCanvasSize(videoWidth, videoHeight, stageWidth, stageHeight) {
@@ -2021,6 +2056,8 @@ window.CarrotTest = (() => {
 
   function renderActiveFrame() {
     refreshParams();
+    const stageWidth = Math.max(1, stageEl.clientWidth);
+    const stageHeight = Math.max(1, stageEl.clientHeight);
 
     const hasStream = syncSourceStream();
     if (!hasStream || !videoEl.videoWidth || !videoEl.videoHeight) {
@@ -2030,13 +2067,19 @@ window.CarrotTest = (() => {
       setStatus("waiting road camera stream...");
       setMeta("road:- model:- path:-");
       setDebug("LD:- LT:- SR:-");
+      applyCarrotHudLayout({
+        left: 0,
+        top: 0,
+        right: stageWidth,
+        bottom: stageHeight,
+        width: stageWidth,
+        height: stageHeight,
+      });
       return;
     }
 
     const videoWidth = videoEl.videoWidth;
     const videoHeight = videoEl.videoHeight;
-    const stageWidth = Math.max(1, stageEl.clientWidth);
-    const stageHeight = Math.max(1, stageEl.clientHeight);
     syncCanvasSize(videoWidth, videoHeight, stageWidth, stageHeight);
 
     const rawOverlayState = window.CarrotOverlayState || {};
@@ -2065,6 +2108,7 @@ window.CarrotTest = (() => {
 
     applyStageTransform(transform);
     setStageReady(true);
+    applyCarrotHudLayout(viewportRect);
     clearOverlay(videoWidth, videoHeight);
     clearHud(stageWidth, stageHeight);
 
@@ -2113,6 +2157,7 @@ window.CarrotTest = (() => {
     if (isActive()) {
       renderActiveFrame();
     } else {
+      resetCarrotHudLayout();
       syncSourceStream();
     }
     scheduleNext();
