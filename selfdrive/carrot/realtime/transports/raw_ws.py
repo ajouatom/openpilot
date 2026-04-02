@@ -11,6 +11,7 @@ from ..raw_services import is_supported_raw_service
 class RawWsHub:
   SEND_TIMEOUT = 0.35
   IDLE_SLEEP = 0.03
+  ACTIVE_POLL_SLEEP = 0.008
   IDLE_STOP_SEC = 5.0
   FAILURE_THRESHOLD = 3
 
@@ -97,10 +98,10 @@ class RawWsHub:
         try:
           payload = sock.receive(non_blocking=True)
         except Exception:
-          await asyncio.sleep(self.IDLE_SLEEP)
+          await asyncio.sleep(self.ACTIVE_POLL_SLEEP)
           continue
         if payload is None:
-          await asyncio.sleep(self.IDLE_SLEEP)
+          await asyncio.sleep(self.ACTIVE_POLL_SLEEP)
           continue
 
         stale: list[web.WebSocketResponse] = []

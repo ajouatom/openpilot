@@ -67,6 +67,10 @@ window.CarrotTest = (() => {
   const PATH_Z_OFFSET = 1.22;
   const MIN_DRAW_DISTANCE = 10;
   const MAX_DRAW_DISTANCE = 100;
+  const RADAR_INTERPOLATION_MIN_MS = 16;
+  const RADAR_INTERPOLATION_DEFAULT_MS = 50;
+  const RADAR_INTERPOLATION_MAX_MS = 120;
+  const RADAR_INTERPOLATION_LEAD_MS = 12;
   const TEST_PATH_VISIBILITY_SOLID_ALPHA = 0.50;
   const TEST_PATH_VISIBILITY_MID_ALPHA = 0.24;
   const TEST_LANE_PROB_MIN = 0.003;
@@ -96,6 +100,13 @@ window.CarrotTest = (() => {
   let lastDebug = "";
   let lastPlotMode = -1;
   let plotHistory = [[], [], []];
+  let radarInterpolationState = {
+    signature: "",
+    previous: null,
+    current: null,
+    previousAtMs: 0,
+    currentAtMs: 0,
+  };
 
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
@@ -478,6 +489,161 @@ window.CarrotTest = (() => {
       leadsLeft: Array.isArray(raw.leadsLeft) && raw.leadsLeft.length ? raw.leadsLeft : live.leadsLeft,
       leadsCenter: Array.isArray(raw.leadsCenter) && raw.leadsCenter.length ? raw.leadsCenter : live.leadsCenter,
       leadsRight: Array.isArray(raw.leadsRight) && raw.leadsRight.length ? raw.leadsRight : live.leadsRight,
+    };
+  }
+
+  function cloneRadarLead(lead) {
+    if (!lead || typeof lead !== "object") return null;
+    return {
+      dRel: finiteNumber(lead.dRel, 0),
+      yRel: finiteNumber(lead.yRel, 0),
+      vRel: finiteNumber(lead.vRel, 0),
+      aRel: finiteNumber(lead.aRel, 0),
+      vLead: finiteNumber(lead.vLead, 0),
+      dPath: finiteNumber(lead.dPath, 0),
+      vLat: finiteNumber(lead.vLat, 0),
+      vLeadK: finiteNumber(lead.vLeadK, 0),
+      aLead: finiteNumber(lead.aLead, 0),
+      aLeadK: finiteNumber(lead.aLeadK, 0),
+      aLeadTau: finiteNumber(lead.aLeadTau, 0),
+      modelProb: finiteNumber(lead.modelProb, 0),
+      score: finiteNumber(lead.score, 0),
+      jLead: finiteNumber(lead.jLead, 0),
+      fcw: Boolean(lead.fcw),
+      status: Boolean(lead.status),
+      radar: Boolean(lead.radar),
+      radarTrackId: finiteNumber(lead.radarTrackId, -1),
+    };
+  }
+
+  function cloneRadarState(radarState) {
+    const source = radarState && typeof radarState === "object" ? radarState : {};
+    return {
+      ...source,
+      leadOne: cloneRadarLead(source.leadOne),
+      leadTwo: cloneRadarLead(source.leadTwo),
+      leadLeft: cloneRadarLead(source.leadLeft),
+      leadRight: cloneRadarLead(source.leadRight),
+      leadsLeft: Array.isArray(source.leadsLeft) ? source.leadsLeft.slice() : source.leadsLeft,
+      leadsCenter: Array.isArray(source.leadsCenter) ? source.leadsCenter.slice() : source.leadsCenter,
+      leadsRight: Array.isArray(source.leadsRight) ? source.leadsRight.slice() : source.leadsRight,
+    };
+  }
+
+  function radarLeadSignature(lead) {
+    if (!lead || typeof lead !== "object") return "null";
+    return [
+      Boolean(lead.status) ? 1 : 0,
+      Boolean(lead.radar) ? 1 : 0,
+      finiteNumber(lead.radarTrackId, -1),
+      finiteNumber(lead.dRel, 0).toFixed(3),
+      finiteNumber(lead.yRel, 0).toFixed(3),
+      finiteNumber(lead.vRel, 0).toFixed(3),
+      finiteNumber(lead.modelProb, 0).toFixed(3),
+      finiteNumber(lead.score, 0).toFixed(3),
+    ].join("|");
+  }
+
+  function radarStateSignature(radarState) {
+    const source = radarState && typeof radarState === "object" ? radarState : {};
+    return [
+      radarLeadSignature(source.leadOne),
+      radarLeadSignature(source.leadTwo),
+      radarLeadSignature(source.leadLeft),
+      radarLeadSignature(source.leadRight),
+    ].join("||");
+  }
+
+  function lerpNumber(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  function canInterpolateRadarLead(previousLead, currentLead) {
+    if (!previousLead || !currentLead) return false;
+    if (!previousLead.status || !currentLead.status) return false;
+
+    const previousTrackId = finiteNumber(previousLead.radarTrackId, -1);
+    const currentTrackId = finiteNumber(currentLead.radarTrackId, -1);
+    if (previousTrackId >= 0 && currentTrackId >= 0) {
+      return previousTrackId === currentTrackId;
+    }
+
+    const distanceDelta = Math.abs(finiteNumber(previousLead.dRel, 0) - finiteNumber(currentLead.dRel, 0));
+    const lateralDelta = Math.abs(finiteNumber(previousLead.yRel, 0) - finiteNumber(currentLead.yRel, 0));
+    return distanceDelta < 12 && lateralDelta < 2.5;
+  }
+
+  function lerpRadarLead(previousLead, currentLead, t) {
+    if (!previousLead) return cloneRadarLead(currentLead);
+    if (!currentLead) return cloneRadarLead(previousLead);
+    if (!canInterpolateRadarLead(previousLead, currentLead)) {
+      return cloneRadarLead(currentLead);
+    }
+
+    return {
+      dRel: lerpNumber(previousLead.dRel, currentLead.dRel, t),
+      yRel: lerpNumber(previousLead.yRel, currentLead.yRel, t),
+      vRel: lerpNumber(previousLead.vRel, currentLead.vRel, t),
+      aRel: lerpNumber(previousLead.aRel, currentLead.aRel, t),
+      vLead: lerpNumber(previousLead.vLead, currentLead.vLead, t),
+      dPath: lerpNumber(previousLead.dPath, currentLead.dPath, t),
+      vLat: lerpNumber(previousLead.vLat, currentLead.vLat, t),
+      vLeadK: lerpNumber(previousLead.vLeadK, currentLead.vLeadK, t),
+      aLead: lerpNumber(previousLead.aLead, currentLead.aLead, t),
+      aLeadK: lerpNumber(previousLead.aLeadK, currentLead.aLeadK, t),
+      aLeadTau: lerpNumber(previousLead.aLeadTau, currentLead.aLeadTau, t),
+      modelProb: lerpNumber(previousLead.modelProb, currentLead.modelProb, t),
+      score: lerpNumber(previousLead.score, currentLead.score, t),
+      jLead: lerpNumber(previousLead.jLead, currentLead.jLead, t),
+      fcw: t < 0.5 ? previousLead.fcw : currentLead.fcw,
+      status: t < 0.5 ? previousLead.status : currentLead.status,
+      radar: t < 0.5 ? previousLead.radar : currentLead.radar,
+      radarTrackId: t < 0.5 ? previousLead.radarTrackId : currentLead.radarTrackId,
+    };
+  }
+
+  function getInterpolatedRadarState(radarState, nowMs) {
+    const signature = radarStateSignature(radarState);
+    if (!radarInterpolationState.current) {
+      const initial = cloneRadarState(radarState);
+      radarInterpolationState = {
+        signature,
+        previous: initial,
+        current: initial,
+        previousAtMs: nowMs,
+        currentAtMs: nowMs,
+      };
+      return initial;
+    }
+
+    if (signature !== radarInterpolationState.signature) {
+      radarInterpolationState = {
+        signature,
+        previous: radarInterpolationState.current,
+        current: cloneRadarState(radarState),
+        previousAtMs: radarInterpolationState.currentAtMs || nowMs,
+        currentAtMs: nowMs,
+      };
+    }
+
+    const previous = radarInterpolationState.previous || radarInterpolationState.current;
+    const current = radarInterpolationState.current || cloneRadarState(radarState);
+    if (!previous || !current) return radarState;
+    if (previous === current) return current;
+
+    const intervalMs = clamp(
+      radarInterpolationState.currentAtMs - radarInterpolationState.previousAtMs || RADAR_INTERPOLATION_DEFAULT_MS,
+      RADAR_INTERPOLATION_MIN_MS,
+      RADAR_INTERPOLATION_MAX_MS,
+    );
+    const t = clamp((nowMs - radarInterpolationState.currentAtMs + RADAR_INTERPOLATION_LEAD_MS) / intervalMs, 0, 1);
+
+    return {
+      ...current,
+      leadOne: lerpRadarLead(previous.leadOne, current.leadOne, t),
+      leadTwo: lerpRadarLead(previous.leadTwo, current.leadTwo, t),
+      leadLeft: lerpRadarLead(previous.leadLeft, current.leadLeft, t),
+      leadRight: lerpRadarLead(previous.leadRight, current.leadRight, t),
     };
   }
 
@@ -1473,9 +1639,13 @@ window.CarrotTest = (() => {
     const rawOverlayState = window.CarrotOverlayState || {};
     const rawHudState = window.CarrotHudState || {};
     const runtimeState = mergeRuntimeState(rawHudState, rawOverlayState);
-    const overlayState = runtimeState.overlayState;
+    let overlayState = runtimeState.overlayState;
     const hudState = runtimeState.hudState;
     const brokerServices = runtimeState.brokerServices;
+    overlayState = {
+      ...overlayState,
+      radarState: getInterpolatedRadarState(overlayState?.radarState, performance.now()),
+    };
     const model = overlayState.modelV2 || null;
     const liveCalibration = overlayState.liveCalibration || null;
     const roadCameraState = overlayState.roadCameraState || null;
@@ -1527,7 +1697,11 @@ window.CarrotTest = (() => {
   }
 
   function scheduleNext() {
-    loopToken = window.setTimeout(runLoop, isActive() ? 16 : 180);
+    if (isActive()) {
+      loopToken = window.requestAnimationFrame(runLoop);
+      return;
+    }
+    loopToken = window.setTimeout(() => runLoop(performance.now()), 180);
   }
 
   function runLoop() {
