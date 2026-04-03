@@ -81,7 +81,7 @@ async function fetchLiveRuntimeState(force = false) {
 
 function getLiveRuntimePollMs() {
   const carrotVisible = document.body?.dataset?.page === "carrot" && !document.hidden;
-  return carrotVisible ? 350 : 1500;
+  return carrotVisible ? 1000 : 3000;
 }
 
 function scheduleLiveRuntimeStateFetch(ms = getLiveRuntimePollMs()) {
@@ -101,6 +101,7 @@ scheduleLiveRuntimeStateFetch(1500);
 let RTC_PC = null;
 let RTC_RETRY_T = null;
 let RTC_WAIT_TRACK_T = null;
+let RTC_FAIL_COUNT = 0;
 function rtcHasLiveTrack() {
   const video = document.getElementById("rtcVideo");
   return Boolean(video && video.srcObject);
@@ -133,10 +134,12 @@ async function rtcDisconnect() {
 
 function rtcScheduleRetry(ms = 2000) {
   rtcCancelRetry();
+  const backoff = Math.min(ms * Math.pow(1.5, RTC_FAIL_COUNT), 30000);
+  RTC_FAIL_COUNT = Math.min(RTC_FAIL_COUNT + 1, 20);
   RTC_RETRY_T = setTimeout(async () => {
     RTC_RETRY_T = null;
     await rtcConnectOnce().catch(() => {});
-  }, ms);
+  }, backoff);
 }
 
 function rtcArmTrackTimeout(ms = 5000) {
@@ -145,7 +148,7 @@ function rtcArmTrackTimeout(ms = 5000) {
     RTC_WAIT_TRACK_T = null;
     rtcStatusSet("no track, retry...");
     await rtcDisconnect();
-    rtcScheduleRetry(1000);
+    rtcScheduleRetry(2000);
   }, ms);
 }
 
@@ -171,9 +174,13 @@ async function waitIceComplete(pc, timeoutMs = 8000) {
   });
 }
 
+let _rtcConnecting = false;
+
 async function rtcConnectOnce() {
+  if (_rtcConnecting) return;
   if (RTC_PC && (RTC_PC.connectionState === "connected" || RTC_PC.connectionState === "connecting")) return;
 
+  _rtcConnecting = true;
   try {
     await rtcDisconnect();
     rtcStatusSet("connecting...");
@@ -207,12 +214,13 @@ async function rtcConnectOnce() {
       try { await videoEl.play(); } catch (e) { console.log("[RTC] play() failed", e); }
       rtcStatusSet("track: " + ev.track.kind);
       rtcDisarmTrackTimeout();
+      RTC_FAIL_COUNT = 0;
     };
 
     pc.onconnectionstatechange = () => {
       const state = pc.connectionState;
-      console.log("[RTC] connectionState:", state);
       rtcStatusSet("conn: " + state);
+      if (state === "connected") RTC_FAIL_COUNT = 0;
       if (state === "failed" || state === "disconnected" || state === "closed") {
         rtcDisconnect();
         rtcScheduleRetry(2000);
@@ -221,7 +229,6 @@ async function rtcConnectOnce() {
 
     pc.oniceconnectionstatechange = () => {
       const state = pc.iceConnectionState;
-      console.log("[RTC] iceConnectionState:", state);
       rtcStatusSet("ice: " + state);
       if (state === "failed" || state === "disconnected" || state === "closed") {
         rtcDisconnect();
@@ -261,7 +268,8 @@ async function rtcConnectOnce() {
     rtcStatusSet("error: " + e.message);
     await rtcDisconnect();
     rtcScheduleRetry(2000);
-    throw e;
+  } finally {
+    _rtcConnecting = false;
   }
 }
 
@@ -269,7 +277,6 @@ async function waitServerReady(timeoutMs = 8000) {
   const t0 = Date.now();
   while (Date.now() - t0 < timeoutMs) {
     try {
-      // ���� ����ִ����� Ȯ�� (������ API)
       const r = await fetch("/api/settings", { cache: "no-store" });
       if (r.ok) return true;
     } catch {}
@@ -278,15 +285,30 @@ async function waitServerReady(timeoutMs = 8000) {
   return false;
 }
 
+window.CARROT_VISION_ACTIVE = false;
+
+window.CarrotVisionStart = async function() {
+  if (window.CARROT_VISION_ACTIVE) return;
+  window.CARROT_VISION_ACTIVE = true;
+  
+  const btn = document.getElementById("visionStartOverlay");
+  if (btn) btn.style.display = "none";
+  
+  rtcStatusSet("waiting server...");
+  await waitServerReady(8000);
+  await rtcConnectOnce().catch(() => {});
+};
+
 function rtcInitAuto() {
-  (async () => {
-    rtcStatusSet("waiting server...");
-    await waitServerReady(8000);   // �����ص� ��� ����
-    await rtcConnectOnce().catch(() => {});
-  })();
+  const btn = document.getElementById("btnStartVision");
+  if (btn) btn.onclick = window.CarrotVisionStart;
 
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) rtcConnectOnce().catch(() => {});
+    if (!document.hidden && !_rtcConnecting && window.CARROT_VISION_ACTIVE) {
+      rtcCancelRetry();
+      RTC_FAIL_COUNT = 0;
+      rtcConnectOnce().catch(() => {});
+    }
   });
 }
 
@@ -538,6 +560,33 @@ function startAll() {
   rawHudConnectAll();
   rawOverlayConnectAll();
 }
+
+/* ── Phase 1: visibilitychange tab pause + WS release ── */
+let _visibilityPaused = false;
+
+function _onVisibilityChange() {
+  if (document.hidden) {
+    if (_visibilityPaused) return;
+    _visibilityPaused = true;
+    console.log("[perf] tab hidden → pausing");
+    _hudStopRenderLoop();
+    rawOverlayDisconnectAll();
+    if (LIVE_RUNTIME_FETCH_T) {
+      clearTimeout(LIVE_RUNTIME_FETCH_T);
+      LIVE_RUNTIME_FETCH_T = null;
+    }
+  } else {
+    if (!_visibilityPaused) return;
+    _visibilityPaused = false;
+    console.log("[perf] tab visible → resuming");
+    _hudStartRenderLoop();
+    _hudMarkDirty();
+    rawOverlayConnectAll();
+    scheduleLiveRuntimeStateFetch(100);
+  }
+}
+
+document.addEventListener("visibilitychange", _onVisibilityChange);
 
 
 

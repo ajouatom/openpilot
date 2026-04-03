@@ -60,6 +60,7 @@ window.CarrotRawCapnp = (() => {
       fields: {
         activeCarrot: { kind: "int32", offset: 0 },
         nRoadLimitSpeed: { kind: "int32", offset: 1 },
+        xSpdType: { kind: "int32", offset: 2 },
         xSpdLimit: { kind: "int32", offset: 3 },
         desiredSpeed: { kind: "int32", offset: 10 },
         desiredSource: { kind: "text", offset: 4 },
@@ -548,7 +549,8 @@ window.CarrotRawCapnp = (() => {
 
   function rawHudSpeedLimitKph(state) {
     const xSpdLimit = Number(state?.carrotMan?.xSpdLimit);
-    if (isFinite(xSpdLimit) && xSpdLimit > 0) return xSpdLimit;
+    const xSpdType = Number(state?.carrotMan?.xSpdType);
+    if (isFinite(xSpdLimit) && xSpdLimit > 0 && xSpdType !== 22) return xSpdLimit;
 
     const nRoadLimitSpeed = Number(state?.carrotMan?.nRoadLimitSpeed);
     if (isFinite(nRoadLimitSpeed) && nRoadLimitSpeed > 0) return nRoadLimitSpeed;
@@ -622,8 +624,12 @@ window.CarrotRawCapnp = (() => {
       driveMode: rawHudDriveMode(state),
       speedLimitKph,
       speedLimitOver: isFinite(vEgo) && isFinite(speedLimitKph) ? (vEgo * 3.6) > speedLimitKph : false,
-      speedLimitBlink: isFinite(Number(carrotMan?.xSpdLimit)) && Number(carrotMan.xSpdLimit) > 0,
-      apm: carrotMan?.activeCarrot ?? " ",
+      speedLimitBlink: isFinite(Number(carrotMan?.xSpdLimit)) && Number(carrotMan.xSpdLimit) > 0 && Number(carrotMan?.xSpdType) !== 22 && Number(carrotMan?.xSpdType) !== 4,
+      apm: (() => {
+        const ac = Number(carrotMan?.activeCarrot);
+        if (!isFinite(ac) || ac < 1) return "";
+        return ac >= 2 ? "APN" : "APM";
+      })(),
     };
   }
 

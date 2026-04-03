@@ -110,6 +110,52 @@ window.HomeDrive = (() => {
     currentAtMs: 0,
   };
 
+  /* ── EMA state for lead box smoothing (matches carrot.cc alpha=0.85) ── */
+  const LEAD_EMA_ALPHA = 0.85;
+  let leadEmaState = [
+    { fx: NaN, fy: NaN, fw: NaN, trackId: -99999 },  // slot 0: leadOne
+    { fx: NaN, fy: NaN, fw: NaN, trackId: -99999 },  // slot 1: leadTwo
+  ];
+
+  /* ── Phase 1-2: dirty check ── */
+  let _lastRenderSig = "";
+  let _forceNextRender = true;
+
+  function _quickDataSignature(hudState, overlayState) {
+    const cs = hudState?.carState;
+    const cm = hudState?.carrotMan;
+    const model = overlayState?.modelV2;
+    const radar = overlayState?.radarState;
+    // fast fingerprint from high-churn fields
+    return [
+      cs?.vEgo, cs?.vEgoCluster,
+      cm?.xSpdLimit, cm?.nRoadLimitSpeed, cm?.desiredSpeed, cm?.activeCarrot,
+      hudState?.selfdriveState?.personality,
+      hudState?.longitudinalPlan?.myDrivingMode,
+      model?.frameId,
+      radar?.leadOne?.dRel, radar?.leadOne?.status,
+      overlayState?.roadCameraState?.frameId,
+      overlayState?.liveCalibration?.rpyCalib?.[0],
+      paramsState.ShowPathMode, paramsState.ShowLaneInfo,
+    ].join('|');
+  }
+
+  /* ── Phase 1-3: gradient cache ── */
+  const _gradientCache = new Map();
+  const GRADIENT_CACHE_MAX = 16;
+
+  function getCachedGradient(key, factory) {
+    const cached = _gradientCache.get(key);
+    if (cached) return cached;
+    const g = factory();
+    if (_gradientCache.size >= GRADIENT_CACHE_MAX) {
+      const firstKey = _gradientCache.keys().next().value;
+      _gradientCache.delete(firstKey);
+    }
+    _gradientCache.set(key, g);
+    return g;
+  }
+
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
   }
@@ -146,8 +192,22 @@ window.HomeDrive = (() => {
     return text.length > maxLength ? `${text.slice(0, maxLength - 1)}...` : text;
   }
 
+  /* Phase 3: rgba string cache */
+  const _rgbaCache = new Map();
+  const RGBA_CACHE_MAX = 64;
+  const _emptyDash = [];
+
   function rgba(rgb, alpha) {
-    return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${clamp(alpha, 0, 1).toFixed(3)})`;
+    const a = clamp(alpha, 0, 1);
+    const key = (rgb.r << 20) | (rgb.g << 10) | rgb.b | ((a * 1000 | 0) << 24);
+    let s = _rgbaCache.get(key);
+    if (s) return s;
+    s = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${a.toFixed(3)})`;
+    if (_rgbaCache.size >= RGBA_CACHE_MAX) {
+      _rgbaCache.delete(_rgbaCache.keys().next().value);
+    }
+    _rgbaCache.set(key, s);
+    return s;
   }
 
   function paletteColor(index) {
@@ -182,12 +242,13 @@ window.HomeDrive = (() => {
     ];
   }
 
+  /* Phase 3: reuse array to avoid per-call allocation */
+  const _mv3Out = [0, 0, 0];
   function mat3Vector(a, v) {
-    return [
-      a[0][0] * v[0] + a[0][1] * v[1] + a[0][2] * v[2],
-      a[1][0] * v[0] + a[1][1] * v[1] + a[1][2] * v[2],
-      a[2][0] * v[0] + a[2][1] * v[1] + a[2][2] * v[2],
-    ];
+    _mv3Out[0] = a[0][0] * v[0] + a[0][1] * v[1] + a[0][2] * v[2];
+    _mv3Out[1] = a[1][0] * v[0] + a[1][1] * v[1] + a[1][2] * v[2];
+    _mv3Out[2] = a[2][0] * v[0] + a[2][1] * v[1] + a[2][2] * v[2];
+    return _mv3Out;
   }
 
   function rotFromEuler(roll, pitch, yaw) {
@@ -306,11 +367,11 @@ window.HomeDrive = (() => {
   }
 
   function projectPoint(calibTransform, x, y, z) {
-    const projected = mat3Vector(calibTransform, [x, y, z]);
-    if (!Number.isFinite(projected[2]) || projected[2] <= 1e-3) return null;
+    mat3Vector(calibTransform, [x, y, z]);
+    if (!Number.isFinite(_mv3Out[2]) || _mv3Out[2] <= 1e-3) return null;
     return {
-      x: projected[0] / projected[2],
-      y: projected[1] / projected[2],
+      x: (_mv3Out[0] / _mv3Out[2]) | 0,
+      y: (_mv3Out[1] / _mv3Out[2]) | 0,
     };
   }
 
@@ -400,7 +461,6 @@ window.HomeDrive = (() => {
 
   function drawPolyline(points, strokeStyle, lineWidth, dashPattern = [], dashOffset = 0) {
     if (!Array.isArray(points) || points.length < 2) return;
-    ctx.save();
     ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);
     for (let i = 1; i < points.length; i += 1) {
@@ -409,13 +469,14 @@ window.HomeDrive = (() => {
     if (dashPattern.length) {
       ctx.setLineDash(dashPattern);
       ctx.lineDashOffset = dashOffset;
+    } else {
+      ctx.setLineDash(_emptyDash);
     }
     ctx.lineWidth = lineWidth;
     ctx.strokeStyle = strokeStyle;
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
     ctx.stroke();
-    ctx.restore();
   }
 
   function buildBandPolygon(left, right, startRatio, endRatio) {
@@ -637,10 +698,10 @@ window.HomeDrive = (() => {
       modelProb: lerpNumber(previousLead.modelProb, currentLead.modelProb, t),
       score: lerpNumber(previousLead.score, currentLead.score, t),
       jLead: lerpNumber(previousLead.jLead, currentLead.jLead, t),
-      fcw: t < 0.5 ? previousLead.fcw : currentLead.fcw,
-      status: t < 0.5 ? previousLead.status : currentLead.status,
-      radar: t < 0.5 ? previousLead.radar : currentLead.radar,
-      radarTrackId: t < 0.5 ? previousLead.radarTrackId : currentLead.radarTrackId,
+      fcw: currentLead.fcw,
+      status: currentLead.status,
+      radar: currentLead.radar,
+      radarTrackId: currentLead.radarTrackId,
     };
   }
 
@@ -771,9 +832,13 @@ window.HomeDrive = (() => {
     return hasStream;
   }
 
+  let _lastStageReady = null;
   function setStageReady(ready) {
-    stageEl.classList.toggle("is-stream-ready", Boolean(ready));
-    videoEl.style.display = ready ? "block" : "none";
+    const r = Boolean(ready);
+    if (_lastStageReady === r) return;
+    _lastStageReady = r;
+    stageEl.classList.toggle("is-stream-ready", r);
+    videoEl.style.display = r ? "block" : "none";
   }
 
   function resetCarrotHudLayout() {
@@ -782,22 +847,36 @@ window.HomeDrive = (() => {
     driveHudCardEl.style.removeProperty("--carrot-hud-bottom");
   }
 
+  let _lastHudLeft = "";
+  let _lastHudBottom = "";
+
   function applyCarrotHudLayout(viewportRect) {
     if (!driveHudCardEl) return;
     if (window.matchMedia("(orientation: portrait)").matches) {
-      driveHudCardEl.style.removeProperty("--carrot-hud-left");
-      driveHudCardEl.style.removeProperty("--carrot-hud-bottom");
+      if (_lastHudLeft !== "" || _lastHudBottom !== "") {
+        driveHudCardEl.style.removeProperty("--carrot-hud-left");
+        driveHudCardEl.style.removeProperty("--carrot-hud-bottom");
+        _lastHudLeft = "";
+        _lastHudBottom = "";
+      }
       return;
     }
-    const stageRect = stageEl.getBoundingClientRect();
-    if (!stageRect.width || !stageRect.height) return;
-    const overlayInsetX = clamp(stageRect.width * 0.028, 16, 28);
-    const overlayInsetY = clamp(stageRect.height * 0.034, 16, 24);
-    const stageLeft = Math.round(overlayInsetX);
-    const stageBottom = Math.round(overlayInsetY);
+    const vw = viewportRect?.width || 0;
+    const vh = viewportRect?.height || 0;
+    if (!vw || !vh) return;
+    const overlayInsetX = clamp(vw * 0.028, 16, 28);
+    const overlayInsetY = clamp(vh * 0.034, 16, 24);
+    const leftVal = `${Math.round(overlayInsetX)}px`;
+    const bottomVal = `${Math.round(overlayInsetY)}px`;
 
-    driveHudCardEl.style.setProperty("--carrot-hud-left", `${stageLeft}px`);
-    driveHudCardEl.style.setProperty("--carrot-hud-bottom", `${stageBottom}px`);
+    if (_lastHudLeft !== leftVal) {
+      _lastHudLeft = leftVal;
+      driveHudCardEl.style.setProperty("--carrot-hud-left", leftVal);
+    }
+    if (_lastHudBottom !== bottomVal) {
+      _lastHudBottom = bottomVal;
+      driveHudCardEl.style.setProperty("--carrot-hud-bottom", bottomVal);
+    }
   }
 
   function syncCanvasSize(videoWidth, videoHeight, stageWidth, stageHeight) {
@@ -902,23 +981,23 @@ window.HomeDrive = (() => {
   }
 
   function createPathGradient(baseColor, canvasHeight, style) {
-    const gradient = ctx.createLinearGradient(0, canvasHeight, 0, canvasHeight * 0.32);
     const mode = finiteNumber(style?.mode, 0);
     let solidAlpha = mode === 0 ? 0.40 : 0.24;
     let midAlpha = mode === 0 ? 0.20 : 0.12;
 
-    // Test-page visibility floor:
-    // keep native path mode/color selection intact, but avoid a nearly invisible
-    // ribbon during stationary or indoor checks where only the web test view is used.
     if (mode === 0 || style?.isCruiseOff) {
       solidAlpha = Math.max(solidAlpha, TEST_PATH_VISIBILITY_SOLID_ALPHA);
       midAlpha = Math.max(midAlpha, TEST_PATH_VISIBILITY_MID_ALPHA);
     }
 
-    gradient.addColorStop(0, rgba(baseColor, solidAlpha));
-    gradient.addColorStop(0.55, rgba(baseColor, midAlpha));
-    gradient.addColorStop(1, rgba(baseColor, 0.0));
-    return gradient;
+    const cacheKey = `g:${baseColor.r},${baseColor.g},${baseColor.b}|${Math.round(canvasHeight)}|${solidAlpha}|${midAlpha}`;
+    return getCachedGradient(cacheKey, () => {
+      const gradient = ctx.createLinearGradient(0, canvasHeight, 0, canvasHeight * 0.32);
+      gradient.addColorStop(0, rgba(baseColor, solidAlpha));
+      gradient.addColorStop(0.55, rgba(baseColor, midAlpha));
+      gradient.addColorStop(1, rgba(baseColor, 0.0));
+      return gradient;
+    });
   }
 
   function drawPathRibbon(ribbon, style, canvasHeight) {
@@ -1164,7 +1243,7 @@ window.HomeDrive = (() => {
     else if (rightAssistWarn) drawRibbon(1.7, greenFill, greenStroke);
   }
 
-  function projectLeadBox(lead, modelPath, calibTransform, videoWidth, videoHeight) {
+  function projectLeadBox(lead, modelPath, calibTransform, videoWidth, videoHeight, slot = 0) {
     if (!lead?.status) return null;
     const distance = finiteNumber(lead.dRel, NaN);
     if (!Number.isFinite(distance) || distance <= 0) return null;
@@ -1178,26 +1257,41 @@ window.HomeDrive = (() => {
     const rawWidth = Math.abs(right.x - left.x);
     if (!Number.isFinite(rawWidth) || rawWidth <= 1) return null;
 
-    const centerX = (left.x + right.x) * 0.5;
-    const centerY = (left.y + right.y) * 0.5;
-    const width = clamp(rawWidth, 120, 800);
+    const rawCenterX = (left.x + right.x) * 0.5;
+    const rawCenterY = (left.y + right.y) * 0.5;
+
+    // ── Step 1: Clamp FIRST (exact C3 carrot.cc order) ──
+    // carrot.cc: _path_x = clamp(_path_x, 350, fb_w-350); _path_y = clamp(_path_y, 200, fb_h-80);
+    const _path_x = clamp(rawCenterX, 350, Math.max(350, videoWidth - 350));
+    const _path_y = clamp(rawCenterY, 200, Math.max(200, videoHeight - 80));
+    let _path_width = clamp(rawWidth, 120, 800);
+
+    // ── Step 2: EMA on clamped values (exact C3 carrot.cc order) ──
+    // carrot.cc: path_fx = path_fx * alpha + _path_x * (1-alpha);
+    const ema = leadEmaState[slot] || { fx: NaN, fy: NaN, fw: NaN, trackId: -99999 };
+    const currentTrackId = finiteNumber(lead.radarTrackId, -99999);
+    const trackChanged = ema.trackId !== currentTrackId || !Number.isFinite(ema.fx) || !Number.isFinite(ema.fy);
+    const alpha = LEAD_EMA_ALPHA;  // C3 uses single alpha=0.85
+
+    const path_fx = trackChanged ? _path_x : ema.fx * alpha + _path_x * (1 - alpha);
+    const path_fy = trackChanged ? _path_y : ema.fy * alpha + _path_y * (1 - alpha);
+    const path_fw = trackChanged ? _path_width : ema.fw * alpha + _path_width * (1 - alpha);
+    leadEmaState[slot] = { fx: path_fx, fy: path_fy, fw: path_fw, trackId: currentTrackId };
+
+    // ── Step 3: Build box from smoothed values ──
+    const width = path_fw;
     const sidePad = 10;
     const height = Math.max(width * 0.8, 12);
-    const marginX = Math.min(videoWidth * 0.35, 350);
-    const topMargin = Math.min(videoHeight * 0.28, 200);
-    const bottomMargin = Math.max(videoHeight * 0.14, 80);
-    const clampedCenterX = clamp(centerX, marginX, Math.max(marginX, videoWidth - marginX));
-    const clampedCenterY = clamp(centerY, topMargin, Math.max(topMargin, videoHeight - bottomMargin));
 
     return {
       rect: {
-        x: clampedCenterX - width * 0.5 - sidePad,
-        y: clampedCenterY - height,
+        x: path_fx - width * 0.5 - sidePad,
+        y: path_fy - height,
         width: width + sidePad * 2,
         height,
       },
-      centerX: clampedCenterX,
-      centerY: clampedCenterY,
+      centerX: path_fx,
+      centerY: path_fy,
       radar: Boolean(lead.radar),
       radarTrackId: finiteNumber(lead.radarTrackId, -99999),
       dRel: distance,
@@ -1208,32 +1302,57 @@ window.HomeDrive = (() => {
   function drawLeadBoxCard(box, strokeColor, fillColor, primary = true) {
     if (!box?.rect) return;
     const { x, y, width, height } = box.rect;
-    fillRoundedRect(ctx, x, y, width, height, primary ? 16 : 12, fillColor);
-    strokeRoundedRect(ctx, x, y, width, height, primary ? 16 : 12, strokeColor, primary ? 3.2 : 2.2);
-    if (primary) {
-      strokeRoundedRect(ctx, x + 5, y + 5, width - 10, height - 10, 12, "rgba(255,255,255,0.12)", 1.2);
-    }
+    const r = primary ? 15 : 12;
+    const sw = primary ? 3.0 : 2.2;
+    // C3 style: fill + stroke (carrot.cc ui_fill_rect with stroke color)
+    fillRoundedRect(ctx, x, y, width, height, r, fillColor);
+    strokeRoundedRect(ctx, x, y, width, height, r, strokeColor, sw);
   }
 
-  function drawLeadDistanceBadge(box, text, accentColor, textColor = "#ffffff") {
-    if (!box?.rect || !text) return;
-    const badgeWidth = 72;
-    const badgeHeight = 34;
-    const badgeX = box.centerX - badgeWidth * 0.5;
-    const badgeY = box.rect.y - badgeHeight - 12;
-    fillRoundedRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, 14, "rgba(18, 23, 31, 0.80)");
-    strokeRoundedRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, 14, accentColor, 2.2);
-    ctx.save();
-    ctx.font = `800 22px ${HUD_TEXT_FONT}`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = "rgba(0,0,0,0.82)";
-    ctx.fillStyle = textColor;
-    ctx.lineWidth = 4;
-    ctx.strokeText(text, box.centerX, badgeY + badgeHeight * 0.54);
-    ctx.fillText(text, box.centerX, badgeY + badgeHeight * 0.54);
-    ctx.restore();
+  // C3-style dual distance badges: radar left (red/orange) + vision right (blue)
+  function drawLeadDistanceBadgesC3(box, radarDist, visionDist, isLeadScc, textColor = "#ffffff") {
+    if (!box?.rect) return;
+    const cx = box.centerX;
+    const baseY = box.rect.y + box.rect.height + 8;
+    const badgeH = 34;
+    const gap = 6;
+    const fontSize = 22;
+
+    const drawBadge = (text, centerX, bgColor) => {
+      const charW = fontSize * 0.62;
+      const w = Math.max(52, 16 + text.length * charW);
+      const bx = centerX - w * 0.5;
+      fillRoundedRect(ctx, bx, baseY, w, badgeH, 12, bgColor);
+      ctx.save();
+      ctx.font = `800 ${fontSize}px ${HUD_TEXT_FONT}`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = "rgba(0,0,0,0.82)";
+      ctx.fillStyle = textColor;
+      ctx.lineWidth = 4;
+      ctx.strokeText(text, centerX, baseY + badgeH * 0.54);
+      ctx.fillText(text, centerX, baseY + badgeH * 0.54);
+      ctx.restore();
+    };
+
+    const hasRadar = radarDist > 0;
+    const hasVision = visionDist > 0;
+    const radarColor = isLeadScc ? "rgba(255,59,48,0.92)" : "rgba(255,167,38,0.92)";
+    const visionColor = "rgba(61,123,255,0.92)";
+
+    if (hasRadar && hasVision) {
+      const rText = radarDist < 10 ? radarDist.toFixed(1) : radarDist.toFixed(0);
+      const vText = visionDist < 10 ? visionDist.toFixed(1) : visionDist.toFixed(0);
+      drawBadge(rText, cx - 40 - gap * 0.5, radarColor);
+      drawBadge(vText, cx + 40 + gap * 0.5, visionColor);
+    } else if (hasRadar) {
+      const rText = radarDist < 10 ? radarDist.toFixed(1) : radarDist.toFixed(0);
+      drawBadge(rText, cx, radarColor);
+    } else if (hasVision) {
+      const vText = visionDist < 10 ? visionDist.toFixed(1) : visionDist.toFixed(0);
+      drawBadge(vText, cx, visionColor);
+    }
   }
 
   function leadStateAccentColor(xState) {
@@ -1478,19 +1597,22 @@ window.HomeDrive = (() => {
     const showRadarInfo = finiteNumber(paramsState.ShowRadarInfo, defaultParams.ShowRadarInfo);
     const leadState = getLeadStateText(overlayState, hudState);
 
-    const leadOneBox = projectLeadBox(radarState?.leadOne, modelPath, calibTransform, videoWidth, videoHeight);
+    const leadOneBox = projectLeadBox(radarState?.leadOne, modelPath, calibTransform, videoWidth, videoHeight, 0);
     if (leadOneBox) {
       const isLeadScc = leadOneBox.radarTrackId < 1;
-      const strokeColor = !leadOneBox.radar ? "#3d7bff" : (isLeadScc ? "#ff3b30" : "#ffa726");
+      // Color logic: same as C3 carrot.cc (rcolor = isLeadSCC ? RED : ORANGE, !radar → BLUE)
+      const strokeColor = !leadOneBox.radar
+        ? "rgba(61,123,255,0.96)"
+        : (isLeadScc ? "rgba(255,59,48,0.96)" : "rgba(255,167,38,0.96)");
       drawLeadBoxCard(leadOneBox, strokeColor, "rgba(0,0,0,0.20)", true);
 
+      // C3-style distance badges: radar (red/orange bg) + vision (blue bg) side by side below box
       if (showRadarInfo > 0 && leadState?.showDistanceBadge !== false) {
         const radarDist = leadOneBox.radar ? Math.max(0, finiteNumber(radarState?.leadOne?.dRel, 0)) : 0;
         const visionDist = leadOneBox.modelProb > 0.5 ? Math.max(0, leadOneBox.dRel - 1.52) : 0;
-        const primaryDistance = radarDist > 0 ? radarDist : visionDist;
-        if (primaryDistance > 0) {
+        if (radarDist > 0 || visionDist > 0) {
           const badgeTextColor = leadState?.xState === 0 ? "#ffffff" : (leadState?.xState === 1 ? "#b0b0b0" : "#23d55d");
-          drawLeadDistanceBadge(leadOneBox, primaryDistance.toFixed(1), strokeColor, badgeTextColor);
+          drawLeadDistanceBadgesC3(leadOneBox, radarDist, visionDist, isLeadScc, badgeTextColor);
         }
       }
 
@@ -1499,15 +1621,16 @@ window.HomeDrive = (() => {
       }
     }
 
+    // LeadTwo: same logic as C3 (radar && dRel > leadOne.dRel + 3)
     const leadTwo = radarState?.leadTwo;
     const validLeadTwo = Boolean(leadTwo?.status) &&
       Boolean(leadTwo?.radar) &&
       finiteNumber(leadTwo?.dRel, 0) > (finiteNumber(radarState?.leadOne?.dRel, 0) + 3) &&
       finiteNumber(leadTwo?.radarTrackId, -99999) !== finiteNumber(radarState?.leadOne?.radarTrackId, -99998);
     if (validLeadTwo) {
-      const leadTwoBox = projectLeadBox(leadTwo, modelPath, calibTransform, videoWidth, videoHeight);
+      const leadTwoBox = projectLeadBox(leadTwo, modelPath, calibTransform, videoWidth, videoHeight, 1);
       if (leadTwoBox) {
-        drawLeadBoxCard(leadTwoBox, "#b68a3a", "rgba(0,0,0,0.20)", false);
+        drawLeadBoxCard(leadTwoBox, "rgba(182,138,58,0.96)", "rgba(0,0,0,0.20)", false);
       }
     }
     drawRadarTargets(radarState, modelPath, calibTransform);
@@ -1844,22 +1967,54 @@ window.HomeDrive = (() => {
     }
   }
 
+  /* ── Phase 1-4: ring buffer for plot history ── */
+  const _plotRing = [
+    new Float64Array(PLOT_MAX_POINTS),
+    new Float64Array(PLOT_MAX_POINTS),
+    new Float64Array(PLOT_MAX_POINTS),
+  ];
+  let _plotRingHead = 0;
+  let _plotRingSize = 0;
+
+  function _plotRingPush(values) {
+    const writeIdx = (_plotRingHead + _plotRingSize) % PLOT_MAX_POINTS;
+    for (let i = 0; i < 3; i += 1) {
+      _plotRing[i][writeIdx] = finiteNumber(values[i], 0);
+    }
+    if (_plotRingSize < PLOT_MAX_POINTS) _plotRingSize++;
+    else _plotRingHead = (_plotRingHead + 1) % PLOT_MAX_POINTS;
+  }
+
+  function _plotRingGet(series, idx) {
+    return _plotRing[series][(_plotRingHead + idx) % PLOT_MAX_POINTS];
+  }
+
+  function _plotRingReset() {
+    _plotRingHead = 0;
+    _plotRingSize = 0;
+  }
+
   function updatePlotHistory(plotData) {
     if (!plotData) {
       lastPlotMode = -1;
+      _plotRingReset();
       plotHistory = [[], [], []];
       return;
     }
 
     if (plotData.mode !== lastPlotMode) {
       lastPlotMode = plotData.mode;
+      _plotRingReset();
       plotHistory = [[], [], []];
     }
 
-    for (let i = 0; i < 3; i += 1) {
-      plotHistory[i].push(finiteNumber(plotData.values[i], 0));
-      if (plotHistory[i].length > PLOT_MAX_POINTS) {
-        plotHistory[i].shift();
+    _plotRingPush(plotData.values);
+    // sync plotHistory arrays for getPlotBounds/drawPlot compatibility
+    for (let s = 0; s < 3; s += 1) {
+      const arr = plotHistory[s];
+      arr.length = _plotRingSize;
+      for (let i = 0; i < _plotRingSize; i += 1) {
+        arr[i] = _plotRingGet(s, i);
       }
     }
   }
@@ -1977,8 +2132,22 @@ window.HomeDrive = (() => {
     const stageWidth = Math.max(1, stageEl.clientWidth);
     const stageHeight = Math.max(1, stageEl.clientHeight);
 
+    if (!window.CARROT_VISION_ACTIVE) {
+      if (_lastRenderSig !== "vision-disabled") {
+        _lastRenderSig = "vision-disabled";
+        setStageReady(false);
+        clearOverlay(canvasEl.width || 1, canvasEl.height || 1);
+        clearHud(hudCanvasEl.width || 1, hudCanvasEl.height || 1);
+        setStatus("주행 비전을 켜려면 화면 중앙의 시작 버튼을 클릭하세요.");
+        setMeta("");
+        setDebug("");
+      }
+      return;
+    }
+
     const hasStream = syncSourceStream();
     if (!hasStream || !videoEl.videoWidth || !videoEl.videoHeight) {
+      _lastRenderSig = "";
       setStageReady(false);
       clearOverlay(canvasEl.width || 1, canvasEl.height || 1);
       clearHud(hudCanvasEl.width || 1, hudCanvasEl.height || 1);
@@ -1996,20 +2165,26 @@ window.HomeDrive = (() => {
       return;
     }
 
+    /* Phase 1-2: dirty check — skip if data unchanged */
+    const rawOverlayState = window.CarrotOverlayState || {};
+    const rawHudState = window.CarrotHudState || {};
+    const sig = _quickDataSignature(rawHudState, rawOverlayState);
+    if (!_forceNextRender && sig === _lastRenderSig) return;
+    _lastRenderSig = sig;
+    _forceNextRender = false;
+
     const videoWidth = videoEl.videoWidth;
     const videoHeight = videoEl.videoHeight;
     syncCanvasSize(videoWidth, videoHeight, stageWidth, stageHeight);
 
-    const rawOverlayState = window.CarrotOverlayState || {};
-    const rawHudState = window.CarrotHudState || {};
+    // rawOverlayState and rawHudState already read above in dirty check
     const runtimeState = mergeRuntimeState(rawHudState, rawOverlayState);
     let overlayState = runtimeState.overlayState;
     const hudState = runtimeState.hudState;
     const brokerServices = runtimeState.brokerServices;
-    overlayState = {
-      ...overlayState,
-      radarState: getInterpolatedRadarState(overlayState?.radarState, performance.now()),
-    };
+    // Use raw radar state directly — no interpolation (matches C3/CarrotLink).
+    // C3 reads SubMaster every frame; CarrotLink reads snapshot directly.
+    // Position smoothing is handled in projectLeadBox() via EMA.
     const model = overlayState.modelV2 || null;
     const liveCalibration = overlayState.liveCalibration || null;
     const roadCameraState = overlayState.roadCameraState || null;
@@ -2062,6 +2237,10 @@ window.HomeDrive = (() => {
     drawHudBottomText(stageWidth, stageHeight, viewportRect, selectedPath.latDebugText, hudState, pathStyle.mode);
   }
 
+  /* Phase 3: 20fps render cap — camera is 20fps, no need to render faster */
+  const RENDER_INTERVAL_MS = 50; // 1000/20 = 50ms
+  let _lastRenderTime = 0;
+
   function scheduleNext() {
     if (isActive()) {
       loopToken = window.requestAnimationFrame(runLoop);
@@ -2070,9 +2249,13 @@ window.HomeDrive = (() => {
     loopToken = window.setTimeout(() => runLoop(performance.now()), 180);
   }
 
-  function runLoop() {
+  function runLoop(timestamp) {
     if (isActive()) {
-      renderActiveFrame();
+      const elapsed = timestamp - _lastRenderTime;
+      if (elapsed >= RENDER_INTERVAL_MS) {
+        _lastRenderTime = timestamp;
+        renderActiveFrame();
+      }
     } else {
       resetCarrotHudLayout();
       syncSourceStream();
@@ -2084,6 +2267,9 @@ window.HomeDrive = (() => {
     transformSignature = "";
     overlaySizeSignature = "";
     hudSizeSignature = "";
+    _forceNextRender = true;
+    _gradientCache.clear();
+    _rgbaCache.clear();
   }
 
   zoomButtons.forEach((button) => {
