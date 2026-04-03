@@ -29,6 +29,7 @@ def make_app() -> web.Application:
   app.router.add_post("/stream", routes_api.proxy_stream)
 
   # ws
+  app.router.add_get("/ws/raw_multiplex", routes_ws.ws_raw_multiplex)
   app.router.add_get("/ws/raw/{service}", routes_ws.ws_raw)
   app.router.add_get("/ws/camera/{camera}", routes_ws.ws_camera)
   app.router.add_get("/ws/terminal", routes_ws.ws_terminal)

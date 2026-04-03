@@ -89,11 +89,11 @@
   width: var(--hud-card-width, var(--hud-max-width));
   max-width: none;
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.008) 38%, transparent 72%),
-    linear-gradient(145deg, rgba(17,68,46,0.87), rgba(10,40,27,0.80));
+    linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.006) 38%, transparent 72%),
+    linear-gradient(145deg, rgba(17,68,46,0.68), rgba(10,40,27,0.60));
   box-shadow: none;
-  border-color: rgba(255,255,255,0.12);
-  transform: scale(0.8);
+  border-color: rgba(255,255,255,0.08);
+  transform: scale(0.58);
   transform-origin: bottom left;
 }
 

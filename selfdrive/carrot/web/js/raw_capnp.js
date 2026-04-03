@@ -1,6 +1,10 @@
 "use strict";
 
-window.CarrotRawCapnp = (() => {
+const carrotRawCapnpGlobal = typeof globalThis !== "undefined"
+  ? globalThis
+  : (typeof self !== "undefined" ? self : window);
+
+carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
   const HUD_GEAR_NAMES = ["unknown", "park", "drive", "neutral", "reverse", "sport", "low", "brake", "eco", "manumatic"];
   const HUD_SERVICES = [
     "carState",

@@ -47,6 +47,9 @@
 
   let hudLayoutBound = false;
   let hudLayoutRaf = 0;
+  let lastHudLabelLang = "";
+  let lastHudBarsCount = -1;
+  let lastHudTempSignature = "";
 
   function getHudCard() {
     return $("driveHudCard");
@@ -495,6 +498,8 @@
     if (!wrap) return;
     const bars = wrap.querySelectorAll(".hudGapBar");
     const count = clamp(Number(n) || 0, 0, bars.length);
+    if (lastHudBarsCount === count) return;
+    lastHudBarsCount = count;
     bars.forEach((bar, index) => {
       bar.classList.toggle("is-on", index < count);
     });
@@ -509,21 +514,30 @@
     const reasonEl = $("hudTempReason");
     const speedEl = $("hudTempSpeed");
     if (!reasonEl || !speedEl) return;
+    const lang = currentLang();
 
     if (!temp || temp.speed == null || !isFinite(temp.speed)) {
-      reasonEl.textContent = getHudLabels().temp;
-      speedEl.textContent = "--";
-      reasonEl.style.color = "rgba(255,255,255,0.84)";
-      speedEl.style.color = "rgba(255,255,255,0.88)";
+      const nextSignature = `${lang}|idle`;
+      if (lastHudTempSignature === nextSignature) return;
+      lastHudTempSignature = nextSignature;
+      const labels = getHudLabels();
+      if (reasonEl.textContent !== labels.temp) reasonEl.textContent = labels.temp;
+      if (speedEl.textContent !== "--") speedEl.textContent = "--";
+      if (reasonEl.style.color !== "rgba(255,255,255,0.84)") reasonEl.style.color = "rgba(255,255,255,0.84)";
+      if (speedEl.style.color !== "rgba(255,255,255,0.88)") speedEl.style.color = "rgba(255,255,255,0.88)";
       return;
     }
 
     const reason = String(temp.source || getHudLabels().temp).trim();
     const color = temp.is_decel ? "#FFC94A" : "#34C96E";
-    reasonEl.textContent = reason || "TEMP";
-    speedEl.textContent = `${Math.round(temp.speed)}`;
-    reasonEl.style.color = color;
-    speedEl.style.color = color;
+    const speedText = `${Math.round(temp.speed)}`;
+    const nextSignature = `${lang}|${reason || "TEMP"}|${speedText}|${color}`;
+    if (lastHudTempSignature === nextSignature) return;
+    lastHudTempSignature = nextSignature;
+    if (reasonEl.textContent !== (reason || "TEMP")) reasonEl.textContent = reason || "TEMP";
+    if (speedEl.textContent !== speedText) speedEl.textContent = speedText;
+    if (reasonEl.style.color !== color) reasonEl.style.color = color;
+    if (speedEl.style.color !== color) speedEl.style.color = color;
   }
 
   function setSpeed(vEgoKph) {
@@ -551,7 +565,10 @@
     setText("hudDiskVal", diskPct == null || !isFinite(diskPct) ? "--.-V" : `${Number(diskPct).toFixed(1)}V`);
   }
 
-  function syncStaticHudText() {
+  function syncStaticHudText(force = false) {
+    const lang = currentLang();
+    if (!force && lastHudLabelLang === lang) return;
+    lastHudLabelLang = lang;
     const labels = getHudLabels();
     setText("hudSpeedLabel", labels.speed);
     setText("hudSetSpeedLabel", labels.setSpeed);
@@ -561,7 +578,7 @@
   const DrivingHud = {
     init() {
       bindHudLayout();
-      syncStaticHudText();
+      syncStaticHudText(true);
       setMetrics(null, null, null);
       setSpeed(null);
       setSetSpeed(null);
@@ -597,7 +614,7 @@
     },
 
     renderText() {
-      syncStaticHudText();
+      syncStaticHudText(true);
       setDriveMode("", "normal");
       setRoadLimit(null, false);
     },
