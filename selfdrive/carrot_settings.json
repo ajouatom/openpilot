@@ -1589,17 +1589,17 @@
       "group": "시작",
       "name": "CanfdHDA2",
       "title": "CANFD HDA2지원(0)",
-      "descr": "1: HDA2 차량\n 2: HDA2 + BSM 차량",
+      "descr": "1: HDA2 차량",
       "egroup": "START",
       "etitle": "CANFD HDA2(0)",
-      "edescr": "0:HDA1, 1: HDA2, 2: HDA2+BSM",
+      "edescr": "0:HDA1, 1: HDA2",
       "min": 0,
-      "max": 2,
+      "max": 1,
       "default": 0,
       "unit": 1,
       "cgroup": "启动设置",
       "ctitle": "CANFD HDA2 (0)",
-      "cdescr": "0: HDA1, 1: HDA2, 2: HDA2+BSM"
+      "cdescr": "0: HDA1, 1: HDA2"
     },
     {
       "group": "시작",
