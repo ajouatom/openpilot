@@ -1623,6 +1623,19 @@ body[data-page="carrot"] #driveHudCard {
   display: none;
 }
 
+.vision-start-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 50;
+  transition: opacity 0.3s ease;
+}
+
 body[data-page="carrot"] #driveHudCard.driveHudCard--inline {
   position: relative !important;
   inset: auto !important;
@@ -1675,6 +1688,12 @@ body[data-page="carrot"] .carrot-hud-dock {
   overflow: hidden;
 }
 
+@media (orientation: landscape) {
+  body[data-page="carrot"] .carrot-hud-dock {
+    display: none !important;
+  }
+}
+
 body[data-page="carrot"] #driveHudCard.driveHudCard--inline .hudWrap {
   margin-inline: auto;
 }
@@ -1687,6 +1706,7 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--overlay {
   top: auto !important;
   width: auto;
   max-width: calc(100% - (var(--carrot-hud-left, 12px) * 2));
+  z-index: 60;
 }
 
 body[data-page="carrot"] #driveHudCard.driveHudCard--overlay .hudWrap {
@@ -1754,6 +1774,7 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--overlay .hudWrap {
     linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0)),
     #04070c;
   box-shadow: 0 20px 48px rgba(0, 0, 0, 0.24);
+  contain: layout style;
 }
 
 .carrot-stage__video,
@@ -1818,6 +1839,7 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--overlay .hudWrap {
   transform-origin: 0 0;
   will-change: transform;
   pointer-events: none;
+  contain: strict;
 }
 
 .carrot-stage__hud {

@@ -825,11 +825,13 @@ function showPage(page, pushHistory = false, transition = null) {
     else if (typeof syncSettingViewportLayout === "function" && typeof isCompactLandscapeMode === "function" && isCompactLandscapeMode()) {
       syncSettingViewportLayout().catch(() => {});
     } else if (pushHistory || !CURRENT_GROUP) showSettingScreen("groups", false);
+    loadCurrentCar().catch(() => {});
   }
 
   if (page === "car") {
     showCarScreen("makers", false);
     if (!CARS) loadCars();
+    loadCurrentCar().catch(() => {});
   }
   if (page === "tools") {
     initToolsPage();

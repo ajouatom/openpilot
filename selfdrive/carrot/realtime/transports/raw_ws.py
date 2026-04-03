@@ -21,10 +21,26 @@ class RawWsHub:
     self._tasks: dict[str, asyncio.Task] = {}
     self._sockets: dict[str, Any] = {}
     self._send_failures: dict[str, dict[web.WebSocketResponse, int]] = {}
+    self._last_send_time: dict[str, float] = {}
     self._lock = asyncio.Lock()
 
   def is_allowed_service(self, service: str) -> bool:
     return is_supported_raw_service(service)
+
+  # Phase 2-2: per-service throttle intervals (seconds)
+  # 0 = no throttle (send every message)
+  _THROTTLE_MAP = {
+    "modelV2": 0,             # camera-synced, don't throttle
+    "roadCameraState": 0,     # camera-synced
+    "liveCalibration": 0.25,  # slow-changing
+    "liveParameters": 0.25,
+    "liveTorqueParameters": 0.25,
+    "liveDelay": 0.25,
+  }
+  _THROTTLE_DEFAULT = 0.05  # 20Hz for everything else
+
+  def _throttle_interval(self, service: str) -> float:
+    return self._THROTTLE_MAP.get(service, self._THROTTLE_DEFAULT)
 
   def client_count(self, service: str | None = None) -> int:
     if service is None:
@@ -103,6 +119,15 @@ class RawWsHub:
         if payload is None:
           await asyncio.sleep(self.ACTIVE_POLL_SLEEP)
           continue
+
+        # Phase 2-2: per-service throttle — skip if too soon since last send
+        now = asyncio.get_running_loop().time()
+        interval = self._throttle_interval(service)
+        last_send = self._last_send_time.get(service, 0.0)
+        if interval > 0 and (now - last_send) < interval:
+          await asyncio.sleep(self.ACTIVE_POLL_SLEEP)
+          continue
+        self._last_send_time[service] = now
 
         stale: list[web.WebSocketResponse] = []
         client_list = list(clients)

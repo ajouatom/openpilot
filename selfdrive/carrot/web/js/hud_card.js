@@ -7,7 +7,9 @@
   function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
   function setText(id, v) {
     const el = $(id);
-    if (el) el.textContent = v == null ? "" : String(v);
+    if (!el) return;
+    const s = v == null ? "" : String(v);
+    if (el.textContent !== s) el.textContent = s;
   }
 
   const SURFACE_HOME = "homePreview";
@@ -364,15 +366,21 @@
     };
   }
 
+  let _hudProfileSig = "";
+
   function applyHudProfile() {
     const root = getHudRoot();
     const card = getHudCard();
     if (!root || !card) return;
 
     const surface = getHudSurface();
+    const constraints = getHudConstraints(surface);
+    const sig = `${surface}|${Math.round(constraints.width)}|${Math.round(constraints.height)}`;
+    if (_hudProfileSig === sig) return;
+    _hudProfileSig = sig;
+
     mountHudToSurface(surface);
 
-    const constraints = getHudConstraints(surface);
     const profile = buildHudProfile(constraints.width, constraints.height, surface);
     const style = root.style;
     const portraitInline = surface === SURFACE_INLINE && !isOverlayMount();
@@ -447,7 +455,7 @@
     const el = $("hudSignalDot");
     if (!el) return;
     const state = String(kind || "off").toLowerCase();
-    el.dataset.state = state;
+    if (el.dataset.state !== state) el.dataset.state = state;
   }
 
   function setDriveMode(name, kind) {
@@ -456,8 +464,8 @@
     const normalized = String(kind || "").toLowerCase();
     const labels = DRIVE_MODE_TEXT[currentLang()] || DRIVE_MODE_TEXT.ko;
     const translated = labels[normalized] || name || labels.normal;
-    el.textContent = translated;
-    el.dataset.kind = normalized || "normal";
+    if (el.textContent !== translated) el.textContent = translated;
+    if (el.dataset.kind !== (normalized || "normal")) el.dataset.kind = normalized || "normal";
   }
 
   function setRoadLimit(speedKph, over, blink) {
@@ -465,15 +473,17 @@
     if (!el) return;
     const limitLabel = getHudLabels().limit;
     const text = speedKph == null || !isFinite(speedKph) ? `${limitLabel} --` : `${limitLabel} ${Math.round(speedKph)}`;
-    el.textContent = text;
-    el.dataset.over = over ? "1" : "0";
+    if (el.textContent !== text) el.textContent = text;
+    const overStr = over ? "1" : "0";
+    if (el.dataset.over !== overStr) el.dataset.over = overStr;
     setCameraBlink(blink);
   }
 
   function setCameraBlink(on) {
     const root = getHudRoot();
     if (!root) return;
-    root.dataset.cameraBlink = on ? "1" : "0";
+    const v = on ? "1" : "0";
+    if (root.dataset.cameraBlink !== v) root.dataset.cameraBlink = v;
   }
 
   function setConnectivity(text) {
@@ -529,8 +539,10 @@
     if (!el) return;
     const value = String(txt || "U").trim().toUpperCase() || "U";
     const unknown = value === "U" || value === "X";
-    el.textContent = unknown ? "–" : value;
-    el.dataset.unknown = unknown ? "1" : "0";
+    const display = unknown ? "\u2013" : value;
+    if (el.textContent !== display) el.textContent = display;
+    const unknownStr = unknown ? "1" : "0";
+    if (el.dataset.unknown !== unknownStr) el.dataset.unknown = unknownStr;
   }
 
   function setMetrics(cpuTempC, memPct, diskPct) {
