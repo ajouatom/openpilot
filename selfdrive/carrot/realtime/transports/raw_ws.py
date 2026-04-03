@@ -6,6 +6,7 @@ from typing import Any
 from aiohttp import web
 
 from ..raw_services import is_supported_raw_service
+from ..raw_protocol import encode_raw_multiplex_frame
 
 
 class RawWsHub:
@@ -22,6 +23,9 @@ class RawWsHub:
     self._sockets: dict[str, Any] = {}
     self._send_failures: dict[str, dict[web.WebSocketResponse, int]] = {}
     self._last_send_time: dict[str, float] = {}
+    self._ws_modes: dict[web.WebSocketResponse, str] = {}
+    self._ws_services: dict[web.WebSocketResponse, set[str]] = {}
+    self._ws_send_locks: dict[web.WebSocketResponse, asyncio.Lock] = {}
     self._lock = asyncio.Lock()
 
   def is_allowed_service(self, service: str) -> bool:
@@ -31,7 +35,11 @@ class RawWsHub:
   # 0 = no throttle (send every message)
   _THROTTLE_MAP = {
     "modelV2": 0,             # camera-synced, don't throttle
-    "roadCameraState": 0,     # camera-synced
+    "roadCameraState": 0.25,  # metadata/debug only on web HUD
+    "deviceState": 0.5,       # slow-changing HUD stats
+    "peripheralState": 0.5,
+    "gpsLocationExternal": 0.5,
+    "selfdriveState": 0.2,
     "liveCalibration": 0.25,  # slow-changing
     "liveParameters": 0.25,
     "liveTorqueParameters": 0.25,
@@ -50,13 +58,33 @@ class RawWsHub:
   async def register(self, service: str, ws: web.WebSocketResponse) -> None:
     self._clients.setdefault(service, set()).add(ws)
     self._send_failures.setdefault(service, {})
+    self._ws_modes.setdefault(ws, "single")
+    self._ws_services.setdefault(ws, set()).add(service)
+    self._ws_send_locks.setdefault(ws, asyncio.Lock())
     await self.ensure_service_task(service)
 
-  async def unregister(self, service: str, ws: web.WebSocketResponse) -> None:
-    self._clients.get(service, set()).discard(ws)
-    self._send_failures.get(service, {}).pop(ws, None)
+  async def register_many(self, services: list[str], ws: web.WebSocketResponse) -> None:
+    unique_services = [service for service in dict.fromkeys(services) if service]
+    self._ws_modes[ws] = "multiplex"
+    self._ws_services[ws] = set(unique_services)
+    self._ws_send_locks.setdefault(ws, asyncio.Lock())
+    for service in unique_services:
+      self._clients.setdefault(service, set()).add(ws)
+      self._send_failures.setdefault(service, {})
+      await self.ensure_service_task(service)
+
+  async def unregister_client(self, ws: web.WebSocketResponse, *, close_code: int | None = None, close_message: bytes | None = None) -> None:
+    services = self._ws_services.pop(ws, set())
+    for service in services:
+      self._clients.get(service, set()).discard(ws)
+      self._send_failures.get(service, {}).pop(ws, None)
+    self._ws_modes.pop(ws, None)
+    self._ws_send_locks.pop(ws, None)
     try:
-      await ws.close()
+      if close_code is not None:
+        await ws.close(code=close_code, message=close_message or b"")
+      else:
+        await ws.close()
     except Exception:
       pass
 
@@ -78,15 +106,28 @@ class RawWsHub:
         pass
       except Exception:
         pass
-    for service, clients in self._clients.items():
-      for ws in tuple(clients):
-        try:
-          await ws.close()
-        except Exception:
-          pass
+    all_clients: set[web.WebSocketResponse] = set(self._ws_services.keys())
+    for clients in self._clients.values():
+      all_clients.update(clients)
+    for ws in tuple(all_clients):
+      try:
+        await ws.close()
+      except Exception:
+        pass
+    for clients in self._clients.values():
       clients.clear()
-      self._send_failures.get(service, {}).clear()
+    self._ws_modes.clear()
+    self._ws_services.clear()
+    self._ws_send_locks.clear()
+    self._send_failures.clear()
     self._sockets.clear()
+
+  async def _send_payload(self, service: str, ws: web.WebSocketResponse, payload: bytes) -> None:
+    lock = self._ws_send_locks.setdefault(ws, asyncio.Lock())
+    mode = self._ws_modes.get(ws, "single")
+    wire_payload = encode_raw_multiplex_frame(service=service, payload=payload) if mode == "multiplex" else payload
+    async with lock:
+      await ws.send_bytes(wire_payload)
 
   async def _service_loop(self, service: str) -> None:
     idle_started_at = 0.0
@@ -132,7 +173,7 @@ class RawWsHub:
         stale: list[web.WebSocketResponse] = []
         client_list = list(clients)
         results = await asyncio.gather(
-          *[asyncio.wait_for(ws.send_bytes(payload), timeout=self.SEND_TIMEOUT) for ws in client_list],
+          *[asyncio.wait_for(self._send_payload(service, ws, payload), timeout=self.SEND_TIMEOUT) for ws in client_list],
           return_exceptions=True,
         )
         failures = self._send_failures.setdefault(service, {})
@@ -146,12 +187,7 @@ class RawWsHub:
             stale.append(ws)
 
         for ws in stale:
-          self._clients.get(service, set()).discard(ws)
-          failures.pop(ws, None)
-          try:
-            await ws.close(code=1011, message=b"raw_send_timeout")
-          except Exception:
-            pass
+          await self.unregister_client(ws, close_code=1011, close_message=b"raw_send_timeout")
     except asyncio.CancelledError:
       raise
     finally:

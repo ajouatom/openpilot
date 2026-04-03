@@ -46,6 +46,10 @@ window.HomeDrive = (() => {
   ];
   const HUD_TEXT_FONT = "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
   const DISPLAY_MODE_STORAGE_KEY = "home_drive_display_mode_index";
+  const PHONE_PORTRAIT_DPR_CAP = 1.0;
+  const MOBILE_DPR_CAP = 1.25;
+  const DESKTOP_DPR_CAP = 1.5;
+  const RENDER_INTERVAL_MS = 50;
   const PATH_PALETTE = [
     { r: 255, g: 82, b: 82 },
     { r: 255, g: 153, b: 0 },
@@ -93,7 +97,6 @@ window.HomeDrive = (() => {
 
   let paramsState = { ...defaultParams };
   let displayModeIndex = 1;
-  let loopToken = 0;
   let overlaySizeSignature = "";
   let hudSizeSignature = "";
   let transformSignature = "";
@@ -101,7 +104,6 @@ window.HomeDrive = (() => {
   let lastMeta = "";
   let lastDebug = "";
   let lastPlotMode = -1;
-  let plotHistory = [[], [], []];
   let radarInterpolationState = {
     signature: "",
     previous: null,
@@ -118,26 +120,112 @@ window.HomeDrive = (() => {
   ];
 
   /* ── Phase 1-2: dirty check ── */
-  let _lastRenderSig = "";
+  let _lastOverlaySig = "";
+  let _lastHudSig = "";
+  let _lastPlotInputSig = "";
   let _forceNextRender = true;
+  let _lastRenderTime = 0;
+  let _renderRafId = null;
+  let _renderTimerId = null;
+  let _renderVideoFrameId = null;
+  let _pendingRenderState = {
+    force: true,
+    overlayDirty: true,
+    hudDirty: true,
+  };
+  const _mergeRuntimeCache = {
+    refs: null,
+    result: null,
+  };
 
-  function _quickDataSignature(hudState, overlayState) {
-    const cs = hudState?.carState;
-    const cm = hudState?.carrotMan;
+  function pathDataSignature(pathData) {
+    const x = Array.isArray(pathData?.x) ? pathData.x : [];
+    const y = Array.isArray(pathData?.y) ? pathData.y : [];
+    if (!x.length || !y.length) return "none";
+    const lastIndex = Math.min(x.length, y.length) - 1;
+    const midIndex = Math.min(lastIndex, Math.max(0, Math.floor(lastIndex / 2)));
+    const farIndex = Math.min(lastIndex, 16);
+    return [
+      x.length,
+      finiteNumber(x[0], 0).toFixed(2),
+      finiteNumber(y[0], 0).toFixed(2),
+      finiteNumber(x[midIndex], 0).toFixed(2),
+      finiteNumber(y[midIndex], 0).toFixed(2),
+      finiteNumber(x[farIndex], 0).toFixed(2),
+      finiteNumber(y[farIndex], 0).toFixed(2),
+      finiteNumber(x[lastIndex], 0).toFixed(2),
+      finiteNumber(y[lastIndex], 0).toFixed(2),
+    ].join("|");
+  }
+
+  function plotInputSignature(plotData) {
+    if (!plotData) return "off";
+    return [
+      plotData.mode,
+      plotData.title,
+      finiteNumber(plotData.values?.[0], 0).toFixed(3),
+      finiteNumber(plotData.values?.[1], 0).toFixed(3),
+      finiteNumber(plotData.values?.[2], 0).toFixed(3),
+    ].join("|");
+  }
+
+  function overlayDataSignature(hudState, overlayState, selectedPath, pathStyle, showLaneInfo) {
     const model = overlayState?.modelV2;
     const radar = overlayState?.radarState;
-    // fast fingerprint from high-churn fields
+    const liveCalibration = overlayState?.liveCalibration;
+    const carState = hudState?.carState;
+    const controlsState = hudState?.controlsState;
     return [
-      cs?.vEgo, cs?.vEgoCluster,
-      cm?.xSpdLimit, cm?.nRoadLimitSpeed, cm?.desiredSpeed, cm?.activeCarrot,
-      hudState?.selfdriveState?.personality,
-      hudState?.longitudinalPlan?.myDrivingMode,
-      model?.frameId,
-      radar?.leadOne?.dRel, radar?.leadOne?.status,
-      overlayState?.roadCameraState?.frameId,
-      overlayState?.liveCalibration?.rpyCalib?.[0],
-      paramsState.ShowPathMode, paramsState.ShowLaneInfo,
-    ].join('|');
+      model?.frameId ?? "-",
+      selectedPath?.pathSource || "none",
+      pathDataSignature(selectedPath?.pathData),
+      radarStateSignature(radar),
+      finiteNumber(liveCalibration?.rpyCalib?.[0], 0).toFixed(3),
+      finiteNumber(liveCalibration?.rpyCalib?.[1], 0).toFixed(3),
+      finiteNumber(liveCalibration?.rpyCalib?.[2], 0).toFixed(3),
+      finiteNumber(liveCalibration?.height?.[0], 0).toFixed(2),
+      Boolean(controlsState?.activeLaneLine) ? 1 : 0,
+      finiteNumber(carState?.useLaneLineSpeed, 0).toFixed(2),
+      Boolean(carState?.brakeLights) ? 1 : 0,
+      Boolean(overlayState?.carControl?.longActive) ? 1 : 0,
+      showLaneInfo,
+      pathStyle?.mode ?? 0,
+      pathStyle?.colorIndex ?? 0,
+      paramsState.ShowPathMode,
+      paramsState.ShowPathColor,
+      paramsState.ShowPathModeLane,
+      paramsState.ShowPathColorLane,
+      paramsState.ShowPathColorCruiseOff,
+      paramsState.ShowPathWidth,
+      paramsState.ShowPathEnd,
+      paramsState.ShowLaneInfo,
+      paramsState.ShowRadarInfo,
+    ].join("|");
+  }
+
+  function hudDataSignature(hudState, overlayState, plotData, selectedPath, debugText) {
+    const carState = hudState?.carState;
+    const carrotMan = hudState?.carrotMan;
+    const longPlan = hudState?.longitudinalPlan;
+    return [
+      finiteNumber(carState?.vEgo, 0).toFixed(3),
+      finiteNumber(carState?.vEgoCluster, 0).toFixed(3),
+      finiteNumber(carState?.vCruiseCluster, 0).toFixed(2),
+      carrotMan?.xSpdLimit ?? "-",
+      carrotMan?.nRoadLimitSpeed ?? "-",
+      carrotMan?.desiredSpeed ?? "-",
+      carrotMan?.activeCarrot ?? "-",
+      hudState?.selfdriveState?.personality ?? "-",
+      longPlan?.myDrivingMode ?? "-",
+      longPlan?.tFollow ?? "-",
+      longPlan?.desiredDistance ?? "-",
+      overlayState?.roadCameraState?.frameId ?? "-",
+      selectedPath?.latDebugText || "",
+      debugText || "",
+      plotInputSignature(plotData),
+      paramsState.ShowPlotMode,
+      paramsState.CustomSR,
+    ].join("|");
   }
 
   /* ── Phase 1-3: gradient cache ── */
@@ -172,9 +260,28 @@ window.HomeDrive = (() => {
     return Number.isFinite(num) ? num : fallback;
   }
 
-  function finiteList(value) {
-    if (!Array.isArray(value)) return [];
-    return value.map((item) => Number(item)).filter((item) => Number.isFinite(item));
+  function hasEnumerableKeys(value) {
+    if (!value || typeof value !== "object") return false;
+    for (const _key in value) {
+      return true;
+    }
+    return false;
+  }
+
+  function readRpyTriplet(liveCalibration) {
+    const source = Array.isArray(liveCalibration?.rpyCalib) ? liveCalibration.rpyCalib : null;
+    if (!source) return null;
+    const roll = Number(source[0]);
+    const pitch = Number(source[1]);
+    const yaw = Number(source[2]);
+    if (!Number.isFinite(roll) || !Number.isFinite(pitch) || !Number.isFinite(yaw)) return null;
+    return [roll, pitch, yaw];
+  }
+
+  function formatRpyTriplet(liveCalibration) {
+    const rpy = readRpyTriplet(liveCalibration);
+    if (!rpy) return "-";
+    return `${rpy[0].toFixed(3)},${rpy[1].toFixed(3)},${rpy[2].toFixed(3)}`;
   }
 
   function firstFinite(values, fallback = 0) {
@@ -267,8 +374,8 @@ window.HomeDrive = (() => {
   }
 
   function getCalibrationMatrix(liveCalibration) {
-    const rpy = finiteList(liveCalibration?.rpyCalib);
-    if (rpy.length < 3) return VIEW_FROM_DEVICE;
+    const rpy = readRpyTriplet(liveCalibration);
+    if (!rpy) return VIEW_FROM_DEVICE;
     return mat3Multiply(VIEW_FROM_DEVICE, rotFromEuler(rpy[0], rpy[1], rpy[2]));
   }
 
@@ -562,16 +669,22 @@ window.HomeDrive = (() => {
   function mergeServiceState(rawState, liveState) {
     const raw = rawState && typeof rawState === "object" ? rawState : {};
     const live = liveState && typeof liveState === "object" ? liveState : {};
+    if (raw === live) return raw;
+    if (!hasEnumerableKeys(live)) return raw;
+    if (!hasEnumerableKeys(raw)) return live;
     return { ...raw, ...live };
   }
 
   function mergeDefinedState(baseState, preferredState) {
-    const merged = baseState && typeof baseState === "object" ? { ...baseState } : {};
-    if (!preferredState || typeof preferredState !== "object") return merged;
+    const base = baseState && typeof baseState === "object" ? baseState : {};
+    if (!preferredState || typeof preferredState !== "object") return base;
+    let merged = null;
     for (const [key, value] of Object.entries(preferredState)) {
-      if (value !== undefined && value !== null) merged[key] = value;
+      if (value === undefined || value === null) continue;
+      if (!merged) merged = { ...base };
+      merged[key] = value;
     }
-    return merged;
+    return merged || base;
   }
 
   function mergeRadarLead(rawLead, liveLead) {
@@ -581,6 +694,9 @@ window.HomeDrive = (() => {
   function mergeRadarState(rawState, liveState) {
     const raw = rawState && typeof rawState === "object" ? rawState : {};
     const live = liveState && typeof liveState === "object" ? liveState : {};
+    if (raw === live) return raw;
+    if (!hasEnumerableKeys(live)) return raw;
+    if (!hasEnumerableKeys(raw)) return live;
 
     return {
       ...live,
@@ -752,6 +868,40 @@ window.HomeDrive = (() => {
 
   function mergeRuntimeState(rawHudState, rawOverlayState) {
     const liveServices = readLiveRuntimeServices();
+    const cachedRefs = _mergeRuntimeCache.refs;
+    if (
+      cachedRefs &&
+      cachedRefs.rawHudState === rawHudState &&
+      cachedRefs.rawOverlayState === rawOverlayState &&
+      cachedRefs.liveServices === liveServices &&
+      cachedRefs.rawCarState === rawHudState?.carState &&
+      cachedRefs.rawControlsState === rawHudState?.controlsState &&
+      cachedRefs.rawDeviceState === rawHudState?.deviceState &&
+      cachedRefs.rawPeripheralState === rawHudState?.peripheralState &&
+      cachedRefs.rawSelfdriveState === rawHudState?.selfdriveState &&
+      cachedRefs.rawGpsLocationExternal === rawHudState?.gpsLocationExternal &&
+      cachedRefs.rawLongitudinalPlan === rawHudState?.longitudinalPlan &&
+      cachedRefs.rawCarrotMan === rawHudState?.carrotMan &&
+      cachedRefs.rawModelV2 === rawOverlayState?.modelV2 &&
+      cachedRefs.rawLiveCalibration === rawOverlayState?.liveCalibration &&
+      cachedRefs.rawRoadCameraState === rawOverlayState?.roadCameraState &&
+      cachedRefs.rawRadarState === rawOverlayState?.radarState &&
+      cachedRefs.rawLateralPlan === rawOverlayState?.lateralPlan &&
+      cachedRefs.rawCarControl === rawOverlayState?.carControl &&
+      cachedRefs.rawLiveDelay === rawOverlayState?.liveDelay &&
+      cachedRefs.rawLiveTorqueParameters === rawOverlayState?.liveTorqueParameters &&
+      cachedRefs.rawLiveParameters === rawOverlayState?.liveParameters &&
+      cachedRefs.liveCarState === liveServices?.carState &&
+      cachedRefs.liveControlsState === liveServices?.controlsState &&
+      cachedRefs.liveSelfdriveState === liveServices?.selfdriveState &&
+      cachedRefs.liveLongitudinalPlan === liveServices?.longitudinalPlan &&
+      cachedRefs.liveCarrotMan === liveServices?.carrotMan &&
+      cachedRefs.liveLateralPlan === liveServices?.lateralPlan &&
+      cachedRefs.liveRadarState === liveServices?.radarState
+    ) {
+      return _mergeRuntimeCache.result;
+    }
+
     const radarState = mergeRadarState(rawOverlayState?.radarState, liveServices.radarState);
     const mergedHudState = {
       ...rawHudState,
@@ -771,11 +921,42 @@ window.HomeDrive = (() => {
       carrotMan: mergedHudState.carrotMan,
     };
 
-    return {
+    const result = {
       brokerServices: liveServices,
       hudState: mergedHudState,
       overlayState: mergedOverlayState,
     };
+    _mergeRuntimeCache.refs = {
+      rawHudState,
+      rawOverlayState,
+      liveServices,
+      rawCarState: rawHudState?.carState,
+      rawControlsState: rawHudState?.controlsState,
+      rawDeviceState: rawHudState?.deviceState,
+      rawPeripheralState: rawHudState?.peripheralState,
+      rawSelfdriveState: rawHudState?.selfdriveState,
+      rawGpsLocationExternal: rawHudState?.gpsLocationExternal,
+      rawLongitudinalPlan: rawHudState?.longitudinalPlan,
+      rawCarrotMan: rawHudState?.carrotMan,
+      rawModelV2: rawOverlayState?.modelV2,
+      rawLiveCalibration: rawOverlayState?.liveCalibration,
+      rawRoadCameraState: rawOverlayState?.roadCameraState,
+      rawRadarState: rawOverlayState?.radarState,
+      rawLateralPlan: rawOverlayState?.lateralPlan,
+      rawCarControl: rawOverlayState?.carControl,
+      rawLiveDelay: rawOverlayState?.liveDelay,
+      rawLiveTorqueParameters: rawOverlayState?.liveTorqueParameters,
+      rawLiveParameters: rawOverlayState?.liveParameters,
+      liveCarState: liveServices?.carState,
+      liveControlsState: liveServices?.controlsState,
+      liveSelfdriveState: liveServices?.selfdriveState,
+      liveLongitudinalPlan: liveServices?.longitudinalPlan,
+      liveCarrotMan: liveServices?.carrotMan,
+      liveLateralPlan: liveServices?.lateralPlan,
+      liveRadarState: liveServices?.radarState,
+    };
+    _mergeRuntimeCache.result = result;
+    return result;
   }
 
   function firstNonEmptyText(...values) {
@@ -879,8 +1060,19 @@ window.HomeDrive = (() => {
     }
   }
 
+  function getCanvasDpr() {
+    const rawDpr = window.devicePixelRatio || 1;
+    const portrait = window.matchMedia("(orientation: portrait)").matches;
+    const shortSide = Math.min(window.innerWidth || 0, window.innerHeight || 0);
+    if (portrait && shortSide > 0 && shortSide <= 540) {
+      return Math.min(rawDpr, PHONE_PORTRAIT_DPR_CAP);
+    }
+    const cap = shortSide >= 960 ? DESKTOP_DPR_CAP : MOBILE_DPR_CAP;
+    return Math.min(rawDpr, cap);
+  }
+
   function syncCanvasSize(videoWidth, videoHeight, stageWidth, stageHeight) {
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = getCanvasDpr();
 
     const nextOverlaySignature = `${videoWidth}x${videoHeight}@${dpr.toFixed(2)}`;
     if (overlaySizeSignature !== nextOverlaySignature) {
@@ -1998,32 +2190,23 @@ window.HomeDrive = (() => {
     if (!plotData) {
       lastPlotMode = -1;
       _plotRingReset();
-      plotHistory = [[], [], []];
       return;
     }
 
     if (plotData.mode !== lastPlotMode) {
       lastPlotMode = plotData.mode;
       _plotRingReset();
-      plotHistory = [[], [], []];
     }
 
     _plotRingPush(plotData.values);
-    // sync plotHistory arrays for getPlotBounds/drawPlot compatibility
-    for (let s = 0; s < 3; s += 1) {
-      const arr = plotHistory[s];
-      arr.length = _plotRingSize;
-      for (let i = 0; i < _plotRingSize; i += 1) {
-        arr[i] = _plotRingGet(s, i);
-      }
-    }
   }
 
   function getPlotBounds() {
     let min = Number.POSITIVE_INFINITY;
     let max = Number.NEGATIVE_INFINITY;
-    for (const series of plotHistory) {
-      for (const value of series) {
+    for (let seriesIndex = 0; seriesIndex < 3; seriesIndex += 1) {
+      for (let i = 0; i < _plotRingSize; i += 1) {
+        const value = _plotRingGet(seriesIndex, i);
         min = Math.min(min, value);
         max = Math.max(max, value);
       }
@@ -2079,14 +2262,14 @@ window.HomeDrive = (() => {
       hudCtx.stroke();
     }
 
-    for (let seriesIndex = 0; seriesIndex < plotHistory.length; seriesIndex += 1) {
-      const series = plotHistory[seriesIndex];
-      if (series.length < 2) continue;
+    for (let seriesIndex = 0; seriesIndex < 3; seriesIndex += 1) {
+      if (_plotRingSize < 2) continue;
 
       hudCtx.beginPath();
-      for (let i = 0; i < series.length; i += 1) {
+      for (let i = 0; i < _plotRingSize; i += 1) {
+        const currentValue = _plotRingGet(seriesIndex, i);
         const x = graphX + (graphWidth * i) / Math.max(1, PLOT_MAX_POINTS - 1);
-        const y = graphY + graphHeight - ((series[i] - bounds.min) / range) * graphHeight;
+        const y = graphY + graphHeight - ((currentValue - bounds.min) / range) * graphHeight;
         if (i === 0) hudCtx.moveTo(x, y);
         else hudCtx.lineTo(x, y);
       }
@@ -2094,7 +2277,7 @@ window.HomeDrive = (() => {
       hudCtx.strokeStyle = PLOT_SERIES[seriesIndex].color;
       hudCtx.stroke();
 
-      const currentValue = series[series.length - 1];
+      const currentValue = _plotRingGet(seriesIndex, _plotRingSize - 1);
       hudCtx.fillStyle = PLOT_SERIES[seriesIndex].color;
       hudCtx.font = "600 15px system-ui";
       hudCtx.fillText(
@@ -2127,14 +2310,17 @@ window.HomeDrive = (() => {
     return document.body?.dataset?.page === "carrot";
   }
 
-  function renderActiveFrame() {
+  function renderActiveFrame(options = {}) {
     refreshParams();
     const stageWidth = Math.max(1, stageEl.clientWidth);
     const stageHeight = Math.max(1, stageEl.clientHeight);
+    const forceAll = Boolean(options.force || _forceNextRender);
 
     if (!window.CARROT_VISION_ACTIVE) {
-      if (_lastRenderSig !== "vision-disabled") {
-        _lastRenderSig = "vision-disabled";
+      if (forceAll || _lastOverlaySig !== "vision-disabled" || _lastHudSig !== "vision-disabled") {
+        _lastOverlaySig = "vision-disabled";
+        _lastHudSig = "vision-disabled";
+        _lastPlotInputSig = "off";
         setStageReady(false);
         clearOverlay(canvasEl.width || 1, canvasEl.height || 1);
         clearHud(hudCanvasEl.width || 1, hudCanvasEl.height || 1);
@@ -2147,7 +2333,8 @@ window.HomeDrive = (() => {
 
     const hasStream = syncSourceStream();
     if (!hasStream || !videoEl.videoWidth || !videoEl.videoHeight) {
-      _lastRenderSig = "";
+      _lastOverlaySig = "";
+      _lastHudSig = "";
       setStageReady(false);
       clearOverlay(canvasEl.width || 1, canvasEl.height || 1);
       clearHud(hudCanvasEl.width || 1, hudCanvasEl.height || 1);
@@ -2165,19 +2352,12 @@ window.HomeDrive = (() => {
       return;
     }
 
-    /* Phase 1-2: dirty check — skip if data unchanged */
     const rawOverlayState = window.CarrotOverlayState || {};
     const rawHudState = window.CarrotHudState || {};
-    const sig = _quickDataSignature(rawHudState, rawOverlayState);
-    if (!_forceNextRender && sig === _lastRenderSig) return;
-    _lastRenderSig = sig;
-    _forceNextRender = false;
-
     const videoWidth = videoEl.videoWidth;
     const videoHeight = videoEl.videoHeight;
     syncCanvasSize(videoWidth, videoHeight, stageWidth, stageHeight);
 
-    // rawOverlayState and rawHudState already read above in dirty check
     const runtimeState = mergeRuntimeState(rawHudState, rawOverlayState);
     let overlayState = runtimeState.overlayState;
     const hudState = runtimeState.hudState;
@@ -2192,36 +2372,59 @@ window.HomeDrive = (() => {
     const pathStyle = getPathStyle(overlayState, hudState);
     const plotData = buildPlotData(overlayState, hudState);
     const showLaneInfo = finiteNumber(paramsState.ShowLaneInfo, defaultParams.ShowLaneInfo);
-
-    updatePlotHistory(plotData);
+    const debugText = firstNonEmptyText(
+      brokerServices?.carrotMan?.stockDebugTopRightText,
+      overlayState?.carrotMan?.stockDebugTopRightText,
+      formatDebugText(overlayState),
+    );
+    const overlaySig = overlayDataSignature(hudState, overlayState, selectedPath, pathStyle, showLaneInfo);
+    const nextPlotSig = plotInputSignature(plotData);
+    const plotChanged = forceAll || Boolean(options.hudDirty) || nextPlotSig !== _lastPlotInputSig;
+    if (plotChanged) {
+      updatePlotHistory(plotData);
+      _lastPlotInputSig = nextPlotSig;
+    }
+    const hudSig = hudDataSignature(hudState, overlayState, plotData, selectedPath, debugText);
+    const overlayDirty = forceAll || Boolean(options.overlayDirty) || overlaySig !== _lastOverlaySig;
+    const hudDirty = forceAll || overlayDirty || Boolean(options.hudDirty) || plotChanged || hudSig !== _lastHudSig;
+    if (!overlayDirty && !hudDirty) return;
+    _lastOverlaySig = overlaySig;
+    _lastHudSig = hudSig;
+    _forceNextRender = false;
 
     const calibration = getCalibrationMatrix(liveCalibration);
     const transform = getStageTransform(videoWidth, videoHeight, stageWidth, stageHeight, calibration);
     const viewportRect = getHudViewportRect(videoWidth, videoHeight, stageWidth, stageHeight, transform);
+    const laneCount = Array.isArray(model?.laneLines) ? model.laneLines.length : 0;
+    const edgeCount = Array.isArray(model?.roadEdges) ? model.roadEdges.length : 0;
+    const leadCount = Array.isArray(model?.leadsV3) ? model.leadsV3.length : 0;
+    const rpyText = formatRpyTriplet(liveCalibration);
+    const modeLabel = transform.displayMode?.label || DISPLAY_MODES[1].label;
+    const laneLabel = laneModeLabel(hudState);
 
     applyStageTransform(transform);
     setStageReady(true);
     applyCarrotHudLayout(viewportRect);
-    clearOverlay(videoWidth, videoHeight);
-    clearHud(stageWidth, stageHeight);
 
-    if (model) {
-      if (showLaneInfo >= 1) drawLaneLines(model, hudState, transform.calibTransform);
-      if (showLaneInfo > 1) drawRoadEdges(model, transform.calibTransform);
-      if (showLaneInfo >= 0) drawPath(selectedPath.pathData, model, transform.calibTransform, videoHeight, pathStyle);
-      drawProjectedTfMarker(model?.position, hudState?.longitudinalPlan, transform.calibTransform, videoWidth, videoHeight);
-      drawBlindspotBarriers(model?.position, overlayState, hudState, transform.calibTransform);
-      drawRadarLeadBoxes(model, overlayState, hudState, transform.calibTransform, videoWidth, videoHeight);
+    if (overlayDirty) {
+      clearOverlay(videoWidth, videoHeight);
+      if (model) {
+        if (showLaneInfo >= 1) drawLaneLines(model, hudState, transform.calibTransform);
+        if (showLaneInfo > 1) drawRoadEdges(model, transform.calibTransform);
+        if (showLaneInfo >= 0) drawPath(selectedPath.pathData, model, transform.calibTransform, videoHeight, pathStyle);
+        drawProjectedTfMarker(model?.position, hudState?.longitudinalPlan, transform.calibTransform, videoWidth, videoHeight);
+        drawBlindspotBarriers(model?.position, overlayState, hudState, transform.calibTransform);
+        drawRadarLeadBoxes(model, overlayState, hudState, transform.calibTransform, videoWidth, videoHeight);
+      }
     }
 
-    drawPlot(stageWidth, stageHeight, viewportRect, plotData);
-
-    const laneCount = Array.isArray(model?.laneLines) ? model.laneLines.length : 0;
-    const edgeCount = Array.isArray(model?.roadEdges) ? model.roadEdges.length : 0;
-    const leadCount = Array.isArray(model?.leadsV3) ? model.leadsV3.length : 0;
-    const rpy = finiteList(liveCalibration?.rpyCalib).slice(0, 3).map((value) => value.toFixed(3));
-    const modeLabel = transform.displayMode?.label || DISPLAY_MODES[1].label;
-    const laneLabel = laneModeLabel(hudState);
+    if (hudDirty) {
+      clearHud(stageWidth, stageHeight);
+      drawPlot(stageWidth, stageHeight, viewportRect, plotData);
+      setDebug(debugText);
+      drawHudTopRightText(stageWidth, stageHeight, viewportRect, lastDebug, pathStyle.mode);
+      drawHudBottomText(stageWidth, stageHeight, viewportRect, selectedPath.latDebugText, hudState, pathStyle.mode);
+    }
 
     if (!model) {
       setStatus(`road ${videoWidth}x${videoHeight} · waiting modelV2... · ${laneLabel}`);
@@ -2230,46 +2433,130 @@ window.HomeDrive = (() => {
     }
 
     setMeta(
-      `road:${roadCameraState?.frameId ?? "-"} model:${model?.frameId ?? "-"} path:${selectedPath.pathSource}/${pathStyle.mode}:${pathStyle.colorIndex} width:${finiteNumber(paramsState.ShowPathWidth, 100)} laneInfo:${showLaneInfo} lane:${laneCount} edge:${edgeCount} lead:${leadCount} plot:${finiteNumber(paramsState.ShowPlotMode, 0)} rpy:${rpy.join(",") || "-"} h:${finiteNumber(liveCalibration?.height?.[0], 0).toFixed(2)}`,
+      `road:${roadCameraState?.frameId ?? "-"} model:${model?.frameId ?? "-"} path:${selectedPath.pathSource}/${pathStyle.mode}:${pathStyle.colorIndex} width:${finiteNumber(paramsState.ShowPathWidth, 100)} laneInfo:${showLaneInfo} lane:${laneCount} edge:${edgeCount} lead:${leadCount} plot:${finiteNumber(paramsState.ShowPlotMode, 0)} rpy:${rpyText} h:${finiteNumber(liveCalibration?.height?.[0], 0).toFixed(2)}`,
     );
-    setDebug(firstNonEmptyText(brokerServices?.carrotMan?.stockDebugTopRightText, overlayState?.carrotMan?.stockDebugTopRightText, formatDebugText(overlayState)));
-    drawHudTopRightText(stageWidth, stageHeight, viewportRect, lastDebug, pathStyle.mode);
-    drawHudBottomText(stageWidth, stageHeight, viewportRect, selectedPath.latDebugText, hudState, pathStyle.mode);
+    if (!hudDirty) setDebug(debugText);
   }
 
-  /* Phase 3: 20fps render cap — camera is 20fps, no need to render faster */
-  const RENDER_INTERVAL_MS = 50; // 1000/20 = 50ms
-  let _lastRenderTime = 0;
+  function cancelScheduledRender() {
+    if (_renderRafId != null) {
+      window.cancelAnimationFrame(_renderRafId);
+      _renderRafId = null;
+    }
+    if (_renderTimerId != null) {
+      window.clearTimeout(_renderTimerId);
+      _renderTimerId = null;
+    }
+    if (_renderVideoFrameId != null) {
+      try {
+        if (typeof videoEl.cancelVideoFrameCallback === "function") {
+          videoEl.cancelVideoFrameCallback(_renderVideoFrameId);
+        }
+      } catch {}
+      _renderVideoFrameId = null;
+    }
+  }
 
-  function scheduleNext() {
-    if (isActive()) {
-      loopToken = window.requestAnimationFrame(runLoop);
+  function mergePendingRenderState(options = {}) {
+    const force = Boolean(options.force);
+    const overlayDirty = force || options.overlayDirty === true;
+    const hudDirty = force || options.hudDirty === true;
+    _pendingRenderState.force = _pendingRenderState.force || force;
+    _pendingRenderState.overlayDirty = _pendingRenderState.overlayDirty || overlayDirty;
+    _pendingRenderState.hudDirty = _pendingRenderState.hudDirty || hudDirty;
+  }
+
+  function clearPendingRenderState() {
+    _pendingRenderState.force = false;
+    _pendingRenderState.overlayDirty = false;
+    _pendingRenderState.hudDirty = false;
+  }
+
+  function isStageVisible() {
+    return isActive() && !document.hidden;
+  }
+
+  function flushScheduledRender() {
+    _renderRafId = null;
+    _renderTimerId = null;
+    _renderVideoFrameId = null;
+    if (!isStageVisible()) {
+      if (!isActive()) resetCarrotHudLayout();
       return;
     }
-    loopToken = window.setTimeout(() => runLoop(performance.now()), 180);
+
+    const pending = { ..._pendingRenderState };
+    clearPendingRenderState();
+    _lastRenderTime = performance.now();
+    renderActiveFrame(pending);
+
+    if (_pendingRenderState.force || _pendingRenderState.overlayDirty || _pendingRenderState.hudDirty) {
+      scheduleRender();
+    }
   }
 
-  function runLoop(timestamp) {
-    if (isActive()) {
-      const elapsed = timestamp - _lastRenderTime;
-      if (elapsed >= RENDER_INTERVAL_MS) {
-        _lastRenderTime = timestamp;
-        renderActiveFrame();
-      }
-    } else {
-      resetCarrotHudLayout();
-      syncSourceStream();
+  function canUseVideoFrameScheduling() {
+    return (
+      _pendingRenderState.overlayDirty &&
+      !_pendingRenderState.force &&
+      typeof videoEl.requestVideoFrameCallback === "function" &&
+      window.CARROT_VISION_ACTIVE &&
+      !videoEl.paused &&
+      videoEl.readyState >= 2
+    );
+  }
+
+  function scheduleRender(options = {}) {
+    mergePendingRenderState(options);
+    if (!isStageVisible()) {
+      cancelScheduledRender();
+      if (!isActive()) resetCarrotHudLayout();
+      return;
     }
-    scheduleNext();
+
+    if (_renderRafId != null || _renderTimerId != null || _renderVideoFrameId != null) return;
+    const elapsed = performance.now() - _lastRenderTime;
+    const waitMs = Math.max(0, RENDER_INTERVAL_MS - elapsed);
+    if (waitMs > 0) {
+      _renderTimerId = window.setTimeout(() => {
+        _renderTimerId = null;
+        scheduleRender();
+      }, waitMs);
+      return;
+    }
+    if (canUseVideoFrameScheduling()) {
+      _renderVideoFrameId = videoEl.requestVideoFrameCallback(() => {
+        _renderVideoFrameId = null;
+        flushScheduledRender();
+      });
+      return;
+    }
+    _renderRafId = window.requestAnimationFrame(flushScheduledRender);
+  }
+
+  function requestRender(options = {}) {
+    const hasOverlayDirty = Object.prototype.hasOwnProperty.call(options, "overlayDirty");
+    const hasHudDirty = Object.prototype.hasOwnProperty.call(options, "hudDirty");
+    const normalized = {
+      force: Boolean(options.force),
+      overlayDirty: Boolean(options.force || (hasOverlayDirty ? options.overlayDirty : true)),
+      hudDirty: Boolean(options.force || (hasHudDirty ? options.hudDirty : true)),
+    };
+    scheduleRender(normalized);
   }
 
   function refresh() {
     transformSignature = "";
     overlaySizeSignature = "";
     hudSizeSignature = "";
+    _lastOverlaySig = "";
+    _lastHudSig = "";
+    _lastPlotInputSig = "";
     _forceNextRender = true;
     _gradientCache.clear();
     _rgbaCache.clear();
+    _mergeRuntimeCache.refs = null;
+    _mergeRuntimeCache.result = null;
   }
 
   zoomButtons.forEach((button) => {
@@ -2277,11 +2564,33 @@ window.HomeDrive = (() => {
       const index = Number(button.dataset.displayIndex);
       if (!Number.isFinite(index)) return;
       setDisplayModeIndex(index);
-      renderActiveFrame();
+      requestRender({ force: true, overlayDirty: true, hudDirty: true });
     });
   });
 
-  window.addEventListener("resize", refresh);
+  function requestFullRender() {
+    refresh();
+    requestRender({ force: true, overlayDirty: true, hudDirty: true });
+  }
+
+  function handleLifecycleChange() {
+    if (isStageVisible()) {
+      requestFullRender();
+      return;
+    }
+    cancelScheduledRender();
+    if (!isActive()) resetCarrotHudLayout();
+  }
+
+  window.addEventListener("resize", requestFullRender);
+  window.addEventListener("carrot:render-request", (event) => requestRender(event.detail || {}));
+  window.addEventListener("carrot:pagechange", handleLifecycleChange);
+  window.addEventListener("carrot:visionchange", handleLifecycleChange);
+  document.addEventListener("visibilitychange", handleLifecycleChange);
+  ["loadedmetadata", "loadeddata", "playing", "resize", "emptied"].forEach((eventName) => {
+    sourceVideoEl.addEventListener(eventName, requestFullRender);
+    videoEl.addEventListener(eventName, requestFullRender);
+  });
 
   try {
     const stored = Number(localStorage.getItem(DISPLAY_MODE_STORAGE_KEY));
@@ -2292,11 +2601,11 @@ window.HomeDrive = (() => {
 
   syncDisplayModeButtons();
   refreshParams(true);
-
-  runLoop();
+  requestRender({ force: true, overlayDirty: true, hudDirty: true });
 
   return {
     refresh,
+    requestRender,
     setDisplayModeIndex,
   };
 })();
