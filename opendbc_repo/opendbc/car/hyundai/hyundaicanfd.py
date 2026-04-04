@@ -674,7 +674,7 @@ def _make_ccnc_values(values, CS, lat_active, frame, hud_control,
 
 def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
                          disp_angle, left_lane_warning, right_lane_warning,
-                         enable_corner_radar, stopping):
+                         enable_corner_radar, stopping, canfd_debug):
   ret = []
 
   md = CS.MD
@@ -867,6 +867,10 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
 
         if (left_lane_warning and not CS.out.leftBlinker) or (right_lane_warning and not CS.out.rightBlinker):
           values["VIBRATE"] = 1
+
+        if canfd_debug > 0:
+          values["FAULT_LSS"] = 0
+          values["FAULT_DAS"] = 0
 
         ret.append(packer.make_can_msg("CCNC_0x162", CAN.ECAN, values))
 
