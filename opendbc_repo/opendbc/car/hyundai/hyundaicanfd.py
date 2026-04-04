@@ -100,7 +100,8 @@ def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, 
     #rx_counter = values.pop("COUNTER", None)
     if angle_control:
       if CS.lfa_alt is not None:
-        values["LFA2_ACTIVE"] = CS.lfa_alt["LKAS_ANGLE_ACTIVE"]
+        pass
+        #values["LFA2_ACTIVE"] = CS.lfa_alt["LKAS_ANGLE_ACTIVE"]
     else:
       if CS.lfa is not None:
         values["LKA_ACTIVE"] = 1 if CS.lfa["STEER_REQ"] == 1 else 0
