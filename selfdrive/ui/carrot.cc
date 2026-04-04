@@ -2540,7 +2540,14 @@ public:
         // 시간표시
         int show_datetime = params.getInt("ShowDateTime");
         if (show_datetime) {
+            setenv("TZ", "KST-9", 1);
+            tzset();
             time_t now = time(nullptr);
+            const SubMaster &sm = *(s->sm);
+            auto gps = (s->ublox_avaliable) ? sm["gpsLocationExternal"].getGpsLocationExternal() : sm["gpsLocation"].getGpsLocation();
+            if (gps.getUnixTimestampMillis() > 0) {
+                now = gps.getUnixTimestampMillis() / 1000;
+            }
             struct tm* local = localtime(&now);
 
             int x = 170;// s->fb_w - 300;
