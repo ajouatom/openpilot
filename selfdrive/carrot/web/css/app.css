@@ -537,10 +537,24 @@ body[data-page="home"] .global-home-record-fab {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   word-break: break-all;
-  color: var(--md-primary);
+  color: var(--md-on-surface);
   text-decoration: none;
   font-size: var(--fs-body-sm);
+  font-weight: 500;
   line-height: 1.25;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.home-utility-linkInline:hover,
+.home-utility-linkInline:focus-visible {
+  color: var(--md-on-surface);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--md-on-surface) 52%, transparent);
+  text-underline-offset: 0.18em;
+}
+
+.home-utility-linkInline:focus-visible {
+  outline: none;
 }
 
 .home-utility-linkInline[aria-disabled="true"],
@@ -1874,15 +1888,9 @@ body[data-page="carrot"] #driveHudCard {
 
 .carrot-stage__spinner::after {
   content: "";
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  background:
-    center / 15px 15px no-repeat url("/assets/img_chffr_wheel.png?v=2604-01"),
-    radial-gradient(circle at center, rgba(8, 12, 16, 0.72) 0%, rgba(8, 12, 16, 0.58) 72%, rgba(8, 12, 16, 0.14) 100%);
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.08),
-    0 2px 8px rgba(0, 0, 0, 0.38);
+  width: 24px;
+  height: 24px;
+  background: center / 19px 19px no-repeat url("/assets/img_chffr_wheel.png?v=2604-01");
   animation: carrot-stage-spin 0.88s linear infinite reverse;
 }
 

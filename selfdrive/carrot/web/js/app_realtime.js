@@ -51,7 +51,7 @@ let LAST_HUD_PAYLOAD_SIGNATURE = "";
 const RTC_STATS_POLL_MS = 1000;
 const RTC_FREEZE_MAX_STALL_SAMPLES = 3;
 const RTC_FREEZE_CURRENT_TIME_EPSILON = 0.05;
-const RTC_FREEZE_RECOVERY_COOLDOWN_MS = 8000;
+const RTC_FREEZE_RECOVERY_COOLDOWN_MS = 4000;
 const RTC_PERF_STATE = {
   active: false,
   collectedAtMs: 0,
@@ -470,7 +470,7 @@ async function collectRtcPerfStats() {
 }
 
 function scheduleRtcPerfPolling(ms = RTC_STATS_POLL_MS) {
-  if (RTC_STATS_T || !shouldRunCarrotVisionRealtime()) return;
+  if (RTC_STATS_T) return;
   RTC_STATS_T = setTimeout(async () => {
     RTC_STATS_T = null;
     if (!shouldRunCarrotVisionRealtime()) return;
@@ -571,7 +571,19 @@ function rtcScheduleFreezeRecovery(reason) {
 }
 
 function rtcUpdateFreezeWatchdog(pc, video) {
-  if (!shouldRunCarrotVisionRealtime() || !rtcConnectionLooksLive(pc) || !rtcHasLiveTrack() || !video) {
+  if (!shouldRunCarrotVisionRealtime() || !video) {
+    rtcResetFreezeWatchdog();
+    return;
+  }
+
+  // PC connected but track dead (ended) → force reconnect
+  if (rtcConnectionLooksLive(pc) && !rtcHasLiveTrack() && video.srcObject) {
+    rtcResetFreezeWatchdog();
+    rtcScheduleFreezeRecovery("track ended, reconnecting...");
+    return;
+  }
+
+  if (!rtcConnectionLooksLive(pc) || !rtcHasLiveTrack()) {
     rtcResetFreezeWatchdog();
     return;
   }
@@ -720,6 +732,14 @@ async function rtcConnectOnce() {
       RTC_FAIL_COUNT = 0;
       rtcResetFreezeWatchdog();
       collectRtcPerfStats().catch(() => {});
+
+      // Detect server-side track close → immediate recovery
+      ev.track.addEventListener("ended", () => {
+        console.warn("[RTC] remote track ended");
+        if (RTC_PC === pc && shouldRunCarrotVisionRealtime() && !_rtcConnecting) {
+          rtcScheduleFreezeRecovery("remote track ended");
+        }
+      });
     };
 
     pc.onconnectionstatechange = () => {
@@ -1558,6 +1578,7 @@ function syncCarrotRealtimeLifecycle(forceFetch = false) {
     if (nextVisionActive && !_rtcConnecting && !rtcHasLiveTrack()) {
       rtcConnectOnce().catch(() => {});
     }
+    if (nextVisionActive) scheduleRtcPerfPolling();
     if (nextHudActive) _hudScheduleRender();
     return;
   }
@@ -1599,7 +1620,21 @@ function syncCarrotRealtimeLifecycle(forceFetch = false) {
   emitCarrotRenderRequest({ force: true, overlayDirty: true, hudDirty: true });
 }
 
-document.addEventListener("visibilitychange", () => syncCarrotRealtimeLifecycle(false));
+document.addEventListener("visibilitychange", () => {
+  syncCarrotRealtimeLifecycle(false);
+  // When returning from hidden, verify stream health quickly
+  if (!document.hidden && shouldRunCarrotVisionRealtime() && RTC_PC && !_rtcConnecting) {
+    // Force immediate stats collect to restart freeze detection
+    collectRtcPerfStats().catch(() => {});
+    // Quick follow-up: if no live track after 500ms, force reconnect
+    setTimeout(() => {
+      if (!shouldRunCarrotVisionRealtime() || _rtcConnecting || !RTC_PC) return;
+      if (rtcConnectionLooksLive(RTC_PC) && !rtcHasLiveTrack()) {
+        rtcScheduleFreezeRecovery("returned visible, no live track");
+      }
+    }, 500);
+  }
+});
 window.addEventListener("carrot:pagechange", (event) => {
   maybeRequestCarrotFullscreenOnPageChange(event?.detail || {});
   syncCarrotRealtimeLifecycle(false);
