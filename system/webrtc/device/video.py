@@ -24,25 +24,32 @@ class LiveStreamVideoStreamTrack(TiciVideoStreamTrack):
   async def recv(self):
     waited = 0
     while True:
-      msg = messaging.recv_one_or_none(self._sock)
-      if msg is not None:
-        break
-      await asyncio.sleep(0.005)
-      waited += 0.005
-      if waited > 1.0:
-        print("########### recv timedout....")
+      try:
+        msg = messaging.recv_one_or_none(self._sock)
+        if msg is None:
+          await asyncio.sleep(0.005)
+          waited += 0.005
+          if waited > 1.0:
+            self._logger.warning("%s frame recv timed out", self.camera_to_sock_mapping.get(self._id.split(':', 1)[0], "video"))
+            waited = 0
+          continue
+
         waited = 0
+        evta = getattr(msg, msg.which())
 
-    evta = getattr(msg, msg.which())
+        packet = av.Packet(evta.header + evta.data)
+        packet.time_base = self._time_base
+        packet.pts = self._pts
 
-    packet = av.Packet(evta.header + evta.data)
-    packet.time_base = self._time_base
-    packet.pts = self._pts
+        self.log_debug("track sending frame %s", self._pts)
+        self._pts += self._dt * self._clock_rate
 
-    self.log_debug("track sending frame %s", self._pts)
-    self._pts += self._dt * self._clock_rate
-
-    return packet
+        return packet
+      except asyncio.CancelledError:
+        raise
+      except Exception:
+        self._logger.exception("failed to build outgoing video packet")
+        await asyncio.sleep(0.01)
 
   def codec_preference(self) -> str | None:
     return "H264"

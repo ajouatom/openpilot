@@ -2850,7 +2850,8 @@ window.HomeDrive = (() => {
     const exactC3Mode = stageWidth >= 1280 && stageHeight >= 720;
     const baseScale = Math.min(stageWidth / 1920, stageHeight / 1080);
     const scale = clamp(baseScale, 0.48, 1.0);
-    const edgeInsetX = exactC3Mode ? 10.0 : clamp(12.0 * scale, 6.0, 12.0);
+    const edgeInsetX = exactC3Mode ? 1.5 : clamp(2.0 * scale, 1.0, 2.5);
+    const edgeInsetTop = exactC3Mode ? 28.0 : clamp(30.0 * scale, 12.0, 30.0);
     const maxWidth = Math.max(180.0, viewportRect.width * 0.42);
     const fontSize = fitSingleLineHudFontSize(
       label,
@@ -2859,19 +2860,19 @@ window.HomeDrive = (() => {
       6.0,
       900,
     );
-    const alpha = getHudLabelAlpha(pathMode, Math.PI * 0.33) * 0.62;
+    const alpha = getHudLabelAlpha(pathMode, 0.0);
 
     drawOutlinedHudText({
       text: label,
       x: viewportRect.right - edgeInsetX,
-      y: viewportRect.top + viewportRect.height * 0.48,
-      color: `rgba(214, 214, 214, ${alpha.toFixed(3)})`,
-      strokeColor: `rgba(0, 0, 0, ${clamp(alpha + 0.18, 0.0, 0.82).toFixed(3)})`,
-      strokeWidth: clamp(3.8 * scale, 2.4, 4.6),
+      y: viewportRect.top + edgeInsetTop,
+      color: `rgba(244, 244, 244, ${alpha.toFixed(3)})`,
+      strokeColor: `rgba(0, 0, 0, ${clamp(alpha + 0.08, 0.0, 1.0).toFixed(3)})`,
+      strokeWidth: clamp(4.2 * scale, 2.8, 5.4),
       fontSize,
       fontWeight: 900,
       alignX: "right",
-      alignY: "middle",
+      alignY: "top",
       maxWidth,
     });
   }

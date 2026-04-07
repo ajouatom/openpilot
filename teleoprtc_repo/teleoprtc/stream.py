@@ -21,6 +21,8 @@ MessageHandler = Callable[[bytes], Awaitable[None]]
 
 
 class WebRTCBaseStream(abc.ABC):
+  DISCONNECTED_GRACE_SECONDS = 8.0
+
   def __init__(self,
                consumed_camera_types: List[str],
                consume_audio: bool,
@@ -46,6 +48,7 @@ class WebRTCBaseStream(abc.ABC):
     self.messaging_channel_ready_event = asyncio.Event()
     self.connection_attempted_event = asyncio.Event()
     self.connection_stopped_event = asyncio.Event()
+    self._disconnect_grace_task: Optional[asyncio.Task] = None
 
     self.peer_connection.on("connectionstatechange", self._on_connectionstatechange)
     self.peer_connection.on("datachannel", self._on_incoming_datachannel)
@@ -55,6 +58,27 @@ class WebRTCBaseStream(abc.ABC):
 
   def _log_debug(self, msg: Any, *args):
     self.logger.debug(f"{type(self)}() {msg}", *args)
+
+  def _cancel_disconnect_grace(self):
+    if self._disconnect_grace_task is not None:
+      self._disconnect_grace_task.cancel()
+      self._disconnect_grace_task = None
+
+  def _schedule_disconnect_grace(self):
+    if self._disconnect_grace_task is not None and not self._disconnect_grace_task.done():
+      return
+
+    async def _grace_disconnect():
+      try:
+        await asyncio.sleep(self.DISCONNECTED_GRACE_SECONDS)
+      except asyncio.CancelledError:
+        return
+
+      if self.peer_connection.connectionState == "disconnected":
+        self._log_debug("disconnect grace expired")
+        self.connection_stopped_event.set()
+
+    self._disconnect_grace_task = asyncio.create_task(_grace_disconnect())
 
   @property
   def _number_of_incoming_media(self) -> int:
@@ -116,11 +140,19 @@ class WebRTCBaseStream(abc.ABC):
     transceiver.setCodecPreferences(rtp_codec)
 
   def _on_connectionstatechange(self):
-    self._log_debug("connection state is %s", self.peer_connection.connectionState)
-    if self.peer_connection.connectionState in ['connected', 'failed']:
+    state = self.peer_connection.connectionState
+    self._log_debug("connection state is %s", state)
+    if state in ['connected', 'failed']:
       self.connection_attempted_event.set()
-    if self.peer_connection.connectionState in ['disconnected', 'closed', 'failed']:
+    if state == 'connected':
+      self._cancel_disconnect_grace()
+    elif state == 'disconnected':
+      self._schedule_disconnect_grace()
+    elif state in ['closed', 'failed']:
+      self._cancel_disconnect_grace()
       self.connection_stopped_event.set()
+    else:
+      self._cancel_disconnect_grace()
 
   def _on_incoming_track(self, track: aiortc.MediaStreamTrack):
     self._log_debug("got track: %s %s", track.kind, track.id)
@@ -216,6 +248,7 @@ class WebRTCBaseStream(abc.ABC):
     await self.connection_stopped_event.wait()
 
   async def stop(self):
+    self._cancel_disconnect_grace()
     await self.peer_connection.close()
 
   @abc.abstractmethod

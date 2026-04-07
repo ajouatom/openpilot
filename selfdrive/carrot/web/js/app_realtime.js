@@ -567,7 +567,11 @@ async function rtcDisconnect() {
 
 function rtcConnectionLooksLive(pc = RTC_PC) {
   if (!pc) return false;
-  return pc.connectionState === "connected" || pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed";
+  return pc.connectionState === "connected" || pc.iceConnectionState === "completed";
+}
+
+function rtcIsWaitingForInitialTrack(pc = RTC_PC) {
+  return Boolean(RTC_WAIT_TRACK_T && RTC_WAIT_TRACK_PC && RTC_WAIT_TRACK_PC === pc);
 }
 
 function rtcUpdateFreezeSnapshot(snapshot) {
@@ -604,6 +608,11 @@ function rtcScheduleFreezeRecovery(reason, options = {}) {
 
 function rtcUpdateFreezeWatchdog(pc, video) {
   if (!shouldRunCarrotVisionRealtime() || !video) {
+    rtcResetFreezeWatchdog();
+    return;
+  }
+
+  if (rtcIsWaitingForInitialTrack(pc)) {
     rtcResetFreezeWatchdog();
     return;
   }
