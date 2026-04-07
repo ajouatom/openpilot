@@ -52,6 +52,7 @@ const RTC_STATS_POLL_MS = 1000;
 const RTC_FREEZE_MAX_STALL_SAMPLES = 3;
 const RTC_FREEZE_CURRENT_TIME_EPSILON = 0.05;
 const RTC_FREEZE_RECOVERY_COOLDOWN_MS = 4000;
+const RTC_RESUME_PROGRESS_CHECK_MS = 900;
 const RTC_PERF_STATE = {
   active: false,
   collectedAtMs: 0,
@@ -78,6 +79,12 @@ const RTC_FREEZE_STATE = {
 };
 let RTC_FREEZE_RECOVER_T = null;
 let RTC_VIDEO_EVENTS_BOUND = false;
+let RTC_WAIT_TRACK_PC = null;
+let RTC_RESUME_CHECK_T = null;
+const RTC_VISIBILITY_STATE = {
+  hiddenAtMs: 0,
+  currentTimeAtHide: null,
+};
 
 function getRtcVideoElement() {
   return document.getElementById("carrotRoadVideo") || document.getElementById("rtcVideo");
@@ -87,16 +94,20 @@ function getLegacyRtcVideoElement() {
   return document.getElementById("rtcVideo");
 }
 
+function isCarrotPageActive() {
+  return document.body?.dataset?.page === "carrot";
+}
+
 function isCarrotPageVisible() {
-  return document.body?.dataset?.page === "carrot" && !document.hidden;
+  return isCarrotPageActive() && !document.hidden;
 }
 
 function shouldRunCarrotHudRealtime() {
-  return isCarrotPageVisible();
+  return isCarrotPageActive();
 }
 
 function shouldRunCarrotVisionRealtime() {
-  return isCarrotPageVisible() && window.CARROT_VISION_ACTIVE;
+  return isCarrotPageActive() && window.CARROT_VISION_ACTIVE;
 }
 
 function isLandscapeOrientation() {
@@ -259,7 +270,7 @@ async function fetchLiveRuntimeState(force = false) {
 }
 
 function getLiveRuntimePollMs() {
-  return shouldRunCarrotHudRealtime() ? 1000 : 3000;
+  return isCarrotPageVisible() ? 1000 : 3000;
 }
 
 function scheduleLiveRuntimeStateFetch(ms = getLiveRuntimePollMs()) {
@@ -307,6 +318,13 @@ function rtcResetFreezeWatchdog() {
   RTC_FREEZE_STATE.lastFramesDecoded = null;
   RTC_FREEZE_STATE.lastTotalVideoFrames = null;
   RTC_FREEZE_STATE.lastCurrentTime = null;
+}
+
+function rtcCancelResumeCheck() {
+  if (RTC_RESUME_CHECK_T) {
+    clearTimeout(RTC_RESUME_CHECK_T);
+    RTC_RESUME_CHECK_T = null;
+  }
 }
 
 function rtcCancelFreezeRecovery() {
@@ -475,13 +493,13 @@ function scheduleRtcPerfPolling(ms = RTC_STATS_POLL_MS) {
     RTC_STATS_T = null;
     if (!shouldRunCarrotVisionRealtime()) return;
     await collectRtcPerfStats().catch(() => {});
-    scheduleRtcPerfPolling(RTC_STATS_POLL_MS);
+    scheduleRtcPerfPolling(isCarrotPageVisible() ? RTC_STATS_POLL_MS : 2500);
   }, ms);
 }
 
 function startRtcPerfPolling(force = false) {
-  if (force) collectRtcPerfStats().catch(() => {});
-  scheduleRtcPerfPolling(force ? 500 : RTC_STATS_POLL_MS);
+  if (force && isCarrotPageVisible()) collectRtcPerfStats().catch(() => {});
+  scheduleRtcPerfPolling(force ? (isCarrotPageVisible() ? 500 : 2500) : (isCarrotPageVisible() ? RTC_STATS_POLL_MS : 2500));
 }
 
 
@@ -494,10 +512,22 @@ function rtcHasLiveTrack() {
   const video = getRtcVideoElement();
   const stream = video?.srcObject;
   if (!stream) return false;
+  if (stream.active === false) return false;
   if (typeof stream.getVideoTracks !== "function") return true;
   const tracks = stream.getVideoTracks();
   if (!tracks.length) return true;
   return tracks.some((track) => track && track.readyState !== "ended");
+}
+
+function rtcHasUsableTrack() {
+  const video = getRtcVideoElement();
+  const stream = video?.srcObject;
+  if (!stream) return false;
+  if (stream.active === false) return false;
+  if (typeof stream.getVideoTracks !== "function") return true;
+  const tracks = stream.getVideoTracks();
+  if (!tracks.length) return true;
+  return tracks.some((track) => track && track.readyState !== "ended" && track.muted !== true);
 }
 
 function rtcStatusSet(s) {
@@ -515,6 +545,7 @@ function rtcCancelRetry() {
 async function rtcDisconnect() {
   rtcCancelRetry();
   rtcDisarmTrackTimeout();
+  rtcCancelResumeCheck();
   rtcCancelFreezeRecovery();
   stopRtcPerfPolling();
   try { if (RTC_PC) RTC_PC.close(); } catch {}
@@ -545,10 +576,11 @@ function rtcUpdateFreezeSnapshot(snapshot) {
   RTC_FREEZE_STATE.lastCurrentTime = snapshot.currentTime;
 }
 
-function rtcScheduleFreezeRecovery(reason) {
+function rtcScheduleFreezeRecovery(reason, options = {}) {
+  const force = Boolean(options.force);
   if (!shouldRunCarrotVisionRealtime() || _rtcConnecting || RTC_FREEZE_RECOVER_T) return;
   const now = Date.now();
-  if (now - RTC_FREEZE_STATE.lastRecoveredAtMs < RTC_FREEZE_RECOVERY_COOLDOWN_MS) return;
+  if (!force && (now - RTC_FREEZE_STATE.lastRecoveredAtMs < RTC_FREEZE_RECOVERY_COOLDOWN_MS)) return;
 
   RTC_FREEZE_STATE.lastRecoveredAtMs = now;
   RTC_FREEZE_STATE.stallSamples = 0;
@@ -576,14 +608,14 @@ function rtcUpdateFreezeWatchdog(pc, video) {
     return;
   }
 
-  // PC connected but track dead (ended) → force reconnect
-  if (rtcConnectionLooksLive(pc) && !rtcHasLiveTrack() && video.srcObject) {
+  // PC connected but track dead/muted/inactive → force reconnect
+  if (rtcConnectionLooksLive(pc) && !rtcHasUsableTrack() && video.srcObject) {
     rtcResetFreezeWatchdog();
     rtcScheduleFreezeRecovery("track ended, reconnecting...");
     return;
   }
 
-  if (!rtcConnectionLooksLive(pc) || !rtcHasLiveTrack()) {
+  if (!rtcConnectionLooksLive(pc) || !rtcHasUsableTrack()) {
     rtcResetFreezeWatchdog();
     return;
   }
@@ -653,21 +685,41 @@ function rtcScheduleRetry(ms = 2000) {
   }, backoff);
 }
 
-function rtcArmTrackTimeout(ms = 5000) {
+function rtcArmTrackTimeout(ms = 5000, expectedPc = RTC_PC) {
   if (RTC_WAIT_TRACK_T) clearTimeout(RTC_WAIT_TRACK_T);
+  RTC_WAIT_TRACK_PC = expectedPc;
   RTC_WAIT_TRACK_T = setTimeout(async () => {
     RTC_WAIT_TRACK_T = null;
+    if (RTC_WAIT_TRACK_PC !== expectedPc || RTC_PC !== expectedPc) return;
+    RTC_WAIT_TRACK_PC = null;
     rtcStatusSet("no track, retry...");
     await rtcDisconnect();
     rtcScheduleRetry(2000);
   }, ms);
 }
 
-function rtcDisarmTrackTimeout() {
+function rtcDisarmTrackTimeout(expectedPc = null) {
+  if (expectedPc && RTC_WAIT_TRACK_PC && RTC_WAIT_TRACK_PC !== expectedPc) return;
   if (RTC_WAIT_TRACK_T) {
     clearTimeout(RTC_WAIT_TRACK_T);
     RTC_WAIT_TRACK_T = null;
   }
+  RTC_WAIT_TRACK_PC = null;
+}
+
+function rtcScheduleResumeHealthCheck(reason = "returned visible") {
+  rtcCancelResumeCheck();
+  RTC_RESUME_CHECK_T = setTimeout(async () => {
+    RTC_RESUME_CHECK_T = null;
+    if (!shouldRunCarrotVisionRealtime() || _rtcConnecting || !RTC_PC) return;
+    const video = getRtcVideoElement();
+    const currentTime = Number(video?.currentTime || 0);
+    const hiddenTime = Number(RTC_VISIBILITY_STATE.currentTimeAtHide || 0);
+    const progressed = currentTime > hiddenTime + RTC_FREEZE_CURRENT_TIME_EPSILON;
+    if (!rtcConnectionLooksLive(RTC_PC) || !rtcHasUsableTrack() || !progressed) {
+      rtcScheduleFreezeRecovery(`${reason}, reconnecting...`, { force: true });
+    }
+  }, RTC_RESUME_PROGRESS_CHECK_MS);
 }
 
 async function waitIceComplete(pc, timeoutMs = 8000) {
@@ -714,6 +766,7 @@ async function rtcConnectOnce() {
     pc.addTransceiver("video", { direction: "recvonly" });
 
     pc.ontrack = async (ev) => {
+      if (RTC_PC !== pc) return;
       const videoEl = getRtcVideoElement();
       if (!videoEl) return;
 
@@ -728,7 +781,7 @@ async function rtcConnectOnce() {
       }
       try { await videoEl.play(); } catch (e) { console.log("[RTC] play() failed", e); }
       rtcStatusSet("track: " + ev.track.kind);
-      rtcDisarmTrackTimeout();
+      rtcDisarmTrackTimeout(pc);
       RTC_FAIL_COUNT = 0;
       rtcResetFreezeWatchdog();
       collectRtcPerfStats().catch(() => {});
@@ -743,6 +796,7 @@ async function rtcConnectOnce() {
     };
 
     pc.onconnectionstatechange = () => {
+      if (RTC_PC !== pc) return;
       const state = pc.connectionState;
       rtcStatusSet("conn: " + state);
       if (state === "connected") RTC_FAIL_COUNT = 0;
@@ -754,6 +808,7 @@ async function rtcConnectOnce() {
     };
 
     pc.oniceconnectionstatechange = () => {
+      if (RTC_PC !== pc) return;
       const state = pc.iceConnectionState;
       rtcStatusSet("ice: " + state);
       collectRtcPerfStats().catch(() => {});
@@ -790,7 +845,7 @@ async function rtcConnectOnce() {
 
     await pc.setRemoteDescription({ type: answer.type || "answer", sdp: answer.sdp });
     rtcStatusSet("connected (waiting track...)");
-    rtcArmTrackTimeout(6000);
+    rtcArmTrackTimeout(6000, pc);
   } catch (e) {
     rtcStatusSet("error: " + e.message);
     await rtcDisconnect();
@@ -1621,18 +1676,26 @@ function syncCarrotRealtimeLifecycle(forceFetch = false) {
 }
 
 document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    const video = getRtcVideoElement();
+    RTC_VISIBILITY_STATE.hiddenAtMs = Date.now();
+    RTC_VISIBILITY_STATE.currentTimeAtHide = Number(video?.currentTime || 0);
+  }
   syncCarrotRealtimeLifecycle(false);
-  // When returning from hidden, verify stream health quickly
   if (!document.hidden && shouldRunCarrotVisionRealtime() && RTC_PC && !_rtcConnecting) {
-    // Force immediate stats collect to restart freeze detection
     collectRtcPerfStats().catch(() => {});
-    // Quick follow-up: if no live track after 500ms, force reconnect
-    setTimeout(() => {
-      if (!shouldRunCarrotVisionRealtime() || _rtcConnecting || !RTC_PC) return;
-      if (rtcConnectionLooksLive(RTC_PC) && !rtcHasLiveTrack()) {
-        rtcScheduleFreezeRecovery("returned visible, no live track");
-      }
-    }, 500);
+    rtcScheduleResumeHealthCheck("returned visible");
+  }
+});
+
+window.addEventListener("offline", () => {
+  rtcStatusSet("offline");
+});
+
+window.addEventListener("online", () => {
+  syncCarrotRealtimeLifecycle(false);
+  if (shouldRunCarrotVisionRealtime() && RTC_PC && !_rtcConnecting) {
+    rtcScheduleResumeHealthCheck("network resumed");
   }
 });
 window.addEventListener("carrot:pagechange", (event) => {
