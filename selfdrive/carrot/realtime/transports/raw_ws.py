@@ -12,7 +12,7 @@ from ..raw_protocol import encode_raw_multiplex_frame
 class RawWsHub:
   SEND_TIMEOUT = 0.35
   IDLE_SLEEP = 0.03
-  ACTIVE_POLL_SLEEP = 0.008
+  ACTIVE_POLL_SLEEP = 0.004
   IDLE_STOP_SEC = 5.0
   FAILURE_THRESHOLD = 3
 

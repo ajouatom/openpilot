@@ -39,6 +39,20 @@ def safe_int(value: Any, default: int | None = None) -> int | None:
     return default
 
 
+def safe_enum_int(value: Any, default: int | None = None) -> int | None:
+  if value is None:
+    return default
+  raw = safe_get(value, "raw")
+  parsed = safe_int(raw, default=None)
+  if parsed is not None:
+    return parsed
+  enum_value = safe_get(value, "value")
+  parsed = safe_int(enum_value, default=None)
+  if parsed is not None:
+    return parsed
+  return safe_int(value, default=default)
+
+
 def safe_bool(value: Any, default: bool = False) -> bool:
   try:
     if value is None:
@@ -76,3 +90,34 @@ def pick_first(*values: Any, default: Any = None) -> Any:
     if value is not None:
       return value
   return default
+
+
+def to_transport_safe(value: Any) -> Any:
+  if value is None or isinstance(value, (str, int, float, bool)):
+    return value
+
+  raw = safe_get(value, "raw")
+  if raw is not None:
+    return safe_int(raw, default=safe_text(raw, default=None))
+
+  enum_value = safe_get(value, "value")
+  if enum_value is not None:
+    return safe_int(enum_value, default=safe_text(enum_value, default=None))
+
+  if isinstance(value, bytes):
+    return value.decode("utf-8", errors="replace")
+
+  if isinstance(value, dict):
+    return {str(key): to_transport_safe(item) for key, item in value.items()}
+
+  if isinstance(value, (list, tuple, set)):
+    return [to_transport_safe(item) for item in value]
+
+  tolist = safe_get(value, "tolist")
+  if callable(tolist):
+    try:
+      return to_transport_safe(tolist())
+    except Exception:
+      pass
+
+  return safe_text(value, default=str(type(value).__name__))

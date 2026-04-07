@@ -93,8 +93,52 @@
     linear-gradient(145deg, rgba(17,68,46,0.68), rgba(10,40,27,0.60));
   box-shadow: none;
   border-color: rgba(255,255,255,0.08);
-  transform: scale(0.58);
+  transform: none;
   transform-origin: bottom left;
+}
+
+.hudWrap[data-surface="driveOverlay"] .hudBody {
+  grid-template-columns: minmax(0, 5.2fr) auto minmax(0, 3.2fr);
+}
+
+.hudWrap[data-surface="driveOverlay"] .hudBottomStrip {
+  padding-inline: calc(var(--hud-section-gap) * 0.06);
+}
+
+.hudWrap[data-surface="driveOverlay"] .hudBottomSegment {
+  font-size: calc(var(--hud-chip-font) + 0.6px);
+  letter-spacing: 0.06px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hudWrap[data-surface="driveOverlay"] .hudSupportKey {
+  font-size: calc(var(--hud-label-font) + 0.2px);
+}
+
+.hudWrap[data-surface="driveOverlay"] .hudSupportValue {
+  font-size: calc(var(--hud-label-font) + 0.5px);
+}
+
+.hudWrap[data-surface="driveOverlay"] .hudSupportDetail {
+  gap: calc(var(--hud-metric-gap) * 0.16);
+}
+
+.hudWrap[data-surface="driveOverlay"] .hudGapText {
+  font-size: calc(var(--hud-label-font) - 0.2px);
+}
+
+.hudWrap[data-surface="driveOverlay"] .hudGearLabel {
+  display: none;
+}
+
+.hudWrap[data-surface="driveOverlay"] .hudGearValue {
+  margin-top: 0;
+  font-size: calc(var(--hud-secondary-font) - 5px);
+}
+
+.hudWrap[data-surface="driveOverlay"] .hudSignalSlot {
+  width: calc(var(--hud-chip-font) + 8px);
 }
 
 .hudWrap::before {
@@ -293,12 +337,13 @@
   font-weight: 900;
   letter-spacing: 0.22px;
   white-space: nowrap;
-  overflow: visible;
-  text-overflow: clip;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .hudSupportValue {
   flex: none;
+  min-width: 0;
   color: rgba(255,255,255,0.86);
   font-size: calc(var(--hud-label-font) + 2.4px);
   font-weight: 900;
@@ -329,6 +374,7 @@
 
 .hudGapBar {
   flex: 1 1 0;
+  min-width: 8px;
   height: 4px;
   border-radius: 999px;
   background: rgba(255,255,255,0.22);
@@ -351,11 +397,25 @@
 }
 
 .hudGearStatus {
-  flex: none;
-  min-width: 0;
+  flex: 0 0 auto;
+  min-width: clamp(34px, calc(var(--hud-chip-font) * 2.6), 74px);
+  max-width: clamp(44px, calc(var(--hud-chip-font) * 4.2), 96px);
   display: flex;
   flex-direction: column;
   align-items: flex-end;
+  justify-content: flex-start;
+}
+
+.hudGearStep {
+  min-height: 1em;
+  margin-bottom: calc(var(--hud-metric-gap) * 0.10);
+  color: rgba(255,255,255,0.88);
+  font-size: calc(var(--hud-label-font) + 3.2px);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-shadow: var(--hud-text-shadow-strong);
+  white-space: nowrap;
 }
 
 .hudGearLabel {
@@ -456,6 +516,102 @@
   flex-wrap: nowrap;
 }
 
+.hudWrap[data-support-layout="compact"] .hudSupportLine {
+  flex-direction: column;
+  align-items: stretch;
+  gap: calc(var(--hud-metric-gap) * 0.10);
+}
+
+.hudWrap[data-support-layout="compact"] .hudSupportValue {
+  align-self: flex-end;
+  text-align: right;
+}
+
+.hudWrap[data-support-layout="compact"] .hudSupportDetail {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: calc(var(--hud-metric-gap) * 0.24);
+}
+
+.hudWrap[data-support-layout="compact"] .hudGapStatus {
+  width: 100%;
+}
+
+.hudWrap[data-support-layout="compact"] .hudGapBars {
+  min-width: clamp(72px, 32%, 116px);
+}
+
+.hudWrap[data-support-layout="compact"] .hudGearStatus {
+  align-self: flex-end;
+  min-width: clamp(46px, 16%, 74px);
+  max-width: clamp(56px, 24%, 90px);
+}
+
+.hudWrap[data-support-layout="veryCompact"] .hudSupportLine {
+  align-items: center;
+  gap: calc(var(--hud-metric-gap) * 0.24);
+}
+
+.hudWrap[data-support-layout="veryCompact"] .hudSupportKey {
+  font-size: calc(var(--hud-chip-font) + 0.2px);
+  letter-spacing: 0.18px;
+}
+
+.hudWrap[data-support-layout="veryCompact"] .hudSupportValue {
+  max-width: 48%;
+  font-size: calc(var(--hud-chip-font) + 0.9px);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hudWrap[data-support-layout="veryCompact"] .hudSupportDetail {
+  gap: calc(var(--hud-metric-gap) * 0.20);
+}
+
+.hudWrap[data-support-layout="veryCompact"] .hudGapStatus {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.hudWrap[data-support-layout="veryCompact"] .hudGapBars {
+  min-width: 56px;
+  gap: calc(var(--hud-metric-gap) * 0.12);
+}
+
+.hudWrap[data-support-layout="veryCompact"] .hudGapBar {
+  min-width: 7px;
+}
+
+.hudWrap[data-support-layout="veryCompact"] .hudGapBar.is-on {
+  height: 8px;
+}
+
+.hudWrap[data-support-layout="veryCompact"] .hudGapText {
+  font-size: calc(var(--hud-chip-font) + 0.3px);
+}
+
+.hudWrap[data-support-layout="veryCompact"] .hudGearStatus {
+  min-width: 22px;
+  max-width: 30px;
+}
+
+.hudWrap[data-support-layout="veryCompact"] .hudGearStep {
+  font-size: calc(var(--hud-chip-font) + 0.9px);
+  margin-bottom: calc(var(--hud-metric-gap) * 0.04);
+}
+
+.hudWrap[data-support-layout="veryCompact"] .hudGearLabel {
+  display: none;
+}
+
+.hudWrap[data-support-layout="veryCompact"] .hudGearValue {
+  margin-top: 0;
+  text-align: center;
+  font-size: calc(var(--hud-secondary-font) - 4.8px);
+}
+
 .hudWrap[data-density="micro"] .hudGearLabel {
   display: none;
 }
@@ -470,28 +626,35 @@
 }
 
 .hudWrap[data-surface="homePreview"] .hudSupportLine {
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: flex-start;
-  gap: calc(var(--hud-metric-gap) * 0.10);
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: calc(var(--hud-metric-gap) * 0.34);
 }
 
 .hudWrap[data-surface="homePreview"] .hudSupportValue {
-  align-self: flex-end;
+  flex: 0 0 auto;
   text-align: right;
+  font-size: calc(var(--hud-chip-font) + 1.4px);
 }
 
 .hudWrap[data-surface="homePreview"] .hudSupportDetail {
-  flex-direction: column;
-  align-items: stretch;
+  flex-direction: row;
+  align-items: flex-start;
   justify-content: flex-start;
-  gap: calc(var(--hud-metric-gap) * 0.24);
+  gap: calc(var(--hud-metric-gap) * 0.34);
 }
 
 .hudWrap[data-surface="homePreview"] .hudGapStatus {
-  flex-direction: column;
-  align-items: stretch;
-  gap: calc(var(--hud-metric-gap) * 0.14);
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: calc(var(--hud-metric-gap) * 0.22);
+}
+
+.hudWrap[data-surface="homePreview"] .hudGapBars {
+  min-width: clamp(84px, 34%, 132px);
 }
 
 .hudWrap[data-surface="homePreview"] .hudGapText {
@@ -499,7 +662,9 @@
 }
 
 .hudWrap[data-surface="homePreview"] .hudGearStatus {
-  align-self: flex-end;
+  align-self: flex-start;
+  min-width: clamp(34px, 12%, 54px);
+  max-width: clamp(42px, 18%, 62px);
 }
 
 @media (max-width: 430px) {

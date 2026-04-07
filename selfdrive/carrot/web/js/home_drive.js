@@ -5,14 +5,20 @@ window.HomeDrive = (() => {
   const videoEl = document.getElementById("carrotRoadVideo");
   const canvasEl = document.getElementById("carrotOverlayCanvas");
   const hudCanvasEl = document.getElementById("carrotHudCanvas");
+  const onroadAlertEl = document.getElementById("carrotOnroadAlert");
+  const onroadAlertBoxEl = document.getElementById("carrotOnroadAlertBox");
+  const onroadAlertText1El = document.getElementById("carrotOnroadAlertText1");
+  const onroadAlertText2El = document.getElementById("carrotOnroadAlertText2");
+  const stageLoadingEl = document.getElementById("carrotStageLoading");
+  const stageLoadingTextEl = document.getElementById("carrotStageLoadingText");
   const statusEl = document.getElementById("carrotStageStatus");
   const metaEl = document.getElementById("carrotStageMeta");
   const debugEl = document.getElementById("carrotStageDebug");
   const driveHudCardEl = document.getElementById("driveHudCard");
-  const sourceVideoEl = document.getElementById("rtcVideo");
-  const zoomButtons = Array.from(document.querySelectorAll(".carrot-zoom__btn"));
+  const sourceVideoEl = videoEl;
+  const displayModeButton = document.getElementById("btnDisplayModeCycle");
 
-  if (!stageEl || !videoEl || !canvasEl || !hudCanvasEl || !statusEl || !metaEl || !debugEl || !sourceVideoEl) {
+  if (!stageEl || !videoEl || !canvasEl || !hudCanvasEl || !statusEl || !metaEl || !debugEl) {
     return {};
   }
 
@@ -40,16 +46,16 @@ window.HomeDrive = (() => {
     focalY: 2648,
   };
   const DISPLAY_MODES = [
-    { key: "fit", label: "축소" },
-    { key: "normal", label: "정사이즈" },
-    { key: "crop", label: "크롭" },
+    { key: "fit", label: "축소", shortLabel: "1X" },
+    { key: "normal", label: "정사이즈", shortLabel: "2X" },
+    { key: "crop", label: "크롭", shortLabel: "3X" },
   ];
   const HUD_TEXT_FONT = "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
   const DISPLAY_MODE_STORAGE_KEY = "home_drive_display_mode_index";
   const PHONE_PORTRAIT_DPR_CAP = 1.0;
   const MOBILE_DPR_CAP = 1.25;
   const DESKTOP_DPR_CAP = 1.5;
-  const RENDER_INTERVAL_MS = 50;
+  const RENDER_INTERVAL_MS = 33;  // ~30fps for denser plot data (C3: 20Hz/50ms)
   const PATH_PALETTE = [
     { r: 255, g: 82, b: 82 },
     { r: 255, g: 153, b: 0 },
@@ -67,9 +73,10 @@ window.HomeDrive = (() => {
     { color: "#58d97d", label: "G" },
     { color: "#ff9f43", label: "O" },
   ];
-  const PLOT_MAX_POINTS = 240;
+  const PLOT_MAX_POINTS = 600;  // ~20s at 30fps (C3: 400 at 20fps = 20s)
   const PATH_HALF_WIDTH = 0.9;
   const PATH_Z_OFFSET = 1.22;
+  const LONG_PLAN_SOURCE_LEAD1 = 2;
   const MIN_DRAW_DISTANCE = 10;
   const MAX_DRAW_DISTANCE = 100;
   const RADAR_INTERPOLATION_MIN_MS = 16;
@@ -80,8 +87,24 @@ window.HomeDrive = (() => {
   const TEST_PATH_VISIBILITY_MID_ALPHA = 0.24;
   const TEST_LANE_PROB_MIN = 0.003;
   const TEST_LANE_PROB_BOOST = 6;
+  const ALERT_STATUS_NORMAL = 0;
+  const ALERT_STATUS_USER_PROMPT = 1;
+  const ALERT_STATUS_CRITICAL = 2;
+  const ALERT_SIZE_NONE = 0;
+  const ALERT_SIZE_SMALL = 1;
+  const ALERT_SIZE_MID = 2;
+  const ALERT_SIZE_FULL = 3;
+  const ONROAD_ALERT_SCALE = 1.5;
+  const POLYLINE_SMOOTH_NEAR_DISTANCE = 16;
+  const POLYLINE_SMOOTH_FAR_DISTANCE = 52;
+  const POLYLINE_SMOOTH_MAX_STRENGTH = 0.34;
+  const POLYLINE_CENTER_SMOOTH_MAX_STRENGTH = 0.24;
+  const GEOMETRY_QUALITY_DEFAULT = "default";
+  const GEOMETRY_QUALITY_LANE = "lane";
+  const GEOMETRY_QUALITY_ROAD_EDGE = "road-edge";
 
   const defaultParams = {
+    IsMetric: 1,
     ShowPathEnd: 0,
     ShowLaneInfo: 2,
     ShowPathMode: 0,
@@ -92,7 +115,15 @@ window.HomeDrive = (() => {
     ShowPathWidth: 100,
     ShowPlotMode: 0,
     ShowRadarInfo: 0,
+    RadarLatFactor: 0,
     CustomSR: 0,
+  };
+  const overlayInfoState = {
+    carLabel: "",
+    branchLabel: "",
+    lastSignature: "",
+    loading: false,
+    nextRetryAt: 0,
   };
 
   let paramsState = { ...defaultParams };
@@ -112,17 +143,43 @@ window.HomeDrive = (() => {
     currentAtMs: 0,
   };
 
-  /* ── EMA state for lead box smoothing (matches carrot.cc alpha=0.85) ── */
+  /* ── EMA state for lead box smoothing ──
+   * C3 uses alpha=0.85 at a stable 20Hz UI loop.  The web's actual frame
+   * rate varies, so we use time-based EMA: alpha_adj = 0.85^(dt/50ms).
+   * This guarantees the same wall-clock convergence speed as C3.          */
   const LEAD_EMA_ALPHA = 0.85;
+  const C3_FRAME_MS = 50;  // C3 UI loop interval (~20Hz)
   let leadEmaState = [
-    { fx: NaN, fy: NaN, fw: NaN, trackId: -99999 },  // slot 0: leadOne
-    { fx: NaN, fy: NaN, fw: NaN, trackId: -99999 },  // slot 1: leadTwo
+    { fx: NaN, fy: NaN, fw: NaN, trackId: -1, lastMs: 0 },  // slot 0: leadOne
+    { fx: NaN, fy: NaN, fw: NaN, trackId: -1, lastMs: 0 },  // slot 1: leadTwo
   ];
+  let leadTwoEmaState = { xl: NaN, xr: NaN, y: NaN, lastMs: 0 };
+  /* ── Lead hold state: keeps box visible briefly when status flickers false ──
+   * C3 reads SubMaster at stable 20Hz; web's merged WebSocket state can
+   * briefly lose status between messages.  Hold last valid box for up to
+   * LEAD_HOLD_MS so the visual experience matches C3's stability.           */
+  const LEAD_HOLD_MS = 1500;
+  let leadHoldState = {
+    lastValidMs: 0,
+    box: null,
+    strokeColor: null,
+    isLeadScc: false,
+    radarDist: 0,
+    visionDist: 0,
+    badgeTextColor: "#ffffff",
+  };
+  let leadRenderState = {
+    lastCameraFrameId: NaN,
+    lastModelFrameId: NaN,
+    lastSourceWidth: NaN,
+    lastSourceHeight: NaN,
+  };
 
   /* ── Phase 1-2: dirty check ── */
   let _lastOverlaySig = "";
   let _lastHudSig = "";
   let _lastPlotInputSig = "";
+  let _lastAlertSig = "";
   let _forceNextRender = true;
   let _lastRenderTime = 0;
   let _renderRafId = null;
@@ -136,6 +193,13 @@ window.HomeDrive = (() => {
   const _mergeRuntimeCache = {
     refs: null,
     result: null,
+  };
+  let _frameProjectionCache = {
+    pathLengthIdx: new WeakMap(),
+    ribbon: new WeakMap(),
+    verticalRibbon: new WeakMap(),
+    pathZ: new WeakMap(),
+    pathY: new WeakMap(),
   };
 
   function pathDataSignature(pathData) {
@@ -175,6 +239,7 @@ window.HomeDrive = (() => {
     const liveCalibration = overlayState?.liveCalibration;
     const carState = hudState?.carState;
     const controlsState = hudState?.controlsState;
+    const longPlan = hudState?.longitudinalPlan;
     return [
       model?.frameId ?? "-",
       selectedPath?.pathSource || "none",
@@ -185,9 +250,13 @@ window.HomeDrive = (() => {
       finiteNumber(liveCalibration?.rpyCalib?.[2], 0).toFixed(3),
       finiteNumber(liveCalibration?.height?.[0], 0).toFixed(2),
       Boolean(controlsState?.activeLaneLine) ? 1 : 0,
+      Boolean(controlsState?.enabled) ? 1 : 0,
       finiteNumber(carState?.useLaneLineSpeed, 0).toFixed(2),
       Boolean(carState?.brakeLights) ? 1 : 0,
       Boolean(overlayState?.carControl?.longActive) ? 1 : 0,
+      longPlan?.xState ?? "-",
+      longPlan?.trafficState ?? "-",
+      longPlan?.longitudinalPlanSource ?? "-",
       showLaneInfo,
       pathStyle?.mode ?? 0,
       pathStyle?.colorIndex ?? 0,
@@ -207,6 +276,8 @@ window.HomeDrive = (() => {
     const carState = hudState?.carState;
     const carrotMan = hudState?.carrotMan;
     const longPlan = hudState?.longitudinalPlan;
+    const selfdriveState = hudState?.selfdriveState;
+    const rtcPerfText = formatRtcPerfLabel();
     return [
       finiteNumber(carState?.vEgo, 0).toFixed(3),
       finiteNumber(carState?.vEgoCluster, 0).toFixed(3),
@@ -215,13 +286,19 @@ window.HomeDrive = (() => {
       carrotMan?.nRoadLimitSpeed ?? "-",
       carrotMan?.desiredSpeed ?? "-",
       carrotMan?.activeCarrot ?? "-",
-      hudState?.selfdriveState?.personality ?? "-",
+      selfdriveState?.personality ?? "-",
+      selfdriveState?.alertStatus ?? "-",
+      selfdriveState?.alertSize ?? "-",
+      selfdriveState?.alertType || "",
+      selfdriveState?.alertText1 || "",
+      selfdriveState?.alertText2 || "",
       longPlan?.myDrivingMode ?? "-",
       longPlan?.tFollow ?? "-",
       longPlan?.desiredDistance ?? "-",
       overlayState?.roadCameraState?.frameId ?? "-",
       selectedPath?.latDebugText || "",
       debugText || "",
+      rtcPerfText,
       plotInputSignature(plotData),
       paramsState.ShowPlotMode,
       paramsState.CustomSR,
@@ -231,6 +308,12 @@ window.HomeDrive = (() => {
   /* ── Phase 1-3: gradient cache ── */
   const _gradientCache = new Map();
   const GRADIENT_CACHE_MAX = 16;
+  const _hudGradientCache = new Map();
+  const HUD_GRADIENT_CACHE_MAX = 8;
+  const _roundedRectPathCache = new Map();
+  const ROUNDED_RECT_CACHE_MAX = 24;
+  const _textWidthCache = new Map();
+  const TEXT_WIDTH_CACHE_MAX = 256;
 
   function getCachedGradient(key, factory) {
     const cached = _gradientCache.get(key);
@@ -242,6 +325,35 @@ window.HomeDrive = (() => {
     }
     _gradientCache.set(key, g);
     return g;
+  }
+
+  function getCachedHudGradient(key, factory) {
+    const cached = _hudGradientCache.get(key);
+    if (cached) return cached;
+    const gradient = factory();
+    if (_hudGradientCache.size >= HUD_GRADIENT_CACHE_MAX) {
+      const firstKey = _hudGradientCache.keys().next().value;
+      _hudGradientCache.delete(firstKey);
+    }
+    _hudGradientCache.set(key, gradient);
+    return gradient;
+  }
+
+  function getCachedTextWidth(canvasCtx, font, text) {
+    const label = String(text || "");
+    const key = `${font}|${label}`;
+    const cached = _textWidthCache.get(key);
+    if (cached != null) return cached;
+    canvasCtx.save();
+    canvasCtx.font = font;
+    const width = canvasCtx.measureText(label).width;
+    canvasCtx.restore();
+    if (_textWidthCache.size >= TEXT_WIDTH_CACHE_MAX) {
+      const firstKey = _textWidthCache.keys().next().value;
+      _textWidthCache.delete(firstKey);
+    }
+    _textWidthCache.set(key, width);
+    return width;
   }
 
   function clamp(value, min, max) {
@@ -322,11 +434,144 @@ window.HomeDrive = (() => {
     return PATH_PALETTE[normalized] || PATH_PALETTE[3];
   }
 
+  function resetFrameProjectionCache() {
+    _frameProjectionCache = {
+      pathLengthIdx: new WeakMap(),
+      ribbon: new WeakMap(),
+      verticalRibbon: new WeakMap(),
+      pathZ: new WeakMap(),
+      pathY: new WeakMap(),
+    };
+  }
+
+  function getWeakCacheBucket(weakMap, target) {
+    if (!target || typeof target !== "object") return null;
+    let bucket = weakMap.get(target);
+    if (!bucket) {
+      bucket = new Map();
+      weakMap.set(target, bucket);
+    }
+    return bucket;
+  }
+
+  function getProjectionSampleStride(distance, maxDistance) {
+    const dist = finiteNumber(distance, 0);
+    const maxDist = finiteNumber(maxDistance, MAX_DRAW_DISTANCE);
+    if (maxDist <= 36) return 1;
+    if (dist >= Math.min(maxDist * 0.72, 62)) return 3;
+    if (dist >= Math.min(maxDist * 0.44, 34)) return 2;
+    return 1;
+  }
+
+  function getProjectionSampleStrideForQuality(distance, maxDistance, quality = GEOMETRY_QUALITY_DEFAULT) {
+    const baseStride = getProjectionSampleStride(distance, maxDistance);
+    const dist = finiteNumber(distance, 0);
+
+    if (quality === GEOMETRY_QUALITY_ROAD_EDGE) {
+      if (dist >= 64) return Math.min(baseStride + 2, 5);
+      if (dist >= 40) return Math.min(baseStride + 1, 4);
+      return baseStride;
+    }
+    if (quality === GEOMETRY_QUALITY_LANE) {
+      if (dist >= 58) return Math.min(baseStride + 1, 4);
+      return baseStride;
+    }
+    return baseStride;
+  }
+
+  function forEachProjectedSampleIndex(xs, maxIdx, maxDistance, visitor, quality = GEOMETRY_QUALITY_DEFAULT) {
+    if (maxIdx < 0) return;
+    let i = 0;
+    let lastVisited = -1;
+    while (i <= maxIdx) {
+      visitor(i);
+      lastVisited = i;
+      i += getProjectionSampleStrideForQuality(xs[i], maxDistance, quality);
+    }
+    if (lastVisited !== maxIdx) visitor(maxIdx);
+  }
+
+  function getGeometrySmoothingGain(quality, axis = "side") {
+    if (quality === GEOMETRY_QUALITY_ROAD_EDGE) {
+      return axis === "center" ? 1.12 : 1.22;
+    }
+    if (quality === GEOMETRY_QUALITY_LANE) {
+      return axis === "center" ? 1.06 : 1.12;
+    }
+    return 1.0;
+  }
+
+  function getCachedRoundedRectPath(width, height, radius) {
+    if (typeof Path2D !== "function") return null;
+    const w = Math.max(0, finiteNumber(width, 0));
+    const h = Math.max(0, finiteNumber(height, 0));
+    const r = Math.min(finiteNumber(radius, 0), w / 2, h / 2);
+    const key = `${Math.round(w * 2)}|${Math.round(h * 2)}|${Math.round(r * 2)}`;
+    const cached = _roundedRectPathCache.get(key);
+    if (cached) return cached;
+
+    const path = new Path2D();
+    path.moveTo(r, 0);
+    path.lineTo(w - r, 0);
+    path.quadraticCurveTo(w, 0, w, r);
+    path.lineTo(w, h - r);
+    path.quadraticCurveTo(w, h, w - r, h);
+    path.lineTo(r, h);
+    path.quadraticCurveTo(0, h, 0, h - r);
+    path.lineTo(0, r);
+    path.quadraticCurveTo(0, 0, r, 0);
+    path.closePath();
+
+    if (_roundedRectPathCache.size >= ROUNDED_RECT_CACHE_MAX) {
+      _roundedRectPathCache.delete(_roundedRectPathCache.keys().next().value);
+    }
+    _roundedRectPathCache.set(key, path);
+    return path;
+  }
+
   function mixPoint(a, b, ratio) {
     return {
       x: a.x + (b.x - a.x) * ratio,
       y: a.y + (b.y - a.y) * ratio,
     };
+  }
+
+  function getPolylineSmoothingStrength(distance, maxDistance, maxStrength) {
+    const dist = finiteNumber(distance, 0);
+    const smoothFarDistance = Math.max(
+      POLYLINE_SMOOTH_FAR_DISTANCE,
+      Math.min(finiteNumber(maxDistance, MAX_DRAW_DISTANCE), MAX_DRAW_DISTANCE),
+    );
+    if (dist <= POLYLINE_SMOOTH_NEAR_DISTANCE) return 0;
+    const ratio = clamp(
+      (dist - POLYLINE_SMOOTH_NEAR_DISTANCE) /
+      Math.max(1, smoothFarDistance - POLYLINE_SMOOTH_NEAR_DISTANCE),
+      0,
+      1,
+    );
+    return maxStrength * ratio;
+  }
+
+  function smoothProjectedPolyline(points, distances, maxDistance, maxStrength = POLYLINE_SMOOTH_MAX_STRENGTH) {
+    if (!Array.isArray(points) || points.length < 3) return points;
+
+    let smoothed = null;
+    for (let i = 1; i < points.length - 1; i += 1) {
+      const strength = getPolylineSmoothingStrength(distances?.[i], maxDistance, maxStrength);
+      if (strength <= 0.001) continue;
+
+      const prev = points[i - 1];
+      const current = points[i];
+      const next = points[i + 1];
+      const targetX = prev.x * 0.25 + current.x * 0.5 + next.x * 0.25;
+      const targetY = prev.y * 0.25 + current.y * 0.5 + next.y * 0.25;
+      if (!smoothed) {
+        smoothed = points.map((point) => ({ x: point.x, y: point.y }));
+      }
+      smoothed[i].x = current.x + (targetX - current.x) * strength;
+      smoothed[i].y = current.y + (targetY - current.y) * strength;
+    }
+    return smoothed || points;
   }
 
   function mat3Multiply(a, b) {
@@ -473,6 +718,40 @@ window.HomeDrive = (() => {
     };
   }
 
+  function getVisibleSourceRect(videoWidth, videoHeight, stageWidth = videoWidth, stageHeight = videoHeight, transform = null) {
+    const scale = Math.max(finiteNumber(transform?.scale, 1), 0.01);
+    const tx = finiteNumber(transform?.tx, 0);
+    const ty = finiteNumber(transform?.ty, 0);
+    const rawLeft = (0 - tx) / scale;
+    const rawTop = (0 - ty) / scale;
+    const rawRight = (stageWidth - tx) / scale;
+    const rawBottom = (stageHeight - ty) / scale;
+    const left = clamp(Math.min(rawLeft, rawRight), 0, videoWidth);
+    const right = clamp(Math.max(rawLeft, rawRight), 0, videoWidth);
+    const top = clamp(Math.min(rawTop, rawBottom), 0, videoHeight);
+    const bottom = clamp(Math.max(rawTop, rawBottom), 0, videoHeight);
+
+    if (right - left < 2 || bottom - top < 2) {
+      return {
+        left: 0,
+        top: 0,
+        right: videoWidth,
+        bottom: videoHeight,
+        width: videoWidth,
+        height: videoHeight,
+      };
+    }
+
+    return {
+      left,
+      top,
+      right,
+      bottom,
+      width: right - left,
+      height: bottom - top,
+    };
+  }
+
   function projectPoint(calibTransform, x, y, z) {
     mat3Vector(calibTransform, [x, y, z]);
     if (!Number.isFinite(_mv3Out[2]) || _mv3Out[2] <= 1e-3) return null;
@@ -482,69 +761,121 @@ window.HomeDrive = (() => {
     };
   }
 
+  function projectPointPrecise(calibTransform, x, y, z) {
+    mat3Vector(calibTransform, [x, y, z]);
+    if (!Number.isFinite(_mv3Out[2]) || _mv3Out[2] <= 1e-3) return null;
+    return {
+      x: _mv3Out[0] / _mv3Out[2],
+      y: _mv3Out[1] / _mv3Out[2],
+    };
+  }
+
   function getPathLengthIdx(line, maxDistance) {
+    const cacheBucket = getWeakCacheBucket(_frameProjectionCache.pathLengthIdx, line);
+    const cacheKey = Number.isFinite(Number(maxDistance))
+      ? Math.round(Number(maxDistance) * 100)
+      : "default";
+    if (cacheBucket?.has(cacheKey)) return cacheBucket.get(cacheKey);
+
     const xs = Array.isArray(line?.x) ? line.x : [];
     let maxIdx = 0;
     for (let i = 1; i < xs.length; i += 1) {
       if (Number(xs[i]) > maxDistance) break;
       maxIdx = i;
     }
+    cacheBucket?.set(cacheKey, maxIdx);
     return maxIdx;
   }
 
-  function getModelMaxDistance(model) {
+  function getHeldLeadBox(nowMs = performance.now()) {
+    if (!leadHoldState.box) return null;
+    if ((nowMs - finiteNumber(leadHoldState.lastValidMs, 0)) >= LEAD_HOLD_MS) return null;
+    return leadHoldState.box;
+  }
+
+  function getPrimaryLeadDistance(overlayState = null, nowMs = performance.now()) {
+    const leadOne = overlayState?.radarState?.leadOne;
+    const liveDistance = finiteNumber(leadOne?.dRel, NaN);
+    if (Boolean(leadOne?.status) && Number.isFinite(liveDistance) && liveDistance > 0) {
+      return liveDistance;
+    }
+
+    const heldDistance = finiteNumber(getHeldLeadBox(nowMs)?.dRel, NaN);
+    if (Number.isFinite(heldDistance) && heldDistance > 0) {
+      return heldDistance;
+    }
+    return NaN;
+  }
+
+  function getSceneMaxDistance(model, overlayState = null) {
     const positionXs = Array.isArray(model?.position?.x) ? model.position.x : [];
     const tailX = finiteNumber(positionXs[positionXs.length - 1], MIN_DRAW_DISTANCE);
     let maxDistance = clamp(tailX, MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE);
 
-    const leads = Array.isArray(model?.leadsV3) ? model.leadsV3 : [];
-    const leadCandidates = leads
-      .map((lead) => ({
-        x: finiteNumber(lead?.x?.[0], NaN),
-        prob: finiteNumber(lead?.prob, 0),
-      }))
-      .filter((lead) => Number.isFinite(lead.x) && lead.x > 0 && lead.prob > 0.35)
-      .sort((a, b) => a.x - b.x);
-
-    if (leadCandidates.length) {
-      const leadDistance = leadCandidates[0].x * 2;
-      maxDistance = clamp(leadDistance - Math.min(leadDistance * 0.35, 10), 0, maxDistance);
+    const leadDistance = getPrimaryLeadDistance(overlayState);
+    if (Number.isFinite(leadDistance) && leadDistance > 0) {
+      maxDistance = Math.min(maxDistance, leadDistance);
     }
     return maxDistance;
   }
 
-  function buildRibbon(calibTransform, line, halfWidth, zOffset, maxDistance, allowInvert = false, centerShift = 0) {
+  function getPathMaxDistance(sceneMaxDistance) {
+    return Math.max(0, finiteNumber(sceneMaxDistance, 0) - 2.0);
+  }
+
+  function buildRibbon(calibTransform, line, halfWidth, zOffset, maxDistance, allowInvert = false, centerShift = 0, quality = GEOMETRY_QUALITY_DEFAULT) {
+    const cacheBucket = getWeakCacheBucket(_frameProjectionCache.ribbon, line);
+    const cacheKey = [
+      Math.round(finiteNumber(halfWidth, 0) * 1000),
+      Math.round(finiteNumber(zOffset, 0) * 1000),
+      Math.round(finiteNumber(maxDistance, MAX_DRAW_DISTANCE) * 100),
+      allowInvert ? 1 : 0,
+      Math.round(finiteNumber(centerShift, 0) * 1000),
+      quality,
+    ].join("|");
+    if (cacheBucket?.has(cacheKey)) return cacheBucket.get(cacheKey);
+
     const xs = Array.isArray(line?.x) ? line.x : [];
     const ys = Array.isArray(line?.y) ? line.y : [];
     const zs = Array.isArray(line?.z) ? line.z : [];
     const left = [];
     const right = [];
     const center = [];
+    const distances = [];
     const maxIdx = getPathLengthIdx(line, maxDistance);
 
-    for (let i = 0; i <= maxIdx; i += 1) {
+    forEachProjectedSampleIndex(xs, maxIdx, maxDistance, (i) => {
       const x = finiteNumber(xs[i], NaN);
-      if (!Number.isFinite(x) || x < 0) continue;
+      if (!Number.isFinite(x) || x < 0) return;
 
       const y = finiteNumber(ys[i], 0) + centerShift;
       const z = finiteNumber(zs[i], 0) + zOffset;
       const leftPt = projectPoint(calibTransform, x, y - halfWidth, z);
       const rightPt = projectPoint(calibTransform, x, y + halfWidth, z);
       const centerPt = projectPoint(calibTransform, x, y, z);
-      if (!leftPt || !rightPt || !centerPt) continue;
-      if (!allowInvert && center.length && centerPt.y > center[center.length - 1].y) continue;
+      if (!leftPt || !rightPt || !centerPt) return;
+      if (!allowInvert && center.length && centerPt.y > center[center.length - 1].y) return;
 
       left.push(leftPt);
       right.push(rightPt);
       center.push(centerPt);
-    }
+      distances.push(x);
+    }, quality);
 
-    return {
-      left,
-      right,
-      center,
-      polygon: left.length >= 2 && right.length >= 2 ? left.concat([...right].reverse()) : [],
+    const smoothMaxDistance = finiteNumber(maxDistance, MAX_DRAW_DISTANCE);
+    const sideSmoothGain = getGeometrySmoothingGain(quality, "side");
+    const centerSmoothGain = getGeometrySmoothingGain(quality, "center");
+    const smoothedLeft = smoothProjectedPolyline(left, distances, smoothMaxDistance, POLYLINE_SMOOTH_MAX_STRENGTH * sideSmoothGain);
+    const smoothedRight = smoothProjectedPolyline(right, distances, smoothMaxDistance, POLYLINE_SMOOTH_MAX_STRENGTH * sideSmoothGain);
+    const smoothedCenter = smoothProjectedPolyline(center, distances, smoothMaxDistance, POLYLINE_CENTER_SMOOTH_MAX_STRENGTH * centerSmoothGain);
+    const result = {
+      left: smoothedLeft,
+      right: smoothedRight,
+      center: smoothedCenter,
+      polygon: smoothedLeft.length >= 2 && smoothedRight.length >= 2 ? smoothedLeft.concat([...smoothedRight].reverse()) : [],
     };
+    cacheBucket?.set(cacheKey, result);
+    return result;
   }
 
   function drawPolygon(points, fillStyle, strokeStyle = "", lineWidth = 1) {
@@ -628,6 +959,7 @@ window.HomeDrive = (() => {
   function normalizeVisualParams(values, fallback = defaultParams) {
     const source = values && typeof values === "object" ? values : {};
     return {
+      IsMetric: finiteParamNumber(source.IsMetric, fallback.IsMetric),
       ShowPathEnd: finiteParamNumber(source.ShowPathEnd, fallback.ShowPathEnd),
       ShowLaneInfo: finiteParamNumber(source.ShowLaneInfo, fallback.ShowLaneInfo),
       ShowPathMode: finiteParamNumber(source.ShowPathMode, fallback.ShowPathMode),
@@ -638,6 +970,7 @@ window.HomeDrive = (() => {
       ShowPathWidth: finiteParamNumber(source.ShowPathWidth, fallback.ShowPathWidth),
       ShowPlotMode: finiteParamNumber(source.ShowPlotMode, fallback.ShowPlotMode),
       ShowRadarInfo: finiteParamNumber(source.ShowRadarInfo, fallback.ShowRadarInfo),
+      RadarLatFactor: finiteParamNumber(source.RadarLatFactor, fallback.RadarLatFactor),
       CustomSR: finiteParamNumber(source.CustomSR, fallback.CustomSR),
     };
   }
@@ -648,6 +981,7 @@ window.HomeDrive = (() => {
 
     const normalized = normalizeVisualParams(runtimeParams, paramsState);
     const hasPathKeys = (
+      runtimeParams.IsMetric != null ||
       runtimeParams.ShowPathEnd != null ||
       runtimeParams.ShowPathMode != null ||
       runtimeParams.ShowPathColor != null ||
@@ -655,6 +989,7 @@ window.HomeDrive = (() => {
       runtimeParams.ShowPathColorLane != null ||
       runtimeParams.ShowLaneInfo != null ||
       runtimeParams.ShowRadarInfo != null ||
+      runtimeParams.RadarLatFactor != null ||
       runtimeParams.ShowPlotMode != null
     );
     if (!hasPathKeys) return null;
@@ -967,6 +1302,57 @@ window.HomeDrive = (() => {
     return "";
   }
 
+  function buildOverlayCarLabel(values = {}) {
+    let label = firstNonEmptyText(values.CarName, values.CarSelected3);
+    if (!label) return "";
+    if (finiteParamNumber(values.HyundaiCameraSCC, 0) > 0) {
+      label += "(CAMERA SCC)";
+    }
+    if (firstNonEmptyText(values.NNFFModelName)) {
+      label += ",NNFF";
+    }
+    return label;
+  }
+
+  function buildOverlayBranchLabel(values = {}) {
+    const branch = firstNonEmptyText(values.GitBranch);
+    const commit = firstNonEmptyText(values.GitCommit);
+    if (!branch && !commit) return "";
+    if (!branch) return shortText(commit, 12);
+    return commit ? `${branch} (${commit.slice(0, 7)})` : branch;
+  }
+
+  async function refreshOverlayInfo(force = false) {
+    if (!force && overlayInfoState.loading) return;
+    if (!force && overlayInfoState.nextRetryAt > Date.now()) return;
+    if (typeof bulkGet !== "function") return;
+
+    overlayInfoState.loading = true;
+    try {
+      const values = await bulkGet([
+        "CarName",
+        "CarSelected3",
+        "HyundaiCameraSCC",
+        "NNFFModelName",
+        "GitBranch",
+        "GitCommit",
+      ]);
+      const carLabel = buildOverlayCarLabel(values);
+      const branchLabel = buildOverlayBranchLabel(values);
+      const signature = `${carLabel}|${branchLabel}`;
+      overlayInfoState.carLabel = carLabel;
+      overlayInfoState.branchLabel = branchLabel;
+      overlayInfoState.nextRetryAt = signature ? 0 : (Date.now() + 5000);
+      if (signature !== overlayInfoState.lastSignature) {
+        overlayInfoState.lastSignature = signature;
+        requestRender({ force: true, hudDirty: true });
+      }
+    } catch {
+      overlayInfoState.nextRetryAt = Date.now() + 5000;
+    }
+    overlayInfoState.loading = false;
+  }
+
   function setStatus(text) {
     if (lastStatus === text) return;
     lastStatus = text;
@@ -985,10 +1371,141 @@ window.HomeDrive = (() => {
     debugEl.textContent = text;
   }
 
+  function hideOnroadAlert() {
+    if (!onroadAlertEl || !onroadAlertBoxEl || !onroadAlertText1El || !onroadAlertText2El) return;
+    if (_lastAlertSig === "hidden") return;
+    _lastAlertSig = "hidden";
+    onroadAlertEl.hidden = true;
+    onroadAlertEl.className = "carrot-stage__alert";
+    onroadAlertText1El.textContent = "";
+    onroadAlertText2El.textContent = "";
+    onroadAlertText2El.hidden = true;
+  }
+
+  function getAlertStatusClass(status) {
+    switch (finiteNumber(status, ALERT_STATUS_NORMAL)) {
+      case ALERT_STATUS_USER_PROMPT:
+        return "alert-status--user-prompt";
+      case ALERT_STATUS_CRITICAL:
+        return "alert-status--critical";
+      default:
+        return "alert-status--normal";
+    }
+  }
+
+  function getAlertSizeClass(size) {
+    switch (finiteNumber(size, ALERT_SIZE_NONE)) {
+      case ALERT_SIZE_SMALL:
+        return "alert-size--small";
+      case ALERT_SIZE_MID:
+        return "alert-size--mid";
+      case ALERT_SIZE_FULL:
+        return "alert-size--full";
+      default:
+        return "alert-size--none";
+    }
+  }
+
+  function renderOnroadAlert(stageWidth, stageHeight, selfdriveState) {
+    if (!onroadAlertEl || !onroadAlertBoxEl || !onroadAlertText1El || !onroadAlertText2El) return;
+
+    const text1 = String(selfdriveState?.alertText1 || "").trim();
+    const text2 = String(selfdriveState?.alertText2 || "").trim();
+    const alertType = String(selfdriveState?.alertType || "").trim();
+    const alertSize = finiteNumber(selfdriveState?.alertSize, ALERT_SIZE_NONE);
+    const alertStatus = finiteNumber(selfdriveState?.alertStatus, ALERT_STATUS_NORMAL);
+
+    if (alertSize === ALERT_SIZE_NONE || (!text1 && !text2 && !alertType)) {
+      hideOnroadAlert();
+      return;
+    }
+
+    const isPortrait = stageHeight > stageWidth;
+    const longPrimaryText = text1.length > 15;
+    const stageScale = clamp(Math.min(stageWidth / BASE_CAMERA.width, stageHeight / BASE_CAMERA.height), 0.52, 0.90);
+    const displayModeScale = displayModeIndex === 0 ? 0.88 : displayModeIndex === 2 ? 0.96 : 0.92;
+    const orientationScale = isPortrait ? 0.80 : 0.90;
+    const widthScale = isPortrait ? clamp(stageWidth / 420, 0.72, 0.94) : 1.0;
+    const resolutionScale = isPortrait
+      ? clamp(stageHeight / BASE_CAMERA.height, 0.98, 1.06)
+      : clamp(stageWidth / BASE_CAMERA.width, 1.00, 1.08);
+    const textScale = stageScale * displayModeScale * orientationScale * widthScale * resolutionScale * 1.24;
+    const primaryBase = alertSize === ALERT_SIZE_SMALL
+      ? 32
+      : alertSize === ALERT_SIZE_MID
+        ? 40
+        : (longPrimaryText ? 44 : 48);
+    const secondaryBase = alertSize === ALERT_SIZE_SMALL ? 0 : (alertSize === ALERT_SIZE_MID ? 20 : 24);
+    const fontSize1 = clamp(
+      Math.round(primaryBase * textScale * ONROAD_ALERT_SCALE),
+      Math.round((alertSize === ALERT_SIZE_SMALL ? 16 : alertSize === ALERT_SIZE_MID ? 20 : 22) * ONROAD_ALERT_SCALE),
+      Math.round((alertSize === ALERT_SIZE_SMALL ? 32 : alertSize === ALERT_SIZE_MID ? 40 : 44) * ONROAD_ALERT_SCALE),
+    );
+    const fontSize2 = alertSize === ALERT_SIZE_SMALL
+      ? 0
+      : clamp(
+        Math.round(secondaryBase * textScale * ONROAD_ALERT_SCALE),
+        Math.round(14 * ONROAD_ALERT_SCALE),
+        Math.round(29 * ONROAD_ALERT_SCALE),
+      );
+    const offsetRatio = isPortrait ? 0.06 : 0.11;
+    const displayModeYOffset = displayModeIndex === 0 ? -6 : displayModeIndex === 2 ? 6 : 0;
+    const offsetY = Math.round(stageHeight * offsetRatio) + displayModeYOffset;
+    const gap = text2 && alertSize !== ALERT_SIZE_SMALL
+      ? clamp(Math.round(fontSize1 * 0.16), Math.round(6 * ONROAD_ALERT_SCALE), Math.round(14 * ONROAD_ALERT_SCALE))
+      : 0;
+    const maxWidthRatio = alertSize === ALERT_SIZE_FULL
+      ? (isPortrait ? 0.94 : 0.84)
+      : (isPortrait ? 0.90 : 0.74);
+    const maxWidth = Math.round(stageWidth * maxWidthRatio);
+    const primaryColor = alertStatus === ALERT_STATUS_CRITICAL ? "#ff5a63" : "#ffb12a";
+    const secondaryColor = alertStatus === ALERT_STATUS_CRITICAL ? "#ffe3e5" : "#ffffff";
+
+    const signature = [
+      Math.round(stageWidth),
+      Math.round(stageHeight),
+      displayModeIndex,
+      alertSize,
+      alertStatus,
+      text1,
+      text2,
+      alertType,
+      fontSize1,
+      fontSize2,
+      offsetY,
+      gap,
+      maxWidth,
+      ONROAD_ALERT_SCALE,
+      primaryColor,
+      secondaryColor,
+    ].join("|");
+    if (_lastAlertSig === signature) return;
+    _lastAlertSig = signature;
+
+    onroadAlertEl.hidden = false;
+    onroadAlertEl.className = `carrot-stage__alert is-visible ${getAlertSizeClass(alertSize)} ${getAlertStatusClass(alertStatus)}`;
+    onroadAlertEl.classList.toggle("has-text2", Boolean(text2));
+    onroadAlertEl.classList.toggle("is-long-text1", longPrimaryText);
+    onroadAlertEl.style.setProperty("--carrot-alert-offset-y", `${offsetY}px`);
+    onroadAlertEl.style.setProperty("--carrot-alert-gap", `${gap}px`);
+    onroadAlertEl.style.setProperty("--carrot-alert-max-width", `${maxWidth}px`);
+    onroadAlertEl.style.setProperty("--carrot-alert-font1", `${fontSize1}px`);
+    onroadAlertEl.style.setProperty("--carrot-alert-font2", `${Math.max(fontSize2, 0)}px`);
+    onroadAlertEl.style.setProperty("--carrot-alert-scale", `${ONROAD_ALERT_SCALE}`);
+    onroadAlertEl.style.setProperty("--carrot-alert-primary-color", primaryColor);
+    onroadAlertEl.style.setProperty("--carrot-alert-secondary-color", secondaryColor);
+
+    onroadAlertText1El.textContent = text1;
+    onroadAlertText2El.textContent = text2;
+    onroadAlertText2El.hidden = !text2 || alertSize === ALERT_SIZE_SMALL;
+  }
+
   function syncDisplayModeButtons() {
-    zoomButtons.forEach((button, index) => {
-      button.classList.toggle("is-active", index === displayModeIndex);
-    });
+    if (!displayModeButton) return;
+    const mode = DISPLAY_MODES[displayModeIndex] || DISPLAY_MODES[1];
+    displayModeButton.textContent = mode.shortLabel || mode.label || "2X";
+    displayModeButton.setAttribute("aria-label", `Display mode: ${mode.label}`);
+    displayModeButton.title = mode.label;
   }
 
   function setDisplayModeIndex(nextIndex) {
@@ -1002,11 +1519,11 @@ window.HomeDrive = (() => {
 
   function syncSourceStream() {
     const stream = sourceVideoEl.srcObject || null;
-    if (videoEl.srcObject !== stream) {
+    if (sourceVideoEl !== videoEl && videoEl.srcObject !== stream) {
       videoEl.srcObject = stream;
     }
 
-    const hasStream = Boolean(stream);
+    const hasStream = Boolean((sourceVideoEl === videoEl ? sourceVideoEl : videoEl).srcObject || stream);
     if (hasStream && videoEl.paused) {
       videoEl.play().catch(() => {});
     }
@@ -1020,6 +1537,24 @@ window.HomeDrive = (() => {
     _lastStageReady = r;
     stageEl.classList.toggle("is-stream-ready", r);
     videoEl.style.display = r ? "block" : "none";
+  }
+
+  let _lastStageLoading = null;
+  let _lastStageLoadingText = "";
+
+  function setStageLoading(loading, text = "연결중") {
+    const l = Boolean(loading);
+    if (_lastStageLoading !== l) {
+      _lastStageLoading = l;
+      stageEl.classList.toggle("is-loading", l);
+      if (driveHudCardEl) driveHudCardEl.classList.toggle("driveHudCard--loading", l);
+      if (stageLoadingEl) stageLoadingEl.hidden = !l;
+    }
+    if (!l) return;
+    if (stageLoadingTextEl && _lastStageLoadingText !== text) {
+      _lastStageLoadingText = text;
+      stageLoadingTextEl.textContent = text;
+    }
   }
 
   function resetCarrotHudLayout() {
@@ -1042,11 +1577,11 @@ window.HomeDrive = (() => {
       }
       return;
     }
-    const vw = viewportRect?.width || 0;
-    const vh = viewportRect?.height || 0;
-    if (!vw || !vh) return;
-    const overlayInsetX = clamp(vw * 0.028, 16, 28);
-    const overlayInsetY = clamp(vh * 0.034, 16, 24);
+    const stageWidth = stageEl?.clientWidth || viewportRect?.width || 0;
+    const stageHeight = stageEl?.clientHeight || viewportRect?.height || 0;
+    if (!stageWidth || !stageHeight) return;
+    const overlayInsetX = clamp(stageWidth * 0.028, 16, 28);
+    const overlayInsetY = clamp(stageHeight * 0.038, 20, 30);
     const leftVal = `${Math.round(overlayInsetX)}px`;
     const bottomVal = `${Math.round(overlayInsetY)}px`;
 
@@ -1119,10 +1654,8 @@ window.HomeDrive = (() => {
     const label = String(text || "").trim();
     if (!label) return preferredSize;
     let fontSize = preferredSize;
-    hudCtx.save();
-    hudCtx.font = `${fontWeight} ${fontSize}px ${HUD_TEXT_FONT}`;
-    const measured = hudCtx.measureText(label).width;
-    hudCtx.restore();
+    const font = `${fontWeight} ${fontSize}px ${HUD_TEXT_FONT}`;
+    const measured = getCachedTextWidth(hudCtx, font, label);
     if (measured > maxWidth && measured > 1.0) {
       fontSize = clamp(fontSize * ((maxWidth / measured) * 0.985), minSize, fontSize);
     }
@@ -1256,9 +1789,10 @@ window.HomeDrive = (() => {
     return PATH_HALF_WIDTH * widthRatio;
   }
 
-  function drawPath(pathData, model, calibTransform, canvasHeight, style) {
+  function drawPath(pathData, model, overlayState, calibTransform, canvasHeight, style) {
     if (!pathData || !Array.isArray(pathData.x) || !pathData.x.length) return;
-    const ribbon = buildRibbon(calibTransform, pathData, getPathHalfWidth(), PATH_Z_OFFSET, getModelMaxDistance(model), false);
+    const sceneMaxDistance = getSceneMaxDistance(model, overlayState);
+    const ribbon = buildRibbon(calibTransform, pathData, getPathHalfWidth(), PATH_Z_OFFSET, getPathMaxDistance(sceneMaxDistance), false);
     if (ribbon.polygon.length < 3) return;
 
     drawPathRibbon(ribbon, style, canvasHeight);
@@ -1274,14 +1808,15 @@ window.HomeDrive = (() => {
     drawAnimatedPath(ribbon, style);
   }
 
-  function drawLaneLines(model, hudState, calibTransform) {
+  function drawLaneLines(model, overlayState, hudState, calibTransform) {
     const laneLines = Array.isArray(model?.laneLines) ? model.laneLines : [];
     const laneLineProbs = Array.isArray(model?.laneLineProbs) ? model.laneLineProbs : [];
     if (!laneLines.length) return;
 
     const leftLaneLine = finiteNumber(hudState?.carState?.leftLaneLine, 0);
     const rightLaneLine = finiteNumber(hudState?.carState?.rightLaneLine, 0);
-    const maxIdx = getPathLengthIdx(laneLines[0], getModelMaxDistance(model));
+    const sceneMaxDistance = getSceneMaxDistance(model, overlayState);
+    const maxIdx = getPathLengthIdx(laneLines[0], sceneMaxDistance);
     for (let i = 0; i < laneLines.length; i += 1) {
       const prob = clamp(finiteNumber(laneLineProbs[i], 0), 0, 0.9);
       const renderProb = prob >= 0.02 ? prob : (prob >= TEST_LANE_PROB_MIN ? clamp(prob * TEST_LANE_PROB_BOOST, 0.02, 0.12) : 0);
@@ -1295,7 +1830,16 @@ window.HomeDrive = (() => {
       const halfWidth = Math.max(highlightedLeft || highlightedRight ? 0.025 : 0.010, 0.025 * renderProb);
       const fillAlpha = prob >= 0.02 ? clamp(renderProb, 0.12, 0.7) : clamp(renderProb * 3.0, 0.16, 0.26);
       const strokeAlpha = prob >= 0.02 ? 0.20 : 0.24;
-      const ribbon = buildRibbon(calibTransform, laneLines[i], halfWidth, 0, finiteNumber(laneLines[i]?.x?.[maxIdx], MAX_DRAW_DISTANCE), false);
+      const ribbon = buildRibbon(
+        calibTransform,
+        laneLines[i],
+        halfWidth,
+        0,
+        finiteNumber(laneLines[i]?.x?.[maxIdx], MAX_DRAW_DISTANCE),
+        false,
+        0,
+        GEOMETRY_QUALITY_LANE,
+      );
       drawPolygon(
         ribbon.polygon,
         `rgba(${laneColor.r},${laneColor.g},${laneColor.b},${fillAlpha.toFixed(3)})`,
@@ -1313,6 +1857,7 @@ window.HomeDrive = (() => {
           finiteNumber(laneLines[i]?.x?.[maxIdx], MAX_DRAW_DISTANCE),
           false,
           shift,
+          GEOMETRY_QUALITY_LANE,
         );
         drawPolygon(
           doubleRibbon.polygon,
@@ -1324,16 +1869,26 @@ window.HomeDrive = (() => {
     }
   }
 
-  function drawRoadEdges(model, calibTransform) {
+  function drawRoadEdges(model, overlayState, calibTransform) {
     const roadEdges = Array.isArray(model?.roadEdges) ? model.roadEdges : [];
     const roadEdgeStds = Array.isArray(model?.roadEdgeStds) ? model.roadEdgeStds : [];
     if (!roadEdges.length) return;
 
-    const maxIdx = getPathLengthIdx(roadEdges[0], getModelMaxDistance(model));
+    const sceneMaxDistance = getSceneMaxDistance(model, overlayState);
+    const maxIdx = getPathLengthIdx(roadEdges[0], sceneMaxDistance);
     for (let i = 0; i < roadEdges.length; i += 1) {
       const edgeStd = clamp(finiteNumber(roadEdgeStds[i], 0.4), 0, 1);
       const alpha = clamp(1 - edgeStd, 0.12, 0.66);
-      const ribbon = buildRibbon(calibTransform, roadEdges[i], 0.025, 0, finiteNumber(roadEdges[i]?.x?.[maxIdx], MAX_DRAW_DISTANCE), false);
+      const ribbon = buildRibbon(
+        calibTransform,
+        roadEdges[i],
+        0.025,
+        0,
+        finiteNumber(roadEdges[i]?.x?.[maxIdx], MAX_DRAW_DISTANCE),
+        false,
+        0,
+        GEOMETRY_QUALITY_ROAD_EDGE,
+      );
       drawPolygon(
         ribbon.polygon,
         `rgba(255,78,59,${alpha.toFixed(3)})`,
@@ -1344,17 +1899,29 @@ window.HomeDrive = (() => {
   }
 
   function samplePathZ(position, distance) {
+    const cacheBucket = getWeakCacheBucket(_frameProjectionCache.pathZ, position);
+    const cacheKey = Math.round(finiteNumber(distance, 0) * 100);
+    if (cacheBucket?.has(cacheKey)) return cacheBucket.get(cacheKey);
+
     const zs = Array.isArray(position?.z) ? position.z : [];
     const idx = getPathLengthIdx(position, distance);
-    return finiteNumber(zs[idx], 0);
+    const value = finiteNumber(zs[idx], 0);
+    cacheBucket?.set(cacheKey, value);
+    return value;
   }
 
   function samplePathY(position, distance) {
-    return interp1D(
+    const cacheBucket = getWeakCacheBucket(_frameProjectionCache.pathY, position);
+    const cacheKey = Math.round(finiteNumber(distance, 0) * 100);
+    if (cacheBucket?.has(cacheKey)) return cacheBucket.get(cacheKey);
+
+    const value = interp1D(
       distance,
       Array.isArray(position?.x) ? position.x : [],
       Array.isArray(position?.y) ? position.y : [],
     );
+    cacheBucket?.set(cacheKey, value);
+    return value;
   }
 
   function circlePolygon(cx, cy, radius, points = 12) {
@@ -1370,29 +1937,100 @@ window.HomeDrive = (() => {
   }
 
   function buildVerticalRibbon(calibTransform, line, centerShift, topZOffset, bottomZOffset, maxDistance) {
+    const cacheBucket = getWeakCacheBucket(_frameProjectionCache.verticalRibbon, line);
+    const cacheKey = [
+      Math.round(finiteNumber(centerShift, 0) * 1000),
+      Math.round(finiteNumber(topZOffset, 0) * 1000),
+      Math.round(finiteNumber(bottomZOffset, 0) * 1000),
+      Math.round(finiteNumber(maxDistance, MAX_DRAW_DISTANCE) * 100),
+    ].join("|");
+    if (cacheBucket?.has(cacheKey)) return cacheBucket.get(cacheKey);
+
     const xs = Array.isArray(line?.x) ? line.x : [];
     const ys = Array.isArray(line?.y) ? line.y : [];
     const zs = Array.isArray(line?.z) ? line.z : [];
     const top = [];
     const bottom = [];
+    const distances = [];
     const maxIdx = getPathLengthIdx(line, maxDistance);
 
-    for (let i = 0; i <= maxIdx; i += 1) {
+    forEachProjectedSampleIndex(xs, maxIdx, maxDistance, (i) => {
       const x = finiteNumber(xs[i], NaN);
-      if (!Number.isFinite(x) || x < 0) continue;
+      if (!Number.isFinite(x) || x < 0) return;
 
       const y = finiteNumber(ys[i], 0) + centerShift;
       const z = finiteNumber(zs[i], 0);
       const topPoint = projectPoint(calibTransform, x, y, z + topZOffset);
       const bottomPoint = projectPoint(calibTransform, x, y, z + bottomZOffset);
-      if (!topPoint || !bottomPoint) continue;
-      if (top.length && topPoint.y > top[top.length - 1].y) continue;
+      if (!topPoint || !bottomPoint) return;
+      if (top.length && topPoint.y > top[top.length - 1].y) return;
 
       top.push(topPoint);
-      bottom.unshift(bottomPoint);
+      bottom.push(bottomPoint);
+      distances.push(x);
+    });
+
+    const smoothMaxDistance = finiteNumber(maxDistance, MAX_DRAW_DISTANCE);
+    const smoothedTop = smoothProjectedPolyline(top, distances, smoothMaxDistance, POLYLINE_SMOOTH_MAX_STRENGTH);
+    const smoothedBottom = smoothProjectedPolyline(bottom, distances, smoothMaxDistance, POLYLINE_SMOOTH_MAX_STRENGTH);
+    const result = smoothedTop.length >= 2 && smoothedBottom.length >= 2 ? smoothedTop.concat([...smoothedBottom].reverse()) : [];
+    cacheBucket?.set(cacheKey, result);
+    return result;
+  }
+
+  function resetLeadEmaSlot(slot) {
+    if (slot !== 0 && slot !== 1) return;
+    leadEmaState[slot] = { fx: NaN, fy: NaN, fw: NaN, trackId: -1, lastMs: 0 };
+  }
+
+  function resetLeadTwoEma() {
+    leadTwoEmaState = { xl: NaN, xr: NaN, y: NaN, lastMs: 0 };
+  }
+
+  function syncLeadRenderState(videoWidth, videoHeight, modelFrameId, cameraFrameId) {
+    const nextWidth = finiteNumber(videoWidth, NaN);
+    const nextHeight = finiteNumber(videoHeight, NaN);
+    const nextModelFrameId = finiteNumber(modelFrameId, NaN);
+    const nextCameraFrameId = finiteNumber(cameraFrameId, NaN);
+    const prev = leadRenderState;
+
+    const sourceChanged =
+      Number.isFinite(prev.lastSourceWidth) &&
+      Number.isFinite(prev.lastSourceHeight) &&
+      (Math.abs(prev.lastSourceWidth - nextWidth) > 0.5 || Math.abs(prev.lastSourceHeight - nextHeight) > 0.5);
+    const cameraFrameRewind =
+      Number.isFinite(prev.lastCameraFrameId) &&
+      Number.isFinite(nextCameraFrameId) &&
+      nextCameraFrameId < prev.lastCameraFrameId;
+    const modelFrameRewind =
+      Number.isFinite(prev.lastModelFrameId) &&
+      Number.isFinite(nextModelFrameId) &&
+      nextModelFrameId < prev.lastModelFrameId;
+    if (sourceChanged || cameraFrameRewind || modelFrameRewind) {
+      resetLeadEmaSlot(0);
+      resetLeadEmaSlot(1);
+      resetLeadTwoEma();
+      leadHoldState.box = null;
     }
 
-    return top.length >= 2 && bottom.length >= 2 ? top.concat(bottom) : [];
+    leadRenderState = {
+      lastCameraFrameId: nextCameraFrameId,
+      lastModelFrameId: nextModelFrameId,
+      lastSourceWidth: nextWidth,
+      lastSourceHeight: nextHeight,
+    };
+  }
+
+  function getLeadBadgeOffsets(videoWidth, videoHeight) {
+    const scaleX = videoWidth / BASE_CAMERA.width;
+    const scaleY = videoHeight / BASE_CAMERA.height;
+    return {
+      dx: 80 * scaleX,
+      rectTopOffset: 25 * scaleY,
+      textBaselineOffset: 60 * scaleY,
+      badgeHeight: Math.max(42 * scaleY, 26),
+      fontSize: Math.max(40 * scaleY, 20),
+    };
   }
 
   function hasNearbyAssistLead(lead, speedMps) {
@@ -1435,15 +2073,46 @@ window.HomeDrive = (() => {
     else if (rightAssistWarn) drawRibbon(1.7, greenFill, greenStroke);
   }
 
-  function projectLeadBox(lead, modelPath, calibTransform, videoWidth, videoHeight, slot = 0) {
+  function getLeadBoxClampMargins(videoWidth, videoHeight, stageWidth = videoWidth, stageHeight = videoHeight, transform = null, options = {}) {
+    const visibleRect = getVisibleSourceRect(videoWidth, videoHeight, stageWidth, stageHeight, transform);
+    const baseTopMargin = Math.min(videoHeight * 0.28, 200.0);
+    const baseBottomMargin = Math.max(videoHeight * 0.14, 80.0);
+    const offsets = getLeadBadgeOffsets(videoWidth, videoHeight);
+    let bottomReserve = baseBottomMargin;
+
+    if (options.includeDistanceBadge !== false) {
+      bottomReserve = Math.max(bottomReserve, offsets.rectTopOffset + offsets.badgeHeight + 8);
+    }
+    if (options.includeStateText) {
+      const stateBottomReserve = offsets.textBaselineOffset + Math.max(offsets.fontSize * 0.28, 8);
+      bottomReserve = Math.max(bottomReserve, stateBottomReserve);
+    }
+
+    const topMargin = Math.max(baseTopMargin, visibleRect.top + 6);
+    const maxCenterY = Math.max(
+      topMargin,
+      Math.min(videoHeight - baseBottomMargin, visibleRect.bottom - bottomReserve),
+    );
+
+    return {
+      marginX: Math.min(videoWidth * 0.35, 350.0),
+      topMargin,
+      bottomMargin: Math.max(baseBottomMargin, videoHeight - maxCenterY),
+      maxCenterY,
+      visibleRect,
+      bottomReserve,
+    };
+  }
+
+  function projectLeadBox(lead, modelPath, calibTransform, videoWidth, videoHeight, slot = 0, stageWidth = videoWidth, stageHeight = videoHeight, transform = null, options = {}) {
     if (!lead?.status) return null;
     const distance = finiteNumber(lead.dRel, NaN);
     if (!Number.isFinite(distance) || distance <= 0) return null;
 
     const yCenter = -finiteNumber(lead.yRel, 0);
     const z = samplePathZ(modelPath, distance) + PATH_Z_OFFSET;
-    const left = projectPoint(calibTransform, distance, yCenter - 1.2, z);
-    const right = projectPoint(calibTransform, distance, yCenter + 1.2, z);
+    const left = projectPointPrecise(calibTransform, distance, yCenter - 1.2, z);
+    const right = projectPointPrecise(calibTransform, distance, yCenter + 1.2, z);
     if (!left || !right) return null;
 
     const rawWidth = Math.abs(right.x - left.x);
@@ -1451,44 +2120,114 @@ window.HomeDrive = (() => {
 
     const rawCenterX = (left.x + right.x) * 0.5;
     const rawCenterY = (left.y + right.y) * 0.5;
+    const { marginX, topMargin, maxCenterY } = getLeadBoxClampMargins(
+      videoWidth,
+      videoHeight,
+      stageWidth,
+      stageHeight,
+      transform,
+      options,
+    );
 
-    // ── Step 1: Clamp FIRST (exact C3 carrot.cc order) ──
-    // carrot.cc: _path_x = clamp(_path_x, 350, fb_w-350); _path_y = clamp(_path_y, 200, fb_h-80);
-    const _path_x = clamp(rawCenterX, 350, Math.max(350, videoWidth - 350));
-    const _path_y = clamp(rawCenterY, 200, Math.max(200, videoHeight - 80));
-    let _path_width = clamp(rawWidth, 120, 800);
+    // Match CarrotLink's adaptive bottom margin while keeping carrot.cc clamp policy.
+    const _path_x = clamp(rawCenterX, marginX, Math.max(marginX, videoWidth - marginX));
+    const _path_y = clamp(rawCenterY, topMargin, maxCenterY);
+    const _path_width = clamp(rawWidth, 120, 800);
 
-    // ── Step 2: EMA on clamped values (exact C3 carrot.cc order) ──
-    // carrot.cc: path_fx = path_fx * alpha + _path_x * (1-alpha);
-    const ema = leadEmaState[slot] || { fx: NaN, fy: NaN, fw: NaN, trackId: -99999 };
-    const currentTrackId = finiteNumber(lead.radarTrackId, -99999);
-    const trackChanged = ema.trackId !== currentTrackId || !Number.isFinite(ema.fx) || !Number.isFinite(ema.fy);
-    const alpha = LEAD_EMA_ALPHA;  // C3 uses single alpha=0.85
-
-    const path_fx = trackChanged ? _path_x : ema.fx * alpha + _path_x * (1 - alpha);
-    const path_fy = trackChanged ? _path_y : ema.fy * alpha + _path_y * (1 - alpha);
-    const path_fw = trackChanged ? _path_width : ema.fw * alpha + _path_width * (1 - alpha);
-    leadEmaState[slot] = { fx: path_fx, fy: path_fy, fw: path_fw, trackId: currentTrackId };
+    // ── Step 2: Time-based EMA on clamped values ──
+    // C3 uses alpha=0.85 at stable 20Hz.  Web frame rate varies, so
+    // alpha_adj = 0.85^(dt/50ms) gives identical wall-clock convergence.
+    const ema = leadEmaState[slot] || { fx: NaN, fy: NaN, fw: NaN, trackId: -1, lastMs: 0 };
+    const currentTrackId = (lead.radarTrackId != null) ? finiteNumber(lead.radarTrackId, -1) : -1;
+    const nowMs = performance.now();
+    const dt = ema.lastMs > 0 ? clamp(nowMs - ema.lastMs, 1, 500) : C3_FRAME_MS;
+    const alpha = Math.pow(LEAD_EMA_ALPHA, dt / C3_FRAME_MS);
+    const hasPrev = Number.isFinite(ema.fx) && Number.isFinite(ema.fy) && Number.isFinite(ema.fw);
+    const path_fx = hasPrev ? (ema.fx * alpha + _path_x * (1 - alpha)) : _path_x;
+    const path_fy = hasPrev ? (ema.fy * alpha + _path_y * (1 - alpha)) : _path_y;
+    const path_fw = hasPrev ? (ema.fw * alpha + _path_width * (1 - alpha)) : _path_width;
+    leadEmaState[slot] = { fx: path_fx, fy: path_fy, fw: path_fw, trackId: currentTrackId, lastMs: nowMs };
 
     // ── Step 3: Build box from smoothed values ──
-    const width = path_fw;
+    const path_x = Math.trunc(path_fx);
+    const path_y = Math.trunc(path_fy);
+    const width = Math.max(Math.trunc(path_fw), 1);
     const sidePad = 10;
-    const height = Math.max(width * 0.8, 12);
+    const height = Math.max(Math.trunc(width * 0.8), 12);
+    // capnp default is -1; Number(null)=0 would falsely trigger radar-detected, so guard null
+    const radarTrackId = (lead.radarTrackId != null) ? finiteNumber(lead.radarTrackId, -1) : -1;
+    const radarDetected = radarTrackId >= 0;
 
     return {
       rect: {
-        x: path_fx - width * 0.5 - sidePad,
-        y: path_fy - height,
+        x: path_x - width * 0.5 - sidePad,
+        y: path_y - height,
         width: width + sidePad * 2,
         height,
       },
-      centerX: path_fx,
-      centerY: path_fy,
+      centerX: path_x,
+      centerY: path_y,
       radar: Boolean(lead.radar),
-      radarTrackId: finiteNumber(lead.radarTrackId, -99999),
+      radarDetected,
+      radarTrackId,
       dRel: distance,
       modelProb: finiteNumber(lead.modelProb, 0),
+      width,
     };
+  }
+
+  function projectLeadTwoBox(lead, modelPath, calibTransform, videoWidth, videoHeight, stageWidth = videoWidth, stageHeight = videoHeight, transform = null) {
+    if (!lead?.status || !lead?.radar) return null;
+    const distance = finiteNumber(lead.dRel, NaN);
+    if (!Number.isFinite(distance) || distance <= 0) return null;
+
+    const yCenter = -finiteNumber(lead.yRel, 0);
+    const z = samplePathZ(modelPath, distance) + PATH_Z_OFFSET;
+    const left = projectPointPrecise(calibTransform, distance, yCenter - 1.2, z);
+    const right = projectPointPrecise(calibTransform, distance, yCenter + 1.2, z);
+    if (!left || !right) return null;
+
+    const prev = leadTwoEmaState;
+    const hasPrev = Number.isFinite(prev.xl) && Number.isFinite(prev.xr) && Number.isFinite(prev.y);
+    // C3 lead_two uses alpha=0.8 at 20Hz; apply same time-compensation
+    const nowMs2 = performance.now();
+    const dt2 = prev.lastMs > 0 ? clamp(nowMs2 - prev.lastMs, 1, 500) : C3_FRAME_MS;
+    const a2 = Math.pow(0.8, dt2 / C3_FRAME_MS);
+    const xl = hasPrev ? (prev.xl * a2 + left.x * (1 - a2)) : left.x;
+    const xr = hasPrev ? (prev.xr * a2 + right.x * (1 - a2)) : right.x;
+    const y = hasPrev ? (prev.y * a2 + left.y * (1 - a2)) : left.y;
+    leadTwoEmaState = { xl, xr, y, lastMs: nowMs2 };
+
+    const { marginX, topMargin, maxCenterY } = getLeadBoxClampMargins(
+      videoWidth,
+      videoHeight,
+      stageWidth,
+      stageHeight,
+      transform,
+      { includeDistanceBadge: false, includeStateText: false },
+    );
+    const clampedCenterX = clamp((xl + xr) * 0.5, marginX, Math.max(marginX, videoWidth - marginX));
+    const rawWidth = Math.max(xr - xl, 1);
+    const width = Math.max(Math.trunc(clamp(rawWidth, 120, 800)), 1);
+    const yInt = Math.trunc(clamp(y, topMargin, maxCenterY));
+    const xlInt = Math.trunc(clampedCenterX - width * 0.5);
+    const height = Math.max(Math.trunc(width * 0.8), 1);
+    return {
+      rect: {
+        x: xlInt - 10,
+        y: yInt - height,
+        width: width + 20,
+        height,
+      },
+      dRel: distance,
+    };
+  }
+
+  function getPrimaryVisionDistance(model) {
+    const lead = Array.isArray(model?.leadsV3) ? model.leadsV3[0] : null;
+    const prob = finiteNumber(lead?.prob, 0);
+    const distance = finiteNumber(lead?.x?.[0], 0);
+    return prob > 0.5 && distance > 0 ? Math.max(0, distance - 1.52) : 0;
   }
 
   function drawLeadBoxCard(box, strokeColor, fillColor, primary = true) {
@@ -1501,14 +2240,24 @@ window.HomeDrive = (() => {
     strokeRoundedRect(ctx, x, y, width, height, r, strokeColor, sw);
   }
 
+  function eraseLeadBoxOcclusion(box, primary = true) {
+    if (!box?.rect) return;
+    const { x, y, width, height } = box.rect;
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-out";
+    fillRoundedRect(ctx, x, y, width, height, primary ? 15 : 12, "rgba(0,0,0,1)");
+    ctx.restore();
+  }
+
   // C3-style dual distance badges: radar left (red/orange) + vision right (blue)
-  function drawLeadDistanceBadgesC3(box, radarDist, visionDist, isLeadScc, textColor = "#ffffff") {
+  function drawLeadDistanceBadgesC3(box, radarDist, visionDist, isLeadScc, textColor = "#ffffff", videoWidth = BASE_CAMERA.width, videoHeight = BASE_CAMERA.height, stageWidth = videoWidth, stageHeight = videoHeight, transform = null) {
     if (!box?.rect) return;
     const cx = box.centerX;
-    const baseY = box.rect.y + box.rect.height + 8;
-    const badgeH = 34;
-    const gap = 6;
-    const fontSize = 22;
+    const offsets = getLeadBadgeOffsets(videoWidth, videoHeight);
+    const badgeH = offsets.badgeHeight;
+    const fontSize = offsets.fontSize;
+    const visibleRect = getVisibleSourceRect(videoWidth, videoHeight, stageWidth, stageHeight, transform);
+    const baseY = Math.min(box.centerY + offsets.rectTopOffset, Math.max(visibleRect.top + 4, visibleRect.bottom - badgeH - 4));
 
     const drawBadge = (text, centerX, bgColor) => {
       const charW = fontSize * 0.62;
@@ -1530,20 +2279,23 @@ window.HomeDrive = (() => {
 
     const hasRadar = radarDist > 0;
     const hasVision = visionDist > 0;
-    const radarColor = isLeadScc ? "rgba(255,59,48,0.92)" : "rgba(255,167,38,0.92)";
-    const visionColor = "rgba(61,123,255,0.92)";
+    // C3 exact colors: COLOR_RED(255,0,0), COLOR_ORANGE(255,175,3), COLOR_BLUE(0,0,255)
+    const radarColor = isLeadScc ? "rgba(255,0,0,0.92)" : "rgba(255,175,3,0.92)";
+    const visionColor = "rgba(0,0,255,0.92)";
+    const radarCenterX = cx - offsets.dx;
+    const visionCenterX = cx + offsets.dx;
 
     if (hasRadar && hasVision) {
       const rText = radarDist < 10 ? radarDist.toFixed(1) : radarDist.toFixed(0);
       const vText = visionDist < 10 ? visionDist.toFixed(1) : visionDist.toFixed(0);
-      drawBadge(rText, cx - 40 - gap * 0.5, radarColor);
-      drawBadge(vText, cx + 40 + gap * 0.5, visionColor);
+      drawBadge(rText, radarCenterX, radarColor);
+      drawBadge(vText, visionCenterX, visionColor);
     } else if (hasRadar) {
       const rText = radarDist < 10 ? radarDist.toFixed(1) : radarDist.toFixed(0);
-      drawBadge(rText, cx, radarColor);
+      drawBadge(rText, radarCenterX, radarColor);
     } else if (hasVision) {
       const vText = visionDist < 10 ? visionDist.toFixed(1) : visionDist.toFixed(0);
-      drawBadge(vText, cx, visionColor);
+      drawBadge(vText, visionCenterX, visionColor);
     }
   }
 
@@ -1562,15 +2314,32 @@ window.HomeDrive = (() => {
   }
 
   function getLeadStateText(overlayState, hudState) {
+    const longPlan = hudState?.longitudinalPlan || {};
     const carrotMan = overlayState?.carrotMan || hudState?.carrotMan || {};
-    const xStateRaw = String(carrotMan?.xState || "").trim();
-    const trafficStateRaw = String(carrotMan?.trafficState || "").trim();
-    const xState = finiteNumber(xStateRaw, -1);
-    const trafficState = finiteNumber(trafficStateRaw, -1);
-    const longActive = Boolean(overlayState?.carControl?.longActive);
-    const vEgoMps = finiteNumber(hudState?.carState?.vEgo, finiteNumber(hudState?.carState?.vEgoCluster, 0));
+    const carState = hudState?.carState || {};
+    const xState = finiteNumber(longPlan?.xState, finiteNumber(carrotMan?.xState, -1));
+    const trafficState = finiteNumber(longPlan?.trafficState, finiteNumber(carrotMan?.trafficState, -1));
+    const longActive = Boolean(hudState?.controlsState?.enabled);
+    const vEgoMps = finiteNumber(carState?.vEgo, finiteNumber(carState?.vEgoCluster, 0));
+    const brakeHoldActive = Boolean(carState?.brakeHoldActive);
+    const softHoldActive = finiteNumber(carState?.softHoldActive, 0) > 0;
+    const carrotCruise = finiteNumber(carState?.carrotCruise, 0) > 0;
 
-    if (!longActive) return null;
+    if (brakeHoldActive || softHoldActive || carrotCruise) {
+      return {
+        text: brakeHoldActive ? "AUTOHOLD" : (softHoldActive ? "SOFTHOLD" : "CARROT"),
+        xState,
+        showDistanceBadge: false,
+      };
+    }
+
+    if (!longActive) {
+      return {
+        text: "",
+        xState,
+        showDistanceBadge: true,
+      };
+    }
     if (xState === 3 || xState === 5) {
       return {
         text: vEgoMps < 1.0 ? (trafficState >= 1000 ? "Signal Error" : "Signal Ready") : "Signal slowing",
@@ -1580,7 +2349,7 @@ window.HomeDrive = (() => {
     }
     if (xState === 4) {
       return {
-        text: "E2E 주행중",
+        text: "E2E주행중",
         xState,
         showDistanceBadge: false,
       };
@@ -1592,13 +2361,6 @@ window.HomeDrive = (() => {
         showDistanceBadge: true,
       };
     }
-    if (xStateRaw) {
-      return {
-        text: xStateRaw,
-        xState,
-        showDistanceBadge: false,
-      };
-    }
     return {
       text: "",
       xState,
@@ -1606,26 +2368,20 @@ window.HomeDrive = (() => {
     };
   }
 
-  function drawLeadStateBadge(box, text, xState) {
+  function drawLeadStateBadge(box, text, _xState, videoWidth = BASE_CAMERA.width, videoHeight = BASE_CAMERA.height, stageWidth = videoWidth, stageHeight = videoHeight, transform = null) {
     if (!box?.rect || !text) return;
-    const badgeWidth = Math.max(108, Math.min(170, box.rect.width * 0.72));
-    const badgeHeight = 32;
-    const badgeX = box.centerX - badgeWidth * 0.5;
-    const badgeY = box.rect.y + box.rect.height + 10;
-    const accentColor = leadStateAccentColor(xState);
-    fillRoundedRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, 14, "rgba(16, 21, 28, 0.88)");
-    strokeRoundedRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, 14, accentColor, 2.2);
-    ctx.save();
-    ctx.font = `900 18px ${HUD_TEXT_FONT}`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = "rgba(0,0,0,0.88)";
-    ctx.fillStyle = "#ffffff";
-    ctx.lineWidth = 3.6;
-    ctx.strokeText(text, box.centerX, badgeY + badgeHeight * 0.56);
-    ctx.fillText(text, box.centerX, badgeY + badgeHeight * 0.56);
-    ctx.restore();
+    const offsets = getLeadBadgeOffsets(videoWidth, videoHeight);
+    const visibleRect = getVisibleSourceRect(videoWidth, videoHeight, stageWidth, stageHeight, transform);
+    const textY = Math.min(box.centerY + offsets.textBaselineOffset, Math.max(visibleRect.top + 6, visibleRect.bottom - 6));
+    drawCanvasOutlinedText(text, box.centerX, textY, {
+      fontSize: Math.max(50 * (videoHeight / BASE_CAMERA.height), 24),
+      fontWeight: 900,
+      fillStyle: "#ffffff",
+      strokeStyle: "rgba(0,0,0,0.88)",
+      strokeWidth: Math.max(4.0 * (videoHeight / BASE_CAMERA.height), 3.4),
+      align: "center",
+      baseline: "bottom",
+    });
   }
 
   function drawCanvasOutlinedText(text, x, y, {
@@ -1636,27 +2392,26 @@ window.HomeDrive = (() => {
     strokeWidth = 3.4,
     align = "center",
     baseline = "middle",
+    canvasCtx = ctx,
   } = {}) {
     if (!text) return;
-    ctx.save();
-    ctx.font = `${fontWeight} ${fontSize}px ${HUD_TEXT_FONT}`;
-    ctx.textAlign = align;
-    ctx.textBaseline = baseline;
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = strokeStyle;
-    ctx.fillStyle = fillStyle;
-    ctx.lineWidth = strokeWidth;
-    ctx.strokeText(text, x, y);
-    ctx.fillText(text, x, y);
-    ctx.restore();
+    canvasCtx.save();
+    canvasCtx.font = `${fontWeight} ${fontSize}px ${HUD_TEXT_FONT}`;
+    canvasCtx.textAlign = align;
+    canvasCtx.textBaseline = baseline;
+    canvasCtx.lineJoin = "round";
+    canvasCtx.strokeStyle = strokeStyle;
+    canvasCtx.fillStyle = fillStyle;
+    canvasCtx.lineWidth = strokeWidth;
+    canvasCtx.strokeText(text, x, y);
+    canvasCtx.fillText(text, x, y);
+    canvasCtx.restore();
   }
 
   function clampTextAnchor(point, text, fontSize, videoWidth, videoHeight) {
     const anchor = { x: finiteNumber(point?.x, 0), y: finiteNumber(point?.y, 0) };
-    ctx.save();
-    ctx.font = `800 ${fontSize}px ${HUD_TEXT_FONT}`;
-    const textWidth = Math.max(ctx.measureText(String(text || "")).width, 1);
-    ctx.restore();
+    const font = `800 ${fontSize}px ${HUD_TEXT_FONT}`;
+    const textWidth = Math.max(getCachedTextWidth(ctx, font, String(text || "")), 1);
     const padding = 8;
     anchor.x = clamp(anchor.x, padding, Math.max(padding, videoWidth - textWidth - padding));
     anchor.y = clamp(anchor.y, fontSize + padding, Math.max(fontSize + padding, videoHeight - padding));
@@ -1665,15 +2420,15 @@ window.HomeDrive = (() => {
 
   function drawRadarSpeedBadge(center, text, accentColor) {
     if (!center || !text) return;
-    const badgeWidth = Math.max(52, 28 + String(text).length * 18);
-    const badgeHeight = 34;
+    const badgeWidth = Math.max(40, 35 * String(text).length);
+    const badgeHeight = 42;
     const badgeX = center.x - badgeWidth * 0.5;
-    const badgeY = center.y - badgeHeight * 0.5;
-    fillRoundedRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, 14, accentColor);
-    drawCanvasOutlinedText(String(text), center.x, badgeY + badgeHeight * 0.56, {
-      fontSize: 21,
+    const badgeY = center.y - 35;
+    fillRoundedRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, 15, accentColor);
+    drawCanvasOutlinedText(String(text), center.x, center.y, {
+      fontSize: 40,
       fontWeight: 900,
-      strokeWidth: 3.6,
+      strokeWidth: 4.2,
     });
   }
 
@@ -1712,12 +2467,74 @@ window.HomeDrive = (() => {
     });
   }
 
+  function getPathStatusText(hudState) {
+    const carState = hudState?.carState || {};
+    if (Boolean(carState?.brakeHoldActive)) return "AUTOHOLD";
+    if (finiteNumber(carState?.softHoldActive, 0) > 0) return "SOFTHOLD";
+    if (finiteNumber(carState?.carrotCruise, 0) > 0) return "CARROT";
+    return "";
+  }
+
+  function projectPathEndAnchorBox(modelPath, calibTransform, videoWidth, videoHeight) {
+    const xs = Array.isArray(modelPath?.x) ? modelPath.x : [];
+    const ys = Array.isArray(modelPath?.y) ? modelPath.y : [];
+    const zs = Array.isArray(modelPath?.z) ? modelPath.z : [];
+    if (!xs.length || !ys.length || !zs.length) return null;
+
+    const tailDistance = clamp(finiteNumber(xs[xs.length - 1], 0), MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE);
+    const idx = getPathLengthIdx(modelPath, tailDistance);
+    const distance = finiteNumber(xs[idx], NaN);
+    const centerLineY = finiteNumber(ys[idx], NaN);
+    const centerLineZ = finiteNumber(zs[idx], NaN);
+    if (!Number.isFinite(distance) || !Number.isFinite(centerLineY) || !Number.isFinite(centerLineZ)) return null;
+
+    const left = projectPointPrecise(calibTransform, distance, centerLineY - 1.2, centerLineZ + PATH_Z_OFFSET);
+    const right = projectPointPrecise(calibTransform, distance, centerLineY + 1.2, centerLineZ + PATH_Z_OFFSET);
+    if (!left || !right) return null;
+
+    const rawWidth = Math.abs(right.x - left.x);
+    if (!Number.isFinite(rawWidth) || rawWidth <= 1) return null;
+
+    const rawCenterX = (left.x + right.x) * 0.5;
+    const rawCenterY = (left.y + right.y) * 0.5;
+    const { marginX, topMargin, bottomMargin } = getLeadBoxClampMargins(videoWidth, videoHeight);
+    const width = clamp(rawWidth, 120, 800);
+    const centerX = clamp(rawCenterX, marginX, Math.max(marginX, videoWidth - marginX));
+    const centerY = clamp(rawCenterY, topMargin, Math.max(topMargin, videoHeight - bottomMargin));
+    return {
+      centerX: Math.trunc(centerX),
+      centerY: Math.trunc(centerY),
+      width: Math.trunc(width),
+    };
+  }
+
+  function drawPathStatusText(modelPath, hudState, calibTransform, videoWidth, videoHeight, anchorBox = null) {
+    const text = getPathStatusText(hudState);
+    if (!text) return;
+
+    const anchor = anchorBox || projectPathEndAnchorBox(modelPath, calibTransform, videoWidth, videoHeight);
+    if (!anchor) return;
+
+    const scale = videoHeight / BASE_CAMERA.height;
+    const fontSize = Math.max(50 * scale, 24);
+    const baselineY = clamp(anchor.centerY + 60 * scale, fontSize + 8, videoHeight - 10);
+    drawCanvasOutlinedText(text, anchor.centerX, baselineY, {
+      fontSize,
+      fontWeight: 900,
+      fillStyle: "#ffffff",
+      strokeStyle: "rgba(0,0,0,0.88)",
+      strokeWidth: Math.max(4.0 * scale, 3.4),
+      align: "center",
+      baseline: "bottom",
+    });
+  }
+
   function getRadarTracks(radarState) {
     const source = radarState && typeof radarState === "object" ? radarState : {};
     const tracks = [
       ...(Array.isArray(source.leadsLeft) ? source.leadsLeft : []),
-      ...(Array.isArray(source.leadsCenter) ? source.leadsCenter : []),
       ...(Array.isArray(source.leadsRight) ? source.leadsRight : []),
+      ...(Array.isArray(source.leadsCenter) ? source.leadsCenter : []),
     ];
     if (tracks.length) return tracks;
 
@@ -1727,16 +2544,30 @@ window.HomeDrive = (() => {
     return fallback;
   }
 
-  function drawRadarTargets(radarState, modelPath, calibTransform) {
+  function getRadarProjectionLine(model) {
+    const laneLines = Array.isArray(model?.laneLines) ? model.laneLines : [];
+    const centerLane = laneLines[2];
+    if (Array.isArray(centerLane?.x) && Array.isArray(centerLane?.z) && centerLane.x.length && centerLane.z.length) {
+      return centerLane;
+    }
+    return model?.position || null;
+  }
+
+  function drawRadarTargets(radarState, model, calibTransform) {
     const showRadarInfo = finiteNumber(paramsState.ShowRadarInfo, 0);
     if (showRadarInfo <= 0) return;
+    const projectionLine = getRadarProjectionLine(model);
+    if (!projectionLine) return;
+    const radarLatFactor = finiteNumber(paramsState.RadarLatFactor, 0) / 100.0;
+    const isMetric = finiteNumber(paramsState.IsMetric, 1) !== 0;
 
     for (const radar of getRadarTracks(radarState)) {
       const dRel = finiteNumber(radar?.dRel, 0);
       if (!Number.isFinite(dRel) || dRel <= 2.5) continue;
 
-      const z = samplePathZ(modelPath, dRel) - 0.61;
-      const center = projectPoint(calibTransform, dRel, -finiteNumber(radar?.yRel, 0), z);
+      const yRel = finiteNumber(radar?.yRel, 0);
+      const z = samplePathZ(projectionLine, dRel) - 0.61;
+      const center = projectPointPrecise(calibTransform, dRel, -yRel, z);
       if (!center) continue;
 
       const vLead = finiteNumber(radar?.vLeadK, finiteNumber(radar?.vRel, 0));
@@ -1747,14 +2578,15 @@ window.HomeDrive = (() => {
       const modelProb = finiteNumber(radar?.modelProb, 0);
 
       if (vAbs > 3.0) {
-        const futureDRel = Math.max(2.0, dRel + vLead * 0.35);
-        const futureYRel = finiteNumber(radar?.yRel, 0) + vLat * 0.35;
-        const futureZ = samplePathZ(modelPath, futureDRel) - 0.61;
-        const future = projectPoint(calibTransform, futureDRel, -futureYRel, futureZ);
+        const futureDRel = Math.max(2.0, dRel + vLead * radarLatFactor);
+        const futureYRel = yRel + vLat * radarLatFactor;
+        const future = Math.abs(vLead) > 3.0
+          ? projectPointPrecise(calibTransform, futureDRel, -futureYRel, z)
+          : null;
         if (future) {
           const vectorColor = vSigned >= 0 ? "rgba(35,213,93,0.94)" : "rgba(255,59,48,0.94)";
           drawPolyline([center, future], vectorColor, 3.0);
-          drawPolygon(circlePolygon(future.x, future.y, 7, 18), vectorColor);
+          drawPolygon(circlePolygon(future.x, future.y, 10, 12), vectorColor);
         }
 
         let badgeColor = "rgba(255,59,48,0.96)";
@@ -1762,70 +2594,130 @@ window.HomeDrive = (() => {
         else if (Math.abs(modelProb - 0.01) < 1e-3) badgeColor = "rgba(35,213,93,0.96)";
         else if (vSigned > 0) badgeColor = "rgba(255,167,38,0.96)";
 
-        drawRadarSpeedBadge({ x: center.x, y: center.y - 18 }, (vSigned * 3.6).toFixed(0), badgeColor);
+        const speedValue = vSigned * (isMetric ? 3.6 : 2.2369363);
+        drawRadarSpeedBadge({ x: center.x, y: center.y }, speedValue.toFixed(0), badgeColor);
 
         if (showRadarInfo >= 2) {
-          drawCanvasOutlinedText(finiteNumber(radar?.yRel, 0).toFixed(1), center.x, center.y - 48, {
-            fontSize: 18,
-            fontWeight: 800,
+          drawCanvasOutlinedText(finiteNumber(radar?.yRel, 0).toFixed(1), center.x, center.y - 40, {
+            fontSize: 30,
+            fontWeight: 900,
+            strokeWidth: 3.8,
           });
-          drawCanvasOutlinedText(dRel.toFixed(1), center.x, center.y + 30, {
-            fontSize: 18,
-            fontWeight: 800,
+          const distanceValue = isMetric ? dRel : dRel * 0.621371;
+          drawCanvasOutlinedText(distanceValue.toFixed(1), center.x, center.y + 30, {
+            fontSize: 30,
+            fontWeight: 900,
+            strokeWidth: 3.8,
           });
         }
       } else if (showRadarInfo >= 3) {
         drawCanvasOutlinedText("*", center.x, center.y, {
-          fontSize: 28,
+          fontSize: 40,
           fontWeight: 900,
+          strokeWidth: 4.2,
         });
       }
     }
   }
 
-  function drawRadarLeadBoxes(model, overlayState, hudState, calibTransform, videoWidth, videoHeight) {
+  function drawRadarLeadBoxes(model, overlayState, hudState, calibTransform, videoWidth, videoHeight, stageWidth, stageHeight, transform) {
     const radarState = overlayState?.radarState || {};
     const modelPath = model?.position || null;
-    const showRadarInfo = finiteNumber(paramsState.ShowRadarInfo, defaultParams.ShowRadarInfo);
     const leadState = getLeadStateText(overlayState, hudState);
+    const roadCameraState = overlayState?.roadCameraState || null;
+    const longPlan = hudState?.longitudinalPlan || {};
+    const leadTwoStatus = finiteNumber(longPlan?.longitudinalPlanSource, 0) === LONG_PLAN_SOURCE_LEAD1 ? 2 : 1;
 
-    const leadOneBox = projectLeadBox(radarState?.leadOne, modelPath, calibTransform, videoWidth, videoHeight, 0);
+    syncLeadRenderState(videoWidth, videoHeight, model?.frameId, roadCameraState?.frameId);
+
+    const leadOneBox = projectLeadBox(
+      radarState?.leadOne,
+      modelPath,
+      calibTransform,
+      videoWidth,
+      videoHeight,
+      0,
+      stageWidth,
+      stageHeight,
+      transform,
+      {
+        includeDistanceBadge: leadState?.showDistanceBadge !== false,
+        includeStateText: Boolean(leadState?.text),
+      },
+    );
+    const nowMs = performance.now();
+
+    let primaryStatusAnchorBox = null;
     if (leadOneBox) {
       const isLeadScc = leadOneBox.radarTrackId < 1;
-      // Color logic: same as C3 carrot.cc (rcolor = isLeadSCC ? RED : ORANGE, !radar → BLUE)
-      const strokeColor = !leadOneBox.radar
-        ? "rgba(61,123,255,0.96)"
-        : (isLeadScc ? "rgba(255,59,48,0.96)" : "rgba(255,167,38,0.96)");
+      // C3 exact colors: COLOR_RED(255,0,0), COLOR_ORANGE(255,175,3), COLOR_BLUE(0,0,255)
+      const strokeColor = !leadOneBox.radarDetected
+        ? "rgba(0,0,255,0.96)"
+        : (isLeadScc ? "rgba(255,0,0,0.96)" : "rgba(255,175,3,0.96)");
+      eraseLeadBoxOcclusion(leadOneBox, true);
       drawLeadBoxCard(leadOneBox, strokeColor, "rgba(0,0,0,0.20)", true);
 
+      // Update hold state for persistence across brief status flickers
+      leadHoldState.lastValidMs = nowMs;
+      leadHoldState.box = leadOneBox;
+      leadHoldState.strokeColor = strokeColor;
+      leadHoldState.isLeadScc = isLeadScc;
+
       // C3-style distance badges: radar (red/orange bg) + vision (blue bg) side by side below box
-      if (showRadarInfo > 0 && leadState?.showDistanceBadge !== false) {
-        const radarDist = leadOneBox.radar ? Math.max(0, finiteNumber(radarState?.leadOne?.dRel, 0)) : 0;
-        const visionDist = leadOneBox.modelProb > 0.5 ? Math.max(0, leadOneBox.dRel - 1.52) : 0;
+      if (leadState?.showDistanceBadge !== false) {
+        const radarDist = Boolean(radarState?.leadOne?.radar) ? Math.max(0, finiteNumber(radarState?.leadOne?.dRel, 0)) : 0;
+        const visionDist = getPrimaryVisionDistance(model);
+        leadHoldState.radarDist = radarDist;
+        leadHoldState.visionDist = visionDist;
         if (radarDist > 0 || visionDist > 0) {
           const badgeTextColor = leadState?.xState === 0 ? "#ffffff" : (leadState?.xState === 1 ? "#b0b0b0" : "#23d55d");
-          drawLeadDistanceBadgesC3(leadOneBox, radarDist, visionDist, isLeadScc, badgeTextColor);
+          leadHoldState.badgeTextColor = badgeTextColor;
+          drawLeadDistanceBadgesC3(leadOneBox, radarDist, visionDist, isLeadScc, badgeTextColor, videoWidth, videoHeight, stageWidth, stageHeight, transform);
         }
       }
 
       if (leadState?.text) {
-        drawLeadStateBadge(leadOneBox, leadState.text, leadState.xState);
+        drawLeadStateBadge(leadOneBox, leadState.text, leadState.xState, videoWidth, videoHeight, stageWidth, stageHeight, transform);
       }
+      primaryStatusAnchorBox = leadOneBox;
+    } else if (leadHoldState.box && (nowMs - leadHoldState.lastValidMs) < LEAD_HOLD_MS) {
+      // Status flickered false briefly — hold last valid box (C3's SubMaster doesn't flicker)
+      const held = leadHoldState;
+      eraseLeadBoxOcclusion(held.box, true);
+      drawLeadBoxCard(held.box, held.strokeColor, "rgba(0,0,0,0.20)", true);
+      if (leadState?.showDistanceBadge !== false && (held.radarDist > 0 || held.visionDist > 0)) {
+        drawLeadDistanceBadgesC3(held.box, held.radarDist, held.visionDist, held.isLeadScc, held.badgeTextColor, videoWidth, videoHeight, stageWidth, stageHeight, transform);
+      }
+      if (leadState?.text) {
+        drawLeadStateBadge(held.box, leadState.text, leadState.xState, videoWidth, videoHeight, stageWidth, stageHeight, transform);
+      }
+      primaryStatusAnchorBox = held.box;
+    } else {
+      leadHoldState.box = null;
     }
 
     // LeadTwo: same logic as C3 (radar && dRel > leadOne.dRel + 3)
     const leadTwo = radarState?.leadTwo;
     const validLeadTwo = Boolean(leadTwo?.status) &&
       Boolean(leadTwo?.radar) &&
-      finiteNumber(leadTwo?.dRel, 0) > (finiteNumber(radarState?.leadOne?.dRel, 0) + 3) &&
-      finiteNumber(leadTwo?.radarTrackId, -99999) !== finiteNumber(radarState?.leadOne?.radarTrackId, -99998);
+      finiteNumber(leadTwo?.dRel, 0) > (finiteNumber(radarState?.leadOne?.dRel, 0) + 3);
     if (validLeadTwo) {
-      const leadTwoBox = projectLeadBox(leadTwo, modelPath, calibTransform, videoWidth, videoHeight, 1);
+      const leadTwoBox = projectLeadTwoBox(leadTwo, modelPath, calibTransform, videoWidth, videoHeight, stageWidth, stageHeight, transform);
       if (leadTwoBox) {
-        drawLeadBoxCard(leadTwoBox, "rgba(182,138,58,0.96)", "rgba(0,0,0,0.20)", false);
+        eraseLeadBoxOcclusion(leadTwoBox, false);
+        drawLeadBoxCard(
+          leadTwoBox,
+          "rgba(218,111,37,0.96)",  // C3 COLOR_OCHRE(218,111,37)
+          leadTwoStatus === 2 ? "rgba(255,0,0,0.20)" : "rgba(0,0,0,0.20)",  // C3 COLOR_RED_ALPHA(50)
+          false,
+        );
       }
+    } else {
+      resetLeadEmaSlot(1);
+      resetLeadTwoEma();
     }
-    drawRadarTargets(radarState, modelPath, calibTransform);
+    drawPathStatusText(modelPath, hudState, calibTransform, videoWidth, videoHeight, primaryStatusAnchorBox);
+    drawRadarTargets(radarState, model, calibTransform);
   }
 
   function roundedRectPath(context, x, y, width, height, radius) {
@@ -1844,15 +2736,31 @@ window.HomeDrive = (() => {
   }
 
   function fillRoundedRect(context, x, y, width, height, radius, fillStyle) {
-    roundedRectPath(context, x, y, width, height, radius);
     context.fillStyle = fillStyle;
+    const cachedPath = getCachedRoundedRectPath(width, height, radius);
+    if (cachedPath) {
+      context.save();
+      context.translate(x, y);
+      context.fill(cachedPath);
+      context.restore();
+      return;
+    }
+    roundedRectPath(context, x, y, width, height, radius);
     context.fill();
   }
 
   function strokeRoundedRect(context, x, y, width, height, radius, strokeStyle, lineWidth = 1) {
-    roundedRectPath(context, x, y, width, height, radius);
     context.strokeStyle = strokeStyle;
     context.lineWidth = lineWidth;
+    const cachedPath = getCachedRoundedRectPath(width, height, radius);
+    if (cachedPath) {
+      context.save();
+      context.translate(x, y);
+      context.stroke(cachedPath);
+      context.restore();
+      return;
+    }
+    roundedRectPath(context, x, y, width, height, radius);
     context.stroke();
   }
 
@@ -1902,6 +2810,134 @@ window.HomeDrive = (() => {
       fontSize,
       fontWeight: 900,
       alignX: "right",
+      alignY: "top",
+      maxWidth,
+    });
+  }
+
+  function formatRtcPerfLabel() {
+    const perf = window.CarrotRtcPerf || null;
+    if (!perf?.active) return "";
+    if (perf?.connectionState === "connecting" || perf?.iceConnectionState === "checking") return "RECONN";
+    if (perf?.error) return "";
+
+    const network = perf.network || {};
+    const inbound = perf.inbound || {};
+    const video = perf.video || {};
+    const resolutionLabel = String(network.resolutionLabel || "").trim();
+    const bitrateMbps = Number.isFinite(Number(network.bitrateMbps)) ? Number(network.bitrateMbps) : null;
+    const fps = Number.isFinite(Number(inbound.framesPerSecond)) ? Number(inbound.framesPerSecond) : null;
+    const rttMs = Number.isFinite(Number(network.rttMs)) ? Number(network.rttMs) : null;
+    const hasFreeze = Number.isFinite(Number(inbound.freezeCount)) && Number(inbound.freezeCount) > 0 &&
+      Number.isFinite(Number(video.readyState)) && Number(video.readyState) < 3;
+
+    if (!resolutionLabel && bitrateMbps == null && fps == null && rttMs == null) {
+      return hasFreeze ? "STALL" : "";
+    }
+
+    const bitrateLabel = bitrateMbps != null
+      ? `${bitrateMbps >= 10 ? bitrateMbps.toFixed(0) : bitrateMbps.toFixed(1)}m`
+      : "-m";
+    const fpsLabel = fps != null ? `${Math.round(fps)}fps` : "-fps";
+    const rttLabel = rttMs != null ? `${Math.round(rttMs)}ms` : "-ms";
+    return [resolutionLabel || "-p", bitrateLabel, fpsLabel, rttLabel].join(" ");
+  }
+
+  function drawHudRightCenterPerfText(stageWidth, stageHeight, viewportRect, pathMode) {
+    const label = shortText(formatRtcPerfLabel(), 48);
+    if (!label) return;
+
+    const exactC3Mode = stageWidth >= 1280 && stageHeight >= 720;
+    const baseScale = Math.min(stageWidth / 1920, stageHeight / 1080);
+    const scale = clamp(baseScale, 0.48, 1.0);
+    const edgeInsetX = exactC3Mode ? 10.0 : clamp(12.0 * scale, 6.0, 12.0);
+    const maxWidth = Math.max(180.0, viewportRect.width * 0.42);
+    const fontSize = fitSingleLineHudFontSize(
+      label,
+      exactC3Mode ? 18.0 : clamp(18.0 * scale, 8.0, 18.0),
+      maxWidth,
+      6.0,
+      900,
+    );
+    const alpha = getHudLabelAlpha(pathMode, Math.PI * 0.33) * 0.62;
+
+    drawOutlinedHudText({
+      text: label,
+      x: viewportRect.right - edgeInsetX,
+      y: viewportRect.top + viewportRect.height * 0.48,
+      color: `rgba(214, 214, 214, ${alpha.toFixed(3)})`,
+      strokeColor: `rgba(0, 0, 0, ${clamp(alpha + 0.18, 0.0, 0.82).toFixed(3)})`,
+      strokeWidth: clamp(3.8 * scale, 2.4, 4.6),
+      fontSize,
+      fontWeight: 900,
+      alignX: "right",
+      alignY: "middle",
+      maxWidth,
+    });
+  }
+
+  function drawStageEdgeFades(stageWidth, stageHeight) {
+    const topHeight = clamp(stageHeight * 0.16, 72, 148);
+    const bottomHeight = clamp(stageHeight * 0.24, 104, 212);
+
+    hudCtx.save();
+    hudCtx.globalCompositeOperation = "source-over";
+
+    const topGradientKey = `hud-top:${Math.round(stageWidth)}x${Math.round(stageHeight)}:${Math.round(topHeight)}`;
+    const topGradient = getCachedHudGradient(topGradientKey, () => {
+      const gradient = hudCtx.createLinearGradient(0, 0, 0, topHeight);
+      gradient.addColorStop(0.0, "rgba(0, 0, 0, 0.64)");
+      gradient.addColorStop(0.42, "rgba(0, 0, 0, 0.30)");
+      gradient.addColorStop(1.0, "rgba(0, 0, 0, 0.00)");
+      return gradient;
+    });
+    hudCtx.fillStyle = topGradient;
+    hudCtx.fillRect(0, 0, stageWidth, topHeight);
+
+    const bottomStart = Math.max(0, stageHeight - bottomHeight);
+    const bottomGradientKey = `hud-bottom:${Math.round(stageWidth)}x${Math.round(stageHeight)}:${Math.round(bottomStart)}:${Math.round(bottomHeight)}`;
+    const bottomGradient = getCachedHudGradient(bottomGradientKey, () => {
+      const gradient = hudCtx.createLinearGradient(0, bottomStart, 0, stageHeight);
+      gradient.addColorStop(0.0, "rgba(0, 0, 0, 0.00)");
+      gradient.addColorStop(0.42, "rgba(0, 0, 0, 0.28)");
+      gradient.addColorStop(1.0, "rgba(0, 0, 0, 0.74)");
+      return gradient;
+    });
+    hudCtx.fillStyle = bottomGradient;
+    hudCtx.fillRect(0, bottomStart, stageWidth, bottomHeight);
+
+    hudCtx.restore();
+  }
+
+  function drawHudTopLeftText(stageWidth, stageHeight, viewportRect, text, pathMode) {
+    if (window.matchMedia("(orientation: portrait)").matches) return;
+    const label = shortText(text, 160);
+    if (!label) return;
+    const exactC3Mode = stageWidth >= 1280 && stageHeight >= 720;
+    const baseScale = Math.min(stageWidth / 1920, stageHeight / 1080);
+    const scale = clamp(baseScale, 0.48, 1.0);
+    const edgeInsetX = exactC3Mode ? 1.5 : clamp(2.0 * scale, 1.0, 2.5);
+    const edgeInsetTop = exactC3Mode ? 1.5 : clamp(2.0 * scale, 1.0, 2.5);
+    const maxWidth = Math.max(120.0, viewportRect.width - edgeInsetX * 2.0);
+    const fontSize = fitSingleLineHudFontSize(
+      label,
+      exactC3Mode ? 24.0 : clamp(24.0 * scale, 7.0, 24.0),
+      maxWidth,
+      4.5,
+      900,
+    );
+    const alpha = getHudLabelAlpha(pathMode, 0.0);
+
+    drawOutlinedHudText({
+      text: label,
+      x: viewportRect.left + edgeInsetX,
+      y: viewportRect.top + edgeInsetTop,
+      color: `rgba(244, 244, 244, ${alpha.toFixed(3)})`,
+      strokeColor: `rgba(0, 0, 0, ${clamp(alpha + 0.08, 0.0, 1.0).toFixed(3)})`,
+      strokeWidth: clamp(4.2 * scale, 2.8, 5.4),
+      fontSize,
+      fontWeight: 900,
+      alignX: "left",
       alignY: "top",
       maxWidth,
     });
@@ -1991,6 +3027,39 @@ window.HomeDrive = (() => {
       fontSize,
       fontWeight: 900,
       alignX: "center",
+      alignY: "baselineBottom",
+      maxWidth,
+    });
+  }
+
+  function drawHudBottomLeftText(stageWidth, stageHeight, viewportRect, text, pathMode) {
+    const label = shortText(text, 160);
+    if (!label) return;
+    const exactC3Mode = stageWidth >= 1280 && stageHeight >= 720;
+    const baseScale = Math.min(stageWidth / 1920, stageHeight / 1080);
+    const scale = clamp(baseScale, 0.48, 1.0);
+    const edgeInsetX = exactC3Mode ? 1.5 : clamp(2.0 * scale, 1.0, 2.5);
+    const bottomInset = exactC3Mode ? 1.5 : clamp(2.0 * scale, 1.0, 2.5);
+    const maxWidth = Math.max(120.0, viewportRect.width * 0.42);
+    const fontSize = fitSingleLineHudFontSize(
+      label,
+      exactC3Mode ? 24.0 : clamp(24.0 * scale, 7.0, 24.0),
+      maxWidth,
+      4.5,
+      900,
+    );
+    const alpha = getHudLabelAlpha(pathMode, Math.PI);
+
+    drawOutlinedHudText({
+      text: label,
+      x: viewportRect.left + edgeInsetX,
+      y: viewportRect.bottom - bottomInset,
+      color: `rgba(236, 236, 236, ${alpha.toFixed(3)})`,
+      strokeColor: `rgba(0, 0, 0, ${clamp(alpha + 0.08, 0.0, 1.0).toFixed(3)})`,
+      strokeWidth: clamp(4.0 * scale, 2.8, 5.2),
+      fontSize,
+      fontWeight: 900,
+      alignX: "left",
       alignY: "baselineBottom",
       maxWidth,
     });
@@ -2103,37 +3172,41 @@ window.HomeDrive = (() => {
       case 2:
         return {
           mode,
-          title: "2.Speed/Accel (Y:speed_0, G:v_ego, O:a_ego)",
+          title: "2.Speed/Accel(Y:speed_0, G:v_ego, O:a_ego)",
           values: [speedTarget, vEgo, aEgo],
         };
       case 3:
         return {
           mode,
-          title: "3.Model (Y:pos_32, G:vel_32, O:vel_0)",
+          title: "3.Model(Y:pos_32, G:vel_32, O:vel_0)",
           values: [modelPos32, modelVel32, modelVel0],
         };
       case 4:
         return {
           mode,
-          title: "4.Lead (Y:accel, G:a_lead, O:v_rel)",
+          title: "4.Lead(Y:accel, G:a_lead, O:v_rel)",
           values: [accelTarget, finiteNumber(radarLead?.aLeadK, 0), finiteNumber(radarLead?.vRel, 0)],
         };
       case 5:
         return {
           mode,
-          title: "5.Lead (Y:a_ego, G:a_lead, O:j_lead)",
+          title: "5.Lead(Y:a_ego, G:a_lead, O:j_lead)",
           values: [aEgo, finiteNumber(radarLead?.aLead, 0), finiteNumber(radarLead?.jLead, 0)],
         };
       case 6:
         return {
           mode,
-          title: "6.Steer (web raw torqueState unavailable)",
-          values: [0, 0, 0],
+          title: "6.Steer(Y:actual, G:desire, O:output)",
+          values: [
+            finiteNumber(controlsState?.actualLateralAccel, 0) * 10.0,
+            finiteNumber(controlsState?.desiredLateralAccel, 0) * 10.0,
+            finiteNumber(controlsState?.lateralOutput, 0) * 10.0,
+          ],
         };
       case 7:
         return {
           mode,
-          title: "7.SteerA (Y:Actual, G:Target, O:Offset*10)",
+          title: "7.SteerA(Y:Actual, G:Target, O:Offset*10)",
           values: [
             finiteNumber(carState?.steeringAngleDeg, 0),
             finiteNumber(actuators?.steeringAngleDeg, 0),
@@ -2143,11 +3216,11 @@ window.HomeDrive = (() => {
       case 8:
         return {
           mode,
-          title: "8.Curvature (Y:G:O:cmd*10000)",
+          title: "8.SteerA(Y:Actual, G:Target, O:Offset*10)",
           values: [
             finiteNumber(actuators?.curvature, 0) * 10000,
-            finiteNumber(controlsState?.desiredCurvature, 0) * 10000,
-            finiteNumber(controlsState?.curvature, 0) * 10000,
+            finiteNumber(actuators?.curvature, 0) * 10000,
+            finiteNumber(actuators?.curvature, 0) * 10000,
           ],
         };
       default:
@@ -2227,65 +3300,69 @@ window.HomeDrive = (() => {
 
   function drawPlot(stageWidth, stageHeight, viewportRect, plotData) {
     if (!plotData) return;
+    if (stageHeight > stageWidth) return;
     const viewportWidth = finiteNumber(viewportRect?.width, stageWidth);
     const viewportHeight = finiteNumber(viewportRect?.height, stageHeight);
-    if (viewportWidth < 560 || viewportHeight < 260) return;
 
-    const panelWidth = clamp(viewportWidth * 0.42, 340, 560);
-    const panelHeight = clamp(viewportHeight * 0.22, 156, 200);
-    const panelX = finiteNumber(viewportRect?.left, 0) + Math.max(14, viewportWidth * 0.018);
-    const panelY = finiteNumber(viewportRect?.top, 0) + Math.max(46, viewportHeight * 0.05);
-    const graphX = panelX + 16;
-    const graphY = panelY + 40;
-    const graphWidth = panelWidth - 32;
-    const graphHeight = panelHeight - 58;
+    const plotScale = Math.min(
+      viewportWidth / BASE_CAMERA.width,
+      viewportHeight / BASE_CAMERA.height,
+    );
+    const plotX = finiteNumber(viewportRect?.left, 0) + 22.0 * plotScale;
+    const plotY = finiteNumber(viewportRect?.top, 0) + 40.0 * plotScale;
+    const plotWidth = 1000.0 * plotScale;
+    const plotHeight = 300.0 * plotScale;
+    const plotDx = 2.0 * plotScale;  // scale with plot area to match C3 density
+    const size = Math.min(_plotRingSize, PLOT_MAX_POINTS);
+    if (size < 2) return;
     const bounds = getPlotBounds();
     const range = Math.max(bounds.max - bounds.min, 1);
+    const visibleSize = Math.min(size, Math.max(2, Math.floor(plotWidth / Math.max(plotDx, 0.001))));
+    const latestPlotX = plotX + plotWidth;
+    const latestLabelX = latestPlotX + 50.0 * plotScale;
+    const titleX = plotX + 8.0 * plotScale;
+    const titleY = plotY + plotHeight + 18.0 * plotScale;
 
     hudCtx.save();
-    fillRoundedRect(hudCtx, panelX, panelY, panelWidth, panelHeight, 18, "rgba(15, 20, 28, 0.58)");
-    strokeRoundedRect(hudCtx, panelX, panelY, panelWidth, panelHeight, 18, "rgba(255,255,255,0.10)");
-
-    hudCtx.fillStyle = "rgba(255,255,255,0.95)";
-    hudCtx.font = "600 16px system-ui";
-    hudCtx.textAlign = "left";
-    hudCtx.textBaseline = "middle";
-    hudCtx.fillText(plotData.title, panelX + 16, panelY + 20);
-
-    hudCtx.strokeStyle = "rgba(255,255,255,0.10)";
-    hudCtx.lineWidth = 1;
-    for (let i = 0; i <= 4; i += 1) {
-      const y = graphY + (graphHeight / 4) * i;
-      hudCtx.beginPath();
-      hudCtx.moveTo(graphX, y);
-      hudCtx.lineTo(graphX + graphWidth, y);
-      hudCtx.stroke();
-    }
 
     for (let seriesIndex = 0; seriesIndex < 3; seriesIndex += 1) {
-      if (_plotRingSize < 2) continue;
-
       hudCtx.beginPath();
-      for (let i = 0; i < _plotRingSize; i += 1) {
-        const currentValue = _plotRingGet(seriesIndex, i);
-        const x = graphX + (graphWidth * i) / Math.max(1, PLOT_MAX_POINTS - 1);
-        const y = graphY + graphHeight - ((currentValue - bounds.min) / range) * graphHeight;
-        if (i === 0) hudCtx.moveTo(x, y);
-        else hudCtx.lineTo(x, y);
+      let latestPoint = null;
+      for (let i = 0; i < visibleSize; i += 1) {
+        const currentValue = _plotRingGet(seriesIndex, size - 1 - i);
+        const x = latestPlotX - i * plotDx;
+        const y = plotY + plotHeight - ((currentValue - bounds.min) / range) * plotHeight;
+        if (i === 0) {
+          hudCtx.moveTo(x, y);
+          latestPoint = { x, y, value: currentValue };
+        } else {
+          hudCtx.lineTo(x, y);
+        }
       }
-      hudCtx.lineWidth = 2.5;
+      hudCtx.lineWidth = Math.max(1.6, 3.0 * plotScale);
       hudCtx.strokeStyle = PLOT_SERIES[seriesIndex].color;
       hudCtx.stroke();
 
-      const currentValue = _plotRingGet(seriesIndex, _plotRingSize - 1);
-      hudCtx.fillStyle = PLOT_SERIES[seriesIndex].color;
-      hudCtx.font = "600 15px system-ui";
-      hudCtx.fillText(
-        `${PLOT_SERIES[seriesIndex].label}:${currentValue.toFixed(2)}`,
-        graphX + 8 + seriesIndex * 130,
-        panelY + panelHeight - 16,
-      );
+      if (latestPoint) {
+        const labelY = latestPoint.y + (seriesIndex > 0 ? 40.0 * plotScale : 0);
+        drawCanvasOutlinedText(latestPoint.value.toFixed(2), latestLabelX, labelY, {
+          fontSize: clamp(Math.round(34.0 * plotScale), 15, 34),
+          fontWeight: 900,
+          strokeWidth: Math.max(1.3, 3.2 * plotScale),
+          fillStyle: PLOT_SERIES[seriesIndex].color,
+          align: "left",
+          canvasCtx: hudCtx,
+        });
+      }
     }
+
+    drawCanvasOutlinedText(plotData.title, titleX, titleY, {
+      fontSize: clamp(Math.round(19.0 * plotScale), 12, 19),
+      fontWeight: 800,
+      strokeWidth: Math.max(1.4, 3.6 * plotScale),
+      align: "left",
+      canvasCtx: hudCtx,
+    });
 
     hudCtx.restore();
   }
@@ -2315,12 +3392,21 @@ window.HomeDrive = (() => {
     const stageWidth = Math.max(1, stageEl.clientWidth);
     const stageHeight = Math.max(1, stageEl.clientHeight);
     const forceAll = Boolean(options.force || _forceNextRender);
+    const rawOverlayState = window.CarrotOverlayState || {};
+    const rawHudState = window.CarrotHudState || {};
+    const runtimeState = mergeRuntimeState(rawHudState, rawOverlayState);
+    let overlayState = runtimeState.overlayState;
+    const hudState = runtimeState.hudState;
+    const brokerServices = runtimeState.brokerServices;
+
+    renderOnroadAlert(stageWidth, stageHeight, hudState?.selfdriveState);
 
     if (!window.CARROT_VISION_ACTIVE) {
       if (forceAll || _lastOverlaySig !== "vision-disabled" || _lastHudSig !== "vision-disabled") {
         _lastOverlaySig = "vision-disabled";
         _lastHudSig = "vision-disabled";
         _lastPlotInputSig = "off";
+        setStageLoading(false);
         setStageReady(false);
         clearOverlay(canvasEl.width || 1, canvasEl.height || 1);
         clearHud(hudCanvasEl.width || 1, hudCanvasEl.height || 1);
@@ -2335,6 +3421,7 @@ window.HomeDrive = (() => {
     if (!hasStream || !videoEl.videoWidth || !videoEl.videoHeight) {
       _lastOverlaySig = "";
       _lastHudSig = "";
+      setStageLoading(true, "연결중");
       setStageReady(false);
       clearOverlay(canvasEl.width || 1, canvasEl.height || 1);
       clearHud(hudCanvasEl.width || 1, hudCanvasEl.height || 1);
@@ -2352,16 +3439,9 @@ window.HomeDrive = (() => {
       return;
     }
 
-    const rawOverlayState = window.CarrotOverlayState || {};
-    const rawHudState = window.CarrotHudState || {};
     const videoWidth = videoEl.videoWidth;
     const videoHeight = videoEl.videoHeight;
     syncCanvasSize(videoWidth, videoHeight, stageWidth, stageHeight);
-
-    const runtimeState = mergeRuntimeState(rawHudState, rawOverlayState);
-    let overlayState = runtimeState.overlayState;
-    const hudState = runtimeState.hudState;
-    const brokerServices = runtimeState.brokerServices;
     // Use raw radar state directly — no interpolation (matches C3/CarrotLink).
     // C3 reads SubMaster every frame; CarrotLink reads snapshot directly.
     // Position smoothing is handled in projectLeadBox() via EMA.
@@ -2378,13 +3458,18 @@ window.HomeDrive = (() => {
       formatDebugText(overlayState),
     );
     const overlaySig = overlayDataSignature(hudState, overlayState, selectedPath, pathStyle, showLaneInfo);
+    // C3 pushes plot data EVERY frame unconditionally (drawPlot.draw→updatePlotQueue).
+    // Web must do the same for identical density — no signature gating.
+    updatePlotHistory(plotData);
     const nextPlotSig = plotInputSignature(plotData);
     const plotChanged = forceAll || Boolean(options.hudDirty) || nextPlotSig !== _lastPlotInputSig;
     if (plotChanged) {
-      updatePlotHistory(plotData);
       _lastPlotInputSig = nextPlotSig;
     }
     const hudSig = hudDataSignature(hudState, overlayState, plotData, selectedPath, debugText);
+    if ((!overlayInfoState.lastSignature || !overlayInfoState.carLabel || !overlayInfoState.branchLabel) && !overlayInfoState.loading) {
+      refreshOverlayInfo().catch(() => {});
+    }
     const overlayDirty = forceAll || Boolean(options.overlayDirty) || overlaySig !== _lastOverlaySig;
     const hudDirty = forceAll || overlayDirty || Boolean(options.hudDirty) || plotChanged || hudSig !== _lastHudSig;
     if (!overlayDirty && !hudDirty) return;
@@ -2405,24 +3490,30 @@ window.HomeDrive = (() => {
     applyStageTransform(transform);
     setStageReady(true);
     applyCarrotHudLayout(viewportRect);
+    setStageLoading(false);
 
     if (overlayDirty) {
+      resetFrameProjectionCache();
       clearOverlay(videoWidth, videoHeight);
       if (model) {
-        if (showLaneInfo >= 1) drawLaneLines(model, hudState, transform.calibTransform);
-        if (showLaneInfo > 1) drawRoadEdges(model, transform.calibTransform);
-        if (showLaneInfo >= 0) drawPath(selectedPath.pathData, model, transform.calibTransform, videoHeight, pathStyle);
-        drawProjectedTfMarker(model?.position, hudState?.longitudinalPlan, transform.calibTransform, videoWidth, videoHeight);
+        if (showLaneInfo >= 1) drawLaneLines(model, overlayState, hudState, transform.calibTransform);
+        if (showLaneInfo > 1) drawRoadEdges(model, overlayState, transform.calibTransform);
+        if (showLaneInfo >= 0) drawPath(selectedPath.pathData, model, overlayState, transform.calibTransform, videoHeight, pathStyle);
         drawBlindspotBarriers(model?.position, overlayState, hudState, transform.calibTransform);
-        drawRadarLeadBoxes(model, overlayState, hudState, transform.calibTransform, videoWidth, videoHeight);
+        drawRadarLeadBoxes(model, overlayState, hudState, transform.calibTransform, videoWidth, videoHeight, stageWidth, stageHeight, transform);
+        drawProjectedTfMarker(model?.position, hudState?.longitudinalPlan, transform.calibTransform, videoWidth, videoHeight);
       }
     }
 
     if (hudDirty) {
       clearHud(stageWidth, stageHeight);
+      drawStageEdgeFades(stageWidth, stageHeight);
       drawPlot(stageWidth, stageHeight, viewportRect, plotData);
       setDebug(debugText);
+      drawHudTopLeftText(stageWidth, stageHeight, viewportRect, overlayInfoState.carLabel, pathStyle.mode);
       drawHudTopRightText(stageWidth, stageHeight, viewportRect, lastDebug, pathStyle.mode);
+      drawHudRightCenterPerfText(stageWidth, stageHeight, viewportRect, pathStyle.mode);
+      drawHudBottomLeftText(stageWidth, stageHeight, viewportRect, overlayInfoState.branchLabel, pathStyle.mode);
       drawHudBottomText(stageWidth, stageHeight, viewportRect, selectedPath.latDebugText, hudState, pathStyle.mode);
     }
 
@@ -2554,19 +3645,34 @@ window.HomeDrive = (() => {
     _lastPlotInputSig = "";
     _forceNextRender = true;
     _gradientCache.clear();
+    _hudGradientCache.clear();
     _rgbaCache.clear();
     _mergeRuntimeCache.refs = null;
     _mergeRuntimeCache.result = null;
   }
 
-  zoomButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      const index = Number(button.dataset.displayIndex);
-      if (!Number.isFinite(index)) return;
-      setDisplayModeIndex(index);
+  if (displayModeButton) {
+    displayModeButton.addEventListener("click", () => {
+      const nextIndex = (displayModeIndex + 1) % DISPLAY_MODES.length;
+      setDisplayModeIndex(nextIndex);
       requestRender({ force: true, overlayDirty: true, hudDirty: true });
     });
-  });
+  }
+
+  function shouldIgnoreStageFullscreenToggle(target) {
+    if (!(target instanceof Element)) return false;
+    if (target.closest("button, a, input, textarea, select, label")) return true;
+    if (target.closest(".carrot-stage__controls")) return true;
+    if (target.closest(".vision-start-overlay")) return true;
+    return false;
+  }
+
+  async function handleStageFullscreenToggle(event) {
+    if (!window.CARROT_VISION_ACTIVE) return;
+    if (shouldIgnoreStageFullscreenToggle(event?.target)) return;
+    if (typeof window.ToggleCarrotFullscreen !== "function") return;
+    await window.ToggleCarrotFullscreen({ quiet: false }).catch(() => {});
+  }
 
   function requestFullRender() {
     refresh();
@@ -2575,21 +3681,34 @@ window.HomeDrive = (() => {
 
   function handleLifecycleChange() {
     if (isStageVisible()) {
+      if (window.CARROT_VISION_ACTIVE) {
+        setStageLoading(true, "연결중");
+      }
+      refreshOverlayInfo().catch(() => {});
       requestFullRender();
       return;
     }
     cancelScheduledRender();
+    setStageLoading(false);
     if (!isActive()) resetCarrotHudLayout();
   }
 
+  stageEl.addEventListener("click", handleStageFullscreenToggle);
   window.addEventListener("resize", requestFullRender);
+  window.addEventListener("orientationchange", requestFullRender);
+  document.addEventListener("fullscreenchange", requestFullRender);
+  document.addEventListener("webkitfullscreenchange", requestFullRender);
   window.addEventListener("carrot:render-request", (event) => requestRender(event.detail || {}));
   window.addEventListener("carrot:pagechange", handleLifecycleChange);
   window.addEventListener("carrot:visionchange", handleLifecycleChange);
   document.addEventListener("visibilitychange", handleLifecycleChange);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", requestFullRender, { passive: true });
+    window.visualViewport.addEventListener("scroll", requestFullRender, { passive: true });
+  }
+  const renderVideoTargets = sourceVideoEl === videoEl ? [videoEl] : [sourceVideoEl, videoEl];
   ["loadedmetadata", "loadeddata", "playing", "resize", "emptied"].forEach((eventName) => {
-    sourceVideoEl.addEventListener(eventName, requestFullRender);
-    videoEl.addEventListener(eventName, requestFullRender);
+    renderVideoTargets.forEach((target) => target.addEventListener(eventName, requestFullRender));
   });
 
   try {
@@ -2601,6 +3720,7 @@ window.HomeDrive = (() => {
 
   syncDisplayModeButtons();
   refreshParams(true);
+  refreshOverlayInfo(true).catch(() => {});
   requestRender({ force: true, overlayDirty: true, hudDirty: true });
 
   return {

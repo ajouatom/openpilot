@@ -441,6 +441,7 @@ const appDialog = document.getElementById("appDialog");
 const appDialogBackdrop = document.getElementById("appDialogBackdrop");
 const appDialogTitle = document.getElementById("appDialogTitle");
 const appDialogBody = document.getElementById("appDialogBody");
+const appDialogChoices = document.getElementById("appDialogChoices");
 const appDialogInputWrap = document.getElementById("appDialogInputWrap");
 const appDialogInput = document.getElementById("appDialogInput");
 const appDialogCancel = document.getElementById("appDialogCancel");
@@ -451,6 +452,12 @@ const appBranchPickerTitle = document.getElementById("appBranchPickerTitle");
 const appBranchPickerMeta = document.getElementById("appBranchPickerMeta");
 const appBranchPickerList = document.getElementById("appBranchPickerList");
 const appBranchPickerClose = document.getElementById("appBranchPickerClose");
+const appCarPicker = document.getElementById("appCarPicker");
+const appCarPickerBackdrop = document.getElementById("appCarPickerBackdrop");
+const appCarPickerTitle = document.getElementById("appCarPickerTitle");
+const appCarPickerMeta = document.getElementById("appCarPickerMeta");
+const appCarPickerList = document.getElementById("appCarPickerList");
+const appCarPickerClose = document.getElementById("appCarPickerClose");
 const swipeContainer = document.getElementById("swipeContainer");
 const PAGE_ELEMENTS = {
   setting: document.getElementById("pageSetting"),
@@ -508,10 +515,13 @@ let appToastHideTimer = null;
 let appToastRemoveTimer = null;
 let activeAppDialog = null;
 let appDialogSerial = 0;
+let settingScreenHideTimer = null;
+let settingScreenTransitionToken = 0;
+let carScreenHideTimer = null;
+let carScreenTransitionToken = 0;
 
 btnTools.onclick = () => showPage("tools", true, getSwipeTransition(CURRENT_PAGE, "tools"));
 
-const btnChangeCar = document.getElementById("btnChangeCar");
 const curCarLabelCar = document.getElementById("curCarLabelCar");
 const curCarLabelSetting = document.getElementById("curCarLabelSetting");
 
@@ -555,7 +565,19 @@ btnFleet.onclick = async () => {
 
 btnLang.onclick = () => toggleLang();
 
-btnChangeCar.onclick = () => showPage("car", true);
+if (settingCarRow) {
+  settingCarRow.onclick = () => {
+    if (typeof window.openCarPickerFlow === "function") window.openCarPickerFlow();
+    else showPage("car", true);
+  };
+  settingCarRow.onkeydown = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      if (typeof window.openCarPickerFlow === "function") window.openCarPickerFlow();
+      else showPage("car", true);
+    }
+  };
+}
 btnBackCar.onclick = () => history.back();
 carTitle.onclick = () => history.back();
 modelTitle.onclick = () => showCarScreen("makers");
@@ -607,6 +629,13 @@ function setDisplayedPage(page) {
   });
   if (swipeContainer) swipeContainer.style.minHeight = "";
   if (settingScreenHost) settingScreenHost.style.minHeight = "";
+}
+
+function clearPendingScreenHide(timerRef) {
+  if (timerRef) {
+    window.clearTimeout(timerRef);
+  }
+  return null;
 }
 
 function getSwipeTransition(fromPage, toPage) {
@@ -869,6 +898,9 @@ function showSettingScreen(which, pushHistory = false) {
     ? getSettingGroupLabel(CURRENT_GROUP)
     : (CURRENT_GROUP || "");
   const splitLandscape = (CURRENT_PAGE === "setting" && typeof isCompactLandscapeMode === "function" && isCompactLandscapeMode());
+  const transitionToken = ++settingScreenTransitionToken;
+
+  settingScreenHideTimer = clearPendingScreenHide(settingScreenHideTimer);
 
   if (splitLandscape) {
     settingTitle.textContent = UI_STRINGS[LANG].setting || "Setting";
@@ -893,10 +925,17 @@ function showSettingScreen(which, pushHistory = false) {
   if (settingSubnavWrap) settingSubnavWrap.style.display = isGroups ? "none" : "";
 
   showEl.style.display = "";
-  requestAnimationFrame(() => showEl.classList.remove("hidden"));
+  requestAnimationFrame(() => {
+    if (transitionToken !== settingScreenTransitionToken) return;
+    showEl.classList.remove("hidden");
+  });
 
   hideEl.classList.add("hidden");
-  setTimeout(() => { hideEl.style.display = "none"; }, 170);
+  settingScreenHideTimer = window.setTimeout(() => {
+    if (transitionToken !== settingScreenTransitionToken) return;
+    hideEl.style.display = "none";
+    settingScreenHideTimer = null;
+  }, 170);
 
   if (pushHistory) {
     history.pushState({ page: "setting", screen: which, group: CURRENT_GROUP || null }, "");
@@ -917,12 +956,22 @@ function showCarScreen(which, pushHistory = false) {
   const isMakers = (which === "makers");
   const showEl = isMakers ? carScreenMakers : carScreenModels;
   const hideEl = isMakers ? carScreenModels : carScreenMakers;
+  const transitionToken = ++carScreenTransitionToken;
+
+  carScreenHideTimer = clearPendingScreenHide(carScreenHideTimer);
 
   showEl.style.display = "";
-  requestAnimationFrame(() => showEl.classList.remove("hidden"));
+  requestAnimationFrame(() => {
+    if (transitionToken !== carScreenTransitionToken) return;
+    showEl.classList.remove("hidden");
+  });
 
   hideEl.classList.add("hidden");
-  setTimeout(() => { hideEl.style.display = "none"; }, 170);
+  carScreenHideTimer = window.setTimeout(() => {
+    if (transitionToken !== carScreenTransitionToken) return;
+    hideEl.style.display = "none";
+    carScreenHideTimer = null;
+  }, 170);
 
   if (pushHistory) {
     history.pushState({ page: "car", screen: which, maker: CURRENT_MAKER || null }, "");
@@ -959,7 +1008,7 @@ function toggleLang() {
 function renderUIText() {
   const s = UI_STRINGS[LANG];
   if (!s) return;
-  document.title = s.home || "Home";
+  document.title = "CarrotPilot";
 
   // Nav bar (nested spans — set last child text)
   setNavText("btnHome", s.home);
@@ -968,7 +1017,7 @@ function renderUIText() {
   setNavText("btnTerminal", s.terminal);
   setNavText("btnFleet", s.fleet);
 
-  setText("carrotTitle", s.home || "Home");
+  setText("carrotTitle", "CarrotPilot");
 
   // Car Select
   setText("carTitle", s.car_select);
@@ -979,7 +1028,6 @@ function renderUIText() {
   // Setting
   setText("settingTitleText", s.setting);
   setText("btnBackGroups", s.back);
-  setText("btnChangeCar", s.change);
   setText("groupsTitle", s.groups);
   setText("itemsTitle", s.items);
 
@@ -987,8 +1035,7 @@ function renderUIText() {
   setText("toolsTitle", s.tools);
   setText("gitCommandsTitle", s.git_commands);
   setText("userSystemTitle", s.user_system);
-  setText("toolsQuickLinkTitle", s.quick_link);
-  setText("btnToolsQuickLink", s.open);
+  setText("toolsQuickLinkTitle", "Quick Link");
   setText("userSettingsTitle", s.section_settings_backup);
   setText("btnReboot", s.reboot);
   setText("btnBackupSettings", s.backup);
@@ -1022,6 +1069,8 @@ function renderUIText() {
   }
   setText("appBranchPickerTitle", s.branch_select);
   setText("appBranchPickerClose", s.close);
+  setText("appCarPickerTitle", s.car_select);
+  setText("appCarPickerClose", s.cancel);
   updateLangLabel();
   syncHomeUtilityButtons();
   if (window.DrivingHud && typeof window.DrivingHud.renderText === "function") {
@@ -1074,6 +1123,7 @@ function syncModalBodyLock() {
   const hasOpenDialog =
     Boolean(appDialog && !appDialog.hidden) ||
     Boolean(appBranchPicker && !appBranchPicker.hidden) ||
+    Boolean(appCarPicker && !appCarPicker.hidden) ||
     Boolean(settingSearchPanel && !settingSearchPanel.hidden);
   document.body.classList.toggle("dialog-open", hasOpenDialog);
 }
@@ -1139,6 +1189,10 @@ function resolveAppDialog(result) {
     }
     appDialog.hidden = true;
     syncModalBodyLock();
+    if (appDialogChoices) {
+      appDialogChoices.hidden = true;
+      appDialogChoices.innerHTML = "";
+    }
     if (appDialogInputWrap) appDialogInputWrap.hidden = true;
     if (appDialogInput) {
       appDialogInput.value = "";
@@ -1153,7 +1207,9 @@ function resolveAppDialog(result) {
 
 function cancelAppDialog() {
   if (!activeAppDialog) return;
-  const result = activeAppDialog.mode === "prompt" ? null : false;
+  const result = activeAppDialog.mode === "prompt" || activeAppDialog.mode === "choice"
+    ? null
+    : false;
   resolveAppDialog(result);
 }
 
@@ -1184,6 +1240,10 @@ function openAppDialog(options = {}) {
   const message = options.message || "";
   const confirmLabel = options.confirmLabel || getUIText("ok", "OK");
   const cancelLabel = options.cancelLabel || getUIText("cancel", "Cancel");
+  const choices = Array.isArray(options.choices)
+    ? options.choices.filter((choice) => choice && choice.label)
+    : [];
+  const isChoice = mode === "choice" || choices.length > 0;
   const showCancel = mode !== "alert";
 
   appDialogTitle.textContent = title;
@@ -1192,6 +1252,23 @@ function openAppDialog(options = {}) {
   appDialogCancel.textContent = cancelLabel;
   appDialogCancel.hidden = !showCancel;
   appDialogCancel.setAttribute("aria-hidden", showCancel ? "false" : "true");
+  appDialogConfirm.hidden = isChoice;
+  appDialogConfirm.setAttribute("aria-hidden", isChoice ? "true" : "false");
+
+  if (appDialogChoices) {
+    appDialogChoices.innerHTML = "";
+    appDialogChoices.hidden = !isChoice;
+    for (const choice of choices) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = choice.danger
+        ? "btn btn--danger app-dialog__choiceBtn"
+        : "btn app-dialog__choiceBtn";
+      button.textContent = String(choice.label);
+      button.addEventListener("click", () => resolveAppDialog(choice.value));
+      appDialogChoices.appendChild(button);
+    }
+  }
 
   if (appDialogInputWrap && appDialogInput) {
     const isPrompt = mode === "prompt";
@@ -1217,6 +1294,9 @@ function openAppDialog(options = {}) {
       if (mode === "prompt" && appDialogInput) {
         appDialogInput.focus();
         appDialogInput.select();
+      } else if (isChoice && appDialogChoices) {
+        const firstChoice = appDialogChoices.querySelector("button");
+        if (firstChoice && typeof firstChoice.focus === "function") firstChoice.focus();
       } else {
         appDialogConfirm.focus();
       }
@@ -1278,12 +1358,7 @@ document.addEventListener("keydown", (ev) => {
 });
 
 function syncHomeUtilityButtons() {
-  if (btnSaveQuickLink) {
-    const label = getUIText("open", "Open");
-    btnSaveQuickLink.textContent = label;
-    btnSaveQuickLink.setAttribute("aria-label", label);
-    btnSaveQuickLink.title = label;
-  }
+  return;
 }
 
 function flashQuickLinkActionLabel(label, duration = 1400) {
@@ -1363,12 +1438,6 @@ async function openQuickLink() {
   window.open(QUICK_LINK_URL, "_blank", "noopener");
 }
 
-if (btnSaveQuickLink) {
-  btnSaveQuickLink.onclick = () => {
-    openQuickLink().catch((e) => console.log("[QuickLink] open failed:", e));
-  };
-}
-
 function escapeHtml(s) {
   return String(s)
     .replaceAll("&", "&amp;")
@@ -1415,7 +1484,7 @@ const SWIPE_PAGES = ["carrot", "setting", "tools", "terminal"];
 const SETTING_BACK_EDGE_WIDTH = 32;
 
 function isLandscapeRailMode() {
-  return window.matchMedia("(orientation: landscape) and (max-height: 560px) and (pointer: coarse)").matches;
+  return window.matchMedia("(orientation: landscape)").matches;
 }
 
 function isSettingItemsScreenActive() {

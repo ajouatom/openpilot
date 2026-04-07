@@ -44,6 +44,7 @@ from openpilot.system.hardware import HARDWARE
 from ..realtime.raw_protocol import build_raw_hello, build_raw_multiplex_hello
 from ..realtime.transports import CameraWsHub, RawWsHub
 from .live_compat.broker import RealtimeBroker
+from .live_compat.normalize import to_transport_safe
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
@@ -236,19 +237,21 @@ async def api_live_runtime(request: web.Request) -> web.Response:
 
   meta = broker.last_snapshot.get("meta") if isinstance(broker.last_snapshot, dict) else {}
   services = _select_live_runtime_services(broker.last_snapshot if isinstance(broker.last_snapshot, dict) else {})
-  return web.json_response({
+  return web.json_response(to_transport_safe({
     "ok": True,
     "meta": meta if isinstance(meta, dict) else {},
     "runtime": runtime if isinstance(runtime, dict) else {},
     "services": services,
     "snapshotAgeMs": broker.snapshot_age_ms(),
-  })
+  }))
 
 
 _LIVE_RUNTIME_SERVICE_NAMES = (
   "selfdriveState",
   "carState",
   "controlsState",
+  "deviceState",
+  "peripheralState",
   "longitudinalPlan",
   "lateralPlan",
   "radarState",
