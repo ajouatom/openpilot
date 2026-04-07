@@ -3312,7 +3312,7 @@ window.HomeDrive = (() => {
     const plotY = finiteNumber(viewportRect?.top, 0) + 40.0 * plotScale;
     const plotWidth = 1000.0 * plotScale;
     const plotHeight = 300.0 * plotScale;
-    const plotDx = 2.0;  // C3 fixed: plotDx=2.0 (no scaling)
+    const plotDx = 2.0 * plotScale;  // scale with plot area to match C3 density
     const size = Math.min(_plotRingSize, PLOT_MAX_POINTS);
     if (size < 2) return;
     const bounds = getPlotBounds();
