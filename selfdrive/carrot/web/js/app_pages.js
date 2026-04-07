@@ -5,9 +5,140 @@ let recordStateResyncTimer = null;
 let appViewportMetricsBound = false;
 const CURRENT_CAR_CACHE_KEY = "carrot_web_current_car_label";
 const CURRENT_CAR_RETRY_DELAYS_MS = [350, 800, 1500, 2500, 4000];
+const PAGE_DATA_TTL_MS = 15000;
 let currentCarRetryTimer = null;
 let currentCarRetryIndex = 0;
 let currentCarLastKnownLabel = "";
+let currentCarLoadPromise = null;
+let currentCarLoadedAt = 0;
+let currentCarHasSnapshot = false;
+let recordStateLoadPromise = null;
+let recordStateLoadedAt = 0;
+let carsLoadPromise = null;
+let settingsLoadPromise = null;
+let toolsMetaLoadPromise = null;
+let toolsMetaLoadedAt = 0;
+let uiWarmupTimer = null;
+const SETTING_VALUES_TTL_MS = 60000;
+let settingValueWarmupTimer = null;
+let settingValueWarmupPromise = null;
+const settingValueCache = new Map();
+const settingGroupValueCache = new Map();
+const settingGroupValuePromises = new Map();
+
+function hasFreshPageData(lastLoadedAt, ttlMs = PAGE_DATA_TTL_MS) {
+  return Number.isFinite(lastLoadedAt) && lastLoadedAt > 0 && (Date.now() - lastLoadedAt) < ttlMs;
+}
+
+function requestIdleTask(callback, timeout = 900) {
+  if (typeof window.requestIdleCallback === "function") {
+    return window.requestIdleCallback(callback, { timeout });
+  }
+  return window.setTimeout(callback, Math.min(timeout, 180));
+}
+
+function getSettingGroupParamNames(group) {
+  const list = SETTINGS?.items_by_group?.[group] || [];
+  return list.map((item) => item.name).filter(Boolean);
+}
+
+function cacheSettingValue(name, value, group = null) {
+  if (!name) return;
+  const loadedAt = Date.now();
+  settingValueCache.set(name, { value, loadedAt });
+  if (!group) return;
+  const cachedGroup = settingGroupValueCache.get(group);
+  if (!cachedGroup) return;
+  cachedGroup.values[name] = value;
+  cachedGroup.loadedAt = loadedAt;
+}
+
+function primeSettingGroupValueCache(group, values) {
+  if (!group) return;
+  const loadedAt = Date.now();
+  const snapshot = { values: { ...(values || {}) }, loadedAt };
+  settingGroupValueCache.set(group, snapshot);
+  Object.entries(snapshot.values).forEach(([name, value]) => {
+    settingValueCache.set(name, { value, loadedAt });
+  });
+}
+
+async function fetchSettingGroupValues(group, options = {}) {
+  if (!group) return {};
+  const force = options.force === true;
+  const ttlMs = Number.isFinite(options.ttlMs) ? options.ttlMs : SETTING_VALUES_TTL_MS;
+  const names = getSettingGroupParamNames(group);
+  if (!names.length) {
+    primeSettingGroupValueCache(group, {});
+    return {};
+  }
+
+  const cachedGroup = settingGroupValueCache.get(group);
+  if (!force && cachedGroup && hasFreshPageData(cachedGroup.loadedAt, ttlMs)) {
+    return { ...cachedGroup.values };
+  }
+
+  if (!force && settingGroupValuePromises.has(group)) {
+    return settingGroupValuePromises.get(group);
+  }
+
+  const assembledValues = {};
+  const missingNames = [];
+  names.forEach((name) => {
+    const cachedValue = settingValueCache.get(name);
+    if (!force && cachedValue && hasFreshPageData(cachedValue.loadedAt, ttlMs)) {
+      assembledValues[name] = cachedValue.value;
+    } else {
+      missingNames.push(name);
+    }
+  });
+
+  if (!missingNames.length) {
+    primeSettingGroupValueCache(group, assembledValues);
+    return assembledValues;
+  }
+
+  const loadPromise = (async () => {
+    const fetchedValues = await bulkGet(missingNames);
+    const nextValues = { ...assembledValues, ...(fetchedValues || {}) };
+    primeSettingGroupValueCache(group, nextValues);
+    return { ...nextValues };
+  })().finally(() => {
+    settingGroupValuePromises.delete(group);
+  });
+
+  settingGroupValuePromises.set(group, loadPromise);
+  return loadPromise;
+}
+
+async function warmupSettingGroupValues() {
+  if (!SETTINGS?.groups?.length) return;
+  const groups = SETTINGS.groups
+    .map((entry) => entry.group)
+    .filter(Boolean)
+    .filter((group) => group !== CURRENT_GROUP);
+
+  for (const group of groups) {
+    try {
+      await fetchSettingGroupValues(group, { ttlMs: SETTING_VALUES_TTL_MS });
+    } catch {}
+    await new Promise((resolve) => window.setTimeout(resolve, 24));
+  }
+}
+
+function scheduleSettingGroupValueWarmup(delay = 220) {
+  if (!SETTINGS?.groups?.length || settingValueWarmupTimer || settingValueWarmupPromise) return;
+  settingValueWarmupTimer = window.setTimeout(() => {
+    settingValueWarmupTimer = null;
+    requestIdleTask(() => {
+      settingValueWarmupPromise = warmupSettingGroupValues()
+        .catch(() => {})
+        .finally(() => {
+          settingValueWarmupPromise = null;
+        });
+    }, 1200);
+  }, Math.max(0, delay));
+}
 
 function updateSettingCarEntryState(label) {
   if (!settingCarRow) return;
@@ -215,45 +346,82 @@ function applyRecordFabState(isOn) {
 
 async function loadCurrentCar(options = {}) {
   const resetRetry = options.resetRetry !== false;
+  const force = options.force === true;
+  const ttlMs = Number.isFinite(options.ttlMs) ? options.ttlMs : PAGE_DATA_TTL_MS;
   if (resetRetry) {
     currentCarRetryIndex = 0;
     cancelCurrentCarRetry();
   }
-  try {
-    const values = await bulkGet(["CarSelected3", "CarName"]);
-    const label = resolveCurrentCarLabel(values);
-    if (label) {
-      cancelCurrentCarRetry();
-      currentCarRetryIndex = 0;
-      applyCurrentCarLabel(label);
-    } else {
+  if (!force && currentCarLoadPromise) return currentCarLoadPromise;
+  if (!force && currentCarHasSnapshot && hasFreshPageData(currentCarLoadedAt, ttlMs)) {
+    return currentCarLastKnownLabel;
+  }
+
+  currentCarLoadPromise = (async () => {
+    try {
+      const values = await bulkGet(["CarSelected3", "CarName"]);
+      const label = resolveCurrentCarLabel(values);
+      if (label) {
+        cancelCurrentCarRetry();
+        currentCarRetryIndex = 0;
+        applyCurrentCarLabel(label);
+      } else {
+        applyCurrentCarLabel("", { blank: !currentCarLastKnownLabel });
+        scheduleCurrentCarRetry();
+      }
+      currentCarHasSnapshot = true;
+      currentCarLoadedAt = Date.now();
+      return label;
+    } catch (e) {
       applyCurrentCarLabel("", { blank: !currentCarLastKnownLabel });
       scheduleCurrentCarRetry();
+      throw e;
+    } finally {
+      currentCarLoadPromise = null;
     }
-  } catch (e) {
-    applyCurrentCarLabel("", { blank: !currentCarLastKnownLabel });
-    scheduleCurrentCarRetry();
-  }
+  })();
+
+  return currentCarLoadPromise;
 }
 
 window.addEventListener("pageshow", () => {
   loadCurrentCar({ resetRetry: true }).catch(() => {});
+  scheduleUiWarmup(90);
 });
 
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
-    loadCurrentCar({ resetRetry: true }).catch(() => {});
+    loadCurrentCar({ resetRetry: true, force: true }).catch(() => {});
+    scheduleUiWarmup(70);
   }
 });
 
+window.addEventListener("online", () => {
+  scheduleUiWarmup(40);
+});
+
 async function loadRecordState(options = {}) {
-  if (recordTogglePending && !options.force) return;
-  try {
-    const values = await bulkGet(["ScreenRecord"]);
-    applyRecordFabState(parseRecordStateValue(values["ScreenRecord"]));
-  } catch (e) {
-    applyRecordFabState(false);
-  }
+  const force = options.force === true;
+  const ttlMs = Number.isFinite(options.ttlMs) ? options.ttlMs : PAGE_DATA_TTL_MS;
+  if (recordTogglePending && !force) return;
+  if (!force && recordStateLoadPromise) return recordStateLoadPromise;
+  if (!force && hasFreshPageData(recordStateLoadedAt, ttlMs)) return recordStateIsOn;
+
+  recordStateLoadPromise = (async () => {
+    try {
+      const values = await bulkGet(["ScreenRecord"]);
+      applyRecordFabState(parseRecordStateValue(values["ScreenRecord"]));
+      recordStateLoadedAt = Date.now();
+      return recordStateIsOn;
+    } catch (e) {
+      applyRecordFabState(false);
+      throw e;
+    } finally {
+      recordStateLoadPromise = null;
+    }
+  })();
+
+  return recordStateLoadPromise;
 }
 async function toggleRecord() {
   if (recordTogglePending) return;
@@ -377,11 +545,21 @@ function renderCarPickerModels(maker) {
 
 async function ensureCarsLoaded() {
   if (CARS?.makers) return CARS;
-  const r = await fetch("/api/cars");
-  const j = await r.json();
-  if (!j.ok) throw new Error(j.error || "failed to load cars");
-  CARS = j;
-  return CARS;
+  if (carsLoadPromise) return carsLoadPromise;
+
+  carsLoadPromise = (async () => {
+    const r = await fetch("/api/cars");
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || "failed to load cars");
+    CARS = j;
+    return CARS;
+  })();
+
+  try {
+    return await carsLoadPromise;
+  } finally {
+    carsLoadPromise = null;
+  }
 }
 
 async function runOpenCarPickerFlow() {
@@ -418,7 +596,23 @@ document.addEventListener("keydown", (ev) => {
   else closeCarPicker();
 });
 
-async function loadCars() {
+async function loadCars(options = {}) {
+  const background = options.background === true;
+  if (CARS?.makers) {
+    if (!background) {
+      const sources = (CARS.sources || []).join(", ");
+      carMeta.textContent = sources ? ("sources: " + sources) : "ok";
+      renderMakers();
+      CURRENT_MAKER = null;
+      showCarScreen("makers", false);
+    }
+    return CARS;
+  }
+
+  if (background) {
+    return ensureCarsLoaded();
+  }
+
   carMeta.textContent = "loading...";
   makerList.innerHTML = "";
   modelList.innerHTML = "";
@@ -521,46 +715,79 @@ async function onSelectCar(maker, modelOnly, fullLine) {
 }
 
 /* ---------- Settings ---------- */
-async function loadSettings() {
+async function loadSettings(options = {}) {
+  const background = options.background === true;
+  const force = options.force === true;
   const meta = document.getElementById("settingsMeta");
-  meta.textContent = "loading...";
 
-  const r = await fetch("/api/settings");
-  const j = await r.json();
-  if (!j.ok) {
+  if (SETTINGS && !force) {
+    renderGroups();
+    renderSettingSubnav();
+    syncSettingSearchFabState();
+    if (!background && CURRENT_PAGE === "setting" && typeof syncSettingViewportLayout === "function") {
+      await syncSettingViewportLayout();
+    }
+    return SETTINGS;
+  }
+
+  if (!force && settingsLoadPromise) return settingsLoadPromise;
+  if (!background && meta) meta.textContent = "loading...";
+
+  settingsLoadPromise = (async () => {
+    const r = await fetch("/api/settings");
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || "unknown");
+
+    SETTINGS = j;
+    UNIT_CYCLE = j.unit_cycle || UNIT_CYCLE;
+    settingValueCache.clear();
+    settingGroupValueCache.clear();
+    settingGroupValuePromises.clear();
+    rebuildSettingSearchEntries();
+
+    if (meta) {
+      meta.textContent = `path: ${j.path} | has_params: ${j.has_params} | type_api: ${j.has_param_type}`;
+      if (!DEBUG_UI) {
+        meta.style.display = "none";
+      }
+    }
+
+    if (!DEBUG_UI) {
+      const gm = document.getElementById("groupMeta");
+      if (gm) gm.style.display = "none";
+      const cm = document.getElementById("carMeta");
+      if (cm) cm.style.display = "none";
+    }
+
+    renderGroups();
+    renderSettingSubnav();
+    syncSettingSearchFabState();
+    scheduleSettingGroupValueWarmup(260);
+
+    if (!background || CURRENT_PAGE === "setting") {
+      CURRENT_GROUP = null;
+      if (isCompactLandscapeMode()) {
+        const initialGroup = getLandscapeDefaultSettingGroup();
+        if (initialGroup) await activateSettingGroup(initialGroup, false);
+        else showSettingScreen("groups", false);
+      } else {
+        showSettingScreen("groups", false);
+      }
+      if (settingSearchPanel && !settingSearchPanel.hidden) {
+        renderSettingSearchResults(settingSearchInput?.value || "");
+      }
+    }
+
+    return SETTINGS;
+  })().catch((e) => {
     settingSearchEntries = [];
-    meta.textContent = "Failed: " + (j.error || "unknown");
-    return;
-  }
+    if (!background && meta) meta.textContent = "Failed: " + (e?.message || "unknown");
+    throw e;
+  }).finally(() => {
+    settingsLoadPromise = null;
+  });
 
-  SETTINGS = j;
-  UNIT_CYCLE = j.unit_cycle || UNIT_CYCLE;
-  rebuildSettingSearchEntries();
-
-  meta.textContent = `path: ${j.path} | has_params: ${j.has_params} | type_api: ${j.has_param_type}`;
-
-  if (!DEBUG_UI) {
-    meta.style.display = "none";
-    const gm = document.getElementById("groupMeta");
-    if (gm) gm.style.display = "none";
-    const cm = document.getElementById("carMeta");
-    if (cm) cm.style.display = "none";
-  }
-
-  renderGroups();
-  renderSettingSubnav();
-  CURRENT_GROUP = null;
-  syncSettingSearchFabState();
-  if (isCompactLandscapeMode()) {
-    const initialGroup = getLandscapeDefaultSettingGroup();
-    if (initialGroup) await activateSettingGroup(initialGroup, false);
-    else showSettingScreen("groups", false);
-  } else {
-    showSettingScreen("groups", false);
-  }
-  if (settingSearchPanel && !settingSearchPanel.hidden) {
-    renderSettingSearchResults(settingSearchInput?.value || "");
-  }
+  return settingsLoadPromise;
 }
 
 function renderGroups() {
@@ -974,6 +1201,10 @@ async function activateSettingGroup(group, pushHistory = true, options = {}) {
   const nextGroup = group || CURRENT_GROUP;
   const previousGroup = CURRENT_GROUP;
   const scrollMode = options.scrollMode || "top";
+  const canReuseRenderedGroup =
+    options.forceRender !== true &&
+    previousGroup === nextGroup &&
+    hasRenderedSettingItems(nextGroup);
 
   if (previousGroup && previousGroup !== nextGroup) {
     saveCurrentSettingScrollPosition(previousGroup);
@@ -984,6 +1215,20 @@ async function activateSettingGroup(group, pushHistory = true, options = {}) {
   if (isCompactLandscapeMode() && CURRENT_PAGE === "setting") {
     showSettingScreen("items", false);
     history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
+    syncSettingGroupChrome(group);
+    if (typeof centerActiveSettingSubnavTab === "function") centerActiveSettingSubnavTab("auto");
+    if (canReuseRenderedGroup) {
+      requestAnimationFrame(() => {
+        if (scrollMode === "restore") {
+          setSettingItemsScrollTop(
+            Number.isFinite(options.scrollTop) ? options.scrollTop : getSavedSettingScrollPosition(group),
+          );
+        } else {
+          resetSettingItemsViewport();
+        }
+      });
+      return;
+    }
     await renderItems(group, {
       scrollMode,
       scrollTop: options.scrollTop,
@@ -994,6 +1239,20 @@ async function activateSettingGroup(group, pushHistory = true, options = {}) {
   showSettingScreen("items", pushHistory);
   if (!pushHistory) {
     history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
+  }
+  syncSettingGroupChrome(group);
+  if (typeof centerActiveSettingSubnavTab === "function") centerActiveSettingSubnavTab("auto");
+  if (canReuseRenderedGroup) {
+    requestAnimationFrame(() => {
+      if (scrollMode === "restore") {
+        setSettingItemsScrollTop(
+          Number.isFinite(options.scrollTop) ? options.scrollTop : getSavedSettingScrollPosition(group),
+        );
+      } else {
+        resetSettingItemsViewport();
+      }
+    });
+    return;
   }
   await renderItems(group, {
     scrollMode,
@@ -1290,10 +1549,12 @@ async function renderItems(group, options = {}) {
   settingTitle.textContent = (UI_STRINGS[LANG].setting || "Setting") + " - " + groupLabel;
   if (itemsTitle) itemsTitle.textContent = groupLabel;
 
-  const names = list.map(p => p.name);
   let values = {};
   try {
-    values = await bulkGet(names);
+    values = await fetchSettingGroupValues(group, {
+      force: options.forceValues === true,
+      ttlMs: Number.isFinite(options.ttlMs) ? options.ttlMs : SETTING_VALUES_TTL_MS,
+    });
   } catch (e) {
     values = {};
   }
@@ -1383,6 +1644,7 @@ async function renderItems(group, options = {}) {
       try {
         await setParam(name, next);
         val.textContent = String(next);
+        cacheSettingValue(name, next, group);
       } catch (e) {
         showAppToast((UI_STRINGS[LANG].set_failed || "set failed: ") + e.message, { tone: "error" });
       }
@@ -1642,16 +1904,50 @@ function renderToolsMeta() {
   statusEl.textContent = toolsMetaStatusText || "-";
   meta.appendChild(statusEl);
 
+  const actionsEl = document.createElement("div");
+  actionsEl.className = "tools-meta__actions";
+
+  const langBtn = document.createElement("button");
+  langBtn.type = "button";
+  langBtn.className = "tools-meta__langBtn";
+  langBtn.textContent = (typeof LANG_EMOJI === "object" && LANG_EMOJI[LANG]) ? LANG_EMOJI[LANG] : "🌐";
+  const langTitle = LANG === "en"
+    ? "Language"
+    : LANG === "zh"
+      ? "语言"
+      : "언어";
+  langBtn.setAttribute("aria-label", langTitle);
+  langBtn.title = langTitle;
+  langBtn.addEventListener("click", () => {
+    if (typeof toggleLang === "function") toggleLang();
+  });
+  actionsEl.appendChild(langBtn);
+
   if (toolsMetaInfoText) {
     const infoBtn = document.createElement("button");
     infoBtn.type = "button";
     infoBtn.className = "smallBtn tools-meta__infoBtn";
-    infoBtn.textContent = "기기정보";
+    infoBtn.textContent = LANG === "en"
+      ? "Device Info"
+      : LANG === "zh"
+        ? "设备信息"
+        : "기기정보";
     infoBtn.addEventListener("click", () => {
-      appAlert(toolsMetaInfoDialogText || toolsMetaInfoText, { title: "기기정보" });
+      const title = LANG === "en"
+        ? "Device Info"
+        : LANG === "zh"
+          ? "设备信息"
+          : "기기정보";
+      appAlert(toolsMetaInfoDialogText || toolsMetaInfoText, {
+        title,
+        html: true,
+        messageHtml: toolsMetaInfoDialogText,
+      });
     });
-    meta.appendChild(infoBtn);
+    actionsEl.appendChild(infoBtn);
   }
+
+  meta.appendChild(actionsEl);
 }
 
 function toolsMetaSet(s) {
@@ -1672,27 +1968,161 @@ function buildToolsMetaInfo(values = {}) {
   return parts.join("  ·  ");
 }
 
+function formatToolsMetaDate(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const m = raw.match(/^(\d{4})[-./](\d{2})[-./](\d{2})/);
+  if (m) return `${m[1]}.${m[2]}.${m[3]}`;
+  const ts = Date.parse(raw);
+  if (!Number.isFinite(ts)) return "";
+  const d = new Date(ts);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}.${mm}.${dd}`;
+}
+
+function formatToolsMetaDateTime(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  let ms = NaN;
+  if (/^\d+$/.test(raw)) {
+    const num = Number(raw);
+    if (Number.isFinite(num)) ms = raw.length >= 13 ? num : num * 1000;
+  } else {
+    ms = Date.parse(raw);
+  }
+  if (!Number.isFinite(ms)) return "";
+
+  const d = new Date(ms);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  return `${yyyy}.${mm}.${dd} ${hh}:${min}:${ss}`;
+}
+
 function buildToolsMetaInfoDialog(values = {}) {
   const branch = String(values.GitBranch || "").trim();
   const commit = String(values.GitCommit || "").trim();
+  const commitDate = formatToolsMetaDate(values.GitCommitDate);
   const dongleId = String(values.DongleId || "").trim();
   const serial = String(values.HardwareSerial || "").trim();
+  const gitPullTime = formatToolsMetaDateTime(values.GitPullTime);
+  const labels = LANG === "en"
+    ? { branch: "Branch", commit: "Commit", dongle: "Dongle ID", serial: "Serial", gitPull: "Recent update" }
+    : LANG === "zh"
+      ? { branch: "分支", commit: "提交", dongle: "Dongle ID", serial: "序列号", gitPull: "最近更新" }
+      : { branch: "브랜치", commit: "커밋", dongle: "동글ID", serial: "시리얼", gitPull: "최근 업데이트" };
+  const htmlEscape = typeof escapeHtml === "function"
+    ? escapeHtml
+    : (value) => String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
   const lines = [];
-  if (branch) lines.push(`브랜치: ${branch}`);
-  if (commit) lines.push(`커밋: ${commit.slice(0, 7)}`);
-  if (dongleId) lines.push(`동글ID: ${dongleId}`);
-  if (serial) lines.push(`시리얼: ${serial}`);
-  return lines.join("\n");
+  if (branch) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.branch)}: ${htmlEscape(branch)}</div>`);
+  if (commit) {
+    const commitText = `${commit.slice(0, 7)}${commitDate ? `    ${commitDate}` : ""}`;
+    lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.commit)}: ${htmlEscape(commitText)}</div>`);
+  }
+  if (dongleId) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.dongle)}: ${htmlEscape(dongleId)}</div>`);
+  if (serial) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.serial)}: ${htmlEscape(serial)}</div>`);
+  if (gitPullTime) {
+    lines.push(`<div class="app-dialog__metaSubtle">${htmlEscape(labels.gitPull)}: ${htmlEscape(gitPullTime)}</div>`);
+  }
+  return `<div class="app-dialog__metaList">${lines.join("")}</div>`;
 }
 
-async function refreshToolsMetaInfo() {
+function rerenderPageLangUi() {
+  renderToolsMeta();
+  refreshToolsMetaInfo().catch(() => {});
+
+  const terminalMetaEl = document.getElementById("terminalMeta");
+  if (!terminalMetaEl) return;
+
+  const current = String(terminalMetaEl.textContent || "").trim();
+  const terminalStates = [
+    ["connecting", "connecting..."],
+    ["connected", "connected"],
+    ["reconnecting", "reconnecting..."],
+    ["terminal_ready", "tmux ready"],
+    ["terminal_disconnected", "disconnected"],
+    ["terminal_unavailable", "terminal unavailable"],
+    ["terminal_offline", "terminal offline"],
+  ];
+
+  for (const [key, fallback] of terminalStates) {
+    const variants = ["ko", "en", "zh"]
+      .map((langKey) => UI_STRINGS[langKey]?.[key] || fallback)
+      .filter(Boolean);
+    if (variants.includes(current)) {
+      terminalMetaEl.textContent = getUIText(key, fallback);
+      break;
+    }
+  }
+}
+
+async function refreshToolsMetaInfo(options = {}) {
+  const force = options.force === true;
+  const silent = options.silent === true;
+  const ttlMs = Number.isFinite(options.ttlMs) ? options.ttlMs : PAGE_DATA_TTL_MS;
   if (typeof bulkGet !== "function") return;
-  try {
-    const values = await bulkGet(["GitBranch", "GitCommit", "DongleId", "HardwareSerial"]);
+  if (!force && toolsMetaLoadPromise) return toolsMetaLoadPromise;
+  if (!force && hasFreshPageData(toolsMetaLoadedAt, ttlMs)) {
+    if (!silent || CURRENT_PAGE === "tools") renderToolsMeta();
+    return {
+      text: toolsMetaInfoText,
+      dialog: toolsMetaInfoDialogText,
+    };
+  }
+
+  toolsMetaLoadPromise = (async () => {
+    const values = await bulkGet(["GitBranch", "GitCommit", "GitCommitDate", "DongleId", "HardwareSerial", "GitPullTime"]);
     toolsMetaInfoText = buildToolsMetaInfo(values);
     toolsMetaInfoDialogText = buildToolsMetaInfoDialog(values);
-    renderToolsMeta();
-  } catch {}
+    toolsMetaLoadedAt = Date.now();
+    if (!silent || CURRENT_PAGE === "tools") renderToolsMeta();
+    return values;
+  })().finally(() => {
+    toolsMetaLoadPromise = null;
+  });
+
+  return toolsMetaLoadPromise;
+}
+
+function runUiWarmup() {
+  return Promise.allSettled([
+    loadCurrentCar({ resetRetry: false, ttlMs: PAGE_DATA_TTL_MS }),
+    loadRecordState({ ttlMs: PAGE_DATA_TTL_MS }),
+    refreshToolsMetaInfo({ silent: true, ttlMs: PAGE_DATA_TTL_MS }),
+    typeof updateQuickLink === "function" ? updateQuickLink({ silent: true, ttlMs: PAGE_DATA_TTL_MS }) : Promise.resolve(),
+    loadSettings({ background: true }),
+    ensureCarsLoaded(),
+  ]);
+}
+
+function scheduleUiWarmup(delay = 140) {
+  if (uiWarmupTimer) return;
+  uiWarmupTimer = window.setTimeout(() => {
+    uiWarmupTimer = null;
+    requestIdleTask(() => {
+      runUiWarmup().catch(() => {});
+    });
+  }, Math.max(0, delay));
+}
+
+if (document.readyState === "complete") {
+  scheduleUiWarmup(120);
+} else {
+  window.addEventListener("load", () => {
+    scheduleUiWarmup(120);
+  }, { once: true });
 }
 
 function toolsProgressSet(percent = null, opts = {}) {
@@ -1959,6 +2389,7 @@ function initToolsPage() {
   bindOnce("btnGitPull", async () => {
     try {
       const result = await runTool("git_pull");
+      await refreshToolsMetaInfo();
       if (!didGitPullUpdate(result)) return;
       if (await appConfirm(UI_STRINGS[LANG].confirm_reboot || "Reboot now?", {
         title: UI_STRINGS[LANG].reboot || "Reboot",

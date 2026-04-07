@@ -6,8 +6,8 @@
   <title>CarrotPilot</title>
   <link rel="icon" type="image/png" href="/assets/img_chffr_wheel.png?v=2604-01" />
   <link rel="stylesheet" href="/css/tokens.css?v=2603-73" />
-  <link rel="stylesheet" href="/css/hud_card.css?v=2604-06" />
-  <link rel="stylesheet" href="/css/app.css?v=2604-26" />
+  <link rel="stylesheet" href="/css/hud_card.css?v=2604-09" />
+  <link rel="stylesheet" href="/css/app.css?v=2604-38" />
 </head>
 
 <body>
@@ -144,20 +144,6 @@
 
         <hr class="divider">
 
-        <div class="section tools-group" data-tools-group="quicklink">
-          <button class="tools-group__toggle" type="button" aria-expanded="false" aria-controls="toolsGroupBodyQuickLink">
-            <span id="toolsQuickLinkTitle" class="section-title tools-group__title">Quick Link</span>
-            <span class="tools-group__chevron" aria-hidden="true"></span>
-          </button>
-          <div id="toolsGroupBodyQuickLink" class="tools-group__body hidden" hidden>
-            <div class="muted mt-sm">
-              <a id="toolsQuickLink" class="home-utility-linkInline" href="#" target="_blank" rel="noopener">Quick Link</a>
-            </div>
-          </div>
-        </div>
-
-        <hr class="divider">
-
         <div class="section tools-group" data-tools-group="settings">
           <button class="tools-group__toggle" type="button" aria-expanded="false" aria-controls="toolsGroupBodySettings">
             <span id="userSettingsTitle" class="section-title tools-group__title">Settings</span>
@@ -166,6 +152,21 @@
           <div id="toolsGroupBodySettings" class="tools-group__body row-wrap hidden" hidden>
             <button id="btnBackupSettings" class="btn">backup settings</button>
             <button id="btnRestoreSettings" class="btn">restore settings</button>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="section tools-group" data-tools-group="quicklink">
+          <button class="tools-group__toggle" type="button" aria-expanded="false" aria-controls="toolsGroupBodyQuickLink">
+            <span id="toolsQuickLinkTitle" class="section-title tools-group__title">Link</span>
+            <span class="tools-group__chevron" aria-hidden="true"></span>
+          </button>
+          <div id="toolsGroupBodyQuickLink" class="tools-group__body hidden" hidden>
+            <div class="tools-quicklink-actions row-wrap">
+              <a id="btnQuickLinkWeb" class="home-utility-linkInline tools-quicklink-link" href="#" aria-disabled="true">web</a>
+              <button id="btnQuickFleet" class="btn" type="button">Fleet</button>
+            </div>
           </div>
         </div>
       </div>
@@ -386,21 +387,6 @@
       </span>
       <span>Terminal</span>
     </button>
-    <button id="btnFleet" class="nav-btn">
-      <span class="nav-icon">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
-      </span>
-      <span>Fleet</span>
-    </button>
-    <button id="btnLang" class="nav-btn langToggle">
-      <span class="nav-icon">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12.87 15.07l-2.54-2.51.03-.03A17.52 17.52 0 0014.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/></svg>
-      </span>
-      <span id="langLabel" class="lang-label">
-        <span class="lang-label__main">🇰🇷</span>
-        <span class="lang-label__sub"></span>
-      </span>
-    </button>
   </nav>
 
   <div id="appToastHost" class="app-toast-host" aria-live="polite" aria-atomic="true"></div>
@@ -452,10 +438,10 @@
   </div>
 
   <script src="/js/hud_card.js?v=2604-05"></script>
-  <script src="/js/app_core.js?v=2604-12"></script>
-  <script src="/js/app_pages.js?v=2604-18"></script>
+  <script src="/js/app_core.js?v=2604-18"></script>
+  <script src="/js/app_pages.js?v=2604-23"></script>
   <script src="/js/raw_capnp.js?v=2604-05"></script>
-  <script src="/js/app_realtime.js?v=2604-10"></script>
-  <script src="/js/home_drive.js?v=2604-25"></script>
+  <script src="/js/app_realtime.js?v=2604-11"></script>
+  <script src="/js/home_drive.js?v=2604-26"></script>
 </body>
 </html>

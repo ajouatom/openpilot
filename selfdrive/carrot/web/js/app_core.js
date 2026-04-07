@@ -425,6 +425,9 @@ const btnTerminal = document.getElementById("btnTerminal");
 const btnFleet = document.getElementById("btnFleet");
 const btnLang = document.getElementById("btnLang");
 const langLabel = document.getElementById("langLabel");
+const btnSettingLang = document.getElementById("btnSettingLang");
+const btnQuickLinkWeb = document.getElementById("btnQuickLinkWeb");
+const btnQuickFleet = document.getElementById("btnQuickFleet");
 const btnTools = document.getElementById("btnTools");
 const btnRecordToggle = document.getElementById("btnRecordToggle");
 const btnSettingSearch = document.getElementById("btnSettingSearch");
@@ -552,7 +555,7 @@ btnRecordToggle.onclick = () => toggleRecord();
 btnSetting.onclick = () => showPage("setting", true, getSwipeTransition(CURRENT_PAGE, "setting"));
 btnTerminal.onclick = () => showPage("terminal", true, getSwipeTransition(CURRENT_PAGE, "terminal"));
 
-btnFleet.onclick = async () => {
+async function openFleetLink() {
   const ip = location.hostname;
   const url = `http://${ip}:8082/`;
   const ok = await appConfirm(
@@ -561,9 +564,12 @@ btnFleet.onclick = async () => {
   );
   if (!ok) return;
   window.open(url, "_blank", "noopener");
-};
+}
 
-btnLang.onclick = () => toggleLang();
+if (btnFleet) btnFleet.onclick = () => { openFleetLink().catch(() => {}); };
+if (btnQuickFleet) btnQuickFleet.onclick = () => { openFleetLink().catch(() => {}); };
+if (btnLang) btnLang.onclick = () => toggleLang();
+if (btnSettingLang) btnSettingLang.onclick = () => toggleLang();
 
 if (settingCarRow) {
   settingCarRow.onclick = () => {
@@ -597,6 +603,8 @@ const btnSaveQuickLink = document.getElementById("btnToolsQuickLink");
 let QUICK_LINK_URL = "";
 let QUICK_LINK_STATUS = "loading";
 let QUICK_LINK_MESSAGE = "";
+let quickLinkLoadPromise = null;
+let quickLinkLoadedAt = 0;
 let quickLinkActionTimer = null;
 
 btnBackBranch.onclick = () => history.back();
@@ -827,17 +835,33 @@ function showPage(page, pushHistory = false, transition = null) {
     teardownTerminalPage();
   }
   CURRENT_PAGE = page;
-
-  if (transition && prevPage !== page) animatePageTransition(prevPage, page, transition);
-  else setDisplayedPage(page);
-
   document.body.dataset.page = page;
-  window.dispatchEvent(new CustomEvent("carrot:pagechange", { detail: { page, prevPage } }));
 
   btnHome.classList.toggle("active", page === "carrot");
   btnSetting.classList.toggle("active", page === "setting");
   btnTools.classList.toggle("active", page === "tools");
   btnTerminal.classList.toggle("active", page === "terminal");
+
+  if (typeof updateAppViewportMetrics === "function") {
+    updateAppViewportMetrics();
+  }
+
+  if (page === "setting" && SETTINGS) {
+    if (typeof syncSettingViewportLayout === "function") {
+      syncSettingViewportLayout().catch(() => {});
+    } else if (pushHistory || !CURRENT_GROUP) {
+      showSettingScreen("groups", false);
+    }
+  }
+
+  if (page === "carrot" && window.HomeDrive && typeof window.HomeDrive.refresh === "function") {
+    window.HomeDrive.refresh();
+  }
+
+  if (transition && prevPage !== page) animatePageTransition(prevPage, page, transition);
+  else setDisplayedPage(page);
+
+  window.dispatchEvent(new CustomEvent("carrot:pagechange", { detail: { page, prevPage } }));
 
   if (page !== "setting" && typeof closeSettingSearchPanel === "function") {
     closeSettingSearchPanel({ clear: false });
@@ -868,9 +892,6 @@ function showPage(page, pushHistory = false, transition = null) {
   }
   if (page === "terminal" && typeof initTerminalPage === "function") {
     initTerminalPage();
-  }
-  if (page === "carrot" && window.HomeDrive && typeof window.HomeDrive.refresh === "function") {
-    window.HomeDrive.refresh();
   }
   if (page === "carrot") {
     loadRecordState().catch(() => {});
@@ -991,6 +1012,7 @@ function toggleLang() {
   // Update static UI text
   renderUIText();
   loadRecordState().catch(() => {});
+  if (typeof rerenderPageLangUi === "function") rerenderPageLangUi();
 
   if (SETTINGS) {
     if (typeof rebuildSettingSearchEntries === "function") rebuildSettingSearchEntries();
@@ -1016,6 +1038,8 @@ function renderUIText() {
   setNavText("btnTools", s.tools);
   setNavText("btnTerminal", s.terminal);
   setNavText("btnFleet", s.fleet);
+  setText("btnQuickLinkWeb", "web");
+  setText("btnQuickFleet", s.fleet);
 
   setText("carrotTitle", "CarrotPilot");
 
@@ -1035,7 +1059,7 @@ function renderUIText() {
   setText("toolsTitle", s.tools);
   setText("gitCommandsTitle", s.git_commands);
   setText("userSystemTitle", s.user_system);
-  setText("toolsQuickLinkTitle", "Quick Link");
+  setText("toolsQuickLinkTitle", "Link");
   setText("userSettingsTitle", s.section_settings_backup);
   setText("btnReboot", s.reboot);
   setText("btnBackupSettings", s.backup);
@@ -1094,23 +1118,32 @@ function setText(id, txt) {
 }
 
 function updateLangLabel() {
-  if (!langLabel) return;
-
-  const main = langLabel.querySelector(".lang-label__main");
-  const sub = langLabel.querySelector(".lang-label__sub");
+  const main = langLabel?.querySelector(".lang-label__main");
+  const sub = langLabel?.querySelector(".lang-label__sub");
   const emoji = LANG_EMOJI[LANG] || "🌐";
-  if (main && sub) {
-    main.textContent = emoji;
-    sub.textContent = "";
-    sub.hidden = true;
-  } else {
-    langLabel.textContent = emoji;
+  if (langLabel) {
+    if (main && sub) {
+      main.textContent = emoji;
+      sub.textContent = "";
+      sub.hidden = true;
+    } else {
+      langLabel.textContent = emoji;
+    }
   }
 
   if (btnLang) {
     const text = `${getUIText("lang", "lang")} (${LANG})`;
     btnLang.setAttribute("aria-label", text);
     btnLang.title = text;
+  }
+  if (btnSettingLang) {
+    const label = LANG === "en"
+      ? "Language · English"
+      : LANG === "zh"
+        ? "语言 · 中文"
+        : "언어 · 한국어";
+    btnSettingLang.textContent = label;
+    btnSettingLang.title = label;
   }
   document.documentElement.lang = LANG;
 }
@@ -1238,6 +1271,8 @@ function openAppDialog(options = {}) {
         ? getUIText("input_title", "Input")
         : getUIText("notice", "Notice"));
   const message = options.message || "";
+  const messageHtml = options.messageHtml || "";
+  const useHtml = Boolean(options.html);
   const confirmLabel = options.confirmLabel || getUIText("ok", "OK");
   const cancelLabel = options.cancelLabel || getUIText("cancel", "Cancel");
   const choices = Array.isArray(options.choices)
@@ -1247,7 +1282,8 @@ function openAppDialog(options = {}) {
   const showCancel = mode !== "alert";
 
   appDialogTitle.textContent = title;
-  appDialogBody.textContent = String(message);
+  if (useHtml) appDialogBody.innerHTML = String(messageHtml || message);
+  else appDialogBody.textContent = String(message);
   appDialogConfirm.textContent = confirmLabel;
   appDialogCancel.textContent = cancelLabel;
   appDialogCancel.hidden = !showCancel;
@@ -1309,6 +1345,8 @@ function appAlert(message, opts = {}) {
     mode: "alert",
     title: opts.title,
     message,
+    messageHtml: opts.messageHtml,
+    html: opts.html,
     confirmLabel: opts.confirmLabel,
   });
 }
@@ -1400,42 +1438,87 @@ function renderQuickLinkUI() {
     btnSaveQuickLink.disabled = !hasUrl;
     btnSaveQuickLink.setAttribute("aria-disabled", hasUrl ? "false" : "true");
   }
+
+  if (btnQuickLinkWeb) {
+    if (hasUrl) {
+      btnQuickLinkWeb.href = QUICK_LINK_URL;
+      btnQuickLinkWeb.setAttribute("aria-disabled", "false");
+    } else {
+      btnQuickLinkWeb.removeAttribute("href");
+      btnQuickLinkWeb.setAttribute("aria-disabled", "true");
+    }
+  }
 }
 
 function setServerStateStatus() {}
 
-async function updateQuickLink() {
-  QUICK_LINK_URL = "";
-  QUICK_LINK_STATUS = "loading";
-  QUICK_LINK_MESSAGE = "";
-  renderQuickLinkUI();
+async function updateQuickLink(options = {}) {
+  const force = options.force === true;
+  const silent = options.silent === true;
+  const ttlMs = Number.isFinite(options.ttlMs) ? options.ttlMs : 15000;
 
-  try {
-    const values = await bulkGet(["GithubUsername"]);
-    const githubId = String(values["GithubUsername"] || "").trim();
+  if (!force && quickLinkLoadPromise) return quickLinkLoadPromise;
+  if (!force && quickLinkLoadedAt > 0 && (Date.now() - quickLinkLoadedAt) < ttlMs) {
+    if (!silent || CURRENT_PAGE === "tools") renderQuickLinkUI();
+    return QUICK_LINK_URL;
+  }
 
-    if (!githubId) {
-      QUICK_LINK_STATUS = "empty";
-      QUICK_LINK_MESSAGE = "";
-      renderQuickLinkUI();
-      return;
-    }
-
-    QUICK_LINK_URL = `https://shind0.synology.me/carrot/go/?id=${encodeURIComponent(githubId)}`;
-    QUICK_LINK_STATUS = "ready";
+  if (!silent) {
+    QUICK_LINK_URL = "";
+    QUICK_LINK_STATUS = "loading";
     QUICK_LINK_MESSAGE = "";
     renderQuickLinkUI();
-  } catch (e) {
-    QUICK_LINK_STATUS = "error";
-    QUICK_LINK_MESSAGE = `QuickLink error: ${e?.message || e}`;
-    renderQuickLinkUI();
-    console.log("[QuickLink] failed:", e);
   }
+
+  quickLinkLoadPromise = (async () => {
+    try {
+      const values = await bulkGet(["GithubUsername"]);
+      const githubId = String(values["GithubUsername"] || "").trim();
+
+      if (!githubId) {
+        QUICK_LINK_URL = "";
+        QUICK_LINK_STATUS = "empty";
+        QUICK_LINK_MESSAGE = "";
+        quickLinkLoadedAt = Date.now();
+        if (!silent || CURRENT_PAGE === "tools") renderQuickLinkUI();
+        return "";
+      }
+
+      QUICK_LINK_URL = `https://shind0.synology.me/carrot/go/?id=${encodeURIComponent(githubId)}`;
+      QUICK_LINK_STATUS = "ready";
+      QUICK_LINK_MESSAGE = "";
+      quickLinkLoadedAt = Date.now();
+      if (!silent || CURRENT_PAGE === "tools") renderQuickLinkUI();
+      return QUICK_LINK_URL;
+    } catch (e) {
+      QUICK_LINK_STATUS = "error";
+      QUICK_LINK_MESSAGE = `QuickLink error: ${e?.message || e}`;
+      if (!silent || CURRENT_PAGE === "tools") renderQuickLinkUI();
+      console.log("[QuickLink] failed:", e);
+      throw e;
+    } finally {
+      quickLinkLoadPromise = null;
+    }
+  })();
+
+  return quickLinkLoadPromise;
 }
 
 async function openQuickLink() {
   if (!QUICK_LINK_URL) return;
+  const ok = await appConfirm(
+    `${getUIText("open", "Open")} web?\n\n${QUICK_LINK_URL}`,
+    { title: "web" },
+  );
+  if (!ok) return;
   window.open(QUICK_LINK_URL, "_blank", "noopener");
+}
+
+if (btnQuickLinkWeb) {
+  btnQuickLinkWeb.onclick = (e) => {
+    e.preventDefault();
+    openQuickLink().catch(() => {});
+  };
 }
 
 function escapeHtml(s) {

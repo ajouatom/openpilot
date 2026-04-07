@@ -563,6 +563,42 @@ body[data-page="home"] .global-home-record-fab {
   pointer-events: none;
 }
 
+.tools-quicklink-actions {
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.tools-quicklink-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 20px;
+  border: 1px solid var(--md-stroke-soft);
+  border-radius: var(--r-pill);
+  background: var(--md-surface-cont-h);
+  white-space: nowrap;
+  font-size: var(--fs-label-lg);
+  font-weight: 500;
+  color: var(--md-on-surface);
+  text-decoration: none;
+  box-sizing: border-box;
+  transition: background 0.12s, box-shadow 0.12s, color 0.12s;
+}
+
+.tools-quicklink-link:hover,
+.tools-quicklink-link:focus-visible {
+  color: var(--md-on-surface);
+  background: var(--md-surface-cont-hh);
+  text-decoration: none;
+}
+
+.tools-quicklink-link[aria-disabled="true"] {
+  color: var(--md-outline);
+  background: var(--md-surface-cont-h);
+  border-color: color-mix(in srgb, var(--md-stroke-soft) 72%, transparent);
+}
+
 /* ── Headings: Hierarchy ──────────────────────────────────── */
 .page-header {
   display: flex;
@@ -590,6 +626,25 @@ body[data-page="home"] .global-home-record-fab {
   color: var(--md-primary);
   margin: 0 0 var(--sp-sm) 0;
   letter-spacing: 0.15px;
+}
+
+.topbar #btnFleet,
+.topbar #btnLang {
+  display: none !important;
+}
+
+.setting-pageActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.setting-pageAction {
+  min-height: 36px;
+  padding-inline: 14px;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .setting-car-entry {
@@ -751,6 +806,13 @@ body[data-page="home"] .global-home-record-fab {
   text-overflow: ellipsis;
 }
 
+.tools-meta__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
 .tools-meta__info {
   display: none;
 }
@@ -760,11 +822,32 @@ body[data-page="home"] .global-home-record-fab {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  min-height: 28px;
-  padding: 4px 10px;
-  font-size: 12px;
+  min-height: 24px;
+  padding: 3px 8px;
+  font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.tools-meta__langBtn {
+  appearance: none;
+  -webkit-appearance: none;
+  min-width: 22px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  text-align: center;
+  cursor: pointer;
 }
 
 .tools-scroll-stack {
@@ -1325,6 +1408,25 @@ body[data-page="terminal"] .app-toast-host {
   word-break: break-word;
 }
 
+.app-dialog__metaList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app-dialog__metaLine {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-body-md);
+  line-height: 1.5;
+}
+
+.app-dialog__metaSubtle {
+  margin-top: 4px;
+  color: color-mix(in srgb, var(--md-on-surface-var) 82%, var(--md-outline));
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .app-dialog__choices {
   display: grid;
   gap: var(--sp-sm);
@@ -1564,9 +1666,8 @@ body[data-page="terminal"] .app-toast-host {
   top: 0;
   z-index: 18;
   padding-top: clamp(8px, 1.8vw, 12px);
-  background: color-mix(in srgb, var(--md-surface) 96%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: var(--md-surface);
+  isolation: isolate;
 }
 
 .setting-subnav {
@@ -1875,8 +1976,8 @@ body[data-page="carrot"] #driveHudCard {
 
 .carrot-stage__spinner {
   position: relative;
-  width: 42px;
-  height: 42px;
+  width: 46px;
+  height: 46px;
   display: grid;
   place-items: center;
   border-radius: 999px;
@@ -1888,9 +1989,9 @@ body[data-page="carrot"] #driveHudCard {
 
 .carrot-stage__spinner::after {
   content: "";
-  width: 24px;
-  height: 24px;
-  background: center / 19px 19px no-repeat url("/assets/img_chffr_wheel.png?v=2604-01");
+  width: 34px;
+  height: 34px;
+  background: center / 28px 28px no-repeat url("/assets/img_chffr_wheel.png?v=2604-01");
   animation: carrot-stage-spin 0.88s linear infinite reverse;
 }
 
@@ -2449,6 +2550,64 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
 
 /* ── Mobile tweaks ────────────────────────────────────────── */
 @media (max-width: 640px) {
+  .setting-subnav-wrap {
+    margin-bottom: 0;
+    top: 8px;
+    padding-top: 8px;
+    padding-bottom: 24px;
+    background: var(--md-surface);
+    border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 72%, transparent);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.14);
+  }
+
+  .setting-subnav-wrap::after {
+    display: none;
+  }
+
+  .setting-subnav {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    justify-content: stretch;
+    overflow: visible;
+    padding: 0;
+    border-bottom: 0;
+    scroll-snap-type: none;
+  }
+
+  .setting-subnav::before,
+  .setting-subnav::after {
+    display: none;
+  }
+
+  .setting-subnav__tab {
+    flex: none;
+    min-height: 42px;
+    padding: 8px 6px;
+    border: 1px solid var(--md-stroke-soft);
+    border-radius: 12px;
+    background: var(--md-surface-cont);
+    color: rgba(255, 255, 255, 0.86);
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1.15;
+    white-space: normal;
+    text-wrap: balance;
+    scroll-snap-align: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10);
+  }
+
+  .setting-subnav__tab.is-active {
+    color: var(--md-primary);
+    border-color: color-mix(in srgb, var(--md-primary) 42%, var(--md-stroke-soft));
+    background: color-mix(in srgb, var(--md-primary-cont) 72%, var(--md-surface));
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.16);
+  }
+
+  .setting-subnav__tab:active {
+    background: color-mix(in srgb, var(--md-primary-cont) 56%, var(--md-surface-cont));
+  }
+
   #pageTerminal {
     --terminal-inline: 12px;
   }
@@ -2766,21 +2925,32 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
 
   body[data-page="setting"] #pageSetting {
     --setting-landscape-left-width: clamp(224px, 31vw, 280px);
+    --setting-landscape-gap: 12px;
+    --setting-landscape-page-inset: 12px;
+    --setting-landscape-fab-reserve: calc(var(--fab-size) + 18px);
+    --setting-landscape-scroll-pad-bottom: 4px;
     display: flex;
     flex-direction: column;
     min-height: calc(var(--app-vv-height, 100dvh) - 24px);
-    padding: 0;
+    height: calc(var(--app-vv-height, 100dvh) - 24px);
+    padding:
+      var(--setting-landscape-page-inset)
+      var(--setting-landscape-page-inset)
+      calc(var(--setting-landscape-page-inset) + var(--setting-landscape-fab-reserve))
+      var(--setting-landscape-page-inset);
+    box-sizing: border-box;
+    overflow: hidden;
   }
 
   body[data-page="setting"] #settingsMeta {
-    margin-bottom: 8px;
+    margin-bottom: var(--setting-landscape-gap);
   }
 
   body[data-page="setting"] #settingScreenHost {
     display: grid;
     grid-template-columns: var(--setting-landscape-left-width) minmax(0, 1fr);
     column-gap: 18px;
-    align-items: start;
+    align-items: stretch;
     flex: 1 1 auto;
     min-height: 0;
     position: relative;
@@ -2789,25 +2959,24 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
   body[data-page="setting"] #settingScreenGroups,
   body[data-page="setting"] #settingScreenItems {
     display: block !important;
+    height: 100%;
     min-height: 0;
+    max-height: none;
+    overflow: auto;
+    padding: 0 0 var(--setting-landscape-scroll-pad-bottom) 0;
+    box-sizing: border-box;
+    scrollbar-gutter: stable;
   }
 
   body[data-page="setting"] #settingScreenGroups {
-    position: sticky;
-    top: 10px;
-    align-self: start;
-    max-height: calc(var(--app-vv-height, 100dvh) - 40px);
-    overflow: auto;
-    padding: 0 16px 84px 0;
-    margin-left: 6px;
+    position: relative;
+    align-self: stretch;
+    margin-left: 0;
+    padding-right: 10px;
   }
 
   body[data-page="setting"] #settingScreenItems {
     min-width: 0;
-    max-height: calc(var(--app-vv-height, 100dvh) - 40px);
-    overflow: auto;
-    padding-right: 6px;
-    scrollbar-gutter: stable;
   }
 
   body[data-page="setting"] #settingCarRow {
@@ -2836,10 +3005,10 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
   body[data-page="setting"] #pageSetting > .page-fab-layer--setting {
     position: absolute;
     top: auto;
-    left: 6px;
-    bottom: 14px;
-    width: calc(var(--setting-landscape-left-width) - 10px);
-    max-width: calc(100% - 28px);
+    left: var(--setting-landscape-page-inset);
+    bottom: var(--setting-landscape-page-inset);
+    width: var(--setting-landscape-left-width);
+    max-width: calc(100% - (var(--setting-landscape-page-inset) * 2));
     height: auto;
     display: flex;
     justify-content: flex-end;
@@ -2854,7 +3023,7 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
   opacity: 1 !important;
   visibility: visible !important;
   transform: none !important;
-  margin-right: 10px;
+  margin-right: 0;
   pointer-events: auto;
 }
 

@@ -31,6 +31,7 @@
   --hud-green: #34c96e;
   --hud-amber: #ffc94a;
   --hud-red: #ff5c5c;
+  --hud-support-col-max: 44%;
   width: min(100%, var(--hud-card-width, var(--hud-max-width)));
   max-width: 100%;
   height: auto;
@@ -98,7 +99,7 @@
 }
 
 .hudWrap[data-surface="driveOverlay"] .hudBody {
-  grid-template-columns: minmax(0, 5.2fr) auto minmax(0, 3.2fr);
+  grid-template-columns: minmax(0, 1fr) auto fit-content(var(--hud-support-col-max));
 }
 
 .hudWrap[data-surface="driveOverlay"] .hudBottomStrip {
@@ -225,7 +226,7 @@
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 5fr) auto minmax(0, 4fr);
+  grid-template-columns: minmax(0, 1fr) auto fit-content(var(--hud-support-col-max));
   gap: 0;
   margin-bottom: calc(var(--hud-section-gap) * 0.26);
 }
@@ -242,12 +243,12 @@
 }
 
 .hudWrap[data-surface="homePreview"][data-wide="1"] .hudBody {
-  grid-template-columns: minmax(0, 5fr) auto minmax(0, 5fr);
+  grid-template-columns: minmax(0, 1fr) auto fit-content(calc(var(--hud-support-col-max) + 2%));
 }
 
 .hudWrap[data-surface="homePreview"][data-wide="1"][data-density="regular"] .hudBody,
 .hudWrap[data-surface="homePreview"][data-wide="1"][data-density="spacious"] .hudBody {
-  grid-template-columns: minmax(0, 6fr) auto minmax(0, 5fr);
+  grid-template-columns: minmax(0, 1fr) auto fit-content(calc(var(--hud-support-col-max) + 3%));
 }
 
 .hudSpeedColumn,
@@ -258,11 +259,13 @@
 }
 
 .hudSpeedColumn {
+  justify-self: stretch;
   padding: calc(var(--hud-padding) * 0.18) calc(var(--hud-padding) * 0.10) calc(var(--hud-padding) * 0.10) calc(var(--hud-padding) * 0.16);
 }
 
 .hudSupportColumn {
-  padding: calc(var(--hud-padding) * 0.18) calc(var(--hud-padding) * 0.12) calc(var(--hud-padding) * 0.10) calc(var(--hud-padding) * 0.10);
+  justify-self: end;
+  padding: calc(var(--hud-padding) * 0.18) calc(var(--hud-padding) * 0.34) calc(var(--hud-padding) * 0.10) calc(var(--hud-padding) * 0.14);
 }
 
 .hudSectionLabel {
@@ -398,12 +401,13 @@
 
 .hudGearStatus {
   flex: 0 0 auto;
-  min-width: clamp(34px, calc(var(--hud-chip-font) * 2.6), 74px);
-  max-width: clamp(44px, calc(var(--hud-chip-font) * 4.2), 96px);
+  min-width: clamp(42px, calc(var(--hud-chip-font) * 3.1), 82px);
+  max-width: clamp(52px, calc(var(--hud-chip-font) * 4.8), 108px);
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: flex-start;
+  text-align: left;
 }
 
 .hudGearStep {
@@ -416,6 +420,8 @@
   letter-spacing: 0.04em;
   text-shadow: var(--hud-text-shadow-strong);
   white-space: nowrap;
+  width: 100%;
+  text-align: left;
 }
 
 .hudGearLabel {
@@ -424,6 +430,8 @@
   font-weight: 800;
   letter-spacing: 0.26px;
   line-height: 1;
+  width: 100%;
+  text-align: left;
 }
 
 .hudGearValue {
@@ -433,6 +441,8 @@
   font-weight: 900;
   line-height: 1;
   white-space: nowrap;
+  width: 100%;
+  text-align: left;
 }
 
 .hudGearValue[data-unknown="1"] {
@@ -544,8 +554,8 @@
 
 .hudWrap[data-support-layout="compact"] .hudGearStatus {
   align-self: flex-end;
-  min-width: clamp(46px, 16%, 74px);
-  max-width: clamp(56px, 24%, 90px);
+  min-width: clamp(58px, 19%, 84px);
+  max-width: clamp(68px, 27%, 100px);
 }
 
 .hudWrap[data-support-layout="veryCompact"] .hudSupportLine {
@@ -593,12 +603,12 @@
 }
 
 .hudWrap[data-support-layout="veryCompact"] .hudGearStatus {
-  min-width: 22px;
-  max-width: 30px;
+  min-width: 30px;
+  max-width: 42px;
 }
 
 .hudWrap[data-support-layout="veryCompact"] .hudGearStep {
-  font-size: calc(var(--hud-chip-font) + 0.9px);
+  font-size: calc(var(--hud-chip-font) + 1.1px);
   margin-bottom: calc(var(--hud-metric-gap) * 0.04);
 }
 
