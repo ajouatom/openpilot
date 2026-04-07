@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import time
+import importlib
 from typing import Iterable
 
 _MESSAGING_IMPORT_ERROR: Exception | None = None
@@ -20,10 +21,86 @@ try:
 except Exception:
   Params = None
 
-try:
-  import msgpack  # type: ignore
-except Exception:
-  msgpack = None
+def _load_msgpack():
+  try:
+    module = importlib.import_module("msgpack")  # type: ignore
+  except Exception:
+    return None
+
+  if callable(getattr(module, "packb", None)) or callable(getattr(module, "dumps", None)):
+    return module
+
+  # Some AGNOS/pydeps installs expose msgpack only as a namespace package
+  # with the compiled extension available under msgpack._cmsgpack.
+  try:
+    cmodule = importlib.import_module("msgpack._cmsgpack")  # type: ignore
+  except Exception:
+    return module
+
+  if callable(getattr(cmodule, "packb", None)) or callable(getattr(cmodule, "dumps", None)):
+    return cmodule
+  return module
+
+
+msgpack = _load_msgpack()
+
+
+def _coerce_payload_bytes(value) -> bytes:
+  if isinstance(value, bytes):
+    return value
+  if isinstance(value, bytearray):
+    return bytes(value)
+  if isinstance(value, memoryview):
+    return value.tobytes()
+  if isinstance(value, str):
+    return value.encode("utf-8")
+  return str(value).encode("utf-8")
+
+
+def _encode_transport_value(value):
+  raw = getattr(value, "raw", None)
+  if raw is not None:
+    return raw
+
+  enum_value = getattr(value, "value", None)
+  if enum_value is not None:
+    return enum_value
+
+  if isinstance(value, bytes):
+    return value.decode("utf-8", errors="replace")
+
+  tolist = getattr(value, "tolist", None)
+  if callable(tolist):
+    try:
+      return tolist()
+    except Exception:
+      pass
+
+  return str(value)
+
+
+def _encode_msgpack_payload(payload: dict) -> bytes | None:
+  if msgpack is None:
+    return None
+
+  for attr in ("packb", "dumps"):
+    encoder = getattr(msgpack, attr, None)
+    if not callable(encoder):
+      continue
+
+    for kwargs in (
+      {"use_bin_type": True, "default": _encode_transport_value},
+      {"default": _encode_transport_value},
+      {},
+    ):
+      try:
+        return _coerce_payload_bytes(encoder(payload, **kwargs))
+      except TypeError:
+        continue
+      except Exception:
+        return None
+
+  return None
 
 
 class RealtimeBroker:
@@ -96,6 +173,7 @@ class RealtimeBroker:
       return {}
 
     names = (
+      "IsMetric",
       "LongitudinalPersonality",
       "ShowDateTime",
       "ShowPathEnd",
@@ -108,6 +186,7 @@ class RealtimeBroker:
       "ShowPathWidth",
       "ShowPlotMode",
       "ShowRadarInfo",
+      "RadarLatFactor",
       "CustomSR",
     )
     snapshot: dict[str, object] = {}
@@ -128,9 +207,10 @@ class RealtimeBroker:
     return self._encode_payload(snapshot)
 
   def _encode_payload(self, payload: dict) -> tuple[str, bytes]:
-    if msgpack is not None:
-      return LIVE_ENCODING_MSGPACK, msgpack.packb(payload, use_bin_type=True)
-    return "json", json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    encoded_msgpack = _encode_msgpack_payload(payload)
+    if encoded_msgpack is not None:
+      return LIVE_ENCODING_MSGPACK, encoded_msgpack
+    return "json", json.dumps(payload, separators=(",", ":"), ensure_ascii=False, default=_encode_transport_value).encode("utf-8")
 
   def debug_stats(self) -> dict[str, object]:
     runtime = self.last_snapshot.get("runtime", {}) if isinstance(self.last_snapshot, dict) else {}

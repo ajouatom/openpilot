@@ -4,7 +4,7 @@ import time
 from typing import Any
 
 from .contract import DEFAULT_CAMERA_KIND, PAYLOAD_KIND_SERVICE_RAW, SCHEMA_VERSION
-from .normalize import safe_bool, safe_float, safe_get, safe_int, safe_text, to_list
+from .normalize import safe_bool, safe_enum_int, safe_float, safe_get, safe_int, safe_text, to_list
 from .services import common_services, optional_services
 
 
@@ -294,6 +294,8 @@ def _build_selfdrive_state(service: Any, previous: dict[str, Any] | None = None)
   p["alertType"] = safe_text(safe_get(service, "alertType"))
   p["alertText1"] = safe_text(safe_get(service, "alertText1"))
   p["alertText2"] = safe_text(safe_get(service, "alertText2"))
+  p["alertStatus"] = safe_enum_int(safe_get(service, "alertStatus"))
+  p["alertSize"] = safe_enum_int(safe_get(service, "alertSize"))
   return p
 
 
@@ -308,6 +310,10 @@ def _build_car_state(service: Any, previous: dict[str, Any] | None = None) -> di
   p["leftLaneLine"] = safe_int(safe_get(service, "leftLaneLine"))
   p["rightLaneLine"] = safe_int(safe_get(service, "rightLaneLine"))
   p["gearShifter"] = safe_text(safe_get(service, "gearShifter"))
+  p["gearStep"] = safe_int(safe_get(service, "gearStep"))
+  p["brakeHoldActive"] = safe_bool(safe_get(service, "brakeHoldActive"))
+  p["softHoldActive"] = safe_int(safe_get(service, "softHoldActive"))
+  p["carrotCruise"] = safe_int(safe_get(service, "carrotCruise"))
   p["brakeLights"] = safe_bool(safe_get(service, "brakeLights"))
   p["leftBlindspot"] = safe_bool(safe_get(service, "leftBlindspot"))
   p["rightBlindspot"] = safe_bool(safe_get(service, "rightBlindspot"))
@@ -324,6 +330,10 @@ def _build_controls_state(service: Any, previous: dict[str, Any] | None = None) 
   p["activeLaneLine"] = safe_bool(safe_get(service, "activeLaneLine"))
   p["curvature"] = safe_float(safe_get(service, "curvature"))
   p["desiredCurvature"] = safe_float(safe_get(service, "desiredCurvature"))
+  torque_state = safe_get(safe_get(service, "lateralControlState"), "torqueState")
+  p["actualLateralAccel"] = safe_float(safe_get(torque_state, "actualLateralAccel"))
+  p["desiredLateralAccel"] = safe_float(safe_get(torque_state, "desiredLateralAccel"))
+  p["lateralOutput"] = safe_float(safe_get(torque_state, "output"))
   return p
 
 
@@ -336,14 +346,15 @@ def _build_longitudinal_plan(service: Any, previous: dict[str, Any] | None = Non
   _fill_list(_ensure_list(p, "jerks"), safe_get(service, "jerks"), limit=33)
   p["tFollow"] = safe_float(safe_get(service, "tFollow"))
   p["desiredDistance"] = safe_float(safe_get(service, "desiredDistance"))
-  p["xState"] = safe_int(safe_get(service, "xState"))
-  p["trafficState"] = safe_int(safe_get(service, "trafficState"))
+  p["xState"] = safe_enum_int(safe_get(service, "xState"))
+  p["trafficState"] = safe_enum_int(safe_get(service, "trafficState"))
+  p["longitudinalPlanSource"] = safe_enum_int(safe_get(service, "longitudinalPlanSource"))
   return p
 
 
 def _build_live_calibration(service: Any, previous: dict[str, Any] | None = None) -> dict[str, Any]:
   payload = previous if isinstance(previous, dict) else {}
-  payload["calStatus"] = safe_int(safe_get(service, "calStatus"))
+  payload["calStatus"] = safe_enum_int(safe_get(service, "calStatus"))
   _fill_list(_ensure_list(payload, "rpyCalib"), safe_get(service, "rpyCalib"), limit=3)
   _fill_list(_ensure_list(payload, "wideFromDeviceEuler"), safe_get(service, "wideFromDeviceEuler"), limit=3)
   return payload
@@ -453,8 +464,8 @@ def _build_lateral_plan(service: Any, previous: dict[str, Any] | None = None) ->
   p = previous if isinstance(previous, dict) else {}
   p["pathMode"] = safe_text(safe_get(service, "pathMode"))
   p["useLaneLineSpeed"] = safe_float(safe_get(service, "useLaneLineSpeed"))
-  p["laneChangeState"] = safe_int(safe_get(service, "laneChangeState"))
-  p["laneChangeDirection"] = safe_int(safe_get(service, "laneChangeDirection"))
+  p["laneChangeState"] = safe_enum_int(safe_get(service, "laneChangeState"))
+  p["laneChangeDirection"] = safe_enum_int(safe_get(service, "laneChangeDirection"))
   p["latDebugText"] = safe_text(safe_get(service, "latDebugText"))
   p["useLaneLines"] = safe_bool(safe_get(service, "useLaneLines"))
   _update_xyz_payload(_ensure_dict(p, "position"), safe_get(service, "position"))

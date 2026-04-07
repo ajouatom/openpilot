@@ -3,6 +3,19 @@ let recordStateIsOn = false;
 let recordTogglePending = false;
 let recordStateResyncTimer = null;
 let appViewportMetricsBound = false;
+const CURRENT_CAR_CACHE_KEY = "carrot_web_current_car_label";
+const CURRENT_CAR_RETRY_DELAYS_MS = [350, 800, 1500, 2500, 4000];
+let currentCarRetryTimer = null;
+let currentCarRetryIndex = 0;
+let currentCarLastKnownLabel = "";
+
+function updateSettingCarEntryState(label) {
+  if (!settingCarRow) return;
+  const text = String(label || "").trim();
+  const isEmpty = !text || text === "-";
+  settingCarRow.classList.toggle("is-empty", isEmpty);
+  settingCarRow.setAttribute("aria-label", isEmpty ? "차량 선택 열기" : `${text} 차량 선택 열기`);
+}
 
 function updateAppViewportMetrics() {
   const vv = window.visualViewport;
@@ -12,6 +25,34 @@ function updateAppViewportMetrics() {
   document.documentElement.style.setProperty("--app-vv-height", `${height}px`);
   document.documentElement.style.setProperty("--app-vv-top", `${top}px`);
   document.documentElement.style.setProperty("--app-vv-width", `${width}px`);
+
+  const topbarEl = document.querySelector(".topbar");
+  let navLeftGap = 0;
+  let navBottomGap = 0;
+  if (topbarEl) {
+    const styles = window.getComputedStyle(topbarEl);
+    if (styles.display !== "none" && styles.visibility !== "hidden") {
+      const rect = topbarEl.getBoundingClientRect();
+      const rectWidth = Math.max(0, Math.round(rect.width));
+      const rectHeight = Math.max(0, Math.round(rect.height));
+      const isRailLayout =
+        rectWidth > 0 &&
+        rectHeight > 0 &&
+        rectHeight >= Math.max(Math.round(rectWidth * 1.25), Math.round(height * 0.5)) &&
+        rectWidth <= Math.max(160, Math.round(width * 0.35));
+
+      if (isRailLayout) {
+        navLeftGap = rectWidth;
+      } else if (rectHeight > 0) {
+        const visibleTop = Math.max(0, Math.round(rect.top));
+        const visibleBottom = Math.min(height, Math.round(rect.bottom));
+        navBottomGap = Math.max(0, visibleBottom - visibleTop);
+      }
+    }
+  }
+
+  document.documentElement.style.setProperty("--app-nav-left-gap", `${navLeftGap}px`);
+  document.documentElement.style.setProperty("--app-nav-bottom-gap", `${navBottomGap}px`);
 }
 
 function bindAppViewportObservers() {
@@ -22,6 +63,8 @@ function bindAppViewportObservers() {
   updateAppViewportMetrics();
   window.addEventListener("resize", handleLayout, { passive: true });
   window.addEventListener("orientationchange", handleLayout, { passive: true });
+  document.addEventListener("fullscreenchange", handleLayout);
+  document.addEventListener("webkitfullscreenchange", handleLayout);
   if (window.visualViewport) {
     window.visualViewport.addEventListener("resize", handleLayout, { passive: true });
     window.visualViewport.addEventListener("scroll", handleLayout, { passive: true });
@@ -63,6 +106,70 @@ function bindDriveHudLayoutObservers() {
 
 bindDriveHudLayoutObservers();
 
+function applyCurrentCarLabel(label, { persist = true, blank = false } = {}) {
+  const text = String(label || "").trim();
+  if (text) {
+    currentCarLastKnownLabel = text;
+    if (curCarLabelCar) curCarLabelCar.textContent = text;
+    if (curCarLabelSetting) curCarLabelSetting.textContent = text;
+    updateSettingCarEntryState(text);
+    if (persist) {
+      try {
+        localStorage.setItem(CURRENT_CAR_CACHE_KEY, text);
+      } catch {}
+    }
+    return;
+  }
+
+  if (currentCarLastKnownLabel) {
+    if (curCarLabelCar) curCarLabelCar.textContent = currentCarLastKnownLabel;
+    if (curCarLabelSetting) curCarLabelSetting.textContent = currentCarLastKnownLabel;
+    updateSettingCarEntryState(currentCarLastKnownLabel);
+    return;
+  }
+
+  if (blank) {
+    if (curCarLabelCar) curCarLabelCar.textContent = "-";
+    if (curCarLabelSetting) curCarLabelSetting.textContent = "-";
+    updateSettingCarEntryState("-");
+  }
+}
+
+function restoreCurrentCarLabelFromCache() {
+  try {
+    const cached = localStorage.getItem(CURRENT_CAR_CACHE_KEY);
+    if (cached && String(cached).trim()) {
+      applyCurrentCarLabel(cached, { persist: false });
+    }
+  } catch {}
+}
+
+function cancelCurrentCarRetry() {
+  if (!currentCarRetryTimer) return;
+  clearTimeout(currentCarRetryTimer);
+  currentCarRetryTimer = null;
+}
+
+function scheduleCurrentCarRetry() {
+  if (currentCarRetryTimer || currentCarRetryIndex >= CURRENT_CAR_RETRY_DELAYS_MS.length) return;
+  const delay = CURRENT_CAR_RETRY_DELAYS_MS[currentCarRetryIndex++];
+  currentCarRetryTimer = window.setTimeout(() => {
+    currentCarRetryTimer = null;
+    loadCurrentCar({ resetRetry: false }).catch(() => {});
+  }, delay);
+}
+
+function resolveCurrentCarLabel(values) {
+  const selected = String(values?.CarSelected3 || "").trim();
+  if (selected) return selected;
+  const effective = String(values?.CarName || "").trim();
+  if (effective) return effective;
+  return "";
+}
+
+restoreCurrentCarLabelFromCache();
+updateSettingCarEntryState(curCarLabelSetting?.textContent || curCarLabelCar?.textContent || "-");
+
 function parseRecordStateValue(value) {
   return (
     value === true ||
@@ -89,7 +196,8 @@ function applyRecordFabState(isOn) {
   if (!btnRecordToggle) return;
 
   btnRecordToggle.classList.toggle("active", recordStateIsOn);
-  btnRecordToggle.textContent = recordStateIsOn ? "ON" : "OFF";
+  btnRecordToggle.textContent = "REC";
+  btnRecordToggle.dataset.state = recordStateIsOn ? "on" : "off";
   if (typeof btnHome !== "undefined" && btnHome) {
     btnHome.classList.toggle("recording", recordStateIsOn);
     btnHome.setAttribute("data-record-badge", recordStateIsOn ? "REC" : "");
@@ -105,17 +213,38 @@ function applyRecordFabState(isOn) {
   }
 }
 
-async function loadCurrentCar() {
+async function loadCurrentCar(options = {}) {
+  const resetRetry = options.resetRetry !== false;
+  if (resetRetry) {
+    currentCarRetryIndex = 0;
+    cancelCurrentCarRetry();
+  }
   try {
-    const values = await bulkGet(["CarSelected3"]);
-    const v = values["CarSelected3"];
-    curCarLabelCar.textContent = (v && String(v).trim().length) ? String(v) : "-";
-    curCarLabelSetting.textContent = (v && String(v).trim().length) ? String(v) : "-";
+    const values = await bulkGet(["CarSelected3", "CarName"]);
+    const label = resolveCurrentCarLabel(values);
+    if (label) {
+      cancelCurrentCarRetry();
+      currentCarRetryIndex = 0;
+      applyCurrentCarLabel(label);
+    } else {
+      applyCurrentCarLabel("", { blank: !currentCarLastKnownLabel });
+      scheduleCurrentCarRetry();
+    }
   } catch (e) {
-    curCarLabelCar.textContent = "-";
-    curCarLabelSetting.textContent = "-";
+    applyCurrentCarLabel("", { blank: !currentCarLastKnownLabel });
+    scheduleCurrentCarRetry();
   }
 }
+
+window.addEventListener("pageshow", () => {
+  loadCurrentCar({ resetRetry: true }).catch(() => {});
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    loadCurrentCar({ resetRetry: true }).catch(() => {});
+  }
+});
 
 async function loadRecordState(options = {}) {
   if (recordTogglePending && !options.force) return;
@@ -150,6 +279,145 @@ async function toggleRecord() {
 }
 
 /* ---------- Cars: load list + maker/model UI ---------- */
+let carPickerCloseTimer = null;
+let carPickerMode = "makers";
+let carPickerMaker = null;
+
+function openCarPicker() {
+  if (!appCarPicker) return false;
+  if (carPickerCloseTimer) {
+    clearTimeout(carPickerCloseTimer);
+    carPickerCloseTimer = null;
+  }
+  appCarPicker.hidden = false;
+  syncModalBodyLock();
+  requestAnimationFrame(() => {
+    appCarPicker.classList.add("is-open");
+  });
+  return true;
+}
+
+function closeCarPicker(immediate = false) {
+  if (!appCarPicker || appCarPicker.hidden) return;
+  appCarPicker.classList.remove("is-open");
+
+  if (carPickerCloseTimer) {
+    clearTimeout(carPickerCloseTimer);
+    carPickerCloseTimer = null;
+  }
+
+  const finishClose = () => {
+    appCarPicker.hidden = true;
+    syncModalBodyLock();
+  };
+
+  if (immediate) {
+    finishClose();
+    return;
+  }
+
+  carPickerCloseTimer = window.setTimeout(() => {
+    carPickerCloseTimer = null;
+    finishClose();
+  }, 180);
+}
+
+function syncCarPickerChrome() {
+  if (!appCarPickerTitle || !appCarPickerMeta || !appCarPickerClose) return;
+  const currentLabel = String(curCarLabelSetting?.textContent || curCarLabelCar?.textContent || "").trim() || "-";
+  if (carPickerMode === "models" && carPickerMaker) {
+    appCarPickerTitle.textContent = carPickerMaker;
+    const arr = (CARS?.makers && CARS.makers[carPickerMaker]) ? CARS.makers[carPickerMaker] : [];
+    appCarPickerMeta.textContent = `${arr.length} ${getUIText("models", "Models")}`;
+    appCarPickerClose.textContent = getUIText("back", "Back");
+    return;
+  }
+  appCarPickerTitle.textContent = getUIText("car_select", "Car Select");
+  appCarPickerMeta.textContent = currentLabel;
+  appCarPickerClose.textContent = getUIText("cancel", "Cancel");
+}
+
+function renderCarPickerMakers() {
+  if (!appCarPickerList) return;
+  carPickerMode = "makers";
+  carPickerMaker = null;
+  syncCarPickerChrome();
+  appCarPickerList.innerHTML = "";
+
+  const makers = CARS && CARS.makers ? Object.keys(CARS.makers) : [];
+  makers.sort((a, b) => a.localeCompare(b));
+
+  for (const mk of makers) {
+    const arr = CARS.makers[mk] || [];
+    const b = document.createElement("button");
+    b.className = "btn groupBtn app-branch-picker__item app-car-picker__item";
+    b.innerHTML = `<span class="app-branch-picker__label">${mk}</span><span class="app-branch-picker__badge">${arr.length}</span>`;
+    b.onclick = () => renderCarPickerModels(mk);
+    appCarPickerList.appendChild(b);
+  }
+}
+
+function renderCarPickerModels(maker) {
+  if (!appCarPickerList) return;
+  carPickerMode = "models";
+  carPickerMaker = maker;
+  syncCarPickerChrome();
+  appCarPickerList.innerHTML = "";
+
+  const arr = (CARS?.makers && CARS.makers[maker]) ? CARS.makers[maker] : [];
+  for (const fullLine of arr) {
+    const modelOnly = stripMaker(fullLine, maker);
+    const b = document.createElement("button");
+    b.className = "btn groupBtn app-branch-picker__item app-car-picker__item";
+    b.innerHTML = `<span class="app-branch-picker__label">${modelOnly}</span>`;
+    b.onclick = () => onSelectCar(maker, modelOnly, fullLine);
+    appCarPickerList.appendChild(b);
+  }
+}
+
+async function ensureCarsLoaded() {
+  if (CARS?.makers) return CARS;
+  const r = await fetch("/api/cars");
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error || "failed to load cars");
+  CARS = j;
+  return CARS;
+}
+
+async function runOpenCarPickerFlow() {
+  if (!appCarPickerList || !openCarPicker()) return false;
+  carPickerMode = "makers";
+  carPickerMaker = null;
+  syncCarPickerChrome();
+  appCarPickerMeta.textContent = "loading...";
+  appCarPickerList.innerHTML = "";
+  await ensureCarsLoaded();
+  renderCarPickerMakers();
+  return true;
+}
+
+window.openCarPickerFlow = () => {
+  runOpenCarPickerFlow().catch((e) => {
+    closeCarPicker(true);
+    appAlert(e?.message || String(e), { title: getUIText("error", "Error") });
+  });
+};
+
+if (appCarPickerBackdrop) appCarPickerBackdrop.onclick = () => closeCarPicker();
+if (appCarPickerClose) {
+  appCarPickerClose.onclick = () => {
+    if (carPickerMode === "models") renderCarPickerMakers();
+    else closeCarPicker();
+  };
+}
+
+document.addEventListener("keydown", (ev) => {
+  if (!appCarPicker || appCarPicker.hidden || ev.key !== "Escape") return;
+  ev.preventDefault();
+  if (carPickerMode === "models") renderCarPickerMakers();
+  else closeCarPicker();
+});
+
 async function loadCars() {
   carMeta.textContent = "loading...";
   makerList.innerHTML = "";
@@ -157,18 +425,15 @@ async function loadCars() {
   CURRENT_MAKER = null;
   showCarScreen("makers", false);
 
-  const r = await fetch("/api/cars");
-  const j = await r.json();
-  if (!j.ok) {
-    carMeta.textContent = "Failed: " + (j.error || "unknown");
+  try {
+    const j = await ensureCarsLoaded();
+    const sources = (j.sources || []).join(", ");
+    carMeta.textContent = sources ? ("sources: " + sources) : "ok";
+    renderMakers();
+  } catch (e) {
+    carMeta.textContent = "Failed: " + (e?.message || "unknown");
     return;
   }
-  CARS = j;
-
-  const sources = (j.sources || []).join(", ");
-  carMeta.textContent = sources ? ("sources: " + sources) : "ok";
-
-  renderMakers();
 }
 
 function renderMakers() {
@@ -228,8 +493,12 @@ async function onSelectCar(maker, modelOnly, fullLine) {
     return;
   }
 
-  curCarLabelCar.textContent = modelOnly;
-  curCarLabelSetting.textContent = modelOnly;
+  if (typeof applyCurrentCarLabel === "function") applyCurrentCarLabel(modelOnly);
+  else {
+    curCarLabelCar.textContent = modelOnly;
+    curCarLabelSetting.textContent = modelOnly;
+  }
+  closeCarPicker(true);
 
   const rb = await appConfirm(UI_STRINGS[LANG].confirm_reboot || "Reboot now?", {
     title: UI_STRINGS[LANG].reboot || "Reboot",
@@ -336,7 +605,7 @@ let settingSearchEntries = [];
 const settingPageRoot = document.getElementById("pageSetting");
 
 function isCompactLandscapeMode() {
-  return window.matchMedia("(orientation: landscape) and (max-height: 560px) and (pointer: coarse)").matches;
+  return window.matchMedia("(orientation: landscape)").matches;
 }
 
 function getLandscapeDefaultSettingGroup() {
@@ -1358,9 +1627,72 @@ function getToolCommandPreview(action, payload = {}) {
   }
 }
 
-function toolsMetaSet(s) {
+let toolsMetaStatusText = "";
+let toolsMetaInfoText = "";
+let toolsMetaInfoDialogText = "";
+
+function renderToolsMeta() {
   const meta = document.getElementById("toolsMeta");
-  if (meta) meta.textContent = String(s);
+  if (!meta) return;
+
+  meta.textContent = "";
+
+  const statusEl = document.createElement("span");
+  statusEl.className = "tools-meta__status";
+  statusEl.textContent = toolsMetaStatusText || "-";
+  meta.appendChild(statusEl);
+
+  if (toolsMetaInfoText) {
+    const infoBtn = document.createElement("button");
+    infoBtn.type = "button";
+    infoBtn.className = "smallBtn tools-meta__infoBtn";
+    infoBtn.textContent = "기기정보";
+    infoBtn.addEventListener("click", () => {
+      appAlert(toolsMetaInfoDialogText || toolsMetaInfoText, { title: "기기정보" });
+    });
+    meta.appendChild(infoBtn);
+  }
+}
+
+function toolsMetaSet(s) {
+  toolsMetaStatusText = String(s || "");
+  renderToolsMeta();
+}
+
+function buildToolsMetaInfo(values = {}) {
+  const branch = String(values.GitBranch || "").trim();
+  const commit = String(values.GitCommit || "").trim();
+  const dongleId = String(values.DongleId || "").trim();
+  const serial = String(values.HardwareSerial || "").trim();
+  const parts = [];
+  if (branch) parts.push(branch);
+  if (commit) parts.push(commit.slice(0, 7));
+  if (dongleId) parts.push(dongleId);
+  if (serial) parts.push(serial);
+  return parts.join("  ·  ");
+}
+
+function buildToolsMetaInfoDialog(values = {}) {
+  const branch = String(values.GitBranch || "").trim();
+  const commit = String(values.GitCommit || "").trim();
+  const dongleId = String(values.DongleId || "").trim();
+  const serial = String(values.HardwareSerial || "").trim();
+  const lines = [];
+  if (branch) lines.push(`브랜치: ${branch}`);
+  if (commit) lines.push(`커밋: ${commit.slice(0, 7)}`);
+  if (dongleId) lines.push(`동글ID: ${dongleId}`);
+  if (serial) lines.push(`시리얼: ${serial}`);
+  return lines.join("\n");
+}
+
+async function refreshToolsMetaInfo() {
+  if (typeof bulkGet !== "function") return;
+  try {
+    const values = await bulkGet(["GitBranch", "GitCommit", "DongleId", "HardwareSerial"]);
+    toolsMetaInfoText = buildToolsMetaInfo(values);
+    toolsMetaInfoDialogText = buildToolsMetaInfoDialog(values);
+    renderToolsMeta();
+  } catch {}
 }
 
 function toolsProgressSet(percent = null, opts = {}) {
@@ -1488,6 +1820,24 @@ async function runTool(action, payload) {
   throw new Error("tool run cancelled");
 }
 
+function didGitPullUpdate(result) {
+  const body = normalizeToolsOutText(result?.out || result?.log || "");
+  if (!body) return false;
+  const lower = body.toLowerCase();
+  if (lower.includes("already up to date") || lower.includes("already up-to-date")) {
+    return false;
+  }
+  return (
+    lower.includes("fast-forward") ||
+    lower.includes("merge made by") ||
+    lower.includes("updating ") ||
+    /[0-9]+\s+files?\s+changed/.test(lower) ||
+    lower.includes("create mode ") ||
+    lower.includes("delete mode ") ||
+    lower.includes("rewrite ")
+  );
+}
+
 async function confirmText(msg, placeholder = "") {
   const v = await appPrompt(msg, {
     title: UI_STRINGS[LANG].input_title || "Input",
@@ -1566,6 +1916,29 @@ function initToolsPage() {
     node.addEventListener(eventName, fn);
   };
 
+  const initToolsGroups = () => {
+    const groups = Array.from(document.querySelectorAll("#pageTools .tools-group"));
+    groups.forEach((group) => {
+      const toggle = group.querySelector(".tools-group__toggle");
+      const body = group.querySelector(".tools-group__body");
+      if (!toggle || !body) return;
+
+      const shouldOpen = group.dataset.toolsGroup === "git";
+      group.classList.toggle("is-open", shouldOpen);
+      body.hidden = !shouldOpen;
+      body.classList.toggle("hidden", !shouldOpen);
+      toggle.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+
+      bindNodeOnce(toggle, "toolsGroupToggle", () => {
+        const nextOpen = body.hidden;
+        body.hidden = !nextOpen;
+        body.classList.toggle("hidden", !nextOpen);
+        group.classList.toggle("is-open", nextOpen);
+        toggle.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+      });
+    });
+  };
+
   const runSystemCommand = async () => {
     const inp = document.getElementById("sysCmdInput");
     const cmd = (inp?.value || "").trim();
@@ -1580,10 +1953,18 @@ function initToolsPage() {
 
   toolsMetaSet(UI_STRINGS[LANG].ready || "Ready");
   toolsProgressSet(null, { active: false });
+  refreshToolsMetaInfo().catch(() => {});
+  initToolsGroups();
 
   bindOnce("btnGitPull", async () => {
     try {
-      await runTool("git_pull");
+      const result = await runTool("git_pull");
+      if (!didGitPullUpdate(result)) return;
+      if (await appConfirm(UI_STRINGS[LANG].confirm_reboot || "Reboot now?", {
+        title: UI_STRINGS[LANG].reboot || "Reboot",
+      })) {
+        await runTool("reboot");
+      }
     } catch (e) {
       showError("git_pull", e);
     }
@@ -1598,20 +1979,32 @@ function initToolsPage() {
     }
   });
 
-  bindOnce("btnGitReset", async () => {
-    if (!await appConfirm(UI_STRINGS[LANG].git_reset_confirm || "Run git reset?", { title: "git reset" })) return;
-
-    const mode = await confirmText(UI_STRINGS[LANG].git_reset_mode_prompt || "reset mode? (hard/soft/mixed)", "hard");
-    if (!mode) return;
-
-    const target = await confirmText(UI_STRINGS[LANG].git_reset_target_prompt || "reset target?", "HEAD");
-    if (!target) return;
-
+  async function runGitResetMode(mode) {
+    const safeMode = String(mode || "hard").trim().toLowerCase();
+    const title = `git reset --${safeMode}`;
+    const message = UI_STRINGS[LANG].git_reset_confirm || "Run git reset?";
+    if (!await appConfirm(`${message}\n\nHEAD`, { title })) return;
     try {
-      await runTool("git_reset", { mode, target });
+      await runTool("git_reset", { mode: safeMode, target: "HEAD" });
     } catch (e) {
       showError("git_reset", e);
     }
+  }
+
+  bindOnce("btnGitReset", async () => {
+    const mode = await openAppDialog({
+      mode: "choice",
+      title: "git reset",
+      message: "HEAD 기준 리셋 방식을 선택하세요.",
+      cancelLabel: UI_STRINGS[LANG].cancel || "Cancel",
+      choices: [
+        { label: "reset hard", value: "hard", danger: true },
+        { label: "reset mixed", value: "mixed" },
+        { label: "reset soft", value: "soft" },
+      ],
+    });
+    if (!mode) return;
+    await runGitResetMode(mode);
   });
   bindOnce("btnGitBranch", async () => {
     await loadBranchesAndShow();
