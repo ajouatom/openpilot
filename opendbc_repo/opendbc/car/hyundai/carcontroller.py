@@ -141,6 +141,8 @@ class CarController(CarControllerBase):
     self.lkas_max_torque = 0
     self.angle_max_torque = 250
 
+    self.lkas11_active = False
+
     self.canfd_debug = 0
     self.MainMode_ACC_trigger = 0
     self.LFA_trigger = 0
@@ -371,10 +373,12 @@ class CarController(CarControllerBase):
           can_sends.extend(self.create_button_messages(CC, CS, use_clu11=False))
     else:
       if CS.lkas11 is not None:
-        can_sends.append(hyundaican.create_lkas11(self.packer, self.frame, self.CP, apply_torque, apply_steer_req,
-                                                  torque_fault, CS.lkas11, sys_warning, sys_state, CC.enabled,
-                                                  hud_control.leftLaneVisible, hud_control.rightLaneVisible,
-                                                  left_lane_warning, right_lane_warning, self.is_ldws_car))
+        if self.lkas11_active:
+          can_sends.append(hyundaican.create_lkas11(self.packer, self.frame, self.CP, apply_torque, apply_steer_req,
+                                                    torque_fault, CS.lkas11, sys_warning, sys_state, CC.enabled,
+                                                    hud_control.leftLaneVisible, hud_control.rightLaneVisible,
+                                                    left_lane_warning, right_lane_warning, self.is_ldws_car))
+        self.lkas11_active = True
 
       if not self.CP.openpilotLongitudinalControl:
         can_sends.extend(self.create_button_messages(CC, CS, use_clu11=True))
