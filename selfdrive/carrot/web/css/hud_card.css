@@ -18,6 +18,8 @@
   --hud-chip-font: 13.5px;
   --hud-gear-font: 46px;
   --hud-band-height: 34px;
+  --hud-metric-value-scale: 1.78;
+  --hud-bottom-segment-scale: 1.30;
   --hud-max-width: 428px;
   --hud-panel-top: rgba(13, 56, 38, 1);
   --hud-panel-mid: rgba(18, 65, 44, 1);
@@ -107,7 +109,6 @@
 }
 
 .hudWrap[data-surface="driveOverlay"] .hudBottomSegment {
-  font-size: calc(var(--hud-chip-font) + 0.6px);
   letter-spacing: 0.06px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -215,10 +216,10 @@
 
 .hudMetricValue {
   min-width: 0;
-  font-size: calc(var(--hud-chip-font) * 2.15);
-  font-weight: 950;
+  font-size: calc(var(--hud-chip-font) * var(--hud-metric-value-scale, 1.78));
+  font-weight: 920;
   line-height: 1;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.028em;
   text-shadow: var(--hud-text-shadow-strong);
   white-space: nowrap;
 }
@@ -492,10 +493,10 @@
 .hudBottomSegment {
   flex: 1 1 0;
   min-width: 0;
-  font-size: calc(var(--hud-chip-font) * 1.72);
-  font-weight: 950;
+  font-size: calc(var(--hud-chip-font) * var(--hud-bottom-segment-scale, 1.30));
+  font-weight: 920;
   line-height: 1;
-  letter-spacing: 0.02px;
+  letter-spacing: 0.01px;
   text-align: center;
   color: rgba(255,255,255,0.92);
   text-shadow: var(--hud-text-shadow-strong);

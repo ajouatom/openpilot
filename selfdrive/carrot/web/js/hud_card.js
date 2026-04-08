@@ -129,11 +129,45 @@
 
   function getBandHeight(density) {
     switch (density) {
-      case "micro": return 36;
-      case "compact": return 42;
-      case "regular": return 48;
-      default: return 54;
+      case "micro": return 34;
+      case "compact": return 40;
+      case "regular": return 44;
+      default: return 48;
     }
+  }
+
+  function getBandTypography(profile, surface) {
+    let metricScale;
+    let bottomScale;
+
+    switch (profile.density) {
+      case "micro":
+        metricScale = 1.84;
+        bottomScale = 1.34;
+        break;
+      case "compact":
+        metricScale = 1.78;
+        bottomScale = 1.30;
+        break;
+      case "regular":
+        metricScale = 1.72;
+        bottomScale = 1.26;
+        break;
+      default:
+        metricScale = 1.66;
+        bottomScale = 1.22;
+        break;
+    }
+
+    if (surface === SURFACE_OVERLAY) {
+      metricScale -= 0.02;
+      bottomScale -= 0.02;
+    }
+
+    return {
+      metricScale,
+      bottomScale,
+    };
   }
 
   function getSurfaceTarget() {
@@ -417,24 +451,26 @@
 
     let profile = buildHudProfile(constraints.width, constraints.height, surface);
     if (surface === SURFACE_OVERLAY) {
+      const overlayScale = clamp(Math.min(constraints.width / 340, constraints.height / 210), 0.92, 1.02);
       profile = {
         ...profile,
         density: "micro",
         wide: false,
         borderRadius: 18,
         dockInset: 4,
-        padding: 8,
-        sectionGap: 6,
-        metricGap: 5,
-        speedFontSize: 62,
-        primaryValueFontSize: 26,
-        secondaryValueFontSize: 20,
-        labelFontSize: 11.8,
-        chipFontSize: 10.8,
-        gearFontSize: 28,
+        padding: Math.max(8, Math.round(profile.padding * 0.64)),
+        sectionGap: Math.max(6, Math.round(profile.sectionGap * 0.56)),
+        metricGap: Math.max(5, Math.round(profile.metricGap * 0.56)),
+        speedFontSize: Math.round(profile.speedFontSize * 0.84 * overlayScale),
+        primaryValueFontSize: Math.round(profile.primaryValueFontSize * 0.80 * overlayScale),
+        secondaryValueFontSize: Math.round(profile.secondaryValueFontSize * 0.82 * overlayScale),
+        labelFontSize: Math.round(profile.labelFontSize * 0.92 * overlayScale * 10) / 10,
+        chipFontSize: Math.round(profile.chipFontSize * overlayScale * 10) / 10,
+        gearFontSize: Math.round(profile.gearFontSize * 0.74 * overlayScale),
         maxWidth: Math.min(profile.maxWidth, 340),
       };
     }
+    const bandTypography = getBandTypography(profile, surface);
     const style = root.style;
     const portraitInline = surface === SURFACE_INLINE && !isOverlayMount();
     const exactSizedSurface = surface === SURFACE_INLINE || surface === SURFACE_OVERLAY;
@@ -466,6 +502,8 @@
     style.setProperty("--hud-chip-font", `${profile.chipFontSize}px`);
     style.setProperty("--hud-gear-font", `${profile.gearFontSize}px`);
     style.setProperty("--hud-band-height", `${getBandHeight(profile.density)}px`);
+    style.setProperty("--hud-metric-value-scale", bandTypography.metricScale.toFixed(2));
+    style.setProperty("--hud-bottom-segment-scale", bandTypography.bottomScale.toFixed(2));
     style.setProperty("--hud-max-width", `${Math.round(profile.maxWidth)}px`);
     style.setProperty("--hud-dock-inset", `${profile.dockInset}px`);
     style.setProperty("--hud-text-shadow-strong", STRONG_TEXT_SHADOW);
