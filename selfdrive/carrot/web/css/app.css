@@ -2152,16 +2152,13 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--loading {
   border-radius: calc(var(--r-2xl) + 2px);
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 82%, rgba(255,255,255,0.12));
-  background:
-    radial-gradient(circle at 16% 20%, rgba(255, 146, 77, 0.15), transparent 28%),
-    radial-gradient(circle at 80% 80%, rgba(104, 201, 255, 0.12), transparent 24%),
-    linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0)),
-    #04070c;
+  background: #0b0e12;
   box-shadow: 0 20px 48px rgba(0, 0, 0, 0.24);
   contain: layout style;
 }
 
 .carrot-stage__video,
+.carrot-stage__videoHold,
 .carrot-stage__canvas,
 .carrot-stage__hud {
   position: absolute;
@@ -2212,6 +2209,10 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--loading {
   opacity: 1;
 }
 
+.carrot-stage.is-video-held .carrot-stage__videoHold {
+  opacity: 1;
+}
+
 .carrot-stage.is-loading .carrot-stage__controls {
   opacity: 0;
   transform: translateY(8px);
@@ -2223,6 +2224,14 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--loading {
   will-change: transform;
   background: #000;
   pointer-events: none;
+}
+
+.carrot-stage__videoHold {
+  transform-origin: 0 0;
+  will-change: transform;
+  background: #000;
+  pointer-events: none;
+  z-index: 1;
 }
 
 .carrot-stage__canvas {

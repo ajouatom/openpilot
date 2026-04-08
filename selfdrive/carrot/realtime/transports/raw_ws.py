@@ -35,6 +35,13 @@ class RawWsHub:
   # 0 = no throttle (send every message)
   _THROTTLE_MAP = {
     "modelV2": 0,             # camera-synced, don't throttle
+    "carState": 0,            # plot 1,2,5,7,8 — needs full rate for dense graphs
+    "controlsState": 0,       # plot 6 — needs full rate for dense graphs
+    "longitudinalPlan": 0,    # plot 1,2,4 — needs full rate for dense graphs
+    "carControl": 0,          # plot 1,6,7,8 — needs full rate for dense graphs
+    "radarState": 0,          # plot 4,5 — needs full rate for dense graphs
+    "lateralPlan": 0,         # overlay path rendering
+    "carrotMan": 0,           # HUD status updates
     "roadCameraState": 0.25,  # metadata/debug only on web HUD
     "deviceState": 0.5,       # slow-changing HUD stats
     "peripheralState": 0.5,
