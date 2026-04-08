@@ -160,8 +160,8 @@
     }
 
     if (surface === SURFACE_OVERLAY) {
-      metricScale -= 0.02;
-      bottomScale -= 0.02;
+      metricScale = Math.max(1.42, (metricScale - 0.02) * 0.90);
+      bottomScale = Math.max(1.02, (bottomScale - 0.02) * 0.90);
     }
 
     return {
@@ -204,6 +204,7 @@
       const drawWidth = width;
       const drawHeight = height;
       const base = Math.min(drawWidth, drawHeight);
+      const overlaySizeBoost = 1.10;
       const ratio = (() => {
         switch (windowClass) {
           case "compact": return 0.23;
@@ -221,7 +222,7 @@
           case "large": return 186;
           default: return 198;
         }
-      })();
+      })() * overlaySizeBoost;
       const maxSize = (() => {
         switch (windowClass) {
           case "compact": return 246;
@@ -230,10 +231,10 @@
           case "large": return 294;
           default: return 310;
         }
-      })();
-      const viewportCap = drawHeight * 0.34;
+      })() * overlaySizeBoost;
+      const viewportCap = drawHeight * 0.374;
       const upperBound = Math.max(minSize, Math.min(maxSize, viewportCap));
-      const overlayHeight = clamp(base * ratio, minSize, upperBound);
+      const overlayHeight = clamp(base * ratio * overlaySizeBoost, minSize, upperBound);
       const overlayWidth = Math.min(
         Math.max(320, drawWidth - 32),
         overlayHeight * getPreferredAspectRatioForWindow(windowClass, true),
