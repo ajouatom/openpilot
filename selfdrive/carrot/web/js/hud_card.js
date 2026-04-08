@@ -129,10 +129,10 @@
 
   function getBandHeight(density) {
     switch (density) {
-      case "micro": return 30;
-      case "compact": return 34;
-      case "regular": return 38;
-      default: return 42;
+      case "micro": return 36;
+      case "compact": return 42;
+      case "regular": return 48;
+      default: return 54;
     }
   }
 
@@ -423,9 +423,9 @@
         wide: false,
         borderRadius: 18,
         dockInset: 4,
-        padding: 11,
-        sectionGap: 9,
-        metricGap: 7,
+        padding: 8,
+        sectionGap: 6,
+        metricGap: 5,
         speedFontSize: 62,
         primaryValueFontSize: 26,
         secondaryValueFontSize: 20,

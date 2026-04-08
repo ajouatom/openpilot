@@ -169,8 +169,9 @@
 .hudMetricBar {
   display: flex;
   align-items: stretch;
-  margin-bottom: calc(var(--hud-section-gap) * 0.28);
-  padding: 0 calc(var(--hud-section-gap) * 0.08);
+  margin-top: calc(var(--hud-padding) * -0.34);
+  margin-bottom: calc(var(--hud-section-gap) * 0.08);
+  padding: 0;
 }
 
 .hudMetricCell {
@@ -179,8 +180,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: calc(var(--hud-metric-gap) * 0.42);
-  padding: 0 calc(var(--hud-section-gap) * 0.30);
+  gap: calc(var(--hud-metric-gap) * 0.22);
+  padding: 0 calc(var(--hud-section-gap) * 0.12);
 }
 
 .hudMetricDivider,
@@ -214,10 +215,10 @@
 
 .hudMetricValue {
   min-width: 0;
-  font-size: calc(var(--hud-chip-font) + 2.9px);
-  font-weight: 900;
+  font-size: calc(var(--hud-chip-font) * 2.15);
+  font-weight: 950;
   line-height: 1;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.035em;
   text-shadow: var(--hud-text-shadow-strong);
   white-space: nowrap;
 }
@@ -452,8 +453,10 @@
 .hudBottomStrip {
   display: flex;
   align-items: center;
-  padding: clamp(2px, calc((var(--hud-band-height) - (var(--hud-chip-font) + 4px)) / 2), 4px) calc(var(--hud-section-gap) * 0.12);
+  min-height: calc(var(--hud-band-height) + 2px);
+  padding: 0 calc(var(--hud-section-gap) * 0.04);
   margin-top: auto;
+  margin-bottom: calc(var(--hud-padding) * -0.34);
 }
 
 .hudSignalSlot {
@@ -489,10 +492,10 @@
 .hudBottomSegment {
   flex: 1 1 0;
   min-width: 0;
-  font-size: calc(var(--hud-chip-font) + 2.8px);
-  font-weight: 900;
+  font-size: calc(var(--hud-chip-font) * 1.72);
+  font-weight: 950;
   line-height: 1;
-  letter-spacing: 0.18px;
+  letter-spacing: 0.02px;
   text-align: center;
   color: rgba(255,255,255,0.92);
   text-shadow: var(--hud-text-shadow-strong);
