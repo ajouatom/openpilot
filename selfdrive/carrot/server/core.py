@@ -27,7 +27,7 @@ import traceback
 import numpy as np
 from typing import Dict, Any, Tuple, Optional, List
 
-from aiohttp import web, ClientSession, WSMsgType
+from aiohttp import web, ClientSession, ClientTimeout, WSMsgType
 from cereal import messaging
 from opendbc.car import structs
 import shlex
@@ -204,14 +204,16 @@ async def proxy_stream(request: web.Request) -> web.StreamResponse:
   sess: ClientSession = request.app["http"]
 
   try:
-    async with sess.post(WEBRTCD_URL, data=body, headers={"Content-Type": ct}) as resp:
+    async with sess.post(WEBRTCD_URL, data=body, headers={"Content-Type": ct},
+                         timeout=ClientTimeout(total=15)) as resp:
       resp_body = await resp.read()
-      # 그대로 전달
       out = web.Response(body=resp_body, status=resp.status)
       rct = resp.headers.get("Content-Type")
       if rct:
         out.headers["Content-Type"] = rct
       return out
+  except asyncio.TimeoutError:
+    return web.json_response({"ok": False, "error": "webrtcd timeout"}, status=504)
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=502)
 

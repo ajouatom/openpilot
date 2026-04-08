@@ -18,8 +18,15 @@ from aiohttp import web
 if TYPE_CHECKING:
   from aiortc.rtcdatachannel import RTCDataChannel
 
+from openpilot.common.swaglog import cloudlog
 from openpilot.system.webrtc.schema import generate_field
 from cereal import messaging, log
+
+
+def webrtcd_log(level: str, msg: str, *args):
+  logger = logging.getLogger("webrtcd")
+  getattr(logger, level)(msg, *args)
+  getattr(cloudlog, level)("[webrtcd] " + msg, *args)
 
 
 class CerealOutgoingMessageProxy:
@@ -137,15 +144,26 @@ class StreamSession:
     from teleoprtc import WebRTCAnswerBuilder
     from teleoprtc.info import parse_info_from_offer
 
+    self.logger = logging.getLogger("webrtcd")
     config = parse_info_from_offer(sdp)
     builder = WebRTCAnswerBuilder(sdp)
 
+    self._video_tracks = []
     assert len(cameras) == config.n_expected_camera_tracks, "Incoming stream has misconfigured number of video tracks"
     for cam in cameras:
-      builder.add_video_stream(cam, LiveStreamVideoStreamTrack(cam) if not debug_mode else VideoStreamTrack())
+      try:
+        track = LiveStreamVideoStreamTrack(cam) if not debug_mode else VideoStreamTrack()
+        builder.add_video_stream(cam, track)
+        if hasattr(track, 'close_sock'):
+          self._video_tracks.append(track)
+        self.logger.info("added camera track: %s", cam)
+      except Exception:
+        self.logger.exception("failed to create camera track: %s", cam)
+        raise
 
-    self.stream = builder.stream()
     self.identifier = str(uuid.uuid4())
+    self.stream = builder.stream()
+    setattr(self.stream, "session_identifier", self.identifier)
 
     self.incoming_bridge: CerealIncomingMessageProxy | None = None
     self.incoming_bridge_services = incoming_services
@@ -158,16 +176,21 @@ class StreamSession:
       self.outgoing_bridge_runner = CerealProxyRunner(self.outgoing_bridge)
 
     self.run_task: asyncio.Task | None = None
-    self.logger = logging.getLogger("webrtcd")
+    self.connected_event = asyncio.Event()
     self.logger.info("New stream session (%s), cameras %s, incoming services %s, outgoing services %s",
                       self.identifier, cameras, incoming_services, outgoing_services)
+    self.logger.info("request cameras=%s", cameras)
+
 
   def start(self):
+    webrtcd_log("info", "Stream session (%s) start requested", self.identifier)
     self.run_task = asyncio.create_task(self.run())
 
   async def stop(self):
     if self.run_task is None:
       return
+
+    webrtcd_log("info", "Stream session (%s) stop requested (done=%s)", self.identifier, self.run_task.done())
 
     if not self.run_task.done():
       self.run_task.cancel()
@@ -178,6 +201,7 @@ class StreamSession:
 
     self.run_task = None
     await self.post_run_cleanup()
+    webrtcd_log("info", "Stream session (%s) stop cleanup complete", self.identifier)
 
     try:
       if hasattr(self, "stream_dict"):
@@ -187,7 +211,10 @@ class StreamSession:
     
 
   async def get_answer(self):
-    return await self.stream.start()
+    webrtcd_log("info", "Stream session (%s) building answer", self.identifier)
+    answer = await self.stream.start()
+    webrtcd_log("info", "Stream session (%s) answer ready", self.identifier)
+    return answer
 
   async def message_handler(self, message: bytes):
     assert self.incoming_bridge is not None
@@ -198,6 +225,7 @@ class StreamSession:
 
   async def run(self):
     try:
+      webrtcd_log("info", "Stream session (%s) waiting for peer connection", self.identifier)
       await self.stream.wait_for_connection()
       if self.stream.has_messaging_channel():
         if self.incoming_bridge is not None:
@@ -207,12 +235,14 @@ class StreamSession:
           channel = self.stream.get_messaging_channel()
           self.outgoing_bridge_runner.proxy.add_channel(channel)
           self.outgoing_bridge_runner.start()
-      self.logger.info("Stream session (%s) connected", self.identifier)
+      self.connected_event.set()
+      webrtcd_log("info", "Stream session (%s) connected", self.identifier)
 
+      webrtcd_log("info", "Stream session (%s) waiting for disconnection", self.identifier)
       await self.stream.wait_for_disconnection()
       await self.post_run_cleanup()
 
-      self.logger.info("Stream session (%s) ended", self.identifier)
+      webrtcd_log("info", "Stream session (%s) ended", self.identifier)
     except Exception:
       self.logger.exception("Stream session failure")
     finally:
@@ -227,6 +257,12 @@ class StreamSession:
     await self.stream.stop()
     if self.outgoing_bridge is not None:
       self.outgoing_bridge_runner.stop()
+    # Close ZMQ sockets held by video tracks
+    for track in getattr(self, '_video_tracks', []):
+      try:
+        track.close_sock()
+      except Exception:
+        self.logger.exception("Failed to close video track socket")
 
 
 @dataclass
@@ -237,10 +273,36 @@ class StreamRequestBody:
   bridge_services_out: list[str] = field(default_factory=list)
 
 
+async def retire_old_sessions_after_handover(old_sessions: list[StreamSession], new_session: StreamSession, timeout_s: float = 12.0):
+  if not old_sessions:
+    return
+
+  old_ids = [getattr(old, "identifier", "?") for old in old_sessions]
+  webrtcd_log("info", "Handover: waiting to retire old sessions %s after new session %s", old_ids, new_session.identifier)
+  try:
+    await asyncio.wait_for(new_session.connected_event.wait(), timeout=timeout_s)
+    webrtcd_log("info", "New session %s connected, retiring old sessions %s", new_session.identifier, old_ids)
+  except TimeoutError:
+    webrtcd_log("warning", "New session %s did not connect within %.1fs, retiring old sessions %s anyway",
+                new_session.identifier, timeout_s, old_ids)
+
+  for old in old_sessions:
+    try:
+      webrtcd_log("info", "Handover: stopping old session %s", getattr(old, 'identifier', '?'))
+      await old.stop()
+      webrtcd_log("info", "Handover: stopped old session %s", getattr(old, 'identifier', '?'))
+    except Exception:
+      webrtcd_log("exception", "Failed to stop old session %s during handover", getattr(old, 'identifier', '?'))
+
+
 async def get_stream(request: 'web.Request'):
   stream_dict, debug_mode = request.app['streams'], request.app['debug']
+
+  old_sessions = list(stream_dict.values())
   raw_body = await request.json()
   body = StreamRequestBody(**raw_body)
+  webrtcd_log("info", "get_stream request from %s cameras=%s old_sessions=%s", request.remote, body.cameras,
+              [getattr(old, "identifier", "?") for old in old_sessions])
 
   session = StreamSession(body.sdp, body.cameras, body.bridge_services_in, body.bridge_services_out, debug_mode)
   session.stream_dict = stream_dict
@@ -248,6 +310,9 @@ async def get_stream(request: 'web.Request'):
   session.start()
 
   stream_dict[session.identifier] = session
+  webrtcd_log("info", "get_stream created new session %s active_sessions=%d", session.identifier, len(stream_dict))
+  if old_sessions:
+    asyncio.create_task(retire_old_sessions_after_handover(old_sessions, session))
 
   return web.json_response({"sdp": answer.sdp, "type": answer.type}, headers={'Access-Control-Allow-Origin': '*'})
 

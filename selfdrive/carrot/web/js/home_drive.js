@@ -3,6 +3,7 @@
 window.HomeDrive = (() => {
   const stageEl = document.getElementById("carrotStage");
   const videoEl = document.getElementById("carrotRoadVideo");
+  const videoHoldEl = document.getElementById("carrotLastFrameCanvas");
   const canvasEl = document.getElementById("carrotOverlayCanvas");
   const hudCanvasEl = document.getElementById("carrotHudCanvas");
   const onroadAlertEl = document.getElementById("carrotOnroadAlert");
@@ -1614,6 +1615,12 @@ window.HomeDrive = (() => {
       overlaySizeSignature = nextOverlaySignature;
       videoEl.style.width = `${videoWidth}px`;
       videoEl.style.height = `${videoHeight}px`;
+      if (videoHoldEl) {
+        videoHoldEl.style.width = `${videoWidth}px`;
+        videoHoldEl.style.height = `${videoHeight}px`;
+        videoHoldEl.width = Math.max(1, Math.round(videoWidth * dpr));
+        videoHoldEl.height = Math.max(1, Math.round(videoHeight * dpr));
+      }
       canvasEl.style.width = `${videoWidth}px`;
       canvasEl.style.height = `${videoHeight}px`;
       canvasEl.width = Math.max(1, Math.round(videoWidth * dpr));
@@ -1639,6 +1646,7 @@ window.HomeDrive = (() => {
     transformSignature = nextSignature;
     const cssMatrix = `matrix(${transform.scale}, 0, 0, ${transform.scale}, ${transform.tx}, ${transform.ty})`;
     videoEl.style.transform = cssMatrix;
+    if (videoHoldEl) videoHoldEl.style.transform = cssMatrix;
     canvasEl.style.transform = cssMatrix;
   }
 
@@ -2075,32 +2083,31 @@ window.HomeDrive = (() => {
 
   function getLeadBoxClampMargins(videoWidth, videoHeight, stageWidth = videoWidth, stageHeight = videoHeight, transform = null, options = {}) {
     const visibleRect = getVisibleSourceRect(videoWidth, videoHeight, stageWidth, stageHeight, transform);
-    const baseTopMargin = Math.min(videoHeight * 0.28, 200.0);
-    const baseBottomMargin = Math.max(videoHeight * 0.14, 80.0);
-    const offsets = getLeadBadgeOffsets(videoWidth, videoHeight);
-    let bottomReserve = baseBottomMargin;
+    // C3 fixed margins: top=200, bottom=80, marginX=350
+    const topMargin = Math.max(200.0, visibleRect.top + 6);
 
+    // C3 base: maxCenterY = fb_h - 80
+    let maxCenterY = videoHeight - 80.0;
+
+    // In crop/fit modes, also keep badges inside visible area
+    const offsets = getLeadBadgeOffsets(videoWidth, videoHeight);
+    let badgeReserve = 0;
     if (options.includeDistanceBadge !== false) {
-      bottomReserve = Math.max(bottomReserve, offsets.rectTopOffset + offsets.badgeHeight + 8);
+      badgeReserve = Math.max(badgeReserve, offsets.rectTopOffset + offsets.badgeHeight + 8);
     }
     if (options.includeStateText) {
-      const stateBottomReserve = offsets.textBaselineOffset + Math.max(offsets.fontSize * 0.28, 8);
-      bottomReserve = Math.max(bottomReserve, stateBottomReserve);
+      badgeReserve = Math.max(badgeReserve, offsets.textBaselineOffset + Math.max(offsets.fontSize * 0.28, 8));
     }
-
-    const topMargin = Math.max(baseTopMargin, visibleRect.top + 6);
-    const maxCenterY = Math.max(
-      topMargin,
-      Math.min(videoHeight - baseBottomMargin, visibleRect.bottom - bottomReserve),
-    );
+    maxCenterY = Math.min(maxCenterY, visibleRect.bottom - Math.max(badgeReserve, 80.0));
+    maxCenterY = Math.max(topMargin, maxCenterY);
 
     return {
-      marginX: Math.min(videoWidth * 0.35, 350.0),
+      marginX: 350.0,
       topMargin,
-      bottomMargin: Math.max(baseBottomMargin, videoHeight - maxCenterY),
+      bottomMargin: Math.max(80.0, videoHeight - maxCenterY),
       maxCenterY,
       visibleRect,
-      bottomReserve,
+      bottomReserve: badgeReserve,
     };
   }
 
