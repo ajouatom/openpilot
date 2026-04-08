@@ -287,8 +287,25 @@ async function toggleCarrotFullscreen(options = {}) {
   return requestCarrotFullscreen(options);
 }
 
+function shouldKeepCarrotFullscreen() {
+  return document.body?.dataset?.page === "carrot" && Boolean(window.CARROT_VISION_ACTIVE);
+}
+
+async function syncCarrotFullscreenLifecycle() {
+  if (shouldKeepCarrotFullscreen()) return;
+  await exitCarrotFullscreen({ quiet: true }).catch(() => {});
+}
+
 window.RequestCarrotFullscreen = requestCarrotFullscreen;
+window.ExitCarrotFullscreen = exitCarrotFullscreen;
 window.ToggleCarrotFullscreen = toggleCarrotFullscreen;
+
+window.addEventListener("carrot:pagechange", () => {
+  void syncCarrotFullscreenLifecycle();
+});
+window.addEventListener("carrot:visionchange", () => {
+  void syncCarrotFullscreenLifecycle();
+});
 
 function emitCarrotRenderRequest(detail = {}) {
   window.dispatchEvent(new CustomEvent("carrot:render-request", { detail }));
