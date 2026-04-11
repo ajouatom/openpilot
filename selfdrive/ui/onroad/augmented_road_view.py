@@ -10,7 +10,7 @@ from openpilot.selfdrive.ui.onroad.driver_state import DriverStateRenderer
 from openpilot.selfdrive.ui.onroad.hud_renderer import HudRenderer
 from openpilot.selfdrive.ui.onroad.model_renderer import ModelRenderer
 from openpilot.selfdrive.ui.onroad.cameraview import CameraView
-from openpilot.system.ui.lib.application import gui_app
+from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.common.transformations.camera import DEVICE_CAMERAS, DeviceCameraConfig, view_frame_from_device_frame
 from openpilot.common.transformations.orientation import rot_from_euler
 
@@ -51,6 +51,9 @@ class AugmentedRoadView(CameraView):
 
     # debug
     self._pm = messaging.PubMaster(['uiDebug'])
+
+    self._font_display: rl.Font = gui_app.font(FontWeight.DISPLAY)
+
 
   def _render(self, rect):
     # Only render when system is started to avoid invalid data access
@@ -96,7 +99,7 @@ class AugmentedRoadView(CameraView):
     rl.end_scissor_mode()
 
     # Draw colored border based on driving state
-    self._draw_border(rect)
+    self._draw_border_carrot(rect)
 
     # publish uiDebug
     msg = messaging.new_message('uiDebug')
@@ -217,6 +220,346 @@ class AugmentedRoadView(CameraView):
 
     return self._cached_matrix
 
+  def _get_border_color(self, status: UIStatus) -> rl.Color:
+    return BORDER_COLORS.get(status, BORDER_COLORS[UIStatus.DISENGAGED])
+
+
+  def _draw_text_with_outline(self, text, pos, font_size,
+                              text_color,
+                              outline_color=rl.BLACK,
+                              thickness=2):
+    x, y = pos.x, pos.y
+    for dx in range(-thickness, thickness + 1):
+      for dy in range(-thickness, thickness + 1):
+        if dx == 0 and dy == 0:
+          continue
+        rl.draw_text_ex(
+          self._font_display,
+          text,
+          rl.Vector2(x + dx, y + dy),
+          font_size,
+          0,
+          outline_color
+        )
+
+    # main text
+    rl.draw_text_ex(
+      self._font_display,
+      text,
+      rl.Vector2(x, y),
+      font_size,
+      0,
+      text_color
+    )
+    
+  def _draw_text_outline_aligned(self, text: str, x: float, y: float, font_size: float,
+                                 text_color: rl.Color,
+                                 align: str = "center",
+                                 outline_color: rl.Color = rl.BLACK,
+                                 thickness: int = 2):
+    if not text:
+      return
+
+    text_size = rl.measure_text_ex(self._font_display, text, font_size, 0)
+
+    if align == "left":
+      draw_x = x
+    elif align == "right":
+      draw_x = x - text_size.x
+    else:
+      draw_x = x - text_size.x / 2.0
+
+    self._draw_text_with_outline(
+      text,
+      rl.Vector2(draw_x, y),
+      font_size,
+      text_color,
+      outline_color,
+      thickness,
+    )
+
+  def _draw_border_carrot(self, rect: rl.Rectangle):
+    sm = ui_state.sm
+    if not sm.alive["carState"]:
+      self._draw_border(rect)
+      return
+
+    car_state = sm["carState"]
+
+    x = float(rect.x)
+    y = float(rect.y)
+    w = float(rect.width)
+    h = float(rect.height)
+
+    mid_y = y + h / 2.0
+    center_gap = 200.0
+    gap_half = center_gap / 2.0
+
+    thickness = float(UI_BORDER_SIZE)
+    roundness = 0.18
+    segments = 10
+
+    # ---------- colors ----------
+    if car_state.steeringPressed:
+      top_color = self._get_border_color(UIStatus.OVERRIDE)
+    elif ui_state.lat_active:
+      top_color = self._get_border_color(UIStatus.ENGAGED)
+    else:
+      top_color = self._get_border_color(UIStatus.DISENGAGED)
+
+    bottom_color = self._get_border_color(ui_state.status)
+
+    left_blink = bool(car_state.leftBlinker)
+    right_blink = bool(car_state.rightBlinker)
+
+    # ---------- geometry ----------
+    top_h = max(0.0, mid_y - gap_half - y)
+    bottom_y = mid_y + gap_half
+    bottom_h = max(0.0, y + h - bottom_y)
+
+    # blinker box
+    blink_w = 52.0
+    blink_h = center_gap
+    blink_y = mid_y - blink_h / 2.0
+
+    left_blink_rect = rl.Rectangle(
+      x,
+      blink_y,
+      blink_w,
+      blink_h
+    )
+    right_blink_rect = rl.Rectangle(
+      x + w - blink_w,
+      blink_y,
+      blink_w,
+      blink_h
+    )
+
+    # ---------- top inverted U ----------
+    # top horizontal
+    rl.draw_rectangle(
+      int(x),
+      int(y),
+      int(w),
+      int(thickness),
+      top_color
+    )
+
+    # top left vertical
+    rl.draw_rectangle(
+      int(x),
+      int(y),
+      int(thickness),
+      int(top_h),
+      top_color
+    )
+
+    # top right vertical
+    rl.draw_rectangle(
+      int(x + w - thickness),
+      int(y),
+      int(thickness),
+      int(top_h),
+      top_color
+    )
+
+    # ---------- bottom U ----------
+    # bottom left vertical
+    rl.draw_rectangle(
+      int(x),
+      int(bottom_y),
+      int(thickness),
+      int(bottom_h),
+      bottom_color
+    )
+
+    # bottom right vertical
+    rl.draw_rectangle(
+      int(x + w - thickness),
+      int(bottom_y),
+      int(thickness),
+      int(bottom_h),
+      bottom_color
+    )
+
+    # bottom horizontal
+    rl.draw_rectangle(
+      int(x),
+      int(y + h - thickness),
+      int(w),
+      int(thickness),
+      bottom_color
+    )
+
+    # ---------- blinkers ----------
+    rl.draw_rectangle_rounded(
+      left_blink_rect,
+      roundness,
+      segments,
+      rl.ORANGE if left_blink else rl.BLACK
+    )
+    rl.draw_rectangle_rounded_lines_ex(
+      left_blink_rect,
+      roundness,
+      segments,
+      1.0,
+      top_color
+    )
+
+    rl.draw_rectangle_rounded(
+      right_blink_rect,
+      roundness,
+      segments,
+      rl.ORANGE if right_blink else rl.BLACK
+    )
+    rl.draw_rectangle_rounded_lines_ex(
+      right_blink_rect,
+      roundness,
+      segments,
+      1.0,
+      top_color
+    )
+
+    # ---------- text ----------
+    text_margin = 30.0
+    font_size = 30.0
+    line_margin = 2.0
+
+    top = str(car_state.logCarrot)
+    top_left = ""
+    top_right = ""
+    bottom = ""
+    bottom_left = ""
+    bottom_right = ""
+
+    car_name = ui_state.params.get("CarName") or ""
+
+    if ui_state.params.get_int("HyundaiCameraSCC") > 0:
+      car_name += "(CAMERA SCC)"
+    else:
+      try:
+        if sm.alive["carParams"] and sm["carParams"].openpilotLongitudinalControl:
+          car_name += " - OP Long"
+      except Exception:
+        pass
+
+    nnff_model_name = ui_state.params.get("NNFFModelName") or ""
+    if len(nnff_model_name) > 0:
+      car_name += ",NNFF"
+
+    top_left = car_name
+
+    try:
+      top_right_parts = []
+
+      if sm.alive["liveDelay"]:
+        live_delay = sm["liveDelay"]
+        try:
+          top_right_parts.append(
+            f"LD[{live_delay.calPerc:.0f}%,{live_delay.lateralDelay:.2f}]"
+          )
+        except Exception:
+          pass
+
+      if sm.alive["liveTorqueParameters"]:
+        ltp = sm["liveTorqueParameters"]
+        try:
+          live_valid = "ON" if ltp.liveValid else "OFF"
+          top_right_parts.append(
+            f"LT[{ltp.calPerc:.0f}%,{live_valid}]({ltp.latAccelFactorFiltered:.2f}/{ltp.frictionCoefficientFiltered:.2f})"
+          )
+        except Exception:
+          pass
+
+      if sm.alive["liveParameters"]:
+        lp = sm["liveParameters"]
+        try:
+          custom_sr = 0.0
+          if ui_state.params is not None:
+            try:
+              custom_sr = ui_state.params.get_float("CustomSR") / 10.0
+            except Exception:
+              custom_sr = 0.0
+          top_right_parts.append(f"SR({lp.steerRatio:.1f},{custom_sr:.1f})")
+        except Exception:
+          pass
+
+      top_right = ", ".join(top_right_parts)
+    except Exception:
+      top_right = ""
+
+    try:
+      if sm.alive["lateralPlan"]:
+        lat_plan = sm["lateralPlan"]
+        if hasattr(lat_plan, "latDebugText"):
+          bottom = str(lat_plan.latDebugText)
+    except Exception:
+      bottom = ""
+
+    try:
+      if ui_state.params is not None:
+        bottom_left = ui_state.params.get("GitBranch") or ""
+    except Exception:
+      bottom_left = ""
+
+    try:
+      if ui_state.params_memory is not None:
+        bottom_right = ui_state.params_memory.get("NetworkAddress") or ""
+    except Exception:
+      bottom_right = ""
+
+    # text positions
+    top_text_y = y + line_margin
+    bottom_text_y = bottom_y + bottom_h - font_size - 2
+    self._draw_text_outline_aligned(
+      top,
+      x + w / 2.0,
+      top_text_y,
+      font_size,
+      rl.WHITE,
+      "center",
+    )
+    self._draw_text_outline_aligned(
+      top_left,
+      x + text_margin,
+      top_text_y,
+      font_size,
+      rl.WHITE,
+      "left",
+    )
+    self._draw_text_outline_aligned(
+      top_right,
+      x + w - text_margin,
+      top_text_y,
+      font_size,
+      rl.WHITE,
+      "right",
+    )
+
+    self._draw_text_outline_aligned(
+      bottom,
+      x + w / 2.0,
+      bottom_text_y,
+      font_size,
+      rl.WHITE,
+      "center",
+    )
+    self._draw_text_outline_aligned(
+      bottom_left,
+      x + text_margin,
+      bottom_text_y,
+      font_size,
+      rl.WHITE,
+      "left",
+    )
+    self._draw_text_outline_aligned(
+      bottom_right,
+      x + w - text_margin,
+      bottom_text_y,
+      font_size,
+      rl.WHITE,
+      "right",
+    )
 
 if __name__ == "__main__":
   gui_app.init_window("OnRoad Camera View")
