@@ -318,7 +318,7 @@ class AugmentedRoadView(CameraView):
     bottom_h = max(0.0, y + h - bottom_y)
 
     # blinker box
-    blink_w = 52.0
+    blink_w = UI_BORDER_SIZE
     blink_h = center_gap
     blink_y = mid_y - blink_h / 2.0
 
@@ -454,59 +454,34 @@ class AugmentedRoadView(CameraView):
 
       if sm.alive["liveDelay"]:
         live_delay = sm["liveDelay"]
-        try:
-          top_right_parts.append(
-            f"LD[{live_delay.calPerc:.0f}%,{live_delay.lateralDelay:.2f}]"
-          )
-        except Exception:
-          pass
+        top_right_parts.append(
+          f"LD[{live_delay.calPerc:.0f}%,{live_delay.lateralDelay:.2f}]"
+        )
 
       if sm.alive["liveTorqueParameters"]:
         ltp = sm["liveTorqueParameters"]
-        try:
-          live_valid = "ON" if ltp.liveValid else "OFF"
-          top_right_parts.append(
-            f"LT[{ltp.calPerc:.0f}%,{live_valid}]({ltp.latAccelFactorFiltered:.2f}/{ltp.frictionCoefficientFiltered:.2f})"
-          )
-        except Exception:
-          pass
+        live_valid = "ON" if ltp.liveValid else "OFF"
+        top_right_parts.append(
+          f"LT[{ltp.calPerc:.0f}%,{live_valid}]({ltp.latAccelFactorFiltered:.2f}/{ltp.frictionCoefficientFiltered:.2f})"
+        )
 
       if sm.alive["liveParameters"]:
         lp = sm["liveParameters"]
-        try:
-          custom_sr = 0.0
-          if ui_state.params is not None:
-            try:
-              custom_sr = ui_state.params.get_float("CustomSR") / 10.0
-            except Exception:
-              custom_sr = 0.0
-          top_right_parts.append(f"SR({lp.steerRatio:.1f},{custom_sr:.1f})")
-        except Exception:
-          pass
+        custom_sr = ui_state.params.get_float("CustomSR") / 10.0
+        top_right_parts.append(f"SR({lp.steerRatio:.1f},{custom_sr:.1f})")
 
       top_right = ", ".join(top_right_parts)
     except Exception:
+      print("Error accessing live debug data for top right text")
       top_right = ""
 
-    try:
-      if sm.alive["lateralPlan"]:
-        lat_plan = sm["lateralPlan"]
-        if hasattr(lat_plan, "latDebugText"):
-          bottom = str(lat_plan.latDebugText)
-    except Exception:
-      bottom = ""
+    if sm.alive["lateralPlan"]:
+      lat_plan = sm["lateralPlan"]
+      bottom = str(lat_plan.latDebugText)
 
-    try:
-      if ui_state.params is not None:
-        bottom_left = ui_state.params.get("GitBranch") or ""
-    except Exception:
-      bottom_left = ""
+    bottom_left = ui_state.params.get("GitBranch") or ""
 
-    try:
-      if ui_state.params_memory is not None:
-        bottom_right = ui_state.params_memory.get("NetworkAddress") or ""
-    except Exception:
-      bottom_right = ""
+    bottom_right = ui_state.params_memory.get("NetworkAddress") or ""
 
     # text positions
     top_text_y = y + line_margin
