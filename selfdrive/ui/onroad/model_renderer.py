@@ -491,7 +491,12 @@ class ModelRenderer(Widget):
     self._carrot_radar_dist = 0.0
     self._carrot_vision_dist = 0.0
     self._carrot_lead_status = False
+    
+    self._carrot_path_draw_seq = 0.0
+    self._carrot_path_forward = True
+    self._carrot_use_lane_line_speed_apply = 0
 
+    self._carrot_show_path_width = 1.0
 
   def _refresh_carrot_params(self):
     self._carrot_show_lane_info = ui_state.params.get_int("ShowLaneInfo")
@@ -504,35 +509,33 @@ class ModelRenderer(Widget):
     self._carrot_path_color_lane = ui_state.params.get_int("ShowPathColorLane")
     self._carrot_path_color_cruise_off = ui_state.params.get_int("ShowPathColorCruiseOff")
 
-
   def _draw_path_carrot(self, sm):
-    if not self._path.projected_points.size:
+    if not self._path.raw_points.size:
       return
 
     self._refresh_carrot_params()
     self._update_path_end_carrot(sm)
 
-    show_path_mode = self._carrot_path_mode
-    show_path_color = self._carrot_path_color
-
-    controls_state = sm['controlsState']
     car_state = sm['carState']
+    controls_state = sm['controlsState']
     selfdrive_state = sm['selfdriveState']
     longitudinal_plan = sm['longitudinalPlan']
     radar_state = sm['radarState'] if sm.valid['radarState'] else None
     lead_one = radar_state.leadOne if radar_state is not None else None
 
-    active_lane_line = controls_state.activeLaneLine
-    long_active = selfdrive_state.enabled
-    brake_valid = car_state.brakeLights
+    show_path_mode = self._carrot_path_mode
+    show_path_color = self._carrot_path_color
 
+    active_lane_line = controls_state.activeLaneLine
     if active_lane_line:
       show_path_mode = self._carrot_path_mode_lane
       show_path_color = self._carrot_path_color_lane
 
+    long_active = selfdrive_state.enabled
     if not long_active:
       show_path_color = self._carrot_path_color_cruise_off
 
+    brake_valid = car_state.brakeLights
     accel = longitudinal_plan.accels[0] if len(longitudinal_plan.accels) > 0 else 0.0
 
     if show_path_color >= 20:
@@ -548,17 +551,30 @@ class ModelRenderer(Widget):
       else:
         show_path_color = 19
 
-    fill_color = self._get_path_color_carrot(show_path_color)
-    stroke_width = 2.0 if (show_path_color >= 10 or brake_valid) else 0.0
-    stroke_color = rl.Color(255, 0, 0, 255) if brake_valid else rl.Color(255, 255, 255, 255)
+    self._carrot_path_draw_seq += 0.12
+    if self._carrot_path_draw_seq > 10000.0:
+      self._carrot_path_draw_seq = 0.0
 
-    draw_polygon(self._rect, self._path.projected_points, fill_color)
-
-    if stroke_width > 0.0:
-      self._draw_polygon_outline_carrot(self._path.projected_points, stroke_color, stroke_width)
+    if show_path_mode == 0:
+      track_vertices = self._build_path_polygon_mode0_carrot(sm)
+      if track_vertices.size == 0:
+        return
+      fill_color = self._get_path_color_carrot(show_path_color)
+      draw_polygon(self._rect, track_vertices, fill_color)
+      if show_path_color >= 10 or brake_valid:
+        self._draw_polygon_outline_carrot(
+          track_vertices,
+          rl.Color(255, 0, 0, 255) if brake_valid else rl.Color(255, 255, 255, 255),
+          2.0,
+        )
+    elif 13 <= show_path_mode <= 15:
+      self._draw_special_modes_carrot(sm, show_path_mode, show_path_color, brake_valid)
+    elif show_path_mode >= 9:
+      self._draw_complex_path_carrot(sm, show_path_mode, show_path_color, brake_valid)
+    else:
+      self._draw_animated_path_carrot(sm, show_path_mode, show_path_color, brake_valid)
 
     self._draw_path_end_overlay_carrot(sm)
-
 
   def _draw_lane_lines_carrot(self, sm):
     if self._carrot_show_lane_info < 1:
@@ -780,7 +796,288 @@ class ModelRenderer(Widget):
       tf_text = f"{self._carrot_tf_distance:.1f}({self._carrot_t_follow:.2f})"
       self._draw_text_carrot(int(self._carrot_tf_right[0]), int(self._carrot_tf_right[1]), tf_text, 25, rl.Color(255, 255, 255, 255))
 
+  def _interp_carrot(self, x: float, xp, fp) -> float:
+    return float(np.interp(x, xp, fp))
 
+
+  def _build_path_polygon_mode0_carrot(self, sm) -> np.ndarray:
+    line = self._path.raw_points
+    if line.shape[0] == 0:
+      return np.empty((0, 2), dtype=np.float32)
+
+    max_distance = np.clip(line[-1, 0], MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE)
+    radar_state = sm['radarState'] if sm.valid['radarState'] else None
+    if radar_state is not None and radar_state.leadOne.status:
+      lead_d = radar_state.leadOne.dRel * 2.0
+      max_distance = np.clip(lead_d - min(lead_d * 0.35, 10.0), 0.0, max_distance)
+
+    max_idx = self._get_path_length_idx(line[:, 0], max_distance)
+    return self._map_line_to_polygon(
+      line,
+      0.9 * self._carrot_show_path_width,
+      self._path_offset_z,
+      max_idx,
+      max_distance,
+      allow_invert=False,
+    )
+
+
+  def _build_path_polygon_lineardepth_carrot(
+      self,
+      line: np.ndarray,
+      width_apply: float,
+      z_off_start: float,
+      z_off_end: float,
+      max_idx: int,
+      allow_invert: bool = True,
+  ) -> np.ndarray:
+    if line.shape[0] == 0 or max_idx < 0:
+      return np.empty((0, 2), dtype=np.float32)
+
+    points = line[:max_idx + 1]
+    points = points[points[:, 0] >= 0]
+    if points.shape[0] == 0:
+      return np.empty((0, 2), dtype=np.float32)
+
+    left_pts = []
+    right_pts = []
+
+    for i in range(points.shape[0]):
+      x = float(points[i, 0])
+      y = float(points[i, 1])
+      z = float(points[i, 2])
+
+      z_off = self._interp_carrot(x, [0.0, 100.0], [z_off_start, z_off_end])
+      y_off = self._interp_carrot(z_off, [-3.0, 0.0, 3.0], [1.5, 0.5, 1.5]) * width_apply
+
+      left = self._map_to_screen(x, y - y_off, z + z_off)
+      right = self._map_to_screen(x, y + y_off, z + z_off)
+      if left is None or right is None:
+        continue
+
+      if not allow_invert and len(left_pts) > 0 and left[1] > left_pts[-1][1]:
+        continue
+
+      left_pts.append(left)
+      right_pts.insert(0, right)
+
+    if len(left_pts) == 0 or len(right_pts) == 0:
+      return np.empty((0, 2), dtype=np.float32)
+
+    return np.array(left_pts + right_pts, dtype=np.float32)
+
+
+  def _build_path_polygon_dist_carrot(
+      self,
+      line: np.ndarray,
+      width_apply: float,
+      z_off_start: float,
+      z_off_end: float,
+      max_dist: float,
+      allow_invert: bool = True,
+  ) -> np.ndarray:
+    if line.shape[0] == 0:
+      return np.empty((0, 2), dtype=np.float32)
+
+    line_x = line[:, 0].astype(np.float32).copy()
+    line_y = line[:, 1].astype(np.float32).copy()
+    line_z = line[:, 2].astype(np.float32).copy()
+
+    for i in range(1, line_x.shape[0]):
+      if line_x[i] < line_x[i - 1]:
+        line_x[i] = line_x[i - 1]
+
+    idxs = np.arange(line_x.shape[0], dtype=np.float32)
+
+    left_pts = []
+    right_pts = []
+
+    dist = 2.0
+    exit_flag = False
+    while not exit_flag:
+      if dist >= max_dist:
+        dist = max_dist
+        exit_flag = True
+
+      z_off = self._interp_carrot(dist, [0.0, 100.0], [z_off_start, z_off_end])
+      y_off = self._interp_carrot(z_off, [-3.0, 0.0, 3.0], [1.5, 0.5, 1.5]) * width_apply
+
+      idx = self._interp_carrot(dist, line_x, idxs)
+      if idx >= line_x.shape[0] - 1:
+        idx = line_x.shape[0] - 1
+
+      y = self._interp_carrot(idx, idxs, line_y)
+      z = self._interp_carrot(idx, idxs, line_z)
+
+      left = self._map_to_screen(dist, y - y_off, z + z_off)
+      right = self._map_to_screen(dist, y + y_off, z + z_off)
+      if left is not None and right is not None:
+        if not allow_invert and len(left_pts) > 0 and left[1] > left_pts[-1][1]:
+          dist = dist + dist * 0.15
+          continue
+
+        left_pts.append(left)
+        right_pts.insert(0, right)
+
+      dist = dist + dist * 0.15
+
+    if len(left_pts) == 0 or len(right_pts) == 0:
+      return np.empty((0, 2), dtype=np.float32)
+
+    return np.array(left_pts + right_pts, dtype=np.float32)
+
+   def _draw_special_modes_carrot(self, sm, mode: int, color_idx: int, brake_valid: bool):
+    line = self._path.raw_points
+    if line.shape[0] == 0:
+      return
+
+    max_distance = np.clip(line[-1, 0], MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE)
+    max_idx = self._get_path_length_idx(line[:, 0], max_distance)
+
+    fill_color = self._get_path_color_carrot(color_idx)
+    stroke_color = rl.Color(255, 0, 0, 255) if brake_valid else rl.Color(255, 255, 255, 255)
+    stroke_width = 2.0 if (color_idx >= 10 or brake_valid) else 0.0
+
+    if mode == 13:
+      track_vertices = self._build_path_polygon_lineardepth_carrot(
+        line,
+        1.0 * self._carrot_show_path_width,
+        self._path_offset_z,
+        self._path_offset_z,
+        max_idx,
+        allow_invert=False,
+      )
+    elif mode == 14:
+      track_vertices = self._build_path_polygon_lineardepth_carrot(
+        line,
+        1.0 * self._carrot_show_path_width,
+        self._path_offset_z + 0.15,
+        self._path_offset_z - 0.35,
+        max_idx,
+        allow_invert=False,
+      )
+    else:  # mode == 15
+      track_vertices = self._build_path_polygon_dist_carrot(
+        line,
+        1.0 * self._carrot_show_path_width,
+        self._path_offset_z + 0.20,
+        self._path_offset_z - 0.50,
+        max_distance,
+        allow_invert=False,
+      )
+
+    if track_vertices.size == 0:
+      return
+
+    draw_polygon(self._rect, track_vertices, fill_color)
+    if stroke_width > 0.0:
+      self._draw_polygon_outline_carrot(track_vertices, stroke_color, stroke_width)
+
+
+  def _draw_complex_path_carrot(self, sm, mode: int, color_idx: int, brake_valid: bool):
+    line = self._path.raw_points
+    if line.shape[0] == 0:
+      return
+
+    max_distance = np.clip(line[-1, 0], MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE)
+    fill_color = self._get_path_color_carrot(color_idx)
+    stroke_color = rl.Color(255, 0, 0, 255) if brake_valid else rl.Color(255, 255, 255, 255)
+    stroke_width = 2.0 if (color_idx >= 10 or brake_valid) else 0.0
+
+    if mode == 9:
+      track_vertices = self._build_path_polygon_dist_carrot(
+        line, 1.00 * self._carrot_show_path_width,
+        self._path_offset_z, self._path_offset_z,
+        max_distance, allow_invert=False
+      )
+    elif mode == 10:
+      track_vertices = self._build_path_polygon_dist_carrot(
+        line, 0.85 * self._carrot_show_path_width,
+        self._path_offset_z + 0.10, self._path_offset_z - 0.15,
+        max_distance, allow_invert=False
+      )
+    elif mode == 11:
+      track_vertices = self._build_path_polygon_dist_carrot(
+        line, 1.15 * self._carrot_show_path_width,
+        self._path_offset_z + 0.20, self._path_offset_z - 0.30,
+        max_distance, allow_invert=False
+      )
+    else:
+      track_vertices = self._build_path_polygon_dist_carrot(
+        line, 1.00 * self._carrot_show_path_width,
+        self._path_offset_z + 0.25, self._path_offset_z - 0.45,
+        max_distance, allow_invert=False
+      )
+
+    if track_vertices.size == 0:
+      return
+
+    draw_polygon(self._rect, track_vertices, fill_color)
+    if stroke_width > 0.0:
+      self._draw_polygon_outline_carrot(track_vertices, stroke_color, stroke_width)
+
+
+  def _draw_animated_path_carrot(self, sm, mode: int, color_idx: int, brake_valid: bool):
+    line = self._path.raw_points
+    if line.shape[0] == 0:
+      return
+
+    max_distance = np.clip(line[-1, 0], MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE)
+    fill_color = self._get_path_color_carrot(color_idx)
+    stroke_color = rl.Color(255, 0, 0, 255) if brake_valid else rl.Color(255, 255, 255, 255)
+    stroke_width = 2.0 if (color_idx >= 10 or brake_valid) else 0.0
+
+    phase = (math.sin(self._carrot_path_draw_seq) + 1.0) * 0.5
+
+    if mode == 1:
+      width_apply = (0.65 + 0.35 * phase) * self._carrot_show_path_width
+      z0 = self._path_offset_z
+      z1 = self._path_offset_z
+    elif mode == 2:
+      width_apply = (0.55 + 0.55 * phase) * self._carrot_show_path_width
+      z0 = self._path_offset_z + 0.10
+      z1 = self._path_offset_z - 0.15
+    elif mode == 3:
+      width_apply = (0.70 + 0.40 * phase) * self._carrot_show_path_width
+      z0 = self._path_offset_z + 0.20
+      z1 = self._path_offset_z - 0.25
+    elif mode == 4:
+      width_apply = (0.80 + 0.45 * phase) * self._carrot_show_path_width
+      z0 = self._path_offset_z + 0.25
+      z1 = self._path_offset_z - 0.35
+    elif mode == 5:
+      width_apply = (0.90 + 0.25 * phase) * self._carrot_show_path_width
+      z0 = self._path_offset_z + 0.05
+      z1 = self._path_offset_z - 0.25
+    elif mode == 6:
+      width_apply = (1.00 + 0.20 * phase) * self._carrot_show_path_width
+      z0 = self._path_offset_z + 0.15
+      z1 = self._path_offset_z - 0.40
+    elif mode == 7:
+      width_apply = (0.75 + 0.50 * phase) * self._carrot_show_path_width
+      z0 = self._path_offset_z + 0.30
+      z1 = self._path_offset_z - 0.45
+    else:
+      width_apply = (0.65 + 0.35 * phase) * self._carrot_show_path_width
+      z0 = self._path_offset_z + 0.10
+      z1 = self._path_offset_z - 0.20
+
+    track_vertices = self._build_path_polygon_dist_carrot(
+      line,
+      width_apply,
+      z0,
+      z1,
+      max_distance,
+      allow_invert=False,
+    )
+
+    if track_vertices.size == 0:
+      return
+
+    draw_polygon(self._rect, track_vertices, fill_color)
+    if stroke_width > 0.0:
+      self._draw_polygon_outline_carrot(track_vertices, stroke_color, stroke_width)
+      
   def _draw_radar_info_carrot(self, sm):
     if self._carrot_show_radar_info <= 0:
       return
