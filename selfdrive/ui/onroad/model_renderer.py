@@ -597,6 +597,24 @@ class ModelRenderer(Widget):
       rl.draw_rectangle_rounded_lines_ex(rect, 0.15, 12, stroke_width, stroke_color)
 
 
+  def _draw_text_box_carrot(self, x: int, y: int, text: str, font_size: int, box_color: rl.Color):
+    w = max(40, int(len(text) * font_size * 0.8))
+    h = 42
+    self._draw_rect_fill_outline_carrot(x - w / 2, y - 35, w, h, box_color, box_color, 0.0)
+    draw_text_ui_style(
+      text,
+      x,
+      y,
+      font_size,
+      rl.Color(255, 255, 255, 255),
+      font=self._font_display,
+      align="center",
+      y_offset=0.0,
+      border_width=3.0,
+      shadow_offset=8.0,
+    )
+
+
   def _update_path_end_carrot(self, sm):
     if self._path.raw_points.shape[0] == 0:
       return
