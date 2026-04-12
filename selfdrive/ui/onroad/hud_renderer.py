@@ -124,10 +124,10 @@ class HudRenderer(Widget):
     self.speed: float = 0.0
     self.v_ego_cluster_seen: bool = False
 
-    self._font_semi_bold: rl.Font = gui_app.font(FontWeight.SEMI_BOLD)
-    self._font_bold: rl.Font = gui_app.font(FontWeight.BOLD)
-    self._font_medium: rl.Font = gui_app.font(FontWeight.MEDIUM)
-    self._font_display: rl.Font = gui_app.font(FontWeight.DISPLAY)
+    self._font_semi_bold = gui_app.font(FontWeight.SEMI_BOLD)
+    self._font_bold = gui_app.font(FontWeight.BOLD)
+    self._font_medium = gui_app.font(FontWeight.MEDIUM)
+    self._font_display = gui_app.font(FontWeight.DISPLAY)
 
     self._exp_button: ExpButton = ExpButton(UI_CONFIG.button_size, UI_CONFIG.wheel_icon_size)
 
@@ -263,7 +263,7 @@ class HudRenderer(Widget):
                           y: float,
                           font_size: float,
                           color: rl.Color,
-                          font: rl.Font | None = None,
+                          font=None,
                           border_width: float = 3.0,
                           shadow_offset: float = 0.0,
                           border_color: rl.Color = rl.BLACK,
