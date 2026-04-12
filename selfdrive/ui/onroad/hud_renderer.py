@@ -118,24 +118,37 @@ class SetSpeedOverride:
 class HudRenderer(Widget):
   def __init__(self):
     super().__init__()
-    self.is_cruise_set: bool = False
-    self.is_cruise_available: bool = True
-    self.set_speed: float = SET_SPEED_NA
-    self.speed: float = 0.0
-    self.v_ego_cluster_seen: bool = False
+    self.is_cruise_set = False
+    self.is_cruise_available = True
+    self.set_speed = SET_SPEED_NA
+    self.speed = 0.0
+    self.v_ego_cluster_seen = False
 
     self._font_semi_bold = gui_app.font(FontWeight.SEMI_BOLD)
     self._font_bold = gui_app.font(FontWeight.BOLD)
     self._font_medium = gui_app.font(FontWeight.MEDIUM)
     self._font_display = gui_app.font(FontWeight.DISPLAY)
 
-    self._exp_button: ExpButton = ExpButton(UI_CONFIG.button_size, UI_CONFIG.wheel_icon_size)
+    self._exp_button = ExpButton(UI_CONFIG.button_size, UI_CONFIG.wheel_icon_size)
 
-    self._txt_speed_bg: rl.Texture = gui_app.texture('images/speed_bg.png')
+    self._txt_speed_bg = gui_app.texture('images/speed_bg.png')
+
+    # traffic light icon들 이름은 실제 프로젝트 리소스 이름에 맞춰 수정 가능
+    self._traffic_red_icon = gui_app.texture('images/traffic_red.png')
+    self._traffic_green_icon = gui_app.texture('images/traffic_green.png')
 
     self._set_speed_override = SetSpeedOverride()
     self._debug_speed_panel = False
-    self._engaged: bool = False
+    self._engaged = False
+
+    self._blink_timer = 0
+    self._disp_timer = 0
+
+    self._cpu_temp = 0.0
+    self._cpu_usage = 0.0
+    self._memory_usage = 0
+    self._free_space = 0.0
+    self._voltage = 0.0
 
   def _update_state(self) -> None:
     """Update HUD state based on car state and controls state."""
@@ -270,13 +283,6 @@ class HudRenderer(Widget):
                           shadow_color: rl.Color = rl.BLACK,
                           align: str = "center_bottom",
                           y_offset: float = 6.0) -> None:
-    """
-    C의 ui_draw_text() 스타일을 raylib에서 흉내낸 함수
-    - y += 6 보정
-    - 8방향 border
-    - optional shadow
-    - center_bottom 정렬 지원
-    """
     if not text:
       return
 
@@ -321,6 +327,19 @@ class HudRenderer(Widget):
     if line_color is not None and line_thickness > 0:
       rl.draw_rectangle_rounded_lines_ex(rect, roundness, segments, float(line_thickness), line_color)
 
+
+  def _draw_texture_rect(self, tex, x, y, w, h, tint=rl.WHITE):
+    if tex is None:
+      return
+    rl.draw_texture_pro(
+      tex,
+      rl.Rectangle(0, 0, float(tex.width), float(tex.height)),
+      rl.Rectangle(float(x), float(y), float(w), float(h)),
+      rl.Vector2(0, 0),
+      0.0,
+      tint,
+    )
+  
   def _get_gear_text(self) -> str:
     sm = ui_state.sm
 
@@ -407,70 +426,154 @@ class HudRenderer(Widget):
 
     return "", rl.Color(255, 255, 255, 200)
 
-  def _draw_set_speed_carrot(self, rect: rl.Rectangle) -> None:
+  def _update_device_info(self):
+    sm = ui_state.sm
+
+    self._cpu_temp = 0.0
+    self._cpu_usage = 0.0
+    self._memory_usage = 0
+    self._free_space = 0.0
+    self._voltage = 0.0
+
+    try:
+      device_state = sm["deviceState"]
+      self._free_space = float(device_state.freeSpacePercent)
+      self._memory_usage = int(device_state.memoryUsagePercent)
+
+      try:
+        cpu_temps = list(device_state.cpuTempC)
+        if len(cpu_temps) > 0:
+          self._cpu_temp = sum(cpu_temps) / len(cpu_temps)
+      except Exception:
+        pass
+
+      try:
+        cpu_usages = [float(v) for v in device_state.cpuUsagePercent if float(v) > 0]
+        if len(cpu_usages) > 0:
+          self._cpu_usage = sum(cpu_usages) / len(cpu_usages)
+      except Exception:
+        pass
+    except Exception:
+      pass
+
+    try:
+      peripheral_state = sm["peripheralState"]
+      self._voltage = float(peripheral_state.voltage) / 1000.0
+    except Exception:
+      pass
+
+  def _get_active_carrot(self) -> int:
+    try:
+      return int(ui_state.sm["carrotMan"].activeCarrot)
+    except Exception:
+      return 0
+
+
+  def _get_nav_path_vertex_count(self) -> int:
+    try:
+      return int(ui_state.sm["carrotMan"].navPathVertexCount)
+    except Exception:
+      return 0
+
+
+  def _get_traffic_state(self) -> int:
+    try:
+      return int(ui_state.sm["carrotMan"].trafficState)
+    except Exception:
+      return 0
+
+
+  def _get_traffic_state_carrot(self) -> int:
+    try:
+      return int(ui_state.sm["carrotMan"].trafficStateCarrot)
+    except Exception:
+      return 0
+
+
+  def _get_speed_limit_info(self):
+    """
+    return:
+      x_spd_limit, x_sign_type, road_limit_speed
+    """
+    try:
+      cm = ui_state.sm["carrotMan"]
+      x_spd_limit = int(cm.xSpdLimit)
+    except Exception:
+      x_spd_limit = 0
+
+    try:
+      cm = ui_state.sm["carrotMan"]
+      x_sign_type = int(cm.xSignType)
+    except Exception:
+      x_sign_type = 0
+
+    try:
+      cm = ui_state.sm["carrotMan"]
+      road_limit_speed = int(cm.nRoadLimitSpeed)
+    except Exception:
+      road_limit_speed = 0
+
+    return x_spd_limit, x_sign_type, road_limit_speed
+
+
+  def _gps_has_fix(self) -> bool:
+    sm = ui_state.sm
+
+    try:
+      return bool(sm["gpsLocationExternal"].hasFix)
+    except Exception:
+      pass
+
+    try:
+      return bool(sm["gpsLocation"].hasFix)
+    except Exception:
+      pass
+
+    return False
+
+  def _draw_carrot_traffic_light(self, bx: int, by: int):
+    traffic_state = self._get_traffic_state()
+    traffic_state_carrot = self._get_traffic_state_carrot()
+
+    icon_size = 64
+    red_light = traffic_state == 1
+    green_light = traffic_state == 2
+
+    icon_red = icon_size
+    icon_green = icon_size
+
+    if traffic_state_carrot == 1:
+      red_light = True
+      icon_red = int(icon_red * 1.5)
+    elif traffic_state_carrot == 2:
+      green_light = True
+      icon_green = int(icon_green * 1.5)
+
+    x = bx
+    y = by + 270
+
+    if red_light:
+      self._draw_texture_rect(self._traffic_red_icon, x - icon_red / 2, y - icon_red / 2, icon_red, icon_red)
+    elif green_light:
+      self._draw_texture_rect(self._traffic_green_icon, x - icon_green / 2, y - icon_green / 2, icon_green, icon_green)
+
+  def _draw_carrot_speed_panel(self, bx: int, by: int):
     sm = ui_state.sm
     ov = self._set_speed_override.compute(sm, float(self.set_speed))
 
-    # --------------------------------------------------
-    # C drawHud 기준 anchor
-    #   x = 140
-    #   y = fb_h - 500
-    #   bx = x
-    #   by = y + 270
-    #
-    # 즉 최종적으로 by = fb_h - 230
-    # rect 기준으로 맞춤
-    # --------------------------------------------------
-    bx = int(rect.x + 140)
-    by = int(rect.y + rect.height - 230)
+    self._draw_texture_rect(self._txt_speed_bg, bx - 100, by - 60, 350, 150)
 
-    # --------------------------------------------------
-    # speed bg
-    # C:
-    # ui_draw_image(s, { bx - 100, by - 60, 350, 150 }, "ic_speed_bg", 1.0f);
-    # --------------------------------------------------
-    bg_x = bx - 100
-    bg_y = by - 60
-    bg_w = 350
-    bg_h = 150
-
-    rl.draw_texture_pro(
-      self._txt_speed_bg,
-      rl.Rectangle(0, 0, float(self._txt_speed_bg.width), float(self._txt_speed_bg.height)),
-      rl.Rectangle(float(bg_x), float(bg_y), float(bg_w), float(bg_h)),
-      rl.Vector2(0, 0),
-      0.0,
-      rl.WHITE,
-    )
-
-    # --------------------------------------------------
-    # current speed
-    # C:
-    # ui_draw_text(s, bx, by + 50, speed, 120, COLOR_WHITE, BOLD, 3.0f, 8.0f);
-    # --------------------------------------------------
     cur_speed_int = 123 if self._debug_speed_panel else int(round(self.speed))
     cur_text = str(cur_speed_int)
 
     self._draw_text_ui_style(
-      cur_text,
-      bx,
-      by + 50,
-      120,
-      rl.WHITE,
+      cur_text, bx, by + 50, 120, rl.WHITE,
       font=self._font_display,
       border_width=3.0,
       shadow_offset=8.0,
-      border_color=rl.BLACK,
-      shadow_color=rl.BLACK,
       align="center_bottom",
     )
 
-    # --------------------------------------------------
-    # cruise speed
-    # C:
-    # cruise_x = bx + 170
-    # cruise_y = by + 15
-    # --------------------------------------------------
     if self._engaged and self.is_cruise_set:
       set_speed = float(self.set_speed)
       if not ui_state.is_metric:
@@ -480,26 +583,13 @@ class HudRenderer(Widget):
       cruise_text = "--"
 
     self._draw_text_ui_style(
-      cruise_text,
-      bx + 170,
-      by + 15,
-      60,
-      rl.GREEN,
+      cruise_text, bx + 170, by + 15, 60, rl.GREEN,
       font=self._font_display,
       border_width=1.0,
       shadow_offset=5.0,
-      border_color=rl.BLACK,
-      shadow_color=rl.BLACK,
       align="center_bottom",
     )
 
-    # --------------------------------------------------
-    # apply speed / eco
-    # C:
-    # apply_x = bx + 250
-    # apply_y = by - 50
-    # speed=50, label=30
-    # --------------------------------------------------
     if ov.active:
       ov_speed = float(ov.speed_kph)
       if not ui_state.is_metric:
@@ -519,55 +609,35 @@ class HudRenderer(Widget):
         ov_label = "vturn"
 
       self._draw_text_ui_style(
-        ov_text,
-        bx + 250,
-        by - 50,
-        50,
-        ov_color,
+        ov_text, bx + 250, by - 50, 50, ov_color,
         font=self._font_display,
         border_width=1.0,
         shadow_offset=5.0,
-        border_color=rl.BLACK,
-        shadow_color=rl.BLACK,
         align="center_bottom",
       )
 
       self._draw_text_ui_style(
-        ov_label,
-        bx + 250,
-        by - 100,
-        30,
-        ov_color,
+        ov_label, bx + 250, by - 100, 30, ov_color,
         font=self._font_display,
         border_width=1.0,
         shadow_offset=5.0,
-        border_color=rl.BLACK,
-        shadow_color=rl.BLACK,
         align="center_bottom",
       )
 
-    # --------------------------------------------------
-    # driving mode
-    # C:
-    # dx = bx - 50
-    # dy = by + 175
-    # rect = { dx - 55, dy - 38, 110, 48 }
-    # --------------------------------------------------
+  def _draw_carrot_lower_status(self, bx: int, by: int):
     mode_text, mode_color = self._get_driving_mode_text_and_color()
     if self._debug_speed_panel:
       mode_text = "safe"
       mode_color = rl.Color(255, 165, 0, 230)
 
+    # driving mode
     if mode_text:
       dx = bx - 50
       dy = by + 175
 
-      fill_color = mode_color
-      text_color = rl.WHITE
-
       self._draw_round_box(
         dx - 55, dy - 38, 110, 48,
-        fill_color,
+        mode_color,
         line_color=rl.WHITE,
         roundness=0.25,
         segments=8,
@@ -575,87 +645,40 @@ class HudRenderer(Widget):
       )
 
       self._draw_text_ui_style(
-        mode_text,
-        dx,
-        dy - 2,
-        32,
-        text_color,
+        mode_text, dx, dy - 2, 32, rl.WHITE,
         font=self._font_display,
         border_width=0.0,
         shadow_offset=0.0,
         align="center_bottom",
       )
 
-    # --------------------------------------------------
-    # GPS text
-    # C:
-    # ui_draw_text(s, dx, dy - 45, "GPS", 30, COLOR_GREEN, BOLD);
-    # --------------------------------------------------
-    try:
-      gps_ok = False
-      if "gpsLocationExternal" in sm:
-        try:
-          gps_ok = sm["gpsLocationExternal"].hasFix
-        except Exception:
-          gps_ok = False
-      if not gps_ok and "gpsLocation" in sm:
-        try:
-          gps_ok = sm["gpsLocation"].hasFix
-        except Exception:
-          gps_ok = False
-    except Exception:
-      gps_ok = False
+      if self._gps_has_fix():
+        self._draw_text_ui_style(
+          "GPS", dx, dy - 45, 30, rl.GREEN,
+          font=self._font_display,
+          border_width=0.0,
+          shadow_offset=0.0,
+          align="center_bottom",
+        )
 
-    if gps_ok:
-      dx = bx - 50
-      dy = by + 175
-      self._draw_text_ui_style(
-        "GPS",
-        dx,
-        dy - 45,
-        30,
-        rl.GREEN,
-        font=self._font_display,
-        border_width=0.0,
-        shadow_offset=0.0,
-        align="center_bottom",
-      )
-
-    # --------------------------------------------------
     # gap number
-    # C:
-    # dx = bx + 220
-    # dy = by + 77
-    # --------------------------------------------------
     gap = self._get_cruise_gap()
     self._draw_text_ui_style(
-      str(gap),
-      bx + 220,
-      by + 77,
-      40,
-      rl.WHITE,
+      str(gap), bx + 220, by + 77, 40, rl.WHITE,
       font=self._font_display,
       border_width=0.0,
       shadow_offset=0.0,
       align="center_bottom",
     )
 
-    # --------------------------------------------------
     # gap bars
-    # C:
-    # dx = bx + 300 - 30
-    # dy = by + 175 + 10
-    # ddy = 80 / 4.
-    # --------------------------------------------------
     dx = bx + 270
     dy = by + 185
     ddy = 80.0 / 4.0
-
-    for i in range(gap):
-      bar_y = dy - ddy * (i + 1) + 2
+    for i in range(max(0, min(gap, 4))):
       self._draw_round_box(
         dx,
-        bar_y,
+        dy - ddy * (i + 1) + 2,
         70,
         ddy - 2,
         rl.Color(0, 255, 0, 210),
@@ -665,22 +688,13 @@ class HudRenderer(Widget):
         line_thickness=2,
       )
 
-    # --------------------------------------------------
-    # gear box
-    # C:
-    # dx = bx + 305
-    # dy = by + 60
-    # rect = { dx - 35, dy - 70, 70, 80 }
-    # --------------------------------------------------
+    # gear
     gear = self._get_gear_text()
     gx = bx + 305
     gy = by + 60
 
     self._draw_round_box(
-      gx - 35,
-      gy - 70,
-      70,
-      80,
+      gx - 35, gy - 70, 70, 80,
       rl.Color(0, 255, 0, 210),
       line_color=rl.WHITE,
       roundness=0.20,
@@ -689,38 +703,21 @@ class HudRenderer(Widget):
     )
 
     self._draw_text_ui_style(
-      gear,
-      gx,
-      gy,
-      70,
-      rl.WHITE,
+      gear, gx, gy, 70, rl.WHITE,
       font=self._font_display,
       border_width=0.0,
       shadow_offset=0.0,
       align="center_bottom",
     )
 
-    # --------------------------------------------------
     # active carrot
-    # C:
-    # dx = bx + 200
-    # dy = by + 175
-    # APN / APM
-    # --------------------------------------------------
-    try:
-      active_carrot = sm["carrotMan"].activeCarrot
-    except Exception:
-      active_carrot = 0
-
+    active_carrot = self._get_active_carrot()
     dx = bx + 200
     dy = by + 175
 
     if active_carrot >= 2:
       self._draw_round_box(
-        dx - 55,
-        dy - 38,
-        110,
-        48,
+        dx - 55, dy - 38, 110, 48,
         rl.GREEN,
         line_color=rl.WHITE,
         roundness=0.25,
@@ -728,11 +725,7 @@ class HudRenderer(Widget):
         line_thickness=2,
       )
       self._draw_text_ui_style(
-        "APN",
-        dx,
-        dy,
-        40,
-        rl.WHITE,
+        "APN", dx, dy, 40, rl.WHITE,
         font=self._font_display,
         border_width=0.0,
         shadow_offset=0.0,
@@ -740,10 +733,7 @@ class HudRenderer(Widget):
       )
     elif active_carrot >= 1:
       self._draw_round_box(
-        dx - 55,
-        dy - 38,
-        110,
-        48,
+        dx - 55, dy - 38, 110, 48,
         rl.Color(0, 120, 255, 210),
         line_color=rl.WHITE,
         roundness=0.25,
@@ -751,15 +741,149 @@ class HudRenderer(Widget):
         line_thickness=2,
       )
       self._draw_text_ui_style(
-        "APM",
-        dx,
-        dy,
-        40,
-        rl.WHITE,
+        "APM", dx, dy, 40, rl.WHITE,
         font=self._font_display,
         border_width=0.0,
         shadow_offset=0.0,
         align="center_bottom",
       )
 
+    if self._get_nav_path_vertex_count() > 1:
+      self._draw_text_ui_style(
+        "ROUTE", dx, dy - 45, 30, rl.WHITE,
+        font=self._font_display,
+        border_width=0.0,
+        shadow_offset=0.0,
+        align="center_bottom",
+      )
 
+  def _draw_carrot_speed_limit_box(self, bx: int, by: int):
+    x_spd_limit, x_sign_type, road_limit_speed = self._get_speed_limit_info()
+
+    dx = bx + 75
+    dy = by + 175
+
+    disp_speed = 0
+    limit_color = rl.Color(0, 255, 0, 210)
+    label = "LIMIT"
+
+    if x_spd_limit > 0 and x_sign_type != 22:
+      disp_speed = int(x_spd_limit if ui_state.is_metric else (x_spd_limit * KM_TO_MILE + 0.5))
+      label = "CAM"
+      if self._blink_timer <= 8:
+        limit_color = rl.Color(255, 0, 0, 210)
+      else:
+        limit_color = rl.Color(255, 255, 0, 210)
+    else:
+      disp_speed = int(road_limit_speed if ui_state.is_metric else (road_limit_speed * KM_TO_MILE + 0.5))
+      if self.speed > disp_speed + 2:
+        limit_color = rl.Color(255, 0, 0, 210)
+      else:
+        limit_color = rl.Color(255, 255, 255, 210)
+
+    self._draw_text_ui_style(
+      label, dx, dy - 45, 30, rl.WHITE,
+      font=self._font_display,
+      border_width=0.0,
+      shadow_offset=0.0,
+      align="center_bottom",
+    )
+
+    self._draw_round_box(
+      dx - 55, dy - 38, 110, 48,
+      limit_color,
+      line_color=rl.WHITE,
+      roundness=0.25,
+      segments=8,
+      line_thickness=2,
+    )
+
+    self._draw_text_ui_style(
+      str(disp_speed), dx, dy, 40, rl.WHITE,
+      font=self._font_display,
+      border_width=0.0,
+      shadow_offset=0.0,
+      align="center_bottom",
+    )
+
+  def _draw_carrot_main_background(self, bx: int, by: int):
+    show_device_state = ui_state.params.get_int("ShowDeviceState")
+
+    x_spd_limit, x_sign_type, _ = self._get_speed_limit_info()
+    cam_detected = x_spd_limit > 0 and x_sign_type not in (22, 4)
+
+    stroke_color = rl.WHITE
+    if cam_detected and self._blink_timer > 8:
+      bg_color = rl.Color(255, 0, 0, 180)
+    else:
+      bg_color = rl.Color(0, 0, 0, 90)
+
+    if show_device_state > 0:
+      self._draw_round_box(
+        bx - 120, by - 270, 475, 495,
+        bg_color,
+        line_color=stroke_color,
+        roundness=30.0 / 495.0,
+        segments=12,
+        line_thickness=2,
+      )
+    else:
+      self._draw_round_box(
+        bx - 120, by - 130, 475, 355,
+        bg_color,
+        line_color=stroke_color,
+        roundness=30.0 / 355.0,
+        segments=12,
+        line_thickness=2,
+      )
+
+  def _draw_carrot_device_state(self, bx: int, by: int):
+    show_device_state = ui_state.params.get_int("ShowDeviceState")
+    if show_device_state <= 0:
+      return
+
+    self._update_device_info()
+
+    dx = bx - 35
+    dy = by - 200
+    ok_color = rl.Color(0, 255, 0, 190)
+
+    # CPU
+    cpu_fill = rl.Color(255, 0, 0, 255) if (self._cpu_temp > 80 and self._blink_timer <= 8) else ok_color
+    self._draw_round_box(dx - 65, dy - 38, 130, 90, cpu_fill, line_color=rl.WHITE, roundness=0.16, segments=8, line_thickness=2)
+    self._draw_text_ui_style("CPU", dx, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
+    self._draw_text_ui_style(f"{self._cpu_temp:.0f}°C", dx, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
+
+    # MEM
+    dx2 = dx + 150
+    mem_fill = rl.Color(255, 0, 0, 255) if (self._memory_usage > 85 and self._blink_timer <= 8) else ok_color
+    self._draw_round_box(dx2 - 65, dy - 38, 130, 90, mem_fill, line_color=rl.WHITE, roundness=0.16, segments=8, line_thickness=2)
+    self._draw_text_ui_style("MEM", dx2, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
+    self._draw_text_ui_style(f"{self._memory_usage}%", dx2, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
+
+    # DISK / VOLT
+    dx3 = dx2 + 150
+    self._draw_round_box(dx3 - 65, dy - 38, 130, 90, ok_color, line_color=rl.WHITE, roundness=0.16, segments=8, line_thickness=2)
+
+    if self._disp_timer < 32:
+      self._draw_text_ui_style("DISK", dx3, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
+      self._draw_text_ui_style(f"{100 - self._free_space:.0f}%", dx3, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
+    else:
+      self._draw_text_ui_style("VOLT", dx3, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
+      self._draw_text_ui_style(f"{self._voltage:.1f}V", dx3, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
+
+  def _draw_set_speed_carrot(self, rect: rl.Rectangle) -> None:
+    self._blink_timer = (self._blink_timer + 1) % 16
+    self._disp_timer = (self._disp_timer + 1) % 64
+
+    # C drawHud anchor
+    bx = int(rect.x + 140)
+    by = int(rect.y + rect.height - 230)
+
+    self._draw_carrot_main_background(bx, by)
+    self._draw_carrot_traffic_light(bx, by)
+    self._draw_carrot_speed_panel(bx, by)
+    self._draw_carrot_lower_status(bx, by)
+    self._draw_carrot_speed_limit_box(bx, by)
+    self._draw_carrot_device_state(bx, by)
+  
