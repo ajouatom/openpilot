@@ -1,3 +1,4 @@
+import math
 import colorsys
 import numpy as np
 import pyray as rl
@@ -40,7 +41,21 @@ class LeadVehicle:
   chevron: list[float] = field(default_factory=list)
   fill_alpha: int = 0
 
-
+@dataclass
+class RadarLeadInfo:
+  x: float = 0.0
+  y: float = 0.0
+  ax: float = 0.0
+  ay: float = 0.0
+  d_rel: float = 0.0
+  y_rel: float = 0.0
+  v_rel: float = 0.0
+  v_lat: float = 0.0
+  v_sum: float = 0.0
+  radar: bool = False
+  model_prob: float = 0.0
+  has_future_point: bool = False
+  
 class ModelRenderer(Widget):
   def __init__(self):
     super().__init__()
@@ -75,6 +90,8 @@ class ModelRenderer(Widget):
     if car_params := Params().get("CarParams"):
       cp = messaging.log_from_bytes(car_params, car.CarParams)
       self._longitudinal_control = cp.openpilotLongitudinalControl
+
+    self._init_carrot()
 
   def set_transform(self, transform: np.ndarray):
     self._car_space_transform = transform.astype(np.float32)
@@ -123,11 +140,14 @@ class ModelRenderer(Widget):
       self._transform_dirty = False
 
     # Draw elements
-    self._draw_lane_lines()
-    self._draw_path(sm)
+    #self._draw_lane_lines()
+    #self._draw_path(sm)
 
-    if render_lead_indicator and radar_state:
-      self._draw_lead_indicator()
+    #if render_lead_indicator and radar_state:
+    #  self._draw_lead_indicator()
+    self._draw_path_carrot(sm)
+    self._draw_lane_lines_carrot(sm)
+    self._draw_radar_info_carrot(sm)
 
   def _update_raw_points(self, model):
     """Update raw 3D points from model data"""
@@ -332,7 +352,7 @@ class ModelRenderer(Widget):
 
     return (x, y)
 
-  def _map_line_to_polygon(self, line: np.ndarray, y_off: float, z_off: float, max_idx: int, max_distance: float, allow_invert: bool = True) -> np.ndarray:
+  def _map_line_to_polygon(self, line: np.ndarray, y_off: float, z_off: float, max_idx: int, max_distance: float, allow_invert: bool = True, y_shift: float = 0.0) -> np.ndarray:
     """Convert 3D line to 2D polygon for rendering."""
     if line.shape[0] == 0:
       return np.empty((0, 2), dtype=np.float32)
@@ -356,7 +376,7 @@ class ModelRenderer(Widget):
 
     N = points.shape[0]
     # Generate left and right 3D points in one array using broadcasting
-    offsets = np.array([[0, -y_off, z_off], [0, y_off, z_off]], dtype=np.float32)
+    offsets = np.array([[0, -y_off + y_shift, z_off], [0, y_off + y_shift, z_off]], dtype=np.float32)
     points_3d = points[None, :, :] + offsets[:, None, :]  # Shape: 2xNx3
     points_3d = points_3d.reshape(2 * N, 3)  # Shape: (2*N)x3
 
@@ -433,3 +453,487 @@ class ModelRenderer(Widget):
       int(inv_t * start.b + t * end.b),
       int(inv_t * start.a + t * end.a)
     ) for start, end in zip(begin_colors, end_colors, strict=True)]
+
+
+  def _init_carrot(self):
+    self._carrot_path_mode = 13
+    self._carrot_path_color = 14
+    self._carrot_path_mode_lane = 13
+    self._carrot_path_color_lane = 14
+    self._carrot_path_color_cruise_off = 14
+    self._carrot_show_lane_info = 1
+    self._carrot_show_radar_info = 0
+    self._carrot_radar_lat_factor = 1.0
+
+    self._carrot_path_fx = 0.0
+    self._carrot_path_fy = 0.0
+    self._carrot_path_fwidth = 0.0
+    self._carrot_path_x = 0
+    self._carrot_path_y = 0
+    self._carrot_path_width = 0
+    self._carrot_path_alpha = 0.85
+
+    self._carrot_radar_leads = []
+    self._carrot_tf_left = None
+    self._carrot_tf_right = None
+    self._carrot_tf_distance = 0.0
+    self._carrot_t_follow = 0.0
+
+    self._carrot_lead_one_left = None
+    self._carrot_lead_one_right = None
+    self._carrot_lead_two_left = None
+    self._carrot_lead_two_right = None
+    self._carrot_lead_two_xl = 0.0
+    self._carrot_lead_two_xr = 0.0
+    self._carrot_lead_two_y = 0.0
+    self._carrot_lead_two_status = 0
+    self._carrot_radar_track_id = -1
+    self._carrot_radar_dist = 0.0
+    self._carrot_vision_dist = 0.0
+    self._carrot_lead_status = False
+
+
+  def _refresh_carrot_params(self):
+    self._carrot_show_lane_info = ui_state.params.get_int("ShowLaneInfo")
+    self._carrot_show_radar_info = ui_state.params.get_int("ShowRadarInfo")
+    self._carrot_radar_lat_factor = ui_state.params.get_float("RadarLatFactor") / 100.0
+
+    self._carrot_path_mode = ui_state.params.get_int("ShowPathMode")
+    self._carrot_path_color = ui_state.params.get_int("ShowPathColor")
+    self._carrot_path_mode_lane = ui_state.params.get_int("ShowPathModeLane")
+    self._carrot_path_color_lane = ui_state.params.get_int("ShowPathColorLane")
+    self._carrot_path_color_cruise_off = ui_state.params.get_int("ShowPathColorCruiseOff")
+
+
+  def _draw_path_carrot(self, sm):
+    if not self._path.projected_points.size:
+      return
+
+    self._refresh_carrot_params()
+    self._update_path_end_carrot(sm)
+
+    show_path_mode = self._carrot_path_mode
+    show_path_color = self._carrot_path_color
+
+    controls_state = sm['controlsState']
+    car_state = sm['carState']
+    selfdrive_state = sm['selfdriveState']
+    longitudinal_plan = sm['longitudinalPlan']
+    radar_state = sm['radarState'] if sm.valid['radarState'] else None
+    lead_one = radar_state.leadOne if radar_state is not None else None
+
+    active_lane_line = controls_state.activeLaneLine
+    long_active = selfdrive_state.enabled
+    brake_valid = car_state.brakeLights
+
+    if active_lane_line:
+      show_path_mode = self._carrot_path_mode_lane
+      show_path_color = self._carrot_path_color_lane
+
+    if not long_active:
+      show_path_color = self._carrot_path_color_cruise_off
+
+    accel = longitudinal_plan.accels[0] if len(longitudinal_plan.accels) > 0 else 0.0
+
+    if show_path_color >= 20:
+      if long_active:
+        show_path_color = 13
+        if lead_one is not None and lead_one.status:
+          if abs(accel) < 0.5:
+            show_path_color = 12
+          elif accel >= 0.5:
+            show_path_color = 11
+          else:
+            show_path_color = 10
+      else:
+        show_path_color = 19
+
+    fill_color = self._get_path_color_carrot(show_path_color)
+    stroke_width = 2.0 if (show_path_color >= 10 or brake_valid) else 0.0
+    stroke_color = rl.Color(255, 0, 0, 255) if brake_valid else rl.Color(255, 255, 255, 255)
+
+    draw_polygon(self._rect, self._path.projected_points, fill_color)
+
+    if stroke_width > 0.0:
+      self._draw_polygon_outline_carrot(self._path.projected_points, stroke_color, stroke_width)
+
+    self._draw_path_end_overlay_carrot(sm)
+
+
+  def _draw_lane_lines_carrot(self, sm):
+    if self._carrot_show_lane_info < 1:
+      return
+
+    car_state = sm['carState']
+    left_lane_line = car_state.leftLaneLine
+    right_lane_line = car_state.rightLaneLine
+
+    path_x_array = self._path.raw_points[:, 0]
+    if path_x_array.size == 0:
+      return
+
+    max_distance = np.clip(path_x_array[-1], MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE)
+    lane_max_idx = self._get_path_length_idx(self._lane_lines[0].raw_points[:, 0], max_distance)
+
+    for i, lane_line in enumerate(self._lane_lines):
+      if lane_line.projected_points.size == 0:
+        continue
+
+      alpha = 220 if self._lane_line_probs[i] > 0.3 else 0
+      stroke_width = 0.0
+
+      if i == 1:
+        if left_lane_line >= 20:
+          color = rl.Color(218, 202, 37, alpha)
+          stroke_width = 1.0
+        else:
+          color = rl.Color(255, 255, 255, alpha)
+      elif i == 2:
+        if right_lane_line >= 20:
+          color = rl.Color(218, 202, 37, alpha)
+        else:
+          color = rl.Color(255, 255, 255, alpha)
+      else:
+        color = rl.Color(255, 255, 255, alpha)
+
+      draw_polygon(self._rect, lane_line.projected_points, color)
+
+      if stroke_width > 0.0:
+        self._draw_polygon_outline_carrot(lane_line.projected_points, color, stroke_width)
+
+      if i == 1 and (left_lane_line % 10 == 4):
+        double_points = self._map_line_to_polygon(
+          self._lane_lines[i].raw_points,
+          0.05,
+          0.0,
+          lane_max_idx,
+          max_distance,
+          allow_invert=True,
+          y_shift=-0.3,
+        )
+        if double_points.size != 0:
+          draw_polygon(self._rect, double_points, color)
+          if stroke_width > 0.0:
+            self._draw_polygon_outline_carrot(double_points, color, stroke_width)
+
+    if self._carrot_show_lane_info > 1:
+      self._draw_road_edges_carrot()
+
+
+  def _draw_road_edges_carrot(self):
+    for i, road_edge in enumerate(self._road_edges):
+      if road_edge.projected_points.size == 0:
+        continue
+
+      temp_f = float(np.clip(self._road_edge_stds[i] / 2.0, 0.0, 1.0))
+      color = rl.Color(
+        int((1.0 - temp_f) * 255.0),
+        0,
+        int(temp_f * 255.0),
+        255,
+      )
+      draw_polygon(self._rect, road_edge.projected_points, color)
+
+
+  def _update_path_end_carrot(self, sm):
+    if self._path.raw_points.shape[0] == 0:
+      return
+
+    model = sm['modelV2']
+    radar_state = sm['radarState'] if sm.valid['radarState'] else None
+    lead_one = radar_state.leadOne if radar_state is not None else None
+    lead_two = radar_state.leadTwo if radar_state is not None else None
+    longitudinal_plan = sm['longitudinalPlan']
+    selfdrive_state = sm['selfdriveState']
+    car_state = sm['carState']
+
+    line = self._path.raw_points
+    max_distance = np.clip(line[-1, 0], MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE)
+
+    idx = self._get_path_length_idx(line[:, 0], max_distance)
+    y = line[idx, 1]
+    z = line[idx, 2]
+
+    leads_v3 = model.leadsV3
+    if len(leads_v3) > 0 and leads_v3[0].prob > 0.5:
+      self._carrot_vision_dist = leads_v3[0].x[0] - 1.52
+    else:
+      self._carrot_vision_dist = 0.0
+
+    self._carrot_lead_status = False
+    self._carrot_radar_track_id = -1
+    self._carrot_radar_dist = 0.0
+
+    if lead_one is not None and lead_one.status:
+      lead_idx = self._get_path_length_idx(line[:, 0], lead_one.dRel)
+      z = line[lead_idx, 2]
+      max_distance = lead_one.dRel
+      y = -lead_one.yRel
+      self._carrot_radar_track_id = lead_one.radarTrackId
+      self._carrot_radar_dist = lead_one.dRel if lead_one.radar else 0.0
+      self._carrot_lead_status = True
+
+    self._carrot_lead_one_left = self._map_to_screen(max_distance, y - 1.2, z + 1.22)
+    self._carrot_lead_one_right = self._map_to_screen(max_distance, y + 1.2, z + 1.22)
+
+    if self._carrot_lead_one_left is not None and self._carrot_lead_one_right is not None:
+      lex = self._carrot_lead_one_left[0]
+      ley = self._carrot_lead_one_left[1]
+      rex = self._carrot_lead_one_right[0]
+      rey = self._carrot_lead_one_right[1]
+
+      path_width = rex - lex
+      path_x = (lex + rex) / 2.0
+      path_y = (ley + rey) / 2.0
+
+      path_x = float(np.clip(path_x, 350.0, self._rect.width - 350.0))
+      path_y = float(np.clip(path_y, 200.0, self._rect.height - 80.0))
+
+      self._carrot_path_fx = self._carrot_path_fx * self._carrot_path_alpha + path_x * (1.0 - self._carrot_path_alpha)
+      self._carrot_path_fy = self._carrot_path_fy * self._carrot_path_alpha + path_y * (1.0 - self._carrot_path_alpha)
+
+      if path_width < 120.0:
+        path_width = 120.0
+      elif path_width > 800.0:
+        path_width = 800.0
+
+      self._carrot_path_fwidth = self._carrot_path_fwidth * self._carrot_path_alpha + path_width * (1.0 - self._carrot_path_alpha)
+
+      self._carrot_path_x = int(self._carrot_path_fx)
+      self._carrot_path_y = int(self._carrot_path_fy)
+      self._carrot_path_width = int(self._carrot_path_fwidth)
+
+    self._carrot_t_follow = longitudinal_plan.tFollow
+    self._carrot_tf_distance = longitudinal_plan.desiredDistance
+
+    if self._carrot_tf_distance > 0.0:
+      tf_idx = self._get_path_length_idx(line[:, 0], self._carrot_tf_distance)
+      tf_y = line[tf_idx, 1]
+      tf_z = line[tf_idx, 2]
+      self._carrot_tf_left = self._map_to_screen(self._carrot_tf_distance, tf_y - 1.0, tf_z + 1.22)
+      self._carrot_tf_right = self._map_to_screen(self._carrot_tf_distance, tf_y + 1.0, tf_z + 1.22)
+    else:
+      self._carrot_tf_left = None
+      self._carrot_tf_right = None
+
+    if lead_two is not None and self._carrot_lead_status and lead_two.radar and lead_two.dRel > lead_one.dRel + 3.0:
+      lead_two_idx = self._get_path_length_idx(line[:, 0], lead_two.dRel)
+      lead_two_z = line[lead_two_idx, 2]
+      lead_two_y = -lead_two.yRel
+
+      self._carrot_lead_two_left = self._map_to_screen(lead_two.dRel, lead_two_y - 1.2, lead_two_z + 1.22)
+      self._carrot_lead_two_right = self._map_to_screen(lead_two.dRel, lead_two_y + 1.2, lead_two_z + 1.22)
+
+      if self._carrot_lead_two_left is not None and self._carrot_lead_two_right is not None:
+        if self._carrot_lead_two_status > 0:
+          self._carrot_lead_two_xl = self._carrot_lead_two_xl * 0.8 + self._carrot_lead_two_left[0] * 0.2
+          self._carrot_lead_two_xr = self._carrot_lead_two_xr * 0.8 + self._carrot_lead_two_right[0] * 0.2
+          self._carrot_lead_two_y = self._carrot_lead_two_y * 0.8 + self._carrot_lead_two_left[1] * 0.2
+        else:
+          self._carrot_lead_two_xl = self._carrot_lead_two_left[0]
+          self._carrot_lead_two_xr = self._carrot_lead_two_right[0]
+          self._carrot_lead_two_y = self._carrot_lead_two_left[1]
+
+        if longitudinal_plan.longitudinalPlanSource == longitudinal_plan.LongitudinalPlanSource.lead1:
+          self._carrot_lead_two_status = 2
+        else:
+          self._carrot_lead_two_status = 1
+    else:
+      self._carrot_lead_two_status = 0
+
+
+  def _draw_path_end_overlay_carrot(self, sm):
+    if not self._carrot_lead_status:
+      return
+
+    lead_is_scc = self._carrot_radar_track_id < 1
+    radar_detected = self._carrot_radar_track_id >= 0
+    rcolor = rl.Color(255, 0, 0, 255) if lead_is_scc else rl.Color(255, 175, 3, 255)
+
+    if self._carrot_lead_two_status > 0:
+      radar_stroke = rl.Color(218, 111, 37, 255)
+      path_width2 = int(self._carrot_lead_two_xr - self._carrot_lead_two_xl)
+      fill_color = rl.Color(255, 0, 0, 50) if self._carrot_lead_two_status == 2 else rl.Color(0, 0, 0, 20)
+      self._draw_rect_fill_outline_carrot(
+        self._carrot_lead_two_xl - 10,
+        self._carrot_lead_two_y - path_width2 * 0.8,
+        path_width2 + 20,
+        path_width2 * 0.8,
+        fill_color,
+        radar_stroke,
+        3.0,
+      )
+
+    radar_stroke = rcolor if radar_detected else rl.Color(0, 0, 255, 255)
+    self._draw_rect_fill_outline_carrot(
+      self._carrot_path_x - self._carrot_path_width / 2 - 10,
+      self._carrot_path_y - self._carrot_path_width * 0.8,
+      self._carrot_path_width + 20,
+      self._carrot_path_width * 0.8,
+      rl.Color(0, 0, 0, 20),
+      radar_stroke,
+      3.0,
+    )
+
+    if self._carrot_tf_left is not None and self._carrot_tf_right is not None:
+      self._draw_line_segment_carrot(self._carrot_tf_left, self._carrot_tf_right, rl.Color(255, 255, 255, 255), 3.0)
+      tf_text = f"{self._carrot_tf_distance:.1f}({self._carrot_t_follow:.2f})"
+      self._draw_text_carrot(int(self._carrot_tf_right[0]), int(self._carrot_tf_right[1]), tf_text, 25, rl.Color(255, 255, 255, 255))
+
+
+  def _draw_radar_info_carrot(self, sm):
+    if self._carrot_show_radar_info <= 0:
+      return
+
+    if not sm.valid['radarState']:
+      return
+
+    radar_state = sm['radarState']
+    lane_lines = sm['modelV2'].laneLines
+    if len(lane_lines) < 3:
+      return
+
+    lane_line = lane_lines[2]
+
+    for rs in (radar_state.leadsLeft, radar_state.leadsRight, radar_state.leadsCenter):
+      for lead in rs:
+        d_rel = lead.dRel
+        if d_rel <= 2.5:
+          continue
+
+        idx = self._get_path_length_idx(np.array(lane_line.x, dtype=np.float32), d_rel)
+        if idx >= len(lane_line.z):
+          continue
+
+        z = lane_line.z[idx] - 0.61
+        side = self._map_to_screen(d_rel, -lead.yRel, z)
+        if side is None:
+          continue
+
+        x = side[0]
+        y = side[1]
+        v = lead.vLeadK
+        v_lat = lead.vLat
+        y_rel = lead.yRel
+        radar = lead.radar
+        model_prob = lead.modelProb
+
+        v_abs = math.sqrt(v * v + v_lat * v_lat)
+        v_sum = v_abs if v >= 0.0 else -v_abs
+
+        if v_abs > 3.0:
+          t = self._carrot_radar_lat_factor
+          a_d_rel = d_rel + v * t
+          if a_d_rel < 2.0:
+            a_d_rel = 2.0
+          a_y_rel = y_rel + v_lat * t
+
+          a_side = None
+          if abs(v) > 3.0:
+            a_side = self._map_to_screen(a_d_rel, -a_y_rel, z)
+
+          line_color = rl.Color(0, 203, 0, 255) if v_sum > 0.0 else rl.Color(255, 0, 0, 255)
+
+          if a_side is not None:
+            self._draw_line_segment_carrot(side, a_side, line_color, 3.0)
+            rl.draw_circle(int(a_side[0]), int(a_side[1]), 10.0, line_color)
+
+          speed_text = f"{(v_sum * 3.6) if ui_state.scene.is_metric else (v_sum * 2.2369363):.0f}"
+
+          if not radar:
+            box_color = rl.Color(0, 0, 255, 255)
+          elif model_prob == 0.01:
+            box_color = rl.Color(0, 203, 0, 255)
+          elif v_sum > 0.0:
+            box_color = rl.Color(255, 175, 3, 255)
+          else:
+            box_color = rl.Color(255, 0, 0, 255)
+
+          self._draw_text_box_carrot(int(x), int(y), speed_text, 40, box_color)
+
+          if self._carrot_show_radar_info >= 2:
+            self._draw_text_carrot(int(x), int(y - 40), f"{y_rel:.1f}", 30, rl.Color(255, 255, 255, 255))
+            dist_text = f"{d_rel:.1f}" if ui_state.scene.is_metric else f"{(d_rel * 0.000621371):.1f}"
+            self._draw_text_carrot(int(x), int(y + 30), dist_text, 30, rl.Color(255, 255, 255, 255))
+
+        elif self._carrot_show_radar_info >= 3:
+          self._draw_text_carrot(int(x), int(y), "*", 40, rl.Color(255, 255, 255, 255))
+
+
+  def _get_path_color_carrot(self, show_path_color: int) -> rl.Color:
+    color_id = show_path_color % 10
+
+    if color_id == 0:
+      return rl.Color(255, 0, 0, 120)
+    if color_id == 1:
+      return rl.Color(255, 153, 0, 120)
+    if color_id == 2:
+      return rl.Color(218, 202, 37, 120)
+    if color_id == 3:
+      return rl.Color(0, 203, 0, 120)
+    if color_id == 4:
+      return rl.Color(0, 0, 255, 120)
+    if color_id == 5:
+      return rl.Color(0, 0, 128, 120)
+    if color_id == 6:
+      return rl.Color(139, 0, 255, 120)
+    if color_id == 7:
+      return rl.Color(218, 111, 37, 120)
+    if color_id == 8:
+      return rl.Color(255, 255, 255, 120)
+    return rl.Color(0, 0, 0, 120)
+
+
+  def _draw_polygon_outline_carrot(self, points: np.ndarray, color: rl.Color, thickness: float):
+    if points.shape[0] < 2:
+      return
+
+    for i in range(points.shape[0] - 1):
+      p0 = rl.Vector2(float(points[i][0]), float(points[i][1]))
+      p1 = rl.Vector2(float(points[i + 1][0]), float(points[i + 1][1]))
+      rl.draw_line_ex(p0, p1, thickness, color)
+
+    p0 = rl.Vector2(float(points[-1][0]), float(points[-1][1]))
+    p1 = rl.Vector2(float(points[0][0]), float(points[0][1]))
+    rl.draw_line_ex(p0, p1, thickness, color)
+
+
+  def _draw_line_segment_carrot(self, p0, p1, color: rl.Color, thickness: float):
+    v0 = rl.Vector2(float(p0[0]), float(p0[1]))
+    v1 = rl.Vector2(float(p1[0]), float(p1[1]))
+    rl.draw_line_ex(v0, v1, thickness, color)
+
+
+  def _draw_rect_fill_outline_carrot(self, x: float, y: float, w: float, h: float, fill_color: rl.Color, stroke_color: rl.Color, stroke_width: float):
+    rl.draw_rectangle_rounded(
+      rl.Rectangle(float(x), float(y), float(w), float(h)),
+      0.15,
+      12,
+      fill_color,
+    )
+    rl.draw_rectangle_rounded_lines_ex(
+      rl.Rectangle(float(x), float(y), float(w), float(h)),
+      0.15,
+      12,
+      stroke_width,
+      stroke_color,
+    )
+
+
+  def _draw_text_box_carrot(self, x: int, y: int, text: str, font_size: int, box_color: rl.Color):
+    w = max(40, int(len(text) * font_size * 0.9))
+    h = 42
+    self._draw_rect_fill_outline_carrot(
+      x - w / 2,
+      y - 35,
+      w,
+      h,
+      box_color,
+      box_color,
+      0.0,
+    )
+    self._draw_text_carrot(x, y, text, font_size, rl.Color(255, 255, 255, 255))
+
+
+  def _draw_text_carrot(self, x: int, y: int, text: str, font_size: int, color: rl.Color):
+    rl.draw_text(text, int(x - len(text) * font_size * 0.25), int(y - font_size * 0.5), font_size, color)
