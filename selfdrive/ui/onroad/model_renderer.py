@@ -710,7 +710,7 @@ class ModelRenderer(Widget):
           self._carrot_lead_two_xr = lead_two_right[0]
           self._carrot_lead_two_y = lead_two_left[1]
 
-        src = int(lp.longitudinalPlanSource)
+        src = int(lp.longitudinalPlanSource.raw)
         self._carrot_lead_two_status = 2 if src == 1 else 1
     else:
       self._carrot_lead_two_status = 0
