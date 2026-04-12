@@ -888,7 +888,7 @@ class ModelRenderer(Widget):
             self._draw_line_segment_carrot(side, a_side, line_color, 3.0)
             rl.draw_circle(int(a_side[0]), int(a_side[1]), 10.0, line_color)
 
-          speed_text = f"{(v_sum * 3.6):.0f}" if ui_state.scene.is_metric else f"{(v_sum * 2.2369363):.0f}"
+          speed_text = f"{(v_sum * 3.6):.0f}" if ui_state.is_metric else f"{(v_sum * 2.2369363):.0f}"
 
           if not radar:
             box_color = rl.Color(0, 0, 255, 255)
