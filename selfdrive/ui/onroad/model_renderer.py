@@ -1135,7 +1135,7 @@ class ModelRenderer(Widget):
             self._draw_line_segment_carrot(side, a_side, line_color, 3.0)
             rl.draw_circle(int(a_side[0]), int(a_side[1]), 10.0, line_color)
 
-          speed_text = f"{(v_sum * 3.6) if ui_state.scene.is_metric else (v_sum * 2.2369363):.0f}"
+          speed_text = f"{(v_sum * 3.6) if ui_state.is_metric else (v_sum * 2.2369363):.0f}"
 
           if not radar:
             box_color = rl.Color(0, 0, 255, 255)
@@ -1150,7 +1150,7 @@ class ModelRenderer(Widget):
 
           if self._carrot_show_radar_info >= 2:
             self._draw_text_carrot(int(x), int(y - 40), f"{y_rel:.1f}", 30, rl.Color(255, 255, 255, 255))
-            dist_text = f"{d_rel:.1f}" if ui_state.scene.is_metric else f"{(d_rel * 0.000621371):.1f}"
+            dist_text = f"{d_rel:.1f}" if ui_state.is_metric else f"{(d_rel * 0.000621371):.1f}"
             self._draw_text_carrot(int(x), int(y + 30), dist_text, 30, rl.Color(255, 255, 255, 255))
 
         elif self._carrot_show_radar_info >= 3:
