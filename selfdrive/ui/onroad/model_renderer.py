@@ -554,14 +554,31 @@ class ModelRenderer(Widget):
 
   def _draw_polygon_from_xy_carrot(self, xs, ys, fill_color: rl.Color, brake_valid: bool, color_idx: int):
     pts = np.array(list(zip(xs, ys)), dtype=np.float32)
+
+    # 연속 중복점 제거
+    if pts.shape[0] >= 2:
+      keep = [0]
+      for i in range(1, pts.shape[0]):
+        if abs(float(pts[i][0] - pts[keep[-1]][0])) > 1e-3 or abs(float(pts[i][1] - pts[keep[-1]][1])) > 1e-3:
+          keep.append(i)
+      pts = pts[keep]
+
+    # 마지막 점이 첫 점과 거의 같으면 제거
+    if pts.shape[0] >= 3:
+      if abs(float(pts[0][0] - pts[-1][0])) < 1e-3 and abs(float(pts[0][1] - pts[-1][1])) < 1e-3:
+        pts = pts[:-1]
+
+    if pts.shape[0] < 3:
+      return
+
     draw_polygon(self._rect, pts, fill_color)
+
     if color_idx >= 10 or brake_valid:
       self._draw_polygon_outline_carrot(
         pts,
         rl.Color(255, 0, 0, 255) if brake_valid else rl.Color(255, 255, 255, 255),
         2.0,
       )
-
 
   def _draw_line_segment_carrot(self, p0, p1, color: rl.Color, thickness: float):
     rl.draw_line_ex(
@@ -958,7 +975,7 @@ class ModelRenderer(Widget):
       y_off = self._carrot_interp(z_off, [-3.0, 0.0, 3.0], [1.5, 0.5, 1.5]) * width_apply
       idx = self._carrot_interp(dist, line_x, idxs)
       if idx >= line_x.shape[0]:
-        break
+        idx = line_x.shape[0] - 1
 
       line_y1 = self._carrot_interp(idx, idxs, line_y)
       line_z1 = self._carrot_interp(idx, idxs, line_z)
@@ -1047,7 +1064,7 @@ class ModelRenderer(Widget):
 
       idx = self._carrot_interp(dist, line_x, idxs)
       if idx >= line_x.shape[0]:
-        break
+        idx = line_x.shape[0] - 1
 
       line_y1 = self._carrot_interp(idx, idxs, line_y)
       line_z1 = self._carrot_interp(idx, idxs, line_z)
@@ -1086,7 +1103,9 @@ class ModelRenderer(Widget):
     if model_position.shape[0] == 0:
       return False
 
-    max_distance = np.clip(model_position[-1, 0], MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE) - 2.0
+    max_distance = np.clip(model_position[-1, 0], MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE)
+    if max_distance > 6.0:
+      max_distance -= 1.0
     if max_distance < 2.0:
       max_distance = 2.0
 
@@ -1130,7 +1149,7 @@ class ModelRenderer(Widget):
     elif mode == 15:
       gc = g
 
-    glen = track_vertices_len // 2 - 1
+    glen = track_vertices_len // 2 - 2
     if glen <= 0:
       return
 
@@ -1175,7 +1194,7 @@ class ModelRenderer(Widget):
       return
 
     color_n = 0
-    for i in range(0, track_vertices_len // 2 - 1, 3):
+    for i in range(0, track_vertices_len // 2 - 3, 3):
       e = track_vertices_len - i - 1
       x = [0.0] * 6
       y = [0.0] * 6
@@ -1197,7 +1216,7 @@ class ModelRenderer(Widget):
     track_vertices_len = len(track_vertices)
 
     color_n = 0
-    for i in range(0, track_vertices_len // 2 - 4, 2):
+    for i in range(0, track_vertices_len // 2 - 5, 2):
       x = [0.0] * 4
       y = [0.0] * 4
       x[0] = float(track_vertices[i][0]); y[0] = float(track_vertices[i][1])
@@ -1229,7 +1248,7 @@ class ModelRenderer(Widget):
     track_vertices_len = len(track_vertices)
 
     color_n = 0
-    for i in range(0, track_vertices_len // 2 - 4, 2):
+    for i in range(0, track_vertices_len // 2 - 6, 2):
       x = [0.0] * 6
       y = [0.0] * 6
       x[0] = float(track_vertices[i][0]); y[0] = float(track_vertices[i][1])
