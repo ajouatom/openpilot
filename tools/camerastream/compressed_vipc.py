@@ -62,7 +62,7 @@ def decoder(addr, vipc_server, vst, nvidia, W, H, debug=False):
           print("waiting for iframe")
         continue
       time_q.append(time.monotonic())
-      network_latency = (int(time.time()*1e9) - evta.unixTimestampNanos)/1e6
+      network_latency = (int(time.time()*1e9) - evta.unixTimestampNanos)/1e6  # noqa: TID251
       frame_latency = ((evta.idx.timestampEof/1e9) - (evta.idx.timestampSof/1e9))*1000
       process_latency = ((evt.logMonoTime/1e9) - (evta.idx.timestampEof/1e9))*1000
 
@@ -107,24 +107,17 @@ def decoder(addr, vipc_server, vst, nvidia, W, H, debug=False):
 
 
 class CompressedVipc:
-  def __init__(self, addr, vision_streams, nvidia=False, debug=False):
+  def __init__(self, addr, vision_streams, server_name, nvidia=False, debug=False):
     print("getting frame sizes")
     os.environ["ZMQ"] = "1"
     messaging.reset_context()
     sm = messaging.SubMaster([ENCODE_SOCKETS[s] for s in vision_streams], addr=addr)
-    print("waiting for:", [ENCODE_SOCKETS[s] for s in vision_streams])
-    print("initial recv_frame:", sm.recv_frame)
-    import time
-    t0 = time.time()
     while min(sm.recv_frame.values()) == 0:
       sm.update(100)
-      if time.time() - t0 > 1.0:
-        print("still waiting, recv_frame:", sm.recv_frame)
-        t0 = time.time()
     os.environ.pop("ZMQ")
     messaging.reset_context()
 
-    self.vipc_server = VisionIpcServer("camerad")
+    self.vipc_server = VisionIpcServer(server_name)
     for vst in vision_streams:
       ed = sm[ENCODE_SOCKETS[vst]]
       self.vipc_server.create_buffers(vst, 4, ed.width, ed.height)
@@ -151,6 +144,7 @@ if __name__ == "__main__":
   parser.add_argument("addr", help="Address of comma three")
   parser.add_argument("--nvidia", action="store_true", help="Use nvidia instead of ffmpeg")
   parser.add_argument("--cams", default="0,1,2", help="Cameras to decode")
+  parser.add_argument("--server", default="camerad", help="choose vipc server name")
   parser.add_argument("--silent", action="store_true", help="Suppress debug output")
   args = parser.parse_args()
 
@@ -161,7 +155,7 @@ if __name__ == "__main__":
   ]
 
   vsts = [vision_streams[int(x)] for x in args.cams.split(",")]
-  cvipc = CompressedVipc(args.addr, vsts, args.nvidia, debug=(not args.silent))
+  cvipc = CompressedVipc(args.addr, vsts, args.server, args.nvidia, debug=(not args.silent))
 
   # register exit handler
   signal.signal(signal.SIGINT, lambda sig, frame: cvipc.kill())
