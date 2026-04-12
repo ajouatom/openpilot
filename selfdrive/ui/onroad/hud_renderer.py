@@ -152,7 +152,7 @@ class HudRenderer(Widget):
 
     v_cruise_cluster = car_state.vCruiseCluster
     self.set_speed = (
-      controls_state.deprecated.vCruise if v_cruise_cluster == 0.0 else v_cruise_cluster
+      controls_state.vCruiseDEPRECATED if v_cruise_cluster == 0.0 else v_cruise_cluster
     )
     self.is_cruise_set = 0 < self.set_speed < SET_SPEED_NA
     self.is_cruise_available = self.set_speed != -1
@@ -344,7 +344,7 @@ class HudRenderer(Widget):
       return tr("soft hold"), rl.Color(255, 165, 0, 230)
     elif carState.carrotCruise:
       return tr("carrot"), rl.Color(0, 255, 0, 230)
-
+    
     try:
       mode_val = int(ui_state.sm["longitudinalPlan"].myDrivingMode)
     except Exception:

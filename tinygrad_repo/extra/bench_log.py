@@ -34,8 +34,7 @@ class WallTimeEvent:
     self.start = time.monotonic()
     return self
   def __exit__(self, *_):
-    self.time = time.monotonic() - self.start
-    _events[self.event]["wall"].append(self.time)
+    _events[self.event]["wall"].append(time.monotonic() - self.start)
     return False
 
 class KernelTimeEvent:

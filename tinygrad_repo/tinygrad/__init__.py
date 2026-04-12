@@ -4,7 +4,6 @@ if int(os.getenv("TYPED", "0")):
   install_import_hook(__name__)
 from tinygrad.tensor import Tensor                                    # noqa: F401
 from tinygrad.engine.jit import TinyJit                               # noqa: F401
-from tinygrad.function import function                                # noqa: F401
 from tinygrad.uop.ops import UOp
 Variable = UOp.variable
 from tinygrad.dtype import dtypes                                     # noqa: F401

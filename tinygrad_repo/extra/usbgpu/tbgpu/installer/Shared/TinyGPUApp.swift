@@ -1,6 +1,6 @@
 import SwiftUI
 
-private let dextID = "org.tinygrad.tinygpu.driver2"
+private let dextID = "org.tinygrad.tinygpu.edriver"
 
 @main
 struct TinyGPUApp: App {

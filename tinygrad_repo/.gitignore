@@ -66,5 +66,3 @@ target
 .mypy_cache
 mutants
 .mutmut-cache
-dagre/
-graphlib/

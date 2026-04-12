@@ -145,8 +145,7 @@ class RGP:
   @staticmethod
   def from_profile(profile_pickled, device:str|None=None):
     profile: list[ProfileEvent] = pickle.loads(profile_pickled)
-    def _is_base_dev(d): return all(p.isdigit() for p in d.split(":")[1:])
-    device_events = {x.device:x for x in profile if isinstance(x, ProfileDeviceEvent) and x.device.startswith('AMD') and _is_base_dev(x.device)}
+    device_events = {x.device:x for x in profile if isinstance(x, ProfileDeviceEvent) and x.device.startswith('AMD')}
     if device is None:
       if len(device_events) == 0: raise RuntimeError('No supported devices found in profile')
       if len(device_events) > 1: raise RuntimeError(f"More than one supported device found, select which one to export: {', '.join(device_events.keys())}")

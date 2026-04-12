@@ -6,9 +6,9 @@ class TestDataset(unittest.TestCase):
   def test_dataset_is_realized(self):
     X_train, _, _, _ = mnist()
     X_train[0].contiguous().realize()
-    GlobalCounters.reset()
+    start = GlobalCounters.kernel_count
     X_train[0].contiguous().realize()
-    self.assertLessEqual(GlobalCounters.kernel_count, 1)  # 0 if BUFFER_VIEW (zero-copy), 1 otherwise
+    self.assertEqual(GlobalCounters.kernel_count-start, 1)
 
 if __name__ == '__main__':
   unittest.main()

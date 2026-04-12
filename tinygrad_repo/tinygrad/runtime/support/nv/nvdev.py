@@ -1,10 +1,9 @@
 from __future__ import annotations
 import ctypes, time, functools, re, gzip, struct
 from tinygrad.helpers import getenv, DEBUG, fetch, getbits
-from tinygrad.runtime.autogen import pci
 from tinygrad.runtime.support.memory import TLSFAllocator, MemoryManager, AddrSpace
 from tinygrad.runtime.support.nv.ip import NV_FLCN, NV_FLCN_COT, NV_GSP
-from tinygrad.runtime.support.system import PCIDevice, MMIOInterface
+from tinygrad.runtime.support.system import PCIDevice, PCIDevImplBase, MMIOInterface
 
 NV_DEBUG = getenv("NV_DEBUG", 0)
 
@@ -70,16 +69,15 @@ class NVMemoryManager(MemoryManager):
 
   def on_range_mapped(self): self.dev.NV_VIRTUAL_FUNCTION_PRIV_MMU_INVALIDATE.write((1 << 0) | (1 << 1) | (1 << 6) | (1 << 31))
 
-class NVDev:
+class NVDev(PCIDevImplBase):
   def __init__(self, pci_dev:PCIDevice):
     self.pci_dev, self.devfmt, self.mmio = pci_dev, pci_dev.pcibus, pci_dev.map_bar(0, fmt='I')
-    self.pci_dev.write_config(pci.PCI_COMMAND, self.pci_dev.read_config(pci.PCI_COMMAND, 2) | pci.PCI_COMMAND_MASTER, 2)
 
     self.smi_dev, self.is_booting, self.is_err_state = False, True, False
     self._early_ip_init()
     self._early_mmu_init()
 
-    # No booting state, gsp client is reinited every run.
+    # Turn the booting early, gsp client is loaded from the clean.
     self.is_booting = False
 
     for ip in [self.flcn, self.gsp]: ip.init_sw()
@@ -99,15 +97,6 @@ class NVDev:
     self.reg_offsets:dict[str, tuple[int, int]] = {}
 
     self.include("src/common/inc/swref/published/nv_ref.h")
-    self.include("src/common/inc/swref/published/turing/tu102/dev_fb.h")
-    self.include("src/common/inc/swref/published/ampere/ga102/dev_gc6_island.h")
-    self.include("src/common/inc/swref/published/ampere/ga102/dev_gc6_island_addendum.h")
-
-    if (needs_reset:=self.reg("NV_PFB_PRI_MMU_WPR2_ADDR_HI").read() != 0):
-      if DEBUG >= 2: print(f"nv {self.devfmt}: WPR2 is up. Issuing a full reset.", flush=True)
-      self.pci_dev.reset()
-      time.sleep(0.1) # wait until device can respond again
-
     self.chip_id = self.reg("NV_PMC_BOOT_0").read()
     self.chip_details = self.reg("NV_PMC_BOOT_42").read_bitfields()
     self.chip_name = {0x17: "GA1", 0x19: "AD1", 0x1b: "GB2"}[self.chip_details['architecture']] + f"{self.chip_details['implementation']:02d}"
@@ -117,7 +106,14 @@ class NVDev:
     self.flcn:NV_FLCN|NV_FLCN_COT = NV_FLCN_COT(self) if self.fmc_boot else NV_FLCN(self)
     self.gsp:NV_GSP = NV_GSP(self)
 
-    if needs_reset: self.flcn.wait_for_reset()
+    self.include("src/common/inc/swref/published/turing/tu102/dev_fb.h")
+    self.include("src/common/inc/swref/published/ampere/ga102/dev_gc6_island.h")
+    self.include("src/common/inc/swref/published/ampere/ga102/dev_gc6_island_addendum.h")
+    if self.reg("NV_PFB_PRI_MMU_WPR2_ADDR_HI").read() != 0:
+      if DEBUG >= 2: print(f"nv {self.devfmt}: WPR2 is up. Issuing a full reset.", flush=True)
+      self.pci_dev.reset()
+      time.sleep(0.1) # wait until device can respond again
+      self.flcn.wait_for_reset()
 
   def _early_mmu_init(self):
     self.include("src/common/inc/swref/published/turing/tu102/dev_vm.h")
@@ -151,10 +147,10 @@ class NVDev:
     if data is not None: view[:size] = data
     return view, paddrs
 
-  def _alloc_boot_struct(self, struct:ctypes.Structure) -> tuple[MMIOInterface, int]:
+  def _alloc_boot_struct(self, struct:ctypes.Structure) -> tuple[ctypes.Structure, int]:
     view, paddrs = self._alloc_sysmem(sz:=ctypes.sizeof(type(struct)), contiguous=True)
     view[:sz] = bytes(struct)
-    return view, paddrs[0]
+    return type(struct).from_address(view.addr), paddrs[0]
 
   def _download(self, file:str) -> str:
     url = f"https://raw.githubusercontent.com/NVIDIA/open-gpu-kernel-modules/8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f/{file}"

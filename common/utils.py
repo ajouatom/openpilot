@@ -131,11 +131,11 @@ def get_upload_stream(filepath: str, should_compress: bool) -> tuple[io.Buffered
     return compressed_stream, compressed_size
 
 
-# remove all keys that end in DEPRECATED, plus any "deprecated" group
+# remove all keys that end in DEPRECATED
 def strip_deprecated_keys(d):
   for k in list(d.keys()):
     if isinstance(k, str):
-      if k.endswith('DEPRECATED') or k == 'deprecated':
+      if k.endswith('DEPRECATED'):
         d.pop(k)
       elif isinstance(d[k], dict):
         strip_deprecated_keys(d[k])

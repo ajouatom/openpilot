@@ -192,7 +192,7 @@ class HudRenderer(Widget):
     self._wheel_y_filter = FirstOrderFilter(0, 0.1, 1 / gui_app.target_fps)
 
     self._set_speed_alpha_filter = FirstOrderFilter(0.0, 0.1, 1 / gui_app.target_fps)
-
+    
     self._set_speed_override = SetSpeedOverride()
     self._debug_traffic_light = False
 
@@ -250,7 +250,7 @@ class HudRenderer(Widget):
 
     v_cruise_cluster = car_state.vCruiseCluster
     set_speed = (
-      controls_state.deprecated.vCruise if v_cruise_cluster == 0.0 else v_cruise_cluster
+      controls_state.vCruiseDEPRECATED if v_cruise_cluster == 0.0 else v_cruise_cluster
     )
     engaged = sm['selfdriveState'].enabled
     if (set_speed != self.set_speed and engaged) or (engaged and not self._engaged):
@@ -613,7 +613,7 @@ class HudRenderer(Widget):
     cur_y = int(panel_y + panel_h * 0.48 - cur_size.y * 0.5) - 2
 
     self._draw_text_with_outline(cur_text, rl.Vector2(cur_x, cur_y), cur_font, rl.WHITE, rl.BLACK, thickness=2)
-
+    
     mode_text, mode_color = self._get_driving_mode_text_and_color()
     if self._debug_speed_panel:
       mode_text = "safe"
@@ -627,7 +627,7 @@ class HudRenderer(Widget):
       mode_y = int(panel_y + panel_h * 0.05 - mode_size.y * 0.5 - 15)
 
       self._draw_text_with_outline(mode_text, rl.Vector2(mode_x, mode_y), mode_font, mode_color, rl.BLACK, thickness=1)
-
+  
     # ----- set speed (center, smaller) -----
     show_set = self._engaged and self.is_cruise_set
     if True: #show_set or self._debug_speed_panel:
@@ -689,7 +689,7 @@ class HudRenderer(Widget):
     gap_font = 28
     gap_size = measure_text_cached(self._font_semi_bold, gap_text, gap_font)
     self._draw_text_with_outline(gap_text, rl.Vector2(gap_center_x - gap_size.x * 0.5, gap_center_y - gap_size.y * 0.5), gap_font, rl.WHITE, rl.BLACK, thickness=1)
-
+    
     # active carrot
     sm = ui_state.sm
     active_carrot = sm['carrotMan'].activeCarrot
@@ -724,7 +724,7 @@ class HudRenderer(Widget):
     if self._debug_speed_panel:
       active_lane_line = True
     else:
-      active_lane_line = bool(ui_state.sm['controlsState'].activeLaneLine)
+      active_lane_line = bool(ui_state.sm['controlsState'].activeLaneLine)      
 
     line1 = "lane"
     line2 = "mode" if active_lane_line else "less"
@@ -751,7 +751,7 @@ class HudRenderer(Widget):
       return tr("soft hold"), rl.Color(255, 165, 0, 230)
     elif carState.carrotCruise:
       return tr("carrot"), rl.Color(0, 255, 0, 230)
-
+    
     try:
       mode_val = int(ui_state.sm["longitudinalPlan"].myDrivingMode)
     except Exception:
@@ -855,7 +855,7 @@ class HudRenderer(Widget):
       rl.BLACK,
       thickness=1
     )
-
+  
   def _draw_traffic_light_info(self, pos_x: int, pos_y: int) -> bool:
     info = self._get_traffic_light_info()
     if not info:

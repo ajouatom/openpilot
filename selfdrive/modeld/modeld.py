@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 import os
-from openpilot.selfdrive.modeld.tinygrad_helpers import MODELS_DIR, set_tinygrad_backend_from_compiled_flags
-set_tinygrad_backend_from_compiled_flags()
-
+from openpilot.system.hardware import TICI
+os.environ['DEV'] = 'QCOM' if TICI else 'CPU'
 USBGPU = "USBGPU" in os.environ
 if USBGPU:
   os.environ['DEV'] = 'AMD'
@@ -13,6 +12,7 @@ import pickle
 import numpy as np
 import cereal.messaging as messaging
 from cereal import car, log
+from pathlib import Path
 from cereal.messaging import PubMaster, SubMaster
 from msgq.visionipc import VisionIpcClient, VisionStreamType, VisionBuf
 from opendbc.car.car_helpers import get_demo_car_params
@@ -34,12 +34,11 @@ from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
 PROCESS_NAME = "selfdrive.modeld.modeld"
 SEND_RAW_PRED = os.getenv('SEND_RAW_PRED')
 
-VISION_PKL_PATH = MODELS_DIR / 'driving_vision_tinygrad.pkl'
-VISION_METADATA_PATH = MODELS_DIR / 'driving_vision_metadata.pkl'
-ON_POLICY_PKL_PATH = MODELS_DIR / 'driving_on_policy_tinygrad.pkl'
-ON_POLICY_METADATA_PATH = MODELS_DIR / 'driving_on_policy_metadata.pkl'
-OFF_POLICY_PKL_PATH = MODELS_DIR / 'driving_off_policy_tinygrad.pkl'
-OFF_POLICY_METADATA_PATH = MODELS_DIR / 'driving_off_policy_metadata.pkl'
+VISION_PKL_PATH = Path(__file__).parent / 'models/driving_vision_tinygrad.pkl'
+POLICY_PKL_PATH = Path(__file__).parent / 'models/driving_policy_tinygrad.pkl'
+VISION_METADATA_PATH = Path(__file__).parent / 'models/driving_vision_metadata.pkl'
+POLICY_METADATA_PATH = Path(__file__).parent / 'models/driving_policy_metadata.pkl'
+MODELS_DIR = Path(__file__).parent / 'models'
 
 LAT_SMOOTH_SECONDS = 0.0
 LONG_SMOOTH_SECONDS = 0.3
@@ -155,13 +154,7 @@ class ModelState:
       self.vision_output_slices = vision_metadata['output_slices']
       vision_output_size = vision_metadata['output_shapes']['outputs'][1]
 
-    with open(OFF_POLICY_METADATA_PATH, 'rb') as f:
-      off_policy_metadata = pickle.load(f)
-      self.off_policy_input_shapes =  off_policy_metadata['input_shapes']
-      self.off_policy_output_slices = off_policy_metadata['output_slices']
-      off_policy_output_size = off_policy_metadata['output_shapes']['outputs'][1]
-
-    with open(ON_POLICY_METADATA_PATH, 'rb') as f:
+    with open(POLICY_METADATA_PATH, 'rb') as f:
       policy_metadata = pickle.load(f)
       self.policy_input_shapes =  policy_metadata['input_shapes']
       self.policy_output_slices = policy_metadata['output_slices']
@@ -185,13 +178,11 @@ class ModelState:
     self.vision_output = np.zeros(vision_output_size, dtype=np.float32)
     self.policy_inputs = {k: Tensor(v, device='NPY').realize() for k,v in self.numpy_inputs.items()}
     self.policy_output = np.zeros(policy_output_size, dtype=np.float32)
-    self.off_policy_output = np.zeros(off_policy_output_size, dtype=np.float32)
     self.parser = Parser()
     self.frame_buf_params : dict[str, tuple[int, int, int, int]] = {}
     self.update_imgs = None
     self.vision_run = pickle.loads(read_file_chunked(str(VISION_PKL_PATH)))
-    self.policy_run = pickle.loads(read_file_chunked(str(ON_POLICY_PKL_PATH)))
-    self.off_policy_run = pickle.loads(read_file_chunked(str(OFF_POLICY_PKL_PATH)))
+    self.policy_run = pickle.loads(read_file_chunked(str(POLICY_PKL_PATH)))
 
   def slice_outputs(self, model_outputs: np.ndarray, output_slices: dict[str, slice]) -> dict[str, np.ndarray]:
     parsed_model_outputs = {k: model_outputs[np.newaxis, v] for k,v in output_slices.items()}
@@ -224,7 +215,8 @@ class ModelState:
 
     out = self.update_imgs(self.img_queues['img'], self.full_frames['img'], self.transforms['img'],
                            self.img_queues['big_img'], self.full_frames['big_img'], self.transforms['big_img'])
-    vision_inputs = {'img': out[0], 'big_img': out[1]}
+    self.img_queues['img'], self.img_queues['big_img'] = out[0].realize(), out[2].realize()
+    vision_inputs = {'img': out[1], 'big_img': out[3]}
 
     if prepare_only:
       return None
@@ -239,17 +231,9 @@ class ModelState:
 
     self.policy_output = self.policy_run(**self.policy_inputs).contiguous().realize().uop.base.buffer.numpy().flatten()
     policy_outputs_dict = self.parser.parse_policy_outputs(self.slice_outputs(self.policy_output, self.policy_output_slices))
-
-    self.off_policy_output = self.off_policy_run(**self.policy_inputs).contiguous().realize().uop.base.buffer.numpy()
-    off_policy_outputs_dict = self.parser.parse_off_policy_outputs(self.slice_outputs(self.off_policy_output, self.off_policy_output_slices))
-    off_policy_outputs_dict.pop('plan')
-
-
-    combined_outputs_dict = {**vision_outputs_dict, **off_policy_outputs_dict, **policy_outputs_dict}
-    if 'planplus' in combined_outputs_dict and 'plan' in combined_outputs_dict:
-      combined_outputs_dict['plan'] = combined_outputs_dict['plan'] + combined_outputs_dict['planplus']
+    combined_outputs_dict = {**vision_outputs_dict, **policy_outputs_dict}
     if SEND_RAW_PRED:
-      combined_outputs_dict['raw_pred'] = np.concatenate([self.vision_output.copy(), self.policy_output.copy(), self.off_policy_output.copy()])
+      combined_outputs_dict['raw_pred'] = np.concatenate([self.vision_output.copy(), self.policy_output.copy()])
 
     return combined_outputs_dict
 
@@ -338,7 +322,7 @@ def main(demo=False):
       long_delay = params.get_float("LongActuatorDelay")*0.01
       vEgoStopping = params.get_float("VEgoStopping") * 0.01
       camera_yaw_trim_deg = params.get_float("CameraYawTrimDeg") * 0.01
-
+      
     if custom_lat_delay > 0.0:
       lat_delay = custom_lat_delay + lat_smooth_seconds
     else:
@@ -382,7 +366,6 @@ def main(demo=False):
     frame_id = sm["roadCameraState"].frameId
     v_ego = max(sm["carState"].vEgo, 0.)
     #lateral_control_params = np.array([v_ego, lat_delay], dtype=np.float32)
-    lat_delay = sm["liveDelay"].lateralDelay + LAT_SMOOTH_SECONDS
     if sm.updated["liveCalibration"] and sm.seen['roadCameraState'] and sm.seen['deviceState']:
       device_from_calib_euler = np.array(sm["liveCalibration"].rpyCalib, dtype=np.float32)
 
@@ -391,7 +374,7 @@ def main(demo=False):
 
       if applied_yaw_trim_deg != 0.0:
         device_from_calib_euler[2] -= np.radians(applied_yaw_trim_deg)
-
+        
       dc = DEVICE_CAMERAS[(str(sm['deviceState'].deviceType), str(sm['roadCameraState'].sensor))]
       model_transform_main = get_warp_matrix(device_from_calib_euler, dc.ecam.intrinsics if main_wide_camera else dc.fcam.intrinsics, False).astype(np.float32)
       model_transform_extra = get_warp_matrix(device_from_calib_euler, dc.ecam.intrinsics, True).astype(np.float32)
@@ -434,9 +417,7 @@ def main(demo=False):
       drivingdata_send = messaging.new_message('drivingModelData')
       posenet_send = messaging.new_message('cameraOdometry')
 
-      frame_delay = DT_MDL # compensate for time passed since the frame was captured: current_time - timestamp_eof is 50ms on average
-      action_delay = DT_MDL / 2 # middle of the interval between model output (current state) and next frame (expected state)
-      action = get_action_from_model(model_output, prev_action, lat_delay + frame_delay + action_delay, long_delay + frame_delay + action_delay, v_ego)
+      action = get_action_from_model(model_output, prev_action, lat_delay + DT_MDL, long_delay + DT_MDL, v_ego, lat_smooth_seconds, vEgoStopping)
       prev_action = action
       fill_model_msg(drivingdata_send, modelv2_send, model_output, action,
                      publish_state, meta_main.frame_id, meta_extra.frame_id, frame_id,

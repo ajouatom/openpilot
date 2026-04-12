@@ -315,7 +315,7 @@ class TestProgressBar(unittest.TestCase):
     for _ in tinytqdm(range(100)): pass
     tinytqdm_time = time.perf_counter() - st
 
-    assert tinytqdm_time < 5 * tqdm_time
+    assert tinytqdm_time < 2 * tqdm_time
 
   def test_tqdm_perf_high_iter(self):
     st = time.perf_counter()
@@ -326,7 +326,7 @@ class TestProgressBar(unittest.TestCase):
     for _ in tinytqdm(range(10^7)): pass
     tinytqdm_time = time.perf_counter() - st
 
-    assert tinytqdm_time < 20 * tqdm_time
+    assert tinytqdm_time < 5 * tqdm_time
 
 if __name__ == '__main__':
   unittest.main()

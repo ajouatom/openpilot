@@ -1,11 +1,11 @@
-from tinygrad import nn, Tensor, dtypes
-from tinygrad.helpers import DEV, Timing
+from tinygrad import nn, Tensor, Device, dtypes
+from tinygrad.helpers import Timing
 
 from extra.models.llama import Transformer
 from examples.llama3 import MODEL_PARAMS
 
 if __name__ == "__main__":
-  DEV.value = "NULL"
+  Device.DEFAULT = "NULL"
   Tensor.training = True
   #model_size = "8B"
   model_size = "405B"

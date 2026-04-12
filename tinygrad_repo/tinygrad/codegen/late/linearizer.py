@@ -7,13 +7,17 @@ from tinygrad.helpers import prod, getenv, TUPLE_ORDER
 def linearize(sink:UOp) -> list[UOp]:
   # this is a toposort with priority
   lst = list(sink.toposort())
-  out_degree:defaultdict[UOp, int] = defaultdict(int)
+  consumers: defaultdict[UOp, list[UOp]] = defaultdict(list)
+  in_degree:dict[UOp, int] = {}
+  out_degree:dict[UOp, int] = {}
   priorities:dict[UOp, tuple[int, int, Any]] = {}
 
   # get consumers and assign priorities
   # NOTE: this requires the lst be locally toposorted
   for u in reversed(lst):
-    for s in u.src: out_degree[s] += 1
+    for s in u.src: consumers[s].append(u)
+    in_degree[u] = len(u.src)
+    out_degree[u] = len(consumers[u])
 
     # we place UOps with higher run_counts later
     run_count = prod([int(r.vmax)+1 for r in u.ranges])
