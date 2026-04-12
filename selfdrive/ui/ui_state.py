@@ -60,6 +60,7 @@ class UIState:
         "peripheralState",
         "liveDelay",
         "liveTorqueParameters",
+        "lateralPlan",
       ]
     )
 
