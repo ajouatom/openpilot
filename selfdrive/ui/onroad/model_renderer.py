@@ -926,7 +926,7 @@ class ModelRenderer(Widget):
 
     return np.array(left_pts + right_pts, dtype=np.float32)
 
-   def _draw_special_modes_carrot(self, sm, mode: int, color_idx: int, brake_valid: bool):
+  def _draw_special_modes_carrot(self, sm, mode: int, color_idx: int, brake_valid: bool):
     line = self._path.raw_points
     if line.shape[0] == 0:
       return
