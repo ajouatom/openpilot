@@ -9,6 +9,7 @@ from openpilot.common.params import Params
 from openpilot.selfdrive.locationd.calibrationd import HEIGHT_INIT
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import gui_app
+from openpilot.system.ui.lib.text_draw import draw_text_ui_style
 from openpilot.system.ui.lib.shader_polygon import draw_polygon, Gradient
 from openpilot.system.ui.widgets import Widget
 
@@ -596,18 +597,6 @@ class ModelRenderer(Widget):
       rl.draw_rectangle_rounded_lines_ex(rect, 0.15, 12, stroke_width, stroke_color)
 
 
-  def _draw_text_simple_carrot(self, x: int, y: int, text: str, font_size: int, color: rl.Color):
-    text_w = rl.measure_text(text, font_size)
-    rl.draw_text(text, int(x - text_w / 2), int(y - font_size / 2), font_size, color)
-
-
-  def _draw_text_box_carrot(self, x: int, y: int, text: str, font_size: int, box_color: rl.Color):
-    w = max(40, int(len(text) * font_size * 0.8))
-    h = 42
-    self._draw_rect_fill_outline_carrot(x - w / 2, y - 35, w, h, box_color, box_color, 0.0)
-    self._draw_text_simple_carrot(x, y, text, font_size, rl.Color(255, 255, 255, 255))
-
-
   def _update_path_end_carrot(self, sm):
     if self._path.raw_points.shape[0] == 0:
       return
@@ -715,18 +704,18 @@ class ModelRenderer(Widget):
 
     if self._carrot_soft_hold_active or self._carrot_brake_hold_active or self._carrot_carrot_cruise:
       text = "AUTOHOLD" if self._carrot_brake_hold_active else ("SOFTHOLD" if self._carrot_soft_hold_active else "CARROT")
-      self._draw_text_simple_carrot(x, disp_y, text, 50, rl.Color(255, 255, 255, 255))
+      draw_text_ui_style(text, x, disp_y, 50, rl.Color(255, 255, 255, 255), align="center", y_offset=0.0)
     else:
       draw_dist = False
       if self._carrot_long_active:
         if self._carrot_x_state in (3, 5):
           if self._carrot_v_ego < 1.0:
             text = "Signal Error" if self._carrot_traffic_state >= 1000 else "Signal Ready"
-            self._draw_text_simple_carrot(x, disp_y, text, 50, rl.Color(255, 255, 255, 255))
+            draw_text_ui_style(text, x, disp_y, 50, rl.Color(255, 255, 255, 255), align="center", y_offset=0.0)
           else:
-            self._draw_text_simple_carrot(x, disp_y, "Signal slowing", 50, rl.Color(255, 255, 255, 255))
+            draw_text_ui_style("Signal slowing", x, disp_y, 50, rl.Color(255, 255, 255, 255), align="center", y_offset=0.0)
         elif self._carrot_x_state == 4:
-          self._draw_text_simple_carrot(x, disp_y, "E2E주행중", 50, rl.Color(255, 255, 255, 255))
+          draw_text_ui_style("E2E주행중", x, disp_y, 50, rl.Color(255, 255, 255, 255), align="center", y_offset=0.0)
         elif self._carrot_x_state in (0, 1, 2):
           draw_dist = True
       else:
@@ -739,15 +728,15 @@ class ModelRenderer(Widget):
           dist_text = f"{self._carrot_radar_dist:.1f}"
           box_color = rl.Color(255, 0, 0, 255) if self._carrot_radar_track_id < 1 else rl.Color(255, 175, 3, 255)
           self._draw_text_box_carrot(x - w, disp_y, dist_text, 40, box_color)
-          self._draw_text_simple_carrot(x - w, disp_y, dist_text, 40, text_color)
+          draw_text_ui_style(dist_text, x - w, disp_y, 40, text_color, align="center", y_offset=0.0)
         if self._carrot_vision_dist > 0.0:
           dist_text = f"{self._carrot_vision_dist:.1f}"
           self._draw_text_box_carrot(x + w, disp_y, dist_text, 40, rl.Color(0, 0, 255, 255))
-          self._draw_text_simple_carrot(x + w, disp_y, dist_text, 40, text_color)
+          draw_text_ui_style(dist_text, x + w, disp_y, 40, text_color, align="center", y_offset=0.0)
 
     if self._carrot_tf_distance > 0.0 and self._carrot_tf_left is not None and self._carrot_tf_right is not None:
       self._draw_line_segment_carrot(self._carrot_tf_left, self._carrot_tf_right, rl.Color(255, 255, 255, 255), 3.0)
-      self._draw_text_simple_carrot(int(self._carrot_tf_right[0]), int(self._carrot_tf_right[1]), f"{self._carrot_tf_distance:.1f}({self._carrot_t_follow:.2f})", 25, rl.Color(255, 255, 255, 255))
+      draw_text_ui_style(f"{self._carrot_tf_distance:.1f}({self._carrot_t_follow:.2f})", int(self._carrot_tf_right[0]), int(self._carrot_tf_right[1]), 25, rl.Color(255, 255, 255, 255), align="center", y_offset=0.0)
 
     if self._carrot_lead_status:
       rcolor = rl.Color(255, 0, 0, 255) if self._carrot_radar_track_id < 1 else rl.Color(255, 175, 3, 255)
@@ -919,10 +908,10 @@ class ModelRenderer(Widget):
           self._draw_text_box_carrot(int(x), int(y), speed_text, 40, box_color)
 
           if self._carrot_show_radar_info >= 2:
-            self._draw_text_simple_carrot(int(x), int(y - 40), f"{y_rel:.1f}", 30, rl.Color(255, 255, 255, 255))
-            self._draw_text_simple_carrot(int(x), int(y + 30), f"{d_rel:.1f}", 30, rl.Color(255, 255, 255, 255))
+            draw_text_ui_style(f"{y_rel:.1f}", int(x), int(y - 40), 30, rl.Color(255, 255, 255, 255), align="center", y_offset=0.0)
+            draw_text_ui_style(f"{d_rel:.1f}", int(x), int(y + 30), 30, rl.Color(255, 255, 255, 255), align="center", y_offset=0.0)
         elif self._carrot_show_radar_info >= 3:
-          self._draw_text_simple_carrot(int(x), int(y), "*", 40, rl.Color(255, 255, 255, 255))
+          draw_text_ui_style("*", int(x), int(y), 40, rl.Color(255, 255, 255, 255), align="center", y_offset=0.0)
 
 
   def _build_path_polygon_update_line_data2_carrot(self, line: np.ndarray, width_apply: float, z_off_start: float, z_off_end: float, max_idx: int, allow_invert: bool = True) -> np.ndarray:

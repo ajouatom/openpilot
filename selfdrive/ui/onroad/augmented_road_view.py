@@ -10,7 +10,8 @@ from openpilot.selfdrive.ui.onroad.driver_state import DriverStateRenderer
 from openpilot.selfdrive.ui.onroad.hud_renderer import HudRenderer
 from openpilot.selfdrive.ui.onroad.model_renderer import ModelRenderer
 from openpilot.selfdrive.ui.onroad.cameraview import CameraView
-from openpilot.system.ui.lib.application import gui_app, FontWeight
+from openpilot.system.ui.lib.application import gui_app
+from openpilot.system.ui.lib.text_draw import draw_text_ui_style
 from openpilot.common.transformations.camera import DEVICE_CAMERAS, DeviceCameraConfig, view_frame_from_device_frame
 from openpilot.common.transformations.orientation import rot_from_euler
 
@@ -52,7 +53,6 @@ class AugmentedRoadView(CameraView):
     # debug
     self._pm = messaging.PubMaster(['uiDebug'])
 
-    self._font_display: rl.Font = gui_app.font(FontWeight.DISPLAY)
 
 
   def _render(self, rect):
@@ -223,60 +223,6 @@ class AugmentedRoadView(CameraView):
   def _get_border_color(self, status: UIStatus) -> rl.Color:
     return BORDER_COLORS.get(status, BORDER_COLORS[UIStatus.DISENGAGED])
 
-
-  def _draw_text_with_outline(self, text, pos, font_size,
-                              text_color,
-                              outline_color=rl.BLACK,
-                              thickness=2):
-    x, y = pos.x, pos.y
-    for dx in range(-thickness, thickness + 1):
-      for dy in range(-thickness, thickness + 1):
-        if dx == 0 and dy == 0:
-          continue
-        rl.draw_text_ex(
-          self._font_display,
-          text,
-          rl.Vector2(x + dx, y + dy),
-          font_size,
-          0,
-          outline_color
-        )
-
-    # main text
-    rl.draw_text_ex(
-      self._font_display,
-      text,
-      rl.Vector2(x, y),
-      font_size,
-      0,
-      text_color
-    )
-    
-  def _draw_text_outline_aligned(self, text: str, x: float, y: float, font_size: float,
-                                 text_color: rl.Color,
-                                 align: str = "center",
-                                 outline_color: rl.Color = rl.BLACK,
-                                 thickness: int = 2):
-    if not text:
-      return
-
-    text_size = rl.measure_text_ex(self._font_display, text, font_size, 0)
-
-    if align == "left":
-      draw_x = x
-    elif align == "right":
-      draw_x = x - text_size.x
-    else:
-      draw_x = x - text_size.x / 2.0
-
-    self._draw_text_with_outline(
-      text,
-      rl.Vector2(draw_x, y),
-      font_size,
-      text_color,
-      outline_color,
-      thickness,
-    )
 
   def _draw_border_carrot(self, rect: rl.Rectangle):
     sm = ui_state.sm
@@ -486,55 +432,19 @@ class AugmentedRoadView(CameraView):
     # text positions
     top_text_y = y + line_margin
     bottom_text_y = bottom_y + bottom_h - font_size - 2
-    self._draw_text_outline_aligned(
-      top,
-      x + w / 2.0,
-      top_text_y,
-      font_size,
-      rl.WHITE,
-      "center",
-    )
-    self._draw_text_outline_aligned(
-      top_left,
-      x + text_margin,
-      top_text_y,
-      font_size,
-      rl.WHITE,
-      "left",
-    )
-    self._draw_text_outline_aligned(
-      top_right,
-      x + w - text_margin,
-      top_text_y,
-      font_size,
-      rl.WHITE,
-      "right",
-    )
+    draw_text_ui_style(top, x + w / 2.0, top_text_y, font_size, rl.WHITE,
+                       align="center_top", y_offset=0.0)
+    draw_text_ui_style(top_left, x + text_margin, top_text_y, font_size, rl.WHITE,
+                       align="left_top", y_offset=0.0)
+    draw_text_ui_style(top_right, x + w - text_margin, top_text_y, font_size, rl.WHITE,
+                       align="right_top", y_offset=0.0)
 
-    self._draw_text_outline_aligned(
-      bottom,
-      x + w / 2.0,
-      bottom_text_y,
-      font_size,
-      rl.WHITE,
-      "center",
-    )
-    self._draw_text_outline_aligned(
-      bottom_left,
-      x + text_margin,
-      bottom_text_y,
-      font_size,
-      rl.WHITE,
-      "left",
-    )
-    self._draw_text_outline_aligned(
-      bottom_right,
-      x + w - text_margin,
-      bottom_text_y,
-      font_size,
-      rl.WHITE,
-      "right",
-    )
+    draw_text_ui_style(bottom, x + w / 2.0, bottom_text_y, font_size, rl.WHITE,
+                       align="center_top", y_offset=0.0)
+    draw_text_ui_style(bottom_left, x + text_margin, bottom_text_y, font_size, rl.WHITE,
+                       align="left_top", y_offset=0.0)
+    draw_text_ui_style(bottom_right, x + w - text_margin, bottom_text_y, font_size, rl.WHITE,
+                       align="right_top", y_offset=0.0)
 
 if __name__ == "__main__":
   gui_app.init_window("OnRoad Camera View")

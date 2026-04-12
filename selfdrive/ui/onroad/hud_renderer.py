@@ -1,4 +1,3 @@
-import math
 import pyray as rl
 from dataclasses import dataclass
 from openpilot.common.constants import CV
@@ -7,6 +6,7 @@ from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.lib.text_measure import measure_text_cached
+from openpilot.system.ui.lib.text_draw import draw_text_ui_style
 from openpilot.system.ui.widgets import Widget
 
 # Constants
@@ -259,64 +259,6 @@ class HudRenderer(Widget):
     unit_pos = rl.Vector2(rect.x + rect.width / 2 - unit_text_size.x / 2, 290 - unit_text_size.y / 2)
     rl.draw_text_ex(self._font_medium, unit_text, unit_pos, FONT_SIZES.speed_unit, 0, COLORS.WHITE_TRANSLUCENT)
 
-  def _draw_text_raw(self, font, text, x, y, font_size, color):
-    rl.draw_text_ex(
-      font,
-      text,
-      rl.Vector2(float(x), float(y)),
-      float(font_size),
-      0,
-      color,
-    )
-
-
-  def _draw_text_ui_style(self,
-                          text: str,
-                          x: float,
-                          y: float,
-                          font_size: float,
-                          color: rl.Color,
-                          font=None,
-                          border_width: float = 3.0,
-                          shadow_offset: float = 0.0,
-                          border_color: rl.Color = rl.BLACK,
-                          shadow_color: rl.Color = rl.BLACK,
-                          align: str = "center_bottom",
-                          y_offset: float = 6.0) -> None:
-    if not text:
-      return
-
-    if font is None:
-      font = self._font_display
-
-    text_size = measure_text_cached(font, text, font_size)
-
-    draw_x = x
-    draw_y = y + y_offset
-
-    if align == "center_bottom":
-      draw_x = x - text_size.x * 0.5
-      draw_y = (y + y_offset) - text_size.y
-    elif align == "center_top":
-      draw_x = x - text_size.x * 0.5
-      draw_y = y + y_offset
-    elif align == "left_top":
-      draw_x = x
-      draw_y = y + y_offset
-
-    if border_width > 0.0:
-      for deg in range(0, 360, 45):
-        rad = math.radians(deg)
-        ox = border_width * math.cos(rad)
-        oy = border_width * math.sin(rad)
-        self._draw_text_raw(font, text, draw_x + ox, draw_y + oy, font_size, border_color)
-
-    if shadow_offset != 0.0:
-      self._draw_text_raw(font, text, draw_x + shadow_offset, draw_y + shadow_offset, font_size, shadow_color)
-
-    self._draw_text_raw(font, text, draw_x, draw_y, font_size, color)
-
-
   def _draw_round_box(self, x, y, w, h, fill_color,
                       line_color=None,
                       roundness=0.25,
@@ -566,7 +508,7 @@ class HudRenderer(Widget):
     cur_speed_int = 123 if self._debug_speed_panel else int(round(self.speed))
     cur_text = str(cur_speed_int)
 
-    self._draw_text_ui_style(
+    draw_text_ui_style(
       cur_text, bx, by + 50, 120, rl.WHITE,
       font=self._font_display,
       border_width=3.0,
@@ -582,7 +524,7 @@ class HudRenderer(Widget):
     else:
       cruise_text = "--"
 
-    self._draw_text_ui_style(
+    draw_text_ui_style(
       cruise_text, bx + 170, by + 15 + 5, 60, rl.GREEN,
       font=self._font_display,
       border_width=1.0,
@@ -608,7 +550,7 @@ class HudRenderer(Widget):
         ov_text = "111"
         ov_label = "vturn"
 
-      self._draw_text_ui_style(
+      draw_text_ui_style(
         ov_text, bx + 250, by - 50 + 5, 50, ov_color,
         font=self._font_display,
         border_width=1.0,
@@ -616,7 +558,7 @@ class HudRenderer(Widget):
         align="center_bottom",
       )
 
-      self._draw_text_ui_style(
+      draw_text_ui_style(
         ov_label, bx + 250, by - 100, 30, ov_color,
         font=self._font_display,
         border_width=1.0,
@@ -644,7 +586,7 @@ class HudRenderer(Widget):
         line_thickness=2,
       )
 
-      self._draw_text_ui_style(
+      draw_text_ui_style(
         mode_text, dx, dy - 2, 32, rl.WHITE,
         font=self._font_display,
         border_width=0.0,
@@ -653,7 +595,7 @@ class HudRenderer(Widget):
       )
 
       if self._gps_has_fix():
-        self._draw_text_ui_style(
+        draw_text_ui_style(
           "GPS", dx, dy - 45, 30, rl.GREEN,
           font=self._font_display,
           border_width=0.0,
@@ -663,7 +605,7 @@ class HudRenderer(Widget):
 
     # gap number
     gap = self._get_cruise_gap()
-    self._draw_text_ui_style(
+    draw_text_ui_style(
       str(gap), bx + 220, by + 77, 40, rl.WHITE,
       font=self._font_display,
       border_width=0.0,
@@ -702,7 +644,7 @@ class HudRenderer(Widget):
       line_thickness=3,
     )
 
-    self._draw_text_ui_style(
+    draw_text_ui_style(
       gear, gx, gy + 5, 70, rl.WHITE,
       font=self._font_display,
       border_width=0.0,
@@ -724,7 +666,7 @@ class HudRenderer(Widget):
         segments=8,
         line_thickness=2,
       )
-      self._draw_text_ui_style(
+      draw_text_ui_style(
         "APN", dx, dy, 40, rl.WHITE,
         font=self._font_display,
         border_width=0.0,
@@ -740,7 +682,7 @@ class HudRenderer(Widget):
         segments=8,
         line_thickness=2,
       )
-      self._draw_text_ui_style(
+      draw_text_ui_style(
         "APM", dx, dy, 40, rl.WHITE,
         font=self._font_display,
         border_width=0.0,
@@ -749,7 +691,7 @@ class HudRenderer(Widget):
       )
 
     if self._get_nav_path_vertex_count() > 1:
-      self._draw_text_ui_style(
+      draw_text_ui_style(
         "ROUTE", dx, dy - 45, 30, rl.WHITE,
         font=self._font_display,
         border_width=0.0,
@@ -781,7 +723,7 @@ class HudRenderer(Widget):
       else:
         limit_color = rl.Color(255, 255, 255, 210)
 
-    self._draw_text_ui_style(
+    draw_text_ui_style(
       label, dx, dy - 45, 30, rl.WHITE,
       font=self._font_display,
       border_width=0.0,
@@ -798,7 +740,7 @@ class HudRenderer(Widget):
       line_thickness=2,
     )
 
-    self._draw_text_ui_style(
+    draw_text_ui_style(
       str(disp_speed), dx, dy, 40, rl.WHITE,
       font=self._font_display,
       border_width=0.0,
@@ -851,26 +793,26 @@ class HudRenderer(Widget):
     # CPU
     cpu_fill = rl.Color(255, 0, 0, 255) if (self._cpu_temp > 80 and self._blink_timer <= 8) else ok_color
     self._draw_round_box(dx - 65, dy - 38, 130, 90, cpu_fill, line_color=rl.WHITE, roundness=0.16, segments=8, line_thickness=2)
-    self._draw_text_ui_style("CPU", dx, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
-    self._draw_text_ui_style(f"{self._cpu_temp:.0f}°C", dx, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
+    draw_text_ui_style("CPU", dx, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
+    draw_text_ui_style(f"{self._cpu_temp:.0f}°C", dx, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
 
     # MEM
     dx2 = dx + 150
     mem_fill = rl.Color(255, 0, 0, 255) if (self._memory_usage > 85 and self._blink_timer <= 8) else ok_color
     self._draw_round_box(dx2 - 65, dy - 38, 130, 90, mem_fill, line_color=rl.WHITE, roundness=0.16, segments=8, line_thickness=2)
-    self._draw_text_ui_style("MEM", dx2, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
-    self._draw_text_ui_style(f"{self._memory_usage}%", dx2, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
+    draw_text_ui_style("MEM", dx2, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
+    draw_text_ui_style(f"{self._memory_usage}%", dx2, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
 
     # DISK / VOLT
     dx3 = dx2 + 150
     self._draw_round_box(dx3 - 65, dy - 38, 130, 90, ok_color, line_color=rl.WHITE, roundness=0.16, segments=8, line_thickness=2)
 
     if self._disp_timer < 32:
-      self._draw_text_ui_style("DISK", dx3, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
-      self._draw_text_ui_style(f"{100 - self._free_space:.0f}%", dx3, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
+      draw_text_ui_style("DISK", dx3, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
+      draw_text_ui_style(f"{100 - self._free_space:.0f}%", dx3, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
     else:
-      self._draw_text_ui_style("VOLT", dx3, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
-      self._draw_text_ui_style(f"{self._voltage:.1f}V", dx3, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
+      draw_text_ui_style("VOLT", dx3, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
+      draw_text_ui_style(f"{self._voltage:.1f}V", dx3, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
 
   def _draw_set_speed_carrot(self, rect: rl.Rectangle) -> None:
     self._blink_timer = (self._blink_timer + 1) % 16
