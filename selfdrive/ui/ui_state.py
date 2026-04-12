@@ -88,6 +88,9 @@ class UIState:
     self._offroad_transition_callbacks: list[Callable[[], None]] = []
     self._engaged_transition_callbacks: list[Callable[[], None]] = []
 
+    # Brightness and UI options
+    self.show_brightness_ratio: float = 1.0
+
     self.update_params()
 
   def add_offroad_transition_callback(self, callback: Callable[[], None]):
@@ -189,6 +192,7 @@ class UIState:
     self.show_debug_ui = self.params.get_int("ShowDebugUI")
     self.show_date_time = self.params.get_int("ShowDateTime")
     self.show_radar_info = self.params.get_int("ShowRadarInfo")
+    self.show_brightness_ratio: float = self.params.get_int("ShowCustomBrightness") / 100.0
 
     self._param_update_time = time.monotonic()
 
@@ -206,6 +210,8 @@ class Device:
     self._last_brightness: int = 0
     self._brightness_filter = FirstOrderFilter(BACKLIGHT_OFFROAD, 10.00, 1 / gui_app.target_fps)
     self._brightness_thread: threading.Thread | None = None
+    self._brightness_timer: int = 0
+    self._BRIGHTNESS_DELAY: int = 200
 
   @property
   def awake(self) -> bool:
@@ -256,6 +262,9 @@ class Device:
         clipped_brightness = ((clipped_brightness + 16.0) / 116.0) ** 3.0
 
       clipped_brightness = float(np.interp(clipped_brightness, [0, 1], [30, 100]))
+    else:
+        # offroad 또는 센서 없음: 타이머 리셋
+        self._brightness_timer = 0
 
     brightness = round(self._brightness_filter.update(clipped_brightness))
     if not self._awake:
@@ -274,6 +283,8 @@ class Device:
 
     if ignition_just_turned_off or any(ev.left_down for ev in gui_app.mouse_events):
       self._reset_interactive_timeout()
+      self._brightness_timer = 0      # ← 추가: 터치 시 타이머 리셋 (밝기 복구)
+
 
     interaction_timeout = time.monotonic() > self._interaction_time
     if interaction_timeout and not self._prev_timed_out:

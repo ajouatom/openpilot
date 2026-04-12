@@ -127,7 +127,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"UpdaterTargetBranch", {CLEAR_ON_MANAGER_START, STRING}},
     {"UpdaterLastFetchTime", {PERSISTENT, TIME}},
     {"UptimeOffroad", {PERSISTENT, FLOAT, "0.0"}},
-    {"UptimeOnroad", {PERSISTENT, FLOAT, "0.0"}},
+    {"UptimeOnroad", {PERSISTENT, FLOAT, "0.0"}},C
     {"Version", {PERSISTENT, STRING}},
 
     // carrot
@@ -155,6 +155,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"ShowDateTime", {PERSISTENT, INT, "1"}},
     {"ShowRadarInfo", {PERSISTENT, INT, "1"}},
     {"ShowPlotMode", {PERSISTENT, INT, "0"}},
+    {"ShowCustomBrightness", {PERSISTENT, INT, "100"}},
     {"RecordRoadCam", {PERSISTENT, INT, "0"}},
     {"HDPuse", {PERSISTENT, INT, "0"}},
 

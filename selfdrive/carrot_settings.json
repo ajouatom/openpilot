@@ -2112,6 +2112,22 @@
       "cgroup": "速度控制",
       "ctitle": "导航限速比例 (105)%",
       "cdescr": "在限速摄像头处将速度降至 道路限速 * 设定值"
+    },
+    {
+      "group": "화면",
+      "egroup": "DISPLAY",
+      "cgroup": "显示",
+      "name": "ShowCustomBrightness",
+      "title": "주행중 화면밝기(100%)",
+      "descr": "주행 시작 약 10초 후 화면밝기 비율\n100: 항상 밝음\n30: 30%로 어두워짐\n0: 화면 꺼짐",
+      "etitle": "Onroad Screen Brightness(100%)",
+      "edescr": "Screen brightness ratio ~10s after driving starts\n100: Always bright\n30: Dim to 30%\n0: Off",
+      "ctitle": "行车中屏幕亮度(100%)",
+      "cdescr": "行车开始约10秒后的屏幕亮度比例\n100: 始终明亮\n30: 降至30%\n0: 关闭屏幕",
+      "min": 0,
+      "max": 100,
+      "default": 100,
+      "unit": 5
     }
   ]
 }
