@@ -9,6 +9,7 @@ from openpilot.selfdrive.locationd.calibrationd import HEIGHT_INIT
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.selfdrive.ui.mici.onroad import blend_colors
 from openpilot.system.ui.lib.application import gui_app, FontWeight
+from openpilot.system.ui.lib.text_draw import draw_text_ui_style
 from openpilot.system.ui.lib.shader_polygon import draw_polygon, Gradient
 from openpilot.system.ui.widgets import Widget
 from typing import Optional, Any
@@ -586,34 +587,6 @@ class ModelRenderer(Widget):
       int(inv_t * start.a + t * end.a)
     ) for start, end in zip(begin_colors, end_colors, strict=True)]
 
-  def _draw_text_with_outline(self, text, pos, font_size,
-                              text_color,
-                              outline_color=rl.BLACK,
-                              thickness=2):
-    x, y = pos.x, pos.y
-    for dx in range(-thickness, thickness + 1):
-      for dy in range(-thickness, thickness + 1):
-        if dx == 0 and dy == 0:
-          continue
-        rl.draw_text_ex(
-          self._font_display,
-          text,
-          rl.Vector2(x + dx, y + dy),
-          font_size,
-          0,
-          outline_color
-        )
-
-    # main text
-    rl.draw_text_ex(
-      self._font_display,
-      text,
-      rl.Vector2(x, y),
-      font_size,
-      0,
-      text_color
-    )
-    
   def _get_radar_info_color(self, lead, v_sum: float):
     radar = bool(getattr(lead, "radar", False))
     model_prob = float(getattr(lead, "modelProb", 0.0))
@@ -724,13 +697,7 @@ class ModelRenderer(Widget):
 
       if item.is_star:
         tw = rl.measure_text(item.text, font_size)
-        rl.draw_text(
-          item.text,
-          int(item.x - tw / 2),
-          int(item.y - font_size / 2),
-          font_size,
-          item.color,
-        )
+        draw_text_ui_style(item.text, item.x, item.y, font_size, item.color, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="center", y_offset=0.0)
         continue
 
       # 박스
@@ -754,7 +721,7 @@ class ModelRenderer(Widget):
       #  rl.WHITE,
       #)
 
-      self._draw_text_with_outline(item.text, rl.Vector2(tx, ty), font_size, rl.WHITE, rl.BLACK, thickness=1)
+      draw_text_ui_style(item.text, tx, ty, font_size, rl.WHITE, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
 
 
 

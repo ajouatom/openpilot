@@ -7,7 +7,7 @@ from tinygrad.tensor import _to_np_dtype
 from tinygrad.engine.realize import Runner, get_program
 from tinygrad.dtype import DType
 from tinygrad.nn.state import get_parameters
-from tinygrad.helpers import T, CI
+from tinygrad.helpers import T, CI, Target
 from tinygrad.renderer import Renderer
 from tinygrad.codegen import full_rewrite_to_sink, line_rewrite, pm_linearize_cleanups
 from tinygrad.codegen.late.linearizer import linearize
@@ -18,7 +18,7 @@ from tinygrad.runtime.ops_python import PythonProgram, PythonRenderer, PythonCom
 
 def get_uops(sink:UOp, ren:Renderer|None=None) -> list[UOp]:
   """Extract linearized UOps from a sink. Test helper that only does linearization (no render)."""
-  if ren is None: ren = Renderer()
+  if ren is None: ren = Renderer(Target())
   if sink.arg is None: sink = sink.replace(arg=KernelInfo())
   full_sink = full_rewrite_to_sink(sink, ren, optimize=sink.tag is None)
   return line_rewrite(linearize(full_sink), pm_linearize_cleanups)
@@ -39,16 +39,20 @@ def assert_jit_cache_len(fxn, expected_len):
     assert len(fxn.jit_cache) == 1, len(fxn.jit_cache)
     # until we have a better way of typing the prg in ExecItem
     assert type(fxn.jit_cache[0].prg).__name__.endswith('Graph')
-    assert len(fxn.jit_cache[0].prg.jit_cache) == expected_len
+    assert len(fxn.jit_cache[0].prg.jit_cache) == expected_len, f"expected {expected_len}, got {len(fxn.jit_cache[0].prg.jit_cache)}"
 
-def rand_for_dtype(dt:DType, size:int):
+def rand_for_dtype(dt:DType, size:int, allow_subnormal=True):
   if dtypes.is_unsigned(dt):
     return np.random.randint(0, 100, size=size, dtype=_to_np_dtype(dt))
   elif dtypes.is_int(dt):
     return np.random.randint(-100, 100, size=size, dtype=_to_np_dtype(dt))
   elif dt == dtypes.bool:
     return np.random.choice([True, False], size=size)
-  return np.random.uniform(-10, 10, size=size).astype(_to_np_dtype(dt))
+  ret = np.random.uniform(-10, 10, size=size).astype(_to_np_dtype(dt))
+  if not allow_subnormal:
+    min_normal = 2.0 ** (2 - (1 << (dtypes.finfo(dt)[0] - 1)))
+    ret = np.where(np.abs(ret) < min_normal, 0, ret)
+  return ret
 
 def timeit(fxn:Callable[..., T], *args, **kwargs) -> tuple[T, float]:
   st = time.perf_counter_ns()
@@ -62,10 +66,17 @@ def eval_uop(uop:UOp, inputs:list[tuple[DType, list[Any]]]|None=None):
     bufs.append(buf:=allocator.alloc(len(data) * buf_dt.itemsize))
     allocator._copyin(buf, memoryview(struct.pack(str(len(data)) + (buf_dt.fmt or ""), *data)))
   g = UOp(Ops.PARAM, uop.dtype.ptr(), arg=0, src=())
-  prg = get_program(UOp.store(g.index(UOp.const(dtypes.int, 0)), uop).sink(), PythonRenderer())
+  prg = get_program(UOp.store(g.index(UOp.const(dtypes.int, 0)), uop).sink(arg=KernelInfo()), PythonRenderer(Target("PYTHON")))
   prog = PythonProgram("run", PythonCompiler().compile(prg.src))
   prog(out_buf:=allocator.alloc(uop.dtype.itemsize), *bufs)
   return out_buf.cast(uop.dtype.fmt or "").tolist()[0]
+
+def to_uops_list(u:list[UOp], ren=None) -> list[UOp]:
+  sink = UOp.group(*u)
+  for r in sink.ranges: sink = sink.end(r)
+  ret = get_uops(sink.sink(arg=KernelInfo(opts_to_apply=())), ren)
+  assert ret[-1].op is Ops.SINK
+  return ret
 
 def not_support_multi_device():
   # CL and CUDA don't support multi device if in CI

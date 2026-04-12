@@ -9,6 +9,7 @@ from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.lib.text_measure import measure_text_cached
+from openpilot.system.ui.lib.text_draw import draw_text_ui_style
 from openpilot.system.ui.widgets import Widget
 from openpilot.common.filter_simple import FirstOrderFilter
 from cereal import log
@@ -192,37 +193,9 @@ class HudRenderer(Widget):
     self._wheel_y_filter = FirstOrderFilter(0, 0.1, 1 / gui_app.target_fps)
 
     self._set_speed_alpha_filter = FirstOrderFilter(0.0, 0.1, 1 / gui_app.target_fps)
-    
+
     self._set_speed_override = SetSpeedOverride()
     self._debug_traffic_light = False
-
-  def _draw_text_with_outline(self, text, pos, font_size,
-                              text_color,
-                              outline_color=rl.BLACK,
-                              thickness=2):
-    x, y = pos.x, pos.y
-    for dx in range(-thickness, thickness + 1):
-      for dy in range(-thickness, thickness + 1):
-        if dx == 0 and dy == 0:
-          continue
-        rl.draw_text_ex(
-          self._font_display,
-          text,
-          rl.Vector2(x + dx, y + dy),
-          font_size,
-          0,
-          outline_color
-        )
-
-    # main text
-    rl.draw_text_ex(
-      self._font_display,
-      text,
-      rl.Vector2(x, y),
-      font_size,
-      0,
-      text_color
-    )
 
   def set_wheel_critical_icon(self, critical: bool):
     """Set the wheel icon to critical or normal state."""
@@ -250,7 +223,7 @@ class HudRenderer(Widget):
 
     v_cruise_cluster = car_state.vCruiseCluster
     set_speed = (
-      controls_state.vCruiseDEPRECATED if v_cruise_cluster == 0.0 else v_cruise_cluster
+      controls_state.deprecated.vCruise if v_cruise_cluster == 0.0 else v_cruise_cluster
     )
     engaged = sm['selfdriveState'].enabled
     if (set_speed != self.set_speed and engaged) or (engaged and not self._engaged):
@@ -385,23 +358,9 @@ class HudRenderer(Widget):
         date_x = time_x + (block_w - date_size.x) / 2
         draw_time_x = time_x + (block_w - time_size.x) / 2
 
-        self._draw_text_with_outline(
-          date_text,
-          rl.Vector2(date_x, date_y),
-          dt_font,
-          rl.Color(255, 255, 255, 220),
-          rl.BLACK,
-          thickness=1
-        )
+        draw_text_ui_style(date_text, date_x, date_y, dt_font, rl.Color(255, 255, 255, 220), font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
 
-        self._draw_text_with_outline(
-          time_text,
-          rl.Vector2(draw_time_x, time_y),
-          dt_font,
-          rl.Color(255, 255, 255, 230),
-          rl.BLACK,
-          thickness=1
-        )
+        draw_text_ui_style(time_text, draw_time_x, time_y, dt_font, rl.Color(255, 255, 255, 230), font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
 
         time_block_right = time_x + block_w
 
@@ -411,14 +370,7 @@ class HudRenderer(Widget):
         time_size = measure_text_cached(self._font_semi_bold, time_text, text_font)
         time_y = pos_y - time_size.y / 2
 
-        self._draw_text_with_outline(
-          time_text,
-          rl.Vector2(time_x, time_y),
-          text_font,
-          rl.Color(255, 255, 255, 230),
-          rl.BLACK,
-          thickness=1
-        )
+        draw_text_ui_style(time_text, time_x, time_y, text_font, rl.Color(255, 255, 255, 230), font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
 
         time_block_right = time_x + time_size.x
 
@@ -428,14 +380,7 @@ class HudRenderer(Widget):
         date_size = measure_text_cached(self._font_medium, date_text, text_font)
         date_y = pos_y - date_size.y / 2
 
-        self._draw_text_with_outline(
-          date_text,
-          rl.Vector2(time_x, date_y),
-          text_font,
-          rl.Color(255, 255, 255, 220),
-          rl.BLACK,
-          thickness=1
-        )
+        draw_text_ui_style(date_text, time_x, date_y, text_font, rl.Color(255, 255, 255, 220), font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
 
         time_block_right = time_x + date_size.x
 
@@ -487,33 +432,12 @@ class HudRenderer(Widget):
     sr_y = cpu_y + cpu_size.y + line_gap
     road_y = sr_y + sr_size.y + line_gap
 
-    self._draw_text_with_outline(
-      cpu_text,
-      rl.Vector2(info_x, cpu_y),
-      side_font,
-      rl.Color(255, 255, 255, 210),
-      rl.BLACK,
-      thickness=1
-    )
+    draw_text_ui_style(cpu_text, info_x, cpu_y, side_font, rl.Color(255, 255, 255, 210), font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
 
-    self._draw_text_with_outline(
-      sr_text,
-      rl.Vector2(info_x, sr_y),
-      side_font,
-      rl.Color(255, 255, 255, 210),
-      rl.BLACK,
-      thickness=1
-    )
+    draw_text_ui_style(sr_text, info_x, sr_y, side_font, rl.Color(255, 255, 255, 210), font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
 
     if road_name:
-      self._draw_text_with_outline(
-        road_name,
-        rl.Vector2(info_x, road_y),
-        side_font,
-        rl.Color(255, 255, 255, 210),
-        rl.BLACK,
-        thickness=1
-      )
+      draw_text_ui_style(road_name, info_x, road_y, side_font, rl.Color(255, 255, 255, 210), font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
 
 
   def _get_gear_text(self) -> str:
@@ -612,8 +536,8 @@ class HudRenderer(Widget):
 
     cur_y = int(panel_y + panel_h * 0.48 - cur_size.y * 0.5) - 2
 
-    self._draw_text_with_outline(cur_text, rl.Vector2(cur_x, cur_y), cur_font, rl.WHITE, rl.BLACK, thickness=2)
-    
+    draw_text_ui_style(cur_text, cur_x, cur_y, cur_font, rl.WHITE, font=self._font_display, border_width=2.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
+
     mode_text, mode_color = self._get_driving_mode_text_and_color()
     if self._debug_speed_panel:
       mode_text = "safe"
@@ -626,8 +550,8 @@ class HudRenderer(Widget):
       mode_x = panel_x + 5
       mode_y = int(panel_y + panel_h * 0.05 - mode_size.y * 0.5 - 15)
 
-      self._draw_text_with_outline(mode_text, rl.Vector2(mode_x, mode_y), mode_font, mode_color, rl.BLACK, thickness=1)
-  
+      draw_text_ui_style(mode_text, mode_x, mode_y, mode_font, mode_color, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
+
     # ----- set speed (center, smaller) -----
     show_set = self._engaged and self.is_cruise_set
     if True: #show_set or self._debug_speed_panel:
@@ -648,7 +572,7 @@ class HudRenderer(Widget):
       set_size = measure_text_cached(self._font_display, set_text, set_font)
       set_x = int(panel_x + panel_w * 0.76 - set_size.x * 0.5)
       set_y = int(panel_y + panel_h * 0.33 - set_size.y * 0.5)
-      self._draw_text_with_outline(set_text, rl.Vector2(set_x, set_y), set_font, set_color, rl.BLACK, thickness=1)
+      draw_text_ui_style(set_text, set_x, set_y, set_font, set_color, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
       if ov.active:
         set_speed = ov.speed_kph
         if not ui_state.is_metric:
@@ -672,12 +596,12 @@ class HudRenderer(Widget):
         set_size = measure_text_cached(self._font_display, set_text, set_font)
         set_x = int(panel_x + panel_w * 0.90 - set_size.x * 0.5 + 50)
         set_y = int(panel_y + panel_h * 0.25 - set_size.y * 0.5)
-        self._draw_text_with_outline(set_text, rl.Vector2(set_x, set_y), set_font, set_color, rl.BLACK, thickness=1)
+        draw_text_ui_style(set_text, set_x, set_y, set_font, set_color, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
         set_font = 30
         set_size = measure_text_cached(self._font_display, set_label_text, set_font)
         set_x = int(panel_x + panel_w * 0.90 - set_size.x * 0.5 + 50)
         set_y = int(panel_y + panel_h * 0.10 - set_size.y * 0.5 - 20)
-        self._draw_text_with_outline(set_label_text, rl.Vector2(set_x, set_y), set_font, set_color, rl.BLACK, thickness=1)
+        draw_text_ui_style(set_label_text, set_x, set_y, set_font, set_color, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
 
     # ----- cruise gap (small circle + number, bottom-mid-right) -----
     gap = self._get_cruise_gap()
@@ -688,15 +612,15 @@ class HudRenderer(Widget):
     gap_text = str(gap)
     gap_font = 28
     gap_size = measure_text_cached(self._font_semi_bold, gap_text, gap_font)
-    self._draw_text_with_outline(gap_text, rl.Vector2(gap_center_x - gap_size.x * 0.5, gap_center_y - gap_size.y * 0.5), gap_font, rl.WHITE, rl.BLACK, thickness=1)
-    
+    draw_text_ui_style(gap_text, gap_center_x, gap_center_y, gap_font, rl.WHITE, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="center", y_offset=0.0)
+
     # active carrot
     sm = ui_state.sm
     active_carrot = sm['carrotMan'].activeCarrot
     if active_carrot >= 2:
       x = int(panel_x + panel_w * 0.60)
       y = int(panel_y + panel_h * 0.82)
-      self._draw_text_with_outline("NAV", rl.Vector2(x, y), 26, rl.GREEN, rl.BLACK, thickness=1)
+      draw_text_ui_style("NAV", x, y, 26, rl.GREEN, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
 
 
     # ----- gear (right side box with letter) -----
@@ -724,7 +648,7 @@ class HudRenderer(Widget):
     if self._debug_speed_panel:
       active_lane_line = True
     else:
-      active_lane_line = bool(ui_state.sm['controlsState'].activeLaneLine)      
+      active_lane_line = bool(ui_state.sm['controlsState'].activeLaneLine)
 
     line1 = "lane"
     line2 = "mode" if active_lane_line else "less"
@@ -740,8 +664,8 @@ class HudRenderer(Widget):
     s1 = measure_text_cached(self._font_semi_bold, line1, lane_font)
     s2 = measure_text_cached(self._font_semi_bold, line2, lane_font)
 
-    self._draw_text_with_outline(line1, rl.Vector2(lane_x - s1.x, lane_y1), lane_font, lane_color, rl.BLACK, thickness=1)
-    self._draw_text_with_outline(line2, rl.Vector2(lane_x - s2.x, lane_y2), lane_font, lane_color, rl.BLACK, thickness=1)
+    draw_text_ui_style(line1, lane_x - s1.x, lane_y1, lane_font, lane_color, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
+    draw_text_ui_style(line2, lane_x - s2.x, lane_y2, lane_font, lane_color, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
 
   def _get_driving_mode_text_and_color(self) -> tuple[str, rl.Color]:
     carState = ui_state.sm["carState"]
@@ -751,7 +675,7 @@ class HudRenderer(Widget):
       return tr("soft hold"), rl.Color(255, 165, 0, 230)
     elif carState.carrotCruise:
       return tr("carrot"), rl.Color(0, 255, 0, 230)
-    
+
     try:
       mode_val = int(ui_state.sm["longitudinalPlan"].myDrivingMode)
     except Exception:
@@ -847,15 +771,8 @@ class HudRenderer(Widget):
 
     font_size = int(size * 2.0)
     text_size = measure_text_cached(self._font_display, txt, font_size)
-    self._draw_text_with_outline(
-      txt,
-      rl.Vector2(cx - text_size.x * 0.5, cy - text_size.y * 0.5),
-      font_size,
-      color,
-      rl.BLACK,
-      thickness=1
-    )
-  
+    draw_text_ui_style(txt, cx, cy, font_size, color, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="center", y_offset=0.0)
+
   def _draw_traffic_light_info(self, pos_x: int, pos_y: int) -> bool:
     info = self._get_traffic_light_info()
     if not info:
@@ -878,14 +795,7 @@ class HudRenderer(Widget):
     text_x = lamp_cx + lamp_size + gap
     text_y = int(pos_y - remain_size.y / 2)
 
-    self._draw_text_with_outline(
-      remain,
-      rl.Vector2(text_x, text_y),
-      remain_font,
-      rl.Color(255, 255, 255, 235),
-      rl.BLACK,
-      thickness=1
-    )
+    draw_text_ui_style(remain, text_x, text_y, remain_font, rl.Color(255, 255, 255, 235), font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
 
     return True
 
