@@ -1,5 +1,5 @@
 import functools, struct
-from tinygrad.device import  Compiled, Allocator, Compiler, BufferSpec, CompilerSet, CompilerPair
+from tinygrad.device import Compiled, Allocator, BufferSpec
 from tinygrad.renderer.wgsl import WGSLRenderer
 from tinygrad.helpers import round_up, suppress_finalizing
 from tinygrad.runtime.autogen import webgpu
@@ -90,7 +90,7 @@ class WebGPUProgram:
 
     self.name, self.lib, self.prg = name, lib, shader_module
   def __call__(self, *bufs:WGPUBufPtr, global_size:tuple[int,int,int]=(1,1,1), local_size:tuple[int,int,int]=(1,1,1),
-               vals:tuple[int, ...]=(), wait=False) -> float|None:
+               vals:tuple[int, ...]=(), wait=False, **kw) -> float|None:
     wait = wait and self.timestamp_supported
     tmp_bufs = [*bufs]
     buf_patch = False
@@ -217,7 +217,7 @@ class WebGpuDevice(Compiled):
     self.device_res = _run(webgpu.wgpuAdapterRequestDeviceF, webgpu.WGPURequestDeviceCallbackInfo, webgpu.WGPURequestDeviceCallback,
       webgpu.WGPURequestDeviceStatus, 1, 2, adapter_res, dev_desc)
 
-    super().__init__(device, WebGpuAllocator(self), CompilerSet([CompilerPair(WGSLRenderer, Compiler)]),
+    super().__init__(device, WebGpuAllocator(self), [WGSLRenderer],
       functools.partial(WebGPUProgram, (self.device_res, webgpu.WGPUFeatureName_TimestampQuery in supported)))
 
   def synchronize(self):
