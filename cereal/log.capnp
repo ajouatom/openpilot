@@ -1263,6 +1263,7 @@ struct UiPlan {
 
 struct LateralPlan @0xe1e9318e2ae8b51e {
   modelMonoTime @31 :UInt64;
+  laneWidth @0 :Float32;
   dPathPoints @20 :List(Float32);
 
   mpcSolutionValid @9 :Bool;
@@ -1291,7 +1292,6 @@ struct LateralPlan @0xe1e9318e2ae8b51e {
   }
 
   deprecated :group {
-    laneWidth @0 :Float32;
     lProb @5 :Float32;
     rProb @7 :Float32;
     dProb @21 :Float32;
