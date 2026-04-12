@@ -57,6 +57,7 @@ class UIState:
         "liveParameters",
         "rawAudioData",
         "carrotMan",
+        "peripheralState",
       ]
     )
 
