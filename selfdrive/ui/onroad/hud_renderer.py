@@ -807,7 +807,7 @@ class HudRenderer(Widget):
     )
 
   def _draw_carrot_main_background(self, bx: int, by: int):
-    show_device_state = ui_state.params.get_int("ShowDeviceState")
+    show_device_state = True #ui_state.params.get_int("ShowDeviceState")
 
     x_spd_limit, x_sign_type, _ = self._get_speed_limit_info()
     cam_detected = x_spd_limit > 0 and x_sign_type not in (22, 4)
@@ -838,7 +838,7 @@ class HudRenderer(Widget):
       )
 
   def _draw_carrot_device_state(self, bx: int, by: int):
-    show_device_state = ui_state.params.get_int("ShowDeviceState")
+    show_device_state = True #ui_state.params.get_int("ShowDeviceState")
     if show_device_state <= 0:
       return
 
