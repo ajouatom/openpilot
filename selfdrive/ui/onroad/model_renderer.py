@@ -554,6 +554,94 @@ class ModelRenderer(Widget):
     )
 
 
+  def _polygon_signed_area_carrot(self, pts: np.ndarray) -> float:
+    if pts.shape[0] < 3:
+      return 0.0
+    x = pts[:, 0]
+    y = pts[:, 1]
+    return 0.5 * float(np.sum(x * np.roll(y, -1) - np.roll(x, -1) * y))
+
+
+  def _is_point_in_triangle_carrot(self, p, a, b, c) -> bool:
+    px, py = float(p[0]), float(p[1])
+    ax, ay = float(a[0]), float(a[1])
+    bx, by = float(b[0]), float(b[1])
+    cx, cy = float(c[0]), float(c[1])
+
+    v0x, v0y = cx - ax, cy - ay
+    v1x, v1y = bx - ax, by - ay
+    v2x, v2y = px - ax, py - ay
+
+    dot00 = v0x * v0x + v0y * v0y
+    dot01 = v0x * v1x + v0y * v1y
+    dot02 = v0x * v2x + v0y * v2y
+    dot11 = v1x * v1x + v1y * v1y
+    dot12 = v1x * v2x + v1y * v2y
+
+    denom = dot00 * dot11 - dot01 * dot01
+    if abs(denom) < 1e-9:
+      return False
+
+    inv = 1.0 / denom
+    u = (dot11 * dot02 - dot01 * dot12) * inv
+    v = (dot00 * dot12 - dot01 * dot02) * inv
+    return u >= -1e-6 and v >= -1e-6 and (u + v) <= 1.0 + 1e-6
+
+
+  def _triangulate_polygon_carrot(self, pts: np.ndarray):
+    n = pts.shape[0]
+    if n < 3:
+      return []
+    if n == 3:
+      return [(pts[0], pts[1], pts[2])]
+
+    work = pts.copy()
+    if self._polygon_signed_area_carrot(work) < 0.0:
+      work = work[::-1].copy()
+
+    indices = list(range(len(work)))
+    tris = []
+    guard = 0
+    while len(indices) > 3 and guard < 512:
+      guard += 1
+      ear_found = False
+      m = len(indices)
+      for k in range(m):
+        i0 = indices[(k - 1) % m]
+        i1 = indices[k]
+        i2 = indices[(k + 1) % m]
+        a = work[i0]
+        b = work[i1]
+        c = work[i2]
+
+        cross = (float(b[0] - a[0]) * float(c[1] - a[1]) -
+                 float(b[1] - a[1]) * float(c[0] - a[0]))
+        if cross <= 1e-6:
+          continue
+
+        inside = False
+        for j in indices:
+          if j in (i0, i1, i2):
+            continue
+          if self._is_point_in_triangle_carrot(work[j], a, b, c):
+            inside = True
+            break
+        if inside:
+          continue
+
+        tris.append((a.copy(), b.copy(), c.copy()))
+        del indices[k]
+        ear_found = True
+        break
+
+      if not ear_found:
+        return []
+
+    if len(indices) == 3:
+      tris.append((work[indices[0]].copy(), work[indices[1]].copy(), work[indices[2]].copy()))
+    return tris
+
+
   def _draw_polygon_from_xy_carrot(self, xs, ys, fill_color: rl.Color, brake_valid: bool, color_idx: int):
     pts = np.array(list(zip(xs, ys)), dtype=np.float32)
 
@@ -573,7 +661,19 @@ class ModelRenderer(Widget):
     if pts.shape[0] < 3:
       return
 
-    draw_polygon(self._rect, pts, fill_color)
+    # shader_polygon.draw_polygon은 일부 concave/복잡한 도형에서 채움이 깨질 수 있어서
+    # carrot path용은 ear clipping으로 삼각형 분할 후 직접 채움
+    tris = self._triangulate_polygon_carrot(pts)
+    if tris:
+      for a, b, c in tris:
+        rl.draw_triangle(
+          rl.Vector2(float(a[0]), float(a[1])),
+          rl.Vector2(float(b[0]), float(b[1])),
+          rl.Vector2(float(c[0]), float(c[1])),
+          fill_color,
+        )
+    else:
+      draw_polygon(self._rect, pts, fill_color)
 
     if color_idx >= 10 or brake_valid:
       self._draw_polygon_outline_carrot(
@@ -1053,6 +1153,10 @@ class ModelRenderer(Widget):
       n = int(np.clip(v_ego_kph * 0.058 - 0.5, 0, 7))
       add_time_points(n, 3.0)
 
+    def dist_function(t: float, max_distance: float) -> float:
+      dist = 3.0 * pow(1.2, t)
+      return max_distance if dist >= max_distance else dist
+
     draw_t_idx = int(np.argmin(draw_t))
     exit_flag = False
     i = 0
@@ -1063,28 +1167,30 @@ class ModelRenderer(Widget):
         i += 1
         continue
 
-      dist = min(max_dist, 3.0 * pow(1.2, t))
+      dist = dist_function(t, max_dist)
       if dist == max_dist:
         exit_flag = True
 
-      z_off = self._carrot_interp(dist, [0.0, 100.0], [z_off_start, z_off_end])
-      y_off = self._carrot_interp(z_off, [-3.0, 0.0, 3.0], [1.5, 0.5, 1.5]) * width_apply
+      for j in range(2, -1, -1):
+        dist_j = dist_function(100.0, max_dist) if exit_flag else dist_function(t - j * 1.0, max_dist)
+        z_off = self._carrot_interp(dist_j, [0.0, 100.0], [z_off_start, z_off_end])
+        y_off = self._carrot_interp(z_off, [-3.0, 0.0, 3.0], [1.5, 0.5, 1.5]) * width_apply
 
-      idx = self._carrot_interp(dist, line_x, idxs)
-      if idx >= line_x.shape[0]:
-        idx = line_x.shape[0] - 1
+        idx = self._carrot_interp(dist_j, line_x, idxs)
+        if idx >= line_x.shape[0]:
+          break
 
-      line_y1 = self._carrot_interp(idx, idxs, line_y)
-      line_z1 = self._carrot_interp(idx, idxs, line_z)
+        line_y1 = self._carrot_interp(idx, idxs, line_y)
+        line_z1 = self._carrot_interp(idx, idxs, line_z)
 
-      left = self._map_to_screen(dist, line_y1 - y_off, line_z1 + z_off)
-      right = self._map_to_screen(dist, line_y1 + y_off, line_z1 + z_off)
-      if left is not None and right is not None:
-        if not allow_invert and len(left_points) > 0 and left[1] > left_points[-1][1]:
-          i += 1
-          continue
-        left_points.append(left)
-        right_points.insert(0, right)
+        left = self._map_to_screen(dist_j, line_y1 - y_off, line_z1 + z_off)
+        right = self._map_to_screen(dist_j, line_y1 + y_off, line_z1 + z_off)
+        if left is not None and right is not None:
+          left_points.append(left)
+          right_points.insert(0, right)
+
+        if exit_flag:
+          break
 
       i += 1
 
@@ -1112,10 +1218,7 @@ class ModelRenderer(Widget):
       return False
 
     max_distance = np.clip(model_position[-1, 0], MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE)
-    if max_distance > 6.0:
-      max_distance -= 1.0
-    if max_distance < 2.0:
-      max_distance = 2.0
+    max_distance -= 2.0
 
     max_idx = self._get_path_length_idx(model_position[:, 0], max_distance)
     self._carrot_long_active = sm['selfdriveState'].enabled
@@ -1157,7 +1260,7 @@ class ModelRenderer(Widget):
     elif mode == 15:
       gc = g
 
-    glen = track_vertices_len // 2 - 2
+    glen = track_vertices_len // 2 - 1
     if glen <= 0:
       return
 
@@ -1202,7 +1305,7 @@ class ModelRenderer(Widget):
       return
 
     color_n = 0
-    for i in range(0, track_vertices_len // 2 - 3, 3):
+    for i in range(0, track_vertices_len // 2 - 1, 3):
       e = track_vertices_len - i - 1
       x = [0.0] * 6
       y = [0.0] * 6
@@ -1224,7 +1327,7 @@ class ModelRenderer(Widget):
     track_vertices_len = len(track_vertices)
 
     color_n = 0
-    for i in range(0, track_vertices_len // 2 - 5, 2):
+    for i in range(0, track_vertices_len // 2 - 4, 2):
       x = [0.0] * 4
       y = [0.0] * 4
       x[0] = float(track_vertices[i][0]); y[0] = float(track_vertices[i][1])
@@ -1256,7 +1359,7 @@ class ModelRenderer(Widget):
     track_vertices_len = len(track_vertices)
 
     color_n = 0
-    for i in range(0, track_vertices_len // 2 - 6, 2):
+    for i in range(0, track_vertices_len // 2 - 4, 2):
       x = [0.0] * 6
       y = [0.0] * 6
       x[0] = float(track_vertices[i][0]); y[0] = float(track_vertices[i][1])
