@@ -583,7 +583,7 @@ class HudRenderer(Widget):
       cruise_text = "--"
 
     self._draw_text_ui_style(
-      cruise_text, bx + 170, by + 15 + 2, 60, rl.GREEN,
+      cruise_text, bx + 170, by + 15 + 5, 60, rl.GREEN,
       font=self._font_display,
       border_width=1.0,
       shadow_offset=5.0,
@@ -609,7 +609,7 @@ class HudRenderer(Widget):
         ov_label = "vturn"
 
       self._draw_text_ui_style(
-        ov_text, bx + 250, by - 50 + 2, 50, ov_color,
+        ov_text, bx + 250, by - 50 + 5, 50, ov_color,
         font=self._font_display,
         border_width=1.0,
         shadow_offset=5.0,
@@ -703,7 +703,7 @@ class HudRenderer(Widget):
     )
 
     self._draw_text_ui_style(
-      gear, gx, gy, 70 + 2, rl.WHITE,
+      gear, gx, gy + 5, 70, rl.WHITE,
       font=self._font_display,
       border_width=0.0,
       shadow_offset=0.0,
