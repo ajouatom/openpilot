@@ -60,7 +60,10 @@ function install_ubuntu_deps() {
     libcurl4-openssl-dev \
     locales \
     git \
-    xvfb
+    xvfb \
+    clang \
+    libusb-1.0-0-dev
+
 
   if [[ -d "/etc/udev/rules.d/" ]]; then
     # Setup jungle udev rules
