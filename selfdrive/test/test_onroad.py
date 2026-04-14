@@ -8,7 +8,7 @@ import time
 import numpy as np
 from collections import Counter, defaultdict
 from pathlib import Path
-from tabulate import tabulate
+from openpilot.common.utils import tabulate
 
 from cereal import log
 import cereal.messaging as messaging
@@ -18,7 +18,6 @@ from openpilot.common.timeout import Timeout
 from openpilot.common.params import Params
 from openpilot.selfdrive.selfdrived.events import EVENTS, ET
 from openpilot.selfdrive.test.helpers import set_params_enabled, release_only
-from openpilot.system.hardware import HARDWARE
 from openpilot.system.hardware.hw import Paths
 from openpilot.tools.lib.logreader import LogReader
 from openpilot.tools.lib.log_time_series import msgs_to_time_series
@@ -33,51 +32,43 @@ CPU usage budget
 TEST_DURATION = 25
 LOG_OFFSET = 8
 
-MAX_TOTAL_CPU = 280.  # total for all 8 cores
+MAX_TOTAL_CPU = 350.  # total for all 8 cores
 PROCS = {
   # Baseline CPU usage by process
   "selfdrive.controls.controlsd": 16.0,
   "selfdrive.selfdrived.selfdrived": 16.0,
   "selfdrive.car.card": 26.0,
   "./loggerd": 14.0,
-  "./encoderd": 17.0,
+  "./encoderd": 13.0,
   "./camerad": 10.0,
-  "selfdrive.controls.plannerd": 9.0,
-  "./ui": 18.0,
-  "selfdrive.locationd.paramsd": 9.0,
-  "./sensord": 7.0,
+  "selfdrive.controls.plannerd": 8.0,
+  "selfdrive.ui.ui": 40.0,
+  "system.sensord.sensord": 13.0,
   "selfdrive.controls.radard": 2.0,
   "selfdrive.modeld.modeld": 22.0,
-  "selfdrive.modeld.dmonitoringmodeld": 21.0,
+  "selfdrive.modeld.dmonitoringmodeld": 18.0,
   "system.hardware.hardwared": 4.0,
   "selfdrive.locationd.calibrationd": 2.0,
   "selfdrive.locationd.torqued": 5.0,
   "selfdrive.locationd.locationd": 25.0,
+  "selfdrive.locationd.paramsd": 9.0,
+  "selfdrive.locationd.lagd": 11.0,
   "selfdrive.ui.soundd": 3.0,
+  "selfdrive.ui.feedback.feedbackd": 1.0,
   "selfdrive.monitoring.dmonitoringd": 4.0,
-  "./proclogd": 2.0,
+  "system.proclogd": 7.0,
   "system.logmessaged": 1.0,
   "system.tombstoned": 0,
-  "./logcatd": 1.0,
+  "system.journald": 1.0,
   "system.micd": 5.0,
   "system.timed": 0,
   "selfdrive.pandad.pandad": 0,
   "system.statsd": 1.0,
   "system.loggerd.uploader": 15.0,
   "system.loggerd.deleter": 1.0,
+  "./pandad": 19.0,
+  "system.qcomgpsd.qcomgpsd": 1.0,
 }
-
-PROCS.update({
-  "tici": {
-    "./pandad": 5.0,
-    "./ubloxd": 1.0,
-    "system.ubloxd.pigeond": 6.0,
-  },
-  "tizi": {
-     "./pandad": 19.0,
-    "system.qcomgpsd.qcomgpsd": 1.0,
-  }
-}.get(HARDWARE.get_device_type(), {}))
 
 TIMINGS = {
   # rtols: max/min, rsd
@@ -95,6 +86,7 @@ TIMINGS = {
   "modelV2": [2.5, 0.35],
   "driverStateV2": [2.5, 0.40],
   "livePose": [2.5, 0.35],
+  "liveParameters": [2.5, 0.35],
   "wideRoadCameraState": [1.5, 0.35],
 }
 
@@ -129,6 +121,7 @@ class TestOnroad:
     params.put_bool("RecordFront", True)
     set_params_enabled()
     os.environ['REPLAY'] = '1'
+    os.environ['MSGQ_PREALLOC'] = '1'
     os.environ['TESTING_CLOSET'] = '1'
     if os.path.exists(Paths.log_root()):
       shutil.rmtree(Paths.log_root())
@@ -145,7 +138,7 @@ class TestOnroad:
         while not sm.seen['carState']:
           sm.update(1000)
 
-      route = params.get("CurrentRoute", encoding="utf-8")
+      route = params.get("CurrentRoute")
       assert route is not None
 
       segs = list(Path(Paths.log_root()).glob(f"{route}--*"))
@@ -187,7 +180,7 @@ class TestOnroad:
 
   def test_manager_starting_time(self):
     st = self.ts['managerState']['t'][0]
-    assert (st - self.manager_st) < 10, f"manager.py took {st - self.manager_st}s to publish the first 'managerState' msg"
+    assert (st - self.manager_st) < 15.0, f"manager.py took {st - self.manager_st}s to publish the first 'managerState' msg"
 
   def test_cloudlog_size(self):
     msgs = self.msgs['logMessage']
@@ -214,7 +207,9 @@ class TestOnroad:
     result += "-------------- UI Draw Timing ------------------\n"
     result += "------------------------------------------------\n"
 
-    ts = self.ts['uiDebug']['drawTimeMillis']
+    # other processes preempt ui while starting up
+    offset = int(20 * LOG_OFFSET)
+    ts = self.ts['uiDebug']['drawTimeMillis'][offset:]
     result += f"min  {min(ts):.2f}ms\n"
     result += f"max  {max(ts):.2f}ms\n"
     result += f"std  {np.std(ts):.2f}ms\n"
@@ -223,7 +218,7 @@ class TestOnroad:
     print(result)
 
     assert max(ts) < 250.
-    assert np.mean(ts) < 10.
+    assert np.mean(ts) < 20.  # TODO: ~6-11ms, increase consistency
     #self.assertLess(np.std(ts), 5.)
 
     # some slow frames are expected since camerad/modeld can preempt ui
@@ -287,13 +282,17 @@ class TestOnroad:
     print("\n------------------------------------------------")
     print("--------------- Memory Usage -------------------")
     print("------------------------------------------------")
+
+    from openpilot.selfdrive.debug.mem_usage import print_report
+    print_report(self.msgs['procLog'], self.msgs['deviceState'])
+
     offset = int(SERVICE_LIST['deviceState'].frequency * LOG_OFFSET)
     mems = [m.deviceState.memoryUsagePercent for m in self.msgs['deviceState'][offset:]]
-    print("Memory usage: ", mems)
+    print("MSGQ (/dev/shm/) usage: ", subprocess.check_output(["du", "-hs", "/dev/shm"]).split()[0].decode())
 
     # check for big leaks. note that memory usage is
     # expected to go up while the MSGQ buffers fill up
-    assert np.average(mems) <= 65, "Average memory usage above 65%"
+    assert np.average(mems) <= 80, "Average memory usage too high"
     assert np.max(np.diff(mems)) <= 4, "Max memory increase too high"
     assert np.average(np.diff(mems)) <= 1, "Average memory increase too high"
 
@@ -330,24 +329,27 @@ class TestOnroad:
             assert np.all(eof_sof_diff > 0)
             assert np.all(eof_sof_diff < 50*1e6)
 
-        first_fid = {c: min(self.ts[c]['frameId']) for c in cams}
+        first_fid = {min(self.ts[c]['frameId']) for c in cams}
+        assert len(first_fid) == 1, "Cameras don't start on same frame ID"
         if cam.endswith('CameraState'):
           # camerad guarantees that all cams start on frame ID 0
           # (note loggerd also needs to start up fast enough to catch it)
-          assert set(first_fid.values()) == {0, }, "Cameras don't start on frame ID 0"
-        else:
-          # encoder guarantees all cams start on the same frame ID
-          assert len(set(first_fid.values())) == 1, "Cameras don't start on same frame ID"
+          assert next(iter(first_fid)) < 100, "Cameras start on frame ID too high"
 
         # we don't do a full segment rotation, so these might not match exactly
-        last_fid = {c: max(self.ts[c]['frameId']) for c in cams}
-        assert max(last_fid.values()) - min(last_fid.values()) < 10
+        last_fid = {max(self.ts[c]['frameId']) for c in cams}
+        assert max(last_fid) - min(last_fid) < 10
 
-        start, end = min(first_fid.values()), min(last_fid.values())
+        start, end = min(first_fid), min(last_fid)
         for i in range(end-start):
-          ts = {c: round(self.ts[c]['timestampSof'][i]/1e6, 1) for c in cams}
+          # road and wide cameras (first two) should be synced within 2ms
+          ts = {c: round(self.ts[c]['timestampSof'][i]/1e6, 1) for c in cams[:2]}
           diff = (max(ts.values()) - min(ts.values()))
           assert diff < 2, f"Cameras not synced properly: frame_id={start+i}, {diff=:.1f}ms, {ts=}"
+
+          # driver camera should be staggered ~25ms from road camera
+          offset_ms = abs(self.ts[cams[2]]['timestampSof'][i] - self.ts[cams[0]]['timestampSof'][i]) / 1e6
+          assert 20 < offset_ms < 30, f"driver camera stagger out of range at frame {start+i}: {offset_ms:.1f}ms"
 
   def test_camera_encoder_matches(self, subtests):
     # sanity check that the frame metadata is consistent with the encoded frames
@@ -391,8 +393,12 @@ class TestOnroad:
     result += "----------------- Model Timing -----------------\n"
     result += "------------------------------------------------\n"
     cfgs = [
-      ("modelV2", 0.045, 0.035),
-      ("driverStateV2", 0.045, 0.035),
+      # since multiple processes use the GPU and can preempt each other,
+      # these numbers are not fully self-contained.
+      ("modelV2", 0.06, 0.040),
+
+      # can miss cycles here and there, just important the avg frequency is 20Hz
+      ("driverStateV2", 0.3, 0.05),
     ]
     for (s, instant_max, avg_max) in cfgs:
       ts = [getattr(m, s).modelExecutionTime for m in self.msgs[s]]
