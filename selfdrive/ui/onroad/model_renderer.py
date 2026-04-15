@@ -701,7 +701,7 @@ class ModelRenderer(Widget):
   def _draw_text_box_carrot(self, x: int, y: int, text: str, font_size: int, box_color: rl.Color):
     w = max(40, int(len(text) * font_size * 0.8))
     h = 42
-    self._draw_rect_fill_outline_carrot(x - w / 2, y - 30, w, h, box_color, box_color, 0.0)
+    self._draw_rect_fill_outline_carrot(x - w / 2, y - 25, w, h, box_color, box_color, 0.0)
     draw_text_ui_style(
       text,
       x,
