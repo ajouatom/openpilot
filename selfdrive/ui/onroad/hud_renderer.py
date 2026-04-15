@@ -599,8 +599,8 @@ class HudRenderer(Widget):
       draw_text_ui_style(
         mode_text, dx, dy - 2, 32, rl.WHITE,
         font=self._font_display,
-        border_width=0.0,
-        shadow_offset=0.0,
+        border_width=2.0,
+        shadow_offset=4.0,
         align="center_bottom",
       )
 
@@ -608,8 +608,8 @@ class HudRenderer(Widget):
         draw_text_ui_style(
           "GPS", dx, dy - 45, 30, rl.GREEN,
           font=self._font_display,
-          border_width=0.0,
-          shadow_offset=0.0,
+          border_width=2.0,
+          shadow_offset=4.0,
           align="center_bottom",
         )
 
@@ -618,8 +618,8 @@ class HudRenderer(Widget):
     draw_text_ui_style(
       str(gap), bx + 220, by + 77, 40, rl.WHITE,
       font=self._font_display,
-      border_width=0.0,
-      shadow_offset=0.0,
+      border_width=2.0,
+      shadow_offset=4.0,
       align="center_bottom",
     )
 
@@ -657,8 +657,8 @@ class HudRenderer(Widget):
     draw_text_ui_style(
       gear, gx, gy + 5, 70, rl.WHITE,
       font=self._font_display,
-      border_width=0.0,
-      shadow_offset=0.0,
+      border_width=2.0,
+      shadow_offset=4.0,
       align="center_bottom",
     )
 
@@ -679,8 +679,8 @@ class HudRenderer(Widget):
       draw_text_ui_style(
         "APN", dx, dy, 40, rl.WHITE,
         font=self._font_display,
-        border_width=0.0,
-        shadow_offset=0.0,
+        border_width=2.0,
+        shadow_offset=4.0,
         align="center_bottom",
       )
     elif active_carrot >= 1:
@@ -695,8 +695,8 @@ class HudRenderer(Widget):
       draw_text_ui_style(
         "APM", dx, dy, 40, rl.WHITE,
         font=self._font_display,
-        border_width=0.0,
-        shadow_offset=0.0,
+        border_width=2.0,
+        shadow_offset=4.0,
         align="center_bottom",
       )
 
@@ -704,8 +704,8 @@ class HudRenderer(Widget):
       draw_text_ui_style(
         "ROUTE", dx, dy - 45, 30, rl.WHITE,
         font=self._font_display,
-        border_width=0.0,
-        shadow_offset=0.0,
+        border_width=2.0,
+        shadow_offset=4.0,
         align="center_bottom",
       )
 
@@ -736,8 +736,8 @@ class HudRenderer(Widget):
     draw_text_ui_style(
       label, dx, dy - 45, 30, rl.WHITE,
       font=self._font_display,
-      border_width=0.0,
-      shadow_offset=0.0,
+      border_width=2.0,
+      shadow_offset=4.0,
       align="center_bottom",
     )
 
@@ -753,8 +753,8 @@ class HudRenderer(Widget):
     draw_text_ui_style(
       str(disp_speed), dx, dy, 40, rl.WHITE,
       font=self._font_display,
-      border_width=0.0,
-      shadow_offset=0.0,
+      border_width=2.0,
+      shadow_offset=4.0,
       align="center_bottom",
     )
 
@@ -803,26 +803,26 @@ class HudRenderer(Widget):
     # CPU
     cpu_fill = rl.Color(255, 0, 0, 255) if (self._cpu_temp > 80 and self._blink_timer <= 8) else ok_color
     self._draw_round_box(dx - 65, dy - 38, 130, 90, cpu_fill, line_color=rl.WHITE, roundness=0.16, segments=8, line_thickness=2)
-    draw_text_ui_style("CPU", dx, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
-    draw_text_ui_style(f"{self._cpu_temp:.0f}°C", dx, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
+    draw_text_ui_style("CPU", dx, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=2.0, shadow_offset=4.0, align="center_bottom")
+    draw_text_ui_style(f"{self._cpu_temp:.0f}°C", dx, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=2.0, shadow_offset=4.0, align="center_bottom")
 
     # MEM
     dx2 = dx + 150
     mem_fill = rl.Color(255, 0, 0, 255) if (self._memory_usage > 85 and self._blink_timer <= 8) else ok_color
     self._draw_round_box(dx2 - 65, dy - 38, 130, 90, mem_fill, line_color=rl.WHITE, roundness=0.16, segments=8, line_thickness=2)
-    draw_text_ui_style("MEM", dx2, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
-    draw_text_ui_style(f"{self._memory_usage}%", dx2, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
+    draw_text_ui_style("MEM", dx2, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=2.0, shadow_offset=4.0, align="center_bottom")
+    draw_text_ui_style(f"{self._memory_usage}%", dx2, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=2.0, shadow_offset=4.0, align="center_bottom")
 
     # DISK / VOLT
     dx3 = dx2 + 150
     self._draw_round_box(dx3 - 65, dy - 38, 130, 90, ok_color, line_color=rl.WHITE, roundness=0.16, segments=8, line_thickness=2)
 
     if self._disp_timer < 32:
-      draw_text_ui_style("DISK", dx3, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
-      draw_text_ui_style(f"{100 - self._free_space:.0f}%", dx3, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
+      draw_text_ui_style("DISK", dx3, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=2.0, shadow_offset=4.0, align="center_bottom")
+      draw_text_ui_style(f"{100 - self._free_space:.0f}%", dx3, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=2.0, shadow_offset=4.0, align="center_bottom")
     else:
-      draw_text_ui_style("VOLT", dx3, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
-      draw_text_ui_style(f"{self._voltage:.1f}V", dx3, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
+      draw_text_ui_style("VOLT", dx3, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=2.0, shadow_offset=4.0, align="center_bottom")
+      draw_text_ui_style(f"{self._voltage:.1f}V", dx3, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=2.0, shadow_offset=4.0, align="center_bottom")
 
   def _draw_date_time(self, rect: rl.Rectangle) -> None:
     show_datetime = ui_state.params.get_int("ShowDateTime")
