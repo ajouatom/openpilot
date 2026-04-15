@@ -868,7 +868,7 @@ class HudRenderer(Widget):
     return f'{round(tpms):.0f}'
 
   def _draw_tpms_top_right(self, rect: rl.Rectangle) -> None:
-    show_tpms = ui_state.params.get_int('ShowTpms')
+    show_tpms = 1 #ui_state.params.get_int('ShowTpms')
     if show_tpms not in (1, 3):
       return
 
