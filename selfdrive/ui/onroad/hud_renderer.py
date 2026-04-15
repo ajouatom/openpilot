@@ -208,6 +208,7 @@ class HudRenderer(Widget):
       self._plot_renderer = PlotRenderer()
     self._plot_renderer.draw(rect, self._font_display)
     self._draw_date_time(rect)
+    self._draw_tpms_top_right(rect)
 
   def user_interacting(self) -> bool:
     return self._exp_button.is_pressed
@@ -853,6 +854,53 @@ class HudRenderer(Widget):
         shadow_offset=8.0,
         align="center_bottom",
       )
+
+  def _get_tpms_color(self, tpms: float) -> rl.Color:
+    if tpms < 5 or tpms > 60:
+      return rl.Color(255, 255, 255, 220)
+    if tpms < 31:
+      return rl.Color(255, 90, 90, 220)
+    return rl.Color(255, 255, 255, 220)
+
+  def _get_tpms_text(self, tpms: float) -> str:
+    if tpms < 5 or tpms > 60:
+      return '  -'
+    return f'{round(tpms):.0f}'
+
+  def _draw_tpms_top_right(self, rect: rl.Rectangle) -> None:
+    show_tpms = ui_state.params.get_int('ShowTpms')
+    if show_tpms not in (1, 3):
+      return
+
+    try:
+      tpms = ui_state.sm['carState'].tpms
+      fl = float(tpms.fl)
+      fr = float(tpms.fr)
+      rl_v = float(tpms.rl)
+      rr = float(tpms.rr)
+    except Exception:
+      return
+
+    bx = rect.x + rect.width - 125
+    by = rect.y + 130
+    dw = 80
+
+    draw_text_ui_style(
+      self._get_tpms_text(fl), bx - dw, by - 55, 40, self._get_tpms_color(fl),
+      font=self._font_display, border_width=2.0, shadow_offset=4.0, align='center_bottom',
+    )
+    draw_text_ui_style(
+      self._get_tpms_text(fr), bx + dw, by - 55, 40, self._get_tpms_color(fr),
+      font=self._font_display, border_width=2.0, shadow_offset=4.0, align='center_bottom',
+    )
+    draw_text_ui_style(
+      self._get_tpms_text(rl_v), bx - dw, by + 70, 40, self._get_tpms_color(rl_v),
+      font=self._font_display, border_width=2.0, shadow_offset=4.0, align='center_bottom',
+    )
+    draw_text_ui_style(
+      self._get_tpms_text(rr), bx + dw, by + 70, 40, self._get_tpms_color(rr),
+      font=self._font_display, border_width=2.0, shadow_offset=4.0, align='center_bottom',
+    )
 
   def _draw_set_speed_carrot(self, rect: rl.Rectangle) -> None:
     self._blink_timer = (self._blink_timer + 1) % 16
