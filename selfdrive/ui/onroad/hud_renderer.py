@@ -920,23 +920,27 @@ class HudRenderer(Widget):
 
 
 class PlotRenderer:
+  PLOT_MAX = 400
+
   def __init__(self):
+    self._plot_size = 0
+    self._plot_index = 0
+    self._plot_queue = [[0.0] * self.PLOT_MAX for _ in range(3)]
+    self._plot_min = 0.0
+    self._plot_max = 0.0
     self._plot_x = 350.0
-    self._plot_y = 40.0
     self._plot_width = 1000.0
+    self._plot_y = 40.0
     self._plot_height = 300.0
     self._plot_dx = 2.0
-    self._plot_size = 400
-    self._plot_min = -2.0
-    self._plot_max = 2.0
     self._show_plot_mode_prev = -1
-    self._plot_queue = [deque(maxlen=self._plot_size) for _ in range(3)]
 
   def _clear(self):
-    for q in self._plot_queue:
-      q.clear()
-    self._plot_min = -2.0
-    self._plot_max = 2.0
+    self._plot_size = 0
+    self._plot_index = 0
+    self._plot_min = 0.0
+    self._plot_max = 0.0
+    self._plot_queue = [[0.0] * self.PLOT_MAX for _ in range(3)]
 
   def _make_plot_data(self, sm, show_plot_mode: int):
     car_state = sm['carState']
@@ -1058,54 +1062,72 @@ class PlotRenderer:
     return [0.0, 0.0, 0.0], 'no data'
 
   def _update_plot_queue(self, plot_data):
+    self._plot_index = (self._plot_index + 1) % self.PLOT_MAX
+
     for i in range(3):
-      self._plot_queue[i].append(float(plot_data[i]))
+      self._plot_queue[i][self._plot_index] = float(plot_data[i])
 
-    mins = []
-    maxs = []
-    for q in self._plot_queue:
-      if len(q) > 0:
-        mins.append(min(q))
-        maxs.append(max(q))
+    if self._plot_size < self.PLOT_MAX:
+      self._plot_size += 1
 
-    self._plot_min = min(mins) if mins else -2.0
-    self._plot_max = max(maxs) if maxs else 2.0
+    self._plot_min = float('inf')
+    self._plot_max = float('-inf')
+    for i in range(3):
+      values = self._plot_queue[i][:self._plot_size] if self._plot_size < self.PLOT_MAX else self._plot_queue[i]
+      self._plot_min = min(self._plot_min, min(values))
+      self._plot_max = max(self._plot_max, max(values))
+
+    if self._plot_min == float('inf'):
+      self._plot_min = -2.0
+    if self._plot_max == float('-inf'):
+      self._plot_max = 2.0
 
     if self._plot_min > -2.0:
       self._plot_min = -2.0
     if self._plot_max < 2.0:
       self._plot_max = 2.0
 
-  def _draw_plotting(self, values, x_base, color, font):
-    if len(values) == 0:
+  def _draw_plotting(self, index: int, x_base: float, y_base: float, color, font):
+    if self._plot_size <= 0:
       return
 
     plot_range = self._plot_max - self._plot_min
-    ratio = self._plot_height if plot_range < 1.0 else (self._plot_height / plot_range)
+    plot_ratio = self._plot_height if plot_range < 1.0 else (self._plot_height / plot_range)
 
-    prev_x = None
-    prev_y = None
-    start = self._plot_size - len(values)
+    prev = None
+    latest_x = None
+    latest_y = None
+    latest_value = 0.0
 
-    for i, value in enumerate(values):
-      x = x_base + (start + i) * self._plot_dx
-      y = self._plot_y + self._plot_height - (value - self._plot_min) * ratio
-      if prev_x is not None:
-        rl.draw_line_ex(rl.Vector2(prev_x, prev_y), rl.Vector2(x, y), 3.0, color)
-      prev_x = x
-      prev_y = y
+    for i in range(self._plot_size):
+      data = self._plot_queue[index][(self._plot_index - i + self.PLOT_MAX) % self.PLOT_MAX]
+      plot_y = y_base + self._plot_height - (data - self._plot_min) * plot_ratio
+      plot_x = x_base + (self._plot_size - i) * self._plot_dx
 
-    last_value = float(values[-1])
-    label_x = x_base + self._plot_size * self._plot_dx + 50
-    label_y = self._plot_y + self._plot_height - (last_value - self._plot_min) * ratio
-    draw_text_ui_style(
-      f'{last_value:.2f}', label_x, label_y, 40, color,
-      font=font, border_width=2.0, shadow_offset=4.0, align='center_bottom',
-    )
+      pt = rl.Vector2(plot_x, plot_y)
+      if prev is not None:
+        rl.draw_line_ex(prev, pt, 3.0, color)
+      else:
+        latest_x = plot_x
+        latest_y = plot_y
+        latest_value = data
+      prev = pt
+
+    if latest_x is not None and latest_y is not None:
+      draw_text_ui_style(
+        f'{latest_value:.2f}', latest_x + 50, latest_y + (40 if index > 0 else 0), 40, color,
+        font=font, border_width=2.0, shadow_offset=4.0, align='center_bottom',
+      )
 
   def draw(self, rect: rl.Rectangle, font) -> None:
     show_plot_mode = ui_state.params.get_int('ShowPlotMode')
-    if show_plot_mode <= 0:
+    if show_plot_mode == 0:
+      return
+
+    try:
+      if not ui_state.sm.alive('carState') or not ui_state.sm.alive('longitudinalPlan'):
+        return
+    except Exception:
       return
 
     if show_plot_mode != self._show_plot_mode_prev:
@@ -1119,13 +1141,17 @@ class PlotRenderer:
 
     self._update_plot_queue(plot_data)
 
+    if rect.width < 1200:
+      return
+
     x_base = rect.x + self._plot_x
+    y_base = rect.y + self._plot_y
     colors = [rl.YELLOW, rl.GREEN, rl.Color(255, 165, 0, 255)]
 
     for i in range(3):
-      self._draw_plotting(list(self._plot_queue[i]), x_base, colors[i], font)
+      self._draw_plotting(i, x_base, y_base, colors[i], font)
 
     draw_text_ui_style(
-      title, x_base + 400, self._plot_y - 20, 25, rl.WHITE,
+      title, x_base + 400, y_base - 20, 25, rl.WHITE,
       font=font, border_width=2.0, shadow_offset=4.0, align='center_bottom',
     )
