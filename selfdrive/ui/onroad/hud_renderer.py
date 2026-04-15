@@ -1,3 +1,5 @@
+import time
+from collections import deque
 import pyray as rl
 from dataclasses import dataclass
 from openpilot.common.constants import CV
@@ -149,6 +151,7 @@ class HudRenderer(Widget):
     self._memory_usage = 0
     self._free_space = 0.0
     self._voltage = 0.0
+    self._plot_renderer = None
 
   def _update_state(self) -> None:
     """Update HUD state based on car state and controls state."""
@@ -200,6 +203,11 @@ class HudRenderer(Widget):
     button_x = rect.x + rect.width - UI_CONFIG.border_size - UI_CONFIG.button_size
     button_y = rect.y + UI_CONFIG.border_size
     self._exp_button.render(rl.Rectangle(button_x, button_y, UI_CONFIG.button_size, UI_CONFIG.button_size))
+
+    if self._plot_renderer is None:
+      self._plot_renderer = PlotRenderer()
+    self._plot_renderer.draw(rect, self._font_display)
+    self._draw_date_time(rect)
 
   def user_interacting(self) -> bool:
     return self._exp_button.is_pressed
@@ -376,6 +384,7 @@ class HudRenderer(Widget):
     self._memory_usage = 0
     self._free_space = 0.0
     self._voltage = 0.0
+    self._plot_renderer = None
 
     try:
       device_state = sm["deviceState"]
@@ -814,6 +823,37 @@ class HudRenderer(Widget):
       draw_text_ui_style("VOLT", dx3, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
       draw_text_ui_style(f"{self._voltage:.1f}V", dx3, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=0.0, shadow_offset=0.0, align="center_bottom")
 
+  def _draw_date_time(self, rect: rl.Rectangle) -> None:
+    show_datetime = ui_state.params.get_int("ShowDateTime")
+    if show_datetime <= 0:
+      return
+
+    now = time.localtime()
+    weekdays_ko = ["일", "월", "화", "수", "목", "금", "토"]
+
+    x = int(rect.x + 170)
+    y = int(rect.y + 120)
+
+    if show_datetime in (1, 2):
+      draw_text_ui_style(
+        time.strftime("%H:%M", now), x, y, 100, rl.WHITE,
+        font=self._font_display,
+        border_width=3.0,
+        shadow_offset=8.0,
+        align="center_bottom",
+      )
+
+    if show_datetime in (1, 3):
+      weekday = weekdays_ko[(now.tm_wday + 1) % 7]
+      date_text = f"{time.strftime('%m-%d', now)}({weekday})"
+      draw_text_ui_style(
+        date_text, x, y + 70, 60, rl.WHITE,
+        font=self._font_display,
+        border_width=3.0,
+        shadow_offset=8.0,
+        align="center_bottom",
+      )
+
   def _draw_set_speed_carrot(self, rect: rl.Rectangle) -> None:
     self._blink_timer = (self._blink_timer + 1) % 16
     self._disp_timer = (self._disp_timer + 1) % 64
@@ -829,3 +869,215 @@ class HudRenderer(Widget):
     self._draw_carrot_speed_limit_box(bx, by)
     self._draw_carrot_device_state(bx, by)
   
+
+
+class PlotRenderer:
+  def __init__(self):
+    self._plot_x = 350.0
+    self._plot_y = 40.0
+    self._plot_width = 1000.0
+    self._plot_height = 300.0
+    self._plot_dx = 2.0
+    self._plot_size = 400
+    self._plot_min = -2.0
+    self._plot_max = 2.0
+    self._show_plot_mode_prev = -1
+    self._plot_queue = [deque(maxlen=self._plot_size) for _ in range(3)]
+
+  def _clear(self):
+    for q in self._plot_queue:
+      q.clear()
+    self._plot_min = -2.0
+    self._plot_max = 2.0
+
+  def _make_plot_data(self, sm, show_plot_mode: int):
+    car_state = sm['carState']
+    lp = sm['longitudinalPlan']
+    car_control = sm['carControl']
+    controls_state = sm['controlsState']
+
+    a_ego = float(car_state.aEgo)
+    v_ego = float(car_state.vEgo)
+
+    accel = 0.0
+    try:
+      accel = float(lp.accels[0])
+    except Exception:
+      pass
+
+    speeds_0 = 0.0
+    try:
+      speeds_0 = float(lp.speeds[0])
+    except Exception:
+      pass
+
+    accel_out = 0.0
+    try:
+      accel_out = float(car_control.actuators.accel)
+    except Exception:
+      pass
+
+    if show_plot_mode in (0, 1):
+      return [a_ego, accel, accel_out], '1.Accel (Y:a_ego, G:a_target, O:a_out)'
+
+    if show_plot_mode == 2:
+      return [speeds_0, v_ego, a_ego], '2.Speed/Accel(Y:speed_0, G:v_ego, O:a_ego)'
+
+    if show_plot_mode == 3:
+      pos_32 = 0.0
+      vel_32 = 0.0
+      vel_0 = 0.0
+      try:
+        pos_32 = float(sm['modelV2'].position.x[32])
+      except Exception:
+        pass
+      try:
+        vel_32 = float(sm['modelV2'].velocity.x[32])
+      except Exception:
+        pass
+      try:
+        vel_0 = float(sm['modelV2'].velocity.x[0])
+      except Exception:
+        pass
+      return [pos_32, vel_32, vel_0], '3.Model(Y:pos_32, G:vel_32, O:vel_0)'
+
+    if show_plot_mode == 4:
+      a_lead_k = 0.0
+      v_rel = 0.0
+      try:
+        a_lead_k = float(sm['radarState'].leadOne.aLeadK)
+      except Exception:
+        pass
+      try:
+        v_rel = float(sm['radarState'].leadOne.vRel)
+      except Exception:
+        pass
+      return [accel, a_lead_k, v_rel], '4.Lead(Y:accel, G:a_lead, O:v_rel)'
+
+    if show_plot_mode == 5:
+      a_lead = 0.0
+      j_lead = 0.0
+      try:
+        a_lead = float(sm['radarState'].leadOne.aLead)
+      except Exception:
+        pass
+      try:
+        j_lead = float(sm['radarState'].leadOne.jLead)
+      except Exception:
+        pass
+      return [a_ego, a_lead, j_lead], '5.Lead(Y:a_ego, G:a_lead, O:j_lead)'
+
+    if show_plot_mode == 6:
+      actual_lat_accel = 0.0
+      desired_lat_accel = 0.0
+      output = 0.0
+      try:
+        actual_lat_accel = float(controls_state.lateralControlState.torqueState.actualLateralAccel) * 10.0
+      except Exception:
+        pass
+      try:
+        desired_lat_accel = float(controls_state.lateralControlState.torqueState.desiredLateralAccel) * 10.0
+      except Exception:
+        pass
+      try:
+        output = float(controls_state.lateralControlState.torqueState.output) * 10.0
+      except Exception:
+        pass
+      return [actual_lat_accel, desired_lat_accel, output], '6.Steer(Y:actual, G:desire, O:output)'
+
+    if show_plot_mode == 7:
+      actual_angle = float(car_state.steeringAngleDeg)
+      target_angle = 0.0
+      angle_offset = 0.0
+      try:
+        target_angle = float(car_control.actuators.steeringAngleDeg)
+      except Exception:
+        pass
+      try:
+        angle_offset = float(sm['liveParameters'].angleOffsetDeg) * 10.0
+      except Exception:
+        pass
+      return [actual_angle, target_angle, angle_offset], '7.SteerA (Y:Actual, G:Target, O:Offset*10)'
+
+    if show_plot_mode == 8:
+      curvature = 0.0
+      try:
+        curvature = float(car_control.actuators.curvature) * 10000.0
+      except Exception:
+        pass
+      return [curvature, curvature, curvature], '8.Curvature (*10000)'
+
+    return [0.0, 0.0, 0.0], 'no data'
+
+  def _update_plot_queue(self, plot_data):
+    for i in range(3):
+      self._plot_queue[i].append(float(plot_data[i]))
+
+    mins = []
+    maxs = []
+    for q in self._plot_queue:
+      if len(q) > 0:
+        mins.append(min(q))
+        maxs.append(max(q))
+
+    self._plot_min = min(mins) if mins else -2.0
+    self._plot_max = max(maxs) if maxs else 2.0
+
+    if self._plot_min > -2.0:
+      self._plot_min = -2.0
+    if self._plot_max < 2.0:
+      self._plot_max = 2.0
+
+  def _draw_plotting(self, values, x_base, color, font):
+    if len(values) == 0:
+      return
+
+    plot_range = self._plot_max - self._plot_min
+    ratio = self._plot_height if plot_range < 1.0 else (self._plot_height / plot_range)
+
+    prev_x = None
+    prev_y = None
+    start = self._plot_size - len(values)
+
+    for i, value in enumerate(values):
+      x = x_base + (start + i) * self._plot_dx
+      y = self._plot_y + self._plot_height - (value - self._plot_min) * ratio
+      if prev_x is not None:
+        rl.draw_line_ex(rl.Vector2(prev_x, prev_y), rl.Vector2(x, y), 3.0, color)
+      prev_x = x
+      prev_y = y
+
+    last_value = float(values[-1])
+    label_x = x_base + self._plot_size * self._plot_dx + 50
+    label_y = self._plot_y + self._plot_height - (last_value - self._plot_min) * ratio
+    draw_text_ui_style(
+      f'{last_value:.2f}', label_x, label_y, 40, color,
+      font=font, border_width=2.0, shadow_offset=4.0, align='center_bottom',
+    )
+
+  def draw(self, rect: rl.Rectangle, font) -> None:
+    show_plot_mode = ui_state.params.get_int('ShowPlotMode')
+    if show_plot_mode <= 0:
+      return
+
+    if show_plot_mode != self._show_plot_mode_prev:
+      self._clear()
+      self._show_plot_mode_prev = show_plot_mode
+
+    try:
+      plot_data, title = self._make_plot_data(ui_state.sm, show_plot_mode)
+    except Exception:
+      return
+
+    self._update_plot_queue(plot_data)
+
+    x_base = rect.x + self._plot_x
+    colors = [rl.YELLOW, rl.GREEN, rl.Color(255, 165, 0, 255)]
+
+    for i in range(3):
+      self._draw_plotting(list(self._plot_queue[i]), x_base, colors[i], font)
+
+    draw_text_ui_style(
+      title, x_base + 400, self._plot_y - 20, 25, rl.WHITE,
+      font=font, border_width=2.0, shadow_offset=4.0, align='center_bottom',
+    )
