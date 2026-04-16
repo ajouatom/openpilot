@@ -20,6 +20,9 @@ from openpilot.common.transformations.orientation import rot_from_euler
 from enum import IntEnum
 
 from openpilot.selfdrive.ui.mici.onroad.traffic_light import TrafficLight
+import math
+from openpilot.common.params import Params
+
 
 OpState = log.SelfdriveState.OpenpilotState
 CALIBRATED = log.LiveCalibrationData.Status.calibrated
@@ -138,6 +141,9 @@ class AugmentedRoadView(CameraView):
     self._bookmark_callback = bookmark_callback
     self._set_placeholder_color(rl.BLACK)
 
+    self.params = Params()
+    self._last_device_position = ""
+
     self.device_camera: DeviceCameraConfig | None = None
     self.view_from_calib = view_frame_from_device_frame.copy()
     self.view_from_wide_calib = view_frame_from_device_frame.copy()
@@ -156,7 +162,7 @@ class AugmentedRoadView(CameraView):
     self._hud_renderer = HudRenderer()
     self._alert_renderer = AlertRenderer()
     self._driver_state_renderer = DriverStateRenderer()
-    self._confidence_ball = ConfidenceBall()
+    #self._confidence_ball = ConfidenceBall()
     self._traffic_light = TrafficLight()
     self._offroad_label = UnifiedLabel("start the car to\nuse openpilot", 54, FontWeight.DISPLAY,
                                        text_color=rl.Color(255, 255, 255, int(255 * 0.9)),
@@ -179,6 +185,8 @@ class AugmentedRoadView(CameraView):
     # update offroad label
     if ui_state.panda_type == log.PandaState.PandaType.unknown:
       self._offroad_label.set_text("system booting")
+    elif ui_state.ignition and not ui_state.started:
+      self._offroad_label.set_text("openpilot can't start\ncheck alerts")
     else:
       self._offroad_label.set_text("start the car to\nuse openpilot")
 
@@ -198,7 +206,7 @@ class AugmentedRoadView(CameraView):
     self._content_rect = rl.Rectangle(
       self.rect.x,
       self.rect.y,
-      self.rect.width - SIDE_PANEL_WIDTH,
+      self.rect.width, # - SIDE_PANEL_WIDTH,
       self.rect.height,
     )
 
@@ -218,7 +226,12 @@ class AugmentedRoadView(CameraView):
     self._model_renderer.render(self._content_rect)
 
     # Fade out bottom of overlays for looks
-    rl.draw_texture_ex(self._fade_texture, rl.Vector2(self._content_rect.x, self._content_rect.y), 0.0, 1.0, rl.WHITE)
+    source_rect = rl.Rectangle(0, 0, self._fade_texture.width, self._fade_texture.height)
+    dest_rect = rl.Rectangle(self._content_rect.x, self._content_rect.y, self._content_rect.width,
+                             self._content_rect.height)
+    rl.draw_texture_pro(self._fade_texture, source_rect, dest_rect, rl.Vector2(0, 0), 0.0, rl.WHITE)
+
+    #rl.draw_texture_ex(self._fade_texture, rl.Vector2(self._content_rect.x, self._content_rect.y), 0.0, 1.0, rl.WHITE)
 
     alert_to_render, not_animating_out = self._alert_renderer.will_render()
 
@@ -246,8 +259,8 @@ class AugmentedRoadView(CameraView):
     # Custom UI extension point - add custom overlays here
     # Use self._content_rect for positioning within camera bounds
     self._traffic_light.render(self.rect)
-    if not self._traffic_light.is_visible():
-      self._confidence_ball.render(self.rect)
+    #if not self._traffic_light.is_visible():
+    #  self._confidence_ball.render(self.rect)
 
     self._bookmark_icon.render(self.rect)
 
@@ -260,7 +273,7 @@ class AugmentedRoadView(CameraView):
       x = int(self._content_rect.x + 16)
       y = int(self._content_rect.y + self._content_rect.height - 16)
       rl.draw_circle(x, y, 6, rl.Color(255, 0, 0, 220))
-      
+
     # publish uiDebug
     msg = messaging.new_message('uiDebug')
     msg.uiDebug.drawTimeMillis = (time.monotonic() - start_draw) * 1000
@@ -295,6 +308,17 @@ class AugmentedRoadView(CameraView):
     calib = sm['liveCalibration']
     if len(calib.rpyCalib) != 3 or calib.calStatus != CALIBRATED:
       return
+
+    # ---------------------------------------------------------
+    pitch = math.degrees(calib.rpyCalib[1])
+    yaw = math.degrees(calib.rpyCalib[2])
+
+    position = f"{abs(pitch):.1f}° {'v' if pitch > 0 else '^'} {abs(yaw):.1f}° {'<' if yaw > 0 else '>'}"
+
+    if position != self._last_device_position:
+      self.params.put("DevicePosition", position)
+      self._last_device_position = position
+    # ---------------------------------------------------------
 
     # Update view_from_calib matrix
     device_from_calib = rot_from_euler(calib.rpyCalib)
