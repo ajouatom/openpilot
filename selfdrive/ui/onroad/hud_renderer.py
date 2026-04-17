@@ -1125,7 +1125,7 @@ class PlotRenderer:
       return
     print(f"show_plot_mode: {show_plot_mode}")
     try:
-      if not ui_state.sm.alive('carState') or not ui_state.sm.alive('longitudinalPlan'):
+      if not ui_state.sm.alive['carState'] or not ui_state.sm.alive['longitudinalPlan']:
         return
     except Exception:
       return
