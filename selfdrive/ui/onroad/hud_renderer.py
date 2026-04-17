@@ -1131,6 +1131,7 @@ class PlotRenderer:
       return
 
     self._update_plot_queue(plot_data)
+    print(f'Plot size = {self._plot_size}, min={self._plot_min:.2f}, max={self._plot_max:.2f}')
 
     if rect.width < 1200:
       return
