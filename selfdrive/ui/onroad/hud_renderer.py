@@ -1123,14 +1123,12 @@ class PlotRenderer:
     show_plot_mode = ui_state.params.get_int('ShowPlotMode')
     if show_plot_mode == 0:
       return
-    print(f"show_plot_mode: {show_plot_mode}")
     try:
       if not ui_state.sm.alive['carState'] or not ui_state.sm.alive['longitudinalPlan']:
         return
     except Exception:
       return
 
-    print("PlotRenderer: draw")
     if show_plot_mode != self._show_plot_mode_prev:
       self._clear()
       self._show_plot_mode_prev = show_plot_mode
@@ -1140,13 +1138,11 @@ class PlotRenderer:
     except Exception:
       return
 
-    print(f"Plot data: {plot_data}, title: {title}")
     self._update_plot_queue(plot_data)
 
     if rect.width < 1200:
       return
 
-    print("Drawing plot...")
     x_base = rect.x + self._plot_x
     y_base = rect.y + self._plot_y
     colors = [rl.YELLOW, rl.GREEN, rl.Color(255, 165, 0, 255)]
