@@ -1122,6 +1122,7 @@ class PlotRenderer:
       return
 
     if show_plot_mode != self._show_plot_mode_prev:
+      print(f'Plot mode changed: {self._show_plot_mode_prev} → {show_plot_mode}')
       self._clear()
       self._show_plot_mode_prev = show_plot_mode
 
@@ -1132,6 +1133,7 @@ class PlotRenderer:
 
     self._update_plot_queue(plot_data)
     print(f'Plot size = {self._plot_size}, min={self._plot_min:.2f}, max={self._plot_max:.2f}')
+    print(f'show_plot_mode={show_plot_mode}, title={title}')
 
     if rect.width < 1200:
       return
