@@ -643,23 +643,24 @@ class ModelRenderer(Widget):
 
 
   def _draw_quad_fill_carrot(self, p0, p1, p2, p3, color: rl.Color):
+    # perimeter order quad(0,1,2,3)를 안정적으로 채우기 위한 분할
     v0 = rl.Vector2(float(p0[0]), float(p0[1]))
     v1 = rl.Vector2(float(p1[0]), float(p1[1]))
     v2 = rl.Vector2(float(p2[0]), float(p2[1]))
     v3 = rl.Vector2(float(p3[0]), float(p3[1]))
 
-    rl.draw_triangle(v0, v1, v2, color)
-    rl.draw_triangle(v0, v2, v3, color)
+    rl.draw_triangle(v0, v1, v3, color)
+    rl.draw_triangle(v1, v2, v3, color)
 
   def _draw_two_quads_from_6pts_carrot(self, x, y, fill_color: rl.Color, brake_valid: bool, color_idx: int):
     pts = np.array(list(zip(x, y)), dtype=np.float32)
     if pts.shape[0] != 6:
       return
 
-    # left quad: 0 -> 1 -> 2 -> 5
+    # carrot.cc의 6점 순서는 외곽선 순서다.
+    # 0-1-2-3-4-5 전체를 그대로 두고, 내부 대각선을 1-5 / 2-4로 잡아야 채움이 정상적으로 나온다.
+    # 이전처럼 0-2, 5-3 대각선으로 자르면 삼각형이 꼬여서 색이 사실상 안 보일 수 있다.
     self._draw_quad_fill_carrot(pts[0], pts[1], pts[2], pts[5], fill_color)
-
-    # right quad: 5 -> 2 -> 3 -> 4
     self._draw_quad_fill_carrot(pts[5], pts[2], pts[3], pts[4], fill_color)
 
     if color_idx >= 10 or brake_valid:
@@ -688,19 +689,23 @@ class ModelRenderer(Widget):
     if pts.shape[0] < 3:
       return
 
-    # shader_polygon.draw_polygon은 일부 concave/복잡한 도형에서 채움이 깨질 수 있어서
-    # carrot path용은 ear clipping으로 삼각형 분할 후 직접 채움
-    tris = self._triangulate_polygon_carrot(pts)
-    if tris:
-      for a, b, c in tris:
-        rl.draw_triangle(
-          rl.Vector2(float(a[0]), float(a[1])),
-          rl.Vector2(float(b[0]), float(b[1])),
-          rl.Vector2(float(c[0]), float(c[1])),
-          fill_color,
-        )
+    # path용 4점은 사실상 둘레 순서의 사다리꼴/사각형이라 직접 분할이 가장 안정적이다.
+    if pts.shape[0] == 4:
+      self._draw_quad_fill_carrot(pts[0], pts[1], pts[2], pts[3], fill_color)
     else:
-      draw_polygon(self._rect, pts, fill_color)
+      # shader_polygon.draw_polygon은 일부 concave/복잡한 도형에서 채움이 깨질 수 있어서
+      # carrot path용은 ear clipping으로 삼각형 분할 후 직접 채움
+      tris = self._triangulate_polygon_carrot(pts)
+      if tris:
+        for a, b, c in tris:
+          rl.draw_triangle(
+            rl.Vector2(float(a[0]), float(a[1])),
+            rl.Vector2(float(b[0]), float(b[1])),
+            rl.Vector2(float(c[0]), float(c[1])),
+            fill_color,
+          )
+      else:
+        draw_polygon(self._rect, pts, fill_color)
 
     if color_idx >= 10 or brake_valid:
       self._draw_polygon_outline_carrot(
