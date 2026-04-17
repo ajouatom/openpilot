@@ -642,26 +642,44 @@ class ModelRenderer(Widget):
     return tris
 
 
-  def _draw_quad_fill_carrot(self, p0, p1, p2, p3, color: rl.Color):
-    # perimeter order quad(0,1,2,3)를 안정적으로 채우기 위한 분할
-    v0 = rl.Vector2(float(p0[0]), float(p0[1]))
-    v1 = rl.Vector2(float(p1[0]), float(p1[1]))
-    v2 = rl.Vector2(float(p2[0]), float(p2[1]))
-    v3 = rl.Vector2(float(p3[0]), float(p3[1]))
+  def _draw_triangle_fill_carrot(self, p0, p1, p2, color: rl.Color):
+    a = np.array([float(p0[0]), float(p0[1])], dtype=np.float32)
+    b = np.array([float(p1[0]), float(p1[1])], dtype=np.float32)
+    c = np.array([float(p2[0]), float(p2[1])], dtype=np.float32)
 
-    rl.draw_triangle(v0, v1, v3, color)
-    rl.draw_triangle(v1, v2, v3, color)
+    area2 = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+    if abs(float(area2)) < 1e-3:
+      return
+
+    if area2 < 0.0:
+      b, c = c, b
+
+    rl.draw_triangle(
+      rl.Vector2(float(a[0]), float(a[1])),
+      rl.Vector2(float(b[0]), float(b[1])),
+      rl.Vector2(float(c[0]), float(c[1])),
+      color,
+    )
+
+  def _draw_quad_fill_carrot(self, p0, p1, p2, p3, color: rl.Color):
+    # 사각형은 대각선 하나로 쪼개서 그리되, 각 삼각형 winding을 맞춰서 채움이 사라지지 않게 한다.
+    self._draw_triangle_fill_carrot(p0, p1, p2, color)
+    self._draw_triangle_fill_carrot(p0, p2, p3, color)
 
   def _draw_two_quads_from_6pts_carrot(self, x, y, fill_color: rl.Color, brake_valid: bool, color_idx: int):
     pts = np.array(list(zip(x, y)), dtype=np.float32)
     if pts.shape[0] != 6:
       return
 
-    # carrot.cc의 6점 순서는 외곽선 순서다.
-    # 0-1-2-3-4-5 전체를 그대로 두고, 내부 대각선을 1-5 / 2-4로 잡아야 채움이 정상적으로 나온다.
-    # 이전처럼 0-2, 5-3 대각선으로 자르면 삼각형이 꼬여서 색이 사실상 안 보일 수 있다.
-    self._draw_quad_fill_carrot(pts[0], pts[1], pts[2], pts[5], fill_color)
-    self._draw_quad_fill_carrot(pts[5], pts[2], pts[3], pts[4], fill_color)
+    # 6점 path는 일반 polygon triangulation보다 아래처럼 4개 삼각형으로 직접 쪼개는 편이 안정적이다.
+    #   left :  (0,1,5) + (1,2,5)
+    #   right:  (5,2,4) + (2,3,4)
+    # 이렇게 하면 중간 분할선(2-5)을 기준으로 좌/우가 깔끔하게 채워지고,
+    # bow-tie 형태나 winding 꼬임 때문에 fill이 안보이는 문제를 줄일 수 있다.
+    self._draw_triangle_fill_carrot(pts[0], pts[1], pts[5], fill_color)
+    self._draw_triangle_fill_carrot(pts[1], pts[2], pts[5], fill_color)
+    self._draw_triangle_fill_carrot(pts[5], pts[2], pts[4], fill_color)
+    self._draw_triangle_fill_carrot(pts[2], pts[3], pts[4], fill_color)
 
     if color_idx >= 10 or brake_valid:
       self._draw_polygon_outline_carrot(
@@ -689,23 +707,14 @@ class ModelRenderer(Widget):
     if pts.shape[0] < 3:
       return
 
-    # path용 4점은 사실상 둘레 순서의 사다리꼴/사각형이라 직접 분할이 가장 안정적이다.
-    if pts.shape[0] == 4:
-      self._draw_quad_fill_carrot(pts[0], pts[1], pts[2], pts[3], fill_color)
+    # shader_polygon.draw_polygon은 일부 concave/복잡한 도형에서 채움이 깨질 수 있어서
+    # carrot path용은 ear clipping으로 삼각형 분할 후 직접 채움
+    tris = self._triangulate_polygon_carrot(pts)
+    if tris:
+      for a, b, c in tris:
+        self._draw_triangle_fill_carrot(a, b, c, fill_color)
     else:
-      # shader_polygon.draw_polygon은 일부 concave/복잡한 도형에서 채움이 깨질 수 있어서
-      # carrot path용은 ear clipping으로 삼각형 분할 후 직접 채움
-      tris = self._triangulate_polygon_carrot(pts)
-      if tris:
-        for a, b, c in tris:
-          rl.draw_triangle(
-            rl.Vector2(float(a[0]), float(a[1])),
-            rl.Vector2(float(b[0]), float(b[1])),
-            rl.Vector2(float(c[0]), float(c[1])),
-            fill_color,
-          )
-      else:
-        draw_polygon(self._rect, pts, fill_color)
+      draw_polygon(self._rect, pts, fill_color)
 
     if color_idx >= 10 or brake_valid:
       self._draw_polygon_outline_carrot(
