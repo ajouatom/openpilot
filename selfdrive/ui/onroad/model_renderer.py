@@ -665,10 +665,22 @@ class ModelRenderer(Widget):
     self._draw_triangle_fill_carrot(p1, p2, p3, color)
 
   def _draw_two_quads_from_6pts_carrot(self, x, y, fill_color: rl.Color, brake_valid: bool, color_idx: int):
-    # 이름은 유지하지만, 현재 렌더 파이프라인에서는 두 quad의 rl.draw_triangle()보다
-    # 기존 draw_polygon() 경로가 더 안정적으로 채워진다.
-    self._draw_polygon_from_xy_carrot(x, y, fill_color, brake_valid, color_idx)
+    pts = np.array(list(zip(x, y)), dtype=np.float32)
+    if pts.shape[0] != 6:
+      return
 
+    # carrot.cc의 6점 외곽 순서: 0 -> 1 -> 2 -> 3 -> 4 -> 5
+    # 이를 내부 대각선 1-5, 2-4 기준의 두 quad로 분할
+    self._draw_quad_fill_carrot(pts[0], pts[1], pts[2], pts[5], fill_color)
+    self._draw_quad_fill_carrot(pts[5], pts[2], pts[3], pts[4], fill_color)
+
+    if color_idx >= 10 or brake_valid:
+      self._draw_polygon_outline_carrot(
+        pts,
+        rl.Color(255, 0, 0, 255) if brake_valid else rl.Color(255, 255, 255, 255),
+        2.0,
+      )
+    
   def _draw_polygon_from_xy_carrot(self, xs, ys, fill_color: rl.Color, brake_valid: bool, color_idx: int):
     pts = np.array(list(zip(xs, ys)), dtype=np.float32)
 
@@ -688,8 +700,18 @@ class ModelRenderer(Widget):
     if pts.shape[0] < 3:
       return
 
-    # 현재 UI/shader 파이프라인에서 검증된 채움 경로를 그대로 사용
-    draw_polygon(self._rect, pts, fill_color)
+    # 4점은 직접 분할이 가장 안정적이다.
+    if pts.shape[0] == 4:
+      self._draw_quad_fill_carrot(pts[0], pts[1], pts[2], pts[3], fill_color)
+    else:
+      # shader_polygon.draw_polygon은 일부 concave/복잡한 도형에서 채움이 깨질 수 있어서
+      # carrot path용은 ear clipping으로 삼각형 분할 후 직접 채움
+      tris = self._triangulate_polygon_carrot(pts)
+      if tris:
+        for a, b, c in tris:
+          self._draw_triangle_fill_carrot(a, b, c, fill_color)
+      else:
+        draw_polygon(self._rect, pts, fill_color)
 
     if color_idx >= 10 or brake_valid:
       self._draw_polygon_outline_carrot(
