@@ -642,33 +642,33 @@ class ModelRenderer(Widget):
     return tris
 
 
-  def _draw_triangle_fill_carrot(self, p0, p1, p2, color: rl.Color):
-    # 현재 렌더 상태에서 backface culling이 켜져 있으면 winding이 뒤집힌 삼각형은 안 보일 수 있다.
-    # 그래서 항상 CCW로 정규화해서 채운다.
-    x0, y0 = float(p0[0]), float(p0[1])
-    x1, y1 = float(p1[0]), float(p1[1])
-    x2, y2 = float(p2[0]), float(p2[1])
-    cross = (x1 - x0) * (y2 - y0) - (y1 - y0) * (x2 - x0)
-    if cross < 0.0:
-      x1, y1, x2, y2 = x2, y2, x1, y1
-
-    rl.draw_triangle(
-      rl.Vector2(x0, y0),
-      rl.Vector2(x1, y1),
-      rl.Vector2(x2, y2),
-      color,
-    )
-
   def _draw_quad_fill_carrot(self, p0, p1, p2, p3, color: rl.Color):
-    # perimeter order: 0 -> 1 -> 2 -> 3
-    self._draw_triangle_fill_carrot(p0, p1, p3, color)
-    self._draw_triangle_fill_carrot(p1, p2, p3, color)
+    v0 = rl.Vector2(float(p0[0]), float(p0[1]))
+    v1 = rl.Vector2(float(p1[0]), float(p1[1]))
+    v2 = rl.Vector2(float(p2[0]), float(p2[1]))
+    v3 = rl.Vector2(float(p3[0]), float(p3[1]))
+
+    rl.draw_triangle(v0, v1, v2, color)
+    rl.draw_triangle(v0, v2, v3, color)
 
   def _draw_two_quads_from_6pts_carrot(self, x, y, fill_color: rl.Color, brake_valid: bool, color_idx: int):
-    # 이름은 유지하지만, 현재 렌더 파이프라인에서는 두 quad의 rl.draw_triangle()보다
-    # 기존 draw_polygon() 경로가 더 안정적으로 채워진다.
-    self._draw_polygon_from_xy_carrot(x, y, fill_color, brake_valid, color_idx)
+    pts = np.array(list(zip(x, y)), dtype=np.float32)
+    if pts.shape[0] != 6:
+      return
 
+    # left quad: 0 -> 1 -> 2 -> 5
+    self._draw_quad_fill_carrot(pts[0], pts[1], pts[2], pts[5], fill_color)
+
+    # right quad: 5 -> 2 -> 3 -> 4
+    self._draw_quad_fill_carrot(pts[5], pts[2], pts[3], pts[4], fill_color)
+
+    if color_idx >= 10 or brake_valid:
+      self._draw_polygon_outline_carrot(
+        pts,
+        rl.Color(255, 0, 0, 255) if brake_valid else rl.Color(255, 255, 255, 255),
+        2.0,
+      )
+    
   def _draw_polygon_from_xy_carrot(self, xs, ys, fill_color: rl.Color, brake_valid: bool, color_idx: int):
     pts = np.array(list(zip(xs, ys)), dtype=np.float32)
 
@@ -688,8 +688,19 @@ class ModelRenderer(Widget):
     if pts.shape[0] < 3:
       return
 
-    # 현재 UI/shader 파이프라인에서 검증된 채움 경로를 그대로 사용
-    draw_polygon(self._rect, pts, fill_color)
+    # shader_polygon.draw_polygon은 일부 concave/복잡한 도형에서 채움이 깨질 수 있어서
+    # carrot path용은 ear clipping으로 삼각형 분할 후 직접 채움
+    tris = self._triangulate_polygon_carrot(pts)
+    if tris:
+      for a, b, c in tris:
+        rl.draw_triangle(
+          rl.Vector2(float(a[0]), float(a[1])),
+          rl.Vector2(float(b[0]), float(b[1])),
+          rl.Vector2(float(c[0]), float(c[1])),
+          fill_color,
+        )
+    else:
+      draw_polygon(self._rect, pts, fill_color)
 
     if color_idx >= 10 or brake_valid:
       self._draw_polygon_outline_carrot(
