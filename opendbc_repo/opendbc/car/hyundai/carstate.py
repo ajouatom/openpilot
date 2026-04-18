@@ -107,6 +107,7 @@ class CarState(CarStateBase):
     self.manual_speed_limit_assist = None
     self.accelerator = None
     self.blinkers = None
+    self.blinkers_alt = None
     self.doors_seatbelts = None
     self.cruise_buttons_alt2 = None
 
@@ -248,6 +249,7 @@ class CarState(CarStateBase):
           if self.gear_msg_canfd == "ACCELERATOR":
             add_and_cache(self.cp, "ACCELERATOR", "accelerator", ignore_counter = True)
           add_and_cache(self.cp, "BLINKERS", "blinkers")
+          add_and_cache(self.cp, "BLINKERS_ALT", "blinkers_alt")
           add_and_cache(self.cp, "DOORS_SEATBELTS", "doors_seatbelts")
         elif self.controls_ready_count == 126:
           add_and_cache(self.cp, "CRUISE_BUTTONS_ALT2", "cruise_buttons_alt2", ignore_counter = True)
@@ -534,8 +536,8 @@ class CarState(CarStateBase):
     ret.steerFaultTemporary = cp.vl["MDPS"]["LKA_FAULT"] != 0 or cp.vl["MDPS"]["LFA2_FAULT"] != 0
     #ret.steerFaultTemporary = False
 
-    if self.blinkers is not None:
-      blinkers_info = self.blinkers
+    blinkers_info = self.blinkers if self.blinkers is not None else self.blinkers_alt if self.blinkers_alt is not None else None
+    if blinkers_info is not None:
       left_blinker_lamp = blinkers_info["LEFT_LAMP"] or blinkers_info["LEFT_LAMP_ALT"]
       right_blinker_lamp = blinkers_info["RIGHT_LAMP"] or blinkers_info["RIGHT_LAMP_ALT"]
       ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_lamp(50, left_blinker_lamp, right_blinker_lamp)

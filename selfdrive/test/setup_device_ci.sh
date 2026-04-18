@@ -18,6 +18,9 @@ if [ -z "$TEST_DIR" ]; then
   exit 1
 fi
 
+# prevent storage from filling up
+rm -rf /data/media/0/realdata/*
+
 rm -rf /data/safe_staging/ || true
 if [ -d /data/safe_staging/ ]; then
   sudo umount /data/safe_staging/merged/ || true
@@ -39,6 +42,7 @@ sudo systemctl restart NetworkManager
 sudo systemctl disable ssh-param-watcher.path
 sudo systemctl disable ssh-param-watcher.service
 sudo mount -o ro,remount /
+sudo systemctl stop power_monitor
 
 while true; do
   if ! sudo systemctl is-active -q ssh; then

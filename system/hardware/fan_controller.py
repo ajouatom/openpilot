@@ -18,6 +18,6 @@ class FanController:
     self.last_ignition = ignition
 
     return int(self.controller.update(
-                 error=(cur_temp - 75),  # temperature setpoint in C
+                 error=(cur_temp - 70),  # temperature setpoint in C
                  feedforward=np.interp(cur_temp, [60.0, 100.0], [0, 100])
               ))
