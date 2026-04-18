@@ -288,7 +288,7 @@ class HudRenderer(Widget):
     if ui_state.lat_active:
       wheel_color = rl.Color(0, 255, 0, int(self._wheel_alpha_filter.x))
     else:
-      wheel_color = rl.Color(188, 188, 188, int(self._wheel_alpha_filter.x))
+      wheel_color = rl.Color(230, 230, 230, int(self._wheel_alpha_filter.x))
 
     rl.draw_texture_pro(wheel_txt, src_rect, dest_rect, origin, rotation, wheel_color)
     # 당근맨은 틴팅 없이 덧대서 그리기
