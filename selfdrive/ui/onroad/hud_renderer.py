@@ -139,6 +139,12 @@ class HudRenderer(Widget):
     self._traffic_red_icon = gui_app.texture('images/traffic_red.png')
     self._traffic_green_icon = gui_app.texture('images/traffic_green.png')
 
+    self._ic_turn_l = gui_app.texture('images/ic_turn_l.png')
+    self._ic_turn_r = gui_app.texture('images/ic_turn_r.png')
+    self._ic_lane_change_l = gui_app.texture('images/ic_lane_change_l.png')
+    self._ic_lane_change_r = gui_app.texture('images/ic_lane_change_r.png')
+    self._ic_turn_u = gui_app.texture('images/ic_turn_u.png')
+
     self._set_speed_override = SetSpeedOverride()
     self._debug_speed_panel = False
     self._engaged = False
@@ -894,6 +900,259 @@ class HudRenderer(Widget):
       font=self._font_display, border_width=1.0, shadow_offset=4.0, align='center_bottom',
     )
 
+  def _get_turn_info_hud_data(self) -> dict:
+    try:
+      cm = ui_state.sm["carrotMan"]
+    except Exception:
+      return {
+        "active_carrot": 0,
+        "x_turn_info": 0,
+        "x_dist_to_turn": 0,
+        "n_go_pos_dist": 0,
+        "n_go_pos_time": 0,
+        "atc_type": "",
+        "sdi_descr": "",
+        "road_name": "",
+        "tbt_main_text": "",
+      }
+
+    try:
+      active_carrot = int(cm.activeCarrot)
+    except Exception:
+      active_carrot = 0
+
+    try:
+      x_turn_info = int(cm.xTurnInfo)
+    except Exception:
+      x_turn_info = 0
+
+    try:
+      x_dist_to_turn = int(cm.xDistToTurn)
+    except Exception:
+      x_dist_to_turn = 0
+
+    try:
+      n_go_pos_dist = int(cm.nGoPosDist)
+    except Exception:
+      n_go_pos_dist = 0
+
+    try:
+      n_go_pos_time = int(cm.nGoPosTime)
+    except Exception:
+      n_go_pos_time = 0
+
+    try:
+      atc_type = str(cm.atcType or "")
+    except Exception:
+      atc_type = ""
+
+    try:
+      sdi_descr = str(cm.szSdiDescr or "")
+    except Exception:
+      sdi_descr = ""
+
+    try:
+      road_name = str(cm.szPosRoadName or "")
+    except Exception:
+      road_name = ""
+
+    try:
+      tbt_main_text = str(cm.szTBTMainText or "")
+    except Exception:
+      tbt_main_text = ""
+
+    return {
+      "active_carrot": active_carrot,
+      "x_turn_info": x_turn_info,
+      "x_dist_to_turn": x_dist_to_turn,
+      "n_go_pos_dist": n_go_pos_dist,
+      "n_go_pos_time": n_go_pos_time,
+      "atc_type": atc_type,
+      "sdi_descr": sdi_descr,
+      "road_name": road_name,
+      "tbt_main_text": tbt_main_text,
+    }
+
+  def _format_turn_distance_text(self, dist_m: int) -> str:
+    if dist_m <= 0:
+      return ""
+
+    if ui_state.is_metric:
+      if dist_m < 1000:
+        return f"{dist_m} m"
+      return f"{dist_m / 1000.0:.1f} km"
+    else:
+      if dist_m < 1609:
+        return f"{int(dist_m * 3.28084)} ft"
+      return f"{dist_m / 1609.344:.1f} mi"
+
+  def _format_eta_text(self, remain_sec: int) -> str:
+    if remain_sec <= 0:
+      return ""
+
+    eta_tm = time.localtime(time.time() + remain_sec)
+    remain_min = remain_sec / 60.0
+    return f"도착: {remain_min:.1f}분({eta_tm.tm_hour:02d}:{eta_tm.tm_min:02d})"
+
+  def _format_go_pos_distance_text(self, dist_m: int) -> str:
+    if dist_m <= 0:
+      return ""
+
+    if ui_state.is_metric:
+      return f"{dist_m / 1000.0:.1f}km"
+    else:
+      return f"{dist_m / 1000.0 * KM_TO_MILE:.1f}mile"
+
+  def _draw_text_left_bottom(self, text: str, x: float, y: float, size: int, color, font=None, border_width: float = 2.0, shadow_offset: float = 4.0):
+    if not text:
+      return
+
+    draw_text_ui_style(
+      text, x, y, size, color,
+      font=font or self._font_display,
+      border_width=border_width,
+      shadow_offset=shadow_offset,
+      align="left_bottom",
+    )
+
+  def _draw_turn_icon(self, turn_info: int, bx: int, by: int, icon_size: int = 140):
+    if turn_info == 1:
+      self._draw_texture_rect(self._ic_turn_l, bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size)
+    elif turn_info == 2:
+      self._draw_texture_rect(self._ic_turn_r, bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size)
+    elif turn_info == 3:
+      self._draw_texture_rect(self._ic_lane_change_l, bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size)
+    elif turn_info == 4:
+      self._draw_texture_rect(self._ic_lane_change_r, bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size)
+    elif turn_info == 7:
+      self._draw_texture_rect(self._ic_turn_u, bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size)
+    elif turn_info == 6:
+      draw_text_ui_style(
+        "TG", bx, by + 20, 35, rl.WHITE,
+        font=self._font_display,
+        border_width=2.0,
+        shadow_offset=4.0,
+        align="center_bottom",
+      )
+    elif turn_info == 8:
+      draw_text_ui_style(
+        "목적지", bx, by + 20, 35, rl.WHITE,
+        font=self._font_display,
+        border_width=2.0,
+        shadow_offset=4.0,
+        align="center_bottom",
+      )
+    else:
+      draw_text_ui_style(
+        f"감속:{turn_info}", bx, by + 20, 35, rl.WHITE,
+        font=self._font_display,
+        border_width=2.0,
+        shadow_offset=4.0,
+        align="center_bottom",
+      )
+
+  def _draw_turn_info_hud(self, rect: rl.Rectangle):
+    if rect.width < 1200:
+      return
+
+    info = self._get_turn_info_hud_data()
+    n_go_pos_dist = info["n_go_pos_dist"]
+    n_go_pos_time = info["n_go_pos_time"]
+
+    if not (n_go_pos_dist > 0 and n_go_pos_time > 0):
+      return
+
+    tbt_x = int(rect.x + rect.width - 800)
+    tbt_y = int(rect.y + rect.height - 250)
+
+    self._draw_round_box(
+      tbt_x,
+      tbt_y - 60,
+      790,
+      300,
+      rl.Color(0, 0, 0, 120),
+      line_color=rl.WHITE,
+      roundness=30.0 / 300.0,
+      segments=12,
+      line_thickness=2,
+    )
+
+    if info["tbt_main_text"]:
+      self._draw_text_left_bottom(
+        info["tbt_main_text"], tbt_x + 20, tbt_y - 15, 40, rl.WHITE,
+        font=self._font_bold, border_width=2.0, shadow_offset=4.0,
+      )
+
+    x_turn_info = info["x_turn_info"]
+    x_dist_to_turn = info["x_dist_to_turn"]
+
+    if x_turn_info > 0:
+      bx = tbt_x + 100
+      by = tbt_y + 85
+
+      if info["atc_type"]:
+        fill_color = rl.Color(0, 255, 0, 100) if "prepare" in info["atc_type"] else rl.GREEN
+        self._draw_round_box(
+          bx - 80, by - 90, 160, 230,
+          fill_color,
+          line_color=rl.BLACK,
+          roundness=15.0 / 230.0,
+          segments=8,
+          line_thickness=1,
+        )
+
+      self._draw_turn_icon(x_turn_info, bx, by, 140)
+
+      dist_text = self._format_turn_distance_text(x_dist_to_turn)
+      if dist_text:
+        draw_text_ui_style(
+          dist_text,
+          bx, by + 120, 40, rl.WHITE,
+          font=self._font_bold,
+          border_width=2.0,
+          shadow_offset=4.0,
+          align="center_bottom",
+        )
+
+    if info["sdi_descr"]:
+      label_x = tbt_x + 200
+      label_y = tbt_y + 200
+      size = measure_text_cached(self._font_bold, info["sdi_descr"], 40)
+      box_h = max(48, int(size.y + 13))
+      self._draw_round_box(
+        label_x - 10,
+        label_y - int(size.y) - 2,
+        int(size.x) + 20,
+        box_h,
+        rl.GREEN,
+        roundness=10.0 / box_h,
+        segments=8,
+        line_thickness=0,
+      )
+      self._draw_text_left_bottom(
+        info["sdi_descr"], label_x, label_y, 40, rl.WHITE,
+        font=self._font_bold, border_width=1.5, shadow_offset=3.0,
+      )
+    elif info["road_name"]:
+      self._draw_text_left_bottom(
+        info["road_name"], tbt_x + 200, tbt_y + 200, 40, rl.WHITE,
+        font=self._font_bold, border_width=1.5, shadow_offset=3.0,
+      )
+
+    eta_text = self._format_eta_text(n_go_pos_time)
+    if eta_text:
+      self._draw_text_left_bottom(
+        eta_text, tbt_x + 190, tbt_y + 80, 50, rl.WHITE,
+        font=self._font_bold, border_width=2.0, shadow_offset=4.0,
+      )
+
+    go_dist_text = self._format_go_pos_distance_text(n_go_pos_dist)
+    if go_dist_text:
+      self._draw_text_left_bottom(
+        go_dist_text, tbt_x + 310, tbt_y + 130, 50, rl.WHITE,
+        font=self._font_bold, border_width=2.0, shadow_offset=4.0,
+      )
+
   def _draw_set_speed_carrot(self, rect: rl.Rectangle) -> None:
     self._blink_timer = (self._blink_timer + 1) % 16
     self._disp_timer = (self._disp_timer + 1) % 64
@@ -908,6 +1167,7 @@ class HudRenderer(Widget):
     self._draw_carrot_lower_status(bx, by)
     self._draw_carrot_speed_limit_box(bx, by)
     self._draw_carrot_device_state(bx, by)
+    self._draw_turn_info_hud(rect)
   
 
 
