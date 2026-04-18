@@ -139,11 +139,11 @@ class HudRenderer(Widget):
     self._traffic_red_icon = gui_app.texture('images/traffic_red.png')
     self._traffic_green_icon = gui_app.texture('images/traffic_green.png')
 
-    self._ic_turn_l = gui_app.texture('images/ic_turn_l.png')
-    self._ic_turn_r = gui_app.texture('images/ic_turn_r.png')
-    self._ic_lane_change_l = gui_app.texture('images/ic_lane_change_l.png')
-    self._ic_lane_change_r = gui_app.texture('images/ic_lane_change_r.png')
-    self._ic_turn_u = gui_app.texture('images/ic_turn_u.png')
+    self._ic_turn_l = gui_app.texture('images/turn_l.png')
+    self._ic_turn_r = gui_app.texture('images/turn_r.png')
+    self._ic_lane_change_l = gui_app.texture('images/lane_change_l.png')
+    self._ic_lane_change_r = gui_app.texture('images/lane_change_r.png')
+    self._ic_turn_u = gui_app.texture('images/turn_u.png')
 
     self._set_speed_override = SetSpeedOverride()
     self._debug_speed_panel = False
