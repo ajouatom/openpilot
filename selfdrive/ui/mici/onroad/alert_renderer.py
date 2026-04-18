@@ -332,6 +332,8 @@ class AlertRenderer(Widget):
 
     alert_text2 = alert.text2.lower()
 
+    #print(f"Alert: {alert.text1} | {alert.text2} | {alert.size} | {alert.status} | {alert.visual_alert} | {alert.alert_type}")
+
     # randomize chars and length for testing
     if DEBUG:
       if time.monotonic() - self._text_gen_time > 0.5:
@@ -339,13 +341,13 @@ class AlertRenderer(Widget):
         self._text_gen_time = time.monotonic()
       alert_text2 = self._alert_text2_gen or alert_text2
 
-    if can_draw_second_line and alert_text2:
+    if (can_draw_second_line or alert.size != AlertSize.small) and alert_text2:
       last_line_h = self._alert_text1_label.rect.y + self._alert_text1_label.get_content_height(int(alert_layout.text_rect.width))
       last_line_h -= 4
-      if len(alert_text2) > 18:
-        small_font_size = 36
-      elif len(alert_text2) > 24:
+      if len(alert_text2) > 24:
         small_font_size = 32
+      elif len(alert_text2) > 16:
+        small_font_size = 36
       else:
         small_font_size = 40
       text_rect2 = rl.Rectangle(
