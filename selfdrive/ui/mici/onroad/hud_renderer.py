@@ -182,8 +182,12 @@ class HudRenderer(Widget):
     self._turn_intent = TurnIntent()
     self._torque_bar = TorqueBar()
 
-    self._txt_wheel: rl.Texture = gui_app.texture('icons_mici/wheel.png', 50, 50)
-    self._txt_wheel_critical: rl.Texture = gui_app.texture('icons_mici/wheel_critical.png', 50, 50)
+    # 휠 당근 휠로 변경
+    self._txt_wheel: rl.Texture = gui_app.texture('icons_mici/carrot_wheel.png', 50, 50) # 당근 휠
+    self._txt_wheel_critical: rl.Texture = gui_app.texture('icons_mici/carrot_wheel_critical.png', 50, 50) # 당근 휠 위험
+    self._txt_wheel_lane: rl.Texture = gui_app.texture('icons_mici/carrot_wheel_lane.png', 100, 50) # 당근 레인모드
+    self._txt_wheel_cap: rl.Texture = gui_app.texture('icons_mici/carrot_wheel_cap.png', 50, 50) # 당근 휠 중앙 당근맨
+
     self._txt_exclamation_point: rl.Texture = gui_app.texture('icons_mici/exclamation_point.png', 44, 44)
 
     # Bottom-left speed panel background
@@ -284,15 +288,23 @@ class HudRenderer(Widget):
     if ui_state.lat_active:
       wheel_color = rl.Color(0, 255, 0, int(self._wheel_alpha_filter.x))
     else:
-      wheel_color = rl.Color(160, 160, 160, int(self._wheel_alpha_filter.x))
+      wheel_color = rl.Color(188, 188, 188, int(self._wheel_alpha_filter.x))
 
     rl.draw_texture_pro(wheel_txt, src_rect, dest_rect, origin, rotation, wheel_color)
+    # 당근맨은 틴팅 없이 덧대서 그리기
+    rl.draw_texture_pro(self._txt_wheel_cap, src_rect, dest_rect, origin, rotation, rl.WHITE)
 
     if self._show_wheel_critical:
       EXCLAMATION_POINT_SPACING = 10
       exclamation_pos_x = pos_x - self._txt_exclamation_point.width / 2 + wheel_txt.width / 2 + EXCLAMATION_POINT_SPACING
       exclamation_pos_y = pos_y - self._txt_exclamation_point.height / 2
       rl.draw_texture_ex(self._txt_exclamation_point, rl.Vector2(exclamation_pos_x, exclamation_pos_y), 0.0, 1.0, rl.WHITE)
+    # 속도패널 디버깅 모드거나 레인모드일 때 차선 이미지 추가
+    elif self._debug_speed_panel or bool(ui_state.sm['controlsState'].activeLaneLine):
+      LANE_TOP_OFFSET = 3
+      lane_pos_x = pos_x - self._txt_wheel_lane.width / 2
+      lane_pos_y = pos_y - self._txt_wheel_lane.height / 2 - LANE_TOP_OFFSET
+      rl.draw_texture_ex(self._txt_wheel_lane, rl.Vector2(lane_pos_x, lane_pos_y), 0.0, 1.0, wheel_color)
 
 
   def _get_cpu_temp_text(self) -> str:
@@ -645,6 +657,8 @@ class HudRenderer(Widget):
       rl.WHITE,
     )
 
+    # 기존 레인모드/레인리스 출력 코드 제거
+    """
     if self._debug_speed_panel:
       active_lane_line = True
     else:
@@ -666,6 +680,7 @@ class HudRenderer(Widget):
 
     draw_text_ui_style(line1, lane_x - s1.x, lane_y1, lane_font, lane_color, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
     draw_text_ui_style(line2, lane_x - s2.x, lane_y2, lane_font, lane_color, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
+    """
 
   def _get_driving_mode_text_and_color(self) -> tuple[str, rl.Color]:
     carState = ui_state.sm["carState"]
