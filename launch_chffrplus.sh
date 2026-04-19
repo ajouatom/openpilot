@@ -76,6 +76,7 @@ function launch {
     agnos_init
   fi
 
+  rm selfdrive/pandad/*.so
   # write tmux scrollback to a file
   tmux capture-pane -pq -S-1500 > /tmp/launch_log
   if python -c "import flask" > /dev/null 2>&1; then
