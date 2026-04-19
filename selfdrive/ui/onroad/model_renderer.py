@@ -718,7 +718,7 @@ class ModelRenderer(Widget):
   def _draw_text_box_carrot(self, x: int, y: int, text: str, font_size: int, box_color: rl.Color):
     w = max(40, int(len(text) * font_size * 0.8))
     h = 42
-    self._draw_rect_fill_outline_carrot(x - w / 2, y - 22, w, h, box_color, box_color, 0.0)
+    self._draw_rect_fill_outline_carrot(x - w / 2, y - 20, w, h, box_color, box_color, 0.0)
     draw_text_ui_style(
       text,
       x,
@@ -996,60 +996,47 @@ class ModelRenderer(Widget):
     model_position = np.array([model.position.x, model.position.y, model.position.z], dtype=np.float32).T
     max_idx_barrier = self._get_path_length_idx(model_position[:, 0], 40.0)
 
-    self._carrot_lane_barrier_vertices[0] = self._build_path_polygon_update_line_data2_carrot(
-      model_position,
-      1.2 - 0.05,
-      1.2 - 0.6,
-      1.2 - 0.6,
-      max_idx_barrier,
-      False,
-    )
-    self._carrot_lane_barrier_vertices[0][:, 0] = self._carrot_lane_barrier_vertices[0][:, 0]
-
-    self._carrot_lane_barrier_vertices[1] = self._build_path_polygon_update_line_data2_carrot(
-      model_position,
-      1.2 - 0.05,
-      1.2 - 0.6,
-      1.2 - 0.6,
-      max_idx_barrier,
-      False,
-    )
-
-    # Shift left/right from vehicle center, matching carrot.cc offset usage
-    if self._carrot_lane_barrier_vertices[0].size != 0:
+    def build_barrier(y_shift: float) -> np.ndarray:
       left_points = []
       right_points = []
+
       for i in range(0, max_idx_barrier + 1):
         if model_position[i, 0] < 0:
           continue
-        z_off = self._carrot_interp(float(model_position[i, 0]), [0.0, 100.0], [1.2 - 0.6, 1.2 - 0.6])
-        y_off = self._carrot_interp(z_off, [-3.0, 0.0, 3.0], [1.5, 0.5, 1.5]) * (1.2 - 0.05)
-        left = self._map_to_screen(model_position[i, 0], model_position[i, 1] - y_off - 1.7, model_position[i, 2] + z_off)
-        right = self._map_to_screen(model_position[i, 0], model_position[i, 1] + y_off - 1.7, model_position[i, 2] + z_off)
+
+        left = self._map_to_screen(
+          model_position[i, 0],
+          model_position[i, 1] + y_shift,
+          model_position[i, 2] + (1.2 - 0.05),
+        )
+        right = self._map_to_screen(
+          model_position[i, 0],
+          model_position[i, 1] + y_shift,
+          model_position[i, 2] + (1.2 - 0.6),
+        )
+
         if left is not None and right is not None:
           if len(left_points) > 0 and left[1] > left_points[-1][1]:
             continue
           left_points.append(left)
           right_points.insert(0, right)
-      self._carrot_lane_barrier_vertices[0] = np.array(left_points + right_points, dtype=np.float32) if len(left_points) > 0 else np.empty((0, 2), dtype=np.float32)
 
-    if self._carrot_lane_barrier_vertices[1].size != 0:
-      left_points = []
-      right_points = []
-      for i in range(0, max_idx_barrier + 1):
-        if model_position[i, 0] < 0:
-          continue
-        z_off = self._carrot_interp(float(model_position[i, 0]), [0.0, 100.0], [1.2 - 0.6, 1.2 - 0.6])
-        y_off = self._carrot_interp(z_off, [-3.0, 0.0, 3.0], [1.5, 0.5, 1.5]) * (1.2 - 0.05)
-        left = self._map_to_screen(model_position[i, 0], model_position[i, 1] - y_off + 1.7, model_position[i, 2] + z_off)
-        right = self._map_to_screen(model_position[i, 0], model_position[i, 1] + y_off + 1.7, model_position[i, 2] + z_off)
-        if left is not None and right is not None:
-          if len(left_points) > 0 and left[1] > left_points[-1][1]:
-            continue
-          left_points.append(left)
-          right_points.insert(0, right)
-      self._carrot_lane_barrier_vertices[1] = np.array(left_points + right_points, dtype=np.float32) if len(left_points) > 0 else np.empty((0, 2), dtype=np.float32)
+      if len(left_points) == 0:
+        return np.empty((0, 2), dtype=np.float32)
+      return np.array(left_points + right_points, dtype=np.float32)
 
+    self._carrot_lane_barrier_vertices[0] = build_barrier(-1.7)
+    self._carrot_lane_barrier_vertices[1] = build_barrier(1.7)
+
+
+  def _order_polygon_points_carrot(self, pts: np.ndarray) -> np.ndarray:
+    if pts.shape[0] < 3:
+      return pts
+
+    center = np.mean(pts, axis=0)
+    angles = np.arctan2(pts[:, 1] - center[1], pts[:, 0] - center[0])
+    order = np.argsort(angles)
+    return pts[order]
 
   def _draw_blind_spot_segments_carrot(self, points: np.ndarray, color: rl.Color):
     if points.size == 0:
@@ -1065,11 +1052,14 @@ class ModelRenderer(Widget):
       p1 = points[i + 1]
       p2 = points[count - i - 3]
       p3 = points[count - i - 2]
-      self._draw_quad_fill_carrot(p0, p1, p2, p3, color)
-      self._draw_line_segment_carrot(p0, p1, color, 3.0)
-      self._draw_line_segment_carrot(p1, p2, color, 3.0)
-      self._draw_line_segment_carrot(p2, p3, color, 3.0)
-      self._draw_line_segment_carrot(p3, p0, color, 3.0)
+
+      quad = np.array([p0, p1, p2, p3], dtype=np.float32)
+      quad = self._order_polygon_points_carrot(quad)
+
+      xs = [float(p[0]) for p in quad]
+      ys = [float(p[1]) for p in quad]
+
+      self._draw_polygon_from_xy_carrot(xs, ys, color, False, 10)
 
 
   def _draw_blind_spot_carrot(self, sm):
