@@ -261,7 +261,7 @@ class HudRenderer(Widget):
       lateral_acceleration = actual_lateral_accel - roll_compensation
       max_lateral_acceleration = ui_state.CP.maxLateralAccel if ui_state.CP else DEFAULT_MAX_LAT_ACCEL
 
-      if True or car_control.latActive:
+      if car_control.latActive:
         self._torque_filter.update(float(np.clip((lateral_acceleration + accel_diff) / max_lateral_acceleration, -1.0, 1.0)))
       else:
         self._torque_filter.update(0.0)
