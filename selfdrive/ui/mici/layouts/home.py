@@ -197,7 +197,7 @@ class MiciHomeLayout(Widget):
         commit_text = self._version_text[2]
         model = ui_state.params.get("DrivingModelName") or ""
         if model:
-          commit_text = f"{commit_text} ({model})"
+          commit_text = f"{commit_text}  {model}"
         self._version_commit_label.set_text(commit_text)
         self._version_commit_label.set_position(version_pos.x, version_pos.y + self._date_label.font_size + 7)
         self._version_commit_label.render()
