@@ -10,6 +10,8 @@
 
   let currentJobId = null;
   let pollTimer = null;
+  let currentModel = "";
+  let pendingModel = "";
 
   const $ = (id) => document.getElementById(id);
 
@@ -47,28 +49,60 @@
   async function refreshStatus() {
     try {
       const s = await fetchJSON("/api/models/status");
-      $("msCurrent").textContent = s.current_model || "Default Model";
-      $("msPending").textContent = s.pending_model || "—";
+      currentModel = s.current_model || "";
+      pendingModel = s.pending_model || "";
+      $("msCurrent").textContent = currentModel || "Default (built-in)";
+      $("msDescription").textContent = s.description || "No custom model installed";
       $("msDisk").textContent = s.disk_free_mb >= 0 ? s.disk_free_mb : "?";
-      $("msDescription").textContent = s.description || "";
-      $("msApplyBtn").disabled = !s.pending_model;
+      const pendingChip = $("msPendingChip");
+      if (pendingModel) {
+        $("msPending").textContent = pendingModel;
+        pendingChip.style.display = "";
+      } else {
+        pendingChip.style.display = "none";
+      }
+      $("msApplyBtn").disabled = !pendingModel;
     } catch (e) {
       showError("status: " + e.message);
     }
   }
 
-  function rowHtml(m) {
-    const arch = m.has_off_policy
-      ? (m.has_on_policy ? "on+off" : "policy+off")
-      : (m.has_on_policy ? "on_policy" : "policy");
+  function archLabel(m) {
+    if (m.has_off_policy) return m.has_on_policy ? "on-policy + off-policy" : "policy + off-policy";
+    return m.has_on_policy ? "on-policy" : "policy";
+  }
+
+  function cardHtml(m) {
+    const isCurrent = m.id === currentModel || m.name === currentModel;
+    const isPending = m.id === pendingModel || m.name === pendingModel;
+    const stateCls = isCurrent ? " is-current" : (isPending ? " is-pending" : "");
+
+    let badge = "";
+    if (isCurrent) badge = `<span class="ms-chip ms-chip--current">Current</span>`;
+    else if (isPending) badge = `<span class="ms-chip ms-chip--pending">Pending</span>`;
+
+    const btnLabel = isCurrent ? "Reinstall" : (isPending ? "Downloaded" : "Install");
+    const btnDisabled = isPending ? "disabled" : "";
+    const btnClass = isCurrent ? "btn" : "btn btn--filled";
+
     return `
-      <tr>
-        <td>${escapeHtml(m.name)}</td>
-        <td>${arch}</td>
-        <td>${fmtMB(m.total_size)}</td>
-        <td>${escapeHtml(m.added_at || "")}</td>
-        <td><button class="btn ms-install-btn" data-id="${escapeHtml(m.id)}">Install</button></td>
-      </tr>`;
+      <div class="ms-card${stateCls}">
+        <div class="ms-card__head">
+          <div class="ms-card__name">${escapeHtml(m.name)}</div>
+          ${badge}
+        </div>
+        <div class="ms-card__badge-row">
+          <span class="ms-chip ms-chip--arch">${escapeHtml(archLabel(m))}</span>
+        </div>
+        <div class="ms-card__meta">
+          <span>${fmtMB(m.total_size)}</span>
+          <span>•</span>
+          <span>${escapeHtml(m.added_at || "")}</span>
+        </div>
+        <div class="ms-card__actions">
+          <button class="${btnClass} ms-install-btn" data-id="${escapeHtml(m.id)}" ${btnDisabled}>${btnLabel}</button>
+        </div>
+      </div>`;
   }
 
   function escapeHtml(s) {
@@ -81,19 +115,19 @@
 
   async function refreshList() {
     const body = $("msModelsBody");
-    body.innerHTML = "<tr><td colspan='5'>Loading…</td></tr>";
+    body.innerHTML = `<div class="ms-loading">Loading…</div>`;
     try {
       const d = await fetchJSON("/api/models/list");
       if (!d.models || !d.models.length) {
-        body.innerHTML = "<tr><td colspan='5'>No models available.</td></tr>";
+        body.innerHTML = `<div class="ms-empty">No models available.</div>`;
         return;
       }
-      body.innerHTML = d.models.map(rowHtml).join("");
+      body.innerHTML = d.models.map(cardHtml).join("");
       Array.from(body.querySelectorAll(".ms-install-btn")).forEach((btn) => {
         btn.addEventListener("click", () => onInstall(btn.dataset.id));
       });
     } catch (e) {
-      body.innerHTML = "<tr><td colspan='5'>Failed to load.</td></tr>";
+      body.innerHTML = `<div class="ms-empty">Failed to load.</div>`;
       showError("list: " + e.message);
     }
   }
@@ -140,7 +174,7 @@
         currentJobId = null;
         if (snap.status === "done") {
           showProgress(true, 100, "downloaded — ready to apply");
-          refreshStatus();
+          refreshStatus().then(() => refreshList());
         } else {
           showProgress(false, 0, "");
           showError(snap.error || "install failed");
