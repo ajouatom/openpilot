@@ -2006,7 +2006,7 @@ function buildToolsMetaInfoDialog(values = {}) {
   const lines = [];
   if (branch) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.branch)}: ${htmlEscape(branch)}</div>`);
   if (commit) {
-    const commitText = `${commit.slice(0, 7)}${commitDate ? `    ${commitDate}` : ""}`;
+    const commitText = `${commit.slice(0, 7)}${commitDate ? ` (${commitDate})` : ""}`;
     lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.commit)}: ${htmlEscape(commitText)}</div>`);
   }
   if (dongleId) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.dongle)}: ${htmlEscape(dongleId)}</div>`);
@@ -2465,6 +2465,19 @@ function initToolsPage() {
   });
   bindOnce("btnGitBranch", async () => {
     await loadBranchesAndShow();
+  });
+
+  bindOnce("btnResetCalib", async () => {
+    const title = LANG === "ko" ? "캘리브레이션 초기화" : "ReCalibration";
+    const msg = LANG === "ko" 
+      ? "캘리브레이션을 초기화하시겠습니까?\n초기화 후 자동으로 재부팅됩니다."
+      : "Are you sure you want to reset calibration?\nDevice will reboot automatically.";
+    if (!await appConfirm(msg, { title })) return;
+    try {
+      await runTool("shell_cmd", { cmd: "rm -f /data/params/d_tmp/CalibrationParams /data/params/d/CalibrationParams && sleep 1 && reboot" });
+    } catch (e) {
+      showError("shell_cmd", e);
+    }
   });
 
   bindOnce("btnDeviceLang", async () => {
