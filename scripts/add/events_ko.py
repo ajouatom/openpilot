@@ -153,6 +153,8 @@ class NoEntryAlert(Alert):
   def __init__(self, alert_text_2: str,
                alert_text_1: str = "오픈파일럿 사용불가",
                visual_alert: car.CarControl.HUDControl.VisualAlert=VisualAlert.none):
+    if HARDWARE.get_device_type() == 'mici':
+      alert_text_1, alert_text_2 = alert_text_2, alert_text_1
     super().__init__(alert_text_1, alert_text_2, AlertStatus.normal,
                      AlertSize.mid, Priority.LOW, visual_alert,
                      AudibleAlert.refuse, 3.)
@@ -171,6 +173,7 @@ class UserSoftDisableAlert(SoftDisableAlert):
   def __init__(self, alert_text_2: str):
     super().__init__(alert_text_2),
     self.alert_text_1 = "오픈파일럿이 해제됩니다"
+
 
 class ImmediateDisableAlert(Alert):
   def __init__(self, alert_text_2: str):
@@ -265,7 +268,7 @@ def calibration_incomplete_alert(CP: car.CarParams, CS: car.CarState, sm: messag
 def audio_feedback_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
   duration = FEEDBACK_MAX_DURATION - ((sm['audioFeedback'].blockNum + 1) * SAMPLE_BUFFER / SAMPLE_RATE)
   return NormalPermanentAlert(
-    "Recording Audio Feedback",
+    "오디오 피드백 녹음",
     f"{round(duration)} second{'s' if round(duration) != 1 else ''} remaining. Press again to save early.",
     priority=Priority.LOW)
 
@@ -326,19 +329,20 @@ def calibration_invalid_alert(CP: car.CarParams, CS: car.CarState, sm: messaging
 def paramsd_invalid_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
   if not sm['liveParameters'].angleOffsetValid:
     angle_offset_deg = sm['liveParameters'].angleOffsetDeg
-    title = "Steering misalignment detected"
-    text = f"Angle offset too high (Offset: {angle_offset_deg:.1f}°)"
+    title = "스티어링 오정렬 감지"
+    text = f"각도 옵셋이 너무 높음 (옵셋: {angle_offset_deg:.1f}°)"
   elif not sm['liveParameters'].steerRatioValid:
     steer_ratio = sm['liveParameters'].steerRatio
-    title = "Steer ratio mismatch"
-    text = f"Steering rack geometry may be off (Ratio: {steer_ratio:.1f})"
+    title = "조향비 불일치"
+    text = f"스티어링 랙 구조가 틀어짐 (비율: {steer_ratio:.1f})"
   elif not sm['liveParameters'].stiffnessFactorValid:
     stiffness_factor = sm['liveParameters'].stiffnessFactor
-    title = "Abnormal tire stiffness"
-    text = f"Check tires, pressure, or alignment (Factor: {stiffness_factor:.1f})"
+    title = "타이어 강성 이상"
+    text = f"타이어, 공기압 또는 얼라인먼트 점검 (인자: {stiffness_factor:.1f})"
   else:
     return NoEntryAlert("paramsd Temporary Error")
 
+  return NoEntryAlert(alert_text_1=title, alert_text_2=text)
 
 def overheat_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
   cpu = max(sm['deviceState'].cpuTempC, default=0.)
@@ -386,17 +390,17 @@ def longitudinal_maneuver_alert(CP: car.CarParams, CS: car.CarState, sm: messagi
 
 def personality_changed_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
   personality = str(personality).title()
-  return NormalPermanentAlert(f"Driving Personality: {personality}", duration=1.5)
+  return NormalPermanentAlert(f"운전 성향: {personality}", duration=1.5)
 
 
 def invalid_lkas_setting_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
-  text = "Toggle stock LKAS on or off to engage"
+  text = "활성화 하려면 차량의 LKAS 상태를 확인하세요"
   if CP.brand == "tesla":
-    text = "Switch to Traffic-Aware Cruise Control to engage"
+    text = "활성화 하려면 Traffic-Aware Cruise Control을 켜세요"
   elif CP.brand == "mazda":
-    text = "Enable your car's LKAS to engage"
+    text = "활성화 하려면 LKAS를 켜세요"
   elif CP.brand == "nissan":
-    text = "Disable your car's stock LKAS to engage"
+    text = "활성화 하려면 LKAS를 끄세요"
   return NormalPermanentAlert("Invalid LKAS setting", text)
 
 def car_parser_result(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
@@ -404,11 +408,11 @@ def car_parser_result(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMast
   if results is None:
     results = ""
   return Alert(
-    "CAN 오류: Check Connections",
+    "CAN 오류: 연결을 확인하세요",
     results,
     AlertStatus.normal, AlertSize.small,
     Priority.LOW, VisualAlert.none, AudibleAlert.none, 1., creation_delay=1.)
-  
+
 
 
 EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
@@ -426,12 +430,13 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.longitudinalManeuver: {
     ET.WARNING: longitudinal_maneuver_alert,
-    ET.PERMANENT: NormalPermanentAlert("롱컨 가동 모드",
+    ET.PERMANENT: NormalPermanentAlert("롱컨 제어 모드",
                                        "전방 도로에 장애물이 없는지 확인하세요"),
   },
+
   EventName.lateralManeuver: {
     ET.WARNING: longitudinal_maneuver_alert,
-    ET.PERMANENT: NormalPermanentAlert("Lateral Maneuver Mode"),
+    ET.PERMANENT: NormalPermanentAlert("조향 제어 모드"),
   },
 
   EventName.selfdriveInitializing: {
@@ -467,9 +472,8 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
 
   EventName.invalidLkasSetting: {
-    ET.PERMANENT: NormalPermanentAlert("잘못된 LKAS 설정",
-                                       "활성화 하려면 차량의 LKAS를 켜거나 끄세요."),
-    ET.NO_ENTRY: NoEntryAlert("Invalid LKAS setting"),
+    ET.PERMANENT: invalid_lkas_setting_alert,
+    ET.NO_ENTRY: NoEntryAlert("잘못된 LKAS 설정"),
   },
 
   EventName.cruiseMismatch: {
@@ -503,6 +507,10 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
     ET.NO_ENTRY: NoEntryAlert("추돌 위험: 차량 AEB 작동"),
   },
 
+  EventName.stockLkas: {
+    ET.NO_ENTRY: NoEntryAlert("차선 이탈 감지: 차량 LKAS 모드"),
+  },
+
   EventName.fcw: {
     ET.PERMANENT: Alert(
       "브레이크!",
@@ -523,7 +531,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.steerTempUnavailableSilent: {
     ET.WARNING: Alert(
-      "조향제어 일시적 불가능",
+      "조향제어 일시적 사용불가",
       "",
       AlertStatus.userPrompt, AlertSize.small,
       Priority.LOW, VisualAlert.steerRequired, AudibleAlert.none, 1.8),
@@ -677,7 +685,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   # This alert is thrown when any of these values exceed a sanity check. This can be caused by
   # bad alignment or bad sensor data. If this happens consistently consider creating an issue on GitHub
   EventName.paramsdTemporaryError: {
-    ET.NO_ENTRY: NoEntryAlert("paramsd 일시적 오류"),
+    ET.NO_ENTRY: paramsd_invalid_alert,
     ET.SOFT_DISABLE: soft_disable_alert("paramsd 일시적 오류"),
   },
 
@@ -707,8 +715,11 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
 
   EventName.brakeHold: {
-    ET.USER_DISABLE: EngagementAlert(AudibleAlert.disengage),
-    ET.NO_ENTRY: NoEntryAlert("브레이크 감지됨"),
+    ET.WARNING: Alert(
+      "브레이크 홀드를 해제하려면 RES를 누르세요",
+      "",
+      AlertStatus.userPrompt, AlertSize.small,
+      Priority.LOW, VisualAlert.none, AudibleAlert.none, .2),
   },
 
   EventName.parkBrake: {
@@ -724,7 +735,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.steerDisengage: {
     ET.USER_DISABLE: EngagementAlert(AudibleAlert.disengage),
-    ET.NO_ENTRY: NoEntryAlert("Steering Pressed"),
+    ET.NO_ENTRY: NoEntryAlert("스티어링 감지됨"),
   },
 
   EventName.preEnableStandstill: {
@@ -766,8 +777,8 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
 
   EventName.steerTempUnavailable: {
-    ET.SOFT_DISABLE: soft_disable_alert("조향제어 일시적 불가능"),
-    ET.NO_ENTRY: NoEntryAlert("조향제어 일시적 불가능"),
+    ET.SOFT_DISABLE: soft_disable_alert("조향제어 일시적 사용불가"),
+    ET.NO_ENTRY: NoEntryAlert("조향제어 일시적 사용불가"),
   },
 
   EventName.steerTimeLimit: {
@@ -795,11 +806,6 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
 
   EventName.noGps: {
-    ET.PERMANENT: Alert(
-      "GPS 수신 불량",
-      "기기에서 하늘이 잘 보이는지 확인하세요",
-      AlertStatus.normal, AlertSize.mid,
-      Priority.LOWER, VisualAlert.none, AudibleAlert.none, .2, creation_delay=600.)
   },
 
   EventName.tooDistracted: {
@@ -807,8 +813,8 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
 
   EventName.excessiveActuation: {
-    ET.SOFT_DISABLE: soft_disable_alert("Excessive Actuation"),
-    ET.NO_ENTRY: NoEntryAlert("Excessive Actuation"),
+    ET.SOFT_DISABLE: soft_disable_alert("과도한 동작"),
+    ET.NO_ENTRY: NoEntryAlert("과도한 동작"),
   },
 
   EventName.overheat: {
@@ -894,6 +900,11 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
     ET.NO_ENTRY: NoEntryAlert("레이더 오류 : 차량을 재가동 하세요"),
   },
 
+  EventName.radarTempUnavailable: {
+    ET.SOFT_DISABLE: soft_disable_alert("레이더 일시적 사용불가"),
+    ET.NO_ENTRY: NoEntryAlert("레이더 일시적 사용불가"),
+  },
+
   # Every frame from the camera should be processed by the model. If modeld
   # is not processing frames fast enough they have to be dropped. This alert is
   # thrown when over 20% of frames are dropped.
@@ -946,7 +957,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   # causing the connection to the panda to be lost
   EventName.usbError: {
     ET.SOFT_DISABLE: soft_disable_alert("USB 오류 : 장치를 재부팅 하세요"),
-    ET.PERMANENT: NormalPermanentAlert("USB 오류 : 장치를 재부팅 하세요", ""),
+    ET.PERMANENT: NormalPermanentAlert("USB 오류 : 장치를 재부팅 하세요"),
     ET.NO_ENTRY: NoEntryAlert("USB 오류 : 장치를 재부팅 하세요"),
   },
 
@@ -1037,7 +1048,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
 
   EventName.userBookmark: {
-    ET.PERMANENT: NormalPermanentAlert("Bookmark Saved", duration=1.5),
+    ET.PERMANENT: NormalPermanentAlert("북마크 저장됨", duration=1.5),
   },
 
   EventName.audioFeedback: {
@@ -1146,66 +1157,66 @@ if HARDWARE.get_device_type() == 'mici':
   EVENTS.update({
     EventName.driverDistracted1: {
       ET.PERMANENT: Alert(
-        "Pay Attention",
+        "도로를 주시하세요",
         "",
         AlertStatus.normal, AlertSize.small,
         Priority.LOW, VisualAlert.none, AudibleAlert.none, 2),
     },
     EventName.driverDistracted2: {
       ET.PERMANENT: Alert(
-        "Pay Attention",
-        "Driver Distracted",
+        "도로를 주시하세요",
+        "운전자 도로주시 불안",
         AlertStatus.userPrompt, AlertSize.mid,
         Priority.MID, VisualAlert.steerRequired, AudibleAlert.promptDistracted, 1),
     },
     EventName.resumeRequired: {
       ET.WARNING: Alert(
-        "Press Resume",
+        "정지 상태를 종료하려면 RES버튼을 누르세요",
         "",
         AlertStatus.userPrompt, AlertSize.small,
         Priority.LOW, VisualAlert.none, AudibleAlert.none, .2),
     },
     EventName.preLaneChangeLeft: {
       ET.WARNING: Alert(
-        "Steer Left",
-        "Confirm Lane Change",
+        "좌측 차선이 안전한지 확인하세요",
+        "",
         AlertStatus.normal, AlertSize.mid,
         Priority.LOW, VisualAlert.none, AudibleAlert.none, .1),
     },
     EventName.preLaneChangeRight: {
       ET.WARNING: Alert(
-        "Steer Right",
-        "Confirm Lane Change",
+        "우측 차선이 안전한지 확인하세요",
+        "",
         AlertStatus.normal, AlertSize.mid,
         Priority.LOW, VisualAlert.none, AudibleAlert.none, .1),
     },
     EventName.laneChangeBlocked: {
       ET.WARNING: Alert(
-        "Car in Blindspot",
+        "사각지대에 차량이 감지되니 대기하세요",
         "",
         AlertStatus.userPrompt, AlertSize.small,
         Priority.LOW, VisualAlert.none, AudibleAlert.prompt, .1),
     },
     EventName.steerSaturated: {
       ET.WARNING: Alert(
-        "take control",
-        "turn exceeds limit",
+        "핸들을 잡아주세요",
+        "회전이 조향 한도를 초과함",
         AlertStatus.userPrompt, AlertSize.mid,
         Priority.LOW, VisualAlert.steerRequired, AudibleAlert.promptRepeat, 2.),
     },
     EventName.calibrationIncomplete: {
       ET.PERMANENT: calibration_incomplete_alert,
-      ET.SOFT_DISABLE: soft_disable_alert("Calibration Incomplete"),
-      ET.NO_ENTRY: NoEntryAlert("Calibrating"),
+      ET.SOFT_DISABLE: soft_disable_alert("캘리브레이션 미완료"),
+      ET.NO_ENTRY: NoEntryAlert("캘리브레이션중"),
     },
     EventName.reverseGear: {
       ET.PERMANENT: Alert(
-        "Reverse",
+        "기어 [R] 상태",
         "",
         AlertStatus.normal, AlertSize.full,
         Priority.LOWEST, VisualAlert.none, AudibleAlert.none, .2, creation_delay=0.5),
-      ET.USER_DISABLE: ImmediateDisableAlert("Reverse"),
-      ET.NO_ENTRY: NoEntryAlert("Reverse"),
+      ET.USER_DISABLE: SoftDisableAlert("기어 [R] 상태"),
+      ET.NO_ENTRY: NoEntryAlert("기어 [R] 상태"),
     },
   })
 
