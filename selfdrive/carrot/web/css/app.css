@@ -1375,6 +1375,9 @@ body[data-page="terminal"] .app-toast-host {
   position: relative;
   z-index: 1;
   width: min(100%, 420px);
+  max-height: calc(100dvh - var(--sp-lg) * 2);
+  display: flex;
+  flex-direction: column;
   padding: var(--sp-lg);
   border: 1px solid color-mix(in srgb, var(--md-stroke-soft) 92%, transparent);
   border-radius: var(--r-lg);
@@ -1392,6 +1395,7 @@ body[data-page="terminal"] .app-toast-host {
 
 .app-dialog__head {
   margin-bottom: var(--sp-sm);
+  flex-shrink: 0;
 }
 
 .app-dialog__title {
@@ -1406,6 +1410,7 @@ body[data-page="terminal"] .app-toast-host {
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
+  flex-shrink: 0;
 }
 
 .app-dialog__metaList {
@@ -1431,6 +1436,10 @@ body[data-page="terminal"] .app-toast-host {
   display: grid;
   gap: var(--sp-sm);
   margin-top: var(--sp-md);
+  overflow-y: auto;
+  min-height: 0;
+  flex-shrink: 1;
+  padding-right: 4px;
 }
 
 .app-dialog__choices[hidden] {
@@ -1462,6 +1471,7 @@ body[data-page="terminal"] .app-toast-host {
   gap: var(--sp-sm);
   flex-wrap: wrap;
   margin-top: var(--sp-lg);
+  flex-shrink: 0;
 }
 
 .app-branch-picker__sheet {
