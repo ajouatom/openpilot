@@ -1,11 +1,6 @@
-Carrot2-v9 (2026-01-xx)
+carrot (2026-04-21)
 ========================
-* WMI model
-* Activate corner radar(HDA2)
-* fix Angle Steering(HKG car)
-* Keep blinker while LaneChange
-* Speed based TF adjustment
-* 
+* CD210 model
 
 Carrot2-v9 (2025-12-06)
 ========================
