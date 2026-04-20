@@ -219,6 +219,9 @@ def manager_thread() -> None:
 
 def main() -> None:
   manager_init()
+  # Carrot model selector: compile any pending model before processes start.
+  from openpilot.carrot.model_selector.boot_compile import run as _ms_boot_compile
+  _ms_boot_compile()
   print(f"python ../../opendbc/car/hyundai/values.py > {Params().get_param_path()}/SupportedCars")
   os.system(f"python ../../opendbc/car/hyundai/values.py > {Params().get_param_path()}/SupportedCars")
   os.system(f"python ../../opendbc/car/gm/values.py > {Params().get_param_path()}/SupportedCars_gm")

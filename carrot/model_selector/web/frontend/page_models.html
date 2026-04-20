@@ -1,0 +1,44 @@
+<div id="pageModels" class="page" style="display:none;">
+  <div class="panel">
+    <div class="panel-title">Model Selector</div>
+
+    <div id="msStatus" class="ms-status">
+      <div>Current: <span id="msCurrent">—</span></div>
+      <div>Pending: <span id="msPending">—</span></div>
+      <div>Disk free: <span id="msDisk">—</span> MB</div>
+      <div id="msDescription" class="ms-desc"></div>
+    </div>
+
+    <div class="panel-actions">
+      <button id="msRefreshBtn" class="btn">Refresh</button>
+      <button id="msApplyBtn" class="btn btn-primary" disabled>Apply &amp; Reboot</button>
+      <button id="msResetBtn" class="btn btn-danger">Reset to Default</button>
+    </div>
+
+    <div id="msProgressWrap" class="ms-progress" style="display:none;">
+      <div class="ms-progress-label" id="msProgressMsg">&nbsp;</div>
+      <div class="ms-progress-bar">
+        <div class="ms-progress-fill" id="msProgressFill" style="width:0%;"></div>
+      </div>
+    </div>
+
+    <div class="ms-list">
+      <table class="ms-table">
+        <thead>
+          <tr>
+            <th>Model</th>
+            <th>Arch</th>
+            <th>Size</th>
+            <th>Added</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="msModelsBody">
+          <tr><td colspan="5">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="msError" class="ms-error"></div>
+  </div>
+</div>

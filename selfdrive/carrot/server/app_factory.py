@@ -2,6 +2,7 @@ from aiohttp import web
 
 from .core import log_mw, on_startup, on_cleanup, WEB_DIR
 from . import routes_static, routes_api, routes_ws
+from openpilot.carrot.model_selector.web import routes as model_selector_routes
 
 
 def make_app() -> web.Application:
@@ -37,6 +38,9 @@ def make_app() -> web.Application:
   # downloads
   app.router.add_get("/download/tmux.log", routes_api.handle_download_tmux)
   app.router.add_get("/download/params_backup.json", routes_api.handle_download_params_backup)
+
+  # model selector plugin
+  model_selector_routes.register(app)
 
   # foldered static assets
   app.router.add_static("/", str(WEB_DIR), show_index=True)
