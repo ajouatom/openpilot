@@ -17,6 +17,15 @@
 
   const $ = (id) => document.getElementById(id);
 
+  async function confirmPopup(message, opts) {
+    if (typeof window.appConfirm === "function") {
+      try {
+        return await window.appConfirm(message, opts || {});
+      } catch (_) { /* fall through to native */ }
+    }
+    return window.confirm(message);
+  }
+
   function fmtMB(bytes) {
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   }
@@ -176,8 +185,9 @@
     const sizeStr = m ? fmtMB(m.total_size) : "";
     const isCurrent = m && (m.id === currentModel || m.name === currentModel);
     const verb = isCurrent ? "Reinstall" : "Install";
-    const msg = `${verb} "${name}"${sizeStr ? " (" + sizeStr + ")" : ""}?\n\nDownload + reboot will start. This takes a few minutes.`;
-    if (!confirm(msg)) return;
+    const msg = `"${name}"${sizeStr ? " (" + sizeStr + ")" : ""} 모델을 ${verb === "Reinstall" ? "재설치" : "설치"}합니다.\n다운로드 후 자동 재부팅됩니다.`;
+    const ok = await confirmPopup(msg, { title: `${verb} Model`, confirmLabel: verb });
+    if (!ok) return;
     showError("");
     try {
       const d = await fetchJSON("/api/models/install", {
@@ -253,7 +263,11 @@
   }
 
   async function onReset() {
-    if (!confirm("Remove custom model and revert to built-in?")) return;
+    const ok = await confirmPopup(
+      "커스텀 모델을 제거하고 기본 모델로 되돌립니다.\n제거 후 자동 재부팅됩니다.",
+      { title: "Reset Default", confirmLabel: "Reset" },
+    );
+    if (!ok) return;
     showError("");
     try {
       const d = await fetchJSON("/api/models/reset", { method: "POST" });
