@@ -22,13 +22,13 @@ from .validator import describe, is_valid_model_dir
 
 def _use_custom_model() -> bool:
     if is_valid_model_dir(CUSTOM_MODELS_DIR):
-        cloudlog.warning(
-            f"model_selector: running carrot_modeld — {describe(CUSTOM_MODELS_DIR)}"
-        )
+        msg = f"[MODEL_SELECTOR] running carrot_modeld (custom) — {describe(CUSTOM_MODELS_DIR)}"
+        print(msg, flush=True)
+        cloudlog.warning(msg)
         return True
-    cloudlog.info(
-        f"model_selector: running upstream modeld — {describe(CUSTOM_MODELS_DIR)}"
-    )
+    msg = f"[MODEL_SELECTOR] running upstream modeld (default) — {describe(CUSTOM_MODELS_DIR)}"
+    print(msg, flush=True)
+    cloudlog.warning(msg)
     return False
 
 
