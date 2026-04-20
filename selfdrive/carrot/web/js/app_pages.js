@@ -2536,12 +2536,11 @@ function initToolsPage() {
   bindOnce("btnGitRemote", async () => {
     const title = LANG === "ko" ? "저장소 주소 변경" : "Change Repository";
     let defaultUrl = "";
-    if (toolsMetaLoadPromise) {
-      try {
-        const meta = await toolsMetaLoadPromise;
-        if (meta && meta.GitRemote) defaultUrl = meta.GitRemote.trim();
-      } catch (e) {}
-    }
+    try {
+      const v = await bulkGet(["GitRemote"]);
+      if (v && v.GitRemote) defaultUrl = String(v.GitRemote).trim();
+    } catch (e) {}
+
     const msg = LANG === "ko"
       ? `현재 주소: ${defaultUrl}\n\n새로운 GitHub 저장소 주소를 붙여넣으세요.\n(해당 저장소로 연결을 덮어씁니다)`
       : `Current: ${defaultUrl}\n\nEnter new GitHub repository URL.\n(This will overwrite the current connection)`;
