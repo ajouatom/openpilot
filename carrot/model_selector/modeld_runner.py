@@ -13,22 +13,37 @@ without us having to re-merge.
 from __future__ import annotations
 
 import argparse
+import os
+import time
 
 from openpilot.common.swaglog import cloudlog
 
 from .config import MODELS_DIR as CUSTOM_MODELS_DIR
 from .validator import describe, is_valid_model_dir
 
+STATUS_FILE = "/data/model_selector_status"
+
+
+def _write_status(engine: str, desc: str) -> None:
+    try:
+        with open(STATUS_FILE, "w") as f:
+            f.write(f"engine={engine}\npid={os.getpid()}\nstarted={int(time.time())}\ndescribe={desc}\n")
+    except OSError:
+        pass
+
 
 def _use_custom_model() -> bool:
+    desc = describe(CUSTOM_MODELS_DIR)
     if is_valid_model_dir(CUSTOM_MODELS_DIR):
-        msg = f"[MODEL_SELECTOR] running carrot_modeld (custom) — {describe(CUSTOM_MODELS_DIR)}"
+        msg = f"[MODEL_SELECTOR] running carrot_modeld (custom) — {desc}"
         print(msg, flush=True)
         cloudlog.warning(msg)
+        _write_status("carrot_modeld", desc)
         return True
-    msg = f"[MODEL_SELECTOR] running upstream modeld (default) — {describe(CUSTOM_MODELS_DIR)}"
+    msg = f"[MODEL_SELECTOR] running upstream modeld (default) — {desc}"
     print(msg, flush=True)
     cloudlog.warning(msg)
+    _write_status("upstream_modeld", desc)
     return False
 
 
