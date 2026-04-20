@@ -2033,11 +2033,45 @@ function buildToolsMetaInfoDialog(values = {}) {
   }
   const copyText = LANG === "ko" ? "복사" : LANG === "zh" ? "复制" : "Copy";
   const shareText = LANG === "ko" ? "공유" : LANG === "zh" ? "分享" : "Share";
-  const btnStyle = "background:none;border:none;cursor:pointer;padding:4px;font-size:13px;font-weight:600;color:var(--md-primary);text-decoration:underline;";
-  const shareBtnHtml = `<button onclick="const t=this.parentElement.nextElementSibling.innerText; if(navigator.share){navigator.share({title:'Device Info',text:t}).catch(()=>alert(t))}else{alert(t)}" style="${btnStyle}" title="Share">${shareText}</button>`;
-  const copyBtnHtml = `<button onclick="navigator.clipboard.writeText(this.parentElement.nextElementSibling.innerText).then(()=>{alert('복사되었습니다')})" style="${btnStyle}" title="Copy">${copyText}</button>`;
+  
+  if (!window.copyTextWithFallback) {
+    window.copyTextWithFallback = function(text) {
+      const msg = LANG === "ko" ? "복사되었습니다" : "Copied";
+      const failMsg = LANG === "ko" ? "복사 실패" : "Copy failed";
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(() => alert(msg)).catch(() => alert(failMsg));
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.top = "-9999px";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try {
+          if (document.execCommand("copy")) alert(msg);
+          else alert(failMsg);
+        } catch (e) {
+          alert(failMsg);
+        }
+        document.body.removeChild(ta);
+      }
+    };
+    window.shareTextWithFallback = function(text) {
+      if (navigator.share) {
+        navigator.share({ title: "Device Info", text }).catch(e => {
+          if (e.name !== "AbortError") window.copyTextWithFallback(text);
+        });
+      } else {
+        window.copyTextWithFallback(text);
+      }
+    };
+  }
+
+  const shareBtnHtml = `<button onclick="window.shareTextWithFallback(this.parentElement.nextElementSibling.innerText)" class="smallBtn btn--filled" title="Share">${shareText}</button>`;
+  const copyBtnHtml = `<button onclick="window.copyTextWithFallback(this.parentElement.nextElementSibling.innerText)" class="smallBtn btn--filled" title="Copy">${copyText}</button>`;
   return `<div style="position:relative;">
-    <div style="position:absolute; top:-36px; right:0px; display:flex; gap:8px;">${copyBtnHtml}${shareBtnHtml}</div>
+    <div style="position:absolute; top:-40px; right:0px; display:flex; gap:8px;">${copyBtnHtml}${shareBtnHtml}</div>
     <div class="app-dialog__metaList" id="toolsMetaListContent">${lines.join("")}</div>
   </div>`;
 }
