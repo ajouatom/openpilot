@@ -2518,6 +2518,34 @@ function initToolsPage() {
     if (!mode) return;
     await runGitResetMode(mode);
   });
+
+  bindOnce("btnGitRemote", async () => {
+    const title = LANG === "ko" ? "저장소 주소 변경" : "Change Repository";
+    let defaultUrl = "";
+    if (toolsMetaLoadPromise) {
+      try {
+        const meta = await toolsMetaLoadPromise;
+        if (meta && meta.GitRemote) defaultUrl = meta.GitRemote.trim();
+      } catch (e) {}
+    }
+    const msg = LANG === "ko"
+      ? `현재 주소: ${defaultUrl}\n\n새로운 GitHub 저장소 주소를 붙여넣으세요.\n(해당 저장소로 연결을 덮어씁니다)`
+      : `Current: ${defaultUrl}\n\nEnter new GitHub repository URL.\n(This will overwrite the current connection)`;
+    
+    const newUrl = await appPrompt(msg, defaultUrl, { title });
+    if (!newUrl || newUrl.trim() === "" || newUrl.trim() === defaultUrl) return;
+
+    try {
+      await runTool("git_remote_set", { url: newUrl.trim() });
+      await refreshToolsMetaInfo();
+      const successMsg = LANG === "ko" 
+        ? "저장소가 성공적으로 변경되었습니다.\n[change branch] 버튼을 눌러 새 저장소의 브랜치를 선택해 주세요." 
+        : "Repository changed successfully.\nClick [change branch] to select a branch.";
+      await appAlert(successMsg, { title });
+    } catch (e) {
+      showError("change repository", e);
+    }
+  });
   bindOnce("btnGitBranch", async () => {
     await loadBranchesAndShow();
   });
