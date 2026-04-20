@@ -2498,7 +2498,7 @@ function initToolsPage() {
     const val = await openAppDialog({
       mode: "choice",
       title: "Device Language",
-      message: LANG === "ko" ? "기기 언어를 선택하세요. (변경 시 재부팅 권장)" : "Select language for the device UI",
+      message: LANG === "ko" ? "기기 언어를 선택하세요." : "Select language for the device UI",
       cancelLabel: UI_STRINGS[LANG]?.cancel || "Cancel",
       choices
     });

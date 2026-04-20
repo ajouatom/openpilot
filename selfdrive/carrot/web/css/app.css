@@ -1410,9 +1410,7 @@ body[data-page="terminal"] .app-toast-host {
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
-  overflow-y: auto;
-  min-height: 0;
-  flex-shrink: 1;
+  flex-shrink: 0;
 }
 
 .app-dialog__metaList {
