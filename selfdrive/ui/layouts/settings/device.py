@@ -70,6 +70,7 @@ class DeviceLayout(Widget):
 
   def _offroad_transition(self):
     self._power_off_btn.action_item.right_button.set_visible(ui_state.is_offroad())
+    self._update_device_position()
 
   def show_event(self):
     super().show_event()
@@ -158,6 +159,21 @@ class DeviceLayout(Widget):
                "Resetting calibration will restart openpilot if the car is powered on.")
 
     self._reset_calib_btn.set_description(desc)
+
+  def _update_device_position(self):
+    calib_bytes = self._params.get("CalibrationParams")
+    if calib_bytes:
+      try:
+        calib = messaging.log_from_bytes(calib_bytes, log.Event).liveCalibration
+
+        if calib.calStatus != log.LiveCalibrationData.Status.uncalibrated:
+          pitch = math.degrees(calib.rpyCalib[1])
+          yaw = math.degrees(calib.rpyCalib[2])
+
+          position = f"{abs(pitch):.1f}° {'v' if pitch > 0 else '^'} {abs(yaw):.1f}° {'<' if yaw > 0 else '>'}"
+          self._params.put("DevicePosition", position)
+      except Exception:
+        cloudlog.exception("invalid CalibrationParams")
 
   def _reboot_prompt(self):
     if ui_state.engaged:
