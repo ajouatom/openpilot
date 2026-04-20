@@ -18,6 +18,7 @@ let carsLoadPromise = null;
 let settingsLoadPromise = null;
 let toolsMetaLoadPromise = null;
 let toolsMetaLoadedAt = 0;
+let toolsMetaLastValues = null;
 let uiWarmupTimer = null;
 const SETTING_VALUES_TTL_MS = 60000;
 let settingValueWarmupTimer = null;
@@ -1947,8 +1948,16 @@ function buildToolsMetaInfo(values = {}) {
 }
 
 function formatToolsMetaDate(value) {
-  const raw = String(value || "").trim();
+  let raw = String(value || "").replace(/['"]/g, "").trim();
   if (!raw) return "";
+
+  // Support "1730000000 2024-10-27..."
+  const parts = raw.split(" ");
+  if (parts.length > 1 && /^\d{10,}$/.test(parts[0])) {
+    const d = new Date(parseInt(parts[0], 10) * 1000);
+    if (!isNaN(d)) return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+  }
+
   const m = raw.match(/^(\d{4})[-./](\d{2})[-./](\d{2})/);
   if (m) return `${m[1]}.${m[2]}.${m[3]}`;
   const ts = Date.parse(raw);
@@ -1991,10 +2000,10 @@ function buildToolsMetaInfoDialog(values = {}) {
   const serial = String(values.HardwareSerial || "").trim();
   const gitPullTime = formatToolsMetaDateTime(values.GitPullTime);
   const labels = LANG === "en"
-    ? { branch: "Branch", commit: "Commit", dongle: "Dongle ID", serial: "Serial", gitPull: "Recent update", position: "Position" }
+    ? { branch: "Branch", commit: "Commit", deviceType: "Device", dongle: "Dongle ID", serial: "Serial", gitPull: "Recent update", position: "Position" }
     : LANG === "zh"
-      ? { branch: "分支", commit: "提交", dongle: "Dongle ID", serial: "序列号", gitPull: "最近更新", position: "安装角度" }
-      : { branch: "브랜치", commit: "커밋", dongle: "동글ID", serial: "시리얼", gitPull: "최근 업데이트", position: "설치각도" };
+      ? { branch: "分支", commit: "提交", deviceType: "设备型号", dongle: "Dongle ID", serial: "序列号", gitPull: "最近更新", position: "安装角度" }
+      : { branch: "브랜치", commit: "커밋", deviceType: "기기", dongle: "동글ID", serial: "시리얼", gitPull: "최근 업데이트", position: "설치각도" };
   const htmlEscape = typeof escapeHtml === "function"
     ? escapeHtml
     : (value) => String(value)
@@ -2004,11 +2013,15 @@ function buildToolsMetaInfoDialog(values = {}) {
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#039;");
   const lines = [];
-  if (branch) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.branch)}: ${htmlEscape(branch)}</div>`);
+  const remote = String(values.GitRemote || "").trim();
+  const shortRemote = remote ? remote.replace(/^https?:\/\/[^/]+\//, "").replace(/\.git$/, "") : "";
+  const branchText = branch + (shortRemote ? ` (${shortRemote})` : "");
+  if (branchText) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.branch)}: ${htmlEscape(branchText)}</div>`);
   if (commit) {
     const commitText = `${commit.slice(0, 7)}${commitDate ? ` (${commitDate})` : ""}`;
     lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.commit)}: ${htmlEscape(commitText)}</div>`);
   }
+
   if (dongleId) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.dongle)}: ${htmlEscape(dongleId)}</div>`);
   if (serial) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.serial)}: ${htmlEscape(serial)}</div>`);
   const position = String(values.DevicePosition || "").trim();
@@ -2016,7 +2029,35 @@ function buildToolsMetaInfoDialog(values = {}) {
   if (gitPullTime) {
     lines.push(`<div class="app-dialog__metaSubtle">${htmlEscape(labels.gitPull)}: ${htmlEscape(gitPullTime)}</div>`);
   }
-  return `<div class="app-dialog__metaList">${lines.join("")}</div>`;
+  const copyText = LANG === "ko" ? "복사" : LANG === "zh" ? "复制" : "Copy";
+  
+  if (!window.copyTextWithFallback) {
+    window.copyTextWithFallback = function(text) {
+      const msg = LANG === "ko" ? "복사되었습니다" : "Copied";
+      const failMsg = LANG === "ko" ? "복사 실패" : "Copy failed";
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(() => alert(msg)).catch(() => alert(failMsg));
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.top = "-9999px";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try {
+          if (document.execCommand("copy")) alert(msg);
+          else alert(failMsg);
+        } catch (e) {
+          alert(failMsg);
+        }
+        document.body.removeChild(ta);
+      }
+    };
+  }
+
+  const copyBtnHtml = `<button onclick="window.copyTextWithFallback(this.parentElement.nextElementSibling.innerText)" class="smallBtn btn--filled" title="Copy">${copyText}</button>`;
+  return `<div style="position:relative;"><div style="position:absolute; top:-36px; right:0px; display:flex; gap:8px;">${copyBtnHtml}</div><div class="app-dialog__metaList" id="toolsMetaListContent">${lines.join("")}</div></div>`;
 }
 
 function rerenderPageLangUi() {
@@ -2063,10 +2104,11 @@ async function refreshToolsMetaInfo(options = {}) {
   }
 
   toolsMetaLoadPromise = (async () => {
-    const values = await bulkGet(["GitBranch", "GitCommit", "GitCommitDate", "DongleId", "HardwareSerial", "GitPullTime", "DevicePosition"]);
+    const values = await bulkGet(["GitBranch", "GitCommit", "GitCommitDate", "GitRemote", "DeviceType", "DongleId", "HardwareSerial", "GitPullTime", "DevicePosition"]);
     toolsMetaInfoText = buildToolsMetaInfo(values);
     toolsMetaInfoDialogText = buildToolsMetaInfoDialog(values);
     toolsMetaLoadedAt = Date.now();
+    toolsMetaLastValues = values;
     if (!silent || CURRENT_PAGE === "tools") renderToolsMeta();
     return values;
   })().finally(() => {
@@ -2411,12 +2453,25 @@ function initToolsPage() {
   refreshToolsMetaInfo().catch(() => {});
   initToolsGroups();
 
-  bindOnce("btnDeviceInfo", () => {
-    const title = LANG === "en"
-      ? "Device Info"
-      : LANG === "zh"
-        ? "设备信息"
-        : "기기정보";
+  bindOnce("btnDeviceInfo", async () => {
+    let title = LANG === "en" ? "Device Info" : LANG === "zh" ? "设备信息" : "기기정보";
+    
+    try {
+      if (!toolsMetaLastValues && !toolsMetaLoadPromise) {
+        await refreshToolsMetaInfo({ ttlMs: 3600000 });
+      }
+      const values = toolsMetaLoadPromise ? await toolsMetaLoadPromise : toolsMetaLastValues;
+      if (values) {
+        const deviceType = String(values.DeviceType || "").trim();
+        if (deviceType) {
+          const deviceFriendly = { tici: "c3", tizi: "c3x", mici: "c4" };
+          const friendly = deviceFriendly[deviceType] || deviceType;
+          const label = friendly !== deviceType ? `${friendly}/${deviceType}` : deviceType;
+          title += `(${label})`;
+        }
+      }
+    } catch (e) {}
+
     appAlert(toolsMetaInfoDialogText || toolsMetaInfoText, {
       title,
       html: true,
@@ -2474,6 +2529,37 @@ function initToolsPage() {
     });
     if (!mode) return;
     await runGitResetMode(mode);
+  });
+
+  bindOnce("btnGitRemote", async () => {
+    const title = LANG === "ko" ? "저장소 주소 변경" : "Change Repository";
+    let defaultUrl = "";
+    try {
+      const v = await bulkGet(["GitRemote"]);
+      if (v && v.GitRemote) defaultUrl = String(v.GitRemote).trim();
+    } catch (e) {}
+
+    const msg = LANG === "ko"
+      ? `현재 주소: ${defaultUrl}\n\n새로운 GitHub 저장소 주소를 붙여넣으세요.\n(해당 저장소로 연결을 덮어씁니다)`
+      : `Current: ${defaultUrl}\n\nEnter new GitHub repository URL.\n(This will overwrite the current connection)`;
+    
+    const newUrl = await appPrompt(msg, defaultUrl, { title });
+    if (!newUrl || newUrl.trim() === "" || newUrl.trim() === defaultUrl) return;
+
+    try {
+      const waitMsg = LANG === "ko"
+        ? "저장소 데이터를 받아오는 중입니다.\n처음 연결하는 저장소의 경우 수 분이 걸릴 수 있습니다.\n잠시만 기다려 주세요..."
+        : "Fetching repository data.\nThis may take a few minutes for new repositories.\nPlease wait...";
+      showAppToast(waitMsg, { tone: "info", duration: 8000 });
+      await runTool("git_remote_set", { url: newUrl.trim() });
+      await refreshToolsMetaInfo();
+      const successMsg = LANG === "ko" 
+        ? "저장소가 성공적으로 변경되었습니다.\n[change branch] 버튼을 눌러 새 저장소의 브랜치를 선택해 주세요." 
+        : "Repository changed successfully.\nClick [change branch] to select a branch.";
+      await appAlert(successMsg, { title });
+    } catch (e) {
+      showError("change repository", e);
+    }
   });
   bindOnce("btnGitBranch", async () => {
     await loadBranchesAndShow();
