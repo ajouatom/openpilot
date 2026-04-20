@@ -201,6 +201,7 @@ uint32_t last_ts_scc13_from_op = 0;
 uint32_t last_ts_mdps12_from_op = 0;
 uint32_t last_ts_fca11_from_op = 0;
 uint32_t last_ts_fca12_from_op = 0;
+uint32_t last_ts_lfahda_mfc_from_op = 0;
 
 static bool hyundai_tx_hook(const CANPacket_t *to_send) {
   const TorqueSteeringLimits HYUNDAI_STEERING_LIMITS = HYUNDAI_LIMITS(512, 10, 10);
@@ -291,6 +292,8 @@ static bool hyundai_tx_hook(const CANPacket_t *to_send) {
     last_ts_fca12_from_op = (tx == 0 ? 0 : now);
   else if(addr == 1290)
     last_ts_scc13_from_op = (tx == 0 ? 0 : now);
+  else if(addr == 0x485)
+    last_ts_lfahda_mfc_from_op = (tx == 0 ? 0 : now);
 
   return tx;
 }
@@ -328,10 +331,14 @@ static int hyundai_fwd_hook(CANPacket_t* to_send) {
       bus_fwd = 0;
     }
     else {
-      if(is_lkas_msg || is_lfahda_msg) {
+      if(is_lkas_msg) {
         if(now - last_ts_lkas11_from_op >= 200000) {
           bus_fwd = 0;
         }
+      }
+      else if(is_lfahda_msg) {
+        if (now - last_ts_lfahda_mfc_from_op >= 200000)
+          bus_fwd = 0;
       }
       else if (is_scc_msg) {
         if (now - last_ts_scc12_from_op >= 400000)

@@ -8,6 +8,7 @@ def create_lkas11(packer, frame, CP, apply_torque, steer_req,
                   torque_fault, lkas11, sys_warning, sys_state, enabled,
                   left_lane, right_lane,
                   left_lane_depart, right_lane_depart, is_ldws_car):
+
   values = {s: lkas11[s] for s in [
     "CF_Lkas_LdwsActivemode",
     "CF_Lkas_LdwsSysState",
@@ -34,9 +35,10 @@ def create_lkas11(packer, frame, CP, apply_torque, steer_req,
   values["CF_Lkas_ToiFlt"] = torque_fault  # seems to allow actuation on CR_Lkas_StrToqReq
   values["CF_Lkas_MsgCount"] = frame % 0x10
 
+
   if CP.flags & HyundaiFlags.SEND_LFA.value or CP.carFingerprint in (CAR.HYUNDAI_SANTA_FE):
-    values["CF_Lkas_LdwsActivemode"] = int(left_lane) + (int(right_lane) << 1)
-    values["CF_Lkas_LdwsOpt_USM"] = 2
+    values["CF_Lkas_LdwsActivemode"] = int(left_lane) + (int(right_lane) << 1)    
+    values["CF_Lkas_LdwsOpt_USM"] = 0 if CP.carFingerprint in (CAR.KIA_RAY_EV) else 2
 
     # FcwOpt_USM 5 = Orange blinking car + lanes
     # FcwOpt_USM 4 = Orange car + lanes
@@ -75,6 +77,8 @@ def create_lkas11(packer, frame, CP, apply_torque, steer_req,
 
   if is_ldws_car:
     values["CF_Lkas_LdwsOpt_USM"] = 3
+
+  values["CF_Lkas_Chksum"] = 0
 
   dat = packer.make_can_msg("LKAS11", 0, values)[1]
 
