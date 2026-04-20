@@ -106,7 +106,7 @@
 
     const badges = [];
     if (isCurrent) badges.push(`<span class="ms-chip ms-chip--current">현재</span>`);
-    else if (isPending) badges.push(`<span class="ms-chip ms-chip--pending">대기중</span>`);
+    else if (isPending) badges.push(`<span class="ms-chip ms-chip--pending">설치중</span>`);
 
     const btnLabel = isCurrent ? "재설치" : (isPending ? "다운로드됨" : "설치");
     const btnDisabled = isPending ? "disabled" : "";
@@ -265,7 +265,7 @@
   async function onReset() {
     const ok = await confirmPopup(
       "기본(내장) 모델로 되돌립니다.\n자동 재부팅됩니다.",
-      { title: "기본값 복원", confirmLabel: "복원" },
+      { title: "기본 모델 복원", confirmLabel: "복원" },
     );
     if (!ok) return;
     showError("");
@@ -273,7 +273,7 @@
       const d = await fetchJSON("/api/models/reset", { method: "POST" });
       await refreshStatus();
       renderList();
-      rebootCountdown(d.reboot_in || 5, "기본값 복원");
+      rebootCountdown(d.reboot_in || 5, "기본 모델 복원");
     } catch (e) {
       showError("reset: " + e.message);
     }
