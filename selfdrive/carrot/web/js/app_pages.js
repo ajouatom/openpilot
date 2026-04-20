@@ -2100,6 +2100,15 @@ async function syncDeviceLanguageOnce() {
 
     if (currentLang !== targetParam) {
       await setParam("LanguageSetting", targetParam);
+      localStorage.setItem(SYNC_KEY, "1");
+      // show notification after a short delay so the page finishes loading
+      setTimeout(() => {
+        const msg = LANG === "ko"
+          ? "기기 언어를 변경했습니다.\n기기를 재부팅해야 적용됩니다."
+          : "Device language has been changed.\nPlease reboot the device to apply.";
+        openAppDialog({ mode: "alert", title: "Device Language", message: msg });
+      }, 800);
+      return;
     }
     localStorage.setItem(SYNC_KEY, "1");
   } catch (e) {
