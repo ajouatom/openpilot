@@ -1046,7 +1046,7 @@ async def _run_tool_job(job: Dict[str, Any]) -> None:
         return
 
       _tool_job_progress(job, message="fetch origin", current=2, total=2)
-      rc_fetch = await _tool_stream_exec(job, ["git", "fetch", "origin"], cwd=repo_dir, timeout=180)
+      rc_fetch = await _tool_stream_exec(job, ["git", "fetch", "--progress", "origin"], cwd=repo_dir, timeout=180)
       _tool_job_finish(job, ok=rc_fetch == 0, result=_tool_result_from_log(job, rc_fetch))
       return
 
