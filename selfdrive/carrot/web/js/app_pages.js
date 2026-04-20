@@ -2076,8 +2076,37 @@ async function refreshToolsMetaInfo(options = {}) {
   return toolsMetaLoadPromise;
 }
 
+async function syncDeviceLanguageOnce() {
+  if (typeof bulkGet !== "function" || typeof setParam !== "function") return;
+  try {
+    const values = await bulkGet(["WebLanguageSynced", "LanguageSetting"]);
+    if (values["WebLanguageSynced"] === "1") return;
+
+    const browserLang = (navigator.language || navigator.userLanguage || "en").toLowerCase();
+    let targetParam = "main_en";
+    if (browserLang.startsWith("ko")) targetParam = "main_ko";
+    else if (browserLang.startsWith("zh")) targetParam = browserLang.includes("tw") || browserLang.includes("hk") ? "main_zh-CHT" : "main_zh-CHS";
+    else if (browserLang.startsWith("ja")) targetParam = "main_ja";
+    else if (browserLang.startsWith("de")) targetParam = "main_de";
+    else if (browserLang.startsWith("fr")) targetParam = "main_fr";
+    else if (browserLang.startsWith("es")) targetParam = "main_es";
+    else if (browserLang.startsWith("pt")) targetParam = "main_pt-BR";
+    else if (browserLang.startsWith("tr")) targetParam = "main_tr";
+    else if (browserLang.startsWith("ar")) targetParam = "main_ar";
+    else if (browserLang.startsWith("th")) targetParam = "main_th";
+
+    if (values["LanguageSetting"] !== targetParam) {
+      await setParam("LanguageSetting", targetParam);
+    }
+    await setParam("WebLanguageSynced", "1");
+  } catch (e) {
+    console.log("Language sync failed:", e);
+  }
+}
+
 function runUiWarmup() {
   return Promise.allSettled([
+    syncDeviceLanguageOnce(),
     loadCurrentCar({ resetRetry: false, ttlMs: PAGE_DATA_TTL_MS }),
     loadRecordState({ ttlMs: PAGE_DATA_TTL_MS }),
     refreshToolsMetaInfo({ silent: true, ttlMs: PAGE_DATA_TTL_MS }),
@@ -2436,6 +2465,40 @@ function initToolsPage() {
   });
   bindOnce("btnGitBranch", async () => {
     await loadBranchesAndShow();
+  });
+
+  bindOnce("btnDeviceLang", async () => {
+    const choices = [
+      { label: "한국어", value: "main_ko" },
+      { label: "English", value: "main_en" },
+      { label: "中文(简体)", value: "main_zh-CHS" },
+      { label: "中文(繁體)", value: "main_zh-CHT" },
+      { label: "日本語", value: "main_ja" },
+      { label: "Deutsch", value: "main_de" },
+      { label: "Français", value: "main_fr" },
+      { label: "Português", value: "main_pt-BR" },
+      { label: "Español", value: "main_es" },
+      { label: "Türkçe", value: "main_tr" },
+      { label: "العربية", value: "main_ar" },
+      { label: "ไทย", value: "main_th" },
+    ];
+    const val = await openAppDialog({
+      mode: "choice",
+      title: "Device Language",
+      message: LANG === "ko" ? "기기 언어를 선택하세요. (변경 시 재부팅 권장)" : "Select language for the device UI",
+      cancelLabel: UI_STRINGS[LANG]?.cancel || "Cancel",
+      choices
+    });
+    if (!val) return;
+    try {
+      await setParam("LanguageSetting", val);
+      const rebootMsg = LANG === "ko" ? "설정이 변경되었습니다. 지금 재부팅하시겠습니까?" : "Setting changed. Reboot now?";
+      if (await appConfirm(rebootMsg, { title: "Reboot" })) {
+        await runTool("reboot");
+      }
+    } catch (e) {
+      showError("shell_cmd", e);
+    }
   });
 
 
