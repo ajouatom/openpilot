@@ -5,6 +5,7 @@ import hashlib
 import os
 import re
 import tempfile
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -44,7 +45,12 @@ def _build_url(base_url: str, filename: str) -> str:
     sep = "" if base_url.endswith("/") else "/"
     url = f"{base_url}{sep}{filename}"
     _validate_url(url)
-    return url
+    # Percent-encode the path (spaces, unicode) — raw.githubusercontent.com
+    # serves files whose names contain spaces (e.g. "Op Modelv12") but urllib
+    # rejects URLs with literal control characters.
+    parts = urllib.parse.urlsplit(url)
+    quoted_path = urllib.parse.quote(parts.path, safe="/%")
+    return urllib.parse.urlunsplit(parts._replace(path=quoted_path))
 
 
 @dataclass
