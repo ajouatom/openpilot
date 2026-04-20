@@ -75,11 +75,12 @@
   }
 
   function sortModels(list) {
+    const opts = { numeric: true, sensitivity: "base" };
     return list.slice().sort((a, b) => {
       const da = a.added_at || "";
       const db = b.added_at || "";
       if (da !== db) return db.localeCompare(da);
-      return (a.name || "").localeCompare(b.name || "");
+      return (b.name || "").localeCompare(a.name || "", undefined, opts);
     });
   }
 
