@@ -2058,11 +2058,13 @@ function buildToolsMetaInfoDialog(values = {}) {
       }
     };
     window.shareTextWithFallback = function(text) {
-      if (navigator.share) {
+      if (navigator.share && window.isSecureContext) {
         navigator.share({ title: "Device Info", text }).catch(e => {
           if (e.name !== "AbortError") window.copyTextWithFallback(text);
         });
       } else {
+        const msg = LANG === "ko" ? "공유 기능을 지원하지 않는 환경입니다.\n클립보드에 복사합니다." : "Sharing not supported in this environment.\nCopying to clipboard instead.";
+        alert(msg);
         window.copyTextWithFallback(text);
       }
     };
@@ -2070,10 +2072,7 @@ function buildToolsMetaInfoDialog(values = {}) {
 
   const shareBtnHtml = `<button onclick="window.shareTextWithFallback(this.parentElement.nextElementSibling.innerText)" class="smallBtn btn--filled" title="Share">${shareText}</button>`;
   const copyBtnHtml = `<button onclick="window.copyTextWithFallback(this.parentElement.nextElementSibling.innerText)" class="smallBtn btn--filled" title="Copy">${copyText}</button>`;
-  return `<div style="position:relative;">
-    <div style="position:absolute; top:-40px; right:0px; display:flex; gap:8px;">${copyBtnHtml}${shareBtnHtml}</div>
-    <div class="app-dialog__metaList" id="toolsMetaListContent">${lines.join("")}</div>
-  </div>`;
+  return `<div style="position:relative;"><div style="position:absolute; top:-36px; right:0px; display:flex; gap:8px;">${copyBtnHtml}${shareBtnHtml}</div><div class="app-dialog__metaList" id="toolsMetaListContent">${lines.join("")}</div></div>`;
 }
 
 function rerenderPageLangUi() {
