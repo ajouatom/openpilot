@@ -425,7 +425,9 @@ class AugmentedRoadView(CameraView):
       lat_plan = sm["lateralPlan"]
       bottom = str(lat_plan.latDebugText)
 
-    bottom_left = ui_state.params.get("GitBranch") or ""
+    branch = ui_state.params.get("GitBranch") or ""
+    model = ui_state.params.get("DrivingModelName") or ""
+    bottom_left = f"{branch} ({model})" if model else branch
 
     bottom_right = ui_state.params_memory.get("NetworkAddress") or ""
 
