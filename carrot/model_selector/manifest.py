@@ -123,13 +123,20 @@ def _parse_model(raw: dict) -> ModelEntry:
             size=int(info["size"]),
             sha256=str(info["sha256"]).lower(),
         )
+    base_url = raw.get("base_url") or raw.get("baseUrl")
+    if not base_url:
+        raise ManifestError("missing base_url")
+    added_at = raw.get("added_at") or raw.get("addedAt") or ""
+    min_ver = raw.get("minimum_selector_version")
+    if min_ver is None:
+        min_ver = raw.get("minimumSelectorVersion", 0)
     return ModelEntry(
         id=str(raw["id"]),
         name=str(raw.get("name") or raw["id"]),
-        base_url=str(raw["baseUrl"]),
-        added_at=str(raw.get("addedAt", "")),
+        base_url=str(base_url),
+        added_at=str(added_at),
         files=files,
-        minimum_selector_version=int(raw.get("minimumSelectorVersion", 0)),
+        minimum_selector_version=int(min_ver),
         raw=raw,
     )
 
