@@ -2457,12 +2457,23 @@ function initToolsPage() {
   refreshToolsMetaInfo().catch(() => {});
   initToolsGroups();
 
-  bindOnce("btnDeviceInfo", () => {
-    const title = LANG === "en"
-      ? "Device Info"
-      : LANG === "zh"
-        ? "设备信息"
-        : "기기정보";
+  bindOnce("btnDeviceInfo", async () => {
+    let title = LANG === "en" ? "Device Info" : LANG === "zh" ? "设备信息" : "기기정보";
+    
+    try {
+      // Use existing values if available to avoid extra fetch, or wait if loading
+      const values = toolsMetaLoadPromise ? await toolsMetaLoadPromise : (toolsMetaLoadedAt ? await refreshToolsMetaInfo({ ttlMs: 3600000 }) : null);
+      if (values) {
+        const deviceType = String(values.DeviceType || "").trim();
+        if (deviceType) {
+          const deviceFriendly = { tici: "c3", tizi: "c3x", mici: "c4" };
+          const friendly = deviceFriendly[deviceType] || deviceType;
+          const label = friendly !== deviceType ? `${friendly}/${deviceType}` : deviceType;
+          title += `(${label})`;
+        }
+      }
+    } catch (e) {}
+
     appAlert(toolsMetaInfoDialogText || toolsMetaInfoText, {
       title,
       html: true,
