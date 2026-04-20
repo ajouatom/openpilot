@@ -200,16 +200,17 @@
 
   function rebootCountdown(seconds, label) {
     const total = seconds;
-    let remaining = seconds;
-    showProgress(true, 100, `${label} — rebooting in ${remaining}s…`);
+    let elapsed = 0;
+    showProgress(true, 0, `${label} — rebooting in ${total}s…`);
     const t = setInterval(() => {
-      remaining -= 1;
+      elapsed += 1;
+      const remaining = total - elapsed;
       if (remaining <= 0) {
         clearInterval(t);
-        showProgress(true, 0, `${label} — rebooting now…`);
+        showProgress(true, 100, `${label} — rebooting now…`);
         return;
       }
-      const pct = (remaining / total) * 100;
+      const pct = (elapsed / total) * 100;
       showProgress(true, pct, `${label} — rebooting in ${remaining}s…`);
     }, 1000);
   }
