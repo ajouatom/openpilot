@@ -20,6 +20,8 @@ from openpilot.common.transformations.orientation import rot_from_euler
 from enum import IntEnum
 
 from openpilot.selfdrive.ui.mici.onroad.traffic_light import TrafficLight
+import math
+from openpilot.common.params import Params
 
 OpState = log.SelfdriveState.OpenpilotState
 CALIBRATED = log.LiveCalibrationData.Status.calibrated
@@ -138,6 +140,9 @@ class AugmentedRoadView(CameraView):
     self._bookmark_callback = bookmark_callback
     self._set_placeholder_color(rl.BLACK)
 
+    self.params = Params()
+    self._last_device_position = ""
+
     self.device_camera: DeviceCameraConfig | None = None
     self.view_from_calib = view_frame_from_device_frame.copy()
     self.view_from_wide_calib = view_frame_from_device_frame.copy()
@@ -179,6 +184,8 @@ class AugmentedRoadView(CameraView):
     # update offroad label
     if ui_state.panda_type == log.PandaState.PandaType.unknown:
       self._offroad_label.set_text("system booting")
+    elif ui_state.ignition and not ui_state.started:
+      self._offroad_label.set_text("openpilot can't start\ncheck alerts")
     else:
       self._offroad_label.set_text("start the car to\nuse openpilot")
 
@@ -260,7 +267,7 @@ class AugmentedRoadView(CameraView):
       x = int(self._content_rect.x + 16)
       y = int(self._content_rect.y + self._content_rect.height - 16)
       rl.draw_circle(x, y, 6, rl.Color(255, 0, 0, 220))
-      
+
     # publish uiDebug
     msg = messaging.new_message('uiDebug')
     msg.uiDebug.drawTimeMillis = (time.monotonic() - start_draw) * 1000
@@ -295,6 +302,17 @@ class AugmentedRoadView(CameraView):
     calib = sm['liveCalibration']
     if len(calib.rpyCalib) != 3 or calib.calStatus != CALIBRATED:
       return
+
+    # ---------------------------------------------------------
+    pitch = math.degrees(calib.rpyCalib[1])
+    yaw = math.degrees(calib.rpyCalib[2])
+
+    position = f"{abs(pitch):.1f}° {'v' if pitch > 0 else '^'} {abs(yaw):.1f}° {'<' if yaw > 0 else '>'}"
+
+    if position != self._last_device_position:
+      self.params.put("DevicePosition", position)
+      self._last_device_position = position
+    # ---------------------------------------------------------
 
     # Update view_from_calib matrix
     device_from_calib = rot_from_euler(calib.rpyCalib)
