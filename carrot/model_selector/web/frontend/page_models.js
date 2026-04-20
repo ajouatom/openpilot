@@ -171,6 +171,13 @@
       showError("another install is already running");
       return;
     }
+    const m = modelsCache.find((x) => x.id === modelId);
+    const name = m ? m.name : modelId;
+    const sizeStr = m ? fmtMB(m.total_size) : "";
+    const isCurrent = m && (m.id === currentModel || m.name === currentModel);
+    const verb = isCurrent ? "Reinstall" : "Install";
+    const msg = `${verb} "${name}"${sizeStr ? " (" + sizeStr + ")" : ""}?\n\nDownload + reboot will start. This takes a few minutes.`;
+    if (!confirm(msg)) return;
     showError("");
     try {
       const d = await fetchJSON("/api/models/install", {
