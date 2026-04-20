@@ -125,71 +125,77 @@
       color: var(--md-on-surface);
     }
 
-    #pageModels .ms-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-      gap: var(--sp-md);
-    }
-
-    #pageModels .ms-card {
-      background: var(--md-surface-cont);
-      border: 1px solid var(--md-stroke-soft);
-      border-radius: var(--r-lg);
-      padding: var(--sp-lg);
+    #pageModels .ms-list {
       display: flex;
       flex-direction: column;
       gap: var(--sp-sm);
-      transition: border-color 0.15s ease, transform 0.1s ease;
-      position: relative;
+      max-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - 420px);
+      min-height: 260px;
+      overflow-y: auto;
+      padding-right: 4px;
+      scrollbar-gutter: stable;
     }
-    #pageModels .ms-card:hover {
-      border-color: var(--md-outline-var);
+    #pageModels .ms-list::-webkit-scrollbar {
+      width: 6px;
     }
-    #pageModels .ms-card.is-current {
-      border-color: var(--md-primary);
-      box-shadow: inset 0 0 0 1px var(--md-primary);
-    }
-    #pageModels .ms-card.is-pending {
-      border-color: var(--md-primary-cont);
+    #pageModels .ms-list::-webkit-scrollbar-thumb {
+      background: var(--md-surface-cont-hh);
+      border-radius: var(--r-pill);
     }
 
-    #pageModels .ms-card__head {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: var(--sp-sm);
+    #pageModels .ms-row {
+      background: var(--md-surface-cont);
+      border: 1px solid var(--md-stroke-soft);
+      border-radius: var(--r-md);
+      padding: var(--sp-md) var(--sp-lg);
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: var(--sp-sm) var(--sp-md);
+      align-items: center;
+      transition: border-color 0.15s ease, background 0.15s ease;
+      cursor: pointer;
+      user-select: none;
     }
-    #pageModels .ms-card__name {
-      font-size: var(--fs-title-md);
+    #pageModels .ms-row:hover {
+      border-color: var(--md-outline-var);
+    }
+    #pageModels .ms-row.is-selected {
+      border-color: var(--md-primary);
+      background: color-mix(in srgb, var(--md-primary) 8%, var(--md-surface-cont));
+    }
+    #pageModels .ms-row.is-current {
+      border-left: 4px solid var(--md-primary);
+    }
+    #pageModels .ms-row.is-pending {
+      border-left: 4px solid var(--md-primary-cont);
+    }
+
+    #pageModels .ms-row__main {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    #pageModels .ms-row__name {
+      font-size: var(--fs-title-sm);
       font-weight: 700;
       color: var(--md-on-surface);
       word-break: break-word;
-      flex: 1;
-      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: var(--sp-sm);
+      flex-wrap: wrap;
     }
-    #pageModels .ms-card__meta {
+    #pageModels .ms-row__meta {
       display: flex;
       flex-wrap: wrap;
       gap: var(--sp-xs) var(--sp-sm);
       color: var(--md-outline-var);
       font-size: var(--fs-label-sm);
     }
-    #pageModels .ms-card__meta > span {
-      display: inline-flex;
-      align-items: center;
-    }
-
-    #pageModels .ms-card__actions {
-      margin-top: auto;
+    #pageModels .ms-row__actions {
       display: flex;
-      justify-content: flex-end;
       gap: var(--sp-sm);
-      padding-top: var(--sp-sm);
-    }
-    #pageModels .ms-card__badge-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--sp-xs);
     }
 
     #pageModels .ms-empty,
@@ -257,7 +263,7 @@
     <button id="msRefreshBtn" class="smallBtn">Refresh</button>
   </div>
 
-  <div id="msModelsBody" class="ms-grid">
+  <div id="msModelsBody" class="ms-list">
     <div class="ms-loading">Loading…</div>
   </div>
 

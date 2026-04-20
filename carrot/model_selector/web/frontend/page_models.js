@@ -12,6 +12,8 @@
   let pollTimer = null;
   let currentModel = "";
   let pendingModel = "";
+  let selectedModelId = "";
+  let modelsCache = [];
 
   const $ = (id) => document.getElementById(id);
 
@@ -68,38 +70,54 @@
   }
 
   function archLabel(m) {
-    if (m.has_off_policy) return m.has_on_policy ? "on-policy + off-policy" : "policy + off-policy";
+    if (m.has_off_policy) return m.has_on_policy ? "on+off policy" : "policy + off";
     return m.has_on_policy ? "on-policy" : "policy";
   }
 
-  function cardHtml(m) {
+  function sortModels(list) {
+    return list.slice().sort((a, b) => {
+      const da = a.added_at || "";
+      const db = b.added_at || "";
+      if (da !== db) return db.localeCompare(da);
+      return (a.name || "").localeCompare(b.name || "");
+    });
+  }
+
+  function rowHtml(m) {
     const isCurrent = m.id === currentModel || m.name === currentModel;
     const isPending = m.id === pendingModel || m.name === pendingModel;
-    const stateCls = isCurrent ? " is-current" : (isPending ? " is-pending" : "");
+    const isSelected = m.id === selectedModelId;
+    const cls = [
+      "ms-row",
+      isCurrent ? "is-current" : "",
+      isPending ? "is-pending" : "",
+      isSelected ? "is-selected" : "",
+    ].filter(Boolean).join(" ");
 
-    let badge = "";
-    if (isCurrent) badge = `<span class="ms-chip ms-chip--current">Current</span>`;
-    else if (isPending) badge = `<span class="ms-chip ms-chip--pending">Pending</span>`;
+    const badges = [];
+    if (isCurrent) badges.push(`<span class="ms-chip ms-chip--current">Current</span>`);
+    else if (isPending) badges.push(`<span class="ms-chip ms-chip--pending">Pending</span>`);
 
     const btnLabel = isCurrent ? "Reinstall" : (isPending ? "Downloaded" : "Install");
     const btnDisabled = isPending ? "disabled" : "";
     const btnClass = isCurrent ? "btn" : "btn btn--filled";
 
     return `
-      <div class="ms-card${stateCls}">
-        <div class="ms-card__head">
-          <div class="ms-card__name">${escapeHtml(m.name)}</div>
-          ${badge}
+      <div class="${cls}" data-id="${escapeHtml(m.id)}">
+        <div class="ms-row__main">
+          <div class="ms-row__name">
+            <span>${escapeHtml(m.name)}</span>
+            ${badges.join("")}
+          </div>
+          <div class="ms-row__meta">
+            <span>${escapeHtml(m.added_at || "—")}</span>
+            <span>•</span>
+            <span>${escapeHtml(archLabel(m))}</span>
+            <span>•</span>
+            <span>${fmtMB(m.total_size)}</span>
+          </div>
         </div>
-        <div class="ms-card__badge-row">
-          <span class="ms-chip ms-chip--arch">${escapeHtml(archLabel(m))}</span>
-        </div>
-        <div class="ms-card__meta">
-          <span>${fmtMB(m.total_size)}</span>
-          <span>•</span>
-          <span>${escapeHtml(m.added_at || "")}</span>
-        </div>
-        <div class="ms-card__actions">
+        <div class="ms-row__actions">
           <button class="${btnClass} ms-install-btn" data-id="${escapeHtml(m.id)}" ${btnDisabled}>${btnLabel}</button>
         </div>
       </div>`;
@@ -113,19 +131,34 @@
       .replace(/"/g, "&quot;");
   }
 
+  function renderList() {
+    const body = $("msModelsBody");
+    if (!modelsCache.length) {
+      body.innerHTML = `<div class="ms-empty">No models available.</div>`;
+      return;
+    }
+    body.innerHTML = modelsCache.map(rowHtml).join("");
+    Array.from(body.querySelectorAll(".ms-install-btn")).forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        onInstall(btn.dataset.id);
+      });
+    });
+    Array.from(body.querySelectorAll(".ms-row")).forEach((row) => {
+      row.addEventListener("click", () => {
+        selectedModelId = row.dataset.id;
+        renderList();
+      });
+    });
+  }
+
   async function refreshList() {
     const body = $("msModelsBody");
     body.innerHTML = `<div class="ms-loading">Loading…</div>`;
     try {
       const d = await fetchJSON("/api/models/list");
-      if (!d.models || !d.models.length) {
-        body.innerHTML = `<div class="ms-empty">No models available.</div>`;
-        return;
-      }
-      body.innerHTML = d.models.map(cardHtml).join("");
-      Array.from(body.querySelectorAll(".ms-install-btn")).forEach((btn) => {
-        btn.addEventListener("click", () => onInstall(btn.dataset.id));
-      });
+      modelsCache = sortModels(d.models || []);
+      renderList();
     } catch (e) {
       body.innerHTML = `<div class="ms-empty">Failed to load.</div>`;
       showError("list: " + e.message);
@@ -174,7 +207,7 @@
         currentJobId = null;
         if (snap.status === "done") {
           showProgress(true, 100, "downloaded — ready to apply");
-          refreshStatus().then(() => refreshList());
+          refreshStatus().then(() => renderList());
         } else {
           showProgress(false, 0, "");
           showError(snap.error || "install failed");
