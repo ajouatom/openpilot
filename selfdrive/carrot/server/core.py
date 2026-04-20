@@ -1000,8 +1000,18 @@ async def _run_tool_job(job: Dict[str, Any]) -> None:
         return
 
       _tool_job_progress(job, message=f"switch {branch}", current=2, total=2)
-      if branch.startswith("origin/"):
-        local_branch = branch.replace("origin/", "", 1)
+
+      # Detect if `branch` is a `<remote>/<name>` ref for any configured remote.
+      rc_remotes, remotes_out = await _tool_capture_exec(["git", "remote"], cwd=repo_dir, timeout=30)
+      known_remotes = remotes_out.split() if rc_remotes == 0 else ["origin"]
+      remote_prefix = None
+      for r in known_remotes:
+        if branch.startswith(f"{r}/"):
+          remote_prefix = r
+          break
+
+      if remote_prefix is not None:
+        local_branch = branch[len(remote_prefix) + 1:]
         script = (
           f"if git rev-parse --verify {shlex.quote(local_branch)} >/dev/null 2>&1; "
           f"then git switch {shlex.quote(local_branch)}; "
