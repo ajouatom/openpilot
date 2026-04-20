@@ -39,7 +39,8 @@
   }
 
   async function fetchJSON(url, opts) {
-    const resp = await fetch(url, opts || {});
+    const merged = Object.assign({ cache: "no-store" }, opts || {});
+    const resp = await fetch(url, merged);
     const data = await resp.json().catch(() => ({ ok: false, error: "bad json" }));
     if (!resp.ok || data.ok === false) {
       const err = data.error || ("HTTP " + resp.status);

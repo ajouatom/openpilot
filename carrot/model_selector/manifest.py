@@ -8,6 +8,8 @@ from __future__ import annotations
 import base64
 import json
 import math
+import time
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 
@@ -145,8 +147,15 @@ def fetch_and_verify(url: str = MODELS_JSON_URL, timeout: float = 20.0) -> list[
     """Download `models.json`, verify its Ed25519 signature, and return the
     parsed model list.  Raises `ManifestError` on any failure.
     """
+    # Append cache-busting query to bypass raw.githubusercontent.com CDN.
+    sep = "&" if urllib.parse.urlparse(url).query else "?"
+    fetch_url = f"{url}{sep}t={int(time.time())}"
+    req = urllib.request.Request(fetch_url, headers={
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+    })
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             body = resp.read()
     except Exception as e:
         raise ManifestError(f"failed to fetch manifest: {e}") from e
