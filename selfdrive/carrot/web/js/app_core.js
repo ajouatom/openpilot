@@ -1038,7 +1038,7 @@ function renderUIText() {
   setNavText("btnTools", s.tools);
   setNavText("btnTerminal", s.terminal);
   setNavText("btnFleet", s.fleet);
-  setText("btnQuickLinkWeb", "web");
+  setText("btnQuickLinkWeb", "Web");
   setText("btnQuickFleet", s.fleet);
 
   setText("carrotTitle", "CarrotPilot");
@@ -1506,10 +1506,10 @@ async function updateQuickLink(options = {}) {
 
 async function openQuickLink() {
   if (!QUICK_LINK_URL) return;
-  const ok = await appConfirm(
-    `${getUIText("open", "Open")} web?\n\n${QUICK_LINK_URL}`,
-    { title: "web" },
-  );
+  const msg = LANG === "ko"
+    ? `Web을 여시겠습니까?\n\n${QUICK_LINK_URL}`
+    : `${getUIText("open", "Open")} Web?\n\n${QUICK_LINK_URL}`;
+  const ok = await appConfirm(msg, { title: "Web" });
   if (!ok) return;
   window.open(QUICK_LINK_URL, "_blank", "noopener");
 }
