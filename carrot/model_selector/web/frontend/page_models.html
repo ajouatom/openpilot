@@ -1,13 +1,28 @@
 <div id="pageModels" class="page" style="display:none;">
   <style>
-    #pageModels {
+    body[data-page="models"] { overflow: hidden; }
+    body[data-page="models"] .wrap {
       padding: var(--sp-lg);
+      padding-bottom: calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px) + var(--sp-md));
+      min-height: 0;
+      height: calc(var(--app-vv-height, 100dvh));
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+    #pageModels {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+      box-sizing: border-box;
     }
     #pageModels .ms-hero {
       display: flex;
       flex-direction: column;
-      gap: var(--sp-sm);
-      margin-bottom: var(--sp-lg);
+      gap: 2px;
+      margin-bottom: var(--sp-md);
+      flex-shrink: 0;
     }
     #pageModels .ms-hero__title {
       font-size: var(--fs-headline);
@@ -26,9 +41,11 @@
       border-radius: var(--r-lg);
       padding: var(--sp-md) var(--sp-lg);
       margin-bottom: var(--sp-md);
-      display: flex;
-      flex-direction: column;
-      gap: var(--sp-sm);
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: var(--sp-md);
+      align-items: center;
+      flex-shrink: 0;
     }
     #pageModels .ms-status-card__info {
       min-width: 0;
@@ -57,11 +74,9 @@
       display: flex;
       flex-direction: row;
       gap: var(--sp-sm);
-      flex-wrap: wrap;
     }
     #pageModels .ms-status-card__actions .btn {
-      flex: 1 1 auto;
-      min-width: 140px;
+      white-space: nowrap;
     }
 
     #pageModels .ms-chip {
@@ -95,7 +110,8 @@
       border: 1px solid var(--md-stroke-soft);
       border-radius: var(--r-md);
       padding: var(--sp-md) var(--sp-lg);
-      margin-bottom: var(--sp-lg);
+      margin-bottom: var(--sp-md);
+      flex-shrink: 0;
     }
     #pageModels .ms-progress__label {
       font-size: var(--fs-body-sm);
@@ -120,7 +136,8 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin: var(--sp-lg) 0 var(--sp-sm);
+      margin: 0 0 var(--sp-sm);
+      flex-shrink: 0;
     }
     #pageModels .ms-section-head__title {
       font-size: var(--fs-title-md);
@@ -132,8 +149,8 @@
       display: flex;
       flex-direction: column;
       gap: var(--sp-sm);
-      max-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - 300px);
-      min-height: 320px;
+      flex: 1 1 auto;
+      min-height: 0;
       overflow-y: auto;
       padding-right: 4px;
       scrollbar-gutter: stable;
