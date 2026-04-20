@@ -64,7 +64,6 @@
       } else {
         pendingChip.style.display = "none";
       }
-      $("msApplyBtn").disabled = !pendingModel;
     } catch (e) {
       showError("status: " + e.message);
     }
@@ -199,6 +198,22 @@
     }
   }
 
+  function rebootCountdown(seconds, label) {
+    const total = seconds;
+    let remaining = seconds;
+    showProgress(true, 100, `${label} — rebooting in ${remaining}s…`);
+    const t = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearInterval(t);
+        showProgress(true, 0, `${label} — rebooting now…`);
+        return;
+      }
+      const pct = (remaining / total) * 100;
+      showProgress(true, pct, `${label} — rebooting in ${remaining}s…`);
+    }, 1000);
+  }
+
   async function pollOnce() {
     if (!currentJobId) return;
     try {
@@ -208,8 +223,14 @@
         stopPoll();
         currentJobId = null;
         if (snap.status === "done") {
-          showProgress(true, 100, "downloaded — ready to apply");
-          refreshStatus().then(() => renderList());
+          try {
+            const d = await fetchJSON("/api/models/apply", { method: "POST" });
+            await refreshStatus();
+            renderList();
+            rebootCountdown(d.reboot_in || 5, "downloaded");
+          } catch (e) {
+            showError("apply: " + e.message);
+          }
         } else {
           showProgress(false, 0, "");
           showError(snap.error || "install failed");
@@ -223,22 +244,14 @@
     }
   }
 
-  async function onApply() {
-    showError("");
-    try {
-      const d = await fetchJSON("/api/models/apply", { method: "POST" });
-      showProgress(true, 100, "rebooting in " + (d.reboot_in || 3) + "s…");
-    } catch (e) {
-      showError("apply: " + e.message);
-    }
-  }
-
   async function onReset() {
     if (!confirm("Remove custom model and revert to built-in?")) return;
     showError("");
     try {
-      await fetchJSON("/api/models/reset", { method: "POST" });
-      refreshStatus();
+      const d = await fetchJSON("/api/models/reset", { method: "POST" });
+      await refreshStatus();
+      renderList();
+      rebootCountdown(d.reboot_in || 5, "reset");
     } catch (e) {
       showError("reset: " + e.message);
     }
@@ -252,11 +265,6 @@
         refreshStatus();
         refreshList();
       });
-    }
-    const applyBtn = $("msApplyBtn");
-    if (applyBtn && !applyBtn.dataset.bound) {
-      applyBtn.dataset.bound = "1";
-      applyBtn.addEventListener("click", onApply);
     }
     const resetBtn = $("msResetBtn");
     if (resetBtn && !resetBtn.dataset.bound) {

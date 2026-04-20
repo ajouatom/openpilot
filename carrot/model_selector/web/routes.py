@@ -156,11 +156,11 @@ async def api_apply(request: web.Request) -> web.Response:
         return web.json_response({"ok": False, "error": "no pending model"}, status=409)
 
     async def reboot_soon() -> None:
-        await asyncio.sleep(3.0)
+        await asyncio.sleep(5.0)
         subprocess.Popen(["sudo", "reboot"])
 
     asyncio.get_event_loop().create_task(reboot_soon())
-    return web.json_response({"ok": True, "reboot_in": 3})
+    return web.json_response({"ok": True, "reboot_in": 5})
 
 
 async def api_reset(request: web.Request) -> web.Response:
@@ -168,7 +168,13 @@ async def api_reset(request: web.Request) -> web.Response:
         await asyncio.get_event_loop().run_in_executor(None, reset_to_default)
     except Exception as e:
         return web.json_response({"ok": False, "error": str(e)}, status=500)
-    return web.json_response({"ok": True})
+
+    async def reboot_soon() -> None:
+        await asyncio.sleep(5.0)
+        subprocess.Popen(["sudo", "reboot"])
+
+    asyncio.get_event_loop().create_task(reboot_soon())
+    return web.json_response({"ok": True, "reboot_in": 5})
 
 
 # -- frontend --------------------------------------------------------------
