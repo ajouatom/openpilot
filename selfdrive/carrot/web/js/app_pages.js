@@ -18,6 +18,7 @@ let carsLoadPromise = null;
 let settingsLoadPromise = null;
 let toolsMetaLoadPromise = null;
 let toolsMetaLoadedAt = 0;
+let toolsMetaLastValues = null;
 let uiWarmupTimer = null;
 const SETTING_VALUES_TTL_MS = 60000;
 let settingValueWarmupTimer = null;
@@ -2020,13 +2021,7 @@ function buildToolsMetaInfoDialog(values = {}) {
     const commitText = `${commit.slice(0, 7)}${commitDate ? ` (${commitDate})` : ""}`;
     lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.commit)}: ${htmlEscape(commitText)}</div>`);
   }
-  const deviceType = String(values.DeviceType || "").trim();
-  if (deviceType) {
-    const deviceFriendly = { tici: "c3", tizi: "c3x", mici: "c4" };
-    const friendly = deviceFriendly[deviceType] || deviceType;
-    const deviceLabel = friendly !== deviceType ? `${friendly} (${deviceType})` : deviceType;
-    lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.deviceType)}: ${htmlEscape(deviceLabel)}</div>`);
-  }
+
   if (dongleId) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.dongle)}: ${htmlEscape(dongleId)}</div>`);
   if (serial) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.serial)}: ${htmlEscape(serial)}</div>`);
   const position = String(values.DevicePosition || "").trim();
@@ -2113,6 +2108,7 @@ async function refreshToolsMetaInfo(options = {}) {
     toolsMetaInfoText = buildToolsMetaInfo(values);
     toolsMetaInfoDialogText = buildToolsMetaInfoDialog(values);
     toolsMetaLoadedAt = Date.now();
+    toolsMetaLastValues = values;
     if (!silent || CURRENT_PAGE === "tools") renderToolsMeta();
     return values;
   })().finally(() => {
@@ -2461,8 +2457,10 @@ function initToolsPage() {
     let title = LANG === "en" ? "Device Info" : LANG === "zh" ? "设备信息" : "기기정보";
     
     try {
-      // Use existing values if available to avoid extra fetch, or wait if loading
-      const values = toolsMetaLoadPromise ? await toolsMetaLoadPromise : (toolsMetaLoadedAt ? await refreshToolsMetaInfo({ ttlMs: 3600000 }) : null);
+      if (!toolsMetaLastValues && !toolsMetaLoadPromise) {
+        await refreshToolsMetaInfo({ ttlMs: 3600000 });
+      }
+      const values = toolsMetaLoadPromise ? await toolsMetaLoadPromise : toolsMetaLastValues;
       if (values) {
         const deviceType = String(values.DeviceType || "").trim();
         if (deviceType) {
