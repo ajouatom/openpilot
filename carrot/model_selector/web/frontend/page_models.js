@@ -317,6 +317,8 @@
 
   window.addEventListener("carrot:pagechange", (e) => {
     const cur = e && e.detail && e.detail.page;
+    const navBtn = document.getElementById("btnModels");
+    if (navBtn) navBtn.classList.toggle("active", cur === "models");
     if (cur && cur !== "models") {
       window.ModelSelector.onHide();
     }
