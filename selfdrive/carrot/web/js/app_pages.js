@@ -1999,10 +1999,10 @@ function buildToolsMetaInfoDialog(values = {}) {
   const serial = String(values.HardwareSerial || "").trim();
   const gitPullTime = formatToolsMetaDateTime(values.GitPullTime);
   const labels = LANG === "en"
-    ? { branch: "Branch", commit: "Commit", remote: "Remote", deviceType: "Device", dongle: "Dongle ID", serial: "Serial", gitPull: "Recent update", position: "Position" }
+    ? { branch: "Branch", commit: "Commit", deviceType: "Device", dongle: "Dongle ID", serial: "Serial", gitPull: "Recent update", position: "Position" }
     : LANG === "zh"
-      ? { branch: "分支", commit: "提交", remote: "远程", deviceType: "设备型号", dongle: "Dongle ID", serial: "序列号", gitPull: "最近更新", position: "安装角度" }
-      : { branch: "브랜치", commit: "커밋", remote: "원격 주소", deviceType: "기기", dongle: "동글ID", serial: "시리얼", gitPull: "최근 업데이트", position: "설치각도" };
+      ? { branch: "分支", commit: "提交", deviceType: "设备型号", dongle: "Dongle ID", serial: "序列号", gitPull: "最近更新", position: "安装角度" }
+      : { branch: "브랜치", commit: "커밋", deviceType: "기기", dongle: "동글ID", serial: "시리얼", gitPull: "최근 업데이트", position: "설치각도" };
   const htmlEscape = typeof escapeHtml === "function"
     ? escapeHtml
     : (value) => String(value)
@@ -2012,15 +2012,13 @@ function buildToolsMetaInfoDialog(values = {}) {
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#039;");
   const lines = [];
-  if (branch) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.branch)}: ${htmlEscape(branch)}</div>`);
+  const remote = String(values.GitRemote || "").trim();
+  const shortRemote = remote ? remote.replace(/^https?:\/\/[^/]+\//, "").replace(/\.git$/, "") : "";
+  const branchText = branch + (shortRemote ? ` (${shortRemote})` : "");
+  if (branchText) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.branch)}: ${htmlEscape(branchText)}</div>`);
   if (commit) {
     const commitText = `${commit.slice(0, 7)}${commitDate ? ` (${commitDate})` : ""}`;
     lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.commit)}: ${htmlEscape(commitText)}</div>`);
-  }
-  if (remote) {
-    // extract "user/repo" from full URL like https://github.com/user/repo.git
-    const shortRemote = remote.replace(/^https?:\/\/[^/]+\//, "").replace(/\.git$/, "");
-    lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.remote)}: ${htmlEscape(shortRemote)}</div>`);
   }
   const deviceType = String(values.DeviceType || "").trim();
   if (deviceType) {
@@ -2033,8 +2031,11 @@ function buildToolsMetaInfoDialog(values = {}) {
   if (gitPullTime) {
     lines.push(`<div class="app-dialog__metaSubtle">${htmlEscape(labels.gitPull)}: ${htmlEscape(gitPullTime)}</div>`);
   }
-  const shareBtnHtml = `<button onclick="const t=this.parentElement.nextElementSibling.innerText; if(navigator.share){navigator.share({title:'Device Info',text:t}).catch(()=>alert(t))}else{alert(t)}" style="background:none;border:none;cursor:pointer;padding:4px;font-size:16px;" title="Share">📤</button>`;
-  const copyBtnHtml = `<button onclick="navigator.clipboard.writeText(this.parentElement.nextElementSibling.innerText).then(()=>{alert('복사되었습니다')})" style="background:none;border:none;cursor:pointer;padding:4px;font-size:16px;" title="Copy">📋</button>`;
+  const copyText = LANG === "ko" ? "복사" : LANG === "zh" ? "复制" : "Copy";
+  const shareText = LANG === "ko" ? "공유" : LANG === "zh" ? "分享" : "Share";
+  const btnStyle = "background:none;border:none;cursor:pointer;padding:4px;font-size:13px;font-weight:600;color:var(--md-primary);text-decoration:underline;";
+  const shareBtnHtml = `<button onclick="const t=this.parentElement.nextElementSibling.innerText; if(navigator.share){navigator.share({title:'Device Info',text:t}).catch(()=>alert(t))}else{alert(t)}" style="${btnStyle}" title="Share">${shareText}</button>`;
+  const copyBtnHtml = `<button onclick="navigator.clipboard.writeText(this.parentElement.nextElementSibling.innerText).then(()=>{alert('복사되었습니다')})" style="${btnStyle}" title="Copy">${copyText}</button>`;
   return `<div style="position:relative;">
     <div style="position:absolute; top:-36px; right:0px; display:flex; gap:8px;">${copyBtnHtml}${shareBtnHtml}</div>
     <div class="app-dialog__metaList" id="toolsMetaListContent">${lines.join("")}</div>
