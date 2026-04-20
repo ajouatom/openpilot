@@ -208,6 +208,42 @@
     },
   };
 
+  function integrateWithRouter() {
+    const pageEl = document.getElementById("pageModels");
+    if (!pageEl) return false;
+    try {
+      if (typeof PAGE_ELEMENTS === "object" && PAGE_ELEMENTS && !PAGE_ELEMENTS.models) {
+        PAGE_ELEMENTS.models = pageEl;
+      }
+    } catch (_) { /* ignore */ }
+    return true;
+  }
+
+  function activateModelsPage() {
+    const pageEl = document.getElementById("pageModels");
+    if (!pageEl) return;
+    const integrated = integrateWithRouter();
+    if (integrated && typeof window.showPage === "function") {
+      window.showPage("models", true);
+    } else {
+      document.querySelectorAll(".page").forEach((p) => { p.style.display = "none"; });
+      pageEl.style.display = "block";
+      document.body.dataset.page = "models";
+    }
+    document.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("active"));
+    const navBtn = document.getElementById("btnModels");
+    if (navBtn) navBtn.classList.add("active");
+    try { window.scrollTo(0, 0); } catch (_) { /* ignore */ }
+    window.ModelSelector.onShow();
+  }
+
+  window.addEventListener("carrot:pagechange", (e) => {
+    const cur = e && e.detail && e.detail.page;
+    if (cur && cur !== "models") {
+      window.ModelSelector.onHide();
+    }
+  });
+
   // Self-bootstrap: pull the page fragment into the DOM and wire up the nav
   // button that index.html provides.  Idempotent.
   async function bootstrap() {
@@ -221,17 +257,12 @@
         }
       } catch (_) { /* ignore */ }
     }
+    integrateWithRouter();
+
     const navBtn = document.getElementById("btnModels");
     if (navBtn && !navBtn.dataset.bound) {
       navBtn.dataset.bound = "1";
-      navBtn.addEventListener("click", () => {
-        document.querySelectorAll(".page").forEach((p) => { p.style.display = "none"; });
-        const page = document.getElementById("pageModels");
-        if (page) page.style.display = "block";
-        document.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("active"));
-        navBtn.classList.add("active");
-        window.ModelSelector.onShow();
-      });
+      navBtn.addEventListener("click", activateModelsPage);
     }
   }
 
