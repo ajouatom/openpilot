@@ -63,8 +63,8 @@
       const s = await fetchJSON("/api/models/status");
       currentModel = s.current_model || "";
       pendingModel = s.pending_model || "";
-      $("msCurrent").textContent = currentModel || "Default (built-in)";
-      $("msDescription").textContent = s.description || "No custom model installed";
+      $("msCurrent").textContent = currentModel || "기본 (내장)";
+      $("msDescription").textContent = s.description || "커스텀 모델 없음";
       $("msDisk").textContent = s.disk_free_mb >= 0 ? s.disk_free_mb : "?";
       const pendingChip = $("msPendingChip");
       if (pendingModel) {
@@ -105,10 +105,10 @@
     ].filter(Boolean).join(" ");
 
     const badges = [];
-    if (isCurrent) badges.push(`<span class="ms-chip ms-chip--current">Current</span>`);
-    else if (isPending) badges.push(`<span class="ms-chip ms-chip--pending">Pending</span>`);
+    if (isCurrent) badges.push(`<span class="ms-chip ms-chip--current">현재</span>`);
+    else if (isPending) badges.push(`<span class="ms-chip ms-chip--pending">대기중</span>`);
 
-    const btnLabel = isCurrent ? "Reinstall" : (isPending ? "Downloaded" : "Install");
+    const btnLabel = isCurrent ? "재설치" : (isPending ? "다운로드됨" : "설치");
     const btnDisabled = isPending ? "disabled" : "";
     const btnClass = isCurrent ? "btn" : "btn btn--filled";
 
@@ -144,7 +144,7 @@
   function renderList() {
     const body = $("msModelsBody");
     if (!modelsCache.length) {
-      body.innerHTML = `<div class="ms-empty">No models available.</div>`;
+      body.innerHTML = `<div class="ms-empty">사용 가능한 모델이 없습니다.</div>`;
       return;
     }
     body.innerHTML = modelsCache.map(rowHtml).join("");
@@ -164,29 +164,29 @@
 
   async function refreshList() {
     const body = $("msModelsBody");
-    body.innerHTML = `<div class="ms-loading">Loading…</div>`;
+    body.innerHTML = `<div class="ms-loading">불러오는 중…</div>`;
     try {
       const d = await fetchJSON("/api/models/list");
       modelsCache = sortModels(d.models || []);
       renderList();
     } catch (e) {
-      body.innerHTML = `<div class="ms-empty">Failed to load.</div>`;
+      body.innerHTML = `<div class="ms-empty">불러오기 실패</div>`;
       showError("list: " + e.message);
     }
   }
 
   async function onInstall(modelId) {
     if (currentJobId) {
-      showError("another install is already running");
+      showError("이미 설치가 진행 중입니다");
       return;
     }
     const m = modelsCache.find((x) => x.id === modelId);
     const name = m ? m.name : modelId;
     const sizeStr = m ? fmtMB(m.total_size) : "";
     const isCurrent = m && (m.id === currentModel || m.name === currentModel);
-    const verb = isCurrent ? "Reinstall" : "Install";
-    const msg = `"${name}"${sizeStr ? " (" + sizeStr + ")" : ""} 모델을 ${verb === "Reinstall" ? "재설치" : "설치"}합니다.\n다운로드 후 자동 재부팅됩니다.`;
-    const ok = await confirmPopup(msg, { title: `${verb} Model`, confirmLabel: verb });
+    const verb = isCurrent ? "재설치" : "설치";
+    const msg = `"${name}"${sizeStr ? " (" + sizeStr + ")" : ""} 모델을 ${verb}합니다.\n다운로드 후 자동 재부팅됩니다.`;
+    const ok = await confirmPopup(msg, { title: `모델 ${verb}`, confirmLabel: verb });
     if (!ok) return;
     showError("");
     try {
@@ -196,7 +196,7 @@
         body: JSON.stringify({ id: modelId }),
       });
       currentJobId = d.id;
-      showProgress(true, 0, "starting…");
+      showProgress(true, 0, "시작 중…");
       startPoll();
     } catch (e) {
       showError("install: " + e.message);
@@ -218,17 +218,17 @@
   function rebootCountdown(seconds, label) {
     const total = seconds;
     let elapsed = 0;
-    showProgress(true, 0, `${label} — rebooting in ${total}s…`);
+    showProgress(true, 0, `${label} — ${total}초 후 재부팅…`);
     const t = setInterval(() => {
       elapsed += 1;
       const remaining = total - elapsed;
       if (remaining <= 0) {
         clearInterval(t);
-        showProgress(true, 100, `${label} — rebooting now…`);
+        showProgress(true, 100, `${label} — 재부팅 중…`);
         return;
       }
       const pct = (elapsed / total) * 100;
-      showProgress(true, pct, `${label} — rebooting in ${remaining}s…`);
+      showProgress(true, pct, `${label} — ${remaining}초 후 재부팅…`);
     }, 1000);
   }
 
@@ -245,13 +245,13 @@
             const d = await fetchJSON("/api/models/apply", { method: "POST" });
             await refreshStatus();
             renderList();
-            rebootCountdown(d.reboot_in || 5, "downloaded");
+            rebootCountdown(d.reboot_in || 5, "다운로드 완료");
           } catch (e) {
             showError("apply: " + e.message);
           }
         } else {
           showProgress(false, 0, "");
-          showError(snap.error || "install failed");
+          showError(snap.error || "설치 실패");
         }
       }
     } catch (e) {
@@ -264,8 +264,8 @@
 
   async function onReset() {
     const ok = await confirmPopup(
-      "커스텀 모델을 제거하고 기본 모델로 되돌립니다.\n제거 후 자동 재부팅됩니다.",
-      { title: "Reset Default", confirmLabel: "Reset" },
+      "기본(내장) 모델로 되돌립니다.\n자동 재부팅됩니다.",
+      { title: "기본값 복원", confirmLabel: "복원" },
     );
     if (!ok) return;
     showError("");
@@ -273,7 +273,7 @@
       const d = await fetchJSON("/api/models/reset", { method: "POST" });
       await refreshStatus();
       renderList();
-      rebootCountdown(d.reboot_in || 5, "reset");
+      rebootCountdown(d.reboot_in || 5, "기본값 복원");
     } catch (e) {
       showError("reset: " + e.message);
     }

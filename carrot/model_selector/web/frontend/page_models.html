@@ -251,22 +251,22 @@
   </style>
 
   <div class="ms-hero">
-    <div class="ms-hero__title">Model Selector</div>
-    <div class="ms-hero__subtitle" id="msSubtitle">Select a driving model to download and apply.</div>
+    <div class="ms-hero__title">모델 선택</div>
+    <div class="ms-hero__subtitle" id="msSubtitle">주행 모델을 다운로드하고 적용합니다.</div>
   </div>
 
   <div class="ms-status-card">
     <div class="ms-status-card__info">
-      <div class="ms-status-card__label">Current Model</div>
+      <div class="ms-status-card__label">현재 모델</div>
       <div class="ms-status-card__current" id="msCurrent">—</div>
       <div class="ms-status-card__meta">
         <span id="msDescription">—</span>
-        <span class="ms-chip ms-chip--pending" id="msPendingChip" style="display:none;">Pending: <span id="msPending"></span></span>
-        <span class="ms-chip" id="msDiskChip">Free: <span id="msDisk">—</span> MB</span>
+        <span class="ms-chip ms-chip--pending" id="msPendingChip" style="display:none;">대기중: <span id="msPending"></span></span>
+        <span class="ms-chip" id="msDiskChip">여유: <span id="msDisk">—</span> MB</span>
       </div>
     </div>
     <div class="ms-status-card__actions">
-      <button id="msResetBtn" class="btn btn--danger">Reset Default</button>
+      <button id="msResetBtn" class="btn btn--danger">기본값 복원</button>
     </div>
   </div>
 
@@ -278,12 +278,12 @@
   </div>
 
   <div class="ms-section-head">
-    <div class="ms-section-head__title">Available Models</div>
-    <button id="msRefreshBtn" class="smallBtn">Refresh</button>
+    <div class="ms-section-head__title">사용 가능한 모델</div>
+    <button id="msRefreshBtn" class="smallBtn">새로고침</button>
   </div>
 
   <div id="msModelsBody" class="ms-list">
-    <div class="ms-loading">Loading…</div>
+    <div class="ms-loading">불러오는 중…</div>
   </div>
 
   <div id="msError" class="ms-error"></div>
