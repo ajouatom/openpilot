@@ -1033,6 +1033,23 @@ async def _run_tool_job(job: Dict[str, Any]) -> None:
       _tool_job_finish(job, ok=rc == 0, result=_tool_result_from_log(job, rc))
       return
 
+    if action == "git_remote_set":
+      url = str(job.get("payload", {}).get("url") or "").strip()
+      if not url:
+        _tool_job_finish(job, ok=False, result={"ok": False, "error": "missing url"}, error="missing url")
+        return
+      
+      _tool_job_progress(job, message=f"set-url origin {url}", current=1, total=2)
+      rc_set = await _tool_stream_exec(job, ["git", "remote", "set-url", "origin", url], cwd=repo_dir, timeout=30)
+      if rc_set != 0:
+        _tool_job_finish(job, ok=False, result=_tool_result_from_log(job, rc_set))
+        return
+
+      _tool_job_progress(job, message="fetch origin", current=2, total=2)
+      rc_fetch = await _tool_stream_exec(job, ["git", "fetch", "origin"], cwd=repo_dir, timeout=180)
+      _tool_job_finish(job, ok=rc_fetch == 0, result=_tool_result_from_log(job, rc_fetch))
+      return
+
     if action == "git_branch_list":
       _tool_job_progress(job, message="fetch --all --prune", current=1, total=2)
       rc_fetch = await _tool_stream_exec(job, ["git", "fetch", "--all", "--prune"], cwd=repo_dir, timeout=180)
@@ -1432,19 +1449,6 @@ async def api_tools(request: web.Request) -> web.Response:
       except Exception as e:
         return web.json_response({"ok": False, "error": str(e)}, status=500)
   
-    if action == "git_remote_set":
-      url = (body.get("url") or "").strip()
-      if not url:
-        return web.json_response({"ok": False, "error": "missing url"}, status=400)
-      
-      rc_set, out_set = run(["git", "remote", "set-url", "origin", url], cwd=REPO_DIR)
-      if rc_set != 0:
-        return web.json_response({"ok": False, "rc": rc_set, "out": out_set})
-        
-      rc_fetch, out_fetch = run(["git", "fetch", "origin"], cwd=REPO_DIR)
-      out = (out_set + "\n\n" + out_fetch).strip()
-      return web.json_response({"ok": rc_fetch == 0, "rc": rc_fetch, "out": out})
-
     if action == "git_branch_list":
       rc0, out0 = run(["git", "fetch", "--all", "--prune"], cwd=REPO_DIR)
       if rc0 != 0:
