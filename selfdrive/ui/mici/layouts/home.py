@@ -188,16 +188,17 @@ class MiciHomeLayout(Widget):
 
       self._branch_label.set_max_width(gui_app.width - self._version_label.text_width - self._date_label.text_width - 32)
       branch_text = "release" if release_branch else self._version_text[1]
-      model = ui_state.params.get("DrivingModelName") or ""
-      if model:
-        branch_text = f"{branch_text} ({model})"
       self._branch_label.set_text(" " + branch_text)
       self._branch_label.set_position(version_pos.x + self._version_label.text_width + self._date_label.text_width + 20, version_pos.y)
       self._branch_label.render()
 
       if not release_branch:
         # 2nd line
-        self._version_commit_label.set_text(self._version_text[2])
+        commit_text = self._version_text[2]
+        model = ui_state.params.get("DrivingModelName") or ""
+        if model:
+          commit_text = f"{commit_text} ({model})"
+        self._version_commit_label.set_text(commit_text)
         self._version_commit_label.set_position(version_pos.x, version_pos.y + self._date_label.font_size + 7)
         self._version_commit_label.render()
 
