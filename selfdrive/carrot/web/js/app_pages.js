@@ -2022,7 +2022,10 @@ function buildToolsMetaInfoDialog(values = {}) {
   }
   const deviceType = String(values.DeviceType || "").trim();
   if (deviceType) {
-    lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.deviceType)}: ${htmlEscape(deviceType)}</div>`);
+    const deviceFriendly = { tici: "c3", tizi: "c3x", mici: "c4" };
+    const friendly = deviceFriendly[deviceType] || deviceType;
+    const deviceLabel = friendly !== deviceType ? `${friendly} (${deviceType})` : deviceType;
+    lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.deviceType)}: ${htmlEscape(deviceLabel)}</div>`);
   }
   if (dongleId) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.dongle)}: ${htmlEscape(dongleId)}</div>`);
   if (serial) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.serial)}: ${htmlEscape(serial)}</div>`);
@@ -2536,6 +2539,10 @@ function initToolsPage() {
     if (!newUrl || newUrl.trim() === "" || newUrl.trim() === defaultUrl) return;
 
     try {
+      const waitMsg = LANG === "ko"
+        ? "저장소 데이터를 받아오는 중입니다.\n처음 연결하는 저장소의 경우 수 분이 걸릴 수 있습니다.\n잠시만 기다려 주세요..."
+        : "Fetching repository data.\nThis may take a few minutes for new repositories.\nPlease wait...";
+      showAppToast(waitMsg, { tone: "info", duration: 8000 });
       await runTool("git_remote_set", { url: newUrl.trim() });
       await refreshToolsMetaInfo();
       const successMsg = LANG === "ko" 
