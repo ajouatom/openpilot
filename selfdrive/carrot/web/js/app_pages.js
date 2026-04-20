@@ -1947,8 +1947,16 @@ function buildToolsMetaInfo(values = {}) {
 }
 
 function formatToolsMetaDate(value) {
-  const raw = String(value || "").trim();
+  let raw = String(value || "").replace(/['"]/g, "").trim();
   if (!raw) return "";
+
+  // Support "1730000000 2024-10-27..."
+  const parts = raw.split(" ");
+  if (parts.length > 1 && /^\d{10,}$/.test(parts[0])) {
+    const d = new Date(parseInt(parts[0], 10) * 1000);
+    if (!isNaN(d)) return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+  }
+
   const m = raw.match(/^(\d{4})[-./](\d{2})[-./](\d{2})/);
   if (m) return `${m[1]}.${m[2]}.${m[3]}`;
   const ts = Date.parse(raw);
@@ -1991,10 +1999,10 @@ function buildToolsMetaInfoDialog(values = {}) {
   const serial = String(values.HardwareSerial || "").trim();
   const gitPullTime = formatToolsMetaDateTime(values.GitPullTime);
   const labels = LANG === "en"
-    ? { branch: "Branch", commit: "Commit", remote: "Remote", dongle: "Dongle ID", serial: "Serial", gitPull: "Recent update", position: "Position" }
+    ? { branch: "Branch", commit: "Commit", remote: "Remote", deviceType: "Device", dongle: "Dongle ID", serial: "Serial", gitPull: "Recent update", position: "Position" }
     : LANG === "zh"
-      ? { branch: "分支", commit: "提交", remote: "远程", dongle: "Dongle ID", serial: "序列号", gitPull: "最近更新", position: "安装角度" }
-      : { branch: "브랜치", commit: "커밋", remote: "원격 주소", dongle: "동글ID", serial: "시리얼", gitPull: "최근 업데이트", position: "설치각도" };
+      ? { branch: "分支", commit: "提交", remote: "远程", deviceType: "设备型号", dongle: "Dongle ID", serial: "序列号", gitPull: "最近更新", position: "安装角度" }
+      : { branch: "브랜치", commit: "커밋", remote: "원격 주소", deviceType: "기기", dongle: "동글ID", serial: "시리얼", gitPull: "최근 업데이트", position: "설치각도" };
   const htmlEscape = typeof escapeHtml === "function"
     ? escapeHtml
     : (value) => String(value)
@@ -2009,11 +2017,14 @@ function buildToolsMetaInfoDialog(values = {}) {
     const commitText = `${commit.slice(0, 7)}${commitDate ? ` (${commitDate})` : ""}`;
     lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.commit)}: ${htmlEscape(commitText)}</div>`);
   }
-  const remote = String(values.GitRemote || "").trim();
   if (remote) {
     // extract "user/repo" from full URL like https://github.com/user/repo.git
     const shortRemote = remote.replace(/^https?:\/\/[^/]+\//, "").replace(/\.git$/, "");
     lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.remote)}: ${htmlEscape(shortRemote)}</div>`);
+  }
+  const deviceType = String(values.DeviceType || "").trim();
+  if (deviceType) {
+    lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.deviceType)}: ${htmlEscape(deviceType)}</div>`);
   }
   if (dongleId) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.dongle)}: ${htmlEscape(dongleId)}</div>`);
   if (serial) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.serial)}: ${htmlEscape(serial)}</div>`);
@@ -2022,7 +2033,12 @@ function buildToolsMetaInfoDialog(values = {}) {
   if (gitPullTime) {
     lines.push(`<div class="app-dialog__metaSubtle">${htmlEscape(labels.gitPull)}: ${htmlEscape(gitPullTime)}</div>`);
   }
-  return `<div class="app-dialog__metaList">${lines.join("")}</div>`;
+  const shareBtnHtml = `<button onclick="const t=this.parentElement.nextElementSibling.innerText; if(navigator.share){navigator.share({title:'Device Info',text:t}).catch(()=>alert(t))}else{alert(t)}" style="background:none;border:none;cursor:pointer;padding:4px;font-size:16px;" title="Share">📤</button>`;
+  const copyBtnHtml = `<button onclick="navigator.clipboard.writeText(this.parentElement.nextElementSibling.innerText).then(()=>{alert('복사되었습니다')})" style="background:none;border:none;cursor:pointer;padding:4px;font-size:16px;" title="Copy">📋</button>`;
+  return `<div style="position:relative;">
+    <div style="position:absolute; top:-36px; right:0px; display:flex; gap:8px;">${copyBtnHtml}${shareBtnHtml}</div>
+    <div class="app-dialog__metaList" id="toolsMetaListContent">${lines.join("")}</div>
+  </div>`;
 }
 
 function rerenderPageLangUi() {
@@ -2069,7 +2085,7 @@ async function refreshToolsMetaInfo(options = {}) {
   }
 
   toolsMetaLoadPromise = (async () => {
-    const values = await bulkGet(["GitBranch", "GitCommit", "GitCommitDate", "GitRemote", "DongleId", "HardwareSerial", "GitPullTime", "DevicePosition"]);
+    const values = await bulkGet(["GitBranch", "GitCommit", "GitCommitDate", "GitRemote", "DeviceType", "DongleId", "HardwareSerial", "GitPullTime", "DevicePosition"]);
     toolsMetaInfoText = buildToolsMetaInfo(values);
     toolsMetaInfoDialogText = buildToolsMetaInfoDialog(values);
     toolsMetaLoadedAt = Date.now();

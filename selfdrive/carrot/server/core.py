@@ -648,8 +648,15 @@ async def api_params_bulk(request: web.Request) -> web.Response:
 
   values = {}
   for n in req_names:
-    default = by_name.get(n, {}).get("default", 0)
-    values[n] = _get_param_value(n, default)
+    if n == "DeviceType":
+      try:
+        from openpilot.system.hardware import HARDWARE
+        values[n] = HARDWARE.get_device_type()
+      except Exception:
+        values[n] = "unknown"
+    else:
+      default = by_name.get(n, {}).get("default", 0)
+      values[n] = _get_param_value(n, default)
 
   return web.json_response({"ok": True, "values": values})
 
