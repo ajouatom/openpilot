@@ -2079,8 +2079,11 @@ async function refreshToolsMetaInfo(options = {}) {
 async function syncDeviceLanguageOnce() {
   if (typeof bulkGet !== "function" || typeof setParam !== "function") return;
   try {
-    const values = await bulkGet(["WebLanguageSynced", "LanguageSetting"]);
-    if (values["WebLanguageSynced"] === "1") return;
+    const SYNC_KEY = "carrot_device_lang_synced";
+    if (localStorage.getItem(SYNC_KEY) === "1") return;
+
+    const values = await bulkGet(["LanguageSetting"]);
+    const currentLang = String(values["LanguageSetting"] || "").trim();
 
     const browserLang = (navigator.language || navigator.userLanguage || "en").toLowerCase();
     let targetParam = "main_en";
@@ -2095,10 +2098,10 @@ async function syncDeviceLanguageOnce() {
     else if (browserLang.startsWith("ar")) targetParam = "main_ar";
     else if (browserLang.startsWith("th")) targetParam = "main_th";
 
-    if (values["LanguageSetting"] !== targetParam) {
+    if (currentLang !== targetParam) {
       await setParam("LanguageSetting", targetParam);
     }
-    await setParam("WebLanguageSynced", "1");
+    localStorage.setItem(SYNC_KEY, "1");
   } catch (e) {
     console.log("Language sync failed:", e);
   }
