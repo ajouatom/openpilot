@@ -1923,29 +1923,7 @@ function renderToolsMeta() {
   });
   actionsEl.appendChild(langBtn);
 
-  if (toolsMetaInfoText) {
-    const infoBtn = document.createElement("button");
-    infoBtn.type = "button";
-    infoBtn.className = "smallBtn tools-meta__infoBtn";
-    infoBtn.textContent = LANG === "en"
-      ? "Device Info"
-      : LANG === "zh"
-        ? "设备信息"
-        : "기기정보";
-    infoBtn.addEventListener("click", () => {
-      const title = LANG === "en"
-        ? "Device Info"
-        : LANG === "zh"
-          ? "设备信息"
-          : "기기정보";
-      appAlert(toolsMetaInfoDialogText || toolsMetaInfoText, {
-        title,
-        html: true,
-        messageHtml: toolsMetaInfoDialogText,
-      });
-    });
-    actionsEl.appendChild(infoBtn);
-  }
+
 
   meta.appendChild(actionsEl);
 }
@@ -2034,7 +2012,7 @@ function buildToolsMetaInfoDialog(values = {}) {
   if (dongleId) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.dongle)}: ${htmlEscape(dongleId)}</div>`);
   if (serial) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.serial)}: ${htmlEscape(serial)}</div>`);
   const position = String(values.DevicePosition || "").trim();
-  if (position) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.position)}: ${htmlEscape(position)}</div>`);
+  lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.position)}: ${htmlEscape(position)}</div>`);
   if (gitPullTime) {
     lines.push(`<div class="app-dialog__metaSubtle">${htmlEscape(labels.gitPull)}: ${htmlEscape(gitPullTime)}</div>`);
   }
@@ -2355,7 +2333,10 @@ function initToolsPage() {
       const body = group.querySelector(".tools-group__body");
       if (!toggle || !body) return;
 
-      const shouldOpen = group.dataset.toolsGroup === "git";
+      const groupName = group.dataset.toolsGroup;
+      const savedState = localStorage.getItem("tools_group_" + groupName);
+      const shouldOpen = savedState !== null ? savedState === "true" : true;
+
       group.classList.toggle("is-open", shouldOpen);
       body.hidden = !shouldOpen;
       body.classList.toggle("hidden", !shouldOpen);
@@ -2367,6 +2348,7 @@ function initToolsPage() {
         body.classList.toggle("hidden", !nextOpen);
         group.classList.toggle("is-open", nextOpen);
         toggle.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+        localStorage.setItem("tools_group_" + groupName, nextOpen ? "true" : "false");
       });
     });
   };
@@ -2387,6 +2369,19 @@ function initToolsPage() {
   toolsProgressSet(null, { active: false });
   refreshToolsMetaInfo().catch(() => {});
   initToolsGroups();
+
+  bindOnce("btnDeviceInfo", () => {
+    const title = LANG === "en"
+      ? "Device Info"
+      : LANG === "zh"
+        ? "设备信息"
+        : "기기정보";
+    appAlert(toolsMetaInfoDialogText || toolsMetaInfoText, {
+      title,
+      html: true,
+      messageHtml: toolsMetaInfoDialogText,
+    });
+  });
 
   bindOnce("btnGitPull", async () => {
     try {
