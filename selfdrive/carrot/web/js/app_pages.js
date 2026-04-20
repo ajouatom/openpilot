@@ -2013,10 +2013,10 @@ function buildToolsMetaInfoDialog(values = {}) {
   const serial = String(values.HardwareSerial || "").trim();
   const gitPullTime = formatToolsMetaDateTime(values.GitPullTime);
   const labels = LANG === "en"
-    ? { branch: "Branch", commit: "Commit", dongle: "Dongle ID", serial: "Serial", gitPull: "Recent update" }
+    ? { branch: "Branch", commit: "Commit", dongle: "Dongle ID", serial: "Serial", gitPull: "Recent update", position: "Position" }
     : LANG === "zh"
-      ? { branch: "分支", commit: "提交", dongle: "Dongle ID", serial: "序列号", gitPull: "最近更新" }
-      : { branch: "브랜치", commit: "커밋", dongle: "동글ID", serial: "시리얼", gitPull: "최근 업데이트" };
+      ? { branch: "分支", commit: "提交", dongle: "Dongle ID", serial: "序列号", gitPull: "最近更新", position: "安装角度" }
+      : { branch: "브랜치", commit: "커밋", dongle: "동글ID", serial: "시리얼", gitPull: "최근 업데이트", position: "설치각도" };
   const htmlEscape = typeof escapeHtml === "function"
     ? escapeHtml
     : (value) => String(value)
@@ -2033,6 +2033,8 @@ function buildToolsMetaInfoDialog(values = {}) {
   }
   if (dongleId) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.dongle)}: ${htmlEscape(dongleId)}</div>`);
   if (serial) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.serial)}: ${htmlEscape(serial)}</div>`);
+  const position = String(values.DevicePosition || "").trim();
+  if (position) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.position)}: ${htmlEscape(position)}</div>`);
   if (gitPullTime) {
     lines.push(`<div class="app-dialog__metaSubtle">${htmlEscape(labels.gitPull)}: ${htmlEscape(gitPullTime)}</div>`);
   }
@@ -2083,7 +2085,7 @@ async function refreshToolsMetaInfo(options = {}) {
   }
 
   toolsMetaLoadPromise = (async () => {
-    const values = await bulkGet(["GitBranch", "GitCommit", "GitCommitDate", "DongleId", "HardwareSerial", "GitPullTime"]);
+    const values = await bulkGet(["GitBranch", "GitCommit", "GitCommitDate", "DongleId", "HardwareSerial", "GitPullTime", "DevicePosition"]);
     toolsMetaInfoText = buildToolsMetaInfo(values);
     toolsMetaInfoDialogText = buildToolsMetaInfoDialog(values);
     toolsMetaLoadedAt = Date.now();
