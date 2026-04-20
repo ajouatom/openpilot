@@ -1923,29 +1923,7 @@ function renderToolsMeta() {
   });
   actionsEl.appendChild(langBtn);
 
-  if (toolsMetaInfoText) {
-    const infoBtn = document.createElement("button");
-    infoBtn.type = "button";
-    infoBtn.className = "smallBtn tools-meta__infoBtn";
-    infoBtn.textContent = LANG === "en"
-      ? "Device Info"
-      : LANG === "zh"
-        ? "设备信息"
-        : "기기정보";
-    infoBtn.addEventListener("click", () => {
-      const title = LANG === "en"
-        ? "Device Info"
-        : LANG === "zh"
-          ? "设备信息"
-          : "기기정보";
-      appAlert(toolsMetaInfoDialogText || toolsMetaInfoText, {
-        title,
-        html: true,
-        messageHtml: toolsMetaInfoDialogText,
-      });
-    });
-    actionsEl.appendChild(infoBtn);
-  }
+
 
   meta.appendChild(actionsEl);
 }
@@ -2013,10 +1991,10 @@ function buildToolsMetaInfoDialog(values = {}) {
   const serial = String(values.HardwareSerial || "").trim();
   const gitPullTime = formatToolsMetaDateTime(values.GitPullTime);
   const labels = LANG === "en"
-    ? { branch: "Branch", commit: "Commit", dongle: "Dongle ID", serial: "Serial", gitPull: "Recent update" }
+    ? { branch: "Branch", commit: "Commit", dongle: "Dongle ID", serial: "Serial", gitPull: "Recent update", position: "Position" }
     : LANG === "zh"
-      ? { branch: "分支", commit: "提交", dongle: "Dongle ID", serial: "序列号", gitPull: "最近更新" }
-      : { branch: "브랜치", commit: "커밋", dongle: "동글ID", serial: "시리얼", gitPull: "최근 업데이트" };
+      ? { branch: "分支", commit: "提交", dongle: "Dongle ID", serial: "序列号", gitPull: "最近更新", position: "安装角度" }
+      : { branch: "브랜치", commit: "커밋", dongle: "동글ID", serial: "시리얼", gitPull: "최근 업데이트", position: "설치각도" };
   const htmlEscape = typeof escapeHtml === "function"
     ? escapeHtml
     : (value) => String(value)
@@ -2028,11 +2006,13 @@ function buildToolsMetaInfoDialog(values = {}) {
   const lines = [];
   if (branch) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.branch)}: ${htmlEscape(branch)}</div>`);
   if (commit) {
-    const commitText = `${commit.slice(0, 7)}${commitDate ? `    ${commitDate}` : ""}`;
+    const commitText = `${commit.slice(0, 7)}${commitDate ? ` (${commitDate})` : ""}`;
     lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.commit)}: ${htmlEscape(commitText)}</div>`);
   }
   if (dongleId) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.dongle)}: ${htmlEscape(dongleId)}</div>`);
   if (serial) lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.serial)}: ${htmlEscape(serial)}</div>`);
+  const position = String(values.DevicePosition || "").trim();
+  lines.push(`<div class="app-dialog__metaLine">${htmlEscape(labels.position)}: ${htmlEscape(position)}</div>`);
   if (gitPullTime) {
     lines.push(`<div class="app-dialog__metaSubtle">${htmlEscape(labels.gitPull)}: ${htmlEscape(gitPullTime)}</div>`);
   }
@@ -2083,7 +2063,7 @@ async function refreshToolsMetaInfo(options = {}) {
   }
 
   toolsMetaLoadPromise = (async () => {
-    const values = await bulkGet(["GitBranch", "GitCommit", "GitCommitDate", "DongleId", "HardwareSerial", "GitPullTime"]);
+    const values = await bulkGet(["GitBranch", "GitCommit", "GitCommitDate", "DongleId", "HardwareSerial", "GitPullTime", "DevicePosition"]);
     toolsMetaInfoText = buildToolsMetaInfo(values);
     toolsMetaInfoDialogText = buildToolsMetaInfoDialog(values);
     toolsMetaLoadedAt = Date.now();
@@ -2096,8 +2076,49 @@ async function refreshToolsMetaInfo(options = {}) {
   return toolsMetaLoadPromise;
 }
 
+async function syncDeviceLanguageOnce() {
+  if (typeof bulkGet !== "function" || typeof setParam !== "function") return;
+  try {
+    const SYNC_KEY = "carrot_device_lang_synced";
+    if (localStorage.getItem(SYNC_KEY) === "1") return;
+
+    const values = await bulkGet(["LanguageSetting"]);
+    const currentLang = String(values["LanguageSetting"] || "").trim();
+
+    const browserLang = (navigator.language || navigator.userLanguage || "en").toLowerCase();
+    let targetParam = "main_en";
+    if (browserLang.startsWith("ko")) targetParam = "main_ko";
+    else if (browserLang.startsWith("zh")) targetParam = browserLang.includes("tw") || browserLang.includes("hk") ? "main_zh-CHT" : "main_zh-CHS";
+    else if (browserLang.startsWith("ja")) targetParam = "main_ja";
+    else if (browserLang.startsWith("de")) targetParam = "main_de";
+    else if (browserLang.startsWith("fr")) targetParam = "main_fr";
+    else if (browserLang.startsWith("es")) targetParam = "main_es";
+    else if (browserLang.startsWith("pt")) targetParam = "main_pt-BR";
+    else if (browserLang.startsWith("tr")) targetParam = "main_tr";
+    else if (browserLang.startsWith("ar")) targetParam = "main_ar";
+    else if (browserLang.startsWith("th")) targetParam = "main_th";
+
+    if (currentLang !== targetParam) {
+      await setParam("LanguageSetting", targetParam);
+      localStorage.setItem(SYNC_KEY, "1");
+      // show notification after a short delay so the page finishes loading
+      setTimeout(() => {
+        const msg = LANG === "ko"
+          ? "기기 언어를 변경했습니다.\n기기를 재부팅해야 적용됩니다."
+          : "Device language has been changed.\nPlease reboot the device to apply.";
+        openAppDialog({ mode: "alert", title: "Device Language", message: msg });
+      }, 800);
+      return;
+    }
+    localStorage.setItem(SYNC_KEY, "1");
+  } catch (e) {
+    console.log("Language sync failed:", e);
+  }
+}
+
 function runUiWarmup() {
   return Promise.allSettled([
+    syncDeviceLanguageOnce(),
     loadCurrentCar({ resetRetry: false, ttlMs: PAGE_DATA_TTL_MS }),
     loadRecordState({ ttlMs: PAGE_DATA_TTL_MS }),
     refreshToolsMetaInfo({ silent: true, ttlMs: PAGE_DATA_TTL_MS }),
@@ -2353,7 +2374,10 @@ function initToolsPage() {
       const body = group.querySelector(".tools-group__body");
       if (!toggle || !body) return;
 
-      const shouldOpen = group.dataset.toolsGroup === "git";
+      const groupName = group.dataset.toolsGroup;
+      const savedState = localStorage.getItem("tools_group_" + groupName);
+      const shouldOpen = savedState !== null ? savedState === "true" : true;
+
       group.classList.toggle("is-open", shouldOpen);
       body.hidden = !shouldOpen;
       body.classList.toggle("hidden", !shouldOpen);
@@ -2365,6 +2389,7 @@ function initToolsPage() {
         body.classList.toggle("hidden", !nextOpen);
         group.classList.toggle("is-open", nextOpen);
         toggle.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+        localStorage.setItem("tools_group_" + groupName, nextOpen ? "true" : "false");
       });
     });
   };
@@ -2385,6 +2410,19 @@ function initToolsPage() {
   toolsProgressSet(null, { active: false });
   refreshToolsMetaInfo().catch(() => {});
   initToolsGroups();
+
+  bindOnce("btnDeviceInfo", () => {
+    const title = LANG === "en"
+      ? "Device Info"
+      : LANG === "zh"
+        ? "设备信息"
+        : "기기정보";
+    appAlert(toolsMetaInfoDialogText || toolsMetaInfoText, {
+      title,
+      html: true,
+      messageHtml: toolsMetaInfoDialogText,
+    });
+  });
 
   bindOnce("btnGitPull", async () => {
     try {
@@ -2439,6 +2477,53 @@ function initToolsPage() {
   });
   bindOnce("btnGitBranch", async () => {
     await loadBranchesAndShow();
+  });
+
+  bindOnce("btnResetCalib", async () => {
+    const title = LANG === "ko" ? "캘리브레이션 초기화" : "ReCalibration";
+    const msg = LANG === "ko" 
+      ? "캘리브레이션을 초기화하시겠습니까?\n초기화 후 자동으로 재부팅됩니다."
+      : "Are you sure you want to reset calibration?\nDevice will reboot automatically.";
+    if (!await appConfirm(msg, { title })) return;
+    try {
+      await runTool("shell_cmd", { cmd: "rm -f /data/params/d_tmp/CalibrationParams /data/params/d/CalibrationParams && sleep 1 && reboot" });
+    } catch (e) {
+      showError("shell_cmd", e);
+    }
+  });
+
+  bindOnce("btnDeviceLang", async () => {
+    const choices = [
+      { label: "한국어", value: "main_ko" },
+      { label: "English", value: "main_en" },
+      { label: "中文(简体)", value: "main_zh-CHS" },
+      { label: "中文(繁體)", value: "main_zh-CHT" },
+      { label: "日本語", value: "main_ja" },
+      { label: "Deutsch", value: "main_de" },
+      { label: "Français", value: "main_fr" },
+      { label: "Português", value: "main_pt-BR" },
+      { label: "Español", value: "main_es" },
+      { label: "Türkçe", value: "main_tr" },
+      { label: "العربية", value: "main_ar" },
+      { label: "ไทย", value: "main_th" },
+    ];
+    const val = await openAppDialog({
+      mode: "choice",
+      title: "Device Language",
+      message: LANG === "ko" ? "기기 언어를 선택하세요." : "Select language for the device UI",
+      cancelLabel: UI_STRINGS[LANG]?.cancel || "Cancel",
+      choices
+    });
+    if (!val) return;
+    try {
+      await setParam("LanguageSetting", val);
+      const rebootMsg = LANG === "ko" ? "설정이 변경되었습니다. 지금 재부팅하시겠습니까?" : "Setting changed. Reboot now?";
+      if (await appConfirm(rebootMsg, { title: "Reboot" })) {
+        await runTool("reboot");
+      }
+    } catch (e) {
+      showError("shell_cmd", e);
+    }
   });
 
 

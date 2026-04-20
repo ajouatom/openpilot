@@ -111,6 +111,12 @@
       </div>
 
       <div class="tools-scroll-stack">
+        <div class="row-wrap mb-md" style="gap: var(--sp-md);">
+          <a id="btnQuickLinkWeb" class="btn btn--filled" href="#" aria-disabled="true">Web</a>
+          <button id="btnQuickFleet" class="btn btn--filled" type="button">Fleet</button>
+          <button id="btnDeviceInfo" class="btn btn--filled" type="button">Device Info</button>
+        </div>
+
         <div class="section tools-group is-open" data-tools-group="git">
           <button class="tools-group__toggle" type="button" aria-expanded="true" aria-controls="toolsGroupBodyGit">
             <span id="gitCommandsTitle" class="section-title tools-group__title">Git Commands</span>
@@ -132,6 +138,8 @@
             <span class="tools-group__chevron" aria-hidden="true"></span>
           </button>
           <div id="toolsGroupBodySystem" class="tools-group__body row-wrap hidden" hidden>
+            <button id="btnDeviceLang" class="btn">Device Lang</button>
+            <button id="btnResetCalib" class="btn btn--danger">Reset Calib</button>
             <button id="btnSendTmuxLog" class="btn">capture tmux</button>
             <button id="btnSendTmuxServerLog" class="btn">send tmux</button>
             <button id="btnInstallRequired" class="btn">install flask</button>
@@ -155,20 +163,7 @@
           </div>
         </div>
 
-        <hr class="divider">
 
-        <div class="section tools-group" data-tools-group="quicklink">
-          <button class="tools-group__toggle" type="button" aria-expanded="false" aria-controls="toolsGroupBodyQuickLink">
-            <span id="toolsQuickLinkTitle" class="section-title tools-group__title">Link</span>
-            <span class="tools-group__chevron" aria-hidden="true"></span>
-          </button>
-          <div id="toolsGroupBodyQuickLink" class="tools-group__body hidden" hidden>
-            <div class="tools-quicklink-actions row-wrap">
-              <a id="btnQuickLinkWeb" class="home-utility-linkInline tools-quicklink-link" href="#" aria-disabled="true">web</a>
-              <button id="btnQuickFleet" class="btn" type="button">Fleet</button>
-            </div>
-          </div>
-        </div>
       </div>
 
       <div class="tools-console-dock">
