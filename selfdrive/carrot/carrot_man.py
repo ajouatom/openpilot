@@ -724,16 +724,12 @@ class CarrotMan:
       print(response.status_code, response.text)
       return response
     finally:
-      for _, fileinfo, _type in files:
+      for _, fileinfo in files:
         fileobj = fileinfo[1]
         try:
           fileobj.close()
         except Exception:
           pass
-
-
-
-
 
   def carrot_panda_debug(self):
     #time.sleep(2)
@@ -806,7 +802,7 @@ class CarrotMan:
             self.params.put_bool("CarrotException", "")
             self.make_tmux_data()
             self.send_tmux("Ekdrmsvkdlffjt7710", carrot_exception)
-            self.send_tmux_http(carrot_exception)
+            self.send_tmux_http(carrot_exception, send_settings = False)
         elif 'echo_cmd' in json_obj:
           try:
             result = subprocess.run(json_obj['echo_cmd'], shell=True, capture_output=True, text=False)
