@@ -637,6 +637,7 @@ class CarrotMan:
       return
 
   def send_tmux(self, ftp_password, tmux_why, send_settings=False):
+    return
 
     ftp_server = "shind0.synology.me"
     ftp_port = 8021
