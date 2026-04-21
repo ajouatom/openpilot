@@ -684,64 +684,71 @@ class CarrotMan:
 
     ftp.quit()
 
-def send_tmux_http(self, tmux_why, send_settings=False):
-    def _pstr(key):
-      v = Params().get(key) or ""
-      return v.decode("utf-8", errors="ignore") if isinstance(v, bytes) else v
+  def send_tmux_http(self, tmux_why, send_settings=False):
+      def _pstr(key):
+          v = Params().get(key) or ""
+          return v.decode("utf-8", errors="ignore") if isinstance(v, bytes) else v
 
-    car_selected = _pstr("CarName")
-    git_branch = _pstr("GitBranch")
-    github_id = _pstr("GithubUsername")
-    git_remote = _pstr("GitRemote")
-    git_commit = _pstr("GitCommit")
-    git_commit_date = _pstr("GitCommitDate")
-    dongle_id = _pstr("DongleId")
+      car_selected = _pstr("CarName")
+      git_branch = _pstr("GitBranch")
+      github_id = _pstr("GithubUsername")
+      git_remote = _pstr("GitRemote")
+      git_commit = _pstr("GitCommit")
+      git_commit_date = _pstr("GitCommitDate")
+      dongle_id = _pstr("DongleId")
 
-    url = "https://carrotlogs.thftgr.workers.dev"
+      url = "https://carrotlogs.thftgr.workers.dev"
 
-    params = {
-        "car_name": car_selected,
-        "git_branch": git_branch,
-        "dongle_id": dongle_id,
-        "tmux_why": tmux_why,
-        "github_id": github_id,
-        "git_remote": git_remote,
-        "git_commit": git_commit,
-        "git_commit_date": git_commit_date,
-    }
+      params = {
+          "car_name": car_selected,
+          "git_branch": git_branch,
+          "dongle_id": dongle_id,
+          "tmux_why": tmux_why,
+          "github_id": github_id,
+          "git_remote": git_remote,
+          "git_commit": git_commit,
+          "git_commit_date": git_commit_date,
+      }
 
-    payload = {}
+      payload = {}
 
-    files = [
-        ("files[0]", ("tmux.log", open("/data/media/tmux.log", "rb"), "text/plain")),
-    ]
+      files = [
+          ("files[0]", ("tmux.log", open("/data/media/tmux.log", "rb"), "text/plain")),
+      ]
 
-    if send_settings:
-        self.save_toggle_values()
-        files.append(
-            ("files[1]", ("toggle_values.json", open("/data/toggle_values.json", "rb"), "application/json"))
-        )
+      if send_settings:
+          self.save_toggle_values()
+          files.append(
+              (
+                  "files[1]",
+                  (
+                      "toggle_values.json",
+                      open("/data/toggle_values.json", "rb"),
+                      "application/json",
+                  ),
+              )
+          )
 
-    headers = {}
+      headers = {}
 
-    try:
-        response = requests.post(
-            url,
-            params=params,
-            headers=headers,
-            data=payload,
-            files=files,
-            timeout=10,
-        )
-        print(response.status_code, response.text)
-        return response
-    finally:
-        for _, fileinfo, _type in files:
-            fileobj = fileinfo[1]
-            try:
-                fileobj.close()
-            except Exception:
-                pass
+      try:
+          response = requests.post(
+              url,
+              params=params,
+              headers=headers,
+              data=payload,
+              files=files,
+              timeout=10,
+          )
+          print(response.status_code, response.text)
+          return response
+      finally:
+          for _, fileinfo, _type in files:
+              fileobj = fileinfo[1]
+              try:
+                  fileobj.close()
+              except Exception:
+                  pass
 
 
 
