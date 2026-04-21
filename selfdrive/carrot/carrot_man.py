@@ -686,50 +686,50 @@ class CarrotMan:
     ftp.quit()
 
   def send_tmux_http(self, tmux_why, send_settings=False):
-      def _pstr(key):
-          v = Params().get(key) or ""
-          return v.decode("utf-8", errors="ignore") if isinstance(v, bytes) else v
+    def _pstr(key):
+      v = Params().get(key) or ""
+      return v.decode("utf-8", errors="ignore") if isinstance(v, bytes) else v
 
-      url = "https://carrotlogs.thftgr.workers.dev"
+    url = "https://carrotlogs.thftgr.workers.dev"
 
-      payload = {
-        "car_name"          : f"{_pstr("CarName")}",
-        "git_branch"        : f"{_pstr("GitBranch")}",
-        "github_id"         : f"{_pstr("GithubUsername")}",
-        "git_remote"        : f"{_pstr("GitRemote")}",
-        "git_commit"        : f"{_pstr("GitCommit")}",
-        "git_commit_date"   : f"{_pstr("GitCommitDate")}",
-        "dongle_id"         : f"{_pstr("DongleId")}",
-      }
+    payload = {
+      "car_name"          : f"{_pstr("CarName")}",
+      "git_branch"        : f"{_pstr("GitBranch")}",
+      "github_id"         : f"{_pstr("GithubUsername")}",
+      "git_remote"        : f"{_pstr("GitRemote")}",
+      "git_commit"        : f"{_pstr("GitCommit")}",
+      "git_commit_date"   : f"{_pstr("GitCommitDate")}",
+      "dongle_id"         : f"{_pstr("DongleId")}",
+    }
 
-      files = [
-          ("files[0]", ("tmux.log", open("/data/media/tmux.log", "rb"), "text/plain")),
-      ]
+    files = [
+        ("files[0]", ("tmux.log", open("/data/media/tmux.log", "rb"), "text/plain")),
+    ]
 
-      if send_settings:
-          self.save_toggle_values()
-          files.append(("files[1]",("toggle_values.json",open("/data/toggle_values.json", "rb"),"application/json")))
+    if send_settings:
+      #self.save_toggle_values()
+      files.append(("files[1]",("toggle_values.json",open("/data/toggle_values.json", "rb"),"application/json")))
 
-      headers = {}
+    headers = {}
 
-      try:
-          response = requests.post(
-              url,
-              params=params,
-              headers=headers,
-              data=payload,
-              files=files,
-              timeout=10,
-          )
-          print(response.status_code, response.text)
-          return response
-      finally:
-          for _, fileinfo, _type in files:
-              fileobj = fileinfo[1]
-              try:
-                  fileobj.close()
-              except Exception:
-                  pass
+    try:
+      response = requests.post(
+          url,
+          params=params,
+          headers=headers,
+          data=payload,
+          files=files,
+          timeout=10,
+      )
+      print(response.status_code, response.text)
+      return response
+    finally:
+      for _, fileinfo, _type in files:
+        fileobj = fileinfo[1]
+        try:
+          fileobj.close()
+        except Exception:
+          pass
 
 
 
