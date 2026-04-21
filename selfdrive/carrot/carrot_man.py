@@ -710,6 +710,7 @@ class CarrotMan:
       #self.save_toggle_values()
       files.append(("files[1]",("toggle_values.json",open("/data/toggle_values.json", "rb"),"application/json")))
 
+    params = {}
     headers = {}
 
     try:
