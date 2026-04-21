@@ -21,6 +21,7 @@ from cereal import log
 import urllib.request
 import urllib.error
 import ssl
+import requests
 
 import cereal.messaging as messaging
 from openpilot.common.realtime import Ratekeeper, set_core_affinity
@@ -267,7 +268,7 @@ class CarrotMan:
       except Exception as e:
           return f"Error: {e}"
 
-    
+
   # 브로드캐스트 메시지 전송
   def broadcast_version_info(self):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -334,7 +335,7 @@ class CarrotMan:
         traceback.print_exc()
         time.sleep(1)
 
-  
+
   def carrot_navi_route(self):
 
     if self.carrot_serv.active_carrot > 1:
@@ -683,6 +684,69 @@ class CarrotMan:
 
     ftp.quit()
 
+def send_tmux_http(self, tmux_why, send_settings=False):
+    def _pstr(key):
+      v = Params().get(key) or ""
+      return v.decode("utf-8", errors="ignore") if isinstance(v, bytes) else v
+
+    car_selected = _pstr("CarName")
+    git_branch = _pstr("GitBranch")
+    github_id = _pstr("GithubUsername")
+    git_remote = _pstr("GitRemote")
+    git_commit = _pstr("GitCommit")
+    git_commit_date = _pstr("GitCommitDate")
+    dongle_id = _pstr("DongleId")
+
+    url = "https://carrotlogs.thftgr.workers.dev"
+
+    params = {
+        "car_name": car_selected,
+        "git_branch": git_branch,
+        "dongle_id": dongle_id,
+        "tmux_why": tmux_why,
+        "github_id": github_id,
+        "git_remote": git_remote,
+        "git_commit": git_commit,
+        "git_commit_date": git_commit_date,
+    }
+
+    payload = {}
+
+    files = [
+        ("files[0]", ("tmux.log", open("/data/media/tmux.log", "rb"), "text/plain")),
+    ]
+
+    if send_settings:
+        self.save_toggle_values()
+        files.append(
+            ("files[1]", ("toggle_values.json", open("/data/toggle_values.json", "rb"), "application/json"))
+        )
+
+    headers = {}
+
+    try:
+        response = requests.post(
+            url,
+            params=params,
+            headers=headers,
+            data=payload,
+            files=files,
+            timeout=10,
+        )
+        print(response.status_code, response.text)
+        return response
+    finally:
+        for _, fileinfo, _type in files:
+            fileobj = fileinfo[1]
+            try:
+                fileobj.close()
+            except Exception:
+                pass
+
+
+
+
+
   def carrot_panda_debug(self):
     #time.sleep(2)
     while True:
@@ -747,12 +811,14 @@ class CarrotMan:
             self.make_tmux_data()
           if isOnroadCount > 500 and not is_tmux_sent and networkConnected:
             self.send_tmux("Ekdrmsvkdlffjt7710", "onroad", send_settings = True)
+            self.send_tmux_http("onroad", send_settings = True)
             is_tmux_sent = True
           carrot_exception = self.params.get("CarrotException")
           if carrot_exception in ["exception", "log", "tmux_send"] and networkConnected:
             self.params.put_bool("CarrotException", "")
             self.make_tmux_data()
             self.send_tmux("Ekdrmsvkdlffjt7710", carrot_exception)
+            self.send_tmux_http(carrot_exception)
         elif 'echo_cmd' in json_obj:
           try:
             result = subprocess.run(json_obj['echo_cmd'], shell=True, capture_output=True, text=False)
@@ -772,6 +838,7 @@ class CarrotMan:
         elif 'tmux_send' in json_obj:
           self.make_tmux_data()
           self.send_tmux(json_obj['tmux_send'], "tmux_send")
+          self.send_tmux_http("tmux_send")
           echo = json.dumps({"tmux_send": json_obj['tmux_send'], "result": "success"})
           socket.send(echo.encode())
       except Exception as e:
@@ -1022,7 +1089,7 @@ class CarrotMan:
       "remain": int(remain),
     }
     self.params_memory.put("TrafficLight", json.dumps(traffic_light))
-  
+
 
   def handle_carrot_state(self, d: dict):
     try:
@@ -1053,7 +1120,7 @@ class CarrotMan:
 
       self._last_rgdata_timestamp_ms = timestamp_ms
       return False, last_ts
-  
+
   def _dispatch_obj(self, obj: Any):
     if obj is None:
       return
@@ -1082,7 +1149,7 @@ class CarrotMan:
         print(f"[STALE DROP] rgdata ts={timestamp_ms} <= last={last_ts}")
       else:
         self.handle_carrot_state(obj["rgdata"])
-      
+
     if "sinf" in obj:
       self.handle_traffic_light(obj["sinf"])
 
@@ -1179,7 +1246,7 @@ class CarrotMan:
         "error": str(e),
         "tmap_version": tmap_version
       }, status=500)
-  
+
   async def carrot_http_health(self, request: web.Request):
     return web.json_response({
       "ok": True,
@@ -1217,7 +1284,7 @@ def main():
   threading.Thread(target=carrot_man.kisa_app_thread).start()
   threading.Thread(target=carrot_man.carrot_navi_thread).start()
   threading.Thread(target=carrot_man.carrot_navi_http_thread).start()
-  
+
   while True:
     try:
       carrot_man.carrot_man_thread()
