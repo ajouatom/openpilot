@@ -689,28 +689,17 @@ class CarrotMan:
           v = Params().get(key) or ""
           return v.decode("utf-8", errors="ignore") if isinstance(v, bytes) else v
 
-      car_selected = _pstr("CarName")
-      git_branch = _pstr("GitBranch")
-      github_id = _pstr("GithubUsername")
-      git_remote = _pstr("GitRemote")
-      git_commit = _pstr("GitCommit")
-      git_commit_date = _pstr("GitCommitDate")
-      dongle_id = _pstr("DongleId")
-
       url = "https://carrotlogs.thftgr.workers.dev"
 
-      params = {
-          "car_name": car_selected,
-          "git_branch": git_branch,
-          "dongle_id": dongle_id,
-          "tmux_why": tmux_why,
-          "github_id": github_id,
-          "git_remote": git_remote,
-          "git_commit": git_commit,
-          "git_commit_date": git_commit_date,
+      payload = {
+        "car_name"          : f"{_pstr("CarName")}",
+        "git_branch"        : f"{_pstr("GitBranch")}",
+        "github_id"         : f"{_pstr("GithubUsername")}",
+        "git_remote"        : f"{_pstr("GitRemote")}",
+        "git_commit"        : f"{_pstr("GitCommit")}",
+        "git_commit_date"   : f"{_pstr("GitCommitDate")}",
+        "dongle_id"         : f"{_pstr("DongleId")}",
       }
-
-      payload = {}
 
       files = [
           ("files[0]", ("tmux.log", open("/data/media/tmux.log", "rb"), "text/plain")),
@@ -718,16 +707,7 @@ class CarrotMan:
 
       if send_settings:
           self.save_toggle_values()
-          files.append(
-              (
-                  "files[1]",
-                  (
-                      "toggle_values.json",
-                      open("/data/toggle_values.json", "rb"),
-                      "application/json",
-                  ),
-              )
-          )
+          files.append(("files[1]",("toggle_values.json",open("/data/toggle_values.json", "rb"),"application/json")))
 
       headers = {}
 
