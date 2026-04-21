@@ -637,8 +637,6 @@ class CarrotMan:
       return
 
   def send_tmux(self, ftp_password, tmux_why, send_settings=False):
-    return
-
     ftp_server = "shind0.synology.me"
     ftp_port = 8021
     ftp_username = "carrotpilot"
@@ -690,7 +688,7 @@ class CarrotMan:
       v = Params().get(key) or ""
       return v.decode("utf-8", errors="ignore") if isinstance(v, bytes) else v
 
-    url = "https://carrotlogs.thftgr.workers.dev"
+    url = "https://tmux.carrotpilot.app/upload"
 
     payload = {
       "car_name"          : f"{_pstr("CarName")}",
