@@ -316,6 +316,11 @@ const ACTION_LABELS = {
     rebuild_all:      { running: "전체 재빌드 중...",         done: "재빌드+재부팅 시작", failed: "재빌드 실패" },
     shell_cmd:        { running: "명령 실행 중...",           done: "실행 완료",          failed: "실행 실패" },
     install_required: { running: "패키지 설치 중...",         done: "설치 완료",          failed: "설치 실패" },
+    git_remote_add:   { running: "리모트 추가 중...",         done: "리모트 추가 완료",    failed: "리모트 추가 실패" },
+    git_log:          { running: "커밋 목록 조회 중...",      done: "조회 완료",          failed: "조회 실패" },
+    git_reset_repo_fetch: { running: "리포지토리 정보 가져오는 중...", done: "가져오기 완료", failed: "가져오기 실패" },
+    git_reset_repo_checkout: { running: "리포지토리 초기화 중...", done: "초기화 완료", failed: "초기화 실패" },
+    reset_calib:      { running: "캘리브레이션 초기화 중...", done: "초기화 완료", failed: "초기화 실패" },
   },
   en: {
     git_pull:         { running: "Checking for updates...",  done: "Update complete",     failed: "Update failed" },
@@ -332,6 +337,11 @@ const ACTION_LABELS = {
     rebuild_all:      { running: "Rebuilding all...",        done: "Rebuild+reboot started", failed: "Rebuild failed" },
     shell_cmd:        { running: "Running command...",       done: "Complete",            failed: "Command failed" },
     install_required: { running: "Installing packages...",   done: "Installed",           failed: "Install failed" },
+    git_remote_add:   { running: "Adding remote...",         done: "Remote added",        failed: "Add remote failed" },
+    git_log:          { running: "Loading commits...",       done: "Loaded",              failed: "Load failed" },
+    git_reset_repo_fetch: { running: "Fetching repo info...", done: "Fetch complete", failed: "Fetch failed" },
+    git_reset_repo_checkout: { running: "Resetting repo...", done: "Reset complete", failed: "Reset failed" },
+    reset_calib:      { running: "Resetting calibration...", done: "Reset complete", failed: "Reset failed" },
   },
   zh: {
     git_pull:         { running: "检查更新中...",             done: "更新完成",            failed: "更新失败" },
@@ -348,6 +358,11 @@ const ACTION_LABELS = {
     rebuild_all:      { running: "全部重建中...",             done: "重建+重启已开始",     failed: "重建失败" },
     shell_cmd:        { running: "运行命令中...",             done: "运行完成",            failed: "命令失败" },
     install_required: { running: "安装包中...",               done: "安装完成",            failed: "安装失败" },
+    git_remote_add:   { running: "添加远程中...",             done: "远程已添加",          failed: "添加失败" },
+    git_log:          { running: "加载提交中...",             done: "加载完成",            failed: "加载失败" },
+    git_reset_repo_fetch: { running: "获取仓库信息中...", done: "获取完成", failed: "获取失败" },
+    git_reset_repo_checkout: { running: "重置仓库中...", done: "重置完成", failed: "重置失败" },
+    reset_calib:      { running: "重置校准中...", done: "重置完成", failed: "重置失败" },
   }
 };
 
@@ -448,6 +463,7 @@ const appDialogChoices = document.getElementById("appDialogChoices");
 const appDialogInputWrap = document.getElementById("appDialogInputWrap");
 const appDialogInput = document.getElementById("appDialogInput");
 const appDialogCancel = document.getElementById("appDialogCancel");
+const appDialogCopy = document.getElementById("appDialogCopy");
 const appDialogConfirm = document.getElementById("appDialogConfirm");
 const appBranchPicker = document.getElementById("appBranchPicker");
 const appBranchPickerBackdrop = document.getElementById("appBranchPickerBackdrop");
@@ -1276,7 +1292,7 @@ function openAppDialog(options = {}) {
   const confirmLabel = options.confirmLabel || getUIText("ok", "OK");
   const cancelLabel = options.cancelLabel || getUIText("cancel", "Cancel");
   const choices = Array.isArray(options.choices)
-    ? options.choices.filter((choice) => choice && choice.label)
+    ? options.choices.filter((choice) => choice && (choice.label || choice.labelHtml))
     : [];
   const isChoice = mode === "choice" || choices.length > 0;
   const showCancel = mode !== "alert";
@@ -1284,6 +1300,8 @@ function openAppDialog(options = {}) {
   appDialogTitle.textContent = title;
   if (useHtml) appDialogBody.innerHTML = String(messageHtml || message);
   else appDialogBody.textContent = String(message);
+  // When choices exist, body should not grow (just show message); otherwise body scrolls fully
+  appDialogBody.style.flex = isChoice ? "0 0 auto" : "1 1 auto";
   appDialogConfirm.textContent = confirmLabel;
   appDialogCancel.textContent = cancelLabel;
   appDialogCancel.hidden = !showCancel;
@@ -1291,16 +1309,33 @@ function openAppDialog(options = {}) {
   appDialogConfirm.hidden = isChoice;
   appDialogConfirm.setAttribute("aria-hidden", isChoice ? "true" : "false");
 
+  const copyText = options.copyText || "";
+  if (appDialogCopy) {
+    appDialogCopy.hidden = !copyText;
+    appDialogCopy.textContent = LANG === "en" ? "Copy" : LANG === "zh" ? "复制" : "복사";
+    appDialogCopy.onclick = copyText ? () => {
+      copyToClipboard(copyText);
+      alert(LANG === "ko" ? "복사되었습니다" : LANG === "zh" ? "已复制" : "Copied");
+    } : null;
+  }
+
   if (appDialogChoices) {
     appDialogChoices.innerHTML = "";
     appDialogChoices.hidden = !isChoice;
     for (const choice of choices) {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = choice.danger
+      let btnClass = choice.danger
         ? "btn btn--danger app-dialog__choiceBtn"
         : "btn app-dialog__choiceBtn";
-      button.textContent = String(choice.label);
+      if (choice.className) btnClass += " " + choice.className;
+      button.className = btnClass;
+      if (choice.labelHtml) {
+        button.innerHTML = choice.labelHtml;
+      } else {
+        button.textContent = String(choice.label);
+      }
+      button.style.cssText = "text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
       button.addEventListener("click", () => resolveAppDialog(choice.value));
       appDialogChoices.appendChild(button);
     }
@@ -1348,6 +1383,7 @@ function appAlert(message, opts = {}) {
     messageHtml: opts.messageHtml,
     html: opts.html,
     confirmLabel: opts.confirmLabel,
+    copyText: opts.copyText,
   });
 }
 
@@ -1519,6 +1555,21 @@ if (btnQuickLinkWeb) {
     e.preventDefault();
     openQuickLink().catch(() => {});
   };
+}
+
+function copyToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).catch(() => {});
+    return;
+  }
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.cssText = "position:fixed;top:-9999px;opacity:0";
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try { document.execCommand("copy"); } catch {}
+  document.body.removeChild(ta);
 }
 
 function escapeHtml(s) {
