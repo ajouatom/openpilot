@@ -112,7 +112,7 @@
 
       <div class="tools-scroll-stack">
         <div class="row-wrap mb-md" style="gap: var(--sp-md);">
-          <a id="btnQuickLinkWeb" class="btn btn--filled" href="#" aria-disabled="true">Web</a>
+          <a id="btnQuickLinkWeb" class="btn btn--filled" href="#" aria-disabled="true" style="text-decoration:none; font-weight:700;">Web</a>
           <button id="btnQuickFleet" class="btn btn--filled" type="button">Fleet</button>
           <button id="btnDeviceInfo" class="btn btn--filled" type="button">Device Info</button>
         </div>
@@ -126,8 +126,11 @@
             <button id="btnGitPull" class="btn">git pull</button>
             <button id="btnGitSync" class="btn">git sync</button>
             <button id="btnGitReset" class="btn">git reset</button>
+            <button id="btnGitLog" class="btn">git log</button>
             <button id="btnGitRemote" class="btn">change repository</button>
             <button id="btnGitBranch" class="btn">change branch</button>
+            <button id="btnGitAddRemote" class="btn">add remote</button>
+            <button id="btnGitResetRepo" class="btn btn--danger">reset repo</button>
           </div>
         </div>
 
@@ -159,8 +162,10 @@
             <span class="tools-group__chevron" aria-hidden="true"></span>
           </button>
           <div id="toolsGroupBodySettings" class="tools-group__body row-wrap hidden" hidden>
-            <button id="btnBackupSettings" class="btn">backup settings</button>
-            <button id="btnRestoreSettings" class="btn">restore settings</button>
+            <button id="btnBackupSettings" class="btn">Backup</button>
+            <button id="btnRestoreSettings" class="btn">Restore</button>
+            <button id="btnCopySettings" class="btn">Copy</button>
+            <button id="btnViewSettings" class="btn">View</button>
           </div>
         </div>
 
@@ -400,6 +405,7 @@
         <input id="appDialogInput" type="text" class="input-text app-dialog__input" />
       </div>
       <div class="app-dialog__actions">
+        <button id="appDialogCopy" class="smallBtn" type="button" hidden>복사</button>
         <button id="appDialogCancel" class="smallBtn" type="button">취소</button>
         <button id="appDialogConfirm" class="smallBtn btn--filled" type="button">확인</button>
       </div>

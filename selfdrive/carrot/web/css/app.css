@@ -139,15 +139,7 @@ body.dialog-open {
 }
 
 .topbar .nav-btn.active > span:last-child::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -9px;
-  height: 3px;
-  border-radius: var(--r-pill);
-  background: currentColor;
-  opacity: 0.95;
+  display: none;
 }
 
 .topbar .nav-btn.recording.active > span:last-child::after {
@@ -1410,7 +1402,9 @@ body[data-page="terminal"] .app-toast-host {
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
-  flex-shrink: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .app-dialog__metaList {
@@ -1438,7 +1432,7 @@ body[data-page="terminal"] .app-toast-host {
   margin-top: var(--sp-md);
   overflow-y: auto;
   min-height: 0;
-  flex-shrink: 1;
+  flex: 1 1 auto;
   padding-right: 4px;
 }
 
@@ -1450,6 +1444,16 @@ body[data-page="terminal"] .app-toast-host {
   width: 100%;
   justify-content: center;
   min-height: 44px;
+}
+
+.app-dialog__choiceBtn.is-current {
+  border-color: color-mix(in srgb, var(--md-primary) 56%, var(--md-stroke-soft));
+  background: color-mix(in srgb, var(--md-primary-cont) 34%, var(--md-surface-cont-h));
+  color: var(--md-primary);
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .app-dialog__inputWrap {
