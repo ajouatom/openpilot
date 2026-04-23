@@ -1893,6 +1893,7 @@ function getToolCommandPreview(action, payload = {}) {
     case "git_reset": return `git reset --${payload.mode || "hard"} ${payload.target || "HEAD"}`.trim();
     case "git_checkout": return `git checkout ${payload.branch || ""}`.trim();
     case "git_branch_list": return "change branch";
+    case "git_remote_add": return `git remote add/set-url ${payload.name || ""}`.trim();
     case "send_tmux_log": return "capture tmux";
     case "server_tmux_log": return "send tmux";
     case "install_required": return "install flask";
@@ -2436,8 +2437,69 @@ function syncBranchRemoteContext(result = {}) {
   }
 }
 
-function getBranchDisplayInfo(ref) {
-  const raw = String(ref || "").trim();
+function normalizeBranchItems(result = {}) {
+  const items = Array.isArray(result.branch_items) ? result.branch_items : [];
+  if (items.length) {
+    return items
+      .map((item) => {
+        const kind = item && item.kind === "remote" ? "remote" : "local";
+        const remote = String(item?.remote || "").trim();
+        const name = String(item?.name || item?.label || item?.ref || "").trim();
+        const ref = String(item?.ref || (kind === "remote" && remote && name ? `${remote}/${name}` : name)).trim();
+        if (!ref || !name) return null;
+        return {
+          id: String(item?.id || `${kind}:${remote}:${name}`),
+          kind,
+          ref,
+          remote,
+          name,
+          label: String(item?.label || name).trim() || name,
+        };
+      })
+      .filter(Boolean);
+  }
+
+  const refs = Array.isArray(result.branches) ? result.branches : [];
+  return refs
+    .map((ref) => ({ kind: "legacy", ref: String(ref || "").trim() }))
+    .filter((item) => item.ref);
+}
+
+function getBranchDisplayInfo(entry) {
+  if (entry && typeof entry === "object" && entry.kind !== "legacy") {
+    const kind = entry.kind === "remote" ? "remote" : "local";
+    const ref = String(entry.ref || "").trim();
+    const name = String(entry.name || entry.label || ref).trim();
+
+    if (kind === "local") {
+      return {
+        ref,
+        label: name,
+        groupKey: "local",
+        groupTitle: "local",
+        groupRank: 0,
+        kind: "local",
+        name,
+        checkoutPayload: { branch: ref, kind: "local", name },
+      };
+    }
+
+    const remoteName = String(entry.remote || "").trim();
+    const owner = BRANCH_REMOTE_OWNERS[remoteName] || (remoteName === "origin" ? ORIGIN_USERNAME : remoteName);
+    return {
+      ref,
+      label: String(entry.label || name).trim() || name,
+      groupKey: `remote:${remoteName}:${owner}`,
+      groupTitle: remoteName === "origin" ? `${remoteName} / ${owner}` : `remote / ${owner}`,
+      groupRank: remoteName === "origin" ? 1 : 2,
+      kind: "remote",
+      remote: remoteName,
+      name,
+      checkoutPayload: { branch: ref, kind: "remote", remote: remoteName, name },
+    };
+  }
+
+  const raw = String(entry?.ref || entry || "").trim();
   const parts = raw.split("/").filter(Boolean);
   const first = parts[0] || "";
   const isRemoteRef = parts.length >= 2 && BRANCH_REMOTE_NAMES.includes(first);
@@ -2449,6 +2511,9 @@ function getBranchDisplayInfo(ref) {
       groupKey: "local",
       groupTitle: "local",
       groupRank: 0,
+      kind: "local",
+      name: raw,
+      checkoutPayload: { branch: raw },
     };
   }
 
@@ -2462,11 +2527,15 @@ function getBranchDisplayInfo(ref) {
     groupKey: `remote:${remoteName}:${owner}`,
     groupTitle: remoteName === "origin" ? `${remoteName} / ${owner}` : `remote / ${owner}`,
     groupRank: remoteName === "origin" ? 1 : 2,
+    kind: "remote",
+    remote: remoteName,
+    name: rest.join("/") || raw,
+    checkoutPayload: { branch: raw },
   };
 }
 
-function isCurrentBranchRef(ref) {
-  return Boolean(CURRENT_BRANCH_NAME && ref === CURRENT_BRANCH_NAME);
+function isCurrentBranchItem(info) {
+  return Boolean(info && info.kind === "local" && CURRENT_BRANCH_NAME && info.name === CURRENT_BRANCH_NAME);
 }
 
 function getBranchGroups() {
@@ -2487,7 +2556,7 @@ function getBranchGroups() {
       groups.set(info.groupKey, group);
     }
 
-    const current = isCurrentBranchRef(info.ref);
+    const current = isCurrentBranchItem(info);
     group.hasCurrent = group.hasCurrent || current;
     group.items.push({ ...info, current });
   }
@@ -2682,10 +2751,10 @@ function initToolsPage() {
   });
 
   bindOnce("btnGitAddRemote", async () => {
-    const title = LANG === "ko" ? "리모트 추가" : "Add Remote";
+    const title = LANG === "ko" ? "리모트 추가/갱신" : "Add/Update Remote";
     const nameInput = await appPrompt(
-      LANG === "ko" ? "리모트 이름을 입력하세요 (예: upstream)" : "Enter remote name (e.g. upstream)",
-      { title, placeholder: "upstream" }
+      LANG === "ko" ? "리모트 이름을 입력하세요 (예: remote)" : "Enter remote name (e.g. remote)",
+      { title, placeholder: "remote" }
     );
     if (!nameInput || !nameInput.trim()) return;
     const remoteName = nameInput.trim();
@@ -2697,9 +2766,8 @@ function initToolsPage() {
     if (!urlInput || !urlInput.trim()) return;
 
     try {
-      const res = await postJson("/api/tools", { action: "git_remote_add", name: remoteName, url: urlInput.trim() });
-      if (!res.ok) throw new Error(res.error || "Failed to add remote");
-      toolsLogNotice(LANG === "ko" ? `리모트 '${remoteName}' 추가 완료` : `Remote '${remoteName}' added`, { label: "git_remote_add" });
+      await runTool("git_remote_add", { name: remoteName, url: urlInput.trim() });
+      toolsLogNotice(LANG === "ko" ? `리모트 '${remoteName}' 추가/갱신 완료` : `Remote '${remoteName}' added/updated`, { label: "git_remote_add" });
     } catch (e) {
       showError("git_remote_add", e);
     }
@@ -3102,7 +3170,7 @@ async function loadBranchesAndShow() {
   try {
     const j = await runTool("git_branch_list");
     syncBranchRemoteContext(j);
-    BRANCHES = j.branches || [];
+    BRANCHES = normalizeBranchItems(j);
     CURRENT_BRANCH_NAME = (j.current_branch || "").trim();
     appBranchPickerMeta.textContent = `${BRANCHES.length} branches`;
 
@@ -3180,7 +3248,7 @@ function renderBranchList() {
           b.appendChild(badge);
         }
 
-        b.onclick = () => onSelectBranch(item.ref);
+        b.onclick = () => onSelectBranch(item);
         items.appendChild(b);
       }
 
@@ -3191,14 +3259,15 @@ function renderBranchList() {
   }
 }
 
-async function onSelectBranch(branch) {
+async function onSelectBranch(item) {
+  const branch = String(item?.ref || item || "").trim();
   closeBranchPicker(true);
   if (!await appConfirm((UI_STRINGS[LANG].checkout_confirm || "Switch to this branch?") + `\n\n${branch}`, {
     title: "git checkout",
   })) return;
 
   try {
-    await runTool("git_checkout", { branch });
+    await runTool("git_checkout", item?.checkoutPayload || { branch });
     toolsLogNotice(UI_STRINGS[LANG].branch_changed || "Branch changed.", { label: "git_checkout" });
   } catch (e) {
     showError("git_checkout", e);
