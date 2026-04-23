@@ -1526,6 +1526,61 @@ body[data-page="terminal"] .app-toast-host {
   padding-right: 2px;
 }
 
+.app-branch-picker__group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-branch-picker__groupHead {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--md-on-surface-var);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: left;
+}
+
+.app-branch-picker__groupIcon {
+  flex: 0 0 auto;
+  width: 16px;
+  color: var(--md-primary);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.app-branch-picker__groupTitle {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-branch-picker__groupCount {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--md-surface-cont-h) 80%, transparent);
+  color: var(--md-on-surface-var);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.app-branch-picker__groupItems {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-sm);
+}
+
 .app-branch-picker__item {
   width: 100%;
   margin-bottom: 0;
@@ -1542,8 +1597,15 @@ body[data-page="terminal"] .app-toast-host {
   min-width: 0;
   flex: 1 1 auto;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-x: auto;
+  overflow-y: hidden;
+  text-overflow: clip;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.app-branch-picker__label::-webkit-scrollbar {
+  display: none;
 }
 
 .app-branch-picker__badge {
