@@ -28,6 +28,9 @@ const settingGroupValueCache = new Map();
 const settingGroupValuePromises = new Map();
 
 let ORIGIN_USERNAME = "origin";
+let BRANCH_REMOTE_NAMES = ["origin"];
+let BRANCH_REMOTE_OWNERS = Object.create(null);
+let BRANCH_GROUP_OPEN = Object.create(null);
 
 function hasFreshPageData(lastLoadedAt, ttlMs = PAGE_DATA_TTL_MS) {
   return Number.isFinite(lastLoadedAt) && lastLoadedAt > 0 && (Date.now() - lastLoadedAt) < ttlMs;
@@ -1872,6 +1875,16 @@ function toolsOutCommitCurrent() {
   renderToolsOut();
 }
 
+function toolsLogNotice(message, options = {}) {
+  const text = normalizeToolsOutText(message);
+  if (!text) return;
+  const label = options.label ? String(options.label).trim() : "notice";
+  toolsOutCommitCurrent();
+  toolsOutAppend(`[${label}]\n${text}`);
+  if (options.meta !== false) toolsMetaSet(text.split("\n")[0]);
+  if (options.clearProgress !== false) toolsProgressSet(null, { active: false });
+}
+
 function getToolCommandPreview(action, payload = {}) {
   switch (action) {
     case "shell_cmd": return String(payload.cmd || "").trim() || "command";
@@ -2345,7 +2358,7 @@ function showError(action, error) {
   const msg = (typeof error === "object" && error.message) ? error.message : String(error);
   toolsMetaSet(title);
   toolsProgressSet(null, { active: false });
-  appAlert(msg, { title, copyText: `[${action}] ${msg}` });
+  toolsLogNotice(msg, { label: action, meta: false });
 }
 
 let branchPickerCloseTimer = null;
@@ -2391,6 +2404,110 @@ function closeBranchPicker(immediate = false) {
 
 if (appBranchPickerBackdrop) appBranchPickerBackdrop.onclick = () => closeBranchPicker();
 if (appBranchPickerClose) appBranchPickerClose.onclick = () => closeBranchPicker();
+
+function parseGitHubOwner(url) {
+  const text = String(url || "").trim();
+  if (!text) return "";
+  const httpsMatch = text.match(/github\.com\/([^\/:\s]+)\//);
+  if (httpsMatch) return httpsMatch[1];
+  const sshMatch = text.match(/github\.com[:\/]([^\/:\s]+)\//);
+  return sshMatch ? sshMatch[1] : "";
+}
+
+function resetBranchRemoteContext() {
+  ORIGIN_USERNAME = "origin";
+  BRANCH_REMOTE_NAMES = ["origin"];
+  BRANCH_REMOTE_OWNERS = Object.create(null);
+}
+
+function syncBranchRemoteContext(result = {}) {
+  const remotes = Array.isArray(result.remotes) ? result.remotes.map((r) => String(r || "").trim()).filter(Boolean) : [];
+  BRANCH_REMOTE_NAMES = remotes.length ? remotes : ["origin"];
+  BRANCH_REMOTE_OWNERS = Object.create(null);
+
+  const remoteUrls = result.remote_urls && typeof result.remote_urls === "object" ? result.remote_urls : {};
+  for (const [name, url] of Object.entries(remoteUrls)) {
+    const owner = parseGitHubOwner(url);
+    if (owner) BRANCH_REMOTE_OWNERS[name] = owner;
+  }
+
+  if (BRANCH_REMOTE_OWNERS.origin) {
+    ORIGIN_USERNAME = BRANCH_REMOTE_OWNERS.origin;
+  }
+}
+
+function getBranchDisplayInfo(ref) {
+  const raw = String(ref || "").trim();
+  const parts = raw.split("/").filter(Boolean);
+  const first = parts[0] || "";
+  const isRemoteRef = parts.length >= 2 && BRANCH_REMOTE_NAMES.includes(first);
+
+  if (!isRemoteRef) {
+    return {
+      ref: raw,
+      label: raw,
+      groupKey: "local",
+      groupTitle: "local",
+      groupRank: 0,
+    };
+  }
+
+  const remoteName = first;
+  const rest = parts.slice(1);
+
+  const owner = BRANCH_REMOTE_OWNERS[remoteName] || (remoteName === "origin" ? ORIGIN_USERNAME : remoteName);
+  return {
+    ref: raw,
+    label: rest.join("/") || raw,
+    groupKey: `remote:${remoteName}:${owner}`,
+    groupTitle: remoteName === "origin" ? `${remoteName} / ${owner}` : `remote / ${owner}`,
+    groupRank: remoteName === "origin" ? 1 : 2,
+  };
+}
+
+function isCurrentBranchRef(ref) {
+  return Boolean(CURRENT_BRANCH_NAME && ref === CURRENT_BRANCH_NAME);
+}
+
+function getBranchGroups() {
+  const groups = new Map();
+  for (const br of BRANCHES) {
+    const info = getBranchDisplayInfo(br);
+    if (!info.ref || !info.label) continue;
+
+    let group = groups.get(info.groupKey);
+    if (!group) {
+      group = {
+        key: info.groupKey,
+        title: info.groupTitle,
+        rank: info.groupRank,
+        items: [],
+        hasCurrent: false,
+      };
+      groups.set(info.groupKey, group);
+    }
+
+    const current = isCurrentBranchRef(info.ref);
+    group.hasCurrent = group.hasCurrent || current;
+    group.items.push({ ...info, current });
+  }
+
+  return Array.from(groups.values()).sort((a, b) => {
+    if (a.rank !== b.rank) return a.rank - b.rank;
+    return a.title.localeCompare(b.title);
+  });
+}
+
+function isBranchGroupOpen(group) {
+  if (Object.prototype.hasOwnProperty.call(BRANCH_GROUP_OPEN, group.key)) {
+    return Boolean(BRANCH_GROUP_OPEN[group.key]);
+  }
+  return group.key === "local" || group.rank === 1 || group.hasCurrent;
+}
+
+function branchCountLabel(count) {
+  return count === 1 ? "1 branch" : `${count} branches`;
+}
 
 
 function initToolsPage() {
@@ -2549,13 +2666,13 @@ function initToolsPage() {
       const waitMsg = LANG === "ko"
         ? "저장소 데이터를 받아오는 중입니다.\n처음 연결하는 저장소의 경우 수 분이 걸릴 수 있습니다.\n잠시만 기다려 주세요..."
         : "Fetching repository data.\nThis may take a few minutes for new repositories.\nPlease wait...";
-      showAppToast(waitMsg, { tone: "info", duration: 8000 });
+      toolsLogNotice(waitMsg, { label: "change repository" });
       await runTool("git_remote_set", { url: newUrl.trim() });
       await refreshToolsMetaInfo();
       const successMsg = LANG === "ko" 
         ? "저장소가 성공적으로 변경되었습니다.\n[change branch] 버튼을 눌러 새 저장소의 브랜치를 선택해 주세요." 
         : "Repository changed successfully.\nClick [change branch] to select a branch.";
-      await appAlert(successMsg, { title });
+      toolsLogNotice(successMsg, { label: "change repository" });
     } catch (e) {
       showError("change repository", e);
     }
@@ -2582,9 +2699,9 @@ function initToolsPage() {
     try {
       const res = await postJson("/api/tools", { action: "git_remote_add", name: remoteName, url: urlInput.trim() });
       if (!res.ok) throw new Error(res.error || "Failed to add remote");
-      alert(LANG === "ko" ? `리모트 '${remoteName}' 추가 완료` : `Remote '${remoteName}' added`);
+      toolsLogNotice(LANG === "ko" ? `리모트 '${remoteName}' 추가 완료` : `Remote '${remoteName}' added`, { label: "git_remote_add" });
     } catch (e) {
-      alert("Error: " + e.message);
+      showError("git_remote_add", e);
     }
   });
 
@@ -2599,7 +2716,7 @@ function initToolsPage() {
       const commits = res.commits || [];
       const currentCommit = res.current_commit || "";
       if (!commits.length) {
-        alert("No commits found");
+        toolsLogNotice("No commits found", { label: "git_log" });
         return;
       }
 
@@ -2630,7 +2747,7 @@ function initToolsPage() {
       const resetRes = await postJson("/api/tools", { action: "git_reset", mode: "hard", target: selected });
       if (!resetRes.ok) throw new Error(resetRes.error || "Reset failed");
       
-      alert(LANG === "ko" ? "이동 완료" : "Checkout complete");
+      toolsLogNotice(LANG === "ko" ? "이동 완료" : "Checkout complete", { label: "git_log" });
       await refreshToolsMetaInfo();
     } catch (e) {
       showError("git_log", e);
@@ -2650,7 +2767,7 @@ function initToolsPage() {
       const fetchResult = await runTool("git_reset_repo_fetch");
       const branches = fetchResult.branches || [];
       if (!branches.length) {
-        alert(LANG === "ko" ? "브랜치를 찾을 수 없습니다" : "No branches found");
+        toolsLogNotice(LANG === "ko" ? "브랜치를 찾을 수 없습니다" : "No branches found", { label: "git_reset_repo" });
         return;
       }
 
@@ -2666,7 +2783,7 @@ function initToolsPage() {
 
       // Phase 3: checkout selected branch
       await runTool("git_reset_repo_checkout", { branch: selected });
-      alert(LANG === "ko" ? `'${selected}' 브랜치로 초기화 완료` : `Reset to '${selected}' complete`);
+      toolsLogNotice(LANG === "ko" ? `'${selected}' 브랜치로 초기화 완료` : `Reset to '${selected}' complete`, { label: "git_reset_repo" });
       await refreshToolsMetaInfo();
 
       if (await appConfirm(UI_STRINGS[LANG].confirm_reboot || "Reboot now?", {
@@ -2877,7 +2994,7 @@ function initToolsPage() {
         if (j.ok) SETTINGS = j;
       }
       if (!SETTINGS || !SETTINGS.items_by_group) {
-        alert("Settings not loaded");
+        toolsLogNotice("Settings not loaded", { label: "copy settings" });
         return;
       }
       const allNames = getAllSettingNames(SETTINGS);
@@ -2885,9 +3002,9 @@ function initToolsPage() {
       const lines = allNames.map(n => `${n}=${values[n] ?? ""}`);
       const text = lines.join("\n");
       copyToClipboard(text);
-      alert(LANG === "ko" ? `${allNames.length}개 파라미터 복사됨` : `${allNames.length} params copied`);
+      toolsLogNotice(LANG === "ko" ? `${allNames.length}개 파라미터 복사됨` : `${allNames.length} params copied`, { label: "copy settings" });
     } catch (e) {
-      alert("Copy failed: " + e.message);
+      showError("copy settings", e);
     }
   });
 
@@ -2899,7 +3016,7 @@ function initToolsPage() {
         if (j.ok) SETTINGS = j;
       }
       if (!SETTINGS || !SETTINGS.items_by_group) {
-        alert("Settings not loaded");
+        toolsLogNotice("Settings not loaded", { label: "view settings" });
         return;
       }
       const allNames = getAllSettingNames(SETTINGS);
@@ -2911,7 +3028,7 @@ function initToolsPage() {
         copyText: text,
       });
     } catch (e) {
-      alert("View failed: " + e.message);
+      showError("view settings", e);
     }
   });
 
@@ -2965,25 +3082,26 @@ function initToolsPage() {
 
 async function loadBranchesAndShow() {
   if (!appBranchPickerMeta || !appBranchPickerList || !openBranchPicker()) {
-    showAppToast(UI_STRINGS[LANG].branch_dom_missing || "Branch DOM missing", { tone: "error" });
+    toolsLogNotice(UI_STRINGS[LANG].branch_dom_missing || "Branch DOM missing", { label: "git_branch_list" });
     return;
   }
   appBranchPickerMeta.textContent = "loading...";
   appBranchPickerList.innerHTML = "";
   BRANCHES = [];
   CURRENT_BRANCH_NAME = "";
-  ORIGIN_USERNAME = "origin";
+  resetBranchRemoteContext();
 
   try {
     const v = await bulkGet(["GitRemote"]);
     if (v && v.GitRemote) {
-      const match = String(v.GitRemote).match(/github\.com\/([^\/]+)/);
-      if (match) ORIGIN_USERNAME = match[1];
+      const owner = parseGitHubOwner(v.GitRemote);
+      if (owner) ORIGIN_USERNAME = owner;
     }
   } catch(e) {}
 
   try {
     const j = await runTool("git_branch_list");
+    syncBranchRemoteContext(j);
     BRANCHES = j.branches || [];
     CURRENT_BRANCH_NAME = (j.current_branch || "").trim();
     appBranchPickerMeta.textContent = `${BRANCHES.length} branches`;
@@ -3006,31 +3124,70 @@ function renderBranchList() {
     return;
   }
 
-  for (const br of BRANCHES) {
-    const b = document.createElement("button");
-    b.className = "btn groupBtn app-branch-picker__item";
-    if (CURRENT_BRANCH_NAME && br === CURRENT_BRANCH_NAME) {
-      b.classList.add("is-current");
+  for (const group of getBranchGroups()) {
+    const open = isBranchGroupOpen(group);
+    const section = document.createElement("div");
+    section.className = "app-branch-picker__group";
+    section.classList.toggle("is-open", open);
+
+    const head = document.createElement("button");
+    head.className = "app-branch-picker__groupHead";
+    head.type = "button";
+    head.setAttribute("aria-expanded", open ? "true" : "false");
+
+    const icon = document.createElement("span");
+    icon.className = "app-branch-picker__groupIcon";
+    icon.textContent = open ? "▼" : "▶";
+    head.appendChild(icon);
+
+    const title = document.createElement("span");
+    title.className = "app-branch-picker__groupTitle";
+    title.textContent = group.title;
+    head.appendChild(title);
+
+    const count = document.createElement("span");
+    count.className = "app-branch-picker__groupCount";
+    count.textContent = branchCountLabel(group.items.length);
+    head.appendChild(count);
+
+    head.onclick = () => {
+      BRANCH_GROUP_OPEN[group.key] = !open;
+      renderBranchList();
+    };
+    section.appendChild(head);
+
+    if (open) {
+      const items = document.createElement("div");
+      items.className = "app-branch-picker__groupItems";
+
+      for (const item of group.items) {
+        const b = document.createElement("button");
+        b.className = "btn groupBtn app-branch-picker__item";
+        if (item.current) {
+          b.classList.add("is-current");
+        }
+        b.title = item.ref;
+
+        const label = document.createElement("span");
+        label.className = "app-branch-picker__label";
+        label.textContent = item.label;
+        b.appendChild(label);
+
+        if (item.current) {
+          const badge = document.createElement("span");
+          badge.className = "app-branch-picker__badge";
+          badge.textContent = getUIText("branch_current", "Current");
+          b.appendChild(badge);
+        }
+
+        b.onclick = () => onSelectBranch(item.ref);
+        items.appendChild(b);
+      }
+
+      section.appendChild(items);
     }
 
-    const label = document.createElement("span");
-    label.className = "app-branch-picker__label";
-    let displayLabel = br;
-    if (br.startsWith("origin/")) {
-      displayLabel = br.replace("origin/", `${ORIGIN_USERNAME}/`);
-    }
-    label.textContent = displayLabel;
-    b.appendChild(label);
-
-    if (CURRENT_BRANCH_NAME && br === CURRENT_BRANCH_NAME) {
-      const badge = document.createElement("span");
-      badge.className = "app-branch-picker__badge";
-      badge.textContent = getUIText("branch_current", "Current");
-      b.appendChild(badge);
-    }
-
-    b.onclick = () => onSelectBranch(br);
-    appBranchPickerList.appendChild(b);
+    appBranchPickerList.appendChild(section);
   }
 }
 
@@ -3042,7 +3199,7 @@ async function onSelectBranch(branch) {
 
   try {
     await runTool("git_checkout", { branch });
-    showAppToast(UI_STRINGS[LANG].branch_changed || "Branch changed.", { tone: "success" });
+    toolsLogNotice(UI_STRINGS[LANG].branch_changed || "Branch changed.", { label: "git_checkout" });
   } catch (e) {
     showError("git_checkout", e);
     return;
@@ -3055,7 +3212,7 @@ async function onSelectBranch(branch) {
 
   try {
     await runTool("reboot");
-    showAppToast(UI_STRINGS[LANG].rebooting || "Rebooting...", { tone: "success" });
+    toolsLogNotice(UI_STRINGS[LANG].rebooting || "Rebooting...", { label: "reboot" });
   } catch (e) {
     showError("reboot", e);
   }
