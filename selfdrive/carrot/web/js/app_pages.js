@@ -1893,6 +1893,7 @@ function getToolCommandPreview(action, payload = {}) {
     case "git_reset": return `git reset --${payload.mode || "hard"} ${payload.target || "HEAD"}`.trim();
     case "git_checkout": return `git checkout ${payload.branch || ""}`.trim();
     case "git_branch_list": return "change branch";
+    case "git_remote_add": return `git remote add/set-url ${payload.name || ""}`.trim();
     case "send_tmux_log": return "capture tmux";
     case "server_tmux_log": return "send tmux";
     case "install_required": return "install flask";
@@ -2682,10 +2683,10 @@ function initToolsPage() {
   });
 
   bindOnce("btnGitAddRemote", async () => {
-    const title = LANG === "ko" ? "리모트 추가" : "Add Remote";
+    const title = LANG === "ko" ? "리모트 추가/갱신" : "Add/Update Remote";
     const nameInput = await appPrompt(
-      LANG === "ko" ? "리모트 이름을 입력하세요 (예: upstream)" : "Enter remote name (e.g. upstream)",
-      { title, placeholder: "upstream" }
+      LANG === "ko" ? "리모트 이름을 입력하세요 (예: remote)" : "Enter remote name (e.g. remote)",
+      { title, placeholder: "remote" }
     );
     if (!nameInput || !nameInput.trim()) return;
     const remoteName = nameInput.trim();
@@ -2697,9 +2698,8 @@ function initToolsPage() {
     if (!urlInput || !urlInput.trim()) return;
 
     try {
-      const res = await postJson("/api/tools", { action: "git_remote_add", name: remoteName, url: urlInput.trim() });
-      if (!res.ok) throw new Error(res.error || "Failed to add remote");
-      toolsLogNotice(LANG === "ko" ? `리모트 '${remoteName}' 추가 완료` : `Remote '${remoteName}' added`, { label: "git_remote_add" });
+      await runTool("git_remote_add", { name: remoteName, url: urlInput.trim() });
+      toolsLogNotice(LANG === "ko" ? `리모트 '${remoteName}' 추가/갱신 완료` : `Remote '${remoteName}' added/updated`, { label: "git_remote_add" });
     } catch (e) {
       showError("git_remote_add", e);
     }

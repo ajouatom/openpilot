@@ -922,18 +922,10 @@ def _get_branch_prefix() -> str:
     return "c3"
 
 def _filter_branch_list(branches: list[str]) -> list[str]:
-  prefix = _get_branch_prefix()
-
   filtered = []
   for branch in branches:
     name = branch.strip()
-    if not name:
-      continue
-
-    # local branch: c3-xxx / c4-xxx
-    # remote branch: origin/c3-xxx, ajouatom/c3-xxx, etc.
-    branch_name = name.rsplit("/", 1)[-1] if "/" in name else name
-    if branch_name.startswith(prefix) or "carrot" in branch_name:
+    if name:
       filtered.append(name)
 
   return sorted(set(filtered))
@@ -1028,7 +1020,7 @@ async def _run_tool_job(job: Dict[str, Any]) -> None:
       if remote_prefix is not None:
         local_branch = branch[len(remote_prefix) + 1:]
         script = (
-          f"if git rev-parse --verify {shlex.quote(local_branch)} >/dev/null 2>&1; "
+          f"if git show-ref --verify --quiet {shlex.quote(f'refs/heads/{local_branch}')}; "
           f"then git switch {shlex.quote(local_branch)}; "
           f"else git switch -c {shlex.quote(local_branch)} --track {shlex.quote(branch)}; fi"
         )
@@ -1105,6 +1097,8 @@ async def _run_tool_job(job: Dict[str, Any]) -> None:
           line = line.replace("remotes/", "", 1)
         if line in remotes:
           continue
+        if any(line == f"{remote}/HEAD" for remote in remotes):
+          continue
         branches.append(line)
 
       branches = _filter_branch_list(branches)
@@ -1128,14 +1122,25 @@ async def _run_tool_job(job: Dict[str, Any]) -> None:
         _tool_job_finish(job, ok=False, result={"ok": False, "error": "missing name or url"}, error="missing name or url")
         return
 
-      _tool_job_progress(job, message=f"git remote add {name}", current=1, total=2)
-      rc_add = await _tool_stream_exec(job, ["git", "remote", "add", name, url], cwd=repo_dir, timeout=30)
-      if rc_add != 0:
-        _tool_job_finish(job, ok=False, result=_tool_result_from_log(job, rc_add))
+      rc_remotes, remotes_out = await _tool_capture_exec(["git", "remote"], cwd=repo_dir, timeout=15)
+      remotes = remotes_out.split() if rc_remotes == 0 else []
+      remote_exists = name in remotes
+
+      setup_cmd = ["git", "remote", "set-url", name, url] if remote_exists else ["git", "remote", "add", name, url]
+      setup_label = "set-url" if remote_exists else "add"
+      _tool_job_progress(job, message=f"git remote {setup_label} {name}", current=1, total=2)
+      rc_setup = await _tool_stream_exec(job, setup_cmd, cwd=repo_dir, timeout=30)
+      if rc_setup != 0:
+        _tool_job_finish(job, ok=False, result=_tool_result_from_log(job, rc_setup))
         return
 
-      _tool_job_progress(job, message=f"git fetch {name}", current=2, total=2)
-      rc_fetch = await _tool_stream_exec(job, ["git", "fetch", "--progress", name], cwd=repo_dir, timeout=180)
+      _tool_job_progress(job, message=f"git fetch --prune {name}", current=2, total=2)
+      rc_fetch = await _tool_stream_exec(job, ["git", "fetch", "--prune", "--progress", name], cwd=repo_dir, timeout=180)
+
+      rc_remote_urls, remote_urls_out = await _tool_capture_exec(["git", "remote", "-v"], cwd=repo_dir, timeout=15)
+      if rc_remote_urls == 0 and remote_urls_out:
+        _tool_job_append(job, "\n$ git remote -v\n")
+        _tool_job_append(job, remote_urls_out + "\n")
       _tool_job_finish(job, ok=rc_fetch == 0, result=_tool_result_from_log(job, rc_fetch))
       return
 
@@ -1594,11 +1599,18 @@ async def api_tools(request: web.Request) -> web.Response:
       if rc_fetch != 0:
         return web.json_response({"ok": False, "rc": rc_fetch, "out": out_fetch})
 
-      is_remote = branch.startswith("origin/")
+      rc_remotes, out_remotes = run(["git", "remote"], cwd=REPO_DIR)
+      known_remotes = out_remotes.split() if rc_remotes == 0 else ["origin"]
+      remote_prefix = None
+      for remote in known_remotes:
+        if branch.startswith(f"{remote}/"):
+          remote_prefix = remote
+          break
+
       try:
-        if is_remote:
-          local_branch = branch.replace("origin/", "", 1)
-          rc_check, _ = run(["git", "rev-parse", "--verify", local_branch], cwd=REPO_DIR)
+        if remote_prefix is not None:
+          local_branch = branch[len(remote_prefix) + 1:]
+          rc_check, _ = run(["git", "show-ref", "--verify", "--quiet", f"refs/heads/{local_branch}"], cwd=REPO_DIR)
           if rc_check == 0:
             rc, out = run(["git", "switch", local_branch], cwd=REPO_DIR)
           else:
@@ -1655,6 +1667,8 @@ async def api_tools(request: web.Request) -> web.Response:
           line = line.replace("remotes/", "", 1)
         if line in remotes:
           continue
+        if any(line == f"{remote}/HEAD" for remote in remotes):
+          continue
         branches.append(line)
 
       branches = _filter_branch_list(branches)
@@ -1676,11 +1690,18 @@ async def api_tools(request: web.Request) -> web.Response:
       url = (body.get("url") or "").strip()
       if not name or not url:
         return web.json_response({"ok": False, "error": "missing name or url"}, status=400)
-      rc_add, out_add = run(["git", "remote", "add", name, url], cwd=REPO_DIR)
-      if rc_add != 0:
-        return web.json_response({"ok": False, "rc": rc_add, "out": out_add})
-      rc_fetch, out_fetch = run(["git", "fetch", name], cwd=REPO_DIR)
-      out = (out_add + "\n" + out_fetch).strip()
+
+      rc_remotes, out_remotes = run(["git", "remote"], cwd=REPO_DIR)
+      remotes = out_remotes.split() if rc_remotes == 0 else []
+      remote_exists = name in remotes
+      setup_cmd = ["git", "remote", "set-url", name, url] if remote_exists else ["git", "remote", "add", name, url]
+      rc_setup, out_setup = run(setup_cmd, cwd=REPO_DIR)
+      if rc_setup != 0:
+        return web.json_response({"ok": False, "rc": rc_setup, "out": out_setup})
+
+      rc_fetch, out_fetch = run(["git", "fetch", "--prune", name], cwd=REPO_DIR)
+      rc_remote_urls, out_remote_urls = run(["git", "remote", "-v"], cwd=REPO_DIR)
+      out = (out_setup + "\n" + out_fetch + "\n\n> git remote -v\n" + (out_remote_urls if rc_remote_urls == 0 else "")).strip()
       return web.json_response({"ok": rc_fetch == 0, "rc": rc_fetch, "out": out})
 
     if action == "git_log":
