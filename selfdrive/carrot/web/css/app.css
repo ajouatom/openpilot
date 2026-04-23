@@ -1345,6 +1345,10 @@ body[data-page="terminal"] .app-toast-host {
   pointer-events: none;
 }
 
+#appDialog {
+  z-index: 180;
+}
+
 .app-dialog[hidden] {
   display: none !important;
 }
@@ -2431,7 +2435,7 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
   position: absolute;
   right: 14px;
   bottom: 14px;
-  z-index: 4;
+  z-index: 60;
   display: inline-flex;
   gap: 10px;
   padding: 0;
