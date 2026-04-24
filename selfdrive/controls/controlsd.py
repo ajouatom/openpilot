@@ -5,6 +5,7 @@ from numbers import Number
 
 from cereal import car, log
 import cereal.messaging as messaging
+from opendbc.car.hyundai.values import HyundaiFlags
 from openpilot.common.constants import CV
 from openpilot.common.params import Params
 from openpilot.common.realtime import config_realtime_process, Priority, Ratekeeper
@@ -26,6 +27,7 @@ from openpilot.selfdrive.controls.lib.longcontrol import LongControl
 from openpilot.common.realtime import DT_CTRL, DT_MDL
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N
+from scripts.add.events_ko import CS
 from selfdrive.modeld.modeld import LAT_SMOOTH_SECONDS
 from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
 
@@ -120,6 +122,10 @@ class Controls:
     #standstill = abs(CS.vEgo) <= max(self.CP.minSteerSpeed, MIN_LATERAL_CONTROL_SPEED) or CS.standstill
 
     lat_ready = not CS.steerFaultTemporary and not CS.steerFaultPermanent
+    # CANFD가 아닌 차량 CS.latEnabled 조건 추가
+    if not (self.CP.flags & HyundaiFlags.CANFD):
+      lat_ready = lat_ready and CS.latEnabled
+
     CC.latEnabled = lat_ready
 
     long_active = (
