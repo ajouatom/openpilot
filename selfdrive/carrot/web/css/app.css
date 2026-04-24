@@ -139,15 +139,7 @@ body.dialog-open {
 }
 
 .topbar .nav-btn.active > span:last-child::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -9px;
-  height: 3px;
-  border-radius: var(--r-pill);
-  background: currentColor;
-  opacity: 0.95;
+  display: none;
 }
 
 .topbar .nav-btn.recording.active > span:last-child::after {
@@ -1353,6 +1345,10 @@ body[data-page="terminal"] .app-toast-host {
   pointer-events: none;
 }
 
+#appDialog {
+  z-index: 180;
+}
+
 .app-dialog[hidden] {
   display: none !important;
 }
@@ -1410,7 +1406,9 @@ body[data-page="terminal"] .app-toast-host {
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
-  flex-shrink: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .app-dialog__metaList {
@@ -1438,7 +1436,7 @@ body[data-page="terminal"] .app-toast-host {
   margin-top: var(--sp-md);
   overflow-y: auto;
   min-height: 0;
-  flex-shrink: 1;
+  flex: 1 1 auto;
   padding-right: 4px;
 }
 
@@ -1450,6 +1448,16 @@ body[data-page="terminal"] .app-toast-host {
   width: 100%;
   justify-content: center;
   min-height: 44px;
+}
+
+.app-dialog__choiceBtn.is-current {
+  border-color: color-mix(in srgb, var(--md-primary) 56%, var(--md-stroke-soft));
+  background: color-mix(in srgb, var(--md-primary-cont) 34%, var(--md-surface-cont-h));
+  color: var(--md-primary);
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .app-dialog__inputWrap {
@@ -1518,6 +1526,61 @@ body[data-page="terminal"] .app-toast-host {
   padding-right: 2px;
 }
 
+.app-branch-picker__group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-branch-picker__groupHead {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--md-on-surface-var);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: left;
+}
+
+.app-branch-picker__groupIcon {
+  flex: 0 0 auto;
+  width: 16px;
+  color: var(--md-primary);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.app-branch-picker__groupTitle {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-branch-picker__groupCount {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--md-surface-cont-h) 80%, transparent);
+  color: var(--md-on-surface-var);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.app-branch-picker__groupItems {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-sm);
+}
+
 .app-branch-picker__item {
   width: 100%;
   margin-bottom: 0;
@@ -1534,8 +1597,15 @@ body[data-page="terminal"] .app-toast-host {
   min-width: 0;
   flex: 1 1 auto;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-x: auto;
+  overflow-y: hidden;
+  text-overflow: clip;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.app-branch-picker__label::-webkit-scrollbar {
+  display: none;
 }
 
 .app-branch-picker__badge {
@@ -2427,7 +2497,7 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
   position: absolute;
   right: 14px;
   bottom: 14px;
-  z-index: 4;
+  z-index: 60;
   display: inline-flex;
   gap: 10px;
   padding: 0;
