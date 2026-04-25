@@ -592,13 +592,13 @@ class ModelRenderer(Widget):
     model_prob = float(getattr(lead, "modelProb", 0.0))
 
     if not radar:
-      return rl.Color(0, 120, 255, 220)      # BLUE
+      return rl.Color(0, 0, 255, 220)      # BLUE
     elif abs(model_prob - 0.01) < 0.001:
-      return rl.Color(0, 200, 80, 220)       # GREEN
+      return rl.Color(0, 203, 0, 220)       # GREEN
     elif v_sum > 0.0:
-      return rl.Color(255, 190, 0, 220)      # ORANGE
+      return rl.Color(255, 175, 3, 220)      # ORANGE
     else:
-      return rl.Color(255, 70, 70, 220)      # RED
+      return rl.Color(255, 0, 0, 220)      # RED
 
   def _update_radar_info(self, radar_state, path_x_array):
     self._radar_info_items = []
