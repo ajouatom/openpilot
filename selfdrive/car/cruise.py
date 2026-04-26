@@ -844,14 +844,11 @@ class VCruiseCarrot:
 
   def _toggle_user_lat(self):
     if self._lat_override == LAT_OVERRIDE_FORCE_OFF:
+      # 꺼둔 상태 -> 기본 정책 복귀
       self._set_lat_override(self._default_lat_override())
-    else:
+    elif self._lat_override == LAT_OVERRIDE_AUTO:
+      # AUTO 상태 -> 사용자가 명시적으로 LAT 켜기 원함
+      self._set_lat_override(LAT_OVERRIDE_FORCE_ON)
+    else:  # FORCE_ON
+      # 켜진 상태 -> 끄기
       self._set_lat_override(LAT_OVERRIDE_FORCE_OFF)
-
-    state_name = {
-      LAT_OVERRIDE_AUTO: "AUTO",
-      LAT_OVERRIDE_FORCE_ON: "FORCE_ON",
-      LAT_OVERRIDE_FORCE_OFF: "FORCE_OFF",
-    }[self._lat_override]
-    self._add_log(f"Lateral {state_name}")
-
