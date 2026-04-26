@@ -259,7 +259,14 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
 
   # A) normal match
   if dist_sane(first_track) and vel_sane(first_track):
-    if y_sane(first_track):
+    select_second_track = False
+    if second_track is not None and vel_sane(second_track) and second_track.in_lane_prob > 0.3:
+      if second_track.cnt > 5 and offset_vision_dist * 0.5 < second_track.dRel < first_track.dRel:
+        select_second_track = True
+        
+    if select_second_track:
+      best_track = second_track
+    elif y_sane(first_track):
       if lead.prob > 0.5:
         best_track = first_track
       elif lead.prob > 0.4 and first_track.selected_count > 0:
