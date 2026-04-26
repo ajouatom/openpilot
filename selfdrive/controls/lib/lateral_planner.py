@@ -84,7 +84,7 @@ class LateralPlanner:
     global LATERAL_ACCEL_COST, LATERAL_JERK_COST, STEERING_RATE_COST
     self.readParams -= 1
     if self.readParams <= 0:
-      self.readParams = 100
+      self.readParams = 10
       self.useLaneLineSpeedApply = sm['carState'].useLaneLineSpeed
       self.pathOffset = float(self.params.get_int("PathOffset")) * 0.01
       self.lateralPathCost = self.params.get_float("LatMpcPathCost") * 0.01
