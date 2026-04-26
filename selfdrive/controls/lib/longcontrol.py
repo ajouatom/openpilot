@@ -91,7 +91,7 @@ class LongControl:
         longitudinalTuningKiV = self.params.get_float("LongTuningKiV") * 0.001
         self.pid._k_p = (self.CP.longitudinalTuning.kpBP, [longitudinalTuningKpV])
         self.pid._k_i = (self.CP.longitudinalTuning.kiBP, [longitudinalTuningKiV])
-        self.pid._k_f = self.params.get_float("LongTuningKf") * 0.01
+        self.pid.k_f = self.params.get_float("LongTuningKf") * 0.01
 
 
     """Update longitudinal control. This updates the state machine and runs a PID loop"""
