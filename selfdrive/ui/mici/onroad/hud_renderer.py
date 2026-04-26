@@ -384,52 +384,91 @@ class HudRenderer(Widget):
     time_block_right = time_x
 
     if show_date_time != 0:
-      time_text = now.strftime("%H:%M:%S")
-      date_text = now.strftime("%y-%m-%d")
+      weekdays_ko = ["일", "월", "화", "수", "목", "금", "토"]
+      # Python weekday(): 월=0 ... 일=6 이라서 C tm_wday 스타일로 변환
+      weekday = weekdays_ko[(now.weekday() + 1) % 7]
+
+      time_text = now.strftime("%H:%M")
+      date_text = now.strftime(f"%m-%d({weekday})")
 
       if show_date_time == 1:
-        # two lines: both use smaller font
-        dt_font = small_dt_font
+        # 시간 + 날짜: 시간은 조금 크게, 날짜는 조금 작게
+        time_font = int(wheel_txt.height * 1.05)
+        date_font = max(18, int(time_font * 0.58))
 
-        date_size = measure_text_cached(self._font_medium, date_text, dt_font)
-        time_size = measure_text_cached(self._font_semi_bold, time_text, dt_font)
+        time_size = measure_text_cached(self._font_display, time_text, time_font)
+        date_size = measure_text_cached(self._font_display, date_text, date_font)
 
-        line_gap = max(2, int(dt_font * 0.10))
-        total_h = date_size.y + line_gap + time_size.y
+        line_gap = max(2, int(time_font * 0.02))
+        total_h = time_size.y + line_gap + date_size.y
         base_y = pos_y - total_h / 2
 
-        date_y = base_y
-        time_y = date_y + date_size.y + line_gap
+        block_w = max(time_size.x, date_size.x)
 
-        block_w = max(date_size.x, time_size.x)
-        date_x = time_x + (block_w - date_size.x) / 2
         draw_time_x = time_x + (block_w - time_size.x) / 2
+        date_x = time_x + (block_w - date_size.x) / 2
 
-        draw_text_ui_style(date_text, date_x, date_y, dt_font, rl.Color(255, 255, 255, 220), font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
+        time_y = base_y
+        date_y = time_y + time_size.y + line_gap
 
-        draw_text_ui_style(time_text, draw_time_x, time_y, dt_font, rl.Color(255, 255, 255, 230), font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
+        draw_text_ui_style(
+          time_text, draw_time_x, time_y, time_font,
+          rl.Color(255, 255, 255, 235),
+          font=self._font_display,
+          border_width=1.0,
+          shadow_offset=3.0,
+          align="left_top",
+          y_offset=0.0,
+        )
+
+        draw_text_ui_style(
+          date_text, date_x, date_y, date_font,
+          rl.Color(255, 255, 255, 220),
+          font=self._font_display,
+          border_width=1.0,
+          shadow_offset=3.0,
+          align="left_top",
+          y_offset=0.0,
+        )
 
         time_block_right = time_x + block_w
 
       elif show_date_time == 2:
-        # time only: large font
-        text_font = time_font
-        time_size = measure_text_cached(self._font_semi_bold, time_text, text_font)
+        # 시간만: 크게
+        text_font = int(wheel_txt.height * 1.1)
+        time_size = measure_text_cached(self._font_display, time_text, text_font)
         time_y = pos_y - time_size.y / 2
 
-        draw_text_ui_style(time_text, time_x, time_y, text_font, rl.Color(255, 255, 255, 230), font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
+        draw_text_ui_style(
+          time_text, time_x, time_y, text_font,
+          rl.Color(255, 255, 255, 235),
+          font=self._font_display,
+          border_width=1.0,
+          shadow_offset=3.0,
+          align="left_top",
+          y_offset=0.0,
+        )
 
         time_block_right = time_x + time_size.x
 
       elif show_date_time == 3:
-        # date only: also large font
-        text_font = time_font
-        date_size = measure_text_cached(self._font_medium, date_text, text_font)
+        # 날짜만: 년도 없이 요일 포함
+        text_font = int(wheel_txt.height * 0.72)
+        date_size = measure_text_cached(self._font_display, date_text, text_font)
         date_y = pos_y - date_size.y / 2
 
-        draw_text_ui_style(date_text, time_x, date_y, text_font, rl.Color(255, 255, 255, 220), font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
+        draw_text_ui_style(
+          date_text, time_x, date_y, text_font,
+          rl.Color(255, 255, 255, 220),
+          font=self._font_display,
+          border_width=1.0,
+          shadow_offset=3.0,
+          align="left_top",
+          y_offset=0.0,
+        )
 
         time_block_right = time_x + date_size.x
+
 
     # --------------------------------------------------------------------------
     # Traffic Light (always higher priority than debug UI)
