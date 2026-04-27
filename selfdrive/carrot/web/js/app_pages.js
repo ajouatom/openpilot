@@ -3377,15 +3377,21 @@ function dashcamRouteCardHtml(entry) {
   const dateLabel = escapeHtml(entry.dateLabel || route);
   const latest = escapeHtml(entry.latestModifiedLabel || "-");
   const preview = representative
-    ? `<div class="dashcam-route-preview" data-action="play" data-route="${routeAttr}" data-segment="${escapeHtml(representative)}">
-        <img loading="lazy" src="${dashcamApiPath("preview", representative)}" onerror="this.onerror=null;this.src='${dashcamApiPath("thumbnail", representative)}';" alt="">
-        <div class="dashcam-route-preview__shade"></div>
-        <div class="dashcam-route-preview__chips">
-          <span class="dashcam-chip">세그먼트 ${segments.length}개</span>
-          <span class="dashcam-chip">${latest}</span>
+    ? `<div class="dashcam-route-media">
+        <div class="dashcam-route-preview" data-action="play" data-route="${routeAttr}" data-segment="${escapeHtml(representative)}">
+          <img loading="lazy" src="${dashcamApiPath("preview", representative)}" onerror="this.onerror=null;this.src='${dashcamApiPath("thumbnail", representative)}';" alt="">
+          <div class="dashcam-route-preview__shade"></div>
+          <div class="dashcam-route-preview__chips">
+            <span class="dashcam-chip">세그먼트 ${segments.length}개</span>
+            <span class="dashcam-chip">${latest}</span>
+          </div>
+          <div class="dashcam-play-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+          </div>
         </div>
-        <div class="dashcam-play-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+        <div class="dashcam-route-media-info">
+          <div class="dashcam-route-title">${title}</div>
+          <div class="dashcam-route-subtitle">${dateLabel}</div>
         </div>
       </div>`
     : "";
@@ -3646,6 +3652,9 @@ function activateLogsTab(tab) {
     loadScreenrecordVideos().catch(() => {});
   } else if (logsActiveTab === "screen") {
     renderScreenrecordVideos();
+    loadScreenrecordVideos({ silent: true }).catch(() => {});
+  } else if (dashcamState.initialized) {
+    loadDashcamRoutes({ silent: true }).catch(() => {});
   }
 }
 
@@ -3654,7 +3663,6 @@ function bindLogsPage() {
   const screenTab = document.getElementById("logsTabScreen");
   const routesHost = document.getElementById("dashcamRoutes");
   const screenHost = document.getElementById("screenrecordVideos");
-  const refreshBtn = document.getElementById("btnLogsRefresh");
 
   if (dashTab && dashTab.dataset.bound !== "1") {
     dashTab.dataset.bound = "1";
@@ -3664,14 +3672,6 @@ function bindLogsPage() {
   if (screenTab && screenTab.dataset.bound !== "1") {
     screenTab.dataset.bound = "1";
     screenTab.addEventListener("click", () => activateLogsTab("screen"));
-  }
-
-  if (refreshBtn && refreshBtn.dataset.bound !== "1") {
-    refreshBtn.dataset.bound = "1";
-    refreshBtn.addEventListener("click", () => {
-      if (logsActiveTab === "screen") loadScreenrecordVideos().catch(() => {});
-      else loadDashcamRoutes().catch(() => {});
-    });
   }
 
   if (routesHost && routesHost.dataset.bound !== "1") {
