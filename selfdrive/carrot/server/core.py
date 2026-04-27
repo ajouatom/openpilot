@@ -653,11 +653,9 @@ def _dashcam_upload_share_text(payload: dict[str, Any]) -> str:
   failed = [item for item in payload.get("results") or [] if not item.get("ok")]
   lines = [
     "# Carrot Dashcam Upload",
-    "",
     "## Upload",
     f"- Time: {payload.get('uploadedAt') or ''}",
     f"- Path: {payload.get('remoteBasePath') or ''}",
-    "",
     "## Device",
     f"- Car name: {meta.get('carName') or 'none'}",
     f"- DongleId: {meta.get('dongleId') or 'unknown'}",
@@ -670,7 +668,7 @@ def _dashcam_upload_share_text(payload: dict[str, Any]) -> str:
   for item in uploaded:
     lines.append(f"- {item.get('segment')} OK")
   if failed:
-    lines.extend(["", "## Failed", f"- {len(failed)}"])
+    lines.extend(["## Failed", f"- {len(failed)}"])
   return "\n".join(lines).strip()
 
 
@@ -685,17 +683,17 @@ def _dashcam_discord_content(payload: dict[str, Any]) -> str:
     detail_lines.append("- none")
   failed_line = f"\n- Failed: **{len(failed)}**" if failed else ""
   content = (
-    "# Carrot Dashcam Upload\n\n"
+    "# Carrot Dashcam Upload\n"
     "## Upload\n"
     f"- Time: **{payload.get('uploadedAt') or ''}**\n"
-    f"- Path: **{payload.get('remoteBasePath') or ''}**\n\n"
+    f"- Path: **{payload.get('remoteBasePath') or ''}**\n"
     "## Device\n"
     f"- Car name: **{meta.get('carName') or 'none'}**\n"
     f"- DongleId: **{meta.get('dongleId') or 'unknown'}**\n"
     f"- Serial: **{meta.get('serial') or 'unknown'}**\n"
     f"- Branch: **{meta.get('branch') or 'unknown'}**\n"
     f"- Commit: **{meta.get('commit') or 'unknown'}** ({meta.get('commitDate') or 'unknown'})"
-    f"{failed_line}\n\n"
+    f"{failed_line}\n"
     "## Result\n"
     + "\n".join(detail_lines)
   )
@@ -705,17 +703,17 @@ def _dashcam_discord_content(payload: dict[str, Any]) -> str:
   if len(uploaded) > len(trimmed):
     trimmed.append(f"- ... +{len(uploaded) - len(trimmed)} more")
   return (
-    "# Carrot Dashcam Upload\n\n"
+    "# Carrot Dashcam Upload\n"
     "## Upload\n"
     f"- Time: **{payload.get('uploadedAt') or ''}**\n"
-    f"- Path: **{payload.get('remoteBasePath') or ''}**\n\n"
+    f"- Path: **{payload.get('remoteBasePath') or ''}**\n"
     "## Device\n"
     f"- Car name: **{meta.get('carName') or 'none'}**\n"
     f"- DongleId: **{meta.get('dongleId') or 'unknown'}**\n"
     f"- Serial: **{meta.get('serial') or 'unknown'}**\n"
     f"- Branch: **{meta.get('branch') or 'unknown'}**\n"
     f"- Commit: **{meta.get('commit') or 'unknown'}** ({meta.get('commitDate') or 'unknown'})"
-    f"{failed_line}\n\n"
+    f"{failed_line}\n"
     "## Result\n"
     + "\n".join(trimmed)
   )
