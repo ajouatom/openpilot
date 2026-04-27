@@ -1238,6 +1238,8 @@ body[data-page="home"] .global-home-record-fab {
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 50%, transparent);
   background: var(--md-surface-cont-h);
   color: var(--md-on-surface);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 300px;
 }
 
 .dashcam-route-media {
@@ -1267,6 +1269,15 @@ body[data-page="home"] .global-home-record-fab {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.logs-lazy-img {
+  opacity: 1;
+  transition: opacity .16s ease;
+}
+
+.logs-lazy-img[data-src] {
+  opacity: 0;
 }
 
 .dashcam-route-preview__shade {
@@ -1418,6 +1429,8 @@ body[data-page="home"] .global-home-record-fab {
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 42%, transparent);
   background: var(--md-surface-cont);
   cursor: pointer;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 70px;
 }
 
 .dashcam-segment-tile:hover {
@@ -1809,6 +1822,8 @@ body[data-page="home"] .global-home-record-fab {
   background: var(--md-surface-cont-h);
   color: var(--md-on-surface);
   cursor: pointer;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 64px;
 }
 
 .screenrecord-row:hover {

@@ -3306,6 +3306,7 @@ const dashcamState = {
   layoutBound: false,
   layoutTimer: null,
   landscape: null,
+  signature: "",
 };
 
 const screenrecordState = {
@@ -3313,9 +3314,11 @@ const screenrecordState = {
   loading: false,
   videos: [],
   loadSeq: 0,
+  signature: "",
 };
 
 let logsActiveTab = "dashcam";
+let logsLazyImageObserver = null;
 
 function dashcamSegmentIndex(segment) {
   const parts = String(segment || "").split("--");
@@ -3364,6 +3367,54 @@ function screenrecordApiPath(kind, fileId) {
   return `/api/screenrecord/${kind}/${encodeURIComponent(fileId)}`;
 }
 
+function dashcamRoutesSignature(routes) {
+  return (routes || []).map((entry) => [
+    entry.route || "",
+    entry.latestModifiedLabel || "",
+    ...(entry.segmentFolders || []),
+  ].join("|")).join("\n");
+}
+
+function screenrecordVideosSignature(videos) {
+  return (videos || []).map((video) => [
+    video.id || "",
+    video.name || "",
+    video.modifiedLabel || video.relativeModifiedLabel || "",
+    video.size || 0,
+  ].join("|")).join("\n");
+}
+
+function loadLogsLazyImage(img) {
+  if (!img) return;
+  const src = img.dataset?.src || "";
+  if (!src) return;
+  img.src = src;
+  img.removeAttribute("data-src");
+}
+
+function hydrateLogsLazyImages(root) {
+  const scope = root || document;
+  const images = Array.from(scope.querySelectorAll?.("img[data-src]") || []);
+  if (!images.length) return;
+
+  if (!("IntersectionObserver" in window)) {
+    images.forEach(loadLogsLazyImage);
+    return;
+  }
+
+  if (!logsLazyImageObserver) {
+    logsLazyImageObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        logsLazyImageObserver.unobserve(entry.target);
+        loadLogsLazyImage(entry.target);
+      });
+    }, { root: null, rootMargin: "720px 0px", threshold: 0.01 });
+  }
+
+  images.forEach((img) => logsLazyImageObserver.observe(img));
+}
+
 function logsLoadingSkeletonHtml(type = "dashcam") {
   const count = type === "screen" ? 6 : 4;
   const itemClass = type === "screen" ? "logs-loading-row" : "logs-loading-card";
@@ -3392,7 +3443,7 @@ function dashcamRouteCardHtml(entry) {
   const preview = representative
     ? `<div class="dashcam-route-media">
         <div class="dashcam-route-preview" data-action="play" data-route="${routeAttr}" data-segment="${escapeHtml(representative)}">
-          <img loading="lazy" src="${dashcamApiPath("preview", representative)}" onerror="this.onerror=null;this.src='${dashcamApiPath("thumbnail", representative)}';" alt="">
+          <img class="logs-lazy-img" loading="lazy" decoding="async" fetchpriority="low" data-src="${dashcamApiPath("preview", representative)}" data-fallback="${dashcamApiPath("thumbnail", representative)}" onerror="this.onerror=null;if(this.dataset.fallback)this.src=this.dataset.fallback;" alt="">
           <div class="dashcam-route-preview__shade"></div>
           <div class="dashcam-route-preview__chips">
             <span class="dashcam-chip">세그먼트 ${segments.length}개</span>
@@ -3414,7 +3465,7 @@ function dashcamRouteCardHtml(entry) {
     if (compactSegments) {
       return `<div class="dashcam-segment-tile dashcam-segment-tile--compact" data-action="play" data-route="${routeAttr}" data-segment="${segAttr}">
         <div class="dashcam-segment-thumb dashcam-segment-thumb--compact">
-          <img loading="lazy" src="${dashcamApiPath("thumbnail", segment)}" alt="">
+          <img class="logs-lazy-img" loading="lazy" decoding="async" fetchpriority="low" data-src="${dashcamApiPath("thumbnail", segment)}" alt="">
           <label class="dashcam-segment-check dashcam-segment-check--compact" title="선택" onclick="event.stopPropagation()">
             <input type="checkbox" data-action="select-segment" data-segment="${segAttr}"${checked}>
           </label>
@@ -3430,7 +3481,7 @@ function dashcamRouteCardHtml(entry) {
     }
     return `<div class="dashcam-segment-tile" data-action="play" data-route="${routeAttr}" data-segment="${segAttr}">
       <div class="dashcam-segment-thumb">
-        <img loading="lazy" src="${dashcamApiPath("thumbnail", segment)}" alt="">
+        <img class="logs-lazy-img" loading="lazy" decoding="async" fetchpriority="low" data-src="${dashcamApiPath("thumbnail", segment)}" alt="">
         <label class="dashcam-segment-check" title="선택" onclick="event.stopPropagation()">
           <input type="checkbox" data-action="select-segment" data-segment="${segAttr}"${checked}>
         </label>
@@ -3485,6 +3536,7 @@ function renderDashcamRoutes() {
   }
   setDashcamStatus("");
   host.innerHTML = routes.map(dashcamRouteCardHtml).join("");
+  hydrateLogsLazyImages(host);
 }
 
 async function loadDashcamRoutes({ silent = false } = {}) {
@@ -3497,11 +3549,17 @@ async function loadDashcamRoutes({ silent = false } = {}) {
     const json = await getJson("/api/dashcam/routes");
     if (seq !== dashcamState.loadSeq) return;
     const routes = Array.isArray(json.routes) ? json.routes : [];
+    const nextSignature = dashcamRoutesSignature(routes);
+    if (silent && nextSignature === dashcamState.signature) {
+      dashcamState.loading = false;
+      return;
+    }
     const validRoutes = new Set(routes.map((entry) => entry.route));
     const validSegments = new Set(routes.flatMap((entry) => entry.segmentFolders || []));
     dashcamState.expanded = new Set(Array.from(dashcamState.expanded).filter((route) => validRoutes.has(route)));
     dashcamState.selected = new Set(Array.from(dashcamState.selected).filter((segment) => validSegments.has(segment)));
     dashcamState.routes = routes;
+    dashcamState.signature = nextSignature;
     dashcamState.loading = false;
     renderDashcamRoutes();
   } catch (e) {
@@ -3681,7 +3739,7 @@ function screenrecordVideoRowHtml(video) {
   const ext = escapeHtml((video.ext || "video").toUpperCase());
   return `<article class="screenrecord-row" data-action="play-screenrecord" data-id="${id}" data-name="${name}">
     <div class="screenrecord-row__thumb" aria-hidden="true">
-      <img loading="lazy" src="${screenrecordApiPath("thumbnail", video.id || "")}" alt="">
+      <img class="logs-lazy-img" loading="lazy" decoding="async" fetchpriority="low" data-src="${screenrecordApiPath("thumbnail", video.id || "")}" alt="">
     </div>
     <div class="screenrecord-row__main">
       <div class="screenrecord-row__name">${name}</div>
@@ -3713,6 +3771,7 @@ function renderScreenrecordVideos() {
   }
   setScreenrecordStatus("");
   host.innerHTML = videos.map(screenrecordVideoRowHtml).join("");
+  hydrateLogsLazyImages(host);
 }
 
 async function loadScreenrecordVideos({ silent = false } = {}) {
@@ -3724,7 +3783,14 @@ async function loadScreenrecordVideos({ silent = false } = {}) {
   try {
     const json = await getJson("/api/screenrecord/videos");
     if (seq !== screenrecordState.loadSeq) return;
-    screenrecordState.videos = Array.isArray(json.videos) ? json.videos : [];
+    const videos = Array.isArray(json.videos) ? json.videos : [];
+    const nextSignature = screenrecordVideosSignature(videos);
+    if (silent && nextSignature === screenrecordState.signature) {
+      screenrecordState.loading = false;
+      return;
+    }
+    screenrecordState.videos = videos;
+    screenrecordState.signature = nextSignature;
     screenrecordState.loading = false;
     renderScreenrecordVideos();
   } catch (e) {
@@ -3838,6 +3904,7 @@ function bindLogsPage() {
 
   if (screenHost && screenHost.dataset.bound !== "1") {
     screenHost.dataset.bound = "1";
+    screenHost.addEventListener("scroll", markDashcamScrollBusy, { passive: true });
     screenHost.addEventListener("click", (ev) => {
       const actionEl = ev.target?.closest?.("[data-action]");
       if (!actionEl) return;
