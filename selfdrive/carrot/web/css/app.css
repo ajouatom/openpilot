@@ -883,7 +883,7 @@ body[data-page="home"] .global-home-record-fab {
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: var(--sp-lg);
+  padding-bottom: calc(var(--tools-console-height) + var(--sp-lg));
 }
 
 .tools-group__toggle {
@@ -956,11 +956,13 @@ body[data-page="home"] .global-home-record-fab {
 }
 
 .tools-console-dock {
-  position: relative;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--nav-bar-height);
   width: 100vw;
-  margin-left: calc(50% - 50vw);
-  margin-right: calc(50% - 50vw);
-  z-index: 45;
+  margin: 0;
+  z-index: 99;
   flex: none;
   background: var(--tools-console-bg);
   overflow: hidden;
@@ -4100,6 +4102,10 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
   }
 
   body[data-page="tools"] #pageTools > .tools-console-dock {
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
     grid-column: 2;
     grid-row: 1 / span 3;
     width: auto;
