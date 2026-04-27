@@ -428,16 +428,43 @@ def _dashcam_run_ffmpeg(args: list[str], timeout: float = 90.0) -> subprocess.Co
   )
 
 
+def _dashcam_placeholder_svg(token: str = "dashcam") -> str:
+  out = _dashcam_cache_path("placeholder", token, ".svg")
+  if os.path.isfile(out) and os.path.getsize(out) > 0:
+    return out
+  svg = """<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+<rect width="640" height="360" fill="#10161d"/>
+<rect x="1" y="1" width="638" height="358" fill="none" stroke="#354252" stroke-width="2"/>
+<path d="M296 126h48l20 24h44a24 24 0 0 1 24 24v72a24 24 0 0 1-24 24H232a24 24 0 0 1-24-24v-72a24 24 0 0 1 24-24h44z" fill="#253241"/>
+<circle cx="320" cy="210" r="42" fill="#111820" stroke="#5d6c7d" stroke-width="8"/>
+<path d="M306 188v44l38-22z" fill="#ffb268"/>
+<text x="320" y="306" text-anchor="middle" fill="#9aa6b2" font-family="Arial, sans-serif" font-size="24" font-weight="700">NO THUMBNAIL</text>
+</svg>"""
+  with open(out, "w", encoding="utf-8") as f:
+    f.write(svg)
+  return out
+
+
 def _dashcam_ensure_thumbnail(segment: str) -> str:
   segment_dir = _dashcam_segment_dir(segment)
   source, _ = _dashcam_source_video(segment_dir)
   out = _dashcam_cache_path("thumb", segment, ".jpg")
   if os.path.isfile(out) and os.path.getsize(out) > 0:
     return out
-  result = _dashcam_run_ffmpeg(["-ss", "2", "-i", source, "-vframes", "1", "-vf", "scale=640:-1", out])
-  if result.returncode != 0 or not os.path.isfile(out) or os.path.getsize(out) <= 0:
-    raise web.HTTPInternalServerError(text=result.stderr or result.stdout or "thumbnail generation failed")
-  return out
+  attempts = (
+    ["-ss", "2", "-i", source, "-vframes", "1", "-vf", "scale=640:-1", out],
+    ["-ss", "0.2", "-i", source, "-vframes", "1", "-vf", "scale=640:-1", out],
+  )
+  for args in attempts:
+    result = _dashcam_run_ffmpeg(args)
+    if result.returncode == 0 and os.path.isfile(out) and os.path.getsize(out) > 0:
+      return out
+    try:
+      if os.path.exists(out):
+        os.remove(out)
+    except OSError:
+      pass
+  return _dashcam_placeholder_svg(segment)
 
 
 def _dashcam_ensure_preview(segment: str) -> str:
@@ -455,7 +482,12 @@ def _dashcam_ensure_preview(segment: str) -> str:
     out,
   ], timeout=120.0)
   if result.returncode != 0 or not os.path.isfile(out) or os.path.getsize(out) <= 0:
-    raise web.HTTPInternalServerError(text=result.stderr or result.stdout or "preview generation failed")
+    try:
+      if os.path.exists(out):
+        os.remove(out)
+    except OSError:
+      pass
+    return _dashcam_ensure_thumbnail(segment)
   return out
 
 

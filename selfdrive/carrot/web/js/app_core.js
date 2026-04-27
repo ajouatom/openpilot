@@ -622,13 +622,13 @@ const branchList = document.getElementById("branchList");
 const quickLink = document.getElementById("toolsQuickLink");
 const chipQuickLabel = document.getElementById("toolsQuickLinkTitle");
 const btnSaveQuickLink = document.getElementById("btnToolsQuickLink");
-let QUICK_LINK_URL = "";
+const QUICK_LINK_FIXED_URL = "https://man.carrotpilot.app/";
+let QUICK_LINK_URL = QUICK_LINK_FIXED_URL;
 let QUICK_LINK_STATUS = "loading";
 let QUICK_LINK_MESSAGE = "";
 let quickLinkLoadPromise = null;
 let quickLinkLoadedAt = 0;
 let quickLinkActionTimer = null;
-const QUICK_LINK_FIXED_URL = "https://man.carrotpilot.app/";
 
 btnBackBranch.onclick = () => history.back();
 branchTitle.onclick = () => history.back();
@@ -1513,13 +1513,14 @@ async function updateQuickLink(options = {}) {
 }
 
 async function openQuickLink() {
-  if (!QUICK_LINK_URL) return;
+  QUICK_LINK_URL = QUICK_LINK_FIXED_URL;
+  renderQuickLinkUI();
   const msg = LANG === "ko"
-    ? `Web을 여시겠습니까?\n\n${QUICK_LINK_URL}`
-    : `${getUIText("open", "Open")} Web?\n\n${QUICK_LINK_URL}`;
+    ? `Web을 여시겠습니까?\n\n${QUICK_LINK_FIXED_URL}`
+    : `${getUIText("open", "Open")} Web?\n\n${QUICK_LINK_FIXED_URL}`;
   const ok = await appConfirm(msg, { title: "Web" });
   if (!ok) return;
-  window.open(QUICK_LINK_URL, "_blank", "noopener");
+  window.open(QUICK_LINK_FIXED_URL, "_blank", "noopener");
 }
 
 if (btnQuickLinkWeb) {
