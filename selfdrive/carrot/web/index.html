@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/assets/img_chffr_wheel.png?v=2604-01" />
   <link rel="stylesheet" href="/css/tokens.css?v=2603-73" />
   <link rel="stylesheet" href="/css/hud_card.css?v=2604-09" />
-  <link rel="stylesheet" href="/css/app.css?v=2604-44" />
+  <link rel="stylesheet" href="/css/app.css?v=2604-45" />
 </head>
 
 <body>
@@ -239,43 +239,28 @@
     <!-- ════════════ LOGS ════════════ -->
     <div id="pageLogs" class="page" style="display:none;">
       <div class="logs-shell">
-        <div class="logs-tabbar" role="tablist" aria-label="Logs">
-          <button id="logsTabDashcam" class="logs-tab is-active" type="button" role="tab" aria-selected="true">
-            <span class="logs-tab__icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M17 10.5V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3.5l4 4v-11z"/></svg>
-            </span>
-            <span>대시캠</span>
-          </button>
-          <button id="logsTabScreen" class="logs-tab" type="button" role="tab" aria-selected="false">
-            <span class="logs-tab__icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M21 16V4H3v12zm0-14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-7v2h3v2H7v-2h3v-2H3a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/></svg>
-            </span>
-            <span>화면녹화</span>
+        <div class="logs-tabbar">
+          <div class="logs-tabs" role="tablist" aria-label="Logs">
+            <button id="logsTabDashcam" class="logs-tab is-active" type="button" role="tab" aria-selected="true">
+              <span>대시캠</span>
+            </button>
+            <button id="logsTabScreen" class="logs-tab" type="button" role="tab" aria-selected="false">
+              <span>화면녹화</span>
+            </button>
+          </div>
+          <button id="btnLogsRefresh" class="logs-icon-btn" type="button" aria-label="새로고침" title="새로고침">
+            <svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 7.45 5H17.3A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h8V3z"/></svg>
           </button>
         </div>
 
         <section id="logsDashcamPanel" class="logs-panel" aria-labelledby="logsTabDashcam">
-          <div class="logs-subheader">
-            <div>
-              <div class="logs-subheader__title">대시캠 녹화</div>
-              <div id="dashcamMeta" class="logs-subheader__desc">주행 라우트 목록입니다. 자동으로 주기 갱신됩니다.</div>
-            </div>
-            <button id="btnDashcamRefresh" class="logs-icon-btn" type="button" aria-label="새로고침" title="새로고침">
-              <svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 7.45 5H17.3A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h8V3z"/></svg>
-            </button>
-          </div>
           <div id="dashcamStatus" class="dashcam-status">불러오는 중...</div>
           <div id="dashcamRoutes" class="dashcam-routes"></div>
         </section>
 
         <section id="logsScreenPanel" class="logs-panel" hidden aria-labelledby="logsTabScreen">
-          <div class="logs-subheader">
-            <div>
-              <div class="logs-subheader__title">화면 녹화</div>
-              <div class="logs-subheader__desc">기기 내부 화면녹화 영상 목록입니다.</div>
-            </div>
-          </div>
-          <div class="dashcam-status">화면녹화는 다음 단계에서 구현합니다.</div>
+          <div id="screenrecordStatus" class="dashcam-status">불러오는 중...</div>
+          <div id="screenrecordVideos" class="screenrecord-list"></div>
         </section>
       </div>
     </div>
@@ -492,7 +477,7 @@
 
   <script src="/js/hud_card.js?v=2604-05"></script>
   <script src="/js/app_core.js?v=2604-20"></script>
-  <script src="/js/app_pages.js?v=2604-29"></script>
+  <script src="/js/app_pages.js?v=2604-30"></script>
   <script src="/js/raw_capnp.js?v=2604-05"></script>
   <script src="/js/app_realtime.js?v=2604-17"></script>
   <script src="/js/home_drive.js?v=2604-27"></script>

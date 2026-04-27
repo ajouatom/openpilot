@@ -58,6 +58,16 @@ CARROT_STATE_DIR = os.path.join(CARROT_DATA_DIR, "state")
 CARROT_GIT_STATE_PATH = os.path.join(CARROT_STATE_DIR, "git.json")
 DASHCAM_ROOT = "/data/media/0/realdata"
 DASHCAM_CACHE_DIR = os.path.join(CARROT_DATA_DIR, "cache", "dashcam")
+SCREEN_RECORDING_DIRS = (
+  "/data/media/0/videos",
+  "/data/media/0/screenrecord",
+  "/data/media/0/screen_recordings",
+  "/data/media/0/screenrecords",
+  "/data/media/0/ScreenRecords",
+  "/data/media/0/Movies",
+  "/sdcard/Movies",
+)
+SCREEN_RECORDING_EXTS = (".mp4", ".mkv", ".avi", ".mov", ".ts", ".hevc")
 
 WEB_DIR = os.path.join(ROOT_DIR, "web")
 CSS_DIR = os.path.join(WEB_DIR, "css")
@@ -607,6 +617,109 @@ async def api_dashcam_upload(request: web.Request) -> web.Response:
     })
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+def _screenrecord_file_id(path: str) -> str:
+  return hashlib.sha1(os.path.abspath(path).encode("utf-8", errors="ignore")).hexdigest()[:24]
+
+
+def _screenrecord_date_label(epoch_seconds: int) -> str:
+  try:
+    return datetime.fromtimestamp(epoch_seconds).strftime("%Y-%m-%d %H:%M")
+  except Exception:
+    return "-"
+
+
+def _screenrecord_build_videos() -> list[dict[str, Any]]:
+  videos: list[dict[str, Any]] = []
+  seen: set[str] = set()
+  for folder in SCREEN_RECORDING_DIRS:
+    if not os.path.isdir(folder):
+      continue
+    try:
+      with os.scandir(folder) as it:
+        for entry in it:
+          try:
+            name = entry.name
+            if not entry.is_file(follow_symlinks=False):
+              continue
+            if not name.lower().endswith(SCREEN_RECORDING_EXTS):
+              continue
+            stat = entry.stat(follow_symlinks=False)
+            if stat.st_size <= 0:
+              continue
+            path = os.path.abspath(entry.path)
+            real = os.path.realpath(path)
+            if real in seen:
+              continue
+            seen.add(real)
+            modified = int(stat.st_mtime)
+            videos.append({
+              "id": _screenrecord_file_id(path),
+              "name": name,
+              "folder": folder,
+              "size": int(stat.st_size),
+              "modifiedEpoch": modified,
+              "modifiedLabel": _screenrecord_date_label(modified),
+              "relativeModifiedLabel": _dashcam_relative_time(modified),
+              "ext": os.path.splitext(name)[1].lower().lstrip("."),
+            })
+          except Exception:
+            continue
+    except Exception:
+      continue
+  videos.sort(key=lambda item: (item.get("modifiedEpoch", 0), item.get("name", "")), reverse=True)
+  return videos
+
+
+def _screenrecord_find_file(file_id: str) -> str:
+  file_id = (file_id or "").strip()
+  if not file_id or "/" in file_id or "\\" in file_id or len(file_id) > 64:
+    raise web.HTTPBadRequest(text="bad file id")
+  for item in _screenrecord_build_videos():
+    folder = str(item.get("folder") or "")
+    name = str(item.get("name") or "")
+    path = os.path.abspath(os.path.join(folder, name))
+    if _screenrecord_file_id(path) == file_id and os.path.isfile(path):
+      return path
+  raise web.HTTPNotFound(text="screen recording not found")
+
+
+async def api_screenrecord_videos(request: web.Request) -> web.Response:
+  try:
+    videos = await asyncio.to_thread(_screenrecord_build_videos)
+    folders = [folder for folder in SCREEN_RECORDING_DIRS if os.path.isdir(folder)]
+    return web.json_response({"ok": True, "videos": videos, "folders": folders})
+  except Exception as e:
+    return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def api_screenrecord_video(request: web.Request) -> web.StreamResponse:
+  file_id = request.match_info.get("file_id", "")
+  path = await asyncio.to_thread(_screenrecord_find_file, file_id)
+  mime = mimetypes.guess_type(path)[0] or "application/octet-stream"
+  return web.FileResponse(
+    path,
+    headers={
+      "Content-Type": mime,
+      "Cache-Control": "private, max-age=3600",
+    },
+  )
+
+
+async def api_screenrecord_download(request: web.Request) -> web.StreamResponse:
+  file_id = request.match_info.get("file_id", "")
+  path = await asyncio.to_thread(_screenrecord_find_file, file_id)
+  filename = os.path.basename(path)
+  safe_filename = "".join(ch if 32 <= ord(ch) < 127 and ch not in {'"', "\\"} else "_" for ch in filename)
+  mime = mimetypes.guess_type(path)[0] or "application/octet-stream"
+  return web.FileResponse(
+    path,
+    headers={
+      "Content-Type": mime,
+      "Content-Disposition": f'attachment; filename="{safe_filename or "screenrecord"}"',
+    },
+  )
 
 
 def _do_gc_and_trim() -> None:

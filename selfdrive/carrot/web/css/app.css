@@ -1094,40 +1094,45 @@ body[data-page="home"] .global-home-record-fab {
   position: sticky;
   top: 0;
   z-index: 12;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  padding: 8px clamp(8px, 3.2vw, 24px) 4px;
-  background: color-mix(in srgb, var(--md-surface) 92%, transparent);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px clamp(8px, 3.2vw, 24px);
+  background: color-mix(in srgb, var(--md-surface) 96%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 42%, transparent);
   backdrop-filter: blur(18px);
+}
+
+.logs-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--md-surface-cont);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 36%, transparent);
 }
 
 .logs-tab {
   appearance: none;
   border: 0;
-  border-bottom: 3px solid transparent;
   background: transparent;
   color: var(--md-on-surface-var);
-  min-height: 46px;
+  min-height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  border-radius: 10px 10px 0 0;
-}
-
-.logs-tab svg {
-  width: 20px;
-  height: 20px;
+  border-radius: 6px;
 }
 
 .logs-tab.is-active {
-  color: var(--md-primary);
-  border-bottom-color: var(--md-primary);
-  background: color-mix(in srgb, var(--md-primary) 8%, transparent);
+  color: var(--md-on-primary);
+  background: var(--md-primary);
 }
 
 .logs-panel {
@@ -1182,7 +1187,10 @@ body[data-page="home"] .global-home-record-fab {
 .logs-icon-btn {
   width: 36px;
   height: 36px;
-  border-radius: 999px;
+  flex: 0 0 36px;
+  border-radius: 8px;
+  background: var(--md-surface-cont);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 36%, transparent);
 }
 
 .logs-icon-btn:hover,
@@ -1232,6 +1240,7 @@ body[data-page="home"] .global-home-record-fab {
 .dashcam-route-preview {
   position: relative;
   aspect-ratio: 16 / 9;
+  align-self: start;
   overflow: hidden;
   cursor: pointer;
   background: linear-gradient(180deg, var(--md-surface-cont-hh), var(--md-surface-cont));
@@ -1517,6 +1526,88 @@ body[data-page="home"] .global-home-record-fab {
   background: rgba(255,255,255,.16);
 }
 
+.screenrecord-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px clamp(12px, 3.5vw, 24px) calc(var(--nav-bar-height) + 16px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.screenrecord-row {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 44%, transparent);
+  background: var(--md-surface-cont-h);
+  color: var(--md-on-surface);
+}
+
+.screenrecord-row__icon {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--md-primary) 12%, var(--md-surface-cont));
+  color: var(--md-primary);
+}
+
+.screenrecord-row__icon svg,
+.screenrecord-download svg {
+  width: 21px;
+  height: 21px;
+}
+
+.screenrecord-row__main {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.screenrecord-row__name {
+  font-size: 14px;
+  line-height: 1.25;
+  font-weight: 750;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.screenrecord-row__meta {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  color: var(--md-on-surface-var);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.screenrecord-download {
+  appearance: none;
+  border: 0;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--md-on-surface-var);
+  background: transparent;
+  cursor: pointer;
+}
+
+.screenrecord-download:hover {
+  color: var(--md-primary);
+  background: color-mix(in srgb, var(--md-primary) 10%, transparent);
+}
+
 @media (min-width: 900px) {
   .dashcam-routes {
     padding-left: clamp(18px, 3vw, 34px);
@@ -1526,10 +1617,11 @@ body[data-page="home"] .global-home-record-fab {
   .dashcam-route-card {
     display: grid;
     grid-template-columns: minmax(320px, 42%) minmax(0, 1fr);
+    align-items: start;
   }
 
   .dashcam-route-preview {
-    min-height: 100%;
+    width: 100%;
   }
 }
 

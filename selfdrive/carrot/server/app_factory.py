@@ -32,6 +32,9 @@ def make_app() -> web.Application:
   app.router.add_get("/api/dashcam/video/{segment}", routes_api.api_dashcam_video)
   app.router.add_get("/api/dashcam/download/{segment}/{kind}", routes_api.api_dashcam_download)
   app.router.add_post("/api/dashcam/upload", routes_api.api_dashcam_upload)
+  app.router.add_get("/api/screenrecord/videos", routes_api.api_screenrecord_videos)
+  app.router.add_get("/api/screenrecord/video/{file_id}", routes_api.api_screenrecord_video)
+  app.router.add_get("/api/screenrecord/download/{file_id}", routes_api.api_screenrecord_download)
   app.router.add_post("/stream", routes_api.proxy_stream)
 
   # ws

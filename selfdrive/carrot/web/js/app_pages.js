@@ -3305,6 +3305,15 @@ const dashcamState = {
   loadSeq: 0,
 };
 
+const screenrecordState = {
+  initialized: false,
+  loading: false,
+  videos: [],
+  loadSeq: 0,
+};
+
+let logsActiveTab = "dashcam";
+
 function dashcamSegmentIndex(segment) {
   const parts = String(segment || "").split("--");
   const n = Number.parseInt(parts[parts.length - 1] || "0", 10);
@@ -3330,6 +3339,26 @@ function setDashcamStatus(message, tone = "") {
 function setDashcamMeta(message) {
   const meta = document.getElementById("dashcamMeta");
   if (meta) meta.textContent = message;
+}
+
+function setScreenrecordStatus(message, tone = "") {
+  const status = document.getElementById("screenrecordStatus");
+  if (!status) return;
+  status.textContent = message || "";
+  status.hidden = !message;
+  status.classList.toggle("is-error", tone === "error");
+}
+
+function formatLogBytes(bytes) {
+  const n = Number(bytes) || 0;
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+function screenrecordApiPath(kind, fileId) {
+  return `/api/screenrecord/${kind}/${encodeURIComponent(fileId)}`;
 }
 
 function dashcamSelectedForRoute(entry) {
@@ -3416,11 +3445,9 @@ function renderDashcamRoutes() {
   if (!routes.length) {
     host.innerHTML = "";
     setDashcamStatus("주행 기록이 없습니다.");
-    setDashcamMeta("주행 라우트 목록입니다. 자동으로 주기 갱신됩니다.");
     return;
   }
   setDashcamStatus("");
-  setDashcamMeta(`주행 라우트 ${routes.length}개 · 자동 갱신 10초`);
   host.innerHTML = routes.map(dashcamRouteCardHtml).join("");
 }
 
@@ -3455,7 +3482,8 @@ function startDashcamAutoRefresh() {
   if (dashcamState.refreshTimer) return;
   dashcamState.refreshTimer = window.setInterval(() => {
     if (CURRENT_PAGE !== "logs" || dashcamState.scrollBusy) return;
-    loadDashcamRoutes({ silent: true }).catch(() => {});
+    if (logsActiveTab === "screen") loadScreenrecordVideos({ silent: true }).catch(() => {});
+    else loadDashcamRoutes({ silent: true }).catch(() => {});
   }, 10000);
 }
 
@@ -3535,41 +3563,115 @@ async function showDashcamSegmentMenu(route, segment) {
   }
 }
 
-function bindLogsPage() {
+function screenrecordVideoRowHtml(video) {
+  const id = escapeHtml(video.id || "");
+  const name = escapeHtml(video.name || "-");
+  const date = escapeHtml(video.modifiedLabel || video.relativeModifiedLabel || "-");
+  const size = escapeHtml(formatLogBytes(video.size));
+  const ext = escapeHtml((video.ext || "video").toUpperCase());
+  return `<article class="screenrecord-row">
+    <div class="screenrecord-row__icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path fill="currentColor" d="M21 16V4H3v12zm0-14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-7v2h3v2H7v-2h3v-2H3a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/></svg>
+    </div>
+    <div class="screenrecord-row__main">
+      <div class="screenrecord-row__name">${name}</div>
+      <div class="screenrecord-row__meta">
+        <span>${date}</span>
+        <span>${size}</span>
+        <span>${ext}</span>
+      </div>
+    </div>
+    <button class="screenrecord-download" type="button" data-action="download-screenrecord" data-id="${id}" aria-label="다운로드" title="다운로드">
+      <svg viewBox="0 0 24 24"><path fill="currentColor" d="M5 20h14v-2H5m14-9h-4V3H9v6H5l7 7z"/></svg>
+    </button>
+  </article>`;
+}
+
+function renderScreenrecordVideos() {
+  const host = document.getElementById("screenrecordVideos");
+  if (!host) return;
+  const videos = screenrecordState.videos || [];
+  if (screenrecordState.loading && !videos.length) {
+    host.innerHTML = "";
+    setScreenrecordStatus("불러오는 중...");
+    return;
+  }
+  if (!videos.length) {
+    host.innerHTML = "";
+    setScreenrecordStatus("화면녹화 폴더/영상이 없습니다.");
+    return;
+  }
+  setScreenrecordStatus("");
+  host.innerHTML = videos.map(screenrecordVideoRowHtml).join("");
+}
+
+async function loadScreenrecordVideos({ silent = false } = {}) {
+  const seq = ++screenrecordState.loadSeq;
+  if (!silent) {
+    screenrecordState.loading = true;
+    renderScreenrecordVideos();
+  }
+  try {
+    const json = await getJson("/api/screenrecord/videos");
+    if (seq !== screenrecordState.loadSeq) return;
+    screenrecordState.videos = Array.isArray(json.videos) ? json.videos : [];
+    screenrecordState.loading = false;
+    renderScreenrecordVideos();
+  } catch (e) {
+    if (seq !== screenrecordState.loadSeq) return;
+    screenrecordState.loading = false;
+    if (!silent) {
+      setScreenrecordStatus(`화면녹화 목록 로드 실패: ${e.message || e}`, "error");
+      showAppToast(e.message || "화면녹화 목록 로드 실패", { tone: "error" });
+    }
+  }
+}
+
+function activateLogsTab(tab) {
+  logsActiveTab = tab === "screen" ? "screen" : "dashcam";
   const dashTab = document.getElementById("logsTabDashcam");
   const screenTab = document.getElementById("logsTabScreen");
   const dashPanel = document.getElementById("logsDashcamPanel");
   const screenPanel = document.getElementById("logsScreenPanel");
+
+  dashTab?.classList.toggle("is-active", logsActiveTab === "dashcam");
+  screenTab?.classList.toggle("is-active", logsActiveTab === "screen");
+  dashTab?.setAttribute("aria-selected", logsActiveTab === "dashcam" ? "true" : "false");
+  screenTab?.setAttribute("aria-selected", logsActiveTab === "screen" ? "true" : "false");
+  if (dashPanel) dashPanel.hidden = logsActiveTab !== "dashcam";
+  if (screenPanel) screenPanel.hidden = logsActiveTab !== "screen";
+
+  if (logsActiveTab === "screen" && !screenrecordState.initialized) {
+    screenrecordState.initialized = true;
+    loadScreenrecordVideos().catch(() => {});
+  } else if (logsActiveTab === "screen") {
+    renderScreenrecordVideos();
+  }
+}
+
+function bindLogsPage() {
+  const dashTab = document.getElementById("logsTabDashcam");
+  const screenTab = document.getElementById("logsTabScreen");
   const routesHost = document.getElementById("dashcamRoutes");
-  const refreshBtn = document.getElementById("btnDashcamRefresh");
+  const screenHost = document.getElementById("screenrecordVideos");
+  const refreshBtn = document.getElementById("btnLogsRefresh");
 
   if (dashTab && dashTab.dataset.bound !== "1") {
     dashTab.dataset.bound = "1";
-    dashTab.addEventListener("click", () => {
-      dashTab.classList.add("is-active");
-      screenTab?.classList.remove("is-active");
-      dashTab.setAttribute("aria-selected", "true");
-      screenTab?.setAttribute("aria-selected", "false");
-      if (dashPanel) dashPanel.hidden = false;
-      if (screenPanel) screenPanel.hidden = true;
-    });
+    dashTab.addEventListener("click", () => activateLogsTab("dashcam"));
   }
 
   if (screenTab && screenTab.dataset.bound !== "1") {
     screenTab.dataset.bound = "1";
-    screenTab.addEventListener("click", () => {
-      screenTab.classList.add("is-active");
-      dashTab?.classList.remove("is-active");
-      screenTab.setAttribute("aria-selected", "true");
-      dashTab?.setAttribute("aria-selected", "false");
-      if (dashPanel) dashPanel.hidden = true;
-      if (screenPanel) screenPanel.hidden = false;
-    });
+    screenTab.addEventListener("click", () => activateLogsTab("screen"));
   }
 
   if (refreshBtn && refreshBtn.dataset.bound !== "1") {
     refreshBtn.dataset.bound = "1";
-    refreshBtn.addEventListener("click", () => loadDashcamRoutes().catch(() => {}));
+    refreshBtn.addEventListener("click", () => {
+      if (logsActiveTab === "screen") loadScreenrecordVideos().catch(() => {});
+      else loadDashcamRoutes().catch(() => {});
+    });
   }
 
   if (routesHost && routesHost.dataset.bound !== "1") {
@@ -3614,10 +3716,23 @@ function bindLogsPage() {
       renderDashcamRoutes();
     });
   }
+
+  if (screenHost && screenHost.dataset.bound !== "1") {
+    screenHost.dataset.bound = "1";
+    screenHost.addEventListener("click", (ev) => {
+      const actionEl = ev.target?.closest?.("[data-action]");
+      if (!actionEl) return;
+      if (actionEl.dataset.action === "download-screenrecord") {
+        const id = actionEl.dataset.id || "";
+        if (id) window.open(screenrecordApiPath("download", id), "_blank", "noopener");
+      }
+    });
+  }
 }
 
 function initLogsPage() {
   bindLogsPage();
+  activateLogsTab(logsActiveTab);
   startDashcamAutoRefresh();
   if (!dashcamState.initialized) {
     dashcamState.initialized = true;
