@@ -3364,6 +3364,14 @@ function screenrecordApiPath(kind, fileId) {
   return `/api/screenrecord/${kind}/${encodeURIComponent(fileId)}`;
 }
 
+function logsLoadingSkeletonHtml(type = "dashcam") {
+  const count = type === "screen" ? 6 : 4;
+  const itemClass = type === "screen" ? "logs-loading-row" : "logs-loading-card";
+  return `<div class="logs-loading-list" aria-hidden="true">${Array.from({ length: count }, (_, i) =>
+    `<div class="${itemClass}" style="--i:${i}"></div>`
+  ).join("")}</div>`;
+}
+
 function dashcamSelectedForRoute(entry) {
   return (entry.segmentFolders || []).filter((segment) => dashcamState.selected.has(segment));
 }
@@ -3466,8 +3474,8 @@ function renderDashcamRoutes() {
   if (!host) return;
   const routes = dashcamState.routes || [];
   if (dashcamState.loading && !routes.length) {
-    host.innerHTML = "";
-    setDashcamStatus("불러오는 중...");
+    setDashcamStatus("");
+    host.innerHTML = logsLoadingSkeletonHtml("dashcam");
     return;
   }
   if (!routes.length) {
@@ -3694,8 +3702,8 @@ function renderScreenrecordVideos() {
   if (!host) return;
   const videos = screenrecordState.videos || [];
   if (screenrecordState.loading && !videos.length) {
-    host.innerHTML = "";
-    setScreenrecordStatus("불러오는 중...");
+    setScreenrecordStatus("");
+    host.innerHTML = logsLoadingSkeletonHtml("screen");
     return;
   }
   if (!videos.length) {

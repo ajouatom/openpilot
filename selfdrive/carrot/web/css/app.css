@@ -1176,11 +1176,15 @@ body[data-page="home"] .global-home-record-fab {
 .dashcam-player-close {
   appearance: none;
   border: 0;
+  padding: 0;
   background: transparent;
   color: var(--md-on-surface-var);
-  display: inline-grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
   cursor: pointer;
+  box-sizing: border-box;
 }
 
 .logs-icon-btn {
@@ -1493,6 +1497,106 @@ body[data-page="home"] .global-home-record-fab {
   height: 30px;
   border-radius: 999px;
   flex: 0 0 auto;
+}
+
+.dashcam-menu-btn svg {
+  display: block;
+  transform: translateZ(0);
+}
+
+.logs-loading-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.logs-loading-card,
+.logs-loading-row {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 36%, transparent);
+  background: var(--md-surface-cont-h);
+  opacity: 0;
+  transform: translateY(14px);
+  animation: logsItemIn .42s cubic-bezier(.2, 0, 0, 1) forwards;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+
+.logs-loading-card {
+  min-height: 184px;
+}
+
+.logs-loading-row {
+  min-height: 64px;
+}
+
+.logs-loading-card::before,
+.logs-loading-row::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      100deg,
+      transparent 0%,
+      color-mix(in srgb, var(--md-on-surface) 7%, transparent) 48%,
+      transparent 72%
+    );
+  transform: translateX(-100%);
+  animation: logsSkeletonSweep 1.35s ease-in-out infinite;
+  animation-delay: calc(var(--i, 0) * 90ms);
+  z-index: 1;
+}
+
+.logs-loading-card::after,
+.logs-loading-row::after {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  border-radius: 6px;
+  background:
+    linear-gradient(var(--md-surface-cont), var(--md-surface-cont)) 0 0 / 100% 104px no-repeat,
+    linear-gradient(var(--md-surface-cont), var(--md-surface-cont)) 0 122px / 62% 14px no-repeat,
+    linear-gradient(var(--md-surface-cont), var(--md-surface-cont)) 0 146px / 38% 12px no-repeat;
+  z-index: 0;
+}
+
+.logs-loading-row::after {
+  inset: 8px 10px;
+  background:
+    linear-gradient(var(--md-surface-cont), var(--md-surface-cont)) 0 0 / 76px 48px no-repeat,
+    linear-gradient(var(--md-surface-cont), var(--md-surface-cont)) 90px 7px / 52% 14px no-repeat,
+    linear-gradient(var(--md-surface-cont), var(--md-surface-cont)) 90px 31px / 34% 11px no-repeat;
+}
+
+@keyframes logsItemIn {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes logsSkeletonSweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logs-loading-card,
+  .logs-loading-row {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .logs-loading-card::before,
+  .logs-loading-row::before {
+    animation: none;
+    opacity: 0;
+  }
 }
 
 .dashcam-share-card {
