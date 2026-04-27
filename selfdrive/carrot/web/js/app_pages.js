@@ -3637,6 +3637,40 @@ function renderDashcamRoute(route) {
   return true;
 }
 
+function updateDashcamRouteSelectionUi(route) {
+  const host = document.getElementById("dashcamRoutes");
+  if (!host) return false;
+  const entry = (dashcamState.routes || []).find((item) => item.route === route);
+  if (!entry) return false;
+
+  const card = Array.from(host.querySelectorAll("[data-route-card]"))
+    .find((node) => node.dataset.routeCard === route);
+  if (!card) return false;
+
+  const segments = Array.isArray(entry.segmentFolders) ? entry.segmentFolders : [];
+  const selected = dashcamSelectedForRoute(entry);
+  const allSelected = segments.length > 0 && selected.length === segments.length;
+
+  const countEl = card.querySelector(".dashcam-selection-count");
+  if (countEl) countEl.textContent = `선택 ${selected.length}개`;
+
+  const selectBtn = card.querySelector('[data-action="select-route"]');
+  if (selectBtn) {
+    selectBtn.dataset.selected = allSelected ? "1" : "0";
+    selectBtn.textContent = allSelected ? "전체 해제" : "전체 선택";
+  }
+
+  const uploadBtn = card.querySelector('[data-action="upload-selected"]');
+  if (uploadBtn) uploadBtn.disabled = selected.length === 0;
+
+  card.querySelectorAll('input[data-action="select-segment"]').forEach((input) => {
+    const segment = input.dataset.segment || "";
+    input.checked = dashcamState.selected.has(segment);
+  });
+
+  return true;
+}
+
 async function loadDashcamRoutes({ silent = false } = {}) {
   const seq = ++dashcamState.loadSeq;
   if (!silent) {
@@ -3983,7 +4017,7 @@ function bindLogsPage() {
           if (shouldClear) dashcamState.selected.delete(item);
           else dashcamState.selected.add(item);
         }
-        renderDashcamRoutes();
+        if (!updateDashcamRouteSelectionUi(route)) renderDashcamRoutes();
       } else if (action === "upload-selected") {
         const entry = dashcamState.routes.find((item) => item.route === route);
         const targets = dashcamSelectedForRoute(entry || { segmentFolders: [] });
@@ -3996,7 +4030,8 @@ function bindLogsPage() {
       const segment = input.dataset.segment || "";
       if (input.checked) dashcamState.selected.add(segment);
       else dashcamState.selected.delete(segment);
-      renderDashcamRoutes();
+      const route = input.closest("[data-route-card]")?.dataset.routeCard || "";
+      if (!updateDashcamRouteSelectionUi(route)) renderDashcamRoutes();
     });
   }
 
