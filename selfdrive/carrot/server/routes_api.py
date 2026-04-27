@@ -18,6 +18,7 @@ from .core import (
   api_dashcam_download,
   api_dashcam_upload,
   api_screenrecord_videos,
+  api_screenrecord_thumbnail,
   api_screenrecord_video,
   api_screenrecord_download,
   proxy_stream,

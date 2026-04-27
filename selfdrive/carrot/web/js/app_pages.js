@@ -3405,9 +3405,12 @@ function dashcamRouteCardHtml(entry) {
     const checked = dashcamState.selected.has(segment) ? " checked" : "";
     if (compactSegments) {
       return `<div class="dashcam-segment-tile dashcam-segment-tile--compact" data-action="play" data-route="${routeAttr}" data-segment="${segAttr}">
-        <label class="dashcam-segment-inline-check" title="선택" onclick="event.stopPropagation()">
-          <input type="checkbox" data-action="select-segment" data-segment="${segAttr}"${checked}>
-        </label>
+        <div class="dashcam-segment-thumb dashcam-segment-thumb--compact">
+          <img loading="lazy" src="${dashcamApiPath("thumbnail", segment)}" alt="">
+          <label class="dashcam-segment-check dashcam-segment-check--compact" title="선택" onclick="event.stopPropagation()">
+            <input type="checkbox" data-action="select-segment" data-segment="${segAttr}"${checked}>
+          </label>
+        </div>
         <div class="dashcam-segment-body">
           <div class="dashcam-segment-badge">SEG ${dashcamSegmentIndex(segment)}</div>
           <div class="dashcam-segment-name">${segAttr}</div>
@@ -3607,8 +3610,8 @@ function screenrecordVideoRowHtml(video) {
   const size = escapeHtml(formatLogBytes(video.size));
   const ext = escapeHtml((video.ext || "video").toUpperCase());
   return `<article class="screenrecord-row" data-action="play-screenrecord" data-id="${id}" data-name="${name}">
-    <div class="screenrecord-row__icon" aria-hidden="true">
-      <svg viewBox="0 0 24 24"><path fill="currentColor" d="M21 16V4H3v12zm0-14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-7v2h3v2H7v-2h3v-2H3a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/></svg>
+    <div class="screenrecord-row__thumb" aria-hidden="true">
+      <img loading="lazy" src="${screenrecordApiPath("thumbnail", video.id || "")}" alt="">
     </div>
     <div class="screenrecord-row__main">
       <div class="screenrecord-row__name">${name}</div>

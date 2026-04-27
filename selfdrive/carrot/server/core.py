@@ -695,6 +695,17 @@ def _screenrecord_find_file(file_id: str) -> str:
   raise web.HTTPNotFound(text="screen recording not found")
 
 
+def _screenrecord_thumbnail_path(file_id: str) -> str:
+  path = _screenrecord_find_file(file_id)
+  out = _dashcam_cache_path("screen_thumb", file_id, ".jpg")
+  if os.path.isfile(out) and os.path.getsize(out) > 0:
+    return out
+  result = _dashcam_run_ffmpeg(["-ss", "1", "-i", path, "-vframes", "1", "-vf", "scale=320:-1", out])
+  if result.returncode != 0 or not os.path.isfile(out) or os.path.getsize(out) <= 0:
+    raise web.HTTPInternalServerError(text=result.stderr or result.stdout or "screenrecord thumbnail generation failed")
+  return out
+
+
 async def api_screenrecord_videos(request: web.Request) -> web.Response:
   try:
     videos = await asyncio.to_thread(_screenrecord_build_videos)
@@ -702,6 +713,12 @@ async def api_screenrecord_videos(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "videos": videos, "folders": folders})
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def api_screenrecord_thumbnail(request: web.Request) -> web.StreamResponse:
+  file_id = request.match_info.get("file_id", "")
+  path = await asyncio.to_thread(_screenrecord_thumbnail_path, file_id)
+  return web.FileResponse(path, headers={"Cache-Control": "public, max-age=86400"})
 
 
 async def api_screenrecord_video(request: web.Request) -> web.StreamResponse:
