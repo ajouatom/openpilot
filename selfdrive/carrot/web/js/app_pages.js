@@ -3501,14 +3501,14 @@ function markDashcamScrollBusy() {
   }, 380);
 }
 
-function openDashcamPlayer(route, segment) {
+function openLogsVideoPlayer(title, src) {
   const overlay = document.createElement("div");
   overlay.className = "dashcam-player-overlay";
   overlay.innerHTML = `<div class="dashcam-player-dialog" role="dialog" aria-modal="true">
     <div class="dashcam-player-frame">
-      <video class="dashcam-player-video" autoplay controls playsinline src="${dashcamApiPath("video", segment)}"></video>
+      <video class="dashcam-player-video" autoplay controls playsinline src="${src}"></video>
       <div class="dashcam-player-top">
-        <div class="dashcam-player-title">${escapeHtml(dashcamRouteTitle(route))} · Segment ${dashcamSegmentIndex(segment)}</div>
+        <div class="dashcam-player-title">${escapeHtml(title || "Video")}</div>
         <button class="dashcam-player-close" type="button" aria-label="닫기" title="닫기">
           <svg viewBox="0 0 24 24"><path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.41L10.59 13.41 4.29 19.71 2.88 18.3 9.17 12 2.88 5.7 4.29 4.29l6.3 6.3 6.29-6.3z"/></svg>
         </button>
@@ -3526,6 +3526,18 @@ function openDashcamPlayer(route, segment) {
   overlay.querySelector(".dashcam-player-close")?.addEventListener("click", close);
   document.body.appendChild(overlay);
   requestAnimationFrame(() => overlay.classList.add("is-open"));
+}
+
+function openDashcamPlayer(route, segment) {
+  openLogsVideoPlayer(
+    `${dashcamRouteTitle(route)} · Segment ${dashcamSegmentIndex(segment)}`,
+    dashcamApiPath("video", segment),
+  );
+}
+
+function openScreenrecordPlayer(id, name) {
+  if (!id) return;
+  openLogsVideoPlayer(name || "화면녹화", screenrecordApiPath("video", id));
 }
 
 async function uploadDashcamSegments(segments) {
@@ -3575,7 +3587,7 @@ function screenrecordVideoRowHtml(video) {
   const date = escapeHtml(video.modifiedLabel || video.relativeModifiedLabel || "-");
   const size = escapeHtml(formatLogBytes(video.size));
   const ext = escapeHtml((video.ext || "video").toUpperCase());
-  return `<article class="screenrecord-row">
+  return `<article class="screenrecord-row" data-action="play-screenrecord" data-id="${id}" data-name="${name}">
     <div class="screenrecord-row__icon" aria-hidden="true">
       <svg viewBox="0 0 24 24"><path fill="currentColor" d="M21 16V4H3v12zm0-14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-7v2h3v2H7v-2h3v-2H3a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/></svg>
     </div>
@@ -3725,6 +3737,8 @@ function bindLogsPage() {
       if (actionEl.dataset.action === "download-screenrecord") {
         const id = actionEl.dataset.id || "";
         if (id) window.open(screenrecordApiPath("download", id), "_blank", "noopener");
+      } else if (actionEl.dataset.action === "play-screenrecord") {
+        openScreenrecordPlayer(actionEl.dataset.id || "", actionEl.dataset.name || "");
       }
     });
   }

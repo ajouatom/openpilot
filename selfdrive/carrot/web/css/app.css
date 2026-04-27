@@ -1557,6 +1557,12 @@ body[data-page="home"] .global-home-record-fab {
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 44%, transparent);
   background: var(--md-surface-cont-h);
   color: var(--md-on-surface);
+  cursor: pointer;
+}
+
+.screenrecord-row:hover {
+  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
 }
 
 .screenrecord-row__icon {
@@ -1653,6 +1659,70 @@ body[data-page="home"] .global-home-record-fab {
   }
 }
 
+@media (orientation: landscape) {
+  .dashcam-route-card {
+    display: grid;
+    grid-template-columns: minmax(230px, 32%) minmax(0, 1fr);
+    align-items: stretch;
+    height: clamp(178px, 45vh, 236px);
+  }
+
+  .dashcam-route-media {
+    min-height: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .dashcam-route-preview {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+
+  .dashcam-route-media-info {
+    display: block;
+    flex: 0 0 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .dashcam-route-main {
+    min-height: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .dashcam-route-head {
+    flex: 0 0 auto;
+    justify-content: flex-end;
+  }
+
+  .dashcam-route-head .dashcam-route-titleblock,
+  .dashcam-expand-btn {
+    display: none;
+  }
+
+  .dashcam-segments,
+  .dashcam-segments.is-collapsed {
+    min-height: 0;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    margin-top: 0;
+  }
+
+  .dashcam-selection-row {
+    flex: 0 0 auto;
+  }
+
+  .dashcam-segment-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+  }
+}
+
 @media (orientation: landscape) and (max-height: 620px) {
   .logs-tabbar {
     padding-top: 6px;
@@ -1673,7 +1743,8 @@ body[data-page="home"] .global-home-record-fab {
   .dashcam-route-card {
     display: grid;
     grid-template-columns: minmax(230px, 32%) minmax(0, 1fr);
-    align-items: start;
+    align-items: stretch;
+    height: clamp(168px, 46vh, 196px);
   }
 
   .dashcam-route-media-info {
