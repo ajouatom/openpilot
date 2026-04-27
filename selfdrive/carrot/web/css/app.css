@@ -1741,15 +1741,10 @@ body[data-page="home"] .global-home-record-fab {
     height: 100%;
     display: flex;
     flex-direction: column;
+    padding-top: 8px;
   }
 
   .dashcam-route-head {
-    flex: 0 0 auto;
-    justify-content: flex-end;
-  }
-
-  .dashcam-route-head .dashcam-route-titleblock,
-  .dashcam-expand-btn {
     display: none;
   }
 
@@ -1870,15 +1865,6 @@ body[data-page="home"] .global-home-record-fab {
   .dashcam-route-media-info {
     display: block;
     padding: 8px 10px 10px;
-  }
-
-  .dashcam-route-head {
-    justify-content: flex-end;
-    min-height: 32px;
-  }
-
-  .dashcam-route-head .dashcam-route-titleblock {
-    display: none;
   }
 
   .dashcam-route-title {
