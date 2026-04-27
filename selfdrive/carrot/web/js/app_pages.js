@@ -804,7 +804,8 @@ function renderGroups() {
     const label = getSettingGroupLabel(g.group);
 
     const b = document.createElement("button");
-    b.className = "btn groupBtn";
+    b.className = "btn groupBtn ui-stagger-item";
+    b.style.setProperty("--i", String(box.children.length));
     if (g.group === CURRENT_GROUP) b.classList.add("active");
     b.textContent = `${label} (${g.count})`;
     b.onclick = () => selectGroup(g.group);
@@ -1569,7 +1570,7 @@ async function renderItems(group, options = {}) {
     return;
   }
 
-  for (const p of list) {
+  list.forEach((p, index) => {
     const name = p.name;
     if (!(name in UNIT_INDEX)) UNIT_INDEX[name] = 0;
 
@@ -1577,7 +1578,8 @@ async function renderItems(group, options = {}) {
     const descr = formatItemText(p, "descr", "edescr", "");
 
     const el = document.createElement("div");
-    el.className = "setting";
+    el.className = "setting ui-stagger-item";
+    el.style.setProperty("--i", String(index));
     el.dataset.settingName = name;
     el.dataset.settingGroup = group;
 
@@ -1658,7 +1660,7 @@ async function renderItems(group, options = {}) {
 
     btnMinus.onclick = () => applyDelta(-1);
     btnPlus.onclick = () => applyDelta(+1);
-  }
+  });
 
   itemsBox.dataset.renderedGroup = group;
 
@@ -1819,9 +1821,48 @@ showPage("carrot", false);
 
 let toolsOutHistory = "";
 let toolsOutCurrentBlock = "";
+let toolsLogAttentionTimer = null;
 
 function normalizeToolsOutText(s) {
   return String(s ?? "").replace(/\s+$/, "");
+}
+
+function scrollToolsLogToBottom(delay = 0) {
+  window.setTimeout(() => {
+    const out = document.getElementById("toolsOut");
+    if (!out) return;
+    out.scrollTop = out.scrollHeight;
+  }, delay);
+}
+
+function pulseToolsLogPanel() {
+  const page = document.getElementById("pageTools");
+  if (!page || page.classList.contains("tools-log-expanded")) return;
+  page.classList.add("tools-log-attention");
+  if (toolsLogAttentionTimer) window.clearTimeout(toolsLogAttentionTimer);
+  toolsLogAttentionTimer = window.setTimeout(() => {
+    page.classList.remove("tools-log-attention");
+    toolsLogAttentionTimer = null;
+    scrollToolsLogToBottom();
+    scrollToolsLogToBottom(280);
+  }, 3200);
+  scrollToolsLogToBottom(280);
+}
+
+function setToolsLogExpanded(expanded) {
+  const page = document.getElementById("pageTools");
+  if (!page) return;
+  page.classList.toggle("tools-log-expanded", expanded);
+  document.getElementById("toolsOut")?.setAttribute("aria-expanded", expanded ? "true" : "false");
+  if (expanded) {
+    page.classList.remove("tools-log-attention");
+    if (toolsLogAttentionTimer) {
+      window.clearTimeout(toolsLogAttentionTimer);
+      toolsLogAttentionTimer = null;
+    }
+  }
+  scrollToolsLogToBottom();
+  scrollToolsLogToBottom(280);
 }
 
 function renderToolsOut() {
@@ -1856,14 +1897,14 @@ function renderToolsOut() {
     out.replaceChildren(frag);
   }
 
-  requestAnimationFrame(() => {
-    out.scrollTop = out.scrollHeight;
-  });
+  requestAnimationFrame(() => scrollToolsLogToBottom());
+  scrollToolsLogToBottom(280);
 }
 
 function toolsOutSet(s) {
   toolsOutCurrentBlock = normalizeToolsOutText(s);
   renderToolsOut();
+  pulseToolsLogPanel();
 }
 
 function toolsOutAppend(s) {
@@ -1871,6 +1912,7 @@ function toolsOutAppend(s) {
   if (!next) return;
   toolsOutHistory = toolsOutHistory ? `${toolsOutHistory}\n\n${next}` : next;
   renderToolsOut();
+  pulseToolsLogPanel();
 }
 
 function toolsOutCommitCurrent() {
@@ -2600,6 +2642,16 @@ function initToolsPage() {
 
   const initToolsGroups = () => {
     const groups = Array.from(document.querySelectorAll("#pageTools .tools-group"));
+    const applyToolsStagger = () => {
+      const items = Array.from(document.querySelectorAll(
+        "#pageTools .tools-scroll-stack > .row-wrap:first-child, #pageTools .tools-group, #pageTools .tools-group.is-open .tools-group__body > *"
+      )).filter((node) => !node.hidden && !node.classList.contains("hidden"));
+      items.forEach((node, index) => {
+        node.classList.add("ui-stagger-item");
+        node.style.setProperty("--i", String(index));
+      });
+    };
+
     groups.forEach((group) => {
       const toggle = group.querySelector(".tools-group__toggle");
       const body = group.querySelector(".tools-group__body");
@@ -2621,7 +2673,29 @@ function initToolsPage() {
         group.classList.toggle("is-open", nextOpen);
         toggle.setAttribute("aria-expanded", nextOpen ? "true" : "false");
         localStorage.setItem("tools_group_" + groupName, nextOpen ? "true" : "false");
+        applyToolsStagger();
       });
+    });
+    applyToolsStagger();
+  };
+
+  const initToolsLogPanel = () => {
+    const out = document.getElementById("toolsOut");
+    if (!out || out.dataset.toolsLogBound === "1") return;
+    out.dataset.toolsLogBound = "1";
+    out.setAttribute("role", "button");
+    out.setAttribute("tabindex", "0");
+    out.setAttribute("aria-expanded", "false");
+    out.setAttribute("aria-label", LANG === "ko" ? "로그창 펼치기 또는 접기" : "Expand or collapse log panel");
+    out.addEventListener("click", () => {
+      const page = document.getElementById("pageTools");
+      setToolsLogExpanded(!page?.classList.contains("tools-log-expanded"));
+    });
+    out.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      ev.preventDefault();
+      const page = document.getElementById("pageTools");
+      setToolsLogExpanded(!page?.classList.contains("tools-log-expanded"));
     });
   };
 
@@ -2641,6 +2715,7 @@ function initToolsPage() {
   toolsProgressSet(null, { active: false });
   refreshToolsMetaInfo().catch(() => {});
   initToolsGroups();
+  initToolsLogPanel();
 
   bindOnce("btnDeviceInfo", async () => {
     let title = LANG === "en" ? "Device Info" : LANG === "zh" ? "设备信息" : "기기정보";
@@ -3002,7 +3077,7 @@ function initToolsPage() {
   bindOnce("btnRestoreSettings", async () => {
     const inp = document.createElement("input");
     inp.type = "file";
-    inp.accept = "application/json";
+    inp.accept = "application/json,text/plain,*/*";
     inp.style.display = "none";
 
     inp.onchange = async () => {
@@ -3306,6 +3381,7 @@ const dashcamState = {
   layoutBound: false,
   layoutTimer: null,
   landscape: null,
+  signature: "",
 };
 
 const screenrecordState = {
@@ -3313,9 +3389,11 @@ const screenrecordState = {
   loading: false,
   videos: [],
   loadSeq: 0,
+  signature: "",
 };
 
 let logsActiveTab = "dashcam";
+let logsLazyImageObserver = null;
 
 function dashcamSegmentIndex(segment) {
   const parts = String(segment || "").split("--");
@@ -3364,11 +3442,68 @@ function screenrecordApiPath(kind, fileId) {
   return `/api/screenrecord/${kind}/${encodeURIComponent(fileId)}`;
 }
 
+function dashcamRoutesSignature(routes) {
+  return (routes || []).map((entry) => [
+    entry.route || "",
+    entry.latestModifiedLabel || "",
+    ...(entry.segmentFolders || []),
+  ].join("|")).join("\n");
+}
+
+function screenrecordVideosSignature(videos) {
+  return (videos || []).map((video) => [
+    video.id || "",
+    video.name || "",
+    video.modifiedLabel || video.relativeModifiedLabel || "",
+    video.size || 0,
+  ].join("|")).join("\n");
+}
+
+function loadLogsLazyImage(img) {
+  if (!img) return;
+  const src = img.dataset?.src || "";
+  if (!src) return;
+  img.src = src;
+  img.removeAttribute("data-src");
+}
+
+function hydrateLogsLazyImages(root) {
+  const scope = root || document;
+  const images = Array.from(scope.querySelectorAll?.("img[data-src]") || []);
+  if (!images.length) return;
+
+  if (!("IntersectionObserver" in window)) {
+    images.forEach(loadLogsLazyImage);
+    return;
+  }
+
+  if (!logsLazyImageObserver) {
+    logsLazyImageObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        logsLazyImageObserver.unobserve(entry.target);
+        loadLogsLazyImage(entry.target);
+      });
+    }, { root: null, rootMargin: "720px 0px", threshold: 0.01 });
+  }
+
+  images.forEach((img) => logsLazyImageObserver.observe(img));
+}
+
+function logsLoadingSkeletonHtml(type = "dashcam") {
+  const count = type === "screen" ? 6 : 4;
+  const itemClass = type === "screen" ? "logs-loading-row" : "logs-loading-card";
+  return `<div class="logs-loading-list" aria-hidden="true">${Array.from({ length: count }, (_, i) =>
+    `<div class="${itemClass}" style="--i:${i}"></div>`
+  ).join("")}</div>`;
+}
+
 function dashcamSelectedForRoute(entry) {
   return (entry.segmentFolders || []).filter((segment) => dashcamState.selected.has(segment));
 }
 
-function dashcamRouteCardHtml(entry) {
+function dashcamRouteCardHtml(entry, index = 0, options = {}) {
+  const animate = options.animate !== false;
   const route = String(entry.route || "");
   const segments = Array.isArray(entry.segmentFolders) ? entry.segmentFolders : [];
   const expanded = dashcamState.expanded.has(route);
@@ -3384,7 +3519,7 @@ function dashcamRouteCardHtml(entry) {
   const preview = representative
     ? `<div class="dashcam-route-media">
         <div class="dashcam-route-preview" data-action="play" data-route="${routeAttr}" data-segment="${escapeHtml(representative)}">
-          <img loading="lazy" src="${dashcamApiPath("preview", representative)}" onerror="this.onerror=null;this.src='${dashcamApiPath("thumbnail", representative)}';" alt="">
+          <img class="logs-lazy-img" loading="lazy" decoding="async" fetchpriority="low" data-src="${dashcamApiPath("preview", representative)}" data-fallback="${dashcamApiPath("thumbnail", representative)}" onerror="this.onerror=null;if(this.dataset.fallback)this.src=this.dataset.fallback;" alt="">
           <div class="dashcam-route-preview__shade"></div>
           <div class="dashcam-route-preview__chips">
             <span class="dashcam-chip">세그먼트 ${segments.length}개</span>
@@ -3400,13 +3535,13 @@ function dashcamRouteCardHtml(entry) {
         </div>
       </div>`
     : "";
-  const segmentList = shouldRenderSegments ? segments.map((segment) => {
+  const segmentList = shouldRenderSegments ? segments.map((segment, segmentIndex) => {
     const segAttr = escapeHtml(segment);
     const checked = dashcamState.selected.has(segment) ? " checked" : "";
     if (compactSegments) {
-      return `<div class="dashcam-segment-tile dashcam-segment-tile--compact" data-action="play" data-route="${routeAttr}" data-segment="${segAttr}">
+      return `<div class="dashcam-segment-tile dashcam-segment-tile--compact ui-stagger-item" style="--i:${segmentIndex}" data-action="play" data-route="${routeAttr}" data-segment="${segAttr}">
         <div class="dashcam-segment-thumb dashcam-segment-thumb--compact">
-          <img loading="lazy" src="${dashcamApiPath("thumbnail", segment)}" alt="">
+          <img class="logs-lazy-img" loading="lazy" decoding="async" fetchpriority="low" data-src="${dashcamApiPath("thumbnail", segment)}" alt="">
           <label class="dashcam-segment-check dashcam-segment-check--compact" title="선택" onclick="event.stopPropagation()">
             <input type="checkbox" data-action="select-segment" data-segment="${segAttr}"${checked}>
           </label>
@@ -3420,9 +3555,9 @@ function dashcamRouteCardHtml(entry) {
         </button>
       </div>`;
     }
-    return `<div class="dashcam-segment-tile" data-action="play" data-route="${routeAttr}" data-segment="${segAttr}">
+    return `<div class="dashcam-segment-tile ui-stagger-item" style="--i:${segmentIndex}" data-action="play" data-route="${routeAttr}" data-segment="${segAttr}">
       <div class="dashcam-segment-thumb">
-        <img loading="lazy" src="${dashcamApiPath("thumbnail", segment)}" alt="">
+        <img class="logs-lazy-img" loading="lazy" decoding="async" fetchpriority="low" data-src="${dashcamApiPath("thumbnail", segment)}" alt="">
         <label class="dashcam-segment-check" title="선택" onclick="event.stopPropagation()">
           <input type="checkbox" data-action="select-segment" data-segment="${segAttr}"${checked}>
         </label>
@@ -3437,7 +3572,7 @@ function dashcamRouteCardHtml(entry) {
     </div>`;
   }).join("") : "";
 
-  return `<article class="dashcam-route-card">
+  return `<article class="dashcam-route-card${animate ? " ui-stagger-item" : ""}"${animate ? ` style="--i:${index}"` : ""} data-route-card="${routeAttr}">
     ${preview}
     <div class="dashcam-route-main">
       <div class="dashcam-route-head" data-action="toggle-route" data-route="${routeAttr}">
@@ -3466,8 +3601,8 @@ function renderDashcamRoutes() {
   if (!host) return;
   const routes = dashcamState.routes || [];
   if (dashcamState.loading && !routes.length) {
-    host.innerHTML = "";
-    setDashcamStatus("불러오는 중...");
+    setDashcamStatus("");
+    host.innerHTML = logsLoadingSkeletonHtml("dashcam");
     return;
   }
   if (!routes.length) {
@@ -3476,7 +3611,30 @@ function renderDashcamRoutes() {
     return;
   }
   setDashcamStatus("");
-  host.innerHTML = routes.map(dashcamRouteCardHtml).join("");
+  host.innerHTML = routes.map((entry, index) => dashcamRouteCardHtml(entry, index, { animate: false })).join("");
+  hydrateLogsLazyImages(host);
+}
+
+function renderDashcamRoute(route) {
+  const host = document.getElementById("dashcamRoutes");
+  if (!host) return false;
+  const routes = dashcamState.routes || [];
+  const index = routes.findIndex((entry) => entry.route === route);
+  if (index < 0) return false;
+
+  const current = Array.from(host.querySelectorAll("[data-route-card]"))
+    .find((node) => node.dataset.routeCard === route);
+  if (!current) return false;
+
+  const tpl = document.createElement("template");
+  tpl.innerHTML = dashcamRouteCardHtml(routes[index], index, { animate: false });
+  const nextMain = tpl.content.querySelector(".dashcam-route-main");
+  const currentMain = current.querySelector(".dashcam-route-main");
+  if (!nextMain || !currentMain) return false;
+
+  currentMain.replaceWith(nextMain);
+  hydrateLogsLazyImages(nextMain);
+  return true;
 }
 
 async function loadDashcamRoutes({ silent = false } = {}) {
@@ -3489,11 +3647,17 @@ async function loadDashcamRoutes({ silent = false } = {}) {
     const json = await getJson("/api/dashcam/routes");
     if (seq !== dashcamState.loadSeq) return;
     const routes = Array.isArray(json.routes) ? json.routes : [];
+    const nextSignature = dashcamRoutesSignature(routes);
+    if (silent && nextSignature === dashcamState.signature) {
+      dashcamState.loading = false;
+      return;
+    }
     const validRoutes = new Set(routes.map((entry) => entry.route));
     const validSegments = new Set(routes.flatMap((entry) => entry.segmentFolders || []));
     dashcamState.expanded = new Set(Array.from(dashcamState.expanded).filter((route) => validRoutes.has(route)));
     dashcamState.selected = new Set(Array.from(dashcamState.selected).filter((segment) => validSegments.has(segment)));
     dashcamState.routes = routes;
+    dashcamState.signature = nextSignature;
     dashcamState.loading = false;
     renderDashcamRoutes();
   } catch (e) {
@@ -3665,15 +3829,15 @@ async function showDashcamSegmentMenu(route, segment) {
   }
 }
 
-function screenrecordVideoRowHtml(video) {
+function screenrecordVideoRowHtml(video, index = 0) {
   const id = escapeHtml(video.id || "");
   const name = escapeHtml(video.name || "-");
   const date = escapeHtml(video.modifiedLabel || video.relativeModifiedLabel || "-");
   const size = escapeHtml(formatLogBytes(video.size));
   const ext = escapeHtml((video.ext || "video").toUpperCase());
-  return `<article class="screenrecord-row" data-action="play-screenrecord" data-id="${id}" data-name="${name}">
+  return `<article class="screenrecord-row ui-stagger-item" style="--i:${index}" data-action="play-screenrecord" data-id="${id}" data-name="${name}">
     <div class="screenrecord-row__thumb" aria-hidden="true">
-      <img loading="lazy" src="${screenrecordApiPath("thumbnail", video.id || "")}" alt="">
+      <img class="logs-lazy-img" loading="lazy" decoding="async" fetchpriority="low" data-src="${screenrecordApiPath("thumbnail", video.id || "")}" alt="">
     </div>
     <div class="screenrecord-row__main">
       <div class="screenrecord-row__name">${name}</div>
@@ -3694,8 +3858,8 @@ function renderScreenrecordVideos() {
   if (!host) return;
   const videos = screenrecordState.videos || [];
   if (screenrecordState.loading && !videos.length) {
-    host.innerHTML = "";
-    setScreenrecordStatus("불러오는 중...");
+    setScreenrecordStatus("");
+    host.innerHTML = logsLoadingSkeletonHtml("screen");
     return;
   }
   if (!videos.length) {
@@ -3705,6 +3869,7 @@ function renderScreenrecordVideos() {
   }
   setScreenrecordStatus("");
   host.innerHTML = videos.map(screenrecordVideoRowHtml).join("");
+  hydrateLogsLazyImages(host);
 }
 
 async function loadScreenrecordVideos({ silent = false } = {}) {
@@ -3716,7 +3881,14 @@ async function loadScreenrecordVideos({ silent = false } = {}) {
   try {
     const json = await getJson("/api/screenrecord/videos");
     if (seq !== screenrecordState.loadSeq) return;
-    screenrecordState.videos = Array.isArray(json.videos) ? json.videos : [];
+    const videos = Array.isArray(json.videos) ? json.videos : [];
+    const nextSignature = screenrecordVideosSignature(videos);
+    if (silent && nextSignature === screenrecordState.signature) {
+      screenrecordState.loading = false;
+      return;
+    }
+    screenrecordState.videos = videos;
+    screenrecordState.signature = nextSignature;
     screenrecordState.loading = false;
     renderScreenrecordVideos();
   } catch (e) {
@@ -3797,7 +3969,7 @@ function bindLogsPage() {
       if (action === "toggle-route") {
         if (dashcamState.expanded.has(route)) dashcamState.expanded.delete(route);
         else dashcamState.expanded.add(route);
-        renderDashcamRoutes();
+        if (!renderDashcamRoute(route)) renderDashcamRoutes();
       } else if (action === "play") {
         openDashcamPlayer(route, segment);
       } else if (action === "segment-menu") {
@@ -3830,6 +4002,7 @@ function bindLogsPage() {
 
   if (screenHost && screenHost.dataset.bound !== "1") {
     screenHost.dataset.bound = "1";
+    screenHost.addEventListener("scroll", markDashcamScrollBusy, { passive: true });
     screenHost.addEventListener("click", (ev) => {
       const actionEl = ev.target?.closest?.("[data-action]");
       if (!actionEl) return;

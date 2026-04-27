@@ -20,6 +20,15 @@ body.dialog-open {
   overflow: hidden;
 }
 
+body[data-page="tools"] {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body[data-page="tools"] .wrap {
+  padding-bottom: 0;
+}
+
 /* ── Bottom Navigation Bar (Material 3) ───────────────────── */
 .topbar {
   display: flex;
@@ -55,6 +64,18 @@ body.dialog-open {
   transition: color 0.15s;
   position: relative;
   letter-spacing: 0.15px;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.topbar .nav-btn:focus,
+.topbar .nav-btn:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.topbar .nav-btn:focus-visible {
+  background: color-mix(in srgb, var(--md-primary-cont) 14%, transparent);
 }
 
 .topbar .nav-btn .nav-icon {
@@ -754,31 +775,76 @@ body[data-page="home"] .global-home-record-fab {
   margin-bottom: var(--sp-2xl);
 }
 
+.ui-stagger-item {
+  animation: uiStaggerIn .38s cubic-bezier(.2, 0, 0, 1) both;
+  animation-delay: min(calc(var(--i, 0) * 36ms), 420ms);
+}
+
+@keyframes uiStaggerIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-stagger-item {
+    animation: none;
+  }
+}
+
 #pageTools {
   --tools-console-bottom: calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px));
-  --tools-page-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px) - (var(--sp-lg) * 2));
+  --tools-page-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px) - var(--sp-lg));
   --tools-console-form-height: 40px;
   --tools-console-log-font-size: 12px;
   --tools-console-log-line-height: 1.45;
   --tools-console-log-lines: 5;
-  --tools-console-log-pad-top: 12px;
-  --tools-console-log-pad-bottom: 16px;
+  --tools-console-peek-lines: 2;
+  --tools-console-attention-lines: 5;
+  --tools-console-expanded-lines: 9;
+  --tools-console-visible-lines: var(--tools-console-peek-lines);
+  --tools-console-handle-height: 18px;
+  --tools-console-log-pad-top: 10px;
+  --tools-console-log-pad-bottom: 14px;
   --tools-console-log-height: calc(
-    (var(--tools-console-log-font-size) * var(--tools-console-log-line-height) * var(--tools-console-log-lines)) +
+    (var(--tools-console-log-font-size) * var(--tools-console-log-line-height) * var(--tools-console-visible-lines)) +
+    var(--tools-console-handle-height) +
     var(--tools-console-log-pad-top) +
     var(--tools-console-log-pad-bottom)
   );
-  --tools-console-height: calc(var(--tools-console-form-height) + var(--tools-console-log-height) + 1px);
+  --tools-console-height: var(--tools-console-log-height);
   --tools-console-inline: var(--sp-lg);
-  --tools-console-bg: color-mix(in srgb, var(--md-surface) 92%, #000);
-  --tools-console-divider: color-mix(in srgb, var(--md-stroke-soft) 46%, transparent);
+  --tools-console-bg: #080b10;
+  --tools-console-surface: #0c131b;
+  --tools-console-current: #d9f1ff;
+  --tools-console-history: #7f95a7;
+  --tools-console-divider: color-mix(in srgb, var(--md-outline-var) 24%, transparent);
   display: flex;
   flex-direction: column;
   min-height: var(--tools-page-height);
   height: var(--tools-page-height);
   max-height: var(--tools-page-height);
   background: var(--tools-console-bg);
-  overflow: hidden;
+  overflow: visible;
+}
+
+body[data-page="tools"] .swipe-container,
+.swipe-container:has(#pageTools.page-transitioning) {
+  overflow-x: visible;
+}
+
+#pageTools.tools-log-attention {
+  --tools-console-visible-lines: var(--tools-console-attention-lines);
+}
+
+#pageTools.tools-log-expanded {
+  --tools-console-visible-lines: var(--tools-console-expanded-lines);
 }
 
 #toolsMeta {
@@ -848,7 +914,7 @@ body[data-page="home"] .global-home-record-fab {
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: var(--sp-lg);
+  padding-bottom: calc(var(--tools-console-height) + var(--sp-lg));
 }
 
 .tools-group__toggle {
@@ -921,13 +987,49 @@ body[data-page="home"] .global-home-record-fab {
 }
 
 .tools-console-dock {
-  position: relative;
-  width: auto;
-  margin-inline: calc(var(--sp-lg) * -1);
-  z-index: 45;
+  position: absolute;
+  left: calc(50% - 50vw);
+  right: auto;
+  bottom: 0;
+  width: 100vw;
+  margin: 0;
+  z-index: 99;
   flex: none;
-  background: var(--tools-console-bg);
-  overflow: hidden;
+  background: transparent;
+  overflow: visible;
+  box-shadow: none;
+}
+
+.page-transitioning .tools-console-shell,
+.page-transitioning .tools-console-log {
+  transition: none;
+  animation: none;
+}
+
+.tools-console-dock::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 18px;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, .46));
+  pointer-events: none;
+}
+
+.tools-console-dock::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  width: 72px;
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-outline-var) 42%, transparent);
+  transform: translateX(-50%);
+  z-index: 2;
+  opacity: .78;
+  transition: background 180ms ease, opacity 180ms ease, width 180ms ease;
 }
 
 .tools-console-shell {
@@ -938,12 +1040,16 @@ body[data-page="home"] .global-home-record-fab {
   max-height: var(--tools-console-height);
   padding: 0;
   border-radius: 0;
-  border-top: 1px solid var(--tools-console-divider);
+  border-top: 0;
   border-bottom: 0;
   border-left: 0;
   border-right: 0;
-  background: var(--tools-console-bg);
+  background: var(--tools-console-surface);
   overflow: hidden;
+  box-shadow:
+    0 -1px 0 color-mix(in srgb, var(--md-outline-var) 28%, transparent),
+    0 -18px 30px rgba(0, 0, 0, .34);
+  transition: height 240ms cubic-bezier(.2, 0, 0, 1), min-height 240ms cubic-bezier(.2, 0, 0, 1), max-height 240ms cubic-bezier(.2, 0, 0, 1);
 }
 
 .tools-console-meta {
@@ -962,6 +1068,11 @@ body[data-page="home"] .global-home-record-fab {
   border-bottom: 1px solid var(--tools-console-divider);
   background: var(--tools-console-bg);
   box-sizing: border-box;
+}
+
+#pageTools .tools-console-form,
+#pageTools .tools-console-help {
+  display: none !important;
 }
 
 .tools-console-prompt {
@@ -1045,13 +1156,13 @@ body[data-page="home"] .global-home-record-fab {
   max-height: var(--tools-console-log-height);
   margin: 0;
   padding:
-    var(--tools-console-log-pad-top)
-    var(--tools-console-inline)
-    var(--tools-console-log-pad-bottom);
+    calc(var(--tools-console-handle-height) + var(--tools-console-log-pad-top))
+    max(var(--tools-console-inline), 16px)
+    calc(var(--tools-console-log-pad-bottom) + 2px);
   border: 0;
   border-radius: 0;
-  background: var(--tools-console-bg);
-  color: var(--md-on-surface-var);
+  background: var(--tools-console-surface);
+  color: color-mix(in srgb, var(--md-on-surface) 86%, var(--md-on-surface-var));
   font-family: var(--font-mono);
   font-size: var(--tools-console-log-font-size);
   line-height: var(--tools-console-log-line-height);
@@ -1059,6 +1170,57 @@ body[data-page="home"] .global-home-record-fab {
   word-break: break-word;
   overflow: auto;
   box-sizing: border-box;
+  box-shadow: none;
+  cursor: pointer;
+  transition:
+    height 240ms cubic-bezier(.2, 0, 0, 1),
+    min-height 240ms cubic-bezier(.2, 0, 0, 1),
+    max-height 240ms cubic-bezier(.2, 0, 0, 1),
+    color 180ms ease,
+    background 180ms ease;
+}
+
+#pageTools.tools-log-attention .tools-console-dock::after,
+#pageTools.tools-log-expanded .tools-console-dock::after {
+  width: 104px;
+  background: color-mix(in srgb, var(--md-primary) 40%, var(--md-outline-var));
+  opacity: .9;
+}
+
+.tools-console-log:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--md-primary) 72%, transparent);
+  outline-offset: -3px;
+}
+
+#pageTools.tools-log-attention .tools-console-log,
+#pageTools.tools-log-expanded .tools-console-log {
+  background: color-mix(in srgb, var(--tools-console-surface) 94%, var(--md-primary) 6%);
+  color: color-mix(in srgb, var(--md-on-surface) 92%, var(--md-on-surface-var));
+}
+
+#pageTools.tools-log-attention .tools-console-log {
+  animation: toolsLogRise 240ms cubic-bezier(.2, 0, 0, 1) both;
+}
+
+@keyframes toolsLogRise {
+  from {
+    transform: translateY(8px);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tools-console-shell,
+  .tools-console-log {
+    transition: none;
+  }
+
+  #pageTools.tools-log-attention .tools-console-log {
+    animation: none;
+  }
 }
 
 .tools-console-log__history,
@@ -1068,11 +1230,11 @@ body[data-page="home"] .global-home-record-fab {
 }
 
 .tools-console-log__history {
-  color: color-mix(in srgb, var(--md-on-surface-var) 72%, var(--md-outline));
+  color: var(--tools-console-history);
 }
 
 .tools-console-log__current {
-  color: var(--md-on-surface);
+  color: var(--tools-console-current);
 }
 
 /* ── Logs / Dashcam ───────────────────────────────────────── */
@@ -1176,11 +1338,15 @@ body[data-page="home"] .global-home-record-fab {
 .dashcam-player-close {
   appearance: none;
   border: 0;
+  padding: 0;
   background: transparent;
   color: var(--md-on-surface-var);
-  display: inline-grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
   cursor: pointer;
+  box-sizing: border-box;
 }
 
 .logs-icon-btn {
@@ -1234,6 +1400,8 @@ body[data-page="home"] .global-home-record-fab {
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 50%, transparent);
   background: var(--md-surface-cont-h);
   color: var(--md-on-surface);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 300px;
 }
 
 .dashcam-route-media {
@@ -1263,6 +1431,15 @@ body[data-page="home"] .global-home-record-fab {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.logs-lazy-img {
+  opacity: 1;
+  transition: opacity .16s ease;
+}
+
+.logs-lazy-img[data-src] {
+  opacity: 0;
 }
 
 .dashcam-route-preview__shade {
@@ -1414,6 +1591,8 @@ body[data-page="home"] .global-home-record-fab {
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 42%, transparent);
   background: var(--md-surface-cont);
   cursor: pointer;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 70px;
 }
 
 .dashcam-segment-tile:hover {
@@ -1493,6 +1672,99 @@ body[data-page="home"] .global-home-record-fab {
   height: 30px;
   border-radius: 999px;
   flex: 0 0 auto;
+}
+
+.dashcam-menu-btn svg {
+  display: block;
+  transform: translateZ(0);
+}
+
+.logs-loading-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.logs-loading-card,
+.logs-loading-row {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 36%, transparent);
+  background: var(--md-surface-cont-h);
+  opacity: 0;
+  transform: translateY(12px);
+  animation: uiStaggerIn .38s cubic-bezier(.2, 0, 0, 1) both;
+  animation-delay: min(calc(var(--i, 0) * 36ms), 420ms);
+}
+
+.logs-loading-card {
+  min-height: 184px;
+}
+
+.logs-loading-row {
+  min-height: 64px;
+}
+
+.logs-loading-card::before,
+.logs-loading-row::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      100deg,
+      transparent 0%,
+      color-mix(in srgb, var(--md-on-surface) 7%, transparent) 48%,
+      transparent 72%
+    );
+  transform: translateX(-100%);
+  animation: logsSkeletonSweep 1.35s ease-in-out infinite;
+  animation-delay: calc(var(--i, 0) * 90ms);
+  z-index: 1;
+}
+
+.logs-loading-card::after,
+.logs-loading-row::after {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  border-radius: 6px;
+  background:
+    linear-gradient(var(--md-surface-cont), var(--md-surface-cont)) 0 0 / 100% 104px no-repeat,
+    linear-gradient(var(--md-surface-cont), var(--md-surface-cont)) 0 122px / 62% 14px no-repeat,
+    linear-gradient(var(--md-surface-cont), var(--md-surface-cont)) 0 146px / 38% 12px no-repeat;
+  z-index: 0;
+}
+
+.logs-loading-row::after {
+  inset: 8px 10px;
+  background:
+    linear-gradient(var(--md-surface-cont), var(--md-surface-cont)) 0 0 / 76px 48px no-repeat,
+    linear-gradient(var(--md-surface-cont), var(--md-surface-cont)) 90px 7px / 52% 14px no-repeat,
+    linear-gradient(var(--md-surface-cont), var(--md-surface-cont)) 90px 31px / 34% 11px no-repeat;
+}
+
+@keyframes logsSkeletonSweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logs-loading-card,
+  .logs-loading-row {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .logs-loading-card::before,
+  .logs-loading-row::before {
+    animation: none;
+    opacity: 0;
+  }
 }
 
 .dashcam-share-card {
@@ -1705,6 +1977,8 @@ body[data-page="home"] .global-home-record-fab {
   background: var(--md-surface-cont-h);
   color: var(--md-on-surface);
   cursor: pointer;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 64px;
 }
 
 .screenrecord-row:hover {
@@ -3845,7 +4119,7 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
     gap: 1px;
   }
 
-  body[data-page="tools"] #pageTools {
+  :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) {
     display: grid !important;
     grid-template-columns: minmax(0, 1.04fr) minmax(300px, 0.96fr);
     grid-template-rows: auto auto minmax(0, 1fr);
@@ -3853,49 +4127,61 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
     align-items: stretch;
   }
 
-  body[data-page="tools"] #pageTools > .page-header--hidden {
+  :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > .page-header--hidden {
     display: none !important;
   }
 
-  body[data-page="tools"] #pageTools > #toolsMeta {
+  :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > #toolsMeta {
     grid-column: 1;
     grid-row: 1;
     align-self: start;
     min-height: 1.5em;
   }
 
-  body[data-page="tools"] #pageTools > #toolsProgress {
+  :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > #toolsProgress {
     grid-column: 1;
     grid-row: 2;
     margin-bottom: 8px;
   }
 
-  body[data-page="tools"] #pageTools > .tools-scroll-stack {
+  :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > .tools-scroll-stack {
     grid-column: 1;
     grid-row: 3;
     padding-bottom: 0;
   }
 
-  body[data-page="tools"] #pageTools > .tools-console-dock {
+  :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > .tools-console-dock {
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
     grid-column: 2;
     grid-row: 1 / span 3;
     width: auto;
-    margin-inline: 0;
+    margin-left: 0;
+    margin-right: 0;
     display: flex;
     min-height: 0;
     background: transparent;
+    box-shadow: none;
   }
 
-  body[data-page="tools"] #pageTools > .tools-console-dock .tools-console-shell {
+  :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > .tools-console-dock::before,
+  :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > .tools-console-dock::after {
+    display: none;
+  }
+
+  :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > .tools-console-dock .tools-console-shell {
     flex: 1 1 auto;
     height: auto;
     min-height: 0;
     max-height: none;
     border: 1px solid var(--tools-console-divider);
     border-radius: var(--r-xl);
+    box-shadow: none;
   }
 
-  body[data-page="tools"] #pageTools > .tools-console-dock .tools-console-log {
+  :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > .tools-console-dock .tools-console-log {
     flex: 1 1 auto;
     height: auto;
     min-height: 0;
@@ -4116,7 +4402,7 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
   }
 
   #pageTools {
-    --tools-page-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px) - 24px);
+    --tools-page-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px) - 12px);
     --tools-console-form-height: 40px;
     --tools-console-log-font-size: 14px;
     --tools-console-log-line-height: 1.55;
@@ -4150,7 +4436,7 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
   }
 
   .tools-scroll-stack {
-    padding-bottom: 12px;
+    padding-bottom: calc(var(--tools-console-height) + 12px);
   }
 
   .tools-console-form {
