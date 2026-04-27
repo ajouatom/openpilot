@@ -883,6 +883,22 @@
     },
     {
       "group": "버튼설정",
+      "name": "MainButtonMode",
+      "title": "크루즈메인작동모드(0)",
+      "descr": "0:크루즈ON/OFF 1:조향포함",
+      "egroup": "BUTN",
+      "etitle": "CruiseMain Button Mode(0)",
+      "edescr": "0:Cruise On/Off, 1:include Lat",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "cgroup": "按键设置",
+      "ctitle": "CruiseMain Button Mode",
+      "cdescr": "0:Cruise On/Off, 1:include Lat"
+    },
+    {
+      "group": "버튼설정",
       "name": "CruiseButtonTest1",
       "title": "크루즈버튼스팸쏘기(8)",
       "descr": "(비롱컨 전용) 속도버튼신호 발송제한시간",
