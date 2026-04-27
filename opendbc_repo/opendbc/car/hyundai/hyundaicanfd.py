@@ -598,10 +598,10 @@ def _get_desire_and_lane_changing(md):
     desire = md.meta.desire.raw
     ds = md.meta.desireState
     if len(ds) > 4:
-      if ds[1] > 0.8: lane_changing = 1
-      if ds[2] > 0.8: lane_changing = 2
-      if ds[3] > 0.8: lane_changing = 3
-      if ds[4] > 0.8: lane_changing = 4
+      if ds[1] > 0.7: lane_changing = 1
+      if ds[2] > 0.7: lane_changing = 2
+      if ds[3] > 0.7: lane_changing = 3
+      if ds[4] > 0.7: lane_changing = 4
   return desire, lane_changing
 
 def _apply_lane_desire(values, desire):

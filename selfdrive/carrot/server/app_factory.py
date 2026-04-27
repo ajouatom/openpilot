@@ -26,6 +26,16 @@ def make_app() -> web.Application:
   app.router.add_get("/api/heartbeat_status", routes_api.api_heartbeat_status)
   app.router.add_get("/api/live_runtime", routes_api.api_live_runtime)
   app.router.add_post("/api/time_sync", routes_api.api_time_sync)
+  app.router.add_get("/api/dashcam/routes", routes_api.api_dashcam_routes)
+  app.router.add_get("/api/dashcam/thumbnail/{segment}", routes_api.api_dashcam_thumbnail)
+  app.router.add_get("/api/dashcam/preview/{segment}", routes_api.api_dashcam_preview)
+  app.router.add_get("/api/dashcam/video/{segment}", routes_api.api_dashcam_video)
+  app.router.add_get("/api/dashcam/download/{segment}/{kind}", routes_api.api_dashcam_download)
+  app.router.add_post("/api/dashcam/upload", routes_api.api_dashcam_upload)
+  app.router.add_get("/api/screenrecord/videos", routes_api.api_screenrecord_videos)
+  app.router.add_get("/api/screenrecord/thumbnail/{file_id}", routes_api.api_screenrecord_thumbnail)
+  app.router.add_get("/api/screenrecord/video/{file_id}", routes_api.api_screenrecord_video)
+  app.router.add_get("/api/screenrecord/download/{file_id}", routes_api.api_screenrecord_download)
   app.router.add_post("/stream", routes_api.proxy_stream)
 
   # ws

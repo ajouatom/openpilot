@@ -36,6 +36,7 @@ const UI_STRINGS = {
     home: "홈",
     setting: "설정",
     tools: "도구",
+    logs: "로그",
     terminal: "터미널",
     fleet: "Fleet",
     carrot: "당근",
@@ -125,6 +126,7 @@ const UI_STRINGS = {
     home: "Home",
     setting: "Setting",
     tools: "Tools",
+    logs: "Logs",
     terminal: "Terminal",
     fleet: "Fleet",
     carrot: "Carrot",
@@ -213,6 +215,7 @@ const UI_STRINGS = {
     home: "首页",
     setting: "设置",
     tools: "工具",
+    logs: "日志",
     terminal: "终端",
     fleet: "车队",
     carrot: "胡萝卜",
@@ -436,6 +439,7 @@ let CURRENT_MAKER = null;
 
 const btnHome = document.getElementById("btnHome");
 const btnSetting = document.getElementById("btnSetting");
+const btnLogs = document.getElementById("btnLogs");
 const btnTerminal = document.getElementById("btnTerminal");
 const btnFleet = document.getElementById("btnFleet");
 const btnLang = document.getElementById("btnLang");
@@ -482,6 +486,7 @@ const PAGE_ELEMENTS = {
   setting: document.getElementById("pageSetting"),
   car: document.getElementById("pageCar"),
   tools: document.getElementById("pageTools"),
+  logs: document.getElementById("pageLogs"),
   terminal: document.getElementById("pageTerminal"),
   branch: document.getElementById("pageBranch"),
   carrot: document.getElementById("pageCarrot"),
@@ -569,6 +574,7 @@ const modelMeta = document.getElementById("modelMeta");
 btnHome.onclick = () => showPage("carrot", true, getSwipeTransition(CURRENT_PAGE, "carrot"));
 btnRecordToggle.onclick = () => toggleRecord();
 btnSetting.onclick = () => showPage("setting", true, getSwipeTransition(CURRENT_PAGE, "setting"));
+if (btnLogs) btnLogs.onclick = () => showPage("logs", true, getSwipeTransition(CURRENT_PAGE, "logs"));
 btnTerminal.onclick = () => showPage("terminal", true, getSwipeTransition(CURRENT_PAGE, "terminal"));
 
 async function openFleetLink() {
@@ -616,7 +622,8 @@ const branchList = document.getElementById("branchList");
 const quickLink = document.getElementById("toolsQuickLink");
 const chipQuickLabel = document.getElementById("toolsQuickLinkTitle");
 const btnSaveQuickLink = document.getElementById("btnToolsQuickLink");
-let QUICK_LINK_URL = "";
+const QUICK_LINK_FIXED_URL = "https://man.carrotpilot.app/";
+let QUICK_LINK_URL = QUICK_LINK_FIXED_URL;
 let QUICK_LINK_STATUS = "loading";
 let QUICK_LINK_MESSAGE = "";
 let quickLinkLoadPromise = null;
@@ -856,6 +863,7 @@ function showPage(page, pushHistory = false, transition = null) {
   btnHome.classList.toggle("active", page === "carrot");
   btnSetting.classList.toggle("active", page === "setting");
   btnTools.classList.toggle("active", page === "tools");
+  if (btnLogs) btnLogs.classList.toggle("active", page === "logs");
   btnTerminal.classList.toggle("active", page === "terminal");
 
   if (typeof updateAppViewportMetrics === "function") {
@@ -906,6 +914,9 @@ function showPage(page, pushHistory = false, transition = null) {
     initToolsPage();
     updateQuickLink().catch(() => {});
   }
+  if (page === "logs" && typeof initLogsPage === "function") {
+    initLogsPage();
+  }
   if (page === "terminal" && typeof initTerminalPage === "function") {
     initTerminalPage();
   }
@@ -917,6 +928,7 @@ function showPage(page, pushHistory = false, transition = null) {
     (page === "setting") ? { page: "setting", screen: "groups", group: null } :
     (page === "car") ? { page: "car", screen: "makers", maker: null } :
     (page === "tools") ? { page: "tools" } :
+    (page === "logs") ? { page: "logs" } :
     (page === "terminal") ? { page: "terminal" } :
     (page === "carrot") ? { page: "carrot" } :
     (page === "branch") ? { page: "branch" } :
@@ -1052,6 +1064,7 @@ function renderUIText() {
   setNavText("btnHome", s.home);
   setNavText("btnSetting", s.setting);
   setNavText("btnTools", s.tools);
+  setNavText("btnLogs", s.logs);
   setNavText("btnTerminal", s.terminal);
   setNavText("btnFleet", s.fleet);
   setText("btnQuickLinkWeb", "Web");
@@ -1489,65 +1502,25 @@ function renderQuickLinkUI() {
 function setServerStateStatus() {}
 
 async function updateQuickLink(options = {}) {
-  const force = options.force === true;
   const silent = options.silent === true;
-  const ttlMs = Number.isFinite(options.ttlMs) ? options.ttlMs : 15000;
-
-  if (!force && quickLinkLoadPromise) return quickLinkLoadPromise;
-  if (!force && quickLinkLoadedAt > 0 && (Date.now() - quickLinkLoadedAt) < ttlMs) {
-    if (!silent || CURRENT_PAGE === "tools") renderQuickLinkUI();
-    return QUICK_LINK_URL;
-  }
-
-  if (!silent) {
-    QUICK_LINK_URL = "";
-    QUICK_LINK_STATUS = "loading";
-    QUICK_LINK_MESSAGE = "";
-    renderQuickLinkUI();
-  }
-
-  quickLinkLoadPromise = (async () => {
-    try {
-      const values = await bulkGet(["GithubUsername"]);
-      const githubId = String(values["GithubUsername"] || "").trim();
-
-      if (!githubId) {
-        QUICK_LINK_URL = "";
-        QUICK_LINK_STATUS = "empty";
-        QUICK_LINK_MESSAGE = "";
-        quickLinkLoadedAt = Date.now();
-        if (!silent || CURRENT_PAGE === "tools") renderQuickLinkUI();
-        return "";
-      }
-
-      QUICK_LINK_URL = `https://shind0.synology.me/carrot/go/?id=${encodeURIComponent(githubId)}`;
-      QUICK_LINK_STATUS = "ready";
-      QUICK_LINK_MESSAGE = "";
-      quickLinkLoadedAt = Date.now();
-      if (!silent || CURRENT_PAGE === "tools") renderQuickLinkUI();
-      return QUICK_LINK_URL;
-    } catch (e) {
-      QUICK_LINK_STATUS = "error";
-      QUICK_LINK_MESSAGE = `QuickLink error: ${e?.message || e}`;
-      if (!silent || CURRENT_PAGE === "tools") renderQuickLinkUI();
-      console.log("[QuickLink] failed:", e);
-      throw e;
-    } finally {
-      quickLinkLoadPromise = null;
-    }
-  })();
-
-  return quickLinkLoadPromise;
+  QUICK_LINK_URL = QUICK_LINK_FIXED_URL;
+  QUICK_LINK_STATUS = "ready";
+  QUICK_LINK_MESSAGE = "";
+  quickLinkLoadPromise = null;
+  quickLinkLoadedAt = Date.now();
+  if (!silent || CURRENT_PAGE === "tools") renderQuickLinkUI();
+  return QUICK_LINK_URL;
 }
 
 async function openQuickLink() {
-  if (!QUICK_LINK_URL) return;
+  QUICK_LINK_URL = QUICK_LINK_FIXED_URL;
+  renderQuickLinkUI();
   const msg = LANG === "ko"
-    ? `Web을 여시겠습니까?\n\n${QUICK_LINK_URL}`
-    : `${getUIText("open", "Open")} Web?\n\n${QUICK_LINK_URL}`;
+    ? `Web을 여시겠습니까?\n\n${QUICK_LINK_FIXED_URL}`
+    : `${getUIText("open", "Open")} Web?\n\n${QUICK_LINK_FIXED_URL}`;
   const ok = await appConfirm(msg, { title: "Web" });
   if (!ok) return;
-  window.open(QUICK_LINK_URL, "_blank", "noopener");
+  window.open(QUICK_LINK_FIXED_URL, "_blank", "noopener");
 }
 
 if (btnQuickLinkWeb) {
@@ -1614,7 +1587,7 @@ async function setParam(name, value) {
 }
 
 /* ── Swipe Navigation ──────────────────────────────────── */
-const SWIPE_PAGES = ["carrot", "setting", "tools", "terminal"];
+const SWIPE_PAGES = ["carrot", "setting", "tools", "logs", "terminal"];
 const SETTING_BACK_EDGE_WIDTH = 32;
 
 function isLandscapeRailMode() {
