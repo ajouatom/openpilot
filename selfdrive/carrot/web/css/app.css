@@ -810,7 +810,12 @@ body[data-page="home"] .global-home-record-fab {
   height: var(--tools-page-height);
   max-height: var(--tools-page-height);
   background: var(--tools-console-bg);
-  overflow: hidden;
+  overflow: visible;
+}
+
+body[data-page="tools"] .swipe-container,
+.swipe-container:has(#pageTools.page-transitioning) {
+  overflow-x: visible;
 }
 
 #pageTools.tools-log-attention {
@@ -4383,7 +4388,7 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
   }
 
   #pageTools {
-    --tools-page-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px) - 24px);
+    --tools-page-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px) - 12px);
     --tools-console-form-height: 40px;
     --tools-console-log-font-size: 14px;
     --tools-console-log-line-height: 1.55;
@@ -4417,7 +4422,7 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
   }
 
   .tools-scroll-stack {
-    padding-bottom: 12px;
+    padding-bottom: calc(var(--tools-console-height) + 12px);
   }
 
   .tools-console-form {
