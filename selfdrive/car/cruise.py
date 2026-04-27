@@ -172,7 +172,6 @@ class VCruiseCarrot:
     self._cruise_button_mode = 2
     self._cancel_button_mode = 0
     self._lfa_button_mode = 0
-    self._main_button_mode = 0
 
     self._gas_pressed_count = 0
     self._gas_pressed_count_last = 0
@@ -264,7 +263,6 @@ class VCruiseCarrot:
       self._cruise_button_mode = self.params.get_int("CruiseButtonMode")
       self._cancel_button_mode = self.params.get_int("CancelButtonMode")
       self._lfa_button_mode = self.params.get_int("LfaButtonMode")
-      self._main_button_mode = self.params.get_int("MainButtonMode")
       self.autoRoadSpeedLimitOffset = self.params.get_int("AutoRoadSpeedLimitOffset")
       self.autoNaviSpeedSafetyFactor = self.params.get_float("AutoNaviSpeedSafetyFactor") * 0.01
       self.cruiseOnDist = self.params.get_float("CruiseOnDist") * 0.01
@@ -348,8 +346,8 @@ class VCruiseCarrot:
     else:
       self.v_cruise_kph = np.clip(v_cruise_kph, self._cruise_speed_min, self._cruise_speed_max) #max(20, self.v_ego_kph_set) #V_CRUISE_UNSET
       self.v_cruise_cluster_kph = self.v_cruise_kph #V_CRUISE_UNSET
-      if self.cruise_state_available_last and self._main_button_mode > 0: # 최초 한번이라도 cruiseState.available이 True였다면
-        self._lat_enabled = False
+      #if self.cruise_state_available_last: # 최초 한번이라도 cruiseState.available이 True였다면
+      #  self._lat_enabled = False
 
     self.cruise_state_available_last = CS.cruiseState.available
     self.enabled_last = CC.enabled
