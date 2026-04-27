@@ -1843,7 +1843,10 @@ function pulseToolsLogPanel() {
   toolsLogAttentionTimer = window.setTimeout(() => {
     page.classList.remove("tools-log-attention");
     toolsLogAttentionTimer = null;
+    scrollToolsLogToBottom();
+    scrollToolsLogToBottom(280);
   }, 3200);
+  scrollToolsLogToBottom(280);
 }
 
 function setToolsLogExpanded(expanded) {
@@ -3568,7 +3571,7 @@ function dashcamRouteCardHtml(entry, index = 0) {
     </div>`;
   }).join("") : "";
 
-  return `<article class="dashcam-route-card ui-stagger-item" style="--i:${index}">
+  return `<article class="dashcam-route-card ui-stagger-item" style="--i:${index}" data-route-card="${routeAttr}">
     ${preview}
     <div class="dashcam-route-main">
       <div class="dashcam-route-head" data-action="toggle-route" data-route="${routeAttr}">
@@ -3609,6 +3612,28 @@ function renderDashcamRoutes() {
   setDashcamStatus("");
   host.innerHTML = routes.map(dashcamRouteCardHtml).join("");
   hydrateLogsLazyImages(host);
+}
+
+function renderDashcamRoute(route) {
+  const host = document.getElementById("dashcamRoutes");
+  if (!host) return false;
+  const routes = dashcamState.routes || [];
+  const index = routes.findIndex((entry) => entry.route === route);
+  if (index < 0) return false;
+
+  const current = Array.from(host.querySelectorAll("[data-route-card]"))
+    .find((node) => node.dataset.routeCard === route);
+  if (!current) return false;
+
+  const tpl = document.createElement("template");
+  tpl.innerHTML = dashcamRouteCardHtml(routes[index], index);
+  const nextMain = tpl.content.querySelector(".dashcam-route-main");
+  const currentMain = current.querySelector(".dashcam-route-main");
+  if (!nextMain || !currentMain) return false;
+
+  currentMain.replaceWith(nextMain);
+  hydrateLogsLazyImages(nextMain);
+  return true;
 }
 
 async function loadDashcamRoutes({ silent = false } = {}) {
@@ -3803,13 +3828,13 @@ async function showDashcamSegmentMenu(route, segment) {
   }
 }
 
-function screenrecordVideoRowHtml(video) {
+function screenrecordVideoRowHtml(video, index = 0) {
   const id = escapeHtml(video.id || "");
   const name = escapeHtml(video.name || "-");
   const date = escapeHtml(video.modifiedLabel || video.relativeModifiedLabel || "-");
   const size = escapeHtml(formatLogBytes(video.size));
   const ext = escapeHtml((video.ext || "video").toUpperCase());
-  return `<article class="screenrecord-row" data-action="play-screenrecord" data-id="${id}" data-name="${name}">
+  return `<article class="screenrecord-row ui-stagger-item" style="--i:${index}" data-action="play-screenrecord" data-id="${id}" data-name="${name}">
     <div class="screenrecord-row__thumb" aria-hidden="true">
       <img class="logs-lazy-img" loading="lazy" decoding="async" fetchpriority="low" data-src="${screenrecordApiPath("thumbnail", video.id || "")}" alt="">
     </div>
@@ -3943,7 +3968,7 @@ function bindLogsPage() {
       if (action === "toggle-route") {
         if (dashcamState.expanded.has(route)) dashcamState.expanded.delete(route);
         else dashcamState.expanded.add(route);
-        renderDashcamRoutes();
+        if (!renderDashcamRoute(route)) renderDashcamRoutes();
       } else if (action === "play") {
         openDashcamPlayer(route, segment);
       } else if (action === "segment-menu") {
