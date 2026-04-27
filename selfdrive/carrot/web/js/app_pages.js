@@ -1789,6 +1789,11 @@ window.addEventListener("popstate", async (ev) => {
     return;
   }
 
+  if (st.page === "logs") {
+    showPage("logs", false);
+    return;
+  }
+
   if (st.page === "terminal") {
     showPage("terminal", false);
     return;
@@ -3284,6 +3289,570 @@ async function onSelectBranch(item) {
     toolsLogNotice(UI_STRINGS[LANG].rebooting || "Rebooting...", { label: "reboot" });
   } catch (e) {
     showError("reboot", e);
+  }
+}
+
+/* ---------- Logs / Dashcam ---------- */
+const dashcamState = {
+  initialized: false,
+  loading: false,
+  routes: [],
+  expanded: new Set(),
+  selected: new Set(),
+  refreshTimer: null,
+  scrollBusy: false,
+  scrollTimer: null,
+  loadSeq: 0,
+  layoutBound: false,
+  layoutTimer: null,
+  landscape: null,
+};
+
+const screenrecordState = {
+  initialized: false,
+  loading: false,
+  videos: [],
+  loadSeq: 0,
+};
+
+let logsActiveTab = "dashcam";
+
+function dashcamSegmentIndex(segment) {
+  const parts = String(segment || "").split("--");
+  const n = Number.parseInt(parts[parts.length - 1] || "0", 10);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function dashcamRouteTitle(route) {
+  return String(route || "").replace(/^0+(?=\d{3})/, "");
+}
+
+function dashcamApiPath(kind, segment) {
+  return `/api/dashcam/${kind}/${encodeURIComponent(segment)}`;
+}
+
+function setDashcamStatus(message, tone = "") {
+  const status = document.getElementById("dashcamStatus");
+  if (!status) return;
+  status.textContent = message || "";
+  status.hidden = !message;
+  status.classList.toggle("is-error", tone === "error");
+}
+
+function setDashcamMeta(message) {
+  const meta = document.getElementById("dashcamMeta");
+  if (meta) meta.textContent = message;
+}
+
+function setScreenrecordStatus(message, tone = "") {
+  const status = document.getElementById("screenrecordStatus");
+  if (!status) return;
+  status.textContent = message || "";
+  status.hidden = !message;
+  status.classList.toggle("is-error", tone === "error");
+}
+
+function formatLogBytes(bytes) {
+  const n = Number(bytes) || 0;
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+function screenrecordApiPath(kind, fileId) {
+  return `/api/screenrecord/${kind}/${encodeURIComponent(fileId)}`;
+}
+
+function dashcamSelectedForRoute(entry) {
+  return (entry.segmentFolders || []).filter((segment) => dashcamState.selected.has(segment));
+}
+
+function dashcamRouteCardHtml(entry) {
+  const route = String(entry.route || "");
+  const segments = Array.isArray(entry.segmentFolders) ? entry.segmentFolders : [];
+  const expanded = dashcamState.expanded.has(route);
+  const compactSegments = isCompactLandscapeMode();
+  const shouldRenderSegments = expanded || compactSegments;
+  const selected = dashcamSelectedForRoute(entry);
+  const allSelected = segments.length > 0 && selected.length === segments.length;
+  const representative = segments[0] || "";
+  const routeAttr = escapeHtml(route);
+  const title = escapeHtml(entry.title || dashcamRouteTitle(route));
+  const dateLabel = escapeHtml(entry.dateLabel || route);
+  const latest = escapeHtml(entry.latestModifiedLabel || "-");
+  const preview = representative
+    ? `<div class="dashcam-route-media">
+        <div class="dashcam-route-preview" data-action="play" data-route="${routeAttr}" data-segment="${escapeHtml(representative)}">
+          <img loading="lazy" src="${dashcamApiPath("preview", representative)}" onerror="this.onerror=null;this.src='${dashcamApiPath("thumbnail", representative)}';" alt="">
+          <div class="dashcam-route-preview__shade"></div>
+          <div class="dashcam-route-preview__chips">
+            <span class="dashcam-chip">세그먼트 ${segments.length}개</span>
+            <span class="dashcam-chip">${latest}</span>
+          </div>
+          <div class="dashcam-play-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+          </div>
+        </div>
+        <div class="dashcam-route-media-info" data-action="toggle-route" data-route="${routeAttr}">
+          <div class="dashcam-route-title">${title}</div>
+          <div class="dashcam-route-subtitle">${dateLabel}</div>
+        </div>
+      </div>`
+    : "";
+  const segmentList = shouldRenderSegments ? segments.map((segment) => {
+    const segAttr = escapeHtml(segment);
+    const checked = dashcamState.selected.has(segment) ? " checked" : "";
+    if (compactSegments) {
+      return `<div class="dashcam-segment-tile dashcam-segment-tile--compact" data-action="play" data-route="${routeAttr}" data-segment="${segAttr}">
+        <div class="dashcam-segment-thumb dashcam-segment-thumb--compact">
+          <img loading="lazy" src="${dashcamApiPath("thumbnail", segment)}" alt="">
+          <label class="dashcam-segment-check dashcam-segment-check--compact" title="선택" onclick="event.stopPropagation()">
+            <input type="checkbox" data-action="select-segment" data-segment="${segAttr}"${checked}>
+          </label>
+        </div>
+        <div class="dashcam-segment-body">
+          <div class="dashcam-segment-badge">SEG ${dashcamSegmentIndex(segment)}</div>
+          <div class="dashcam-segment-name">${segAttr}</div>
+        </div>
+        <button class="dashcam-menu-btn" type="button" data-action="segment-menu" data-route="${routeAttr}" data-segment="${segAttr}" aria-label="세그먼트 메뉴" title="세그먼트 메뉴">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4m0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/></svg>
+        </button>
+      </div>`;
+    }
+    return `<div class="dashcam-segment-tile" data-action="play" data-route="${routeAttr}" data-segment="${segAttr}">
+      <div class="dashcam-segment-thumb">
+        <img loading="lazy" src="${dashcamApiPath("thumbnail", segment)}" alt="">
+        <label class="dashcam-segment-check" title="선택" onclick="event.stopPropagation()">
+          <input type="checkbox" data-action="select-segment" data-segment="${segAttr}"${checked}>
+        </label>
+      </div>
+      <div class="dashcam-segment-body">
+        <div class="dashcam-segment-badge">SEG ${dashcamSegmentIndex(segment)}</div>
+        <div class="dashcam-segment-name">${segAttr}</div>
+      </div>
+      <button class="dashcam-menu-btn" type="button" data-action="segment-menu" data-route="${routeAttr}" data-segment="${segAttr}" aria-label="세그먼트 메뉴" title="세그먼트 메뉴">
+        <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4m0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/></svg>
+      </button>
+    </div>`;
+  }).join("") : "";
+
+  return `<article class="dashcam-route-card">
+    ${preview}
+    <div class="dashcam-route-main">
+      <div class="dashcam-route-head" data-action="toggle-route" data-route="${routeAttr}">
+        <div class="dashcam-route-titleblock">
+          <div class="dashcam-route-title">${title}</div>
+          <div class="dashcam-route-subtitle">${dateLabel}</div>
+        </div>
+        <button class="dashcam-expand-btn" type="button" data-action="toggle-route" data-route="${routeAttr}" aria-expanded="${expanded ? "true" : "false"}" title="${expanded ? "접기" : "세그먼트 보기"}">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="${expanded ? "M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z" : "M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z"}"/></svg>
+        </button>
+      </div>
+      <div class="dashcam-segments ${expanded ? "" : "is-collapsed"}">
+        <div class="dashcam-selection-row">
+          <span class="dashcam-selection-count">선택 ${selected.length}개</span>
+          <button class="smallBtn" type="button" data-action="select-route" data-route="${routeAttr}" data-selected="${allSelected ? "1" : "0"}">${allSelected ? "전체 해제" : "전체 선택"}</button>
+          <button class="smallBtn btn--filled" type="button" data-action="upload-selected" data-route="${routeAttr}" ${selected.length ? "" : "disabled"}>선택 전송</button>
+        </div>
+        <div class="dashcam-segment-list">${segmentList}</div>
+      </div>
+    </div>
+  </article>`;
+}
+
+function renderDashcamRoutes() {
+  const host = document.getElementById("dashcamRoutes");
+  if (!host) return;
+  const routes = dashcamState.routes || [];
+  if (dashcamState.loading && !routes.length) {
+    host.innerHTML = "";
+    setDashcamStatus("불러오는 중...");
+    return;
+  }
+  if (!routes.length) {
+    host.innerHTML = "";
+    setDashcamStatus("주행 기록이 없습니다.");
+    return;
+  }
+  setDashcamStatus("");
+  host.innerHTML = routes.map(dashcamRouteCardHtml).join("");
+}
+
+async function loadDashcamRoutes({ silent = false } = {}) {
+  const seq = ++dashcamState.loadSeq;
+  if (!silent) {
+    dashcamState.loading = true;
+    renderDashcamRoutes();
+  }
+  try {
+    const json = await getJson("/api/dashcam/routes");
+    if (seq !== dashcamState.loadSeq) return;
+    const routes = Array.isArray(json.routes) ? json.routes : [];
+    const validRoutes = new Set(routes.map((entry) => entry.route));
+    const validSegments = new Set(routes.flatMap((entry) => entry.segmentFolders || []));
+    dashcamState.expanded = new Set(Array.from(dashcamState.expanded).filter((route) => validRoutes.has(route)));
+    dashcamState.selected = new Set(Array.from(dashcamState.selected).filter((segment) => validSegments.has(segment)));
+    dashcamState.routes = routes;
+    dashcamState.loading = false;
+    renderDashcamRoutes();
+  } catch (e) {
+    if (seq !== dashcamState.loadSeq) return;
+    dashcamState.loading = false;
+    if (!silent) {
+      setDashcamStatus(`대시캠 목록 로드 실패: ${e.message || e}`, "error");
+      showAppToast(e.message || "대시캠 목록 로드 실패", { tone: "error" });
+    }
+  }
+}
+
+function startDashcamAutoRefresh() {
+  if (dashcamState.refreshTimer) return;
+  dashcamState.refreshTimer = window.setInterval(() => {
+    if (CURRENT_PAGE !== "logs" || dashcamState.scrollBusy) return;
+    if (logsActiveTab === "screen") loadScreenrecordVideos({ silent: true }).catch(() => {});
+    else loadDashcamRoutes({ silent: true }).catch(() => {});
+  }, 10000);
+}
+
+function markDashcamScrollBusy() {
+  dashcamState.scrollBusy = true;
+  if (dashcamState.scrollTimer) window.clearTimeout(dashcamState.scrollTimer);
+  dashcamState.scrollTimer = window.setTimeout(() => {
+    dashcamState.scrollBusy = false;
+  }, 380);
+}
+
+function openLogsVideoPlayer(title, src) {
+  const overlay = document.createElement("div");
+  overlay.className = "dashcam-player-overlay";
+  overlay.innerHTML = `<div class="dashcam-player-dialog" role="dialog" aria-modal="true">
+    <div class="dashcam-player-frame">
+      <video class="dashcam-player-video" autoplay controls playsinline src="${src}"></video>
+      <div class="dashcam-player-top">
+        <div class="dashcam-player-title">${escapeHtml(title || "Video")}</div>
+        <button class="dashcam-player-close" type="button" aria-label="닫기" title="닫기">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.41L10.59 13.41 4.29 19.71 2.88 18.3 9.17 12 2.88 5.7 4.29 4.29l6.3 6.3 6.29-6.3z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>`;
+  const close = () => {
+    const video = overlay.querySelector("video");
+    try { video?.pause?.(); } catch {}
+    overlay.remove();
+  };
+  overlay.addEventListener("click", (ev) => {
+    if (ev.target === overlay) close();
+  });
+  overlay.querySelector(".dashcam-player-close")?.addEventListener("click", close);
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add("is-open"));
+}
+
+function openDashcamPlayer(route, segment) {
+  openLogsVideoPlayer(
+    `${dashcamRouteTitle(route)} · Segment ${dashcamSegmentIndex(segment)}`,
+    dashcamApiPath("video", segment),
+  );
+}
+
+function openScreenrecordPlayer(id, name) {
+  if (!id) return;
+  openLogsVideoPlayer(name || "화면녹화", screenrecordApiPath("video", id));
+}
+
+function dashcamUploadResultHtml(result) {
+  const text = String(result?.shareText || result?.message || "");
+  const discord = result?.discord || {};
+  let discordLabel = "Discord: 설정 없음";
+  let discordClass = "is-muted";
+  if (discord.configured && discord.ok) {
+    discordLabel = "Discord: 전송 완료";
+    discordClass = "is-ok";
+  } else if (discord.configured) {
+    discordLabel = `Discord: 실패${discord.status ? ` (${discord.status})` : ""}`;
+    discordClass = "is-error";
+  }
+  return `<div class="dashcam-share-card">
+    <div class="dashcam-share-card__summary">
+      <span>업로드 ${Number(result?.uploaded || 0)}/${Number(result?.total || 0)}</span>
+      <span class="${discordClass}">${escapeHtml(discordLabel)}</span>
+    </div>
+    <pre>${escapeHtml(text)}</pre>
+  </div>`;
+}
+
+async function showDashcamUploadResult(result) {
+  const text = String(result?.shareText || result?.message || "").trim();
+  const selected = await openAppDialog({
+    mode: "choice",
+    title: "로그 전송 결과",
+    html: true,
+    messageHtml: `<div class="dashcam-share-dialog">${dashcamUploadResultHtml(result)}</div>`,
+    cancelLabel: "닫기",
+    choices: [
+      { label: "복사", value: "copy", className: "btn--filled" },
+    ],
+  });
+  if (selected === "copy") {
+    copyToClipboard(text);
+    showAppToast("복사되었습니다.");
+  }
+}
+
+function openDashcamUploadProgress(total) {
+  const overlay = document.createElement("div");
+  overlay.className = "dashcam-upload-progress";
+  overlay.innerHTML = `<div class="dashcam-upload-progress__sheet" role="dialog" aria-modal="true">
+    <div class="dashcam-upload-progress__title">로그 전송 중</div>
+    <div class="dashcam-upload-progress__message">0/${Number(total || 0)}</div>
+    <div class="dashcam-upload-progress__bar" aria-hidden="true"><span></span></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  document.body.classList.add("dialog-open");
+  requestAnimationFrame(() => overlay.classList.add("is-open"));
+  return {
+    close() {
+      overlay.classList.remove("is-open");
+      window.setTimeout(() => {
+        overlay.remove();
+        syncModalBodyLock();
+      }, 160);
+    },
+  };
+}
+
+async function uploadDashcamSegments(segments) {
+  const targets = Array.from(new Set(segments || [])).filter(Boolean);
+  if (!targets.length) {
+    showAppToast("선택된 세그먼트가 없습니다.", { tone: "error" });
+    return;
+  }
+  const ok = await appConfirm(`당근 서버에 ${targets.length}개 로그를 전송할까요?`, { title: "로그 전송" });
+  if (!ok) return;
+  const progress = openDashcamUploadProgress(targets.length);
+  try {
+    const result = await postJson("/api/dashcam/upload", { segments: targets });
+    const message = result.message || `전송 완료 ${result.uploaded || 0}/${result.total || targets.length}`;
+    showAppToast(message, { tone: result.ok ? "default" : "error", duration: 3600 });
+    progress.close();
+    await showDashcamUploadResult(result);
+  } catch (e) {
+    progress.close();
+    showAppToast(`로그 전송 실패: ${e.message || e}`, { tone: "error", duration: 4200 });
+  }
+}
+
+async function showDashcamSegmentMenu(route, segment) {
+  const selected = await openAppDialog({
+    mode: "choice",
+    title: `SEG ${dashcamSegmentIndex(segment)}`,
+    message: segment,
+    choices: [
+      { label: "재생", value: "play" },
+      { label: "로그 전송", value: "upload" },
+      { label: "qcamera 다운로드", value: "download_qcamera" },
+      { label: "rlog 다운로드", value: "download_rlog" },
+      { label: "qlog 다운로드", value: "download_qlog" },
+    ],
+  });
+  if (selected === "play") openDashcamPlayer(route, segment);
+  else if (selected === "upload") await uploadDashcamSegments([segment]);
+  else if (selected?.startsWith?.("download_")) {
+    const kind = selected.replace("download_", "");
+    window.open(dashcamApiPath(`download/${encodeURIComponent(segment)}`, kind), "_blank", "noopener");
+  }
+}
+
+function screenrecordVideoRowHtml(video) {
+  const id = escapeHtml(video.id || "");
+  const name = escapeHtml(video.name || "-");
+  const date = escapeHtml(video.modifiedLabel || video.relativeModifiedLabel || "-");
+  const size = escapeHtml(formatLogBytes(video.size));
+  const ext = escapeHtml((video.ext || "video").toUpperCase());
+  return `<article class="screenrecord-row" data-action="play-screenrecord" data-id="${id}" data-name="${name}">
+    <div class="screenrecord-row__thumb" aria-hidden="true">
+      <img loading="lazy" src="${screenrecordApiPath("thumbnail", video.id || "")}" alt="">
+    </div>
+    <div class="screenrecord-row__main">
+      <div class="screenrecord-row__name">${name}</div>
+      <div class="screenrecord-row__meta">
+        <span>${date}</span>
+        <span>${size}</span>
+        <span>${ext}</span>
+      </div>
+    </div>
+    <button class="screenrecord-download" type="button" data-action="download-screenrecord" data-id="${id}" aria-label="다운로드" title="다운로드">
+      <svg viewBox="0 0 24 24"><path fill="currentColor" d="M5 20h14v-2H5m14-9h-4V3H9v6H5l7 7z"/></svg>
+    </button>
+  </article>`;
+}
+
+function renderScreenrecordVideos() {
+  const host = document.getElementById("screenrecordVideos");
+  if (!host) return;
+  const videos = screenrecordState.videos || [];
+  if (screenrecordState.loading && !videos.length) {
+    host.innerHTML = "";
+    setScreenrecordStatus("불러오는 중...");
+    return;
+  }
+  if (!videos.length) {
+    host.innerHTML = "";
+    setScreenrecordStatus("화면녹화 폴더/영상이 없습니다.");
+    return;
+  }
+  setScreenrecordStatus("");
+  host.innerHTML = videos.map(screenrecordVideoRowHtml).join("");
+}
+
+async function loadScreenrecordVideos({ silent = false } = {}) {
+  const seq = ++screenrecordState.loadSeq;
+  if (!silent) {
+    screenrecordState.loading = true;
+    renderScreenrecordVideos();
+  }
+  try {
+    const json = await getJson("/api/screenrecord/videos");
+    if (seq !== screenrecordState.loadSeq) return;
+    screenrecordState.videos = Array.isArray(json.videos) ? json.videos : [];
+    screenrecordState.loading = false;
+    renderScreenrecordVideos();
+  } catch (e) {
+    if (seq !== screenrecordState.loadSeq) return;
+    screenrecordState.loading = false;
+    if (!silent) {
+      setScreenrecordStatus(`화면녹화 목록 로드 실패: ${e.message || e}`, "error");
+      showAppToast(e.message || "화면녹화 목록 로드 실패", { tone: "error" });
+    }
+  }
+}
+
+function activateLogsTab(tab) {
+  logsActiveTab = tab === "screen" ? "screen" : "dashcam";
+  const dashTab = document.getElementById("logsTabDashcam");
+  const screenTab = document.getElementById("logsTabScreen");
+  const dashPanel = document.getElementById("logsDashcamPanel");
+  const screenPanel = document.getElementById("logsScreenPanel");
+
+  dashTab?.classList.toggle("is-active", logsActiveTab === "dashcam");
+  screenTab?.classList.toggle("is-active", logsActiveTab === "screen");
+  dashTab?.setAttribute("aria-selected", logsActiveTab === "dashcam" ? "true" : "false");
+  screenTab?.setAttribute("aria-selected", logsActiveTab === "screen" ? "true" : "false");
+  if (dashPanel) dashPanel.hidden = logsActiveTab !== "dashcam";
+  if (screenPanel) screenPanel.hidden = logsActiveTab !== "screen";
+
+  if (logsActiveTab === "screen" && !screenrecordState.initialized) {
+    screenrecordState.initialized = true;
+    loadScreenrecordVideos().catch(() => {});
+  } else if (logsActiveTab === "screen") {
+    renderScreenrecordVideos();
+    loadScreenrecordVideos({ silent: true }).catch(() => {});
+  } else if (dashcamState.initialized) {
+    loadDashcamRoutes({ silent: true }).catch(() => {});
+  }
+}
+
+function bindLogsPage() {
+  const dashTab = document.getElementById("logsTabDashcam");
+  const screenTab = document.getElementById("logsTabScreen");
+  const routesHost = document.getElementById("dashcamRoutes");
+  const screenHost = document.getElementById("screenrecordVideos");
+
+  if (!dashcamState.layoutBound) {
+    dashcamState.layoutBound = true;
+    dashcamState.landscape = isCompactLandscapeMode();
+    window.addEventListener("resize", () => {
+      if (CURRENT_PAGE !== "logs") return;
+      if (dashcamState.layoutTimer) window.clearTimeout(dashcamState.layoutTimer);
+      dashcamState.layoutTimer = window.setTimeout(() => {
+        const nextLandscape = isCompactLandscapeMode();
+        if (dashcamState.landscape === nextLandscape) return;
+        dashcamState.landscape = nextLandscape;
+        renderDashcamRoutes();
+      }, 120);
+    }, { passive: true });
+  }
+
+  if (dashTab && dashTab.dataset.bound !== "1") {
+    dashTab.dataset.bound = "1";
+    dashTab.addEventListener("click", () => activateLogsTab("dashcam"));
+  }
+
+  if (screenTab && screenTab.dataset.bound !== "1") {
+    screenTab.dataset.bound = "1";
+    screenTab.addEventListener("click", () => activateLogsTab("screen"));
+  }
+
+  if (routesHost && routesHost.dataset.bound !== "1") {
+    routesHost.dataset.bound = "1";
+    routesHost.addEventListener("scroll", markDashcamScrollBusy, { passive: true });
+    routesHost.addEventListener("click", (ev) => {
+      const actionEl = ev.target?.closest?.("[data-action]");
+      if (!actionEl) return;
+      const action = actionEl.dataset.action;
+      const route = actionEl.dataset.route || "";
+      const segment = actionEl.dataset.segment || "";
+      if (action === "toggle-route") {
+        if (dashcamState.expanded.has(route)) dashcamState.expanded.delete(route);
+        else dashcamState.expanded.add(route);
+        renderDashcamRoutes();
+      } else if (action === "play") {
+        openDashcamPlayer(route, segment);
+      } else if (action === "segment-menu") {
+        ev.stopPropagation();
+        showDashcamSegmentMenu(route, segment).catch(() => {});
+      } else if (action === "select-route") {
+        const entry = dashcamState.routes.find((item) => item.route === route);
+        if (!entry) return;
+        const shouldClear = actionEl.dataset.selected === "1";
+        for (const item of entry.segmentFolders || []) {
+          if (shouldClear) dashcamState.selected.delete(item);
+          else dashcamState.selected.add(item);
+        }
+        renderDashcamRoutes();
+      } else if (action === "upload-selected") {
+        const entry = dashcamState.routes.find((item) => item.route === route);
+        const targets = dashcamSelectedForRoute(entry || { segmentFolders: [] });
+        uploadDashcamSegments(targets).catch(() => {});
+      }
+    });
+    routesHost.addEventListener("change", (ev) => {
+      const input = ev.target;
+      if (!input?.matches?.('input[data-action="select-segment"]')) return;
+      const segment = input.dataset.segment || "";
+      if (input.checked) dashcamState.selected.add(segment);
+      else dashcamState.selected.delete(segment);
+      renderDashcamRoutes();
+    });
+  }
+
+  if (screenHost && screenHost.dataset.bound !== "1") {
+    screenHost.dataset.bound = "1";
+    screenHost.addEventListener("click", (ev) => {
+      const actionEl = ev.target?.closest?.("[data-action]");
+      if (!actionEl) return;
+      if (actionEl.dataset.action === "download-screenrecord") {
+        const id = actionEl.dataset.id || "";
+        if (id) window.open(screenrecordApiPath("download", id), "_blank", "noopener");
+      } else if (actionEl.dataset.action === "play-screenrecord") {
+        openScreenrecordPlayer(actionEl.dataset.id || "", actionEl.dataset.name || "");
+      }
+    });
+  }
+}
+
+function initLogsPage() {
+  bindLogsPage();
+  activateLogsTab(logsActiveTab);
+  startDashcamAutoRefresh();
+  if (!dashcamState.initialized) {
+    dashcamState.initialized = true;
+    loadDashcamRoutes().catch(() => {});
+  } else {
+    renderDashcamRoutes();
+    loadDashcamRoutes({ silent: true }).catch(() => {});
   }
 }
 
