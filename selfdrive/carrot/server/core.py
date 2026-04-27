@@ -319,6 +319,14 @@ def _dashcam_segment_dir(segment: str) -> str:
   return path
 
 
+def _dashcam_has_source_video(segment_dir: str) -> bool:
+  for name in ("qcamera.mp4", "qcamera.ts"):
+    path = os.path.join(segment_dir, name)
+    if os.path.isfile(path) and os.path.getsize(path) > 0:
+      return True
+  return False
+
+
 def _dashcam_cache_path(kind: str, segment: str, ext: str) -> str:
   token = hashlib.sha1(segment.encode("utf-8", errors="ignore")).hexdigest()[:24]
   directory = os.path.join(DASHCAM_CACHE_DIR, kind)
@@ -378,6 +386,8 @@ def _dashcam_build_routes() -> list[dict[str, Any]]:
     for entry in it:
       try:
         if not entry.is_dir(follow_symlinks=False) or "--" not in entry.name:
+          continue
+        if not _dashcam_has_source_video(entry.path):
           continue
         parts = entry.name.split("--")
         if len(parts) < 2 or not parts[-1].isdigit():

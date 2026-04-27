@@ -1254,6 +1254,7 @@ body[data-page="home"] .global-home-record-fab {
   padding: 10px 12px 12px;
   border-top: 1px solid color-mix(in srgb, var(--md-outline-var) 30%, transparent);
   background: color-mix(in srgb, var(--md-surface-cont-h) 92%, var(--md-surface));
+  cursor: pointer;
 }
 
 .dashcam-route-preview img,
@@ -1322,6 +1323,12 @@ body[data-page="home"] .global-home-record-fab {
   display: flex;
   align-items: flex-start;
   gap: 10px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.dashcam-route-head:hover {
+  background: color-mix(in srgb, var(--md-primary) 7%, transparent);
 }
 
 .dashcam-route-titleblock {
@@ -1374,8 +1381,18 @@ body[data-page="home"] .global-home-record-fab {
   font-weight: 750;
 }
 
+.dashcam-selection-count {
+  flex: 0 0 auto;
+  color: var(--md-on-surface-var);
+}
+
 .dashcam-selection-row .smallBtn {
   white-space: nowrap;
+  min-height: 34px;
+  padding-inline: 12px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 800;
 }
 
 .dashcam-segment-list {
@@ -1425,6 +1442,21 @@ body[data-page="home"] .global-home-record-fab {
 .dashcam-segment-check input {
   width: 20px;
   height: 20px;
+  accent-color: var(--md-primary);
+}
+
+.dashcam-segment-inline-check {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+}
+
+.dashcam-segment-inline-check input {
+  width: 18px;
+  height: 18px;
   accent-color: var(--md-primary);
 }
 
@@ -1714,12 +1746,58 @@ body[data-page="home"] .global-home-record-fab {
 
   .dashcam-selection-row {
     flex: 0 0 auto;
+    gap: 6px;
+    padding-bottom: 6px;
   }
 
   .dashcam-segment-list {
     flex: 1 1 auto;
     min-height: 0;
     max-height: none;
+  }
+
+  .dashcam-selection-count {
+    font-size: 12px;
+  }
+
+  .dashcam-selection-row .smallBtn {
+    min-height: 30px;
+    padding-inline: 10px;
+    font-size: 12px;
+  }
+
+  .dashcam-selection-row .btn--filled {
+    padding-inline: 12px;
+  }
+
+  .dashcam-segment-tile--compact {
+    min-height: 42px;
+    gap: 8px;
+    padding: 5px 8px;
+  }
+
+  .dashcam-segment-tile--compact .dashcam-segment-body {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .dashcam-segment-tile--compact .dashcam-segment-badge {
+    flex: 0 0 auto;
+    min-height: 20px;
+    padding-inline: 7px;
+    font-size: 10.5px;
+  }
+
+  .dashcam-segment-tile--compact .dashcam-segment-name {
+    margin-top: 0;
+    font-size: 12.5px;
+  }
+
+  .dashcam-segment-tile--compact .dashcam-menu-btn {
+    width: 26px;
+    height: 26px;
   }
 }
 
@@ -1770,7 +1848,7 @@ body[data-page="home"] .global-home-record-fab {
   }
 
   .dashcam-selection-row {
-    padding-bottom: 6px;
+    padding-bottom: 5px;
   }
 
   .dashcam-segment-list {

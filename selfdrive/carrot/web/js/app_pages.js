@@ -3303,6 +3303,9 @@ const dashcamState = {
   scrollBusy: false,
   scrollTimer: null,
   loadSeq: 0,
+  layoutBound: false,
+  layoutTimer: null,
+  landscape: null,
 };
 
 const screenrecordState = {
@@ -3369,6 +3372,8 @@ function dashcamRouteCardHtml(entry) {
   const route = String(entry.route || "");
   const segments = Array.isArray(entry.segmentFolders) ? entry.segmentFolders : [];
   const expanded = dashcamState.expanded.has(route);
+  const compactSegments = isCompactLandscapeMode();
+  const shouldRenderSegments = expanded || compactSegments;
   const selected = dashcamSelectedForRoute(entry);
   const allSelected = segments.length > 0 && selected.length === segments.length;
   const representative = segments[0] || "";
@@ -3389,15 +3394,29 @@ function dashcamRouteCardHtml(entry) {
             <svg viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
           </div>
         </div>
-        <div class="dashcam-route-media-info">
+        <div class="dashcam-route-media-info" data-action="toggle-route" data-route="${routeAttr}">
           <div class="dashcam-route-title">${title}</div>
           <div class="dashcam-route-subtitle">${dateLabel}</div>
         </div>
       </div>`
     : "";
-  const segmentList = segments.map((segment) => {
+  const segmentList = shouldRenderSegments ? segments.map((segment) => {
     const segAttr = escapeHtml(segment);
     const checked = dashcamState.selected.has(segment) ? " checked" : "";
+    if (compactSegments) {
+      return `<div class="dashcam-segment-tile dashcam-segment-tile--compact" data-action="play" data-route="${routeAttr}" data-segment="${segAttr}">
+        <label class="dashcam-segment-inline-check" title="선택" onclick="event.stopPropagation()">
+          <input type="checkbox" data-action="select-segment" data-segment="${segAttr}"${checked}>
+        </label>
+        <div class="dashcam-segment-body">
+          <div class="dashcam-segment-badge">SEG ${dashcamSegmentIndex(segment)}</div>
+          <div class="dashcam-segment-name">${segAttr}</div>
+        </div>
+        <button class="dashcam-menu-btn" type="button" data-action="segment-menu" data-route="${routeAttr}" data-segment="${segAttr}" aria-label="세그먼트 메뉴" title="세그먼트 메뉴">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4m0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/></svg>
+        </button>
+      </div>`;
+    }
     return `<div class="dashcam-segment-tile" data-action="play" data-route="${routeAttr}" data-segment="${segAttr}">
       <div class="dashcam-segment-thumb">
         <img loading="lazy" src="${dashcamApiPath("thumbnail", segment)}" alt="">
@@ -3413,12 +3432,12 @@ function dashcamRouteCardHtml(entry) {
         <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4m0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/></svg>
       </button>
     </div>`;
-  }).join("");
+  }).join("") : "";
 
   return `<article class="dashcam-route-card">
     ${preview}
     <div class="dashcam-route-main">
-      <div class="dashcam-route-head">
+      <div class="dashcam-route-head" data-action="toggle-route" data-route="${routeAttr}">
         <div class="dashcam-route-titleblock">
           <div class="dashcam-route-title">${title}</div>
           <div class="dashcam-route-subtitle">${dateLabel}</div>
@@ -3429,7 +3448,7 @@ function dashcamRouteCardHtml(entry) {
       </div>
       <div class="dashcam-segments ${expanded ? "" : "is-collapsed"}">
         <div class="dashcam-selection-row">
-          <span>선택 ${selected.length}개</span>
+          <span class="dashcam-selection-count">선택 ${selected.length}개</span>
           <button class="smallBtn" type="button" data-action="select-route" data-route="${routeAttr}" data-selected="${allSelected ? "1" : "0"}">${allSelected ? "전체 해제" : "전체 선택"}</button>
           <button class="smallBtn btn--filled" type="button" data-action="upload-selected" data-route="${routeAttr}" ${selected.length ? "" : "disabled"}>선택 전송</button>
         </div>
@@ -3675,6 +3694,21 @@ function bindLogsPage() {
   const screenTab = document.getElementById("logsTabScreen");
   const routesHost = document.getElementById("dashcamRoutes");
   const screenHost = document.getElementById("screenrecordVideos");
+
+  if (!dashcamState.layoutBound) {
+    dashcamState.layoutBound = true;
+    dashcamState.landscape = isCompactLandscapeMode();
+    window.addEventListener("resize", () => {
+      if (CURRENT_PAGE !== "logs") return;
+      if (dashcamState.layoutTimer) window.clearTimeout(dashcamState.layoutTimer);
+      dashcamState.layoutTimer = window.setTimeout(() => {
+        const nextLandscape = isCompactLandscapeMode();
+        if (dashcamState.landscape === nextLandscape) return;
+        dashcamState.landscape = nextLandscape;
+        renderDashcamRoutes();
+      }, 120);
+    }, { passive: true });
+  }
 
   if (dashTab && dashTab.dataset.bound !== "1") {
     dashTab.dataset.bound = "1";
