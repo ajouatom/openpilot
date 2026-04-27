@@ -209,7 +209,6 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"CruiseButtonMode", {PERSISTENT, INT, "0"}},
     {"CancelButtonMode", {PERSISTENT, INT, "0"}},
     {"LfaButtonMode", {PERSISTENT, INT, "0"}},
-    {"MainButtonMode", {PERSISTENT, INT, "0"}},
     {"CruiseButtonTest1", {PERSISTENT, INT, "8"}},
     {"CruiseButtonTest2", {PERSISTENT, INT, "30"}},
     {"CruiseButtonTest3", {PERSISTENT, INT, "1"}},
