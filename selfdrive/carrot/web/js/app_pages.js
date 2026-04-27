@@ -1821,9 +1821,35 @@ showPage("carrot", false);
 
 let toolsOutHistory = "";
 let toolsOutCurrentBlock = "";
+let toolsLogAttentionTimer = null;
 
 function normalizeToolsOutText(s) {
   return String(s ?? "").replace(/\s+$/, "");
+}
+
+function pulseToolsLogPanel() {
+  const page = document.getElementById("pageTools");
+  if (!page || page.classList.contains("tools-log-expanded")) return;
+  page.classList.add("tools-log-attention");
+  if (toolsLogAttentionTimer) window.clearTimeout(toolsLogAttentionTimer);
+  toolsLogAttentionTimer = window.setTimeout(() => {
+    page.classList.remove("tools-log-attention");
+    toolsLogAttentionTimer = null;
+  }, 3200);
+}
+
+function setToolsLogExpanded(expanded) {
+  const page = document.getElementById("pageTools");
+  if (!page) return;
+  page.classList.toggle("tools-log-expanded", expanded);
+  document.getElementById("toolsOut")?.setAttribute("aria-expanded", expanded ? "true" : "false");
+  if (expanded) {
+    page.classList.remove("tools-log-attention");
+    if (toolsLogAttentionTimer) {
+      window.clearTimeout(toolsLogAttentionTimer);
+      toolsLogAttentionTimer = null;
+    }
+  }
 }
 
 function renderToolsOut() {
@@ -1866,6 +1892,7 @@ function renderToolsOut() {
 function toolsOutSet(s) {
   toolsOutCurrentBlock = normalizeToolsOutText(s);
   renderToolsOut();
+  pulseToolsLogPanel();
 }
 
 function toolsOutAppend(s) {
@@ -1873,6 +1900,7 @@ function toolsOutAppend(s) {
   if (!next) return;
   toolsOutHistory = toolsOutHistory ? `${toolsOutHistory}\n\n${next}` : next;
   renderToolsOut();
+  pulseToolsLogPanel();
 }
 
 function toolsOutCommitCurrent() {
@@ -2639,6 +2667,26 @@ function initToolsPage() {
     applyToolsStagger();
   };
 
+  const initToolsLogPanel = () => {
+    const out = document.getElementById("toolsOut");
+    if (!out || out.dataset.toolsLogBound === "1") return;
+    out.dataset.toolsLogBound = "1";
+    out.setAttribute("role", "button");
+    out.setAttribute("tabindex", "0");
+    out.setAttribute("aria-expanded", "false");
+    out.setAttribute("aria-label", LANG === "ko" ? "로그창 펼치기 또는 접기" : "Expand or collapse log panel");
+    out.addEventListener("click", () => {
+      const page = document.getElementById("pageTools");
+      setToolsLogExpanded(!page?.classList.contains("tools-log-expanded"));
+    });
+    out.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      ev.preventDefault();
+      const page = document.getElementById("pageTools");
+      setToolsLogExpanded(!page?.classList.contains("tools-log-expanded"));
+    });
+  };
+
   const runSystemCommand = async () => {
     const inp = document.getElementById("sysCmdInput");
     const cmd = (inp?.value || "").trim();
@@ -2655,6 +2703,7 @@ function initToolsPage() {
   toolsProgressSet(null, { active: false });
   refreshToolsMetaInfo().catch(() => {});
   initToolsGroups();
+  initToolsLogPanel();
 
   bindOnce("btnDeviceInfo", async () => {
     let title = LANG === "en" ? "Device Info" : LANG === "zh" ? "设备信息" : "기기정보";
