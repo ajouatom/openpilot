@@ -140,6 +140,7 @@ class CarController(CarControllerBase):
     self.apply_angle_last = 0
     self.lkas_max_torque = 0
     self.angle_max_torque = 250
+    self.steer_pressed_timer = 0
 
     self.lkas11_active = False
 
@@ -241,13 +242,23 @@ class CarController(CarControllerBase):
     if CS.out.steeringPressed:
       #self.apply_angle_last = CS.out.steeringAngleDeg
       self.lkas_max_torque = max(self.lkas_max_torque - 20, 25)
+      self.steer_pressed_timer = int(2.0 / DT_CTRL)
     else:
+      angle_error = abs(apply_angle - CS.out.steeringAngleDeg)
       target_torque = self.angle_max_torque
 
       max_steering_tq = self.params.STEER_DRIVER_ALLOWANCE * 0.7
       rate_ratio = max(20, max_steering_tq - abs(CS.out.steeringTorque)) / max_steering_tq
       rate_up = self.params.ANGLE_TORQUE_UP_RATE * rate_ratio
       rate_down = self.params.ANGLE_TORQUE_DOWN_RATE * rate_ratio
+
+      if self.steer_pressed_timer > 0:
+        self.steer_pressed_timer -= 1
+
+        if angle_error < 2.0:
+          self.steer_pressed_timer -= 5
+
+        target_torque *= 0.3
 
       if self.lkas_max_torque > target_torque:
         self.lkas_max_torque = max(self.lkas_max_torque - rate_down, target_torque)
