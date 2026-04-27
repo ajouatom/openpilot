@@ -1512,13 +1512,14 @@ body[data-page="home"] .global-home-record-fab {
 }
 
 .dashcam-player-dialog {
-  width: min(92vw, 960px);
+  width: min(92vw, 960px, calc(78vh * 16 / 9));
   max-height: min(78vh, 680px);
 }
 
 .dashcam-player-frame {
   position: relative;
   overflow: hidden;
+  aspect-ratio: 16 / 9;
   border-radius: 8px;
   border: 1px solid rgba(255,255,255,.16);
   background: #000;
@@ -1527,9 +1528,13 @@ body[data-page="home"] .global-home-record-fab {
 
 .dashcam-player-video {
   width: 100%;
-  max-height: min(78vh, 680px);
+  height: 100%;
   display: block;
   background: #000;
+  object-fit: cover;
+  object-position: center;
+  transform: scale(1.045);
+  transform-origin: center;
 }
 
 .dashcam-player-top {
@@ -1889,12 +1894,12 @@ body[data-page="home"] .global-home-record-fab {
   }
 
   .dashcam-player-dialog {
-    width: min(76vw, 760px);
+    width: min(76vw, 760px, calc(68vh * 16 / 9));
     max-height: 68vh;
   }
 
   .dashcam-player-video {
-    max-height: 68vh;
+    height: 100%;
   }
 
   .dashcam-player-title {
