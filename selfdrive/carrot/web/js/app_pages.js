@@ -1827,6 +1827,14 @@ function normalizeToolsOutText(s) {
   return String(s ?? "").replace(/\s+$/, "");
 }
 
+function scrollToolsLogToBottom(delay = 0) {
+  window.setTimeout(() => {
+    const out = document.getElementById("toolsOut");
+    if (!out) return;
+    out.scrollTop = out.scrollHeight;
+  }, delay);
+}
+
 function pulseToolsLogPanel() {
   const page = document.getElementById("pageTools");
   if (!page || page.classList.contains("tools-log-expanded")) return;
@@ -1850,6 +1858,8 @@ function setToolsLogExpanded(expanded) {
       toolsLogAttentionTimer = null;
     }
   }
+  scrollToolsLogToBottom();
+  scrollToolsLogToBottom(280);
 }
 
 function renderToolsOut() {
@@ -1884,9 +1894,8 @@ function renderToolsOut() {
     out.replaceChildren(frag);
   }
 
-  requestAnimationFrame(() => {
-    out.scrollTop = out.scrollHeight;
-  });
+  requestAnimationFrame(() => scrollToolsLogToBottom());
+  scrollToolsLogToBottom(280);
 }
 
 function toolsOutSet(s) {

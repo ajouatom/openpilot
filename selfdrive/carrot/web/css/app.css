@@ -957,8 +957,9 @@ body[data-page="home"] .global-home-record-fab {
 
 .tools-console-dock {
   position: relative;
-  width: calc(100% + (var(--sp-lg) * 2));
-  margin-inline: calc(var(--sp-lg) * -1);
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
   z-index: 45;
   flex: none;
   background: var(--tools-console-bg);
@@ -1130,12 +1131,12 @@ body[data-page="home"] .global-home-record-fab {
 
 #pageTools.tools-log-attention .tools-console-dock::before,
 #pageTools.tools-log-expanded .tools-console-dock::before {
-  background: color-mix(in srgb, var(--md-primary) 68%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-primary) 42%, var(--tools-console-divider));
 }
 
 #pageTools.tools-log-attention .tools-console-log,
 #pageTools.tools-log-expanded .tools-console-log {
-  background: color-mix(in srgb, var(--tools-console-bg) 88%, var(--md-primary) 6%);
+  background: color-mix(in srgb, var(--tools-console-bg) 92%, var(--md-primary) 3%);
   color: color-mix(in srgb, var(--md-on-surface) 92%, var(--md-on-surface-var));
 }
 
@@ -4102,7 +4103,8 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
     grid-column: 2;
     grid-row: 1 / span 3;
     width: auto;
-    margin-inline: 0;
+    margin-left: 0;
+    margin-right: 0;
     display: flex;
     min-height: 0;
     background: transparent;
