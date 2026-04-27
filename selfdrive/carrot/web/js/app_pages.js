@@ -3562,6 +3562,66 @@ function openScreenrecordPlayer(id, name) {
   openLogsVideoPlayer(name || "화면녹화", screenrecordApiPath("video", id));
 }
 
+function dashcamUploadResultHtml(result) {
+  const text = String(result?.shareText || result?.message || "");
+  const discord = result?.discord || {};
+  let discordLabel = "Discord: 설정 없음";
+  let discordClass = "is-muted";
+  if (discord.configured && discord.ok) {
+    discordLabel = "Discord: 전송 완료";
+    discordClass = "is-ok";
+  } else if (discord.configured) {
+    discordLabel = `Discord: 실패${discord.status ? ` (${discord.status})` : ""}`;
+    discordClass = "is-error";
+  }
+  return `<div class="dashcam-share-card">
+    <div class="dashcam-share-card__summary">
+      <span>업로드 ${Number(result?.uploaded || 0)}/${Number(result?.total || 0)}</span>
+      <span class="${discordClass}">${escapeHtml(discordLabel)}</span>
+    </div>
+    <pre>${escapeHtml(text)}</pre>
+  </div>`;
+}
+
+async function shareDashcamUploadText(text) {
+  const body = String(text || "").trim();
+  if (!body) return;
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: "Carrot Dashcam Upload",
+        text: body,
+      });
+      return;
+    } catch (e) {
+      if (e?.name === "AbortError") return;
+    }
+  }
+  copyToClipboard(body);
+  showAppToast("공유를 지원하지 않아 클립보드에 복사했습니다.");
+}
+
+async function showDashcamUploadResult(result) {
+  const text = String(result?.shareText || result?.message || "").trim();
+  const selected = await openAppDialog({
+    mode: "choice",
+    title: "로그 전송 결과",
+    html: true,
+    messageHtml: dashcamUploadResultHtml(result),
+    cancelLabel: "닫기",
+    choices: [
+      { label: "공유", value: "share", className: "btn--filled" },
+      { label: "복사", value: "copy" },
+    ],
+  });
+  if (selected === "share") {
+    await shareDashcamUploadText(text);
+  } else if (selected === "copy") {
+    copyToClipboard(text);
+    showAppToast("복사되었습니다.");
+  }
+}
+
 async function uploadDashcamSegments(segments) {
   const targets = Array.from(new Set(segments || [])).filter(Boolean);
   if (!targets.length) {
@@ -3576,6 +3636,7 @@ async function uploadDashcamSegments(segments) {
     const message = result.message || `전송 완료 ${result.uploaded || 0}/${result.total || targets.length}`;
     showAppToast(message, { tone: result.ok ? "default" : "error", duration: 3600 });
     setDashcamStatus("");
+    await showDashcamUploadResult(result);
   } catch (e) {
     setDashcamStatus("");
     showAppToast(`로그 전송 실패: ${e.message || e}`, { tone: "error", duration: 4200 });

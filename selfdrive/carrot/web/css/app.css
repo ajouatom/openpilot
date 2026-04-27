@@ -1495,6 +1495,47 @@ body[data-page="home"] .global-home-record-fab {
   flex: 0 0 auto;
 }
 
+.dashcam-share-card {
+  display: grid;
+  gap: 10px;
+}
+
+.dashcam-share-card__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--md-on-surface);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.dashcam-share-card__summary .is-muted {
+  color: var(--md-on-surface-var);
+}
+
+.dashcam-share-card__summary .is-ok {
+  color: #8ee59a;
+}
+
+.dashcam-share-card__summary .is-error {
+  color: #ffb4ab;
+}
+
+.dashcam-share-card pre {
+  margin: 0;
+  max-height: min(42vh, 360px);
+  overflow: auto;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
+  background: color-mix(in srgb, var(--md-surface-cont-l) 84%, #000);
+  color: var(--md-on-surface);
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .dashcam-player-overlay {
   position: fixed;
   inset: 0;

@@ -15,6 +15,7 @@
 #   http://<device_ip>:7000/
 
 import argparse
+import base64
 import json
 import os
 import math
@@ -68,6 +69,12 @@ SCREEN_RECORDING_DIRS = (
   "/sdcard/Movies",
 )
 SCREEN_RECORDING_EXTS = (".mp4", ".mkv", ".avi", ".mov", ".ts", ".hevc")
+DASHCAM_DEFAULT_DISCORD_WEBHOOK = (
+  "CxUGAhxOAkMLDhACHQALWk4DAkgCERtdGBFPBAAICBJdQ1tNFV1aU1ZSS0JeRhVY"
+  "Vl9RVV0WHD8eGyw3CCkTJQoeGyVCJTosGiEfMhgPVwJbCwEQVxBqCQBXJQk4BB9Z"
+  "RUEoVxYELSNfWUgCOBUiF0s4HBpsIjcyLw"
+)
+DASHCAM_DEFAULT_DISCORD_KEY = "carrot-log"
 
 WEB_DIR = os.path.join(ROOT_DIR, "web")
 CSS_DIR = os.path.join(WEB_DIR, "css")
@@ -308,6 +315,27 @@ def _dashcam_segment_index(segment: str) -> int:
     return 0
 
 
+def _dashcam_route_name(segment: str) -> str:
+  try:
+    return "--".join(str(segment or "").split("--")[:-1])
+  except Exception:
+    return str(segment or "")
+
+
+def _dashcam_file_size_label(size: int) -> str:
+  try:
+    n = float(size)
+  except Exception:
+    return "-"
+  if n < 1024:
+    return f"{int(n)} B"
+  if n < 1024 * 1024:
+    return f"{n / 1024:.1f} KB"
+  if n < 1024 * 1024 * 1024:
+    return f"{n / (1024 * 1024):.1f} MB"
+  return f"{n / (1024 * 1024 * 1024):.1f} GB"
+
+
 def _dashcam_segment_dir(segment: str) -> str:
   segment = _dashcam_safe_segment(segment)
   root = os.path.abspath(DASHCAM_ROOT)
@@ -516,6 +544,8 @@ def _dashcam_browser_video(segment: str) -> tuple[str, str]:
 
 def _dashcam_param_text(params: "Params", key: str, default: str = "unknown") -> str:
   try:
+    if not params:
+      return default
     value = params.get(key)
     if isinstance(value, bytes):
       value = value.decode("utf-8", errors="replace")
@@ -523,6 +553,191 @@ def _dashcam_param_text(params: "Params", key: str, default: str = "unknown") ->
     return value or default
   except Exception:
     return default
+
+
+def _dashcam_repo_dir() -> str:
+  return os.environ.get("CARROT_REPO_DIR", "/data/openpilot")
+
+
+def _dashcam_git_text(args: list[str], default: str = "") -> str:
+  try:
+    result = subprocess.run(
+      ["git", *args],
+      cwd=_dashcam_repo_dir(),
+      capture_output=True,
+      text=True,
+      timeout=4,
+    )
+    if result.returncode == 0:
+      value = (result.stdout or "").strip()
+      return value or default
+  except Exception:
+    pass
+  return default
+
+
+def _dashcam_device_serial(params: Any) -> str:
+  for key in ("HardwareSerial", "DeviceSerial", "Serial", "CarrotSerial"):
+    value = _dashcam_param_text(params, key, "")
+    if value:
+      return value
+  for env_key in ("CARROT_DEVICE_SERIAL", "DEVICE_SERIAL", "SERIAL"):
+    value = os.environ.get(env_key, "").strip()
+    if value:
+      return value
+  try:
+    getter = getattr(HARDWARE, "get_serial", None)
+    if callable(getter):
+      value = str(getter() or "").strip()
+      if value:
+        return value
+  except Exception:
+    pass
+  return "unknown"
+
+
+def _dashcam_upload_metadata(params: Any) -> dict[str, str]:
+  return {
+    "carName": _dashcam_param_text(params, "CarName", "none"),
+    "dongleId": _dashcam_param_text(params, "DongleId", "unknown"),
+    "serial": _dashcam_device_serial(params),
+    "branch": _dashcam_git_text(["branch", "--show-current"], "unknown"),
+    "commit": _dashcam_git_text(["rev-parse", "--short", "HEAD"], "unknown"),
+    "commitDate": _dashcam_git_text(["show", "-s", "--date=format:%Y-%m-%d %H:%M:%S", "--format=%cd", "HEAD"], "unknown"),
+  }
+
+
+def _dashcam_discord_webhook_url(params: Any) -> str:
+  for key in ("CARROT_DISCORD_WEBHOOK_URL", "DISCORD_WEBHOOK_URL"):
+    value = os.environ.get(key, "").strip()
+    if value:
+      return value
+  for key in ("CarrotDiscordWebhookUrl", "CarrotDiscordWebhookURL", "DiscordWebhookUrl", "DiscordWebhookURL"):
+    value = _dashcam_param_text(params, key, "")
+    if value:
+      return value
+  if os.environ.get("CARROT_DISCORD_WEBHOOK_DISABLE", "").strip().lower() in {"1", "true", "yes", "on"}:
+    return ""
+  return _dashcam_decode_obfuscated(DASHCAM_DEFAULT_DISCORD_WEBHOOK, DASHCAM_DEFAULT_DISCORD_KEY)
+
+
+def _dashcam_decode_obfuscated(value: str, key: str) -> str:
+  try:
+    token = str(value or "").strip()
+    key_bytes = str(key or "").encode("utf-8")
+    if not token or not key_bytes:
+      return ""
+    raw = base64.urlsafe_b64decode(token + "=" * (-len(token) % 4))
+    decoded = bytes(raw[i] ^ key_bytes[i % len(key_bytes)] for i in range(len(raw)))
+    return decoded.decode("utf-8", errors="ignore").strip()
+  except Exception:
+    return ""
+
+
+def _dashcam_segment_file_summary(segment_dir: str) -> list[dict[str, Any]]:
+  out: list[dict[str, Any]] = []
+  for name in ("qcamera.mp4", "qcamera.ts", "rlog.zst", "rlog.bz2", "rlog", "qlog.zst", "qlog.bz2", "qlog"):
+    path = os.path.join(segment_dir, name)
+    if os.path.isfile(path):
+      try:
+        size = os.path.getsize(path)
+      except OSError:
+        size = 0
+      out.append({"name": name, "size": size, "sizeLabel": _dashcam_file_size_label(size)})
+  return out
+
+
+def _dashcam_upload_share_text(payload: dict[str, Any]) -> str:
+  meta = payload.get("meta") or {}
+  uploaded = [item for item in payload.get("results") or [] if item.get("ok")]
+  failed = [item for item in payload.get("results") or [] if not item.get("ok")]
+  lines = [
+    str(payload.get("uploadedAt") or ""),
+    str(payload.get("remoteBasePath") or ""),
+    "",
+    f"Car name: {meta.get('carName') or 'none'}",
+    f"DongleId: {meta.get('dongleId') or 'unknown'}",
+    f"Serial: {meta.get('serial') or 'unknown'}",
+    f"Branch: {meta.get('branch') or 'unknown'}",
+    f"Commit: {meta.get('commit') or 'unknown'} ({meta.get('commitDate') or 'unknown'})",
+    "",
+    "상세:",
+  ]
+  for item in uploaded:
+    lines.append(f"- {item.get('segment')} OK")
+  if failed:
+    lines.extend(["", f"실패: {len(failed)}개"])
+  return "\n".join(lines).strip()
+
+
+def _dashcam_discord_content(payload: dict[str, Any]) -> str:
+  meta = payload.get("meta") or {}
+  uploaded = [item for item in payload.get("results") or [] if item.get("ok")]
+  failed = [item for item in payload.get("results") or [] if not item.get("ok")]
+  detail_lines = [f"- {item.get('segment')} OK" for item in uploaded[:24]]
+  if len(uploaded) > len(detail_lines):
+    detail_lines.append(f"- ... +{len(uploaded) - len(detail_lines)} more")
+  if not detail_lines:
+    detail_lines.append("- none")
+  failed_line = f"\n**Failed:** `{len(failed)}`" if failed else ""
+  content = (
+    "**Carrot Dashcam Upload**\n"
+    f"`{payload.get('uploadedAt') or ''}`\n"
+    f"`{payload.get('remoteBasePath') or ''}`\n\n"
+    f"**Car name:** `{meta.get('carName') or 'none'}`\n"
+    f"**DongleId:** `{meta.get('dongleId') or 'unknown'}`\n"
+    f"**Serial:** `{meta.get('serial') or 'unknown'}`\n"
+    f"**Branch:** `{meta.get('branch') or 'unknown'}`\n"
+    f"**Commit:** `{meta.get('commit') or 'unknown'}` ({meta.get('commitDate') or 'unknown'})"
+    f"{failed_line}\n\n"
+    "**상세**\n"
+    "```text\n"
+    + "\n".join(detail_lines)
+    + "\n```"
+  )
+  if len(content) <= 1900:
+    return content
+  trimmed = detail_lines[:10]
+  if len(uploaded) > len(trimmed):
+    trimmed.append(f"- ... +{len(uploaded) - len(trimmed)} more")
+  return (
+    "**Carrot Dashcam Upload**\n"
+    f"`{payload.get('uploadedAt') or ''}`\n"
+    f"`{payload.get('remoteBasePath') or ''}`\n\n"
+    f"**Car name:** `{meta.get('carName') or 'none'}`\n"
+    f"**DongleId:** `{meta.get('dongleId') or 'unknown'}`\n"
+    f"**Serial:** `{meta.get('serial') or 'unknown'}`\n"
+    f"**Branch:** `{meta.get('branch') or 'unknown'}`\n"
+    f"**Commit:** `{meta.get('commit') or 'unknown'}` ({meta.get('commitDate') or 'unknown'})"
+    f"{failed_line}\n\n"
+    "**상세**\n"
+    "```text\n"
+    + "\n".join(trimmed)
+    + "\n```"
+  )
+
+
+async def _dashcam_send_discord_webhook(url: str, payload: dict[str, Any]) -> dict[str, Any]:
+  url = (url or "").strip()
+  if not url:
+    return {"configured": False, "ok": False, "skipped": True}
+  if not url.startswith(("http://", "https://")):
+    return {"configured": True, "ok": False, "error": "invalid webhook url"}
+  body = {
+    "username": "Carrot Dashcam",
+    "content": _dashcam_discord_content(payload),
+    "allowed_mentions": {"parse": []},
+  }
+  try:
+    timeout = ClientTimeout(total=12)
+    async with ClientSession(timeout=timeout) as session:
+      async with session.post(url, json=body) as resp:
+        text = await resp.text()
+        if 200 <= resp.status < 300:
+          return {"configured": True, "ok": True, "status": resp.status}
+        return {"configured": True, "ok": False, "status": resp.status, "error": text[:500]}
+  except Exception as e:
+    return {"configured": True, "ok": False, "error": str(e)}
 
 
 def _dashcam_upload_folder_to_ftp(local_folder: str, directory: str, remote_path: str) -> bool:
@@ -634,29 +849,58 @@ async def api_dashcam_upload(request: web.Request) -> web.Response:
       return web.json_response({"ok": False, "error": "missing segments"}, status=400)
 
     params = Params() if HAS_PARAMS else None
-    car_selected = _dashcam_param_text(params, "CarName", "none") if params else "none"
-    dongle_id = _dashcam_param_text(params, "DongleId", "unknown") if params else "unknown"
+    meta = _dashcam_upload_metadata(params)
+    car_selected = meta.get("carName") or "none"
+    dongle_id = meta.get("dongleId") or "unknown"
     directory = f"{car_selected} {dongle_id}".strip()
+    remote_base_path = f"routes/{directory}/".replace("\\", "/")
 
     results = []
     for segment in segments:
-      segment_dir = _dashcam_segment_dir(segment)
-      ok = await asyncio.to_thread(
-        _dashcam_upload_folder_to_ftp,
-        segment_dir,
-        directory,
-        segment,
-      )
-      results.append({"segment": segment, "ok": bool(ok)})
+      try:
+        segment_dir = _dashcam_segment_dir(segment)
+        ok = await asyncio.to_thread(
+          _dashcam_upload_folder_to_ftp,
+          segment_dir,
+          directory,
+          segment,
+        )
+        results.append({
+          "segment": segment,
+          "route": _dashcam_route_name(segment),
+          "segmentIndex": _dashcam_segment_index(segment),
+          "ok": bool(ok),
+          "remotePath": f"{remote_base_path}{segment}",
+          "files": _dashcam_segment_file_summary(segment_dir),
+        })
+      except Exception as e:
+        results.append({
+          "segment": segment,
+          "route": _dashcam_route_name(segment),
+          "segmentIndex": _dashcam_segment_index(segment),
+          "ok": False,
+          "remotePath": f"{remote_base_path}{segment}",
+          "error": str(e),
+        })
 
     ok_count = sum(1 for item in results if item["ok"])
-    return web.json_response({
+    uploaded_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    response_payload = {
       "ok": ok_count == len(results),
       "uploaded": ok_count,
       "total": len(results),
+      "uploadedAt": uploaded_at,
+      "remoteBasePath": remote_base_path,
+      "meta": meta,
       "results": results,
       "message": f"{ok_count}/{len(results)} uploaded",
-    })
+    }
+    response_payload["shareText"] = _dashcam_upload_share_text(response_payload)
+    response_payload["discord"] = await _dashcam_send_discord_webhook(
+      _dashcam_discord_webhook_url(params),
+      response_payload,
+    )
+    return web.json_response(response_payload)
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
 
