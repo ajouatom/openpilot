@@ -791,7 +791,7 @@ body[data-page="home"] .global-home-record-fab {
     var(--tools-console-log-pad-top) +
     var(--tools-console-log-pad-bottom)
   );
-  --tools-console-height: calc(var(--tools-console-form-height) + var(--tools-console-log-height) + 1px);
+  --tools-console-height: calc(var(--tools-console-log-height) + 28px);
   --tools-console-inline: var(--sp-lg);
   --tools-console-bg: color-mix(in srgb, var(--md-surface) 92%, #000);
   --tools-console-divider: color-mix(in srgb, var(--md-stroke-soft) 46%, transparent);
@@ -987,6 +987,11 @@ body[data-page="home"] .global-home-record-fab {
   box-sizing: border-box;
 }
 
+#pageTools .tools-console-form,
+#pageTools .tools-console-help {
+  display: none !important;
+}
+
 .tools-console-prompt {
   color: var(--md-primary);
   font-family: var(--font-mono);
@@ -1063,18 +1068,18 @@ body[data-page="home"] .global-home-record-fab {
 .tools-console-log {
   display: block;
   flex: none;
-  height: var(--tools-console-log-height);
-  min-height: var(--tools-console-log-height);
-  max-height: var(--tools-console-log-height);
-  margin: 0;
+  height: calc(var(--tools-console-log-height) + 18px);
+  min-height: calc(var(--tools-console-log-height) + 18px);
+  max-height: calc(var(--tools-console-log-height) + 18px);
+  margin: 8px 0 0;
   padding:
-    var(--tools-console-log-pad-top)
-    var(--tools-console-inline)
-    var(--tools-console-log-pad-bottom);
-  border: 0;
-  border-radius: 0;
-  background: var(--tools-console-bg);
-  color: var(--md-on-surface-var);
+    calc(var(--tools-console-log-pad-top) + 2px)
+    calc(var(--tools-console-inline) + 2px)
+    calc(var(--tools-console-log-pad-bottom) + 2px);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 42%, transparent);
+  border-radius: 8px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--md-surface-cont-h) 88%, transparent), var(--md-surface-cont));
+  color: color-mix(in srgb, var(--md-on-surface) 78%, var(--md-on-surface-var));
   font-family: var(--font-mono);
   font-size: var(--tools-console-log-font-size);
   line-height: var(--tools-console-log-line-height);
@@ -1082,6 +1087,7 @@ body[data-page="home"] .global-home-record-fab {
   word-break: break-word;
   overflow: auto;
   box-sizing: border-box;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 5%, transparent);
 }
 
 .tools-console-log__history,

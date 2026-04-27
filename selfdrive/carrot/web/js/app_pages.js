@@ -3441,7 +3441,7 @@ function dashcamSelectedForRoute(entry) {
   return (entry.segmentFolders || []).filter((segment) => dashcamState.selected.has(segment));
 }
 
-function dashcamRouteCardHtml(entry) {
+function dashcamRouteCardHtml(entry, index = 0) {
   const route = String(entry.route || "");
   const segments = Array.isArray(entry.segmentFolders) ? entry.segmentFolders : [];
   const expanded = dashcamState.expanded.has(route);
@@ -3473,11 +3473,11 @@ function dashcamRouteCardHtml(entry) {
         </div>
       </div>`
     : "";
-  const segmentList = shouldRenderSegments ? segments.map((segment) => {
+  const segmentList = shouldRenderSegments ? segments.map((segment, segmentIndex) => {
     const segAttr = escapeHtml(segment);
     const checked = dashcamState.selected.has(segment) ? " checked" : "";
     if (compactSegments) {
-      return `<div class="dashcam-segment-tile dashcam-segment-tile--compact" data-action="play" data-route="${routeAttr}" data-segment="${segAttr}">
+      return `<div class="dashcam-segment-tile dashcam-segment-tile--compact ui-stagger-item" style="--i:${segmentIndex}" data-action="play" data-route="${routeAttr}" data-segment="${segAttr}">
         <div class="dashcam-segment-thumb dashcam-segment-thumb--compact">
           <img class="logs-lazy-img" loading="lazy" decoding="async" fetchpriority="low" data-src="${dashcamApiPath("thumbnail", segment)}" alt="">
           <label class="dashcam-segment-check dashcam-segment-check--compact" title="선택" onclick="event.stopPropagation()">
@@ -3493,7 +3493,7 @@ function dashcamRouteCardHtml(entry) {
         </button>
       </div>`;
     }
-    return `<div class="dashcam-segment-tile" data-action="play" data-route="${routeAttr}" data-segment="${segAttr}">
+    return `<div class="dashcam-segment-tile ui-stagger-item" style="--i:${segmentIndex}" data-action="play" data-route="${routeAttr}" data-segment="${segAttr}">
       <div class="dashcam-segment-thumb">
         <img class="logs-lazy-img" loading="lazy" decoding="async" fetchpriority="low" data-src="${dashcamApiPath("thumbnail", segment)}" alt="">
         <label class="dashcam-segment-check" title="선택" onclick="event.stopPropagation()">
@@ -3510,7 +3510,7 @@ function dashcamRouteCardHtml(entry) {
     </div>`;
   }).join("") : "";
 
-  return `<article class="dashcam-route-card">
+  return `<article class="dashcam-route-card ui-stagger-item" style="--i:${index}">
     ${preview}
     <div class="dashcam-route-main">
       <div class="dashcam-route-head" data-action="toggle-route" data-route="${routeAttr}">
