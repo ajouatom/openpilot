@@ -804,7 +804,8 @@ function renderGroups() {
     const label = getSettingGroupLabel(g.group);
 
     const b = document.createElement("button");
-    b.className = "btn groupBtn";
+    b.className = "btn groupBtn ui-stagger-item";
+    b.style.setProperty("--i", String(box.children.length));
     if (g.group === CURRENT_GROUP) b.classList.add("active");
     b.textContent = `${label} (${g.count})`;
     b.onclick = () => selectGroup(g.group);
@@ -1569,7 +1570,7 @@ async function renderItems(group, options = {}) {
     return;
   }
 
-  for (const p of list) {
+  list.forEach((p, index) => {
     const name = p.name;
     if (!(name in UNIT_INDEX)) UNIT_INDEX[name] = 0;
 
@@ -1577,7 +1578,8 @@ async function renderItems(group, options = {}) {
     const descr = formatItemText(p, "descr", "edescr", "");
 
     const el = document.createElement("div");
-    el.className = "setting";
+    el.className = "setting ui-stagger-item";
+    el.style.setProperty("--i", String(index));
     el.dataset.settingName = name;
     el.dataset.settingGroup = group;
 
@@ -1658,7 +1660,7 @@ async function renderItems(group, options = {}) {
 
     btnMinus.onclick = () => applyDelta(-1);
     btnPlus.onclick = () => applyDelta(+1);
-  }
+  });
 
   itemsBox.dataset.renderedGroup = group;
 
@@ -2600,6 +2602,16 @@ function initToolsPage() {
 
   const initToolsGroups = () => {
     const groups = Array.from(document.querySelectorAll("#pageTools .tools-group"));
+    const applyToolsStagger = () => {
+      const items = Array.from(document.querySelectorAll(
+        "#pageTools .tools-scroll-stack > .row-wrap:first-child, #pageTools .tools-group, #pageTools .tools-group.is-open .tools-group__body > *"
+      )).filter((node) => !node.hidden && !node.classList.contains("hidden"));
+      items.forEach((node, index) => {
+        node.classList.add("ui-stagger-item");
+        node.style.setProperty("--i", String(index));
+      });
+    };
+
     groups.forEach((group) => {
       const toggle = group.querySelector(".tools-group__toggle");
       const body = group.querySelector(".tools-group__body");
@@ -2621,8 +2633,10 @@ function initToolsPage() {
         group.classList.toggle("is-open", nextOpen);
         toggle.setAttribute("aria-expanded", nextOpen ? "true" : "false");
         localStorage.setItem("tools_group_" + groupName, nextOpen ? "true" : "false");
+        applyToolsStagger();
       });
     });
+    applyToolsStagger();
   };
 
   const runSystemCommand = async () => {

@@ -754,6 +754,29 @@ body[data-page="home"] .global-home-record-fab {
   margin-bottom: var(--sp-2xl);
 }
 
+.ui-stagger-item {
+  animation: uiStaggerIn .38s cubic-bezier(.2, 0, 0, 1) both;
+  animation-delay: min(calc(var(--i, 0) * 36ms), 420ms);
+}
+
+@keyframes uiStaggerIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-stagger-item {
+    animation: none;
+  }
+}
+
 #pageTools {
   --tools-console-bottom: calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px));
   --tools-page-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px) - (var(--sp-lg) * 2));
