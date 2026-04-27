@@ -628,6 +628,7 @@ let QUICK_LINK_MESSAGE = "";
 let quickLinkLoadPromise = null;
 let quickLinkLoadedAt = 0;
 let quickLinkActionTimer = null;
+const QUICK_LINK_FIXED_URL = "https://man.carrotpilot.app/";
 
 btnBackBranch.onclick = () => history.back();
 branchTitle.onclick = () => history.back();
@@ -1501,55 +1502,14 @@ function renderQuickLinkUI() {
 function setServerStateStatus() {}
 
 async function updateQuickLink(options = {}) {
-  const force = options.force === true;
   const silent = options.silent === true;
-  const ttlMs = Number.isFinite(options.ttlMs) ? options.ttlMs : 15000;
-
-  if (!force && quickLinkLoadPromise) return quickLinkLoadPromise;
-  if (!force && quickLinkLoadedAt > 0 && (Date.now() - quickLinkLoadedAt) < ttlMs) {
-    if (!silent || CURRENT_PAGE === "tools") renderQuickLinkUI();
-    return QUICK_LINK_URL;
-  }
-
-  if (!silent) {
-    QUICK_LINK_URL = "";
-    QUICK_LINK_STATUS = "loading";
-    QUICK_LINK_MESSAGE = "";
-    renderQuickLinkUI();
-  }
-
-  quickLinkLoadPromise = (async () => {
-    try {
-      const values = await bulkGet(["GithubUsername"]);
-      const githubId = String(values["GithubUsername"] || "").trim();
-
-      if (!githubId) {
-        QUICK_LINK_URL = "";
-        QUICK_LINK_STATUS = "empty";
-        QUICK_LINK_MESSAGE = "";
-        quickLinkLoadedAt = Date.now();
-        if (!silent || CURRENT_PAGE === "tools") renderQuickLinkUI();
-        return "";
-      }
-
-      QUICK_LINK_URL = `https://shind0.synology.me/carrot/go/?id=${encodeURIComponent(githubId)}`;
-      QUICK_LINK_STATUS = "ready";
-      QUICK_LINK_MESSAGE = "";
-      quickLinkLoadedAt = Date.now();
-      if (!silent || CURRENT_PAGE === "tools") renderQuickLinkUI();
-      return QUICK_LINK_URL;
-    } catch (e) {
-      QUICK_LINK_STATUS = "error";
-      QUICK_LINK_MESSAGE = `QuickLink error: ${e?.message || e}`;
-      if (!silent || CURRENT_PAGE === "tools") renderQuickLinkUI();
-      console.log("[QuickLink] failed:", e);
-      throw e;
-    } finally {
-      quickLinkLoadPromise = null;
-    }
-  })();
-
-  return quickLinkLoadPromise;
+  QUICK_LINK_URL = QUICK_LINK_FIXED_URL;
+  QUICK_LINK_STATUS = "ready";
+  QUICK_LINK_MESSAGE = "";
+  quickLinkLoadPromise = null;
+  quickLinkLoadedAt = Date.now();
+  if (!silent || CURRENT_PAGE === "tools") renderQuickLinkUI();
+  return QUICK_LINK_URL;
 }
 
 async function openQuickLink() {
