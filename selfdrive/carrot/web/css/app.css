@@ -799,8 +799,10 @@ body[data-page="home"] .global-home-record-fab {
   );
   --tools-console-height: var(--tools-console-log-height);
   --tools-console-inline: var(--sp-lg);
-  --tools-console-bg: #090d12;
-  --tools-console-surface: #05080c;
+  --tools-console-bg: #080b10;
+  --tools-console-surface: #0c131b;
+  --tools-console-current: #d9f1ff;
+  --tools-console-history: #7f95a7;
   --tools-console-divider: color-mix(in srgb, var(--md-outline-var) 24%, transparent);
   display: flex;
   flex-direction: column;
@@ -1160,7 +1162,7 @@ body[data-page="home"] .global-home-record-fab {
 
 #pageTools.tools-log-attention .tools-console-log,
 #pageTools.tools-log-expanded .tools-console-log {
-  background: color-mix(in srgb, var(--tools-console-surface) 96%, var(--md-primary) 4%);
+  background: color-mix(in srgb, var(--tools-console-surface) 94%, var(--md-primary) 6%);
   color: color-mix(in srgb, var(--md-on-surface) 92%, var(--md-on-surface-var));
 }
 
@@ -1196,11 +1198,11 @@ body[data-page="home"] .global-home-record-fab {
 }
 
 .tools-console-log__history {
-  color: color-mix(in srgb, var(--md-on-surface-var) 72%, var(--md-outline));
+  color: var(--tools-console-history);
 }
 
 .tools-console-log__current {
-  color: var(--md-on-surface);
+  color: var(--tools-console-current);
 }
 
 /* ── Logs / Dashcam ───────────────────────────────────────── */
