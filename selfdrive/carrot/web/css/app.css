@@ -1536,6 +1536,76 @@ body[data-page="home"] .global-home-record-fab {
   word-break: break-word;
 }
 
+#appDialog:has(.dashcam-share-dialog) .app-dialog__choiceBtn {
+  min-height: 40px;
+  text-align: center !important;
+  justify-content: center;
+}
+
+#appDialog:has(.dashcam-share-dialog) .app-dialog__actions {
+  margin-top: 10px;
+}
+
+.dashcam-upload-progress {
+  position: fixed;
+  inset: 0;
+  z-index: 170;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(0, 0, 0, .46);
+  opacity: 0;
+  transition: opacity .16s ease;
+}
+
+.dashcam-upload-progress.is-open {
+  opacity: 1;
+}
+
+.dashcam-upload-progress__sheet {
+  width: min(92vw, 320px);
+  padding: 18px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 55%, transparent);
+  background: var(--md-surface-cont);
+  box-shadow: var(--shadow-2);
+}
+
+.dashcam-upload-progress__title {
+  color: var(--md-on-surface);
+  font-size: 17px;
+  font-weight: 850;
+}
+
+.dashcam-upload-progress__message {
+  margin-top: 8px;
+  color: var(--md-on-surface-var);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dashcam-upload-progress__bar {
+  height: 4px;
+  margin-top: 16px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-outline-var) 30%, transparent);
+}
+
+.dashcam-upload-progress__bar span {
+  display: block;
+  width: 42%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--md-primary);
+  animation: dashcam-upload-indeterminate 1.1s ease-in-out infinite;
+}
+
+@keyframes dashcam-upload-indeterminate {
+  0% { transform: translateX(-115%); }
+  100% { transform: translateX(260%); }
+}
+
 .dashcam-player-overlay {
   position: fixed;
   inset: 0;

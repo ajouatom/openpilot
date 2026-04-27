@@ -652,21 +652,25 @@ def _dashcam_upload_share_text(payload: dict[str, Any]) -> str:
   uploaded = [item for item in payload.get("results") or [] if item.get("ok")]
   failed = [item for item in payload.get("results") or [] if not item.get("ok")]
   lines = [
-    str(payload.get("uploadedAt") or ""),
-    str(payload.get("remoteBasePath") or ""),
+    "# Carrot Dashcam Upload",
     "",
-    f"Car name: {meta.get('carName') or 'none'}",
-    f"DongleId: {meta.get('dongleId') or 'unknown'}",
-    f"Serial: {meta.get('serial') or 'unknown'}",
-    f"Branch: {meta.get('branch') or 'unknown'}",
-    f"Commit: {meta.get('commit') or 'unknown'} ({meta.get('commitDate') or 'unknown'})",
+    "## Upload",
+    f"- Time: {payload.get('uploadedAt') or ''}",
+    f"- Path: {payload.get('remoteBasePath') or ''}",
     "",
-    "상세:",
+    "## Device",
+    f"- Car name: {meta.get('carName') or 'none'}",
+    f"- DongleId: {meta.get('dongleId') or 'unknown'}",
+    f"- Serial: {meta.get('serial') or 'unknown'}",
+    f"- Branch: {meta.get('branch') or 'unknown'}",
+    f"- Commit: {meta.get('commit') or 'unknown'} ({meta.get('commitDate') or 'unknown'})",
+    "",
+    "## 상세",
   ]
   for item in uploaded:
     lines.append(f"- {item.get('segment')} OK")
   if failed:
-    lines.extend(["", f"실패: {len(failed)}개"])
+    lines.extend(["", "## 실패", f"- {len(failed)}개"])
   return "\n".join(lines).strip()
 
 
@@ -681,16 +685,18 @@ def _dashcam_discord_content(payload: dict[str, Any]) -> str:
     detail_lines.append("- none")
   failed_line = f"\n**Failed:** `{len(failed)}`" if failed else ""
   content = (
-    "**Carrot Dashcam Upload**\n"
-    f"`{payload.get('uploadedAt') or ''}`\n"
-    f"`{payload.get('remoteBasePath') or ''}`\n\n"
-    f"**Car name:** `{meta.get('carName') or 'none'}`\n"
-    f"**DongleId:** `{meta.get('dongleId') or 'unknown'}`\n"
-    f"**Serial:** `{meta.get('serial') or 'unknown'}`\n"
-    f"**Branch:** `{meta.get('branch') or 'unknown'}`\n"
-    f"**Commit:** `{meta.get('commit') or 'unknown'}` ({meta.get('commitDate') or 'unknown'})"
+    "# Carrot Dashcam Upload\n\n"
+    "## Upload\n"
+    f"- Time: `{payload.get('uploadedAt') or ''}`\n"
+    f"- Path: `{payload.get('remoteBasePath') or ''}`\n\n"
+    "## Device\n"
+    f"- Car name: `{meta.get('carName') or 'none'}`\n"
+    f"- DongleId: `{meta.get('dongleId') or 'unknown'}`\n"
+    f"- Serial: `{meta.get('serial') or 'unknown'}`\n"
+    f"- Branch: `{meta.get('branch') or 'unknown'}`\n"
+    f"- Commit: `{meta.get('commit') or 'unknown'}` ({meta.get('commitDate') or 'unknown'})"
     f"{failed_line}\n\n"
-    "**상세**\n"
+    "## 상세\n"
     "```text\n"
     + "\n".join(detail_lines)
     + "\n```"
@@ -701,16 +707,18 @@ def _dashcam_discord_content(payload: dict[str, Any]) -> str:
   if len(uploaded) > len(trimmed):
     trimmed.append(f"- ... +{len(uploaded) - len(trimmed)} more")
   return (
-    "**Carrot Dashcam Upload**\n"
-    f"`{payload.get('uploadedAt') or ''}`\n"
-    f"`{payload.get('remoteBasePath') or ''}`\n\n"
-    f"**Car name:** `{meta.get('carName') or 'none'}`\n"
-    f"**DongleId:** `{meta.get('dongleId') or 'unknown'}`\n"
-    f"**Serial:** `{meta.get('serial') or 'unknown'}`\n"
-    f"**Branch:** `{meta.get('branch') or 'unknown'}`\n"
-    f"**Commit:** `{meta.get('commit') or 'unknown'}` ({meta.get('commitDate') or 'unknown'})"
+    "# Carrot Dashcam Upload\n\n"
+    "## Upload\n"
+    f"- Time: `{payload.get('uploadedAt') or ''}`\n"
+    f"- Path: `{payload.get('remoteBasePath') or ''}`\n\n"
+    "## Device\n"
+    f"- Car name: `{meta.get('carName') or 'none'}`\n"
+    f"- DongleId: `{meta.get('dongleId') or 'unknown'}`\n"
+    f"- Serial: `{meta.get('serial') or 'unknown'}`\n"
+    f"- Branch: `{meta.get('branch') or 'unknown'}`\n"
+    f"- Commit: `{meta.get('commit') or 'unknown'}` ({meta.get('commitDate') or 'unknown'})"
     f"{failed_line}\n\n"
-    "**상세**\n"
+    "## 상세\n"
     "```text\n"
     + "\n".join(trimmed)
     + "\n```"

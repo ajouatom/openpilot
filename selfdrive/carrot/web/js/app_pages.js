@@ -3583,43 +3583,44 @@ function dashcamUploadResultHtml(result) {
   </div>`;
 }
 
-async function shareDashcamUploadText(text) {
-  const body = String(text || "").trim();
-  if (!body) return;
-  if (navigator.share) {
-    try {
-      await navigator.share({
-        title: "Carrot Dashcam Upload",
-        text: body,
-      });
-      return;
-    } catch (e) {
-      if (e?.name === "AbortError") return;
-    }
-  }
-  copyToClipboard(body);
-  showAppToast("공유를 지원하지 않아 클립보드에 복사했습니다.");
-}
-
 async function showDashcamUploadResult(result) {
   const text = String(result?.shareText || result?.message || "").trim();
   const selected = await openAppDialog({
     mode: "choice",
     title: "로그 전송 결과",
     html: true,
-    messageHtml: dashcamUploadResultHtml(result),
+    messageHtml: `<div class="dashcam-share-dialog">${dashcamUploadResultHtml(result)}</div>`,
     cancelLabel: "닫기",
     choices: [
-      { label: "공유", value: "share", className: "btn--filled" },
-      { label: "복사", value: "copy" },
+      { label: "복사", value: "copy", className: "btn--filled" },
     ],
   });
-  if (selected === "share") {
-    await shareDashcamUploadText(text);
-  } else if (selected === "copy") {
+  if (selected === "copy") {
     copyToClipboard(text);
     showAppToast("복사되었습니다.");
   }
+}
+
+function openDashcamUploadProgress(total) {
+  const overlay = document.createElement("div");
+  overlay.className = "dashcam-upload-progress";
+  overlay.innerHTML = `<div class="dashcam-upload-progress__sheet" role="dialog" aria-modal="true">
+    <div class="dashcam-upload-progress__title">로그 전송 중</div>
+    <div class="dashcam-upload-progress__message">0/${Number(total || 0)}</div>
+    <div class="dashcam-upload-progress__bar" aria-hidden="true"><span></span></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  document.body.classList.add("dialog-open");
+  requestAnimationFrame(() => overlay.classList.add("is-open"));
+  return {
+    close() {
+      overlay.classList.remove("is-open");
+      window.setTimeout(() => {
+        overlay.remove();
+        syncModalBodyLock();
+      }, 160);
+    },
+  };
 }
 
 async function uploadDashcamSegments(segments) {
@@ -3630,15 +3631,15 @@ async function uploadDashcamSegments(segments) {
   }
   const ok = await appConfirm(`당근 서버에 ${targets.length}개 로그를 전송할까요?`, { title: "로그 전송" });
   if (!ok) return;
-  setDashcamStatus(`로그 전송 중... 0/${targets.length}`);
+  const progress = openDashcamUploadProgress(targets.length);
   try {
     const result = await postJson("/api/dashcam/upload", { segments: targets });
     const message = result.message || `전송 완료 ${result.uploaded || 0}/${result.total || targets.length}`;
     showAppToast(message, { tone: result.ok ? "default" : "error", duration: 3600 });
-    setDashcamStatus("");
+    progress.close();
     await showDashcamUploadResult(result);
   } catch (e) {
-    setDashcamStatus("");
+    progress.close();
     showAppToast(`로그 전송 실패: ${e.message || e}`, { tone: "error", duration: 4200 });
   }
 }
