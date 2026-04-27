@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/assets/img_chffr_wheel.png?v=2604-01" />
   <link rel="stylesheet" href="/css/tokens.css?v=2603-73" />
   <link rel="stylesheet" href="/css/hud_card.css?v=2604-09" />
-  <link rel="stylesheet" href="/css/app.css?v=2604-43" />
+  <link rel="stylesheet" href="/css/app.css?v=2604-53" />
 </head>
 
 <body>
@@ -236,6 +236,32 @@
       </div>
     </div>
 
+    <!-- ════════════ LOGS ════════════ -->
+    <div id="pageLogs" class="page" style="display:none;">
+      <div class="logs-shell">
+        <div class="logs-tabbar">
+          <div class="logs-tabs" role="tablist" aria-label="Logs">
+            <button id="logsTabDashcam" class="logs-tab is-active" type="button" role="tab" aria-selected="true">
+              <span>대시캠</span>
+            </button>
+            <button id="logsTabScreen" class="logs-tab" type="button" role="tab" aria-selected="false">
+              <span>화면녹화</span>
+            </button>
+          </div>
+        </div>
+
+        <section id="logsDashcamPanel" class="logs-panel" aria-labelledby="logsTabDashcam">
+          <div id="dashcamStatus" class="dashcam-status">불러오는 중...</div>
+          <div id="dashcamRoutes" class="dashcam-routes"></div>
+        </section>
+
+        <section id="logsScreenPanel" class="logs-panel" hidden aria-labelledby="logsTabScreen">
+          <div id="screenrecordStatus" class="dashcam-status">불러오는 중...</div>
+          <div id="screenrecordVideos" class="screenrecord-list"></div>
+        </section>
+      </div>
+    </div>
+
     <!-- ════════════ CARROT TEST ════════════ -->
     <div id="pageCarrot" class="page" style="display:none;">
       <div class="page-header page-header--hidden" aria-hidden="true">
@@ -383,6 +409,12 @@
       </span>
       <span>Tools</span>
     </button>
+    <button id="btnLogs" class="nav-btn">
+      <span class="nav-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm0 2.5L17.5 8H14zM8 13h8v2H8zm0 4h8v2H8zm0-8h4v2H8z"/></svg>
+      </span>
+      <span>Logs</span>
+    </button>
     <button id="btnTerminal" class="nav-btn">
       <span class="nav-icon">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m0 2v10h16V7zm2.8 8.6 3.8-3.6-3.8-3.6 1.4-1.4 5.2 5-5.2 5zm7.7 0H18v2h-3.5z"/></svg>
@@ -441,8 +473,8 @@
   </div>
 
   <script src="/js/hud_card.js?v=2604-05"></script>
-  <script src="/js/app_core.js?v=2604-19"></script>
-  <script src="/js/app_pages.js?v=2604-28"></script>
+  <script src="/js/app_core.js?v=2604-22"></script>
+  <script src="/js/app_pages.js?v=2604-35"></script>
   <script src="/js/raw_capnp.js?v=2604-05"></script>
   <script src="/js/app_realtime.js?v=2604-17"></script>
   <script src="/js/home_drive.js?v=2604-27"></script>
