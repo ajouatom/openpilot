@@ -3502,7 +3502,8 @@ function dashcamSelectedForRoute(entry) {
   return (entry.segmentFolders || []).filter((segment) => dashcamState.selected.has(segment));
 }
 
-function dashcamRouteCardHtml(entry, index = 0) {
+function dashcamRouteCardHtml(entry, index = 0, options = {}) {
+  const animate = options.animate !== false;
   const route = String(entry.route || "");
   const segments = Array.isArray(entry.segmentFolders) ? entry.segmentFolders : [];
   const expanded = dashcamState.expanded.has(route);
@@ -3571,7 +3572,7 @@ function dashcamRouteCardHtml(entry, index = 0) {
     </div>`;
   }).join("") : "";
 
-  return `<article class="dashcam-route-card ui-stagger-item" style="--i:${index}" data-route-card="${routeAttr}">
+  return `<article class="dashcam-route-card${animate ? " ui-stagger-item" : ""}"${animate ? ` style="--i:${index}"` : ""} data-route-card="${routeAttr}">
     ${preview}
     <div class="dashcam-route-main">
       <div class="dashcam-route-head" data-action="toggle-route" data-route="${routeAttr}">
@@ -3610,7 +3611,7 @@ function renderDashcamRoutes() {
     return;
   }
   setDashcamStatus("");
-  host.innerHTML = routes.map(dashcamRouteCardHtml).join("");
+  host.innerHTML = routes.map((entry, index) => dashcamRouteCardHtml(entry, index, { animate: false })).join("");
   hydrateLogsLazyImages(host);
 }
 
@@ -3626,7 +3627,7 @@ function renderDashcamRoute(route) {
   if (!current) return false;
 
   const tpl = document.createElement("template");
-  tpl.innerHTML = dashcamRouteCardHtml(routes[index], index);
+  tpl.innerHTML = dashcamRouteCardHtml(routes[index], index, { animate: false });
   const nextMain = tpl.content.querySelector(".dashcam-route-main");
   const currentMain = current.querySelector(".dashcam-route-main");
   if (!nextMain || !currentMain) return false;

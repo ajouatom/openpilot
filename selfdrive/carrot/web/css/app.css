@@ -1703,6 +1703,12 @@ body[data-page="tools"] .swipe-container,
   min-height: 184px;
 }
 
+.dashcam-routes .logs-loading-card {
+  opacity: 1;
+  transform: none;
+  animation: none;
+}
+
 .logs-loading-row {
   min-height: 64px;
 }
