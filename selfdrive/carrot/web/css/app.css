@@ -1694,19 +1694,13 @@ body[data-page="tools"] .swipe-container,
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 36%, transparent);
   background: var(--md-surface-cont-h);
   opacity: 0;
-  transform: translateY(14px);
-  animation: logsItemIn .42s cubic-bezier(.2, 0, 0, 1) forwards;
-  animation-delay: calc(var(--i, 0) * 70ms);
+  transform: translateY(12px);
+  animation: uiStaggerIn .38s cubic-bezier(.2, 0, 0, 1) both;
+  animation-delay: min(calc(var(--i, 0) * 36ms), 420ms);
 }
 
 .logs-loading-card {
   min-height: 184px;
-}
-
-.dashcam-routes .logs-loading-card {
-  opacity: 1;
-  transform: none;
-  animation: none;
 }
 
 .logs-loading-row {
@@ -1750,13 +1744,6 @@ body[data-page="tools"] .swipe-container,
     linear-gradient(var(--md-surface-cont), var(--md-surface-cont)) 0 0 / 76px 48px no-repeat,
     linear-gradient(var(--md-surface-cont), var(--md-surface-cont)) 90px 7px / 52% 14px no-repeat,
     linear-gradient(var(--md-surface-cont), var(--md-surface-cont)) 90px 31px / 34% 11px no-repeat;
-}
-
-@keyframes logsItemIn {
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 @keyframes logsSkeletonSweep {
