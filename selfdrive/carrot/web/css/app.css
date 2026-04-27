@@ -55,6 +55,18 @@ body.dialog-open {
   transition: color 0.15s;
   position: relative;
   letter-spacing: 0.15px;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.topbar .nav-btn:focus,
+.topbar .nav-btn:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.topbar .nav-btn:focus-visible {
+  background: color-mix(in srgb, var(--md-primary-cont) 14%, transparent);
 }
 
 .topbar .nav-btn .nav-icon {
