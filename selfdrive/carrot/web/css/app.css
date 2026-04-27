@@ -20,6 +20,15 @@ body.dialog-open {
   overflow: hidden;
 }
 
+body[data-page="tools"] {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body[data-page="tools"] .wrap {
+  padding-bottom: 0;
+}
+
 /* ── Bottom Navigation Bar (Material 3) ───────────────────── */
 .topbar {
   display: flex;
