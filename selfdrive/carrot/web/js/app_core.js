@@ -36,6 +36,7 @@ const UI_STRINGS = {
     home: "홈",
     setting: "설정",
     tools: "도구",
+    logs: "로그",
     terminal: "터미널",
     fleet: "Fleet",
     carrot: "당근",
@@ -125,6 +126,7 @@ const UI_STRINGS = {
     home: "Home",
     setting: "Setting",
     tools: "Tools",
+    logs: "Logs",
     terminal: "Terminal",
     fleet: "Fleet",
     carrot: "Carrot",
@@ -213,6 +215,7 @@ const UI_STRINGS = {
     home: "首页",
     setting: "设置",
     tools: "工具",
+    logs: "日志",
     terminal: "终端",
     fleet: "车队",
     carrot: "胡萝卜",
@@ -436,6 +439,7 @@ let CURRENT_MAKER = null;
 
 const btnHome = document.getElementById("btnHome");
 const btnSetting = document.getElementById("btnSetting");
+const btnLogs = document.getElementById("btnLogs");
 const btnTerminal = document.getElementById("btnTerminal");
 const btnFleet = document.getElementById("btnFleet");
 const btnLang = document.getElementById("btnLang");
@@ -482,6 +486,7 @@ const PAGE_ELEMENTS = {
   setting: document.getElementById("pageSetting"),
   car: document.getElementById("pageCar"),
   tools: document.getElementById("pageTools"),
+  logs: document.getElementById("pageLogs"),
   terminal: document.getElementById("pageTerminal"),
   branch: document.getElementById("pageBranch"),
   carrot: document.getElementById("pageCarrot"),
@@ -569,6 +574,7 @@ const modelMeta = document.getElementById("modelMeta");
 btnHome.onclick = () => showPage("carrot", true, getSwipeTransition(CURRENT_PAGE, "carrot"));
 btnRecordToggle.onclick = () => toggleRecord();
 btnSetting.onclick = () => showPage("setting", true, getSwipeTransition(CURRENT_PAGE, "setting"));
+if (btnLogs) btnLogs.onclick = () => showPage("logs", true, getSwipeTransition(CURRENT_PAGE, "logs"));
 btnTerminal.onclick = () => showPage("terminal", true, getSwipeTransition(CURRENT_PAGE, "terminal"));
 
 async function openFleetLink() {
@@ -856,6 +862,7 @@ function showPage(page, pushHistory = false, transition = null) {
   btnHome.classList.toggle("active", page === "carrot");
   btnSetting.classList.toggle("active", page === "setting");
   btnTools.classList.toggle("active", page === "tools");
+  if (btnLogs) btnLogs.classList.toggle("active", page === "logs");
   btnTerminal.classList.toggle("active", page === "terminal");
 
   if (typeof updateAppViewportMetrics === "function") {
@@ -906,6 +913,9 @@ function showPage(page, pushHistory = false, transition = null) {
     initToolsPage();
     updateQuickLink().catch(() => {});
   }
+  if (page === "logs" && typeof initLogsPage === "function") {
+    initLogsPage();
+  }
   if (page === "terminal" && typeof initTerminalPage === "function") {
     initTerminalPage();
   }
@@ -917,6 +927,7 @@ function showPage(page, pushHistory = false, transition = null) {
     (page === "setting") ? { page: "setting", screen: "groups", group: null } :
     (page === "car") ? { page: "car", screen: "makers", maker: null } :
     (page === "tools") ? { page: "tools" } :
+    (page === "logs") ? { page: "logs" } :
     (page === "terminal") ? { page: "terminal" } :
     (page === "carrot") ? { page: "carrot" } :
     (page === "branch") ? { page: "branch" } :
@@ -1052,6 +1063,7 @@ function renderUIText() {
   setNavText("btnHome", s.home);
   setNavText("btnSetting", s.setting);
   setNavText("btnTools", s.tools);
+  setNavText("btnLogs", s.logs);
   setNavText("btnTerminal", s.terminal);
   setNavText("btnFleet", s.fleet);
   setText("btnQuickLinkWeb", "Web");
@@ -1614,7 +1626,7 @@ async function setParam(name, value) {
 }
 
 /* ── Swipe Navigation ──────────────────────────────────── */
-const SWIPE_PAGES = ["carrot", "setting", "tools", "terminal"];
+const SWIPE_PAGES = ["carrot", "setting", "tools", "logs", "terminal"];
 const SETTING_BACK_EDGE_WIDTH = 32;
 
 function isLandscapeRailMode() {

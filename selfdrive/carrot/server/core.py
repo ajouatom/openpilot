@@ -38,6 +38,9 @@ import urllib.error
 import ssl
 import getpass
 import uuid
+import hashlib
+import mimetypes
+from ftplib import FTP
 from openpilot.common.realtime import set_core_affinity
 from openpilot.system.hardware import HARDWARE
 
@@ -53,6 +56,8 @@ DEFAULT_SETTINGS_PATH = "/data/openpilot/selfdrive/carrot_settings.json"
 CARROT_DATA_DIR = "/data/openpilot/selfdrive/carrot/data"
 CARROT_STATE_DIR = os.path.join(CARROT_DATA_DIR, "state")
 CARROT_GIT_STATE_PATH = os.path.join(CARROT_STATE_DIR, "git.json")
+DASHCAM_ROOT = "/data/media/0/realdata"
+DASHCAM_CACHE_DIR = os.path.join(CARROT_DATA_DIR, "cache", "dashcam")
 
 WEB_DIR = os.path.join(ROOT_DIR, "web")
 CSS_DIR = os.path.join(WEB_DIR, "css")
@@ -274,6 +279,334 @@ def _select_live_runtime_services(snapshot: dict[str, Any]) -> dict[str, Any]:
     if isinstance(value, dict):
       out[name] = value
   return out
+
+
+def _dashcam_safe_segment(segment: str) -> str:
+  segment = (segment or "").strip()
+  if not segment or "/" in segment or "\\" in segment or segment in {".", ".."}:
+    raise web.HTTPBadRequest(text="bad segment")
+  parts = segment.split("--")
+  if len(parts) < 2 or not parts[-1].isdigit():
+    raise web.HTTPBadRequest(text="bad segment")
+  return segment
+
+
+def _dashcam_segment_index(segment: str) -> int:
+  try:
+    return int(segment.split("--")[-1])
+  except Exception:
+    return 0
+
+
+def _dashcam_segment_dir(segment: str) -> str:
+  segment = _dashcam_safe_segment(segment)
+  root = os.path.abspath(DASHCAM_ROOT)
+  path = os.path.abspath(os.path.join(root, segment))
+  if not path.startswith(root + os.sep):
+    raise web.HTTPBadRequest(text="bad segment path")
+  if not os.path.isdir(path):
+    raise web.HTTPNotFound(text="segment not found")
+  return path
+
+
+def _dashcam_cache_path(kind: str, segment: str, ext: str) -> str:
+  token = hashlib.sha1(segment.encode("utf-8", errors="ignore")).hexdigest()[:24]
+  directory = os.path.join(DASHCAM_CACHE_DIR, kind)
+  os.makedirs(directory, exist_ok=True)
+  return os.path.join(directory, f"{token}{ext}")
+
+
+def _dashcam_source_video(segment_dir: str) -> tuple[str, str]:
+  # Prefer MP4 for browser playback, but keep TS as the canonical logger output.
+  for name in ("qcamera.mp4", "qcamera.ts"):
+    path = os.path.join(segment_dir, name)
+    if os.path.isfile(path) and os.path.getsize(path) > 0:
+      return path, name
+  raise web.HTTPNotFound(text="qcamera video not found")
+
+
+def _dashcam_route_date_label(route: str) -> str:
+  try:
+    if "-" in route and "--" in route:
+      parts = route.split("--")
+      if len(parts) >= 2:
+        date = parts[0]
+        t = parts[1].split("-")
+        if len(t) >= 2:
+          return f"{date} {t[0]}:{t[1]}"
+        return date
+    compact = route.split("--")
+    if len(compact) >= 2:
+      raw_date, raw_time = compact[0], compact[1]
+      if len(raw_date) >= 8 and len(raw_time) >= 4:
+        return f"{raw_date[:4]}-{raw_date[4:6]}-{raw_date[6:8]} {raw_time[:2]}:{raw_time[2:4]}"
+  except Exception:
+    pass
+  return route
+
+
+def _dashcam_relative_time(epoch_seconds: int) -> str:
+  if epoch_seconds <= 0:
+    return "-"
+  delta = max(0, int(time.time()) - int(epoch_seconds))
+  if delta < 60:
+    return "방금 전"
+  if delta < 3600:
+    return f"{delta // 60}분 전"
+  if delta < 86400:
+    return f"{delta // 3600}시간 전"
+  return f"{delta // 86400}일 전"
+
+
+def _dashcam_build_routes() -> list[dict[str, Any]]:
+  if not os.path.isdir(DASHCAM_ROOT):
+    return []
+
+  route_segments: dict[str, list[str]] = {}
+  route_modified: dict[str, int] = {}
+  with os.scandir(DASHCAM_ROOT) as it:
+    for entry in it:
+      try:
+        if not entry.is_dir(follow_symlinks=False) or "--" not in entry.name:
+          continue
+        parts = entry.name.split("--")
+        if len(parts) < 2 or not parts[-1].isdigit():
+          continue
+        route = "--".join(parts[:-1])
+        route_segments.setdefault(route, []).append(entry.name)
+        modified = int(entry.stat(follow_symlinks=False).st_mtime)
+        if modified > route_modified.get(route, 0):
+          route_modified[route] = modified
+      except Exception:
+        continue
+
+  routes: list[dict[str, Any]] = []
+  for route, segments in route_segments.items():
+    sorted_segments = sorted(segments, key=lambda s: (_dashcam_segment_index(s), s))
+    latest = route_modified.get(route, 0)
+    routes.append({
+      "route": route,
+      "title": route.lstrip("0") or route,
+      "dateLabel": _dashcam_route_date_label(route),
+      "segmentFolders": sorted_segments,
+      "segmentCount": len(sorted_segments),
+      "latestModifiedEpoch": latest,
+      "latestModifiedLabel": _dashcam_relative_time(latest),
+    })
+  routes.sort(key=lambda r: (r.get("route", ""), r.get("latestModifiedEpoch", 0)), reverse=True)
+  return routes
+
+
+def _dashcam_run_ffmpeg(args: list[str], timeout: float = 90.0) -> subprocess.CompletedProcess:
+  if not shutil.which("ffmpeg"):
+    raise web.HTTPServiceUnavailable(text="ffmpeg not available")
+  return subprocess.run(
+    ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *args],
+    capture_output=True,
+    text=True,
+    timeout=timeout,
+  )
+
+
+def _dashcam_ensure_thumbnail(segment: str) -> str:
+  segment_dir = _dashcam_segment_dir(segment)
+  source, _ = _dashcam_source_video(segment_dir)
+  out = _dashcam_cache_path("thumb", segment, ".jpg")
+  if os.path.isfile(out) and os.path.getsize(out) > 0:
+    return out
+  result = _dashcam_run_ffmpeg(["-ss", "2", "-i", source, "-vframes", "1", "-vf", "scale=640:-1", out])
+  if result.returncode != 0 or not os.path.isfile(out) or os.path.getsize(out) <= 0:
+    raise web.HTTPInternalServerError(text=result.stderr or result.stdout or "thumbnail generation failed")
+  return out
+
+
+def _dashcam_ensure_preview(segment: str) -> str:
+  segment_dir = _dashcam_segment_dir(segment)
+  source, _ = _dashcam_source_video(segment_dir)
+  out = _dashcam_cache_path("preview", segment, ".gif")
+  if os.path.isfile(out) and os.path.getsize(out) > 0:
+    return out
+  result = _dashcam_run_ffmpeg([
+    "-ss", "1",
+    "-t", "2.4",
+    "-i", source,
+    "-vf", "fps=4,scale=360:-1:flags=lanczos",
+    "-loop", "0",
+    out,
+  ], timeout=120.0)
+  if result.returncode != 0 or not os.path.isfile(out) or os.path.getsize(out) <= 0:
+    raise web.HTTPInternalServerError(text=result.stderr or result.stdout or "preview generation failed")
+  return out
+
+
+def _dashcam_browser_video(segment: str) -> tuple[str, str]:
+  segment_dir = _dashcam_segment_dir(segment)
+  source, source_name = _dashcam_source_video(segment_dir)
+  if source_name.endswith(".mp4"):
+    return source, "video/mp4"
+
+  out = _dashcam_cache_path("video", segment, ".mp4")
+  if os.path.isfile(out) and os.path.getsize(out) > 0:
+    return out, "video/mp4"
+
+  result = _dashcam_run_ffmpeg(["-i", source, "-c", "copy", "-an", "-movflags", "+faststart", out], timeout=180.0)
+  if result.returncode == 0 and os.path.isfile(out) and os.path.getsize(out) > 0:
+    return out, "video/mp4"
+  try:
+    if os.path.exists(out):
+      os.remove(out)
+  except OSError:
+    pass
+
+  # Last-resort fallback: some browsers can still handle TS, and this preserves access.
+  return source, "video/mp2t"
+
+
+def _dashcam_param_text(params: "Params", key: str, default: str = "unknown") -> str:
+  try:
+    value = params.get(key)
+    if isinstance(value, bytes):
+      value = value.decode("utf-8", errors="replace")
+    value = str(value or "").strip()
+    return value or default
+  except Exception:
+    return default
+
+
+def _dashcam_upload_folder_to_ftp(local_folder: str, directory: str, remote_path: str) -> bool:
+  ftp_server = os.environ.get("CARROT_FTP_SERVER", "shind0.synology.me")
+  ftp_port = int(os.environ.get("CARROT_FTP_PORT", "8021"))
+  ftp_username = os.environ.get("CARROT_FTP_USERNAME", "carrotpilot")
+  ftp_password = os.environ.get("CARROT_FTP_PASSWORD", "Ekdrmsvkdlffjt7710")
+
+  ftp = FTP()
+  ftp.connect(ftp_server, ftp_port, timeout=20)
+  ftp.login(ftp_username, ftp_password)
+  try:
+    ftp.cwd("routes")
+    routes_root = ftp.pwd()
+
+    def cwd_or_create(path: str) -> None:
+      ftp.cwd(routes_root)
+      for part in [p for p in path.split("/") if p]:
+        try:
+          ftp.cwd(part)
+        except Exception:
+          ftp.mkd(part)
+          ftp.cwd(part)
+
+    base_path = f"{directory}/{remote_path}".strip("/")
+    for root, _, files in os.walk(local_folder):
+      rel_dir = os.path.relpath(root, local_folder)
+      remote_dir = base_path if rel_dir == "." else f"{base_path}/{rel_dir.replace(os.sep, '/')}"
+      cwd_or_create(remote_dir)
+      for filename in files:
+        local_path = os.path.join(root, filename)
+        with open(local_path, "rb") as f:
+          ftp.storbinary(f"STOR {filename}", f)
+    return True
+  finally:
+    try:
+      ftp.quit()
+    except Exception:
+      pass
+
+
+async def api_dashcam_routes(request: web.Request) -> web.Response:
+  try:
+    routes = await asyncio.to_thread(_dashcam_build_routes)
+    return web.json_response({"ok": True, "routes": routes, "root": DASHCAM_ROOT})
+  except Exception as e:
+    return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def api_dashcam_thumbnail(request: web.Request) -> web.StreamResponse:
+  segment = request.match_info.get("segment", "")
+  path = await asyncio.to_thread(_dashcam_ensure_thumbnail, segment)
+  return web.FileResponse(path, headers={"Cache-Control": "public, max-age=86400"})
+
+
+async def api_dashcam_preview(request: web.Request) -> web.StreamResponse:
+  segment = request.match_info.get("segment", "")
+  path = await asyncio.to_thread(_dashcam_ensure_preview, segment)
+  return web.FileResponse(path, headers={"Cache-Control": "public, max-age=86400"})
+
+
+async def api_dashcam_video(request: web.Request) -> web.StreamResponse:
+  segment = request.match_info.get("segment", "")
+  path, content_type = await asyncio.to_thread(_dashcam_browser_video, segment)
+  return web.FileResponse(
+    path,
+    headers={
+      "Content-Type": content_type,
+      "Cache-Control": "private, max-age=3600",
+    },
+  )
+
+
+async def api_dashcam_download(request: web.Request) -> web.StreamResponse:
+  segment = request.match_info.get("segment", "")
+  kind = (request.match_info.get("kind", "") or "").strip()
+  segment_dir = _dashcam_segment_dir(segment)
+  allowed = {
+    "qcamera": ("qcamera.ts", "qcamera.mp4"),
+    "rlog": ("rlog.zst", "rlog.bz2", "rlog"),
+    "qlog": ("qlog.zst", "qlog.bz2", "qlog"),
+  }
+  for name in allowed.get(kind, ()):
+    path = os.path.join(segment_dir, name)
+    if os.path.isfile(path):
+      mime = mimetypes.guess_type(path)[0] or "application/octet-stream"
+      return web.FileResponse(
+        path,
+        headers={
+          "Content-Type": mime,
+          "Content-Disposition": f'attachment; filename="{segment}--{name}"',
+        },
+      )
+  raise web.HTTPNotFound(text="artifact not found")
+
+
+async def api_dashcam_upload(request: web.Request) -> web.Response:
+  try:
+    try:
+      body = await request.json()
+    except Exception:
+      body = {}
+    segments = body.get("segments")
+    if not isinstance(segments, list):
+      one = body.get("segment")
+      segments = [one] if one else []
+    segments = [_dashcam_safe_segment(str(segment)) for segment in segments if segment]
+    if not segments:
+      return web.json_response({"ok": False, "error": "missing segments"}, status=400)
+
+    params = Params() if HAS_PARAMS else None
+    car_selected = _dashcam_param_text(params, "CarName", "none") if params else "none"
+    dongle_id = _dashcam_param_text(params, "DongleId", "unknown") if params else "unknown"
+    directory = f"{car_selected} {dongle_id}".strip()
+
+    results = []
+    for segment in segments:
+      segment_dir = _dashcam_segment_dir(segment)
+      ok = await asyncio.to_thread(
+        _dashcam_upload_folder_to_ftp,
+        segment_dir,
+        directory,
+        segment,
+      )
+      results.append({"segment": segment, "ok": bool(ok)})
+
+    ok_count = sum(1 for item in results if item["ok"])
+    return web.json_response({
+      "ok": ok_count == len(results),
+      "uploaded": ok_count,
+      "total": len(results),
+      "results": results,
+      "message": f"{ok_count}/{len(results)} uploaded",
+    })
+  except Exception as e:
+    return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 
 def _do_gc_and_trim() -> None:
