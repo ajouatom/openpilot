@@ -797,8 +797,9 @@ body[data-page="home"] .global-home-record-fab {
   );
   --tools-console-height: var(--tools-console-log-height);
   --tools-console-inline: var(--sp-lg);
-  --tools-console-bg: color-mix(in srgb, var(--md-surface) 82%, #03070c);
-  --tools-console-divider: color-mix(in srgb, var(--md-outline-var) 46%, transparent);
+  --tools-console-bg: #090d12;
+  --tools-console-surface: #05080c;
+  --tools-console-divider: color-mix(in srgb, var(--md-outline-var) 24%, transparent);
   display: flex;
   flex-direction: column;
   min-height: var(--tools-page-height);
@@ -966,19 +967,22 @@ body[data-page="home"] .global-home-record-fab {
   flex: none;
   background: var(--tools-console-bg);
   overflow: hidden;
-  box-shadow: 0 -1px 0 var(--tools-console-divider);
+  box-shadow: 0 -14px 28px rgba(0, 0, 0, .28);
 }
 
 .tools-console-dock::before {
   content: "";
   position: absolute;
   top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: var(--tools-console-divider);
+  left: 50%;
+  width: min(96px, 34vw);
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-outline-var) 36%, transparent);
+  transform: translateX(-50%);
   z-index: 1;
-  transition: background 180ms ease, opacity 180ms ease;
+  opacity: .72;
+  transition: background 180ms ease, opacity 180ms ease, width 180ms ease;
 }
 
 .tools-console-shell {
@@ -993,7 +997,7 @@ body[data-page="home"] .global-home-record-fab {
   border-bottom: 0;
   border-left: 0;
   border-right: 0;
-  background: var(--tools-console-bg);
+  background: var(--tools-console-surface);
   overflow: hidden;
   transition: height 240ms cubic-bezier(.2, 0, 0, 1), min-height 240ms cubic-bezier(.2, 0, 0, 1), max-height 240ms cubic-bezier(.2, 0, 0, 1);
 }
@@ -1107,7 +1111,7 @@ body[data-page="home"] .global-home-record-fab {
     calc(var(--tools-console-log-pad-bottom) + 2px);
   border: 0;
   border-radius: 0;
-  background: color-mix(in srgb, var(--tools-console-bg) 94%, #17202b);
+  background: var(--tools-console-surface);
   color: color-mix(in srgb, var(--md-on-surface) 86%, var(--md-on-surface-var));
   font-family: var(--font-mono);
   font-size: var(--tools-console-log-font-size);
@@ -1133,12 +1137,14 @@ body[data-page="home"] .global-home-record-fab {
 
 #pageTools.tools-log-attention .tools-console-dock::before,
 #pageTools.tools-log-expanded .tools-console-dock::before {
-  background: color-mix(in srgb, var(--md-primary) 42%, var(--tools-console-divider));
+  width: min(136px, 42vw);
+  background: color-mix(in srgb, var(--md-primary) 46%, var(--md-outline-var));
+  opacity: .86;
 }
 
 #pageTools.tools-log-attention .tools-console-log,
 #pageTools.tools-log-expanded .tools-console-log {
-  background: color-mix(in srgb, var(--tools-console-bg) 92%, var(--md-primary) 3%);
+  background: color-mix(in srgb, var(--tools-console-surface) 96%, var(--md-primary) 4%);
   color: color-mix(in srgb, var(--md-on-surface) 92%, var(--md-on-surface-var));
 }
 
@@ -4114,6 +4120,11 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
     display: flex;
     min-height: 0;
     background: transparent;
+    box-shadow: none;
+  }
+
+  body[data-page="tools"] #pageTools > .tools-console-dock::before {
+    display: none;
   }
 
   body[data-page="tools"] #pageTools > .tools-console-dock .tools-console-shell {
