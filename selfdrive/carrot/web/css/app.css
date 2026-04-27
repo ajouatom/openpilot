@@ -788,10 +788,12 @@ body[data-page="home"] .global-home-record-fab {
   --tools-console-attention-lines: 5;
   --tools-console-expanded-lines: 9;
   --tools-console-visible-lines: var(--tools-console-peek-lines);
-  --tools-console-log-pad-top: 12px;
-  --tools-console-log-pad-bottom: 16px;
+  --tools-console-handle-height: 18px;
+  --tools-console-log-pad-top: 10px;
+  --tools-console-log-pad-bottom: 14px;
   --tools-console-log-height: calc(
     (var(--tools-console-log-font-size) * var(--tools-console-log-line-height) * var(--tools-console-visible-lines)) +
+    var(--tools-console-handle-height) +
     var(--tools-console-log-pad-top) +
     var(--tools-console-log-pad-bottom)
   );
@@ -965,23 +967,34 @@ body[data-page="home"] .global-home-record-fab {
   margin: 0;
   z-index: 99;
   flex: none;
-  background: var(--tools-console-bg);
-  overflow: hidden;
-  box-shadow: 0 -14px 28px rgba(0, 0, 0, .28);
+  background: transparent;
+  overflow: visible;
+  box-shadow: none;
 }
 
 .tools-console-dock::before {
   content: "";
   position: absolute;
-  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 18px;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, .46));
+  pointer-events: none;
+}
+
+.tools-console-dock::after {
+  content: "";
+  position: absolute;
+  top: 7px;
   left: 50%;
-  width: min(96px, 34vw);
-  height: 2px;
+  width: 72px;
+  height: 3px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--md-outline-var) 36%, transparent);
+  background: color-mix(in srgb, var(--md-outline-var) 42%, transparent);
   transform: translateX(-50%);
-  z-index: 1;
-  opacity: .72;
+  z-index: 2;
+  opacity: .78;
   transition: background 180ms ease, opacity 180ms ease, width 180ms ease;
 }
 
@@ -999,6 +1012,9 @@ body[data-page="home"] .global-home-record-fab {
   border-right: 0;
   background: var(--tools-console-surface);
   overflow: hidden;
+  box-shadow:
+    0 -1px 0 color-mix(in srgb, var(--md-outline-var) 28%, transparent),
+    0 -18px 30px rgba(0, 0, 0, .34);
   transition: height 240ms cubic-bezier(.2, 0, 0, 1), min-height 240ms cubic-bezier(.2, 0, 0, 1), max-height 240ms cubic-bezier(.2, 0, 0, 1);
 }
 
@@ -1106,7 +1122,7 @@ body[data-page="home"] .global-home-record-fab {
   max-height: var(--tools-console-log-height);
   margin: 0;
   padding:
-    calc(var(--tools-console-log-pad-top) + 2px)
+    calc(var(--tools-console-handle-height) + var(--tools-console-log-pad-top))
     max(var(--tools-console-inline), 16px)
     calc(var(--tools-console-log-pad-bottom) + 2px);
   border: 0;
@@ -1130,16 +1146,16 @@ body[data-page="home"] .global-home-record-fab {
     background 180ms ease;
 }
 
+#pageTools.tools-log-attention .tools-console-dock::after,
+#pageTools.tools-log-expanded .tools-console-dock::after {
+  width: 104px;
+  background: color-mix(in srgb, var(--md-primary) 40%, var(--md-outline-var));
+  opacity: .9;
+}
+
 .tools-console-log:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--md-primary) 72%, transparent);
   outline-offset: -3px;
-}
-
-#pageTools.tools-log-attention .tools-console-dock::before,
-#pageTools.tools-log-expanded .tools-console-dock::before {
-  width: min(136px, 42vw);
-  background: color-mix(in srgb, var(--md-primary) 46%, var(--md-outline-var));
-  opacity: .86;
 }
 
 #pageTools.tools-log-attention .tools-console-log,
@@ -4123,7 +4139,8 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
     box-shadow: none;
   }
 
-  body[data-page="tools"] #pageTools > .tools-console-dock::before {
+  body[data-page="tools"] #pageTools > .tools-console-dock::before,
+  body[data-page="tools"] #pageTools > .tools-console-dock::after {
     display: none;
   }
 
@@ -4134,6 +4151,7 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
     max-height: none;
     border: 1px solid var(--tools-console-divider);
     border-radius: var(--r-xl);
+    box-shadow: none;
   }
 
   body[data-page="tools"] #pageTools > .tools-console-dock .tools-console-log {
