@@ -961,10 +961,10 @@ body[data-page="home"] .global-home-record-fab {
 }
 
 .tools-console-dock {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: var(--nav-bar-height);
+  position: absolute;
+  left: calc(50% - 50vw);
+  right: auto;
+  bottom: 0;
   width: 100vw;
   margin: 0;
   z-index: 99;
@@ -972,6 +972,12 @@ body[data-page="home"] .global-home-record-fab {
   background: transparent;
   overflow: visible;
   box-shadow: none;
+}
+
+.page-transitioning .tools-console-shell,
+.page-transitioning .tools-console-log {
+  transition: none;
+  animation: none;
 }
 
 .tools-console-dock::before {
@@ -4094,7 +4100,7 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
     gap: 1px;
   }
 
-  body[data-page="tools"] #pageTools {
+  :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) {
     display: grid !important;
     grid-template-columns: minmax(0, 1.04fr) minmax(300px, 0.96fr);
     grid-template-rows: auto auto minmax(0, 1fr);
@@ -4102,30 +4108,30 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
     align-items: stretch;
   }
 
-  body[data-page="tools"] #pageTools > .page-header--hidden {
+  :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > .page-header--hidden {
     display: none !important;
   }
 
-  body[data-page="tools"] #pageTools > #toolsMeta {
+  :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > #toolsMeta {
     grid-column: 1;
     grid-row: 1;
     align-self: start;
     min-height: 1.5em;
   }
 
-  body[data-page="tools"] #pageTools > #toolsProgress {
+  :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > #toolsProgress {
     grid-column: 1;
     grid-row: 2;
     margin-bottom: 8px;
   }
 
-  body[data-page="tools"] #pageTools > .tools-scroll-stack {
+  :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > .tools-scroll-stack {
     grid-column: 1;
     grid-row: 3;
     padding-bottom: 0;
   }
 
-  body[data-page="tools"] #pageTools > .tools-console-dock {
+  :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > .tools-console-dock {
     position: relative;
     left: auto;
     right: auto;
@@ -4141,12 +4147,12 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
     box-shadow: none;
   }
 
-  body[data-page="tools"] #pageTools > .tools-console-dock::before,
-  body[data-page="tools"] #pageTools > .tools-console-dock::after {
+  :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > .tools-console-dock::before,
+  :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > .tools-console-dock::after {
     display: none;
   }
 
-  body[data-page="tools"] #pageTools > .tools-console-dock .tools-console-shell {
+  :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > .tools-console-dock .tools-console-shell {
     flex: 1 1 auto;
     height: auto;
     min-height: 0;
@@ -4156,7 +4162,7 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
     box-shadow: none;
   }
 
-  body[data-page="tools"] #pageTools > .tools-console-dock .tools-console-log {
+  :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > .tools-console-dock .tools-console-log {
     flex: 1 1 auto;
     height: auto;
     min-height: 0;
