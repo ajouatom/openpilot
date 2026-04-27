@@ -3002,7 +3002,7 @@ function initToolsPage() {
   bindOnce("btnRestoreSettings", async () => {
     const inp = document.createElement("input");
     inp.type = "file";
-    inp.accept = "application/json";
+    inp.accept = ".json";
     inp.style.display = "none";
 
     inp.onchange = async () => {
