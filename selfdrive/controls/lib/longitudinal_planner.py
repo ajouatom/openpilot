@@ -183,7 +183,6 @@ class LongitudinalPlanner:
       self.a_desired = np.clip(sm['carState'].aEgo, accel_limits[0], accel_limits[1])
       
       self.mpc.prev_a = np.full(N+1, self.a_desired) ## carrot
-      accel_limits_turns[0] = accel_limits_turns[0] = 0.0 ## carrot
 
     # Prevent divergence, smooth in current v_ego
     self.v_desired_filter.x = max(0.0, self.v_desired_filter.update(v_ego))
