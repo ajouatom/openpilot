@@ -3482,7 +3482,31 @@ const screenrecordState = {
 };
 
 let logsActiveTab = "dashcam";
+const logsScrollTops = { dashcam: 0, screen: 0 };
 let logsLazyImageObserver = null;
+
+function getLogsScroller(tab = logsActiveTab) {
+  return document.getElementById(tab === "screen" ? "screenrecordVideos" : "dashcamRoutes");
+}
+
+function saveLogsScrollTop(tab = logsActiveTab) {
+  const scroller = getLogsScroller(tab);
+  if (!scroller) return;
+  logsScrollTops[tab === "screen" ? "screen" : "dashcam"] = scroller.scrollTop || 0;
+}
+
+function restoreLogsScrollTop(tab = logsActiveTab, options = {}) {
+  const scroller = getLogsScroller(tab);
+  if (!scroller) return;
+  const key = tab === "screen" ? "screen" : "dashcam";
+  const nextTop = options.reset === true ? 0 : (logsScrollTops[key] || 0);
+  requestAnimationFrame(() => {
+    scroller.scrollTop = nextTop;
+    requestAnimationFrame(() => {
+      scroller.scrollTop = nextTop;
+    });
+  });
+}
 
 function dashcamSegmentIndex(segment) {
   const parts = String(segment || "").split("--");
@@ -3783,6 +3807,7 @@ async function loadDashcamRoutes({ silent = false } = {}) {
     dashcamState.signature = nextSignature;
     dashcamState.loading = false;
     renderDashcamRoutes();
+    if (!silent && logsScrollTops.dashcam === 0) restoreLogsScrollTop("dashcam", { reset: true });
   } catch (e) {
     if (seq !== dashcamState.loadSeq) return;
     dashcamState.loading = false;
@@ -4113,6 +4138,7 @@ async function loadScreenrecordVideos({ silent = false } = {}) {
     screenrecordState.signature = nextSignature;
     screenrecordState.loading = false;
     renderScreenrecordVideos();
+    if (!silent && logsScrollTops.screen === 0) restoreLogsScrollTop("screen", { reset: true });
   } catch (e) {
     if (seq !== screenrecordState.loadSeq) return;
     screenrecordState.loading = false;
@@ -4124,7 +4150,9 @@ async function loadScreenrecordVideos({ silent = false } = {}) {
 }
 
 function activateLogsTab(tab) {
-  logsActiveTab = tab === "screen" ? "screen" : "dashcam";
+  const nextTab = tab === "screen" ? "screen" : "dashcam";
+  if (nextTab !== logsActiveTab) saveLogsScrollTop(logsActiveTab);
+  logsActiveTab = nextTab;
   const dashTab = document.getElementById("logsTabDashcam");
   const screenTab = document.getElementById("logsTabScreen");
   const dashPanel = document.getElementById("logsDashcamPanel");
@@ -4146,6 +4174,7 @@ function activateLogsTab(tab) {
   } else if (dashcamState.initialized) {
     loadDashcamRoutes({ silent: true }).catch(() => {});
   }
+  restoreLogsScrollTop(logsActiveTab);
 }
 
 function bindLogsPage() {
@@ -4181,7 +4210,10 @@ function bindLogsPage() {
 
   if (routesHost && routesHost.dataset.bound !== "1") {
     routesHost.dataset.bound = "1";
-    routesHost.addEventListener("scroll", markDashcamScrollBusy, { passive: true });
+    routesHost.addEventListener("scroll", () => {
+      markDashcamScrollBusy();
+      saveLogsScrollTop("dashcam");
+    }, { passive: true });
     routesHost.addEventListener("click", (ev) => {
       const actionEl = ev.target?.closest?.("[data-action]");
       if (!actionEl) return;
@@ -4225,7 +4257,10 @@ function bindLogsPage() {
 
   if (screenHost && screenHost.dataset.bound !== "1") {
     screenHost.dataset.bound = "1";
-    screenHost.addEventListener("scroll", markDashcamScrollBusy, { passive: true });
+    screenHost.addEventListener("scroll", () => {
+      markDashcamScrollBusy();
+      saveLogsScrollTop("screen");
+    }, { passive: true });
     screenHost.addEventListener("click", (ev) => {
       const actionEl = ev.target?.closest?.("[data-action]");
       if (!actionEl) return;
