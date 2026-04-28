@@ -3767,7 +3767,19 @@ function openLogsVideoPlayer(title, src, options = {}) {
   });
   overlay.querySelector(".dashcam-player-close")?.addEventListener("click", close);
   const video = overlay.querySelector("video");
+  const frame = overlay.querySelector(".dashcam-player-frame");
   const playButton = overlay.querySelector(".dashcam-player-control--play");
+  if (video) video.controls = true;
+  const seekVideo = (delta) => {
+    if (!video) return;
+    const duration = Number.isFinite(video.duration) ? video.duration : Infinity;
+    const current = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+    video.currentTime = Math.max(0, Math.min(duration, current + delta));
+  };
+  const isPlayerControlTarget = (target) => {
+    if (!(target instanceof Element)) return false;
+    return Boolean(target.closest("button, .dashcam-player-top, .dashcam-player-controls"));
+  };
   const syncPlayButton = () => {
     if (!video || !playButton) return;
     const paused = video.paused || video.ended;
@@ -3786,12 +3798,35 @@ function openLogsVideoPlayer(title, src, options = {}) {
   video?.addEventListener("ended", syncPlayButton);
   overlay.querySelectorAll("[data-skip]").forEach((button) => {
     button.addEventListener("click", () => {
-      if (!video) return;
       const delta = Number(button.dataset.skip || 0);
-      const duration = Number.isFinite(video.duration) ? video.duration : Infinity;
-      video.currentTime = Math.max(0, Math.min(duration, video.currentTime + delta));
+      seekVideo(delta);
     });
   });
+  frame?.addEventListener("dblclick", (ev) => {
+    if (isPlayerControlTarget(ev.target)) return;
+    const rect = frame.getBoundingClientRect();
+    const x = ev.clientX - rect.left;
+    seekVideo(x < rect.width / 2 ? -5 : 5);
+  });
+  let lastPlayerTap = { time: 0, x: 0, y: 0 };
+  frame?.addEventListener("touchend", (ev) => {
+    if (isPlayerControlTarget(ev.target)) return;
+    const touch = ev.changedTouches?.[0];
+    if (!touch) return;
+    const now = performance.now();
+    const dx = touch.clientX - lastPlayerTap.x;
+    const dy = touch.clientY - lastPlayerTap.y;
+    const isDoubleTap = now - lastPlayerTap.time < 320 && Math.hypot(dx, dy) < 34;
+    if (isDoubleTap) {
+      ev.preventDefault();
+      const rect = frame.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      seekVideo(x < rect.width / 2 ? -5 : 5);
+      lastPlayerTap = { time: 0, x: 0, y: 0 };
+      return;
+    }
+    lastPlayerTap = { time: now, x: touch.clientX, y: touch.clientY };
+  }, { passive: false });
   document.body.appendChild(overlay);
   requestAnimationFrame(() => {
     overlay.classList.add("is-open");

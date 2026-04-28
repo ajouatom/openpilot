@@ -675,7 +675,6 @@ body[data-page="home"] .global-home-record-fab {
   letter-spacing: 0.15px;
 }
 
-.topbar #btnFleet,
 .topbar #btnLang {
   display: none !important;
 }
@@ -2010,9 +2009,10 @@ body[data-page="tools"] .swipe-container,
   z-index: 2;
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: clamp(32px, 4.2vw, 56px);
   transform: translate(-50%, -50%);
   opacity: .9;
+  pointer-events: none;
   transition: opacity .15s ease, transform .15s ease;
 }
 
@@ -2035,6 +2035,7 @@ body[data-page="tools"] .swipe-container,
   display: grid;
   place-items: center;
   box-shadow: 0 10px 28px rgba(0,0,0,.28);
+  pointer-events: auto;
 }
 
 .dashcam-player-control--play {
