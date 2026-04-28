@@ -2020,6 +2020,11 @@ body[data-page="tools"] .swipe-container,
   opacity: 1;
 }
 
+.dashcam-player-overlay.is-player-controls-hidden .dashcam-player-controls {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(.96);
+}
+
 .dashcam-player-control {
   width: 54px;
   height: 54px;

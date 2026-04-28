@@ -3759,6 +3759,7 @@ function openLogsVideoPlayer(title, src, options = {}) {
   </div>`;
   const close = () => {
     const video = overlay.querySelector("video");
+    clearHideControlsTimer();
     try { video?.pause?.(); } catch {}
     overlay.remove();
   };
@@ -3769,7 +3770,25 @@ function openLogsVideoPlayer(title, src, options = {}) {
   const video = overlay.querySelector("video");
   const frame = overlay.querySelector(".dashcam-player-frame");
   const playButton = overlay.querySelector(".dashcam-player-control--play");
+  let hideControlsTimer = null;
   if (video) video.controls = true;
+  const clearHideControlsTimer = () => {
+    if (!hideControlsTimer) return;
+    window.clearTimeout(hideControlsTimer);
+    hideControlsTimer = null;
+  };
+  const scheduleHidePlayerControls = () => {
+    clearHideControlsTimer();
+    if (!video || video.paused || video.ended) return;
+    hideControlsTimer = window.setTimeout(() => {
+      if (!video || video.paused || video.ended) return;
+      overlay.classList.add("is-player-controls-hidden");
+    }, 2200);
+  };
+  const showPlayerControls = () => {
+    overlay.classList.remove("is-player-controls-hidden");
+    scheduleHidePlayerControls();
+  };
   const seekVideo = (delta) => {
     if (!video) return;
     const duration = Number.isFinite(video.duration) ? video.duration : Infinity;
@@ -3786,6 +3805,12 @@ function openLogsVideoPlayer(title, src, options = {}) {
     playButton.classList.toggle("is-paused", paused);
     playButton.setAttribute("aria-label", paused ? "재생" : "일시정지");
     playButton.title = paused ? "재생" : "일시정지";
+    if (paused) {
+      clearHideControlsTimer();
+      overlay.classList.remove("is-player-controls-hidden");
+    } else {
+      scheduleHidePlayerControls();
+    }
   };
   playButton?.addEventListener("click", () => {
     if (!video) return;
@@ -3800,13 +3825,21 @@ function openLogsVideoPlayer(title, src, options = {}) {
     button.addEventListener("click", () => {
       const delta = Number(button.dataset.skip || 0);
       seekVideo(delta);
+      showPlayerControls();
     });
+  });
+  frame?.addEventListener("mousemove", showPlayerControls);
+  frame?.addEventListener("touchstart", showPlayerControls, { passive: true });
+  frame?.addEventListener("click", (ev) => {
+    if (isPlayerControlTarget(ev.target)) return;
+    showPlayerControls();
   });
   frame?.addEventListener("dblclick", (ev) => {
     if (isPlayerControlTarget(ev.target)) return;
     const rect = frame.getBoundingClientRect();
     const x = ev.clientX - rect.left;
     seekVideo(x < rect.width / 2 ? -5 : 5);
+    showPlayerControls();
   });
   let lastPlayerTap = { time: 0, x: 0, y: 0 };
   frame?.addEventListener("touchend", (ev) => {
@@ -3822,6 +3855,7 @@ function openLogsVideoPlayer(title, src, options = {}) {
       const rect = frame.getBoundingClientRect();
       const x = touch.clientX - rect.left;
       seekVideo(x < rect.width / 2 ? -5 : 5);
+      showPlayerControls();
       lastPlayerTap = { time: 0, x: 0, y: 0 };
       return;
     }
@@ -3831,6 +3865,7 @@ function openLogsVideoPlayer(title, src, options = {}) {
   requestAnimationFrame(() => {
     overlay.classList.add("is-open");
     syncPlayButton();
+    showPlayerControls();
   });
 }
 
