@@ -796,16 +796,17 @@ async function loadSettings(options = {}) {
   return settingsLoadPromise;
 }
 
-function renderGroups() {
+function renderGroups(options = {}) {
   const box = document.getElementById("groupList");
   box.innerHTML = "";
+  const animateGroups = options.animateGroups !== false;
 
   (SETTINGS.groups || []).forEach(g => {
     const label = getSettingGroupLabel(g.group);
 
     const b = document.createElement("button");
-    b.className = "btn groupBtn ui-stagger-item";
-    b.style.setProperty("--i", String(box.children.length));
+    b.className = animateGroups ? "btn groupBtn ui-stagger-item" : "btn groupBtn";
+    if (animateGroups) b.style.setProperty("--i", String(box.children.length));
     if (g.group === CURRENT_GROUP) b.classList.add("active");
     b.textContent = `${label} (${g.count})`;
     b.onclick = () => selectGroup(g.group);
@@ -1208,6 +1209,8 @@ async function activateSettingGroup(group, pushHistory = true, options = {}) {
   const nextGroup = group || CURRENT_GROUP;
   const previousGroup = CURRENT_GROUP;
   const scrollMode = options.scrollMode || "top";
+  const animateItems = options.animateItems !== false;
+  const animateGroups = options.animateGroups !== false;
   const canReuseRenderedGroup =
     options.forceRender !== true &&
     previousGroup === nextGroup &&
@@ -1218,7 +1221,7 @@ async function activateSettingGroup(group, pushHistory = true, options = {}) {
   }
 
   CURRENT_GROUP = group;
-  renderGroups();
+  renderGroups({ animateGroups });
   if (isCompactLandscapeMode() && CURRENT_PAGE === "setting") {
     showSettingScreen("items", false);
     history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
@@ -1239,6 +1242,7 @@ async function activateSettingGroup(group, pushHistory = true, options = {}) {
     await renderItems(group, {
       scrollMode,
       scrollTop: options.scrollTop,
+      animateItems,
     });
     return;
   }
@@ -1264,6 +1268,7 @@ async function activateSettingGroup(group, pushHistory = true, options = {}) {
   await renderItems(group, {
     scrollMode,
     scrollTop: options.scrollTop,
+    animateItems,
   });
 }
 
@@ -1537,7 +1542,10 @@ if (settingSubnavWrap) {
 
 function selectGroup(group, pushHistory = true) {
   const shouldPush = pushHistory && !(isCompactLandscapeMode() && CURRENT_PAGE === "setting");
-  activateSettingGroup(group, shouldPush).catch((e) => console.log("[Setting] selectGroup failed:", e));
+  const options = (isCompactLandscapeMode() && CURRENT_PAGE === "setting")
+    ? { animateItems: false, animateGroups: false }
+    : {};
+  activateSettingGroup(group, shouldPush, options).catch((e) => console.log("[Setting] selectGroup failed:", e));
 }
 
 async function renderItems(group, options = {}) {
@@ -1545,6 +1553,7 @@ async function renderItems(group, options = {}) {
   const itemsBox = document.getElementById("items");
   const renderToken = ++settingRenderToken;
   const scrollMode = options.scrollMode || "top";
+  const animateItems = options.animateItems !== false;
   const requestedScrollTop = Number.isFinite(options.scrollTop) ? options.scrollTop : null;
   itemsBox.innerHTML = "";
   delete itemsBox.dataset.renderedGroup;
@@ -1578,8 +1587,8 @@ async function renderItems(group, options = {}) {
     const descr = formatItemText(p, "descr", "edescr", "");
 
     const el = document.createElement("div");
-    el.className = "setting ui-stagger-item";
-    el.style.setProperty("--i", String(index));
+    el.className = animateItems ? "setting ui-stagger-item" : "setting";
+    if (animateItems) el.style.setProperty("--i", String(index));
     el.dataset.settingName = name;
     el.dataset.settingGroup = group;
 
@@ -3721,12 +3730,21 @@ function markDashcamScrollBusy() {
   }, 380);
 }
 
-function openLogsVideoPlayer(title, src) {
+function openLogsVideoPlayer(title, src, options = {}) {
   const overlay = document.createElement("div");
-  overlay.className = "dashcam-player-overlay";
+  const kind = String(options.kind || "video").replace(/[^a-z0-9_-]/gi, "");
+  overlay.className = `dashcam-player-overlay dashcam-player-overlay--${kind}`;
   overlay.innerHTML = `<div class="dashcam-player-dialog" role="dialog" aria-modal="true">
     <div class="dashcam-player-frame">
       <video class="dashcam-player-video" autoplay controls playsinline src="${src}"></video>
+      <div class="dashcam-player-controls" aria-label="영상 제어">
+        <button class="dashcam-player-control" type="button" data-skip="-5" aria-label="5초 뒤로" title="5초 뒤로">
+          <span aria-hidden="true">-5</span>
+        </button>
+        <button class="dashcam-player-control" type="button" data-skip="5" aria-label="5초 앞으로" title="5초 앞으로">
+          <span aria-hidden="true">+5</span>
+        </button>
+      </div>
       <div class="dashcam-player-top">
         <div class="dashcam-player-title">${escapeHtml(title || "Video")}</div>
         <button class="dashcam-player-close" type="button" aria-label="닫기" title="닫기">
@@ -3737,6 +3755,7 @@ function openLogsVideoPlayer(title, src) {
   </div>`;
   const close = () => {
     const video = overlay.querySelector("video");
+    clearHideControlsTimer();
     try { video?.pause?.(); } catch {}
     overlay.remove();
   };
@@ -3744,20 +3763,109 @@ function openLogsVideoPlayer(title, src) {
     if (ev.target === overlay) close();
   });
   overlay.querySelector(".dashcam-player-close")?.addEventListener("click", close);
+  const video = overlay.querySelector("video");
+  const frame = overlay.querySelector(".dashcam-player-frame");
+  let hideControlsTimer = null;
+  if (video) video.controls = true;
+  const clearHideControlsTimer = () => {
+    if (!hideControlsTimer) return;
+    window.clearTimeout(hideControlsTimer);
+    hideControlsTimer = null;
+  };
+  const scheduleHidePlayerControls = () => {
+    clearHideControlsTimer();
+    if (!video || video.paused || video.ended) return;
+    hideControlsTimer = window.setTimeout(() => {
+      if (!video || video.paused || video.ended) return;
+      overlay.classList.add("is-player-controls-hidden");
+    }, 2200);
+  };
+  const showPlayerControls = () => {
+    overlay.classList.remove("is-player-controls-hidden");
+    scheduleHidePlayerControls();
+  };
+  const seekVideo = (delta) => {
+    if (!video) return;
+    const duration = Number.isFinite(video.duration) ? video.duration : Infinity;
+    const current = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+    video.currentTime = Math.max(0, Math.min(duration, current + delta));
+  };
+  const isPlayerControlTarget = (target) => {
+    if (!(target instanceof Element)) return false;
+    return Boolean(target.closest("button, .dashcam-player-top, .dashcam-player-controls"));
+  };
+  const syncPlayerControlsVisibility = () => {
+    if (!video) return;
+    const paused = video.paused || video.ended;
+    if (paused) {
+      clearHideControlsTimer();
+      overlay.classList.remove("is-player-controls-hidden");
+    } else {
+      scheduleHidePlayerControls();
+    }
+  };
+  video?.addEventListener("play", syncPlayerControlsVisibility);
+  video?.addEventListener("pause", syncPlayerControlsVisibility);
+  video?.addEventListener("ended", syncPlayerControlsVisibility);
+  overlay.querySelectorAll("[data-skip]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const delta = Number(button.dataset.skip || 0);
+      seekVideo(delta);
+      showPlayerControls();
+    });
+  });
+  frame?.addEventListener("mousemove", showPlayerControls);
+  frame?.addEventListener("touchstart", showPlayerControls, { passive: true });
+  frame?.addEventListener("click", (ev) => {
+    if (isPlayerControlTarget(ev.target)) return;
+    showPlayerControls();
+  });
+  frame?.addEventListener("dblclick", (ev) => {
+    if (isPlayerControlTarget(ev.target)) return;
+    const rect = frame.getBoundingClientRect();
+    const x = ev.clientX - rect.left;
+    seekVideo(x < rect.width / 2 ? -5 : 5);
+    showPlayerControls();
+  });
+  let lastPlayerTap = { time: 0, x: 0, y: 0 };
+  frame?.addEventListener("touchend", (ev) => {
+    if (isPlayerControlTarget(ev.target)) return;
+    const touch = ev.changedTouches?.[0];
+    if (!touch) return;
+    const now = performance.now();
+    const dx = touch.clientX - lastPlayerTap.x;
+    const dy = touch.clientY - lastPlayerTap.y;
+    const isDoubleTap = now - lastPlayerTap.time < 320 && Math.hypot(dx, dy) < 34;
+    if (isDoubleTap) {
+      ev.preventDefault();
+      const rect = frame.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      seekVideo(x < rect.width / 2 ? -5 : 5);
+      showPlayerControls();
+      lastPlayerTap = { time: 0, x: 0, y: 0 };
+      return;
+    }
+    lastPlayerTap = { time: now, x: touch.clientX, y: touch.clientY };
+  }, { passive: false });
   document.body.appendChild(overlay);
-  requestAnimationFrame(() => overlay.classList.add("is-open"));
+  requestAnimationFrame(() => {
+    overlay.classList.add("is-open");
+    syncPlayerControlsVisibility();
+    showPlayerControls();
+  });
 }
 
 function openDashcamPlayer(route, segment) {
   openLogsVideoPlayer(
     `${dashcamRouteTitle(route)} · Segment ${dashcamSegmentIndex(segment)}`,
     dashcamApiPath("video", segment),
+    { kind: "dashcam" },
   );
 }
 
 function openScreenrecordPlayer(id, name) {
   if (!id) return;
-  openLogsVideoPlayer(name || "화면녹화", screenrecordApiPath("video", id));
+  openLogsVideoPlayer(name || "화면녹화", screenrecordApiPath("video", id), { kind: "screenrecord" });
 }
 
 function dashcamUploadResultHtml(result) {
