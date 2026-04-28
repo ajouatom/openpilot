@@ -2009,7 +2009,7 @@ body[data-page="tools"] .swipe-container,
   z-index: 2;
   display: flex;
   align-items: center;
-  gap: clamp(88px, 14vw, 180px);
+  gap: clamp(132px, 22vw, 280px);
   transform: translate(-50%, -50%);
   opacity: .9;
   pointer-events: none;
