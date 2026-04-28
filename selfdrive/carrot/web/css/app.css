@@ -2114,8 +2114,10 @@ body[data-page="tools"] .swipe-container,
   }
 
   .dashcam-route-preview {
-    flex: 0 0 auto;
+    flex: 1 1 auto;
+    min-height: 0;
     width: 100%;
+    aspect-ratio: auto;
   }
 
   .dashcam-route-media-info {
