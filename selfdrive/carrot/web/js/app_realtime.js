@@ -1161,9 +1161,30 @@ function updateCarrotVisionAvailabilityUi(available, message = window.CARROT_VIS
   }
   if (messageEl) {
     messageEl.hidden = Boolean(available);
-    messageEl.textContent = available ? "" : message;
+    messageEl.replaceChildren();
+    if (!available) {
+      const title = document.createElement("div");
+      title.className = "vision-start-overlay__message-title";
+      title.textContent = "주행 비전을 사용할 수 없습니다";
+      const body = document.createElement("div");
+      body.className = "vision-start-overlay__message-body";
+      body.textContent = message;
+      const hint = document.createElement("div");
+      hint.className = "vision-start-overlay__message-hint";
+      hint.textContent = "설정 > 시작 > DisableDM 값을 2로 변경하세요.";
+      messageEl.append(title, body, hint);
+    }
   }
-  if (!available) rtcStatusSet(message);
+  if (available) {
+    if (!window.CARROT_VISION_ACTIVE) rtcStatusSet("주행 비전을 켜려면 화면 중앙의 시작 버튼을 클릭하세요.");
+  } else {
+    if (window.CARROT_VISION_ACTIVE) {
+      window.CARROT_VISION_ACTIVE = false;
+      emitCarrotVisionChange(false);
+      syncCarrotRealtimeLifecycle(true);
+    }
+    rtcStatusSet(message);
+  }
 }
 
 async function syncCarrotVisionAvailability() {
@@ -1202,6 +1223,16 @@ function rtcInitAuto() {
   syncCarrotVisionAvailability().catch(() => {});
   rtcBindVideoEvents();
 }
+
+window.addEventListener("carrot:paramchange", (ev) => {
+  if (ev?.detail?.name !== "DisableDM") return;
+  syncCarrotVisionAvailability().catch(() => {});
+});
+
+window.addEventListener("carrot:pagechange", (ev) => {
+  if (ev?.detail?.page !== "carrot") return;
+  syncCarrotVisionAvailability().catch(() => {});
+});
 
 const RAW_HUD_LOG_PREFIX = "[raw hud]";
 const RAW_HUD_MUX_LOG_PREFIX = "[raw hud mux]";

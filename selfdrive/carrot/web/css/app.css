@@ -718,6 +718,19 @@ body[data-page="home"] .global-home-record-fab {
   transform: translateY(1px);
 }
 
+.setting-car-entry.is-attention {
+  border-color: color-mix(in srgb, var(--md-primary) 78%, #fff);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--md-primary) 28%, transparent),
+    0 10px 26px rgba(0, 0, 0, 0.24);
+  animation: setting-car-attention 1.05s ease-in-out 0s 3;
+}
+
+@keyframes setting-car-attention {
+  0%, 100% { transform: translateY(0); }
+  45% { transform: translateY(-2px); }
+}
+
 .setting-car-entry__text {
   min-width: 0;
   display: flex;
@@ -3332,15 +3345,35 @@ body[data-page="carrot"] #driveHudCard {
 
 .vision-start-overlay__message {
   max-width: min(82vw, 520px);
-  padding: 10px 14px;
-  border: 1px solid rgba(255,255,255,.18);
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--md-primary) 34%, rgba(255,255,255,.16));
   border-radius: 8px;
-  background: rgba(0,0,0,.54);
-  color: #fff;
-  font-size: 14px;
-  font-weight: 700;
+  background:
+    linear-gradient(180deg, rgba(255,177,42,.16), rgba(255,177,42,.06)),
+    color-mix(in srgb, var(--md-surface-cont) 82%, rgba(0,0,0,.72));
+  color: var(--md-on-surface);
+  box-shadow: 0 12px 32px rgba(0,0,0,.34);
   line-height: 1.35;
   text-align: center;
+}
+
+.vision-start-overlay__message-title {
+  color: var(--md-primary);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.vision-start-overlay__message-body {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.vision-start-overlay__message-hint {
+  margin-top: 6px;
+  color: var(--md-on-surface-var);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .vision-start-overlay .btn:disabled {

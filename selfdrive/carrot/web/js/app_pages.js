@@ -4,6 +4,7 @@ let recordTogglePending = false;
 let recordStateResyncTimer = null;
 let appViewportMetricsBound = false;
 const CURRENT_CAR_CACHE_KEY = "carrot_web_current_car_label";
+const CURRENT_CAR_PROMPT_SESSION_KEY = "carrot_web_missing_car_prompted";
 const CURRENT_CAR_RETRY_DELAYS_MS = [350, 800, 1500, 2500, 4000];
 const PAGE_DATA_TTL_MS = 15000;
 let currentCarRetryTimer = null;
@@ -12,6 +13,7 @@ let currentCarLastKnownLabel = "";
 let currentCarLoadPromise = null;
 let currentCarLoadedAt = 0;
 let currentCarHasSnapshot = false;
+let currentCarPromptActive = false;
 let recordStateLoadPromise = null;
 let recordStateLoadedAt = 0;
 let carsLoadPromise = null;
@@ -152,6 +154,76 @@ function updateSettingCarEntryState(label) {
   const isEmpty = !text || text === "-";
   settingCarRow.classList.toggle("is-empty", isEmpty);
   settingCarRow.setAttribute("aria-label", isEmpty ? "차량 선택 열기" : `${text} 차량 선택 열기`);
+}
+
+function isMissingCarSelectionLabel(label) {
+  const text = String(label || "").trim();
+  if (!text || text === "-") return true;
+  return text.toLowerCase().includes("mock");
+}
+
+function isMissingCarSelectionValues(values) {
+  const selected = String(values?.CarSelected3 || "").trim();
+  if (!selected) return true;
+  const carName = String(values?.CarName || "").trim();
+  return isMissingCarSelectionLabel(selected) || (carName && carName.toLowerCase().includes("mock"));
+}
+
+function highlightSettingCarEntry() {
+  if (!settingCarRow) return;
+  settingCarRow.scrollIntoView({ behavior: "smooth", block: "center" });
+  try {
+    settingCarRow.focus({ preventScroll: true });
+  } catch {
+    settingCarRow.focus();
+  }
+  settingCarRow.classList.remove("is-attention");
+  void settingCarRow.offsetWidth;
+  settingCarRow.classList.add("is-attention");
+  window.setTimeout(() => {
+    settingCarRow.classList.remove("is-attention");
+  }, 3600);
+}
+
+async function promptMissingCurrentCarSelection(values = null) {
+  if (currentCarPromptActive) return false;
+  try {
+    if (sessionStorage.getItem(CURRENT_CAR_PROMPT_SESSION_KEY) === "1") return false;
+  } catch {}
+
+  let snapshot = values;
+  if (!snapshot) {
+    try {
+      snapshot = await bulkGet(["CarSelected3", "CarName"]);
+    } catch {
+      return false;
+    }
+  }
+
+  if (!isMissingCarSelectionValues(snapshot)) return false;
+
+  currentCarPromptActive = true;
+  try {
+    sessionStorage.setItem(CURRENT_CAR_PROMPT_SESSION_KEY, "1");
+  } catch {}
+
+  try {
+    await appAlert("차량이 선택되어 있지 않습니다.\n설정에서 차량을 먼저 선택해주세요.", {
+      title: getUIText("car_select", "차량 선택"),
+    });
+
+    if (typeof showPage === "function") {
+      showPage("setting", true, typeof getSwipeTransition === "function" ? getSwipeTransition(CURRENT_PAGE, "setting") : null);
+    }
+    if (typeof showSettingScreen === "function") {
+      CURRENT_GROUP = null;
+      showSettingScreen("groups", false);
+    }
+    window.setTimeout(highlightSettingCarEntry, 260);
+  } finally {
+    currentCarPromptActive = false;
+  }
+  return true;
 }
 
 function updateAppViewportMetrics() {
@@ -371,9 +443,17 @@ async function loadCurrentCar(options = {}) {
         cancelCurrentCarRetry();
         currentCarRetryIndex = 0;
         applyCurrentCarLabel(label);
+        if (isMissingCarSelectionValues(values)) {
+          window.setTimeout(() => {
+            promptMissingCurrentCarSelection(values).catch(() => {});
+          }, 350);
+        }
       } else {
         applyCurrentCarLabel("", { blank: !currentCarLastKnownLabel });
         scheduleCurrentCarRetry();
+        window.setTimeout(() => {
+          promptMissingCurrentCarSelection(values).catch(() => {});
+        }, 350);
       }
       currentCarHasSnapshot = true;
       currentCarLoadedAt = Date.now();
