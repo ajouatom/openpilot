@@ -1538,11 +1538,11 @@
       "cdescr": "1: 加速度, 2: 加速+速度, 3: 模型, 4: 前车, 5: 前车2"
     },
     {
-      "group": "조향일반",
+      "group": "레인모드",
       "name": "UseLaneLineSpeed",
       "title": "레인모드: 속도(0)",
       "descr": "설정 속도 이상일 때 레인모드로 전환합니다.",
-      "egroup": "LAT",
+      "egroup": "LANE",
       "etitle": "Laneline: Speed(0)",
       "edescr": "Switches to LaneMode when speed exceeds the set speed",
       "min": 0,
@@ -1554,11 +1554,11 @@
       "cdescr": "当速度超过设定速度时切换到车道模式"
     },
     {
-      "group": "조향일반",
+      "group": "레인모드",
       "name": "UseLaneLineCurveSpeed",
       "title": "레인모드: 커브속도(0)",
       "descr": "레인모드를 설정속도 이하에서는 사용하지 않습니다.",
-      "egroup": "LAT",
+      "egroup": "LANE",
       "etitle": "Laneline: Curve Speed(0)",
       "edescr": "LaneMode is not used below the set speed",
       "min": 0,
@@ -1570,11 +1570,11 @@
       "cdescr": "低于设定速度时不使用车道模式"
     },
     {
-      "group": "조향일반",
+      "group": "레인모드",
       "name": "AdjustLaneOffset",
       "title": "레인모드: 차선조절옵셋 (0)cm",
       "descr": "도로경계쪽/커브안쪽으로 보정합니다.",
-      "egroup": "LAT",
+      "egroup": "LANE",
       "etitle": "LaneLine: AdjustLaneOffset (0)cm",
       "edescr": "Corrects toward the road edge/inside of the curve",
       "min": 0,
