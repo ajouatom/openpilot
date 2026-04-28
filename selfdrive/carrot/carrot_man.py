@@ -26,7 +26,7 @@ import psutil
 import ipaddress
 import cereal.messaging as messaging
 from openpilot.common.realtime import Ratekeeper, set_core_affinity
-from openpilot.common.params import Params
+from openpilot.common.params import Params, ParamKeyType
 from openpilot.common.filter_simple import MyMovingAverage
 from openpilot.system.hardware import PC, TICI
 from openpilot.selfdrive.navd.helpers import Coordinate
@@ -759,11 +759,56 @@ class CarrotMan:
       else:
         time.sleep(1)
 
+  def get_all_toggle_values(self):
+    toggle_values = {}
+
+    for k in self.params.all_keys():
+      # key 정리
+      if isinstance(k, (bytes, bytearray, memoryview)):
+        try:
+          key = k.decode("utf-8")
+        except Exception:
+          continue
+      else:
+        key = str(k)
+
+      # 타입 확인 + 제외
+      try:
+        t = self.params.get_type(key)
+      except Exception:
+        continue
+      if t in (ParamKeyType.BYTES, ParamKeyType.JSON):
+        continue
+
+      # default 없는 키 제외
+      try:
+        dv = self.params.get_default_value(key)
+      except Exception:
+        continue
+      if dv is None:
+        continue
+
+      # 값 읽기 (이미 Params.get()이 타입 변환까지 해줌)
+      try:
+        v = self.params.get(key, block=False, return_default=False)
+      except Exception:
+        v = None
+
+      # v가 None이면 default로 채우고 싶으면 dv로 대체 (선택)
+      if v is None:
+        v = dv
+
+      # 최종 stringify (jsonify 용)
+      if isinstance(v, (dict, list)):
+        toggle_values[key] = json.dumps(v, ensure_ascii=False)
+      else:
+        toggle_values[key] = str(v)
+
+    return toggle_values
+
   def save_toggle_values(self):
     try:
-      import openpilot.selfdrive.frogpilot.fleetmanager.helpers as fleet
-
-      toggle_values = fleet.get_all_toggle_values()
+      toggle_values = self.get_all_toggle_values()
       file_path = os.path.join('/data', 'toggle_values.json')
       with open(file_path, 'w') as file:
         json.dump(toggle_values, file, indent=2)
