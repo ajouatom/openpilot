@@ -3714,9 +3714,10 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
   </article>`;
 }
 
-function renderDashcamRoutes() {
+function renderDashcamRoutes(options = {}) {
   const host = document.getElementById("dashcamRoutes");
   if (!host) return;
+  const animate = options.animate !== false;
   const routes = dashcamState.routes || [];
   if (dashcamState.loading && !routes.length) {
     setDashcamStatus("");
@@ -3729,7 +3730,7 @@ function renderDashcamRoutes() {
     return;
   }
   setDashcamStatus("");
-  host.innerHTML = routes.map((entry, index) => dashcamRouteCardHtml(entry, index, { animate: false })).join("");
+  host.innerHTML = routes.map((entry, index) => dashcamRouteCardHtml(entry, index, { animate })).join("");
   hydrateLogsLazyImages(host);
 }
 
@@ -3811,7 +3812,7 @@ async function loadDashcamRoutes({ silent = false } = {}) {
     dashcamState.routes = routes;
     dashcamState.signature = nextSignature;
     dashcamState.loading = false;
-    renderDashcamRoutes();
+    renderDashcamRoutes({ animate: !silent });
     if (!silent && logsScrollTops.dashcam === 0) restoreLogsScrollTop("dashcam", { reset: true });
   } catch (e) {
     if (seq !== dashcamState.loadSeq) return;
@@ -4198,7 +4199,7 @@ function bindLogsPage() {
         const nextLandscape = isCompactLandscapeMode();
         if (dashcamState.landscape === nextLandscape) return;
         dashcamState.landscape = nextLandscape;
-        renderDashcamRoutes();
+        renderDashcamRoutes({ animate: false });
       }, 120);
     }, { passive: true });
   }
@@ -4228,7 +4229,7 @@ function bindLogsPage() {
       if (action === "toggle-route") {
         if (dashcamState.expanded.has(route)) dashcamState.expanded.delete(route);
         else dashcamState.expanded.add(route);
-        if (!renderDashcamRoute(route)) renderDashcamRoutes();
+        if (!renderDashcamRoute(route)) renderDashcamRoutes({ animate: false });
       } else if (action === "play") {
         openDashcamPlayer(route, segment);
       } else if (action === "segment-menu") {
@@ -4242,7 +4243,7 @@ function bindLogsPage() {
           if (shouldClear) dashcamState.selected.delete(item);
           else dashcamState.selected.add(item);
         }
-        if (!updateDashcamRouteSelectionUi(route)) renderDashcamRoutes();
+        if (!updateDashcamRouteSelectionUi(route)) renderDashcamRoutes({ animate: false });
       } else if (action === "upload-selected") {
         const entry = dashcamState.routes.find((item) => item.route === route);
         const targets = dashcamSelectedForRoute(entry || { segmentFolders: [] });
@@ -4256,7 +4257,7 @@ function bindLogsPage() {
       if (input.checked) dashcamState.selected.add(segment);
       else dashcamState.selected.delete(segment);
       const route = input.closest("[data-route-card]")?.dataset.routeCard || "";
-      if (!updateDashcamRouteSelectionUi(route)) renderDashcamRoutes();
+      if (!updateDashcamRouteSelectionUi(route)) renderDashcamRoutes({ animate: false });
     });
   }
 
