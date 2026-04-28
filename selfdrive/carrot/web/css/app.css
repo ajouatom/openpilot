@@ -3335,7 +3335,7 @@ body[data-page="carrot"] #driveHudCard {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: 10px;
   background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
@@ -3344,36 +3344,39 @@ body[data-page="carrot"] #driveHudCard {
 }
 
 .vision-start-overlay__message {
-  max-width: min(82vw, 520px);
-  padding: 14px 16px;
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  width: min(78vw, 620px);
+  max-width: calc(100% - 24px);
+  padding: 8px 12px;
   border: 1px solid color-mix(in srgb, var(--md-primary) 34%, rgba(255,255,255,.16));
-  border-radius: 8px;
+  border-radius: 999px;
   background:
     linear-gradient(180deg, rgba(255,177,42,.16), rgba(255,177,42,.06)),
     color-mix(in srgb, var(--md-surface-cont) 82%, rgba(0,0,0,.72));
   color: var(--md-on-surface);
-  box-shadow: 0 12px 32px rgba(0,0,0,.34);
-  line-height: 1.35;
+  box-shadow: 0 8px 22px rgba(0,0,0,.28);
+  line-height: 1.25;
   text-align: center;
+  transform: translateX(-50%);
+  z-index: 1;
 }
 
 .vision-start-overlay__message-title {
-  color: var(--md-primary);
-  font-size: 13px;
-  font-weight: 900;
+  display: none;
 }
 
 .vision-start-overlay__message-body {
-  margin-top: 6px;
-  font-size: 14px;
+  font-size: clamp(11px, 1.7vw, 13px);
   font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .vision-start-overlay__message-hint {
-  margin-top: 6px;
-  color: var(--md-on-surface-var);
-  font-size: 12px;
-  font-weight: 700;
+  display: none;
 }
 
 .vision-start-overlay .btn:disabled {
