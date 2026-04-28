@@ -821,8 +821,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           values["LCA_LEFT_ICON"] = 0
           values["LCA_RIGHT_ICON"] = 0
         elif not lat_active:
-          values["LCA_LEFT_ICON"] = 3
-          values["LCA_RIGHT_ICON"] = 3
+          values["LCA_LEFT_ICON"] = 1
+          values["LCA_RIGHT_ICON"] = 1
         else:
           if lca_left_available and not lane_line_warn_left:
             values["LCA_LEFT_ICON"] = 1 if CS.out.leftBlindspot else 2
