@@ -3418,7 +3418,9 @@ window.HomeDrive = (() => {
         setStageReady(false);
         clearOverlay(canvasEl.width || 1, canvasEl.height || 1);
         clearHud(hudCanvasEl.width || 1, hudCanvasEl.height || 1);
-        setStatus("주행 비전을 켜려면 화면 중앙의 시작 버튼을 클릭하세요.");
+        setStatus(window.CARROT_VISION_AVAILABLE === false
+          ? (window.CARROT_VISION_DISABLED_MESSAGE || "DisableDM이 비활성화 되어있습니다.")
+          : "주행 비전을 켜려면 화면 중앙의 시작 버튼을 클릭하세요.");
         setMeta("");
         setDebug("");
       }

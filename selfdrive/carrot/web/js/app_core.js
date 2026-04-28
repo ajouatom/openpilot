@@ -33,7 +33,7 @@ const LANG_EMOJI = {
 
 const UI_STRINGS = {
   ko: {
-    home: "홈",
+    home: "주행",
     setting: "설정",
     tools: "도구",
     logs: "로그",

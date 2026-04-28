@@ -3319,13 +3319,33 @@ body[data-page="carrot"] #driveHudCard {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 14px;
   background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   z-index: 50;
   transition: opacity 0.3s ease;
+}
+
+.vision-start-overlay__message {
+  max-width: min(82vw, 520px);
+  padding: 10px 14px;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 8px;
+  background: rgba(0,0,0,.54);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.vision-start-overlay .btn:disabled {
+  opacity: .46;
+  cursor: not-allowed;
 }
 
 .carrot-stage__loading {

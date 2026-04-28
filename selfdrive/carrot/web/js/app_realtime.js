@@ -1139,9 +1139,51 @@ async function waitServerReady(timeoutMs = 8000) {
 }
 
 window.CARROT_VISION_ACTIVE = false;
+window.CARROT_VISION_AVAILABLE = false;
+window.CARROT_VISION_DISABLED_MESSAGE = "DisableDM이 비활성화 되어있습니다.";
+
+async function fetchDisableDmValue() {
+  const r = await fetch("/api/params_bulk?names=DisableDM", { cache: "no-store" });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  const raw = j.values?.DisableDM;
+  const value = Number.parseInt(String(raw ?? "0"), 10);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function updateCarrotVisionAvailabilityUi(available, message = window.CARROT_VISION_DISABLED_MESSAGE) {
+  window.CARROT_VISION_AVAILABLE = Boolean(available);
+  const button = document.getElementById("btnStartVision");
+  const messageEl = document.getElementById("visionDisabledMessage");
+  if (button) {
+    button.disabled = !available;
+    button.setAttribute("aria-disabled", available ? "false" : "true");
+  }
+  if (messageEl) {
+    messageEl.hidden = Boolean(available);
+    messageEl.textContent = available ? "" : message;
+  }
+  if (!available) rtcStatusSet(message);
+}
+
+async function syncCarrotVisionAvailability() {
+  try {
+    const disableDm = await fetchDisableDmValue();
+    const available = disableDm === 2;
+    updateCarrotVisionAvailabilityUi(available);
+    return available;
+  } catch (e) {
+    updateCarrotVisionAvailabilityUi(false, "DisableDM 상태를 확인할 수 없습니다.");
+    return false;
+  }
+}
 
 window.CarrotVisionStart = async function() {
   if (window.CARROT_VISION_ACTIVE) return;
+  if (!(await syncCarrotVisionAvailability())) {
+    if (typeof showAppToast === "function") showAppToast(window.CARROT_VISION_DISABLED_MESSAGE, { tone: "error" });
+    return;
+  }
   requestCarrotFullscreen({ quiet: false }).catch(() => {});
   window.CARROT_VISION_ACTIVE = true;
   emitCarrotVisionChange(true);
@@ -1157,6 +1199,7 @@ window.CarrotVisionStart = async function() {
 function rtcInitAuto() {
   const btn = document.getElementById("btnStartVision");
   if (btn) btn.onclick = window.CarrotVisionStart;
+  syncCarrotVisionAvailability().catch(() => {});
   rtcBindVideoEvents();
 }
 
