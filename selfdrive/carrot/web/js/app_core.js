@@ -837,6 +837,7 @@ function showPage(page, pushHistory = false, transition = null) {
     teardownTerminalPage();
   }
   CURRENT_PAGE = page;
+  document.documentElement.dataset.page = page;
   document.body.dataset.page = page;
 
   btnHome.classList.toggle("active", page === "carrot");

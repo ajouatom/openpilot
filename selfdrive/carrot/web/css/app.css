@@ -29,6 +29,31 @@ body[data-page="tools"] .wrap {
   padding-bottom: 0;
 }
 
+html[data-page="logs"],
+html:has(body[data-page="logs"]),
+body[data-page="logs"] {
+  height: var(--app-vv-height, 100dvh);
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body[data-page="logs"] .wrap {
+  max-width: none;
+  height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height));
+  min-height: 0;
+  padding: 0;
+  padding-bottom: 0;
+  overflow: hidden;
+}
+
+body[data-page="logs"] .swipe-container {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: pan-y;
+}
+
 @media (hover: hover) and (pointer: fine) {
   * {
     scrollbar-width: thin;
@@ -1286,16 +1311,20 @@ body[data-page="tools"] .swipe-container,
 /* ── Logs / Dashcam ───────────────────────────────────────── */
 #pageLogs {
   padding: 0;
-  min-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height));
+  height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height));
+  min-height: 0;
   background: var(--md-surface);
+  overflow: hidden;
 }
 
 .logs-shell {
-  min-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height));
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   max-width: 1480px;
   margin: 0 auto;
+  overflow: hidden;
 }
 
 .logs-tabbar {
@@ -1347,6 +1376,7 @@ body[data-page="tools"] .swipe-container,
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .logs-panel[hidden] {
@@ -1434,6 +1464,8 @@ body[data-page="tools"] .swipe-container,
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 6px clamp(12px, 3.5vw, 24px) calc(var(--nav-bar-height) + 16px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
@@ -2065,6 +2097,8 @@ body[data-page="tools"] .swipe-container,
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 10px clamp(12px, 3.5vw, 24px) calc(var(--nav-bar-height) + 16px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
@@ -4009,8 +4043,8 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
 @media (max-width: 640px) {
   .setting-subnav-wrap {
     margin-bottom: 0;
-    top: 8px;
-    padding-top: 8px;
+    top: 0;
+    padding-top: calc(8px + env(safe-area-inset-top, 0px));
     padding-bottom: 24px;
     background: var(--md-surface);
     border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 72%, transparent);
@@ -4349,6 +4383,16 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
     padding: 0;
     margin-left: var(--app-nav-left-gap, var(--nav-rail-width));
     width: calc(var(--app-vv-width, 100dvw) - var(--app-nav-left-gap, var(--nav-rail-width)));
+  }
+
+  body[data-page="logs"] .wrap {
+    margin-left: var(--app-nav-left-gap, var(--nav-rail-width));
+    width: calc(var(--app-vv-width, 100dvw) - var(--app-nav-left-gap, var(--nav-rail-width)));
+    height: var(--app-vv-height, 100dvh);
+  }
+
+  body[data-page="logs"] #pageLogs {
+    height: var(--app-vv-height, 100dvh);
   }
 
   body[data-page="carrot"] #pageCarrot > .page-header--hidden {

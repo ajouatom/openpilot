@@ -3500,6 +3500,11 @@ function restoreLogsScrollTop(tab = logsActiveTab, options = {}) {
   if (!scroller) return;
   const key = tab === "screen" ? "screen" : "dashcam";
   const nextTop = options.reset === true ? 0 : (logsScrollTops[key] || 0);
+  if (CURRENT_PAGE === "logs") {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }
   requestAnimationFrame(() => {
     scroller.scrollTop = nextTop;
     requestAnimationFrame(() => {
