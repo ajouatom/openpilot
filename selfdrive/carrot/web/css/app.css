@@ -1450,6 +1450,7 @@ body[data-page="tools"] .swipe-container,
 }
 
 .dashcam-status {
+  flex: 0 0 auto;
   padding: 22px clamp(14px, 3.5vw, 26px);
   color: var(--md-on-surface-var);
   text-align: center;
@@ -1473,6 +1474,7 @@ body[data-page="tools"] .swipe-container,
 }
 
 .dashcam-route-card {
+  flex: 0 0 auto;
   overflow: hidden;
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 50%, transparent);
@@ -1660,6 +1662,7 @@ body[data-page="tools"] .swipe-container,
 }
 
 .dashcam-segment-tile {
+  flex: 0 0 auto;
   min-height: 70px;
   display: flex;
   align-items: center;
@@ -2106,6 +2109,7 @@ body[data-page="tools"] .swipe-container,
 }
 
 .screenrecord-row {
+  flex: 0 0 auto;
   min-height: 64px;
   display: flex;
   align-items: center;
