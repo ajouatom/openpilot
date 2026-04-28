@@ -38,7 +38,6 @@ const UI_STRINGS = {
     tools: "도구",
     logs: "로그",
     terminal: "터미널",
-    fleet: "Fleet",
     carrot: "당근",
     lang: "언어",
     branch_select: "브랜치 선택",
@@ -75,7 +74,6 @@ const UI_STRINGS = {
     restore_done_reboot: "복구가 완료되었습니다.\n지금 재부팅하시겠습니까?",
     checkout_confirm: "브랜치를 변경하시겠습니까?",
     branch_changed: "브랜치가 변경되었습니다.",
-    fleet_open_confirm: "Fleet를 여시겠습니까?",
     quick_link_hint: "길게 눌러 링크 저장",
     failed_set_car: "차량 선택 저장 실패: ",
     reboot_failed: "재부팅 실패: ",
@@ -128,7 +126,6 @@ const UI_STRINGS = {
     tools: "Tools",
     logs: "Logs",
     terminal: "Terminal",
-    fleet: "Fleet",
     carrot: "Carrot",
     lang: "Lang",
     branch_select: "Branch Select",
@@ -165,7 +162,6 @@ const UI_STRINGS = {
     restore_done_reboot: "Restore done.\nReboot now?",
     checkout_confirm: "Switch to this branch?",
     branch_changed: "Branch changed.",
-    fleet_open_confirm: "Open Fleet?",
     quick_link_hint: "Long press to save link",
     failed_set_car: "Failed to set car: ",
     reboot_failed: "Reboot failed: ",
@@ -217,7 +213,6 @@ const UI_STRINGS = {
     tools: "工具",
     logs: "日志",
     terminal: "终端",
-    fleet: "车队",
     carrot: "胡萝卜",
     lang: "语言",
     branch_select: "分支选择",
@@ -254,7 +249,6 @@ const UI_STRINGS = {
     restore_done_reboot: "还原完成。\n现在重启吗？",
     checkout_confirm: "切换到此分支吗？",
     branch_changed: "分支已切换。",
-    fleet_open_confirm: "要打开 Fleet 吗？",
     quick_link_hint: "长按保存链接",
     failed_set_car: "保存车辆选择失败: ",
     reboot_failed: "重启失败: ",
@@ -441,12 +435,10 @@ const btnHome = document.getElementById("btnHome");
 const btnSetting = document.getElementById("btnSetting");
 const btnLogs = document.getElementById("btnLogs");
 const btnTerminal = document.getElementById("btnTerminal");
-const btnFleet = document.getElementById("btnFleet");
 const btnLang = document.getElementById("btnLang");
 const langLabel = document.getElementById("langLabel");
 const btnSettingLang = document.getElementById("btnSettingLang");
 const btnQuickLinkWeb = document.getElementById("btnQuickLinkWeb");
-const btnQuickFleet = document.getElementById("btnQuickFleet");
 const btnTools = document.getElementById("btnTools");
 const btnRecordToggle = document.getElementById("btnRecordToggle");
 const btnSettingSearch = document.getElementById("btnSettingSearch");
@@ -577,19 +569,6 @@ btnSetting.onclick = () => showPage("setting", true, getSwipeTransition(CURRENT_
 if (btnLogs) btnLogs.onclick = () => showPage("logs", true, getSwipeTransition(CURRENT_PAGE, "logs"));
 btnTerminal.onclick = () => showPage("terminal", true, getSwipeTransition(CURRENT_PAGE, "terminal"));
 
-async function openFleetLink() {
-  const ip = location.hostname;
-  const url = `http://${ip}:8082/`;
-  const ok = await appConfirm(
-    `${getUIText("fleet_open_confirm", "Open Fleet?")}\n\n${url}`,
-    { title: UI_STRINGS[LANG].fleet || "Fleet" },
-  );
-  if (!ok) return;
-  window.open(url, "_blank", "noopener");
-}
-
-if (btnFleet) btnFleet.onclick = () => { openFleetLink().catch(() => {}); };
-if (btnQuickFleet) btnQuickFleet.onclick = () => { openFleetLink().catch(() => {}); };
 if (btnLang) btnLang.onclick = () => toggleLang();
 if (btnSettingLang) btnSettingLang.onclick = () => toggleLang();
 
@@ -1066,9 +1045,7 @@ function renderUIText() {
   setNavText("btnTools", s.tools);
   setNavText("btnLogs", s.logs);
   setNavText("btnTerminal", s.terminal);
-  setNavText("btnFleet", s.fleet);
   setText("btnQuickLinkWeb", "Web");
-  setText("btnQuickFleet", s.fleet);
 
   setText("carrotTitle", "CarrotPilot");
 
