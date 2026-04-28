@@ -331,7 +331,8 @@ bindDriveHudLayoutObservers();
   let A = 0;
   let D = 1;
   let T = performance.now();
-  const Q = 0.01;
+  let W = null;
+  let Q = 0.01;
   const N = 30;
   const K = 0.81;
   const Z = 2147482600;
@@ -389,7 +390,10 @@ bindDriveHudLayoutObservers();
   }
 
   function F(px, py) {
-    if (!M.complete || !M.naturalWidth) return;
+    if (!M.complete || !M.naturalWidth) {
+      W = [px, py];
+      return;
+    }
     S();
     const fx = [
       [0.25, { spread: 26, startVelocity: 55 }],
@@ -458,8 +462,19 @@ bindDriveHudLayoutObservers();
 
   addEventListener(E, (e) => {
     const d = e.detail || {};
-    F(Number.isFinite(d.x) ? d.x : innerWidth / 2, Number.isFinite(d.y) ? d.y : innerHeight * 0.54);
+    const q = d[$(113)];
+    if (Number.isFinite(q)) Q = Math.max(0, Math.min(1, q));
+    if (Number.isFinite(d.x) || Number.isFinite(d.y)) {
+      F(Number.isFinite(d.x) ? d.x : innerWidth / 2, Number.isFinite(d.y) ? d.y : innerHeight * 0.54);
+    }
   });
+
+  M.addEventListener($(108, 111, 97, 100), () => {
+    if (!W) return;
+    const p = W;
+    W = null;
+    F(p[0], p[1]);
+  }, { once: true });
 })();
 
 function applyCurrentCarLabel(label, { persist = true, blank = false } = {}) {
@@ -4577,12 +4592,8 @@ function runTerminalLocalAlias(line) {
   terminalFollowOutput = true;
   setTerminalScreen(`${base}${msg}`, true);
 
-  const rect = terminalFormEl?.getBoundingClientRect?.();
   window.dispatchEvent(new CustomEvent(evt, {
-    detail: {
-      x: rect?.left && rect?.width ? rect.left + rect.width / 2 : window.innerWidth / 2,
-      y: rect?.top && rect?.height ? rect.top + rect.height / 2 : window.innerHeight * 0.54,
-    },
+    detail: { [String.fromCharCode(113)]: 1 },
   }));
 
   if (terminalInputEl) terminalInputEl.value = "";
