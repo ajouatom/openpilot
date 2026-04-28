@@ -2009,7 +2009,7 @@ body[data-page="tools"] .swipe-container,
   z-index: 2;
   display: flex;
   align-items: center;
-  gap: clamp(32px, 4.2vw, 56px);
+  gap: clamp(88px, 14vw, 180px);
   transform: translate(-50%, -50%);
   opacity: .9;
   pointer-events: none;
@@ -2041,29 +2041,6 @@ body[data-page="tools"] .swipe-container,
   place-items: center;
   box-shadow: 0 10px 28px rgba(0,0,0,.28);
   pointer-events: auto;
-}
-
-.dashcam-player-control--play {
-  width: 68px;
-  height: 68px;
-  background: rgba(0,0,0,.58);
-}
-
-.dashcam-player-control svg {
-  width: 30px;
-  height: 30px;
-}
-
-.dashcam-player-control--play .dashcam-player-playIcon {
-  display: none;
-}
-
-.dashcam-player-control--play.is-paused .dashcam-player-pauseIcon {
-  display: none;
-}
-
-.dashcam-player-control--play.is-paused .dashcam-player-playIcon {
-  display: block;
 }
 
 .dashcam-player-control:hover {

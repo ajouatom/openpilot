@@ -3741,10 +3741,6 @@ function openLogsVideoPlayer(title, src, options = {}) {
         <button class="dashcam-player-control" type="button" data-skip="-5" aria-label="5초 뒤로" title="5초 뒤로">
           <span aria-hidden="true">-5</span>
         </button>
-        <button class="dashcam-player-control dashcam-player-control--play" type="button" data-action="toggle-play" aria-label="일시정지" title="일시정지">
-          <svg class="dashcam-player-pauseIcon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 5h4v14H7zm6 0h4v14h-4z"/></svg>
-          <svg class="dashcam-player-playIcon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
-        </button>
         <button class="dashcam-player-control" type="button" data-skip="5" aria-label="5초 앞으로" title="5초 앞으로">
           <span aria-hidden="true">+5</span>
         </button>
@@ -3769,7 +3765,6 @@ function openLogsVideoPlayer(title, src, options = {}) {
   overlay.querySelector(".dashcam-player-close")?.addEventListener("click", close);
   const video = overlay.querySelector("video");
   const frame = overlay.querySelector(".dashcam-player-frame");
-  const playButton = overlay.querySelector(".dashcam-player-control--play");
   let hideControlsTimer = null;
   if (video) video.controls = true;
   const clearHideControlsTimer = () => {
@@ -3799,12 +3794,9 @@ function openLogsVideoPlayer(title, src, options = {}) {
     if (!(target instanceof Element)) return false;
     return Boolean(target.closest("button, .dashcam-player-top, .dashcam-player-controls"));
   };
-  const syncPlayButton = () => {
-    if (!video || !playButton) return;
+  const syncPlayerControlsVisibility = () => {
+    if (!video) return;
     const paused = video.paused || video.ended;
-    playButton.classList.toggle("is-paused", paused);
-    playButton.setAttribute("aria-label", paused ? "재생" : "일시정지");
-    playButton.title = paused ? "재생" : "일시정지";
     if (paused) {
       clearHideControlsTimer();
       overlay.classList.remove("is-player-controls-hidden");
@@ -3812,15 +3804,9 @@ function openLogsVideoPlayer(title, src, options = {}) {
       scheduleHidePlayerControls();
     }
   };
-  playButton?.addEventListener("click", () => {
-    if (!video) return;
-    if (video.paused || video.ended) video.play().catch(() => {});
-    else video.pause();
-    syncPlayButton();
-  });
-  video?.addEventListener("play", syncPlayButton);
-  video?.addEventListener("pause", syncPlayButton);
-  video?.addEventListener("ended", syncPlayButton);
+  video?.addEventListener("play", syncPlayerControlsVisibility);
+  video?.addEventListener("pause", syncPlayerControlsVisibility);
+  video?.addEventListener("ended", syncPlayerControlsVisibility);
   overlay.querySelectorAll("[data-skip]").forEach((button) => {
     button.addEventListener("click", () => {
       const delta = Number(button.dataset.skip || 0);
@@ -3864,7 +3850,7 @@ function openLogsVideoPlayer(title, src, options = {}) {
   document.body.appendChild(overlay);
   requestAnimationFrame(() => {
     overlay.classList.add("is-open");
-    syncPlayButton();
+    syncPlayerControlsVisibility();
     showPlayerControls();
   });
 }
