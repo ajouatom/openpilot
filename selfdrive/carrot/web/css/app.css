@@ -29,6 +29,31 @@ body[data-page="tools"] .wrap {
   padding-bottom: 0;
 }
 
+html[data-page="logs"],
+html:has(body[data-page="logs"]),
+body[data-page="logs"] {
+  height: var(--app-vv-height, 100dvh);
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body[data-page="logs"] .wrap {
+  max-width: none;
+  height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height));
+  min-height: 0;
+  padding: 0;
+  padding-bottom: 0;
+  overflow: hidden;
+}
+
+body[data-page="logs"] .swipe-container {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: pan-y;
+}
+
 @media (hover: hover) and (pointer: fine) {
   * {
     scrollbar-width: thin;
@@ -718,6 +743,19 @@ body[data-page="home"] .global-home-record-fab {
   transform: translateY(1px);
 }
 
+.setting-car-entry.is-attention {
+  border-color: color-mix(in srgb, var(--md-primary) 78%, #fff);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--md-primary) 28%, transparent),
+    0 10px 26px rgba(0, 0, 0, 0.24);
+  animation: setting-car-attention 1.05s ease-in-out 0s 3;
+}
+
+@keyframes setting-car-attention {
+  0%, 100% { transform: translateY(0); }
+  45% { transform: translateY(-2px); }
+}
+
 .setting-car-entry__text {
   min-width: 0;
   display: flex;
@@ -1273,16 +1311,20 @@ body[data-page="tools"] .swipe-container,
 /* ── Logs / Dashcam ───────────────────────────────────────── */
 #pageLogs {
   padding: 0;
-  min-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height));
+  height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height));
+  min-height: 0;
   background: var(--md-surface);
+  overflow: hidden;
 }
 
 .logs-shell {
-  min-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height));
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   max-width: 1480px;
   margin: 0 auto;
+  overflow: hidden;
 }
 
 .logs-tabbar {
@@ -1334,6 +1376,7 @@ body[data-page="tools"] .swipe-container,
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .logs-panel[hidden] {
@@ -1407,6 +1450,7 @@ body[data-page="tools"] .swipe-container,
 }
 
 .dashcam-status {
+  flex: 0 0 auto;
   padding: 22px clamp(14px, 3.5vw, 26px);
   color: var(--md-on-surface-var);
   text-align: center;
@@ -1421,6 +1465,8 @@ body[data-page="tools"] .swipe-container,
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 6px clamp(12px, 3.5vw, 24px) calc(var(--nav-bar-height) + 16px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
@@ -1428,6 +1474,7 @@ body[data-page="tools"] .swipe-container,
 }
 
 .dashcam-route-card {
+  flex: 0 0 auto;
   overflow: hidden;
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 50%, transparent);
@@ -1615,6 +1662,7 @@ body[data-page="tools"] .swipe-container,
 }
 
 .dashcam-segment-tile {
+  flex: 0 0 auto;
   min-height: 70px;
   display: flex;
   align-items: center;
@@ -2052,6 +2100,8 @@ body[data-page="tools"] .swipe-container,
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 10px clamp(12px, 3.5vw, 24px) calc(var(--nav-bar-height) + 16px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
@@ -2059,6 +2109,7 @@ body[data-page="tools"] .swipe-container,
 }
 
 .screenrecord-row {
+  flex: 0 0 auto;
   min-height: 64px;
   display: flex;
   align-items: center;
@@ -3319,13 +3370,56 @@ body[data-page="carrot"] #driveHudCard {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 10px;
   background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   z-index: 50;
   transition: opacity 0.3s ease;
+}
+
+.vision-start-overlay__message {
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  width: min(78vw, 620px);
+  max-width: calc(100% - 24px);
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--md-primary) 34%, rgba(255,255,255,.16));
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255,177,42,.16), rgba(255,177,42,.06)),
+    color-mix(in srgb, var(--md-surface-cont) 82%, rgba(0,0,0,.72));
+  color: var(--md-on-surface);
+  box-shadow: 0 8px 22px rgba(0,0,0,.28);
+  line-height: 1.25;
+  text-align: center;
+  transform: translateX(-50%);
+  z-index: 1;
+}
+
+.vision-start-overlay__message-title {
+  display: none;
+}
+
+.vision-start-overlay__message-body {
+  font-size: clamp(11px, 1.7vw, 13px);
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vision-start-overlay__message-hint {
+  display: none;
+}
+
+.vision-start-overlay .btn:disabled {
+  opacity: .46;
+  cursor: not-allowed;
 }
 
 .carrot-stage__loading {
@@ -3953,8 +4047,8 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
 @media (max-width: 640px) {
   .setting-subnav-wrap {
     margin-bottom: 0;
-    top: 8px;
-    padding-top: 8px;
+    top: 0;
+    padding-top: calc(8px + env(safe-area-inset-top, 0px));
     padding-bottom: 24px;
     background: var(--md-surface);
     border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 72%, transparent);
@@ -4293,6 +4387,16 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
     padding: 0;
     margin-left: var(--app-nav-left-gap, var(--nav-rail-width));
     width: calc(var(--app-vv-width, 100dvw) - var(--app-nav-left-gap, var(--nav-rail-width)));
+  }
+
+  body[data-page="logs"] .wrap {
+    margin-left: var(--app-nav-left-gap, var(--nav-rail-width));
+    width: calc(var(--app-vv-width, 100dvw) - var(--app-nav-left-gap, var(--nav-rail-width)));
+    height: var(--app-vv-height, 100dvh);
+  }
+
+  body[data-page="logs"] #pageLogs {
+    height: var(--app-vv-height, 100dvh);
   }
 
   body[data-page="carrot"] #pageCarrot > .page-header--hidden {

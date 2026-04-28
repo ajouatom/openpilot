@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/assets/img_chffr_wheel.png?v=2604-01" />
   <link rel="stylesheet" href="/css/tokens.css?v=2603-73" />
   <link rel="stylesheet" href="/css/hud_card.css?v=2604-09" />
-  <link rel="stylesheet" href="/css/app.css?v=2604-61" />
+  <link rel="stylesheet" href="/css/app.css?v=2604-70" />
 </head>
 
 <body>
@@ -112,7 +112,7 @@
 
       <div class="tools-scroll-stack">
         <div class="row-wrap mb-md" style="gap: var(--sp-md);">
-          <a id="btnQuickLinkWeb" class="btn btn--filled" href="#" aria-disabled="true" style="text-decoration:none; font-weight:700;">Web</a>
+          <a id="btnQuickLinkWeb" class="btn btn--filled" href="#" aria-disabled="true" style="text-decoration:none; font-weight:700;">CarrotMan</a>
           <button id="btnDeviceInfo" class="btn btn--filled" type="button">Device Info</button>
         </div>
 
@@ -283,6 +283,7 @@
           <button id="btnStartVision" class="btn btn--filled" type="button" style="font-size:1.2rem; padding: 16px 32px; border-radius: 99px;">
             ▶ 주행 비전 시작
           </button>
+          <div id="visionDisabledMessage" class="vision-start-overlay__message" hidden></div>
         </div>
 
         <div id="carrotStageLoading" class="carrot-stage__loading" hidden aria-live="polite" aria-busy="true">
@@ -394,7 +395,7 @@
       <span class="nav-icon">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
       </span>
-      <span>Home</span>
+      <span>Drive</span>
     </button>
     <button id="btnSetting" class="nav-btn">
       <span class="nav-icon">
@@ -472,10 +473,10 @@
   </div>
 
   <script src="/js/hud_card.js?v=2604-05"></script>
-  <script src="/js/app_core.js?v=2604-23"></script>
-  <script src="/js/app_pages.js?v=2604-42"></script>
+  <script src="/js/app_core.js?v=2604-27"></script>
+  <script src="/js/app_pages.js?v=2604-46"></script>
   <script src="/js/raw_capnp.js?v=2604-05"></script>
-  <script src="/js/app_realtime.js?v=2604-17"></script>
-  <script src="/js/home_drive.js?v=2604-27"></script>
+  <script src="/js/app_realtime.js?v=2604-19"></script>
+  <script src="/js/home_drive.js?v=2604-28"></script>
 </body>
 </html>

@@ -4,6 +4,7 @@ let recordTogglePending = false;
 let recordStateResyncTimer = null;
 let appViewportMetricsBound = false;
 const CURRENT_CAR_CACHE_KEY = "carrot_web_current_car_label";
+const CURRENT_CAR_PROMPT_SESSION_KEY = "carrot_web_missing_car_prompted";
 const CURRENT_CAR_RETRY_DELAYS_MS = [350, 800, 1500, 2500, 4000];
 const PAGE_DATA_TTL_MS = 15000;
 let currentCarRetryTimer = null;
@@ -12,6 +13,7 @@ let currentCarLastKnownLabel = "";
 let currentCarLoadPromise = null;
 let currentCarLoadedAt = 0;
 let currentCarHasSnapshot = false;
+let currentCarPromptActive = false;
 let recordStateLoadPromise = null;
 let recordStateLoadedAt = 0;
 let carsLoadPromise = null;
@@ -152,6 +154,76 @@ function updateSettingCarEntryState(label) {
   const isEmpty = !text || text === "-";
   settingCarRow.classList.toggle("is-empty", isEmpty);
   settingCarRow.setAttribute("aria-label", isEmpty ? "차량 선택 열기" : `${text} 차량 선택 열기`);
+}
+
+function isMissingCarSelectionLabel(label) {
+  const text = String(label || "").trim();
+  if (!text || text === "-") return true;
+  return text.toLowerCase().includes("mock");
+}
+
+function isMissingCarSelectionValues(values) {
+  const selected = String(values?.CarSelected3 || "").trim();
+  if (!selected) return true;
+  const carName = String(values?.CarName || "").trim();
+  return isMissingCarSelectionLabel(selected) || (carName && carName.toLowerCase().includes("mock"));
+}
+
+function highlightSettingCarEntry() {
+  if (!settingCarRow) return;
+  settingCarRow.scrollIntoView({ behavior: "smooth", block: "center" });
+  try {
+    settingCarRow.focus({ preventScroll: true });
+  } catch {
+    settingCarRow.focus();
+  }
+  settingCarRow.classList.remove("is-attention");
+  void settingCarRow.offsetWidth;
+  settingCarRow.classList.add("is-attention");
+  window.setTimeout(() => {
+    settingCarRow.classList.remove("is-attention");
+  }, 3600);
+}
+
+async function promptMissingCurrentCarSelection(values = null) {
+  if (currentCarPromptActive) return false;
+  try {
+    if (sessionStorage.getItem(CURRENT_CAR_PROMPT_SESSION_KEY) === "1") return false;
+  } catch {}
+
+  let snapshot = values;
+  if (!snapshot) {
+    try {
+      snapshot = await bulkGet(["CarSelected3", "CarName"]);
+    } catch {
+      return false;
+    }
+  }
+
+  if (!isMissingCarSelectionValues(snapshot)) return false;
+
+  currentCarPromptActive = true;
+  try {
+    sessionStorage.setItem(CURRENT_CAR_PROMPT_SESSION_KEY, "1");
+  } catch {}
+
+  try {
+    await appAlert("차량이 선택되어 있지 않습니다.\n설정에서 차량을 먼저 선택해주세요.", {
+      title: getUIText("car_select", "차량 선택"),
+    });
+
+    if (typeof showPage === "function") {
+      showPage("setting", true, typeof getSwipeTransition === "function" ? getSwipeTransition(CURRENT_PAGE, "setting") : null);
+    }
+    if (typeof showSettingScreen === "function") {
+      CURRENT_GROUP = null;
+      showSettingScreen("groups", false);
+    }
+    window.setTimeout(highlightSettingCarEntry, 260);
+  } finally {
+    currentCarPromptActive = false;
+  }
+  return true;
 }
 
 function updateAppViewportMetrics() {
@@ -371,9 +443,17 @@ async function loadCurrentCar(options = {}) {
         cancelCurrentCarRetry();
         currentCarRetryIndex = 0;
         applyCurrentCarLabel(label);
+        if (isMissingCarSelectionValues(values)) {
+          window.setTimeout(() => {
+            promptMissingCurrentCarSelection(values).catch(() => {});
+          }, 350);
+        }
       } else {
         applyCurrentCarLabel("", { blank: !currentCarLastKnownLabel });
         scheduleCurrentCarRetry();
+        window.setTimeout(() => {
+          promptMissingCurrentCarSelection(values).catch(() => {});
+        }, 350);
       }
       currentCarHasSnapshot = true;
       currentCarLoadedAt = Date.now();
@@ -3402,7 +3482,36 @@ const screenrecordState = {
 };
 
 let logsActiveTab = "dashcam";
+const logsScrollTops = { dashcam: 0, screen: 0 };
 let logsLazyImageObserver = null;
+
+function getLogsScroller(tab = logsActiveTab) {
+  return document.getElementById(tab === "screen" ? "screenrecordVideos" : "dashcamRoutes");
+}
+
+function saveLogsScrollTop(tab = logsActiveTab) {
+  const scroller = getLogsScroller(tab);
+  if (!scroller) return;
+  logsScrollTops[tab === "screen" ? "screen" : "dashcam"] = scroller.scrollTop || 0;
+}
+
+function restoreLogsScrollTop(tab = logsActiveTab, options = {}) {
+  const scroller = getLogsScroller(tab);
+  if (!scroller) return;
+  const key = tab === "screen" ? "screen" : "dashcam";
+  const nextTop = options.reset === true ? 0 : (logsScrollTops[key] || 0);
+  if (CURRENT_PAGE === "logs") {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }
+  requestAnimationFrame(() => {
+    scroller.scrollTop = nextTop;
+    requestAnimationFrame(() => {
+      scroller.scrollTop = nextTop;
+    });
+  });
+}
 
 function dashcamSegmentIndex(segment) {
   const parts = String(segment || "").split("--");
@@ -3605,9 +3714,10 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
   </article>`;
 }
 
-function renderDashcamRoutes() {
+function renderDashcamRoutes(options = {}) {
   const host = document.getElementById("dashcamRoutes");
   if (!host) return;
+  const animate = options.animate !== false;
   const routes = dashcamState.routes || [];
   if (dashcamState.loading && !routes.length) {
     setDashcamStatus("");
@@ -3620,7 +3730,7 @@ function renderDashcamRoutes() {
     return;
   }
   setDashcamStatus("");
-  host.innerHTML = routes.map((entry, index) => dashcamRouteCardHtml(entry, index, { animate: false })).join("");
+  host.innerHTML = routes.map((entry, index) => dashcamRouteCardHtml(entry, index, { animate })).join("");
   hydrateLogsLazyImages(host);
 }
 
@@ -3702,7 +3812,8 @@ async function loadDashcamRoutes({ silent = false } = {}) {
     dashcamState.routes = routes;
     dashcamState.signature = nextSignature;
     dashcamState.loading = false;
-    renderDashcamRoutes();
+    renderDashcamRoutes({ animate: !silent });
+    if (!silent && logsScrollTops.dashcam === 0) restoreLogsScrollTop("dashcam", { reset: true });
   } catch (e) {
     if (seq !== dashcamState.loadSeq) return;
     dashcamState.loading = false;
@@ -4033,6 +4144,7 @@ async function loadScreenrecordVideos({ silent = false } = {}) {
     screenrecordState.signature = nextSignature;
     screenrecordState.loading = false;
     renderScreenrecordVideos();
+    if (!silent && logsScrollTops.screen === 0) restoreLogsScrollTop("screen", { reset: true });
   } catch (e) {
     if (seq !== screenrecordState.loadSeq) return;
     screenrecordState.loading = false;
@@ -4044,7 +4156,9 @@ async function loadScreenrecordVideos({ silent = false } = {}) {
 }
 
 function activateLogsTab(tab) {
-  logsActiveTab = tab === "screen" ? "screen" : "dashcam";
+  const nextTab = tab === "screen" ? "screen" : "dashcam";
+  if (nextTab !== logsActiveTab) saveLogsScrollTop(logsActiveTab);
+  logsActiveTab = nextTab;
   const dashTab = document.getElementById("logsTabDashcam");
   const screenTab = document.getElementById("logsTabScreen");
   const dashPanel = document.getElementById("logsDashcamPanel");
@@ -4066,6 +4180,7 @@ function activateLogsTab(tab) {
   } else if (dashcamState.initialized) {
     loadDashcamRoutes({ silent: true }).catch(() => {});
   }
+  restoreLogsScrollTop(logsActiveTab);
 }
 
 function bindLogsPage() {
@@ -4084,7 +4199,7 @@ function bindLogsPage() {
         const nextLandscape = isCompactLandscapeMode();
         if (dashcamState.landscape === nextLandscape) return;
         dashcamState.landscape = nextLandscape;
-        renderDashcamRoutes();
+        renderDashcamRoutes({ animate: false });
       }, 120);
     }, { passive: true });
   }
@@ -4101,7 +4216,10 @@ function bindLogsPage() {
 
   if (routesHost && routesHost.dataset.bound !== "1") {
     routesHost.dataset.bound = "1";
-    routesHost.addEventListener("scroll", markDashcamScrollBusy, { passive: true });
+    routesHost.addEventListener("scroll", () => {
+      markDashcamScrollBusy();
+      saveLogsScrollTop("dashcam");
+    }, { passive: true });
     routesHost.addEventListener("click", (ev) => {
       const actionEl = ev.target?.closest?.("[data-action]");
       if (!actionEl) return;
@@ -4111,7 +4229,7 @@ function bindLogsPage() {
       if (action === "toggle-route") {
         if (dashcamState.expanded.has(route)) dashcamState.expanded.delete(route);
         else dashcamState.expanded.add(route);
-        if (!renderDashcamRoute(route)) renderDashcamRoutes();
+        if (!renderDashcamRoute(route)) renderDashcamRoutes({ animate: false });
       } else if (action === "play") {
         openDashcamPlayer(route, segment);
       } else if (action === "segment-menu") {
@@ -4125,7 +4243,7 @@ function bindLogsPage() {
           if (shouldClear) dashcamState.selected.delete(item);
           else dashcamState.selected.add(item);
         }
-        if (!updateDashcamRouteSelectionUi(route)) renderDashcamRoutes();
+        if (!updateDashcamRouteSelectionUi(route)) renderDashcamRoutes({ animate: false });
       } else if (action === "upload-selected") {
         const entry = dashcamState.routes.find((item) => item.route === route);
         const targets = dashcamSelectedForRoute(entry || { segmentFolders: [] });
@@ -4139,13 +4257,16 @@ function bindLogsPage() {
       if (input.checked) dashcamState.selected.add(segment);
       else dashcamState.selected.delete(segment);
       const route = input.closest("[data-route-card]")?.dataset.routeCard || "";
-      if (!updateDashcamRouteSelectionUi(route)) renderDashcamRoutes();
+      if (!updateDashcamRouteSelectionUi(route)) renderDashcamRoutes({ animate: false });
     });
   }
 
   if (screenHost && screenHost.dataset.bound !== "1") {
     screenHost.dataset.bound = "1";
-    screenHost.addEventListener("scroll", markDashcamScrollBusy, { passive: true });
+    screenHost.addEventListener("scroll", () => {
+      markDashcamScrollBusy();
+      saveLogsScrollTop("screen");
+    }, { passive: true });
     screenHost.addEventListener("click", (ev) => {
       const actionEl = ev.target?.closest?.("[data-action]");
       if (!actionEl) return;
