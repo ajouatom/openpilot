@@ -108,7 +108,9 @@ class LongitudinalPlanner:
     self.solverExecutionTime = 0.0
 
     self.vCluRatio = 1.0
-
+    self.reset_decel_timer = 0
+    self.reset_decel_start_a = 0.0
+    
     self.v_cruise_kph = 0.0
 
     self.params = Params()
@@ -183,6 +185,21 @@ class LongitudinalPlanner:
       self.a_desired = np.clip(sm['carState'].aEgo, accel_limits[0], accel_limits[1])
       
       self.mpc.prev_a = np.full(N+1, self.a_desired) ## carrot
+
+      self.reset_decel_timer = int(2.0 / self.dt)
+      self.reset_decel_start_a = self.a_desired
+
+    elif self.reset_decel_timer > 0:
+      self.reset_decel_timer -= 1
+
+      # 1초 동안 감속 하한을 현재 가속도 근처에서 원래 limit으로 천천히 복귀
+      t = self.reset_decel_timer / max(1, int(1.0 / self.dt))
+      soft_min_accel = min(0.0, self.reset_decel_start_a - 0.05)
+
+      accel_limits_turns[0] = max(
+        accel_limits_turns[0],
+        soft_min_accel * t + accel_limits_turns[0] * (1.0 - t)
+      )
 
     # Prevent divergence, smooth in current v_ego
     self.v_desired_filter.x = max(0.0, self.v_desired_filter.update(v_ego))
