@@ -34,11 +34,11 @@
       "cdescr": "微调摄像头左右(YAW)值(+: right)"
     },
     {
-      "group": "조향튜닝",
+      "group": "조향토크",
       "name": "LateralTorqueCustom",
       "title": "_LateralTorqueCustom(0)",
       "descr": "커스텀 토크 사용\n (TorqueAccelFactor, FrictionFactor 사용을 위해서 켜기)",
-      "egroup": "LAT",
+      "egroup": "LAT_TQ",
       "etitle": "_LateralTorqueCustom(0)",
       "edescr": "Use Custom Torque(TorqueAccelFactor, FrictionFactor)",
       "min": 0,
@@ -50,11 +50,11 @@
       "cdescr": "使用自定义力矩 (TorqueAccelFactor, FrictionFactor)"
     },
     {
-      "group": "조향튜닝",
+      "group": "조향토크",
       "name": "LateralTorqueAccelFactor",
       "title": "_LateralTorqueAccelFactor*0.001(2500)",
       "descr": "낮을수록 토크가 강해지다가 어느순간 약해짐 \n 가장 강한 지점의 값 사용",
-      "egroup": "LAT",
+      "egroup": "LAT_TQ",
       "etitle": "_LateralTorqueAccelFactor*0.001(2500)",
       "edescr": "As the value decreases, the torque becomes stronger up to a point, then weakens — Uses the value at the strongest point.",
       "min": 1000,
@@ -66,11 +66,11 @@
       "cdescr": "随着值减小，力矩会增强到某一点然后变弱 — 请使用力矩最强点的值。"
     },
     {
-      "group": "조향튜닝",
+      "group": "조향토크",
       "name": "LateralTorqueFriction",
       "title": "_LateralTorqueFriction*0.001(100)",
       "descr": "높을수록 미세조향이 많아짐 \n\n 0~50 권장",
-      "egroup": "LAT",
+      "egroup": "LAT_TQ",
       "etitle": "_LateralTorqueFriction*0.001(100)",
       "edescr": "More fine steering at higher values — 0-50 recommended",
       "min": 0,
@@ -82,11 +82,11 @@
       "cdescr": "值越高微操越多 — 推荐 0-50"
     },
     {
-      "group": "조향튜닝",
+      "group": "조향토크",
       "name": "LateralTorqueKpV",
       "title": "_LateralTorqueKp*0.01(100)",
       "descr": "조향 비례 계수(오차가 클수록 강하게 반응) \n\n 140 권장",
-      "egroup": "LAT",
+      "egroup": "LAT_TQ",
       "etitle": "_LateralTorqueKp*0.01(100)",
       "edescr": "Steering Response Speed (Instant Reaction) — 140 Recommended",
       "min": 0,
@@ -98,11 +98,11 @@
       "cdescr": "转向响应速度 (瞬时反应) — 推荐 140"
     },
     {
-      "group": "조향튜닝",
+      "group": "조향토크",
       "name": "LateralTorqueKiV",
       "title": "_LateralTorqueKi*0.01(10)",
       "descr": "조향 누적 오차 보정 \n\n 20 권장",
-      "egroup": "LAT",
+      "egroup": "LAT_TQ",
       "etitle": "_LateralTorqueKi*0.01(10)",
       "edescr": "Steering Accumulated Error Correction — 20 Recommended",
       "min": 0,
@@ -114,11 +114,11 @@
       "cdescr": "转向累积误差修正 — 推荐 20"
     },
     {
-      "group": "조향튜닝",
+      "group": "조향토크",
       "name": "LateralTorqueKf",
       "title": "_LateralTorqueKf*0.01(100)",
       "descr": "조향 예측 기반 보정 \n\n 85 권장",
-      "egroup": "LAT",
+      "egroup": "LAT_TQ",
       "etitle": "_LateralTorqueKf*0.001(100)",
       "edescr": "Steering Feedforward Correction — 85 Recommended",
       "min": 0,
@@ -130,11 +130,11 @@
       "cdescr": "转向前馈修正 — 推荐 85"
     },
     {
-      "group": "조향튜닝",
+      "group": "조향토크",
       "name": "LateralTorqueKd",
       "title": "_LateralTorqueKd*0.01(0)",
       "descr": "조향 미분 계수(급격한 변화에 저항) \n\n 0 권장",
-      "egroup": "LAT",
+      "egroup": "LAT_TQ",
       "etitle": "_LateralTorqueKd*0.01(0)",
       "edescr": "Steering Derivative Gain, 0 Recommended",
       "min": 0,
@@ -146,11 +146,11 @@
       "cdescr": "转向微分增益，推荐 0"
     },
     {
-      "group": "조향튜닝",
+      "group": "레인모드",
       "name": "LatMpcPathCost",
       "title": "*LATMPC.PathCost(200)",
       "descr": "(레인모드) 경로추종가중치 \n 높으면 경로우선시함.",
-      "egroup": "LAT",
+      "egroup": "LANE",
       "etitle": "*LATMPC.PathCost(200)",
       "edescr": "(LaneMode) Path Following Weight — Higher values prioritize the path",
       "min": 0,
@@ -162,11 +162,11 @@
       "cdescr": "(车道模式) 路径跟随权重 — 值越高越优先考虑路径"
     },
     {
-      "group": "조향튜닝",
+      "group": "레인모드",
       "name": "LatMpcMotionCost",
       "title": "*LATMPC.MotionCost(7)",
       "descr": "(레인모드) 헤딩가중치",
-      "egroup": "LAT",
+      "egroup": "LANE",
       "etitle": "*LATMPC.MotionCost(7)",
       "edescr": "(LaneMode) Heading Weight",
       "min": 0,
@@ -178,11 +178,11 @@
       "cdescr": "(车道模式) 航向权重"
     },
     {
-      "group": "조향튜닝",
+      "group": "레인모드",
       "name": "LatMpcAccelCost",
       "title": "*LATMPC.AccelCost(120)",
       "descr": "(레인모드) 횡가속도제한 \n 낮으면 민첩성증가 안정성감소",
-      "egroup": "LAT",
+      "egroup": "LANE",
       "etitle": "*LATMPC.AccelCost(120)",
       "edescr": "(LaneMode) Lateral Acceleration Limit — Lower values increase agility but reduce stability",
       "min": 0,
@@ -194,11 +194,11 @@
       "cdescr": "(车道模式) 侧向加速度限制 — 值越低灵活性越高但稳定性降低"
     },
     {
-      "group": "조향튜닝",
+      "group": "레인모드",
       "name": "LatMpcJerkCost",
       "title": "*LATMPC.JerkCost(4)",
       "descr": "(레인모드) 낮추면 빠른조향허용 \n 부드러움 감소",
-      "egroup": "LAT",
+      "egroup": "LANE",
       "etitle": "*LATMPC.JerkCost(4)",
       "edescr": "(LaneMode) Lower values allow quicker steering — reduces smoothness",
       "min": 0,
@@ -210,11 +210,11 @@
       "cdescr": "(车道模式) 值越低允许越快的转向 — 会降低平滑度"
     },
     {
-      "group": "조향튜닝",
+      "group": "레인모드",
       "name": "LatMpcSteeringRateCost",
       "title": "*LATMPC.SteerRateCost(7)",
       "descr": "(레인모드) 조향변화율제한 \n 낮추면 조향이 적극적",
-      "egroup": "LAT",
+      "egroup": "LANE",
       "etitle": "*LATMPC.SteerRateCost(7)",
       "edescr": "(LaneMode) Steering Rate Limit — Lower values make steering more aggressive",
       "min": 0,
@@ -226,11 +226,11 @@
       "cdescr": "(车道模式) 转向速率限制 — 值越低转向越激进"
     },
     {
-      "group": "조향튜닝",
+      "group": "레인모드",
       "name": "LatMpcInputOffset",
       "title": "*LATMPC.InputOffset(4)",
       "descr": "(레인모드) Mpc입력보상 \n 값이 크면 일찍커브에 진입함",
-      "egroup": "LAT",
+      "egroup": "LANE",
       "etitle": "*LATMPC.InputOffset(4)",
       "edescr": "(LaneMode) MPC Input Compensation — Higher values enter curves earlier",
       "min": 0,
@@ -242,11 +242,11 @@
       "cdescr": "(车道模式) MPC 输入补偿 — 值越高进入弯道越早"
     },
     {
-      "group": "조향튜닝",
+      "group": "조향토크",
       "name": "CustomSteerMax",
       "title": "_CustomSteerMax(0)",
       "descr": "최대조향토크 \n 270/384/409 중 오류가 안나는 가장 큰 값 사용",
-      "egroup": "LAT",
+      "egroup": "LAT_TQ",
       "etitle": "_CustomSteerMax(0)",
       "edescr": "Maximum Steering Torque — Use the largest value among 270/384/409 that does not cause errors",
       "min": 0,
@@ -258,11 +258,11 @@
       "cdescr": "最大转向力矩 — 在 270/384/409 中选择不报错的最大值"
     },
     {
-      "group": "조향튜닝",
+      "group": "조향토크",
       "name": "CustomSteerDeltaUp",
       "title": "_CustomSteerDeltaUp(0)",
       "descr": "(토크차량) \n 높을수록 핸들 감는속도 빨라짐",
-      "egroup": "LAT",
+      "egroup": "LAT_TQ",
       "etitle": "_CustomSteerDeltaUp(0)",
       "edescr": "Torque Vehicle — Higher values increase steering wheel turn speed",
       "min": 0,
@@ -274,11 +274,11 @@
       "cdescr": "力矩控制车辆 — 值越高方向盘转动速度越快"
     },
     {
-      "group": "조향튜닝",
+      "group": "조향토크",
       "name": "CustomSteerDeltaDown",
       "title": "_CustomSteerDeltaDown(0)",
       "descr": "(토크차량) \n 높을수록 핸들 푸는속도 빨라짐",
-      "egroup": "LAT",
+      "egroup": "LAT_TQ",
       "etitle": "_CustomSteerDeltaDown(0)",
       "edescr": "Torque Vehicle — Higher values increase steering wheel release speed",
       "min": 0,
@@ -290,11 +290,11 @@
       "cdescr": "力矩控制车辆 — 值越高方向盘回正速度越快"
     },
     {
-      "group": "조향튜닝",
+      "group": "조향토크",
       "name": "CustomSteerDeltaUpLC",
       "title": "_CustomSteerDeltaUpLC(0)",
       "descr": "(토크차량) \n 차선변경 시 일시적용 SteerDeltaUp",
-      "egroup": "LAT",
+      "egroup": "LAT_TQ",
       "etitle": "_CustomSteerDeltaUpLC(0)",
       "edescr": "Torque Vehicle — Temporarily applies SteerDeltaUp during lane changes",
       "min": 0,
@@ -306,11 +306,11 @@
       "cdescr": "力矩控制车辆 — 变道期间临时应用转向增大斜率"
     },
     {
-      "group": "조향튜닝",
+      "group": "조향토크",
       "name": "CustomSteerDeltaDownLC",
       "title": "_CustomSteerDeltaDownLC(0)",
       "descr": "(토크차량) \n 차선변경 시 일시적용 SteerDeltaDown",
-      "egroup": "LAT",
+      "egroup": "LAT_TQ",
       "etitle": "_CustomSteerDeltaDownLC(0)",
       "edescr": "Torque Vehicle — Temporarily applies SteerDeltaDown during lane changes",
       "min": 0,
@@ -1077,7 +1077,7 @@
       "group": "시작",
       "name": "AutoCruiseControl",
       "title": "오토크루즈제어(HKG only)",
-      "descr": "1:소프트홀드 + 오토크루즈\n 2:소프트홀드 오류 발생 차량",
+      "descr": "조건에 따라 자동으로 크루즈 ON(소프트홀드포함)\n1:오토크루즈사용\n2:소프트홀드 오류 발생 차량(스팅어등)",
       "egroup": "START",
       "etitle": "Auto Cruise control(HKG only)",
       "edescr": "1:Softhold + Auto Cruise, 2:if softhold error",
@@ -1093,7 +1093,7 @@
       "group": "시작",
       "name": "AutoGasTokSpeed",
       "title": "오토크루즈: 엑셀톡 시작속도",
-      "descr": "설정속도 이상에서만 작동합니다",
+      "descr": "엑셀톡기능:가속페달을 톡 밟았다가 뗌\n설정속도 이상에서 작동",
       "egroup": "START",
       "etitle": "Auto Cruise: Accelerator Tap Start Speed",
       "edescr": "Operates only above the set speed — GasTab : Tap the accelerator pedal for 0.6 seconds",
@@ -1109,7 +1109,7 @@
       "group": "시작",
       "name": "AutoEngage",
       "title": "오토인게이지",
-      "descr": "1: 조향만\n 2: 조향 ON + 크루즈 대기상태",
+      "descr": "주행시작시 자동 시작\n1:조향ON, 2:조향ON + 크루즈 대기",
       "egroup": "START",
       "etitle": "Auto Engage on onroad",
       "edescr": "1: Steering Only, 2: Steering ON + Cruise Standby",
@@ -1125,7 +1125,7 @@
       "group": "시작",
       "name": "RecordRoadCam",
       "title": "RoadCam녹화",
-      "descr": "1: 일반카메라\n 2: 일반카메라 + 광각카메라",
+      "descr": "저장소에 비디오 녹화\n0:녹화안함,1:일반카메라\n2:일반카메라+광각카메라",
       "egroup": "START",
       "etitle": "Record RoadCam",
       "edescr": "1: Standard Camera, 2: Standard Camera + Wide Camera",
@@ -1173,7 +1173,7 @@
       "group": "시작",
       "name": "DisableMinSteerSpeed",
       "title": "저속조향제한해제",
-      "descr": "SMDPS장착차량: 1로 설정",
+      "descr": "저속조향이 안되는 차량 제한해제(SMDPS장착차량): 1",
       "egroup": "START",
       "etitle": "DisableMinSteerSpeed",
       "edescr": "smdps equiped: 1",
@@ -1188,8 +1188,8 @@
     {
       "group": "시작",
       "name": "SpeedFromPCM",
-      "title": "PCM차량속도제어(순정SCC)",
-      "descr": "0: 커브/카메라 감속 + 롱컨\n 1: 버튼스패밍안함(순정SCC)\n 2: 커브/카메라 감속\n 3: Honda/Toyota",
+      "title": "PCM차량속도제어",
+      "descr": "PCM(비롱컨)속도제어방법\n0:커브/카메라 감속+롱컨\n1:버튼스패밍안함(순정SCC)\n2:커브/카메라 감속\n3: Honda/Toyota",
       "egroup": "START",
       "etitle": "Speed from PCM(StockSCC)",
       "edescr": "0: Curve/Camera Deceleration + Long, 1: No Button Spamming (Stock SCC), 2: Curve/Camera Decel, 3: Honda/Toyota",
