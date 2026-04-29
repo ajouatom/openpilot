@@ -46,6 +46,23 @@ MIN_LAT_CONTROL_SPEED = 0.3
 IMG_QUEUE_SHAPE = (6*(ModelConstants.MODEL_RUN_FREQ//ModelConstants.MODEL_CONTEXT_FREQ + 1), 128, 256)
 assert IMG_QUEUE_SHAPE[0] == 30
 
+def get_lat_smooth_seconds_dynamic(model_output: dict[str, np.ndarray],
+                                   base_lat_smooth_seconds: float) -> tuple[float, float, float]:
+  if base_lat_smooth_seconds <= 0.0:
+    return 0.0, 0.0, 0.0
+
+  try:
+    y_std_1s = float(model_output['plan_stds'][0, 10, Plan.POSITION, 1])
+  except Exception:
+    y_std_1s = 0.0
+
+  extra_smooth_seconds = float(np.interp(y_std_1s, [0.20, 0.45], [0.0, base_lat_smooth_seconds]))
+
+  extra_smooth_seconds = float(np.clip(extra_smooth_seconds, 0.0, min(base_lat_smooth_seconds, 0.25)))
+
+  dynamic_lat_smooth_seconds = float(np.clip(base_lat_smooth_seconds + extra_smooth_seconds, 0.0, 0.60))
+
+  return dynamic_lat_smooth_seconds, y_std_1s, extra_smooth_seconds
 
 def get_action_from_model(model_output: dict[str, np.ndarray], prev_action: log.ModelDataV2.Action,
                           lat_action_t: float, long_action_t: float, v_ego: float, lat_smooth_seconds: float, vEgoStopping: float) -> log.ModelDataV2.Action:
@@ -321,11 +338,6 @@ def main(demo=False):
       vEgoStopping = params.get_float("VEgoStopping") * 0.01
       camera_yaw_trim_deg = params.get_float("CameraYawTrimDeg") * 0.01
 
-    if custom_lat_delay > 0.0:
-      lat_delay = custom_lat_delay + lat_smooth_seconds
-    else:
-      lat_delay = sm["liveDelay"].lateralDelay + lat_smooth_seconds
-
     # Keep receiving frames until we are at least 1 frame ahead of previous extra frame
     while meta_main.timestamp_sof < meta_extra.timestamp_sof + 25000000:
       buf_main = vipc_client_main.recv()
@@ -415,9 +427,18 @@ def main(demo=False):
       drivingdata_send = messaging.new_message('drivingModelData')
       posenet_send = messaging.new_message('cameraOdometry')
 
+      lat_smooth_seconds_dynamic, y_std_1s, lat_smooth_extra = get_lat_smooth_seconds_dynamic(
+          model_output,
+          lat_smooth_seconds,
+        )
+      if custom_lat_delay > 0.0:
+        lat_delay_dynamic = custom_lat_delay + lat_smooth_seconds_dynamic
+      else:
+        lat_delay_dynamic = sm["liveDelay"].lateralDelay + lat_smooth_seconds_dynamic
+
       frame_delay = DT_MDL # compensate for time passed since the frame was captured: current_time - timestamp_eof is 50ms on average
       action_delay = DT_MDL / 2 # middle of the interval between model output (current state) and next frame (expected state)
-      action = get_action_from_model(model_output, prev_action, lat_delay + frame_delay + action_delay, long_delay + frame_delay + action_delay, v_ego, lat_smooth_seconds, vEgoStopping)
+      action = get_action_from_model(model_output, prev_action, lat_delay_dynamic + frame_delay + action_delay, long_delay + frame_delay + action_delay, v_ego, lat_smooth_seconds_dynamic, vEgoStopping)
       prev_action = action
       fill_model_msg(drivingdata_send, modelv2_send, model_output, action,
                      publish_state, meta_main.frame_id, meta_extra.frame_id, frame_id,
