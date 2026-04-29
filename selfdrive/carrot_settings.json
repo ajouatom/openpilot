@@ -1235,22 +1235,6 @@
     },
     {
       "group": "시작",
-      "name": "EnableConnect",
-      "title": "EnableConnect",
-      "descr": "(1:콤마, 2:당근)커넥트를 사용합니다\n 상황에 따라 BAN될 수 있습니다\n 재부팅 필요",
-      "egroup": "START",
-      "etitle": "EnableConnect",
-      "edescr": "Using (1:comma, 2:carrot) Connect. May be banned depending on the situation. Reboot required.",
-      "min": 0,
-      "max": 2,
-      "default": 0,
-      "unit": 1,
-      "cgroup": "启动设置",
-      "ctitle": "开启连接 (Connect)",
-      "cdescr": "使用 (1:comma, 2:carrot) 连接。根据情况可能会被封禁。需要重启。"
-    },
-    {
-      "group": "시작",
       "name": "MuteDoor",
       "title": "도어감지안함",
       "descr": "",

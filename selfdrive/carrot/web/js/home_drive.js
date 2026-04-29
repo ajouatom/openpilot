@@ -47,9 +47,9 @@ window.HomeDrive = (() => {
     focalY: 2648,
   };
   const DISPLAY_MODES = [
-    { key: "fit", label: "축소", shortLabel: "1X" },
-    { key: "normal", label: "정사이즈", shortLabel: "2X" },
-    { key: "crop", label: "크롭", shortLabel: "3X" },
+    { key: "fit", labelKey: "display_fit", fallbackLabel: "Fit", shortLabel: "1X" },
+    { key: "normal", labelKey: "display_normal", fallbackLabel: "Normal", shortLabel: "2X" },
+    { key: "crop", labelKey: "display_crop", fallbackLabel: "Crop", shortLabel: "3X" },
   ];
   const HUD_TEXT_FONT = "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
   const DISPLAY_MODE_STORAGE_KEY = "home_drive_display_mode_index";
@@ -1504,9 +1504,10 @@ window.HomeDrive = (() => {
   function syncDisplayModeButtons() {
     if (!displayModeButton) return;
     const mode = DISPLAY_MODES[displayModeIndex] || DISPLAY_MODES[1];
-    displayModeButton.textContent = mode.shortLabel || mode.label || "2X";
-    displayModeButton.setAttribute("aria-label", `Display mode: ${mode.label}`);
-    displayModeButton.title = mode.label;
+    const label = getDisplayModeLabel(mode);
+    displayModeButton.textContent = mode.shortLabel || label || "2X";
+    displayModeButton.setAttribute("aria-label", `${getUIText("display_mode", "Display mode")}: ${label}`);
+    displayModeButton.title = label;
   }
 
   function setDisplayModeIndex(nextIndex) {
@@ -1516,6 +1517,11 @@ window.HomeDrive = (() => {
     } catch {}
     transformSignature = "";
     syncDisplayModeButtons();
+  }
+
+  function getDisplayModeLabel(mode) {
+    if (!mode) return getUIText("display_normal", "Normal");
+    return getUIText(mode.labelKey, mode.fallbackLabel || mode.key || "Normal");
   }
 
   function syncSourceStream() {
@@ -1543,7 +1549,7 @@ window.HomeDrive = (() => {
   let _lastStageLoading = null;
   let _lastStageLoadingText = "";
 
-  function setStageLoading(loading, text = "연결중") {
+  function setStageLoading(loading, text = getUIText("connecting", "Connecting...")) {
     const l = Boolean(loading);
     if (_lastStageLoading !== l) {
       _lastStageLoading = l;
@@ -2356,7 +2362,7 @@ window.HomeDrive = (() => {
     }
     if (xState === 4) {
       return {
-        text: "E2E주행중",
+        text: getUIText("e2e_driving", "E2E driving"),
         xState,
         showDistanceBadge: false,
       };
@@ -3419,8 +3425,8 @@ window.HomeDrive = (() => {
         clearOverlay(canvasEl.width || 1, canvasEl.height || 1);
         clearHud(hudCanvasEl.width || 1, hudCanvasEl.height || 1);
         setStatus(window.CARROT_VISION_AVAILABLE === false
-          ? (window.CARROT_VISION_DISABLED_MESSAGE || "DisableDM이 비활성화 되어있습니다.")
-          : "주행 비전을 켜려면 화면 중앙의 시작 버튼을 클릭하세요.");
+          ? (window.CARROT_VISION_DISABLED_MESSAGE || getUIText("disable_dm_inactive", "DisableDM is inactive."))
+          : getUIText("start_vision_hint", "Tap the start button to enable drive vision."));
         setMeta("");
         setDebug("");
       }
@@ -3431,11 +3437,11 @@ window.HomeDrive = (() => {
     if (!hasStream || !videoEl.videoWidth || !videoEl.videoHeight) {
       _lastOverlaySig = "";
       _lastHudSig = "";
-      setStageLoading(true, "연결중");
+      setStageLoading(true, getUIText("connecting", "Connecting..."));
       setStageReady(false);
       clearOverlay(canvasEl.width || 1, canvasEl.height || 1);
       clearHud(hudCanvasEl.width || 1, hudCanvasEl.height || 1);
-      setStatus("waiting road camera stream...");
+      setStatus(getUIText("waiting_road_stream", "Waiting road camera stream..."));
       setMeta("road:- model:- path:-");
       setDebug("LD:- LT:- SR:-");
       applyCarrotHudLayout({
@@ -3494,7 +3500,7 @@ window.HomeDrive = (() => {
     const edgeCount = Array.isArray(model?.roadEdges) ? model.roadEdges.length : 0;
     const leadCount = Array.isArray(model?.leadsV3) ? model.leadsV3.length : 0;
     const rpyText = formatRpyTriplet(liveCalibration);
-    const modeLabel = transform.displayMode?.label || DISPLAY_MODES[1].label;
+    const modeLabel = getDisplayModeLabel(transform.displayMode || DISPLAY_MODES[1]);
     const laneLabel = laneModeLabel(hudState);
 
     applyStageTransform(transform);
@@ -3528,7 +3534,7 @@ window.HomeDrive = (() => {
     }
 
     if (!model) {
-      setStatus(`road ${videoWidth}x${videoHeight} · waiting modelV2... · ${laneLabel}`);
+      setStatus(`road ${videoWidth}x${videoHeight} · ${getUIText("waiting_model", "waiting modelV2...")} · ${laneLabel}`);
     } else {
       setStatus(`road ${videoWidth}x${videoHeight} · model ${model.frameId ?? "-"} · ${laneLabel} · ${modeLabel}`);
     }
@@ -3692,7 +3698,7 @@ window.HomeDrive = (() => {
   function handleLifecycleChange() {
     if (isStageVisible()) {
       if (window.CARROT_VISION_ACTIVE) {
-        setStageLoading(true, "연결중");
+        setStageLoading(true, getUIText("connecting", "Connecting..."));
       }
       refreshOverlayInfo().catch(() => {});
       requestFullRender();

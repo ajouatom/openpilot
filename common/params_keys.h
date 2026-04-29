@@ -313,7 +313,6 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"MaxTimeOffroadMin", {PERSISTENT, INT, "60"}},
 
     {"DisableDM", {PERSISTENT, INT, "0"}},
-    {"EnableConnect", {PERSISTENT, INT, "0"}},
     {"MuteDoor", {PERSISTENT, INT, "0"}},
     {"MuteSeatbelt", {PERSISTENT, INT, "0"}},
 
