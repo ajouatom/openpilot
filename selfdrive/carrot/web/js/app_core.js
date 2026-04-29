@@ -33,7 +33,7 @@ const LANG_EMOJI = {
 
 const UI_STRINGS = {
   ko: {
-    home: "홈",
+    home: "주행",
     setting: "설정",
     tools: "도구",
     logs: "로그",
@@ -121,7 +121,7 @@ const UI_STRINGS = {
     setting_search_results: "검색 결과",
   },
   en: {
-    home: "Home",
+    home: "Drive",
     setting: "Setting",
     tools: "Tools",
     logs: "Logs",
@@ -208,7 +208,7 @@ const UI_STRINGS = {
     setting_search_results: "results",
   },
   zh: {
-    home: "首页",
+    home: "驾驶",
     setting: "设置",
     tools: "工具",
     logs: "日志",
@@ -837,6 +837,7 @@ function showPage(page, pushHistory = false, transition = null) {
     teardownTerminalPage();
   }
   CURRENT_PAGE = page;
+  document.documentElement.dataset.page = page;
   document.body.dataset.page = page;
 
   btnHome.classList.toggle("active", page === "carrot");
@@ -1045,7 +1046,7 @@ function renderUIText() {
   setNavText("btnTools", s.tools);
   setNavText("btnLogs", s.logs);
   setNavText("btnTerminal", s.terminal);
-  setText("btnQuickLinkWeb", "Web");
+  setText("btnQuickLinkWeb", "CarrotMan");
 
   setText("carrotTitle", "CarrotPilot");
 
@@ -1493,9 +1494,9 @@ async function openQuickLink() {
   QUICK_LINK_URL = QUICK_LINK_FIXED_URL;
   renderQuickLinkUI();
   const msg = LANG === "ko"
-    ? `Web을 여시겠습니까?\n\n${QUICK_LINK_FIXED_URL}`
-    : `${getUIText("open", "Open")} Web?\n\n${QUICK_LINK_FIXED_URL}`;
-  const ok = await appConfirm(msg, { title: "Web" });
+    ? `CarrotMan을 여시겠습니까?\n\n${QUICK_LINK_FIXED_URL}`
+    : `${getUIText("open", "Open")} CarrotMan?\n\n${QUICK_LINK_FIXED_URL}`;
+  const ok = await appConfirm(msg, { title: "CarrotMan" });
   if (!ok) return;
   window.open(QUICK_LINK_FIXED_URL, "_blank", "noopener");
 }
@@ -1560,6 +1561,9 @@ async function setParam(name, value) {
   });
   const j = await r.json();
   if (!j.ok) throw new Error(j.error || "set failed");
+  window.dispatchEvent(new CustomEvent("carrot:paramchange", {
+    detail: { name, value: j.value ?? value },
+  }));
   return true;
 }
 

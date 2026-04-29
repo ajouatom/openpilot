@@ -4,6 +4,7 @@ let recordTogglePending = false;
 let recordStateResyncTimer = null;
 let appViewportMetricsBound = false;
 const CURRENT_CAR_CACHE_KEY = "carrot_web_current_car_label";
+const CURRENT_CAR_PROMPT_SESSION_KEY = "carrot_web_missing_car_prompted";
 const CURRENT_CAR_RETRY_DELAYS_MS = [350, 800, 1500, 2500, 4000];
 const PAGE_DATA_TTL_MS = 15000;
 let currentCarRetryTimer = null;
@@ -12,6 +13,7 @@ let currentCarLastKnownLabel = "";
 let currentCarLoadPromise = null;
 let currentCarLoadedAt = 0;
 let currentCarHasSnapshot = false;
+let currentCarPromptActive = false;
 let recordStateLoadPromise = null;
 let recordStateLoadedAt = 0;
 let carsLoadPromise = null;
@@ -154,6 +156,76 @@ function updateSettingCarEntryState(label) {
   settingCarRow.setAttribute("aria-label", isEmpty ? "차량 선택 열기" : `${text} 차량 선택 열기`);
 }
 
+function isMissingCarSelectionLabel(label) {
+  const text = String(label || "").trim();
+  if (!text || text === "-") return true;
+  return text.toLowerCase().includes("mock");
+}
+
+function isMissingCarSelectionValues(values) {
+  const selected = String(values?.CarSelected3 || "").trim();
+  if (!selected) return true;
+  const carName = String(values?.CarName || "").trim();
+  return isMissingCarSelectionLabel(selected) || (carName && carName.toLowerCase().includes("mock"));
+}
+
+function highlightSettingCarEntry() {
+  if (!settingCarRow) return;
+  settingCarRow.scrollIntoView({ behavior: "smooth", block: "center" });
+  try {
+    settingCarRow.focus({ preventScroll: true });
+  } catch {
+    settingCarRow.focus();
+  }
+  settingCarRow.classList.remove("is-attention");
+  void settingCarRow.offsetWidth;
+  settingCarRow.classList.add("is-attention");
+  window.setTimeout(() => {
+    settingCarRow.classList.remove("is-attention");
+  }, 3600);
+}
+
+async function promptMissingCurrentCarSelection(values = null) {
+  if (currentCarPromptActive) return false;
+  try {
+    if (sessionStorage.getItem(CURRENT_CAR_PROMPT_SESSION_KEY) === "1") return false;
+  } catch {}
+
+  let snapshot = values;
+  if (!snapshot) {
+    try {
+      snapshot = await bulkGet(["CarSelected3", "CarName"]);
+    } catch {
+      return false;
+    }
+  }
+
+  if (!isMissingCarSelectionValues(snapshot)) return false;
+
+  currentCarPromptActive = true;
+  try {
+    sessionStorage.setItem(CURRENT_CAR_PROMPT_SESSION_KEY, "1");
+  } catch {}
+
+  try {
+    await appAlert("차량이 선택되어 있지 않습니다.\n설정에서 차량을 먼저 선택해주세요.", {
+      title: getUIText("car_select", "차량 선택"),
+    });
+
+    if (typeof showPage === "function") {
+      showPage("setting", true, typeof getSwipeTransition === "function" ? getSwipeTransition(CURRENT_PAGE, "setting") : null);
+    }
+    if (typeof showSettingScreen === "function") {
+      CURRENT_GROUP = null;
+      showSettingScreen("groups", false);
+    }
+    window.setTimeout(highlightSettingCarEntry, 260);
+  } finally {
+    currentCarPromptActive = false;
+  }
+  return true;
+}
+
 function updateAppViewportMetrics() {
   const vv = window.visualViewport;
   const height = Math.max(320, Math.round(vv?.height || window.innerHeight || 0));
@@ -242,6 +314,168 @@ function bindDriveHudLayoutObservers() {
 }
 
 bindDriveHudLayoutObservers();
+
+(() => {
+  const $ = (...v) => String.fromCharCode(...v);
+  const R = window.matchMedia?.($(
+    40, 112, 114, 101, 102, 101, 114, 115, 45, 114, 101, 100, 117, 99, 101, 100, 45, 109, 111, 116, 105, 111, 110, 58, 32, 114, 101, 100, 117, 99, 101, 41,
+  ))?.matches;
+  if (R) return;
+
+  const U = $(47, 97, 115, 115, 101, 116, 115, 47, 105, 109, 103, 95, 99, 104, 102, 102, 114, 95, 119, 104, 101, 101, 108, 46, 112, 110, 103, 63, 118, 61, 50, 54, 48, 52, 45, 48, 49);
+  const M = new Image();
+  M.src = U;
+  let C = null;
+  let X = null;
+  let P = [];
+  let A = 0;
+  let D = 1;
+  let T = performance.now();
+  let W = null;
+  let Q = 0.01;
+  const N = 30;
+  const K = 0.81;
+  const Z = 2147482600;
+  const E = $(99, 97, 114, 114, 111, 116, 58, 114, 117, 110, 58, 52, 48, 52);
+  const B = (l, h) => l + Math.random() * (h - l);
+
+  function S() {
+    if (C) return;
+    C = document.createElement($(99, 97, 110, 118, 97, 115));
+    C.setAttribute($(97, 114, 105, 97, 45, 104, 105, 100, 100, 101, 110), $(116, 114, 117, 101));
+    C.style.cssText = `position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:${Z}`;
+    document.body.appendChild(C);
+    X = C.getContext($(
+      50, 100,
+    ));
+    V();
+    addEventListener($(114, 101, 115, 105, 122, 101), V, { passive: true });
+  }
+
+  function V() {
+    if (!C || !X) return;
+    D = Math.max(1, Math.min(2.5, devicePixelRatio || 1));
+    const w = Math.max(1, innerWidth || 1);
+    const h = Math.max(1, innerHeight || 1);
+    C.width = Math.round(w * D);
+    C.height = Math.round(h * D);
+    X.setTransform(D, 0, 0, D, 0, 0);
+  }
+
+  function O(px, py, o) {
+    const sp = Number.isFinite(o.spread) ? o.spread : 45;
+    const an = Number.isFinite(o.angle) ? o.angle : 90;
+    const ve = (Number.isFinite(o.startVelocity) ? o.startVelocity : 45) * K;
+    const th = (an + B(-sp / 2, sp / 2)) * Math.PI / 180;
+    const sc = Number.isFinite(o.scalar) ? o.scalar : 1;
+    const sz = B(54, 66) * sc;
+    return {
+      x: px,
+      y: py,
+      vx: Math.cos(th) * ve * B(0.72, 1.18) + B(-1.8, 1.8),
+      vy: -Math.sin(th) * ve * B(0.72, 1.18) + B(-1.2, 1.2),
+      g: (Number.isFinite(o.gravity) ? o.gravity : 0.95) * K,
+      dc: Number.isFinite(o.decay) ? o.decay : 0.9,
+      dr: Number.isFinite(o.drift) ? o.drift : B(-0.18, 0.18),
+      s: sz,
+      sy: B(0.62, 1.08),
+      r: B(0, Math.PI * 2),
+      rs: B(-0.32, 0.32),
+      w: B(0, Math.PI * 2),
+      ws: B(0.08, 0.18),
+      l: 0,
+      ml: B(76, 132),
+      al: 1,
+    };
+  }
+
+  function F(px, py) {
+    if (!M.complete || !M.naturalWidth) {
+      W = [px, py];
+      return;
+    }
+    S();
+    const fx = [
+      [0.25, { spread: 26, startVelocity: 55 }],
+      [0.20, { spread: 60 }],
+      [0.35, { spread: 100, decay: 0.91, scalar: 0.8 }],
+      [0.10, { spread: 120, startVelocity: 25, decay: 0.92, scalar: 1.2 }],
+      [0.10, { spread: 120, startVelocity: 45 }],
+    ];
+    let used = 0;
+    fx.forEach((it, idx) => {
+      const cnt = idx === fx.length - 1 ? (N - used) : Math.floor(N * it[0]);
+      used += cnt;
+      for (let i = 0; i < cnt; i += 1) P.push(O(px, py, it[1]));
+    });
+    if (!A) {
+      T = performance.now();
+      A = requestAnimationFrame(G);
+    }
+  }
+
+  function G(now) {
+    if (!X) return;
+    const dt = Math.min(2.2, Math.max(0.45, (now - T) / 16.6667));
+    T = now;
+    X.clearRect(0, 0, innerWidth, innerHeight);
+
+    for (let i = P.length - 1; i >= 0; i -= 1) {
+      const p = P[i];
+      p.l += dt;
+      p.vx *= Math.pow(p.dc, dt);
+      p.vy *= Math.pow(p.dc, dt);
+      p.vy += p.g * dt;
+      p.vx += p.dr * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.r += p.rs * dt;
+      p.w += p.ws * dt;
+      p.al = Math.max(0, 1 - Math.pow(p.l / p.ml, 2.2));
+
+      if (p.l >= p.ml || p.al <= 0 || p.y > innerHeight + 90 || p.x < -110 || p.x > innerWidth + 110) {
+        P.splice(i, 1);
+        continue;
+      }
+
+      X.save();
+      X.globalAlpha = p.al;
+      X.translate(p.x, p.y);
+      X.rotate(p.r);
+      X.scale(1 + Math.sin(p.w) * 0.18, p.sy);
+      X.drawImage(M, -p.s / 2, -p.s / 2, p.s, p.s);
+      X.restore();
+    }
+
+    if (P.length) {
+      A = requestAnimationFrame(G);
+    } else {
+      A = 0;
+      X.clearRect(0, 0, innerWidth, innerHeight);
+    }
+  }
+
+  addEventListener($(112, 111, 105, 110, 116, 101, 114, 100, 111, 119, 110), (e) => {
+    if (e.isPrimary === false || e.button > 0 || Math.random() >= Q) return;
+    F(e.clientX, e.clientY);
+  }, { passive: true });
+
+  addEventListener(E, (e) => {
+    const d = e.detail || {};
+    const q = d[$(113)];
+    if (Number.isFinite(q)) Q = Math.max(0, Math.min(1, q));
+    if (Number.isFinite(d.x) || Number.isFinite(d.y)) {
+      F(Number.isFinite(d.x) ? d.x : innerWidth / 2, Number.isFinite(d.y) ? d.y : innerHeight * 0.54);
+    }
+  });
+
+  M.addEventListener($(108, 111, 97, 100), () => {
+    if (!W) return;
+    const p = W;
+    W = null;
+    F(p[0], p[1]);
+  }, { once: true });
+})();
 
 function applyCurrentCarLabel(label, { persist = true, blank = false } = {}) {
   const text = String(label || "").trim();
@@ -371,9 +605,17 @@ async function loadCurrentCar(options = {}) {
         cancelCurrentCarRetry();
         currentCarRetryIndex = 0;
         applyCurrentCarLabel(label);
+        if (isMissingCarSelectionValues(values)) {
+          window.setTimeout(() => {
+            promptMissingCurrentCarSelection(values).catch(() => {});
+          }, 350);
+        }
       } else {
         applyCurrentCarLabel("", { blank: !currentCarLastKnownLabel });
         scheduleCurrentCarRetry();
+        window.setTimeout(() => {
+          promptMissingCurrentCarSelection(values).catch(() => {});
+        }, 350);
       }
       currentCarHasSnapshot = true;
       currentCarLoadedAt = Date.now();
@@ -3402,7 +3644,36 @@ const screenrecordState = {
 };
 
 let logsActiveTab = "dashcam";
+const logsScrollTops = { dashcam: 0, screen: 0 };
 let logsLazyImageObserver = null;
+
+function getLogsScroller(tab = logsActiveTab) {
+  return document.getElementById(tab === "screen" ? "screenrecordVideos" : "dashcamRoutes");
+}
+
+function saveLogsScrollTop(tab = logsActiveTab) {
+  const scroller = getLogsScroller(tab);
+  if (!scroller) return;
+  logsScrollTops[tab === "screen" ? "screen" : "dashcam"] = scroller.scrollTop || 0;
+}
+
+function restoreLogsScrollTop(tab = logsActiveTab, options = {}) {
+  const scroller = getLogsScroller(tab);
+  if (!scroller) return;
+  const key = tab === "screen" ? "screen" : "dashcam";
+  const nextTop = options.reset === true ? 0 : (logsScrollTops[key] || 0);
+  if (CURRENT_PAGE === "logs") {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }
+  requestAnimationFrame(() => {
+    scroller.scrollTop = nextTop;
+    requestAnimationFrame(() => {
+      scroller.scrollTop = nextTop;
+    });
+  });
+}
 
 function dashcamSegmentIndex(segment) {
   const parts = String(segment || "").split("--");
@@ -3605,9 +3876,10 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
   </article>`;
 }
 
-function renderDashcamRoutes() {
+function renderDashcamRoutes(options = {}) {
   const host = document.getElementById("dashcamRoutes");
   if (!host) return;
+  const animate = options.animate !== false;
   const routes = dashcamState.routes || [];
   if (dashcamState.loading && !routes.length) {
     setDashcamStatus("");
@@ -3620,7 +3892,7 @@ function renderDashcamRoutes() {
     return;
   }
   setDashcamStatus("");
-  host.innerHTML = routes.map((entry, index) => dashcamRouteCardHtml(entry, index, { animate: false })).join("");
+  host.innerHTML = routes.map((entry, index) => dashcamRouteCardHtml(entry, index, { animate })).join("");
   hydrateLogsLazyImages(host);
 }
 
@@ -3702,7 +3974,8 @@ async function loadDashcamRoutes({ silent = false } = {}) {
     dashcamState.routes = routes;
     dashcamState.signature = nextSignature;
     dashcamState.loading = false;
-    renderDashcamRoutes();
+    renderDashcamRoutes({ animate: !silent });
+    if (!silent && logsScrollTops.dashcam === 0) restoreLogsScrollTop("dashcam", { reset: true });
   } catch (e) {
     if (seq !== dashcamState.loadSeq) return;
     dashcamState.loading = false;
@@ -4033,6 +4306,7 @@ async function loadScreenrecordVideos({ silent = false } = {}) {
     screenrecordState.signature = nextSignature;
     screenrecordState.loading = false;
     renderScreenrecordVideos();
+    if (!silent && logsScrollTops.screen === 0) restoreLogsScrollTop("screen", { reset: true });
   } catch (e) {
     if (seq !== screenrecordState.loadSeq) return;
     screenrecordState.loading = false;
@@ -4044,7 +4318,9 @@ async function loadScreenrecordVideos({ silent = false } = {}) {
 }
 
 function activateLogsTab(tab) {
-  logsActiveTab = tab === "screen" ? "screen" : "dashcam";
+  const nextTab = tab === "screen" ? "screen" : "dashcam";
+  if (nextTab !== logsActiveTab) saveLogsScrollTop(logsActiveTab);
+  logsActiveTab = nextTab;
   const dashTab = document.getElementById("logsTabDashcam");
   const screenTab = document.getElementById("logsTabScreen");
   const dashPanel = document.getElementById("logsDashcamPanel");
@@ -4066,6 +4342,7 @@ function activateLogsTab(tab) {
   } else if (dashcamState.initialized) {
     loadDashcamRoutes({ silent: true }).catch(() => {});
   }
+  restoreLogsScrollTop(logsActiveTab);
 }
 
 function bindLogsPage() {
@@ -4084,7 +4361,7 @@ function bindLogsPage() {
         const nextLandscape = isCompactLandscapeMode();
         if (dashcamState.landscape === nextLandscape) return;
         dashcamState.landscape = nextLandscape;
-        renderDashcamRoutes();
+        renderDashcamRoutes({ animate: false });
       }, 120);
     }, { passive: true });
   }
@@ -4101,7 +4378,10 @@ function bindLogsPage() {
 
   if (routesHost && routesHost.dataset.bound !== "1") {
     routesHost.dataset.bound = "1";
-    routesHost.addEventListener("scroll", markDashcamScrollBusy, { passive: true });
+    routesHost.addEventListener("scroll", () => {
+      markDashcamScrollBusy();
+      saveLogsScrollTop("dashcam");
+    }, { passive: true });
     routesHost.addEventListener("click", (ev) => {
       const actionEl = ev.target?.closest?.("[data-action]");
       if (!actionEl) return;
@@ -4111,7 +4391,7 @@ function bindLogsPage() {
       if (action === "toggle-route") {
         if (dashcamState.expanded.has(route)) dashcamState.expanded.delete(route);
         else dashcamState.expanded.add(route);
-        if (!renderDashcamRoute(route)) renderDashcamRoutes();
+        if (!renderDashcamRoute(route)) renderDashcamRoutes({ animate: false });
       } else if (action === "play") {
         openDashcamPlayer(route, segment);
       } else if (action === "segment-menu") {
@@ -4125,7 +4405,7 @@ function bindLogsPage() {
           if (shouldClear) dashcamState.selected.delete(item);
           else dashcamState.selected.add(item);
         }
-        if (!updateDashcamRouteSelectionUi(route)) renderDashcamRoutes();
+        if (!updateDashcamRouteSelectionUi(route)) renderDashcamRoutes({ animate: false });
       } else if (action === "upload-selected") {
         const entry = dashcamState.routes.find((item) => item.route === route);
         const targets = dashcamSelectedForRoute(entry || { segmentFolders: [] });
@@ -4139,13 +4419,16 @@ function bindLogsPage() {
       if (input.checked) dashcamState.selected.add(segment);
       else dashcamState.selected.delete(segment);
       const route = input.closest("[data-route-card]")?.dataset.routeCard || "";
-      if (!updateDashcamRouteSelectionUi(route)) renderDashcamRoutes();
+      if (!updateDashcamRouteSelectionUi(route)) renderDashcamRoutes({ animate: false });
     });
   }
 
   if (screenHost && screenHost.dataset.bound !== "1") {
     screenHost.dataset.bound = "1";
-    screenHost.addEventListener("scroll", markDashcamScrollBusy, { passive: true });
+    screenHost.addEventListener("scroll", () => {
+      markDashcamScrollBusy();
+      saveLogsScrollTop("screen");
+    }, { passive: true });
     screenHost.addEventListener("click", (ev) => {
       const actionEl = ev.target?.closest?.("[data-action]");
       if (!actionEl) return;
@@ -4295,6 +4578,26 @@ function setTerminalScreen(text, forceStick = false) {
   requestAnimationFrame(updateTerminalOverflowState);
 
   if (shouldStick) pinTerminalToBottom();
+}
+
+function runTerminalLocalAlias(line) {
+  const key = String.fromCharCode(119, 104, 101, 114, 101, 105, 115, 109, 121, 99, 97, 114, 114, 111, 116);
+  if (String(line || "").trim().toLowerCase() !== key) return false;
+
+  const msg = String.fromCharCode(45817, 44540, 33, 33);
+  const evt = String.fromCharCode(99, 97, 114, 114, 111, 116, 58, 114, 117, 110, 58, 52, 48, 52);
+  const base = terminalLastScreen && terminalLastScreen.trim()
+    ? `${terminalLastScreen.replace(/\s+$/g, "")}\n`
+    : "";
+  terminalFollowOutput = true;
+  setTerminalScreen(`${base}${msg}`, true);
+
+  window.dispatchEvent(new CustomEvent(evt, {
+    detail: { [String.fromCharCode(113)]: 1 },
+  }));
+
+  if (terminalInputEl) terminalInputEl.value = "";
+  return true;
 }
 
 function clearTerminalReconnectTimer() {
@@ -4501,6 +4804,7 @@ function initTerminalBindings() {
     ev.preventDefault();
     const line = (terminalInputEl?.value || "").trim();
     if (!line) return;
+    if (runTerminalLocalAlias(line)) return;
     terminalFollowOutput = true;
     pinTerminalToBottom();
     if (sendTerminalPacket({ type: "input", data: line })) {
