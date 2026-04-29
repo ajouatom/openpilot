@@ -56,9 +56,7 @@ def get_lat_smooth_seconds_dynamic(model_output: dict[str, np.ndarray],
   except Exception:
     y_std_1s = 0.0
 
-  extra_smooth_seconds = float(np.interp(y_std_1s, [0.20, 0.45], [0.0, base_lat_smooth_seconds]))
-
-  extra_smooth_seconds = float(np.clip(extra_smooth_seconds, 0.0, min(base_lat_smooth_seconds, 0.25)))
+  extra_smooth_seconds = float(np.interp(y_std_1s, [0.15, 0.25], [0.0, base_lat_smooth_seconds]))
 
   dynamic_lat_smooth_seconds = float(np.clip(base_lat_smooth_seconds + extra_smooth_seconds, 0.0, 0.60))
 
