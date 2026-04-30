@@ -17,19 +17,19 @@
   const SURFACE_OVERLAY = "driveOverlay";
   const STRONG_TEXT_SHADOW = "0 1.4px 3.6px rgba(0,0,0,0.94), 0 0 1.2px rgba(0,0,0,0.62)";
   const DRIVE_MODE_TEXT = {
-    ko: {
-      normal: "일반",
-      eco: "에코",
-      safe: "안전",
-      sport: "고속",
-      fast: "고속",
-    },
     en: {
       normal: "Normal",
       eco: "Eco",
       safe: "Safe",
       sport: "Fast",
       fast: "Fast",
+    },
+    ko: {
+      normal: "일반",
+      eco: "에코",
+      safe: "안전",
+      sport: "고속",
+      fast: "고속",
     },
     zh: {
       normal: "普通",
@@ -38,11 +38,27 @@
       sport: "高速",
       fast: "高速",
     },
+    ja: {
+      normal: "通常",
+      eco: "エコ",
+      safe: "安全",
+      sport: "高速",
+      fast: "高速",
+    },
+    fr: {
+      normal: "Normal",
+      eco: "Eco",
+      safe: "Securite",
+      sport: "Rapide",
+      fast: "Rapide",
+    },
   };
   const HUD_LABELS = {
-    ko: { speed: "현재속도", setSpeed: "설정속도", temp: "TEMP", gear: "GEAR", limit: "LIMIT" },
     en: { speed: "Speed", setSpeed: "Set Speed", temp: "TEMP", gear: "GEAR", limit: "LIMIT" },
+    ko: { speed: "현재속도", setSpeed: "설정속도", temp: "TEMP", gear: "GEAR", limit: "LIMIT" },
     zh: { speed: "当前速度", setSpeed: "设定速度", temp: "TEMP", gear: "GEAR", limit: "LIMIT" },
+    ja: { speed: "速度", setSpeed: "設定速度", temp: "TEMP", gear: "GEAR", limit: "LIMIT" },
+    fr: { speed: "Vitesse", setSpeed: "Vitesse reglee", temp: "TEMP", gear: "GEAR", limit: "LIMIT" },
   };
   const HUD_AUX_ROTATE_MS = 1600;
   const HUD_AUX_ICON_PATHS = {
@@ -120,11 +136,11 @@
   }
 
   function currentLang() {
-    return typeof LANG === "string" && HUD_LABELS[LANG] ? LANG : "ko";
+    return typeof LANG === "string" && LANG ? LANG : "en";
   }
 
   function getHudLabels() {
-    return HUD_LABELS[currentLang()] || HUD_LABELS.ko;
+    return HUD_LABELS[currentLang()] || HUD_LABELS.en;
   }
 
   function getBandHeight(density) {
@@ -555,7 +571,9 @@
     const el = $("hudDriveMode");
     if (!el) return;
     const normalized = String(kind || "").toLowerCase();
-    const labels = DRIVE_MODE_TEXT[currentLang()] || DRIVE_MODE_TEXT.ko;
+    const lang = currentLang();
+    const registryLabels = typeof DRIVE_MODES === "object" ? DRIVE_MODES[lang] || DRIVE_MODES.en : null;
+    const labels = Object.assign({}, DRIVE_MODE_TEXT.en, DRIVE_MODE_TEXT[lang] || {}, registryLabels || {});
     const translated = labels[normalized] || name || labels.normal;
     if (el.textContent !== translated) el.textContent = translated;
     if (el.dataset.kind !== (normalized || "normal")) el.dataset.kind = normalized || "normal";

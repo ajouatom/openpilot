@@ -105,6 +105,13 @@ def discord_webhook_url(params: Any) -> str:
 
 def upload_message_lines(payload: dict[str, Any], max_results: int | None = None) -> list[str]:
   meta = payload.get("meta") or {}
+  commit = str(meta.get("commit") or "").strip()
+  commit_date = meta.get("commitDate") or "unknown"
+  commit_text = (
+    f"[{commit}](https://github.com/ajouatom/openpilot/commit/{commit})"
+    if commit and commit != "unknown"
+    else "unknown"
+  )
   uploaded = [item for item in payload.get("results") or [] if item.get("ok")]
   failed = [item for item in payload.get("results") or [] if not item.get("ok")]
   lines = [
@@ -117,7 +124,7 @@ def upload_message_lines(payload: dict[str, Any], max_results: int | None = None
     f"- DongleId: {meta.get('dongleId') or 'unknown'}",
     f"- Serial: {meta.get('serial') or 'unknown'}",
     f"- Branch: {meta.get('branch') or 'unknown'}",
-    f"- Commit: {meta.get('commit') or 'unknown'} ({meta.get('commitDate') or 'unknown'})",
+    f"- Commit: {commit_text} ({commit_date})",
     "### Result",
   ]
 
@@ -165,6 +172,7 @@ async def send_discord_webhook(url: str, payload: dict[str, Any]) -> dict[str, A
     "username": "Carrot Dashcam",
     "content": discord_content(payload),
     "allowed_mentions": {"parse": []},
+    "flags": 4,
   }
   try:
     timeout = ClientTimeout(total=12)

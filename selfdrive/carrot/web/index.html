@@ -7,12 +7,12 @@
   <link rel="icon" type="image/png" href="/assets/img_chffr_wheel.png?v=2604-01" />
   <link rel="stylesheet" href="/css/tokens.css?v=2603-73" />
   <link rel="stylesheet" href="/css/hud_card.css?v=2604-09" />
-  <link rel="stylesheet" href="/css/base.css?v=2604-73" />
-  <link rel="stylesheet" href="/css/layout.css?v=2604-73" />
-  <link rel="stylesheet" href="/css/pages/logs.css?v=2604-73" />
-  <link rel="stylesheet" href="/css/components.css?v=2604-73" />
-  <link rel="stylesheet" href="/css/pages/drive.css?v=2604-73" />
-  <link rel="stylesheet" href="/css/responsive.css?v=2604-73" />
+  <link rel="stylesheet" href="/css/base.css?v=2604-80" />
+  <link rel="stylesheet" href="/css/layout.css?v=2604-79" />
+  <link rel="stylesheet" href="/css/pages/logs.css?v=2604-74" />
+  <link rel="stylesheet" href="/css/components.css?v=2604-77" />
+  <link rel="stylesheet" href="/css/pages/drive.css?v=2604-74" />
+  <link rel="stylesheet" href="/css/responsive.css?v=2604-92" />
 </head>
 
 <body>
@@ -127,7 +127,10 @@
             <span class="tools-group__chevron" aria-hidden="true"></span>
           </button>
           <div id="toolsGroupBodyGit" class="tools-group__body row-wrap">
-            <button id="btnGitPull" class="btn">git pull</button>
+            <button id="btnGitPull" class="btn git-pull-btn" type="button">
+              <span>git pull</span>
+              <span id="gitPullBadge" class="git-pull-btn__badge" hidden aria-label="pending commits">0</span>
+            </button>
             <button id="btnGitSync" class="btn">git sync</button>
             <button id="btnGitReset" class="btn">git reset</button>
             <button id="btnGitLog" class="btn">git log</button>
@@ -312,8 +315,8 @@
         </div>
         <div id="carrotStageDebug" class="carrot-stage__debug">LD:- LT:- SR:-</div>
         <div class="carrot-stage__controls" role="group" aria-label="Display and recording controls">
-          <button id="btnDisplayModeCycle" class="carrot-stage__controlBtn carrot-stage__controlBtn--display" type="button" aria-label="Display mode">2X</button>
-          <button id="btnRecordToggle" class="carrot-stage__controlBtn carrot-stage__controlBtn--record" type="button" aria-label="Record">REC</button>
+          <button id="btnDisplayModeCycle" class="carrot-stage__controlBtn carrot-stage__controlBtn--display" type="button" aria-label="Display mode">Normal</button>
+          <button id="btnRecordToggle" class="carrot-stage__controlBtn carrot-stage__controlBtn--record" type="button" aria-label="Record">Record</button>
         </div>
 
         <div id="carrotStageMeta" class="carrot-stage__meta">model:- road:- cal:-</div>
@@ -487,30 +490,31 @@
   </div>
 
   <script src="/js/translations/registry.js?v=2604-01"></script>
-  <script src="/js/translations/ko.js?v=2604-01"></script>
-  <script src="/js/translations/en.js?v=2604-01"></script>
+  <script src="/js/translations/ko.js?v=2604-03"></script>
+  <script src="/js/translations/en.js?v=2604-03"></script>
   <script src="/js/translations/zh.js?v=2604-01"></script>
   <script src="/js/translations/ja.js?v=2604-01"></script>
   <script src="/js/translations/fr.js?v=2604-01"></script>
   <script src="/js/hud_card.js?v=2604-05"></script>
-  <script src="/js/shared/constants.js?v=2604-71"></script>
+  <script src="/js/shared/constants.js?v=2604-72"></script>
   <script src="/js/shared/dom.js?v=2604-71"></script>
   <script src="/js/shared/utils.js?v=2604-71"></script>
   <script src="/js/shared/i18n.js?v=2604-71"></script>
   <script src="/js/shared/api.js?v=2604-71"></script>
+  <script src="/js/shared/activity.js?v=2604-04"></script>
   <script src="/js/shared/ui/dialog.js?v=2604-71"></script>
   <script src="/js/shared/ui/viewport.js?v=2604-71"></script>
   <script src="/js/shared/ui/effects.js?v=2604-72"></script>
-  <script src="/js/shared/ui/navigation.js?v=2604-72"></script>
-  <script src="/js/pages/car.js?v=2604-72"></script>
-  <script src="/js/pages/setting.js?v=2604-72"></script>
-  <script src="/js/pages/tools.js?v=2604-72"></script>
-  <script src="/js/pages/branch.js?v=2604-72"></script>
-  <script src="/js/pages/logs.js?v=2604-72"></script>
+  <script src="/js/shared/ui/navigation.js?v=2604-77"></script>
+  <script src="/js/pages/car.js?v=2604-74"></script>
+  <script src="/js/pages/setting.js?v=2604-76"></script>
+  <script src="/js/pages/tools.js?v=2604-79"></script>
+  <script src="/js/pages/branch.js?v=2604-73"></script>
+  <script src="/js/pages/logs.js?v=2604-75"></script>
   <script src="/js/pages/terminal.js?v=2604-72"></script>
   <script src="/js/raw_capnp.js?v=2604-05"></script>
   <script src="/js/app_realtime.js?v=2604-19"></script>
-  <script src="/js/home_drive.js?v=2604-28"></script>
+  <script src="/js/home_drive.js?v=2604-29"></script>
   <script src="/js/app.js?v=2604-72"></script>
 </body>
 </html>

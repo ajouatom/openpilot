@@ -17,6 +17,7 @@ server/
 │   ├── params.py           typed get/set + bulk backup/restore
 │   ├── settings.py         carrot_settings.json mtime cache
 │   ├── git_state.py        /data/.../git.json read/write
+│   ├── git_status.py       periodic cached git fetch/status comparison for update badges
 │   ├── heartbeat.py        external IP register loop
 │   ├── time_sync.py        browser → system time sync
 │   └── tmux.py             tmux session helpers
@@ -29,9 +30,9 @@ server/
     ├── cars.py             /api/cars
     ├── system.py           /api/heartbeat_status, /api/reboot, /api/time_sync, /api/live_runtime
     ├── terminal.py         /ws/terminal, /download/tmux.log
-    ├── dashcam/            /api/dashcam/* (paths, catalog, ffmpeg, upload, routes)
+    ├── dashcam/            /api/dashcam/* (paths, catalog, ffmpeg, upload, upload_jobs, routes)
     ├── screenrecord/       /api/screenrecord/* (catalog, routes)
-    └── tools/              /api/tools, /api/tools/start, /api/tools/job (jobs, dispatcher, routes)
+    └── tools/              /api/tools, /api/tools/start, /api/tools/job, /api/tools/git_status (jobs, dispatcher, routes)
 ```
 
 Rule: `features/` may import `services/`. `services/` must not import `features/`.
@@ -60,11 +61,12 @@ web/
     │   ├── utils.js        escapeHtml, clamp, copyToClipboard, quick link
     │   ├── i18n.js         LANG, getUIText, renderUIText, setWebLanguage
     │   ├── api.js          bulkGet, setParam, postJson, getJson, waitMs
+    │   ├── activity.js     cross-page activity badges + beforeunload guard
     │   └── ui/
     │       ├── dialog.js   appAlert/Confirm/Prompt + toast
     │       ├── effects.js  pointer-down confetti easter egg
     │       ├── viewport.js viewport metrics + drive HUD layout
-    │       └── navigation.js  showPage, transitions, swipe gestures
+    │       └── navigation.js  showPage, menu transitions, page state
     ├── pages/
     │   ├── car.js          car picker + record FAB + currentCar status
     │   ├── setting.js      settings groups/items/search/subnav

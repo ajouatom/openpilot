@@ -61,8 +61,8 @@
   --fs-label-lg: 16px;
   --fs-label-md: 14px;
   --fs-label-sm: 13px;
-  --fs-nav:      clamp(15px, 4.4vw, 18px);
-  --fs-nav-desktop: clamp(16px, 1.3vw, 19px);
+  --fs-nav:      clamp(13px, 3.8vw, 16px);
+  --fs-nav-desktop: clamp(14px, 1.1vw, 17px);
 }
 
 @media (prefers-contrast: more) {

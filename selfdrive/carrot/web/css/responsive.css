@@ -14,7 +14,10 @@
     right: 0;
     bottom: 0;
     width: auto;
-    transform: none;
+    height: calc(var(--nav-bar-height-desktop) + env(safe-area-inset-bottom, 0px));
+    min-height: calc(var(--nav-bar-height-desktop) + env(safe-area-inset-bottom, 0px));
+    max-height: calc(var(--nav-bar-height-desktop) + env(safe-area-inset-bottom, 0px));
+    transform: translateZ(0);
     border: 0;
     border-top: 1px solid var(--md-stroke-soft);
     border-radius: 0;
@@ -25,11 +28,12 @@
   }
 
   .topbar .nav-btn {
-    flex: 1;
+    flex: 1 1 0;
+    height: var(--nav-bar-height-desktop);
     flex-direction: column;
     font-size: var(--fs-nav-desktop);
     padding: 16px 10px 18px;
-    min-height: var(--nav-bar-height-desktop);
+    min-height: 0;
     gap: 0;
   }
 
@@ -40,6 +44,10 @@
   .wrap {
     padding-bottom: calc(var(--nav-bar-height-desktop) + 22px + env(safe-area-inset-bottom, 0px));
     min-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height-desktop) - env(safe-area-inset-bottom, 0px));
+  }
+
+  body[data-page="tools"] .wrap {
+    height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height-desktop) - env(safe-area-inset-bottom, 0px));
   }
 
   .page {
@@ -80,7 +88,7 @@
     margin-bottom: 0;
     top: 0;
     padding-top: calc(8px + env(safe-area-inset-top, 0px));
-    padding-bottom: 24px;
+    padding-bottom: 18px;
     background: var(--md-surface);
     border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 72%, transparent);
     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.14);
@@ -108,30 +116,33 @@
 
   .setting-subnav__tab {
     flex: none;
-    min-height: 42px;
-    padding: 8px 6px;
-    border: 1px solid var(--md-stroke-soft);
-    border-radius: 12px;
+    min-height: 38px;
+    padding: 7px 6px;
+    border: 1px solid color-mix(in srgb, var(--md-outline-var) 44%, transparent);
+    border-radius: 8px;
     background: var(--md-surface-cont);
-    color: rgba(255, 255, 255, 0.86);
-    font-size: 13px;
+    color: var(--md-on-surface-var);
+    font-size: 12.5px;
     font-weight: 800;
     line-height: 1.15;
     white-space: normal;
     text-wrap: balance;
     scroll-snap-align: none;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   }
 
   .setting-subnav__tab.is-active {
     color: var(--md-primary);
-    border-color: color-mix(in srgb, var(--md-primary) 42%, var(--md-stroke-soft));
-    background: color-mix(in srgb, var(--md-primary-cont) 72%, var(--md-surface));
-    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.16);
+    border-color: color-mix(in srgb, var(--md-primary) 48%, var(--md-outline-var));
+    background: color-mix(in srgb, var(--md-primary) 14%, var(--md-surface-cont-h));
   }
 
   .setting-subnav__tab:active {
-    background: color-mix(in srgb, var(--md-primary-cont) 56%, var(--md-surface-cont));
+    background: color-mix(in srgb, var(--md-surface-cont-hh) 88%, var(--md-primary));
+  }
+
+  body[data-page="setting"] #settingSubnavWrap {
+    box-sizing: border-box;
   }
 
   #pageTerminal {
@@ -222,6 +233,41 @@
   }
 }
 
+@media (max-width: 640px) and (orientation: portrait) {
+  body[data-page="setting"] #settingScreenItems {
+    padding-top: calc(var(--setting-fixed-subnav-height, 174px) + 10px);
+  }
+
+  body[data-page="setting"] #settingScreenHost,
+  body[data-page="setting"] #settingScreenItems:not(.hidden) {
+    overflow: visible;
+    transform: none !important;
+    will-change: auto !important;
+  }
+
+  body[data-page="setting"] #settingSubnavWrap {
+    position: fixed !important;
+    top: 0 !important;
+    right: 0 !important;
+    left: 0 !important;
+    z-index: 90;
+    width: 100dvw;
+    margin: 0 !important;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) var(--sp-lg) 12px;
+    background: color-mix(in srgb, var(--md-surface) 98%, #000);
+    border-bottom: 1px solid color-mix(in srgb, var(--md-primary) 42%, var(--md-outline-var));
+    box-shadow:
+      0 10px 22px rgba(0, 0, 0, 0.34),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+    transform: none !important;
+    will-change: auto !important;
+  }
+
+  body[data-page="setting"] #settingSubnavWrap::after {
+    display: none;
+  }
+}
+
 @media (max-height: 760px) {
   #pageTools {
     --tools-console-log-lines: 4;
@@ -295,6 +341,9 @@
     left: 0;
     right: auto;
     width: var(--nav-rail-width);
+    height: auto;
+    min-height: 0;
+    max-height: none;
     flex-direction: column;
     justify-content: space-between;
     align-items: stretch;
@@ -305,6 +354,7 @@
 
   .topbar .nav-btn {
     flex: 1 1 0;
+    height: auto;
     min-height: 0;
     padding: 10px 6px;
     font-size: var(--fs-nav);
@@ -318,20 +368,16 @@
 
   .topbar .nav-btn.active {
     color: var(--md-primary);
-    font-weight: 900;
-    background: color-mix(in srgb, var(--md-primary-cont) 24%, transparent);
-  }
-
-  .topbar .nav-btn.active {
-    color: var(--md-primary);
-    font-weight: 900;
-    background: color-mix(in srgb, var(--md-primary-cont) 24%, transparent);
+    font-weight: 700;
+    background: color-mix(in srgb, var(--md-primary) 12%, transparent);
   }
 
   .topbar .nav-btn > span:last-child {
+    overflow: visible;
     white-space: normal;
     text-align: center;
     line-height: 1.05;
+    text-overflow: clip;
   }
 
   .topbar .nav-btn.langToggle > span:last-child {
@@ -344,6 +390,7 @@
     grid-template-rows: auto auto minmax(0, 1fr);
     column-gap: 18px;
     align-items: stretch;
+    background: transparent;
   }
 
   :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > .page-header--hidden {
@@ -354,7 +401,9 @@
     grid-column: 1;
     grid-row: 1;
     align-self: start;
-    min-height: 1.5em;
+    height: 30px;
+    min-height: 30px;
+    max-height: 30px;
   }
 
   :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > #toolsProgress {
@@ -366,6 +415,8 @@
   :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > .tools-scroll-stack {
     grid-column: 1;
     grid-row: 3;
+    min-height: 0;
+    overflow-y: auto;
     padding-bottom: 0;
   }
 
@@ -381,6 +432,7 @@
     margin-right: 0;
     margin-bottom: 12px;
     display: flex;
+    align-self: stretch;
     min-height: 0;
     background: transparent;
     box-shadow: none;
@@ -393,9 +445,9 @@
 
   :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > .tools-console-dock .tools-console-shell {
     flex: 1 1 auto;
-    height: auto;
+    height: 100%;
     min-height: 0;
-    max-height: none;
+    max-height: 100%;
     border: 1px solid var(--tools-console-divider);
     border-radius: var(--r-xl);
     box-shadow: none;
@@ -473,7 +525,7 @@
   }
 
   body[data-page="setting"] #pageSetting {
-    --setting-landscape-left-width: clamp(224px, 31vw, 280px);
+    --setting-landscape-left-width: clamp(208px, 28vw, 260px);
     --setting-landscape-gap: 12px;
     --setting-landscape-page-inset: 12px;
     --setting-landscape-fab-reserve: calc(var(--fab-size) + 18px);
@@ -498,7 +550,7 @@
   body[data-page="setting"] #settingScreenHost {
     display: grid;
     grid-template-columns: var(--setting-landscape-left-width) minmax(0, 1fr);
-    column-gap: 18px;
+    column-gap: 14px;
     align-items: stretch;
     flex: 1 1 auto;
     min-height: 0;
@@ -521,7 +573,7 @@
     position: relative;
     align-self: stretch;
     margin-left: 0;
-    padding-right: 10px;
+    padding-right: 8px;
   }
 
   body[data-page="setting"] #settingScreenItems {
@@ -530,11 +582,25 @@
 
   body[data-page="setting"] #settingCarRow {
     display: flex;
+    overflow: hidden;
   }
 
   body[data-page="setting"] #curCarLabelSetting {
-    font-size: 16px !important;
+    font-size: 14px !important;
     line-height: 1.15;
+    overflow-x: auto;
+    scrollbar-width: none;
+    text-overflow: clip;
+    touch-action: pan-x pan-y;
+  }
+
+  body[data-page="setting"] #curCarLabelSetting::-webkit-scrollbar {
+    display: none;
+  }
+
+  body[data-page="setting"] .setting-car-entry__text {
+    min-width: 0;
+    overflow: hidden;
   }
 
   body[data-page="setting"] #settingSubnavWrap {
@@ -549,6 +615,34 @@
 
   body[data-page="setting"] .groupBtn {
     margin-bottom: 0;
+    min-width: 0;
+    min-height: 44px;
+    padding: 9px 12px;
+    font-size: 14px;
+    line-height: 1.16;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    scrollbar-width: none;
+    text-overflow: clip;
+    touch-action: pan-x pan-y;
+  }
+
+  body[data-page="setting"] .groupBtn::-webkit-scrollbar {
+    display: none;
+  }
+
+  body[data-page="setting"] #groupList .groupBtn .setting-group-label {
+    display: inline-block;
+    min-width: max-content;
+    transform: translateX(0);
+    will-change: transform;
+  }
+
+  body[data-page="setting"] #groupList .groupBtn.is-overflowing:hover .setting-group-label,
+  body[data-page="setting"] #groupList .groupBtn.is-overflowing:focus .setting-group-label,
+  body[data-page="setting"] #groupList .groupBtn.is-overflowing:active .setting-group-label {
+    animation: setting-left-text-pan 4.2s ease-in-out 1;
   }
 
   body[data-page="setting"] #pageSetting > .page-fab-layer--setting {
@@ -599,6 +693,18 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
     width: calc(100vw - var(--nav-rail-width) - 24px);
   }
 
+  body[data-page="tools"] .wrap {
+    height: 100dvh;
+    min-height: 100dvh;
+    overflow: hidden;
+  }
+
+  body[data-page="tools"] .swipe-container {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
   .app-toast-host {
     left: calc(var(--nav-rail-width) + 20px);
     right: 20px;
@@ -632,7 +738,7 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
   }
 
   #pageTools {
-    --tools-page-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px) - 12px);
+    --tools-page-height: calc(100dvh - 24px - env(safe-area-inset-bottom, 0px));
     --tools-console-form-height: 40px;
     --tools-console-log-font-size: 14px;
     --tools-console-log-line-height: 1.55;
@@ -640,6 +746,14 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
     --tools-console-log-pad-top: 14px;
     --tools-console-log-pad-bottom: 14px;
     --tools-console-inline: 16px;
+  }
+
+  body[data-page="tools"] #pageTools,
+  #pageTools.page-transitioning {
+    height: var(--tools-page-height);
+    min-height: 0;
+    max-height: var(--tools-page-height);
+    overflow: hidden;
   }
 
   #pageTools .section {
@@ -655,8 +769,10 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
   }
 
   body[data-page="tools"] #toolsMeta {
-    min-height: 1.5em;
-    font-size: 15px;
+    height: 32px;
+    min-height: 32px;
+    max-height: 32px;
+    font-size: 13px;
     font-weight: 600;
   }
 
@@ -766,30 +882,135 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
   }
 
   body[data-page="setting"] #settingScreenItems .title {
-    font-size: calc(var(--fs-body-lg) * 1.22);
+    font-size: clamp(15px, 2.05vw, 18px);
     font-weight: 700;
+    line-height: 1.18;
   }
 
   body[data-page="setting"] #settingScreenItems .name {
-    font-size: calc(var(--fs-label-md) * 1.12);
+    font-size: clamp(10.5px, 1.45vw, 12.5px);
+    line-height: 1.28;
   }
 
   body[data-page="setting"] #settingScreenItems .muted,
   body[data-page="setting"] #settingScreenItems .descr {
-    font-size: calc(var(--fs-body-sm) * 1.18);
-    line-height: 1.45;
+    font-size: clamp(12px, 1.65vw, 14px);
+    line-height: 1.38;
+  }
+
+  body[data-page="setting"] #settingScreenItems .setting {
+    overflow: hidden;
+  }
+
+  body[data-page="setting"] #settingScreenItems .settingTop {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: start;
+  }
+
+  body[data-page="setting"] #settingScreenItems .settingTop > :first-child {
+    min-width: 0;
+  }
+
+  body[data-page="setting"] #settingScreenItems .title,
+  body[data-page="setting"] #settingScreenItems .name,
+  body[data-page="setting"] #settingScreenItems .muted,
+  body[data-page="setting"] #settingScreenItems .descr {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  body[data-page="setting"] #settingScreenItems .ctrl {
+    display: grid;
+    grid-template-columns: 40px 86px 40px;
+    gap: 8px;
+    justify-content: end;
+    align-items: center;
+    flex: 0 0 auto;
+    max-width: 100%;
+  }
+
+  body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(1) {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(2) {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(3) {
+    grid-column: 3;
+    grid-row: 2;
+  }
+
+  body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(4) {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    justify-self: stretch;
+    width: 100%;
   }
 
   body[data-page="setting"] #settingScreenItems .smallBtn {
-    min-height: 48px;
-    padding: 10px 16px;
-    font-size: 15px;
-    font-weight: 700;
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 7px 9px;
+    font-size: 13px;
+    font-weight: 850;
+    border-color: color-mix(in srgb, var(--md-outline-var) 58%, transparent);
+    background: color-mix(in srgb, var(--md-surface-cont-h) 94%, #000);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  body[data-page="setting"] #settingScreenItems .smallBtn:hover,
+  body[data-page="setting"] #settingScreenItems .smallBtn:focus-visible {
+    border-color: color-mix(in srgb, var(--md-primary) 42%, var(--md-outline-var));
+    background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
+  }
+
+  body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(1),
+  body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(3) {
+    border-radius: 999px;
+  }
+
+  body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(4) {
+    border-radius: 999px;
+    color: color-mix(in srgb, var(--md-on-surface) 94%, var(--md-primary));
   }
 
   body[data-page="setting"] #settingScreenItems .val {
-    min-width: 92px;
-    font-size: 15px;
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 72px;
+    max-width: 86px;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-color: color-mix(in srgb, var(--md-outline-var) 58%, transparent);
+    background: color-mix(in srgb, var(--md-surface-cont) 92%, #000);
+    border-radius: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 13px;
+    font-weight: 850;
+  }
+
+  @keyframes setting-left-text-pan {
+    0%, 16% {
+      transform: translateX(0);
+    }
+    72%, 86% {
+      transform: translateX(var(--setting-label-shift, -24px));
+    }
+    100% {
+      transform: translateX(0);
+    }
   }
 
   .setting-search-panel {
@@ -798,5 +1019,215 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
     --setting-search-results-max-height: min(48dvh, 260px);
     gap: 10px;
     padding: calc(12px + env(safe-area-inset-top, 0px)) 12px calc(var(--nav-bar-height) + 12px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (orientation: landscape) and (max-width: 760px) {
+  body[data-page="setting"] #pageSetting {
+    --setting-landscape-left-width: clamp(184px, 27vw, 220px);
+  }
+
+  body[data-page="setting"] #settingScreenHost {
+    column-gap: 10px;
+  }
+
+  body[data-page="setting"] #settingScreenItems .settingTop {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-page="setting"] #settingScreenItems .ctrl {
+    justify-content: start;
+  }
+}
+
+body[data-page="setting"] #settingScreenItems .ctrl {
+  --setting-control-side: 42px;
+  --setting-control-value: 88px;
+  --setting-control-gap: 6px;
+  display: grid;
+  grid-template-columns: var(--setting-control-side) var(--setting-control-value) var(--setting-control-side);
+  gap: var(--setting-control-gap);
+  justify-content: end;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+
+body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(1) {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(2) {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(3) {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(4) {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  justify-self: stretch;
+  width: 100%;
+}
+
+body[data-page="setting"] #settingScreenItems .smallBtn {
+  width: 100%;
+  box-sizing: border-box;
+  min-width: var(--setting-control-side);
+  min-height: 38px;
+  padding: 7px 9px;
+  border-color: color-mix(in srgb, var(--md-outline-var) 62%, transparent);
+  border-radius: 9px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--md-surface-cont-h) 92%, #101820),
+    color-mix(in srgb, var(--md-surface-cont) 94%, #05080b)
+  );
+  color: var(--md-on-surface);
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+body[data-page="setting"] #settingScreenItems .smallBtn:hover,
+body[data-page="setting"] #settingScreenItems .smallBtn:focus-visible,
+body[data-page="setting"] #settingScreenItems .val:hover,
+body[data-page="setting"] #settingScreenItems .val:focus-visible {
+  border-color: color-mix(in srgb, var(--md-primary) 42%, var(--md-outline-var));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--md-surface-cont-h) 82%, var(--md-primary)),
+    color-mix(in srgb, var(--md-surface-cont) 88%, var(--md-primary))
+  );
+  outline: none;
+}
+
+body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(1),
+body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(3) {
+  border-radius: 9px;
+}
+
+body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(4) {
+  min-height: 36px;
+  border-radius: 9px;
+  color: color-mix(in srgb, var(--md-primary) 72%, var(--md-on-surface));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--md-primary) 15%, var(--md-surface-cont-h)),
+    color-mix(in srgb, var(--md-primary) 8%, var(--md-surface-cont))
+  );
+}
+
+body[data-page="setting"] #settingScreenItems .val {
+  appearance: none;
+  width: 100%;
+  box-sizing: border-box;
+  min-width: var(--setting-control-value);
+  max-width: var(--setting-control-value);
+  min-height: 38px;
+  padding: 7px 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-color: color-mix(in srgb, var(--md-primary) 28%, color-mix(in srgb, var(--md-outline-var) 62%, transparent));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--md-surface-cont) 90%, #111922),
+    color-mix(in srgb, var(--md-surface) 92%, #04070a)
+  );
+  border-radius: 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--md-on-surface);
+  letter-spacing: 0;
+}
+
+@media (max-width: 640px) {
+  body[data-page="setting"] #settingScreenItems .ctrl {
+    justify-content: center;
+  }
+}
+
+@media (orientation: landscape) and (max-width: 760px) {
+  body[data-page="setting"] #settingScreenItems .ctrl {
+    justify-content: start;
+  }
+}
+
+@media (max-width: 640px) and (orientation: portrait) {
+  body[data-page="setting"] #settingScreenItems > .row-between.mb-sm {
+    min-height: 30px;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 30%, transparent);
+  }
+
+  body[data-page="setting"] #settingScreenItems .setting {
+    padding: 18px 0 20px;
+  }
+
+  body[data-page="setting"] #settingScreenItems #items::after {
+    content: "";
+    display: block;
+    height: calc(var(--fab-size, 62px) + 12px);
+  }
+
+  body[data-page="setting"] #settingScreenItems .settingTop {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: start;
+  }
+
+  body[data-page="setting"] #settingScreenItems .ctrl {
+    --setting-control-side: 34px;
+    --setting-control-value: 70px;
+    --setting-control-gap: 6px;
+    justify-self: end;
+    justify-content: end;
+    width: calc((var(--setting-control-side) * 2) + var(--setting-control-value) + (var(--setting-control-gap) * 2));
+    max-width: 100%;
+  }
+
+  body[data-page="setting"] #settingScreenItems .smallBtn,
+  body[data-page="setting"] #settingScreenItems .val {
+    min-height: 34px;
+    font-size: 12px;
+  }
+
+  body[data-page="setting"] #settingScreenItems .title,
+  body[data-page="setting"] #settingScreenItems .name {
+    text-align: left;
+  }
+
+  body[data-page="setting"] #settingScreenItems .descr {
+    margin-top: 4px;
+  }
+
+  body[data-page="tools"] #toolsMeta {
+    height: 32px;
+    min-height: 32px;
+    max-height: 32px;
+    margin-bottom: 8px;
+    overflow: visible;
+    align-items: center;
+    line-height: 1.2;
+  }
+
+  body[data-page="tools"] #toolsProgress {
+    margin-bottom: 10px;
   }
 }

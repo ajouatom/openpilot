@@ -1,13 +1,13 @@
 "use strict";
 
 // Translation registry — loaded by translations/registry.js + ko/en/zh/ja/fr.js
-const TRANSLATION_REGISTRY = window.CarrotTranslations || { packs: {}, order: ["ko", "en", "zh"] };
+const TRANSLATION_REGISTRY = window.CarrotTranslations || { packs: {}, order: ["en", "ko", "zh"] };
 const UI_STRINGS = TRANSLATION_REGISTRY.strings || {};
 const ACTION_LABELS = TRANSLATION_REGISTRY.actionLabels || {};
 const ERROR_MESSAGES = TRANSLATION_REGISTRY.errorMessages || {};
 const DRIVE_MODES = TRANSLATION_REGISTRY.driveModes || {};
 
-let LANG = "ko";
+let LANG = "en";
 
 
 function normalizeLangCode(raw) {
@@ -35,7 +35,7 @@ function detectDefaultLang() {
     const normalized = normalizeLangCode(candidate);
     if (normalized) return normalized;
   }
-  return "ko";
+  return "en";
 }
 
 LANG = detectDefaultLang();
@@ -133,6 +133,7 @@ function getUIText(key, fallback = "", vars = null) {
 function renderUIText() {
   const s = UI_STRINGS[LANG];
   if (!s) return;
+  const toolsEn = UI_STRINGS.en || s;
   document.title = "CarrotPilot";
 
   // Nav bar (nested spans — set last child text)
@@ -160,31 +161,31 @@ function renderUIText() {
 
   // Tools
   setText("toolsTitle", s.tools);
-  setText("gitCommandsTitle", s.git_commands);
-  setText("userSystemTitle", s.user_system);
+  setText("gitCommandsTitle", "Git Commands");
+  setText("userSystemTitle", "User / System");
   setText("toolsQuickLinkTitle", "Link");
-  setText("userSettingsTitle", s.section_settings_backup);
-  setText("btnDeviceInfo", s.device_info || "Device Info");
-  setText("btnGitRemote", s.change_repository || "change repository");
-  setText("btnGitBranch", s.change_branch || "change branch");
-  setText("btnGitAddRemote", s.add_remote || "add remote");
-  setText("btnGitResetRepo", s.reset_repo || "reset repo");
-  setText("btnDeviceLang", s.device_lang || "Device Lang");
-  setText("btnResetCalib", s.reset_calib || "Reset Calib");
-  setText("btnSendTmuxLog", s.capture_tmux || "capture tmux");
-  setText("btnSendTmuxServerLog", s.send_tmux || "send tmux");
-  setText("btnInstallRequired", s.install_required || "install flask");
-  setText("btnDeleteVideos", s.delete_all_videos || "delete all videos");
-  setText("btnDeleteLogs", s.delete_all_logs || "delete all logs");
-  setText("btnRebuildAll", s.rebuild_all || "Rebuild All");
-  setText("btnReboot", s.reboot);
-  setText("btnBackupSettings", s.backup);
-  setText("btnRestoreSettings", s.restore);
-  setText("btnCopySettings", s.copy || "Copy");
-  setText("btnViewSettings", s.view || "View");
-  setText("sysCmdTitle", s.section_sys_cmd);
-  setText("sysCmdHelp", s.sys_cmd_help);
-  setText("outputTitle", s.section_output);
+  setText("userSettingsTitle", "Settings");
+  setText("btnDeviceInfo", toolsEn.device_info || "Device Info");
+  setText("btnGitRemote", toolsEn.change_repository || "change repository");
+  setText("btnGitBranch", toolsEn.change_branch || "change branch");
+  setText("btnGitAddRemote", toolsEn.add_remote || "add remote");
+  setText("btnGitResetRepo", toolsEn.reset_repo || "reset repo");
+  setText("btnDeviceLang", toolsEn.device_lang || "Device Lang");
+  setText("btnResetCalib", toolsEn.reset_calib || "Reset Calib");
+  setText("btnSendTmuxLog", toolsEn.capture_tmux || "capture tmux");
+  setText("btnSendTmuxServerLog", toolsEn.send_tmux || "send tmux");
+  setText("btnInstallRequired", toolsEn.install_required || "install flask");
+  setText("btnDeleteVideos", toolsEn.delete_all_videos || "delete all videos");
+  setText("btnDeleteLogs", toolsEn.delete_all_logs || "delete all logs");
+  setText("btnRebuildAll", toolsEn.rebuild_all || "Rebuild All");
+  setText("btnReboot", toolsEn.reboot || "Reboot");
+  setText("btnBackupSettings", "Backup");
+  setText("btnRestoreSettings", "Restore");
+  setText("btnCopySettings", "Copy");
+  setText("btnViewSettings", "View");
+  setText("sysCmdTitle", toolsEn.section_sys_cmd || "System Command");
+  setText("sysCmdHelp", toolsEn.sys_cmd_help || "Allowed: pull, status, branch, log, git ..., df, free, uptime");
+  setText("outputTitle", toolsEn.section_output || "Output");
   setText("terminalTitle", s.terminal);
   setText("terminalSessionMeta", "/data/openpilot");
   setText("btnTerminalCtrlC", s.terminal_ctrl_c);
@@ -257,9 +258,9 @@ function setWebLanguage(lang) {
 }
 
 function toggleLang() {
-  const order = (TRANSLATION_REGISTRY.order || ["ko", "en", "zh"]).filter((lang) => UI_STRINGS[lang]);
+  const order = (TRANSLATION_REGISTRY.order || ["en", "ko", "zh"]).filter((lang) => UI_STRINGS[lang]);
   const currentIndex = Math.max(0, order.indexOf(LANG));
-  const next = order[(currentIndex + 1) % order.length] || "ko";
+  const next = order[(currentIndex + 1) % order.length] || "en";
   setWebLanguage(next);
 }
 

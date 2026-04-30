@@ -4,6 +4,7 @@ import uuid
 
 from aiohttp import web
 
+from ...services.git_status import get_git_status
 from . import jobs
 from .dispatcher import dispatch_sync, run_tool_job
 
@@ -62,7 +63,17 @@ async def api_tools(request: web.Request) -> web.Response:
   return await dispatch_sync(request, body)
 
 
+async def api_tools_git_status(request: web.Request) -> web.Response:
+  force = any(
+    (request.query.get(name) or "").strip().lower() in ("1", "true", "yes")
+    for name in ("force", "refresh")
+  )
+  status = await get_git_status(force=force)
+  return web.json_response({"ok": True, **status})
+
+
 def register(app: web.Application) -> None:
   app.router.add_post("/api/tools", api_tools)
   app.router.add_post("/api/tools/start", api_tools_start)
   app.router.add_get("/api/tools/job", api_tools_job)
+  app.router.add_get("/api/tools/git_status", api_tools_git_status)

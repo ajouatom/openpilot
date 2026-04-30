@@ -21,12 +21,19 @@ body.dialog-open {
 }
 
 body[data-page="tools"] {
-  overflow: hidden;
   overscroll-behavior: none;
 }
 
 body[data-page="tools"] .wrap {
+  height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px));
+  min-height: 0;
   padding-bottom: 0;
+  overflow: hidden;
+}
+
+body[data-page="tools"] .swipe-container {
+  height: 100%;
+  min-height: 0;
 }
 
 html[data-page="logs"],
@@ -99,18 +106,28 @@ body[data-page="terminal"] .swipe-container {
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 100;
+  z-index: 120;
+  height: calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px));
+  min-height: calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px));
+  max-height: calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px));
   background: color-mix(in srgb, var(--md-surface-cont) 94%, #000);
   border-top: 1px solid var(--md-stroke-soft);
   padding: 0;
   padding-bottom: env(safe-area-inset-bottom, 0px);
   justify-content: space-around;
   gap: 0;
+  isolation: isolate;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+  will-change: transform;
+  overflow: hidden;
 }
 
 .topbar .nav-btn {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
+  height: var(--nav-bar-height);
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -123,12 +140,13 @@ body[data-page="terminal"] .swipe-container {
   font-weight: 700;
   padding: 14px 6px 16px;
   cursor: pointer;
-  min-height: var(--nav-bar-height);
   transition: color 0.15s;
   position: relative;
-  letter-spacing: 0.15px;
+  letter-spacing: 0;
   outline: none;
   -webkit-tap-highlight-color: transparent;
+  backface-visibility: hidden;
+  contain: layout paint;
 }
 
 .topbar .nav-btn:focus,
@@ -153,6 +171,7 @@ body[data-page="terminal"] .swipe-container {
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1.08;
+  overflow-wrap: anywhere;
   transition: color 0.15s;
 }
 
@@ -185,7 +204,8 @@ body[data-page="terminal"] .swipe-container {
 
 .topbar .nav-btn.active {
   color: var(--md-primary);
-  font-weight: 900;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--md-primary) 12%, transparent);
 }
 
 .topbar .nav-btn.recording,
@@ -195,6 +215,44 @@ body[data-page="terminal"] .swipe-container {
 
 .topbar .nav-btn.recording.active {
   background: color-mix(in srgb, #ff6b6b 18%, transparent);
+}
+
+.topbar .nav-btn.is-working::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  right: 11px;
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--md-primary) 28%, transparent);
+  border-top-color: var(--md-primary);
+  background: color-mix(in srgb, var(--md-surface-cont) 88%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-surface) 70%, transparent);
+  animation: nav-working-spin 0.9s linear infinite;
+  transform: translateZ(0);
+  will-change: transform;
+  pointer-events: none;
+}
+
+.topbar .nav-btn.has-git-updates:not(.is-working)::after {
+  content: attr(data-git-behind);
+  position: absolute;
+  top: 6px;
+  right: 9px;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--md-error);
+  color: var(--md-on-error);
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 20px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-surface) 72%, transparent);
+  pointer-events: none;
 }
 
 .topbar .nav-btn.recording::before {
@@ -231,8 +289,7 @@ body[data-page="terminal"] .swipe-container {
 }
 
 .topbar .nav-btn:active {
-  background: transparent;
-  color: var(--md-on-surface);
+  color: inherit;
 }
 
 /* ── Content Area ─────────────────────────────────────────── */
@@ -373,10 +430,22 @@ body[data-page="home"] .global-home-record-fab {
   }
 }
 
+@keyframes nav-working-spin {
+  to {
+    transform: translateZ(0) rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar .nav-btn.is-working::after {
+    animation: none;
+  }
+}
+
 .setting-search-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 120;
+  z-index: 170;
   border: 0;
   background: color-mix(in srgb, var(--md-surface) 38%, transparent);
   backdrop-filter: blur(6px) saturate(108%);
@@ -389,7 +458,7 @@ body[data-page="home"] .global-home-record-fab {
   --setting-search-results-max-height: min(58dvh, 520px);
   position: fixed;
   inset: 0;
-  z-index: 121;
+  z-index: 171;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -545,5 +614,10 @@ body[data-page="home"] .global-home-record-fab {
 #pageSetting.setting-search-open .fab--setting-search {
   opacity: 0;
   transform: scale(0.92);
+  pointer-events: none;
+}
+
+#pageSetting.setting-search-open #settingScreenHost,
+#pageSetting.setting-search-open #settingsMeta {
   pointer-events: none;
 }

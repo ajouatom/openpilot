@@ -22,7 +22,7 @@ const PAGE_TRANSITION_CLASSES = [
   "page-exit-to-left",
   "page-exit-to-right",
 ];
-const PAGE_TRANSITION_MS = 280;
+const PAGE_TRANSITION_MS = 200;
 const SWIPE_SETTLE_MS = 220;
 const SWIPE_COMMIT_RATIO = 0.22;
 const SWIPE_VELOCITY_THRESHOLD = 0.45;
