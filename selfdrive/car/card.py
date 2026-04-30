@@ -213,7 +213,6 @@ class Car:
     CS.softHoldActive = self.v_cruise_helper._soft_hold_active
     CS.activateCruise = self.v_cruise_helper._activate_cruise
     CS.latEnabled = self.v_cruise_helper._lat_enabled
-    CS.latOverride = self.v_cruise_helper._lat_override
     CS.useLaneLineSpeed = self.v_cruise_helper.useLaneLineSpeedApply
     CS.carrotCruise = 1 if self.v_cruise_helper.carrot_cruise_active else 0
 
@@ -302,7 +301,7 @@ class Car:
     finally:
       e.set()
       t.join()
-
+    
 def main():
   #config_realtime_process(4, Priority.CTRL_HIGH)
   config_realtime_process(6, Priority.CTRL_HIGH)

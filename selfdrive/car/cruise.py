@@ -30,9 +30,6 @@ CRUISE_INTERVAL_SIGN = {
   ButtonType.decelCruise: -1,
 }
 
-LAT_OVERRIDE_AUTO = 0
-LAT_OVERRIDE_FORCE_ON = 1
-LAT_OVERRIDE_FORCE_OFF = 2
 
 class VCruiseHelper:
   def __init__(self, CP):
@@ -188,9 +185,7 @@ class VCruiseCarrot:
     self._cruise_cancel_state = False
     self._pause_auto_speed_up = False
     self._activate_cruise = 0
-    self._auto_engage_mode = self.params.get_int("AutoEngage")
-    self._lat_override = LAT_OVERRIDE_FORCE_ON if self._auto_engage_mode in (1, 2) else LAT_OVERRIDE_AUTO
-    self._lat_enabled = self._lat_override == LAT_OVERRIDE_FORCE_ON
+    self._lat_enabled = self.params.get_int("AutoEngage") > 0
     self._v_cruise_kph_at_brake = 0
     self.cruise_state_available_last = False
 
@@ -251,8 +246,6 @@ class VCruiseCarrot:
       self.autoCruiseControl = self.params.get_int("AutoCruiseControl") * unit_factor
       self.autoGasTokSpeed = self.params.get_int("AutoGasTokSpeed") * unit_factor
       self.autoGasSyncSpeed = self.params.get_int("AutoGasSyncSpeed")
-      self._auto_engage_mode = self.params.get_int("AutoEngage")
-
       self.applyModelSpeed = self.params.get_float("ApplyModelSpeed") * 0.01
       self.autoSpeedUptoRoadSpeedLimit = self.params.get_float("AutoSpeedUptoRoadSpeedLimit") * 0.01
       self.autoRoadSpeedAdjust = self.params.get_float("AutoRoadSpeedAdjust") * 0.01
@@ -323,11 +316,6 @@ class VCruiseCarrot:
     #self.events = []
     self.v_ego_kph_set = int(CS.vEgoCluster * CV.MS_TO_KPH + 0.5)
     self._activate_cruise = 0
-
-    if CC.enabled and not self.enabled_last and self._lat_override == LAT_OVERRIDE_FORCE_OFF:
-      self._set_lat_override(self._default_lat_override())
-      self._add_log(f"Lateral {'enabled' if self._lat_enabled else 'disabled'}")
-
     self._prepare_brake_gas(CS, CC)
     if CC.enabled:
       self._cruise_ready = False
@@ -419,9 +407,8 @@ class VCruiseCarrot:
 
       elif not b.pressed and self.button_cnt > 0 and bt == self.button_prev:
         if bt == ButtonType.cancel:
-          if not self.long_pressed:
-            button_type = bt
-        elif not self.long_pressed:
+          button_type = bt
+        elif not self.long_pressed:          
           if bt == ButtonType.accelCruise:
             unit = SPEED_UP_UNIT if is_metric else SPEED_UP_UNIT * CV.MPH_TO_KPH
             button_kph = math.ceil((button_kph + 0.01) / unit) * unit
@@ -485,8 +472,8 @@ class VCruiseCarrot:
           speed_kph = int(self.carrot_arg)
           if 0 < speed_kph < 200:
             v_cruise_kph = speed_kph
-            self._add_log(f"Cruise speed set to {v_cruise_kph} (carrot command)")
-
+            self._add_log(f"Cruise speed set to {v_cruise_kph} (carrot command)")       
+    
     return v_cruise_kph, button_type, long_pressed
 
   def _update_cruise_buttons(self, CS, CC, v_cruise_kph):
@@ -559,22 +546,23 @@ class VCruiseCarrot:
         #self.events.append(EventName.personalityChanged)
       elif button_type == ButtonType.lfaButton:
         if self._lfa_button_mode == 0:
-          self._toggle_user_lat()
+          self._lat_enabled = not self._lat_enabled
+          self._add_log("Lateral " + "enabled" if self._lat_enabled else "disabled")
         elif self._lfa_button_mode == 2:
           self.carrot_cruise_active = True
         else:
-          if False: #CC.enabled and self._paddle_decel_active:
+          if False: #CC.enabled and self._paddle_decel_active:  # 수정필요...
             self._paddle_decel_active = False
-          else:
+          else:          
             self._paddle_decel_active = True
         print("lfaButton")
       elif button_type == ButtonType.cancel:
         self._paddle_decel_active = False
-        if self._cancel_button_mode == 1:
-          self._set_lat_override(LAT_OVERRIDE_FORCE_OFF)
-          self._add_log(f"Lateral {'enabled' if self._lat_enabled else 'disabled'}")
+        if self._cancel_button_mode in [1]:
+          self._lat_enabled = False
+          self._add_log("Lateral " + "enabled" if self._lat_enabled else "disabled")
         self._cruise_cancel_state = True
-
+        #self._v_cruise_kph_at_brake = 0
     else:
       if button_type == ButtonType.accelCruise:
         v_cruise_kph = button_kph
@@ -721,7 +709,7 @@ class VCruiseCarrot:
 
     if self._gas_tok and self.v_ego_kph_set >= self.autoGasTokSpeed:
       if not CC.enabled:
-        self._cruise_cancel_state = False
+        #self._cruise_cancel_state = False
         self._cruise_control(1, -1, "Cruise on (gas tok)")
         if self.v_ego_kph_set > v_cruise_kph:
           v_cruise_kph = self.v_ego_kph_set
@@ -750,7 +738,7 @@ class VCruiseCarrot:
           if self.xState == 3:  # 감속중
             v_cruise_kph = self.v_ego_kph_set
           self._cruise_control(1, 0, "Cruise on (traffic sign)")
-        elif 0 < self.d_rel < 20:
+        elif 0 < self.d_rel < 20: 
           # v_cruise_kph = self.v_ego_kph_set # 전방에 차가 가까이 있을때, 기존속도 유지
           self._cruise_control(1, -1 if self.v_ego_kph_set < 1 else 0, "Cruise on (lead car)")
 
@@ -781,7 +769,7 @@ class VCruiseCarrot:
         elif self.d_rel > 0:
           self._paddle_decel_active = False
           v_cruise_kph = self.v_ego_kph_set
-
+          
 
     if self._gas_pressed_count > self._gas_tok_timer:
       if CS.aEgo < -0.5:
@@ -830,25 +818,3 @@ class VCruiseCarrot:
     else:
       self._soft_hold_count = 0
       self._brake_pressed_count = min(-1, self._brake_pressed_count - 1)
-
-
-  def _default_lat_override(self):
-    return LAT_OVERRIDE_FORCE_ON if self._auto_engage_mode in (1, 2) else LAT_OVERRIDE_AUTO
-
-  def _sync_lat_enabled(self):
-    self._lat_enabled = self._lat_override == LAT_OVERRIDE_FORCE_ON
-
-  def _set_lat_override(self, override):
-    self._lat_override = override
-    self._sync_lat_enabled()
-
-  def _toggle_user_lat(self):
-    if self._lat_override == LAT_OVERRIDE_FORCE_OFF:
-      # 꺼둔 상태 -> 기본 정책 복귀
-      self._set_lat_override(self._default_lat_override())
-    elif self._lat_override == LAT_OVERRIDE_AUTO:
-      # AUTO 상태 -> 사용자가 명시적으로 LAT 켜기 원함
-      self._set_lat_override(LAT_OVERRIDE_FORCE_ON)
-    else:  # FORCE_ON
-      # 켜진 상태 -> 끄기
-      self._set_lat_override(LAT_OVERRIDE_FORCE_OFF)
