@@ -172,6 +172,7 @@ async def send_discord_webhook(url: str, payload: dict[str, Any]) -> dict[str, A
     "username": "Carrot Dashcam",
     "content": discord_content(payload),
     "allowed_mentions": {"parse": []},
+    "flags": 4,
   }
   try:
     timeout = ClientTimeout(total=12)

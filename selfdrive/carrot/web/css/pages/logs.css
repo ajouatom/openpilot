@@ -565,6 +565,90 @@
   color: #ffb4ab;
 }
 
+.dashcam-upload-log {
+  display: grid;
+  gap: 8px;
+}
+
+.dashcam-upload-log__title {
+  color: var(--md-on-surface);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.dashcam-upload-log__item {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 42%, transparent);
+  background: color-mix(in srgb, var(--md-surface-cont-h) 72%, #000);
+}
+
+.dashcam-upload-log__head,
+.dashcam-upload-log__file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dashcam-upload-log__head {
+  color: var(--md-on-surface);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.dashcam-upload-log__head .is-muted,
+.dashcam-upload-log__file.is-muted {
+  color: var(--md-on-surface-var);
+}
+
+.dashcam-upload-log__head .is-ok {
+  color: #8ee59a;
+}
+
+.dashcam-upload-log__head .is-error,
+.dashcam-upload-log__error {
+  color: #ffb4ab;
+}
+
+.dashcam-upload-log__segment {
+  overflow: hidden;
+  color: var(--md-on-surface-var);
+  font: 11px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashcam-upload-log__files {
+  display: grid;
+  gap: 3px;
+}
+
+.dashcam-upload-log__file {
+  color: var(--md-on-surface-var);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dashcam-upload-log__file span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashcam-upload-log__file span:last-child {
+  flex: 0 0 auto;
+  color: var(--md-outline);
+}
+
+.dashcam-upload-log__error {
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .dashcam-share-card pre {
   margin: 0;
   max-height: min(42vh, 360px);
@@ -606,7 +690,7 @@
 }
 
 .dashcam-upload-progress__sheet {
-  width: min(92vw, 320px);
+  width: min(92vw, 430px);
   padding: 18px;
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 55%, transparent);
@@ -642,6 +726,14 @@
   border-radius: inherit;
   background: var(--md-primary);
   animation: dashcam-upload-indeterminate 1.1s ease-in-out infinite;
+}
+
+.dashcam-upload-progress__log {
+  display: grid;
+  gap: 8px;
+  max-height: min(42vh, 300px);
+  margin-top: 14px;
+  overflow: auto;
 }
 
 @keyframes dashcam-upload-indeterminate {

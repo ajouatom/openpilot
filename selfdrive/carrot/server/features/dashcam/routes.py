@@ -11,6 +11,7 @@ from . import upload
 from .catalog import build_routes, segment_file_summary
 from .ffmpeg import browser_video, ensure_preview, ensure_thumbnail
 from .paths import (
+  file_size_label,
   route_name,
   safe_segment,
   segment_dir,
@@ -73,6 +74,38 @@ async def api_dashcam_download(request: web.Request) -> web.StreamResponse:
   raise web.HTTPNotFound(text="artifact not found")
 
 
+async def api_dashcam_upload_summary(request: web.Request) -> web.Response:
+  try:
+    try:
+      body = await request.json()
+    except Exception:
+      body = {}
+    segments = body.get("segments")
+    if not isinstance(segments, list):
+      one = body.get("segment")
+      segments = [one] if one else []
+    segments = [safe_segment(str(seg)) for seg in segments if seg]
+    if not segments:
+      return web.json_response({"ok": False, "error": "missing segments"}, status=400)
+
+    summaries = []
+    for segment in segments:
+      segment_path = segment_dir(segment)
+      files = await asyncio.to_thread(segment_file_summary, segment_path)
+      total_size = sum(int(item.get("size") or 0) for item in files)
+      summaries.append({
+        "segment": segment,
+        "route": route_name(segment),
+        "segmentIndex": segment_index(segment),
+        "files": files,
+        "totalSize": total_size,
+        "totalSizeLabel": file_size_label(total_size),
+      })
+    return web.json_response({"ok": True, "summaries": summaries})
+  except Exception as e:
+    return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
 async def api_dashcam_upload(request: web.Request) -> web.Response:
   try:
     try:
@@ -96,8 +129,10 @@ async def api_dashcam_upload(request: web.Request) -> web.Response:
 
     results = []
     for segment in segments:
+      files = []
       try:
         segment_path = segment_dir(segment)
+        files = segment_file_summary(segment_path)
         ok = await asyncio.to_thread(
           upload.upload_folder_to_ftp,
           segment_path,
@@ -110,7 +145,7 @@ async def api_dashcam_upload(request: web.Request) -> web.Response:
           "segmentIndex": segment_index(segment),
           "ok": bool(ok),
           "remotePath": f"{remote_base_path}{segment}",
-          "files": segment_file_summary(segment_path),
+          "files": files,
         })
       except Exception as e:
         results.append({
@@ -119,6 +154,7 @@ async def api_dashcam_upload(request: web.Request) -> web.Response:
           "segmentIndex": segment_index(segment),
           "ok": False,
           "remotePath": f"{remote_base_path}{segment}",
+          "files": files,
           "error": str(e),
         })
 
@@ -150,4 +186,5 @@ def register(app: web.Application) -> None:
   app.router.add_get("/api/dashcam/preview/{segment}", api_dashcam_preview)
   app.router.add_get("/api/dashcam/video/{segment}", api_dashcam_video)
   app.router.add_get("/api/dashcam/download/{segment}/{kind}", api_dashcam_download)
+  app.router.add_post("/api/dashcam/upload/summary", api_dashcam_upload_summary)
   app.router.add_post("/api/dashcam/upload", api_dashcam_upload)
