@@ -228,6 +228,7 @@
 @media (max-width: 640px) and (orientation: portrait) {
   body[data-page="setting"] #settingScreenItems {
     padding-top: calc(var(--setting-fixed-subnav-height, 174px) + 10px);
+    padding-bottom: calc(var(--fab-size, 62px) + var(--nav-bar-height) + 36px + env(safe-area-inset-bottom, 0px));
   }
 
   body[data-page="setting"] #settingScreenHost,
@@ -256,15 +257,7 @@
   }
 
   body[data-page="setting"] #settingSubnavWrap::after {
-    content: "";
-    display: block;
-    position: absolute;
-    left: var(--sp-lg);
-    right: var(--sp-lg);
-    bottom: 0;
-    height: 1px;
-    pointer-events: none;
-    background: color-mix(in srgb, var(--md-primary) 48%, var(--md-outline-var));
+    display: none;
   }
 }
 
@@ -1124,6 +1117,12 @@ body[data-page="setting"] #settingScreenItems .val {
 
   body[data-page="setting"] #settingScreenItems .setting {
     padding: 18px 0 20px;
+  }
+
+  body[data-page="setting"] #settingScreenItems #items::after {
+    content: "";
+    display: block;
+    height: calc(var(--fab-size, 62px) + 34px);
   }
 
   body[data-page="setting"] #settingScreenItems .settingTop {
