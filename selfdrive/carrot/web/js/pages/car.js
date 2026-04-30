@@ -24,6 +24,16 @@ let carPickerCloseTimer = null;
 let carPickerMode = "makers";
 let carPickerMaker = null;
 
+function updateSettingCarEntryState(label) {
+  if (!settingCarRow) return;
+  const text = String(label || "").trim();
+  const isEmpty = !text || text === "-";
+  settingCarRow.classList.toggle("is-empty", isEmpty);
+  settingCarRow.setAttribute("aria-label", isEmpty
+    ? getUIText("open_car_select", "Open car select")
+    : getUIText("open_car_select_named", "Open car select for {name}", { name: text }));
+}
+
 function applyCurrentCarLabel(label, { persist = true, blank = false } = {}) {
   const text = String(label || "").trim();
   if (text) {

@@ -117,16 +117,6 @@ function scheduleSettingGroupValueWarmup(delay = 220) {
   }, Math.max(0, delay));
 }
 
-function updateSettingCarEntryState(label) {
-  if (!settingCarRow) return;
-  const text = String(label || "").trim();
-  const isEmpty = !text || text === "-";
-  settingCarRow.classList.toggle("is-empty", isEmpty);
-  settingCarRow.setAttribute("aria-label", isEmpty
-    ? getUIText("open_car_select", "Open car select")
-    : getUIText("open_car_select_named", "Open car select for {name}", { name: text }));
-}
-
 function isMissingCarSelectionLabel(label) {
   const text = String(label || "").trim();
   if (!text || text === "-") return true;
