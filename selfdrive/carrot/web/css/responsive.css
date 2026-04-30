@@ -318,14 +318,8 @@
 
   .topbar .nav-btn.active {
     color: var(--md-primary);
-    font-weight: 900;
-    background: color-mix(in srgb, var(--md-primary-cont) 24%, transparent);
-  }
-
-  .topbar .nav-btn.active {
-    color: var(--md-primary);
-    font-weight: 900;
-    background: color-mix(in srgb, var(--md-primary-cont) 24%, transparent);
+    font-weight: 850;
+    background: color-mix(in srgb, var(--md-primary) 12%, transparent);
   }
 
   .topbar .nav-btn > span:last-child {
@@ -852,7 +846,7 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
 
   body[data-page="setting"] #settingScreenItems .ctrl {
     display: grid;
-    grid-template-columns: 40px minmax(72px, 86px) 40px;
+    grid-template-columns: 40px 86px 40px;
     gap: 8px;
     justify-content: end;
     align-items: center;
@@ -878,8 +872,8 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
   body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(4) {
     grid-column: 1 / -1;
     grid-row: 1;
-    justify-self: end;
-    width: min(86px, 100%);
+    justify-self: stretch;
+    width: 100%;
   }
 
   body[data-page="setting"] #settingScreenItems .smallBtn {
@@ -889,7 +883,26 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
     min-height: 40px;
     padding: 7px 9px;
     font-size: 13px;
-    font-weight: 700;
+    font-weight: 850;
+    border-color: color-mix(in srgb, var(--md-outline-var) 58%, transparent);
+    background: color-mix(in srgb, var(--md-surface-cont-h) 94%, #000);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  body[data-page="setting"] #settingScreenItems .smallBtn:hover,
+  body[data-page="setting"] #settingScreenItems .smallBtn:focus-visible {
+    border-color: color-mix(in srgb, var(--md-primary) 42%, var(--md-outline-var));
+    background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
+  }
+
+  body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(1),
+  body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(3) {
+    border-radius: 999px;
+  }
+
+  body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(4) {
+    border-radius: 999px;
+    color: color-mix(in srgb, var(--md-on-surface) 94%, var(--md-primary));
   }
 
   body[data-page="setting"] #settingScreenItems .val {
@@ -897,9 +910,17 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
     box-sizing: border-box;
     min-width: 72px;
     max-width: 86px;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-color: color-mix(in srgb, var(--md-outline-var) 58%, transparent);
+    background: color-mix(in srgb, var(--md-surface-cont) 92%, #000);
+    border-radius: 8px;
     overflow: hidden;
     text-overflow: ellipsis;
     font-size: 13px;
+    font-weight: 850;
   }
 
   @keyframes setting-left-text-pan {

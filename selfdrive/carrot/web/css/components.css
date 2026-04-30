@@ -377,49 +377,67 @@ body[data-page="terminal"] .app-toast-host {
 /* ── Buttons: Material 3 ─────────────────────────────────── */
 .btn {
   padding: 10px 20px;
-  border: 1px solid var(--md-stroke-soft);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
   background: var(--md-surface-cont-h);
   color: var(--md-on-surface);
   border-radius: var(--r-pill);
   cursor: pointer;
   font-size: var(--fs-label-lg);
-  font-weight: 500;
+  font-weight: 750;
   min-height: 44px;
   box-sizing: border-box;
-  transition: background 0.12s, box-shadow 0.12s;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.12s ease;
   letter-spacing: 0.1px;
 }
 
+.btn:hover,
+.btn:focus-visible {
+  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
+  outline: none;
+}
+
 .btn:active {
-  background: var(--md-surface-cont-hh);
+  background: color-mix(in srgb, var(--md-surface-cont-hh) 88%, var(--md-primary));
+  transform: translateY(1px);
 }
 
 .btn.active {
-  background: var(--md-primary-cont);
-  color: var(--md-on-primary-cont);
-  font-weight: 600;
+  border-color: color-mix(in srgb, var(--md-primary) 48%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-primary) 14%, var(--md-surface-cont-h));
+  color: var(--md-primary);
+  font-weight: 850;
 }
 
 .smallBtn {
   padding: var(--sp-sm) var(--sp-md);
   border-radius: var(--r-pill);
-  border: 1px solid var(--md-stroke-soft);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
   background: var(--md-surface-cont-h);
   color: var(--md-on-surface);
   cursor: pointer;
   font-size: var(--fs-label-lg);
-  font-weight: 500;
+  font-weight: 750;
   min-height: 44px;
   box-sizing: border-box;
-  transition: background 0.12s;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.12s ease;
+}
+
+.smallBtn:hover,
+.smallBtn:focus-visible {
+  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
+  outline: none;
 }
 
 .smallBtn:active {
-  background: var(--md-surface-cont-hh);
+  background: color-mix(in srgb, var(--md-surface-cont-hh) 88%, var(--md-primary));
+  transform: translateY(1px);
 }
 
 .btn--filled {
   background: var(--md-primary);
+  border-color: color-mix(in srgb, var(--md-primary) 76%, var(--md-outline-var));
   color: var(--md-on-primary);
 }
 
@@ -550,14 +568,27 @@ body[data-page="terminal"] .app-toast-host {
   width: 100%;
   text-align: left;
   margin-bottom: 2px;
-  border-radius: var(--r-md);
+  border-radius: 8px;
   padding: var(--sp-md) var(--sp-lg);
   background: var(--md-surface-cont);
   font-size: var(--fs-body-md);
 }
 
+.groupBtn:hover,
+.groupBtn:focus-visible {
+  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-surface-cont-h) 90%, var(--md-primary));
+}
+
 .groupBtn:active {
   background: var(--md-surface-cont-h);
+}
+
+.groupBtn.active {
+  border-color: color-mix(in srgb, var(--md-primary) 48%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-primary) 14%, var(--md-surface-cont-h));
+  color: var(--md-primary);
+  font-weight: 850;
 }
 
 /* ── Setting Item ─────────────────────────────────────────── */

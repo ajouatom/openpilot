@@ -103,12 +103,12 @@
   justify-content: center;
   min-height: 44px;
   padding: 10px 20px;
-  border: 1px solid var(--md-stroke-soft);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
   border-radius: var(--r-pill);
   background: var(--md-surface-cont-h);
   white-space: nowrap;
   font-size: var(--fs-label-lg);
-  font-weight: 500;
+  font-weight: 750;
   color: var(--md-on-surface);
   text-decoration: none;
   box-sizing: border-box;
@@ -118,8 +118,10 @@
 .tools-quicklink-link:hover,
 .tools-quicklink-link:focus-visible {
   color: var(--md-on-surface);
-  background: var(--md-surface-cont-hh);
+  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
   text-decoration: none;
+  outline: none;
 }
 
 .tools-quicklink-link[aria-disabled="true"] {

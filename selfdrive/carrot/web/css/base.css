@@ -186,7 +186,8 @@ body[data-page="terminal"] .swipe-container {
 
 .topbar .nav-btn.active {
   color: var(--md-primary);
-  font-weight: 900;
+  font-weight: 850;
+  background: color-mix(in srgb, var(--md-primary) 12%, transparent);
 }
 
 .topbar .nav-btn.recording,
@@ -232,7 +233,7 @@ body[data-page="terminal"] .swipe-container {
 }
 
 .topbar .nav-btn:active {
-  background: transparent;
+  background: color-mix(in srgb, var(--md-primary) 8%, transparent);
   color: var(--md-on-surface);
 }
 

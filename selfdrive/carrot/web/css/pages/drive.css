@@ -617,7 +617,7 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
   bottom: 14px;
   z-index: 60;
   display: inline-flex;
-  gap: 10px;
+  gap: 8px;
   padding: 0;
   border: 0;
   pointer-events: auto;
@@ -631,8 +631,8 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(8, 12, 16, 0.54);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 58%, rgba(255, 255, 255, 0.16));
+  background: color-mix(in srgb, var(--md-surface-cont-h) 82%, rgba(0, 0, 0, 0.52));
   color: rgba(255, 255, 255, 0.96);
   font-size: 15px;
   font-weight: 900;
@@ -641,14 +641,14 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
   text-transform: uppercase;
   backdrop-filter: blur(10px) saturate(118%);
   -webkit-backdrop-filter: blur(10px) saturate(118%);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   pointer-events: auto;
   transition: border-color 0.18s ease, color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
 }
 
 .carrot-stage__controlBtn:hover {
-  border-color: rgba(255, 255, 255, 0.3);
-  background: rgba(10, 14, 18, 0.68);
+  border-color: color-mix(in srgb, var(--md-primary) 42%, rgba(255, 255, 255, 0.22));
+  background: color-mix(in srgb, var(--md-surface-cont-h) 78%, var(--md-primary));
 }
 
 .carrot-stage__controlBtn:active {
@@ -656,8 +656,9 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
 }
 
 .carrot-stage__controlBtn--display {
-  border-color: color-mix(in srgb, var(--md-primary) 76%, #fff);
-  color: color-mix(in srgb, var(--md-primary) 76%, #fff);
+  border-color: color-mix(in srgb, var(--md-primary) 64%, rgba(255, 255, 255, 0.18));
+  background: color-mix(in srgb, var(--md-primary) 13%, var(--md-surface-cont-h));
+  color: var(--md-primary);
 }
 
 .carrot-stage__controlBtn--record.active {
