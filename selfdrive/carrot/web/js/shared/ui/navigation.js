@@ -514,6 +514,11 @@ if (btnQuickLinkWeb) {
 
   let gesture = null;
 
+  function shouldIgnorePageSwipeTarget(target) {
+    if (CURRENT_PAGE === "terminal") return true;
+    return Boolean(target?.closest?.(".terminal-screen, .terminal-form"));
+  }
+
   el.addEventListener("touchstart", (e) => {
     if (isLandscapeRailMode()) {
       gesture = null;
@@ -524,6 +529,7 @@ if (btnQuickLinkWeb) {
       e.touches.length !== 1 ||
       !SWIPE_PAGES.includes(CURRENT_PAGE) ||
       inSettingItems ||
+      shouldIgnorePageSwipeTarget(e.target) ||
       (inSettingItems && e.target?.closest?.("#settingSubnavWrap"))
     ) {
       gesture = null;

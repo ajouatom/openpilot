@@ -54,6 +54,10 @@ body[data-page="logs"] .swipe-container {
   touch-action: pan-y;
 }
 
+body[data-page="terminal"] .swipe-container {
+  touch-action: auto;
+}
+
 @media (hover: hover) and (pointer: fine) {
   * {
     scrollbar-width: thin;
