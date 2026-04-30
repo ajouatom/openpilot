@@ -1151,7 +1151,7 @@ function showCarrotVisionBadgeHint(el) {
     el.classList.remove("is-tooltip-visible");
     if (document.activeElement === el) el.blur();
     carrotVisionBadgeHintTimer = null;
-  }, 2400);
+  }, 1400);
 }
 
 async function fetchDisableDmValue() {

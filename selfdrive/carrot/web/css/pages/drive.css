@@ -89,36 +89,38 @@ body[data-page="carrot"] #driveHudCard {
 .vision-start-overlay__message::after {
   content: attr(data-tooltip);
   position: absolute;
-  top: calc(100% + 8px);
-  right: -6px;
+  bottom: calc(100% + 8px);
+  left: 50%;
   width: max-content;
-  max-width: min(72vw, 260px);
-  padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, var(--md-primary) 38%, rgba(255,255,255,.16));
-  border-radius: 8px;
-  background: rgba(8, 12, 16, 0.92);
-  color: rgba(255, 255, 255, 0.94);
-  font-size: 13px;
+  max-width: min(70vw, 230px);
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--md-primary) 28%, rgba(255,255,255,.14));
+  border-radius: 7px;
+  background:
+    linear-gradient(180deg, rgba(255, 177, 42, 0.08), rgba(255, 177, 42, 0.03)),
+    rgba(9, 13, 18, 0.94);
+  color: rgba(255, 244, 220, 0.94);
+  font-size: 12px;
   font-weight: 800;
   line-height: 1.25;
   white-space: normal;
-  box-shadow: 0 10px 24px rgba(0,0,0,.32);
+  box-shadow: 0 8px 22px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.04);
   opacity: 0;
-  transform: translateY(-4px);
+  transform: translate(-50%, 4px);
   pointer-events: none;
-  transition: opacity 0.14s ease, transform 0.14s ease;
+  transition: opacity 0.11s ease, transform 0.11s ease;
 }
 
 .vision-start-overlay__message:focus::after,
 .vision-start-overlay__message.is-tooltip-visible::after {
   opacity: 1;
-  transform: translateY(0);
+  transform: translate(-50%, 0);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .vision-start-overlay__message:hover::after {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate(-50%, 0);
   }
 }
 
