@@ -17,6 +17,7 @@ server/
 │   ├── params.py           typed get/set + bulk backup/restore
 │   ├── settings.py         carrot_settings.json mtime cache
 │   ├── git_state.py        /data/.../git.json read/write
+│   ├── git_status.py       cached git fetch/status comparison for update badges
 │   ├── heartbeat.py        external IP register loop
 │   ├── time_sync.py        browser → system time sync
 │   └── tmux.py             tmux session helpers
@@ -31,7 +32,7 @@ server/
     ├── terminal.py         /ws/terminal, /download/tmux.log
     ├── dashcam/            /api/dashcam/* (paths, catalog, ffmpeg, upload, upload_jobs, routes)
     ├── screenrecord/       /api/screenrecord/* (catalog, routes)
-    └── tools/              /api/tools, /api/tools/start, /api/tools/job (jobs, dispatcher, routes)
+    └── tools/              /api/tools, /api/tools/start, /api/tools/job, /api/tools/git_status (jobs, dispatcher, routes)
 ```
 
 Rule: `features/` may import `services/`. `services/` must not import `features/`.

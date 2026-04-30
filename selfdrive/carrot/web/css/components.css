@@ -409,6 +409,41 @@ body[data-page="terminal"] .app-toast-host {
   font-weight: 850;
 }
 
+.git-pull-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 118px;
+  padding-right: 8px;
+}
+
+.git-pull-btn__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--r-pill);
+  background: var(--md-error);
+  color: var(--md-on-error);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.git-pull-btn__badge[hidden] {
+  display: none;
+}
+
+.git-pull-btn.has-updates {
+  border-color: color-mix(in srgb, var(--md-error) 54%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-error-cont) 32%, var(--md-surface-cont-h));
+}
+
 .smallBtn {
   padding: var(--sp-sm) var(--sp-md);
   border-radius: var(--r-pill);

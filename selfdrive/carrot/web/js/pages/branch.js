@@ -343,6 +343,9 @@ async function onSelectBranch(item) {
 
   try {
     await runTool("git_checkout", item?.checkoutPayload || { branch });
+    if (typeof refreshGitPullStatus === "function") {
+      await refreshGitPullStatus({ force: true });
+    }
     toolsLogNotice(UI_STRINGS[LANG].branch_changed || "Branch changed.", { label: "git_checkout" });
   } catch (e) {
     showError("git_checkout", e);

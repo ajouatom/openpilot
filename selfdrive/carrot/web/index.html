@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="/css/base.css?v=2604-79" />
   <link rel="stylesheet" href="/css/layout.css?v=2604-79" />
   <link rel="stylesheet" href="/css/pages/logs.css?v=2604-74" />
-  <link rel="stylesheet" href="/css/components.css?v=2604-75" />
+  <link rel="stylesheet" href="/css/components.css?v=2604-76" />
   <link rel="stylesheet" href="/css/pages/drive.css?v=2604-74" />
   <link rel="stylesheet" href="/css/responsive.css?v=2604-85" />
 </head>
@@ -127,7 +127,10 @@
             <span class="tools-group__chevron" aria-hidden="true"></span>
           </button>
           <div id="toolsGroupBodyGit" class="tools-group__body row-wrap">
-            <button id="btnGitPull" class="btn">git pull</button>
+            <button id="btnGitPull" class="btn git-pull-btn" type="button">
+              <span>git pull</span>
+              <span id="gitPullBadge" class="git-pull-btn__badge" hidden aria-label="pending commits">0</span>
+            </button>
             <button id="btnGitSync" class="btn">git sync</button>
             <button id="btnGitReset" class="btn">git reset</button>
             <button id="btnGitLog" class="btn">git log</button>
@@ -505,8 +508,8 @@
   <script src="/js/shared/ui/navigation.js?v=2604-77"></script>
   <script src="/js/pages/car.js?v=2604-74"></script>
   <script src="/js/pages/setting.js?v=2604-76"></script>
-  <script src="/js/pages/tools.js?v=2604-74"></script>
-  <script src="/js/pages/branch.js?v=2604-72"></script>
+  <script src="/js/pages/tools.js?v=2604-75"></script>
+  <script src="/js/pages/branch.js?v=2604-73"></script>
   <script src="/js/pages/logs.js?v=2604-75"></script>
   <script src="/js/pages/terminal.js?v=2604-72"></script>
   <script src="/js/raw_capnp.js?v=2604-05"></script>

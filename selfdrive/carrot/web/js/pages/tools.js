@@ -7,6 +7,8 @@
 let toolsMetaLoadPromise = null;
 let toolsMetaLoadedAt = 0;
 let toolsMetaLastValues = null;
+let gitPullStatusPromise = null;
+let gitPullStatusLoadedAt = 0;
 let uiWarmupTimer = null;
 
 let toolsOutHistory = "";
@@ -120,6 +122,50 @@ function toolsLogNotice(message, options = {}) {
   toolsOutAppend(`[${label}]\n${text}`);
   if (options.meta !== false) toolsMetaSet(text.split("\n")[0]);
   if (options.clearProgress !== false) toolsProgressSet(null, { active: false });
+}
+
+function renderGitPullStatus(status = {}) {
+  const button = document.getElementById("btnGitPull");
+  const badge = document.getElementById("gitPullBadge");
+  if (!button || !badge) return;
+
+  const behind = Math.max(0, Number(status.behind || 0));
+  const hasUpdates = behind > 0;
+  button.classList.toggle("has-updates", hasUpdates);
+  badge.hidden = !hasUpdates;
+  badge.textContent = behind > 99 ? "99+" : String(behind);
+
+  if (hasUpdates) {
+    const upstream = String(status.upstream || "").trim();
+    const suffix = upstream ? ` (${upstream})` : "";
+    button.title = `${behind} commits available${suffix}`;
+  } else {
+    button.removeAttribute("title");
+  }
+}
+
+async function refreshGitPullStatus(options = {}) {
+  const force = options.force === true;
+  const ttlMs = Number.isFinite(options.ttlMs) ? options.ttlMs : 600000;
+  if (!force && gitPullStatusPromise) return gitPullStatusPromise;
+  if (!force && hasFreshPageData(gitPullStatusLoadedAt, ttlMs)) return null;
+
+  const url = `/api/tools/git_status${force ? "?force=1" : ""}`;
+  gitPullStatusPromise = getJson(url)
+    .then((status) => {
+      gitPullStatusLoadedAt = Date.now();
+      renderGitPullStatus(status);
+      return status;
+    })
+    .catch((error) => {
+      console.log("[GitStatus] check failed:", error);
+      renderGitPullStatus({ behind: 0 });
+      return null;
+    })
+    .finally(() => {
+      gitPullStatusPromise = null;
+    });
+  return gitPullStatusPromise;
 }
 
 function getToolCommandPreview(action, payload = {}) {
@@ -508,6 +554,7 @@ function runUiWarmup() {
     loadCurrentCar({ resetRetry: false, ttlMs: PAGE_DATA_TTL_MS }),
     loadRecordState({ ttlMs: PAGE_DATA_TTL_MS }),
     refreshToolsMetaInfo({ silent: true, ttlMs: PAGE_DATA_TTL_MS }),
+    refreshGitPullStatus({ ttlMs: 600000 }),
     typeof updateQuickLink === "function" ? updateQuickLink({ silent: true, ttlMs: PAGE_DATA_TTL_MS }) : Promise.resolve(),
     loadSettings({ background: true }),
     ensureCarsLoaded(),
@@ -790,6 +837,7 @@ function initToolsPage() {
   toolsMetaSet(UI_STRINGS[LANG].ready || "Ready");
   toolsProgressSet(null, { active: false });
   refreshToolsMetaInfo().catch(() => {});
+  refreshGitPullStatus().catch(() => {});
   initToolsGroups();
   initToolsLogPanel();
 
@@ -824,6 +872,7 @@ function initToolsPage() {
     try {
       const result = await runTool("git_pull");
       await refreshToolsMetaInfo();
+      await refreshGitPullStatus({ force: true });
       if (!didGitPullUpdate(result)) return;
       if (await appConfirm(UI_STRINGS[LANG].confirm_reboot || "Reboot now?", {
         title: UI_STRINGS[LANG].reboot || "Reboot",
@@ -839,6 +888,7 @@ function initToolsPage() {
     if (!await appConfirm(UI_STRINGS[LANG].git_sync_confirm || "Run git sync?", { title: "git sync" })) return;
     try {
       await runTool("git_sync");
+      await refreshGitPullStatus({ force: true });
     } catch (e) {
       showError("git_sync", e);
     }
@@ -894,6 +944,7 @@ function initToolsPage() {
       toolsLogNotice(waitMsg, { label: "change repository" });
       await runTool("git_remote_set", { url: newUrl.trim() });
       await refreshToolsMetaInfo();
+      await refreshGitPullStatus({ force: true });
       const successMsg = getUIText("git_remote_success", "Repository changed successfully.\nClick [change branch] to select a branch.");
       toolsLogNotice(successMsg, { label: "change repository" });
     } catch (e) {
@@ -921,6 +972,7 @@ function initToolsPage() {
 
     try {
       await runTool("git_remote_add", { name: remoteName, url: urlInput.trim() });
+      await refreshGitPullStatus({ force: true });
       toolsLogNotice(getUIText("git_add_remote_done", "Remote '{name}' added/updated", { name: remoteName }), { label: "git_remote_add" });
     } catch (e) {
       showError("git_remote_add", e);
@@ -969,6 +1021,7 @@ function initToolsPage() {
       
       toolsLogNotice(getUIText("git_log_checkout_done", "Checkout complete"), { label: "git_log" });
       await refreshToolsMetaInfo();
+      await refreshGitPullStatus({ force: true });
     } catch (e) {
       showError("git_log", e);
     }
@@ -1006,6 +1059,7 @@ function initToolsPage() {
       await runTool("git_reset_repo_checkout", { branch: selected });
       toolsLogNotice(getUIText("git_reset_repo_done", "Reset to '{branch}' complete", { branch: selected }), { label: "git_reset_repo" });
       await refreshToolsMetaInfo();
+      await refreshGitPullStatus({ force: true });
 
       if (await appConfirm(UI_STRINGS[LANG].confirm_reboot || "Reboot now?", {
         title: UI_STRINGS[LANG].reboot || "Reboot",
