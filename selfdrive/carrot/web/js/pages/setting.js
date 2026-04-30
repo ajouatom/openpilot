@@ -390,6 +390,27 @@ function clearSettingItemFocus() {
 }
 
 const settingGroupScrollTops = new Map();
+let settingViewportSyncTimer = null;
+let settingViewportLayoutSignature = null;
+
+function getSettingViewportLayoutSignature() {
+  const width = Math.round(window.innerWidth || document.documentElement.clientWidth || 0);
+  return {
+    compactLandscape: isCompactLandscapeMode(),
+    width,
+  };
+}
+
+function hasSettingViewportLayoutChanged() {
+  const next = getSettingViewportLayoutSignature();
+  const prev = settingViewportLayoutSignature;
+  settingViewportLayoutSignature = next;
+  if (!prev) return true;
+  return (
+    prev.compactLandscape !== next.compactLandscape ||
+    Math.abs(prev.width - next.width) > 2
+  );
+}
 
 function getSettingItemsScrollContainer() {
   if (isCompactLandscapeMode() && screenItems) return screenItems;
@@ -1159,10 +1180,13 @@ async function renderItems(group, options = {}) {
   });
 }
 
-async function syncSettingViewportLayout() {
+async function syncSettingViewportLayout(options = {}) {
   if (CURRENT_PAGE !== "setting" || !SETTINGS) return;
+  settingViewportLayoutSignature = getSettingViewportLayoutSignature();
+  const animateChrome = options.animateChrome === true;
+  const animateItems = options.animateItems === true;
   syncSettingSearchFabState();
-  renderGroups();
+  renderGroups({ animateGroups: animateChrome });
   renderSettingSubnav();
 
   if (isCompactLandscapeMode()) {
@@ -1173,7 +1197,7 @@ async function syncSettingViewportLayout() {
     syncSettingGroupChrome(targetGroup);
     if (typeof centerActiveSettingSubnavTab === "function") centerActiveSettingSubnavTab("auto");
     if (!hasRenderedSettingItems(targetGroup)) {
-      await renderItems(targetGroup, { scrollMode: "restore" });
+      await renderItems(targetGroup, { scrollMode: "restore", animateItems });
     }
     return;
   }
@@ -1183,23 +1207,29 @@ async function syncSettingViewportLayout() {
     showSettingScreen("items", false);
     if (typeof centerActiveSettingSubnavTab === "function") centerActiveSettingSubnavTab("auto");
     if (!hasRenderedSettingItems(CURRENT_GROUP)) {
-      await renderItems(CURRENT_GROUP, { scrollMode: "restore" });
+      await renderItems(CURRENT_GROUP, { scrollMode: "restore", animateItems });
     }
   } else {
     showSettingScreen("groups", false);
   }
 }
 
+function scheduleSettingViewportLayoutSync(force = false) {
+  if (CURRENT_PAGE !== "setting" || !SETTINGS) return;
+  if (!force && !hasSettingViewportLayoutChanged()) return;
+  if (settingViewportSyncTimer) clearTimeout(settingViewportSyncTimer);
+  settingViewportSyncTimer = window.setTimeout(() => {
+    settingViewportSyncTimer = null;
+    syncSettingViewportLayout({ animateChrome: false, animateItems: false }).catch(() => {});
+  }, 80);
+}
+
 window.addEventListener("resize", () => {
-  if (CURRENT_PAGE === "setting" && SETTINGS) {
-    syncSettingViewportLayout().catch(() => {});
-  }
+  scheduleSettingViewportLayoutSync(false);
 }, { passive: true });
 
 window.addEventListener("orientationchange", () => {
-  if (CURRENT_PAGE === "setting" && SETTINGS) {
-    syncSettingViewportLayout().catch(() => {});
-  }
+  scheduleSettingViewportLayoutSync(true);
 }, { passive: true });
 
 
