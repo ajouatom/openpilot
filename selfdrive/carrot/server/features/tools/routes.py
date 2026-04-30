@@ -64,7 +64,10 @@ async def api_tools(request: web.Request) -> web.Response:
 
 
 async def api_tools_git_status(request: web.Request) -> web.Response:
-  force = (request.query.get("force") or "").strip().lower() in ("1", "true", "yes")
+  force = any(
+    (request.query.get(name) or "").strip().lower() in ("1", "true", "yes")
+    for name in ("force", "refresh")
+  )
   status = await get_git_status(force=force)
   return web.json_response({"ok": True, **status})
 

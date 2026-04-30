@@ -191,13 +191,13 @@ function startGitPullStatusPolling() {
   if (!gitPullStatusVisibilityBound) {
     gitPullStatusVisibilityBound = true;
     document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) refreshGitPullStatus({ ttlMs: 0 }).catch(() => {});
+      if (!document.hidden) refreshGitPullStatus({ force: true, ttlMs: 0 }).catch(() => {});
     });
   }
 
   if (gitPullStatusTimer) return;
   gitPullStatusTimer = window.setInterval(() => {
-    if (!document.hidden) refreshGitPullStatus({ ttlMs: 0 }).catch(() => {});
+    if (!document.hidden) refreshGitPullStatus({ force: true, ttlMs: 0 }).catch(() => {});
   }, GIT_PULL_STATUS_CLIENT_INTERVAL_MS);
 }
 
