@@ -520,105 +520,73 @@ function openScreenrecordPlayer(id, name) {
   openLogsVideoPlayer(name || getUIText("logs_screenrecord", "Screen Record"), screenrecordApiPath("video", id), { kind: "screenrecord" });
 }
 
-function dashcamUploadFilesTotalLabel(files) {
-  const total = (Array.isArray(files) ? files : []).reduce((sum, file) => sum + (Number(file?.size) || 0), 0);
-  return total > 0 ? formatLogBytes(total) : "";
-}
-
-function dashcamUploadLogBodyHtml(items, options = {}) {
+function dashcamUploadStats(items) {
   const list = Array.isArray(items) ? items : [];
-  if (!list.length) return "";
-  const pendingText = options.pendingText || getUIText("loading", "Loading...");
-  return list.map((item) => {
+  return list.reduce((stats, item) => {
     const files = Array.isArray(item?.files) ? item.files : [];
-    const status = item?.ok === true ? "OK" : item?.ok === false ? "FAILED" : (item?.status || pendingText);
-    const total = item?.totalSizeLabel || dashcamUploadFilesTotalLabel(files);
-    const filesHtml = files.length
-      ? files.map((file) => `<div class="dashcam-upload-log__file">
-          <span>${escapeHtml(file?.name || "-")}</span>
-          <span>${escapeHtml(file?.sizeLabel || formatLogBytes(file?.size))}</span>
-        </div>`).join("")
-      : `<div class="dashcam-upload-log__file is-muted">${escapeHtml(pendingText)}</div>`;
-    const errorHtml = item?.error
-      ? `<div class="dashcam-upload-log__error">${escapeHtml(item.error)}</div>`
-      : "";
-    return `<div class="dashcam-upload-log__item">
-      <div class="dashcam-upload-log__head">
-        <span>SEG ${escapeHtml(String(item?.segmentIndex ?? dashcamSegmentIndex(item?.segment)))}</span>
-        <span class="${item?.ok === false ? "is-error" : item?.ok === true ? "is-ok" : "is-muted"}">${escapeHtml(status)}${total ? ` · ${escapeHtml(total)}` : ""}</span>
-      </div>
-      <div class="dashcam-upload-log__segment">${escapeHtml(item?.segment || "-")}</div>
-      <div class="dashcam-upload-log__files">${filesHtml}</div>
-      ${errorHtml}
-    </div>`;
-  }).join("");
+    const totalSize = Number(item?.totalSize) || files.reduce((sum, file) => sum + (Number(file?.size) || 0), 0);
+    stats.segments += 1;
+    stats.files += files.length;
+    stats.bytes += totalSize;
+    return stats;
+  }, { segments: 0, files: 0, bytes: 0 });
 }
 
-function dashcamUploadLogHtml(items, options = {}) {
-  const body = dashcamUploadLogBodyHtml(items, options);
-  if (!body) return "";
-  return `<div class="dashcam-upload-log">
-    <div class="dashcam-upload-log__title">${escapeHtml(options.title || getUIText("log_upload", "Upload Logs"))}</div>
-    ${body}
-  </div>`;
+function dashcamUploadSummaryLabel(stats) {
+  const fileCount = Number(stats?.files || 0);
+  const bytes = Number(stats?.bytes || 0);
+  const fileLabel = fileCount > 0
+    ? getUIText("upload_file_count", "{count} files", { count: fileCount })
+    : getUIText("upload_files_unknown", "files unknown");
+  const sizeLabel = bytes > 0 ? formatLogBytes(bytes) : getUIText("upload_size_unknown", "size unknown");
+  return `${fileLabel} · ${sizeLabel}`;
 }
 
 function dashcamUploadResultHtml(result) {
   const text = String(result?.shareText || result?.message || "");
-  const discord = result?.discord || {};
-  const discordHtml = discord.configured && !discord.ok
-    ? `<span class="is-error">${escapeHtml(`Discord: ${getUIText("failed", "Failed")}${discord.status ? ` (${discord.status})` : ""}`)}</span>`
-    : "";
+  const stats = dashcamUploadStats(result?.results || []);
   return `<div class="dashcam-share-card">
     <div class="dashcam-share-card__summary">
       <span>${escapeHtml(getUIText("upload_count", "Upload {uploaded}/{total}", { uploaded: Number(result?.uploaded || 0), total: Number(result?.total || 0) }))}</span>
-      ${discordHtml}
+      <span>${escapeHtml(dashcamUploadSummaryLabel(stats))}</span>
     </div>
-    ${dashcamUploadLogHtml(result?.results || [], { title: getUIText("log_upload", "Upload Logs") })}
     <pre>${escapeHtml(text)}</pre>
   </div>`;
 }
 
 async function showDashcamUploadResult(result) {
   const text = String(result?.shareText || result?.message || "").trim();
-  const selected = await openAppDialog({
+  await openAppDialog({
     mode: "choice",
     title: getUIText("log_upload_result", "Upload Result"),
     html: true,
     messageHtml: `<div class="dashcam-share-dialog">${dashcamUploadResultHtml(result)}</div>`,
     cancelLabel: getUIText("close", "Close"),
-    choices: [
-      { label: getUIText("copy", "Copy"), value: "copy", className: "btn--filled" },
-    ],
+    copyText: text,
+    copyLabel: getUIText("copy", "Copy"),
   });
-  if (selected === "copy") {
-    copyToClipboard(text);
-    showAppToast(getUIText("copied", "Copied"));
-  }
 }
 
-function openDashcamUploadProgress(total, items = []) {
+function openDashcamUploadProgress(total, stats = null) {
   const overlay = document.createElement("div");
   overlay.className = "dashcam-upload-progress";
   overlay.innerHTML = `<div class="dashcam-upload-progress__sheet" role="dialog" aria-modal="true">
     <div class="dashcam-upload-progress__title">${escapeHtml(getUIText("log_uploading", "Uploading logs"))}</div>
     <div class="dashcam-upload-progress__message">0/${Number(total || 0)}</div>
     <div class="dashcam-upload-progress__bar" aria-hidden="true"><span></span></div>
-    <div class="dashcam-upload-progress__log">${dashcamUploadLogBodyHtml(items, { pendingText: getUIText("loading", "Loading...") })}</div>
+    <div class="dashcam-upload-progress__summary">${escapeHtml(stats ? dashcamUploadSummaryLabel(stats) : getUIText("loading", "Loading..."))}</div>
   </div>`;
   document.body.appendChild(overlay);
   document.body.classList.add("dialog-open");
   requestAnimationFrame(() => overlay.classList.add("is-open"));
   const message = overlay.querySelector(".dashcam-upload-progress__message");
-  const log = overlay.querySelector(".dashcam-upload-progress__log");
+  const summary = overlay.querySelector(".dashcam-upload-progress__summary");
   return {
     setMessage(text) {
       if (message) message.textContent = text || "";
     },
-    setLog(nextItems, options = {}) {
-      if (log) log.innerHTML = dashcamUploadLogBodyHtml(nextItems, {
-        pendingText: options.pendingText || getUIText("loading", "Loading..."),
-      });
+    setSummary(nextStats) {
+      if (summary) summary.textContent = nextStats ? dashcamUploadSummaryLabel(nextStats) : "";
     },
     close() {
       overlay.classList.remove("is-open");
@@ -636,21 +604,24 @@ async function uploadDashcamSegments(segments) {
     showAppToast(getUIText("no_selected_segments", "No segments selected."), { tone: "error" });
     return;
   }
-  const ok = await appConfirm(getUIText("log_upload_confirm", `Upload ${targets.length} logs to the Carrot server?`, { count: targets.length }), { title: getUIText("log_upload", "Upload Logs") });
-  if (!ok) return;
-  const progressItems = targets.map((segment) => ({ segment, status: getUIText("loading", "Loading...") }));
-  const progress = openDashcamUploadProgress(targets.length, progressItems);
+  let uploadStats = { segments: targets.length, files: 0, bytes: 0 };
   try {
-    try {
-      const summary = await postJson("/api/dashcam/upload/summary", { segments: targets });
-      if (Array.isArray(summary?.summaries)) {
-        progress.setLog(summary.summaries, { pendingText: getUIText("ready", "Ready") });
-      }
-    } catch {}
+    const summary = await postJson("/api/dashcam/upload/summary", { segments: targets });
+    if (Array.isArray(summary?.summaries)) uploadStats = dashcamUploadStats(summary.summaries);
+  } catch {}
+  const confirmMessage = [
+    getUIText("log_upload_confirm", `Upload ${targets.length} logs to the Carrot server?`, { count: targets.length }),
+    dashcamUploadSummaryLabel(uploadStats),
+    getUIText("upload_data_warning", "This upload may use mobile data depending on your network connection."),
+  ].join("\n\n");
+  const ok = await appConfirm(confirmMessage, { title: getUIText("log_upload", "Upload Logs") });
+  if (!ok) return;
+  const progress = openDashcamUploadProgress(targets.length, uploadStats);
+  try {
     progress.setMessage(`0/${targets.length} · ${getUIText("log_uploading", "Uploading logs")}`);
     const result = await postJson("/api/dashcam/upload", { segments: targets });
     progress.setMessage(`${Number(result.uploaded || 0)}/${Number(result.total || targets.length)}`);
-    progress.setLog(result.results || [], { pendingText: getUIText("loading", "Loading...") });
+    progress.setSummary(dashcamUploadStats(result.results || []));
     const message = result.message || getUIText("upload_complete_count", "Upload complete {uploaded}/{total}", {
       uploaded: result.uploaded || 0,
       total: result.total || targets.length,

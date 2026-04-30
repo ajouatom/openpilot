@@ -136,13 +136,14 @@ function openAppDialog(options = {}) {
   const choices = Array.isArray(options.choices)
     ? options.choices.filter((choice) => choice && (choice.label || choice.labelHtml))
     : [];
-  const isChoice = mode === "choice" || choices.length > 0;
+  const hasChoices = choices.length > 0;
+  const isChoice = mode === "choice" || hasChoices;
   const showCancel = mode !== "alert";
 
   appDialogTitle.textContent = title;
   if (useHtml) appDialogBody.innerHTML = String(messageHtml || message);
   else appDialogBody.textContent = String(message);
-  appDialogBody.style.flex = isChoice ? "0 0 auto" : "1 1 auto";
+  appDialogBody.style.flex = hasChoices ? "0 0 auto" : "1 1 auto";
   appDialogConfirm.textContent = confirmLabel;
   appDialogCancel.textContent = cancelLabel;
   appDialogCancel.hidden = !showCancel;
@@ -153,16 +154,17 @@ function openAppDialog(options = {}) {
   const copyText = options.copyText || "";
   if (appDialogCopy) {
     appDialogCopy.hidden = !copyText;
-    appDialogCopy.textContent = getUIText("copy", "Copy");
+    appDialogCopy.textContent = options.copyLabel || getUIText("copy", "Copy");
     appDialogCopy.onclick = copyText ? () => {
       copyToClipboard(copyText);
-      alert(getUIText("copied", "Copied"));
+      if (typeof showAppToast === "function") showAppToast(getUIText("copied", "Copied"));
+      else alert(getUIText("copied", "Copied"));
     } : null;
   }
 
   if (appDialogChoices) {
     appDialogChoices.innerHTML = "";
-    appDialogChoices.hidden = !isChoice;
+    appDialogChoices.hidden = !hasChoices;
     for (const choice of choices) {
       const button = document.createElement("button");
       button.type = "button";
@@ -206,9 +208,11 @@ function openAppDialog(options = {}) {
       if (mode === "prompt" && appDialogInput) {
         appDialogInput.focus();
         appDialogInput.select();
-      } else if (isChoice && appDialogChoices) {
+      } else if (hasChoices && appDialogChoices) {
         const firstChoice = appDialogChoices.querySelector("button");
         if (firstChoice && typeof firstChoice.focus === "function") firstChoice.focus();
+      } else if (mode === "choice" && appDialogCancel) {
+        appDialogCancel.focus();
       } else {
         appDialogConfirm.focus();
       }
