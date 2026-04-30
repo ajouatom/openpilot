@@ -382,6 +382,15 @@ function syncSettingSearchFabState() {
   }
 }
 
+function mountSettingSearchOverlay() {
+  if (settingSearchBackdrop && settingSearchBackdrop.parentElement !== document.body) {
+    document.body.appendChild(settingSearchBackdrop);
+  }
+  if (settingSearchPanel && settingSearchPanel.parentElement !== document.body) {
+    document.body.appendChild(settingSearchPanel);
+  }
+}
+
 function rebuildSettingSearchEntries() {
   const groups = SETTINGS?.groups || [];
   const entries = [];
@@ -643,6 +652,7 @@ async function openSettingSearchPanel(options = {}) {
     }
   }
   if (!settingSearchPanel) return;
+  mountSettingSearchOverlay();
   settingSearchPanel.hidden = false;
   settingSearchPanel.setAttribute("aria-hidden", "false");
   if (settingSearchBackdrop) settingSearchBackdrop.hidden = false;

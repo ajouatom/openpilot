@@ -386,9 +386,10 @@ body[data-page="tools"] .swipe-container,
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 16px;
-  overflow: hidden;
+  overflow: visible;
   line-height: 1.2;
-  contain: layout paint;
+  position: relative;
+  z-index: 90;
 }
 
 .tools-meta__status {
