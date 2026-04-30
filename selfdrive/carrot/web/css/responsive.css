@@ -386,10 +386,9 @@
 
   :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) {
     display: grid !important;
-    grid-template-columns: minmax(360px, 1.04fr) minmax(300px, 0.96fr);
+    grid-template-columns: minmax(0, 1.04fr) minmax(300px, 0.96fr);
     grid-template-rows: auto auto minmax(0, 1fr);
     column-gap: 18px;
-    row-gap: 8px;
     align-items: stretch;
   }
 
@@ -398,7 +397,7 @@
   }
 
   :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > #toolsMeta {
-    grid-column: 1 / -1;
+    grid-column: 1;
     grid-row: 1;
     align-self: start;
     height: 30px;
@@ -407,14 +406,15 @@
   }
 
   :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > #toolsProgress {
-    grid-column: 1 / -1;
+    grid-column: 1;
     grid-row: 2;
-    margin-bottom: 0;
+    margin-bottom: 8px;
   }
 
   :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > .tools-scroll-stack {
     grid-column: 1;
     grid-row: 3;
+    min-height: 0;
     padding-bottom: 0;
   }
 
@@ -424,14 +424,17 @@
     right: auto;
     bottom: auto;
     grid-column: 2;
-    grid-row: 3;
+    grid-row: 1 / span 3;
     width: auto;
     margin-left: 0;
     margin-right: 0;
-    margin-bottom: 0;
+    margin-bottom: 12px;
     display: flex;
+    height: 100%;
     min-height: 0;
+    max-height: 100%;
     background: transparent;
+    overflow: hidden;
     box-shadow: none;
   }
 
@@ -442,11 +445,11 @@
 
   :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > .tools-console-dock .tools-console-shell {
     flex: 1 1 auto;
-    height: 100%;
+    height: auto;
     min-height: 0;
-    max-height: 100%;
+    max-height: none;
     border: 1px solid var(--tools-console-divider);
-    border-radius: 8px;
+    border-radius: var(--r-xl);
     box-shadow: none;
   }
 
@@ -455,7 +458,6 @@
     height: auto;
     min-height: 0;
     max-height: none;
-    padding: 14px 16px;
   }
 
   body[data-page="carrot"] #pageCarrot {
@@ -691,6 +693,17 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
     width: calc(100vw - var(--nav-rail-width) - 24px);
   }
 
+  body[data-page="tools"] .wrap {
+    height: calc(var(--app-vv-height, 100dvh) - env(safe-area-inset-bottom, 0px));
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  body[data-page="tools"] .swipe-container {
+    height: 100%;
+    min-height: 0;
+  }
+
   .app-toast-host {
     left: calc(var(--nav-rail-width) + 20px);
     right: 20px;
@@ -724,7 +737,7 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
   }
 
   #pageTools {
-    --tools-page-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px) - 12px);
+    --tools-page-height: 100%;
     --tools-console-form-height: 40px;
     --tools-console-log-font-size: 14px;
     --tools-console-log-line-height: 1.55;
@@ -732,6 +745,14 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
     --tools-console-log-pad-top: 14px;
     --tools-console-log-pad-bottom: 14px;
     --tools-console-inline: 16px;
+  }
+
+  body[data-page="tools"] #pageTools,
+  #pageTools.page-transitioning {
+    height: 100%;
+    min-height: 0;
+    max-height: 100%;
+    overflow: hidden;
   }
 
   #pageTools .section {
