@@ -126,7 +126,7 @@ body[data-page="terminal"] .swipe-container {
   min-height: var(--nav-bar-height);
   transition: color 0.15s;
   position: relative;
-  letter-spacing: 0.15px;
+  letter-spacing: 0;
   outline: none;
   -webkit-tap-highlight-color: transparent;
 }
@@ -153,6 +153,7 @@ body[data-page="terminal"] .swipe-container {
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1.08;
+  overflow-wrap: anywhere;
   transition: color 0.15s;
 }
 

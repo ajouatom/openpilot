@@ -329,9 +329,11 @@
   }
 
   .topbar .nav-btn > span:last-child {
+    overflow: visible;
     white-space: normal;
     text-align: center;
     line-height: 1.05;
+    text-overflow: clip;
   }
 
   .topbar .nav-btn.langToggle > span:last-child {

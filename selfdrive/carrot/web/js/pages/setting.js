@@ -306,8 +306,8 @@ function getSettingGroupLabel(group) {
   const meta = getSettingGroupMeta(group);
   if (!meta) return group;
   if (LANG === "zh") return meta.cgroup || meta.egroup || meta.group;
-  if (LANG === "en") return meta.egroup || meta.group;
-  return meta.group;
+  if (LANG === "ko") return meta.group || meta.egroup || group;
+  return meta.egroup || meta.group || group;
 }
 
 const SETTING_SUBNAV_PAGE_STEP = 1;
