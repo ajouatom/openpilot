@@ -7,7 +7,12 @@
   <link rel="icon" type="image/png" href="/assets/img_chffr_wheel.png?v=2604-01" />
   <link rel="stylesheet" href="/css/tokens.css?v=2603-73" />
   <link rel="stylesheet" href="/css/hud_card.css?v=2604-09" />
-  <link rel="stylesheet" href="/css/app.css?v=2604-70" />
+  <link rel="stylesheet" href="/css/base.css?v=2604-73" />
+  <link rel="stylesheet" href="/css/layout.css?v=2604-73" />
+  <link rel="stylesheet" href="/css/pages/logs.css?v=2604-73" />
+  <link rel="stylesheet" href="/css/components.css?v=2604-73" />
+  <link rel="stylesheet" href="/css/pages/drive.css?v=2604-73" />
+  <link rel="stylesheet" href="/css/responsive.css?v=2604-73" />
 </head>
 
 <body>
@@ -63,7 +68,7 @@
         <div id="settingScreenGroups" class="screen">
           <div id="settingCarRow" class="mb-md setting-car-entry" role="button" tabindex="0" aria-label="차량 선택 열기">
             <div class="setting-car-entry__text">
-              <div class="setting-car-entry__eyebrow">차량 선택</div>
+              <div id="settingCarEyebrow" class="setting-car-entry__eyebrow">차량 선택</div>
               <div id="curCarLabelSetting" class="setting-car-entry__value">-</div>
             </div>
             <span class="setting-car-entry__chevron" aria-hidden="true"></span>
@@ -241,10 +246,10 @@
         <div class="logs-tabbar">
           <div class="logs-tabs" role="tablist" aria-label="Logs">
             <button id="logsTabDashcam" class="logs-tab is-active" type="button" role="tab" aria-selected="true">
-              <span>대시캠</span>
+              <span id="logsDashcamTitle">대시캠</span>
             </button>
             <button id="logsTabScreen" class="logs-tab" type="button" role="tab" aria-selected="false">
-              <span>화면녹화</span>
+              <span id="logsScreenTitle">화면녹화</span>
             </button>
           </div>
         </div>
@@ -472,11 +477,31 @@
     </div>
   </div>
 
+  <script src="/js/translations/registry.js?v=2604-01"></script>
+  <script src="/js/translations/ko.js?v=2604-01"></script>
+  <script src="/js/translations/en.js?v=2604-01"></script>
+  <script src="/js/translations/zh.js?v=2604-01"></script>
+  <script src="/js/translations/ja.js?v=2604-01"></script>
+  <script src="/js/translations/fr.js?v=2604-01"></script>
   <script src="/js/hud_card.js?v=2604-05"></script>
-  <script src="/js/app_core.js?v=2604-27"></script>
-  <script src="/js/app_pages.js?v=2604-49"></script>
+  <script src="/js/shared/constants.js?v=2604-71"></script>
+  <script src="/js/shared/dom.js?v=2604-71"></script>
+  <script src="/js/shared/utils.js?v=2604-71"></script>
+  <script src="/js/shared/i18n.js?v=2604-71"></script>
+  <script src="/js/shared/api.js?v=2604-71"></script>
+  <script src="/js/shared/ui/dialog.js?v=2604-71"></script>
+  <script src="/js/shared/ui/viewport.js?v=2604-71"></script>
+  <script src="/js/shared/ui/effects.js?v=2604-72"></script>
+  <script src="/js/shared/ui/navigation.js?v=2604-72"></script>
+  <script src="/js/pages/car.js?v=2604-72"></script>
+  <script src="/js/pages/setting.js?v=2604-72"></script>
+  <script src="/js/pages/tools.js?v=2604-72"></script>
+  <script src="/js/pages/branch.js?v=2604-72"></script>
+  <script src="/js/pages/logs.js?v=2604-72"></script>
+  <script src="/js/pages/terminal.js?v=2604-72"></script>
   <script src="/js/raw_capnp.js?v=2604-05"></script>
   <script src="/js/app_realtime.js?v=2604-19"></script>
   <script src="/js/home_drive.js?v=2604-28"></script>
+  <script src="/js/app.js?v=2604-72"></script>
 </body>
 </html>
