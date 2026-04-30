@@ -75,7 +75,7 @@ body[data-page="carrot"] #driveHudCard {
   font-weight: 900;
   line-height: 1;
   text-align: center;
-  transform: translate(88px, -48px);
+  transform: translate(72px, -40px);
   z-index: 1;
   cursor: help;
   user-select: none;

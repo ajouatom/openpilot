@@ -134,7 +134,7 @@ window.CarrotTranslations.register("ko", {
     display_normal: "정사이즈",
     display_crop: "크롭",
     e2e_driving: "E2E 주행중",
-    start_vision: "당근 비전",
+    start_vision: "당근 비전 시작",
     start_vision_hint: "당근 비전을 켜려면 화면 중앙의 시작 버튼을 클릭하세요.",
     waiting_road_stream: "도로 카메라 스트림 대기 중...",
     waiting_server: "서버 대기 중...",
