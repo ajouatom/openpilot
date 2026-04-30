@@ -396,7 +396,9 @@
     grid-column: 1;
     grid-row: 1;
     align-self: start;
-    min-height: 1.5em;
+    height: 34px;
+    min-height: 34px;
+    max-height: 34px;
   }
 
   :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > #toolsProgress {
@@ -739,7 +741,9 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
   }
 
   body[data-page="tools"] #toolsMeta {
-    min-height: 1.5em;
+    height: 36px;
+    min-height: 36px;
+    max-height: 36px;
     font-size: 15px;
     font-weight: 600;
   }
@@ -1162,5 +1166,9 @@ body[data-page="setting"] #settingScreenItems .val {
     overflow: hidden;
     align-items: center;
     line-height: 1.2;
+  }
+
+  body[data-page="tools"] #toolsProgress {
+    margin-bottom: 10px;
   }
 }

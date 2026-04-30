@@ -382,17 +382,20 @@ body[data-page="tools"] .swipe-container,
   height: 34px;
   min-height: 34px;
   max-height: 34px;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
   overflow: hidden;
   line-height: 1.2;
+  contain: layout paint;
 }
 
 .tools-meta__status {
-  flex: 1 1 auto;
   min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -402,7 +405,8 @@ body[data-page="tools"] .swipe-container,
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  flex: 0 0 auto;
+  min-width: 0;
+  height: 100%;
 }
 
 .tools-meta__info {
@@ -426,6 +430,7 @@ body[data-page="tools"] .swipe-container,
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
+  height: 100%;
 }
 
 .tools-lang-menu__button {
@@ -433,7 +438,9 @@ body[data-page="tools"] .swipe-container,
   -webkit-appearance: none;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  height: 30px;
   min-height: 30px;
   padding: 3px 8px;
   border: 0;
@@ -599,10 +606,15 @@ body[data-page="tools"] .swipe-container,
   position: relative;
   width: 100%;
   height: 4px;
-  margin: -4px 0 var(--sp-md);
+  margin: 0 0 var(--sp-md);
   border-radius: 999px;
   background: color-mix(in srgb, var(--md-stroke-soft) 26%, transparent);
   overflow: hidden;
+}
+
+.tools-progress[hidden] {
+  display: block;
+  visibility: hidden;
 }
 
 .tools-progress__bar {
