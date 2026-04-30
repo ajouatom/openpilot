@@ -5,6 +5,7 @@
 /* ---------- Terminal ---------- */
 const terminalMetaEl = document.getElementById("terminalMeta");
 const terminalSessionMetaEl = document.getElementById("terminalSessionMeta");
+const terminalPageEl = document.getElementById("pageTerminal");
 const terminalScreenEl = document.getElementById("terminalScreen");
 const terminalOutputEl = document.getElementById("terminalOutput");
 const terminalFormEl = document.getElementById("terminalForm");
@@ -170,7 +171,9 @@ function updateTerminalToastAnchor() {
     return;
   }
   const gap = 10;
-  const offset = Math.max(0, Math.round(window.innerHeight - rect.top + gap));
+  const vv = window.visualViewport;
+  const viewportBottom = vv ? (vv.offsetTop + vv.height) : (window.innerHeight || 0);
+  const offset = Math.max(0, Math.round(viewportBottom - rect.top + gap));
   document.documentElement.style.setProperty("--terminal-toast-bottom", `${offset}px`);
   document.documentElement.style.setProperty("--terminal-toast-left", `${Math.round(rect.left)}px`);
   document.documentElement.style.setProperty("--terminal-toast-width", `${Math.round(rect.width)}px`);
@@ -179,20 +182,35 @@ function updateTerminalToastAnchor() {
 function updateTerminalViewportMetrics() {
   updateAppViewportMetrics();
   const vv = window.visualViewport;
+  const landscapeRail = typeof isLandscapeRailMode === "function" && isLandscapeRailMode();
+  const layoutHeight = Math.max(320, Math.round(window.innerHeight || vv?.height || 0));
   const height = Math.max(320, Math.round(vv?.height || window.innerHeight || 0));
-  const top = (typeof isLandscapeRailMode === "function" && isLandscapeRailMode())
-    ? Math.max(0, Math.round(vv?.offsetTop || 0))
-    : 0;
-  const keyboardInset = Math.max(0, Math.round((window.innerHeight || 0) - height - top));
-  const keyboardOpen = !(typeof isLandscapeRailMode === "function" && isLandscapeRailMode()) && keyboardInset > 120;
+  const top = Math.max(0, Math.round(vv?.offsetTop || 0));
+  const keyboardInset = Math.max(0, Math.round(layoutHeight - height - top));
+  const keyboardOpen = !landscapeRail && keyboardInset > 120;
+  const desktopBottomNav = window.matchMedia?.("(min-width: 769px)")?.matches;
+  const restingBottomGap = landscapeRail
+    ? `calc(14px + env(safe-area-inset-bottom, 0px))`
+    : `calc(var(--nav-bar-height${desktopBottomNav ? "-desktop" : ""}) + env(safe-area-inset-bottom, 0px))`;
+  const restingFormBottom = landscapeRail
+    ? `max(10px, env(safe-area-inset-bottom, 0px))`
+    : `calc(8px + env(safe-area-inset-bottom, 0px))`;
   document.documentElement.style.setProperty("--terminal-vv-height", `${height}px`);
   document.documentElement.style.setProperty("--terminal-vv-top", `${top}px`);
-  document.documentElement.style.setProperty(
+  const layoutStyle = terminalPageEl?.style || document.documentElement.style;
+  layoutStyle.setProperty(
     "--terminal-bottom-gap",
     keyboardOpen
       ? `calc(6px + env(safe-area-inset-bottom, 0px))`
-      : `calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px))`,
+      : restingBottomGap,
   );
+  layoutStyle.setProperty(
+    "--terminal-form-bottom",
+    keyboardOpen
+      ? `calc(6px + env(safe-area-inset-bottom, 0px))`
+      : restingFormBottom,
+  );
+  document.documentElement.classList.toggle("terminal-keyboard-open", keyboardOpen);
 }
 
 function bindTerminalLayoutObservers() {
@@ -342,6 +360,14 @@ function initTerminalBindings() {
 
   bindTerminalLayoutObservers();
 
+  if (terminalInputEl) {
+    terminalInputEl.autocomplete = "off";
+    terminalInputEl.autocapitalize = "none";
+    terminalInputEl.spellcheck = false;
+    terminalInputEl.setAttribute("autocorrect", "off");
+    terminalInputEl.setAttribute("enterkeyhint", "send");
+  }
+
   bindNodeOnce(terminalScreenEl, "scrollBound", () => {
     terminalFollowOutput = isTerminalPinnedToBottom();
     updateTerminalOverflowState();
@@ -405,8 +431,11 @@ function teardownTerminalPage() {
   closeTerminalSocket();
   document.documentElement.style.removeProperty("--terminal-vv-height");
   document.documentElement.style.removeProperty("--terminal-vv-top");
-  document.documentElement.style.removeProperty("--terminal-bottom-gap");
+  const layoutStyle = terminalPageEl?.style || document.documentElement.style;
+  layoutStyle.removeProperty("--terminal-bottom-gap");
+  layoutStyle.removeProperty("--terminal-form-bottom");
   document.documentElement.style.removeProperty("--terminal-toast-bottom");
   document.documentElement.style.removeProperty("--terminal-toast-left");
   document.documentElement.style.removeProperty("--terminal-toast-width");
+  document.documentElement.classList.remove("terminal-keyboard-open");
 }
