@@ -429,6 +429,7 @@
     margin-right: 0;
     margin-bottom: 12px;
     display: flex;
+    align-self: stretch;
     min-height: 0;
     background: transparent;
     box-shadow: none;
@@ -441,9 +442,9 @@
 
   :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > .tools-console-dock .tools-console-shell {
     flex: 1 1 auto;
-    height: auto;
+    height: 100%;
     min-height: 0;
-    max-height: none;
+    max-height: 100%;
     border: 1px solid var(--tools-console-divider);
     border-radius: var(--r-xl);
     box-shadow: none;
