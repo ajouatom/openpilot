@@ -475,7 +475,7 @@
   }
 
   body[data-page="setting"] #pageSetting {
-    --setting-landscape-left-width: clamp(224px, 31vw, 280px);
+    --setting-landscape-left-width: clamp(208px, 28vw, 260px);
     --setting-landscape-gap: 12px;
     --setting-landscape-page-inset: 12px;
     --setting-landscape-fab-reserve: calc(var(--fab-size) + 18px);
@@ -500,7 +500,7 @@
   body[data-page="setting"] #settingScreenHost {
     display: grid;
     grid-template-columns: var(--setting-landscape-left-width) minmax(0, 1fr);
-    column-gap: 18px;
+    column-gap: 14px;
     align-items: stretch;
     flex: 1 1 auto;
     min-height: 0;
@@ -523,7 +523,7 @@
     position: relative;
     align-self: stretch;
     margin-left: 0;
-    padding-right: 10px;
+    padding-right: 8px;
   }
 
   body[data-page="setting"] #settingScreenItems {
@@ -532,11 +532,25 @@
 
   body[data-page="setting"] #settingCarRow {
     display: flex;
+    overflow: hidden;
   }
 
   body[data-page="setting"] #curCarLabelSetting {
     font-size: 16px !important;
     line-height: 1.15;
+    overflow-x: auto;
+    scrollbar-width: none;
+    text-overflow: clip;
+    touch-action: pan-x pan-y;
+  }
+
+  body[data-page="setting"] #curCarLabelSetting::-webkit-scrollbar {
+    display: none;
+  }
+
+  body[data-page="setting"] .setting-car-entry__text {
+    min-width: 0;
+    overflow: hidden;
   }
 
   body[data-page="setting"] #settingSubnavWrap {
@@ -551,6 +565,30 @@
 
   body[data-page="setting"] .groupBtn {
     margin-bottom: 0;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    scrollbar-width: none;
+    text-overflow: clip;
+    touch-action: pan-x pan-y;
+  }
+
+  body[data-page="setting"] .groupBtn::-webkit-scrollbar {
+    display: none;
+  }
+
+  body[data-page="setting"] #groupList .groupBtn .setting-group-label {
+    display: inline-block;
+    min-width: max-content;
+    transform: translateX(0);
+    will-change: transform;
+  }
+
+  body[data-page="setting"] #groupList .groupBtn.is-overflowing:hover .setting-group-label,
+  body[data-page="setting"] #groupList .groupBtn.is-overflowing:focus .setting-group-label,
+  body[data-page="setting"] #groupList .groupBtn.is-overflowing:active .setting-group-label {
+    animation: setting-left-text-pan 4.2s ease-in-out 1;
   }
 
   body[data-page="setting"] #pageSetting > .page-fab-layer--setting {
@@ -768,30 +806,86 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
   }
 
   body[data-page="setting"] #settingScreenItems .title {
-    font-size: calc(var(--fs-body-lg) * 1.22);
+    font-size: clamp(17px, 2.35vw, 20px);
     font-weight: 700;
+    line-height: 1.18;
   }
 
   body[data-page="setting"] #settingScreenItems .name {
-    font-size: calc(var(--fs-label-md) * 1.12);
+    font-size: clamp(12px, 1.65vw, 14px);
+    line-height: 1.28;
   }
 
   body[data-page="setting"] #settingScreenItems .muted,
   body[data-page="setting"] #settingScreenItems .descr {
-    font-size: calc(var(--fs-body-sm) * 1.18);
+    font-size: clamp(13px, 1.85vw, 15px);
     line-height: 1.45;
   }
 
+  body[data-page="setting"] #settingScreenItems .setting {
+    overflow: hidden;
+  }
+
+  body[data-page="setting"] #settingScreenItems .settingTop {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: start;
+  }
+
+  body[data-page="setting"] #settingScreenItems .settingTop > :first-child {
+    min-width: 0;
+  }
+
+  body[data-page="setting"] #settingScreenItems .title,
+  body[data-page="setting"] #settingScreenItems .name,
+  body[data-page="setting"] #settingScreenItems .muted,
+  body[data-page="setting"] #settingScreenItems .descr {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  body[data-page="setting"] #settingScreenItems .ctrl {
+    display: grid;
+    grid-template-columns: 42px minmax(70px, 84px);
+    gap: 8px;
+    justify-content: end;
+    align-items: center;
+    flex: 0 0 auto;
+    max-width: 100%;
+  }
+
   body[data-page="setting"] #settingScreenItems .smallBtn {
-    min-height: 48px;
-    padding: 10px 16px;
-    font-size: 15px;
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 42px;
+    min-height: 42px;
+    padding: 8px 10px;
+    font-size: 14px;
     font-weight: 700;
   }
 
   body[data-page="setting"] #settingScreenItems .val {
-    min-width: 92px;
-    font-size: 15px;
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 70px;
+    max-width: 84px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 14px;
+  }
+
+  @keyframes setting-left-text-pan {
+    0%, 16% {
+      transform: translateX(0);
+    }
+    72%, 86% {
+      transform: translateX(var(--setting-label-shift, -24px));
+    }
+    100% {
+      transform: translateX(0);
+    }
   }
 
   .setting-search-panel {
@@ -800,5 +894,23 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
     --setting-search-results-max-height: min(48dvh, 260px);
     gap: 10px;
     padding: calc(12px + env(safe-area-inset-top, 0px)) 12px calc(var(--nav-bar-height) + 12px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (orientation: landscape) and (max-width: 760px) {
+  body[data-page="setting"] #pageSetting {
+    --setting-landscape-left-width: clamp(184px, 27vw, 220px);
+  }
+
+  body[data-page="setting"] #settingScreenHost {
+    column-gap: 10px;
+  }
+
+  body[data-page="setting"] #settingScreenItems .settingTop {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-page="setting"] #settingScreenItems .ctrl {
+    justify-content: start;
   }
 }

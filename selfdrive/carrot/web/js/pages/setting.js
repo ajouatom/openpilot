@@ -267,6 +267,19 @@ function renderGroups(options = {}) {
   const groups = SETTINGS.groups || [];
   const signature = groups.map((g) => `${g.group}:${g.count}`).join("|");
 
+  function setGroupButtonLabel(button, label, count) {
+    const text = `${label} (${count})`;
+    button.title = text;
+    button.innerHTML = `<span class="setting-group-label">${escapeHtml(text)}</span>`;
+    requestAnimationFrame(() => {
+      const labelEl = button.querySelector(".setting-group-label");
+      if (!labelEl) return;
+      const shift = Math.min(0, button.clientWidth - labelEl.scrollWidth - 8);
+      button.style.setProperty("--setting-label-shift", `${shift}px`);
+      button.classList.toggle("is-overflowing", shift < 0);
+    });
+  }
+
   if (!animateGroups && box.dataset.groupsSignature === signature && box.children.length === groups.length) {
     Array.from(box.children).forEach((button, index) => {
       const g = groups[index];
@@ -274,7 +287,7 @@ function renderGroups(options = {}) {
       button.className = "btn groupBtn";
       if (g.group === CURRENT_GROUP) button.classList.add("active");
       button.dataset.group = g.group;
-      button.textContent = `${label} (${g.count})`;
+      setGroupButtonLabel(button, label, g.count);
       button.onclick = () => selectGroup(g.group);
     });
     return;
@@ -291,7 +304,7 @@ function renderGroups(options = {}) {
     if (animateGroups) b.style.setProperty("--i", String(box.children.length));
     if (g.group === CURRENT_GROUP) b.classList.add("active");
     b.dataset.group = g.group;
-    b.textContent = `${label} (${g.count})`;
+    setGroupButtonLabel(b, label, g.count);
     b.onclick = () => selectGroup(g.group);
     box.appendChild(b);
   });
