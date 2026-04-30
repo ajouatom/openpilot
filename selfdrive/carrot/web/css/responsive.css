@@ -80,7 +80,7 @@
     margin-bottom: 0;
     top: 0;
     padding-top: calc(8px + env(safe-area-inset-top, 0px));
-    padding-bottom: 24px;
+    padding-bottom: 18px;
     background: var(--md-surface);
     border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 72%, transparent);
     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.14);
@@ -108,30 +108,29 @@
 
   .setting-subnav__tab {
     flex: none;
-    min-height: 42px;
-    padding: 8px 6px;
-    border: 1px solid var(--md-stroke-soft);
-    border-radius: 12px;
+    min-height: 38px;
+    padding: 7px 6px;
+    border: 1px solid color-mix(in srgb, var(--md-outline-var) 44%, transparent);
+    border-radius: 8px;
     background: var(--md-surface-cont);
-    color: rgba(255, 255, 255, 0.86);
-    font-size: 13px;
+    color: var(--md-on-surface-var);
+    font-size: 12.5px;
     font-weight: 800;
     line-height: 1.15;
     white-space: normal;
     text-wrap: balance;
     scroll-snap-align: none;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   }
 
   .setting-subnav__tab.is-active {
     color: var(--md-primary);
-    border-color: color-mix(in srgb, var(--md-primary) 42%, var(--md-stroke-soft));
-    background: color-mix(in srgb, var(--md-primary-cont) 72%, var(--md-surface));
-    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.16);
+    border-color: color-mix(in srgb, var(--md-primary) 48%, var(--md-outline-var));
+    background: color-mix(in srgb, var(--md-primary) 14%, var(--md-surface-cont-h));
   }
 
   .setting-subnav__tab:active {
-    background: color-mix(in srgb, var(--md-primary-cont) 56%, var(--md-surface-cont));
+    background: color-mix(in srgb, var(--md-surface-cont-hh) 88%, var(--md-primary));
   }
 
   #pageTerminal {
@@ -957,6 +956,108 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  body[data-page="setting"] #settingScreenItems .ctrl {
+    justify-content: start;
+  }
+}
+
+body[data-page="setting"] #settingScreenItems .ctrl {
+  --setting-control-side: 40px;
+  --setting-control-value: 86px;
+  --setting-control-gap: 8px;
+  display: grid;
+  grid-template-columns: var(--setting-control-side) var(--setting-control-value) var(--setting-control-side);
+  gap: var(--setting-control-gap);
+  justify-content: end;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+
+body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(1) {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(2) {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(3) {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(4) {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  justify-self: stretch;
+  width: 100%;
+}
+
+body[data-page="setting"] #settingScreenItems .smallBtn {
+  width: 100%;
+  box-sizing: border-box;
+  min-width: var(--setting-control-side);
+  min-height: 40px;
+  padding: 7px 9px;
+  border-color: color-mix(in srgb, var(--md-outline-var) 58%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--md-surface-cont-h) 94%, #000);
+  color: var(--md-on-surface);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+body[data-page="setting"] #settingScreenItems .smallBtn:hover,
+body[data-page="setting"] #settingScreenItems .smallBtn:focus-visible {
+  border-color: color-mix(in srgb, var(--md-primary) 42%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
+}
+
+body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(1),
+body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(3) {
+  border-radius: 999px;
+}
+
+body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(4) {
+  min-height: 36px;
+  border-radius: 8px;
+  color: color-mix(in srgb, var(--md-on-surface) 94%, var(--md-primary));
+}
+
+body[data-page="setting"] #settingScreenItems .val {
+  width: 100%;
+  box-sizing: border-box;
+  min-width: var(--setting-control-value);
+  max-width: var(--setting-control-value);
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-color: color-mix(in srgb, var(--md-outline-var) 58%, transparent);
+  background: color-mix(in srgb, var(--md-surface-cont) 92%, #000);
+  border-radius: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--md-on-surface);
+  letter-spacing: 0;
+}
+
+@media (max-width: 640px) {
+  body[data-page="setting"] #settingScreenItems .ctrl {
+    justify-content: start;
+  }
+}
+
+@media (orientation: landscape) and (max-width: 760px) {
   body[data-page="setting"] #settingScreenItems .ctrl {
     justify-content: start;
   }

@@ -182,19 +182,20 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--md-stroke-soft);
-  border-radius: var(--r-lg);
-  background: var(--md-surface-cont);
+  min-height: 46px;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
+  border-radius: 8px;
+  background: var(--md-surface-cont-h);
   cursor: pointer;
-  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.14s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.12s ease;
 }
 
 .setting-car-entry:hover,
 .setting-car-entry:focus-visible {
-  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, transparent);
-  border-color: color-mix(in srgb, var(--md-primary) 22%, var(--md-stroke-soft));
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.10);
+  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
+  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
   outline: none;
 }
 
@@ -203,10 +204,10 @@
 }
 
 .setting-car-entry.is-attention {
-  border-color: color-mix(in srgb, var(--md-primary) 78%, #fff);
+  border-color: color-mix(in srgb, var(--md-primary) 72%, var(--md-outline-var));
   box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--md-primary) 28%, transparent),
-    0 10px 26px rgba(0, 0, 0, 0.24);
+    0 0 0 2px color-mix(in srgb, var(--md-primary) 18%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
   animation: setting-car-attention 1.05s ease-in-out 0s 3;
 }
 
@@ -236,19 +237,19 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--md-on-surface);
-  font-size: var(--fs-title-sm);
-  font-weight: 800;
+  font-size: 15px;
+  font-weight: 850;
   line-height: 1.14;
 }
 
 .setting-car-entry__chevron {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   flex: 0 0 auto;
-  border-top: 2px solid color-mix(in srgb, var(--md-primary) 82%, #fff);
-  border-right: 2px solid color-mix(in srgb, var(--md-primary) 82%, #fff);
+  border-top: 2px solid color-mix(in srgb, var(--md-primary) 78%, var(--md-on-surface));
+  border-right: 2px solid color-mix(in srgb, var(--md-primary) 78%, var(--md-on-surface));
   transform: rotate(45deg);
-  opacity: 0.72;
+  opacity: 0.82;
 }
 
 .setting-car-entry:not(.is-empty) .setting-car-entry__eyebrow {
@@ -257,8 +258,8 @@
 
 .setting-car-entry.is-empty {
   justify-content: center;
-  min-height: 58px;
-  padding: 14px 16px;
+  min-height: 48px;
+  padding: 10px 14px;
   text-align: center;
 }
 
