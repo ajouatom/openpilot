@@ -99,7 +99,7 @@ body[data-page="terminal"] .swipe-container {
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 100;
+  z-index: 120;
   background: color-mix(in srgb, var(--md-surface-cont) 94%, #000);
   border-top: 1px solid var(--md-stroke-soft);
   padding: 0;
@@ -133,6 +133,8 @@ body[data-page="terminal"] .swipe-container {
   letter-spacing: 0;
   outline: none;
   -webkit-tap-highlight-color: transparent;
+  backface-visibility: hidden;
+  contain: layout paint;
 }
 
 .topbar .nav-btn:focus,
@@ -203,29 +205,29 @@ body[data-page="terminal"] .swipe-container {
   background: color-mix(in srgb, #ff6b6b 18%, transparent);
 }
 
-.topbar .nav-btn.is-working,
-.topbar .nav-btn.is-working.active {
-  color: color-mix(in srgb, var(--md-primary) 82%, var(--md-outline));
-}
-
-.topbar .nav-btn.is-working.active {
-  background: color-mix(in srgb, var(--md-primary) 16%, transparent);
-}
-
 .topbar .nav-btn.is-working::after {
   content: "";
   position: absolute;
-  top: 8px;
-  right: 12px;
-  width: 9px;
-  height: 9px;
+  top: 7px;
+  right: 11px;
+  width: 13px;
+  height: 13px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--md-primary) 62%, var(--md-surface));
-  background: var(--md-primary);
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--md-primary) 18%, transparent),
-    0 0 10px color-mix(in srgb, var(--md-primary) 28%, transparent);
+  border: 2px solid color-mix(in srgb, var(--md-primary) 30%, transparent);
+  border-top-color: var(--md-primary);
+  background: color-mix(in srgb, var(--md-surface-cont) 86%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-surface) 72%, transparent);
+  animation: nav-working-spin 0.82s linear infinite;
+  will-change: transform;
   pointer-events: none;
+}
+
+body.nav-state-settling .topbar,
+body.nav-state-settling .topbar .nav-btn,
+body.nav-state-settling .topbar .nav-btn::before,
+body.nav-state-settling .topbar .nav-btn::after,
+body.nav-state-settling .topbar .nav-btn > span:last-child {
+  transition: none !important;
 }
 
 .topbar .nav-btn.recording::before {
@@ -401,6 +403,18 @@ body[data-page="home"] .global-home-record-fab {
   }
   50%, 100% {
     opacity: 0.28;
+  }
+}
+
+@keyframes nav-working-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar .nav-btn.is-working::after {
+    animation: none;
   }
 }
 

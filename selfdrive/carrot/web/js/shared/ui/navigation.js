@@ -7,6 +7,7 @@ let settingScreenHideTimer = null;
 let settingScreenTransitionToken = 0;
 let carScreenHideTimer = null;
 let carScreenTransitionToken = 0;
+let navStateSettleTimer = null;
 
 
 function disableViewportZoomGestures() {
@@ -257,6 +258,14 @@ function showPage(page, pushHistory = false, transition = null) {
   const prevPage = CURRENT_PAGE;
   if (prevPage === "terminal" && page !== "terminal" && typeof teardownTerminalPage === "function") {
     teardownTerminalPage();
+  }
+  if (prevPage !== page && document.body) {
+    document.body.classList.add("nav-state-settling");
+    if (navStateSettleTimer) window.clearTimeout(navStateSettleTimer);
+    navStateSettleTimer = window.setTimeout(() => {
+      document.body.classList.remove("nav-state-settling");
+      navStateSettleTimer = null;
+    }, PAGE_TRANSITION_MS + 60);
   }
   CURRENT_PAGE = page;
   document.documentElement.dataset.page = page;

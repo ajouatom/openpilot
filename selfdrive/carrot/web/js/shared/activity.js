@@ -31,15 +31,19 @@ function syncAppActivityNav() {
     const entries = getAppActivityEntries(scope);
     const active = entries.length > 0;
     const label = entries[entries.length - 1]?.label || getUIText("working", "Working");
-    button.classList.toggle("is-working", active);
-    button.toggleAttribute("aria-busy", active);
+    if (button.classList.contains("is-working") !== active) {
+      button.classList.toggle("is-working", active);
+    }
+    if (button.hasAttribute("aria-busy") !== active) {
+      button.toggleAttribute("aria-busy", active);
+    }
 
     if (active) {
-      button.dataset.workBadge = "";
-      button.title = label;
+      if (button.dataset.workBadge !== "") button.dataset.workBadge = "";
+      if (button.title !== label) button.title = label;
     } else {
-      button.removeAttribute("data-work-badge");
-      button.removeAttribute("title");
+      if (button.hasAttribute("data-work-badge")) button.removeAttribute("data-work-badge");
+      if (button.hasAttribute("title")) button.removeAttribute("title");
     }
   });
 }

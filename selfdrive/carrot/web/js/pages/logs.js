@@ -3,6 +3,10 @@
 // Logs page — Dashcam (route+segment listing, FFmpeg thumb/preview, FTP upload)
 // + Screen Recording listing/playback. Tab switching between the two.
 
+const DASHCAM_UPLOAD_JOB_STORAGE_KEY = "carrot_dashcam_upload_job_id";
+let dashcamUploadActiveJobId = null;
+let dashcamUploadResumePromise = null;
+
 function getLogsScroller(tab = logsActiveTab) {
   return document.getElementById(tab === "screen" ? "screenrecordVideos" : "dashcamRoutes");
 }
@@ -581,9 +585,23 @@ function openDashcamUploadProgress(total, stats = null) {
   requestAnimationFrame(() => overlay.classList.add("is-open"));
   const message = overlay.querySelector(".dashcam-upload-progress__message");
   const summary = overlay.querySelector(".dashcam-upload-progress__summary");
+  const bar = overlay.querySelector(".dashcam-upload-progress__bar span");
   return {
     setMessage(text) {
       if (message) message.textContent = text || "";
+    },
+    setProgress(percent) {
+      if (!bar) return;
+      const value = Number(percent);
+      if (!Number.isFinite(value) || value <= 0) {
+        bar.style.animation = "";
+        bar.style.transform = "";
+        bar.style.width = "";
+        return;
+      }
+      bar.style.animation = "none";
+      bar.style.transform = "none";
+      bar.style.width = `${Math.max(4, Math.min(100, value))}%`;
     },
     setSummary(nextStats) {
       if (summary) summary.textContent = nextStats ? dashcamUploadSummaryLabel(nextStats) : "";
@@ -596,6 +614,112 @@ function openDashcamUploadProgress(total, stats = null) {
       }, 160);
     },
   };
+}
+
+function rememberDashcamUploadJob(jobId) {
+  dashcamUploadActiveJobId = jobId || null;
+  try {
+    if (jobId) localStorage.setItem(DASHCAM_UPLOAD_JOB_STORAGE_KEY, jobId);
+  } catch {}
+}
+
+function clearRememberedDashcamUploadJob(jobId = null) {
+  if (!jobId || dashcamUploadActiveJobId === jobId) dashcamUploadActiveJobId = null;
+  try {
+    const saved = localStorage.getItem(DASHCAM_UPLOAD_JOB_STORAGE_KEY);
+    if (!jobId || saved === jobId) localStorage.removeItem(DASHCAM_UPLOAD_JOB_STORAGE_KEY);
+  } catch {}
+}
+
+function getRememberedDashcamUploadJob() {
+  try {
+    return localStorage.getItem(DASHCAM_UPLOAD_JOB_STORAGE_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+async function pollDashcamUploadJob(jobId, progress, totalFallback = 0) {
+  let snapshot = null;
+  while (jobId) {
+    snapshot = await getJson(`/api/dashcam/upload/job?id=${encodeURIComponent(jobId)}`);
+    const current = Number(snapshot.step_current || 0);
+    const total = Number(snapshot.step_total || totalFallback || 0);
+    const percent = Number(snapshot.progress);
+    const message = snapshot.message || getUIText("log_uploading", "Uploading logs");
+    progress.setMessage(`${current}/${total || totalFallback || 0} · ${message}`);
+    progress.setProgress(percent);
+    if (snapshot.done) break;
+    await waitMs(850);
+  }
+
+  const result = snapshot?.result || {};
+  if (!result || !Array.isArray(result.results)) {
+    throw new Error(snapshot?.error || getUIText("error", "Error"));
+  }
+  return result;
+}
+
+async function resumeDashcamUploadJobIfNeeded() {
+  if (dashcamUploadResumePromise) return dashcamUploadResumePromise;
+  const jobId = getRememberedDashcamUploadJob();
+  if (!jobId || jobId === dashcamUploadActiveJobId) return null;
+
+  dashcamUploadResumePromise = (async () => {
+    let snapshot = null;
+    try {
+      snapshot = await getJson(`/api/dashcam/upload/job?id=${encodeURIComponent(jobId)}`);
+    } catch {
+      clearRememberedDashcamUploadJob(jobId);
+      dashcamUploadResumePromise = null;
+      return null;
+    }
+
+    if (snapshot.done) {
+      clearRememberedDashcamUploadJob(jobId);
+      if (snapshot.result?.results) await showDashcamUploadResult(snapshot.result);
+      dashcamUploadResumePromise = null;
+      return snapshot.result || null;
+    }
+
+    rememberDashcamUploadJob(jobId);
+    const total = Number(snapshot.step_total || 0);
+    const progress = openDashcamUploadProgress(total, null);
+    let activityId = typeof beginAppActivity === "function"
+      ? beginAppActivity("logs", getUIText("log_uploading", "Uploading logs"))
+      : null;
+
+    try {
+      progress.setMessage(`${Number(snapshot.step_current || 0)}/${total} · ${snapshot.message || getUIText("log_uploading", "Uploading logs")}`);
+      progress.setProgress(Number(snapshot.progress));
+      const result = await pollDashcamUploadJob(jobId, progress, total);
+      clearRememberedDashcamUploadJob(jobId);
+      progress.setMessage(`${Number(result.uploaded || 0)}/${Number(result.total || total)}`);
+      progress.setProgress(100);
+      progress.setSummary(dashcamUploadStats(result.results || []));
+      showAppToast(result.message || getUIText("upload_complete_count", "Upload complete {uploaded}/{total}", {
+        uploaded: result.uploaded || 0,
+        total: result.total || total,
+      }), { tone: result.ok ? "default" : "error", duration: 3600 });
+      progress.close();
+      if (activityId && typeof endAppActivity === "function") {
+        endAppActivity(activityId);
+        activityId = null;
+      }
+      await showDashcamUploadResult(result);
+      return result;
+    } catch (e) {
+      progress.close();
+      showAppToast(`${getUIText("log_upload", "Upload Logs")} ${getUIText("error", "Error")}: ${e.message || e}`, { tone: "error", duration: 4200 });
+      return null;
+    } finally {
+      if (activityId && typeof endAppActivity === "function") endAppActivity(activityId);
+      if (dashcamUploadActiveJobId === jobId) dashcamUploadActiveJobId = null;
+      dashcamUploadResumePromise = null;
+    }
+  })();
+
+  return dashcamUploadResumePromise;
 }
 
 async function uploadDashcamSegments(segments) {
@@ -620,10 +744,16 @@ async function uploadDashcamSegments(segments) {
   let activityId = typeof beginAppActivity === "function"
     ? beginAppActivity("logs", getUIText("log_uploading", "Uploading logs"))
     : null;
+  let jobId = null;
   try {
     progress.setMessage(`0/${targets.length} · ${getUIText("log_uploading", "Uploading logs")}`);
-    const result = await postJson("/api/dashcam/upload", { segments: targets });
+    const started = await postJson("/api/dashcam/upload/start", { segments: targets });
+    jobId = started.job_id;
+    rememberDashcamUploadJob(jobId);
+    const result = await pollDashcamUploadJob(jobId, progress, targets.length);
+    clearRememberedDashcamUploadJob(jobId);
     progress.setMessage(`${Number(result.uploaded || 0)}/${Number(result.total || targets.length)}`);
+    progress.setProgress(100);
     progress.setSummary(dashcamUploadStats(result.results || []));
     const message = result.message || getUIText("upload_complete_count", "Upload complete {uploaded}/{total}", {
       uploaded: result.uploaded || 0,
@@ -641,6 +771,7 @@ async function uploadDashcamSegments(segments) {
     showAppToast(`${getUIText("log_upload", "Upload Logs")} ${getUIText("error", "Error")}: ${e.message || e}`, { tone: "error", duration: 4200 });
   } finally {
     if (activityId && typeof endAppActivity === "function") endAppActivity(activityId);
+    if (jobId && dashcamUploadActiveJobId === jobId) dashcamUploadActiveJobId = null;
   }
 }
 
@@ -867,6 +998,7 @@ function initLogsPage() {
   bindLogsPage();
   activateLogsTab(logsActiveTab);
   startDashcamAutoRefresh();
+  resumeDashcamUploadJobIfNeeded().catch(() => {});
   if (!dashcamState.initialized) {
     dashcamState.initialized = true;
     loadDashcamRoutes().catch(() => {});

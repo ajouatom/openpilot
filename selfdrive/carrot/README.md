@@ -29,7 +29,7 @@ server/
     ├── cars.py             /api/cars
     ├── system.py           /api/heartbeat_status, /api/reboot, /api/time_sync, /api/live_runtime
     ├── terminal.py         /ws/terminal, /download/tmux.log
-    ├── dashcam/            /api/dashcam/* (paths, catalog, ffmpeg, upload, routes)
+    ├── dashcam/            /api/dashcam/* (paths, catalog, ffmpeg, upload, upload_jobs, routes)
     ├── screenrecord/       /api/screenrecord/* (catalog, routes)
     └── tools/              /api/tools, /api/tools/start, /api/tools/job (jobs, dispatcher, routes)
 ```
