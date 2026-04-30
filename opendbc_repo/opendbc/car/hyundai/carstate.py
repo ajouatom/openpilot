@@ -42,6 +42,10 @@ NUMERIC_TO_TZ = {
     356: "Asia/Kolkata",       # 인도 (IN)
 }
 
+LAT_OVERRIDE_AUTO = 0
+LAT_OVERRIDE_FORCE_ON = 1
+LAT_OVERRIDE_FORCE_OFF = 2
+
 class CarState(CarStateBase):
   def __init__(self, CP):
     super().__init__(CP)
@@ -118,9 +122,15 @@ class CarState(CarStateBase):
     self.params = CarControllerParams(CP)
 
     self.auto_engage_mode = Params().get_int("AutoEngage")
+    self.cancel_button_mode = Params().get_int("CancelButtonMode")
     self.main_enabled = self.auto_engage_mode == 2
     self.manual_main_off_latched = False
+
+    self.lat_override = LAT_OVERRIDE_FORCE_ON if self.auto_engage_mode in (1, 2) else LAT_OVERRIDE_AUTO
+    self.lat_enabled = self.lat_override == LAT_OVERRIDE_FORCE_ON
+
     self.gear_shifter = GearShifter.drive # Gear_init for Nexo ?? unknown 21.02.23.LSW
+
 
     self.totalDistance = 0.0
     self.speedLimitDistance = 0
@@ -165,6 +175,32 @@ class CarState(CarStateBase):
     self.cp_cam = None
     self.cp_alt = None
     self.controls_ready_count = 0
+
+  def _default_lat_override(self):
+    return LAT_OVERRIDE_FORCE_ON if self.auto_engage_mode in (1, 2) else LAT_OVERRIDE_AUTO
+
+  def _sync_lat_enabled(self):
+    self.lat_enabled = self.lat_override == LAT_OVERRIDE_FORCE_ON
+
+  def _set_lat_override(self, override):
+    self.lat_override = override
+    self._sync_lat_enabled()
+
+  def _toggle_user_lat(self):
+    if self.lat_override == LAT_OVERRIDE_FORCE_OFF:
+      self._set_lat_override(self._default_lat_override())
+    elif self.lat_override == LAT_OVERRIDE_AUTO:
+      self._set_lat_override(LAT_OVERRIDE_FORCE_ON)
+    else:  # FORCE_ON
+      self._set_lat_override(LAT_OVERRIDE_FORCE_OFF)
+
+  def _update_lat_button_state(self, button_events):
+    for b in button_events:
+      if b.type == ButtonType.lfaButton and b.pressed:
+        self._toggle_user_lat()
+      elif b.type == ButtonType.cancel and b.pressed and self.cancel_button_mode == 1:
+        self._set_lat_override(LAT_OVERRIDE_FORCE_OFF)
+
 
   def monitor_fingerprint(self, can_parsers, canfd):
     if self.controls_ready_count <= 200:
@@ -431,6 +467,7 @@ class CarState(CarStateBase):
     ret.buttonEvents = [*create_button_events(self.cruise_buttons[-1], prev_cruise_buttons, BUTTONS_DICT),
                         *create_button_events(self.main_buttons[-1], prev_main_buttons, {1: ButtonType.mainCruise})]
 
+    self._update_lat_button_state(ret.buttonEvents)
 
     if not self.CP.flags & HyundaiFlags.CC_ONLY_CAR:
       tpms_unit = cp.vl["TPMS11"]["UNIT"] * 0.725 if int(cp.vl["TPMS11"]["UNIT"]) > 0 else 1.
@@ -464,7 +501,11 @@ class CarState(CarStateBase):
       self.main_enabled = not self.main_enabled
       self.manual_main_off_latched = not self.main_enabled
 
+    ret.latEnabled = self.lat_enabled
+    ret.latOverride = self.lat_override
+
     return ret
+
 
   def update_speed_limit(self, ret, speed_limit_cam):
     self.totalDistance += ret.vEgo * DT_CTRL
@@ -728,8 +769,16 @@ class CarState(CarStateBase):
                         *create_button_events(paddle_button, self.paddle_button_prev, {1: ButtonType.paddleLeft, 2: ButtonType.paddleRight}),
                         *create_button_events(self.main_buttons[-1], prev_main_buttons, {1: ButtonType.mainCruise})]
 
+    self._update_lat_button_state(ret.buttonEvents)
+
+
     self.paddle_button_prev = paddle_button
+
+    ret.latEnabled = True
+    ret.latOverride = self.lat_override
+
     return ret
+
 
   def get_can_parsers_canfd(self, CP):
     msgs = []

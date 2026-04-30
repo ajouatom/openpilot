@@ -30,10 +30,6 @@ CRUISE_INTERVAL_SIGN = {
   ButtonType.decelCruise: -1,
 }
 
-LAT_OVERRIDE_AUTO = 0
-LAT_OVERRIDE_FORCE_ON = 1
-LAT_OVERRIDE_FORCE_OFF = 2
-
 class VCruiseHelper:
   def __init__(self, CP):
     self.CP = CP
@@ -188,9 +184,6 @@ class VCruiseCarrot:
     self._cruise_cancel_state = False
     self._pause_auto_speed_up = False
     self._activate_cruise = 0
-    self._auto_engage_mode = self.params.get_int("AutoEngage")
-    self._lat_override = LAT_OVERRIDE_FORCE_ON if self._auto_engage_mode in (1, 2) else LAT_OVERRIDE_AUTO
-    self._lat_enabled = self._lat_override == LAT_OVERRIDE_FORCE_ON
     self._v_cruise_kph_at_brake = 0
     self.cruise_state_available_last = False
 
@@ -251,7 +244,6 @@ class VCruiseCarrot:
       self.autoCruiseControl = self.params.get_int("AutoCruiseControl") * unit_factor
       self.autoGasTokSpeed = self.params.get_int("AutoGasTokSpeed") * unit_factor
       self.autoGasSyncSpeed = self.params.get_int("AutoGasSyncSpeed")
-      self._auto_engage_mode = self.params.get_int("AutoEngage")
 
       self.applyModelSpeed = self.params.get_float("ApplyModelSpeed") * 0.01
       self.autoSpeedUptoRoadSpeedLimit = self.params.get_float("AutoSpeedUptoRoadSpeedLimit") * 0.01
@@ -324,10 +316,6 @@ class VCruiseCarrot:
     self.v_ego_kph_set = int(CS.vEgoCluster * CV.MS_TO_KPH + 0.5)
     self._activate_cruise = 0
 
-    if CC.enabled and not self.enabled_last and self._lat_override == LAT_OVERRIDE_FORCE_OFF:
-      self._set_lat_override(self._default_lat_override())
-      self._add_log(f"Lateral {'enabled' if self._lat_enabled else 'disabled'}")
-
     self._prepare_brake_gas(CS, CC)
     if CC.enabled:
       self._cruise_ready = False
@@ -342,7 +330,6 @@ class VCruiseCarrot:
 
     if CS.cruiseState.available:
       if not self.cruise_state_available_last:
-        self._lat_enabled = True
         v_cruise_kph = self.v_ego_kph_set
       if not self.CP.pcmCruise:
         # if stock cruise is completely disabled, then we can use our own set speed logic
@@ -358,8 +345,6 @@ class VCruiseCarrot:
     else:
       self.v_cruise_kph = np.clip(v_cruise_kph, self._cruise_speed_min, self._cruise_speed_max) #max(20, self.v_ego_kph_set) #V_CRUISE_UNSET
       self.v_cruise_cluster_kph = self.v_cruise_kph #V_CRUISE_UNSET
-      #if self.cruise_state_available_last: # 최초 한번이라도 cruiseState.available이 True였다면
-      #  self._lat_enabled = False
 
     self.cruise_state_available_last = CS.cruiseState.available
     self.enabled_last = CC.enabled
@@ -505,7 +490,6 @@ class VCruiseCarrot:
 
     if not long_pressed:
       if button_type == ButtonType.accelCruise:
-        self._lat_enabled = True
         self._pause_auto_speed_up = False
         if self._soft_hold_active > 0:
           self._soft_hold_active = 0
@@ -558,21 +542,17 @@ class VCruiseCarrot:
         self.params.put_int_nonblocking('LongitudinalPersonality', personality)
         #self.events.append(EventName.personalityChanged)
       elif button_type == ButtonType.lfaButton:
-        if self._lfa_button_mode == 0:
-          self._toggle_user_lat()
-        elif self._lfa_button_mode == 2:
+        if self._lfa_button_mode == 2:
           self.carrot_cruise_active = True
-        else:
+        elif self._lfa_button_mode != 0:
           if False: #CC.enabled and self._paddle_decel_active:
             self._paddle_decel_active = False
           else:
             self._paddle_decel_active = True
         print("lfaButton")
+
       elif button_type == ButtonType.cancel:
         self._paddle_decel_active = False
-        if self._cancel_button_mode == 1:
-          self._set_lat_override(LAT_OVERRIDE_FORCE_OFF)
-          self._add_log(f"Lateral {'enabled' if self._lat_enabled else 'disabled'}")
         self._cruise_cancel_state = True
 
     else:
@@ -588,13 +568,10 @@ class VCruiseCarrot:
       elif button_type == ButtonType.lfaButton:
         useLaneLineSpeed = max(1, self.useLaneLineSpeed)
         self.useLaneLineSpeedApply = useLaneLineSpeed if self.useLaneLineSpeedApply == 0 else 0
-
       elif button_type == ButtonType.cancel:
         self._cruise_cancel_state = True
-        self._lat_enabled = False
         self._paddle_decel_active = False
         #self.params.put_bool_nonblocking("ExperimentalMode", not self.params.get_bool("ExperimentalMode"))
-        self._add_log("Lateral " + "enabled" if self._lat_enabled else "disabled")
 
     if self._paddle_mode > 0 and button_type in [ButtonType.paddleLeft, ButtonType.paddleRight]:  # paddle button
       if self._paddle_mode == 3:
@@ -830,25 +807,3 @@ class VCruiseCarrot:
     else:
       self._soft_hold_count = 0
       self._brake_pressed_count = min(-1, self._brake_pressed_count - 1)
-
-
-  def _default_lat_override(self):
-    return LAT_OVERRIDE_FORCE_ON if self._auto_engage_mode in (1, 2) else LAT_OVERRIDE_AUTO
-
-  def _sync_lat_enabled(self):
-    self._lat_enabled = self._lat_override == LAT_OVERRIDE_FORCE_ON
-
-  def _set_lat_override(self, override):
-    self._lat_override = override
-    self._sync_lat_enabled()
-
-  def _toggle_user_lat(self):
-    if self._lat_override == LAT_OVERRIDE_FORCE_OFF:
-      # 꺼둔 상태 -> 기본 정책 복귀
-      self._set_lat_override(self._default_lat_override())
-    elif self._lat_override == LAT_OVERRIDE_AUTO:
-      # AUTO 상태 -> 사용자가 명시적으로 LAT 켜기 원함
-      self._set_lat_override(LAT_OVERRIDE_FORCE_ON)
-    else:  # FORCE_ON
-      # 켜진 상태 -> 끄기
-      self._set_lat_override(LAT_OVERRIDE_FORCE_OFF)
