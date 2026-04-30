@@ -57,42 +57,66 @@ body[data-page="carrot"] #driveHudCard {
 
 .vision-start-overlay__message {
   position: absolute;
-  top: calc(12px + env(safe-area-inset-top, 0px));
+  top: 50%;
   left: 50%;
-  width: min(78vw, 620px);
-  max-width: calc(100% - 24px);
-  padding: 8px 12px;
-  border: 1px solid color-mix(in srgb, var(--md-primary) 34%, rgba(255,255,255,.16));
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.24);
   border-radius: 999px;
-  background:
-    linear-gradient(180deg, rgba(255,177,42,.16), rgba(255,177,42,.06)),
-    color-mix(in srgb, var(--md-surface-cont) 82%, rgba(0,0,0,.72));
-  color: var(--md-on-surface);
-  box-shadow: 0 8px 22px rgba(0,0,0,.28);
-  line-height: 1.25;
+  background: #ffb12a;
+  color: #161616;
+  box-shadow: 0 8px 22px rgba(0,0,0,.32);
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
   text-align: center;
-  transform: translateX(-50%);
+  transform: translate(86px, -48px);
   z-index: 1;
+  cursor: help;
+  user-select: none;
+  outline: none;
 }
 
-.vision-start-overlay__message-title {
-  display: none;
-}
-
-.vision-start-overlay__message-body {
-  font-size: clamp(11px, 1.7vw, 13px);
+.vision-start-overlay__message::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 8px);
+  right: -6px;
+  width: max-content;
+  max-width: min(72vw, 260px);
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--md-primary) 38%, rgba(255,255,255,.16));
+  border-radius: 8px;
+  background: rgba(8, 12, 16, 0.92);
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 13px;
   font-weight: 800;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.25;
+  white-space: normal;
+  box-shadow: 0 10px 24px rgba(0,0,0,.32);
+  opacity: 0;
+  transform: translateY(-4px);
+  pointer-events: none;
+  transition: opacity 0.14s ease, transform 0.14s ease;
 }
 
-.vision-start-overlay__message-hint {
-  display: none;
+.vision-start-overlay__message:hover::after,
+.vision-start-overlay__message:focus::after,
+.vision-start-overlay__message:active::after {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .vision-start-overlay .btn:disabled {
-  opacity: .46;
+  opacity: 1;
+  filter: none;
+  border-color: rgba(255, 255, 255, 0.16);
+  background: linear-gradient(180deg, #6e737b, #4c525a);
+  color: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.30);
   cursor: not-allowed;
 }
 

@@ -202,11 +202,11 @@ async function loadSettings(options = {}) {
   const meta = document.getElementById("settingsMeta");
 
   if (SETTINGS && !force) {
-    renderGroups();
+    renderGroups({ animateGroups: false });
     renderSettingSubnav();
     syncSettingSearchFabState();
     if (!background && CURRENT_PAGE === "setting" && typeof syncSettingViewportLayout === "function") {
-      await syncSettingViewportLayout();
+      await syncSettingViewportLayout({ animateChrome: false, animateItems: false });
     }
     return SETTINGS;
   }
@@ -273,16 +273,34 @@ async function loadSettings(options = {}) {
 
 function renderGroups(options = {}) {
   const box = document.getElementById("groupList");
-  box.innerHTML = "";
   const animateGroups = options.animateGroups !== false;
+  const groups = SETTINGS.groups || [];
+  const signature = groups.map((g) => `${g.group}:${g.count}`).join("|");
 
-  (SETTINGS.groups || []).forEach(g => {
+  if (!animateGroups && box.dataset.groupsSignature === signature && box.children.length === groups.length) {
+    Array.from(box.children).forEach((button, index) => {
+      const g = groups[index];
+      const label = getSettingGroupLabel(g.group);
+      button.className = "btn groupBtn";
+      if (g.group === CURRENT_GROUP) button.classList.add("active");
+      button.dataset.group = g.group;
+      button.textContent = `${label} (${g.count})`;
+      button.onclick = () => selectGroup(g.group);
+    });
+    return;
+  }
+
+  box.innerHTML = "";
+  box.dataset.groupsSignature = signature;
+
+  groups.forEach(g => {
     const label = getSettingGroupLabel(g.group);
 
     const b = document.createElement("button");
     b.className = animateGroups ? "btn groupBtn ui-stagger-item" : "btn groupBtn";
     if (animateGroups) b.style.setProperty("--i", String(box.children.length));
     if (g.group === CURRENT_GROUP) b.classList.add("active");
+    b.dataset.group = g.group;
     b.textContent = `${label} (${g.count})`;
     b.onclick = () => selectGroup(g.group);
     box.appendChild(b);
@@ -885,9 +903,26 @@ function stopSettingSubnavMotion() {
 
 function renderSettingSubnav() {
   if (!settingSubnav) return;
-  settingSubnav.innerHTML = "";
 
   const groups = SETTINGS?.groups || [];
+  const signature = groups.map((entry) => entry.group).join("|");
+
+  if (settingSubnav.dataset.groupsSignature === signature && settingSubnav.children.length === groups.length) {
+    Array.from(settingSubnav.children).forEach((button, index) => {
+      const entry = groups[index];
+      button.className = "setting-subnav__tab";
+      if (entry.group === CURRENT_GROUP) button.classList.add("is-active");
+      button.dataset.group = entry.group;
+      button.textContent = getSettingGroupLabel(entry.group);
+      button.onclick = () => selectGroup(entry.group, screenItems?.style.display === "none");
+    });
+    scheduleSettingSubnavFocus();
+    return;
+  }
+
+  settingSubnav.innerHTML = "";
+  settingSubnav.dataset.groupsSignature = signature;
+
   groups.forEach((entry) => {
     const button = document.createElement("button");
     button.className = "setting-subnav__tab";
