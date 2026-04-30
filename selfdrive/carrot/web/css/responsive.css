@@ -14,7 +14,7 @@
     right: 0;
     bottom: 0;
     width: auto;
-    transform: none;
+    transform: translateZ(0);
     border: 0;
     border-top: 1px solid var(--md-stroke-soft);
     border-radius: 0;

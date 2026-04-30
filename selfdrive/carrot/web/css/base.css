@@ -106,6 +106,10 @@ body[data-page="terminal"] .swipe-container {
   padding-bottom: env(safe-area-inset-bottom, 0px);
   justify-content: space-around;
   gap: 0;
+  isolation: isolate;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .topbar .nav-btn {
@@ -211,16 +215,16 @@ body[data-page="terminal"] .swipe-container {
 .topbar .nav-btn.is-working::after {
   content: "";
   position: absolute;
-  top: 6px;
-  right: 10px;
-  width: 13px;
-  height: 13px;
+  top: 8px;
+  right: 12px;
+  width: 9px;
+  height: 9px;
   border-radius: 999px;
-  border: 2px solid color-mix(in srgb, var(--md-primary) 32%, transparent);
-  border-top-color: var(--md-primary);
-  background: color-mix(in srgb, var(--md-surface) 86%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-primary) 18%, transparent);
-  animation: nav-working-spin 0.78s linear infinite;
+  border: 1px solid color-mix(in srgb, var(--md-primary) 62%, var(--md-surface));
+  background: var(--md-primary);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--md-primary) 18%, transparent),
+    0 0 10px color-mix(in srgb, var(--md-primary) 28%, transparent);
   pointer-events: none;
 }
 
@@ -397,19 +401,6 @@ body[data-page="home"] .global-home-record-fab {
   }
   50%, 100% {
     opacity: 0.28;
-  }
-}
-
-@keyframes nav-working-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .topbar .nav-btn.is-working::after {
-    animation: none;
-    border-color: var(--md-primary);
   }
 }
 
