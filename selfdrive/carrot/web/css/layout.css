@@ -472,8 +472,8 @@ body[data-page="tools"] .swipe-container,
   top: calc(100% + 10px);
   right: 0;
   z-index: 2500;
-  width: min(184px, calc(100vw - 24px));
-  padding: 14px 16px 10px;
+  width: min(148px, calc(100vw - 24px));
+  padding: 8px 10px 6px;
   border: 1px solid var(--md-outline-var);
   border-radius: 6px;
   background: color-mix(in srgb, var(--md-surface) 96%, var(--md-surface-cont-h));
@@ -494,15 +494,15 @@ body[data-page="tools"] .swipe-container,
 }
 
 .tools-lang-menu__current {
-  padding: 10px 0 14px;
+  padding: 6px 0 8px;
   color: var(--md-on-surface-var);
-  font-size: var(--fs-body-md);
+  font-size: var(--fs-body-sm);
   line-height: 1.25;
 }
 
 .tools-lang-menu__divider {
   height: 1px;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   background: var(--md-outline-var);
   opacity: 0.65;
 }
@@ -511,16 +511,16 @@ body[data-page="tools"] .swipe-container,
   appearance: none;
   -webkit-appearance: none;
   width: 100%;
-  min-height: 46px;
-  padding: 0;
+  min-height: 34px;
+  padding: 0 2px;
   border: 0;
   background: transparent;
   color: var(--md-on-surface);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: var(--fs-title-sm);
+  justify-content: flex-start;
+  gap: 0;
+  font-size: var(--fs-body-md);
   text-align: left;
   cursor: pointer;
 }

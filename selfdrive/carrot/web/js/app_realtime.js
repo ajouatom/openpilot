@@ -1140,7 +1140,19 @@ async function waitServerReady(timeoutMs = 8000) {
 
 window.CARROT_VISION_ACTIVE = false;
 window.CARROT_VISION_AVAILABLE = false;
-window.CARROT_VISION_DISABLED_MESSAGE = getUIText("disable_dm_inactive", "DisableDM is inactive.");
+window.CARROT_VISION_DISABLED_MESSAGE = getUIText("vision_unavailable_hint", "DisableDM 2에서 사용 가능");
+let carrotVisionBadgeHintTimer = null;
+
+function showCarrotVisionBadgeHint(el) {
+  if (!el) return;
+  el.classList.add("is-tooltip-visible");
+  if (carrotVisionBadgeHintTimer) clearTimeout(carrotVisionBadgeHintTimer);
+  carrotVisionBadgeHintTimer = window.setTimeout(() => {
+    el.classList.remove("is-tooltip-visible");
+    if (document.activeElement === el) el.blur();
+    carrotVisionBadgeHintTimer = null;
+  }, 1400);
+}
 
 async function fetchDisableDmValue() {
   const r = await fetch("/api/params_bulk?names=DisableDM", { cache: "no-store" });
@@ -1155,24 +1167,46 @@ function updateCarrotVisionAvailabilityUi(available, message = window.CARROT_VIS
   window.CARROT_VISION_AVAILABLE = Boolean(available);
   const button = document.getElementById("btnStartVision");
   const messageEl = document.getElementById("visionDisabledMessage");
+  const unavailableHint = getUIText("vision_unavailable_hint", "DisableDM 2에서 사용 가능");
+  const disabledMessage = available ? "" : (message || unavailableHint);
   if (button) {
     button.disabled = !available;
     button.setAttribute("aria-disabled", available ? "false" : "true");
+    button.title = available ? "" : unavailableHint;
   }
   if (messageEl) {
     messageEl.hidden = Boolean(available);
     messageEl.replaceChildren();
     if (!available) {
-      const title = document.createElement("div");
-      title.className = "vision-start-overlay__message-title";
-      title.textContent = getUIText("vision_unavailable_title", "Drive vision is unavailable");
-      const body = document.createElement("div");
-      body.className = "vision-start-overlay__message-body";
-      body.textContent = message;
-      const hint = document.createElement("div");
-      hint.className = "vision-start-overlay__message-hint";
-      hint.textContent = getUIText("vision_unavailable_hint", "Change Settings > Start > DisableDM to 2.");
-      messageEl.append(title, body, hint);
+      const hint = unavailableHint;
+      messageEl.textContent = "!";
+      messageEl.dataset.tooltip = hint;
+      messageEl.title = hint;
+      messageEl.setAttribute("aria-label", hint);
+      messageEl.setAttribute("role", "button");
+      messageEl.tabIndex = 0;
+      messageEl.onclick = () => showCarrotVisionBadgeHint(messageEl);
+      messageEl.ontouchstart = () => showCarrotVisionBadgeHint(messageEl);
+      messageEl.onkeydown = (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          showCarrotVisionBadgeHint(messageEl);
+        }
+      };
+    } else {
+      messageEl.classList.remove("is-tooltip-visible");
+      messageEl.removeAttribute("data-tooltip");
+      messageEl.removeAttribute("title");
+      messageEl.removeAttribute("aria-label");
+      messageEl.removeAttribute("role");
+      messageEl.removeAttribute("tabindex");
+      messageEl.onclick = null;
+      messageEl.ontouchstart = null;
+      messageEl.onkeydown = null;
+      if (carrotVisionBadgeHintTimer) {
+        clearTimeout(carrotVisionBadgeHintTimer);
+        carrotVisionBadgeHintTimer = null;
+      }
     }
   }
   if (available) {
@@ -1183,7 +1217,8 @@ function updateCarrotVisionAvailabilityUi(available, message = window.CARROT_VIS
       emitCarrotVisionChange(false);
       syncCarrotRealtimeLifecycle(true);
     }
-    rtcStatusSet(message);
+    window.CARROT_VISION_DISABLED_MESSAGE = disabledMessage;
+    rtcStatusSet(disabledMessage);
   }
 }
 

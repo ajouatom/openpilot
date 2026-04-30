@@ -104,6 +104,26 @@
   grid-template-columns: minmax(0, 1fr) auto fit-content(var(--hud-support-col-max));
 }
 
+.hudWrap[data-surface="driveInline"] .hudBody {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: calc(var(--hud-section-gap) * 0.55);
+}
+
+.hudWrap[data-surface="driveInline"] .hudBodyDivider {
+  display: none;
+}
+
+.hudWrap[data-surface="driveInline"] .hudSpeedColumn,
+.hudWrap[data-surface="driveInline"] .hudSupportColumn {
+  justify-self: stretch;
+  width: 100%;
+}
+
+.hudWrap[data-surface="driveInline"] .hudSupportColumn {
+  padding-left: calc(var(--hud-padding) * 0.30);
+  padding-right: calc(var(--hud-padding) * 0.10);
+}
+
 .hudWrap[data-surface="driveOverlay"] .hudBottomStrip {
   padding-inline: calc(var(--hud-section-gap) * 0.06);
 }

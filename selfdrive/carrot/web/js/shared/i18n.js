@@ -243,13 +243,13 @@ function setWebLanguage(lang) {
 
   if (SETTINGS) {
     if (typeof rebuildSettingSearchEntries === "function") rebuildSettingSearchEntries();
-    if (typeof renderGroups === "function") renderGroups();
+    if (typeof renderGroups === "function") renderGroups({ animateGroups: false });
     if (typeof renderSettingSubnav === "function") renderSettingSubnav();
     if (CURRENT_GROUP && typeof renderItems === "function") {
       const currentTop = typeof getSettingItemsScrollTop === "function"
         ? getSettingItemsScrollTop()
         : 0;
-      renderItems(CURRENT_GROUP, { scrollMode: "restore", scrollTop: currentTop });
+      renderItems(CURRENT_GROUP, { scrollMode: "restore", scrollTop: currentTop, animateItems: false });
     }
   }
   window.dispatchEvent(new CustomEvent("carrot:languagechange", { detail: { lang: LANG } }));

@@ -117,16 +117,6 @@ function scheduleSettingGroupValueWarmup(delay = 220) {
   }, Math.max(0, delay));
 }
 
-function updateSettingCarEntryState(label) {
-  if (!settingCarRow) return;
-  const text = String(label || "").trim();
-  const isEmpty = !text || text === "-";
-  settingCarRow.classList.toggle("is-empty", isEmpty);
-  settingCarRow.setAttribute("aria-label", isEmpty
-    ? getUIText("open_car_select", "Open car select")
-    : getUIText("open_car_select_named", "Open car select for {name}", { name: text }));
-}
-
 function isMissingCarSelectionLabel(label) {
   const text = String(label || "").trim();
   if (!text || text === "-") return true;
@@ -202,11 +192,11 @@ async function loadSettings(options = {}) {
   const meta = document.getElementById("settingsMeta");
 
   if (SETTINGS && !force) {
-    renderGroups();
+    renderGroups({ animateGroups: false });
     renderSettingSubnav();
     syncSettingSearchFabState();
     if (!background && CURRENT_PAGE === "setting" && typeof syncSettingViewportLayout === "function") {
-      await syncSettingViewportLayout();
+      await syncSettingViewportLayout({ animateChrome: false, animateItems: false });
     }
     return SETTINGS;
   }
@@ -273,16 +263,34 @@ async function loadSettings(options = {}) {
 
 function renderGroups(options = {}) {
   const box = document.getElementById("groupList");
-  box.innerHTML = "";
   const animateGroups = options.animateGroups !== false;
+  const groups = SETTINGS.groups || [];
+  const signature = groups.map((g) => `${g.group}:${g.count}`).join("|");
 
-  (SETTINGS.groups || []).forEach(g => {
+  if (!animateGroups && box.dataset.groupsSignature === signature && box.children.length === groups.length) {
+    Array.from(box.children).forEach((button, index) => {
+      const g = groups[index];
+      const label = getSettingGroupLabel(g.group);
+      button.className = "btn groupBtn";
+      if (g.group === CURRENT_GROUP) button.classList.add("active");
+      button.dataset.group = g.group;
+      button.textContent = `${label} (${g.count})`;
+      button.onclick = () => selectGroup(g.group);
+    });
+    return;
+  }
+
+  box.innerHTML = "";
+  box.dataset.groupsSignature = signature;
+
+  groups.forEach(g => {
     const label = getSettingGroupLabel(g.group);
 
     const b = document.createElement("button");
     b.className = animateGroups ? "btn groupBtn ui-stagger-item" : "btn groupBtn";
     if (animateGroups) b.style.setProperty("--i", String(box.children.length));
     if (g.group === CURRENT_GROUP) b.classList.add("active");
+    b.dataset.group = g.group;
     b.textContent = `${label} (${g.count})`;
     b.onclick = () => selectGroup(g.group);
     box.appendChild(b);
@@ -390,6 +398,27 @@ function clearSettingItemFocus() {
 }
 
 const settingGroupScrollTops = new Map();
+let settingViewportSyncTimer = null;
+let settingViewportLayoutSignature = null;
+
+function getSettingViewportLayoutSignature() {
+  const width = Math.round(window.innerWidth || document.documentElement.clientWidth || 0);
+  return {
+    compactLandscape: isCompactLandscapeMode(),
+    width,
+  };
+}
+
+function hasSettingViewportLayoutChanged() {
+  const next = getSettingViewportLayoutSignature();
+  const prev = settingViewportLayoutSignature;
+  settingViewportLayoutSignature = next;
+  if (!prev) return true;
+  return (
+    prev.compactLandscape !== next.compactLandscape ||
+    Math.abs(prev.width - next.width) > 2
+  );
+}
 
 function getSettingItemsScrollContainer() {
   if (isCompactLandscapeMode() && screenItems) return screenItems;
@@ -864,9 +893,26 @@ function stopSettingSubnavMotion() {
 
 function renderSettingSubnav() {
   if (!settingSubnav) return;
-  settingSubnav.innerHTML = "";
 
   const groups = SETTINGS?.groups || [];
+  const signature = groups.map((entry) => entry.group).join("|");
+
+  if (settingSubnav.dataset.groupsSignature === signature && settingSubnav.children.length === groups.length) {
+    Array.from(settingSubnav.children).forEach((button, index) => {
+      const entry = groups[index];
+      button.className = "setting-subnav__tab";
+      if (entry.group === CURRENT_GROUP) button.classList.add("is-active");
+      button.dataset.group = entry.group;
+      button.textContent = getSettingGroupLabel(entry.group);
+      button.onclick = () => selectGroup(entry.group, screenItems?.style.display === "none");
+    });
+    scheduleSettingSubnavFocus();
+    return;
+  }
+
+  settingSubnav.innerHTML = "";
+  settingSubnav.dataset.groupsSignature = signature;
+
   groups.forEach((entry) => {
     const button = document.createElement("button");
     button.className = "setting-subnav__tab";
@@ -1159,10 +1205,13 @@ async function renderItems(group, options = {}) {
   });
 }
 
-async function syncSettingViewportLayout() {
+async function syncSettingViewportLayout(options = {}) {
   if (CURRENT_PAGE !== "setting" || !SETTINGS) return;
+  settingViewportLayoutSignature = getSettingViewportLayoutSignature();
+  const animateChrome = options.animateChrome === true;
+  const animateItems = options.animateItems === true;
   syncSettingSearchFabState();
-  renderGroups();
+  renderGroups({ animateGroups: animateChrome });
   renderSettingSubnav();
 
   if (isCompactLandscapeMode()) {
@@ -1173,7 +1222,7 @@ async function syncSettingViewportLayout() {
     syncSettingGroupChrome(targetGroup);
     if (typeof centerActiveSettingSubnavTab === "function") centerActiveSettingSubnavTab("auto");
     if (!hasRenderedSettingItems(targetGroup)) {
-      await renderItems(targetGroup, { scrollMode: "restore" });
+      await renderItems(targetGroup, { scrollMode: "restore", animateItems });
     }
     return;
   }
@@ -1183,23 +1232,29 @@ async function syncSettingViewportLayout() {
     showSettingScreen("items", false);
     if (typeof centerActiveSettingSubnavTab === "function") centerActiveSettingSubnavTab("auto");
     if (!hasRenderedSettingItems(CURRENT_GROUP)) {
-      await renderItems(CURRENT_GROUP, { scrollMode: "restore" });
+      await renderItems(CURRENT_GROUP, { scrollMode: "restore", animateItems });
     }
   } else {
     showSettingScreen("groups", false);
   }
 }
 
+function scheduleSettingViewportLayoutSync(force = false) {
+  if (CURRENT_PAGE !== "setting" || !SETTINGS) return;
+  if (!force && !hasSettingViewportLayoutChanged()) return;
+  if (settingViewportSyncTimer) clearTimeout(settingViewportSyncTimer);
+  settingViewportSyncTimer = window.setTimeout(() => {
+    settingViewportSyncTimer = null;
+    syncSettingViewportLayout({ animateChrome: false, animateItems: false }).catch(() => {});
+  }, 80);
+}
+
 window.addEventListener("resize", () => {
-  if (CURRENT_PAGE === "setting" && SETTINGS) {
-    syncSettingViewportLayout().catch(() => {});
-  }
+  scheduleSettingViewportLayoutSync(false);
 }, { passive: true });
 
 window.addEventListener("orientationchange", () => {
-  if (CURRENT_PAGE === "setting" && SETTINGS) {
-    syncSettingViewportLayout().catch(() => {});
-  }
+  scheduleSettingViewportLayoutSync(true);
 }, { passive: true });
 
 

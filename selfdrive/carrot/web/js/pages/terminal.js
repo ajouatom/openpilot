@@ -5,6 +5,7 @@
 /* ---------- Terminal ---------- */
 const terminalMetaEl = document.getElementById("terminalMeta");
 const terminalSessionMetaEl = document.getElementById("terminalSessionMeta");
+const terminalPageEl = document.getElementById("pageTerminal");
 const terminalScreenEl = document.getElementById("terminalScreen");
 const terminalOutputEl = document.getElementById("terminalOutput");
 const terminalFormEl = document.getElementById("terminalForm");
@@ -21,6 +22,7 @@ let terminalLastScreen = "";
 let terminalLayoutBound = false;
 let terminalFollowOutput = true;
 let terminalCurrentCwd = "/data/openpilot";
+let terminalScrollRaf = 0;
 
 function setTerminalMeta(text) {
   if (terminalMetaEl) terminalMetaEl.textContent = String(text || "");
@@ -85,13 +87,36 @@ function renderTerminalScreenMarkup(text) {
 
 function isTerminalPinnedToBottom() {
   if (!terminalScreenEl) return true;
-  return (terminalScreenEl.scrollHeight - terminalScreenEl.scrollTop - terminalScreenEl.clientHeight) < 28;
+  return (getTerminalBottomDistance() < 28);
 }
 
-function pinTerminalToBottom() {
+function getTerminalBottomDistance() {
+  if (!terminalScreenEl) return 0;
+  return Math.max(0, terminalScreenEl.scrollHeight - terminalScreenEl.scrollTop - terminalScreenEl.clientHeight);
+}
+
+function getTerminalBottomScrollTop() {
+  if (!terminalScreenEl) return 0;
+  return Math.max(0, terminalScreenEl.scrollHeight - terminalScreenEl.clientHeight);
+}
+
+function pinTerminalToBottom(options = {}) {
   if (!terminalScreenEl) return;
-  requestAnimationFrame(() => {
-    terminalScreenEl.scrollTop = terminalScreenEl.scrollHeight;
+  const { immediate = false } = options;
+  const apply = () => {
+    terminalScreenEl.scrollTop = getTerminalBottomScrollTop();
+    updateTerminalOverflowState();
+  };
+  if (terminalScrollRaf) {
+    cancelAnimationFrame(terminalScrollRaf);
+    terminalScrollRaf = 0;
+  }
+  if (immediate) apply();
+  terminalScrollRaf = requestAnimationFrame(() => {
+    terminalScrollRaf = requestAnimationFrame(() => {
+      terminalScrollRaf = 0;
+      apply();
+    });
   });
 }
 
@@ -106,7 +131,7 @@ function clearTerminalViewport() {
   terminalLastScreen = "";
   if (terminalOutputEl) terminalOutputEl.innerHTML = "";
   updateTerminalOverflowState();
-  pinTerminalToBottom();
+  pinTerminalToBottom({ immediate: true });
 }
 
 function setTerminalScreen(text, forceStick = false) {
@@ -114,6 +139,8 @@ function setTerminalScreen(text, forceStick = false) {
   const nextText = sanitizeTerminalScreen(text);
   if (nextText === terminalLastScreen) return;
 
+  const bottomDistance = getTerminalBottomDistance();
+  const previousScrollLeft = terminalScreenEl?.scrollLeft || 0;
   const shouldStick = forceStick || terminalFollowOutput || isTerminalPinnedToBottom();
   terminalLastScreen = nextText;
   const nextCwd = extractTerminalCwd(nextText);
@@ -122,9 +149,17 @@ function setTerminalScreen(text, forceStick = false) {
     setTerminalSessionMeta(nextCwd);
   }
   terminalOutputEl.innerHTML = renderTerminalScreenMarkup(nextText);
-  requestAnimationFrame(updateTerminalOverflowState);
-
-  if (shouldStick) pinTerminalToBottom();
+  requestAnimationFrame(() => {
+    updateTerminalOverflowState();
+    if (shouldStick) {
+      pinTerminalToBottom();
+      return;
+    }
+    if (terminalScreenEl) {
+      terminalScreenEl.scrollTop = Math.max(0, terminalScreenEl.scrollHeight - terminalScreenEl.clientHeight - bottomDistance);
+      terminalScreenEl.scrollLeft = previousScrollLeft;
+    }
+  });
 }
 
 function runTerminalLocalAlias(line) {
@@ -170,7 +205,9 @@ function updateTerminalToastAnchor() {
     return;
   }
   const gap = 10;
-  const offset = Math.max(0, Math.round(window.innerHeight - rect.top + gap));
+  const vv = window.visualViewport;
+  const viewportBottom = vv ? (vv.offsetTop + vv.height) : (window.innerHeight || 0);
+  const offset = Math.max(0, Math.round(viewportBottom - rect.top + gap));
   document.documentElement.style.setProperty("--terminal-toast-bottom", `${offset}px`);
   document.documentElement.style.setProperty("--terminal-toast-left", `${Math.round(rect.left)}px`);
   document.documentElement.style.setProperty("--terminal-toast-width", `${Math.round(rect.width)}px`);
@@ -179,20 +216,35 @@ function updateTerminalToastAnchor() {
 function updateTerminalViewportMetrics() {
   updateAppViewportMetrics();
   const vv = window.visualViewport;
+  const landscapeRail = typeof isLandscapeRailMode === "function" && isLandscapeRailMode();
+  const layoutHeight = Math.max(320, Math.round(window.innerHeight || vv?.height || 0));
   const height = Math.max(320, Math.round(vv?.height || window.innerHeight || 0));
-  const top = (typeof isLandscapeRailMode === "function" && isLandscapeRailMode())
-    ? Math.max(0, Math.round(vv?.offsetTop || 0))
-    : 0;
-  const keyboardInset = Math.max(0, Math.round((window.innerHeight || 0) - height - top));
-  const keyboardOpen = !(typeof isLandscapeRailMode === "function" && isLandscapeRailMode()) && keyboardInset > 120;
+  const top = Math.max(0, Math.round(vv?.offsetTop || 0));
+  const keyboardInset = Math.max(0, Math.round(layoutHeight - height - top));
+  const keyboardOpen = !landscapeRail && keyboardInset > 120;
+  const desktopBottomNav = window.matchMedia?.("(min-width: 769px)")?.matches;
+  const restingBottomGap = landscapeRail
+    ? `calc(14px + env(safe-area-inset-bottom, 0px))`
+    : `calc(var(--nav-bar-height${desktopBottomNav ? "-desktop" : ""}) + env(safe-area-inset-bottom, 0px))`;
+  const restingFormBottom = landscapeRail
+    ? `max(10px, env(safe-area-inset-bottom, 0px))`
+    : `calc(8px + env(safe-area-inset-bottom, 0px))`;
   document.documentElement.style.setProperty("--terminal-vv-height", `${height}px`);
   document.documentElement.style.setProperty("--terminal-vv-top", `${top}px`);
-  document.documentElement.style.setProperty(
+  const layoutStyle = terminalPageEl?.style || document.documentElement.style;
+  layoutStyle.setProperty(
     "--terminal-bottom-gap",
     keyboardOpen
       ? `calc(6px + env(safe-area-inset-bottom, 0px))`
-      : `calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px))`,
+      : restingBottomGap,
   );
+  layoutStyle.setProperty(
+    "--terminal-form-bottom",
+    keyboardOpen
+      ? `calc(6px + env(safe-area-inset-bottom, 0px))`
+      : restingFormBottom,
+  );
+  document.documentElement.classList.toggle("terminal-keyboard-open", keyboardOpen);
 }
 
 function bindTerminalLayoutObservers() {
@@ -203,6 +255,7 @@ function bindTerminalLayoutObservers() {
     updateTerminalViewportMetrics();
     updateTerminalToastAnchor();
     updateTerminalOverflowState();
+    if (terminalFollowOutput) pinTerminalToBottom();
   });
   window.addEventListener("resize", handleLayout, { passive: true });
   window.addEventListener("orientationchange", handleLayout, { passive: true });
@@ -342,6 +395,14 @@ function initTerminalBindings() {
 
   bindTerminalLayoutObservers();
 
+  if (terminalInputEl) {
+    terminalInputEl.autocomplete = "off";
+    terminalInputEl.autocapitalize = "none";
+    terminalInputEl.spellcheck = false;
+    terminalInputEl.setAttribute("autocorrect", "off");
+    terminalInputEl.setAttribute("enterkeyhint", "send");
+  }
+
   bindNodeOnce(terminalScreenEl, "scrollBound", () => {
     terminalFollowOutput = isTerminalPinnedToBottom();
     updateTerminalOverflowState();
@@ -352,16 +413,14 @@ function initTerminalBindings() {
     const line = (terminalInputEl?.value || "").trim();
     if (!line) return;
     if (runTerminalLocalAlias(line)) return;
-    terminalFollowOutput = true;
-    pinTerminalToBottom();
+    terminalFollowOutput = isTerminalPinnedToBottom();
     if (sendTerminalPacket({ type: "input", data: line })) {
       terminalInputEl.value = "";
     }
   }, "submit");
 
   bindNodeOnce(btnTerminalCtrlCEl, "clickBound", () => {
-    terminalFollowOutput = true;
-    pinTerminalToBottom();
+    terminalFollowOutput = isTerminalPinnedToBottom();
     sendTerminalControl("ctrl_c");
   });
 
@@ -372,8 +431,7 @@ function initTerminalBindings() {
   });
 
   bindNodeOnce(btnTerminalReconnectEl, "clickBound", () => {
-    terminalFollowOutput = true;
-    pinTerminalToBottom();
+    terminalFollowOutput = isTerminalPinnedToBottom();
     const metaText = String(terminalMetaEl?.textContent || "");
     const blockedByPassword = terminalLastScreen.includes("Password:");
     const blockedByStartup = metaText.includes("returned non-zero exit status");
@@ -405,8 +463,11 @@ function teardownTerminalPage() {
   closeTerminalSocket();
   document.documentElement.style.removeProperty("--terminal-vv-height");
   document.documentElement.style.removeProperty("--terminal-vv-top");
-  document.documentElement.style.removeProperty("--terminal-bottom-gap");
+  const layoutStyle = terminalPageEl?.style || document.documentElement.style;
+  layoutStyle.removeProperty("--terminal-bottom-gap");
+  layoutStyle.removeProperty("--terminal-form-bottom");
   document.documentElement.style.removeProperty("--terminal-toast-bottom");
   document.documentElement.style.removeProperty("--terminal-toast-left");
   document.documentElement.style.removeProperty("--terminal-toast-width");
+  document.documentElement.classList.remove("terminal-keyboard-open");
 }

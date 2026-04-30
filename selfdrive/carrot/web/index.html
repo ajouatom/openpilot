@@ -234,7 +234,16 @@
         </div>
         <form id="terminalForm" class="terminal-form">
           <span class="terminal-form__prompt" aria-hidden="true">&gt;</span>
-          <input id="terminalInput" type="text" class="terminal-form__input" />
+          <input
+            id="terminalInput"
+            type="text"
+            class="terminal-form__input"
+            autocomplete="off"
+            autocapitalize="none"
+            autocorrect="off"
+            spellcheck="false"
+            enterkeyhint="send"
+          />
           <button id="btnTerminalSend" class="smallBtn btn--filled" type="submit">Send</button>
         </form>
       </div>
