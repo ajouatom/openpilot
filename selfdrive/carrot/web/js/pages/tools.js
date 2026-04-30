@@ -9,7 +9,11 @@ let toolsMetaLoadedAt = 0;
 let toolsMetaLastValues = null;
 let gitPullStatusPromise = null;
 let gitPullStatusLoadedAt = 0;
+let gitPullStatusTimer = null;
+let gitPullStatusVisibilityBound = false;
 let uiWarmupTimer = null;
+
+const GIT_PULL_STATUS_CLIENT_INTERVAL_MS = 60000;
 
 let toolsOutHistory = "";
 let toolsOutCurrentBlock = "";
@@ -127,26 +131,41 @@ function toolsLogNotice(message, options = {}) {
 function renderGitPullStatus(status = {}) {
   const button = document.getElementById("btnGitPull");
   const badge = document.getElementById("gitPullBadge");
+  const navButton = (typeof btnTools !== "undefined" && btnTools) ? btnTools : document.getElementById("btnTools");
   if (!button || !badge) return;
 
   const behind = Math.max(0, Number(status.behind || 0));
+  const state = String(status.state || "");
+  const hasError = Boolean(state && state !== "ok");
   const hasUpdates = behind > 0;
+  const label = hasUpdates ? (behind > 99 ? "99+" : String(behind)) : (hasError ? "X" : "✓");
   button.classList.toggle("has-updates", hasUpdates);
-  badge.hidden = !hasUpdates;
-  badge.textContent = behind > 99 ? "99+" : String(behind);
+  button.classList.toggle("is-current", !hasUpdates && !hasError);
+  button.classList.toggle("has-git-error", !hasUpdates && hasError);
+  badge.hidden = false;
+  badge.textContent = label;
+  badge.dataset.state = hasUpdates ? "updates" : (hasError ? "error" : "current");
+
+  if (navButton) {
+    navButton.classList.toggle("has-git-updates", hasUpdates);
+    if (hasUpdates) navButton.dataset.gitBehind = label;
+    else navButton.removeAttribute("data-git-behind");
+  }
 
   if (hasUpdates) {
     const upstream = String(status.upstream || "").trim();
     const suffix = upstream ? ` (${upstream})` : "";
     button.title = `${behind} commits available${suffix}`;
+  } else if (hasError) {
+    button.title = status.error || status.fetch_error || "git status unavailable";
   } else {
-    button.removeAttribute("title");
+    button.title = "Up to date";
   }
 }
 
 async function refreshGitPullStatus(options = {}) {
   const force = options.force === true;
-  const ttlMs = Number.isFinite(options.ttlMs) ? options.ttlMs : 600000;
+  const ttlMs = Number.isFinite(options.ttlMs) ? options.ttlMs : 60000;
   if (!force && gitPullStatusPromise) return gitPullStatusPromise;
   if (!force && hasFreshPageData(gitPullStatusLoadedAt, ttlMs)) return null;
 
@@ -166,6 +185,20 @@ async function refreshGitPullStatus(options = {}) {
       gitPullStatusPromise = null;
     });
   return gitPullStatusPromise;
+}
+
+function startGitPullStatusPolling() {
+  if (!gitPullStatusVisibilityBound) {
+    gitPullStatusVisibilityBound = true;
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) refreshGitPullStatus({ ttlMs: 0 }).catch(() => {});
+    });
+  }
+
+  if (gitPullStatusTimer) return;
+  gitPullStatusTimer = window.setInterval(() => {
+    if (!document.hidden) refreshGitPullStatus({ ttlMs: 0 }).catch(() => {});
+  }, GIT_PULL_STATUS_CLIENT_INTERVAL_MS);
 }
 
 function getToolCommandPreview(action, payload = {}) {
@@ -573,9 +606,11 @@ function scheduleUiWarmup(delay = 140) {
 
 if (document.readyState === "complete") {
   scheduleUiWarmup(120);
+  startGitPullStatusPolling();
 } else {
   window.addEventListener("load", () => {
     scheduleUiWarmup(120);
+    startGitPullStatusPolling();
   }, { once: true });
 }
 

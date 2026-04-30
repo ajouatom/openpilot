@@ -235,6 +235,26 @@ body[data-page="terminal"] .swipe-container {
   pointer-events: none;
 }
 
+.topbar .nav-btn.has-git-updates:not(.is-working)::after {
+  content: attr(data-git-behind);
+  position: absolute;
+  top: 6px;
+  right: 9px;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--md-error);
+  color: var(--md-on-error);
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 20px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-surface) 72%, transparent);
+  pointer-events: none;
+}
+
 .topbar .nav-btn.recording::before {
   content: attr(data-record-badge);
   position: absolute;

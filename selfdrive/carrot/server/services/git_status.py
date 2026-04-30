@@ -7,6 +7,7 @@ from typing import Any
 
 REPO_DIR = "/data/openpilot"
 GIT_STATUS_TTL = 600.0
+GIT_STATUS_POLL_INTERVAL = 300.0
 FETCH_TIMEOUT = 25.0
 GIT_TIMEOUT = 8.0
 
@@ -62,21 +63,36 @@ async def _git_text(args: list[str], timeout: float = GIT_TIMEOUT) -> str:
   return out if rc == 0 else ""
 
 
-async def _resolve_upstream(branch: str) -> str:
-  upstream = await _git_text(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
-  if upstream:
-    return upstream
+async def _resolve_tracking(branch: str) -> dict[str, str]:
+  remote = ""
+  remote_branch = ""
+  upstream = ""
 
-  if not branch:
-    return ""
+  if branch:
+    remote = await _git_text(["config", "--get", f"branch.{branch}.remote"])
+    merge_ref = await _git_text(["config", "--get", f"branch.{branch}.merge"])
+    if remote and merge_ref.startswith("refs/heads/"):
+      remote_branch = merge_ref[len("refs/heads/"):]
+      upstream = f"{remote}/{remote_branch}"
 
-  remotes = (await _git_text(["remote"])).split()
-  for remote in ["origin", *[r for r in remotes if r != "origin"]]:
-    candidate = f"{remote}/{branch}"
-    rc, _ = await _git(["rev-parse", "--verify", "--quiet", candidate])
-    if rc == 0:
-      return candidate
-  return ""
+  if not upstream:
+    upstream = await _git_text(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
+    if upstream and "/" in upstream:
+      remote, remote_branch = upstream.split("/", 1)
+
+  if not remote:
+    remotes = (await _git_text(["remote"])).split()
+    remote = "origin" if "origin" in remotes else (remotes[0] if remotes else "")
+
+  if remote and not remote_branch and branch:
+    remote_branch = branch
+    upstream = upstream or f"{remote}/{remote_branch}"
+
+  return {
+    "remote": remote,
+    "remote_branch": remote_branch,
+    "upstream": upstream,
+  }
 
 
 async def _read_status() -> dict[str, Any]:
@@ -88,17 +104,17 @@ async def _read_status() -> dict[str, Any]:
   if not branch:
     branch = await _git_text(["rev-parse", "--short", "HEAD"])
 
-  remote = await _git_text(["config", "--get", f"branch.{branch}.remote"]) if branch else ""
-  if not remote:
-    remotes = (await _git_text(["remote"])).split()
-    remote = "origin" if "origin" in remotes else (remotes[0] if remotes else "")
+  tracking = await _resolve_tracking(branch)
+  remote = tracking["remote"]
+  remote_branch = tracking["remote_branch"]
+  upstream = tracking["upstream"]
 
   fetch_rc = 0
   fetch_out = ""
-  if remote:
-    fetch_rc, fetch_out = await _git(["fetch", "--quiet", "--prune", remote], timeout=FETCH_TIMEOUT)
+  if remote and remote_branch:
+    refspec = f"+refs/heads/{remote_branch}:refs/remotes/{remote}/{remote_branch}"
+    fetch_rc, fetch_out = await _git(["fetch", "--quiet", remote, refspec], timeout=FETCH_TIMEOUT)
 
-  upstream = await _resolve_upstream(branch)
   if not upstream:
     return {
       "available": False,
@@ -107,6 +123,8 @@ async def _read_status() -> dict[str, Any]:
       "ahead": 0,
       "branch": branch,
       "upstream": "",
+      "remote": remote,
+      "remote_branch": remote_branch,
       "checked_at": int(_now()),
       "error": "no upstream branch",
       "fetch_error": fetch_out if fetch_rc != 0 else "",
@@ -127,6 +145,8 @@ async def _read_status() -> dict[str, Any]:
     "ahead": ahead,
     "branch": branch,
     "upstream": upstream,
+    "remote": remote,
+    "remote_branch": remote_branch,
     "checked_at": int(_now()),
     "error": fetch_out if fetch_rc != 0 else "",
   }
@@ -147,3 +167,17 @@ async def get_git_status(force: bool = False) -> dict[str, Any]:
 def clear_git_status_cache() -> None:
   global _cache
   _cache = None
+
+
+async def git_status_loop(interval: float = GIT_STATUS_POLL_INTERVAL, initial_delay: float = 8.0) -> None:
+  if initial_delay > 0:
+    await asyncio.sleep(initial_delay)
+
+  while True:
+    try:
+      await get_git_status(force=True)
+    except asyncio.CancelledError:
+      raise
+    except Exception as exc:
+      print(f"[git_status] periodic check failed: {exc}")
+    await asyncio.sleep(interval)
