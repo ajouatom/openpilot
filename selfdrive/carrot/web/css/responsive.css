@@ -1057,9 +1057,12 @@ body[data-page="setting"] #settingScreenItems .smallBtn {
 }
 
 body[data-page="setting"] #settingScreenItems .smallBtn:hover,
-body[data-page="setting"] #settingScreenItems .smallBtn:focus-visible {
+body[data-page="setting"] #settingScreenItems .smallBtn:focus-visible,
+body[data-page="setting"] #settingScreenItems .val:hover,
+body[data-page="setting"] #settingScreenItems .val:focus-visible {
   border-color: color-mix(in srgb, var(--md-primary) 42%, var(--md-outline-var));
   background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
+  outline: none;
 }
 
 body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(1),
@@ -1074,14 +1077,17 @@ body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(4) {
 }
 
 body[data-page="setting"] #settingScreenItems .val {
+  appearance: none;
   width: 100%;
   box-sizing: border-box;
   min-width: var(--setting-control-value);
   max-width: var(--setting-control-value);
   min-height: 40px;
+  padding: 7px 9px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
   border-color: color-mix(in srgb, var(--md-outline-var) 58%, transparent);
   background: color-mix(in srgb, var(--md-surface-cont) 92%, #000);
   border-radius: 8px;

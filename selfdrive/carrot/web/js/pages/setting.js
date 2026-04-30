@@ -1187,17 +1187,22 @@ async function renderItems(group, options = {}) {
     ctrl.className = "ctrl";
 
     const btnMinus = document.createElement("button");
+    btnMinus.type = "button";
     btnMinus.className = "smallBtn";
     btnMinus.textContent = "-";
 
-    const val = document.createElement("div");
+    const val = document.createElement("button");
+    val.type = "button";
     val.className = "pill val";
+    val.setAttribute("aria-label", getUIText("setting_value_edit", "Edit value"));
 
     const btnPlus = document.createElement("button");
+    btnPlus.type = "button";
     btnPlus.className = "smallBtn";
     btnPlus.textContent = "+";
 
     const unitBtn = document.createElement("button");
+    unitBtn.type = "button";
     unitBtn.className = "smallBtn";
     unitBtn.textContent = "x" + UNIT_CYCLE[UNIT_INDEX[name]];
 
@@ -1225,6 +1230,56 @@ async function renderItems(group, options = {}) {
     const cur = (name in values) ? values[name] : p.default;
     val.textContent = String(cur);
 
+    function normalizeSettingValue(raw) {
+      const text = String(raw).trim();
+      if (!text) return null;
+
+      const num = Number(text);
+      if (!Number.isFinite(num)) return null;
+
+      const min = Number(p.min);
+      const max = Number(p.max);
+      let next = clamp(num, min, max);
+      if (Number.isInteger(min) && Number.isInteger(max)) {
+        next = Math.round(next);
+      }
+      return next;
+    }
+
+    async function commitSettingValue(next) {
+      try {
+        await setParam(name, next);
+        val.textContent = String(next);
+        cacheSettingValue(name, next, group);
+      } catch (e) {
+        showAppToast((UI_STRINGS[LANG].set_failed || "set failed: ") + e.message, { tone: "error" });
+      }
+    }
+
+    async function editValueDirect() {
+      const input = await appPrompt(
+        getUIText("setting_value_prompt", "Enter value for {name}\nRange: {min} - {max}", {
+          name,
+          min: p.min,
+          max: p.max,
+        }),
+        {
+          title: getUIText("setting_value_title", "Edit value"),
+          defaultValue: val.textContent,
+          placeholder: String(p.default),
+        }
+      );
+      if (input === null) return;
+
+      const next = normalizeSettingValue(input);
+      if (next === null) {
+        showAppToast(getUIText("setting_value_invalid", "Enter a valid number."), { tone: "error" });
+        return;
+      }
+      if (String(next) === String(val.textContent)) return;
+      await commitSettingValue(next);
+    }
+
     async function applyDelta(sign) {
       const step = UNIT_CYCLE[UNIT_INDEX[name]];
       let curv = Number(val.textContent);
@@ -1237,16 +1292,11 @@ async function renderItems(group, options = {}) {
         next = Math.round(next);
       }
 
-      try {
-        await setParam(name, next);
-        val.textContent = String(next);
-        cacheSettingValue(name, next, group);
-      } catch (e) {
-        showAppToast((UI_STRINGS[LANG].set_failed || "set failed: ") + e.message, { tone: "error" });
-      }
+      await commitSettingValue(next);
     }
 
     btnMinus.onclick = () => applyDelta(-1);
+    val.onclick = editValueDirect;
     btnPlus.onclick = () => applyDelta(+1);
   });
 
