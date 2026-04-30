@@ -8,6 +8,7 @@
 }
 
 .logs-shell {
+  --logs-content-inline: clamp(12px, 3.5vw, 24px);
   height: 100%;
   min-height: 0;
   display: flex;
@@ -24,14 +25,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px clamp(10px, 3.2vw, 24px) 6px;
+  padding: 8px var(--logs-content-inline) 6px;
   background: color-mix(in srgb, var(--md-surface) 96%, transparent);
   border-bottom: 0;
   backdrop-filter: blur(18px);
 }
 
 .logs-tabs {
-  width: min(100%, 720px);
+  width: 100%;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px;
@@ -157,7 +158,7 @@
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
-  padding: 6px clamp(12px, 3.5vw, 24px) calc(var(--nav-bar-height) + 16px + env(safe-area-inset-bottom, 0px));
+  padding: 6px var(--logs-content-inline) calc(var(--nav-bar-height) + 16px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -869,7 +870,7 @@
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
-  padding: 10px clamp(12px, 3.5vw, 24px) calc(var(--nav-bar-height) + 16px + env(safe-area-inset-bottom, 0px));
+  padding: 10px var(--logs-content-inline) calc(var(--nav-bar-height) + 16px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -975,9 +976,8 @@
 }
 
 @media (min-width: 900px) {
-  .dashcam-routes {
-    padding-left: clamp(18px, 3vw, 34px);
-    padding-right: clamp(18px, 3vw, 34px);
+  .logs-shell {
+    --logs-content-inline: clamp(18px, 3vw, 34px);
   }
 
   .dashcam-route-card {
