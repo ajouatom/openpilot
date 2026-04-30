@@ -541,6 +541,7 @@
 .dashcam-share-card {
   display: grid;
   gap: 10px;
+  min-height: 0;
 }
 
 .dashcam-share-card__summary {
@@ -669,6 +670,19 @@
   justify-content: center;
 }
 
+#appDialog:has(.dashcam-share-dialog) {
+  align-items: center;
+  padding: 8px;
+}
+
+#appDialog:has(.dashcam-share-dialog) .app-dialog__sheet {
+  max-height: calc(var(--app-vv-height, 100dvh) - 16px);
+}
+
+#appDialog:has(.dashcam-share-dialog) .app-dialog__body {
+  min-height: 0;
+}
+
 #appDialog:has(.dashcam-share-dialog) .app-dialog__actions {
   margin-top: 10px;
 }
@@ -734,6 +748,75 @@
   max-height: min(42vh, 300px);
   margin-top: 14px;
   overflow: auto;
+}
+
+@media (orientation: landscape) {
+  .dashcam-share-card {
+    gap: 8px;
+  }
+
+  .dashcam-upload-log {
+    gap: 6px;
+  }
+
+  .dashcam-upload-log__item {
+    gap: 4px;
+    padding: 8px;
+  }
+
+  .dashcam-share-card pre {
+    max-height: min(24vh, 120px);
+    padding: 10px;
+    font-size: 11px;
+    line-height: 1.45;
+  }
+
+  #appDialog:has(.dashcam-share-dialog) .app-dialog__sheet {
+    width: min(72vw, 520px);
+    max-height: calc(var(--app-vv-height, 100dvh) - 16px);
+    padding: 12px 14px;
+  }
+
+  #appDialog:has(.dashcam-share-dialog) .app-dialog__head {
+    margin-bottom: 6px;
+  }
+
+  #appDialog:has(.dashcam-share-dialog) .app-dialog__title {
+    font-size: 14px;
+  }
+
+  #appDialog:has(.dashcam-share-dialog) .app-dialog__actions {
+    margin-top: 8px;
+  }
+
+  .dashcam-upload-progress {
+    padding: 8px;
+  }
+
+  .dashcam-upload-progress__sheet {
+    width: min(70vw, 520px);
+    max-height: calc(var(--app-vv-height, 100dvh) - 16px);
+    overflow: auto;
+    padding: 12px;
+  }
+
+  .dashcam-upload-progress__title {
+    font-size: 14px;
+  }
+
+  .dashcam-upload-progress__message {
+    margin-top: 5px;
+    font-size: 12px;
+  }
+
+  .dashcam-upload-progress__bar {
+    margin-top: 10px;
+  }
+
+  .dashcam-upload-progress__log {
+    max-height: min(48vh, 170px);
+    margin-top: 10px;
+  }
 }
 
 @keyframes dashcam-upload-indeterminate {
