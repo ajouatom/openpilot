@@ -123,7 +123,7 @@ class CarState(CarStateBase):
 
     self.auto_engage_mode = Params().get_int("AutoEngage")
     self.cancel_button_mode = Params().get_int("CancelButtonMode")
-    self.lfa_button_mode = Params().get_int("LFAButtonMode")
+    self.lfa_button_mode = Params().get_int("LfaButtonMode")
     self.main_enabled = self.auto_engage_mode == 2
     self.manual_main_off_latched = False
 
