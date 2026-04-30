@@ -482,11 +482,13 @@ body[data-page="tools"] .swipe-container,
 }
 
 .tools-lang-menu__panel {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
+  position: fixed;
+  top: var(--tools-lang-menu-panel-top, 48px);
+  right: var(--tools-lang-menu-panel-right, 12px);
   z-index: 2500;
   width: min(148px, calc(100vw - 24px));
+  max-height: calc(100dvh - var(--tools-lang-menu-panel-top, 48px) - 12px);
+  overflow: auto;
   padding: 8px 10px 6px;
   border: 1px solid var(--md-outline-var);
   border-radius: 6px;

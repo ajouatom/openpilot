@@ -175,12 +175,21 @@ function closeToolsLanguageMenu() {
   renderToolsMeta();
 }
 
+function setToolsLanguageMenuPosition(anchor) {
+  if (!anchor || typeof anchor.getBoundingClientRect !== "function") return;
+  const rect = anchor.getBoundingClientRect();
+  const top = Math.max(12, Math.round(rect.bottom + 10));
+  const right = Math.max(12, Math.round((window.innerWidth || document.documentElement.clientWidth || 0) - rect.right));
+  document.documentElement.style.setProperty("--tools-lang-menu-panel-top", `${top}px`);
+  document.documentElement.style.setProperty("--tools-lang-menu-panel-right", `${right}px`);
+}
+
 function bindToolsLanguageMenuDismiss() {
   if (document.body.dataset.toolsLangDismissBound === "1") return;
   document.body.dataset.toolsLangDismissBound = "1";
   document.addEventListener("click", (event) => {
     if (!toolsLanguageMenuOpen) return;
-    if (event.target instanceof Element && event.target.closest(".tools-lang-menu")) return;
+    if (event.target instanceof Element && event.target.closest(".tools-lang-menu, .tools-lang-menu__panel")) return;
     closeToolsLanguageMenu();
   });
   document.addEventListener("keydown", (event) => {
@@ -223,6 +232,7 @@ function renderToolsMeta() {
   `;
   langBtn.addEventListener("click", (event) => {
     event.stopPropagation();
+    if (!toolsLanguageMenuOpen) setToolsLanguageMenuPosition(langBtn);
     toolsLanguageMenuOpen = !toolsLanguageMenuOpen;
     renderToolsMeta();
   });

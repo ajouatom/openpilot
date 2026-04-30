@@ -242,7 +242,7 @@
     top: 0 !important;
     right: 0 !important;
     left: 0 !important;
-    z-index: 220;
+    z-index: 90;
     width: 100dvw;
     margin: 0 !important;
     padding: calc(8px + env(safe-area-inset-top, 0px)) var(--sp-lg) 12px;
@@ -1161,7 +1161,7 @@ body[data-page="setting"] #settingScreenItems .val {
     min-height: 32px;
     max-height: 32px;
     margin-bottom: 8px;
-    overflow: hidden;
+    overflow: visible;
     align-items: center;
     line-height: 1.2;
   }
