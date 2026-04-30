@@ -133,6 +133,10 @@
     background: color-mix(in srgb, var(--md-surface-cont-hh) 88%, var(--md-primary));
   }
 
+  body[data-page="setting"] #settingSubnavWrap {
+    box-sizing: border-box;
+  }
+
   #pageTerminal {
     --terminal-inline: 12px;
   }
@@ -218,6 +222,44 @@
   .terminal-form .smallBtn {
     padding: 0 14px;
     font-size: 11px;
+  }
+}
+
+@media (max-width: 640px) and (orientation: portrait) {
+  body[data-page="setting"] #settingScreenItems {
+    padding-top: calc(var(--setting-fixed-subnav-height, 174px) + 10px);
+  }
+
+  body[data-page="setting"] #settingSubnavWrap {
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 96;
+    margin: 0;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) var(--sp-lg) 14px;
+    background: color-mix(in srgb, var(--md-surface) 96%, #000);
+    border-bottom: 1px solid color-mix(in srgb, var(--md-primary) 32%, var(--md-outline-var));
+    box-shadow:
+      0 14px 28px rgba(0, 0, 0, 0.36),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(12px) saturate(112%);
+  }
+
+  body[data-page="setting"] #settingSubnavWrap::after {
+    content: "";
+    display: block;
+    position: absolute;
+    left: var(--sp-lg);
+    right: var(--sp-lg);
+    bottom: 0;
+    height: 2px;
+    pointer-events: none;
+    border-radius: 999px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--md-primary) 58%, var(--md-outline-var)),
+      transparent
+    );
   }
 }
 

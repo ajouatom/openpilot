@@ -336,6 +336,30 @@ function isCompactLandscapeMode() {
   return window.matchMedia("(orientation: landscape)").matches;
 }
 
+function isFixedPortraitSettingSubnavMode() {
+  return window.matchMedia("(max-width: 640px) and (orientation: portrait)").matches;
+}
+
+function syncSettingSubnavFixedOffset() {
+  if (!settingSubnavWrap || !screenItems) return;
+
+  const shouldFix =
+    CURRENT_PAGE === "setting" &&
+    isFixedPortraitSettingSubnavMode() &&
+    screenItems.style.display !== "none" &&
+    settingSubnavWrap.style.display !== "none";
+
+  if (!shouldFix) {
+    document.documentElement.style.removeProperty("--setting-fixed-subnav-height");
+    return;
+  }
+
+  const height = Math.ceil(settingSubnavWrap.getBoundingClientRect().height || settingSubnavWrap.offsetHeight || 0);
+  if (height > 0) {
+    document.documentElement.style.setProperty("--setting-fixed-subnav-height", `${height}px`);
+  }
+}
+
 function getLandscapeDefaultSettingGroup() {
   const groups = SETTINGS?.groups || [];
   if (!groups.length) return null;
@@ -681,11 +705,15 @@ window.addEventListener("keydown", (e) => {
 });
 
 function updateSettingSubnavLayoutState() {
-  if (!settingSubnav || !settingSubnavWrap) return;
+  if (!settingSubnav || !settingSubnavWrap) {
+    syncSettingSubnavFixedOffset();
+    return;
+  }
 
   const maxScrollLeft = Math.max(settingSubnav.scrollWidth - settingSubnav.clientWidth, 0);
   const isScrollable = maxScrollLeft > 4;
   settingSubnavWrap.classList.toggle("is-scrollable", isScrollable);
+  syncSettingSubnavFixedOffset();
 }
 
 function getSettingSubnavGroups() {
@@ -920,6 +948,7 @@ function renderSettingSubnav() {
       button.onclick = () => selectGroup(entry.group, screenItems?.style.display === "none");
     });
     scheduleSettingSubnavFocus();
+    requestAnimationFrame(syncSettingSubnavFixedOffset);
     return;
   }
 
@@ -938,6 +967,7 @@ function renderSettingSubnav() {
   });
 
   scheduleSettingSubnavFocus();
+  requestAnimationFrame(syncSettingSubnavFixedOffset);
 }
 
 if (settingSubnav) {
@@ -958,9 +988,17 @@ if (settingSubnav) {
     }, 120);
   }, { passive: true });
   window.addEventListener("resize", () => requestAnimationFrame(updateSettingSubnavLayoutState));
+  window.addEventListener("orientationchange", () => {
+    window.setTimeout(syncSettingSubnavFixedOffset, 80);
+  }, { passive: true });
 }
 
 if (settingSubnavWrap) {
+  if (window.ResizeObserver) {
+    const settingSubnavResizeObserver = new ResizeObserver(() => syncSettingSubnavFixedOffset());
+    settingSubnavResizeObserver.observe(settingSubnavWrap);
+  }
+
   let gesture = null;
 
   settingSubnavWrap.addEventListener("touchstart", (e) => {

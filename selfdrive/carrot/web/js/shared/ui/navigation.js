@@ -367,6 +367,9 @@ function showSettingScreen(which, pushHistory = false) {
       history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
     }
     if (settingScreenHost) settingScreenHost.style.minHeight = "";
+    if (typeof syncSettingSubnavFixedOffset === "function") {
+      requestAnimationFrame(syncSettingSubnavFixedOffset);
+    }
     return;
   }
 
@@ -392,6 +395,9 @@ function showSettingScreen(which, pushHistory = false) {
   }
 
   if (settingScreenHost) settingScreenHost.style.minHeight = "";
+  if (typeof syncSettingSubnavFixedOffset === "function") {
+    requestAnimationFrame(syncSettingSubnavFixedOffset);
+  }
   if (isGroups && typeof setSettingItemsScrollTop === "function") {
     requestAnimationFrame(() => setSettingItemsScrollTop(0));
   }
