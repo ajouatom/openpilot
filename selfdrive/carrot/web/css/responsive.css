@@ -390,6 +390,7 @@
     grid-template-rows: auto auto minmax(0, 1fr);
     column-gap: 18px;
     align-items: stretch;
+    background: transparent;
   }
 
   :is(body[data-page="tools"] #pageTools, #pageTools.page-transitioning) > .page-header--hidden {

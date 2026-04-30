@@ -13,7 +13,7 @@ let gitPullStatusTimer = null;
 let gitPullStatusVisibilityBound = false;
 let uiWarmupTimer = null;
 
-const GIT_PULL_STATUS_CLIENT_INTERVAL_MS = 60000;
+const GIT_PULL_STATUS_CLIENT_INTERVAL_MS = 10000;
 
 let toolsOutHistory = "";
 let toolsOutCurrentBlock = "";
@@ -197,7 +197,7 @@ function startGitPullStatusPolling() {
 
   if (gitPullStatusTimer) return;
   gitPullStatusTimer = window.setInterval(() => {
-    if (!document.hidden) refreshGitPullStatus({ force: true, ttlMs: 0 }).catch(() => {});
+    if (!document.hidden) refreshGitPullStatus({ ttlMs: 0 }).catch(() => {});
   }, GIT_PULL_STATUS_CLIENT_INTERVAL_MS);
 }
 
@@ -872,7 +872,7 @@ function initToolsPage() {
   toolsMetaSet(UI_STRINGS[LANG].ready || "Ready");
   toolsProgressSet(null, { active: false });
   refreshToolsMetaInfo().catch(() => {});
-  refreshGitPullStatus().catch(() => {});
+  refreshGitPullStatus({ force: true }).catch(() => {});
   initToolsGroups();
   initToolsLogPanel();
 
