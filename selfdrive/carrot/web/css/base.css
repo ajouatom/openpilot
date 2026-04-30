@@ -206,28 +206,23 @@ body[data-page="terminal"] .swipe-container {
 }
 
 .topbar .nav-btn.is-working::after {
-  content: "";
+  content: attr(data-work-badge);
   position: absolute;
-  top: 7px;
-  right: 11px;
-  width: 13px;
-  height: 13px;
-  border-radius: 999px;
-  border: 2px solid color-mix(in srgb, var(--md-primary) 30%, transparent);
-  border-top-color: var(--md-primary);
-  background: color-mix(in srgb, var(--md-surface-cont) 86%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-surface) 72%, transparent);
-  animation: nav-working-spin 0.82s linear infinite;
-  will-change: transform;
+  top: 6px;
+  right: 8px;
+  min-width: 24px;
+  padding: 2px 5px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--md-primary) 42%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-primary-cont) 72%, var(--md-surface-cont));
+  color: var(--md-primary);
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+  letter-spacing: 0;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-surface) 62%, transparent);
   pointer-events: none;
-}
-
-body.nav-state-settling .topbar,
-body.nav-state-settling .topbar .nav-btn,
-body.nav-state-settling .topbar .nav-btn::before,
-body.nav-state-settling .topbar .nav-btn::after,
-body.nav-state-settling .topbar .nav-btn > span:last-child {
-  transition: none !important;
 }
 
 .topbar .nav-btn.recording::before {
@@ -264,8 +259,7 @@ body.nav-state-settling .topbar .nav-btn > span:last-child {
 }
 
 .topbar .nav-btn:active {
-  background: color-mix(in srgb, var(--md-primary) 8%, transparent);
-  color: var(--md-on-surface);
+  color: inherit;
 }
 
 /* ── Content Area ─────────────────────────────────────────── */
@@ -403,18 +397,6 @@ body[data-page="home"] .global-home-record-fab {
   }
   50%, 100% {
     opacity: 0.28;
-  }
-}
-
-@keyframes nav-working-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .topbar .nav-btn.is-working::after {
-    animation: none;
   }
 }
 

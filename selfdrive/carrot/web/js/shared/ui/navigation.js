@@ -7,7 +7,6 @@ let settingScreenHideTimer = null;
 let settingScreenTransitionToken = 0;
 let carScreenHideTimer = null;
 let carScreenTransitionToken = 0;
-let navStateSettleTimer = null;
 
 
 function disableViewportZoomGestures() {
@@ -190,6 +189,30 @@ function stopPageTransition() {
   setDisplayedPage(CURRENT_PAGE);
 }
 
+function setElementClass(el, className, enabled) {
+  if (!el) return;
+  if (el.classList.contains(className) !== enabled) {
+    el.classList.toggle(className, enabled);
+  }
+}
+
+function syncPageDataset(page) {
+  if (document.documentElement.dataset.page !== page) {
+    document.documentElement.dataset.page = page;
+  }
+  if (document.body.dataset.page !== page) {
+    document.body.dataset.page = page;
+  }
+}
+
+function syncNavActivePage(page) {
+  setElementClass(btnHome, "active", page === "carrot");
+  setElementClass(btnSetting, "active", page === "setting");
+  setElementClass(btnTools, "active", page === "tools");
+  setElementClass(btnLogs, "active", page === "logs");
+  setElementClass(btnTerminal, "active", page === "terminal");
+}
+
 function prepareSwipePages(fromPage, toPage) {
   const fromEl = PAGE_ELEMENTS[fromPage];
   const toEl = PAGE_ELEMENTS[toPage];
@@ -256,26 +279,18 @@ function settleSwipe(frame, direction, commit, done) {
 /* ── showPage / showSettingScreen / showCarScreen ───────── */
 function showPage(page, pushHistory = false, transition = null) {
   const prevPage = CURRENT_PAGE;
+  if (prevPage === page) {
+    syncPageDataset(page);
+    syncNavActivePage(page);
+    return;
+  }
+
   if (prevPage === "terminal" && page !== "terminal" && typeof teardownTerminalPage === "function") {
     teardownTerminalPage();
   }
-  if (prevPage !== page && document.body) {
-    document.body.classList.add("nav-state-settling");
-    if (navStateSettleTimer) window.clearTimeout(navStateSettleTimer);
-    navStateSettleTimer = window.setTimeout(() => {
-      document.body.classList.remove("nav-state-settling");
-      navStateSettleTimer = null;
-    }, PAGE_TRANSITION_MS + 60);
-  }
   CURRENT_PAGE = page;
-  document.documentElement.dataset.page = page;
-  document.body.dataset.page = page;
-
-  btnHome.classList.toggle("active", page === "carrot");
-  btnSetting.classList.toggle("active", page === "setting");
-  btnTools.classList.toggle("active", page === "tools");
-  if (btnLogs) btnLogs.classList.toggle("active", page === "logs");
-  btnTerminal.classList.toggle("active", page === "terminal");
+  syncPageDataset(page);
+  syncNavActivePage(page);
 
   if (typeof updateAppViewportMetrics === "function") {
     updateAppViewportMetrics();
