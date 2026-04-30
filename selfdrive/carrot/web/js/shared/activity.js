@@ -39,7 +39,7 @@ function syncAppActivityNav() {
     }
 
     if (active) {
-      if (button.dataset.workBadge !== "RUN") button.dataset.workBadge = "RUN";
+      if (button.dataset.workBadge !== "") button.dataset.workBadge = "";
       if (button.title !== label) button.title = label;
     } else {
       if (button.hasAttribute("data-work-badge")) button.removeAttribute("data-work-badge");
