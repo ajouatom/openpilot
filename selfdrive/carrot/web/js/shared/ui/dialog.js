@@ -157,8 +157,7 @@ function openAppDialog(options = {}) {
     appDialogCopy.textContent = options.copyLabel || getUIText("copy", "Copy");
     appDialogCopy.onclick = copyText ? () => {
       copyToClipboard(copyText);
-      if (typeof showAppToast === "function") showAppToast(getUIText("copied", "Copied"));
-      else alert(getUIText("copied", "Copied"));
+      alert(getUIText("copied", "Copied"));
     } : null;
   }
 
