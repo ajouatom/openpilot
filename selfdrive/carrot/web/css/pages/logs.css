@@ -1133,13 +1133,14 @@
 
 #pageTerminal {
   --terminal-bottom-gap: calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px));
+  --terminal-form-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
   --terminal-inline: max(var(--sp-lg), calc((100vw - var(--content-max-width)) / 2));
   position: fixed;
   left: 0;
   right: 0;
   top: var(--terminal-vv-top, 0px);
   width: 100dvw;
-  height: calc(var(--terminal-vv-height, 100dvh) - var(--terminal-vv-top, 0px) - var(--terminal-bottom-gap));
+  height: calc(var(--terminal-vv-height, 100dvh) - var(--terminal-bottom-gap));
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1221,6 +1222,8 @@
   overflow-x: auto;
   overflow-y: auto;
   overscroll-behavior: contain;
+  overflow-anchor: none;
+  scrollbar-gutter: stable;
   padding: var(--sp-md) var(--terminal-inline);
   touch-action: pan-x pan-y;
   position: relative;
@@ -1228,12 +1231,11 @@
 
 .terminal-screen.is-x-overflow::after {
   content: "";
-  position: sticky;
+  position: absolute;
   top: 0;
   right: 0;
-  float: right;
+  bottom: 0;
   width: 28px;
-  height: 100%;
   pointer-events: none;
   background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--md-surface) 90%, #000 10%));
 }
@@ -1264,7 +1266,7 @@
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: var(--sp-sm);
   align-items: center;
-  margin: 8px var(--terminal-inline) calc(8px + env(safe-area-inset-bottom, 0px));
+  margin: 8px var(--terminal-inline) var(--terminal-form-bottom);
   padding-left: 14px;
   border: 1px solid color-mix(in srgb, var(--md-stroke-soft) 56%, transparent);
   border-radius: var(--r-pill);

@@ -66,9 +66,10 @@
   .setting-search-panel {
     --setting-search-form-width: clamp(360px, 34vw, 540px);
     --setting-search-results-width: min(64vw, 820px);
-    --setting-search-results-max-height: min(44vh, 420px);
-    gap: 28px;
-    padding-bottom: calc(var(--nav-bar-height-desktop) + 24px + env(safe-area-inset-bottom, 0px));
+    --setting-search-results-max-height: min(60dvh, 560px);
+    gap: 14px;
+    padding-top: calc(22px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(var(--nav-bar-height-desktop) + 18px + env(safe-area-inset-bottom, 0px));
   }
 
 }
@@ -173,9 +174,9 @@
   .setting-search-panel {
     --setting-search-form-width: calc(100vw - 28px);
     --setting-search-results-width: calc(100vw - 28px);
-    --setting-search-results-max-height: min(40vh, 320px);
-    gap: 18px;
-    padding: 24px 12px calc(var(--nav-bar-height) + 14px + env(safe-area-inset-bottom, 0px));
+    --setting-search-results-max-height: min(56dvh, 420px);
+    gap: 12px;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 12px calc(var(--nav-bar-height) + 14px + env(safe-area-inset-bottom, 0px));
   }
 
   .setting-search-form {
@@ -211,7 +212,7 @@
   }
 
   .terminal-form {
-    margin: 8px var(--terminal-inline) calc(8px + env(safe-area-inset-bottom, 0px));
+    margin: 8px var(--terminal-inline) var(--terminal-form-bottom);
     padding-left: 12px;
   }
 
@@ -227,9 +228,9 @@
   }
 
   .setting-search-panel {
-    --setting-search-results-max-height: min(34vh, 280px);
-    gap: 16px;
-    padding-top: 18px;
+    --setting-search-results-max-height: min(48dvh, 300px);
+    gap: 10px;
+    padding-top: calc(12px + env(safe-area-inset-top, 0px));
   }
 }
 
@@ -267,7 +268,7 @@
   }
 
   .terminal-form {
-    margin: 8px var(--terminal-inline) calc(8px + env(safe-area-inset-bottom, 0px));
+    margin: 8px var(--terminal-inline) var(--terminal-form-bottom);
     padding-left: 12px;
   }
 
@@ -747,7 +748,7 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
   }
 
   .terminal-form {
-    margin: 6px var(--terminal-inline) max(10px, env(safe-area-inset-bottom, 0px));
+    margin: 6px var(--terminal-inline) var(--terminal-form-bottom);
     padding-left: 12px;
   }
 
@@ -794,8 +795,8 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
   .setting-search-panel {
     --setting-search-form-width: min(76vw, 540px);
     --setting-search-results-width: min(82vw, 760px);
-    --setting-search-results-max-height: min(34vh, 220px);
-    gap: 14px;
-    padding: 18px 12px calc(var(--nav-bar-height) + 12px + env(safe-area-inset-bottom, 0px));
+    --setting-search-results-max-height: min(48dvh, 260px);
+    gap: 10px;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 12px calc(var(--nav-bar-height) + 12px + env(safe-area-inset-bottom, 0px));
   }
 }

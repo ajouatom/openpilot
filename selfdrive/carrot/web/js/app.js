@@ -28,7 +28,7 @@ window.addEventListener("popstate", async (ev) => {
       const targetGroup = CURRENT_GROUP || getLandscapeDefaultSettingGroup();
       if (targetGroup) {
         CURRENT_GROUP = targetGroup;
-        await activateSettingGroup(targetGroup, false, { scrollMode: "restore" });
+        await activateSettingGroup(targetGroup, false, { scrollMode: "restore", animateGroups: false, animateItems: false });
       } else {
         showSettingScreen("groups", false);
       }
@@ -40,7 +40,7 @@ window.addEventListener("popstate", async (ev) => {
 
     if (screen === "items" && CURRENT_GROUP) {
       showSettingScreen("items", false);
-      renderItems(CURRENT_GROUP, { scrollMode: "restore" });
+      renderItems(CURRENT_GROUP, { scrollMode: "restore", animateItems: false });
     } else {
       showSettingScreen("groups", false);
     }

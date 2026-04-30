@@ -245,11 +245,6 @@ function renderToolsMeta() {
       option.setAttribute("aria-checked", item.lang === LANG ? "true" : "false");
       option.innerHTML = `
         <span>${escapeHtml(item.name)}</span>
-        <span class="tools-lang-menu__openMark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" focusable="false">
-            <path fill="currentColor" d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42 9.3-9.29H14zm-9 4h6v2H7v8h8v-4h2v6H5z"/>
-          </svg>
-        </span>
       `;
       option.addEventListener("click", (event) => {
         event.stopPropagation();

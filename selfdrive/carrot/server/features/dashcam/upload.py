@@ -103,76 +103,56 @@ def discord_webhook_url(params: Any) -> str:
   return decode_obfuscated(DASHCAM_DEFAULT_DISCORD_WEBHOOK, DASHCAM_DEFAULT_DISCORD_KEY)
 
 
-def upload_share_text(payload: dict[str, Any]) -> str:
+def upload_message_lines(payload: dict[str, Any], max_results: int | None = None) -> list[str]:
   meta = payload.get("meta") or {}
   uploaded = [item for item in payload.get("results") or [] if item.get("ok")]
   failed = [item for item in payload.get("results") or [] if not item.get("ok")]
   lines = [
     "# Carrot Dashcam Upload",
-    "## Upload",
+    "### Upload",
     f"- Time: {payload.get('uploadedAt') or ''}",
     f"- Path: {payload.get('remoteBasePath') or ''}",
-    "## Device",
+    "### Device",
     f"- Car name: {meta.get('carName') or 'none'}",
     f"- DongleId: {meta.get('dongleId') or 'unknown'}",
     f"- Serial: {meta.get('serial') or 'unknown'}",
     f"- Branch: {meta.get('branch') or 'unknown'}",
     f"- Commit: {meta.get('commit') or 'unknown'} ({meta.get('commitDate') or 'unknown'})",
-    "",
-    "## Result",
+    "### Result",
   ]
-  for item in uploaded:
-    lines.append(f"- {item.get('segment')} OK")
-  if failed:
-    lines.extend(["## Failed", f"- {len(failed)}"])
-  return "\n".join(lines).strip()
+
+  result_items = uploaded + failed
+  visible_items = result_items if max_results is None else result_items[:max_results]
+  for item in visible_items:
+    if item.get("ok"):
+      lines.append(f"- {item.get('segment')} OK")
+    else:
+      error = str(item.get("error") or "").strip()
+      suffix = f": {error}" if error else ""
+      lines.append(f"- {item.get('segment')} FAILED{suffix}")
+
+  hidden_count = len(result_items) - len(visible_items)
+  if hidden_count > 0:
+    lines.append(f"- ... +{hidden_count} more")
+  if not result_items:
+    lines.append("- none")
+  return lines
+
+
+def upload_share_text(payload: dict[str, Any]) -> str:
+  return "\n".join(upload_message_lines(payload)).strip()
 
 
 def discord_content(payload: dict[str, Any]) -> str:
-  meta = payload.get("meta") or {}
-  uploaded = [item for item in payload.get("results") or [] if item.get("ok")]
-  failed = [item for item in payload.get("results") or [] if not item.get("ok")]
-  detail_lines = [f"- {item.get('segment')} OK" for item in uploaded[:24]]
-  if len(uploaded) > len(detail_lines):
-    detail_lines.append(f"- ... +{len(uploaded) - len(detail_lines)} more")
-  if not detail_lines:
-    detail_lines.append("- none")
-  failed_line = f"\n- Failed: **{len(failed)}**" if failed else ""
-  content = (
-    "# Carrot Dashcam Upload\n"
-    "## Upload\n"
-    f"- Time: **{payload.get('uploadedAt') or ''}**\n"
-    f"- Path: **{payload.get('remoteBasePath') or ''}**\n"
-    "## Device\n"
-    f"- Car name: **{meta.get('carName') or 'none'}**\n"
-    f"- DongleId: **{meta.get('dongleId') or 'unknown'}**\n"
-    f"- Serial: **{meta.get('serial') or 'unknown'}**\n"
-    f"- Branch: **{meta.get('branch') or 'unknown'}**\n"
-    f"- Commit: **{meta.get('commit') or 'unknown'}** ({meta.get('commitDate') or 'unknown'})"
-    f"{failed_line}\n"
-    "## Result\n"
-    + "\n".join(detail_lines)
-  )
+  content = "\n".join(upload_message_lines(payload, max_results=24)).strip()
   if len(content) <= 1900:
     return content
-  trimmed = detail_lines[:10]
-  if len(uploaded) > len(trimmed):
-    trimmed.append(f"- ... +{len(uploaded) - len(trimmed)} more")
-  return (
-    "# Carrot Dashcam Upload\n"
-    "## Upload\n"
-    f"- Time: **{payload.get('uploadedAt') or ''}**\n"
-    f"- Path: **{payload.get('remoteBasePath') or ''}**\n"
-    "## Device\n"
-    f"- Car name: **{meta.get('carName') or 'none'}**\n"
-    f"- DongleId: **{meta.get('dongleId') or 'unknown'}**\n"
-    f"- Serial: **{meta.get('serial') or 'unknown'}**\n"
-    f"- Branch: **{meta.get('branch') or 'unknown'}**\n"
-    f"- Commit: **{meta.get('commit') or 'unknown'}** ({meta.get('commitDate') or 'unknown'})"
-    f"{failed_line}\n"
-    "## Result\n"
-    + "\n".join(trimmed)
-  )
+
+  content = "\n".join(upload_message_lines(payload, max_results=10)).strip()
+  if len(content) <= 1900:
+    return content
+
+  return "\n".join(upload_message_lines(payload, max_results=3)).strip()[:1900]
 
 
 async def send_discord_webhook(url: str, payload: dict[str, Any]) -> dict[str, Any]:

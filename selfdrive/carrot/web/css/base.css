@@ -54,6 +54,10 @@ body[data-page="logs"] .swipe-container {
   touch-action: pan-y;
 }
 
+body[data-page="terminal"] .swipe-container {
+  touch-action: auto;
+}
+
 @media (hover: hover) and (pointer: fine) {
   * {
     scrollbar-width: thin;
@@ -382,16 +386,16 @@ body[data-page="home"] .global-home-record-fab {
 .setting-search-panel {
   --setting-search-form-width: clamp(320px, 42vw, 520px);
   --setting-search-results-width: min(72vw, 760px);
-  --setting-search-results-max-height: min(42vh, 360px);
+  --setting-search-results-max-height: min(58dvh, 520px);
   position: fixed;
   inset: 0;
   z-index: 121;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 24px;
-  padding: 28px var(--sp-lg) calc(var(--nav-bar-height) + 20px + env(safe-area-inset-bottom, 0px));
+  justify-content: flex-start;
+  gap: 14px;
+  padding: calc(18px + env(safe-area-inset-top, 0px)) var(--sp-lg) calc(var(--nav-bar-height) + 18px + env(safe-area-inset-bottom, 0px));
   pointer-events: none;
 }
 
@@ -416,6 +420,7 @@ body[data-page="home"] .global-home-record-fab {
   pointer-events: auto;
   position: relative;
   z-index: 1;
+  flex: 0 0 auto;
 }
 
 .setting-search-backdrop[hidden],
@@ -467,6 +472,7 @@ body[data-page="home"] .global-home-record-fab {
   width: min(var(--setting-search-results-width), calc(100vw - 40px));
   padding: 0 4px;
   max-height: var(--setting-search-results-max-height);
+  flex: 0 1 var(--setting-search-results-max-height);
   overflow: auto;
   overscroll-behavior: contain;
   pointer-events: auto;
