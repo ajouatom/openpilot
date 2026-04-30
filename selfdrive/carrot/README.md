@@ -66,7 +66,7 @@ web/
     │       ├── dialog.js   appAlert/Confirm/Prompt + toast
     │       ├── effects.js  pointer-down confetti easter egg
     │       ├── viewport.js viewport metrics + drive HUD layout
-    │       └── navigation.js  showPage, transitions, swipe gestures
+    │       └── navigation.js  showPage, menu transitions, page state
     ├── pages/
     │   ├── car.js          car picker + record FAB + currentCar status
     │   ├── setting.js      settings groups/items/search/subnav
