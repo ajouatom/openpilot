@@ -22,6 +22,7 @@ from . import features
 from openpilot.carrot.model_selector.web import routes as model_selector_routes
 from .config import WEB_DIR
 from .live_runtime.broker import RealtimeBroker
+from .services.git_status import git_status_loop
 from .services.heartbeat import heartbeat_loop
 from .services.params import HAS_PARAMS
 
@@ -76,6 +77,7 @@ async def on_startup(app: web.Application) -> None:
   app["realtime_raw_hub"] = RawWsHub(messaging)
   if HAS_PARAMS:
     app["hb_task"] = asyncio.create_task(heartbeat_loop(app))
+  app["git_status_task"] = asyncio.create_task(git_status_loop())
   asyncio.create_task(_malloc_trim_loop())
 
 
@@ -99,6 +101,18 @@ async def on_cleanup(app: web.Application) -> None:
     t.cancel()
     try:
       await t
+    except asyncio.CancelledError:
+      pass
+    except Exception:
+      pass
+
+  git_status_task = app.get("git_status_task")
+  if git_status_task:
+    git_status_task.cancel()
+    try:
+      await git_status_task
+    except asyncio.CancelledError:
+      pass
     except Exception:
       pass
 

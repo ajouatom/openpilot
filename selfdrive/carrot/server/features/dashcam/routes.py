@@ -1,21 +1,35 @@
 import asyncio
 import mimetypes
 import os
-from datetime import datetime
 
 from aiohttp import web
 
 from ...config import DASHCAM_ROOT
-from ...services.params import HAS_PARAMS, Params
-from . import upload
+from . import upload_jobs
 from .catalog import build_routes, segment_file_summary
 from .ffmpeg import browser_video, ensure_preview, ensure_thumbnail
 from .paths import (
+  file_size_label,
   route_name,
   safe_segment,
   segment_dir,
   segment_index,
 )
+
+
+async def request_upload_segments(request: web.Request) -> list[str]:
+  try:
+    body = await request.json()
+  except Exception:
+    body = {}
+  segments = body.get("segments")
+  if not isinstance(segments, list):
+    one = body.get("segment")
+    segments = [one] if one else []
+  segments = [safe_segment(str(seg)) for seg in segments if seg]
+  if not segments:
+    raise web.HTTPBadRequest(text="missing segments")
+  return segments
 
 
 async def api_dashcam_routes(request: web.Request) -> web.Response:
@@ -73,75 +87,62 @@ async def api_dashcam_download(request: web.Request) -> web.StreamResponse:
   raise web.HTTPNotFound(text="artifact not found")
 
 
-async def api_dashcam_upload(request: web.Request) -> web.Response:
+async def api_dashcam_upload_summary(request: web.Request) -> web.Response:
   try:
-    try:
-      body = await request.json()
-    except Exception:
-      body = {}
-    segments = body.get("segments")
-    if not isinstance(segments, list):
-      one = body.get("segment")
-      segments = [one] if one else []
-    segments = [safe_segment(str(seg)) for seg in segments if seg]
-    if not segments:
-      return web.json_response({"ok": False, "error": "missing segments"}, status=400)
+    segments = await request_upload_segments(request)
 
-    params = Params() if HAS_PARAMS else None
-    meta = upload.upload_metadata(params)
-    car_selected = meta.get("carName") or "none"
-    dongle_id = meta.get("dongleId") or "unknown"
-    directory = f"{car_selected} {dongle_id}".strip()
-    remote_base_path = f"routes/{directory}/".replace("\\", "/")
-
-    results = []
+    summaries = []
     for segment in segments:
-      try:
-        segment_path = segment_dir(segment)
-        ok = await asyncio.to_thread(
-          upload.upload_folder_to_ftp,
-          segment_path,
-          directory,
-          segment,
-        )
-        results.append({
-          "segment": segment,
-          "route": route_name(segment),
-          "segmentIndex": segment_index(segment),
-          "ok": bool(ok),
-          "remotePath": f"{remote_base_path}{segment}",
-          "files": segment_file_summary(segment_path),
-        })
-      except Exception as e:
-        results.append({
-          "segment": segment,
-          "route": route_name(segment),
-          "segmentIndex": segment_index(segment),
-          "ok": False,
-          "remotePath": f"{remote_base_path}{segment}",
-          "error": str(e),
-        })
-
-    ok_count = sum(1 for item in results if item["ok"])
-    uploaded_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    response_payload = {
-      "ok": ok_count == len(results),
-      "uploaded": ok_count,
-      "total": len(results),
-      "uploadedAt": uploaded_at,
-      "remoteBasePath": remote_base_path,
-      "meta": meta,
-      "results": results,
-      "message": f"{ok_count}/{len(results)} uploaded",
-    }
-    response_payload["shareText"] = upload.upload_share_text(response_payload)
-    response_payload["discord"] = await upload.send_discord_webhook(
-      upload.discord_webhook_url(params),
-      response_payload,
-    )
-    return web.json_response(response_payload)
+      segment_path = segment_dir(segment)
+      files = await asyncio.to_thread(segment_file_summary, segment_path)
+      total_size = sum(int(item.get("size") or 0) for item in files)
+      summaries.append({
+        "segment": segment,
+        "route": route_name(segment),
+        "segmentIndex": segment_index(segment),
+        "files": files,
+        "totalSize": total_size,
+        "totalSizeLabel": file_size_label(total_size),
+      })
+    return web.json_response({"ok": True, "summaries": summaries})
+  except web.HTTPException as e:
+    return web.json_response({"ok": False, "error": e.text or e.reason}, status=e.status)
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def api_dashcam_upload(request: web.Request) -> web.Response:
+  try:
+    segments = await request_upload_segments(request)
+    return web.json_response(await upload_jobs.run_upload_segments(segments))
+  except web.HTTPException as e:
+    return web.json_response({"ok": False, "error": e.text or e.reason}, status=e.status)
+  except Exception as e:
+    return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def api_dashcam_upload_start(request: web.Request) -> web.Response:
+  try:
+    segments = await request_upload_segments(request)
+    if upload_jobs.has_running_job():
+      return web.json_response({"ok": False, "error": "upload already running"}, status=409)
+    job = upload_jobs.create_job(segments)
+    asyncio.create_task(upload_jobs.run_job(job))
+    return web.json_response({"ok": True, "job_id": job["id"], "status": job["status"]})
+  except web.HTTPException as e:
+    return web.json_response({"ok": False, "error": e.text or e.reason}, status=e.status)
+  except Exception as e:
+    return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def api_dashcam_upload_job(request: web.Request) -> web.Response:
+  job_id = (request.query.get("id") or request.match_info.get("job_id") or "").strip()
+  if not job_id:
+    return web.json_response({"ok": False, "error": "missing job id"}, status=400)
+  job = upload_jobs.jobs().get(job_id)
+  if not job:
+    return web.json_response({"ok": False, "error": "job not found"}, status=404)
+  return web.json_response(upload_jobs.snapshot(job))
 
 
 def register(app: web.Application) -> None:
@@ -150,4 +151,7 @@ def register(app: web.Application) -> None:
   app.router.add_get("/api/dashcam/preview/{segment}", api_dashcam_preview)
   app.router.add_get("/api/dashcam/video/{segment}", api_dashcam_video)
   app.router.add_get("/api/dashcam/download/{segment}/{kind}", api_dashcam_download)
+  app.router.add_post("/api/dashcam/upload/summary", api_dashcam_upload_summary)
+  app.router.add_post("/api/dashcam/upload/start", api_dashcam_upload_start)
+  app.router.add_get("/api/dashcam/upload/job", api_dashcam_upload_job)
   app.router.add_post("/api/dashcam/upload", api_dashcam_upload)

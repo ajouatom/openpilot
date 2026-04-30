@@ -8,6 +8,7 @@
 }
 
 .logs-shell {
+  --logs-content-inline: clamp(12px, 3.5vw, 24px);
   height: 100%;
   min-height: 0;
   display: flex;
@@ -24,14 +25,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px clamp(10px, 3.2vw, 24px) 6px;
+  padding: 8px var(--logs-content-inline) 6px;
   background: color-mix(in srgb, var(--md-surface) 96%, transparent);
   border-bottom: 0;
   backdrop-filter: blur(18px);
 }
 
 .logs-tabs {
-  width: min(100%, 720px);
+  width: 100%;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px;
@@ -157,7 +158,7 @@
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
-  padding: 6px clamp(12px, 3.5vw, 24px) calc(var(--nav-bar-height) + 16px + env(safe-area-inset-bottom, 0px));
+  padding: 6px var(--logs-content-inline) calc(var(--nav-bar-height) + 16px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -541,6 +542,7 @@
 .dashcam-share-card {
   display: grid;
   gap: 10px;
+  min-height: 0;
 }
 
 .dashcam-share-card__summary {
@@ -548,21 +550,17 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  flex-wrap: wrap;
   color: var(--md-on-surface);
   font-size: 13px;
   font-weight: 750;
 }
 
-.dashcam-share-card__summary .is-muted {
+.dashcam-share-card__summary span:last-child {
   color: var(--md-on-surface-var);
-}
-
-.dashcam-share-card__summary .is-ok {
-  color: #8ee59a;
-}
-
-.dashcam-share-card__summary .is-error {
-  color: #ffb4ab;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: right;
 }
 
 .dashcam-share-card pre {
@@ -583,6 +581,19 @@
   min-height: 40px;
   text-align: center !important;
   justify-content: center;
+}
+
+#appDialog:has(.dashcam-share-dialog) {
+  align-items: center;
+  padding: 8px;
+}
+
+#appDialog:has(.dashcam-share-dialog) .app-dialog__sheet {
+  max-height: calc(var(--app-vv-height, 100dvh) - 16px);
+}
+
+#appDialog:has(.dashcam-share-dialog) .app-dialog__body {
+  min-height: 0;
 }
 
 #appDialog:has(.dashcam-share-dialog) .app-dialog__actions {
@@ -606,7 +617,7 @@
 }
 
 .dashcam-upload-progress__sheet {
-  width: min(92vw, 320px);
+  width: min(92vw, 430px);
   padding: 18px;
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 55%, transparent);
@@ -642,6 +653,73 @@
   border-radius: inherit;
   background: var(--md-primary);
   animation: dashcam-upload-indeterminate 1.1s ease-in-out infinite;
+}
+
+.dashcam-upload-progress__summary {
+  margin-top: 10px;
+  color: var(--md-on-surface-var);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+@media (orientation: landscape) {
+  .dashcam-share-card {
+    gap: 8px;
+  }
+
+  .dashcam-share-card pre {
+    max-height: min(42vh, 190px);
+    padding: 10px;
+    font-size: 11px;
+    line-height: 1.45;
+  }
+
+  #appDialog:has(.dashcam-share-dialog) .app-dialog__sheet {
+    width: min(72vw, 520px);
+    max-height: calc(var(--app-vv-height, 100dvh) - 16px);
+    padding: 12px 14px;
+  }
+
+  #appDialog:has(.dashcam-share-dialog) .app-dialog__head {
+    margin-bottom: 6px;
+  }
+
+  #appDialog:has(.dashcam-share-dialog) .app-dialog__title {
+    font-size: 14px;
+  }
+
+  #appDialog:has(.dashcam-share-dialog) .app-dialog__actions {
+    margin-top: 8px;
+  }
+
+  .dashcam-upload-progress {
+    padding: 8px;
+  }
+
+  .dashcam-upload-progress__sheet {
+    width: min(70vw, 520px);
+    max-height: calc(var(--app-vv-height, 100dvh) - 16px);
+    overflow: auto;
+    padding: 12px;
+  }
+
+  .dashcam-upload-progress__title {
+    font-size: 14px;
+  }
+
+  .dashcam-upload-progress__message {
+    margin-top: 5px;
+    font-size: 12px;
+  }
+
+  .dashcam-upload-progress__bar {
+    margin-top: 10px;
+  }
+
+  .dashcam-upload-progress__summary {
+    margin-top: 8px;
+    font-size: 11px;
+  }
 }
 
 @keyframes dashcam-upload-indeterminate {
@@ -792,7 +870,7 @@
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
-  padding: 10px clamp(12px, 3.5vw, 24px) calc(var(--nav-bar-height) + 16px + env(safe-area-inset-bottom, 0px));
+  padding: 10px var(--logs-content-inline) calc(var(--nav-bar-height) + 16px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -898,9 +976,8 @@
 }
 
 @media (min-width: 900px) {
-  .dashcam-routes {
-    padding-left: clamp(18px, 3vw, 34px);
-    padding-right: clamp(18px, 3vw, 34px);
+  .logs-shell {
+    --logs-content-inline: clamp(18px, 3vw, 34px);
   }
 
   .dashcam-route-card {

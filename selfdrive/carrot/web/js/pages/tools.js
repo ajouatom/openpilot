@@ -7,7 +7,13 @@
 let toolsMetaLoadPromise = null;
 let toolsMetaLoadedAt = 0;
 let toolsMetaLastValues = null;
+let gitPullStatusPromise = null;
+let gitPullStatusLoadedAt = 0;
+let gitPullStatusTimer = null;
+let gitPullStatusVisibilityBound = false;
 let uiWarmupTimer = null;
+
+const GIT_PULL_STATUS_CLIENT_INTERVAL_MS = 10000;
 
 let toolsOutHistory = "";
 let toolsOutCurrentBlock = "";
@@ -122,6 +128,79 @@ function toolsLogNotice(message, options = {}) {
   if (options.clearProgress !== false) toolsProgressSet(null, { active: false });
 }
 
+function renderGitPullStatus(status = {}) {
+  const button = document.getElementById("btnGitPull");
+  const badge = document.getElementById("gitPullBadge");
+  const navButton = (typeof btnTools !== "undefined" && btnTools) ? btnTools : document.getElementById("btnTools");
+  if (!button || !badge) return;
+
+  const behind = Math.max(0, Number(status.behind || 0));
+  const state = String(status.state || "");
+  const hasError = Boolean(state && state !== "ok");
+  const hasUpdates = behind > 0;
+  const label = hasUpdates ? (behind > 99 ? "99+" : String(behind)) : (hasError ? "X" : "✓");
+  button.classList.toggle("has-updates", hasUpdates);
+  button.classList.toggle("is-current", !hasUpdates && !hasError);
+  button.classList.toggle("has-git-error", !hasUpdates && hasError);
+  badge.hidden = false;
+  badge.textContent = label;
+  badge.dataset.state = hasUpdates ? "updates" : (hasError ? "error" : "current");
+
+  if (navButton) {
+    navButton.classList.toggle("has-git-updates", hasUpdates);
+    if (hasUpdates) navButton.dataset.gitBehind = label;
+    else navButton.removeAttribute("data-git-behind");
+  }
+
+  if (hasUpdates) {
+    const upstream = String(status.upstream || "").trim();
+    const suffix = upstream ? ` (${upstream})` : "";
+    button.title = `${behind} commits available${suffix}`;
+  } else if (hasError) {
+    button.title = status.error || status.fetch_error || "git status unavailable";
+  } else {
+    button.title = "Up to date";
+  }
+}
+
+async function refreshGitPullStatus(options = {}) {
+  const force = options.force === true;
+  const ttlMs = Number.isFinite(options.ttlMs) ? options.ttlMs : 60000;
+  if (!force && gitPullStatusPromise) return gitPullStatusPromise;
+  if (!force && hasFreshPageData(gitPullStatusLoadedAt, ttlMs)) return null;
+
+  const url = `/api/tools/git_status${force ? "?force=1" : ""}`;
+  gitPullStatusPromise = getJson(url)
+    .then((status) => {
+      gitPullStatusLoadedAt = Date.now();
+      renderGitPullStatus(status);
+      return status;
+    })
+    .catch((error) => {
+      console.log("[GitStatus] check failed:", error);
+      renderGitPullStatus({ behind: 0 });
+      return null;
+    })
+    .finally(() => {
+      gitPullStatusPromise = null;
+    });
+  return gitPullStatusPromise;
+}
+
+function startGitPullStatusPolling() {
+  if (!gitPullStatusVisibilityBound) {
+    gitPullStatusVisibilityBound = true;
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) refreshGitPullStatus({ force: true, ttlMs: 0 }).catch(() => {});
+    });
+  }
+
+  if (gitPullStatusTimer) return;
+  gitPullStatusTimer = window.setInterval(() => {
+    if (!document.hidden) refreshGitPullStatus({ ttlMs: 0 }).catch(() => {});
+  }, GIT_PULL_STATUS_CLIENT_INTERVAL_MS);
+}
+
 function getToolCommandPreview(action, payload = {}) {
   switch (action) {
     case "shell_cmd": return String(payload.cmd || "").trim() || "command";
@@ -175,12 +254,21 @@ function closeToolsLanguageMenu() {
   renderToolsMeta();
 }
 
+function setToolsLanguageMenuPosition(anchor) {
+  if (!anchor || typeof anchor.getBoundingClientRect !== "function") return;
+  const rect = anchor.getBoundingClientRect();
+  const top = Math.max(12, Math.round(rect.bottom + 10));
+  const right = Math.max(12, Math.round((window.innerWidth || document.documentElement.clientWidth || 0) - rect.right));
+  document.documentElement.style.setProperty("--tools-lang-menu-panel-top", `${top}px`);
+  document.documentElement.style.setProperty("--tools-lang-menu-panel-right", `${right}px`);
+}
+
 function bindToolsLanguageMenuDismiss() {
   if (document.body.dataset.toolsLangDismissBound === "1") return;
   document.body.dataset.toolsLangDismissBound = "1";
   document.addEventListener("click", (event) => {
     if (!toolsLanguageMenuOpen) return;
-    if (event.target instanceof Element && event.target.closest(".tools-lang-menu")) return;
+    if (event.target instanceof Element && event.target.closest(".tools-lang-menu, .tools-lang-menu__panel")) return;
     closeToolsLanguageMenu();
   });
   document.addEventListener("keydown", (event) => {
@@ -223,6 +311,7 @@ function renderToolsMeta() {
   `;
   langBtn.addEventListener("click", (event) => {
     event.stopPropagation();
+    if (!toolsLanguageMenuOpen) setToolsLanguageMenuPosition(langBtn);
     toolsLanguageMenuOpen = !toolsLanguageMenuOpen;
     renderToolsMeta();
   });
@@ -498,6 +587,7 @@ function runUiWarmup() {
     loadCurrentCar({ resetRetry: false, ttlMs: PAGE_DATA_TTL_MS }),
     loadRecordState({ ttlMs: PAGE_DATA_TTL_MS }),
     refreshToolsMetaInfo({ silent: true, ttlMs: PAGE_DATA_TTL_MS }),
+    refreshGitPullStatus({ ttlMs: 600000 }),
     typeof updateQuickLink === "function" ? updateQuickLink({ silent: true, ttlMs: PAGE_DATA_TTL_MS }) : Promise.resolve(),
     loadSettings({ background: true }),
     ensureCarsLoaded(),
@@ -516,9 +606,11 @@ function scheduleUiWarmup(delay = 140) {
 
 if (document.readyState === "complete") {
   scheduleUiWarmup(120);
+  startGitPullStatusPolling();
 } else {
   window.addEventListener("load", () => {
     scheduleUiWarmup(120);
+    startGitPullStatusPolling();
   }, { once: true });
 }
 
@@ -599,52 +691,59 @@ async function runTool(action, payload) {
   const labels = getActionLabel(action);
   const runToken = ++activeToolRunToken;
   const commandPreview = getToolCommandPreview(action, payload || {});
+  const activityId = typeof beginAppActivity === "function"
+    ? beginAppActivity("tools", labels.running || commandPreview)
+    : null;
 
-  toolsMetaSet(labels.running);
-  toolsOutCommitCurrent();
-  toolsOutSet(`> ${commandPreview}\n${labels.running}`);
-  toolsProgressSet(null, { active: true, indeterminate: true });
-
-  const started = await postJson("/api/tools/start", { action, ...(payload || {}) });
-  const jobId = started.job_id;
-  let snapshot = null;
-
-  while (runToken === activeToolRunToken) {
-    snapshot = await getJson(`/api/tools/job?id=${encodeURIComponent(jobId)}`);
-
-    if (snapshot.log != null) {
-      const body = normalizeToolsOutText(snapshot.log) || labels.running;
-      toolsOutSet(`> ${commandPreview}\n${body}`);
-    }
-
-    if (!snapshot.done) {
-      updateToolsRunningState(labels, snapshot);
-      await waitMs(320);
-      continue;
-    }
-
-    const result = snapshot.result || snapshot;
-    if (!result.ok) {
-      const errMsg = friendlyError(result) || result.error || snapshot.error || labels.failed;
-      toolsOutSet(`> ${commandPreview}\n${normalizeToolsOutText(snapshot?.log) || errMsg}`);
-      toolsOutCommitCurrent();
-      toolsMetaSet(labels.failed);
-      toolsProgressSet(null, { active: false });
-      throw new Error(errMsg);
-    }
-
-    const finalBody = normalizeToolsOutText(result.out ?? snapshot.log) || labels.done;
-    toolsOutSet(`> ${commandPreview}\n${finalBody}`);
+  try {
+    toolsMetaSet(labels.running);
     toolsOutCommitCurrent();
-    toolsMetaSet(labels.done);
-    toolsProgressSet(100, { active: true, indeterminate: false });
-    window.setTimeout(() => {
-      if (activeToolRunToken === runToken) toolsProgressSet(null, { active: false });
-    }, 900);
-    return result;
-  }
+    toolsOutSet(`> ${commandPreview}\n${labels.running}`);
+    toolsProgressSet(null, { active: true, indeterminate: true });
 
-  throw new Error("tool run cancelled");
+    const started = await postJson("/api/tools/start", { action, ...(payload || {}) });
+    const jobId = started.job_id;
+    let snapshot = null;
+
+    while (runToken === activeToolRunToken) {
+      snapshot = await getJson(`/api/tools/job?id=${encodeURIComponent(jobId)}`);
+
+      if (snapshot.log != null) {
+        const body = normalizeToolsOutText(snapshot.log) || labels.running;
+        toolsOutSet(`> ${commandPreview}\n${body}`);
+      }
+
+      if (!snapshot.done) {
+        updateToolsRunningState(labels, snapshot);
+        await waitMs(320);
+        continue;
+      }
+
+      const result = snapshot.result || snapshot;
+      if (!result.ok) {
+        const errMsg = friendlyError(result) || result.error || snapshot.error || labels.failed;
+        toolsOutSet(`> ${commandPreview}\n${normalizeToolsOutText(snapshot?.log) || errMsg}`);
+        toolsOutCommitCurrent();
+        toolsMetaSet(labels.failed);
+        toolsProgressSet(null, { active: false });
+        throw new Error(errMsg);
+      }
+
+      const finalBody = normalizeToolsOutText(result.out ?? snapshot.log) || labels.done;
+      toolsOutSet(`> ${commandPreview}\n${finalBody}`);
+      toolsOutCommitCurrent();
+      toolsMetaSet(labels.done);
+      toolsProgressSet(100, { active: true, indeterminate: false });
+      window.setTimeout(() => {
+        if (activeToolRunToken === runToken) toolsProgressSet(null, { active: false });
+      }, 900);
+      return result;
+    }
+
+    throw new Error("tool run cancelled");
+  } finally {
+    if (activityId && typeof endAppActivity === "function") endAppActivity(activityId);
+  }
 }
 
 function didGitPullUpdate(result) {
@@ -773,6 +872,7 @@ function initToolsPage() {
   toolsMetaSet(UI_STRINGS[LANG].ready || "Ready");
   toolsProgressSet(null, { active: false });
   refreshToolsMetaInfo().catch(() => {});
+  refreshGitPullStatus({ force: true }).catch(() => {});
   initToolsGroups();
   initToolsLogPanel();
 
@@ -807,6 +907,7 @@ function initToolsPage() {
     try {
       const result = await runTool("git_pull");
       await refreshToolsMetaInfo();
+      await refreshGitPullStatus({ force: true });
       if (!didGitPullUpdate(result)) return;
       if (await appConfirm(UI_STRINGS[LANG].confirm_reboot || "Reboot now?", {
         title: UI_STRINGS[LANG].reboot || "Reboot",
@@ -822,6 +923,7 @@ function initToolsPage() {
     if (!await appConfirm(UI_STRINGS[LANG].git_sync_confirm || "Run git sync?", { title: "git sync" })) return;
     try {
       await runTool("git_sync");
+      await refreshGitPullStatus({ force: true });
     } catch (e) {
       showError("git_sync", e);
     }
@@ -877,6 +979,7 @@ function initToolsPage() {
       toolsLogNotice(waitMsg, { label: "change repository" });
       await runTool("git_remote_set", { url: newUrl.trim() });
       await refreshToolsMetaInfo();
+      await refreshGitPullStatus({ force: true });
       const successMsg = getUIText("git_remote_success", "Repository changed successfully.\nClick [change branch] to select a branch.");
       toolsLogNotice(successMsg, { label: "change repository" });
     } catch (e) {
@@ -904,6 +1007,7 @@ function initToolsPage() {
 
     try {
       await runTool("git_remote_add", { name: remoteName, url: urlInput.trim() });
+      await refreshGitPullStatus({ force: true });
       toolsLogNotice(getUIText("git_add_remote_done", "Remote '{name}' added/updated", { name: remoteName }), { label: "git_remote_add" });
     } catch (e) {
       showError("git_remote_add", e);
@@ -952,6 +1056,7 @@ function initToolsPage() {
       
       toolsLogNotice(getUIText("git_log_checkout_done", "Checkout complete"), { label: "git_log" });
       await refreshToolsMetaInfo();
+      await refreshGitPullStatus({ force: true });
     } catch (e) {
       showError("git_log", e);
     }
@@ -989,6 +1094,7 @@ function initToolsPage() {
       await runTool("git_reset_repo_checkout", { branch: selected });
       toolsLogNotice(getUIText("git_reset_repo_done", "Reset to '{branch}' complete", { branch: selected }), { label: "git_reset_repo" });
       await refreshToolsMetaInfo();
+      await refreshGitPullStatus({ force: true });
 
       if (await appConfirm(UI_STRINGS[LANG].confirm_reboot || "Reboot now?", {
         title: UI_STRINGS[LANG].reboot || "Reboot",
@@ -1143,8 +1249,12 @@ function initToolsPage() {
         return;
       }
 
+      let activityId = null;
       try {
         const labels = getActionLabel("backup_settings");
+        activityId = typeof beginAppActivity === "function"
+          ? beginAppActivity("tools", labels.running || "restore settings")
+          : null;
         toolsMetaSet(labels.running);
         toolsOutCommitCurrent();
         toolsOutSet(`> restore settings\n${labels.running}`);
@@ -1161,6 +1271,10 @@ function initToolsPage() {
         toolsProgressSet(100, { active: true, indeterminate: false });
         toolsOutSet(`> restore settings\n${JSON.stringify(j.result, null, 2)}`);
         toolsOutCommitCurrent();
+        if (activityId && typeof endAppActivity === "function") {
+          endAppActivity(activityId);
+          activityId = null;
+        }
 
         if (await appConfirm(UI_STRINGS[LANG].restore_done_reboot || "Restore done.\nReboot now?", {
           title: UI_STRINGS[LANG].reboot || "Reboot",
@@ -1170,6 +1284,7 @@ function initToolsPage() {
       } catch (e) {
         showError("backup_settings", e);
       } finally {
+        if (activityId && typeof endAppActivity === "function") endAppActivity(activityId);
         window.setTimeout(() => toolsProgressSet(null, { active: false }), 900);
         inp.remove();
       }

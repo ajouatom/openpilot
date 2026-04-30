@@ -189,6 +189,30 @@ function stopPageTransition() {
   setDisplayedPage(CURRENT_PAGE);
 }
 
+function setElementClass(el, className, enabled) {
+  if (!el) return;
+  if (el.classList.contains(className) !== enabled) {
+    el.classList.toggle(className, enabled);
+  }
+}
+
+function syncPageDataset(page) {
+  if (document.documentElement.dataset.page !== page) {
+    document.documentElement.dataset.page = page;
+  }
+  if (document.body.dataset.page !== page) {
+    document.body.dataset.page = page;
+  }
+}
+
+function syncNavActivePage(page) {
+  setElementClass(btnHome, "active", page === "carrot");
+  setElementClass(btnSetting, "active", page === "setting");
+  setElementClass(btnTools, "active", page === "tools");
+  setElementClass(btnLogs, "active", page === "logs");
+  setElementClass(btnTerminal, "active", page === "terminal");
+}
+
 function prepareSwipePages(fromPage, toPage) {
   const fromEl = PAGE_ELEMENTS[fromPage];
   const toEl = PAGE_ELEMENTS[toPage];
@@ -255,18 +279,18 @@ function settleSwipe(frame, direction, commit, done) {
 /* ── showPage / showSettingScreen / showCarScreen ───────── */
 function showPage(page, pushHistory = false, transition = null) {
   const prevPage = CURRENT_PAGE;
+  if (prevPage === page) {
+    syncPageDataset(page);
+    syncNavActivePage(page);
+    return;
+  }
+
   if (prevPage === "terminal" && page !== "terminal" && typeof teardownTerminalPage === "function") {
     teardownTerminalPage();
   }
   CURRENT_PAGE = page;
-  document.documentElement.dataset.page = page;
-  document.body.dataset.page = page;
-
-  btnHome.classList.toggle("active", page === "carrot");
-  btnSetting.classList.toggle("active", page === "setting");
-  btnTools.classList.toggle("active", page === "tools");
-  if (btnLogs) btnLogs.classList.toggle("active", page === "logs");
-  btnTerminal.classList.toggle("active", page === "terminal");
+  syncPageDataset(page);
+  syncNavActivePage(page);
 
   if (typeof updateAppViewportMetrics === "function") {
     updateAppViewportMetrics();
@@ -367,6 +391,9 @@ function showSettingScreen(which, pushHistory = false) {
       history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
     }
     if (settingScreenHost) settingScreenHost.style.minHeight = "";
+    if (typeof syncSettingSubnavFixedOffset === "function") {
+      requestAnimationFrame(syncSettingSubnavFixedOffset);
+    }
     return;
   }
 
@@ -392,6 +419,9 @@ function showSettingScreen(which, pushHistory = false) {
   }
 
   if (settingScreenHost) settingScreenHost.style.minHeight = "";
+  if (typeof syncSettingSubnavFixedOffset === "function") {
+    requestAnimationFrame(syncSettingSubnavFixedOffset);
+  }
   if (isGroups && typeof setSettingItemsScrollTop === "function") {
     requestAnimationFrame(() => setSettingItemsScrollTop(0));
   }
@@ -507,345 +537,7 @@ if (btnQuickLinkWeb) {
 }
 
 
-/* ── Page-level swipe gesture (carrot ↔ setting ↔ tools …) ── */
-(function initSwipe() {
-  const el = swipeContainer;
-  if (!el) return;
-
-  let gesture = null;
-
-  function shouldIgnorePageSwipeTarget(target) {
-    if (CURRENT_PAGE === "terminal") return true;
-    return Boolean(target?.closest?.(".terminal-screen, .terminal-form"));
-  }
-
-  el.addEventListener("touchstart", (e) => {
-    if (isLandscapeRailMode()) {
-      gesture = null;
-      return;
-    }
-    const inSettingItems = isSettingItemsScreenActive();
-    if (
-      e.touches.length !== 1 ||
-      !SWIPE_PAGES.includes(CURRENT_PAGE) ||
-      inSettingItems ||
-      shouldIgnorePageSwipeTarget(e.target) ||
-      (inSettingItems && e.target?.closest?.("#settingSubnavWrap"))
-    ) {
-      gesture = null;
-      return;
-    }
-
-    const touch = e.touches[0];
-    gesture = {
-      tracking: true,
-      dragging: false,
-      startX: touch.clientX,
-      startY: touch.clientY,
-      dx: 0,
-      direction: null,
-      targetPage: null,
-      settingGroupTarget: null,
-      settingBackTarget: false,
-      frame: null,
-      velocity: 0,
-      lastX: touch.clientX,
-      lastTime: performance.now(),
-    };
-  }, { passive: true });
-
-  el.addEventListener("touchmove", (e) => {
-    if (isLandscapeRailMode()) {
-      gesture = null;
-      return;
-    }
-    const inSettingItems = isSettingItemsScreenActive();
-    if (inSettingItems) {
-      gesture = null;
-      return;
-    }
-    if (!gesture?.tracking || e.touches.length !== 1) return;
-
-    const touch = e.touches[0];
-    const dx = touch.clientX - gesture.startX;
-    const dy = touch.clientY - gesture.startY;
-
-    if (!gesture.dragging) {
-      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
-      if (Math.abs(dy) > Math.abs(dx) * 0.9) {
-        gesture = null;
-        return;
-      }
-
-      const inSettingItems = isSettingItemsScreenActive();
-      const direction = dx < 0 ? "forward" : "backward";
-      const isSettingEdgeBack = inSettingItems && direction === "backward" && gesture.startX <= SETTING_BACK_EDGE_WIDTH;
-      if (isSettingEdgeBack) {
-        gesture = null;
-        return;
-      }
-
-      const idx = SWIPE_PAGES.indexOf(CURRENT_PAGE);
-      const nextSettingGroup = inSettingItems && typeof getSettingSubnavShiftTarget === "function"
-        ? getSettingSubnavShiftTarget(direction)
-        : null;
-      const settingBackTarget = Boolean(inSettingItems && direction === "backward" && nextSettingGroup?.reachedEdge);
-      const settingGroupTarget = (nextSettingGroup && !nextSettingGroup.reachedEdge)
-        ? nextSettingGroup.group
-        : null;
-      const targetPage = settingGroupTarget
-        ? null
-        : (
-          inSettingItems
-            ? (direction === "forward" ? "tools" : null)
-            : (direction === "forward" ? SWIPE_PAGES[idx + 1] : SWIPE_PAGES[idx - 1])
-        );
-
-      gesture.dragging = true;
-      gesture.direction = direction;
-      gesture.targetPage = targetPage || null;
-      gesture.settingGroupTarget = settingGroupTarget || null;
-      gesture.settingBackTarget = settingBackTarget;
-      gesture.edgeResistance = !targetPage && !settingGroupTarget && !settingBackTarget;
-      gesture.frame = targetPage
-        ? prepareSwipePages(CURRENT_PAGE, targetPage)
-        : (
-          settingGroupTarget
-            ? null
-            : (
-              settingBackTarget
-                ? prepareSettingBackFrame()
-                : (stopPageTransition(), prepareSwipeFrame(swipeContainer, PAGE_ELEMENTS[CURRENT_PAGE]))
-            )
-        );
-    }
-
-    if (!gesture.dragging) return;
-
-    e.preventDefault();
-
-    const constrainedDx =
-      gesture.direction === "forward" ? Math.min(dx, 0) : Math.max(dx, 0);
-
-    const now = performance.now();
-    const dt = Math.max(now - gesture.lastTime, 1);
-    gesture.velocity = (touch.clientX - gesture.lastX) / dt;
-    gesture.lastX = touch.clientX;
-    gesture.lastTime = now;
-    gesture.dx = constrainedDx;
-
-    if (gesture.frame) applySwipeDrag(gesture.frame, constrainedDx, gesture.direction, gesture.edgeResistance);
-  }, { passive: false });
-
-  el.addEventListener("touchend", (e) => {
-    if (isLandscapeRailMode()) {
-      gesture = null;
-      return;
-    }
-    const inSettingItems = isSettingItemsScreenActive();
-    if (inSettingItems) {
-      gesture = null;
-      return;
-    }
-    if (!gesture) return;
-
-    if (!gesture.dragging) {
-      gesture = null;
-      return;
-    }
-
-    const dx = gesture.dx;
-    const width = gesture.frame?.width || getSwipeViewportMetrics(swipeContainer).width;
-    const travel = Math.abs(dx) / width;
-    const velocityOk =
-      (gesture.direction === "forward" && gesture.velocity < -SWIPE_VELOCITY_THRESHOLD) ||
-      (gesture.direction === "backward" && gesture.velocity > SWIPE_VELOCITY_THRESHOLD);
-    const shouldCommitPage = Boolean(gesture.targetPage) && (travel > SWIPE_COMMIT_RATIO || velocityOk);
-    const shouldCommitGroup = Boolean(gesture.settingGroupTarget) && (Math.abs(dx) > 48 || velocityOk);
-    const shouldCommitBack = Boolean(gesture.settingBackTarget) && (travel > SWIPE_COMMIT_RATIO || velocityOk);
-
-    if (gesture.frame && gesture.targetPage) {
-      const targetPage = gesture.targetPage;
-      const direction = gesture.direction;
-      const frame = gesture.frame;
-      gesture = null;
-      settleSwipe(frame, direction, shouldCommitPage, () => {
-        if (shouldCommitPage && targetPage) showPage(targetPage, true, null);
-        else setDisplayedPage(CURRENT_PAGE);
-      });
-      return;
-    }
-
-    if (gesture.settingGroupTarget) {
-      const groupTarget = gesture.settingGroupTarget;
-      const direction = gesture.direction;
-      gesture = null;
-      if (shouldCommitGroup && typeof animateSettingGroupSwitch === "function") {
-        animateSettingGroupSwitch(groupTarget, direction).catch((e) => console.log("[SettingSwipe] switch failed:", e));
-      } else if (shouldCommitGroup && typeof selectGroup === "function") {
-        selectGroup(groupTarget, false);
-      } else if (typeof centerActiveSettingSubnavTab === "function") {
-        centerActiveSettingSubnavTab("smooth");
-      }
-      return;
-    }
-
-    if (gesture.settingBackTarget && gesture.frame) {
-      const frame = gesture.frame;
-      gesture = null;
-      settleSwipe(frame, "backward", shouldCommitBack, () => {
-        cleanupSettingBackFrame();
-        if (shouldCommitBack) history.back();
-        else showSettingScreen("items", false);
-      });
-      return;
-    }
-
-    if (gesture.frame) {
-      const frame = gesture.frame;
-      const direction = gesture.direction;
-      gesture = null;
-      settleSwipe(frame, direction, false, () => setDisplayedPage(CURRENT_PAGE));
-      return;
-    }
-    gesture = null;
-  }, { passive: true });
-
-  el.addEventListener("touchcancel", () => {
-    if (!gesture) return;
-    if (gesture.settingBackTarget && gesture.frame) {
-      const frame = gesture.frame;
-      gesture = null;
-      settleSwipe(frame, "backward", false, () => {
-        cleanupSettingBackFrame();
-        showSettingScreen("items", false);
-      });
-      return;
-    }
-    if (gesture.frame) {
-      const frame = gesture.frame;
-      const direction = gesture.direction;
-      gesture = null;
-      settleSwipe(frame, direction, false, () => setDisplayedPage(CURRENT_PAGE));
-      return;
-    }
-    setDisplayedPage(CURRENT_PAGE);
-    gesture = null;
-  }, { passive: true });
-})();
-
-
-/* ── Setting page back-edge swipe ───────────────────────── */
-(function initSettingBackSwipe() {
-  const host = settingScreenHost;
-  if (!host || !screenItems || !screenGroups) return;
-
-  let gesture = null;
-
-  host.addEventListener("touchstart", (e) => {
-    if (isLandscapeRailMode()) {
-      gesture = null;
-      return;
-    }
-    if (
-      e.touches.length !== 1 ||
-      !isSettingItemsScreenActive() ||
-      e.target?.closest?.("#settingSubnav") ||
-      e.touches[0].clientX > SETTING_BACK_EDGE_WIDTH
-    ) {
-      gesture = null;
-      return;
-    }
-
-    const touch = e.touches[0];
-    gesture = {
-      dragging: false,
-      startX: touch.clientX,
-      startY: touch.clientY,
-      dx: 0,
-      velocity: 0,
-      lastX: touch.clientX,
-      lastTime: performance.now(),
-      frame: null,
-    };
-  }, { passive: true });
-
-  host.addEventListener("touchmove", (e) => {
-    if (isLandscapeRailMode()) {
-      gesture = null;
-      return;
-    }
-    if (!gesture || e.touches.length !== 1) return;
-
-    const touch = e.touches[0];
-    const dx = touch.clientX - gesture.startX;
-    const dy = touch.clientY - gesture.startY;
-
-    if (!gesture.dragging) {
-      if (dx < 10 && Math.abs(dy) < 10) return;
-      if (dx <= 0 || Math.abs(dy) > Math.abs(dx) * 0.9) {
-        gesture = null;
-        return;
-      }
-
-      if (typeof stopSettingSubnavMotion === "function") stopSettingSubnavMotion();
-      gesture.dragging = true;
-      gesture.frame = prepareSettingBackFrame();
-    }
-
-    e.preventDefault();
-
-    const constrainedDx = Math.max(dx, 0);
-    const now = performance.now();
-    const dt = Math.max(now - gesture.lastTime, 1);
-    gesture.velocity = (touch.clientX - gesture.lastX) / dt;
-    gesture.lastX = touch.clientX;
-    gesture.lastTime = now;
-    gesture.dx = constrainedDx;
-
-    applySwipeDrag(gesture.frame, constrainedDx, "backward");
-  }, { passive: false });
-
-  host.addEventListener("touchend", () => {
-    if (isLandscapeRailMode()) {
-      gesture = null;
-      return;
-    }
-    if (!gesture) return;
-    if (!gesture.dragging || !gesture.frame) {
-      gesture = null;
-      return;
-    }
-
-    const travel = gesture.dx / gesture.frame.width;
-    const shouldCommit = travel > SWIPE_COMMIT_RATIO || gesture.velocity > SWIPE_VELOCITY_THRESHOLD;
-    const frame = gesture.frame;
-    gesture = null;
-
-    settleSwipe(frame, "backward", shouldCommit, () => {
-      cleanupSettingBackFrame();
-      if (shouldCommit) history.back();
-      else showSettingScreen("items", false);
-    });
-  }, { passive: true });
-
-  host.addEventListener("touchcancel", () => {
-    if (!gesture) return;
-    const frame = gesture.frame;
-    gesture = null;
-
-    if (!frame) {
-      cleanupSettingBackFrame();
-      showSettingScreen("items", false);
-      return;
-    }
-
-    settleSwipe(frame, "backward", false, () => {
-      cleanupSettingBackFrame();
-      showSettingScreen("items", false);
-    });
-  }, { passive: true });
-})();
+/* Touch-swipe navigation is intentionally removed; menu buttons keep lightweight page transitions. */
 
 
 // Final initialization (originally at end of app_core.js)

@@ -267,6 +267,19 @@ function renderGroups(options = {}) {
   const groups = SETTINGS.groups || [];
   const signature = groups.map((g) => `${g.group}:${g.count}`).join("|");
 
+  function setGroupButtonLabel(button, label, count) {
+    const text = `${label} (${count})`;
+    button.title = text;
+    button.innerHTML = `<span class="setting-group-label">${escapeHtml(text)}</span>`;
+    requestAnimationFrame(() => {
+      const labelEl = button.querySelector(".setting-group-label");
+      if (!labelEl) return;
+      const shift = Math.min(0, button.clientWidth - labelEl.scrollWidth - 8);
+      button.style.setProperty("--setting-label-shift", `${shift}px`);
+      button.classList.toggle("is-overflowing", shift < 0);
+    });
+  }
+
   if (!animateGroups && box.dataset.groupsSignature === signature && box.children.length === groups.length) {
     Array.from(box.children).forEach((button, index) => {
       const g = groups[index];
@@ -274,7 +287,7 @@ function renderGroups(options = {}) {
       button.className = "btn groupBtn";
       if (g.group === CURRENT_GROUP) button.classList.add("active");
       button.dataset.group = g.group;
-      button.textContent = `${label} (${g.count})`;
+      setGroupButtonLabel(button, label, g.count);
       button.onclick = () => selectGroup(g.group);
     });
     return;
@@ -291,7 +304,7 @@ function renderGroups(options = {}) {
     if (animateGroups) b.style.setProperty("--i", String(box.children.length));
     if (g.group === CURRENT_GROUP) b.classList.add("active");
     b.dataset.group = g.group;
-    b.textContent = `${label} (${g.count})`;
+    setGroupButtonLabel(b, label, g.count);
     b.onclick = () => selectGroup(g.group);
     box.appendChild(b);
   });
@@ -306,8 +319,8 @@ function getSettingGroupLabel(group) {
   const meta = getSettingGroupMeta(group);
   if (!meta) return group;
   if (LANG === "zh") return meta.cgroup || meta.egroup || meta.group;
-  if (LANG === "en") return meta.egroup || meta.group;
-  return meta.group;
+  if (LANG === "ko") return meta.group || meta.egroup || group;
+  return meta.egroup || meta.group || group;
 }
 
 const SETTING_SUBNAV_PAGE_STEP = 1;
@@ -321,6 +334,30 @@ const settingPageRoot = document.getElementById("pageSetting");
 
 function isCompactLandscapeMode() {
   return window.matchMedia("(orientation: landscape)").matches;
+}
+
+function isFixedPortraitSettingSubnavMode() {
+  return window.matchMedia("(max-width: 640px) and (orientation: portrait)").matches;
+}
+
+function syncSettingSubnavFixedOffset() {
+  if (!settingSubnavWrap || !screenItems) return;
+
+  const shouldFix =
+    CURRENT_PAGE === "setting" &&
+    isFixedPortraitSettingSubnavMode() &&
+    screenItems.style.display !== "none" &&
+    settingSubnavWrap.style.display !== "none";
+
+  if (!shouldFix) {
+    document.documentElement.style.removeProperty("--setting-fixed-subnav-height");
+    return;
+  }
+
+  const height = Math.ceil(settingSubnavWrap.getBoundingClientRect().height || settingSubnavWrap.offsetHeight || 0);
+  if (height > 0) {
+    document.documentElement.style.setProperty("--setting-fixed-subnav-height", `${height}px`);
+  }
 }
 
 function getLandscapeDefaultSettingGroup() {
@@ -342,6 +379,15 @@ function syncSettingSearchFabState() {
   if (btnSettingSearch) {
     btnSettingSearch.classList.toggle("active", isOpen);
     btnSettingSearch.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  }
+}
+
+function mountSettingSearchOverlay() {
+  if (settingSearchBackdrop && settingSearchBackdrop.parentElement !== document.body) {
+    document.body.appendChild(settingSearchBackdrop);
+  }
+  if (settingSearchPanel && settingSearchPanel.parentElement !== document.body) {
+    document.body.appendChild(settingSearchPanel);
   }
 }
 
@@ -606,6 +652,7 @@ async function openSettingSearchPanel(options = {}) {
     }
   }
   if (!settingSearchPanel) return;
+  mountSettingSearchOverlay();
   settingSearchPanel.hidden = false;
   settingSearchPanel.setAttribute("aria-hidden", "false");
   if (settingSearchBackdrop) settingSearchBackdrop.hidden = false;
@@ -668,11 +715,15 @@ window.addEventListener("keydown", (e) => {
 });
 
 function updateSettingSubnavLayoutState() {
-  if (!settingSubnav || !settingSubnavWrap) return;
+  if (!settingSubnav || !settingSubnavWrap) {
+    syncSettingSubnavFixedOffset();
+    return;
+  }
 
   const maxScrollLeft = Math.max(settingSubnav.scrollWidth - settingSubnav.clientWidth, 0);
   const isScrollable = maxScrollLeft > 4;
   settingSubnavWrap.classList.toggle("is-scrollable", isScrollable);
+  syncSettingSubnavFixedOffset();
 }
 
 function getSettingSubnavGroups() {
@@ -907,6 +958,7 @@ function renderSettingSubnav() {
       button.onclick = () => selectGroup(entry.group, screenItems?.style.display === "none");
     });
     scheduleSettingSubnavFocus();
+    requestAnimationFrame(syncSettingSubnavFixedOffset);
     return;
   }
 
@@ -925,6 +977,7 @@ function renderSettingSubnav() {
   });
 
   scheduleSettingSubnavFocus();
+  requestAnimationFrame(syncSettingSubnavFixedOffset);
 }
 
 if (settingSubnav) {
@@ -945,9 +998,17 @@ if (settingSubnav) {
     }, 120);
   }, { passive: true });
   window.addEventListener("resize", () => requestAnimationFrame(updateSettingSubnavLayoutState));
+  window.addEventListener("orientationchange", () => {
+    window.setTimeout(syncSettingSubnavFixedOffset, 80);
+  }, { passive: true });
 }
 
 if (settingSubnavWrap) {
+  if (window.ResizeObserver) {
+    const settingSubnavResizeObserver = new ResizeObserver(() => syncSettingSubnavFixedOffset());
+    settingSubnavResizeObserver.observe(settingSubnavWrap);
+  }
+
   let gesture = null;
 
   settingSubnavWrap.addEventListener("touchstart", (e) => {
@@ -1126,17 +1187,22 @@ async function renderItems(group, options = {}) {
     ctrl.className = "ctrl";
 
     const btnMinus = document.createElement("button");
+    btnMinus.type = "button";
     btnMinus.className = "smallBtn";
     btnMinus.textContent = "-";
 
-    const val = document.createElement("div");
+    const val = document.createElement("button");
+    val.type = "button";
     val.className = "pill val";
+    val.setAttribute("aria-label", getUIText("setting_value_edit", "Edit value"));
 
     const btnPlus = document.createElement("button");
+    btnPlus.type = "button";
     btnPlus.className = "smallBtn";
     btnPlus.textContent = "+";
 
     const unitBtn = document.createElement("button");
+    unitBtn.type = "button";
     unitBtn.className = "smallBtn";
     unitBtn.textContent = "x" + UNIT_CYCLE[UNIT_INDEX[name]];
 
@@ -1164,6 +1230,56 @@ async function renderItems(group, options = {}) {
     const cur = (name in values) ? values[name] : p.default;
     val.textContent = String(cur);
 
+    function normalizeSettingValue(raw) {
+      const text = String(raw).trim();
+      if (!text) return null;
+
+      const num = Number(text);
+      if (!Number.isFinite(num)) return null;
+
+      const min = Number(p.min);
+      const max = Number(p.max);
+      let next = clamp(num, min, max);
+      if (Number.isInteger(min) && Number.isInteger(max)) {
+        next = Math.round(next);
+      }
+      return next;
+    }
+
+    async function commitSettingValue(next) {
+      try {
+        await setParam(name, next);
+        val.textContent = String(next);
+        cacheSettingValue(name, next, group);
+      } catch (e) {
+        showAppToast((UI_STRINGS[LANG].set_failed || "set failed: ") + e.message, { tone: "error" });
+      }
+    }
+
+    async function editValueDirect() {
+      const input = await appPrompt(
+        getUIText("setting_value_prompt", "Enter value for {name}\nRange: {min} - {max}", {
+          name,
+          min: p.min,
+          max: p.max,
+        }),
+        {
+          title: getUIText("setting_value_title", "Edit value"),
+          defaultValue: val.textContent,
+          placeholder: String(p.default),
+        }
+      );
+      if (input === null) return;
+
+      const next = normalizeSettingValue(input);
+      if (next === null) {
+        showAppToast(getUIText("setting_value_invalid", "Enter a valid number."), { tone: "error" });
+        return;
+      }
+      if (String(next) === String(val.textContent)) return;
+      await commitSettingValue(next);
+    }
+
     async function applyDelta(sign) {
       const step = UNIT_CYCLE[UNIT_INDEX[name]];
       let curv = Number(val.textContent);
@@ -1176,16 +1292,11 @@ async function renderItems(group, options = {}) {
         next = Math.round(next);
       }
 
-      try {
-        await setParam(name, next);
-        val.textContent = String(next);
-        cacheSettingValue(name, next, group);
-      } catch (e) {
-        showAppToast((UI_STRINGS[LANG].set_failed || "set failed: ") + e.message, { tone: "error" });
-      }
+      await commitSettingValue(next);
     }
 
     btnMinus.onclick = () => applyDelta(-1);
+    val.onclick = editValueDirect;
     btnPlus.onclick = () => applyDelta(+1);
   });
 
