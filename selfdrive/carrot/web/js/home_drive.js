@@ -47,9 +47,9 @@ window.HomeDrive = (() => {
     focalY: 2648,
   };
   const DISPLAY_MODES = [
-    { key: "fit", labelKey: "display_fit", fallbackLabel: "Fit", shortLabel: "1X" },
-    { key: "normal", labelKey: "display_normal", fallbackLabel: "Normal", shortLabel: "2X" },
-    { key: "crop", labelKey: "display_crop", fallbackLabel: "Crop", shortLabel: "3X" },
+    { key: "fit", labelKey: "display_fit", fallbackLabel: "Fit" },
+    { key: "normal", labelKey: "display_normal", fallbackLabel: "Normal" },
+    { key: "crop", labelKey: "display_crop", fallbackLabel: "Crop" },
   ];
   const HUD_TEXT_FONT = "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
   const DISPLAY_MODE_STORAGE_KEY = "home_drive_display_mode_index";
@@ -1505,7 +1505,7 @@ window.HomeDrive = (() => {
     if (!displayModeButton) return;
     const mode = DISPLAY_MODES[displayModeIndex] || DISPLAY_MODES[1];
     const label = getDisplayModeLabel(mode);
-    displayModeButton.textContent = mode.shortLabel || label || "2X";
+    displayModeButton.textContent = label || "Normal";
     displayModeButton.setAttribute("aria-label", `${getUIText("display_mode", "Display mode")}: ${label}`);
     displayModeButton.title = label;
   }

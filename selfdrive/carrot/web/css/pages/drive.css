@@ -626,9 +626,9 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
 .carrot-stage__controlBtn {
   position: relative;
   width: auto;
-  min-width: 58px;
+  min-width: 74px;
   height: 44px;
-  padding: 0 14px;
+  padding: 0 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -637,11 +637,11 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
   background: color-mix(in srgb, var(--md-surface-cont-h) 82%, rgba(0, 0, 0, 0.52));
   color: rgba(255, 255, 255, 0.96);
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 900;
   line-height: 1;
   letter-spacing: 0;
-  text-transform: uppercase;
+  text-transform: none;
   backdrop-filter: blur(10px) saturate(118%);
   -webkit-backdrop-filter: blur(10px) saturate(118%);
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.06);
@@ -659,14 +659,14 @@ body[data-page="carrot"] #pageCarrot .carrot-stage__debug {
 }
 
 .carrot-stage__controlBtn--display {
-  min-width: 58px;
+  min-width: 82px;
   border-color: color-mix(in srgb, var(--md-primary) 64%, rgba(255, 255, 255, 0.18));
   background: color-mix(in srgb, var(--md-primary) 13%, var(--md-surface-cont-h));
   color: var(--md-primary);
 }
 
 .carrot-stage__controlBtn--record {
-  min-width: 64px;
+  min-width: 74px;
 }
 
 .carrot-stage__controlBtn--record.active {

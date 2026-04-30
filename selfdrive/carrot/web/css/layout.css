@@ -379,12 +379,15 @@ body[data-page="tools"] .swipe-container,
 }
 
 #toolsMeta {
-  min-height: 1.5em;
+  height: 34px;
+  min-height: 34px;
+  max-height: 34px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  line-height: 1.5;
+  overflow: hidden;
+  line-height: 1.2;
 }
 
 .tools-meta__status {

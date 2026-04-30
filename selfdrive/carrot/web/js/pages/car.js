@@ -124,7 +124,7 @@ function applyRecordFabState(isOn) {
   if (!btnRecordToggle) return;
 
   btnRecordToggle.classList.toggle("active", recordStateIsOn);
-  btnRecordToggle.textContent = "REC";
+  btnRecordToggle.textContent = UI_STRINGS[LANG].record || "Record";
   btnRecordToggle.dataset.state = recordStateIsOn ? "on" : "off";
   if (typeof btnHome !== "undefined" && btnHome) {
     btnHome.classList.toggle("recording", recordStateIsOn);

@@ -1095,12 +1095,57 @@ body[data-page="setting"] #settingScreenItems .val {
 
 @media (max-width: 640px) {
   body[data-page="setting"] #settingScreenItems .ctrl {
-    justify-content: start;
+    justify-content: center;
   }
 }
 
 @media (orientation: landscape) and (max-width: 760px) {
   body[data-page="setting"] #settingScreenItems .ctrl {
     justify-content: start;
+  }
+}
+
+@media (max-width: 640px) and (orientation: portrait) {
+  body[data-page="setting"] #settingScreenItems > .row-between.mb-sm {
+    min-height: 30px;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 30%, transparent);
+  }
+
+  body[data-page="setting"] #settingScreenItems .setting {
+    padding: 18px 0 20px;
+  }
+
+  body[data-page="setting"] #settingScreenItems .settingTop {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+  }
+
+  body[data-page="setting"] #settingScreenItems .ctrl {
+    justify-self: center;
+    justify-content: center;
+    width: min(188px, 100%);
+  }
+
+  body[data-page="setting"] #settingScreenItems .title,
+  body[data-page="setting"] #settingScreenItems .name {
+    text-align: left;
+  }
+
+  body[data-page="setting"] #settingScreenItems .descr {
+    margin-top: 4px;
+  }
+
+  body[data-page="tools"] #toolsMeta {
+    height: 36px;
+    min-height: 36px;
+    max-height: 36px;
+    margin-bottom: 10px;
+    overflow: hidden;
+    align-items: center;
+    line-height: 1.2;
   }
 }
