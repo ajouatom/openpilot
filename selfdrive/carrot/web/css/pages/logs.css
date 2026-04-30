@@ -1231,12 +1231,11 @@
 
 .terminal-screen.is-x-overflow::after {
   content: "";
-  position: sticky;
+  position: absolute;
   top: 0;
   right: 0;
-  float: right;
+  bottom: 0;
   width: 28px;
-  height: 100%;
   pointer-events: none;
   background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--md-surface) 90%, #000 10%));
 }
