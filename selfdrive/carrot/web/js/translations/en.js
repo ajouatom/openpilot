@@ -17,6 +17,7 @@ window.CarrotTranslations.register("en", {
     branch_select: "Branch Select",
     branch_current: "Current",
     server_state: "Server Status",
+    working: "Working",
     quick_link: "Quick Link",
     car_select: "Car Select",
     makers: "Makers",

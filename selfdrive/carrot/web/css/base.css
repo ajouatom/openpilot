@@ -199,6 +199,31 @@ body[data-page="terminal"] .swipe-container {
   background: color-mix(in srgb, #ff6b6b 18%, transparent);
 }
 
+.topbar .nav-btn.is-working,
+.topbar .nav-btn.is-working.active {
+  color: color-mix(in srgb, var(--md-primary) 82%, var(--md-outline));
+}
+
+.topbar .nav-btn.is-working.active {
+  background: color-mix(in srgb, var(--md-primary) 16%, transparent);
+}
+
+.topbar .nav-btn.is-working::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--md-primary) 32%, transparent);
+  border-top-color: var(--md-primary);
+  background: color-mix(in srgb, var(--md-surface) 86%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-primary) 18%, transparent);
+  animation: nav-working-spin 0.78s linear infinite;
+  pointer-events: none;
+}
+
 .topbar .nav-btn.recording::before {
   content: attr(data-record-badge);
   position: absolute;
@@ -372,6 +397,19 @@ body[data-page="home"] .global-home-record-fab {
   }
   50%, 100% {
     opacity: 0.28;
+  }
+}
+
+@keyframes nav-working-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar .nav-btn.is-working::after {
+    animation: none;
+    border-color: var(--md-primary);
   }
 }
 

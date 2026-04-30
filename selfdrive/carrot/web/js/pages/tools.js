@@ -609,52 +609,59 @@ async function runTool(action, payload) {
   const labels = getActionLabel(action);
   const runToken = ++activeToolRunToken;
   const commandPreview = getToolCommandPreview(action, payload || {});
+  const activityId = typeof beginAppActivity === "function"
+    ? beginAppActivity("tools", labels.running || commandPreview)
+    : null;
 
-  toolsMetaSet(labels.running);
-  toolsOutCommitCurrent();
-  toolsOutSet(`> ${commandPreview}\n${labels.running}`);
-  toolsProgressSet(null, { active: true, indeterminate: true });
-
-  const started = await postJson("/api/tools/start", { action, ...(payload || {}) });
-  const jobId = started.job_id;
-  let snapshot = null;
-
-  while (runToken === activeToolRunToken) {
-    snapshot = await getJson(`/api/tools/job?id=${encodeURIComponent(jobId)}`);
-
-    if (snapshot.log != null) {
-      const body = normalizeToolsOutText(snapshot.log) || labels.running;
-      toolsOutSet(`> ${commandPreview}\n${body}`);
-    }
-
-    if (!snapshot.done) {
-      updateToolsRunningState(labels, snapshot);
-      await waitMs(320);
-      continue;
-    }
-
-    const result = snapshot.result || snapshot;
-    if (!result.ok) {
-      const errMsg = friendlyError(result) || result.error || snapshot.error || labels.failed;
-      toolsOutSet(`> ${commandPreview}\n${normalizeToolsOutText(snapshot?.log) || errMsg}`);
-      toolsOutCommitCurrent();
-      toolsMetaSet(labels.failed);
-      toolsProgressSet(null, { active: false });
-      throw new Error(errMsg);
-    }
-
-    const finalBody = normalizeToolsOutText(result.out ?? snapshot.log) || labels.done;
-    toolsOutSet(`> ${commandPreview}\n${finalBody}`);
+  try {
+    toolsMetaSet(labels.running);
     toolsOutCommitCurrent();
-    toolsMetaSet(labels.done);
-    toolsProgressSet(100, { active: true, indeterminate: false });
-    window.setTimeout(() => {
-      if (activeToolRunToken === runToken) toolsProgressSet(null, { active: false });
-    }, 900);
-    return result;
-  }
+    toolsOutSet(`> ${commandPreview}\n${labels.running}`);
+    toolsProgressSet(null, { active: true, indeterminate: true });
 
-  throw new Error("tool run cancelled");
+    const started = await postJson("/api/tools/start", { action, ...(payload || {}) });
+    const jobId = started.job_id;
+    let snapshot = null;
+
+    while (runToken === activeToolRunToken) {
+      snapshot = await getJson(`/api/tools/job?id=${encodeURIComponent(jobId)}`);
+
+      if (snapshot.log != null) {
+        const body = normalizeToolsOutText(snapshot.log) || labels.running;
+        toolsOutSet(`> ${commandPreview}\n${body}`);
+      }
+
+      if (!snapshot.done) {
+        updateToolsRunningState(labels, snapshot);
+        await waitMs(320);
+        continue;
+      }
+
+      const result = snapshot.result || snapshot;
+      if (!result.ok) {
+        const errMsg = friendlyError(result) || result.error || snapshot.error || labels.failed;
+        toolsOutSet(`> ${commandPreview}\n${normalizeToolsOutText(snapshot?.log) || errMsg}`);
+        toolsOutCommitCurrent();
+        toolsMetaSet(labels.failed);
+        toolsProgressSet(null, { active: false });
+        throw new Error(errMsg);
+      }
+
+      const finalBody = normalizeToolsOutText(result.out ?? snapshot.log) || labels.done;
+      toolsOutSet(`> ${commandPreview}\n${finalBody}`);
+      toolsOutCommitCurrent();
+      toolsMetaSet(labels.done);
+      toolsProgressSet(100, { active: true, indeterminate: false });
+      window.setTimeout(() => {
+        if (activeToolRunToken === runToken) toolsProgressSet(null, { active: false });
+      }, 900);
+      return result;
+    }
+
+    throw new Error("tool run cancelled");
+  } finally {
+    if (activityId && typeof endAppActivity === "function") endAppActivity(activityId);
+  }
 }
 
 function didGitPullUpdate(result) {
@@ -1153,8 +1160,12 @@ function initToolsPage() {
         return;
       }
 
+      let activityId = null;
       try {
         const labels = getActionLabel("backup_settings");
+        activityId = typeof beginAppActivity === "function"
+          ? beginAppActivity("tools", labels.running || "restore settings")
+          : null;
         toolsMetaSet(labels.running);
         toolsOutCommitCurrent();
         toolsOutSet(`> restore settings\n${labels.running}`);
@@ -1171,6 +1182,10 @@ function initToolsPage() {
         toolsProgressSet(100, { active: true, indeterminate: false });
         toolsOutSet(`> restore settings\n${JSON.stringify(j.result, null, 2)}`);
         toolsOutCommitCurrent();
+        if (activityId && typeof endAppActivity === "function") {
+          endAppActivity(activityId);
+          activityId = null;
+        }
 
         if (await appConfirm(UI_STRINGS[LANG].restore_done_reboot || "Restore done.\nReboot now?", {
           title: UI_STRINGS[LANG].reboot || "Reboot",
@@ -1180,6 +1195,7 @@ function initToolsPage() {
       } catch (e) {
         showError("backup_settings", e);
       } finally {
+        if (activityId && typeof endAppActivity === "function") endAppActivity(activityId);
         window.setTimeout(() => toolsProgressSet(null, { active: false }), 900);
         inp.remove();
       }

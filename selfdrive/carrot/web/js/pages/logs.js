@@ -617,6 +617,9 @@ async function uploadDashcamSegments(segments) {
   const ok = await appConfirm(confirmMessage, { title: getUIText("log_upload", "Upload Logs") });
   if (!ok) return;
   const progress = openDashcamUploadProgress(targets.length, uploadStats);
+  let activityId = typeof beginAppActivity === "function"
+    ? beginAppActivity("logs", getUIText("log_uploading", "Uploading logs"))
+    : null;
   try {
     progress.setMessage(`0/${targets.length} · ${getUIText("log_uploading", "Uploading logs")}`);
     const result = await postJson("/api/dashcam/upload", { segments: targets });
@@ -628,10 +631,16 @@ async function uploadDashcamSegments(segments) {
     });
     showAppToast(message, { tone: result.ok ? "default" : "error", duration: 3600 });
     progress.close();
+    if (activityId && typeof endAppActivity === "function") {
+      endAppActivity(activityId);
+      activityId = null;
+    }
     await showDashcamUploadResult(result);
   } catch (e) {
     progress.close();
     showAppToast(`${getUIText("log_upload", "Upload Logs")} ${getUIText("error", "Error")}: ${e.message || e}`, { tone: "error", duration: 4200 });
+  } finally {
+    if (activityId && typeof endAppActivity === "function") endAppActivity(activityId);
   }
 }
 

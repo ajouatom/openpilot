@@ -60,6 +60,7 @@ web/
     │   ├── utils.js        escapeHtml, clamp, copyToClipboard, quick link
     │   ├── i18n.js         LANG, getUIText, renderUIText, setWebLanguage
     │   ├── api.js          bulkGet, setParam, postJson, getJson, waitMs
+    │   ├── activity.js     cross-page activity badges + beforeunload guard
     │   └── ui/
     │       ├── dialog.js   appAlert/Confirm/Prompt + toast
     │       ├── effects.js  pointer-down confetti easter egg

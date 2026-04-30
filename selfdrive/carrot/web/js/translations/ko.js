@@ -17,6 +17,7 @@ window.CarrotTranslations.register("ko", {
     branch_select: "브랜치 선택",
     branch_current: "현재",
     server_state: "서버 상태",
+    working: "작업 중",
     quick_link: "퀵 링크",
     car_select: "차량 선택",
     makers: "제조사",
