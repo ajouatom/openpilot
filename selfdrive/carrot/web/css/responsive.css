@@ -230,18 +230,29 @@
     padding-top: calc(var(--setting-fixed-subnav-height, 174px) + 10px);
   }
 
+  body[data-page="setting"] #settingScreenHost,
+  body[data-page="setting"] #settingScreenItems:not(.hidden) {
+    overflow: visible;
+    transform: none !important;
+    will-change: auto !important;
+  }
+
   body[data-page="setting"] #settingSubnavWrap {
-    position: fixed;
-    inset: 0 0 auto;
-    z-index: 96;
-    margin: 0;
-    padding: calc(8px + env(safe-area-inset-top, 0px)) var(--sp-lg) 14px;
-    background: color-mix(in srgb, var(--md-surface) 96%, #000);
-    border-bottom: 1px solid color-mix(in srgb, var(--md-primary) 32%, var(--md-outline-var));
+    position: fixed !important;
+    top: 0 !important;
+    right: 0 !important;
+    left: 0 !important;
+    z-index: 220;
+    width: 100dvw;
+    margin: 0 !important;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) var(--sp-lg) 12px;
+    background: color-mix(in srgb, var(--md-surface) 98%, #000);
+    border-bottom: 1px solid color-mix(in srgb, var(--md-primary) 42%, var(--md-outline-var));
     box-shadow:
-      0 14px 28px rgba(0, 0, 0, 0.36),
+      0 10px 22px rgba(0, 0, 0, 0.34),
       inset 0 -1px 0 rgba(255, 255, 255, 0.04);
-    backdrop-filter: blur(12px) saturate(112%);
+    transform: none !important;
+    will-change: auto !important;
   }
 
   body[data-page="setting"] #settingSubnavWrap::after {
@@ -251,15 +262,9 @@
     left: var(--sp-lg);
     right: var(--sp-lg);
     bottom: 0;
-    height: 2px;
+    height: 1px;
     pointer-events: none;
-    border-radius: 999px;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      color-mix(in srgb, var(--md-primary) 58%, var(--md-outline-var)),
-      transparent
-    );
+    background: color-mix(in srgb, var(--md-primary) 48%, var(--md-outline-var));
   }
 }
 
@@ -1119,15 +1124,25 @@ body[data-page="setting"] #settingScreenItems .val {
 
   body[data-page="setting"] #settingScreenItems .settingTop {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 12px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
     align-items: start;
   }
 
   body[data-page="setting"] #settingScreenItems .ctrl {
-    justify-self: center;
-    justify-content: center;
-    width: min(188px, 100%);
+    --setting-control-side: 32px;
+    --setting-control-value: 66px;
+    --setting-control-gap: 6px;
+    justify-self: end;
+    justify-content: end;
+    width: calc((var(--setting-control-side) * 2) + var(--setting-control-value) + (var(--setting-control-gap) * 2));
+    max-width: 100%;
+  }
+
+  body[data-page="setting"] #settingScreenItems .smallBtn,
+  body[data-page="setting"] #settingScreenItems .val {
+    min-height: 34px;
+    font-size: 12px;
   }
 
   body[data-page="setting"] #settingScreenItems .title,
