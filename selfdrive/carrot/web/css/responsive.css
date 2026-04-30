@@ -536,7 +536,7 @@
   }
 
   body[data-page="setting"] #curCarLabelSetting {
-    font-size: 16px !important;
+    font-size: 14px !important;
     line-height: 1.15;
     overflow-x: auto;
     scrollbar-width: none;
@@ -566,6 +566,10 @@
   body[data-page="setting"] .groupBtn {
     margin-bottom: 0;
     min-width: 0;
+    min-height: 44px;
+    padding: 9px 12px;
+    font-size: 14px;
+    line-height: 1.16;
     overflow-x: auto;
     overflow-y: hidden;
     white-space: nowrap;
@@ -806,20 +810,20 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
   }
 
   body[data-page="setting"] #settingScreenItems .title {
-    font-size: clamp(17px, 2.35vw, 20px);
+    font-size: clamp(15px, 2.05vw, 18px);
     font-weight: 700;
     line-height: 1.18;
   }
 
   body[data-page="setting"] #settingScreenItems .name {
-    font-size: clamp(12px, 1.65vw, 14px);
+    font-size: clamp(10.5px, 1.45vw, 12.5px);
     line-height: 1.28;
   }
 
   body[data-page="setting"] #settingScreenItems .muted,
   body[data-page="setting"] #settingScreenItems .descr {
-    font-size: clamp(13px, 1.85vw, 15px);
-    line-height: 1.45;
+    font-size: clamp(12px, 1.65vw, 14px);
+    line-height: 1.38;
   }
 
   body[data-page="setting"] #settingScreenItems .setting {
@@ -829,7 +833,7 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
   body[data-page="setting"] #settingScreenItems .settingTop {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 10px;
+    gap: 8px;
     align-items: start;
   }
 
@@ -848,7 +852,7 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
 
   body[data-page="setting"] #settingScreenItems .ctrl {
     display: grid;
-    grid-template-columns: 42px minmax(70px, 84px);
+    grid-template-columns: 40px minmax(72px, 86px) 40px;
     gap: 8px;
     justify-content: end;
     align-items: center;
@@ -856,24 +860,46 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
     max-width: 100%;
   }
 
+  body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(1) {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(2) {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(3) {
+    grid-column: 3;
+    grid-row: 2;
+  }
+
+  body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(4) {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    justify-self: end;
+    width: min(86px, 100%);
+  }
+
   body[data-page="setting"] #settingScreenItems .smallBtn {
     width: 100%;
     box-sizing: border-box;
-    min-width: 42px;
-    min-height: 42px;
-    padding: 8px 10px;
-    font-size: 14px;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 7px 9px;
+    font-size: 13px;
     font-weight: 700;
   }
 
   body[data-page="setting"] #settingScreenItems .val {
     width: 100%;
     box-sizing: border-box;
-    min-width: 70px;
-    max-width: 84px;
+    min-width: 72px;
+    max-width: 86px;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-size: 14px;
+    font-size: 13px;
   }
 
   @keyframes setting-left-text-pan {
