@@ -1222,6 +1222,8 @@
   overflow-x: auto;
   overflow-y: auto;
   overscroll-behavior: contain;
+  overflow-anchor: none;
+  scrollbar-gutter: stable;
   padding: var(--sp-md) var(--terminal-inline);
   touch-action: pan-x pan-y;
   position: relative;

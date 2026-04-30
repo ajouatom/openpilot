@@ -22,6 +22,7 @@ let terminalLastScreen = "";
 let terminalLayoutBound = false;
 let terminalFollowOutput = true;
 let terminalCurrentCwd = "/data/openpilot";
+let terminalScrollRaf = 0;
 
 function setTerminalMeta(text) {
   if (terminalMetaEl) terminalMetaEl.textContent = String(text || "");
@@ -86,13 +87,36 @@ function renderTerminalScreenMarkup(text) {
 
 function isTerminalPinnedToBottom() {
   if (!terminalScreenEl) return true;
-  return (terminalScreenEl.scrollHeight - terminalScreenEl.scrollTop - terminalScreenEl.clientHeight) < 28;
+  return (getTerminalBottomDistance() < 28);
 }
 
-function pinTerminalToBottom() {
+function getTerminalBottomDistance() {
+  if (!terminalScreenEl) return 0;
+  return Math.max(0, terminalScreenEl.scrollHeight - terminalScreenEl.scrollTop - terminalScreenEl.clientHeight);
+}
+
+function getTerminalBottomScrollTop() {
+  if (!terminalScreenEl) return 0;
+  return Math.max(0, terminalScreenEl.scrollHeight - terminalScreenEl.clientHeight);
+}
+
+function pinTerminalToBottom(options = {}) {
   if (!terminalScreenEl) return;
-  requestAnimationFrame(() => {
-    terminalScreenEl.scrollTop = terminalScreenEl.scrollHeight;
+  const { immediate = false } = options;
+  const apply = () => {
+    terminalScreenEl.scrollTop = getTerminalBottomScrollTop();
+    updateTerminalOverflowState();
+  };
+  if (terminalScrollRaf) {
+    cancelAnimationFrame(terminalScrollRaf);
+    terminalScrollRaf = 0;
+  }
+  if (immediate) apply();
+  terminalScrollRaf = requestAnimationFrame(() => {
+    terminalScrollRaf = requestAnimationFrame(() => {
+      terminalScrollRaf = 0;
+      apply();
+    });
   });
 }
 
@@ -107,7 +131,7 @@ function clearTerminalViewport() {
   terminalLastScreen = "";
   if (terminalOutputEl) terminalOutputEl.innerHTML = "";
   updateTerminalOverflowState();
-  pinTerminalToBottom();
+  pinTerminalToBottom({ immediate: true });
 }
 
 function setTerminalScreen(text, forceStick = false) {
@@ -115,6 +139,8 @@ function setTerminalScreen(text, forceStick = false) {
   const nextText = sanitizeTerminalScreen(text);
   if (nextText === terminalLastScreen) return;
 
+  const bottomDistance = getTerminalBottomDistance();
+  const previousScrollLeft = terminalScreenEl?.scrollLeft || 0;
   const shouldStick = forceStick || terminalFollowOutput || isTerminalPinnedToBottom();
   terminalLastScreen = nextText;
   const nextCwd = extractTerminalCwd(nextText);
@@ -123,9 +149,17 @@ function setTerminalScreen(text, forceStick = false) {
     setTerminalSessionMeta(nextCwd);
   }
   terminalOutputEl.innerHTML = renderTerminalScreenMarkup(nextText);
-  requestAnimationFrame(updateTerminalOverflowState);
-
-  if (shouldStick) pinTerminalToBottom();
+  requestAnimationFrame(() => {
+    updateTerminalOverflowState();
+    if (shouldStick) {
+      pinTerminalToBottom();
+      return;
+    }
+    if (terminalScreenEl) {
+      terminalScreenEl.scrollTop = Math.max(0, terminalScreenEl.scrollHeight - terminalScreenEl.clientHeight - bottomDistance);
+      terminalScreenEl.scrollLeft = previousScrollLeft;
+    }
+  });
 }
 
 function runTerminalLocalAlias(line) {
@@ -221,6 +255,7 @@ function bindTerminalLayoutObservers() {
     updateTerminalViewportMetrics();
     updateTerminalToastAnchor();
     updateTerminalOverflowState();
+    if (terminalFollowOutput) pinTerminalToBottom();
   });
   window.addEventListener("resize", handleLayout, { passive: true });
   window.addEventListener("orientationchange", handleLayout, { passive: true });
@@ -378,16 +413,14 @@ function initTerminalBindings() {
     const line = (terminalInputEl?.value || "").trim();
     if (!line) return;
     if (runTerminalLocalAlias(line)) return;
-    terminalFollowOutput = true;
-    pinTerminalToBottom();
+    terminalFollowOutput = isTerminalPinnedToBottom();
     if (sendTerminalPacket({ type: "input", data: line })) {
       terminalInputEl.value = "";
     }
   }, "submit");
 
   bindNodeOnce(btnTerminalCtrlCEl, "clickBound", () => {
-    terminalFollowOutput = true;
-    pinTerminalToBottom();
+    terminalFollowOutput = isTerminalPinnedToBottom();
     sendTerminalControl("ctrl_c");
   });
 
@@ -398,8 +431,7 @@ function initTerminalBindings() {
   });
 
   bindNodeOnce(btnTerminalReconnectEl, "clickBound", () => {
-    terminalFollowOutput = true;
-    pinTerminalToBottom();
+    terminalFollowOutput = isTerminalPinnedToBottom();
     const metaText = String(terminalMetaEl?.textContent || "");
     const blockedByPassword = terminalLastScreen.includes("Password:");
     const blockedByStartup = metaText.includes("returned non-zero exit status");
