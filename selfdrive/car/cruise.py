@@ -508,7 +508,6 @@ class VCruiseCarrot:
         self.carrot_cruise_active = False
 
       elif button_type == ButtonType.decelCruise:
-        self._lat_enabled = True
         self._pause_auto_speed_up = True
         #self.carrot_cruise_active = False
 

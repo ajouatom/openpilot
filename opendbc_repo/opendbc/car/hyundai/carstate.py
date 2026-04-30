@@ -123,6 +123,7 @@ class CarState(CarStateBase):
 
     self.auto_engage_mode = Params().get_int("AutoEngage")
     self.cancel_button_mode = Params().get_int("CancelButtonMode")
+    self.lfa_button_mode = Params().get_int("LFAButtonMode")
     self.main_enabled = self.auto_engage_mode == 2
     self.manual_main_off_latched = False
 
@@ -130,7 +131,6 @@ class CarState(CarStateBase):
     self.lat_enabled = self.lat_override == LAT_OVERRIDE_FORCE_ON
 
     self.gear_shifter = GearShifter.drive # Gear_init for Nexo ?? unknown 21.02.23.LSW
-
 
     self.totalDistance = 0.0
     self.speedLimitDistance = 0
@@ -197,9 +197,11 @@ class CarState(CarStateBase):
   def _update_lat_button_state(self, button_events):
     for b in button_events:
       if b.type == ButtonType.lfaButton and b.pressed:
-        self._toggle_user_lat()
-      elif b.type == ButtonType.cancel and b.pressed and self.cancel_button_mode == 1:
-        self._set_lat_override(LAT_OVERRIDE_FORCE_OFF)
+        if self.lfa_button_mode == 0:
+          self._toggle_user_lat()
+      elif b.type == ButtonType.cancel and b.pressed:
+        if self.cancel_button_mode == 1:
+          self._set_lat_override(LAT_OVERRIDE_FORCE_OFF)
 
 
   def monitor_fingerprint(self, can_parsers, canfd):
