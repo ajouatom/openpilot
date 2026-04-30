@@ -59,25 +59,31 @@ body[data-page="carrot"] #driveHudCard {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.24);
+  border: 1px solid color-mix(in srgb, var(--md-primary) 62%, rgba(255, 255, 255, 0.18));
   border-radius: 999px;
-  background: #ffb12a;
-  color: #161616;
-  box-shadow: 0 8px 22px rgba(0,0,0,.32);
-  font-size: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 177, 42, 0.18), rgba(255, 177, 42, 0.07)),
+    rgba(8, 12, 16, 0.82);
+  color: var(--md-primary);
+  box-shadow: 0 8px 20px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.06);
+  font-size: 17px;
   font-weight: 900;
   line-height: 1;
   text-align: center;
-  transform: translate(86px, -48px);
+  transform: translate(88px, -48px);
   z-index: 1;
   cursor: help;
   user-select: none;
   outline: none;
+}
+
+.vision-start-overlay__message[hidden] {
+  display: none !important;
 }
 
 .vision-start-overlay__message::after {
@@ -103,11 +109,17 @@ body[data-page="carrot"] #driveHudCard {
   transition: opacity 0.14s ease, transform 0.14s ease;
 }
 
-.vision-start-overlay__message:hover::after,
 .vision-start-overlay__message:focus::after,
-.vision-start-overlay__message:active::after {
+.vision-start-overlay__message.is-tooltip-visible::after {
   opacity: 1;
   transform: translateY(0);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .vision-start-overlay__message:hover::after {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .vision-start-overlay .btn:disabled {

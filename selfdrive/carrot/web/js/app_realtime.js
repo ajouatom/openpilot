@@ -1141,6 +1141,18 @@ async function waitServerReady(timeoutMs = 8000) {
 window.CARROT_VISION_ACTIVE = false;
 window.CARROT_VISION_AVAILABLE = false;
 window.CARROT_VISION_DISABLED_MESSAGE = getUIText("vision_unavailable_hint", "DisableDM 2에서 사용 가능");
+let carrotVisionBadgeHintTimer = null;
+
+function showCarrotVisionBadgeHint(el) {
+  if (!el) return;
+  el.classList.add("is-tooltip-visible");
+  if (carrotVisionBadgeHintTimer) clearTimeout(carrotVisionBadgeHintTimer);
+  carrotVisionBadgeHintTimer = window.setTimeout(() => {
+    el.classList.remove("is-tooltip-visible");
+    if (document.activeElement === el) el.blur();
+    carrotVisionBadgeHintTimer = null;
+  }, 2400);
+}
 
 async function fetchDisableDmValue() {
   const r = await fetch("/api/params_bulk?names=DisableDM", { cache: "no-store" });
@@ -1173,12 +1185,28 @@ function updateCarrotVisionAvailabilityUi(available, message = window.CARROT_VIS
       messageEl.setAttribute("aria-label", hint);
       messageEl.setAttribute("role", "button");
       messageEl.tabIndex = 0;
+      messageEl.onclick = () => showCarrotVisionBadgeHint(messageEl);
+      messageEl.ontouchstart = () => showCarrotVisionBadgeHint(messageEl);
+      messageEl.onkeydown = (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          showCarrotVisionBadgeHint(messageEl);
+        }
+      };
     } else {
+      messageEl.classList.remove("is-tooltip-visible");
       messageEl.removeAttribute("data-tooltip");
       messageEl.removeAttribute("title");
       messageEl.removeAttribute("aria-label");
       messageEl.removeAttribute("role");
       messageEl.removeAttribute("tabindex");
+      messageEl.onclick = null;
+      messageEl.ontouchstart = null;
+      messageEl.onkeydown = null;
+      if (carrotVisionBadgeHintTimer) {
+        clearTimeout(carrotVisionBadgeHintTimer);
+        carrotVisionBadgeHintTimer = null;
+      }
     }
   }
   if (available) {
