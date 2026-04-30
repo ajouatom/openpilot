@@ -20,7 +20,7 @@
   top: 0;
   left: 0;
   width: 100%;
-  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease;
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s ease;
   will-change: transform, opacity;
 }
 
@@ -35,26 +35,26 @@
 }
 
 .page-enter-from-right {
-  opacity: 0.18;
-  transform: translateX(48px);
+  opacity: 0;
+  transform: translateX(14px);
   z-index: 2;
 }
 
 .page-enter-from-left {
-  opacity: 0.18;
-  transform: translateX(-48px);
+  opacity: 0;
+  transform: translateX(-14px);
   z-index: 2;
 }
 
 .page-exit-to-left {
   opacity: 0;
-  transform: translateX(-48px);
+  transform: translateX(-8px);
   z-index: 1;
 }
 
 .page-exit-to-right {
   opacity: 0;
-  transform: translateX(48px);
+  transform: translateX(8px);
   z-index: 1;
 }
 
