@@ -662,17 +662,30 @@ body[data-page="terminal"] .app-toast-host {
 }
 
 .setting .ctrl {
-  gap: 8px;
+  --setting-control-border: color-mix(in srgb, var(--md-outline-var) 62%, transparent);
+  --setting-control-bg: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--md-surface-cont-h) 92%, #101820),
+    color-mix(in srgb, var(--md-surface-cont) 94%, #05080b)
+  );
+  --setting-control-hover-bg: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--md-surface-cont-h) 82%, var(--md-primary)),
+    color-mix(in srgb, var(--md-surface-cont) 88%, var(--md-primary))
+  );
+  gap: 6px;
 }
 
 .setting .ctrl .smallBtn,
 .setting .ctrl .val {
-  min-height: 40px;
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 58%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--md-surface-cont-h) 94%, #000);
+  min-height: 38px;
+  border: 1px solid var(--setting-control-border);
+  border-radius: 9px;
+  background: var(--setting-control-bg);
   color: var(--md-on-surface);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
   box-sizing: border-box;
   font-family: var(--font-mono);
   font-size: 13px;
@@ -682,7 +695,7 @@ body[data-page="terminal"] .app-toast-host {
 }
 
 .setting .ctrl .smallBtn {
-  min-width: 40px;
+  min-width: 42px;
   padding: 7px 12px;
   display: inline-flex;
   align-items: center;
@@ -694,7 +707,27 @@ body[data-page="terminal"] .app-toast-host {
   min-width: 84px;
   padding: 7px 12px;
   cursor: pointer;
-  background: color-mix(in srgb, var(--md-surface-cont) 92%, #000);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--md-surface-cont) 90%, #111922),
+    color-mix(in srgb, var(--md-surface) 92%, #04070a)
+  );
+  border-color: color-mix(in srgb, var(--md-primary) 28%, var(--setting-control-border));
+}
+
+.setting .ctrl > :nth-child(1),
+.setting .ctrl > :nth-child(3),
+.setting .ctrl > :nth-child(4) {
+  border-radius: 9px;
+}
+
+.setting .ctrl > :nth-child(4) {
+  color: color-mix(in srgb, var(--md-primary) 72%, var(--md-on-surface));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--md-primary) 15%, var(--md-surface-cont-h)),
+    color-mix(in srgb, var(--md-primary) 8%, var(--md-surface-cont))
+  );
 }
 
 .setting .ctrl .smallBtn:hover,
@@ -702,7 +735,7 @@ body[data-page="terminal"] .app-toast-host {
 .setting .ctrl .val:hover,
 .setting .ctrl .val:focus-visible {
   border-color: color-mix(in srgb, var(--md-primary) 42%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
+  background: var(--setting-control-hover-bg);
   outline: none;
 }
 

@@ -1005,9 +1005,9 @@ body[data-page="setting"] #pageSetting > .page-fab-layer--setting .fab {
 }
 
 body[data-page="setting"] #settingScreenItems .ctrl {
-  --setting-control-side: 40px;
-  --setting-control-value: 86px;
-  --setting-control-gap: 8px;
+  --setting-control-side: 42px;
+  --setting-control-value: 88px;
+  --setting-control-gap: 6px;
   display: grid;
   grid-template-columns: var(--setting-control-side) var(--setting-control-value) var(--setting-control-side);
   gap: var(--setting-control-gap);
@@ -1043,13 +1043,19 @@ body[data-page="setting"] #settingScreenItems .smallBtn {
   width: 100%;
   box-sizing: border-box;
   min-width: var(--setting-control-side);
-  min-height: 40px;
+  min-height: 38px;
   padding: 7px 9px;
-  border-color: color-mix(in srgb, var(--md-outline-var) 58%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--md-surface-cont-h) 94%, #000);
+  border-color: color-mix(in srgb, var(--md-outline-var) 62%, transparent);
+  border-radius: 9px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--md-surface-cont-h) 92%, #101820),
+    color-mix(in srgb, var(--md-surface-cont) 94%, #05080b)
+  );
   color: var(--md-on-surface);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
   font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 900;
@@ -1061,19 +1067,28 @@ body[data-page="setting"] #settingScreenItems .smallBtn:focus-visible,
 body[data-page="setting"] #settingScreenItems .val:hover,
 body[data-page="setting"] #settingScreenItems .val:focus-visible {
   border-color: color-mix(in srgb, var(--md-primary) 42%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--md-surface-cont-h) 82%, var(--md-primary)),
+    color-mix(in srgb, var(--md-surface-cont) 88%, var(--md-primary))
+  );
   outline: none;
 }
 
 body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(1),
 body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(3) {
-  border-radius: 999px;
+  border-radius: 9px;
 }
 
 body[data-page="setting"] #settingScreenItems .ctrl > :nth-child(4) {
   min-height: 36px;
-  border-radius: 8px;
-  color: color-mix(in srgb, var(--md-on-surface) 94%, var(--md-primary));
+  border-radius: 9px;
+  color: color-mix(in srgb, var(--md-primary) 72%, var(--md-on-surface));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--md-primary) 15%, var(--md-surface-cont-h)),
+    color-mix(in srgb, var(--md-primary) 8%, var(--md-surface-cont))
+  );
 }
 
 body[data-page="setting"] #settingScreenItems .val {
@@ -1082,15 +1097,19 @@ body[data-page="setting"] #settingScreenItems .val {
   box-sizing: border-box;
   min-width: var(--setting-control-value);
   max-width: var(--setting-control-value);
-  min-height: 40px;
+  min-height: 38px;
   padding: 7px 9px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  border-color: color-mix(in srgb, var(--md-outline-var) 58%, transparent);
-  background: color-mix(in srgb, var(--md-surface-cont) 92%, #000);
-  border-radius: 8px;
+  border-color: color-mix(in srgb, var(--md-primary) 28%, color-mix(in srgb, var(--md-outline-var) 62%, transparent));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--md-surface-cont) 90%, #111922),
+    color-mix(in srgb, var(--md-surface) 92%, #04070a)
+  );
+  border-radius: 9px;
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: var(--font-mono);
@@ -1138,8 +1157,8 @@ body[data-page="setting"] #settingScreenItems .val {
   }
 
   body[data-page="setting"] #settingScreenItems .ctrl {
-    --setting-control-side: 32px;
-    --setting-control-value: 66px;
+    --setting-control-side: 34px;
+    --setting-control-value: 70px;
     --setting-control-gap: 6px;
     justify-self: end;
     justify-content: end;
