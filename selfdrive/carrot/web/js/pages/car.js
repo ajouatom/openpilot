@@ -119,25 +119,26 @@ function scheduleRecordStateResync(delay = 520) {
   }, delay);
 }
 
-function applyRecordFabState(isOn) {
+function applyRecordFabState(isOn = recordStateIsOn) {
   recordStateIsOn = Boolean(isOn);
   if (!btnRecordToggle) return;
 
   btnRecordToggle.classList.toggle("active", recordStateIsOn);
-  btnRecordToggle.textContent = UI_STRINGS[LANG].record || "Record";
+  btnRecordToggle.textContent = getUIText("record", "Record");
   btnRecordToggle.dataset.state = recordStateIsOn ? "on" : "off";
   if (typeof btnHome !== "undefined" && btnHome) {
     btnHome.classList.toggle("recording", recordStateIsOn);
     btnHome.setAttribute("data-record-badge", recordStateIsOn ? "REC" : "");
   }
   const label = recordStateIsOn
-    ? (UI_STRINGS[LANG].record_on || UI_STRINGS[LANG].record || "Recording")
-    : (UI_STRINGS[LANG].record_off || UI_STRINGS[LANG].record || "Idle");
+    ? getUIText("record_on", getUIText("record", "Recording"))
+    : getUIText("record_off", getUIText("record", "Idle"));
   btnRecordToggle.setAttribute("aria-label", label);
   btnRecordToggle.title = label;
   if (typeof btnHome !== "undefined" && btnHome) {
-    btnHome.setAttribute("aria-label", recordStateIsOn ? `${UI_STRINGS[LANG].home || "Home"} (${label})` : (UI_STRINGS[LANG].home || "Home"));
-    btnHome.title = recordStateIsOn ? label : (UI_STRINGS[LANG].home || "Home");
+    const homeLabel = getUIText("home", "Home");
+    btnHome.setAttribute("aria-label", recordStateIsOn ? `${homeLabel} (${label})` : homeLabel);
+    btnHome.title = recordStateIsOn ? label : homeLabel;
   }
 }
 
@@ -350,9 +351,7 @@ async function ensureCarsLoaded() {
   if (carsLoadPromise) return carsLoadPromise;
 
   carsLoadPromise = (async () => {
-    const r = await fetch("/api/cars");
-    const j = await r.json();
-    if (!j.ok) throw new Error(j.error || "failed to load cars");
+    const j = await getJson("/api/cars");
     CARS = j;
     return CARS;
   })();

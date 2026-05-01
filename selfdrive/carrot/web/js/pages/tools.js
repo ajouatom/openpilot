@@ -478,7 +478,21 @@ function buildToolsMetaPlainText(values = {}) {
   return lines.join("\n");
 }
 
+function syncToolsMetaStatusLocale() {
+  const current = String(toolsMetaStatusText || "").trim();
+  if (!current) return;
+
+  const langOrder = window.CarrotTranslations?.order || ["ko", "en", "zh"];
+  const readyVariants = langOrder
+    .map((langKey) => UI_STRINGS[langKey]?.ready || "Ready")
+    .filter(Boolean);
+  if (readyVariants.includes(current)) {
+    toolsMetaStatusText = getUIText("ready", "Ready");
+  }
+}
+
 function rerenderPageLangUi() {
+  syncToolsMetaStatusLocale();
   renderToolsMeta();
   refreshToolsMetaInfo().catch(() => {});
   if (CURRENT_PAGE === "logs") {
@@ -634,34 +648,6 @@ function toolsProgressSet(percent = null, opts = {}) {
   const hasPercent = Number.isFinite(percent);
   const safePercent = hasPercent ? Math.max(4, Math.min(100, Number(percent))) : 28;
   bar.style.width = `${safePercent}%`;
-}
-
-async function postJson(url, bodyObj) {
-  const r = await fetch(url, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify(bodyObj || {})
-  });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok || !j.ok) {
-    const msg = friendlyError(j) || j.error || ("HTTP " + r.status);
-    throw new Error(msg);
-  }
-  return j;
-}
-
-async function getJson(url) {
-  const r = await fetch(url);
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok || !j.ok) {
-    const msg = friendlyError(j) || j.error || ("HTTP " + r.status);
-    throw new Error(msg);
-  }
-  return j;
-}
-
-function waitMs(ms) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 let activeToolRunToken = 0;
@@ -869,7 +855,7 @@ function initToolsPage() {
     }
   };
 
-  toolsMetaSet(UI_STRINGS[LANG].ready || "Ready");
+  toolsMetaSet(getUIText("ready", "Ready"));
   toolsProgressSet(null, { active: false });
   refreshToolsMetaInfo().catch(() => {});
   refreshGitPullStatus({ force: true }).catch(() => {});
@@ -877,7 +863,7 @@ function initToolsPage() {
   initToolsLogPanel();
 
   bindOnce("btnDeviceInfo", async () => {
-    let title = getUIText("device_info", "Device Info");
+    let title = getUIText("carrot_info", "Carrot Info");
     
     try {
       if (!toolsMetaLastValues && !toolsMetaLoadPromise) {
@@ -1142,6 +1128,9 @@ function initToolsPage() {
     if (!val) return;
     try {
       await setParam("LanguageSetting", val);
+      if (typeof setWebLanguage === "function") {
+        setWebLanguage(val, { persist: true });
+      }
       const rebootMsg = getUIText("setting_changed_reboot", "Setting changed. Reboot now?");
       if (await appConfirm(rebootMsg, { title: getUIText("reboot", "Reboot") })) {
         await runTool("reboot");
@@ -1263,9 +1252,7 @@ function initToolsPage() {
         const fd = new FormData();
         fd.append("file", inp.files[0]);
 
-        const r = await fetch("/api/params_restore", { method: "POST", body: fd });
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok || !j.ok) throw new Error(friendlyError(j) || j.error || ("HTTP " + r.status));
+        const j = await requestJson("/api/params_restore", { method: "POST", body: fd });
 
         toolsMetaSet(labels.done);
         toolsProgressSet(100, { active: true, indeterminate: false });
@@ -1305,8 +1292,7 @@ function initToolsPage() {
 
   async function buildSettingsJsonText() {
     if (!SETTINGS || !SETTINGS.items_by_group) {
-      const r = await fetch("/api/settings");
-      const j = await r.json();
+      const j = await getJson("/api/settings");
       if (j.ok) SETTINGS = j;
     }
     if (!SETTINGS || !SETTINGS.items_by_group) {

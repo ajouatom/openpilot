@@ -9,6 +9,8 @@ CSS_DIR = os.path.join(WEB_DIR, "css")
 JS_DIR = os.path.join(WEB_DIR, "js")
 ASSETS_DIR = os.path.join(WEB_DIR, "assets")
 PAGES_DIR = os.path.join(WEB_DIR, "pages")
+TRAINING_ASSETS_DIR = os.path.join(os.path.dirname(ROOT_DIR), "assets", "training")
+OFFROAD_ASSETS_DIR = os.path.join(os.path.dirname(ROOT_DIR), "assets", "offroad")
 
 # Settings file
 DEFAULT_SETTINGS_PATH = "/data/openpilot/selfdrive/carrot_settings.json"

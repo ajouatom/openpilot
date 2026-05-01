@@ -547,7 +547,7 @@ body[data-page="terminal"] .app-toast-host {
 }
 
 .setting-subnav {
-  --setting-subnav-tab-width: calc((100% - (4 * var(--sp-sm))) / 5);
+  --setting-subnav-tab-width: calc((100% - var(--sp-sm) - var(--sp-sm) - var(--sp-sm) - var(--sp-sm)) / 5);
   display: flex;
   gap: var(--sp-sm);
   justify-content: flex-start;

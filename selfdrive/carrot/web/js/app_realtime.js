@@ -1520,8 +1520,13 @@ function handleOverlayDecodedMessage(service, data) {
 function drivingHudUpdateFromCarPayload(j) {
   if (!window.DrivingHud || !j) return;
 
+  const runtimeIsMetric = window.CarrotLiveRuntimeState?.runtime?.params?.IsMetric;
+  const isMetric = j.isMetric != null
+    ? Boolean(Number(j.isMetric))
+    : (runtimeIsMetric == null ? true : Boolean(Number(runtimeIsMetric)));
   const vEgoKph = (typeof j.vEgo === "number" && isFinite(j.vEgo)) ? j.vEgo * 3.6 : null;
   const payload = {
+    isMetric,
     cpuTempC: j.cpuTempC,
     memPct: j.memPct,
     diskPct: j.diskPct,
@@ -1545,6 +1550,7 @@ function drivingHudUpdateFromCarPayload(j) {
 
   const payloadSignature = [
     typeof LANG === "string" ? LANG : "",
+    payload.isMetric ? 1 : 0,
     payload.cpuTempC ?? "-",
     payload.memPct ?? "-",
     payload.diskPct ?? "-",
@@ -1987,7 +1993,10 @@ async function syncServerTimeOnConnect() {
   }
 }
 
-function startAll() {
+async function startAll() {
+  if (typeof syncWebLanguageFromDeviceDefault === "function") {
+    await syncWebLanguageFromDeviceDefault();
+  }
   renderUIText();
   showPage("carrot", false);
   console.log("[time_sync] syncing server time on page load");

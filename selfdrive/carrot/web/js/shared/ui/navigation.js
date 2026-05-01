@@ -47,7 +47,20 @@ function resetPageRuntimeStyles(el) {
   el.style.position = "";
   el.style.top = "";
   el.style.left = "";
+  el.style.right = "";
   el.style.width = "";
+}
+
+function setPageRendered(el, rendered) {
+  if (!el) return;
+  el.hidden = !rendered;
+  if (rendered) {
+    el.removeAttribute("aria-hidden");
+    el.style.display = "";
+  } else {
+    el.setAttribute("aria-hidden", "true");
+    el.style.display = "none";
+  }
 }
 
 function setDisplayedPage(page) {
@@ -55,10 +68,10 @@ function setDisplayedPage(page) {
     if (!el) return;
     clearPageTransitionClasses(el);
     resetPageRuntimeStyles(el);
-    el.style.display = (name === page) ? "" : "none";
+    setPageRendered(el, name === page);
   });
-  if (swipeContainer) swipeContainer.style.minHeight = "";
   if (settingScreenHost) settingScreenHost.style.minHeight = "";
+  if (swipeContainer) swipeContainer.style.minHeight = "";
 }
 
 function clearPendingScreenHide(timerRef) {
@@ -69,7 +82,6 @@ function clearPendingScreenHide(timerRef) {
 }
 
 function getSwipeTransition(fromPage, toPage) {
-  if (fromPage === "terminal" || toPage === "terminal") return null;
   const fromIdx = SWIPE_PAGES.indexOf(fromPage);
   const toIdx = SWIPE_PAGES.indexOf(toPage);
   if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return null;
@@ -92,8 +104,10 @@ function getSwipeViewportMetrics(host = swipeContainer) {
 
 function pinSwipeLayer(el, metrics) {
   if (!el) return;
+  el.style.position = "absolute";
   el.style.top = `${metrics.top}px`;
   el.style.left = `${metrics.left}px`;
+  el.style.right = "auto";
   el.style.width = `${metrics.width}px`;
 }
 
@@ -129,12 +143,13 @@ function prepareSwipeFrame(host, fromEl, toEl = null) {
   return frame;
 }
 
-function animatePageTransition(fromPage, toPage, transition) {
+function animatePageTransition(fromPage, toPage, transition, onComplete = null) {
   const fromEl = PAGE_ELEMENTS[fromPage];
   const toEl = PAGE_ELEMENTS[toPage];
   if (!swipeContainer || !fromEl || !toEl || fromEl === toEl || !transition) {
     setDisplayedPage(toPage);
-    return;
+    if (typeof onComplete === "function") onComplete();
+    return null;
   }
 
   pageTransitionToken += 1;
@@ -145,20 +160,34 @@ function animatePageTransition(fromPage, toPage, transition) {
     pageTransitionTimer = null;
   }
 
+  const metrics = getSwipeViewportMetrics(swipeContainer);
+  const frame = { host: swipeContainer, fromEl, toEl, metrics, width: metrics.width };
+
+  // Both pages render simultaneously during the transition. Pin them
+  // to the same host box before animation so page-specific gutters or
+  // full-bleed rules can't resize the visible layer mid-transition.
   Object.values(PAGE_ELEMENTS).forEach((el) => {
     if (!el) return;
     clearPageTransitionClasses(el);
     resetPageRuntimeStyles(el);
-    if (el !== fromEl && el !== toEl) el.style.display = "none";
+    setPageRendered(el, el === fromEl || el === toEl);
   });
 
-  const frame = prepareSwipeFrame(swipeContainer, fromEl, toEl);
-  if (!frame) {
-    setDisplayedPage(toPage);
-    return;
-  }
+  fromEl.classList.add("page-transitioning", "page-active");
+  fromEl.style.willChange = "transform, opacity";
+  pinSwipeLayer(fromEl, metrics);
 
-  toEl.classList.add(transition === "forward" ? "page-enter-from-right" : "page-enter-from-left");
+  toEl.classList.add(
+    "page-transitioning",
+    transition === "forward" ? "page-enter-from-right" : "page-enter-from-left",
+  );
+  toEl.style.willChange = "transform, opacity";
+  pinSwipeLayer(toEl, metrics);
+  updateSwipeFrameHeight(frame);
+
+  // Force the initial frame so the browser commits the "from" state
+  // before the transition rule kicks in.
+  void toEl.offsetWidth;
 
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
@@ -177,7 +206,10 @@ function animatePageTransition(fromPage, toPage, transition) {
     if (token !== pageTransitionToken) return;
     setDisplayedPage(toPage);
     pageTransitionTimer = null;
+    if (typeof onComplete === "function") onComplete(token);
   }, PAGE_TRANSITION_MS);
+
+  return token;
 }
 
 function stopPageTransition() {
@@ -213,21 +245,133 @@ function syncNavActivePage(page) {
   setElementClass(btnTerminal, "active", page === "terminal");
 }
 
-function prepareSwipePages(fromPage, toPage) {
-  const fromEl = PAGE_ELEMENTS[fromPage];
-  const toEl = PAGE_ELEMENTS[toPage];
-  if (!swipeContainer || !fromEl || !toEl) return null;
+function shouldUseSettingSplitLayout(page = CURRENT_PAGE) {
+  return Boolean(
+    page === "setting" &&
+    typeof isCompactLandscapeMode === "function" &&
+    isCompactLandscapeMode()
+  );
+}
 
-  stopPageTransition();
+function syncSettingSplitLayoutClass(enabled = shouldUseSettingSplitLayout()) {
+  const pageEl = PAGE_ELEMENTS.setting;
+  if (pageEl) pageEl.classList.toggle("setting-layout-split", enabled);
+  if (settingScreenHost) settingScreenHost.classList.toggle("setting-screen-host--split", enabled);
 
-  Object.values(PAGE_ELEMENTS).forEach((el) => {
+  if (pageEl) {
+    if (enabled) pageEl.dataset.settingLayout = "split";
+    else delete pageEl.dataset.settingLayout;
+  }
+  if (settingScreenHost) {
+    if (enabled) settingScreenHost.dataset.settingLayout = "split";
+    else delete settingScreenHost.dataset.settingLayout;
+  }
+
+  if (!enabled) return;
+
+  settingScreenHideTimer = clearPendingScreenHide(settingScreenHideTimer);
+
+  [screenGroups, screenItems].forEach((el) => {
     if (!el) return;
     clearPageTransitionClasses(el);
     resetPageRuntimeStyles(el);
-    if (el !== fromEl && el !== toEl) el.style.display = "none";
+    el.style.display = "";
+    el.style.opacity = "";
+    el.style.transform = "";
+    el.style.pointerEvents = "";
+    el.classList.remove("hidden");
+    el.removeAttribute("aria-hidden");
   });
+  if (settingSubnavWrap) settingSubnavWrap.style.display = "none";
+}
 
-  return prepareSwipeFrame(swipeContainer, fromEl, toEl);
+function getPageHistoryState(page) {
+  if (page === "setting") {
+    return shouldUseSettingSplitLayout("setting")
+      ? { page: "setting", screen: "items", group: CURRENT_GROUP || null }
+      : { page: "setting", screen: "groups", group: null };
+  }
+  if (page === "car") return { page: "car", screen: "makers", maker: null };
+  if (page === "tools") return { page: "tools" };
+  if (page === "logs") return { page: "logs" };
+  if (page === "terminal") return { page: "terminal" };
+  if (page === "carrot") return { page: "carrot" };
+  if (page === "branch") return { page: "branch" };
+  return { page: "carrot" };
+}
+
+function runPageEnter(page, prevPage, pushHistory) {
+  if (page === "setting") {
+    if (!SETTINGS && typeof loadSettings === "function") loadSettings();
+    else if (typeof syncSettingViewportLayout === "function" && shouldUseSettingSplitLayout("setting")) {
+      syncSettingViewportLayout({ animateChrome: pushHistory || prevPage !== "setting" }).catch(() => {});
+    } else if (pushHistory || !CURRENT_GROUP) {
+      showSettingScreen("groups", false);
+    }
+
+    if (typeof loadCurrentCar === "function") loadCurrentCar().catch(() => {});
+    return;
+  }
+
+  if (page === "carrot" && window.HomeDrive && typeof window.HomeDrive.refresh === "function") {
+    window.HomeDrive.refresh();
+  }
+
+  if (page === "car") {
+    showCarScreen("makers", false);
+    if (!CARS && typeof loadCars === "function") loadCars();
+    if (typeof loadCurrentCar === "function") loadCurrentCar().catch(() => {});
+  }
+
+  if (page === "tools") {
+    if (typeof initToolsPage === "function") initToolsPage();
+    if (typeof updateQuickLink === "function") updateQuickLink().catch(() => {});
+  }
+
+  if (page === "logs" && typeof initLogsPage === "function") {
+    initLogsPage();
+  }
+
+  if (page === "terminal" && typeof initTerminalPage === "function") {
+    initTerminalPage();
+  }
+
+  if (page === "carrot") {
+    if (typeof loadRecordState === "function") loadRecordState().catch(() => {});
+  }
+}
+
+function commitPageChange(page, prevPage, pushHistory, options = {}) {
+  CURRENT_PAGE = page;
+  syncPageDataset(page);
+  syncNavActivePage(page);
+  syncSettingSplitLayoutClass(shouldUseSettingSplitLayout(page));
+
+  if (typeof updateAppViewportMetrics === "function") {
+    updateAppViewportMetrics();
+  }
+
+  if (!options.displaySettled) setDisplayedPage(page);
+
+  window.dispatchEvent(new CustomEvent("carrot:pagechange", { detail: { page, prevPage } }));
+
+  if (page !== "setting" && typeof closeSettingSearchPanel === "function") {
+    closeSettingSearchPanel({ clear: false });
+  }
+
+  if (prevPage !== "terminal" && page !== "terminal") {
+    window.scrollTo(0, 0);
+  }
+
+  runPageEnter(page, prevPage, pushHistory);
+
+  if (!options.deferTerminalTeardown && prevPage === "terminal" && page !== "terminal" && typeof teardownTerminalPage === "function") {
+    teardownTerminalPage();
+  }
+
+  const state = getPageHistoryState(page);
+  if (pushHistory) history.pushState(state, "");
+  else history.replaceState(state, "");
 }
 
 function applySwipeDrag(frame, dx, direction, withResistance = false) {
@@ -282,86 +426,40 @@ function showPage(page, pushHistory = false, transition = null) {
   if (prevPage === page) {
     syncPageDataset(page);
     syncNavActivePage(page);
+    syncSettingSplitLayoutClass(shouldUseSettingSplitLayout(page));
+    if (typeof updateAppViewportMetrics === "function") {
+      updateAppViewportMetrics();
+    }
+    if (PAGE_ELEMENTS[page]?.hidden || PAGE_ELEMENTS[page]?.style.display === "none") {
+      setDisplayedPage(page);
+      runPageEnter(page, prevPage, pushHistory);
+    }
     return;
   }
-
-  if (prevPage === "terminal" && page !== "terminal" && typeof teardownTerminalPage === "function") {
-    teardownTerminalPage();
-  }
-  CURRENT_PAGE = page;
-  syncPageDataset(page);
-  syncNavActivePage(page);
-
-  if (typeof updateAppViewportMetrics === "function") {
-    updateAppViewportMetrics();
-  }
-
-  if (page === "setting" && SETTINGS) {
-    if (typeof syncSettingViewportLayout === "function") {
-      syncSettingViewportLayout().catch(() => {});
-    } else if (pushHistory || !CURRENT_GROUP) {
-      showSettingScreen("groups", false);
-    }
-  }
-
-  if (page === "carrot" && window.HomeDrive && typeof window.HomeDrive.refresh === "function") {
-    window.HomeDrive.refresh();
-  }
-
-  if (transition && prevPage !== page) animatePageTransition(prevPage, page, transition);
-  else setDisplayedPage(page);
-
-  window.dispatchEvent(new CustomEvent("carrot:pagechange", { detail: { page, prevPage } }));
 
   if (page !== "setting" && typeof closeSettingSearchPanel === "function") {
     closeSettingSearchPanel({ clear: false });
   }
 
-  // Terminal uses its own fixed viewport layout. Resetting the window scroll
-  // while entering/leaving it causes visible jumps on mobile.
-  if (prevPage !== "terminal" && page !== "terminal") {
-    window.scrollTo(0, 0);
+  if (pageTransitionTimer) {
+    stopPageTransition();
   }
 
-  if (page === "setting") {
-    if (!SETTINGS && typeof loadSettings === "function") loadSettings();
-    else if (typeof syncSettingViewportLayout === "function" && typeof isCompactLandscapeMode === "function" && isCompactLandscapeMode()) {
-      syncSettingViewportLayout().catch(() => {});
-    } else if (pushHistory || !CURRENT_GROUP) showSettingScreen("groups", false);
-    if (typeof loadCurrentCar === "function") loadCurrentCar().catch(() => {});
+  const shouldTransition = Boolean(transition && prevPage !== page);
+  if (shouldTransition) {
+    animatePageTransition(prevPage, page, transition, () => {
+      if (prevPage === "terminal" && page !== "terminal" && typeof teardownTerminalPage === "function") {
+        teardownTerminalPage();
+      }
+    });
+    commitPageChange(page, prevPage, pushHistory, {
+      displaySettled: true,
+      deferTerminalTeardown: true,
+    });
+    return;
   }
 
-  if (page === "car") {
-    showCarScreen("makers", false);
-    if (!CARS && typeof loadCars === "function") loadCars();
-    if (typeof loadCurrentCar === "function") loadCurrentCar().catch(() => {});
-  }
-  if (page === "tools") {
-    if (typeof initToolsPage === "function") initToolsPage();
-    if (typeof updateQuickLink === "function") updateQuickLink().catch(() => {});
-  }
-  if (page === "logs" && typeof initLogsPage === "function") {
-    initLogsPage();
-  }
-  if (page === "terminal" && typeof initTerminalPage === "function") {
-    initTerminalPage();
-  }
-  if (page === "carrot") {
-    if (typeof loadRecordState === "function") loadRecordState().catch(() => {});
-  }
-
-  const state =
-    (page === "setting") ? { page: "setting", screen: "groups", group: null } :
-    (page === "car") ? { page: "car", screen: "makers", maker: null } :
-    (page === "tools") ? { page: "tools" } :
-    (page === "logs") ? { page: "logs" } :
-    (page === "terminal") ? { page: "terminal" } :
-    (page === "carrot") ? { page: "carrot" } :
-    (page === "branch") ? { page: "branch" } :
-    { page: "carrot" };
-
-  if (pushHistory) history.pushState(state, "");
-  else history.replaceState(state, "");
+  commitPageChange(page, prevPage, pushHistory);
 }
 
 function showSettingScreen(which, pushHistory = false) {
@@ -375,18 +473,10 @@ function showSettingScreen(which, pushHistory = false) {
   const transitionToken = ++settingScreenTransitionToken;
 
   settingScreenHideTimer = clearPendingScreenHide(settingScreenHideTimer);
+  syncSettingSplitLayoutClass(splitLandscape);
 
   if (splitLandscape) {
     settingTitle.textContent = UI_STRINGS[LANG].setting || "Setting";
-    if (settingSubnavWrap) settingSubnavWrap.style.display = "none";
-    if (showEl) {
-      showEl.style.display = "";
-      showEl.classList.remove("hidden");
-    }
-    if (hideEl) {
-      hideEl.style.display = "";
-      hideEl.classList.remove("hidden");
-    }
     if (pushHistory) {
       history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
     }
@@ -425,6 +515,27 @@ function showSettingScreen(which, pushHistory = false) {
   if (isGroups && typeof setSettingItemsScrollTop === "function") {
     requestAnimationFrame(() => setSettingItemsScrollTop(0));
   }
+}
+
+function resetSettingPageToRoot() {
+  if (typeof closeSettingSearchPanel === "function") {
+    closeSettingSearchPanel({ clear: false, syncHistory: false });
+  }
+
+  if (shouldUseSettingSplitLayout("setting")) {
+    if (typeof syncSettingViewportLayout === "function") {
+      syncSettingViewportLayout({ animateChrome: true }).catch(() => {});
+    }
+    history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
+    return;
+  }
+
+  showSettingScreen("groups", false);
+  if (typeof setSettingItemsScrollTop === "function") {
+    setSettingItemsScrollTop(0);
+  }
+  window.scrollTo(0, 0);
+  history.replaceState({ page: "setting", screen: "groups", group: null }, "");
 }
 
 function showCarScreen(which, pushHistory = false) {
@@ -501,7 +612,13 @@ function cleanupSettingBackFrame() {
 btnTools.onclick = () => showPage("tools", true, getSwipeTransition(CURRENT_PAGE, "tools"));
 btnHome.onclick = () => showPage("carrot", true, getSwipeTransition(CURRENT_PAGE, "carrot"));
 btnRecordToggle.onclick = () => { if (typeof toggleRecord === "function") toggleRecord(); };
-btnSetting.onclick = () => showPage("setting", true, getSwipeTransition(CURRENT_PAGE, "setting"));
+btnSetting.onclick = () => {
+  if (CURRENT_PAGE === "setting") {
+    resetSettingPageToRoot();
+    return;
+  }
+  showPage("setting", true, getSwipeTransition(CURRENT_PAGE, "setting"));
+};
 if (btnLogs) btnLogs.onclick = () => showPage("logs", true, getSwipeTransition(CURRENT_PAGE, "logs"));
 btnTerminal.onclick = () => showPage("terminal", true, getSwipeTransition(CURRENT_PAGE, "terminal"));
 

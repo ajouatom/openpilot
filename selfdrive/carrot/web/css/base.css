@@ -20,49 +20,25 @@ body.dialog-open {
   overflow: hidden;
 }
 
+/* Page-level overscroll/scroll lock.
+   The wrap layout itself is intentionally page-invariant (see .wrap below)
+   so menu transitions don't re-flow the container. Pages that need
+   full-viewport height (logs, terminal) lock body scroll while active. */
+body[data-page="logs"],
+body[data-page="terminal"] {
+  overflow: hidden;
+}
+
+body[data-page="logs"],
+body[data-page="terminal"],
 body[data-page="tools"] {
   overscroll-behavior: none;
 }
 
-body[data-page="tools"] .wrap {
-  height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px));
-  min-height: 0;
-  padding-bottom: 0;
+/* While any page is mid-transition, lock body scroll so the briefly
+   overlapping pages can't introduce a scrollbar that shifts content. */
+body:has(.page-transitioning) {
   overflow: hidden;
-}
-
-body[data-page="tools"] .swipe-container {
-  height: 100%;
-  min-height: 0;
-}
-
-html[data-page="logs"],
-html:has(body[data-page="logs"]),
-body[data-page="logs"] {
-  height: var(--app-vv-height, 100dvh);
-  overflow: hidden;
-  overscroll-behavior: none;
-}
-
-body[data-page="logs"] .wrap {
-  max-width: none;
-  height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height));
-  min-height: 0;
-  padding: 0;
-  padding-bottom: 0;
-  overflow: hidden;
-}
-
-body[data-page="logs"] .swipe-container {
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  overscroll-behavior: none;
-  touch-action: pan-y;
-}
-
-body[data-page="terminal"] .swipe-container {
-  touch-action: auto;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -293,12 +269,17 @@ body[data-page="terminal"] .swipe-container {
 }
 
 /* ── Content Area ─────────────────────────────────────────── */
+/* The wrap is the swipe-container that hosts every page.
+   Keep its geometry page-invariant; visual gutters belong to page
+   primitives so full-bleed pages can remain truly edge-to-edge. */
 .wrap {
-  padding: var(--sp-lg);
-  padding-bottom: calc(var(--nav-bar-height) + 20px + env(safe-area-inset-bottom, 0px));
-  max-width: var(--content-max-width);
-  margin: 0 auto;
-  min-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px));
+  width: var(--page-shell-width, 100%);
+  margin-left: var(--page-shell-margin-left, 0px);
+  margin-right: var(--page-shell-margin-right, 0px);
+  padding: var(--page-shell-padding-block, 0px) var(--page-shell-padding-inline, 0px);
+  min-height: var(--page-shell-min-height, calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px)));
+  height: var(--page-shell-height, auto);
+  max-height: var(--page-shell-max-height, none);
 }
 
 /* ── FAB (Record) ─────────────────────────────────────────── */
@@ -338,25 +319,6 @@ body[data-page="terminal"] .swipe-container {
   position: absolute;
   top: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px) - var(--fab-size) - 10px - var(--sp-lg));
   right: 0;
-  pointer-events: auto;
-}
-
-.global-home-record-fab {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  pointer-events: none;
-  display: none;
-}
-
-body[data-page="home"] .global-home-record-fab {
-  display: block;
-}
-
-.global-home-record-fab .fab {
-  position: fixed;
-  right: max(var(--sp-lg), calc((100vw - var(--content-max-width)) / 2));
-  bottom: calc(var(--nav-bar-height) + 10px + env(safe-area-inset-bottom, 0px));
   pointer-events: auto;
 }
 
@@ -440,184 +402,4 @@ body[data-page="home"] .global-home-record-fab {
   .topbar .nav-btn.is-working::after {
     animation: none;
   }
-}
-
-.setting-search-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 170;
-  border: 0;
-  background: color-mix(in srgb, var(--md-surface) 38%, transparent);
-  backdrop-filter: blur(6px) saturate(108%);
-  -webkit-backdrop-filter: blur(6px) saturate(108%);
-}
-
-.setting-search-panel {
-  --setting-search-form-width: clamp(320px, 42vw, 520px);
-  --setting-search-results-width: min(72vw, 760px);
-  --setting-search-results-max-height: min(58dvh, 520px);
-  position: fixed;
-  inset: 0;
-  z-index: 171;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 14px;
-  padding: calc(18px + env(safe-area-inset-top, 0px)) var(--sp-lg) calc(var(--nav-bar-height) + 18px + env(safe-area-inset-bottom, 0px));
-  pointer-events: none;
-}
-
-.setting-search-panel::before {
-  content: none;
-}
-
-.setting-search-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0;
-  width: min(var(--setting-search-form-width), calc(100vw - 40px));
-  min-height: clamp(56px, 7vh, 62px);
-  padding-left: 20px;
-  border: 1px solid color-mix(in srgb, var(--md-primary) 26%, var(--md-stroke-soft));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--md-surface-cont) 76%, transparent);
-  backdrop-filter: blur(10px) saturate(112%);
-  -webkit-backdrop-filter: blur(10px) saturate(112%);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.26);
-  pointer-events: auto;
-  position: relative;
-  z-index: 1;
-  flex: 0 0 auto;
-}
-
-.setting-search-backdrop[hidden],
-.setting-search-panel[hidden] {
-  display: none !important;
-}
-
-.setting-search-form:focus-within {
-  border-color: color-mix(in srgb, var(--md-primary) 46%, var(--md-stroke-strong));
-}
-
-.setting-search-form__input {
-  min-width: 0;
-  min-height: 56px;
-  border: 0;
-  background: transparent;
-  color: var(--md-on-surface);
-  font-size: var(--fs-body-md);
-  outline: none;
-}
-
-.setting-search-form__submit {
-  width: 56px;
-  height: 100%;
-  border: 0;
-  border-left: 1px solid color-mix(in srgb, var(--md-stroke-soft) 42%, transparent);
-  border-radius: 0 999px 999px 0;
-  background: transparent;
-  color: var(--md-primary);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-
-.setting-search-form__submit:active {
-  background: color-mix(in srgb, var(--md-primary) 12%, transparent);
-}
-
-.setting-search-form__submit svg {
-  width: 20px;
-  height: 20px;
-}
-
-.setting-search-results {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  width: min(var(--setting-search-results-width), calc(100vw - 40px));
-  padding: 0 4px;
-  max-height: var(--setting-search-results-max-height);
-  flex: 0 1 var(--setting-search-results-max-height);
-  overflow: auto;
-  overscroll-behavior: contain;
-  pointer-events: auto;
-  position: relative;
-  z-index: 1;
-}
-
-.setting-search-results:empty {
-  display: none;
-}
-
-.setting-search-result {
-  width: 100%;
-  padding: 15px 0;
-  border: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 62%, transparent);
-  border-radius: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.setting-search-result:active {
-  background: color-mix(in srgb, var(--md-primary) 6%, transparent);
-}
-
-.setting-search-result--empty {
-  cursor: default;
-  color: var(--md-on-surface-var);
-}
-
-.setting-search-result__group {
-  color: var(--md-primary);
-  font-size: var(--fs-label-md);
-  font-weight: 700;
-}
-
-.setting-search-result__title {
-  margin-top: 4px;
-  color: var(--md-on-surface);
-  font-size: var(--fs-body-lg);
-  font-weight: 700;
-}
-
-.setting-search-result__name {
-  margin-top: 2px;
-  color: var(--md-outline);
-  font-family: var(--font-mono);
-  font-size: var(--fs-label-md);
-}
-
-.setting-search-result__descr {
-  margin-top: 6px;
-  color: var(--md-on-surface-var);
-  font-size: var(--fs-body-sm);
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.setting-search-result__mark {
-  background: color-mix(in srgb, var(--md-primary) 20%, transparent);
-  color: var(--md-primary);
-  padding: 0 1px;
-  border-radius: 4px;
-}
-
-#pageSetting.setting-search-open .fab--setting-search {
-  opacity: 0;
-  transform: scale(0.92);
-  pointer-events: none;
-}
-
-#pageSetting.setting-search-open #settingScreenHost,
-#pageSetting.setting-search-open #settingsMeta {
-  pointer-events: none;
 }
