@@ -104,9 +104,12 @@ web/
     │   ├── logs.js         Dashcam + Screen Recording lists
     │   └── terminal.js     tmux WebSocket client
     ├── translations/       ko/en/zh/ja/fr + registry.js
-    └── (realtime — do not touch)
-        app_realtime.js, home_drive.js, hud_card.js,
-        raw_capnp.js, raw_capnp_worker.js
+    └── realtime
+        app_realtime.js       live runtime/raw stream wiring + HUD payload bridge
+        home_drive.js         Carrot Vision renderer and overlay canvas
+        hud_card.js           adaptive driving HUD card
+        raw_capnp.js          raw capnp decoders for HUD/overlay state
+        raw_capnp_worker.js   worker entry for raw capnp decoding
 ```
 
 ### Settings page tab structure
