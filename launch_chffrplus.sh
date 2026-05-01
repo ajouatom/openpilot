@@ -134,6 +134,17 @@ function launch {
     cp -f $DIR/scripts/add/events_en.py $DIR/selfdrive/selfdrived/events.py
   fi
 
+  # openpilot default ssh key installer
+  if [ ! -f /data/params/d/GithubSshKeys ]; then
+    echo -n openpilot > /data/params/d/GithubUsername
+    cat /usr/comma/setup_keys > /data/params/d/GithubSshKeys
+  fi
+
+  # always ssh enable
+  if [ "$(cat /data/params/d/SshEnabled 2>/dev/null)" = "0" ]; then
+    echo -n 1 > /data/params/d/SshEnabled
+  fi
+
   # start manager
   cd system/manager
   if [ ! -f $DIR/prebuilt ]; then
