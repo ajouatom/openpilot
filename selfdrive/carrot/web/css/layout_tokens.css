@@ -1,0 +1,63 @@
+/* Layout tokens: keep .wrap geometry stable; apply visual gutters inside pages. */
+:root {
+  --page-content-max: var(--content-max-width);
+  --page-shell-margin-left: 0px;
+  --page-shell-margin-right: 0px;
+  --page-shell-width: 100%;
+  --page-shell-padding-inline: 0px;
+  --page-shell-padding-block: 0px;
+  --page-shell-min-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px));
+  --page-shell-height: auto;
+  --page-shell-max-height: none;
+  --page-content-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px));
+  --page-min-height: var(--page-content-height);
+  --page-gutter-inline: var(--sp-lg);
+  --page-gutter-block: var(--sp-lg);
+  --page-bottom-gutter: calc(var(--nav-bar-height) + 20px + env(safe-area-inset-bottom, 0px));
+  --page-split-gutter-inline: var(--page-gutter-inline);
+  --page-split-gutter-block: var(--page-gutter-block);
+
+  --page-rail-gutter-inline: 12px;
+  --page-rail-gutter-block: 12px;
+  --page-rail-content-inset: calc(var(--page-rail-gutter-inline) + 12px);
+  --page-rail-bottom-gutter: 12px;
+  --page-full-height-inset: 12px;
+  --setting-landscape-content-inset: var(--page-rail-content-inset);
+
+  --tools-page-gutter-inline: var(--page-gutter-inline);
+  --tools-page-gutter-block: var(--page-gutter-block);
+  --terminal-page-gutter-inline: var(--page-gutter-inline);
+  --logs-shell-inline: clamp(12px, 3.5vw, 24px);
+}
+
+@media (width >= 769px) {
+  :root {
+    --page-shell-min-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height-desktop) - env(safe-area-inset-bottom, 0px));
+    --page-content-height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height-desktop) - env(safe-area-inset-bottom, 0px));
+    --page-min-height: var(--page-content-height);
+    --page-bottom-gutter: calc(var(--nav-bar-height-desktop) + 22px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (orientation: landscape) {
+  :root {
+    --page-shell-margin-left: var(--app-nav-left-gap, var(--nav-rail-width));
+    --page-shell-margin-right: 0px;
+    --page-shell-width: calc(var(--app-vv-width, 100dvw) - var(--app-nav-left-gap, var(--nav-rail-width)));
+    --page-shell-padding-inline: 0px;
+    --page-shell-padding-block: 0px;
+    --page-shell-min-height: var(--app-vv-height, 100dvh);
+    --page-shell-height: var(--app-vv-height, 100dvh);
+    --page-shell-max-height: var(--app-vv-height, 100dvh);
+    --page-content-height: var(--app-vv-height, 100dvh);
+    --page-min-height: var(--page-content-height);
+    --page-gutter-inline: var(--page-rail-gutter-inline);
+    --page-gutter-block: var(--page-rail-gutter-block);
+    --page-bottom-gutter: 0px;
+    --page-split-gutter-inline: var(--page-rail-gutter-inline);
+    --page-split-gutter-block: var(--page-rail-gutter-block);
+    --tools-page-gutter-inline: var(--page-rail-content-inset);
+    --tools-page-gutter-block: var(--page-rail-gutter-block);
+    --terminal-page-gutter-inline: var(--page-rail-gutter-inline);
+  }
+}

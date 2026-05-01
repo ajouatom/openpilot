@@ -2,7 +2,7 @@ import os
 
 from aiohttp import web
 
-from ..config import WEB_DIR
+from ..config import TRAINING_ASSETS_DIR, WEB_DIR
 
 
 async def handle_index(request: web.Request) -> web.Response:
@@ -15,3 +15,5 @@ async def handle_index(request: web.Request) -> web.Response:
 
 def register(app: web.Application) -> None:
   app.router.add_get("/", handle_index)
+  if os.path.isdir(TRAINING_ASSETS_DIR):
+    app.router.add_static("/training/", TRAINING_ASSETS_DIR, show_index=False)

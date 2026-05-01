@@ -205,9 +205,7 @@ async function loadSettings(options = {}) {
   if (!background && meta) meta.textContent = getUIText("loading", "Loading...");
 
   settingsLoadPromise = (async () => {
-    const r = await fetch("/api/settings");
-    const j = await r.json();
-    if (!j.ok) throw new Error(j.error || "unknown");
+    const j = await getJson("/api/settings");
 
     SETTINGS = j;
     UNIT_CYCLE = j.unit_cycle || UNIT_CYCLE;
@@ -499,6 +497,17 @@ function setSettingItemsScrollTop(top = 0) {
   scroller.scrollTop = nextTop;
 }
 
+function settleSettingScreenVisibility(which) {
+  if (!screenGroups || !screenItems) return;
+  const isGroups = which === "groups";
+  const showEl = isGroups ? screenGroups : screenItems;
+  const hideEl = isGroups ? screenItems : screenGroups;
+  showEl.style.display = "";
+  showEl.classList.remove("hidden");
+  hideEl.classList.add("hidden");
+  hideEl.style.display = "none";
+}
+
 function saveCurrentSettingScrollPosition(group = CURRENT_GROUP) {
   if (!group) return;
   settingGroupScrollTops.set(group, getSettingItemsScrollTop());
@@ -527,6 +536,22 @@ function syncSettingGroupChrome(group = CURRENT_GROUP) {
     settingTitle.textContent = (UI_STRINGS[LANG].setting || "Setting") + " - " + groupLabel;
     if (itemsTitle) itemsTitle.textContent = groupLabel;
   }
+}
+
+function settingMarqueeHtml(text, className) {
+  const safe = escapeHtml(text);
+  return `<div class="${className} setting-marquee"><span class="setting-marquee__content">${safe}</span></div>`;
+}
+
+function syncSettingMarqueeOverflow(root = document) {
+  root.querySelectorAll(".setting-marquee").forEach((el) => {
+    const content = el.querySelector(".setting-marquee__content");
+    if (!content) return;
+    const overflow = content.scrollWidth > el.clientWidth + 2;
+    const distance = Math.max(0, content.scrollWidth - el.clientWidth + 18);
+    el.classList.toggle("is-overflowing", overflow);
+    el.style.setProperty("--setting-marquee-distance", `${distance}px`);
+  });
 }
 
 function focusSettingItem(name, behavior = "smooth") {
@@ -1175,9 +1200,10 @@ async function renderItems(group, options = {}) {
     top.className = "settingTop";
 
     const left = document.createElement("div");
+    left.className = "setting-copy";
     left.innerHTML = `
-      <div class="title">${escapeHtml(title)}</div>
-      <div class="name">${escapeHtml(name)}</div>
+      ${settingMarqueeHtml(title, "title")}
+      ${settingMarqueeHtml(name, "name")}
       <div class="muted mt-sm">
         min=${p.min}, max=${p.max}, default=${p.default}
       </div>
@@ -1301,6 +1327,7 @@ async function renderItems(group, options = {}) {
   });
 
   itemsBox.dataset.renderedGroup = group;
+  requestAnimationFrame(() => syncSettingMarqueeOverflow(itemsBox));
 
   if (pendingSettingFocus?.group === group) {
     requestAnimationFrame(() => focusSettingItem(pendingSettingFocus.name));
@@ -1321,11 +1348,33 @@ async function syncSettingViewportLayout(options = {}) {
   settingViewportLayoutSignature = getSettingViewportLayoutSignature();
   const animateChrome = options.animateChrome === true;
   const animateItems = options.animateItems === true;
+  const splitLandscape = isCompactLandscapeMode();
+  if (typeof syncSettingSplitLayoutClass === "function") {
+    syncSettingSplitLayoutClass(splitLandscape);
+  }
   syncSettingSearchFabState();
+
+  if (typeof getCurrentSettingTab === "function" && getCurrentSettingTab() === "device") {
+    if (splitLandscape) {
+      showSettingScreen("items", false);
+    }
+    if (typeof renderDeviceTab === "function") {
+      await renderDeviceTab();
+    }
+    if (!splitLandscape) {
+      const deviceItemsEl = document.getElementById("deviceItems");
+      const hasDeviceItems = Boolean(deviceItemsEl && deviceItemsEl.children.length > 0);
+      const targetScreen = hasDeviceItems ? "items" : "groups";
+      showSettingScreen(targetScreen, false);
+      settleSettingScreenVisibility(targetScreen);
+    }
+    return;
+  }
+
   renderGroups({ animateGroups: animateChrome });
   renderSettingSubnav();
 
-  if (isCompactLandscapeMode()) {
+  if (splitLandscape) {
     const targetGroup = CURRENT_GROUP || getLandscapeDefaultSettingGroup();
     if (!targetGroup) return;
     CURRENT_GROUP = targetGroup;
@@ -1362,10 +1411,12 @@ function scheduleSettingViewportLayoutSync(force = false) {
 
 window.addEventListener("resize", () => {
   scheduleSettingViewportLayoutSync(false);
+  requestAnimationFrame(() => syncSettingMarqueeOverflow(document.getElementById("items") || document));
 }, { passive: true });
 
 window.addEventListener("orientationchange", () => {
   scheduleSettingViewportLayoutSync(true);
+  window.setTimeout(() => syncSettingMarqueeOverflow(document.getElementById("items") || document), 160);
 }, { passive: true });
 
 

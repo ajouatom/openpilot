@@ -4,13 +4,9 @@ Tool action dispatchers.
 - `run_tool_job(job)` — async streaming dispatcher (used by /api/tools/start).
 - `dispatch_sync(request, body)` — synchronous dispatcher (used by /api/tools).
 
-Both share helpers from `jobs.py` (job state, exec wrappers, branch utils).
-The two dispatchers intentionally diverge in some actions (e.g. git_pull job
-runs `git reset --hard` first; sync does not). Frontends rely on each.
-
-The plan calls for full unification into a single ACTIONS registry; this is
-deferred until a golden-test harness exists, since current behavior diffs are
-subtle and easy to regress.
+Both share helpers from `jobs.py` (job state, exec wrappers, branch utils) and
+action/command policy from `actions.py`. Some action implementations still have
+async/sync variants, so keep behavior changes small and deliberate.
 """
 from __future__ import annotations
 
@@ -32,14 +28,46 @@ from ...config import PARAMS_BACKUP_PATH
 from ...services.git_state import did_git_pull_update, write_git_pull_time
 from ...services.params import HAS_PARAMS, Params, ParamKeyType, get_all_param_values_for_backup
 from . import jobs
+from .actions import normalize_action, validate_action, validate_shell_argv
+
+
+TMUX_LOG_PATH = "/data/media/tmux.log"
+
+
+def capture_tmux_log_sync() -> Tuple[int, str]:
+  try:
+    os.remove(TMUX_LOG_PATH)
+  except FileNotFoundError:
+    pass
+  except OSError as e:
+    return 1, str(e)
+
+  proc = subprocess.run(
+    ["tmux", "capture-pane", "-pq", "-S-1000"],
+    capture_output=True,
+    text=True,
+  )
+  if proc.returncode != 0:
+    return proc.returncode, (proc.stderr or proc.stdout or "").strip()
+
+  os.makedirs(os.path.dirname(TMUX_LOG_PATH), exist_ok=True)
+  with open(TMUX_LOG_PATH, "w", encoding="utf-8") as f:
+    f.write(proc.stdout or "")
+  return 0, ""
 
 
 async def run_tool_job(job: Dict[str, Any]) -> None:
-  action = job["action"]
+  action = normalize_action(job.get("action"))
   body = job.get("payload") or {}
   repo_dir = "/data/openpilot"
 
   try:
+    action_error = validate_action(action)
+    if action_error:
+      error, error_code = action_error
+      jobs.finish(job, ok=False, result={"ok": False, "error": error, "error_code": error_code}, error=error, error_code=error_code)
+      return
+
     if action == "git_pull":
       jobs.progress(job, message="git reset --hard", current=1, total=2)
       jobs.append(job, "$ git reset --hard\n")
@@ -415,15 +443,12 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
 
     if action == "send_tmux_log":
       jobs.progress(job, message="capture tmux", current=1, total=1)
-      cmd = "rm -f /data/media/tmux.log && tmux capture-pane -pq -S-1000 > /data/media/tmux.log"
-      rc = await asyncio.to_thread(
-        lambda: subprocess.run(cmd, shell=True, capture_output=True, text=True).returncode
-      )
+      rc, out = await asyncio.to_thread(capture_tmux_log_sync)
       if rc != 0:
         jobs.finish(
           job,
           ok=False,
-          result={"ok": False, "error": "tmux capture failed", "error_code": "TMUX_CAPTURE_FAIL"},
+          result={"ok": False, "error": "tmux capture failed", "error_code": "TMUX_CAPTURE_FAIL", "out": out},
           error="tmux capture failed",
           error_code="TMUX_CAPTURE_FAIL",
         )
@@ -531,7 +556,7 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
     if action == "rebuild_all":
       jobs.progress(job, message="rebuild all", current=1, total=1)
       cmd = "cd /data/openpilot && scons -c && rm -rf prebuilt && sudo reboot"
-      subprocess.Popen(cmd, shell=True)
+      subprocess.Popen(["bash", "-lc", cmd])
       jobs.finish(job, ok=True, result={"ok": True, "out": "rebuild_all requested (clean + remove prebuilt + reboot)"})
       return
 
@@ -558,20 +583,21 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
       if argv[0] in alias_map:
         argv = alias_map[argv[0]] + argv[1:]
 
-      allowed_top = {"git", "df", "free", "uptime", "scons", "rm", "echo", "sleep", "sudo", "reboot", "cat", "ls"}
-      if argv[0] not in allowed_top:
+      validation_error = validate_shell_argv(argv)
+      if validation_error:
+        error, error_code, detail = validation_error
         jobs.finish(
           job,
           ok=False,
           result={
             "ok": False,
-            "error": f"not allowed: {argv[0]}",
-            "error_code": "CMD_NOT_ALLOWED",
-            "error_detail": argv[0],
+            "error": error,
+            "error_code": error_code,
+            "error_detail": detail,
           },
-          error=f"not allowed: {argv[0]}",
-          error_code="CMD_NOT_ALLOWED",
-          error_detail=argv[0],
+          error=error,
+          error_code=error_code,
+          error_detail=detail,
         )
         return
 
@@ -611,9 +637,11 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
 
 
 async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Response:
-  action = body.get("action")
-  if not action:
-    return web.json_response({"ok": False, "error": "missing action"}, status=400)
+  action = normalize_action(body.get("action"))
+  action_error = validate_action(action)
+  if action_error:
+    error, error_code = action_error
+    return web.json_response({"ok": False, "error": error, "error_code": error_code}, status=400)
 
   def run(cmd: List[str], cwd: Optional[str] = None) -> Tuple[int, str]:
     p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
@@ -870,13 +898,9 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
       return web.json_response({"ok": True, "out": f"deleted entries: {deleted}"})
 
     if action == "send_tmux_log":
-      cmd = (
-        "rm -f /data/media/tmux.log && "
-        "tmux capture-pane -pq -S-1000 > /data/media/tmux.log"
-      )
-      p = subprocess.run(cmd, shell=True, capture_output=True, text=False)
-      if p.returncode != 0:
-        return web.json_response({"ok": False, "error": "tmux capture failed"})
+      rc, out = capture_tmux_log_sync()
+      if rc != 0:
+        return web.json_response({"ok": False, "error": "tmux capture failed", "error_code": "TMUX_CAPTURE_FAIL", "out": out})
 
       return web.json_response({
         "ok": True,
@@ -977,7 +1001,7 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
           pass
         except Exception as e:
           out_msg.append(f"error removing {f}: {e}")
-      subprocess.Popen("sleep 1 && sudo reboot", shell=True)
+      subprocess.Popen(["bash", "-lc", "sleep 1 && sudo reboot"])
       return web.json_response({"ok": True, "out": "\n".join(out_msg) or "calibration reset"})
 
     if action == "reboot":
@@ -986,7 +1010,7 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
 
     if action == "rebuild_all":
       cmd = "cd /data/openpilot && scons -c && rm -rf prebuilt && sudo reboot"
-      subprocess.Popen(cmd, shell=True)
+      subprocess.Popen(["bash", "-lc", cmd])
       return web.json_response({"ok": True, "out": "rebuild_all requested (clean + remove prebuilt + reboot)"})
 
     if action == "shell_cmd":
@@ -1011,9 +1035,10 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
       if argv[0] in alias_map:
         argv = alias_map[argv[0]] + argv[1:]
 
-      allowed_top = {"git", "df", "free", "uptime", "scons", "rm", "echo", "sleep", "sudo", "reboot", "cat", "ls"}
-      if argv[0] not in allowed_top:
-        return web.json_response({"ok": False, "error": f"not allowed: {argv[0]}"}, status=403)
+      validation_error = validate_shell_argv(argv)
+      if validation_error:
+        error, error_code, detail = validation_error
+        return web.json_response({"ok": False, "error": error, "error_code": error_code, "error_detail": detail}, status=403)
 
       try:
         p = subprocess.run(

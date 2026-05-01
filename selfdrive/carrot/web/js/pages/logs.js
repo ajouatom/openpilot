@@ -4,8 +4,16 @@
 // + Screen Recording listing/playback. Tab switching between the two.
 
 const DASHCAM_UPLOAD_JOB_STORAGE_KEY = "carrot_dashcam_upload_job_id";
+const DASHCAM_ROUTE_INITIAL_BATCH = 6;
+const DASHCAM_ROUTE_BATCH_SIZE = 8;
 let dashcamUploadActiveJobId = null;
 let dashcamUploadResumePromise = null;
+let dashcamRouteRenderToken = 0;
+let dashcamRouteRenderIdleId = null;
+
+function isLogsPageActive() {
+  return CURRENT_PAGE === "logs";
+}
 
 function getLogsScroller(tab = logsActiveTab) {
   return document.getElementById(tab === "screen" ? "screenrecordVideos" : "dashcamRoutes");
@@ -28,8 +36,10 @@ function restoreLogsScrollTop(tab = logsActiveTab, options = {}) {
     document.body.scrollTop = 0;
   }
   requestAnimationFrame(() => {
+    if (!isLogsPageActive()) return;
     scroller.scrollTop = nextTop;
     requestAnimationFrame(() => {
+      if (!isLogsPageActive()) return;
       scroller.scrollTop = nextTop;
     });
   });
@@ -122,6 +132,22 @@ function screenrecordVideosSignature(videos) {
   ].join("|")).join("\n");
 }
 
+function hasCompleteDashcamDom(host, routes) {
+  if (!host || !Array.isArray(routes) || !routes.length) return false;
+  const renderedCount = Number.parseInt(host.dataset.renderCount || "0", 10);
+  return host.dataset.signature === dashcamState.signature
+    && renderedCount >= routes.length
+    && host.querySelectorAll("[data-route-card]").length >= routes.length;
+}
+
+function hasCompleteScreenrecordDom(host, videos) {
+  if (!host || !Array.isArray(videos) || !videos.length) return false;
+  const renderedCount = Number.parseInt(host.dataset.renderCount || "0", 10);
+  return host.dataset.signature === screenrecordState.signature
+    && renderedCount >= videos.length
+    && host.querySelectorAll(".screenrecord-row").length >= videos.length;
+}
+
 function loadLogsLazyImage(img) {
   if (!img) return;
   const src = img.dataset?.src || "";
@@ -131,6 +157,7 @@ function loadLogsLazyImage(img) {
 }
 
 function hydrateLogsLazyImages(root) {
+  if (!isLogsPageActive()) return;
   const scope = root || document;
   const images = Array.from(scope.querySelectorAll?.("img[data-src]") || []);
   if (!images.length) return;
@@ -153,6 +180,12 @@ function hydrateLogsLazyImages(root) {
   images.forEach((img) => logsLazyImageObserver.observe(img));
 }
 
+function disconnectLogsLazyImages() {
+  if (!logsLazyImageObserver) return;
+  logsLazyImageObserver.disconnect();
+  logsLazyImageObserver = null;
+}
+
 function logsLoadingSkeletonHtml(type = "dashcam") {
   const count = type === "screen" ? 6 : 4;
   const itemClass = type === "screen" ? "logs-loading-row" : "logs-loading-card";
@@ -161,12 +194,67 @@ function logsLoadingSkeletonHtml(type = "dashcam") {
   ).join("")}</div>`;
 }
 
+function logsEmptyStateHtml(type = "dashcam") {
+  const isScreen = type === "screen";
+  const title = isScreen
+    ? getUIText("screenrecord_empty_title", "No screen recordings")
+    : getUIText("dashcam_empty_title", "No dashcam records");
+
+  return `
+    <div class="logs-empty-state" role="status">
+      <div class="logs-empty-state__title">${escapeHtml(title)}</div>
+    </div>`;
+}
+
+function cancelDashcamRouteRender() {
+  dashcamRouteRenderToken += 1;
+  if (dashcamRouteRenderIdleId != null) {
+    if (typeof window.cancelIdleCallback === "function") window.cancelIdleCallback(dashcamRouteRenderIdleId);
+    else window.clearTimeout(dashcamRouteRenderIdleId);
+    dashcamRouteRenderIdleId = null;
+  }
+}
+
+function appendDashcamRouteBatch(host, routes, options) {
+  const token = options.token;
+  if (token !== dashcamRouteRenderToken || !isLogsPageActive() || !host || !Array.isArray(routes)) return;
+
+  const start = options.start || 0;
+  const batchSize = start === 0 ? DASHCAM_ROUTE_INITIAL_BATCH : DASHCAM_ROUTE_BATCH_SIZE;
+  const end = Math.min(start + batchSize, routes.length);
+  const template = document.createElement("template");
+  template.innerHTML = routes
+    .slice(start, end)
+    .map((entry, offset) => dashcamRouteCardHtml(entry, start + offset, {
+      animate: options.animate,
+      animateIndex: offset,
+    }))
+    .join("");
+  const nodes = Array.from(template.content.children);
+  host.appendChild(template.content);
+  nodes.forEach((node) => hydrateLogsLazyImages(node));
+  host.dataset.renderCount = String(end);
+
+  if (end >= routes.length) {
+    host.dataset.signature = dashcamState.signature || dashcamRoutesSignature(routes);
+    return;
+  }
+  dashcamRouteRenderIdleId = requestIdleTask(() => {
+    dashcamRouteRenderIdleId = null;
+    appendDashcamRouteBatch(host, routes, {
+      ...options,
+      start: end,
+    });
+  }, 180);
+}
+
 function dashcamSelectedForRoute(entry) {
   return (entry.segmentFolders || []).filter((segment) => dashcamState.selected.has(segment));
 }
 
 function dashcamRouteCardHtml(entry, index = 0, options = {}) {
   const animate = options.animate !== false;
+  const animateIndex = Number.isFinite(options.animateIndex) ? options.animateIndex : index;
   const route = String(entry.route || "");
   const segments = Array.isArray(entry.segmentFolders) ? entry.segmentFolders : [];
   const expanded = dashcamState.expanded.has(route);
@@ -235,7 +323,7 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
     </div>`;
   }).join("") : "";
 
-  return `<article class="dashcam-route-card${animate ? " ui-stagger-item" : ""}"${animate ? ` style="--i:${index}"` : ""} data-route-card="${routeAttr}">
+  return `<article class="dashcam-route-card${animate ? " ui-stagger-item" : ""}"${animate ? ` style="--i:${animateIndex}"` : ""} data-route-card="${routeAttr}">
     ${preview}
     <div class="dashcam-route-main">
       <div class="dashcam-route-head" data-action="toggle-route" data-route="${routeAttr}">
@@ -263,20 +351,37 @@ function renderDashcamRoutes(options = {}) {
   const host = document.getElementById("dashcamRoutes");
   if (!host) return;
   const animate = options.animate !== false;
+  const preserve = options.preserve === true;
   const routes = dashcamState.routes || [];
+  cancelDashcamRouteRender();
+  if (!isLogsPageActive()) return;
   if (dashcamState.loading && !routes.length) {
-    setDashcamStatus("");
-    host.innerHTML = logsLoadingSkeletonHtml("dashcam");
+    setDashcamStatus(getUIText("loading", "Loading..."));
+    host.innerHTML = "";
+    host.dataset.signature = "";
+    host.dataset.renderCount = "0";
     return;
   }
   if (!routes.length) {
-    host.innerHTML = "";
-    setDashcamStatus(getUIText("dashcam_empty", "No driving records."));
+    host.innerHTML = logsEmptyStateHtml("dashcam");
+    host.dataset.signature = "";
+    host.dataset.renderCount = "0";
+    setDashcamStatus("");
     return;
   }
   setDashcamStatus("");
-  host.innerHTML = routes.map((entry, index) => dashcamRouteCardHtml(entry, index, { animate })).join("");
-  hydrateLogsLazyImages(host);
+  if (preserve && hasCompleteDashcamDom(host, routes)) {
+    hydrateLogsLazyImages(host);
+    return;
+  }
+  host.innerHTML = "";
+  host.dataset.signature = "";
+  host.dataset.renderCount = "0";
+  appendDashcamRouteBatch(host, routes, {
+    animate,
+    start: 0,
+    token: dashcamRouteRenderToken,
+  });
 }
 
 function renderDashcamRoute(route) {
@@ -344,6 +449,10 @@ async function loadDashcamRoutes({ silent = false } = {}) {
   try {
     const json = await getJson("/api/dashcam/routes");
     if (seq !== dashcamState.loadSeq) return;
+    if (!isLogsPageActive()) {
+      dashcamState.loading = false;
+      return;
+    }
     const routes = Array.isArray(json.routes) ? json.routes : [];
     const nextSignature = dashcamRoutesSignature(routes);
     if (silent && nextSignature === dashcamState.signature) {
@@ -362,7 +471,7 @@ async function loadDashcamRoutes({ silent = false } = {}) {
   } catch (e) {
     if (seq !== dashcamState.loadSeq) return;
     dashcamState.loading = false;
-    if (!silent) {
+    if (!silent && isLogsPageActive()) {
       setDashcamStatus(`${getUIText("dashcam_load_failed", "Failed to load dashcam list")}: ${e.message || e}`, "error");
       showAppToast(e.message || getUIText("dashcam_load_failed", "Failed to load dashcam list"), { tone: "error" });
     }
@@ -820,22 +929,34 @@ function screenrecordVideoRowHtml(video, index = 0) {
   </article>`;
 }
 
-function renderScreenrecordVideos() {
+function renderScreenrecordVideos(options = {}) {
   const host = document.getElementById("screenrecordVideos");
   if (!host) return;
+  if (!isLogsPageActive()) return;
+  const preserve = options.preserve === true;
   const videos = screenrecordState.videos || [];
   if (screenrecordState.loading && !videos.length) {
     setScreenrecordStatus("");
     host.innerHTML = logsLoadingSkeletonHtml("screen");
+    host.dataset.signature = "";
+    host.dataset.renderCount = "0";
     return;
   }
   if (!videos.length) {
-    host.innerHTML = "";
-    setScreenrecordStatus(getUIText("screenrecord_empty", "No screen recordings found."));
+    host.innerHTML = logsEmptyStateHtml("screen");
+    host.dataset.signature = "";
+    host.dataset.renderCount = "0";
+    setScreenrecordStatus("");
     return;
   }
   setScreenrecordStatus("");
+  if (preserve && hasCompleteScreenrecordDom(host, videos)) {
+    hydrateLogsLazyImages(host);
+    return;
+  }
   host.innerHTML = videos.map(screenrecordVideoRowHtml).join("");
+  host.dataset.signature = screenrecordState.signature || screenrecordVideosSignature(videos);
+  host.dataset.renderCount = String(videos.length);
   hydrateLogsLazyImages(host);
 }
 
@@ -848,6 +969,10 @@ async function loadScreenrecordVideos({ silent = false } = {}) {
   try {
     const json = await getJson("/api/screenrecord/videos");
     if (seq !== screenrecordState.loadSeq) return;
+    if (!isLogsPageActive()) {
+      screenrecordState.loading = false;
+      return;
+    }
     const videos = Array.isArray(json.videos) ? json.videos : [];
     const nextSignature = screenrecordVideosSignature(videos);
     if (silent && nextSignature === screenrecordState.signature) {
@@ -862,15 +987,16 @@ async function loadScreenrecordVideos({ silent = false } = {}) {
   } catch (e) {
     if (seq !== screenrecordState.loadSeq) return;
     screenrecordState.loading = false;
-    if (!silent) {
+    if (!silent && isLogsPageActive()) {
       setScreenrecordStatus(`${getUIText("screenrecord_load_failed", "Failed to load screen recordings")}: ${e.message || e}`, "error");
       showAppToast(e.message || getUIText("screenrecord_load_failed", "Failed to load screen recordings"), { tone: "error" });
     }
   }
 }
 
-function activateLogsTab(tab) {
+function activateLogsTab(tab, options = {}) {
   const nextTab = tab === "screen" ? "screen" : "dashcam";
+  const shouldLoad = options.load !== false;
   if (nextTab !== logsActiveTab) saveLogsScrollTop(logsActiveTab);
   logsActiveTab = nextTab;
   const dashTab = document.getElementById("logsTabDashcam");
@@ -885,16 +1011,39 @@ function activateLogsTab(tab) {
   if (dashPanel) dashPanel.hidden = logsActiveTab !== "dashcam";
   if (screenPanel) screenPanel.hidden = logsActiveTab !== "screen";
 
-  if (logsActiveTab === "screen" && !screenrecordState.initialized) {
-    screenrecordState.initialized = true;
-    loadScreenrecordVideos().catch(() => {});
-  } else if (logsActiveTab === "screen") {
-    renderScreenrecordVideos();
-    loadScreenrecordVideos({ silent: true }).catch(() => {});
-  } else if (dashcamState.initialized) {
-    loadDashcamRoutes({ silent: true }).catch(() => {});
+  if (shouldLoad) {
+    if (logsActiveTab === "screen" && !screenrecordState.initialized) {
+      screenrecordState.initialized = true;
+      loadScreenrecordVideos().catch(() => {});
+    } else if (logsActiveTab === "screen") {
+      renderScreenrecordVideos();
+      loadScreenrecordVideos({ silent: true }).catch(() => {});
+    } else if (dashcamState.initialized) {
+      loadDashcamRoutes({ silent: true }).catch(() => {});
+    }
   }
-  restoreLogsScrollTop(logsActiveTab);
+  if (options.restoreScroll !== false) restoreLogsScrollTop(logsActiveTab);
+}
+
+function handleLogsPageChange(event) {
+  const page = event?.detail?.page || "";
+  if (page === "logs") return;
+  saveLogsScrollTop(logsActiveTab);
+  cancelDashcamRouteRender();
+  dashcamState.loadSeq += 1;
+  screenrecordState.loadSeq += 1;
+  dashcamState.loading = false;
+  screenrecordState.loading = false;
+  dashcamState.scrollBusy = false;
+  if (dashcamState.scrollTimer) {
+    window.clearTimeout(dashcamState.scrollTimer);
+    dashcamState.scrollTimer = null;
+  }
+  if (dashcamState.layoutTimer) {
+    window.clearTimeout(dashcamState.layoutTimer);
+    dashcamState.layoutTimer = null;
+  }
+  disconnectLogsLazyImages();
 }
 
 function bindLogsPage() {
@@ -906,10 +1055,13 @@ function bindLogsPage() {
   if (!dashcamState.layoutBound) {
     dashcamState.layoutBound = true;
     dashcamState.landscape = isCompactLandscapeMode();
+    window.addEventListener("carrot:pagechange", handleLogsPageChange);
     window.addEventListener("resize", () => {
       if (CURRENT_PAGE !== "logs") return;
       if (dashcamState.layoutTimer) window.clearTimeout(dashcamState.layoutTimer);
       dashcamState.layoutTimer = window.setTimeout(() => {
+        dashcamState.layoutTimer = null;
+        if (!isLogsPageActive()) return;
         const nextLandscape = isCompactLandscapeMode();
         if (dashcamState.landscape === nextLandscape) return;
         dashcamState.landscape = nextLandscape;
@@ -996,14 +1148,22 @@ function bindLogsPage() {
 
 function initLogsPage() {
   bindLogsPage();
-  activateLogsTab(logsActiveTab);
+  activateLogsTab(logsActiveTab, { load: false });
   startDashcamAutoRefresh();
   resumeDashcamUploadJobIfNeeded().catch(() => {});
-  if (!dashcamState.initialized) {
+  if (logsActiveTab === "screen") {
+    if (!screenrecordState.initialized) {
+      screenrecordState.initialized = true;
+      loadScreenrecordVideos().catch(() => {});
+    } else {
+      renderScreenrecordVideos({ preserve: true });
+      loadScreenrecordVideos({ silent: true }).catch(() => {});
+    }
+  } else if (!dashcamState.initialized) {
     dashcamState.initialized = true;
     loadDashcamRoutes().catch(() => {});
   } else {
-    renderDashcamRoutes();
+    renderDashcamRoutes({ animate: false, preserve: true });
     loadDashcamRoutes({ silent: true }).catch(() => {});
   }
 }

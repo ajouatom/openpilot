@@ -4,6 +4,7 @@
   /* ── Surface (Material 3 tonal elevation) ── */
   --md-surface:        #090c10;
   --md-surface-cont:   #11161d;
+  --md-surface-cont-l: #151b24;
   --md-surface-cont-h: #1b222c;
   --md-surface-cont-hh:#262f3b;
   --md-surface-bright: #5e6879;
@@ -45,7 +46,11 @@
   --r-md:    12px;
   --r-lg:    16px;
   --r-xl:    28px;
+  --r-2xl:   32px;
   --r-pill:  999px;
+
+  /* ── Elevation ── */
+  --shadow-2: 0 18px 44px rgba(0, 0, 0, 0.34);
 
   /* ── Typography ── */
   --font-sans:  "Roboto", system-ui, -apple-system, sans-serif;
@@ -55,6 +60,7 @@
   --fs-title-lg: 20px;
   --fs-title-md: 18px;
   --fs-title-sm: 16px;
+  --fs-title-xs: 14px;
   --fs-body-lg:  18px;
   --fs-body-md:  16px;
   --fs-body-sm:  14px;

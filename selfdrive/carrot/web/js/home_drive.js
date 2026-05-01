@@ -127,6 +127,16 @@ window.HomeDrive = (() => {
     nextRetryAt: 0,
   };
 
+  function isMetricDisplay() {
+    return finiteNumber(paramsState.IsMetric, defaultParams.IsMetric) !== 0;
+  }
+
+  function displayDistanceMeters(distanceMeters) {
+    const distance = Number(distanceMeters);
+    if (!Number.isFinite(distance)) return NaN;
+    return isMetricDisplay() ? distance : distance * 3.28084;
+  }
+
   let paramsState = { ...defaultParams };
   let displayModeIndex = 1;
   let overlaySizeSignature = "";
@@ -270,6 +280,7 @@ window.HomeDrive = (() => {
       paramsState.ShowPathEnd,
       paramsState.ShowLaneInfo,
       paramsState.ShowRadarInfo,
+      paramsState.IsMetric,
     ].join("|");
   }
 
@@ -303,6 +314,7 @@ window.HomeDrive = (() => {
       plotInputSignature(plotData),
       paramsState.ShowPlotMode,
       paramsState.CustomSR,
+      paramsState.IsMetric,
     ].join("|");
   }
 
@@ -1461,6 +1473,8 @@ window.HomeDrive = (() => {
     const maxWidth = Math.round(stageWidth * maxWidthRatio);
     const primaryColor = alertStatus === ALERT_STATUS_CRITICAL ? "#ff5a63" : "#ffb12a";
     const secondaryColor = alertStatus === ALERT_STATUS_CRITICAL ? "#ffe3e5" : "#ffffff";
+    const alertScale = ONROAD_ALERT_SCALE;
+    const alertPx = (value) => `${value * alertScale}px`;
 
     const signature = [
       Math.round(stageWidth),
@@ -1476,7 +1490,7 @@ window.HomeDrive = (() => {
       offsetY,
       gap,
       maxWidth,
-      ONROAD_ALERT_SCALE,
+      alertScale,
       primaryColor,
       secondaryColor,
     ].join("|");
@@ -1492,7 +1506,19 @@ window.HomeDrive = (() => {
     onroadAlertEl.style.setProperty("--carrot-alert-max-width", `${maxWidth}px`);
     onroadAlertEl.style.setProperty("--carrot-alert-font1", `${fontSize1}px`);
     onroadAlertEl.style.setProperty("--carrot-alert-font2", `${Math.max(fontSize2, 0)}px`);
-    onroadAlertEl.style.setProperty("--carrot-alert-scale", `${ONROAD_ALERT_SCALE}`);
+    onroadAlertEl.style.setProperty("--carrot-alert-pad-min", alertPx(4));
+    onroadAlertEl.style.setProperty("--carrot-alert-pad-fluid", `${1.4 * alertScale}vw`);
+    onroadAlertEl.style.setProperty("--carrot-alert-pad-max", alertPx(12));
+    onroadAlertEl.style.setProperty("--carrot-alert-shadow-y-lg", alertPx(8));
+    onroadAlertEl.style.setProperty("--carrot-alert-shadow-blur-lg", alertPx(24));
+    onroadAlertEl.style.setProperty("--carrot-alert-shadow-y-sm", alertPx(3));
+    onroadAlertEl.style.setProperty("--carrot-alert-shadow-blur-sm", alertPx(10));
+    onroadAlertEl.style.setProperty("--carrot-alert-outline-strong-pos", alertPx(2.25));
+    onroadAlertEl.style.setProperty("--carrot-alert-outline-strong-neg", alertPx(-2.25));
+    onroadAlertEl.style.setProperty("--carrot-alert-outline-soft-pos", alertPx(1.8));
+    onroadAlertEl.style.setProperty("--carrot-alert-outline-soft-neg", alertPx(-1.8));
+    onroadAlertEl.style.setProperty("--carrot-alert-stroke-primary", alertPx(0.55));
+    onroadAlertEl.style.setProperty("--carrot-alert-stroke-secondary", alertPx(0.48));
     onroadAlertEl.style.setProperty("--carrot-alert-primary-color", primaryColor);
     onroadAlertEl.style.setProperty("--carrot-alert-secondary-color", secondaryColor);
 
@@ -2465,7 +2491,7 @@ window.HomeDrive = (() => {
     if (!left || !right) return;
 
     drawPolyline([left, right], "rgba(255,255,255,0.92)", 3.0);
-    const labelText = `${tfDistance.toFixed(1)}(${finiteNumber(longitudinalPlan?.tFollow, 0).toFixed(2)})`;
+    const labelText = `${displayDistanceMeters(tfDistance).toFixed(1)}(${finiteNumber(longitudinalPlan?.tFollow, 0).toFixed(2)})`;
     const labelAnchor = clampTextAnchor(
       { x: right.x + 10, y: right.y - 4 },
       labelText,
@@ -2572,7 +2598,7 @@ window.HomeDrive = (() => {
     const projectionLine = getRadarProjectionLine(model);
     if (!projectionLine) return;
     const radarLatFactor = finiteNumber(paramsState.RadarLatFactor, 0) / 100.0;
-    const isMetric = finiteNumber(paramsState.IsMetric, 1) !== 0;
+    const isMetric = isMetricDisplay();
 
     for (const radar of getRadarTracks(radarState)) {
       const dRel = finiteNumber(radar?.dRel, 0);
@@ -2611,12 +2637,12 @@ window.HomeDrive = (() => {
         drawRadarSpeedBadge({ x: center.x, y: center.y }, speedValue.toFixed(0), badgeColor);
 
         if (showRadarInfo >= 2) {
-          drawCanvasOutlinedText(finiteNumber(radar?.yRel, 0).toFixed(1), center.x, center.y - 40, {
+          drawCanvasOutlinedText(displayDistanceMeters(finiteNumber(radar?.yRel, 0)).toFixed(1), center.x, center.y - 40, {
             fontSize: 30,
             fontWeight: 900,
             strokeWidth: 3.8,
           });
-          const distanceValue = isMetric ? dRel : dRel * 0.621371;
+          const distanceValue = displayDistanceMeters(dRel);
           drawCanvasOutlinedText(distanceValue.toFixed(1), center.x, center.y + 30, {
             fontSize: 30,
             fontWeight: 900,
@@ -3742,6 +3768,7 @@ window.HomeDrive = (() => {
   return {
     refresh,
     requestRender,
+    renderText: syncDisplayModeButtons,
     setDisplayModeIndex,
   };
 })();
