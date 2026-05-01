@@ -579,11 +579,21 @@
     if (el.dataset.kind !== (normalized || "normal")) el.dataset.kind = normalized || "normal";
   }
 
-  function setRoadLimit(speedKph, over, blink) {
+  function isMetricDisplay(value) {
+    return value == null ? true : Boolean(value);
+  }
+
+  function formatDisplaySpeedKph(speedKph, isMetric) {
+    if (speedKph == null || !isFinite(speedKph)) return "--";
+    const displaySpeed = isMetricDisplay(isMetric) ? Number(speedKph) : Number(speedKph) * 0.621371;
+    return `${Math.round(displaySpeed)}`;
+  }
+
+  function setRoadLimit(speedKph, over, blink, isMetric) {
     const el = $("hudRoadLimitDisplay");
     if (!el) return;
     const limitLabel = getHudLabels().limit;
-    const text = speedKph == null || !isFinite(speedKph) ? `${limitLabel} --` : `${limitLabel} ${Math.round(speedKph)}`;
+    const text = `${limitLabel} ${formatDisplaySpeedKph(speedKph, isMetric)}`;
     if (el.textContent !== text) el.textContent = text;
     const overStr = over ? "1" : "0";
     if (el.dataset.over !== overStr) el.dataset.over = overStr;
@@ -618,7 +628,7 @@
     setText("hudGapNum", display);
   }
 
-  function setTemp(temp) {
+  function setTemp(temp, isMetric) {
     const reasonEl = $("hudTempReason");
     const speedEl = $("hudTempSpeed");
     if (!reasonEl || !speedEl) return;
@@ -638,7 +648,7 @@
 
     const reason = String(temp.source || getHudLabels().temp).trim();
     const color = temp.is_decel ? "#FFC94A" : "#34C96E";
-    const speedText = `${Math.round(temp.speed)}`;
+    const speedText = formatDisplaySpeedKph(temp.speed, isMetric);
     const nextSignature = `${lang}|${reason || "TEMP"}|${speedText}|${color}`;
     if (lastHudTempSignature === nextSignature) return;
     lastHudTempSignature = nextSignature;
@@ -649,12 +659,12 @@
     if (speedEl.style.color !== color) speedEl.style.color = color;
   }
 
-  function setSpeed(vEgoKph) {
-    setText("hudSpeed", vEgoKph == null || !isFinite(vEgoKph) ? "--" : `${Math.round(vEgoKph)}`);
+  function setSpeed(vEgoKph, isMetric) {
+    setText("hudSpeed", formatDisplaySpeedKph(vEgoKph, isMetric));
   }
 
-  function setSetSpeed(vSetKph) {
-    setText("hudSetSpeed", vSetKph == null || !isFinite(vSetKph) ? "--" : `${Math.round(vSetKph)}`);
+  function setSetSpeed(vSetKph, isMetric) {
+    setText("hudSetSpeed", formatDisplaySpeedKph(vSetKph, isMetric));
   }
 
   function setGear(txt, gearStep) {
@@ -780,18 +790,19 @@
 
     update(payload) {
       if (!payload) return;
+      const isMetric = isMetricDisplay(payload.isMetric);
       syncStaticHudText();
       setMetrics(payload.cpuTempC, payload.memPct, payload.diskPct, payload.voltageV);
-      setSpeed(payload.vEgoKph);
-      setSetSpeed(payload.vSetKph);
-      setTemp(payload.temp);
+      setSpeed(payload.vEgoKph, isMetric);
+      setSetSpeed(payload.vSetKph, isMetric);
+      setTemp(payload.temp, isMetric);
       setBars(payload.tfBars != null ? payload.tfBars : payload.tfGap);
       setGapNum(payload.tfGap);
       setGear(payload.gear, payload.gearStep);
       setSignalDot(payload.tlight || "off");
       if (payload.driveMode) setDriveMode(payload.driveMode.name, payload.driveMode.kind);
       else setDriveMode("", "normal");
-      setRoadLimit(payload.speedLimitKph, payload.speedLimitOver, payload.speedLimitBlink);
+      setRoadLimit(payload.speedLimitKph, payload.speedLimitOver, payload.speedLimitBlink, isMetric);
       setConnectivity(payload.apm);
     },
 
