@@ -6,6 +6,7 @@ from aiohttp import web
 
 from ...services.git_status import get_git_status
 from . import jobs
+from .actions import validate_action
 from .dispatcher import dispatch_sync, run_tool_job
 
 
@@ -16,8 +17,10 @@ async def api_tools_start(request: web.Request) -> web.Response:
     return web.json_response({"ok": False, "error": "invalid json"}, status=400)
 
   action = body.get("action")
-  if not action:
-    return web.json_response({"ok": False, "error": "missing action"}, status=400)
+  action_error = validate_action(action)
+  if action_error:
+    error, error_code = action_error
+    return web.json_response({"ok": False, "error": error, "error_code": error_code}, status=400)
 
   job_id = uuid.uuid4().hex[:12]
   job = {

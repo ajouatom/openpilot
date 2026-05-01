@@ -1,0 +1,378 @@
+.page--terminal {
+  --terminal-bottom-gap: calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px));
+  --terminal-form-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  --terminal-inline: max(var(--sp-lg), calc((100vw - var(--content-max-width)) / 2));
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: var(--terminal-vv-top, 0px);
+  width: 100dvw;
+  height: calc(var(--terminal-vv-height, 100dvh) - var(--terminal-bottom-gap));
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  z-index: 10;
+  overflow: hidden;
+}
+
+.terminal-shell {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--md-surface) 92%, #000);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.page--terminal:not([hidden]) .terminal-shell {
+  animation: terminal-content-enter 0.18s ease both;
+}
+
+@keyframes terminal-content-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.terminal-head {
+  position: relative;
+  z-index: 12;
+  flex: 0 0 auto;
+  background: color-mix(in srgb, var(--md-surface) 92%, #000);
+  box-shadow: 0 8px 18px color-mix(in srgb, #000 22%, transparent);
+}
+
+.terminal-pageHeader {
+  margin: 0;
+  padding: 14px var(--terminal-inline) 6px;
+  display: none;
+}
+
+.terminal-meta {
+  margin: 0;
+  padding: 14px var(--terminal-inline) 10px;
+}
+
+.terminal-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--sp-md);
+  align-items: center;
+  padding: 10px var(--terminal-inline);
+  border-top: 1px solid color-mix(in srgb, var(--md-stroke-soft) 18%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 42%, transparent);
+}
+
+.terminal-sessionMeta {
+  min-width: 0;
+  color: var(--md-outline);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.terminal-toolbar__actions {
+  display: inline-flex;
+  gap: var(--sp-sm);
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.terminal-toolbar__actions .smallBtn {
+  min-height: 34px;
+  padding: 6px 12px;
+  font-size: 12px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.terminal-screen {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+  scrollbar-gutter: stable;
+  padding: var(--sp-md) var(--terminal-inline);
+  touch-action: pan-x pan-y;
+  position: relative;
+}
+
+.terminal-screen.is-x-overflow::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 28px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--md-surface) 90%, #000 10%));
+}
+
+.terminal-output {
+  margin: 0;
+  min-height: 100%;
+  background: transparent;
+  color: var(--md-on-surface);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre;
+  word-break: normal;
+  display: inline-block;
+  width: max-content;
+  min-width: 100%;
+}
+
+.terminal-output__promptHost {
+  color: color-mix(in srgb, #67e27a 88%, #d7ffe0);
+  font-weight: 700;
+}
+
+.terminal-form {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--sp-sm);
+  align-items: center;
+  margin: 8px var(--terminal-inline) var(--terminal-form-bottom);
+  padding-left: 14px;
+  border: 1px solid color-mix(in srgb, var(--md-stroke-soft) 56%, transparent);
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--md-surface-cont) 92%, #000);
+  overflow: hidden;
+  position: relative;
+  z-index: 152;
+}
+
+.terminal-form:focus-within {
+  border-color: color-mix(in srgb, var(--md-stroke-strong) 76%, transparent);
+}
+
+.terminal-form__prompt {
+  color: var(--md-primary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-body-sm);
+  font-weight: 700;
+  letter-spacing: 0;
+  align-self: center;
+}
+
+.terminal-form__input {
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--md-on-surface);
+  font-size: var(--fs-body-sm);
+  font-family: var(--font-mono);
+  line-height: 1.25;
+  box-shadow: none;
+  outline: none;
+  appearance: none;
+}
+
+.terminal-form__input:focus {
+  border-color: transparent;
+}
+
+.terminal-form .smallBtn {
+  align-self: stretch;
+  min-height: 100%;
+  padding: 0 16px;
+  font-size: 12px;
+  border: 0;
+  border-left: 1px solid color-mix(in srgb, var(--md-stroke-soft) 44%, transparent);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--md-primary) 16%, transparent);
+  color: var(--md-primary);
+  box-shadow: none;
+}
+
+@media (min-width: 769px) {
+  .page--terminal {
+    --terminal-bottom-gap: calc(var(--nav-bar-height-desktop) + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (max-width: 640px) {
+  .page--terminal {
+    --terminal-inline: 12px;
+  }
+
+  body[data-page="terminal"] .app-toast-host {
+    top: auto;
+    bottom: var(--terminal-toast-bottom, calc(var(--nav-bar-height-desktop) + 104px + env(safe-area-inset-bottom, 0px)));
+  }
+
+  .terminal-toolbar {
+    gap: 8px;
+    padding: 9px var(--terminal-inline);
+  }
+
+  .terminal-sessionMeta {
+    font-size: 11px;
+  }
+
+  .terminal-toolbar__actions {
+    gap: 6px;
+  }
+
+  .terminal-toolbar__actions .smallBtn {
+    min-height: 32px;
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+
+  .terminal-screen {
+    padding: 10px var(--terminal-inline);
+  }
+
+  .terminal-output {
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .terminal-form {
+    margin: 8px var(--terminal-inline) var(--terminal-form-bottom);
+    padding-left: 12px;
+  }
+
+  .terminal-form .smallBtn {
+    padding: 0 14px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 430px) {
+  .page--terminal {
+    --terminal-inline: 10px;
+  }
+
+  .terminal-toolbar {
+    gap: 10px;
+    padding: 9px var(--terminal-inline);
+  }
+
+  .terminal-sessionMeta {
+    font-size: 11px;
+  }
+
+  .terminal-toolbar__actions {
+    gap: 6px;
+  }
+
+  .terminal-toolbar__actions .smallBtn {
+    min-height: 32px;
+    padding: 6px 9px;
+    font-size: 10px;
+  }
+
+  .terminal-screen {
+    padding: 10px var(--terminal-inline);
+  }
+
+  .terminal-output {
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .terminal-form {
+    margin: 8px var(--terminal-inline) var(--terminal-form-bottom);
+    padding-left: 12px;
+  }
+
+  .terminal-form .smallBtn {
+    padding: 0 14px;
+    font-size: 11px;
+  }
+}
+
+@media (orientation: landscape) {
+  body[data-page="terminal"] .app-toast-host {
+    left: var(--terminal-toast-left, calc(var(--nav-rail-width) + 20px));
+    right: auto;
+    width: var(--terminal-toast-width, calc(100vw - var(--nav-rail-width) - 40px));
+    bottom: var(--terminal-toast-bottom, calc(16px + env(safe-area-inset-bottom, 0px)));
+  }
+
+  .page--terminal {
+    --terminal-inline: 12px;
+    --terminal-bottom-gap: calc(14px + env(safe-area-inset-bottom, 0px));
+    left: var(--nav-rail-width);
+    width: calc(100dvw - var(--nav-rail-width));
+  }
+
+  .terminal-pageHeader {
+    padding: 10px var(--terminal-inline) 4px;
+  }
+
+  .terminal-meta {
+    padding: 0 var(--terminal-inline) 8px;
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .terminal-toolbar {
+    gap: 8px;
+    padding: 8px var(--terminal-inline);
+  }
+
+  .terminal-sessionMeta {
+    font-size: 11px;
+  }
+
+  .terminal-toolbar__actions {
+    gap: 6px;
+  }
+
+  .terminal-toolbar__actions .smallBtn {
+    min-height: 36px;
+    padding: 7px 13px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .terminal-screen {
+    padding: 8px var(--terminal-inline);
+    padding-bottom: 4px;
+  }
+
+  .terminal-output {
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .terminal-form {
+    margin: 6px var(--terminal-inline) var(--terminal-form-bottom);
+    padding-left: 12px;
+  }
+
+  .terminal-form__input {
+    min-height: 38px;
+    padding: 8px 0;
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .terminal-form .smallBtn {
+    padding: 0 16px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+}

@@ -1,25 +1,29 @@
-<!doctype html>
+﻿<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>CarrotPilot</title>
   <link rel="icon" type="image/png" href="/assets/img_chffr_wheel.png?v=2604-01" />
-  <link rel="stylesheet" href="/css/tokens.css?v=2603-73" />
-  <link rel="stylesheet" href="/css/hud_card.css?v=2604-09" />
-  <link rel="stylesheet" href="/css/base.css?v=2604-80" />
-  <link rel="stylesheet" href="/css/layout.css?v=2604-79" />
-  <link rel="stylesheet" href="/css/pages/logs.css?v=2604-74" />
-  <link rel="stylesheet" href="/css/components.css?v=2604-77" />
-  <link rel="stylesheet" href="/css/pages/drive.css?v=2604-74" />
-  <link rel="stylesheet" href="/css/responsive.css?v=2604-92" />
+  <link rel="stylesheet" href="/css/tokens.css?v=2605-01" />
+  <link rel="stylesheet" href="/css/layout_tokens.css?v=2605-07" />
+  <link rel="stylesheet" href="/css/hud_card.css?v=2605-02" />
+  <link rel="stylesheet" href="/css/base.css?v=2605-07" />
+  <link rel="stylesheet" href="/css/layout.css?v=2605-08" />
+  <link rel="stylesheet" href="/css/components.css?v=2605-02" />
+  <link rel="stylesheet" href="/css/pages/logs.css?v=2605-07" />
+  <link rel="stylesheet" href="/css/pages/terminal.css?v=2605-07" />
+  <link rel="stylesheet" href="/css/pages/settings.css?v=2605-15" />
+  <link rel="stylesheet" href="/css/pages/tools.css?v=2605-11" />
+  <link rel="stylesheet" href="/css/pages/drive.css?v=2605-09" />
+  <link rel="stylesheet" href="/css/responsive.css?v=2605-07" />
 </head>
 
 <body>
 
   <div class="wrap swipe-container" id="swipeContainer">
     <!-- ════════════ CAR SELECT ════════════ -->
-    <div id="pageCar" class="page" style="display:none;">
+    <div id="pageCar" class="page page--bounded" hidden style="display:none;">
       <div class="page-header">
         <h2 id="carTitle" class="page-title" style="cursor:pointer;">Car Select</h2>
         <button id="btnBackCar" class="btn">Back</button>
@@ -49,7 +53,7 @@
     </div>
 
     <!-- ════════════ SETTING ════════════ -->
-    <div id="pageSetting" class="page" style="display:none;">
+    <div id="pageSetting" class="page page--setting" hidden style="display:none;">
       <div class="page-fab-layer page-fab-layer--setting" aria-hidden="true">
         <button id="btnSettingSearch" class="fab fab--round fab--icon fab--setting-search" type="button" aria-label="Search settings" aria-expanded="false" aria-controls="settingSearchPanel">
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -73,20 +77,39 @@
             </div>
             <span class="setting-car-entry__chevron" aria-hidden="true"></span>
           </div>
-          <h3 id="groupsTitle" class="section-title">Groups</h3>
-          <div id="groupList"></div>
+
+          <div id="settingTabBar" class="setting-tabbar" role="tablist" aria-label="Setting categories">
+            <button type="button" class="setting-tab" id="settingTabDevice" data-setting-tab="device" role="tab" aria-selected="false">
+              <span id="settingTabDeviceLabel">디바이스</span>
+            </button>
+            <button type="button" class="setting-tab is-active" id="settingTabCarrot" data-setting-tab="carrot" role="tab" aria-selected="true">
+              <span id="settingTabCarrotLabel">당근파일럿</span>
+            </button>
+          </div>
+
+          <!-- CarrotPilot Groups -->
+          <div id="carrotTabContent">
+            <div id="groupList"></div>
+          </div>
+
+          <!-- Device tab content (hidden by default) -->
+          <div id="deviceTabContent" hidden>
+            <div id="deviceGroupList"></div>
+          </div>
         </div>
 
         <!-- Items Screen -->
         <div id="settingScreenItems" class="screen hidden" style="display:none;">
           <div id="settingSubnavWrap" class="setting-subnav-wrap">
             <div id="settingSubnav" class="setting-subnav" aria-label="Setting groups"></div>
+            <div id="deviceSubnav" class="setting-subnav" hidden aria-label="Device groups"></div>
           </div>
           <div class="row-between mb-sm">
             <h3 id="itemsTitle" class="section-title" style="cursor:pointer; margin:0;">Items</h3>
             <span class="muted" id="groupMeta">-</span>
           </div>
           <div id="items"></div>
+          <div id="deviceItems" hidden></div>
         </div>
       </div>
 
@@ -105,7 +128,7 @@
     </div>
 
     <!-- ════════════ TOOLS ════════════ -->
-    <div id="pageTools" class="page" style="display:none;">
+    <div id="pageTools" class="page page--full page--split page--tools" hidden style="display:none;">
       <div class="page-header page-header--hidden" aria-hidden="true">
         <h2 id="toolsTitle" class="page-title">Tools</h2>
       </div>
@@ -118,7 +141,7 @@
       <div class="tools-scroll-stack">
         <div class="row-wrap mb-md" style="gap: var(--sp-md);">
           <a id="btnQuickLinkWeb" class="btn btn--filled" href="#" aria-disabled="true" style="text-decoration:none; font-weight:700;">CarrotMan</a>
-          <button id="btnDeviceInfo" class="btn btn--filled" type="button">Device Info</button>
+          <button id="btnDeviceInfo" class="btn btn--filled" type="button">Carrot Info</button>
         </div>
 
         <div class="section tools-group is-open" data-tools-group="git">
@@ -203,7 +226,7 @@
     </div>
 
     <!-- ════════════ BRANCH SELECT ════════════ -->
-    <div id="pageBranch" class="page" style="display:none;">
+    <div id="pageBranch" class="page page--bounded" hidden style="display:none;">
       <div class="page-header">
         <h2 id="branchTitle" class="page-title" style="cursor:pointer;">Branch Select</h2>
         <button id="btnBackBranch" class="btn">Back</button>
@@ -214,7 +237,7 @@
     </div>
 
     <!-- ════════════ TERMINAL ════════════ -->
-    <div id="pageTerminal" class="page" style="display:none;">
+    <div id="pageTerminal" class="page page--full page--terminal" hidden style="display:none;">
       <div class="terminal-shell">
         <div class="terminal-head">
           <div class="page-header terminal-pageHeader">
@@ -253,7 +276,7 @@
     </div>
 
     <!-- ════════════ LOGS ════════════ -->
-    <div id="pageLogs" class="page" style="display:none;">
+    <div id="pageLogs" class="page page--full page--logs" hidden style="display:none;">
       <div class="logs-shell">
         <div class="logs-tabbar">
           <div class="logs-tabs" role="tablist" aria-label="Logs">
@@ -279,12 +302,13 @@
     </div>
 
     <!-- ════════════ CARROT TEST ════════════ -->
-    <div id="pageCarrot" class="page" style="display:none;">
+    <div id="pageCarrot" class="page page--full page--drive" hidden style="display:none;">
       <div class="page-header page-header--hidden" aria-hidden="true">
         <h2 id="carrotTitle" class="page-title">Home</h2>
       </div>
 
       <div id="carrotStage" class="carrot-stage">
+        <canvas id="carrotAmbientCanvas" class="carrot-stage__ambient" aria-hidden="true"></canvas>
         <video id="carrotRoadVideo" class="carrot-stage__video" autoplay playsinline muted style="display:none;"></video>
         <canvas id="carrotLastFrameCanvas" class="carrot-stage__videoHold" aria-hidden="true"></canvas>
         <canvas id="carrotOverlayCanvas" class="carrot-stage__canvas"></canvas>
@@ -500,21 +524,23 @@
   <script src="/js/shared/dom.js?v=2604-71"></script>
   <script src="/js/shared/utils.js?v=2604-71"></script>
   <script src="/js/shared/i18n.js?v=2604-71"></script>
-  <script src="/js/shared/api.js?v=2604-71"></script>
+  <script src="/js/shared/api.js?v=2604-72"></script>
   <script src="/js/shared/activity.js?v=2604-04"></script>
   <script src="/js/shared/ui/dialog.js?v=2604-71"></script>
   <script src="/js/shared/ui/viewport.js?v=2604-71"></script>
   <script src="/js/shared/ui/effects.js?v=2604-72"></script>
-  <script src="/js/shared/ui/navigation.js?v=2604-77"></script>
-  <script src="/js/pages/car.js?v=2604-74"></script>
-  <script src="/js/pages/setting.js?v=2604-76"></script>
-  <script src="/js/pages/tools.js?v=2604-79"></script>
+  <script src="/js/shared/ui/navigation.js?v=2605-06"></script>
+  <script src="/js/pages/car.js?v=2604-75"></script>
+  <script src="/js/pages/setting.js?v=2604-81"></script>
+  <script src="/js/pages/setting_device.js?v=2605-01"></script>
+  <script src="/js/pages/tools.js?v=2604-80"></script>
   <script src="/js/pages/branch.js?v=2604-73"></script>
   <script src="/js/pages/logs.js?v=2604-75"></script>
   <script src="/js/pages/terminal.js?v=2604-72"></script>
   <script src="/js/raw_capnp.js?v=2604-05"></script>
   <script src="/js/app_realtime.js?v=2604-19"></script>
-  <script src="/js/home_drive.js?v=2604-29"></script>
+  <script src="/js/pages/vision_background.js?v=2605-01"></script>
+  <script src="/js/home_drive.js?v=2605-02"></script>
   <script src="/js/app.js?v=2604-72"></script>
 </body>
 </html>

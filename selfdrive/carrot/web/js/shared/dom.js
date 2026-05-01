@@ -90,6 +90,12 @@ const settingSubnavWrap = document.getElementById("settingSubnavWrap");
 const settingSubnav = document.getElementById("settingSubnav");
 const itemsTitle = document.getElementById("itemsTitle");
 
+// Device tab elements
+const settingTabBar = document.getElementById("settingTabBar");
+const settingTabDevice = document.getElementById("settingTabDevice");
+const settingTabCarrot = document.getElementById("settingTabCarrot");
+const deviceTabContent = document.getElementById("deviceTabContent");
+
 // Car page sub-elements
 const carTitle = document.getElementById("carTitle");
 const btnBackCar = document.getElementById("btnBackCar");

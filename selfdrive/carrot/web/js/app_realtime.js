@@ -1987,7 +1987,10 @@ async function syncServerTimeOnConnect() {
   }
 }
 
-function startAll() {
+async function startAll() {
+  if (typeof syncWebLanguageFromDeviceDefault === "function") {
+    await syncWebLanguageFromDeviceDefault();
+  }
   renderUIText();
   showPage("carrot", false);
   console.log("[time_sync] syncing server time on page load");

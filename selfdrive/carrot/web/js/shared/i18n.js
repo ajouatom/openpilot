@@ -14,6 +14,17 @@ function normalizeLangCode(raw) {
   const value = String(raw || "").trim().toLowerCase();
   const packs = window.CarrotTranslations?.packs || {};
   if (packs[value]) return value;
+  const deviceAliases = {
+    main_ko: "ko",
+    main_en: "en",
+    "main_zh-chs": "zh",
+    "main_zh-cht": "zh",
+    main_ja: "ja",
+    main_fr: "fr",
+  };
+  if (deviceAliases[value]) return deviceAliases[value];
+  const withoutMainPrefix = value.replace(/^main[_-]/, "");
+  if (packs[withoutMainPrefix]) return withoutMainPrefix;
   if (value.startsWith("ko")) return "ko";
   if (value.startsWith("zh")) return "zh";
   if (value.startsWith("ja")) return "ja";
@@ -39,6 +50,14 @@ function detectDefaultLang() {
 }
 
 LANG = detectDefaultLang();
+
+function hasStoredWebLanguage() {
+  try {
+    return Boolean(normalizeLangCode(localStorage.getItem(LANG_STORAGE_KEY)));
+  } catch {
+    return false;
+  }
+}
 
 
 /* ── Friendly error / action label lookup ─────────────────── */
@@ -133,7 +152,6 @@ function getUIText(key, fallback = "", vars = null) {
 function renderUIText() {
   const s = UI_STRINGS[LANG];
   if (!s) return;
-  const toolsEn = UI_STRINGS.en || s;
   document.title = "CarrotPilot";
 
   // Nav bar (nested spans — set last child text)
@@ -165,27 +183,27 @@ function renderUIText() {
   setText("userSystemTitle", "User / System");
   setText("toolsQuickLinkTitle", "Link");
   setText("userSettingsTitle", "Settings");
-  setText("btnDeviceInfo", toolsEn.device_info || "Device Info");
-  setText("btnGitRemote", toolsEn.change_repository || "change repository");
-  setText("btnGitBranch", toolsEn.change_branch || "change branch");
-  setText("btnGitAddRemote", toolsEn.add_remote || "add remote");
-  setText("btnGitResetRepo", toolsEn.reset_repo || "reset repo");
-  setText("btnDeviceLang", toolsEn.device_lang || "Device Lang");
-  setText("btnResetCalib", toolsEn.reset_calib || "Reset Calib");
-  setText("btnSendTmuxLog", toolsEn.capture_tmux || "capture tmux");
-  setText("btnSendTmuxServerLog", toolsEn.send_tmux || "send tmux");
-  setText("btnInstallRequired", toolsEn.install_required || "install flask");
-  setText("btnDeleteVideos", toolsEn.delete_all_videos || "delete all videos");
-  setText("btnDeleteLogs", toolsEn.delete_all_logs || "delete all logs");
-  setText("btnRebuildAll", toolsEn.rebuild_all || "Rebuild All");
-  setText("btnReboot", toolsEn.reboot || "Reboot");
+  setText("btnDeviceInfo", getUIText("carrot_info", "Carrot Info"));
+  setText("btnGitRemote", "change repository");
+  setText("btnGitBranch", "change branch");
+  setText("btnGitAddRemote", "add remote");
+  setText("btnGitResetRepo", "reset repo");
+  setText("btnDeviceLang", "Device Lang");
+  setText("btnResetCalib", "Reset Calib");
+  setText("btnSendTmuxLog", "capture tmux");
+  setText("btnSendTmuxServerLog", "send tmux");
+  setText("btnInstallRequired", "install flask");
+  setText("btnDeleteVideos", "delete all videos");
+  setText("btnDeleteLogs", "delete all logs");
+  setText("btnRebuildAll", "Rebuild All");
+  setText("btnReboot", "Reboot");
   setText("btnBackupSettings", "Backup");
   setText("btnRestoreSettings", "Restore");
   setText("btnCopySettings", "Copy");
   setText("btnViewSettings", "View");
-  setText("sysCmdTitle", toolsEn.section_sys_cmd || "System Command");
-  setText("sysCmdHelp", toolsEn.sys_cmd_help || "Allowed: pull, status, branch, log, git ..., df, free, uptime");
-  setText("outputTitle", toolsEn.section_output || "Output");
+  setText("sysCmdTitle", getUIText("section_sys_cmd", "System Command"));
+  setText("sysCmdHelp", getUIText("sys_cmd_help", "Allowed: pull, status, branch, log, git ..., df, free, uptime"));
+  setText("outputTitle", getUIText("section_output", "Output"));
   setText("terminalTitle", s.terminal);
   setText("terminalSessionMeta", "/data/openpilot");
   setText("btnTerminalCtrlC", s.terminal_ctrl_c);
@@ -195,6 +213,10 @@ function renderUIText() {
   setText("logsDashcamTitle", s.logs_dashcam || "Dashcam");
   setText("logsScreenTitle", s.logs_screenrecord || "Screen Record");
   setText("btnStartVision", `▶ ${s.start_vision || "Start Drive Vision"}`);
+  if (typeof applyRecordFabState === "function") applyRecordFabState();
+  if (window.HomeDrive && typeof window.HomeDrive.renderText === "function") {
+    window.HomeDrive.renderText();
+  }
   const terminalInput = document.getElementById("terminalInput");
   if (terminalInput) terminalInput.placeholder = "";
   setText("settingSearchTitle", s.setting_search);
@@ -227,22 +249,28 @@ function renderUIText() {
 
 
 /* ── Language switching ──────────────────────────────────── */
-function setWebLanguage(lang) {
+function setWebLanguage(lang, options = {}) {
   const normalized = normalizeLangCode(lang);
   if (!normalized || !UI_STRINGS[normalized]) return false;
+  const persist = options.persist !== false;
+  const render = options.render !== false;
+  const dispatch = options.dispatch !== false;
   LANG = normalized;
-  try {
-    localStorage.setItem(LANG_STORAGE_KEY, LANG);
-  } catch {}
+  if (persist) {
+    try {
+      localStorage.setItem(LANG_STORAGE_KEY, LANG);
+    } catch {}
+  }
 
   updateLangLabel();
 
-  // Update static UI text
+  if (!render) return true;
+
   renderUIText();
   if (typeof loadRecordState === "function") loadRecordState().catch(() => {});
   if (typeof rerenderPageLangUi === "function") rerenderPageLangUi();
 
-  if (SETTINGS) {
+  if (SETTINGS && !(typeof getCurrentSettingTab === "function" && getCurrentSettingTab() === "device")) {
     if (typeof rebuildSettingSearchEntries === "function") rebuildSettingSearchEntries();
     if (typeof renderGroups === "function") renderGroups({ animateGroups: false });
     if (typeof renderSettingSubnav === "function") renderSettingSubnav();
@@ -253,8 +281,24 @@ function setWebLanguage(lang) {
       renderItems(CURRENT_GROUP, { scrollMode: "restore", scrollTop: currentTop, animateItems: false });
     }
   }
-  window.dispatchEvent(new CustomEvent("carrot:languagechange", { detail: { lang: LANG } }));
+  if (dispatch) {
+    window.dispatchEvent(new CustomEvent("carrot:languagechange", { detail: { lang: LANG } }));
+  }
   return true;
+}
+
+async function syncWebLanguageFromDeviceDefault() {
+  if (hasStoredWebLanguage()) return false;
+  try {
+    const res = await fetch("/api/device_info", { cache: "no-store" });
+    if (!res.ok) return false;
+    const info = await res.json();
+    const lang = normalizeLangCode(info?.language);
+    if (!lang || lang === LANG) return false;
+    return setWebLanguage(lang, { persist: false, render: false, dispatch: false });
+  } catch {
+    return false;
+  }
 }
 
 function toggleLang() {
