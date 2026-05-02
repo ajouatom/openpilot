@@ -120,7 +120,7 @@ function dashcamRoutesSignature(routes) {
     entry.route || "",
     entry.latestModifiedLabel || "",
     ...(entry.segmentFolders || []),
-  ].join("|")).join("\n");
+  ].join("|")).join("\n") + "|" + (typeof LANG !== "undefined" ? LANG : "");
 }
 
 function screenrecordVideosSignature(videos) {
@@ -129,7 +129,7 @@ function screenrecordVideosSignature(videos) {
     video.name || "",
     video.modifiedLabel || video.relativeModifiedLabel || "",
     video.size || 0,
-  ].join("|")).join("\n");
+  ].join("|")).join("\n") + "|" + (typeof LANG !== "undefined" ? LANG : "");
 }
 
 function hasCompleteDashcamDom(host, routes) {
@@ -1056,6 +1056,19 @@ function bindLogsPage() {
     dashcamState.layoutBound = true;
     dashcamState.landscape = isCompactLandscapeMode();
     window.addEventListener("carrot:pagechange", handleLogsPageChange);
+    window.addEventListener("carrot:languagechange", () => {
+      dashcamState.signature = "";
+      screenrecordState.signature = "";
+      const dashcamHost = document.getElementById("dashcamRoutes");
+      if (dashcamHost) dashcamHost.dataset.signature = "";
+      const screenHost = document.getElementById("screenrecordVideos");
+      if (screenHost) screenHost.dataset.signature = "";
+      
+      if (isLogsPageActive()) {
+        renderDashcamRoutes({ animate: false });
+        if (typeof renderScreenrecordVideos === "function") renderScreenrecordVideos({ animate: false });
+      }
+    });
     window.addEventListener("resize", () => {
       if (CURRENT_PAGE !== "logs") return;
       if (dashcamState.layoutTimer) window.clearTimeout(dashcamState.layoutTimer);
