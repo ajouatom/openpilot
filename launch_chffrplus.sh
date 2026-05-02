@@ -118,17 +118,17 @@ function launch {
   # events language init
   #LANG=$(cat ${PARAMS_ROOT}/d/LanguageSetting)
   LANG=$(cat /data/params/d/LanguageSetting)
-  EVENTSTAT=$(git status)
+  GITSTAT=$(git status)
 
   # events.py 한글로 변경 및 파일이 교체된 상태인지 확인
-  if [ "${LANG}" = "main_ko" ] && [[ ! "${EVENTSTAT}" == *"modified:   selfdrive/controls/lib/events.py"* ]]; then
+  if [ "${LANG}" = "ko" ] && [[ ! "${GITSTAT}" == *"modified:   selfdrive/selfdrived/events.py"* ]]; then
     cp -f $DIR/selfdrive/selfdrived/events.py $DIR/scripts/add/events_en.py
     cp -f $DIR/scripts/add/events_ko.py $DIR/selfdrive/selfdrived/events.py
-  elif [ "${LANG}" = "main_zh-CHS" ] && [[ ! "${EVENTSTAT}" == *"modified:   selfdrive/controls/lib/events.py"* ]]; then
+  elif [ "${LANG}" = "zh-CHS" ] && [[ ! "${GITSTAT}" == *"modified:   selfdrive/selfdrived/events.py"* ]]; then
     # Backup current events.py (assumed English) and install Simplified Chinese events
     cp -f $DIR/selfdrive/selfdrived/events.py $DIR/scripts/add/events_en.py
     cp -f $DIR/scripts/add/events_zh.py $DIR/selfdrive/selfdrived/events.py
-  elif [ "${LANG}" = "main_en" ] && [[ "${EVENTSTAT}" == *"modified:   selfdrive/controls/lib/events.py"* ]]; then
+  elif [ "${LANG}" = "en" ] && [[ "${GITSTAT}" == *"modified:   selfdrive/selfdrived/events.py"* ]]; then
     cp -f $DIR/scripts/add/events_en.py $DIR/selfdrive/selfdrived/events.py
   fi
 
@@ -140,6 +140,17 @@ function launch {
     cp -f $DIR/scripts/add/amplifier_c3xl.py $DIR/system/hardware/tici/amplifier.py
   elif [ "${C3XL}" = "0" ] && [[ "${EVENTSTAT}" == *"modified:   system/hardware/tici/amplifier.py"* ]]; then
     cp -f $DIR/scripts/add/amplifier_org.py $DIR/system/hardware/tici/amplifier.py
+  fi
+
+  # openpilot default ssh key installer
+  if [ ! -f /data/params/d/GithubSshKeys ]; then
+    echo -n openpilot > /data/params/d/GithubUsername
+    cat /usr/comma/setup_keys > /data/params/d/GithubSshKeys
+  fi
+
+  # always ssh enable
+  if [ "$(cat /data/params/d/SshEnabled 2>/dev/null)" = "0" ]; then
+    echo -n 1 > /data/params/d/SshEnabled
   fi
 
   # start manager
