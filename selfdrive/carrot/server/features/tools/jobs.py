@@ -8,16 +8,24 @@ Tool job infrastructure.
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 import time
+import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
+from ...config import CARROT_STATE_DIR, CARROT_TOOL_JOBS_STATE_PATH
 
-TOOL_JOB_MAX_LOG_CHARS = 180000
-TOOL_JOB_KEEP_COUNT = 24
+TOOL_JOB_MAX_LOG_CHARS = 60000
+TOOL_JOB_KEEP_COUNT = 20
+TOOL_JOB_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
 _jobs: Dict[str, Dict[str, Any]] = {}
+_loaded = False
+_last_persist_at = 0.0
 
 
 def jobs() -> Dict[str, Dict[str, Any]]:
+  load_persisted()
   return _jobs
 
 
@@ -44,6 +52,7 @@ def append(job: Dict[str, Any], text: Any) -> None:
   job["log"] = cur + chunk
   trim_log(job)
   touch(job)
+  persist_changed()
 
 
 def progress(job: Dict[str, Any], *, message: Optional[str] = None,
@@ -62,6 +71,7 @@ def progress(job: Dict[str, Any], *, message: Optional[str] = None,
       percent = int(max(0, min(100, round((c / t) * 100))))
   job["progress"] = percent
   touch(job)
+  persist_changed()
 
 
 def snapshot(job: Dict[str, Any]) -> Dict[str, Any]:
@@ -70,6 +80,7 @@ def snapshot(job: Dict[str, Any]) -> Dict[str, Any]:
     "ok": True,
     "id": job["id"],
     "action": job["action"],
+    "payload": job.get("payload") if isinstance(job.get("payload"), dict) else {},
     "status": job["status"],
     "done": job["status"] in ("done", "failed"),
     "log": job.get("log") or "",
@@ -100,18 +111,170 @@ def finish(job: Dict[str, Any], *, ok: bool, result: Optional[Dict[str, Any]] = 
     job["progress"] = 100
   touch(job)
   prune()
+  persist_now()
 
 
-def prune() -> None:
+def prune() -> bool:
+  removed = False
+  now = time.time()
   finished = [
     item for item in _jobs.values()
     if item.get("status") in ("done", "failed")
   ]
-  if len(finished) <= TOOL_JOB_KEEP_COUNT:
-    return
-  finished.sort(key=lambda item: float(item.get("updated_at") or 0), reverse=True)
+  for old in finished:
+    updated_at = _safe_float(old.get("updated_at") or old.get("created_at"))
+    if updated_at > 0 and now - updated_at > TOOL_JOB_MAX_AGE_SECONDS:
+      _jobs.pop(old["id"], None)
+      removed = True
+  finished = [
+    item for item in _jobs.values()
+    if item.get("status") in ("done", "failed")
+  ]
+  finished.sort(key=lambda item: _safe_float(item.get("updated_at")), reverse=True)
   for old in finished[TOOL_JOB_KEEP_COUNT:]:
     _jobs.pop(old["id"], None)
+    removed = True
+  return removed
+
+
+def _safe_float(value: Any) -> float:
+  try:
+    return float(value)
+  except Exception:
+    return 0.0
+
+
+def _sanitize_loaded_job(raw: Any) -> Optional[Dict[str, Any]]:
+  if not isinstance(raw, dict):
+    return None
+  job_id = str(raw.get("id") or "").strip()
+  action = str(raw.get("action") or "").strip()
+  if not job_id or not action:
+    return None
+
+  status = str(raw.get("status") or "done").strip()
+  if status == "running":
+    status = "failed"
+
+  job = {
+    "id": job_id,
+    "action": action,
+    "payload": raw.get("payload") if isinstance(raw.get("payload"), dict) else {},
+    "status": status if status in ("done", "failed") else "done",
+    "log": str(raw.get("log") or ""),
+    "progress": raw.get("progress"),
+    "message": str(raw.get("message") or ""),
+    "step_current": raw.get("step_current"),
+    "step_total": raw.get("step_total"),
+    "error": raw.get("error"),
+    "error_code": raw.get("error_code"),
+    "error_detail": raw.get("error_detail"),
+    "result": raw.get("result") if isinstance(raw.get("result"), dict) else None,
+    "created_at": _safe_float(raw.get("created_at") or raw.get("updated_at") or time.time()),
+    "updated_at": _safe_float(raw.get("updated_at") or raw.get("created_at") or time.time()),
+  }
+  if raw.get("status") == "running":
+    job["error"] = job["error"] or "server restarted before job completed"
+    job["message"] = job["message"] or "Interrupted by server restart"
+    job["result"] = job["result"] or {"ok": False, "error": job["error"]}
+  trim_log(job)
+  return job
+
+
+def load_persisted() -> None:
+  global _loaded
+  if _loaded:
+    return
+  _loaded = True
+  try:
+    with open(CARROT_TOOL_JOBS_STATE_PATH, "r", encoding="utf-8") as f:
+      data = json.load(f)
+    raw_jobs = data.get("jobs") if isinstance(data, dict) else data
+    if not isinstance(raw_jobs, list):
+      return
+    for raw in raw_jobs:
+      job = _sanitize_loaded_job(raw)
+      if job is not None:
+        _jobs[job["id"]] = job
+    if prune():
+      persist_now()
+  except Exception:
+    return
+
+
+def list_snapshots(limit: Optional[int] = TOOL_JOB_KEEP_COUNT) -> List[Dict[str, Any]]:
+  load_persisted()
+  items = list(_jobs.values())
+  items.sort(key=lambda item: (
+    _safe_float(item.get("updated_at")),
+    _safe_float(item.get("created_at")),
+  ), reverse=True)
+  if limit is not None and limit > 0:
+    items = items[:limit]
+  return [snapshot(item) for item in items]
+
+
+def clear_finished() -> int:
+  load_persisted()
+  remove_ids = [
+    job_id for job_id, job in _jobs.items()
+    if job.get("status") in ("done", "failed")
+  ]
+  for job_id in remove_ids:
+    _jobs.pop(job_id, None)
+  if remove_ids:
+    persist_now()
+  return len(remove_ids)
+
+
+def add_notice(action: str, message: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+  load_persisted()
+  now = time.time()
+  text = str(message or "").strip()
+  job = {
+    "id": uuid.uuid4().hex[:12],
+    "action": str(action or "notice").strip() or "notice",
+    "payload": payload if isinstance(payload, dict) else {"notice": True},
+    "status": "done",
+    "log": text,
+    "progress": 100,
+    "message": "",
+    "step_current": 1,
+    "step_total": 1,
+    "error": None,
+    "error_code": None,
+    "error_detail": None,
+    "result": {"ok": True, "out": text},
+    "created_at": now,
+    "updated_at": now,
+  }
+  _jobs[job["id"]] = job
+  prune()
+  persist_now()
+  return snapshot(job)
+
+
+def persist_now() -> None:
+  global _last_persist_at
+  try:
+    os.makedirs(CARROT_STATE_DIR, exist_ok=True)
+    payload = {
+      "version": 1,
+      "updated_at": time.time(),
+      "jobs": list_snapshots(TOOL_JOB_KEEP_COUNT),
+    }
+    tmp_path = f"{CARROT_TOOL_JOBS_STATE_PATH}.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+      json.dump(payload, f, ensure_ascii=True, separators=(",", ":"))
+    os.replace(tmp_path, CARROT_TOOL_JOBS_STATE_PATH)
+    _last_persist_at = time.time()
+  except Exception:
+    pass
+
+
+def persist_changed(min_interval: float = 0.5) -> None:
+  if time.time() - _last_persist_at >= min_interval:
+    persist_now()
 
 
 async def stream_exec(job: Dict[str, Any], cmd: List[str], *, cwd: Optional[str] = None,

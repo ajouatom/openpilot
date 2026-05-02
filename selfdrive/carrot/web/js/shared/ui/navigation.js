@@ -300,6 +300,50 @@ function getPageHistoryState(page) {
   return { page: "carrot" };
 }
 
+function resolveWebStartPage() {
+  const fallback = "carrot";
+  let page = fallback;
+  try {
+    page = typeof window.getWebStartPage === "function" ? window.getWebStartPage() : fallback;
+  } catch {
+    page = fallback;
+  }
+  return PAGE_ELEMENTS[page] ? page : fallback;
+}
+
+function markWebStartPageBootstrapped() {
+  document.documentElement.dataset.carrotBootstrapped = "1";
+}
+
+function bootstrapWebStartPage(source = "app") {
+  if (window.__CARROT_WEB_HAS_BOOTSTRAPPED_PAGE) {
+    markWebStartPageBootstrapped();
+    return window.__CARROT_WEB_INITIAL_PAGE || CURRENT_PAGE || "carrot";
+  }
+
+  const startPage = resolveWebStartPage();
+  const prevPage = CURRENT_PAGE;
+  window.__CARROT_WEB_BOOTSTRAPPING = true;
+  try {
+    showPage(startPage, false);
+    history.replaceState(getPageHistoryState(startPage), "");
+  } finally {
+    window.__CARROT_WEB_BOOTSTRAPPING = false;
+  }
+
+  window.__CARROT_WEB_HAS_BOOTSTRAPPED_PAGE = true;
+  window.__CARROT_WEB_INITIAL_PAGE = startPage;
+  window.__CARROT_WEB_BOOTSTRAP_SOURCE = source;
+  markWebStartPageBootstrapped();
+
+  if (startPage === prevPage && PAGE_ELEMENTS[startPage] && !PAGE_ELEMENTS[startPage].hidden) {
+    runPageEnter(startPage, prevPage, false);
+  }
+  return startPage;
+}
+
+window.bootstrapWebStartPage = bootstrapWebStartPage;
+
 function runPageEnter(page, prevPage, pushHistory) {
   if (page === "setting") {
     if (!SETTINGS && typeof loadSettings === "function") loadSettings();
@@ -343,6 +387,7 @@ function runPageEnter(page, prevPage, pushHistory) {
 
 function commitPageChange(page, prevPage, pushHistory, options = {}) {
   CURRENT_PAGE = page;
+  if (!window.__CARROT_WEB_BOOTSTRAPPING && typeof window.recordWebLastPage === "function") window.recordWebLastPage(page);
   syncPageDataset(page);
   syncNavActivePage(page);
   syncSettingSplitLayoutClass(shouldUseSettingSplitLayout(page));
@@ -424,6 +469,7 @@ function settleSwipe(frame, direction, commit, done) {
 function showPage(page, pushHistory = false, transition = null) {
   const prevPage = CURRENT_PAGE;
   if (prevPage === page) {
+    if (!window.__CARROT_WEB_BOOTSTRAPPING && typeof window.recordWebLastPage === "function") window.recordWebLastPage(page);
     syncPageDataset(page);
     syncNavActivePage(page);
     syncSettingSplitLayoutClass(shouldUseSettingSplitLayout(page));

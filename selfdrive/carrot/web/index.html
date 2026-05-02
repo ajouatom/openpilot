@@ -5,6 +5,69 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>CarrotPilot</title>
   <link rel="icon" type="image/png" href="/assets/img_chffr_wheel.png?v=2604-01" />
+  <script>
+    (function () {
+      var primaryPages = { carrot: 1, setting: 1, tools: 1, logs: 1, terminal: 1 };
+      var startPage = "carrot";
+      try {
+        var setting = localStorage.getItem("carrot_web_start_page") || "carrot";
+        if (setting === "last") {
+          var lastPage = localStorage.getItem("carrot_web_last_page");
+          startPage = primaryPages[lastPage] ? lastPage : "carrot";
+        } else {
+          startPage = primaryPages[setting] ? setting : "carrot";
+        }
+      } catch (e) {}
+      document.documentElement.dataset.carrotStartPage = startPage;
+    })();
+  </script>
+  <style>
+    html[data-carrot-start-page]:not([data-carrot-bootstrapped]) #pageCar,
+    html[data-carrot-start-page]:not([data-carrot-bootstrapped]) #pageSetting,
+    html[data-carrot-start-page]:not([data-carrot-bootstrapped]) #pageTools,
+    html[data-carrot-start-page]:not([data-carrot-bootstrapped]) #pageBranch,
+    html[data-carrot-start-page]:not([data-carrot-bootstrapped]) #pageTerminal,
+    html[data-carrot-start-page]:not([data-carrot-bootstrapped]) #pageLogs,
+    html[data-carrot-start-page]:not([data-carrot-bootstrapped]) #pageCarrot {
+      display: none !important;
+    }
+
+    html[data-carrot-start-page="carrot"]:not([data-carrot-bootstrapped]) #pageCarrot,
+    html[data-carrot-start-page="setting"]:not([data-carrot-bootstrapped]) #pageSetting,
+    html[data-carrot-start-page="logs"]:not([data-carrot-bootstrapped]) #pageLogs {
+      display: block !important;
+    }
+
+    html[data-carrot-start-page="terminal"]:not([data-carrot-bootstrapped]) #pageTerminal {
+      display: flex !important;
+    }
+
+    html[data-carrot-start-page="tools"]:not([data-carrot-bootstrapped]) #pageTools {
+      display: block !important;
+    }
+
+    @media (orientation: landscape) {
+      html[data-carrot-start-page="tools"]:not([data-carrot-bootstrapped]) #pageTools {
+        display: grid !important;
+      }
+    }
+
+    html[data-carrot-start-page]:not([data-carrot-bootstrapped]) .topbar .nav-btn.active {
+      color: var(--md-on-surface-var) !important;
+      font-weight: 600 !important;
+      background: transparent !important;
+    }
+
+    html[data-carrot-start-page="carrot"]:not([data-carrot-bootstrapped]) .topbar #btnHome,
+    html[data-carrot-start-page="setting"]:not([data-carrot-bootstrapped]) .topbar #btnSetting,
+    html[data-carrot-start-page="tools"]:not([data-carrot-bootstrapped]) .topbar #btnTools,
+    html[data-carrot-start-page="logs"]:not([data-carrot-bootstrapped]) .topbar #btnLogs,
+    html[data-carrot-start-page="terminal"]:not([data-carrot-bootstrapped]) .topbar #btnTerminal {
+      color: var(--md-primary) !important;
+      font-weight: 700 !important;
+      background: color-mix(in srgb, var(--md-primary) 12%, transparent) !important;
+    }
+  </style>
   <link rel="stylesheet" href="/css/tokens.css?v=2605-01" />
   <link rel="stylesheet" href="/css/layout_tokens.css?v=2605-07" />
   <link rel="stylesheet" href="/css/hud_card.css?v=2605-02" />
@@ -13,8 +76,8 @@
   <link rel="stylesheet" href="/css/components.css?v=2605-02" />
   <link rel="stylesheet" href="/css/pages/logs.css?v=2605-07" />
   <link rel="stylesheet" href="/css/pages/terminal.css?v=2605-07" />
-  <link rel="stylesheet" href="/css/pages/settings.css?v=2605-15" />
-  <link rel="stylesheet" href="/css/pages/tools.css?v=2605-11" />
+  <link rel="stylesheet" href="/css/pages/settings.css?v=2605-16" />
+  <link rel="stylesheet" href="/css/pages/tools.css?v=2605-23" />
   <link rel="stylesheet" href="/css/pages/drive.css?v=2605-09" />
   <link rel="stylesheet" href="/css/responsive.css?v=2605-07" />
 </head>
@@ -309,7 +372,7 @@
 
       <div id="carrotStage" class="carrot-stage">
         <canvas id="carrotAmbientCanvas" class="carrot-stage__ambient" aria-hidden="true"></canvas>
-        <video id="carrotRoadVideo" class="carrot-stage__video" autoplay playsinline muted style="display:none;"></video>
+        <video id="carrotRoadVideo" class="carrot-stage__video" autoplay playsinline muted disablepictureinpicture style="display:none;"></video>
         <canvas id="carrotLastFrameCanvas" class="carrot-stage__videoHold" aria-hidden="true"></canvas>
         <canvas id="carrotOverlayCanvas" class="carrot-stage__canvas"></canvas>
         <canvas id="carrotHudCanvas" class="carrot-stage__hud"></canvas>
@@ -428,7 +491,7 @@
     </div>
   </div>
 
-  <video id="rtcVideo" class="rtcVideo rtcVideo--shared" autoplay playsinline muted></video>
+  <video id="rtcVideo" class="rtcVideo rtcVideo--shared" autoplay playsinline muted disablepictureinpicture></video>
 
   <!-- Bottom Navigation (Material 3 style) -->
   <nav class="topbar">
@@ -514,11 +577,11 @@
   </div>
 
   <script src="/js/translations/registry.js?v=2604-01"></script>
-  <script src="/js/translations/ko.js?v=2604-03"></script>
-  <script src="/js/translations/en.js?v=2604-03"></script>
-  <script src="/js/translations/zh.js?v=2604-01"></script>
-  <script src="/js/translations/ja.js?v=2604-01"></script>
-  <script src="/js/translations/fr.js?v=2604-01"></script>
+  <script src="/js/translations/ko.js?v=2604-04"></script>
+  <script src="/js/translations/en.js?v=2604-04"></script>
+  <script src="/js/translations/zh.js?v=2604-02"></script>
+  <script src="/js/translations/ja.js?v=2604-02"></script>
+  <script src="/js/translations/fr.js?v=2604-02"></script>
   <script src="/js/hud_card.js?v=2604-05"></script>
   <script src="/js/shared/constants.js?v=2604-72"></script>
   <script src="/js/shared/dom.js?v=2604-71"></script>
@@ -529,18 +592,24 @@
   <script src="/js/shared/ui/dialog.js?v=2604-71"></script>
   <script src="/js/shared/ui/viewport.js?v=2604-71"></script>
   <script src="/js/shared/ui/effects.js?v=2604-72"></script>
-  <script src="/js/shared/ui/navigation.js?v=2605-06"></script>
+  <script src="/js/shared/ui/navigation.js?v=2605-11"></script>
   <script src="/js/pages/car.js?v=2604-75"></script>
-  <script src="/js/pages/setting.js?v=2604-81"></script>
-  <script src="/js/pages/setting_device.js?v=2605-01"></script>
-  <script src="/js/pages/tools.js?v=2604-80"></script>
+  <script src="/js/pages/setting.js?v=2604-83"></script>
+  <script src="/js/pages/setting_device_config.js?v=2605-01"></script>
+  <script src="/js/pages/setting_device_render.js?v=2605-02"></script>
+  <script src="/js/pages/setting_device_network.js?v=2605-01"></script>
+  <script src="/js/pages/setting_device_actions.js?v=2605-01"></script>
+  <script src="/js/pages/setting_device.js?v=2605-03"></script>
+  <script src="/js/pages/tools_web_settings.js?v=2605-03"></script>
+  <script src="/js/pages/tools_notifications.js?v=2605-14"></script>
+  <script src="/js/pages/tools.js?v=2605-07"></script>
   <script src="/js/pages/branch.js?v=2604-73"></script>
   <script src="/js/pages/logs.js?v=2604-75"></script>
   <script src="/js/pages/terminal.js?v=2604-72"></script>
   <script src="/js/raw_capnp.js?v=2604-05"></script>
-  <script src="/js/app_realtime.js?v=2604-19"></script>
+  <script src="/js/app_realtime.js?v=2604-21"></script>
   <script src="/js/pages/vision_background.js?v=2605-01"></script>
   <script src="/js/home_drive.js?v=2605-02"></script>
-  <script src="/js/app.js?v=2604-72"></script>
+  <script src="/js/app.js?v=2604-76"></script>
 </body>
 </html>

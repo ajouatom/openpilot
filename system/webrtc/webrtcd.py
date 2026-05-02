@@ -291,7 +291,7 @@ class StreamRequestBody:
   bridge_services_out: list[str] = field(default_factory=list)
 
 
-async def retire_old_sessions_after_handover(old_sessions: list[StreamSession], new_session: StreamSession, timeout_s: float = 12.0):
+async def retire_old_sessions_after_handover(old_sessions: list[StreamSession], new_session: StreamSession, timeout_s: float = 4.0):
   if not old_sessions:
     return
 
