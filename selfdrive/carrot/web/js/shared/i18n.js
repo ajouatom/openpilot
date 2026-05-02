@@ -292,10 +292,8 @@ function setWebLanguage(lang, options = {}) {
 async function syncWebLanguageFromDeviceDefault() {
   if (hasStoredWebLanguage()) return false;
   try {
-    const res = await fetch("/api/device_info", { cache: "no-store" });
-    if (!res.ok) return false;
-    const info = await res.json();
-    const lang = normalizeLangCode(info?.language);
+    const values = typeof bulkGet === "function" ? await bulkGet(["LanguageSetting"]) : {};
+    const lang = normalizeLangCode(values?.LanguageSetting);
     if (!lang || lang === LANG) return false;
     return setWebLanguage(lang, { persist: false, render: false, dispatch: false });
   } catch {

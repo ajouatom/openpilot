@@ -5,14 +5,27 @@
 
 let CURRENT_SETTING_TAB = "carrot";
 let CURRENT_DEVICE_GROUP = "Device";
-let deviceInfo = null;
-let deviceInfoLoadPromise = null;
+let deviceParamValues = {};
+let deviceGroupLoadPromises = new Map();
+let deviceNetworkInfo = null;
+let deviceNetworkLoadPromise = null;
 let deviceTabLoaded = false;
+
+function mergeDeviceParamValues(values) {
+  if (values && typeof values === "object") {
+    deviceParamValues = { ...deviceParamValues, ...values };
+  }
+  return deviceParamValues;
+}
+
+function getDeviceTypeValue(values = deviceParamValues) {
+  return String(values.DeviceType || "unknown").trim().toLowerCase();
+}
 
 function getVisibleDeviceGroups() {
   return DEVICE_GROUPS.filter((group) => {
     if (group.id !== "Software") return true;
-    return isTruthyDeviceFlag(deviceInfo?.software_menu);
+    return isTruthyDeviceFlag(deviceParamValues.SoftwareMenu ?? 1);
   });
 }
 
@@ -67,26 +80,59 @@ function syncSettingTabState(tab = CURRENT_SETTING_TAB) {
   syncSettingTabPanels(CURRENT_SETTING_TAB);
 }
 
-async function loadDeviceInfo(force = false) {
-  if (deviceInfo && !force) return deviceInfo;
-  if (deviceInfoLoadPromise && !force) return deviceInfoLoadPromise;
+async function loadDeviceParams(groupId, force = false) {
+  if (!force && deviceGroupLoadPromises.has(groupId)) return deviceGroupLoadPromises.get(groupId);
 
-  deviceInfoLoadPromise = (async () => {
-    const res = await fetch("/api/device_info");
-    if (!res.ok) throw new Error("Failed to load device info");
-    const payload = await res.json();
-    if (!payload || payload.ok === false) throw new Error(payload?.error || "Failed to load device info");
-    deviceInfo = payload;
-    return deviceInfo;
+  const promise = (async () => {
+    let values = {};
+    if (groupId === "Device") {
+      values = await bulkGet(DEVICE_INFO_PARAMS);
+    } else if (groupId === "Software") {
+      values = await bulkGet(DEVICE_SOFTWARE_PARAMS);
+    } else if (groupId === "Toggles") {
+      const names = DEVICE_TOGGLES.map((entry) => entry.param);
+      DEVICE_TOGGLES.forEach((entry) => {
+        if (entry.confirmedParam) names.push(entry.confirmedParam);
+      });
+      names.push("LongitudinalPersonality");
+      values = await bulkGet(names);
+    } else if (groupId === "Developer") {
+      values = await bulkGet([
+        ...DEVICE_DEVELOPER_TOGGLES.map((entry) => entry.param),
+        "GithubUsername",
+        "GithubSshKeys",
+      ]);
+    }
+    return mergeDeviceParamValues(values);
   })().catch((err) => {
     console.error("[DeviceTab]", err);
-    deviceInfo = null;
-    return null;
+    return deviceParamValues;
   }).finally(() => {
-    deviceInfoLoadPromise = null;
+    deviceGroupLoadPromises.delete(groupId);
   });
 
-  return deviceInfoLoadPromise;
+  deviceGroupLoadPromises.set(groupId, promise);
+  return promise;
+}
+
+async function loadDeviceNetwork(useCache = true) {
+  if (deviceNetworkInfo && useCache) return deviceNetworkInfo;
+  if (deviceNetworkLoadPromise) return deviceNetworkLoadPromise;
+
+  deviceNetworkLoadPromise = requestJson("/api/device_network", { cache: "no-store" })
+    .then((payload) => {
+      deviceNetworkInfo = payload.network || {};
+      return deviceNetworkInfo;
+    })
+    .catch((err) => {
+      console.error("[DeviceTab]", err);
+      return deviceNetworkInfo || {};
+    })
+    .finally(() => {
+      deviceNetworkLoadPromise = null;
+    });
+
+  return deviceNetworkLoadPromise;
 }
 
 function renderDeviceGroups() {
@@ -128,11 +174,13 @@ function renderDeviceGroups() {
 
 async function renderDeviceTab() {
   syncSettingTabState("device");
-  if (!deviceTabLoaded) {
-    await loadDeviceInfo(true);
-    deviceTabLoaded = true;
-  }
   renderDeviceGroups();
+  if (!deviceTabLoaded) {
+    deviceTabLoaded = true;
+    loadDeviceParams("Device", true).then(() => {
+      if (CURRENT_SETTING_TAB === "device") renderDeviceGroups();
+    });
+  }
   if (typeof isCompactLandscapeMode === "function" && isCompactLandscapeMode()) {
     await renderDeviceItems(CURRENT_DEVICE_GROUP, false);
   }
@@ -146,33 +194,11 @@ async function selectDeviceGroup(groupId) {
 }
 
 async function getDeviceGroupValues(groupId) {
-  if (groupId === "Toggles") {
-    const names = DEVICE_TOGGLES.map((entry) => entry.param);
-    DEVICE_TOGGLES.forEach((entry) => {
-      if (entry.confirmedParam) names.push(entry.confirmedParam);
-    });
-    names.push("LongitudinalPersonality");
-    try {
-      return await bulkGet(names);
-    } catch {
-      return {};
-    }
+  if (groupId === "Network") {
+    await loadDeviceNetwork(false);
+    return deviceParamValues;
   }
-
-  if (groupId === "Developer") {
-    try {
-      return await bulkGet([
-        ...DEVICE_DEVELOPER_TOGGLES.map((entry) => entry.param),
-        "GithubUsername",
-        "GithubSshKeys",
-      ]);
-    } catch {
-      return {};
-    }
-  }
-
-  await loadDeviceInfo(true);
-  return {};
+  return loadDeviceParams(groupId, true);
 }
 
 async function renderDeviceItems(groupId, showItemsScreen = true, options = {}) {
@@ -196,11 +222,6 @@ async function renderDeviceItems(groupId, showItemsScreen = true, options = {}) 
     return;
   }
 
-  if (!deviceInfo && groupId !== "Toggles" && groupId !== "Developer") {
-    itemsContainer.innerHTML = `<div class="device-tab-error">${escapeHtml(getUIText("device_tab_error", "Failed to load device info."))}</div>`;
-    return;
-  }
-
   itemsContainer.innerHTML = renderDeviceGroupItems(groupId, values) || `<div class="muted mt-md text-center">-</div>`;
   bindDeviceTabEvents(itemsContainer);
   syncDeviceGroupActiveState(groupId);
@@ -208,41 +229,39 @@ async function renderDeviceItems(groupId, showItemsScreen = true, options = {}) 
 }
 
 function renderDeviceGroupItems(groupId, values) {
-  const info = deviceInfo || {};
-  const calib = info.calibration || {};
-  const update = info.update || {};
+  const data = { ...deviceParamValues, ...(values || {}) };
 
   if (groupId === "Device") {
-    const calibValue = calib.calibrated
-      ? `pitch ${calib.pitch ?? "-"}, yaw ${calib.yaw ?? "-"}`
-      : getUIText("uncalibrated", "Uncalibrated");
     let html = "";
-    html += renderDeviceInfoRow(getUIText("dongle_id", "Dongle ID"), info.dongle_id || "N/A");
-    html += renderDeviceInfoRow(getUIText("serial", "Serial"), info.serial || "N/A");
+    html += renderDeviceInfoRow(getUIText("dongle_id", "Dongle ID"), data.DongleId || "N/A");
+    html += renderDeviceInfoRow(getUIText("serial", "Serial"), data.HardwareSerial || "N/A");
     html += renderDeviceActionRow(getUIText("reboot", "Reboot"), getUIText("reboot_device_desc", "Reboot device"), getUIText("reboot", "Reboot"), "btnDeviceReboot");
     html += renderDeviceActionRow(getUIText("recalibration", "ReCalibration"), "", getUIText("reset", "Reset"), "btnDeviceRecalib");
     html += renderDeviceActionRow(getUIText("power_off", "Power Off"), getUIText("power_off_desc", "Power off device"), getUIText("power_off", "Power Off"), "btnDevicePoweroff", "smallBtn btn--danger");
     html += renderDeviceActionRow(getUIText("pair_device", "Pair Device"), getUIText("pair_device_desc", "Pair your device with comma connect (connect.comma.ai) and claim your comma prime offer."), getUIText("pair", "PAIR"), "btnDevicePair", "smallBtn", true);
     html += renderDeviceActionRow(getUIText("driver_camera", "Driver Camera"), getUIText("driver_camera_desc", "Preview the driver facing camera to ensure that driver monitoring has good visibility. (vehicle must be off)"), getUIText("preview", "PREVIEW"), "btnDeviceDriverCamera", "smallBtn", true);
     html += renderDeviceActionRow(getUIText("review_training_guide", "Review Training Guide"), getUIText("review_training_desc", "Review the rules, features, and limitations of openpilot"), getUIText("review", "Review"), "btnDeviceTraining");
-    html += renderDeviceActionRow(getUIText("calibration_status", "Calibration Status"), calibValue, getUIText("show_upper", "SHOW"), "btnDeviceCalibrationStatus");
-    if (String(info.device_type || "").toLowerCase() === "tici") {
+    html += renderDeviceActionRow(getUIText("calibration_status", "Calibration Status"), "", getUIText("show_upper", "SHOW"), "btnDeviceCalibrationStatus");
+    if (getDeviceTypeValue(data) === "tici") {
       html += renderDeviceActionRow(getUIText("regulatory", "Regulatory"), "", getUIText("view_upper", "VIEW"), "btnDeviceRegulatory");
     }
-    html += renderDeviceLanguageRow(info);
+    html += renderDeviceLanguageRow({
+      language: data.LanguageSetting || "main_en",
+      languages: DEVICE_LANGUAGES,
+    });
     return html;
   }
 
-  if (groupId === "Network") return renderNetworkPanel(info.network || {});
-  if (groupId === "Toggles") return renderDeviceToggleItems(values);
-  if (groupId === "Developer") return renderDeviceDeveloperItems(values);
+  if (groupId === "Network") return renderNetworkPanel(deviceNetworkInfo || {});
+  if (groupId === "Toggles") return renderDeviceToggleItems(data);
+  if (groupId === "Developer") return renderDeviceDeveloperItems(data);
   if (groupId === "Software") {
     let html = "";
     html += renderDeviceInfoRow(getUIText("updates_offroad_only", "Updates are only downloaded while the car is off."), "");
-    html += renderDeviceVersionRow(getUIText("current_version", "Current Version"), update.version || "-");
-    html += renderDeviceActionRow(getUIText("download", "Download"), update.state || "-", getUIText("check_upper", "CHECK"), "btnDeviceUpdateCheck", "smallBtn", true);
-    html += renderDeviceActionRow(getUIText("install_update", "Install Update"), update.new_description || "-", getUIText("install_upper", "INSTALL"), "btnDeviceInstallUpdate", "smallBtn", true);
-    html += renderDeviceActionRow(getUIText("target_branch", "Target Branch"), update.target_branch || update.git_branch || "-", getUIText("select_upper", "SELECT"), "btnDeviceTargetBranch", "smallBtn", true);
+    html += renderDeviceVersionRow(getUIText("current_version", "Current Version"), data.UpdaterCurrentDescription || "-");
+    html += renderDeviceActionRow(getUIText("download", "Download"), data.UpdaterState || "-", getUIText("check_upper", "CHECK"), "btnDeviceUpdateCheck", "smallBtn", true);
+    html += renderDeviceActionRow(getUIText("install_update", "Install Update"), data.UpdaterNewDescription || "-", getUIText("install_upper", "INSTALL"), "btnDeviceInstallUpdate", "smallBtn", true);
+    html += renderDeviceActionRow(getUIText("target_branch", "Target Branch"), data.UpdaterTargetBranch || data.GitBranch || "-", getUIText("select_upper", "SELECT"), "btnDeviceTargetBranch", "smallBtn", true);
     html += renderDeviceActionRow(getUIText("uninstall_openpilot", "Uninstall openpilot"), "", getUIText("uninstall_upper", "UNINSTALL"), "btnDeviceUninstall", "smallBtn btn--danger", true);
     return html;
   }
@@ -339,6 +358,12 @@ window.addEventListener("carrot:languagechange", () => {
   if (CURRENT_SETTING_TAB === "device") {
     renderDeviceTab().catch((err) => console.error("[DeviceTab]", err));
   }
+});
+
+window.addEventListener("carrot:paramchange", (event) => {
+  const name = event.detail?.name;
+  if (!name) return;
+  mergeDeviceParamValues({ [name]: event.detail?.value });
 });
 
 document.addEventListener("visibilitychange", syncDeviceNetworkRefresh);
