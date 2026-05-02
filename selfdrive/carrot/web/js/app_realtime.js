@@ -100,6 +100,229 @@ const RTC_TRACE_ENABLED = false;
 let RTC_PC_SEQ = 0;
 let CARROT_VISION_HEALTH_T = null;
 const RAW_WS_WATCHDOG_T = new WeakMap();
+const CARROT_VISION_PHASE = Object.freeze({
+  UNAVAILABLE: "unavailable",
+  INACTIVE: "inactive",
+  STARTING: "starting",
+  RTC_CONNECTING: "rtc-connecting",
+  TRACK_WAITING: "track-waiting",
+  FIRST_FRAME_WAITING: "first-frame-waiting",
+  READY: "ready",
+  RECOVERING: "recovering",
+  FAILED: "failed",
+});
+const CARROT_VISION_PHASE_SET = new Set(Object.values(CARROT_VISION_PHASE));
+const CARROT_VISION_STATE = {
+  active: false,
+  available: false,
+  phase: CARROT_VISION_PHASE.UNAVAILABLE,
+  statusText: "",
+  detailText: "",
+  disabledMessage: getUIText("vision_unavailable_hint", "Available when DisableDM is 2."),
+  reason: "init",
+  updatedAtMs: Date.now(),
+  rtc: {
+    state: "idle",
+    pcLabel: "none",
+    trackSeen: false,
+    liveTrack: false,
+    pending: false,
+  },
+  raw: {
+    hud: "idle",
+    overlay: "idle",
+  },
+};
+window.CarrotVisionPhase = CARROT_VISION_PHASE;
+window.CarrotVisionState = CARROT_VISION_STATE;
+
+function isCarrotVisionActive() {
+  return Boolean(CARROT_VISION_STATE.active);
+}
+
+function syncLegacyCarrotVisionFlags() {
+  window.CARROT_VISION_ACTIVE = Boolean(CARROT_VISION_STATE.active);
+  window.CARROT_VISION_AVAILABLE = Boolean(CARROT_VISION_STATE.available);
+  window.CARROT_VISION_DISABLED_MESSAGE = CARROT_VISION_STATE.disabledMessage || "";
+}
+
+function getCarrotVisionPhaseStatusText(phase) {
+  switch (phase) {
+    case CARROT_VISION_PHASE.UNAVAILABLE:
+      return CARROT_VISION_STATE.disabledMessage || getUIText("vision_unavailable_hint", "Available when DisableDM is 2.");
+    case CARROT_VISION_PHASE.INACTIVE:
+      return getUIText("start_vision_hint", "Tap the start button to enable drive vision.");
+    case CARROT_VISION_PHASE.STARTING:
+    case CARROT_VISION_PHASE.RTC_CONNECTING:
+      return getUIText("connecting", "Connecting...");
+    case CARROT_VISION_PHASE.TRACK_WAITING:
+      return getUIText("connected_waiting_track", "Connected, waiting track...");
+    case CARROT_VISION_PHASE.FIRST_FRAME_WAITING:
+      return getUIText("waiting_road_stream", "Waiting road camera stream...");
+    case CARROT_VISION_PHASE.READY:
+      return getUIText("connected", "Connected");
+    case CARROT_VISION_PHASE.RECOVERING:
+      return getUIText("reconnecting", "Reconnecting...");
+    case CARROT_VISION_PHASE.FAILED:
+      return getUIText("disable_dm_check_failed", "Could not check DisableDM status.");
+    default:
+      return "";
+  }
+}
+
+function getCarrotVisionPhaseDetailText(phase) {
+  switch (phase) {
+    case CARROT_VISION_PHASE.UNAVAILABLE:
+      return getUIText("vision_step_unavailable", "Enable DisableDM 2 to use Carrot Vision.");
+    case CARROT_VISION_PHASE.INACTIVE:
+      return getUIText("vision_step_inactive", "Ready to start.");
+    case CARROT_VISION_PHASE.STARTING:
+      return getUIText("vision_step_starting", "Preparing camera and overlay streams.");
+    case CARROT_VISION_PHASE.RTC_CONNECTING:
+      return getUIText("vision_step_rtc_connecting", "Opening road camera WebRTC stream.");
+    case CARROT_VISION_PHASE.TRACK_WAITING:
+      return getUIText("vision_step_track_waiting", "Stream connected. Waiting for video track.");
+    case CARROT_VISION_PHASE.FIRST_FRAME_WAITING:
+      return getUIText("vision_step_first_frame", "Video track received. Waiting for first frame.");
+    case CARROT_VISION_PHASE.READY:
+      return getUIText("vision_step_ready", "Camera and overlay are live.");
+    case CARROT_VISION_PHASE.RECOVERING:
+      return getUIText("vision_step_recovering", "Refreshing the stream connection.");
+    case CARROT_VISION_PHASE.FAILED:
+      return getUIText("vision_step_failed", "Connection check failed. Retrying when available.");
+    default:
+      return "";
+  }
+}
+
+function publishCarrotVisionState(detail = {}) {
+  syncLegacyCarrotVisionFlags();
+  window.CarrotVisionState = CARROT_VISION_STATE;
+  window.dispatchEvent(new CustomEvent("carrot:visionstatechange", {
+    detail: {
+      state: CARROT_VISION_STATE,
+      ...detail,
+    },
+  }));
+}
+
+function setCarrotVisionState(patch = {}, detail = {}) {
+  const next = { ...patch };
+  if (next.rtc == null) delete next.rtc;
+  if (next.raw == null) delete next.raw;
+  if (next.rtc && typeof next.rtc === "object") {
+    Object.assign(CARROT_VISION_STATE.rtc, next.rtc);
+    delete next.rtc;
+  }
+  if (next.raw && typeof next.raw === "object") {
+    Object.assign(CARROT_VISION_STATE.raw, next.raw);
+    delete next.raw;
+  }
+  Object.assign(CARROT_VISION_STATE, next);
+  CARROT_VISION_STATE.active = Boolean(CARROT_VISION_STATE.active);
+  CARROT_VISION_STATE.available = Boolean(CARROT_VISION_STATE.available);
+  CARROT_VISION_STATE.updatedAtMs = Date.now();
+  if (detail.silent) {
+    syncLegacyCarrotVisionFlags();
+    window.CarrotVisionState = CARROT_VISION_STATE;
+    return;
+  }
+  publishCarrotVisionState(detail);
+}
+
+function setCarrotVisionPhase(phase, detail = {}) {
+  const nextPhase = CARROT_VISION_PHASE_SET.has(phase) ? phase : CARROT_VISION_PHASE.FAILED;
+  const statusText = Object.prototype.hasOwnProperty.call(detail, "statusText")
+    ? String(detail.statusText || "")
+    : getCarrotVisionPhaseStatusText(nextPhase);
+  const detailText = Object.prototype.hasOwnProperty.call(detail, "detailText")
+    ? String(detail.detailText || "")
+    : getCarrotVisionPhaseDetailText(nextPhase);
+  const nextReason = detail.reason || nextPhase;
+  if (
+    CARROT_VISION_STATE.phase === nextPhase &&
+    CARROT_VISION_STATE.statusText === statusText &&
+    CARROT_VISION_STATE.detailText === detailText &&
+    CARROT_VISION_STATE.reason === nextReason &&
+    detail.rtc == null &&
+    detail.raw == null
+  ) {
+    if (detail.updateRtcStatus !== false && statusText) rtcStatusSet(statusText);
+    return;
+  }
+  setCarrotVisionState({
+    phase: nextPhase,
+    statusText,
+    detailText,
+    reason: nextReason,
+    rtc: detail.rtc || undefined,
+    raw: detail.raw || undefined,
+  }, { phase: nextPhase, reason: nextReason, silent: detail.silent });
+  if (detail.updateRtcStatus !== false && statusText) rtcStatusSet(statusText);
+  if (detail.render !== false) requestCarrotVisionRender({ phase: nextPhase });
+}
+
+function setCarrotVisionAvailable(available, detail = {}) {
+  const nextAvailable = Boolean(available);
+  const wasActive = CARROT_VISION_STATE.active;
+  const disabledMessage = nextAvailable ? "" : (detail.disabledMessage || getUIText("vision_unavailable_hint", "Available when DisableDM is 2."));
+  const nextPhase = detail.phase || (nextAvailable
+    ? (CARROT_VISION_STATE.active ? CARROT_VISION_STATE.phase : CARROT_VISION_PHASE.INACTIVE)
+    : CARROT_VISION_PHASE.UNAVAILABLE);
+  setCarrotVisionState({
+    available: nextAvailable,
+    active: nextAvailable ? CARROT_VISION_STATE.active : false,
+    disabledMessage,
+  }, { reason: detail.reason || "availability" });
+  setCarrotVisionPhase(nextPhase, {
+    reason: detail.reason || "availability",
+    statusText: detail.statusText,
+    detailText: detail.detailText,
+    updateRtcStatus: detail.updateRtcStatus,
+    render: detail.render,
+  });
+  if (wasActive && !CARROT_VISION_STATE.active) emitCarrotVisionChange(false);
+}
+
+function setCarrotVisionActive(active, detail = {}) {
+  const nextActive = Boolean(active);
+  const nextPhase = detail.phase || (nextActive
+    ? CARROT_VISION_PHASE.STARTING
+    : (CARROT_VISION_STATE.available ? CARROT_VISION_PHASE.INACTIVE : CARROT_VISION_PHASE.UNAVAILABLE));
+  const changed = CARROT_VISION_STATE.active !== nextActive;
+  setCarrotVisionState({
+    active: nextActive,
+  }, { reason: detail.reason || "active" });
+  setCarrotVisionPhase(nextPhase, {
+    reason: detail.reason || "active",
+    statusText: detail.statusText,
+    detailText: detail.detailText,
+    updateRtcStatus: detail.updateRtcStatus,
+    render: detail.render,
+  });
+  if (changed) emitCarrotVisionChange(nextActive);
+}
+
+window.CarrotVisionSetPhase = setCarrotVisionPhase;
+window.CarrotVisionSetState = setCarrotVisionState;
+syncLegacyCarrotVisionFlags();
+
+function relocalizeCarrotVisionState() {
+  const phase = CARROT_VISION_STATE.phase || CARROT_VISION_PHASE.UNAVAILABLE;
+  const disabledMessage = CARROT_VISION_STATE.available
+    ? ""
+    : getUIText("vision_unavailable_hint", "Available when DisableDM is 2.");
+  if (disabledMessage) CARROT_VISION_STATE.disabledMessage = disabledMessage;
+  setCarrotVisionState({
+    statusText: getCarrotVisionPhaseStatusText(phase),
+    detailText: getCarrotVisionPhaseDetailText(phase),
+    disabledMessage: CARROT_VISION_STATE.disabledMessage,
+  }, { reason: "language" });
+  if (CARROT_VISION_STATE.statusText) rtcStatusSet(CARROT_VISION_STATE.statusText);
+  requestCarrotVisionRender({ phase });
+}
+
+window.addEventListener("carrot:languagechange", relocalizeCarrotVisionState);
 
 function rtcPcLabel(pc) {
   if (!pc) return "none";
@@ -227,7 +450,7 @@ function shouldRunCarrotHudRealtime() {
 }
 
 function shouldRunCarrotVisionRealtime() {
-  return isCarrotPageActive() && window.CARROT_VISION_ACTIVE;
+  return isCarrotPageActive() && isCarrotVisionActive();
 }
 
 function isLandscapeOrientation() {
@@ -313,7 +536,7 @@ async function toggleCarrotFullscreen(options = {}) {
 }
 
 function shouldKeepCarrotFullscreen() {
-  return document.body?.dataset?.page === "carrot" && Boolean(window.CARROT_VISION_ACTIVE);
+  return document.body?.dataset?.page === "carrot" && isCarrotVisionActive();
 }
 
 async function syncCarrotFullscreenLifecycle() {
@@ -346,7 +569,7 @@ function emitCarrotVisionChange(active) {
 
 function maybeRequestCarrotFullscreenOnPageChange(detail = {}) {
   if (String(detail?.page || "") !== "carrot") return;
-  if (!window.CARROT_VISION_ACTIVE) return;
+  if (!isCarrotVisionActive()) return;
   requestCarrotFullscreen({ quiet: true }).catch(() => {});
 }
 
@@ -733,23 +956,42 @@ function rtcUpdateFreezeSnapshot(snapshot) {
   RTC_FREEZE_STATE.lastCurrentTime = snapshot.currentTime;
 }
 
-function rtcScheduleFreezeRecovery(reason, options = {}) {
+function requestCarrotVisionRecovery(reason, options = {}) {
   const force = Boolean(options.force);
-  if (!shouldRunCarrotVisionRealtime() || _rtcConnecting || RTC_PENDING_PC || RTC_FREEZE_RECOVER_T) return;
+  const allowConnecting = Boolean(options.allowConnecting);
+  const allowPending = Boolean(options.allowPending);
+  if (!shouldRunCarrotVisionRealtime() || (!allowConnecting && _rtcConnecting) || (!allowPending && RTC_PENDING_PC) || RTC_FREEZE_RECOVER_T) return false;
   const now = Date.now();
-  if (!force && (now - RTC_FREEZE_STATE.lastRecoveredAtMs < RTC_FREEZE_RECOVERY_COOLDOWN_MS)) return;
+  if (options.cooldown !== false && !force && (now - RTC_FREEZE_STATE.lastRecoveredAtMs < RTC_FREEZE_RECOVERY_COOLDOWN_MS)) return false;
 
   RTC_FREEZE_STATE.consecutiveRecoveries++;
   RTC_FREEZE_STATE.lastRecoveredAtMs = now;
   RTC_FREEZE_STATE.stallSamples = 0;
-  rtcStatusSet(reason);
-  rtcTrace("freeze_recovery_scheduled", {
+  const action = options.action || "force-connect";
+  const retryMs = Number.isFinite(Number(options.retryMs)) ? Number(options.retryMs) : RTC_RETRY_BASE_MS;
+  const targetPc = options.pc || RTC_PENDING_PC || RTC_PC;
+  const statusText = options.statusText || reason;
+  rtcStatusSet(statusText);
+  setCarrotVisionPhase(CARROT_VISION_PHASE.RECOVERING, {
     reason,
+    statusText,
+    rtc: {
+      state: options.rtcState || "recovering",
+      pending: Boolean(RTC_PENDING_PC),
+      pcLabel: rtcPcLabel(targetPc),
+      liveTrack: rtcHasLiveTrack(),
+    },
+    updateRtcStatus: false,
+  });
+  rtcTrace("recovery_scheduled", {
+    reason,
+    action,
     force,
     attempt: RTC_FREEZE_STATE.consecutiveRecoveries,
-  }, RTC_PC || RTC_PENDING_PC);
-  console.warn("[RTC] road video stalled, reconnecting", {
+  }, targetPc);
+  console.warn("[RTC] recovery scheduled", {
     reason,
+    action,
     attempt: RTC_FREEZE_STATE.consecutiveRecoveries,
     connectionState: RTC_PERF_STATE.connectionState,
     iceConnectionState: RTC_PERF_STATE.iceConnectionState,
@@ -760,10 +1002,34 @@ function rtcScheduleFreezeRecovery(reason, options = {}) {
   RTC_FREEZE_RECOVER_T = setTimeout(async () => {
     RTC_FREEZE_RECOVER_T = null;
     if (!shouldRunCarrotVisionRealtime()) return;
-    rtcCaptureVideoHoldFrame();
+    if (options.capture !== false) rtcCaptureVideoHoldFrame();
+
+    if (action === "retry-pending") {
+      if (targetPc && RTC_PENDING_PC === targetPc) rtcClosePeer(targetPc);
+      _rtcConnecting = false;
+      rtcScheduleRetry(retryMs);
+      return;
+    }
+
+    if (action === "retry-after-disconnect") {
+      if (targetPc && RTC_PENDING_PC === targetPc) rtcClosePeer(targetPc);
+      else await rtcDisconnect({ keepVideo: true }).catch(() => {});
+      _rtcConnecting = false;
+      rtcScheduleRetry(retryMs);
+      return;
+    }
+
     RTC_FAIL_COUNT = 0;
     await rtcConnectOnce({ force: true }).catch(() => {});
-  }, 0);
+  }, Number.isFinite(Number(options.delayMs)) ? Number(options.delayMs) : 0);
+  return true;
+}
+
+function rtcScheduleFreezeRecovery(reason, options = {}) {
+  return requestCarrotVisionRecovery(reason, {
+    ...options,
+    action: "force-connect",
+  });
 }
 
 function rtcUpdateFreezeWatchdog(pc, video) {
@@ -894,15 +1160,17 @@ function rtcArmTrackTimeout(ms = 5000, expectedPc = RTC_PC) {
     }
     RTC_WAIT_TRACK_PC = null;
     rtcTrace("track_timeout", { timeoutMs: ms }, expectedPc);
-    rtcStatusSet(getUIText("no_track_retry", "No track, retry..."));
-    rtcCaptureVideoHoldFrame();
-    if (RTC_PENDING_PC === expectedPc) {
-      rtcClosePeer(expectedPc);
-      rtcScheduleRetry(RTC_RETRY_BASE_MS);
-      return;
-    }
-    await rtcDisconnect({ keepVideo: true });
-    rtcScheduleRetry(RTC_RETRY_BASE_MS);
+    requestCarrotVisionRecovery("rtc track timeout", {
+      action: RTC_PENDING_PC === expectedPc ? "retry-pending" : "retry-after-disconnect",
+      pc: expectedPc,
+      force: true,
+      allowConnecting: true,
+      allowPending: true,
+      statusText: getUIText("no_track_retry", "No track, retry..."),
+      rtcState: "track-timeout",
+      retryMs: RTC_RETRY_BASE_MS,
+      cooldown: false,
+    });
   }, ms);
 }
 
@@ -921,7 +1189,12 @@ function rtcScheduleResumeHealthCheck(reason = "returned visible") {
     RTC_RESUME_CHECK_T = null;
     if (!shouldRunCarrotVisionRealtime() || _rtcConnecting || RTC_PENDING_PC || !RTC_PC) return;
     if (!rtcConnectionLooksLive(RTC_PC) || !rtcHasLiveTrack()) {
-      rtcScheduleFreezeRecovery(`${reason}, reconnecting...`, { force: true });
+      requestCarrotVisionRecovery(`${reason}, reconnecting...`, {
+        action: "force-connect",
+        force: true,
+        statusText: getUIText("reconnecting", "Reconnecting..."),
+        rtcState: "resume-health-failed",
+      });
     }
   }, RTC_RESUME_PROGRESS_CHECK_MS);
 }
@@ -991,10 +1264,20 @@ async function rtcConnectOnce(options = {}) {
       resetRtcPerfState();
       rtcResetFreezeWatchdog();
       rtcStatusSet(getUIText("reconnecting", "Reconnecting..."));
+      setCarrotVisionPhase(CARROT_VISION_PHASE.RECOVERING, {
+        reason: "rtc reconnect keep previous",
+        rtc: { state: "reconnecting", pending: false, liveTrack: rtcHasLiveTrack(), pcLabel: rtcPcLabel(previousPc) },
+        updateRtcStatus: false,
+      });
     } else {
       await rtcDisconnect({ keepVideo: true });
       previousPc = null;
       rtcStatusSet(getUIText("connecting", "Connecting..."));
+      setCarrotVisionPhase(CARROT_VISION_PHASE.RTC_CONNECTING, {
+        reason: "rtc connect",
+        rtc: { state: "connecting", pending: false, liveTrack: false, pcLabel: "none", trackSeen: false },
+        updateRtcStatus: false,
+      });
     }
 
     const pc = new RTCPeerConnection({
@@ -1006,6 +1289,11 @@ async function rtcConnectOnce(options = {}) {
     pc.__carrotTrackSeen = false;
     pc.__carrotCreatedAtMs = Date.now();
     RTC_PENDING_PC = pc;
+    setCarrotVisionPhase(CARROT_VISION_PHASE.RTC_CONNECTING, {
+      reason: "rtc peer created",
+      rtc: { state: "connecting", pending: true, pcLabel: rtcPcLabel(pc), trackSeen: false, liveTrack: false },
+      updateRtcStatus: false,
+    });
     rtcTrace("pc_created", {
       keepPreviousVisible,
       hasPreviousPc: Boolean(previousPc),
@@ -1028,6 +1316,11 @@ async function rtcConnectOnce(options = {}) {
         streamCount: Array.isArray(ev.streams) ? ev.streams.length : 0,
       }, pc);
       pc.__carrotTrackSeen = true;
+      setCarrotVisionPhase(CARROT_VISION_PHASE.FIRST_FRAME_WAITING, {
+        reason: "rtc track received",
+        rtc: { state: "track-received", pending: false, pcLabel: rtcPcLabel(pc), trackSeen: true, liveTrack: rtcHasLiveTrack() },
+        updateRtcStatus: false,
+      });
 
       let stream = ev.streams && ev.streams[0];
       if (!stream) {
@@ -1055,6 +1348,11 @@ async function rtcConnectOnce(options = {}) {
       ev.track.addEventListener("unmute", () => {
         videoEl.play().catch(() => {});
         collectRtcPerfStats().catch(() => {});
+        setCarrotVisionPhase(CARROT_VISION_PHASE.FIRST_FRAME_WAITING, {
+          reason: "rtc track unmuted",
+          rtc: { state: "track-unmuted", pending: false, pcLabel: rtcPcLabel(pc), trackSeen: true, liveTrack: true },
+          updateRtcStatus: false,
+        });
         requestCarrotVisionRender();
       });
 
@@ -1066,8 +1364,10 @@ async function rtcConnectOnce(options = {}) {
         }, pc);
         console.warn("[RTC] remote track ended");
         if ((RTC_PC === pc || RTC_PENDING_PC === pc) && shouldRunCarrotVisionRealtime() && !_rtcConnecting) {
-          rtcCaptureVideoHoldFrame();
-          rtcScheduleFreezeRecovery("remote track ended", { force: true });
+          rtcScheduleFreezeRecovery("remote track ended", {
+            force: true,
+            statusText: getUIText("video_track_lost_reconnecting", "Video track lost, reconnecting..."),
+          });
         }
       });
     };
@@ -1084,17 +1384,26 @@ async function rtcConnectOnce(options = {}) {
       }, pc);
       rtcStatusSet("conn: " + state);
       if (state === "connected") RTC_FAIL_COUNT = 0;
+      if (state === "connected") {
+        setCarrotVisionState({
+          rtc: { state, pending: isPending, pcLabel: rtcPcLabel(pc), liveTrack: rtcHasLiveTrack() },
+        }, { reason: "rtc connected" });
+      }
       if (isActive) {
         collectRtcPerfStats().catch(() => {});
       }
       if (state === "failed" || state === "closed") {
-        rtcCaptureVideoHoldFrame();
-        if (isPending) {
-          rtcClosePeer(pc);
-        } else {
-          rtcDisconnect({ keepVideo: true }).catch(() => {});
-        }
-        rtcScheduleRetry(RTC_RETRY_BASE_MS);
+        requestCarrotVisionRecovery(`rtc connection ${state}`, {
+          action: isPending ? "retry-pending" : "retry-after-disconnect",
+          pc,
+          force: true,
+          allowConnecting: true,
+          allowPending: isPending,
+          statusText: getUIText("reconnecting", "Reconnecting..."),
+          rtcState: state,
+          retryMs: RTC_RETRY_BASE_MS,
+          cooldown: false,
+        });
       }
     };
 
@@ -1113,13 +1422,17 @@ async function rtcConnectOnce(options = {}) {
         collectRtcPerfStats().catch(() => {});
       }
       if (state === "failed" || state === "closed") {
-        rtcCaptureVideoHoldFrame();
-        if (isPending) {
-          rtcClosePeer(pc);
-        } else {
-          rtcDisconnect({ keepVideo: true }).catch(() => {});
-        }
-        rtcScheduleRetry(RTC_RETRY_BASE_MS);
+        requestCarrotVisionRecovery(`rtc ice ${state}`, {
+          action: isPending ? "retry-pending" : "retry-after-disconnect",
+          pc,
+          force: true,
+          allowConnecting: true,
+          allowPending: isPending,
+          statusText: getUIText("reconnecting", "Reconnecting..."),
+          rtcState: `ice-${state}`,
+          retryMs: RTC_RETRY_BASE_MS,
+          cooldown: false,
+        });
       }
     };
 
@@ -1158,28 +1471,39 @@ async function rtcConnectOnce(options = {}) {
     await pc.setRemoteDescription({ type: answer.type || "answer", sdp: answer.sdp });
     rtcTrace("answer_applied", {}, pc);
     rtcStatusSet(getUIText("connected_waiting_track", "Connected, waiting track..."));
+    setCarrotVisionPhase(CARROT_VISION_PHASE.TRACK_WAITING, {
+      reason: "rtc answer applied",
+      rtc: { state: "track-waiting", pending: true, pcLabel: rtcPcLabel(pc), trackSeen: false, liveTrack: false },
+      updateRtcStatus: false,
+    });
     rtcArmTrackTimeout(RTC_INITIAL_TRACK_TIMEOUT_MS, pc);
   } catch (e) {
     rtcTrace("connect_error", {
       message: e?.message || String(e),
     }, RTC_PENDING_PC || previousPc || RTC_PC);
     rtcStatusSet("error: " + e.message);
-    rtcCaptureVideoHoldFrame();
-    if (RTC_PENDING_PC) {
-      rtcClosePeer(RTC_PENDING_PC);
-    }
-    if (!RTC_PC && !RTC_STANDBY_PC) {
-      await rtcDisconnect({ keepVideo: true });
-    }
-    rtcScheduleRetry(RTC_RETRY_BASE_MS);
+    requestCarrotVisionRecovery(e?.message || "rtc connect error", {
+      action: "retry-after-disconnect",
+      pc: RTC_PENDING_PC || RTC_PC,
+      force: true,
+      allowConnecting: true,
+      allowPending: true,
+      statusText: getUIText("reconnecting", "Reconnecting..."),
+      rtcState: "error",
+      retryMs: RTC_RETRY_BASE_MS,
+      cooldown: false,
+    });
   } finally {
     _rtcConnecting = false;
   }
 }
 
-window.CARROT_VISION_ACTIVE = false;
-window.CARROT_VISION_AVAILABLE = false;
-window.CARROT_VISION_DISABLED_MESSAGE = getUIText("vision_unavailable_hint", "DisableDM 2에서 사용 가능");
+setCarrotVisionAvailable(false, {
+  disabledMessage: getUIText("vision_unavailable_hint", "Available when DisableDM is 2."),
+  reason: "init",
+  updateRtcStatus: false,
+  render: false,
+});
 let carrotVisionBadgeHintTimer = null;
 
 function showCarrotVisionBadgeHint(el) {
@@ -1203,20 +1527,26 @@ async function fetchDisableDmValue() {
 }
 
 function updateCarrotVisionAvailabilityUi(available, message = window.CARROT_VISION_DISABLED_MESSAGE) {
-  window.CARROT_VISION_AVAILABLE = Boolean(available);
+  const nextAvailable = Boolean(available);
+  const wasActive = isCarrotVisionActive();
   const button = document.getElementById("btnStartVision");
   const messageEl = document.getElementById("visionDisabledMessage");
-  const unavailableHint = getUIText("vision_unavailable_hint", "DisableDM 2에서 사용 가능");
-  const disabledMessage = available ? "" : (message || unavailableHint);
+  const unavailableHint = getUIText("vision_unavailable_hint", "Available when DisableDM is 2.");
+  const disabledMessage = nextAvailable ? "" : (message || unavailableHint);
+  setCarrotVisionAvailable(nextAvailable, {
+    disabledMessage,
+    reason: "availability ui",
+    updateRtcStatus: false,
+  });
   if (button) {
-    button.disabled = !available;
-    button.setAttribute("aria-disabled", available ? "false" : "true");
-    button.title = available ? "" : unavailableHint;
+    button.disabled = !nextAvailable;
+    button.setAttribute("aria-disabled", nextAvailable ? "false" : "true");
+    button.title = nextAvailable ? "" : unavailableHint;
   }
   if (messageEl) {
-    messageEl.hidden = Boolean(available);
+    messageEl.hidden = Boolean(nextAvailable);
     messageEl.replaceChildren();
-    if (!available) {
+    if (!nextAvailable) {
       const hint = unavailableHint;
       messageEl.textContent = "!";
       messageEl.dataset.tooltip = hint;
@@ -1248,15 +1578,18 @@ function updateCarrotVisionAvailabilityUi(available, message = window.CARROT_VIS
       }
     }
   }
-  if (available) {
-    if (!window.CARROT_VISION_ACTIVE) rtcStatusSet(getUIText("start_vision_hint", "Tap the start button to enable drive vision."));
+  if (nextAvailable) {
+    if (!isCarrotVisionActive()) {
+      setCarrotVisionPhase(CARROT_VISION_PHASE.INACTIVE, {
+        reason: "vision available",
+        updateRtcStatus: false,
+      });
+      rtcStatusSet(getUIText("start_vision_hint", "Tap the start button to enable drive vision."));
+    }
   } else {
-    if (window.CARROT_VISION_ACTIVE) {
-      window.CARROT_VISION_ACTIVE = false;
-      emitCarrotVisionChange(false);
+    if (wasActive) {
       syncCarrotRealtimeLifecycle(true);
     }
-    window.CARROT_VISION_DISABLED_MESSAGE = disabledMessage;
     rtcStatusSet(disabledMessage);
   }
 }
@@ -1274,9 +1607,13 @@ async function syncCarrotVisionAvailability() {
 }
 
 async function reconnectCarrotVisionRealtime(reason = "manual reconnect") {
-  if (!window.CARROT_VISION_ACTIVE) return;
+  if (!isCarrotVisionActive()) return;
   console.warn("[vision] reconnect requested", reason);
   rtcStatusSet(getUIText("reconnecting", "Reconnecting..."));
+  setCarrotVisionPhase(CARROT_VISION_PHASE.RECOVERING, {
+    reason,
+    updateRtcStatus: false,
+  });
   rtcCaptureVideoHoldFrame();
   stopCarrotVisionHealthWatch();
   await rawOverlayDisconnectAll().catch(() => {});
@@ -1290,17 +1627,19 @@ async function reconnectCarrotVisionRealtime(reason = "manual reconnect") {
 window.CarrotVisionReconnect = reconnectCarrotVisionRealtime;
 
 window.CarrotVisionStart = async function() {
-  if (window.CARROT_VISION_ACTIVE) {
+  if (isCarrotVisionActive()) {
     await reconnectCarrotVisionRealtime("start button while active");
     return;
   }
-  if (!window.CARROT_VISION_AVAILABLE && !(await syncCarrotVisionAvailability())) {
+  if (!CARROT_VISION_STATE.available && !(await syncCarrotVisionAvailability())) {
     if (typeof showAppToast === "function") showAppToast(window.CARROT_VISION_DISABLED_MESSAGE, { tone: "error" });
     return;
   }
   requestCarrotFullscreen({ quiet: false }).catch(() => {});
-  window.CARROT_VISION_ACTIVE = true;
-  emitCarrotVisionChange(true);
+  setCarrotVisionActive(true, {
+    phase: CARROT_VISION_PHASE.STARTING,
+    reason: "user start",
+  });
   
   const btn = document.getElementById("visionStartOverlay");
   if (btn) btn.style.display = "none";
@@ -1583,6 +1922,7 @@ function handleHudDecodedMessage(service, data) {
   queueRawDecodedMessage("hud", service, data, (decoded) => {
     RAW_HUD_STATE[service] = decoded;
     window.CarrotHudState = RAW_HUD_STATE;
+    setCarrotVisionState({ raw: { hud: "ready" } }, { reason: `raw hud ${service}`, silent: true });
     _hudMarkDirty();
     emitCarrotRenderRequest({
       hudDirty: true,
@@ -1595,6 +1935,7 @@ function handleOverlayDecodedMessage(service, data) {
   queueRawDecodedMessage("overlay", service, data, (decoded) => {
     RAW_OVERLAY_STATE[service] = decoded;
     window.CarrotOverlayState = RAW_OVERLAY_STATE;
+    setCarrotVisionState({ raw: { overlay: "ready" } }, { reason: `raw overlay ${service}`, silent: true });
     emitCarrotRenderRequest({
       hudDirty: true,
       overlayDirty: !RAW_OVERLAY_HUD_ONLY_SERVICES.has(service),
@@ -1901,6 +2242,7 @@ function rawHudConnectMultiplex() {
 
 function rawHudConnectAll() {
   invalidateRawDecodeState("hud");
+  setCarrotVisionState({ raw: { hud: "connecting" } }, { reason: "raw hud connecting" });
   if (!RAW_HUD_MUX_DISABLED) {
     rawHudConnectMultiplex();
     if (RAW_HUD_MUX_WS) {
@@ -2039,6 +2381,7 @@ function rawOverlayConnectMultiplex() {
 
 function rawOverlayConnectAll() {
   invalidateRawDecodeState("overlay");
+  setCarrotVisionState({ raw: { overlay: "connecting" } }, { reason: "raw overlay connecting" });
   if (!RAW_OVERLAY_MUX_DISABLED) {
     rawOverlayConnectMultiplex();
     if (RAW_OVERLAY_MUX_WS) return;
@@ -2048,6 +2391,7 @@ function rawOverlayConnectAll() {
 
 async function rawHudDisconnectAll() {
   invalidateRawDecodeState("hud");
+  setCarrotVisionState({ raw: { hud: "idle" } }, { reason: "raw hud idle" });
   _hudStopRenderLoop();
   if (RAW_HUD_MUX_RETRY_T) {
     clearTimeout(RAW_HUD_MUX_RETRY_T);
@@ -2069,6 +2413,7 @@ async function rawHudDisconnectAll() {
 
 async function rawOverlayDisconnectAll() {
   invalidateRawDecodeState("overlay");
+  setCarrotVisionState({ raw: { overlay: "idle" } }, { reason: "raw overlay idle" });
   if (RAW_OVERLAY_MUX_RETRY_T) {
     clearTimeout(RAW_OVERLAY_MUX_RETRY_T);
     RAW_OVERLAY_MUX_RETRY_T = null;
@@ -2157,17 +2502,30 @@ function checkCarrotVisionHealth() {
     const createdAt = Number(pendingPc.__carrotCreatedAtMs || 0);
     if (createdAt > 0 && Date.now() - createdAt > RTC_PENDING_STALE_MS) {
       console.warn("[RTC] pending peer stale, forcing retry", rtcBuildTraceSnapshot(pendingPc));
-      rtcCaptureVideoHoldFrame();
-      rtcClosePeer(pendingPc);
-      _rtcConnecting = false;
-      rtcScheduleRetry(0);
+      requestCarrotVisionRecovery("rtc pending stale", {
+        action: "retry-pending",
+        pc: pendingPc,
+        force: true,
+        allowConnecting: true,
+        allowPending: true,
+        statusText: getUIText("reconnecting", "Reconnecting..."),
+        rtcState: "pending-stale",
+        retryMs: 0,
+        cooldown: false,
+      });
       return;
     }
   }
 
   if (_rtcConnecting || RTC_PENDING_PC) return;
   if (!RTC_PC || !rtcHasLiveTrack()) {
-    rtcConnectOnce({ force: true }).catch(() => {});
+    requestCarrotVisionRecovery("health missing rtc track", {
+      action: "force-connect",
+      force: true,
+      statusText: getUIText("connecting", "Connecting..."),
+      rtcState: "missing-track",
+      cooldown: false,
+    });
     return;
   }
 }
@@ -2206,6 +2564,10 @@ function syncCarrotRealtimeLifecycle(forceFetch = false) {
   if (nextVisionActive) {
     console.log("[perf] carrot vision realtime -> active");
     startCarrotVisionHealthWatch();
+    setCarrotVisionPhase(CARROT_VISION_PHASE.STARTING, {
+      reason: "vision lifecycle active",
+      updateRtcStatus: false,
+    });
     requestCarrotFullscreen({ quiet: true }).catch(() => {});
     ensureRawDecodeWorker();
     rawOverlayConnectAll();
@@ -2217,6 +2579,11 @@ function syncCarrotRealtimeLifecycle(forceFetch = false) {
     }
   } else {
     console.log("[perf] carrot vision realtime -> idle");
+    setCarrotVisionPhase(CARROT_VISION_STATE.available ? CARROT_VISION_PHASE.INACTIVE : CARROT_VISION_PHASE.UNAVAILABLE, {
+      reason: "vision lifecycle idle",
+      updateRtcStatus: false,
+      render: false,
+    });
     stopCarrotVisionHealthWatch();
     stopRtcPerfPolling();
     rawOverlayDisconnectAll();
