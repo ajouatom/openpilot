@@ -287,6 +287,8 @@ window.CarrotTranslations.register("ja", {
     vision_step_ready: "カメラとオーバーレイはライブです。",
     vision_step_recovering: "ストリーム接続を更新中です。",
     vision_step_failed: "接続確認に失敗しました。利用可能になり次第再試行します。",
+    vision_step_waiting_runtime: "車両ランタイム接続を待機中です。",
+    vision_step_waiting_car: "車両カメラサービスを待機中です。",
     dashcam_empty: "走行記録がありません。",
     dashcam_empty_title: "No dashcam records",
     dashcam_empty_desc: "Driving routes and video segments will appear here after recording.",

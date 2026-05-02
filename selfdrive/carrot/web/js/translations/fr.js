@@ -287,6 +287,8 @@ window.CarrotTranslations.register("fr", {
     vision_step_ready: "Caméra et overlay en direct.",
     vision_step_recovering: "Actualisation de la connexion du flux.",
     vision_step_failed: "Échec de la vérification. Nouvelle tentative si disponible.",
+    vision_step_waiting_runtime: "En attente de la connexion runtime du véhicule.",
+    vision_step_waiting_car: "En attente des services caméra du véhicule.",
     dashcam_empty: "Aucun trajet enregistré.",
     dashcam_empty_title: "No dashcam records",
     dashcam_empty_desc: "Driving routes and video segments will appear here after recording.",

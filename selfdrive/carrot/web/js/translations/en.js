@@ -289,6 +289,8 @@ window.CarrotTranslations.register("en", {
     vision_step_ready: "Camera and overlay are live.",
     vision_step_recovering: "Refreshing the stream connection.",
     vision_step_failed: "Connection check failed. Retrying when available.",
+    vision_step_waiting_runtime: "Waiting for car runtime connection.",
+    vision_step_waiting_car: "Waiting for car camera services.",
     dashcam_empty: "No driving records.",
     dashcam_empty_title: "No dashcam records",
     dashcam_empty_desc: "Driving routes and video segments will appear here after recording.",

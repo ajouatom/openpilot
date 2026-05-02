@@ -287,6 +287,8 @@ window.CarrotTranslations.register("ko", {
     vision_step_ready: "카메라와 오버레이가 실시간입니다.",
     vision_step_recovering: "스트림 연결을 갱신하는 중입니다.",
     vision_step_failed: "연결 확인 실패, 가능하면 다시 시도합니다.",
+    vision_step_waiting_runtime: "차량 런타임 연결을 기다리는 중입니다.",
+    vision_step_waiting_car: "차량 카메라 서비스를 기다리는 중입니다.",
     dashcam_empty: "주행 기록이 없습니다.",
     dashcam_empty_title: "대시캠 기록이 없습니다",
     dashcam_empty_desc: "주행 녹화가 생성되면 이곳에 경로와 영상 조각이 표시됩니다.",

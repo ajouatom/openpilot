@@ -101,7 +101,7 @@
 }
 
 .hudWrap[data-surface="driveOverlay"] .hudBody {
-  grid-template-columns: minmax(0, 1fr) auto fit-content(var(--hud-support-col-max));
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
 .hudWrap[data-surface="driveOverlay"] .hudBottomStrip {
@@ -228,7 +228,7 @@
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto fit-content(var(--hud-support-col-max));
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0;
   margin-bottom: calc(var(--hud-section-gap) * 0.26);
 }
@@ -237,20 +237,6 @@
   width: 1px;
   margin: calc(var(--hud-metric-gap) * 0.12) calc(var(--hud-section-gap) * 0.18);
   display: none;
-}
-
-.hudWrap[data-surface="homePreview"] .hudBodyDivider {
-  display: block;
-  background: rgba(255,255,255,0.12);
-}
-
-.hudWrap[data-surface="homePreview"][data-wide="1"] .hudBody {
-  grid-template-columns: minmax(0, 1fr) auto fit-content(calc(var(--hud-support-col-max) + 2%));
-}
-
-.hudWrap[data-surface="homePreview"][data-wide="1"][data-density="regular"] .hudBody,
-.hudWrap[data-surface="homePreview"][data-wide="1"][data-density="spacious"] .hudBody {
-  grid-template-columns: minmax(0, 1fr) auto fit-content(calc(var(--hud-support-col-max) + 3%));
 }
 
 .hudSpeedColumn,
@@ -266,8 +252,12 @@
 }
 
 .hudSupportColumn {
-  justify-self: end;
-  padding: calc(var(--hud-padding) * 0.18) calc(var(--hud-padding) * 0.34) calc(var(--hud-padding) * 0.10) calc(var(--hud-padding) * 0.14);
+  justify-self: stretch;
+  align-items: stretch;
+  width: 100%;
+  box-sizing: border-box;
+  padding: calc(var(--hud-padding) * 0.18) calc(var(--hud-padding) * 0.10) calc(var(--hud-padding) * 0.10) calc(var(--hud-padding) * 0.30);
+  text-align: left;
 }
 
 .hudSectionLabel {
@@ -537,8 +527,8 @@
 }
 
 .hudWrap[data-support-layout="compact"] .hudSupportValue {
-  align-self: flex-end;
-  text-align: right;
+  align-self: flex-start;
+  text-align: left;
 }
 
 .hudWrap[data-support-layout="compact"] .hudSupportDetail {
@@ -557,7 +547,7 @@
 }
 
 .hudWrap[data-support-layout="compact"] .hudGearStatus {
-  align-self: flex-end;
+  align-self: flex-start;
   min-width: clamp(58px, 19%, 84px);
   max-width: clamp(68px, 27%, 100px);
 }
@@ -575,7 +565,7 @@
 .hudWrap[data-support-layout="veryCompact"] .hudSupportValue {
   max-width: 48%;
   font-size: calc(var(--hud-chip-font) + 0.9px);
-  text-align: right;
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -639,23 +629,33 @@
   padding-inline: calc(var(--hud-section-gap) * 0.18);
 }
 
-.hudWrap[data-surface="driveInline"] .hudBody {
+.hudWrap[data-surface="homePreview"] .hudBody,
+.hudWrap[data-surface="driveInline"] .hudBody,
+.hudWrap[data-surface="driveOverlay"] .hudBody {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   column-gap: 0;
 }
 
-.hudWrap[data-surface="driveInline"] .hudBodyDivider {
+.hudWrap[data-surface="homePreview"] .hudBodyDivider,
+.hudWrap[data-surface="driveInline"] .hudBodyDivider,
+.hudWrap[data-surface="driveOverlay"] .hudBodyDivider {
   display: none;
 }
 
+.hudWrap[data-surface="homePreview"] .hudSpeedColumn,
+.hudWrap[data-surface="homePreview"] .hudSupportColumn,
 .hudWrap[data-surface="driveInline"] .hudSpeedColumn,
-.hudWrap[data-surface="driveInline"] .hudSupportColumn {
+.hudWrap[data-surface="driveInline"] .hudSupportColumn,
+.hudWrap[data-surface="driveOverlay"] .hudSpeedColumn,
+.hudWrap[data-surface="driveOverlay"] .hudSupportColumn {
   justify-self: stretch;
   width: 100%;
   box-sizing: border-box;
 }
 
-.hudWrap[data-surface="driveInline"] .hudSupportColumn {
+.hudWrap[data-surface="homePreview"] .hudSupportColumn,
+.hudWrap[data-surface="driveInline"] .hudSupportColumn,
+.hudWrap[data-surface="driveOverlay"] .hudSupportColumn {
   justify-self: stretch;
   align-items: stretch;
   padding-left: calc(var(--hud-padding) * 0.30);
@@ -663,88 +663,70 @@
   text-align: left;
 }
 
+.hudWrap[data-surface="homePreview"] .hudSupportLine,
+.hudWrap[data-surface="homePreview"] .hudSupportDetail,
 .hudWrap[data-surface="driveInline"] .hudSupportLine,
-.hudWrap[data-surface="driveInline"] .hudSupportDetail {
+.hudWrap[data-surface="driveInline"] .hudSupportDetail,
+.hudWrap[data-surface="driveOverlay"] .hudSupportLine,
+.hudWrap[data-surface="driveOverlay"] .hudSupportDetail {
   flex-direction: row;
   align-items: center;
   justify-content: flex-start;
 }
 
+.hudWrap[data-surface="homePreview"] .hudSupportValue,
+.hudWrap[data-surface="homePreview"] .hudGapText,
+.hudWrap[data-surface="homePreview"] .hudGearStep,
+.hudWrap[data-surface="homePreview"] .hudGearLabel,
+.hudWrap[data-surface="homePreview"] .hudGearValue,
 .hudWrap[data-surface="driveInline"] .hudSupportValue,
 .hudWrap[data-surface="driveInline"] .hudGapText,
 .hudWrap[data-surface="driveInline"] .hudGearStep,
 .hudWrap[data-surface="driveInline"] .hudGearLabel,
-.hudWrap[data-surface="driveInline"] .hudGearValue {
+.hudWrap[data-surface="driveInline"] .hudGearValue,
+.hudWrap[data-surface="driveOverlay"] .hudSupportValue,
+.hudWrap[data-surface="driveOverlay"] .hudGapText,
+.hudWrap[data-surface="driveOverlay"] .hudGearStep,
+.hudWrap[data-surface="driveOverlay"] .hudGearLabel,
+.hudWrap[data-surface="driveOverlay"] .hudGearValue {
   align-self: auto;
   max-width: none;
   text-align: left;
 }
 
-.hudWrap[data-surface="driveInline"] .hudGapStatus {
+.hudWrap[data-surface="homePreview"] .hudGapStatus,
+.hudWrap[data-surface="driveInline"] .hudGapStatus,
+.hudWrap[data-surface="driveOverlay"] .hudGapStatus {
   flex: 0 1 auto;
   width: auto;
   flex-direction: row;
   align-items: center;
 }
 
-.hudWrap[data-surface="driveInline"] .hudGapBars {
+.hudWrap[data-surface="homePreview"] .hudGapBars,
+.hudWrap[data-surface="driveInline"] .hudGapBars,
+.hudWrap[data-surface="driveOverlay"] .hudGapBars {
   min-width: clamp(72px, 34%, 132px);
 }
 
-.hudWrap[data-surface="driveInline"] .hudGearStatus {
+.hudWrap[data-surface="homePreview"] .hudGearStatus,
+.hudWrap[data-surface="driveInline"] .hudGearStatus,
+.hudWrap[data-surface="driveOverlay"] .hudGearStatus {
   align-self: flex-start;
   align-items: flex-start;
   text-align: left;
 }
 
-.hudWrap[data-surface="driveInline"] .hudGearLabel {
+.hudWrap[data-surface="homePreview"] .hudGearLabel,
+.hudWrap[data-surface="driveInline"] .hudGearLabel,
+.hudWrap[data-surface="driveOverlay"] .hudGearLabel {
   display: block;
 }
 
-.hudWrap[data-surface="driveInline"] .hudGearValue {
+.hudWrap[data-surface="homePreview"] .hudGearValue,
+.hudWrap[data-surface="driveInline"] .hudGearValue,
+.hudWrap[data-surface="driveOverlay"] .hudGearValue {
   margin-top: 3px;
-}
-
-.hudWrap[data-surface="homePreview"] .hudSupportLine {
-  flex-direction: row;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: calc(var(--hud-metric-gap) * 0.34);
-}
-
-.hudWrap[data-surface="homePreview"] .hudSupportValue {
-  flex: 0 0 auto;
-  text-align: right;
-  font-size: calc(var(--hud-chip-font) + 1.4px);
-}
-
-.hudWrap[data-surface="homePreview"] .hudSupportDetail {
-  flex-direction: row;
-  align-items: flex-start;
-  justify-content: flex-start;
-  gap: calc(var(--hud-metric-gap) * 0.34);
-}
-
-.hudWrap[data-surface="homePreview"] .hudGapStatus {
-  flex: 1 1 auto;
-  min-width: 0;
-  flex-direction: row;
-  align-items: center;
-  gap: calc(var(--hud-metric-gap) * 0.22);
-}
-
-.hudWrap[data-surface="homePreview"] .hudGapBars {
-  min-width: clamp(84px, 34%, 132px);
-}
-
-.hudWrap[data-surface="homePreview"] .hudGapText {
-  text-align: right;
-}
-
-.hudWrap[data-surface="homePreview"] .hudGearStatus {
-  align-self: flex-start;
-  min-width: clamp(34px, 12%, 54px);
-  max-width: clamp(42px, 18%, 62px);
 }
 
 @media (max-width: 430px) {

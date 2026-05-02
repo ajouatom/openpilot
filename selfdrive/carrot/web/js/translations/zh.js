@@ -287,6 +287,8 @@ window.CarrotTranslations.register("zh", {
     vision_step_ready: "摄像头和叠加层已实时运行。",
     vision_step_recovering: "正在刷新视频流连接。",
     vision_step_failed: "连接检查失败，将在可用时重试。",
+    vision_step_waiting_runtime: "正在等待车辆运行时连接。",
+    vision_step_waiting_car: "正在等待车辆摄像头服务。",
     dashcam_empty: "没有驾驶记录。",
     dashcam_empty_title: "No dashcam records",
     dashcam_empty_desc: "Driving routes and video segments will appear here after recording.",
