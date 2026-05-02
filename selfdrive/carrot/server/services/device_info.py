@@ -116,7 +116,7 @@ def get_wifi_networks() -> List[Dict[str, Any]]:
   """Read visible Wi-Fi networks without connecting, forgetting, or editing."""
   try:
     proc = subprocess.run(
-      ["nmcli", "-t", "-f", "ACTIVE,SSID,SECURITY,SIGNAL", "dev", "wifi", "list", "--rescan", "no"],
+      ["nmcli", "-t", "-f", "ACTIVE,SSID,SECURITY,SIGNAL", "dev", "wifi", "list", "--rescan", "auto"],
       check=False,
       capture_output=True,
       encoding="utf-8",

@@ -50,10 +50,13 @@ let LIVE_RUNTIME_POLL_ACTIVE = false;
 let LAST_HUD_PAYLOAD_SIGNATURE = "";
 const RTC_STATS_POLL_MS = 1000;
 const RTC_FREEZE_MAX_STALL_SAMPLES = 8;
-const RTC_INITIAL_FRAME_MAX_STALL_SAMPLES = 14;
+const RTC_INITIAL_FRAME_MAX_STALL_SAMPLES = 5;
 const RTC_FREEZE_CURRENT_TIME_EPSILON = 0.05;
 const RTC_FREEZE_RECOVERY_COOLDOWN_MS = 4000;
 const RTC_RESUME_PROGRESS_CHECK_MS = 900;
+const RTC_RETRY_BASE_MS = 700;
+const RTC_ICE_GATHER_TIMEOUT_MS = 1200;
+const RTC_INITIAL_TRACK_TIMEOUT_MS = 2800;
 const RTC_PERF_STATE = {
   active: false,
   collectedAtMs: 0,
@@ -138,6 +141,21 @@ function getRtcVideoElement() {
 
 function getLegacyRtcVideoElement() {
   return document.getElementById("rtcVideo");
+}
+
+function rtcExitPictureInPicture() {
+  try {
+    if (document.pictureInPictureElement && typeof document.exitPictureInPicture === "function") {
+      document.exitPictureInPicture().catch(() => {});
+    }
+  } catch {}
+}
+
+function rtcDisablePictureInPicture(video) {
+  if (!video) return;
+  try { video.disablePictureInPicture = true; } catch {}
+  try { video.setAttribute("disablepictureinpicture", ""); } catch {}
+  try { video.controlsList?.add?.("nopictureinpicture"); } catch {}
 }
 
 function getRtcVideoHoldElement() {
@@ -634,17 +652,6 @@ function rtcHasLiveTrack() {
   return tracks.some((track) => track && track.readyState !== "ended");
 }
 
-function rtcHasUsableTrack() {
-  const video = getRtcVideoElement();
-  const stream = video?.srcObject;
-  if (!stream) return false;
-  if (stream.active === false) return false;
-  if (typeof stream.getVideoTracks !== "function") return true;
-  const tracks = stream.getVideoTracks();
-  if (!tracks.length) return true;
-  return tracks.some((track) => track && track.readyState !== "ended");
-}
-
 function rtcClosePeer(pc) {
   if (!pc) return;
   try { pc.ontrack = null; } catch {}
@@ -702,11 +709,7 @@ async function rtcDisconnect(options = {}) {
 
 function rtcConnectionLooksLive(pc = RTC_PC) {
   if (!pc) return false;
-  return pc.connectionState === "connected" || pc.iceConnectionState === "completed";
-}
-
-function rtcIsWaitingForInitialTrack(pc = RTC_PC) {
-  return Boolean(RTC_WAIT_TRACK_T && RTC_WAIT_TRACK_PC && RTC_WAIT_TRACK_PC === pc);
+  return pc.connectionState === "connected" || pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed";
 }
 
 function rtcIsWaitingForInitialTrack(pc = RTC_PC) {
@@ -764,8 +767,9 @@ function rtcUpdateFreezeWatchdog(pc, video) {
   }
 
   // PC connected but track dead/muted/inactive → force reconnect
-  if (rtcConnectionLooksLive(pc) && !rtcHasUsableTrack() && video.srcObject) {
+  if (rtcConnectionLooksLive(pc) && !rtcHasLiveTrack() && video.srcObject) {
     rtcResetFreezeWatchdog();
+    rtcScheduleFreezeRecovery(getUIText("video_track_lost_reconnecting", "Video track lost, reconnecting..."), { force: true });
     return;
   }
 
@@ -821,6 +825,13 @@ function rtcBindVideoEvents() {
   if (!video) return;
 
   RTC_VIDEO_EVENTS_BOUND = true;
+  const legacyVideo = getLegacyRtcVideoElement();
+  [video, legacyVideo].forEach((videoEl, index, list) => {
+    if (!videoEl || list.indexOf(videoEl) !== index) return;
+    rtcDisablePictureInPicture(videoEl);
+    videoEl.addEventListener("enterpictureinpicture", rtcExitPictureInPicture);
+  });
+
   const nudgePlayback = () => {
     if (!shouldRunCarrotVisionRealtime() || !video.srcObject) return;
     video.play().catch(() => {});
@@ -838,7 +849,7 @@ function rtcBindVideoEvents() {
   });
 }
 
-function rtcScheduleRetry(ms = 2000) {
+function rtcScheduleRetry(ms = RTC_RETRY_BASE_MS) {
   if (!shouldRunCarrotVisionRealtime()) return;
   rtcCancelRetry();
   const backoff = Math.min(ms * Math.pow(1.5, RTC_FAIL_COUNT), 30000);
@@ -871,11 +882,11 @@ function rtcArmTrackTimeout(ms = 5000, expectedPc = RTC_PC) {
     rtcCaptureVideoHoldFrame();
     if (RTC_PENDING_PC === expectedPc) {
       rtcClosePeer(expectedPc);
-      rtcScheduleRetry(2000);
+      rtcScheduleRetry(RTC_RETRY_BASE_MS);
       return;
     }
     await rtcDisconnect({ keepVideo: true });
-    rtcScheduleRetry(2000);
+    rtcScheduleRetry(RTC_RETRY_BASE_MS);
   }, ms);
 }
 
@@ -899,10 +910,13 @@ function rtcScheduleResumeHealthCheck(reason = "returned visible") {
   }, RTC_RESUME_PROGRESS_CHECK_MS);
 }
 
-async function waitIceComplete(pc, timeoutMs = 8000) {
+async function waitIceComplete(pc, timeoutMs = RTC_ICE_GATHER_TIMEOUT_MS) {
   if (pc.iceGatheringState === "complete") return;
   await new Promise((resolve) => {
-    const t = setTimeout(resolve, timeoutMs);
+    const t = setTimeout(() => {
+      pc.removeEventListener("icegatheringstatechange", onchg);
+      resolve();
+    }, timeoutMs);
     function onchg() {
       if (pc.iceGatheringState === "complete") {
         pc.removeEventListener("icegatheringstatechange", onchg);
@@ -1043,7 +1057,7 @@ async function rtcConnectOnce(options = {}) {
         } else {
           rtcDisconnect({ keepVideo: true }).catch(() => {});
         }
-        rtcScheduleRetry(2000);
+        rtcScheduleRetry(RTC_RETRY_BASE_MS);
       }
     };
 
@@ -1068,13 +1082,13 @@ async function rtcConnectOnce(options = {}) {
         } else {
           rtcDisconnect({ keepVideo: true }).catch(() => {});
         }
-        rtcScheduleRetry(2000);
+        rtcScheduleRetry(RTC_RETRY_BASE_MS);
       }
     };
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    await waitIceComplete(pc, 8000);
+    await waitIceComplete(pc, RTC_ICE_GATHER_TIMEOUT_MS);
     rtcTrace("offer_ready", {
       localSdpBytes: pc.localDescription?.sdp?.length || 0,
     }, pc);
@@ -1107,7 +1121,7 @@ async function rtcConnectOnce(options = {}) {
     await pc.setRemoteDescription({ type: answer.type || "answer", sdp: answer.sdp });
     rtcTrace("answer_applied", {}, pc);
     rtcStatusSet(getUIText("connected_waiting_track", "Connected, waiting track..."));
-    rtcArmTrackTimeout(6000, pc);
+    rtcArmTrackTimeout(RTC_INITIAL_TRACK_TIMEOUT_MS, pc);
   } catch (e) {
     rtcTrace("connect_error", {
       message: e?.message || String(e),
@@ -1120,22 +1134,10 @@ async function rtcConnectOnce(options = {}) {
     if (!RTC_PC && !RTC_STANDBY_PC) {
       await rtcDisconnect({ keepVideo: true });
     }
-    rtcScheduleRetry(2000);
+    rtcScheduleRetry(RTC_RETRY_BASE_MS);
   } finally {
     _rtcConnecting = false;
   }
-}
-
-async function waitServerReady(timeoutMs = 8000) {
-  const t0 = Date.now();
-  while (Date.now() - t0 < timeoutMs) {
-    try {
-      const r = await fetch("/api/settings", { cache: "no-store" });
-      if (r.ok) return true;
-    } catch {}
-    await new Promise(res => setTimeout(res, 300));
-  }
-  return false;
 }
 
 window.CARROT_VISION_ACTIVE = false;
@@ -1236,7 +1238,7 @@ async function syncCarrotVisionAvailability() {
 
 window.CarrotVisionStart = async function() {
   if (window.CARROT_VISION_ACTIVE) return;
-  if (!(await syncCarrotVisionAvailability())) {
+  if (!window.CARROT_VISION_AVAILABLE && !(await syncCarrotVisionAvailability())) {
     if (typeof showAppToast === "function") showAppToast(window.CARROT_VISION_DISABLED_MESSAGE, { tone: "error" });
     return;
   }
@@ -1247,8 +1249,7 @@ window.CarrotVisionStart = async function() {
   const btn = document.getElementById("visionStartOverlay");
   if (btn) btn.style.display = "none";
 
-  rtcStatusSet(getUIText("waiting_server", "Waiting server..."));
-  await waitServerReady(8000);
+  rtcStatusSet(getUIText("connecting", "Connecting..."));
   syncCarrotRealtimeLifecycle(true);
 };
 
@@ -1998,7 +1999,9 @@ async function startAll() {
     await syncWebLanguageFromDeviceDefault();
   }
   renderUIText();
-  showPage("carrot", false);
+  if (typeof window.bootstrapWebStartPage === "function") {
+    window.bootstrapWebStartPage("realtime");
+  }
   console.log("[time_sync] syncing server time on page load");
   syncServerTimeOnConnect().catch(() => {});
   rtcInitAuto();
@@ -2069,6 +2072,7 @@ document.addEventListener("visibilitychange", () => {
     const video = getRtcVideoElement();
     RTC_VISIBILITY_STATE.hiddenAtMs = Date.now();
     RTC_VISIBILITY_STATE.currentTimeAtHide = Number(video?.currentTime || 0);
+    rtcExitPictureInPicture();
   }
   syncCarrotRealtimeLifecycle(false);
   if (!document.hidden && shouldRunCarrotVisionRealtime() && RTC_PC && !_rtcConnecting) {
@@ -2087,6 +2091,7 @@ window.addEventListener("online", () => {
     rtcScheduleResumeHealthCheck("network resumed");
   }
 });
+window.addEventListener("pagehide", rtcExitPictureInPicture);
 window.addEventListener("carrot:pagechange", (event) => {
   maybeRequestCarrotFullscreenOnPageChange(event?.detail || {});
   syncCarrotRealtimeLifecycle(false);

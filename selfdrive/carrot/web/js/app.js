@@ -96,4 +96,8 @@ window.addEventListener("popstate", async (ev) => {
 });
 
 // Initial page render after all scripts are loaded.
-showPage("carrot", false);
+if (typeof window.bootstrapWebStartPage === "function") {
+  window.bootstrapWebStartPage("app");
+} else {
+  showPage("carrot", false);
+}
