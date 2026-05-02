@@ -10,7 +10,8 @@
       var primaryPages = { carrot: 1, setting: 1, tools: 1, logs: 1, terminal: 1 };
       var startPage = "carrot";
       try {
-        var setting = localStorage.getItem("carrot_web_start_page") || "carrot";
+        var webSettings = window.__CARROT_BOOTSTRAP__ && window.__CARROT_BOOTSTRAP__.webSettings;
+        var setting = (webSettings && webSettings.start_page) || "last";
         if (setting === "last") {
           var lastPage = localStorage.getItem("carrot_web_last_page");
           startPage = primaryPages[lastPage] ? lastPage : "carrot";
@@ -586,7 +587,7 @@
   <script src="/js/shared/constants.js?v=2604-72"></script>
   <script src="/js/shared/dom.js?v=2604-71"></script>
   <script src="/js/shared/utils.js?v=2604-71"></script>
-  <script src="/js/shared/i18n.js?v=2604-72"></script>
+  <script src="/js/shared/i18n.js?v=2605-01"></script>
   <script src="/js/shared/api.js?v=2604-72"></script>
   <script src="/js/shared/activity.js?v=2604-04"></script>
   <script src="/js/shared/ui/dialog.js?v=2604-71"></script>
@@ -600,7 +601,7 @@
   <script src="/js/pages/setting_device_network.js?v=2605-01"></script>
   <script src="/js/pages/setting_device_actions.js?v=2605-02"></script>
   <script src="/js/pages/setting_device.js?v=2605-05"></script>
-  <script src="/js/pages/tools_web_settings.js?v=2605-03"></script>
+  <script src="/js/pages/tools_web_settings.js?v=2605-04"></script>
   <script src="/js/pages/tools_notifications.js?v=2605-14"></script>
   <script src="/js/pages/tools.js?v=2605-07"></script>
   <script src="/js/pages/branch.js?v=2604-73"></script>
