@@ -172,6 +172,8 @@ function renderUIText() {
 
   // Setting
   setText("settingTitleText", s.setting);
+  setText("settingTabDeviceLabel", getUIText("setting_tab_device", "Device"));
+  setText("settingTabCarrotLabel", getUIText("setting_tab_carrot", "CarrotPilot"));
   setText("settingCarEyebrow", s.car_select);
   setText("btnBackGroups", s.back);
   setText("groupsTitle", s.groups);
@@ -179,10 +181,10 @@ function renderUIText() {
 
   // Tools
   setText("toolsTitle", s.tools);
-  setText("gitCommandsTitle", "Git Commands");
-  setText("userSystemTitle", "User / System");
-  setText("toolsQuickLinkTitle", "Link");
-  setText("userSettingsTitle", "Settings");
+  setText("gitCommandsTitle", getUIText("git_commands", "Git Commands"));
+  setText("userSystemTitle", getUIText("user_system", "User / System"));
+  setText("toolsQuickLinkTitle", getUIText("quick_link", "Link"));
+  setText("userSettingsTitle", getUIText("section_settings_backup", "Settings"));
   setText("btnDeviceInfo", getUIText("carrot_info", "Carrot Info"));
   setText("btnGitRemote", "change repository");
   setText("btnGitBranch", "change branch");

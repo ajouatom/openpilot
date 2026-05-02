@@ -12,28 +12,137 @@ let gitPullStatusLoadedAt = 0;
 let gitPullStatusTimer = null;
 let gitPullStatusVisibilityBound = false;
 let uiWarmupTimer = null;
+let toolsLogHistoryClosing = false;
+
+function isToolsPortraitMode() {
+  return Boolean(window.matchMedia?.("(orientation: portrait)")?.matches);
+}
+
+function pushToolsLogHistoryState() {
+  if (CURRENT_PAGE !== "tools" || !isToolsPortraitMode() || history.state?.toolsLogPanel) return;
+  const base = (history.state && history.state.page === "tools") ? history.state : { page: "tools" };
+  history.pushState({ ...base, page: "tools", toolsLogPanel: true }, "");
+}
+
+function popToolsLogHistoryState() {
+  if (!history.state?.toolsLogPanel || toolsLogHistoryClosing) return;
+  toolsLogHistoryClosing = true;
+  history.back();
+  window.setTimeout(() => {
+    toolsLogHistoryClosing = false;
+  }, 360);
+}
+
+function bindToolsLogHistoryDismiss() {
+  if (document.body?.dataset.toolsLogHistoryDismissBound === "1") return;
+  if (document.body) document.body.dataset.toolsLogHistoryDismissBound = "1";
+  window.addEventListener("popstate", (event) => {
+    const page = document.getElementById("pageTools");
+    if (!page?.classList.contains("tools-log-expanded")) return;
+    setToolsLogExpanded(false, { syncHistory: false });
+    toolsLogHistoryClosing = false;
+    event.stopImmediatePropagation();
+  }, true);
+}
 
 const GIT_PULL_STATUS_CLIENT_INTERVAL_MS = 10000;
+const TOOLS_NOTIFICATION_MAX_ENTRIES = 20;
 
 let toolsOutHistory = "";
 let toolsOutCurrentBlock = "";
+let toolsNotificationJobs = [];
+let toolsNotificationRefreshPromise = null;
 let toolsLogAttentionTimer = null;
+let toolsMetaTickerRaf = 0;
 
 function normalizeToolsOutText(s) {
   return String(s ?? "").replace(/\s+$/, "");
 }
 
+function pruneToolsOutHistoryText(text) {
+  return normalizeToolsOutText(text)
+    .split(/\n{2,}/)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .slice(-TOOLS_NOTIFICATION_MAX_ENTRIES)
+    .join("\n\n");
+}
+
+function toolJobTimestamp(job) {
+  const updatedAt = Number(job?.updated_at || 0);
+  const createdAt = Number(job?.created_at || 0);
+  return Number.isFinite(updatedAt) && updatedAt > 0 ? updatedAt : (Number.isFinite(createdAt) ? createdAt : 0);
+}
+
+function sortToolNotificationJobs(jobs) {
+  return jobs
+    .slice()
+    .sort((a, b) => toolJobTimestamp(b) - toolJobTimestamp(a))
+    .slice(0, TOOLS_NOTIFICATION_MAX_ENTRIES)
+    .sort((a, b) => toolJobTimestamp(a) - toolJobTimestamp(b));
+}
+
+function setToolNotificationJobs(jobs) {
+  toolsNotificationJobs = sortToolNotificationJobs(Array.isArray(jobs) ? jobs.filter((job) => job?.id) : []);
+}
+
+function upsertToolNotificationJob(job) {
+  if (!job?.id) return;
+  const next = toolsNotificationJobs.filter((item) => item?.id !== job.id);
+  next.push(job);
+  setToolNotificationJobs(next);
+}
+
+async function refreshToolsNotificationJobs() {
+  if (toolsNotificationRefreshPromise) return toolsNotificationRefreshPromise;
+  toolsNotificationRefreshPromise = getJson("/api/tools/jobs")
+    .then((res) => {
+      setToolNotificationJobs(res.jobs || []);
+      renderToolsOut();
+      return toolsNotificationJobs;
+    })
+    .finally(() => {
+      toolsNotificationRefreshPromise = null;
+    });
+  return toolsNotificationRefreshPromise;
+}
+
 function scrollToolsLogToBottom(delay = 0) {
   window.setTimeout(() => {
-    const out = document.getElementById("toolsOut");
-    if (!out) return;
-    out.scrollTop = out.scrollHeight;
+    const target = document.querySelector("#toolsOut .tools-console-log__body") || document.getElementById("toolsOut");
+    if (!target) return;
+    target.scrollTop = target.scrollHeight;
   }, delay);
+}
+
+function syncToolsMetaTicker() {
+  toolsMetaTickerRaf = 0;
+  const status = document.querySelector("#toolsMeta .tools-meta__status");
+  const track = status?.querySelector(".tools-meta__statusTrack");
+  if (!status || !track) return;
+  const overflow = track.scrollWidth > status.clientWidth + 3;
+  status.classList.toggle("is-overflowing", overflow);
+  if (!overflow) {
+    track.style.removeProperty("--tools-meta-scroll-distance");
+    track.style.removeProperty("--tools-meta-scroll-duration");
+    return;
+  }
+  const distance = Math.max(18, Math.ceil(track.scrollWidth - status.clientWidth));
+  track.style.setProperty("--tools-meta-scroll-distance", `${distance}px`);
+  track.style.setProperty("--tools-meta-scroll-duration", `${Math.max(2.4, Math.min(6.2, distance / 58))}s`);
+}
+
+function requestToolsMetaTickerSync() {
+  if (toolsMetaTickerRaf) cancelAnimationFrame(toolsMetaTickerRaf);
+  toolsMetaTickerRaf = requestAnimationFrame(syncToolsMetaTicker);
 }
 
 function pulseToolsLogPanel() {
   const page = document.getElementById("pageTools");
-  if (!page || page.classList.contains("tools-log-expanded")) return;
+  if (!page || page.classList.contains("tools-log-expanded")) {
+    scrollToolsLogToBottom();
+    return;
+  }
   page.classList.add("tools-log-attention");
   if (toolsLogAttentionTimer) window.clearTimeout(toolsLogAttentionTimer);
   toolsLogAttentionTimer = window.setTimeout(() => {
@@ -45,11 +154,16 @@ function pulseToolsLogPanel() {
   scrollToolsLogToBottom(280);
 }
 
-function setToolsLogExpanded(expanded) {
+function setToolsLogExpanded(expanded, options = {}) {
   const page = document.getElementById("pageTools");
   if (!page) return;
+  const wasExpanded = page.classList.contains("tools-log-expanded");
   page.classList.toggle("tools-log-expanded", expanded);
   document.getElementById("toolsOut")?.setAttribute("aria-expanded", expanded ? "true" : "false");
+  const meta = document.getElementById("toolsMeta");
+  if (meta) meta.setAttribute("aria-expanded", expanded ? "true" : "false");
+  if (expanded && !wasExpanded && options.syncHistory !== false) pushToolsLogHistoryState();
+  if (!expanded && wasExpanded && options.syncHistory !== false) popToolsLogHistoryState();
   if (expanded) {
     page.classList.remove("tools-log-attention");
     if (toolsLogAttentionTimer) {
@@ -67,34 +181,44 @@ function renderToolsOut() {
   const historyText = normalizeToolsOutText(toolsOutHistory);
   const currentText = normalizeToolsOutText(toolsOutCurrentBlock);
 
-  if (!historyText && !currentText) {
-    out.textContent = " ";
+  if (window.CarrotToolsNotifications?.render) {
+    window.CarrotToolsNotifications.render(out, {
+      jobs: toolsNotificationJobs,
+      historyText,
+      currentText,
+    }, {
+      onClear: clearToolsNotificationHistory,
+      onClose: () => setToolsLogExpanded(false),
+    });
   } else {
-    const frag = document.createDocumentFragment();
-
-    if (historyText) {
-      const historyBlock = document.createElement("span");
-      historyBlock.className = "tools-console-log__history";
-      historyBlock.textContent = historyText;
-      frag.appendChild(historyBlock);
-    }
-
-    if (historyText && currentText) {
-      frag.appendChild(document.createTextNode("\n\n"));
-    }
-
-    if (currentText) {
-      const currentBlock = document.createElement("span");
-      currentBlock.className = "tools-console-log__current";
-      currentBlock.textContent = currentText;
-      frag.appendChild(currentBlock);
-    }
-
-    out.replaceChildren(frag);
+    out.textContent = currentText || historyText || " ";
   }
 
   requestAnimationFrame(() => scrollToolsLogToBottom());
   scrollToolsLogToBottom(280);
+}
+
+async function clearToolsNotificationHistory() {
+  const out = document.getElementById("toolsOut");
+  const hasCards = Boolean(out?.querySelector(".tools-console-log__card"));
+  if (hasCards) {
+    out.classList.add("is-clearing");
+    await new Promise((resolve) => window.setTimeout(resolve, 180));
+  }
+  toolsOutHistory = "";
+  toolsOutCurrentBlock = "";
+  let jobsAfterClear = [];
+  try {
+    const res = await requestJson("/api/tools/jobs", { method: "DELETE" });
+    jobsAfterClear = res.jobs || [];
+  } catch {
+    jobsAfterClear = toolsNotificationJobs.filter((job) => String(job?.status || "") === "running");
+  }
+  out?.classList.remove("is-clearing");
+  setToolNotificationJobs(jobsAfterClear);
+  window.CarrotToolsNotifications?.resetDetail?.();
+  renderToolsOut();
+  if (!toolsNotificationJobs.length) setToolsLogExpanded(false);
 }
 
 function toolsOutSet(s) {
@@ -106,7 +230,7 @@ function toolsOutSet(s) {
 function toolsOutAppend(s) {
   const next = normalizeToolsOutText(s);
   if (!next) return;
-  toolsOutHistory = toolsOutHistory ? `${toolsOutHistory}\n\n${next}` : next;
+  toolsOutHistory = pruneToolsOutHistoryText(toolsOutHistory ? `${toolsOutHistory}\n\n${next}` : next);
   renderToolsOut();
   pulseToolsLogPanel();
 }
@@ -122,8 +246,33 @@ function toolsLogNotice(message, options = {}) {
   const text = normalizeToolsOutText(message);
   if (!text) return;
   const label = options.label ? String(options.label).trim() : "notice";
-  toolsOutCommitCurrent();
-  toolsOutAppend(`[${label}]\n${text}`);
+  const now = Date.now() / 1000;
+  const tempId = `client-${Math.round(now * 1000).toString(36)}`;
+  upsertToolNotificationJob({
+    id: tempId,
+    action: label,
+    payload: { notice: true },
+    status: "done",
+    log: text,
+    progress: 100,
+    message: "",
+    result: { ok: true, out: text },
+    created_at: now,
+    updated_at: now,
+  });
+  renderToolsOut();
+  pulseToolsLogPanel();
+  postJson("/api/tools/jobs/notice", { action: label, message: text })
+    .then((res) => {
+      toolsNotificationJobs = toolsNotificationJobs.filter((job) => job?.id !== tempId);
+      if (res.job) upsertToolNotificationJob(res.job);
+      else setToolNotificationJobs(res.jobs || toolsNotificationJobs);
+      renderToolsOut();
+    })
+    .catch(() => {
+      toolsNotificationJobs = toolsNotificationJobs.filter((job) => job?.id !== tempId);
+      toolsOutAppend(`[${label}]\n${text}`);
+    });
   if (options.meta !== false) toolsMetaSet(text.split("\n")[0]);
   if (options.clearProgress !== false) toolsProgressSet(null, { active: false });
 }
@@ -174,6 +323,7 @@ async function refreshGitPullStatus(options = {}) {
     .then((status) => {
       gitPullStatusLoadedAt = Date.now();
       renderGitPullStatus(status);
+      if (typeof handleWebAutoUpdateStatus === "function") handleWebAutoUpdateStatus(status);
       return status;
     })
     .catch((error) => {
@@ -208,7 +358,9 @@ function getToolCommandPreview(action, payload = {}) {
     case "git_sync": return "git sync";
     case "git_reset": return `git reset --${payload.mode || "hard"} ${payload.target || "HEAD"}`.trim();
     case "git_checkout": return `git checkout ${payload.branch || ""}`.trim();
+    case "git_log": return "git log";
     case "git_branch_list": return "change branch";
+    case "git_remote_set": return "change repository";
     case "git_remote_add": return `git remote add/set-url ${payload.name || ""}`.trim();
     case "send_tmux_log": return "capture tmux";
     case "server_tmux_log": return "send tmux";
@@ -285,7 +437,24 @@ function renderToolsMeta() {
 
   const statusEl = document.createElement("span");
   statusEl.className = "tools-meta__status";
-  statusEl.textContent = toolsMetaStatusText || "-";
+  statusEl.setAttribute("role", "button");
+  statusEl.setAttribute("tabindex", "0");
+  statusEl.setAttribute("aria-expanded", document.getElementById("pageTools")?.classList.contains("tools-log-expanded") ? "true" : "false");
+  statusEl.setAttribute("aria-label", getUIText("toggle_log_panel", "Expand or collapse log panel"));
+  statusEl.innerHTML = `<span class="tools-meta__statusTrack">${escapeHtml(toolsMetaStatusText || "-")}</span>`;
+  window.CarrotToolsNotifications?.bindStatusGesture?.(statusEl, {
+    setExpanded: setToolsLogExpanded,
+  });
+  statusEl.addEventListener("click", () => {
+    const page = document.getElementById("pageTools");
+    setToolsLogExpanded(!page?.classList.contains("tools-log-expanded"));
+  });
+  statusEl.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    const page = document.getElementById("pageTools");
+    setToolsLogExpanded(!page?.classList.contains("tools-log-expanded"));
+  });
   meta.appendChild(statusEl);
 
   const actionsEl = document.createElement("div");
@@ -347,7 +516,25 @@ function renderToolsMeta() {
   }
   actionsEl.appendChild(langWrap);
 
+  const webSettingsButton = document.createElement("button");
+  webSettingsButton.type = "button";
+  webSettingsButton.className = "tools-meta-iconBtn";
+  webSettingsButton.title = getUIText("web_settings", "Web Settings");
+  webSettingsButton.setAttribute("aria-label", getUIText("web_settings", "Web Settings"));
+  webSettingsButton.innerHTML = `
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path fill="currentColor" d="M19.43 12.98c.04-.32.07-.65.07-.98s-.02-.66-.07-.98l2.11-1.65a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.61-.22l-2.49 1a7.3 7.3 0 0 0-1.69-.98L14.5 2.42A.5.5 0 0 0 14 2h-4a.5.5 0 0 0-.5.42L9.12 5.07c-.61.24-1.18.56-1.69.98l-2.49-1a.5.5 0 0 0-.61.22l-2 3.46a.5.5 0 0 0 .12.64l2.11 1.65c-.04.32-.06.65-.06.98s.02.66.07.98l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46c.14.24.43.34.68.22l2.49-1c.51.4 1.08.73 1.69.98l.38 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.38-2.65c.61-.25 1.18-.58 1.69-.98l2.49 1c.25.12.54.02.68-.22l2-3.46a.5.5 0 0 0-.12-.64zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5"/>
+    </svg>
+  `;
+  webSettingsButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    closeToolsLanguageMenu();
+    if (typeof openWebSettingsDialog === "function") openWebSettingsDialog();
+  });
+  actionsEl.appendChild(webSettingsButton);
+
   meta.appendChild(actionsEl);
+  requestToolsMetaTickerSync();
 }
 
 function toolsMetaSet(s) {
@@ -628,6 +815,8 @@ if (document.readyState === "complete") {
   }, { once: true });
 }
 
+window.addEventListener("resize", requestToolsMetaTickerSync, { passive: true });
+
 function toolsProgressSet(percent = null, opts = {}) {
   const host = document.getElementById("toolsProgress");
   const bar = document.getElementById("toolsProgressBar");
@@ -636,13 +825,15 @@ function toolsProgressSet(percent = null, opts = {}) {
   const active = opts.active !== false;
   const indeterminate = Boolean(opts.indeterminate);
   if (!active) {
-    host.hidden = true;
+    host.hidden = false;
+    host.setAttribute("aria-hidden", "false");
     host.classList.remove("is-indeterminate");
     bar.style.width = "0%";
     return;
   }
 
   host.hidden = false;
+  host.setAttribute("aria-hidden", "false");
   host.classList.toggle("is-indeterminate", indeterminate);
 
   const hasPercent = Number.isFinite(percent);
@@ -683,21 +874,31 @@ async function runTool(action, payload) {
 
   try {
     toolsMetaSet(labels.running);
-    toolsOutCommitCurrent();
-    toolsOutSet(`> ${commandPreview}\n${labels.running}`);
     toolsProgressSet(null, { active: true, indeterminate: true });
 
     const started = await postJson("/api/tools/start", { action, ...(payload || {}) });
     const jobId = started.job_id;
+    const now = Date.now() / 1000;
+    upsertToolNotificationJob({
+      id: jobId,
+      action,
+      payload: payload || {},
+      status: "running",
+      log: "",
+      progress: 0,
+      message: labels.running,
+      created_at: now,
+      updated_at: now,
+    });
+    renderToolsOut();
+    pulseToolsLogPanel();
     let snapshot = null;
 
     while (runToken === activeToolRunToken) {
       snapshot = await getJson(`/api/tools/job?id=${encodeURIComponent(jobId)}`);
-
-      if (snapshot.log != null) {
-        const body = normalizeToolsOutText(snapshot.log) || labels.running;
-        toolsOutSet(`> ${commandPreview}\n${body}`);
-      }
+      upsertToolNotificationJob(snapshot);
+      renderToolsOut();
+      pulseToolsLogPanel();
 
       if (!snapshot.done) {
         updateToolsRunningState(labels, snapshot);
@@ -708,18 +909,15 @@ async function runTool(action, payload) {
       const result = snapshot.result || snapshot;
       if (!result.ok) {
         const errMsg = friendlyError(result) || result.error || snapshot.error || labels.failed;
-        toolsOutSet(`> ${commandPreview}\n${normalizeToolsOutText(snapshot?.log) || errMsg}`);
-        toolsOutCommitCurrent();
         toolsMetaSet(labels.failed);
         toolsProgressSet(null, { active: false });
+        refreshToolsNotificationJobs().catch(() => {});
         throw new Error(errMsg);
       }
 
-      const finalBody = normalizeToolsOutText(result.out ?? snapshot.log) || labels.done;
-      toolsOutSet(`> ${commandPreview}\n${finalBody}`);
-      toolsOutCommitCurrent();
       toolsMetaSet(labels.done);
       toolsProgressSet(100, { active: true, indeterminate: false });
+      refreshToolsNotificationJobs().catch(() => {});
       window.setTimeout(() => {
         if (activeToolRunToken === runToken) toolsProgressSet(null, { active: false });
       }, 900);
@@ -766,6 +964,16 @@ function showError(action, error) {
   const msg = (typeof error === "object" && error.message) ? error.message : String(error);
   toolsMetaSet(title);
   toolsProgressSet(null, { active: false });
+  const hasServerFailure = toolsNotificationJobs.some((job) => (
+    String(job?.action || "") === String(action || "") &&
+    String(job?.status || "") === "failed" &&
+    Date.now() / 1000 - toolJobTimestamp(job) < 30
+  ));
+  if (hasServerFailure) {
+    renderToolsOut();
+    pulseToolsLogPanel();
+    return;
+  }
   toolsLogNotice(msg, { label: action, meta: false });
 }
 
@@ -824,23 +1032,32 @@ function initToolsPage() {
   };
 
   const initToolsLogPanel = () => {
+    bindToolsLogHistoryDismiss();
     const out = document.getElementById("toolsOut");
-    if (!out || out.dataset.toolsLogBound === "1") return;
-    out.dataset.toolsLogBound = "1";
-    out.setAttribute("role", "button");
-    out.setAttribute("tabindex", "0");
-    out.setAttribute("aria-expanded", "false");
-    out.setAttribute("aria-label", getUIText("toggle_log_panel", "Expand or collapse log panel"));
-    out.addEventListener("click", () => {
-      const page = document.getElementById("pageTools");
-      setToolsLogExpanded(!page?.classList.contains("tools-log-expanded"));
+    if (out && out.dataset.toolsLogBound !== "1") {
+      out.dataset.toolsLogBound = "1";
+      out.setAttribute("aria-expanded", "false");
+    }
+
+    const dock = document.querySelector("#pageTools .tools-console-dock");
+    if (dock && dock.dataset.toolsLogDismissBound !== "1") {
+      dock.dataset.toolsLogDismissBound = "1";
+      dock.addEventListener("click", (event) => {
+        if (event.target === dock) setToolsLogExpanded(false);
+      });
+    }
+    window.CarrotToolsNotifications?.bindPanelDrag?.(dock, {
+      setExpanded: setToolsLogExpanded,
     });
-    out.addEventListener("keydown", (ev) => {
-      if (ev.key !== "Enter" && ev.key !== " ") return;
-      ev.preventDefault();
-      const page = document.getElementById("pageTools");
-      setToolsLogExpanded(!page?.classList.contains("tools-log-expanded"));
-    });
+
+    if (document.body?.dataset.toolsLogEscBound !== "1") {
+      document.body.dataset.toolsLogEscBound = "1";
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") setToolsLogExpanded(false);
+      });
+    }
+    renderToolsOut();
+    refreshToolsNotificationJobs().catch(() => {});
   };
 
   const runSystemCommand = async () => {
@@ -1172,7 +1389,7 @@ function initToolsPage() {
         const lines = j.results.map(r => `${r.package}: ${r.status}`);
         summary = lines.join("\n");
       }
-      if (summary.trim()) toolsOutAppend(summary);
+      if (summary.trim()) toolsLogNotice(summary, { label: "install_required", meta: false });
 
       if (j.need_reboot) {
         const yes = await appConfirm(UI_STRINGS[LANG].confirm_reboot_after_install, {
@@ -1245,8 +1462,7 @@ function initToolsPage() {
           ? beginAppActivity("tools", labels.running || "restore settings")
           : null;
         toolsMetaSet(labels.running);
-        toolsOutCommitCurrent();
-        toolsOutSet(`> restore settings\n${labels.running}`);
+        toolsLogNotice(labels.running || "Restore settings", { label: "restore settings", clearProgress: false });
         toolsProgressSet(null, { active: true, indeterminate: true });
 
         const fd = new FormData();
@@ -1256,8 +1472,7 @@ function initToolsPage() {
 
         toolsMetaSet(labels.done);
         toolsProgressSet(100, { active: true, indeterminate: false });
-        toolsOutSet(`> restore settings\n${JSON.stringify(j.result, null, 2)}`);
-        toolsOutCommitCurrent();
+        toolsLogNotice(JSON.stringify(j.result, null, 2), { label: "restore settings", meta: false, clearProgress: false });
         if (activityId && typeof endAppActivity === "function") {
           endAppActivity(activityId);
           activityId = null;

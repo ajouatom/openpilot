@@ -25,6 +25,7 @@ server/
 │   ├── git_state.py        /data/.../git.json read/write
 │   ├── git_status.py       periodic cached git fetch/status comparison for update badges
 │   ├── heartbeat.py        external IP register loop
+│   ├── ssh_keys.py         GitHub SSH key fetch/store helpers for Device developer panel
 │   ├── time_sync.py        browser → system time sync
 │   ├── device_info.py      device type, dongle, serial, calibration, language list
 │   └── tmux.py             tmux session helpers
@@ -34,6 +35,7 @@ server/
     ├── ws.py               /ws/raw, /ws/raw_multiplex, /ws/camera
     ├── settings.py         /api/settings
     ├── params.py           /api/params_*, /download/params_backup.json
+    ├── ssh_keys.py         /api/ssh_keys
     ├── cars.py             /api/cars
     ├── system.py           /api/heartbeat_status, /api/reboot, /api/time_sync,
     │                       /api/live_runtime, /api/poweroff, /api/recalibrate,
@@ -98,7 +100,12 @@ web/
     ├── pages/
     │   ├── car.js          car picker + record FAB + currentCar status
     │   ├── setting.js      settings groups/items/search/subnav + device tab switcher
-    │   ├── setting_device.js   Device tab: info, toggles, software, power actions
+    │   ├── setting_device_config.js   Device tab constants and option tables
+    │   ├── setting_device_render.js   Device row/panel rendering helpers
+    │   ├── setting_device_network.js  Device network refresh loop
+    │   ├── setting_device_actions.js  Device action/dialog handlers
+    │   ├── setting_device.js          Device tab coordinator and state
+    │   ├── tools_web_settings.js      Web-only settings dialog
     │   ├── tools.js        tools page + initToolsPage + action runners
     │   ├── branch.js       branch picker modal + Branch page
     │   ├── logs.js         Dashcam + Screen Recording lists

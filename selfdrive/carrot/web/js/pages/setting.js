@@ -527,6 +527,10 @@ function hasRenderedSettingItems(group = CURRENT_GROUP) {
   return itemsBox.dataset.renderedGroup === group && itemsBox.childElementCount > 0;
 }
 
+function isCarrotSettingTabActive() {
+  return !(typeof getCurrentSettingTab === "function" && getCurrentSettingTab() === "device");
+}
+
 function syncSettingGroupChrome(group = CURRENT_GROUP) {
   const meta = document.getElementById("groupMeta");
   const list = SETTINGS?.items_by_group?.[group] || [];
@@ -783,6 +787,7 @@ function stripIdsFromClone(root) {
 }
 
 async function activateSettingGroup(group, pushHistory = true, options = {}) {
+  if (!isCarrotSettingTabActive()) return;
   const nextGroup = group || CURRENT_GROUP;
   const previousGroup = CURRENT_GROUP;
   const scrollMode = options.scrollMode || "top";
@@ -1153,6 +1158,7 @@ function selectGroup(group, pushHistory = true) {
 }
 
 async function renderItems(group, options = {}) {
+  if (!isCarrotSettingTabActive()) return;
   const meta = document.getElementById("groupMeta");
   const itemsBox = document.getElementById("items");
   const renderToken = ++settingRenderToken;
@@ -1179,7 +1185,7 @@ async function renderItems(group, options = {}) {
     values = {};
   }
 
-  if (renderToken !== settingRenderToken || CURRENT_GROUP !== group || screenItems?.style.display === "none") {
+  if (renderToken !== settingRenderToken || CURRENT_GROUP !== group || !isCarrotSettingTabActive() || screenItems?.style.display === "none") {
     return;
   }
 
@@ -1418,8 +1424,4 @@ window.addEventListener("orientationchange", () => {
   scheduleSettingViewportLayoutSync(true);
   window.setTimeout(() => syncSettingMarqueeOverflow(document.getElementById("items") || document), 160);
 }, { passive: true });
-
-
-/* ---------- Back key / history ---------- */
-history.replaceState({ page: "carrot" }, "");
 

@@ -238,6 +238,8 @@
   min-height: var(--setting-menu-item-min-height);
   margin-bottom: 0;
   padding: 0 var(--setting-menu-item-padding-inline);
+  font-size: 14px;
+  line-height: 1.18;
 }
 
 .page--setting #carrotTabContent,
@@ -631,19 +633,19 @@
   }
 
   .page--setting.setting-layout-split #settingScreenItems .title {
-    font-size: clamp(15px, 2.05vw, 18px);
+    font-size: 16px;
     font-weight: 700;
     line-height: 1.18;
   }
 
   .page--setting.setting-layout-split #settingScreenItems .name {
-    font-size: clamp(10.5px, 1.45vw, 12.5px);
+    font-size: 12px;
     line-height: 1.28;
   }
 
   .page--setting.setting-layout-split #settingScreenItems .muted,
   .page--setting.setting-layout-split #settingScreenItems .descr {
-    font-size: clamp(12px, 1.65vw, 14px);
+    font-size: 13px;
     line-height: 1.38;
   }
 
@@ -893,12 +895,12 @@
 .setting-tab {
   min-width: 0;
   min-height: 38px;
-  padding: 0 var(--sp-md);
+  padding: 0 10px;
   border: 0;
   border-radius: calc(var(--r-md) - 4px);
   background: transparent;
   color: var(--md-on-surface-var);
-  font-size: var(--fs-body-md);
+  font-size: 14px;
   font-weight: 800;
   line-height: 1;
   cursor: pointer;
@@ -969,6 +971,72 @@
   white-space: nowrap;
 }
 
+.page--setting #deviceItems .device-ssh-control {
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.device-ssh-account {
+  min-width: 0;
+  max-width: min(42vw, 240px);
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  padding: 7px 10px;
+  border: 1px solid var(--setting-control-border, color-mix(in srgb, var(--md-outline-var) 46%, transparent));
+  border-radius: 9px;
+  background: var(--setting-control-bg, var(--md-surface-cont-h));
+  color: var(--md-on-surface-var);
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.device-ssh-account.is-configured {
+  border-color: color-mix(in srgb, var(--md-primary) 34%, var(--setting-control-border, var(--md-outline-var)));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--md-primary) 12%, var(--md-surface-cont-h)),
+    color-mix(in srgb, var(--md-primary) 6%, var(--md-surface-cont))
+  );
+  color: var(--md-on-surface);
+}
+
+.device-ssh-account__label {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--md-primary) 82%, var(--md-on-surface));
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.device-ssh-account__value {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--md-on-surface);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-ssh-action {
+  flex: 0 0 auto;
+}
+
+.device-ssh-action--remove {
+  color: var(--md-error);
+}
+
 .page--setting #deviceItems .settingTop > :first-child {
   min-width: 0;
 }
@@ -977,12 +1045,37 @@
   min-width: 0;
 }
 
+.page--setting #deviceItems .title {
+  font-size: 16px;
+  line-height: 1.22;
+}
+
+.page--setting #deviceItems .descr {
+  font-size: 13px;
+  line-height: 1.36;
+}
+
 .page--setting #deviceItems .smallBtn {
+  font-size: 13px;
   white-space: nowrap;
 }
 
 .page--setting #deviceItems .device-setting {
   overflow: hidden;
+}
+
+@media (max-width: 640px) {
+  .page--setting #deviceItems .device-ssh-control {
+    width: 100%;
+    min-width: 0;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .device-ssh-account {
+    max-width: min(52vw, 220px);
+  }
 }
 
 .device-toggle {
