@@ -380,7 +380,6 @@ function getToolCommandPreview(action, payload = {}) {
 let toolsMetaStatusText = "";
 let toolsMetaInfoText = "";
 let toolsMetaInfoDialogText = "";
-let toolsLanguageMenuOpen = false;
 
 function getAvailableWebLanguages() {
   const registry = window.CarrotTranslations || {};
@@ -400,38 +399,9 @@ function getAvailableWebLanguages() {
     .filter(Boolean);
 }
 
-function closeToolsLanguageMenu() {
-  if (!toolsLanguageMenuOpen) return;
-  toolsLanguageMenuOpen = false;
-  renderToolsMeta();
-}
-
-function setToolsLanguageMenuPosition(anchor) {
-  if (!anchor || typeof anchor.getBoundingClientRect !== "function") return;
-  const rect = anchor.getBoundingClientRect();
-  const top = Math.max(12, Math.round(rect.bottom + 10));
-  const right = Math.max(12, Math.round((window.innerWidth || document.documentElement.clientWidth || 0) - rect.right));
-  document.documentElement.style.setProperty("--tools-lang-menu-panel-top", `${top}px`);
-  document.documentElement.style.setProperty("--tools-lang-menu-panel-right", `${right}px`);
-}
-
-function bindToolsLanguageMenuDismiss() {
-  if (document.body.dataset.toolsLangDismissBound === "1") return;
-  document.body.dataset.toolsLangDismissBound = "1";
-  document.addEventListener("click", (event) => {
-    if (!toolsLanguageMenuOpen) return;
-    if (event.target instanceof Element && event.target.closest(".tools-lang-menu, .tools-lang-menu__panel")) return;
-    closeToolsLanguageMenu();
-  });
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeToolsLanguageMenu();
-  });
-}
-
 function renderToolsMeta() {
   const meta = document.getElementById("toolsMeta");
   if (!meta) return;
-  bindToolsLanguageMenuDismiss();
 
   meta.textContent = "";
 
@@ -461,15 +431,13 @@ function renderToolsMeta() {
   actionsEl.className = "tools-meta__actions";
 
   const languages = getAvailableWebLanguages();
-  const current = languages.find((item) => item.lang === LANG) || languages[0];
   const langWrap = document.createElement("div");
   langWrap.className = "tools-lang-menu";
 
   const langBtn = document.createElement("button");
   langBtn.type = "button";
   langBtn.className = "tools-lang-menu__button";
-  langBtn.setAttribute("aria-haspopup", "menu");
-  langBtn.setAttribute("aria-expanded", toolsLanguageMenuOpen ? "true" : "false");
+  langBtn.setAttribute("aria-haspopup", "dialog");
   langBtn.innerHTML = `
     <span class="tools-lang-menu__globe" aria-hidden="true">
       <svg viewBox="0 0 24 24" focusable="false">
@@ -478,42 +446,27 @@ function renderToolsMeta() {
     </span>
     <span class="tools-lang-menu__label">${escapeHtml(getUIText("language", getUIText("lang", "Language")))}</span>
   `;
-  langBtn.addEventListener("click", (event) => {
+  langBtn.addEventListener("click", async (event) => {
     event.stopPropagation();
-    if (!toolsLanguageMenuOpen) setToolsLanguageMenuPosition(langBtn);
-    toolsLanguageMenuOpen = !toolsLanguageMenuOpen;
-    renderToolsMeta();
+    const choices = languages.map((item) => ({
+      labelHtml: \`<div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+        <span>\${escapeHtml(item.name)}</span>
+        \${item.lang === LANG ? '<svg viewBox="0 0 24 24" width="20" height="20" style="color:var(--color-primary)"><path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>' : ''}
+      </div>\`,
+      value: item.lang,
+    }));
+    
+    const result = await openAppDialog({
+      mode: "choice",
+      title: getUIText("language", getUIText("lang", "Language")),
+      choices: choices,
+    });
+    
+    if (result && typeof setWebLanguage === "function") {
+      setWebLanguage(result);
+    }
   });
   langWrap.appendChild(langBtn);
-
-  if (toolsLanguageMenuOpen) {
-    const panel = document.createElement("div");
-    panel.className = "tools-lang-menu__panel";
-    panel.setAttribute("role", "menu");
-    const currentLabel = current?.name || LANG.toUpperCase();
-    panel.innerHTML = `
-      <div class="tools-lang-menu__current">${escapeHtml(getUIText("current_language", "Current language"))}: ${escapeHtml(currentLabel)}</div>
-      <div class="tools-lang-menu__divider" aria-hidden="true"></div>
-    `;
-    languages.forEach((item) => {
-      const option = document.createElement("button");
-      option.type = "button";
-      option.className = "tools-lang-menu__item";
-      option.setAttribute("role", "menuitemradio");
-      option.setAttribute("aria-checked", item.lang === LANG ? "true" : "false");
-      option.innerHTML = `
-        <span>${escapeHtml(item.name)}</span>
-      `;
-      option.addEventListener("click", (event) => {
-        event.stopPropagation();
-        if (typeof setWebLanguage === "function") setWebLanguage(item.lang);
-        toolsLanguageMenuOpen = false;
-        renderToolsMeta();
-      });
-      panel.appendChild(option);
-    });
-    langWrap.appendChild(panel);
-  }
   actionsEl.appendChild(langWrap);
 
   const webSettingsButton = document.createElement("button");
@@ -528,7 +481,6 @@ function renderToolsMeta() {
   `;
   webSettingsButton.addEventListener("click", (event) => {
     event.stopPropagation();
-    closeToolsLanguageMenu();
     if (typeof openWebSettingsDialog === "function") openWebSettingsDialog();
   });
   actionsEl.appendChild(webSettingsButton);
