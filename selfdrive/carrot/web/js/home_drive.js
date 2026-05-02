@@ -1653,7 +1653,6 @@ window.HomeDrive = (() => {
     if (_lastStageReady === r) return;
     _lastStageReady = r;
     stageEl.classList.toggle("is-stream-ready", r);
-    videoEl.style.display = r ? "block" : "none";
   }
 
   let _lastStageLoading = null;

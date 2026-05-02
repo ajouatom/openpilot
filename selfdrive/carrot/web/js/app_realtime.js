@@ -57,6 +57,11 @@ const RTC_RESUME_PROGRESS_CHECK_MS = 900;
 const RTC_RETRY_BASE_MS = 700;
 const RTC_ICE_GATHER_TIMEOUT_MS = 1200;
 const RTC_INITIAL_TRACK_TIMEOUT_MS = 2800;
+const RTC_STREAM_FETCH_TIMEOUT_MS = 6500;
+const RTC_PENDING_STALE_MS = 9000;
+const CARROT_VISION_HEALTH_POLL_MS = 2000;
+const RAW_WS_HELLO_TIMEOUT_MS = 3500;
+const RAW_WS_FIRST_DATA_TIMEOUT_MS = 6500;
 const RTC_PERF_STATE = {
   active: false,
   collectedAtMs: 0,
@@ -93,6 +98,8 @@ const RTC_VISIBILITY_STATE = {
 };
 const RTC_TRACE_ENABLED = false;
 let RTC_PC_SEQ = 0;
+let CARROT_VISION_HEALTH_T = null;
+const RAW_WS_WATCHDOG_T = new WeakMap();
 
 function rtcPcLabel(pc) {
   if (!pc) return "none";
@@ -327,6 +334,10 @@ window.addEventListener("carrot:visionchange", () => {
 
 function emitCarrotRenderRequest(detail = {}) {
   window.dispatchEvent(new CustomEvent("carrot:render-request", { detail }));
+}
+
+function requestCarrotVisionRender(detail = {}) {
+  emitCarrotRenderRequest({ force: true, overlayDirty: true, hudDirty: true, ...detail });
 }
 
 function emitCarrotVisionChange(active) {
@@ -836,6 +847,7 @@ function rtcBindVideoEvents() {
     if (!shouldRunCarrotVisionRealtime() || !video.srcObject) return;
     video.play().catch(() => {});
     collectRtcPerfStats().catch(() => {});
+    requestCarrotVisionRender();
   };
 
   video.addEventListener("playing", () => {
@@ -843,6 +855,10 @@ function rtcBindVideoEvents() {
     RTC_FREEZE_STATE.everDecodedFrame = true;
     rtcClearVideoHold();
     collectRtcPerfStats().catch(() => {});
+    requestCarrotVisionRender();
+  });
+  ["loadedmetadata", "loadeddata", "canplay", "resize"].forEach((eventName) => {
+    video.addEventListener(eventName, requestCarrotVisionRender);
   });
   ["waiting", "stalled", "suspend", "pause", "ended"].forEach((eventName) => {
     video.addEventListener(eventName, nudgePlayback);
@@ -928,6 +944,19 @@ async function waitIceComplete(pc, timeoutMs = RTC_ICE_GATHER_TIMEOUT_MS) {
   });
 }
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = RTC_STREAM_FETCH_TIMEOUT_MS) {
+  if (typeof AbortController === "undefined") {
+    return fetch(url, options);
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 let _rtcConnecting = false;
 
 async function rtcConnectOnce(options = {}) {
@@ -975,6 +1004,7 @@ async function rtcConnectOnce(options = {}) {
     });
     rtcPcLabel(pc);
     pc.__carrotTrackSeen = false;
+    pc.__carrotCreatedAtMs = Date.now();
     RTC_PENDING_PC = pc;
     rtcTrace("pc_created", {
       keepPreviousVisible,
@@ -1017,9 +1047,16 @@ async function rtcConnectOnce(options = {}) {
       rtcClearVideoHold();
       startRtcPerfPolling(true);
       collectRtcPerfStats().catch(() => {});
+      requestCarrotVisionRender();
       if (retiringPc) {
         rtcClosePeer(retiringPc);
       }
+
+      ev.track.addEventListener("unmute", () => {
+        videoEl.play().catch(() => {});
+        collectRtcPerfStats().catch(() => {});
+        requestCarrotVisionRender();
+      });
 
       // Detect server-side track close → immediate recovery (guarded by PC identity)
       ev.track.addEventListener("ended", () => {
@@ -1100,11 +1137,11 @@ async function rtcConnectOnce(options = {}) {
       bridge_services_out: [],
     };
 
-    const response = await fetch("/stream", {
+    const response = await fetchWithTimeout("/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-    });
+    }, RTC_STREAM_FETCH_TIMEOUT_MS);
 
     if (!response.ok) {
       const text = await response.text().catch(() => "");
@@ -1236,8 +1273,27 @@ async function syncCarrotVisionAvailability() {
   }
 }
 
+async function reconnectCarrotVisionRealtime(reason = "manual reconnect") {
+  if (!window.CARROT_VISION_ACTIVE) return;
+  console.warn("[vision] reconnect requested", reason);
+  rtcStatusSet(getUIText("reconnecting", "Reconnecting..."));
+  rtcCaptureVideoHoldFrame();
+  stopCarrotVisionHealthWatch();
+  await rawOverlayDisconnectAll().catch(() => {});
+  await rtcDisconnect({ keepVideo: true }).catch(() => {});
+  _carrotVisionRealtimeActive = false;
+  syncCarrotRealtimeLifecycle(true);
+  startCarrotVisionHealthWatch();
+  requestCarrotVisionRender();
+}
+
+window.CarrotVisionReconnect = reconnectCarrotVisionRealtime;
+
 window.CarrotVisionStart = async function() {
-  if (window.CARROT_VISION_ACTIVE) return;
+  if (window.CARROT_VISION_ACTIVE) {
+    await reconnectCarrotVisionRealtime("start button while active");
+    return;
+  }
   if (!window.CARROT_VISION_AVAILABLE && !(await syncCarrotVisionAvailability())) {
     if (typeof showAppToast === "function") showAppToast(window.CARROT_VISION_DISABLED_MESSAGE, { tone: "error" });
     return;
@@ -1307,6 +1363,34 @@ const RAW_DECODE_EPOCH = {
   hud: 0,
   overlay: 0,
 };
+
+function rawClearWsWatchdog(ws) {
+  const timer = RAW_WS_WATCHDOG_T.get(ws);
+  if (!timer) return;
+  clearTimeout(timer);
+  RAW_WS_WATCHDOG_T.delete(ws);
+}
+
+function rawArmWsWatchdog(ws, label, ms, reason, shouldClose) {
+  rawClearWsWatchdog(ws);
+  const timer = setTimeout(() => {
+    RAW_WS_WATCHDOG_T.delete(ws);
+    let close = true;
+    try {
+      close = typeof shouldClose === "function" ? Boolean(shouldClose()) : true;
+    } catch {
+      close = true;
+    }
+    if (!close) return;
+    console.warn("[raw watchdog]", label, reason);
+    try { ws.close(4000, reason); } catch {}
+  }, ms);
+  RAW_WS_WATCHDOG_T.set(ws, timer);
+}
+
+function rawHasState(state) {
+  return Boolean(state && Object.keys(state).length > 0);
+}
 
 function rejectPendingRawDecodeRequests(message) {
   for (const [requestId, pending] of RAW_DECODE_PENDING.entries()) {
@@ -1741,6 +1825,7 @@ function rawHudConnectService(service) {
 
   ws.onclose = () => {
     console.log(RAW_HUD_LOG_PREFIX, service, "close -> reconnect");
+    if (RAW_HUD_WS[service] !== ws) return;
     RAW_HUD_WS[service] = null;
     rawHudScheduleReconnect(service, 1000);
   };
@@ -1759,9 +1844,13 @@ function rawHudConnectMultiplex() {
   if (current && (current.readyState === WebSocket.OPEN || current.readyState === WebSocket.CONNECTING)) return;
 
   let helloReceived = false;
+  let firstDataReceived = false;
   const ws = new WebSocket(buildRawMultiplexUrl(RAW_HUD_SERVICES));
   ws.binaryType = "arraybuffer";
   RAW_HUD_MUX_WS = ws;
+  rawArmWsWatchdog(ws, "hud mux hello", RAW_WS_HELLO_TIMEOUT_MS, "raw_hello_timeout", () => (
+    shouldRunCarrotHudRealtime() && RAW_HUD_MUX_WS === ws && !helloReceived
+  ));
 
   ws.onopen = () => {
     console.log(RAW_HUD_MUX_LOG_PREFIX, "open");
@@ -1773,8 +1862,16 @@ function rawHudConnectMultiplex() {
         const hello = JSON.parse(ev.data);
         console.log(RAW_HUD_MUX_LOG_PREFIX, "hello", hello);
         helloReceived = hello?.mode === RAW_MULTIPLEX_MODE;
+        rawClearWsWatchdog(ws);
+        if (helloReceived) {
+          rawArmWsWatchdog(ws, "hud mux first-data", RAW_WS_FIRST_DATA_TIMEOUT_MS, "raw_first_data_timeout", () => (
+            shouldRunCarrotHudRealtime() && RAW_HUD_MUX_WS === ws && !firstDataReceived && !rawHasState(RAW_HUD_STATE)
+          ));
+        }
         return;
       }
+      firstDataReceived = true;
+      rawClearWsWatchdog(ws);
       const frame = await parseRawMultiplexFrame(ev.data);
       if (!RAW_HUD_SERVICES.includes(frame.service)) return;
       handleHudDecodedMessage(frame.service, frame.payload);
@@ -1788,7 +1885,9 @@ function rawHudConnectMultiplex() {
   };
 
   ws.onclose = () => {
+    rawClearWsWatchdog(ws);
     console.log(RAW_HUD_MUX_LOG_PREFIX, "close");
+    if (RAW_HUD_MUX_WS !== ws) return;
     RAW_HUD_MUX_WS = null;
     if (!shouldRunCarrotHudRealtime()) return;
     if (!helloReceived) {
@@ -1865,6 +1964,7 @@ function rawOverlayConnectService(service) {
 
   ws.onclose = () => {
     console.log(RAW_OVERLAY_LOG_PREFIX, service, "close -> reconnect");
+    if (RAW_OVERLAY_WS[service] !== ws) return;
     RAW_OVERLAY_WS[service] = null;
     rawOverlayScheduleReconnect(service, 1000);
   };
@@ -1882,9 +1982,13 @@ function rawOverlayConnectMultiplex() {
   if (current && (current.readyState === WebSocket.OPEN || current.readyState === WebSocket.CONNECTING)) return;
 
   let helloReceived = false;
+  let firstDataReceived = false;
   const ws = new WebSocket(buildRawMultiplexUrl(RAW_OVERLAY_SERVICES));
   ws.binaryType = "arraybuffer";
   RAW_OVERLAY_MUX_WS = ws;
+  rawArmWsWatchdog(ws, "overlay mux hello", RAW_WS_HELLO_TIMEOUT_MS, "raw_hello_timeout", () => (
+    shouldRunCarrotVisionRealtime() && RAW_OVERLAY_MUX_WS === ws && !helloReceived
+  ));
 
   ws.onopen = () => {
     console.log(RAW_OVERLAY_MUX_LOG_PREFIX, "open");
@@ -1896,8 +2000,16 @@ function rawOverlayConnectMultiplex() {
         const hello = JSON.parse(ev.data);
         console.log(RAW_OVERLAY_MUX_LOG_PREFIX, "hello", hello);
         helloReceived = hello?.mode === RAW_MULTIPLEX_MODE;
+        rawClearWsWatchdog(ws);
+        if (helloReceived) {
+          rawArmWsWatchdog(ws, "overlay mux first-data", RAW_WS_FIRST_DATA_TIMEOUT_MS, "raw_first_data_timeout", () => (
+            shouldRunCarrotVisionRealtime() && RAW_OVERLAY_MUX_WS === ws && !firstDataReceived && !rawHasState(RAW_OVERLAY_STATE)
+          ));
+        }
         return;
       }
+      firstDataReceived = true;
+      rawClearWsWatchdog(ws);
       const frame = await parseRawMultiplexFrame(ev.data);
       if (!RAW_OVERLAY_SERVICES.includes(frame.service)) return;
       handleOverlayDecodedMessage(frame.service, frame.payload);
@@ -1911,7 +2023,9 @@ function rawOverlayConnectMultiplex() {
   };
 
   ws.onclose = () => {
+    rawClearWsWatchdog(ws);
     console.log(RAW_OVERLAY_MUX_LOG_PREFIX, "close");
+    if (RAW_OVERLAY_MUX_WS !== ws) return;
     RAW_OVERLAY_MUX_WS = null;
     if (!shouldRunCarrotVisionRealtime()) return;
     if (!helloReceived) {
@@ -1939,6 +2053,7 @@ async function rawHudDisconnectAll() {
     clearTimeout(RAW_HUD_MUX_RETRY_T);
     RAW_HUD_MUX_RETRY_T = null;
   }
+  if (RAW_HUD_MUX_WS) rawClearWsWatchdog(RAW_HUD_MUX_WS);
   try { if (RAW_HUD_MUX_WS) RAW_HUD_MUX_WS.close(); } catch {}
   RAW_HUD_MUX_WS = null;
   for (const service of RAW_HUD_SERVICES) {
@@ -1946,6 +2061,7 @@ async function rawHudDisconnectAll() {
       clearTimeout(RAW_HUD_RETRY_T[service]);
       RAW_HUD_RETRY_T[service] = null;
     }
+    if (RAW_HUD_WS[service]) rawClearWsWatchdog(RAW_HUD_WS[service]);
     try { if (RAW_HUD_WS[service]) RAW_HUD_WS[service].close(); } catch {}
     RAW_HUD_WS[service] = null;
   }
@@ -1957,6 +2073,7 @@ async function rawOverlayDisconnectAll() {
     clearTimeout(RAW_OVERLAY_MUX_RETRY_T);
     RAW_OVERLAY_MUX_RETRY_T = null;
   }
+  if (RAW_OVERLAY_MUX_WS) rawClearWsWatchdog(RAW_OVERLAY_MUX_WS);
   try { if (RAW_OVERLAY_MUX_WS) RAW_OVERLAY_MUX_WS.close(); } catch {}
   RAW_OVERLAY_MUX_WS = null;
   for (const service of RAW_OVERLAY_SERVICES) {
@@ -1964,6 +2081,7 @@ async function rawOverlayDisconnectAll() {
       clearTimeout(RAW_OVERLAY_RETRY_T[service]);
       RAW_OVERLAY_RETRY_T[service] = null;
     }
+    if (RAW_OVERLAY_WS[service]) rawClearWsWatchdog(RAW_OVERLAY_WS[service]);
     try { if (RAW_OVERLAY_WS[service]) RAW_OVERLAY_WS[service].close(); } catch {}
     RAW_OVERLAY_WS[service] = null;
   }
@@ -2017,11 +2135,50 @@ async function startAll() {
 let _carrotHudRealtimeActive = false;
 let _carrotVisionRealtimeActive = false;
 
+function startCarrotVisionHealthWatch() {
+  if (CARROT_VISION_HEALTH_T) return;
+  CARROT_VISION_HEALTH_T = setInterval(checkCarrotVisionHealth, CARROT_VISION_HEALTH_POLL_MS);
+}
+
+function stopCarrotVisionHealthWatch() {
+  if (!CARROT_VISION_HEALTH_T) return;
+  clearInterval(CARROT_VISION_HEALTH_T);
+  CARROT_VISION_HEALTH_T = null;
+}
+
+function checkCarrotVisionHealth() {
+  if (!shouldRunCarrotVisionRealtime()) {
+    stopCarrotVisionHealthWatch();
+    return;
+  }
+
+  const pendingPc = RTC_PENDING_PC;
+  if (pendingPc) {
+    const createdAt = Number(pendingPc.__carrotCreatedAtMs || 0);
+    if (createdAt > 0 && Date.now() - createdAt > RTC_PENDING_STALE_MS) {
+      console.warn("[RTC] pending peer stale, forcing retry", rtcBuildTraceSnapshot(pendingPc));
+      rtcCaptureVideoHoldFrame();
+      rtcClosePeer(pendingPc);
+      _rtcConnecting = false;
+      rtcScheduleRetry(0);
+      return;
+    }
+  }
+
+  if (_rtcConnecting || RTC_PENDING_PC) return;
+  if (!RTC_PC || !rtcHasLiveTrack()) {
+    rtcConnectOnce({ force: true }).catch(() => {});
+    return;
+  }
+}
+
 function syncCarrotRealtimeLifecycle(forceFetch = false) {
   const nextHudActive = shouldRunCarrotHudRealtime();
   const nextVisionActive = shouldRunCarrotVisionRealtime();
 
   if (nextHudActive === _carrotHudRealtimeActive && nextVisionActive === _carrotVisionRealtimeActive && !forceFetch) {
+    if (nextVisionActive) startCarrotVisionHealthWatch();
+    else stopCarrotVisionHealthWatch();
     if (nextVisionActive && !_rtcConnecting && (!RTC_PC || !rtcHasLiveTrack())) {
       rtcConnectOnce().catch(() => {});
     }
@@ -2048,6 +2205,7 @@ function syncCarrotRealtimeLifecycle(forceFetch = false) {
 
   if (nextVisionActive) {
     console.log("[perf] carrot vision realtime -> active");
+    startCarrotVisionHealthWatch();
     requestCarrotFullscreen({ quiet: true }).catch(() => {});
     ensureRawDecodeWorker();
     rawOverlayConnectAll();
@@ -2059,6 +2217,7 @@ function syncCarrotRealtimeLifecycle(forceFetch = false) {
     }
   } else {
     console.log("[perf] carrot vision realtime -> idle");
+    stopCarrotVisionHealthWatch();
     stopRtcPerfPolling();
     rawOverlayDisconnectAll();
     rtcDisconnect().catch(() => {});
