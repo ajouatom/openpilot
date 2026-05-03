@@ -10,7 +10,8 @@
       var primaryPages = { carrot: 1, setting: 1, tools: 1, logs: 1, terminal: 1 };
       var startPage = "carrot";
       try {
-        var setting = localStorage.getItem("carrot_web_start_page") || "carrot";
+        var webSettings = window.__CARROT_BOOTSTRAP__ && window.__CARROT_BOOTSTRAP__.webSettings;
+        var setting = (webSettings && webSettings.start_page) || "last";
         if (setting === "last") {
           var lastPage = localStorage.getItem("carrot_web_last_page");
           startPage = primaryPages[lastPage] ? lastPage : "carrot";
@@ -70,7 +71,7 @@
   </style>
   <link rel="stylesheet" href="/css/tokens.css?v=2605-01" />
   <link rel="stylesheet" href="/css/layout_tokens.css?v=2605-07" />
-  <link rel="stylesheet" href="/css/hud_card.css?v=2605-02" />
+  <link rel="stylesheet" href="/css/hud_card.css?v=2605-03" />
   <link rel="stylesheet" href="/css/base.css?v=2605-07" />
   <link rel="stylesheet" href="/css/layout.css?v=2605-08" />
   <link rel="stylesheet" href="/css/components.css?v=2605-02" />
@@ -78,7 +79,7 @@
   <link rel="stylesheet" href="/css/pages/terminal.css?v=2605-07" />
   <link rel="stylesheet" href="/css/pages/settings.css?v=2605-16" />
   <link rel="stylesheet" href="/css/pages/tools.css?v=2605-23" />
-  <link rel="stylesheet" href="/css/pages/drive.css?v=2605-09" />
+  <link rel="stylesheet" href="/css/pages/drive.css?v=2605-10" />
   <link rel="stylesheet" href="/css/responsive.css?v=2605-07" />
 </head>
 
@@ -372,7 +373,7 @@
 
       <div id="carrotStage" class="carrot-stage">
         <canvas id="carrotAmbientCanvas" class="carrot-stage__ambient" aria-hidden="true"></canvas>
-        <video id="carrotRoadVideo" class="carrot-stage__video" autoplay playsinline muted disablepictureinpicture style="display:none;"></video>
+        <video id="carrotRoadVideo" class="carrot-stage__video" autoplay playsinline muted disablepictureinpicture></video>
         <canvas id="carrotLastFrameCanvas" class="carrot-stage__videoHold" aria-hidden="true"></canvas>
         <canvas id="carrotOverlayCanvas" class="carrot-stage__canvas"></canvas>
         <canvas id="carrotHudCanvas" class="carrot-stage__hud"></canvas>
@@ -393,7 +394,8 @@
         <div id="carrotStageLoading" class="carrot-stage__loading" hidden aria-live="polite" aria-busy="true">
           <div class="carrot-stage__loadingPanel">
             <div class="carrot-stage__spinner" aria-hidden="true"></div>
-            <div id="carrotStageLoadingText" class="carrot-stage__loadingText">연결중</div>
+            <div id="carrotStageLoadingText" class="carrot-stage__loadingText"></div>
+            <div id="carrotStageLoadingDetail" class="carrot-stage__loadingDetail"></div>
           </div>
         </div>
 
@@ -577,16 +579,16 @@
   </div>
 
   <script src="/js/translations/registry.js?v=2604-01"></script>
-  <script src="/js/translations/ko.js?v=2604-04"></script>
-  <script src="/js/translations/en.js?v=2604-04"></script>
-  <script src="/js/translations/zh.js?v=2604-02"></script>
-  <script src="/js/translations/ja.js?v=2604-02"></script>
-  <script src="/js/translations/fr.js?v=2604-02"></script>
+  <script src="/js/translations/ko.js?v=2604-06"></script>
+  <script src="/js/translations/en.js?v=2604-06"></script>
+  <script src="/js/translations/zh.js?v=2604-04"></script>
+  <script src="/js/translations/ja.js?v=2604-04"></script>
+  <script src="/js/translations/fr.js?v=2604-04"></script>
   <script src="/js/hud_card.js?v=2604-05"></script>
   <script src="/js/shared/constants.js?v=2604-72"></script>
   <script src="/js/shared/dom.js?v=2604-71"></script>
   <script src="/js/shared/utils.js?v=2604-71"></script>
-  <script src="/js/shared/i18n.js?v=2604-71"></script>
+  <script src="/js/shared/i18n.js?v=2605-01"></script>
   <script src="/js/shared/api.js?v=2604-72"></script>
   <script src="/js/shared/activity.js?v=2604-04"></script>
   <script src="/js/shared/ui/dialog.js?v=2604-71"></script>
@@ -595,21 +597,24 @@
   <script src="/js/shared/ui/navigation.js?v=2605-11"></script>
   <script src="/js/pages/car.js?v=2604-75"></script>
   <script src="/js/pages/setting.js?v=2604-83"></script>
-  <script src="/js/pages/setting_device_config.js?v=2605-01"></script>
+  <script src="/js/pages/setting_device_config.js?v=2605-02"></script>
   <script src="/js/pages/setting_device_render.js?v=2605-02"></script>
   <script src="/js/pages/setting_device_network.js?v=2605-01"></script>
-  <script src="/js/pages/setting_device_actions.js?v=2605-01"></script>
-  <script src="/js/pages/setting_device.js?v=2605-03"></script>
-  <script src="/js/pages/tools_web_settings.js?v=2605-03"></script>
+  <script src="/js/pages/setting_device_actions.js?v=2605-02"></script>
+  <script src="/js/pages/setting_device.js?v=2605-05"></script>
+  <script src="/js/pages/tools_web_settings.js?v=2605-04"></script>
   <script src="/js/pages/tools_notifications.js?v=2605-14"></script>
   <script src="/js/pages/tools.js?v=2605-07"></script>
   <script src="/js/pages/branch.js?v=2604-73"></script>
   <script src="/js/pages/logs.js?v=2604-75"></script>
   <script src="/js/pages/terminal.js?v=2604-72"></script>
   <script src="/js/raw_capnp.js?v=2604-05"></script>
-  <script src="/js/app_realtime.js?v=2604-21"></script>
+  <script src="/js/vision_state.js?v=2605-01"></script>
+  <script src="/js/vision_rtc.js?v=2605-01"></script>
+  <script src="/js/vision_raw.js?v=2605-01"></script>
+  <script src="/js/app_realtime.js?v=2604-29"></script>
   <script src="/js/pages/vision_background.js?v=2605-01"></script>
-  <script src="/js/home_drive.js?v=2605-02"></script>
+  <script src="/js/home_drive.js?v=2605-05"></script>
   <script src="/js/app.js?v=2604-76"></script>
 </body>
 </html>

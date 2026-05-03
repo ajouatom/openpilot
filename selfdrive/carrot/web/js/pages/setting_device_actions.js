@@ -147,8 +147,9 @@ function bindDeviceAction(container, id, endpoint, confirmMessage = "") {
   });
 }
 
-function getCalibrationStatusMessage() {
-  const calib = deviceInfo?.calibration || {};
+async function getCalibrationStatusMessage() {
+  const payload = await getJson("/api/calibration_status");
+  const calib = payload.calibration || {};
   let message = getUIText(
     "calibration_status_desc",
     "openpilot requires the device to be mounted within 4° left or right and within 5° up or 9° down. openpilot is continuously calibrating, resetting is rarely required.",
@@ -164,10 +165,15 @@ function getCalibrationStatusMessage() {
   return message;
 }
 
-function openCalibrationStatusModal() {
-  appAlert(getCalibrationStatusMessage(), {
-    title: getUIText("calibration_status", "Calibration Status"),
-  });
+async function openCalibrationStatusModal() {
+  try {
+    const message = await getCalibrationStatusMessage();
+    appAlert(message, {
+      title: getUIText("calibration_status", "Calibration Status"),
+    });
+  } catch (err) {
+    showAppToast(err.message || getUIText("failed", "Failed"), { tone: "error" });
+  }
 }
 
 async function handleSshKeysButton(button) {

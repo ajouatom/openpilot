@@ -10,6 +10,44 @@ const DEVICE_GROUPS = [
   { id: "Developer", labelKey: "device_group_developer", defaultLabel: "Developer" },
 ];
 
+const DEVICE_INFO_PARAMS = [
+  "DeviceType",
+  "DongleId",
+  "HardwareSerial",
+  "LanguageSetting",
+  "SoftwareMenu",
+];
+
+const DEVICE_SOFTWARE_PARAMS = [
+  "UpdaterCurrentDescription",
+  "UpdaterState",
+  "UpdateAvailable",
+  "UpdaterFetchAvailable",
+  "UpdateFailedCount",
+  "UpdaterTargetBranch",
+  "GitBranch",
+  "UpdaterAvailableBranches",
+  "LastUpdateTime",
+  "UpdaterNewDescription",
+];
+
+const DEVICE_LANGUAGES = [
+  { code: "main_en", name: "English" },
+  { code: "main_ko", name: "한국어" },
+  { code: "main_zh-CHS", name: "简体中文" },
+  { code: "main_zh-CHT", name: "繁體中文" },
+  { code: "main_ja", name: "日本語" },
+  { code: "main_fr", name: "Français" },
+  { code: "main_pt-BR", name: "Português" },
+  { code: "main_de", name: "Deutsch" },
+  { code: "main_es", name: "Español" },
+  { code: "main_tr", name: "Türkçe" },
+  { code: "main_th", name: "ไทย" },
+  { code: "main_ar", name: "العربية" },
+  { code: "main_pl", name: "Polski" },
+  { code: "main_nl", name: "Nederlands" },
+];
+
 const DEVICE_TOGGLES = [
   { param: "OpenpilotEnabledToggle", labelKey: "enable_openpilot", defaultLabel: "Enable openpilot" },
   { param: "ExperimentalMode", labelKey: "experimental_mode", defaultLabel: "Experimental Mode", confirmKey: "experimental_mode_confirm", confirmedParam: "ExperimentalModeConfirmed" },

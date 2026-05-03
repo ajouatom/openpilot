@@ -1,7 +1,7 @@
 "use strict";
 
-// Web-only settings dialog. Keep this separate from tools.js so future web
-// preferences can grow without adding another large branch to the Tools page.
+// Web-only settings dialog. Server-backed settings belong to the device, while
+// last-page history remains browser-local by design.
 
 const WEB_SETTINGS_GROUPS = [
   {
@@ -44,41 +44,111 @@ const WEB_SETTINGS_GROUPS = [
   },
 ];
 
-const WEB_AUTO_UPDATE_KEY = "carrot_web_auto_update_git_pull";
-const WEB_START_PAGE_KEY = "carrot_web_start_page";
 const WEB_LAST_PAGE_KEY = "carrot_web_last_page";
 const WEB_AUTO_UPDATE_COOLDOWN_MS = 10 * 60 * 1000;
 const WEB_PRIMARY_PAGES = new Set(["carrot", "setting", "tools", "logs", "terminal"]);
+const WEB_SETTING_DEFAULTS = {
+  auto_update_git_pull: false,
+  start_page: "last",
+  web_language: "",
+};
+
+const webSettingsState = { ...WEB_SETTING_DEFAULTS };
+window.CarrotWebSettingsState = webSettingsState;
 
 let activeWebSettingsGroup = "general";
+let webSettingsLoaded = false;
+let webSettingsLoadPromise = null;
 let webAutoUpdateInFlight = false;
 let webAutoUpdateLastAttempt = 0;
 
-function getWebSettingBool(key, fallback = false) {
-  try {
-    const value = localStorage.getItem(key);
-    if (value === null) return fallback;
-    return value === "1" || value === "true";
-  } catch {
-    return fallback;
+function normalizeWebSettingValue(key, value) {
+  if (key === "auto_update_git_pull") {
+    if (typeof value === "string") return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+    return Boolean(value);
   }
+  if (key === "start_page") {
+    const page = String(value || "").trim().toLowerCase();
+    return page === "last" || WEB_PRIMARY_PAGES.has(page) ? page : WEB_SETTING_DEFAULTS.start_page;
+  }
+  if (key === "web_language") {
+    if (typeof normalizeLangCode === "function") return normalizeLangCode(value);
+    const lang = String(value || "").trim().toLowerCase();
+    return ["en", "ko", "zh", "ja", "fr"].includes(lang) ? lang : "";
+  }
+  return value;
 }
 
-function setWebSettingBool(key, value) {
+function applyWebSettings(settings = {}) {
+  Object.keys(WEB_SETTING_DEFAULTS).forEach((key) => {
+    const value = Object.prototype.hasOwnProperty.call(settings, key) ? settings[key] : WEB_SETTING_DEFAULTS[key];
+    webSettingsState[key] = normalizeWebSettingValue(key, value);
+  });
+  return webSettingsState;
+}
+
+applyWebSettings(window.__CARROT_BOOTSTRAP__?.webSettings || {});
+
+async function requestWebSettings(method = "GET", body = null) {
+  const options = { method };
+  if (body) {
+    options.headers = { "Content-Type": "application/json" };
+    options.body = JSON.stringify(body);
+  }
+  if (typeof requestJson === "function") {
+    return requestJson("/api/web_settings", options);
+  }
+  const response = await fetch("/api/web_settings", options);
+  const payload = await response.json();
+  if (!response.ok || payload?.ok === false) {
+    throw new Error(payload?.error || `HTTP ${response.status}`);
+  }
+  return payload;
+}
+
+async function loadWebSettings(force = false) {
+  if (!force && webSettingsLoaded) return webSettingsState;
+  if (webSettingsLoadPromise) return webSettingsLoadPromise;
+  webSettingsLoadPromise = requestWebSettings("GET")
+    .then((payload) => {
+      webSettingsLoaded = true;
+      return applyWebSettings(payload?.settings || {});
+    })
+    .finally(() => {
+      webSettingsLoadPromise = null;
+    });
+  return webSettingsLoadPromise;
+}
+
+function getWebSettingByKey(key, fallback = undefined) {
+  if (!Object.prototype.hasOwnProperty.call(WEB_SETTING_DEFAULTS, key)) return fallback;
+  return webSettingsState[key] ?? fallback ?? WEB_SETTING_DEFAULTS[key];
+}
+
+async function setWebSettingByKey(key, value) {
+  if (!Object.prototype.hasOwnProperty.call(WEB_SETTING_DEFAULTS, key)) return undefined;
+  const previous = webSettingsState[key];
+  const next = normalizeWebSettingValue(key, value);
+  webSettingsState[key] = next;
   try {
-    localStorage.setItem(key, value ? "1" : "0");
-  } catch {}
+    const payload = await requestWebSettings("POST", { [key]: next });
+    applyWebSettings(payload?.settings || { [key]: next });
+    window.dispatchEvent(new CustomEvent("carrot:websettingschange", {
+      detail: { key, value: webSettingsState[key], settings: { ...webSettingsState } },
+    }));
+  } catch (err) {
+    webSettingsState[key] = previous;
+    throw err;
+  }
+  return webSettingsState[key];
 }
 
 function getWebSettingValue(item) {
-  if (item.id === "auto_update_git_pull") return getWebSettingBool(WEB_AUTO_UPDATE_KEY, false);
-  if (item.id === "start_page") return getWebStartPageSetting();
-  return false;
+  return getWebSettingByKey(item.id, WEB_SETTING_DEFAULTS[item.id]);
 }
 
 function setWebSettingValue(item, value) {
-  if (item.id === "auto_update_git_pull") setWebSettingBool(WEB_AUTO_UPDATE_KEY, value);
-  if (item.id === "start_page") setWebStartPage(value);
+  return setWebSettingByKey(item.id, value);
 }
 
 function getWebStartPage() {
@@ -93,19 +163,11 @@ function getWebStartPage() {
 }
 
 function getWebStartPageSetting() {
-  try {
-    const value = localStorage.getItem(WEB_START_PAGE_KEY);
-    return value === "last" || WEB_PRIMARY_PAGES.has(value) ? value : "carrot";
-  } catch {
-    return "carrot";
-  }
+  return normalizeWebSettingValue("start_page", webSettingsState.start_page);
 }
 
 function setWebStartPage(value) {
-  const next = value === "last" || WEB_PRIMARY_PAGES.has(value) ? value : "carrot";
-  try {
-    localStorage.setItem(WEB_START_PAGE_KEY, next);
-  } catch {}
+  return setWebSettingByKey("start_page", value);
 }
 
 function recordWebLastPage(page) {
@@ -222,19 +284,35 @@ function bindWebSettingsDialogEvents() {
     if (!item) return;
     if (input) {
       input.addEventListener("change", () => {
-        setWebSettingValue(item, input.checked);
-        if (item.id === "auto_update_git_pull" && input.checked && typeof refreshGitPullStatus === "function") {
-          refreshGitPullStatus({ force: true, ttlMs: 0 }).catch(() => {});
-        }
+        setWebSettingValue(item, input.checked)
+          .then(() => {
+            if (item.id === "auto_update_git_pull" && input.checked && typeof refreshGitPullStatus === "function") {
+              refreshGitPullStatus({ force: true, ttlMs: 0 }).catch(() => {});
+            }
+          })
+          .catch((err) => {
+            input.checked = Boolean(getWebSettingValue(item));
+            if (typeof showAppToast === "function") {
+              showAppToast(err?.message || String(err), { tone: "error" });
+            }
+          });
       });
     }
     if (select) {
-      select.addEventListener("change", () => setWebSettingValue(item, select.value));
+      select.addEventListener("change", () => {
+        setWebSettingValue(item, select.value).catch((err) => {
+          select.value = String(getWebSettingValue(item));
+          if (typeof showAppToast === "function") {
+            showAppToast(err?.message || String(err), { tone: "error" });
+          }
+        });
+      });
     }
   });
 }
 
-function openWebSettingsDialog() {
+async function openWebSettingsDialog() {
+  await loadWebSettings().catch(() => {});
   const dialogPromise = appAlert("", {
     title: getUIText("web_settings", "Web Settings"),
     html: true,
@@ -253,7 +331,7 @@ function openWebSettingsDialog() {
 }
 
 async function runWebAutoUpdateGitPull(status = {}) {
-  if (!getWebSettingBool(WEB_AUTO_UPDATE_KEY, false)) return;
+  if (!getWebSettingByKey("auto_update_git_pull", false)) return;
   if (webAutoUpdateInFlight) return;
   if (document.hidden) return;
   const behind = Math.max(0, Number(status.behind || 0));
@@ -292,6 +370,9 @@ function handleWebAutoUpdateStatus(status = {}) {
   runWebAutoUpdateGitPull(status).catch((err) => console.error("[WebSettings]", err));
 }
 
+window.loadWebSettings = loadWebSettings;
+window.getWebSettingByKey = getWebSettingByKey;
+window.setWebSettingByKey = setWebSettingByKey;
 window.getWebStartPage = getWebStartPage;
 window.getWebStartPageSetting = getWebStartPageSetting;
 window.setWebStartPage = setWebStartPage;

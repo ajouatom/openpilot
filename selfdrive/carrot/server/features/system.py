@@ -8,7 +8,7 @@ from aiohttp import web
 from ..live_runtime.broker import RealtimeBroker
 from ..live_runtime.normalize import to_transport_safe
 from ..config import OFFROAD_ASSETS_DIR
-from ..services.device_info import get_device_info
+from ..services.device_info import get_calibration_status, get_device_network
 from ..services.params import HAS_PARAMS, Params, set_param_value
 from ..services.time_sync import TIME_SYNC_DEBUG_DEFAULT, sync_system_time_from_browser
 
@@ -147,10 +147,19 @@ async def api_time_sync(request: web.Request) -> web.Response:
   return web.json_response(result, status=status)
 
 
-async def api_device_info(request: web.Request) -> web.Response:
+async def api_device_network(request: web.Request) -> web.Response:
   try:
-    info = await asyncio.to_thread(get_device_info)
-    return web.json_response({"ok": True, **info})
+    force = request.query.get("force") == "1"
+    network = await asyncio.to_thread(get_device_network, force)
+    return web.json_response({"ok": True, "network": network})
+  except Exception as e:
+    return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def api_calibration_status(request: web.Request) -> web.Response:
+  try:
+    calibration = await asyncio.to_thread(get_calibration_status)
+    return web.json_response({"ok": True, "calibration": calibration})
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
 
@@ -225,7 +234,8 @@ async def api_set_default(request: web.Request) -> web.Response:
 def register(app: web.Application) -> None:
   app.router.add_get("/api/heartbeat_status", api_heartbeat_status)
   app.router.add_get("/api/live_runtime", api_live_runtime)
-  app.router.add_get("/api/device_info", api_device_info)
+  app.router.add_get("/api/device_network", api_device_network)
+  app.router.add_get("/api/calibration_status", api_calibration_status)
   app.router.add_get("/api/regulatory", api_regulatory)
   app.router.add_post("/api/reboot", api_reboot)
   app.router.add_post("/api/poweroff", api_poweroff)

@@ -12,6 +12,7 @@ from . import (
   system,
   terminal,
   tools,
+  web_settings,
   ws,
 )
 
@@ -22,6 +23,7 @@ def register_all(app: web.Application) -> None:
   ws.register(app)
   settings.register(app)
   params.register(app)
+  web_settings.register(app)
   ssh_keys.register(app)
   cars.register(app)
   system.register(app)

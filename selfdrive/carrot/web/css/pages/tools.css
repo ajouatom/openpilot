@@ -233,22 +233,33 @@
   appearance: none;
   -webkit-appearance: none;
   width: 100%;
-  min-height: 34px;
-  padding: 0 2px;
+  min-height: 38px;
+  padding: 6px 10px;
+  margin-bottom: 2px;
   border: 0;
+  border-radius: 6px;
   background: transparent;
   color: var(--md-on-surface);
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 0;
+  gap: 8px;
   font-size: var(--fs-body-md);
   text-align: left;
   cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.tools-lang-menu__item:hover,
+.tools-lang-menu__item:focus-visible {
+  background: color-mix(in srgb, var(--md-on-surface) 6%, transparent);
+  outline: none;
 }
 
 .tools-lang-menu__item[aria-checked="true"] {
   font-weight: 800;
+  color: var(--md-primary);
+  background: color-mix(in srgb, var(--md-primary) 12%, transparent);
 }
 
 .tools-lang-menu__openMark {

@@ -1,26 +1,12 @@
-"""
-Device info service — gathers device metadata for the web Device tab.
-
-Collects: device type, dongle ID, serial, calibration status,
-supported languages, current language, software version, update state.
-Adapts to TICI / MICI / TIZI via HARDWARE.get_device_type().
-"""
+"""Device support services that are not plain Params reads."""
 from __future__ import annotations
 
 import math
 import subprocess
+import time
 from typing import Any, Dict, List
 
 from .params import HAS_PARAMS, Params, get_param_value
-
-
-# ── device type ──────────────────────────────────────────────
-def get_device_type() -> str:
-  try:
-    from openpilot.system.hardware import HARDWARE
-    return HARDWARE.get_device_type()
-  except Exception:
-    return "unknown"
 
 
 # ── calibration ──────────────────────────────────────────────
@@ -53,43 +39,11 @@ def get_calibration_status() -> Dict[str, Any]:
   except Exception:
     return {"calibrated": False, "pitch": None, "yaw": None}
 
-
-# ── supported languages ─────────────────────────────────────
-# Matches the list from Qt getSupportedLanguages() / multilang
-SUPPORTED_LANGUAGES: List[Dict[str, str]] = [
-  {"code": "main_en", "name": "English"},
-  {"code": "main_ko", "name": "한국어"},
-  {"code": "main_zh-CHS", "name": "简体中文"},
-  {"code": "main_zh-CHT", "name": "繁體中文"},
-  {"code": "main_ja", "name": "日本語"},
-  {"code": "main_fr", "name": "Français"},
-  {"code": "main_pt-BR", "name": "Português"},
-  {"code": "main_de", "name": "Deutsch"},
-  {"code": "main_es", "name": "Español"},
-  {"code": "main_tr", "name": "Türkçe"},
-  {"code": "main_th", "name": "ไทย"},
-  {"code": "main_ar", "name": "العربية"},
-  {"code": "main_pl", "name": "Polski"},
-  {"code": "main_nl", "name": "Nederlands"},
-]
-
-
-# ── software / update state ─────────────────────────────────
-def get_update_status() -> Dict[str, Any]:
-  if not HAS_PARAMS:
-    return {}
-  return {
-    "version": get_param_value("UpdaterCurrentDescription", ""),
-    "state": get_param_value("UpdaterState", "idle"),
-    "available": get_param_value("UpdateAvailable", False),
-    "fetch_available": get_param_value("UpdaterFetchAvailable", False),
-    "failed_count": get_param_value("UpdateFailedCount", 0),
-    "target_branch": get_param_value("UpdaterTargetBranch", ""),
-    "git_branch": get_param_value("GitBranch", ""),
-    "available_branches": get_param_value("UpdaterAvailableBranches", ""),
-    "last_update_time": get_param_value("LastUpdateTime", ""),
-    "new_description": get_param_value("UpdaterNewDescription", ""),
-  }
+NETWORK_CACHE_TTL_SEC = 5.0
+_network_cache: Dict[str, Any] = {
+  "monotonic": 0.0,
+  "data": None,
+}
 
 
 # ── network viewer data ────────────────────────────────────
@@ -181,31 +135,20 @@ def get_wifi_ip_address() -> str:
   return ""
 
 
-# ── aggregate ────────────────────────────────────────────────
-def get_device_info() -> Dict[str, Any]:
-  """Single call to gather all device info for the web Device tab."""
-  device_type = get_device_type()
-  is_mici = device_type == "mici"
+def get_device_network(force: bool = False) -> Dict[str, Any]:
+  now = time.monotonic()
+  cached = _network_cache.get("data")
+  if not force and isinstance(cached, dict) and now - float(_network_cache.get("monotonic") or 0.0) < NETWORK_CACHE_TTL_SEC:
+    return dict(cached)
 
-  return {
-    "device_type": device_type,
-    "dongle_id": get_param_value("DongleId", "N/A"),
-    "serial": get_param_value("HardwareSerial", "N/A"),
-    "calibration": get_calibration_status(),
-    "language": get_param_value("LanguageSetting", "main_en"),
-    "languages": SUPPORTED_LANGUAGES,
-    "is_metric": get_param_value("IsMetric", False),
-    "software_menu": get_param_value("SoftwareMenu", 0),
-    "update": get_update_status(),
-    "network": {
-      "wifi": get_wifi_networks(),
-      "ip_address": get_wifi_ip_address(),
-      "tethering_enabled": get_param_value("HotspotOnBoot", False),
-      "roaming_enabled": get_param_value("GsmRoaming", False),
-      "gsm_metered": get_param_value("GsmMetered", False),
-      "apn": get_param_value("GsmApn", ""),
-    },
-    # feature flags for conditional rendering
-    "has_cellular": not is_mici,
-    "has_amplifier": not is_mici,
+  data = {
+    "wifi": get_wifi_networks(),
+    "ip_address": get_wifi_ip_address(),
+    "tethering_enabled": get_param_value("HotspotOnBoot", False),
+    "roaming_enabled": get_param_value("GsmRoaming", False),
+    "gsm_metered": get_param_value("GsmMetered", False),
+    "apn": get_param_value("GsmApn", ""),
   }
+  _network_cache["monotonic"] = now
+  _network_cache["data"] = dict(data)
+  return data
