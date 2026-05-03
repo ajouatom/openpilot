@@ -27,19 +27,22 @@ server/
 │   ├── heartbeat.py        external IP register loop
 │   ├── ssh_keys.py         GitHub SSH key fetch/store helpers for Device developer panel
 │   ├── time_sync.py        browser → system time sync
-│   ├── device_info.py      device type, dongle, serial, calibration, language list
+│   ├── device_info.py      focused calibration + network helpers for Device tab
+│   ├── web_settings.py     device/server-backed Web Settings state
 │   └── tmux.py             tmux session helpers
 └── features/               HTTP entry points (one feature per file/folder)
-    ├── static.py           /, static fallback
+    ├── static.py           /, static fallback + initial bootstrap payload
     ├── stream.py           /stream → webrtcd proxy
     ├── ws.py               /ws/raw, /ws/raw_multiplex, /ws/camera
     ├── settings.py         /api/settings
     ├── params.py           /api/params_*, /download/params_backup.json
+    ├── web_settings.py     /api/web_settings
     ├── ssh_keys.py         /api/ssh_keys
     ├── cars.py             /api/cars
     ├── system.py           /api/heartbeat_status, /api/reboot, /api/time_sync,
     │                       /api/live_runtime, /api/poweroff, /api/recalibrate,
-    │                       /api/set_default, /api/device_info
+    │                       /api/set_default, /api/calibration_status,
+    │                       /api/device_network
     ├── terminal.py         /ws/terminal, /download/tmux.log
     ├── dashcam/            /api/dashcam/* (paths, catalog, ffmpeg, upload, upload_jobs, routes)
     ├── screenrecord/       /api/screenrecord/* (catalog, routes)
@@ -89,7 +92,7 @@ web/
     │   ├── constants.js    LANG_*, SWIPE_*, PAGE_TRANSITION_*
     │   ├── dom.js          all getElementById refs in one place
     │   ├── utils.js        escapeHtml, clamp, copyToClipboard, quick link
-    │   ├── i18n.js         LANG, getUIText, renderUIText, setWebLanguage
+    │   ├── i18n.js         bootstrapped LANG, getUIText, renderUIText, setWebLanguage
     │   ├── api.js          bulkGet, setParam, postJson, getJson, waitMs
     │   ├── activity.js     cross-page activity badges + beforeunload guard
     │   └── ui/
@@ -105,7 +108,7 @@ web/
     │   ├── setting_device_network.js  Device network refresh loop
     │   ├── setting_device_actions.js  Device action/dialog handlers
     │   ├── setting_device.js          Device tab coordinator and state
-    │   ├── tools_web_settings.js      Web-only settings dialog
+    │   ├── tools_web_settings.js      server-backed Web Settings dialog
     │   ├── tools.js        tools page + initToolsPage + action runners
     │   ├── branch.js       branch picker modal + Branch page
     │   ├── logs.js         Dashcam + Screen Recording lists
@@ -125,7 +128,7 @@ The Setting page has two top-level tabs:
 
 | Tab | Content | Data source |
 |---|---|---|
-| **Device** | stock openpilot options (info, toggles, software, power) | Params API direct |
+| **Device** | stock openpilot options (info, toggles, software, power) | Params API direct; network/calibration only use focused APIs |
 | **CarrotPilot** | Carrot-specific tuning groups | carrot_settings.json |
 
 Device tab adapts to hardware via `DeviceType` param (`tici`/`mici`/`tizi`).

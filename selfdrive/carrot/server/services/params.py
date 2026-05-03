@@ -72,35 +72,19 @@ def clamp_numeric(value: float, p: Optional[Dict[str, Any]]) -> float:
   return value
 
 
-# -----------------------
-# Single-key get/set (used by features/params and tools)
-# -----------------------
-def get_param_value(name: str, default: Any) -> Any:
-  # 'GitPullTime' is a synthetic key backed by services/git_state.py.
-  # Imported lazily to avoid a circular import at module load.
-  from .git_state import read_custom_meta_value
-  custom_value = read_custom_meta_value(name)
-  if custom_value is not None:
-    return custom_value
-
-  if not HAS_PARAMS:
-    s = _mem_store.get(name, None)
-    return default if s is None else s
-
-  params = Params()
+def _read_param_value(params: "Params", name: str, default: Any) -> Any:
   try:
     t = params.get_type(name)
 
-    if t == ParamKeyType.BOOL:
+    if ParamKeyType is not None and t == ParamKeyType.BOOL:
       return bool(params.get_bool(name))
 
-    if t == ParamKeyType.INT:
+    if ParamKeyType is not None and t == ParamKeyType.INT:
       return int(params.get_int(name))
 
-    if t == ParamKeyType.FLOAT:
+    if ParamKeyType is not None and t == ParamKeyType.FLOAT:
       return float(params.get_float(name))
 
-    # STRING / TIME / 기타는 raw string
     v = params.get(name)
     if v is None:
       return default if default is not None else ""
@@ -119,6 +103,50 @@ def get_param_value(name: str, default: Any) -> Any:
     return v.decode("utf-8", errors="replace")
   except Exception:
     return default if default is not None else ""
+
+
+# -----------------------
+# Single-key get/set (used by features/params and tools)
+# -----------------------
+def get_param_value(name: str, default: Any) -> Any:
+  # 'GitPullTime' is a synthetic key backed by services/git_state.py.
+  # Imported lazily to avoid a circular import at module load.
+  from .git_state import read_custom_meta_value
+  custom_value = read_custom_meta_value(name)
+  if custom_value is not None:
+    return custom_value
+
+  if not HAS_PARAMS:
+    s = _mem_store.get(name, None)
+    return default if s is None else s
+
+  return _read_param_value(Params(), name, default)
+
+
+def get_param_values(names: list[str], defaults: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+  defaults = defaults or {}
+
+  # Imported lazily to avoid a circular import at module load.
+  from .git_state import read_custom_meta_value
+
+  values: Dict[str, Any] = {}
+  if not HAS_PARAMS:
+    for name in names:
+      custom_value = read_custom_meta_value(name)
+      if custom_value is not None:
+        values[name] = custom_value
+      else:
+        values[name] = _mem_store.get(name, defaults.get(name, 0))
+    return values
+
+  params = Params()
+  for name in names:
+    custom_value = read_custom_meta_value(name)
+    if custom_value is not None:
+      values[name] = custom_value
+      continue
+    values[name] = _read_param_value(params, name, defaults.get(name, 0))
+  return values
 
 
 def put_typed(params: "Params", key: str, value: Any) -> None:

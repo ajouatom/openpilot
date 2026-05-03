@@ -8,7 +8,7 @@ from ..services.params import (
   HAS_PARAMS,
   ParamKeyType,
   clamp_numeric,
-  get_param_value,
+  get_param_values,
   restore_param_values_from_backup,
   set_param_value,
 )
@@ -26,17 +26,22 @@ async def api_params_bulk(request: web.Request) -> web.Response:
   except Exception:
     by_name = {}
 
-  values = {}
+  values = get_param_values(
+    [n for n in req_names if n != "DeviceType"],
+    {n: by_name.get(n, {}).get("default", 0) for n in req_names},
+  )
+  if "DeviceType" in req_names:
+    try:
+      from openpilot.system.hardware import HARDWARE
+      values["DeviceType"] = HARDWARE.get_device_type()
+    except Exception:
+      values["DeviceType"] = "unknown"
   for n in req_names:
-    if n == "DeviceType":
+    if n not in values:
       try:
-        from openpilot.system.hardware import HARDWARE
-        values[n] = HARDWARE.get_device_type()
+        values[n] = by_name.get(n, {}).get("default", 0)
       except Exception:
-        values[n] = "unknown"
-    else:
-      default = by_name.get(n, {}).get("default", 0)
-      values[n] = get_param_value(n, default)
+        values[n] = 0
 
   return web.json_response({"ok": True, "values": values})
 
