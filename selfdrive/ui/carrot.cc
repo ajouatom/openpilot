@@ -2939,165 +2939,93 @@ static void drawLaneCenterIndicator(const UIState *s) {
   QPolygonF polygon = left_points + right_points;
 
   float path_bot_y = left_points[0].y();
-  float path_top_y = left_points.back().y();
-  
-  // ACC 감속 명령 기반 색상: 감속 없으면 초록, 감속강도에 따라 노랑→빨강
-  // carControl.actuators.accel < 0 = ACC가 감속 명령 중
-  float lead_danger = 0.0f;
-  if (sm.alive("carControl")) {
-    auto cc = sm["carControl"].getCarControl();
-    if (cc.getEnabled()) {
-      float cmd_accel = (float)cc.getActuators().getAccel();
-      if (cmd_accel < 0.0f) {
-        // [-3, 0] m/s² → [1.0, 0.0] 위험도 (3m/s²이 급강속 기준)
-        lead_danger = std::clamp(-cmd_accel / 3.0f, 0.0f, 1.0f);
-      }
+
+  // --- Tire Trajectory (Edge Bands) & Indicator Text ---
+  if (Params().getBool("CarrotTireTrajectory")) {
+    // --- 가장자리 그라데이션 밴드 ---
+    bool lane_warning = fabsf(offset_m) >= 0.5f;
+    bool warn_pulse   = lane_warning && ((int64_t)(millis_since_boot()) % 800 < 400);
+
+    // right_reversed: bottom→top 순 (left_points 와 인덱스 매칭)
+    QPolygonF right_reversed;
+    right_reversed.reserve(right_points.size());
+    for (int i = (int)right_points.size() - 1; i >= 0; i--) {
+      right_reversed.push_back(right_points[i]);
     }
-  }
-  // 내부 채우기: 하단 완전 불투명(255) → 상단 약 5% 불투명(alpha=13)
-  int mode_normal = Params().getInt("ShowPathMode");
-  int mode_lane = Params().getInt("ShowPathModeLane");
-  bool active_lane = sm.alive("controlsState") ? sm["controlsState"].getControlsState().getActiveLaneLine() : false;
-  int current_mode = active_lane ? mode_lane : mode_normal;
+    int n_edge = std::min((int)left_points.size(), (int)right_reversed.size());
 
-  if (current_mode != 16) {
-    NVGcolor fill_bot = gradColor(lead_danger, 255);
-    NVGcolor fill_top = gradColor(lead_danger, 13);
-
-    // 폴리곤 내부 채우기 그리기
-    nvgBeginPath(vg);
-    for (int i = 0; i < polygon.size(); i++) {
-      if (i == 0) nvgMoveTo(vg, polygon[i].x(), polygon[i].y());
-      else        nvgLineTo(vg, polygon[i].x(), polygon[i].y());
-    }
-    nvgClosePath(vg);
-    NVGpaint fill_paint = nvgLinearGradient(vg, 0, path_bot_y, 0, path_top_y, fill_bot, fill_top);
-    nvgFillPaint(vg, fill_paint);
-    nvgFill(vg);
-  }
-
-  // --- 가장자리 그라데이션 밴드 ---
-  // 버그 수정: 깜빡임 OFF시 edge_invis(투명)를 쓰면 gradient 자체가 사라짐
-  // → 항상 연속 gradColor로 초록→노랑→빨강 표시, 경고시 강도(alpha)를 펄스
-  bool lane_warning = fabsf(offset_m) >= 0.5f;
-  bool warn_pulse   = lane_warning && ((int64_t)(millis_since_boot()) % 800 < 400);
-
-  // right_reversed: bottom→top 순 (left_points 와 인덱스 매칭)
-  QPolygonF right_reversed;
-  right_reversed.reserve(right_points.size());
-  for (int i = (int)right_points.size() - 1; i >= 0; i--) {
-    right_reversed.push_back(right_points[i]);
-  }
-  int n_edge = std::min((int)left_points.size(), (int)right_reversed.size());
-
-  // 색상 결정: 치우친 쪽 = gradColor(danger_ratio), 반대쪽 = 초록
-  // lane_warning시: 치우친 쪽 = 빨강(warn) 또는 주황(off), 반대쪽 = 초록
-  NVGcolor color_left, color_right;
-  if (lane_warning) {
-    // 경고 펄스: 빨강 ↔ 주황 (투명 NO → 항상 보임)
-    NVGcolor warn_on  = nvgRGBA(255,   0,   0, 255);
-    NVGcolor warn_off = nvgRGBA(255, 100,   0, 200); // 반투명 주황 (OFF시)
-    NVGcolor side_col = warn_pulse ? warn_on : warn_off;
-    color_left  = (offset_m > 0.0f) ? side_col : nvgRGBA(0, 200, 0, 255);
-    color_right = (offset_m < 0.0f) ? side_col : nvgRGBA(0, 200, 0, 255);
-  } else {
-    // 연속 color: danger_ratio에 따라 초록→노랑→빨강 (깜빡임 없음)
-    NVGcolor edge_green = nvgRGBA(0, 200, 0, 255);
-    if (offset_m > 0.02f) {
-      color_left  = gradColor(danger_ratio, 255);
-      color_right = edge_green;
-    } else if (offset_m < -0.02f) {
-      color_left  = edge_green;
-      color_right = gradColor(danger_ratio, 255);
+    // 색상 결정: 치우친 쪽 = gradColor(danger_ratio), 반대쪽 = 초록
+    NVGcolor color_left, color_right;
+    if (lane_warning) {
+      NVGcolor warn_on  = nvgRGBA(255,   0,   0, 255);
+      NVGcolor warn_off = nvgRGBA(255, 100,   0, 200); 
+      NVGcolor side_col = warn_pulse ? warn_on : warn_off;
+      color_left  = (offset_m > 0.0f) ? side_col : nvgRGBA(0, 200, 0, 255);
+      color_right = (offset_m < 0.0f) ? side_col : nvgRGBA(0, 200, 0, 255);
     } else {
-      color_left = color_right = edge_green;
-    }
-  }
-
-  // ─── 가장자리 그라데이션 밴드 ───
-  // ─── 가장자리 그라데이션 (모든 지점에서 안쪽 방향 수직 gradient) ─────────
-  // 각 model segment를 5px 단위로 세분화 → seam 안 보임
-  // 각 sub-segment마다 LOCAL 엣지 수직 방향으로 gradient 적용
-  // → 모든 지점에서 outer→inner 안쪽 방향으로 자연스럽게 투명도 변화
-  auto drawEdgeBand = [&](bool is_left, NVGcolor color) {
-    if (n_edge < 2) return;
-    NVGcolor transp0 = nvgRGBAf(color.r, color.g, color.b, 0.0f);
-
-    for (int i = 0; i < n_edge - 1; i++) {
-      float lx0 = (float)left_points[i].x(),   ly0 = (float)left_points[i].y();
-      float rx0 = (float)right_reversed[i].x(), ry0 = (float)right_reversed[i].y();
-      float lx1 = (float)left_points[i+1].x(),  ly1 = (float)left_points[i+1].y();
-      float rx1 = (float)right_reversed[i+1].x(),ry1 = (float)right_reversed[i+1].y();
-
-      float ox0 = is_left ? lx0 : rx0,  oy0 = is_left ? ly0 : ry0;
-      float ox1 = is_left ? lx1 : rx1,  oy1 = is_left ? ly1 : ry1;
-      (void)ox0; (void)ox1;  // seg_dy 계산용 oy만 사용
-
-      // segment 높이 (px)
-      float seg_dy = fabsf(oy1 - oy0);
-      int nsub = std::max(1, (int)(seg_dy / 5.0f));  // 5px 단위 세분화
-
-      for (int s = 0; s < nsub; s++) {
-        float t0 = (float)s / nsub;
-        float t1 = (float)(s+1) / nsub;
-
-        // 보간: 하단(b)과 상단(t) sub-segment 좌표
-        float slx_b = lx0 + (lx1-lx0)*t0,  sly_b = ly0 + (ly1-ly0)*t0;
-        float srx_b = rx0 + (rx1-rx0)*t0,  sry_b = ry0 + (ry1-ry0)*t0;
-        float slx_t = lx0 + (lx1-lx0)*t1,  sly_t = ly0 + (ly1-ly0)*t1;
-        float srx_t = rx0 + (rx1-rx0)*t1,  sry_t = ry0 + (ry1-ry0)*t1;
-
-        float bw_b = fabsf(slx_b - srx_b) / 6.0f;
-        float bw_t = fabsf(slx_t - srx_t) / 6.0f;
-
-        float sox_b = is_left ? slx_b : srx_b,  soy_b = is_left ? sly_b : sry_b;
-        float sox_t = is_left ? slx_t : srx_t,  soy_t = is_left ? sly_t : sry_t;
-
-        float ctr_b = (slx_b + srx_b) * 0.5f;
-        float dir = (ctr_b > sox_b) ? 1.0f : -1.0f;
-
-        float six_b = sox_b + dir * bw_b;  // inner bottom
-        float six_t = sox_t + dir * bw_t;  // inner top
-
-        // LOCAL 엣지 수직 방향 (이 sub-segment의 outer 방향에 perpendicular)
-        float edx = sox_t - sox_b, edy = soy_t - soy_b;
-        float elen = sqrtf(edx*edx + edy*edy);
-        if (elen < 0.5f) continue;
-        edx /= elen; edy /= elen;
-        float px = edy * (-dir);
-        float py = -edx * (-dir);
-
-        // gradient: 이 sub-segment 중점 기준
-        float bw_avg = (bw_b + bw_t) * 0.5f;
-        float ox_mid = (sox_b + sox_t) * 0.5f;
-        float oy_mid = (soy_b + soy_t) * 0.5f;
-
-        NVGpaint paint = nvgLinearGradient(vg,
-            ox_mid,              oy_mid,
-            ox_mid + px*bw_avg,  oy_mid + py*bw_avg,
-            color, transp0);
-
-        nvgBeginPath(vg);
-        nvgMoveTo(vg, sox_b, soy_b);
-        nvgLineTo(vg, six_b, soy_b);
-        nvgLineTo(vg, six_t, soy_t);
-        nvgLineTo(vg, sox_t, soy_t);
-        nvgClosePath(vg);
-        nvgFillPaint(vg, paint);
-        nvgFill(vg);
+      NVGcolor edge_green = nvgRGBA(0, 200, 0, 255);
+      if (offset_m > 0.02f) {
+        color_left  = gradColor(danger_ratio, 255);
+        color_right = edge_green;
+      } else if (offset_m < -0.02f) {
+        color_left  = edge_green;
+        color_right = gradColor(danger_ratio, 255);
+      } else {
+        color_left = color_right = edge_green;
       }
     }
-  };
 
-  drawEdgeBand(true,  color_left);
-  drawEdgeBand(false, color_right);
+    auto drawEdgeBand = [&](bool is_left, NVGcolor color) {
+      if (n_edge < 2) return;
+      NVGcolor transp0 = nvgRGBAf(color.r, color.g, color.b, 0.0f);
+      for (int i = 0; i < n_edge - 1; i++) {
+        float lx0 = (float)left_points[i].x(),   ly0 = (float)left_points[i].y();
+        float rx0 = (float)right_reversed[i].x(), ry0 = (float)right_reversed[i].y();
+        float lx1 = (float)left_points[i+1].x(),  ly1 = (float)left_points[i+1].y();
+        float rx1 = (float)right_reversed[i+1].x(),ry1 = (float)right_reversed[i+1].y();
+        float oy0 = is_left ? ly0 : ry0;
+        float oy1 = is_left ? ly1 : ry1;
+        float seg_dy = fabsf(oy1 - oy0);
+        int nsub = std::max(1, (int)(seg_dy / 5.0f));
+        for (int s = 0; s < nsub; s++) {
+          float t0 = (float)s / nsub;
+          float t1 = (float)(s+1) / nsub;
+          float slx_b = lx0 + (lx1-lx0)*t0,  sly_b = ly0 + (ly1-ly0)*t0;
+          float srx_b = rx0 + (rx1-rx0)*t0,  sry_b = ry0 + (ry1-ry0)*t0;
+          float slx_t = lx0 + (lx1-lx0)*t1,  sly_t = ly0 + (ly1-ly0)*t1;
+          float srx_t = rx0 + (rx1-rx0)*t1,  sry_t = ry0 + (ry1-ry0)*t1;
+          float bw_b = fabsf(slx_b - srx_b) / 6.0f;
+          float bw_t = fabsf(slx_t - srx_t) / 6.0f;
+          float sox_b = is_left ? slx_b : srx_b,  soy_b = is_left ? sly_b : sry_b;
+          float sox_t = is_left ? slx_t : srx_t,  soy_t = is_left ? sly_t : sry_t;
+          float ctr_b = (slx_b + srx_b) * 0.5f;
+          float dir = (ctr_b > sox_b) ? 1.0f : -1.0f;
+          float six_b = sox_b + dir * bw_b;
+          float six_t = sox_t + dir * bw_t;
+          float edx = sox_t - sox_b, edy = soy_t - soy_b;
+          float elen = sqrtf(edx*edx + edy*edy);
+          if (elen < 0.5f) continue;
+          edx /= elen; edy /= elen;
+          float px = edy * (-dir); float py = -edx * (-dir);
+          float bw_avg = (bw_b + bw_t) * 0.5f;
+          float ox_mid = (sox_b + sox_t) * 0.5f; float oy_mid = (soy_b + soy_t) * 0.5f;
+          NVGpaint paint = nvgLinearGradient(vg, ox_mid, oy_mid, ox_mid + px*bw_avg, oy_mid + py*bw_avg, color, transp0);
+          nvgBeginPath(vg); nvgMoveTo(vg, sox_b, soy_b); nvgLineTo(vg, six_b, soy_b); nvgLineTo(vg, six_t, soy_t); nvgLineTo(vg, sox_t, soy_t); nvgClosePath(vg);
+          nvgFillPaint(vg, paint); nvgFill(vg);
+        }
+      }
+    };
 
-  // ---- Text: 주행선 하단 고정 위치에 항상 표시 (차선 완전 이탈시만 숨김) ----
-  if (danger_ratio < 1.5f) {
-    float text_y = path_bot_y - 130.0f; // 화면 하단 path 바로 위에 고정
-    nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-    ui_draw_text_vg(vg, cx, text_y,         dir_label, 72, COLOR_WHITE, BOLD, 3.5f, 0.0f, COLOR_BLACK, COLOR_BLACK);
-    ui_draw_text_vg(vg, cx, text_y + 70.0f, dist_str,  58, COLOR_WHITE, BOLD, 3.0f, 0.0f, COLOR_BLACK, COLOR_BLACK);
+    drawEdgeBand(true,  color_left);
+    drawEdgeBand(false, color_right);
+
+    // ---- Text Labels ----
+    if (danger_ratio < 1.5f) {
+      float text_y = path_bot_y - 130.0f;
+      nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+      ui_draw_text_vg(vg, cx, text_y,         dir_label, 72, COLOR_WHITE, BOLD, 3.5f, 0.0f, COLOR_BLACK, COLOR_BLACK);
+      ui_draw_text_vg(vg, cx, text_y + 70.0f, dist_str,  58, COLOR_WHITE, BOLD, 3.0f, 0.0f, COLOR_BLACK, COLOR_BLACK);
+    }
   }
 }
 
