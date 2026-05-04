@@ -17,6 +17,7 @@ dependencies = [
   "crcmod-plus",  # cars + qcomgpsd
   "tqdm",         # cars (fw_versions.py) on start + many one-off uses
   "msgpack",      # realtime broker / carrot live payload transport
+  "brotli",       # carrot QR backup compression
 
   # core
   "cffi",

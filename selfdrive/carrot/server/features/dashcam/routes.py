@@ -1,6 +1,8 @@
 import asyncio
 import mimetypes
 import os
+import threading
+import time
 
 from aiohttp import web
 
@@ -15,6 +17,10 @@ from .paths import (
   segment_dir,
   segment_index,
 )
+
+ROUTE_CACHE_TTL = 3.0
+_route_cache_lock = threading.Lock()
+_route_cache = {"time": 0.0, "routes": []}
 
 
 async def request_upload_segments(request: web.Request) -> list[str]:
@@ -32,10 +38,36 @@ async def request_upload_segments(request: web.Request) -> list[str]:
   return segments
 
 
+def cached_dashcam_routes() -> list[dict]:
+  now = time.monotonic()
+  with _route_cache_lock:
+    if now - float(_route_cache.get("time") or 0.0) < ROUTE_CACHE_TTL:
+      return list(_route_cache.get("routes") or [])
+
+  routes = build_routes()
+  with _route_cache_lock:
+    _route_cache["time"] = time.monotonic()
+    _route_cache["routes"] = routes
+  return list(routes)
+
+
 async def api_dashcam_routes(request: web.Request) -> web.Response:
   try:
-    routes = await asyncio.to_thread(build_routes)
-    return web.json_response({"ok": True, "routes": routes, "root": DASHCAM_ROOT})
+    offset = max(0, int(request.query.get("offset", "0") or 0))
+    limit = max(1, min(200, int(request.query.get("limit", "80") or 80)))
+    routes = await asyncio.to_thread(cached_dashcam_routes)
+    total = len(routes)
+    end = min(offset + limit, total)
+    return web.json_response({
+      "ok": True,
+      "routes": routes[offset:end],
+      "root": DASHCAM_ROOT,
+      "offset": offset,
+      "limit": limit,
+      "total": total,
+      "nextOffset": end if end < total else None,
+      "hasMore": end < total,
+    })
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
 
@@ -55,13 +87,14 @@ async def api_dashcam_preview(request: web.Request) -> web.StreamResponse:
 async def api_dashcam_video(request: web.Request) -> web.StreamResponse:
   segment = request.match_info.get("segment", "")
   path, content_type = await asyncio.to_thread(browser_video, segment)
-  return web.FileResponse(
-    path,
-    headers={
-      "Content-Type": content_type,
-      "Cache-Control": "private, max-age=3600",
-    },
-  )
+  headers = {
+    "Content-Type": content_type,
+    "Cache-Control": "private, max-age=3600",
+  }
+  if request.query.get("download"):
+    ext = os.path.splitext(path)[1] or ".mp4"
+    headers["Content-Disposition"] = f'attachment; filename="{segment}{ext}"'
+  return web.FileResponse(path, headers=headers)
 
 
 async def api_dashcam_download(request: web.Request) -> web.StreamResponse:

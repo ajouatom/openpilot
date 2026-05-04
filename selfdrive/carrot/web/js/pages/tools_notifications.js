@@ -21,6 +21,11 @@
   let entryFocusToken = 0;
   let entryFocusTimer = null;
   let relativeTimeTimer = null;
+  let collapseRenderTimer = null;
+  let collapsingNotificationId = "";
+  let collapsingUntil = 0;
+  let collapseHost = null;
+  const detailScrollState = new Map();
   let lastRenderSignature = "";
 
   function uiText(key, fallback, vars = null) {
@@ -461,6 +466,108 @@
     return Boolean(global.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
   }
 
+  function parseTimeMs(value) {
+    const text = String(value || "").trim().split(",")[0].trim();
+    if (!text) return 0;
+    const amount = Number.parseFloat(text);
+    if (!Number.isFinite(amount)) return 0;
+    return text.endsWith("ms") ? amount : amount * 1000;
+  }
+
+  function detailAnimationMs(node) {
+    if (prefersReducedMotion()) return 0;
+    try {
+      const styles = global.getComputedStyle?.(node);
+      const duration = parseTimeMs(styles?.getPropertyValue("--tools-detail-duration"));
+      return Math.max(180, duration || 320) + 40;
+    } catch {
+      return 360;
+    }
+  }
+
+  function clearCollapseRenderTimer() {
+    if (!collapseRenderTimer) return;
+    global.clearTimeout(collapseRenderTimer);
+    collapseRenderTimer = null;
+    collapsingNotificationId = "";
+    collapsingUntil = 0;
+    collapseHost = null;
+  }
+
+  function isCollapseInProgress(out) {
+    return Boolean(
+      collapseRenderTimer &&
+      collapsingNotificationId &&
+      Date.now() < collapsingUntil &&
+      (!collapseHost || !out || collapseHost === out)
+    );
+  }
+
+  function scrollDetailToLatest(out, id) {
+    if (!id) return;
+    const scroller = getLogScroller(out);
+    const card = findCardById(scroller, id);
+    const detail = card?.querySelector?.(".tools-console-log__detail");
+    if (!detail) return;
+    detail.scrollTop = detail.scrollHeight;
+    detailScrollState.set(id, {
+      scrollTop: detail.scrollTop,
+      scrollHeight: detail.scrollHeight,
+      clientHeight: detail.clientHeight,
+    });
+  }
+
+  function rememberDetailScroll(id, detail) {
+    if (!id || !detail) return;
+    detailScrollState.set(id, {
+      scrollTop: detail.scrollTop,
+      scrollHeight: detail.scrollHeight,
+      clientHeight: detail.clientHeight,
+    });
+  }
+
+  function restoreDetailScroll(out, id) {
+    if (!id) return;
+    const scroller = getLogScroller(out);
+    const card = findCardById(scroller, id);
+    const detail = card?.querySelector?.(".tools-console-log__detail");
+    const saved = detailScrollState.get(id);
+    if (!detail || !saved) return;
+    const max = Math.max(0, detail.scrollHeight - detail.clientHeight);
+    detail.scrollTop = Math.min(Math.max(0, saved.scrollTop || 0), max);
+  }
+
+  function bindDetailScroller(detail, entry) {
+    if (!detail || detail.dataset.toolsDetailScrollBound === "1") return;
+    detail.dataset.toolsDetailScrollBound = "1";
+    detail.addEventListener("scroll", () => rememberDetailScroll(entry.id, detail), { passive: true });
+    detail.addEventListener("wheel", (event) => event.stopPropagation(), { passive: true });
+    detail.addEventListener("touchmove", (event) => event.stopPropagation(), { passive: true });
+  }
+
+  function setMeasuredDetailHeight(card) {
+    const wrap = card?.querySelector?.(".tools-console-log__detailWrap");
+    if (!wrap) return;
+    wrap.style.maxHeight = `${wrap.scrollHeight}px`;
+  }
+
+  function animateDetailCollapse(card) {
+    const wrap = card?.querySelector?.(".tools-console-log__detailWrap");
+    if (!wrap) return;
+    wrap.style.maxHeight = `${wrap.scrollHeight}px`;
+    wrap.style.opacity = "1";
+    wrap.style.transform = "translateY(0)";
+    wrap.getBoundingClientRect();
+    card.classList.add("is-collapsing");
+    card.classList.remove("is-expanded");
+    card.setAttribute("aria-expanded", "false");
+    global.requestAnimationFrame(() => {
+      wrap.style.maxHeight = "0px";
+      wrap.style.opacity = "0";
+      wrap.style.transform = "translateY(-6px)";
+    });
+  }
+
   function getLogScroller(out) {
     if (!out) return null;
     const mode = out.dataset.toolsNotificationMode || getMode();
@@ -562,7 +669,7 @@
     scroller.scrollTop = clampScrollTop(scroller, nextTop);
   }
 
-  function scrollEntryIntoView(out, focus, phase = "settled") {
+  function scrollEntryIntoView(out, focus, phase = "settled", opts = {}) {
     const scroller = getLogScroller(out);
     const card = findCardById(scroller, focus?.id);
     if (!scroller || !card) return;
@@ -582,15 +689,19 @@
     const viewportHeight = Math.max(scrollerRect.height - topInset - bottomInset, 1);
     const viewTop = scrollerRect.top + topInset;
     const viewBottom = scrollerRect.bottom - bottomInset;
-    const targetRect = phase === "opening" ? headRect : cardRect;
+    const heightDelta = Math.max(0, Number(opts.expandedHeightDelta) || 0);
+    const effectiveCard = heightDelta > 0
+      ? { top: cardRect.top, bottom: cardRect.bottom + heightDelta, height: cardRect.height + heightDelta }
+      : cardRect;
+    const targetRect = phase === "opening" ? headRect : effectiveCard;
     let delta = 0;
 
     if (phase === "opening" && targetRect.top >= viewTop && targetRect.bottom <= viewBottom) {
       return;
     }
 
-    if (focus?.expanded && phase === "settled" && cardRect.height >= viewportHeight) {
-      delta = cardRect.top - viewTop;
+    if (focus?.expanded && phase !== "opening" && effectiveCard.height >= viewportHeight) {
+      delta = effectiveCard.top - viewTop;
     } else if (targetRect.top < viewTop) {
       delta = targetRect.top - viewTop;
     } else if (targetRect.bottom > viewBottom) {
@@ -606,6 +717,13 @@
     }
   }
 
+  function predictedExpandedHeightDelta(card) {
+    const wrap = card?.querySelector?.(".tools-console-log__detailWrap");
+    if (!wrap) return 0;
+    const rect = wrap.getBoundingClientRect();
+    return Math.max(0, wrap.scrollHeight - rect.height);
+  }
+
   function scheduleEntryFocus(out, focus) {
     if (!focus?.id) return;
     entryFocusToken += 1;
@@ -617,8 +735,21 @@
     const mode = getMode();
     global.requestAnimationFrame(() => {
       if (token !== entryFocusToken) return;
+      if (focus.expanded && !prefersReducedMotion()) {
+        const scroller = getLogScroller(out);
+        const card = findCardById(scroller, focus.id);
+        const heightDelta = predictedExpandedHeightDelta(card);
+        scrollEntryIntoView(out, focus, "concurrent", { expandedHeightDelta: heightDelta });
+        const settleDelay = mode === MODE.PORTRAIT ? 380 : 360;
+        entryFocusTimer = global.setTimeout(() => {
+          entryFocusTimer = null;
+          if (token !== entryFocusToken) return;
+          scrollEntryIntoView(out, focus, "settled");
+        }, settleDelay);
+        return;
+      }
       scrollEntryIntoView(out, focus, "opening");
-      const delay = focus.expanded && !prefersReducedMotion()
+      const delay = focus.expanded
         ? (mode === MODE.PORTRAIT ? 380 : 360)
         : (mode === MODE.PORTRAIT ? 180 : 160);
       entryFocusTimer = global.setTimeout(() => {
@@ -632,9 +763,6 @@
   function renderDetail(entry) {
     const wrap = document.createElement("span");
     wrap.className = "tools-console-log__detailWrap";
-    wrap.addEventListener("click", (event) => {
-      event.stopPropagation();
-    });
 
     const inner = document.createElement("span");
     inner.className = "tools-console-log__detailInner";
@@ -647,6 +775,7 @@
     const detail = document.createElement("span");
     detail.className = "tools-console-log__detail";
     detail.textContent = entry.text;
+    bindDetailScroller(detail, entry);
     inner.appendChild(detail);
     wrap.appendChild(inner);
 
@@ -700,6 +829,26 @@
       }
       const nextExpanded = !expanded;
       pendingEntryFocus = captureEntryInteraction(context.out, entry.id, nextExpanded, keyboard);
+
+      if (!nextExpanded) {
+        clearCollapseRenderTimer();
+        activeNotificationId = "";
+        detailScrollState.delete(entry.id);
+        collapsingNotificationId = entry.id;
+        collapseHost = context.out;
+        animateDetailCollapse(card);
+        collapsingUntil = Date.now() + detailAnimationMs(card);
+        collapseRenderTimer = global.setTimeout(() => {
+          collapseRenderTimer = null;
+          collapsingNotificationId = "";
+          collapsingUntil = 0;
+          collapseHost = null;
+          render(context.out, context.model.state, context.options, { force: true });
+        }, detailAnimationMs(card));
+        return;
+      }
+
+      clearCollapseRenderTimer();
       activeNotificationId = nextExpanded ? entry.id : "";
       render(context.out, context.model.state, context.options);
     };
@@ -774,14 +923,21 @@
     const scrollAnchor = renderOptions.preserveScroll === false || interactionFocus ? null : captureScrollAnchor(out);
     const mode = getMode();
     const model = buildModel(state);
+    lastState = model.state;
+    lastOptions = options;
+    syncHostMode(out, mode);
+
+    if (!renderOptions.force && isCollapseInProgress(out)) {
+      updateRelativeTimeLabels(out, model.entries);
+      scheduleRelativeTimeRefresh(model.entries);
+      return;
+    }
+
     normalizeActiveEntry(model);
     const signature = renderSignature(model, mode);
     const canPatchExisting = !interactionFocus && signature === lastRenderSignature && out.childElementCount > 0;
     const context = { out, mode, model, options };
 
-    lastState = model.state;
-    lastOptions = options;
-    syncHostMode(out, mode);
     if (canPatchExisting) {
       updateRelativeTimeLabels(out, model.entries);
       scheduleRelativeTimeRefresh(model.entries);
@@ -797,7 +953,22 @@
     scheduleRelativeTimeRefresh(model.entries);
     if (interactionFocus) {
       pendingEntryFocus = null;
+      if (interactionFocus.expanded) {
+        global.requestAnimationFrame(() => {
+          const scroller = getLogScroller(out);
+          const card = findCardById(scroller, interactionFocus.id);
+          setMeasuredDetailHeight(card);
+          scrollDetailToLatest(out, interactionFocus.id);
+        });
+      }
       scheduleEntryFocus(out, interactionFocus);
+    } else if (activeNotificationId) {
+      global.requestAnimationFrame(() => {
+        const scroller = getLogScroller(out);
+        const card = findCardById(scroller, activeNotificationId);
+        setMeasuredDetailHeight(card);
+        restoreDetailScroll(out, activeNotificationId);
+      });
     }
   }
 
@@ -822,6 +993,7 @@
     render,
     resetDetail() {
       activeNotificationId = "";
+      detailScrollState.clear();
     },
     syncMode(out = lastHost) {
       if (out) syncHostMode(out);
