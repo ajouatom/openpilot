@@ -146,6 +146,8 @@ function openAppDialog(options = {}) {
   appDialogBody.style.flex = hasChoices ? "0 0 auto" : "1 1 auto";
   appDialogConfirm.textContent = confirmLabel;
   appDialogCancel.textContent = cancelLabel;
+  appDialogConfirm.disabled = false;
+  appDialogCancel.disabled = false;
   appDialogCancel.hidden = !showCancel;
   appDialogCancel.setAttribute("aria-hidden", showCancel ? "false" : "true");
   appDialogConfirm.hidden = isChoice;

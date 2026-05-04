@@ -4,12 +4,14 @@
 // + Screen Recording listing/playback. Tab switching between the two.
 
 const DASHCAM_UPLOAD_JOB_STORAGE_KEY = "carrot_dashcam_upload_job_id";
-const DASHCAM_ROUTE_INITIAL_BATCH = 6;
-const DASHCAM_ROUTE_BATCH_SIZE = 8;
+const DASHCAM_PAGE_SIZE = 40;
+const DASHCAM_LOAD_AHEAD_PX = 1200;
+const DASHCAM_ROUTE_WINDOW_OVERSCAN = 10;
+const SCREENRECORD_PAGE_SIZE = 40;
+const SCREENRECORD_LOAD_AHEAD_PX = 720;
+const SCREENRECORD_WINDOW_OVERSCAN = 8;
 let dashcamUploadActiveJobId = null;
 let dashcamUploadResumePromise = null;
-let dashcamRouteRenderToken = 0;
-let dashcamRouteRenderIdleId = null;
 
 function isLogsPageActive() {
   return CURRENT_PAGE === "logs";
@@ -41,6 +43,8 @@ function restoreLogsScrollTop(tab = logsActiveTab, options = {}) {
     requestAnimationFrame(() => {
       if (!isLogsPageActive()) return;
       scroller.scrollTop = nextTop;
+      if (key === "dashcam" && typeof scheduleDashcamWindowRender === "function") scheduleDashcamWindowRender();
+      if (key === "screen" && typeof scheduleScreenrecordWindowRender === "function") scheduleScreenrecordWindowRender();
     });
   });
 }
@@ -118,7 +122,6 @@ function screenrecordApiPath(kind, fileId) {
 function dashcamRoutesSignature(routes) {
   return (routes || []).map((entry) => [
     entry.route || "",
-    entry.latestModifiedLabel || "",
     ...(entry.segmentFolders || []),
   ].join("|")).join("\n") + "|" + (typeof LANG !== "undefined" ? LANG : "");
 }
@@ -127,25 +130,166 @@ function screenrecordVideosSignature(videos) {
   return (videos || []).map((video) => [
     video.id || "",
     video.name || "",
-    video.modifiedLabel || video.relativeModifiedLabel || "",
+    video.modifiedLabel || "",
     video.size || 0,
   ].join("|")).join("\n") + "|" + (typeof LANG !== "undefined" ? LANG : "");
 }
 
-function hasCompleteDashcamDom(host, routes) {
-  if (!host || !Array.isArray(routes) || !routes.length) return false;
-  const renderedCount = Number.parseInt(host.dataset.renderCount || "0", 10);
-  return host.dataset.signature === dashcamState.signature
-    && renderedCount >= routes.length
-    && host.querySelectorAll("[data-route-card]").length >= routes.length;
+function dashcamDefaultRouteHeight() {
+  return isCompactLandscapeMode() ? 210 : 310;
 }
 
-function hasCompleteScreenrecordDom(host, videos) {
-  if (!host || !Array.isArray(videos) || !videos.length) return false;
-  const renderedCount = Number.parseInt(host.dataset.renderCount || "0", 10);
-  return host.dataset.signature === screenrecordState.signature
-    && renderedCount >= videos.length
-    && host.querySelectorAll(".screenrecord-row").length >= videos.length;
+function dashcamLayoutKey() {
+  const wide = window.matchMedia?.("(min-width: 900px)")?.matches ? "wide" : "narrow";
+  const compact = isCompactLandscapeMode() ? "landscape" : "portrait";
+  return `${compact}:${wide}:${window.innerWidth}x${window.innerHeight}`;
+}
+
+function dashcamRouteHeightFor(route) {
+  const key = String(route || "");
+  const cached = Number(dashcamState.routeHeights?.[key]);
+  if (Number.isFinite(cached) && cached > 0) return cached;
+  const fallback = Number(dashcamState.routeHeight) || dashcamDefaultRouteHeight();
+  if (key && dashcamState.expanded.has(key) && !isCompactLandscapeMode()) {
+    return Math.max(560, fallback);
+  }
+  return Math.max(120, fallback);
+}
+
+function dashcamRouteGap(host) {
+  const styles = window.getComputedStyle?.(host);
+  return Number.parseFloat(styles?.rowGap || styles?.gap || "0") || 0;
+}
+
+function dashcamWindowFor(host, routes) {
+  const list = Array.isArray(routes) ? routes : [];
+  const count = list.length;
+  const viewportHeight = Math.max(1, host?.clientHeight || dashcamDefaultRouteHeight() * 2);
+  const scrollTop = Math.max(0, host?.scrollTop || 0);
+  const overscanPx = dashcamRouteHeightFor("") * DASHCAM_ROUTE_WINDOW_OVERSCAN;
+  const minTop = Math.max(0, scrollTop - overscanPx);
+  const maxBottom = scrollTop + viewportHeight + overscanPx;
+  const gap = dashcamRouteGap(host);
+
+  let start = 0;
+  let end = 0;
+  let topHeight = 0;
+  let cursor = 0;
+
+  while (start < count) {
+    const height = dashcamRouteHeightFor(list[start]?.route) + (start > 0 ? gap : 0);
+    if (cursor + height >= minTop) break;
+    cursor += height;
+    topHeight = cursor;
+    start += 1;
+  }
+
+  end = start;
+  let endHeight = topHeight;
+  while (end < count && endHeight < maxBottom) {
+    endHeight += dashcamRouteHeightFor(list[end]?.route) + (end > 0 ? gap : 0);
+    end += 1;
+  }
+  const minEnd = Math.min(count, Math.max(end + DASHCAM_ROUTE_WINDOW_OVERSCAN, start + 1));
+  while (end < minEnd) {
+    endHeight += dashcamRouteHeightFor(list[end]?.route) + (end > 0 ? gap : 0);
+    end += 1;
+  }
+
+  let totalHeight = topHeight;
+  for (let i = start; i < count; i += 1) {
+    totalHeight += dashcamRouteHeightFor(list[i]?.route) + (i > 0 ? gap : 0);
+  }
+
+  const bottomHeight = Math.max(0, totalHeight - endHeight);
+  return { start, end, topHeight, bottomHeight };
+}
+
+function screenrecordShouldLoadMore(scroller) {
+  if (!scroller || !screenrecordState.hasMore || screenrecordState.loading || screenrecordState.loadingMore) return false;
+  const remaining = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+  return remaining <= SCREENRECORD_LOAD_AHEAD_PX;
+}
+
+function dashcamShouldLoadMore(scroller) {
+  if (!scroller || !dashcamState.hasMore || dashcamState.loading || dashcamState.loadingMore) return false;
+  const remaining = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+  return remaining <= DASHCAM_LOAD_AHEAD_PX;
+}
+
+function screenrecordWindowFor(host, count) {
+  const rowHeight = Math.max(48, Number(screenrecordState.rowHeight) || 80);
+  const viewportHeight = Math.max(1, host?.clientHeight || rowHeight * 8);
+  const scrollTop = Math.max(0, host?.scrollTop || 0);
+  const visibleRows = Math.ceil(viewportHeight / rowHeight);
+  const start = Math.max(0, Math.floor(scrollTop / rowHeight) - SCREENRECORD_WINDOW_OVERSCAN);
+  const end = Math.min(count, start + visibleRows + (SCREENRECORD_WINDOW_OVERSCAN * 2));
+  return { start, end, rowHeight };
+}
+
+function screenrecordMeasureRowHeight(host) {
+  const row = host?.querySelector?.(".screenrecord-row");
+  if (!row) return;
+  const styles = window.getComputedStyle?.(host);
+  const gap = Number.parseFloat(styles?.rowGap || styles?.gap || "0") || 0;
+  const nextHeight = Math.max(48, row.getBoundingClientRect().height + gap);
+  if (Math.abs(nextHeight - screenrecordState.rowHeight) < 1) return;
+  screenrecordState.rowHeight = nextHeight;
+}
+
+function screenrecordSpacerNode(height, position) {
+  if (height <= 0) return null;
+  const node = document.createElement("div");
+  node.className = "screenrecord-virtual-spacer";
+  node.dataset.spacer = position;
+  node.style.height = `${Math.round(height)}px`;
+  return node;
+}
+
+function screenrecordRowNode(video, index, existingRows) {
+  const id = String(video?.id || "");
+  const existing = id ? existingRows.get(id) : null;
+  if (existing) {
+    existing.style.setProperty("--i", String(index));
+    existing.classList.remove("ui-stagger-item");
+    return existing;
+  }
+  const template = document.createElement("template");
+  template.innerHTML = screenrecordVideoRowHtml(video, index);
+  return template.content.firstElementChild;
+}
+
+function patchScreenrecordWindow(host, videos, view) {
+  const existingRows = new Map(
+    Array.from(host.querySelectorAll(".screenrecord-row"))
+      .map((node) => [node.dataset.id || "", node])
+      .filter(([id]) => Boolean(id))
+  );
+  const frag = document.createDocumentFragment();
+  const topSpacer = screenrecordSpacerNode(view.start * view.rowHeight, "top");
+  const bottomSpacer = screenrecordSpacerNode((videos.length - view.end) * view.rowHeight, "bottom");
+  if (topSpacer) frag.appendChild(topSpacer);
+  videos.slice(view.start, view.end).forEach((video, offset) => {
+    const row = screenrecordRowNode(video, view.start + offset, existingRows);
+    if (row) frag.appendChild(row);
+  });
+  if (bottomSpacer) frag.appendChild(bottomSpacer);
+  unobserveLogsLazyImages(host);
+  host.replaceChildren(frag);
+}
+
+function setScreenrecordLoadingMoreUi(active) {
+  const host = document.getElementById("screenrecordVideos");
+  if (!host) return;
+  host.classList.toggle("is-loading-more", Boolean(active));
+}
+
+function scheduleScreenrecordWindowRender() {
+  if (screenrecordState.renderFrame) return;
+  screenrecordState.renderFrame = requestAnimationFrame(() => {
+    screenrecordState.renderFrame = 0;
+    renderScreenrecordVideos({ preserve: true });
+  });
 }
 
 function loadLogsLazyImage(img) {
@@ -186,6 +330,13 @@ function disconnectLogsLazyImages() {
   logsLazyImageObserver = null;
 }
 
+function unobserveLogsLazyImages(root) {
+  if (!logsLazyImageObserver || !root) return;
+  root.querySelectorAll?.("img[data-src]").forEach((img) => {
+    logsLazyImageObserver.unobserve(img);
+  });
+}
+
 function logsLoadingSkeletonHtml(type = "dashcam") {
   const count = type === "screen" ? 6 : 4;
   const itemClass = type === "screen" ? "logs-loading-row" : "logs-loading-card";
@@ -207,45 +358,138 @@ function logsEmptyStateHtml(type = "dashcam") {
 }
 
 function cancelDashcamRouteRender() {
-  dashcamRouteRenderToken += 1;
-  if (dashcamRouteRenderIdleId != null) {
-    if (typeof window.cancelIdleCallback === "function") window.cancelIdleCallback(dashcamRouteRenderIdleId);
-    else window.clearTimeout(dashcamRouteRenderIdleId);
-    dashcamRouteRenderIdleId = null;
+  if (dashcamState.renderFrame) {
+    window.cancelAnimationFrame(dashcamState.renderFrame);
+    dashcamState.renderFrame = 0;
   }
 }
 
-function appendDashcamRouteBatch(host, routes, options) {
-  const token = options.token;
-  if (token !== dashcamRouteRenderToken || !isLogsPageActive() || !host || !Array.isArray(routes)) return;
+function setDashcamLoadingMoreUi(active) {
+  const host = document.getElementById("dashcamRoutes");
+  if (!host) return;
+  host.classList.toggle("is-loading-more", Boolean(active));
+}
 
-  const start = options.start || 0;
-  const batchSize = start === 0 ? DASHCAM_ROUTE_INITIAL_BATCH : DASHCAM_ROUTE_BATCH_SIZE;
-  const end = Math.min(start + batchSize, routes.length);
-  const template = document.createElement("template");
-  template.innerHTML = routes
-    .slice(start, end)
-    .map((entry, offset) => dashcamRouteCardHtml(entry, start + offset, {
-      animate: options.animate,
-      animateIndex: offset,
-    }))
-    .join("");
-  const nodes = Array.from(template.content.children);
-  host.appendChild(template.content);
-  nodes.forEach((node) => hydrateLogsLazyImages(node));
-  host.dataset.renderCount = String(end);
+function dashcamSpacerNode(height, position) {
+  if (height <= 0) return null;
+  const node = document.createElement("div");
+  node.className = "dashcam-virtual-spacer";
+  node.dataset.spacer = position;
+  node.style.height = `${Math.round(height)}px`;
+  return node;
+}
 
-  if (end >= routes.length) {
-    host.dataset.signature = dashcamState.signature || dashcamRoutesSignature(routes);
-    return;
+function dashcamRouteRenderKey(entry) {
+  const route = String(entry?.route || "");
+  const selected = dashcamSelectedForRoute(entry || { segmentFolders: [] }).join(",");
+  const segments = Array.isArray(entry?.segmentFolders) ? entry.segmentFolders.join(",") : "";
+  return [
+    isCompactLandscapeMode() ? "landscape" : "portrait",
+    dashcamState.expanded.has(route) ? "expanded" : "collapsed",
+    typeof LANG !== "undefined" ? LANG : "",
+    entry?.title || "",
+    entry?.dateLabel || "",
+    entry?.latestModifiedEpoch || "",
+    entry?.latestModifiedLabel || "",
+    segments,
+    selected,
+  ].join("|");
+}
+
+function dashcamRouteNode(entry, index, existingCards, options = {}) {
+  const route = String(entry?.route || "");
+  const nextRenderKey = dashcamRouteRenderKey(entry);
+  const existing = route ? existingCards.get(route) : null;
+  if (existing && existing.dataset.renderKey === nextRenderKey) {
+    existing.style.setProperty("--i", String(index));
+    existing.dataset.routeIndex = String(index);
+    existing.classList.remove("ui-stagger-item");
+    existing.querySelectorAll(".ui-stagger-item").forEach((node) => node.classList.remove("ui-stagger-item"));
+    return existing;
   }
-  dashcamRouteRenderIdleId = requestIdleTask(() => {
-    dashcamRouteRenderIdleId = null;
-    appendDashcamRouteBatch(host, routes, {
-      ...options,
-      start: end,
-    });
-  }, 180);
+  const template = document.createElement("template");
+  template.innerHTML = dashcamRouteCardHtml(entry, index, {
+    animate: options.animate,
+    animateIndex: index,
+  });
+  return template.content.firstElementChild;
+}
+
+function patchDashcamWindow(host, routes, view, options = {}) {
+  const existingCards = new Map(
+    Array.from(host.querySelectorAll("[data-route-card]"))
+      .map((node) => [node.dataset.routeCard || "", node])
+      .filter(([route]) => Boolean(route))
+  );
+  const frag = document.createDocumentFragment();
+  const topSpacer = dashcamSpacerNode(view.topHeight, "top");
+  const bottomSpacer = dashcamSpacerNode(view.bottomHeight, "bottom");
+  if (topSpacer) frag.appendChild(topSpacer);
+  routes.slice(view.start, view.end).forEach((entry, offset) => {
+    const card = dashcamRouteNode(entry, view.start + offset, existingCards, options);
+    if (card) frag.appendChild(card);
+  });
+  if (bottomSpacer) frag.appendChild(bottomSpacer);
+  unobserveLogsLazyImages(host);
+  host.replaceChildren(frag);
+}
+
+function measureDashcamRouteHeights(host) {
+  if (!host) return false;
+  const gap = dashcamRouteGap(host);
+  const cards = Array.from(host.querySelectorAll("[data-route-card]"));
+  let changed = false;
+  let total = 0;
+  let measured = 0;
+
+  cards.forEach((card) => {
+    const route = card.dataset.routeCard || "";
+    const index = Number.parseInt(card.dataset.routeIndex || "0", 10) || 0;
+    const height = Math.max(120, card.getBoundingClientRect().height + (index > 0 ? gap : 0));
+    if (!route || !Number.isFinite(height)) return;
+    if (!dashcamState.expanded.has(route) || isCompactLandscapeMode()) {
+      total += height;
+      measured += 1;
+    }
+    if (Math.abs((Number(dashcamState.routeHeights[route]) || 0) - height) > 1) {
+      dashcamState.routeHeights[route] = height;
+      changed = true;
+    }
+  });
+
+  if (measured) {
+    const average = total / measured;
+    if (Number.isFinite(average) && Math.abs(average - dashcamState.routeHeight) > 1) {
+      dashcamState.routeHeight = average;
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
+function scheduleDashcamWindowRender() {
+  if (dashcamState.renderFrame) return;
+  dashcamState.renderFrame = requestAnimationFrame(() => {
+    dashcamState.renderFrame = 0;
+    renderDashcamRoutes({ preserve: true, animate: false });
+  });
+}
+
+function dashcamWindowNeedsRender(host) {
+  if (!host || !(dashcamState.routes || []).length) return false;
+  const cards = Array.from(host.querySelectorAll("[data-route-card]"));
+  if (!cards.length) return true;
+  const hostRect = host.getBoundingClientRect();
+  const firstRect = cards[0].getBoundingClientRect();
+  const lastRect = cards[cards.length - 1].getBoundingClientRect();
+  const buffer = dashcamRouteHeightFor("") * 2;
+  return firstRect.top > hostRect.top - buffer || lastRect.bottom < hostRect.bottom + buffer;
+}
+
+function maybeLoadMoreDashcamRoutes(scroller = document.getElementById("dashcamRoutes")) {
+  if (!dashcamShouldLoadMore(scroller)) return;
+  loadDashcamRoutes({ silent: true, append: true }).catch(() => {});
 }
 
 function dashcamSelectedForRoute(entry) {
@@ -256,6 +500,7 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
   const animate = options.animate !== false;
   const animateIndex = Number.isFinite(options.animateIndex) ? options.animateIndex : index;
   const route = String(entry.route || "");
+  const renderKey = escapeHtml(dashcamRouteRenderKey(entry));
   const segments = Array.isArray(entry.segmentFolders) ? entry.segmentFolders : [];
   const expanded = dashcamState.expanded.has(route);
   const compactSegments = isCompactLandscapeMode();
@@ -323,7 +568,7 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
     </div>`;
   }).join("") : "";
 
-  return `<article class="dashcam-route-card${animate ? " ui-stagger-item" : ""}"${animate ? ` style="--i:${animateIndex}"` : ""} data-route-card="${routeAttr}">
+  return `<article class="dashcam-route-card${animate ? " ui-stagger-item" : ""}"${animate ? ` style="--i:${animateIndex}"` : ""} data-route-card="${routeAttr}" data-route-index="${index}" data-render-key="${renderKey}">
     ${preview}
     <div class="dashcam-route-main">
       <div class="dashcam-route-head" data-action="toggle-route" data-route="${routeAttr}">
@@ -370,17 +615,25 @@ function renderDashcamRoutes(options = {}) {
     return;
   }
   setDashcamStatus("");
-  if (preserve && hasCompleteDashcamDom(host, routes)) {
+  const view = dashcamWindowFor(host, routes);
+  const nextSignature = `${dashcamState.signature || dashcamRoutesSignature(routes)}|${dashcamLayoutKey()}|${view.start}:${view.end}|${Math.round(view.topHeight)}:${Math.round(view.bottomHeight)}`;
+  if (preserve && host.dataset.signature === nextSignature) {
     hydrateLogsLazyImages(host);
     return;
   }
-  host.innerHTML = "";
-  host.dataset.signature = "";
-  host.dataset.renderCount = "0";
-  appendDashcamRouteBatch(host, routes, {
+  patchDashcamWindow(host, routes, view, {
     animate,
-    start: 0,
-    token: dashcamRouteRenderToken,
+  });
+  host.dataset.signature = nextSignature;
+  host.dataset.renderCount = String(view.end - view.start);
+  host.dataset.windowStart = String(view.start);
+  host.dataset.windowEnd = String(view.end);
+  dashcamState.windowStart = view.start;
+  dashcamState.windowEnd = view.end;
+  hydrateLogsLazyImages(host);
+  requestAnimationFrame(() => {
+    if (!isLogsPageActive()) return;
+    if (measureDashcamRouteHeights(host) && !dashcamState.scrollBusy) scheduleDashcamWindowRender();
   });
 }
 
@@ -402,7 +655,12 @@ function renderDashcamRoute(route) {
   if (!nextMain || !currentMain) return false;
 
   currentMain.replaceWith(nextMain);
+  current.dataset.renderKey = dashcamRouteRenderKey(routes[index]);
   hydrateLogsLazyImages(nextMain);
+  requestAnimationFrame(() => {
+    if (!isLogsPageActive()) return;
+    if (measureDashcamRouteHeights(host)) scheduleDashcamWindowRender();
+  });
   return true;
 }
 
@@ -436,41 +694,82 @@ function updateDashcamRouteSelectionUi(route) {
     const segment = input.dataset.segment || "";
     input.checked = dashcamState.selected.has(segment);
   });
+  card.dataset.renderKey = dashcamRouteRenderKey(entry);
 
   return true;
 }
 
-async function loadDashcamRoutes({ silent = false } = {}) {
+async function loadDashcamRoutes({ silent = false, append = false } = {}) {
+  if (append && (!dashcamState.hasMore || dashcamState.loading || dashcamState.loadingMore)) return;
   const seq = ++dashcamState.loadSeq;
-  if (!silent) {
+  if (append) {
+    dashcamState.loadingMore = true;
+    setDashcamLoadingMoreUi(true);
+  } else if (!silent) {
     dashcamState.loading = true;
+    dashcamState.loadingMore = false;
+    setDashcamLoadingMoreUi(false);
     renderDashcamRoutes();
   }
   try {
-    const json = await getJson("/api/dashcam/routes");
-    if (seq !== dashcamState.loadSeq) return;
-    if (!isLogsPageActive()) {
-      dashcamState.loading = false;
+    const offset = append ? (dashcamState.nextOffset || dashcamState.routes.length || 0) : 0;
+    const currentCount = dashcamState.routes.length || 0;
+    const limit = append ? DASHCAM_PAGE_SIZE : Math.max(DASHCAM_PAGE_SIZE, currentCount || 0);
+    const json = await getJson(`/api/dashcam/routes?offset=${offset}&limit=${limit}`);
+    if (seq !== dashcamState.loadSeq) {
+      if (append) {
+        dashcamState.loadingMore = false;
+        setDashcamLoadingMoreUi(false);
+      }
       return;
     }
-    const routes = Array.isArray(json.routes) ? json.routes : [];
+    if (!isLogsPageActive()) {
+      dashcamState.loading = false;
+      dashcamState.loadingMore = false;
+      setDashcamLoadingMoreUi(false);
+      return;
+    }
+    const incoming = Array.isArray(json.routes) ? json.routes : [];
+    const routes = append ? dashcamState.routes.concat(incoming) : incoming;
     const nextSignature = dashcamRoutesSignature(routes);
     if (silent && nextSignature === dashcamState.signature) {
       dashcamState.loading = false;
+      dashcamState.loadingMore = false;
+      dashcamState.total = Number.isFinite(Number(json.total)) ? Number(json.total) : routes.length;
+      dashcamState.nextOffset = json.nextOffset == null ? routes.length : Number(json.nextOffset) || routes.length;
+      dashcamState.hasMore = Boolean(json.hasMore);
+      setDashcamLoadingMoreUi(false);
       return;
     }
     const validRoutes = new Set(routes.map((entry) => entry.route));
     const validSegments = new Set(routes.flatMap((entry) => entry.segmentFolders || []));
     dashcamState.expanded = new Set(Array.from(dashcamState.expanded).filter((route) => validRoutes.has(route)));
     dashcamState.selected = new Set(Array.from(dashcamState.selected).filter((segment) => validSegments.has(segment)));
+    dashcamState.routeHeights = Object.fromEntries(
+      Object.entries(dashcamState.routeHeights || {}).filter(([route]) => validRoutes.has(route))
+    );
     dashcamState.routes = routes;
     dashcamState.signature = nextSignature;
+    dashcamState.total = Number.isFinite(Number(json.total)) ? Number(json.total) : routes.length;
+    dashcamState.nextOffset = json.nextOffset == null ? routes.length : Number(json.nextOffset) || routes.length;
+    dashcamState.hasMore = Boolean(json.hasMore);
     dashcamState.loading = false;
+    dashcamState.loadingMore = false;
+    setDashcamLoadingMoreUi(false);
     renderDashcamRoutes({ animate: !silent });
     if (!silent && logsScrollTops.dashcam === 0) restoreLogsScrollTop("dashcam", { reset: true });
+    requestAnimationFrame(() => maybeLoadMoreDashcamRoutes());
   } catch (e) {
-    if (seq !== dashcamState.loadSeq) return;
+    if (seq !== dashcamState.loadSeq) {
+      if (append) {
+        dashcamState.loadingMore = false;
+        setDashcamLoadingMoreUi(false);
+      }
+      return;
+    }
     dashcamState.loading = false;
+    dashcamState.loadingMore = false;
+    setDashcamLoadingMoreUi(false);
     if (!silent && isLogsPageActive()) {
       setDashcamStatus(`${getUIText("dashcam_load_failed", "Failed to load dashcam list")}: ${e.message || e}`, "error");
       showAppToast(e.message || getUIText("dashcam_load_failed", "Failed to load dashcam list"), { tone: "error" });
@@ -483,7 +782,7 @@ function startDashcamAutoRefresh() {
   dashcamState.refreshTimer = window.setInterval(() => {
     if (CURRENT_PAGE !== "logs" || dashcamState.scrollBusy) return;
     if (logsActiveTab === "screen") loadScreenrecordVideos({ silent: true }).catch(() => {});
-    else loadDashcamRoutes({ silent: true }).catch(() => {});
+    else if (!dashcamState.loading && !dashcamState.loadingMore) loadDashcamRoutes({ silent: true }).catch(() => {});
   }, 10000);
 }
 
@@ -492,6 +791,7 @@ function markDashcamScrollBusy() {
   if (dashcamState.scrollTimer) window.clearTimeout(dashcamState.scrollTimer);
   dashcamState.scrollTimer = window.setTimeout(() => {
     dashcamState.scrollBusy = false;
+    if (isLogsPageActive() && logsActiveTab === "dashcam") scheduleDashcamWindowRender();
   }, 380);
 }
 
@@ -501,15 +801,8 @@ function openLogsVideoPlayer(title, src, options = {}) {
   overlay.className = `dashcam-player-overlay dashcam-player-overlay--${kind}`;
   overlay.innerHTML = `<div class="dashcam-player-dialog" role="dialog" aria-modal="true">
     <div class="dashcam-player-frame">
-      <video class="dashcam-player-video" autoplay controls playsinline src="${src}"></video>
-      <div class="dashcam-player-controls" aria-label="${escapeHtml(getUIText("video_controls", "Video controls"))}">
-        <button class="dashcam-player-control" type="button" data-skip="-5" aria-label="${escapeHtml(getUIText("rewind_5", "Back 5 seconds"))}" title="${escapeHtml(getUIText("rewind_5", "Back 5 seconds"))}">
-          <span aria-hidden="true">-5</span>
-        </button>
-        <button class="dashcam-player-control" type="button" data-skip="5" aria-label="${escapeHtml(getUIText("forward_5", "Forward 5 seconds"))}" title="${escapeHtml(getUIText("forward_5", "Forward 5 seconds"))}">
-          <span aria-hidden="true">+5</span>
-        </button>
-      </div>
+      <video class="dashcam-player-video" playsinline></video>
+      <div class="dashcam-player-toast" aria-live="polite"></div>
       <div class="dashcam-player-top">
         <div class="dashcam-player-title">${escapeHtml(title || "Video")}</div>
         <button class="dashcam-player-close" type="button" aria-label="${escapeHtml(getUIText("close", "Close"))}" title="${escapeHtml(getUIText("close", "Close"))}">
@@ -518,105 +811,73 @@ function openLogsVideoPlayer(title, src, options = {}) {
       </div>
     </div>
   </div>`;
+  const videoEl = overlay.querySelector("video");
+  const toastEl = overlay.querySelector(".dashcam-player-toast");
+  const downloadUrl = src + (src.includes("?") ? "&" : "?") + "download=1";
+  let toastTimer = null;
+  let suppressToasts = true;
+  const showToast = (text) => {
+    if (!toastEl || suppressToasts || !text) return;
+    toastEl.textContent = text;
+    toastEl.classList.add("is-visible");
+    if (toastTimer) window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(() => toastEl.classList.remove("is-visible"), 850);
+  };
+  let player = null;
   const close = () => {
-    const video = overlay.querySelector("video");
-    clearHideControlsTimer();
-    try { video?.pause?.(); } catch {}
+    if (toastTimer) window.clearTimeout(toastTimer);
+    try { player?.destroy?.(); } catch {}
     overlay.remove();
   };
   overlay.addEventListener("click", (ev) => {
     if (ev.target === overlay) close();
   });
   overlay.querySelector(".dashcam-player-close")?.addEventListener("click", close);
-  const video = overlay.querySelector("video");
-  const frame = overlay.querySelector(".dashcam-player-frame");
-  let hideControlsTimer = null;
-  if (video) video.controls = true;
-  const clearHideControlsTimer = () => {
-    if (!hideControlsTimer) return;
-    window.clearTimeout(hideControlsTimer);
-    hideControlsTimer = null;
-  };
-  const scheduleHidePlayerControls = () => {
-    clearHideControlsTimer();
-    if (!video || video.paused || video.ended) return;
-    hideControlsTimer = window.setTimeout(() => {
-      if (!video || video.paused || video.ended) return;
-      overlay.classList.add("is-player-controls-hidden");
-    }, 2200);
-  };
-  const showPlayerControls = () => {
-    overlay.classList.remove("is-player-controls-hidden");
-    scheduleHidePlayerControls();
-  };
-  const seekVideo = (delta) => {
-    if (!video) return;
-    const duration = Number.isFinite(video.duration) ? video.duration : Infinity;
-    const current = Number.isFinite(video.currentTime) ? video.currentTime : 0;
-    video.currentTime = Math.max(0, Math.min(duration, current + delta));
-  };
-  const isPlayerControlTarget = (target) => {
-    if (!(target instanceof Element)) return false;
-    return Boolean(target.closest("button, .dashcam-player-top, .dashcam-player-controls"));
-  };
-  const syncPlayerControlsVisibility = () => {
-    if (!video) return;
-    const paused = video.paused || video.ended;
-    if (paused) {
-      clearHideControlsTimer();
-      overlay.classList.remove("is-player-controls-hidden");
-    } else {
-      scheduleHidePlayerControls();
-    }
-  };
-  video?.addEventListener("play", syncPlayerControlsVisibility);
-  video?.addEventListener("pause", syncPlayerControlsVisibility);
-  video?.addEventListener("ended", syncPlayerControlsVisibility);
-  overlay.querySelectorAll("[data-skip]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const delta = Number(button.dataset.skip || 0);
-      seekVideo(delta);
-      showPlayerControls();
-    });
-  });
-  frame?.addEventListener("mousemove", showPlayerControls);
-  frame?.addEventListener("touchstart", showPlayerControls, { passive: true });
-  frame?.addEventListener("click", (ev) => {
-    if (isPlayerControlTarget(ev.target)) return;
-    showPlayerControls();
-  });
-  frame?.addEventListener("dblclick", (ev) => {
-    if (isPlayerControlTarget(ev.target)) return;
-    const rect = frame.getBoundingClientRect();
-    const x = ev.clientX - rect.left;
-    seekVideo(x < rect.width / 2 ? -5 : 5);
-    showPlayerControls();
-  });
-  let lastPlayerTap = { time: 0, x: 0, y: 0 };
-  frame?.addEventListener("touchend", (ev) => {
-    if (isPlayerControlTarget(ev.target)) return;
-    const touch = ev.changedTouches?.[0];
-    if (!touch) return;
-    const now = performance.now();
-    const dx = touch.clientX - lastPlayerTap.x;
-    const dy = touch.clientY - lastPlayerTap.y;
-    const isDoubleTap = now - lastPlayerTap.time < 320 && Math.hypot(dx, dy) < 34;
-    if (isDoubleTap) {
-      ev.preventDefault();
-      const rect = frame.getBoundingClientRect();
-      const x = touch.clientX - rect.left;
-      seekVideo(x < rect.width / 2 ? -5 : 5);
-      showPlayerControls();
-      lastPlayerTap = { time: 0, x: 0, y: 0 };
-      return;
-    }
-    lastPlayerTap = { time: now, x: touch.clientX, y: touch.clientY };
-  }, { passive: false });
   document.body.appendChild(overlay);
   requestAnimationFrame(() => {
     overlay.classList.add("is-open");
-    syncPlayerControlsVisibility();
-    showPlayerControls();
+    try {
+      player = new Plyr(videoEl, {
+        controls: ["play-large","rewind","play","fast-forward","progress","current-time","fullscreen","download"],
+        hideControls: false,
+        seekTime: 5,
+        keyboard: { focused: true, global: false },
+        fullscreen: { enabled: true, fallback: true, iosNative: true },
+        urls: { download: downloadUrl },
+      });
+      player.source = {
+        type: "video",
+        title: title || "Video",
+        sources: [{ src, type: "video/mp4" }],
+      };
+      player.once("ready", () => {
+        try { player.play()?.catch?.(() => {}); } catch {}
+        const container = player.elements?.container || overlay;
+        const bindBtn = (sel, label) => {
+          container.querySelectorAll(sel).forEach((btn) => btn.addEventListener("click", () => showToast(label)));
+        };
+        bindBtn('[data-plyr="rewind"]', `⏪ ${getUIText("rewind_5", "5s")}`);
+        bindBtn('[data-plyr="fast-forward"]', `${getUIText("forward_5", "5s")} ⏩`);
+        bindBtn('[data-plyr="download"]', `⤓ ${getUIText("download", "Download")}`);
+        container.addEventListener("keydown", (ev) => {
+          if (ev.key === "ArrowLeft") showToast(`⏪ ${getUIText("rewind_5", "5s")}`);
+          else if (ev.key === "ArrowRight") showToast(`${getUIText("forward_5", "5s")} ⏩`);
+        });
+        player.on("play", () => showToast(`▶ ${getUIText("play", "Play")}`));
+        player.on("pause", () => showToast(`⏸ ${getUIText("pause", "Pause")}`));
+        player.on("ended", () => showToast(getUIText("ended", "End")));
+        player.on("ratechange", () => showToast(`⚡ ${player.speed}x`));
+        player.on("enterfullscreen", () => showToast(`⛶ ${getUIText("fullscreen", "Fullscreen")}`));
+        player.on("exitfullscreen", () => showToast(getUIText("fullscreen_exit", "Exit fullscreen")));
+        videoEl.addEventListener("enterpictureinpicture", () => showToast("⊞ PiP"));
+        videoEl.addEventListener("leavepictureinpicture", () => showToast(`⊟ ${getUIText("pip_exit", "Exit PiP")}`));
+        window.setTimeout(() => { suppressToasts = false; }, 350);
+      });
+    } catch (err) {
+      videoEl.controls = true;
+      videoEl.src = src;
+      videoEl.play?.().catch?.(() => {});
+    }
   });
 }
 
@@ -950,43 +1211,69 @@ function renderScreenrecordVideos(options = {}) {
     return;
   }
   setScreenrecordStatus("");
-  if (preserve && hasCompleteScreenrecordDom(host, videos)) {
+  const view = screenrecordWindowFor(host, videos.length);
+  const nextSignature = `${screenrecordState.signature || screenrecordVideosSignature(videos)}|${view.start}:${view.end}|${screenrecordState.loadingMore ? "more" : ""}`;
+  if (preserve && host.dataset.signature === nextSignature) {
     hydrateLogsLazyImages(host);
     return;
   }
-  host.innerHTML = videos.map(screenrecordVideoRowHtml).join("");
-  host.dataset.signature = screenrecordState.signature || screenrecordVideosSignature(videos);
-  host.dataset.renderCount = String(videos.length);
+  patchScreenrecordWindow(host, videos, view);
+  host.dataset.signature = nextSignature;
+  host.dataset.renderCount = String(view.end - view.start);
+  screenrecordState.windowStart = view.start;
+  screenrecordState.windowEnd = view.end;
+  setScreenrecordLoadingMoreUi(screenrecordState.loadingMore);
   hydrateLogsLazyImages(host);
+  requestAnimationFrame(() => screenrecordMeasureRowHeight(host));
 }
 
-async function loadScreenrecordVideos({ silent = false } = {}) {
+async function loadScreenrecordVideos({ silent = false, append = false } = {}) {
+  if (append && (!screenrecordState.hasMore || screenrecordState.loading || screenrecordState.loadingMore)) return;
   const seq = ++screenrecordState.loadSeq;
-  if (!silent) {
+  if (append) {
+    screenrecordState.loadingMore = true;
+    setScreenrecordLoadingMoreUi(true);
+  } else if (!silent) {
     screenrecordState.loading = true;
+    screenrecordState.loadingMore = false;
+    setScreenrecordLoadingMoreUi(false);
     renderScreenrecordVideos();
   }
   try {
-    const json = await getJson("/api/screenrecord/videos");
+    const offset = append ? (screenrecordState.nextOffset || screenrecordState.videos.length || 0) : 0;
+    const limit = append ? SCREENRECORD_PAGE_SIZE : Math.max(SCREENRECORD_PAGE_SIZE, screenrecordState.videos.length || 0);
+    const json = await getJson(`/api/screenrecord/videos?offset=${offset}&limit=${limit}`);
     if (seq !== screenrecordState.loadSeq) return;
     if (!isLogsPageActive()) {
       screenrecordState.loading = false;
+      screenrecordState.loadingMore = false;
+      setScreenrecordLoadingMoreUi(false);
       return;
     }
-    const videos = Array.isArray(json.videos) ? json.videos : [];
+    const incoming = Array.isArray(json.videos) ? json.videos : [];
+    const videos = append ? screenrecordState.videos.concat(incoming) : incoming;
     const nextSignature = screenrecordVideosSignature(videos);
     if (silent && nextSignature === screenrecordState.signature) {
       screenrecordState.loading = false;
+      screenrecordState.loadingMore = false;
+      setScreenrecordLoadingMoreUi(false);
       return;
     }
     screenrecordState.videos = videos;
     screenrecordState.signature = nextSignature;
+    screenrecordState.total = Number.isFinite(Number(json.total)) ? Number(json.total) : videos.length;
+    screenrecordState.nextOffset = json.nextOffset == null ? videos.length : Number(json.nextOffset) || videos.length;
+    screenrecordState.hasMore = Boolean(json.hasMore);
     screenrecordState.loading = false;
-    renderScreenrecordVideos();
+    screenrecordState.loadingMore = false;
+    setScreenrecordLoadingMoreUi(false);
+    renderScreenrecordVideos({ animate: !silent });
     if (!silent && logsScrollTops.screen === 0) restoreLogsScrollTop("screen", { reset: true });
   } catch (e) {
     if (seq !== screenrecordState.loadSeq) return;
     screenrecordState.loading = false;
+    screenrecordState.loadingMore = false;
+    setScreenrecordLoadingMoreUi(false);
     if (!silent && isLogsPageActive()) {
       setScreenrecordStatus(`${getUIText("screenrecord_load_failed", "Failed to load screen recordings")}: ${e.message || e}`, "error");
       showAppToast(e.message || getUIText("screenrecord_load_failed", "Failed to load screen recordings"), { tone: "error" });
@@ -1033,6 +1320,8 @@ function handleLogsPageChange(event) {
   dashcamState.loadSeq += 1;
   screenrecordState.loadSeq += 1;
   dashcamState.loading = false;
+  dashcamState.loadingMore = false;
+  setDashcamLoadingMoreUi(false);
   screenrecordState.loading = false;
   dashcamState.scrollBusy = false;
   if (dashcamState.scrollTimer) {
@@ -1055,10 +1344,12 @@ function bindLogsPage() {
   if (!dashcamState.layoutBound) {
     dashcamState.layoutBound = true;
     dashcamState.landscape = isCompactLandscapeMode();
+    dashcamState.layoutKey = dashcamLayoutKey();
     window.addEventListener("carrot:pagechange", handleLogsPageChange);
     window.addEventListener("carrot:languagechange", () => {
       dashcamState.signature = "";
       screenrecordState.signature = "";
+      dashcamState.routeHeights = Object.create(null);
       const dashcamHost = document.getElementById("dashcamRoutes");
       if (dashcamHost) dashcamHost.dataset.signature = "";
       const screenHost = document.getElementById("screenrecordVideos");
@@ -1076,9 +1367,16 @@ function bindLogsPage() {
         dashcamState.layoutTimer = null;
         if (!isLogsPageActive()) return;
         const nextLandscape = isCompactLandscapeMode();
-        if (dashcamState.landscape === nextLandscape) return;
+        const nextLayoutKey = dashcamLayoutKey();
+        if (dashcamState.layoutKey === nextLayoutKey) return;
         dashcamState.landscape = nextLandscape;
+        dashcamState.layoutKey = nextLayoutKey;
+        dashcamState.routeHeights = Object.create(null);
+        dashcamState.routeHeight = dashcamDefaultRouteHeight();
+        const dashcamHost = document.getElementById("dashcamRoutes");
+        if (dashcamHost) dashcamHost.dataset.signature = "";
         renderDashcamRoutes({ animate: false });
+        if (typeof renderScreenrecordVideos === "function") renderScreenrecordVideos({ preserve: true, animate: false });
       }, 120);
     }, { passive: true });
   }
@@ -1098,6 +1396,8 @@ function bindLogsPage() {
     routesHost.addEventListener("scroll", () => {
       markDashcamScrollBusy();
       saveLogsScrollTop("dashcam");
+      if (dashcamWindowNeedsRender(routesHost)) scheduleDashcamWindowRender();
+      maybeLoadMoreDashcamRoutes(routesHost);
     }, { passive: true });
     routesHost.addEventListener("click", (ev) => {
       const actionEl = ev.target?.closest?.("[data-action]");
@@ -1108,6 +1408,7 @@ function bindLogsPage() {
       if (action === "toggle-route") {
         if (dashcamState.expanded.has(route)) dashcamState.expanded.delete(route);
         else dashcamState.expanded.add(route);
+        if (route && dashcamState.routeHeights) delete dashcamState.routeHeights[route];
         if (!renderDashcamRoute(route)) renderDashcamRoutes({ animate: false });
       } else if (action === "play") {
         openDashcamPlayer(route, segment);
@@ -1145,6 +1446,10 @@ function bindLogsPage() {
     screenHost.addEventListener("scroll", () => {
       markDashcamScrollBusy();
       saveLogsScrollTop("screen");
+      scheduleScreenrecordWindowRender();
+      if (screenrecordShouldLoadMore(screenHost)) {
+        loadScreenrecordVideos({ silent: true, append: true }).catch(() => {});
+      }
     }, { passive: true });
     screenHost.addEventListener("click", (ev) => {
       const actionEl = ev.target?.closest?.("[data-action]");
