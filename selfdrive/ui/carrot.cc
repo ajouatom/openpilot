@@ -2824,6 +2824,207 @@ NVGcolor alert_color;
 
 //MapRenderer mapRenderer;
 
+static void drawLaneCenterIndicator(const UIState *s) {
+  // Lane centering indicator: trapezoid bar + gradient marble
+  const SubMaster &sm = *(s->sm);
+  if (!sm.alive("modelV2")) return;
+
+  const auto &model = sm["modelV2"].getModelV2();
+  const auto lane_lines = model.getLaneLines();
+  const auto lane_line_probs = model.getLaneLineProbs();
+
+  // 차량 중심(0)에서 왼쪽(1)과 오른쪽(2) 차선까지의 거리 (미터 단위)
+  // 왼쪽 차선은 보통 양수(y > 0), 오른쪽 차선은 음수(y < 0)이므로 오른쪽은 -를 붙여 양수로 변환
+  float left_m  = lane_lines[1].getY()[0];
+  float right_m = -lane_lines[2].getY()[0];
+  
+  // 차선 인식 확률이 낮은 경우 한쪽 차선을 기준으로 반대쪽 차선의 위치를 추정 (기본 차선폭 3.0m)
+  if (lane_line_probs[1] < 0.3f && lane_line_probs[2] > 0.3f) {
+    left_m = 3.0f - right_m;
+  } else if (lane_line_probs[2] < 0.3f && lane_line_probs[1] > 0.3f) {
+    right_m = 3.0f - left_m;
+  }
+
+  float total   = left_m + right_m;
+  if (total < 0.5f) total = 3.0f;  // 최후의 보루
+
+  // offset from center lane: positive = car displaced RIGHT, negative = LEFT
+  // left_m 이 클수록 왼쪽 차선에서 멀어진 것 -> 차량이 우측으로 치우침
+  float offset_m = (left_m - right_m) / 2.0f;
+  
+  // 차량 편차 한계점 (일반 차량 폭 약 1.8m -> 절반 0.9m)
+  // 차량 끝(바퀴)이 차선을 밟는 시점을 danger_ratio = 1.0으로 산출
+  float car_half_width = 0.9f;
+  float limit_offset = (total / 2.0f) - car_half_width;
+  if (limit_offset < 0.1f) limit_offset = 0.1f; // 0 나누기 방지
+  
+  float danger_ratio = fabsf(offset_m) / limit_offset;
+
+  // openpilot Y축: 양수=왼쪽 → offset_m>0 이면 차량이 좌측에 치우침
+  char dir_label[4], dist_str[8];
+  if (offset_m > 0.02f)       snprintf(dir_label, sizeof(dir_label), "L");
+  else if (offset_m < -0.02f) snprintf(dir_label, sizeof(dir_label), "R");
+  else                         snprintf(dir_label, sizeof(dir_label), "C");
+  snprintf(dist_str, sizeof(dist_str), "%.2f", fabsf(offset_m));
+
+  NVGcontext *vg = s->vg;
+  const int  cx  = s->fb_w / 2;
+
+
+  // Multi-stop gradient: danger_ratio 기준 (0=중앙, 1=차선밟음)
+  auto gradColor = [](float d, int alpha) -> NVGcolor {
+    float r = 0.0f, g = 0.0f, b = 0.0f;
+    if (d <= 0.10f) {
+      r = 0.0f; g = 180.0f;
+    } else if (d <= 0.60f) {
+      float f = (d - 0.10f) / 0.50f;
+      r = f * 255.0f;
+      g = 180.0f;
+    } else if (d <= 1.00f) {
+      float f = (d - 0.60f) / 0.40f;
+      r = 255.0f;
+      g = 180.0f - f * 180.0f;
+    } else {
+      r = 255.0f; g = 0.0f;
+    }
+    return nvgRGBA((uint8_t)r, (uint8_t)g, (uint8_t)b, (uint8_t)alpha);
+  };
+
+  // 차량의 모델 예측 경로상에 색상이 지정된 주행경로 3D 폴리곤 생성
+  const auto position = model.getPosition();
+  const auto line_x = position.getX(), line_y = position.getY(), line_z = position.getZ();
+  // 선행차까지만 그리기: 선행차 감지시 dRel까지, 없으면 최대 40m
+  float max_dist = 40.0f;
+  {
+    auto leads = model.getLeadsV3();
+    if (leads.size() > 0 && leads[0].getProb() > 0.5f && leads[0].getX().size() > 0) {
+      float dRel = leads[0].getX()[0]; // 선행차까지 종방향 거리 (m)
+      if (dRel > 3.0f && dRel < max_dist) {
+        max_dist = dRel;
+      }
+    }
+  }
+  int max_idx = get_path_length_idx(position, max_dist);
+  if (max_idx < 5) return;
+
+  QPolygonF left_points, right_points;
+  left_points.reserve(max_idx + 1);
+  right_points.reserve(max_idx + 1);
+
+  // 진행 방향(앞쪽)으로 갈수록 면적이 줄어들도록 (원근법)
+  // mapToScreen이 이미 3D 투영을 통해 원근법을 자동 적용하므로, 실제 도로상 폭은 일정(차폭 절반 0.9m)하게 유지해야 실제 차선처럼 자연스럽게 렌더링 됩니다.
+  float w_cur = 0.9f;
+
+  for (int i = 0; i <= max_idx; i++) {
+    float px = line_x[i];
+    if (px < 0.0f) continue;
+
+    QPointF lp, rp;
+    bool l = _model->mapToScreen(px, line_y[i] - w_cur, line_z[i] + 1.22f, &lp);
+    bool r = _model->mapToScreen(px, line_y[i] + w_cur, line_z[i] + 1.22f, &rp);
+
+    if (l && r) {
+      if (left_points.size() && lp.y() > left_points.back().y()) continue;
+      left_points.push_back(lp);
+      right_points.push_front(rp);
+    }
+  }
+  
+  if (left_points.empty() || right_points.empty()) return;
+
+  QPolygonF polygon = left_points + right_points;
+
+  float path_bot_y = left_points[0].y();
+
+  // --- Tire Trajectory (Edge Bands) & Indicator Text ---
+  if (Params().getBool("CarrotTireTrajectory")) {
+    // --- 가장자리 그라데이션 밴드 ---
+    bool lane_warning = fabsf(offset_m) >= 0.5f;
+    bool warn_pulse   = lane_warning && ((int64_t)(millis_since_boot()) % 800 < 400);
+
+    // right_reversed: bottom→top 순 (left_points 와 인덱스 매칭)
+    QPolygonF right_reversed;
+    right_reversed.reserve(right_points.size());
+    for (int i = (int)right_points.size() - 1; i >= 0; i--) {
+      right_reversed.push_back(right_points[i]);
+    }
+    int n_edge = std::min((int)left_points.size(), (int)right_reversed.size());
+
+    // 색상 결정: 치우친 쪽 = gradColor(danger_ratio), 반대쪽 = 초록
+    NVGcolor color_left, color_right;
+    if (lane_warning) {
+      NVGcolor warn_on  = nvgRGBA(255,   0,   0, 255);
+      NVGcolor warn_off = nvgRGBA(255, 100,   0, 200); 
+      NVGcolor side_col = warn_pulse ? warn_on : warn_off;
+      color_left  = (offset_m > 0.0f) ? side_col : nvgRGBA(0, 200, 0, 255);
+      color_right = (offset_m < 0.0f) ? side_col : nvgRGBA(0, 200, 0, 255);
+    } else {
+      NVGcolor edge_green = nvgRGBA(0, 200, 0, 255);
+      if (offset_m > 0.02f) {
+        color_left  = gradColor(danger_ratio, 255);
+        color_right = edge_green;
+      } else if (offset_m < -0.02f) {
+        color_left  = edge_green;
+        color_right = gradColor(danger_ratio, 255);
+      } else {
+        color_left = color_right = edge_green;
+      }
+    }
+
+    auto drawEdgeBand = [&](bool is_left, NVGcolor color) {
+      if (n_edge < 2) return;
+      NVGcolor transp0 = nvgRGBAf(color.r, color.g, color.b, 0.0f);
+      for (int i = 0; i < n_edge - 1; i++) {
+        float lx0 = (float)left_points[i].x(),   ly0 = (float)left_points[i].y();
+        float rx0 = (float)right_reversed[i].x(), ry0 = (float)right_reversed[i].y();
+        float lx1 = (float)left_points[i+1].x(),  ly1 = (float)left_points[i+1].y();
+        float rx1 = (float)right_reversed[i+1].x(),ry1 = (float)right_reversed[i+1].y();
+        float oy0 = is_left ? ly0 : ry0;
+        float oy1 = is_left ? ly1 : ry1;
+        float seg_dy = fabsf(oy1 - oy0);
+        int nsub = std::max(1, (int)(seg_dy / 5.0f));
+        for (int s = 0; s < nsub; s++) {
+          float t0 = (float)s / nsub;
+          float t1 = (float)(s+1) / nsub;
+          float slx_b = lx0 + (lx1-lx0)*t0,  sly_b = ly0 + (ly1-ly0)*t0;
+          float srx_b = rx0 + (rx1-rx0)*t0,  sry_b = ry0 + (ry1-ry0)*t0;
+          float slx_t = lx0 + (lx1-lx0)*t1,  sly_t = ly0 + (ly1-ly0)*t1;
+          float srx_t = rx0 + (rx1-rx0)*t1,  sry_t = ry0 + (ry1-ry0)*t1;
+          float bw_b = fabsf(slx_b - srx_b) / 6.0f;
+          float bw_t = fabsf(slx_t - srx_t) / 6.0f;
+          float sox_b = is_left ? slx_b : srx_b,  soy_b = is_left ? sly_b : sry_b;
+          float sox_t = is_left ? slx_t : srx_t,  soy_t = is_left ? sly_t : sry_t;
+          float ctr_b = (slx_b + srx_b) * 0.5f;
+          float dir = (ctr_b > sox_b) ? 1.0f : -1.0f;
+          float six_b = sox_b + dir * bw_b;
+          float six_t = sox_t + dir * bw_t;
+          float edx = sox_t - sox_b, edy = soy_t - soy_b;
+          float elen = sqrtf(edx*edx + edy*edy);
+          if (elen < 0.5f) continue;
+          edx /= elen; edy /= elen;
+          float px = edy * (-dir); float py = -edx * (-dir);
+          float bw_avg = (bw_b + bw_t) * 0.5f;
+          float ox_mid = (sox_b + sox_t) * 0.5f; float oy_mid = (soy_b + soy_t) * 0.5f;
+          NVGpaint paint = nvgLinearGradient(vg, ox_mid, oy_mid, ox_mid + px*bw_avg, oy_mid + py*bw_avg, color, transp0);
+          nvgBeginPath(vg); nvgMoveTo(vg, sox_b, soy_b); nvgLineTo(vg, six_b, soy_b); nvgLineTo(vg, six_t, soy_t); nvgLineTo(vg, sox_t, soy_t); nvgClosePath(vg);
+          nvgFillPaint(vg, paint); nvgFill(vg);
+        }
+      }
+    };
+
+    drawEdgeBand(true,  color_left);
+    drawEdgeBand(false, color_right);
+
+    // ---- Text Labels ----
+    if (danger_ratio < 1.5f) {
+      float text_y = path_bot_y - 130.0f;
+      nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+      ui_draw_text_vg(vg, cx, text_y,         dir_label, 72, COLOR_WHITE, BOLD, 3.5f, 0.0f, COLOR_BLACK, COLOR_BLACK);
+      ui_draw_text_vg(vg, cx, text_y + 70.0f, dist_str,  58, COLOR_WHITE, BOLD, 3.0f, 0.0f, COLOR_BLACK, COLOR_BLACK);
+    }
+  }
+}
+
 void ui_draw(UIState *s, ModelRenderer* model_renderer, int w, int h) {
   _model = model_renderer;
   if (s->fb_w != w || s->fb_h != h) {
@@ -2843,6 +3044,10 @@ void ui_draw(UIState *s, ModelRenderer* model_renderer, int w, int h) {
   static float pathDrawSeq = 0.0;
   int show_lane_info = params.getInt("ShowLaneInfo");
   if(show_lane_info >= 0) drawPath.draw(s, pathDrawSeq);
+
+  // draw edge bands before other UI elements so it stays under texts
+  drawLaneCenterIndicator(s);
+
   drawLaneLine.draw(s, show_lane_info);
   if (params.getInt("ShowPathEnd") > 0) drawPathEnd.draw(s);
 

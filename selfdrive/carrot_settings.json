@@ -1475,6 +1475,22 @@
     },
     {
       "group": "화면패스",
+      "name": "CarrotTireTrajectory",
+      "title": "타이어 궤적 표시(0)",
+      "descr": "타이어 궤적 그라데이션 표시 여부를 설정합니다.\n 0: 끄기\n 1: 켜기",
+      "egroup": "DISP",
+      "etitle": "Tire Trajectory",
+      "edescr": "Shows the tire trajectory gradient on the screen.\n 0: Off, 1: On",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "cgroup": "显示设置",
+      "ctitle": "显示轮胎轨迹",
+      "cdescr": "显示轮胎轨迹。0: 关闭, 1: 开启"
+    },
+    {
+      "group": "화면패스",
       "name": "ShowPathMode",
       "title": "패스종류,레인리스(9)",
       "descr": "0:일반,1,2:사각,3,4:^^,5,6:사각,7,8:^^,9,10,11:smooth^^,12:smooth2^^,13:3줄,14:2줄,15:1줄",

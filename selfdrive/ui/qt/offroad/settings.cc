@@ -757,6 +757,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   //dispToggles->addItem(new CValueControl("ShowDmInfo", "DM Info", "0:None,1:Display,-1:Disable(Reboot)", -1, 1, 1));
 
   pathToggles = new ListWidget(this);
+  pathToggles->addItem(new CValueControl("CarrotTireTrajectory", tr("Tire Trajectory"), tr("Display tire paths with a gradient effect on the lane markers."), 0, 1, 1));
   pathToggles->addItem(new CValueControl("ShowPathColorCruiseOff", tr("Path Color: Cruise OFF"), tr("(+10:Stroke)0:Red,1:Orange,2:Yellow,3:Green,4:Blue,5:Indigo,6:Violet,7:Brown,8:White,9:Black"), 0, 19, 1));
   pathToggles->addItem(new CValueControl("ShowPathMode", tr("Path Mode: Laneless"), tr("0:Normal,1,2:Rec,3,4:^^,5,6:Rec,7,8:^^,9,10,11,12:Smooth^^"), 0, 15, 1));
   pathToggles->addItem(new CValueControl("ShowPathColor", tr("Path Color: Laneless"), tr("(+10:Stroke)0:Red,1:Orange,2:Yellow,3:Green,4:Blue,5:Indigo,6:Violet,7:Brown,8:White,9:Black"), 0, 19, 1));
