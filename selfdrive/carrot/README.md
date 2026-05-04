@@ -28,6 +28,7 @@ server/
 │   ├── ssh_keys.py         GitHub SSH key fetch/store helpers for Device developer panel
 │   ├── time_sync.py        browser → system time sync
 │   ├── device_info.py      focused calibration + network helpers for Device tab
+│   ├── setting_favorites.py  CarrotPilot setting favorites state
 │   ├── web_settings.py     device/server-backed Web Settings state
 │   └── tmux.py             tmux session helpers
 └── features/               HTTP entry points (one feature per file/folder)
@@ -36,6 +37,7 @@ server/
     ├── ws.py               /ws/raw, /ws/raw_multiplex, /ws/camera
     ├── settings.py         /api/settings
     ├── params.py           /api/params_*, /download/params_backup.json
+    ├── setting_favorites.py /api/setting_favorites
     ├── web_settings.py     /api/web_settings
     ├── ssh_keys.py         /api/ssh_keys
     ├── cars.py             /api/cars

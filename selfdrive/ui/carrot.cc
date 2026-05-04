@@ -569,8 +569,7 @@ protected:
         *pvd = left_points + right_points;
     }
 };
-class PathEndDrawer : public ModelDrawer {
-    Q_OBJECT
+class PathEndDrawer : ModelDrawer {
 private:
     QPointF path_end_left_vertex;
     QPointF path_end_right_vertex;
@@ -1728,10 +1727,7 @@ public:
           }
         }
 
-        if (show_path_mode == 16) {
-            // Mode 16: Comma Original Path (handled by model.cc) -> skip Carrot path
-        }
-        else if (show_path_mode == 0) {
+        if (show_path_mode == 0) {
             ui_draw_line(s, track_vertices, &colors[show_path_color % 10], nullptr,
                 (show_path_color >= 10 || brake_valid) ? 2.0 : 0.0,
                 brake_valid ? COLOR_RED : COLOR_WHITE);
@@ -3048,10 +3044,6 @@ void ui_draw(UIState *s, ModelRenderer* model_renderer, int w, int h) {
   static float pathDrawSeq = 0.0;
   int show_lane_info = params.getInt("ShowLaneInfo");
   if(show_lane_info >= 0) drawPath.draw(s, pathDrawSeq);
-  
-  // draw edge bands before other UI elements so it stays under texts
-  drawLaneCenterIndicator(s);
-
   drawLaneLine.draw(s, show_lane_info);
   if (params.getInt("ShowPathEnd") > 0) drawPathEnd.draw(s);
 

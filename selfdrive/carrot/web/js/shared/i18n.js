@@ -257,10 +257,12 @@ function renderUIText() {
   setText("btnDeleteLogs", "delete all logs");
   setText("btnRebuildAll", "Rebuild All");
   setText("btnReboot", "Reboot");
-  setText("btnBackupSettings", "Backup");
-  setText("btnRestoreSettings", "Restore");
-  setText("btnCopySettings", "Copy");
-  setText("btnViewSettings", "View");
+  setText("btnBackupSettings", getUIText("backup", "Backup"));
+  setText("btnRestoreSettings", getUIText("restore", "Restore"));
+  setText("btnQrBackupSettings", getUIText("qr_backup", "QR Backup"));
+  setText("btnQrRestoreSettings", getUIText("qr_restore", "QR Restore"));
+  setText("btnCopySettings", getUIText("copy", "Copy"));
+  setText("btnViewSettings", getUIText("view", "View"));
   setText("sysCmdTitle", getUIText("section_sys_cmd", "System Command"));
   setText("sysCmdHelp", getUIText("sys_cmd_help", "Allowed: pull, status, branch, log, git ..., df, free, uptime"));
   setText("outputTitle", getUIText("section_output", "Output"));

@@ -60,7 +60,7 @@ async function postJson(url, bodyObj) {
 }
 
 async function getJson(url) {
-  return requestJson(url);
+  return requestJson(url, { cache: "no-store" });
 }
 
 function waitMs(ms) {

@@ -28,18 +28,7 @@ void ModelRenderer::draw(QPainter &painter, const QRect &surface_rect) {
   longitudinal_control = sm["carParams"].getCarParams().getOpenpilotLongitudinalControl();
   path_offset_z = sm["liveCalibration"].getLiveCalibration().getHeight()[0];
 
-  int show_path_mode = Params().getInt("ShowPathMode");
-  int show_path_mode_lane = Params().getInt("ShowPathModeLane");
-  bool active_lane = sm.alive("controlsState") ? sm["controlsState"].getControlsState().getActiveLaneLine() : false;
-  int current_mode = active_lane ? show_path_mode_lane : show_path_mode;
-
-  if (current_mode != 16) {
-    return;
-  }
-  
-  // 강제로 Experimental 모드 색상(선행차/가속도 기반)을 주행선에 적용
-  experimental_mode = true;
-  
+  return;
   painter.save();
 
   const auto &model = sm["modelV2"].getModelV2();
@@ -47,11 +36,9 @@ void ModelRenderer::draw(QPainter &painter, const QRect &surface_rect) {
   const auto &lead_one = radar_state.getLeadOne();
 
   update_model(model, lead_one);
-  // drawLaneLines(painter); // Carrot이 테두리를 그리므로 생략
+  drawLaneLines(painter);
   drawPath(painter, model, surface_rect.height());
 
-  // Carrot이 Lead(선행차량 점/사각형)를 그리므로 생략
-  /*
   if (longitudinal_control && sm.alive("radarState")) {
     update_leads(radar_state, model.getPosition());
     const auto &lead_two = radar_state.getLeadTwo();
@@ -62,7 +49,6 @@ void ModelRenderer::draw(QPainter &painter, const QRect &surface_rect) {
       drawLead(painter, lead_two, lead_vertices[1], surface_rect);
     }
   }
-  */
 
   painter.restore();
 }

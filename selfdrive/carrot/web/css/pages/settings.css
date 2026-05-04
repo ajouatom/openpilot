@@ -8,6 +8,12 @@
   --setting-menu-item-padding-inline: 12px;
 }
 
+.page--setting .setting.is-restored-live .val {
+  border-color: color-mix(in srgb, #8fdc9b 62%, var(--md-outline-var));
+  background: color-mix(in srgb, #8fdc9b 14%, var(--md-surface-cont-h));
+  color: color-mix(in srgb, #a9e8b2 82%, var(--md-on-surface));
+}
+
 .setting-car-entry {
   display: flex;
   align-items: center;
@@ -242,6 +248,16 @@
   line-height: 1.18;
 }
 
+.page--setting #groupList .groupBtn--favorites {
+  border-color: color-mix(in srgb, #7dd3fc 34%, var(--md-outline-var));
+  background: color-mix(in srgb, #7dd3fc 7%, var(--md-surface-cont-h));
+}
+
+.page--setting #groupList .groupBtn--favorites.active {
+  border-color: color-mix(in srgb, #7dd3fc 64%, var(--md-outline-var));
+  color: color-mix(in srgb, #bae6fd 82%, var(--md-on-surface));
+}
+
 .page--setting #carrotTabContent,
 .page--setting #deviceTabContent,
 .page--setting #items,
@@ -327,6 +343,10 @@
 .page--setting.setting-search-open #settingScreenHost,
 .page--setting.setting-search-open #settingsMeta {
   pointer-events: none;
+}
+
+.page--setting .setting-subnav__tab--favorites {
+  color: color-mix(in srgb, #bae6fd 82%, var(--md-on-surface-var));
 }
 
 @media (min-width: 769px) {
@@ -752,6 +772,76 @@
 .page--setting #settingScreenItems .setting-copy {
   min-width: 0;
   max-width: 100%;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.page--setting #settingScreenItems .setting-title-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.page--setting #settingScreenItems .setting-title-row .title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.page--setting #settingScreenItems .setting-favorite-mark {
+  display: none;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  color: #7dd3fc;
+  opacity: 0.92;
+}
+
+.page--setting #settingScreenItems .setting-favorite-mark.is-active {
+  display: inline-flex;
+}
+
+.page--setting #settingScreenItems .setting-favorite-mark svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.page--setting #settingScreenItems .setting.is-longpressing {
+  background: color-mix(in srgb, #7dd3fc 7%, transparent);
+}
+
+.page--setting #settingScreenItems .setting-favorites-empty {
+  max-width: min(460px, 100%);
+  margin: 0 auto;
+  padding: 22px 4px;
+  text-align: center;
+  border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 52%, transparent);
+}
+
+.page--setting #settingScreenItems .setting-favorites-empty__title {
+  color: var(--md-on-surface);
+  font-size: var(--fs-body-md);
+  font-weight: 800;
+}
+
+.page--setting #settingScreenItems .setting-favorites-empty__desc {
+  margin-top: 6px;
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-body-sm);
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+:lang(ko) .page--setting #settingScreenItems .setting-favorites-empty__desc,
+:lang(ja) .page--setting #settingScreenItems .setting-favorites-empty__desc,
+:lang(zh) .page--setting #settingScreenItems .setting-favorites-empty__desc {
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .page--setting #settingScreenItems .setting-marquee {
