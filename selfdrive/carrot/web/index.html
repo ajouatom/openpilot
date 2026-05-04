@@ -74,13 +74,14 @@
   <link rel="stylesheet" href="/css/hud_card.css?v=2605-03" />
   <link rel="stylesheet" href="/css/base.css?v=2605-07" />
   <link rel="stylesheet" href="/css/layout.css?v=2605-08" />
-  <link rel="stylesheet" href="/css/components.css?v=2605-02" />
-  <link rel="stylesheet" href="/css/pages/logs.css?v=2605-07" />
+  <link rel="stylesheet" href="/css/components.css?v=2605-03" />
+  <link rel="stylesheet" href="/css/pages/logs.css?v=2605-15" />
   <link rel="stylesheet" href="/css/pages/terminal.css?v=2605-07" />
-  <link rel="stylesheet" href="/css/pages/settings.css?v=2605-16" />
-  <link rel="stylesheet" href="/css/pages/tools.css?v=2605-23" />
+  <link rel="stylesheet" href="/css/pages/settings.css?v=2605-19" />
+  <link rel="stylesheet" href="/css/pages/tools.css?v=2605-36" />
   <link rel="stylesheet" href="/css/pages/drive.css?v=2605-10" />
   <link rel="stylesheet" href="/css/responsive.css?v=2605-07" />
+  <link rel="stylesheet" href="/css/vendor/plyr.css?v=3.7.8" />
 </head>
 
 <body>
@@ -203,8 +204,8 @@
       </div>
 
       <div class="tools-scroll-stack">
-        <div class="row-wrap mb-md" style="gap: var(--sp-md);">
-          <a id="btnQuickLinkWeb" class="btn btn--filled" href="#" aria-disabled="true" style="text-decoration:none; font-weight:700;">CarrotMan</a>
+        <div class="tools-quick-actions ui-action-grid ui-action-grid--quick mb-md">
+          <a id="btnQuickLinkWeb" class="btn btn--filled" href="#" aria-disabled="true">CarrotMan</a>
           <button id="btnDeviceInfo" class="btn btn--filled" type="button">Carrot Info</button>
         </div>
 
@@ -213,7 +214,7 @@
             <span id="gitCommandsTitle" class="section-title tools-group__title">Git Commands</span>
             <span class="tools-group__chevron" aria-hidden="true"></span>
           </button>
-          <div id="toolsGroupBodyGit" class="tools-group__body row-wrap">
+          <div id="toolsGroupBodyGit" class="tools-group__body ui-action-grid">
             <button id="btnGitPull" class="btn git-pull-btn" type="button">
               <span>git pull</span>
               <span id="gitPullBadge" class="git-pull-btn__badge" hidden aria-label="pending commits">0</span>
@@ -235,7 +236,7 @@
             <span id="userSystemTitle" class="section-title tools-group__title">User / System</span>
             <span class="tools-group__chevron" aria-hidden="true"></span>
           </button>
-          <div id="toolsGroupBodySystem" class="tools-group__body row-wrap hidden" hidden>
+          <div id="toolsGroupBodySystem" class="tools-group__body ui-action-grid hidden" hidden>
             <button id="btnDeviceLang" class="btn">Device Lang</button>
             <button id="btnResetCalib" class="btn btn--danger">Reset Calib</button>
             <button id="btnSendTmuxLog" class="btn">capture tmux</button>
@@ -255,9 +256,11 @@
             <span id="userSettingsTitle" class="section-title tools-group__title">Settings</span>
             <span class="tools-group__chevron" aria-hidden="true"></span>
           </button>
-          <div id="toolsGroupBodySettings" class="tools-group__body row-wrap hidden" hidden>
+          <div id="toolsGroupBodySettings" class="tools-group__body ui-action-grid hidden" hidden>
             <button id="btnBackupSettings" class="btn">Backup</button>
             <button id="btnRestoreSettings" class="btn">Restore</button>
+            <button id="btnQrBackupSettings" class="btn">QR Backup</button>
+            <button id="btnQrRestoreSettings" class="btn">QR Restore</button>
             <button id="btnCopySettings" class="btn">Copy</button>
             <button id="btnViewSettings" class="btn">View</button>
           </div>
@@ -578,35 +581,39 @@
     </div>
   </div>
 
+  <script src="/js/vendor/plyr.min.js?v=3.7.8"></script>
+  <script src="/js/vendor/qrcode-generator.js?v=1.4.4"></script>
+  <script src="/js/vendor/jsQR.js?v=1.4.0"></script>
   <script src="/js/translations/registry.js?v=2604-01"></script>
-  <script src="/js/translations/ko.js?v=2604-06"></script>
-  <script src="/js/translations/en.js?v=2604-06"></script>
-  <script src="/js/translations/zh.js?v=2604-04"></script>
-  <script src="/js/translations/ja.js?v=2604-04"></script>
-  <script src="/js/translations/fr.js?v=2604-04"></script>
+  <script src="/js/translations/ko.js?v=2605-07"></script>
+  <script src="/js/translations/en.js?v=2605-07"></script>
+  <script src="/js/translations/zh.js?v=2605-07"></script>
+  <script src="/js/translations/ja.js?v=2605-07"></script>
+  <script src="/js/translations/fr.js?v=2605-07"></script>
   <script src="/js/hud_card.js?v=2604-05"></script>
   <script src="/js/shared/constants.js?v=2604-72"></script>
   <script src="/js/shared/dom.js?v=2604-71"></script>
   <script src="/js/shared/utils.js?v=2604-71"></script>
-  <script src="/js/shared/i18n.js?v=2605-01"></script>
-  <script src="/js/shared/api.js?v=2604-72"></script>
+  <script src="/js/shared/i18n.js?v=2605-02"></script>
+  <script src="/js/shared/api.js?v=2604-73"></script>
   <script src="/js/shared/activity.js?v=2604-04"></script>
-  <script src="/js/shared/ui/dialog.js?v=2604-71"></script>
+  <script src="/js/shared/ui/dialog.js?v=2604-72"></script>
   <script src="/js/shared/ui/viewport.js?v=2604-71"></script>
   <script src="/js/shared/ui/effects.js?v=2604-72"></script>
   <script src="/js/shared/ui/navigation.js?v=2605-11"></script>
   <script src="/js/pages/car.js?v=2604-75"></script>
-  <script src="/js/pages/setting.js?v=2604-83"></script>
+  <script src="/js/pages/setting.js?v=2605-05"></script>
   <script src="/js/pages/setting_device_config.js?v=2605-02"></script>
   <script src="/js/pages/setting_device_render.js?v=2605-02"></script>
   <script src="/js/pages/setting_device_network.js?v=2605-01"></script>
   <script src="/js/pages/setting_device_actions.js?v=2605-02"></script>
   <script src="/js/pages/setting_device.js?v=2605-05"></script>
   <script src="/js/pages/tools_web_settings.js?v=2605-04"></script>
-  <script src="/js/pages/tools_notifications.js?v=2605-14"></script>
+  <script src="/js/pages/tools_notifications.js?v=2605-18"></script>
   <script src="/js/pages/tools.js?v=2605-07"></script>
-  <script src="/js/pages/branch.js?v=2604-73"></script>
-  <script src="/js/pages/logs.js?v=2604-75"></script>
+  <script src="/js/pages/tools_settings_qr.js?v=2605-11"></script>
+  <script src="/js/pages/branch.js?v=2604-80"></script>
+  <script src="/js/pages/logs.js?v=2605-08"></script>
   <script src="/js/pages/terminal.js?v=2604-72"></script>
   <script src="/js/raw_capnp.js?v=2604-05"></script>
   <script src="/js/vision_state.js?v=2605-01"></script>

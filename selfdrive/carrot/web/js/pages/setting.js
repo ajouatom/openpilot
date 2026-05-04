@@ -5,6 +5,7 @@
 let settingsLoadPromise = null;
 let settingValueWarmupTimer = null;
 let settingValueWarmupPromise = null;
+let settingRestoreRefreshTimer = null;
 const SETTING_VALUES_TTL_MS = 60000;
 const settingValueCache = new Map();
 const settingGroupValueCache = new Map();
@@ -14,7 +15,189 @@ let settingSubnavSettleTimer = null;
 let settingSubnavProgrammaticScroll = false;
 let settingSubnavFocusTimer = null;
 
+const SETTING_FAVORITES_GROUP = "__setting_favorites__";
+const SETTING_FAVORITES_LONG_PRESS_MS = 620;
+const SETTING_FAVORITES_MOVE_TOLERANCE = 10;
+const settingFavoritesState = {
+  names: [],
+  loaded: false,
+  loadPromise: null,
+};
+
+function isSettingFavoritesGroup(group) {
+  return group === SETTING_FAVORITES_GROUP;
+}
+
+function normalizeSettingFavoriteNames(names) {
+  const out = [];
+  const seen = new Set();
+  (Array.isArray(names) ? names : []).forEach((item) => {
+    const name = String(item || "").trim();
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    out.push(name);
+  });
+  return out;
+}
+
+function findSettingItemByName(name) {
+  const target = String(name || "").trim();
+  if (!target || !SETTINGS?.items_by_group) return null;
+
+  for (const [group, list] of Object.entries(SETTINGS.items_by_group)) {
+    const item = (list || []).find((entry) => entry?.name === target);
+    if (item) return { group, item };
+  }
+  return null;
+}
+
+function getFavoriteSettingEntries() {
+  return settingFavoritesState.names
+    .map((name) => findSettingItemByName(name))
+    .filter(Boolean);
+}
+
+function getValidSettingFavoriteNames() {
+  return getFavoriteSettingEntries().map((entry) => entry.item.name).filter(Boolean);
+}
+
+function isSettingFavorite(name) {
+  return settingFavoritesState.names.includes(String(name || "").trim());
+}
+
+function getSettingFavoritesLabel() {
+  return getUIText("setting_favorites", "Favorites");
+}
+
+function getSettingGroupsForDisplay() {
+  const groups = SETTINGS?.groups || [];
+  return [
+    {
+      group: SETTING_FAVORITES_GROUP,
+      count: getFavoriteSettingEntries().length,
+      virtual: true,
+    },
+    ...groups,
+  ];
+}
+
+function getSettingItemEntriesForGroup(group) {
+  if (isSettingFavoritesGroup(group)) return getFavoriteSettingEntries();
+  return (SETTINGS?.items_by_group?.[group] || []).map((item) => ({ group, item }));
+}
+
+async function loadSettingFavorites(force = false) {
+  if (!force && settingFavoritesState.loaded) return settingFavoritesState.names;
+  if (!force && settingFavoritesState.loadPromise) return settingFavoritesState.loadPromise;
+
+  settingFavoritesState.loadPromise = getJson("/api/setting_favorites")
+    .then((payload) => {
+      settingFavoritesState.loaded = true;
+      settingFavoritesState.names = normalizeSettingFavoriteNames(payload?.favorites || []);
+      return settingFavoritesState.names;
+    })
+    .catch(() => {
+      settingFavoritesState.loaded = true;
+      settingFavoritesState.names = [];
+      return settingFavoritesState.names;
+    })
+    .finally(() => {
+      settingFavoritesState.loadPromise = null;
+    });
+
+  return settingFavoritesState.loadPromise;
+}
+
+function invalidateSettingFavoriteRenderState() {
+  settingGroupValueCache.delete(SETTING_FAVORITES_GROUP);
+  settingGroupValuePromises.delete(SETTING_FAVORITES_GROUP);
+  const itemsBox = document.getElementById("items");
+  if (itemsBox?.dataset.renderedGroup === SETTING_FAVORITES_GROUP) {
+    delete itemsBox.dataset.renderedGroup;
+  }
+}
+
+function renderSettingFavoriteMark(name) {
+  const active = isSettingFavorite(name);
+  return `
+    <span class="setting-favorite-mark${active ? " is-active" : ""}" aria-hidden="true">
+      <svg viewBox="0 0 24 24" focusable="false">
+        <path d="M6 3.5h12a1 1 0 0 1 1 1v16l-7-4-7 4v-16a1 1 0 0 1 1-1z"/>
+      </svg>
+    </span>
+  `;
+}
+
+function updateSettingFavoriteRowMarks(root = document.getElementById("items")) {
+  if (!root) return;
+  root.querySelectorAll(".setting[data-setting-name]").forEach((row) => {
+    const active = isSettingFavorite(row.dataset.settingName);
+    row.classList.toggle("is-favorite", active);
+    const mark = row.querySelector(".setting-favorite-mark");
+    if (mark) mark.classList.toggle("is-active", active);
+  });
+}
+
+function refreshSettingFavoriteChrome(options = {}) {
+  const animateGroups = options.animateGroups === true;
+  renderGroups({ animateGroups });
+  renderSettingSubnav();
+  syncSettingGroupChrome(CURRENT_GROUP);
+  updateSettingFavoriteRowMarks();
+}
+
+async function persistSettingFavorites(nextNames) {
+  const payload = await postJson("/api/setting_favorites", {
+    favorites: normalizeSettingFavoriteNames(nextNames),
+  });
+  settingFavoritesState.names = normalizeSettingFavoriteNames(payload?.favorites || nextNames);
+  return settingFavoritesState.names;
+}
+
+async function toggleSettingFavorite(name) {
+  const cleanName = String(name || "").trim();
+  if (!cleanName || !findSettingItemByName(cleanName)) return;
+
+  const previous = settingFavoritesState.names.slice();
+  const exists = previous.includes(cleanName);
+  const next = exists
+    ? previous.filter((entry) => entry !== cleanName)
+    : [...previous, cleanName];
+
+  settingFavoritesState.names = normalizeSettingFavoriteNames(next);
+  invalidateSettingFavoriteRenderState();
+  refreshSettingFavoriteChrome({ animateGroups: false });
+
+  if (isSettingFavoritesGroup(CURRENT_GROUP)) {
+    const scrollTop = getSettingItemsScrollTop();
+    renderItems(SETTING_FAVORITES_GROUP, {
+      animateItems: false,
+      scrollMode: "restore",
+      scrollTop,
+    }).catch(() => {});
+  }
+
+  try {
+    await persistSettingFavorites(getValidSettingFavoriteNames());
+    invalidateSettingFavoriteRenderState();
+    refreshSettingFavoriteChrome({ animateGroups: false });
+    if (navigator.vibrate) navigator.vibrate(12);
+    showAppToast(exists
+      ? getUIText("setting_favorite_removed", "Removed from favorites")
+      : getUIText("setting_favorite_added", "Added to favorites"));
+  } catch (e) {
+    settingFavoritesState.names = previous;
+    invalidateSettingFavoriteRenderState();
+    refreshSettingFavoriteChrome({ animateGroups: false });
+    if (isSettingFavoritesGroup(CURRENT_GROUP)) {
+      renderItems(SETTING_FAVORITES_GROUP, { animateItems: false, scrollMode: "restore" }).catch(() => {});
+    }
+    showAppToast(e?.message || getUIText("setting_favorites_save_failed", "Failed to save favorites"), { tone: "error" });
+  }
+}
+
 function getSettingGroupParamNames(group) {
+  if (isSettingFavoritesGroup(group)) return getValidSettingFavoriteNames();
   const list = SETTINGS?.items_by_group?.[group] || [];
   return list.map((item) => item.name).filter(Boolean);
 }
@@ -38,6 +221,22 @@ function primeSettingGroupValueCache(group, values) {
   Object.entries(snapshot.values).forEach(([name, value]) => {
     settingValueCache.set(name, { value, loadedAt });
   });
+}
+
+function applyRestoredSettingValuesToRenderedItems(values) {
+  if (!values || typeof values !== "object") return false;
+  let updated = false;
+  document.querySelectorAll(".setting[data-setting-name]").forEach((row) => {
+    const name = row.dataset.settingName;
+    if (!name || !(name in values)) return;
+    const valueButton = row.querySelector(".val");
+    if (!valueButton) return;
+    valueButton.textContent = String(values[name]);
+    row.classList.add("is-restored-live");
+    window.setTimeout(() => row.classList.remove("is-restored-live"), 900);
+    updated = true;
+  });
+  return updated;
 }
 
 async function fetchSettingGroupValues(group, options = {}) {
@@ -192,6 +391,7 @@ async function loadSettings(options = {}) {
   const meta = document.getElementById("settingsMeta");
 
   if (SETTINGS && !force) {
+    await loadSettingFavorites();
     renderGroups({ animateGroups: false });
     renderSettingSubnav();
     syncSettingSearchFabState();
@@ -212,6 +412,7 @@ async function loadSettings(options = {}) {
     settingValueCache.clear();
     settingGroupValueCache.clear();
     settingGroupValuePromises.clear();
+    await loadSettingFavorites(force);
     rebuildSettingSearchEntries();
 
     if (meta) {
@@ -262,7 +463,7 @@ async function loadSettings(options = {}) {
 function renderGroups(options = {}) {
   const box = document.getElementById("groupList");
   const animateGroups = options.animateGroups !== false;
-  const groups = SETTINGS.groups || [];
+  const groups = getSettingGroupsForDisplay();
   const signature = groups.map((g) => `${g.group}:${g.count}`).join("|");
 
   function setGroupButtonLabel(button, label, count) {
@@ -283,6 +484,7 @@ function renderGroups(options = {}) {
       const g = groups[index];
       const label = getSettingGroupLabel(g.group);
       button.className = "btn groupBtn";
+      if (isSettingFavoritesGroup(g.group)) button.classList.add("groupBtn--favorites");
       if (g.group === CURRENT_GROUP) button.classList.add("active");
       button.dataset.group = g.group;
       setGroupButtonLabel(button, label, g.count);
@@ -299,6 +501,7 @@ function renderGroups(options = {}) {
 
     const b = document.createElement("button");
     b.className = animateGroups ? "btn groupBtn ui-stagger-item" : "btn groupBtn";
+    if (isSettingFavoritesGroup(g.group)) b.classList.add("groupBtn--favorites");
     if (animateGroups) b.style.setProperty("--i", String(box.children.length));
     if (g.group === CURRENT_GROUP) b.classList.add("active");
     b.dataset.group = g.group;
@@ -309,11 +512,20 @@ function renderGroups(options = {}) {
 }
 
 function getSettingGroupMeta(group) {
+  if (isSettingFavoritesGroup(group)) {
+    return {
+      group,
+      egroup: "Favorites",
+      count: getFavoriteSettingEntries().length,
+      virtual: true,
+    };
+  }
   const groups = SETTINGS?.groups || [];
   return groups.find((entry) => entry.group === group) || null;
 }
 
 function getSettingGroupLabel(group) {
+  if (isSettingFavoritesGroup(group)) return getSettingFavoritesLabel();
   const meta = getSettingGroupMeta(group);
   if (!meta) return group;
   if (LANG === "zh") return meta.cgroup || meta.egroup || meta.group;
@@ -533,7 +745,7 @@ function isCarrotSettingTabActive() {
 
 function syncSettingGroupChrome(group = CURRENT_GROUP) {
   const meta = document.getElementById("groupMeta");
-  const list = SETTINGS?.items_by_group?.[group] || [];
+  const list = getSettingItemEntriesForGroup(group);
   if (meta && group) meta.textContent = `${group} / ${list.length}`;
   const groupLabel = group ? getSettingGroupLabel(group) : "";
   if (group) {
@@ -756,7 +968,7 @@ function updateSettingSubnavLayoutState() {
 }
 
 function getSettingSubnavGroups() {
-  return SETTINGS?.groups || [];
+  return getSettingGroupsForDisplay();
 }
 
 function getSettingSubnavGroupIndex(group = CURRENT_GROUP) {
@@ -975,13 +1187,14 @@ function stopSettingSubnavMotion() {
 function renderSettingSubnav() {
   if (!settingSubnav) return;
 
-  const groups = SETTINGS?.groups || [];
-  const signature = groups.map((entry) => entry.group).join("|");
+  const groups = getSettingSubnavGroups();
+  const signature = groups.map((entry) => `${entry.group}:${entry.count ?? ""}`).join("|");
 
   if (settingSubnav.dataset.groupsSignature === signature && settingSubnav.children.length === groups.length) {
     Array.from(settingSubnav.children).forEach((button, index) => {
       const entry = groups[index];
       button.className = "setting-subnav__tab";
+      if (isSettingFavoritesGroup(entry.group)) button.classList.add("setting-subnav__tab--favorites");
       if (entry.group === CURRENT_GROUP) button.classList.add("is-active");
       button.dataset.group = entry.group;
       button.textContent = getSettingGroupLabel(entry.group);
@@ -998,6 +1211,7 @@ function renderSettingSubnav() {
   groups.forEach((entry) => {
     const button = document.createElement("button");
     button.className = "setting-subnav__tab";
+    if (isSettingFavoritesGroup(entry.group)) button.classList.add("setting-subnav__tab--favorites");
     if (entry.group === CURRENT_GROUP) button.classList.add("is-active");
     button.dataset.group = entry.group;
     button.textContent = getSettingGroupLabel(entry.group);
@@ -1169,7 +1383,8 @@ async function renderItems(group, options = {}) {
   delete itemsBox.dataset.renderedGroup;
   renderSettingSubnav();
 
-  const list = SETTINGS.items_by_group[group] || [];
+  const entries = getSettingItemEntriesForGroup(group);
+  const list = entries.map((entry) => entry.item);
   if (meta) meta.textContent = `${group} / ${list.length}`;
   const groupLabel = getSettingGroupLabel(group);
   settingTitle.textContent = (UI_STRINGS[LANG].setting || "Setting") + " - " + groupLabel;
@@ -1189,8 +1404,29 @@ async function renderItems(group, options = {}) {
     return;
   }
 
+  if (!list.length && isSettingFavoritesGroup(group)) {
+    const empty = document.createElement("div");
+    empty.className = "setting-favorites-empty";
+    const emptyTitle = document.createElement("div");
+    emptyTitle.className = "setting-favorites-empty__title";
+    emptyTitle.textContent = getUIText("setting_favorites_empty_title", "No favorites");
+    const emptyDesc = document.createElement("div");
+    emptyDesc.className = "setting-favorites-empty__desc";
+    emptyDesc.textContent = getUIText(
+      "setting_favorites_empty_desc",
+      "Long press a setting to add it. Long press again to remove it.",
+    );
+    empty.appendChild(emptyTitle);
+    empty.appendChild(emptyDesc);
+    itemsBox.appendChild(empty);
+    itemsBox.dataset.renderedGroup = group;
+    requestAnimationFrame(resetSettingItemsViewport);
+    return;
+  }
+
   list.forEach((p, index) => {
     const name = p.name;
+    const originGroup = entries[index]?.group || group;
     if (!(name in UNIT_INDEX)) UNIT_INDEX[name] = 0;
 
     const title = formatItemText(p, "title", "etitle", "");
@@ -1200,7 +1436,8 @@ async function renderItems(group, options = {}) {
     el.className = animateItems ? "setting ui-stagger-item" : "setting";
     if (animateItems) el.style.setProperty("--i", String(index));
     el.dataset.settingName = name;
-    el.dataset.settingGroup = group;
+    el.dataset.settingGroup = originGroup;
+    el.classList.toggle("is-favorite", isSettingFavorite(name));
 
     const top = document.createElement("div");
     top.className = "settingTop";
@@ -1208,7 +1445,10 @@ async function renderItems(group, options = {}) {
     const left = document.createElement("div");
     left.className = "setting-copy";
     left.innerHTML = `
-      ${settingMarqueeHtml(title, "title")}
+      <div class="setting-title-row">
+        ${settingMarqueeHtml(title, "title")}
+        ${renderSettingFavoriteMark(name)}
+      </div>
       ${settingMarqueeHtml(name, "name")}
       <div class="muted mt-sm">
         min=${p.min}, max=${p.max}, default=${p.default}
@@ -1283,6 +1523,7 @@ async function renderItems(group, options = {}) {
         await setParam(name, next);
         val.textContent = String(next);
         cacheSettingValue(name, next, group);
+        if (originGroup !== group) cacheSettingValue(name, next, originGroup);
       } catch (e) {
         showAppToast((UI_STRINGS[LANG].set_failed || "set failed: ") + e.message, { tone: "error" });
       }
@@ -1349,6 +1590,68 @@ async function renderItems(group, options = {}) {
   });
 }
 
+function bindSettingFavoriteLongPress() {
+  const itemsBox = document.getElementById("items");
+  if (!itemsBox || itemsBox.dataset.favoriteLongPressBound === "1") return;
+  itemsBox.dataset.favoriteLongPressBound = "1";
+
+  let press = null;
+
+  function clearPress() {
+    if (!press) return;
+    if (press.timer) clearTimeout(press.timer);
+    press.row?.classList.remove("is-longpressing");
+    press = null;
+  }
+
+  function isIgnoredFavoritePressTarget(target) {
+    return Boolean(target?.closest?.(".ctrl, button, input, select, textarea, a"));
+  }
+
+  itemsBox.addEventListener("pointerdown", (event) => {
+    if (event.button !== undefined && event.button !== 0) return;
+    const row = event.target.closest(".setting[data-setting-name]");
+    if (!row || !itemsBox.contains(row) || isIgnoredFavoritePressTarget(event.target)) return;
+
+    clearPress();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    press = {
+      pointerId: event.pointerId,
+      row,
+      startX,
+      startY,
+      fired: false,
+      timer: window.setTimeout(() => {
+        if (!press || press.row !== row) return;
+        press.fired = true;
+        row.classList.remove("is-longpressing");
+        toggleSettingFavorite(row.dataset.settingName).catch(() => {});
+      }, SETTING_FAVORITES_LONG_PRESS_MS),
+    };
+    row.classList.add("is-longpressing");
+  }, { passive: true });
+
+  itemsBox.addEventListener("pointermove", (event) => {
+    if (!press || press.pointerId !== event.pointerId) return;
+    const dx = Math.abs(event.clientX - press.startX);
+    const dy = Math.abs(event.clientY - press.startY);
+    if (dx > SETTING_FAVORITES_MOVE_TOLERANCE || dy > SETTING_FAVORITES_MOVE_TOLERANCE) {
+      clearPress();
+    }
+  }, { passive: true });
+
+  itemsBox.addEventListener("pointerup", clearPress, { passive: true });
+  itemsBox.addEventListener("pointercancel", clearPress, { passive: true });
+  itemsBox.addEventListener("pointerleave", clearPress, { passive: true });
+  itemsBox.addEventListener("contextmenu", (event) => {
+    if (!event.target.closest(".setting[data-setting-name]")) return;
+    event.preventDefault();
+  });
+}
+
+bindSettingFavoriteLongPress();
+
 async function syncSettingViewportLayout(options = {}) {
   if (CURRENT_PAGE !== "setting" || !SETTINGS) return;
   settingViewportLayoutSignature = getSettingViewportLayoutSignature();
@@ -1414,6 +1717,41 @@ function scheduleSettingViewportLayoutSync(force = false) {
     syncSettingViewportLayout({ animateChrome: false, animateItems: false }).catch(() => {});
   }, 80);
 }
+
+window.addEventListener("carrot:paramsrestored", (event) => {
+  const values = event.detail?.values;
+  if (!values || typeof values !== "object") return;
+  const changedNames = new Set(Object.keys(values));
+  Object.entries(values).forEach(([name, value]) => cacheSettingValue(name, value));
+  applyRestoredSettingValuesToRenderedItems(values);
+  for (const [group, cachedGroup] of settingGroupValueCache.entries()) {
+    if (!cachedGroup?.values) continue;
+    let touched = false;
+    changedNames.forEach((name) => {
+      if (name in cachedGroup.values) {
+        cachedGroup.values[name] = values[name];
+        touched = true;
+      }
+    });
+    if (touched) cachedGroup.loadedAt = Date.now();
+  }
+
+  if (!CURRENT_GROUP || !isCarrotSettingTabActive()) return;
+  const currentNames = new Set(getSettingGroupParamNames(CURRENT_GROUP));
+  const affectsCurrentGroup = [...changedNames].some((name) => currentNames.has(name));
+  if (!affectsCurrentGroup) return;
+  if (settingRestoreRefreshTimer) clearTimeout(settingRestoreRefreshTimer);
+  const currentTop = getSettingItemsScrollTop();
+  settingRestoreRefreshTimer = window.setTimeout(() => {
+    settingRestoreRefreshTimer = null;
+    renderItems(CURRENT_GROUP, {
+      forceValues: true,
+      scrollMode: "restore",
+      scrollTop: currentTop,
+      animateItems: false,
+    }).catch(() => {});
+  }, 60);
+});
 
 window.addEventListener("resize", () => {
   scheduleSettingViewportLayoutSync(false);

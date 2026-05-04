@@ -660,6 +660,91 @@ body[data-page="terminal"] .app-toast-host {
   font-weight: 850;
 }
 
+/* ── Action Grid (settings/tools/log-style command groups) ── */
+.ui-action-grid {
+  --ui-action-min: 124px;
+  --ui-action-gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ui-action-min)), 1fr));
+  gap: var(--ui-action-gap);
+  align-items: stretch;
+}
+
+.ui-action-grid--quick {
+  --ui-action-min: 136px;
+  --ui-action-gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ui-action-grid > .btn,
+.ui-action-grid > .smallBtn {
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  margin: 0;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: var(--md-surface-cont);
+  color: var(--md-on-surface);
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  text-align: left;
+  line-height: 1.18;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.ui-action-grid > .btn:hover,
+.ui-action-grid > .btn:focus-visible,
+.ui-action-grid > .smallBtn:hover,
+.ui-action-grid > .smallBtn:focus-visible {
+  border-color: color-mix(in srgb, var(--md-primary) 36%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-surface-cont-h) 92%, var(--md-primary));
+}
+
+.ui-action-grid > .btn:active,
+.ui-action-grid > .smallBtn:active {
+  background: var(--md-surface-cont-h);
+}
+
+.ui-action-grid > .btn--filled {
+  justify-content: center;
+  background: var(--md-primary);
+  border-color: color-mix(in srgb, var(--md-primary) 76%, var(--md-outline-var));
+  color: var(--md-on-primary);
+  font-weight: 850;
+}
+
+.ui-action-grid > .btn--filled:hover,
+.ui-action-grid > .btn--filled:focus-visible {
+  background: color-mix(in srgb, var(--md-primary) 88%, #fff);
+  border-color: color-mix(in srgb, var(--md-primary) 82%, var(--md-outline-var));
+  color: var(--md-on-primary);
+}
+
+.ui-action-grid > .btn--filled:active {
+  background: color-mix(in srgb, var(--md-primary) 82%, #fff);
+}
+
+.ui-action-grid > .btn--danger,
+.ui-action-grid > .smallBtn.btn--danger {
+  color: color-mix(in srgb, var(--md-error) 78%, var(--md-on-surface));
+}
+
+.ui-action-grid > .btn--danger:hover,
+.ui-action-grid > .btn--danger:focus-visible,
+.ui-action-grid > .smallBtn.btn--danger:hover,
+.ui-action-grid > .smallBtn.btn--danger:focus-visible {
+  border-color: color-mix(in srgb, var(--md-error) 46%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-error-cont) 18%, var(--md-surface-cont-h));
+}
+
+.ui-action-grid > .git-pull-btn {
+  justify-content: space-between;
+}
+
 /* ── Setting Item ─────────────────────────────────────────── */
 .setting {
   padding: var(--sp-lg) 0;
