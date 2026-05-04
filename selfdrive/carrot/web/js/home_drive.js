@@ -12,6 +12,7 @@ window.HomeDrive = (() => {
   const onroadAlertText2El = document.getElementById("carrotOnroadAlertText2");
   const stageLoadingEl = document.getElementById("carrotStageLoading");
   const stageLoadingTextEl = document.getElementById("carrotStageLoadingText");
+  const stageLoadingDetailEl = document.getElementById("carrotStageLoadingDetail");
   const statusEl = document.getElementById("carrotStageStatus");
   const metaEl = document.getElementById("carrotStageMeta");
   const debugEl = document.getElementById("carrotStageDebug");
@@ -57,6 +58,9 @@ window.HomeDrive = (() => {
   const MOBILE_DPR_CAP = 1.25;
   const DESKTOP_DPR_CAP = 1.5;
   const RENDER_INTERVAL_MS = 33;  // ~30fps for denser plot data (C3: 20Hz/50ms)
+  const CAMERA_FRAME_RECHECK_MS = 250;
+  const MIN_ROAD_VIDEO_WIDTH = 320;
+  const MIN_ROAD_VIDEO_HEIGHT = 180;
   const PATH_PALETTE = [
     { r: 255, g: 82, b: 82 },
     { r: 255, g: 153, b: 0 },
@@ -196,6 +200,13 @@ window.HomeDrive = (() => {
   let _renderRafId = null;
   let _renderTimerId = null;
   let _renderVideoFrameId = null;
+  let _cameraFrameRecheckId = null;
+  let _roadCameraStreamState = {
+    stream: null,
+    decodedFramesAtBind: null,
+    currentTimeAtBind: 0,
+    firstRenderableSeen: false,
+  };
   let _pendingRenderState = {
     force: true,
     overlayDirty: true,
@@ -1372,6 +1383,45 @@ window.HomeDrive = (() => {
     statusEl.textContent = text;
   }
 
+  function getCarrotVisionState() {
+    return window.CarrotVisionState || {};
+  }
+
+  function isCarrotVisionActive() {
+    const state = getCarrotVisionState();
+    return Boolean(state.active ?? window.CARROT_VISION_ACTIVE);
+  }
+
+  function isCarrotVisionAvailable() {
+    const state = getCarrotVisionState();
+    return Boolean(state.available ?? window.CARROT_VISION_AVAILABLE);
+  }
+
+  function getCarrotVisionStatusText(fallback = "") {
+    const state = getCarrotVisionState();
+    return String(state.statusText || fallback || "");
+  }
+
+  function getCarrotVisionDetailText() {
+    const state = getCarrotVisionState();
+    return String(state.detailText || "");
+  }
+
+  function getCarrotVisionDisabledMessage() {
+    const state = getCarrotVisionState();
+    return String(state.disabledMessage || window.CARROT_VISION_DISABLED_MESSAGE || getUIText("disable_dm_inactive", "DisableDM is inactive."));
+  }
+
+  function setCarrotVisionRenderPhase(phase, detail = {}) {
+    if (typeof window.CarrotVisionSetPhase !== "function") return;
+    window.CarrotVisionSetPhase(phase, {
+      source: "home_drive",
+      updateRtcStatus: false,
+      render: false,
+      ...detail,
+    });
+  }
+
   function setMeta(text) {
     if (lastMeta === text) return;
     lastMeta = text;
@@ -1556,11 +1606,85 @@ window.HomeDrive = (() => {
       videoEl.srcObject = stream;
     }
 
-    const hasStream = Boolean((sourceVideoEl === videoEl ? sourceVideoEl : videoEl).srcObject || stream);
+    const activeStream = (sourceVideoEl === videoEl ? sourceVideoEl : videoEl).srcObject || stream;
+    if (_roadCameraStreamState.stream !== activeStream) {
+      _roadCameraStreamState = {
+        stream: activeStream,
+        decodedFramesAtBind: activeStream ? getDecodedVideoFrameCount(videoEl) : null,
+        currentTimeAtBind: activeStream ? Number(videoEl.currentTime || 0) : 0,
+        firstRenderableSeen: false,
+      };
+      cancelCameraFrameRecheck();
+    }
+
+    const hasStream = Boolean(activeStream);
     if (hasStream && videoEl.paused) {
       videoEl.play().catch(() => {});
     }
     return hasStream;
+  }
+
+  function hasLiveVideoTrack(video) {
+    const stream = video?.srcObject;
+    if (!stream || stream.active === false) return false;
+    if (typeof stream.getVideoTracks !== "function") return true;
+    const tracks = stream.getVideoTracks();
+    if (!tracks.length) return false;
+    return tracks.some((track) => track && track.readyState !== "ended" && track.muted !== true);
+  }
+
+  function getDecodedVideoFrameCount(video) {
+    try {
+      if (typeof video?.getVideoPlaybackQuality === "function") {
+        const quality = video.getVideoPlaybackQuality();
+        const total = Number(quality?.totalVideoFrames);
+        if (Number.isFinite(total)) return total;
+      }
+    } catch {}
+    const webkitCount = Number(video?.webkitDecodedFrameCount);
+    return Number.isFinite(webkitCount) ? webkitCount : null;
+  }
+
+  function isRoadCameraFrameRenderable(video) {
+    if (!video || !video.srcObject || !hasLiveVideoTrack(video)) return false;
+    const videoWidth = Number(video.videoWidth || 0);
+    const videoHeight = Number(video.videoHeight || 0);
+    if (videoWidth < MIN_ROAD_VIDEO_WIDTH || videoHeight < MIN_ROAD_VIDEO_HEIGHT) return false;
+    if (Number(video.readyState || 0) < 2) return false;
+    if (_roadCameraStreamState.firstRenderableSeen) return true;
+
+    const decodedFrames = getDecodedVideoFrameCount(video);
+    const baselineFrames = _roadCameraStreamState.decodedFramesAtBind;
+    if (decodedFrames != null && (baselineFrames == null ? decodedFrames > 0 : decodedFrames > baselineFrames)) {
+      _roadCameraStreamState.firstRenderableSeen = true;
+      return true;
+    }
+
+    const currentTime = Number(video.currentTime || 0);
+    const baselineTime = Number(_roadCameraStreamState.currentTimeAtBind || 0);
+    if (Number.isFinite(currentTime) && currentTime > baselineTime + 0.05 && video.paused !== true) {
+      _roadCameraStreamState.firstRenderableSeen = true;
+      return true;
+    }
+    if (decodedFrames == null && Number(video.readyState || 0) >= 3 && video.paused !== true) {
+      _roadCameraStreamState.firstRenderableSeen = true;
+      return true;
+    }
+    return false;
+  }
+
+  function scheduleCameraFrameRecheck() {
+    if (_cameraFrameRecheckId != null || !isStageVisible() || !isCarrotVisionActive()) return;
+    _cameraFrameRecheckId = window.setTimeout(() => {
+      _cameraFrameRecheckId = null;
+      requestRender({ force: true, overlayDirty: true, hudDirty: true });
+    }, CAMERA_FRAME_RECHECK_MS);
+  }
+
+  function cancelCameraFrameRecheck() {
+    if (_cameraFrameRecheckId == null) return;
+    window.clearTimeout(_cameraFrameRecheckId);
+    _cameraFrameRecheckId = null;
   }
 
   let _lastStageReady = null;
@@ -1569,13 +1693,13 @@ window.HomeDrive = (() => {
     if (_lastStageReady === r) return;
     _lastStageReady = r;
     stageEl.classList.toggle("is-stream-ready", r);
-    videoEl.style.display = r ? "block" : "none";
   }
 
   let _lastStageLoading = null;
   let _lastStageLoadingText = "";
+  let _lastStageLoadingDetail = "";
 
-  function setStageLoading(loading, text = getUIText("connecting", "Connecting...")) {
+  function setStageLoading(loading, text = getUIText("connecting", "Connecting..."), detail = "") {
     const l = Boolean(loading);
     if (_lastStageLoading !== l) {
       _lastStageLoading = l;
@@ -1587,6 +1711,12 @@ window.HomeDrive = (() => {
     if (stageLoadingTextEl && _lastStageLoadingText !== text) {
       _lastStageLoadingText = text;
       stageLoadingTextEl.textContent = text;
+    }
+    const detailText = l ? String(detail || "") : "";
+    if (stageLoadingDetailEl && _lastStageLoadingDetail !== detailText) {
+      _lastStageLoadingDetail = detailText;
+      stageLoadingDetailEl.textContent = detailText;
+      stageLoadingDetailEl.hidden = !detailText;
     }
   }
 
@@ -3439,19 +3569,19 @@ window.HomeDrive = (() => {
     const hudState = runtimeState.hudState;
     const brokerServices = runtimeState.brokerServices;
 
-    renderOnroadAlert(stageWidth, stageHeight, hudState?.selfdriveState);
-
-    if (!window.CARROT_VISION_ACTIVE) {
+    if (!isCarrotVisionActive()) {
       if (forceAll || _lastOverlaySig !== "vision-disabled" || _lastHudSig !== "vision-disabled") {
         _lastOverlaySig = "vision-disabled";
         _lastHudSig = "vision-disabled";
         _lastPlotInputSig = "off";
+        cancelCameraFrameRecheck();
+        hideOnroadAlert();
         setStageLoading(false);
         setStageReady(false);
         clearOverlay(canvasEl.width || 1, canvasEl.height || 1);
         clearHud(hudCanvasEl.width || 1, hudCanvasEl.height || 1);
-        setStatus(window.CARROT_VISION_AVAILABLE === false
-          ? (window.CARROT_VISION_DISABLED_MESSAGE || getUIText("disable_dm_inactive", "DisableDM is inactive."))
+        setStatus(!isCarrotVisionAvailable()
+          ? getCarrotVisionDisabledMessage()
           : getUIText("start_vision_hint", "Tap the start button to enable drive vision."));
         setMeta("");
         setDebug("");
@@ -3460,14 +3590,18 @@ window.HomeDrive = (() => {
     }
 
     const hasStream = syncSourceStream();
-    if (!hasStream || !videoEl.videoWidth || !videoEl.videoHeight) {
+    if (!hasStream || !isRoadCameraFrameRenderable(videoEl)) {
+      if (hasStream) {
+        setCarrotVisionRenderPhase("first-frame-waiting", { reason: "camera stream waiting first frame" });
+      }
       _lastOverlaySig = "";
       _lastHudSig = "";
-      setStageLoading(true, getUIText("connecting", "Connecting..."));
+      hideOnroadAlert();
+      setStageLoading(true, getCarrotVisionStatusText(getUIText("connecting", "Connecting...")), getCarrotVisionDetailText());
       setStageReady(false);
       clearOverlay(canvasEl.width || 1, canvasEl.height || 1);
       clearHud(hudCanvasEl.width || 1, hudCanvasEl.height || 1);
-      setStatus(getUIText("waiting_road_stream", "Waiting road camera stream..."));
+      setStatus(getCarrotVisionStatusText(getUIText("waiting_road_stream", "Waiting road camera stream...")));
       setMeta("road:- model:- path:-");
       setDebug("LD:- LT:- SR:-");
       applyCarrotHudLayout({
@@ -3478,12 +3612,15 @@ window.HomeDrive = (() => {
         width: stageWidth,
         height: stageHeight,
       });
+      scheduleCameraFrameRecheck();
       return;
     }
+    cancelCameraFrameRecheck();
 
     const videoWidth = videoEl.videoWidth;
     const videoHeight = videoEl.videoHeight;
     syncCanvasSize(videoWidth, videoHeight, stageWidth, stageHeight);
+    renderOnroadAlert(stageWidth, stageHeight, hudState?.selfdriveState);
     // Use raw radar state directly — no interpolation (matches C3/CarrotLink).
     // C3 reads SubMaster every frame; CarrotLink reads snapshot directly.
     // Position smoothing is handled in projectLeadBox() via EMA.
@@ -3531,6 +3668,7 @@ window.HomeDrive = (() => {
 
     applyStageTransform(transform);
     setStageReady(true);
+    setCarrotVisionRenderPhase("ready", { reason: "camera frame renderable" });
     applyCarrotHudLayout(viewportRect);
     setStageLoading(false);
 
@@ -3572,6 +3710,7 @@ window.HomeDrive = (() => {
   }
 
   function cancelScheduledRender() {
+    cancelCameraFrameRecheck();
     if (_renderRafId != null) {
       window.cancelAnimationFrame(_renderRafId);
       _renderRafId = null;
@@ -3633,7 +3772,7 @@ window.HomeDrive = (() => {
       _pendingRenderState.overlayDirty &&
       !_pendingRenderState.force &&
       typeof videoEl.requestVideoFrameCallback === "function" &&
-      window.CARROT_VISION_ACTIVE &&
+      isCarrotVisionActive() &&
       !videoEl.paused &&
       videoEl.readyState >= 2
     );
@@ -3710,7 +3849,7 @@ window.HomeDrive = (() => {
   }
 
   async function handleStageFullscreenToggle(event) {
-    if (!window.CARROT_VISION_ACTIVE) return;
+    if (!isCarrotVisionActive()) return;
     if (shouldIgnoreStageFullscreenToggle(event?.target)) return;
     if (typeof window.ToggleCarrotFullscreen !== "function") return;
     await window.ToggleCarrotFullscreen({ quiet: false }).catch(() => {});
@@ -3723,8 +3862,9 @@ window.HomeDrive = (() => {
 
   function handleLifecycleChange() {
     if (isStageVisible()) {
-      if (window.CARROT_VISION_ACTIVE) {
-        setStageLoading(true, getUIText("connecting", "Connecting..."));
+      if (isCarrotVisionActive()) {
+        const phase = String(getCarrotVisionState().phase || "");
+        setStageLoading(phase !== "ready", getCarrotVisionStatusText(getUIText("connecting", "Connecting...")), getCarrotVisionDetailText());
       }
       refreshOverlayInfo().catch(() => {});
       requestFullRender();
@@ -3743,7 +3883,12 @@ window.HomeDrive = (() => {
   window.addEventListener("carrot:render-request", (event) => requestRender(event.detail || {}));
   window.addEventListener("carrot:pagechange", handleLifecycleChange);
   window.addEventListener("carrot:visionchange", handleLifecycleChange);
+  window.addEventListener("carrot:visionstatechange", handleLifecycleChange);
   document.addEventListener("visibilitychange", handleLifecycleChange);
+  if (typeof ResizeObserver === "function") {
+    const stageResizeObserver = new ResizeObserver(requestFullRender);
+    stageResizeObserver.observe(stageEl);
+  }
   if (window.visualViewport) {
     window.visualViewport.addEventListener("resize", requestFullRender, { passive: true });
     window.visualViewport.addEventListener("scroll", requestFullRender, { passive: true });

@@ -33,11 +33,33 @@ function normalizeLangCode(raw) {
   return "";
 }
 
-function detectDefaultLang() {
+function getBootstrapWebSettings() {
+  return window.__CARROT_BOOTSTRAP__?.webSettings || {};
+}
+
+function getBootstrappedWebLanguage() {
+  return normalizeLangCode(
+    window.CarrotWebSettingsState?.web_language || getBootstrapWebSettings().web_language,
+  );
+}
+
+function getLegacyStoredWebLanguage() {
   try {
-    const stored = normalizeLangCode(localStorage.getItem(LANG_STORAGE_KEY));
-    if (stored) return stored;
-  } catch {}
+    return normalizeLangCode(localStorage.getItem(LANG_STORAGE_KEY));
+  } catch {
+    return "";
+  }
+}
+
+function detectDefaultLang() {
+  const webSettingLang = getBootstrappedWebLanguage();
+  if (webSettingLang) return webSettingLang;
+
+  const legacyStored = getLegacyStoredWebLanguage();
+  if (legacyStored) return legacyStored;
+
+  const deviceLang = normalizeLangCode(window.__CARROT_BOOTSTRAP__?.deviceLanguage);
+  if (deviceLang) return deviceLang;
 
   const browserLangs = Array.isArray(navigator.languages) && navigator.languages.length
     ? navigator.languages
@@ -52,11 +74,7 @@ function detectDefaultLang() {
 LANG = detectDefaultLang();
 
 function hasStoredWebLanguage() {
-  try {
-    return Boolean(normalizeLangCode(localStorage.getItem(LANG_STORAGE_KEY)));
-  } catch {
-    return false;
-  }
+  return Boolean(getBootstrappedWebLanguage() || getLegacyStoredWebLanguage());
 }
 
 
@@ -147,6 +165,46 @@ function getUIText(key, fallback = "", vars = null) {
   return vars ? formatUIText(value, vars) : value;
 }
 
+function updateWebLanguageState(lang) {
+  if (window.__CARROT_BOOTSTRAP__?.webSettings) {
+    window.__CARROT_BOOTSTRAP__.webSettings.web_language = lang;
+  }
+  if (window.CarrotWebSettingsState) {
+    window.CarrotWebSettingsState.web_language = lang;
+  }
+}
+
+function persistWebLanguage(lang) {
+  try {
+    localStorage.setItem(LANG_STORAGE_KEY, lang);
+  } catch {}
+
+  updateWebLanguageState(lang);
+  if (typeof setWebSettingByKey === "function") {
+    setWebSettingByKey("web_language", lang).catch(() => {});
+    return;
+  }
+
+  fetch("/api/web_settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ web_language: lang }),
+  })
+    .then((response) => response.ok ? response.json() : null)
+    .then((payload) => {
+      const saved = normalizeLangCode(payload?.settings?.web_language);
+      if (saved) updateWebLanguageState(saved);
+    })
+    .catch(() => {});
+}
+
+function maybeMigrateLegacyWebLanguage() {
+  if (getBootstrappedWebLanguage() || !getLegacyStoredWebLanguage()) return;
+  window.setTimeout(() => persistWebLanguage(LANG), 0);
+}
+
+maybeMigrateLegacyWebLanguage();
+
 
 /* ── Page-wide UI text rendering ─────────────────────────── */
 function renderUIText() {
@@ -172,6 +230,8 @@ function renderUIText() {
 
   // Setting
   setText("settingTitleText", s.setting);
+  setText("settingTabDeviceLabel", getUIText("setting_tab_device", "Device"));
+  setText("settingTabCarrotLabel", getUIText("setting_tab_carrot", "CarrotPilot"));
   setText("settingCarEyebrow", s.car_select);
   setText("btnBackGroups", s.back);
   setText("groupsTitle", s.groups);
@@ -179,10 +239,10 @@ function renderUIText() {
 
   // Tools
   setText("toolsTitle", s.tools);
-  setText("gitCommandsTitle", "Git Commands");
-  setText("userSystemTitle", "User / System");
-  setText("toolsQuickLinkTitle", "Link");
-  setText("userSettingsTitle", "Settings");
+  setText("gitCommandsTitle", getUIText("git_commands", "Git Commands"));
+  setText("userSystemTitle", getUIText("user_system", "User / System"));
+  setText("toolsQuickLinkTitle", getUIText("quick_link", "Link"));
+  setText("userSettingsTitle", getUIText("section_settings_backup", "Settings"));
   setText("btnDeviceInfo", getUIText("carrot_info", "Carrot Info"));
   setText("btnGitRemote", "change repository");
   setText("btnGitBranch", "change branch");
@@ -197,10 +257,12 @@ function renderUIText() {
   setText("btnDeleteLogs", "delete all logs");
   setText("btnRebuildAll", "Rebuild All");
   setText("btnReboot", "Reboot");
-  setText("btnBackupSettings", "Backup");
-  setText("btnRestoreSettings", "Restore");
-  setText("btnCopySettings", "Copy");
-  setText("btnViewSettings", "View");
+  setText("btnBackupSettings", getUIText("backup", "Backup"));
+  setText("btnRestoreSettings", getUIText("restore", "Restore"));
+  setText("btnQrBackupSettings", getUIText("qr_backup", "QR Backup"));
+  setText("btnQrRestoreSettings", getUIText("qr_restore", "QR Restore"));
+  setText("btnCopySettings", getUIText("copy", "Copy"));
+  setText("btnViewSettings", getUIText("view", "View"));
   setText("sysCmdTitle", getUIText("section_sys_cmd", "System Command"));
   setText("sysCmdHelp", getUIText("sys_cmd_help", "Allowed: pull, status, branch, log, git ..., df, free, uptime"));
   setText("outputTitle", getUIText("section_output", "Output"));
@@ -257,9 +319,7 @@ function setWebLanguage(lang, options = {}) {
   const dispatch = options.dispatch !== false;
   LANG = normalized;
   if (persist) {
-    try {
-      localStorage.setItem(LANG_STORAGE_KEY, LANG);
-    } catch {}
+    persistWebLanguage(LANG);
   }
 
   updateLangLabel();
@@ -290,10 +350,8 @@ function setWebLanguage(lang, options = {}) {
 async function syncWebLanguageFromDeviceDefault() {
   if (hasStoredWebLanguage()) return false;
   try {
-    const res = await fetch("/api/device_info", { cache: "no-store" });
-    if (!res.ok) return false;
-    const info = await res.json();
-    const lang = normalizeLangCode(info?.language);
+    const values = typeof bulkGet === "function" ? await bulkGet(["LanguageSetting"]) : {};
+    const lang = normalizeLangCode(values?.LanguageSetting);
     if (!lang || lang === LANG) return false;
     return setWebLanguage(lang, { persist: false, render: false, dispatch: false });
   } catch {

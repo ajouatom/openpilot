@@ -192,6 +192,9 @@ class RealtimeBroker:
     snapshot: dict[str, object] = {}
     for name in names:
       try:
+        if name == "IsMetric":
+          snapshot[name] = "1" if self.params.get_bool(name) else "0"
+          continue
         value = self.params.get(name)
       except Exception:
         value = None

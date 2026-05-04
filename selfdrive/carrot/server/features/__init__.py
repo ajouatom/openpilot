@@ -6,11 +6,14 @@ from . import (
   params,
   screenrecord,
   settings,
+  setting_favorites,
+  ssh_keys,
   static,
   stream,
   system,
   terminal,
   tools,
+  web_settings,
   ws,
 )
 
@@ -21,6 +24,9 @@ def register_all(app: web.Application) -> None:
   ws.register(app)
   settings.register(app)
   params.register(app)
+  setting_favorites.register(app)
+  web_settings.register(app)
+  ssh_keys.register(app)
   cars.register(app)
   system.register(app)
   terminal.register(app)

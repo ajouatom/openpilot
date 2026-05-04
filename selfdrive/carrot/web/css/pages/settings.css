@@ -8,6 +8,12 @@
   --setting-menu-item-padding-inline: 12px;
 }
 
+.page--setting .setting.is-restored-live .val {
+  border-color: color-mix(in srgb, #8fdc9b 62%, var(--md-outline-var));
+  background: color-mix(in srgb, #8fdc9b 14%, var(--md-surface-cont-h));
+  color: color-mix(in srgb, #a9e8b2 82%, var(--md-on-surface));
+}
+
 .setting-car-entry {
   display: flex;
   align-items: center;
@@ -238,6 +244,18 @@
   min-height: var(--setting-menu-item-min-height);
   margin-bottom: 0;
   padding: 0 var(--setting-menu-item-padding-inline);
+  font-size: 14px;
+  line-height: 1.18;
+}
+
+.page--setting #groupList .groupBtn--favorites {
+  border-color: color-mix(in srgb, #7dd3fc 34%, var(--md-outline-var));
+  background: color-mix(in srgb, #7dd3fc 7%, var(--md-surface-cont-h));
+}
+
+.page--setting #groupList .groupBtn--favorites.active {
+  border-color: color-mix(in srgb, #7dd3fc 64%, var(--md-outline-var));
+  color: color-mix(in srgb, #bae6fd 82%, var(--md-on-surface));
 }
 
 .page--setting #carrotTabContent,
@@ -325,6 +343,10 @@
 .page--setting.setting-search-open #settingScreenHost,
 .page--setting.setting-search-open #settingsMeta {
   pointer-events: none;
+}
+
+.page--setting .setting-subnav__tab--favorites {
+  color: color-mix(in srgb, #bae6fd 82%, var(--md-on-surface-var));
 }
 
 @media (min-width: 769px) {
@@ -631,19 +653,19 @@
   }
 
   .page--setting.setting-layout-split #settingScreenItems .title {
-    font-size: clamp(15px, 2.05vw, 18px);
+    font-size: 16px;
     font-weight: 700;
     line-height: 1.18;
   }
 
   .page--setting.setting-layout-split #settingScreenItems .name {
-    font-size: clamp(10.5px, 1.45vw, 12.5px);
+    font-size: 12px;
     line-height: 1.28;
   }
 
   .page--setting.setting-layout-split #settingScreenItems .muted,
   .page--setting.setting-layout-split #settingScreenItems .descr {
-    font-size: clamp(12px, 1.65vw, 14px);
+    font-size: 13px;
     line-height: 1.38;
   }
 
@@ -750,6 +772,76 @@
 .page--setting #settingScreenItems .setting-copy {
   min-width: 0;
   max-width: 100%;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.page--setting #settingScreenItems .setting-title-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.page--setting #settingScreenItems .setting-title-row .title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.page--setting #settingScreenItems .setting-favorite-mark {
+  display: none;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  color: #7dd3fc;
+  opacity: 0.92;
+}
+
+.page--setting #settingScreenItems .setting-favorite-mark.is-active {
+  display: inline-flex;
+}
+
+.page--setting #settingScreenItems .setting-favorite-mark svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.page--setting #settingScreenItems .setting.is-longpressing {
+  background: color-mix(in srgb, #7dd3fc 7%, transparent);
+}
+
+.page--setting #settingScreenItems .setting-favorites-empty {
+  max-width: min(460px, 100%);
+  margin: 0 auto;
+  padding: 22px 4px;
+  text-align: center;
+  border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 52%, transparent);
+}
+
+.page--setting #settingScreenItems .setting-favorites-empty__title {
+  color: var(--md-on-surface);
+  font-size: var(--fs-body-md);
+  font-weight: 800;
+}
+
+.page--setting #settingScreenItems .setting-favorites-empty__desc {
+  margin-top: 6px;
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-body-sm);
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+:lang(ko) .page--setting #settingScreenItems .setting-favorites-empty__desc,
+:lang(ja) .page--setting #settingScreenItems .setting-favorites-empty__desc,
+:lang(zh) .page--setting #settingScreenItems .setting-favorites-empty__desc {
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .page--setting #settingScreenItems .setting-marquee {
@@ -893,12 +985,12 @@
 .setting-tab {
   min-width: 0;
   min-height: 38px;
-  padding: 0 var(--sp-md);
+  padding: 0 10px;
   border: 0;
   border-radius: calc(var(--r-md) - 4px);
   background: transparent;
   color: var(--md-on-surface-var);
-  font-size: var(--fs-body-md);
+  font-size: 14px;
   font-weight: 800;
   line-height: 1;
   cursor: pointer;
@@ -969,6 +1061,72 @@
   white-space: nowrap;
 }
 
+.page--setting #deviceItems .device-ssh-control {
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.device-ssh-account {
+  min-width: 0;
+  max-width: min(42vw, 240px);
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  padding: 7px 10px;
+  border: 1px solid var(--setting-control-border, color-mix(in srgb, var(--md-outline-var) 46%, transparent));
+  border-radius: 9px;
+  background: var(--setting-control-bg, var(--md-surface-cont-h));
+  color: var(--md-on-surface-var);
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.device-ssh-account.is-configured {
+  border-color: color-mix(in srgb, var(--md-primary) 34%, var(--setting-control-border, var(--md-outline-var)));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--md-primary) 12%, var(--md-surface-cont-h)),
+    color-mix(in srgb, var(--md-primary) 6%, var(--md-surface-cont))
+  );
+  color: var(--md-on-surface);
+}
+
+.device-ssh-account__label {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--md-primary) 82%, var(--md-on-surface));
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.device-ssh-account__value {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--md-on-surface);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-ssh-action {
+  flex: 0 0 auto;
+}
+
+.device-ssh-action--remove {
+  color: var(--md-error);
+}
+
 .page--setting #deviceItems .settingTop > :first-child {
   min-width: 0;
 }
@@ -977,12 +1135,37 @@
   min-width: 0;
 }
 
+.page--setting #deviceItems .title {
+  font-size: 16px;
+  line-height: 1.22;
+}
+
+.page--setting #deviceItems .descr {
+  font-size: 13px;
+  line-height: 1.36;
+}
+
 .page--setting #deviceItems .smallBtn {
+  font-size: 13px;
   white-space: nowrap;
 }
 
 .page--setting #deviceItems .device-setting {
   overflow: hidden;
+}
+
+@media (max-width: 640px) {
+  .page--setting #deviceItems .device-ssh-control {
+    width: 100%;
+    min-width: 0;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .device-ssh-account {
+    max-width: min(52vw, 220px);
+  }
 }
 
 .device-toggle {

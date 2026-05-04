@@ -19,6 +19,9 @@ DEFAULT_SETTINGS_PATH = "/data/openpilot/selfdrive/carrot_settings.json"
 CARROT_DATA_DIR = "/data/openpilot/selfdrive/carrot/data"
 CARROT_STATE_DIR = os.path.join(CARROT_DATA_DIR, "state")
 CARROT_GIT_STATE_PATH = os.path.join(CARROT_STATE_DIR, "git.json")
+CARROT_TOOL_JOBS_STATE_PATH = os.path.join(CARROT_STATE_DIR, "tool_jobs.json")
+CARROT_WEB_SETTINGS_PATH = os.path.join(CARROT_STATE_DIR, "web_settings.json")
+CARROT_SETTING_FAVORITES_PATH = os.path.join(CARROT_STATE_DIR, "setting_favorites.json")
 
 # Dashcam
 DASHCAM_ROOT = "/data/media/0/realdata"

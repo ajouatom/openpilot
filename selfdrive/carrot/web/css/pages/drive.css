@@ -195,6 +195,20 @@ body[data-page="carrot"] #driveHudCard {
   text-align: center;
 }
 
+.carrot-stage__loadingDetail {
+  max-width: 100%;
+  min-height: 16px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.35;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @keyframes carrot-stage-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
