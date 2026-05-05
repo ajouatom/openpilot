@@ -27,6 +27,22 @@ function agnos_init {
   fi
 }
 
+function start_carrot_recovery {
+  local recovery_script="$DIR/selfdrive/carrot/recovery/server.py"
+  local py_bin
+
+  [ -f "$recovery_script" ] || return
+  py_bin="$(command -v python3 || command -v python || true)"
+  [ -n "$py_bin" ] || return
+
+  if command -v pgrep >/dev/null 2>&1 && pgrep -f "selfdrive/carrot/recovery/server.py" >/dev/null 2>&1; then
+    return
+  fi
+
+  echo "Starting carrot recovery server on 6999."
+  (cd "$DIR" && "$py_bin" "$recovery_script" --port 6999 >> /tmp/carrot_recovery.log 2>&1 &)
+}
+
 function launch {
   # Remove orphaned git lock if it exists on boot
   [ -f "$DIR/.git/index.lock" ] && rm -f $DIR/.git/index.lock
@@ -70,6 +86,8 @@ function launch {
   PYDEPS="$DIR/pydeps"
   mkdir -p "$PYDEPS"
   export PYTHONPATH="$PYDEPS:$PWD${PYTHONPATH:+:$PYTHONPATH}"
+
+  start_carrot_recovery
 
   # hardware specific init
   if [ -f /AGNOS ]; then

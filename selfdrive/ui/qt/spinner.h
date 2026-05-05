@@ -29,8 +29,12 @@ public:
 
 private:
   QLabel *text;
+  QLabel *ipLabel;
   QProgressBar *progress_bar;
   QSocketNotifier *notifier;
+
+private slots:
+  void refreshIPLabel();
 
 public slots:
   void update(int n);

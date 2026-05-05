@@ -4,6 +4,7 @@ import os
 import threading
 
 from openpilot.common.basedir import BASEDIR
+from openpilot.common.network_info import start_ip_monitor, label_with_port
 from openpilot.system.ui.lib.application import gui_app
 
 # Constants
@@ -13,6 +14,9 @@ DEGREES_PER_SECOND = 360.0  # one full rotation per second
 MARGIN = 200
 TEXTURE_SIZE = 360
 FONT_SIZE = 80
+IP_FONT_SIZE = 50
+IP_TOP_MARGIN = 40
+RECOVERY_PORT = 6999
 DARKGRAY = (55, 55, 55, 255)
 
 
@@ -28,6 +32,7 @@ class Spinner:
     self._text: str = ""
     self._progress: int | None = None
     self._lock = threading.Lock()
+    start_ip_monitor()
 
   def set_text(self, text: str) -> None:
     with self._lock:
@@ -39,6 +44,16 @@ class Spinner:
         self._text = text
 
   def render(self):
+    # Recovery IP label at top-center (white, monospace-style)
+    ip_label = label_with_port(RECOVERY_PORT)
+    ip_size = rl.measure_text_ex(gui_app.font(), ip_label, IP_FONT_SIZE, 1.0)
+    rl.draw_text_ex(
+      gui_app.font(),
+      ip_label,
+      rl.Vector2(gui_app.width / 2.0 - ip_size.x / 2.0, IP_TOP_MARGIN),
+      IP_FONT_SIZE, 1.0, rl.WHITE,
+    )
+
     center = rl.Vector2(gui_app.width / 2.0, gui_app.height / 2.0)
     spinner_origin = rl.Vector2(TEXTURE_SIZE / 2.0, TEXTURE_SIZE / 2.0)
     comma_position = rl.Vector2(center.x - TEXTURE_SIZE / 2.0, center.y - TEXTURE_SIZE / 2.0)
