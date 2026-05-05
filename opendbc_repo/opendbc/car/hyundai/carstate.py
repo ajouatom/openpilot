@@ -168,7 +168,8 @@ class CarState(CarStateBase):
 
   def monitor_fingerprint(self, can_parsers, canfd):
     if self.controls_ready_count <= READY_COUNT_OK:
-      self.controls_ready_count += 1
+      if Params().get_bool("ControlsReady"):
+        self.controls_ready_count += 1
 
       self.cp = can_parsers[Bus.pt]
       self.cp_cam = can_parsers[Bus.cam]
