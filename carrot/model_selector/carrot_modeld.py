@@ -371,20 +371,20 @@ class ModelState:
         self.numpy_inputs['prev_action'][:] = 0
 
     # off-policy inference (if present): shares policy_inputs, contributes
-    # environment-aware outputs (lane_lines / road_edges / lead).  Its `plan`
-    # is discarded so on-policy's plan wins in the merged dict.
+    # environment-aware outputs (lane_lines / road_edges / lead / plan).
+    # op11: plan only in off_policy.  op7: both off & on may emit plan; merge
+    # order below lets on-policy override off-policy where keys overlap.
     off_policy_outputs_dict: dict[str, np.ndarray] = {}
     if self.has_off_policy:
       self.off_policy_output = self.off_policy_run(**self.policy_inputs).contiguous().realize().uop.base.buffer.numpy().flatten()
       off_policy_outputs_dict = self.parser.parse_off_policy_outputs(
         self.slice_outputs(self.off_policy_output, self.off_policy_output_slices))
-      off_policy_outputs_dict.pop('plan', None)
 
     self.policy_output = self.policy_run(**self.policy_inputs).contiguous().realize().uop.base.buffer.numpy().flatten()
     policy_outputs_dict = self.parser.parse_policy_outputs(self.slice_outputs(self.policy_output, self.policy_output_slices))
 
     # Merge order: vision → off_policy → policy.  On-policy overrides shared
-    # keys (e.g. lane_lines) when present.
+    # keys (e.g. plan, lane_lines) when present.
     combined_outputs_dict = {**vision_outputs_dict, **off_policy_outputs_dict, **policy_outputs_dict}
 
     # planplus recovery: add extra plan-delta on top of the base plan.
