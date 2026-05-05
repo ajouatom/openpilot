@@ -227,6 +227,8 @@ class CarState(CarStateBase):
           cp_cruise = self.cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else self.cp
           add_and_cache(cp_cruise, "SCC_CONTROL", "scc_control")          
         elif self.controls_ready_count == 121:
+          add_and_cache(self.cp, "TCS", "tcs")
+          add_and_cache(self.cp, "MDPS", "mdps")
           add_and_cache(self.cp_cam, "LFA", "lfa")
           add_and_cache(self.cp_cam, "LFA_ALT", "lfa_alt")          
           add_and_cache(self.cp_cam, "LFAHDA_CLUSTER", "lfahda_cluster")
@@ -238,8 +240,6 @@ class CarState(CarStateBase):
           add_and_cache(self.cp_cam, "CCNC_0x162", "ccnc_0x162")
         elif self.controls_ready_count == 123:        
           add_and_cache(self.cp, "HDA_INFO_4A3", "hda_info_4a3")
-          add_and_cache(self.cp, "TCS", "tcs")
-          add_and_cache(self.cp, "MDPS", "mdps")
           add_and_cache(self.cp, "STEER_TOUCH_2AF", "steer_touch_2af")
         elif self.controls_ready_count == 124:
           add_and_cache(self.cp, self.cruise_btns_msg_canfd, "cruise_buttons_msg")
