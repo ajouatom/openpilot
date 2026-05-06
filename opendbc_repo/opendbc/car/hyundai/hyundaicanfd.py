@@ -154,7 +154,7 @@ def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, 
         values["NEW_SIGNAL_1"] = 10
       ret.append(packer.make_can_msg("LFA", CAN.ECAN, values, rx_counter = rx_counter))
 
-  else:
+  elif CS.lfa is not None:
     values = {}
     values["LKA_MODE"] = 2
     values["LKA_ICON"] = 2 if lat_active else 1
