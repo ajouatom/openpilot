@@ -3,6 +3,8 @@ import pyray as rl
 import select
 import sys
 
+from openpilot.common.basedir import BASEDIR
+from openpilot.common.network_info import start_ip_monitor, label_with_port
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.text import wrap_text
@@ -25,6 +27,9 @@ DEGREES_PER_SECOND = 360.0  # one full rotation per second
 MARGIN_H = 100
 FONT_SIZE = 96
 LINE_HEIGHT = 104
+IP_FONT_SIZE = 50
+IP_TOP_MARGIN = 40
+RECOVERY_PORT = 6999
 DARKGRAY = (55, 55, 55, 255)
 
 
@@ -40,7 +45,8 @@ class Spinner(Widget):
     self._rotation = 0.0
     self._progress: int | None = None
     self._wrapped_lines: list[str] = []
-
+    start_ip_monitor()
+    
   def set_text(self, text: str) -> None:
     if text.isdigit():
       self._progress = clamp(int(text), 0, 100)
@@ -50,6 +56,15 @@ class Spinner(Widget):
       self._wrapped_lines = wrap_text(text, FONT_SIZE, gui_app.width - MARGIN_H)
 
   def _render(self, rect: rl.Rectangle):
+    # Recovery IP label at top-center (white, monospace-style)
+    ip_label = label_with_port(RECOVERY_PORT)
+    ip_size = rl.measure_text_ex(gui_app.font(), ip_label, IP_FONT_SIZE, 1.0)
+    rl.draw_text_ex(
+      gui_app.font(),
+      ip_label,
+      rl.Vector2(gui_app.width / 2.0 - ip_size.x / 2.0, IP_TOP_MARGIN),
+      IP_FONT_SIZE, 1.0, rl.WHITE,
+    )
     if self._wrapped_lines:
       # Calculate total height required for spinner and text
       spacing = WRAPPED_SPACING
