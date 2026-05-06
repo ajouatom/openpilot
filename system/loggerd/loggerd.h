@@ -81,16 +81,16 @@ const EncoderInfo main_road_encoder_info = {
   .publish_name = "roadEncodeData",
   .thumbnail_name = "thumbnail",
   .filename = "fcamera.hevc",
-  .record = Params().getInt("RecordRoadCam") > 0,
   .get_settings = [](int in_width){return EncoderSettings::MainEncoderSettings(in_width);},
+  .record = Params().getInt("RecordRoadCam") > 0,
   INIT_ENCODE_FUNCTIONS(RoadEncode),
 };
 
 const EncoderInfo main_wide_road_encoder_info = {
   .publish_name = "wideRoadEncodeData",
   .filename = "ecamera.hevc",
-  .record = Params().getInt("RecordRoadCam") > 1,
   .get_settings = [](int in_width){return EncoderSettings::MainEncoderSettings(in_width);},
+  .record = Params().getInt("RecordRoadCam") > 1,
   INIT_ENCODE_FUNCTIONS(WideRoadEncode),
 };
 
