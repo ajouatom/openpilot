@@ -23,8 +23,12 @@ else:
   LINE_HEIGHT = 25
   BUTTON_SIZE = rl.Vector2(150, 80)
 
-IP_FONT_SIZE = 50
-IP_BAND_HEIGHT = 80
+if gui_app.big_ui():
+  IP_FONT_SIZE = 50
+  IP_BAND_HEIGHT = 80
+else:
+  IP_FONT_SIZE = 18
+  IP_BAND_HEIGHT = 28
 RECOVERY_PORT = 6999
 
 DEMO_TEXT = """This is a sample text that will be wrapped and scrolled if necessary.
@@ -62,15 +66,14 @@ def wrap_text(text, font_size, max_width):
 class TextWindow(Widget):
   def __init__(self, text: str):
     super().__init__()
-    self._textarea_rect = rl.Rectangle(MARGIN, MARGIN, gui_app.width - MARGIN * 2, gui_app.height - MARGIN * 2)
+    start_ip_monitor()
+    text_top = MARGIN + IP_BAND_HEIGHT
+    self._textarea_rect = rl.Rectangle(MARGIN, text_top, gui_app.width - MARGIN * 2, gui_app.height - text_top - MARGIN)
     self._wrapped_lines = wrap_text(text, FONT_SIZE, self._textarea_rect.width - 20)
     self._content_rect = rl.Rectangle(0, 0, self._textarea_rect.width - 20, len(self._wrapped_lines) * LINE_HEIGHT)
     self._scroll_panel = GuiScrollPanel()
     self._scroll_panel._offset_filter_y.x = -max(self._content_rect.height - self._textarea_rect.height, 0)
 
-    start_ip_monitor()
-    text_top = MARGIN + IP_BAND_HEIGHT
-    
     button_text = "Exit" if PC else "Reboot"
     self._button = Button(button_text, click_callback=self._on_button_clicked, button_style=ButtonStyle.TRANSPARENT_WHITE_BORDER, font_size=FONT_SIZE)
 
