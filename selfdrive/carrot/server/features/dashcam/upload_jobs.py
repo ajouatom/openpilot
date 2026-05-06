@@ -17,12 +17,23 @@ UPLOAD_JOB_MAX_LOG_CHARS = 60000
 _jobs: dict[str, dict[str, Any]] = {}
 
 
+class UploadCanceled(Exception):
+  pass
+
+
 def jobs() -> dict[str, dict[str, Any]]:
   return _jobs
 
 
 def has_running_job() -> bool:
   return any(job.get("status") == "running" for job in _jobs.values())
+
+
+def running_job() -> dict[str, Any] | None:
+  for job in _jobs.values():
+    if job.get("status") == "running":
+      return job
+  return None
 
 
 def touch(job: dict[str, Any]) -> None:
@@ -65,13 +76,35 @@ def progress(
   touch(job)
 
 
+def is_cancel_requested(job: dict[str, Any] | None) -> bool:
+  return bool(job and job.get("cancel_requested"))
+
+
+def ensure_not_canceled(job: dict[str, Any] | None) -> None:
+  if is_cancel_requested(job):
+    raise UploadCanceled("upload canceled")
+
+
+def cancel_job(job_id: str) -> dict[str, Any]:
+  job = _jobs.get(job_id)
+  if not job:
+    return {"ok": False, "error": "job not found"}
+  if job.get("status") in ("done", "failed", "canceled"):
+    return {"ok": True, "already_done": True, **snapshot(job)}
+  job["cancel_requested"] = True
+  progress(job, message="Canceling upload")
+  append(job, "Cancel requested")
+  return {"ok": True, **snapshot(job)}
+
+
 def snapshot(job: dict[str, Any]) -> dict[str, Any]:
   return {
     "ok": True,
     "id": job["id"],
     "action": job["action"],
     "status": job["status"],
-    "done": job["status"] in ("done", "failed"),
+    "done": job["status"] in ("done", "failed", "canceled"),
+    "cancel_requested": bool(job.get("cancel_requested")),
     "log": job.get("log") or "",
     "progress": job.get("progress"),
     "message": job.get("message") or "",
@@ -84,8 +117,15 @@ def snapshot(job: dict[str, Any]) -> dict[str, Any]:
   }
 
 
-def finish(job: dict[str, Any], *, ok: bool, result: dict[str, Any] | None = None, error: str | None = None) -> None:
-  job["status"] = "done" if ok else "failed"
+def finish(
+  job: dict[str, Any],
+  *,
+  ok: bool,
+  result: dict[str, Any] | None = None,
+  error: str | None = None,
+  status: str | None = None,
+) -> None:
+  job["status"] = status or ("done" if ok else "failed")
   job["result"] = result or {"ok": bool(ok)}
   job["error"] = error or (None if ok else job["result"].get("error"))
   if ok:
@@ -95,7 +135,7 @@ def finish(job: dict[str, Any], *, ok: bool, result: dict[str, Any] | None = Non
 
 
 def prune() -> None:
-  finished = [job for job in _jobs.values() if job.get("status") in ("done", "failed")]
+  finished = [job for job in _jobs.values() if job.get("status") in ("done", "failed", "canceled")]
   if len(finished) <= UPLOAD_JOB_KEEP_COUNT:
     return
   finished.sort(key=lambda job: float(job.get("updated_at") or 0), reverse=True)
@@ -118,6 +158,7 @@ def create_job(segments: list[str]) -> dict[str, Any]:
     "step_total": len(segments),
     "error": None,
     "result": None,
+    "cancel_requested": False,
     "created_at": now,
     "updated_at": now,
   }
@@ -137,9 +178,14 @@ async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = 
   results = []
 
   if job:
+    job["upload_meta"] = meta
+    job["remote_base_path"] = remote_base_path
+    job["partial_results"] = results
     progress(job, message="Preparing upload", current=0, total=total, percent=0)
 
+  ensure_not_canceled(job)
   for idx, segment in enumerate(segments, start=1):
+    ensure_not_canceled(job)
     files = []
     if job:
       progress(job, message=f"Uploading {idx}/{total}", current=idx - 1, total=total)
@@ -152,7 +198,9 @@ async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = 
         segment_path,
         directory,
         segment,
+        (lambda: is_cancel_requested(job)) if job else None,
       )
+      ensure_not_canceled(job)
       results.append({
         "segment": segment,
         "route": route_name(segment),
@@ -164,6 +212,8 @@ async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = 
       if job:
         append(job, f"[{idx}/{total}] {segment} OK")
     except Exception as e:
+      if is_cancel_requested(job):
+        raise UploadCanceled("upload canceled") from e
       results.append({
         "segment": segment,
         "route": route_name(segment),
@@ -177,8 +227,10 @@ async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = 
         append(job, f"[{idx}/{total}] {segment} FAILED: {e}")
 
     if job:
+      job["partial_results"] = results
       progress(job, message=f"Uploaded {idx}/{total}", current=idx, total=total)
 
+  ensure_not_canceled(job)
   ok_count = sum(1 for item in results if item["ok"])
   uploaded_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
   response_payload = {
@@ -195,6 +247,7 @@ async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = 
 
   if job:
     progress(job, message="Sending notification", current=total, total=total, percent=98)
+  ensure_not_canceled(job)
   response_payload["discord"] = await upload.send_discord_webhook(
     upload.discord_webhook_url(params),
     response_payload,
@@ -206,6 +259,27 @@ async def run_job(job: dict[str, Any]) -> None:
   try:
     result = await run_upload_segments(list(job.get("segments") or []), job)
     finish(job, ok=bool(result.get("ok")), result=result)
+  except UploadCanceled as exc:
+    results = list(job.get("partial_results") or [])
+    uploaded_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ok_count = sum(1 for item in results if item.get("ok"))
+    total = len(job.get("segments") or [])
+    result = {
+      "ok": False,
+      "canceled": True,
+      "uploaded": ok_count,
+      "total": total,
+      "uploadedAt": uploaded_at,
+      "remoteBasePath": job.get("remote_base_path") or "",
+      "meta": job.get("upload_meta") or {},
+      "results": results,
+      "message": f"Canceled {ok_count}/{total}",
+      "error": str(exc),
+    }
+    result["shareText"] = upload.upload_share_text(result)
+    append(job, "CANCELED")
+    progress(job, message="Upload canceled", percent=0)
+    finish(job, ok=False, result=result, error=str(exc), status="canceled")
   except Exception as exc:
     result = {"ok": False, "error": str(exc)}
     append(job, f"FAILED: {exc}")
