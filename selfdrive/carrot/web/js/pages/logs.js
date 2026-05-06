@@ -851,7 +851,6 @@ function openLogsVideoPlayer(title, src, options = {}) {
         sources: [{ src, type: "video/mp4" }],
       };
       player.once("ready", () => {
-        try { player.play()?.catch?.(() => {}); } catch {}
         const container = player.elements?.container || overlay;
         const bindBtn = (sel, label) => {
           container.querySelectorAll(sel).forEach((btn) => btn.addEventListener("click", () => showToast(label)));
@@ -876,7 +875,6 @@ function openLogsVideoPlayer(title, src, options = {}) {
     } catch (err) {
       videoEl.controls = true;
       videoEl.src = src;
-      videoEl.play?.().catch?.(() => {});
     }
   });
 }

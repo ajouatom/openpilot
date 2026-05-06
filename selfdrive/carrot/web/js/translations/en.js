@@ -226,6 +226,8 @@ window.CarrotTranslations.register("en", {
     record_off: "Idle",
     ready: "Ready",
     loading: "Loading...",
+    tool_queued: "Queued...",
+    tool_queued_detail: "Queued: {command}",
     just_now: "just now",
     minutes_ago: "{count} min ago",
     hours_ago: "{count} hr ago",

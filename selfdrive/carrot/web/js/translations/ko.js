@@ -226,6 +226,8 @@ window.CarrotTranslations.register("ko", {
     record_off: "녹화대기",
     ready: "준비됨",
     loading: "로딩 중...",
+    tool_queued: "대기열에 추가됨...",
+    tool_queued_detail: "대기 중: {command}",
     just_now: "방금 전",
     minutes_ago: "{count}분 전",
     hours_ago: "{count}시간 전",
