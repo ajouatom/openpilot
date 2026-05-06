@@ -3,12 +3,25 @@ import os
 import time
 import subprocess
 from openpilot.common.basedir import BASEDIR
+from openpilot.common.network_info import start_ip_monitor, label_with_port
+
+
+RECOVERY_PORT = 6999
+
+
+def with_recovery_label(text):
+  try:
+    start_ip_monitor()
+    label = label_with_port(RECOVERY_PORT)
+  except Exception:
+    label = "no network"
+  return f"Recovery: {label}\n\n{text}"
 
 
 class TextWindow:
   def __init__(self, text):
     try:
-      self.text_proc = subprocess.Popen(["./text", text],
+      self.text_proc = subprocess.Popen(["./text", with_recovery_label(text)],
                                         stdin=subprocess.PIPE,
                                         cwd=os.path.join(BASEDIR, "selfdrive", "ui"),
                                         close_fds=True)
