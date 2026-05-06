@@ -842,6 +842,8 @@ function toolsProgressSet(percent = null, opts = {}) {
 }
 
 let activeToolRunToken = 0;
+let toolsRunQueueTail = Promise.resolve();
+let toolsRunQueueLength = 0;
 
 function updateToolsRunningState(labels, snapshot) {
   const message = String(snapshot?.message || labels.running || "");
@@ -865,6 +867,26 @@ function updateToolsRunningState(labels, snapshot) {
 }
 
 async function runTool(action, payload) {
+  const queuedAhead = toolsRunQueueLength;
+  toolsRunQueueLength += 1;
+  const runQueued = async () => {
+    if (queuedAhead > 0) {
+      const commandPreview = getToolCommandPreview(action, payload || {});
+      toolsMetaSet(getUIText("tool_queued", "Queued..."));
+      toolsLogNotice(getUIText("tool_queued_detail", "Queued: {command}", { command: commandPreview }), { label: "queue" });
+    }
+    try {
+      return await runToolNow(action, payload);
+    } finally {
+      toolsRunQueueLength = Math.max(0, toolsRunQueueLength - 1);
+    }
+  };
+  const queuedRun = toolsRunQueueTail.catch(() => {}).then(runQueued);
+  toolsRunQueueTail = queuedRun.catch(() => {});
+  return queuedRun;
+}
+
+async function runToolNow(action, payload) {
   const labels = getActionLabel(action);
   const runToken = ++activeToolRunToken;
   const commandPreview = getToolCommandPreview(action, payload || {});
