@@ -5,6 +5,7 @@ Anyone can modify. Refer to the structure below.
 ## Entry
 
 - `carrot_server.py` — starts the aiohttp server on port 7000.
+- `recovery/server.py` — tiny standalone recovery server on port 6999.
 
 ## Server (Python, aiohttp)
 

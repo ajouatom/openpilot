@@ -2,6 +2,7 @@
 import re
 import sys
 import pyray as rl
+from openpilot.common.network_info import start_ip_monitor, label_with_port
 from openpilot.system.hardware import HARDWARE, PC
 from openpilot.system.ui.lib.application import BIG_UI, gui_app
 from openpilot.system.ui.lib.scroll_panel import GuiScrollPanel
@@ -21,6 +22,10 @@ else:
   FONT_SIZE = 25
   LINE_HEIGHT = 25
   BUTTON_SIZE = rl.Vector2(150, 80)
+
+IP_FONT_SIZE = 50
+IP_BAND_HEIGHT = 80
+RECOVERY_PORT = 6999
 
 DEMO_TEXT = """This is a sample text that will be wrapped and scrolled if necessary.
             The text is long enough to demonstrate scrolling and word wrapping.""" * 30
@@ -63,6 +68,9 @@ class TextWindow(Widget):
     self._scroll_panel = GuiScrollPanel()
     self._scroll_panel._offset_filter_y.x = -max(self._content_rect.height - self._textarea_rect.height, 0)
 
+    start_ip_monitor()
+    text_top = MARGIN + IP_BAND_HEIGHT
+    
     button_text = "Exit" if PC else "Reboot"
     self._button = Button(button_text, click_callback=self._on_button_clicked, button_style=ButtonStyle.TRANSPARENT_WHITE_BORDER, font_size=FONT_SIZE)
 
@@ -73,6 +81,15 @@ class TextWindow(Widget):
       HARDWARE.reboot()
 
   def _render(self, rect: rl.Rectangle):
+    # Recovery IP label at top-center (white)
+    ip_label = label_with_port(RECOVERY_PORT)
+    ip_size = rl.measure_text_ex(gui_app.font(), ip_label, IP_FONT_SIZE, 1.0)
+    rl.draw_text_ex(
+      gui_app.font(),
+      ip_label,
+      rl.Vector2(gui_app.width / 2.0 - ip_size.x / 2.0, MARGIN / 2.0),
+      IP_FONT_SIZE, 1.0, rl.WHITE,
+    )
     scroll = self._scroll_panel.update(self._textarea_rect, self._content_rect)
     rl.begin_scissor_mode(int(self._textarea_rect.x), int(self._textarea_rect.y), int(self._textarea_rect.width), int(self._textarea_rect.height))
     for i, line in enumerate(self._wrapped_lines):
