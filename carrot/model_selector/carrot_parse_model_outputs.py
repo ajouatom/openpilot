@@ -135,6 +135,9 @@ class Parser:
     if 'lane_lines_prob' in outs:
       self.parse_binary_crossentropy('lane_lines_prob', outs)
     self._parse_lead_if_exists(outs)
+    # op11 (commaai/openpilot ece8f7664d 이후): desire_state 가 off_policy 로 이동
+    if 'desire_state' in outs:
+      self.parse_categorical_crossentropy('desire_state', outs, out_shape=(ModelConstants.DESIRE_PRED_WIDTH,))
     return outs
 
   def parse_policy_outputs(self, outs: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
