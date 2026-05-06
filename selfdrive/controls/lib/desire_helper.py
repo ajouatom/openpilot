@@ -319,14 +319,14 @@ class DesireHelper:
           self.turn_direction = TurnDirection.none
 
           if self.lane_change_state == LaneChangeState.off:
-              if desire_enabled and not self.prev_desire_enabled and not below_lane_change_speed and side is not None:
-                  self.lane_change_state = LaneChangeState.preLaneChange
-                  self.lane_change_ll_prob = 1.0
-                  self.lane_change_delay = self.laneChangeDelay
-                  lane_exist_counter_side = side.lane_exist_count.counter
-                  lane_change_available_geom = side.lane_change_available_geom
-                  self.auto_lane_change_enable = False if (lane_exist_counter_side > 0 or lane_change_available_geom) else True
-                  self.next_lane_change = False
+            if desire_enabled and not self.prev_desire_enabled and not below_lane_change_speed and side is not None:
+              self.lane_change_state = LaneChangeState.preLaneChange
+              self.lane_change_ll_prob = 1.0
+              self.lane_change_delay = self.laneChangeDelay
+              lane_exist_counter_side = side.lane_exist_count.counter
+              lane_change_available_geom = side.lane_change_available_geom
+              self.auto_lane_change_enable = False if (lane_exist_counter_side > 0 or lane_change_available_geom) else True
+              self.next_lane_change = False
 
           elif self.lane_change_state == LaneChangeState.preLaneChange:
               if side is None:
@@ -382,23 +382,16 @@ class DesireHelper:
                               self.lane_change_state = LaneChangeState.laneChangeStarting
 
           elif self.lane_change_state == LaneChangeState.laneChangeStarting:
-              # ★ 변경: BSD 감지 시 preLaneChange로 롤백하여 재시도 대기
-              _ignore_bsd = (self.laneChangeBsd < 0)
-              _bsd_now = (side is not None) and (side.bsd_hold_counter > 0)
-
-              if _bsd_now and not _ignore_bsd:
-                  # BSD 감지 → preLaneChange로 롤백
-                  # ∙ 방향지시등(desire_enabled / blinker_state)은 그대로 유지
-                  # ∙ BSD 해제되면 다음 프레임에서 preLaneChange 조건 재평가 → 자동 재시도
-                  self.lane_change_state = LaneChangeState.preLaneChange
-                  self.lane_change_ll_prob = 1.0          # ★ 레인라인 확률 복원 (모델 정상화)
-                  self.lane_change_delay = self.laneChangeDelay  # ★ 딜레이 재설정
-                  # lane_change_timer는 아래 타이머 블록에서 preLaneChange → 0으로 리셋됨
-              else:
-                  # 정상 진행
-                  self.lane_change_ll_prob = max(self.lane_change_ll_prob - 2 * DT_MDL, 0.0)
-                  if lane_change_prob < 0.02 and self.lane_change_ll_prob < 0.01:
-                      self.lane_change_state = LaneChangeState.laneChangeFinishing
+            ignore_bsd = (self.laneChangeBsd < 0)
+            bsd_active = (side is not None) and (side.bsd_hold_counter > 0) and (not ignore_bsd)
+            if bsd_active:
+              self.lane_change_state = LaneChangeState.preLaneChange
+              self.lane_change_ll_prob = 1.0
+              self.lane_change_delay = self.laneChangeDelay
+            else:
+              self.lane_change_ll_prob = max(self.lane_change_ll_prob - 2 * DT_MDL, 0.0)
+              if lane_change_prob < 0.02 and self.lane_change_ll_prob < 0.01:
+                self.lane_change_state = LaneChangeState.laneChangeFinishing
 
           elif self.lane_change_state == LaneChangeState.laneChangeFinishing:
               self.lane_change_ll_prob = min(self.lane_change_ll_prob + DT_MDL, 1.0)
