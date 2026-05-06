@@ -2,7 +2,7 @@ import base64
 import os
 import subprocess
 from ftplib import FTP
-from typing import Any
+from typing import Any, Callable
 
 from aiohttp import ClientSession, ClientTimeout
 
@@ -186,22 +186,36 @@ async def send_discord_webhook(url: str, payload: dict[str, Any]) -> dict[str, A
     return {"configured": True, "ok": False, "error": str(e)}
 
 
-def upload_folder_to_ftp(local_folder: str, directory: str, remote_path: str) -> bool:
+def upload_folder_to_ftp(
+  local_folder: str,
+  directory: str,
+  remote_path: str,
+  should_cancel: Callable[[], bool] | None = None,
+) -> bool:
+  def check_cancel() -> None:
+    if should_cancel and should_cancel():
+      raise RuntimeError("upload canceled")
+
   ftp_server = os.environ.get("CARROT_FTP_SERVER", "shind0.synology.me")
   ftp_port = int(os.environ.get("CARROT_FTP_PORT", "8021"))
   ftp_username = os.environ.get("CARROT_FTP_USERNAME", "carrotpilot")
   ftp_password = os.environ.get("CARROT_FTP_PASSWORD", "Ekdrmsvkdlffjt7710")
 
+  check_cancel()
   ftp = FTP()
   ftp.connect(ftp_server, ftp_port, timeout=20)
+  check_cancel()
   ftp.login(ftp_username, ftp_password)
   try:
+    check_cancel()
     ftp.cwd("routes")
     routes_root = ftp.pwd()
 
     def cwd_or_create(path: str) -> None:
+      check_cancel()
       ftp.cwd(routes_root)
       for part in [p for p in path.split("/") if p]:
+        check_cancel()
         try:
           ftp.cwd(part)
         except Exception:
@@ -210,13 +224,16 @@ def upload_folder_to_ftp(local_folder: str, directory: str, remote_path: str) ->
 
     base_path = f"{directory}/{remote_path}".strip("/")
     for root, _, files in os.walk(local_folder):
+      check_cancel()
       rel_dir = os.path.relpath(root, local_folder)
       remote_dir = base_path if rel_dir == "." else f"{base_path}/{rel_dir.replace(os.sep, '/')}"
       cwd_or_create(remote_dir)
       for filename in files:
+        check_cancel()
         local_path = os.path.join(root, filename)
         with open(local_path, "rb") as f:
           ftp.storbinary(f"STOR {filename}", f)
+        check_cancel()
     return True
   finally:
     try:

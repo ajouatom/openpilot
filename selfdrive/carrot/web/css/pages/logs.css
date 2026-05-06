@@ -702,6 +702,25 @@
   font-weight: 800;
 }
 
+.dashcam-upload-progress__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.dashcam-upload-progress__cancel {
+  min-height: 38px;
+  padding-inline: 16px;
+  border-color: color-mix(in srgb, var(--md-error) 42%, var(--md-outline-var));
+  color: color-mix(in srgb, var(--md-error) 82%, var(--md-on-surface));
+  background: transparent;
+}
+
+.dashcam-upload-progress__cancel:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
 @media (orientation: landscape) {
   .dashcam-share-card {
     gap: 8px;
@@ -759,6 +778,14 @@
   .dashcam-upload-progress__summary {
     margin-top: 8px;
     font-size: 11px;
+  }
+
+  .dashcam-upload-progress__actions {
+    margin-top: 10px;
+  }
+
+  .dashcam-upload-progress__cancel {
+    min-height: 34px;
   }
 }
 
