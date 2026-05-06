@@ -4,6 +4,7 @@ let toolsQrCameraStream = null;
 let toolsQrScanTimer = null;
 let toolsQrScanFinishTimer = null;
 let toolsQrAlignedFrames = 0;
+let toolsQrDependencyPromise = null;
 
 function toolsQrText(key, fallback, vars = null) {
   return typeof getUIText === "function" ? getUIText(key, fallback, vars) : fallback;
@@ -177,18 +178,26 @@ async function toolsQrBackupFileName() {
 }
 
 async function toolsQrEnsureDependency() {
-  const status = await getJson("/api/params_qr_dependency");
-  console.info("[carrot][qr-dependency]", status);
-  if (status.installed) return status;
+  if (toolsQrDependencyPromise) return toolsQrDependencyPromise;
+  toolsQrDependencyPromise = (async () => {
+    const status = await getJson("/api/params_qr_dependency");
+    console.info("[carrot][qr-dependency]", status);
+    if (status.installed) return status;
 
-  toolsQrToast("qr_configuring", "Configuring QR feature...");
-  const result = await postJson("/api/params_qr_dependency/ensure", {});
-  console.info("[carrot][qr-dependency]", result);
-  if (!result.ok || !result.installed) {
-    throw new Error(result.error || toolsQrText("qr_config_failed", "QR feature could not be configured."));
+    toolsQrToast("qr_configuring", "Please wait...");
+    const result = await postJson("/api/params_qr_dependency/ensure", {});
+    console.info("[carrot][qr-dependency]", result);
+    if (!result.ok || !result.installed) {
+      throw new Error(result.error || toolsQrText("qr_config_failed", "QR feature could not be configured."));
+    }
+    toolsQrToast("qr_config_done", "QR feature is ready.");
+    return result;
+  })();
+  try {
+    return await toolsQrDependencyPromise;
+  } finally {
+    toolsQrDependencyPromise = null;
   }
-  toolsQrToast("qr_config_done", "QR feature is ready.");
-  return result;
 }
 
 function toolsQrDownloadDataUrl(dataUrl, filename) {
@@ -468,6 +477,13 @@ function toolsQrBindRestoreDialog(state) {
 }
 
 async function toolsQrShowRestore() {
+  try {
+    await toolsQrEnsureDependency();
+  } catch (e) {
+    showError("qr restore", e);
+    return;
+  }
+
   const state = { payload: "" };
   const html = `
     <div class="tools-qr-restore">

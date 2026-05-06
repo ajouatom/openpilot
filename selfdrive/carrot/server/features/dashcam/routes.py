@@ -157,8 +157,14 @@ async def api_dashcam_upload(request: web.Request) -> web.Response:
 async def api_dashcam_upload_start(request: web.Request) -> web.Response:
   try:
     segments = await request_upload_segments(request)
-    if upload_jobs.has_running_job():
-      return web.json_response({"ok": False, "error": "upload already running"}, status=409)
+    running = upload_jobs.running_job()
+    if running:
+      return web.json_response({
+        "ok": False,
+        "error": "upload already running",
+        "job_id": running.get("id"),
+        "job": upload_jobs.snapshot(running),
+      }, status=409)
     job = upload_jobs.create_job(segments)
     asyncio.create_task(upload_jobs.run_job(job))
     return web.json_response({"ok": True, "job_id": job["id"], "status": job["status"]})
@@ -178,6 +184,19 @@ async def api_dashcam_upload_job(request: web.Request) -> web.Response:
   return web.json_response(upload_jobs.snapshot(job))
 
 
+async def api_dashcam_upload_cancel(request: web.Request) -> web.Response:
+  try:
+    body = await request.json()
+  except Exception:
+    body = {}
+  job_id = str(body.get("id") or body.get("job_id") or "").strip()
+  if not job_id:
+    return web.json_response({"ok": False, "error": "missing job id"}, status=400)
+  result = upload_jobs.cancel_job(job_id)
+  status = 200 if result.get("ok") else 404
+  return web.json_response(result, status=status)
+
+
 def register(app: web.Application) -> None:
   app.router.add_get("/api/dashcam/routes", api_dashcam_routes)
   app.router.add_get("/api/dashcam/thumbnail/{segment}", api_dashcam_thumbnail)
@@ -187,4 +206,5 @@ def register(app: web.Application) -> None:
   app.router.add_post("/api/dashcam/upload/summary", api_dashcam_upload_summary)
   app.router.add_post("/api/dashcam/upload/start", api_dashcam_upload_start)
   app.router.add_get("/api/dashcam/upload/job", api_dashcam_upload_job)
+  app.router.add_post("/api/dashcam/upload/cancel", api_dashcam_upload_cancel)
   app.router.add_post("/api/dashcam/upload", api_dashcam_upload)
