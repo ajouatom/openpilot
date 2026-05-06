@@ -25,10 +25,25 @@ def _query_ip():
 
 
 def _refresh_loop():
+  fail_count = 0
+  max_grace = 3  # keep previous IP for up to 3 failures (~15s)
   while True:
-    ip = _query_ip()
-    with _lock:
-      _state["ip"] = ip
+    try:
+      ip = _query_ip()
+      if ip is not None:
+        fail_count = 0
+        with _lock:
+          _state["ip"] = ip
+      else:
+        fail_count += 1
+        if fail_count >= max_grace:
+          with _lock:
+            _state["ip"] = None
+    except Exception:
+      fail_count += 1
+      if fail_count >= max_grace:
+        with _lock:
+          _state["ip"] = None
     time.sleep(5)
 
 
