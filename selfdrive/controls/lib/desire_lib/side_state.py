@@ -41,7 +41,8 @@ class SideState:
   lane_line_info_mod: int = 0
   last_lane_line_mod: int = 0
   lane_line_info_edge_detect: bool = False
-
+  outer_lane_prob: float = 0.0
+  
   # transitions
   lane_available_last: bool = False
   edge_available_last: bool = False
@@ -56,7 +57,7 @@ class SideState:
   bsd_hold_counter: int = 0
   bsd_detected_now: bool = False
 
-  # computed ¡°lane change available¡± (includes BSD+object)
+  # computed â€œlane change availableâ€ (includes BSD+object)
   lane_change_available_geom: bool = False
   lane_change_available: bool = False
   lane_width_sum: float = 0.0
@@ -80,6 +81,7 @@ class SideState:
     self.lane_width = self.lane_width_sum / len(self.lane_width_queue)
 
     self.lane_width_diff = (self.lane_width_queue[-1] - self.lane_width_queue[0]) if len(self.lane_width_queue) >= 2 else 0.0
+    self.outer_lane_prob = float(lane_outer_prob)
 
     self.dist_to_edge = float(dist_edge)
     self.dist_to_edge_far = float(dist_edge_far)
@@ -94,60 +96,84 @@ class SideState:
 
     self.cur_prob = float(cur_prob)
     self.current_lane_missing = self.cur_prob < 0.3
-
+   
   def update_lane_line_info(self, lane_line_info_raw: int):
     self.lane_line_info_raw = int(lane_line_info_raw)
     mod = self.lane_line_info_raw % 10
-    # edge_detect: 0/5·Î ¹Ù²î´Â ¼ø°£ (±âÁ¸Àº ÁÂ/¿ì°¡ °°Àº self.lane_line_info °øÀ¯¶ó ¹ö±×¼º)
+    # edge_detect: 0/5ë¡œ ë°”ë€ŒëŠ” ìˆœê°„ (ê¸°ì¡´ì€ ì¢Œ/ìš°ê°€ ê°™ì€ self.lane_line_info ê³µìœ ë¼ ë²„ê·¸ì„±)
     self.lane_line_info_edge_detect = (mod in (0, 5)) and (self.last_lane_line_mod not in (0, 5))
     self.last_lane_line_mod = mod
     self.lane_line_info_mod = mod
 
   def update_obstacles(self,
-                       v_ego: float,
-                       radar_obj,           # radarState.leadLeft / leadRight
-                       blindspot: bool,      # carstate.leftBlindspot/rightBlindspot
-                       ignore_bsd: bool,
-                       bsd_hold_sec: float = 2.0):
-    # object_detected (radar ±â¹Ý)
+                     v_ego: float,
+                     radar_obj,
+                     blindspot: bool,
+                     ignore_bsd: bool,
+                     bsd_hold_sec: float = 2.0):
+    # ì˜† ì°¨ì„  ì•ž ì°¨ëŸ‰ ê°„ê²© íŒë‹¨ (ê°œì„ )
     if radar_obj is not None and radar_obj.status:
-      d = radar_obj.dRel
-      v = radar_obj.vLead
-      side_object_dist = d + v * 4.0
-    else:
-      side_object_dist = 255.0
+        d_rel = radar_obj.dRel          # í˜„ìž¬ ê±°ë¦¬ (m)
+        v_lead = radar_obj.vLead        # ì•ž ì°¨ ì ˆëŒ€ì†ë„ (m/s)
+        v_rel = v_lead - v_ego          # ìƒëŒ€ì†ë„ (ìŒìˆ˜ = ì ‘ê·¼ ì¤‘)
 
-    object_detected = side_object_dist < (v_ego * 3.0)
-    if object_detected:
-      self.object_detected_count = max(1, self.object_detected_count + 1)
+        # ì¶©ëŒ ì˜ˆìƒ ì‹œê°„ (TTC): ì ‘ê·¼ ì¤‘ì¼ ë•Œë§Œ ê³„ì‚°
+        if v_rel < -0.5:
+            ttc = d_rel / (-v_rel)      # ì–‘ìˆ˜ ê°’ (ì´ˆ)
+        else:
+            ttc = 99.0                  # ë©€ì–´ì§€ê±°ë‚˜ ë™ì†ì´ë©´ ìœ„í—˜ ì—†ìŒ
+
+        # ê°„ê²© ê¸°ì¤€: ì•„ëž˜ ë‘ ì¡°ê±´ ì¤‘ í•˜ë‚˜ë¼ë„ í•´ë‹¹í•˜ë©´ ìœ„í—˜
+        # 1) ì ˆëŒ€ ê±°ë¦¬ ê¸°ì¤€: í˜„ìž¬ ê±°ë¦¬ê°€ ìžì°¨ ì†ë„ * 2.5ì´ˆ ì´ë‚´ (ìµœì†Œ 15m)
+        safe_dist = max(v_ego * 2.5, 15.0)
+        too_close = d_rel < safe_dist
+
+        # 2) TTC ê¸°ì¤€: ì¶©ëŒ ì˜ˆìƒ ì‹œê°„ì´ 5ì´ˆ ì´ë‚´
+        ttc_danger = ttc < 5.0
+
+        object_detected = too_close or ttc_danger
     else:
-      self.object_detected_count = min(-1, self.object_detected_count - 1)
+        object_detected = False
+
+    if object_detected:
+        self.object_detected_count = max(1, self.object_detected_count + 1)
+    else:
+        self.object_detected_count = min(-1, self.object_detected_count - 1)
 
     self.side_object_detected = self.object_detected_count > int(-0.3 / DT_MDL)
 
-    # BSD hold (¿ä±¸»çÇ×: °ËÃâ ÈÄ 2ÃÊ À¯Áö)
+    # BSD hold (ê¸°ì¡´ ìœ ì§€)
     self.bsd_detected_now = bool(blindspot)
     if self.bsd_detected_now and not ignore_bsd:
-      self.bsd_hold_counter = int(bsd_hold_sec / DT_MDL)
+        self.bsd_hold_counter = int(bsd_hold_sec / DT_MDL)
     else:
-      self.bsd_hold_counter = max(0, self.bsd_hold_counter - 1)
+        self.bsd_hold_counter = max(0, self.bsd_hold_counter - 1)
+
 
   def compute_lane_change_available(self, lane_line_info_lt_20: bool, ignore_bsd: bool):
-    # geometric availability
-    self.lane_change_available_geom = (self.lane_available or self.edge_available) and lane_line_info_lt_20
+    # lane_availableì€ ê±°ë¦¬ ê¸°ë°˜ì´ë¯€ë¡œ ì¤‘ì•™ì„  ë„ˆë¨¸ ë°˜ëŒ€ì°¨ì„ ì„ ìž˜ëª» ê°ì§€í•  ìˆ˜ ìžˆìŒ
+    # outer_lane_prob >= 0.5 ì¡°ê±´ì„ ì¶”ê°€í•´ ëª¨ë¸ì´ ì‹¤ì œë¡œ ì°¨ì„ ì„ ì¸ì‹í•  ë•Œë§Œ í—ˆìš©
+    lane_avail_confirmed = self.lane_available and (self.outer_lane_prob >= 0.5)
 
-    # include bsd/object into lane_change_available (¿ä±¸»çÇ×)
+    self.lane_change_available_geom = (
+        (lane_avail_confirmed or self.edge_available) and lane_line_info_lt_20
+    )
+
     bsd_active = (self.bsd_hold_counter > 0) and (not ignore_bsd)
-    self.lane_change_available = self.lane_change_available_geom and (not self.side_object_detected) and (not bsd_active)
-
+    self.lane_change_available = (
+        self.lane_change_available_geom
+        and (not self.side_object_detected)
+        and (not bsd_active)
+    )
+    
   def update_triggers(self):
-    # lane_available_trigger (±âÁ¸ ·ÎÁ÷ À¯Áö)
+    # lane_available_trigger (ê¸°ì¡´ ë¡œì§ ìœ ì§€)
     self.lane_available_trigger = False
     if self.lane_width_diff > 0.8 and (self.lane_width < self.dist_to_edge):
       self.lane_available_trigger = True
 
-    # lane_appeared (bugfix: == ¸»°í >=°¡ ÀÚ¿¬½º·¯¿ò)
-    # + edge°¡ ³Ê¹« ¸Ö¸é(±³Â÷·Î) lane_appeared¸¦ °úµµÇÏ°Ô true·Î ¸¸µéÁö ¾Ê°Ô Á¦ÇÑ
+    # lane_appeared (bugfix: == ë§ê³  >=ê°€ ìžì—°ìŠ¤ëŸ¬ì›€)
+    # + edgeê°€ ë„ˆë¬´ ë©€ë©´(êµì°¨ë¡œ) lane_appearedë¥¼ ê³¼ë„í•˜ê²Œ trueë¡œ ë§Œë“¤ì§€ ì•Šê²Œ ì œí•œ
     appeared_now = self.lane_exist_count.counter >= int(0.2 / DT_MDL)
     self.lane_appeared = (self.lane_appeared or appeared_now) and (self.dist_to_edge < 4.0)
 

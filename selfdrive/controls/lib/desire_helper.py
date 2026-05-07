@@ -164,15 +164,13 @@ class DesireHelper:
   # per-side processing (핵심: 좌/우 모두 매 프레임 계산)
   # ─────────────────────────────────────────────
   def _process_sides(self, carstate, modeldata, radarState):
-    # geometry (좌/우)
-    # left: outer laneLines[0], current laneLines[1], edge[0], cur_prob laneLineProbs[1]
+    # geometry
     self.left.update_lane_geometry(
       modeldata.laneLines[0], modeldata.laneLineProbs[0],
       modeldata.laneLines[1],
       modeldata.roadEdges[0],
       cur_prob=modeldata.laneLineProbs[1],
     )
-    # right: outer laneLines[3], current laneLines[2], edge[1], cur_prob laneLineProbs[2]
     self.right.update_lane_geometry(
       modeldata.laneLines[3], modeldata.laneLineProbs[3],
       modeldata.laneLines[2],
@@ -180,33 +178,35 @@ class DesireHelper:
       cur_prob=modeldata.laneLineProbs[2],
     )
 
-    # lane line info (HUD용 raw는 기존대로 leftLaneLine/rightLaneLine)
     self.left.update_lane_line_info(carstate.leftLaneLine)
     self.right.update_lane_line_info(carstate.rightLaneLine)
 
-    # BSD 설정
     ignore_bsd = (self.laneChangeBsd < 0)
-
-    # obstacles
     v_ego = carstate.vEgo
     self.left.update_obstacles(v_ego, radarState.leadLeft, carstate.leftBlindspot, ignore_bsd, bsd_hold_sec=2.0)
     self.right.update_obstacles(v_ego, radarState.leadRight, carstate.rightBlindspot, ignore_bsd, bsd_hold_sec=2.0)
 
-    # compute available (include BSD+object)
-    if self.laneLineCheck >= 1:
-      left_line_ok = self.left.lane_line_info_mod in (0, 5)
-      right_line_ok = self.right.lane_line_info_mod in (0, 5)
-    else:
-      left_line_ok = self.left.lane_line_info_raw < 20
-      right_line_ok = self.right.lane_line_info_raw < 20
+    def line_ok(raw, check_mode):
+      color = raw // 10   # 0=흰색, 1=황색, 2=주황
+      ltype = raw % 10    # 0=점선, 1=실선, 4=DLM실선, 5=DLM점선
+      if check_mode == 0:
+          # 색상 기준: 흰색(0)만 허용, 황색(1)/주황(2) 모두 차단
+          # raw=0 (흰색점선)도 color=0이므로 허용
+          return color == 0
+      else:
+          # 타입 기준: 점선(0), DLM점선(5)만 허용
+          return ltype in (0, 5)
+
+    left_line_ok  = line_ok(self.left.lane_line_info_raw,  self.laneLineCheck)
+    right_line_ok = line_ok(self.right.lane_line_info_raw, self.laneLineCheck)
+
     self.left.compute_lane_change_available(lane_line_info_lt_20=left_line_ok, ignore_bsd=ignore_bsd)
     self.right.compute_lane_change_available(lane_line_info_lt_20=right_line_ok, ignore_bsd=ignore_bsd)
 
     self.left.update_triggers()
     self.right.update_triggers()
 
-    # externally readable
-    self.lane_change_available_left = self.left.lane_change_available
+    self.lane_change_available_left  = self.left.lane_change_available
     self.lane_change_available_right = self.right.lane_change_available
 
   def _get_selected_side(self, blinker_state: int) -> SideState:
@@ -248,7 +248,7 @@ class DesireHelper:
     if desire_enabled and side is not None:
       # carrot_lane_change_count>0이면 강제 허용
       if self.carrot_lane_change_count > 0:
-        auto_lane_change_trigger = side.lane_change_available
+        auto_lane_change_trigger = side.lane_change_available and (side.bsd_hold_counter == 0)
       else:
         # 기존 조건: edge_available + (trigger or appeared) + not side_object_detected
         auto_lane_change_trigger = (
@@ -266,7 +266,9 @@ class DesireHelper:
       )
     else:
       self.auto_lane_change_enable = False
-      self.next_lane_change = False
+      if not desire_enabled:        # 깜빡이가 꺼진 경우에만 리셋
+        self.next_lane_change = False
+
 
     # ───────────────────────── FSM ─────────────────────────
     if not lateral_active or self.lane_change_timer > LANE_CHANGE_TIME_MAX:
@@ -319,14 +321,15 @@ class DesireHelper:
           self.turn_direction = TurnDirection.none
 
           if self.lane_change_state == LaneChangeState.off:
-            if desire_enabled and not self.prev_desire_enabled and not below_lane_change_speed and side is not None:
+            if desire_enabled and (not self.prev_desire_enabled or self.next_lane_change) \
+              and not below_lane_change_speed and side is not None:
               self.lane_change_state = LaneChangeState.preLaneChange
               self.lane_change_ll_prob = 1.0
-              self.lane_change_delay = self.laneChangeDelay
+              if not self.next_lane_change:      # 처음 진입 시만 딜레이 설정
+                self.lane_change_delay = self.laneChangeDelay
               lane_exist_counter_side = side.lane_exist_count.counter
               lane_change_available_geom = side.lane_change_available_geom
               self.auto_lane_change_enable = False if (lane_exist_counter_side > 0 or lane_change_available_geom) else True
-              self.next_lane_change = False
 
           elif self.lane_change_state == LaneChangeState.preLaneChange:
             if side is None:
@@ -344,64 +347,70 @@ class DesireHelper:
 
               solid_line_blocked = (self.laneLineCheck >= 2) and (not side.lane_change_available_geom) and \
                   (side.lane_available or side.edge_available)
-              start_gate = (side.lane_change_available_geom and self.lane_change_delay == 0) or \
-                  side.lane_line_info_edge_detect or solid_line_blocked
+              start_gate = self.lane_change_delay == 0 and (side.lane_change_available_geom or side.lane_line_info_edge_detect or solid_line_blocked)
 
               if not desire_enabled or below_lane_change_speed:
                 self.lane_change_state = LaneChangeState.off
                 self.lane_change_direction = LaneChangeDirection.none
 
               elif bsd_active:
-                # BSD 감지 중: 실선/자동/driver blinker 여부와 무관하게 최우선 처리
-                # laneChangeBsd=0 → torque 있을 때만 허용
-                # laneChangeBsd=1 → torque도 완전 차단, BSD 해제까지 대기
+                # BSD 최우선: laneChangeBsd=0 → torque 있을 때만, laneChangeBsd=1 → 완전 차단
                 if start_gate and torque_applied and not block_lanechange_bsd:
                   self.lane_change_state = LaneChangeState.laneChangeStarting
 
               elif start_gate:
                 if solid_line_blocked:
-                  # 실선: torque 필수 (BSD 없음이 보장된 상태)
                   if torque_applied:
                     self.lane_change_state = LaneChangeState.laneChangeStarting
 
-                elif self.laneChangeNeedTorque > 0 or self.next_lane_change:
-                  # torque 필수 설정
+                elif self.laneChangeNeedTorque > 0:
                   if torque_applied:
                     self.lane_change_state = LaneChangeState.laneChangeStarting
 
-                elif driver_enabled:
-                  # driver blinker 자동 시작
-                  if side.lane_change_available:
+                elif driver_enabled or self.next_lane_change:
+                  # side.lane_change_available 안에 BSD 포함되어 있으므로 충분
+                  if side.lane_change_available and side.lane_change_available_geom:
                     self.lane_change_state = LaneChangeState.laneChangeStarting
 
                 else:
-                  # auto trigger
+                  # auto_lane_change_trigger 안에 bsd_hold_counter==0 포함
+                  # side.lane_change_available 안에 BSD 포함
                   if (torque_applied or auto_lane_change_trigger or side.lane_line_info_edge_detect) \
-                      and side.lane_change_available:
+                          and side.lane_change_available:
                     self.lane_change_state = LaneChangeState.laneChangeStarting
 
+              # BSD 해제 후 재시도 (side.lane_change_available가 BSD 포함하므로 충분)
+              elif start_gate and driver_enabled and side.lane_change_available:
+                self.lane_change_state = LaneChangeState.laneChangeStarting
 
           elif self.lane_change_state == LaneChangeState.laneChangeStarting:
             ignore_bsd = (self.laneChangeBsd < 0)
             bsd_active = (side is not None) and (side.bsd_hold_counter > 0) and (not ignore_bsd)
             if bsd_active:
-              self.lane_change_state = LaneChangeState.preLaneChange
-              self.lane_change_ll_prob = 1.0
-              self.lane_change_delay = self.laneChangeDelay
-            else:
-              self.lane_change_ll_prob = max(self.lane_change_ll_prob - 2 * DT_MDL, 0.0)
-              if lane_change_prob < 0.02 and self.lane_change_ll_prob < 0.01:
+                self.lane_change_direction = LaneChangeDirection.none  # 즉시 방향 리셋
+                self.lane_change_ll_prob = 1.0
                 self.lane_change_state = LaneChangeState.laneChangeFinishing
+                # 딜레이는 laneChangeFinishing 완료 시 bsd_hold_counter 기반으로 설정됨
+            else:
+                self.lane_change_ll_prob = max(self.lane_change_ll_prob - 2 * DT_MDL, 0.0)
+                if lane_change_prob < 0.02 and self.lane_change_ll_prob < 0.01:
+                    self.lane_change_state = LaneChangeState.laneChangeFinishing
+
 
           elif self.lane_change_state == LaneChangeState.laneChangeFinishing:
-              self.lane_change_ll_prob = min(self.lane_change_ll_prob + DT_MDL, 1.0)
-              if self.lane_change_ll_prob > 0.99:
-                  self.lane_change_direction = LaneChangeDirection.none
-                  if desire_enabled:
-                      self.lane_change_state = LaneChangeState.preLaneChange
-                      self.next_lane_change = True
-                  else:
-                      self.lane_change_state = LaneChangeState.off
+            self.lane_change_ll_prob = min(self.lane_change_ll_prob + DT_MDL, 1.0)
+            if self.lane_change_ll_prob > 0.99:
+                self.lane_change_direction = LaneChangeDirection.none
+                if desire_enabled:
+                    if side is not None and side.bsd_hold_counter > 0:
+                        # BSD hold 남은 시간 + 추가 2초 → BSD 완전 해제 후 재시도 보장
+                        self.lane_change_delay = side.bsd_hold_counter * DT_MDL + max(self.laneChangeDelay, 2.0)
+                    else:
+                        self.lane_change_delay = max(self.laneChangeDelay, 2.0)
+                    self.next_lane_change = True
+                else:
+                    self.next_lane_change = False
+                self.lane_change_state = LaneChangeState.off
 
 
     # timer
