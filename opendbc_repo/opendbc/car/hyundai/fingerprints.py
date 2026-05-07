@@ -481,16 +481,28 @@ FW_VERSIONS = {
       b'\xf1\x00JS  LKAS AT USA LHD 1.00 1.02 95740-J3000 K32',
     ],
   },
-  CAR.GENESIS_G70: {
+  CAR.GENESIS_G70: {  # (IK)
     (Ecu.fwdRadar, 0x7d0, None): [
       b'\xf1\x00IK__ SCC F-CUP      1.00 1.01 96400-G9100         ',
       b'\xf1\x00IK__ SCC F-CUP      1.00 1.02 96400-G9100         ',
+      # 2020
+      b'\xf1\x00IK__ SCC FHCUP      1.00 1.02 96400-G9000         ',
+      b'\xf1\x00IK__ SCC FHCUP      1.00 1.00 99110-G9300         ',
     ],
     (Ecu.eps, 0x7d4, None): [
       b'\xf1\x00IK  MDPS R 1.00 1.06 57700-G9420 4I4VL106',
+      # 2020
+      b'\xf1\x00IK  MDPS R 1.00 1.07 57700-G9220 4I2VL107',
+      b'\xf1\x00IK  MDPS R 1.00 1.07 57700-G9420 4I4VL107',
+      b'\xf1\x00IK  MDPS R 1.00 1.08 57700-G9200 4I2CL108',
+      b'\xf1\x00IK  MDPS R 1.00 1.08 57700-G9420 4I4VL108',
+      b'\xf1\x00IK  MDPS R 1.00 5.09 57700-G9520 4I4VL509',
     ],
     (Ecu.fwdCamera, 0x7c4, None): [
       b'\xf1\x00IK  MFC  AT USA LHD 1.00 1.01 95740-G9000 170920',
+      # 2020
+      b'\xf1\x00IK  MFC  AT KOR LHD 1.00 1.01 95740-G9000 170920',
+      b'\xf1\x00IK  MFC  AT USA LHD 1.00 1.04 99211-G9000 220401',
     ],
   },
   CAR.GENESIS_G70_2020: {
