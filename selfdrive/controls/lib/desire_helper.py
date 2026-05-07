@@ -329,57 +329,57 @@ class DesireHelper:
               self.next_lane_change = False
 
           elif self.lane_change_state == LaneChangeState.preLaneChange:
-              if side is None:
-                  self.lane_change_state = LaneChangeState.off
-                  self.lane_change_direction = LaneChangeDirection.none
-              else:
-                  self.lane_change_direction = LaneChangeDirection.left if blinker_state == BLINKER_LEFT else LaneChangeDirection.right
+            if side is None:
+              self.lane_change_state = LaneChangeState.off
+              self.lane_change_direction = LaneChangeDirection.none
+            else:
+              self.lane_change_direction = LaneChangeDirection.left if blinker_state == BLINKER_LEFT else LaneChangeDirection.right
 
-                  torque_cond = (carstate.steeringTorque > 0) if blinker_state == BLINKER_LEFT else (carstate.steeringTorque < 0)
-                  torque_applied = carstate.steeringPressed and torque_cond
+              torque_cond = (carstate.steeringTorque > 0) if blinker_state == BLINKER_LEFT else (carstate.steeringTorque < 0)
+              torque_applied = carstate.steeringPressed and torque_cond
 
-                  ignore_bsd = (self.laneChangeBsd < 0)
-                  block_lanechange_bsd = (self.laneChangeBsd == 1)
-                  bsd_active = (side.bsd_hold_counter > 0) and (not ignore_bsd)
+              ignore_bsd = (self.laneChangeBsd < 0)
+              block_lanechange_bsd = (self.laneChangeBsd == 1)
+              bsd_active = (side.bsd_hold_counter > 0) and (not ignore_bsd)
 
-                  solid_line_blocked = (self.laneLineCheck >= 2) and (not side.lane_change_available_geom) and \
-                      (side.lane_available or side.edge_available)
-                  start_gate = (side.lane_change_available_geom and self.lane_change_delay == 0) or \
-                      side.lane_line_info_edge_detect or solid_line_blocked
+              solid_line_blocked = (self.laneLineCheck >= 2) and (not side.lane_change_available_geom) and \
+                  (side.lane_available or side.edge_available)
+              start_gate = (side.lane_change_available_geom and self.lane_change_delay == 0) or \
+                  side.lane_line_info_edge_detect or solid_line_blocked
 
-                  if not desire_enabled or below_lane_change_speed:
-                      self.lane_change_state = LaneChangeState.off
-                      self.lane_change_direction = LaneChangeDirection.none
-                  elif start_gate:
-                      if solid_line_blocked:
-                          # 실선 돌파: torque 필수, BSD+block이면 차단
-                          if torque_applied and not (bsd_active and block_lanechange_bsd):
-                              self.lane_change_state = LaneChangeState.laneChangeStarting
+              if not desire_enabled or below_lane_change_speed:
+                self.lane_change_state = LaneChangeState.off
+                self.lane_change_direction = LaneChangeDirection.none
 
-                      elif bsd_active:
-                          # BSD 감지 중: 운전자 직접 조향만 허용
-                          if torque_applied and (not block_lanechange_bsd):
-                              self.lane_change_state = LaneChangeState.laneChangeStarting
-                          # ★ auto trigger는 bsd_active=True 분기에 도달하지 않으므로 자동 차단됨
+              elif bsd_active:
+                # BSD 감지 중: 실선/자동/driver blinker 여부와 무관하게 최우선 처리
+                # laneChangeBsd=0 → torque 있을 때만 허용
+                # laneChangeBsd=1 → torque도 완전 차단, BSD 해제까지 대기
+                if start_gate and torque_applied and not block_lanechange_bsd:
+                  self.lane_change_state = LaneChangeState.laneChangeStarting
 
-                      elif self.laneChangeNeedTorque > 0 or self.next_lane_change:
-                          # ★ 변경: BSD 없을 때만 torque 기반 시작 허용
-                          if torque_applied and not bsd_active:
-                              self.lane_change_state = LaneChangeState.laneChangeStarting
+              elif start_gate:
+                if solid_line_blocked:
+                  # 실선: torque 필수 (BSD 없음이 보장된 상태)
+                  if torque_applied:
+                    self.lane_change_state = LaneChangeState.laneChangeStarting
 
-                      elif driver_enabled:
-                          # ★ 변경: BSD 없을 때만 자동 시작 허용
-                          #   BSD 감지 중이면 preLaneChange 유지 → BSD 해제 시 재시도
-                          if not bsd_active and side.lane_change_available:
-                              self.lane_change_state = LaneChangeState.laneChangeStarting
+                elif self.laneChangeNeedTorque > 0 or self.next_lane_change:
+                  # torque 필수 설정
+                  if torque_applied:
+                    self.lane_change_state = LaneChangeState.laneChangeStarting
 
-                      else:
-                          # auto_lane_change_trigger / torque
-                          # ★ 변경: BSD 중 auto_lane_change_trigger 무효화
-                          effective_auto_trigger = auto_lane_change_trigger and not bsd_active
-                          if (torque_applied or effective_auto_trigger or side.lane_line_info_edge_detect) \
-                                  and side.lane_change_available and not bsd_active:
-                              self.lane_change_state = LaneChangeState.laneChangeStarting
+                elif driver_enabled:
+                  # driver blinker 자동 시작
+                  if side.lane_change_available:
+                    self.lane_change_state = LaneChangeState.laneChangeStarting
+
+                else:
+                  # auto trigger
+                  if (torque_applied or auto_lane_change_trigger or side.lane_line_info_edge_detect) \
+                      and side.lane_change_available:
+                    self.lane_change_state = LaneChangeState.laneChangeStarting
+
 
           elif self.lane_change_state == LaneChangeState.laneChangeStarting:
             ignore_bsd = (self.laneChangeBsd < 0)
