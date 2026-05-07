@@ -812,8 +812,19 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["LCA_LEFT_ARROW"] = 2 if CS.out.leftBlinker else 0
         values["LCA_RIGHT_ARROW"] = 2 if CS.out.rightBlinker else 0
 
-        values["LCA_LEFT_ICON"] = (1 if CS.out.leftBlindspot else 2) if lat_active else 0
-        values["LCA_RIGHT_ICON"] = (1 if CS.out.rightBlindspot else 2) if lat_active else 0
+        # ──────────────────────────────────────────────
+        # ── 회색(1) 조건: BSD 감지 OR auto lane change 불가
+        # ── 흰색(2) 조건: BSD 없음 AND auto lane change 가능
+        # ── 꺼짐(0): lat_active 아닐 때
+        # ──────────────────────────────────────────────
+        lca_avail_left  = (md is not None and md.meta.laneChangeAvailableLeft)
+        lca_avail_right = (md is not None and md.meta.laneChangeAvailableRight)
+
+        lca_left_blocked  = CS.out.leftBlindspot  or not lca_avail_left
+        lca_right_blocked = CS.out.rightBlindspot or not lca_avail_right
+
+        values["LCA_LEFT_ICON"]  = (1 if lca_left_blocked  else 2) if lat_active else 0
+        values["LCA_RIGHT_ICON"] = (1 if lca_right_blocked else 2) if lat_active else 0
 
         values["LANE_LEFT"] = 1 if desire in (1, 3) else 0
         values["LANE_RIGHT"] = 1 if desire in (2, 4) else 0
