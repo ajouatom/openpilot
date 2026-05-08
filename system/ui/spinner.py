@@ -46,11 +46,11 @@ def clamp(value, min_value, max_value):
   return max(min(value, max_value), min_value)
 
 
-def fit_single_line(text: str, font_size: int, max_width: float) -> str:
+def fit_single_line(text: str, font: rl.Font, font_size: float, max_width: float) -> str:
   text = " ".join(text.split())
   if not text:
     return ""
-  if measure_text_cached(gui_app.font(), text, font_size).x <= max_width:
+  if rl.measure_text_ex(font, text, font_size, 0.0).x <= max_width:
     return text
 
   suffix = "..."
@@ -58,7 +58,7 @@ def fit_single_line(text: str, font_size: int, max_width: float) -> str:
   while lo < hi:
     mid = (lo + hi + 1) // 2
     candidate = text[:mid].rstrip() + suffix
-    if measure_text_cached(gui_app.font(), candidate, font_size).x <= max_width:
+    if rl.measure_text_ex(font, candidate, font_size, 0.0).x <= max_width:
       lo = mid
     else:
       hi = mid - 1
@@ -129,9 +129,9 @@ class Spinner(Widget):
       rl.draw_rectangle_rounded(bar, 1, 10, rl.WHITE)
 
       if self._status_line:
-        status_line = fit_single_line(self._status_line, STATUS_FONT_SIZE, gui_app.width - MARGIN_H)
         status_font = gui_app.font(FontWeight.PRETENDARD)
         status_scaled_size = STATUS_FONT_SIZE * FONT_SCALE
+        status_line = fit_single_line(self._status_line, status_font, status_scaled_size, gui_app.width - MARGIN_H)
         status_size = rl.measure_text_ex(status_font, status_line, status_scaled_size, 0.0)
         status_y = y_pos - STATUS_LINE_MARGIN - status_size.y
         draw_text_ex = getattr(rl, "_orig_draw_text_ex", rl.draw_text_ex)
@@ -163,8 +163,8 @@ def main():
   spinner = Spinner()
   for _ in gui_app.render():
     text_list = _read_stdin()
-    if text_list:
-      spinner.set_text(text_list[-1])
+    for text in text_list:
+      spinner.set_text(text)
 
     spinner.render(rl.Rectangle(0, 0, gui_app.width, gui_app.height))
 
