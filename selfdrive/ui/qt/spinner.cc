@@ -111,21 +111,23 @@ Spinner::Spinner(QWidget *parent) : QWidget(parent) {
   main_layout->addWidget(new TrackWidget(this), 1, 0, Qt::AlignHCenter | Qt::AlignVCenter);
 
   text = new QLabel();
-  text->setWordWrap(true);
+  text->setFixedWidth(1000);
+  text->setWordWrap(false);
   text->setVisible(false);
   text->setAlignment(Qt::AlignCenter);
-  main_layout->addWidget(text, 2, 0, Qt::AlignHCenter);
+  main_layout->addWidget(text, 2, 0, Qt::AlignHCenter | Qt::AlignBottom);
 
   progress_bar = new QProgressBar();
   progress_bar->setRange(5, 100);
   progress_bar->setTextVisible(false);
   progress_bar->setVisible(false);
   progress_bar->setFixedHeight(20);
-  main_layout->addWidget(progress_bar, 2, 0, Qt::AlignHCenter);
+  main_layout->addWidget(progress_bar, 3, 0, Qt::AlignHCenter);
 
   main_layout->setRowStretch(0, 0);
   main_layout->setRowStretch(1, 1);
   main_layout->setRowStretch(2, 0);
+  main_layout->setRowStretch(3, 0);
 
   QTimer *ipTimer = new QTimer(this);
   QObject::connect(ipTimer, &QTimer::timeout, this, &Spinner::refreshIPLabel);
@@ -171,11 +173,13 @@ void Spinner::update(int n) {
 
   if (line.length()) {
     bool number = std::all_of(line.begin(), line.end(), ::isdigit);
-    text->setVisible(!number);
-    progress_bar->setVisible(number);
-    text->setText(QString::fromStdString(line));
     if (number) {
+      progress_bar->setVisible(true);
       progress_bar->setValue(std::stoi(line));
+    } else {
+      QString status = QString::fromStdString(line);
+      text->setText(text->fontMetrics().elidedText(status, Qt::ElideRight, text->width()));
+      text->setVisible(true);
     }
   }
 }
