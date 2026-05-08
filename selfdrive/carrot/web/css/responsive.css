@@ -149,8 +149,16 @@
 
   .page-fab-layer--setting .setting-fab-menu {
     --fab-size: 56px;
-    right: max(18px, env(safe-area-inset-right, 0px));
+    right: auto;
+    left: calc(var(--nav-rail-width) + 18px);
     bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .setting-fab-actions {
+    right: auto;
+    left: 0;
+    align-items: flex-start;
+    transform-origin: left bottom;
   }
 
 }

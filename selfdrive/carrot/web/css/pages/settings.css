@@ -217,6 +217,26 @@
   color: color-mix(in srgb, var(--md-on-surface-var) 72%, transparent);
 }
 
+.fab--setting-menu {
+  background: #ffab66;
+  border-color: #ffab66;
+  color: #fff;
+  box-shadow: 0 12px 28px rgba(255, 135, 58, 0.22);
+}
+
+.fab--setting-menu.active,
+.fab--setting-menu:active {
+  background: #ff9c4a;
+  border-color: #ff9c4a;
+  color: #fff;
+  box-shadow: 0 12px 30px rgba(255, 135, 58, 0.3);
+}
+
+.fab--setting-menu svg {
+  width: 26px;
+  height: 26px;
+}
+
 .setting-search-panel {
   --setting-search-form-width: clamp(320px, 42vw, 520px);
   --setting-search-results-width: min(72vw, 760px);
