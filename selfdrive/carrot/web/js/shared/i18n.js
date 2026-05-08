@@ -300,6 +300,11 @@ function renderUIText() {
     btnSettingFabProfileAdd.setAttribute("aria-label", s.profile_add || "Add Profile");
     btnSettingFabProfileAdd.title = s.profile_add || "Add Profile";
   }
+  if (settingFabResetDefaultsLabel) settingFabResetDefaultsLabel.textContent = s.setting_reset_defaults || "Reset to Defaults";
+  if (btnSettingFabResetDefaults) {
+    btnSettingFabResetDefaults.setAttribute("aria-label", s.setting_reset_defaults || "Reset to Defaults");
+    btnSettingFabResetDefaults.title = s.setting_reset_defaults || "Reset to Defaults";
+  }
   if (btnSettingSearchSubmit) {
     btnSettingSearchSubmit.setAttribute("aria-label", s.setting_search || "Search Settings");
     btnSettingSearchSubmit.title = s.setting_search || "Search Settings";

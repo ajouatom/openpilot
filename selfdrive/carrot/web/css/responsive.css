@@ -150,15 +150,21 @@
   .page-fab-layer--setting .setting-fab-menu {
     --fab-size: 56px;
     right: auto;
-    left: calc(var(--nav-rail-width) + 18px);
-    bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+    left: calc(
+      var(--nav-rail-width) +
+      var(--setting-landscape-page-inset, 24px) +
+      var(--setting-landscape-left-width, 260px) -
+      var(--fab-size) -
+      18px
+    );
+    bottom: calc(var(--setting-landscape-page-inset, 24px) + env(safe-area-inset-bottom, 0px));
   }
 
   .setting-fab-actions {
-    right: auto;
-    left: 0;
-    align-items: flex-start;
-    transform-origin: left bottom;
+    right: 0;
+    left: auto;
+    align-items: flex-end;
+    transform-origin: right bottom;
   }
 
 }

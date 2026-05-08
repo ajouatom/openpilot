@@ -220,7 +220,7 @@
 .fab--setting-menu {
   background: #ffab66;
   border-color: #ffab66;
-  color: #fff;
+  color: #111;
   box-shadow: 0 12px 28px rgba(255, 135, 58, 0.22);
 }
 
@@ -228,7 +228,7 @@
 .fab--setting-menu:active {
   background: #ff9c4a;
   border-color: #ff9c4a;
-  color: #fff;
+  color: #111;
   box-shadow: 0 12px 30px rgba(255, 135, 58, 0.3);
 }
 

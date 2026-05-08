@@ -959,6 +959,30 @@ if (btnSettingFabSearch) {
   };
 }
 
+if (btnSettingFabResetDefaults) {
+  btnSettingFabResetDefaults.onclick = async () => {
+    closeSettingFabMenu();
+    const ok = await appConfirm(getUIText(
+      "setting_reset_defaults_confirm",
+      "Reset all settings to defaults?\nThe device may restart to apply changes."
+    ), {
+      title: getUIText("setting_reset_defaults", "Reset to Defaults"),
+      confirmLabel: getUIText("ok", "OK"),
+    });
+    if (!ok) return;
+
+    btnSettingFabResetDefaults.disabled = true;
+    try {
+      await postJson("/api/set_default", {});
+      showAppToast(getUIText("setting_reset_defaults_done", "Default reset requested"));
+    } catch (e) {
+      showAppToast((UI_STRINGS[LANG].set_failed || "set failed: ") + e.message, { tone: "error" });
+    } finally {
+      btnSettingFabResetDefaults.disabled = false;
+    }
+  };
+}
+
 if (settingSearchBackdrop) {
   settingSearchBackdrop.onclick = () => closeSettingSearchPanel({ syncHistory: true });
 }
@@ -1589,10 +1613,32 @@ async function renderItems(group, options = {}) {
           confirmLabel: getUIText("ok", "OK"),
           showCancel: false,
           defaultActionLabel: getUIText("default_value", "Default"),
-          defaultActionValue: String(p.default),
+          defaultActionValue: { settingDefaultAction: true, value: String(p.default) },
         }
       );
       if (input === null) return;
+
+      if (input?.settingDefaultAction) {
+        const defaultValue = input.value;
+        const ok = await appConfirm(getUIText(
+          "default_value_confirm",
+          "Restore {name} to default value ({value})?",
+          { name, value: defaultValue }
+        ), {
+          title: getUIText("default_value", "Default"),
+          confirmLabel: getUIText("ok", "OK"),
+        });
+        if (!ok) return;
+
+        const nextDefault = normalizeSettingValue(defaultValue);
+        if (nextDefault === null) {
+          showAppToast(getUIText("setting_value_invalid", "Enter a valid number."), { tone: "error" });
+          return;
+        }
+        if (String(nextDefault) === String(val.textContent)) return;
+        await commitSettingValue(nextDefault);
+        return;
+      }
 
       const next = normalizeSettingValue(input);
       if (next === null) {
