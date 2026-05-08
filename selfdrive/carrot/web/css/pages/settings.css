@@ -414,7 +414,7 @@
 
 .setting-profile-section {
   --setting-profile-accent: var(--md-primary, #ffab66);
-  --setting-profile-surface: color-mix(in srgb, var(--md-surface-cont) 55%, transparent);
+  --setting-profile-surface: color-mix(in srgb, var(--md-surface-cont-h) 78%, var(--md-surface));
   --setting-profile-divider: color-mix(in srgb, var(--setting-profile-accent) 34%, var(--md-outline-var));
   min-width: 0;
   display: grid;
@@ -451,7 +451,7 @@
 
 .setting-profile-section__header:hover,
 .setting-profile-section__header:focus-visible {
-  background: color-mix(in srgb, var(--md-primary) 10%, transparent);
+  background: color-mix(in srgb, var(--md-primary) 10%, var(--setting-profile-surface));
   color: var(--setting-profile-accent);
   outline: none;
 }
@@ -621,12 +621,12 @@
 }
 
 .setting-toolbar-action {
-  min-width: 48px;
+  min-width: 58px;
   min-height: 48px;
-  padding: 0 14px;
+  padding: 0 16px;
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
-  border-radius: 999px;
-  background: var(--md-surface-cont-h);
+  border-radius: 8px;
+  background: var(--md-surface-cont);
   color: var(--md-on-surface);
   cursor: pointer;
   font: inherit;
