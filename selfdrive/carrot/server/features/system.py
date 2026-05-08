@@ -26,6 +26,69 @@ _LIVE_RUNTIME_SERVICE_NAMES = (
   "carrotMan",
 )
 
+_CARROT_DEFAULT_RESET_EXCLUDED_NAMES = {
+  # Vehicle identity / selection / fingerprinting.
+  "CarName",
+  "CarParams",
+  "CarParamsCache",
+  "CarParamsPersistent",
+  "CarParamsPrevRoute",
+  "CarModel",
+  "CarFingerprint",
+  "SupportedCars",
+  # Training, terms, calibration, and learned live parameters.
+  "CompletedTrainingVersion",
+  "TrainingVersion",
+  "TermsVersion",
+  "HasAcceptedTerms",
+  "CalibrationParams",
+  "LiveParameters",
+  "LiveTorqueParameters",
+  # Device/user/system identity and platform settings.
+  "DongleId",
+  "HardwareSerial",
+  "DeviceSerial",
+  "DeviceType",
+  "LanguageSetting",
+  "IsMetric",
+  "OpenpilotEnabledToggle",
+  "ExperimentalMode",
+  "ExperimentalModeConfirmed",
+  "SshEnabled",
+  "AdbEnabled",
+  "GithubUsername",
+  "GithubSshKeys",
+  # Recording/upload/update/git state should not be reset by Carrot tuning reset.
+  "RecordFront",
+  "RecordAudio",
+  "GitBranch",
+  "GitCommit",
+  "GitCommitDate",
+  "UpdaterState",
+  "UpdaterTargetBranch",
+  "UpdaterCurrentDescription",
+}
+
+_CARROT_DEFAULT_RESET_EXCLUDED_PREFIXES = (
+  "CarParams",
+  "Calibration",
+  "CompletedTraining",
+  "Git",
+  "Github",
+  "Updater",
+  "Dongle",
+  "Hardware",
+  "DeviceSerial",
+)
+
+
+def _is_carrot_default_reset_param(name: str, meta: Any) -> bool:
+  if not name or not isinstance(meta, dict) or "default" not in meta:
+    return False
+  if name in _CARROT_DEFAULT_RESET_EXCLUDED_NAMES:
+    return False
+  return not any(name.startswith(prefix) for prefix in _CARROT_DEFAULT_RESET_EXCLUDED_PREFIXES)
+
 
 def _select_live_runtime_services(snapshot: dict[str, Any]) -> dict[str, Any]:
   services = snapshot.get("services")
@@ -230,7 +293,7 @@ async def api_set_default(request: web.Request) -> web.Response:
     values = {
       name: meta.get("default", 0)
       for name, meta in by_name.items()
-      if isinstance(meta, dict) and "default" in meta
+      if _is_carrot_default_reset_param(name, meta)
     }
     restored = restore_param_values_validated(values)
     result = restored.get("result") or {}

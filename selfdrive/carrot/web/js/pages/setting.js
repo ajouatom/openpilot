@@ -921,7 +921,8 @@ async function deleteSettingProfile(profile) {
 
 function appendSettingProfileHeader(profile, container) {
   const panel = document.createElement("div");
-  panel.className = "setting-profile-panel";
+  panel.className = "setting-profile-panel ui-stagger-item";
+  panel.style.setProperty("--i", "0");
 
   const titleRow = document.createElement("div");
   titleRow.className = "setting-profile-panel__titleRow";
@@ -1953,7 +1954,7 @@ async function renderItems(group, options = {}) {
       lastProfileGroup = originGroup;
       const section = document.createElement("div");
       section.className = animateItems ? "setting-profile-section ui-stagger-item" : "setting-profile-section";
-      if (animateItems) section.style.setProperty("--i", String(index));
+      if (animateItems) section.style.setProperty("--i", String(Math.min(index + 1, 14)));
       const stateKey = `${profile.id}:${originGroup}`;
       const expanded = settingProfileSectionExpandedState.has(stateKey)
         ? settingProfileSectionExpandedState.get(stateKey)
