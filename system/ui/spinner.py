@@ -5,7 +5,7 @@ import sys
 
 from openpilot.common.basedir import BASEDIR
 from openpilot.common.network_info import start_ip_monitor, label_with_port
-from openpilot.system.ui.lib.application import FontWeight, gui_app
+from openpilot.system.ui.lib.application import FONT_SCALE, FontWeight, gui_app
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.text import wrap_text
 from openpilot.system.ui.widgets import Widget
@@ -33,8 +33,8 @@ else:
   MARGIN_H = 20
   FONT_SIZE = 28
   LINE_HEIGHT = 32
-  IP_FONT_SIZE = 16
-  IP_TOP_MARGIN = 14
+  IP_FONT_SIZE = 18
+  IP_TOP_MARGIN = 12
   STATUS_FONT_SIZE = 16
   STATUS_LINE_MARGIN = 8
 DEGREES_PER_SECOND = 360.0  # one full rotation per second
@@ -89,11 +89,13 @@ class Spinner(Widget):
   def _render(self, rect: rl.Rectangle):
     # Recovery IP label at top-center.
     ip_label = label_with_port(RECOVERY_PORT)
-    ip_font = gui_app.font(FontWeight.DISPLAY)
-    ip_size = measure_text_cached(ip_font, ip_label, IP_FONT_SIZE)
-    ip_x = rect.x + (rect.width - ip_size.x) / 2.0
-    rl.draw_text_ex(ip_font, ip_label, rl.Vector2(ip_x, rect.y + IP_TOP_MARGIN),
-                    IP_FONT_SIZE, 0.0, rl.Color(210, 210, 210, 210))
+    ip_font = gui_app.font(FontWeight.PRETENDARD)
+    ip_scaled_size = IP_FONT_SIZE * FONT_SCALE
+    ip_size = rl.measure_text_ex(ip_font, ip_label, ip_scaled_size, 0.0)
+    ip_x = rect.x + rect.width / 2.0 - ip_size.x / 2.0
+    draw_text_ex = getattr(rl, "_orig_draw_text_ex", rl.draw_text_ex)
+    draw_text_ex(ip_font, ip_label, rl.Vector2(round(ip_x), rect.y + IP_TOP_MARGIN),
+                 ip_scaled_size, 0.0, rl.Color(230, 230, 230, 235))
     if self._wrapped_lines:
       # Calculate total height required for spinner and text
       spacing = WRAPPED_SPACING
