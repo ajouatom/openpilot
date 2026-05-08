@@ -65,7 +65,7 @@ static QString recoveryLabel() {
 }
 
 static QString textWindowFontFamily() {
-  QString font_path = QCoreApplication::applicationDirPath() + "/../assets/fonts/Pretendard-Medium.ttf";
+  QString font_path = QCoreApplication::applicationDirPath() + "/../assets/fonts/Pretendard-SemiBold.ttf";
   int font_id = QFontDatabase::addApplicationFont(font_path);
   if (font_id < 0) return QStringLiteral("Inter");
 
@@ -87,7 +87,7 @@ int main(int argc, char *argv[]) {
 
   QLabel *ipLabel = new QLabel(recoveryLabel());
   ipLabel->setObjectName("ipLabel");
-  ipLabel->setFont(QFont(font_family, 42));
+  ipLabel->setFont(QFont(font_family, 84));
   ipLabel->setAlignment(Qt::AlignCenter);
   main_layout->addWidget(ipLabel, 0, 0, Qt::AlignHCenter | Qt::AlignTop);
 
@@ -135,7 +135,7 @@ int main(int argc, char *argv[]) {
     }
     QLabel#ipLabel {
       color: white;
-      font-size: 42px;
+      font-size: 84px;
       font-family: "%1";
     }
     QPushButton {

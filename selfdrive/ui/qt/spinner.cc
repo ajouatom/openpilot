@@ -68,7 +68,7 @@ static QString recoveryLabel() {
 }
 
 static QString spinnerFontFamily() {
-  QString font_path = QCoreApplication::applicationDirPath() + "/../assets/fonts/Pretendard-Medium.ttf";
+  QString font_path = QCoreApplication::applicationDirPath() + "/../assets/fonts/Pretendard-SemiBold.ttf";
   int font_id = QFontDatabase::addApplicationFont(font_path);
   if (font_id < 0) return QStringLiteral("Inter");
 
@@ -121,7 +121,7 @@ Spinner::Spinner(QWidget *parent) : QWidget(parent) {
 
   ipLabel = new QLabel(recoveryLabel());
   ipLabel->setObjectName("ipLabel");
-  ipLabel->setFont(QFont(font_family, 42));
+  ipLabel->setFont(QFont(font_family, 84));
   ipLabel->setAlignment(Qt::AlignCenter);
   main_layout->addWidget(ipLabel, 0, 0, Qt::AlignHCenter | Qt::AlignTop);
 
@@ -130,8 +130,8 @@ Spinner::Spinner(QWidget *parent) : QWidget(parent) {
   text = new QLabel();
   text->setObjectName("statusLabel");
   text->setFixedWidth(1000);
-  text->setFixedHeight(34);
-  text->setFont(QFont(font_family, 26));
+  text->setFixedHeight(68);
+  text->setFont(QFont(font_family, 52));
   text->setWordWrap(false);
   text->setVisible(false);
   text->setAlignment(Qt::AlignCenter);
@@ -169,12 +169,12 @@ Spinner::Spinner(QWidget *parent) : QWidget(parent) {
     }
     QLabel#ipLabel {
       color: white;
-      font-size: 42px;
+      font-size: 84px;
       font-family: "%1";
     }
     QLabel#statusLabel {
       color: #cfcfcf;
-      font-size: 26px;
+      font-size: 52px;
       font-family: "%1";
     }
     QProgressBar {
