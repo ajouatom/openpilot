@@ -22,6 +22,8 @@ if gui_app.big_ui():
   LINE_HEIGHT = 104
   IP_FONT_SIZE = 50
   IP_TOP_MARGIN = 40
+  STATUS_FONT_SIZE = 42
+  STATUS_LINE_MARGIN = 28
 else:
   PROGRESS_BAR_WIDTH = 268
   PROGRESS_BAR_HEIGHT = 10
@@ -33,6 +35,8 @@ else:
   LINE_HEIGHT = 32
   IP_FONT_SIZE = 18
   IP_TOP_MARGIN = 5
+  STATUS_FONT_SIZE = 16
+  STATUS_LINE_MARGIN = 8
 DEGREES_PER_SECOND = 360.0  # one full rotation per second
 RECOVERY_PORT = 6999
 DARKGRAY = (55, 55, 55, 255)
@@ -42,6 +46,25 @@ def clamp(value, min_value, max_value):
   return max(min(value, max_value), min_value)
 
 
+def fit_single_line(text: str, font_size: int, max_width: float) -> str:
+  text = " ".join(text.split())
+  if not text:
+    return ""
+  if measure_text_cached(gui_app.font(), text, font_size).x <= max_width:
+    return text
+
+  suffix = "..."
+  lo, hi = 0, len(text)
+  while lo < hi:
+    mid = (lo + hi + 1) // 2
+    candidate = text[:mid].rstrip() + suffix
+    if measure_text_cached(gui_app.font(), candidate, font_size).x <= max_width:
+      lo = mid
+    else:
+      hi = mid - 1
+  return text[:lo].rstrip() + suffix
+
+
 class Spinner(Widget):
   def __init__(self):
     super().__init__()
@@ -49,16 +72,19 @@ class Spinner(Widget):
     self._spinner_texture = gui_app.texture("images/spinner_track.png", TEXTURE_SIZE, TEXTURE_SIZE, alpha_premultiply=True)
     self._rotation = 0.0
     self._progress: int | None = None
+    self._status_line = ""
     self._wrapped_lines: list[str] = []
     start_ip_monitor()
     
   def set_text(self, text: str) -> None:
+    text = text.strip()
     if text.isdigit():
       self._progress = clamp(int(text), 0, 100)
       self._wrapped_lines = []
     else:
-      self._progress = None
-      self._wrapped_lines = wrap_text(text, FONT_SIZE, gui_app.width - MARGIN_H)
+      self._status_line = text
+      if self._progress is None:
+        self._wrapped_lines = wrap_text(text, FONT_SIZE, gui_app.width - MARGIN_H)
 
   def _render(self, rect: rl.Rectangle):
     # Recovery IP label at top-center (white, monospace-style)
@@ -101,6 +127,13 @@ class Spinner(Widget):
 
       bar.width *= self._progress / 100.0
       rl.draw_rectangle_rounded(bar, 1, 10, rl.WHITE)
+
+      if self._status_line:
+        status_line = fit_single_line(self._status_line, STATUS_FONT_SIZE, gui_app.width - MARGIN_H)
+        status_size = measure_text_cached(gui_app.font(), status_line, STATUS_FONT_SIZE)
+        status_y = y_pos + PROGRESS_BAR_HEIGHT + STATUS_LINE_MARGIN
+        rl.draw_text_ex(gui_app.font(), status_line, rl.Vector2(center.x - status_size.x / 2, status_y),
+                        STATUS_FONT_SIZE, 0.0, rl.LIGHTGRAY)
     elif self._wrapped_lines:
       for i, line in enumerate(self._wrapped_lines):
         text_size = measure_text_cached(gui_app.font(), line, FONT_SIZE)

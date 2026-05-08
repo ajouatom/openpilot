@@ -52,7 +52,9 @@ def build(spinner: Spinner, dirty: bool = False, minimal: bool = False) -> None:
           spinner.update_progress(MAX_BUILD_PROGRESS * min(1., i / TOTAL_SCONS_NODES), 100.)
         elif len(line):
           compile_output.append(line)
-          print(line.decode('utf8', 'replace'))
+          line_text = line.decode('utf8', 'replace')
+          spinner.update(line_text)
+          print(line_text)
       except Exception:
         pass
 
