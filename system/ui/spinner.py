@@ -130,10 +130,13 @@ class Spinner(Widget):
 
       if self._status_line:
         status_line = fit_single_line(self._status_line, STATUS_FONT_SIZE, gui_app.width - MARGIN_H)
-        status_size = measure_text_cached(gui_app.font(), status_line, STATUS_FONT_SIZE)
+        status_font = gui_app.font(FontWeight.PRETENDARD)
+        status_scaled_size = STATUS_FONT_SIZE * FONT_SCALE
+        status_size = rl.measure_text_ex(status_font, status_line, status_scaled_size, 0.0)
         status_y = y_pos + PROGRESS_BAR_HEIGHT + STATUS_LINE_MARGIN
-        rl.draw_text_ex(gui_app.font(), status_line, rl.Vector2(center.x - status_size.x / 2, status_y),
-                        STATUS_FONT_SIZE, 0.0, rl.LIGHTGRAY)
+        draw_text_ex = getattr(rl, "_orig_draw_text_ex", rl.draw_text_ex)
+        draw_text_ex(status_font, status_line, rl.Vector2(round(center.x - status_size.x / 2), status_y),
+                     status_scaled_size, 0.0, rl.LIGHTGRAY)
     elif self._wrapped_lines:
       for i, line in enumerate(self._wrapped_lines):
         text_size = measure_text_cached(gui_app.font(), line, FONT_SIZE)
