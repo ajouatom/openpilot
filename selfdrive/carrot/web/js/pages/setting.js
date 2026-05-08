@@ -30,6 +30,7 @@ const settingProfilesState = {
   loaded: false,
   loadPromise: null,
 };
+const settingProfileSectionExpandedState = new Map();
 
 function isSettingFavoritesGroup(group) {
   return group === SETTING_FAVORITES_GROUP;
@@ -948,11 +949,6 @@ function appendSettingProfileHeader(profile, container) {
       showAppToast(e?.message || getUIText("setting_profile_save_failed", "Failed to save profile"), { tone: "error" });
     }
   };
-  titleRow.appendChild(input);
-  titleRow.appendChild(saveName);
-
-  const actions = document.createElement("div");
-  actions.className = "setting-profile-panel__actions";
   const infoBtn = document.createElement("button");
   infoBtn.type = "button";
   infoBtn.className = "smallBtn";
@@ -968,12 +964,13 @@ function appendSettingProfileHeader(profile, container) {
   deleteBtn.className = "smallBtn";
   deleteBtn.textContent = getUIText("delete", "Delete");
   deleteBtn.onclick = () => deleteSettingProfile(profile);
-  actions.appendChild(infoBtn);
-  actions.appendChild(applyBtn);
-  actions.appendChild(deleteBtn);
+  titleRow.appendChild(input);
+  titleRow.appendChild(saveName);
+  titleRow.appendChild(infoBtn);
+  titleRow.appendChild(applyBtn);
+  titleRow.appendChild(deleteBtn);
 
   panel.appendChild(titleRow);
-  panel.appendChild(actions);
   container.appendChild(panel);
 }
 
@@ -1354,7 +1351,7 @@ if (btnSettingFabResetDefaults) {
     closeSettingFabMenu();
     const ok = await appConfirm(getUIText(
       "setting_reset_defaults_confirm",
-      "Reset all settings to defaults?\nThe device may restart to apply changes."
+      "Reset all settings to defaults?"
     ), {
       title: getUIText("setting_reset_defaults", "Reset Settings"),
       confirmLabel: getUIText("ok", "OK"),
@@ -1365,14 +1362,24 @@ if (btnSettingFabResetDefaults) {
     try {
       const payload = await postJson("/api/set_default", {});
       if (!payload?.ok) {
-        throw new Error(payload?.error || getUIText("setting_reset_defaults_failed", "Failed to request settings reset"));
+        throw new Error(payload?.error || getUIText("setting_reset_defaults_failed", "Settings reset failed"));
+      }
+      if (payload.values && typeof payload.values === "object") {
+        window.dispatchEvent(new CustomEvent("carrot:paramsrestored", {
+          detail: { source: "setting_reset_defaults", values: payload.values },
+        }));
+        Object.entries(payload.values).forEach(([name, value]) => {
+          window.dispatchEvent(new CustomEvent("carrot:paramchange", {
+            detail: { name, value, source: "setting_reset_defaults" },
+          }));
+        });
       }
       showAppToast(getUIText(
         "setting_reset_defaults_done",
-        payload.message || "Settings reset signal sent. The device may restart to apply it."
+        payload.message || "Settings reset complete"
       ));
     } catch (e) {
-      showAppToast(e?.message || getUIText("setting_reset_defaults_failed", "Failed to request settings reset"), { tone: "error" });
+      showAppToast(getUIText("setting_reset_defaults_failed", "Settings reset failed"), { tone: "error" });
     } finally {
       btnSettingFabResetDefaults.disabled = false;
     }
@@ -1895,7 +1902,14 @@ async function renderItems(group, options = {}) {
 
   if (profile) appendSettingProfileHeader(profile, itemsBox);
 
+  const profileSectionCounts = new Map();
+  if (profile) {
+    entries.forEach((entry) => {
+      profileSectionCounts.set(entry.group, (profileSectionCounts.get(entry.group) || 0) + 1);
+    });
+  }
   let lastProfileGroup = "";
+  let currentProfileSectionBody = null;
   list.forEach((p, index) => {
     const name = p.name;
     const originGroup = entries[index]?.group || group;
@@ -1906,14 +1920,38 @@ async function renderItems(group, options = {}) {
       const section = document.createElement("div");
       section.className = animateItems ? "setting-profile-section ui-stagger-item" : "setting-profile-section";
       if (animateItems) section.style.setProperty("--i", String(index));
+      const stateKey = `${profile.id}:${originGroup}`;
+      const expanded = settingProfileSectionExpandedState.has(stateKey)
+        ? settingProfileSectionExpandedState.get(stateKey)
+        : true;
       const sectionLabel = getSettingGroupLabel(originGroup);
-      const sectionCount = entries.filter((entry) => entry.group === originGroup).length;
-      section.innerHTML = `
-        <span></span>
-        <strong>${settingsDiffEscape(sectionLabel)} (${sectionCount})</strong>
-        <span></span>
+      const sectionCount = profileSectionCounts.get(originGroup) || 0;
+      section.classList.toggle("is-collapsed", !expanded);
+
+      const header = document.createElement("button");
+      header.type = "button";
+      header.className = "setting-profile-section__header";
+      header.setAttribute("aria-expanded", expanded ? "true" : "false");
+      header.innerHTML = `
+        <span class="setting-profile-section__label">${settingsDiffEscape(sectionLabel)}</span>
+        <span class="setting-profile-section__count">${settingsDiffEscape(sectionCount)}</span>
+        <svg class="setting-profile-section__chevron" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="m6 9 6 6 6-6"></path>
+        </svg>
       `;
+      const body = document.createElement("div");
+      body.className = "setting-profile-section__body";
+      body.hidden = !expanded;
+      header.onclick = () => {
+        const nextExpanded = section.classList.toggle("is-collapsed") ? false : true;
+        settingProfileSectionExpandedState.set(stateKey, nextExpanded);
+        header.setAttribute("aria-expanded", nextExpanded ? "true" : "false");
+        body.hidden = !nextExpanded;
+      };
+      section.appendChild(header);
+      section.appendChild(body);
       itemsBox.appendChild(section);
+      currentProfileSectionBody = body;
     }
 
     const title = formatItemText(p, "title", "etitle", "");
@@ -1984,7 +2022,7 @@ async function renderItems(group, options = {}) {
 
     el.appendChild(top);
     el.appendChild(d);
-    itemsBox.appendChild(el);
+    (currentProfileSectionBody || itemsBox).appendChild(el);
 
     const cur = (name in values) ? values[name] : p.default;
     val.textContent = String(cur);

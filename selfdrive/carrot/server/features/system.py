@@ -9,7 +9,8 @@ from ..live_runtime.broker import RealtimeBroker
 from ..live_runtime.normalize import to_transport_safe
 from ..config import OFFROAD_ASSETS_DIR
 from ..services.device_info import get_calibration_status, get_device_network
-from ..services.params import HAS_PARAMS, Params, set_param_value
+from ..services.params import HAS_PARAMS, Params, restore_param_values_validated
+from ..services.settings import get_settings_cached
 from ..services.time_sync import TIME_SYNC_DEBUG_DEFAULT, sync_system_time_from_browser
 
 
@@ -225,14 +226,28 @@ async def api_set_default(request: web.Request) -> web.Response:
   if not HAS_PARAMS:
     return web.json_response({"ok": False, "error": "params unavailable"}, status=500)
   try:
-    Params().put_int("SoftRestartTriggered", 2)
+    _, _, by_name, _ = get_settings_cached()
+    values = {
+      name: meta.get("default", 0)
+      for name, meta in by_name.items()
+      if isinstance(meta, dict) and "default" in meta
+    }
+    restored = restore_param_values_validated(values)
+    result = restored.get("result") or {}
+    ok = int(result.get("fail_cnt") or 0) == 0
+    applied_values = {
+      entry["key"]: entry["value"]
+      for entry in restored.get("preview", {}).get("entries", [])
+      if entry.get("apply")
+    }
+    status = 200 if ok else 500
     return web.json_response({
-      "ok": True,
-      "action": "soft_restart_default_reset",
-      "param": "SoftRestartTriggered",
-      "value": 2,
-      "message": "설정 초기화 신호 전송 성공. 재시작 후 기본값 적용이 진행됩니다.",
-    })
+      "ok": ok,
+      "message": "설정 초기화 성공" if ok else "설정 초기화 실패",
+      "error": None if ok else "설정 초기화 실패",
+      "values": applied_values,
+      **restored,
+    }, status=status)
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
 
