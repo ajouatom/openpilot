@@ -404,24 +404,26 @@
 .setting-profile-section {
   min-width: 0;
   display: grid;
-  border-top: 1px solid color-mix(in srgb, var(--md-primary) 36%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--md-outline-var) 34%, transparent);
+  scroll-margin-top: 104px;
 }
 
 .setting-profile-section__header {
   position: sticky;
-  top: 48px;
+  top: var(--setting-profile-toolbar-offset, 56px);
   z-index: 4;
   min-width: 0;
-  min-height: 34px;
+  min-height: 42px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto 18px;
   align-items: center;
-  gap: 8px;
-  padding: 7px 0 6px;
+  gap: 10px;
+  padding: 10px 0 9px;
   border: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 24%, transparent);
-  background: color-mix(in srgb, var(--md-surface) 96%, #000);
-  color: var(--md-primary);
+  background: var(--md-surface);
+  box-shadow: 0 -1px 0 var(--md-surface), 0 1px 0 color-mix(in srgb, var(--md-outline-var) 18%, transparent);
+  color: var(--md-on-surface);
   font: inherit;
   font-size: 12px;
   font-weight: 900;
@@ -437,15 +439,18 @@
 }
 
 .setting-profile-section__count {
-  color: color-mix(in srgb, var(--md-primary) 74%, var(--md-on-surface-var));
+  min-width: 24px;
+  padding: 2px 0;
+  color: color-mix(in srgb, var(--md-primary) 78%, var(--md-on-surface));
   font-size: 11px;
   font-weight: 900;
+  text-align: right;
 }
 
 .setting-profile-section__chevron {
   width: 18px;
   height: 18px;
-  color: var(--md-primary);
+  color: color-mix(in srgb, var(--md-primary) 84%, var(--md-on-surface));
   fill: none;
   stroke: currentColor;
   stroke-width: 2.4;
@@ -467,27 +472,33 @@
 }
 
 .setting-profile-panel {
+  --setting-profile-toolbar-offset: 56px;
   position: sticky;
   top: 0;
   z-index: 5;
   min-width: 0;
-  margin-bottom: 10px;
-  padding: 6px 0 9px;
+  margin-bottom: 0;
+  padding: 8px 0 10px;
   border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 34%, transparent);
-  background: color-mix(in srgb, var(--md-surface) 96%, #000);
+  background: var(--md-surface);
+  box-shadow: 0 -12px 0 12px var(--md-surface), 0 1px 0 color-mix(in srgb, var(--md-outline-var) 18%, transparent);
 }
 
 .setting-profile-panel__titleRow {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(96px, 1fr) repeat(4, minmax(38px, auto));
-  gap: 6px;
+  grid-template-columns: minmax(104px, 1fr) repeat(3, minmax(48px, auto));
+  gap: 8px;
   align-items: center;
+}
+
+.page--setting #settingScreenItems.setting-screen-items--profile > .row-between.mb-sm {
+  display: none;
 }
 
 .setting-profile-panel__name {
   min-width: 0;
-  height: 34px;
+  height: 38px;
   padding: 0 0 1px;
   border: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 72%, transparent);
@@ -496,6 +507,15 @@
   color: var(--md-on-surface);
   font: inherit;
   font-weight: 850;
+}
+
+.setting-profile-panel__name:focus {
+  border-bottom-color: color-mix(in srgb, var(--md-primary) 82%, var(--md-outline-var));
+  outline: none;
+}
+
+.setting-profile-panel__name.is-saving {
+  color: color-mix(in srgb, var(--md-on-surface) 72%, var(--md-primary));
 }
 
 .setting-profile-panel__meta {
@@ -530,16 +550,41 @@
   text-decoration: none;
 }
 
-.setting-profile-panel__actions {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+.setting-toolbar-action {
+  min-width: 48px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-surface-cont-h) 92%, #000);
+  color: var(--md-on-surface);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.12s ease;
 }
 
-.setting-profile-panel .smallBtn {
-  min-width: 38px;
-  min-height: 34px;
-  padding-inline: 8px;
+.setting-toolbar-action:hover,
+.setting-toolbar-action:focus-visible {
+  border-color: color-mix(in srgb, var(--md-primary) 42%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
+  outline: none;
+}
+
+.setting-toolbar-action:active {
+  transform: translateY(1px);
+}
+
+.setting-toolbar-action--primary {
+  border-color: color-mix(in srgb, var(--md-primary) 76%, var(--md-outline-var));
+  background: var(--md-primary);
+  color: var(--md-on-primary);
+}
+
+.setting-toolbar-action--danger {
+  color: color-mix(in srgb, var(--md-error) 86%, var(--md-on-surface));
 }
 
 .app-dialog--settings-diff .app-dialog__sheet {

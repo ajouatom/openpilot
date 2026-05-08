@@ -931,41 +931,74 @@ function appendSettingProfileHeader(profile, container) {
   input.maxLength = 40;
   input.value = profile.name || "";
   input.setAttribute("aria-label", getUIText("setting_profile_name", "Profile name"));
-  const saveName = document.createElement("button");
-  saveName.type = "button";
-  saveName.className = "smallBtn";
-  saveName.textContent = getUIText("save", "Save");
-  saveName.onclick = async () => {
+  let nameSaveTimer = 0;
+  let nameSaveInFlight = null;
+  async function persistProfileName() {
     const nextName = input.value.trim();
-    if (!nextName || nextName === profile.name) return;
+    if (!nextName) {
+      input.value = profile.name || "";
+      return;
+    }
+    if (nextName === profile.name) return;
+    if (nameSaveInFlight) {
+      try { await nameSaveInFlight; } catch {}
+      if (nextName === profile.name) return;
+    }
     try {
-      const nextProfile = await saveSettingProfile(profile.id, { name: nextName });
+      input.classList.add("is-saving");
+      nameSaveInFlight = saveSettingProfile(profile.id, { name: nextName });
+      const nextProfile = await nameSaveInFlight;
       if (nextProfile) profile.name = nextProfile.name;
       if (itemsTitle) itemsTitle.textContent = profile.name;
       renderGroups({ animateGroups: false });
       renderSettingSubnav();
-      showAppToast(getUIText("setting_profile_saved", "Profile saved"));
     } catch (e) {
       showAppToast(e?.message || getUIText("setting_profile_save_failed", "Failed to save profile"), { tone: "error" });
+    } finally {
+      nameSaveInFlight = null;
+      input.classList.remove("is-saving");
     }
-  };
+  }
+  function scheduleProfileNameSave(delay = 500) {
+    if (nameSaveTimer) clearTimeout(nameSaveTimer);
+    nameSaveTimer = window.setTimeout(() => {
+      nameSaveTimer = 0;
+      persistProfileName().catch(() => {});
+    }, delay);
+  }
+  input.addEventListener("input", () => scheduleProfileNameSave());
+  input.addEventListener("blur", () => {
+    if (nameSaveTimer) {
+      clearTimeout(nameSaveTimer);
+      nameSaveTimer = 0;
+    }
+    persistProfileName().catch(() => {});
+  });
+  input.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    if (nameSaveTimer) {
+      clearTimeout(nameSaveTimer);
+      nameSaveTimer = 0;
+    }
+    persistProfileName().then(() => input.blur()).catch(() => {});
+  });
   const infoBtn = document.createElement("button");
   infoBtn.type = "button";
-  infoBtn.className = "smallBtn";
+  infoBtn.className = "setting-toolbar-action";
   infoBtn.textContent = getUIText("setting_profile_info", "Info");
   infoBtn.onclick = () => openSettingProfileInfo(profile);
   const applyBtn = document.createElement("button");
   applyBtn.type = "button";
-  applyBtn.className = "smallBtn btn--filled";
+  applyBtn.className = "setting-toolbar-action setting-toolbar-action--primary";
   applyBtn.textContent = getUIText("apply", "Apply");
   applyBtn.onclick = () => applySettingProfile(profile);
   const deleteBtn = document.createElement("button");
   deleteBtn.type = "button";
-  deleteBtn.className = "smallBtn";
+  deleteBtn.className = "setting-toolbar-action setting-toolbar-action--danger";
   deleteBtn.textContent = getUIText("delete", "Delete");
   deleteBtn.onclick = () => deleteSettingProfile(profile);
   titleRow.appendChild(input);
-  titleRow.appendChild(saveName);
   titleRow.appendChild(infoBtn);
   titleRow.appendChild(applyBtn);
   titleRow.appendChild(deleteBtn);
@@ -1861,6 +1894,7 @@ async function renderItems(group, options = {}) {
   const entries = getSettingItemEntriesForGroup(group);
   const list = entries.map((entry) => entry.item);
   const profile = getSettingProfileByGroup(group);
+  if (screenItems) screenItems.classList.toggle("setting-screen-items--profile", Boolean(profile));
   if (meta) meta.textContent = `${group} / ${list.length}`;
   const groupLabel = getSettingGroupLabel(group);
   settingTitle.textContent = (UI_STRINGS[LANG].setting || "Setting") + " - " + groupLabel;
