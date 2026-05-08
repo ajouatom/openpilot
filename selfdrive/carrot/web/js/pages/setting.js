@@ -678,7 +678,8 @@ function syncSettingSubnavFixedOffset() {
     CURRENT_PAGE === "setting" &&
     isFixedPortraitSettingSubnavMode() &&
     screenItems.style.display !== "none" &&
-    settingSubnavWrap.style.display !== "none";
+    settingSubnavWrap.style.display !== "none" &&
+    !settingPageRoot?.classList.contains("setting-profile-active");
 
   if (!shouldFix) {
     document.documentElement.style.removeProperty("--setting-fixed-subnav-height");
@@ -1975,17 +1976,18 @@ async function renderItems(group, options = {}) {
       `;
       const body = document.createElement("div");
       body.className = "setting-profile-section__body";
-      body.hidden = !expanded;
+      const bodyInner = document.createElement("div");
+      bodyInner.className = "setting-profile-section__bodyInner";
       header.onclick = () => {
         const nextExpanded = section.classList.toggle("is-collapsed") ? false : true;
         settingProfileSectionExpandedState.set(stateKey, nextExpanded);
         header.setAttribute("aria-expanded", nextExpanded ? "true" : "false");
-        body.hidden = !nextExpanded;
       };
+      body.appendChild(bodyInner);
       section.appendChild(header);
       section.appendChild(body);
       itemsBox.appendChild(section);
-      currentProfileSectionBody = body;
+      currentProfileSectionBody = bodyInner;
     }
 
     const title = formatItemText(p, "title", "etitle", "");

@@ -31,7 +31,7 @@ const DEVICE_SOFTWARE_PARAMS = [
   "UpdaterNewDescription",
 ];
 
-const DEVICE_LANGUAGES = [
+const DEVICE_LANGUAGES = window.CarrotDeviceLanguageOptions || [
   { code: "main_en", name: "English" },
   { code: "main_ko", name: "한국어" },
   { code: "main_zh-CHS", name: "简体中文" },

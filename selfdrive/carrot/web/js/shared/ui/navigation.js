@@ -512,6 +512,7 @@ function showSettingScreen(which, pushHistory = false) {
   const isGroups = (which === "groups");
   const showEl = isGroups ? screenGroups : screenItems;
   const hideEl = isGroups ? screenItems : screenGroups;
+  const isProfileItems = !isGroups && typeof isSettingProfileGroup === "function" && isSettingProfileGroup(CURRENT_GROUP);
   const currentGroupLabel = (!isGroups && CURRENT_GROUP && typeof getSettingGroupLabel === "function")
     ? getSettingGroupLabel(CURRENT_GROUP)
     : (CURRENT_GROUP || "");
@@ -520,6 +521,7 @@ function showSettingScreen(which, pushHistory = false) {
 
   settingScreenHideTimer = clearPendingScreenHide(settingScreenHideTimer);
   syncSettingSplitLayoutClass(splitLandscape);
+  document.getElementById("pageSetting")?.classList.toggle("setting-profile-active", isProfileItems);
 
   if (splitLandscape) {
     settingTitle.textContent = UI_STRINGS[LANG].setting || "Setting";
@@ -535,7 +537,7 @@ function showSettingScreen(which, pushHistory = false) {
 
   if (btnBackGroups) btnBackGroups.style.display = "none";
   settingTitle.textContent = isGroups ? (UI_STRINGS[LANG].setting || "Setting") : ((UI_STRINGS[LANG].setting || "Setting") + " - " + currentGroupLabel);
-  if (settingSubnavWrap) settingSubnavWrap.style.display = isGroups ? "none" : "";
+  if (settingSubnavWrap) settingSubnavWrap.style.display = (isGroups || isProfileItems) ? "none" : "";
 
   showEl.style.display = "";
   requestAnimationFrame(() => {

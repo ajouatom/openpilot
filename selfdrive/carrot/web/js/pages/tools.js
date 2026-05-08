@@ -384,7 +384,7 @@ let toolsLanguageMenuOpen = false;
 
 function getAvailableWebLanguages() {
   const registry = window.CarrotTranslations || {};
-  const allowed = ["ko", "en", "zh"];
+  const allowed = window.CARROT_WEB_LANGUAGE_CODES || ["ko", "en", "zh"];
   const rawOrder = Array.isArray(registry.order) ? registry.order : allowed;
   const order = [...new Set([...rawOrder, ...allowed])].filter((lang) => allowed.includes(lang));
   return order
@@ -1337,12 +1337,8 @@ function initToolsPage() {
   });
 
   bindOnce("btnDeviceLang", async () => {
-    const choices = [
-      { label: "한국어", value: "main_ko" },
-      { label: "English", value: "main_en" },
-      { label: "中文(简体)", value: "main_zh-CHS" },
-      { label: "中文(繁體)", value: "main_zh-CHT" },
-    ];
+    const choices = (window.CarrotDeviceLanguageOptions || [])
+      .map((lang) => ({ label: lang.name, value: lang.code }));
     const val = await openAppDialog({
       mode: "choice",
       title: getUIText("device_lang", "Device Language"),

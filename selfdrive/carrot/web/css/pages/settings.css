@@ -6,6 +6,13 @@
   --setting-menu-list-gap: 6px;
   --setting-menu-item-min-height: 46px;
   --setting-menu-item-padding-inline: 12px;
+  --setting-profile-accent: var(--md-primary, #ffab66);
+  --setting-profile-ink: #05080b;
+  --setting-profile-toolbar-height: 64px;
+}
+
+.page--setting.setting-profile-active {
+  --page-gutter-block: 0px;
 }
 
 .page--setting .setting.is-restored-live .val {
@@ -402,8 +409,8 @@
 }
 
 .setting-profile-section {
-  --setting-profile-accent: #ffab66;
-  --setting-profile-surface: color-mix(in srgb, var(--md-surface) 96%, #020407);
+  --setting-profile-accent: var(--md-primary, #ffab66);
+  --setting-profile-surface: color-mix(in srgb, var(--md-surface) 98%, #000);
   --setting-profile-divider: color-mix(in srgb, var(--setting-profile-accent) 34%, var(--md-outline-var));
   min-width: 0;
   display: grid;
@@ -479,9 +486,25 @@
 
 .setting-profile-section__body {
   min-width: 0;
+  display: grid;
+  grid-template-rows: 1fr;
+  overflow: hidden;
+  opacity: 1;
+  transition: grid-template-rows 0.2s cubic-bezier(.2, 0, 0, 1), opacity 0.16s ease;
 }
 
-.setting-profile-section__body:not([hidden]) {
+.setting-profile-section.is-collapsed .setting-profile-section__body {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.setting-profile-section__bodyInner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.setting-profile-section:not(.is-collapsed) .setting-profile-section__bodyInner {
   animation: setting-section-open 0.18s cubic-bezier(.2, 0, 0, 1) both;
 }
 
@@ -490,10 +513,9 @@
 }
 
 .setting-profile-panel {
-  --setting-profile-accent: #ffab66;
-  --setting-profile-surface: color-mix(in srgb, var(--md-surface) 96%, #020407);
-  --setting-profile-divider: color-mix(in srgb, var(--setting-profile-accent) 42%, var(--md-outline-var));
-  --setting-profile-toolbar-height: 60px;
+  --setting-profile-accent: var(--md-primary, #ffab66);
+  --setting-profile-ink: #05080b;
+  --setting-profile-divider: color-mix(in srgb, var(--setting-profile-ink) 78%, transparent);
   --setting-profile-section-sticky-top: var(--setting-profile-toolbar-height);
   position: sticky;
   top: var(--setting-profile-panel-sticky-top, 0px);
@@ -504,12 +526,11 @@
   padding: 8px 0 8px 14px;
   border: 0;
   border-bottom: 1px solid var(--setting-profile-divider);
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--setting-profile-accent) 9%, transparent), transparent 44%),
-    var(--setting-profile-surface);
+  background: var(--setting-profile-accent);
+  color: var(--setting-profile-ink);
   box-shadow:
-    0 6px 14px rgba(0, 0, 0, 0.22),
-    inset 0 -1px 0 color-mix(in srgb, var(--setting-profile-accent) 14%, transparent);
+    0 8px 18px rgba(0, 0, 0, 0.28),
+    inset 0 -1px 0 color-mix(in srgb, var(--setting-profile-ink) 16%, transparent);
   animation: setting-profile-toolbar-enter 0.2s cubic-bezier(.2, 0, 0, 1) both;
 }
 
@@ -521,7 +542,7 @@
   bottom: 11px;
   width: 3px;
   border-radius: 999px;
-  background: var(--setting-profile-accent);
+  background: var(--setting-profile-ink);
 }
 
 .setting-profile-panel__titleRow {
@@ -540,24 +561,24 @@
 
 .setting-profile-panel__name {
   min-width: 0;
-  height: 44px;
+  height: 48px;
   padding: 0 2px 1px 0;
   border: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--setting-profile-accent) 54%, var(--md-outline-var));
+  border-bottom: 1px solid color-mix(in srgb, var(--setting-profile-ink) 62%, transparent);
   border-radius: 0;
   background: transparent;
-  color: var(--md-on-surface);
+  color: var(--setting-profile-ink);
   font: inherit;
   font-weight: 850;
 }
 
 .setting-profile-panel__name:focus {
-  border-bottom-color: color-mix(in srgb, var(--setting-profile-accent) 88%, var(--md-outline-var));
+  border-bottom-color: var(--setting-profile-ink);
   outline: none;
 }
 
 .setting-profile-panel__name.is-saving {
-  color: color-mix(in srgb, var(--md-on-surface) 72%, var(--md-primary));
+  color: color-mix(in srgb, var(--setting-profile-ink) 72%, var(--setting-profile-accent));
 }
 
 .setting-profile-panel__meta {
@@ -594,12 +615,12 @@
 
 .setting-toolbar-action {
   min-width: 48px;
-  min-height: 44px;
-  padding: 0 12px;
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 54%, transparent);
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--setting-profile-ink) 82%, transparent);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--md-surface-cont-h) 90%, #000);
-  color: var(--md-on-surface);
+  background: var(--setting-profile-ink);
+  color: var(--setting-profile-accent);
   cursor: pointer;
   font: inherit;
   font-size: 13px;
@@ -610,8 +631,8 @@
 
 .setting-toolbar-action:hover,
 .setting-toolbar-action:focus-visible {
-  border-color: color-mix(in srgb, var(--setting-profile-accent) 58%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--setting-profile-accent) 12%, var(--md-surface-cont-h));
+  border-color: var(--setting-profile-ink);
+  background: color-mix(in srgb, var(--setting-profile-ink) 88%, #000);
   outline: none;
 }
 
@@ -620,13 +641,13 @@
 }
 
 .setting-toolbar-action--primary {
-  border-color: var(--setting-profile-accent);
-  background: var(--setting-profile-accent);
-  color: #111;
+  border-color: var(--setting-profile-ink);
+  background: var(--setting-profile-ink);
+  color: var(--setting-profile-accent);
 }
 
 .setting-toolbar-action--danger {
-  color: color-mix(in srgb, var(--md-error) 86%, var(--md-on-surface));
+  color: var(--setting-profile-accent);
 }
 
 @keyframes setting-profile-toolbar-enter {
@@ -651,11 +672,12 @@
 
 @media (prefers-reduced-motion: reduce) {
   .setting-profile-panel,
-  .setting-profile-section__body:not([hidden]) {
+  .setting-profile-section__bodyInner {
     animation: none;
   }
 
   .setting-profile-section__header,
+  .setting-profile-section__body,
   .setting-profile-section__chevron,
   .setting-toolbar-action {
     transition: none;
@@ -900,9 +922,9 @@
   }
 
   .page--setting #settingScreenItems.setting-screen-items--profile {
-    padding-top: var(--setting-fixed-subnav-height, 174px);
-    --setting-profile-panel-sticky-top: var(--setting-fixed-subnav-height, 174px);
-    --setting-profile-section-sticky-top: calc(var(--setting-fixed-subnav-height, 174px) + var(--setting-profile-toolbar-height, 60px));
+    padding-top: 0;
+    --setting-profile-panel-sticky-top: 0px;
+    --setting-profile-section-sticky-top: var(--setting-profile-toolbar-height, 64px);
   }
 
   .page--setting #settingScreenItems.setting-screen-items--profile #items {
@@ -1044,6 +1066,12 @@
       var(--setting-landscape-page-inset)
       var(--setting-landscape-page-inset)
       var(--setting-landscape-page-inset);
+  }
+
+  .page.page--setting > #settingScreenHost > #settingScreenItems.setting-screen-items--profile {
+    padding-top: 0;
+    --setting-profile-panel-sticky-top: 0px;
+    --setting-profile-section-sticky-top: var(--setting-profile-toolbar-height, 64px);
   }
 
   .page--setting #settingCarRow {

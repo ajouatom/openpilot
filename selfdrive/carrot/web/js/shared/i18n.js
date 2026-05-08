@@ -6,6 +6,15 @@ const UI_STRINGS = TRANSLATION_REGISTRY.strings || {};
 const ACTION_LABELS = TRANSLATION_REGISTRY.actionLabels || {};
 const ERROR_MESSAGES = TRANSLATION_REGISTRY.errorMessages || {};
 const DRIVE_MODES = TRANSLATION_REGISTRY.driveModes || {};
+const CARROT_WEB_LANGUAGE_CODES = Object.freeze(["en", "ko", "zh"]);
+window.CARROT_WEB_LANGUAGE_CODES = CARROT_WEB_LANGUAGE_CODES;
+
+window.CarrotDeviceLanguageOptions = Object.freeze([
+  { code: "main_en", name: "English" },
+  { code: "main_ko", name: "한국어" },
+  { code: "main_zh-CHS", name: "简体中文" },
+  { code: "main_zh-CHT", name: "繁體中文" },
+]);
 
 let LANG = "en";
 
@@ -371,7 +380,7 @@ async function syncWebLanguageFromDeviceDefault() {
 }
 
 function toggleLang() {
-  const allowed = ["en", "ko", "zh"];
+  const allowed = CARROT_WEB_LANGUAGE_CODES;
   const rawOrder = Array.isArray(TRANSLATION_REGISTRY.order) ? TRANSLATION_REGISTRY.order : allowed;
   const order = [...new Set([...rawOrder, ...allowed])].filter((lang) => allowed.includes(lang) && UI_STRINGS[lang]);
   const currentIndex = Math.max(0, order.indexOf(LANG));
