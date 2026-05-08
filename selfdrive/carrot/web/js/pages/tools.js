@@ -755,14 +755,6 @@ async function syncDeviceLanguageOnce() {
     let targetParam = "main_en";
     if (browserLang.startsWith("ko")) targetParam = "main_ko";
     else if (browserLang.startsWith("zh")) targetParam = browserLang.includes("tw") || browserLang.includes("hk") ? "main_zh-CHT" : "main_zh-CHS";
-    else if (browserLang.startsWith("ja")) targetParam = "main_ja";
-    else if (browserLang.startsWith("de")) targetParam = "main_de";
-    else if (browserLang.startsWith("fr")) targetParam = "main_fr";
-    else if (browserLang.startsWith("es")) targetParam = "main_es";
-    else if (browserLang.startsWith("pt")) targetParam = "main_pt-BR";
-    else if (browserLang.startsWith("tr")) targetParam = "main_tr";
-    else if (browserLang.startsWith("ar")) targetParam = "main_ar";
-    else if (browserLang.startsWith("th")) targetParam = "main_th";
 
     if (currentLang !== targetParam) {
       await setParam("LanguageSetting", targetParam);
@@ -1348,14 +1340,6 @@ function initToolsPage() {
       { label: "English", value: "main_en" },
       { label: "中文(简体)", value: "main_zh-CHS" },
       { label: "中文(繁體)", value: "main_zh-CHT" },
-      { label: "日本語", value: "main_ja" },
-      { label: "Deutsch", value: "main_de" },
-      { label: "Français", value: "main_fr" },
-      { label: "Português", value: "main_pt-BR" },
-      { label: "Español", value: "main_es" },
-      { label: "Türkçe", value: "main_tr" },
-      { label: "العربية", value: "main_ar" },
-      { label: "ไทย", value: "main_th" },
     ];
     const val = await openAppDialog({
       mode: "choice",

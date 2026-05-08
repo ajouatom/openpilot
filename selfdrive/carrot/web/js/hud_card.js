@@ -38,27 +38,11 @@
       sport: "高速",
       fast: "高速",
     },
-    ja: {
-      normal: "通常",
-      eco: "エコ",
-      safe: "安全",
-      sport: "高速",
-      fast: "高速",
-    },
-    fr: {
-      normal: "Normal",
-      eco: "Eco",
-      safe: "Securite",
-      sport: "Rapide",
-      fast: "Rapide",
-    },
   };
   const HUD_LABELS = {
     en: { speed: "Speed", setSpeed: "Set Speed", temp: "TEMP", gear: "GEAR", limit: "LIMIT" },
     ko: { speed: "현재속도", setSpeed: "설정속도", temp: "TEMP", gear: "GEAR", limit: "LIMIT" },
     zh: { speed: "当前速度", setSpeed: "设定速度", temp: "TEMP", gear: "GEAR", limit: "LIMIT" },
-    ja: { speed: "速度", setSpeed: "設定速度", temp: "TEMP", gear: "GEAR", limit: "LIMIT" },
-    fr: { speed: "Vitesse", setSpeed: "Vitesse reglee", temp: "TEMP", gear: "GEAR", limit: "LIMIT" },
   };
   const HUD_AUX_ROTATE_MS = 1600;
   const HUD_AUX_ICON_PATHS = {

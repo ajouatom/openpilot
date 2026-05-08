@@ -89,11 +89,30 @@ function getFavoriteSettingEntries() {
     .filter(Boolean);
 }
 
+function getSettingGroupOrderIndex(group) {
+  const groups = SETTINGS?.groups || [];
+  const index = groups.findIndex((entry) => entry?.group === group);
+  return index >= 0 ? index : 9999;
+}
+
+function getSettingItemOrderIndex(group, name) {
+  const list = SETTINGS?.items_by_group?.[group] || [];
+  const index = list.findIndex((entry) => entry?.name === name);
+  return index >= 0 ? index : 9999;
+}
+
 function getProfileSettingEntries(profile) {
   const values = profile?.values || {};
   return Object.keys(values)
     .map((name) => findSettingItemByName(name))
-    .filter(Boolean);
+    .filter(Boolean)
+    .sort((a, b) => {
+      const groupDelta = getSettingGroupOrderIndex(a.group) - getSettingGroupOrderIndex(b.group);
+      if (groupDelta) return groupDelta;
+      const itemDelta = getSettingItemOrderIndex(a.group, a.item.name) - getSettingItemOrderIndex(b.group, b.item.name);
+      if (itemDelta) return itemDelta;
+      return String(a.item.name).localeCompare(String(b.item.name));
+    });
 }
 
 function getValidSettingFavoriteNames() {
@@ -755,9 +774,9 @@ function settingProfileMetaRows(profile) {
   const meta = profile?.meta || {};
   const rows = [];
   if (profile?.created_at) {
-    rows.push([getUIText("setting_profile_created", "Created"), formatSettingProfileDate(profile.created_at)]);
+    rows.push([getUIText("setting_profile_created", "Created"), settingsDiffEscape(formatSettingProfileDate(profile.created_at))]);
   }
-  if (meta.branch) rows.push([getUIText("branch", "Branch"), meta.branch]);
+  if (meta.branch) rows.push([getUIText("branch", "Branch"), settingsDiffEscape(meta.branch)]);
   if (meta.commit) {
     const commitText = meta.commit_short || String(meta.commit).slice(0, 7);
     const commitValue = meta.commit_url
@@ -766,6 +785,25 @@ function settingProfileMetaRows(profile) {
     rows.push([getUIText("commit", "Commit"), commitValue]);
   }
   return rows;
+}
+
+async function openSettingProfileInfo(profile) {
+  const rows = settingProfileMetaRows(profile);
+  const messageHtml = rows.length
+    ? `<div class="setting-profile-info">${rows.map(([label, value]) => `
+        <div class="setting-profile-panel__metaRow">
+          <span>${settingsDiffEscape(label)}</span>
+          <strong>${value}</strong>
+        </div>
+      `).join("")}</div>`
+    : `<div class="setting-profile-info setting-profile-info--empty">${settingsDiffEscape(getUIText("setting_profile_info_empty", "No profile metadata"))}</div>`;
+  await openAppDialog({
+    mode: "alert",
+    title: getUIText("setting_profile_info", "Profile Info"),
+    html: true,
+    messageHtml,
+    confirmLabel: getUIText("ok", "OK"),
+  });
 }
 
 async function saveSettingProfile(profileId, updates) {
@@ -913,17 +951,13 @@ function appendSettingProfileHeader(profile, container) {
   titleRow.appendChild(input);
   titleRow.appendChild(saveName);
 
-  const meta = document.createElement("div");
-  meta.className = "setting-profile-panel__meta";
-  settingProfileMetaRows(profile).forEach(([label, value]) => {
-    const row = document.createElement("div");
-    row.className = "setting-profile-panel__metaRow";
-    row.innerHTML = `<span>${settingsDiffEscape(label)}</span><strong>${value}</strong>`;
-    meta.appendChild(row);
-  });
-
   const actions = document.createElement("div");
   actions.className = "setting-profile-panel__actions";
+  const infoBtn = document.createElement("button");
+  infoBtn.type = "button";
+  infoBtn.className = "smallBtn";
+  infoBtn.textContent = getUIText("setting_profile_info", "Info");
+  infoBtn.onclick = () => openSettingProfileInfo(profile);
   const applyBtn = document.createElement("button");
   applyBtn.type = "button";
   applyBtn.className = "smallBtn btn--filled";
@@ -934,11 +968,11 @@ function appendSettingProfileHeader(profile, container) {
   deleteBtn.className = "smallBtn";
   deleteBtn.textContent = getUIText("delete", "Delete");
   deleteBtn.onclick = () => deleteSettingProfile(profile);
+  actions.appendChild(infoBtn);
   actions.appendChild(applyBtn);
   actions.appendChild(deleteBtn);
 
   panel.appendChild(titleRow);
-  panel.appendChild(meta);
   panel.appendChild(actions);
   container.appendChild(panel);
 }
@@ -1329,10 +1363,16 @@ if (btnSettingFabResetDefaults) {
 
     btnSettingFabResetDefaults.disabled = true;
     try {
-      await postJson("/api/set_default", {});
-      showAppToast(getUIText("setting_reset_defaults_done", "Default reset requested"));
+      const payload = await postJson("/api/set_default", {});
+      if (!payload?.ok) {
+        throw new Error(payload?.error || getUIText("setting_reset_defaults_failed", "Failed to request settings reset"));
+      }
+      showAppToast(getUIText(
+        "setting_reset_defaults_done",
+        payload.message || "Settings reset signal sent. The device may restart to apply it."
+      ));
     } catch (e) {
-      showAppToast((UI_STRINGS[LANG].set_failed || "set failed: ") + e.message, { tone: "error" });
+      showAppToast(e?.message || getUIText("setting_reset_defaults_failed", "Failed to request settings reset"), { tone: "error" });
     } finally {
       btnSettingFabResetDefaults.disabled = false;
     }
@@ -1855,10 +1895,26 @@ async function renderItems(group, options = {}) {
 
   if (profile) appendSettingProfileHeader(profile, itemsBox);
 
+  let lastProfileGroup = "";
   list.forEach((p, index) => {
     const name = p.name;
     const originGroup = entries[index]?.group || group;
     if (!(name in UNIT_INDEX)) UNIT_INDEX[name] = 0;
+
+    if (profile && originGroup !== lastProfileGroup) {
+      lastProfileGroup = originGroup;
+      const section = document.createElement("div");
+      section.className = animateItems ? "setting-profile-section ui-stagger-item" : "setting-profile-section";
+      if (animateItems) section.style.setProperty("--i", String(index));
+      const sectionLabel = getSettingGroupLabel(originGroup);
+      const sectionCount = entries.filter((entry) => entry.group === originGroup).length;
+      section.innerHTML = `
+        <span></span>
+        <strong>${settingsDiffEscape(sectionLabel)} (${sectionCount})</strong>
+        <span></span>
+      `;
+      itemsBox.appendChild(section);
+    }
 
     const title = formatItemText(p, "title", "etitle", "");
     const descr = formatItemText(p, "descr", "edescr", "");

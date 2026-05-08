@@ -401,6 +401,31 @@
   white-space: nowrap;
 }
 
+.setting-profile-section {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 12px 2px 2px;
+  color: var(--md-primary);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.setting-profile-section span {
+  height: 1px;
+  background: color-mix(in srgb, var(--md-primary) 38%, transparent);
+}
+
+.setting-profile-section strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .setting-subnav__tab--profile {
   border-color: color-mix(in srgb, var(--md-primary) 34%, var(--md-outline-var));
 }
@@ -408,9 +433,9 @@
 .setting-profile-panel {
   min-width: 0;
   display: grid;
-  gap: 12px;
+  gap: 8px;
   margin-bottom: 12px;
-  padding: 12px;
+  padding: 10px;
   border: 1px solid color-mix(in srgb, var(--md-primary) 28%, var(--md-outline-var));
   border-radius: 8px;
   background: color-mix(in srgb, var(--md-primary) 6%, var(--md-surface-cont-h));
@@ -426,7 +451,7 @@
 
 .setting-profile-panel__name {
   min-width: 0;
-  height: 42px;
+  height: 40px;
   padding: 0 12px;
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 76%, transparent);
   border-radius: 8px;
@@ -470,7 +495,7 @@
 
 .setting-profile-panel__actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -501,6 +526,18 @@
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.setting-profile-info {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  white-space: normal;
+}
+
+.setting-profile-info--empty {
+  color: var(--md-on-surface-var);
+  font-weight: 800;
 }
 
 .page--setting #carrotTabContent,
@@ -1083,7 +1120,6 @@
 }
 
 :lang(ko) .page--setting #settingScreenItems .setting-favorites-empty__desc,
-:lang(ja) .page--setting #settingScreenItems .setting-favorites-empty__desc,
 :lang(zh) .page--setting #settingScreenItems .setting-favorites-empty__desc {
   word-break: keep-all;
   overflow-wrap: break-word;

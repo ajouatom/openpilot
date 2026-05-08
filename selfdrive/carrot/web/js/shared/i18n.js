@@ -1,6 +1,6 @@
 "use strict";
 
-// Translation registry — loaded by translations/registry.js + ko/en/zh/ja/fr.js
+// Translation registry — loaded by translations/registry.js + ko/en/zh.js
 const TRANSLATION_REGISTRY = window.CarrotTranslations || { packs: {}, order: ["en", "ko", "zh"] };
 const UI_STRINGS = TRANSLATION_REGISTRY.strings || {};
 const ACTION_LABELS = TRANSLATION_REGISTRY.actionLabels || {};
@@ -19,16 +19,12 @@ function normalizeLangCode(raw) {
     main_en: "en",
     "main_zh-chs": "zh",
     "main_zh-cht": "zh",
-    main_ja: "ja",
-    main_fr: "fr",
   };
   if (deviceAliases[value]) return deviceAliases[value];
   const withoutMainPrefix = value.replace(/^main[_-]/, "");
   if (packs[withoutMainPrefix]) return withoutMainPrefix;
   if (value.startsWith("ko")) return "ko";
   if (value.startsWith("zh")) return "zh";
-  if (value.startsWith("ja")) return "ja";
-  if (value.startsWith("fr")) return "fr";
   if (value.startsWith("en")) return "en";
   return "";
 }

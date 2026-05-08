@@ -226,7 +226,13 @@ async def api_set_default(request: web.Request) -> web.Response:
     return web.json_response({"ok": False, "error": "params unavailable"}, status=500)
   try:
     Params().put_int("SoftRestartTriggered", 2)
-    return web.json_response({"ok": True})
+    return web.json_response({
+      "ok": True,
+      "action": "soft_restart_default_reset",
+      "param": "SoftRestartTriggered",
+      "value": 2,
+      "message": "설정 초기화 신호 전송 성공. 재시작 후 기본값 적용이 진행됩니다.",
+    })
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
 
