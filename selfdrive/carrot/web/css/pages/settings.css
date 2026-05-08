@@ -7,7 +7,9 @@
   --setting-menu-item-min-height: 46px;
   --setting-menu-item-padding-inline: 12px;
   --setting-profile-accent: var(--md-primary, #ffab66);
-  --setting-profile-ink: #05080b;
+  --setting-profile-ink: var(--md-on-surface);
+  --setting-profile-surface: var(--md-surface-cont-h);
+  --setting-profile-outline: color-mix(in srgb, var(--md-outline-var) 46%, transparent);
   --setting-profile-toolbar-height: 64px;
 }
 
@@ -374,12 +376,14 @@
 }
 
 .page--setting #groupList .groupBtn--profile {
-  border-color: color-mix(in srgb, var(--md-primary) 32%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--md-primary) 7%, var(--md-surface-cont-h));
+  border-color: var(--setting-profile-outline);
+  background: var(--md-surface-cont-h);
+  color: var(--md-on-surface);
 }
 
 .page--setting #groupList .groupBtn--profile.active {
-  border-color: color-mix(in srgb, var(--md-primary) 68%, var(--md-outline-var));
+  border-color: color-mix(in srgb, var(--md-primary) 48%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-primary) 14%, var(--md-surface-cont-h));
   color: var(--md-primary);
 }
 
@@ -410,7 +414,7 @@
 
 .setting-profile-section {
   --setting-profile-accent: var(--md-primary, #ffab66);
-  --setting-profile-surface: color-mix(in srgb, var(--md-surface) 98%, #000);
+  --setting-profile-surface: color-mix(in srgb, var(--md-surface-cont) 55%, transparent);
   --setting-profile-divider: color-mix(in srgb, var(--setting-profile-accent) 34%, var(--md-outline-var));
   min-width: 0;
   display: grid;
@@ -430,12 +434,12 @@
   gap: 10px;
   padding: 11px 0 10px;
   border: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 28%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 42%, transparent);
   background: var(--setting-profile-surface);
   box-shadow:
     0 -1px 0 var(--setting-profile-surface),
     0 1px 0 color-mix(in srgb, var(--md-outline-var) 16%, transparent);
-  color: color-mix(in srgb, var(--md-on-surface) 90%, var(--setting-profile-accent));
+  color: var(--md-on-surface);
   font: inherit;
   font-size: 13px;
   font-weight: 900;
@@ -447,7 +451,7 @@
 
 .setting-profile-section__header:hover,
 .setting-profile-section__header:focus-visible {
-  background: color-mix(in srgb, var(--setting-profile-accent) 7%, var(--setting-profile-surface));
+  background: color-mix(in srgb, var(--md-primary) 10%, transparent);
   color: var(--setting-profile-accent);
   outline: none;
 }
@@ -514,8 +518,9 @@
 
 .setting-profile-panel {
   --setting-profile-accent: var(--md-primary, #ffab66);
-  --setting-profile-ink: #05080b;
-  --setting-profile-divider: color-mix(in srgb, var(--setting-profile-ink) 78%, transparent);
+  --setting-profile-ink: var(--md-on-surface);
+  --setting-profile-surface: var(--md-surface-cont-h);
+  --setting-profile-divider: color-mix(in srgb, var(--md-outline-var) 50%, transparent);
   --setting-profile-section-sticky-top: var(--setting-profile-toolbar-height);
   position: sticky;
   top: var(--setting-profile-panel-sticky-top, 0px);
@@ -524,13 +529,15 @@
   min-height: var(--setting-profile-toolbar-height);
   margin-bottom: 0;
   padding: 8px 0 8px 14px;
-  border: 0;
+  border: 1px solid var(--setting-profile-divider);
+  border-left: 0;
+  border-right: 0;
   border-bottom: 1px solid var(--setting-profile-divider);
-  background: var(--setting-profile-accent);
+  background: var(--setting-profile-surface);
   color: var(--setting-profile-ink);
   box-shadow:
-    0 8px 18px rgba(0, 0, 0, 0.28),
-    inset 0 -1px 0 color-mix(in srgb, var(--setting-profile-ink) 16%, transparent);
+    0 8px 18px rgba(0, 0, 0, 0.22),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03);
   animation: setting-profile-toolbar-enter 0.2s cubic-bezier(.2, 0, 0, 1) both;
 }
 
@@ -542,7 +549,7 @@
   bottom: 11px;
   width: 3px;
   border-radius: 999px;
-  background: var(--setting-profile-ink);
+  background: var(--setting-profile-accent);
 }
 
 .setting-profile-panel__titleRow {
@@ -564,7 +571,7 @@
   height: 48px;
   padding: 0 2px 1px 0;
   border: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--setting-profile-ink) 62%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 58%, transparent);
   border-radius: 0;
   background: transparent;
   color: var(--setting-profile-ink);
@@ -573,12 +580,12 @@
 }
 
 .setting-profile-panel__name:focus {
-  border-bottom-color: var(--setting-profile-ink);
+  border-bottom-color: color-mix(in srgb, var(--setting-profile-accent) 76%, var(--md-outline-var));
   outline: none;
 }
 
 .setting-profile-panel__name.is-saving {
-  color: color-mix(in srgb, var(--setting-profile-ink) 72%, var(--setting-profile-accent));
+  color: color-mix(in srgb, var(--md-on-surface) 72%, var(--setting-profile-accent));
 }
 
 .setting-profile-panel__meta {
@@ -617,10 +624,10 @@
   min-width: 48px;
   min-height: 48px;
   padding: 0 14px;
-  border: 1px solid color-mix(in srgb, var(--setting-profile-ink) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
   border-radius: 999px;
-  background: var(--setting-profile-ink);
-  color: var(--setting-profile-accent);
+  background: var(--md-surface-cont-h);
+  color: var(--md-on-surface);
   cursor: pointer;
   font: inherit;
   font-size: 13px;
@@ -631,8 +638,8 @@
 
 .setting-toolbar-action:hover,
 .setting-toolbar-action:focus-visible {
-  border-color: var(--setting-profile-ink);
-  background: color-mix(in srgb, var(--setting-profile-ink) 88%, #000);
+  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
   outline: none;
 }
 
@@ -641,13 +648,13 @@
 }
 
 .setting-toolbar-action--primary {
-  border-color: var(--setting-profile-ink);
-  background: var(--setting-profile-ink);
-  color: var(--setting-profile-accent);
+  border-color: color-mix(in srgb, var(--md-primary) 76%, var(--md-outline-var));
+  background: var(--md-primary);
+  color: var(--md-on-primary);
 }
 
 .setting-toolbar-action--danger {
-  color: var(--setting-profile-accent);
+  color: var(--md-error);
 }
 
 @keyframes setting-profile-toolbar-enter {
