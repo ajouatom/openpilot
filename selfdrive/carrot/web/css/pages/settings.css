@@ -10,7 +10,7 @@
   --setting-profile-ink: var(--md-on-surface);
   --setting-profile-surface: var(--md-surface-cont-h);
   --setting-profile-outline: color-mix(in srgb, var(--md-outline-var) 46%, transparent);
-  --setting-profile-toolbar-height: 64px;
+  --setting-profile-toolbar-height: 58px;
 }
 
 .page--setting.setting-profile-active {
@@ -528,9 +528,11 @@
   top: var(--setting-profile-panel-sticky-top, 0px);
   z-index: 5;
   min-width: 0;
-  min-height: 56px;
+  box-sizing: border-box;
+  height: var(--setting-profile-toolbar-height);
+  min-height: var(--setting-profile-toolbar-height);
   margin-bottom: 0;
-  padding: 8px 0 8px 14px;
+  padding: 7px 0 7px 14px;
   border: 1px solid var(--setting-profile-divider);
   border-left: 0;
   border-right: 0;
@@ -926,7 +928,7 @@
   .page--setting #settingScreenItems.setting-screen-items--profile {
     padding-top: 0;
     --setting-profile-panel-sticky-top: 0px;
-    --setting-profile-section-sticky-top: var(--setting-profile-toolbar-height, 64px);
+    --setting-profile-section-sticky-top: var(--setting-profile-toolbar-height);
   }
 
   .page--setting #settingScreenItems.setting-screen-items--profile #items {
@@ -1077,7 +1079,7 @@
   .page.page--setting > #settingScreenHost > #settingScreenItems.setting-screen-items--profile {
     padding-top: 0;
     --setting-profile-panel-sticky-top: 0px;
-    --setting-profile-section-sticky-top: var(--setting-profile-toolbar-height, 64px);
+    --setting-profile-section-sticky-top: var(--setting-profile-toolbar-height);
   }
 
   .page--setting #settingCarRow {
