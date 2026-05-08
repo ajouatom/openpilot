@@ -366,6 +366,143 @@
   color: color-mix(in srgb, #bae6fd 82%, var(--md-on-surface));
 }
 
+.page--setting #groupList .groupBtn--profile {
+  border-color: color-mix(in srgb, var(--md-primary) 32%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-primary) 7%, var(--md-surface-cont-h));
+}
+
+.page--setting #groupList .groupBtn--profile.active {
+  border-color: color-mix(in srgb, var(--md-primary) 68%, var(--md-outline-var));
+  color: var(--md-primary);
+}
+
+.setting-profile-divider {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 2px 4px;
+  color: var(--md-on-surface-var);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.setting-profile-divider span {
+  height: 1px;
+  background: color-mix(in srgb, var(--md-outline-var) 46%, transparent);
+}
+
+.setting-profile-divider strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setting-subnav__tab--profile {
+  border-color: color-mix(in srgb, var(--md-primary) 34%, var(--md-outline-var));
+}
+
+.setting-profile-panel {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--md-primary) 28%, var(--md-outline-var));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--md-primary) 6%, var(--md-surface-cont-h));
+}
+
+.setting-profile-panel__titleRow {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.setting-profile-panel__name {
+  min-width: 0;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 76%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--md-surface) 86%, #000);
+  color: var(--md-on-surface);
+  font: inherit;
+  font-weight: 850;
+}
+
+.setting-profile-panel__meta {
+  display: grid;
+  gap: 6px;
+}
+
+.setting-profile-panel__metaRow {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  color: var(--md-on-surface-var);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.setting-profile-panel__metaRow span {
+  font-weight: 800;
+}
+
+.setting-profile-panel__metaRow strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--md-on-surface);
+  font-weight: 850;
+}
+
+.setting-profile-panel__metaRow a {
+  color: var(--md-primary);
+  text-decoration: none;
+}
+
+.setting-profile-panel__actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.app-dialog--settings-diff .app-dialog__sheet {
+  width: min(calc(100vw - 24px), 520px);
+  max-height: min(calc(100dvh - 24px), 680px);
+  overflow: hidden;
+}
+
+.app-dialog--settings-diff .app-dialog__body {
+  min-height: 0;
+  overflow: auto;
+  white-space: normal;
+}
+
+.setting-profile-apply {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.setting-profile-apply__title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--md-on-surface);
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .page--setting #carrotTabContent,
 .page--setting #deviceTabContent,
 .page--setting #items,

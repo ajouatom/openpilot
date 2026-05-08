@@ -16,6 +16,8 @@ let settingSubnavProgrammaticScroll = false;
 let settingSubnavFocusTimer = null;
 
 const SETTING_FAVORITES_GROUP = "__setting_favorites__";
+const SETTING_PROFILES_DIVIDER = "__setting_profiles_divider__";
+const SETTING_PROFILE_GROUP_PREFIX = "__setting_profile__:";
 const SETTING_FAVORITES_LONG_PRESS_MS = 620;
 const SETTING_FAVORITES_MOVE_TOLERANCE = 10;
 const settingFavoritesState = {
@@ -23,9 +25,39 @@ const settingFavoritesState = {
   loaded: false,
   loadPromise: null,
 };
+const settingProfilesState = {
+  profiles: [],
+  loaded: false,
+  loadPromise: null,
+};
 
 function isSettingFavoritesGroup(group) {
   return group === SETTING_FAVORITES_GROUP;
+}
+
+function isSettingProfilesDivider(entry) {
+  return entry?.group === SETTING_PROFILES_DIVIDER || entry === SETTING_PROFILES_DIVIDER;
+}
+
+function settingProfileGroup(profileId) {
+  return SETTING_PROFILE_GROUP_PREFIX + String(profileId || "");
+}
+
+function isSettingProfileGroup(group) {
+  return String(group || "").startsWith(SETTING_PROFILE_GROUP_PREFIX);
+}
+
+function getSettingProfileIdFromGroup(group) {
+  return isSettingProfileGroup(group) ? String(group).slice(SETTING_PROFILE_GROUP_PREFIX.length) : "";
+}
+
+function getSettingProfileById(profileId) {
+  const id = String(profileId || "");
+  return settingProfilesState.profiles.find((profile) => profile?.id === id) || null;
+}
+
+function getSettingProfileByGroup(group) {
+  return getSettingProfileById(getSettingProfileIdFromGroup(group));
 }
 
 function normalizeSettingFavoriteNames(names) {
@@ -57,6 +89,13 @@ function getFavoriteSettingEntries() {
     .filter(Boolean);
 }
 
+function getProfileSettingEntries(profile) {
+  const values = profile?.values || {};
+  return Object.keys(values)
+    .map((name) => findSettingItemByName(name))
+    .filter(Boolean);
+}
+
 function getValidSettingFavoriteNames() {
   return getFavoriteSettingEntries().map((entry) => entry.item.name).filter(Boolean);
 }
@@ -69,9 +108,13 @@ function getSettingFavoritesLabel() {
   return getUIText("setting_favorites", "Favorites");
 }
 
+function getSettingProfilesLabel() {
+  return getUIText("setting_profiles", "Profiles");
+}
+
 function getSettingGroupsForDisplay() {
   const groups = SETTINGS?.groups || [];
-  return [
+  const out = [
     {
       group: SETTING_FAVORITES_GROUP,
       count: getFavoriteSettingEntries().length,
@@ -79,10 +122,31 @@ function getSettingGroupsForDisplay() {
     },
     ...groups,
   ];
+  const profiles = settingProfilesState.profiles || [];
+  if (profiles.length) {
+    out.push({
+      group: SETTING_PROFILES_DIVIDER,
+      label: getSettingProfilesLabel(),
+      divider: true,
+      virtual: true,
+    });
+    profiles.forEach((profile) => {
+      out.push({
+        group: settingProfileGroup(profile.id),
+        count: getProfileSettingEntries(profile).length,
+        label: profile.name,
+        profile,
+        virtual: true,
+      });
+    });
+  }
+  return out;
 }
 
 function getSettingItemEntriesForGroup(group) {
   if (isSettingFavoritesGroup(group)) return getFavoriteSettingEntries();
+  const profile = getSettingProfileByGroup(group);
+  if (profile) return getProfileSettingEntries(profile);
   return (SETTINGS?.items_by_group?.[group] || []).map((item) => ({ group, item }));
 }
 
@@ -198,6 +262,8 @@ async function toggleSettingFavorite(name) {
 
 function getSettingGroupParamNames(group) {
   if (isSettingFavoritesGroup(group)) return getValidSettingFavoriteNames();
+  const profile = getSettingProfileByGroup(group);
+  if (profile) return getProfileSettingEntries(profile).map((entry) => entry.item.name).filter(Boolean);
   const list = SETTINGS?.items_by_group?.[group] || [];
   return list.map((item) => item.name).filter(Boolean);
 }
@@ -241,6 +307,8 @@ function applyRestoredSettingValuesToRenderedItems(values) {
 
 async function fetchSettingGroupValues(group, options = {}) {
   if (!group) return {};
+  const profile = getSettingProfileByGroup(group);
+  if (profile) return { ...(profile.values || {}) };
   const force = options.force === true;
   const ttlMs = Number.isFinite(options.ttlMs) ? options.ttlMs : SETTING_VALUES_TTL_MS;
   const names = getSettingGroupParamNames(group);
@@ -392,6 +460,7 @@ async function loadSettings(options = {}) {
 
   if (SETTINGS && !force) {
     await loadSettingFavorites();
+    await loadSettingProfiles();
     renderGroups({ animateGroups: false });
     renderSettingSubnav();
     syncSettingSearchFabState();
@@ -413,6 +482,7 @@ async function loadSettings(options = {}) {
     settingGroupValueCache.clear();
     settingGroupValuePromises.clear();
     await loadSettingFavorites(force);
+    await loadSettingProfiles(force);
     rebuildSettingSearchEntries();
 
     if (meta) {
@@ -464,10 +534,10 @@ function renderGroups(options = {}) {
   const box = document.getElementById("groupList");
   const animateGroups = options.animateGroups !== false;
   const groups = getSettingGroupsForDisplay();
-  const signature = groups.map((g) => `${g.group}:${g.count}`).join("|");
+  const signature = groups.map((g) => isSettingProfilesDivider(g) ? SETTING_PROFILES_DIVIDER : `${g.group}:${g.count ?? ""}:${g.label || ""}`).join("|");
 
   function setGroupButtonLabel(button, label, count) {
-    const text = `${label} (${count})`;
+    const text = Number.isFinite(Number(count)) ? `${label} (${count})` : label;
     button.title = text;
     button.innerHTML = `<span class="setting-group-label">${escapeHtml(text)}</span>`;
     requestAnimationFrame(() => {
@@ -482,9 +552,17 @@ function renderGroups(options = {}) {
   if (!animateGroups && box.dataset.groupsSignature === signature && box.children.length === groups.length) {
     Array.from(box.children).forEach((button, index) => {
       const g = groups[index];
+      if (isSettingProfilesDivider(g)) {
+        button.className = "setting-profile-divider";
+        button.innerHTML = `<span></span><strong>${escapeHtml(g.label || getSettingProfilesLabel())}</strong><span></span>`;
+        button.removeAttribute("data-group");
+        button.onclick = null;
+        return;
+      }
       const label = getSettingGroupLabel(g.group);
       button.className = "btn groupBtn";
       if (isSettingFavoritesGroup(g.group)) button.classList.add("groupBtn--favorites");
+      if (isSettingProfileGroup(g.group)) button.classList.add("groupBtn--profile");
       if (g.group === CURRENT_GROUP) button.classList.add("active");
       button.dataset.group = g.group;
       setGroupButtonLabel(button, label, g.count);
@@ -497,11 +575,21 @@ function renderGroups(options = {}) {
   box.dataset.groupsSignature = signature;
 
   groups.forEach(g => {
+    if (isSettingProfilesDivider(g)) {
+      const divider = document.createElement("div");
+      divider.className = animateGroups ? "setting-profile-divider ui-stagger-item" : "setting-profile-divider";
+      if (animateGroups) divider.style.setProperty("--i", String(box.children.length));
+      divider.innerHTML = `<span></span><strong>${escapeHtml(g.label || getSettingProfilesLabel())}</strong><span></span>`;
+      box.appendChild(divider);
+      return;
+    }
+
     const label = getSettingGroupLabel(g.group);
 
     const b = document.createElement("button");
     b.className = animateGroups ? "btn groupBtn ui-stagger-item" : "btn groupBtn";
     if (isSettingFavoritesGroup(g.group)) b.classList.add("groupBtn--favorites");
+    if (isSettingProfileGroup(g.group)) b.classList.add("groupBtn--profile");
     if (animateGroups) b.style.setProperty("--i", String(box.children.length));
     if (g.group === CURRENT_GROUP) b.classList.add("active");
     b.dataset.group = g.group;
@@ -520,12 +608,24 @@ function getSettingGroupMeta(group) {
       virtual: true,
     };
   }
+  const profile = getSettingProfileByGroup(group);
+  if (profile) {
+    return {
+      group,
+      egroup: profile.name,
+      count: getProfileSettingEntries(profile).length,
+      profile,
+      virtual: true,
+    };
+  }
   const groups = SETTINGS?.groups || [];
   return groups.find((entry) => entry.group === group) || null;
 }
 
 function getSettingGroupLabel(group) {
   if (isSettingFavoritesGroup(group)) return getSettingFavoritesLabel();
+  const profile = getSettingProfileByGroup(group);
+  if (profile) return profile.name;
   const meta = getSettingGroupMeta(group);
   if (!meta) return group;
   if (LANG === "zh") return meta.cgroup || meta.egroup || meta.group;
@@ -591,6 +691,256 @@ function syncSettingSearchFabState() {
     btnSettingSearch.classList.toggle("active", isOpen || settingFabMenuOpen);
     btnSettingSearch.setAttribute("aria-expanded", settingFabMenuOpen ? "true" : "false");
   }
+}
+
+function normalizeSettingProfiles(profiles) {
+  return (Array.isArray(profiles) ? profiles : [])
+    .filter((profile) => profile && profile.id && profile.name && profile.values)
+    .map((profile) => ({
+      ...profile,
+      values: { ...(profile.values || {}) },
+      meta: { ...(profile.meta || {}) },
+    }));
+}
+
+async function loadSettingProfiles(force = false) {
+  if (!force && settingProfilesState.loaded) return settingProfilesState.profiles;
+  if (!force && settingProfilesState.loadPromise) return settingProfilesState.loadPromise;
+
+  settingProfilesState.loadPromise = getJson("/api/setting_profiles")
+    .then((payload) => {
+      settingProfilesState.loaded = true;
+      settingProfilesState.profiles = normalizeSettingProfiles(payload?.profiles || []);
+      return settingProfilesState.profiles;
+    })
+    .catch(() => {
+      settingProfilesState.loaded = true;
+      settingProfilesState.profiles = [];
+      return settingProfilesState.profiles;
+    })
+    .finally(() => {
+      settingProfilesState.loadPromise = null;
+    });
+
+  return settingProfilesState.loadPromise;
+}
+
+function updateSettingProfilesFromPayload(payload) {
+  if (!payload || !Array.isArray(payload.profiles)) return;
+  settingProfilesState.loaded = true;
+  settingProfilesState.profiles = normalizeSettingProfiles(payload.profiles);
+}
+
+function formatSettingProfileDate(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
+  try {
+    return date.toLocaleString(LANG === "ko" ? "ko-KR" : undefined, {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+  } catch {
+    return raw;
+  }
+}
+
+function settingProfileMetaRows(profile) {
+  const meta = profile?.meta || {};
+  const rows = [];
+  if (profile?.created_at) {
+    rows.push([getUIText("setting_profile_created", "Created"), formatSettingProfileDate(profile.created_at)]);
+  }
+  if (meta.branch) rows.push([getUIText("branch", "Branch"), meta.branch]);
+  if (meta.commit) {
+    const commitText = meta.commit_short || String(meta.commit).slice(0, 7);
+    const commitValue = meta.commit_url
+      ? `<a href="${settingsDiffEscape(meta.commit_url)}" target="_blank" rel="noopener">${settingsDiffEscape(commitText)}</a>`
+      : settingsDiffEscape(commitText);
+    rows.push([getUIText("commit", "Commit"), commitValue]);
+  }
+  return rows;
+}
+
+async function saveSettingProfile(profileId, updates) {
+  const payload = await postJson("/api/setting_profiles/update", { id: profileId, ...(updates || {}) });
+  updateSettingProfilesFromPayload(payload);
+  return payload.profile || getSettingProfileById(profileId);
+}
+
+async function createSettingProfileFromCurrent() {
+  closeSettingFabMenu();
+  const name = await appPrompt(getUIText("setting_profile_create_prompt", "Enter a profile name."), {
+    title: getUIText("setting_profile_create_title", "Add Profile"),
+    placeholder: getUIText("setting_profile_name", "Profile name"),
+  });
+  if (!name || !String(name).trim()) return;
+
+  try {
+    const payload = await postJson("/api/setting_profiles", { name: String(name).trim() });
+    updateSettingProfilesFromPayload(payload);
+    const profile = payload.profile;
+    renderGroups({ animateGroups: false });
+    renderSettingSubnav();
+    if (profile?.id) {
+      await selectGroup(settingProfileGroup(profile.id));
+      showAppToast(getUIText("setting_profile_saved", "Profile saved"));
+    }
+  } catch (e) {
+    showAppToast(e?.message || getUIText("setting_profile_save_failed", "Failed to save profile"), { tone: "error" });
+  }
+}
+
+function setSettingProfileDialogClass(enabled) {
+  if (typeof appDialog !== "undefined" && appDialog) {
+    appDialog.classList.toggle("app-dialog--settings-diff", Boolean(enabled));
+  }
+}
+
+async function applySettingProfile(profile) {
+  if (!profile?.id) return;
+  let preview = null;
+  try {
+    const payload = await postJson("/api/setting_profiles/preview", { id: profile.id, values: profile.values || {} });
+    preview = payload.preview;
+  } catch (e) {
+    showAppToast(e?.message || getUIText("setting_profile_apply_failed", "Failed to preview profile"), { tone: "error" });
+    return;
+  }
+
+  const selected = typeof getSettingsDiffSelectedCount === "function" ? getSettingsDiffSelectedCount(preview) : 0;
+  const html = `
+    <div class="setting-profile-apply">
+      <div class="setting-profile-apply__title">${settingsDiffEscape(profile.name)}</div>
+      ${typeof renderSettingsDiffHtml === "function" ? renderSettingsDiffHtml(preview, {
+        nextLabel: getUIText("setting_profile_value", "Profile"),
+      }) : ""}
+    </div>
+  `;
+  const promise = openAppDialog({
+    mode: selected > 0 ? "confirm" : "alert",
+    title: getUIText("setting_profile_apply_title", "Apply Profile"),
+    html: true,
+    messageHtml: html,
+    confirmLabel: getUIText("apply", "Apply"),
+    cancelLabel: getUIText("cancel", "Cancel"),
+  });
+  setSettingProfileDialogClass(true);
+  const ok = await promise.finally(() => setSettingProfileDialogClass(false));
+  if (selected <= 0 || !ok) return;
+
+  try {
+    const result = await postJson("/api/setting_profiles/apply", { id: profile.id, values: profile.values || {} });
+    const failed = new Set((result.result?.fails || []).map((entry) => String(entry?.key || "")).filter(Boolean));
+    const restoredValues = {};
+    (result.preview?.entries || []).forEach((entry) => {
+      if (!entry?.apply || failed.has(String(entry.key))) return;
+      restoredValues[entry.key] = entry.value;
+    });
+    if (Object.keys(restoredValues).length) {
+      window.dispatchEvent(new CustomEvent("carrot:paramsrestored", {
+        detail: { source: "setting_profile", values: restoredValues },
+      }));
+      Object.entries(restoredValues).forEach(([name, value]) => {
+        window.dispatchEvent(new CustomEvent("carrot:paramchange", {
+          detail: { name, value, source: "setting_profile" },
+        }));
+      });
+    }
+    showAppToast(getUIText("setting_profile_apply_done", "Profile applied"));
+  } catch (e) {
+    showAppToast(e?.message || getUIText("setting_profile_apply_failed", "Failed to apply profile"), { tone: "error" });
+  }
+}
+
+async function deleteSettingProfile(profile) {
+  if (!profile?.id) return;
+  const ok = await appConfirm(getUIText("setting_profile_delete_confirm", "Delete this profile?\n{name}", { name: profile.name }), {
+    title: getUIText("setting_profile_delete", "Delete Profile"),
+    confirmLabel: getUIText("delete", "Delete"),
+  });
+  if (!ok) return;
+
+  try {
+    const payload = await postJson("/api/setting_profiles/delete", { id: profile.id });
+    updateSettingProfilesFromPayload(payload);
+    CURRENT_GROUP = null;
+    renderGroups({ animateGroups: false });
+    renderSettingSubnav();
+    showSettingScreen("groups", false);
+    showAppToast(getUIText("setting_profile_deleted", "Profile deleted"));
+  } catch (e) {
+    showAppToast(e?.message || getUIText("setting_profile_save_failed", "Failed to save profile"), { tone: "error" });
+  }
+}
+
+function appendSettingProfileHeader(profile, container) {
+  const panel = document.createElement("div");
+  panel.className = "setting-profile-panel";
+
+  const titleRow = document.createElement("div");
+  titleRow.className = "setting-profile-panel__titleRow";
+  const input = document.createElement("input");
+  input.className = "setting-profile-panel__name";
+  input.type = "text";
+  input.maxLength = 40;
+  input.value = profile.name || "";
+  input.setAttribute("aria-label", getUIText("setting_profile_name", "Profile name"));
+  const saveName = document.createElement("button");
+  saveName.type = "button";
+  saveName.className = "smallBtn";
+  saveName.textContent = getUIText("save", "Save");
+  saveName.onclick = async () => {
+    const nextName = input.value.trim();
+    if (!nextName || nextName === profile.name) return;
+    try {
+      const nextProfile = await saveSettingProfile(profile.id, { name: nextName });
+      if (nextProfile) profile.name = nextProfile.name;
+      if (itemsTitle) itemsTitle.textContent = profile.name;
+      renderGroups({ animateGroups: false });
+      renderSettingSubnav();
+      showAppToast(getUIText("setting_profile_saved", "Profile saved"));
+    } catch (e) {
+      showAppToast(e?.message || getUIText("setting_profile_save_failed", "Failed to save profile"), { tone: "error" });
+    }
+  };
+  titleRow.appendChild(input);
+  titleRow.appendChild(saveName);
+
+  const meta = document.createElement("div");
+  meta.className = "setting-profile-panel__meta";
+  settingProfileMetaRows(profile).forEach(([label, value]) => {
+    const row = document.createElement("div");
+    row.className = "setting-profile-panel__metaRow";
+    row.innerHTML = `<span>${settingsDiffEscape(label)}</span><strong>${value}</strong>`;
+    meta.appendChild(row);
+  });
+
+  const actions = document.createElement("div");
+  actions.className = "setting-profile-panel__actions";
+  const applyBtn = document.createElement("button");
+  applyBtn.type = "button";
+  applyBtn.className = "smallBtn btn--filled";
+  applyBtn.textContent = getUIText("apply", "Apply");
+  applyBtn.onclick = () => applySettingProfile(profile);
+  const deleteBtn = document.createElement("button");
+  deleteBtn.type = "button";
+  deleteBtn.className = "smallBtn";
+  deleteBtn.textContent = getUIText("delete", "Delete");
+  deleteBtn.onclick = () => deleteSettingProfile(profile);
+  actions.appendChild(applyBtn);
+  actions.appendChild(deleteBtn);
+
+  panel.appendChild(titleRow);
+  panel.appendChild(meta);
+  panel.appendChild(actions);
+  container.appendChild(panel);
 }
 
 function syncSettingFabMenuState() {
@@ -959,6 +1309,12 @@ if (btnSettingFabSearch) {
   };
 }
 
+if (btnSettingFabProfileAdd) {
+  btnSettingFabProfileAdd.onclick = () => {
+    createSettingProfileFromCurrent().catch(() => {});
+  };
+}
+
 if (btnSettingFabResetDefaults) {
   btnSettingFabResetDefaults.onclick = async () => {
     closeSettingFabMenu();
@@ -1038,7 +1394,7 @@ function updateSettingSubnavLayoutState() {
 }
 
 function getSettingSubnavGroups() {
-  return getSettingGroupsForDisplay();
+  return getSettingGroupsForDisplay().filter((entry) => !isSettingProfilesDivider(entry));
 }
 
 function getSettingSubnavGroupIndex(group = CURRENT_GROUP) {
@@ -1265,6 +1621,7 @@ function renderSettingSubnav() {
       const entry = groups[index];
       button.className = "setting-subnav__tab";
       if (isSettingFavoritesGroup(entry.group)) button.classList.add("setting-subnav__tab--favorites");
+      if (isSettingProfileGroup(entry.group)) button.classList.add("setting-subnav__tab--profile");
       if (entry.group === CURRENT_GROUP) button.classList.add("is-active");
       button.dataset.group = entry.group;
       button.textContent = getSettingGroupLabel(entry.group);
@@ -1282,6 +1639,7 @@ function renderSettingSubnav() {
     const button = document.createElement("button");
     button.className = "setting-subnav__tab";
     if (isSettingFavoritesGroup(entry.group)) button.classList.add("setting-subnav__tab--favorites");
+    if (isSettingProfileGroup(entry.group)) button.classList.add("setting-subnav__tab--profile");
     if (entry.group === CURRENT_GROUP) button.classList.add("is-active");
     button.dataset.group = entry.group;
     button.textContent = getSettingGroupLabel(entry.group);
@@ -1455,6 +1813,7 @@ async function renderItems(group, options = {}) {
 
   const entries = getSettingItemEntriesForGroup(group);
   const list = entries.map((entry) => entry.item);
+  const profile = getSettingProfileByGroup(group);
   if (meta) meta.textContent = `${group} / ${list.length}`;
   const groupLabel = getSettingGroupLabel(group);
   settingTitle.textContent = (UI_STRINGS[LANG].setting || "Setting") + " - " + groupLabel;
@@ -1493,6 +1852,8 @@ async function renderItems(group, options = {}) {
     requestAnimationFrame(resetSettingItemsViewport);
     return;
   }
+
+  if (profile) appendSettingProfileHeader(profile, itemsBox);
 
   list.forEach((p, index) => {
     const name = p.name;
@@ -1590,10 +1951,22 @@ async function renderItems(group, options = {}) {
 
     async function commitSettingValue(next) {
       try {
-        await setParam(name, next);
+        if (profile) {
+          const nextValues = { ...(profile.values || {}), [name]: next };
+          const nextProfile = await saveSettingProfile(profile.id, { values: nextValues });
+          if (nextProfile) {
+            profile.values = { ...(nextProfile.values || nextValues) };
+          } else {
+            profile.values = nextValues;
+          }
+        } else {
+          await setParam(name, next);
+        }
         val.textContent = String(next);
-        cacheSettingValue(name, next, group);
-        if (originGroup !== group) cacheSettingValue(name, next, originGroup);
+        if (!profile) {
+          cacheSettingValue(name, next, group);
+          if (originGroup !== group) cacheSettingValue(name, next, originGroup);
+        }
       } catch (e) {
         showAppToast((UI_STRINGS[LANG].set_failed || "set failed: ") + e.message, { tone: "error" });
       }
