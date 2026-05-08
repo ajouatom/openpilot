@@ -13,6 +13,8 @@
 #include <unistd.h>
 
 #include <QApplication>
+#include <QCoreApplication>
+#include <QFont>
 #include <QFontDatabase>
 #include <QGridLayout>
 #include <QPainter>
@@ -66,7 +68,8 @@ static QString recoveryLabel() {
 }
 
 static QString spinnerFontFamily() {
-  int font_id = QFontDatabase::addApplicationFont("../assets/fonts/Pretendard-Medium.ttf");
+  QString font_path = QCoreApplication::applicationDirPath() + "/../assets/fonts/Pretendard-Medium.ttf";
+  int font_id = QFontDatabase::addApplicationFont(font_path);
   if (font_id < 0) return QStringLiteral("Inter");
 
   QStringList families = QFontDatabase::applicationFontFamilies(font_id);
@@ -112,10 +115,13 @@ void TrackWidget::paintEvent(QPaintEvent *event) {
 Spinner::Spinner(QWidget *parent) : QWidget(parent) {
   QGridLayout *main_layout = new QGridLayout(this);
   main_layout->setSpacing(0);
-  main_layout->setContentsMargins(200, 170, 200, 120);
+  main_layout->setContentsMargins(200, 170, 200, 70);
+
+  QString font_family = spinnerFontFamily();
 
   ipLabel = new QLabel(recoveryLabel());
   ipLabel->setObjectName("ipLabel");
+  ipLabel->setFont(QFont(font_family, 42));
   ipLabel->setAlignment(Qt::AlignCenter);
   main_layout->addWidget(ipLabel, 0, 0, Qt::AlignHCenter | Qt::AlignTop);
 
@@ -124,7 +130,8 @@ Spinner::Spinner(QWidget *parent) : QWidget(parent) {
   text = new QLabel();
   text->setObjectName("statusLabel");
   text->setFixedWidth(1000);
-  text->setFixedHeight(36);
+  text->setFixedHeight(34);
+  text->setFont(QFont(font_family, 26));
   text->setWordWrap(false);
   text->setVisible(false);
   text->setAlignment(Qt::AlignCenter);
@@ -151,7 +158,6 @@ Spinner::Spinner(QWidget *parent) : QWidget(parent) {
   QObject::connect(ipTimer, &QTimer::timeout, this, &Spinner::refreshIPLabel);
   ipTimer->start(5000);
 
-  QString font_family = spinnerFontFamily();
   setStyleSheet(QString(R"(
     Spinner {
       background-color: black;
@@ -163,12 +169,12 @@ Spinner::Spinner(QWidget *parent) : QWidget(parent) {
     }
     QLabel#ipLabel {
       color: white;
-      font-size: 50px;
+      font-size: 42px;
       font-family: "%1";
     }
     QLabel#statusLabel {
       color: #cfcfcf;
-      font-size: 28px;
+      font-size: 26px;
       font-family: "%1";
     }
     QProgressBar {
