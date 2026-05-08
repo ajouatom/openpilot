@@ -47,7 +47,7 @@
 
   .page-fab-layer--setting .setting-fab-menu {
     --fab-size: 68px;
-    top: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height-desktop) - env(safe-area-inset-bottom, 0px) - var(--fab-size) - 12px - var(--sp-lg));
+    bottom: calc(var(--nav-bar-height-desktop) + env(safe-area-inset-bottom, 0px) + 12px + var(--sp-lg));
   }
 
 }
@@ -149,7 +149,8 @@
 
   .page-fab-layer--setting .setting-fab-menu {
     --fab-size: 56px;
-    top: calc(var(--app-vv-height, 100dvh) - env(safe-area-inset-bottom, 0px) - var(--fab-size) - 18px);
+    right: max(18px, env(safe-area-inset-right, 0px));
+    bottom: calc(18px + env(safe-area-inset-bottom, 0px));
   }
 
 }

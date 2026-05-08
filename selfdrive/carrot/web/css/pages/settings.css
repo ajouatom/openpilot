@@ -131,10 +131,10 @@
 
 .page-fab-layer--setting .setting-fab-menu {
   --fab-size: 68px;
-  position: absolute;
-  top: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px) - var(--fab-size, 68px) - 10px - var(--sp-lg));
-  right: 0;
-  z-index: 55;
+  position: fixed;
+  right: max(var(--sp-lg), env(safe-area-inset-right, 0px));
+  bottom: calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px) + 10px + var(--sp-lg));
+  z-index: 130;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -142,11 +142,13 @@
 }
 
 .setting-fab-actions {
+  position: absolute;
+  right: 0;
+  bottom: calc(var(--fab-size) + 10px);
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 10px;
-  margin-bottom: 10px;
   opacity: 0;
   transform: translateY(8px) scale(0.98);
   transform-origin: right bottom;
