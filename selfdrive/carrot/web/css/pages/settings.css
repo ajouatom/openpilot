@@ -414,12 +414,16 @@
 
 .setting-profile-section {
   --setting-profile-accent: var(--md-primary, #ffab66);
-  --setting-profile-surface: color-mix(in srgb, var(--md-surface-cont-h) 74%, var(--md-surface));
+  --setting-profile-surface: color-mix(in srgb, var(--md-surface) 96%, #000);
   --setting-profile-divider: color-mix(in srgb, var(--setting-profile-accent) 34%, var(--md-outline-var));
   min-width: 0;
   display: grid;
-  border-top: 1px solid color-mix(in srgb, var(--md-outline-var) 36%, transparent);
+  border-top: 0;
   scroll-margin-top: calc(var(--setting-profile-section-sticky-top, 64px) + 8px);
+}
+
+.setting-profile-section + .setting-profile-section {
+  border-top: 1px solid color-mix(in srgb, var(--md-outline-var) 42%, transparent);
 }
 
 .setting-profile-section__header {
@@ -436,9 +440,7 @@
   border: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 42%, transparent);
   background: var(--setting-profile-surface);
-  box-shadow:
-    0 -1px 0 var(--setting-profile-surface),
-    0 1px 0 color-mix(in srgb, var(--md-outline-var) 16%, transparent);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--md-outline-var) 18%, transparent);
   color: var(--md-on-surface);
   font: inherit;
   font-size: 13px;
@@ -929,6 +931,10 @@
 
   .page--setting #settingScreenItems.setting-screen-items--profile #items {
     padding-top: 0;
+  }
+
+  .page--setting #settingScreenItems.setting-screen-items--profile .setting-profile-panel + .setting-profile-section {
+    margin-top: 0;
   }
 
   .page--setting #settingScreenItems.setting-screen-items--profile .setting-profile-panel {
