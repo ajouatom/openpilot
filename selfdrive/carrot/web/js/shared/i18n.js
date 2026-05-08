@@ -287,8 +287,18 @@ function renderUIText() {
     settingSearchMeta.textContent = s.setting_search_idle || "";
   }
   if (btnSettingSearch) {
-    btnSettingSearch.setAttribute("aria-label", s.setting_search || "Search Settings");
-    btnSettingSearch.title = s.setting_search || "Search Settings";
+    btnSettingSearch.setAttribute("aria-label", s.setting_action_menu || "Setting actions");
+    btnSettingSearch.title = s.setting_action_menu || "Setting actions";
+  }
+  if (settingFabSearchLabel) settingFabSearchLabel.textContent = s.setting_search || "Search Settings";
+  if (btnSettingFabSearch) {
+    btnSettingFabSearch.setAttribute("aria-label", s.setting_search || "Search Settings");
+    btnSettingFabSearch.title = s.setting_search || "Search Settings";
+  }
+  if (settingFabProfileAddLabel) settingFabProfileAddLabel.textContent = s.profile_add || "Add Profile";
+  if (btnSettingFabProfileAdd) {
+    btnSettingFabProfileAdd.setAttribute("aria-label", s.profile_add || "Add Profile");
+    btnSettingFabProfileAdd.title = s.profile_add || "Add Profile";
   }
   if (btnSettingSearchSubmit) {
     btnSettingSearchSubmit.setAttribute("aria-label", s.setting_search || "Search Settings");

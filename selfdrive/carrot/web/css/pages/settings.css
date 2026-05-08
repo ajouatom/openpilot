@@ -129,6 +129,92 @@
   -webkit-backdrop-filter: blur(6px) saturate(108%);
 }
 
+.page-fab-layer--setting .setting-fab-menu {
+  --fab-size: 68px;
+  position: absolute;
+  top: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px) - var(--fab-size, 68px) - 10px - var(--sp-lg));
+  right: 0;
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  pointer-events: auto;
+}
+
+.setting-fab-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  margin-bottom: 10px;
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
+  transform-origin: right bottom;
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  pointer-events: none;
+}
+
+.setting-fab-actions[hidden] {
+  display: none !important;
+}
+
+.setting-fab-menu.is-open .setting-fab-actions {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+  visibility: visible;
+}
+
+.setting-fab-action {
+  min-width: 136px;
+  min-height: 44px;
+  display: inline-grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 84%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-surface-cont) 92%, #000);
+  color: var(--md-on-surface);
+  font-size: var(--fs-body-sm);
+  font-weight: 800;
+  line-height: 1;
+  text-align: left;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.26);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.setting-fab-action svg {
+  width: 20px;
+  height: 20px;
+  color: var(--md-primary);
+}
+
+.setting-fab-action span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setting-fab-action:active {
+  background: color-mix(in srgb, var(--md-primary) 12%, var(--md-surface-cont));
+}
+
+.setting-fab-action:disabled,
+.setting-fab-action[aria-disabled="true"] {
+  color: color-mix(in srgb, var(--md-on-surface-var) 64%, transparent);
+  cursor: default;
+  opacity: 0.72;
+}
+
+.setting-fab-action:disabled svg,
+.setting-fab-action[aria-disabled="true"] svg {
+  color: color-mix(in srgb, var(--md-on-surface-var) 72%, transparent);
+}
+
 .setting-search-panel {
   --setting-search-form-width: clamp(320px, 42vw, 520px);
   --setting-search-results-width: min(72vw, 760px);

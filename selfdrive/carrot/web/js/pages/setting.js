@@ -541,6 +541,7 @@ let settingFocusClearTimer = null;
 let settingSearchDebounceTimer = null;
 let settingSearchEntries = [];
 const settingPageRoot = document.getElementById("pageSetting");
+let settingFabMenuOpen = false;
 
 function isCompactLandscapeMode() {
   return window.matchMedia("(orientation: landscape)").matches;
@@ -587,9 +588,32 @@ function syncSettingSearchFabState() {
   const isOpen = Boolean(settingSearchPanel && !settingSearchPanel.hidden);
   if (settingPageRoot) settingPageRoot.classList.toggle("setting-search-open", isOpen);
   if (btnSettingSearch) {
-    btnSettingSearch.classList.toggle("active", isOpen);
-    btnSettingSearch.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    btnSettingSearch.classList.toggle("active", isOpen || settingFabMenuOpen);
+    btnSettingSearch.setAttribute("aria-expanded", settingFabMenuOpen ? "true" : "false");
   }
+}
+
+function syncSettingFabMenuState() {
+  if (settingFabMenu) settingFabMenu.classList.toggle("is-open", settingFabMenuOpen);
+  if (settingFabActions) {
+    settingFabActions.hidden = !settingFabMenuOpen;
+    settingFabActions.setAttribute("aria-hidden", settingFabMenuOpen ? "false" : "true");
+  }
+  if (btnSettingSearch) {
+    btnSettingSearch.classList.toggle("active", settingFabMenuOpen || Boolean(settingSearchPanel && !settingSearchPanel.hidden));
+    btnSettingSearch.setAttribute("aria-expanded", settingFabMenuOpen ? "true" : "false");
+  }
+}
+
+function closeSettingFabMenu() {
+  if (!settingFabMenuOpen) return;
+  settingFabMenuOpen = false;
+  syncSettingFabMenuState();
+}
+
+function toggleSettingFabMenu() {
+  settingFabMenuOpen = !settingFabMenuOpen;
+  syncSettingFabMenuState();
 }
 
 function mountSettingSearchOverlay() {
@@ -885,6 +909,7 @@ function renderSettingSearchResults(query = "") {
 async function openSettingSearchPanel(options = {}) {
   const pushHistory = options.pushHistory !== false;
   if (CURRENT_PAGE !== "setting") return;
+  closeSettingFabMenu();
   if (!SETTINGS) {
     try {
       await loadSettings();
@@ -924,7 +949,14 @@ function toggleSettingSearchPanel() {
 }
 
 if (btnSettingSearch) {
-  btnSettingSearch.onclick = () => toggleSettingSearchPanel();
+  btnSettingSearch.onclick = () => toggleSettingFabMenu();
+}
+
+if (btnSettingFabSearch) {
+  btnSettingFabSearch.onclick = () => {
+    closeSettingFabMenu();
+    openSettingSearchPanel().catch(() => {});
+  };
 }
 
 if (settingSearchBackdrop) {
@@ -952,7 +984,21 @@ if (settingSearchInput) {
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && settingSearchPanel && !settingSearchPanel.hidden) {
     closeSettingSearchPanel({ syncHistory: true });
+    return;
   }
+  if (e.key === "Escape" && settingFabMenuOpen) {
+    closeSettingFabMenu();
+  }
+});
+
+document.addEventListener("pointerdown", (e) => {
+  if (!settingFabMenuOpen || !settingFabMenu) return;
+  if (settingFabMenu.contains(e.target)) return;
+  closeSettingFabMenu();
+});
+
+window.addEventListener("carrot:pagechange", (event) => {
+  if (event?.detail?.page !== "setting") closeSettingFabMenu();
 });
 
 function updateSettingSubnavLayoutState() {
@@ -1540,6 +1586,10 @@ async function renderItems(group, options = {}) {
           title: getUIText("setting_value_title", "Edit value"),
           defaultValue: val.textContent,
           placeholder: String(p.default),
+          confirmLabel: getUIText("ok", "OK"),
+          showCancel: false,
+          defaultActionLabel: getUIText("default_value", "Default"),
+          defaultActionValue: String(p.default),
         }
       );
       if (input === null) return;
