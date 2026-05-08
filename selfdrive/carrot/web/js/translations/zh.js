@@ -268,7 +268,7 @@ window.CarrotTranslations.register("zh", {
     setting_action_menu: "设置操作",
     setting_search: "设置搜索",
     profile_add: "添加配置",
-    setting_reset_defaults: "重置为默认值",
+    setting_reset_defaults: "重置设置",
     setting_reset_defaults_confirm: "将全部设置重置为默认值？\n设备可能会重启以应用更改。",
     setting_reset_defaults_done: "已请求重置为默认值",
     setting_search_placeholder: "搜索名称、描述、分组",

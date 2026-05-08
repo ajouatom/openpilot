@@ -966,7 +966,7 @@ if (btnSettingFabResetDefaults) {
       "setting_reset_defaults_confirm",
       "Reset all settings to defaults?\nThe device may restart to apply changes."
     ), {
-      title: getUIText("setting_reset_defaults", "Reset to Defaults"),
+      title: getUIText("setting_reset_defaults", "Reset Settings"),
       confirmLabel: getUIText("ok", "OK"),
     });
     if (!ok) return;

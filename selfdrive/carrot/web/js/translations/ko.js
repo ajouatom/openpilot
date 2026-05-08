@@ -268,7 +268,7 @@ window.CarrotTranslations.register("ko", {
     setting_action_menu: "설정 작업",
     setting_search: "설정 검색",
     profile_add: "프로필 추가",
-    setting_reset_defaults: "기본값으로 초기화",
+    setting_reset_defaults: "설정 초기화",
     setting_reset_defaults_confirm: "전체 설정을 기본값으로 초기화할까요?\n적용을 위해 재시작될 수 있습니다.",
     setting_reset_defaults_done: "기본값 초기화가 요청되었습니다",
     setting_search_placeholder: "이름, 설명, 그룹 검색",

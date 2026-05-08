@@ -168,13 +168,13 @@
 }
 
 .setting-fab-action {
-  min-width: 136px;
+  min-width: 152px;
   min-height: 44px;
   display: inline-grid;
   grid-template-columns: 20px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
-  padding: 0 14px;
+  padding: 0 16px;
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 84%, transparent);
   border-radius: 999px;
   background: color-mix(in srgb, var(--md-surface-cont) 92%, #000);

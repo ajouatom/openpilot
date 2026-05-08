@@ -268,7 +268,7 @@ window.CarrotTranslations.register("fr", {
     setting_action_menu: "Actions réglages",
     setting_search: "Rechercher réglages",
     profile_add: "Ajouter profil",
-    setting_reset_defaults: "Réinitialiser par défaut",
+    setting_reset_defaults: "Réinit. réglages",
     setting_reset_defaults_confirm: "Réinitialiser tous les réglages par défaut ?\nL'appareil peut redémarrer pour appliquer les changements.",
     setting_reset_defaults_done: "Réinitialisation par défaut demandée",
     setting_search_placeholder: "Nom, description, groupe",

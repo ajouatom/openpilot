@@ -270,7 +270,7 @@ window.CarrotTranslations.register("en", {
     setting_action_menu: "Setting actions",
     setting_search: "Search Settings",
     profile_add: "Add Profile",
-    setting_reset_defaults: "Reset to Defaults",
+    setting_reset_defaults: "Reset Settings",
     setting_reset_defaults_confirm: "Reset all settings to defaults?\nThe device may restart to apply changes.",
     setting_reset_defaults_done: "Default reset requested",
     setting_search_placeholder: "Search name, description, group",

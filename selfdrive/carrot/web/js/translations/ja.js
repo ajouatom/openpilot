@@ -268,7 +268,7 @@ window.CarrotTranslations.register("ja", {
     setting_action_menu: "設定アクション",
     setting_search: "設定検索",
     profile_add: "プロファイル追加",
-    setting_reset_defaults: "デフォルトに初期化",
+    setting_reset_defaults: "設定を初期化",
     setting_reset_defaults_confirm: "すべての設定をデフォルトに初期化しますか？\n適用のため再起動する場合があります。",
     setting_reset_defaults_done: "デフォルト初期化を要求しました",
     setting_search_placeholder: "名前、説明、グループを検索",
