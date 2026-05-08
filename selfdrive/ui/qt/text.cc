@@ -1,8 +1,12 @@
 #include <QApplication>
+#include <QCoreApplication>
+#include <QFont>
+#include <QFontDatabase>
 #include <QGridLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QScrollBar>
+#include <QStringList>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -60,11 +64,22 @@ static QString recoveryLabel() {
   return ip + QStringLiteral(":6999");
 }
 
+static QString textWindowFontFamily() {
+  QString font_path = QCoreApplication::applicationDirPath() + "/../assets/fonts/Pretendard-Medium.ttf";
+  int font_id = QFontDatabase::addApplicationFont(font_path);
+  if (font_id < 0) return QStringLiteral("Inter");
+
+  QStringList families = QFontDatabase::applicationFontFamilies(font_id);
+  return families.isEmpty() ? QStringLiteral("Inter") : families.first();
+}
+
 int main(int argc, char *argv[]) {
   initApp(argc, argv);
   QApplication a(argc, argv);
   QWidget window;
   setMainWindow(&window);
+
+  QString font_family = textWindowFontFamily();
 
   QGridLayout *main_layout = new QGridLayout(&window);
   main_layout->setMargin(50);
@@ -72,6 +87,7 @@ int main(int argc, char *argv[]) {
 
   QLabel *ipLabel = new QLabel(recoveryLabel());
   ipLabel->setObjectName("ipLabel");
+  ipLabel->setFont(QFont(font_family, 42));
   ipLabel->setAlignment(Qt::AlignCenter);
   main_layout->addWidget(ipLabel, 0, 0, Qt::AlignHCenter | Qt::AlignTop);
 
@@ -110,7 +126,7 @@ int main(int argc, char *argv[]) {
   main_layout->setRowStretch(0, 0);
   main_layout->setRowStretch(1, 1);
 
-  window.setStyleSheet(R"(
+  window.setStyleSheet(QString(R"(
     * {
       outline: none;
       color: white;
@@ -119,8 +135,8 @@ int main(int argc, char *argv[]) {
     }
     QLabel#ipLabel {
       color: white;
-      font-size: 50px;
-      font-family: monospace;
+      font-size: 42px;
+      font-family: "%1";
     }
     QPushButton {
       padding: 50px;
@@ -130,7 +146,7 @@ int main(int argc, char *argv[]) {
       border-radius: 20px;
       margin-right: 40px;
     }
-  )");
+  )").arg(font_family));
 
   return a.exec();
 }
