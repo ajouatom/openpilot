@@ -414,7 +414,7 @@
 
 .setting-profile-section {
   --setting-profile-accent: var(--md-primary, #ffab66);
-  --setting-profile-surface: color-mix(in srgb, var(--md-surface-cont-h) 78%, var(--md-surface));
+  --setting-profile-surface: color-mix(in srgb, var(--md-surface-cont-h) 74%, var(--md-surface));
   --setting-profile-divider: color-mix(in srgb, var(--setting-profile-accent) 34%, var(--md-outline-var));
   min-width: 0;
   display: grid;
@@ -519,14 +519,14 @@
 .setting-profile-panel {
   --setting-profile-accent: var(--md-primary, #ffab66);
   --setting-profile-ink: var(--md-on-surface);
-  --setting-profile-surface: var(--md-surface-cont-h);
+  --setting-profile-surface: color-mix(in srgb, var(--md-surface-cont-h) 74%, var(--md-surface));
   --setting-profile-divider: color-mix(in srgb, var(--md-outline-var) 50%, transparent);
   --setting-profile-section-sticky-top: var(--setting-profile-toolbar-height);
   position: sticky;
   top: var(--setting-profile-panel-sticky-top, 0px);
   z-index: 5;
   min-width: 0;
-  min-height: var(--setting-profile-toolbar-height);
+  min-height: 56px;
   margin-bottom: 0;
   padding: 8px 0 8px 14px;
   border: 1px solid var(--setting-profile-divider);
@@ -542,14 +542,7 @@
 }
 
 .setting-profile-panel::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 11px;
-  bottom: 11px;
-  width: 3px;
-  border-radius: 999px;
-  background: var(--setting-profile-accent);
+  display: none;
 }
 
 .setting-profile-panel__titleRow {
@@ -568,7 +561,7 @@
 
 .setting-profile-panel__name {
   min-width: 0;
-  height: 48px;
+  height: 42px;
   padding: 0 2px 1px 0;
   border: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 58%, transparent);
@@ -621,9 +614,9 @@
 }
 
 .setting-toolbar-action {
-  min-width: 58px;
-  min-height: 48px;
-  padding: 0 16px;
+  min-width: 56px;
+  min-height: 42px;
+  padding: 0 14px;
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
   border-radius: 8px;
   background: var(--md-surface-cont);

@@ -1475,7 +1475,11 @@ function updateSettingSubnavLayoutState() {
 }
 
 function getSettingSubnavGroups() {
-  return getSettingGroupsForDisplay().filter((entry) => !isSettingProfilesDivider(entry));
+  return getSettingGroupsForDisplay().filter((entry) =>
+    !isSettingProfilesDivider(entry) &&
+    !isSettingFavoritesGroup(entry.group) &&
+    !isSettingProfileGroup(entry.group)
+  );
 }
 
 function getSettingSubnavGroupIndex(group = CURRENT_GROUP) {
