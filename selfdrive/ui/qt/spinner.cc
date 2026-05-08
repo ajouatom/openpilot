@@ -18,6 +18,7 @@
 #include <QString>
 #include <QTimer>
 #include <QTransform>
+#include <QVBoxLayout>
 
 #include "system/hardware/hw.h"
 #include "selfdrive/ui/qt/qt_window.h"
@@ -111,23 +112,29 @@ Spinner::Spinner(QWidget *parent) : QWidget(parent) {
   main_layout->addWidget(new TrackWidget(this), 1, 0, Qt::AlignHCenter | Qt::AlignVCenter);
 
   text = new QLabel();
+  text->setObjectName("statusLabel");
   text->setFixedWidth(1000);
+  text->setFixedHeight(42);
   text->setWordWrap(false);
   text->setVisible(false);
   text->setAlignment(Qt::AlignCenter);
-  main_layout->addWidget(text, 2, 0, Qt::AlignHCenter | Qt::AlignBottom);
 
   progress_bar = new QProgressBar();
   progress_bar->setRange(5, 100);
   progress_bar->setTextVisible(false);
   progress_bar->setVisible(false);
   progress_bar->setFixedHeight(20);
-  main_layout->addWidget(progress_bar, 3, 0, Qt::AlignHCenter);
+
+  QVBoxLayout *progress_layout = new QVBoxLayout();
+  progress_layout->setContentsMargins(0, 0, 0, 0);
+  progress_layout->setSpacing(8);
+  progress_layout->addWidget(text, 0, Qt::AlignHCenter);
+  progress_layout->addWidget(progress_bar, 0, Qt::AlignHCenter);
+  main_layout->addLayout(progress_layout, 2, 0, Qt::AlignHCenter);
 
   main_layout->setRowStretch(0, 0);
   main_layout->setRowStretch(1, 1);
   main_layout->setRowStretch(2, 0);
-  main_layout->setRowStretch(3, 0);
 
   QTimer *ipTimer = new QTimer(this);
   QObject::connect(ipTimer, &QTimer::timeout, this, &Spinner::refreshIPLabel);
@@ -146,6 +153,10 @@ Spinner::Spinner(QWidget *parent) : QWidget(parent) {
       color: white;
       font-size: 50px;
       font-family: monospace;
+    }
+    QLabel#statusLabel {
+      color: #cfcfcf;
+      font-size: 32px;
     }
     QProgressBar {
       background-color: #373737;
