@@ -384,7 +384,9 @@ let toolsLanguageMenuOpen = false;
 
 function getAvailableWebLanguages() {
   const registry = window.CarrotTranslations || {};
-  const order = Array.isArray(registry.order) ? registry.order : ["ko", "en", "zh"];
+  const allowed = ["ko", "en", "zh"];
+  const rawOrder = Array.isArray(registry.order) ? registry.order : allowed;
+  const order = [...new Set([...rawOrder, ...allowed])].filter((lang) => allowed.includes(lang));
   return order
     .map((lang) => {
       const pack = registry.getPack?.(lang) || registry.packs?.[lang] || {};

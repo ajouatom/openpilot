@@ -921,8 +921,7 @@ async function deleteSettingProfile(profile) {
 
 function appendSettingProfileHeader(profile, container) {
   const panel = document.createElement("div");
-  panel.className = "setting-profile-panel ui-stagger-item";
-  panel.style.setProperty("--i", "0");
+  panel.className = "setting-profile-panel";
 
   const titleRow = document.createElement("div");
   titleRow.className = "setting-profile-panel__titleRow";

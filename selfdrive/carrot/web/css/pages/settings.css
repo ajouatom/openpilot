@@ -402,30 +402,33 @@
 }
 
 .setting-profile-section {
+  --setting-profile-accent: #ffab66;
+  --setting-profile-surface: color-mix(in srgb, var(--md-surface) 96%, #020407);
+  --setting-profile-divider: color-mix(in srgb, var(--setting-profile-accent) 34%, var(--md-outline-var));
   min-width: 0;
   display: grid;
-  border-top: 1px solid color-mix(in srgb, var(--md-outline-var) 42%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--md-outline-var) 36%, transparent);
   scroll-margin-top: calc(var(--setting-profile-section-sticky-top, 64px) + 8px);
 }
 
 .setting-profile-section__header {
   position: sticky;
-  top: var(--setting-profile-section-sticky-top, 58px);
+  top: var(--setting-profile-section-sticky-top, 60px);
   z-index: 4;
   min-width: 0;
-  min-height: 48px;
+  min-height: 46px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto 18px;
   align-items: center;
   gap: 10px;
-  padding: 12px 0 11px;
+  padding: 11px 0 10px;
   border: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 24%, transparent);
-  background: #05080b;
+  border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 28%, transparent);
+  background: var(--setting-profile-surface);
   box-shadow:
-    0 -1px 0 #05080b,
-    0 1px 0 color-mix(in srgb, var(--md-outline-var) 18%, transparent);
-  color: color-mix(in srgb, var(--md-on-surface) 88%, var(--md-primary));
+    0 -1px 0 var(--setting-profile-surface),
+    0 1px 0 color-mix(in srgb, var(--md-outline-var) 16%, transparent);
+  color: color-mix(in srgb, var(--md-on-surface) 90%, var(--setting-profile-accent));
   font: inherit;
   font-size: 13px;
   font-weight: 900;
@@ -437,8 +440,8 @@
 
 .setting-profile-section__header:hover,
 .setting-profile-section__header:focus-visible {
-  background: color-mix(in srgb, var(--md-primary) 8%, #05080b);
-  color: var(--md-primary);
+  background: color-mix(in srgb, var(--setting-profile-accent) 7%, var(--setting-profile-surface));
+  color: var(--setting-profile-accent);
   outline: none;
 }
 
@@ -452,7 +455,7 @@
 .setting-profile-section__count {
   min-width: 28px;
   padding: 2px 0;
-  color: #ffab66;
+  color: var(--setting-profile-accent);
   font-size: 12px;
   font-weight: 900;
   text-align: right;
@@ -461,7 +464,7 @@
 .setting-profile-section__chevron {
   width: 18px;
   height: 18px;
-  color: color-mix(in srgb, var(--md-primary) 84%, var(--md-on-surface));
+  color: color-mix(in srgb, var(--setting-profile-accent) 84%, var(--md-on-surface));
   fill: none;
   stroke: currentColor;
   stroke-width: 2.4;
@@ -487,25 +490,43 @@
 }
 
 .setting-profile-panel {
-  --setting-profile-toolbar-height: 64px;
+  --setting-profile-accent: #ffab66;
+  --setting-profile-surface: color-mix(in srgb, var(--md-surface) 96%, #020407);
+  --setting-profile-divider: color-mix(in srgb, var(--setting-profile-accent) 42%, var(--md-outline-var));
+  --setting-profile-toolbar-height: 60px;
   --setting-profile-section-sticky-top: var(--setting-profile-toolbar-height);
   position: sticky;
   top: var(--setting-profile-panel-sticky-top, 0px);
   z-index: 5;
   min-width: 0;
+  min-height: var(--setting-profile-toolbar-height);
   margin-bottom: 0;
-  padding: 9px 0 11px;
-  border-top: 3px solid #ffab66;
-  border-bottom: 1px solid color-mix(in srgb, #ffab66 58%, var(--md-outline-var));
-  background: #05080b;
+  padding: 8px 0 8px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--setting-profile-divider);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--setting-profile-accent) 9%, transparent), transparent 44%),
+    var(--setting-profile-surface);
   box-shadow:
-    0 -12px 0 12px #05080b,
-    0 10px 18px rgba(0, 0, 0, 0.26),
-    inset 0 -1px 0 rgba(255, 171, 102, 0.08);
+    0 6px 14px rgba(0, 0, 0, 0.22),
+    inset 0 -1px 0 color-mix(in srgb, var(--setting-profile-accent) 14%, transparent);
   animation: setting-profile-toolbar-enter 0.2s cubic-bezier(.2, 0, 0, 1) both;
 }
 
+.setting-profile-panel::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 11px;
+  bottom: 11px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--setting-profile-accent);
+}
+
 .setting-profile-panel__titleRow {
+  position: relative;
+  z-index: 1;
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(104px, 1fr) repeat(3, minmax(48px, auto));
@@ -519,10 +540,10 @@
 
 .setting-profile-panel__name {
   min-width: 0;
-  height: 40px;
+  height: 44px;
   padding: 0 2px 1px 0;
   border: 0;
-  border-bottom: 1px solid color-mix(in srgb, #ffab66 58%, var(--md-outline-var));
+  border-bottom: 1px solid color-mix(in srgb, var(--setting-profile-accent) 54%, var(--md-outline-var));
   border-radius: 0;
   background: transparent;
   color: var(--md-on-surface);
@@ -531,7 +552,7 @@
 }
 
 .setting-profile-panel__name:focus {
-  border-bottom-color: color-mix(in srgb, var(--md-primary) 82%, var(--md-outline-var));
+  border-bottom-color: color-mix(in srgb, var(--setting-profile-accent) 88%, var(--md-outline-var));
   outline: none;
 }
 
@@ -573,11 +594,11 @@
 
 .setting-toolbar-action {
   min-width: 48px;
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 12px;
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 54%, transparent);
   border-radius: 999px;
-  background: color-mix(in srgb, #101720 90%, #000);
+  background: color-mix(in srgb, var(--md-surface-cont-h) 90%, #000);
   color: var(--md-on-surface);
   cursor: pointer;
   font: inherit;
@@ -589,8 +610,8 @@
 
 .setting-toolbar-action:hover,
 .setting-toolbar-action:focus-visible {
-  border-color: color-mix(in srgb, #ffab66 58%, var(--md-outline-var));
-  background: color-mix(in srgb, #ffab66 12%, #101720);
+  border-color: color-mix(in srgb, var(--setting-profile-accent) 58%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--setting-profile-accent) 12%, var(--md-surface-cont-h));
   outline: none;
 }
 
@@ -599,8 +620,8 @@
 }
 
 .setting-toolbar-action--primary {
-  border-color: #ffab66;
-  background: #ffab66;
+  border-color: var(--setting-profile-accent);
+  background: var(--setting-profile-accent);
   color: #111;
 }
 
@@ -611,11 +632,9 @@
 @keyframes setting-profile-toolbar-enter {
   from {
     opacity: 0;
-    transform: translateY(-8px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -627,6 +646,19 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .setting-profile-panel,
+  .setting-profile-section__body:not([hidden]) {
+    animation: none;
+  }
+
+  .setting-profile-section__header,
+  .setting-profile-section__chevron,
+  .setting-toolbar-action {
+    transition: none;
   }
 }
 
@@ -868,8 +900,9 @@
   }
 
   .page--setting #settingScreenItems.setting-screen-items--profile {
+    padding-top: var(--setting-fixed-subnav-height, 174px);
     --setting-profile-panel-sticky-top: var(--setting-fixed-subnav-height, 174px);
-    --setting-profile-section-sticky-top: calc(var(--setting-fixed-subnav-height, 174px) + var(--setting-profile-toolbar-height, 64px));
+    --setting-profile-section-sticky-top: calc(var(--setting-fixed-subnav-height, 174px) + var(--setting-profile-toolbar-height, 60px));
   }
 
   .page--setting #settingScreenItems.setting-screen-items--profile #items {
@@ -879,8 +912,12 @@
   .page--setting #settingScreenItems.setting-screen-items--profile .setting-profile-panel {
     margin-left: calc(-1 * var(--sp-lg));
     margin-right: calc(-1 * var(--sp-lg));
-    padding-left: var(--sp-lg);
+    padding-left: calc(var(--sp-lg) + 14px);
     padding-right: var(--sp-lg);
+  }
+
+  .page--setting #settingScreenItems.setting-screen-items--profile .setting-profile-panel::before {
+    left: var(--sp-lg);
   }
 
   .page--setting #settingScreenItems.setting-screen-items--profile .setting-profile-panel__titleRow {

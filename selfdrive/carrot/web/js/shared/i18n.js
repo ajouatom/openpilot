@@ -371,7 +371,9 @@ async function syncWebLanguageFromDeviceDefault() {
 }
 
 function toggleLang() {
-  const order = (TRANSLATION_REGISTRY.order || ["en", "ko", "zh"]).filter((lang) => UI_STRINGS[lang]);
+  const allowed = ["en", "ko", "zh"];
+  const rawOrder = Array.isArray(TRANSLATION_REGISTRY.order) ? TRANSLATION_REGISTRY.order : allowed;
+  const order = [...new Set([...rawOrder, ...allowed])].filter((lang) => allowed.includes(lang) && UI_STRINGS[lang]);
   const currentIndex = Math.max(0, order.indexOf(LANG));
   const next = order[(currentIndex + 1) % order.length] || "en";
   setWebLanguage(next);
