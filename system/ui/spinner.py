@@ -22,8 +22,8 @@ if gui_app.big_ui():
   LINE_HEIGHT = 104
   IP_FONT_SIZE = 40
   IP_TOP_MARGIN = 36
-  STATUS_FONT_SIZE = 42
-  STATUS_LINE_MARGIN = 28
+  STATUS_FONT_SIZE = 34
+  STATUS_LINE_MARGIN = 14
 else:
   PROGRESS_BAR_WIDTH = 268
   PROGRESS_BAR_HEIGHT = 10
@@ -35,8 +35,8 @@ else:
   LINE_HEIGHT = 32
   IP_FONT_SIZE = 18
   IP_TOP_MARGIN = 12
-  STATUS_FONT_SIZE = 16
-  STATUS_LINE_MARGIN = 8
+  STATUS_FONT_SIZE = 14
+  STATUS_LINE_MARGIN = 4
 DEGREES_PER_SECOND = 360.0  # one full rotation per second
 RECOVERY_PORT = 6999
 DARKGRAY = (55, 55, 55, 255)
@@ -133,7 +133,7 @@ class Spinner(Widget):
         status_font = gui_app.font(FontWeight.PRETENDARD)
         status_scaled_size = STATUS_FONT_SIZE * FONT_SCALE
         status_size = rl.measure_text_ex(status_font, status_line, status_scaled_size, 0.0)
-        status_y = y_pos + PROGRESS_BAR_HEIGHT + STATUS_LINE_MARGIN
+        status_y = y_pos - STATUS_LINE_MARGIN - status_size.y
         draw_text_ex = getattr(rl, "_orig_draw_text_ex", rl.draw_text_ex)
         draw_text_ex(status_font, status_line, rl.Vector2(round(center.x - status_size.x / 2), status_y),
                      status_scaled_size, 0.0, rl.LIGHTGRAY)
