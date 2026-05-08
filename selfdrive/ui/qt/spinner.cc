@@ -13,9 +13,11 @@
 #include <unistd.h>
 
 #include <QApplication>
+#include <QFontDatabase>
 #include <QGridLayout>
 #include <QPainter>
 #include <QString>
+#include <QStringList>
 #include <QTimer>
 #include <QTransform>
 #include <QVBoxLayout>
@@ -63,6 +65,14 @@ static QString recoveryLabel() {
   return ip + QStringLiteral(":6999");
 }
 
+static QString spinnerFontFamily() {
+  int font_id = QFontDatabase::addApplicationFont("../assets/fonts/Pretendard-Medium.ttf");
+  if (font_id < 0) return QStringLiteral("Inter");
+
+  QStringList families = QFontDatabase::applicationFontFamilies(font_id);
+  return families.isEmpty() ? QStringLiteral("Inter") : families.first();
+}
+
 TrackWidget::TrackWidget(QWidget *parent) : QWidget(parent) {
   setAttribute(Qt::WA_OpaquePaintEvent);
   setFixedSize(spinner_size);
@@ -102,7 +112,7 @@ void TrackWidget::paintEvent(QPaintEvent *event) {
 Spinner::Spinner(QWidget *parent) : QWidget(parent) {
   QGridLayout *main_layout = new QGridLayout(this);
   main_layout->setSpacing(0);
-  main_layout->setMargin(200);
+  main_layout->setContentsMargins(200, 170, 200, 120);
 
   ipLabel = new QLabel(recoveryLabel());
   ipLabel->setObjectName("ipLabel");
@@ -114,7 +124,7 @@ Spinner::Spinner(QWidget *parent) : QWidget(parent) {
   text = new QLabel();
   text->setObjectName("statusLabel");
   text->setFixedWidth(1000);
-  text->setFixedHeight(42);
+  text->setFixedHeight(36);
   text->setWordWrap(false);
   text->setVisible(false);
   text->setAlignment(Qt::AlignCenter);
@@ -123,11 +133,12 @@ Spinner::Spinner(QWidget *parent) : QWidget(parent) {
   progress_bar->setRange(5, 100);
   progress_bar->setTextVisible(false);
   progress_bar->setVisible(false);
+  progress_bar->setFixedWidth(1000);
   progress_bar->setFixedHeight(20);
 
   QVBoxLayout *progress_layout = new QVBoxLayout();
   progress_layout->setContentsMargins(0, 0, 0, 0);
-  progress_layout->setSpacing(8);
+  progress_layout->setSpacing(6);
   progress_layout->addWidget(text, 0, Qt::AlignHCenter);
   progress_layout->addWidget(progress_bar, 0, Qt::AlignHCenter);
   main_layout->addLayout(progress_layout, 2, 0, Qt::AlignHCenter);
@@ -140,7 +151,8 @@ Spinner::Spinner(QWidget *parent) : QWidget(parent) {
   QObject::connect(ipTimer, &QTimer::timeout, this, &Spinner::refreshIPLabel);
   ipTimer->start(5000);
 
-  setStyleSheet(R"(
+  QString font_family = spinnerFontFamily();
+  setStyleSheet(QString(R"(
     Spinner {
       background-color: black;
     }
@@ -152,11 +164,12 @@ Spinner::Spinner(QWidget *parent) : QWidget(parent) {
     QLabel#ipLabel {
       color: white;
       font-size: 50px;
-      font-family: monospace;
+      font-family: "%1";
     }
     QLabel#statusLabel {
       color: #cfcfcf;
-      font-size: 32px;
+      font-size: 28px;
+      font-family: "%1";
     }
     QProgressBar {
       background-color: #373737;
@@ -168,7 +181,7 @@ Spinner::Spinner(QWidget *parent) : QWidget(parent) {
       border-radius: 10px;
       background-color: white;
     }
-  )");
+  )").arg(font_family));
 
   notifier = new QSocketNotifier(fileno(stdin), QSocketNotifier::Read);
   QObject::connect(notifier, &QSocketNotifier::activated, this, &Spinner::update);
