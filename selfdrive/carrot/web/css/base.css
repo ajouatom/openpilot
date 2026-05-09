@@ -332,7 +332,7 @@ body:has(.page-transitioning) {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   border-top: 1px solid color-mix(in srgb, var(--md-outline-var) 30%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 30%, transparent);
 }
@@ -340,8 +340,10 @@ body:has(.page-transitioning) {
 .settings-diff-summary__item {
   min-width: 0;
   display: grid;
-  gap: 2px;
-  padding: 8px 10px 9px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 5px;
+  padding: 6px 6px 7px;
   border-right: 1px solid color-mix(in srgb, var(--md-outline-var) 22%, transparent);
 }
 
@@ -353,18 +355,19 @@ body:has(.page-transitioning) {
   min-width: 0;
   overflow: hidden;
   color: var(--md-on-surface-var);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
-  line-height: 1.15;
+  line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .settings-diff-summary__item strong {
   color: var(--md-on-surface);
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 900;
-  line-height: 1.05;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .settings-diff-summary__item--changed strong {
@@ -492,15 +495,32 @@ body:has(.page-transitioning) {
 
 @media (max-width: 640px), (orientation: portrait) {
   .settings-diff-summary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .settings-diff-summary__item:nth-child(2n) {
+    border-right: 1px solid color-mix(in srgb, var(--md-outline-var) 22%, transparent);
+  }
+
+  .settings-diff-summary__item:last-child {
     border-right: 0;
   }
 
   .settings-diff-summary__item:nth-child(n + 3) {
-    border-top: 1px solid color-mix(in srgb, var(--md-outline-var) 22%, transparent);
+    border-top: 0;
+  }
+
+  .settings-diff-summary__item {
+    gap: 3px;
+    padding-inline: 4px;
+  }
+
+  .settings-diff-summary__item span {
+    font-size: 9.5px;
+  }
+
+  .settings-diff-summary__item strong {
+    font-size: 13px;
   }
 
   .settings-diff__list {

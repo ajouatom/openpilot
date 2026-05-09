@@ -1458,7 +1458,7 @@ function renderSettingSearchResults(query = "") {
           showAppToast(e.message || "Search jump failed", { tone: "error" });
         }
       };
-      settingSearchResults.appendChild(button);
+      sectionEl.appendChild(button);
     });
   });
 }
