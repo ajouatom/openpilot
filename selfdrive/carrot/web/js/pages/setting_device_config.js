@@ -31,21 +31,11 @@ const DEVICE_SOFTWARE_PARAMS = [
   "UpdaterNewDescription",
 ];
 
-const DEVICE_LANGUAGES = [
+const DEVICE_LANGUAGES = window.CarrotDeviceLanguageOptions || [
   { code: "main_en", name: "English" },
   { code: "main_ko", name: "한국어" },
   { code: "main_zh-CHS", name: "简体中文" },
   { code: "main_zh-CHT", name: "繁體中文" },
-  { code: "main_ja", name: "日本語" },
-  { code: "main_fr", name: "Français" },
-  { code: "main_pt-BR", name: "Português" },
-  { code: "main_de", name: "Deutsch" },
-  { code: "main_es", name: "Español" },
-  { code: "main_tr", name: "Türkçe" },
-  { code: "main_th", name: "ไทย" },
-  { code: "main_ar", name: "العربية" },
-  { code: "main_pl", name: "Polski" },
-  { code: "main_nl", name: "Nederlands" },
 ];
 
 const DEVICE_TOGGLES = [

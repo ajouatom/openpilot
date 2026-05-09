@@ -9,7 +9,8 @@ from ..live_runtime.broker import RealtimeBroker
 from ..live_runtime.normalize import to_transport_safe
 from ..config import OFFROAD_ASSETS_DIR
 from ..services.device_info import get_calibration_status, get_device_network
-from ..services.params import HAS_PARAMS, Params, set_param_value
+from ..services.params import HAS_PARAMS, Params, restore_param_values_validated
+from ..services.settings import get_settings_cached
 from ..services.time_sync import TIME_SYNC_DEBUG_DEFAULT, sync_system_time_from_browser
 
 
@@ -24,6 +25,69 @@ _LIVE_RUNTIME_SERVICE_NAMES = (
   "radarState",
   "carrotMan",
 )
+
+_CARROT_DEFAULT_RESET_EXCLUDED_NAMES = {
+  # Vehicle identity / selection / fingerprinting.
+  "CarName",
+  "CarParams",
+  "CarParamsCache",
+  "CarParamsPersistent",
+  "CarParamsPrevRoute",
+  "CarModel",
+  "CarFingerprint",
+  "SupportedCars",
+  # Training, terms, calibration, and learned live parameters.
+  "CompletedTrainingVersion",
+  "TrainingVersion",
+  "TermsVersion",
+  "HasAcceptedTerms",
+  "CalibrationParams",
+  "LiveParameters",
+  "LiveTorqueParameters",
+  # Device/user/system identity and platform settings.
+  "DongleId",
+  "HardwareSerial",
+  "DeviceSerial",
+  "DeviceType",
+  "LanguageSetting",
+  "IsMetric",
+  "OpenpilotEnabledToggle",
+  "ExperimentalMode",
+  "ExperimentalModeConfirmed",
+  "SshEnabled",
+  "AdbEnabled",
+  "GithubUsername",
+  "GithubSshKeys",
+  # Recording/upload/update/git state should not be reset by Carrot tuning reset.
+  "RecordFront",
+  "RecordAudio",
+  "GitBranch",
+  "GitCommit",
+  "GitCommitDate",
+  "UpdaterState",
+  "UpdaterTargetBranch",
+  "UpdaterCurrentDescription",
+}
+
+_CARROT_DEFAULT_RESET_EXCLUDED_PREFIXES = (
+  "CarParams",
+  "Calibration",
+  "CompletedTraining",
+  "Git",
+  "Github",
+  "Updater",
+  "Dongle",
+  "Hardware",
+  "DeviceSerial",
+)
+
+
+def _is_carrot_default_reset_param(name: str, meta: Any) -> bool:
+  if not name or not isinstance(meta, dict) or "default" not in meta:
+    return False
+  if name in _CARROT_DEFAULT_RESET_EXCLUDED_NAMES:
+    return False
+  return not any(name.startswith(prefix) for prefix in _CARROT_DEFAULT_RESET_EXCLUDED_PREFIXES)
 
 
 def _select_live_runtime_services(snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -225,8 +289,28 @@ async def api_set_default(request: web.Request) -> web.Response:
   if not HAS_PARAMS:
     return web.json_response({"ok": False, "error": "params unavailable"}, status=500)
   try:
-    Params().put_int("SoftRestartTriggered", 2)
-    return web.json_response({"ok": True})
+    _, _, by_name, _ = get_settings_cached()
+    values = {
+      name: meta.get("default", 0)
+      for name, meta in by_name.items()
+      if _is_carrot_default_reset_param(name, meta)
+    }
+    restored = restore_param_values_validated(values)
+    result = restored.get("result") or {}
+    ok = int(result.get("fail_cnt") or 0) == 0
+    applied_values = {
+      entry["key"]: entry["value"]
+      for entry in restored.get("preview", {}).get("entries", [])
+      if entry.get("apply")
+    }
+    status = 200 if ok else 500
+    return web.json_response({
+      "ok": ok,
+      "message": "설정 초기화 성공" if ok else "설정 초기화 실패",
+      "error": None if ok else "설정 초기화 실패",
+      "values": applied_values,
+      **restored,
+    }, status=status)
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
 
