@@ -2153,11 +2153,6 @@ async function renderItems(group, options = {}) {
       const bodyInner = document.createElement("div");
       bodyInner.className = "setting-profile-section__bodyInner";
       header.onclick = () => {
-<<<<<<< HEAD
-        const nextExpanded = section.classList.toggle("is-collapsed") ? false : true;
-        settingProfileSectionExpandedState.set(stateKey, nextExpanded);
-        header.setAttribute("aria-expanded", nextExpanded ? "true" : "false");
-=======
         const wasCollapsed = section.classList.contains("is-collapsed");
         const nextExpanded = wasCollapsed;
         section.classList.remove("is-expanding", "is-collapsing");
@@ -2173,7 +2168,6 @@ async function renderItems(group, options = {}) {
           section.classList.remove("is-expanding", "is-collapsing");
           section.__settingProfileMotionTimer = null;
         }, 280);
->>>>>>> f3ee1c57 (fix)
       };
       body.appendChild(bodyInner);
       section.appendChild(header);

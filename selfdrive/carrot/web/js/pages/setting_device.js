@@ -140,12 +140,6 @@ function renderDeviceGroups(options = {}) {
   const subnavContainer = document.getElementById("deviceSubnav");
   if (!groupContainer) return;
   const animateGroups = options.animateGroups !== false;
-<<<<<<< HEAD
-
-  groupContainer.innerHTML = "";
-  if (subnavContainer) subnavContainer.innerHTML = "";
-=======
->>>>>>> f3ee1c57 (fix)
 
   const visibleGroups = getVisibleDeviceGroups();
   if (!visibleGroups.some((group) => group.id === CURRENT_DEVICE_GROUP)) {
@@ -157,10 +151,6 @@ function renderDeviceGroups(options = {}) {
   }));
   const signature = groupEntries.map((entry) => `${entry.group.id}:${entry.label}`).join("|");
 
-<<<<<<< HEAD
-  visibleGroups.forEach((group, index) => {
-    const label = getDeviceGroupLabel(group.id);
-=======
   if (
     !animateGroups &&
     groupContainer.dataset.deviceGroupsSignature === signature &&
@@ -199,7 +189,6 @@ function renderDeviceGroups(options = {}) {
   groupEntries.forEach((entry, index) => {
     const group = entry.group;
     const label = entry.label;
->>>>>>> f3ee1c57 (fix)
     const button = document.createElement("button");
     button.type = "button";
     button.className = animateGroups ? "btn groupBtn ui-stagger-item" : "btn groupBtn";

@@ -536,14 +536,7 @@
   overflow: hidden;
   opacity: 1;
   transform: translateY(0);
-<<<<<<< HEAD
-  transition:
-    grid-template-rows 0.24s cubic-bezier(.2, 0, 0, 1),
-    opacity 0.16s ease,
-    transform 0.2s cubic-bezier(.2, 0, 0, 1);
-=======
   will-change: grid-template-rows, opacity, transform;
->>>>>>> f3ee1c57 (fix)
 }
 
 .setting-profile-section.is-collapsed .setting-profile-section__body {
@@ -558,8 +551,6 @@
   overflow: hidden;
 }
 
-<<<<<<< HEAD
-=======
 .setting-profile-section.is-collapsing .setting-profile-section__body {
   pointer-events: none;
   animation: setting-profile-section-fold 0.24s cubic-bezier(.2, 0, 0, 1) both;
@@ -569,7 +560,6 @@
   animation: setting-profile-section-fold 0.24s cubic-bezier(.2, 0, 0, 1) reverse both;
 }
 
->>>>>>> f3ee1c57 (fix)
 .setting-subnav__tab--profile {
   border-color: color-mix(in srgb, var(--md-primary) 34%, var(--md-outline-var));
 }
@@ -776,8 +766,6 @@
   }
 }
 
-<<<<<<< HEAD
-=======
 @keyframes setting-profile-section-fold {
   from {
     grid-template-rows: 1fr;
@@ -791,26 +779,17 @@
   }
 }
 
->>>>>>> f3ee1c57 (fix)
 @media (prefers-reduced-motion: reduce) {
   .setting-profile-panel,
   .page--setting #items > .setting.ui-stagger-item,
   .page--setting #items > .setting-profile-section.ui-stagger-item,
-<<<<<<< HEAD
-  .page--setting #deviceItems > .setting.ui-stagger-item {
-=======
   .page--setting #deviceItems > .setting.ui-stagger-item,
   .setting-profile-section.is-collapsing .setting-profile-section__body,
   .setting-profile-section.is-expanding .setting-profile-section__body {
->>>>>>> f3ee1c57 (fix)
     animation: none;
   }
 
   .setting-profile-section__header,
-<<<<<<< HEAD
-  .setting-profile-section__body,
-=======
->>>>>>> f3ee1c57 (fix)
   .setting-profile-section__chevron,
   .setting-toolbar-action {
     transition: none;
