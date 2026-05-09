@@ -554,15 +554,6 @@
   overflow: hidden;
 }
 
-.setting-profile-section:not(.is-collapsed) .setting-profile-section__bodyInner {
-  animation: setting-section-open 0.18s cubic-bezier(.2, 0, 0, 1) both;
-}
-
-.setting-profile-section.is-expanding .setting-profile-section__bodyInner > .setting {
-  animation: setting-accordion-item-enter 0.22s cubic-bezier(.2, 0, 0, 1) both;
-  animation-delay: calc(var(--accordion-i, 0) * 22ms);
-}
-
 .setting-subnav__tab--profile {
   border-color: color-mix(in srgb, var(--md-primary) 34%, var(--md-outline-var));
 }
@@ -758,17 +749,6 @@
   }
 }
 
-@keyframes setting-section-open {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 @keyframes setting-item-stagger-in {
   from {
     opacity: 0;
@@ -780,24 +760,11 @@
   }
 }
 
-@keyframes setting-accordion-item-enter {
-  from {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .setting-profile-panel,
-  .setting-profile-section__bodyInner,
   .page--setting #items > .setting.ui-stagger-item,
   .page--setting #items > .setting-profile-section.ui-stagger-item,
-  .page--setting #deviceItems > .setting.ui-stagger-item,
-  .setting-profile-section.is-expanding .setting-profile-section__bodyInner > .setting {
+  .page--setting #deviceItems > .setting.ui-stagger-item {
     animation: none;
   }
 
