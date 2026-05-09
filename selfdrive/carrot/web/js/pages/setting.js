@@ -2049,7 +2049,7 @@ if (settingSubnavWrap) {
 function selectGroup(group, pushHistory = true) {
   const shouldPush = pushHistory && !(isCompactLandscapeMode() && CURRENT_PAGE === "setting");
   const options = (isCompactLandscapeMode() && CURRENT_PAGE === "setting")
-    ? { animateItems: false, animateGroups: false }
+    ? { animateGroups: false }
     : {};
   activateSettingGroup(group, shouldPush, options).catch((e) => console.log("[Setting] selectGroup failed:", e));
 }
@@ -2119,6 +2119,7 @@ async function renderItems(group, options = {}) {
   }
   let lastProfileGroup = "";
   let currentProfileSectionBody = null;
+  let currentProfileSectionItemIndex = 0;
   list.forEach((p, index) => {
     const name = p.name;
     const originGroup = entries[index]?.group || group;
@@ -2126,6 +2127,7 @@ async function renderItems(group, options = {}) {
 
     if (profile && originGroup !== lastProfileGroup) {
       lastProfileGroup = originGroup;
+      currentProfileSectionItemIndex = 0;
       const section = document.createElement("div");
       section.className = animateItems ? "setting-profile-section ui-stagger-item" : "setting-profile-section";
       if (animateItems) section.style.setProperty("--i", String(Math.min(index + 1, 14)));
@@ -2156,6 +2158,12 @@ async function renderItems(group, options = {}) {
         const nextExpanded = section.classList.toggle("is-collapsed") ? false : true;
         settingProfileSectionExpandedState.set(stateKey, nextExpanded);
         header.setAttribute("aria-expanded", nextExpanded ? "true" : "false");
+        if (nextExpanded) {
+          section.classList.remove("is-expanding");
+          void section.offsetWidth;
+          section.classList.add("is-expanding");
+          window.setTimeout(() => section.classList.remove("is-expanding"), 420);
+        }
       };
       body.appendChild(bodyInner);
       section.appendChild(header);
@@ -2170,6 +2178,10 @@ async function renderItems(group, options = {}) {
     const el = document.createElement("div");
     el.className = animateItems ? "setting ui-stagger-item" : "setting";
     if (animateItems) el.style.setProperty("--i", String(index));
+    if (profile) {
+      el.style.setProperty("--accordion-i", String(Math.min(currentProfileSectionItemIndex, 10)));
+      currentProfileSectionItemIndex += 1;
+    }
     el.dataset.settingName = name;
     el.dataset.settingGroup = originGroup;
     el.classList.toggle("is-favorite", isSettingFavorite(name));

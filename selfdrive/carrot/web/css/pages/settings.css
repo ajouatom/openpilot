@@ -23,6 +23,16 @@
   color: color-mix(in srgb, #a9e8b2 82%, var(--md-on-surface));
 }
 
+.page--setting #items > .setting.ui-stagger-item,
+.page--setting #items > .setting-profile-section.ui-stagger-item,
+.page--setting #deviceItems > .setting.ui-stagger-item {
+  animation-name: setting-item-stagger-in;
+  animation-duration: 0.32s;
+  animation-timing-function: cubic-bezier(.2, 0, 0, 1);
+  animation-fill-mode: both;
+  animation-delay: min(calc(var(--i, 0) * 34ms), 360ms);
+}
+
 .setting-car-entry {
   display: flex;
   align-items: center;
@@ -525,13 +535,18 @@
   grid-template-rows: 1fr;
   overflow: hidden;
   opacity: 1;
-  transition: grid-template-rows 0.2s cubic-bezier(.2, 0, 0, 1), opacity 0.16s ease;
+  transform: translateY(0);
+  transition:
+    grid-template-rows 0.24s cubic-bezier(.2, 0, 0, 1),
+    opacity 0.16s ease,
+    transform 0.2s cubic-bezier(.2, 0, 0, 1);
 }
 
 .setting-profile-section.is-collapsed .setting-profile-section__body {
   grid-template-rows: 0fr;
   opacity: 0;
   pointer-events: none;
+  transform: translateY(-4px);
 }
 
 .setting-profile-section__bodyInner {
@@ -541,6 +556,11 @@
 
 .setting-profile-section:not(.is-collapsed) .setting-profile-section__bodyInner {
   animation: setting-section-open 0.18s cubic-bezier(.2, 0, 0, 1) both;
+}
+
+.setting-profile-section.is-expanding .setting-profile-section__bodyInner > .setting {
+  animation: setting-accordion-item-enter 0.22s cubic-bezier(.2, 0, 0, 1) both;
+  animation-delay: calc(var(--accordion-i, 0) * 22ms);
 }
 
 .setting-subnav__tab--profile {
@@ -749,9 +769,35 @@
   }
 }
 
+@keyframes setting-item-stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes setting-accordion-item-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .setting-profile-panel,
-  .setting-profile-section__bodyInner {
+  .setting-profile-section__bodyInner,
+  .page--setting #items > .setting.ui-stagger-item,
+  .page--setting #items > .setting-profile-section.ui-stagger-item,
+  .page--setting #deviceItems > .setting.ui-stagger-item,
+  .setting-profile-section.is-expanding .setting-profile-section__bodyInner > .setting {
     animation: none;
   }
 
