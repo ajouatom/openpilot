@@ -938,7 +938,7 @@ function closeSettingProfileActionMenus(exceptPanel = null) {
 function makeSettingProfileMenuItem(label, onClick, className = "") {
   const button = document.createElement("button");
   button.type = "button";
-  button.className = `setting-profile-action-menu__item${className ? ` ${className}` : ""}`;
+  button.className = `setting-profile-action-menu__item ui-dropdown-menu__item${className ? ` ${className}` : ""}`;
   button.setAttribute("role", "menuitem");
   button.textContent = label;
   button.onclick = (event) => {
@@ -1014,10 +1014,10 @@ function appendSettingProfileHeader(profile, container) {
     persistProfileName().then(() => input.blur()).catch(() => {});
   });
   const menu = document.createElement("div");
-  menu.className = "setting-profile-action-menu";
+  menu.className = "setting-profile-action-menu ui-dropdown-menu";
   const menuBtn = document.createElement("button");
   menuBtn.type = "button";
-  menuBtn.className = "setting-profile-action-menu__button";
+  menuBtn.className = "setting-profile-action-menu__button ui-dropdown-menu__button";
   menuBtn.setAttribute("aria-haspopup", "menu");
   menuBtn.setAttribute("aria-expanded", "false");
   menuBtn.setAttribute("aria-label", getUIText("setting_profile_menu", "Profile menu"));
@@ -1027,7 +1027,7 @@ function appendSettingProfileHeader(profile, container) {
     </svg>
   `;
   const menuPanel = document.createElement("div");
-  menuPanel.className = "setting-profile-action-menu__panel";
+  menuPanel.className = "setting-profile-action-menu__panel ui-dropdown-menu__panel";
   menuPanel.setAttribute("role", "menu");
   menuPanel.setAttribute("aria-hidden", "true");
   menuPanel.hidden = true;
@@ -1336,7 +1336,6 @@ function focusSettingItem(name, behavior = "smooth") {
 }
 
 function closeSettingSearchPanel(options = {}) {
-  const clear = Boolean(options.clear);
   const syncHistory = Boolean(options.syncHistory);
   const fromHistory = Boolean(options.fromHistory);
   if (settingSearchDebounceTimer) {
@@ -1350,9 +1349,13 @@ function closeSettingSearchPanel(options = {}) {
   if (settingSearchBackdrop) settingSearchBackdrop.hidden = true;
   syncSettingSearchFabState();
 
-  if (clear && settingSearchInput) settingSearchInput.value = "";
-  if (clear && settingSearchResults) settingSearchResults.innerHTML = "";
-  if (clear) settingSearchScope = { type: "all", profileId: "" };
+  if (settingSearchInput) {
+    settingSearchInput.value = "";
+    settingSearchInput.placeholder = getUIText("setting_search_placeholder", "Search name, description, group");
+    settingSearchInput.removeAttribute("aria-label");
+  }
+  if (settingSearchResults) settingSearchResults.innerHTML = "";
+  settingSearchScope = { type: "all", profileId: "" };
   syncModalBodyLock();
 
   const state = history.state || {};

@@ -465,11 +465,12 @@ function renderToolsMeta() {
   const languages = getAvailableWebLanguages();
   const current = languages.find((item) => item.lang === LANG) || languages[0];
   const langWrap = document.createElement("div");
-  langWrap.className = "tools-lang-menu";
+  langWrap.className = "tools-lang-menu ui-dropdown-menu";
+  langWrap.classList.toggle("is-open", toolsLanguageMenuOpen);
 
   const langBtn = document.createElement("button");
   langBtn.type = "button";
-  langBtn.className = "tools-lang-menu__button";
+  langBtn.className = "tools-lang-menu__button ui-dropdown-menu__button";
   langBtn.setAttribute("aria-haspopup", "menu");
   langBtn.setAttribute("aria-expanded", toolsLanguageMenuOpen ? "true" : "false");
   langBtn.innerHTML = `
@@ -490,7 +491,7 @@ function renderToolsMeta() {
 
   if (toolsLanguageMenuOpen) {
     const panel = document.createElement("div");
-    panel.className = "tools-lang-menu__panel";
+    panel.className = "tools-lang-menu__panel ui-dropdown-menu__panel";
     panel.setAttribute("role", "menu");
     const currentLabel = current?.name || LANG.toUpperCase();
     panel.innerHTML = `
@@ -500,7 +501,7 @@ function renderToolsMeta() {
     languages.forEach((item) => {
       const option = document.createElement("button");
       option.type = "button";
-      option.className = "tools-lang-menu__item";
+      option.className = "tools-lang-menu__item ui-dropdown-menu__item";
       option.setAttribute("role", "menuitemradio");
       option.setAttribute("aria-checked", item.lang === LANG ? "true" : "false");
       option.innerHTML = `
