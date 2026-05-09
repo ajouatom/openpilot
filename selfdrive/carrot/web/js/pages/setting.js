@@ -2441,7 +2441,7 @@ async function syncSettingViewportLayout(options = {}) {
   if (CURRENT_PAGE !== "setting" || !SETTINGS) return;
   settingViewportLayoutSignature = getSettingViewportLayoutSignature();
   const animateChrome = options.animateChrome === true;
-  const animateItems = options.animateItems === true;
+  const animateItems = options.animateItems === true || animateChrome;
   const splitLandscape = isCompactLandscapeMode();
   if (typeof syncSettingSplitLayoutClass === "function") {
     syncSettingSplitLayoutClass(splitLandscape);
@@ -2453,7 +2453,7 @@ async function syncSettingViewportLayout(options = {}) {
       showSettingScreen("items", false);
     }
     if (typeof renderDeviceTab === "function") {
-      await renderDeviceTab();
+      await renderDeviceTab({ animateGroups: animateChrome, animateItems });
     }
     if (!splitLandscape) {
       const deviceItemsEl = document.getElementById("deviceItems");

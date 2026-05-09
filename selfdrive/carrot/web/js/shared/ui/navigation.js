@@ -346,10 +346,21 @@ window.bootstrapWebStartPage = bootstrapWebStartPage;
 
 function runPageEnter(page, prevPage, pushHistory) {
   if (page === "setting") {
+    const animateOnEnter = pushHistory || prevPage !== "setting";
     if (!SETTINGS && typeof loadSettings === "function") loadSettings();
     else if (typeof syncSettingViewportLayout === "function" && shouldUseSettingSplitLayout("setting")) {
-      syncSettingViewportLayout({ animateChrome: pushHistory || prevPage !== "setting" }).catch(() => {});
+      syncSettingViewportLayout({
+        animateChrome: animateOnEnter,
+        animateItems: animateOnEnter,
+      }).catch(() => {});
     } else if (pushHistory || !CURRENT_GROUP) {
+      if (animateOnEnter) {
+        if (typeof getCurrentSettingTab === "function" && getCurrentSettingTab() === "device") {
+          if (typeof renderDeviceTab === "function") renderDeviceTab({ animateGroups: true, animateItems: true }).catch(() => {});
+        } else if (typeof renderGroups === "function") {
+          renderGroups({ animateGroups: true });
+        }
+      }
       showSettingScreen("groups", false);
     }
 
@@ -572,7 +583,7 @@ function resetSettingPageToRoot() {
 
   if (shouldUseSettingSplitLayout("setting")) {
     if (typeof syncSettingViewportLayout === "function") {
-      syncSettingViewportLayout({ animateChrome: true }).catch(() => {});
+      syncSettingViewportLayout({ animateChrome: true, animateItems: true }).catch(() => {});
     }
     history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
     return;
