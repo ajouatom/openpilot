@@ -256,7 +256,7 @@ class CarController(CarControllerBase):
         self.steer_pressed_timer -= 1
 
         if angle_error < 2.0:
-          self.steer_pressed_timer -= 5
+          self.steer_pressed_timer -= 50
 
         target_torque *= 0.3
 
