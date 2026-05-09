@@ -536,10 +536,7 @@
   overflow: hidden;
   opacity: 1;
   transform: translateY(0);
-  transition:
-    grid-template-rows 0.24s cubic-bezier(.2, 0, 0, 1),
-    opacity 0.16s ease,
-    transform 0.2s cubic-bezier(.2, 0, 0, 1);
+  will-change: grid-template-rows, opacity, transform;
 }
 
 .setting-profile-section.is-collapsed .setting-profile-section__body {
@@ -552,6 +549,15 @@
 .setting-profile-section__bodyInner {
   min-height: 0;
   overflow: hidden;
+}
+
+.setting-profile-section.is-collapsing .setting-profile-section__body {
+  pointer-events: none;
+  animation: setting-profile-section-fold 0.24s cubic-bezier(.2, 0, 0, 1) both;
+}
+
+.setting-profile-section.is-expanding .setting-profile-section__body {
+  animation: setting-profile-section-fold 0.24s cubic-bezier(.2, 0, 0, 1) reverse both;
 }
 
 .setting-subnav__tab--profile {
@@ -760,16 +766,30 @@
   }
 }
 
+@keyframes setting-profile-section-fold {
+  from {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .setting-profile-panel,
   .page--setting #items > .setting.ui-stagger-item,
   .page--setting #items > .setting-profile-section.ui-stagger-item,
-  .page--setting #deviceItems > .setting.ui-stagger-item {
+  .page--setting #deviceItems > .setting.ui-stagger-item,
+  .setting-profile-section.is-collapsing .setting-profile-section__body,
+  .setting-profile-section.is-expanding .setting-profile-section__body {
     animation: none;
   }
 
   .setting-profile-section__header,
-  .setting-profile-section__body,
   .setting-profile-section__chevron,
   .setting-toolbar-action {
     transition: none;
@@ -1222,7 +1242,8 @@
     display: none;
   }
 
-  .page--setting.setting-layout-split #groupList .groupBtn .setting-group-label {
+  .page--setting.setting-layout-split #groupList .groupBtn .setting-group-label,
+  .page--setting.setting-layout-split #deviceGroupList .groupBtn .setting-group-label {
     display: inline-block;
     min-width: max-content;
     transform: translateX(0);
@@ -1231,7 +1252,10 @@
 
   .page--setting.setting-layout-split #groupList .groupBtn.is-overflowing:hover .setting-group-label,
   .page--setting.setting-layout-split #groupList .groupBtn.is-overflowing:focus .setting-group-label,
-  .page--setting.setting-layout-split #groupList .groupBtn.is-overflowing:active .setting-group-label {
+  .page--setting.setting-layout-split #groupList .groupBtn.is-overflowing:active .setting-group-label,
+  .page--setting.setting-layout-split #deviceGroupList .groupBtn.is-overflowing:hover .setting-group-label,
+  .page--setting.setting-layout-split #deviceGroupList .groupBtn.is-overflowing:focus .setting-group-label,
+  .page--setting.setting-layout-split #deviceGroupList .groupBtn.is-overflowing:active .setting-group-label {
     animation: setting-left-text-pan 4.2s ease-in-out 1;
   }
 

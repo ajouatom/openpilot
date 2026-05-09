@@ -141,16 +141,55 @@ function renderDeviceGroups(options = {}) {
   if (!groupContainer) return;
   const animateGroups = options.animateGroups !== false;
 
-  groupContainer.innerHTML = "";
-  if (subnavContainer) subnavContainer.innerHTML = "";
-
   const visibleGroups = getVisibleDeviceGroups();
   if (!visibleGroups.some((group) => group.id === CURRENT_DEVICE_GROUP)) {
     CURRENT_DEVICE_GROUP = visibleGroups[0]?.id || "Device";
   }
+  const groupEntries = visibleGroups.map((group) => ({
+    group,
+    label: getDeviceGroupLabel(group.id),
+  }));
+  const signature = groupEntries.map((entry) => `${entry.group.id}:${entry.label}`).join("|");
 
-  visibleGroups.forEach((group, index) => {
-    const label = getDeviceGroupLabel(group.id);
+  if (
+    !animateGroups &&
+    groupContainer.dataset.deviceGroupsSignature === signature &&
+    groupContainer.children.length === groupEntries.length &&
+    (!subnavContainer || subnavContainer.children.length === groupEntries.length)
+  ) {
+    Array.from(groupContainer.children).forEach((button, index) => {
+      const entry = groupEntries[index];
+      button.className = "btn groupBtn";
+      if (entry.group.id === CURRENT_DEVICE_GROUP) button.classList.add("active");
+      button.dataset.deviceGroup = entry.group.id;
+      button.innerHTML = `<span class="setting-group-label">${escapeHtml(entry.label)}</span>`;
+      button.onclick = () => selectDeviceGroup(entry.group.id);
+    });
+
+    if (subnavContainer && subnavContainer.children.length === groupEntries.length) {
+      Array.from(subnavContainer.children).forEach((tab, index) => {
+        const entry = groupEntries[index];
+        tab.className = "setting-subnav__tab";
+        if (entry.group.id === CURRENT_DEVICE_GROUP) tab.classList.add("is-active");
+        tab.dataset.deviceGroup = entry.group.id;
+        tab.textContent = entry.label;
+        tab.onclick = () => selectDeviceGroup(entry.group.id);
+      });
+    }
+    if (typeof scheduleSettingOverflowSync === "function") scheduleSettingOverflowSync(groupContainer);
+    return;
+  }
+
+  groupContainer.innerHTML = "";
+  groupContainer.dataset.deviceGroupsSignature = signature;
+  if (subnavContainer) {
+    subnavContainer.innerHTML = "";
+    subnavContainer.dataset.deviceGroupsSignature = signature;
+  }
+
+  groupEntries.forEach((entry, index) => {
+    const group = entry.group;
+    const label = entry.label;
     const button = document.createElement("button");
     button.type = "button";
     button.className = animateGroups ? "btn groupBtn ui-stagger-item" : "btn groupBtn";
@@ -173,6 +212,7 @@ function renderDeviceGroups(options = {}) {
       subnavContainer.appendChild(tab);
     }
   });
+  if (typeof scheduleSettingOverflowSync === "function") scheduleSettingOverflowSync(groupContainer);
 }
 
 function applyDeviceItemsStagger(container) {
