@@ -660,6 +660,7 @@ let pendingSettingFocus = null;
 let settingFocusClearTimer = null;
 let settingSearchDebounceTimer = null;
 let settingSearchEntries = [];
+let settingSearchScope = { type: "all", profileId: "" };
 const settingPageRoot = document.getElementById("pageSetting");
 let settingFabMenuOpen = false;
 
@@ -920,6 +921,34 @@ async function deleteSettingProfile(profile) {
   }
 }
 
+function closeSettingProfileActionMenus(exceptPanel = null) {
+  document.querySelectorAll(".setting-profile-action-menu.is-open").forEach((menu) => {
+    if (exceptPanel && menu === exceptPanel) return;
+    menu.classList.remove("is-open");
+    const button = menu.querySelector(".setting-profile-action-menu__button");
+    const panel = menu.querySelector(".setting-profile-action-menu__panel");
+    if (button) button.setAttribute("aria-expanded", "false");
+    if (panel) {
+      panel.hidden = true;
+      panel.setAttribute("aria-hidden", "true");
+    }
+  });
+}
+
+function makeSettingProfileMenuItem(label, onClick, className = "") {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `setting-profile-action-menu__item${className ? ` ${className}` : ""}`;
+  button.setAttribute("role", "menuitem");
+  button.textContent = label;
+  button.onclick = (event) => {
+    event.stopPropagation();
+    closeSettingProfileActionMenus();
+    onClick();
+  };
+  return button;
+}
+
 function appendSettingProfileHeader(profile, container) {
   const panel = document.createElement("div");
   panel.className = "setting-profile-panel";
@@ -984,25 +1013,55 @@ function appendSettingProfileHeader(profile, container) {
     }
     persistProfileName().then(() => input.blur()).catch(() => {});
   });
-  const infoBtn = document.createElement("button");
-  infoBtn.type = "button";
-  infoBtn.className = "setting-toolbar-action";
-  infoBtn.textContent = getUIText("setting_profile_info", "Info");
-  infoBtn.onclick = () => openSettingProfileInfo(profile);
-  const applyBtn = document.createElement("button");
-  applyBtn.type = "button";
-  applyBtn.className = "setting-toolbar-action setting-toolbar-action--primary";
-  applyBtn.textContent = getUIText("apply", "Apply");
-  applyBtn.onclick = () => applySettingProfile(profile);
-  const deleteBtn = document.createElement("button");
-  deleteBtn.type = "button";
-  deleteBtn.className = "setting-toolbar-action setting-toolbar-action--danger";
-  deleteBtn.textContent = getUIText("delete", "Delete");
-  deleteBtn.onclick = () => deleteSettingProfile(profile);
+  const menu = document.createElement("div");
+  menu.className = "setting-profile-action-menu";
+  const menuBtn = document.createElement("button");
+  menuBtn.type = "button";
+  menuBtn.className = "setting-profile-action-menu__button";
+  menuBtn.setAttribute("aria-haspopup", "menu");
+  menuBtn.setAttribute("aria-expanded", "false");
+  menuBtn.setAttribute("aria-label", getUIText("setting_profile_menu", "Profile menu"));
+  menuBtn.innerHTML = `
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path fill="currentColor" d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4m0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/>
+    </svg>
+  `;
+  const menuPanel = document.createElement("div");
+  menuPanel.className = "setting-profile-action-menu__panel";
+  menuPanel.setAttribute("role", "menu");
+  menuPanel.setAttribute("aria-hidden", "true");
+  menuPanel.hidden = true;
+  menuPanel.appendChild(makeSettingProfileMenuItem(
+    getUIText("setting_profile_search", "Search Profile"),
+    () => openSettingSearchPanel({ scope: { type: "profile", profileId: profile.id } }).catch(() => {}),
+  ));
+  menuPanel.appendChild(makeSettingProfileMenuItem(
+    getUIText("setting_profile_info", "Info"),
+    () => openSettingProfileInfo(profile),
+  ));
+  menuPanel.appendChild(makeSettingProfileMenuItem(
+    getUIText("apply", "Apply"),
+    () => applySettingProfile(profile),
+    "setting-profile-action-menu__item--primary",
+  ));
+  menuPanel.appendChild(makeSettingProfileMenuItem(
+    getUIText("delete", "Delete"),
+    () => deleteSettingProfile(profile),
+    "setting-profile-action-menu__item--danger",
+  ));
+  menuBtn.onclick = (event) => {
+    event.stopPropagation();
+    const nextOpen = !menu.classList.contains("is-open");
+    closeSettingProfileActionMenus(menu);
+    menu.classList.toggle("is-open", nextOpen);
+    menuBtn.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+    menuPanel.hidden = !nextOpen;
+    menuPanel.setAttribute("aria-hidden", nextOpen ? "false" : "true");
+  };
+  menu.appendChild(menuBtn);
+  menu.appendChild(menuPanel);
   titleRow.appendChild(input);
-  titleRow.appendChild(infoBtn);
-  titleRow.appendChild(applyBtn);
-  titleRow.appendChild(deleteBtn);
+  titleRow.appendChild(menu);
 
   panel.appendChild(titleRow);
   container.appendChild(panel);
@@ -1040,6 +1099,35 @@ function mountSettingSearchOverlay() {
   }
 }
 
+function makeSettingSearchEntry({ source, profile = null, group, item }) {
+  const groupLabel = getSettingGroupLabel(group);
+  const title = formatItemText(item, "title", "etitle", "");
+  const descr = formatItemText(item, "descr", "edescr", "");
+  const isProfile = source === "profile" && profile?.id;
+  const profileName = isProfile ? String(profile.name || "") : "";
+  const sourceLabel = isProfile
+    ? getUIText("setting_search_source_profile", "Profile")
+    : getUIText("setting_search_source_carrot", "CarrotPilot");
+  const contextLabel = isProfile
+    ? `${profileName} / ${groupLabel}`
+    : groupLabel;
+
+  return {
+    source: isProfile ? "profile" : "carrot",
+    sourceLabel,
+    profileId: isProfile ? profile.id : "",
+    profileName,
+    group: isProfile ? settingProfileGroup(profile.id) : group,
+    originalGroup: group,
+    groupLabel,
+    contextLabel,
+    name: item.name,
+    title,
+    descr,
+    haystack: [sourceLabel, profileName, groupLabel, item.name, title, descr].join("\n").toLowerCase(),
+  };
+}
+
 function rebuildSettingSearchEntries() {
   const groups = SETTINGS?.groups || [];
   const entries = [];
@@ -1050,16 +1138,18 @@ function rebuildSettingSearchEntries() {
     const list = SETTINGS?.items_by_group?.[group] || [];
 
     list.forEach((item) => {
-      const title = formatItemText(item, "title", "etitle", "");
-      const descr = formatItemText(item, "descr", "edescr", "");
-      entries.push({
-        group,
-        groupLabel,
-        name: item.name,
-        title,
-        descr,
-        haystack: [groupLabel, item.name, title, descr].join("\n").toLowerCase(),
-      });
+      entries.push(makeSettingSearchEntry({ source: "carrot", group, item }));
+    });
+  });
+
+  (settingProfilesState.profiles || []).forEach((profile) => {
+    getProfileSettingEntries(profile).forEach((entry) => {
+      entries.push(makeSettingSearchEntry({
+        source: "profile",
+        profile,
+        group: entry.group,
+        item: entry.item,
+      }));
     });
   });
 
@@ -1082,6 +1172,14 @@ function highlightSettingSearchText(text, query) {
 
   const end = start + q.length;
   return `${escapeHtml(raw.slice(0, start))}<mark class="setting-search-result__mark">${escapeHtml(raw.slice(start, end))}</mark>${escapeHtml(raw.slice(end))}`;
+}
+
+function getSettingSearchScopeLabel() {
+  if (settingSearchScope.type === "profile") {
+    const profile = getSettingProfileById(settingSearchScope.profileId);
+    return profile?.name || getUIText("setting_search_source_profile", "Profile");
+  }
+  return getUIText("setting_search_all", "All settings");
 }
 
 function clearSettingItemFocus() {
@@ -1218,6 +1316,12 @@ function focusSettingItem(name, behavior = "smooth") {
   );
   if (!target) return false;
 
+  const section = target.closest(".setting-profile-section");
+  if (section?.classList.contains("is-collapsed")) {
+    section.classList.remove("is-collapsed");
+    section.querySelector(".setting-profile-section__header")?.setAttribute("aria-expanded", "true");
+  }
+
   clearSettingItemFocus();
   target.classList.add("is-focus-hit");
   target.scrollIntoView({ behavior, block: "center" });
@@ -1248,6 +1352,7 @@ function closeSettingSearchPanel(options = {}) {
 
   if (clear && settingSearchInput) settingSearchInput.value = "";
   if (clear && settingSearchResults) settingSearchResults.innerHTML = "";
+  if (clear) settingSearchScope = { type: "all", profileId: "" };
   syncModalBodyLock();
 
   const state = history.state || {};
@@ -1281,8 +1386,14 @@ function renderSettingSearchResults(query = "") {
 
   const q = trimmed.toLowerCase();
   const matches = getSettingSearchEntries()
-    .filter((entry) => entry.haystack.includes(q))
-    .slice(0, 24);
+    .filter((entry) => {
+      if (!entry.haystack.includes(q)) return false;
+      if (settingSearchScope.type === "profile") {
+        return entry.source === "profile" && entry.profileId === settingSearchScope.profileId;
+      }
+      return true;
+    })
+    .slice(0, 36);
 
   settingSearchResults.innerHTML = "";
 
@@ -1294,37 +1405,70 @@ function renderSettingSearchResults(query = "") {
     return;
   }
 
-  matches.forEach((entry) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "setting-search-result";
-    button.innerHTML = `
-      <div class="setting-search-result__group">${highlightSettingSearchText(entry.groupLabel, trimmed)}</div>
-      <div class="setting-search-result__title">${highlightSettingSearchText(entry.title || entry.name, trimmed)}</div>
-      ${entry.name && entry.name !== entry.title ? `<div class="setting-search-result__name">${highlightSettingSearchText(entry.name, trimmed)}</div>` : ""}
-      ${entry.descr ? `<div class="setting-search-result__descr">${highlightSettingSearchText(entry.descr, trimmed)}</div>` : ""}
+  const sections = [
+    {
+      key: "carrot",
+      title: getUIText("setting_search_source_carrot", "CarrotPilot"),
+      entries: matches.filter((entry) => entry.source === "carrot"),
+    },
+    {
+      key: "profile",
+      title: getUIText("setting_search_source_profile", "Profile"),
+      entries: matches.filter((entry) => entry.source === "profile"),
+    },
+  ].filter((section) => section.entries.length);
+
+  sections.forEach((section) => {
+    const sectionEl = document.createElement("div");
+    sectionEl.className = "setting-search-section";
+    sectionEl.innerHTML = `
+      <div class="setting-search-section__title">
+        <span>${escapeHtml(section.title)}</span>
+        <strong>${section.entries.length}</strong>
+      </div>
     `;
-    button.onclick = async () => {
-      try {
-        pendingSettingFocus = { group: entry.group, name: entry.name };
-        closeSettingSearchPanel({ syncHistory: false });
-        if (CURRENT_GROUP === entry.group && screenItems && screenItems.style.display !== "none") {
-          focusSettingItem(entry.name);
-          return;
+    settingSearchResults.appendChild(sectionEl);
+
+    section.entries.forEach((entry) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "setting-search-result";
+      const metaLabel = entry.source === "profile"
+        ? `${entry.profileName} / ${entry.groupLabel}`
+        : entry.groupLabel;
+      button.innerHTML = `
+        <div class="setting-search-result__group">${highlightSettingSearchText(metaLabel, trimmed)}</div>
+        <div class="setting-search-result__title">${highlightSettingSearchText(entry.title || entry.name, trimmed)}</div>
+        ${entry.name && entry.name !== entry.title ? `<div class="setting-search-result__name">${highlightSettingSearchText(entry.name, trimmed)}</div>` : ""}
+        ${entry.descr ? `<div class="setting-search-result__descr">${highlightSettingSearchText(entry.descr, trimmed)}</div>` : ""}
+      `;
+      button.onclick = async () => {
+        try {
+          pendingSettingFocus = { group: entry.group, name: entry.name };
+          if (entry.source === "profile" && entry.profileId && entry.originalGroup) {
+            settingProfileSectionExpandedState.set(`${entry.profileId}:${entry.originalGroup}`, true);
+          }
+          closeSettingSearchPanel({ syncHistory: false });
+          if (CURRENT_GROUP === entry.group && screenItems && screenItems.style.display !== "none") {
+            focusSettingItem(entry.name);
+            return;
+          }
+          await activateSettingGroup(entry.group, true);
+        } catch (e) {
+          showAppToast(e.message || "Search jump failed", { tone: "error" });
         }
-        await activateSettingGroup(entry.group, true);
-      } catch (e) {
-        showAppToast(e.message || "Search jump failed", { tone: "error" });
-      }
-    };
-    settingSearchResults.appendChild(button);
+      };
+      settingSearchResults.appendChild(button);
+    });
   });
 }
 
 async function openSettingSearchPanel(options = {}) {
   const pushHistory = options.pushHistory !== false;
+  const scope = options.scope || { type: "all", profileId: "" };
   if (CURRENT_PAGE !== "setting") return;
   closeSettingFabMenu();
+  closeSettingProfileActionMenus();
   if (!SETTINGS) {
     try {
       await loadSettings();
@@ -1332,6 +1476,12 @@ async function openSettingSearchPanel(options = {}) {
       // no-op
     }
   }
+  await loadSettingProfiles();
+  settingSearchScope = {
+    type: scope.type === "profile" && scope.profileId ? "profile" : "all",
+    profileId: scope.type === "profile" && scope.profileId ? String(scope.profileId) : "",
+  };
+  rebuildSettingSearchEntries();
   if (!settingSearchPanel) return;
   mountSettingSearchOverlay();
   settingSearchPanel.hidden = false;
@@ -1345,9 +1495,17 @@ async function openSettingSearchPanel(options = {}) {
       screen: (screenItems && screenItems.style.display !== "none") ? "items" : "groups",
       group: CURRENT_GROUP || null,
       search: true,
+      searchScope: settingSearchScope.type,
+      profileId: settingSearchScope.profileId || null,
     }, "");
   }
   syncModalBodyLock();
+  if (settingSearchInput) {
+    settingSearchInput.placeholder = settingSearchScope.type === "profile"
+      ? getUIText("setting_profile_search_placeholder", "Search in this profile")
+      : getUIText("setting_search_placeholder", "Search name, description, group");
+    settingSearchInput.setAttribute("aria-label", getSettingSearchScopeLabel());
+  }
   renderSettingSearchResults(settingSearchInput?.value || "");
   requestAnimationFrame(() => {
     settingSearchInput?.focus({ preventScroll: true });
@@ -1447,19 +1605,28 @@ window.addEventListener("keydown", (e) => {
     closeSettingSearchPanel({ syncHistory: true });
     return;
   }
+  if (e.key === "Escape") {
+    closeSettingProfileActionMenus();
+  }
   if (e.key === "Escape" && settingFabMenuOpen) {
     closeSettingFabMenu();
   }
 });
 
 document.addEventListener("pointerdown", (e) => {
+  if (!(e.target instanceof Element && e.target.closest(".setting-profile-action-menu"))) {
+    closeSettingProfileActionMenus();
+  }
   if (!settingFabMenuOpen || !settingFabMenu) return;
   if (settingFabMenu.contains(e.target)) return;
   closeSettingFabMenu();
 });
 
 window.addEventListener("carrot:pagechange", (event) => {
-  if (event?.detail?.page !== "setting") closeSettingFabMenu();
+  if (event?.detail?.page !== "setting") {
+    closeSettingFabMenu();
+    closeSettingProfileActionMenus();
+  }
 });
 
 function updateSettingSubnavLayoutState() {
