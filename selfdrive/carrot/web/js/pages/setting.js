@@ -550,6 +550,78 @@ async function loadSettings(options = {}) {
   return settingsLoadPromise;
 }
 
+let settingOverflowSyncRaf = 0;
+let settingOverflowSyncTimer = 0;
+let settingOverflowResizeObserver = null;
+
+function measureSettingGroupButtonOverflow(button) {
+  if (!button) return;
+  const labelEl = button.querySelector(".setting-group-label");
+  if (!labelEl) return;
+  const buttonWidth = button.clientWidth || 0;
+  if (buttonWidth <= 0) return;
+  const shift = Math.min(0, buttonWidth - labelEl.scrollWidth - 8);
+  button.style.setProperty("--setting-label-shift", `${shift}px`);
+  button.classList.toggle("is-overflowing", shift < 0);
+}
+
+function syncSettingGroupLabelOverflow(root = document) {
+  const scope = root && typeof root.querySelectorAll === "function" ? root : document;
+  if (scope.matches?.("#groupList .groupBtn, #deviceGroupList .groupBtn")) {
+    measureSettingGroupButtonOverflow(scope);
+  }
+  const selector = (scope.id === "groupList" || scope.id === "deviceGroupList")
+    ? ".groupBtn"
+    : "#groupList .groupBtn, #deviceGroupList .groupBtn";
+  scope.querySelectorAll(selector).forEach(measureSettingGroupButtonOverflow);
+}
+
+function syncSettingOverflow(root = document) {
+  syncSettingMarqueeOverflow(root);
+  syncSettingGroupLabelOverflow(root);
+}
+
+function scheduleSettingOverflowSync(root = document, delayMs = 0) {
+  if (settingOverflowSyncRaf) cancelAnimationFrame(settingOverflowSyncRaf);
+  if (settingOverflowSyncTimer) {
+    window.clearTimeout(settingOverflowSyncTimer);
+    settingOverflowSyncTimer = 0;
+  }
+
+  const run = () => {
+    settingOverflowSyncRaf = requestAnimationFrame(() => {
+      settingOverflowSyncRaf = 0;
+      syncSettingOverflow(root);
+    });
+  };
+
+  if (delayMs > 0) {
+    settingOverflowSyncTimer = window.setTimeout(() => {
+      settingOverflowSyncTimer = 0;
+      run();
+    }, delayMs);
+  } else {
+    run();
+  }
+}
+
+function initSettingOverflowObservers() {
+  if (settingOverflowResizeObserver || typeof ResizeObserver !== "function") return;
+  settingOverflowResizeObserver = new ResizeObserver(() => scheduleSettingOverflowSync(document));
+  [
+    "settingScreenHost",
+    "settingScreenGroups",
+    "settingScreenItems",
+    "groupList",
+    "deviceGroupList",
+    "items",
+    "deviceItems",
+  ].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) settingOverflowResizeObserver.observe(el);
+  });
+}
+
 function renderGroups(options = {}) {
   const box = document.getElementById("groupList");
   const animateGroups = options.animateGroups !== false;
@@ -560,13 +632,7 @@ function renderGroups(options = {}) {
     const text = Number.isFinite(Number(count)) ? `${label} (${count})` : label;
     button.title = text;
     button.innerHTML = `<span class="setting-group-label">${escapeHtml(text)}</span>`;
-    requestAnimationFrame(() => {
-      const labelEl = button.querySelector(".setting-group-label");
-      if (!labelEl) return;
-      const shift = Math.min(0, button.clientWidth - labelEl.scrollWidth - 8);
-      button.style.setProperty("--setting-label-shift", `${shift}px`);
-      button.classList.toggle("is-overflowing", shift < 0);
-    });
+    requestAnimationFrame(() => measureSettingGroupButtonOverflow(button));
   }
 
   if (!animateGroups && box.dataset.groupsSignature === signature && box.children.length === groups.length) {
@@ -588,6 +654,7 @@ function renderGroups(options = {}) {
       setGroupButtonLabel(button, label, g.count);
       button.onclick = () => selectGroup(g.group);
     });
+    scheduleSettingOverflowSync(box);
     return;
   }
 
@@ -617,6 +684,7 @@ function renderGroups(options = {}) {
     b.onclick = () => selectGroup(g.group);
     box.appendChild(b);
   });
+  scheduleSettingOverflowSync(box);
 }
 
 function getSettingGroupMeta(group) {
@@ -1300,10 +1368,28 @@ function syncSettingMarqueeOverflow(root = document) {
   root.querySelectorAll(".setting-marquee").forEach((el) => {
     const content = el.querySelector(".setting-marquee__content");
     if (!content) return;
+    const elWidth = el.clientWidth || 0;
+    if (elWidth <= 0) return;
     const overflow = content.scrollWidth > el.clientWidth + 2;
     const distance = Math.max(0, content.scrollWidth - el.clientWidth + 18);
+    const nextDistance = `${distance}px`;
+    const prevDistance = el.style.getPropertyValue("--setting-marquee-distance");
+    const wasOverflowing = el.classList.contains("is-overflowing");
+    el.style.setProperty("--setting-marquee-distance", nextDistance);
+    el.scrollLeft = 0;
+    if (!overflow) {
+      el.classList.remove("is-overflowing");
+      content.style.animation = "";
+      return;
+    }
+
+    if (!wasOverflowing || prevDistance !== nextDistance) {
+      el.classList.remove("is-overflowing");
+      content.style.animation = "none";
+      void content.offsetWidth;
+      content.style.animation = "";
+    }
     el.classList.toggle("is-overflowing", overflow);
-    el.style.setProperty("--setting-marquee-distance", `${distance}px`);
   });
 }
 
@@ -2153,9 +2239,21 @@ async function renderItems(group, options = {}) {
       const bodyInner = document.createElement("div");
       bodyInner.className = "setting-profile-section__bodyInner";
       header.onclick = () => {
-        const nextExpanded = section.classList.toggle("is-collapsed") ? false : true;
+        const wasCollapsed = section.classList.contains("is-collapsed");
+        const nextExpanded = wasCollapsed;
+        section.classList.remove("is-expanding", "is-collapsing");
+        if (section.__settingProfileMotionTimer) {
+          window.clearTimeout(section.__settingProfileMotionTimer);
+        }
+        void section.offsetWidth;
+        section.classList.toggle("is-collapsed", !nextExpanded);
+        section.classList.add(nextExpanded ? "is-expanding" : "is-collapsing");
         settingProfileSectionExpandedState.set(stateKey, nextExpanded);
         header.setAttribute("aria-expanded", nextExpanded ? "true" : "false");
+        section.__settingProfileMotionTimer = window.setTimeout(() => {
+          section.classList.remove("is-expanding", "is-collapsing");
+          section.__settingProfileMotionTimer = null;
+        }, 280);
       };
       body.appendChild(bodyInner);
       section.appendChild(header);
@@ -2347,7 +2445,7 @@ async function renderItems(group, options = {}) {
   });
 
   itemsBox.dataset.renderedGroup = group;
-  requestAnimationFrame(() => syncSettingMarqueeOverflow(itemsBox));
+  scheduleSettingOverflowSync(itemsBox);
 
   if (pendingSettingFocus?.group === group) {
     requestAnimationFrame(() => focusSettingItem(pendingSettingFocus.name));
@@ -2528,11 +2626,19 @@ window.addEventListener("carrot:paramsrestored", (event) => {
 
 window.addEventListener("resize", () => {
   scheduleSettingViewportLayoutSync(false);
-  requestAnimationFrame(() => syncSettingMarqueeOverflow(document.getElementById("items") || document));
+  scheduleSettingOverflowSync(document, 80);
 }, { passive: true });
 
 window.addEventListener("orientationchange", () => {
   scheduleSettingViewportLayoutSync(true);
-  window.setTimeout(() => syncSettingMarqueeOverflow(document.getElementById("items") || document), 160);
+  scheduleSettingOverflowSync(document, 180);
 }, { passive: true });
+
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", () => {
+    scheduleSettingOverflowSync(document, 80);
+  }, { passive: true });
+}
+
+initSettingOverflowObservers();
 
