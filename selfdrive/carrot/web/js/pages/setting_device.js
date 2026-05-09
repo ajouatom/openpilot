@@ -135,10 +135,11 @@ async function loadDeviceNetwork(useCache = true) {
   return deviceNetworkLoadPromise;
 }
 
-function renderDeviceGroups() {
+function renderDeviceGroups(options = {}) {
   const groupContainer = document.getElementById("deviceGroupList");
   const subnavContainer = document.getElementById("deviceSubnav");
   if (!groupContainer) return;
+  const animateGroups = options.animateGroups !== false;
 
   groupContainer.innerHTML = "";
   if (subnavContainer) subnavContainer.innerHTML = "";
@@ -148,11 +149,12 @@ function renderDeviceGroups() {
     CURRENT_DEVICE_GROUP = visibleGroups[0]?.id || "Device";
   }
 
-  visibleGroups.forEach((group) => {
+  visibleGroups.forEach((group, index) => {
     const label = getDeviceGroupLabel(group.id);
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "btn groupBtn";
+    button.className = animateGroups ? "btn groupBtn ui-stagger-item" : "btn groupBtn";
+    if (animateGroups) button.style.setProperty("--i", String(index));
     if (group.id === CURRENT_DEVICE_GROUP) button.classList.add("active");
     button.dataset.deviceGroup = group.id;
     button.innerHTML = `<span class="setting-group-label">${escapeHtml(label)}</span>`;
@@ -162,7 +164,8 @@ function renderDeviceGroups() {
     if (subnavContainer) {
       const tab = document.createElement("button");
       tab.type = "button";
-      tab.className = "setting-subnav__tab";
+      tab.className = animateGroups ? "setting-subnav__tab ui-stagger-item" : "setting-subnav__tab";
+      if (animateGroups) tab.style.setProperty("--i", String(index));
       if (group.id === CURRENT_DEVICE_GROUP) tab.classList.add("is-active");
       tab.dataset.deviceGroup = group.id;
       tab.textContent = label;
@@ -172,17 +175,28 @@ function renderDeviceGroups() {
   });
 }
 
-async function renderDeviceTab() {
+function applyDeviceItemsStagger(container) {
+  if (!container) return;
+  Array.from(container.children).forEach((child, index) => {
+    if (!child.classList?.contains("setting")) return;
+    child.classList.add("ui-stagger-item");
+    child.style.setProperty("--i", String(index));
+  });
+}
+
+async function renderDeviceTab(options = {}) {
   syncSettingTabState("device");
-  renderDeviceGroups();
+  const animateGroups = options.animateGroups !== false;
+  const animateItems = options.animateItems !== false;
+  renderDeviceGroups({ animateGroups });
   if (!deviceTabLoaded) {
     deviceTabLoaded = true;
     loadDeviceParams("Device", true).then(() => {
-      if (CURRENT_SETTING_TAB === "device") renderDeviceGroups();
+      if (CURRENT_SETTING_TAB === "device") renderDeviceGroups({ animateGroups: false });
     });
   }
   if (typeof isCompactLandscapeMode === "function" && isCompactLandscapeMode()) {
-    await renderDeviceItems(CURRENT_DEVICE_GROUP, false);
+    await renderDeviceItems(CURRENT_DEVICE_GROUP, false, { animateItems });
   }
 }
 
@@ -190,7 +204,7 @@ async function selectDeviceGroup(groupId) {
   CURRENT_DEVICE_GROUP = groupId || CURRENT_DEVICE_GROUP;
   renderDeviceGroups();
   syncSettingTabState("device");
-  await renderDeviceItems(CURRENT_DEVICE_GROUP, true);
+  await renderDeviceItems(CURRENT_DEVICE_GROUP, true, { animateItems: true });
 }
 
 async function getDeviceGroupValues(groupId) {
@@ -223,6 +237,9 @@ async function renderDeviceItems(groupId, showItemsScreen = true, options = {}) 
   }
 
   itemsContainer.innerHTML = renderDeviceGroupItems(groupId, values) || `<div class="muted mt-md text-center">-</div>`;
+  if (!silentRefresh && options.animateItems !== false) {
+    applyDeviceItemsStagger(itemsContainer);
+  }
   bindDeviceTabEvents(itemsContainer);
   syncDeviceGroupActiveState(groupId);
   syncDeviceNetworkRefresh();

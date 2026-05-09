@@ -45,6 +45,11 @@
     top: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height-desktop) - env(safe-area-inset-bottom, 0px) - var(--fab-size) - 12px - var(--sp-lg));
   }
 
+  .page-fab-layer--setting .setting-fab-menu {
+    --fab-size: 68px;
+    bottom: calc(var(--nav-bar-height-desktop) + env(safe-area-inset-bottom, 0px) + 12px + var(--sp-lg));
+  }
+
 }
 
 /* ── Mobile tweaks ────────────────────────────────────────── */
@@ -58,6 +63,10 @@
   .fab {
     --fab-size: 62px;
     font-size: 11px;
+  }
+
+  .page-fab-layer--setting .setting-fab-menu {
+    --fab-size: 62px;
   }
 
 }
@@ -136,6 +145,26 @@
 
   .page-fab-layer .fab {
     top: calc(var(--app-vv-height, 100dvh) - env(safe-area-inset-bottom, 0px) - var(--fab-size) - 18px);
+  }
+
+  .page-fab-layer--setting .setting-fab-menu {
+    --fab-size: 56px;
+    right: auto;
+    left: calc(
+      var(--nav-rail-width) +
+      var(--setting-landscape-page-inset, 24px) +
+      var(--setting-landscape-left-width, 260px) -
+      var(--fab-size) -
+      18px
+    );
+    bottom: calc(var(--setting-landscape-page-inset, 24px) + env(safe-area-inset-bottom, 0px));
+  }
+
+  .setting-fab-actions {
+    right: 0;
+    left: auto;
+    align-items: flex-end;
+    transform-origin: right bottom;
   }
 
 }

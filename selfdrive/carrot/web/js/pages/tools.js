@@ -384,7 +384,9 @@ let toolsLanguageMenuOpen = false;
 
 function getAvailableWebLanguages() {
   const registry = window.CarrotTranslations || {};
-  const order = Array.isArray(registry.order) ? registry.order : ["ko", "en", "zh"];
+  const allowed = window.CARROT_WEB_LANGUAGE_CODES || ["ko", "en", "zh"];
+  const rawOrder = Array.isArray(registry.order) ? registry.order : allowed;
+  const order = [...new Set([...rawOrder, ...allowed])].filter((lang) => allowed.includes(lang));
   return order
     .map((lang) => {
       const pack = registry.getPack?.(lang) || registry.packs?.[lang] || {};
@@ -463,11 +465,12 @@ function renderToolsMeta() {
   const languages = getAvailableWebLanguages();
   const current = languages.find((item) => item.lang === LANG) || languages[0];
   const langWrap = document.createElement("div");
-  langWrap.className = "tools-lang-menu";
+  langWrap.className = "tools-lang-menu ui-dropdown-menu";
+  langWrap.classList.toggle("is-open", toolsLanguageMenuOpen);
 
   const langBtn = document.createElement("button");
   langBtn.type = "button";
-  langBtn.className = "tools-lang-menu__button";
+  langBtn.className = "tools-lang-menu__button ui-dropdown-menu__button";
   langBtn.setAttribute("aria-haspopup", "menu");
   langBtn.setAttribute("aria-expanded", toolsLanguageMenuOpen ? "true" : "false");
   langBtn.innerHTML = `
@@ -488,7 +491,7 @@ function renderToolsMeta() {
 
   if (toolsLanguageMenuOpen) {
     const panel = document.createElement("div");
-    panel.className = "tools-lang-menu__panel";
+    panel.className = "tools-lang-menu__panel ui-dropdown-menu__panel";
     panel.setAttribute("role", "menu");
     const currentLabel = current?.name || LANG.toUpperCase();
     panel.innerHTML = `
@@ -498,7 +501,7 @@ function renderToolsMeta() {
     languages.forEach((item) => {
       const option = document.createElement("button");
       option.type = "button";
-      option.className = "tools-lang-menu__item";
+      option.className = "tools-lang-menu__item ui-dropdown-menu__item";
       option.setAttribute("role", "menuitemradio");
       option.setAttribute("aria-checked", item.lang === LANG ? "true" : "false");
       option.innerHTML = `
@@ -755,14 +758,6 @@ async function syncDeviceLanguageOnce() {
     let targetParam = "main_en";
     if (browserLang.startsWith("ko")) targetParam = "main_ko";
     else if (browserLang.startsWith("zh")) targetParam = browserLang.includes("tw") || browserLang.includes("hk") ? "main_zh-CHT" : "main_zh-CHS";
-    else if (browserLang.startsWith("ja")) targetParam = "main_ja";
-    else if (browserLang.startsWith("de")) targetParam = "main_de";
-    else if (browserLang.startsWith("fr")) targetParam = "main_fr";
-    else if (browserLang.startsWith("es")) targetParam = "main_es";
-    else if (browserLang.startsWith("pt")) targetParam = "main_pt-BR";
-    else if (browserLang.startsWith("tr")) targetParam = "main_tr";
-    else if (browserLang.startsWith("ar")) targetParam = "main_ar";
-    else if (browserLang.startsWith("th")) targetParam = "main_th";
 
     if (currentLang !== targetParam) {
       await setParam("LanguageSetting", targetParam);
@@ -1343,20 +1338,8 @@ function initToolsPage() {
   });
 
   bindOnce("btnDeviceLang", async () => {
-    const choices = [
-      { label: "한국어", value: "main_ko" },
-      { label: "English", value: "main_en" },
-      { label: "中文(简体)", value: "main_zh-CHS" },
-      { label: "中文(繁體)", value: "main_zh-CHT" },
-      { label: "日本語", value: "main_ja" },
-      { label: "Deutsch", value: "main_de" },
-      { label: "Français", value: "main_fr" },
-      { label: "Português", value: "main_pt-BR" },
-      { label: "Español", value: "main_es" },
-      { label: "Türkçe", value: "main_tr" },
-      { label: "العربية", value: "main_ar" },
-      { label: "ไทย", value: "main_th" },
-    ];
+    const choices = (window.CarrotDeviceLanguageOptions || [])
+      .map((lang) => ({ label: lang.name, value: lang.code }));
     const val = await openAppDialog({
       mode: "choice",
       title: getUIText("device_lang", "Device Language"),

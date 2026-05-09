@@ -84,6 +84,10 @@ function resolveAppDialog(result) {
       appDialogChoices.hidden = true;
       appDialogChoices.innerHTML = "";
     }
+    if (appDialogDefault) {
+      appDialogDefault.hidden = true;
+      appDialogDefault.onclick = null;
+    }
     if (appDialogInputWrap) appDialogInputWrap.hidden = true;
     if (appDialogInput) {
       appDialogInput.value = "";
@@ -133,12 +137,14 @@ function openAppDialog(options = {}) {
   const useHtml = Boolean(options.html);
   const confirmLabel = options.confirmLabel || getUIText("ok", "OK");
   const cancelLabel = options.cancelLabel || getUIText("cancel", "Cancel");
+  const defaultActionLabel = options.defaultActionLabel || "";
+  const hasDefaultAction = mode === "prompt" && Boolean(defaultActionLabel);
   const choices = Array.isArray(options.choices)
     ? options.choices.filter((choice) => choice && (choice.label || choice.labelHtml))
     : [];
   const hasChoices = choices.length > 0;
   const isChoice = mode === "choice" || hasChoices;
-  const showCancel = mode !== "alert";
+  const showCancel = mode !== "alert" && options.showCancel !== false;
 
   appDialogTitle.textContent = title;
   if (useHtml) appDialogBody.innerHTML = String(messageHtml || message);
@@ -152,6 +158,14 @@ function openAppDialog(options = {}) {
   appDialogCancel.setAttribute("aria-hidden", showCancel ? "false" : "true");
   appDialogConfirm.hidden = isChoice;
   appDialogConfirm.setAttribute("aria-hidden", isChoice ? "true" : "false");
+  if (appDialogDefault) {
+    appDialogDefault.hidden = !hasDefaultAction;
+    appDialogDefault.textContent = defaultActionLabel;
+    appDialogDefault.disabled = false;
+    appDialogDefault.onclick = hasDefaultAction
+      ? () => resolveAppDialog(options.defaultActionValue ?? "")
+      : null;
+  }
 
   const copyText = options.copyText || "";
   if (appDialogCopy) {
@@ -251,6 +265,9 @@ function appPrompt(message, opts = {}) {
     confirmLabel: opts.confirmLabel,
     cancelLabel: opts.cancelLabel,
     defaultValue: opts.defaultValue,
+    defaultActionLabel: opts.defaultActionLabel,
+    defaultActionValue: opts.defaultActionValue,
+    showCancel: opts.showCancel,
     placeholder: opts.placeholder,
   });
 }
