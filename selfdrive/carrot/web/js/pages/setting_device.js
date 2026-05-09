@@ -176,6 +176,7 @@ function renderDeviceGroups(options = {}) {
         tab.onclick = () => selectDeviceGroup(entry.group.id);
       });
     }
+    if (typeof scheduleSettingOverflowSync === "function") scheduleSettingOverflowSync(groupContainer);
     return;
   }
 
@@ -211,6 +212,7 @@ function renderDeviceGroups(options = {}) {
       subnavContainer.appendChild(tab);
     }
   });
+  if (typeof scheduleSettingOverflowSync === "function") scheduleSettingOverflowSync(groupContainer);
 }
 
 function applyDeviceItemsStagger(container) {

@@ -1242,7 +1242,8 @@
     display: none;
   }
 
-  .page--setting.setting-layout-split #groupList .groupBtn .setting-group-label {
+  .page--setting.setting-layout-split #groupList .groupBtn .setting-group-label,
+  .page--setting.setting-layout-split #deviceGroupList .groupBtn .setting-group-label {
     display: inline-block;
     min-width: max-content;
     transform: translateX(0);
@@ -1251,7 +1252,10 @@
 
   .page--setting.setting-layout-split #groupList .groupBtn.is-overflowing:hover .setting-group-label,
   .page--setting.setting-layout-split #groupList .groupBtn.is-overflowing:focus .setting-group-label,
-  .page--setting.setting-layout-split #groupList .groupBtn.is-overflowing:active .setting-group-label {
+  .page--setting.setting-layout-split #groupList .groupBtn.is-overflowing:active .setting-group-label,
+  .page--setting.setting-layout-split #deviceGroupList .groupBtn.is-overflowing:hover .setting-group-label,
+  .page--setting.setting-layout-split #deviceGroupList .groupBtn.is-overflowing:focus .setting-group-label,
+  .page--setting.setting-layout-split #deviceGroupList .groupBtn.is-overflowing:active .setting-group-label {
     animation: setting-left-text-pan 4.2s ease-in-out 1;
   }
 
