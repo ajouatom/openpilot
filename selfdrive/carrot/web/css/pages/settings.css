@@ -653,6 +653,19 @@
 .setting-profile-action-menu__button {
   width: 42px;
   height: 42px;
+  min-width: 42px;
+  min-height: 42px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--md-on-surface-var);
+}
+
+.setting-profile-action-menu__button:hover,
+.setting-profile-action-menu__button:focus-visible,
+.setting-profile-action-menu.is-open .setting-profile-action-menu__button {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--md-primary) 10%, transparent);
+  color: var(--md-on-surface);
 }
 
 .setting-profile-action-menu__button svg {
