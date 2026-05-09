@@ -240,62 +240,19 @@ function toolsQrPreviewImageFile(file, preview, statusNode) {
 }
 
 function toolsQrSummaryHtml(summary = {}) {
-  const item = (key, labelKey, fallback) => `
-    <span class="tools-qr-chip">
-      <strong>${Number(summary[key] || 0)}</strong>
-      <span>${toolsQrEscape(toolsQrText(labelKey, fallback))}</span>
-    </span>
-  `;
-  return `
-    <div class="tools-qr-summary">
-      ${item("changed", "qr_restore_changed", "changed")}
-      ${item("same", "qr_restore_same", "same")}
-      ${item("skipped", "qr_restore_skipped", "skipped")}
-      ${item("invalid", "qr_restore_invalid", "invalid")}
-    </div>
-  `;
+  if (typeof renderSettingsDiffSummary === "function") return renderSettingsDiffSummary(summary);
+  return "";
 }
 
 function toolsQrDiffHtml(preview) {
-  const entries = Array.isArray(preview?.entries) ? preview.entries : [];
-  const changed = entries.filter((entry) => entry.apply || entry.status === "changed");
-  const shown = changed.slice(0, 80);
-  const hiddenCount = Math.max(0, changed.length - shown.length);
-  const currentLabel = toolsQrText("qr_restore_current_value", "Current");
-  const backupLabel = toolsQrText("qr_restore_backup_value", "Restore");
-  const changedLabel = toolsQrText("qr_restore_changed", "Changed");
-  const rows = shown.map((entry) => `
-    <div class="tools-qr-diff__row">
-      <div class="tools-qr-diff__head">
-        <div class="tools-qr-diff__key">${toolsQrEscape(entry.key)}</div>
-        <span class="tools-qr-diff__status">${toolsQrEscape(changedLabel)}</span>
-      </div>
-      <div class="tools-qr-diff__compare">
-        <div class="tools-qr-diff__value tools-qr-diff__value--old">
-          <span>${toolsQrEscape(currentLabel)}</span>
-          <code>${toolsQrEscape(entry.current)}</code>
-        </div>
-        <div class="tools-qr-diff__arrow" aria-hidden="true">&gt;</div>
-        <div class="tools-qr-diff__value tools-qr-diff__value--new">
-          <span>${toolsQrEscape(backupLabel)}</span>
-          <code>${toolsQrEscape(entry.value)}</code>
-        </div>
-      </div>
-    </div>
-  `).join("");
-
-  if (!changed.length) {
-    return `
-      ${toolsQrSummaryHtml(preview?.summary)}
-      <div class="tools-qr-empty">${toolsQrEscape(toolsQrText("qr_restore_no_changes", "No changes to apply."))}</div>
-    `;
+  if (typeof renderSettingsDiffHtml === "function") {
+    return renderSettingsDiffHtml(preview, {
+      currentLabel: toolsQrText("qr_restore_current_value", "Current"),
+      nextLabel: toolsQrText("qr_restore_backup_value", "Restore"),
+      changedLabel: toolsQrText("qr_restore_changed", "Changed"),
+    });
   }
-
-  return `
-    ${toolsQrSummaryHtml(preview?.summary)}
-    <div class="tools-qr-diff__list">${rows}</div>
-    ${hiddenCount ? `<div class="tools-qr-more">${toolsQrEscape(toolsQrText("qr_restore_more", "{count} more changes hidden", { count: hiddenCount }))}</div>` : ""}
-  `;
+  return toolsQrSummaryHtml(preview?.summary);
 }
 
 async function toolsQrShowBackup() {

@@ -7,8 +7,6 @@ const LANG_EMOJI = {
   ko: "🇰🇷",
   en: "🇺🇸",
   zh: "🇨🇳",
-  ja: "🇯🇵",
-  fr: "🇫🇷",
 };
 
 let UNIT_CYCLE = [1, 2, 5, 10, 50, 100];
