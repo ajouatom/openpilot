@@ -140,7 +140,8 @@ class CarController(CarControllerBase):
     self.apply_angle_last = 0
     self.lkas_max_torque = 0
     self.angle_max_torque = 250
-    self.steer_pressed_timer = 0
+    self.prev_abs_angle_error = 0.0
+    self.recover_level = 1.0
 
     self.lkas11_active = False
 
@@ -239,12 +240,23 @@ class CarController(CarControllerBase):
     if angle_control:
       apply_steer_req = CC.latActive
 
+    def _clip(x, lo, hi):
+      return min(max(x, lo), hi)
+
+    def _scale01(x, lo, hi):
+      return _clip((x - lo) / (hi - lo), 0.0, 1.0)
+
+    angle_error = apply_angle - CS.out.steeringAngleDeg
+    abs_angle_error = abs(angle_error)
+
+    error_delta = self.prev_abs_angle_error - abs_angle_error
+
     if CS.out.steeringPressed:
-      #self.apply_angle_last = CS.out.steeringAngleDeg
-      self.lkas_max_torque = max(self.lkas_max_torque - 20, 25)
-      self.steer_pressed_timer = int(2.0 / DT_CTRL)
+      # Driver touched the wheel, immediately yield.
+      self.lkas_max_torque = 25
+      self.recover_level = 0.0
+
     else:
-      angle_error = abs(apply_angle - CS.out.steeringAngleDeg)
       target_torque = self.angle_max_torque
 
       max_steering_tq = self.params.STEER_DRIVER_ALLOWANCE * 0.7
@@ -252,19 +264,33 @@ class CarController(CarControllerBase):
       rate_up = self.params.ANGLE_TORQUE_UP_RATE * rate_ratio
       rate_down = self.params.ANGLE_TORQUE_DOWN_RATE * rate_ratio
 
-      if self.steer_pressed_timer > 0:
-        self.steer_pressed_timer -= 1
+      recover_level = self.recover_level
 
-        if angle_error < 2.0:
-          self.steer_pressed_timer -= 50
+      # error_delta > 0 means actual steering angle and apply_angle are getting closer.
+      recover_factor = 0.0
+      if error_delta > 0.02:
+        recover_factor = _scale01(error_delta, 0.02, 0.30)
 
-        target_torque *= 0.3
+      # Normal recovery is slow.
+      # If angle error is decreasing, recover faster.
+      recover_rate = 0.005 + recover_factor * 0.035
+      recover_level = _clip(recover_level + recover_rate, 0.0, 1.0)
+      self.recover_level = recover_level
+
+      # While recovering, limit available torque.
+      # recover_level = 0.0 -> 30%
+      # recover_level = 1.0 -> 100%
+      target_torque *= 0.3 + recover_level * 0.7
+
+      # If angle error is already converging, allow torque to come back a little faster.
+      rate_up *= 1.0 + recover_factor * 0.5
 
       if self.lkas_max_torque > target_torque:
         self.lkas_max_torque = max(self.lkas_max_torque - rate_down, target_torque)
       else:
         self.lkas_max_torque = min(self.lkas_max_torque + rate_up, target_torque)
 
+    self.prev_abs_angle_error = abs_angle_error
 
     if not CC.latActive:
       apply_torque = 0
