@@ -1,11 +1,20 @@
 "use strict";
 
-// Translation registry — loaded by translations/registry.js + ko/en/zh/ja/fr.js
+// Translation registry — loaded by translations/registry.js + ko/en/zh.js
 const TRANSLATION_REGISTRY = window.CarrotTranslations || { packs: {}, order: ["en", "ko", "zh"] };
 const UI_STRINGS = TRANSLATION_REGISTRY.strings || {};
 const ACTION_LABELS = TRANSLATION_REGISTRY.actionLabels || {};
 const ERROR_MESSAGES = TRANSLATION_REGISTRY.errorMessages || {};
 const DRIVE_MODES = TRANSLATION_REGISTRY.driveModes || {};
+const CARROT_WEB_LANGUAGE_CODES = Object.freeze(["en", "ko", "zh"]);
+window.CARROT_WEB_LANGUAGE_CODES = CARROT_WEB_LANGUAGE_CODES;
+
+window.CarrotDeviceLanguageOptions = Object.freeze([
+  { code: "main_en", name: "English" },
+  { code: "main_ko", name: "한국어" },
+  { code: "main_zh-CHS", name: "简体中文" },
+  { code: "main_zh-CHT", name: "繁體中文" },
+]);
 
 let LANG = "en";
 
@@ -19,16 +28,12 @@ function normalizeLangCode(raw) {
     main_en: "en",
     "main_zh-chs": "zh",
     "main_zh-cht": "zh",
-    main_ja: "ja",
-    main_fr: "fr",
   };
   if (deviceAliases[value]) return deviceAliases[value];
   const withoutMainPrefix = value.replace(/^main[_-]/, "");
   if (packs[withoutMainPrefix]) return withoutMainPrefix;
   if (value.startsWith("ko")) return "ko";
   if (value.startsWith("zh")) return "zh";
-  if (value.startsWith("ja")) return "ja";
-  if (value.startsWith("fr")) return "fr";
   if (value.startsWith("en")) return "en";
   return "";
 }
@@ -287,8 +292,23 @@ function renderUIText() {
     settingSearchMeta.textContent = s.setting_search_idle || "";
   }
   if (btnSettingSearch) {
-    btnSettingSearch.setAttribute("aria-label", s.setting_search || "Search Settings");
-    btnSettingSearch.title = s.setting_search || "Search Settings";
+    btnSettingSearch.setAttribute("aria-label", s.setting_action_menu || "Setting actions");
+    btnSettingSearch.title = s.setting_action_menu || "Setting actions";
+  }
+  if (settingFabSearchLabel) settingFabSearchLabel.textContent = s.setting_search || "Search Settings";
+  if (btnSettingFabSearch) {
+    btnSettingFabSearch.setAttribute("aria-label", s.setting_search || "Search Settings");
+    btnSettingFabSearch.title = s.setting_search || "Search Settings";
+  }
+  if (settingFabProfileAddLabel) settingFabProfileAddLabel.textContent = s.profile_add || "Add Profile";
+  if (btnSettingFabProfileAdd) {
+    btnSettingFabProfileAdd.setAttribute("aria-label", s.profile_add || "Add Profile");
+    btnSettingFabProfileAdd.title = s.profile_add || "Add Profile";
+  }
+  if (settingFabResetDefaultsLabel) settingFabResetDefaultsLabel.textContent = s.setting_reset_defaults || "Reset Settings";
+  if (btnSettingFabResetDefaults) {
+    btnSettingFabResetDefaults.setAttribute("aria-label", s.setting_reset_defaults || "Reset Settings");
+    btnSettingFabResetDefaults.title = s.setting_reset_defaults || "Reset Settings";
   }
   if (btnSettingSearchSubmit) {
     btnSettingSearchSubmit.setAttribute("aria-label", s.setting_search || "Search Settings");
@@ -360,7 +380,9 @@ async function syncWebLanguageFromDeviceDefault() {
 }
 
 function toggleLang() {
-  const order = (TRANSLATION_REGISTRY.order || ["en", "ko", "zh"]).filter((lang) => UI_STRINGS[lang]);
+  const allowed = CARROT_WEB_LANGUAGE_CODES;
+  const rawOrder = Array.isArray(TRANSLATION_REGISTRY.order) ? TRANSLATION_REGISTRY.order : allowed;
+  const order = [...new Set([...rawOrder, ...allowed])].filter((lang) => allowed.includes(lang) && UI_STRINGS[lang]);
   const currentIndex = Math.max(0, order.indexOf(LANG));
   const next = order[(currentIndex + 1) % order.length] || "en";
   setWebLanguage(next);

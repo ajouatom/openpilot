@@ -74,7 +74,7 @@ function normalizeWebSettingValue(key, value) {
   if (key === "web_language") {
     if (typeof normalizeLangCode === "function") return normalizeLangCode(value);
     const lang = String(value || "").trim().toLowerCase();
-    return ["en", "ko", "zh", "ja", "fr"].includes(lang) ? lang : "";
+    return ["en", "ko", "zh"].includes(lang) ? lang : "";
   }
   return value;
 }

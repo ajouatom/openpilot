@@ -135,24 +135,65 @@ async function loadDeviceNetwork(useCache = true) {
   return deviceNetworkLoadPromise;
 }
 
-function renderDeviceGroups() {
+function renderDeviceGroups(options = {}) {
   const groupContainer = document.getElementById("deviceGroupList");
   const subnavContainer = document.getElementById("deviceSubnav");
   if (!groupContainer) return;
-
-  groupContainer.innerHTML = "";
-  if (subnavContainer) subnavContainer.innerHTML = "";
+  const animateGroups = options.animateGroups !== false;
 
   const visibleGroups = getVisibleDeviceGroups();
   if (!visibleGroups.some((group) => group.id === CURRENT_DEVICE_GROUP)) {
     CURRENT_DEVICE_GROUP = visibleGroups[0]?.id || "Device";
   }
+  const groupEntries = visibleGroups.map((group) => ({
+    group,
+    label: getDeviceGroupLabel(group.id),
+  }));
+  const signature = groupEntries.map((entry) => `${entry.group.id}:${entry.label}`).join("|");
 
-  visibleGroups.forEach((group) => {
-    const label = getDeviceGroupLabel(group.id);
+  if (
+    !animateGroups &&
+    groupContainer.dataset.deviceGroupsSignature === signature &&
+    groupContainer.children.length === groupEntries.length &&
+    (!subnavContainer || subnavContainer.children.length === groupEntries.length)
+  ) {
+    Array.from(groupContainer.children).forEach((button, index) => {
+      const entry = groupEntries[index];
+      button.className = "btn groupBtn";
+      if (entry.group.id === CURRENT_DEVICE_GROUP) button.classList.add("active");
+      button.dataset.deviceGroup = entry.group.id;
+      button.innerHTML = `<span class="setting-group-label">${escapeHtml(entry.label)}</span>`;
+      button.onclick = () => selectDeviceGroup(entry.group.id);
+    });
+
+    if (subnavContainer && subnavContainer.children.length === groupEntries.length) {
+      Array.from(subnavContainer.children).forEach((tab, index) => {
+        const entry = groupEntries[index];
+        tab.className = "setting-subnav__tab";
+        if (entry.group.id === CURRENT_DEVICE_GROUP) tab.classList.add("is-active");
+        tab.dataset.deviceGroup = entry.group.id;
+        tab.textContent = entry.label;
+        tab.onclick = () => selectDeviceGroup(entry.group.id);
+      });
+    }
+    if (typeof scheduleSettingOverflowSync === "function") scheduleSettingOverflowSync(groupContainer);
+    return;
+  }
+
+  groupContainer.innerHTML = "";
+  groupContainer.dataset.deviceGroupsSignature = signature;
+  if (subnavContainer) {
+    subnavContainer.innerHTML = "";
+    subnavContainer.dataset.deviceGroupsSignature = signature;
+  }
+
+  groupEntries.forEach((entry, index) => {
+    const group = entry.group;
+    const label = entry.label;
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "btn groupBtn";
+    button.className = animateGroups ? "btn groupBtn ui-stagger-item" : "btn groupBtn";
+    if (animateGroups) button.style.setProperty("--i", String(index));
     if (group.id === CURRENT_DEVICE_GROUP) button.classList.add("active");
     button.dataset.deviceGroup = group.id;
     button.innerHTML = `<span class="setting-group-label">${escapeHtml(label)}</span>`;
@@ -162,7 +203,8 @@ function renderDeviceGroups() {
     if (subnavContainer) {
       const tab = document.createElement("button");
       tab.type = "button";
-      tab.className = "setting-subnav__tab";
+      tab.className = animateGroups ? "setting-subnav__tab ui-stagger-item" : "setting-subnav__tab";
+      if (animateGroups) tab.style.setProperty("--i", String(index));
       if (group.id === CURRENT_DEVICE_GROUP) tab.classList.add("is-active");
       tab.dataset.deviceGroup = group.id;
       tab.textContent = label;
@@ -170,19 +212,31 @@ function renderDeviceGroups() {
       subnavContainer.appendChild(tab);
     }
   });
+  if (typeof scheduleSettingOverflowSync === "function") scheduleSettingOverflowSync(groupContainer);
 }
 
-async function renderDeviceTab() {
+function applyDeviceItemsStagger(container) {
+  if (!container) return;
+  Array.from(container.children).forEach((child, index) => {
+    if (!child.classList?.contains("setting")) return;
+    child.classList.add("ui-stagger-item");
+    child.style.setProperty("--i", String(index));
+  });
+}
+
+async function renderDeviceTab(options = {}) {
   syncSettingTabState("device");
-  renderDeviceGroups();
+  const animateGroups = options.animateGroups !== false;
+  const animateItems = options.animateItems !== false;
+  renderDeviceGroups({ animateGroups });
   if (!deviceTabLoaded) {
     deviceTabLoaded = true;
     loadDeviceParams("Device", true).then(() => {
-      if (CURRENT_SETTING_TAB === "device") renderDeviceGroups();
+      if (CURRENT_SETTING_TAB === "device") renderDeviceGroups({ animateGroups: false });
     });
   }
   if (typeof isCompactLandscapeMode === "function" && isCompactLandscapeMode()) {
-    await renderDeviceItems(CURRENT_DEVICE_GROUP, false);
+    await renderDeviceItems(CURRENT_DEVICE_GROUP, false, { animateItems });
   }
 }
 
@@ -190,7 +244,7 @@ async function selectDeviceGroup(groupId) {
   CURRENT_DEVICE_GROUP = groupId || CURRENT_DEVICE_GROUP;
   renderDeviceGroups();
   syncSettingTabState("device");
-  await renderDeviceItems(CURRENT_DEVICE_GROUP, true);
+  await renderDeviceItems(CURRENT_DEVICE_GROUP, true, { animateItems: true });
 }
 
 async function getDeviceGroupValues(groupId) {
@@ -223,6 +277,9 @@ async function renderDeviceItems(groupId, showItemsScreen = true, options = {}) 
   }
 
   itemsContainer.innerHTML = renderDeviceGroupItems(groupId, values) || `<div class="muted mt-md text-center">-</div>`;
+  if (!silentRefresh && options.animateItems !== false) {
+    applyDeviceItemsStagger(itemsContainer);
+  }
   bindDeviceTabEvents(itemsContainer);
   syncDeviceGroupActiveState(groupId);
   syncDeviceNetworkRefresh();

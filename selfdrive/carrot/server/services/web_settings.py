@@ -6,7 +6,7 @@ from ..config import CARROT_WEB_SETTINGS_PATH
 
 
 WEB_PRIMARY_PAGES = {"last", "carrot", "setting", "tools", "logs", "terminal"}
-WEB_LANGUAGES = {"", "en", "ko", "zh", "ja", "fr"}
+WEB_LANGUAGES = {"", "en", "ko", "zh"}
 
 DEFAULT_WEB_SETTINGS: Dict[str, Any] = {
   "auto_update_git_pull": False,
@@ -28,18 +28,12 @@ def _normalize_language(value: Any) -> str:
     "main_en": "en",
     "main_zh-chs": "zh",
     "main_zh-cht": "zh",
-    "main_ja": "ja",
-    "main_fr": "fr",
   }
   lang = aliases.get(lang, lang)
   if lang.startswith("ko"):
     return "ko"
   if lang.startswith("zh"):
     return "zh"
-  if lang.startswith("ja"):
-    return "ja"
-  if lang.startswith("fr"):
-    return "fr"
   if lang.startswith("en"):
     return "en"
   return lang if lang in WEB_LANGUAGES else ""

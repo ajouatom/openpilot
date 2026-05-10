@@ -503,6 +503,88 @@ body[data-page="terminal"] .app-toast-host {
   color: var(--md-on-error-cont);
 }
 
+/* ── Dropdown menus ──────────────────────────────────────── */
+.ui-dropdown-menu {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.ui-dropdown-menu__button {
+  appearance: none;
+  -webkit-appearance: none;
+  min-width: 42px;
+  min-height: 42px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
+  border-radius: 8px;
+  background: var(--md-surface-cont);
+  color: var(--md-on-surface);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.12s ease;
+}
+
+.ui-dropdown-menu__button:hover,
+.ui-dropdown-menu__button:focus-visible,
+.ui-dropdown-menu.is-open .ui-dropdown-menu__button {
+  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
+  outline: none;
+}
+
+.ui-dropdown-menu__button:active {
+  transform: translateY(1px);
+}
+
+.ui-dropdown-menu__panel {
+  min-width: 156px;
+  padding: 6px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 48%, transparent);
+  border-radius: 8px;
+  background: var(--md-surface-cont);
+  color: var(--md-on-surface);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.32);
+}
+
+.ui-dropdown-menu__panel[hidden] {
+  display: none !important;
+}
+
+.ui-dropdown-menu__item {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--md-on-surface);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.ui-dropdown-menu__item:hover,
+.ui-dropdown-menu__item:focus-visible {
+  background: color-mix(in srgb, var(--md-primary) 10%, transparent);
+  color: var(--md-on-surface);
+  outline: none;
+}
+
 /* ── Utility ──────────────────────────────────────────────── */
 .row-between {
   display: flex;

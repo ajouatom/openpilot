@@ -135,36 +135,15 @@
 }
 
 .tools-lang-menu {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
   height: 100%;
 }
 
 .tools-lang-menu__button {
-  appearance: none;
-  -webkit-appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
   height: 26px;
   min-height: 26px;
   padding: 2px 7px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--md-on-surface);
-  box-shadow: none;
   font-size: 13px;
-  line-height: 1;
   white-space: nowrap;
-  cursor: pointer;
-}
-
-.tools-lang-menu__button:hover {
-  background: color-mix(in srgb, var(--md-on-surface) 6%, transparent);
 }
 
 .tools-lang-menu__globe {
@@ -197,24 +176,10 @@
   width: min(148px, calc(100vw - 24px));
   max-height: calc(100dvh - var(--tools-lang-menu-panel-top, 48px) - 12px);
   overflow: auto;
-  padding: 8px 10px 6px;
-  border: 1px solid var(--md-outline-var);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--md-surface) 96%, var(--md-surface-cont-h));
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
 }
 
 .tools-lang-menu__panel::before {
-  content: "";
-  position: absolute;
-  top: -7px;
-  right: 46px;
-  width: 12px;
-  height: 12px;
-  border-left: 1px solid var(--md-outline-var);
-  border-top: 1px solid var(--md-outline-var);
-  background: inherit;
-  transform: rotate(45deg);
+  content: none;
 }
 
 .tools-lang-menu__current {
@@ -227,35 +192,11 @@
 .tools-lang-menu__divider {
   height: 1px;
   margin-bottom: 4px;
-  background: var(--md-outline-var);
-  opacity: 0.65;
+  background: color-mix(in srgb, var(--md-outline-var) 42%, transparent);
 }
 
 .tools-lang-menu__item {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 100%;
-  min-height: 38px;
-  padding: 6px 10px;
   margin-bottom: 2px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--md-on-surface);
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  font-size: var(--fs-body-md);
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.14s ease, color 0.14s ease;
-}
-
-.tools-lang-menu__item:hover,
-.tools-lang-menu__item:focus-visible {
-  background: color-mix(in srgb, var(--md-on-surface) 6%, transparent);
-  outline: none;
 }
 
 .tools-lang-menu__item[aria-checked="true"] {
