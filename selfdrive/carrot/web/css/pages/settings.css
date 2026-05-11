@@ -169,10 +169,14 @@
   align-items: flex-end;
   gap: 10px;
   opacity: 0;
-  transform: translateY(8px) scale(0.98);
+  transform: translateY(8px) scale(0.96);
   transform-origin: right bottom;
-  transition: opacity 0.16s ease, transform 0.16s ease;
+  /* Exit (close) — Material emphasized accelerate */
+  transition:
+    opacity 0.16s cubic-bezier(0.3, 0, 0.8, 0.15),
+    transform 0.18s cubic-bezier(0.3, 0, 0.8, 0.15);
   pointer-events: none;
+  will-change: opacity, transform;
 }
 
 .setting-fab-actions[hidden] {
@@ -184,6 +188,10 @@
   transform: translateY(0) scale(1);
   pointer-events: auto;
   visibility: visible;
+  /* Enter (open) — Material emphasized decelerate */
+  transition:
+    opacity 0.22s cubic-bezier(0.2, 0, 0, 1),
+    transform 0.26s cubic-bezier(0.2, 0, 0, 1);
 }
 
 .setting-fab-action {
@@ -205,7 +213,30 @@
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.26);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  /* Closed state — items collapse toward the FAB */
+  opacity: 0;
+  transform: translateY(6px) scale(0.96);
+  transform-origin: right center;
+  transition:
+    opacity 0.14s cubic-bezier(0.3, 0, 0.8, 0.15),
+    transform 0.14s cubic-bezier(0.3, 0, 0.8, 0.15);
 }
+
+.setting-fab-menu.is-open .setting-fab-action {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition:
+    opacity 0.22s cubic-bezier(0.2, 0, 0, 1),
+    transform 0.26s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Stagger items from the FAB outward (last child is closest to the FAB,
+   so it animates first). Supports up to 5 items. */
+.setting-fab-menu.is-open .setting-fab-action:nth-last-child(1) { transition-delay: 0ms; }
+.setting-fab-menu.is-open .setting-fab-action:nth-last-child(2) { transition-delay: 40ms; }
+.setting-fab-menu.is-open .setting-fab-action:nth-last-child(3) { transition-delay: 80ms; }
+.setting-fab-menu.is-open .setting-fab-action:nth-last-child(4) { transition-delay: 120ms; }
+.setting-fab-menu.is-open .setting-fab-action:nth-last-child(5) { transition-delay: 160ms; }
 
 .setting-fab-action svg {
   width: 20px;
@@ -254,6 +285,23 @@
 .fab--setting-menu svg {
   width: 26px;
   height: 26px;
+  transition: transform 0.24s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Rotate the "+" into an "x" when the menu is open */
+.fab--setting-menu[aria-expanded="true"] svg {
+  transform: rotate(135deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .setting-fab-actions,
+  .setting-fab-action,
+  .fab--setting-menu svg {
+    transition: none !important;
+  }
+  .setting-fab-menu.is-open .setting-fab-action {
+    transition-delay: 0ms !important;
+  }
 }
 
 .setting-search-panel {
