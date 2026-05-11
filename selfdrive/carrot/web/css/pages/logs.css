@@ -390,11 +390,33 @@
   overflow-anchor: none;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
-  scrollbar-gutter: stable;
+  /* Symmetric breathing room on both sides; no gutter reservation so the
+     visual layout is identical regardless of whether the scrollbar shows. */
+  padding-inline: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--md-outline-var) 50%, transparent) transparent;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding-right: 2px;
+}
+
+/* Thin, semi-transparent overlay-style scrollbar — does not push content. */
+.dashcam-segment-list::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.dashcam-segment-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dashcam-segment-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-outline-var) 40%, transparent);
+}
+
+.dashcam-segment-list::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--md-outline-var) 70%, transparent);
 }
 
 .dashcam-segment-loader {
