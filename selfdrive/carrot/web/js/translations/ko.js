@@ -343,6 +343,8 @@ window.CarrotTranslations.register("ko", {
     selected_count: "선택 {count}개",
     select_all: "전체 선택",
     deselect_all: "전체 해제",
+    select_loaded: "로드된 항목 선택",
+    deselect_loaded: "로드된 항목 해제",
     upload_selected: "선택 전송",
     segment_count: "세그먼트 {count}개",
     segment_menu: "세그먼트 메뉴",

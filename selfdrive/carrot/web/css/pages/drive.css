@@ -84,6 +84,32 @@ body[data-page="carrot"] #driveHudCard {
   display: none !important;
 }
 
+.vision-start-overlay .btn--filled {
+  border-color: color-mix(in srgb, var(--md-primary) 82%, rgba(255, 255, 255, 0.22));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--md-primary) 96%, #fff 4%),
+      color-mix(in srgb, var(--md-primary) 82%, #ff8b37)
+    );
+  color: var(--md-on-primary);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, #fff 28%, transparent) inset,
+    0 14px 34px rgba(255, 176, 109, 0.18),
+    0 10px 26px rgba(0, 0, 0, 0.28);
+}
+
+.vision-start-overlay .btn--filled:hover,
+.vision-start-overlay .btn--filled:focus-visible {
+  border-color: color-mix(in srgb, var(--md-primary) 90%, rgba(255, 255, 255, 0.28));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--md-primary) 88%, #fff 12%),
+      color-mix(in srgb, var(--md-primary) 90%, #ff9f55)
+    );
+}
+
 .vision-start-overlay__message::after {
   content: attr(data-tooltip);
   position: absolute;
@@ -125,10 +151,10 @@ body[data-page="carrot"] #driveHudCard {
 .vision-start-overlay .btn:disabled {
   opacity: 1;
   filter: none;
-  border-color: rgba(255, 255, 255, 0.16);
-  background: linear-gradient(180deg, #6e737b, #4c525a);
-  color: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.30);
+  border-color: color-mix(in srgb, var(--md-outline-var) 42%, transparent);
+  background: color-mix(in srgb, var(--md-on-surface) 8%, transparent);
+  color: color-mix(in srgb, var(--md-on-surface-var) 72%, var(--md-outline-var));
+  box-shadow: none;
   cursor: not-allowed;
 }
 

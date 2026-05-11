@@ -1135,11 +1135,33 @@ function appendSettingProfileHeader(profile, container) {
   container.appendChild(panel);
 }
 
+let settingFabMenuCloseTimer = null;
+const SETTING_FAB_MENU_CLOSE_MS = 240;
+
 function syncSettingFabMenuState() {
+  if (settingFabActions) {
+    if (settingFabMenuCloseTimer) {
+      window.clearTimeout(settingFabMenuCloseTimer);
+      settingFabMenuCloseTimer = null;
+    }
+    if (settingFabMenuOpen && settingFabActions.hidden) {
+      // Make the element renderable in its closed state first, then let the
+      // next style recalc apply the open class so the transition plays.
+      settingFabActions.hidden = false;
+      void settingFabActions.offsetWidth; // commit closed-state baseline
+    }
+  }
   if (settingFabMenu) settingFabMenu.classList.toggle("is-open", settingFabMenuOpen);
   if (settingFabActions) {
-    settingFabActions.hidden = !settingFabMenuOpen;
     settingFabActions.setAttribute("aria-hidden", settingFabMenuOpen ? "false" : "true");
+    if (!settingFabMenuOpen && !settingFabActions.hidden) {
+      // Defer [hidden] until the close transition finishes — otherwise
+      // `display: none` snaps it away with no animation.
+      settingFabMenuCloseTimer = window.setTimeout(() => {
+        settingFabMenuCloseTimer = null;
+        if (!settingFabMenuOpen) settingFabActions.hidden = true;
+      }, SETTING_FAB_MENU_CLOSE_MS);
+    }
   }
   if (btnSettingSearch) {
     btnSettingSearch.classList.toggle("active", settingFabMenuOpen || Boolean(settingSearchPanel && !settingSearchPanel.hidden));

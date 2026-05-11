@@ -8,6 +8,23 @@ from ..services.params import get_param_values
 from ..services.web_settings import read_web_settings
 
 
+_LANGUAGES_JSON_PATH = os.path.join(
+  os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
+  "ui", "translations", "languages.json",
+)
+
+
+def _load_device_languages() -> list:
+  """Read selfdrive/ui/translations/languages.json and return
+  a list of ``{code, name}`` dicts that the web client can use directly."""
+  try:
+    with open(_LANGUAGES_JSON_PATH, "r", encoding="utf-8") as f:
+      mapping = json.load(f)  # e.g. {"English": "main_en", ...}
+    return [{"code": code, "name": name} for name, code in mapping.items()]
+  except Exception:
+    return []
+
+
 def _build_bootstrap_payload() -> dict:
   try:
     device_values = get_param_values(["LanguageSetting"], {"LanguageSetting": ""})
@@ -17,6 +34,7 @@ def _build_bootstrap_payload() -> dict:
   return {
     "webSettings": read_web_settings(),
     "deviceLanguage": device_language,
+    "deviceLanguages": _load_device_languages(),
   }
 
 

@@ -1,6 +1,6 @@
 "use strict";
 
-self.importScripts("/js/raw_capnp.js");
+self.importScripts("/js/realtime/raw_capnp.js");
 
 const rawCapnp = self.CarrotRawCapnp || null;
 

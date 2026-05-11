@@ -345,6 +345,8 @@ window.CarrotTranslations.register("en", {
     selected_count: "{count} selected",
     select_all: "Select all",
     deselect_all: "Deselect all",
+    select_loaded: "Select loaded",
+    deselect_loaded: "Deselect loaded",
     upload_selected: "Upload selected",
     segment_count: "{count} segments",
     segment_menu: "Segment menu",

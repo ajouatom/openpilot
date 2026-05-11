@@ -1,0 +1,305 @@
+/* Settings page layout.
+   Keep spacing tokens in layout_tokens.css; this file only applies them to
+   the setting page's concrete screens and controls. */
+
+.page--setting {
+  --setting-menu-list-gap: 6px;
+  --setting-menu-item-min-height: 46px;
+  --setting-menu-item-padding-inline: 12px;
+  --setting-profile-accent: var(--md-primary, #ffab66);
+  --setting-profile-ink: var(--md-on-surface);
+  --setting-profile-surface: var(--md-surface-cont-h);
+  --setting-profile-outline: color-mix(in srgb, var(--md-outline-var) 46%, transparent);
+  --setting-profile-toolbar-height: 58px;
+}
+
+.page--setting.setting-profile-active {
+  --page-gutter-block: 0px;
+}
+
+.page--setting .setting.is-restored-live .val {
+  border-color: color-mix(in srgb, #8fdc9b 62%, var(--md-outline-var));
+  background: color-mix(in srgb, #8fdc9b 14%, var(--md-surface-cont-h));
+  color: color-mix(in srgb, #a9e8b2 82%, var(--md-on-surface));
+}
+
+.page--setting #items > .setting.ui-stagger-item,
+.page--setting #items > .setting-profile-section.ui-stagger-item,
+.page--setting #deviceItems > .setting.ui-stagger-item {
+  animation-name: setting-item-stagger-in;
+  animation-duration: 0.32s;
+  animation-timing-function: cubic-bezier(.2, 0, 0, 1);
+  animation-fill-mode: both;
+  animation-delay: min(calc(var(--i, 0) * 34ms), 360ms);
+}
+
+.setting-car-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 46px;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
+  border-radius: 8px;
+  background: var(--md-surface-cont-h);
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.12s ease;
+}
+
+.setting-car-entry:hover,
+.setting-car-entry:focus-visible {
+  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
+  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
+  outline: none;
+}
+
+.setting-car-entry:active {
+  transform: translateY(1px);
+}
+
+.setting-car-entry.is-attention {
+  border-color: color-mix(in srgb, var(--md-primary) 72%, var(--md-outline-var));
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--md-primary) 18%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  animation: setting-car-attention 1.05s ease-in-out 0s 3;
+}
+
+@keyframes setting-car-attention {
+  0%, 100% { transform: translateY(0); }
+  45% { transform: translateY(-2px); }
+}
+
+.setting-car-entry__text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.setting-car-entry__eyebrow {
+  color: color-mix(in srgb, var(--md-primary) 88%, #fff);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  opacity: 0.84;
+}
+
+.setting-car-entry__value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--md-on-surface);
+  font-size: 15px;
+  font-weight: 850;
+  line-height: 1.14;
+}
+
+.setting-car-entry__chevron {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-top: 2px solid color-mix(in srgb, var(--md-primary) 78%, var(--md-on-surface));
+  border-right: 2px solid color-mix(in srgb, var(--md-primary) 78%, var(--md-on-surface));
+  transform: rotate(45deg);
+  opacity: 0.82;
+}
+
+.setting-car-entry:not(.is-empty) .setting-car-entry__eyebrow {
+  display: none;
+}
+
+.setting-car-entry.is-empty {
+  justify-content: center;
+  min-height: 48px;
+  padding: 10px 14px;
+  text-align: center;
+}
+
+.setting-car-entry.is-empty .setting-car-entry__text {
+  align-items: center;
+  gap: 0;
+}
+
+.setting-car-entry.is-empty .setting-car-entry__eyebrow {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--md-on-surface);
+  opacity: 0.96;
+}
+
+.setting-car-entry.is-empty .setting-car-entry__value,
+.setting-car-entry.is-empty .setting-car-entry__chevron {
+  display: none;
+}
+
+.setting-search-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 170;
+  border: 0;
+  background: color-mix(in srgb, var(--md-surface) 38%, transparent);
+  backdrop-filter: blur(6px) saturate(108%);
+  -webkit-backdrop-filter: blur(6px) saturate(108%);
+}
+
+.page-fab-layer--setting .setting-fab-menu {
+  --fab-size: 68px;
+  position: fixed;
+  right: max(var(--sp-lg), env(safe-area-inset-right, 0px));
+  bottom: calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px) + 10px + var(--sp-lg));
+  z-index: 130;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  pointer-events: auto;
+}
+
+.setting-fab-actions {
+  position: absolute;
+  right: 0;
+  bottom: calc(var(--fab-size) + 10px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  opacity: 0;
+  transform: translateY(8px) scale(0.96);
+  transform-origin: right bottom;
+  /* Exit (close) — Material emphasized accelerate */
+  transition:
+    opacity 0.16s cubic-bezier(0.3, 0, 0.8, 0.15),
+    transform 0.18s cubic-bezier(0.3, 0, 0.8, 0.15);
+  pointer-events: none;
+  will-change: opacity, transform;
+}
+
+.setting-fab-actions[hidden] {
+  display: none !important;
+}
+
+.setting-fab-menu.is-open .setting-fab-actions {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+  visibility: visible;
+  /* Enter (open) — Material emphasized decelerate */
+  transition:
+    opacity 0.22s cubic-bezier(0.2, 0, 0, 1),
+    transform 0.26s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.setting-fab-action {
+  min-width: 152px;
+  min-height: 44px;
+  display: inline-grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 84%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-surface-cont) 92%, #000);
+  color: var(--md-on-surface);
+  font-size: var(--fs-body-sm);
+  font-weight: 800;
+  line-height: 1;
+  text-align: left;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.26);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  /* Closed state — items collapse toward the FAB */
+  opacity: 0;
+  transform: translateY(6px) scale(0.96);
+  transform-origin: right center;
+  transition:
+    opacity 0.14s cubic-bezier(0.3, 0, 0.8, 0.15),
+    transform 0.14s cubic-bezier(0.3, 0, 0.8, 0.15);
+}
+
+.setting-fab-menu.is-open .setting-fab-action {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition:
+    opacity 0.22s cubic-bezier(0.2, 0, 0, 1),
+    transform 0.26s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Stagger items from the FAB outward (last child is closest to the FAB,
+   so it animates first). Supports up to 5 items. */
+.setting-fab-menu.is-open .setting-fab-action:nth-last-child(1) { transition-delay: 0ms; }
+.setting-fab-menu.is-open .setting-fab-action:nth-last-child(2) { transition-delay: 40ms; }
+.setting-fab-menu.is-open .setting-fab-action:nth-last-child(3) { transition-delay: 80ms; }
+.setting-fab-menu.is-open .setting-fab-action:nth-last-child(4) { transition-delay: 120ms; }
+.setting-fab-menu.is-open .setting-fab-action:nth-last-child(5) { transition-delay: 160ms; }
+
+.setting-fab-action svg {
+  width: 20px;
+  height: 20px;
+  color: var(--md-primary);
+}
+
+.setting-fab-action span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setting-fab-action:active {
+  background: color-mix(in srgb, var(--md-primary) 12%, var(--md-surface-cont));
+}
+
+.setting-fab-action:disabled,
+.setting-fab-action[aria-disabled="true"] {
+  color: color-mix(in srgb, var(--md-on-surface-var) 64%, transparent);
+  cursor: default;
+  opacity: 0.72;
+}
+
+.setting-fab-action:disabled svg,
+.setting-fab-action[aria-disabled="true"] svg {
+  color: color-mix(in srgb, var(--md-on-surface-var) 72%, transparent);
+}
+
+.fab--setting-menu {
+  background: #ffab66;
+  border-color: #ffab66;
+  color: #111;
+  box-shadow: 0 12px 28px rgba(255, 135, 58, 0.22);
+}
+
+.fab--setting-menu.active,
+.fab--setting-menu:active {
+  background: #ff9c4a;
+  border-color: #ff9c4a;
+  color: #111;
+  box-shadow: 0 12px 30px rgba(255, 135, 58, 0.3);
+}
+
+.fab--setting-menu svg {
+  width: 26px;
+  height: 26px;
+  transition: transform 0.24s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Rotate the "+" into an "x" when the menu is open */
+.fab--setting-menu[aria-expanded="true"] svg {
+  transform: rotate(135deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .setting-fab-actions,
+  .setting-fab-action,
+  .fab--setting-menu svg {
+    transition: none !important;
+  }
+  .setting-fab-menu.is-open .setting-fab-action {
+    transition-delay: 0ms !important;
+  }
+}

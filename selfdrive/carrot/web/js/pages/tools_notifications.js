@@ -27,6 +27,7 @@
   let collapseHost = null;
   const detailScrollState = new Map();
   let lastRenderSignature = "";
+  let lastAutoFocusedEntryId = "";
 
   function uiText(key, fallback, vars = null) {
     return typeof getUIText === "function" ? getUIText(key, fallback, vars) : fallback;
@@ -551,6 +552,17 @@
     wrap.style.maxHeight = `${wrap.scrollHeight}px`;
   }
 
+  function stabilizeExpandedDetail(card) {
+    const wrap = card?.querySelector?.(".tools-console-log__detailWrap");
+    if (!wrap) return;
+    wrap.style.transition = "none";
+    wrap.style.animation = "none";
+    wrap.style.opacity = "1";
+    wrap.style.transform = "translateY(0)";
+    setMeasuredDetailHeight(card);
+    wrap.getBoundingClientRect();
+  }
+
   function animateDetailCollapse(card) {
     const wrap = card?.querySelector?.(".tools-console-log__detailWrap");
     if (!wrap) return;
@@ -598,6 +610,62 @@
     });
   }
 
+  function isRunningEntry(entry) {
+    return String(entry?.status || "") === "running";
+  }
+
+  function canAutoFocusEntry(entry) {
+    return Boolean(entry) && !isRunningEntry(entry);
+  }
+
+  function currentCards(out) {
+    const scroller = getLogScroller(out);
+    return scroller ? Array.from(scroller.querySelectorAll("[data-notification-id]")) : [];
+  }
+
+  function canPatchExistingCards(out, model) {
+    const cards = currentCards(out);
+    return cards.length === model.entries.length && cards.every((card, index) => (
+      card.dataset.notificationId === model.entries[index]?.id
+    ));
+  }
+
+  function setNodeText(node, value) {
+    if (node && node.textContent !== value) node.textContent = value;
+  }
+
+  function patchCard(card, entry, context) {
+    const expanded = activeNotificationId === entry.id;
+    card.classList.toggle("tools-console-log__current", entry.source === "current");
+    card.classList.toggle("tools-console-log__history", entry.source === "history");
+    card.classList.toggle("is-expanded", expanded);
+    card.dataset.toolsNotificationMode = context.mode;
+    card.setAttribute("aria-expanded", expanded ? "true" : "false");
+
+    setNodeText(card.querySelector(".tools-console-log__cardTitle"), entry.title);
+    const head = card.querySelector(".tools-console-log__cardHead");
+    let time = card.querySelector(".tools-console-log__cardTime");
+    if (entry.timeLabel) {
+      if (!time && head) {
+        time = document.createElement("span");
+        time.className = "tools-console-log__cardTime";
+        head.appendChild(time);
+      }
+      setNodeText(time, entry.timeLabel);
+    } else if (time) {
+      time.remove();
+    }
+    setNodeText(card.querySelector(".tools-console-log__cardBody"), entry.summary);
+    setNodeText(card.querySelector(".tools-console-log__detail"), entry.text);
+  }
+
+  function patchExistingCards(out, model, context) {
+    currentCards(out).forEach((card, index) => patchCard(card, model.entries[index], context));
+    out.querySelectorAll(".tools-console-log__clearBtn").forEach((button) => {
+      button.disabled = !model.hasHistory;
+    });
+  }
+
   function updateRelativeTimeLabels(out, entries) {
     if (!out) return;
     const labels = new Map(entries.map((entry) => [entry.id, entry.timeLabel || ""]));
@@ -611,6 +679,57 @@
   function normalizeActiveEntry(model) {
     if (!activeNotificationId) return;
     if (!model.entries.some((entry) => entry.id === activeNotificationId)) activeNotificationId = "";
+  }
+
+  function latestEntry(model) {
+    if (!model?.entries?.length) return null;
+    let latest = null;
+    let latestTime = 0;
+    model.entries.forEach((entry) => {
+      const timestamp = Number(entry.timestamp || 0);
+      if (Number.isFinite(timestamp) && timestamp > 0 && timestamp >= latestTime) {
+        latest = entry;
+        latestTime = timestamp;
+      }
+    });
+    if (latest) return latest;
+    return model.entries.slice().reverse().find((entry) => entry.source === "current") || model.entries[model.entries.length - 1];
+  }
+
+  function createEntryFocus(out, entryId, expanded = true, options = {}) {
+    const scroller = getLogScroller(out);
+    const card = findCardById(scroller, entryId);
+    const cardRect = card?.getBoundingClientRect?.();
+    return {
+      id: entryId,
+      expanded,
+      keyboard: false,
+      instant: options.instant === true,
+      smoothOnce: options.smoothOnce === true,
+      stableDetail: options.stableDetail === true,
+      mode: out?.dataset?.toolsNotificationMode || getMode(),
+      scrollTop: scroller?.scrollTop || 0,
+      cardTop: cardRect ? cardRect.top : null,
+    };
+  }
+
+  function focusEntry(out, entryId, options = {}) {
+    if (!entryId) return "";
+    const expanded = options.expand !== false;
+    clearCollapseRenderTimer();
+    activeNotificationId = expanded ? entryId : "";
+    pendingEntryFocus = createEntryFocus(out, entryId, expanded, options);
+    detailScrollState.delete(entryId);
+    return entryId;
+  }
+
+  function focusLatestEntry(out = lastHost, options = {}) {
+    const model = buildModel(lastState);
+    const entry = latestEntry(model);
+    if (!entry) return "";
+    const focusedId = focusEntry(out, entry.id, options);
+    if (out) render(out, model.state, lastOptions, { force: true, preserveScroll: false });
+    return focusedId;
   }
 
   function captureScrollAnchor(out, anchorId = activeNotificationId) {
@@ -710,8 +829,9 @@
 
     if (Math.abs(delta) < 2) return;
     const target = clampScrollTop(scroller, scroller.scrollTop + delta);
+    const behavior = opts.behavior || (prefersReducedMotion() ? "auto" : "smooth");
     try {
-      scroller.scrollTo({ top: target, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+      scroller.scrollTo({ top: target, behavior });
     } catch {
       scroller.scrollTop = target;
     }
@@ -735,6 +855,14 @@
     const mode = getMode();
     global.requestAnimationFrame(() => {
       if (token !== entryFocusToken) return;
+      if (focus.instant) {
+        scrollEntryIntoView(out, focus, "settled", { behavior: "auto" });
+        return;
+      }
+      if (focus.smoothOnce) {
+        scrollEntryIntoView(out, focus, "settled");
+        return;
+      }
       if (focus.expanded && !prefersReducedMotion()) {
         const scroller = getLogScroller(out);
         const card = findCardById(scroller, focus.id);
@@ -919,8 +1047,8 @@
   function render(out, state = {}, options = {}, renderOptions = {}) {
     if (!out) return;
     bindModeSync();
-    const interactionFocus = pendingEntryFocus;
-    const scrollAnchor = renderOptions.preserveScroll === false || interactionFocus ? null : captureScrollAnchor(out);
+    let interactionFocus = pendingEntryFocus;
+    let scrollAnchor = renderOptions.preserveScroll === false || interactionFocus ? null : captureScrollAnchor(out);
     const mode = getMode();
     const model = buildModel(state);
     lastState = model.state;
@@ -934,21 +1062,50 @@
     }
 
     normalizeActiveEntry(model);
+    const autoFocusLatest = options.autoFocusLatest === true && !renderOptions.skipAutoFocusLatest;
+    const latest = autoFocusLatest ? latestEntry(model) : null;
+    if (canAutoFocusEntry(latest) && latest.id !== lastAutoFocusedEntryId) {
+      lastAutoFocusedEntryId = latest.id;
+      focusEntry(out, latest.id, { expand: true, smoothOnce: true, stableDetail: true });
+      interactionFocus = pendingEntryFocus;
+      scrollAnchor = null;
+    }
     const signature = renderSignature(model, mode);
-    const canPatchExisting = !interactionFocus && signature === lastRenderSignature && out.childElementCount > 0;
     const context = { out, mode, model, options };
 
-    if (canPatchExisting) {
+    if (!interactionFocus && signature === lastRenderSignature && out.childElementCount > 0) {
       updateRelativeTimeLabels(out, model.entries);
       scheduleRelativeTimeRefresh(model.entries);
+      return;
+    }
+    if (!interactionFocus && out.childElementCount > 0 && canPatchExistingCards(out, model)) {
+      patchExistingCards(out, model, context);
+      lastRenderSignature = signature;
+      scheduleRelativeTimeRefresh(model.entries);
+      if (activeNotificationId) {
+        global.requestAnimationFrame(() => {
+          const scroller = getLogScroller(out);
+          const card = findCardById(scroller, activeNotificationId);
+          setMeasuredDetailHeight(card);
+          restoreDetailScroll(out, activeNotificationId);
+        });
+      }
       return;
     }
     out.replaceChildren(mode === MODE.PORTRAIT ? renderPortraitCenter(context) : renderLandscapePanel(context));
     lastRenderSignature = signature;
     if (interactionFocus) {
       restoreEntryInteraction(out, interactionFocus);
+      if (interactionFocus.instant || interactionFocus.stableDetail) {
+        const scroller = getLogScroller(out);
+        stabilizeExpandedDetail(findCardById(scroller, interactionFocus.id));
+      }
     } else {
       restoreScrollAnchor(out, scrollAnchor);
+      if (activeNotificationId) {
+        const scroller = getLogScroller(out);
+        stabilizeExpandedDetail(findCardById(scroller, activeNotificationId));
+      }
     }
     scheduleRelativeTimeRefresh(model.entries);
     if (interactionFocus) {
@@ -993,7 +1150,11 @@
     render,
     resetDetail() {
       activeNotificationId = "";
+      lastAutoFocusedEntryId = "";
       detailScrollState.clear();
+    },
+    focusLatest(options = {}) {
+      return focusLatestEntry(options.out || lastHost, options);
     },
     syncMode(out = lastHost) {
       if (out) syncHostMode(out);
