@@ -140,7 +140,6 @@ function requestToolsMetaTickerSync() {
 function pulseToolsLogPanel() {
   const page = document.getElementById("pageTools");
   if (!page || page.classList.contains("tools-log-expanded")) {
-    scrollToolsLogToBottom();
     return;
   }
   page.classList.add("tools-log-attention");
@@ -148,10 +147,7 @@ function pulseToolsLogPanel() {
   toolsLogAttentionTimer = window.setTimeout(() => {
     page.classList.remove("tools-log-attention");
     toolsLogAttentionTimer = null;
-    scrollToolsLogToBottom();
-    scrollToolsLogToBottom(280);
   }, 3200);
-  scrollToolsLogToBottom(280);
 }
 
 function setToolsLogExpanded(expanded, options = {}) {
@@ -172,8 +168,10 @@ function setToolsLogExpanded(expanded, options = {}) {
     }
     window.CarrotToolsNotifications?.focusLatest?.({ expand: true });
   }
-  scrollToolsLogToBottom();
-  scrollToolsLogToBottom(280);
+  if (!window.CarrotToolsNotifications?.render) {
+    scrollToolsLogToBottom();
+    scrollToolsLogToBottom(280);
+  }
 }
 
 function renderToolsOut() {
@@ -194,10 +192,9 @@ function renderToolsOut() {
     });
   } else {
     out.textContent = currentText || historyText || " ";
+    requestAnimationFrame(() => scrollToolsLogToBottom());
+    scrollToolsLogToBottom(280);
   }
-
-  requestAnimationFrame(() => scrollToolsLogToBottom());
-  scrollToolsLogToBottom(280);
 }
 
 async function clearToolsNotificationHistory() {
