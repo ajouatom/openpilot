@@ -552,6 +552,17 @@
     wrap.style.maxHeight = `${wrap.scrollHeight}px`;
   }
 
+  function stabilizeExpandedDetail(card) {
+    const wrap = card?.querySelector?.(".tools-console-log__detailWrap");
+    if (!wrap) return;
+    wrap.style.transition = "none";
+    wrap.style.animation = "none";
+    wrap.style.opacity = "1";
+    wrap.style.transform = "translateY(0)";
+    setMeasuredDetailHeight(card);
+    wrap.getBoundingClientRect();
+  }
+
   function animateDetailCollapse(card) {
     const wrap = card?.querySelector?.(".tools-console-log__detailWrap");
     if (!wrap) return;
@@ -596,6 +607,62 @@
         status: entry.status || "",
         hasTime: Number(entry.timestamp || 0) > 0,
       })),
+    });
+  }
+
+  function isRunningEntry(entry) {
+    return String(entry?.status || "") === "running";
+  }
+
+  function canAutoFocusEntry(entry) {
+    return Boolean(entry) && !isRunningEntry(entry);
+  }
+
+  function currentCards(out) {
+    const scroller = getLogScroller(out);
+    return scroller ? Array.from(scroller.querySelectorAll("[data-notification-id]")) : [];
+  }
+
+  function canPatchExistingCards(out, model) {
+    const cards = currentCards(out);
+    return cards.length === model.entries.length && cards.every((card, index) => (
+      card.dataset.notificationId === model.entries[index]?.id
+    ));
+  }
+
+  function setNodeText(node, value) {
+    if (node && node.textContent !== value) node.textContent = value;
+  }
+
+  function patchCard(card, entry, context) {
+    const expanded = activeNotificationId === entry.id;
+    card.classList.toggle("tools-console-log__current", entry.source === "current");
+    card.classList.toggle("tools-console-log__history", entry.source === "history");
+    card.classList.toggle("is-expanded", expanded);
+    card.dataset.toolsNotificationMode = context.mode;
+    card.setAttribute("aria-expanded", expanded ? "true" : "false");
+
+    setNodeText(card.querySelector(".tools-console-log__cardTitle"), entry.title);
+    const head = card.querySelector(".tools-console-log__cardHead");
+    let time = card.querySelector(".tools-console-log__cardTime");
+    if (entry.timeLabel) {
+      if (!time && head) {
+        time = document.createElement("span");
+        time.className = "tools-console-log__cardTime";
+        head.appendChild(time);
+      }
+      setNodeText(time, entry.timeLabel);
+    } else if (time) {
+      time.remove();
+    }
+    setNodeText(card.querySelector(".tools-console-log__cardBody"), entry.summary);
+    setNodeText(card.querySelector(".tools-console-log__detail"), entry.text);
+  }
+
+  function patchExistingCards(out, model, context) {
+    currentCards(out).forEach((card, index) => patchCard(card, model.entries[index], context));
+    out.querySelectorAll(".tools-console-log__clearBtn").forEach((button) => {
+      button.disabled = !model.hasHistory;
     });
   }
 
@@ -991,27 +1058,48 @@
     normalizeActiveEntry(model);
     const autoFocusLatest = options.autoFocusLatest === true && !renderOptions.skipAutoFocusLatest;
     const latest = autoFocusLatest ? latestEntry(model) : null;
-    if (latest && latest.id !== lastAutoFocusedEntryId) {
+    if (canAutoFocusEntry(latest) && latest.id !== lastAutoFocusedEntryId) {
       lastAutoFocusedEntryId = latest.id;
       focusEntry(out, latest.id, { expand: true, instant: true });
       interactionFocus = pendingEntryFocus;
       scrollAnchor = null;
     }
     const signature = renderSignature(model, mode);
-    const canPatchExisting = !interactionFocus && signature === lastRenderSignature && out.childElementCount > 0;
     const context = { out, mode, model, options };
 
-    if (canPatchExisting) {
+    if (!interactionFocus && signature === lastRenderSignature && out.childElementCount > 0) {
       updateRelativeTimeLabels(out, model.entries);
       scheduleRelativeTimeRefresh(model.entries);
+      return;
+    }
+    if (!interactionFocus && out.childElementCount > 0 && canPatchExistingCards(out, model)) {
+      patchExistingCards(out, model, context);
+      lastRenderSignature = signature;
+      scheduleRelativeTimeRefresh(model.entries);
+      if (activeNotificationId) {
+        global.requestAnimationFrame(() => {
+          const scroller = getLogScroller(out);
+          const card = findCardById(scroller, activeNotificationId);
+          setMeasuredDetailHeight(card);
+          restoreDetailScroll(out, activeNotificationId);
+        });
+      }
       return;
     }
     out.replaceChildren(mode === MODE.PORTRAIT ? renderPortraitCenter(context) : renderLandscapePanel(context));
     lastRenderSignature = signature;
     if (interactionFocus) {
       restoreEntryInteraction(out, interactionFocus);
+      if (interactionFocus.instant) {
+        const scroller = getLogScroller(out);
+        stabilizeExpandedDetail(findCardById(scroller, interactionFocus.id));
+      }
     } else {
       restoreScrollAnchor(out, scrollAnchor);
+      if (activeNotificationId) {
+        const scroller = getLogScroller(out);
+        stabilizeExpandedDetail(findCardById(scroller, activeNotificationId));
+      }
     }
     scheduleRelativeTimeRefresh(model.entries);
     if (interactionFocus) {
