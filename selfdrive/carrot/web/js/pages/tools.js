@@ -170,6 +170,7 @@ function setToolsLogExpanded(expanded, options = {}) {
       window.clearTimeout(toolsLogAttentionTimer);
       toolsLogAttentionTimer = null;
     }
+    window.CarrotToolsNotifications?.focusLatest?.({ expand: true });
   }
   scrollToolsLogToBottom();
   scrollToolsLogToBottom(280);
@@ -189,6 +190,7 @@ function renderToolsOut() {
     }, {
       onClear: clearToolsNotificationHistory,
       onClose: () => setToolsLogExpanded(false),
+      autoFocusLatest: true,
     });
   } else {
     out.textContent = currentText || historyText || " ";

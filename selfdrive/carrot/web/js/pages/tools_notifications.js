@@ -27,6 +27,7 @@
   let collapseHost = null;
   const detailScrollState = new Map();
   let lastRenderSignature = "";
+  let lastAutoFocusedEntryId = "";
 
   function uiText(key, fallback, vars = null) {
     return typeof getUIText === "function" ? getUIText(key, fallback, vars) : fallback;
@@ -613,6 +614,54 @@
     if (!model.entries.some((entry) => entry.id === activeNotificationId)) activeNotificationId = "";
   }
 
+  function latestEntry(model) {
+    if (!model?.entries?.length) return null;
+    let latest = null;
+    let latestTime = 0;
+    model.entries.forEach((entry) => {
+      const timestamp = Number(entry.timestamp || 0);
+      if (Number.isFinite(timestamp) && timestamp > 0 && timestamp >= latestTime) {
+        latest = entry;
+        latestTime = timestamp;
+      }
+    });
+    if (latest) return latest;
+    return model.entries.slice().reverse().find((entry) => entry.source === "current") || model.entries[model.entries.length - 1];
+  }
+
+  function createEntryFocus(out, entryId, expanded = true) {
+    const scroller = getLogScroller(out);
+    const card = findCardById(scroller, entryId);
+    const cardRect = card?.getBoundingClientRect?.();
+    return {
+      id: entryId,
+      expanded,
+      keyboard: false,
+      mode: out?.dataset?.toolsNotificationMode || getMode(),
+      scrollTop: scroller?.scrollTop || 0,
+      cardTop: cardRect ? cardRect.top : null,
+    };
+  }
+
+  function focusEntry(out, entryId, options = {}) {
+    if (!entryId) return "";
+    const expanded = options.expand !== false;
+    clearCollapseRenderTimer();
+    activeNotificationId = expanded ? entryId : "";
+    pendingEntryFocus = createEntryFocus(out, entryId, expanded);
+    detailScrollState.delete(entryId);
+    return entryId;
+  }
+
+  function focusLatestEntry(out = lastHost, options = {}) {
+    const model = buildModel(lastState);
+    const entry = latestEntry(model);
+    if (!entry) return "";
+    const focusedId = focusEntry(out, entry.id, options);
+    if (out) render(out, model.state, lastOptions, { force: true, preserveScroll: false });
+    return focusedId;
+  }
+
   function captureScrollAnchor(out, anchorId = activeNotificationId) {
     const scroller = getLogScroller(out);
     if (!scroller) return null;
@@ -919,8 +968,8 @@
   function render(out, state = {}, options = {}, renderOptions = {}) {
     if (!out) return;
     bindModeSync();
-    const interactionFocus = pendingEntryFocus;
-    const scrollAnchor = renderOptions.preserveScroll === false || interactionFocus ? null : captureScrollAnchor(out);
+    let interactionFocus = pendingEntryFocus;
+    let scrollAnchor = renderOptions.preserveScroll === false || interactionFocus ? null : captureScrollAnchor(out);
     const mode = getMode();
     const model = buildModel(state);
     lastState = model.state;
@@ -934,6 +983,14 @@
     }
 
     normalizeActiveEntry(model);
+    const autoFocusLatest = options.autoFocusLatest === true && !renderOptions.skipAutoFocusLatest;
+    const latest = autoFocusLatest ? latestEntry(model) : null;
+    if (latest && latest.id !== lastAutoFocusedEntryId) {
+      lastAutoFocusedEntryId = latest.id;
+      focusEntry(out, latest.id, { expand: true });
+      interactionFocus = pendingEntryFocus;
+      scrollAnchor = null;
+    }
     const signature = renderSignature(model, mode);
     const canPatchExisting = !interactionFocus && signature === lastRenderSignature && out.childElementCount > 0;
     const context = { out, mode, model, options };
@@ -993,7 +1050,11 @@
     render,
     resetDetail() {
       activeNotificationId = "";
+      lastAutoFocusedEntryId = "";
       detailScrollState.clear();
+    },
+    focusLatest(options = {}) {
+      return focusLatestEntry(options.out || lastHost, options);
     },
     syncMode(out = lastHost) {
       if (out) syncHostMode(out);
