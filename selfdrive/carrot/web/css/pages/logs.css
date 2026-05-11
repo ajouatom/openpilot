@@ -304,7 +304,7 @@
 
 .dashcam-route-main {
   min-width: 0;
-  padding: 12px;
+  padding: 12px 18px 12px 12px;
 }
 
 .dashcam-route-head {
@@ -348,6 +348,7 @@
   height: 34px;
   border-radius: 999px;
   flex: 0 0 auto;
+  margin-right: 2px;
 }
 
 .dashcam-segments {
@@ -1196,7 +1197,7 @@
   }
 
   .dashcam-route-main {
-    padding: 10px 12px 12px;
+    padding: 10px 18px 12px 12px;
   }
 
   .dashcam-route-head {

@@ -877,7 +877,11 @@ function appendDashcamSegmentsToRoute(route, newSegments, startIndex = 0) {
   hydrateLogsLazyImages(list);
   updateDashcamRouteSelectionUi(route);
   updateDashcamSegmentLoaderUi(route, false);
-  list.scrollTop = wasNearBottom ? Math.max(0, list.scrollHeight - list.clientHeight) : scrollTop;
+  const nextTop = wasNearBottom ? Math.max(0, list.scrollHeight - list.clientHeight) : scrollTop;
+  list.scrollTop = nextTop;
+  requestAnimationFrame(() => {
+    if (list.isConnected) list.scrollTop = nextTop;
+  });
   if (activeSegment) {
     Array.from(card.querySelectorAll("[data-segment]"))
       .find((node) => node.dataset.segment === activeSegment)
@@ -893,9 +897,7 @@ async function loadDashcamSegments(route) {
   if (!entry || !dashcamRouteHasMoreSegments(entry)) return;
   const previousCount = dashcamSegmentsForRoute(entry).length;
   dashcamState.loadingSegments.add(route);
-  if (!updateDashcamSegmentLoaderUi(route, true) && !renderDashcamRoute(route)) {
-    renderDashcamRoutes({ animate: false, preserve: true });
-  }
+  updateDashcamSegmentLoaderUi(route, true);
 
   try {
     const offset = dashcamSegmentNextOffset(entry);
@@ -917,7 +919,7 @@ async function loadDashcamSegments(route) {
     }
   } finally {
     dashcamState.loadingSegments.delete(route);
-    if (!updateDashcamSegmentLoaderUi(route, false) && !renderDashcamRoute(route)) renderDashcamRoutes({ animate: false, preserve: true });
+    updateDashcamSegmentLoaderUi(route, false);
     requestAnimationFrame(() => maybeLoadVisibleDashcamSegments());
   }
 }
