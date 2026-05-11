@@ -20,11 +20,11 @@
   /* ── Primary — Carrot Dark Orange ── */
   --md-primary:        #ffb06d;
   --md-on-primary:     #3a1800;
-  --md-primary-cont:   #7b3e10;
+  --md-primary-cont:   #2f3946;
   --md-on-primary-cont:#fff0e2;
-  --md-primary-state-soft:   color-mix(in srgb, var(--md-primary) 12%, transparent);
-  --md-primary-state:        color-mix(in srgb, var(--md-primary) 16%, var(--md-surface-cont-h));
-  --md-primary-state-strong: color-mix(in srgb, var(--md-primary) 22%, var(--md-surface-cont-hh));
+  --md-primary-state-soft:   color-mix(in srgb, var(--md-surface-bright) 13%, transparent);
+  --md-primary-state:        color-mix(in srgb, var(--md-surface-bright) 24%, var(--md-surface-cont-h));
+  --md-primary-state-strong: color-mix(in srgb, var(--md-surface-bright) 28%, var(--md-surface-cont-hh));
 
   /* ── Error ── */
   --md-error:          #ff9d94;
@@ -88,7 +88,7 @@
     --md-stroke-soft:    #959fb2;
     --md-stroke-strong:  #d2d9e8;
     --md-primary:        #ffc087;
-    --md-primary-cont:   #8b4713;
+    --md-primary-cont:   #3a4655;
     --md-on-primary-cont:#fff4eb;
   }
 }
