@@ -485,8 +485,17 @@ function patchDashcamWindow(host, routes, view, options = {}) {
   });
   if (bottomSpacer) frag.appendChild(bottomSpacer);
   unobserveLogsLazyImages(host);
+  unobserveDashcamSegmentLoaders(host);
   host.replaceChildren(frag);
   restoreVisibleDashcamSegmentScrolls(host);
+}
+
+function unobserveDashcamSegmentLoaders(host) {
+  if (!dashcamSegmentLoaderObserver || !host) return;
+  host.querySelectorAll?.("[data-segment-loader]").forEach((loader) => {
+    dashcamSegmentLoaderObserver.unobserve(loader);
+    delete loader.dataset.observed;
+  });
 }
 
 function measureDashcamRouteHeights(host) {
@@ -599,8 +608,38 @@ function mergeDashcamRoutePage(entry, existing) {
   };
 }
 
+let dashcamSegmentLoaderObserver = null;
+function ensureDashcamSegmentLoaderObserver(scroller) {
+  if (!scroller || !("IntersectionObserver" in window)) return null;
+  if (dashcamSegmentLoaderObserver && dashcamSegmentLoaderObserver._root === scroller) {
+    return dashcamSegmentLoaderObserver;
+  }
+  if (dashcamSegmentLoaderObserver) dashcamSegmentLoaderObserver.disconnect();
+  dashcamSegmentLoaderObserver = new IntersectionObserver((entries) => {
+    if (!isLogsPageActive()) return;
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      const route = entry.target.dataset?.route || "";
+      if (!route || dashcamState.loadingSegments?.has(route)) return;
+      loadDashcamSegments(route).catch(() => {});
+    });
+  }, { root: scroller, rootMargin: "240px 0px", threshold: 0.01 });
+  dashcamSegmentLoaderObserver._root = scroller;
+  return dashcamSegmentLoaderObserver;
+}
+
 function maybeLoadVisibleDashcamSegments(scroller = document.getElementById("dashcamRoutes")) {
   if (!scroller || !isLogsPageActive()) return;
+  const observer = ensureDashcamSegmentLoaderObserver(scroller);
+  if (observer) {
+    scroller.querySelectorAll("[data-segment-loader]").forEach((loader) => {
+      if (loader.dataset.observed === "1") return;
+      loader.dataset.observed = "1";
+      observer.observe(loader);
+    });
+    return;
+  }
+  // Fallback for environments without IntersectionObserver
   const hostRect = scroller.getBoundingClientRect();
   scroller.querySelectorAll("[data-segment-loader]").forEach((loader) => {
     const route = loader.dataset.route || "";
@@ -612,52 +651,19 @@ function maybeLoadVisibleDashcamSegments(scroller = document.getElementById("das
   });
 }
 
-function dashcamScrollableSegmentList(target) {
-  const list = target?.closest?.(".dashcam-segment-list");
-  if (!list) return null;
-  return list.scrollHeight > list.clientHeight + 1 ? list : null;
-}
-
-function bindDashcamNestedScrollGuard(routesHost) {
-  if (!routesHost || routesHost.dataset.nestedScrollBound === "1") return;
-  routesHost.dataset.nestedScrollBound = "1";
-  let activeList = null;
-  let lastY = 0;
-
-  const clear = () => {
-    activeList = null;
-    lastY = 0;
-  };
-
-  routesHost.addEventListener("touchstart", (ev) => {
-    activeList = dashcamScrollableSegmentList(ev.target);
-    lastY = ev.touches?.[0]?.clientY || 0;
-    if (activeList) markDashcamScrollBusy({ renderOnIdle: false });
-  }, { passive: true });
-
-  routesHost.addEventListener("touchmove", (ev) => {
-    if (!activeList || ev.touches.length !== 1) return;
-    markDashcamScrollBusy({ renderOnIdle: false });
-    rememberDashcamSegmentScroll(activeList);
-    const y = ev.touches[0].clientY;
-    const deltaY = lastY - y;
-    lastY = y;
-    const atTop = activeList.scrollTop <= 0;
-    const atBottom = activeList.scrollTop + activeList.clientHeight >= activeList.scrollHeight - 1;
-    ev.stopPropagation();
-    if ((deltaY < 0 && atTop) || (deltaY > 0 && atBottom)) {
-      ev.preventDefault();
-    }
-  }, { passive: false });
-
-  routesHost.addEventListener("touchend", () => {
-    if (activeList) rememberDashcamSegmentScroll(activeList);
-    clear();
-  }, { passive: true });
-  routesHost.addEventListener("touchcancel", () => {
-    if (activeList) rememberDashcamSegmentScroll(activeList);
-    clear();
-  }, { passive: true });
+let segmentListPersistFrame = 0;
+const segmentListPersistQueue = new Set();
+function scheduleSegmentListScrollPersist(list) {
+  if (!list) return;
+  segmentListPersistQueue.add(list);
+  if (segmentListPersistFrame) return;
+  segmentListPersistFrame = requestAnimationFrame(() => {
+    segmentListPersistFrame = 0;
+    segmentListPersistQueue.forEach((node) => {
+      if (node.isConnected) rememberDashcamSegmentScroll(node);
+    });
+    segmentListPersistQueue.clear();
+  });
 }
 
 function dashcamSelectedForRoute(entry) {
@@ -909,26 +915,32 @@ function appendDashcamSegmentsToRoute(route, newSegments, startIndex = 0) {
   const scrollTop = list.scrollTop;
   const wasScrollable = list.scrollHeight > list.clientHeight + 1;
   const wasNearBottom = wasScrollable && (list.scrollHeight - list.scrollTop - list.clientHeight <= 48);
+  const isScrolling = Boolean(dashcamState.scrollBusy);
   rememberDashcamSegmentScroll(list);
-  markDashcamScrollBusy({ renderOnIdle: false });
   const compact = isCompactLandscapeMode();
   const template = document.createElement("template");
+  // Don't animate tile entry while the user is actively scrolling — the
+  // simultaneous animation + scrollTop adjustment is what causes "shake".
+  const animate = !isScrolling;
   template.innerHTML = newSegments
-    .map((segment, offset) => dashcamSegmentTileHtml(route, segment, startIndex + offset, { compact, animate: true }))
+    .map((segment, offset) => dashcamSegmentTileHtml(route, segment, startIndex + offset, { compact, animate }))
     .join("");
   const loader = list.querySelector("[data-segment-loader]");
   list.insertBefore(template.content, loader || null);
   hydrateLogsLazyImages(list);
   updateDashcamRouteSelectionUi(route);
   updateDashcamSegmentLoaderUi(route, false);
-  const nextTop = wasNearBottom ? Math.max(0, list.scrollHeight - list.clientHeight) : scrollTop;
-  list.scrollTop = nextTop;
-  rememberDashcamSegmentScroll(list);
-  requestAnimationFrame(() => {
-    if (!list.isConnected) return;
+  // Pin to bottom only when the user wasn't actively scrolling — otherwise
+  // setting scrollTop fights inertia and produces a visible jump/shake.
+  if (wasNearBottom && !isScrolling) {
+    const nextTop = Math.max(0, list.scrollHeight - list.clientHeight);
     list.scrollTop = nextTop;
     rememberDashcamSegmentScroll(list);
-  });
+  } else {
+    // Preserve current position; browser will keep inertia smooth.
+    list.scrollTop = scrollTop;
+    rememberDashcamSegmentScroll(list);
+  }
   card.dataset.renderKey = dashcamRouteRenderKey(entry);
   return true;
 }
@@ -1777,20 +1789,16 @@ function bindLogsPage() {
 
   if (routesHost && routesHost.dataset.bound !== "1") {
     routesHost.dataset.bound = "1";
-    bindDashcamNestedScrollGuard(routesHost);
     routesHost.addEventListener("scroll", () => {
       markDashcamScrollBusy();
       saveLogsScrollTop("dashcam");
       if (dashcamWindowNeedsRender(routesHost)) scheduleDashcamWindowRender();
       maybeLoadMoreDashcamRoutes(routesHost);
-      maybeLoadVisibleDashcamSegments(routesHost);
     }, { passive: true });
     routesHost.addEventListener("scroll", (ev) => {
       const segmentList = ev.target?.closest?.(".dashcam-segment-list");
-      if (!segmentList) return;
-      markDashcamScrollBusy({ renderOnIdle: false });
-      rememberDashcamSegmentScroll(segmentList);
-      maybeLoadVisibleDashcamSegments(routesHost);
+      if (!segmentList || segmentList === routesHost) return;
+      scheduleSegmentListScrollPersist(segmentList);
     }, { passive: true, capture: true });
     routesHost.addEventListener("click", (ev) => {
       const actionEl = ev.target?.closest?.("[data-action]");

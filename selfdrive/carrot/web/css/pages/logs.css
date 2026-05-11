@@ -400,25 +400,33 @@
 .dashcam-segment-loader {
   flex: 0 0 auto;
   width: 100%;
-  height: 16px;
+  /* Fixed height in both states — prevents layout shift / "shake" when the
+     loader toggles on near the bottom of the list. */
+  height: 22px;
   position: relative;
   overflow: hidden;
   overflow-anchor: none;
   border-radius: 999px;
   background: transparent;
+  transition: background-color 160ms ease-out;
 }
 
 .dashcam-segment-loader.is-loading {
-  height: 22px;
   background: color-mix(in srgb, var(--md-outline-var) 18%, transparent);
 }
 
-.dashcam-segment-loader.is-loading::before {
+.dashcam-segment-loader::before {
   content: "";
   position: absolute;
   inset: 8px 20%;
   border-radius: inherit;
   background: var(--md-primary);
+  opacity: 0;
+  transition: opacity 160ms ease-out;
+}
+
+.dashcam-segment-loader.is-loading::before {
+  opacity: 1;
   animation: dashcam-segment-loader 820ms ease-in-out infinite;
 }
 
@@ -433,11 +441,17 @@
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 42%, transparent);
   background: var(--md-surface-cont);
   cursor: pointer;
+  /* Skip layout/paint for offscreen tiles so long lists scroll smoothly.
+     contain-intrinsic-size reserves space so virtual scroll height stays stable. */
+  content-visibility: auto;
+  contain-intrinsic-size: 70px 100%;
 }
 
-.dashcam-segment-tile:hover {
-  border-color: color-mix(in srgb, var(--md-primary) 44%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--md-surface-cont-h) 84%, var(--md-primary));
+@media (hover: hover) {
+  .dashcam-segment-tile:hover {
+    border-color: color-mix(in srgb, var(--md-primary) 44%, var(--md-outline-var));
+    background: color-mix(in srgb, var(--md-surface-cont-h) 84%, var(--md-primary));
+  }
 }
 
 .dashcam-segment-tile--append {
@@ -1305,6 +1319,7 @@
     min-height: 46px;
     gap: 8px;
     padding: 5px 8px 5px 5px;
+    contain-intrinsic-size: 46px 100%;
   }
 
   .dashcam-segment-thumb--compact {
