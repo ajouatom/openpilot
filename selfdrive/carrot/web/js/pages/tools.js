@@ -166,7 +166,7 @@ function setToolsLogExpanded(expanded, options = {}) {
       window.clearTimeout(toolsLogAttentionTimer);
       toolsLogAttentionTimer = null;
     }
-    window.CarrotToolsNotifications?.focusLatest?.({ expand: true, instant: true });
+    window.CarrotToolsNotifications?.focusLatest?.({ expand: true, smoothOnce: true, stableDetail: true });
   }
   if (!window.CarrotToolsNotifications?.render) {
     scrollToolsLogToBottom();

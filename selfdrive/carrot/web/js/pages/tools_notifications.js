@@ -705,6 +705,8 @@
       expanded,
       keyboard: false,
       instant: options.instant === true,
+      smoothOnce: options.smoothOnce === true,
+      stableDetail: options.stableDetail === true,
       mode: out?.dataset?.toolsNotificationMode || getMode(),
       scrollTop: scroller?.scrollTop || 0,
       cardTop: cardRect ? cardRect.top : null,
@@ -855,6 +857,10 @@
       if (token !== entryFocusToken) return;
       if (focus.instant) {
         scrollEntryIntoView(out, focus, "settled", { behavior: "auto" });
+        return;
+      }
+      if (focus.smoothOnce) {
+        scrollEntryIntoView(out, focus, "settled");
         return;
       }
       if (focus.expanded && !prefersReducedMotion()) {
@@ -1060,7 +1066,7 @@
     const latest = autoFocusLatest ? latestEntry(model) : null;
     if (canAutoFocusEntry(latest) && latest.id !== lastAutoFocusedEntryId) {
       lastAutoFocusedEntryId = latest.id;
-      focusEntry(out, latest.id, { expand: true, instant: true });
+      focusEntry(out, latest.id, { expand: true, smoothOnce: true, stableDetail: true });
       interactionFocus = pendingEntryFocus;
       scrollAnchor = null;
     }
@@ -1090,7 +1096,7 @@
     lastRenderSignature = signature;
     if (interactionFocus) {
       restoreEntryInteraction(out, interactionFocus);
-      if (interactionFocus.instant) {
+      if (interactionFocus.instant || interactionFocus.stableDetail) {
         const scroller = getLogScroller(out);
         stabilizeExpandedDetail(findCardById(scroller, interactionFocus.id));
       }
