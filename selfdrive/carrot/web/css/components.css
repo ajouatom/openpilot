@@ -177,7 +177,7 @@ body[data-page="terminal"] .app-toast-host {
 
 .app-dialog__choiceBtn.is-current {
   border-color: color-mix(in srgb, var(--md-primary) 56%, var(--md-stroke-soft));
-  background: color-mix(in srgb, var(--md-primary-cont) 34%, var(--md-surface-cont-h));
+  background: var(--md-primary-state);
   color: var(--md-primary);
   font-weight: 800;
   display: flex;
@@ -338,7 +338,7 @@ body[data-page="terminal"] .app-toast-host {
   padding: 4px 8px;
   border-radius: var(--r-pill);
   border: 1px solid color-mix(in srgb, var(--md-primary) 42%, transparent);
-  background: color-mix(in srgb, var(--md-primary-cont) 62%, transparent);
+  background: var(--md-primary-state-soft);
   color: var(--md-primary);
   font-size: 11px;
   font-weight: 800;
@@ -347,7 +347,7 @@ body[data-page="terminal"] .app-toast-host {
 
 .app-branch-picker__item.is-current {
   border-color: color-mix(in srgb, var(--md-primary) 56%, var(--md-stroke-soft));
-  background: color-mix(in srgb, var(--md-primary-cont) 34%, var(--md-surface-cont-h));
+  background: var(--md-primary-state);
   color: var(--md-primary);
   font-weight: 800;
 }
@@ -404,7 +404,7 @@ body[data-page="terminal"] .app-toast-host {
 
 .btn.active {
   border-color: color-mix(in srgb, var(--md-primary) 48%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--md-primary) 14%, var(--md-surface-cont-h));
+  background: var(--md-primary-state);
   color: var(--md-primary);
   font-weight: 850;
 }
@@ -695,7 +695,7 @@ body[data-page="terminal"] .app-toast-host {
 
 .setting-subnav__tab.is-active {
   border-color: color-mix(in srgb, var(--md-primary) 48%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--md-primary) 14%, var(--md-surface-cont-h));
+  background: var(--md-primary-state);
   color: var(--md-primary);
   font-weight: 850;
 }
@@ -737,7 +737,7 @@ body[data-page="terminal"] .app-toast-host {
 
 .groupBtn.active {
   border-color: color-mix(in srgb, var(--md-primary) 48%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--md-primary) 14%, var(--md-surface-cont-h));
+  background: var(--md-primary-state);
   color: var(--md-primary);
   font-weight: 850;
 }
@@ -843,7 +843,7 @@ body[data-page="terminal"] .app-toast-host {
 }
 
 .setting.is-focus-hit {
-  background: color-mix(in srgb, var(--md-primary-cont) 26%, transparent);
+  background: var(--md-primary-state-soft);
   border-bottom-color: color-mix(in srgb, var(--md-primary) 34%, var(--md-stroke-soft));
 }
 

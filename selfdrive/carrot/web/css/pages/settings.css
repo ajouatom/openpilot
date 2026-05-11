@@ -422,7 +422,7 @@
 
 .page--setting #groupList .groupBtn--profile.active {
   border-color: color-mix(in srgb, var(--md-primary) 48%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--md-primary) 14%, var(--md-surface-cont-h));
+  background: var(--md-primary-state);
   color: var(--md-primary);
 }
 
@@ -990,7 +990,7 @@
   .page--setting .setting-subnav__tab.is-active {
     color: var(--md-primary);
     border-color: color-mix(in srgb, var(--md-primary) 48%, var(--md-outline-var));
-    background: color-mix(in srgb, var(--md-primary) 14%, var(--md-surface-cont-h));
+    background: var(--md-primary-state);
   }
 
   .page--setting .setting-subnav__tab:active {

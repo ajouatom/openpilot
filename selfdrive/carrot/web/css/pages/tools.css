@@ -324,7 +324,7 @@
 
 .web-settings-nav__item.is-active {
   border-color: color-mix(in srgb, var(--md-primary) 56%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--md-primary-cont) 42%, var(--md-surface-cont-h));
+  background: var(--md-primary-state);
   color: var(--md-primary);
 }
 
@@ -1344,7 +1344,7 @@
     background:
       linear-gradient(
         180deg,
-        color-mix(in srgb, var(--md-primary-cont) 16%, var(--md-surface-cont-h)),
+        color-mix(in srgb, var(--md-primary) 10%, var(--md-surface-cont-h)),
         color-mix(in srgb, var(--md-surface-cont) 88%, #05080d)
       );
   }
@@ -1368,8 +1368,8 @@
   background:
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--md-primary-cont) 28%, var(--md-surface-cont-h)),
-      color-mix(in srgb, var(--md-primary-cont) 16%, var(--md-surface-cont))
+      color-mix(in srgb, var(--md-primary) 16%, var(--md-surface-cont-h)),
+      color-mix(in srgb, var(--md-primary) 10%, var(--md-surface-cont))
     );
 }
 
@@ -1481,7 +1481,7 @@
   padding: 9px 10px;
   border: 1px solid color-mix(in srgb, var(--md-primary) 26%, var(--md-outline-var));
   border-radius: 10px;
-  background: color-mix(in srgb, var(--tools-console-bg) 82%, var(--md-primary-cont));
+  background: color-mix(in srgb, var(--tools-console-bg) 88%, var(--md-primary));
   color: color-mix(in srgb, var(--md-on-surface) 84%, var(--tools-console-current));
   font-family: var(--font-mono);
   font-size: 12px;
@@ -1529,8 +1529,8 @@
   background:
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--md-primary-cont) 76%, #05080d),
-      color-mix(in srgb, var(--md-primary-cont) 54%, #05080d)
+      color-mix(in srgb, var(--md-primary) 22%, var(--md-surface-cont-hh)),
+      color-mix(in srgb, var(--md-primary) 14%, var(--md-surface-cont-h))
     );
   color: var(--md-on-surface);
 }
@@ -1550,8 +1550,8 @@
   background:
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--md-primary-cont) 30%, var(--md-surface-cont-h)),
-      color-mix(in srgb, var(--md-primary-cont) 18%, var(--md-surface-cont))
+      color-mix(in srgb, var(--md-primary) 18%, var(--md-surface-cont-h)),
+      color-mix(in srgb, var(--md-primary) 12%, var(--md-surface-cont))
     );
   color: var(--tools-console-current);
 }
@@ -2013,7 +2013,7 @@
   }
 
   .tools-console-log__clearBtn {
-    background: color-mix(in srgb, var(--md-primary-cont) 72%, #05070c);
+    background: color-mix(in srgb, var(--md-primary) 16%, #05070c);
     border-color: color-mix(in srgb, var(--md-primary) 42%, transparent);
   }
 }

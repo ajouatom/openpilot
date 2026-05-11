@@ -132,7 +132,7 @@ body:has(.page-transitioning) {
 }
 
 .topbar .nav-btn:focus-visible {
-  background: color-mix(in srgb, var(--md-primary-cont) 14%, transparent);
+  background: var(--md-primary-state-soft);
 }
 
 .topbar .nav-btn .nav-icon {
@@ -181,7 +181,7 @@ body:has(.page-transitioning) {
 .topbar .nav-btn.active {
   color: var(--md-primary);
   font-weight: 700;
-  background: color-mix(in srgb, var(--md-primary) 12%, transparent);
+  background: var(--md-primary-state-soft);
 }
 
 .topbar .nav-btn.recording,
@@ -565,7 +565,7 @@ body:has(.page-transitioning) {
 }
 
 .fab.active {
-  background: var(--md-primary-cont);
+  background: var(--md-primary-state-strong);
   border-color: color-mix(in srgb, var(--md-primary) 35%, var(--md-outline-var));
   color: var(--md-primary);
 }

@@ -22,6 +22,9 @@
   --md-on-primary:     #3a1800;
   --md-primary-cont:   #7b3e10;
   --md-on-primary-cont:#fff0e2;
+  --md-primary-state-soft:   color-mix(in srgb, var(--md-primary) 12%, transparent);
+  --md-primary-state:        color-mix(in srgb, var(--md-primary) 16%, var(--md-surface-cont-h));
+  --md-primary-state-strong: color-mix(in srgb, var(--md-primary) 22%, var(--md-surface-cont-hh));
 
   /* ── Error ── */
   --md-error:          #ff9d94;
