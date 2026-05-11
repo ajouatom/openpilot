@@ -375,6 +375,7 @@ const dashcamState = {
   refreshTimer: null,
   loadingMore: false,
   loadingSegments: new Set(),
+  segmentScrollTops: Object.create(null),
   scrollBusy: false,
   scrollTimer: null,
   renderFrame: 0,
