@@ -392,6 +392,21 @@
   padding-right: 2px;
 }
 
+.dashcam-segment-more {
+  flex: 0 0 auto;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  border-radius: 8px;
+}
+
+.dashcam-segment-more span {
+  color: var(--md-on-surface-var);
+  font-size: 12px;
+  font-weight: 750;
+}
+
 .dashcam-segment-tile {
   flex: 0 0 auto;
   min-height: 70px;

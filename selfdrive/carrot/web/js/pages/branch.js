@@ -374,6 +374,7 @@ const dashcamState = {
   selected: new Set(),
   refreshTimer: null,
   loadingMore: false,
+  loadingSegments: new Set(),
   scrollBusy: false,
   scrollTimer: null,
   renderFrame: 0,
