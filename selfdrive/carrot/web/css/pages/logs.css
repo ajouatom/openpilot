@@ -390,33 +390,17 @@
   overflow-anchor: none;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
-  /* Symmetric breathing room on both sides; no gutter reservation so the
-     visual layout is identical regardless of whether the scrollbar shows. */
-  padding-inline: 4px;
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--md-outline-var) 50%, transparent) transparent;
+  /* Hide the scrollbar entirely so the content sits flush with the rest of
+     the card on both sides. Scrolling still works via touch/wheel/keyboard.
+     This is the standard pattern for touch-first list views. */
+  scrollbar-width: none;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-/* Thin, semi-transparent overlay-style scrollbar — does not push content. */
 .dashcam-segment-list::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
-
-.dashcam-segment-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.dashcam-segment-list::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--md-outline-var) 40%, transparent);
-}
-
-.dashcam-segment-list::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--md-outline-var) 70%, transparent);
+  display: none;
 }
 
 .dashcam-segment-loader {
