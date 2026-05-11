@@ -490,27 +490,27 @@ body[data-page="terminal"] .app-toast-host {
 
 .btn--filled,
 .smallBtn.btn--filled {
-  background: var(--md-primary-action);
-  border-color: color-mix(in srgb, var(--md-primary-action) 78%, var(--md-outline-var));
-  color: var(--md-on-primary-action);
+  background: var(--md-action-filled);
+  border-color: color-mix(in srgb, var(--md-action-filled) 78%, var(--md-outline-var));
+  color: var(--md-on-action-filled);
 }
 
 #appDialogConfirm.btn--filled {
-  background: var(--md-primary-action);
-  border-color: color-mix(in srgb, var(--md-primary-action) 78%, var(--md-outline-var));
-  color: var(--md-on-primary-action);
+  background: var(--md-action-filled);
+  border-color: color-mix(in srgb, var(--md-action-filled) 78%, var(--md-outline-var));
+  color: var(--md-on-action-filled);
   box-shadow: none;
 }
 
 #appDialogConfirm.btn--filled:hover,
 #appDialogConfirm.btn--filled:focus-visible {
-  background: color-mix(in srgb, var(--md-primary-action) 88%, #fff);
-  border-color: color-mix(in srgb, var(--md-primary-action) 84%, var(--md-outline-var));
-  color: var(--md-on-primary-action);
+  background: color-mix(in srgb, var(--md-action-filled) 88%, #fff);
+  border-color: color-mix(in srgb, var(--md-action-filled) 84%, var(--md-outline-var));
+  color: var(--md-on-action-filled);
 }
 
 #appDialogConfirm.btn--filled:active {
-  background: color-mix(in srgb, var(--md-primary-action) 84%, #1f0b00);
+  background: color-mix(in srgb, var(--md-action-filled) 84%, #001826);
 }
 
 .btn--danger {

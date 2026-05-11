@@ -20,8 +20,8 @@
   /* ── Primary — Carrot Dark Orange ── */
   --md-primary:        #ffb06d;
   --md-on-primary:     #3a1800;
-  --md-primary-action: #ff8f45;
-  --md-on-primary-action: #1f0b00;
+  --md-action-filled:  #7dd3fc;
+  --md-on-action-filled: #001826;
   --md-primary-state-soft:   color-mix(in srgb, var(--md-primary) 14%, transparent);
   --md-primary-state:        color-mix(in srgb, var(--md-primary) 18%, var(--md-surface-cont-h));
   --md-primary-state-strong: color-mix(in srgb, var(--md-primary) 22%, var(--md-surface-cont-hh));
