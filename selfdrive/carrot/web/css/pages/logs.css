@@ -303,7 +303,9 @@
 
 .dashcam-route-main {
   min-width: 0;
-  padding: 12px 28px 12px 12px;
+  /* Symmetric inline padding so all children (title, selection row,
+     segment list) align flush on both sides of the card. */
+  padding: 12px 14px;
 }
 
 .dashcam-route-head {
@@ -1216,7 +1218,7 @@
   }
 
   .dashcam-route-main {
-    padding: 10px 28px 12px 12px;
+    padding: 10px 14px 12px;
   }
 
   .dashcam-route-head {
