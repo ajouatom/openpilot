@@ -9,12 +9,17 @@ const DRIVE_MODES = TRANSLATION_REGISTRY.driveModes || {};
 const CARROT_WEB_LANGUAGE_CODES = Object.freeze(["en", "ko", "zh"]);
 window.CARROT_WEB_LANGUAGE_CODES = CARROT_WEB_LANGUAGE_CODES;
 
-window.CarrotDeviceLanguageOptions = Object.freeze([
-  { code: "main_en", name: "English" },
-  { code: "main_ko", name: "한국어" },
-  { code: "main_zh-CHS", name: "简体中文" },
-  { code: "main_zh-CHT", name: "繁體中文" },
-]);
+// Device language options — loaded from the server bootstrap (languages.json).
+// Falls back to a minimal set if the server data is unavailable.
+window.CarrotDeviceLanguageOptions = Object.freeze(
+  (Array.isArray(window.__CARROT_BOOTSTRAP__?.deviceLanguages) &&
+    window.__CARROT_BOOTSTRAP__.deviceLanguages.length > 0)
+    ? window.__CARROT_BOOTSTRAP__.deviceLanguages
+    : [
+        { code: "main_en", name: "English" },
+        { code: "main_ko", name: "한국어" },
+      ]
+);
 
 let LANG = "en";
 

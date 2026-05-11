@@ -753,10 +753,22 @@ async function syncDeviceLanguageOnce() {
     const values = await bulkGet(["LanguageSetting"]);
     const currentLang = String(values["LanguageSetting"] || "").trim();
 
+    // Map browser language → web language code (ko/en/zh only)
     const browserLang = (navigator.language || navigator.userLanguage || "en").toLowerCase();
-    let targetParam = "main_en";
-    if (browserLang.startsWith("ko")) targetParam = "main_ko";
-    else if (browserLang.startsWith("zh")) targetParam = browserLang.includes("tw") || browserLang.includes("hk") ? "main_zh-CHT" : "main_zh-CHS";
+    const webLang = normalizeLangCode(browserLang); // returns "ko" | "en" | "zh" | ""
+
+    // Map web language → device language code
+    const WEB_TO_DEVICE = { ko: "main_ko", en: "main_en", zh: "main_zh-CHS" };
+    if (browserLang.startsWith("zh") && (browserLang.includes("tw") || browserLang.includes("hk"))) {
+      WEB_TO_DEVICE.zh = "main_zh-CHT";
+    }
+
+    // Only sync if browser language has BOTH a web pack AND a device translation
+    const deviceCodes = (window.CarrotDeviceLanguageOptions || []).map((o) => o.code);
+    let targetParam = "main_en"; // default fallback
+    if (webLang && WEB_TO_DEVICE[webLang] && deviceCodes.includes(WEB_TO_DEVICE[webLang])) {
+      targetParam = WEB_TO_DEVICE[webLang];
+    }
 
     if (currentLang !== targetParam) {
       await setParam("LanguageSetting", targetParam);
