@@ -490,27 +490,27 @@ body[data-page="terminal"] .app-toast-host {
 
 .btn--filled,
 .smallBtn.btn--filled {
-  background: var(--md-primary);
-  border-color: color-mix(in srgb, var(--md-primary) 76%, var(--md-outline-var));
-  color: var(--md-on-primary);
+  background: var(--md-primary-action);
+  border-color: color-mix(in srgb, var(--md-primary-action) 78%, var(--md-outline-var));
+  color: var(--md-on-primary-action);
 }
 
 #appDialogConfirm.btn--filled {
-  background: var(--md-primary);
-  border-color: color-mix(in srgb, var(--md-primary) 76%, var(--md-outline-var));
-  color: var(--md-on-primary);
+  background: var(--md-primary-action);
+  border-color: color-mix(in srgb, var(--md-primary-action) 78%, var(--md-outline-var));
+  color: var(--md-on-primary-action);
   box-shadow: none;
 }
 
 #appDialogConfirm.btn--filled:hover,
 #appDialogConfirm.btn--filled:focus-visible {
-  background: color-mix(in srgb, var(--md-primary) 88%, #fff);
-  border-color: color-mix(in srgb, var(--md-primary) 82%, var(--md-outline-var));
-  color: var(--md-on-primary);
+  background: color-mix(in srgb, var(--md-primary-action) 88%, #fff);
+  border-color: color-mix(in srgb, var(--md-primary-action) 84%, var(--md-outline-var));
+  color: var(--md-on-primary-action);
 }
 
 #appDialogConfirm.btn--filled:active {
-  background: color-mix(in srgb, var(--md-primary) 82%, #fff);
+  background: color-mix(in srgb, var(--md-primary-action) 84%, #1f0b00);
 }
 
 .btn--danger {
