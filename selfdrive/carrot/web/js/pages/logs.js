@@ -578,8 +578,77 @@ function maybeLoadVisibleDashcamSegments(scroller = document.getElementById("das
   });
 }
 
+function dashcamScrollableSegmentList(target) {
+  const list = target?.closest?.(".dashcam-segment-list");
+  if (!list) return null;
+  return list.scrollHeight > list.clientHeight + 1 ? list : null;
+}
+
+function bindDashcamNestedScrollGuard(routesHost) {
+  if (!routesHost || routesHost.dataset.nestedScrollBound === "1") return;
+  routesHost.dataset.nestedScrollBound = "1";
+  let activeList = null;
+  let lastY = 0;
+
+  const clear = () => {
+    activeList = null;
+    lastY = 0;
+  };
+
+  routesHost.addEventListener("touchstart", (ev) => {
+    activeList = dashcamScrollableSegmentList(ev.target);
+    lastY = ev.touches?.[0]?.clientY || 0;
+  }, { passive: true });
+
+  routesHost.addEventListener("touchmove", (ev) => {
+    if (!activeList || ev.touches.length !== 1) return;
+    const y = ev.touches[0].clientY;
+    const deltaY = lastY - y;
+    lastY = y;
+    const atTop = activeList.scrollTop <= 0;
+    const atBottom = activeList.scrollTop + activeList.clientHeight >= activeList.scrollHeight - 1;
+    ev.stopPropagation();
+    if ((deltaY < 0 && atTop) || (deltaY > 0 && atBottom)) {
+      ev.preventDefault();
+    }
+  }, { passive: false });
+
+  routesHost.addEventListener("touchend", clear, { passive: true });
+  routesHost.addEventListener("touchcancel", clear, { passive: true });
+}
+
 function dashcamSelectedForRoute(entry) {
   return dashcamSegmentsForRoute(entry).filter((segment) => dashcamState.selected.has(segment));
+}
+
+function dashcamSegmentTileHtml(route, segment, segmentIndex, options = {}) {
+  const compactSegments = options.compact === true;
+  const animate = options.animate === true;
+  const routeAttr = escapeHtml(route);
+  const segAttr = escapeHtml(segment);
+  const checked = dashcamState.selected.has(segment) ? " checked" : "";
+  const tileClass = [
+    "dashcam-segment-tile",
+    compactSegments ? "dashcam-segment-tile--compact" : "",
+    animate ? "dashcam-segment-tile--append" : "",
+  ].filter(Boolean).join(" ");
+  const thumbClass = compactSegments ? "dashcam-segment-thumb dashcam-segment-thumb--compact" : "dashcam-segment-thumb";
+  const checkClass = compactSegments ? "dashcam-segment-check dashcam-segment-check--compact" : "dashcam-segment-check";
+  return `<div class="${tileClass}" style="--i:${segmentIndex}" data-action="play" data-route="${routeAttr}" data-segment="${segAttr}">
+    <div class="${thumbClass}">
+      <img class="logs-lazy-img" loading="lazy" decoding="async" fetchpriority="low" data-src="${dashcamApiPath("thumbnail", segment)}" alt="">
+      <label class="${checkClass}" title="${escapeHtml(getUIText("select_all", "Select"))}" onclick="event.stopPropagation()">
+        <input type="checkbox" data-action="select-segment" data-segment="${segAttr}"${checked}>
+      </label>
+    </div>
+    <div class="dashcam-segment-body">
+      <div class="dashcam-segment-badge">SEG ${dashcamSegmentIndex(segment)}</div>
+      <div class="dashcam-segment-name">${segAttr}</div>
+    </div>
+    <button class="dashcam-menu-btn" type="button" data-action="segment-menu" data-route="${routeAttr}" data-segment="${segAttr}" aria-label="${escapeHtml(getUIText("segment_menu", "Segment menu"))}" title="${escapeHtml(getUIText("segment_menu", "Segment menu"))}">
+      <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4m0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/></svg>
+    </button>
+  </div>`;
 }
 
 function dashcamRouteCardHtml(entry, index = 0, options = {}) {
@@ -625,40 +694,7 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
       </div>`
     : "";
   const segmentList = shouldRenderSegments ? segments.map((segment, segmentIndex) => {
-    const segAttr = escapeHtml(segment);
-    const checked = dashcamState.selected.has(segment) ? " checked" : "";
-    if (compactSegments) {
-      return `<div class="dashcam-segment-tile dashcam-segment-tile--compact ui-stagger-item" style="--i:${segmentIndex}" data-action="play" data-route="${routeAttr}" data-segment="${segAttr}">
-        <div class="dashcam-segment-thumb dashcam-segment-thumb--compact">
-          <img class="logs-lazy-img" loading="lazy" decoding="async" fetchpriority="low" data-src="${dashcamApiPath("thumbnail", segment)}" alt="">
-          <label class="dashcam-segment-check dashcam-segment-check--compact" title="${escapeHtml(getUIText("select_all", "Select"))}" onclick="event.stopPropagation()">
-            <input type="checkbox" data-action="select-segment" data-segment="${segAttr}"${checked}>
-          </label>
-        </div>
-        <div class="dashcam-segment-body">
-          <div class="dashcam-segment-badge">SEG ${dashcamSegmentIndex(segment)}</div>
-          <div class="dashcam-segment-name">${segAttr}</div>
-        </div>
-        <button class="dashcam-menu-btn" type="button" data-action="segment-menu" data-route="${routeAttr}" data-segment="${segAttr}" aria-label="${escapeHtml(getUIText("segment_menu", "Segment menu"))}" title="${escapeHtml(getUIText("segment_menu", "Segment menu"))}">
-          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4m0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/></svg>
-        </button>
-      </div>`;
-    }
-    return `<div class="dashcam-segment-tile ui-stagger-item" style="--i:${segmentIndex}" data-action="play" data-route="${routeAttr}" data-segment="${segAttr}">
-      <div class="dashcam-segment-thumb">
-        <img class="logs-lazy-img" loading="lazy" decoding="async" fetchpriority="low" data-src="${dashcamApiPath("thumbnail", segment)}" alt="">
-        <label class="dashcam-segment-check" title="${escapeHtml(getUIText("select_all", "Select"))}" onclick="event.stopPropagation()">
-          <input type="checkbox" data-action="select-segment" data-segment="${segAttr}"${checked}>
-        </label>
-      </div>
-      <div class="dashcam-segment-body">
-        <div class="dashcam-segment-badge">SEG ${dashcamSegmentIndex(segment)}</div>
-        <div class="dashcam-segment-name">${segAttr}</div>
-      </div>
-      <button class="dashcam-menu-btn" type="button" data-action="segment-menu" data-route="${routeAttr}" data-segment="${segAttr}" aria-label="${escapeHtml(getUIText("segment_menu", "Segment menu"))}" title="${escapeHtml(getUIText("segment_menu", "Segment menu"))}">
-        <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4m0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/></svg>
-      </button>
-    </div>`;
+    return dashcamSegmentTileHtml(route, segment, segmentIndex, { compact: compactSegments });
   }).join("") : "";
   const segmentMore = shouldRenderSegments && hasMoreSegments
     ? `<button class="smallBtn dashcam-segment-more" type="button" data-action="load-more-segments" data-route="${routeAttr}" ${loadingSegments ? "disabled" : ""}>
@@ -803,12 +839,65 @@ function updateDashcamRouteSelectionUi(route) {
   return true;
 }
 
+function updateDashcamSegmentMoreUi(route, loading = false) {
+  const host = document.getElementById("dashcamRoutes");
+  const entry = (dashcamState.routes || []).find((item) => item.route === route);
+  if (!host || !entry) return false;
+  const card = Array.from(host.querySelectorAll("[data-route-card]"))
+    .find((node) => node.dataset.routeCard === route);
+  if (!card) return false;
+  const button = card.querySelector('[data-action="load-more-segments"]');
+  if (!button) return false;
+  const loaded = dashcamSegmentsForRoute(entry).length;
+  const total = dashcamSegmentCountForRoute(entry);
+  button.disabled = Boolean(loading);
+  button.firstChild.textContent = loading ? getUIText("loading", "Loading...") : getUIText("load_more_segments", "Load more");
+  const count = button.querySelector("span");
+  if (count) count.textContent = getUIText("loaded_count", "{loaded}/{total}", { loaded, total });
+  return true;
+}
+
+function appendDashcamSegmentsToRoute(route, newSegments, startIndex = 0) {
+  if (!newSegments.length) return false;
+  const host = document.getElementById("dashcamRoutes");
+  const entry = (dashcamState.routes || []).find((item) => item.route === route);
+  if (!host || !entry) return false;
+  const card = Array.from(host.querySelectorAll("[data-route-card]"))
+    .find((node) => node.dataset.routeCard === route);
+  const list = card?.querySelector(".dashcam-segment-list");
+  if (!card || !list) return false;
+
+  const scrollTop = list.scrollTop;
+  const activeSegment = document.activeElement?.closest?.("[data-segment]")?.dataset.segment || "";
+  const compact = isCompactLandscapeMode();
+  const template = document.createElement("template");
+  template.innerHTML = newSegments
+    .map((segment, offset) => dashcamSegmentTileHtml(route, segment, startIndex + offset, { compact, animate: true }))
+    .join("");
+  const moreButton = list.querySelector('[data-action="load-more-segments"]');
+  list.insertBefore(template.content, moreButton || null);
+  list.scrollTop = scrollTop;
+  hydrateLogsLazyImages(list);
+  updateDashcamRouteSelectionUi(route);
+  updateDashcamSegmentMoreUi(route, false);
+  if (activeSegment) {
+    Array.from(card.querySelectorAll("[data-segment]"))
+      .find((node) => node.dataset.segment === activeSegment)
+      ?.focus?.({ preventScroll: true });
+  }
+  card.dataset.renderKey = dashcamRouteRenderKey(entry);
+  return true;
+}
+
 async function loadDashcamSegments(route) {
   if (!route || dashcamState.loadingSegments?.has(route)) return;
   const entry = (dashcamState.routes || []).find((item) => item.route === route);
   if (!entry || !dashcamRouteHasMoreSegments(entry)) return;
+  const previousCount = dashcamSegmentsForRoute(entry).length;
   dashcamState.loadingSegments.add(route);
-  if (!renderDashcamRoute(route)) renderDashcamRoutes({ animate: false, preserve: true });
+  if (!updateDashcamSegmentMoreUi(route, true) && !renderDashcamRoute(route)) {
+    renderDashcamRoutes({ animate: false, preserve: true });
+  }
 
   try {
     const offset = dashcamSegmentNextOffset(entry);
@@ -816,18 +905,21 @@ async function loadDashcamSegments(route) {
     const current = (dashcamState.routes || []).find((item) => item.route === route);
     if (!current) return;
     const incoming = Array.isArray(json.segments) ? json.segments : [];
+    const existing = new Set(dashcamSegmentsForRoute(current));
+    const appended = incoming.filter((segment) => segment && !existing.has(segment));
     current.segmentFolders = mergeDashcamSegments(dashcamSegmentsForRoute(current), incoming);
     current.segmentCount = Number.isFinite(Number(json.total)) ? Number(json.total) : dashcamSegmentCountForRoute(current);
     current.segmentsNextOffset = json.nextOffset == null ? current.segmentFolders.length : Number(json.nextOffset) || current.segmentFolders.length;
     current.segmentsHasMore = Boolean(json.hasMore);
     dashcamState.signature = dashcamRoutesSignature(dashcamState.routes);
+    if (appended.length && appendDashcamSegmentsToRoute(route, appended, previousCount)) return;
   } catch (e) {
     if (isLogsPageActive()) {
       showAppToast(e.message || getUIText("dashcam_load_failed", "Failed to load dashcam list"), { tone: "error" });
     }
   } finally {
     dashcamState.loadingSegments.delete(route);
-    if (!renderDashcamRoute(route)) renderDashcamRoutes({ animate: false, preserve: true });
+    if (!updateDashcamSegmentMoreUi(route, false) && !renderDashcamRoute(route)) renderDashcamRoutes({ animate: false, preserve: true });
     requestAnimationFrame(() => maybeLoadVisibleDashcamSegments());
   }
 }
@@ -892,7 +984,7 @@ async function loadDashcamRoutes({ silent = false, append = false } = {}) {
     dashcamState.loading = false;
     dashcamState.loadingMore = false;
     setDashcamLoadingMoreUi(false);
-    renderDashcamRoutes({ animate: !silent });
+    renderDashcamRoutes({ animate: append || !silent });
     if (!silent && logsScrollTops.dashcam === 0) restoreLogsScrollTop("dashcam", { reset: true });
     requestAnimationFrame(() => {
       maybeLoadMoreDashcamRoutes();
@@ -1632,6 +1724,7 @@ function bindLogsPage() {
 
   if (routesHost && routesHost.dataset.bound !== "1") {
     routesHost.dataset.bound = "1";
+    bindDashcamNestedScrollGuard(routesHost);
     routesHost.addEventListener("scroll", () => {
       markDashcamScrollBusy();
       saveLogsScrollTop("dashcam");
