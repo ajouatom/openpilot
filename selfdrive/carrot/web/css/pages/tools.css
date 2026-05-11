@@ -1473,6 +1473,7 @@
   width: calc(100% - var(--tools-detail-scroll-gap));
   max-height: min(32dvh, 230px);
   overflow: auto;
+  overflow-anchor: none;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
@@ -1674,6 +1675,7 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow: auto;
+    overflow-anchor: none;
     padding: 0 var(--tools-log-scroll-gap) 16px 0;
     scroll-padding-bottom: 20px;
     scrollbar-gutter: stable;
@@ -1886,6 +1888,7 @@
     max-height: none;
     padding: clamp(22px, 7dvh, 58px) var(--tools-log-scroll-gap) 0 0;
     overflow: auto;
+    overflow-anchor: none;
     overscroll-behavior: contain;
     touch-action: pan-y;
     -webkit-user-select: none;

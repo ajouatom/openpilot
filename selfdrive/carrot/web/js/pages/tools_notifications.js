@@ -629,7 +629,7 @@
     return model.entries.slice().reverse().find((entry) => entry.source === "current") || model.entries[model.entries.length - 1];
   }
 
-  function createEntryFocus(out, entryId, expanded = true) {
+  function createEntryFocus(out, entryId, expanded = true, options = {}) {
     const scroller = getLogScroller(out);
     const card = findCardById(scroller, entryId);
     const cardRect = card?.getBoundingClientRect?.();
@@ -637,6 +637,7 @@
       id: entryId,
       expanded,
       keyboard: false,
+      instant: options.instant === true,
       mode: out?.dataset?.toolsNotificationMode || getMode(),
       scrollTop: scroller?.scrollTop || 0,
       cardTop: cardRect ? cardRect.top : null,
@@ -648,7 +649,7 @@
     const expanded = options.expand !== false;
     clearCollapseRenderTimer();
     activeNotificationId = expanded ? entryId : "";
-    pendingEntryFocus = createEntryFocus(out, entryId, expanded);
+    pendingEntryFocus = createEntryFocus(out, entryId, expanded, options);
     detailScrollState.delete(entryId);
     return entryId;
   }
@@ -759,8 +760,9 @@
 
     if (Math.abs(delta) < 2) return;
     const target = clampScrollTop(scroller, scroller.scrollTop + delta);
+    const behavior = opts.behavior || (prefersReducedMotion() ? "auto" : "smooth");
     try {
-      scroller.scrollTo({ top: target, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+      scroller.scrollTo({ top: target, behavior });
     } catch {
       scroller.scrollTop = target;
     }
@@ -784,6 +786,10 @@
     const mode = getMode();
     global.requestAnimationFrame(() => {
       if (token !== entryFocusToken) return;
+      if (focus.instant) {
+        scrollEntryIntoView(out, focus, "settled", { behavior: "auto" });
+        return;
+      }
       if (focus.expanded && !prefersReducedMotion()) {
         const scroller = getLogScroller(out);
         const card = findCardById(scroller, focus.id);
@@ -987,7 +993,7 @@
     const latest = autoFocusLatest ? latestEntry(model) : null;
     if (latest && latest.id !== lastAutoFocusedEntryId) {
       lastAutoFocusedEntryId = latest.id;
-      focusEntry(out, latest.id, { expand: true });
+      focusEntry(out, latest.id, { expand: true, instant: true });
       interactionFocus = pendingEntryFocus;
       scrollAnchor = null;
     }
