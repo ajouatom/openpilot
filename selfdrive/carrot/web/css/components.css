@@ -510,7 +510,7 @@ body[data-page="terminal"] .app-toast-host {
 }
 
 #appDialogConfirm.btn--filled:active {
-  background: color-mix(in srgb, var(--md-action-filled) 84%, #001826);
+  background: color-mix(in srgb, var(--md-action-filled) 86%, #2a1204);
 }
 
 .btn--danger {

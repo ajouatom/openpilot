@@ -396,19 +396,28 @@
   padding-right: 2px;
 }
 
-.dashcam-segment-more {
+.dashcam-segment-loader {
   flex: 0 0 auto;
-  justify-content: center;
-  gap: 8px;
   width: 100%;
-  min-height: 38px;
-  border-radius: 8px;
+  height: 16px;
+  position: relative;
+  overflow: hidden;
+  border-radius: 999px;
+  background: transparent;
 }
 
-.dashcam-segment-more span {
-  color: var(--md-on-surface-var);
-  font-size: 12px;
-  font-weight: 750;
+.dashcam-segment-loader.is-loading {
+  height: 22px;
+  background: color-mix(in srgb, var(--md-outline-var) 18%, transparent);
+}
+
+.dashcam-segment-loader.is-loading::before {
+  content: "";
+  position: absolute;
+  inset: 8px 20%;
+  border-radius: inherit;
+  background: var(--md-primary);
+  animation: dashcam-segment-loader 820ms ease-in-out infinite;
 }
 
 .dashcam-segment-tile {
@@ -443,6 +452,15 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes dashcam-segment-loader {
+  0% {
+    transform: translateX(-160%);
+  }
+  100% {
+    transform: translateX(160%);
   }
 }
 
@@ -607,6 +625,10 @@
   }
 
   .dashcam-segment-tile--append {
+    animation: none;
+  }
+
+  .dashcam-segment-loader.is-loading::before {
     animation: none;
   }
 

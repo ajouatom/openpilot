@@ -568,10 +568,10 @@ function mergeDashcamRoutePage(entry, existing) {
 function maybeLoadVisibleDashcamSegments(scroller = document.getElementById("dashcamRoutes")) {
   if (!scroller || !isLogsPageActive()) return;
   const hostRect = scroller.getBoundingClientRect();
-  scroller.querySelectorAll('[data-action="load-more-segments"]').forEach((button) => {
-    const route = button.dataset.route || "";
+  scroller.querySelectorAll("[data-segment-loader]").forEach((loader) => {
+    const route = loader.dataset.route || "";
     if (!route || dashcamState.loadingSegments?.has(route)) return;
-    const rect = button.getBoundingClientRect();
+    const rect = loader.getBoundingClientRect();
     if (rect.top <= hostRect.bottom + 160 && rect.bottom >= hostRect.top - 40) {
       loadDashcamSegments(route).catch(() => {});
     }
@@ -696,11 +696,8 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
   const segmentList = shouldRenderSegments ? segments.map((segment, segmentIndex) => {
     return dashcamSegmentTileHtml(route, segment, segmentIndex, { compact: compactSegments });
   }).join("") : "";
-  const segmentMore = shouldRenderSegments && hasMoreSegments
-    ? `<button class="smallBtn dashcam-segment-more" type="button" data-action="load-more-segments" data-route="${routeAttr}" ${loadingSegments ? "disabled" : ""}>
-        ${escapeHtml(loadingSegments ? getUIText("loading", "Loading...") : getUIText("load_more_segments", "Load more"))}
-        <span>${escapeHtml(getUIText("loaded_count", "{loaded}/{total}", { loaded: loadedCount, total: segmentCount }))}</span>
-      </button>`
+  const segmentLoader = shouldRenderSegments && hasMoreSegments
+    ? `<div class="dashcam-segment-loader${loadingSegments ? " is-loading" : ""}" data-segment-loader="1" data-route="${routeAttr}" aria-hidden="true"></div>`
     : "";
 
   return `<article class="dashcam-route-card${animate ? " ui-stagger-item" : ""}"${animate ? ` style="--i:${animateIndex}"` : ""} data-route-card="${routeAttr}" data-route-index="${index}" data-render-key="${renderKey}">
@@ -721,7 +718,7 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
           <button class="smallBtn" type="button" data-action="select-route" data-route="${routeAttr}" data-selected="${allSelected ? "1" : "0"}">${escapeHtml(selectLabel)}</button>
           <button class="smallBtn btn--filled" type="button" data-action="upload-selected" data-route="${routeAttr}" ${selected.length ? "" : "disabled"}>${escapeHtml(getUIText("upload_selected", "Upload selected"))}</button>
         </div>
-        <div class="dashcam-segment-list">${segmentList}${segmentMore}</div>
+        <div class="dashcam-segment-list">${segmentList}${segmentLoader}</div>
       </div>
     </div>
   </article>`;
@@ -839,21 +836,20 @@ function updateDashcamRouteSelectionUi(route) {
   return true;
 }
 
-function updateDashcamSegmentMoreUi(route, loading = false) {
+function updateDashcamSegmentLoaderUi(route, loading = false) {
   const host = document.getElementById("dashcamRoutes");
   const entry = (dashcamState.routes || []).find((item) => item.route === route);
   if (!host || !entry) return false;
   const card = Array.from(host.querySelectorAll("[data-route-card]"))
     .find((node) => node.dataset.routeCard === route);
   if (!card) return false;
-  const button = card.querySelector('[data-action="load-more-segments"]');
-  if (!button) return false;
-  const loaded = dashcamSegmentsForRoute(entry).length;
-  const total = dashcamSegmentCountForRoute(entry);
-  button.disabled = Boolean(loading);
-  button.firstChild.textContent = loading ? getUIText("loading", "Loading...") : getUIText("load_more_segments", "Load more");
-  const count = button.querySelector("span");
-  if (count) count.textContent = getUIText("loaded_count", "{loaded}/{total}", { loaded, total });
+  const loader = card.querySelector("[data-segment-loader]");
+  if (!loader) return false;
+  if (!dashcamRouteHasMoreSegments(entry)) {
+    loader.remove();
+    return true;
+  }
+  loader.classList.toggle("is-loading", Boolean(loading));
   return true;
 }
 
@@ -868,18 +864,20 @@ function appendDashcamSegmentsToRoute(route, newSegments, startIndex = 0) {
   if (!card || !list) return false;
 
   const scrollTop = list.scrollTop;
+  const wasScrollable = list.scrollHeight > list.clientHeight + 1;
+  const wasNearBottom = wasScrollable && (list.scrollHeight - list.scrollTop - list.clientHeight <= 48);
   const activeSegment = document.activeElement?.closest?.("[data-segment]")?.dataset.segment || "";
   const compact = isCompactLandscapeMode();
   const template = document.createElement("template");
   template.innerHTML = newSegments
     .map((segment, offset) => dashcamSegmentTileHtml(route, segment, startIndex + offset, { compact, animate: true }))
     .join("");
-  const moreButton = list.querySelector('[data-action="load-more-segments"]');
-  list.insertBefore(template.content, moreButton || null);
-  list.scrollTop = scrollTop;
+  const loader = list.querySelector("[data-segment-loader]");
+  list.insertBefore(template.content, loader || null);
   hydrateLogsLazyImages(list);
   updateDashcamRouteSelectionUi(route);
-  updateDashcamSegmentMoreUi(route, false);
+  updateDashcamSegmentLoaderUi(route, false);
+  list.scrollTop = wasNearBottom ? Math.max(0, list.scrollHeight - list.clientHeight) : scrollTop;
   if (activeSegment) {
     Array.from(card.querySelectorAll("[data-segment]"))
       .find((node) => node.dataset.segment === activeSegment)
@@ -895,7 +893,7 @@ async function loadDashcamSegments(route) {
   if (!entry || !dashcamRouteHasMoreSegments(entry)) return;
   const previousCount = dashcamSegmentsForRoute(entry).length;
   dashcamState.loadingSegments.add(route);
-  if (!updateDashcamSegmentMoreUi(route, true) && !renderDashcamRoute(route)) {
+  if (!updateDashcamSegmentLoaderUi(route, true) && !renderDashcamRoute(route)) {
     renderDashcamRoutes({ animate: false, preserve: true });
   }
 
@@ -919,7 +917,7 @@ async function loadDashcamSegments(route) {
     }
   } finally {
     dashcamState.loadingSegments.delete(route);
-    if (!updateDashcamSegmentMoreUi(route, false) && !renderDashcamRoute(route)) renderDashcamRoutes({ animate: false, preserve: true });
+    if (!updateDashcamSegmentLoaderUi(route, false) && !renderDashcamRoute(route)) renderDashcamRoutes({ animate: false, preserve: true });
     requestAnimationFrame(() => maybeLoadVisibleDashcamSegments());
   }
 }
@@ -1022,7 +1020,10 @@ function markDashcamScrollBusy() {
   if (dashcamState.scrollTimer) window.clearTimeout(dashcamState.scrollTimer);
   dashcamState.scrollTimer = window.setTimeout(() => {
     dashcamState.scrollBusy = false;
-    if (isLogsPageActive() && logsActiveTab === "dashcam") scheduleDashcamWindowRender();
+    if (isLogsPageActive() && logsActiveTab === "dashcam") {
+      const host = getLogsScroller("dashcam");
+      if (dashcamWindowNeedsRender(host)) scheduleDashcamWindowRender();
+    }
   }, 380);
 }
 
@@ -1765,10 +1766,6 @@ function bindLogsPage() {
         const entry = dashcamState.routes.find((item) => item.route === route);
         const targets = dashcamSelectedForRoute(entry || { segmentFolders: [] });
         uploadDashcamSegments(targets).catch(() => {});
-      } else if (action === "load-more-segments") {
-        ev.preventDefault();
-        ev.stopPropagation();
-        loadDashcamSegments(route).catch(() => {});
       }
     });
     routesHost.addEventListener("change", (ev) => {

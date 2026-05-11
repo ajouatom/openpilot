@@ -347,8 +347,6 @@ window.CarrotTranslations.register("ko", {
     deselect_loaded: "로드된 항목 해제",
     upload_selected: "선택 전송",
     segment_count: "세그먼트 {count}개",
-    load_more_segments: "더 불러오기",
-    loaded_count: "{loaded}/{total}",
     segment_menu: "세그먼트 메뉴",
     show_segments: "세그먼트 보기",
     collapse: "접기",
