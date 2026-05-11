@@ -229,6 +229,7 @@ async function renderDeviceTab(options = {}) {
   const animateGroups = options.animateGroups !== false;
   const animateItems = options.animateItems !== false;
   renderDeviceGroups({ animateGroups });
+  syncDeviceGroupChrome(CURRENT_DEVICE_GROUP);
   if (!deviceTabLoaded) {
     deviceTabLoaded = true;
     loadDeviceParams("Device", true).then(() => {
@@ -244,6 +245,7 @@ async function selectDeviceGroup(groupId) {
   CURRENT_DEVICE_GROUP = groupId || CURRENT_DEVICE_GROUP;
   renderDeviceGroups();
   syncSettingTabState("device");
+  syncDeviceGroupChrome(CURRENT_DEVICE_GROUP);
   await renderDeviceItems(CURRENT_DEVICE_GROUP, true, { animateItems: true });
 }
 
@@ -282,6 +284,7 @@ async function renderDeviceItems(groupId, showItemsScreen = true, options = {}) 
   }
   bindDeviceTabEvents(itemsContainer);
   syncDeviceGroupActiveState(groupId);
+  syncDeviceGroupChrome(groupId);
   syncDeviceNetworkRefresh();
 }
 
@@ -373,12 +376,30 @@ function syncDeviceGroupActiveState(groupId = CURRENT_DEVICE_GROUP) {
   });
 }
 
+function syncDeviceGroupChrome(groupId = CURRENT_DEVICE_GROUP) {
+  const label = getDeviceGroupLabel(groupId);
+  const meta = document.getElementById("groupMeta");
+  const itemCount = document.getElementById("deviceItems")?.children.length || 0;
+  if (meta && groupId) meta.textContent = `${groupId} / ${itemCount}`;
+  if (typeof settingTitle !== "undefined" && settingTitle) {
+    settingTitle.textContent = (UI_STRINGS[LANG].setting || "Setting") + " - " + label;
+  }
+  if (typeof itemsTitle !== "undefined" && itemsTitle) {
+    itemsTitle.textContent = label;
+  }
+}
+
 async function switchSettingTab(tab) {
   const nextTab = tab === "device" ? "device" : "carrot";
   if (CURRENT_SETTING_TAB === nextTab) {
     syncSettingTabState(nextTab);
-    if (nextTab !== "device") stopDeviceNetworkRefresh();
-    else syncDeviceNetworkRefresh();
+    if (nextTab !== "device") {
+      stopDeviceNetworkRefresh();
+      if (typeof syncSettingGroupChrome === "function") syncSettingGroupChrome(CURRENT_GROUP);
+    } else {
+      syncDeviceGroupChrome(CURRENT_DEVICE_GROUP);
+      syncDeviceNetworkRefresh();
+    }
     return;
   }
 
@@ -391,12 +412,26 @@ async function switchSettingTab(tab) {
     if (!(typeof isCompactLandscapeMode === "function" && isCompactLandscapeMode()) && typeof showSettingScreen === "function") {
       showSettingScreen("groups", false);
     }
+    syncDeviceGroupChrome(CURRENT_DEVICE_GROUP);
     return;
+  }
+
+  if (typeof isCompactLandscapeMode === "function" && isCompactLandscapeMode() && typeof activateSettingGroup === "function") {
+    const targetGroup = CURRENT_GROUP || (typeof getLandscapeDefaultSettingGroup === "function" ? getLandscapeDefaultSettingGroup() : null);
+    if (targetGroup) {
+      await activateSettingGroup(targetGroup, false, {
+        animateGroups: false,
+        animateItems: false,
+        scrollMode: "restore",
+      });
+      return;
+    }
   }
 
   if (typeof showSettingScreen === "function") {
     showSettingScreen("groups", false);
   }
+  if (typeof syncSettingGroupChrome === "function") syncSettingGroupChrome(CURRENT_GROUP);
 }
 
 if (settingTabDevice) {

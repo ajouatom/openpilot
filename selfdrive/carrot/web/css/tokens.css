@@ -20,14 +20,49 @@
   /* ── Primary — Carrot Dark Orange ── */
   --md-primary:        #ffb06d;
   --md-on-primary:     #3a1800;
-  --md-primary-cont:   #7b3e10;
-  --md-on-primary-cont:#fff0e2;
+  --md-action-filled:  #9f5a2c;
+  --md-on-action-filled: #fff3ea;
+  --md-primary-state-soft:   color-mix(in srgb, var(--md-primary) 14%, transparent);
+  --md-primary-state:        color-mix(in srgb, var(--md-primary) 18%, var(--md-surface-cont-h));
+  --md-primary-state-strong: color-mix(in srgb, var(--md-primary) 22%, var(--md-surface-cont-hh));
 
-  /* ── Error ── */
+  /* ── Error / Danger ──
+     `--md-error` is the soft coral used for non-critical errors
+     (form validation, failed upload toast). For alarm-level red
+     (active hazard, irreversible destructive) use `--md-danger`.
+     Material 3 palette + the codebase's existing alarm reds. */
   --md-error:          #ff9d94;
   --md-on-error:       #690005;
   --md-error-cont:     #93000a;
   --md-on-error-cont:  #ffdad6;
+  --md-danger:         #ff8a80;
+  --md-danger-strong:  #ff6b6b;
+  --md-danger-cont:    color-mix(in srgb, var(--md-danger) 16%, var(--md-surface-cont-h));
+
+  /* ── Success / Warning / Info ──
+     Semantic status colors. Use these — don't hardcode greens, ambers
+     or blues inline. Pattern:
+
+       .status-ok   { color: var(--md-success); }
+       .status-warn { background: var(--md-warning-cont); color: var(--md-on-warning-cont); }
+       .status-info { color: var(--md-info); }
+
+     `-cont` variants are surfaces (chip / badge background).
+     `-on-cont` is the text color on top of that container. */
+  --md-success:        #8fdc9b;
+  --md-success-strong: #4fd18b;
+  --md-success-cont:   color-mix(in srgb, var(--md-success) 16%, var(--md-surface-cont-h));
+  --md-on-success-cont: color-mix(in srgb, var(--md-success) 78%, var(--md-on-surface));
+
+  --md-warning:        #ffc94a;
+  --md-warning-strong: #ffb000;
+  --md-warning-cont:   color-mix(in srgb, var(--md-warning) 18%, var(--md-surface-cont-h));
+  --md-on-warning-cont: color-mix(in srgb, var(--md-warning) 78%, var(--md-on-surface));
+
+  --md-info:           #7dd3fc;
+  --md-info-strong:    #38bdf8;
+  --md-info-cont:      color-mix(in srgb, var(--md-info) 16%, var(--md-surface-cont-h));
+  --md-on-info-cont:   color-mix(in srgb, var(--md-info) 82%, var(--md-on-surface));
 
   /* ── Spacing ── */
   --sp-xs:   4px;
@@ -49,8 +84,118 @@
   --r-2xl:   32px;
   --r-pill:  999px;
 
-  /* ── Elevation ── */
-  --shadow-2: 0 18px 44px rgba(0, 0, 0, 0.34);
+  /* ── Elevation ────────────────────────────────────────────────
+     Material 3 dark elevation. Pick the smallest level that reads
+     as "raised". Larger = more separation from background.
+
+       --shadow-1  hover/lifted controls       (8px ambient)
+       --shadow-2  default for cards, FAB      (24px ambient)
+       --shadow-3  popovers, dropdowns         (28px ambient)
+       --shadow-4  dialogs, sheets             (40px ambient)
+       --shadow-5  fullscreen modals / pickers (60px ambient)
+
+     For brand-tinted elevation (the orange FAB), prefer composing:
+       box-shadow: var(--shadow-3), 0 0 0 1px var(--md-primary);
+     rather than re-encoding a colored shadow inline. */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.18), 0 4px 10px rgba(0, 0, 0, 0.16);
+  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.26);
+  --shadow-3: 0 12px 28px rgba(0, 0, 0, 0.30);
+  --shadow-4: 0 18px 40px rgba(0, 0, 0, 0.34);
+  --shadow-5: 0 20px 60px rgba(0, 0, 0, 0.44);
+
+  /* ── Motion ────────────────────────────────────────────────────
+     Duration tokens — pick one. Don't invent new values inline.
+
+       --motion-instant  state flicks, hovers       (80ms)
+       --motion-quick    common toggles, taps       (140ms)
+       --motion-base     default for most things    (180ms)
+       --motion-medium   FAB menus, sheets entering (240ms)
+       --motion-long     page transitions, large    (380ms)
+
+     Easing tokens — match the motion to the kind of change:
+
+       --ease-standard               default; symmetric in/out
+       --ease-emphasized             entering: decelerates onto place
+                                     (use for open/expand/enter)
+       --ease-emphasized-accelerate  leaving: accelerates away
+                                     (use for close/collapse/dismiss)
+       --ease-linear                 for crossfades and progress bars only
+
+     Pattern:
+       transition: opacity var(--motion-base) var(--ease-emphasized),
+                   transform var(--motion-medium) var(--ease-emphasized);
+
+     For asymmetric open/close, define both:
+       .menu        { transition: ... var(--motion-quick) var(--ease-emphasized-accelerate); }
+       .menu.is-open{ transition: ... var(--motion-medium) var(--ease-emphasized); }
+  */
+  --motion-instant:  80ms;
+  --motion-quick:    140ms;
+  --motion-base:     180ms;
+  --motion-medium:   240ms;
+  --motion-long:     380ms;
+
+  --ease-standard:              cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized:            cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --ease-linear:                linear;
+
+  /* ── State Layer (Material 3) ──────────────────────────────────
+     Material 3 expresses hover/focus/pressed by overlaying a tinted
+     layer at these opacities. The codebase mostly uses
+     `color-mix(primary, surface)` directly — these tokens give the
+     same effect with consistent intensities. Use as:
+
+       background:
+         color-mix(in srgb, var(--md-primary) calc(var(--state-hover) * 100%),
+                            transparent);
+
+     Or as a layer:
+       background-image: linear-gradient(
+         color-mix(in srgb, currentColor var(--state-hover-pct), transparent),
+         color-mix(in srgb, currentColor var(--state-hover-pct), transparent));
+  */
+  --state-hover:   0.08;
+  --state-focus:   0.12;
+  --state-pressed: 0.12;
+  --state-dragged: 0.16;
+  --state-hover-pct:   8%;
+  --state-focus-pct:  12%;
+  --state-pressed-pct:12%;
+
+  /* ── Z-Index Scale ─────────────────────────────────────────────
+     Use these instead of magic numbers. Local stacking inside a
+     component (1/2/3) is fine as raw numbers; cross-component
+     layering must come from this scale.
+
+       --z-base       in-flow content
+       --z-sticky     sticky headers, subnav
+       --z-rail       side nav rail
+       --z-nav        bottom nav bar (matches existing topbar z:120)
+       --z-fab        floating action buttons
+       --z-popover    dropdown menus, tooltips
+       --z-modal      dialogs, sheets, pickers
+       --z-toast      transient toast layer
+       --z-overlay    fullscreen overlays (video, recovery)
+  */
+  --z-base:    1;
+  --z-sticky:  50;
+  --z-rail:    100;
+  --z-nav:     120;
+  --z-fab:     130;
+  --z-popover: 150;
+  --z-modal:   170;
+  --z-toast:   200;
+  --z-overlay: 220;
+
+  /* ── Focus Ring ────────────────────────────────────────────────
+     One ring style for the whole app, via :focus-visible. Defined
+     here so individual components don't reinvent outline width and
+     color. Components that want a custom shape can still override
+     by writing their own :focus-visible rule. */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --focus-ring-color: color-mix(in srgb, var(--md-primary) 80%, transparent);
 
   /* ── Typography ── */
   --font-sans:  "Roboto", system-ui, -apple-system, sans-serif;
@@ -85,7 +230,5 @@
     --md-stroke-soft:    #959fb2;
     --md-stroke-strong:  #d2d9e8;
     --md-primary:        #ffc087;
-    --md-primary-cont:   #8b4713;
-    --md-on-primary-cont:#fff4eb;
   }
 }

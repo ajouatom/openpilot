@@ -343,6 +343,8 @@ window.CarrotTranslations.register("zh", {
     selected_count: "已选 {count} 个",
     select_all: "全选",
     deselect_all: "取消全选",
+    select_loaded: "选择已加载",
+    deselect_loaded: "取消已加载",
     upload_selected: "发送所选",
     segment_count: "{count} 个片段",
     segment_menu: "片段菜单",

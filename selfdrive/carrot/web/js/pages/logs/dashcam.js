@@ -1,53 +1,46 @@
 "use strict";
 
-// Logs page — Dashcam (route+segment listing, FFmpeg thumb/preview, FTP upload)
-// + Screen Recording listing/playback. Tab switching between the two.
+// Logs page — Dashcam tab.
+// Route + segment virtual listing, FFmpeg thumb/preview lazy load,
+// segment selection, FTP upload (with cancel/resume), segment menu, player.
 
 const DASHCAM_UPLOAD_JOB_STORAGE_KEY = "carrot_dashcam_upload_job_id";
-const DASHCAM_PAGE_SIZE = 40;
-const DASHCAM_LOAD_AHEAD_PX = 1200;
-const DASHCAM_ROUTE_WINDOW_OVERSCAN = 10;
-const SCREENRECORD_PAGE_SIZE = 40;
-const SCREENRECORD_LOAD_AHEAD_PX = 720;
-const SCREENRECORD_WINDOW_OVERSCAN = 8;
+const DASHCAM_ROUTE_PAGE_MIN = 10;
+const DASHCAM_ROUTE_PAGE_MAX = 40;
+const DASHCAM_ROUTE_PAGE_VIEWPORTS = 3;
+const DASHCAM_SEGMENT_PAGE_SIZE = 10;
+const DASHCAM_LOAD_AHEAD_VIEWPORTS = 1.5;
+const DASHCAM_ROUTE_WINDOW_OVERSCAN_VIEWPORTS = 1.25;
 let dashcamUploadActiveJobId = null;
 let dashcamUploadResumePromise = null;
 
-function isLogsPageActive() {
-  return CURRENT_PAGE === "logs";
-}
-
-function getLogsScroller(tab = logsActiveTab) {
-  return document.getElementById(tab === "screen" ? "screenrecordVideos" : "dashcamRoutes");
-}
-
-function saveLogsScrollTop(tab = logsActiveTab) {
-  const scroller = getLogsScroller(tab);
-  if (!scroller) return;
-  logsScrollTops[tab === "screen" ? "screen" : "dashcam"] = scroller.scrollTop || 0;
-}
-
-function restoreLogsScrollTop(tab = logsActiveTab, options = {}) {
-  const scroller = getLogsScroller(tab);
-  if (!scroller) return;
-  const key = tab === "screen" ? "screen" : "dashcam";
-  const nextTop = options.reset === true ? 0 : (logsScrollTops[key] || 0);
-  if (CURRENT_PAGE === "logs") {
-    window.scrollTo(0, 0);
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-  }
-  requestAnimationFrame(() => {
-    if (!isLogsPageActive()) return;
-    scroller.scrollTop = nextTop;
-    requestAnimationFrame(() => {
-      if (!isLogsPageActive()) return;
-      scroller.scrollTop = nextTop;
-      if (key === "dashcam" && typeof scheduleDashcamWindowRender === "function") scheduleDashcamWindowRender();
-      if (key === "screen" && typeof scheduleScreenrecordWindowRender === "function") scheduleScreenrecordWindowRender();
-    });
-  });
-}
+const dashcamState = {
+  initialized: false,
+  loading: false,
+  routes: [],
+  expanded: new Set(),
+  selected: new Set(),
+  refreshTimer: null,
+  loadingMore: false,
+  loadingSegments: new Set(),
+  segmentScrollTops: Object.create(null),
+  scrollBusy: false,
+  scrollTimer: null,
+  renderFrame: 0,
+  loadSeq: 0,
+  layoutBound: false,
+  layoutTimer: null,
+  landscape: null,
+  layoutKey: "",
+  total: 0,
+  nextOffset: 0,
+  hasMore: false,
+  routeHeight: 300,
+  routeHeights: Object.create(null),
+  windowStart: 0,
+  windowEnd: 0,
+  signature: "",
+};
 
 function dashcamSegmentIndex(segment) {
   const parts = String(segment || "").split("--");
@@ -63,29 +56,6 @@ function dashcamApiPath(kind, segment) {
   return `/api/dashcam/${kind}/${encodeURIComponent(segment)}`;
 }
 
-function formatRelativeEpoch(epochSeconds) {
-  const epoch = Number(epochSeconds || 0);
-  if (!Number.isFinite(epoch) || epoch <= 0) return "";
-  const delta = Math.max(0, Math.floor(Date.now() / 1000) - Math.floor(epoch));
-  if (delta < 60) return getUIText("just_now", "just now");
-  if (delta < 3600) return getUIText("minutes_ago", "{count} min ago", { count: Math.floor(delta / 60) });
-  if (delta < 86400) return getUIText("hours_ago", "{count} hr ago", { count: Math.floor(delta / 3600) });
-  return getUIText("days_ago", "{count} days ago", { count: Math.floor(delta / 86400) });
-}
-
-function localizeRelativeLabel(label) {
-  const text = String(label || "").trim();
-  if (!text) return "";
-  if (/^(방금\s*전|just\s*now)$/i.test(text)) return getUIText("just_now", "just now");
-  const minuteMatch = text.match(/^(\d+)\s*(?:분\s*전|min(?:ute)?s?\s*ago)$/i);
-  if (minuteMatch) return getUIText("minutes_ago", "{count} min ago", { count: minuteMatch[1] });
-  const hourMatch = text.match(/^(\d+)\s*(?:시간\s*전|hr?s?\s*ago|hour?s?\s*ago)$/i);
-  if (hourMatch) return getUIText("hours_ago", "{count} hr ago", { count: hourMatch[1] });
-  const dayMatch = text.match(/^(\d+)\s*(?:일\s*전|day?s?\s*ago)$/i);
-  if (dayMatch) return getUIText("days_ago", "{count} days ago", { count: dayMatch[1] });
-  return text;
-}
-
 function setDashcamStatus(message, tone = "") {
   const status = document.getElementById("dashcamStatus");
   if (!status) return;
@@ -99,39 +69,13 @@ function setDashcamMeta(message) {
   if (meta) meta.textContent = message;
 }
 
-function setScreenrecordStatus(message, tone = "") {
-  const status = document.getElementById("screenrecordStatus");
-  if (!status) return;
-  status.textContent = message || "";
-  status.hidden = !message;
-  status.classList.toggle("is-error", tone === "error");
-}
-
-function formatLogBytes(bytes) {
-  const n = Number(bytes) || 0;
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-}
-
-function screenrecordApiPath(kind, fileId) {
-  return `/api/screenrecord/${kind}/${encodeURIComponent(fileId)}`;
-}
-
 function dashcamRoutesSignature(routes) {
   return (routes || []).map((entry) => [
     entry.route || "",
+    entry.segmentCount || 0,
+    entry.segmentsNextOffset ?? "",
+    entry.segmentsHasMore ? "1" : "0",
     ...(entry.segmentFolders || []),
-  ].join("|")).join("\n") + "|" + (typeof LANG !== "undefined" ? LANG : "");
-}
-
-function screenrecordVideosSignature(videos) {
-  return (videos || []).map((video) => [
-    video.id || "",
-    video.name || "",
-    video.modifiedLabel || "",
-    video.size || 0,
   ].join("|")).join("\n") + "|" + (typeof LANG !== "undefined" ? LANG : "");
 }
 
@@ -156,6 +100,16 @@ function dashcamRouteHeightFor(route) {
   return Math.max(120, fallback);
 }
 
+function dashcamRoutePageSize(scroller = document.getElementById("dashcamRoutes")) {
+  const rowHeight = Math.max(120, dashcamRouteHeightFor(""));
+  const viewportHeight = Math.max(rowHeight, scroller?.clientHeight || window.innerHeight || rowHeight);
+  const visibleRows = Math.max(1, Math.ceil(viewportHeight / rowHeight));
+  return Math.max(
+    DASHCAM_ROUTE_PAGE_MIN,
+    Math.min(DASHCAM_ROUTE_PAGE_MAX, visibleRows * DASHCAM_ROUTE_PAGE_VIEWPORTS)
+  );
+}
+
 function dashcamRouteGap(host) {
   const styles = window.getComputedStyle?.(host);
   return Number.parseFloat(styles?.rowGap || styles?.gap || "0") || 0;
@@ -166,7 +120,8 @@ function dashcamWindowFor(host, routes) {
   const count = list.length;
   const viewportHeight = Math.max(1, host?.clientHeight || dashcamDefaultRouteHeight() * 2);
   const scrollTop = Math.max(0, host?.scrollTop || 0);
-  const overscanPx = dashcamRouteHeightFor("") * DASHCAM_ROUTE_WINDOW_OVERSCAN;
+  const rowHeight = Math.max(120, dashcamRouteHeightFor(""));
+  const overscanPx = Math.max(rowHeight * 2, viewportHeight * DASHCAM_ROUTE_WINDOW_OVERSCAN_VIEWPORTS);
   const minTop = Math.max(0, scrollTop - overscanPx);
   const maxBottom = scrollTop + viewportHeight + overscanPx;
   const gap = dashcamRouteGap(host);
@@ -190,7 +145,7 @@ function dashcamWindowFor(host, routes) {
     endHeight += dashcamRouteHeightFor(list[end]?.route) + (end > 0 ? gap : 0);
     end += 1;
   }
-  const minEnd = Math.min(count, Math.max(end + DASHCAM_ROUTE_WINDOW_OVERSCAN, start + 1));
+  const minEnd = Math.min(count, Math.max(end + Math.ceil(overscanPx / rowHeight), start + 1));
   while (end < minEnd) {
     endHeight += dashcamRouteHeightFor(list[end]?.route) + (end > 0 ? gap : 0);
     end += 1;
@@ -205,156 +160,10 @@ function dashcamWindowFor(host, routes) {
   return { start, end, topHeight, bottomHeight };
 }
 
-function screenrecordShouldLoadMore(scroller) {
-  if (!scroller || !screenrecordState.hasMore || screenrecordState.loading || screenrecordState.loadingMore) return false;
-  const remaining = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-  return remaining <= SCREENRECORD_LOAD_AHEAD_PX;
-}
-
 function dashcamShouldLoadMore(scroller) {
   if (!scroller || !dashcamState.hasMore || dashcamState.loading || dashcamState.loadingMore) return false;
   const remaining = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-  return remaining <= DASHCAM_LOAD_AHEAD_PX;
-}
-
-function screenrecordWindowFor(host, count) {
-  const rowHeight = Math.max(48, Number(screenrecordState.rowHeight) || 80);
-  const viewportHeight = Math.max(1, host?.clientHeight || rowHeight * 8);
-  const scrollTop = Math.max(0, host?.scrollTop || 0);
-  const visibleRows = Math.ceil(viewportHeight / rowHeight);
-  const start = Math.max(0, Math.floor(scrollTop / rowHeight) - SCREENRECORD_WINDOW_OVERSCAN);
-  const end = Math.min(count, start + visibleRows + (SCREENRECORD_WINDOW_OVERSCAN * 2));
-  return { start, end, rowHeight };
-}
-
-function screenrecordMeasureRowHeight(host) {
-  const row = host?.querySelector?.(".screenrecord-row");
-  if (!row) return;
-  const styles = window.getComputedStyle?.(host);
-  const gap = Number.parseFloat(styles?.rowGap || styles?.gap || "0") || 0;
-  const nextHeight = Math.max(48, row.getBoundingClientRect().height + gap);
-  if (Math.abs(nextHeight - screenrecordState.rowHeight) < 1) return;
-  screenrecordState.rowHeight = nextHeight;
-}
-
-function screenrecordSpacerNode(height, position) {
-  if (height <= 0) return null;
-  const node = document.createElement("div");
-  node.className = "screenrecord-virtual-spacer";
-  node.dataset.spacer = position;
-  node.style.height = `${Math.round(height)}px`;
-  return node;
-}
-
-function screenrecordRowNode(video, index, existingRows) {
-  const id = String(video?.id || "");
-  const existing = id ? existingRows.get(id) : null;
-  if (existing) {
-    existing.style.setProperty("--i", String(index));
-    existing.classList.remove("ui-stagger-item");
-    return existing;
-  }
-  const template = document.createElement("template");
-  template.innerHTML = screenrecordVideoRowHtml(video, index);
-  return template.content.firstElementChild;
-}
-
-function patchScreenrecordWindow(host, videos, view) {
-  const existingRows = new Map(
-    Array.from(host.querySelectorAll(".screenrecord-row"))
-      .map((node) => [node.dataset.id || "", node])
-      .filter(([id]) => Boolean(id))
-  );
-  const frag = document.createDocumentFragment();
-  const topSpacer = screenrecordSpacerNode(view.start * view.rowHeight, "top");
-  const bottomSpacer = screenrecordSpacerNode((videos.length - view.end) * view.rowHeight, "bottom");
-  if (topSpacer) frag.appendChild(topSpacer);
-  videos.slice(view.start, view.end).forEach((video, offset) => {
-    const row = screenrecordRowNode(video, view.start + offset, existingRows);
-    if (row) frag.appendChild(row);
-  });
-  if (bottomSpacer) frag.appendChild(bottomSpacer);
-  unobserveLogsLazyImages(host);
-  host.replaceChildren(frag);
-}
-
-function setScreenrecordLoadingMoreUi(active) {
-  const host = document.getElementById("screenrecordVideos");
-  if (!host) return;
-  host.classList.toggle("is-loading-more", Boolean(active));
-}
-
-function scheduleScreenrecordWindowRender() {
-  if (screenrecordState.renderFrame) return;
-  screenrecordState.renderFrame = requestAnimationFrame(() => {
-    screenrecordState.renderFrame = 0;
-    renderScreenrecordVideos({ preserve: true });
-  });
-}
-
-function loadLogsLazyImage(img) {
-  if (!img) return;
-  const src = img.dataset?.src || "";
-  if (!src) return;
-  img.src = src;
-  img.removeAttribute("data-src");
-}
-
-function hydrateLogsLazyImages(root) {
-  if (!isLogsPageActive()) return;
-  const scope = root || document;
-  const images = Array.from(scope.querySelectorAll?.("img[data-src]") || []);
-  if (!images.length) return;
-
-  if (!("IntersectionObserver" in window)) {
-    images.forEach(loadLogsLazyImage);
-    return;
-  }
-
-  if (!logsLazyImageObserver) {
-    logsLazyImageObserver = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        logsLazyImageObserver.unobserve(entry.target);
-        loadLogsLazyImage(entry.target);
-      });
-    }, { root: null, rootMargin: "720px 0px", threshold: 0.01 });
-  }
-
-  images.forEach((img) => logsLazyImageObserver.observe(img));
-}
-
-function disconnectLogsLazyImages() {
-  if (!logsLazyImageObserver) return;
-  logsLazyImageObserver.disconnect();
-  logsLazyImageObserver = null;
-}
-
-function unobserveLogsLazyImages(root) {
-  if (!logsLazyImageObserver || !root) return;
-  root.querySelectorAll?.("img[data-src]").forEach((img) => {
-    logsLazyImageObserver.unobserve(img);
-  });
-}
-
-function logsLoadingSkeletonHtml(type = "dashcam") {
-  const count = type === "screen" ? 6 : 4;
-  const itemClass = type === "screen" ? "logs-loading-row" : "logs-loading-card";
-  return `<div class="logs-loading-list" aria-hidden="true">${Array.from({ length: count }, (_, i) =>
-    `<div class="${itemClass}" style="--i:${i}"></div>`
-  ).join("")}</div>`;
-}
-
-function logsEmptyStateHtml(type = "dashcam") {
-  const isScreen = type === "screen";
-  const title = isScreen
-    ? getUIText("screenrecord_empty_title", "No screen recordings")
-    : getUIText("dashcam_empty_title", "No dashcam records");
-
-  return `
-    <div class="logs-empty-state" role="status">
-      <div class="logs-empty-state__title">${escapeHtml(title)}</div>
-    </div>`;
+  return remaining <= Math.max(360, scroller.clientHeight * DASHCAM_LOAD_AHEAD_VIEWPORTS);
 }
 
 function cancelDashcamRouteRender() {
@@ -379,10 +188,42 @@ function dashcamSpacerNode(height, position) {
   return node;
 }
 
+function dashcamSegmentListRoute(list) {
+  return list?.closest?.("[data-route-card]")?.dataset.routeCard || "";
+}
+
+function rememberDashcamSegmentScroll(list) {
+  const route = dashcamSegmentListRoute(list);
+  if (!route || !dashcamState.segmentScrollTops) return;
+  dashcamState.segmentScrollTops[route] = Math.max(0, list.scrollTop || 0);
+}
+
+function rememberVisibleDashcamSegmentScrolls(host = document.getElementById("dashcamRoutes")) {
+  if (!host) return;
+  host.querySelectorAll(".dashcam-segment-list").forEach((list) => rememberDashcamSegmentScroll(list));
+}
+
+function restoreDashcamSegmentScroll(list) {
+  const route = dashcamSegmentListRoute(list);
+  if (!route || !dashcamState.segmentScrollTops) return;
+  const nextTop = Number(dashcamState.segmentScrollTops[route]);
+  if (!Number.isFinite(nextTop) || nextTop <= 0) return;
+  list.scrollTop = nextTop;
+}
+
+function restoreVisibleDashcamSegmentScrolls(host = document.getElementById("dashcamRoutes")) {
+  if (!host) return;
+  host.querySelectorAll(".dashcam-segment-list").forEach((list) => restoreDashcamSegmentScroll(list));
+  requestAnimationFrame(() => {
+    if (!host.isConnected) return;
+    host.querySelectorAll(".dashcam-segment-list").forEach((list) => restoreDashcamSegmentScroll(list));
+  });
+}
+
 function dashcamRouteRenderKey(entry) {
   const route = String(entry?.route || "");
   const selected = dashcamSelectedForRoute(entry || { segmentFolders: [] }).join(",");
-  const segments = Array.isArray(entry?.segmentFolders) ? entry.segmentFolders.join(",") : "";
+  const segments = dashcamSegmentsForRoute(entry).join(",");
   return [
     isCompactLandscapeMode() ? "landscape" : "portrait",
     dashcamState.expanded.has(route) ? "expanded" : "collapsed",
@@ -391,6 +232,10 @@ function dashcamRouteRenderKey(entry) {
     entry?.dateLabel || "",
     entry?.latestModifiedEpoch || "",
     entry?.latestModifiedLabel || "",
+    dashcamSegmentCountForRoute(entry),
+    entry?.segmentsNextOffset ?? "",
+    entry?.segmentsHasMore ? "more" : "done",
+    dashcamState.loadingSegments?.has(route) ? "loading" : "idle",
     segments,
     selected,
   ].join("|");
@@ -416,6 +261,7 @@ function dashcamRouteNode(entry, index, existingCards, options = {}) {
 }
 
 function patchDashcamWindow(host, routes, view, options = {}) {
+  rememberVisibleDashcamSegmentScrolls(host);
   const existingCards = new Map(
     Array.from(host.querySelectorAll("[data-route-card]"))
       .map((node) => [node.dataset.routeCard || "", node])
@@ -431,7 +277,17 @@ function patchDashcamWindow(host, routes, view, options = {}) {
   });
   if (bottomSpacer) frag.appendChild(bottomSpacer);
   unobserveLogsLazyImages(host);
+  unobserveDashcamSegmentLoaders(host);
   host.replaceChildren(frag);
+  restoreVisibleDashcamSegmentScrolls(host);
+}
+
+function unobserveDashcamSegmentLoaders(host) {
+  if (!dashcamSegmentLoaderObserver || !host) return;
+  host.querySelectorAll?.("[data-segment-loader]").forEach((loader) => {
+    dashcamSegmentLoaderObserver.unobserve(loader);
+    delete loader.dataset.observed;
+  });
 }
 
 function measureDashcamRouteHeights(host) {
@@ -492,8 +348,148 @@ function maybeLoadMoreDashcamRoutes(scroller = document.getElementById("dashcamR
   loadDashcamRoutes({ silent: true, append: true }).catch(() => {});
 }
 
+function dashcamSegmentsForRoute(entry) {
+  return Array.isArray(entry?.segmentFolders) ? entry.segmentFolders : [];
+}
+
+function dashcamSegmentCountForRoute(entry) {
+  const total = Number(entry?.segmentCount);
+  const loaded = dashcamSegmentsForRoute(entry).length;
+  return Number.isFinite(total) && total >= loaded ? total : loaded;
+}
+
+function dashcamRouteHasMoreSegments(entry) {
+  return Boolean(entry?.segmentsHasMore) || dashcamSegmentsForRoute(entry).length < dashcamSegmentCountForRoute(entry);
+}
+
+function dashcamSegmentNextOffset(entry) {
+  const next = Number(entry?.segmentsNextOffset);
+  if (Number.isFinite(next) && next >= 0) return next;
+  return dashcamSegmentsForRoute(entry).length;
+}
+
+function mergeDashcamSegments(existing, incoming) {
+  const merged = [];
+  const seen = new Set();
+  [...(existing || []), ...(incoming || [])].forEach((segment) => {
+    if (!segment || seen.has(segment)) return;
+    seen.add(segment);
+    merged.push(segment);
+  });
+  return merged.sort((a, b) => dashcamSegmentIndex(a) - dashcamSegmentIndex(b));
+}
+
+function mergeDashcamRoutePage(entry, existing) {
+  if (!entry || !existing) return entry;
+  const route = String(entry.route || "");
+  if (!route || route !== existing.route) return entry;
+  const incomingSegments = dashcamSegmentsForRoute(entry);
+  const existingSegments = dashcamSegmentsForRoute(existing);
+  if (existingSegments.length <= incomingSegments.length) return entry;
+
+  const mergedSegments = mergeDashcamSegments(incomingSegments, existingSegments);
+  const total = Math.max(dashcamSegmentCountForRoute(entry), mergedSegments.length);
+  return {
+    ...entry,
+    segmentFolders: mergedSegments,
+    segmentCount: total,
+    segmentsNextOffset: mergedSegments.length < total
+      ? Math.max(dashcamSegmentNextOffset(entry), dashcamSegmentNextOffset(existing), mergedSegments.length)
+      : null,
+    segmentsHasMore: mergedSegments.length < total,
+  };
+}
+
+let dashcamSegmentLoaderObserver = null;
+function ensureDashcamSegmentLoaderObserver(scroller) {
+  if (!scroller || !("IntersectionObserver" in window)) return null;
+  if (dashcamSegmentLoaderObserver && dashcamSegmentLoaderObserver._root === scroller) {
+    return dashcamSegmentLoaderObserver;
+  }
+  if (dashcamSegmentLoaderObserver) dashcamSegmentLoaderObserver.disconnect();
+  dashcamSegmentLoaderObserver = new IntersectionObserver((entries) => {
+    if (!isLogsPageActive()) return;
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      const route = entry.target.dataset?.route || "";
+      if (!route || dashcamState.loadingSegments?.has(route)) return;
+      loadDashcamSegments(route).catch(() => {});
+    });
+  }, { root: scroller, rootMargin: "240px 0px", threshold: 0.01 });
+  dashcamSegmentLoaderObserver._root = scroller;
+  return dashcamSegmentLoaderObserver;
+}
+
+function maybeLoadVisibleDashcamSegments(scroller = document.getElementById("dashcamRoutes")) {
+  if (!scroller || !isLogsPageActive()) return;
+  const observer = ensureDashcamSegmentLoaderObserver(scroller);
+  if (observer) {
+    scroller.querySelectorAll("[data-segment-loader]").forEach((loader) => {
+      if (loader.dataset.observed === "1") return;
+      loader.dataset.observed = "1";
+      observer.observe(loader);
+    });
+    return;
+  }
+  // Fallback for environments without IntersectionObserver
+  const hostRect = scroller.getBoundingClientRect();
+  scroller.querySelectorAll("[data-segment-loader]").forEach((loader) => {
+    const route = loader.dataset.route || "";
+    if (!route || dashcamState.loadingSegments?.has(route)) return;
+    const rect = loader.getBoundingClientRect();
+    if (rect.top <= hostRect.bottom + 160 && rect.bottom >= hostRect.top - 40) {
+      loadDashcamSegments(route).catch(() => {});
+    }
+  });
+}
+
+let segmentListPersistFrame = 0;
+const segmentListPersistQueue = new Set();
+function scheduleSegmentListScrollPersist(list) {
+  if (!list) return;
+  segmentListPersistQueue.add(list);
+  if (segmentListPersistFrame) return;
+  segmentListPersistFrame = requestAnimationFrame(() => {
+    segmentListPersistFrame = 0;
+    segmentListPersistQueue.forEach((node) => {
+      if (node.isConnected) rememberDashcamSegmentScroll(node);
+    });
+    segmentListPersistQueue.clear();
+  });
+}
+
 function dashcamSelectedForRoute(entry) {
-  return (entry.segmentFolders || []).filter((segment) => dashcamState.selected.has(segment));
+  return dashcamSegmentsForRoute(entry).filter((segment) => dashcamState.selected.has(segment));
+}
+
+function dashcamSegmentTileHtml(route, segment, segmentIndex, options = {}) {
+  const compactSegments = options.compact === true;
+  const animate = options.animate === true;
+  const routeAttr = escapeHtml(route);
+  const segAttr = escapeHtml(segment);
+  const checked = dashcamState.selected.has(segment) ? " checked" : "";
+  const tileClass = [
+    "dashcam-segment-tile",
+    compactSegments ? "dashcam-segment-tile--compact" : "",
+    animate ? "dashcam-segment-tile--append" : "",
+  ].filter(Boolean).join(" ");
+  const thumbClass = compactSegments ? "dashcam-segment-thumb dashcam-segment-thumb--compact" : "dashcam-segment-thumb";
+  const checkClass = compactSegments ? "dashcam-segment-check dashcam-segment-check--compact" : "dashcam-segment-check";
+  return `<div class="${tileClass}" style="--i:${segmentIndex}" data-action="play" data-route="${routeAttr}" data-segment="${segAttr}">
+    <div class="${thumbClass}">
+      <img class="logs-lazy-img" loading="lazy" decoding="async" fetchpriority="low" data-src="${dashcamApiPath("thumbnail", segment)}" alt="">
+      <label class="${checkClass}" title="${escapeHtml(getUIText("select_all", "Select"))}" onclick="event.stopPropagation()">
+        <input type="checkbox" data-action="select-segment" data-segment="${segAttr}"${checked}>
+      </label>
+    </div>
+    <div class="dashcam-segment-body">
+      <div class="dashcam-segment-badge">SEG ${dashcamSegmentIndex(segment)}</div>
+      <div class="dashcam-segment-name">${segAttr}</div>
+    </div>
+    <button class="dashcam-menu-btn" type="button" data-action="segment-menu" data-route="${routeAttr}" data-segment="${segAttr}" aria-label="${escapeHtml(getUIText("segment_menu", "Segment menu"))}" title="${escapeHtml(getUIText("segment_menu", "Segment menu"))}">
+      <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4m0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/></svg>
+    </button>
+  </div>`;
 }
 
 function dashcamRouteCardHtml(entry, index = 0, options = {}) {
@@ -501,12 +497,19 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
   const animateIndex = Number.isFinite(options.animateIndex) ? options.animateIndex : index;
   const route = String(entry.route || "");
   const renderKey = escapeHtml(dashcamRouteRenderKey(entry));
-  const segments = Array.isArray(entry.segmentFolders) ? entry.segmentFolders : [];
+  const segments = dashcamSegmentsForRoute(entry);
+  const segmentCount = dashcamSegmentCountForRoute(entry);
+  const loadedCount = segments.length;
+  const hasMoreSegments = dashcamRouteHasMoreSegments(entry);
+  const loadingSegments = dashcamState.loadingSegments?.has(route);
   const expanded = dashcamState.expanded.has(route);
   const compactSegments = isCompactLandscapeMode();
   const shouldRenderSegments = expanded || compactSegments;
   const selected = dashcamSelectedForRoute(entry);
   const allSelected = segments.length > 0 && selected.length === segments.length;
+  const selectLabel = allSelected
+    ? getUIText(hasMoreSegments ? "deselect_loaded" : "deselect_all", "Deselect all")
+    : getUIText(hasMoreSegments ? "select_loaded" : "select_all", "Select all");
   const representative = segments[0] || "";
   const routeAttr = escapeHtml(route);
   const title = escapeHtml(entry.title || dashcamRouteTitle(route));
@@ -518,7 +521,7 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
           <img class="logs-lazy-img" loading="lazy" decoding="async" fetchpriority="low" data-src="${dashcamApiPath("preview", representative)}" data-fallback="${dashcamApiPath("thumbnail", representative)}" onerror="this.onerror=null;if(this.dataset.fallback)this.src=this.dataset.fallback;" alt="">
           <div class="dashcam-route-preview__shade"></div>
           <div class="dashcam-route-preview__chips">
-            <span class="dashcam-chip">${escapeHtml(getUIText("segment_count", "{count} segments", { count: segments.length }))}</span>
+            <span class="dashcam-chip">${escapeHtml(getUIText("segment_count", "{count} segments", { count: segmentCount }))}</span>
             <span class="dashcam-chip">${latest}</span>
           </div>
           <div class="dashcam-play-mark" aria-hidden="true">
@@ -532,41 +535,11 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
       </div>`
     : "";
   const segmentList = shouldRenderSegments ? segments.map((segment, segmentIndex) => {
-    const segAttr = escapeHtml(segment);
-    const checked = dashcamState.selected.has(segment) ? " checked" : "";
-    if (compactSegments) {
-      return `<div class="dashcam-segment-tile dashcam-segment-tile--compact ui-stagger-item" style="--i:${segmentIndex}" data-action="play" data-route="${routeAttr}" data-segment="${segAttr}">
-        <div class="dashcam-segment-thumb dashcam-segment-thumb--compact">
-          <img class="logs-lazy-img" loading="lazy" decoding="async" fetchpriority="low" data-src="${dashcamApiPath("thumbnail", segment)}" alt="">
-          <label class="dashcam-segment-check dashcam-segment-check--compact" title="${escapeHtml(getUIText("select_all", "Select"))}" onclick="event.stopPropagation()">
-            <input type="checkbox" data-action="select-segment" data-segment="${segAttr}"${checked}>
-          </label>
-        </div>
-        <div class="dashcam-segment-body">
-          <div class="dashcam-segment-badge">SEG ${dashcamSegmentIndex(segment)}</div>
-          <div class="dashcam-segment-name">${segAttr}</div>
-        </div>
-        <button class="dashcam-menu-btn" type="button" data-action="segment-menu" data-route="${routeAttr}" data-segment="${segAttr}" aria-label="${escapeHtml(getUIText("segment_menu", "Segment menu"))}" title="${escapeHtml(getUIText("segment_menu", "Segment menu"))}">
-          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4m0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/></svg>
-        </button>
-      </div>`;
-    }
-    return `<div class="dashcam-segment-tile ui-stagger-item" style="--i:${segmentIndex}" data-action="play" data-route="${routeAttr}" data-segment="${segAttr}">
-      <div class="dashcam-segment-thumb">
-        <img class="logs-lazy-img" loading="lazy" decoding="async" fetchpriority="low" data-src="${dashcamApiPath("thumbnail", segment)}" alt="">
-        <label class="dashcam-segment-check" title="${escapeHtml(getUIText("select_all", "Select"))}" onclick="event.stopPropagation()">
-          <input type="checkbox" data-action="select-segment" data-segment="${segAttr}"${checked}>
-        </label>
-      </div>
-      <div class="dashcam-segment-body">
-        <div class="dashcam-segment-badge">SEG ${dashcamSegmentIndex(segment)}</div>
-        <div class="dashcam-segment-name">${segAttr}</div>
-      </div>
-      <button class="dashcam-menu-btn" type="button" data-action="segment-menu" data-route="${routeAttr}" data-segment="${segAttr}" aria-label="${escapeHtml(getUIText("segment_menu", "Segment menu"))}" title="${escapeHtml(getUIText("segment_menu", "Segment menu"))}">
-        <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4m0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/></svg>
-      </button>
-    </div>`;
+    return dashcamSegmentTileHtml(route, segment, segmentIndex, { compact: compactSegments });
   }).join("") : "";
+  const segmentLoader = shouldRenderSegments && hasMoreSegments
+    ? `<div class="dashcam-segment-loader${loadingSegments ? " is-loading" : ""}" data-segment-loader="1" data-route="${routeAttr}" aria-hidden="true"></div>`
+    : "";
 
   return `<article class="dashcam-route-card${animate ? " ui-stagger-item" : ""}"${animate ? ` style="--i:${animateIndex}"` : ""} data-route-card="${routeAttr}" data-route-index="${index}" data-render-key="${renderKey}">
     ${preview}
@@ -583,10 +556,10 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
       <div class="dashcam-segments ${expanded ? "" : "is-collapsed"}">
         <div class="dashcam-selection-row">
           <span class="dashcam-selection-count">${escapeHtml(getUIText("selected_count", "{count} selected", { count: selected.length }))}</span>
-          <button class="smallBtn" type="button" data-action="select-route" data-route="${routeAttr}" data-selected="${allSelected ? "1" : "0"}">${escapeHtml(allSelected ? getUIText("deselect_all", "Deselect all") : getUIText("select_all", "Select all"))}</button>
+          <button class="smallBtn" type="button" data-action="select-route" data-route="${routeAttr}" data-selected="${allSelected ? "1" : "0"}">${escapeHtml(selectLabel)}</button>
           <button class="smallBtn btn--filled" type="button" data-action="upload-selected" data-route="${routeAttr}" ${selected.length ? "" : "disabled"}>${escapeHtml(getUIText("upload_selected", "Upload selected"))}</button>
         </div>
-        <div class="dashcam-segment-list">${segmentList}</div>
+        <div class="dashcam-segment-list">${segmentList}${segmentLoader}</div>
       </div>
     </div>
   </article>`;
@@ -634,6 +607,7 @@ function renderDashcamRoutes(options = {}) {
   requestAnimationFrame(() => {
     if (!isLogsPageActive()) return;
     if (measureDashcamRouteHeights(host) && !dashcamState.scrollBusy) scheduleDashcamWindowRender();
+    maybeLoadVisibleDashcamSegments(host);
   });
 }
 
@@ -660,6 +634,7 @@ function renderDashcamRoute(route) {
   requestAnimationFrame(() => {
     if (!isLogsPageActive()) return;
     if (measureDashcamRouteHeights(host)) scheduleDashcamWindowRender();
+    maybeLoadVisibleDashcamSegments(host);
   });
   return true;
 }
@@ -674,9 +649,10 @@ function updateDashcamRouteSelectionUi(route) {
     .find((node) => node.dataset.routeCard === route);
   if (!card) return false;
 
-  const segments = Array.isArray(entry.segmentFolders) ? entry.segmentFolders : [];
+  const segments = dashcamSegmentsForRoute(entry);
   const selected = dashcamSelectedForRoute(entry);
   const allSelected = segments.length > 0 && selected.length === segments.length;
+  const hasMoreSegments = dashcamRouteHasMoreSegments(entry);
 
   const countEl = card.querySelector(".dashcam-selection-count");
   if (countEl) countEl.textContent = getUIText("selected_count", "{count} selected", { count: selected.length });
@@ -684,7 +660,9 @@ function updateDashcamRouteSelectionUi(route) {
   const selectBtn = card.querySelector('[data-action="select-route"]');
   if (selectBtn) {
     selectBtn.dataset.selected = allSelected ? "1" : "0";
-    selectBtn.textContent = allSelected ? getUIText("deselect_all", "Deselect all") : getUIText("select_all", "Select all");
+    selectBtn.textContent = allSelected
+      ? getUIText(hasMoreSegments ? "deselect_loaded" : "deselect_all", "Deselect all")
+      : getUIText(hasMoreSegments ? "select_loaded" : "select_all", "Select all");
   }
 
   const uploadBtn = card.querySelector('[data-action="upload-selected"]');
@@ -697,6 +675,100 @@ function updateDashcamRouteSelectionUi(route) {
   card.dataset.renderKey = dashcamRouteRenderKey(entry);
 
   return true;
+}
+
+function updateDashcamSegmentLoaderUi(route, loading = false) {
+  const host = document.getElementById("dashcamRoutes");
+  const entry = (dashcamState.routes || []).find((item) => item.route === route);
+  if (!host || !entry) return false;
+  const card = Array.from(host.querySelectorAll("[data-route-card]"))
+    .find((node) => node.dataset.routeCard === route);
+  if (!card) return false;
+  const loader = card.querySelector("[data-segment-loader]");
+  if (!loader) return false;
+  if (!dashcamRouteHasMoreSegments(entry)) {
+    loader.remove();
+    return true;
+  }
+  loader.classList.toggle("is-loading", Boolean(loading));
+  return true;
+}
+
+function appendDashcamSegmentsToRoute(route, newSegments, startIndex = 0) {
+  if (!newSegments.length) return false;
+  const host = document.getElementById("dashcamRoutes");
+  const entry = (dashcamState.routes || []).find((item) => item.route === route);
+  if (!host || !entry) return false;
+  const card = Array.from(host.querySelectorAll("[data-route-card]"))
+    .find((node) => node.dataset.routeCard === route);
+  const list = card?.querySelector(".dashcam-segment-list");
+  if (!card || !list) return false;
+
+  const scrollTop = list.scrollTop;
+  const wasScrollable = list.scrollHeight > list.clientHeight + 1;
+  const wasNearBottom = wasScrollable && (list.scrollHeight - list.scrollTop - list.clientHeight <= 48);
+  const isScrolling = Boolean(dashcamState.scrollBusy);
+  rememberDashcamSegmentScroll(list);
+  const compact = isCompactLandscapeMode();
+  const template = document.createElement("template");
+  // Don't animate tile entry while the user is actively scrolling — the
+  // simultaneous animation + scrollTop adjustment is what causes "shake".
+  const animate = !isScrolling;
+  template.innerHTML = newSegments
+    .map((segment, offset) => dashcamSegmentTileHtml(route, segment, startIndex + offset, { compact, animate }))
+    .join("");
+  const loader = list.querySelector("[data-segment-loader]");
+  list.insertBefore(template.content, loader || null);
+  hydrateLogsLazyImages(list);
+  updateDashcamRouteSelectionUi(route);
+  updateDashcamSegmentLoaderUi(route, false);
+  // Pin to bottom only when the user wasn't actively scrolling — otherwise
+  // setting scrollTop fights inertia and produces a visible jump/shake.
+  if (wasNearBottom && !isScrolling) {
+    const nextTop = Math.max(0, list.scrollHeight - list.clientHeight);
+    list.scrollTop = nextTop;
+    rememberDashcamSegmentScroll(list);
+  } else {
+    // Preserve current position; browser will keep inertia smooth.
+    list.scrollTop = scrollTop;
+    rememberDashcamSegmentScroll(list);
+  }
+  card.dataset.renderKey = dashcamRouteRenderKey(entry);
+  return true;
+}
+
+async function loadDashcamSegments(route) {
+  if (!route || dashcamState.loadingSegments?.has(route)) return;
+  const entry = (dashcamState.routes || []).find((item) => item.route === route);
+  if (!entry || !dashcamRouteHasMoreSegments(entry)) return;
+  const previousCount = dashcamSegmentsForRoute(entry).length;
+  dashcamState.loadingSegments.add(route);
+  markDashcamScrollBusy({ renderOnIdle: false });
+  updateDashcamSegmentLoaderUi(route, true);
+
+  try {
+    const offset = dashcamSegmentNextOffset(entry);
+    const json = await getJson(`/api/dashcam/segments/${encodeURIComponent(route)}?offset=${offset}&limit=${DASHCAM_SEGMENT_PAGE_SIZE}`);
+    const current = (dashcamState.routes || []).find((item) => item.route === route);
+    if (!current) return;
+    const incoming = Array.isArray(json.segments) ? json.segments : [];
+    const existing = new Set(dashcamSegmentsForRoute(current));
+    const appended = incoming.filter((segment) => segment && !existing.has(segment));
+    current.segmentFolders = mergeDashcamSegments(dashcamSegmentsForRoute(current), incoming);
+    current.segmentCount = Number.isFinite(Number(json.total)) ? Number(json.total) : dashcamSegmentCountForRoute(current);
+    current.segmentsNextOffset = json.nextOffset == null ? current.segmentFolders.length : Number(json.nextOffset) || current.segmentFolders.length;
+    current.segmentsHasMore = Boolean(json.hasMore);
+    dashcamState.signature = dashcamRoutesSignature(dashcamState.routes);
+    if (appended.length && appendDashcamSegmentsToRoute(route, appended, previousCount)) return;
+  } catch (e) {
+    if (isLogsPageActive()) {
+      showAppToast(e.message || getUIText("dashcam_load_failed", "Failed to load dashcam list"), { tone: "error" });
+    }
+  } finally {
+    dashcamState.loadingSegments.delete(route);
+    updateDashcamSegmentLoaderUi(route, false);
+    requestAnimationFrame(() => maybeLoadVisibleDashcamSegments());
+  }
 }
 
 async function loadDashcamRoutes({ silent = false, append = false } = {}) {
@@ -714,8 +786,9 @@ async function loadDashcamRoutes({ silent = false, append = false } = {}) {
   try {
     const offset = append ? (dashcamState.nextOffset || dashcamState.routes.length || 0) : 0;
     const currentCount = dashcamState.routes.length || 0;
-    const limit = append ? DASHCAM_PAGE_SIZE : Math.max(DASHCAM_PAGE_SIZE, currentCount || 0);
-    const json = await getJson(`/api/dashcam/routes?offset=${offset}&limit=${limit}`);
+    const routePageSize = dashcamRoutePageSize();
+    const limit = append ? routePageSize : Math.max(routePageSize, currentCount || 0);
+    const json = await getJson(`/api/dashcam/routes?offset=${offset}&limit=${limit}&segment_limit=${DASHCAM_SEGMENT_PAGE_SIZE}`);
     if (seq !== dashcamState.loadSeq) {
       if (append) {
         dashcamState.loadingMore = false;
@@ -730,7 +803,9 @@ async function loadDashcamRoutes({ silent = false, append = false } = {}) {
       return;
     }
     const incoming = Array.isArray(json.routes) ? json.routes : [];
-    const routes = append ? dashcamState.routes.concat(incoming) : incoming;
+    const existingRoutes = new Map((dashcamState.routes || []).map((entry) => [entry.route, entry]));
+    const nextIncoming = append ? incoming : incoming.map((entry) => mergeDashcamRoutePage(entry, existingRoutes.get(entry.route)));
+    const routes = append ? dashcamState.routes.concat(nextIncoming) : nextIncoming;
     const nextSignature = dashcamRoutesSignature(routes);
     if (silent && nextSignature === dashcamState.signature) {
       dashcamState.loading = false;
@@ -742,11 +817,14 @@ async function loadDashcamRoutes({ silent = false, append = false } = {}) {
       return;
     }
     const validRoutes = new Set(routes.map((entry) => entry.route));
-    const validSegments = new Set(routes.flatMap((entry) => entry.segmentFolders || []));
+    const validSegments = new Set(routes.flatMap((entry) => dashcamSegmentsForRoute(entry)));
     dashcamState.expanded = new Set(Array.from(dashcamState.expanded).filter((route) => validRoutes.has(route)));
     dashcamState.selected = new Set(Array.from(dashcamState.selected).filter((segment) => validSegments.has(segment)));
     dashcamState.routeHeights = Object.fromEntries(
       Object.entries(dashcamState.routeHeights || {}).filter(([route]) => validRoutes.has(route))
+    );
+    dashcamState.segmentScrollTops = Object.fromEntries(
+      Object.entries(dashcamState.segmentScrollTops || {}).filter(([route]) => validRoutes.has(route))
     );
     dashcamState.routes = routes;
     dashcamState.signature = nextSignature;
@@ -756,9 +834,12 @@ async function loadDashcamRoutes({ silent = false, append = false } = {}) {
     dashcamState.loading = false;
     dashcamState.loadingMore = false;
     setDashcamLoadingMoreUi(false);
-    renderDashcamRoutes({ animate: !silent });
+    renderDashcamRoutes({ animate: append || !silent });
     if (!silent && logsScrollTops.dashcam === 0) restoreLogsScrollTop("dashcam", { reset: true });
-    requestAnimationFrame(() => maybeLoadMoreDashcamRoutes());
+    requestAnimationFrame(() => {
+      maybeLoadMoreDashcamRoutes();
+      maybeLoadVisibleDashcamSegments();
+    });
   } catch (e) {
     if (seq !== dashcamState.loadSeq) {
       if (append) {
@@ -782,101 +863,23 @@ function startDashcamAutoRefresh() {
   dashcamState.refreshTimer = window.setInterval(() => {
     if (CURRENT_PAGE !== "logs" || dashcamState.scrollBusy) return;
     if (logsActiveTab === "screen") loadScreenrecordVideos({ silent: true }).catch(() => {});
-    else if (!dashcamState.loading && !dashcamState.loadingMore) loadDashcamRoutes({ silent: true }).catch(() => {});
+    else if (!dashcamState.loading && !dashcamState.loadingMore && !dashcamState.loadingSegments?.size) {
+      loadDashcamRoutes({ silent: true }).catch(() => {});
+    }
   }, 10000);
 }
 
-function markDashcamScrollBusy() {
+function markDashcamScrollBusy(options = {}) {
+  const renderOnIdle = options.renderOnIdle !== false;
   dashcamState.scrollBusy = true;
   if (dashcamState.scrollTimer) window.clearTimeout(dashcamState.scrollTimer);
   dashcamState.scrollTimer = window.setTimeout(() => {
     dashcamState.scrollBusy = false;
-    if (isLogsPageActive() && logsActiveTab === "dashcam") scheduleDashcamWindowRender();
-  }, 380);
-}
-
-function openLogsVideoPlayer(title, src, options = {}) {
-  const overlay = document.createElement("div");
-  const kind = String(options.kind || "video").replace(/[^a-z0-9_-]/gi, "");
-  overlay.className = `dashcam-player-overlay dashcam-player-overlay--${kind}`;
-  overlay.innerHTML = `<div class="dashcam-player-dialog" role="dialog" aria-modal="true">
-    <div class="dashcam-player-frame">
-      <video class="dashcam-player-video" playsinline></video>
-      <div class="dashcam-player-toast" aria-live="polite"></div>
-      <div class="dashcam-player-top">
-        <div class="dashcam-player-title">${escapeHtml(title || "Video")}</div>
-        <button class="dashcam-player-close" type="button" aria-label="${escapeHtml(getUIText("close", "Close"))}" title="${escapeHtml(getUIText("close", "Close"))}">
-          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.41L10.59 13.41 4.29 19.71 2.88 18.3 9.17 12 2.88 5.7 4.29 4.29l6.3 6.3 6.29-6.3z"/></svg>
-        </button>
-      </div>
-    </div>
-  </div>`;
-  const videoEl = overlay.querySelector("video");
-  const toastEl = overlay.querySelector(".dashcam-player-toast");
-  const downloadUrl = src + (src.includes("?") ? "&" : "?") + "download=1";
-  let toastTimer = null;
-  let suppressToasts = true;
-  const showToast = (text) => {
-    if (!toastEl || suppressToasts || !text) return;
-    toastEl.textContent = text;
-    toastEl.classList.add("is-visible");
-    if (toastTimer) window.clearTimeout(toastTimer);
-    toastTimer = window.setTimeout(() => toastEl.classList.remove("is-visible"), 850);
-  };
-  let player = null;
-  const close = () => {
-    if (toastTimer) window.clearTimeout(toastTimer);
-    try { player?.destroy?.(); } catch {}
-    overlay.remove();
-  };
-  overlay.addEventListener("click", (ev) => {
-    if (ev.target === overlay) close();
-  });
-  overlay.querySelector(".dashcam-player-close")?.addEventListener("click", close);
-  document.body.appendChild(overlay);
-  requestAnimationFrame(() => {
-    overlay.classList.add("is-open");
-    try {
-      player = new Plyr(videoEl, {
-        controls: ["play-large","rewind","play","fast-forward","progress","current-time","fullscreen","download"],
-        hideControls: false,
-        seekTime: 5,
-        keyboard: { focused: true, global: false },
-        fullscreen: { enabled: true, fallback: true, iosNative: true },
-        urls: { download: downloadUrl },
-      });
-      player.source = {
-        type: "video",
-        title: title || "Video",
-        sources: [{ src, type: "video/mp4" }],
-      };
-      player.once("ready", () => {
-        const container = player.elements?.container || overlay;
-        const bindBtn = (sel, label) => {
-          container.querySelectorAll(sel).forEach((btn) => btn.addEventListener("click", () => showToast(label)));
-        };
-        bindBtn('[data-plyr="rewind"]', `⏪ ${getUIText("rewind_5", "5s")}`);
-        bindBtn('[data-plyr="fast-forward"]', `${getUIText("forward_5", "5s")} ⏩`);
-        bindBtn('[data-plyr="download"]', `⤓ ${getUIText("download", "Download")}`);
-        container.addEventListener("keydown", (ev) => {
-          if (ev.key === "ArrowLeft") showToast(`⏪ ${getUIText("rewind_5", "5s")}`);
-          else if (ev.key === "ArrowRight") showToast(`${getUIText("forward_5", "5s")} ⏩`);
-        });
-        player.on("play", () => showToast(`▶ ${getUIText("play", "Play")}`));
-        player.on("pause", () => showToast(`⏸ ${getUIText("pause", "Pause")}`));
-        player.on("ended", () => showToast(getUIText("ended", "End")));
-        player.on("ratechange", () => showToast(`⚡ ${player.speed}x`));
-        player.on("enterfullscreen", () => showToast(`⛶ ${getUIText("fullscreen", "Fullscreen")}`));
-        player.on("exitfullscreen", () => showToast(getUIText("fullscreen_exit", "Exit fullscreen")));
-        videoEl.addEventListener("enterpictureinpicture", () => showToast("⊞ PiP"));
-        videoEl.addEventListener("leavepictureinpicture", () => showToast(`⊟ ${getUIText("pip_exit", "Exit PiP")}`));
-        window.setTimeout(() => { suppressToasts = false; }, 350);
-      });
-    } catch (err) {
-      videoEl.controls = true;
-      videoEl.src = src;
+    if (renderOnIdle && isLogsPageActive() && logsActiveTab === "dashcam") {
+      const host = getLogsScroller("dashcam");
+      if (dashcamWindowNeedsRender(host)) scheduleDashcamWindowRender();
     }
-  });
+  }, 380);
 }
 
 function openDashcamPlayer(route, segment) {
@@ -885,11 +888,6 @@ function openDashcamPlayer(route, segment) {
     dashcamApiPath("video", segment),
     { kind: "dashcam" },
   );
-}
-
-function openScreenrecordPlayer(id, name) {
-  if (!id) return;
-  openLogsVideoPlayer(name || getUIText("logs_screenrecord", "Screen Record"), screenrecordApiPath("video", id), { kind: "screenrecord" });
 }
 
 function dashcamUploadStats(items) {
@@ -1263,325 +1261,5 @@ async function showDashcamSegmentMenu(route, segment) {
   else if (selected?.startsWith?.("download_")) {
     const kind = selected.replace("download_", "");
     window.open(dashcamApiPath(`download/${encodeURIComponent(segment)}`, kind), "_blank", "noopener");
-  }
-}
-
-function screenrecordVideoRowHtml(video, index = 0) {
-  const id = escapeHtml(video.id || "");
-  const name = escapeHtml(video.name || "-");
-  const date = escapeHtml(formatRelativeEpoch(video.modifiedEpoch) || localizeRelativeLabel(video.modifiedLabel || video.relativeModifiedLabel) || "-");
-  const size = escapeHtml(formatLogBytes(video.size));
-  const ext = escapeHtml((video.ext || "video").toUpperCase());
-  return `<article class="screenrecord-row ui-stagger-item" style="--i:${index}" data-action="play-screenrecord" data-id="${id}" data-name="${name}">
-    <div class="screenrecord-row__thumb" aria-hidden="true">
-      <img class="logs-lazy-img" loading="lazy" decoding="async" fetchpriority="low" data-src="${screenrecordApiPath("thumbnail", video.id || "")}" alt="">
-    </div>
-    <div class="screenrecord-row__main">
-      <div class="screenrecord-row__name">${name}</div>
-      <div class="screenrecord-row__meta">
-        <span>${date}</span>
-        <span>${size}</span>
-        <span>${ext}</span>
-      </div>
-    </div>
-    <button class="screenrecord-download" type="button" data-action="download-screenrecord" data-id="${id}" aria-label="${escapeHtml(getUIText("download", "Download"))}" title="${escapeHtml(getUIText("download", "Download"))}">
-      <svg viewBox="0 0 24 24"><path fill="currentColor" d="M5 20h14v-2H5m14-9h-4V3H9v6H5l7 7z"/></svg>
-    </button>
-  </article>`;
-}
-
-function renderScreenrecordVideos(options = {}) {
-  const host = document.getElementById("screenrecordVideos");
-  if (!host) return;
-  if (!isLogsPageActive()) return;
-  const preserve = options.preserve === true;
-  const videos = screenrecordState.videos || [];
-  if (screenrecordState.loading && !videos.length) {
-    setScreenrecordStatus("");
-    host.innerHTML = logsLoadingSkeletonHtml("screen");
-    host.dataset.signature = "";
-    host.dataset.renderCount = "0";
-    return;
-  }
-  if (!videos.length) {
-    host.innerHTML = logsEmptyStateHtml("screen");
-    host.dataset.signature = "";
-    host.dataset.renderCount = "0";
-    setScreenrecordStatus("");
-    return;
-  }
-  setScreenrecordStatus("");
-  const view = screenrecordWindowFor(host, videos.length);
-  const nextSignature = `${screenrecordState.signature || screenrecordVideosSignature(videos)}|${view.start}:${view.end}|${screenrecordState.loadingMore ? "more" : ""}`;
-  if (preserve && host.dataset.signature === nextSignature) {
-    hydrateLogsLazyImages(host);
-    return;
-  }
-  patchScreenrecordWindow(host, videos, view);
-  host.dataset.signature = nextSignature;
-  host.dataset.renderCount = String(view.end - view.start);
-  screenrecordState.windowStart = view.start;
-  screenrecordState.windowEnd = view.end;
-  setScreenrecordLoadingMoreUi(screenrecordState.loadingMore);
-  hydrateLogsLazyImages(host);
-  requestAnimationFrame(() => screenrecordMeasureRowHeight(host));
-}
-
-async function loadScreenrecordVideos({ silent = false, append = false } = {}) {
-  if (append && (!screenrecordState.hasMore || screenrecordState.loading || screenrecordState.loadingMore)) return;
-  const seq = ++screenrecordState.loadSeq;
-  if (append) {
-    screenrecordState.loadingMore = true;
-    setScreenrecordLoadingMoreUi(true);
-  } else if (!silent) {
-    screenrecordState.loading = true;
-    screenrecordState.loadingMore = false;
-    setScreenrecordLoadingMoreUi(false);
-    renderScreenrecordVideos();
-  }
-  try {
-    const offset = append ? (screenrecordState.nextOffset || screenrecordState.videos.length || 0) : 0;
-    const limit = append ? SCREENRECORD_PAGE_SIZE : Math.max(SCREENRECORD_PAGE_SIZE, screenrecordState.videos.length || 0);
-    const json = await getJson(`/api/screenrecord/videos?offset=${offset}&limit=${limit}`);
-    if (seq !== screenrecordState.loadSeq) return;
-    if (!isLogsPageActive()) {
-      screenrecordState.loading = false;
-      screenrecordState.loadingMore = false;
-      setScreenrecordLoadingMoreUi(false);
-      return;
-    }
-    const incoming = Array.isArray(json.videos) ? json.videos : [];
-    const videos = append ? screenrecordState.videos.concat(incoming) : incoming;
-    const nextSignature = screenrecordVideosSignature(videos);
-    if (silent && nextSignature === screenrecordState.signature) {
-      screenrecordState.loading = false;
-      screenrecordState.loadingMore = false;
-      setScreenrecordLoadingMoreUi(false);
-      return;
-    }
-    screenrecordState.videos = videos;
-    screenrecordState.signature = nextSignature;
-    screenrecordState.total = Number.isFinite(Number(json.total)) ? Number(json.total) : videos.length;
-    screenrecordState.nextOffset = json.nextOffset == null ? videos.length : Number(json.nextOffset) || videos.length;
-    screenrecordState.hasMore = Boolean(json.hasMore);
-    screenrecordState.loading = false;
-    screenrecordState.loadingMore = false;
-    setScreenrecordLoadingMoreUi(false);
-    renderScreenrecordVideos({ animate: !silent });
-    if (!silent && logsScrollTops.screen === 0) restoreLogsScrollTop("screen", { reset: true });
-  } catch (e) {
-    if (seq !== screenrecordState.loadSeq) return;
-    screenrecordState.loading = false;
-    screenrecordState.loadingMore = false;
-    setScreenrecordLoadingMoreUi(false);
-    if (!silent && isLogsPageActive()) {
-      setScreenrecordStatus(`${getUIText("screenrecord_load_failed", "Failed to load screen recordings")}: ${e.message || e}`, "error");
-      showAppToast(e.message || getUIText("screenrecord_load_failed", "Failed to load screen recordings"), { tone: "error" });
-    }
-  }
-}
-
-function activateLogsTab(tab, options = {}) {
-  const nextTab = tab === "screen" ? "screen" : "dashcam";
-  const shouldLoad = options.load !== false;
-  if (nextTab !== logsActiveTab) saveLogsScrollTop(logsActiveTab);
-  logsActiveTab = nextTab;
-  const dashTab = document.getElementById("logsTabDashcam");
-  const screenTab = document.getElementById("logsTabScreen");
-  const dashPanel = document.getElementById("logsDashcamPanel");
-  const screenPanel = document.getElementById("logsScreenPanel");
-
-  dashTab?.classList.toggle("is-active", logsActiveTab === "dashcam");
-  screenTab?.classList.toggle("is-active", logsActiveTab === "screen");
-  dashTab?.setAttribute("aria-selected", logsActiveTab === "dashcam" ? "true" : "false");
-  screenTab?.setAttribute("aria-selected", logsActiveTab === "screen" ? "true" : "false");
-  if (dashPanel) dashPanel.hidden = logsActiveTab !== "dashcam";
-  if (screenPanel) screenPanel.hidden = logsActiveTab !== "screen";
-
-  if (shouldLoad) {
-    if (logsActiveTab === "screen" && !screenrecordState.initialized) {
-      screenrecordState.initialized = true;
-      loadScreenrecordVideos().catch(() => {});
-    } else if (logsActiveTab === "screen") {
-      renderScreenrecordVideos();
-      loadScreenrecordVideos({ silent: true }).catch(() => {});
-    } else if (dashcamState.initialized) {
-      loadDashcamRoutes({ silent: true }).catch(() => {});
-    }
-  }
-  if (options.restoreScroll !== false) restoreLogsScrollTop(logsActiveTab);
-}
-
-function handleLogsPageChange(event) {
-  const page = event?.detail?.page || "";
-  if (page === "logs") return;
-  saveLogsScrollTop(logsActiveTab);
-  cancelDashcamRouteRender();
-  dashcamState.loadSeq += 1;
-  screenrecordState.loadSeq += 1;
-  dashcamState.loading = false;
-  dashcamState.loadingMore = false;
-  setDashcamLoadingMoreUi(false);
-  screenrecordState.loading = false;
-  dashcamState.scrollBusy = false;
-  if (dashcamState.scrollTimer) {
-    window.clearTimeout(dashcamState.scrollTimer);
-    dashcamState.scrollTimer = null;
-  }
-  if (dashcamState.layoutTimer) {
-    window.clearTimeout(dashcamState.layoutTimer);
-    dashcamState.layoutTimer = null;
-  }
-  disconnectLogsLazyImages();
-}
-
-function bindLogsPage() {
-  const dashTab = document.getElementById("logsTabDashcam");
-  const screenTab = document.getElementById("logsTabScreen");
-  const routesHost = document.getElementById("dashcamRoutes");
-  const screenHost = document.getElementById("screenrecordVideos");
-
-  if (!dashcamState.layoutBound) {
-    dashcamState.layoutBound = true;
-    dashcamState.landscape = isCompactLandscapeMode();
-    dashcamState.layoutKey = dashcamLayoutKey();
-    window.addEventListener("carrot:pagechange", handleLogsPageChange);
-    window.addEventListener("carrot:languagechange", () => {
-      dashcamState.signature = "";
-      screenrecordState.signature = "";
-      dashcamState.routeHeights = Object.create(null);
-      const dashcamHost = document.getElementById("dashcamRoutes");
-      if (dashcamHost) dashcamHost.dataset.signature = "";
-      const screenHost = document.getElementById("screenrecordVideos");
-      if (screenHost) screenHost.dataset.signature = "";
-      
-      if (isLogsPageActive()) {
-        renderDashcamRoutes({ animate: false });
-        if (typeof renderScreenrecordVideos === "function") renderScreenrecordVideos({ animate: false });
-      }
-    });
-    window.addEventListener("resize", () => {
-      if (CURRENT_PAGE !== "logs") return;
-      if (dashcamState.layoutTimer) window.clearTimeout(dashcamState.layoutTimer);
-      dashcamState.layoutTimer = window.setTimeout(() => {
-        dashcamState.layoutTimer = null;
-        if (!isLogsPageActive()) return;
-        const nextLandscape = isCompactLandscapeMode();
-        const nextLayoutKey = dashcamLayoutKey();
-        if (dashcamState.layoutKey === nextLayoutKey) return;
-        dashcamState.landscape = nextLandscape;
-        dashcamState.layoutKey = nextLayoutKey;
-        dashcamState.routeHeights = Object.create(null);
-        dashcamState.routeHeight = dashcamDefaultRouteHeight();
-        const dashcamHost = document.getElementById("dashcamRoutes");
-        if (dashcamHost) dashcamHost.dataset.signature = "";
-        renderDashcamRoutes({ animate: false });
-        if (typeof renderScreenrecordVideos === "function") renderScreenrecordVideos({ preserve: true, animate: false });
-      }, 120);
-    }, { passive: true });
-  }
-
-  if (dashTab && dashTab.dataset.bound !== "1") {
-    dashTab.dataset.bound = "1";
-    dashTab.addEventListener("click", () => activateLogsTab("dashcam"));
-  }
-
-  if (screenTab && screenTab.dataset.bound !== "1") {
-    screenTab.dataset.bound = "1";
-    screenTab.addEventListener("click", () => activateLogsTab("screen"));
-  }
-
-  if (routesHost && routesHost.dataset.bound !== "1") {
-    routesHost.dataset.bound = "1";
-    routesHost.addEventListener("scroll", () => {
-      markDashcamScrollBusy();
-      saveLogsScrollTop("dashcam");
-      if (dashcamWindowNeedsRender(routesHost)) scheduleDashcamWindowRender();
-      maybeLoadMoreDashcamRoutes(routesHost);
-    }, { passive: true });
-    routesHost.addEventListener("click", (ev) => {
-      const actionEl = ev.target?.closest?.("[data-action]");
-      if (!actionEl) return;
-      const action = actionEl.dataset.action;
-      const route = actionEl.dataset.route || "";
-      const segment = actionEl.dataset.segment || "";
-      if (action === "toggle-route") {
-        if (dashcamState.expanded.has(route)) dashcamState.expanded.delete(route);
-        else dashcamState.expanded.add(route);
-        if (route && dashcamState.routeHeights) delete dashcamState.routeHeights[route];
-        if (!renderDashcamRoute(route)) renderDashcamRoutes({ animate: false });
-      } else if (action === "play") {
-        openDashcamPlayer(route, segment);
-      } else if (action === "segment-menu") {
-        ev.stopPropagation();
-        showDashcamSegmentMenu(route, segment).catch(() => {});
-      } else if (action === "select-route") {
-        const entry = dashcamState.routes.find((item) => item.route === route);
-        if (!entry) return;
-        const shouldClear = actionEl.dataset.selected === "1";
-        for (const item of entry.segmentFolders || []) {
-          if (shouldClear) dashcamState.selected.delete(item);
-          else dashcamState.selected.add(item);
-        }
-        if (!updateDashcamRouteSelectionUi(route)) renderDashcamRoutes({ animate: false });
-      } else if (action === "upload-selected") {
-        const entry = dashcamState.routes.find((item) => item.route === route);
-        const targets = dashcamSelectedForRoute(entry || { segmentFolders: [] });
-        uploadDashcamSegments(targets).catch(() => {});
-      }
-    });
-    routesHost.addEventListener("change", (ev) => {
-      const input = ev.target;
-      if (!input?.matches?.('input[data-action="select-segment"]')) return;
-      const segment = input.dataset.segment || "";
-      if (input.checked) dashcamState.selected.add(segment);
-      else dashcamState.selected.delete(segment);
-      const route = input.closest("[data-route-card]")?.dataset.routeCard || "";
-      if (!updateDashcamRouteSelectionUi(route)) renderDashcamRoutes({ animate: false });
-    });
-  }
-
-  if (screenHost && screenHost.dataset.bound !== "1") {
-    screenHost.dataset.bound = "1";
-    screenHost.addEventListener("scroll", () => {
-      markDashcamScrollBusy();
-      saveLogsScrollTop("screen");
-      scheduleScreenrecordWindowRender();
-      if (screenrecordShouldLoadMore(screenHost)) {
-        loadScreenrecordVideos({ silent: true, append: true }).catch(() => {});
-      }
-    }, { passive: true });
-    screenHost.addEventListener("click", (ev) => {
-      const actionEl = ev.target?.closest?.("[data-action]");
-      if (!actionEl) return;
-      if (actionEl.dataset.action === "download-screenrecord") {
-        const id = actionEl.dataset.id || "";
-        if (id) window.open(screenrecordApiPath("download", id), "_blank", "noopener");
-      } else if (actionEl.dataset.action === "play-screenrecord") {
-        openScreenrecordPlayer(actionEl.dataset.id || "", actionEl.dataset.name || "");
-      }
-    });
-  }
-}
-
-function initLogsPage() {
-  bindLogsPage();
-  activateLogsTab(logsActiveTab, { load: false });
-  startDashcamAutoRefresh();
-  resumeDashcamUploadJobIfNeeded().catch(() => {});
-  if (logsActiveTab === "screen") {
-    if (!screenrecordState.initialized) {
-      screenrecordState.initialized = true;
-      loadScreenrecordVideos().catch(() => {});
-    } else {
-      renderScreenrecordVideos({ preserve: true });
-      loadScreenrecordVideos({ silent: true }).catch(() => {});
-    }
-  } else if (!dashcamState.initialized) {
-    dashcamState.initialized = true;
-    loadDashcamRoutes().catch(() => {});
-  } else {
-    renderDashcamRoutes({ animate: false, preserve: true });
-    loadDashcamRoutes({ silent: true }).catch(() => {});
   }
 }

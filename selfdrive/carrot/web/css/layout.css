@@ -143,26 +143,6 @@
   margin-bottom: var(--sp-2xl);
 }
 
-.ui-stagger-item {
-  animation: uiStaggerIn .38s cubic-bezier(.2, 0, 0, 1) both;
-  animation-delay: min(calc(var(--i, 0) * 36ms), 420ms);
-}
-
-@keyframes uiStaggerIn {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ui-stagger-item {
-    animation: none;
-  }
-}
+/* .ui-stagger-item moved to components.css; the global
+   prefers-reduced-motion guard in base.css disables the animation. */
 
