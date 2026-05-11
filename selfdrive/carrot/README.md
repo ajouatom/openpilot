@@ -11,6 +11,7 @@ Anyone can modify. Refer to the structure below.
 
 ```
 server/
+├── __init__.py
 ├── app.py                  composition root: middleware, lifecycle, make_app()
 ├── config.py               constants (paths, URLs, tmux session, etc.)
 ├── live_runtime/           cereal SubMaster broker for /api/live_runtime
@@ -30,6 +31,7 @@ server/
 │   ├── time_sync.py        browser → system time sync
 │   ├── device_info.py      focused calibration + network helpers for Device tab
 │   ├── setting_favorites.py  CarrotPilot setting favorites state
+│   ├── setting_profiles.py   CarrotPilot setting profile CRUD + import/export
 │   ├── web_settings.py     device/server-backed Web Settings state
 │   └── tmux.py             tmux session helpers
 └── features/               HTTP entry points (one feature per file/folder)
@@ -39,6 +41,7 @@ server/
     ├── settings.py         /api/settings
     ├── params.py           /api/params_*, /download/params_backup.json
     ├── setting_favorites.py /api/setting_favorites
+    ├── setting_profiles.py  /api/setting_profiles, profile import/export
     ├── web_settings.py     /api/web_settings
     ├── ssh_keys.py         /api/ssh_keys
     ├── cars.py             /api/cars
@@ -83,12 +86,20 @@ web/
 │   ├── layout.css          page container, swipe, headings, sections
 │   ├── components.css      dialog, toast, buttons, setting items, transitions
 │   ├── responsive.css      desktop + mobile media queries (loads last)
+│   ├── vendor/
+│   │   └── plyr.css        Plyr video player styles
 │   └── pages/
 │       ├── logs.css        Logs/Dashcam page
 │       ├── drive.css       WebRTC video + Carrot stage
-│       ├── settings.css    Settings page styles (includes device tab)
 │       ├── terminal.css    Terminal page styles
-│       └── tools.css       Tools page styles
+│       ├── settings/       Settings page styles, split for readability
+│       │   ├── base.css        page base, car entry, FAB menu (open/close anim)
+│       │   ├── panels.css      search panel, group list, profile sections, toolbar
+│       │   └── device.css      Device tab, settings-diff dialog, subnav, responsive
+│       └── tools/          Tools page styles, split by feature
+│           ├── base.css        page base, meta/lang, Web Settings dialog
+│           ├── qr.css          QR code dialog
+│           └── main.css        groups, progress, notifications/console, responsive
 └── js/
     ├── app.js              bootstrap: popstate, initial showPage()
     ├── shared/             cross-page modules
@@ -97,6 +108,7 @@ web/
     │   ├── utils.js        escapeHtml, clamp, copyToClipboard, quick link
     │   ├── i18n.js         bootstrapped LANG, getUIText, renderUIText, setWebLanguage
     │   ├── api.js          bulkGet, setParam, postJson, getJson, waitMs
+    │   ├── setting_diff.js setting-diff dialog helpers (used by settings + tools)
     │   ├── activity.js     cross-page activity badges + beforeunload guard
     │   └── ui/
     │       ├── dialog.js   appAlert/Confirm/Prompt + toast
@@ -112,17 +124,28 @@ web/
     │   ├── setting_device_actions.js  Device action/dialog handlers
     │   ├── setting_device.js          Device tab coordinator and state
     │   ├── tools_web_settings.js      server-backed Web Settings dialog
+    │   ├── tools_notifications.js     Tools-tab notification preview/composer
+    │   ├── tools_settings_qr.js       Settings QR import/export
     │   ├── tools.js        tools page + initToolsPage + action runners
     │   ├── branch.js       branch picker modal + Branch page
-    │   ├── logs.js         Dashcam + Screen Recording lists
-    │   └── terminal.js     tmux WebSocket client
+    │   ├── logs/           Logs page, split by tab
+    │   │   ├── shared.js       tab state, scroll persistence, lazy-image observer,
+    │   │   │                   video player, bind/init
+    │   │   ├── dashcam.js      Dashcam tab: virtual route+segment list, upload subsystem
+    │   │   └── screenrecord.js Screen Recording tab: virtual list, lazy thumbs
+    │   ├── terminal.js     tmux WebSocket client
+    │   └── vision_background.js  static background for non-realtime pages
     ├── translations/       ko/en/zh/ja/fr + registry.js
-    └── realtime
-        app_realtime.js       live runtime/raw stream wiring + HUD payload bridge
-        home_drive.js         Carrot Vision renderer and overlay canvas
-        hud_card.js           adaptive driving HUD card
-        raw_capnp.js          raw capnp decoders for HUD/overlay state
-        raw_capnp_worker.js   worker entry for raw capnp decoding
+    ├── realtime/           realtime stream stack (loaded together)
+    │   ├── hud_card.js          adaptive driving HUD card
+    │   ├── raw_capnp.js         raw capnp decoders for HUD/overlay state
+    │   ├── raw_capnp_worker.js  worker entry for raw capnp decoding
+    │   ├── vision_state.js      shared vision/HUD state
+    │   ├── vision_rtc.js        WebRTC vision stream client
+    │   ├── vision_raw.js        raw WebSocket vision client + decoder worker bridge
+    │   ├── app_realtime.js      live runtime/raw stream wiring + HUD payload bridge
+    │   └── home_drive.js        Carrot Vision renderer and overlay canvas
+    └── vendor/             third-party libraries (Plyr, jsQR, qrcode-generator)
 ```
 
 ### Settings page tab structure
@@ -137,8 +160,27 @@ The Setting page has two top-level tabs:
 Device tab adapts to hardware via `DeviceType` param (`tici`/`mici`/`tizi`).
 
 Load order (set in `index.html`):
-`tokens → layout_tokens → hud_card → base → layout → pages/* → components → responsive`
-then JS:
-`translations → hud_card → shared/* → shared/ui/* → pages/* → realtime/* → app.js`
 
-CSS files merge byte-identical with the previous single `app.css` if concatenated in the order above. JS scripts share the same global realm — top-level `let`/`const` are visible across files.
+CSS:
+```
+tokens → layout_tokens → hud_card → base → layout → components
+  → pages/logs → pages/terminal
+  → pages/settings/base → pages/settings/panels → pages/settings/device
+  → pages/tools/base → pages/tools/qr → pages/tools/main
+  → pages/drive → responsive → vendor/plyr
+```
+
+JS:
+```
+vendor/* → translations → shared/* → shared/ui/* → pages/* → pages/logs/* → realtime/* → app
+```
+
+CSS files merge byte-identical with the previous single `settings.css` and `tools.css` if concatenated in the order above. JS scripts share the same global realm — top-level `let`/`const` are visible across files (so the logs split files all see the shared `logsActiveTab`, `dashcamState`, `screenrecordState`, etc.).
+
+### Recovery server (standalone)
+
+```
+recovery/
+├── __init__.py
+└── server.py               port 6999, minimal self-contained recovery UI
+```
