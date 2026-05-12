@@ -19,6 +19,11 @@ from .paths import (
 )
 
 ROUTE_CACHE_TTL = 3.0
+DASHCAM_ROUTE_LIMIT_DEFAULT = 40
+DASHCAM_ROUTE_LIMIT_MAX = 200
+DASHCAM_SEGMENT_LIMIT_DEFAULT = 10
+DASHCAM_SEGMENT_LIMIT_MAX = 80
+DASHCAM_OFFSET_MAX = 1000000
 _route_cache_lock = threading.Lock()
 _route_cache = {"time": 0.0, "routes": []}
 
@@ -51,22 +56,89 @@ def cached_dashcam_routes() -> list[dict]:
   return list(routes)
 
 
+def bounded_query_int(request: web.Request, name: str, default: int, maximum: int) -> int:
+  try:
+    value = int(request.query.get(name, str(default)) or default)
+  except (TypeError, ValueError):
+    value = default
+  return max(0 if name == "offset" else 1, min(maximum, value))
+
+
+def route_with_segment_page(entry: dict, segment_offset: int = 0, segment_limit: int = DASHCAM_SEGMENT_LIMIT_DEFAULT) -> dict:
+  segments = list(entry.get("segmentFolders") or [])
+  total = len(segments)
+  offset = max(0, min(segment_offset, total))
+  limit = max(1, min(DASHCAM_SEGMENT_LIMIT_MAX, segment_limit))
+  end = min(offset + limit, total)
+  result = dict(entry)
+  result["segmentFolders"] = segments[offset:end]
+  result["segmentCount"] = int(entry.get("segmentCount") or total)
+  result["segmentOffset"] = offset
+  result["segmentLimit"] = limit
+  result["segmentsNextOffset"] = end if end < total else None
+  result["segmentsHasMore"] = end < total
+  return result
+
+
+def find_dashcam_route(routes: list[dict], route: str) -> dict | None:
+  if not route or "/" in route or "\\" in route or route in (".", ".."):
+    return None
+  for entry in routes:
+    if entry.get("route") == route:
+      return entry
+  return None
+
+
 async def api_dashcam_routes(request: web.Request) -> web.Response:
   try:
-    offset = max(0, int(request.query.get("offset", "0") or 0))
-    limit = max(1, min(200, int(request.query.get("limit", "80") or 80)))
+    offset = bounded_query_int(request, "offset", 0, DASHCAM_OFFSET_MAX)
+    limit = bounded_query_int(request, "limit", DASHCAM_ROUTE_LIMIT_DEFAULT, DASHCAM_ROUTE_LIMIT_MAX)
+    segment_limit = bounded_query_int(
+      request,
+      "segment_limit",
+      DASHCAM_SEGMENT_LIMIT_DEFAULT,
+      DASHCAM_SEGMENT_LIMIT_MAX,
+    )
     routes = await asyncio.to_thread(cached_dashcam_routes)
     total = len(routes)
     end = min(offset + limit, total)
     return web.json_response({
       "ok": True,
-      "routes": routes[offset:end],
+      "routes": [
+        route_with_segment_page(entry, 0, segment_limit)
+        for entry in routes[offset:end]
+      ],
       "root": DASHCAM_ROOT,
       "offset": offset,
       "limit": limit,
+      "segmentLimit": segment_limit,
       "total": total,
       "nextOffset": end if end < total else None,
       "hasMore": end < total,
+    })
+  except Exception as e:
+    return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def api_dashcam_segments(request: web.Request) -> web.Response:
+  try:
+    route = request.match_info.get("route", "")
+    offset = bounded_query_int(request, "offset", 0, DASHCAM_OFFSET_MAX)
+    limit = bounded_query_int(request, "limit", DASHCAM_SEGMENT_LIMIT_DEFAULT, DASHCAM_SEGMENT_LIMIT_MAX)
+    routes = await asyncio.to_thread(cached_dashcam_routes)
+    entry = find_dashcam_route(routes, route)
+    if not entry:
+      return web.json_response({"ok": False, "error": "route not found"}, status=404)
+    page = route_with_segment_page(entry, offset, limit)
+    return web.json_response({
+      "ok": True,
+      "route": route,
+      "segments": page["segmentFolders"],
+      "offset": page["segmentOffset"],
+      "limit": page["segmentLimit"],
+      "total": page["segmentCount"],
+      "nextOffset": page["segmentsNextOffset"],
+      "hasMore": page["segmentsHasMore"],
     })
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
@@ -199,6 +271,7 @@ async def api_dashcam_upload_cancel(request: web.Request) -> web.Response:
 
 def register(app: web.Application) -> None:
   app.router.add_get("/api/dashcam/routes", api_dashcam_routes)
+  app.router.add_get("/api/dashcam/segments/{route}", api_dashcam_segments)
   app.router.add_get("/api/dashcam/thumbnail/{segment}", api_dashcam_thumbnail)
   app.router.add_get("/api/dashcam/preview/{segment}", api_dashcam_preview)
   app.router.add_get("/api/dashcam/video/{segment}", api_dashcam_video)

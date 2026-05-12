@@ -140,7 +140,6 @@ function requestToolsMetaTickerSync() {
 function pulseToolsLogPanel() {
   const page = document.getElementById("pageTools");
   if (!page || page.classList.contains("tools-log-expanded")) {
-    scrollToolsLogToBottom();
     return;
   }
   page.classList.add("tools-log-attention");
@@ -148,10 +147,7 @@ function pulseToolsLogPanel() {
   toolsLogAttentionTimer = window.setTimeout(() => {
     page.classList.remove("tools-log-attention");
     toolsLogAttentionTimer = null;
-    scrollToolsLogToBottom();
-    scrollToolsLogToBottom(280);
   }, 3200);
-  scrollToolsLogToBottom(280);
 }
 
 function setToolsLogExpanded(expanded, options = {}) {
@@ -170,9 +166,12 @@ function setToolsLogExpanded(expanded, options = {}) {
       window.clearTimeout(toolsLogAttentionTimer);
       toolsLogAttentionTimer = null;
     }
+    window.CarrotToolsNotifications?.focusLatest?.({ expand: true, smoothOnce: true, stableDetail: true });
   }
-  scrollToolsLogToBottom();
-  scrollToolsLogToBottom(280);
+  if (!window.CarrotToolsNotifications?.render) {
+    scrollToolsLogToBottom();
+    scrollToolsLogToBottom(280);
+  }
 }
 
 function renderToolsOut() {
@@ -189,13 +188,13 @@ function renderToolsOut() {
     }, {
       onClear: clearToolsNotificationHistory,
       onClose: () => setToolsLogExpanded(false),
+      autoFocusLatest: true,
     });
   } else {
     out.textContent = currentText || historyText || " ";
+    requestAnimationFrame(() => scrollToolsLogToBottom());
+    scrollToolsLogToBottom(280);
   }
-
-  requestAnimationFrame(() => scrollToolsLogToBottom());
-  scrollToolsLogToBottom(280);
 }
 
 async function clearToolsNotificationHistory() {
@@ -754,10 +753,22 @@ async function syncDeviceLanguageOnce() {
     const values = await bulkGet(["LanguageSetting"]);
     const currentLang = String(values["LanguageSetting"] || "").trim();
 
+    // Map browser language → web language code (ko/en/zh only)
     const browserLang = (navigator.language || navigator.userLanguage || "en").toLowerCase();
-    let targetParam = "main_en";
-    if (browserLang.startsWith("ko")) targetParam = "main_ko";
-    else if (browserLang.startsWith("zh")) targetParam = browserLang.includes("tw") || browserLang.includes("hk") ? "main_zh-CHT" : "main_zh-CHS";
+    const webLang = normalizeLangCode(browserLang); // returns "ko" | "en" | "zh" | ""
+
+    // Map web language → device language code
+    const WEB_TO_DEVICE = { ko: "main_ko", en: "main_en", zh: "main_zh-CHS" };
+    if (browserLang.startsWith("zh") && (browserLang.includes("tw") || browserLang.includes("hk"))) {
+      WEB_TO_DEVICE.zh = "main_zh-CHT";
+    }
+
+    // Only sync if browser language has BOTH a web pack AND a device translation
+    const deviceCodes = (window.CarrotDeviceLanguageOptions || []).map((o) => o.code);
+    let targetParam = "main_en"; // default fallback
+    if (webLang && WEB_TO_DEVICE[webLang] && deviceCodes.includes(WEB_TO_DEVICE[webLang])) {
+      targetParam = WEB_TO_DEVICE[webLang];
+    }
 
     if (currentLang !== targetParam) {
       await setParam("LanguageSetting", targetParam);

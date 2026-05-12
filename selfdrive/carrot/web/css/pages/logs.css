@@ -184,6 +184,7 @@
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
+  overflow-anchor: none;
   scrollbar-gutter: stable;
   padding: 6px var(--logs-content-inline) calc(var(--nav-bar-height) + 16px + env(safe-area-inset-bottom, 0px));
   display: flex;
@@ -211,8 +212,6 @@
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 50%, transparent);
   background: var(--md-surface-cont-h);
   color: var(--md-on-surface);
-  content-visibility: auto;
-  contain-intrinsic-size: auto 300px;
 }
 
 .dashcam-route-media {
@@ -304,7 +303,9 @@
 
 .dashcam-route-main {
   min-width: 0;
-  padding: 12px;
+  /* Symmetric inline padding so all children (title, selection row,
+     segment list) align flush on both sides of the card. */
+  padding: 12px 14px;
 }
 
 .dashcam-route-head {
@@ -348,6 +349,7 @@
   height: 34px;
   border-radius: 999px;
   flex: 0 0 auto;
+  margin-right: 8px;
 }
 
 .dashcam-segments {
@@ -386,10 +388,54 @@
 .dashcam-segment-list {
   max-height: min(40vh, 330px);
   overflow: auto;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  /* Hide the scrollbar entirely so the content sits flush with the rest of
+     the card on both sides. Scrolling still works via touch/wheel/keyboard.
+     This is the standard pattern for touch-first list views. */
+  scrollbar-width: none;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding-right: 2px;
+}
+
+.dashcam-segment-list::-webkit-scrollbar {
+  display: none;
+}
+
+.dashcam-segment-loader {
+  flex: 0 0 auto;
+  width: 100%;
+  /* Fixed height in both states — prevents layout shift / "shake" when the
+     loader toggles on near the bottom of the list. */
+  height: 22px;
+  position: relative;
+  overflow: hidden;
+  overflow-anchor: none;
+  border-radius: 999px;
+  background: transparent;
+  transition: background-color 160ms ease-out;
+}
+
+.dashcam-segment-loader.is-loading {
+  background: color-mix(in srgb, var(--md-outline-var) 18%, transparent);
+}
+
+.dashcam-segment-loader::before {
+  content: "";
+  position: absolute;
+  inset: 8px 20%;
+  border-radius: inherit;
+  background: var(--md-primary);
+  opacity: 0;
+  transition: opacity 160ms ease-out;
+}
+
+.dashcam-segment-loader.is-loading::before {
+  opacity: 1;
+  animation: dashcam-segment-loader 820ms ease-in-out infinite;
 }
 
 .dashcam-segment-tile {
@@ -403,13 +449,41 @@
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 42%, transparent);
   background: var(--md-surface-cont);
   cursor: pointer;
+  /* Skip layout/paint for offscreen tiles so long lists scroll smoothly.
+     contain-intrinsic-size reserves space so virtual scroll height stays stable. */
   content-visibility: auto;
-  contain-intrinsic-size: auto 70px;
+  contain-intrinsic-size: 70px 100%;
 }
 
-.dashcam-segment-tile:hover {
-  border-color: color-mix(in srgb, var(--md-primary) 44%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--md-surface-cont-h) 84%, var(--md-primary));
+@media (hover: hover) {
+  .dashcam-segment-tile:hover {
+    border-color: color-mix(in srgb, var(--md-primary) 44%, var(--md-outline-var));
+    background: color-mix(in srgb, var(--md-surface-cont-h) 84%, var(--md-primary));
+  }
+}
+
+.dashcam-segment-tile--append {
+  animation: dashcam-segment-append 180ms cubic-bezier(.2, 0, 0, 1) both;
+}
+
+@keyframes dashcam-segment-append {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dashcam-segment-loader {
+  0% {
+    transform: translateX(-160%);
+  }
+  100% {
+    transform: translateX(160%);
+  }
 }
 
 .dashcam-segment-thumb {
@@ -570,6 +644,14 @@
     animation: none;
     opacity: 1;
     transform: none;
+  }
+
+  .dashcam-segment-tile--append {
+    animation: none;
+  }
+
+  .dashcam-segment-loader.is-loading::before {
+    animation: none;
   }
 
   .logs-loading-card::before,
@@ -1136,7 +1218,7 @@
   }
 
   .dashcam-route-main {
-    padding: 10px 12px 12px;
+    padding: 10px 14px 12px;
   }
 
   .dashcam-route-head {
@@ -1245,6 +1327,7 @@
     min-height: 46px;
     gap: 8px;
     padding: 5px 8px 5px 5px;
+    contain-intrinsic-size: 46px 100%;
   }
 
   .dashcam-segment-thumb--compact {

@@ -20,6 +20,39 @@ body.dialog-open {
   overflow: hidden;
 }
 
+/* ── Global Focus Ring ─────────────────────────────────────────
+   One accessible focus indicator for every interactive element.
+   Components may override this with a more specific :focus-visible
+   rule, but they should never *remove* the outline without providing
+   an equivalent visual cue. Uses tokens from tokens.css. */
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+  border-radius: inherit;
+}
+
+/* Mouse/touch interaction shouldn't show the ring — only keyboard. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ── Reduced Motion ────────────────────────────────────────────
+   Honors the user's OS-level "reduce motion" preference globally.
+   Animation/transition durations collapse to near-zero so things
+   still *snap* into their final state (preserving feedback) but
+   without movement. Individual components can opt out by being
+   more specific. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Page-level overscroll/scroll lock.
    The wrap layout itself is intentionally page-invariant (see .wrap below)
    so menu transitions don't re-flow the container. Pages that need
@@ -132,7 +165,7 @@ body:has(.page-transitioning) {
 }
 
 .topbar .nav-btn:focus-visible {
-  background: color-mix(in srgb, var(--md-primary-cont) 14%, transparent);
+  background: var(--md-primary-state-soft);
 }
 
 .topbar .nav-btn .nav-icon {
@@ -181,7 +214,7 @@ body:has(.page-transitioning) {
 .topbar .nav-btn.active {
   color: var(--md-primary);
   font-weight: 700;
-  background: color-mix(in srgb, var(--md-primary) 12%, transparent);
+  background: var(--md-primary-state-soft);
 }
 
 .topbar .nav-btn.recording,
@@ -565,7 +598,7 @@ body:has(.page-transitioning) {
 }
 
 .fab.active {
-  background: var(--md-primary-cont);
+  background: var(--md-primary-state-strong);
   border-color: color-mix(in srgb, var(--md-primary) 35%, var(--md-outline-var));
   color: var(--md-primary);
 }

@@ -365,50 +365,5 @@ async function onSelectBranch(item) {
   }
 }
 
-/* ---------- Logs / Dashcam ---------- */
-const dashcamState = {
-  initialized: false,
-  loading: false,
-  routes: [],
-  expanded: new Set(),
-  selected: new Set(),
-  refreshTimer: null,
-  loadingMore: false,
-  scrollBusy: false,
-  scrollTimer: null,
-  renderFrame: 0,
-  loadSeq: 0,
-  layoutBound: false,
-  layoutTimer: null,
-  landscape: null,
-  layoutKey: "",
-  total: 0,
-  nextOffset: 0,
-  hasMore: false,
-  routeHeight: 300,
-  routeHeights: Object.create(null),
-  windowStart: 0,
-  windowEnd: 0,
-  signature: "",
-};
-
-const screenrecordState = {
-  initialized: false,
-  loading: false,
-  loadingMore: false,
-  videos: [],
-  loadSeq: 0,
-  signature: "",
-  total: 0,
-  nextOffset: 0,
-  hasMore: false,
-  rowHeight: 80,
-  windowStart: 0,
-  windowEnd: 0,
-  renderFrame: 0,
-};
-
-let logsActiveTab = "dashcam";
-const logsScrollTops = { dashcam: 0, screen: 0 };
-let logsLazyImageObserver = null;
+// Logs page state and helpers moved to js/pages/logs/{shared,dashcam,screenrecord}.js
 
