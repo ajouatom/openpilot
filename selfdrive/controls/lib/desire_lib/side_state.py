@@ -42,7 +42,7 @@ class SideState:
   last_lane_line_mod: int = 0
   lane_line_info_edge_detect: bool = False
   outer_lane_prob: float = 0.0
-  
+
   # transitions
   lane_available_last: bool = False
   edge_available_last: bool = False
@@ -56,6 +56,10 @@ class SideState:
   # BSD hold (after detection)
   bsd_hold_counter: int = 0
   bsd_detected_now: bool = False
+
+  # clear counters (stabilization after detection released)
+  bsd_clear_count: int = 0
+  object_clear_count: int = 0
 
   # computed “lane change available” (includes BSD+object)
   lane_change_available_geom: bool = False
@@ -96,7 +100,7 @@ class SideState:
 
     self.cur_prob = float(cur_prob)
     self.current_lane_missing = self.cur_prob < 0.3
-   
+
   def update_lane_line_info(self, lane_line_info_raw: int):
     self.lane_line_info_raw = int(lane_line_info_raw)
     mod = self.lane_line_info_raw % 10
@@ -110,8 +114,8 @@ class SideState:
                      radar_obj,
                      blindspot: bool,
                      ignore_bsd: bool,
-                     bsd_hold_sec: float = 2.0):
-    # 옆 차선 앞 차량 간격 판단 (개선)
+                     bsd_hold_sec: float = 2.5):
+    # 옆 차선 앞 차량 간격 판단 (자동 차선변경 기준으로 보수적 상향)
     if radar_obj is not None and radar_obj.status:
         d_rel = radar_obj.dRel          # 현재 거리 (m)
         v_lead = radar_obj.vLead        # 앞 차 절대속도 (m/s)
@@ -123,13 +127,12 @@ class SideState:
         else:
             ttc = 99.0                  # 멀어지거나 동속이면 위험 없음
 
-        # 간격 기준: 아래 두 조건 중 하나라도 해당하면 위험
-        # 1) 절대 거리 기준: 현재 거리가 자차 속도 * 2.5초 이내 (최소 15m)
-        safe_dist = max(v_ego * 2.5, 15.0)
+        # 간격 기준 (보수적 상향)
+        # 1) 절대 거리: vEgo * 3.0초, 최소 20m
+        # 2) TTC: 6초 이내면 위험
+        safe_dist = max(v_ego * 3.0, 20.0)
         too_close = d_rel < safe_dist
-
-        # 2) TTC 기준: 충돌 예상 시간이 5초 이내
-        ttc_danger = ttc < 5.0
+        ttc_danger = ttc < 6.0
 
         object_detected = too_close or ttc_danger
     else:
@@ -137,17 +140,22 @@ class SideState:
 
     if object_detected:
         self.object_detected_count = max(1, self.object_detected_count + 1)
+        self.object_clear_count = 0
     else:
         self.object_detected_count = min(-1, self.object_detected_count - 1)
+        self.object_clear_count += 1
 
     self.side_object_detected = self.object_detected_count > int(-0.3 / DT_MDL)
 
-    # BSD hold (기존 유지)
+    # BSD hold + 해제 카운터
     self.bsd_detected_now = bool(blindspot)
     if self.bsd_detected_now and not ignore_bsd:
         self.bsd_hold_counter = int(bsd_hold_sec / DT_MDL)
+        self.bsd_clear_count = 0
     else:
         self.bsd_hold_counter = max(0, self.bsd_hold_counter - 1)
+        if self.bsd_hold_counter == 0:
+            self.bsd_clear_count += 1
 
 
   def compute_lane_change_available(self, lane_line_info_lt_20: bool, ignore_bsd: bool):
@@ -165,7 +173,7 @@ class SideState:
         and (not self.side_object_detected)
         and (not bsd_active)
     )
-    
+
   def update_triggers(self):
     # lane_available_trigger (기존 로직 유지)
     self.lane_available_trigger = False

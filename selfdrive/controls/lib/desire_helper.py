@@ -51,6 +51,11 @@ class DesireHelper:
     self.auto_lane_change_enable = False
     self.next_lane_change = False
 
+    # abort & recover (BSD trip during lane change)
+    self.abort_recover = False
+    self.abort_recover_direction = LaneChangeDirection.none
+    self.abort_recover_timer = 0.0
+
     # keep pulse
     self.keep_pulse_timer = 0.0
 
@@ -183,8 +188,8 @@ class DesireHelper:
 
     ignore_bsd = (self.laneChangeBsd < 0)
     v_ego = carstate.vEgo
-    self.left.update_obstacles(v_ego, radarState.leadLeft, carstate.leftBlindspot, ignore_bsd, bsd_hold_sec=2.0)
-    self.right.update_obstacles(v_ego, radarState.leadRight, carstate.rightBlindspot, ignore_bsd, bsd_hold_sec=2.0)
+    self.left.update_obstacles(v_ego, radarState.leadLeft, carstate.leftBlindspot, ignore_bsd, bsd_hold_sec=2.5)
+    self.right.update_obstacles(v_ego, radarState.leadRight, carstate.rightBlindspot, ignore_bsd, bsd_hold_sec=2.5)
 
     def line_ok(raw, check_mode):
       color = raw // 10   # 0=흰색, 1=황색, 2=주황
@@ -245,24 +250,30 @@ class DesireHelper:
 
     # auto lane change trigger (기존 로직 유지하되 side 기반)
     auto_lane_change_trigger = False
+    ignore_bsd = (self.laneChangeBsd < 0)
+    block_lanechange_bsd = (self.laneChangeBsd >= 1)
     if desire_enabled and side is not None:
       # carrot_lane_change_count>0이면 강제 허용
       if self.carrot_lane_change_count > 0:
-        auto_lane_change_trigger = side.lane_change_available and (side.bsd_hold_counter == 0)
+        # ATC 강제 명령도 BSD 옵션 적용
+        auto_lane_change_trigger = (
+          side.lane_change_available and
+          (ignore_bsd or side.bsd_hold_counter == 0)
+        )
       else:
-        # 기존 조건: edge_available + (trigger or appeared) + not side_object_detected
+        # edge_available + (trigger or appeared) + not side_object_detected
+        # + BSD 해제 후 1.0초 안정화 + 옆차선 클리어 0.5초 안정화
         auto_lane_change_trigger = (
           self.auto_lane_change_enable and
           side.edge_available and
           (side.lane_available_trigger or side.lane_appeared) and
           (not side.side_object_detected) and
-          (side.bsd_hold_counter == 0)
+          (ignore_bsd or side.bsd_hold_counter == 0) and
+          (ignore_bsd or side.bsd_clear_count > int(1.0 / DT_MDL)) and
+          (side.object_clear_count > int(0.5 / DT_MDL))
         )
       self.desireLog = (
         f"{side.name}:ALC={self.auto_lane_change_enable}, "
-        #f"L={side.lane_available},E={side.edge_available}, "
-        #f"T={side.lane_available_trigger},A={side.lane_appeared}, "
-        #f"OBJ={side.side_object_detected},BSD={side.bsd_hold_counter>0}"
       )
     else:
       self.auto_lane_change_enable = False
@@ -342,7 +353,7 @@ class DesireHelper:
               torque_applied = carstate.steeringPressed and torque_cond
 
               ignore_bsd = (self.laneChangeBsd < 0)
-              block_lanechange_bsd = (self.laneChangeBsd == 1)
+              block_lanechange_bsd = (self.laneChangeBsd >= 1)
               bsd_active = (side.bsd_hold_counter > 0) and (not ignore_bsd)
 
               solid_line_blocked = (self.laneLineCheck >= 2) and (not side.lane_change_available_geom) and \
@@ -354,8 +365,9 @@ class DesireHelper:
                 self.lane_change_direction = LaneChangeDirection.none
 
               elif bsd_active:
-                # BSD 최우선: laneChangeBsd=0 → torque 있을 때만, laneChangeBsd=1 → 완전 차단
-                if start_gate and torque_applied and not block_lanechange_bsd:
+                # laneChangeBsd >= 1 → 토크 여부 무관 완전 차단
+                # laneChangeBsd == 0 → 운전자 토크 있을 때만 진입 허용
+                if not block_lanechange_bsd and start_gate and torque_applied:
                   self.lane_change_state = LaneChangeState.laneChangeStarting
 
               elif start_gate:
@@ -385,12 +397,25 @@ class DesireHelper:
 
           elif self.lane_change_state == LaneChangeState.laneChangeStarting:
             ignore_bsd = (self.laneChangeBsd < 0)
+            block_lanechange_bsd = (self.laneChangeBsd >= 1)
             bsd_active = (side is not None) and (side.bsd_hold_counter > 0) and (not ignore_bsd)
             if bsd_active:
-                self.lane_change_direction = LaneChangeDirection.none  # 즉시 방향 리셋
-                self.lane_change_ll_prob = 1.0
-                self.lane_change_state = LaneChangeState.laneChangeFinishing
-                # 딜레이는 laneChangeFinishing 완료 시 bsd_hold_counter 기반으로 설정됨
+                if block_lanechange_bsd:
+                    # laneChangeBsd >= 1: 원래 차선으로 능동 복귀
+                    if self.lane_change_direction == LaneChangeDirection.left:
+                        self.abort_recover_direction = LaneChangeDirection.right
+                    elif self.lane_change_direction == LaneChangeDirection.right:
+                        self.abort_recover_direction = LaneChangeDirection.left
+                    self.abort_recover = True
+                    self.abort_recover_timer = 1.2  # 차종에 맞춰 0.8~1.5초 튜닝
+                    self.next_lane_change = False    # 자동 재시도 잠금
+                    self.lane_change_ll_prob = 1.0
+                    self.lane_change_state = LaneChangeState.laneChangeFinishing
+                else:
+                    # laneChangeBsd == 0: 기존 동작 (방향 none으로 부드럽게 마무리)
+                    self.lane_change_direction = LaneChangeDirection.none
+                    self.lane_change_ll_prob = 1.0
+                    self.lane_change_state = LaneChangeState.laneChangeFinishing
             else:
                 self.lane_change_ll_prob = max(self.lane_change_ll_prob - 2 * DT_MDL, 0.0)
                 if lane_change_prob < 0.02 and self.lane_change_ll_prob < 0.01:
@@ -434,6 +459,16 @@ class DesireHelper:
       self.lane_change_direction = LaneChangeDirection.none
       self.lane_change_state = LaneChangeState.off
       self.blinker_ignore = True
+
+    # abort_recover: BSD로 중단된 차선변경을 반대방향 desire로 능동 복귀
+    if self.abort_recover and self.abort_recover_timer > 0:
+      self.abort_recover_timer -= DT_MDL
+      self.lane_change_direction = self.abort_recover_direction
+      self.lane_change_state = LaneChangeState.laneChangeStarting
+      if self.abort_recover_timer <= 0:
+        self.abort_recover = False
+        self.abort_recover_direction = LaneChangeDirection.none
+        self.lane_change_state = LaneChangeState.laneChangeFinishing
 
     # final desire
     if self.turn_direction != TurnDirection.none:
