@@ -399,43 +399,56 @@ class DesireHelper:
             ignore_bsd = (self.laneChangeBsd < 0)
             block_lanechange_bsd = (self.laneChangeBsd >= 1)
             bsd_active = (side is not None) and (side.bsd_hold_counter > 0) and (not ignore_bsd)
+
             if bsd_active:
-                if block_lanechange_bsd:
-                    # laneChangeBsd >= 1: 원래 차선으로 능동 복귀
-                    if self.lane_change_direction == LaneChangeDirection.left:
-                        self.abort_recover_direction = LaneChangeDirection.right
-                    elif self.lane_change_direction == LaneChangeDirection.right:
-                        self.abort_recover_direction = LaneChangeDirection.left
-                    self.abort_recover = True
-                    self.abort_recover_timer = 1.2  # 차종에 맞춰 0.8~1.5초 튜닝
-                    self.next_lane_change = False    # 자동 재시도 잠금
-                    self.lane_change_ll_prob = 1.0
-                    self.lane_change_state = LaneChangeState.laneChangeFinishing
-                else:
-                    # laneChangeBsd == 0: 기존 동작 (방향 none으로 부드럽게 마무리)
-                    self.lane_change_direction = LaneChangeDirection.none
-                    self.lane_change_ll_prob = 1.0
-                    self.lane_change_state = LaneChangeState.laneChangeFinishing
+              if block_lanechange_bsd:
+                # abort 초기화는 한 번만 수행해서 timer가 매 프레임 리셋되지 않게 함
+                if not self.abort_recover:
+                  if self.lane_change_direction == LaneChangeDirection.left:
+                    self.abort_recover_direction = LaneChangeDirection.right
+                  elif self.lane_change_direction == LaneChangeDirection.right:
+                    self.abort_recover_direction = LaneChangeDirection.left
+                  self.abort_recover = True
+                  self.abort_recover_timer = 1.2  # 차종에 맞춰 0.8~1.5초 튜닝
+                  self.next_lane_change = False   # 자동 재시도 잠금
+
+                self.lane_change_ll_prob = 1.0
+                self.lane_change_state = LaneChangeState.laneChangeFinishing
+              else:
+                # laneChangeBsd == 0: 기존 동작 (방향 none으로 부드럽게 마무리)
+                self.lane_change_direction = LaneChangeDirection.none
+                self.lane_change_ll_prob = 1.0
+                self.lane_change_state = LaneChangeState.laneChangeFinishing
             else:
-                self.lane_change_ll_prob = max(self.lane_change_ll_prob - 2 * DT_MDL, 0.0)
-                if lane_change_prob < 0.02 and self.lane_change_ll_prob < 0.01:
-                    self.lane_change_state = LaneChangeState.laneChangeFinishing
+              self.lane_change_ll_prob = max(self.lane_change_ll_prob - 2 * DT_MDL, 0.0)
+              if lane_change_prob < 0.02 and self.lane_change_ll_prob < 0.01:
+                self.lane_change_state = LaneChangeState.laneChangeFinishing
+
 
 
           elif self.lane_change_state == LaneChangeState.laneChangeFinishing:
             self.lane_change_ll_prob = min(self.lane_change_ll_prob + DT_MDL, 1.0)
             if self.lane_change_ll_prob > 0.99:
-                self.lane_change_direction = LaneChangeDirection.none
-                if desire_enabled:
-                    if side is not None and side.bsd_hold_counter > 0:
-                        # BSD hold 남은 시간 + 추가 2초 → BSD 완전 해제 후 재시도 보장
-                        self.lane_change_delay = side.bsd_hold_counter * DT_MDL + max(self.laneChangeDelay, 2.0)
-                    else:
-                        self.lane_change_delay = max(self.laneChangeDelay, 2.0)
-                    self.next_lane_change = True
+              self.lane_change_direction = LaneChangeDirection.none
+
+              block_lanechange_bsd = (self.laneChangeBsd >= 1)
+              aborted_by_bsd = block_lanechange_bsd and (
+                self.abort_recover or
+                (side is not None and side.bsd_hold_counter > 0)
+              )
+
+              if desire_enabled and not aborted_by_bsd:
+                if side is not None and side.bsd_hold_counter > 0:
+                  # BSD hold 남은 시간 + 추가 2초 → BSD 완전 해제 후 재시도 보장
+                  self.lane_change_delay = side.bsd_hold_counter * DT_MDL + max(self.laneChangeDelay, 2.0)
                 else:
-                    self.next_lane_change = False
-                self.lane_change_state = LaneChangeState.off
+                  self.lane_change_delay = max(self.laneChangeDelay, 2.0)
+                self.next_lane_change = True
+              else:
+                self.next_lane_change = False
+
+              self.lane_change_state = LaneChangeState.off
+
 
 
     # timer
