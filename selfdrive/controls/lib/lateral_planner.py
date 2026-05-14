@@ -73,6 +73,8 @@ class LateralPlanner:
     self.curve_speed = 0
     self.lanemode_possible_count = 0
     self.laneless_only = True
+    self.lane_change_mult_current = 1.0   # lane_change_multiplier 페이드 추적용
+
 
   def reset_mpc(self, x0=None):
     if x0 is None:
@@ -114,7 +116,9 @@ class LateralPlanner:
       self.v_plan = np.clip(car_speed, MIN_SPEED, np.inf)
       self.v_ego = self.v_plan[0]
       self.plan_a = np.array(md.acceleration.x)
-      if md.velocity.x[-1] < md.velocity.x[0] * 0.7:  # TODO: 모델이 감속을 요청하는 경우 속도테이블이 레인모드를 할수 없음. 속도테이블을 새로 만들어야함..
+      is_lane_changing = (md.meta.desire != log.Desire.none)
+
+      if not is_lane_changing and md.velocity.x[-1] < md.velocity.x[0] * 0.7:  # TODO: 모델이 감속을 요청하는 경우 속도테이블이 레인모드를 할수 없음. 속도테이블을 새로 만들어야함..
         self.lanemode_possible_count = 0
         self.laneless_only = True
       else:
@@ -136,11 +140,15 @@ class LateralPlanner:
 
     # Turn off lanes during lane change
     #if self.DH.desire == log.Desire.laneChangeRight or self.DH.desire == log.Desire.laneChangeLeft:
-      
-    if md.meta.desire != log.Desire.none or carrot.atc_active:
-      self.LP.lane_change_multiplier = 0.0 #md.meta.laneChangeProb
+
+    lane_change_target = 0.0 if (md.meta.desire != log.Desire.none or carrot.atc_active) else 1.0
+    if lane_change_target < self.lane_change_mult_current:
+      # 차선변경 시작: 즉시 OFF (레인 경로 간섭 방지)
+      self.lane_change_mult_current = 0.0
     else:
-      self.LP.lane_change_multiplier = 1.0
+      # 차선변경 완료 후: 0.5초에 걸쳐 서서히 ON (경로 복귀 충격 방지)
+      self.lane_change_mult_current = min(1.0, self.lane_change_mult_current + DT_MDL / 0.5)
+    self.LP.lane_change_multiplier = self.lane_change_mult_current
 
     # lanelines calculation?
     self.LP.lanefull_mode = self.useLaneLineMode
@@ -156,7 +164,7 @@ class LateralPlanner:
         clip_rate=2.0,
         align_first_yaw=None #md.orientation.z[0]  # 초기 정렬
       )
-      
+
     self.latDebugText = self.LP.debugText
     #self.lanelines_active = True if self.LP.d_prob > 0.3 and self.LP.lanefull_mode else False
 
@@ -201,7 +209,7 @@ class LateralPlanner:
       self.solution_invalid_cnt += 1
     else:
       self.solution_invalid_cnt = 0
-  
+
     self.x_sol = self.lat_mpc.x_sol
 
   def publish(self, sm, pm, carrot):
@@ -291,7 +299,7 @@ def yaw_from_path_no_scipy(path_xyz, v_plan, smooth_window=5,
   # 저속(≤6 m/s)에서는 창을 크게
   if v0 <= 6.0:
     smooth_window = max(smooth_window, 9)   # 9~11 권장
-    
+
   N = path_xyz.shape[0]
   x = path_xyz[:, 0].astype(float)
   y = path_xyz[:, 1].astype(float)
