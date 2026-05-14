@@ -726,6 +726,8 @@ class VCruiseCarrot:
       elif self.xState == 3:
         v_cruise_kph = min(self.v_ego_kph_set, v_cruise_kph)
         self._cruise_control(-1, 3, "Cruise off (traffic sign)")
+      elif CS.leftBlinker or CS.rightBlinker:
+        pass
       elif self.v_ego_kph_set >= self.autoGasTokSpeed and not CC.enabled:
         v_cruise_kph = min(self.v_ego_kph_set, v_cruise_kph)
         self._cruise_control(1, -1 if self.aTarget > 0.0 else 0, "Cruise on (gas pressed)")
