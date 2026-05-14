@@ -8,6 +8,7 @@ from openpilot.common.realtime import DT_MDL
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.filter_simple import MyMovingAverage
 from openpilot.selfdrive.selfdrived.events import Events
+from openpilot.selfdrive.carrot.carrot_learning import CarrotLearner
 
 EventName = log.OnroadEvent.EventName
 LaneChangeState = log.LaneChangeState
@@ -139,6 +140,7 @@ class CarrotPlanner:
 
     self._stop_x_rl = None
     self.last_event_time = 0.0
+    self.learner = CarrotLearner()
 
   def _params_update(self):
     self.frame += 1
@@ -627,6 +629,28 @@ class CarrotPlanner:
     self.stop_dist = stop_dist
     self.mode = mode
     #return v_cruise, stop_dist, mode
+
+    # Auto-Tuner: 학습 데이터 수집
+    from cereal import car
+    gear_park = carstate.gearShifter == car.CarState.GearShifter.park
+    engaged = sm.alive.get('selfdriveState', False) and sm['selfdriveState'].enabled
+    
+    # 현재 GAP 단계 파악 (Personality 기반)
+    personality = sm['selfdriveState'].personality
+    current_gap = 2  # default standard
+    if personality == log.LongitudinalPersonality.moreRelaxed: current_gap = 4
+    elif personality == log.LongitudinalPersonality.relaxed: current_gap = 3
+    elif personality == log.LongitudinalPersonality.standard: current_gap = 2
+    elif personality == log.LongitudinalPersonality.aggressive: current_gap = 1
+    self.learner.set_current_gap(current_gap)
+
+    self.learner.update(v_ego_kph, carstate.gasPressed, engaged, gear_park,
+                        steer_deg=carstate.steeringAngleDeg, steer_pressed=carstate.steeringPressed,
+                        brake_pressed=carstate.brakePressed,
+                        lead_drel=leadOne.dRel if leadOne.status else 0.0,
+                        lead_v_kph=leadOne.vLead * CV.MS_TO_KPH if leadOne.status else 0.0,
+                        a_ego=a_ego, lead_jlead=leadOne.jLead if leadOne.status else 0.0,
+                        v_cruise_kph=v_cruise_kph)
 
     return v_cruise_kph
 

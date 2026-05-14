@@ -7,6 +7,11 @@
 
 #include <QDebug>
 #include <QProcess>
+#include <QScrollArea>
+#include <QScroller>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 
 #include "common/watchdog.h"
 #include "common/util.h"
@@ -460,6 +465,180 @@ void SettingsWindow::setCurrentPanel(int index, const QString &param) {
   nav_btns->buttons()[index]->setChecked(true);
 }
 
+AutoTunerHistoryPanel::AutoTunerHistoryPanel(QWidget* parent) : QFrame(parent) {
+  QVBoxLayout *main_layout = new QVBoxLayout(this);
+  main_layout->setContentsMargins(50, 50, 50, 50);
+
+  QLabel *title = new QLabel(tr("Auto-Tuner History Log v2"));
+  title->setStyleSheet("font-size: 60px; font-weight: bold; margin-bottom: 20px; color: white;");
+  main_layout->addWidget(title);
+
+  QPushButton *btn_clear = new QPushButton(tr("전체 이력 삭제 (Clear All)"));
+  btn_clear->setStyleSheet("background-color: #bb3333; font-size: 45px; padding: 30px; border-radius: 10px; margin-bottom: 30px; color: white; font-weight: bold;");
+  connect(btn_clear, &QPushButton::clicked, this, &AutoTunerHistoryPanel::clearAll);
+  main_layout->addWidget(btn_clear);
+
+  QScrollArea *scroll = new QScrollArea();
+  scroll->setWidgetResizable(true);
+  scroll->setFrameShape(QFrame::NoFrame);
+  scroll->setStyleSheet("QScrollArea { background: transparent; } QWidget { background: transparent; }");
+  QScroller::grabGesture(scroll->viewport(), QScroller::LeftMouseButtonGesture);
+
+  QWidget *scroll_widget = new QWidget();
+  list_layout = new QVBoxLayout(scroll_widget);
+  list_layout->setSpacing(30);
+  
+  scroll->setWidget(scroll_widget);
+  main_layout->addWidget(scroll);
+
+  refreshHistory();
+}
+
+void AutoTunerHistoryPanel::showEvent(QShowEvent *event) {
+  refreshHistory();
+  QFrame::showEvent(event);
+}
+
+void AutoTunerHistoryPanel::refreshHistory() {
+  QLayoutItem *child;
+  while ((child = list_layout->takeAt(0)) != nullptr) {
+    if (child->widget()) delete child->widget();
+    delete child;
+  }
+
+  QString raw = QString::fromStdString(Params().get("CarrotLearningHistory"));
+  if (raw.isEmpty()) {
+    QLabel *empty = new QLabel(tr("이력이 없습니다. (No tuning history available)"));
+    empty->setStyleSheet("font-size: 45px; color: #888888;");
+    list_layout->addWidget(empty);
+    list_layout->addStretch();
+    return;
+  }
+
+  QJsonArray arr = QJsonDocument::fromJson(raw.toUtf8()).array();
+  for (int i = 0; i < arr.size(); i++) {
+    QJsonObject item = arr[i].toObject();
+    QString id = item["id"].toString();
+    QString time_str = item["timestamp"].toString();
+    QJsonObject changes = item["changes"].toObject();
+
+    QFrame *row = new QFrame();
+    row->setStyleSheet("background-color: #333333; border-radius: 15px; padding: 20px;");
+    QHBoxLayout *row_layout = new QHBoxLayout(row);
+
+    QString text = QString("<span style='font-size: 35px; color: #aaaaaa;'>[%1 적용됨]</span><br>").arg(time_str);
+    for (const QString& group : changes.keys()) {
+      QJsonObject g_items = changes[group].toObject();
+      QString short_group;
+      bool is_en = (QString::fromStdString(Params().get("LanguageSetting")) != "main_ko");
+      if (is_en && group.contains("(")) {
+        short_group = group.split("(").last().replace(")", "");
+      } else {
+        short_group = group.split(" ").first(); // e.g. "가속"
+      }
+      for (const QString& key : g_items.keys()) {
+        QJsonObject info = g_items[key].toObject();
+        text += QString("<span style='font-size: 40px; color: white;'><span style='color:#aaaaaa;'>[%1]</span> <b>%2</b> <span style='font-size:35px; color:#bbbbbb;'>[%3]</span> &nbsp;:&nbsp; %4 ➔ <span style='color:#00ff00; font-weight:bold;'>%5</span></span><br>")
+                  .arg(short_group)
+                  .arg(key)
+                  .arg(info["band_kph"].toString())
+                  .arg(info["current"].toInt())
+                  .arg(info["recommended"].toInt());
+      }
+    }
+
+    QLabel *lbl = new QLabel(text);
+    lbl->setWordWrap(true);
+    row_layout->addWidget(lbl, 1);
+
+    bool is_latest = (i == 0);
+    
+    QPushButton *btn_restore = new QPushButton(tr("복구"));
+    if (is_latest) {
+      btn_restore->setStyleSheet("background-color: #178644; font-size: 40px; padding: 20px; border-radius: 10px; color: white;");
+    } else {
+      btn_restore->setStyleSheet("background-color: #333333; font-size: 40px; padding: 20px; border-radius: 10px; color: #666666;");
+      btn_restore->setEnabled(false);
+    }
+    btn_restore->setFixedSize(200, 120);
+    connect(btn_restore, &QPushButton::clicked, [this, id]() { restoreItem(id); });
+    row_layout->addWidget(btn_restore);
+
+    QPushButton *btn_del = new QPushButton(tr("삭제"));
+    if (is_latest) {
+      btn_del->setStyleSheet("background-color: #555555; font-size: 40px; padding: 20px; border-radius: 10px; color: white;");
+    } else {
+      btn_del->setStyleSheet("background-color: #333333; font-size: 40px; padding: 20px; border-radius: 10px; color: #666666;");
+      btn_del->setEnabled(false);
+    }
+    btn_del->setFixedSize(200, 120);
+    connect(btn_del, &QPushButton::clicked, [this, id]() { deleteItem(id); });
+    row_layout->addWidget(btn_del);
+
+    list_layout->addWidget(row);
+  }
+  list_layout->addStretch();
+}
+
+void AutoTunerHistoryPanel::restoreItem(const QString& id) {
+  if (ConfirmationDialog::confirm(tr("이 시점의 튜닝을 취소하고 모든 값을 이전 상태로 되돌리시겠습니까?"), tr("복구"), this)) {
+    QString raw = QString::fromStdString(Params().get("CarrotLearningHistory"));
+    QJsonArray arr = QJsonDocument::fromJson(raw.toUtf8()).array();
+    QJsonArray new_arr;
+    
+    for (int i = 0; i < arr.size(); i++) {
+      QJsonObject entry = arr[i].toObject();
+      if (entry["id"].toString() == id) {
+        // 복구 로직: 이력에 저장된 'current' 값을 다시 Params에 기록
+        QJsonObject changes = entry["changes"].toObject();
+        for (const QString& group : changes.keys()) {
+          QJsonObject g_items = changes[group].toObject();
+          for (const QString& key : g_items.keys()) {
+            int prev_val = g_items[key].toObject()["current"].toInt();
+            Params().putInt(key.toStdString(), prev_val);
+          }
+        }
+      } else {
+        new_arr.append(entry);
+      }
+    }
+    
+    if (new_arr.isEmpty()) {
+      Params().remove("CarrotLearningHistory");
+    } else {
+      Params().put("CarrotLearningHistory", QJsonDocument(new_arr).toJson(QJsonDocument::Compact).toStdString());
+    }
+    refreshHistory();
+    ConfirmationDialog::alert(tr("이전 값으로 복구가 완료되었습니다."), this);
+  }
+}
+
+void AutoTunerHistoryPanel::deleteItem(const QString& id) {
+  if (ConfirmationDialog::confirm(tr("정말 이 항목을 삭제하시겠습니까?"), tr("삭제"), this)) {
+    QString raw = QString::fromStdString(Params().get("CarrotLearningHistory"));
+    QJsonArray arr = QJsonDocument::fromJson(raw.toUtf8()).array();
+    QJsonArray new_arr;
+    for (int i = 0; i < arr.size(); i++) {
+      if (arr[i].toObject()["id"].toString() != id) {
+        new_arr.append(arr[i]);
+      }
+    }
+    if (new_arr.isEmpty()) {
+      Params().remove("CarrotLearningHistory");
+    } else {
+      Params().put("CarrotLearningHistory", QJsonDocument(new_arr).toJson(QJsonDocument::Compact).toStdString());
+    }
+    refreshHistory();
+  }
+}
+
+void AutoTunerHistoryPanel::clearAll() {
+  if (ConfirmationDialog::confirm(tr("모든 이력을 삭제하시겠습니까? (이전 파라미터 값으로 되돌아가지 않습니다)"), tr("전체 삭제"), this)) {
+    Params().remove("CarrotLearningHistory");
+    refreshHistory();
+  }
+}
+
 SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
 
   // setup two main layouts
@@ -509,6 +688,7 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
     panels.append({tr("Firehose"), new FirehosePanel(this)});
   }
   panels.append({ tr("CarrotPilot"), new CarrotPanel(this) });
+  panels.append({ tr("튜닝 이력"), new AutoTunerHistoryPanel(this) });
   panels.append({ tr("Developer"), new DeveloperPanel(this) });
 
   nav_btns = new QButtonGroup(this);
@@ -692,6 +872,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   //cruiseToggles->addItem(new CValueControl("MyHighModeFactor", "DRIVEMODE: HIGH ratio(100%)", "AccelRatio control ratio", 100, 300, 10));
 
   latLongToggles = new ListWidget(this);
+  latLongToggles->addItem(new CValueControl("CarrotLearningActive", tr("Auto-Tuner: Learning"), tr("Learn from driver interventions (gas/brake) and recommend parameter adjustments when parking. 0=Off, 1=On"), 0, 1, 1));
   latLongToggles->addItem(new CValueControl("UseLaneLineSpeed", tr("Laneline mode speed(0)"), tr("Laneline mode, lat_mpc control used"), 0, 200, 5));
   latLongToggles->addItem(new CValueControl("UseLaneLineCurveSpeed", tr("Laneline mode curve speed(0)"), tr("Laneline mode, high speed only"), 0, 200, 5));
   latLongToggles->addItem(new CValueControl("AdjustLaneOffset", tr("AdjustLaneOffset(0)cm"), "", 0, 500, 5));

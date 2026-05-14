@@ -1475,6 +1475,22 @@
     },
     {
       "group": "화면패스",
+      "name": "CarrotLearningActive",
+      "title": "Auto-Tuner: 학습(0)",
+      "descr": "주행 중 운전자 개입(가속/제동) 데이터를 학습하여 파라미터 최적화를 추천합니다.\n 0: 끄기\n 1: 켜기",
+      "egroup": "DISP",
+      "etitle": "Auto-Tuner: Learning",
+      "edescr": "Learns from driver interventions (gas/brake) to recommend parameter adjustments.\n 0: Off, 1: On",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "cgroup": "显示设置",
+      "ctitle": "自动调整器: 学习",
+      "cdescr": "从驾驶员干预中学习以推荐参数调整。0: 关闭, 1: 开启"
+    },
+    {
+      "group": "화면패스",
       "name": "CarrotTireTrajectory",
       "title": "타이어 궤적 표시(0)",
       "descr": "타이어 궤적 그라데이션 표시 여부를 설정합니다.\n 0: 끄기\n 1: 켜기",

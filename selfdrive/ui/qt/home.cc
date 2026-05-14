@@ -4,10 +4,300 @@
 #include <QMouseEvent>
 #include <QStackedWidget>
 #include <QVBoxLayout>
+#include <QJsonDocument>
+#include <QJsonObject>
 
 #include "selfdrive/ui/qt/offroad/experimental_mode.h"
 #include "selfdrive/ui/qt/util.h"
 #include "selfdrive/ui/qt/widgets/prime.h"
+#include "selfdrive/ui/qt/widgets/input.h"
+#include "common/params.h"
+#include <QScrollArea>
+#include <QScroller>
+#include <QDialogButtonBox>
+#include <QCheckBox>
+#include <QMap>
+#include <QDateTime>
+#include <QDialogButtonBox>
+#include <QScrollArea>
+#include <QScroller>
+#include "selfdrive/ui/qt/qt_window.h"
+#include "selfdrive/ui/qt/widgets/input.h"
+
+class AutoTunerGuideDialog : public DialogBase {
+public:
+  explicit AutoTunerGuideDialog(const QString &html_content, QWidget *parent = nullptr) : DialogBase(parent) {
+    setWindowFlags(Qt::Popup | Qt::FramelessWindowHint);
+    setAttribute(Qt::WA_TranslucentBackground);
+    setStyleSheet(R"(
+      DialogBase { background: transparent; }
+      #container { background-color: #1b1b1b; border-radius: 20px; }
+      QLabel { color: #dddddd; font-size: 45px; margin: 20px; }
+      QPushButton { padding: 20px; height: 100px; font-size: 45px; border-radius: 10px; color: white; background-color: #465BEA; }
+      QPushButton:pressed { background-color: #3049F4; }
+    )");
+
+    QVBoxLayout *outer_layout = new QVBoxLayout(this);
+    outer_layout->setContentsMargins(40, 40, 40, 40); // Maximize layout
+
+    QFrame *container = new QFrame(this);
+    container->setObjectName("container");
+    QVBoxLayout *main_layout = new QVBoxLayout(container);
+    main_layout->setContentsMargins(20, 20, 20, 20);
+
+    QLabel *text = new QLabel(html_content);
+    text->setWordWrap(true);
+    text->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    
+    QScrollArea *scroll = new QScrollArea();
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setStyleSheet("QScrollArea { background: transparent; } QWidget { background: transparent; }");
+    QScroller::grabGesture(scroll->viewport(), QScroller::LeftMouseButtonGesture);
+    scroll->setWidget(text);
+
+    main_layout->addWidget(scroll, 1);
+
+    QPushButton *btn_ok = new QPushButton(tr("확인"));
+    btn_ok->setFixedWidth(400);
+    main_layout->addWidget(btn_ok, 0, Qt::AlignCenter);
+
+    outer_layout->addWidget(container);
+
+    connect(btn_ok, &QPushButton::clicked, this, &QDialog::accept);
+  }
+
+  void showEvent(QShowEvent *event) override {
+    setMainWindow(this);
+    QDialog::showEvent(event);
+  }
+};
+
+class AutoTunerDialog : public DialogBase {
+public:
+  QMap<QString, QCheckBox*> item_checkboxes;
+  QJsonObject recommendations;
+
+  explicit AutoTunerDialog(const QString &title_text, const QJsonObject &recs, QWidget *parent = nullptr) : DialogBase(parent), recommendations(recs) {
+    setWindowFlags(Qt::Popup | Qt::FramelessWindowHint);
+    setAttribute(Qt::WA_TranslucentBackground);
+    setStyleSheet(R"(
+      DialogBase { background: transparent; }
+      #container { background-color: #2b2b2b; border-radius: 30px; border: 2px solid #555555; }
+      QLabel { color: white; }
+      QCheckBox { font-size: 45px; color: white; spacing: 20px; }
+      QCheckBox::indicator { width: 50px; height: 50px; }
+      QPushButton { padding: 25px; font-size: 45px; font-weight: 500; border-radius: 10px; color: white; background-color: #444444; }
+      QPushButton:pressed { background-color: #333333; }
+    )");
+
+    QVBoxLayout *outer_layout = new QVBoxLayout(this);
+    outer_layout->setContentsMargins(200, 40, 200, 40); // Maximize vertically, slightly wider horizontally
+
+    QFrame *container = new QFrame(this);
+    container->setObjectName("container");
+    QVBoxLayout *main_layout = new QVBoxLayout(container);
+    main_layout->setContentsMargins(40, 30, 40, 30);
+    main_layout->setSpacing(15);
+
+    QLabel *title = new QLabel(title_text);
+    title->setStyleSheet("font-size: 55px; font-weight: bold; margin-bottom: 10px;");
+    title->setAlignment(Qt::AlignCenter);
+    main_layout->addWidget(title);
+
+    QScrollArea *scroll = new QScrollArea();
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setStyleSheet("QScrollArea { background: transparent; } QWidget { background: transparent; }");
+    QScroller::grabGesture(scroll->viewport(), QScroller::LeftMouseButtonGesture);
+    
+    QWidget *scroll_widget = new QWidget();
+    QVBoxLayout *scroll_layout = new QVBoxLayout(scroll_widget);
+    scroll_layout->setContentsMargins(0, 0, 0, 0);
+    scroll_layout->setSpacing(15);
+
+    for (const QString& group : recommendations.keys()) {
+      QJsonObject group_items = recommendations[group].toObject();
+      
+      QString short_group;
+      bool is_en = (QString::fromStdString(Params().get("LanguageSetting")) != "main_ko");
+      if (is_en && group.contains("(")) {
+        short_group = group.split("(").last().replace(")", "");
+      } else {
+        short_group = group.split(" ").first();
+      }
+
+      for (const QString& key : group_items.keys()) {
+        QJsonObject info = group_items[key].toObject();
+        QString item_text = QString("<span style='color:#aaaaaa;'>[%1]</span> <b>%2</b> <span style='font-size:40px; color:#bbbbbb;'>[%3]</span> &nbsp;:&nbsp; %4 ➔ <span style='color:#00ff00; font-weight:bold;'>%5</span>")
+                                    .arg(short_group)
+                                    .arg(key)
+                                    .arg(info["band_kph"].toString())
+                                    .arg(info["current"].toInt())
+                                    .arg(info["recommended"].toInt());
+        
+        QCheckBox *cb = new QCheckBox();
+        cb->setText(item_text);
+        // Qt uses rich text in QCheckBox only if we set it this way or implicitly, but since Qt 5.11 text formats are auto-detected.
+        // If rich text doesn't render in QCheckBox text, we will use a QLabel alongside a checkbox.
+        // Wait, QCheckBox text does not support rich text by default natively in all styles.
+        // Let's create a horizontal layout for each item: Checkbox + QLabel
+        
+        QHBoxLayout *item_layout = new QHBoxLayout();
+        item_layout->setContentsMargins(0, 0, 0, 15);
+        item_layout->setSpacing(20);
+        
+        QCheckBox *item_cb = new QCheckBox();
+        item_cb->setChecked(true);
+        item_cb->setStyleSheet("QCheckBox::indicator { width: 50px; height: 50px; }");
+        
+        QLabel *item_label = new QLabel(item_text);
+        item_label->setStyleSheet("font-size: 45px; color: white;");
+        item_label->setWordWrap(true);
+        
+        item_layout->addWidget(item_cb);
+        item_layout->addWidget(item_label, 1);
+        
+        scroll_layout->addLayout(item_layout);
+        item_checkboxes[key] = item_cb;
+      }
+    }
+    scroll_layout->addStretch();
+    scroll->setWidget(scroll_widget);
+    main_layout->addWidget(scroll, 1);
+
+    QHBoxLayout *btn_layout = new QHBoxLayout();
+    
+    QPushButton *btn_guide = new QPushButton(tr("사용 안내 (Guide)"));
+    btn_guide->setStyleSheet("background-color: #3b5998;");
+    
+    QPushButton *btn_later = new QPushButton(tr("나중에 (Later)"));
+    btn_later->setStyleSheet("background-color: #555555;");
+    
+    QPushButton *btn_clear = new QPushButton(tr("학습 초기화 (Clear)"));
+    btn_clear->setStyleSheet("background-color: #8a1d1d;");
+    
+    QPushButton *btn_apply = new QPushButton(tr("선택 적용 (Apply Selected)"));
+    btn_apply->setStyleSheet("background-color: #178644;");
+
+    btn_layout->addWidget(btn_guide);
+    btn_layout->addWidget(btn_later);
+    btn_layout->addWidget(btn_clear);
+    btn_layout->addWidget(btn_apply);
+    main_layout->addLayout(btn_layout);
+
+    outer_layout->addWidget(container);
+
+    connect(btn_guide, &QPushButton::clicked, this, [=]() {
+      QString guide_html;
+      if (QString::fromStdString(Params().get("LanguageSetting")) != "main_ko") {
+        guide_html = R"(
+        <div style='font-size: 45px;'>
+        <div style='text-align:center; font-size: 55px; font-weight: bold; margin-bottom: 20px;'>🥕 CarrotPilot Auto-Tuner Guide</div><hr>
+        <div style='font-size: 50px; font-weight: bold; margin-top: 20px; margin-bottom: 10px;'>📊 Data Collection &amp; Application</div>
+        <ul>
+        <li><b>Data Collection</b>: Records driving data in the background, focusing on <b>overrides (gas pedal)</b> and <b>interventions (brake pedal)</b>.</li>
+        <li><b>Pattern Analysis</b>: Analyzes the gap between current settings and driving behavior to calculate ideal parameters.</li>
+        <li><b>Recommendation &amp; Apply</b>: Shows a popup when parking (P). Click <b>[Apply Selected]</b> to apply. (Manage in <b>Tuning History</b>)</li>
+        </ul><hr>
+        <div style='font-size: 50px; font-weight: bold; margin-top: 20px; margin-bottom: 10px;'>⚙️ Group Parameter Details</div>
+        <b>🚀 [Acceleration]</b><br>
+        Adjusts cruise control acceleration capabilities.<br>
+        - <b>CruiseMaxVals0~6</b>: Increases accel limits per speed band to fix sluggish starts and acceleration.<br>
+        <b>🚙 [Driving]</b><br>
+        Adjusts longitudinal (brake) control.<br>
+        - <b>JLeadFactor3</b>: If the driver brakes frequently, it tunes the system to start braking earlier and smoother.<br>
+        <b>🛣️ [Following Distance]</b><br>
+        Optimizes highway following distance. If gas is pressed often while following a lead car at speed, it means the gap is too wide. Recommends decreasing TFollowGap for that gap level.<br>
+        - <b>TFollowGap1~4</b>: Per-GAP-level time-gap setting (seconds x100). Lower = closer.<br>
+        <b>🎛️ [Dynamic Control]</b><br>
+        If multiple brake params trigger at once, only the strongest signal is recommended this session to avoid over-correction. Others deferred to next session.<br>
+        - <b>DynamicTFollow</b>: When lead car decelerates suddenly, driver may brake to compensate. More events = system widens gap faster when lead decelerates. (0=off)<br>
+        - <b>TFollowDecelBoost</b>: During strong ego deceleration, gap shrinks naturally. More events = system maintains extra buffer during braking. (default 10, range 0~100)<br>
+        <b>🔄 [Steering]</b><br>
+        Adjusts handling responsiveness.<br>
+        - <b>PathOffset</b>: Compensates for lane drifts.<br>
+        - <b>SteerActuatorDelay</b>: Reduces cornering delay.<br>
+        <hr>
+        <div style='font-size: 50px; font-weight: bold; margin-top: 20px; margin-bottom: 10px;'>🧠 Autonomous Pattern Detection</div>
+        Even without your pedal input, the system monitors its own control quality:<br>
+        - <b>(auto) Late Braking</b>: If the system brakes too hard at the last moment, it recommends increasing JLeadFactor3 to start braking earlier.<br>
+        - <b>(auto) Aggressive Accel</b>: If the system accelerates too harshly relative to the lead car, it recommends lowering CruiseMaxVals.<br>
+        - <b>(auto) Hunting</b>: If the system oscillates between accel/decel while following, it recommends widening the gap for stability.
+        </div>
+        )";
+      } else {
+        guide_html = R"(
+        <div style='font-size: 45px;'>
+        <div style='text-align:center; font-size: 55px; font-weight: bold; margin-bottom: 20px;'>🥕 CarrotPilot Auto-Tuner 사용 안내</div><hr>
+        <div style='font-size: 50px; font-weight: bold; margin-top: 20px; margin-bottom: 10px;'>📊 데이터 수집 및 적용 방식</div>
+        <ul>
+        <li><b>주행 중 데이터 수집</b>: 백그라운드에서 차량의 주행 데이터를 실시간으로 기록하며, 특히 <b>오버라이드(가속 페달 밟음)</b>와 <b>개입(직접 브레이크)</b> 순간을 중점 수집합니다.</li>
+        <li><b>패턴 분석</b>: 현재 설정값과 운전자 주행 성향의 차이를 분석하여 이상적인 파라미터를 계산합니다.</li>
+        <li><b>추천 및 적용</b>: 주차(P) 시 팝업으로 추천값을 안내하며, <b>[선택 적용]</b>을 누르면 즉시 반영됩니다. (설정의 <b>튜닝 이력</b>에서 이력 확인/삭제 가능)</li>
+        </ul><hr>
+        <div style='font-size: 50px; font-weight: bold; margin-top: 20px; margin-bottom: 10px;'>⚙️ 그룹별 튜닝 설정 안내</div>
+        <b>🚀 [가속] (Acceleration)</b><br>
+        오픈파일럿의 크루즈 가속 능력을 조정합니다.<br>
+        - <b>CruiseMaxVals0~6</b>: 속도 대역별 가속 한계치를 높여 굼뜬 출발과 답답한 가속을 개선합니다.<br>
+        <b>🚙 [주행] (Driving)</b><br>
+        종방향(브레이크) 제어 능력을 조정합니다.<br>
+        - <b>JLeadFactor3</b>: 운전자가 브레이크를 자주 밟을 경우, 앞차가 가까워질 때 조금 더 일찍 감속을 시작하도록 유도합니다.<br>
+        <b>🛣️ [거리] (Following Distance)</b><br>
+        고속도 주행 중 선행차 추종 거리를 최적화합니다. 선행차가 있는데도 가속 페달을 자주 밟는다면, 시스템이 지나치게 거리를 넓게 유지하는 것으로 판단하여 해당 GAP의 TFollowGap 값을 줄이는 방향으로 추천합니다.<br>
+        - <b>TFollowGap1~4</b>: GAP 단계별 추종 거리 시간(x0.01초). 낙을수록 가깄워집니다. 최소 0.70초 보장.<br>
+        <b>🎛️ [동적제어] (Dynamic Control)</b><br>
+        브레이크 관련 파라미터가 동시 여러 개 발동되면 합산 과보정 위험이 있어, 이벤트가 가장 많은 1개만 먼저 추천합니다. 나머지는 다음 세션 재평가.<br>
+        - <b>DynamicTFollow</b>: 앞차가 급감속할 때 브레이크 개입이 쌓이면, 시스템이 앞차 감속에 더 빠르게 반응하도록 조정합니다. (0=사용 안 함)<br>
+        - <b>TFollowDecelBoost</b>: 내 차 강감속 중 브레이크 개입이 쌓이면, 감속이 강할수록 자동으로 더 넉넉한 간격을 유지하도록 보완합니다. (기본값 10, 범위 0~100)<br>
+        <b>🔄 [조향] (Steering)</b><br>
+        핸들링 반응성을 조정합니다.<br>
+        - <b>PathOffset / SteerActuatorDelay</b>: 조향 편차 및 지연 보정.<br>
+        <hr>
+        <div style='font-size: 50px; font-weight: bold; margin-top: 20px; margin-bottom: 10px;'>🧠 자율 주행 패턴 자동 감지</div>
+        운전자가 페달을 밟지 않아도, 시스템은 스스로의 제어 품질을 감시합니다:<br>
+        - <b>(auto) 늦은 제동</b>: 시스템이 뒤늦게 급제동을 거는 패턴이 감지되면, 더 일찍 부드럽게 감속하도록 제동 시점 상향을 추천합니다.<br>
+        - <b>(auto) 과도한 가속</b>: 선행차 흐름에 비해 시스템이 너무 거칠게 가속하면, 가속 한계치를 낮추도록 추천합니다.<br>
+        - <b>(auto) 주행 요동(Hunting)</b>: 가속과 감속을 반복하며 거리를 불안정하게 맞추는 패턴이 감지되면, 제어의 여유를 위해 차간 거리를 넓히도록 추천합니다.
+        </div>
+        )";
+      }
+      AutoTunerGuideDialog *d = new AutoTunerGuideDialog(guide_html, this);
+      d->exec();
+      d->deleteLater();
+    });
+
+    connect(btn_later, &QPushButton::clicked, this, &QDialog::reject);
+    
+    connect(btn_clear, &QPushButton::clicked, [=]() {
+      if (ConfirmationDialog::confirm(tr("적용하지 않고 현재까지의 모든 학습 데이터를 삭제하시겠습니까?"), tr("초기화"), this)) {
+        Params().putBool("CarrotLearningClear", true);
+        this->reject();
+      }
+    });
+
+    connect(btn_apply, &QPushButton::clicked, this, &QDialog::accept);
+  }
+
+  QJsonObject getSelectedItems() {
+    QJsonObject selected;
+    for (const QString& group : recommendations.keys()) {
+      QJsonObject group_items = recommendations[group].toObject();
+      QJsonObject selected_group_items;
+      
+      for (const QString& key : group_items.keys()) {
+        if (item_checkboxes.contains(key) && item_checkboxes[key]->isChecked()) {
+          selected_group_items[key] = group_items[key];
+        }
+      }
+      
+      if (!selected_group_items.isEmpty()) {
+        selected[group] = selected_group_items;
+      }
+    }
+    return selected;
+  }
+};
 
 #ifdef ENABLE_MAPS
 #include "selfdrive/ui/qt/maps/map_settings.h"
@@ -80,6 +370,66 @@ void HomeWindow::updateState(const UIState &s) {
       break;
   }
 
+  // Auto-Tuner: 주행 중 주차(P단) 전환 시 즉시 팝업 표시 (1초 주기로 체크)
+  static int carrot_tuner_frame = 0;
+  if (carrot_tuner_frame++ % 20 == 0) {
+    Params params;
+    if (params.getBool("CarrotLearningPopupReady")) {
+      // 중복 팝업 방지를 위해 즉시 플래그 해제
+      params.putBool("CarrotLearningPopupReady", false);
+      
+      QString raw = QString::fromStdString(params.get("CarrotLearningRecommend"));
+      QJsonDocument doc = QJsonDocument::fromJson(raw.toUtf8());
+      if (!raw.isEmpty() && doc.isObject()) {
+        QJsonObject obj = doc.object();
+        QString msg = tr("Auto-Tuner: Driving pattern learned!");
+        
+        AutoTunerDialog *dialog = new AutoTunerDialog(msg, obj, this);
+        connect(dialog, &QDialog::accepted, [=]() {
+          Params p;
+          QJsonObject selected = dialog->getSelectedItems();
+          if (!selected.isEmpty()) {
+            QJsonArray history_array;
+            QString history_raw = QString::fromStdString(p.get("CarrotLearningHistory"));
+            if (!history_raw.isEmpty()) {
+              QJsonDocument h_doc = QJsonDocument::fromJson(history_raw.toUtf8());
+              if (h_doc.isArray()) history_array = h_doc.array();
+            }
+
+            QJsonObject history_entry;
+            history_entry["timestamp"] = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm");
+            history_entry["changes"] = selected;
+            history_entry["id"] = QString::number(QDateTime::currentMSecsSinceEpoch());
+            
+            history_array.prepend(history_entry);
+            while (history_array.size() > 50) history_array.removeLast();
+
+            p.put("CarrotLearningHistory", QJsonDocument(history_array).toJson(QJsonDocument::Compact).toStdString());
+
+            for (const QString& group : selected.keys()) {
+              QJsonObject group_items = selected[group].toObject();
+              for (const QString& key : group_items.keys()) {
+                QJsonObject info = group_items[key].toObject();
+                int recommended = info["recommended"].toInt(0);
+                if (recommended > 0) {
+                  p.put(key.toStdString(), std::to_string(recommended));
+                }
+              }
+            }
+          }
+          Params().putBool("CarrotLearningClear", true);
+          dialog->deleteLater();
+        });
+        
+        connect(dialog, &QDialog::rejected, [=]() {
+          dialog->deleteLater();
+        });
+
+        setMainWindow(dialog);
+      }
+    }
+  }
+
 }
 
 void HomeWindow::offroadTransition(bool offroad) {
@@ -87,9 +437,10 @@ void HomeWindow::offroadTransition(bool offroad) {
   sidebar->setVisible(offroad);
   UIState* s = uiState();
   if (offroad) {
-    
+
     s->scene._current_carrot_display = 1;
     slayout->setCurrentWidget(home);
+
   } else {
     slayout->setCurrentWidget(onroad);
 
