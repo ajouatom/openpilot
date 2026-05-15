@@ -1123,6 +1123,22 @@
     },
     {
       "group": "시작",
+      "name": "AlwaysLateral",
+      "title": "상시 조향",
+      "descr": "크루즈가 켜져있지 않아도 조향제어를 허용합니다.\n0: 끄기, 1: 켜기",
+      "egroup": "START",
+      "etitle": "Always Lateral",
+      "edescr": "Allow lateral control even when cruise is not active.\n0: OFF, 1: ON",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "cgroup": "启动设置",
+      "ctitle": "全时横向控制",
+      "cdescr": "即使巡航未激活，也允许横向控制。\n0: 关闭, 1: 开启"
+    },
+    {
+      "group": "시작",
       "name": "RecordRoadCam",
       "title": "RoadCam녹화",
       "descr": "저장소에 비디오 녹화\n0:녹화안함,1:일반카메라\n2:일반카메라+광각카메라",
