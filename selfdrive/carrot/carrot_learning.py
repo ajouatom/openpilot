@@ -55,7 +55,7 @@ _SR_RATE_STEP_UNIT = 3          # SteerRatioRate 한 번 추천 시 변화량 (+
 
 # ── Phase 3 상수 ─────────────────────────────────────────────────────
 _BRAKE_MIN_COUNT = 5            # 추천을 위한 최소 수동 브레이크 횟수
-_JLEAD_STEP_UNIT = 10           # JLeadFactor3 한 번 추천 시 변화량
+_JLEAD_STEP_UNIT = 20           # JLeadFactor3 한 번 추천 시 변화량 (강화: 10 -> 20)
 _JLEAD_REDUCE_STEP = -7         # 제동 과다 시 변화량
 _JLEAD_GAS_THRESHOLD_SEC = 5.0  # 제동 중 가속 개입 누적 기준 (초)
 
@@ -82,6 +82,7 @@ _TFOLLOW_MIN_LEAD_DREL = 120.0     # 선행차 거리가 이보다 가까우면 
 _TFOLLOW_MIN_V_KPH = 60.0          # 고속도로 주행 구간에서만 학습
 _TFOLLOW_WIDEN_STEP = 5            # 증가 추천 (+0.05s)
 _TFOLLOW_BRAKE_THRESHOLD_SEC = 10.0 # 거리 부족으로 인한 브레이크 누적 기준 (초)
+_TFOLLOW_SPEED_FACTOR_STEP = 5     # 고속 보정치 증가 단위 (+0.05)
 _AUTO_HUNTING_THRESHOLD = 0.8      # 자율 주행 중 가감속 변동(Hunting) 감지 임계치 (m/s^2)
 
 # ── 공통 ─────────────────────────────────────────────────────────────
@@ -128,6 +129,7 @@ class CarrotLearner:
     self._tfollow_gas_acc = [0.0] * 4
     self._tfollow_brake_acc = [0.0] * 4 # 수동 브레이크 개입
     self._tfollow_brake_auto_acc = [0.0] * 4 # 자율 주행 중 헌팅 감지
+    self._tfollow_speed_brake_acc = 0.0      # 고속 주행 시 브레이크 개입 누적
     self._current_gap = 1  # 현재 활성화된 GAP 단계 (1~4)
     # Phase 5 (DynamicTFollow / TFollowDecelBoost)
     self._dyn_brake_count = 0    # 앞차 급감속 중 브레이크 개입 횟수
@@ -254,8 +256,12 @@ class CarrotLearner:
         if (self._prev_a_ego > 0.3 and a_ego < -0.3) or (self._prev_a_ego < -0.3 and a_ego > 0.3):
           self._accel_swing_count += 1
           if self._accel_swing_count > 8:
-            self._tfollow_brake_acc[gap_idx] += _DT * 0.2
+            self._tfollow_brake_auto_acc[gap_idx] += _DT * 2.0
             self._accel_swing_count = 0
+            
+      # 고속 주행(80km/h 이상) 시 추가 거리 보정 학습
+      if v_ego_kph >= 80.0 and brake_pressed:
+        self._tfollow_speed_brake_acc += _DT
 
     # 주차 감지 (이전에 주차가 아니었고, 주행을 한 번이라도 한 경우에만 발동)
     if gear_park and not self._prev_gear_park and self._has_driven:
@@ -325,6 +331,7 @@ class CarrotLearner:
       loaded4_auto = data.get("tfollow_brake_auto_acc", [0.0] * 4)
       if len(loaded4_auto) == 4:
         self._tfollow_brake_auto_acc = [float(x) for x in loaded4_auto]
+      self._tfollow_speed_brake_acc = float(data.get("tfollow_speed_brake_acc", 0.0))
       # Phase 5
       p5 = data.get("phase5", {})
       self._dyn_brake_count = int(p5.get("dyn_brake_count", 0))
@@ -350,6 +357,7 @@ class CarrotLearner:
       "tfollow_gas_acc": self._tfollow_gas_acc,
       "tfollow_brake_acc": self._tfollow_brake_acc,
       "tfollow_brake_auto_acc": self._tfollow_brake_auto_acc,
+      "tfollow_speed_brake_acc": self._tfollow_speed_brake_acc,
       "gas_dec_auto_acc": self._gas_dec_auto_acc,
       "phase5": {
         "dyn_brake_count": self._dyn_brake_count,
@@ -494,6 +502,18 @@ class CarrotLearner:
       else:
         continue
 
+    # ── Phase 6: TFollowSpeedFactor (고속 차간 거리 보정) ───────────
+    if self._tfollow_speed_brake_acc >= _TFOLLOW_BRAKE_THRESHOLD_SEC:
+      current_sf = self._params.get_int("TFollowSpeedFactor")
+      recommended_sf = min(100, current_sf + _TFOLLOW_SPEED_FACTOR_STEP)
+      if recommended_sf != current_sf:
+        result["거리 (Following Distance)"]["TFollowSpeedFactor"] = {
+          "current": current_sf,
+          "recommended": recommended_sf,
+          "band_kph": "high-speed safety (>80km/h)",
+          "sec": round(self._tfollow_speed_brake_acc, 1),
+        }
+
       if recommended_val != current_val:
         result["거리 (Following Distance)"][key] = {
           "current": current_val,
@@ -586,6 +606,7 @@ class CarrotLearner:
     self._tfollow_gas_acc = [0.0] * 4
     self._tfollow_brake_acc = [0.0] * 4
     self._tfollow_brake_auto_acc = [0.0] * 4
+    self._tfollow_speed_brake_acc = 0.0
     self._dyn_brake_count = 0
     self._decel_brake_count = 0
     self._params.remove("CarrotLearningData")

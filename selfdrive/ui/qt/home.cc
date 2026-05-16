@@ -206,7 +206,9 @@ public:
         - <b>CruiseMaxVals0~6</b>: Increases accel limits per speed band to fix sluggish starts and acceleration.<br>
         <b>🚙 [Driving]</b><br>
         Adjusts longitudinal (brake) control.<br>
-        - <b>JLeadFactor3</b>: If the driver brakes frequently, it tunes the system to start braking earlier and smoother.<br>
+        - <b>JLeadFactor3</b>: Controls how early the car starts braking for a lead vehicle. Higher values = earlier, smoother braking (range 50~200).<br>
+        - <b>TFollowSpeedFactor</b>: Automatically widens the following distance as speed increases above 80km/h for high-speed cruising safety.<br>
+        - <b>DynamicTFollow</b>: Adjusts gap based on lead vehicle's sudden acceleration or deceleration.<br>
         <b>🛣️ [Following Distance]</b><br>
         Optimizes highway following distance. If gas is pressed often while following a lead car at speed, it means the gap is too wide. Recommends decreasing TFollowGap for that gap level.<br>
         - <b>TFollowGap1~4</b>: Per-GAP-level time-gap setting (seconds x100). Lower = closer.<br>
@@ -242,8 +244,9 @@ public:
         - <b>CruiseMaxVals0~6</b>: 속도 대역별 가속 한계치를 높여 굼뜬 출발과 답답한 가속을 개선합니다.<br>
         <b>🚙 [주행] (Driving)</b><br>
         종방향(브레이크) 제어 능력을 조정합니다.<br>
-        - <b>JLeadFactor3</b>: 운전자가 브레이크를 자주 밟을 경우, 앞차가 가까워질 때 조금 더 일찍 감속을 시작하도록 유도합니다.<br>
-        <b>🛣️ [거리] (Following Distance)</b><br>
+        - <b>JLeadFactor3</b>: 선행차에 대한 제동 시작 시점입니다. 수치가 높을수록 더 멀리서 부드럽게 감속을 시작합니다. (범위 50~200)<br>
+        - <b>TFollowSpeedFactor</b>: 80km/h 이상의 고속 주행 시 자동으로 차간 거리를 추가로 확보하여 안전 마진을 늘려줍니다.<br>
+        - <b>DynamicTFollow</b>: 선행차의 거친 움직임(급가감속)에 대응하여 일시적으로 거리를 조절합니다.<br>
         고속도 주행 중 선행차 추종 거리를 최적화합니다. 선행차가 있는데도 가속 페달을 자주 밟는다면, 시스템이 지나치게 거리를 넓게 유지하는 것으로 판단하여 해당 GAP의 TFollowGap 값을 줄이는 방향으로 추천합니다.<br>
         - <b>TFollowGap1~4</b>: GAP 단계별 추종 거리 시간(x0.01초). 낙을수록 가깄워집니다. 최소 0.70초 보장.<br>
         <b>🎛️ [동적제어] (Dynamic Control)</b><br>

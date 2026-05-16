@@ -137,6 +137,7 @@ class CarrotPlanner:
     self.xDistToTurn = 0
     self.atcType = ""
     self.atc_active = False
+    self.tFollowSpeedFactor = 0.0 # 고속 주행 시 추가 차간 거리 가중치
 
     self._stop_x_rl = None
     self.last_event_time = 0.0
@@ -165,6 +166,7 @@ class CarrotPlanner:
       self.tFollowGap2 = self.params.get_float("TFollowGap2") / 100.
       self.tFollowGap3 = self.params.get_float("TFollowGap3") / 100.
       self.tFollowGap4 = self.params.get_float("TFollowGap4") / 100.
+      self.tFollowSpeedFactor = self.params.get_float("TFollowSpeedFactor") / 100.
       self.dynamicTFollow = self.params.get_float("DynamicTFollow") / 100.
       self.dynamicTFollowLC = self.params.get_float("DynamicTFollowLC") / 100.
       self.enableSpeedTF = self.params.get_int("EnableSpeedTF")
@@ -252,6 +254,12 @@ class CarrotPlanner:
       s = float(np.clip(v_ego * CV.MS_TO_KPH / 100.0, 0.0, 1.0))
       scale = (1.0 - reduce) + reduce * s
       tf_target *= scale
+
+    # 고속 주행 시 추가 차간 거리 가중치 (TFollowSpeedFactor)
+    # v_ego가 높을수록 차간 거리를 추가로 확보함
+    if self.tFollowSpeedFactor > 0:
+      speed_boost = float(np.clip((v_ego * CV.MS_TO_KPH - 60.0) / 100.0, 0.0, 1.0))
+      tf_target += speed_boost * self.tFollowSpeedFactor
 
     return float(tf_target)
 

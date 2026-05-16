@@ -2003,6 +2003,19 @@
     },
     {
       "group": "차량간격",
+      "name": "TFollowSpeedFactor",
+      "title": "고속 차간거리 보정x0.01s(0)",
+      "descr": "80km/h 이상의 고속 주행 시 추가로 확보할 차간 거리 가중치",
+      "egroup": "FDIST",
+      "etitle": "TFollow Speed Factor",
+      "edescr": "Additional following distance factor at high speeds (>80km/h)",
+      "min": 0,
+      "max": 100,
+      "default": 0,
+      "unit": 5
+    },
+    {
+      "group": "차량간격",
       "name": "DynamicTFollow",
       "title": "동적 차간거리 설정(0)",
       "descr": "선행차의 움직임 변화에 따라 차간거리를 동적으로 조절",
