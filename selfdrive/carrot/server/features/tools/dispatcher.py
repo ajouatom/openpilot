@@ -14,6 +14,7 @@ import asyncio
 import glob
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -32,6 +33,8 @@ from .actions import normalize_action, validate_action, validate_shell_argv
 
 
 TMUX_LOG_PATH = "/data/media/tmux.log"
+GIT_UPDATE_COMMIT_LIMIT = 20
+GIT_UPDATE_DISPLAY_LIMIT = 3
 
 
 def capture_tmux_log_sync() -> Tuple[int, str]:
@@ -56,6 +59,192 @@ def capture_tmux_log_sync() -> Tuple[int, str]:
   return 0, ""
 
 
+def _safe_int(value: Any, default: int = 0) -> int:
+  try:
+    return int(str(value).strip())
+  except Exception:
+    return default
+
+
+def _parse_git_shortstat(text: str) -> Dict[str, int]:
+  body = str(text or "")
+
+  def match_count(pattern: str) -> int:
+    match = re.search(pattern, body)
+    return _safe_int(match.group(1)) if match else 0
+
+  return {
+    "files": match_count(r"(\d+)\s+files?\s+changed"),
+    "insertions": match_count(r"(\d+)\s+insertions?\(\+\)"),
+    "deletions": match_count(r"(\d+)\s+deletions?\(-\)"),
+  }
+
+
+def _parse_git_commit_lines(text: str) -> List[Dict[str, str]]:
+  commits: List[Dict[str, str]] = []
+  for line in str(text or "").splitlines():
+    line = line.strip()
+    if not line:
+      continue
+    parts = line.split("\t", 1)
+    if len(parts) == 2:
+      commit_hash, message = parts
+    else:
+      commit_hash, message = "", parts[0]
+    commits.append({"hash": commit_hash.strip(), "message": message.strip()})
+  return commits
+
+
+def _format_commit_count(count: int) -> str:
+  return f"{count} commit" + ("" if count == 1 else "s")
+
+
+def _format_git_update_summary(
+  *,
+  before: str,
+  after: str,
+  commit_count: int,
+  commits: List[Dict[str, str]],
+  shortstat: Dict[str, int],
+  raw_out: str,
+) -> Dict[str, Any]:
+  updated = bool(before and after and before != after and commit_count > 0)
+  if not updated:
+    display = "Already up to date"
+    return {
+      "updated": False,
+      "before": before,
+      "after": after,
+      "commit_count": 0,
+      "commits": [],
+      "files_changed": 0,
+      "insertions": 0,
+      "deletions": 0,
+      "display": display,
+      "card_summary": display,
+      "detail": (display + "\n\nGit output\n" + str(raw_out or "").strip()).strip(),
+    }
+
+  shown = commits[:GIT_UPDATE_DISPLAY_LIMIT]
+  remaining = max(0, commit_count - len(shown))
+  lines = ["New Updates", ""]
+  for commit in shown:
+    message = commit.get("message") or commit.get("hash") or "Update"
+    lines.append(message)
+  if remaining > 0:
+    lines.append(f"and {remaining} more commits")
+
+  stat_bits = [_format_commit_count(commit_count)]
+  files = int(shortstat.get("files") or 0)
+  insertions = int(shortstat.get("insertions") or 0)
+  deletions = int(shortstat.get("deletions") or 0)
+  if files:
+    stat_bits.append(f"{files} file" + ("" if files == 1 else "s"))
+  stat_bits.append(f"+{insertions} -{deletions}")
+  lines.extend(["", " | ".join(stat_bits)])
+  display = "\n".join(lines).strip()
+
+  commit_log = "\n".join(
+    f"{commit.get('hash', '').strip()} {commit.get('message', '').strip()}".strip()
+    for commit in commits
+  ).strip()
+  detail_parts = [display]
+  if commit_log:
+    detail_parts.extend(["", "Commit log", commit_log])
+  raw = str(raw_out or "").strip()
+  if raw:
+    detail_parts.extend(["", "Git output", raw])
+
+  return {
+    "updated": True,
+    "before": before,
+    "after": after,
+    "commit_count": commit_count,
+    "commits": commits,
+    "files_changed": files,
+    "insertions": insertions,
+    "deletions": deletions,
+    "display": display,
+    "card_summary": display,
+    "detail": "\n".join(detail_parts).strip(),
+  }
+
+
+async def _build_git_update_summary_async(repo_dir: str, before: str, after: str, raw_out: str) -> Dict[str, Any]:
+  if not before or not after or before == after:
+    return _format_git_update_summary(
+      before=before,
+      after=after,
+      commit_count=0,
+      commits=[],
+      shortstat={},
+      raw_out=raw_out,
+    )
+
+  range_spec = f"{before}..{after}"
+  rc_count, count_out = await jobs.capture_exec(["git", "rev-list", "--count", range_spec], cwd=repo_dir, timeout=15)
+  commit_count = _safe_int(count_out) if rc_count == 0 else 0
+  rc_log, log_out = await jobs.capture_exec(
+    ["git", "log", "--format=%h%x09%s", f"-{GIT_UPDATE_COMMIT_LIMIT}", range_spec],
+    cwd=repo_dir,
+    timeout=15,
+  )
+  commits = _parse_git_commit_lines(log_out if rc_log == 0 else "")
+  rc_stat, stat_out = await jobs.capture_exec(["git", "diff", "--shortstat", before, after], cwd=repo_dir, timeout=20)
+  shortstat = _parse_git_shortstat(stat_out if rc_stat == 0 else "")
+  return _format_git_update_summary(
+    before=before,
+    after=after,
+    commit_count=commit_count or len(commits),
+    commits=commits,
+    shortstat=shortstat,
+    raw_out=raw_out,
+  )
+
+
+def _build_git_update_summary_sync(repo_dir: str, before: str, after: str, raw_out: str) -> Dict[str, Any]:
+  if not before or not after or before == after:
+    return _format_git_update_summary(
+      before=before,
+      after=after,
+      commit_count=0,
+      commits=[],
+      shortstat={},
+      raw_out=raw_out,
+    )
+
+  range_spec = f"{before}..{after}"
+
+  def run_git(args: List[str], timeout: float = 20) -> Tuple[int, str]:
+    try:
+      proc = subprocess.run(
+        ["git", *args],
+        cwd=repo_dir,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+      )
+      out = (proc.stdout or "") + (("\n" + proc.stderr) if proc.stderr else "")
+      return proc.returncode, out.strip()
+    except Exception as exc:
+      return 1, str(exc)
+
+  rc_count, count_out = run_git(["rev-list", "--count", range_spec], timeout=15)
+  commit_count = _safe_int(count_out) if rc_count == 0 else 0
+  rc_log, log_out = run_git(["log", "--format=%h%x09%s", f"-{GIT_UPDATE_COMMIT_LIMIT}", range_spec], timeout=15)
+  commits = _parse_git_commit_lines(log_out if rc_log == 0 else "")
+  rc_stat, stat_out = run_git(["diff", "--shortstat", before, after], timeout=20)
+  shortstat = _parse_git_shortstat(stat_out if rc_stat == 0 else "")
+  return _format_git_update_summary(
+    before=before,
+    after=after,
+    commit_count=commit_count or len(commits),
+    commits=commits,
+    shortstat=shortstat,
+    raw_out=raw_out,
+  )
+
+
 async def run_tool_job(job: Dict[str, Any]) -> None:
   action = normalize_action(job.get("action"))
   body = job.get("payload") or {}
@@ -76,12 +265,17 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
         jobs.finish(job, ok=False, result=jobs.result_from_log(job, rc_reset))
         return
 
+      rc_before, before_out = await jobs.capture_exec(["git", "rev-parse", "HEAD"], cwd=repo_dir, timeout=10)
+      before_head = before_out.strip() if rc_before == 0 else ""
       jobs.append(job, "\n$ git pull\n")
       jobs.progress(job, message="git pull", current=2, total=2)
       rc = await jobs.stream_exec(job, ["git", "pull"], cwd=repo_dir, timeout=180)
+      rc_after, after_out = await jobs.capture_exec(["git", "rev-parse", "HEAD"], cwd=repo_dir, timeout=10)
+      after_head = after_out.strip() if rc_after == 0 else ""
       if rc == 0 and did_git_pull_update(job.get("log") or ""):
         write_git_pull_time()
-      result = jobs.result_from_log(job, rc)
+      update_summary = await _build_git_update_summary_async(repo_dir, before_head, after_head, job.get("log") or "") if rc == 0 else None
+      result = jobs.result_from_log(job, rc, update_summary=update_summary, summary_key="git_result_pull_done") if update_summary else jobs.result_from_log(job, rc)
       jobs.finish(job, ok=rc == 0, result=result)
       return
 
@@ -99,7 +293,7 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
 
       jobs.progress(job, message="fetch --all --prune", current=2, total=2)
       rc2 = await jobs.stream_exec(job, ["git", "fetch", "--all", "--prune"], cwd=repo_dir, timeout=180)
-      jobs.finish(job, ok=rc2 == 0, result=jobs.result_from_log(job, rc2))
+      jobs.finish(job, ok=rc2 == 0, result=jobs.result_from_log(job, rc2, summary_key="git_result_sync_done"))
       return
 
     if action == "git_reset":
@@ -117,7 +311,7 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
 
       jobs.progress(job, message=f"git reset --{mode} {target}", current=1, total=1)
       rc = await jobs.stream_exec(job, ["git", "reset", f"--{mode}", target], cwd=repo_dir, timeout=120)
-      jobs.finish(job, ok=rc == 0, result=jobs.result_from_log(job, rc))
+      jobs.finish(job, ok=rc == 0, result=jobs.result_from_log(job, rc, summary_key="git_result_reset_done", summary_vars={"mode": mode, "target": target}))
       return
 
     if action == "git_checkout":
@@ -146,8 +340,10 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
       rc_remotes, remotes_out = await jobs.capture_exec(["git", "remote"], cwd=repo_dir, timeout=30)
       known_remotes = remotes_out.split() if rc_remotes == 0 else ["origin"]
 
+      summary_branch = branch
       if kind == "local":
         local_branch = item_name or branch
+        summary_branch = local_branch
         script = f"git switch {shlex.quote(local_branch)}"
       elif kind == "remote":
         if not item_remote or not item_name:
@@ -158,6 +354,7 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
           return
         branch = f"{item_remote}/{item_name}"
         local_branch = item_name
+        summary_branch = local_branch
         script = (
           f"if git show-ref --verify --quiet {shlex.quote(f'refs/heads/{local_branch}')}; "
           f"then git switch {shlex.quote(local_branch)}; "
@@ -173,18 +370,20 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
 
         if remote_prefix is not None:
           local_branch = branch[len(remote_prefix) + 1:]
+          summary_branch = local_branch
           script = (
             f"if git show-ref --verify --quiet {shlex.quote(f'refs/heads/{local_branch}')}; "
             f"then git switch {shlex.quote(local_branch)}; "
             f"else git switch -c {shlex.quote(local_branch)} --track {shlex.quote(branch)}; fi"
           )
         else:
+          summary_branch = branch
           script = (
             f"git switch {shlex.quote(branch)} || "
             f"git switch -c {shlex.quote(branch)} --track {shlex.quote(f'origin/{branch}')}"
           )
       rc = await jobs.stream_exec(job, ["bash", "-lc", script], cwd=repo_dir, timeout=180)
-      jobs.finish(job, ok=rc == 0, result=jobs.result_from_log(job, rc))
+      jobs.finish(job, ok=rc == 0, result=jobs.result_from_log(job, rc, summary_key="git_result_checkout_done", summary_vars={"branch": summary_branch}))
       return
 
     if action == "git_remote_set":
@@ -201,7 +400,7 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
 
       jobs.progress(job, message="fetch origin", current=2, total=2)
       rc_fetch = await jobs.stream_exec(job, ["git", "fetch", "--progress", "origin"], cwd=repo_dir, timeout=180)
-      jobs.finish(job, ok=rc_fetch == 0, result=jobs.result_from_log(job, rc_fetch))
+      jobs.finish(job, ok=rc_fetch == 0, result=jobs.result_from_log(job, rc_fetch, summary_key="git_result_remote_set_done"))
       return
 
     if action == "git_branch_list":
@@ -250,6 +449,8 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
 
       result = {
         "ok": True,
+        "summary_key": "git_result_branch_list_done",
+        "summary_vars": {"count": len(branch_items)},
         "branches": branches,
         "branch_items": branch_items,
         "current_branch": current_branch,
@@ -288,7 +489,7 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
       if rc_remote_urls == 0 and remote_urls_out:
         jobs.append(job, "\n$ git remote -v\n")
         jobs.append(job, remote_urls_out + "\n")
-      jobs.finish(job, ok=rc_fetch == 0, result=jobs.result_from_log(job, rc_fetch))
+      jobs.finish(job, ok=rc_fetch == 0, result=jobs.result_from_log(job, rc_fetch, summary_key="git_result_remote_add_done", summary_vars={"name": name}))
       return
 
     if action == "git_log":
@@ -314,7 +515,7 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
           continue
         parts = line.split(" ", 1)
         commits.append({"hash": parts[0], "message": parts[1] if len(parts) > 1 else ""})
-      result = {"ok": rc == 0, "commits": commits, "current_commit": current_commit, "out": out}
+      result = {"ok": rc == 0, "commits": commits, "current_commit": current_commit, "out": out, "summary_key": "git_result_log_done", "summary_vars": {"count": len(commits)}}
       jobs.finish(job, ok=rc == 0, result=result)
       return
 
@@ -376,7 +577,7 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
       branches = sorted(set(branches))
       jobs.append(job, f"found {len(branches)} branches\n")
 
-      result = {"ok": True, "branches": branches, "out": (job.get("log") or "").strip()}
+      result = {"ok": True, "branches": branches, "out": (job.get("log") or "").strip(), "summary_key": "git_result_reset_repo_fetch_done", "summary_vars": {"count": len(branches)}}
       jobs.finish(job, ok=True, result=result)
       return
 
@@ -398,7 +599,7 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
           jobs.finish(job, ok=False, result=jobs.result_from_log(job, rc))
           return
 
-      jobs.finish(job, ok=True, result=jobs.result_from_log(job, 0))
+      jobs.finish(job, ok=True, result=jobs.result_from_log(job, 0, summary_key="git_result_reset_repo_checkout_done", summary_vars={"branch": branch}))
       return
 
     if action == "delete_all_videos":
@@ -652,10 +853,18 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
     REPO_DIR = "/data/openpilot"
 
     if action == "git_pull":
+      rc_before, before_out = run(["git", "rev-parse", "HEAD"], cwd=REPO_DIR)
+      before_head = before_out.strip() if rc_before == 0 else ""
       rc, out = run(["git", "pull"], cwd=REPO_DIR)
+      rc_after, after_out = run(["git", "rev-parse", "HEAD"], cwd=REPO_DIR)
+      after_head = after_out.strip() if rc_after == 0 else ""
       if rc == 0 and did_git_pull_update(out):
         write_git_pull_time()
-      return web.json_response({"ok": rc == 0, "rc": rc, "out": out})
+      update_summary = _build_git_update_summary_sync(REPO_DIR, before_head, after_head, out) if rc == 0 else None
+      payload = {"ok": rc == 0, "rc": rc, "out": out, "summary_key": "git_result_pull_done"}
+      if update_summary:
+        payload["update_summary"] = update_summary
+      return web.json_response(payload)
 
     if action == "git_sync":
       rc1, out1 = run(["bash", "-lc", "git branch | grep -v '^\\*' | xargs -r git branch -D"], cwd=REPO_DIR)
@@ -664,7 +873,7 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
 
       rc2, out2 = run(["git", "fetch", "--all", "--prune"], cwd=REPO_DIR)
       out = (out1 + "\n\n" + out2).strip()
-      return web.json_response({"ok": rc2 == 0, "rc": rc2, "out": out})
+      return web.json_response({"ok": rc2 == 0, "rc": rc2, "out": out, "summary_key": "git_result_sync_done", "empty_output": not out})
 
     if action == "git_reset":
       mode = (body.get("mode") or "hard").strip()
@@ -672,7 +881,7 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
       if mode not in ("hard", "soft", "mixed"):
         return web.json_response({"ok": False, "error": "bad mode"}, status=400)
       rc, out = run(["git", "reset", f"--{mode}", target], cwd=REPO_DIR)
-      return web.json_response({"ok": rc == 0, "rc": rc, "out": out})
+      return web.json_response({"ok": rc == 0, "rc": rc, "out": out, "summary_key": "git_result_reset_done", "summary_vars": {"mode": mode, "target": target}, "empty_output": not out})
 
     if action == "git_checkout":
       branch = (body.get("branch") or "").strip()
@@ -698,6 +907,7 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
         if kind == "local":
           local_branch = item_name or branch
           rc, out = run(["git", "switch", local_branch], cwd=REPO_DIR)
+          summary_branch = local_branch
         elif kind == "remote":
           if not item_remote or not item_name:
             return web.json_response({"ok": False, "error": "missing remote branch info"}, status=400)
@@ -705,6 +915,7 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
             return web.json_response({"ok": False, "error": f"unknown remote: {item_remote}"}, status=400)
           branch = f"{item_remote}/{item_name}"
           local_branch = item_name
+          summary_branch = local_branch
           rc_check, _ = run(["git", "show-ref", "--verify", "--quiet", f"refs/heads/{local_branch}"], cwd=REPO_DIR)
           if rc_check == 0:
             rc, out = run(["git", "switch", local_branch], cwd=REPO_DIR)
@@ -715,6 +926,7 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
             )
         elif remote_prefix is not None:
           local_branch = branch[len(remote_prefix) + 1:]
+          summary_branch = local_branch
           rc_check, _ = run(["git", "show-ref", "--verify", "--quiet", f"refs/heads/{local_branch}"], cwd=REPO_DIR)
           if rc_check == 0:
             rc, out = run(["git", "switch", local_branch], cwd=REPO_DIR)
@@ -724,6 +936,7 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
               cwd=REPO_DIR
             )
         else:
+          summary_branch = branch
           rc, out = run(["git", "switch", branch], cwd=REPO_DIR)
           if rc != 0:
             rc2, out2 = run(
@@ -731,7 +944,7 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
               cwd=REPO_DIR
             )
             rc, out = rc2, out2
-        return web.json_response({"ok": rc == 0, "rc": rc, "out": out})
+        return web.json_response({"ok": rc == 0, "rc": rc, "out": out, "summary_key": "git_result_checkout_done", "summary_vars": {"branch": summary_branch}, "empty_output": not out})
       except Exception as e:
         return web.json_response({"ok": False, "error": str(e)}, status=500)
 
@@ -764,6 +977,8 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
 
       return web.json_response({
         "ok": True,
+        "summary_key": "git_result_branch_list_done",
+        "summary_vars": {"count": len(branch_items)},
         "branches": branches,
         "branch_items": branch_items,
         "current_branch": current_branch,
@@ -791,7 +1006,7 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
       rc_fetch, out_fetch = run(["git", "fetch", "--prune", name], cwd=REPO_DIR)
       rc_remote_urls, out_remote_urls = run(["git", "remote", "-v"], cwd=REPO_DIR)
       out = (out_setup + "\n" + out_fetch + "\n\n> git remote -v\n" + (out_remote_urls if rc_remote_urls == 0 else "")).strip()
-      return web.json_response({"ok": rc_fetch == 0, "rc": rc_fetch, "out": out})
+      return web.json_response({"ok": rc_fetch == 0, "rc": rc_fetch, "out": out, "summary_key": "git_result_remote_add_done", "summary_vars": {"name": name}, "empty_output": not out})
 
     if action == "git_log":
       count = min(int(body.get("count") or 20), 50)
@@ -805,7 +1020,7 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
           continue
         parts = line.split(" ", 1)
         commits.append({"hash": parts[0], "message": parts[1] if len(parts) > 1 else ""})
-      return web.json_response({"ok": rc == 0, "commits": commits, "current_commit": current_commit, "out": out})
+      return web.json_response({"ok": rc == 0, "commits": commits, "current_commit": current_commit, "out": out, "summary_key": "git_result_log_done", "summary_vars": {"count": len(commits)}})
 
     if action == "git_reset_repo_fetch":
       url = "https://github.com/ajouatom/openpilot.git"
@@ -843,7 +1058,7 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
           continue
         branches.append(line.split("/", 1)[1])
       branches = sorted(set(branches))
-      return web.json_response({"ok": True, "branches": branches, "out": out_all.strip()})
+      return web.json_response({"ok": True, "branches": branches, "out": out_all.strip(), "summary_key": "git_result_reset_repo_fetch_done", "summary_vars": {"count": len(branches)}, "empty_output": not out_all.strip()})
 
     if action == "git_reset_repo_checkout":
       branch = str(body.get("branch") or "").strip()
@@ -860,7 +1075,7 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
         out_all += f"> {' '.join(c)}\n{out}\n\n"
         if rc != 0:
           return web.json_response({"ok": False, "rc": rc, "out": out_all.strip()})
-      return web.json_response({"ok": True, "out": out_all.strip()})
+      return web.json_response({"ok": True, "out": out_all.strip(), "summary_key": "git_result_reset_repo_checkout_done", "summary_vars": {"branch": branch}, "empty_output": not out_all.strip()})
 
     if action == "delete_all_videos":
       paths = ["/data/media/0/videos"]
