@@ -336,8 +336,9 @@ async def capture_exec(cmd: List[str], *, cwd: Optional[str] = None,
 
 
 def result_from_log(job: Dict[str, Any], rc: int, **extra: Any) -> Dict[str, Any]:
-  out = (job.get("log") or "").strip() or "(no output)"
-  return {"ok": rc == 0, "rc": rc, "out": out, **extra}
+  raw_out = (job.get("log") or "").strip()
+  out = raw_out or "(no output)"
+  return {"ok": rc == 0, "rc": rc, "out": out, "empty_output": not raw_out, **extra}
 
 
 # -----------------------
