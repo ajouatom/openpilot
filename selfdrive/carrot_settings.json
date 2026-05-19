@@ -2256,6 +2256,22 @@
       "max": 100,
       "default": 100,
       "unit": 5
+    },
+    {
+      "group": "화면",
+      "egroup": "DISPLAY",
+      "cgroup": "显示",
+      "name": "ShowModelView",
+      "title": "주행화면 표시 모드(C4)",
+      "descr": "주행 중 화면 밝기가 설정값 근처까지 낮아졌을 때 표시 방식\n0: 카메라와 모델 표시\n1: 카메라만 표시\n2: 모델만 표시\n3: 카메라와 모델 숨김",
+      "etitle": "Onroad Display Mode(C4)",
+      "edescr": "Display mode when onroad screen brightness reaches the configured level\n0: Show camera and model\n1: Show camera only\n2: Show model only\n3: Hide camera and model",
+      "ctitle": "行车画面显示模式(C4)",
+      "cdescr": "行车中屏幕亮度接近设定值时的显示方式\n0: 显示摄像头和模型\n1: 仅显示摄像头\n2: 仅显示模型\n3: 隐藏摄像头和模型",
+      "min": 0,
+      "max": 3,
+      "default": 0,
+      "unit": 1
     }
 
   ]
