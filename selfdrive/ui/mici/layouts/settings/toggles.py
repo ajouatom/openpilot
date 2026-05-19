@@ -79,7 +79,7 @@ class TogglesLayoutMici(NavScroller):
         # no long for now
         self._experimental_btn.set_visible(False)
         self._experimental_btn.set_checked(False)
-        self._personality_toggle.set_visible(False)
+        #self._personality_toggle.set_visible(False)
         ui_state.params.remove("ExperimentalMode")
 
     # Refresh toggles from params to mirror external changes

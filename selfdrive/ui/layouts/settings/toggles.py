@@ -176,7 +176,7 @@ class TogglesLayout(Widget):
         # no long for now
         self._toggles["ExperimentalMode"].action_item.set_enabled(False)
         self._toggles["ExperimentalMode"].action_item.set_state(False)
-        self._long_personality_setting.action_item.set_enabled(False)
+        #self._long_personality_setting.action_item.set_enabled(False)
         self._params.remove("ExperimentalMode")
 
         unavailable = tr("Experimental mode is currently unavailable on this car since the car's stock ACC is used for longitudinal control.")

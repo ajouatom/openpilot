@@ -442,7 +442,19 @@ function renderToolsMeta() {
   statusEl.setAttribute("tabindex", "0");
   statusEl.setAttribute("aria-expanded", document.getElementById("pageTools")?.classList.contains("tools-log-expanded") ? "true" : "false");
   statusEl.setAttribute("aria-label", getUIText("toggle_log_panel", "Expand or collapse log panel"));
-  statusEl.innerHTML = `<span class="tools-meta__statusTrack">${escapeHtml(toolsMetaStatusText || "-")}</span>`;
+  const unreadCount = Math.max(0, Number(window.CarrotToolsNotifications?.unreadCount?.() || 0));
+  statusEl.classList.toggle("has-unread", unreadCount > 0);
+  statusEl.dataset.unreadCount = unreadCount > 0 ? String(unreadCount) : "";
+  if (unreadCount > 0) {
+    const badge = document.createElement("span");
+    badge.className = "tools-meta__unreadBadge";
+    badge.textContent = unreadCount > 99 ? "99+" : String(unreadCount);
+    statusEl.appendChild(badge);
+  }
+  const track = document.createElement("span");
+  track.className = "tools-meta__statusTrack";
+  track.textContent = toolsMetaStatusText || "-";
+  statusEl.appendChild(track);
   window.CarrotToolsNotifications?.bindStatusGesture?.(statusEl, {
     setExpanded: setToolsLogExpanded,
   });
