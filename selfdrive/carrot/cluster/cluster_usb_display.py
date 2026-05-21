@@ -24,11 +24,13 @@ class TuringUsbDisplay:
         display_fps: int = 60,
         jpeg_quality: int = 82,
         fast_write: bool = False,
+        wait_for_frame_ack: bool = False,
     ) -> None:
         self.brightness = int(clamp(brightness, 0, 100))
         self.display_fps = int(clamp(display_fps, 0, 255))
         self.jpeg_quality = int(clamp(jpeg_quality, 1, 95))
         self.fast_write = fast_write
+        self.wait_for_frame_ack = wait_for_frame_ack
         self.dev = None
         self.dev_pid: int | None = None
         self.landscape_width = 1920
@@ -165,11 +167,7 @@ class TuringUsbDisplay:
         if self.dev is None or self._send_image is None:
             raise RuntimeError("USB display is not open")
         try:
-            if self.fast_write:
-                response = self._send_frame_fast(self._cmd_upload_png, frame)
-            else:
-                response = self._send_frame_ack(self._cmd_upload_png, frame)
-            self._check_frame_response(response)
+            self._send_frame(self._cmd_upload_png, frame)
         except Exception as exc:
             self._handle_frame_error(exc)
 
@@ -177,11 +175,7 @@ class TuringUsbDisplay:
         if self.dev is None or self._send_jpeg is None:
             raise RuntimeError("USB display is not open")
         try:
-            if self.fast_write:
-                response = self._send_frame_fast(self._cmd_upload_jpeg, frame)
-            else:
-                response = self._send_frame_ack(self._cmd_upload_jpeg, frame)
-            self._check_frame_response(response)
+            self._send_frame(self._cmd_upload_jpeg, frame)
         except Exception as exc:
             self._handle_frame_error(exc)
 
@@ -267,7 +261,7 @@ class TuringUsbDisplay:
         except Exception as exc:
             raise RuntimeError(error_message) from exc
 
-    def _send_frame_ack(self, command_id: int, frame: bytes) -> bytes:
+    def _build_frame_payload(self, command_id: int, frame: bytes) -> bytes:
         if self._build_command_packet_header is None or self._encrypt_command_packet is None:
             raise RuntimeError("USB command helpers are not initialized")
 
@@ -277,28 +271,43 @@ class TuringUsbDisplay:
         cmd_packet[9] = (frame_size >> 16) & 0xFF
         cmd_packet[10] = (frame_size >> 8) & 0xFF
         cmd_packet[11] = frame_size & 0xFF
+        return self._encrypt_command_packet(cmd_packet) + frame
+
+    def _send_frame(self, command_id: int, frame: bytes) -> None:
+        if self.wait_for_frame_ack:
+            response = (
+                self._send_frame_fast(command_id, frame)
+                if self.fast_write
+                else self._send_frame_ack(command_id, frame)
+            )
+            self._check_frame_response(response)
+        else:
+            self._send_frame_no_ack(command_id, frame, drain_input=not self.fast_write)
+            self._frame_error_count = 0
+
+    def _send_frame_ack(self, command_id: int, frame: bytes) -> bytes:
         return self._write_payload_checked(
-            self._encrypt_command_packet(cmd_packet) + frame,
+            self._build_frame_payload(command_id, frame),
             "TURZX USB frame upload timed out",
             timeout_ms=USB_FRAME_TIMEOUT_MS,
         )
 
-    def _send_frame_fast(self, command_id: int, frame: bytes) -> None:
+    def _send_frame_fast(self, command_id: int, frame: bytes) -> bytes:
         if self._ep_out is None:
             raise RuntimeError("USB OUT endpoint is not open")
-        if self._build_command_packet_header is None or self._encrypt_command_packet is None:
-            raise RuntimeError("USB command helpers are not initialized")
 
-        frame_size = len(frame)
-        cmd_packet = self._build_command_packet_header(command_id)
-        cmd_packet[8] = (frame_size >> 24) & 0xFF
-        cmd_packet[9] = (frame_size >> 16) & 0xFF
-        cmd_packet[10] = (frame_size >> 8) & 0xFF
-        cmd_packet[11] = frame_size & 0xFF
         self._clear_endpoint_halt()
         self._drain_input()
-        self._ep_out.write(self._encrypt_command_packet(cmd_packet) + frame, USB_FRAME_TIMEOUT_MS)
+        self._ep_out.write(self._build_frame_payload(command_id, frame), USB_FRAME_TIMEOUT_MS)
         return bytes(self._ep_in.read(512, USB_FRAME_TIMEOUT_MS))
+
+    def _send_frame_no_ack(self, command_id: int, frame: bytes, *, drain_input: bool) -> None:
+        if self._ep_out is None:
+            raise RuntimeError("USB OUT endpoint is not open")
+        self._clear_endpoint_halt()
+        if drain_input:
+            self._drain_input()
+        self._ep_out.write(self._build_frame_payload(command_id, frame), USB_FRAME_TIMEOUT_MS)
 
     def _check_frame_response(self, response: bytes | None) -> None:
         if not response:
@@ -310,6 +319,6 @@ class TuringUsbDisplay:
         print(f"USB frame upload failed ({self._frame_error_count}/{MAX_CONSECUTIVE_FRAME_ERRORS}): {exc}")
         if self._frame_error_count >= MAX_CONSECUTIVE_FRAME_ERRORS:
             raise RuntimeError(
-                "TURZX USB display is not responding. Unplug/replug the display, "
-                "then run again without --usb-fast."
+                "TURZX USB display is not accepting frame data. Unplug/replug the display, "
+                "then retry with --fps 10 or a lower --usb-jpeg-quality value."
             ) from exc

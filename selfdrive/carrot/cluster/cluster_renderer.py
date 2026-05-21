@@ -402,7 +402,17 @@ class ClusterUiRenderer:
         return self._aa_source_target
 
     def _load_fxaa_shader(self) -> None:
-        for shader_code in (FXAA_FRAGMENT_SHADER_330, FXAA_FRAGMENT_SHADER_100):
+        gl_version = rl.rl_get_version()
+        es_versions = (
+            getattr(rl, "RL_OPENGL_ES_20", 5),
+            getattr(rl, "RL_OPENGL_ES_30", 6),
+        )
+        shader_codes = (
+            (FXAA_FRAGMENT_SHADER_100, FXAA_FRAGMENT_SHADER_330)
+            if gl_version in es_versions
+            else (FXAA_FRAGMENT_SHADER_330, FXAA_FRAGMENT_SHADER_100)
+        )
+        for shader_code in shader_codes:
             try:
                 shader = rl.load_shader_from_memory(rl.ffi.NULL, shader_code)
             except Exception as exc:

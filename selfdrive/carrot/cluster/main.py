@@ -251,6 +251,7 @@ def run_demo(
     usb_codec: str,
     usb_jpeg_quality: int,
     usb_fast_write: bool,
+    usb_wait_frame_ack: bool,
     route_path: Path,
     route_log: str,
     route_loop: bool,
@@ -267,6 +268,7 @@ def run_demo(
             display_fps=usb_display_fps,
             jpeg_quality=usb_jpeg_quality,
             fast_write=usb_fast_write,
+            wait_for_frame_ack=usb_wait_frame_ack,
         )
         usb_display.open()
 
@@ -415,7 +417,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--usb-fast",
         action="store_true",
-        help="Experimental cached USB write path. The default acknowledged path is safer.",
+        help="Skip pre-write USB input drain before frame uploads. Useful only after no-ACK USB output is stable.",
+    )
+    parser.add_argument(
+        "--usb-wait-frame-ack",
+        action="store_true",
+        help="Wait for a TURZX response after each frame upload. Default skips ACK because some units never reply.",
     )
     parser.add_argument(
         "--route",
@@ -509,6 +516,7 @@ def main() -> None:
             args.usb_codec,
             args.usb_jpeg_quality,
             args.usb_fast,
+            args.usb_wait_frame_ack,
             args.route,
             args.route_log,
             args.route_loop,
