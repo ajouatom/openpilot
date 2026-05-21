@@ -12,8 +12,9 @@ from cluster_utils import clamp
 VENDOR_ROOT = Path(__file__).resolve().parent / ".vendor" / "turing-smart-screen-python-main"
 VENDOR_LIBRARY = VENDOR_ROOT / "library"
 MAX_CONSECUTIVE_FRAME_ERRORS = 3
-USB_COMMAND_TIMEOUT_MS = 700
+USB_COMMAND_TIMEOUT_MS = 2000
 USB_FRAME_TIMEOUT_MS = 2000
+USB_COMMAND_GAP_S = 0.2
 
 
 class TuringUsbDisplay:
@@ -91,11 +92,19 @@ class TuringUsbDisplay:
             raise RuntimeError("USB display is not open")
 
         self._send_command(10, "sync")
+        time.sleep(USB_COMMAND_GAP_S)
         if self.display_fps > 0:
-            self._send_command(15, "frame-rate", {8: self.display_fps})
-        self._send_command(14, "brightness", {8: int(self.brightness / 100 * 102)})
+            self._send_optional_command(15, "frame-rate", {8: self.display_fps})
+        self._send_optional_command(14, "brightness", {8: int(self.brightness / 100 * 102)})
 
-    def _send_command(self, command_id: int, name: str, fields: dict[int, int] | None = None) -> bytes:
+    def _send_command(
+        self,
+        command_id: int,
+        name: str,
+        fields: dict[int, int] | None = None,
+        *,
+        expect_response: bool = True,
+    ) -> bytes:
         if self._build_command_packet_header is None or self._encrypt_command_packet is None:
             raise RuntimeError("USB command helpers are not initialized")
         packet = self._build_command_packet_header(command_id)
@@ -103,11 +112,27 @@ class TuringUsbDisplay:
             for index, value in fields.items():
                 packet[index] = value & 0xFF
         print(f"Sending {name} command (ID {command_id})...")
+        payload = self._encrypt_command_packet(packet)
+        if not expect_response:
+            self._write_payload_no_ack(
+                payload,
+                f"TURZX USB {name} command write failed",
+                timeout_ms=USB_COMMAND_TIMEOUT_MS,
+            )
+            time.sleep(USB_COMMAND_GAP_S)
+            self._drain_input(attempts=5)
+            return b""
         return self._write_payload_checked(
-            self._encrypt_command_packet(packet),
+            payload,
             f"TURZX USB {name} command timed out",
             timeout_ms=USB_COMMAND_TIMEOUT_MS,
         )
+
+    def _send_optional_command(self, command_id: int, name: str, fields: dict[int, int] | None = None) -> None:
+        try:
+            self._send_command(command_id, name, fields, expect_response=False)
+        except RuntimeError as exc:
+            print(f"Warning: optional TURZX USB {name} command skipped: {exc}")
 
     def _reset_and_reconnect(self) -> None:
         import usb.util
@@ -229,6 +254,16 @@ class TuringUsbDisplay:
         try:
             self._ep_out.write(payload, timeout_ms)
             return bytes(self._ep_in.read(512, timeout_ms))
+        except Exception as exc:
+            raise RuntimeError(error_message) from exc
+
+    def _write_payload_no_ack(self, payload: bytes, error_message: str, timeout_ms: int) -> None:
+        if self._ep_out is None:
+            raise RuntimeError("USB OUT endpoint is not open")
+        self._clear_endpoint_halt()
+        self._drain_input()
+        try:
+            self._ep_out.write(payload, timeout_ms)
         except Exception as exc:
             raise RuntimeError(error_message) from exc
 

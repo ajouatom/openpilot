@@ -404,7 +404,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--width", type=int, default=None)
     parser.add_argument("--height", type=int, default=None)
     parser.add_argument("--usb-brightness", type=int, default=80)
-    parser.add_argument("--usb-display-fps", type=int, default=60)
+    parser.add_argument(
+        "--usb-display-fps",
+        type=int,
+        default=0,
+        help="Optional TURZX display frame-rate command. Default 0 skips it because some units do not ACK it.",
+    )
     parser.add_argument("--usb-codec", choices=("jpeg", "png"), default="jpeg")
     parser.add_argument("--usb-jpeg-quality", type=int, default=68)
     parser.add_argument(
