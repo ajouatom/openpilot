@@ -1,0 +1,280 @@
+from __future__ import annotations
+
+import sys
+import os
+import time
+from io import BytesIO
+from pathlib import Path
+
+from cluster_utils import clamp
+
+
+VENDOR_ROOT = Path(__file__).resolve().parent / ".vendor" / "turing-smart-screen-python-main"
+VENDOR_LIBRARY = VENDOR_ROOT / "library"
+MAX_CONSECUTIVE_FRAME_ERRORS = 3
+USB_COMMAND_TIMEOUT_MS = 700
+USB_FRAME_TIMEOUT_MS = 2000
+
+
+class TuringUsbDisplay:
+    def __init__(
+        self,
+        brightness: int = 80,
+        display_fps: int = 60,
+        jpeg_quality: int = 82,
+        fast_write: bool = False,
+    ) -> None:
+        self.brightness = int(clamp(brightness, 0, 100))
+        self.display_fps = int(clamp(display_fps, 0, 255))
+        self.jpeg_quality = int(clamp(jpeg_quality, 1, 95))
+        self.fast_write = fast_write
+        self.dev = None
+        self.dev_pid: int | None = None
+        self.landscape_width = 1920
+        self.landscape_height = 480
+        self._send_image = None
+        self._send_jpeg = None
+        self._find_usb_device = None
+        self._product_id = None
+        self._build_command_packet_header = None
+        self._encrypt_command_packet = None
+        self._cmd_upload_jpeg = 101
+        self._cmd_upload_png = 102
+        self._ep_out = None
+        self._ep_in = None
+        self._dll_dir_handle = None
+        self._frame_error_count = 0
+
+    def open(self) -> None:
+        if not VENDOR_LIBRARY.exists():
+            raise RuntimeError(f"TURZX vendor library not found: {VENDOR_LIBRARY}")
+        self._add_libusb_search_path()
+        if str(VENDOR_ROOT) not in sys.path:
+            sys.path.insert(0, str(VENDOR_ROOT))
+
+        from library.lcd.lcd_comm_turing_usb import (  # type: ignore
+            CMD_UPLOAD_JPEG,
+            CMD_UPLOAD_PNG,
+            PRODUCT_ID,
+            build_command_packet_header,
+            encrypt_command_packet,
+            find_usb_device,
+            send_image,
+            send_jpeg,
+        )
+
+        self._send_image = send_image
+        self._send_jpeg = send_jpeg
+        self._find_usb_device = find_usb_device
+        self._product_id = PRODUCT_ID
+        self._build_command_packet_header = build_command_packet_header
+        self._encrypt_command_packet = encrypt_command_packet
+        self._cmd_upload_jpeg = CMD_UPLOAD_JPEG
+        self._cmd_upload_png = CMD_UPLOAD_PNG
+        self._connect_device()
+        try:
+            self._initialize_device()
+        except RuntimeError:
+            print("USB display did not respond during init; resetting device once...")
+            self._reset_and_reconnect()
+            self._initialize_device()
+
+    def _connect_device(self) -> None:
+        self.dev, self.dev_pid = self._find_usb_device()
+        self._cache_out_endpoint()
+        portrait_width, portrait_height = self._product_id[self.dev_pid]
+        self.landscape_width = portrait_height
+        self.landscape_height = portrait_width
+
+    def _initialize_device(self) -> None:
+        if self.dev is None:
+            raise RuntimeError("USB display is not open")
+
+        self._send_command(10, "sync")
+        if self.display_fps > 0:
+            self._send_command(15, "frame-rate", {8: self.display_fps})
+        self._send_command(14, "brightness", {8: int(self.brightness / 100 * 102)})
+
+    def _send_command(self, command_id: int, name: str, fields: dict[int, int] | None = None) -> bytes:
+        if self._build_command_packet_header is None or self._encrypt_command_packet is None:
+            raise RuntimeError("USB command helpers are not initialized")
+        packet = self._build_command_packet_header(command_id)
+        if fields:
+            for index, value in fields.items():
+                packet[index] = value & 0xFF
+        print(f"Sending {name} command (ID {command_id})...")
+        return self._write_payload_checked(
+            self._encrypt_command_packet(packet),
+            f"TURZX USB {name} command timed out",
+            timeout_ms=USB_COMMAND_TIMEOUT_MS,
+        )
+
+    def _reset_and_reconnect(self) -> None:
+        import usb.util
+
+        if self.dev is not None:
+            try:
+                self.dev.reset()
+            except Exception as exc:
+                print(f"USB reset failed: {exc}")
+            try:
+                usb.util.dispose_resources(self.dev)
+            except Exception:
+                pass
+        time.sleep(1.5)
+        self._connect_device()
+
+    def _add_libusb_search_path(self) -> None:
+        libusb = VENDOR_ROOT / "external" / "libusb-1.0" / "libusb-1.0.dll"
+        if not libusb.exists():
+            return
+
+        dll_dir = str(libusb.parent)
+        path_entries = os.environ.get("PATH", "").split(os.pathsep)
+        if dll_dir not in path_entries:
+            os.environ["PATH"] = dll_dir + os.pathsep + os.environ.get("PATH", "")
+        if hasattr(os, "add_dll_directory") and self._dll_dir_handle is None:
+            self._dll_dir_handle = os.add_dll_directory(dll_dir)
+
+    def send_png(self, frame: bytes) -> None:
+        if self.dev is None or self._send_image is None:
+            raise RuntimeError("USB display is not open")
+        try:
+            if self.fast_write:
+                response = self._send_frame_fast(self._cmd_upload_png, frame)
+            else:
+                response = self._send_frame_ack(self._cmd_upload_png, frame)
+            self._check_frame_response(response)
+        except Exception as exc:
+            self._handle_frame_error(exc)
+
+    def send_jpeg(self, frame: bytes) -> None:
+        if self.dev is None or self._send_jpeg is None:
+            raise RuntimeError("USB display is not open")
+        try:
+            if self.fast_write:
+                response = self._send_frame_fast(self._cmd_upload_jpeg, frame)
+            else:
+                response = self._send_frame_ack(self._cmd_upload_jpeg, frame)
+            self._check_frame_response(response)
+        except Exception as exc:
+            self._handle_frame_error(exc)
+
+    def encode_jpeg(self, rgba: bytes, width: int, height: int) -> bytes:
+        from PIL import Image
+
+        image = Image.frombytes("RGBA", (width, height), rgba).convert("RGB")
+        buffer = BytesIO()
+        image.save(
+            buffer,
+            format="JPEG",
+            quality=self.jpeg_quality,
+            optimize=False,
+            progressive=False,
+            subsampling=2,
+        )
+        return buffer.getvalue()
+
+    def _cache_out_endpoint(self) -> None:
+        import usb.util
+
+        cfg = self.dev.get_active_configuration()
+        intf = usb.util.find_descriptor(cfg, bInterfaceNumber=0)
+        if intf is None:
+            raise RuntimeError("USB interface 0 not found")
+        self._ep_out = usb.util.find_descriptor(
+            intf,
+            custom_match=lambda endpoint: usb.util.endpoint_direction(
+                endpoint.bEndpointAddress
+            )
+            == usb.util.ENDPOINT_OUT,
+        )
+        if self._ep_out is None:
+            raise RuntimeError("Could not find USB OUT endpoint")
+        self._ep_in = usb.util.find_descriptor(
+            intf,
+            custom_match=lambda endpoint: usb.util.endpoint_direction(
+                endpoint.bEndpointAddress
+            )
+            == usb.util.ENDPOINT_IN,
+        )
+        if self._ep_in is None:
+            raise RuntimeError("Could not find USB IN endpoint")
+
+    def _drain_input(self, attempts: int = 3) -> None:
+        if self._ep_in is None:
+            return
+        for _ in range(attempts):
+            try:
+                self._ep_in.read(512, 20)
+            except Exception:
+                return
+
+    def _clear_endpoint_halt(self) -> None:
+        if self.dev is None:
+            return
+        for endpoint in (self._ep_out, self._ep_in):
+            if endpoint is None:
+                continue
+            try:
+                self.dev.clear_halt(endpoint.bEndpointAddress)
+            except Exception:
+                pass
+
+    def _write_payload_checked(self, payload: bytes, error_message: str, timeout_ms: int) -> bytes:
+        if self._ep_out is None or self._ep_in is None:
+            raise RuntimeError("USB endpoints are not open")
+        self._clear_endpoint_halt()
+        self._drain_input()
+        try:
+            self._ep_out.write(payload, timeout_ms)
+            return bytes(self._ep_in.read(512, timeout_ms))
+        except Exception as exc:
+            raise RuntimeError(error_message) from exc
+
+    def _send_frame_ack(self, command_id: int, frame: bytes) -> bytes:
+        if self._build_command_packet_header is None or self._encrypt_command_packet is None:
+            raise RuntimeError("USB command helpers are not initialized")
+
+        frame_size = len(frame)
+        cmd_packet = self._build_command_packet_header(command_id)
+        cmd_packet[8] = (frame_size >> 24) & 0xFF
+        cmd_packet[9] = (frame_size >> 16) & 0xFF
+        cmd_packet[10] = (frame_size >> 8) & 0xFF
+        cmd_packet[11] = frame_size & 0xFF
+        return self._write_payload_checked(
+            self._encrypt_command_packet(cmd_packet) + frame,
+            "TURZX USB frame upload timed out",
+            timeout_ms=USB_FRAME_TIMEOUT_MS,
+        )
+
+    def _send_frame_fast(self, command_id: int, frame: bytes) -> None:
+        if self._ep_out is None:
+            raise RuntimeError("USB OUT endpoint is not open")
+        if self._build_command_packet_header is None or self._encrypt_command_packet is None:
+            raise RuntimeError("USB command helpers are not initialized")
+
+        frame_size = len(frame)
+        cmd_packet = self._build_command_packet_header(command_id)
+        cmd_packet[8] = (frame_size >> 24) & 0xFF
+        cmd_packet[9] = (frame_size >> 16) & 0xFF
+        cmd_packet[10] = (frame_size >> 8) & 0xFF
+        cmd_packet[11] = frame_size & 0xFF
+        self._clear_endpoint_halt()
+        self._drain_input()
+        self._ep_out.write(self._encrypt_command_packet(cmd_packet) + frame, USB_FRAME_TIMEOUT_MS)
+        return bytes(self._ep_in.read(512, USB_FRAME_TIMEOUT_MS))
+
+    def _check_frame_response(self, response: bytes | None) -> None:
+        if not response:
+            raise RuntimeError("TURZX USB frame upload timed out")
+        self._frame_error_count = 0
+
+    def _handle_frame_error(self, exc: Exception) -> None:
+        self._frame_error_count += 1
+        print(f"USB frame upload failed ({self._frame_error_count}/{MAX_CONSECUTIVE_FRAME_ERRORS}): {exc}")
+        if self._frame_error_count >= MAX_CONSECUTIVE_FRAME_ERRORS:
+            raise RuntimeError(
+                "TURZX USB display is not responding. Unplug/replug the display, "
+                "then run again without --usb-fast."
+            ) from exc

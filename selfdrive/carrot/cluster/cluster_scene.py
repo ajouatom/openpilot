@@ -1,0 +1,1438 @@
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+
+from cluster_config import (
+    AMBER,
+    BLUE,
+    CAR_DARK,
+    DEFAULT_LANE_WIDTH_M,
+    EGO,
+    EGO_FORWARD_M,
+    GREEN,
+    PATH_END_M,
+    PATH_HEIGHT_M,
+    PATH_LANE_CHANGE_CURVE_END_M,
+    PATH_LANE_CHANGE_CURVE_START_M,
+    PATH_START_M,
+    RED,
+    ROAD_EDGE,
+    ROAD_CURVE_M_PER_M2,
+    ROAD_FAR_M,
+    ROAD_NEAR_M,
+    SURROUND_CAMERA_DISTANCE_M,
+    SURROUND_CAMERA_HEIGHT_M,
+    SURROUND_MAX_PITCH_DEG,
+    SURROUND_MAX_YAW_DEG,
+    SURROUND_ROAD_FRONT_M,
+    SURROUND_ROAD_REAR_M,
+    SURROUND_TARGET_FORWARD_M,
+    SURROUND_TARGET_HEIGHT_M,
+    VEHICLE_HEIGHT_M,
+    VEHICLE_LANE_CHANGE_SLOPE,
+    VEHICLE_LENGTH_M,
+    VEHICLE_WIDTH_M,
+)
+from cluster_models import ClusterUiState, DetectedVehicle, LaneMarking, ModelPathPoint, RadarPoint
+from cluster_utils import clamp, darken, lighten, smoothstep
+
+
+Color = tuple[int, int, int, int]
+PATH_BLOCKER_CLEARANCE_M = 1.25
+PATH_BLOCKER_LANE_TOLERANCE = 0.42
+RADAR_VEHICLE_MIN_VALID_COUNT = 16
+RADAR_VEHICLE_MAX_DISTANCE_M = 150.0
+RADAR_VEHICLE_MAX_LATERAL_LANES = 1.35
+RADAR_ROAD_EDGE_HARD_CLEARANCE_M = 0.55
+RADAR_ROAD_EDGE_STATIONARY_CLEARANCE_M = 1.05
+RADAR_STATIC_OBJECT_SPEED_MPS = 1.25
+RADAR_STATIC_OBJECT_SPEED_KPH = 8.0
+RADAR_SIDE_STATIC_LATERAL_LANES = 0.58
+RADAR_EGO_MOVING_SPEED_KPH = 10.0
+RADAR_CENTER_RAW_LATERAL_LANES = 0.72
+RADAR_ADJACENT_RAW_LATERAL_LANES = 0.95
+RADAR_RAW_MOVING_SPEED_KPH = 12.0
+RADAR_RAW_CENTER_MIN_VALID_COUNT = 24
+RADAR_RAW_ADJACENT_MIN_VALID_COUNT = 35
+RADAR_PROBABLE_VEHICLE_LATERAL_LANES = 0.95
+RADAR_VEHICLE_MIN_PROBABILITY = 0.45
+RADAR_VEHICLE_DEDUP_LONGITUDINAL_M = 7.0
+RADAR_VEHICLE_DEDUP_LATERAL_M = 1.6
+RADAR_VEHICLE_MAX_BOXES = 6
+LEFT_TEST_TRAFFIC_FORWARD_M = 24.0
+LANE_MARKING_SHADOW_HEIGHT_M = 0.026
+LANE_MARKING_HEIGHT_M = 0.044
+LANE_MARKING_BORDER_EXTRA_WIDTH_PX = 3
+LANE_MARKING_BORDER_COLOR = (54, 62, 70, 205)
+ROAD_EDGE_HEIGHT_M = 0.034
+ROAD_EDGE_SHADOW_HEIGHT_M = 0.028
+ROAD_EDGE_BACKING_COLOR = (72, 82, 92, 118)
+PATH_SHADOW_LAYER_M = 0.024
+PATH_UNCERTAINTY_LAYER_M = PATH_HEIGHT_M + 0.002
+LEAD_PATH_BACKING_LAYER_M = PATH_HEIGHT_M + 0.014
+LEAD_PATH_LINE_LAYER_M = PATH_HEIGHT_M + 0.028
+PATH_BODY_LAYER_M = PATH_HEIGHT_M + 0.046
+PATH_METRIC_LAYER_M = PATH_HEIGHT_M + 0.066
+PATH_HIGHLIGHT_LAYER_M = PATH_HEIGHT_M + 0.088
+
+
+@dataclass(frozen=True)
+class Vec3:
+    x: float
+    y: float
+    z: float = 0.0
+
+
+@dataclass(frozen=True)
+class CameraSpec:
+    position: Vec3
+    target: Vec3
+    fovy_deg: float
+
+
+@dataclass(frozen=True)
+class MeshStrip:
+    left: tuple[Vec3, ...]
+    right: tuple[Vec3, ...]
+    color: Color
+
+
+@dataclass(frozen=True)
+class VehicleBox:
+    center: Vec3
+    right_x: float
+    right_y: float
+    forward_x: float
+    forward_y: float
+    width_m: float
+    length_m: float
+    height_m: float
+    body_color: Color
+    side_color: Color
+    rear_color: Color
+    top_highlight: Color
+    outline_color: Color
+    confidence: float = 1.0
+    label: str = ""
+    source: str = ""
+    relative_speed_mps: float | None = None
+    acceleration_mps2: float | None = None
+    ttc_s: float | None = None
+    cut_in: bool = False
+    primary: bool = False
+    annotate: bool = False
+
+
+@dataclass(frozen=True)
+class RadarPointMarker:
+    center: Vec3
+    radius_m: float
+    color: Color
+    label: str
+    longitudinal_m: float
+    lateral_m: float
+    relative_speed_mps: float | None = None
+    absolute_speed_kph: float | None = None
+    lateral_speed_mps: float | None = None
+    relative_accel_mps2: float | None = None
+    probability: float | None = None
+    valid: int | None = None
+    in_my_lane: int | None = None
+
+
+@dataclass(frozen=True)
+class PathBlocker:
+    offset: float
+    forward_m: float
+    length_m: float
+
+
+@dataclass(frozen=True)
+class ClusterScene:
+    camera: CameraSpec
+    road_surface: MeshStrip
+    road_edges: tuple[MeshStrip, ...]
+    highlight_lanes: tuple[MeshStrip, ...]
+    lane_markings: tuple[MeshStrip, ...]
+    lead_paths: tuple[MeshStrip, ...]
+    planned_path: tuple[MeshStrip, ...]
+    radar_points: tuple[RadarPointMarker, ...]
+    vehicles: tuple[VehicleBox, ...]
+
+
+def rgba(color: tuple[int, int, int], alpha: int = 255) -> Color:
+    return color[0], color[1], color[2], alpha
+
+
+def road_curve_m(forward_m: float, steering: float) -> float:
+    return clamp(steering, -1.0, 1.0) * ROAD_CURVE_M_PER_M2 * forward_m * forward_m
+
+
+def road_world_x(offset: float, forward_m: float, steering: float, lane_width_m: float) -> float:
+    return offset * lane_width_m + road_curve_m(forward_m, steering)
+
+
+def normalize2(x: float, y: float) -> tuple[float, float]:
+    length = math.hypot(x, y)
+    if length <= 0.0001:
+        return 0.0, 1.0
+    return x / length, y / length
+
+
+def vehicle_heading(
+    offset: float,
+    forward_m: float,
+    steering: float,
+    lane_width_m: float,
+    target_offset: float | None = None,
+) -> tuple[float, float, float, float]:
+    road_slope = 2.0 * clamp(steering, -1.0, 1.0) * ROAD_CURVE_M_PER_M2 * forward_m
+    lane_change_slope = 0.0
+    if target_offset is not None:
+        lane_delta_m = (target_offset - offset) * lane_width_m
+        lane_change_slope = clamp(
+            lane_delta_m / 18.0,
+            -VEHICLE_LANE_CHANGE_SLOPE,
+            VEHICLE_LANE_CHANGE_SLOPE,
+        )
+    forward_x, forward_y = normalize2(road_slope + lane_change_slope, 1.0)
+    right_x = forward_y
+    right_y = -forward_x
+    return right_x, right_y, forward_x, forward_y
+
+
+def sample_range(start_m: float, end_m: float, steps: int) -> tuple[float, ...]:
+    steps = max(1, steps)
+    return tuple(start_m + (end_m - start_m) * index / steps for index in range(steps + 1))
+
+
+def lane_centerline(
+    offset: float,
+    steering: float,
+    lane_width_m: float,
+    start_m: float,
+    end_m: float,
+    steps: int,
+    height_m: float = 0.0,
+) -> tuple[Vec3, ...]:
+    return tuple(
+        Vec3(
+            road_world_x(offset, forward_m, steering, lane_width_m),
+            forward_m,
+            height_m,
+        )
+        for forward_m in sample_range(start_m, end_m, steps)
+    )
+
+
+def strip_between_offsets(
+    left_offset: float,
+    right_offset: float,
+    steering: float,
+    lane_width_m: float,
+    start_m: float,
+    end_m: float,
+    steps: int,
+    color: Color,
+    height_m: float = 0.0,
+) -> MeshStrip:
+    return MeshStrip(
+        left=lane_centerline(left_offset, steering, lane_width_m, start_m, end_m, steps, height_m),
+        right=lane_centerline(right_offset, steering, lane_width_m, start_m, end_m, steps, height_m),
+        color=color,
+    )
+
+
+def model_line_lateral_at_forward(
+    points: tuple[ModelPathPoint, ...],
+    relative_forward_m: float,
+) -> float | None:
+    if not points or relative_forward_m < 0.0:
+        return None
+    previous = points[0]
+    if relative_forward_m <= previous.forward_m:
+        return previous.lateral_m
+    for point in points[1:]:
+        if relative_forward_m <= point.forward_m:
+            span = max(0.001, point.forward_m - previous.forward_m)
+            amount = clamp((relative_forward_m - previous.forward_m) / span, 0.0, 1.0)
+            return previous.lateral_m + (point.lateral_m - previous.lateral_m) * amount
+        previous = point
+    return None
+
+
+def strip_between_model_lines(
+    left_points: tuple[ModelPathPoint, ...],
+    right_points: tuple[ModelPathPoint, ...],
+    start_m: float,
+    end_m: float,
+    steps: int,
+    color: Color,
+    height_m: float,
+) -> MeshStrip | None:
+    if len(left_points) < 2 or len(right_points) < 2:
+        return None
+
+    relative_start_m = max(
+        0.0,
+        start_m - EGO_FORWARD_M,
+        left_points[0].forward_m,
+        right_points[0].forward_m,
+    )
+    relative_end_m = min(
+        end_m - EGO_FORWARD_M,
+        left_points[-1].forward_m,
+        right_points[-1].forward_m,
+    )
+    if relative_end_m <= relative_start_m + 1.0:
+        return None
+
+    left: list[Vec3] = []
+    right: list[Vec3] = []
+    for relative_forward_m in sample_range(relative_start_m, relative_end_m, steps):
+        left_lateral = model_line_lateral_at_forward(left_points, relative_forward_m)
+        right_lateral = model_line_lateral_at_forward(right_points, relative_forward_m)
+        if left_lateral is None or right_lateral is None:
+            continue
+        forward_m = EGO_FORWARD_M + relative_forward_m
+        if left_lateral <= right_lateral:
+            left.append(Vec3(left_lateral, forward_m, height_m))
+            right.append(Vec3(right_lateral, forward_m, height_m))
+        else:
+            left.append(Vec3(right_lateral, forward_m, height_m))
+            right.append(Vec3(left_lateral, forward_m, height_m))
+
+    if len(left) < 2 or len(right) < 2:
+        return None
+    return MeshStrip(tuple(left), tuple(right), color)
+
+
+def marking_near_offset(markings: tuple[LaneMarking, ...], offset: float) -> LaneMarking | None:
+    candidates = [marking for marking in markings if marking.visible]
+    if not candidates:
+        return None
+    marking = min(candidates, key=lambda candidate: abs(candidate.offset - offset))
+    return marking if abs(marking.offset - offset) <= 0.30 else None
+
+
+def lane_floor_strip(
+    state: ClusterUiState,
+    lane_center_offset: float,
+    color: Color,
+    lane_width_m: float,
+    road_start_m: float,
+    road_end_m: float,
+    road_steps: int,
+    route_mode: bool,
+    height_m: float,
+) -> MeshStrip | None:
+    left_marking = marking_near_offset(state.lanes, lane_center_offset - 0.5)
+    right_marking = marking_near_offset(state.lanes, lane_center_offset + 0.5)
+    if left_marking is not None and right_marking is not None:
+        model_strip = strip_between_model_lines(
+            left_marking.model_points,
+            right_marking.model_points,
+            road_start_m,
+            road_end_m,
+            road_steps,
+            color,
+            height_m,
+        )
+        if model_strip is not None:
+            return model_strip
+
+    if route_mode:
+        return None
+    return strip_between_offsets(
+        lane_center_offset - 0.5,
+        lane_center_offset + 0.5,
+        state.steering,
+        lane_width_m,
+        road_start_m,
+        road_end_m,
+        road_steps,
+        color,
+        height_m,
+    )
+
+
+def strip_from_centerline(points: tuple[Vec3, ...], width_m: float, color: Color) -> MeshStrip:
+    if len(points) < 2:
+        return MeshStrip(points, points, color)
+
+    left: list[Vec3] = []
+    right: list[Vec3] = []
+    half_width = width_m * 0.5
+    for index, point in enumerate(points):
+        previous_point = points[max(0, index - 1)]
+        next_point = points[min(len(points) - 1, index + 1)]
+        tangent_x, tangent_y = normalize2(
+            next_point.x - previous_point.x,
+            next_point.y - previous_point.y,
+        )
+        right_x = tangent_y
+        right_y = -tangent_x
+        left.append(Vec3(point.x - right_x * half_width, point.y - right_y * half_width, point.z))
+        right.append(Vec3(point.x + right_x * half_width, point.y + right_y * half_width, point.z))
+    return MeshStrip(tuple(left), tuple(right), color)
+
+
+def points_at_height(points: tuple[Vec3, ...], height_m: float) -> tuple[Vec3, ...]:
+    return tuple(Vec3(point.x, point.y, height_m) for point in points)
+
+
+def lane_marking_strips(
+    offset: float,
+    steering: float,
+    lane_width_m: float,
+    width_px: int,
+    style: str,
+    color: Color,
+    start_m: float,
+    end_m: float,
+    height_m: float = LANE_MARKING_HEIGHT_M,
+) -> tuple[MeshStrip, ...]:
+    width_m = max(0.08, width_px * 0.022)
+    if style == "solid":
+        points = lane_centerline(offset, steering, lane_width_m, start_m, end_m, 80, height_m)
+        return (strip_from_centerline(points, width_m, color),)
+
+    strips: list[MeshStrip] = []
+    dash_m = 5.2
+    gap_m = 4.2
+    cursor = start_m
+    while cursor < end_m:
+        dash_end = min(cursor + dash_m, end_m)
+        points = lane_centerline(offset, steering, lane_width_m, cursor, dash_end, 6, height_m)
+        strips.append(strip_from_centerline(points, width_m, color))
+        cursor += dash_m + gap_m
+    return tuple(strips)
+
+
+def model_line_centerline(
+    model_points: tuple[ModelPathPoint, ...],
+    start_m: float,
+    end_m: float,
+    height_m: float,
+) -> tuple[Vec3, ...]:
+    points: list[Vec3] = []
+    for point in model_points:
+        forward_m = EGO_FORWARD_M + point.forward_m
+        if start_m <= forward_m <= end_m:
+            points.append(Vec3(point.lateral_m, forward_m, height_m))
+    return tuple(points)
+
+
+def resample_centerline(points: tuple[Vec3, ...], spacing_m: float) -> tuple[Vec3, ...]:
+    if len(points) < 2:
+        return points
+
+    sampled = [points[0]]
+    leftover_m = spacing_m
+    previous = points[0]
+    for current in points[1:]:
+        segment_dx = current.x - previous.x
+        segment_dy = current.y - previous.y
+        segment_dz = current.z - previous.z
+        segment_m = math.sqrt(segment_dx * segment_dx + segment_dy * segment_dy + segment_dz * segment_dz)
+        while segment_m >= leftover_m and segment_m > 0.001:
+            amount = leftover_m / segment_m
+            previous = Vec3(
+                previous.x + segment_dx * amount,
+                previous.y + segment_dy * amount,
+                previous.z + segment_dz * amount,
+            )
+            sampled.append(previous)
+            segment_dx = current.x - previous.x
+            segment_dy = current.y - previous.y
+            segment_dz = current.z - previous.z
+            segment_m = math.sqrt(segment_dx * segment_dx + segment_dy * segment_dy + segment_dz * segment_dz)
+            leftover_m = spacing_m
+        leftover_m -= segment_m
+        previous = current
+
+    if sampled[-1] != points[-1]:
+        sampled.append(points[-1])
+    return tuple(sampled)
+
+
+def model_line_marking_strips(
+    model_points: tuple[ModelPathPoint, ...],
+    width_px: int,
+    style: str,
+    color: Color,
+    start_m: float,
+    end_m: float,
+    height_m: float,
+) -> tuple[MeshStrip, ...]:
+    centerline = model_line_centerline(model_points, start_m, end_m, height_m)
+    if len(centerline) < 2:
+        return ()
+
+    width_m = max(0.08, width_px * 0.022)
+    if style == "solid":
+        return (strip_from_centerline(centerline, width_m, color),)
+
+    strips: list[MeshStrip] = []
+    sampled = resample_centerline(centerline, 0.75)
+    dash_m = 5.2
+    gap_m = 4.2
+    cycle_m = dash_m + gap_m
+    current_dash: list[Vec3] = []
+    distance_m = 0.0
+    previous: Vec3 | None = None
+    for point in sampled:
+        if previous is not None:
+            distance_m += math.hypot(point.x - previous.x, point.y - previous.y)
+        if distance_m % cycle_m < dash_m:
+            current_dash.append(point)
+        else:
+            if len(current_dash) >= 2:
+                strips.append(strip_from_centerline(tuple(current_dash), width_m, color))
+            current_dash = []
+        previous = point
+
+    if len(current_dash) >= 2:
+        strips.append(strip_from_centerline(tuple(current_dash), width_m, color))
+    return tuple(strips)
+
+
+def lane_marking_strips_for_marking(
+    marking: LaneMarking,
+    steering: float,
+    lane_width_m: float,
+    width_px: int,
+    color: Color,
+    start_m: float,
+    end_m: float,
+    height_m: float,
+) -> tuple[MeshStrip, ...]:
+    if marking.model_points:
+        model_strips = model_line_marking_strips(
+            marking.model_points,
+            width_px,
+            marking.style,
+            color,
+            start_m,
+            end_m,
+            height_m,
+        )
+        if model_strips:
+            return model_strips
+
+    return lane_marking_strips(
+        marking.offset,
+        steering,
+        lane_width_m,
+        width_px,
+        marking.style,
+        color,
+        start_m,
+        end_m,
+        height_m=height_m,
+    )
+
+
+def planned_path_lane_offset(state: ClusterUiState, forward_m: float) -> float:
+    start_offset = 0.0
+    target_offset = 0.0
+    if state.lane_change is not None:
+        start_offset = clamp(state.ego_lane_offset, -1.25, 1.25)
+        target_offset = state.highlight_lane_offset if state.highlight_lane_offset is not None else 0.0
+
+    if state.lane_change is None:
+        return 0.0
+
+    blend = smoothstep(
+        (forward_m - PATH_LANE_CHANGE_CURVE_START_M)
+        / (PATH_LANE_CHANGE_CURVE_END_M - PATH_LANE_CHANGE_CURVE_START_M)
+    )
+    return start_offset + (target_offset - start_offset) * blend
+
+
+def planned_path_end_m(state: ClusterUiState, blockers: tuple[PathBlocker, ...]) -> float:
+    end_m = PATH_END_M
+    for blocker in blockers:
+        if blocker.forward_m <= PATH_START_M:
+            continue
+        path_offset = planned_path_lane_offset(state, blocker.forward_m)
+        if abs(path_offset - blocker.offset) > PATH_BLOCKER_LANE_TOLERANCE:
+            continue
+        stop_m = blocker.forward_m - blocker.length_m * 0.5 - PATH_BLOCKER_CLEARANCE_M
+        end_m = min(end_m, max(PATH_START_M + 0.6, stop_m))
+    return end_m
+
+
+def model_path_lateral_at_forward(state: ClusterUiState, relative_forward_m: float) -> float | None:
+    if not state.model_path or relative_forward_m < 0.0:
+        return None
+
+    previous = state.model_path[0]
+    if relative_forward_m <= previous.forward_m:
+        return previous.lateral_m
+
+    for point in state.model_path[1:]:
+        if relative_forward_m <= point.forward_m:
+            span = max(0.001, point.forward_m - previous.forward_m)
+            amount = clamp((relative_forward_m - previous.forward_m) / span, 0.0, 1.0)
+            return previous.lateral_m + (point.lateral_m - previous.lateral_m) * amount
+        previous = point
+    return None
+
+
+def model_path_world_x(state: ClusterUiState, lane_width_m: float, forward_m: float) -> float | None:
+    lateral_m = model_path_lateral_at_forward(state, forward_m - EGO_FORWARD_M)
+    if lateral_m is None:
+        return None
+    ego_offset = clamp(state.ego_lane_offset, -1.25, 1.25)
+    ego_x_m = road_world_x(ego_offset, EGO_FORWARD_M, state.steering, lane_width_m)
+    return ego_x_m + lateral_m
+
+
+def model_path_end_m(state: ClusterUiState, lane_width_m: float, blockers: tuple[PathBlocker, ...]) -> float | None:
+    if len(state.model_path) < 2:
+        return None
+    last_forward_m = state.model_path[-1].forward_m
+    end_m = min(PATH_END_M, EGO_FORWARD_M + last_forward_m)
+    if end_m <= PATH_START_M + 0.6:
+        return None
+
+    for blocker in blockers:
+        if blocker.forward_m <= PATH_START_M:
+            continue
+        path_x_m = model_path_world_x(state, lane_width_m, blocker.forward_m)
+        if path_x_m is None:
+            continue
+        blocker_x_m = road_world_x(blocker.offset, blocker.forward_m, state.steering, lane_width_m)
+        if abs(path_x_m - blocker_x_m) > PATH_BLOCKER_LANE_TOLERANCE * lane_width_m:
+            continue
+        stop_m = blocker.forward_m - blocker.length_m * 0.5 - PATH_BLOCKER_CLEARANCE_M
+        end_m = min(end_m, max(PATH_START_M + 0.6, stop_m))
+    return end_m
+
+
+def model_path_centerline(
+    state: ClusterUiState,
+    lane_width_m: float,
+    blockers: tuple[PathBlocker, ...],
+) -> tuple[Vec3, ...]:
+    end_m = model_path_end_m(state, lane_width_m, blockers)
+    if end_m is None:
+        return ()
+    steps = max(4, int(72 * (end_m - PATH_START_M) / (PATH_END_M - PATH_START_M)))
+    points: list[Vec3] = []
+    for forward_m in sample_range(PATH_START_M, end_m, steps):
+        x_m = model_path_world_x(state, lane_width_m, forward_m)
+        if x_m is not None:
+            points.append(Vec3(x_m, forward_m, PATH_HEIGHT_M))
+    return tuple(points) if len(points) >= 2 else ()
+
+
+def planned_path_strips(
+    state: ClusterUiState,
+    lane_width_m: float,
+    blockers: tuple[PathBlocker, ...],
+) -> tuple[MeshStrip, ...]:
+    points = model_path_centerline(state, lane_width_m, blockers)
+    model_driven = bool(points)
+    if not points:
+        end_m = planned_path_end_m(state, blockers)
+        steps = max(4, int(72 * (end_m - PATH_START_M) / (PATH_END_M - PATH_START_M)))
+        centerline: list[Vec3] = []
+        for forward_m in sample_range(PATH_START_M, end_m, steps):
+            lane_offset = planned_path_lane_offset(state, forward_m)
+            centerline.append(
+                Vec3(
+                    road_world_x(lane_offset, forward_m, state.steering, lane_width_m),
+                    forward_m,
+                    PATH_HEIGHT_M,
+                )
+            )
+        points = tuple(centerline)
+    shadow_points = points_at_height(points, PATH_SHADOW_LAYER_M)
+    strips: list[MeshStrip] = [strip_from_centerline(shadow_points, 0.86, (56, 72, 88, 70))]
+    if model_driven:
+        uncertainty_width = model_path_uncertainty_width(state)
+        if uncertainty_width is not None:
+            strips.append(
+                strip_from_centerline(
+                    points_at_height(points, PATH_UNCERTAINTY_LAYER_M),
+                    uncertainty_width,
+                    (112, 169, 255, 74),
+                )
+            )
+    strips.append(strip_from_centerline(points_at_height(points, PATH_BODY_LAYER_M), 0.46, (34, 126, 255, 220)))
+    if model_driven:
+        strips.extend(model_path_metric_strips(state, points))
+    strips.append(
+        strip_from_centerline(
+            points_at_height(points, PATH_HIGHLIGHT_LAYER_M),
+            0.16,
+            (222, 239, 255, 238),
+        )
+    )
+    return tuple(strips)
+
+
+def model_path_uncertainty_width(state: ClusterUiState) -> float | None:
+    std_values = [point.lateral_std_m for point in state.model_path if point.lateral_std_m is not None]
+    if not std_values:
+        return None
+    average_std = sum(std_values[:16]) / min(len(std_values), 16)
+    return clamp(0.68 + average_std * 0.42, 0.72, 1.85)
+
+
+def model_path_metric_strips(state: ClusterUiState, points: tuple[Vec3, ...]) -> tuple[MeshStrip, ...]:
+    if len(state.model_path) < 2 or len(points) < 2:
+        return ()
+    strips: list[MeshStrip] = []
+    metric_count = min(len(state.model_path), len(points))
+    for index in range(metric_count - 1):
+        accel = state.model_path[index].accel_mps2
+        if accel is None:
+            continue
+        color = path_metric_color(accel)
+        segment = (
+            Vec3(points[index].x, points[index].y, PATH_METRIC_LAYER_M),
+            Vec3(points[index + 1].x, points[index + 1].y, PATH_METRIC_LAYER_M),
+        )
+        strips.append(strip_from_centerline(segment, 0.24, color))
+    return tuple(strips)
+
+
+def path_metric_color(accel_mps2: float) -> Color:
+    if accel_mps2 <= -2.4:
+        return RED[0], RED[1], RED[2], 210
+    if accel_mps2 <= -0.7:
+        return AMBER[0], AMBER[1], AMBER[2], 190
+    if accel_mps2 >= 0.7:
+        return 18, 184, 108, 170
+    return 70, 152, 255, 145
+
+
+def lead_trajectory_strips(state: ClusterUiState, lane_width_m: float) -> tuple[MeshStrip, ...]:
+    strips: list[MeshStrip] = []
+    for vehicle in state.detected_vehicles:
+        if len(vehicle.trajectory) < 2:
+            continue
+        points: list[Vec3] = []
+        for point in vehicle.trajectory:
+            forward_m = EGO_FORWARD_M + point.longitudinal_m
+            if forward_m < ROAD_NEAR_M or forward_m > ROAD_FAR_M:
+                continue
+            offset = clamp(point.lateral_m / lane_width_m, -2.2, 2.2)
+            points.append(
+                Vec3(
+                    road_world_x(offset, forward_m, state.steering, lane_width_m),
+                    forward_m,
+                    LEAD_PATH_BACKING_LAYER_M,
+                )
+            )
+        if len(points) < 2:
+            continue
+        color = lead_trajectory_color(vehicle)
+        uncertainty = [
+            point.y_std_m
+            for point in vehicle.trajectory
+            if point.y_std_m is not None and math.isfinite(point.y_std_m)
+        ]
+        if uncertainty:
+            width = clamp(0.22 + sum(uncertainty) / len(uncertainty) * 0.10, 0.22, 0.74)
+            strips.append(strip_from_centerline(tuple(points), width, color[0]))
+        strips.append(strip_from_centerline(points_at_height(tuple(points), LEAD_PATH_LINE_LAYER_M), 0.11, color[1]))
+    return tuple(strips)
+
+
+def lead_trajectory_color(vehicle: DetectedVehicle) -> tuple[Color, Color]:
+    if vehicle.ttc_s is not None and vehicle.ttc_s < 3.0:
+        return (RED[0], RED[1], RED[2], 80), (RED[0], RED[1], RED[2], 210)
+    if vehicle.cut_in:
+        return (AMBER[0], AMBER[1], AMBER[2], 76), (AMBER[0], AMBER[1], AMBER[2], 210)
+    alpha = int(90 + 95 * clamp(vehicle.probability, 0.0, 1.0))
+    return (88, 134, 182, 54), (72, 142, 255, alpha)
+
+
+def radar_point_markers(state: ClusterUiState, lane_width_m: float) -> tuple[RadarPointMarker, ...]:
+    markers: list[RadarPointMarker] = []
+    for point in state.radar_points[:48]:
+        if radar_point_is_vehicle_candidate(point, state, lane_width_m):
+            continue
+        forward_m = EGO_FORWARD_M + point.longitudinal_m
+        if forward_m < ROAD_NEAR_M or forward_m > ROAD_FAR_M + 30.0:
+            continue
+        color = radar_point_color(point)
+        absolute_speed_kph = radar_point_absolute_speed_kph(point, state)
+        markers.append(
+            RadarPointMarker(
+                center=Vec3(
+                    clamp(point.lateral_m, -lane_width_m * 3.0, lane_width_m * 3.0),
+                    forward_m,
+                    0.20,
+                ),
+                radius_m=radar_point_radius(point),
+                color=color,
+                label=point.label,
+                longitudinal_m=point.longitudinal_m,
+                lateral_m=point.lateral_m,
+                relative_speed_mps=point.relative_speed_mps,
+                absolute_speed_kph=absolute_speed_kph,
+                lateral_speed_mps=point.lateral_speed_mps,
+                relative_accel_mps2=point.relative_accel_mps2,
+                probability=point.probability,
+                valid=point.valid,
+                in_my_lane=point.in_my_lane,
+            )
+        )
+    return tuple(markers)
+
+
+def radar_vehicle_boxes(state: ClusterUiState, lane_width_m: float) -> tuple[VehicleBox, ...]:
+    selected: list[RadarPoint] = []
+    candidates = sorted(
+        (
+            point
+            for point in state.radar_points[:48]
+            if radar_point_is_vehicle_candidate(point, state, lane_width_m)
+        ),
+        key=lambda point: (
+            0 if radar_point_matches_detected_vehicle(point, state) else 1,
+            point.longitudinal_m,
+            abs(point.lateral_m),
+        ),
+    )
+    for point in candidates:
+        if any(radar_points_same_vehicle(point, existing) for existing in selected):
+            continue
+        selected.append(point)
+        if len(selected) >= RADAR_VEHICLE_MAX_BOXES:
+            break
+    selected.sort(key=lambda point: point.longitudinal_m)
+    return tuple(radar_vehicle_box(point, lane_width_m) for point in selected)
+
+
+def radar_points_same_vehicle(left: RadarPoint, right: RadarPoint) -> bool:
+    return (
+        abs(left.longitudinal_m - right.longitudinal_m) <= RADAR_VEHICLE_DEDUP_LONGITUDINAL_M
+        and abs(left.lateral_m - right.lateral_m) <= RADAR_VEHICLE_DEDUP_LATERAL_M
+    )
+
+
+def radar_vehicle_box(point: RadarPoint, lane_width_m: float) -> VehicleBox:
+    confidence = radar_vehicle_confidence(point)
+    alpha = int(92 + 163 * confidence)
+    body_color = GREEN
+    forward_m = EGO_FORWARD_M + point.longitudinal_m
+    center_x_m = clamp(point.lateral_m, -lane_width_m * 3.0, lane_width_m * 3.0)
+    return VehicleBox(
+        center=Vec3(center_x_m, forward_m, VEHICLE_HEIGHT_M * 0.5),
+        right_x=1.0,
+        right_y=0.0,
+        forward_x=0.0,
+        forward_y=1.0,
+        width_m=VEHICLE_WIDTH_M,
+        length_m=VEHICLE_LENGTH_M,
+        height_m=VEHICLE_HEIGHT_M,
+        body_color=rgba(body_color, alpha),
+        side_color=rgba(darken(body_color, 0.20), alpha),
+        rear_color=rgba(darken(body_color, 0.28), alpha),
+        top_highlight=rgba(lighten(body_color, 0.16), min(235, alpha)),
+        outline_color=rgba(darken(body_color, 0.42), min(235, alpha)),
+        confidence=confidence,
+        label=point.label,
+        source="radarPoint",
+        relative_speed_mps=point.relative_speed_mps,
+        acceleration_mps2=point.relative_accel_mps2,
+        annotate=False,
+    )
+
+
+def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> bool:
+    if not 2.5 <= point.longitudinal_m <= RADAR_VEHICLE_MAX_DISTANCE_M:
+        return False
+    if abs(point.lateral_m) > lane_width_m * RADAR_VEHICLE_MAX_LATERAL_LANES:
+        return False
+    if radar_point_is_stationary_object(point, state):
+        return False
+    if radar_point_is_side_static_reflection(point, state, lane_width_m):
+        return False
+    if radar_point_matches_static_road_edge(point, state, lane_width_m):
+        return False
+    if point.valid_count is not None and point.valid_count < RADAR_VEHICLE_MIN_VALID_COUNT:
+        return False
+    if point.probability is not None and point.probability < 0.20 and not point.in_my_lane:
+        return False
+    if radar_point_matches_detected_vehicle(point, state):
+        return True
+    if point.in_my_lane is not None and point.in_my_lane > 0:
+        return abs(point.lateral_m) <= lane_width_m * RADAR_PROBABLE_VEHICLE_LATERAL_LANES
+    if point.probability is not None and point.probability >= RADAR_VEHICLE_MIN_PROBABILITY:
+        return abs(point.lateral_m) <= lane_width_m * RADAR_PROBABLE_VEHICLE_LATERAL_LANES
+    if radar_point_is_moving_raw_vehicle(point, state, lane_width_m):
+        return True
+    return False
+
+
+def radar_point_is_moving_raw_vehicle(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> bool:
+    absolute_speed_kph = radar_point_absolute_speed_kph(point, state)
+    if absolute_speed_kph is None or absolute_speed_kph < RADAR_RAW_MOVING_SPEED_KPH:
+        return False
+    valid_count = point.valid_count if point.valid_count is not None else RADAR_RAW_CENTER_MIN_VALID_COUNT
+    lateral_lanes = abs(point.lateral_m) / max(0.1, lane_width_m)
+    if lateral_lanes <= RADAR_CENTER_RAW_LATERAL_LANES:
+        return valid_count >= RADAR_RAW_CENTER_MIN_VALID_COUNT
+    if lateral_lanes <= RADAR_ADJACENT_RAW_LATERAL_LANES:
+        return valid_count >= RADAR_RAW_ADJACENT_MIN_VALID_COUNT and abs(point.relative_speed_mps or 0.0) > RADAR_STATIC_OBJECT_SPEED_MPS
+    return False
+
+
+def radar_point_matches_detected_vehicle(point: RadarPoint, state: ClusterUiState) -> bool:
+    for vehicle in state.detected_vehicles:
+        longitudinal_tolerance = max(4.0, min(8.0, point.longitudinal_m * 0.08))
+        if abs(point.longitudinal_m - vehicle.longitudinal_m) > longitudinal_tolerance:
+            continue
+        if abs(point.lateral_m - vehicle.lateral_m) <= 1.35:
+            return True
+    return False
+
+
+def radar_point_absolute_speed_kph(point: RadarPoint, state: ClusterUiState) -> float | None:
+    if point.absolute_speed_kph is not None:
+        return point.absolute_speed_kph
+    if point.relative_speed_mps is None:
+        return None
+    return max(0.0, state.speed_kph + point.relative_speed_mps * 3.6)
+
+
+def radar_point_is_stationary_object(point: RadarPoint, state: ClusterUiState) -> bool:
+    absolute_speed_kph = radar_point_absolute_speed_kph(point, state)
+    return absolute_speed_kph is not None and absolute_speed_kph <= RADAR_STATIC_OBJECT_SPEED_KPH
+
+
+def radar_point_is_side_static_reflection(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> bool:
+    if state.speed_kph < RADAR_EGO_MOVING_SPEED_KPH:
+        return False
+    if point.in_my_lane is not None and point.in_my_lane > 0:
+        return False
+    if abs(point.lateral_m) <= lane_width_m * RADAR_SIDE_STATIC_LATERAL_LANES:
+        return False
+    return abs(point.relative_speed_mps or 0.0) <= RADAR_STATIC_OBJECT_SPEED_MPS
+
+
+def radar_point_matches_static_road_edge(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> bool:
+    edge_distance = radar_point_road_edge_distance_m(point, state, lane_width_m)
+    if edge_distance is None:
+        return False
+    if edge_distance <= RADAR_ROAD_EDGE_HARD_CLEARANCE_M:
+        return True
+    rel_speed = abs(point.relative_speed_mps or 0.0)
+    absolute_speed_kph = radar_point_absolute_speed_kph(point, state)
+    absolute_static = absolute_speed_kph is not None and absolute_speed_kph <= RADAR_STATIC_OBJECT_SPEED_KPH
+    relative_static = rel_speed <= RADAR_STATIC_OBJECT_SPEED_MPS
+    return edge_distance <= RADAR_ROAD_EDGE_STATIONARY_CLEARANCE_M and (absolute_static or relative_static)
+
+
+
+def radar_point_road_edge_distance_m(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> float | None:
+    distances: list[float] = []
+    for edge_points in (state.left_road_edge_points, state.right_road_edge_points):
+        edge_lateral = model_line_lateral_at(edge_points, point.longitudinal_m)
+        if edge_lateral is not None:
+            distances.append(abs(point.lateral_m - edge_lateral))
+    for edge_offset in (state.left_road_edge_offset, state.right_road_edge_offset):
+        if edge_offset is not None:
+            distances.append(abs(point.lateral_m - edge_offset * lane_width_m))
+    if not distances:
+        left_offset, right_offset = road_surface_offsets(state, True)
+        distances.extend(
+            (
+                abs(point.lateral_m - left_offset * lane_width_m),
+                abs(point.lateral_m - right_offset * lane_width_m),
+            )
+        )
+    return min(distances) if distances else None
+
+
+def model_line_lateral_at(points: tuple[ModelPathPoint, ...], forward_m: float) -> float | None:
+    if not points:
+        return None
+    ordered = sorted(points, key=lambda point: point.forward_m)
+    if forward_m <= ordered[0].forward_m:
+        return ordered[0].lateral_m
+    for left, right in zip(ordered, ordered[1:]):
+        if left.forward_m <= forward_m <= right.forward_m:
+            span = max(0.001, right.forward_m - left.forward_m)
+            amount = clamp((forward_m - left.forward_m) / span, 0.0, 1.0)
+            return left.lateral_m + (right.lateral_m - left.lateral_m) * amount
+    return ordered[-1].lateral_m
+
+
+def radar_vehicle_confidence(point: RadarPoint) -> float:
+    if point.probability is not None:
+        return clamp(0.58 + point.probability * 0.38, 0.58, 0.96)
+    if point.valid_count is not None:
+        return clamp(0.56 + min(point.valid_count, 120) / 120.0 * 0.36, 0.56, 0.92)
+    return 0.72
+
+
+def radar_point_color(point: RadarPoint) -> Color:
+    if point.longitudinal_m < 12.0 and abs(point.lateral_m) < 1.6:
+        return RED[0], RED[1], RED[2], 232
+    if point.in_my_lane is not None and point.in_my_lane > 0:
+        return BLUE[0], BLUE[1], BLUE[2], 226
+    if point.probability is not None and point.probability < 0.25:
+        return 116, 126, 136, 150
+    if point.relative_speed_mps is not None and point.relative_speed_mps < -2.5:
+        return AMBER[0], AMBER[1], AMBER[2], 226
+    return 34, 150, 255, 208
+
+
+def radar_point_radius(point: RadarPoint) -> float:
+    probability = point.probability if point.probability is not None else 0.72
+    return clamp(0.105 + 0.07 * probability, 0.095, 0.19)
+
+
+def vehicle_box(
+    offset: float,
+    forward_m: float,
+    steering: float,
+    lane_width_m: float,
+    color: tuple[int, int, int],
+    camera_active: bool,
+    target_offset: float | None = None,
+    confidence: float = 1.0,
+    label: str = "",
+    source: str = "",
+    relative_speed_mps: float | None = None,
+    acceleration_mps2: float | None = None,
+    ttc_s: float | None = None,
+    cut_in: bool = False,
+    primary: bool = False,
+    annotate: bool = False,
+) -> VehicleBox:
+    confidence = clamp(confidence, 0.0, 1.0)
+    alpha = int(92 + 163 * confidence)
+    body_color = color
+    center_x_m = road_world_x(offset, forward_m, steering, lane_width_m)
+    right_x, right_y, forward_x, forward_y = vehicle_heading(
+        offset,
+        forward_m,
+        steering,
+        lane_width_m,
+        target_offset,
+    )
+    width_m = VEHICLE_WIDTH_M
+    length_m = VEHICLE_LENGTH_M
+    height_m = VEHICLE_HEIGHT_M
+
+    return VehicleBox(
+        center=Vec3(center_x_m, forward_m, height_m * 0.5),
+        right_x=right_x,
+        right_y=right_y,
+        forward_x=forward_x,
+        forward_y=forward_y,
+        width_m=width_m,
+        length_m=length_m,
+        height_m=height_m,
+        body_color=rgba(body_color, alpha),
+        side_color=rgba(darken(body_color, 0.20), alpha),
+        rear_color=rgba(darken(body_color, 0.28), alpha),
+        top_highlight=rgba(lighten(body_color, 0.16), min(235, alpha)),
+        outline_color=rgba(darken(body_color, 0.42), min(235, alpha)),
+        confidence=confidence,
+        label=label,
+        source=source,
+        relative_speed_mps=relative_speed_mps,
+        acceleration_mps2=acceleration_mps2,
+        ttc_s=ttc_s,
+        cut_in=cut_in,
+        primary=primary,
+        annotate=annotate,
+    )
+
+
+def scene_camera(state: ClusterUiState, lane_width_m: float) -> CameraSpec:
+    ego_offset = clamp(state.ego_lane_offset, -1.25, 1.25)
+    ego_x_m = road_world_x(ego_offset, EGO_FORWARD_M, state.steering, lane_width_m)
+    ego_y_m = EGO_FORWARD_M
+
+    drive_camera = CameraSpec(
+        position=Vec3(0.0, -8.80, 5.20),
+        target=Vec3(0.0, 22.0, 0.18),
+        fovy_deg=31.0,
+    )
+
+    if not state.surround_view_active:
+        return drive_camera
+
+    yaw_rad = math.radians(clamp(state.surround_yaw_deg, -SURROUND_MAX_YAW_DEG, SURROUND_MAX_YAW_DEG))
+    orbit_forward_x = math.sin(yaw_rad)
+    orbit_forward_y = math.cos(yaw_rad)
+    pitch_deg = clamp(state.surround_pitch_deg, -SURROUND_MAX_PITCH_DEG, SURROUND_MAX_PITCH_DEG)
+    camera_height_m = SURROUND_CAMERA_HEIGHT_M + pitch_deg * 0.035
+    target_forward_m = SURROUND_TARGET_FORWARD_M + pitch_deg * 0.12
+
+    orbit_camera = CameraSpec(
+        position=Vec3(
+            ego_x_m - orbit_forward_x * SURROUND_CAMERA_DISTANCE_M,
+            ego_y_m - orbit_forward_y * SURROUND_CAMERA_DISTANCE_M,
+            camera_height_m,
+        ),
+        target=Vec3(
+            ego_x_m + orbit_forward_x * target_forward_m,
+            ego_y_m + orbit_forward_y * target_forward_m,
+            SURROUND_TARGET_HEIGHT_M,
+        ),
+        fovy_deg=40.0,
+    )
+    orbit_amount = smoothstep(
+        max(
+            abs(state.surround_yaw_deg) / SURROUND_MAX_YAW_DEG,
+            abs(state.surround_pitch_deg) / SURROUND_MAX_PITCH_DEG,
+        )
+    )
+    return blend_camera(drive_camera, orbit_camera, orbit_amount)
+
+
+def blend_vec3(start: Vec3, end: Vec3, amount: float) -> Vec3:
+    return Vec3(
+        start.x + (end.x - start.x) * amount,
+        start.y + (end.y - start.y) * amount,
+        start.z + (end.z - start.z) * amount,
+    )
+
+
+def blend_camera(start: CameraSpec, end: CameraSpec, amount: float) -> CameraSpec:
+    amount = clamp(amount, 0.0, 1.0)
+    return CameraSpec(
+        position=blend_vec3(start.position, end.position, amount),
+        target=blend_vec3(start.target, end.target, amount),
+        fovy_deg=start.fovy_deg + (end.fovy_deg - start.fovy_deg) * amount,
+    )
+
+
+def road_surface_offsets(state: ClusterUiState, route_mode: bool) -> tuple[float, float]:
+    if not route_mode:
+        return -1.9, 1.9
+
+    road_shift = state.road_view_lane_position
+    left = road_shift - 0.92
+    right = road_shift + 0.92
+    if state.lane_change == "left":
+        left = min(left, road_shift - 1.55)
+    elif state.lane_change == "right":
+        right = max(right, road_shift + 1.55)
+    if state.extra_left_lane_visible:
+        left = min(road_shift - 1.55, state.left_road_edge_offset if state.left_road_edge_offset is not None else road_shift - 1.9)
+    elif state.left_road_edge_offset is not None:
+        left = min(left, max(state.left_road_edge_offset, -1.25))
+    if state.extra_right_lane_visible:
+        right = max(road_shift + 1.55, state.right_road_edge_offset if state.right_road_edge_offset is not None else road_shift + 1.9)
+    elif state.right_road_edge_offset is not None:
+        right = max(right, min(state.right_road_edge_offset, 1.25))
+    return clamp(left, -2.8, -0.68), clamp(right, 0.68, 2.8)
+
+
+def road_edge_color(distance_m: float | None, confidence: float) -> Color:
+    confidence = clamp(confidence, 0.0, 1.0)
+    if distance_m is not None and distance_m < 0.85:
+        base = RED
+        alpha = 165 + int(80 * confidence)
+    elif distance_m is not None and distance_m < 1.35:
+        base = AMBER
+        alpha = 145 + int(80 * confidence)
+    else:
+        base = darken(ROAD_EDGE, 0.22)
+        alpha = 150 + int(70 * confidence)
+    return base[0], base[1], base[2], int(clamp(alpha, 120, 245))
+
+
+def road_edge_model_strips(
+    model_points: tuple[ModelPathPoint, ...],
+    color: Color,
+    start_m: float,
+    end_m: float,
+) -> tuple[MeshStrip, ...]:
+    return (
+        *model_line_marking_strips(
+            model_points,
+            12,
+            "solid",
+            ROAD_EDGE_BACKING_COLOR,
+            start_m,
+            end_m,
+            ROAD_EDGE_SHADOW_HEIGHT_M,
+        ),
+        *model_line_marking_strips(
+            model_points,
+            7,
+            "solid",
+            color,
+            start_m,
+            end_m,
+            ROAD_EDGE_HEIGHT_M,
+        ),
+    )
+
+
+def road_edge_offset_strips(
+    offset: float,
+    steering: float,
+    lane_width_m: float,
+    color: Color,
+    start_m: float,
+    end_m: float,
+) -> tuple[MeshStrip, ...]:
+    return (
+        *lane_marking_strips(
+            offset,
+            steering,
+            lane_width_m,
+            12,
+            "solid",
+            ROAD_EDGE_BACKING_COLOR,
+            start_m,
+            end_m,
+            height_m=ROAD_EDGE_SHADOW_HEIGHT_M,
+        ),
+        *lane_marking_strips(
+            offset,
+            steering,
+            lane_width_m,
+            7,
+            "solid",
+            color,
+            start_m,
+            end_m,
+            height_m=ROAD_EDGE_HEIGHT_M,
+        ),
+    )
+
+
+def vehicle_color_for_detection(vehicle: DetectedVehicle) -> tuple[int, int, int]:
+    if vehicle.cut_in:
+        return AMBER
+    if vehicle.primary:
+        return (50, 66, 82)
+    if vehicle.source.startswith("modelV2"):
+        return (88, 100, 112)
+    return CAR_DARK
+
+
+def vehicle_blocks_path(vehicle: DetectedVehicle) -> bool:
+    if vehicle.longitudinal_m <= 0.0:
+        return False
+    if vehicle.source.startswith("modelV2") and vehicle.probability < 0.35:
+        return False
+    return True
+
+
+def road_edge_strips(
+    state: ClusterUiState,
+    route_mode: bool,
+    lane_width_m: float,
+    road_start_m: float,
+    road_end_m: float,
+) -> tuple[MeshStrip, ...]:
+    if not route_mode:
+        default_color = road_edge_color(None, 1.0)
+        return (
+            *road_edge_offset_strips(
+                -1.9,
+                state.steering,
+                lane_width_m,
+                default_color,
+                road_start_m,
+                road_end_m,
+            ),
+            *road_edge_offset_strips(
+                1.9,
+                state.steering,
+                lane_width_m,
+                default_color,
+                road_start_m,
+                road_end_m,
+            ),
+        )
+
+    strips: list[MeshStrip] = []
+    if state.left_road_edge_offset is not None or state.left_road_edge_points:
+        left_color = road_edge_color(state.left_road_edge_distance_m, state.left_road_edge_confidence)
+        if state.left_road_edge_points:
+            strips.extend(road_edge_model_strips(state.left_road_edge_points, left_color, road_start_m, road_end_m))
+        elif state.left_road_edge_offset is not None:
+            strips.extend(
+                road_edge_offset_strips(
+                    clamp(state.left_road_edge_offset, -2.8, -0.68),
+                    state.steering,
+                    lane_width_m,
+                    left_color,
+                    road_start_m,
+                    road_end_m,
+                )
+            )
+    if state.right_road_edge_offset is not None or state.right_road_edge_points:
+        right_color = road_edge_color(state.right_road_edge_distance_m, state.right_road_edge_confidence)
+        if state.right_road_edge_points:
+            strips.extend(road_edge_model_strips(state.right_road_edge_points, right_color, road_start_m, road_end_m))
+        elif state.right_road_edge_offset is not None:
+            strips.extend(
+                road_edge_offset_strips(
+                    clamp(state.right_road_edge_offset, 0.68, 2.8),
+                    state.steering,
+                    lane_width_m,
+                    right_color,
+                    road_start_m,
+                    road_end_m,
+                )
+            )
+    return tuple(strips)
+
+
+def build_cluster_scene(state: ClusterUiState) -> ClusterScene:
+    lane_width_m = max(2.4, min(4.6, state.lane_width_m or DEFAULT_LANE_WIDTH_M))
+    camera = scene_camera(state, lane_width_m)
+    camera_active = state.surround_view_active
+    radar_boxes = radar_vehicle_boxes(state, lane_width_m)
+    route_mode = state.route_overlay is not None or bool(state.detected_vehicles) or bool(state.radar_points)
+    road_start_m = SURROUND_ROAD_REAR_M if camera_active else ROAD_NEAR_M
+    road_end_m = SURROUND_ROAD_FRONT_M if camera_active else ROAD_FAR_M
+    road_steps = 120 if camera_active else 88
+    if (state.detected_vehicles or radar_boxes) and not camera_active:
+        nearest_detected_y = min(
+            (EGO_FORWARD_M + vehicle.longitudinal_m for vehicle in state.detected_vehicles),
+            default=ROAD_FAR_M,
+        )
+        nearest_radar_y = min((vehicle.center.y for vehicle in radar_boxes), default=ROAD_FAR_M)
+        nearest_detected_y = min(nearest_detected_y, nearest_radar_y)
+        road_start_m = min(road_start_m, max(-35.0, nearest_detected_y - 8.0))
+
+    highlight_lanes: list[MeshStrip] = []
+    if state.highlight_lane_offset is not None:
+        highlight_strip = lane_floor_strip(
+            state,
+            state.highlight_lane_offset,
+            (218, 235, 255, 130 if route_mode else 185),
+            lane_width_m,
+            road_start_m,
+            road_end_m,
+            road_steps,
+            route_mode,
+            0.006,
+        )
+        if highlight_strip is not None:
+            highlight_lanes.append(highlight_strip)
+
+    lane_strips: list[MeshStrip] = []
+    for marking in state.lanes:
+        if not marking.visible:
+            continue
+        lane_strips.extend(
+            lane_marking_strips_for_marking(
+                marking,
+                state.steering,
+                lane_width_m,
+                marking.width + LANE_MARKING_BORDER_EXTRA_WIDTH_PX,
+                LANE_MARKING_BORDER_COLOR,
+                road_start_m,
+                road_end_m,
+                height_m=LANE_MARKING_SHADOW_HEIGHT_M,
+            )
+        )
+        lane_strips.extend(
+            lane_marking_strips_for_marking(
+                marking,
+                state.steering,
+                lane_width_m,
+                marking.width,
+                rgba(marking.color),
+                road_start_m,
+                road_end_m,
+                height_m=LANE_MARKING_HEIGHT_M,
+            )
+        )
+
+    ego_offset = clamp(state.ego_lane_offset, -1.25, 1.25)
+    target_offset = state.highlight_lane_offset if state.lane_change_phase == "changing" else None
+    ego_vehicle = vehicle_box(ego_offset, EGO_FORWARD_M, state.steering, lane_width_m, EGO, camera_active, target_offset)
+    if route_mode:
+        detected_vehicle_boxes = tuple(
+            vehicle_box(
+                clamp(detected.lateral_m / lane_width_m, -2.2, 2.2),
+                EGO_FORWARD_M + detected.longitudinal_m,
+                state.steering,
+                lane_width_m,
+                vehicle_color_for_detection(detected),
+                camera_active,
+                confidence=detected.probability,
+                label=detected.label,
+                source=detected.source,
+                relative_speed_mps=detected.relative_speed_mps,
+                acceleration_mps2=detected.acceleration_mps2,
+                ttc_s=detected.ttc_s,
+                cut_in=detected.cut_in,
+                primary=detected.primary,
+                annotate=(
+                    detected.primary
+                    or detected.cut_in
+                    or (
+                        detected.source.startswith("modelV2")
+                        and detected.probability >= 0.55
+                    )
+                ),
+            )
+            for detected in state.detected_vehicles
+        )
+        detected_blockers = tuple(
+            PathBlocker(
+                clamp(detected.lateral_m / lane_width_m, -2.2, 2.2),
+                EGO_FORWARD_M + detected.longitudinal_m,
+                VEHICLE_LENGTH_M,
+            )
+            for detected in state.detected_vehicles
+            if vehicle_blocks_path(detected)
+        )
+        radar_blockers = tuple(
+            PathBlocker(
+                clamp(vehicle.center.x / lane_width_m, -2.2, 2.2),
+                vehicle.center.y,
+                vehicle.length_m,
+            )
+            for vehicle in radar_boxes
+        )
+        blockers = (*detected_blockers, *radar_blockers)
+        vehicles = (ego_vehicle, *detected_vehicle_boxes, *radar_boxes)
+    else:
+        traffic_forward_m = 14.5 + 0.9 * math.sin(state.speed_kph * 0.03)
+        left_traffic_forward_m = LEFT_TEST_TRAFFIC_FORWARD_M + 0.5 * math.sin(state.speed_kph * 0.02)
+        blockers = (
+            PathBlocker(0.0, traffic_forward_m, VEHICLE_LENGTH_M),
+            PathBlocker(-1.0, left_traffic_forward_m, VEHICLE_LENGTH_M),
+        )
+        vehicles = (
+            ego_vehicle,
+            vehicle_box(0.0, traffic_forward_m, state.steering, lane_width_m, CAR_DARK, camera_active),
+            vehicle_box(-1.0, left_traffic_forward_m, state.steering, lane_width_m, CAR_DARK, camera_active),
+        )
+
+    road_left_offset, road_right_offset = road_surface_offsets(state, route_mode)
+    return ClusterScene(
+        camera=camera,
+        road_surface=strip_between_offsets(
+            road_left_offset,
+            road_right_offset,
+            state.steering,
+            lane_width_m,
+            road_start_m,
+            road_end_m,
+            road_steps,
+            (218, 222, 226, 255),
+        ),
+        road_edges=road_edge_strips(state, route_mode, lane_width_m, road_start_m, road_end_m),
+        highlight_lanes=tuple(highlight_lanes),
+        lane_markings=tuple(lane_strips),
+        lead_paths=(),
+        planned_path=planned_path_strips(state, lane_width_m, blockers),
+        radar_points=radar_point_markers(state, lane_width_m),
+        vehicles=vehicles,
+    )
