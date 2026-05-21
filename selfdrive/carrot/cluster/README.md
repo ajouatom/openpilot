@@ -19,3 +19,6 @@ python selfdrive/carrot/cluster_run.py --output usb --usb-codec jpeg --usb-jpeg-
 The launcher defaults to `--input live`, subscribes to openpilot cereal services,
 and renders live `carState`, `modelV2`, `radarState`, and raw Hyundai CAN-FD radar
 points when CAN subscription is enabled.
+
+The bundled TURZX code includes only the Python vendor library. The openpilot
+device uses the system `libusb-1.0.so` through `pyusb`.
