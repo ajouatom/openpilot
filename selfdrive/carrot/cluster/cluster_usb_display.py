@@ -220,12 +220,12 @@ class TuringUsbDisplay:
         if self._ep_in is None:
             raise RuntimeError("Could not find USB IN endpoint")
 
-    def _drain_input(self, attempts: int = 3) -> None:
+    def _drain_input(self, attempts: int = 3, timeout_ms: int = 20) -> None:
         if self._ep_in is None:
             return
         for _ in range(attempts):
             try:
-                self._ep_in.read(512, 20)
+                self._ep_in.read(512, timeout_ms)
             except Exception:
                 return
 
@@ -306,7 +306,9 @@ class TuringUsbDisplay:
             raise RuntimeError("USB OUT endpoint is not open")
 
         if drain_input:
-            self._drain_input(attempts=3)
+            self._drain_input(attempts=3, timeout_ms=20)
+        else:
+            self._drain_input(attempts=1, timeout_ms=2)
 
         self._ep_out.write(
             self._build_frame_payload(command_id, frame),
