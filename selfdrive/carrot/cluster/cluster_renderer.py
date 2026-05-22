@@ -827,7 +827,7 @@ class ClusterUiRenderer:
 
         text = state.center_clock_text
         x = DESIGN_WIDTH * 0.5
-        y = DESIGN_HEIGHT * 0.5
+        y = 58
         size = 54
         spacing = max(1.0, size * 0.02)
         font = self._font or rl.get_font_default()
