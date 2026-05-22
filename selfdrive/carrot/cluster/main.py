@@ -309,6 +309,7 @@ def run_demo(
             last_frame_time = now
             if live_source is not None:
                 state = live_source.update()
+                state = replace(state, center_clock_text=time.strftime("%H:%M:%S"))
                 source_status = live_source.status_text()
             elif route_source is not None:
                 playback_seconds = (now - start_time) * route_replay_speed
