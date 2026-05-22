@@ -339,11 +339,7 @@ def run_demo(
                       state,
                       rotate_clockwise=True,
                   )
-                  jpeg = usb_display.encode_jpeg(rgba, image_width, image_height)
-                  
-                  # print(f"jpeg={len(jpeg) / 1024:.0f}KiB", flush=True)
-                  
-                  usb_display.send_jpeg(jpeg)
+                  usb_display.send_jpeg(usb_display.encode_jpeg(rgba, image_width, image_height))
                 else:
                     usb_display.send_png(renderer.render_to_png_bytes(state, rotate_clockwise=True))
             report_frames += 1
