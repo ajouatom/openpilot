@@ -94,6 +94,7 @@ class UIState:
 
     # Brightness and UI options
     self.show_brightness_ratio: float = 1.0
+    self.show_model_view: int = 0
 
     self.update_params()
 
@@ -197,6 +198,7 @@ class UIState:
     self.show_date_time = self.params.get_int("ShowDateTime")
     self.show_radar_info = self.params.get_int("ShowRadarInfo")
     self.show_brightness_ratio: float = self.params.get_int("ShowCustomBrightness") / 100.0
+    self.show_model_view = self.params.get_int("ShowModelView")
 
     self._param_update_time = time.monotonic()
 

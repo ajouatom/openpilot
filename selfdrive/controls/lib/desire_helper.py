@@ -238,6 +238,11 @@ class DesireHelper:
     blinker_state  = driver_st if driver_enabled else atc_st
 
     side = self._get_selected_side(blinker_state) if blinker_state in (BLINKER_LEFT, BLINKER_RIGHT) else None
+    atc_lane_change_manual_only = (
+      atc_enabled and
+      not driver_enabled and
+      self.atc_type in ("fork left", "atc left")
+    )
 
     # ── lane_change_available 의 False→True 전환 감지 ──────────────
     # commit_last() 는 update() 말미에 호출되므로
@@ -279,6 +284,7 @@ class DesireHelper:
       else:
         auto_lane_change_trigger = (
           self.auto_lane_change_enable and
+          (not atc_lane_change_manual_only) and
           side.edge_available and
           (side.lane_available_trigger or side.lane_appeared) and
           side.lane_change_available

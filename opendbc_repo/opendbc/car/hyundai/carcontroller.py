@@ -252,8 +252,13 @@ class CarController(CarControllerBase):
     error_delta = self.prev_abs_angle_error - abs_angle_error
 
     if CS.out.steeringPressed:
+<<<<<<< HEAD
       # Driver touched the wheel, immediately yield.
       self.lkas_max_torque = 25
+=======
+      # Driver touched the wheel, gradually yield.
+      self.lkas_max_torque = max(self.lkas_max_torque - 20, 25)
+>>>>>>> dd1ae2e3ff3a4e0ede3564277f8d8d00d682b644
       self.recover_level = 0.0
 
     else:

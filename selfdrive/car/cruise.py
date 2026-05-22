@@ -726,11 +726,15 @@ class VCruiseCarrot:
       elif self.xState == 3:
         v_cruise_kph = min(self.v_ego_kph_set, v_cruise_kph)
         self._cruise_control(-1, 3, "Cruise off (traffic sign)")
+      elif CS.leftBlinker or CS.rightBlinker:
+        pass
       elif self.v_ego_kph_set >= self.autoGasTokSpeed and not CC.enabled:
         v_cruise_kph = min(self.v_ego_kph_set, v_cruise_kph)
         self._cruise_control(1, -1 if self.aTarget > 0.0 else 0, "Cruise on (gas pressed)")
     elif self._brake_pressed_count == -1 and self._soft_hold_active == 0:
-      if self.v_ego_kph_set > self.autoGasTokSpeed:
+      if CS.leftBlinker or CS.rightBlinker:
+        pass
+      elif self.v_ego_kph_set > self.autoGasTokSpeed:
         v_cruise_kph = self.v_ego_kph_set
         self._cruise_control(1, -1 if self.aTarget > 0.0 else 0, "Cruise on (speed)")
       elif abs(CS.steeringAngleDeg) < 20:
@@ -755,13 +759,16 @@ class VCruiseCarrot:
           else:
             self._add_log(f"leadCar d={self.d_rel:.1f},v={self.v_rel:.1f},{CS.vEgo:.1f}, {safe_dist:.1f}")
             #self.events.append(EventName.stopStop)
-        if self.desiredSpeed < self.v_ego_kph_set:
-          self._cruise_control(1, -1, "Cruise on (desired speed)")
-        if self._cruise_ready:
-          if self.xState in [3]:
-            self._cruise_control(1, 0, "Cruise on (traffic sign)")
-          elif self.d_rel > 0:
-            self._cruise_control(1, 0, "Cruise on (lead car)")
+        if CS.leftBlinker or CS.rightBlinker:
+          pass
+        else:
+          if self.desiredSpeed < self.v_ego_kph_set:
+            self._cruise_control(1, -1, "Cruise on (desired speed)")
+          if self._cruise_ready:
+            if self.xState in [3]:
+              self._cruise_control(1, 0, "Cruise on (traffic sign)")
+            elif self.d_rel > 0:
+              self._cruise_control(1, 0, "Cruise on (lead car)")
       elif self._paddle_decel_active:
         if self.xState in [3]:
           self._paddle_decel_active = False
