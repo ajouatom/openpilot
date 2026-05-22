@@ -335,8 +335,15 @@ def run_demo(
                 renderer.render_frame(state)
             if usb_display is not None:
                 if usb_codec == "jpeg":
-                    rgba, image_width, image_height = renderer.render_to_rgba_bytes(state, rotate_clockwise=True)
-                    usb_display.send_jpeg(usb_display.encode_jpeg(rgba, image_width, image_height))
+                  rgba, image_width, image_height = renderer.render_to_rgba_bytes(
+                      state,
+                      rotate_clockwise=True,
+                  )
+                  jpeg = usb_display.encode_jpeg(rgba, image_width, image_height)
+                  
+                  print(f"jpeg={len(jpeg) / 1024:.0f}KiB", flush=True)
+                  
+                  usb_display.send_jpeg(jpeg)
                 else:
                     usb_display.send_png(renderer.render_to_png_bytes(state, rotate_clockwise=True))
             report_frames += 1
