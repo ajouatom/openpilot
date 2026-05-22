@@ -817,9 +817,35 @@ class ClusterUiRenderer:
         self._draw_accel_block(state)
         self._draw_turn_signal("left", state.left_signal)
         self._draw_turn_signal("right", state.right_signal)
+        self._draw_center_clock(state)
         self._draw_route_overlay(state.route_overlay)
         rl.rl_pop_matrix()
 
+    def _draw_center_clock(self, state: ClusterUiState) -> None:
+        if not state.center_clock_text:
+            return
+
+        text = state.center_clock_text
+        x = DESIGN_WIDTH * 0.5
+        y = DESIGN_HEIGHT * 0.5
+        size = 54
+        spacing = max(1.0, size * 0.02)
+        font = self._font or rl.get_font_default()
+        measured = rl.measure_text_ex(font, text, size, spacing)
+
+        pad_x = 28
+        pad_y = 14
+        rect = rl.Rectangle(
+            x - measured.x * 0.5 - pad_x,
+            y - measured.y * 0.5 - pad_y,
+            measured.x + pad_x * 2,
+            measured.y + pad_y * 2,
+        )
+
+        rl.draw_rectangle_rounded(rect, 0.28, 12, rl_color((8, 10, 12, 150)))
+        rl.draw_rectangle_rounded_lines_ex(rect, 0.28, 12, 2.0, rl_color((255, 255, 255, 72)))
+        self._draw_text(text, x, y, size, WHITE, anchor="center")
+  
     def _draw_route_overlay(self, overlay: RouteOverlay | None) -> None:
         if overlay is None:
             return
