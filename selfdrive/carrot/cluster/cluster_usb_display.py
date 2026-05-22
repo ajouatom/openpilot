@@ -301,24 +301,40 @@ class TuringUsbDisplay:
         self._ep_out.write(self._build_frame_payload(command_id, frame), USB_FRAME_TIMEOUT_MS)
         return bytes(self._ep_in.read(512, USB_FRAME_TIMEOUT_MS))
 
-    def _send_frame_no_ack(self, command_id: int, frame: bytes, *, drain_input: bool) -> None:
-        if self._ep_out is None:
-            raise RuntimeError("USB OUT endpoint is not open")
-        self._clear_endpoint_halt()
-        if drain_input:
-            self._drain_input()
-        self._ep_out.write(self._build_frame_payload(command_id, frame), USB_FRAME_TIMEOUT_MS)
+def _send_frame_no_ack(self, command_id: int, frame: bytes, *, drain_input: bool) -> None:
+    if self._ep_out is None:
+        raise RuntimeError("USB OUT endpoint is not open")
+
+    self._drain_input(attempts=3 if drain_input else 1)
+
+    self._ep_out.write(
+        self._build_frame_payload(command_id, frame),
+        USB_FRAME_TIMEOUT_MS,
+    )
 
     def _check_frame_response(self, response: bytes | None) -> None:
         if not response:
             raise RuntimeError("TURZX USB frame upload timed out")
         self._frame_error_count = 0
 
-    def _handle_frame_error(self, exc: Exception) -> None:
-        self._frame_error_count += 1
-        print(f"USB frame upload failed ({self._frame_error_count}/{MAX_CONSECUTIVE_FRAME_ERRORS}): {exc}")
-        if self._frame_error_count >= MAX_CONSECUTIVE_FRAME_ERRORS:
-            raise RuntimeError(
-                "TURZX USB display is not accepting frame data. Unplug/replug the display, "
-                "then retry with --fps 10 or a lower --usb-jpeg-quality value."
-            ) from exc
+def _handle_frame_error(self, exc: Exception) -> None:
+    self._frame_error_count += 1
+    print(
+        f"USB frame upload failed "
+        f"({self._frame_error_count}/{MAX_CONSECUTIVE_FRAME_ERRORS}): {exc}",
+        flush=True,
+    )
+
+    try:
+        self._clear_endpoint_halt()
+        self._reset_and_reconnect()
+        self._initialize_device()
+    except Exception as reset_exc:
+        print(f"USB recovery failed: {reset_exc}", flush=True)
+
+    if self._frame_error_count >= MAX_CONSECUTIVE_FRAME_ERRORS:
+        raise RuntimeError(
+            "TURZX USB display is not accepting frame data. "
+            "Unplug/replug the display, then retry with lower --fps "
+            "or lower --usb-jpeg-quality."
+        ) from exc
