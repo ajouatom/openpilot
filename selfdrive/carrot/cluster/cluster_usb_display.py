@@ -304,9 +304,10 @@ class TuringUsbDisplay:
     def _send_frame_no_ack(self, command_id: int, frame: bytes, *, drain_input: bool) -> None:
         if self._ep_out is None:
             raise RuntimeError("USB OUT endpoint is not open")
-    
-        self._drain_input(attempts=3 if drain_input else 1)
-    
+
+        if drain_input:
+            self._drain_input(attempts=3)
+
         self._ep_out.write(
             self._build_frame_payload(command_id, frame),
             USB_FRAME_TIMEOUT_MS,
