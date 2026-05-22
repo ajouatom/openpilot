@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import os
+import time
 from pathlib import Path
 
 import pyray as rl
@@ -357,17 +358,41 @@ class ClusterUiRenderer:
         state: ClusterUiState,
         rotate_clockwise: bool = False,
     ) -> tuple[bytes, int, int]:
+        profile = os.environ.get("CLUSTER_PROFILE_RGBA") == "1"
+
+        t0 = time.perf_counter()
         image = self._render_to_image(state, rotate_clockwise=rotate_clockwise)
+        t1 = time.perf_counter()
+
         try:
             rl.image_format(image, rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8)
+            t2 = time.perf_counter()
+
             byte_count = image.width * image.height * 4
-            return bytes(rl.ffi.buffer(image.data, byte_count)), image.width, image.height
+            rgba = bytes(rl.ffi.buffer(image.data, byte_count))
+            t3 = time.perf_counter()
+
+            if profile:
+                print(
+                    f"rgba_detail render_to_image={(t1 - t0) * 1000:.1f}ms "
+                    f"format={(t2 - t1) * 1000:.1f}ms "
+                    f"copy={(t3 - t2) * 1000:.1f}ms "
+                    f"image={image.width}x{image.height}",
+                    flush=True,
+                )
+
+            return rgba, image.width, image.height
         finally:
             rl.unload_image(image)
 
     def _render_to_image(self, state: ClusterUiState, rotate_clockwise: bool = False):
+        profile = os.environ.get("CLUSTER_PROFILE_RGBA") == "1"
+
         self.open(hidden=self.hidden)
         target = self._get_capture_target()
+
+        t0 = time.perf_counter()
+
         if self._fxaa_shader is None:
             rl.begin_texture_mode(target)
             self.render(state)
@@ -383,10 +408,27 @@ class ClusterUiRenderer:
             self._draw_hud(state)
             rl.end_texture_mode()
 
+        t1 = time.perf_counter()
+
         image = rl.load_image_from_texture(target.texture)
+        t2 = time.perf_counter()
+
         rl.image_flip_vertical(image)
+        t3 = time.perf_counter()
+
         if rotate_clockwise:
             rl.image_rotate_cw(image)
+        t4 = time.perf_counter()
+
+        if profile:
+            print(
+                f"render_image draw={(t1 - t0) * 1000:.1f}ms "
+                f"readback={(t2 - t1) * 1000:.1f}ms "
+                f"flip={(t3 - t2) * 1000:.1f}ms "
+                f"rotate={(t4 - t3) * 1000:.1f}ms",
+                flush=True,
+            )
+
         return image
 
     def _get_capture_target(self):
@@ -596,7 +638,26 @@ class ClusterUiRenderer:
         count = min(len(strip.left), len(strip.right))
         if count < 2:
             return
+
         color = rl_color(strip.color)
+
+        if hasattr(rl, "draw_triangle_strip_3d"):
+            points = rl.ffi.new("Vector3[]", count * 2)
+            for index in range(count):
+                left = strip.left[index]
+                right = strip.right[index]
+
+                points[index * 2].x = left.x
+                points[index * 2].y = left.y
+                points[index * 2].z = left.z
+
+                points[index * 2 + 1].x = right.x
+                points[index * 2 + 1].y = right.y
+                points[index * 2 + 1].z = right.z
+
+            rl.draw_triangle_strip_3d(points, count * 2, color)
+            return
+
         for index in range(count - 1):
             left_near = vec3(strip.left[index])
             right_near = vec3(strip.right[index])
