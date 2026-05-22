@@ -6,6 +6,8 @@ Run from the openpilot root:
 
 ```bash
 python selfdrive/carrot/cluster_run.py --output usb
+
+CLUSTER_PROFILE_RGBA=1 python selfdrive/carrot/cluster_run.py --output usb
 ```
 
 Useful options:
