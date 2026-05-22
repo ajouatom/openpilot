@@ -317,24 +317,24 @@ class TuringUsbDisplay:
             raise RuntimeError("TURZX USB frame upload timed out")
         self._frame_error_count = 0
 
-def _handle_frame_error(self, exc: Exception) -> None:
-    self._frame_error_count += 1
-    print(
-        f"USB frame upload failed "
-        f"({self._frame_error_count}/{MAX_CONSECUTIVE_FRAME_ERRORS}): {exc}",
-        flush=True,
-    )
-
-    try:
-        self._clear_endpoint_halt()
-        self._reset_and_reconnect()
-        self._initialize_device()
-    except Exception as reset_exc:
-        print(f"USB recovery failed: {reset_exc}", flush=True)
-
-    if self._frame_error_count >= MAX_CONSECUTIVE_FRAME_ERRORS:
-        raise RuntimeError(
-            "TURZX USB display is not accepting frame data. "
-            "Unplug/replug the display, then retry with lower --fps "
-            "or lower --usb-jpeg-quality."
-        ) from exc
+    def _handle_frame_error(self, exc: Exception) -> None:
+        self._frame_error_count += 1
+        print(
+            f"USB frame upload failed "
+            f"({self._frame_error_count}/{MAX_CONSECUTIVE_FRAME_ERRORS}): {exc}",
+            flush=True,
+        )
+    
+        try:
+            self._clear_endpoint_halt()
+            self._reset_and_reconnect()
+            self._initialize_device()
+        except Exception as reset_exc:
+            print(f"USB recovery failed: {reset_exc}", flush=True)
+    
+        if self._frame_error_count >= MAX_CONSECUTIVE_FRAME_ERRORS:
+            raise RuntimeError(
+                "TURZX USB display is not accepting frame data. "
+                "Unplug/replug the display, then retry with lower --fps "
+                "or lower --usb-jpeg-quality."
+            ) from exc
