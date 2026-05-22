@@ -376,7 +376,7 @@ class ClusterUiRenderer:
             rgba = bytes(rl.ffi.buffer(image.data, byte_count))
             t3 = time.perf_counter()
 
-            if profile:
+            if profile and False:
                 print(
                     f"rgba_detail render_to_image={(t1 - t0) * 1000:.1f}ms "
                     f"format={(t2 - t1) * 1000:.1f}ms "
@@ -463,7 +463,7 @@ class ClusterUiRenderer:
             t_rotate_gpu = t3
             t4 = t3
 
-        if profile:
+        if profile and False:
             print(
                 f"render_image draw={(t1 - t0) * 1000:.1f}ms "
                 f"gpu_rotate={(t_rotate_gpu - t1) * 1000:.1f}ms "
