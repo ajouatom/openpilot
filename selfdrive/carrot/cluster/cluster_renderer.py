@@ -642,7 +642,8 @@ class ClusterUiRenderer:
         color = rl_color(strip.color)
 
         if hasattr(rl, "draw_triangle_strip_3d"):
-            points = rl.ffi.new("Vector3[]", count * 2)
+            points = rl.ffi.new("struct Vector3[]", count * 2)
+
             for index in range(count):
                 left = strip.left[index]
                 right = strip.right[index]
@@ -655,7 +656,11 @@ class ClusterUiRenderer:
                 points[index * 2 + 1].y = right.y
                 points[index * 2 + 1].z = right.z
 
-            rl.draw_triangle_strip_3d(points, count * 2, color)
+            rl.draw_triangle_strip_3d(
+                rl.ffi.cast("struct Vector3 *", points),
+                count * 2,
+                color,
+            )
             return
 
         for index in range(count - 1):
