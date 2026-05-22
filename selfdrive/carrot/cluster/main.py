@@ -351,14 +351,15 @@ def run_demo(
                     
                     usb_display.send_jpeg(jpeg)
                     t3 = time.perf_counter()
-                    
-                    print(
-                        f"stage render_rgba={(t1-t0)*1000:.1f}ms "
-                        f"jpeg={(t2-t1)*1000:.1f}ms "
-                        f"usb={(t3-t2)*1000:.1f}ms "
-                        f"size={len(jpeg)/1024:.1f}KiB",
-                        flush=True,
-                    )
+
+                    if False :
+                      print(
+                          f"stage render_rgba={(t1-t0)*1000:.1f}ms "
+                          f"jpeg={(t2-t1)*1000:.1f}ms "
+                          f"usb={(t3-t2)*1000:.1f}ms "
+                          f"size={len(jpeg)/1024:.1f}KiB",
+                          flush=True,
+                      )
                 else:
                     usb_display.send_png(renderer.render_to_png_bytes(state, rotate_clockwise=True))
             report_frames += 1
