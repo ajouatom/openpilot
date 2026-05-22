@@ -267,7 +267,7 @@ class ClusterUiRenderer:
             rl.set_target_fps(self.target_fps)
         self._font = self._load_font()
         self._load_vehicle_model()
-        self._load_fxaa_shader()
+        # self._load_fxaa_shader()
         self._window_open = True
 
     def close(self) -> None:
