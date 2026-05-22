@@ -294,10 +294,12 @@ def run_demo(
     last_frame_time = start_time
     last_report_time = start_time
     report_frames = 0
+    frame_interval = 1.0 / target_fps if target_fps > 0 else 0.0
 
     try:
         renderer.open(hidden=output_mode == "usb")
         while True:
+            frame_start_time = time.perf_counter()
             if output_mode in ("window", "both") and renderer.should_close():
                 break
 
@@ -360,6 +362,12 @@ def run_demo(
                 else:
                     usb_display.send_png(renderer.render_to_png_bytes(state, rotate_clockwise=True))
             report_frames += 1
+
+            if frame_interval > 0.0:
+                elapsed = time.perf_counter() - frame_start_time
+                remaining = frame_interval - elapsed
+                if remaining > 0.0:
+                    time.sleep(remaining)
 
             now = time.perf_counter()
             if now - last_report_time >= 2.0:
