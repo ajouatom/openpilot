@@ -481,17 +481,7 @@
 
 @media (hover: hover) {
   .tools-console-log__card:hover {
-<<<<<<< HEAD
-    border-color: color-mix(in srgb, var(--md-primary) 34%, var(--md-outline-var));
-    background:
-      linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--md-primary) 10%, var(--md-surface-cont-h)),
-        color-mix(in srgb, var(--md-surface-cont) 88%, #05080d)
-      );
-=======
     background: color-mix(in srgb, var(--md-on-surface) var(--state-hover-pct), transparent);
->>>>>>> dd1ae2e3ff3a4e0ede3564277f8d8d00d682b644
   }
 }
 
@@ -509,15 +499,6 @@
 }
 
 .tools-console-log__card.is-expanded {
-<<<<<<< HEAD
-  border-color: color-mix(in srgb, var(--md-primary) 58%, var(--md-outline-var));
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--md-primary) 16%, var(--md-surface-cont-h)),
-      color-mix(in srgb, var(--md-primary) 10%, var(--md-surface-cont))
-    );
-=======
   background: color-mix(in srgb, var(--md-primary) 6%, transparent);
 }
 
@@ -541,7 +522,6 @@
 
 .tools-console-log__card.is-git-update .tools-console-log__cardBody {
   white-space: pre-wrap;
->>>>>>> dd1ae2e3ff3a4e0ede3564277f8d8d00d682b644
 }
 
 .tools-console-log__card.is-collapsing {
@@ -719,24 +699,12 @@
   max-height: min(40dvh, 320px);
   overflow: auto;
   overflow-anchor: none;
-<<<<<<< HEAD
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  touch-action: pan-y;
-  padding: 9px 10px;
-  border: 1px solid color-mix(in srgb, var(--md-primary) 26%, var(--md-outline-var));
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--tools-console-bg) 88%, var(--md-primary));
-  color: color-mix(in srgb, var(--md-on-surface) 84%, var(--tools-console-current));
-=======
   scrollbar-width: thin;
   padding: 2px 14px 4px 6px;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: color-mix(in srgb, var(--md-on-surface-var) 92%, var(--md-on-surface));
->>>>>>> dd1ae2e3ff3a4e0ede3564277f8d8d00d682b644
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.5;
@@ -932,12 +900,8 @@
     min-height: 0;
     overflow: auto;
     overflow-anchor: none;
-<<<<<<< HEAD
-    padding: 0 var(--tools-log-scroll-gap) 16px 0;
-=======
     overscroll-behavior: contain;
     padding: 0 0 16px;
->>>>>>> dd1ae2e3ff3a4e0ede3564277f8d8d00d682b644
     scroll-padding-bottom: 20px;
     scrollbar-gutter: stable;
     scrollbar-width: thin;

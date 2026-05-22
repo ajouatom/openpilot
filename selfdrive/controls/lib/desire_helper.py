@@ -12,8 +12,6 @@ from openpilot.selfdrive.controls.lib.desire_lib.constants import (
 )
 from openpilot.selfdrive.controls.lib.desire_lib.side_state import SideState
 from openpilot.selfdrive.controls.lib.desire_lib.maneuver_classifier import classify_maneuver_type
-
-
 class DesireHelper:
   def __init__(self):
     self.params = Params()
@@ -191,18 +189,14 @@ class DesireHelper:
         object_clear_sec   = self.object_clear_sec,
     )
 
-
-    def line_ok(raw, check_mode):
-      color = raw // 10
-      ltype = raw % 10
-      if check_mode == 0:
-        return color == 0
-      else:
-        return ltype in (0, 5)
-
-    left_line_ok  = line_ok(self.left.lane_line_info_raw,  self.laneLineCheck)
-    right_line_ok = line_ok(self.right.lane_line_info_raw, self.laneLineCheck)
-
+    # compute available (include BSD+object)
+    if self.laneLineCheck >= 1:
+      left_line_ok = self.left.lane_line_info_mod in (0, 5)
+      right_line_ok = self.right.lane_line_info_mod in (0, 5)
+    else:
+      left_line_ok = self.left.lane_line_info_raw < 20
+      right_line_ok = self.right.lane_line_info_raw < 20
+    
     self.left.compute_lane_change_available(lane_line_info_lt_20=left_line_ok,  bsd_level=self.laneChangeBsd, bsd_clear_sec=self.bsd_clear_sec)
     self.right.compute_lane_change_available(lane_line_info_lt_20=right_line_ok, bsd_level=self.laneChangeBsd, bsd_clear_sec=self.bsd_clear_sec)
 
@@ -256,15 +250,18 @@ class DesireHelper:
       side.object_clear_count >= max(1, int(self.object_clear_sec / DT_MDL))
     )
 
+    # ── avail_just_cleared: off 상태에서 깜빡이 켜진 채 available이 된 순간 ──
+    # (not avail_last) 조건 제거 → available이면 계속 재진입 허용
     avail_just_cleared = (
-      desire_enabled and
-      side is not None and
-      avail_now and
-      (not avail_last) and
-      clear_ready and
-      self.unsafe_cancel_timer <= 0.0 and
-      (not self.next_lane_change)
+        desire_enabled and
+        side is not None and
+        avail_now and
+        self.prev_desire_enabled and        # 깜빡이를 새로 켠 게 아니라 유지 중
+        self.lane_change_state == LaneChangeState.off and  # off 상태일 때만
+        self.unsafe_cancel_timer <= 0.0 and
+        (not self.next_lane_change)
     )
+
     # 차량이 사라진 직후 즉시 재진입하지 않고,
     # BSD/object clear 안정화와 unsafe cancel cooldown 이후에만 재진입 허용
 
@@ -342,17 +339,12 @@ class DesireHelper:
 
         # ── off 상태 ──────────────────────────────────────────────
         if self.lane_change_state == LaneChangeState.off:
-
-          # preLaneChange 재진입 조건:
-          #   A) 깜빡이를 새로 켠 순간         (not prev_desire_enabled)
-          #   B) 연속 차선변경 재진입           (next_lane_change)
-          #   C) 깜빡이 유지 중 차량이 방금 사라진 순간 (avail_just_cleared)
-          #      → 이 케이스가 없으면 깜빡이를 켠 채로 기다려도 재진입 불가
           reentry = (
-              not self.prev_desire_enabled or
-              self.next_lane_change or
-              avail_just_cleared           # ← 핵심 추가
+            not self.prev_desire_enabled or   # A) 깜빡이 새로 켠 순간
+            self.next_lane_change or           # B) 연속 차선변경
+            avail_just_cleared                 # C) 대기 중 차량 사라짐
           )
+
 
           if desire_enabled and reentry and not below_lane_change_speed and side is not None:
             self.lane_change_state   = LaneChangeState.preLaneChange
@@ -405,6 +397,8 @@ class DesireHelper:
             if not desire_enabled or below_lane_change_speed:
               self.lane_change_state     = LaneChangeState.off
               self.lane_change_direction = LaneChangeDirection.none
+              self.auto_lane_change_enable = False
+              self.next_lane_change        = False
 
             elif unsafe_prechange:
               # 대기 중 위험 요소가 생기면 강하게 취소

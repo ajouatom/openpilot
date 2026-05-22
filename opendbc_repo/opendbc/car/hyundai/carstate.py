@@ -544,7 +544,7 @@ class CarState(CarStateBase):
       left_blinker_lamp = blinkers_info["LEFT_LAMP"] or blinkers_info["LEFT_LAMP_ALT"]
       right_blinker_lamp = blinkers_info["RIGHT_LAMP"] or blinkers_info["RIGHT_LAMP_ALT"]
       ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_lamp(50, left_blinker_lamp, right_blinker_lamp)
-
+    corner = False
     if self.CP.enableBsm:
       if self.cp_bsm is None:
         if 442 in cp.seen_addresses:
@@ -555,8 +555,12 @@ class CarState(CarStateBase):
           print("######## BSM in CAM")
       else:
         bsm_info = self.cp_bsm.vl["BLINDSPOTS_REAR_CORNERS"]
-        ret.leftBlindspot = (bsm_info["FL_INDICATOR"] + bsm_info["INDICATOR_LEFT_TWO"] + bsm_info["INDICATOR_LEFT_FOUR"]) > 0
-        ret.rightBlindspot = (bsm_info["FR_INDICATOR"] + bsm_info["INDICATOR_RIGHT_TWO"] + bsm_info["INDICATOR_RIGHT_FOUR"]) > 0
+        if corner:
+          ret.leftBlindspot  = (bsm_info["FL_INDICATOR"] + bsm_info["INDICATOR_LEFT_TWO"] + bsm_info["INDICATOR_LEFT_FOUR"]) > 0
+          ret.rightBlindspot = (bsm_info["FR_INDICATOR"] + bsm_info["INDICATOR_RIGHT_TWO"] + bsm_info["INDICATOR_RIGHT_FOUR"]) > 0
+        else:
+          ret.leftBlindspot  = (bsm_info["INDICATOR_LEFT_TWO"] + bsm_info["INDICATOR_LEFT_FOUR"]) > 0
+          ret.rightBlindspot = (bsm_info["INDICATOR_RIGHT_TWO"] + bsm_info["INDICATOR_RIGHT_FOUR"]) > 0
 
     # cruise state
     if self.cruise_buttons_alt2 is not None:
@@ -589,7 +593,6 @@ class CarState(CarStateBase):
       ret.brakeHoldActive = cp.vl["ESP_STATUS"]["AUTO_HOLD"] == 1 and cp_cruise_info.vl["SCC_CONTROL"]["ACCMode"] not in (1, 2)
 
     speed_limit_cam = False
-    corner = False
     if self.ccnc_0x162 is not None:
       ret.leftLongDist = self.lf_distance = self.ccnc_0x162["LF_DETECT_DISTANCE"]
       ret.rightLongDist = self.rf_distance = self.ccnc_0x162["RF_DETECT_DISTANCE"]

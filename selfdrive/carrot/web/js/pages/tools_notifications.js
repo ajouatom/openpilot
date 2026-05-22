@@ -30,6 +30,8 @@
   let lastPublishedUnreadCount = 0;
   const detailScrollState = new Map();
   let lastRenderSignature = "";
+  let lastAutoFocusedEntryId = "";
+  const acknowledgedUpdateIds = loadAcknowledgedUpdateIds();
 
   function uiText(key, fallback, vars = null) {
     return typeof getUIText === "function" ? getUIText(key, fallback, vars) : fallback;
@@ -813,6 +815,106 @@
     });
   }
 
+  function isRunningEntry(entry) {
+    return String(entry?.status || "") === "running";
+  }
+
+  function canAutoFocusEntry(entry) {
+    return Boolean(entry) && !isRunningEntry(entry);
+  }
+
+  function currentCards(out) {
+    const scroller = getLogScroller(out);
+    return scroller ? Array.from(scroller.querySelectorAll("[data-notification-id]")) : [];
+  }
+
+  function canPatchExistingCards(out, model) {
+    const cards = currentCards(out);
+    return cards.length === model.entries.length && cards.every((card, index) => (
+      card.dataset.notificationId === model.entries[index]?.id
+    ));
+  }
+
+  function setNodeText(node, value) {
+    if (node && node.textContent !== value) node.textContent = value;
+  }
+
+  function appendTextNode(parent, className, text) {
+    const node = document.createElement("span");
+    node.className = className;
+    node.textContent = text;
+    parent.appendChild(node);
+    return node;
+  }
+
+  function renderSummaryBody(body, entry) {
+    if (!body) return;
+    body.replaceChildren();
+    body.classList.toggle("tools-console-log__cardBody--update", Boolean(entry.updateCard));
+    if (!entry.updateCard) {
+      body.textContent = entry.summary;
+      return;
+    }
+
+    const label = String(entry.updateCard.label || "").trim();
+    if (label) appendTextNode(body, "tools-console-log__updateLabel", label);
+
+    const messages = Array.isArray(entry.updateCard.messages) ? entry.updateCard.messages.filter(Boolean) : [];
+    if (messages.length) {
+      const messageWrap = document.createElement("span");
+      messageWrap.className = "tools-console-log__updateMessages";
+      messages.slice(0, 3).forEach((message) => appendTextNode(messageWrap, "tools-console-log__updateMessage", message));
+      body.appendChild(messageWrap);
+    }
+
+    const stats = entry.updateCard.stats && typeof entry.updateCard.stats === "object" ? entry.updateCard.stats : null;
+    if (stats) {
+      const statWrap = document.createElement("span");
+      statWrap.className = "tools-console-log__updateStats";
+      if (stats.commits) appendTextNode(statWrap, "tools-console-log__updateStat", stats.commits);
+      if (stats.files) appendTextNode(statWrap, "tools-console-log__updateStat", stats.files);
+      appendTextNode(statWrap, "tools-console-log__updateStat tools-console-log__updateStat--add", `+${Math.max(0, safeNumber(stats.insertions))}`);
+      appendTextNode(statWrap, "tools-console-log__updateStat tools-console-log__updateStat--delete", `-${Math.max(0, safeNumber(stats.deletions))}`);
+      body.appendChild(statWrap);
+    } else if (!messages.length && label) {
+      body.textContent = label;
+    }
+  }
+
+  function patchCard(card, entry, context) {
+    const expanded = activeNotificationId === entry.id;
+    card.classList.toggle("tools-console-log__current", entry.source === "current");
+    card.classList.toggle("tools-console-log__history", entry.source === "history");
+    card.classList.toggle("is-expanded", expanded);
+    card.classList.toggle("is-git-update", entry.updateKind === "git_pull");
+    card.classList.toggle("is-unread-update", Boolean(entry.highlight));
+    card.dataset.toolsNotificationMode = context.mode;
+    card.setAttribute("aria-expanded", expanded ? "true" : "false");
+
+    setNodeText(card.querySelector(".tools-console-log__cardTitle"), entry.title);
+    const head = card.querySelector(".tools-console-log__cardHead");
+    let time = card.querySelector(".tools-console-log__cardTime");
+    if (entry.timeLabel) {
+      if (!time && head) {
+        time = document.createElement("span");
+        time.className = "tools-console-log__cardTime";
+        head.appendChild(time);
+      }
+      setNodeText(time, entry.timeLabel);
+    } else if (time) {
+      time.remove();
+    }
+    renderSummaryBody(card.querySelector(".tools-console-log__cardBody"), entry);
+    setNodeText(card.querySelector(".tools-console-log__detail"), entry.text);
+  }
+
+  function patchExistingCards(out, model, context) {
+    currentCards(out).forEach((card, index) => patchCard(card, model.entries[index], context));
+    out.querySelectorAll(".tools-console-log__clearBtn").forEach((button) => {
+      button.disabled = !model.hasHistory;
+    });
+  }
+
   function updateRelativeTimeLabels(out, entries) {
     if (!out) return;
     const labels = new Map(entries.map((entry) => [entry.id, entry.timeLabel || ""]));
@@ -1017,6 +1119,30 @@
     const mode = getMode();
     global.requestAnimationFrame(() => {
       if (token !== entryFocusToken) return;
+      if (focus.instant) {
+        scrollEntryIntoView(out, focus, "settled", { behavior: "auto" });
+        return;
+      }
+      if (focus.smoothOnce) {
+        scrollEntryIntoView(out, focus, "settled");
+        return;
+      }
+      // User-click expand/collapse policy:
+      //   - mouse/touch: never move the body scroll. The user clicked something they were
+      //     already looking at; nudging the page underneath them feels like the card is
+      //     "sliding up from the bottom". If the detail overflows below the viewport, the
+      //     user can wheel down themselves; the detail's own scrollbar handles the rest.
+      //   - keyboard activate (Tab→Enter): the activated card may be off-screen, so bring
+      //     the head into view via the opening pass (which itself no-ops when the head is
+      //     already visible).
+      if (!focus.stableDetail) {
+        if (focus.keyboard) {
+          scrollEntryIntoView(out, focus, "opening");
+        }
+        return;
+      }
+      // Auto-focus with stableDetail (e.g. autoFocusLatest on a fresh notification): keep the
+      // two-phase concurrent + settled flow so the freshly expanded card lands cleanly.
       if (focus.expanded && !prefersReducedMotion()) {
         const scroller = getLogScroller(out);
         const card = findCardById(scroller, focus.id);

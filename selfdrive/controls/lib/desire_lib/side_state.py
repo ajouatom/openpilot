@@ -40,7 +40,6 @@ class SideState:
   lane_line_info_mod:        int   = 0
   last_lane_line_mod:        int   = 0
   lane_line_info_edge_detect: bool = False
-  outer_lane_prob:           float = 0.0
 
   # ── 상태 전환 ──────────────────────────────────────────────────
   lane_available_last:    bool = False
@@ -56,7 +55,7 @@ class SideState:
   # ── BSD hold ───────────────────────────────────────────────────
   bsd_hold_counter: int  = 0
   bsd_detected_now: bool = False
-  bsd_clear_count:  int  = 0
+  bsd_clear_count: int = field(default_factory=lambda: int(10.0 / DT_MDL))
 
   # ── 차선 변경 가능 여부 (용도별 3종) ──────────────────────────
   # lane_change_available_geom  : 기하학적 조건만 (차선 폭·도로 경계)
@@ -117,7 +116,6 @@ class SideState:
       (self.lane_width_queue[-1] - self.lane_width_queue[0])
       if len(self.lane_width_queue) >= 2 else 0.0
     )
-    self.outer_lane_prob  = float(lane_outer_prob)
     self.dist_to_edge     = float(dist_edge)
     self.dist_to_edge_far = float(dist_edge_far)
 
@@ -150,18 +148,17 @@ class SideState:
   # ════════════════════════════════════════════════════════════════
   #  측방 장애물 / BSD 업데이트
   # ════════════════════════════════════════════════════════════════
-
   def update_obstacles(self,
-                       v_ego: float,
-                       radar_obj,
-                       blindspot: bool,
-                       ignore_bsd: bool,
-                       bsd_hold_sec: float = 2.5,
-                       side_gap_margin: float = 3.0,
-                       corner_long_dist_f: float = 0.0,  # 측전방 거리 (m)
-                       corner_long_dist_r: float = 0.0,  # 측후방 거리 (m)
-                       corner_lat_dist: float = 0.0,     # 측전방 횡거리 (m)
-                       object_clear_sec: float = 0.5):
+                      v_ego: float,
+                      radar_obj,
+                      blindspot: bool,
+                      ignore_bsd: bool,
+                      bsd_hold_sec: float = 2.5,
+                      side_gap_margin: float = 3.0,
+                      corner_long_dist_f: float = 0.0,
+                      corner_long_dist_r: float = 0.0,
+                      corner_lat_dist: float = 0.0,
+                      object_clear_sec: float = 0.5):
     gap = float(np.clip(side_gap_margin, 1.0, 6.0))
 
     # ── 1) 사이드 레이더 (leadLeft / leadRight)
@@ -173,10 +170,18 @@ class SideState:
     # ── 3) 측후방 코너 레이더
     rear_detected = self._corner_block_rear(corner_long_dist_r, v_ego, gap)
 
-    object_detected          = radar_detected or front_detected or rear_detected
-    self.corner_radar_active = (corner_long_dist_f > 0) or (corner_long_dist_r > 0)
+    # ── 4) 코너 레이더 활성 여부 (거리값 유효 여부로 판단)
+    corner_radar_active = (corner_long_dist_f > 0) or (corner_long_dist_r > 0)
+    self.corner_radar_active = corner_radar_active
 
-    # ── 4) 디바운싱
+    # ── 5) BSD → object 연동
+    bsd_now = bool(blindspot) and (not ignore_bsd)
+
+    bsd_as_object = bsd_now
+
+    object_detected = radar_detected or front_detected or rear_detected or bsd_as_object
+
+    # ── 6) 디바운싱
     CLEAR_FRAMES = max(1, int(object_clear_sec / DT_MDL))
 
     if object_detected:
@@ -189,11 +194,11 @@ class SideState:
         self.object_detected_count = 0
         self.side_object_detected  = False
 
-    # ── 5) BSD hold
-    self.bsd_detected_now = bool(blindspot) and (not ignore_bsd)
+    # ── 7) BSD hold
+    self.bsd_detected_now = bsd_now
 
     # 코너 레이더 없는 차량은 hold 시간을 늘려 보수적으로 동작
-    effective_hold_sec = bsd_hold_sec if self.corner_radar_active else max(bsd_hold_sec, 3.5)
+    effective_hold_sec = bsd_hold_sec if corner_radar_active else max(bsd_hold_sec, 3.5)
 
     if self.bsd_detected_now:
       self.bsd_hold_counter = int(effective_hold_sec / DT_MDL)
@@ -215,10 +220,8 @@ class SideState:
                                     bsd_clear_sec: float = 1.0):
     BSD_CLEAR_FRAMES = max(1, int(bsd_clear_sec / DT_MDL))
 
-    lane_avail_confirmed = self.lane_available and (self.outer_lane_prob >= 0.5)
-
     self.lane_change_available_geom = (
-      (lane_avail_confirmed or self.edge_available) and lane_line_info_lt_20
+      (self.lane_available or self.edge_available) and lane_line_info_lt_20
     )
 
     ignore_bsd    = (bsd_level < 0)
@@ -330,11 +333,6 @@ class SideState:
 
   def _corner_block_front(self, d_cur: float, d_lat: float,
                           v_ego: float, gap: float) -> bool:
-    """
-    측전방 코너 레이더 차단 판단.
-    self.front_prev / front_approach / front_miss 를 직접 읽고 씀.
-    """
-    # ── 미감지 처리
     if d_cur <= 0:
       self.front_miss += 1
       if self.front_miss >= self._MISS_RESET_FRAMES:
@@ -354,53 +352,54 @@ class SideState:
           self._APPR_EMA_ALPHA * raw
         )
     else:
-      self.front_approach = max(self.front_approach, 0.0)
+      first_detect_th = float(np.interp(gap, [1.0, 6.0], [15.0, 30.0]))
+      self.front_approach = self._APPR_MIN_REF * 2.0 if d_cur < first_detect_th else 0.0
 
     self.front_prev = d_cur
 
     appr_norm = float(np.clip(self.front_approach, 0.0, self._APPR_MAX_REF))
 
     # ── 거리 임계 보간
-    near_lo = float(np.interp(gap, [1.0, 6.0], [6.0,  12.0]))
-    far_lo  = float(np.interp(gap, [1.0, 6.0], [15.0, 35.0]))
-    dist_th = float(np.interp(appr_norm,
-                              [self._APPR_MIN_REF, self._APPR_MAX_REF],
-                              [near_lo, far_lo]))
+    dist_th_min = float(np.interp(gap, [1.0, 6.0], [4.0,  8.0]))
+    dist_th_max = float(np.interp(gap, [1.0, 6.0], [10.0, 22.0]))
+    dist_th     = float(np.interp(appr_norm,
+                                  [self._APPR_MIN_REF, self._APPR_MAX_REF],
+                                  [dist_th_min, dist_th_max]))
+
+    # ── 미래 위치 예측 차단 (접근 중일 때 더 멀리서 감지)
+    # 예측 시간(T_predict)만큼 후의 거리를 계산해서 dist_th 이내면 차단
+    # 가까워질수록 T_predict를 늘려 더 보수적으로 동작
+    future_block = False
+    if self.front_approach > self._APPR_MIN_REF:
+      T_predict   = float(np.interp(gap, [1.0, 6.0], [2.0, 4.0]))
+      d_future    = d_cur - self.front_approach * T_predict
+      future_block = d_future < dist_th_min  # 미래에 최소 임계 이내로 들어오면 차단
 
     # ── TTC 임계 보간
-    ttc_lo = float(np.interp(gap, [1.0, 6.0], [2.0, 4.5]))
-    ttc_th = float(np.interp(appr_norm,
-                             [self._APPR_MIN_REF, self._APPR_MAX_REF],
-                             [ttc_lo, ttc_lo * 1.5]))
+    ttc_th_min = float(np.interp(gap, [1.0, 6.0], [1.5, 3.5]))
+    ttc_th     = float(np.interp(appr_norm,
+                                [self._APPR_MIN_REF, self._APPR_MAX_REF],
+                                [ttc_th_min, ttc_th_min * 1.5]))
 
-    dist_block = d_cur < dist_th
-
-    if self.front_approach > self._APPR_MIN_REF:
-      ttc_block = (d_cur / max(self.front_approach, 0.1)) < ttc_th
-    else:
-      ttc_block = False
+    dist_block   = d_cur < dist_th
+    ttc_block    = (self.front_approach > self._APPR_MIN_REF) and \
+                  (d_cur / max(self.front_approach, 0.1)) < ttc_th
 
     safety_th    = float(np.interp(gap, [1.0, 6.0], [5.0, 8.0]))
     safety_block = d_cur < safety_th
 
-    # ── 횡거리 보강 (측전방 전용)
+    # ── 횡거리 보강
     lat_block = False
     if d_lat > 0:
       lat_th      = float(np.interp(gap, [1.0, 6.0], [3.0,  4.5]))
       long_lat_th = float(np.interp(gap, [1.0, 6.0], [12.0, 24.0]))
       lat_block   = (d_lat < lat_th) and (d_cur < long_lat_th)
 
-    return dist_block or ttc_block or safety_block or lat_block
+    return dist_block or ttc_block or safety_block or future_block or lat_block
 
 
   def _corner_block_rear(self, d_cur: float,
-                         v_ego: float, gap: float) -> bool:
-    """
-    측후방 코너 레이더 차단 판단.
-    self.rear_prev / rear_approach / rear_miss 를 직접 읽고 씀.
-    횡거리 보강 없음.
-    """
-    # ── 미감지 처리
+                        v_ego: float, gap: float) -> bool:
     if d_cur <= 0:
       self.rear_miss += 1
       if self.rear_miss >= self._MISS_RESET_FRAMES:
@@ -420,33 +419,39 @@ class SideState:
           self._APPR_EMA_ALPHA * raw
         )
     else:
-      self.rear_approach = max(self.rear_approach, 0.0)
+      first_detect_th = float(np.interp(gap, [1.0, 6.0], [25.0, 50.0]))
+      self.rear_approach = self._APPR_MIN_REF * 2.0 if d_cur < first_detect_th else 0.0
 
     self.rear_prev = d_cur
 
     appr_norm = float(np.clip(self.rear_approach, 0.0, self._APPR_MAX_REF))
 
     # ── 거리 임계 보간
-    near_lo = float(np.interp(gap, [1.0, 6.0], [5.0,  10.0]))
-    far_lo  = float(np.interp(gap, [1.0, 6.0], [12.0, 28.0]))
-    dist_th = float(np.interp(appr_norm,
-                              [self._APPR_MIN_REF, self._APPR_MAX_REF],
-                              [near_lo, far_lo]))
+    dist_th_min = float(np.interp(gap, [1.0, 6.0], [8.0,  15.0]))
+    dist_th_max = float(np.interp(gap, [1.0, 6.0], [20.0, 45.0]))
+    dist_th     = float(np.interp(appr_norm,
+                                  [self._APPR_MIN_REF, self._APPR_MAX_REF],
+                                  [dist_th_min, dist_th_max]))
+
+    # ── 미래 위치 예측 차단 (후방은 더 긴 예측 시간 적용)
+    future_block = False
+    if self.rear_approach > self._APPR_MIN_REF:
+      T_predict    = float(np.interp(gap, [1.0, 6.0], [3.0, 6.0]))
+      d_future     = d_cur - self.rear_approach * T_predict
+      future_block = d_future < dist_th_min  # 미래에 최소 임계 이내로 들어오면 차단
 
     # ── TTC 임계 보간
-    ttc_lo = float(np.interp(gap, [1.0, 6.0], [2.5, 5.5]))
-    ttc_th = float(np.interp(appr_norm,
-                             [self._APPR_MIN_REF, self._APPR_MAX_REF],
-                             [ttc_lo, ttc_lo * 1.5]))
+    ttc_th_min = float(np.interp(gap, [1.0, 6.0], [3.0, 6.0]))
+    ttc_th     = float(np.interp(appr_norm,
+                                [self._APPR_MIN_REF, self._APPR_MAX_REF],
+                                [ttc_th_min, ttc_th_min * 1.5]))
 
-    dist_block = d_cur < dist_th
-
-    if self.rear_approach > self._APPR_MIN_REF:
-      ttc_block = (d_cur / max(self.rear_approach, 0.1)) < ttc_th
-    else:
-      ttc_block = False
+    dist_block   = d_cur < dist_th
+    ttc_block    = (self.rear_approach > self._APPR_MIN_REF) and \
+                  (d_cur / max(self.rear_approach, 0.1)) < ttc_th
 
     safety_th    = float(np.interp(gap, [1.0, 6.0], [4.0, 7.0]))
     safety_block = d_cur < safety_th
 
-    return dist_block or ttc_block or safety_block
+    return dist_block or ttc_block or safety_block or future_block
+
