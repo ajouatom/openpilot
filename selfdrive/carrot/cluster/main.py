@@ -341,7 +341,7 @@ def run_demo(
                   )
                   jpeg = usb_display.encode_jpeg(rgba, image_width, image_height)
                   
-                  print(f"jpeg={len(jpeg) / 1024:.0f}KiB", flush=True)
+                  # print(f"jpeg={len(jpeg) / 1024:.0f}KiB", flush=True)
                   
                   usb_display.send_jpeg(jpeg)
                 else:
