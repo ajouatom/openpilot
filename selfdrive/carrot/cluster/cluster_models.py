@@ -143,6 +143,7 @@ class ClusterUiState:
     detected_vehicles: tuple[DetectedVehicle, ...] = ()
     radar_points: tuple[RadarPoint, ...] = ()
     route_overlay: RouteOverlay | None = None
+    center_clock_text: str | None = None
     planned_speed_kph: float | None = None
     planned_accel_mps2: float | None = None
     planned_curvature_m_inv: float | None = None
