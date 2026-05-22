@@ -244,6 +244,7 @@ class ClusterUiRenderer:
         self._font = None
         self._owns_font = False
         self._capture_target = None
+        self._rotated_capture_target = None
         self._aa_source_target = None
         self._fxaa_shader = None
         self._fxaa_resolution_loc = -1
@@ -280,6 +281,9 @@ class ClusterUiRenderer:
         if self._capture_target is not None:
             rl.unload_render_texture(self._capture_target)
             self._capture_target = None
+        if self._rotated_capture_target is not None:
+            rl.unload_render_texture(self._rotated_capture_target)
+            self._rotated_capture_target = None
         if self._fxaa_shader is not None:
             rl.unload_shader(self._fxaa_shader)
             self._fxaa_shader = None
@@ -410,22 +414,62 @@ class ClusterUiRenderer:
 
         t1 = time.perf_counter()
 
-        image = rl.load_image_from_texture(target.texture)
-        t2 = time.perf_counter()
-
-        rl.image_flip_vertical(image)
-        t3 = time.perf_counter()
-
         if rotate_clockwise:
-            rl.image_rotate_cw(image)
-        t4 = time.perf_counter()
+            rotated_target = self._get_rotated_capture_target()
+
+            rl.begin_texture_mode(rotated_target)
+            rl.clear_background(rl_color(BG))
+
+            source = rl.Rectangle(
+                0.0,
+                0.0,
+                float(target.texture.width),
+                -float(target.texture.height),
+            )
+            dest = rl.Rectangle(
+                float(self.height),
+                0.0,
+                float(self.width),
+                float(self.height),
+            )
+            origin = rl.Vector2(0.0, 0.0)
+
+            rl.draw_texture_pro(
+                target.texture,
+                source,
+                dest,
+                origin,
+                90.0,
+                rl_color(WHITE),
+            )
+            rl.end_texture_mode()
+
+            t_rotate_gpu = time.perf_counter()
+
+            image = rl.load_image_from_texture(rotated_target.texture)
+            t2 = time.perf_counter()
+
+            rl.image_flip_vertical(image)
+            t3 = time.perf_counter()
+
+            t4 = t3
+        else:
+            image = rl.load_image_from_texture(target.texture)
+            t2 = time.perf_counter()
+
+            rl.image_flip_vertical(image)
+            t3 = time.perf_counter()
+
+            t_rotate_gpu = t3
+            t4 = t3
 
         if profile:
             print(
                 f"render_image draw={(t1 - t0) * 1000:.1f}ms "
-                f"readback={(t2 - t1) * 1000:.1f}ms "
+                f"gpu_rotate={(t_rotate_gpu - t1) * 1000:.1f}ms "
+                f"readback={(t2 - t_rotate_gpu) * 1000:.1f}ms "
                 f"flip={(t3 - t2) * 1000:.1f}ms "
-                f"rotate={(t4 - t3) * 1000:.1f}ms",
+                f"cpu_rotate={(t4 - t3) * 1000:.1f}ms",
                 flush=True,
             )
 
@@ -436,7 +480,13 @@ class ClusterUiRenderer:
             self._capture_target = rl.load_render_texture(self.width, self.height)
             rl.set_texture_filter(self._capture_target.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
         return self._capture_target
-
+      
+    def _get_rotated_capture_target(self):
+        if self._rotated_capture_target is None:
+            self._rotated_capture_target = rl.load_render_texture(self.height, self.width)
+            rl.set_texture_filter(self._rotated_capture_target.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+        return self._rotated_capture_target
+      
     def _get_aa_source_target(self):
         if self._aa_source_target is None:
             self._aa_source_target = rl.load_render_texture(self.width, self.height)
