@@ -550,6 +550,75 @@ def lane_marking_strips_for_marking(
     )
 
 
+def lane_marking_segments_for_marking(
+    marking: LaneMarking,
+    steering: float,
+    lane_width_m: float,
+    start_m: float,
+    end_m: float,
+) -> tuple[tuple[Vec3, ...], ...]:
+    if marking.model_points:
+        centerline = model_line_centerline(marking.model_points, start_m, end_m, 0.0)
+        if len(centerline) < 2:
+            return ()
+        if marking.style == "solid":
+            return (centerline,)
+
+        segments: list[tuple[Vec3, ...]] = []
+        sampled = resample_centerline(centerline, 0.75)
+        dash_m = 5.2
+        gap_m = 4.2
+        cycle_m = dash_m + gap_m
+        current_dash: list[Vec3] = []
+        distance_m = 0.0
+        previous: Vec3 | None = None
+        for point in sampled:
+            if previous is not None:
+                distance_m += math.hypot(point.x - previous.x, point.y - previous.y)
+            if distance_m % cycle_m < dash_m:
+                current_dash.append(point)
+            else:
+                if len(current_dash) >= 2:
+                    segments.append(tuple(current_dash))
+                current_dash = []
+            previous = point
+
+        if len(current_dash) >= 2:
+            segments.append(tuple(current_dash))
+        return tuple(segments)
+
+    if marking.style == "solid":
+        return (lane_centerline(marking.offset, steering, lane_width_m, start_m, end_m, 80, 0.0),)
+
+    segments: list[tuple[Vec3, ...]] = []
+    dash_m = 5.2
+    gap_m = 4.2
+    cursor = start_m
+    while cursor < end_m:
+        dash_end = min(cursor + dash_m, end_m)
+        segment = lane_centerline(marking.offset, steering, lane_width_m, cursor, dash_end, 6, 0.0)
+        if len(segment) >= 2:
+            segments.append(segment)
+        cursor += dash_m + gap_m
+    return tuple(segments)
+
+
+def lane_marking_strips_from_segments(
+    segments: tuple[tuple[Vec3, ...], ...],
+    width_px: int,
+    color: Color,
+    height_m: float,
+) -> tuple[MeshStrip, ...]:
+    if not segments:
+        return ()
+    width_m = max(0.08, width_px * 0.022)
+    return tuple(
+        strip_from_centerline(points_at_height(segment, height_m), width_m, color)
+        for segment in segments
+        if len(segment) >= 2
+    )
+
+
 def planned_path_lane_offset(state: ClusterUiState, forward_m: float) -> float:
     start_offset = 0.0
     target_offset = 0.0
@@ -1389,27 +1458,26 @@ def build_cluster_scene(state: ClusterUiState) -> ClusterScene:
     for marking in state.lanes:
         if not marking.visible:
             continue
+        marking_segments = lane_marking_segments_for_marking(
+            marking,
+            state.steering,
+            lane_width_m,
+            road_start_m,
+            road_end_m,
+        )
         lane_strips.extend(
-            lane_marking_strips_for_marking(
-                marking,
-                state.steering,
-                lane_width_m,
+            lane_marking_strips_from_segments(
+                marking_segments,
                 marking.width + LANE_MARKING_BORDER_EXTRA_WIDTH_PX,
                 LANE_MARKING_BORDER_COLOR,
-                road_start_m,
-                road_end_m,
                 height_m=LANE_MARKING_SHADOW_HEIGHT_M,
             )
         )
         lane_strips.extend(
-            lane_marking_strips_for_marking(
-                marking,
-                state.steering,
-                lane_width_m,
+            lane_marking_strips_from_segments(
+                marking_segments,
                 marking.width,
                 rgba(marking.color),
-                road_start_m,
-                road_end_m,
                 height_m=LANE_MARKING_HEIGHT_M,
             )
         )
