@@ -1173,8 +1173,7 @@ class ClusterUiRenderer:
 
     def _draw_speed_block(self, state: ClusterUiState) -> None:
         speed_value = int(round(clamp(state.speed_kph, 0.0, MAX_SPEED_KPH)))
-        self._draw_text(str(speed_value), 214, 160, 156, TEXT, anchor="center")
-        self._draw_text("km/h", 214, 260, 34, MUTED, anchor="center")
+        self._draw_text(str(speed_value), 260, 230, 156, TEXT, anchor="center")
 
         if state.speed_limit_kph is not None:
             center = rl.Vector2(130, 360)
@@ -1191,7 +1190,7 @@ class ClusterUiRenderer:
         top = 80
         bottom = 400
         center = (top + bottom) // 2
-        gauge_x = 0
+        gauge_x = 16
         gauge_width = 56
         fill_x = gauge_x + 8
         fill_width = 40
