@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import locale
+import os
 import sys
 from pathlib import Path
 
@@ -15,6 +17,18 @@ for path in (OPENPILOT_ROOT, BUNDLE_DIR):
         sys.path.insert(0, path_text)
 
 
+def configure_cluster_locale() -> None:
+    for candidate in ("C.UTF-8", "C"):
+        try:
+            locale.setlocale(locale.LC_ALL, candidate)
+        except locale.Error:
+            continue
+        os.environ["LC_ALL"] = candidate
+        os.environ["LC_CTYPE"] = candidate
+        os.environ["LANG"] = candidate
+        return
+
+
 def configure_cluster_realtime() -> None:
     try:
         from openpilot.common.realtime import config_realtime_process
@@ -25,6 +39,7 @@ def configure_cluster_realtime() -> None:
 
 
 def main() -> None:
+    configure_cluster_locale()
     args = sys.argv[1:]
     if "--input" not in args:
         args = ["--input", "live", *args]

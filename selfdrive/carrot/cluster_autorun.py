@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import sys
 import time
+import traceback
 from pathlib import Path
 
 from openpilot.common.params import Params
@@ -102,6 +103,7 @@ def main() -> None:
                 f"[cluster_autorun] cluster HUD failed: {exc}; retrying in {RETRY_INTERVAL_S:.0f}s",
                 flush=True,
             )
+            traceback.print_exc()
         time.sleep(RETRY_INTERVAL_S)
 
 
