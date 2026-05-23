@@ -66,18 +66,28 @@ def _open_usb_uevent_socket() -> socket.socket | None:
     if not hasattr(socket, "AF_NETLINK"):
         return None
 
-    try:
-        sock = socket.socket(
-            socket.AF_NETLINK,
-            socket.SOCK_DGRAM,
-            getattr(socket, "NETLINK_KOBJECT_UEVENT", NETLINK_KOBJECT_UEVENT),
-        )
-        sock.bind((os.getpid(), 1))
-        sock.setblocking(False)
-        return sock
-    except OSError as exc:
-        print(f"[cluster_autorun] USB event monitor unavailable: {exc}", flush=True)
-        return None
+    last_error: OSError | None = None
+    for port_id in (0, os.getpid()):
+        sock: socket.socket | None = None
+        try:
+            sock = socket.socket(
+                socket.AF_NETLINK,
+                socket.SOCK_DGRAM,
+                getattr(socket, "NETLINK_KOBJECT_UEVENT", NETLINK_KOBJECT_UEVENT),
+            )
+            sock.bind((port_id, 1))
+            sock.setblocking(False)
+            return sock
+        except OSError as exc:
+            last_error = exc
+            try:
+                if sock is not None:
+                    sock.close()
+            except Exception:
+                pass
+
+    print(f"[cluster_autorun] USB event monitor unavailable: {last_error}", flush=True)
+    return None
 
 
 def _decode_uevent(payload: bytes) -> dict[str, str]:
