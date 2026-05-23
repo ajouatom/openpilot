@@ -472,15 +472,18 @@ class ClusterUiRenderer:
             rl.begin_texture_mode(rotated_target)
             rl.clear_background(rl_color(BG))
 
+            # Draw pre-flipped into the rotated render target so the subsequent
+            # texture readback already has the same orientation as the old
+            # readback+image_flip_vertical path.
             source = rl.Rectangle(
                 0.0,
                 0.0,
                 float(target.texture.width),
-                -float(target.texture.height),
+                float(target.texture.height),
             )
             dest = rl.Rectangle(
-                float(self.height),
                 0.0,
+                float(self.width),
                 float(self.width),
                 float(self.height),
             )
@@ -491,7 +494,7 @@ class ClusterUiRenderer:
                 source,
                 dest,
                 origin,
-                90.0,
+                -90.0,
                 rl_color(WHITE),
             )
             rl.end_texture_mode()
@@ -500,10 +503,6 @@ class ClusterUiRenderer:
             profile_stage = self._profile_start()
             image = rl.load_image_from_texture(rotated_target.texture)
             self._profile_add("render_to_image.readback_rotated_texture", profile_stage)
-
-            profile_stage = self._profile_start()
-            rl.image_flip_vertical(image)
-            self._profile_add("render_to_image.flip_vertical", profile_stage)
         else:
             profile_stage = self._profile_start()
             image = rl.load_image_from_texture(target.texture)
