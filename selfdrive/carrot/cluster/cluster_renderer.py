@@ -1177,11 +1177,7 @@ class ClusterUiRenderer:
         self._draw_text(str(speed_value), 214, 160, 156, TEXT, anchor="center")
         self._draw_text("km/h", 214, 260, 34, MUTED, anchor="center")
 
-        if state.speed_limit_kph is None:
-            self._rounded_rect(80, 316, 98, 82, 16, (247, 248, 249), FAINT, 3)
-            self._draw_text("--", 129, 346, 30, MUTED, anchor="center")
-            self._draw_text("LIMIT", 129, 376, 18, MUTED, anchor="center")
-        else:
+        if state.speed_limit_kph is not None:
             center = rl.Vector2(130, 360)
             rl.draw_circle_v(center, 56, rl_color(RED))
             rl.draw_circle_v(center, 47, rl_color(WHITE))

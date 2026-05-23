@@ -68,7 +68,6 @@ DETECTED_VEHICLE_MAX_PATH_BLOCKERS = 10
 MODEL_LINE_MAX_POINTS = 36
 MODEL_PATH_MAX_POINTS = 44
 MODEL_PATH_MAX_METRIC_SEGMENTS = 14
-LEFT_TEST_TRAFFIC_FORWARD_M = 24.0
 LANE_MARKING_SHADOW_HEIGHT_M = 0.026
 LANE_MARKING_HEIGHT_M = 0.044
 LANE_MARKING_BORDER_EXTRA_WIDTH_PX = 3
@@ -1639,17 +1638,8 @@ def build_cluster_scene(
         blockers = (*detected_blockers, *radar_blockers)
         vehicles = (ego_vehicle, *detected_vehicle_boxes, *radar_boxes)
     else:
-        traffic_forward_m = 14.5 + 0.9 * math.sin(state.speed_kph * 0.03)
-        left_traffic_forward_m = LEFT_TEST_TRAFFIC_FORWARD_M + 0.5 * math.sin(state.speed_kph * 0.02)
-        blockers = (
-            PathBlocker(0.0, traffic_forward_m, VEHICLE_LENGTH_M),
-            PathBlocker(-1.0, left_traffic_forward_m, VEHICLE_LENGTH_M),
-        )
-        vehicles = (
-            ego_vehicle,
-            vehicle_box(0.0, traffic_forward_m, state.steering, lane_width_m, CAR_DARK, camera_active),
-            vehicle_box(-1.0, left_traffic_forward_m, state.steering, lane_width_m, CAR_DARK, camera_active),
-        )
+        blockers = ()
+        vehicles = (ego_vehicle,)
     profile_scene_add(profile_add, "scene.build.vehicles", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)

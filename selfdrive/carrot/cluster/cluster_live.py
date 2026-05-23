@@ -5,9 +5,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-from cluster_models import ClusterUiState, SimulatorInput
+from cluster_config import BLUE, DEFAULT_LANE_WIDTH_M, WHITE
+from cluster_models import ClusterUiState, LaneMarking
 from cluster_route_replay import RouteLogParser, frame_to_state
-from cluster_simulator import ClusterSimulator
 from cluster_utils import clamp
 
 
@@ -58,7 +58,6 @@ class OpenpilotLiveSource:
         self.parser = RouteLogParser()
         self.timeout_ms = max(0, int(timeout_ms))
         self.last_state: ClusterUiState | None = None
-        self.fallback_simulator = ClusterSimulator()
         self.start_t = time.monotonic()
         self.frames = 0
 
@@ -79,9 +78,7 @@ class OpenpilotLiveSource:
             self.frames += 1
             return self.last_state
 
-        if self.last_state is not None:
-            return self.last_state
-        self.last_state = self.fallback_simulator.update(SimulatorInput(), 0.016)
+        self.last_state = standby_state()
         return self.last_state
 
     def status_text(self) -> str:
@@ -150,3 +147,34 @@ class OpenpilotLiveSource:
             return bool(self.sm.valid.get(service, True))
         except AttributeError:
             return True
+
+
+def standby_state() -> ClusterUiState:
+    return ClusterUiState(
+        speed_kph=0.0,
+        accel_mps2=0.0,
+        steering=0.0,
+        speed_limit_kph=None,
+        cruise_kph=None,
+        left_signal=False,
+        right_signal=False,
+        lane_change=None,
+        lane_change_phase="idle",
+        lane_change_progress=0.0,
+        highlight_lane=None,
+        highlight_lane_offset=None,
+        ego_lane_offset=0.0,
+        road_view_lane_position=0.0,
+        camera_lane_center_offset_m=None,
+        lane_width_m=DEFAULT_LANE_WIDTH_M,
+        steering_angle_deg=None,
+        surround_yaw_deg=0.0,
+        surround_pitch_deg=0.0,
+        surround_view_active=False,
+        lanes=(
+            LaneMarking(-1.5, WHITE, "solid", width=5),
+            LaneMarking(-0.5, BLUE, "solid", width=7),
+            LaneMarking(0.5, BLUE, "solid", width=7),
+            LaneMarking(1.5, WHITE, "dashed", width=5),
+        ),
+    )

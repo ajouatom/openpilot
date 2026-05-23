@@ -521,6 +521,7 @@ class RouteVideoFrameReader:
 class RouteLogParser:
     def __init__(self) -> None:
         self.speed_limit_kph: int | None = None
+        self.nav_speed_limit_kph: int | None = None
         self.cruise_kph: int | None = None
         self.lane_width_m = DEFAULT_LANE_WIDTH_M
         self.left_lane_y_m: float | None = None
@@ -673,13 +674,10 @@ class RouteLogParser:
                 1.0,
             )
 
-        cruise_kph = self._cruise_kph_from_car_state(car_state)
-        if cruise_kph is not None:
-            self.cruise_kph = cruise_kph
+        self.cruise_kph = self._cruise_kph_from_car_state(car_state)
 
         car_speed_limit_kph = self._speed_limit_kph_from_car_state(car_state)
-        if car_speed_limit_kph is not None:
-            self.speed_limit_kph = car_speed_limit_kph
+        self.speed_limit_kph = car_speed_limit_kph if car_speed_limit_kph is not None else self.nav_speed_limit_kph
 
         self._update_lane_styles_from_car_state(car_state)
         lane_values = self._lane_values()
@@ -902,13 +900,9 @@ class RouteLogParser:
 
     def _update_nav_instruction(self, nav_instruction: Any) -> None:
         speed_limit_mps = safe_float(nav_instruction, "speedLimit", 0.0)
-        if speed_limit_mps > 0.1:
-            self.speed_limit_kph = int(round(speed_limit_mps * 3.6))
+        self.nav_speed_limit_kph = int(round(speed_limit_mps * 3.6)) if speed_limit_mps > 0.1 else None
 
     def _update_longitudinal_plan(self, longitudinal_plan: Any) -> None:
-        cruise_target = safe_float(longitudinal_plan, "cruiseTarget", 0.0)
-        if 0.0 < cruise_target < 250.0:
-            self.cruise_kph = int(round(cruise_target))
         self.longitudinal_plan_source = enum_text(
             safe_get(longitudinal_plan, "longitudinalPlanSource", self.longitudinal_plan_source or "")
         ) or self.longitudinal_plan_source
@@ -1172,11 +1166,14 @@ class RouteLogParser:
         self.right_road_edge_distance_m = clamp(right_distance, 0.0, 20.0) if right_distance is not None else None
 
     def _cruise_kph_from_car_state(self, car_state: Any) -> int | None:
+        cruise_state = safe_get(car_state, "cruiseState")
+        if cruise_state is not None and safe_get(cruise_state, "available", True) is False:
+            return None
+
         v_cruise = safe_float(car_state, "vCruise", 0.0)
         if 0.0 < v_cruise < 250.0:
             return int(round(v_cruise))
 
-        cruise_state = safe_get(car_state, "cruiseState")
         if cruise_state is not None:
             speed_mps = safe_float(cruise_state, "speed", 0.0)
             if speed_mps > 0.1:
