@@ -614,12 +614,57 @@ def lane_marking_strips_from_segments(
 ) -> tuple[MeshStrip, ...]:
     if not segments:
         return ()
-    width_m = max(0.08, width_px * 0.022)
+    grouped = lane_marking_strip_groups_from_segments(segments, ((width_px, color, height_m),))
+    return grouped[0] if grouped else ()
+
+
+def strips_from_centerline_specs(
+    points: tuple[Vec3, ...],
+    specs: tuple[tuple[int, Color, float], ...],
+) -> tuple[MeshStrip, ...]:
+    if len(points) < 2:
+        return ()
+
+    half_widths = tuple(max(0.08, width_px * 0.022) * 0.5 for width_px, _, _ in specs)
+    left_groups: list[list[Vec3]] = [[] for _ in specs]
+    right_groups: list[list[Vec3]] = [[] for _ in specs]
+
+    for index, point in enumerate(points):
+        previous_point = points[max(0, index - 1)]
+        next_point = points[min(len(points) - 1, index + 1)]
+        tangent_x, tangent_y = normalize2(
+            next_point.x - previous_point.x,
+            next_point.y - previous_point.y,
+        )
+        right_x = tangent_y
+        right_y = -tangent_x
+        for spec_index, half_width in enumerate(half_widths):
+            height_m = specs[spec_index][2]
+            left_groups[spec_index].append(
+                Vec3(point.x - right_x * half_width, point.y - right_y * half_width, height_m)
+            )
+            right_groups[spec_index].append(
+                Vec3(point.x + right_x * half_width, point.y + right_y * half_width, height_m)
+            )
+
     return tuple(
-        strip_from_centerline(points_at_height(segment, height_m), width_m, color)
-        for segment in segments
-        if len(segment) >= 2
+        MeshStrip(tuple(left_groups[index]), tuple(right_groups[index]), color)
+        for index, (_, color, _) in enumerate(specs)
     )
+
+
+def lane_marking_strip_groups_from_segments(
+    segments: tuple[tuple[Vec3, ...], ...],
+    specs: tuple[tuple[int, Color, float], ...],
+) -> tuple[tuple[MeshStrip, ...], ...]:
+    if not segments or not specs:
+        return tuple(() for _ in specs)
+
+    grouped: list[list[MeshStrip]] = [[] for _ in specs]
+    for segment in segments:
+        for spec_index, strip in enumerate(strips_from_centerline_specs(segment, specs)):
+            grouped[spec_index].append(strip)
+    return tuple(tuple(group) for group in grouped)
 
 
 def planned_path_lane_offset(state: ClusterUiState, forward_m: float) -> float:
@@ -1264,26 +1309,15 @@ def road_edge_model_strips(
     start_m: float,
     end_m: float,
 ) -> tuple[MeshStrip, ...]:
-    return (
-        *model_line_marking_strips(
-            model_points,
-            12,
-            "solid",
-            ROAD_EDGE_BACKING_COLOR,
-            start_m,
-            end_m,
-            ROAD_EDGE_SHADOW_HEIGHT_M,
-        ),
-        *model_line_marking_strips(
-            model_points,
-            7,
-            "solid",
-            color,
-            start_m,
-            end_m,
-            ROAD_EDGE_HEIGHT_M,
+    centerline = model_line_centerline(model_points, start_m, end_m, 0.0)
+    backing, foreground = lane_marking_strip_groups_from_segments(
+        (centerline,),
+        (
+            (12, ROAD_EDGE_BACKING_COLOR, ROAD_EDGE_SHADOW_HEIGHT_M),
+            (7, color, ROAD_EDGE_HEIGHT_M),
         ),
     )
+    return (*backing, *foreground)
 
 
 def road_edge_offset_strips(
@@ -1294,30 +1328,15 @@ def road_edge_offset_strips(
     start_m: float,
     end_m: float,
 ) -> tuple[MeshStrip, ...]:
-    return (
-        *lane_marking_strips(
-            offset,
-            steering,
-            lane_width_m,
-            12,
-            "solid",
-            ROAD_EDGE_BACKING_COLOR,
-            start_m,
-            end_m,
-            height_m=ROAD_EDGE_SHADOW_HEIGHT_M,
-        ),
-        *lane_marking_strips(
-            offset,
-            steering,
-            lane_width_m,
-            7,
-            "solid",
-            color,
-            start_m,
-            end_m,
-            height_m=ROAD_EDGE_HEIGHT_M,
+    centerline = lane_centerline(offset, steering, lane_width_m, start_m, end_m, 80, 0.0)
+    backing, foreground = lane_marking_strip_groups_from_segments(
+        (centerline,),
+        (
+            (12, ROAD_EDGE_BACKING_COLOR, ROAD_EDGE_SHADOW_HEIGHT_M),
+            (7, color, ROAD_EDGE_HEIGHT_M),
         ),
     )
+    return (*backing, *foreground)
 
 
 def vehicle_color_for_detection(vehicle: DetectedVehicle) -> tuple[int, int, int]:
@@ -1485,22 +1504,19 @@ def build_cluster_scene(
             road_start_m,
             road_end_m,
         )
-        lane_strips.extend(
-            lane_marking_strips_from_segments(
-                marking_segments,
-                marking.width + LANE_MARKING_BORDER_EXTRA_WIDTH_PX,
-                LANE_MARKING_BORDER_COLOR,
-                height_m=LANE_MARKING_SHADOW_HEIGHT_M,
-            )
+        backing_strips, foreground_strips = lane_marking_strip_groups_from_segments(
+            marking_segments,
+            (
+                (
+                    marking.width + LANE_MARKING_BORDER_EXTRA_WIDTH_PX,
+                    LANE_MARKING_BORDER_COLOR,
+                    LANE_MARKING_SHADOW_HEIGHT_M,
+                ),
+                (marking.width, rgba(marking.color), LANE_MARKING_HEIGHT_M),
+            ),
         )
-        lane_strips.extend(
-            lane_marking_strips_from_segments(
-                marking_segments,
-                marking.width,
-                rgba(marking.color),
-                height_m=LANE_MARKING_HEIGHT_M,
-            )
-        )
+        lane_strips.extend(backing_strips)
+        lane_strips.extend(foreground_strips)
     profile_scene_add(profile_add, "scene.build.lane_markings", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
