@@ -330,6 +330,7 @@ def run_demo(
     live_timeout_ms: int,
     profile_render: bool,
     profile_interval_s: float,
+    render_msaa: bool,
 ) -> None:
     profile = ProfileReporter(profile_render, profile_interval_s)
     usb_display: TuringUsbDisplay | None = None
@@ -355,7 +356,12 @@ def run_demo(
 
     frame_width = width or (usb_display.landscape_width if usb_display is not None else DESIGN_WIDTH)
     frame_height = height or (usb_display.landscape_height if usb_display is not None else DESIGN_HEIGHT)
-    renderer = ClusterUiRenderer(frame_width, frame_height, target_fps=max(0, int(round(target_fps))))
+    renderer = ClusterUiRenderer(
+        frame_width,
+        frame_height,
+        target_fps=max(0, int(round(target_fps))),
+        msaa_4x=render_msaa,
+    )
     renderer.set_profile_enabled(profile_render)
     simulator = ClusterSimulator() if input_mode in ("random", "gamepad") else None
     controller = DualSenseSimulator(controller_index) if input_mode == "gamepad" else None
@@ -654,6 +660,11 @@ def parse_args() -> argparse.Namespace:
         default=2.0,
         help="Seconds between --profile-render timing summaries. Default: 2.0.",
     )
+    parser.add_argument(
+        "--render-msaa",
+        action="store_true",
+        help="Enable raylib 4x MSAA config hint. Default off for maximum SD845 throughput.",
+    )
     args = parser.parse_args()
     if args.fps < 0:
         parser.error("--fps must be 0 or greater")
@@ -723,6 +734,7 @@ def main() -> None:
             args.live_timeout_ms,
             args.profile_render,
             args.profile_interval,
+            args.render_msaa,
         )
     except KeyboardInterrupt:
         print("\nStopped.")

@@ -233,12 +233,14 @@ class ClusterUiRenderer:
         width: int = DESIGN_WIDTH,
         height: int = DESIGN_HEIGHT,
         title: str = "carrotpilot cluster",
-        target_fps: int = 30,
+        target_fps: int = 0,
+        msaa_4x: bool = False,
     ) -> None:
         self.width = width
         self.height = height
         self.title = title
         self.target_fps = target_fps
+        self.msaa_4x = msaa_4x
         self.hidden = False
         self._window_open = False
         self._font = None
@@ -279,10 +281,13 @@ class ClusterUiRenderer:
         profile_total = self._profile_start()
         self.hidden = hidden
         rl.set_trace_log_level(rl.TraceLogLevel.LOG_WARNING)
-        flags = rl.ConfigFlags.FLAG_MSAA_4X_HINT
+        flags = 0
+        if self.msaa_4x:
+            flags |= rl.ConfigFlags.FLAG_MSAA_4X_HINT
         if hidden:
             flags |= rl.ConfigFlags.FLAG_WINDOW_HIDDEN
-        rl.set_config_flags(flags)
+        if flags:
+            rl.set_config_flags(flags)
         profile_stage = self._profile_start()
         rl.init_window(self.width, self.height, self.title)
         self._profile_add("renderer.open.init_window", profile_stage)
