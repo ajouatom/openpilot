@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import replace
+import gc
 import math
 import random
 import threading
@@ -85,6 +86,23 @@ class ProfileReporter:
         self.samples.clear()
         self.report_frames = 0
         self.last_report_time = now
+
+
+class GcProfileHook:
+    def __init__(self, profile: ProfileReporter) -> None:
+        self.profile = profile
+        self._starts: dict[int, float] = {}
+
+    def __call__(self, phase: str, info: dict[str, Any]) -> None:
+        generation = int(info.get("generation", -1))
+        if phase == "start":
+            self._starts[generation] = time.perf_counter()
+            return
+        if phase != "stop":
+            return
+        start_time = self._starts.pop(generation, None)
+        if start_time is not None:
+            self.profile.add(f"gc.gen{generation}", (time.perf_counter() - start_time) * 1000.0)
 
 
 class AsyncJpegUsbPipeline:
@@ -413,6 +431,9 @@ def run_demo(
     render_msaa: bool,
 ) -> None:
     profile = ProfileReporter(profile_render, profile_interval_s)
+    gc_hook = GcProfileHook(profile) if profile_render else None
+    if gc_hook is not None:
+        gc.callbacks.append(gc_hook)
     usb_display: TuringUsbDisplay | None = None
     usb_pipeline: AsyncJpegUsbPipeline | None = None
     if output_mode in ("usb", "both"):
@@ -601,6 +622,11 @@ def run_demo(
                 report_frames = 0
                 last_report_time = now
     finally:
+        if gc_hook is not None:
+            try:
+                gc.callbacks.remove(gc_hook)
+            except ValueError:
+                pass
         if usb_pipeline is not None:
             usb_pipeline.close()
         if controller is not None:

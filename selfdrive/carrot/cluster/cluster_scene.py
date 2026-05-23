@@ -476,6 +476,82 @@ def resample_centerline(points: tuple[Vec3, ...], spacing_m: float) -> tuple[Vec
     return tuple(sampled)
 
 
+def append_unique_point(points: list[Vec3], point: Vec3) -> None:
+    if not points or points[-1] != point:
+        points.append(point)
+
+
+def lerp_vec3(start: Vec3, end: Vec3, amount: float) -> Vec3:
+    return Vec3(
+        start.x + (end.x - start.x) * amount,
+        start.y + (end.y - start.y) * amount,
+        start.z + (end.z - start.z) * amount,
+    )
+
+
+def dashed_centerline_segments(
+    centerline: tuple[Vec3, ...],
+    dash_m: float = 5.2,
+    gap_m: float = 4.2,
+) -> tuple[tuple[Vec3, ...], ...]:
+    if len(centerline) < 2:
+        return ()
+
+    cycle_m = dash_m + gap_m
+    segments: list[tuple[Vec3, ...]] = []
+    current_dash: list[Vec3] = []
+    distance_m = 0.0
+    previous = centerline[0]
+    eps = 0.0001
+
+    for current in centerline[1:]:
+        segment_dx = current.x - previous.x
+        segment_dy = current.y - previous.y
+        segment_dz = current.z - previous.z
+        segment_m = math.sqrt(segment_dx * segment_dx + segment_dy * segment_dy + segment_dz * segment_dz)
+        if segment_m <= 0.001:
+            previous = current
+            continue
+
+        segment_start_m = distance_m
+        segment_end_m = distance_m + segment_m
+        cursor_m = segment_start_m
+        cursor_point = previous
+
+        while cursor_m < segment_end_m - eps:
+            cycle_offset_m = cursor_m % cycle_m
+            if cycle_offset_m < eps or abs(cycle_offset_m - cycle_m) < eps:
+                cycle_offset_m = 0.0
+            elif abs(cycle_offset_m - dash_m) < eps:
+                cycle_offset_m = dash_m
+            in_dash = cycle_offset_m < dash_m
+            boundary_m = cursor_m + (dash_m - cycle_offset_m if in_dash else cycle_m - cycle_offset_m)
+            next_m = min(segment_end_m, boundary_m)
+            if next_m <= cursor_m + eps:
+                next_m = segment_end_m
+
+            next_point = lerp_vec3(previous, current, (next_m - segment_start_m) / segment_m)
+            if in_dash:
+                append_unique_point(current_dash, cursor_point)
+                append_unique_point(current_dash, next_point)
+                if boundary_m <= next_m + eps and len(current_dash) >= 2:
+                    segments.append(tuple(current_dash))
+                    current_dash = []
+            elif len(current_dash) >= 2:
+                segments.append(tuple(current_dash))
+                current_dash = []
+
+            cursor_m = next_m
+            cursor_point = next_point
+
+        distance_m = segment_end_m
+        previous = current
+
+    if len(current_dash) >= 2:
+        segments.append(tuple(current_dash))
+    return tuple(segments)
+
+
 def model_line_marking_strips(
     model_points: tuple[ModelPathPoint, ...],
     width_px: int,
@@ -493,28 +569,7 @@ def model_line_marking_strips(
     if style == "solid":
         return (strip_from_centerline(centerline, width_m, color),)
 
-    strips: list[MeshStrip] = []
-    sampled = resample_centerline(centerline, 0.75)
-    dash_m = 5.2
-    gap_m = 4.2
-    cycle_m = dash_m + gap_m
-    current_dash: list[Vec3] = []
-    distance_m = 0.0
-    previous: Vec3 | None = None
-    for point in sampled:
-        if previous is not None:
-            distance_m += math.hypot(point.x - previous.x, point.y - previous.y)
-        if distance_m % cycle_m < dash_m:
-            current_dash.append(point)
-        else:
-            if len(current_dash) >= 2:
-                strips.append(strip_from_centerline(tuple(current_dash), width_m, color))
-            current_dash = []
-        previous = point
-
-    if len(current_dash) >= 2:
-        strips.append(strip_from_centerline(tuple(current_dash), width_m, color))
-    return tuple(strips)
+    return tuple(strip_from_centerline(segment, width_m, color) for segment in dashed_centerline_segments(centerline))
 
 
 def lane_marking_strips_for_marking(
@@ -566,29 +621,7 @@ def lane_marking_segments_for_marking(
             return ()
         if marking.style == "solid":
             return (centerline,)
-
-        segments: list[tuple[Vec3, ...]] = []
-        sampled = resample_centerline(centerline, 0.75)
-        dash_m = 5.2
-        gap_m = 4.2
-        cycle_m = dash_m + gap_m
-        current_dash: list[Vec3] = []
-        distance_m = 0.0
-        previous: Vec3 | None = None
-        for point in sampled:
-            if previous is not None:
-                distance_m += math.hypot(point.x - previous.x, point.y - previous.y)
-            if distance_m % cycle_m < dash_m:
-                current_dash.append(point)
-            else:
-                if len(current_dash) >= 2:
-                    segments.append(tuple(current_dash))
-                current_dash = []
-            previous = point
-
-        if len(current_dash) >= 2:
-            segments.append(tuple(current_dash))
-        return tuple(segments)
+        return dashed_centerline_segments(centerline)
 
     if marking.style == "solid":
         return (lane_centerline(marking.offset, steering, lane_width_m, start_m, end_m, 80, 0.0),)
