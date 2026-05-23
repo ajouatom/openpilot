@@ -26,7 +26,7 @@ from cluster_config import (
 )
 from cluster_models import ClusterUiState, RouteOverlay
 from cluster_scene import ClusterScene, MeshStrip, RadarPointMarker, Vec3, VehicleBox, build_cluster_scene
-from cluster_utils import clamp
+from cluster_utils import blink_visible, clamp
 
 
 VEHICLE_MODEL_PATH = Path(__file__).resolve().parent / "assets" / "models" / "cybertruck" / "cybertruck_cluster.obj"
@@ -256,6 +256,8 @@ class ClusterUiRenderer:
         self._route_video_texture = None
         self._route_video_size: tuple[int, int] | None = None
         self._route_video_frame_id: str | None = None
+        self._left_turn_signal_started_at: float | None = None
+        self._right_turn_signal_started_at: float | None = None
         self.profile_enabled = os.environ.get("CLUSTER_PROFILE_RENDER") == "1"
         self._profile_samples: list[tuple[str, float]] = []
 
@@ -1052,10 +1054,10 @@ class ClusterUiRenderer:
             self._draw_accel_block(state)
             self._profile_add("hud.accel_block", profile_stage)
             profile_stage = self._profile_start()
-            self._draw_turn_signal("left", state.left_signal)
+            self._draw_turn_signal("left", self._turn_signal_lit("left", state.left_signal))
             self._profile_add("hud.turn_signal_left", profile_stage)
             profile_stage = self._profile_start()
-            self._draw_turn_signal("right", state.right_signal)
+            self._draw_turn_signal("right", self._turn_signal_lit("right", state.right_signal))
             self._profile_add("hud.turn_signal_right", profile_stage)
             profile_stage = self._profile_start()
             self._draw_center_clock(state)
@@ -1309,12 +1311,31 @@ class ClusterUiRenderer:
             color = RED if value > 0.55 else AMBER if value > 0.22 else BLUE
             self._rounded_rect(x + index * (bar_w + gap), y + height - bar_h, bar_w, bar_h, 2, color)
 
-    def _draw_turn_signal(self, side: str, active: bool) -> None:
+    def _turn_signal_lit(self, side: str, active: bool) -> bool:
+        if not active:
+            if side == "left":
+                self._left_turn_signal_started_at = None
+            else:
+                self._right_turn_signal_started_at = None
+            return False
+
+        now = time.perf_counter()
+        if side == "left":
+            if self._left_turn_signal_started_at is None:
+                self._left_turn_signal_started_at = now
+            started_at = self._left_turn_signal_started_at
+        else:
+            if self._right_turn_signal_started_at is None:
+                self._right_turn_signal_started_at = now
+            started_at = self._right_turn_signal_started_at
+        return blink_visible(now, started_at, float("inf"))
+
+    def _draw_turn_signal(self, side: str, lit: bool) -> None:
         cx = 610 if side == "left" else 1310
         cy = 72
         direction = -1 if side == "left" else 1
-        fill = GREEN if active else (195, 202, 209, 92)
-        outline = (8, 118, 65) if active else (168, 176, 184)
+        fill = GREEN if lit else (195, 202, 209, 92)
+        outline = (8, 118, 65) if lit else (168, 176, 184)
         tail_back = -36
         tail_front = 12
         tail_half_height = 16

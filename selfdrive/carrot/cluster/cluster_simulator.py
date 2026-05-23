@@ -24,7 +24,7 @@ from cluster_config import (
     WHITE,
 )
 from cluster_models import ClusterUiState, LaneMarking, SimulatorInput
-from cluster_utils import blink_visible, clamp, smoothstep
+from cluster_utils import clamp, smoothstep
 
 
 class ClusterSimulator:
@@ -33,8 +33,6 @@ class ClusterSimulator:
         self.speed_kph = 0.0
         self.accel_mps2 = 0.0
         self.steering = 0.0
-        self.left_signal_started_at = -999.0
-        self.right_signal_started_at = -999.0
         self.left_signal_until = -999.0
         self.right_signal_until = -999.0
         self.lane_change_direction: str | None = None
@@ -65,8 +63,8 @@ class ClusterSimulator:
         speed_limit_kph = self._speed_limit_for_current_road()
         cruise_kph = min(int(speed_limit_kph + 12), int(MAX_SPEED_KPH))
         lanes = self._lanes_for_current_state()
-        left_signal = blink_visible(self.elapsed, self.left_signal_started_at, self.left_signal_until)
-        right_signal = blink_visible(self.elapsed, self.right_signal_started_at, self.right_signal_until)
+        left_signal = self.elapsed < self.left_signal_until
+        right_signal = self.elapsed < self.right_signal_until
         highlight_lane = self.lane_change_direction if self.lane_change_direction is not None else None
         highlight_lane_offset = (
             self.target_lane_position - self.view_lane_position
@@ -142,11 +140,9 @@ class ClusterSimulator:
 
     def _start_signal(self, direction: str) -> None:
         if direction == "left":
-            self.left_signal_started_at = self.elapsed
             self.left_signal_until = self.elapsed + TURN_SIGNAL_SECONDS
             self.right_signal_until = min(self.right_signal_until, self.elapsed)
         else:
-            self.right_signal_started_at = self.elapsed
             self.right_signal_until = self.elapsed + TURN_SIGNAL_SECONDS
             self.left_signal_until = min(self.left_signal_until, self.elapsed)
 
