@@ -618,6 +618,8 @@ class RouteLogParser:
         self.hyundai_canfd_radar_points: dict[str, RadarPoint] = {}
         self.hyundai_canfd_radar_history: dict[str, tuple[float, float]] = {}
         self.hyundai_canfd_radar_t = -999.0
+        self.live_track_radar_points: dict[str, RadarPoint] = {}
+        self.live_track_radar_t = -999.0
         self.radar_detections: tuple[DetectedVehicle, ...] = ()
         self.radar_detection_t = -999.0
         self.current_speed_kph = 0.0
@@ -648,6 +650,8 @@ class RouteLogParser:
                 self._update_camera_odometry(event.cameraOdometry, bool(safe_get(event, "valid", True)))
             elif event_type == "radarState":
                 self._update_radar_state(event.radarState, event_t)
+            elif event_type == "liveTracks":
+                self._update_live_tracks(event.liveTracks, event_t)
             elif event_type in ("can", "sendcan"):
                 self._update_can_detections(getattr(event, event_type), event_t)
 
@@ -1028,16 +1032,24 @@ class RouteLogParser:
                 self.corner_detections = parsed
                 self.corner_detection_t = event_t
 
+    def _update_live_tracks(self, live_tracks: Any, event_t: float) -> None:
+        points: dict[str, RadarPoint] = {}
+        tracks = safe_get(live_tracks, "points", ())
+        if tracks is None:
+            tracks = ()
+        for index, track in enumerate(tracks):
+            point = live_track_to_radar_point(track, index, self.current_speed_kph)
+            if point is not None:
+                points[point.label] = point
+        self.live_track_radar_points = points
+        self.live_track_radar_t = event_t
+
     def _radar_points_from_current_state(self, event_t: float) -> tuple[RadarPoint, ...]:
-        if event_t - self.hyundai_canfd_radar_t >= RADAR_POINT_STALE_S:
-            return ()
-        points = [
-            point
-            for point in self.hyundai_canfd_radar_points.values()
-            if -12.0 <= point.lateral_m <= 12.0 and -10.0 <= point.longitudinal_m <= 180.0
-        ]
-        points.sort(key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label))
-        return tuple(points[:48])
+        if event_t - self.hyundai_canfd_radar_t < RADAR_POINT_STALE_S:
+            return sorted_radar_points(self.hyundai_canfd_radar_points.values())
+        if event_t - self.live_track_radar_t < RADAR_POINT_STALE_S:
+            return sorted_radar_points(self.live_track_radar_points.values())
+        return ()
 
     def _radar_point_with_absolute_speed(self, point: RadarPoint, event_t: float) -> RadarPoint:
         signal_speed_kph = (
@@ -2137,6 +2149,51 @@ def parse_hyundai_canfd_radar_point_3a5(address: int, data: bytes) -> RadarPoint
 def renderer_lateral_from_openpilot_yrel(y_rel: float) -> float:
     # openpilot radar/model UI projects radar points as -yRel; this renderer stores x as right-positive.
     return -y_rel
+
+
+def live_track_to_radar_point(track: Any, index: int, ego_speed_kph: float) -> RadarPoint | None:
+    d_rel = safe_optional_float(track, "dRel")
+    if d_rel is None or not 0.2 < d_rel < 180.0:
+        return None
+    y_rel = safe_float(track, "yRel", 0.0)
+    lateral_m = renderer_lateral_from_openpilot_yrel(y_rel)
+    if not -12.0 <= lateral_m <= 12.0:
+        return None
+    track_id = safe_optional_int(track, "trackId")
+    label = f"T{track_id}" if track_id is not None else f"T{index:03d}"
+    rel_speed_mps = safe_optional_float(track, "vRel")
+    lead_speed_mps = safe_optional_float(track, "vLead")
+    absolute_speed_kph = None
+    if lead_speed_mps is not None:
+        absolute_speed_kph = max(0.0, lead_speed_mps * 3.6)
+    elif rel_speed_mps is not None:
+        absolute_speed_kph = max(0.0, ego_speed_kph + rel_speed_mps * 3.6)
+    lat_speed_mps = safe_optional_float(track, "yvRel")
+    if lat_speed_mps is not None:
+        lat_speed_mps = renderer_lateral_from_openpilot_yrel(lat_speed_mps)
+    measured = bool(safe_get(track, "measured", True))
+    return RadarPoint(
+        label=label,
+        longitudinal_m=d_rel,
+        lateral_m=lateral_m,
+        source="liveTracks",
+        relative_speed_mps=rel_speed_mps,
+        absolute_speed_kph=absolute_speed_kph,
+        lateral_speed_mps=lat_speed_mps,
+        relative_accel_mps2=safe_optional_float(track, "aRel"),
+        probability=0.72 if measured else 0.38,
+        valid=1 if measured else 0,
+    )
+
+
+def sorted_radar_points(points: Any) -> tuple[RadarPoint, ...]:
+    filtered = [
+        point
+        for point in points
+        if -12.0 <= point.lateral_m <= 12.0 and -10.0 <= point.longitudinal_m <= 180.0
+    ]
+    filtered.sort(key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label))
+    return tuple(filtered[:48])
 
 
 def normalized_lateral_m(value: float) -> float:

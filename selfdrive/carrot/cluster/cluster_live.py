@@ -30,6 +30,7 @@ LIVE_SERVICES_BASE = (
     "carState",
     "modelV2",
     "radarState",
+    "liveTracks",
     "longitudinalPlan",
     "lateralPlan",
     "controlsState",
@@ -112,6 +113,8 @@ class OpenpilotLiveSource:
             self.parser._update_camera_odometry(data, self._service_valid(service))
         elif service == "radarState":
             self.parser._update_radar_state(data, event_t)
+        elif service == "liveTracks":
+            self.parser._update_live_tracks(data, event_t)
         elif service == "can":
             self.parser._update_can_detections(data, event_t)
 
