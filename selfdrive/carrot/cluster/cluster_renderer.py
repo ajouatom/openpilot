@@ -803,7 +803,11 @@ class ClusterUiRenderer:
             rl.draw_triangle_3d(left_near, right_far, left_far, color)
 
     def _draw_vehicle(self, vehicle: VehicleBox) -> None:
-        if self._vehicle_model is not None:
+        use_model = (
+            self._vehicle_model is not None
+            and (not vehicle.source or vehicle.primary or vehicle.cut_in)
+        )
+        if use_model:
             self._draw_vehicle_shadow(vehicle)
             self._draw_vehicle_model(vehicle)
             return

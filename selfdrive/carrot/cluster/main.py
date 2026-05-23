@@ -20,6 +20,7 @@ from cluster_ui import (
     ClusterSimulator,
     ClusterUiRenderer,
     RandomInputSource,
+    RouteOverlay,
     SimulatorInput,
 )
 
@@ -90,6 +91,14 @@ def next_simulated_values(speed_kph: float, dt: float) -> tuple[float, float, fl
     next_speed = max(0.0, min(MAX_SPEED_KPH, speed_kph + accel_mps2 * dt * 3.6))
     steering = 0.42 * math.sin(time.monotonic() * 0.55)
     return next_speed, accel_mps2, steering
+
+
+def route_overlay_for_mode(overlay: RouteOverlay | None, mode: str) -> RouteOverlay | None:
+    if overlay is None or mode == "off":
+        return None
+    if mode == "compact":
+        return replace(overlay, data_lines=overlay.data_lines[:4])
+    return overlay
 
 
 def normalize_signed_axis(axis_value: float | int) -> float:
@@ -303,10 +312,12 @@ def run_demo(
     usb_display_fps: int,
     usb_codec: str,
     usb_jpeg_quality: int,
+    usb_jpeg_encoder: str,
     usb_fast_write: bool,
     usb_wait_frame_ack: bool,
     route_path: Path,
     route_log: str,
+    route_overlay_mode: str,
     route_loop: bool,
     route_replay_speed: float,
     route_start_segment: int | None,
@@ -323,6 +334,7 @@ def run_demo(
             brightness=usb_brightness,
             display_fps=usb_display_fps,
             jpeg_quality=usb_jpeg_quality,
+            jpeg_encoder=usb_jpeg_encoder,
             fast_write=usb_fast_write,
             wait_for_frame_ack=usb_wait_frame_ack,
         )
@@ -387,7 +399,12 @@ def run_demo(
                 playback_seconds = (now - start_time) * route_replay_speed
                 if route_source.is_finished(playback_seconds, route_loop):
                     break
-                state = route_source.state_at(playback_seconds, route_loop, include_overlay=True)
+                state = route_source.state_at(
+                    playback_seconds,
+                    route_loop,
+                    include_overlay=route_overlay_mode != "off",
+                )
+                state = replace(state, route_overlay=route_overlay_for_mode(state.route_overlay, route_overlay_mode))
                 source_status = route_source.status_text(playback_seconds, route_loop)
                 profile.add_elapsed("source.route_update", profile_stage)
             elif controller is None:
@@ -527,6 +544,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--usb-codec", choices=("jpeg", "png"), default="jpeg")
     parser.add_argument("--usb-jpeg-quality", type=int, default=68)
     parser.add_argument(
+        "--usb-jpeg-encoder",
+        choices=("auto", "pillow", "opencv"),
+        default="auto",
+        help="JPEG encoder for USB output. auto tries OpenCV first and falls back to Pillow.",
+    )
+    parser.add_argument(
         "--usb-fast",
         action="store_true",
         help="Skip pre-write USB input drain before frame uploads. Useful only after no-ACK USB output is stable.",
@@ -547,6 +570,12 @@ def parse_args() -> argparse.Namespace:
         choices=("qlog", "rlog"),
         default="rlog",
         help="Route log type to read. rlog has full corner radar data; qlog is faster but downsampled.",
+    )
+    parser.add_argument(
+        "--route-overlay",
+        choices=("compact", "full", "off"),
+        default="compact",
+        help="Route replay debug overlay. compact keeps video plus fewer text lines; off hides it.",
     )
     parser.add_argument(
         "--route-loop",
@@ -640,10 +669,12 @@ def main() -> None:
             args.usb_display_fps,
             args.usb_codec,
             args.usb_jpeg_quality,
+            args.usb_jpeg_encoder,
             args.usb_fast,
             args.usb_wait_frame_ack,
             args.route,
             args.route_log,
+            args.route_overlay,
             args.route_loop,
             args.route_replay_speed,
             args.route_start_segment,

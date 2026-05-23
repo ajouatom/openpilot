@@ -60,6 +60,8 @@ RADAR_VEHICLE_MIN_PROBABILITY = 0.45
 RADAR_VEHICLE_DEDUP_LONGITUDINAL_M = 7.0
 RADAR_VEHICLE_DEDUP_LATERAL_M = 1.6
 RADAR_VEHICLE_MAX_BOXES = 6
+DETECTED_VEHICLE_MAX_RENDER_BOXES = 8
+DETECTED_VEHICLE_MAX_PATH_BLOCKERS = 16
 LEFT_TEST_TRAFFIC_FORWARD_M = 24.0
 LANE_MARKING_SHADOW_HEIGHT_M = 0.026
 LANE_MARKING_HEIGHT_M = 0.044
@@ -1227,6 +1229,29 @@ def vehicle_blocks_path(vehicle: DetectedVehicle) -> bool:
     return True
 
 
+def detected_vehicle_priority(vehicle: DetectedVehicle) -> tuple[int, float, float]:
+    if vehicle.primary:
+        category = 0
+    elif vehicle.cut_in:
+        category = 1
+    elif vehicle.ttc_s is not None and vehicle.ttc_s < 5.0:
+        category = 2
+    elif vehicle.source.startswith("modelV2") and vehicle.probability >= 0.55:
+        category = 3
+    else:
+        category = 4
+    return category, max(0.0, vehicle.longitudinal_m), -vehicle.probability
+
+
+def limited_detected_vehicles(
+    vehicles: tuple[DetectedVehicle, ...],
+    limit: int,
+) -> tuple[DetectedVehicle, ...]:
+    if len(vehicles) <= limit:
+        return vehicles
+    return tuple(sorted(vehicles, key=detected_vehicle_priority)[:limit])
+
+
 def road_edge_strips(
     state: ClusterUiState,
     route_mode: bool,
@@ -1356,6 +1381,10 @@ def build_cluster_scene(state: ClusterUiState) -> ClusterScene:
     target_offset = state.highlight_lane_offset if state.lane_change_phase == "changing" else None
     ego_vehicle = vehicle_box(ego_offset, EGO_FORWARD_M, state.steering, lane_width_m, EGO, camera_active, target_offset)
     if route_mode:
+        render_detected_vehicles = limited_detected_vehicles(
+            state.detected_vehicles,
+            DETECTED_VEHICLE_MAX_RENDER_BOXES,
+        )
         detected_vehicle_boxes = tuple(
             vehicle_box(
                 clamp(detected.lateral_m / lane_width_m, -2.2, 2.2),
@@ -1381,7 +1410,11 @@ def build_cluster_scene(state: ClusterUiState) -> ClusterScene:
                     )
                 ),
             )
-            for detected in state.detected_vehicles
+            for detected in render_detected_vehicles
+        )
+        blocking_detected_vehicles = limited_detected_vehicles(
+            tuple(detected for detected in state.detected_vehicles if vehicle_blocks_path(detected)),
+            DETECTED_VEHICLE_MAX_PATH_BLOCKERS,
         )
         detected_blockers = tuple(
             PathBlocker(
@@ -1389,8 +1422,7 @@ def build_cluster_scene(state: ClusterUiState) -> ClusterScene:
                 EGO_FORWARD_M + detected.longitudinal_m,
                 VEHICLE_LENGTH_M,
             )
-            for detected in state.detected_vehicles
-            if vehicle_blocks_path(detected)
+            for detected in blocking_detected_vehicles
         )
         radar_blockers = tuple(
             PathBlocker(

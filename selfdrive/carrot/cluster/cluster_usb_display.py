@@ -23,12 +23,14 @@ class TuringUsbDisplay:
         brightness: int = 80,
         display_fps: int = 60,
         jpeg_quality: int = 82,
+        jpeg_encoder: str = "auto",
         fast_write: bool = False,
         wait_for_frame_ack: bool = False,
     ) -> None:
         self.brightness = int(clamp(brightness, 0, 100))
         self.display_fps = int(clamp(display_fps, 0, 255))
         self.jpeg_quality = int(clamp(jpeg_quality, 1, 95))
+        self.jpeg_encoder = jpeg_encoder
         self.fast_write = fast_write
         self.wait_for_frame_ack = wait_for_frame_ack
         self.dev = None
@@ -198,6 +200,48 @@ class TuringUsbDisplay:
             self._handle_frame_error(exc)
 
     def encode_jpeg(self, rgba: bytes, width: int, height: int) -> bytes:
+        if self.jpeg_encoder in ("auto", "opencv"):
+            try:
+                return self._encode_jpeg_opencv(rgba, width, height)
+            except ImportError:
+                if self.jpeg_encoder == "opencv":
+                    raise
+            except Exception:
+                if self.jpeg_encoder == "opencv":
+                    raise
+        return self._encode_jpeg_pillow(rgba, width, height)
+
+    def _encode_jpeg_opencv(self, rgba: bytes, width: int, height: int) -> bytes:
+        profile_stage = self._profile_start()
+        import cv2  # type: ignore
+        import numpy as np
+
+        self._profile_add("usb.encode.opencv_import", profile_stage)
+
+        profile_stage = self._profile_start()
+        rgba_array = np.frombuffer(rgba, dtype=np.uint8).reshape((height, width, 4))
+        self._profile_add("usb.encode.opencv_rgba_view", profile_stage)
+
+        profile_stage = self._profile_start()
+        bgr = cv2.cvtColor(rgba_array, cv2.COLOR_RGBA2BGR)
+        self._profile_add("usb.encode.opencv_rgba_to_bgr", profile_stage)
+
+        profile_stage = self._profile_start()
+        ok, encoded = cv2.imencode(
+            ".jpg",
+            bgr,
+            [int(cv2.IMWRITE_JPEG_QUALITY), int(self.jpeg_quality)],
+        )
+        self._profile_add("usb.encode.opencv_imencode", profile_stage)
+        if not ok:
+            raise RuntimeError("OpenCV failed to encode JPEG")
+
+        profile_stage = self._profile_start()
+        jpeg = encoded.tobytes()
+        self._profile_add("usb.encode.opencv_tobytes", profile_stage)
+        return jpeg
+
+    def _encode_jpeg_pillow(self, rgba: bytes, width: int, height: int) -> bytes:
         from PIL import Image
 
         profile_stage = self._profile_start()
