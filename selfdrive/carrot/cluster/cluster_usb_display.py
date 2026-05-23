@@ -26,6 +26,10 @@ class TuringUsbDisplay:
         jpeg_encoder: str = "auto",
         fast_write: bool = False,
         wait_for_frame_ack: bool = False,
+        frame_drain_attempts: int = 3,
+        frame_drain_timeout_ms: int = 20,
+        fast_frame_drain_attempts: int = 3,
+        fast_frame_drain_timeout_ms: int = 2,
     ) -> None:
         self.brightness = int(clamp(brightness, 0, 100))
         self.display_fps = int(clamp(display_fps, 0, 255))
@@ -33,6 +37,10 @@ class TuringUsbDisplay:
         self.jpeg_encoder = jpeg_encoder
         self.fast_write = fast_write
         self.wait_for_frame_ack = wait_for_frame_ack
+        self.frame_drain_attempts = max(0, int(frame_drain_attempts))
+        self.frame_drain_timeout_ms = max(0, int(frame_drain_timeout_ms))
+        self.fast_frame_drain_attempts = max(0, int(fast_frame_drain_attempts))
+        self.fast_frame_drain_timeout_ms = max(0, int(fast_frame_drain_timeout_ms))
         self.dev = None
         self.dev_pid: int | None = None
         self.landscape_width = 1920
@@ -306,7 +314,7 @@ class TuringUsbDisplay:
             raise RuntimeError("Could not find USB IN endpoint")
 
     def _drain_input(self, attempts: int = 3, timeout_ms: int = 20) -> None:
-        if self._ep_in is None:
+        if self._ep_in is None or attempts <= 0:
             return
         for _ in range(attempts):
             try:
@@ -416,9 +424,15 @@ class TuringUsbDisplay:
 
         profile_stage = self._profile_start()
         if drain_input:
-            self._drain_input(attempts=3, timeout_ms=20)
+            self._drain_input(
+                attempts=self.frame_drain_attempts,
+                timeout_ms=self.frame_drain_timeout_ms,
+            )
         else:
-            self._drain_input(attempts=1, timeout_ms=2)
+            self._drain_input(
+                attempts=self.fast_frame_drain_attempts,
+                timeout_ms=self.fast_frame_drain_timeout_ms,
+            )
         self._profile_add("usb.frame_no_ack.drain_input", profile_stage)
 
         profile_stage = self._profile_start()

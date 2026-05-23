@@ -315,6 +315,10 @@ def run_demo(
     usb_jpeg_encoder: str,
     usb_fast_write: bool,
     usb_wait_frame_ack: bool,
+    usb_frame_drain_attempts: int,
+    usb_frame_drain_timeout_ms: int,
+    usb_fast_drain_attempts: int,
+    usb_fast_drain_timeout_ms: int,
     route_path: Path,
     route_log: str,
     route_overlay_mode: str,
@@ -337,6 +341,10 @@ def run_demo(
             jpeg_encoder=usb_jpeg_encoder,
             fast_write=usb_fast_write,
             wait_for_frame_ack=usb_wait_frame_ack,
+            frame_drain_attempts=usb_frame_drain_attempts,
+            frame_drain_timeout_ms=usb_frame_drain_timeout_ms,
+            fast_frame_drain_attempts=usb_fast_drain_attempts,
+            fast_frame_drain_timeout_ms=usb_fast_drain_timeout_ms,
         )
         usb_display.set_profile_enabled(profile_render)
         profile_stage = time.perf_counter()
@@ -552,12 +560,36 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--usb-fast",
         action="store_true",
-        help="Skip pre-write USB input drain before frame uploads. Useful only after no-ACK USB output is stable.",
+        help="Use short pre-write USB input drain before frame uploads. Useful only after no-ACK USB output is stable.",
     )
     parser.add_argument(
         "--usb-wait-frame-ack",
         action="store_true",
         help="Wait for a TURZX response after each frame upload. Default skips ACK because some units never reply.",
+    )
+    parser.add_argument(
+        "--usb-frame-drain-attempts",
+        type=int,
+        default=3,
+        help="IN endpoint drain read attempts before normal no-ACK frame uploads. Default: 3.",
+    )
+    parser.add_argument(
+        "--usb-frame-drain-timeout-ms",
+        type=int,
+        default=20,
+        help="Per-read IN endpoint drain timeout before normal no-ACK frame uploads. Default: 20.",
+    )
+    parser.add_argument(
+        "--usb-fast-drain-attempts",
+        type=int,
+        default=3,
+        help="IN endpoint drain read attempts before --usb-fast no-ACK frame uploads. Default: 3.",
+    )
+    parser.add_argument(
+        "--usb-fast-drain-timeout-ms",
+        type=int,
+        default=2,
+        help="Per-read IN endpoint drain timeout before --usb-fast no-ACK frame uploads. Default: 2.",
     )
     parser.add_argument(
         "--route",
@@ -633,6 +665,10 @@ def parse_args() -> argparse.Namespace:
         parser.error("--usb-display-fps must be between 0 and 255")
     if not 1 <= args.usb_jpeg_quality <= 95:
         parser.error("--usb-jpeg-quality must be between 1 and 95")
+    if args.usb_frame_drain_attempts < 0 or args.usb_fast_drain_attempts < 0:
+        parser.error("USB drain attempts must be 0 or greater")
+    if args.usb_frame_drain_timeout_ms < 0 or args.usb_fast_drain_timeout_ms < 0:
+        parser.error("USB drain timeouts must be 0 or greater")
     if args.input == "route" and args.route_replay_speed <= 0:
         parser.error("--route-replay-speed must be greater than 0")
     if args.route_start_segment is not None and args.route_start_segment < 0:
@@ -672,6 +708,10 @@ def main() -> None:
             args.usb_jpeg_encoder,
             args.usb_fast,
             args.usb_wait_frame_ack,
+            args.usb_frame_drain_attempts,
+            args.usb_frame_drain_timeout_ms,
+            args.usb_fast_drain_attempts,
+            args.usb_fast_drain_timeout_ms,
             args.route,
             args.route_log,
             args.route_overlay,
