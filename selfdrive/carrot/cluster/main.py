@@ -447,7 +447,7 @@ def run_demo(
                         rotate_clockwise=True,
                     )
                     profile.add_elapsed("main.usb.render_rgba_total", profile_stage)
-                    
+
                     profile_stage = time.perf_counter()
                     jpeg = usb_display.encode_jpeg(rgba, image_width, image_height)
                     profile.add_elapsed("main.usb.encode_jpeg", profile_stage)

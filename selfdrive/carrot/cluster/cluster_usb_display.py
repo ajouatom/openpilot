@@ -269,8 +269,8 @@ class TuringUsbDisplay:
         from PIL import Image
 
         profile_stage = self._profile_start()
-        image = Image.frombuffer("RGBA", (width, height), rgba, "raw", "RGBA", 0, 1).convert("RGB")
-        self._profile_add("usb.encode.rgba_to_rgb", profile_stage)
+        image = Image.frombuffer("RGB", (width, height), rgba, "raw", "RGBX", 0, 1)
+        self._profile_add("usb.encode.rgba_to_rgbx_view", profile_stage)
         buffer = BytesIO()
         profile_stage = self._profile_start()
         image.save(
