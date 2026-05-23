@@ -686,6 +686,41 @@ def strips_from_centerline_specs(
     )
 
 
+def strips_from_centerline_width_specs(
+    points: tuple[Vec3, ...],
+    specs: tuple[tuple[float, Color, float], ...],
+) -> tuple[MeshStrip, ...]:
+    if len(points) < 2:
+        return ()
+
+    half_widths = tuple(max(0.001, width_m) * 0.5 for width_m, _, _ in specs)
+    left_groups: list[list[Vec3]] = [[] for _ in specs]
+    right_groups: list[list[Vec3]] = [[] for _ in specs]
+
+    for index, point in enumerate(points):
+        previous_point = points[max(0, index - 1)]
+        next_point = points[min(len(points) - 1, index + 1)]
+        tangent_x, tangent_y = normalize2(
+            next_point.x - previous_point.x,
+            next_point.y - previous_point.y,
+        )
+        right_x = tangent_y
+        right_y = -tangent_x
+        for spec_index, half_width in enumerate(half_widths):
+            height_m = specs[spec_index][2]
+            left_groups[spec_index].append(
+                Vec3(point.x - right_x * half_width, point.y - right_y * half_width, height_m)
+            )
+            right_groups[spec_index].append(
+                Vec3(point.x + right_x * half_width, point.y + right_y * half_width, height_m)
+            )
+
+    return tuple(
+        MeshStrip(tuple(left_groups[index]), tuple(right_groups[index]), color)
+        for index, (_, color, _) in enumerate(specs)
+    )
+
+
 def lane_marking_strip_groups_from_segments(
     segments: tuple[tuple[Vec3, ...], ...],
     specs: tuple[tuple[int, Color, float], ...],
@@ -834,28 +869,21 @@ def planned_path_strips(
                 )
             )
         points = tuple(centerline)
-    shadow_points = points_at_height(points, PATH_SHADOW_LAYER_M)
-    strips: list[MeshStrip] = [strip_from_centerline(shadow_points, 0.86, (56, 72, 88, 70))]
+    path_specs: list[tuple[float, Color, float]] = [
+        (0.86, (56, 72, 88, 70), PATH_SHADOW_LAYER_M),
+    ]
     if model_driven:
         uncertainty_width = model_path_uncertainty_width(state)
         if uncertainty_width is not None:
-            strips.append(
-                strip_from_centerline(
-                    points_at_height(points, PATH_UNCERTAINTY_LAYER_M),
-                    uncertainty_width,
-                    (112, 169, 255, 74),
-                )
-            )
-    strips.append(strip_from_centerline(points_at_height(points, PATH_BODY_LAYER_M), 0.46, (34, 126, 255, 220)))
+            path_specs.append((uncertainty_width, (112, 169, 255, 74), PATH_UNCERTAINTY_LAYER_M))
+    path_specs.append((0.46, (34, 126, 255, 220), PATH_BODY_LAYER_M))
+    path_specs.append((0.16, (222, 239, 255, 238), PATH_HIGHLIGHT_LAYER_M))
+    strips = list(strips_from_centerline_width_specs(points, tuple(path_specs)))
     if model_driven:
+        highlight_strip = strips.pop() if strips else None
         strips.extend(model_path_metric_strips(state, points))
-    strips.append(
-        strip_from_centerline(
-            points_at_height(points, PATH_HIGHLIGHT_LAYER_M),
-            0.16,
-            (222, 239, 255, 238),
-        )
-    )
+        if highlight_strip is not None:
+            strips.append(highlight_strip)
     return tuple(strips)
 
 

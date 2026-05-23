@@ -722,8 +722,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--usb-frame-drain-attempts",
         type=int,
-        default=3,
-        help="IN endpoint drain read attempts before normal no-ACK frame uploads. Default: 3.",
+        default=2,
+        help="IN endpoint drain read attempts before normal no-ACK frame uploads. Default: 2.",
     )
     parser.add_argument(
         "--usb-frame-drain-timeout-ms",
