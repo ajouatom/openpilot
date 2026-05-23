@@ -758,8 +758,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--route-overlay",
         choices=("compact", "full", "off"),
-        default="off",
-        help="Route replay debug overlay. Default off matches live rendering cost more closely.",
+        default="compact",
+        help="Route replay debug overlay. Default compact shows the replay camera/data panel; use off for performance tests.",
     )
     parser.add_argument(
         "--route-loop",
