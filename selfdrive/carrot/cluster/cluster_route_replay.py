@@ -2124,20 +2124,44 @@ def discover_route_logs(
     filename = LOG_FILENAMES[log_kind]
     if route_path.is_file():
         return [route_path]
-    if not route_path.exists():
+
+    search_root, effective_start_segment, route_id_filter = route_search_spec(route_path, start_segment)
+    if not search_root.exists():
         raise RuntimeError(f"route path does not exist: {route_path}")
 
-    files = sorted(route_path.rglob(filename), key=route_sort_key)
-    if start_segment is not None:
-        files = [path for path in files if segment_index(path) is not None and segment_index(path) >= start_segment]
+    files = sorted(search_root.rglob(filename), key=route_sort_key)
+    if route_id_filter is not None:
+        files = [
+            path
+            for path in files
+            if segment_route_id(path) == route_id_filter
+        ]
+    if effective_start_segment is not None:
+        files = [
+            path
+            for path in files
+            if segment_index(path) is not None and segment_index(path) >= effective_start_segment
+        ]
     if max_segments is not None:
         files = files[:max_segments]
     return files
 
 
+def route_search_spec(route_path: Path, start_segment: int | None) -> tuple[Path, int | None, str | None]:
+    segment = segment_index_from_name(route_path.name)
+    route_id = segment_route_id_from_name(route_path.name)
+    if route_path.exists():
+        if segment is None:
+            return route_path, start_segment, None
+        return route_path.parent, start_segment if start_segment is not None else segment, route_id
+    if segment is not None:
+        return route_path.parent, start_segment if start_segment is not None else segment, route_id
+    return route_path.parent, start_segment, route_path.name
+
+
 def route_sort_key(path: Path) -> tuple[str, int, str]:
     parent = path.parent.name
-    route = path.parent.parent.name
+    route = segment_route_id(path) or path.parent.parent.name
     index = segment_index(path)
     return route, index if index is not None else 10**9, parent
 
@@ -2200,10 +2224,25 @@ def probe_video(path: Path) -> tuple[int, int, float]:
 
 
 def segment_index(path: Path) -> int | None:
+    return segment_index_from_name(path.parent.name)
+
+
+def segment_route_id(path: Path) -> str | None:
+    return segment_route_id_from_name(path.parent.name)
+
+
+def segment_route_id_from_name(name: str) -> str | None:
+    if segment_index_from_name(name) is None:
+        return None
+    return name.rsplit("--", 1)[0]
+
+
+def segment_index_from_name(name: str) -> int | None:
     try:
-        return int(path.parent.name.rsplit("--", 1)[1])
+        suffix = name.rsplit("--", 1)[1]
     except (IndexError, ValueError):
         return None
+    return int(suffix) if suffix.isdigit() else None
 
 
 _LOG_SCHEMA: Any | None = None
