@@ -105,6 +105,20 @@ class GcProfileHook:
             self.profile.add(f"gc.gen{generation}", (time.perf_counter() - start_time) * 1000.0)
 
 
+def freeze_gc_after_init(profile: ProfileReporter) -> None:
+    freeze = getattr(gc, "freeze", None)
+    if freeze is None:
+        return
+
+    profile_stage = time.perf_counter()
+    gc.collect(2)
+    profile.add_elapsed("gc.freeze_init.collect", profile_stage)
+
+    profile_stage = time.perf_counter()
+    freeze()
+    profile.add_elapsed("gc.freeze_init.freeze", profile_stage)
+
+
 class AsyncJpegUsbPipeline:
     def __init__(self, usb_display: TuringUsbDisplay) -> None:
         self.usb_display = usb_display
@@ -429,6 +443,7 @@ def run_demo(
     profile_render: bool,
     profile_interval_s: float,
     render_msaa: bool,
+    gc_freeze_init: bool,
 ) -> None:
     profile = ProfileReporter(profile_render, profile_interval_s)
     gc_hook = GcProfileHook(profile) if profile_render else None
@@ -493,6 +508,8 @@ def run_demo(
         renderer.open(hidden=output_mode == "usb")
         profile.add_samples(renderer.profile_samples())
         renderer.clear_profile_samples()
+        if gc_freeze_init:
+            freeze_gc_after_init(profile)
         while True:
             frame_start_time = time.perf_counter()
             renderer.clear_profile_samples()
@@ -794,6 +811,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Enable raylib 4x MSAA config hint. Default off for maximum SD845 throughput.",
     )
+    parser.add_argument(
+        "--no-gc-freeze",
+        action="store_true",
+        help="Disable post-init gc.freeze(). Default enabled to avoid long gen2 pauses during USB rendering.",
+    )
     args = parser.parse_args()
     if args.fps < 0:
         parser.error("--fps must be 0 or greater")
@@ -867,6 +889,7 @@ def main() -> None:
             args.profile_render,
             args.profile_interval,
             args.render_msaa,
+            not args.no_gc_freeze,
         )
     except KeyboardInterrupt:
         print("\nStopped.")
