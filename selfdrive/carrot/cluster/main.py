@@ -576,8 +576,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--usb-frame-drain-timeout-ms",
         type=int,
-        default=20,
-        help="Per-read IN endpoint drain timeout before normal no-ACK frame uploads. Default: 20.",
+        default=2,
+        help="Per-read IN endpoint drain timeout before normal no-ACK frame uploads. Default: 2.",
     )
     parser.add_argument(
         "--usb-fast-drain-attempts",

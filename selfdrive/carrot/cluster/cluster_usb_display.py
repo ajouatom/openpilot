@@ -27,7 +27,7 @@ class TuringUsbDisplay:
         fast_write: bool = False,
         wait_for_frame_ack: bool = False,
         frame_drain_attempts: int = 3,
-        frame_drain_timeout_ms: int = 20,
+        frame_drain_timeout_ms: int = 2,
         fast_frame_drain_attempts: int = 3,
         fast_frame_drain_timeout_ms: int = 2,
     ) -> None:
