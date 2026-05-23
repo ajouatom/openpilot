@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import os
+import select
+import socket
 import sys
 import time
 import traceback
@@ -14,6 +17,9 @@ CLUSTER_DIR = CARROT_DIR / "cluster"
 OPENPILOT_ROOT = CARROT_DIR.parents[1]
 HUD_PARAM = "ClusterHud"
 RETRY_INTERVAL_S = 5.0
+HUD_CHECK_INTERVAL_S = 5.0
+USB_FALLBACK_SCAN_INTERVAL_S = 60.0
+NETLINK_KOBJECT_UEVENT = 15
 
 
 def _ensure_cluster_paths() -> None:
@@ -56,20 +62,153 @@ def _run_cluster_once() -> None:
         sys.argv = previous_argv
 
 
-def _idle_without_startup_device(params: Params, expected_product_id: int) -> None:
-    from cluster_usb_display import product_id_for_hud_mode, product_label
+def _open_usb_uevent_socket() -> socket.socket | None:
+    if not hasattr(socket, "AF_NETLINK"):
+        return None
+
+    try:
+        sock = socket.socket(
+            socket.AF_NETLINK,
+            socket.SOCK_DGRAM,
+            getattr(socket, "NETLINK_KOBJECT_UEVENT", NETLINK_KOBJECT_UEVENT),
+        )
+        sock.bind((os.getpid(), 1))
+        sock.setblocking(False)
+        return sock
+    except OSError as exc:
+        print(f"[cluster_autorun] USB event monitor unavailable: {exc}", flush=True)
+        return None
+
+
+def _decode_uevent(payload: bytes) -> dict[str, str]:
+    event: dict[str, str] = {}
+    for part in payload.decode("utf-8", errors="replace").split("\0"):
+        if not part:
+            continue
+        if "=" in part:
+            key, value = part.split("=", 1)
+            event[key] = value
+        elif "@" in part:
+            event.setdefault("ACTION", part.split("@", 1)[0])
+    return event
+
+
+def _parse_hex_int(value: str | None) -> int | None:
+    if not value:
+        return None
+    try:
+        return int(value, 16)
+    except ValueError:
+        return None
+
+
+def _usb_uevent_matches(payload: bytes, expected_product_id: int) -> bool:
+    from cluster_usb_display import TURZX_USB_VENDOR_ID
+
+    event = _decode_uevent(payload)
+    if event.get("SUBSYSTEM") != "usb":
+        return False
+
+    action = event.get("ACTION")
+    if action not in ("add", "bind", "change", "move"):
+        return False
+
+    product = event.get("PRODUCT")
+    if product:
+        parts = product.split("/")
+        if len(parts) >= 2:
+            vendor_id = _parse_hex_int(parts[0])
+            product_id = _parse_hex_int(parts[1])
+            return vendor_id == TURZX_USB_VENDOR_ID and product_id == expected_product_id
+
+    vendor_id = _parse_hex_int(event.get("ID_VENDOR_ID"))
+    product_id = _parse_hex_int(event.get("ID_MODEL_ID"))
+    if vendor_id is not None or product_id is not None:
+        return vendor_id == TURZX_USB_VENDOR_ID and product_id == expected_product_id
+
+    return event.get("DEVTYPE") == "usb_device"
+
+
+def _wait_for_usb_uevent(sock: socket.socket | None, timeout_s: float, expected_product_id: int) -> bool:
+    if timeout_s <= 0:
+        return False
+    if sock is None:
+        time.sleep(timeout_s)
+        return False
+
+    try:
+        readable, _, _ = select.select([sock], [], [], timeout_s)
+    except (OSError, ValueError) as exc:
+        print(f"[cluster_autorun] USB event wait failed: {exc}", flush=True)
+        time.sleep(timeout_s)
+        return False
+
+    if not readable:
+        return False
+
+    matched = False
+    while True:
+        try:
+            payload = sock.recv(8192)
+        except BlockingIOError:
+            return matched
+        except OSError as exc:
+            print(f"[cluster_autorun] USB event read failed: {exc}", flush=True)
+            return matched
+        matched = _usb_uevent_matches(payload, expected_product_id) or matched
+
+
+def _wait_for_supported_usb_device(params: Params, expected_product_id: int, reason: str) -> int | None:
+    from cluster_usb_display import find_supported_usb_product, product_id_for_hud_mode, product_label
 
     print(
-        f"[cluster_autorun] {product_label(expected_product_id)} not found at startup; "
-        "not retrying USB scan until this process or the HUD setting is restarted",
+        f"[cluster_autorun] {product_label(expected_product_id)} {reason}; "
+        "waiting for USB event",
         flush=True,
     )
-    while True:
-        hud_mode = _read_hud_mode(params)
-        if product_id_for_hud_mode(hud_mode) is None:
-            print(f"[cluster_autorun] {HUD_PARAM}={hud_mode}; stopping idle cluster HUD", flush=True)
-            return
-        time.sleep(RETRY_INTERVAL_S)
+    usb_events = _open_usb_uevent_socket()
+    if usb_events is None:
+        print(
+            f"[cluster_autorun] falling back to USB scan every {USB_FALLBACK_SCAN_INTERVAL_S:.0f}s",
+            flush=True,
+        )
+    else:
+        print(
+            f"[cluster_autorun] fallback USB scan every {USB_FALLBACK_SCAN_INTERVAL_S:.0f}s",
+            flush=True,
+        )
+
+    next_hud_check = time.monotonic()
+    next_fallback_scan = time.monotonic() + USB_FALLBACK_SCAN_INTERVAL_S
+    try:
+        while True:
+            now = time.monotonic()
+            if now >= next_hud_check:
+                hud_mode = _read_hud_mode(params)
+                current_product_id = product_id_for_hud_mode(hud_mode)
+                if current_product_id is None:
+                    print(f"[cluster_autorun] {HUD_PARAM}={hud_mode}; stopping cluster HUD", flush=True)
+                    return None
+                if current_product_id != expected_product_id:
+                    expected_product_id = current_product_id
+                    next_fallback_scan = now
+                next_hud_check = now + HUD_CHECK_INTERVAL_S
+
+            now = time.monotonic()
+            if now >= next_fallback_scan:
+                found_product_id = find_supported_usb_product(expected_product_id)
+                if found_product_id is not None:
+                    return found_product_id
+                next_fallback_scan = now + USB_FALLBACK_SCAN_INTERVAL_S
+
+            wait_s = max(0.1, min(next_hud_check, next_fallback_scan) - time.monotonic())
+            if _wait_for_usb_uevent(usb_events, wait_s, expected_product_id):
+                found_product_id = find_supported_usb_product(expected_product_id)
+                if found_product_id is not None:
+                    return found_product_id
+    finally:
+        if usb_events is not None:
+            usb_events.close()
 
 
 def main() -> None:
@@ -85,8 +224,13 @@ def main() -> None:
 
     found_product_id = find_supported_usb_product(expected_product_id)
     if found_product_id is None:
-        _idle_without_startup_device(params, expected_product_id)
-        return
+        found_product_id = _wait_for_supported_usb_device(
+            params,
+            expected_product_id,
+            "not found at startup",
+        )
+        if found_product_id is None:
+            return
 
     print(f"[cluster_autorun] found {product_label(found_product_id)}; starting cluster HUD", flush=True)
     while True:
@@ -97,13 +241,14 @@ def main() -> None:
             return
 
         if find_supported_usb_product(expected_product_id) is None:
-            print(
-                f"[cluster_autorun] {product_label(expected_product_id)} disconnected; "
-                f"retrying in {RETRY_INTERVAL_S:.0f}s",
-                flush=True,
+            found_product_id = _wait_for_supported_usb_device(
+                params,
+                expected_product_id,
+                "disconnected",
             )
-            time.sleep(RETRY_INTERVAL_S)
-            continue
+            if found_product_id is None:
+                return
+            print(f"[cluster_autorun] found {product_label(found_product_id)}; starting cluster HUD", flush=True)
 
         try:
             _run_cluster_once()
