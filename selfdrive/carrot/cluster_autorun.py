@@ -41,6 +41,7 @@ def _cluster_args() -> list[str]:
         "jpeg",
         "--usb-jpeg-quality",
         "68",
+        "--live-no-can",
     ]
 
 
@@ -53,6 +54,22 @@ def _run_cluster_once() -> None:
         cluster_run.main()
     finally:
         sys.argv = previous_argv
+
+
+def _idle_without_startup_device(params: Params, expected_product_id: int) -> None:
+    from cluster_usb_display import product_id_for_hud_mode, product_label
+
+    print(
+        f"[cluster_autorun] {product_label(expected_product_id)} not found at startup; "
+        "not retrying USB scan until this process or the HUD setting is restarted",
+        flush=True,
+    )
+    while True:
+        hud_mode = _read_hud_mode(params)
+        if product_id_for_hud_mode(hud_mode) is None:
+            print(f"[cluster_autorun] {HUD_PARAM}={hud_mode}; stopping idle cluster HUD", flush=True)
+            return
+        time.sleep(RETRY_INTERVAL_S)
 
 
 def main() -> None:
@@ -68,11 +85,7 @@ def main() -> None:
 
     found_product_id = find_supported_usb_product(expected_product_id)
     if found_product_id is None:
-        print(
-            f"[cluster_autorun] {product_label(expected_product_id)} not found at startup; "
-            "not retrying until the HUD setting or manager is restarted",
-            flush=True,
-        )
+        _idle_without_startup_device(params, expected_product_id)
         return
 
     print(f"[cluster_autorun] found {product_label(found_product_id)}; starting cluster HUD", flush=True)

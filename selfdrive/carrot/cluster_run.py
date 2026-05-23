@@ -30,10 +30,18 @@ def configure_cluster_locale() -> None:
 
 
 def configure_cluster_realtime() -> None:
+    realtime_enabled = os.environ.get("CLUSTER_REALTIME", "0").strip().lower() in ("1", "true", "yes", "on")
+    if not realtime_enabled:
+        return
+
     try:
         from openpilot.common.realtime import config_realtime_process
 
-        config_realtime_process([0, 1, 2, 3], 55)
+        cores_text = os.environ.get("CLUSTER_REALTIME_CORES", "0,1,2,3")
+        cores = [int(core.strip()) for core in cores_text.split(",") if core.strip()]
+        priority = int(os.environ.get("CLUSTER_REALTIME_PRIORITY", "55"))
+        config_realtime_process(cores, priority)
+        print(f"[cluster_run] realtime enabled cores={cores} priority={priority}", flush=True)
     except Exception as exc:
         print(f"[cluster_run] failed to configure realtime process: {exc}", flush=True)
 
