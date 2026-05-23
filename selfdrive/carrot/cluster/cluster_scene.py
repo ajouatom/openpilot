@@ -62,6 +62,9 @@ RADAR_VEHICLE_DEDUP_LATERAL_M = 1.6
 RADAR_VEHICLE_MAX_BOXES = 4
 DETECTED_VEHICLE_MAX_RENDER_BOXES = 5
 DETECTED_VEHICLE_MAX_PATH_BLOCKERS = 10
+MODEL_LINE_MAX_POINTS = 36
+MODEL_PATH_MAX_POINTS = 44
+MODEL_PATH_MAX_METRIC_SEGMENTS = 14
 LEFT_TEST_TRAFFIC_FORWARD_M = 24.0
 LANE_MARKING_SHADOW_HEIGHT_M = 0.026
 LANE_MARKING_HEIGHT_M = 0.044
@@ -380,6 +383,17 @@ def strip_from_centerline(points: tuple[Vec3, ...], width_m: float, color: Color
     return MeshStrip(tuple(left), tuple(right), color)
 
 
+def downsample_tuple(values: tuple, max_count: int) -> tuple:
+    if len(values) <= max_count or max_count <= 1:
+        return values
+    last_index = len(values) - 1
+    indexes = {
+        round(index * last_index / (max_count - 1))
+        for index in range(max_count)
+    }
+    return tuple(values[index] for index in sorted(indexes))
+
+
 def points_at_height(points: tuple[Vec3, ...], height_m: float) -> tuple[Vec3, ...]:
     return tuple(Vec3(point.x, point.y, height_m) for point in points)
 
@@ -423,7 +437,7 @@ def model_line_centerline(
         forward_m = EGO_FORWARD_M + point.forward_m
         if start_m <= forward_m <= end_m:
             points.append(Vec3(point.lateral_m, forward_m, height_m))
-    return tuple(points)
+    return downsample_tuple(tuple(points), MODEL_LINE_MAX_POINTS)
 
 
 def resample_centerline(points: tuple[Vec3, ...], spacing_m: float) -> tuple[Vec3, ...]:
@@ -622,9 +636,22 @@ def model_path_centerline(
     end_m = model_path_end_m(state, lane_width_m, blockers)
     if end_m is None:
         return ()
-    steps = max(4, int(72 * (end_m - PATH_START_M) / (PATH_END_M - PATH_START_M)))
+    relative_start_m = max(0.0, PATH_START_M - EGO_FORWARD_M)
+    relative_end_m = max(relative_start_m, end_m - EGO_FORWARD_M)
+    model_points = tuple(
+        point
+        for point in state.model_path
+        if relative_start_m <= point.forward_m <= relative_end_m
+    )
+    if len(model_points) < 2:
+        steps = max(4, int(44 * (end_m - PATH_START_M) / (PATH_END_M - PATH_START_M)))
+        sample_points = sample_range(PATH_START_M, end_m, steps)
+    else:
+        sampled_model_points = downsample_tuple(model_points, MODEL_PATH_MAX_POINTS)
+        sample_points = tuple(EGO_FORWARD_M + point.forward_m for point in sampled_model_points)
+
     points: list[Vec3] = []
-    for forward_m in sample_range(PATH_START_M, end_m, steps):
+    for forward_m in sample_points:
         x_m = model_path_world_x(state, lane_width_m, forward_m)
         if x_m is not None:
             points.append(Vec3(x_m, forward_m, PATH_HEIGHT_M))
@@ -640,7 +667,7 @@ def planned_path_strips(
     model_driven = bool(points)
     if not points:
         end_m = planned_path_end_m(state, blockers)
-        steps = max(4, int(72 * (end_m - PATH_START_M) / (PATH_END_M - PATH_START_M)))
+        steps = max(4, int(44 * (end_m - PATH_START_M) / (PATH_END_M - PATH_START_M)))
         centerline: list[Vec3] = []
         for forward_m in sample_range(PATH_START_M, end_m, steps):
             lane_offset = planned_path_lane_offset(state, forward_m)
@@ -690,8 +717,13 @@ def model_path_metric_strips(state: ClusterUiState, points: tuple[Vec3, ...]) ->
         return ()
     strips: list[MeshStrip] = []
     metric_count = min(len(state.model_path), len(points))
-    for index in range(metric_count - 1):
-        accel = state.model_path[index].accel_mps2
+    step = max(1, math.ceil((metric_count - 1) / MODEL_PATH_MAX_METRIC_SEGMENTS))
+    for index in range(0, metric_count - 1, step):
+        model_index = min(
+            len(state.model_path) - 1,
+            round(index * (len(state.model_path) - 1) / max(1, metric_count - 1)),
+        )
+        accel = state.model_path[model_index].accel_mps2
         if accel is None:
             continue
         color = path_metric_color(accel)
