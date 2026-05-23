@@ -47,6 +47,24 @@ class TuringUsbDisplay:
         self._ep_in = None
         self._dll_dir_handle = None
         self._frame_error_count = 0
+        self.profile_enabled = os.environ.get("CLUSTER_PROFILE_USB") == "1"
+        self._profile_samples: list[tuple[str, float]] = []
+
+    def set_profile_enabled(self, enabled: bool) -> None:
+        self.profile_enabled = enabled
+
+    def clear_profile_samples(self) -> None:
+        self._profile_samples.clear()
+
+    def profile_samples(self) -> tuple[tuple[str, float], ...]:
+        return tuple(self._profile_samples)
+
+    def _profile_start(self) -> float:
+        return time.perf_counter() if self.profile_enabled else 0.0
+
+    def _profile_add(self, name: str, start_time: float) -> None:
+        if self.profile_enabled:
+            self._profile_samples.append((name, (time.perf_counter() - start_time) * 1000.0))
 
     def open(self) -> None:
         if not VENDOR_LIBRARY.exists():
@@ -182,8 +200,11 @@ class TuringUsbDisplay:
     def encode_jpeg(self, rgba: bytes, width: int, height: int) -> bytes:
         from PIL import Image
 
+        profile_stage = self._profile_start()
         image = Image.frombytes("RGBA", (width, height), rgba).convert("RGB")
+        self._profile_add("usb.encode.rgba_to_rgb", profile_stage)
         buffer = BytesIO()
+        profile_stage = self._profile_start()
         image.save(
             buffer,
             format="JPEG",
@@ -192,7 +213,11 @@ class TuringUsbDisplay:
             progressive=False,
             subsampling=2,
         )
-        return buffer.getvalue()
+        self._profile_add("usb.encode.jpeg_save", profile_stage)
+        profile_stage = self._profile_start()
+        jpeg = buffer.getvalue()
+        self._profile_add("usb.encode.getvalue", profile_stage)
+        return jpeg
 
     def _cache_out_endpoint(self) -> None:
         import usb.util
@@ -243,21 +268,32 @@ class TuringUsbDisplay:
     def _write_payload_checked(self, payload: bytes, error_message: str, timeout_ms: int) -> bytes:
         if self._ep_out is None or self._ep_in is None:
             raise RuntimeError("USB endpoints are not open")
+        profile_stage = self._profile_start()
         self._clear_endpoint_halt()
         self._drain_input()
+        self._profile_add("usb.write_checked.prepare", profile_stage)
         try:
+            profile_stage = self._profile_start()
             self._ep_out.write(payload, timeout_ms)
-            return bytes(self._ep_in.read(512, timeout_ms))
+            self._profile_add("usb.write_checked.write", profile_stage)
+            profile_stage = self._profile_start()
+            response = bytes(self._ep_in.read(512, timeout_ms))
+            self._profile_add("usb.write_checked.read_ack", profile_stage)
+            return response
         except Exception as exc:
             raise RuntimeError(error_message) from exc
 
     def _write_payload_no_ack(self, payload: bytes, error_message: str, timeout_ms: int) -> None:
         if self._ep_out is None:
             raise RuntimeError("USB OUT endpoint is not open")
+        profile_stage = self._profile_start()
         self._clear_endpoint_halt()
         self._drain_input()
+        self._profile_add("usb.write_no_ack.prepare", profile_stage)
         try:
+            profile_stage = self._profile_start()
             self._ep_out.write(payload, timeout_ms)
+            self._profile_add("usb.write_no_ack.write", profile_stage)
         except Exception as exc:
             raise RuntimeError(error_message) from exc
 
@@ -266,12 +302,15 @@ class TuringUsbDisplay:
             raise RuntimeError("USB command helpers are not initialized")
 
         frame_size = len(frame)
+        profile_stage = self._profile_start()
         cmd_packet = self._build_command_packet_header(command_id)
         cmd_packet[8] = (frame_size >> 24) & 0xFF
         cmd_packet[9] = (frame_size >> 16) & 0xFF
         cmd_packet[10] = (frame_size >> 8) & 0xFF
         cmd_packet[11] = frame_size & 0xFF
-        return self._encrypt_command_packet(cmd_packet) + frame
+        payload = self._encrypt_command_packet(cmd_packet) + frame
+        self._profile_add("usb.frame.build_payload", profile_stage)
+        return payload
 
     def _send_frame(self, command_id: int, frame: bytes) -> None:
         if self.wait_for_frame_ack:
@@ -296,24 +335,38 @@ class TuringUsbDisplay:
         if self._ep_out is None:
             raise RuntimeError("USB OUT endpoint is not open")
 
+        profile_stage = self._profile_start()
         self._clear_endpoint_halt()
         self._drain_input()
-        self._ep_out.write(self._build_frame_payload(command_id, frame), USB_FRAME_TIMEOUT_MS)
-        return bytes(self._ep_in.read(512, USB_FRAME_TIMEOUT_MS))
+        self._profile_add("usb.frame_fast.prepare", profile_stage)
+        profile_stage = self._profile_start()
+        payload = self._build_frame_payload(command_id, frame)
+        self._profile_add("usb.frame_fast.payload", profile_stage)
+        profile_stage = self._profile_start()
+        self._ep_out.write(payload, USB_FRAME_TIMEOUT_MS)
+        self._profile_add("usb.frame_fast.write", profile_stage)
+        profile_stage = self._profile_start()
+        response = bytes(self._ep_in.read(512, USB_FRAME_TIMEOUT_MS))
+        self._profile_add("usb.frame_fast.read_ack", profile_stage)
+        return response
 
     def _send_frame_no_ack(self, command_id: int, frame: bytes, *, drain_input: bool) -> None:
         if self._ep_out is None:
             raise RuntimeError("USB OUT endpoint is not open")
 
+        profile_stage = self._profile_start()
         if drain_input:
             self._drain_input(attempts=3, timeout_ms=20)
         else:
             self._drain_input(attempts=1, timeout_ms=2)
+        self._profile_add("usb.frame_no_ack.drain_input", profile_stage)
 
-        self._ep_out.write(
-            self._build_frame_payload(command_id, frame),
-            USB_FRAME_TIMEOUT_MS,
-        )
+        profile_stage = self._profile_start()
+        payload = self._build_frame_payload(command_id, frame)
+        self._profile_add("usb.frame_no_ack.payload", profile_stage)
+        profile_stage = self._profile_start()
+        self._ep_out.write(payload, USB_FRAME_TIMEOUT_MS)
+        self._profile_add("usb.frame_no_ack.write", profile_stage)
 
     def _check_frame_response(self, response: bytes | None) -> None:
         if not response:

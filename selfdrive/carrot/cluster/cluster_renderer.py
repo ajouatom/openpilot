@@ -254,23 +254,51 @@ class ClusterUiRenderer:
         self._route_video_texture = None
         self._route_video_size: tuple[int, int] | None = None
         self._route_video_frame_id: str | None = None
+        self.profile_enabled = os.environ.get("CLUSTER_PROFILE_RENDER") == "1"
+        self._profile_samples: list[tuple[str, float]] = []
+
+    def set_profile_enabled(self, enabled: bool) -> None:
+        self.profile_enabled = enabled
+
+    def clear_profile_samples(self) -> None:
+        self._profile_samples.clear()
+
+    def profile_samples(self) -> tuple[tuple[str, float], ...]:
+        return tuple(self._profile_samples)
+
+    def _profile_start(self) -> float:
+        return time.perf_counter() if self.profile_enabled else 0.0
+
+    def _profile_add(self, name: str, start_time: float) -> None:
+        if self.profile_enabled:
+            self._profile_samples.append((name, (time.perf_counter() - start_time) * 1000.0))
 
     def open(self, hidden: bool = False) -> None:
         if self._window_open:
             return
+        profile_total = self._profile_start()
         self.hidden = hidden
         rl.set_trace_log_level(rl.TraceLogLevel.LOG_WARNING)
         flags = rl.ConfigFlags.FLAG_MSAA_4X_HINT
         if hidden:
             flags |= rl.ConfigFlags.FLAG_WINDOW_HIDDEN
         rl.set_config_flags(flags)
+        profile_stage = self._profile_start()
         rl.init_window(self.width, self.height, self.title)
+        self._profile_add("renderer.open.init_window", profile_stage)
         if self.target_fps > 0:
+            profile_stage = self._profile_start()
             rl.set_target_fps(self.target_fps)
+            self._profile_add("renderer.open.set_target_fps", profile_stage)
+        profile_stage = self._profile_start()
         self._font = self._load_font()
+        self._profile_add("renderer.open.load_font", profile_stage)
+        profile_stage = self._profile_start()
         self._load_vehicle_model()
+        self._profile_add("renderer.open.load_vehicle_model", profile_stage)
         # self._load_fxaa_shader()
         self._window_open = True
+        self._profile_add("renderer.open.total", profile_total)
 
     def close(self) -> None:
         if not self._window_open:
@@ -311,30 +339,50 @@ class ClusterUiRenderer:
     def render_frame(self, state: ClusterUiState) -> None:
         self.open()
         if self._fxaa_shader is None:
+            profile_stage = self._profile_start()
             rl.begin_drawing()
+            self._profile_add("render_frame.begin_drawing", profile_stage)
+            profile_stage = self._profile_start()
             self.render(state)
+            self._profile_add("render_frame.render_no_fxaa", profile_stage)
+            profile_stage = self._profile_start()
             rl.end_drawing()
+            self._profile_add("render_frame.end_drawing", profile_stage)
             return
 
         scene_target = self._get_aa_source_target()
+        profile_stage = self._profile_start()
         rl.begin_texture_mode(scene_target)
         self._render_world(state)
         rl.end_texture_mode()
+        self._profile_add("render_frame.render_scene_target", profile_stage)
 
+        profile_stage = self._profile_start()
         rl.begin_drawing()
         self._draw_antialiased_texture(scene_target.texture)
         self._draw_hud(state)
         rl.end_drawing()
+        self._profile_add("render_frame.draw_fxaa_hud", profile_stage)
 
     def render(self, state: ClusterUiState) -> None:
         """Draw one frame into the currently active raylib render target."""
+        profile_stage = self._profile_start()
         self._render_world(state)
+        self._profile_add("render.world", profile_stage)
+        profile_stage = self._profile_start()
         self._draw_hud(state)
+        self._profile_add("render.hud", profile_stage)
 
     def _render_world(self, state: ClusterUiState) -> None:
+        profile_stage = self._profile_start()
         scene = build_cluster_scene(state)
+        self._profile_add("render_world.build_scene", profile_stage)
+        profile_stage = self._profile_start()
         rl.clear_background(rl_color(BG))
+        self._profile_add("render_world.clear_background", profile_stage)
+        profile_stage = self._profile_start()
         self._draw_scene(scene)
+        self._profile_add("render_world.draw_scene", profile_stage)
 
     def render_to_file(self, state: ClusterUiState, output_path: str | Path) -> None:
         image = self._render_to_image(state)
@@ -344,10 +392,14 @@ class ClusterUiRenderer:
             rl.unload_image(image)
 
     def render_to_png_bytes(self, state: ClusterUiState, rotate_clockwise: bool = False) -> bytes:
+        profile_stage = self._profile_start()
         image = self._render_to_image(state, rotate_clockwise=rotate_clockwise)
+        self._profile_add("render_to_png.render_to_image", profile_stage)
         try:
             size = rl.ffi.new("int *")
+            profile_stage = self._profile_start()
             data = rl.export_image_to_memory(image, ".png", size)
+            self._profile_add("render_to_png.export_png", profile_stage)
             try:
                 if size[0] <= 0:
                     raise RuntimeError("raylib failed to encode frame as PNG")
@@ -355,68 +407,68 @@ class ClusterUiRenderer:
             finally:
                 rl.mem_free(data)
         finally:
+            profile_stage = self._profile_start()
             rl.unload_image(image)
+            self._profile_add("render_to_png.unload_image", profile_stage)
 
     def render_to_rgba_bytes(
         self,
         state: ClusterUiState,
         rotate_clockwise: bool = False,
     ) -> tuple[bytes, int, int]:
-        profile = os.environ.get("CLUSTER_PROFILE_RGBA") == "1"
-
-        t0 = time.perf_counter()
+        profile_stage = self._profile_start()
         image = self._render_to_image(state, rotate_clockwise=rotate_clockwise)
-        t1 = time.perf_counter()
+        self._profile_add("render_to_rgba.render_to_image", profile_stage)
 
         try:
+            profile_stage = self._profile_start()
             rl.image_format(image, rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8)
-            t2 = time.perf_counter()
+            self._profile_add("render_to_rgba.image_format", profile_stage)
 
             byte_count = image.width * image.height * 4
+            profile_stage = self._profile_start()
             rgba = bytes(rl.ffi.buffer(image.data, byte_count))
-            t3 = time.perf_counter()
-
-            if profile and False:
-                print(
-                    f"rgba_detail render_to_image={(t1 - t0) * 1000:.1f}ms "
-                    f"format={(t2 - t1) * 1000:.1f}ms "
-                    f"copy={(t3 - t2) * 1000:.1f}ms "
-                    f"image={image.width}x{image.height}",
-                    flush=True,
-                )
+            self._profile_add("render_to_rgba.copy_bytes", profile_stage)
 
             return rgba, image.width, image.height
         finally:
+            profile_stage = self._profile_start()
             rl.unload_image(image)
+            self._profile_add("render_to_rgba.unload_image", profile_stage)
 
     def _render_to_image(self, state: ClusterUiState, rotate_clockwise: bool = False):
-        profile = os.environ.get("CLUSTER_PROFILE_RGBA") == "1"
-
         self.open(hidden=self.hidden)
+        profile_stage = self._profile_start()
         target = self._get_capture_target()
-
-        t0 = time.perf_counter()
+        self._profile_add("render_to_image.get_capture_target", profile_stage)
 
         if self._fxaa_shader is None:
+            profile_stage = self._profile_start()
             rl.begin_texture_mode(target)
             self.render(state)
             rl.end_texture_mode()
+            self._profile_add("render_to_image.draw_to_target", profile_stage)
         else:
             scene_target = self._get_aa_source_target()
+            profile_stage = self._profile_start()
             rl.begin_texture_mode(scene_target)
             self._render_world(state)
             rl.end_texture_mode()
+            self._profile_add("render_to_image.draw_scene_target", profile_stage)
 
+            profile_stage = self._profile_start()
             rl.begin_texture_mode(target)
             self._draw_antialiased_texture(scene_target.texture)
             self._draw_hud(state)
             rl.end_texture_mode()
-
-        t1 = time.perf_counter()
+            self._profile_add("render_to_image.draw_fxaa_target", profile_stage)
 
         if rotate_clockwise:
+            profile_stage = self._profile_start()
             rotated_target = self._get_rotated_capture_target()
+            self._profile_add("render_to_image.get_rotated_target", profile_stage)
 
+            profile_stage = self._profile_start()
             rl.begin_texture_mode(rotated_target)
             rl.clear_background(rl_color(BG))
 
@@ -443,54 +495,54 @@ class ClusterUiRenderer:
                 rl_color(WHITE),
             )
             rl.end_texture_mode()
+            self._profile_add("render_to_image.gpu_rotate", profile_stage)
 
-            t_rotate_gpu = time.perf_counter()
-
+            profile_stage = self._profile_start()
             image = rl.load_image_from_texture(rotated_target.texture)
-            t2 = time.perf_counter()
+            self._profile_add("render_to_image.readback_rotated_texture", profile_stage)
 
+            profile_stage = self._profile_start()
             rl.image_flip_vertical(image)
-            t3 = time.perf_counter()
-
-            t4 = t3
+            self._profile_add("render_to_image.flip_vertical", profile_stage)
         else:
+            profile_stage = self._profile_start()
             image = rl.load_image_from_texture(target.texture)
-            t2 = time.perf_counter()
+            self._profile_add("render_to_image.readback_texture", profile_stage)
 
+            profile_stage = self._profile_start()
             rl.image_flip_vertical(image)
-            t3 = time.perf_counter()
-
-            t_rotate_gpu = t3
-            t4 = t3
-
-        if profile and False:
-            print(
-                f"render_image draw={(t1 - t0) * 1000:.1f}ms "
-                f"gpu_rotate={(t_rotate_gpu - t1) * 1000:.1f}ms "
-                f"readback={(t2 - t_rotate_gpu) * 1000:.1f}ms "
-                f"flip={(t3 - t2) * 1000:.1f}ms "
-                f"cpu_rotate={(t4 - t3) * 1000:.1f}ms",
-                flush=True,
-            )
+            self._profile_add("render_to_image.flip_vertical", profile_stage)
 
         return image
 
     def _get_capture_target(self):
         if self._capture_target is None:
+            profile_stage = self._profile_start()
             self._capture_target = rl.load_render_texture(self.width, self.height)
+            self._profile_add("render_target.alloc_capture", profile_stage)
+            profile_stage = self._profile_start()
             rl.set_texture_filter(self._capture_target.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+            self._profile_add("render_target.filter_capture", profile_stage)
         return self._capture_target
       
     def _get_rotated_capture_target(self):
         if self._rotated_capture_target is None:
+            profile_stage = self._profile_start()
             self._rotated_capture_target = rl.load_render_texture(self.height, self.width)
+            self._profile_add("render_target.alloc_rotated", profile_stage)
+            profile_stage = self._profile_start()
             rl.set_texture_filter(self._rotated_capture_target.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+            self._profile_add("render_target.filter_rotated", profile_stage)
         return self._rotated_capture_target
       
     def _get_aa_source_target(self):
         if self._aa_source_target is None:
+            profile_stage = self._profile_start()
             self._aa_source_target = rl.load_render_texture(self.width, self.height)
+            self._profile_add("render_target.alloc_aa_source", profile_stage)
+            profile_stage = self._profile_start()
             rl.set_texture_filter(self._aa_source_target.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+            self._profile_add("render_target.filter_aa_source", profile_stage)
         return self._aa_source_target
 
     def _load_fxaa_shader(self) -> None:
@@ -525,7 +577,10 @@ class ClusterUiRenderer:
         source = rl.Rectangle(0.0, 0.0, float(texture.width), -float(texture.height))
         dest = rl.Rectangle(0.0, 0.0, float(self.width), float(self.height))
         origin = rl.Vector2(0.0, 0.0)
+        profile_stage = self._profile_start()
         rl.clear_background(rl_color(BG))
+        self._profile_add("fxaa.clear_background", profile_stage)
+        profile_stage = self._profile_start()
         rl.begin_shader_mode(self._fxaa_shader)
         if self._fxaa_resolution_loc >= 0 and self._fxaa_resolution_value is not None:
             rl.set_shader_value(
@@ -536,6 +591,7 @@ class ClusterUiRenderer:
             )
         rl.draw_texture_pro(texture, source, dest, origin, 0.0, rl_color(WHITE))
         rl.end_shader_mode()
+        self._profile_add("fxaa.shader_draw", profile_stage)
 
     def _load_font(self):
         for candidate in self._font_candidates():
@@ -564,9 +620,15 @@ class ClusterUiRenderer:
         if not VEHICLE_MODEL_PATH.exists():
             return
         try:
+            profile_stage = self._profile_start()
             mesh = self._load_obj_mesh(VEHICLE_MODEL_PATH)
+            self._profile_add("vehicle_model.parse_obj", profile_stage)
+            profile_stage = self._profile_start()
             rl.upload_mesh(rl.ffi.addressof(mesh), False)
+            self._profile_add("vehicle_model.upload_mesh", profile_stage)
+            profile_stage = self._profile_start()
             model = rl.load_model_from_mesh(mesh)
+            self._profile_add("vehicle_model.load_from_mesh", profile_stage)
             if not rl.is_model_valid(model):
                 rl.unload_model(model)
                 return
@@ -667,22 +729,42 @@ class ClusterUiRenderer:
             scene.camera.fovy_deg,
             rl.CameraProjection.CAMERA_PERSPECTIVE,
         )
+        profile_stage = self._profile_start()
         rl.begin_mode_3d(camera)
+        self._profile_add("draw_scene.begin_mode_3d", profile_stage)
+        profile_stage = self._profile_start()
         for strip in scene.highlight_lanes:
             self._draw_strip(strip)
+        self._profile_add("draw_scene.highlight_lanes", profile_stage)
+        profile_stage = self._profile_start()
         for strip in scene.road_edges:
             self._draw_strip(strip)
+        self._profile_add("draw_scene.road_edges", profile_stage)
+        profile_stage = self._profile_start()
         for strip in scene.lane_markings:
             self._draw_strip(strip)
+        self._profile_add("draw_scene.lane_markings", profile_stage)
+        profile_stage = self._profile_start()
         for strip in scene.planned_path:
             self._draw_strip(strip)
+        self._profile_add("draw_scene.planned_path", profile_stage)
+        profile_stage = self._profile_start()
         for point in scene.radar_points:
             self._draw_radar_point(point)
+        self._profile_add("draw_scene.radar_points", profile_stage)
+        profile_stage = self._profile_start()
         for vehicle in scene.vehicles:
             self._draw_vehicle(vehicle)
+        self._profile_add("draw_scene.vehicles", profile_stage)
+        profile_stage = self._profile_start()
         rl.end_mode_3d()
+        self._profile_add("draw_scene.end_mode_3d", profile_stage)
+        profile_stage = self._profile_start()
         self._draw_radar_point_labels(scene.radar_points, camera)
+        self._profile_add("draw_scene.radar_labels", profile_stage)
+        profile_stage = self._profile_start()
         self._draw_vehicle_badges(scene.vehicles, camera)
+        self._profile_add("draw_scene.vehicle_badges", profile_stage)
 
     def _draw_strip(self, strip: MeshStrip) -> None:
         count = min(len(strip.left), len(strip.right))
@@ -927,15 +1009,33 @@ class ClusterUiRenderer:
     def _draw_hud(self, state: ClusterUiState) -> None:
         sx = self.width / DESIGN_WIDTH
         sy = self.height / DESIGN_HEIGHT
+        profile_stage = self._profile_start()
         rl.rl_push_matrix()
         rl.rl_scalef(sx, sy, 1.0)
-        self._draw_speed_block(state)
-        self._draw_accel_block(state)
-        self._draw_turn_signal("left", state.left_signal)
-        self._draw_turn_signal("right", state.right_signal)
-        self._draw_center_clock(state)
-        self._draw_route_overlay(state.route_overlay)
-        rl.rl_pop_matrix()
+        self._profile_add("hud.push_scale", profile_stage)
+        try:
+            profile_stage = self._profile_start()
+            self._draw_speed_block(state)
+            self._profile_add("hud.speed_block", profile_stage)
+            profile_stage = self._profile_start()
+            self._draw_accel_block(state)
+            self._profile_add("hud.accel_block", profile_stage)
+            profile_stage = self._profile_start()
+            self._draw_turn_signal("left", state.left_signal)
+            self._profile_add("hud.turn_signal_left", profile_stage)
+            profile_stage = self._profile_start()
+            self._draw_turn_signal("right", state.right_signal)
+            self._profile_add("hud.turn_signal_right", profile_stage)
+            profile_stage = self._profile_start()
+            self._draw_center_clock(state)
+            self._profile_add("hud.center_clock", profile_stage)
+            profile_stage = self._profile_start()
+            self._draw_route_overlay(state.route_overlay)
+            self._profile_add("hud.route_overlay", profile_stage)
+        finally:
+            profile_stage = self._profile_start()
+            rl.rl_pop_matrix()
+            self._profile_add("hud.pop_matrix", profile_stage)
 
     def _draw_center_clock(self, state: ClusterUiState) -> None:
         if not state.center_clock_text:
@@ -970,19 +1070,31 @@ class ClusterUiRenderer:
         panel_w = 476
         video_h = 244
         data_y = 300
+        profile_stage = self._profile_start()
         self._rounded_rect(panel_x, panel_y, panel_w, 410, 18, (248, 250, 252), FAINT, 2)
+        self._profile_add("route_overlay.panel", profile_stage)
+        profile_stage = self._profile_start()
         self._draw_route_video(overlay, panel_x + 10, panel_y + 10, panel_w - 20, video_h)
+        self._profile_add("route_overlay.video", profile_stage)
+        profile_stage = self._profile_start()
         self._draw_route_data(overlay, panel_x + 18, data_y, panel_w - 36)
+        self._profile_add("route_overlay.data", profile_stage)
 
     def _draw_route_video(self, overlay: RouteOverlay, x: float, y: float, width: float, height: float) -> None:
         video_rect = rl.Rectangle(x, y, width, height)
+        profile_stage = self._profile_start()
         rl.draw_rectangle_rounded(video_rect, 0.04, 10, rl_color((18, 20, 22)))
+        self._profile_add("route_video.background", profile_stage)
         if overlay.video_rgba is None or overlay.video_width <= 0 or overlay.video_height <= 0:
             status = overlay.video_status or "qcamera unavailable"
+            profile_stage = self._profile_start()
             self._draw_text(status, x + width * 0.5, y + height * 0.5, 20, (212, 218, 224), anchor="center")
+            self._profile_add("route_video.status_text", profile_stage)
             return
 
+        profile_stage = self._profile_start()
         texture = self._route_video_texture_for_overlay(overlay)
+        self._profile_add("route_video.texture_for_overlay", profile_stage)
         if texture is None:
             return
         source = rl.Rectangle(0.0, 0.0, float(overlay.video_width), float(overlay.video_height))
@@ -990,17 +1102,23 @@ class ClusterUiRenderer:
         draw_w = overlay.video_width * scale
         draw_h = overlay.video_height * scale
         dest = rl.Rectangle(x + (width - draw_w) * 0.5, y + (height - draw_h) * 0.5, draw_w, draw_h)
+        profile_stage = self._profile_start()
         rl.draw_texture_pro(texture, source, dest, rl.Vector2(0.0, 0.0), 0.0, rl_color(WHITE))
+        self._profile_add("route_video.draw_texture", profile_stage)
 
     def _route_video_texture_for_overlay(self, overlay: RouteOverlay):
         size = (overlay.video_width, overlay.video_height)
         if self._route_video_texture is None or self._route_video_size != size:
             if self._route_video_texture is not None:
                 rl.unload_texture(self._route_video_texture)
+            profile_stage = self._profile_start()
             image = rl.gen_image_color(overlay.video_width, overlay.video_height, rl_color((0, 0, 0)))
             self._route_video_texture = rl.load_texture_from_image(image)
             rl.unload_image(image)
+            self._profile_add("route_video.alloc_texture", profile_stage)
+            profile_stage = self._profile_start()
             rl.set_texture_filter(self._route_video_texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+            self._profile_add("route_video.filter_texture", profile_stage)
             self._route_video_size = size
             self._route_video_frame_id = None
 
@@ -1008,8 +1126,12 @@ class ClusterUiRenderer:
             expected = overlay.video_width * overlay.video_height * 4
             if len(overlay.video_rgba or b"") != expected:
                 return self._route_video_texture
+            profile_stage = self._profile_start()
             pixels = rl.ffi.new("unsigned char[]", overlay.video_rgba)
+            self._profile_add("route_video.copy_pixels", profile_stage)
+            profile_stage = self._profile_start()
             rl.update_texture(self._route_video_texture, pixels)
+            self._profile_add("route_video.update_texture", profile_stage)
             self._route_video_frame_id = overlay.video_frame_id
         return self._route_video_texture
 

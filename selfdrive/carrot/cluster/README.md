@@ -7,7 +7,7 @@ Run from the openpilot root:
 ```bash
 python selfdrive/carrot/cluster_run.py --output usb
 
-CLUSTER_PROFILE_RGBA=1 python selfdrive/carrot/cluster_run.py --output usb
+python selfdrive/carrot/cluster_run.py --output usb --profile-render
 ```
 
 Useful options:
@@ -17,6 +17,7 @@ python selfdrive/carrot/cluster_run.py --output window --width 1920 --height 480
 python selfdrive/carrot/cluster_run.py --output usb --live-no-can
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec jpeg --usb-jpeg-quality 68
 python selfdrive/carrot/cluster_run.py --output usb --fps 10 --usb-jpeg-quality 55
+python selfdrive/carrot/cluster_run.py --output usb --profile-render --profile-interval 2
 ```
 
 The launcher defaults to `--input live`, subscribes to openpilot cereal services,

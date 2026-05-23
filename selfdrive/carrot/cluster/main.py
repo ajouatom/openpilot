@@ -33,6 +33,58 @@ LEFT_SIGNAL_BUTTONS = (4, 9, 13)
 RIGHT_SIGNAL_BUTTONS = (5, 10, 14)
 
 
+class ProfileReporter:
+    def __init__(self, enabled: bool, interval_s: float) -> None:
+        self.enabled = enabled
+        self.interval_s = max(0.2, interval_s)
+        self.samples: dict[str, list[float]] = {}
+        self.last_report_time = time.perf_counter()
+        self.report_frames = 0
+
+    def add(self, name: str, milliseconds: float) -> None:
+        if not self.enabled:
+            return
+        self.samples.setdefault(name, []).append(milliseconds)
+
+    def add_elapsed(self, name: str, start_time: float) -> None:
+        if self.enabled:
+            self.add(name, (time.perf_counter() - start_time) * 1000.0)
+
+    def add_samples(self, samples: tuple[tuple[str, float], ...]) -> None:
+        if not self.enabled:
+            return
+        for name, milliseconds in samples:
+            self.add(name, milliseconds)
+
+    def frame_done(self) -> None:
+        if self.enabled:
+            self.report_frames += 1
+
+    def maybe_report(self, now: float) -> None:
+        if not self.enabled or now - self.last_report_time < self.interval_s:
+            return
+
+        elapsed = max(0.001, now - self.last_report_time)
+        print(f"PROFILE {self.report_frames} frames / {elapsed:.1f}s", flush=True)
+        ordered = sorted(
+            self.samples.items(),
+            key=lambda item: sum(item[1]) / max(1, len(item[1])),
+            reverse=True,
+        )
+        for name, values in ordered:
+            if not values:
+                continue
+            average = sum(values) / len(values)
+            print(
+                f"  {name:<42} avg={average:7.2f}ms "
+                f"max={max(values):7.2f}ms last={values[-1]:7.2f}ms n={len(values)}",
+                flush=True,
+            )
+        self.samples.clear()
+        self.report_frames = 0
+        self.last_report_time = now
+
+
 def next_simulated_values(speed_kph: float, dt: float) -> tuple[float, float, float]:
     accel_mps2 = 1.8 * math.sin(time.monotonic() * 0.8) + random.uniform(-0.35, 0.35)
     next_speed = max(0.0, min(MAX_SPEED_KPH, speed_kph + accel_mps2 * dt * 3.6))
@@ -261,7 +313,10 @@ def run_demo(
     route_max_segments: int | None,
     live_include_can: bool,
     live_timeout_ms: int,
+    profile_render: bool,
+    profile_interval_s: float,
 ) -> None:
+    profile = ProfileReporter(profile_render, profile_interval_s)
     usb_display: TuringUsbDisplay | None = None
     if output_mode in ("usb", "both"):
         usb_display = TuringUsbDisplay(
@@ -271,20 +326,26 @@ def run_demo(
             fast_write=usb_fast_write,
             wait_for_frame_ack=usb_wait_frame_ack,
         )
+        usb_display.set_profile_enabled(profile_render)
+        profile_stage = time.perf_counter()
         usb_display.open()
+        profile.add_elapsed("usb.open", profile_stage)
+        profile.add_samples(usb_display.profile_samples())
+        usb_display.clear_profile_samples()
 
     frame_width = width or (usb_display.landscape_width if usb_display is not None else DESIGN_WIDTH)
     frame_height = height or (usb_display.landscape_height if usb_display is not None else DESIGN_HEIGHT)
     renderer = ClusterUiRenderer(frame_width, frame_height, target_fps=max(0, int(round(target_fps))))
+    renderer.set_profile_enabled(profile_render)
     simulator = ClusterSimulator() if input_mode in ("random", "gamepad") else None
     controller = DualSenseSimulator(controller_index) if input_mode == "gamepad" else None
     random_input = RandomInputSource() if input_mode == "random" else None
     live_source = OpenpilotLiveSource(include_can=live_include_can, timeout_ms=live_timeout_ms) if input_mode == "live" else None
-    route_source = (
-        RouteReplaySource.load(route_path, route_log, route_start_segment, route_max_segments)
-        if input_mode == "route"
-        else None
-    )
+    route_source = None
+    if input_mode == "route":
+        profile_stage = time.perf_counter()
+        route_source = RouteReplaySource.load(route_path, route_log, route_start_segment, route_max_segments)
+        profile.add_elapsed("source.route_load_initial", profile_stage)
     if route_source is not None:
         print(
             f"Loaded route replay buffer: {len(route_source.frames)} frames, "
@@ -299,8 +360,13 @@ def run_demo(
 
     try:
         renderer.open(hidden=output_mode == "usb")
+        profile.add_samples(renderer.profile_samples())
+        renderer.clear_profile_samples()
         while True:
             frame_start_time = time.perf_counter()
+            renderer.clear_profile_samples()
+            if usb_display is not None:
+                usb_display.clear_profile_samples()
             if output_mode in ("window", "both") and renderer.should_close():
                 break
 
@@ -311,16 +377,21 @@ def run_demo(
             dt = max(0.001, now - last_frame_time)
             last_frame_time = now
             if live_source is not None:
+                profile_stage = time.perf_counter()
                 state = live_source.update()
                 state = replace(state, center_clock_text=time.strftime("%H:%M:%S"))
                 source_status = live_source.status_text()
+                profile.add_elapsed("source.live_update", profile_stage)
             elif route_source is not None:
+                profile_stage = time.perf_counter()
                 playback_seconds = (now - start_time) * route_replay_speed
                 if route_source.is_finished(playback_seconds, route_loop):
                     break
                 state = route_source.state_at(playback_seconds, route_loop, include_overlay=True)
                 source_status = route_source.status_text(playback_seconds, route_loop)
+                profile.add_elapsed("source.route_update", profile_stage)
             elif controller is None:
+                profile_stage = time.perf_counter()
                 command = random_input.update(dt) if random_input is not None else SimulatorInput()
                 source_status = (
                     f"random R2={command.throttle:.2f} "
@@ -329,49 +400,60 @@ def run_demo(
                 if simulator is None:
                     raise RuntimeError("simulator is not available for random input")
                 state = simulator.update(command, dt)
+                profile.add_elapsed("source.random_update", profile_stage)
             else:
+                profile_stage = time.perf_counter()
                 command = controller.read_input()
                 source_status = controller.status_text()
                 if simulator is None:
                     raise RuntimeError("simulator is not available for gamepad input")
                 state = simulator.update(command, dt)
+                profile.add_elapsed("source.gamepad_update", profile_stage)
 
             if output_mode in ("window", "both"):
+                profile_stage = time.perf_counter()
                 renderer.render_frame(state)
+                profile.add_elapsed("main.window_render_total", profile_stage)
             if usb_display is not None:
                 if usb_codec == "jpeg":
-                    t0 = time.perf_counter()
+                    profile_stage = time.perf_counter()
                     rgba, image_width, image_height = renderer.render_to_rgba_bytes(
                         state,
                         rotate_clockwise=True,
                     )
-                    t1 = time.perf_counter()
+                    profile.add_elapsed("main.usb.render_rgba_total", profile_stage)
                     
+                    profile_stage = time.perf_counter()
                     jpeg = usb_display.encode_jpeg(rgba, image_width, image_height)
-                    t2 = time.perf_counter()
+                    profile.add_elapsed("main.usb.encode_jpeg", profile_stage)
                     
+                    profile_stage = time.perf_counter()
                     usb_display.send_jpeg(jpeg)
-                    t3 = time.perf_counter()
-
-                    if False :
-                      print(
-                          f"stage render_rgba={(t1-t0)*1000:.1f}ms "
-                          f"jpeg={(t2-t1)*1000:.1f}ms "
-                          f"usb={(t3-t2)*1000:.1f}ms "
-                          f"size={len(jpeg)/1024:.1f}KiB",
-                          flush=True,
-                      )
+                    profile.add_elapsed("main.usb.send_jpeg", profile_stage)
                 else:
-                    usb_display.send_png(renderer.render_to_png_bytes(state, rotate_clockwise=True))
+                    profile_stage = time.perf_counter()
+                    png = renderer.render_to_png_bytes(state, rotate_clockwise=True)
+                    profile.add_elapsed("main.usb.render_png_total", profile_stage)
+                    profile_stage = time.perf_counter()
+                    usb_display.send_png(png)
+                    profile.add_elapsed("main.usb.send_png", profile_stage)
+                profile.add_samples(usb_display.profile_samples())
+            profile.add_samples(renderer.profile_samples())
             report_frames += 1
+            profile.add_elapsed("main.frame_active", frame_start_time)
 
             if frame_interval > 0.0:
                 elapsed = time.perf_counter() - frame_start_time
                 remaining = frame_interval - elapsed
                 if remaining > 0.0:
+                    profile_stage = time.perf_counter()
                     time.sleep(remaining)
+                    profile.add_elapsed("main.sleep", profile_stage)
 
             now = time.perf_counter()
+            profile.add_elapsed("main.frame_total", frame_start_time)
+            profile.frame_done()
+            profile.maybe_report(now)
             if now - last_report_time >= 2.0:
                 actual_fps = report_frames / (now - last_report_time)
                 lane_status = state.lane_change or (
@@ -500,6 +582,17 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="SubMaster update timeout for --input live. Default 0 keeps rendering responsive.",
     )
+    parser.add_argument(
+        "--profile-render",
+        action="store_true",
+        help="Log render, GPU readback, USB encode/send, and input source timings.",
+    )
+    parser.add_argument(
+        "--profile-interval",
+        type=float,
+        default=2.0,
+        help="Seconds between --profile-render timing summaries. Default: 2.0.",
+    )
     args = parser.parse_args()
     if args.fps < 0:
         parser.error("--fps must be 0 or greater")
@@ -517,6 +610,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--route-start-segment must be 0 or greater")
     if args.route_max_segments is not None and args.route_max_segments <= 0:
         parser.error("--route-max-segments must be greater than 0")
+    if args.profile_interval <= 0:
+        parser.error("--profile-interval must be greater than 0")
     return args
 
 
@@ -555,6 +650,8 @@ def main() -> None:
             args.route_max_segments,
             not args.live_no_can,
             args.live_timeout_ms,
+            args.profile_render,
+            args.profile_interval,
         )
     except KeyboardInterrupt:
         print("\nStopped.")
