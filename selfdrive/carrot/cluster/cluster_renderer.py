@@ -1172,7 +1172,6 @@ class ClusterUiRenderer:
             self._draw_text(line, x, y + 22 + index * 14, 12, TEXT)
 
     def _draw_speed_block(self, state: ClusterUiState) -> None:
-        self._rounded_rect(28, 36, 377, 408, 26, PANEL_BG, FAINT, 2)
         speed_value = int(round(clamp(state.speed_kph, 0.0, MAX_SPEED_KPH)))
         self._draw_text(str(speed_value), 214, 160, 156, TEXT, anchor="center")
         self._draw_text("km/h", 214, 260, 34, MUTED, anchor="center")
@@ -1192,18 +1191,28 @@ class ClusterUiRenderer:
         top = 80
         bottom = 400
         center = (top + bottom) // 2
-        self._rounded_rect(440, top, 56, bottom - top, 18, (232, 236, 240), FAINT, 2)
-        rl.draw_line_ex(rl.Vector2(424, center), rl.Vector2(512, center), 3, rl_color((88, 96, 104)))
+        gauge_x = 0
+        gauge_width = 56
+        fill_x = gauge_x + 8
+        fill_width = 40
+        gauge_center_x = gauge_x + gauge_width * 0.5
+        self._rounded_rect(gauge_x, top, gauge_width, bottom - top, 18, (232, 236, 240), FAINT, 2)
+        rl.draw_line_ex(
+            rl.Vector2(gauge_x, center),
+            rl.Vector2(gauge_x + gauge_width, center),
+            3,
+            rl_color((88, 96, 104)),
+        )
         value = clamp(state.accel_mps2, -MAX_ACCEL_MPS2, MAX_ACCEL_MPS2)
         fill_color = GREEN if value > 0 else RED if value < 0 else MUTED
         if value != 0.0:
             fill_height = int(abs(value) / MAX_ACCEL_MPS2 * ((bottom - top) / 2 - 8))
             if value > 0:
-                self._rounded_rect(448, center - fill_height, 40, fill_height, 13, fill_color)
+                self._rounded_rect(fill_x, center - fill_height, fill_width, fill_height, 13, fill_color)
             else:
-                self._rounded_rect(448, center, 40, fill_height, 13, fill_color)
-        self._draw_text(f"{state.accel_mps2:+.1f}", 468, 48, 38, fill_color, anchor="center")
-        self._draw_text("m/s^2", 468, 424, 21, MUTED, anchor="center")
+                self._rounded_rect(fill_x, center, fill_width, fill_height, 13, fill_color)
+        self._draw_text(f"{state.accel_mps2:+.1f}", gauge_x + 4, 48, 38, fill_color)
+        self._draw_text("m/s^2", gauge_center_x, 424, 21, MUTED, anchor="center")
 
     def _draw_model_status_block(self, state: ClusterUiState) -> None:
         if state.model_confidence is None and state.disengage_risk <= 0.0 and not state.hard_brake_predicted:
