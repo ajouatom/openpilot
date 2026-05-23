@@ -1190,11 +1190,18 @@ class ClusterUiRenderer:
         top = 80
         bottom = 400
         center = (top + bottom) // 2
-        gauge_x = 16
         gauge_width = 56
+        accel_text = f"{0.0 if abs(state.accel_mps2) < 0.05 else state.accel_mps2:+05.1f}"
+        accel_text_x = 20
+        accel_text_size = 38
+        if self._font is None:
+            self._font = rl.get_font_default()
+        text_spacing = max(1.0, accel_text_size * 0.02)
+        text_width = rl.measure_text_ex(self._font, accel_text, accel_text_size, text_spacing).x
+        gauge_center_x = accel_text_x + text_width * 0.5
+        gauge_x = gauge_center_x - gauge_width * 0.5
         fill_x = gauge_x + 8
         fill_width = 40
-        gauge_center_x = gauge_x + gauge_width * 0.5
         self._rounded_rect(gauge_x, top, gauge_width, bottom - top, 18, (232, 236, 240), FAINT, 2)
         rl.draw_line_ex(
             rl.Vector2(gauge_x, center),
@@ -1210,7 +1217,7 @@ class ClusterUiRenderer:
                 self._rounded_rect(fill_x, center - fill_height, fill_width, fill_height, 13, fill_color)
             else:
                 self._rounded_rect(fill_x, center, fill_width, fill_height, 13, fill_color)
-        self._draw_text(f"{state.accel_mps2:+.1f}", gauge_x + 4, 48, 38, fill_color)
+        self._draw_text(accel_text, accel_text_x, 48, accel_text_size, fill_color)
         self._draw_text("m/s^2", gauge_center_x, 424, 21, MUTED, anchor="center")
 
     def _draw_model_status_block(self, state: ClusterUiState) -> None:
