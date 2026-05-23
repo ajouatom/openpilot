@@ -44,6 +44,9 @@ LOG_FILENAMES = {
 RADAR_TO_CAMERA_M = 1.52
 MODEL_LEAD_MIN_PROB = 0.08
 RADAR_POINT_STALE_S = 0.12
+ROUTE_REPLAY_MIN_BUFFER_FILES = 2
+ROUTE_REPLAY_READAHEAD_S = 5.0
+ROUTE_REPLAY_RETAIN_BEHIND_S = 1.0
 
 
 @dataclass(frozen=True)
@@ -158,21 +161,39 @@ class RouteVideoFrame:
     frame_id: str
 
 
+@dataclass
+class RouteReplayChunk:
+    index: int
+    path: Path
+    frames: list[RouteReplayFrame]
+    start_t: float
+    end_t: float
+
+
 class RouteReplaySource:
     def __init__(
         self,
-        frames: list[RouteReplayFrame],
         source_files: list[Path],
-        video_segments: list[RouteVideoSegment],
+        log_schema: Any,
     ) -> None:
-        if not frames:
-            raise RuntimeError("route contains no carState frames")
-        self.frames = sorted(frames, key=lambda frame: frame.t)
+        if not source_files:
+            raise RuntimeError("route contains no log files")
         self.source_files = source_files
-        self.times = [frame.t for frame in self.frames]
-        self.duration = self.frames[-1].t
-        self.video_segments = sorted(video_segments, key=lambda segment: segment.start_t)
-        self._video_reader = RouteVideoFrameReader(self.video_segments) if self.video_segments else None
+        self.frames: list[RouteReplayFrame] = []
+        self.times: list[float] = []
+        self.duration = 0.0
+        self.video_segments: list[RouteVideoSegment] = []
+        self._video_reader = RouteVideoFrameReader(self.video_segments)
+        self._log_schema = log_schema
+        self._parser = RouteLogParser()
+        self._first_t: float | None = None
+        self._next_file_index = 0
+        self._loaded_chunks: list[RouteReplayChunk] = []
+        self._loaded_file_count = 0
+        self._end_of_route = False
+        self._ensure_loaded(0.0)
+        if not self.frames:
+            raise RuntimeError("route contains no carState frames")
 
     @classmethod
     def load(
@@ -187,38 +208,11 @@ class RouteReplaySource:
             raise RuntimeError(f"no {LOG_FILENAMES[log_kind]} files found under {route_path}")
 
         log_schema = load_openpilot_log_schema()
-        frames: list[RouteReplayFrame] = []
-        per_file_frames: list[tuple[Path, list[RouteReplayFrame]]] = []
-        parser = RouteLogParser()
-        for file_path in files:
-            parsed_frames = parser.parse_file(file_path, log_schema)
-            per_file_frames.append((file_path, parsed_frames))
-            frames.extend(parsed_frames)
-
-        if not frames:
-            raise RuntimeError(f"no usable route frames found in {route_path}")
-
-        first_t = min(frame.t for frame in frames)
-        normalized = [replace(frame, t=frame.t - first_t) for frame in frames]
-        video_segments: list[RouteVideoSegment] = []
-        for file_path, parsed_frames in per_file_frames:
-            if not parsed_frames:
-                continue
-            video_path = file_path.parent / "qcamera.ts"
-            if not video_path.exists():
-                continue
-            video_segments.append(
-                RouteVideoSegment(
-                    index=segment_index(file_path),
-                    path=video_path,
-                    start_t=min(frame.t for frame in parsed_frames) - first_t,
-                    end_t=max(frame.t for frame in parsed_frames) - first_t,
-                )
-            )
-
-        return cls(normalized, files, video_segments)
+        return cls(files, log_schema)
 
     def is_finished(self, playback_seconds: float, loop: bool = False) -> bool:
+        if not loop:
+            self._ensure_loaded(playback_seconds)
         return not loop and playback_seconds > self.duration
 
     def state_at(
@@ -227,12 +221,13 @@ class RouteReplaySource:
         loop: bool = False,
         include_overlay: bool = False,
     ) -> ClusterUiState:
+        if loop and self._end_of_route and self.duration > 0.0:
+            playback_seconds %= self.duration
+        self._ensure_loaded(playback_seconds)
         if self.duration <= 0.0:
             state = frame_to_state(self.frames[0])
             return self._with_overlay(state, self.frames[0], 0.0, loop) if include_overlay else state
-        if loop:
-            playback_seconds %= self.duration
-        else:
+        if not loop or self._end_of_route:
             playback_seconds = clamp(playback_seconds, 0.0, self.duration)
 
         right_index = bisect_right(self.times, playback_seconds)
@@ -256,10 +251,115 @@ class RouteReplaySource:
             self._video_reader.close()
 
     def status_text(self, playback_seconds: float, loop: bool = False) -> str:
-        shown_time = playback_seconds % self.duration if loop and self.duration > 0.0 else playback_seconds
+        shown_time = (
+            playback_seconds % self.duration
+            if loop and self._end_of_route and self.duration > 0.0
+            else playback_seconds
+        )
         shown_time = clamp(shown_time, 0.0, self.duration)
         file_count = len(self.source_files)
-        return f"route t={shown_time:6.1f}/{self.duration:6.1f}s files={file_count}"
+        return (
+            f"route t={shown_time:6.1f}/{self.duration:6.1f}s "
+            f"files={self._loaded_file_count}/{file_count}"
+        )
+
+    @property
+    def loaded_file_count(self) -> int:
+        return self._loaded_file_count
+
+    def _ensure_loaded(self, playback_seconds: float) -> None:
+        if self.frames and playback_seconds < self.frames[0].t and not self._end_of_route:
+            self._reset_stream()
+
+        while not self._end_of_route and (
+            not self.frames
+            or len(self._loaded_chunks) < ROUTE_REPLAY_MIN_BUFFER_FILES
+            or playback_seconds >= self.duration - ROUTE_REPLAY_READAHEAD_S
+        ):
+            if not self._load_next_file():
+                break
+
+        self._trim_loaded_chunks(playback_seconds)
+
+    def _load_next_file(self) -> bool:
+        if self._next_file_index >= len(self.source_files):
+            self._end_of_route = True
+            return False
+
+        file_index = self._next_file_index
+        file_path = self.source_files[file_index]
+        self._next_file_index += 1
+        parsed_frames = self._parser.parse_file(file_path, self._log_schema)
+        self._loaded_file_count = max(self._loaded_file_count, self._next_file_index)
+        if not parsed_frames:
+            return True
+
+        if self._first_t is None:
+            self._first_t = min(frame.t for frame in parsed_frames)
+        first_t = self._first_t
+        normalized = [replace(frame, t=frame.t - first_t) for frame in parsed_frames]
+        normalized.sort(key=lambda frame: frame.t)
+        chunk = RouteReplayChunk(
+            index=file_index,
+            path=file_path,
+            frames=normalized,
+            start_t=normalized[0].t,
+            end_t=normalized[-1].t,
+        )
+        self._loaded_chunks.append(chunk)
+        self._append_video_segment(file_path, chunk)
+        self._rebuild_frame_index()
+        return True
+
+    def _append_video_segment(self, file_path: Path, chunk: RouteReplayChunk) -> None:
+        video_path = file_path.parent / "qcamera.ts"
+        if not video_path.exists():
+            return
+        self.video_segments.append(
+            RouteVideoSegment(
+                index=segment_index(file_path),
+                path=video_path,
+                start_t=chunk.start_t,
+                end_t=chunk.end_t,
+            )
+        )
+
+    def _trim_loaded_chunks(self, playback_seconds: float) -> None:
+        removed = False
+        while (
+            len(self._loaded_chunks) > ROUTE_REPLAY_MIN_BUFFER_FILES
+            and self._loaded_chunks[0].end_t < playback_seconds - ROUTE_REPLAY_RETAIN_BEHIND_S
+        ):
+            self._loaded_chunks.pop(0)
+            removed = True
+        if removed:
+            self._rebuild_frame_index()
+
+    def _rebuild_frame_index(self) -> None:
+        self.frames = [
+            frame
+            for chunk in self._loaded_chunks
+            for frame in chunk.frames
+        ]
+        self.frames.sort(key=lambda frame: frame.t)
+        self.times = [frame.t for frame in self.frames]
+        if self.frames:
+            self.duration = max(self.duration, self.frames[-1].t)
+
+    def _reset_stream(self) -> None:
+        if self._video_reader is not None:
+            self._video_reader.close()
+        self.frames = []
+        self.times = []
+        self.duration = 0.0
+        self.video_segments = []
+        self._video_reader = RouteVideoFrameReader(self.video_segments)
+        self._parser = RouteLogParser()
+        self._first_t = None
+        self._next_file_index = 0
+        self._loaded_chunks = []
+        self._loaded_file_count = 0
+        self._end_of_route = False
 
     def _with_overlay(
         self,

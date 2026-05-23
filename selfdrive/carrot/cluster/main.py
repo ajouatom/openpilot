@@ -287,8 +287,9 @@ def run_demo(
     )
     if route_source is not None:
         print(
-            f"Loaded route replay: {len(route_source.frames)} frames, "
-            f"{route_source.duration:.1f}s from {len(route_source.source_files)} {route_log} files"
+            f"Loaded route replay buffer: {len(route_source.frames)} frames, "
+            f"{route_source.duration:.1f}s from "
+            f"{route_source.loaded_file_count}/{len(route_source.source_files)} {route_log} files"
         )
     start_time = time.perf_counter()
     last_frame_time = start_time
