@@ -16,9 +16,13 @@ Useful options:
 python selfdrive/carrot/cluster_run.py --output window --width 1920 --height 480
 python selfdrive/carrot/cluster_run.py --output usb --live-no-can
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec jpeg --usb-jpeg-quality 68
-python selfdrive/carrot/cluster_run.py --output usb --fps 10 --usb-jpeg-quality 55
+python selfdrive/carrot/cluster_run.py --output usb --fps 10 --usb-jpeg-quality 55 --route-overlay off
 python selfdrive/carrot/cluster_run.py --output usb --profile-render --profile-interval 2
 ```
+
+`--usb-jpeg-encoder auto` tries optional `turbojpeg` first and falls back to
+Pillow. `--route-overlay off` is the default for route replay performance tests;
+use `compact` or `full` only when the qcamera/debug panel is needed.
 
 The launcher defaults to `--input live`, subscribes to openpilot cereal services,
 and renders live `carState`, `modelV2`, `radarState`, and raw Hyundai CAN-FD radar

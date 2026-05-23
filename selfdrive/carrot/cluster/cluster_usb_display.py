@@ -49,6 +49,7 @@ class TuringUsbDisplay:
         self._ep_in = None
         self._dll_dir_handle = None
         self._frame_error_count = 0
+        self._turbojpeg = None
         self.profile_enabled = os.environ.get("CLUSTER_PROFILE_USB") == "1"
         self._profile_samples: list[tuple[str, float]] = []
 
@@ -200,46 +201,56 @@ class TuringUsbDisplay:
             self._handle_frame_error(exc)
 
     def encode_jpeg(self, rgba: bytes, width: int, height: int) -> bytes:
-        if self.jpeg_encoder in ("auto", "opencv"):
+        if self.jpeg_encoder in ("auto", "turbojpeg"):
             try:
-                return self._encode_jpeg_opencv(rgba, width, height)
+                return self._encode_jpeg_turbojpeg(rgba, width, height)
             except ImportError:
-                if self.jpeg_encoder == "opencv":
+                if self.jpeg_encoder == "turbojpeg":
                     raise
             except Exception:
-                if self.jpeg_encoder == "opencv":
+                if self.jpeg_encoder == "turbojpeg":
                     raise
         return self._encode_jpeg_pillow(rgba, width, height)
 
-    def _encode_jpeg_opencv(self, rgba: bytes, width: int, height: int) -> bytes:
+    def _encode_jpeg_turbojpeg(self, rgba: bytes, width: int, height: int) -> bytes:
         profile_stage = self._profile_start()
-        import cv2  # type: ignore
         import numpy as np
+        import turbojpeg  # type: ignore
 
-        self._profile_add("usb.encode.opencv_import", profile_stage)
+        self._profile_add("usb.encode.turbojpeg_import", profile_stage)
 
         profile_stage = self._profile_start()
         rgba_array = np.frombuffer(rgba, dtype=np.uint8).reshape((height, width, 4))
-        self._profile_add("usb.encode.opencv_rgba_view", profile_stage)
+        self._profile_add("usb.encode.turbojpeg_rgba_view", profile_stage)
 
         profile_stage = self._profile_start()
-        bgr = cv2.cvtColor(rgba_array, cv2.COLOR_RGBA2BGR)
-        self._profile_add("usb.encode.opencv_rgba_to_bgr", profile_stage)
-
-        profile_stage = self._profile_start()
-        ok, encoded = cv2.imencode(
-            ".jpg",
-            bgr,
-            [int(cv2.IMWRITE_JPEG_QUALITY), int(self.jpeg_quality)],
-        )
-        self._profile_add("usb.encode.opencv_imencode", profile_stage)
-        if not ok:
-            raise RuntimeError("OpenCV failed to encode JPEG")
-
-        profile_stage = self._profile_start()
-        jpeg = encoded.tobytes()
-        self._profile_add("usb.encode.opencv_tobytes", profile_stage)
+        jpeg = self._turbojpeg_encode_array(turbojpeg, rgba_array)
+        self._profile_add("usb.encode.turbojpeg_encode", profile_stage)
         return jpeg
+
+    def _turbojpeg_encode_array(self, turbojpeg_module, rgba_array) -> bytes:
+        if hasattr(turbojpeg_module, "TurboJPEG"):
+            if self._turbojpeg is None:
+                self._turbojpeg = turbojpeg_module.TurboJPEG()
+            pixel_format = getattr(turbojpeg_module, "TJPF_RGBA", None)
+            jpeg_subsample = getattr(turbojpeg_module, "TJSAMP_420", None)
+            kwargs = {"quality": int(self.jpeg_quality)}
+            if pixel_format is not None:
+                kwargs["pixel_format"] = pixel_format
+            if jpeg_subsample is not None:
+                kwargs["jpeg_subsample"] = jpeg_subsample
+            return self._turbojpeg.encode(rgba_array, **kwargs)
+
+        compress = getattr(turbojpeg_module, "compress", None)
+        if compress is not None:
+            kwargs = {"quality": int(self.jpeg_quality)}
+            if hasattr(turbojpeg_module, "PF"):
+                kwargs["pixelformat"] = turbojpeg_module.PF.RGBA
+            if hasattr(turbojpeg_module, "SAMP"):
+                kwargs["subsamp"] = turbojpeg_module.SAMP.Y420
+            return compress(rgba_array, **kwargs)
+
+        raise RuntimeError("unsupported turbojpeg Python API")
 
     def _encode_jpeg_pillow(self, rgba: bytes, width: int, height: int) -> bytes:
         from PIL import Image

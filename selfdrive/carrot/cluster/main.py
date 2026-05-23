@@ -545,9 +545,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--usb-jpeg-quality", type=int, default=68)
     parser.add_argument(
         "--usb-jpeg-encoder",
-        choices=("auto", "pillow", "opencv"),
+        choices=("auto", "pillow", "turbojpeg"),
         default="auto",
-        help="JPEG encoder for USB output. auto tries OpenCV first and falls back to Pillow.",
+        help="JPEG encoder for USB output. auto tries turbojpeg first and falls back to Pillow.",
     )
     parser.add_argument(
         "--usb-fast",
@@ -574,8 +574,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--route-overlay",
         choices=("compact", "full", "off"),
-        default="compact",
-        help="Route replay debug overlay. compact keeps video plus fewer text lines; off hides it.",
+        default="off",
+        help="Route replay debug overlay. Default off matches live rendering cost more closely.",
     )
     parser.add_argument(
         "--route-loop",
