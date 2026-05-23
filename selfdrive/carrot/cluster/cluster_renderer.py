@@ -275,6 +275,10 @@ class ClusterUiRenderer:
         if self.profile_enabled:
             self._profile_samples.append((name, (time.perf_counter() - start_time) * 1000.0))
 
+    def _profile_add_elapsed(self, name: str, elapsed_ms: float) -> None:
+        if self.profile_enabled:
+            self._profile_samples.append((name, elapsed_ms))
+
     def open(self, hidden: bool = False) -> None:
         if self._window_open:
             return
@@ -380,7 +384,10 @@ class ClusterUiRenderer:
 
     def _render_world(self, state: ClusterUiState) -> None:
         profile_stage = self._profile_start()
-        scene = build_cluster_scene(state)
+        scene = build_cluster_scene(
+            state,
+            self._profile_add_elapsed if self.profile_enabled else None,
+        )
         self._profile_add("render_world.build_scene", profile_stage)
         profile_stage = self._profile_start()
         rl.clear_background(rl_color(BG))

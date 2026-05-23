@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import math
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from cluster_config import (
@@ -39,6 +41,7 @@ from cluster_utils import clamp, darken, lighten, smoothstep
 
 
 Color = tuple[int, int, int, int]
+ProfileAdd = Callable[[str, float], None]
 PATH_BLOCKER_CLEARANCE_M = 1.25
 PATH_BLOCKER_LANE_TOLERANCE = 0.42
 RADAR_VEHICLE_MIN_VALID_COUNT = 16
@@ -1420,7 +1423,20 @@ def road_edge_strips(
     return tuple(strips)
 
 
-def build_cluster_scene(state: ClusterUiState) -> ClusterScene:
+def profile_scene_start(profile_add: ProfileAdd | None) -> float:
+    return time.perf_counter() if profile_add is not None else 0.0
+
+
+def profile_scene_add(profile_add: ProfileAdd | None, name: str, start_time: float) -> None:
+    if profile_add is not None:
+        profile_add(name, (time.perf_counter() - start_time) * 1000.0)
+
+
+def build_cluster_scene(
+    state: ClusterUiState,
+    profile_add: ProfileAdd | None = None,
+) -> ClusterScene:
+    profile_stage = profile_scene_start(profile_add)
     lane_width_m = max(2.4, min(4.6, state.lane_width_m or DEFAULT_LANE_WIDTH_M))
     camera = scene_camera(state, lane_width_m)
     camera_active = state.surround_view_active
@@ -1437,7 +1453,9 @@ def build_cluster_scene(state: ClusterUiState) -> ClusterScene:
         nearest_radar_y = min((vehicle.center.y for vehicle in radar_boxes), default=ROAD_FAR_M)
         nearest_detected_y = min(nearest_detected_y, nearest_radar_y)
         road_start_m = min(road_start_m, max(-35.0, nearest_detected_y - 8.0))
+    profile_scene_add(profile_add, "scene.build.setup", profile_stage)
 
+    profile_stage = profile_scene_start(profile_add)
     highlight_lanes: list[MeshStrip] = []
     if state.highlight_lane_offset is not None:
         highlight_strip = lane_floor_strip(
@@ -1453,7 +1471,9 @@ def build_cluster_scene(state: ClusterUiState) -> ClusterScene:
         )
         if highlight_strip is not None:
             highlight_lanes.append(highlight_strip)
+    profile_scene_add(profile_add, "scene.build.highlight_lanes", profile_stage)
 
+    profile_stage = profile_scene_start(profile_add)
     lane_strips: list[MeshStrip] = []
     for marking in state.lanes:
         if not marking.visible:
@@ -1481,7 +1501,9 @@ def build_cluster_scene(state: ClusterUiState) -> ClusterScene:
                 height_m=LANE_MARKING_HEIGHT_M,
             )
         )
+    profile_scene_add(profile_add, "scene.build.lane_markings", profile_stage)
 
+    profile_stage = profile_scene_start(profile_add)
     ego_offset = clamp(state.ego_lane_offset, -1.25, 1.25)
     target_offset = state.highlight_lane_offset if state.lane_change_phase == "changing" else None
     ego_vehicle = vehicle_box(ego_offset, EGO_FORWARD_M, state.steering, lane_width_m, EGO, camera_active, target_offset)
@@ -1551,25 +1573,45 @@ def build_cluster_scene(state: ClusterUiState) -> ClusterScene:
             vehicle_box(0.0, traffic_forward_m, state.steering, lane_width_m, CAR_DARK, camera_active),
             vehicle_box(-1.0, left_traffic_forward_m, state.steering, lane_width_m, CAR_DARK, camera_active),
         )
+    profile_scene_add(profile_add, "scene.build.vehicles", profile_stage)
 
+    profile_stage = profile_scene_start(profile_add)
     road_left_offset, road_right_offset = road_surface_offsets(state, route_mode)
-    return ClusterScene(
+    road_surface = strip_between_offsets(
+        road_left_offset,
+        road_right_offset,
+        state.steering,
+        lane_width_m,
+        road_start_m,
+        road_end_m,
+        road_steps,
+        (218, 222, 226, 255),
+    )
+    profile_scene_add(profile_add, "scene.build.road_surface", profile_stage)
+
+    profile_stage = profile_scene_start(profile_add)
+    road_edges = road_edge_strips(state, route_mode, lane_width_m, road_start_m, road_end_m)
+    profile_scene_add(profile_add, "scene.build.road_edges", profile_stage)
+
+    profile_stage = profile_scene_start(profile_add)
+    planned_path = planned_path_strips(state, lane_width_m, blockers)
+    profile_scene_add(profile_add, "scene.build.planned_path", profile_stage)
+
+    profile_stage = profile_scene_start(profile_add)
+    radar_points = radar_point_markers(state, lane_width_m)
+    profile_scene_add(profile_add, "scene.build.radar_points", profile_stage)
+
+    profile_stage = profile_scene_start(profile_add)
+    scene = ClusterScene(
         camera=camera,
-        road_surface=strip_between_offsets(
-            road_left_offset,
-            road_right_offset,
-            state.steering,
-            lane_width_m,
-            road_start_m,
-            road_end_m,
-            road_steps,
-            (218, 222, 226, 255),
-        ),
-        road_edges=road_edge_strips(state, route_mode, lane_width_m, road_start_m, road_end_m),
+        road_surface=road_surface,
+        road_edges=road_edges,
         highlight_lanes=tuple(highlight_lanes),
         lane_markings=tuple(lane_strips),
         lead_paths=(),
-        planned_path=planned_path_strips(state, lane_width_m, blockers),
-        radar_points=radar_point_markers(state, lane_width_m),
+        planned_path=planned_path,
+        radar_points=radar_points,
         vehicles=vehicles,
     )
+    profile_scene_add(profile_add, "scene.build.pack", profile_stage)
+    return scene
