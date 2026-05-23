@@ -59,9 +59,9 @@ RADAR_PROBABLE_VEHICLE_LATERAL_LANES = 0.95
 RADAR_VEHICLE_MIN_PROBABILITY = 0.45
 RADAR_VEHICLE_DEDUP_LONGITUDINAL_M = 7.0
 RADAR_VEHICLE_DEDUP_LATERAL_M = 1.6
-RADAR_VEHICLE_MAX_BOXES = 6
-DETECTED_VEHICLE_MAX_RENDER_BOXES = 8
-DETECTED_VEHICLE_MAX_PATH_BLOCKERS = 16
+RADAR_VEHICLE_MAX_BOXES = 4
+DETECTED_VEHICLE_MAX_RENDER_BOXES = 5
+DETECTED_VEHICLE_MAX_PATH_BLOCKERS = 10
 LEFT_TEST_TRAFFIC_FORWARD_M = 24.0
 LANE_MARKING_SHADOW_HEIGHT_M = 0.026
 LANE_MARKING_HEIGHT_M = 0.044
@@ -1322,7 +1322,7 @@ def build_cluster_scene(state: ClusterUiState) -> ClusterScene:
     route_mode = state.route_overlay is not None or bool(state.detected_vehicles) or bool(state.radar_points)
     road_start_m = SURROUND_ROAD_REAR_M if camera_active else ROAD_NEAR_M
     road_end_m = SURROUND_ROAD_FRONT_M if camera_active else ROAD_FAR_M
-    road_steps = 120 if camera_active else 88
+    road_steps = 120 if camera_active else 64 if route_mode else 88
     if (state.detected_vehicles or radar_boxes) and not camera_active:
         nearest_detected_y = min(
             (EGO_FORWARD_M + vehicle.longitudinal_m for vehicle in state.detected_vehicles),

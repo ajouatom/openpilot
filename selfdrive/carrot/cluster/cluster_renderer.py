@@ -811,7 +811,20 @@ class ClusterUiRenderer:
             self._draw_vehicle_shadow(vehicle)
             self._draw_vehicle_model(vehicle)
             return
+        if vehicle.source and not vehicle.primary and not vehicle.cut_in:
+            self._draw_vehicle_marker(vehicle)
+            return
         self._draw_vehicle_box(vehicle)
+
+    def _draw_vehicle_marker(self, vehicle: VehicleBox) -> None:
+        alpha = int(80 + 150 * clamp(vehicle.confidence, 0.0, 1.0))
+        marker_center = rl.Vector3(vehicle.center.x, vehicle.center.y, vehicle.height_m * 0.32)
+        marker_size = rl.Vector3(
+            max(0.55, vehicle.width_m * 0.68),
+            max(1.05, vehicle.length_m * 0.64),
+            max(0.42, vehicle.height_m * 0.45),
+        )
+        rl.draw_cube_v(marker_center, marker_size, rl_color(vehicle.body_color, alpha))
 
     def _draw_radar_point(self, point: RadarPointMarker) -> None:
         side_m = max(0.16, point.radius_m * 1.75)

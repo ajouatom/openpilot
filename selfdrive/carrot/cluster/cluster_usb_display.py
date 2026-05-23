@@ -50,6 +50,7 @@ class TuringUsbDisplay:
         self._dll_dir_handle = None
         self._frame_error_count = 0
         self._turbojpeg = None
+        self._turbojpeg_unavailable = False
         self.profile_enabled = os.environ.get("CLUSTER_PROFILE_USB") == "1"
         self._profile_samples: list[tuple[str, float]] = []
 
@@ -201,15 +202,19 @@ class TuringUsbDisplay:
             self._handle_frame_error(exc)
 
     def encode_jpeg(self, rgba: bytes, width: int, height: int) -> bytes:
-        if self.jpeg_encoder in ("auto", "turbojpeg"):
+        if self.jpeg_encoder == "turbojpeg" or (
+            self.jpeg_encoder == "auto" and not self._turbojpeg_unavailable
+        ):
             try:
                 return self._encode_jpeg_turbojpeg(rgba, width, height)
             except ImportError:
                 if self.jpeg_encoder == "turbojpeg":
                     raise
+                self._turbojpeg_unavailable = True
             except Exception:
                 if self.jpeg_encoder == "turbojpeg":
                     raise
+                self._turbojpeg_unavailable = True
         return self._encode_jpeg_pillow(rgba, width, height)
 
     def _encode_jpeg_turbojpeg(self, rgba: bytes, width: int, height: int) -> bytes:
