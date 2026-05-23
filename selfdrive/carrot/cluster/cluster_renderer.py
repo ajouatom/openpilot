@@ -810,8 +810,11 @@ class ClusterUiRenderer:
         self._draw_vehicle_box(vehicle)
 
     def _draw_radar_point(self, point: RadarPointMarker) -> None:
-        rl.draw_sphere(vec3(point.center), point.radius_m, rl_color(point.color))
-        rl.draw_sphere_wires(vec3(point.center), point.radius_m * 1.08, 8, 8, rl_color((255, 255, 255, 150)))
+        side_m = max(0.16, point.radius_m * 1.75)
+        height_m = max(0.12, point.radius_m * 1.15)
+        marker_center = rl.Vector3(point.center.x, point.center.y, point.center.z)
+        marker_size = rl.Vector3(side_m, side_m, height_m)
+        rl.draw_cube_v(marker_center, marker_size, rl_color(point.color))
 
     def _draw_radar_point_labels(self, points: tuple[RadarPointMarker, ...], camera) -> None:
         occupied: list[tuple[float, float, float, float]] = []
