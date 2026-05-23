@@ -1328,23 +1328,20 @@ def blend_camera(start: CameraSpec, end: CameraSpec, amount: float) -> CameraSpe
 
 
 def road_surface_offsets(state: ClusterUiState, route_mode: bool) -> tuple[float, float]:
-    if not route_mode:
-        return -1.9, 1.9
-
-    road_shift = state.road_view_lane_position
+    road_shift = state.road_view_lane_position if route_mode else 0.0
     left = road_shift - 0.92
     right = road_shift + 0.92
     if state.lane_change == "left":
         left = min(left, road_shift - 1.55)
     elif state.lane_change == "right":
         right = max(right, road_shift + 1.55)
-    if state.extra_left_lane_visible:
+    if state.extra_left_lane_visible and state.lane_change == "left":
         left = min(road_shift - 1.55, state.left_road_edge_offset if state.left_road_edge_offset is not None else road_shift - 1.9)
-    elif state.left_road_edge_offset is not None:
+    elif route_mode and state.left_road_edge_offset is not None:
         left = min(left, max(state.left_road_edge_offset, -1.25))
-    if state.extra_right_lane_visible:
+    if state.extra_right_lane_visible and state.lane_change == "right":
         right = max(road_shift + 1.55, state.right_road_edge_offset if state.right_road_edge_offset is not None else road_shift + 1.9)
-    elif state.right_road_edge_offset is not None:
+    elif route_mode and state.right_road_edge_offset is not None:
         right = max(right, min(state.right_road_edge_offset, 1.25))
     return clamp(left, -2.8, -0.68), clamp(right, 0.68, 2.8)
 
@@ -1449,9 +1446,10 @@ def road_edge_strips(
 ) -> tuple[MeshStrip, ...]:
     if not route_mode:
         default_color = road_edge_color(None, 1.0)
+        left_offset, right_offset = road_surface_offsets(state, route_mode)
         return (
             *road_edge_offset_strips(
-                -1.9,
+                left_offset,
                 state.steering,
                 lane_width_m,
                 default_color,
@@ -1459,7 +1457,7 @@ def road_edge_strips(
                 road_end_m,
             ),
             *road_edge_offset_strips(
-                1.9,
+                right_offset,
                 state.steering,
                 lane_width_m,
                 default_color,

@@ -1308,18 +1308,28 @@ class ClusterUiRenderer:
         direction = -1 if side == "left" else 1
         fill = GREEN if active else (195, 202, 209, 92)
         outline = (8, 118, 65) if active else (168, 176, 184)
+        tail_back = -36
+        tail_front = 12
+        tail_half_height = 16
+        head_tip_x = 60
+        head_half_height = 38
 
         def point(local_x: float, local_y: float) -> rl.Vector2:
             return rl.Vector2(cx + direction * local_x, cy + local_y)
 
-        tail_rect = rl.Rectangle(cx + direction * -58, cy - 13, direction * 66, 26)
+        tail_rect = rl.Rectangle(
+            cx + direction * tail_back,
+            cy - tail_half_height,
+            direction * (tail_front - tail_back),
+            tail_half_height * 2,
+        )
         if tail_rect.width < 0:
             tail_rect.x += tail_rect.width
             tail_rect.width = -tail_rect.width
 
-        head_top = point(8, -34)
-        head_tip = point(68, 0)
-        head_bottom = point(8, 34)
+        head_top = point(tail_front, -head_half_height)
+        head_tip = point(head_tip_x, 0)
+        head_bottom = point(tail_front, head_half_height)
         if direction < 0:
             head_vertices = (head_top, head_tip, head_bottom)
         else:
@@ -1329,13 +1339,13 @@ class ClusterUiRenderer:
         rl.draw_triangle(*head_vertices, rl_color(fill))
 
         outline_points = [
-            point(-58, -13),
-            point(8, -13),
+            point(tail_back, -tail_half_height),
+            point(tail_front, -tail_half_height),
             head_top,
             head_tip,
             head_bottom,
-            point(8, 13),
-            point(-58, 13),
+            point(tail_front, tail_half_height),
+            point(tail_back, tail_half_height),
         ]
         line_color = rl_color(outline)
         for index, start in enumerate(outline_points):

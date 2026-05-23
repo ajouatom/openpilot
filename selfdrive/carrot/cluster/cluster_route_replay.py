@@ -1644,7 +1644,7 @@ def lanes_for_frame(
     right_inner_visible = frame.right_lane_visible or force_lane_change_lanes
 
     markings: list[LaneMarking] = []
-    if frame.extra_left_lane_visible or (use_animated_lane_grid and frame.lane_change == "left"):
+    if use_animated_lane_grid and frame.lane_change == "left":
         left_outer = left_inner - 1.0
         markings.append(
             LaneMarking(
@@ -1694,7 +1694,7 @@ def lanes_for_frame(
             ),
         )
     )
-    if frame.extra_right_lane_visible or (use_animated_lane_grid and frame.lane_change == "right"):
+    if use_animated_lane_grid and frame.lane_change == "right":
         right_outer = right_inner + 1.0
         markings.append(
             LaneMarking(

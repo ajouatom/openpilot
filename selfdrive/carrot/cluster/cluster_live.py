@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from cluster_config import BLUE, DEFAULT_LANE_WIDTH_M, WHITE
+from cluster_config import BLUE, DEFAULT_LANE_WIDTH_M
 from cluster_models import ClusterUiState, LaneMarking
 from cluster_route_replay import RouteLogParser, frame_to_state
 from cluster_utils import clamp
@@ -172,9 +172,7 @@ def standby_state() -> ClusterUiState:
         surround_pitch_deg=0.0,
         surround_view_active=False,
         lanes=(
-            LaneMarking(-1.5, WHITE, "solid", width=5),
             LaneMarking(-0.5, BLUE, "solid", width=7),
             LaneMarking(0.5, BLUE, "solid", width=7),
-            LaneMarking(1.5, WHITE, "dashed", width=5),
         ),
     )

@@ -262,21 +262,26 @@ class ClusterSimulator:
         lane_center = self.active_lane_position
         left_inner = BLUE
         right_inner = BLUE
-        left_outer = WHITE
-        right_outer = WHITE
+        markings: list[LaneMarking] = []
         if self.lane_change_direction == "left":
-            left_outer = BLUE_SOFT
             left_inner = BLUE
+            markings.append(
+                LaneMarking(lane_center - 1.5 - self.view_lane_position, BLUE_SOFT, "solid", width=5)
+            )
         elif self.lane_change_direction == "right":
-            right_outer = BLUE_SOFT
             right_inner = BLUE
 
-        return (
-            LaneMarking(lane_center - 1.5 - self.view_lane_position, left_outer, "solid", width=5),
-            LaneMarking(lane_center - 0.5 - self.view_lane_position, left_inner, "solid", width=7),
-            LaneMarking(lane_center + 0.5 - self.view_lane_position, right_inner, "solid", width=7),
-            LaneMarking(lane_center + 1.5 - self.view_lane_position, right_outer, "dashed", width=5),
+        markings.extend(
+            (
+                LaneMarking(lane_center - 0.5 - self.view_lane_position, left_inner, "solid", width=7),
+                LaneMarking(lane_center + 0.5 - self.view_lane_position, right_inner, "solid", width=7),
+            )
         )
+        if self.lane_change_direction == "right":
+            markings.append(
+                LaneMarking(lane_center + 1.5 - self.view_lane_position, BLUE_SOFT, "dashed", width=5)
+            )
+        return tuple(markings)
 
 
 class RandomInputSource:
