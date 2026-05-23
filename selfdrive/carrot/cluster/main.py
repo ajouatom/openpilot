@@ -4,6 +4,7 @@ import argparse
 from dataclasses import replace
 import math
 import random
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -84,6 +85,84 @@ class ProfileReporter:
         self.samples.clear()
         self.report_frames = 0
         self.last_report_time = now
+
+
+class AsyncJpegUsbPipeline:
+    def __init__(self, usb_display: TuringUsbDisplay) -> None:
+        self.usb_display = usb_display
+        self._condition = threading.Condition()
+        self._pending_rgba: tuple[bytes, int, int] | None = None
+        self._closing = False
+        self._error: BaseException | None = None
+        self._samples: list[tuple[str, float]] = []
+        self._thread = threading.Thread(target=self._run, name="cluster-usb-jpeg", daemon=True)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def submit_rgba(self, rgba: bytes, width: int, height: int) -> None:
+        self.check_error()
+        with self._condition:
+            self._pending_rgba = (rgba, width, height)
+            self._condition.notify()
+
+    def profile_samples(self) -> tuple[tuple[str, float], ...]:
+        with self._condition:
+            samples = tuple(self._samples)
+            self._samples.clear()
+        return samples
+
+    def check_error(self) -> None:
+        if self._error is not None:
+            raise RuntimeError("asynchronous USB JPEG pipeline failed") from self._error
+
+    def close(self) -> None:
+        with self._condition:
+            self._closing = True
+            self._condition.notify()
+        self._thread.join(timeout=3.0)
+
+    def _add_sample(self, name: str, start_time: float) -> None:
+        milliseconds = (time.perf_counter() - start_time) * 1000.0
+        with self._condition:
+            self._samples.append((name, milliseconds))
+
+    def _add_samples(self, samples: tuple[tuple[str, float], ...]) -> None:
+        if not samples:
+            return
+        with self._condition:
+            self._samples.extend(samples)
+
+    def _take_pending(self) -> tuple[bytes, int, int] | None:
+        with self._condition:
+            while self._pending_rgba is None and not self._closing:
+                self._condition.wait(timeout=0.1)
+            if self._pending_rgba is None:
+                return None
+            pending = self._pending_rgba
+            self._pending_rgba = None
+            return pending
+
+    def _run(self) -> None:
+        while True:
+            pending = self._take_pending()
+            if pending is None:
+                return
+            rgba, width, height = pending
+            try:
+                self.usb_display.clear_profile_samples()
+                profile_stage = time.perf_counter()
+                jpeg = self.usb_display.encode_jpeg(rgba, width, height)
+                self._add_sample("usb_async.encode_jpeg", profile_stage)
+
+                profile_stage = time.perf_counter()
+                self.usb_display.send_jpeg(jpeg)
+                self._add_sample("usb_async.send_jpeg", profile_stage)
+                self._add_samples(self.usb_display.profile_samples())
+                self.usb_display.clear_profile_samples()
+            except BaseException as exc:
+                self._error = exc
+                return
 
 
 def next_simulated_values(speed_kph: float, dt: float) -> tuple[float, float, float]:
@@ -315,6 +394,7 @@ def run_demo(
     usb_jpeg_encoder: str,
     usb_fast_write: bool,
     usb_wait_frame_ack: bool,
+    usb_async: bool,
     usb_frame_drain_attempts: int,
     usb_frame_drain_timeout_ms: int,
     usb_fast_drain_attempts: int,
@@ -334,6 +414,7 @@ def run_demo(
 ) -> None:
     profile = ProfileReporter(profile_render, profile_interval_s)
     usb_display: TuringUsbDisplay | None = None
+    usb_pipeline: AsyncJpegUsbPipeline | None = None
     if output_mode in ("usb", "both"):
         usb_display = TuringUsbDisplay(
             brightness=usb_brightness,
@@ -353,6 +434,9 @@ def run_demo(
         profile.add_elapsed("usb.open", profile_stage)
         profile.add_samples(usb_display.profile_samples())
         usb_display.clear_profile_samples()
+        if usb_async and usb_codec == "jpeg":
+            usb_pipeline = AsyncJpegUsbPipeline(usb_display)
+            usb_pipeline.start()
 
     frame_width = width or (usb_display.landscape_width if usb_display is not None else DESIGN_WIDTH)
     frame_height = height or (usb_display.landscape_height if usb_display is not None else DESIGN_HEIGHT)
@@ -391,8 +475,11 @@ def run_demo(
         while True:
             frame_start_time = time.perf_counter()
             renderer.clear_profile_samples()
-            if usb_display is not None:
+            if usb_display is not None and usb_pipeline is None:
                 usb_display.clear_profile_samples()
+            if usb_pipeline is not None:
+                usb_pipeline.check_error()
+                profile.add_samples(usb_pipeline.profile_samples())
             if output_mode in ("window", "both") and renderer.should_close():
                 break
 
@@ -454,13 +541,18 @@ def run_demo(
                     )
                     profile.add_elapsed("main.usb.render_rgba_total", profile_stage)
 
-                    profile_stage = time.perf_counter()
-                    jpeg = usb_display.encode_jpeg(rgba, image_width, image_height)
-                    profile.add_elapsed("main.usb.encode_jpeg", profile_stage)
-                    
-                    profile_stage = time.perf_counter()
-                    usb_display.send_jpeg(jpeg)
-                    profile.add_elapsed("main.usb.send_jpeg", profile_stage)
+                    if usb_pipeline is not None:
+                        profile_stage = time.perf_counter()
+                        usb_pipeline.submit_rgba(rgba, image_width, image_height)
+                        profile.add_elapsed("main.usb_async.submit_rgba", profile_stage)
+                    else:
+                        profile_stage = time.perf_counter()
+                        jpeg = usb_display.encode_jpeg(rgba, image_width, image_height)
+                        profile.add_elapsed("main.usb.encode_jpeg", profile_stage)
+
+                        profile_stage = time.perf_counter()
+                        usb_display.send_jpeg(jpeg)
+                        profile.add_elapsed("main.usb.send_jpeg", profile_stage)
                 else:
                     profile_stage = time.perf_counter()
                     png = renderer.render_to_png_bytes(state, rotate_clockwise=True)
@@ -468,7 +560,10 @@ def run_demo(
                     profile_stage = time.perf_counter()
                     usb_display.send_png(png)
                     profile.add_elapsed("main.usb.send_png", profile_stage)
-                profile.add_samples(usb_display.profile_samples())
+                if usb_pipeline is not None:
+                    profile.add_samples(usb_pipeline.profile_samples())
+                else:
+                    profile.add_samples(usb_display.profile_samples())
             profile.add_samples(renderer.profile_samples())
             report_frames += 1
             profile.add_elapsed("main.frame_active", frame_start_time)
@@ -499,12 +594,15 @@ def run_demo(
                     f"ego_offset={state.ego_lane_offset:+.2f} | "
                     f"output={output_mode}/{usb_codec if usb_display else 'screen'}"
                     f"{'-fast' if usb_display and usb_fast_write else ''} "
+                    f"{'async ' if usb_pipeline is not None else ''}"
                     f"view_yaw={state.surround_yaw_deg:+.0f} "
                     f"{source_status}"
                 )
                 report_frames = 0
                 last_report_time = now
     finally:
+        if usb_pipeline is not None:
+            usb_pipeline.close()
         if controller is not None:
             controller.close()
         if route_source is not None:
@@ -572,6 +670,11 @@ def parse_args() -> argparse.Namespace:
         "--usb-wait-frame-ack",
         action="store_true",
         help="Wait for a TURZX response after each frame upload. Default skips ACK because some units never reply.",
+    )
+    parser.add_argument(
+        "--usb-async",
+        action="store_true",
+        help="Encode and send JPEG USB frames on a background thread to overlap transport with the next render.",
     )
     parser.add_argument(
         "--usb-frame-drain-attempts",
@@ -676,6 +779,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--usb-display-fps must be between 0 and 255")
     if not 1 <= args.usb_jpeg_quality <= 95:
         parser.error("--usb-jpeg-quality must be between 1 and 95")
+    if args.usb_async and args.usb_codec != "jpeg":
+        parser.error("--usb-async only supports --usb-codec jpeg")
     if args.usb_frame_drain_attempts < 0 or args.usb_fast_drain_attempts < 0:
         parser.error("USB drain attempts must be 0 or greater")
     if args.usb_frame_drain_timeout_ms < 0 or args.usb_fast_drain_timeout_ms < 0:
@@ -719,6 +824,7 @@ def main() -> None:
             args.usb_jpeg_encoder,
             args.usb_fast,
             args.usb_wait_frame_ack,
+            args.usb_async,
             args.usb_frame_drain_attempts,
             args.usb_frame_drain_timeout_ms,
             args.usb_fast_drain_attempts,
