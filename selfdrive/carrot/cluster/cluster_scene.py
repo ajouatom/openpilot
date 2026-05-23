@@ -646,15 +646,20 @@ def model_path_centerline(
     if len(model_points) < 2:
         steps = max(4, int(44 * (end_m - PATH_START_M) / (PATH_END_M - PATH_START_M)))
         sample_points = sample_range(PATH_START_M, end_m, steps)
+        points: list[Vec3] = []
+        for forward_m in sample_points:
+            x_m = model_path_world_x(state, lane_width_m, forward_m)
+            if x_m is not None:
+                points.append(Vec3(x_m, forward_m, PATH_HEIGHT_M))
+        return tuple(points) if len(points) >= 2 else ()
     else:
         sampled_model_points = downsample_tuple(model_points, MODEL_PATH_MAX_POINTS)
-        sample_points = tuple(EGO_FORWARD_M + point.forward_m for point in sampled_model_points)
-
-    points: list[Vec3] = []
-    for forward_m in sample_points:
-        x_m = model_path_world_x(state, lane_width_m, forward_m)
-        if x_m is not None:
-            points.append(Vec3(x_m, forward_m, PATH_HEIGHT_M))
+        ego_offset = clamp(state.ego_lane_offset, -1.25, 1.25)
+        ego_x_m = road_world_x(ego_offset, EGO_FORWARD_M, state.steering, lane_width_m)
+        points = [
+            Vec3(ego_x_m + point.lateral_m, EGO_FORWARD_M + point.forward_m, PATH_HEIGHT_M)
+            for point in sampled_model_points
+        ]
     return tuple(points) if len(points) >= 2 else ()
 
 
