@@ -11,10 +11,76 @@ from cluster_utils import clamp
 
 VENDOR_ROOT = Path(__file__).resolve().parent / ".vendor" / "turing-smart-screen-python-main"
 VENDOR_LIBRARY = VENDOR_ROOT / "library"
+TURZX_USB_VENDOR_ID = 0x1CBE
+TURZX_USB_PRODUCT_IDS = {
+    0x0092: "TURZX 9.2",
+    0x0123: "TURZX 12.3",
+}
+HUD_MODE_PRODUCT_IDS = {
+    1: 0x0092,
+    2: 0x0123,
+}
 MAX_CONSECUTIVE_FRAME_ERRORS = 3
 USB_COMMAND_TIMEOUT_MS = 2000
 USB_FRAME_TIMEOUT_MS = 2000
 USB_COMMAND_GAP_S = 0.2
+_LIBUSB_DLL_DIR_HANDLE = None
+
+
+def product_id_for_hud_mode(hud_mode: int) -> int | None:
+    try:
+        return HUD_MODE_PRODUCT_IDS.get(int(hud_mode))
+    except Exception:
+        return None
+
+
+def product_label(product_id: int | None) -> str:
+    if product_id is None:
+        return "TURZX USB"
+    return TURZX_USB_PRODUCT_IDS.get(product_id, f"TURZX USB pid=0x{product_id:04x}")
+
+
+def _add_libusb_search_path_once() -> None:
+    global _LIBUSB_DLL_DIR_HANDLE
+
+    libusb = VENDOR_ROOT / "external" / "libusb-1.0" / "libusb-1.0.dll"
+    if not libusb.exists():
+        return
+
+    dll_dir = str(libusb.parent)
+    path_entries = os.environ.get("PATH", "").split(os.pathsep)
+    if dll_dir not in path_entries:
+        os.environ["PATH"] = dll_dir + os.pathsep + os.environ.get("PATH", "")
+    if hasattr(os, "add_dll_directory") and _LIBUSB_DLL_DIR_HANDLE is None:
+        _LIBUSB_DLL_DIR_HANDLE = os.add_dll_directory(dll_dir)
+
+
+def find_supported_usb_product(expected_product_id: int | None = None) -> int | None:
+    if not VENDOR_LIBRARY.exists():
+        print(f"TURZX vendor library not found: {VENDOR_LIBRARY}", flush=True)
+        return None
+
+    _add_libusb_search_path_once()
+    try:
+        import usb.core  # type: ignore
+    except Exception as exc:
+        print(f"TURZX USB scan unavailable: {exc}", flush=True)
+        return None
+
+    product_ids = [expected_product_id] if expected_product_id is not None else list(TURZX_USB_PRODUCT_IDS)
+    for product_id in product_ids:
+        try:
+            dev = usb.core.find(idVendor=TURZX_USB_VENDOR_ID, idProduct=product_id)
+        except Exception as exc:
+            print(f"TURZX USB scan failed for pid=0x{product_id:04x}: {exc}", flush=True)
+            return None
+        if dev is not None:
+            return product_id
+    return None
+
+
+def supported_usb_device_present(expected_product_id: int | None = None) -> bool:
+    return find_supported_usb_product(expected_product_id) is not None
 
 
 class TuringUsbDisplay:

@@ -15,12 +15,22 @@ for path in (OPENPILOT_ROOT, BUNDLE_DIR):
         sys.path.insert(0, path_text)
 
 
+def configure_cluster_realtime() -> None:
+    try:
+        from openpilot.common.realtime import config_realtime_process
+
+        config_realtime_process([0, 1, 2, 3], 55)
+    except Exception as exc:
+        print(f"[cluster_run] failed to configure realtime process: {exc}", flush=True)
+
+
 def main() -> None:
     args = sys.argv[1:]
     if "--input" not in args:
         args = ["--input", "live", *args]
     sys.argv = [sys.argv[0], *args]
 
+    configure_cluster_realtime()
     from main import main as cluster_main
 
     cluster_main()
