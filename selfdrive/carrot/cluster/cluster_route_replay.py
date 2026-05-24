@@ -1747,11 +1747,14 @@ class RouteLogParser:
 
     def _model_direct_lane_change_value(self, direction: str) -> float:
         if self.lane_change_state == "laneChangeStarting":
+            # The model desire for the active lane change fades out as the
+            # maneuver completes, so visual position uses the complementary
+            # value without timer or recenter synthesis.
             if direction == "left":
-                return self.lane_change_desire_left_prob
-            return self.lane_change_desire_right_prob
+                return 1.0 - self.lane_change_desire_left_prob
+            return 1.0 - self.lane_change_desire_right_prob
         if self.lane_change_state == "laneChangeFinishing":
-            return self.lane_change_ll_prob
+            return 1.0
         return 0.0
 
 
