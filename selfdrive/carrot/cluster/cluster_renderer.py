@@ -37,7 +37,7 @@ OPENPILOT_ADDON_FONT_DIR = SELFDRIVE_DIR / "assets" / "addon" / "font"
 KAIGEN_GOTHIC_KR_BOLD_FONT_PATH = OPENPILOT_FONT_DIR / "KaiGenGothicKR-Bold.ttf"
 JETBRAINS_MONO_FONT_PATH = OPENPILOT_FONT_DIR / "JetBrainsMono-Medium.ttf"
 VEHICLE_MODEL_PATH = CLUSTER_DIR / "assets" / "models" / "cybertruck" / "cybertruck_cluster.obj"
-ACCEL_TEXT_WIDTH_SAMPLES = ("+00.0", "-00.0")
+ACCEL_TEXT_WIDTH_SAMPLES = ("+00.00", "-00.00")
 TURN_SIGNAL_LEFT_CENTER_X = 610
 TURN_SIGNAL_RIGHT_CENTER_X = 1310
 TURN_SIGNAL_CENTER_Y = 72
@@ -1355,7 +1355,8 @@ class ClusterUiRenderer:
         bottom = 400
         center = (top + bottom) // 2
         gauge_width = 56
-        accel_text = f"{0.0 if abs(state.accel_mps2) < 0.05 else state.accel_mps2:+05.1f}"
+        accel_value = 0.0 if abs(state.accel_mps2) < 0.005 else state.accel_mps2
+        accel_text = f"{accel_value:+05.2f}"
         accel_text_x = 20
         accel_text_size = 38
         if self._font is None:
