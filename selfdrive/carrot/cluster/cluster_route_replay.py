@@ -1202,12 +1202,27 @@ class RouteLogParser:
                 continue
             # openpilot yRel is left-positive; this renderer uses right-positive x.
             lateral_m = -safe_float(lead, "yRel", 0.0)
+            relative_speed_mps = safe_optional_float(lead, "vRel")
+            lead_speed_mps = safe_optional_float(lead, "vLead")
+            absolute_speed_kph = (
+                max(0.0, lead_speed_mps * 3.6)
+                if lead_speed_mps is not None
+                else (
+                    max(0.0, self.current_speed_kph + relative_speed_mps * 3.6)
+                    if relative_speed_mps is not None
+                    else None
+                )
+            )
             detections.append(
                 DetectedVehicle(
                     label=label,
                     longitudinal_m=d_rel,
                     lateral_m=clamp(lateral_m, -8.0, 8.0),
                     source="radarState",
+                    relative_speed_mps=relative_speed_mps,
+                    absolute_speed_kph=absolute_speed_kph,
+                    acceleration_mps2=safe_optional_float(lead, "aLeadK"),
+                    ttc_s=ttc_from_relative_speed(d_rel, relative_speed_mps),
                 )
             )
         self.radar_detections = tuple(detections)
@@ -2114,6 +2129,7 @@ def model_lead_detections_from_model_v2(model: Any) -> tuple[DetectedVehicle, ..
                 source="modelV2.leadsV3",
                 probability=probability,
                 relative_speed_mps=relative_speed_mps,
+                absolute_speed_kph=max(0.0, lead_speed_mps * 3.6) if lead_speed_mps is not None else None,
                 acceleration_mps2=acceleration_mps2,
                 cut_in=cut_in,
                 primary=index == 0,

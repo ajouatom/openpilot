@@ -130,6 +130,7 @@ class VehicleBox:
     label: str = ""
     source: str = ""
     relative_speed_mps: float | None = None
+    absolute_speed_kph: float | None = None
     acceleration_mps2: float | None = None
     ttc_s: float | None = None
     cut_in: bool = False
@@ -1036,7 +1037,7 @@ def radar_vehicle_points(state: ClusterUiState, lane_width_m: float) -> tuple[Ra
 
 
 def radar_vehicle_boxes(state: ClusterUiState, lane_width_m: float) -> tuple[VehicleBox, ...]:
-    return tuple(radar_vehicle_box(point, lane_width_m) for point in radar_vehicle_points(state, lane_width_m))
+    return tuple(radar_vehicle_box(point, state, lane_width_m) for point in radar_vehicle_points(state, lane_width_m))
 
 
 def radar_points_same_vehicle(left: RadarPoint, right: RadarPoint) -> bool:
@@ -1046,7 +1047,7 @@ def radar_points_same_vehicle(left: RadarPoint, right: RadarPoint) -> bool:
     )
 
 
-def radar_vehicle_box(point: RadarPoint, lane_width_m: float) -> VehicleBox:
+def radar_vehicle_box(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> VehicleBox:
     confidence = radar_vehicle_confidence(point)
     alpha = int(92 + 163 * confidence)
     body_color = GREEN
@@ -1070,6 +1071,7 @@ def radar_vehicle_box(point: RadarPoint, lane_width_m: float) -> VehicleBox:
         label=point.label,
         source="radarPoint",
         relative_speed_mps=point.relative_speed_mps,
+        absolute_speed_kph=radar_point_absolute_speed_kph(point, state),
         acceleration_mps2=point.relative_accel_mps2,
         annotate=False,
     )
@@ -1242,6 +1244,7 @@ def vehicle_box(
     label: str = "",
     source: str = "",
     relative_speed_mps: float | None = None,
+    absolute_speed_kph: float | None = None,
     acceleration_mps2: float | None = None,
     ttc_s: float | None = None,
     cut_in: bool = False,
@@ -1281,6 +1284,7 @@ def vehicle_box(
         label=label,
         source=source,
         relative_speed_mps=relative_speed_mps,
+        absolute_speed_kph=absolute_speed_kph,
         acceleration_mps2=acceleration_mps2,
         ttc_s=ttc_s,
         cut_in=cut_in,
@@ -1388,6 +1392,7 @@ def translate_vehicle_box_x(vehicle: VehicleBox, shift_x_m: float) -> VehicleBox
         label=vehicle.label,
         source=vehicle.source,
         relative_speed_mps=vehicle.relative_speed_mps,
+        absolute_speed_kph=vehicle.absolute_speed_kph,
         acceleration_mps2=vehicle.acceleration_mps2,
         ttc_s=vehicle.ttc_s,
         cut_in=vehicle.cut_in,
@@ -1623,7 +1628,7 @@ def build_cluster_scene(
     camera = scene_camera(state, lane_width_m, anchor_x_m)
     camera_active = state.surround_view_active
     selected_radar_vehicle_points = radar_vehicle_points(state, lane_width_m)
-    radar_boxes = tuple(radar_vehicle_box(point, lane_width_m) for point in selected_radar_vehicle_points)
+    radar_boxes = tuple(radar_vehicle_box(point, state, lane_width_m) for point in selected_radar_vehicle_points)
     route_mode = state.route_overlay is not None or bool(state.detected_vehicles) or bool(state.radar_points)
     road_start_m = SURROUND_ROAD_REAR_M if camera_active else ROAD_NEAR_M
     road_end_m = SURROUND_ROAD_FRONT_M if camera_active else ROAD_FAR_M
@@ -1704,6 +1709,13 @@ def build_cluster_scene(
                 label=detected.label,
                 source=detected.source,
                 relative_speed_mps=detected.relative_speed_mps,
+                absolute_speed_kph=detected.absolute_speed_kph
+                if detected.absolute_speed_kph is not None
+                else (
+                    max(0.0, state.speed_kph + detected.relative_speed_mps * 3.6)
+                    if detected.relative_speed_mps is not None
+                    else None
+                ),
                 acceleration_mps2=detected.acceleration_mps2,
                 ttc_s=detected.ttc_s,
                 cut_in=detected.cut_in,

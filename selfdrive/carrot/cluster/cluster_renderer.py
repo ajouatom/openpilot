@@ -14,6 +14,7 @@ from cluster_config import (
     BLUE_SOFT,
     DESIGN_HEIGHT,
     DESIGN_WIDTH,
+    EGO_FORWARD_M,
     FAINT,
     GREEN,
     MAX_ACCEL_MPS2,
@@ -227,6 +228,31 @@ def radar_point_speed_label(point: RadarPointMarker) -> str:
     if point.absolute_speed_kph is None:
         return "-- km/h"
     return f"{point.absolute_speed_kph:.0f} km/h"
+
+
+def vehicle_distance_label(vehicle: VehicleBox) -> str:
+    return f"{max(0.0, vehicle.center.y - EGO_FORWARD_M):.0f} m"
+
+
+def vehicle_speed_label(vehicle: VehicleBox) -> str:
+    if vehicle.absolute_speed_kph is None:
+        return "-- km/h"
+    return f"{vehicle.absolute_speed_kph:.0f} km/h"
+
+
+def vehicle_status_label(vehicle: VehicleBox) -> str:
+    parts = [vehicle_speed_label(vehicle)]
+    if vehicle.ttc_s is not None and vehicle.ttc_s < 9.9:
+        parts.append(f"TTC {vehicle.ttc_s:.1f}s")
+    elif vehicle.cut_in:
+        parts.append("CUT-IN")
+    elif vehicle.acceleration_mps2 is not None and abs(vehicle.acceleration_mps2) > 0.2:
+        parts.append(f"a {vehicle.acceleration_mps2:+.1f}")
+    elif vehicle.relative_speed_mps is not None:
+        parts.append(f"rel {vehicle.relative_speed_mps:+.1f}")
+    elif vehicle.confidence < 0.995:
+        parts.append(f"{vehicle.confidence:.0%}")
+    return "  ".join(parts)
 
 
 def vec3(point: Vec3) -> rl.Vector3:
@@ -943,11 +969,11 @@ class ClusterUiRenderer:
             distance = radar_point_distance_label(point)
             speed = radar_point_speed_label(point)
             text_width = max(
-                int(rl.measure_text_ex(self._font or rl.get_font_default(), distance, 18, 1).x),
-                int(rl.measure_text_ex(self._font or rl.get_font_default(), speed, 16, 1).x),
+                int(rl.measure_text_ex(self._font or rl.get_font_default(), distance, 14, 1).x),
+                int(rl.measure_text_ex(self._font or rl.get_font_default(), speed, 12, 1).x),
             )
-            width = max(74, text_width + 18)
-            height = 40
+            width = max(62, text_width + 14)
+            height = 32
             x = screen.x - width * 0.5
             y = screen.y - height - 4
             rect_tuple = (x, y, width, height)
@@ -959,10 +985,10 @@ class ClusterUiRenderer:
             center_x = x + width * 0.5
             shadow = (245, 248, 252)
             text = (8, 10, 12)
-            self._draw_text(distance, center_x + 1, y + 10 + 1, 18, shadow, anchor="center")
-            self._draw_text(distance, center_x, y + 10, 18, text, anchor="center")
-            self._draw_text(speed, center_x + 1, y + 29 + 1, 16, shadow, anchor="center")
-            self._draw_text(speed, center_x, y + 29, 16, text, anchor="center")
+            self._draw_text(distance, center_x + 1, y + 8 + 1, 14, shadow, anchor="center")
+            self._draw_text(distance, center_x, y + 8, 14, text, anchor="center")
+            self._draw_text(speed, center_x + 1, y + 23 + 1, 12, shadow, anchor="center")
+            self._draw_text(speed, center_x, y + 23, 12, text, anchor="center")
 
     def _draw_vehicle_shadow(self, vehicle: VehicleBox) -> None:
         half_width = vehicle.width_m * 0.5
@@ -1007,31 +1033,36 @@ class ClusterUiRenderer:
     def _draw_vehicle_badges(self, vehicles: tuple[VehicleBox, ...], camera) -> None:
         occupied: list[tuple[float, float, float, float]] = []
         ordered = sorted(
-            (vehicle for vehicle in vehicles if vehicle.annotate and vehicle.label),
-            key=lambda vehicle: (0 if vehicle.primary else 1 if vehicle.cut_in else 2, -vehicle.confidence),
+            (vehicle for vehicle in vehicles if vehicle.label),
+            key=lambda vehicle: (
+                0 if vehicle.primary else 1 if vehicle.cut_in else 2,
+                max(0.0, vehicle.center.y - EGO_FORWARD_M),
+                -vehicle.confidence,
+            ),
         )
-        for vehicle in ordered:
+        for vehicle in ordered[:18]:
             anchor = rl.Vector3(vehicle.center.x, vehicle.center.y, vehicle.height_m + 0.55)
             screen = world_to_screen_label_anchor(anchor, camera, self.width, self.height)
             if screen is None:
                 continue
 
-            distance_m = max(0.0, vehicle.center.y - 4.18)
-            rel_text = "" if vehicle.relative_speed_mps is None else f" {vehicle.relative_speed_mps:+.1f}"
-            text = f"{vehicle.label} {distance_m:.0f}m{rel_text}"
-            if vehicle.ttc_s is not None and vehicle.ttc_s < 9.9:
-                sub = f"TTC {vehicle.ttc_s:.1f}s"
-            elif vehicle.cut_in:
-                sub = "CUT-IN"
-            elif vehicle.acceleration_mps2 is not None and abs(vehicle.acceleration_mps2) > 0.2:
-                sub = f"{vehicle.confidence:.0%}  a {vehicle.acceleration_mps2:+.1f}"
-            else:
-                sub = f"{vehicle.confidence:.0%}"
+            text = f"{vehicle.label} {vehicle_distance_label(vehicle)}"
+            sub = vehicle_status_label(vehicle)
             color = RED if vehicle.ttc_s is not None and vehicle.ttc_s < 3.0 else AMBER if vehicle.cut_in else BLUE if vehicle.confidence >= 0.55 else MUTED
             bg = (254, 250, 238) if vehicle.cut_in else (246, 249, 252)
             border = AMBER if vehicle.cut_in else FAINT
-            width = max(90, int(rl.measure_text_ex(self._font or rl.get_font_default(), text, 16, 1).x) + 24)
-            height = 42
+            font = self._font or rl.get_font_default()
+            width = max(
+                96,
+                int(
+                    max(
+                        rl.measure_text_ex(font, text, 15, 1).x,
+                        rl.measure_text_ex(font, sub, 12, 1).x,
+                    )
+                )
+                + 22,
+            )
+            height = 44
             x = screen.x - width * 0.5
             y = screen.y - height * 0.5
             rect_tuple = (x, y, width, height)
@@ -1054,8 +1085,8 @@ class ClusterUiRenderer:
             rect = rl.Rectangle(x, y, width, height)
             rl.draw_rectangle_rounded(rect, 0.18, 8, rl_color(bg, int(178 + 62 * vehicle.confidence)))
             rl.draw_rectangle_rounded_lines_ex(rect, 0.18, 8, 1.4, rl_color(border, int(130 + 80 * vehicle.confidence)))
-            self._draw_text(text, x + width * 0.5, y + 14, 16, TEXT, anchor="center")
-            self._draw_text(sub, x + width * 0.5, y + 31, 12, color, anchor="center")
+            self._draw_text(text, x + width * 0.5, y + 14, 15, TEXT, anchor="center")
+            self._draw_text(sub, x + width * 0.5, y + 32, 12, color, anchor="center")
 
     def _world_label_bounds(
         self,

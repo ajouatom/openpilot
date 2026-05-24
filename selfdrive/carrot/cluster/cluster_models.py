@@ -71,6 +71,7 @@ class DetectedVehicle:
     source: str = "route"
     probability: float = 1.0
     relative_speed_mps: float | None = None
+    absolute_speed_kph: float | None = None
     acceleration_mps2: float | None = None
     cut_in: bool = False
     primary: bool = False
