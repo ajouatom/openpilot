@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from cluster_config import (
     AMBER,
@@ -64,6 +64,11 @@ RADAR_PROBABLE_VEHICLE_LATERAL_LANES = 2.75
 RADAR_VEHICLE_MIN_PROBABILITY = 0.35
 RADAR_VEHICLE_DEDUP_LONGITUDINAL_M = 7.0
 RADAR_VEHICLE_DEDUP_LATERAL_M = 1.6
+RADAR_MERGE_LONGITUDINAL_MIN_M = 3.0
+RADAR_MERGE_LONGITUDINAL_MAX_M = 7.0
+RADAR_MERGE_LATERAL_M = 1.35
+RADAR_MERGED_SOURCE_TAG = "+radar:"
+CORNER_RADAR_LABELS = frozenset(("LF", "RF", "LR", "RR"))
 DETECTED_VEHICLE_MAX_RENDER_BOXES = 5
 DETECTED_VEHICLE_MAX_PATH_BLOCKERS = 10
 VEHICLE_BADGE_TTC_S = 9.9
@@ -1040,6 +1045,105 @@ def radar_vehicle_boxes(state: ClusterUiState, lane_width_m: float) -> tuple[Veh
     return tuple(radar_vehicle_box(point, state, lane_width_m) for point in radar_vehicle_points(state, lane_width_m))
 
 
+def detected_vehicles_with_merged_radar(
+    vehicles: tuple[DetectedVehicle, ...],
+    radar_points: tuple[RadarPoint, ...],
+    state: ClusterUiState,
+) -> tuple[DetectedVehicle, ...]:
+    if not vehicles or not radar_points:
+        return vehicles
+    merged: list[DetectedVehicle] = []
+    used_radar_labels: set[str] = set()
+    for vehicle in vehicles:
+        point = radar_merge_point_for_vehicle(
+            vehicle,
+            tuple(point for point in radar_points if point.label not in used_radar_labels),
+            state,
+        )
+        if point is None:
+            merged.append(vehicle)
+            continue
+        used_radar_labels.add(point.label)
+        absolute_speed_kph = radar_point_absolute_speed_kph(point, state)
+        merged.append(
+            replace(
+                vehicle,
+                source=f"{vehicle.source}{RADAR_MERGED_SOURCE_TAG}{point.label}",
+                relative_speed_mps=vehicle.relative_speed_mps
+                if vehicle.relative_speed_mps is not None
+                else point.relative_speed_mps,
+                absolute_speed_kph=vehicle.absolute_speed_kph
+                if vehicle.absolute_speed_kph is not None
+                else absolute_speed_kph,
+                acceleration_mps2=vehicle.acceleration_mps2
+                if vehicle.acceleration_mps2 is not None
+                else point.relative_accel_mps2,
+                ttc_s=vehicle.ttc_s
+                if vehicle.ttc_s is not None
+                else ttc_from_relative_speed(vehicle.longitudinal_m, point.relative_speed_mps),
+            )
+        )
+    return tuple(merged)
+
+
+def radar_merge_point_for_vehicle(
+    vehicle: DetectedVehicle,
+    radar_points: tuple[RadarPoint, ...],
+    state: ClusterUiState,
+) -> RadarPoint | None:
+    if not detected_vehicle_needs_radar_merge(vehicle):
+        return None
+    candidates = tuple(
+        point
+        for point in radar_points
+        if radar_point_can_fill_vehicle_speed(point, state) and radar_point_close_to_vehicle(point, vehicle)
+    )
+    if not candidates:
+        return None
+    return min(
+        candidates,
+        key=lambda point: (
+            abs(point.longitudinal_m - vehicle.longitudinal_m),
+            abs(point.lateral_m - vehicle.lateral_m),
+        ),
+    )
+
+
+def detected_vehicle_needs_radar_merge(vehicle: DetectedVehicle) -> bool:
+    return (
+        vehicle.label in CORNER_RADAR_LABELS
+        and vehicle.absolute_speed_kph is None
+        and (vehicle.source == "carState" or vehicle.source.startswith("CAN 0x"))
+    )
+
+
+def radar_point_can_fill_vehicle_speed(point: RadarPoint, state: ClusterUiState) -> bool:
+    return radar_point_absolute_speed_kph(point, state) is not None or point.relative_speed_mps is not None
+
+
+def radar_point_close_to_vehicle(point: RadarPoint, vehicle: DetectedVehicle) -> bool:
+    longitudinal_tolerance = max(
+        RADAR_MERGE_LONGITUDINAL_MIN_M,
+        min(RADAR_MERGE_LONGITUDINAL_MAX_M, vehicle.longitudinal_m * 0.08),
+    )
+    return (
+        abs(point.longitudinal_m - vehicle.longitudinal_m) <= longitudinal_tolerance
+        and abs(point.lateral_m - vehicle.lateral_m) <= RADAR_MERGE_LATERAL_M
+    )
+
+
+def merged_radar_point_label(vehicle: DetectedVehicle) -> str | None:
+    if RADAR_MERGED_SOURCE_TAG not in vehicle.source:
+        return None
+    return vehicle.source.rsplit(RADAR_MERGED_SOURCE_TAG, 1)[1] or None
+
+
+def ttc_from_relative_speed(longitudinal_m: float, relative_speed_mps: float | None) -> float | None:
+    if relative_speed_mps is None or relative_speed_mps >= -0.15 or longitudinal_m <= 0.0:
+        return None
+    return min(99.9, longitudinal_m / max(0.15, -relative_speed_mps))
+
+
 def radar_points_same_vehicle(left: RadarPoint, right: RadarPoint) -> bool:
     return (
         abs(left.longitudinal_m - right.longitudinal_m) <= RADAR_VEHICLE_DEDUP_LONGITUDINAL_M
@@ -1491,6 +1595,8 @@ def road_edge_offset_strips(
 
 
 def vehicle_color_for_detection(vehicle: DetectedVehicle) -> tuple[int, int, int]:
+    if RADAR_MERGED_SOURCE_TAG in vehicle.source:
+        return BLUE
     if vehicle.cut_in:
         return AMBER
     if vehicle.primary:
@@ -1692,10 +1798,21 @@ def build_cluster_scene(
     ego_offset = clamp(state.ego_lane_offset, -1.25, 1.25)
     target_offset = state.highlight_lane_offset if state.lane_change_phase == "changing" else None
     ego_vehicle = vehicle_box(ego_offset, EGO_FORWARD_M, state.steering, lane_width_m, EGO, camera_active, target_offset)
+    merged_radar_labels = frozenset[str]()
     if route_mode:
-        render_detected_vehicles = limited_detected_vehicles(
+        merged_detected_vehicles = detected_vehicles_with_merged_radar(
             state.detected_vehicles,
+            state.radar_points,
+            state,
+        )
+        render_detected_vehicles = limited_detected_vehicles(
+            merged_detected_vehicles,
             DETECTED_VEHICLE_MAX_RENDER_BOXES,
+        )
+        merged_radar_labels = frozenset(
+            label
+            for label in (merged_radar_point_label(vehicle) for vehicle in render_detected_vehicles)
+            if label is not None
         )
         detected_vehicle_boxes = tuple(
             vehicle_box(
@@ -1736,15 +1853,19 @@ def build_cluster_scene(
             )
             for detected in blocking_detected_vehicles
         )
+        visible_radar_vehicle_points = tuple(
+            point for point in selected_radar_vehicle_points if point.label not in merged_radar_labels
+        )
         radar_blockers = tuple(
             PathBlocker(
                 clamp(vehicle.center.x / lane_width_m, -2.2, 2.2),
                 vehicle.center.y,
                 vehicle.length_m,
             )
-            for vehicle in radar_boxes
+            for vehicle in tuple(radar_vehicle_box(point, state, lane_width_m) for point in visible_radar_vehicle_points)
         )
         blockers = (*detected_blockers, *radar_blockers)
+        radar_boxes = tuple(radar_vehicle_box(point, state, lane_width_m) for point in visible_radar_vehicle_points)
         vehicles = (ego_vehicle, *detected_vehicle_boxes, *radar_boxes)
     else:
         blockers = ()
@@ -1774,7 +1895,12 @@ def build_cluster_scene(
     profile_scene_add(profile_add, "scene.build.planned_path", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
-    radar_points = radar_point_markers(state, lane_width_m, selected_radar_vehicle_points)
+    hidden_merged_radar_points = tuple(point for point in state.radar_points if point.label in merged_radar_labels)
+    radar_points = radar_point_markers(
+        state,
+        lane_width_m,
+        (*selected_radar_vehicle_points, *hidden_merged_radar_points),
+    )
     profile_scene_add(profile_add, "scene.build.radar_points", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)

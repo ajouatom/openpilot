@@ -240,6 +240,10 @@ def vehicle_speed_label(vehicle: VehicleBox) -> str:
     return f"{vehicle.absolute_speed_kph:.0f} km/h"
 
 
+def vehicle_metric_color(vehicle: VehicleBox) -> tuple[int, int, int]:
+    return BLUE if "+radar:" in vehicle.source else TEXT
+
+
 def vec3(point: Vec3) -> rl.Vector3:
     return rl.Vector3(point.x, point.y, point.z)
 
@@ -1066,10 +1070,11 @@ class ClusterUiRenderer:
             occupied.append(rect_tuple)
             center_x = x + width * 0.5
             shadow = (245, 248, 252)
+            text_color = vehicle_metric_color(vehicle)
             self._draw_text(distance, center_x + 1, y + 10 + 1, 15, shadow, anchor="center")
-            self._draw_text(distance, center_x, y + 10, 15, TEXT, anchor="center")
+            self._draw_text(distance, center_x, y + 10, 15, text_color, anchor="center")
             self._draw_text(speed, center_x + 1, y + 27 + 1, 13, shadow, anchor="center")
-            self._draw_text(speed, center_x, y + 27, 13, TEXT, anchor="center")
+            self._draw_text(speed, center_x, y + 27, 13, text_color, anchor="center")
 
     def _world_label_bounds(
         self,
