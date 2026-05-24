@@ -572,7 +572,10 @@ def run_demo(
             if usb_display is not None:
                 if usb_codec == "jpeg":
                     profile_stage = time.perf_counter()
-                    rgba, image_width, image_height = renderer.render_to_rgba_bytes(state)
+                    rgba, image_width, image_height = renderer.render_to_rgba_bytes(
+                        state,
+                        portrait_upload=True,
+                    )
                     profile.add_elapsed("main.usb.render_rgba_total", profile_stage)
 
                     if usb_pipeline is not None:
@@ -589,7 +592,7 @@ def run_demo(
                         profile.add_elapsed("main.usb.send_jpeg", profile_stage)
                 else:
                     profile_stage = time.perf_counter()
-                    png = renderer.render_to_png_bytes(state)
+                    png = renderer.render_to_png_bytes(state, portrait_upload=True)
                     profile.add_elapsed("main.usb.render_png_total", profile_stage)
                     profile_stage = time.perf_counter()
                     usb_display.send_png(png)
