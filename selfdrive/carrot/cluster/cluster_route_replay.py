@@ -396,15 +396,44 @@ class RouteReplaySource:
             else playback_seconds
         )
         shown_time = clamp(shown_time, 0.0, self.duration)
+        frame = self._status_frame_at(shown_time)
+        radar_count = len(frame.radar_points) if frame is not None else 0
+        rear_radar_count = (
+            sum(1 for point in frame.radar_points if point.longitudinal_m < 0.0)
+            if frame is not None
+            else 0
+        )
+        detected_count = len(frame.detected_vehicles) if frame is not None else 0
+        rear_detected_count = (
+            sum(1 for vehicle in frame.detected_vehicles if vehicle.longitudinal_m < 0.0)
+            if frame is not None
+            else 0
+        )
         file_count = len(self.source_files)
         return (
             f"route t={shown_time:6.1f}/{self.duration:6.1f}s "
-            f"files={self._loaded_file_count}/{file_count}"
+            f"files={self._loaded_file_count}/{file_count} "
+            f"radar={radar_count}/rear{rear_radar_count} "
+            f"detected={detected_count}/rear{rear_detected_count}"
         )
 
     @property
     def loaded_file_count(self) -> int:
         return self._loaded_file_count
+
+    def _status_frame_at(self, playback_seconds: float) -> RouteReplayFrame | None:
+        if not self.frames:
+            return None
+        if playback_seconds <= self.times[0]:
+            return self.frames[0]
+        right_index = bisect_right(self.times, playback_seconds)
+        if right_index >= len(self.frames):
+            return self.frames[-1]
+        left = self.frames[right_index - 1]
+        right = self.frames[right_index]
+        span = max(0.001, right.t - left.t)
+        amount = clamp((playback_seconds - left.t) / span, 0.0, 1.0)
+        return blend_frames(left, right, amount)
 
     def _ensure_loaded(self, playback_seconds: float) -> None:
         if self.frames and playback_seconds < self.frames[0].t and not self._end_of_route:
