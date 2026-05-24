@@ -240,21 +240,6 @@ def vehicle_speed_label(vehicle: VehicleBox) -> str:
     return f"{vehicle.absolute_speed_kph:.0f} km/h"
 
 
-def vehicle_status_label(vehicle: VehicleBox) -> str:
-    parts = [vehicle_speed_label(vehicle)]
-    if vehicle.ttc_s is not None and vehicle.ttc_s < 9.9:
-        parts.append(f"TTC {vehicle.ttc_s:.1f}s")
-    elif vehicle.cut_in:
-        parts.append("CUT-IN")
-    elif vehicle.acceleration_mps2 is not None and abs(vehicle.acceleration_mps2) > 0.2:
-        parts.append(f"a {vehicle.acceleration_mps2:+.1f}")
-    elif vehicle.relative_speed_mps is not None:
-        parts.append(f"rel {vehicle.relative_speed_mps:+.1f}")
-    elif vehicle.confidence < 0.995:
-        parts.append(f"{vehicle.confidence:.0%}")
-    return "  ".join(parts)
-
-
 def vec3(point: Vec3) -> rl.Vector3:
     return rl.Vector3(point.x, point.y, point.z)
 
@@ -1046,25 +1031,22 @@ class ClusterUiRenderer:
             if screen is None:
                 continue
 
-            text = f"{vehicle.label} {vehicle_distance_label(vehicle)}"
-            sub = vehicle_status_label(vehicle)
-            color = RED if vehicle.ttc_s is not None and vehicle.ttc_s < 3.0 else AMBER if vehicle.cut_in else BLUE if vehicle.confidence >= 0.55 else MUTED
-            bg = (254, 250, 238) if vehicle.cut_in else (246, 249, 252)
-            border = AMBER if vehicle.cut_in else FAINT
+            distance = vehicle_distance_label(vehicle)
+            speed = vehicle_speed_label(vehicle)
             font = self._font or rl.get_font_default()
             width = max(
-                96,
+                62,
                 int(
                     max(
-                        rl.measure_text_ex(font, text, 15, 1).x,
-                        rl.measure_text_ex(font, sub, 12, 1).x,
+                        rl.measure_text_ex(font, distance, 15, 1).x,
+                        rl.measure_text_ex(font, speed, 13, 1).x,
                     )
                 )
-                + 22,
+                + 14,
             )
-            height = 44
+            height = 36
             x = screen.x - width * 0.5
-            y = screen.y - height * 0.5
+            y = screen.y - height - 4
             rect_tuple = (x, y, width, height)
             label_bounds = self._world_label_bounds(left=430, top=58, right=40, bottom=28)
             if not label_rect_inside_bounds(rect_tuple, label_bounds):
@@ -1082,11 +1064,12 @@ class ClusterUiRenderer:
                 else:
                     continue
             occupied.append(rect_tuple)
-            rect = rl.Rectangle(x, y, width, height)
-            rl.draw_rectangle_rounded(rect, 0.18, 8, rl_color(bg, int(178 + 62 * vehicle.confidence)))
-            rl.draw_rectangle_rounded_lines_ex(rect, 0.18, 8, 1.4, rl_color(border, int(130 + 80 * vehicle.confidence)))
-            self._draw_text(text, x + width * 0.5, y + 14, 15, TEXT, anchor="center")
-            self._draw_text(sub, x + width * 0.5, y + 32, 12, color, anchor="center")
+            center_x = x + width * 0.5
+            shadow = (245, 248, 252)
+            self._draw_text(distance, center_x + 1, y + 10 + 1, 15, shadow, anchor="center")
+            self._draw_text(distance, center_x, y + 10, 15, TEXT, anchor="center")
+            self._draw_text(speed, center_x + 1, y + 27 + 1, 13, shadow, anchor="center")
+            self._draw_text(speed, center_x, y + 27, 13, TEXT, anchor="center")
 
     def _world_label_bounds(
         self,
