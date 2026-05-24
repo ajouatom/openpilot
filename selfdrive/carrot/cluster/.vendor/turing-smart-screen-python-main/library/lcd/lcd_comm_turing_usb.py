@@ -590,19 +590,18 @@ def send_refresh_storage_command(dev):
     print(f"  Card Valid = {valid}")
 
 
-def send_save_settings_command(dev, brightness=0, startup=0, reserved=0, rotation=0, sleep=0, offline=0):
+def send_save_settings_command(dev, brightness=0, startup=0, reserved=0, sleep=0, offline=0):
     print("Sending Save Settings Command (ID 125)...")
     print(f"  Brightness:     {brightness}")
     print(f"  Startup Mode:   {startup}")
     print(f"  Reserved:       {reserved}")
-    print(f"  Rotation:       {rotation}")
     print(f"  Sleep Timeout:  {sleep}")
     print(f"  Offline Mode:   {offline}")
     cmd_packet = build_command_packet_header(125)
     cmd_packet[8] = brightness
     cmd_packet[9] = startup
     cmd_packet[10] = reserved
-    cmd_packet[11] = rotation
+    cmd_packet[11] = 0
     cmd_packet[12] = sleep
     cmd_packet[13] = offline
     return write_to_device(dev, encrypt_command_packet(cmd_packet))
@@ -989,15 +988,5 @@ class LcdCommTuringUSB(LcdComm):
         # Paste new image over existing screen state
         self.current_state.paste(image, (x, y))
 
-        # Rotate image before sending to screen: all images sent to the screen are in portrait mode
-        if self.orientation == Orientation.LANDSCAPE:
-            base_image = self.current_state.transpose(Image.Transpose.ROTATE_270)
-        elif self.orientation == Orientation.REVERSE_LANDSCAPE:
-            base_image = self.current_state.transpose(Image.Transpose.ROTATE_90)
-        elif self.orientation == Orientation.PORTRAIT:
-            base_image = self.current_state.transpose(Image.Transpose.ROTATE_180)
-        else:  # Orientation.REVERSE_PORTRAIT is initial screen orientation
-            base_image = self.current_state
-
         # Send image data (auto JPEG fallback when payload exceeds device limit)
-        send_pil_image_auto(self.dev, base_image, max_bytes=MAX_IMAGE_PAYLOAD_DEFAULT)
+        send_pil_image_auto(self.dev, self.current_state, max_bytes=MAX_IMAGE_PAYLOAD_DEFAULT)

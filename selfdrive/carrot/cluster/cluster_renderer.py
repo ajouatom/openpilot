@@ -324,7 +324,6 @@ class ClusterUiRenderer:
         self._owns_font = False
         self._accel_text_width = 0.0
         self._capture_target = None
-        self._rotated_capture_target = None
         self._aa_source_target = None
         self._fxaa_shader = None
         self._fxaa_resolution_loc = -1
@@ -398,9 +397,6 @@ class ClusterUiRenderer:
         if self._capture_target is not None:
             rl.unload_render_texture(self._capture_target)
             self._capture_target = None
-        if self._rotated_capture_target is not None:
-            rl.unload_render_texture(self._rotated_capture_target)
-            self._rotated_capture_target = None
         if self._fxaa_shader is not None:
             rl.unload_shader(self._fxaa_shader)
             self._fxaa_shader = None
@@ -490,9 +486,9 @@ class ClusterUiRenderer:
         finally:
             rl.unload_image(image)
 
-    def render_to_png_bytes(self, state: ClusterUiState, rotate_clockwise: bool = False) -> bytes:
+    def render_to_png_bytes(self, state: ClusterUiState) -> bytes:
         profile_stage = self._profile_start()
-        image = self._render_to_image(state, rotate_clockwise=rotate_clockwise)
+        image = self._render_to_image(state)
         self._profile_add("render_to_png.render_to_image", profile_stage)
         try:
             size = rl.ffi.new("int *")
@@ -510,13 +506,9 @@ class ClusterUiRenderer:
             rl.unload_image(image)
             self._profile_add("render_to_png.unload_image", profile_stage)
 
-    def render_to_rgba_bytes(
-        self,
-        state: ClusterUiState,
-        rotate_clockwise: bool = False,
-    ) -> tuple[bytes, int, int]:
+    def render_to_rgba_bytes(self, state: ClusterUiState) -> tuple[bytes, int, int]:
         profile_stage = self._profile_start()
-        image = self._render_to_image(state, rotate_clockwise=rotate_clockwise)
+        image = self._render_to_image(state)
         self._profile_add("render_to_rgba.render_to_image", profile_stage)
 
         try:
@@ -535,7 +527,7 @@ class ClusterUiRenderer:
             rl.unload_image(image)
             self._profile_add("render_to_rgba.unload_image", profile_stage)
 
-    def _render_to_image(self, state: ClusterUiState, rotate_clockwise: bool = False):
+    def _render_to_image(self, state: ClusterUiState):
         self.open(hidden=self.hidden)
         profile_stage = self._profile_start()
         target = self._get_capture_target()
@@ -563,54 +555,13 @@ class ClusterUiRenderer:
             rl.end_texture_mode()
             self._profile_add("render_to_image.draw_fxaa_target", profile_stage)
 
-        if rotate_clockwise:
-            profile_stage = self._profile_start()
-            rotated_target = self._get_rotated_capture_target()
-            self._profile_add("render_to_image.get_rotated_target", profile_stage)
+        profile_stage = self._profile_start()
+        image = rl.load_image_from_texture(target.texture)
+        self._profile_add("render_to_image.readback_texture", profile_stage)
 
-            profile_stage = self._profile_start()
-            rl.begin_texture_mode(rotated_target)
-            rl.clear_background(rl_color(BG))
-
-            # Draw pre-flipped into the rotated render target so the subsequent
-            # texture readback already has the same orientation as the old
-            # readback+image_flip_vertical path.
-            source = rl.Rectangle(
-                0.0,
-                0.0,
-                float(target.texture.width),
-                float(target.texture.height),
-            )
-            dest = rl.Rectangle(
-                0.0,
-                float(self.width),
-                float(self.width),
-                float(self.height),
-            )
-            origin = rl.Vector2(0.0, 0.0)
-
-            rl.draw_texture_pro(
-                target.texture,
-                source,
-                dest,
-                origin,
-                -90.0,
-                rl_color(WHITE),
-            )
-            rl.end_texture_mode()
-            self._profile_add("render_to_image.gpu_rotate", profile_stage)
-
-            profile_stage = self._profile_start()
-            image = rl.load_image_from_texture(rotated_target.texture)
-            self._profile_add("render_to_image.readback_rotated_texture", profile_stage)
-        else:
-            profile_stage = self._profile_start()
-            image = rl.load_image_from_texture(target.texture)
-            self._profile_add("render_to_image.readback_texture", profile_stage)
-
-            profile_stage = self._profile_start()
-            rl.image_flip_vertical(image)
-            self._profile_add("render_to_image.flip_vertical", profile_stage)
+        profile_stage = self._profile_start()
+        rl.image_flip_vertical(image)
+        self._profile_add("render_to_image.flip_vertical", profile_stage)
 
         return image
 
@@ -623,16 +574,6 @@ class ClusterUiRenderer:
             rl.set_texture_filter(self._capture_target.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
             self._profile_add("render_target.filter_capture", profile_stage)
         return self._capture_target
-
-    def _get_rotated_capture_target(self):
-        if self._rotated_capture_target is None:
-            profile_stage = self._profile_start()
-            self._rotated_capture_target = rl.load_render_texture(self.height, self.width)
-            self._profile_add("render_target.alloc_rotated", profile_stage)
-            profile_stage = self._profile_start()
-            rl.set_texture_filter(self._rotated_capture_target.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
-            self._profile_add("render_target.filter_rotated", profile_stage)
-        return self._rotated_capture_target
 
     def _get_aa_source_target(self):
         if self._aa_source_target is None:
