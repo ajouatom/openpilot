@@ -34,7 +34,7 @@ VIEW_ROTATION_DEADZONE = 0.08
 GAMEPAD_WARMUP_SECONDS = 0.6
 LEFT_SIGNAL_BUTTONS = (4, 9, 13)
 RIGHT_SIGNAL_BUTTONS = (5, 10, 14)
-THEME_PARAM_POLL_SECONDS = 1.0
+THEME_PARAM_POLL_SECONDS = 0.05
 
 
 class ProfileReporter:
@@ -104,6 +104,25 @@ class GcProfileHook:
         start_time = self._starts.pop(generation, None)
         if start_time is not None:
             self.profile.add(f"gc.gen{generation}", (time.perf_counter() - start_time) * 1000.0)
+
+
+class ClusterThemeParamReader:
+    def __init__(self) -> None:
+        self._params = None
+        try:
+            from openpilot.common.params import Params
+
+            self._params = Params()
+        except Exception:
+            pass
+
+    def read(self) -> str:
+        if self._params is None:
+            return "auto"
+        try:
+            return normalize_cluster_theme_mode(self._params.get_int(CLUSTER_THEME_PARAM))
+        except Exception:
+            return "auto"
 
 
 def freeze_gc_after_init(profile: ProfileReporter) -> None:
@@ -211,15 +230,6 @@ def route_overlay_for_mode(overlay: RouteOverlay | None, mode: str) -> RouteOver
     if mode == "compact":
         return replace(overlay, data_lines=overlay.data_lines[:4])
     return overlay
-
-
-def read_cluster_theme_mode_from_params() -> str:
-    try:
-        from openpilot.common.params import Params
-
-        return normalize_cluster_theme_mode(Params().get_int(CLUSTER_THEME_PARAM))
-    except Exception:
-        return "auto"
 
 
 def normalize_signed_axis(axis_value: float | int) -> float:
@@ -488,7 +498,8 @@ def run_demo(
     frame_width = width or (usb_display.landscape_width if usb_display is not None else DESIGN_WIDTH)
     frame_height = height or (usb_display.landscape_height if usb_display is not None else DESIGN_HEIGHT)
     theme_override = normalize_cluster_theme_mode(theme_mode) if theme_mode is not None else None
-    active_theme_mode = theme_override or read_cluster_theme_mode_from_params()
+    theme_param_reader = ClusterThemeParamReader() if theme_override is None else None
+    active_theme_mode = theme_override or (theme_param_reader.read() if theme_param_reader is not None else "auto")
     renderer = ClusterUiRenderer(
         frame_width,
         frame_height,
@@ -538,7 +549,9 @@ def run_demo(
 
             now = time.perf_counter()
             if theme_override is None and now >= next_theme_param_read:
-                renderer.set_theme_mode(read_cluster_theme_mode_from_params())
+                next_theme_mode = theme_param_reader.read() if theme_param_reader is not None else "auto"
+                if next_theme_mode != renderer.theme_mode:
+                    renderer.set_theme_mode(next_theme_mode)
                 next_theme_param_read = now + THEME_PARAM_POLL_SECONDS
             if duration_seconds is not None and now - start_time >= duration_seconds:
                 break
