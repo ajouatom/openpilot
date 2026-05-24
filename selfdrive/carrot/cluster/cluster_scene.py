@@ -44,7 +44,7 @@ Color = tuple[int, int, int, int]
 ProfileAdd = Callable[[str, float], None]
 PATH_BLOCKER_CLEARANCE_M = 1.25
 PATH_BLOCKER_LANE_TOLERANCE = 0.42
-RADAR_VEHICLE_MIN_VALID_COUNT = 16
+RADAR_VEHICLE_MIN_VALID_COUNT = 11
 RADAR_VEHICLE_MAX_DISTANCE_M = 150.0
 RADAR_VEHICLE_MAX_LATERAL_LANES = 2.75
 RADAR_ROAD_EDGE_HARD_CLEARANCE_M = 0.55
@@ -56,15 +56,14 @@ RADAR_EGO_MOVING_SPEED_KPH = 10.0
 RADAR_CENTER_RAW_LATERAL_LANES = 0.72
 RADAR_ADJACENT_RAW_LATERAL_LANES = 1.45
 RADAR_OUTER_RAW_LATERAL_LANES = 2.65
-RADAR_RAW_MOVING_SPEED_KPH = 12.0
-RADAR_RAW_CENTER_MIN_VALID_COUNT = 24
-RADAR_RAW_ADJACENT_MIN_VALID_COUNT = 35
-RADAR_RAW_OUTER_MIN_VALID_COUNT = 48
-RADAR_PROBABLE_VEHICLE_LATERAL_LANES = 2.55
-RADAR_VEHICLE_MIN_PROBABILITY = 0.45
+RADAR_RAW_MOVING_SPEED_KPH = 8.0
+RADAR_RAW_CENTER_MIN_VALID_COUNT = 16
+RADAR_RAW_ADJACENT_MIN_VALID_COUNT = 24
+RADAR_RAW_OUTER_MIN_VALID_COUNT = 35
+RADAR_PROBABLE_VEHICLE_LATERAL_LANES = 2.75
+RADAR_VEHICLE_MIN_PROBABILITY = 0.35
 RADAR_VEHICLE_DEDUP_LONGITUDINAL_M = 7.0
 RADAR_VEHICLE_DEDUP_LATERAL_M = 1.6
-RADAR_VEHICLE_MAX_BOXES = 12
 DETECTED_VEHICLE_MAX_RENDER_BOXES = 5
 DETECTED_VEHICLE_MAX_PATH_BLOCKERS = 10
 VEHICLE_BADGE_TTC_S = 9.9
@@ -1032,8 +1031,6 @@ def radar_vehicle_points(state: ClusterUiState, lane_width_m: float) -> tuple[Ra
         if any(radar_points_same_vehicle(point, existing) for existing in selected):
             continue
         selected.append(point)
-        if len(selected) >= RADAR_VEHICLE_MAX_BOXES:
-            break
     selected.sort(key=lambda point: point.longitudinal_m)
     return tuple(selected)
 
@@ -1119,9 +1116,9 @@ def radar_point_is_moving_raw_vehicle(point: RadarPoint, state: ClusterUiState, 
     if lateral_lanes <= RADAR_CENTER_RAW_LATERAL_LANES:
         return valid_count >= RADAR_RAW_CENTER_MIN_VALID_COUNT
     if lateral_lanes <= RADAR_ADJACENT_RAW_LATERAL_LANES:
-        return valid_count >= RADAR_RAW_ADJACENT_MIN_VALID_COUNT and abs(point.relative_speed_mps or 0.0) > RADAR_STATIC_OBJECT_SPEED_MPS
+        return valid_count >= RADAR_RAW_ADJACENT_MIN_VALID_COUNT
     if lateral_lanes <= RADAR_OUTER_RAW_LATERAL_LANES:
-        return valid_count >= RADAR_RAW_OUTER_MIN_VALID_COUNT and abs(point.relative_speed_mps or 0.0) > RADAR_STATIC_OBJECT_SPEED_MPS
+        return valid_count >= RADAR_RAW_OUTER_MIN_VALID_COUNT
     return False
 
 
@@ -1157,7 +1154,15 @@ def radar_point_is_side_static_reflection(point: RadarPoint, state: ClusterUiSta
         return False
     if abs(point.lateral_m) <= lane_width_m * RADAR_SIDE_STATIC_LATERAL_LANES:
         return False
-    return abs(point.relative_speed_mps or 0.0) <= RADAR_STATIC_OBJECT_SPEED_MPS
+    if abs(point.relative_speed_mps or 0.0) > RADAR_STATIC_OBJECT_SPEED_MPS:
+        return False
+    lateral_lanes = abs(point.lateral_m) / max(0.1, lane_width_m)
+    valid_count = point.valid_count if point.valid_count is not None else 0
+    if lateral_lanes <= RADAR_ADJACENT_RAW_LATERAL_LANES and valid_count >= RADAR_RAW_ADJACENT_MIN_VALID_COUNT:
+        return False
+    if lateral_lanes <= RADAR_OUTER_RAW_LATERAL_LANES and valid_count >= RADAR_RAW_OUTER_MIN_VALID_COUNT:
+        return False
+    return True
 
 
 def radar_point_matches_static_road_edge(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> bool:
@@ -1183,14 +1188,6 @@ def radar_point_road_edge_distance_m(point: RadarPoint, state: ClusterUiState, l
     for edge_offset in (state.left_road_edge_offset, state.right_road_edge_offset):
         if edge_offset is not None:
             distances.append(abs(point.lateral_m - edge_offset * lane_width_m))
-    if not distances:
-        left_offset, right_offset = road_surface_offsets(state, True)
-        distances.extend(
-            (
-                abs(point.lateral_m - left_offset * lane_width_m),
-                abs(point.lateral_m - right_offset * lane_width_m),
-            )
-        )
     return min(distances) if distances else None
 
 
