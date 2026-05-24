@@ -35,6 +35,14 @@ OPENPILOT_FONT_DIR = SELFDRIVE_DIR / "assets" / "fonts"
 JETBRAINS_MONO_FONT_PATH = OPENPILOT_FONT_DIR / "JetBrainsMono-Medium.ttf"
 VEHICLE_MODEL_PATH = CLUSTER_DIR / "assets" / "models" / "cybertruck" / "cybertruck_cluster.obj"
 ACCEL_TEXT_WIDTH_SAMPLES = ("+00.0", "-00.0")
+TURN_SIGNAL_LEFT_CENTER_X = 610
+TURN_SIGNAL_RIGHT_CENTER_X = 1310
+TURN_SIGNAL_CENTER_Y = 72
+TURN_SIGNAL_MID_CENTER_X = (TURN_SIGNAL_LEFT_CENTER_X + TURN_SIGNAL_RIGHT_CENTER_X) * 0.5
+SPEED_LIMIT_SIGN_CENTER_X = 760
+SPEED_LIMIT_SIGN_CENTER_Y = TURN_SIGNAL_CENTER_Y
+CRUISE_SET_CENTER_X = TURN_SIGNAL_MID_CENTER_X
+CRUISE_SET_CENTER_Y = TURN_SIGNAL_CENTER_Y
 VEHICLE_MATERIAL_COLORS: dict[str, tuple[int, int, int, int]] = {
     "body": (156, 166, 172, 255),
     "wheel": (18, 20, 22, 255),
@@ -1088,7 +1096,7 @@ class ClusterUiRenderer:
             self._profile_add("hud.pop_matrix", profile_stage)
 
     def _draw_center_clock(self, state: ClusterUiState) -> None:
-        if not state.center_clock_text:
+        if not state.center_clock_text or state.cruise_kph is not None:
             return
 
         text = state.center_clock_text
@@ -1195,15 +1203,47 @@ class ClusterUiRenderer:
         self._draw_text(str(speed_value), 260, 230, 156, TEXT, anchor="center")
 
         if state.speed_limit_kph is not None:
-            center = rl.Vector2(130, 360)
+            center = rl.Vector2(SPEED_LIMIT_SIGN_CENTER_X, SPEED_LIMIT_SIGN_CENTER_Y)
             rl.draw_circle_v(center, 56, rl_color(RED))
             rl.draw_circle_v(center, 47, rl_color(WHITE))
-            self._draw_text(str(state.speed_limit_kph), 130, 359, 42, TEXT, anchor="center")
+            self._draw_text(
+                str(state.speed_limit_kph),
+                SPEED_LIMIT_SIGN_CENTER_X,
+                SPEED_LIMIT_SIGN_CENTER_Y - 1,
+                42,
+                TEXT,
+                anchor="center",
+            )
 
         if state.cruise_kph is not None:
-            self._rounded_rect(224, 320, 130, 84, 18, (232, 241, 255), BLUE_SOFT, 2)
-            self._draw_text(str(state.cruise_kph), 289, 348, 40, BLUE, anchor="center")
-            self._draw_text("SET", 289, 381, 18, BLUE, anchor="center")
+            cruise_w = 130
+            cruise_h = 84
+            self._rounded_rect(
+                CRUISE_SET_CENTER_X - cruise_w * 0.5,
+                CRUISE_SET_CENTER_Y - cruise_h * 0.5,
+                cruise_w,
+                cruise_h,
+                18,
+                (232, 241, 255),
+                BLUE_SOFT,
+                2,
+            )
+            self._draw_text(
+                str(state.cruise_kph),
+                CRUISE_SET_CENTER_X,
+                CRUISE_SET_CENTER_Y - 12,
+                40,
+                BLUE,
+                anchor="center",
+            )
+            self._draw_text(
+                "SET",
+                CRUISE_SET_CENTER_X,
+                CRUISE_SET_CENTER_Y + 21,
+                18,
+                BLUE,
+                anchor="center",
+            )
 
     def _draw_accel_block(self, state: ClusterUiState) -> None:
         top = 80
@@ -1353,8 +1393,8 @@ class ClusterUiRenderer:
         return blink_visible(now, started_at, float("inf"))
 
     def _draw_turn_signal(self, side: str, lit: bool) -> None:
-        cx = 610 if side == "left" else 1310
-        cy = 72
+        cx = TURN_SIGNAL_LEFT_CENTER_X if side == "left" else TURN_SIGNAL_RIGHT_CENTER_X
+        cy = TURN_SIGNAL_CENTER_Y
         direction = -1 if side == "left" else 1
         fill = GREEN if lit else (195, 202, 209, 92)
         outline = (8, 118, 65) if lit else (168, 176, 184)
