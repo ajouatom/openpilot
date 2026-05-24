@@ -552,7 +552,7 @@ class ClusterUiRenderer:
             rl.set_texture_filter(self._capture_target.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
             self._profile_add("render_target.filter_capture", profile_stage)
         return self._capture_target
-      
+
     def _get_rotated_capture_target(self):
         if self._rotated_capture_target is None:
             profile_stage = self._profile_start()
@@ -562,7 +562,7 @@ class ClusterUiRenderer:
             rl.set_texture_filter(self._rotated_capture_target.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
             self._profile_add("render_target.filter_rotated", profile_stage)
         return self._rotated_capture_target
-      
+
     def _get_aa_source_target(self):
         if self._aa_source_target is None:
             profile_stage = self._profile_start()
@@ -1119,7 +1119,7 @@ class ClusterUiRenderer:
         rl.draw_rectangle_rounded(rect, 0.28, 12, rl_color((8, 10, 12, 150)))
         rl.draw_rectangle_rounded_lines_ex(rect, 0.28, 12, 2.0, rl_color((255, 255, 255, 72)))
         self._draw_text(text, x, y, size, WHITE, anchor="center")
-  
+
     def _draw_route_overlay(self, overlay: RouteOverlay | None) -> None:
         if overlay is None:
             return
@@ -1217,10 +1217,10 @@ class ClusterUiRenderer:
 
         if state.cruise_kph is not None:
             self._draw_text(
-                f"SET {state.cruise_kph:03d}",
+                f"SET{state.cruise_kph:d}",
                 CRUISE_SET_CENTER_X,
                 CRUISE_SET_CENTER_Y,
-                40,
+                60,
                 BLUE,
                 anchor="center",
             )
