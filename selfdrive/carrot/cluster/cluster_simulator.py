@@ -78,6 +78,7 @@ class ClusterSimulator:
             steering=self.steering,
             speed_limit_kph=speed_limit_kph,
             cruise_kph=cruise_kph,
+            cruise_display_state="engaged",
             left_signal=left_signal,
             right_signal=right_signal,
             lane_change=self.lane_change_direction,

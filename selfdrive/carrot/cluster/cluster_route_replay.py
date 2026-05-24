@@ -25,6 +25,7 @@ from cluster_config import (
 )
 from cluster_models import (
     ClusterUiState,
+    CruiseDisplayState,
     DetectedVehicle,
     LaneMarking,
     LeadTrajectoryPoint,
@@ -58,6 +59,7 @@ class RouteReplayFrame:
     steering_angle_deg: float | None
     speed_limit_kph: int | None
     cruise_kph: int | None
+    cruise_display_state: CruiseDisplayState
     left_signal: bool
     right_signal: bool
     lane_width_m: float
@@ -523,6 +525,7 @@ class RouteLogParser:
         self.speed_limit_kph: int | None = None
         self.nav_speed_limit_kph: int | None = None
         self.cruise_kph: int | None = None
+        self.controls_enabled: bool | None = None
         self.lane_width_m = DEFAULT_LANE_WIDTH_M
         self.left_lane_y_m: float | None = None
         self.right_lane_y_m: float | None = None
@@ -675,6 +678,7 @@ class RouteLogParser:
             )
 
         self.cruise_kph = self._cruise_kph_from_car_state(car_state)
+        cruise_display_state = self._cruise_display_state_from_car_state(car_state, self.cruise_kph)
 
         car_speed_limit_kph = self._speed_limit_kph_from_car_state(car_state)
         self.speed_limit_kph = car_speed_limit_kph if car_speed_limit_kph is not None else self.nav_speed_limit_kph
@@ -699,6 +703,7 @@ class RouteLogParser:
             steering_angle_deg=steering_angle_deg,
             speed_limit_kph=self.speed_limit_kph,
             cruise_kph=self.cruise_kph,
+            cruise_display_state=cruise_display_state,
             left_signal=left_signal,
             right_signal=right_signal,
             lane_width_m=lane_values["width"],
@@ -969,6 +974,10 @@ class RouteLogParser:
         self.road_transform_std = three_float_tuple(safe_get(camera_odometry, "roadTransformTransStd"))
 
     def _update_controls_state(self, controls_state: Any) -> None:
+        enabled = safe_get(controls_state, "enabled", None)
+        if enabled is not None:
+            self.controls_enabled = bool(enabled)
+
         desired_curvature = safe_optional_float(controls_state, "desiredCurvature")
         if desired_curvature is not None and abs(desired_curvature) < 0.05:
             self.controls_curvature_m_inv = desired_curvature
@@ -1170,15 +1179,36 @@ class RouteLogParser:
         if cruise_state is not None and safe_get(cruise_state, "available", True) is False:
             return None
 
-        v_cruise = safe_float(car_state, "vCruise", 0.0)
-        if 0.0 < v_cruise < 250.0:
-            return int(round(v_cruise))
+        for name in ("vCruiseCluster", "vCruise"):
+            v_cruise = safe_float(car_state, name, 0.0)
+            if 0.0 < v_cruise < 250.0:
+                return int(round(v_cruise))
 
         if cruise_state is not None:
+            speed_cluster_mps = safe_float(cruise_state, "speedCluster", 0.0)
+            if 0.1 < speed_cluster_mps < 70.0:
+                return int(round(speed_cluster_mps * 3.6))
+
             speed_mps = safe_float(cruise_state, "speed", 0.0)
-            if speed_mps > 0.1:
+            if 0.1 < speed_mps < 70.0:
                 return int(round(speed_mps * 3.6))
         return None
+
+    def _cruise_display_state_from_car_state(
+        self,
+        car_state: Any,
+        cruise_kph: int | None,
+    ) -> CruiseDisplayState:
+        if cruise_kph is None:
+            return "off"
+
+        if self.controls_enabled is not None:
+            return "engaged" if self.controls_enabled else "paused"
+
+        cruise_state = safe_get(car_state, "cruiseState")
+        if cruise_state is not None and bool(safe_get(cruise_state, "enabled", False)):
+            return "engaged"
+        return "paused"
 
     def _speed_limit_kph_from_car_state(self, car_state: Any) -> int | None:
         speed_limit = safe_float(car_state, "speedLimit", 0.0)
@@ -1397,6 +1427,7 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         steering=frame.steering,
         speed_limit_kph=frame.speed_limit_kph,
         cruise_kph=frame.cruise_kph,
+        cruise_display_state=frame.cruise_display_state,
         left_signal=frame.left_signal,
         right_signal=frame.right_signal,
         lane_change=frame.lane_change,
@@ -1530,6 +1561,7 @@ def blend_frames(left: RouteReplayFrame, right: RouteReplayFrame, amount: float)
         steering_angle_deg=lerp_optional(left.steering_angle_deg, right.steering_angle_deg),
         speed_limit_kph=discrete.speed_limit_kph,
         cruise_kph=discrete.cruise_kph,
+        cruise_display_state=discrete.cruise_display_state,
         left_signal=discrete.left_signal,
         right_signal=discrete.right_signal,
         lane_width_m=lerp(left.lane_width_m, right.lane_width_m),

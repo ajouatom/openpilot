@@ -1096,7 +1096,7 @@ class ClusterUiRenderer:
             self._profile_add("hud.pop_matrix", profile_stage)
 
     def _draw_center_clock(self, state: ClusterUiState) -> None:
-        if not state.center_clock_text or state.cruise_kph is not None:
+        if not state.center_clock_text or self._cruise_set_visible(state):
             return
 
         text = state.center_clock_text
@@ -1215,15 +1215,27 @@ class ClusterUiRenderer:
                 anchor="center",
             )
 
-        if state.cruise_kph is not None:
+        if self._cruise_set_visible(state):
             self._draw_text(
-                f"SET{state.cruise_kph:d}",
+                f"SET {state.cruise_kph:3d}",
                 CRUISE_SET_CENTER_X,
                 CRUISE_SET_CENTER_Y,
                 60,
-                BLUE,
+                self._cruise_set_color(state),
                 anchor="center",
             )
+
+    @staticmethod
+    def _cruise_set_visible(state: ClusterUiState) -> bool:
+        return state.cruise_kph is not None and state.cruise_display_state != "off"
+
+    @staticmethod
+    def _cruise_set_color(state: ClusterUiState) -> tuple[int, int, int]:
+        if state.cruise_display_state == "paused":
+            return MUTED
+        if state.speed_limit_kph is not None and state.cruise_kph == state.speed_limit_kph:
+            return GREEN
+        return WHITE
 
     def _draw_accel_block(self, state: ClusterUiState) -> None:
         top = 80

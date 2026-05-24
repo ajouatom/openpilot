@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from cluster_config import DEFAULT_LANE_WIDTH_M, WHITE
+
+CruiseDisplayState = Literal["off", "paused", "engaged"]
 
 
 @dataclass(frozen=True)
@@ -115,6 +118,7 @@ class ClusterUiState:
     steering: float
     speed_limit_kph: int | None
     cruise_kph: int | None
+    cruise_display_state: CruiseDisplayState
     left_signal: bool
     right_signal: bool
     lane_change: str | None
