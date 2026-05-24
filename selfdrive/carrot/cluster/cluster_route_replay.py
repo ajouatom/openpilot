@@ -49,6 +49,8 @@ LOG_FILENAMES = {
 RADAR_TO_CAMERA_M = 1.52
 MODEL_LEAD_MIN_PROB = 0.08
 RADAR_POINT_STALE_S = 0.12
+RADAR_REAR_MIN_LONGITUDINAL_M = -80.0
+RADAR_FRONT_MAX_LONGITUDINAL_M = 180.0
 ROUTE_REPLAY_MIN_BUFFER_FILES = 2
 ROUTE_REPLAY_READAHEAD_S = 5.0
 ROUTE_REPLAY_RETAIN_BEHIND_S = 1.0
@@ -1198,7 +1200,7 @@ class RouteLogParser:
             if lead is None or not bool(safe_get(lead, "status", False)):
                 continue
             d_rel = safe_float(lead, "dRel", 0.0)
-            if not 0.2 < d_rel < 180.0:
+            if not RADAR_REAR_MIN_LONGITUDINAL_M <= d_rel <= RADAR_FRONT_MAX_LONGITUDINAL_M:
                 continue
             # openpilot yRel is left-positive; this renderer uses right-positive x.
             lateral_m = -safe_float(lead, "yRel", 0.0)
@@ -2181,7 +2183,7 @@ def lead_trajectory_points(lead: Any) -> tuple[LeadTrajectoryPoint, ...]:
 
 
 def ttc_from_relative_speed(longitudinal_m: float, relative_speed_mps: float | None) -> float | None:
-    if relative_speed_mps is None or relative_speed_mps >= -0.15:
+    if longitudinal_m <= 0.0 or relative_speed_mps is None or relative_speed_mps >= -0.15:
         return None
     ttc_s = longitudinal_m / max(0.15, -relative_speed_mps)
     return clamp(ttc_s, 0.0, 99.0)
@@ -2403,7 +2405,7 @@ def renderer_lateral_from_openpilot_yrel(y_rel: float) -> float:
 
 def live_track_to_radar_point(track: Any, index: int, ego_speed_kph: float) -> RadarPoint | None:
     d_rel = safe_optional_float(track, "dRel")
-    if d_rel is None or not 0.2 < d_rel < 180.0:
+    if d_rel is None or not RADAR_REAR_MIN_LONGITUDINAL_M <= d_rel <= RADAR_FRONT_MAX_LONGITUDINAL_M:
         return None
     y_rel = safe_float(track, "yRel", 0.0)
     lateral_m = renderer_lateral_from_openpilot_yrel(y_rel)
@@ -2440,7 +2442,8 @@ def sorted_radar_points(points: Any) -> tuple[RadarPoint, ...]:
     filtered = [
         point
         for point in points
-        if -12.0 <= point.lateral_m <= 12.0 and -10.0 <= point.longitudinal_m <= 180.0
+        if -12.0 <= point.lateral_m <= 12.0
+        and RADAR_REAR_MIN_LONGITUDINAL_M <= point.longitudinal_m <= RADAR_FRONT_MAX_LONGITUDINAL_M
     ]
     filtered.sort(key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label))
     return tuple(filtered[:48])
