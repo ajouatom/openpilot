@@ -1793,15 +1793,14 @@ def route_lane_animation_values(
         return 0.0, 0.0, 0.0, highlight_lane_offset, True
 
     if frame.lane_change_phase == "changing":
-        lane_grid_offset = -direction_sign * smoothstep(frame.lane_change_progress)
-        highlight_lane_offset = lane_grid_offset + direction_sign
-        return 0.0, lane_grid_offset, lane_grid_offset, highlight_lane_offset, True
+        ego_lane_offset = direction_sign * smoothstep(frame.lane_change_progress)
+        return ego_lane_offset, 0.0, 0.0, highlight_lane_offset, True
 
     if frame.lane_change_phase == "recentering":
         recenter_blend = smoothstep(frame.lane_change_progress)
-        start_grid_offset = -direction_sign * smoothstep(frame.lane_change_recenter_start_progress)
-        lane_grid_offset = start_grid_offset * (1.0 - recenter_blend)
-        ego_lane_offset = observed_ego_lane_offset * recenter_blend
+        start_ego_offset = direction_sign * smoothstep(frame.lane_change_recenter_start_progress)
+        lane_grid_offset = -direction_sign * recenter_blend
+        ego_lane_offset = start_ego_offset * (1.0 - recenter_blend) + observed_ego_lane_offset * recenter_blend
         return ego_lane_offset, lane_grid_offset, lane_grid_offset, None, True
 
     return observed_ego_lane_offset, 0.0, 0.0, None, False
