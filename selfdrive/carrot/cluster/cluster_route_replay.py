@@ -49,7 +49,7 @@ LOG_FILENAMES = {
 RADAR_TO_CAMERA_M = 1.52
 MODEL_LEAD_MIN_PROB = 0.08
 RADAR_POINT_STALE_S = 0.12
-RADAR_REAR_MIN_LONGITUDINAL_M = -80.0
+RADAR_MIN_LONGITUDINAL_M = 0.0
 RADAR_FRONT_MAX_LONGITUDINAL_M = 180.0
 ROUTE_REPLAY_MIN_BUFFER_FILES = 2
 ROUTE_REPLAY_READAHEAD_S = 5.0
@@ -398,23 +398,13 @@ class RouteReplaySource:
         shown_time = clamp(shown_time, 0.0, self.duration)
         frame = self._status_frame_at(shown_time)
         radar_count = len(frame.radar_points) if frame is not None else 0
-        rear_radar_count = (
-            sum(1 for point in frame.radar_points if point.longitudinal_m < 0.0)
-            if frame is not None
-            else 0
-        )
         detected_count = len(frame.detected_vehicles) if frame is not None else 0
-        rear_detected_count = (
-            sum(1 for vehicle in frame.detected_vehicles if vehicle.longitudinal_m < 0.0)
-            if frame is not None
-            else 0
-        )
         file_count = len(self.source_files)
         return (
             f"route t={shown_time:6.1f}/{self.duration:6.1f}s "
             f"files={self._loaded_file_count}/{file_count} "
-            f"radar={radar_count}/rear{rear_radar_count} "
-            f"detected={detected_count}/rear{rear_detected_count}"
+            f"radar={radar_count} "
+            f"detected={detected_count}"
         )
 
     @property
@@ -844,8 +834,6 @@ class RouteLogParser:
         self.lane_change_recenter_started_t: float | None = None
         self.corner_detections: dict[str, DetectedVehicle] = {}
         self.corner_detection_t = -999.0
-        self.corner_radar_points: dict[str, RadarPoint] = {}
-        self.corner_radar_point_t = -999.0
         self.hyundai_canfd_radar_points: dict[str, RadarPoint] = {}
         self.hyundai_canfd_radar_history: dict[str, tuple[float, float]] = {}
         self.hyundai_canfd_radar_t = -999.0
@@ -1231,7 +1219,7 @@ class RouteLogParser:
             if lead is None or not bool(safe_get(lead, "status", False)):
                 continue
             d_rel = safe_float(lead, "dRel", 0.0)
-            if not RADAR_REAR_MIN_LONGITUDINAL_M <= d_rel <= RADAR_FRONT_MAX_LONGITUDINAL_M:
+            if not RADAR_MIN_LONGITUDINAL_M <= d_rel <= RADAR_FRONT_MAX_LONGITUDINAL_M:
                 continue
             # openpilot yRel is left-positive; this renderer uses right-positive x.
             lateral_m = -safe_float(lead, "yRel", 0.0)
@@ -1281,12 +1269,6 @@ class RouteLogParser:
                 continue
             if len(data) < 24:
                 continue
-            raw_points = parse_corner_radar_points(address, data)
-            for label in corner_radar_labels():
-                self.corner_radar_points.pop(label, None)
-            for point in raw_points:
-                self.corner_radar_points[point.label] = point
-            self.corner_radar_point_t = event_t
             parsed = parse_corner_radar_message(address, data)
             if parsed:
                 self.corner_detections = parsed
@@ -1310,8 +1292,6 @@ class RouteLogParser:
             points.extend(self.hyundai_canfd_radar_points.values())
         elif event_t - self.live_track_radar_t < RADAR_POINT_STALE_S:
             points.extend(self.live_track_radar_points.values())
-        if event_t - self.corner_radar_point_t < RADAR_POINT_STALE_S:
-            points.extend(self.corner_radar_points.values())
         return sorted_radar_points(points)
 
     def _radar_point_with_absolute_speed(self, point: RadarPoint, event_t: float) -> RadarPoint:
@@ -2323,10 +2303,6 @@ def corner_radar_specs(address: int) -> dict[str, tuple[str, int, int, str, int,
     }
 
 
-def corner_radar_labels() -> tuple[str, ...]:
-    return ("LF", "RF", "LR", "RR")
-
-
 def parse_corner_radar_message(address: int, data: bytes) -> dict[str, DetectedVehicle]:
     specs = corner_radar_specs(address)
     detections: dict[str, DetectedVehicle] = {}
@@ -2336,6 +2312,9 @@ def parse_corner_radar_message(address: int, data: bytes) -> dict[str, DetectedV
         distance_m = dbc_unsigned(data, dist_start, dist_len, dist_order) * 0.1
         if detect == 0 or not 0.2 < distance_m < 180.0:
             continue
+        longitudinal_m = forward_sign * distance_m
+        if not RADAR_MIN_LONGITUDINAL_M <= longitudinal_m <= RADAR_FRONT_MAX_LONGITUDINAL_M:
+            continue
         lateral_mag = normalized_lateral_m(dbc_unsigned(data, lat_start, lat_len, lat_order) * 0.1)
         side = -1.0 if label.endswith("F") and label.startswith("L") else 1.0
         if label.startswith("L"):
@@ -2344,34 +2323,11 @@ def parse_corner_radar_message(address: int, data: bytes) -> dict[str, DetectedV
             side = 1.0
         detections[label] = DetectedVehicle(
             label=label,
-            longitudinal_m=forward_sign * distance_m,
+            longitudinal_m=longitudinal_m,
             lateral_m=side * lateral_mag,
             source=f"CAN 0x{address:x}",
         )
     return detections
-
-
-def parse_corner_radar_points(address: int, data: bytes) -> tuple[RadarPoint, ...]:
-    points: list[RadarPoint] = []
-    for label, spec in corner_radar_specs(address).items():
-        det_order, det_start, det_len, dist_order, dist_start, dist_len, lat_order, lat_start, lat_len, forward_sign = spec
-        detect = dbc_unsigned(data, det_start, det_len, det_order)
-        distance_m = dbc_unsigned(data, dist_start, dist_len, dist_order) * 0.1
-        if not 0.2 < distance_m < 180.0:
-            continue
-        lateral_mag = normalized_lateral_m(dbc_unsigned(data, lat_start, lat_len, lat_order) * 0.1)
-        side = -1.0 if label.startswith("L") else 1.0
-        points.append(
-            RadarPoint(
-                label=label,
-                longitudinal_m=forward_sign * distance_m,
-                lateral_m=side * lateral_mag,
-                source=f"cornerRaw 0x{address:x}",
-                probability=1.0 if detect > 0 else 0.12,
-                valid=1 if detect > 0 else 0,
-            )
-        )
-    return tuple(points)
 
 
 def parse_hyundai_canfd_radar_message(address: int, data: bytes) -> tuple[RadarPoint, ...]:
@@ -2474,7 +2430,7 @@ def renderer_lateral_from_openpilot_yrel(y_rel: float) -> float:
 
 def live_track_to_radar_point(track: Any, index: int, ego_speed_kph: float) -> RadarPoint | None:
     d_rel = safe_optional_float(track, "dRel")
-    if d_rel is None or not RADAR_REAR_MIN_LONGITUDINAL_M <= d_rel <= RADAR_FRONT_MAX_LONGITUDINAL_M:
+    if d_rel is None or not RADAR_MIN_LONGITUDINAL_M <= d_rel <= RADAR_FRONT_MAX_LONGITUDINAL_M:
         return None
     y_rel = safe_float(track, "yRel", 0.0)
     lateral_m = renderer_lateral_from_openpilot_yrel(y_rel)
@@ -2512,7 +2468,7 @@ def sorted_radar_points(points: Any) -> tuple[RadarPoint, ...]:
         point
         for point in points
         if -12.0 <= point.lateral_m <= 12.0
-        and RADAR_REAR_MIN_LONGITUDINAL_M <= point.longitudinal_m <= RADAR_FRONT_MAX_LONGITUDINAL_M
+        and RADAR_MIN_LONGITUDINAL_M <= point.longitudinal_m <= RADAR_FRONT_MAX_LONGITUDINAL_M
     ]
     filtered.sort(key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label))
     return tuple(filtered[:48])

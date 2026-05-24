@@ -88,20 +88,10 @@ class OpenpilotLiveSource:
         age = time.monotonic() - self.start_t
         fps = self.frames / age if age > 0.1 else 0.0
         radar_count = len(self.last_state.radar_points) if self.last_state is not None else 0
-        rear_radar_count = (
-            sum(1 for point in self.last_state.radar_points if point.longitudinal_m < 0.0)
-            if self.last_state is not None
-            else 0
-        )
         detected_count = len(self.last_state.detected_vehicles) if self.last_state is not None else 0
-        rear_detected_count = (
-            sum(1 for vehicle in self.last_state.detected_vehicles if vehicle.longitudinal_m < 0.0)
-            if self.last_state is not None
-            else 0
-        )
         return (
             f"live {can_status} alive={alive}/{len(self.services)} upd={updated} state={fps:.1f}Hz "
-            f"radar={radar_count}/rear{rear_radar_count} detected={detected_count}/rear{rear_detected_count}"
+            f"radar={radar_count} detected={detected_count}"
         )
 
     def close(self) -> None:

@@ -26,12 +26,6 @@ from cluster_ui import (
     SimulatorInput,
 )
 
-try:
-    from openpilot.common.params import Params
-except Exception:
-    Params = None  # type: ignore[assignment]
-
-
 DEFAULT_FPS = 0.0
 TRIGGER_DEADZONE = 0.03
 STEERING_DEADZONE = 0.06
@@ -39,48 +33,6 @@ VIEW_ROTATION_DEADZONE = 0.08
 GAMEPAD_WARMUP_SECONDS = 0.6
 LEFT_SIGNAL_BUTTONS = (4, 9, 13)
 RIGHT_SIGNAL_BUTTONS = (5, 10, 14)
-HUD_UI_TYPE_PARAM = "ClusterHudUiType"
-HUD_UI_TYPE_REFRESH_SECONDS = 1.0
-HUD_UI_TYPE_MIN = 0
-HUD_UI_TYPE_MAX = 1
-
-
-def normalize_hud_ui_type(value: Any) -> int:
-    try:
-        mode = int(float(value))
-    except (TypeError, ValueError):
-        return 0
-    return max(HUD_UI_TYPE_MIN, min(HUD_UI_TYPE_MAX, mode))
-
-
-class HudUiTypeSource:
-    def __init__(self, override: int | None) -> None:
-        self.override = normalize_hud_ui_type(override) if override is not None else None
-        self.params = None
-        if Params is not None and self.override is None:
-            try:
-                self.params = Params()
-            except Exception:
-                self.params = None
-        self.value = self.override if self.override is not None else 0
-        self.next_read_time = 0.0
-        self.warned = False
-
-    def read(self, now: float) -> int:
-        if self.override is not None:
-            return self.override
-        if self.params is None or now < self.next_read_time:
-            return self.value
-
-        self.next_read_time = now + HUD_UI_TYPE_REFRESH_SECONDS
-        try:
-            self.value = normalize_hud_ui_type(self.params.get_int(HUD_UI_TYPE_PARAM))
-            self.warned = False
-        except Exception as exc:
-            if not self.warned:
-                print(f"[cluster] failed to read {HUD_UI_TYPE_PARAM}: {exc}", flush=True)
-                self.warned = True
-        return self.value
 
 
 class ProfileReporter:
@@ -491,13 +443,11 @@ def run_demo(
     profile_interval_s: float,
     render_msaa: bool,
     gc_freeze_init: bool,
-    hud_ui_type_override: int | None,
 ) -> None:
     profile = ProfileReporter(profile_render, profile_interval_s)
     gc_hook = GcProfileHook(profile) if profile_render else None
     if gc_hook is not None:
         gc.callbacks.append(gc_hook)
-    hud_ui_type_source = HudUiTypeSource(hud_ui_type_override)
     usb_display: TuringUsbDisplay | None = None
     usb_pipeline: AsyncJpegUsbPipeline | None = None
     if output_mode in ("usb", "both"):
@@ -615,10 +565,6 @@ def run_demo(
                 state = simulator.update(command, dt)
                 profile.add_elapsed("source.gamepad_update", profile_stage)
 
-            hud_ui_type = hud_ui_type_source.read(now)
-            if state.hud_ui_type != hud_ui_type:
-                state = replace(state, hud_ui_type=hud_ui_type)
-
             if output_mode in ("window", "both"):
                 profile_stage = time.perf_counter()
                 renderer.render_frame(state)
@@ -683,7 +629,6 @@ def run_demo(
                     f"limit={state.speed_limit_kph} "
                     f"lane={lane_status}:{state.lane_change_progress:.2f} "
                     f"ego_offset={state.ego_lane_offset:+.2f} | "
-                    f"hud_ui={state.hud_ui_type} "
                     f"output={output_mode}/{usb_codec if usb_display else 'screen'}"
                     f"{'-fast' if usb_display and usb_fast_write else ''} "
                     f"{'async ' if usb_pipeline is not None else ''}"
@@ -734,13 +679,6 @@ def parse_args() -> argparse.Namespace:
         choices=("usb", "window", "both"),
         default="usb",
         help="Render target. usb sends frames to the TURZX USB display. Default: usb.",
-    )
-    parser.add_argument(
-        "--hud-ui-type",
-        type=int,
-        choices=(0, 1),
-        default=None,
-        help=f"Override {HUD_UI_TYPE_PARAM}. Default reads Params when available. 0=default, 1=rear-aware.",
     )
     parser.add_argument(
         "--controller-index",
@@ -951,7 +889,6 @@ def main() -> None:
             args.profile_interval,
             args.render_msaa,
             not args.no_gc_freeze,
-            args.hud_ui_type,
         )
     except KeyboardInterrupt:
         print("\nStopped.")
