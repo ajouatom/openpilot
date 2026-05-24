@@ -238,7 +238,7 @@ def vehicle_distance_label(vehicle: VehicleBox) -> str:
 
 def vehicle_speed_label(vehicle: VehicleBox) -> str:
     if vehicle.absolute_speed_kph is None:
-        return "-- km/h"
+        return ""
     return f"{vehicle.absolute_speed_kph:.0f} km/h"
 
 
@@ -1042,17 +1042,18 @@ class ClusterUiRenderer:
             distance = vehicle_distance_label(vehicle)
             speed = vehicle_speed_label(vehicle)
             font = self._font or rl.get_font_default()
+            label_height = 36 if speed else 24
             width = max(
                 62,
                 int(
                     max(
                         rl.measure_text_ex(font, distance, 15, 1).x,
-                        rl.measure_text_ex(font, speed, 13, 1).x,
+                        rl.measure_text_ex(font, speed, 13, 1).x if speed else 0,
                     )
                 )
                 + 14,
             )
-            height = 36
+            height = label_height
             x = screen.x - width * 0.5
             y = screen.y - height - 4
             rect_tuple = (x, y, width, height)
@@ -1075,10 +1076,12 @@ class ClusterUiRenderer:
             center_x = x + width * 0.5
             shadow = (245, 248, 252)
             text_color = vehicle_metric_color(vehicle)
-            self._draw_text(distance, center_x + 1, y + 10 + 1, 15, shadow, anchor="center")
-            self._draw_text(distance, center_x, y + 10, 15, text_color, anchor="center")
-            self._draw_text(speed, center_x + 1, y + 27 + 1, 13, shadow, anchor="center")
-            self._draw_text(speed, center_x, y + 27, 13, text_color, anchor="center")
+            distance_y = y + (10 if speed else 12)
+            self._draw_text(distance, center_x + 1, distance_y + 1, 15, shadow, anchor="center")
+            self._draw_text(distance, center_x, distance_y, 15, text_color, anchor="center")
+            if speed:
+                self._draw_text(speed, center_x + 1, y + 27 + 1, 13, shadow, anchor="center")
+                self._draw_text(speed, center_x, y + 27, 13, text_color, anchor="center")
 
     def _world_label_bounds(
         self,
