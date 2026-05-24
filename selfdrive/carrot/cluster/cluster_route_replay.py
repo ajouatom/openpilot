@@ -6,6 +6,7 @@ import math
 import shutil
 import subprocess
 import tempfile
+import threading
 from bisect import bisect_right
 from dataclasses import dataclass, replace
 from fractions import Fraction
@@ -172,6 +173,13 @@ class RouteReplayChunk:
     end_t: float
 
 
+@dataclass
+class RouteReplayParsedFile:
+    index: int
+    path: Path
+    frames: list[RouteReplayFrame]
+
+
 class RouteReplaySource:
     def __init__(
         self,
@@ -193,6 +201,13 @@ class RouteReplaySource:
         self._loaded_chunks: list[RouteReplayChunk] = []
         self._loaded_file_count = 0
         self._end_of_route = False
+        self._preload_lock = threading.Lock()
+        self._preload_thread: threading.Thread | None = None
+        self._preload_file_index: int | None = None
+        self._preload_file_path: Path | None = None
+        self._preload_result: RouteReplayParsedFile | None = None
+        self._preload_error: BaseException | None = None
+        self._preload_generation = 0
         self._ensure_loaded(0.0)
         if not self.frames:
             raise RuntimeError("route contains no carState frames")
@@ -249,6 +264,7 @@ class RouteReplaySource:
         return self._with_overlay(state, frame, playback_seconds, loop) if include_overlay else state
 
     def close(self) -> None:
+        self._stop_preload(wait=False)
         if self._video_reader is not None:
             self._video_reader.close()
 
@@ -282,8 +298,12 @@ class RouteReplaySource:
                 break
 
         self._trim_loaded_chunks(playback_seconds)
+        self._start_preload()
 
     def _load_next_file(self) -> bool:
+        if self._preload_thread is not None:
+            return self._finish_preload(block=True)
+
         if self._next_file_index >= len(self.source_files):
             self._end_of_route = True
             return False
@@ -292,6 +312,98 @@ class RouteReplaySource:
         file_path = self.source_files[file_index]
         self._next_file_index += 1
         parsed_frames = self._parser.parse_file(file_path, self._log_schema)
+        return self._append_parsed_file(RouteReplayParsedFile(file_index, file_path, parsed_frames))
+
+    def _start_preload(self) -> None:
+        if (
+            self._end_of_route
+            or self._preload_thread is not None
+            or self._next_file_index >= len(self.source_files)
+        ):
+            return
+
+        file_index = self._next_file_index
+        file_path = self.source_files[file_index]
+        parser = self._parser
+        generation = self._preload_generation
+        self._next_file_index += 1
+
+        with self._preload_lock:
+            self._preload_file_index = file_index
+            self._preload_file_path = file_path
+            self._preload_result = None
+            self._preload_error = None
+
+        thread = threading.Thread(
+            target=self._preload_file_worker,
+            args=(generation, parser, file_index, file_path),
+            name=f"route-replay-preload-{file_index}",
+            daemon=True,
+        )
+        self._preload_thread = thread
+        thread.start()
+
+    def _preload_file_worker(
+        self,
+        generation: int,
+        parser: RouteLogParser,
+        file_index: int,
+        file_path: Path,
+    ) -> None:
+        try:
+            parsed_frames = parser.parse_file(file_path, self._log_schema)
+            result = RouteReplayParsedFile(file_index, file_path, parsed_frames)
+        except BaseException as exc:
+            with self._preload_lock:
+                if generation == self._preload_generation:
+                    self._preload_error = exc
+            return
+
+        with self._preload_lock:
+            if generation == self._preload_generation:
+                self._preload_result = result
+
+    def _finish_preload(self, block: bool) -> bool:
+        thread = self._preload_thread
+        if thread is None:
+            return False
+        if block:
+            thread.join()
+        elif thread.is_alive():
+            return False
+
+        with self._preload_lock:
+            file_path = self._preload_file_path
+            result = self._preload_result
+            error = self._preload_error
+            self._preload_thread = None
+            self._preload_file_index = None
+            self._preload_file_path = None
+            self._preload_result = None
+            self._preload_error = None
+
+        if error is not None:
+            raise RuntimeError(f"failed to preload route log {file_path}") from error
+        if result is None:
+            return False
+        return self._append_parsed_file(result)
+
+    def _stop_preload(self, wait: bool) -> None:
+        self._preload_generation += 1
+        thread = self._preload_thread
+        if wait and thread is not None:
+            thread.join()
+        with self._preload_lock:
+            self._preload_thread = None
+            self._preload_file_index = None
+            self._preload_file_path = None
+            self._preload_result = None
+            self._preload_error = None
+
+    def _append_parsed_file(self, parsed_file: RouteReplayParsedFile) -> bool:
+        file_index = parsed_file.index
+        file_path = parsed_file.path
+        parsed_frames = parsed_file.frames
         self._loaded_file_count = max(self._loaded_file_count, self._next_file_index)
         if not parsed_frames:
             return True
@@ -349,6 +461,7 @@ class RouteReplaySource:
             self.duration = max(self.duration, self.frames[-1].t)
 
     def _reset_stream(self) -> None:
+        self._stop_preload(wait=True)
         if self._video_reader is not None:
             self._video_reader.close()
         self.frames = []
