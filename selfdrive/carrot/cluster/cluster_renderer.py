@@ -42,9 +42,11 @@ TURN_SIGNAL_LEFT_CENTER_X = 610
 TURN_SIGNAL_RIGHT_CENTER_X = 1310
 TURN_SIGNAL_CENTER_Y = 72
 TURN_SIGNAL_MID_CENTER_X = (TURN_SIGNAL_LEFT_CENTER_X + TURN_SIGNAL_RIGHT_CENTER_X) * 0.5
+SPEED_VALUE_CENTER_X = 260
+SPEED_VALUE_CENTER_Y = 230
 SPEED_LIMIT_SIGN_CENTER_X = 760
 SPEED_LIMIT_SIGN_CENTER_Y = TURN_SIGNAL_CENTER_Y
-CRUISE_SET_CENTER_X = TURN_SIGNAL_MID_CENTER_X
+CRUISE_SET_CENTER_X = SPEED_VALUE_CENTER_X
 CRUISE_SET_CENTER_Y = TURN_SIGNAL_CENTER_Y
 VEHICLE_MATERIAL_COLORS: dict[str, tuple[int, int, int, int]] = {
     "body": (156, 166, 172, 255),
@@ -226,7 +228,7 @@ def radar_point_distance_label(point: RadarPointMarker) -> str:
 
 def radar_point_speed_label(point: RadarPointMarker) -> str:
     if point.absolute_speed_kph is None:
-        return "-- km/h"
+        return ""
     return f"{point.absolute_speed_kph:.0f} km/h"
 
 
@@ -957,12 +959,13 @@ class ClusterUiRenderer:
                 continue
             distance = radar_point_distance_label(point)
             speed = radar_point_speed_label(point)
+            label_height = 32 if speed else 22
             text_width = max(
                 int(rl.measure_text_ex(self._font or rl.get_font_default(), distance, 14, 1).x),
-                int(rl.measure_text_ex(self._font or rl.get_font_default(), speed, 12, 1).x),
+                int(rl.measure_text_ex(self._font or rl.get_font_default(), speed, 12, 1).x) if speed else 0,
             )
             width = max(62, text_width + 14)
-            height = 32
+            height = label_height
             x = screen.x - width * 0.5
             y = screen.y - height - 4
             rect_tuple = (x, y, width, height)
@@ -976,8 +979,9 @@ class ClusterUiRenderer:
             text = (8, 10, 12)
             self._draw_text(distance, center_x + 1, y + 8 + 1, 14, shadow, anchor="center")
             self._draw_text(distance, center_x, y + 8, 14, text, anchor="center")
-            self._draw_text(speed, center_x + 1, y + 23 + 1, 12, shadow, anchor="center")
-            self._draw_text(speed, center_x, y + 23, 12, text, anchor="center")
+            if speed:
+                self._draw_text(speed, center_x + 1, y + 23 + 1, 12, shadow, anchor="center")
+                self._draw_text(speed, center_x, y + 23, 12, text, anchor="center")
 
     def _draw_vehicle_shadow(self, vehicle: VehicleBox) -> None:
         half_width = vehicle.width_m * 0.5
@@ -1201,7 +1205,7 @@ class ClusterUiRenderer:
             self._profile_add("hud.pop_matrix", profile_stage)
 
     def _draw_center_clock(self, state: ClusterUiState) -> None:
-        if not state.center_clock_text or self._cruise_set_visible(state):
+        if not state.center_clock_text:
             return
 
         text = state.center_clock_text
@@ -1306,7 +1310,7 @@ class ClusterUiRenderer:
     def _draw_speed_block(self, state: ClusterUiState) -> None:
         display_speed_kph = state.display_speed_kph if state.display_speed_kph is not None else state.speed_kph
         speed_value = int(round(clamp(display_speed_kph, 0.0, MAX_SPEED_KPH)))
-        self._draw_text(str(speed_value), 260, 230, 156, TEXT, anchor="center")
+        self._draw_text(str(speed_value), SPEED_VALUE_CENTER_X, SPEED_VALUE_CENTER_Y, 156, TEXT, anchor="center")
 
         if state.speed_limit_kph is not None:
             center = rl.Vector2(SPEED_LIMIT_SIGN_CENTER_X, SPEED_LIMIT_SIGN_CENTER_Y)
