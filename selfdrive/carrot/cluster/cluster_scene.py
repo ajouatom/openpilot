@@ -1624,7 +1624,7 @@ def road_edge_strips(
     road_end_m: float,
     theme: ClusterTheme = LIGHT_CLUSTER_THEME,
 ) -> tuple[MeshStrip, ...]:
-    if not route_mode:
+    def default_road_edge_strips() -> tuple[MeshStrip, ...]:
         default_color = road_edge_color(None, 1.0, theme)
         left_offset, right_offset = road_surface_offsets(state, route_mode)
         return (
@@ -1647,6 +1647,9 @@ def road_edge_strips(
                 theme,
             ),
         )
+
+    if not route_mode:
+        return default_road_edge_strips()
 
     strips: list[MeshStrip] = []
     if state.left_road_edge_offset is not None or state.left_road_edge_points:
@@ -1697,7 +1700,7 @@ def road_edge_strips(
                     theme,
                 )
             )
-    return tuple(strips)
+    return tuple(strips) if strips else default_road_edge_strips()
 
 
 def profile_scene_start(profile_add: ProfileAdd | None) -> float:
@@ -1742,6 +1745,19 @@ def lane_marking_color_for_state(
     return marking.color
 
 
+def data_geometry_mode_for_state(state: ClusterUiState) -> bool:
+    return (
+        state.route_overlay is not None
+        or bool(state.detected_vehicles)
+        or bool(state.radar_points)
+        or state.left_road_edge_offset is not None
+        or state.right_road_edge_offset is not None
+        or bool(state.left_road_edge_points)
+        or bool(state.right_road_edge_points)
+        or any(marking.model_points for marking in state.lanes)
+    )
+
+
 def build_cluster_scene(
     state: ClusterUiState,
     profile_add: ProfileAdd | None = None,
@@ -1756,7 +1772,7 @@ def build_cluster_scene(
     camera_active = state.surround_view_active
     selected_radar_vehicle_points = radar_vehicle_points(state, lane_width_m)
     radar_boxes = tuple(radar_vehicle_box(point, state, lane_width_m) for point in selected_radar_vehicle_points)
-    route_mode = state.route_overlay is not None or bool(state.detected_vehicles) or bool(state.radar_points)
+    route_mode = data_geometry_mode_for_state(state)
     road_start_m = (
         SURROUND_ROAD_REAR_M if state.surround_view_active
         else ROAD_NEAR_M

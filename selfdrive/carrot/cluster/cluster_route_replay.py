@@ -23,6 +23,7 @@ from cluster_config import (
     MAX_ACCEL_MPS2,
     MAX_SPEED_KPH,
     MAX_STEERING_ANGLE_DEG,
+    MODEL_DIRECT_LANE_RECENTER_SECONDS,
     ROAD_CURVE_M_PER_M2,
     WHITE,
 )
@@ -1686,7 +1687,7 @@ class RouteLogParser:
         if self.lane_change_recenter_direction is None or self.lane_change_recenter_started_t is None:
             return None
         elapsed = max(0.0, event_t - self.lane_change_recenter_started_t)
-        progress = clamp(elapsed / 0.85, 0.0, 1.0)
+        progress = clamp(elapsed / MODEL_DIRECT_LANE_RECENTER_SECONDS, 0.0, 1.0)
         if progress >= 1.0:
             self.lane_change_recenter_direction = None
             self.lane_change_recenter_started_t = None

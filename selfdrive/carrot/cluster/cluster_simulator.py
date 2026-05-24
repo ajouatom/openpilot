@@ -12,10 +12,10 @@ from cluster_config import (
     DRAG_DECEL_PER_MPS,
     LANE_CHANGE_MAX_SECONDS,
     LANE_CHANGE_MIN_SECONDS,
-    LANE_RECENTER_SECONDS,
     MAX_ACCEL_MPS2,
     MAX_SPEED_KPH,
     MAX_STEERING_ANGLE_DEG,
+    MODEL_DIRECT_LANE_RECENTER_SECONDS,
     SURROUND_MAX_PITCH_DEG,
     SURROUND_MAX_YAW_DEG,
     SURROUND_VIEW_SMOOTH_SECONDS,
@@ -37,6 +37,7 @@ class ClusterSimulator:
         self.lane_change_phase = "idle"
         self.lane_change_elapsed = 0.0
         self.lane_change_progress = 0.0
+        self.lane_change_recenter_start_progress = 1.0
         self.active_lane_position = 0.0
         self.ego_lane_position = 0.0
         self.view_lane_position = 0.0
@@ -63,10 +64,11 @@ class ClusterSimulator:
         lanes = self._lanes_for_current_state()
         left_signal = self.elapsed < self.left_signal_until
         right_signal = self.elapsed < self.right_signal_until
-        highlight_lane = self.lane_change_direction if self.lane_change_direction is not None else None
+        highlight_active = self.lane_change_direction is not None and self.lane_change_phase in ("preparing", "changing")
+        highlight_lane = self.lane_change_direction if highlight_active else None
         highlight_lane_offset = (
             self.target_lane_position - self.view_lane_position
-            if self.lane_change_direction is not None
+            if highlight_active
             else None
         )
 
@@ -151,6 +153,7 @@ class ClusterSimulator:
         self.lane_change_phase = "changing"
         self.lane_change_elapsed = 0.0
         self.lane_change_progress = 0.0
+        self.lane_change_recenter_start_progress = 1.0
         direction_sign = -1.0 if direction == "left" else 1.0
         self.target_lane_position = self.active_lane_position + direction_sign
 
@@ -168,32 +171,37 @@ class ClusterSimulator:
                 0.0,
                 1.0,
             )
-            blend = smoothstep(self.lane_change_progress)
+            direction_sign = self._lane_change_direction_sign()
             self.ego_lane_position = (
                 self.active_lane_position
-                + (self.target_lane_position - self.active_lane_position) * blend
+                + direction_sign * self.lane_change_progress
             )
 
             if self.lane_change_progress >= 1.0:
                 self.active_lane_position = self.target_lane_position
                 self.ego_lane_position = self.target_lane_position
                 self.lane_change_phase = "recentering"
+                self.lane_change_elapsed = 0.0
+                self.lane_change_recenter_start_progress = 1.0
             return
 
         if self.lane_change_phase == "recentering":
-            recenter_alpha = min(1.0, dt / LANE_RECENTER_SECONDS)
-            self.view_lane_position += (self.active_lane_position - self.view_lane_position) * recenter_alpha
-            self.ego_lane_position += (self.active_lane_position - self.ego_lane_position) * recenter_alpha
+            self.lane_change_elapsed += dt
             self.lane_change_progress = clamp(
-                1.0 - abs(self.ego_lane_position - self.view_lane_position),
+                self.lane_change_elapsed / MODEL_DIRECT_LANE_RECENTER_SECONDS,
                 0.0,
                 1.0,
             )
-            if abs(self.view_lane_position - self.active_lane_position) < 0.012:
+            direction_sign = self._lane_change_direction_sign()
+            recenter_blend = smoothstep(self.lane_change_progress)
+            start_offset = direction_sign * smoothstep(self.lane_change_recenter_start_progress)
+            self.view_lane_position = self.active_lane_position - start_offset * (1.0 - recenter_blend)
+            self.ego_lane_position = self.active_lane_position
+            if self.lane_change_progress >= 1.0:
                 self.view_lane_position = self.active_lane_position
-                self.ego_lane_position = self.active_lane_position
                 self.lane_change_phase = "idle"
                 self.lane_change_progress = 0.0
+                self.lane_change_recenter_start_progress = 1.0
                 self.lane_change_direction = None
 
     def _lane_change_duration_seconds(self) -> float:
@@ -202,6 +210,9 @@ class ClusterSimulator:
             LANE_CHANGE_MIN_SECONDS,
             LANE_CHANGE_MAX_SECONDS,
         )
+
+    def _lane_change_direction_sign(self) -> float:
+        return -1.0 if self.lane_change_direction == "left" else 1.0
 
     def _apply_camera_lane_model(self, command: SimulatorInput) -> None:
         self.lane_width_m = max(2.4, min(4.6, command.camera_lane_width_m))
@@ -231,6 +242,8 @@ class ClusterSimulator:
                 self.active_lane_position = self.target_lane_position
                 self.ego_lane_position = self.target_lane_position
                 self.lane_change_phase = "recentering"
+                self.lane_change_elapsed = 0.0
+                self.lane_change_recenter_start_progress = clamp(self.lane_change_progress, 0.0, 1.0)
 
     def _update_surround_view(self, command: SimulatorInput, dt: float) -> None:
         target_yaw = clamp(command.surround_yaw_deg, -SURROUND_MAX_YAW_DEG, SURROUND_MAX_YAW_DEG)
