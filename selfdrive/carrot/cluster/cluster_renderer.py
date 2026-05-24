@@ -8,9 +8,7 @@ from pathlib import Path
 import pyray as rl
 
 from cluster_config import (
-    AMBER,
     BLUE,
-    BLUE_SOFT,
     ClusterTheme,
     DESIGN_HEIGHT,
     DESIGN_WIDTH,
@@ -62,7 +60,6 @@ VEHICLE_MATERIAL_COLORS: dict[str, tuple[int, int, int, int]] = {
     "Material.006": (18, 20, 22, 255),
 }
 DEFAULT_VEHICLE_MATERIAL_COLOR = (142, 150, 156, 255)
-DESIRE_LABELS = ("NONE", "TURN L", "TURN R", "LC L", "LC R", "KEEP L", "KEEP R", "OTHER")
 FXAA_FRAGMENT_SHADER_330 = """
 #version 330
 
@@ -171,54 +168,6 @@ def rl_color(color: tuple[int, int, int] | tuple[int, int, int, int], alpha: int
     if alpha is not None:
         a = alpha
     return rl.Color(int(r), int(g), int(b), int(a))
-
-
-def dominant_desire(
-    desire_state: tuple[float, ...],
-    desire_prediction: tuple[tuple[float, ...], ...],
-) -> tuple[str | None, float]:
-    candidates = desire_state
-    if not candidates and desire_prediction:
-        candidates = desire_prediction[0]
-    if not candidates:
-        return None, 0.0
-    best_index = 0
-    best_value = 0.0
-    for index, value in enumerate(candidates[: len(DESIRE_LABELS)]):
-        if index == 0 and len(candidates) > 1:
-            continue
-        value = clamp(value, 0.0, 1.0)
-        if value > best_value:
-            best_index = index
-            best_value = value
-    if best_value < 0.03:
-        return "NONE", clamp(candidates[0] if candidates else 0.0, 0.0, 1.0)
-    return DESIRE_LABELS[min(best_index, len(DESIRE_LABELS) - 1)], best_value
-
-
-def model_risk_values(state: ClusterUiState) -> tuple[float, ...]:
-    if state.risk_points:
-        values = []
-        for point in state.risk_points[:5]:
-            values.append(
-                max(
-                    point.brake_disengage,
-                    point.gas_disengage,
-                    point.steer_override,
-                    point.hard_brake_3,
-                    point.hard_brake_4,
-                    point.hard_brake_5,
-                )
-            )
-        return tuple(values)
-    values = (
-        state.brake_disengage_risk,
-        state.gas_disengage_risk,
-        state.steer_override_risk,
-        state.hard_brake_risk,
-        max(state.gas_press_prob, state.brake_press_prob),
-    )
-    return tuple(value for value in values if value > 0.0)
 
 
 def radar_point_distance_label(point: RadarPointMarker) -> str:
@@ -1404,102 +1353,6 @@ class ClusterUiRenderer:
                 self._rounded_rect(fill_x, center, fill_width, fill_height, 13, fill_color)
         self._draw_text(accel_text, accel_text_x, 48, accel_text_size, fill_color)
         self._draw_text("m/s^2", gauge_center_x, 424, 21, theme.muted, anchor="center")
-
-    def _draw_model_status_block(self, state: ClusterUiState) -> None:
-        if state.model_confidence is None and state.disengage_risk <= 0.0 and not state.hard_brake_predicted:
-            return
-
-        x = 704
-        y = 26
-        confidence_color = self._model_confidence_color(state)
-        confidence_label = "RED" if confidence_color == RED else (state.model_confidence or "--").upper()
-        rl.draw_circle_v(rl.Vector2(x + 488, y + 18), 8, rl_color(confidence_color))
-        self._draw_text(confidence_label, x + 488, y + 39, 12, confidence_color, anchor="center")
-
-    def _model_confidence_color(self, state: ClusterUiState) -> tuple[int, int, int]:
-        if state.hard_brake_predicted or state.disengage_risk > 0.55:
-            return RED
-        confidence = (state.model_confidence or "").lower()
-        if confidence == "green":
-            return GREEN
-        if confidence == "yellow" or state.disengage_risk > 0.22:
-            return AMBER
-        if confidence == "red":
-            return RED
-        return self._current_theme().muted
-
-    def _draw_model_insight_block(self, state: ClusterUiState) -> None:
-        has_risk = bool(state.risk_points) or state.hard_brake_risk > 0.0 or state.brake_press_prob > 0.0
-        has_desire = bool(state.desire_state or state.desire_prediction)
-        if not (has_risk or has_desire):
-            return
-
-        x = 704
-        y = 84
-
-        desire_label, desire_prob = dominant_desire(state.desire_state, state.desire_prediction)
-        if desire_label:
-            theme = self._current_theme()
-            desire_color = BLUE if "LC" in desire_label or "KEEP" in desire_label else AMBER if "TURN" in desire_label else theme.muted
-            self._draw_text("DES", x + 320, y + 14, 11, theme.muted, anchor="center")
-            self._draw_text(desire_label, x + 320, y + 34, 18, desire_color, anchor="center")
-            rl.draw_line_ex(
-                rl.Vector2(x + 288, y + 51),
-                rl.Vector2(x + 288 + 64 * clamp(desire_prob, 0.0, 1.0), y + 51),
-                4,
-                rl_color(desire_color, 220),
-            )
-
-        risk_values = model_risk_values(state)
-        if risk_values:
-            theme = self._current_theme()
-            self._draw_text("RISK", x + 438, y + 14, 11, theme.muted, anchor="center")
-            self._draw_tiny_bars(risk_values, x + 404, y + 24, 72, 24)
-            peak_risk = max(risk_values)
-            risk_color = RED if peak_risk > 0.55 else AMBER if peak_risk > 0.22 else BLUE
-            self._draw_text(f"{peak_risk:.0%}", x + 438, y + 57, 11, risk_color, anchor="center")
-
-    def _draw_sparkline(
-        self,
-        values: tuple[float, ...],
-        x: float,
-        y: float,
-        width: float,
-        height: float,
-        minimum: float,
-        maximum: float,
-        color: tuple[int, int, int],
-    ) -> None:
-        if len(values) < 2:
-            return
-        rl.draw_line_ex(
-            rl.Vector2(x, y + height * 0.5),
-            rl.Vector2(x + width, y + height * 0.5),
-            1,
-            rl_color(self._current_theme().faint),
-        )
-        span = max(0.001, maximum - minimum)
-        previous: rl.Vector2 | None = None
-        for index, value in enumerate(values):
-            px = x + width * index / max(1, len(values) - 1)
-            amount = clamp((value - minimum) / span, 0.0, 1.0)
-            py = y + height * (1.0 - amount)
-            current = rl.Vector2(px, py)
-            if previous is not None:
-                rl.draw_line_ex(previous, current, 2, rl_color(color, 210))
-            previous = current
-
-    def _draw_tiny_bars(self, values: tuple[float, ...], x: float, y: float, width: float, height: float) -> None:
-        count = len(values)
-        if count == 0:
-            return
-        gap = 3.0
-        bar_w = max(3.0, (width - gap * (count - 1)) / count)
-        for index, value in enumerate(values):
-            value = clamp(value, 0.0, 1.0)
-            bar_h = max(2.0, height * value)
-            color = RED if value > 0.55 else AMBER if value > 0.22 else BLUE
-            self._rounded_rect(x + index * (bar_w + gap), y + height - bar_h, bar_w, bar_h, 2, color)
 
     def _turn_signal_lights(self, state: ClusterUiState) -> tuple[bool, bool]:
         now = time.perf_counter()

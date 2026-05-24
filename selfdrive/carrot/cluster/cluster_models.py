@@ -20,17 +20,6 @@ class ModelPathPoint:
 
 
 @dataclass(frozen=True)
-class LeadTrajectoryPoint:
-    t_s: float
-    longitudinal_m: float
-    lateral_m: float
-    speed_mps: float | None = None
-    accel_mps2: float | None = None
-    x_std_m: float | None = None
-    y_std_m: float | None = None
-
-
-@dataclass(frozen=True)
 class ModelRiskPoint:
     t_s: float
     brake_disengage: float = 0.0
@@ -75,7 +64,6 @@ class DetectedVehicle:
     acceleration_mps2: float | None = None
     cut_in: bool = False
     primary: bool = False
-    trajectory: tuple[LeadTrajectoryPoint, ...] = ()
     ttc_s: float | None = None
     x_std_m: float | None = None
     y_std_m: float | None = None

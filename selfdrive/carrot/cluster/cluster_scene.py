@@ -85,8 +85,6 @@ ROAD_EDGE_SHADOW_HEIGHT_M = 0.028
 ROAD_EDGE_BACKING_COLOR = LIGHT_CLUSTER_THEME.road_edge_backing
 PATH_SHADOW_LAYER_M = 0.024
 PATH_UNCERTAINTY_LAYER_M = PATH_HEIGHT_M + 0.002
-LEAD_PATH_BACKING_LAYER_M = PATH_HEIGHT_M + 0.014
-LEAD_PATH_LINE_LAYER_M = PATH_HEIGHT_M + 0.028
 PATH_BODY_LAYER_M = PATH_HEIGHT_M + 0.046
 PATH_METRIC_LAYER_M = PATH_HEIGHT_M + 0.066
 PATH_HIGHLIGHT_LAYER_M = PATH_HEIGHT_M + 0.088
@@ -174,7 +172,6 @@ class ClusterScene:
     road_edges: tuple[MeshStrip, ...]
     highlight_lanes: tuple[MeshStrip, ...]
     lane_markings: tuple[MeshStrip, ...]
-    lead_paths: tuple[MeshStrip, ...]
     planned_path: tuple[MeshStrip, ...]
     radar_points: tuple[RadarPointMarker, ...]
     vehicles: tuple[VehicleBox, ...]
@@ -425,38 +422,6 @@ def downsample_tuple(values: tuple, max_count: int) -> tuple:
     return tuple(values[index] for index in sorted(indexes))
 
 
-def points_at_height(points: tuple[Vec3, ...], height_m: float) -> tuple[Vec3, ...]:
-    return tuple(Vec3(point.x, point.y, height_m) for point in points)
-
-
-def lane_marking_strips(
-    offset: float,
-    steering: float,
-    lane_width_m: float,
-    width_px: int,
-    style: str,
-    color: Color,
-    start_m: float,
-    end_m: float,
-    height_m: float = LANE_MARKING_HEIGHT_M,
-) -> tuple[MeshStrip, ...]:
-    width_m = max(0.08, width_px * 0.022)
-    if style == "solid":
-        points = lane_centerline(offset, steering, lane_width_m, start_m, end_m, 80, height_m)
-        return (strip_from_centerline(points, width_m, color),)
-
-    strips: list[MeshStrip] = []
-    dash_m = 5.2
-    gap_m = 4.2
-    cursor = start_m
-    while cursor < end_m:
-        dash_end = min(cursor + dash_m, end_m)
-        points = lane_centerline(offset, steering, lane_width_m, cursor, dash_end, 6, height_m)
-        strips.append(strip_from_centerline(points, width_m, color))
-        cursor += dash_m + gap_m
-    return tuple(strips)
-
-
 def model_line_centerline(
     model_points: tuple[ModelPathPoint, ...],
     start_m: float,
@@ -500,39 +465,6 @@ def extend_model_centerline_rearward(
         start_m,
         0.0,
     )
-
-
-def resample_centerline(points: tuple[Vec3, ...], spacing_m: float) -> tuple[Vec3, ...]:
-    if len(points) < 2:
-        return points
-
-    sampled = [points[0]]
-    leftover_m = spacing_m
-    previous = points[0]
-    for current in points[1:]:
-        segment_dx = current.x - previous.x
-        segment_dy = current.y - previous.y
-        segment_dz = current.z - previous.z
-        segment_m = math.sqrt(segment_dx * segment_dx + segment_dy * segment_dy + segment_dz * segment_dz)
-        while segment_m >= leftover_m and segment_m > 0.001:
-            amount = leftover_m / segment_m
-            previous = Vec3(
-                previous.x + segment_dx * amount,
-                previous.y + segment_dy * amount,
-                previous.z + segment_dz * amount,
-            )
-            sampled.append(previous)
-            segment_dx = current.x - previous.x
-            segment_dy = current.y - previous.y
-            segment_dz = current.z - previous.z
-            segment_m = math.sqrt(segment_dx * segment_dx + segment_dy * segment_dy + segment_dz * segment_dz)
-            leftover_m = spacing_m
-        leftover_m -= segment_m
-        previous = current
-
-    if sampled[-1] != points[-1]:
-        sampled.append(points[-1])
-    return tuple(sampled)
 
 
 def append_unique_point(points: list[Vec3], point: Vec3) -> None:
@@ -611,62 +543,6 @@ def dashed_centerline_segments(
     return tuple(segments)
 
 
-def model_line_marking_strips(
-    model_points: tuple[ModelPathPoint, ...],
-    width_px: int,
-    style: str,
-    color: Color,
-    start_m: float,
-    end_m: float,
-    height_m: float,
-) -> tuple[MeshStrip, ...]:
-    centerline = model_line_centerline(model_points, start_m, end_m, height_m)
-    if len(centerline) < 2:
-        return ()
-
-    width_m = max(0.08, width_px * 0.022)
-    if style == "solid":
-        return (strip_from_centerline(centerline, width_m, color),)
-
-    return tuple(strip_from_centerline(segment, width_m, color) for segment in dashed_centerline_segments(centerline))
-
-
-def lane_marking_strips_for_marking(
-    marking: LaneMarking,
-    steering: float,
-    lane_width_m: float,
-    width_px: int,
-    color: Color,
-    start_m: float,
-    end_m: float,
-    height_m: float,
-) -> tuple[MeshStrip, ...]:
-    if marking.model_points:
-        model_strips = model_line_marking_strips(
-            marking.model_points,
-            width_px,
-            marking.style,
-            color,
-            start_m,
-            end_m,
-            height_m,
-        )
-        if model_strips:
-            return model_strips
-
-    return lane_marking_strips(
-        marking.offset,
-        steering,
-        lane_width_m,
-        width_px,
-        marking.style,
-        color,
-        start_m,
-        end_m,
-        height_m=height_m,
-    )
-
-
 def lane_marking_segments_for_marking(
     marking: LaneMarking,
     steering: float,
@@ -704,18 +580,6 @@ def lane_marking_segments_for_marking(
             segments.append(segment)
         cursor += dash_m + gap_m
     return tuple(segments)
-
-
-def lane_marking_strips_from_segments(
-    segments: tuple[tuple[Vec3, ...], ...],
-    width_px: int,
-    color: Color,
-    height_m: float,
-) -> tuple[MeshStrip, ...]:
-    if not segments:
-        return ()
-    grouped = lane_marking_strip_groups_from_segments(segments, ((width_px, color, height_m),))
-    return grouped[0] if grouped else ()
 
 
 def strips_from_centerline_specs(
@@ -994,55 +858,6 @@ def path_metric_color(accel_mps2: float) -> Color:
     return 70, 152, 255, 145
 
 
-def lead_trajectory_strips(
-    state: ClusterUiState,
-    lane_width_m: float,
-    theme: ClusterTheme = LIGHT_CLUSTER_THEME,
-) -> tuple[MeshStrip, ...]:
-    strips: list[MeshStrip] = []
-    for vehicle in state.detected_vehicles:
-        if len(vehicle.trajectory) < 2:
-            continue
-        points: list[Vec3] = []
-        for point in vehicle.trajectory:
-            forward_m = data_scene_forward_m(point.longitudinal_m)
-            if forward_m < ROAD_NEAR_M or forward_m > ROAD_FAR_M:
-                continue
-            offset = clamp(point.lateral_m / lane_width_m, -2.2, 2.2)
-            points.append(
-                Vec3(
-                    road_world_x(offset, forward_m, state.steering, lane_width_m),
-                    forward_m,
-                    LEAD_PATH_BACKING_LAYER_M,
-                )
-            )
-        if len(points) < 2:
-            continue
-        color = lead_trajectory_color(vehicle, theme)
-        uncertainty = [
-            point.y_std_m
-            for point in vehicle.trajectory
-            if point.y_std_m is not None and math.isfinite(point.y_std_m)
-        ]
-        if uncertainty:
-            width = clamp(0.22 + sum(uncertainty) / len(uncertainty) * 0.10, 0.22, 0.74)
-            strips.append(strip_from_centerline(tuple(points), width, color[0]))
-        strips.append(strip_from_centerline(points_at_height(tuple(points), LEAD_PATH_LINE_LAYER_M), 0.11, color[1]))
-    return tuple(strips)
-
-
-def lead_trajectory_color(
-    vehicle: DetectedVehicle,
-    theme: ClusterTheme = LIGHT_CLUSTER_THEME,
-) -> tuple[Color, Color]:
-    if vehicle.ttc_s is not None and vehicle.ttc_s < 3.0:
-        return (RED[0], RED[1], RED[2], 80), (RED[0], RED[1], RED[2], 210)
-    if vehicle.cut_in:
-        return (AMBER[0], AMBER[1], AMBER[2], 76), (AMBER[0], AMBER[1], AMBER[2], 210)
-    alpha = int(90 + 95 * clamp(vehicle.probability, 0.0, 1.0))
-    return theme.lead_path_shadow, (72, 142, 255, alpha)
-
-
 def radar_point_markers(
     state: ClusterUiState,
     lane_width_m: float,
@@ -1103,10 +918,6 @@ def radar_vehicle_points(state: ClusterUiState, lane_width_m: float) -> tuple[Ra
         selected.append(point)
     selected.sort(key=lambda point: point.longitudinal_m)
     return tuple(selected)
-
-
-def radar_vehicle_boxes(state: ClusterUiState, lane_width_m: float) -> tuple[VehicleBox, ...]:
-    return tuple(radar_vehicle_box(point, state, lane_width_m) for point in radar_vehicle_points(state, lane_width_m))
 
 
 def detected_vehicles_with_merged_radar(
@@ -2021,7 +1832,6 @@ def build_cluster_scene(
         road_edges=tuple(translate_mesh_strip_x(strip, scene_shift_x_m) for strip in road_edges),
         highlight_lanes=tuple(translate_mesh_strip_x(strip, scene_shift_x_m) for strip in highlight_lanes),
         lane_markings=tuple(translate_mesh_strip_x(strip, scene_shift_x_m) for strip in lane_strips),
-        lead_paths=(),
         planned_path=tuple(translate_mesh_strip_x(strip, scene_shift_x_m) for strip in planned_path),
         radar_points=tuple(translate_radar_marker_x(marker, scene_shift_x_m) for marker in radar_points),
         vehicles=tuple(translate_vehicle_box_x(vehicle, scene_shift_x_m) for vehicle in vehicles),

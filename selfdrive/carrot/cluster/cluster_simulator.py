@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-import random
 
 from cluster_config import (
     BLUE,
@@ -21,7 +20,6 @@ from cluster_config import (
     SURROUND_MAX_YAW_DEG,
     SURROUND_VIEW_SMOOTH_SECONDS,
     TURN_SIGNAL_SECONDS,
-    WHITE,
 )
 from cluster_models import ClusterUiState, LaneMarking, SimulatorInput
 from cluster_utils import clamp, smoothstep

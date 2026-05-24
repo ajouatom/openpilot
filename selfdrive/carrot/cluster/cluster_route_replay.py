@@ -23,7 +23,6 @@ from cluster_config import (
     MAX_ACCEL_MPS2,
     MAX_SPEED_KPH,
     MAX_STEERING_ANGLE_DEG,
-    RED,
     ROAD_CURVE_M_PER_M2,
     WHITE,
 )
@@ -32,7 +31,6 @@ from cluster_models import (
     CruiseDisplayState,
     DetectedVehicle,
     LaneMarking,
-    LeadTrajectoryPoint,
     ModelPathPoint,
     ModelRiskPoint,
     RadarPoint,
@@ -2155,51 +2153,12 @@ def model_lead_detections_from_model_v2(model: Any) -> tuple[DetectedVehicle, ..
                 acceleration_mps2=acceleration_mps2,
                 cut_in=cut_in,
                 primary=index == 0,
-                trajectory=lead_trajectory_points(lead),
                 ttc_s=ttc_from_relative_speed(longitudinal_m, relative_speed_mps),
                 x_std_m=x_std_m,
                 y_std_m=y_std_m,
             )
         )
     return tuple(detections)
-
-
-def lead_trajectory_points(lead: Any) -> tuple[LeadTrajectoryPoint, ...]:
-    xs = safe_get(lead, "x")
-    ys = safe_get(lead, "y")
-    ts = safe_get(lead, "t")
-    if xs is None or ys is None:
-        return ()
-    speeds = safe_get(lead, "v")
-    accels = safe_get(lead, "a")
-    x_stds = safe_get(lead, "xStd")
-    y_stds = safe_get(lead, "yStd")
-    count = min(len(xs), len(ys), len(ts) if ts is not None else len(xs), 8)
-    points: list[LeadTrajectoryPoint] = []
-    previous_longitudinal_m = -999.0
-    for index in range(count):
-        x_m = finite_float(xs[index])
-        y_m = finite_float(ys[index])
-        if x_m is None or y_m is None:
-            continue
-        longitudinal_m = x_m - RADAR_TO_CAMERA_M
-        if not -10.0 <= longitudinal_m <= 190.0 or abs(y_m) > 12.0:
-            continue
-        if longitudinal_m < previous_longitudinal_m - 2.0:
-            continue
-        points.append(
-            LeadTrajectoryPoint(
-                t_s=list_value(ts, index) if ts is not None else float(index * 2),
-                longitudinal_m=longitudinal_m,
-                lateral_m=clamp(y_m, -12.0, 12.0),
-                speed_mps=list_value(speeds, index),
-                accel_mps2=list_value(accels, index),
-                x_std_m=list_value(x_stds, index),
-                y_std_m=list_value(y_stds, index),
-            )
-        )
-        previous_longitudinal_m = longitudinal_m
-    return tuple(points)
 
 
 def ttc_from_relative_speed(longitudinal_m: float, relative_speed_mps: float | None) -> float | None:

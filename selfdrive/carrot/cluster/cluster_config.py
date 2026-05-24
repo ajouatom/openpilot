@@ -27,7 +27,6 @@ class ClusterTheme:
     path_uncertainty: Color4
     path_body: Color4
     path_highlight: Color4
-    lead_path_shadow: Color4
     world_label_shadow: Color3
     world_label_text: Color3
     clock_bg: Color4
@@ -68,7 +67,6 @@ LIGHT_CLUSTER_THEME = ClusterTheme(
     path_uncertainty=(112, 169, 255, 74),
     path_body=(34, 126, 255, 220),
     path_highlight=(222, 239, 255, 238),
-    lead_path_shadow=(88, 134, 182, 54),
     world_label_shadow=(245, 248, 252),
     world_label_text=(8, 10, 12),
     clock_bg=(8, 10, 12, 150),
@@ -102,7 +100,6 @@ DARK_CLUSTER_THEME = ClusterTheme(
     path_uncertainty=(92, 154, 255, 82),
     path_body=(48, 146, 255, 230),
     path_highlight=(220, 238, 255, 245),
-    lead_path_shadow=(44, 92, 148, 66),
     world_label_shadow=(0, 0, 0),
     world_label_text=(238, 242, 247),
     clock_bg=(0, 0, 0, 172),

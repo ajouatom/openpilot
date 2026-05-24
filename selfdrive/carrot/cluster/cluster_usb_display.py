@@ -79,10 +79,6 @@ def find_supported_usb_product(expected_product_id: int | None = None) -> int | 
     return None
 
 
-def supported_usb_device_present(expected_product_id: int | None = None) -> bool:
-    return find_supported_usb_product(expected_product_id) is not None
-
-
 class TuringUsbDisplay:
     def __init__(
         self,
