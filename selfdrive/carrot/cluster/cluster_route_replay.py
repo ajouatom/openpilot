@@ -67,6 +67,8 @@ class RouteReplayFrame:
     cruise_display_state: CruiseDisplayState
     left_signal: bool
     right_signal: bool
+    left_blindspot: bool
+    right_blindspot: bool
     lane_width_m: float
     lane_center_offset_m: float | None
     left_lane_offset: float
@@ -902,6 +904,8 @@ class RouteLogParser:
         lane_values = self._lane_values()
         left_signal = bool(safe_get(car_state, "leftBlinker", False))
         right_signal = bool(safe_get(car_state, "rightBlinker", False))
+        left_blindspot = bool(safe_get(car_state, "leftBlindspot", False))
+        right_blindspot = bool(safe_get(car_state, "rightBlindspot", False))
         lane_change, lane_change_phase, lane_change_progress = self._lane_change_values(
             event_t,
             left_signal,
@@ -921,6 +925,8 @@ class RouteLogParser:
             cruise_display_state=cruise_display_state,
             left_signal=left_signal,
             right_signal=right_signal,
+            left_blindspot=left_blindspot,
+            right_blindspot=right_blindspot,
             lane_width_m=lane_values["width"],
             lane_center_offset_m=lane_values["center"],
             left_lane_offset=lane_values["left_offset"],
@@ -1668,6 +1674,8 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         cruise_display_state=frame.cruise_display_state,
         left_signal=frame.left_signal,
         right_signal=frame.right_signal,
+        left_blindspot=frame.left_blindspot,
+        right_blindspot=frame.right_blindspot,
         lane_change=frame.lane_change,
         lane_change_phase=frame.lane_change_phase,
         lane_change_progress=frame.lane_change_progress,
@@ -1804,6 +1812,8 @@ def blend_frames(left: RouteReplayFrame, right: RouteReplayFrame, amount: float)
         cruise_display_state=discrete.cruise_display_state,
         left_signal=discrete.left_signal,
         right_signal=discrete.right_signal,
+        left_blindspot=discrete.left_blindspot,
+        right_blindspot=discrete.right_blindspot,
         lane_width_m=lerp(left.lane_width_m, right.lane_width_m),
         lane_center_offset_m=lerp_optional(left.lane_center_offset_m, right.lane_center_offset_m),
         left_lane_offset=lerp(left.left_lane_offset, right.left_lane_offset),

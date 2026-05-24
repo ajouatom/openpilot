@@ -91,6 +91,8 @@ PATH_HIGHLIGHT_LAYER_M = PATH_HEIGHT_M + 0.088
 LANE_HIGHLIGHT_COLOR = (64, 148, 255)
 LANE_HIGHLIGHT_ALPHA = 220
 LANE_HIGHLIGHT_ROUTE_ALPHA = 170
+BSD_LANE_ALERT_ALPHA = 220
+BSD_LANE_ALERT_HEIGHT_M = 0.010
 
 
 @dataclass(frozen=True)
@@ -1634,6 +1636,27 @@ def lane_highlight_color(route_mode: bool) -> Color:
     return LANE_HIGHLIGHT_COLOR[0], LANE_HIGHLIGHT_COLOR[1], LANE_HIGHLIGHT_COLOR[2], alpha
 
 
+def bsd_lane_alert_color() -> Color:
+    return RED[0], RED[1], RED[2], BSD_LANE_ALERT_ALPHA
+
+
+def bsd_lane_alert_offsets(state: ClusterUiState) -> tuple[float, ...]:
+    offsets: list[float] = []
+    if state.left_blindspot:
+        offsets.append(
+            state.highlight_lane_offset
+            if state.highlight_lane == "left" and state.highlight_lane_offset is not None
+            else -1.0
+        )
+    if state.right_blindspot:
+        offsets.append(
+            state.highlight_lane_offset
+            if state.highlight_lane == "right" and state.highlight_lane_offset is not None
+            else 1.0
+        )
+    return tuple(offsets)
+
+
 def build_cluster_scene(
     state: ClusterUiState,
     profile_add: ProfileAdd | None = None,
@@ -1684,6 +1707,20 @@ def build_cluster_scene(
         )
         if highlight_strip is not None:
             highlight_lanes.append(highlight_strip)
+    for lane_offset in bsd_lane_alert_offsets(state):
+        alert_strip = lane_floor_strip(
+            state,
+            lane_offset,
+            bsd_lane_alert_color(),
+            lane_width_m,
+            road_start_m,
+            road_end_m,
+            road_steps,
+            False,
+            BSD_LANE_ALERT_HEIGHT_M,
+        )
+        if alert_strip is not None:
+            highlight_lanes.append(alert_strip)
     profile_scene_add(profile_add, "scene.build.highlight_lanes", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)

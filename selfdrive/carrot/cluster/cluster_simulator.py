@@ -79,6 +79,8 @@ class ClusterSimulator:
             cruise_display_state="engaged",
             left_signal=left_signal,
             right_signal=right_signal,
+            left_blindspot=False,
+            right_blindspot=False,
             lane_change=self.lane_change_direction,
             lane_change_phase=self.lane_change_phase,
             lane_change_progress=self.lane_change_progress,

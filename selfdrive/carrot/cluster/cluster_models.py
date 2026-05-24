@@ -110,6 +110,8 @@ class ClusterUiState:
     cruise_display_state: CruiseDisplayState
     left_signal: bool
     right_signal: bool
+    left_blindspot: bool
+    right_blindspot: bool
     lane_change: str | None
     lane_change_phase: str
     lane_change_progress: float

@@ -164,6 +164,8 @@ def standby_state() -> ClusterUiState:
         cruise_display_state="off",
         left_signal=False,
         right_signal=False,
+        left_blindspot=False,
+        right_blindspot=False,
         lane_change=None,
         lane_change_phase="idle",
         lane_change_progress=0.0,
