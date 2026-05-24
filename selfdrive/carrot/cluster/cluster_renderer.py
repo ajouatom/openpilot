@@ -1285,7 +1285,8 @@ class ClusterUiRenderer:
             self._draw_text(line, x, y + 22 + index * 14, 12, TEXT)
 
     def _draw_speed_block(self, state: ClusterUiState) -> None:
-        speed_value = int(round(clamp(state.speed_kph, 0.0, MAX_SPEED_KPH)))
+        display_speed_kph = state.display_speed_kph if state.display_speed_kph is not None else state.speed_kph
+        speed_value = int(round(clamp(display_speed_kph, 0.0, MAX_SPEED_KPH)))
         self._draw_text(str(speed_value), 260, 230, 156, TEXT, anchor="center")
 
         if state.speed_limit_kph is not None:

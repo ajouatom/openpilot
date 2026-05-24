@@ -204,6 +204,7 @@ class ClusterUiState:
     lateral_plan_debug_text: str | None = None
     lateral_plan_curvatures: tuple[float, ...] = ()
     lateral_plan_curvature_rates: tuple[float, ...] = ()
+    display_speed_kph: float | None = None
 
 
 @dataclass(frozen=True)

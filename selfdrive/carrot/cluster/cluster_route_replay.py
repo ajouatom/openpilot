@@ -90,6 +90,7 @@ class RouteReplayFrame:
     brake: float
     detected_vehicles: tuple[DetectedVehicle, ...]
     radar_points: tuple[RadarPoint, ...] = ()
+    display_speed_kph: float | None = None
     planned_speed_kph: float | None = None
     planned_accel_mps2: float | None = None
     planned_curvature_m_inv: float | None = None
@@ -740,6 +741,7 @@ class RouteLogParser:
         self.radar_detections: tuple[DetectedVehicle, ...] = ()
         self.radar_detection_t = -999.0
         self.current_speed_kph = 0.0
+        self.v_ego_cluster_seen = False
 
     def parse_file(self, file_path: Path, log_schema: Any) -> list[RouteReplayFrame]:
         frames: list[RouteReplayFrame] = []
@@ -778,6 +780,7 @@ class RouteLogParser:
         speed_mps = max(0.0, safe_float(car_state, "vEgo", 0.0))
         speed_kph = clamp(speed_mps * 3.6, 0.0, MAX_SPEED_KPH)
         self.current_speed_kph = speed_kph
+        display_speed_kph = self._display_speed_kph_from_car_state(car_state, speed_mps)
         accel_mps2 = clamp(safe_float(car_state, "aEgo", 0.0), -MAX_ACCEL_MPS2, MAX_ACCEL_MPS2)
         steering_angle_deg = safe_optional_float(car_state, "steeringAngleDeg")
         road_curvature, road_curvature_source = self._current_road_curvature()
@@ -846,6 +849,7 @@ class RouteLogParser:
             brake=clamp(safe_float(car_state, "brake", 0.0), 0.0, 1.0),
             detected_vehicles=detected_vehicles,
             radar_points=radar_points,
+            display_speed_kph=display_speed_kph,
             planned_speed_kph=self.planned_speed_kph,
             planned_accel_mps2=self.planned_accel_mps2,
             planned_curvature_m_inv=self.model_action_curvature_m_inv,
@@ -903,6 +907,12 @@ class RouteLogParser:
             lateral_plan_curvatures=self.lateral_plan_curvatures,
             lateral_plan_curvature_rates=self.lateral_plan_curvature_rates,
         )
+
+    def _display_speed_kph_from_car_state(self, car_state: Any, fallback_speed_mps: float) -> float:
+        v_ego_cluster = safe_float(car_state, "vEgoCluster", 0.0)
+        self.v_ego_cluster_seen = self.v_ego_cluster_seen or v_ego_cluster != 0.0
+        display_speed_mps = v_ego_cluster if self.v_ego_cluster_seen else fallback_speed_mps
+        return clamp(max(0.0, display_speed_mps) * 3.6, 0.0, MAX_SPEED_KPH)
 
     def _update_driving_model(self, model: Any) -> None:
         lane_meta = safe_get(model, "laneLineMeta")
@@ -1624,6 +1634,7 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         lateral_plan_debug_text=frame.lateral_plan_debug_text,
         lateral_plan_curvatures=frame.lateral_plan_curvatures,
         lateral_plan_curvature_rates=frame.lateral_plan_curvature_rates,
+        display_speed_kph=frame.display_speed_kph,
     )
 
 
@@ -1669,6 +1680,7 @@ def blend_frames(left: RouteReplayFrame, right: RouteReplayFrame, amount: float)
     return RouteReplayFrame(
         t=lerp(left.t, right.t),
         speed_kph=lerp(left.speed_kph, right.speed_kph),
+        display_speed_kph=lerp_optional(left.display_speed_kph, right.display_speed_kph),
         accel_mps2=lerp(left.accel_mps2, right.accel_mps2),
         steering=lerp(left.steering, right.steering),
         steering_angle_deg=lerp_optional(left.steering_angle_deg, right.steering_angle_deg),

@@ -65,6 +65,8 @@ RADAR_VEHICLE_DEDUP_LATERAL_M = 1.6
 RADAR_VEHICLE_MAX_BOXES = 4
 DETECTED_VEHICLE_MAX_RENDER_BOXES = 5
 DETECTED_VEHICLE_MAX_PATH_BLOCKERS = 10
+VEHICLE_BADGE_TTC_S = 9.9
+VEHICLE_BADGE_ACCEL_MPS2 = 1.0
 MODEL_LINE_MAX_POINTS = 36
 MODEL_PATH_MAX_POINTS = 44
 MODEL_PATH_MAX_METRIC_SEGMENTS = 14
@@ -1484,6 +1486,14 @@ def vehicle_blocks_path(vehicle: DetectedVehicle) -> bool:
     return True
 
 
+def vehicle_badge_has_special_info(vehicle: DetectedVehicle) -> bool:
+    if vehicle.cut_in:
+        return True
+    if vehicle.ttc_s is not None and vehicle.ttc_s < VEHICLE_BADGE_TTC_S:
+        return True
+    return vehicle.acceleration_mps2 is not None and abs(vehicle.acceleration_mps2) > VEHICLE_BADGE_ACCEL_MPS2
+
+
 def detected_vehicle_priority(vehicle: DetectedVehicle) -> tuple[int, float, float]:
     if vehicle.primary:
         category = 0
@@ -1680,14 +1690,7 @@ def build_cluster_scene(
                 ttc_s=detected.ttc_s,
                 cut_in=detected.cut_in,
                 primary=detected.primary,
-                annotate=(
-                    detected.primary
-                    or detected.cut_in
-                    or (
-                        detected.source.startswith("modelV2")
-                        and detected.probability >= 0.55
-                    )
-                ),
+                annotate=vehicle_badge_has_special_info(detected),
             )
             for detected in render_detected_vehicles
         )
