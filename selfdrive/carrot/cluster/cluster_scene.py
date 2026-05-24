@@ -1065,6 +1065,40 @@ def radar_point_markers(
     return tuple(markers)
 
 
+def rear_detected_vehicle_markers(
+    state: ClusterUiState,
+    lane_width_m: float,
+    min_forward_m: float,
+    max_forward_m: float,
+) -> tuple[RadarPointMarker, ...]:
+    markers: list[RadarPointMarker] = []
+    for vehicle in state.detected_vehicles:
+        if vehicle.longitudinal_m >= 0.0:
+            continue
+        forward_m = EGO_FORWARD_M + vehicle.longitudinal_m
+        if forward_m < min_forward_m or forward_m > max_forward_m:
+            continue
+        markers.append(
+            RadarPointMarker(
+                center=Vec3(
+                    clamp(vehicle.lateral_m, -lane_width_m * 3.0, lane_width_m * 3.0),
+                    forward_m,
+                    0.24,
+                ),
+                radius_m=0.22,
+                color=(244, 172, 54, 230),
+                label=vehicle.label,
+                longitudinal_m=vehicle.longitudinal_m,
+                lateral_m=vehicle.lateral_m,
+                relative_speed_mps=vehicle.relative_speed_mps,
+                absolute_speed_kph=vehicle.absolute_speed_kph,
+                relative_accel_mps2=vehicle.acceleration_mps2,
+                probability=vehicle.probability,
+            )
+        )
+    return tuple(markers)
+
+
 def radar_vehicle_points(state: ClusterUiState, lane_width_m: float) -> tuple[RadarPoint, ...]:
     selected: list[RadarPoint] = []
     candidates = sorted(
@@ -1970,6 +2004,11 @@ def build_cluster_scene(
         min_forward_m=road_start_m if camera_active else ROAD_NEAR_M,
         max_forward_m=road_end_m if camera_active else ROAD_FAR_M + 30.0,
     )
+    if rear_view_active:
+        radar_points = (
+            *radar_points,
+            *rear_detected_vehicle_markers(state, lane_width_m, road_start_m, road_end_m),
+        )
     profile_scene_add(profile_add, "scene.build.radar_points", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
