@@ -1216,31 +1216,11 @@ class ClusterUiRenderer:
             )
 
         if state.cruise_kph is not None:
-            cruise_w = 130
-            cruise_h = 84
-            self._rounded_rect(
-                CRUISE_SET_CENTER_X - cruise_w * 0.5,
-                CRUISE_SET_CENTER_Y - cruise_h * 0.5,
-                cruise_w,
-                cruise_h,
-                18,
-                (232, 241, 255),
-                BLUE_SOFT,
-                2,
-            )
             self._draw_text(
-                str(state.cruise_kph),
+                f"SET {state.cruise_kph:03d}",
                 CRUISE_SET_CENTER_X,
-                CRUISE_SET_CENTER_Y - 12,
+                CRUISE_SET_CENTER_Y,
                 40,
-                BLUE,
-                anchor="center",
-            )
-            self._draw_text(
-                "SET",
-                CRUISE_SET_CENTER_X,
-                CRUISE_SET_CENTER_Y + 21,
-                18,
                 BLUE,
                 anchor="center",
             )
