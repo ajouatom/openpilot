@@ -58,7 +58,7 @@ public:
 
     main_layout->addWidget(scroll, 1);
 
-    QPushButton *btn_ok = new QPushButton(tr("확인"));
+    QPushButton *btn_ok = new QPushButton(tr("OK"));
     btn_ok->setFixedWidth(400);
     main_layout->addWidget(btn_ok, 0, Qt::AlignCenter);
 
@@ -168,16 +168,16 @@ public:
 
     QHBoxLayout *btn_layout = new QHBoxLayout();
     
-    QPushButton *btn_guide = new QPushButton(tr("사용 안내 (Guide)"));
+    QPushButton *btn_guide = new QPushButton(tr("Guide"));
     btn_guide->setStyleSheet("background-color: #3b5998;");
     
-    QPushButton *btn_later = new QPushButton(tr("나중에 (Later)"));
+    QPushButton *btn_later = new QPushButton(tr("Later"));
     btn_later->setStyleSheet("background-color: #555555;");
     
-    QPushButton *btn_clear = new QPushButton(tr("학습 초기화 (Clear)"));
+    QPushButton *btn_clear = new QPushButton(tr("Reset"));
     btn_clear->setStyleSheet("background-color: #8a1d1d;");
     
-    QPushButton *btn_apply = new QPushButton(tr("선택 적용 (Apply Selected)"));
+    QPushButton *btn_apply = new QPushButton(tr("Apply Selected"));
     btn_apply->setStyleSheet("background-color: #178644;");
 
     btn_layout->addWidget(btn_guide);
@@ -225,7 +225,17 @@ public:
         Even without your pedal input, the system monitors its own control quality:<br>
         - <b>(auto) Late Braking</b>: If the system brakes too hard at the last moment, it recommends increasing JLeadFactor3 to start braking earlier.<br>
         - <b>(auto) Aggressive Accel</b>: If the system accelerates too harshly relative to the lead car, it recommends lowering CruiseMaxVals.<br>
-        - <b>(auto) Hunting</b>: If the system oscillates between accel/decel while following, it recommends widening the gap for stability.
+        - <b>(auto) Hunting</b>: If the system oscillates between accel/decel while following, it recommends widening the gap for stability.<br>
+        <hr>
+        <div style='font-size: 50px; font-weight: bold; margin-top: 20px; margin-bottom: 10px;'>⚖️ Accel-Brake Cross Inhibition</div>
+        - Prevents the infinite inflation spiral where stronger acceleration leads to stronger braking.<br>
+        - Even if you step on the gas often, <b>frequent braking will block any increase recommendations for CruiseMaxVals</b>.<br>
+        - If the system detects **self-led rapid acceleration and rapid braking (Auto-Surging)** during autopilot, it automatically suggests <b>reducing</b> CruiseMaxVals with an **excessive auto-surging penalty** to restore passenger comfort.<br>
+        <hr>
+        <div style='font-size: 50px; font-weight: bold; margin-top: 20px; margin-bottom: 10px;'>🧬 Driving Style Profiler (DSP)</div>
+        - Before your first openpilot engage, DSP collects your <b>manual driving habits</b> (acceleration style, following distance, braking timing).<br>
+        - After ~10 minutes of manual driving, DSP suggests <b>personalized initial values</b> for CruiseMaxVals, TFollowGap, and JLeadFactor3.<br>
+        - Once applied, DSP completes and the Auto-Tuner takes over for continuous fine-tuning.
         </div>
         )";
       } else {
@@ -236,7 +246,7 @@ public:
         <ul>
         <li><b>주행 중 데이터 수집</b>: 백그라운드에서 차량의 주행 데이터를 실시간으로 기록하며, 특히 <b>오버라이드(가속 페달 밟음)</b>와 <b>개입(직접 브레이크)</b> 순간을 중점 수집합니다.</li>
         <li><b>패턴 분석</b>: 현재 설정값과 운전자 주행 성향의 차이를 분석하여 이상적인 파라미터를 계산합니다.</li>
-        <li><b>추천 및 적용</b>: 주차(P) 시 팝업으로 추천값을 안내하며, <b>[선택 적용]</b>을 누르면 즉시 반영됩니다. (설정의 <b>튜닝 이력</b>에서 이력 확인/삭제 가능)</li>
+        <li><b>추천 및 적용</b>: 주차(P) 시 팝업으로 추천값을 안내하며, <b>[선택 적용]</b>을 누르면 즉시 반영됩니다. (설정의 <b>CarrotPilot -> Tuning history</b>에서 이력 확인/삭제 가능)</li>
         </ul><hr>
         <div style='font-size: 50px; font-weight: bold; margin-top: 20px; margin-bottom: 10px;'>⚙️ 그룹별 튜닝 설정 안내</div>
         <b>🚀 [가속] (Acceleration)</b><br>
@@ -261,7 +271,17 @@ public:
         운전자가 페달을 밟지 않아도, 시스템은 스스로의 제어 품질을 감시합니다:<br>
         - <b>(auto) 늦은 제동</b>: 시스템이 뒤늦게 급제동을 거는 패턴이 감지되면, 더 일찍 부드럽게 감속하도록 제동 시점 상향을 추천합니다.<br>
         - <b>(auto) 과도한 가속</b>: 선행차 흐름에 비해 시스템이 너무 거칠게 가속하면, 가속 한계치를 낮추도록 추천합니다.<br>
-        - <b>(auto) 주행 요동(Hunting)</b>: 가속과 감속을 반복하며 거리를 불안정하게 맞추는 패턴이 감지되면, 제어의 여유를 위해 차간 거리를 넓히도록 추천합니다.
+        - <b>(auto) 주행 요동(Hunting)</b>: 가속과 감속을 반복하며 거리를 불안정하게 맞추는 패턴이 감지되면, 제어의 여유를 위해 차간 거리를 넓히도록 추천합니다.<br>
+        <hr>
+        <div style='font-size: 50px; font-weight: bold; margin-top: 20px; margin-bottom: 10px;'>⚖️ 가속-제동 상호 억제 (Inflation Lock)</div>
+        - 가속력을 높이면 뒤이어 급제동이 유발되는 '악순환(인플레이션)'을 방지합니다.<br>
+        - 가속 페달을 많이 밟았더라도 <b>브레이크 개입이 잦으면 가속도 상승 제안을 차단</b>합니다.<br>
+        - 자율 주행 중 스스로 <b>급가속과 급제동을 반복하는 요동 현상(Auto-Surging)</b>이 감지되면, 운전자 개입이 전혀 없었더라도 최우선적으로 가속 설정을 낮추도록 <b>감소(excessive auto-surging penalty)</b>를 추천하여 부드러운 주행을 강제합니다.<br>
+        <hr>
+        <div style='font-size: 50px; font-weight: bold; margin-top: 20px; margin-bottom: 10px;'>🧬 수동 주행 성향 프로파일러 (DSP)</div>
+        - 오픈파일럿 첫 인게이지 전, 수동 운전 중의 <b>가속 스타일, 차간 거리 습관, 제동 시점</b>을 자동으로 수집합니다.<br>
+        - 약 10분 이상 수동 주행 후, CruiseMaxVals, TFollowGap, JLeadFactor3의 <b>개인화된 초기값</b>을 제안합니다.<br>
+        - 적용 후 DSP는 완료되고, 이후부터는 Auto-Tuner가 자율주행 데이터를 기반으로 지속적으로 미세 조정합니다.
         </div>
         )";
       }
@@ -273,7 +293,7 @@ public:
     connect(btn_later, &QPushButton::clicked, this, &QDialog::reject);
     
     connect(btn_clear, &QPushButton::clicked, [=]() {
-      if (ConfirmationDialog::confirm(tr("적용하지 않고 현재까지의 모든 학습 데이터를 삭제하시겠습니까?"), tr("초기화"), this)) {
+      if (ConfirmationDialog::confirm(tr("Are you sure you want to delete all learning data collected so far without applying it?"), tr("Reset"), this)) {
         Params().putBool("CarrotLearningClear", true);
         this->reject();
       }
@@ -373,20 +393,65 @@ void HomeWindow::updateState(const UIState &s) {
       break;
   }
 
-  // Auto-Tuner: 주행 중 주차(P단) 전환 시 즉시 팝업 표시 (1초 주기로 체크)
+  // Auto-Tuner + DSP: 주차(P단) 전환 시 팝업 표시 (1초 주기로 체크)
+  // 우선순위: DSP(초기값 설정) > Auto-Tuner(미세 조정)
+  // 두 팝업이 동시에 Ready이면 DSP 팝업을 먼저 표시하고,
+  // Auto-Tuner는 다음 사이클(~1초 후)에 자동으로 표시됩니다.
   static int carrot_tuner_frame = 0;
   if (carrot_tuner_frame++ % 20 == 0) {
     Params params;
-    if (params.getBool("CarrotLearningPopupReady")) {
-      // 중복 팝업 방지를 위해 즉시 플래그 해제
+
+    // ── [우선순위 1] DSP: 수동 주행 프로파일링 초기값 추천 ──────────────
+    if (params.getBool("CarrotDSPPopupReady")) {
+      params.putBool("CarrotDSPPopupReady", false);
+
+      QString dsp_raw = QString::fromStdString(params.get("CarrotDSPRecommend"));
+      QJsonDocument dsp_doc = QJsonDocument::fromJson(dsp_raw.toUtf8());
+      if (!dsp_raw.isEmpty() && dsp_doc.isObject()) {
+        QJsonObject dsp_obj = dsp_doc.object();
+        QString dsp_msg = tr("🧬 DSP: Manual driving style analyzed! (Auto-Tuner will follow next)");
+
+        AutoTunerDialog *dsp_dialog = new AutoTunerDialog(dsp_msg, dsp_obj, this);
+        connect(dsp_dialog, &QDialog::accepted, [=]() {
+          Params p;
+          QJsonObject selected = dsp_dialog->getSelectedItems();
+          if (!selected.isEmpty()) {
+            for (const QString& group : selected.keys()) {
+              QJsonObject group_items = selected[group].toObject();
+              for (const QString& key : group_items.keys()) {
+                QJsonObject info = group_items[key].toObject();
+                int recommended = info["recommended"].toInt(0);
+                if (recommended > 0) {
+                  p.put(key.toStdString(), std::to_string(recommended));
+                }
+              }
+            }
+          }
+          // 프로파일링 완료 마킹 → DSP 비활성화
+          p.putBool("CarrotDSPComplete", true);
+          p.remove("CarrotDSPData");
+          p.remove("CarrotDSPRecommend");
+          dsp_dialog->deleteLater();
+          // Auto-Tuner 팝업이 대기 중이면 다음 사이클에서 자동 표시됨
+        });
+
+        connect(dsp_dialog, &QDialog::rejected, [=]() {
+          dsp_dialog->deleteLater();
+        });
+
+        setMainWindow(dsp_dialog);
+      }  // if (!dsp_raw.isEmpty() && dsp_doc.isObject())
+
+    // ── [우선순위 2] Auto-Tuner: 자율주행 패턴 미세 조정 추천 ───────────
+    } else if (params.getBool("CarrotLearningPopupReady")) {
       params.putBool("CarrotLearningPopupReady", false);
-      
+
       QString raw = QString::fromStdString(params.get("CarrotLearningRecommend"));
       QJsonDocument doc = QJsonDocument::fromJson(raw.toUtf8());
       if (!raw.isEmpty() && doc.isObject()) {
         QJsonObject obj = doc.object();
         QString msg = tr("Auto-Tuner: Driving pattern learned!");
-        
+
         AutoTunerDialog *dialog = new AutoTunerDialog(msg, obj, this);
         connect(dialog, &QDialog::accepted, [=]() {
           Params p;
@@ -403,7 +468,7 @@ void HomeWindow::updateState(const UIState &s) {
             history_entry["timestamp"] = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm");
             history_entry["changes"] = selected;
             history_entry["id"] = QString::number(QDateTime::currentMSecsSinceEpoch());
-            
+
             history_array.prepend(history_entry);
             while (history_array.size() > 50) history_array.removeLast();
 
@@ -423,7 +488,7 @@ void HomeWindow::updateState(const UIState &s) {
           Params().putBool("CarrotLearningClear", true);
           dialog->deleteLater();
         });
-        
+
         connect(dialog, &QDialog::rejected, [=]() {
           dialog->deleteLater();
         });

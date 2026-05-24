@@ -8,7 +8,7 @@ from openpilot.common.realtime import DT_MDL
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.filter_simple import MyMovingAverage
 from openpilot.selfdrive.selfdrived.events import Events
-from openpilot.selfdrive.carrot.carrot_learning import CarrotLearner
+from openpilot.selfdrive.carrot.carrot_learning import CarrotLearner, DrivingStyleProfiler
 
 EventName = log.OnroadEvent.EventName
 LaneChangeState = log.LaneChangeState
@@ -142,6 +142,7 @@ class CarrotPlanner:
     self._stop_x_rl = None
     self.last_event_time = 0.0
     self.learner = CarrotLearner()
+    self.profiler = DrivingStyleProfiler()
 
   def _params_update(self):
     self.frame += 1
@@ -658,7 +659,14 @@ class CarrotPlanner:
                         lead_drel=leadOne.dRel if leadOne.status else 0.0,
                         lead_v_kph=leadOne.vLead * CV.MS_TO_KPH if leadOne.status else 0.0,
                         a_ego=a_ego, lead_jlead=leadOne.jLead if leadOne.status else 0.0,
-                        v_cruise_kph=v_cruise_kph)
+                        v_cruise_kph=v_cruise_kph,
+                        gas_val=carstate.gas, brake_val=carstate.brake)
+
+    # DSP: 수동 주행 성향 프로파일링 (오픈파일럿 미인게이지 상태에서만 수집)
+    self.profiler.update(v_ego_kph, engaged, gear_park,
+                         a_ego=a_ego, brake_pressed=carstate.brakePressed,
+                         lead_drel=leadOne.dRel if leadOne.status else 0.0,
+                         lead_v_kph=leadOne.vLead * CV.MS_TO_KPH if leadOne.status else 0.0)
 
     return v_cruise_kph
 

@@ -115,6 +115,8 @@ private:
   QWidget* homeWidget;
   QVBoxLayout* carrotLayout;
 
+  QStackedWidget* content_stack = nullptr;
+
   ListWidget* cruiseToggles;
   ListWidget* latLongToggles;
   ListWidget* pathToggles;
