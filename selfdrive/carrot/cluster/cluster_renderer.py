@@ -240,6 +240,51 @@ def rectangles_overlap(
     return lx < rx + rw and lx + lw > rx and ly < ry + rh and ly + lh > ry
 
 
+def camera_forward(camera) -> tuple[float, float, float] | None:
+    dx = float(camera.target.x - camera.position.x)
+    dy = float(camera.target.y - camera.position.y)
+    dz = float(camera.target.z - camera.position.z)
+    length = math.sqrt(dx * dx + dy * dy + dz * dz)
+    if length <= 0.0001 or not all(math.isfinite(value) for value in (dx, dy, dz, length)):
+        return None
+    return dx / length, dy / length, dz / length
+
+
+def camera_depth_m(point, camera) -> float | None:
+    forward = camera_forward(camera)
+    if forward is None:
+        return None
+    px = float(point.x - camera.position.x)
+    py = float(point.y - camera.position.y)
+    pz = float(point.z - camera.position.z)
+    if not all(math.isfinite(value) for value in (px, py, pz)):
+        return None
+    fx, fy, fz = forward
+    return px * fx + py * fy + pz * fz
+
+
+def world_to_screen_label_anchor(point, camera, width: int, height: int):
+    depth_m = camera_depth_m(point, camera)
+    if depth_m is None or depth_m <= 0.05:
+        return None
+    screen = rl.get_world_to_screen_ex(point, camera, width, height)
+    if not math.isfinite(screen.x) or not math.isfinite(screen.y):
+        return None
+    return screen
+
+
+def label_rect_inside_bounds(
+    rect: tuple[float, float, float, float],
+    bounds: tuple[float, float, float, float],
+) -> bool:
+    x, y, width, height = rect
+    left, top, right, bottom = bounds
+    values = (x, y, width, height, left, top, right, bottom)
+    if not all(math.isfinite(value) for value in values):
+        return False
+    return x >= left and y >= top and x + width <= right and y + height <= bottom
+
+
 class ClusterUiRenderer:
     def __init__(
         self,
@@ -874,11 +919,12 @@ class ClusterUiRenderer:
 
     def _draw_radar_point_labels(self, points: tuple[RadarPointMarker, ...], camera) -> None:
         occupied: list[tuple[float, float, float, float]] = []
+        label_bounds = self._world_label_bounds(left=430, top=52, right=40, bottom=26)
         ordered = sorted(points, key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label))
         for point in ordered[:32]:
             anchor = rl.Vector3(point.center.x, point.center.y, point.center.z + 0.46)
-            screen = rl.get_world_to_screen(anchor, camera)
-            if screen.x < 430 or screen.x > self.width - 40 or screen.y < 76 or screen.y > self.height - 26:
+            screen = world_to_screen_label_anchor(anchor, camera, self.width, self.height)
+            if screen is None:
                 continue
             distance = radar_point_distance_label(point)
             speed = radar_point_speed_label(point)
@@ -891,6 +937,8 @@ class ClusterUiRenderer:
             x = screen.x - width * 0.5
             y = screen.y - height - 4
             rect_tuple = (x, y, width, height)
+            if not label_rect_inside_bounds(rect_tuple, label_bounds):
+                continue
             if any(rectangles_overlap(rect_tuple, taken) for taken in occupied):
                 continue
             occupied.append(rect_tuple)
@@ -950,8 +998,8 @@ class ClusterUiRenderer:
         )
         for vehicle in ordered:
             anchor = rl.Vector3(vehicle.center.x, vehicle.center.y, vehicle.height_m + 0.55)
-            screen = rl.get_world_to_screen(anchor, camera)
-            if screen.x < 430 or screen.x > self.width - 40 or screen.y < 88 or screen.y > self.height - 28:
+            screen = world_to_screen_label_anchor(anchor, camera, self.width, self.height)
+            if screen is None:
                 continue
 
             distance_m = max(0.0, vehicle.center.y - 4.18)
@@ -973,12 +1021,17 @@ class ClusterUiRenderer:
             x = screen.x - width * 0.5
             y = screen.y - height * 0.5
             rect_tuple = (x, y, width, height)
+            label_bounds = self._world_label_bounds(left=430, top=58, right=40, bottom=28)
+            if not label_rect_inside_bounds(rect_tuple, label_bounds):
+                continue
             if any(rectangles_overlap(rect_tuple, taken) for taken in occupied):
                 if not vehicle.primary and not vehicle.cut_in:
                     continue
                 for _ in range(3):
                     y -= height + 4
                     rect_tuple = (x, y, width, height)
+                    if not label_rect_inside_bounds(rect_tuple, label_bounds):
+                        continue
                     if not any(rectangles_overlap(rect_tuple, taken) for taken in occupied):
                         break
                 else:
@@ -989,6 +1042,22 @@ class ClusterUiRenderer:
             rl.draw_rectangle_rounded_lines_ex(rect, 0.18, 8, 1.4, rl_color(border, int(130 + 80 * vehicle.confidence)))
             self._draw_text(text, x + width * 0.5, y + 14, 16, TEXT, anchor="center")
             self._draw_text(sub, x + width * 0.5, y + 31, 12, color, anchor="center")
+
+    def _world_label_bounds(
+        self,
+        left: float,
+        top: float,
+        right: float,
+        bottom: float,
+    ) -> tuple[float, float, float, float]:
+        sx = self.width / DESIGN_WIDTH
+        sy = self.height / DESIGN_HEIGHT
+        return (
+            left * sx,
+            top * sy,
+            self.width - right * sx,
+            self.height - bottom * sy,
+        )
 
     def _draw_vehicle_box(self, vehicle: VehicleBox) -> None:
         half_width = vehicle.width_m * 0.5
