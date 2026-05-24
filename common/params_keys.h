@@ -166,6 +166,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"ShowCustomBrightness", {PERSISTENT, INT, "100"}},
     {"ShowModelView", {PERSISTENT, INT, "0"}},
     {"ClusterHud", {PERSISTENT, INT, "0"}},
+    {"ClusterHudUiType", {PERSISTENT, INT, "0"}},
     {"RecordRoadCam", {PERSISTENT, INT, "0"}},
     {"HDPuse", {PERSISTENT, INT, "0"}},
 

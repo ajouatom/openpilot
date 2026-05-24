@@ -13,6 +13,13 @@ from cluster_config import (
     EGO,
     EGO_FORWARD_M,
     GREEN,
+    HUD_REAR_CAMERA_HEIGHT_M,
+    HUD_REAR_CAMERA_Y_M,
+    HUD_REAR_FOVY_DEG,
+    HUD_REAR_ROAD_FRONT_M,
+    HUD_REAR_ROAD_REAR_M,
+    HUD_REAR_TARGET_FORWARD_M,
+    HUD_REAR_TARGET_HEIGHT_M,
     PATH_END_M,
     PATH_HEIGHT_M,
     PATH_LANE_CHANGE_CURVE_END_M,
@@ -985,13 +992,15 @@ def radar_point_markers(
     state: ClusterUiState,
     lane_width_m: float,
     vehicle_points: tuple[RadarPoint, ...] = (),
+    min_forward_m: float = ROAD_NEAR_M,
+    max_forward_m: float = ROAD_FAR_M + 30.0,
 ) -> tuple[RadarPointMarker, ...]:
     markers: list[RadarPointMarker] = []
     for point in state.radar_points[:48]:
         if any(radar_points_same_vehicle(point, vehicle_point) for vehicle_point in vehicle_points):
             continue
         forward_m = EGO_FORWARD_M + point.longitudinal_m
-        if forward_m < ROAD_NEAR_M or forward_m > ROAD_FAR_M + 30.0:
+        if forward_m < min_forward_m or forward_m > max_forward_m:
             continue
         color = radar_point_color(point)
         absolute_speed_kph = radar_point_absolute_speed_kph(point, state)
@@ -1406,11 +1415,18 @@ def scene_camera(state: ClusterUiState, lane_width_m: float, anchor_x_m: float =
     ego_x_m = ego_anchor_x_m(state, lane_width_m) - anchor_x_m
     ego_y_m = EGO_FORWARD_M
 
-    drive_camera = CameraSpec(
-        position=Vec3(0.0, -8.80, 5.20),
-        target=Vec3(0.0, 22.0, 0.18),
-        fovy_deg=31.0,
-    )
+    if hud_rear_view_active(state):
+        drive_camera = CameraSpec(
+            position=Vec3(0.0, HUD_REAR_CAMERA_Y_M, HUD_REAR_CAMERA_HEIGHT_M),
+            target=Vec3(0.0, HUD_REAR_TARGET_FORWARD_M, HUD_REAR_TARGET_HEIGHT_M),
+            fovy_deg=HUD_REAR_FOVY_DEG,
+        )
+    else:
+        drive_camera = CameraSpec(
+            position=Vec3(0.0, -8.80, 5.20),
+            target=Vec3(0.0, 22.0, 0.18),
+            fovy_deg=31.0,
+        )
 
     if not state.surround_view_active:
         return drive_camera
@@ -1442,6 +1458,10 @@ def scene_camera(state: ClusterUiState, lane_width_m: float, anchor_x_m: float =
         )
     )
     return blend_camera(drive_camera, orbit_camera, orbit_amount)
+
+
+def hud_rear_view_active(state: ClusterUiState) -> bool:
+    return int(getattr(state, "hud_ui_type", 0) or 0) == 1
 
 
 def blend_vec3(start: Vec3, end: Vec3, amount: float) -> Vec3:
@@ -1732,12 +1752,21 @@ def build_cluster_scene(
     anchor_x_m = ego_anchor_x_m(state, lane_width_m)
     scene_shift_x_m = -anchor_x_m
     camera = scene_camera(state, lane_width_m, anchor_x_m)
-    camera_active = state.surround_view_active
+    rear_view_active = hud_rear_view_active(state)
+    camera_active = state.surround_view_active or rear_view_active
     selected_radar_vehicle_points = radar_vehicle_points(state, lane_width_m)
     radar_boxes = tuple(radar_vehicle_box(point, state, lane_width_m) for point in selected_radar_vehicle_points)
     route_mode = state.route_overlay is not None or bool(state.detected_vehicles) or bool(state.radar_points)
-    road_start_m = SURROUND_ROAD_REAR_M if camera_active else ROAD_NEAR_M
-    road_end_m = SURROUND_ROAD_FRONT_M if camera_active else ROAD_FAR_M
+    road_start_m = (
+        HUD_REAR_ROAD_REAR_M if rear_view_active
+        else SURROUND_ROAD_REAR_M if state.surround_view_active
+        else ROAD_NEAR_M
+    )
+    road_end_m = (
+        HUD_REAR_ROAD_FRONT_M if rear_view_active
+        else SURROUND_ROAD_FRONT_M if state.surround_view_active
+        else ROAD_FAR_M
+    )
     road_steps = 120 if camera_active else 64 if route_mode else 88
     if (state.detected_vehicles or radar_boxes) and not camera_active:
         nearest_detected_y = min(
@@ -1900,6 +1929,8 @@ def build_cluster_scene(
         state,
         lane_width_m,
         (*selected_radar_vehicle_points, *hidden_merged_radar_points),
+        min_forward_m=road_start_m if camera_active else ROAD_NEAR_M,
+        max_forward_m=road_end_m if camera_active else ROAD_FAR_M + 30.0,
     )
     profile_scene_add(profile_add, "scene.build.radar_points", profile_stage)
 
