@@ -461,6 +461,32 @@ def model_line_centerline(
     return downsample_tuple(tuple(points), MODEL_LINE_MAX_POINTS)
 
 
+def extend_model_centerline_rearward(
+    centerline: tuple[Vec3, ...],
+    marking: LaneMarking,
+    steering: float,
+    lane_width_m: float,
+    start_m: float,
+) -> tuple[Vec3, ...]:
+    if len(centerline) < 2 or start_m >= centerline[0].y - 0.10:
+        return centerline
+
+    extension_end_m = centerline[0].y
+    extension_steps = max(2, min(80, int(abs(extension_end_m - start_m))))
+    rear_points = lane_centerline(
+        marking.offset,
+        steering,
+        lane_width_m,
+        start_m,
+        extension_end_m,
+        extension_steps,
+        0.0,
+    )
+    if len(rear_points) < 2:
+        return centerline
+    return (*rear_points[:-1], *centerline)
+
+
 def resample_centerline(points: tuple[Vec3, ...], spacing_m: float) -> tuple[Vec3, ...]:
     if len(points) < 2:
         return points
@@ -632,14 +658,25 @@ def lane_marking_segments_for_marking(
     lane_width_m: float,
     start_m: float,
     end_m: float,
+    extend_before_model: bool = False,
 ) -> tuple[tuple[Vec3, ...], ...]:
     if marking.model_points:
         centerline = model_line_centerline(marking.model_points, start_m, end_m, 0.0)
         if len(centerline) < 2:
-            return ()
-        if marking.style == "solid":
-            return (centerline,)
-        return dashed_centerline_segments(centerline)
+            if not extend_before_model:
+                return ()
+        else:
+            if extend_before_model:
+                centerline = extend_model_centerline_rearward(
+                    centerline,
+                    marking,
+                    steering,
+                    lane_width_m,
+                    start_m,
+                )
+            if marking.style == "solid":
+                return (centerline,)
+            return dashed_centerline_segments(centerline)
 
     if marking.style == "solid":
         return (lane_centerline(marking.offset, steering, lane_width_m, start_m, end_m, 80, 0.0),)
@@ -1807,6 +1844,7 @@ def build_cluster_scene(
             lane_width_m,
             road_start_m,
             road_end_m,
+            extend_before_model=rear_view_active,
         )
         backing_strips, foreground_strips = lane_marking_strip_groups_from_segments(
             marking_segments,
