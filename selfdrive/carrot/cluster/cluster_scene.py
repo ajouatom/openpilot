@@ -1267,9 +1267,13 @@ def vehicle_box(
     )
 
 
-def scene_camera(state: ClusterUiState, lane_width_m: float) -> CameraSpec:
+def ego_anchor_x_m(state: ClusterUiState, lane_width_m: float) -> float:
     ego_offset = clamp(state.ego_lane_offset, -1.25, 1.25)
-    ego_x_m = road_world_x(ego_offset, EGO_FORWARD_M, state.steering, lane_width_m)
+    return road_world_x(ego_offset, EGO_FORWARD_M, state.steering, lane_width_m)
+
+
+def scene_camera(state: ClusterUiState, lane_width_m: float, anchor_x_m: float = 0.0) -> CameraSpec:
+    ego_x_m = ego_anchor_x_m(state, lane_width_m) - anchor_x_m
     ego_y_m = EGO_FORWARD_M
 
     drive_camera = CameraSpec(
@@ -1324,6 +1328,69 @@ def blend_camera(start: CameraSpec, end: CameraSpec, amount: float) -> CameraSpe
         position=blend_vec3(start.position, end.position, amount),
         target=blend_vec3(start.target, end.target, amount),
         fovy_deg=start.fovy_deg + (end.fovy_deg - start.fovy_deg) * amount,
+    )
+
+
+def translate_vec3_x(point: Vec3, shift_x_m: float) -> Vec3:
+    return Vec3(point.x + shift_x_m, point.y, point.z)
+
+
+def translate_mesh_strip_x(strip: MeshStrip, shift_x_m: float) -> MeshStrip:
+    if abs(shift_x_m) <= 0.0001:
+        return strip
+    return MeshStrip(
+        left=tuple(translate_vec3_x(point, shift_x_m) for point in strip.left),
+        right=tuple(translate_vec3_x(point, shift_x_m) for point in strip.right),
+        color=strip.color,
+    )
+
+
+def translate_vehicle_box_x(vehicle: VehicleBox, shift_x_m: float) -> VehicleBox:
+    if abs(shift_x_m) <= 0.0001:
+        return vehicle
+    return VehicleBox(
+        center=translate_vec3_x(vehicle.center, shift_x_m),
+        right_x=vehicle.right_x,
+        right_y=vehicle.right_y,
+        forward_x=vehicle.forward_x,
+        forward_y=vehicle.forward_y,
+        width_m=vehicle.width_m,
+        length_m=vehicle.length_m,
+        height_m=vehicle.height_m,
+        body_color=vehicle.body_color,
+        side_color=vehicle.side_color,
+        rear_color=vehicle.rear_color,
+        top_highlight=vehicle.top_highlight,
+        outline_color=vehicle.outline_color,
+        confidence=vehicle.confidence,
+        label=vehicle.label,
+        source=vehicle.source,
+        relative_speed_mps=vehicle.relative_speed_mps,
+        acceleration_mps2=vehicle.acceleration_mps2,
+        ttc_s=vehicle.ttc_s,
+        cut_in=vehicle.cut_in,
+        primary=vehicle.primary,
+        annotate=vehicle.annotate,
+    )
+
+
+def translate_radar_marker_x(marker: RadarPointMarker, shift_x_m: float) -> RadarPointMarker:
+    if abs(shift_x_m) <= 0.0001:
+        return marker
+    return RadarPointMarker(
+        center=translate_vec3_x(marker.center, shift_x_m),
+        radius_m=marker.radius_m,
+        color=marker.color,
+        label=marker.label,
+        longitudinal_m=marker.longitudinal_m,
+        lateral_m=marker.lateral_m,
+        relative_speed_mps=marker.relative_speed_mps,
+        absolute_speed_kph=marker.absolute_speed_kph,
+        lateral_speed_mps=marker.lateral_speed_mps,
+        relative_accel_mps2=marker.relative_accel_mps2,
+        probability=marker.probability,
+        valid=marker.valid,
+        in_my_lane=marker.in_my_lane,
     )
 
 
@@ -1515,7 +1582,9 @@ def build_cluster_scene(
 ) -> ClusterScene:
     profile_stage = profile_scene_start(profile_add)
     lane_width_m = max(2.4, min(4.6, state.lane_width_m or DEFAULT_LANE_WIDTH_M))
-    camera = scene_camera(state, lane_width_m)
+    anchor_x_m = ego_anchor_x_m(state, lane_width_m)
+    scene_shift_x_m = -anchor_x_m
+    camera = scene_camera(state, lane_width_m, anchor_x_m)
     camera_active = state.surround_view_active
     radar_boxes = radar_vehicle_boxes(state, lane_width_m)
     route_mode = state.route_overlay is not None or bool(state.detected_vehicles) or bool(state.radar_points)
@@ -1669,14 +1738,14 @@ def build_cluster_scene(
     profile_stage = profile_scene_start(profile_add)
     scene = ClusterScene(
         camera=camera,
-        road_surface=road_surface,
-        road_edges=road_edges,
-        highlight_lanes=tuple(highlight_lanes),
-        lane_markings=tuple(lane_strips),
+        road_surface=translate_mesh_strip_x(road_surface, scene_shift_x_m),
+        road_edges=tuple(translate_mesh_strip_x(strip, scene_shift_x_m) for strip in road_edges),
+        highlight_lanes=tuple(translate_mesh_strip_x(strip, scene_shift_x_m) for strip in highlight_lanes),
+        lane_markings=tuple(translate_mesh_strip_x(strip, scene_shift_x_m) for strip in lane_strips),
         lead_paths=(),
-        planned_path=planned_path,
-        radar_points=radar_points,
-        vehicles=vehicles,
+        planned_path=tuple(translate_mesh_strip_x(strip, scene_shift_x_m) for strip in planned_path),
+        radar_points=tuple(translate_radar_marker_x(marker, scene_shift_x_m) for marker in radar_points),
+        vehicles=tuple(translate_vehicle_box_x(vehicle, scene_shift_x_m) for vehicle in vehicles),
     )
     profile_scene_add(profile_add, "scene.build.pack", profile_stage)
     return scene
