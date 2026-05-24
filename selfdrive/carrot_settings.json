@@ -2288,6 +2288,22 @@
       "max": 2,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "화면",
+      "egroup": "DISPLAY",
+      "cgroup": "显示",
+      "name": "ClusterHudTheme",
+      "title": "외부 HUD 테마(0)",
+      "descr": "0: 자동\n1: 다크\n2: 라이트",
+      "etitle": "External HUD Theme(0)",
+      "edescr": "0: Auto\n1: Dark\n2: Light",
+      "ctitle": "外部 HUD 主题(0)",
+      "cdescr": "0: 自动\n1: 深色\n2: 浅色",
+      "min": 0,
+      "max": 2,
+      "default": 0,
+      "unit": 1
     }
 
   ]

@@ -8,18 +8,18 @@ from dataclasses import dataclass, replace
 from cluster_config import (
     AMBER,
     BLUE,
-    CAR_DARK,
+    ClusterTheme,
     DEFAULT_LANE_WIDTH_M,
     EGO,
     EGO_FORWARD_M,
     GREEN,
+    LIGHT_CLUSTER_THEME,
     PATH_END_M,
     PATH_HEIGHT_M,
     PATH_LANE_CHANGE_CURVE_END_M,
     PATH_LANE_CHANGE_CURVE_START_M,
     PATH_START_M,
     RED,
-    ROAD_EDGE,
     ROAD_CURVE_M_PER_M2,
     ROAD_FAR_M,
     ROAD_NEAR_M,
@@ -79,10 +79,10 @@ MODEL_PATH_MAX_METRIC_SEGMENTS = 14
 LANE_MARKING_SHADOW_HEIGHT_M = 0.026
 LANE_MARKING_HEIGHT_M = 0.044
 LANE_MARKING_BORDER_EXTRA_WIDTH_PX = 3
-LANE_MARKING_BORDER_COLOR = (54, 62, 70, 205)
+LANE_MARKING_BORDER_COLOR = LIGHT_CLUSTER_THEME.lane_marking_border
 ROAD_EDGE_HEIGHT_M = 0.034
 ROAD_EDGE_SHADOW_HEIGHT_M = 0.028
-ROAD_EDGE_BACKING_COLOR = (72, 82, 92, 118)
+ROAD_EDGE_BACKING_COLOR = LIGHT_CLUSTER_THEME.road_edge_backing
 PATH_SHADOW_LAYER_M = 0.024
 PATH_UNCERTAINTY_LAYER_M = PATH_HEIGHT_M + 0.002
 LEAD_PATH_BACKING_LAYER_M = PATH_HEIGHT_M + 0.014
@@ -919,6 +919,7 @@ def planned_path_strips(
     state: ClusterUiState,
     lane_width_m: float,
     blockers: tuple[PathBlocker, ...],
+    theme: ClusterTheme = LIGHT_CLUSTER_THEME,
 ) -> tuple[MeshStrip, ...]:
     points = model_path_centerline(state, lane_width_m, blockers)
     model_driven = bool(points)
@@ -936,15 +937,13 @@ def planned_path_strips(
                 )
             )
         points = tuple(centerline)
-    path_specs: list[tuple[float, Color, float]] = [
-        (0.86, (56, 72, 88, 70), PATH_SHADOW_LAYER_M),
-    ]
+    path_specs: list[tuple[float, Color, float]] = [(0.86, theme.path_shadow, PATH_SHADOW_LAYER_M)]
     if model_driven:
         uncertainty_width = model_path_uncertainty_width(state)
         if uncertainty_width is not None:
-            path_specs.append((uncertainty_width, (112, 169, 255, 74), PATH_UNCERTAINTY_LAYER_M))
-    path_specs.append((0.46, (34, 126, 255, 220), PATH_BODY_LAYER_M))
-    path_specs.append((0.16, (222, 239, 255, 238), PATH_HIGHLIGHT_LAYER_M))
+            path_specs.append((uncertainty_width, theme.path_uncertainty, PATH_UNCERTAINTY_LAYER_M))
+    path_specs.append((0.46, theme.path_body, PATH_BODY_LAYER_M))
+    path_specs.append((0.16, theme.path_highlight, PATH_HIGHLIGHT_LAYER_M))
     strips = list(strips_from_centerline_width_specs(points, tuple(path_specs)))
     if model_driven:
         highlight_strip = strips.pop() if strips else None
@@ -995,7 +994,11 @@ def path_metric_color(accel_mps2: float) -> Color:
     return 70, 152, 255, 145
 
 
-def lead_trajectory_strips(state: ClusterUiState, lane_width_m: float) -> tuple[MeshStrip, ...]:
+def lead_trajectory_strips(
+    state: ClusterUiState,
+    lane_width_m: float,
+    theme: ClusterTheme = LIGHT_CLUSTER_THEME,
+) -> tuple[MeshStrip, ...]:
     strips: list[MeshStrip] = []
     for vehicle in state.detected_vehicles:
         if len(vehicle.trajectory) < 2:
@@ -1015,7 +1018,7 @@ def lead_trajectory_strips(state: ClusterUiState, lane_width_m: float) -> tuple[
             )
         if len(points) < 2:
             continue
-        color = lead_trajectory_color(vehicle)
+        color = lead_trajectory_color(vehicle, theme)
         uncertainty = [
             point.y_std_m
             for point in vehicle.trajectory
@@ -1028,13 +1031,16 @@ def lead_trajectory_strips(state: ClusterUiState, lane_width_m: float) -> tuple[
     return tuple(strips)
 
 
-def lead_trajectory_color(vehicle: DetectedVehicle) -> tuple[Color, Color]:
+def lead_trajectory_color(
+    vehicle: DetectedVehicle,
+    theme: ClusterTheme = LIGHT_CLUSTER_THEME,
+) -> tuple[Color, Color]:
     if vehicle.ttc_s is not None and vehicle.ttc_s < 3.0:
         return (RED[0], RED[1], RED[2], 80), (RED[0], RED[1], RED[2], 210)
     if vehicle.cut_in:
         return (AMBER[0], AMBER[1], AMBER[2], 76), (AMBER[0], AMBER[1], AMBER[2], 210)
     alpha = int(90 + 95 * clamp(vehicle.probability, 0.0, 1.0))
-    return (88, 134, 182, 54), (72, 142, 255, alpha)
+    return theme.lead_path_shadow, (72, 142, 255, alpha)
 
 
 def radar_point_markers(
@@ -1604,7 +1610,11 @@ def road_surface_offsets(state: ClusterUiState, route_mode: bool) -> tuple[float
     return clamp(left, -2.8, -0.68), clamp(right, 0.68, 2.8)
 
 
-def road_edge_color(distance_m: float | None, confidence: float) -> Color:
+def road_edge_color(
+    distance_m: float | None,
+    confidence: float,
+    theme: ClusterTheme = LIGHT_CLUSTER_THEME,
+) -> Color:
     confidence = clamp(confidence, 0.0, 1.0)
     if distance_m is not None and distance_m < 0.85:
         base = RED
@@ -1613,7 +1623,7 @@ def road_edge_color(distance_m: float | None, confidence: float) -> Color:
         base = AMBER
         alpha = 145 + int(80 * confidence)
     else:
-        base = darken(ROAD_EDGE, 0.22)
+        base = theme.road_edge
         alpha = 150 + int(70 * confidence)
     return base[0], base[1], base[2], int(clamp(alpha, 120, 245))
 
@@ -1623,6 +1633,7 @@ def road_edge_model_strips(
     color: Color,
     start_m: float,
     end_m: float,
+    theme: ClusterTheme = LIGHT_CLUSTER_THEME,
 ) -> tuple[MeshStrip, ...]:
     centerline = model_line_centerline(model_points, start_m, end_m, 0.0)
     centerline = extend_centerline_rearward_to_first_point(
@@ -1633,7 +1644,7 @@ def road_edge_model_strips(
     backing, foreground = lane_marking_strip_groups_from_segments(
         (centerline,),
         (
-            (12, ROAD_EDGE_BACKING_COLOR, ROAD_EDGE_SHADOW_HEIGHT_M),
+            (12, theme.road_edge_backing, ROAD_EDGE_SHADOW_HEIGHT_M),
             (7, color, ROAD_EDGE_HEIGHT_M),
         ),
     )
@@ -1647,28 +1658,32 @@ def road_edge_offset_strips(
     color: Color,
     start_m: float,
     end_m: float,
+    theme: ClusterTheme = LIGHT_CLUSTER_THEME,
 ) -> tuple[MeshStrip, ...]:
     centerline = lane_centerline(offset, steering, lane_width_m, start_m, end_m, 80, 0.0)
     backing, foreground = lane_marking_strip_groups_from_segments(
         (centerline,),
         (
-            (12, ROAD_EDGE_BACKING_COLOR, ROAD_EDGE_SHADOW_HEIGHT_M),
+            (12, theme.road_edge_backing, ROAD_EDGE_SHADOW_HEIGHT_M),
             (7, color, ROAD_EDGE_HEIGHT_M),
         ),
     )
     return (*backing, *foreground)
 
 
-def vehicle_color_for_detection(vehicle: DetectedVehicle) -> tuple[int, int, int]:
+def vehicle_color_for_detection(
+    vehicle: DetectedVehicle,
+    theme: ClusterTheme = LIGHT_CLUSTER_THEME,
+) -> tuple[int, int, int]:
     if RADAR_MERGED_SOURCE_TAG in vehicle.source:
         return BLUE
     if vehicle.cut_in:
         return AMBER
     if vehicle.primary:
-        return (50, 66, 82)
+        return theme.primary_vehicle
     if vehicle.source.startswith("modelV2"):
-        return (88, 100, 112)
-    return CAR_DARK
+        return theme.model_vehicle
+    return theme.default_vehicle
 
 
 def vehicle_blocks_path(vehicle: DetectedVehicle) -> bool:
@@ -1716,9 +1731,10 @@ def road_edge_strips(
     lane_width_m: float,
     road_start_m: float,
     road_end_m: float,
+    theme: ClusterTheme = LIGHT_CLUSTER_THEME,
 ) -> tuple[MeshStrip, ...]:
     if not route_mode:
-        default_color = road_edge_color(None, 1.0)
+        default_color = road_edge_color(None, 1.0, theme)
         left_offset, right_offset = road_surface_offsets(state, route_mode)
         return (
             *road_edge_offset_strips(
@@ -1728,6 +1744,7 @@ def road_edge_strips(
                 default_color,
                 road_start_m,
                 road_end_m,
+                theme,
             ),
             *road_edge_offset_strips(
                 right_offset,
@@ -1736,12 +1753,13 @@ def road_edge_strips(
                 default_color,
                 road_start_m,
                 road_end_m,
+                theme,
             ),
         )
 
     strips: list[MeshStrip] = []
     if state.left_road_edge_offset is not None or state.left_road_edge_points:
-        left_color = road_edge_color(state.left_road_edge_distance_m, state.left_road_edge_confidence)
+        left_color = road_edge_color(state.left_road_edge_distance_m, state.left_road_edge_confidence, theme)
         if state.left_road_edge_points:
             strips.extend(
                 road_edge_model_strips(
@@ -1749,6 +1767,7 @@ def road_edge_strips(
                     left_color,
                     road_start_m,
                     road_end_m,
+                    theme,
                 )
             )
         elif state.left_road_edge_offset is not None:
@@ -1760,10 +1779,11 @@ def road_edge_strips(
                     left_color,
                     road_start_m,
                     road_end_m,
+                    theme,
                 )
             )
     if state.right_road_edge_offset is not None or state.right_road_edge_points:
-        right_color = road_edge_color(state.right_road_edge_distance_m, state.right_road_edge_confidence)
+        right_color = road_edge_color(state.right_road_edge_distance_m, state.right_road_edge_confidence, theme)
         if state.right_road_edge_points:
             strips.extend(
                 road_edge_model_strips(
@@ -1771,6 +1791,7 @@ def road_edge_strips(
                     right_color,
                     road_start_m,
                     road_end_m,
+                    theme,
                 )
             )
         elif state.right_road_edge_offset is not None:
@@ -1782,6 +1803,7 @@ def road_edge_strips(
                     right_color,
                     road_start_m,
                     road_end_m,
+                    theme,
                 )
             )
     return tuple(strips)
@@ -1805,6 +1827,7 @@ def build_cluster_scene(
     state: ClusterUiState,
     profile_add: ProfileAdd | None = None,
     highlight_lane_lit: bool = True,
+    theme: ClusterTheme = LIGHT_CLUSTER_THEME,
 ) -> ClusterScene:
     profile_stage = profile_scene_start(profile_add)
     lane_width_m = max(2.4, min(4.6, state.lane_width_m or DEFAULT_LANE_WIDTH_M))
@@ -1870,7 +1893,7 @@ def build_cluster_scene(
             (
                 (
                     marking.width + LANE_MARKING_BORDER_EXTRA_WIDTH_PX,
-                    LANE_MARKING_BORDER_COLOR,
+                    theme.lane_marking_border,
                     LANE_MARKING_SHADOW_HEIGHT_M,
                 ),
                 (marking.width, rgba(marking.color), LANE_MARKING_HEIGHT_M),
@@ -1906,7 +1929,7 @@ def build_cluster_scene(
                 data_scene_forward_m(detected.longitudinal_m),
                 state.steering,
                 lane_width_m,
-                vehicle_color_for_detection(detected),
+                vehicle_color_for_detection(detected, theme),
                 camera_active,
                 confidence=detected.probability,
                 label=detected.label,
@@ -1968,16 +1991,16 @@ def build_cluster_scene(
         road_start_m,
         road_end_m,
         road_steps,
-        (218, 222, 226, 255),
+        rgba(theme.road),
     )
     profile_scene_add(profile_add, "scene.build.road_surface", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
-    road_edges = road_edge_strips(state, route_mode, lane_width_m, road_start_m, road_end_m)
+    road_edges = road_edge_strips(state, route_mode, lane_width_m, road_start_m, road_end_m, theme)
     profile_scene_add(profile_add, "scene.build.road_edges", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
-    planned_path = planned_path_strips(state, lane_width_m, blockers)
+    planned_path = planned_path_strips(state, lane_width_m, blockers, theme)
     profile_scene_add(profile_add, "scene.build.planned_path", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)

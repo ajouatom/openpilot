@@ -9,21 +9,20 @@ import pyray as rl
 
 from cluster_config import (
     AMBER,
-    BG,
     BLUE,
     BLUE_SOFT,
+    ClusterTheme,
     DESIGN_HEIGHT,
     DESIGN_WIDTH,
     EGO_FORWARD_M,
-    FAINT,
     GREEN,
     MAX_ACCEL_MPS2,
     MAX_SPEED_KPH,
-    MUTED,
-    PANEL_BG,
     RED,
     TEXT,
     WHITE,
+    current_cluster_theme,
+    normalize_cluster_theme_mode,
 )
 from cluster_models import ClusterUiState, RouteOverlay
 from cluster_scene import ClusterScene, MeshStrip, RadarPointMarker, Vec3, VehicleBox, build_cluster_scene
@@ -242,8 +241,8 @@ def vehicle_speed_label(vehicle: VehicleBox) -> str:
     return f"{vehicle.absolute_speed_kph:.0f} km/h"
 
 
-def vehicle_metric_color(vehicle: VehicleBox) -> tuple[int, int, int]:
-    return BLUE if "+radar:" in vehicle.source else TEXT
+def vehicle_metric_color(vehicle: VehicleBox, theme: ClusterTheme) -> tuple[int, int, int]:
+    return BLUE if "+radar:" in vehicle.source else theme.world_label_text
 
 
 def vec3(point: Vec3) -> rl.Vector3:
@@ -312,12 +311,15 @@ class ClusterUiRenderer:
         title: str = "carrotpilot cluster",
         target_fps: int = 0,
         msaa_4x: bool = False,
+        theme_mode: str = "auto",
     ) -> None:
         self.width = width
         self.height = height
         self.title = title
         self.target_fps = target_fps
         self.msaa_4x = msaa_4x
+        self.theme_mode = normalize_cluster_theme_mode(theme_mode)
+        self._theme = current_cluster_theme(self.theme_mode)
         self.hidden = False
         self._window_open = False
         self._font = None
@@ -341,6 +343,14 @@ class ClusterUiRenderer:
 
     def set_profile_enabled(self, enabled: bool) -> None:
         self.profile_enabled = enabled
+
+    def set_theme_mode(self, theme_mode: str) -> None:
+        self.theme_mode = normalize_cluster_theme_mode(theme_mode)
+        self._theme = current_cluster_theme(self.theme_mode)
+
+    def _current_theme(self) -> ClusterTheme:
+        self._theme = current_cluster_theme(self.theme_mode)
+        return self._theme
 
     def clear_profile_samples(self) -> None:
         self._profile_samples.clear()
@@ -469,15 +479,17 @@ class ClusterUiRenderer:
     def _render_world(self, state: ClusterUiState, signal_lights: tuple[bool, bool] | None = None) -> None:
         if signal_lights is None:
             signal_lights = self._turn_signal_lights(state)
+        theme = self._current_theme()
         profile_stage = self._profile_start()
         scene = build_cluster_scene(
             state,
             self._profile_add_elapsed if self.profile_enabled else None,
             highlight_lane_lit=self._highlight_lane_lit(state, signal_lights),
+            theme=theme,
         )
         self._profile_add("render_world.build_scene", profile_stage)
         profile_stage = self._profile_start()
-        rl.clear_background(rl_color(BG))
+        rl.clear_background(rl_color(theme.bg))
         self._profile_add("render_world.clear_background", profile_stage)
         profile_stage = self._profile_start()
         self._draw_scene(scene)
@@ -570,7 +582,7 @@ class ClusterUiRenderer:
 
             profile_stage = self._profile_start()
             rl.begin_texture_mode(upload_target)
-            rl.clear_background(rl_color(BG))
+            rl.clear_background(rl_color(self._current_theme().bg))
             source = rl.Rectangle(
                 0.0,
                 0.0,
@@ -672,7 +684,7 @@ class ClusterUiRenderer:
         dest = rl.Rectangle(0.0, 0.0, float(self.width), float(self.height))
         origin = rl.Vector2(0.0, 0.0)
         profile_stage = self._profile_start()
-        rl.clear_background(rl_color(BG))
+        rl.clear_background(rl_color(self._current_theme().bg))
         self._profile_add("fxaa.clear_background", profile_stage)
         profile_stage = self._profile_start()
         rl.begin_shader_mode(self._fxaa_shader)
@@ -944,6 +956,7 @@ class ClusterUiRenderer:
         rl.draw_cube_v(marker_center, marker_size, rl_color(point.color))
 
     def _draw_radar_point_labels(self, points: tuple[RadarPointMarker, ...], camera) -> None:
+        theme = self._current_theme()
         occupied: list[tuple[float, float, float, float]] = []
         label_bounds = self._world_label_bounds(left=430, top=52, right=40, bottom=26)
         ordered = sorted(points, key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label))
@@ -970,8 +983,8 @@ class ClusterUiRenderer:
                 continue
             occupied.append(rect_tuple)
             center_x = x + width * 0.5
-            shadow = (245, 248, 252)
-            text = (8, 10, 12)
+            shadow = theme.world_label_shadow
+            text = theme.world_label_text
             self._draw_text(distance, center_x + 1, y + 8 + 1, 14, shadow, anchor="center")
             self._draw_text(distance, center_x, y + 8, 14, text, anchor="center")
             if speed:
@@ -1019,6 +1032,7 @@ class ClusterUiRenderer:
             rl.rl_enable_backface_culling()
 
     def _draw_vehicle_badges(self, vehicles: tuple[VehicleBox, ...], camera) -> None:
+        theme = self._current_theme()
         occupied: list[tuple[float, float, float, float]] = []
         ordered = sorted(
             (vehicle for vehicle in vehicles if vehicle.label),
@@ -1069,8 +1083,8 @@ class ClusterUiRenderer:
                     continue
             occupied.append(rect_tuple)
             center_x = x + width * 0.5
-            shadow = (245, 248, 252)
-            text_color = vehicle_metric_color(vehicle)
+            shadow = theme.world_label_shadow
+            text_color = vehicle_metric_color(vehicle, theme)
             distance_y = y + (10 if speed else 12)
             self._draw_text(distance, center_x + 1, distance_y + 1, 15, shadow, anchor="center")
             self._draw_text(distance, center_x, distance_y, 15, text_color, anchor="center")
@@ -1206,6 +1220,7 @@ class ClusterUiRenderer:
         if not state.center_clock_text:
             return
 
+        theme = self._current_theme()
         text = state.center_clock_text
         x = DESIGN_WIDTH * 0.5
         y = 58
@@ -1223,20 +1238,21 @@ class ClusterUiRenderer:
             measured.y + pad_y * 2,
         )
 
-        rl.draw_rectangle_rounded(rect, 0.28, 12, rl_color((8, 10, 12, 150)))
-        rl.draw_rectangle_rounded_lines_ex(rect, 0.28, 12, 2.0, rl_color((255, 255, 255, 72)))
-        self._draw_text(text, x, y, size, WHITE, anchor="center")
+        rl.draw_rectangle_rounded(rect, 0.28, 12, rl_color(theme.clock_bg))
+        rl.draw_rectangle_rounded_lines_ex(rect, 0.28, 12, 2.0, rl_color(theme.clock_outline))
+        self._draw_text(text, x, y, size, theme.clock_text, anchor="center")
 
     def _draw_route_overlay(self, overlay: RouteOverlay | None) -> None:
         if overlay is None:
             return
+        theme = self._current_theme()
         panel_x = 1416
         panel_y = 34
         panel_w = 476
         video_h = 244
         data_y = 300
         profile_stage = self._profile_start()
-        self._rounded_rect(panel_x, panel_y, panel_w, 410, 18, (248, 250, 252), FAINT, 2)
+        self._rounded_rect(panel_x, panel_y, panel_w, 410, 18, theme.route_panel_bg, theme.faint, 2)
         self._profile_add("route_overlay.panel", profile_stage)
         profile_stage = self._profile_start()
         self._draw_route_video(overlay, panel_x + 10, panel_y + 10, panel_w - 20, video_h)
@@ -1246,14 +1262,15 @@ class ClusterUiRenderer:
         self._profile_add("route_overlay.data", profile_stage)
 
     def _draw_route_video(self, overlay: RouteOverlay, x: float, y: float, width: float, height: float) -> None:
+        theme = self._current_theme()
         video_rect = rl.Rectangle(x, y, width, height)
         profile_stage = self._profile_start()
-        rl.draw_rectangle_rounded(video_rect, 0.04, 10, rl_color((18, 20, 22)))
+        rl.draw_rectangle_rounded(video_rect, 0.04, 10, rl_color(theme.route_video_bg))
         self._profile_add("route_video.background", profile_stage)
         if overlay.video_rgba is None or overlay.video_width <= 0 or overlay.video_height <= 0:
             status = overlay.video_status or "qcamera unavailable"
             profile_stage = self._profile_start()
-            self._draw_text(status, x + width * 0.5, y + height * 0.5, 20, (212, 218, 224), anchor="center")
+            self._draw_text(status, x + width * 0.5, y + height * 0.5, 20, theme.route_video_status, anchor="center")
             self._profile_add("route_video.status_text", profile_stage)
             return
 
@@ -1301,14 +1318,16 @@ class ClusterUiRenderer:
         return self._route_video_texture
 
     def _draw_route_data(self, overlay: RouteOverlay, x: float, y: float, width: float) -> None:
-        self._draw_text("ROUTE DATA", x, y, 16, MUTED)
+        theme = self._current_theme()
+        self._draw_text("ROUTE DATA", x, y, 16, theme.muted)
         for index, line in enumerate(overlay.data_lines[:10]):
-            self._draw_text(line, x, y + 22 + index * 14, 12, TEXT)
+            self._draw_text(line, x, y + 22 + index * 14, 12, theme.text)
 
     def _draw_speed_block(self, state: ClusterUiState) -> None:
+        theme = self._current_theme()
         display_speed_kph = state.display_speed_kph if state.display_speed_kph is not None else state.speed_kph
         speed_value = int(round(clamp(display_speed_kph, 0.0, MAX_SPEED_KPH)))
-        self._draw_text(str(speed_value), SPEED_VALUE_CENTER_X, SPEED_VALUE_CENTER_Y, 156, TEXT, anchor="center")
+        self._draw_text(str(speed_value), SPEED_VALUE_CENTER_X, SPEED_VALUE_CENTER_Y, 156, theme.text, anchor="center")
 
         if state.speed_limit_kph is not None:
             center = rl.Vector2(SPEED_LIMIT_SIGN_CENTER_X, SPEED_LIMIT_SIGN_CENTER_Y)
@@ -1329,7 +1348,7 @@ class ClusterUiRenderer:
                 CRUISE_SET_CENTER_X,
                 CRUISE_SET_CENTER_Y,
                 60,
-                self._cruise_set_color(state),
+                self._cruise_set_color(state, theme),
                 anchor="center",
             )
 
@@ -1338,14 +1357,15 @@ class ClusterUiRenderer:
         return state.cruise_kph is not None and state.cruise_display_state != "off"
 
     @staticmethod
-    def _cruise_set_color(state: ClusterUiState) -> tuple[int, int, int]:
+    def _cruise_set_color(state: ClusterUiState, theme: ClusterTheme) -> tuple[int, int, int]:
         if state.cruise_display_state == "paused":
-            return MUTED
+            return theme.muted
         if state.speed_limit_kph is not None and state.cruise_kph == state.speed_limit_kph:
             return GREEN
         return BLUE
 
     def _draw_accel_block(self, state: ClusterUiState) -> None:
+        theme = self._current_theme()
         top = 80
         bottom = 400
         center = (top + bottom) // 2
@@ -1367,15 +1387,15 @@ class ClusterUiRenderer:
         gauge_x = gauge_center_x - gauge_width * 0.5
         fill_x = gauge_x + 8
         fill_width = 40
-        self._rounded_rect(gauge_x, top, gauge_width, bottom - top, 18, (232, 236, 240), FAINT, 2)
+        self._rounded_rect(gauge_x, top, gauge_width, bottom - top, 18, theme.gauge_bg, theme.faint, 2)
         rl.draw_line_ex(
             rl.Vector2(gauge_x, center),
             rl.Vector2(gauge_x + gauge_width, center),
             3,
-            rl_color((88, 96, 104)),
+            rl_color(theme.gauge_midline),
         )
         value = clamp(state.accel_mps2, -MAX_ACCEL_MPS2, MAX_ACCEL_MPS2)
-        fill_color = GREEN if value > 0 else RED if value < 0 else MUTED
+        fill_color = GREEN if value > 0 else RED if value < 0 else theme.muted
         if value != 0.0:
             fill_height = int(abs(value) / MAX_ACCEL_MPS2 * ((bottom - top) / 2 - 8))
             if value > 0:
@@ -1383,7 +1403,7 @@ class ClusterUiRenderer:
             else:
                 self._rounded_rect(fill_x, center, fill_width, fill_height, 13, fill_color)
         self._draw_text(accel_text, accel_text_x, 48, accel_text_size, fill_color)
-        self._draw_text("m/s^2", gauge_center_x, 424, 21, MUTED, anchor="center")
+        self._draw_text("m/s^2", gauge_center_x, 424, 21, theme.muted, anchor="center")
 
     def _draw_model_status_block(self, state: ClusterUiState) -> None:
         if state.model_confidence is None and state.disengage_risk <= 0.0 and not state.hard_brake_predicted:
@@ -1406,7 +1426,7 @@ class ClusterUiRenderer:
             return AMBER
         if confidence == "red":
             return RED
-        return MUTED
+        return self._current_theme().muted
 
     def _draw_model_insight_block(self, state: ClusterUiState) -> None:
         has_risk = bool(state.risk_points) or state.hard_brake_risk > 0.0 or state.brake_press_prob > 0.0
@@ -1419,8 +1439,9 @@ class ClusterUiRenderer:
 
         desire_label, desire_prob = dominant_desire(state.desire_state, state.desire_prediction)
         if desire_label:
-            desire_color = BLUE if "LC" in desire_label or "KEEP" in desire_label else AMBER if "TURN" in desire_label else MUTED
-            self._draw_text("DES", x + 320, y + 14, 11, MUTED, anchor="center")
+            theme = self._current_theme()
+            desire_color = BLUE if "LC" in desire_label or "KEEP" in desire_label else AMBER if "TURN" in desire_label else theme.muted
+            self._draw_text("DES", x + 320, y + 14, 11, theme.muted, anchor="center")
             self._draw_text(desire_label, x + 320, y + 34, 18, desire_color, anchor="center")
             rl.draw_line_ex(
                 rl.Vector2(x + 288, y + 51),
@@ -1431,7 +1452,8 @@ class ClusterUiRenderer:
 
         risk_values = model_risk_values(state)
         if risk_values:
-            self._draw_text("RISK", x + 438, y + 14, 11, MUTED, anchor="center")
+            theme = self._current_theme()
+            self._draw_text("RISK", x + 438, y + 14, 11, theme.muted, anchor="center")
             self._draw_tiny_bars(risk_values, x + 404, y + 24, 72, 24)
             peak_risk = max(risk_values)
             risk_color = RED if peak_risk > 0.55 else AMBER if peak_risk > 0.22 else BLUE
@@ -1450,7 +1472,12 @@ class ClusterUiRenderer:
     ) -> None:
         if len(values) < 2:
             return
-        rl.draw_line_ex(rl.Vector2(x, y + height * 0.5), rl.Vector2(x + width, y + height * 0.5), 1, rl_color(FAINT))
+        rl.draw_line_ex(
+            rl.Vector2(x, y + height * 0.5),
+            rl.Vector2(x + width, y + height * 0.5),
+            1,
+            rl_color(self._current_theme().faint),
+        )
         span = max(0.001, maximum - minimum)
         previous: rl.Vector2 | None = None
         for index, value in enumerate(values):
@@ -1513,11 +1540,12 @@ class ClusterUiRenderer:
         return blink_visible(now, started_at, float("inf"))
 
     def _draw_turn_signal(self, side: str, lit: bool) -> None:
+        theme = self._current_theme()
         cx = TURN_SIGNAL_LEFT_CENTER_X if side == "left" else TURN_SIGNAL_RIGHT_CENTER_X
         cy = TURN_SIGNAL_CENTER_Y
         direction = -1 if side == "left" else 1
-        fill = GREEN if lit else (195, 202, 209, 92)
-        outline = (8, 118, 65) if lit else (168, 176, 184)
+        fill = GREEN if lit else theme.inactive_signal_fill
+        outline = (8, 118, 65) if lit else theme.inactive_signal_outline
         tail_back = -36
         tail_front = 12
         tail_half_height = 16

@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from cluster_config import CLUSTER_THEME_PARAM, normalize_cluster_theme_mode
 from cluster_live import OpenpilotLiveSource
 from cluster_route_replay import RouteReplaySource
 from cluster_usb_display import TuringUsbDisplay
@@ -33,6 +34,7 @@ VIEW_ROTATION_DEADZONE = 0.08
 GAMEPAD_WARMUP_SECONDS = 0.6
 LEFT_SIGNAL_BUTTONS = (4, 9, 13)
 RIGHT_SIGNAL_BUTTONS = (5, 10, 14)
+THEME_PARAM_POLL_SECONDS = 1.0
 
 
 class ProfileReporter:
@@ -209,6 +211,15 @@ def route_overlay_for_mode(overlay: RouteOverlay | None, mode: str) -> RouteOver
     if mode == "compact":
         return replace(overlay, data_lines=overlay.data_lines[:4])
     return overlay
+
+
+def read_cluster_theme_mode_from_params() -> str:
+    try:
+        from openpilot.common.params import Params
+
+        return normalize_cluster_theme_mode(Params().get_int(CLUSTER_THEME_PARAM))
+    except Exception:
+        return "auto"
 
 
 def normalize_signed_axis(axis_value: float | int) -> float:
@@ -443,6 +454,7 @@ def run_demo(
     profile_interval_s: float,
     render_msaa: bool,
     gc_freeze_init: bool,
+    theme_mode: str | None,
 ) -> None:
     profile = ProfileReporter(profile_render, profile_interval_s)
     gc_hook = GcProfileHook(profile) if profile_render else None
@@ -475,11 +487,14 @@ def run_demo(
 
     frame_width = width or (usb_display.landscape_width if usb_display is not None else DESIGN_WIDTH)
     frame_height = height or (usb_display.landscape_height if usb_display is not None else DESIGN_HEIGHT)
+    theme_override = normalize_cluster_theme_mode(theme_mode) if theme_mode is not None else None
+    active_theme_mode = theme_override or read_cluster_theme_mode_from_params()
     renderer = ClusterUiRenderer(
         frame_width,
         frame_height,
         target_fps=max(0, int(round(target_fps))),
         msaa_4x=render_msaa,
+        theme_mode=active_theme_mode,
     )
     renderer.set_profile_enabled(profile_render)
     simulator = ClusterSimulator() if input_mode in ("random", "gamepad") else None
@@ -500,6 +515,7 @@ def run_demo(
     start_time = time.perf_counter()
     last_frame_time = start_time
     last_report_time = start_time
+    next_theme_param_read = start_time
     report_frames = 0
     frame_interval = 1.0 / target_fps if target_fps > 0 else 0.0
 
@@ -521,6 +537,9 @@ def run_demo(
                 break
 
             now = time.perf_counter()
+            if theme_override is None and now >= next_theme_param_read:
+                renderer.set_theme_mode(read_cluster_theme_mode_from_params())
+                next_theme_param_read = now + THEME_PARAM_POLL_SECONDS
             if duration_seconds is not None and now - start_time >= duration_seconds:
                 break
 
@@ -632,6 +651,7 @@ def run_demo(
                     f"output={output_mode}/{usb_codec if usb_display else 'screen'}"
                     f"{'-fast' if usb_display and usb_fast_write else ''} "
                     f"{'async ' if usb_pipeline is not None else ''}"
+                    f"theme={renderer.theme_mode} "
                     f"view_yaw={state.surround_yaw_deg:+.0f} "
                     f"{source_status}"
                 )
@@ -759,6 +779,12 @@ def parse_args() -> argparse.Namespace:
         choices=("compact", "full", "off"),
         default="compact",
         help="Route replay debug overlay. Default compact shows the replay camera/data panel; use off for performance tests.",
+    )
+    parser.add_argument(
+        "--theme",
+        choices=("auto", "dark", "light"),
+        default=None,
+        help=f"HUD theme override. Default reads {CLUSTER_THEME_PARAM}: 0 auto, 1 dark, 2 light.",
     )
     parser.add_argument(
         "--route-loop",
@@ -889,6 +915,7 @@ def main() -> None:
             args.profile_interval,
             args.render_msaa,
             not args.no_gc_freeze,
+            args.theme,
         )
     except KeyboardInterrupt:
         print("\nStopped.")
