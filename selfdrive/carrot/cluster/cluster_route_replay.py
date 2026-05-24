@@ -49,6 +49,7 @@ MODEL_LEAD_MIN_PROB = 0.08
 RADAR_POINT_STALE_S = 0.12
 RADAR_MIN_LONGITUDINAL_M = 0.0
 RADAR_FRONT_MAX_LONGITUDINAL_M = 180.0
+CORNER_RADAR_REAR_MIN_LONGITUDINAL_M = -180.0
 ROUTE_REPLAY_MIN_BUFFER_FILES = 2
 ROUTE_REPLAY_READAHEAD_S = 5.0
 ROUTE_REPLAY_RETAIN_BEHIND_S = 1.0
@@ -2282,7 +2283,10 @@ def parse_corner_radar_message(address: int, data: bytes) -> dict[str, DetectedV
         if detect == 0 or not 0.2 < distance_m < 180.0:
             continue
         longitudinal_m = forward_sign * distance_m
-        if not RADAR_MIN_LONGITUDINAL_M <= longitudinal_m <= RADAR_FRONT_MAX_LONGITUDINAL_M:
+        if forward_sign < 0.0:
+            if not CORNER_RADAR_REAR_MIN_LONGITUDINAL_M <= longitudinal_m <= -0.2:
+                continue
+        elif not RADAR_MIN_LONGITUDINAL_M <= longitudinal_m <= RADAR_FRONT_MAX_LONGITUDINAL_M:
             continue
         lateral_mag = normalized_lateral_m(dbc_unsigned(data, lat_start, lat_len, lat_order) * 0.1)
         side = -1.0 if label.endswith("F") and label.startswith("L") else 1.0
