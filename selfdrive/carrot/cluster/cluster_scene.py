@@ -46,7 +46,7 @@ PATH_BLOCKER_CLEARANCE_M = 1.25
 PATH_BLOCKER_LANE_TOLERANCE = 0.42
 RADAR_VEHICLE_MIN_VALID_COUNT = 16
 RADAR_VEHICLE_MAX_DISTANCE_M = 150.0
-RADAR_VEHICLE_MAX_LATERAL_LANES = 1.35
+RADAR_VEHICLE_MAX_LATERAL_LANES = 2.75
 RADAR_ROAD_EDGE_HARD_CLEARANCE_M = 0.55
 RADAR_ROAD_EDGE_STATIONARY_CLEARANCE_M = 1.05
 RADAR_STATIC_OBJECT_SPEED_MPS = 1.25
@@ -54,15 +54,17 @@ RADAR_STATIC_OBJECT_SPEED_KPH = 8.0
 RADAR_SIDE_STATIC_LATERAL_LANES = 0.58
 RADAR_EGO_MOVING_SPEED_KPH = 10.0
 RADAR_CENTER_RAW_LATERAL_LANES = 0.72
-RADAR_ADJACENT_RAW_LATERAL_LANES = 0.95
+RADAR_ADJACENT_RAW_LATERAL_LANES = 1.45
+RADAR_OUTER_RAW_LATERAL_LANES = 2.65
 RADAR_RAW_MOVING_SPEED_KPH = 12.0
 RADAR_RAW_CENTER_MIN_VALID_COUNT = 24
 RADAR_RAW_ADJACENT_MIN_VALID_COUNT = 35
-RADAR_PROBABLE_VEHICLE_LATERAL_LANES = 0.95
+RADAR_RAW_OUTER_MIN_VALID_COUNT = 48
+RADAR_PROBABLE_VEHICLE_LATERAL_LANES = 2.55
 RADAR_VEHICLE_MIN_PROBABILITY = 0.45
 RADAR_VEHICLE_DEDUP_LONGITUDINAL_M = 7.0
 RADAR_VEHICLE_DEDUP_LATERAL_M = 1.6
-RADAR_VEHICLE_MAX_BOXES = 4
+RADAR_VEHICLE_MAX_BOXES = 12
 DETECTED_VEHICLE_MAX_RENDER_BOXES = 5
 DETECTED_VEHICLE_MAX_PATH_BLOCKERS = 10
 VEHICLE_BADGE_TTC_S = 9.9
@@ -974,10 +976,14 @@ def lead_trajectory_color(vehicle: DetectedVehicle) -> tuple[Color, Color]:
     return (88, 134, 182, 54), (72, 142, 255, alpha)
 
 
-def radar_point_markers(state: ClusterUiState, lane_width_m: float) -> tuple[RadarPointMarker, ...]:
+def radar_point_markers(
+    state: ClusterUiState,
+    lane_width_m: float,
+    vehicle_points: tuple[RadarPoint, ...] = (),
+) -> tuple[RadarPointMarker, ...]:
     markers: list[RadarPointMarker] = []
     for point in state.radar_points[:48]:
-        if radar_point_is_vehicle_candidate(point, state, lane_width_m):
+        if any(radar_points_same_vehicle(point, vehicle_point) for vehicle_point in vehicle_points):
             continue
         forward_m = EGO_FORWARD_M + point.longitudinal_m
         if forward_m < ROAD_NEAR_M or forward_m > ROAD_FAR_M + 30.0:
@@ -1008,7 +1014,7 @@ def radar_point_markers(state: ClusterUiState, lane_width_m: float) -> tuple[Rad
     return tuple(markers)
 
 
-def radar_vehicle_boxes(state: ClusterUiState, lane_width_m: float) -> tuple[VehicleBox, ...]:
+def radar_vehicle_points(state: ClusterUiState, lane_width_m: float) -> tuple[RadarPoint, ...]:
     selected: list[RadarPoint] = []
     candidates = sorted(
         (
@@ -1029,7 +1035,11 @@ def radar_vehicle_boxes(state: ClusterUiState, lane_width_m: float) -> tuple[Veh
         if len(selected) >= RADAR_VEHICLE_MAX_BOXES:
             break
     selected.sort(key=lambda point: point.longitudinal_m)
-    return tuple(radar_vehicle_box(point, lane_width_m) for point in selected)
+    return tuple(selected)
+
+
+def radar_vehicle_boxes(state: ClusterUiState, lane_width_m: float) -> tuple[VehicleBox, ...]:
+    return tuple(radar_vehicle_box(point, lane_width_m) for point in radar_vehicle_points(state, lane_width_m))
 
 
 def radar_points_same_vehicle(left: RadarPoint, right: RadarPoint) -> bool:
@@ -1104,6 +1114,8 @@ def radar_point_is_moving_raw_vehicle(point: RadarPoint, state: ClusterUiState, 
         return valid_count >= RADAR_RAW_CENTER_MIN_VALID_COUNT
     if lateral_lanes <= RADAR_ADJACENT_RAW_LATERAL_LANES:
         return valid_count >= RADAR_RAW_ADJACENT_MIN_VALID_COUNT and abs(point.relative_speed_mps or 0.0) > RADAR_STATIC_OBJECT_SPEED_MPS
+    if lateral_lanes <= RADAR_OUTER_RAW_LATERAL_LANES:
+        return valid_count >= RADAR_RAW_OUTER_MIN_VALID_COUNT and abs(point.relative_speed_mps or 0.0) > RADAR_STATIC_OBJECT_SPEED_MPS
     return False
 
 
@@ -1134,6 +1146,8 @@ def radar_point_is_side_static_reflection(point: RadarPoint, state: ClusterUiSta
     if state.speed_kph < RADAR_EGO_MOVING_SPEED_KPH:
         return False
     if point.in_my_lane is not None and point.in_my_lane > 0:
+        return False
+    if point.probability is not None and point.probability >= RADAR_VEHICLE_MIN_PROBABILITY:
         return False
     if abs(point.lateral_m) <= lane_width_m * RADAR_SIDE_STATIC_LATERAL_LANES:
         return False
@@ -1605,7 +1619,8 @@ def build_cluster_scene(
     scene_shift_x_m = -anchor_x_m
     camera = scene_camera(state, lane_width_m, anchor_x_m)
     camera_active = state.surround_view_active
-    radar_boxes = radar_vehicle_boxes(state, lane_width_m)
+    selected_radar_vehicle_points = radar_vehicle_points(state, lane_width_m)
+    radar_boxes = tuple(radar_vehicle_box(point, lane_width_m) for point in selected_radar_vehicle_points)
     route_mode = state.route_overlay is not None or bool(state.detected_vehicles) or bool(state.radar_points)
     road_start_m = SURROUND_ROAD_REAR_M if camera_active else ROAD_NEAR_M
     road_end_m = SURROUND_ROAD_FRONT_M if camera_active else ROAD_FAR_M
@@ -1744,7 +1759,7 @@ def build_cluster_scene(
     profile_scene_add(profile_add, "scene.build.planned_path", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
-    radar_points = radar_point_markers(state, lane_width_m)
+    radar_points = radar_point_markers(state, lane_width_m, selected_radar_vehicle_points)
     profile_scene_add(profile_add, "scene.build.radar_points", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
