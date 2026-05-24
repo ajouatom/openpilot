@@ -54,7 +54,9 @@ ROUTE_REPLAY_MIN_BUFFER_FILES = 2
 ROUTE_REPLAY_READAHEAD_S = 5.0
 ROUTE_REPLAY_RETAIN_BEHIND_S = 1.0
 ROUTE_REPLAY_PRELOAD_NICE = 5
-CONTINUOUS_LANE_CHANGE_REBASE_PROGRESS = 0.20
+LANE_CHANGE_REINDEX_PEAK_THRESHOLD = 0.22
+LANE_CHANGE_REINDEX_RESET_THRESHOLD = -0.08
+CONTINUOUS_LANE_CHANGE_REBASE_PROGRESS = 0.12
 
 
 @dataclass(frozen=True)
@@ -839,6 +841,7 @@ class RouteLogParser:
         self.lane_change_recenter_start_progress = 1.0
         self.lane_change_continuation_active = False
         self.lane_change_previous_state = "off"
+        self.lane_change_peak_directional_observed_offset = 0.0
         self.corner_detections: dict[str, DetectedVehicle] = {}
         self.corner_detection_t = -999.0
         self.hyundai_canfd_radar_points: dict[str, RadarPoint] = {}
@@ -913,6 +916,9 @@ class RouteLogParser:
         right_signal = bool(safe_get(car_state, "rightBlinker", False))
         left_blindspot = bool(safe_get(car_state, "leftBlindspot", False))
         right_blindspot = bool(safe_get(car_state, "rightBlindspot", False))
+        observed_ego_lane_offset = 0.0
+        if lane_values["center"] is not None:
+            observed_ego_lane_offset = clamp(-lane_values["center"] / lane_values["width"], -1.25, 1.25)
         (
             lane_change,
             lane_change_phase,
@@ -923,6 +929,7 @@ class RouteLogParser:
             event_t,
             left_signal,
             right_signal,
+            observed_ego_lane_offset,
         )
         detected_vehicles = self._detected_vehicles_from_current_state(car_state, event_t)
         radar_points = self._radar_points_from_current_state(event_t)
@@ -1553,6 +1560,7 @@ class RouteLogParser:
         event_t: float,
         left_signal: bool,
         right_signal: bool,
+        observed_ego_lane_offset: float,
     ) -> tuple[str | None, str, float, float, bool]:
         def remember(result: tuple[str | None, str, float, float, bool]) -> tuple[str | None, str, float, float, bool]:
             self.lane_change_previous_state = self.lane_change_state
@@ -1566,6 +1574,7 @@ class RouteLogParser:
             self.lane_change_started_t = None
             self.active_lane_change_direction = None
             self.lane_change_continuation_active = False
+            self.lane_change_peak_directional_observed_offset = 0.0
             recenter_values = self._lane_change_recenter_values(event_t)
             if recenter_values is not None:
                 return remember(recenter_values)
@@ -1592,8 +1601,17 @@ class RouteLogParser:
             self.active_lane_change_direction = None
             self.lane_change_recenter_start_progress = 1.0
             self.lane_change_continuation_active = False
+            self.lane_change_peak_directional_observed_offset = 0.0
             return remember((None, "idle", 0.0, 1.0, False))
 
+        direction_sign = -1.0 if direction == "left" else 1.0
+        directional_observed_offset = direction_sign * observed_ego_lane_offset
+        model_reindexed_current_lane = (
+            self.active_lane_change_direction == direction
+            and self.lane_change_last_progress > 0.65
+            and self.lane_change_peak_directional_observed_offset > LANE_CHANGE_REINDEX_PEAK_THRESHOLD
+            and directional_observed_offset < LANE_CHANGE_REINDEX_RESET_THRESHOLD
+        )
         same_direction_continuation = (
             (
                 self.active_lane_change_direction == direction
@@ -1605,6 +1623,7 @@ class RouteLogParser:
                 self.lane_change_recenter_direction == direction
                 and self.lane_change_recenter_started_t is not None
             )
+            or model_reindexed_current_lane
         )
         if (
             self.lane_change_started_t is None
@@ -1617,6 +1636,12 @@ class RouteLogParser:
             self.lane_change_recenter_started_t = None
             self.lane_change_recenter_start_progress = 1.0
             self.lane_change_continuation_active = same_direction_continuation
+            self.lane_change_peak_directional_observed_offset = max(0.0, directional_observed_offset)
+        else:
+            self.lane_change_peak_directional_observed_offset = max(
+                self.lane_change_peak_directional_observed_offset,
+                directional_observed_offset,
+            )
 
         elapsed = max(0.0, event_t - self.lane_change_started_t)
         if self.lane_change_state == "preLaneChange":
@@ -1838,28 +1863,28 @@ def route_lane_animation_values(
         return 0.0, 0.0, 0.0, highlight_lane_offset, True
 
     if frame.lane_change_phase == "changing":
+        lane_grid_offset = 0.0
         if frame.lane_change_continuation:
             rebase_progress = clamp(
                 frame.lane_change_progress / CONTINUOUS_LANE_CHANGE_REBASE_PROGRESS,
                 0.0,
                 1.0,
             )
-            if rebase_progress < 1.0:
-                ego_lane_offset = direction_sign * (1.0 - smoothstep(rebase_progress))
-            else:
-                change_progress = clamp(
-                    (
-                        frame.lane_change_progress
-                        - CONTINUOUS_LANE_CHANGE_REBASE_PROGRESS
-                    )
-                    / (1.0 - CONTINUOUS_LANE_CHANGE_REBASE_PROGRESS),
-                    0.0,
-                    1.0,
+            rebase_blend = smoothstep(rebase_progress)
+            lane_grid_offset = -direction_sign * (1.0 - rebase_blend)
+            change_progress = clamp(
+                (
+                    frame.lane_change_progress
+                    - CONTINUOUS_LANE_CHANGE_REBASE_PROGRESS
                 )
-                ego_lane_offset = direction_sign * smoothstep(change_progress)
+                / (1.0 - CONTINUOUS_LANE_CHANGE_REBASE_PROGRESS),
+                0.0,
+                1.0,
+            )
+            ego_lane_offset = direction_sign * smoothstep(change_progress)
         else:
             ego_lane_offset = direction_sign * smoothstep(frame.lane_change_progress)
-        return ego_lane_offset, 0.0, 0.0, highlight_lane_offset, True
+        return ego_lane_offset, lane_grid_offset, lane_grid_offset, highlight_lane_offset, True
 
     if frame.lane_change_phase == "recentering":
         recenter_blend = smoothstep(frame.lane_change_progress)
