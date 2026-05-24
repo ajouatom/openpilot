@@ -227,12 +227,16 @@ def sample_range(start_m: float, end_m: float, steps: int) -> tuple[float, ...]:
     return tuple(start_m + (end_m - start_m) * index / steps for index in range(steps + 1))
 
 
-def data_scene_forward_m(relative_forward_m: float) -> float:
+def model_scene_forward_m(relative_forward_m: float) -> float:
     return EGO_FORWARD_M + SCENE_DATA_FORWARD_OFFSET_M + relative_forward_m
 
 
-def scene_data_relative_forward_m(forward_m: float) -> float:
+def scene_model_relative_forward_m(forward_m: float) -> float:
     return forward_m - EGO_FORWARD_M - SCENE_DATA_FORWARD_OFFSET_M
+
+
+def object_scene_forward_m(relative_forward_m: float) -> float:
+    return EGO_FORWARD_M + relative_forward_m
 
 
 def lane_centerline(
@@ -304,12 +308,12 @@ def strip_between_model_lines(
 
     relative_start_m = max(
         0.0,
-        scene_data_relative_forward_m(start_m),
+        scene_model_relative_forward_m(start_m),
         left_points[0].forward_m,
         right_points[0].forward_m,
     )
     relative_end_m = min(
-        scene_data_relative_forward_m(end_m),
+        scene_model_relative_forward_m(end_m),
         left_points[-1].forward_m,
         right_points[-1].forward_m,
     )
@@ -323,7 +327,7 @@ def strip_between_model_lines(
         right_lateral = model_line_lateral_at_forward(right_points, relative_forward_m)
         if left_lateral is None or right_lateral is None:
             continue
-        forward_m = data_scene_forward_m(relative_forward_m)
+        forward_m = model_scene_forward_m(relative_forward_m)
         if left_lateral <= right_lateral:
             left.append(Vec3(left_lateral, forward_m, height_m))
             right.append(Vec3(right_lateral, forward_m, height_m))
@@ -457,7 +461,7 @@ def model_line_centerline(
 ) -> tuple[Vec3, ...]:
     points: list[Vec3] = []
     for point in model_points:
-        forward_m = data_scene_forward_m(point.forward_m)
+        forward_m = model_scene_forward_m(point.forward_m)
         if start_m <= forward_m <= end_m:
             points.append(Vec3(point.lateral_m, forward_m, height_m))
     return downsample_tuple(tuple(points), MODEL_LINE_MAX_POINTS)
@@ -840,7 +844,7 @@ def model_path_lateral_at_forward(state: ClusterUiState, relative_forward_m: flo
 
 
 def model_path_world_x(state: ClusterUiState, lane_width_m: float, forward_m: float) -> float | None:
-    lateral_m = model_path_lateral_at_forward(state, scene_data_relative_forward_m(forward_m))
+    lateral_m = model_path_lateral_at_forward(state, scene_model_relative_forward_m(forward_m))
     if lateral_m is None:
         return None
     ego_offset = clamp(state.ego_lane_offset, -1.25, 1.25)
@@ -852,7 +856,7 @@ def model_path_end_m(state: ClusterUiState, lane_width_m: float, blockers: tuple
     if len(state.model_path) < 2:
         return None
     last_forward_m = state.model_path[-1].forward_m
-    end_m = min(PATH_END_M, data_scene_forward_m(last_forward_m))
+    end_m = min(PATH_END_M, model_scene_forward_m(last_forward_m))
     if end_m <= PATH_START_M + 0.6:
         return None
 
@@ -878,8 +882,8 @@ def model_path_centerline(
     end_m = model_path_end_m(state, lane_width_m, blockers)
     if end_m is None:
         return ()
-    relative_start_m = max(0.0, scene_data_relative_forward_m(PATH_START_M))
-    relative_end_m = max(relative_start_m, scene_data_relative_forward_m(end_m))
+    relative_start_m = max(0.0, scene_model_relative_forward_m(PATH_START_M))
+    relative_end_m = max(relative_start_m, scene_model_relative_forward_m(end_m))
     model_points = tuple(
         point
         for point in state.model_path
@@ -899,7 +903,7 @@ def model_path_centerline(
         ego_offset = clamp(state.ego_lane_offset, -1.25, 1.25)
         ego_x_m = road_world_x(ego_offset, EGO_FORWARD_M, state.steering, lane_width_m)
         points = [
-            Vec3(ego_x_m + point.lateral_m, data_scene_forward_m(point.forward_m), PATH_HEIGHT_M)
+            Vec3(ego_x_m + point.lateral_m, model_scene_forward_m(point.forward_m), PATH_HEIGHT_M)
             for point in sampled_model_points
         ]
     return tuple(points) if len(points) >= 2 else ()
@@ -992,7 +996,7 @@ def lead_trajectory_strips(state: ClusterUiState, lane_width_m: float) -> tuple[
             continue
         points: list[Vec3] = []
         for point in vehicle.trajectory:
-            forward_m = data_scene_forward_m(point.longitudinal_m)
+            forward_m = object_scene_forward_m(point.longitudinal_m)
             if forward_m < ROAD_NEAR_M or forward_m > ROAD_FAR_M:
                 continue
             offset = clamp(point.lateral_m / lane_width_m, -2.2, 2.2)
@@ -1038,7 +1042,7 @@ def radar_point_markers(
     for point in state.radar_points[:48]:
         if any(radar_points_same_vehicle(point, vehicle_point) for vehicle_point in vehicle_points):
             continue
-        forward_m = data_scene_forward_m(point.longitudinal_m)
+        forward_m = object_scene_forward_m(point.longitudinal_m)
         if forward_m < min_forward_m or forward_m > max_forward_m:
             continue
         color = radar_point_color(point)
@@ -1053,7 +1057,7 @@ def radar_point_markers(
                 radius_m=radar_point_radius(point),
                 color=color,
                 label=point.label,
-                longitudinal_m=forward_m - EGO_FORWARD_M,
+                longitudinal_m=point.longitudinal_m,
                 lateral_m=point.lateral_m,
                 relative_speed_mps=point.relative_speed_mps,
                 absolute_speed_kph=absolute_speed_kph,
@@ -1203,7 +1207,7 @@ def radar_vehicle_box(point: RadarPoint, state: ClusterUiState, lane_width_m: fl
     confidence = radar_vehicle_confidence(point)
     alpha = int(92 + 163 * confidence)
     body_color = GREEN
-    forward_m = data_scene_forward_m(point.longitudinal_m)
+    forward_m = object_scene_forward_m(point.longitudinal_m)
     center_x_m = clamp(point.lateral_m, -lane_width_m * 3.0, lane_width_m * 3.0)
     return VehicleBox(
         center=Vec3(center_x_m, forward_m, VEHICLE_HEIGHT_M * 0.5),
@@ -1797,7 +1801,7 @@ def build_cluster_scene(
     road_steps = 120 if camera_active else 64 if route_mode else 88
     if (state.detected_vehicles or radar_boxes) and not camera_active:
         nearest_detected_y = min(
-            (data_scene_forward_m(vehicle.longitudinal_m) for vehicle in state.detected_vehicles),
+            (object_scene_forward_m(vehicle.longitudinal_m) for vehicle in state.detected_vehicles),
             default=ROAD_FAR_M,
         )
         nearest_radar_y = min((vehicle.center.y for vehicle in radar_boxes), default=ROAD_FAR_M)
@@ -1834,7 +1838,7 @@ def build_cluster_scene(
             lane_width_m,
             road_start_m,
             road_end_m,
-            extend_before_model=False,
+            extend_before_model=True,
         )
         backing_strips, foreground_strips = lane_marking_strip_groups_from_segments(
             marking_segments,
@@ -1874,7 +1878,7 @@ def build_cluster_scene(
         detected_vehicle_boxes = tuple(
             vehicle_box(
                 clamp(detected.lateral_m / lane_width_m, -2.2, 2.2),
-                data_scene_forward_m(detected.longitudinal_m),
+                object_scene_forward_m(detected.longitudinal_m),
                 state.steering,
                 lane_width_m,
                 vehicle_color_for_detection(detected),
@@ -1905,7 +1909,7 @@ def build_cluster_scene(
         detected_blockers = tuple(
             PathBlocker(
                 clamp(detected.lateral_m / lane_width_m, -2.2, 2.2),
-                data_scene_forward_m(detected.longitudinal_m),
+                object_scene_forward_m(detected.longitudinal_m),
                 VEHICLE_LENGTH_M,
             )
             for detected in blocking_detected_vehicles
