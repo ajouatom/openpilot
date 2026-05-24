@@ -1083,24 +1083,30 @@ def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, l
         return False
     if abs(point.lateral_m) > lane_width_m * RADAR_VEHICLE_MAX_LATERAL_LANES:
         return False
+    if point.valid_count is not None and point.valid_count < RADAR_VEHICLE_MIN_VALID_COUNT:
+        return False
+    if point.probability is not None and point.probability < 0.20 and not point.in_my_lane:
+        return False
+    if radar_point_has_vehicle_estimate(point, state, lane_width_m):
+        return True
     if radar_point_is_stationary_object(point, state):
         return False
     if radar_point_is_side_static_reflection(point, state, lane_width_m):
         return False
     if radar_point_matches_static_road_edge(point, state, lane_width_m):
         return False
-    if point.valid_count is not None and point.valid_count < RADAR_VEHICLE_MIN_VALID_COUNT:
-        return False
-    if point.probability is not None and point.probability < 0.20 and not point.in_my_lane:
-        return False
+    if radar_point_is_moving_raw_vehicle(point, state, lane_width_m):
+        return True
+    return False
+
+
+def radar_point_has_vehicle_estimate(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> bool:
     if radar_point_matches_detected_vehicle(point, state):
         return True
     if point.in_my_lane is not None and point.in_my_lane > 0:
         return abs(point.lateral_m) <= lane_width_m * RADAR_PROBABLE_VEHICLE_LATERAL_LANES
     if point.probability is not None and point.probability >= RADAR_VEHICLE_MIN_PROBABILITY:
         return abs(point.lateral_m) <= lane_width_m * RADAR_PROBABLE_VEHICLE_LATERAL_LANES
-    if radar_point_is_moving_raw_vehicle(point, state, lane_width_m):
-        return True
     return False
 
 
