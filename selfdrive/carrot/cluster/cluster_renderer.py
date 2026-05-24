@@ -1235,7 +1235,7 @@ class ClusterUiRenderer:
             return MUTED
         if state.speed_limit_kph is not None and state.cruise_kph == state.speed_limit_kph:
             return GREEN
-        return WHITE
+        return BLUE
 
     def _draw_accel_block(self, state: ClusterUiState) -> None:
         top = 80
