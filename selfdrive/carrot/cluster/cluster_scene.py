@@ -82,6 +82,9 @@ LEAD_PATH_LINE_LAYER_M = PATH_HEIGHT_M + 0.028
 PATH_BODY_LAYER_M = PATH_HEIGHT_M + 0.046
 PATH_METRIC_LAYER_M = PATH_HEIGHT_M + 0.066
 PATH_HIGHLIGHT_LAYER_M = PATH_HEIGHT_M + 0.088
+LANE_HIGHLIGHT_COLOR = (64, 148, 255)
+LANE_HIGHLIGHT_ALPHA = 220
+LANE_HIGHLIGHT_ROUTE_ALPHA = 170
 
 
 @dataclass(frozen=True)
@@ -1576,9 +1579,15 @@ def profile_scene_add(profile_add: ProfileAdd | None, name: str, start_time: flo
         profile_add(name, (time.perf_counter() - start_time) * 1000.0)
 
 
+def lane_highlight_color(route_mode: bool) -> Color:
+    alpha = LANE_HIGHLIGHT_ROUTE_ALPHA if route_mode else LANE_HIGHLIGHT_ALPHA
+    return LANE_HIGHLIGHT_COLOR[0], LANE_HIGHLIGHT_COLOR[1], LANE_HIGHLIGHT_COLOR[2], alpha
+
+
 def build_cluster_scene(
     state: ClusterUiState,
     profile_add: ProfileAdd | None = None,
+    highlight_lane_lit: bool = True,
 ) -> ClusterScene:
     profile_stage = profile_scene_start(profile_add)
     lane_width_m = max(2.4, min(4.6, state.lane_width_m or DEFAULT_LANE_WIDTH_M))
@@ -1603,11 +1612,11 @@ def build_cluster_scene(
 
     profile_stage = profile_scene_start(profile_add)
     highlight_lanes: list[MeshStrip] = []
-    if state.highlight_lane_offset is not None:
+    if state.highlight_lane_offset is not None and highlight_lane_lit:
         highlight_strip = lane_floor_strip(
             state,
             state.highlight_lane_offset,
-            (218, 235, 255, 130 if route_mode else 185),
+            lane_highlight_color(route_mode),
             lane_width_m,
             road_start_m,
             road_end_m,

@@ -33,9 +33,9 @@ The bundled TURZX code includes only the Python vendor library. The openpilot
 device uses the system `libusb-1.0.so` through `pyusb`.
 
 The renderer prefers
-`/data/openpilot/selfdrive/assets/fonts/JetBrainsMono-Medium.ttf` for HUD text.
-It falls back to the bundled `JetBrainsMono-Bold.ttf`, then system/platform
-fonts if the medium file is not present.
+`/data/openpilot/selfdrive/assets/fonts/KaiGenGothicKR-Bold.ttf` for HUD text.
+It falls back to the bundled/addon KaiGen copy, then JetBrainsMono and
+system/platform fonts if KaiGen is not present.
 
 USB frame upload runs in no-ACK mode by default because some TURZX panels accept
 image data but never return a frame-upload response. Use `--usb-wait-frame-ack`

@@ -32,6 +32,8 @@ from cluster_utils import blink_visible, clamp
 CLUSTER_DIR = Path(__file__).resolve().parent
 SELFDRIVE_DIR = CLUSTER_DIR.parents[1]
 OPENPILOT_FONT_DIR = SELFDRIVE_DIR / "assets" / "fonts"
+OPENPILOT_ADDON_FONT_DIR = SELFDRIVE_DIR / "assets" / "addon" / "font"
+KAIGEN_GOTHIC_KR_BOLD_FONT_PATH = OPENPILOT_FONT_DIR / "KaiGenGothicKR-Bold.ttf"
 JETBRAINS_MONO_FONT_PATH = OPENPILOT_FONT_DIR / "JetBrainsMono-Medium.ttf"
 VEHICLE_MODEL_PATH = CLUSTER_DIR / "assets" / "models" / "cybertruck" / "cybertruck_cluster.obj"
 ACCEL_TEXT_WIDTH_SAMPLES = ("+00.0", "-00.0")
@@ -421,34 +423,40 @@ class ClusterUiRenderer:
             self._profile_add("render_frame.end_drawing", profile_stage)
             return
 
+        signal_lights = self._turn_signal_lights(state)
         scene_target = self._get_aa_source_target()
         profile_stage = self._profile_start()
         rl.begin_texture_mode(scene_target)
-        self._render_world(state)
+        self._render_world(state, signal_lights)
         rl.end_texture_mode()
         self._profile_add("render_frame.render_scene_target", profile_stage)
 
         profile_stage = self._profile_start()
         rl.begin_drawing()
         self._draw_antialiased_texture(scene_target.texture)
-        self._draw_hud(state)
+        self._draw_hud(state, signal_lights)
         rl.end_drawing()
         self._profile_add("render_frame.draw_fxaa_hud", profile_stage)
 
-    def render(self, state: ClusterUiState) -> None:
+    def render(self, state: ClusterUiState, signal_lights: tuple[bool, bool] | None = None) -> None:
         """Draw one frame into the currently active raylib render target."""
+        if signal_lights is None:
+            signal_lights = self._turn_signal_lights(state)
         profile_stage = self._profile_start()
-        self._render_world(state)
+        self._render_world(state, signal_lights)
         self._profile_add("render.world", profile_stage)
         profile_stage = self._profile_start()
-        self._draw_hud(state)
+        self._draw_hud(state, signal_lights)
         self._profile_add("render.hud", profile_stage)
 
-    def _render_world(self, state: ClusterUiState) -> None:
+    def _render_world(self, state: ClusterUiState, signal_lights: tuple[bool, bool] | None = None) -> None:
+        if signal_lights is None:
+            signal_lights = self._turn_signal_lights(state)
         profile_stage = self._profile_start()
         scene = build_cluster_scene(
             state,
             self._profile_add_elapsed if self.profile_enabled else None,
+            highlight_lane_lit=self._highlight_lane_lit(state, signal_lights),
         )
         self._profile_add("render_world.build_scene", profile_stage)
         profile_stage = self._profile_start()
@@ -524,16 +532,17 @@ class ClusterUiRenderer:
             self._profile_add("render_to_image.draw_to_target", profile_stage)
         else:
             scene_target = self._get_aa_source_target()
+            signal_lights = self._turn_signal_lights(state)
             profile_stage = self._profile_start()
             rl.begin_texture_mode(scene_target)
-            self._render_world(state)
+            self._render_world(state, signal_lights)
             rl.end_texture_mode()
             self._profile_add("render_to_image.draw_scene_target", profile_stage)
 
             profile_stage = self._profile_start()
             rl.begin_texture_mode(target)
             self._draw_antialiased_texture(scene_target.texture)
-            self._draw_hud(state)
+            self._draw_hud(state, signal_lights)
             rl.end_texture_mode()
             self._profile_add("render_to_image.draw_fxaa_target", profile_stage)
 
@@ -684,11 +693,16 @@ class ClusterUiRenderer:
     def _font_candidates(self) -> list[Path]:
         windir = Path(os.environ.get("WINDIR", "C:/Windows"))
         return [
+            KAIGEN_GOTHIC_KR_BOLD_FONT_PATH,
+            OPENPILOT_ADDON_FONT_DIR / "KaiGenGothicKR-Bold.ttf",
             JETBRAINS_MONO_FONT_PATH,
             OPENPILOT_FONT_DIR / "JetBrainsMono-Bold.ttf",
+            Path("/data/openpilot/selfdrive/assets/fonts/KaiGenGothicKR-Bold.ttf"),
+            Path("/data/openpilot/selfdrive/assets/addon/font/KaiGenGothicKR-Bold.ttf"),
             Path("/usr/share/fonts/truetype/jetbrains-mono/JetBrainsMono-Medium.ttf"),
             Path("/usr/share/fonts/TTF/JetBrainsMono-Medium.ttf"),
             Path("/usr/local/share/fonts/JetBrainsMono-Medium.ttf"),
+            windir / "Fonts" / "KaiGenGothicKR-Bold.ttf",
             windir / "Fonts" / "JetBrainsMono-Medium.ttf",
             windir / "Fonts" / "JetBrainsMono-Bold.ttf",
             windir / "Fonts" / "segoeuib.ttf",
@@ -1133,7 +1147,10 @@ class ClusterUiRenderer:
         rl.draw_triangle_3d(vec3(p0), vec3(p1), vec3(p2), draw_color)
         rl.draw_triangle_3d(vec3(p0), vec3(p2), vec3(p3), draw_color)
 
-    def _draw_hud(self, state: ClusterUiState) -> None:
+    def _draw_hud(self, state: ClusterUiState, signal_lights: tuple[bool, bool] | None = None) -> None:
+        if signal_lights is None:
+            signal_lights = self._turn_signal_lights(state)
+        left_signal_lit, right_signal_lit = signal_lights
         sx = self.width / DESIGN_WIDTH
         sy = self.height / DESIGN_HEIGHT
         profile_stage = self._profile_start()
@@ -1148,10 +1165,10 @@ class ClusterUiRenderer:
             self._draw_accel_block(state)
             self._profile_add("hud.accel_block", profile_stage)
             profile_stage = self._profile_start()
-            self._draw_turn_signal("left", self._turn_signal_lit("left", state.left_signal))
+            self._draw_turn_signal("left", left_signal_lit)
             self._profile_add("hud.turn_signal_left", profile_stage)
             profile_stage = self._profile_start()
-            self._draw_turn_signal("right", self._turn_signal_lit("right", state.right_signal))
+            self._draw_turn_signal("right", right_signal_lit)
             self._profile_add("hud.turn_signal_right", profile_stage)
             profile_stage = self._profile_start()
             self._draw_center_clock(state)
@@ -1434,7 +1451,25 @@ class ClusterUiRenderer:
             color = RED if value > 0.55 else AMBER if value > 0.22 else BLUE
             self._rounded_rect(x + index * (bar_w + gap), y + height - bar_h, bar_w, bar_h, 2, color)
 
-    def _turn_signal_lit(self, side: str, active: bool) -> bool:
+    def _turn_signal_lights(self, state: ClusterUiState) -> tuple[bool, bool]:
+        now = time.perf_counter()
+        return (
+            self._turn_signal_lit("left", state.left_signal, now),
+            self._turn_signal_lit("right", state.right_signal, now),
+        )
+
+    @staticmethod
+    def _highlight_lane_lit(state: ClusterUiState, signal_lights: tuple[bool, bool]) -> bool:
+        left_signal_lit, right_signal_lit = signal_lights
+        if state.highlight_lane == "left":
+            return left_signal_lit
+        if state.highlight_lane == "right":
+            return right_signal_lit
+        if state.left_signal != state.right_signal:
+            return left_signal_lit if state.left_signal else right_signal_lit
+        return True
+
+    def _turn_signal_lit(self, side: str, active: bool, now: float | None = None) -> bool:
         if not active:
             if side == "left":
                 self._left_turn_signal_started_at = None
@@ -1442,7 +1477,8 @@ class ClusterUiRenderer:
                 self._right_turn_signal_started_at = None
             return False
 
-        now = time.perf_counter()
+        if now is None:
+            now = time.perf_counter()
         if side == "left":
             if self._left_turn_signal_started_at is None:
                 self._left_turn_signal_started_at = now
