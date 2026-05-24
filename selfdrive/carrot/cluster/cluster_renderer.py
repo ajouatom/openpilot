@@ -29,7 +29,12 @@ from cluster_scene import ClusterScene, MeshStrip, RadarPointMarker, Vec3, Vehic
 from cluster_utils import blink_visible, clamp
 
 
-VEHICLE_MODEL_PATH = Path(__file__).resolve().parent / "assets" / "models" / "cybertruck" / "cybertruck_cluster.obj"
+CLUSTER_DIR = Path(__file__).resolve().parent
+SELFDRIVE_DIR = CLUSTER_DIR.parents[1]
+OPENPILOT_FONT_DIR = SELFDRIVE_DIR / "assets" / "fonts"
+JETBRAINS_MONO_FONT_PATH = OPENPILOT_FONT_DIR / "JetBrainsMono-Medium.ttf"
+VEHICLE_MODEL_PATH = CLUSTER_DIR / "assets" / "models" / "cybertruck" / "cybertruck_cluster.obj"
+ACCEL_TEXT_WIDTH_SAMPLES = ("+00.0", "-00.0")
 VEHICLE_MATERIAL_COLORS: dict[str, tuple[int, int, int, int]] = {
     "body": (156, 166, 172, 255),
     "wheel": (18, 20, 22, 255),
@@ -245,6 +250,7 @@ class ClusterUiRenderer:
         self._window_open = False
         self._font = None
         self._owns_font = False
+        self._accel_text_width = 0.0
         self._capture_target = None
         self._rotated_capture_target = None
         self._aa_source_target = None
@@ -333,6 +339,7 @@ class ClusterUiRenderer:
             rl.unload_font(self._font)
         self._font = None
         self._owns_font = False
+        self._accel_text_width = 0.0
         self._fxaa_resolution_loc = -1
         self._fxaa_resolution_value = None
         if self._vehicle_model is not None:
@@ -609,18 +616,28 @@ class ClusterUiRenderer:
     def _load_font(self):
         for candidate in self._font_candidates():
             if candidate.exists():
-                font = rl.load_font_ex(str(candidate), 160, None, 0)
-                if font.texture.id > 0:
-                    rl.gen_texture_mipmaps(font.texture)
-                    rl.set_texture_filter(font.texture, rl.TextureFilter.TEXTURE_FILTER_TRILINEAR)
-                    self._owns_font = True
-                    return font
+                try:
+                    font = rl.load_font_ex(str(candidate), 160, None, 0)
+                    if font.texture.id > 0:
+                        rl.gen_texture_mipmaps(font.texture)
+                        rl.set_texture_filter(font.texture, rl.TextureFilter.TEXTURE_FILTER_TRILINEAR)
+                        self._owns_font = True
+                        return font
+                except Exception as exc:
+                    print(f"Cluster font load failed for {candidate}: {exc}")
         self._owns_font = False
         return rl.get_font_default()
 
     def _font_candidates(self) -> list[Path]:
         windir = Path(os.environ.get("WINDIR", "C:/Windows"))
         return [
+            JETBRAINS_MONO_FONT_PATH,
+            OPENPILOT_FONT_DIR / "JetBrainsMono-Bold.ttf",
+            Path("/usr/share/fonts/truetype/jetbrains-mono/JetBrainsMono-Medium.ttf"),
+            Path("/usr/share/fonts/TTF/JetBrainsMono-Medium.ttf"),
+            Path("/usr/local/share/fonts/JetBrainsMono-Medium.ttf"),
+            windir / "Fonts" / "JetBrainsMono-Medium.ttf",
+            windir / "Fonts" / "JetBrainsMono-Bold.ttf",
             windir / "Fonts" / "segoeuib.ttf",
             windir / "Fonts" / "arialbd.ttf",
             windir / "Fonts" / "arial.ttf",
@@ -1199,7 +1216,12 @@ class ClusterUiRenderer:
         if self._font is None:
             self._font = rl.get_font_default()
         text_spacing = max(1.0, accel_text_size * 0.02)
-        text_width = rl.measure_text_ex(self._font, accel_text, accel_text_size, text_spacing).x
+        if self._accel_text_width <= 0.0:
+            self._accel_text_width = max(
+                rl.measure_text_ex(self._font, text, accel_text_size, text_spacing).x
+                for text in ACCEL_TEXT_WIDTH_SAMPLES
+            )
+        text_width = self._accel_text_width
         gauge_center_x = accel_text_x + text_width * 0.5
         gauge_x = gauge_center_x - gauge_width * 0.5
         fill_x = gauge_x + 8
