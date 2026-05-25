@@ -42,8 +42,11 @@ the live debug panel with grouped `LIVE DELAY`, `LIVE TORQUE`, `STEERING`, and
 `LATERAL PLAN` rows, `2` shows the system information panel, `3` shows a large
 debug graph selected by `ShowPlotMode` with the driving scene disabled, and `4`
 shows the same graph in the right-side panel while keeping the driving scene.
-Modes `1`, `2`, `3`, and `4` suppress the route overlay so the selected debug
-view remains visible.
+Mode `3` also hides the speed, accel, clock, turn-signal, and git HUD so the
+large graph uses the available center/right height with only a small margin.
+Mode `4` keeps the driving HUD and uses the maximum right-side panel height with
+the same margin. Modes `1`, `2`, `3`, and `4` suppress the route overlay so the
+selected debug view remains visible.
 
 The bundled TURZX code includes only the Python vendor library. The openpilot
 device uses the system `libusb-1.0.so` through `pyusb`.

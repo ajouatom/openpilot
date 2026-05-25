@@ -69,14 +69,15 @@ SYSTEM_PANEL_W = 476
 SYSTEM_STATS_REFRESH_SECONDS = 1.0
 DEBUG_PLOT_MAX_SAMPLES = 360
 DEBUG_PLOT_SAMPLE_SECONDS = 0.05
+DEBUG_PLOT_MARGIN = 18.0
 DEBUG_PLOT_FULL_X = 500.0
-DEBUG_PLOT_FULL_Y = 92.0
+DEBUG_PLOT_FULL_Y = DEBUG_PLOT_MARGIN
 DEBUG_PLOT_FULL_W = 1392.0
-DEBUG_PLOT_FULL_H = 370.0
+DEBUG_PLOT_FULL_H = DESIGN_HEIGHT - DEBUG_PLOT_MARGIN * 2.0
 DEBUG_PLOT_RIGHT_X = SYSTEM_PANEL_X
-DEBUG_PLOT_RIGHT_Y = SYSTEM_PANEL_Y
+DEBUG_PLOT_RIGHT_Y = DEBUG_PLOT_MARGIN
 DEBUG_PLOT_RIGHT_W = SYSTEM_PANEL_W
-DEBUG_PLOT_RIGHT_H = DESIGN_HEIGHT - SYSTEM_PANEL_Y - 18.0
+DEBUG_PLOT_RIGHT_H = DESIGN_HEIGHT - DEBUG_PLOT_MARGIN * 2.0
 GIT_STATUS_MARGIN = 2
 GIT_STATUS_DOT_RADIUS = 7
 GIT_STATUS_DOT_TEXT_GAP = 6
@@ -1157,6 +1158,19 @@ class ClusterUiRenderer:
         rl.rl_scalef(sx, sy, 1.0)
         self._profile_add("hud.push_scale", profile_stage)
         try:
+            screen_mode = self.screen_mode
+            if screen_mode == CLUSTER_SCREEN_MODE_DEBUG_GRAPH:
+                profile_stage = self._profile_start()
+                self._draw_debug_plot(
+                    state.debug_plot,
+                    DEBUG_PLOT_FULL_X,
+                    DEBUG_PLOT_FULL_Y,
+                    DEBUG_PLOT_FULL_W,
+                    DEBUG_PLOT_FULL_H,
+                )
+                self._profile_add("hud.debug_plot_full", profile_stage)
+                return
+
             profile_stage = self._profile_start()
             self._draw_speed_block(state)
             self._profile_add("hud.speed_block", profile_stage)
@@ -1172,7 +1186,6 @@ class ClusterUiRenderer:
             profile_stage = self._profile_start()
             self._draw_center_clock(state)
             self._profile_add("hud.center_clock", profile_stage)
-            screen_mode = self.screen_mode
             if screen_mode == CLUSTER_SCREEN_MODE_DEBUG:
                 profile_stage = self._profile_start()
                 self._draw_live_debug_panel(state)
@@ -1181,16 +1194,6 @@ class ClusterUiRenderer:
                 profile_stage = self._profile_start()
                 self._draw_system_stats_panel(state)
                 self._profile_add("hud.system_stats", profile_stage)
-            if screen_mode == CLUSTER_SCREEN_MODE_DEBUG_GRAPH:
-                profile_stage = self._profile_start()
-                self._draw_debug_plot(
-                    state.debug_plot,
-                    DEBUG_PLOT_FULL_X,
-                    DEBUG_PLOT_FULL_Y,
-                    DEBUG_PLOT_FULL_W,
-                    DEBUG_PLOT_FULL_H,
-                )
-                self._profile_add("hud.debug_plot_full", profile_stage)
             if screen_mode == CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT:
                 profile_stage = self._profile_start()
                 self._draw_debug_plot(
