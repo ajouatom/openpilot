@@ -286,17 +286,18 @@ def strip_between_offsets(
 def model_line_lateral_at_forward(
     points: tuple[ModelPathPoint, ...],
     relative_forward_m: float,
+    lateral_shift_m: float = 0.0,
 ) -> float | None:
     if not points or relative_forward_m < 0.0:
         return None
     previous = points[0]
     if relative_forward_m <= previous.forward_m:
-        return previous.lateral_m
+        return previous.lateral_m + lateral_shift_m
     for point in points[1:]:
         if relative_forward_m <= point.forward_m:
             span = max(0.001, point.forward_m - previous.forward_m)
             amount = clamp((relative_forward_m - previous.forward_m) / span, 0.0, 1.0)
-            return previous.lateral_m + (point.lateral_m - previous.lateral_m) * amount
+            return previous.lateral_m + (point.lateral_m - previous.lateral_m) * amount + lateral_shift_m
         previous = point
     return None
 
@@ -304,6 +305,8 @@ def model_line_lateral_at_forward(
 def strip_between_model_lines(
     left_points: tuple[ModelPathPoint, ...],
     right_points: tuple[ModelPathPoint, ...],
+    left_lateral_shift_m: float,
+    right_lateral_shift_m: float,
     start_m: float,
     end_m: float,
     steps: int,
@@ -332,14 +335,14 @@ def strip_between_model_lines(
     for forward_m in sample_range(scene_start_m, scene_end_m, steps):
         relative_forward_m = scene_data_relative_forward_m(forward_m)
         left_lateral = (
-            left_points[0].lateral_m
+            left_points[0].lateral_m + left_lateral_shift_m
             if extend_before_model and relative_forward_m < left_points[0].forward_m
-            else model_line_lateral_at_forward(left_points, relative_forward_m)
+            else model_line_lateral_at_forward(left_points, relative_forward_m, left_lateral_shift_m)
         )
         right_lateral = (
-            right_points[0].lateral_m
+            right_points[0].lateral_m + right_lateral_shift_m
             if extend_before_model and relative_forward_m < right_points[0].forward_m
-            else model_line_lateral_at_forward(right_points, relative_forward_m)
+            else model_line_lateral_at_forward(right_points, relative_forward_m, right_lateral_shift_m)
         )
         if left_lateral is None or right_lateral is None:
             continue
@@ -380,6 +383,8 @@ def lane_floor_strip(
         model_strip = strip_between_model_lines(
             left_marking.model_points,
             right_marking.model_points,
+            left_marking.model_lateral_shift_m,
+            right_marking.model_lateral_shift_m,
             road_start_m,
             road_end_m,
             road_steps,
@@ -442,6 +447,7 @@ def model_line_centerline(
     start_m: float,
     end_m: float,
     height_m: float,
+    lateral_shift_m: float = 0.0,
 ) -> tuple[Vec3, ...]:
     visible_points: list[ModelPathPoint] = []
     for point in model_points:
@@ -450,7 +456,7 @@ def model_line_centerline(
             visible_points.append(point)
     selected = downsample_tuple(tuple(visible_points), MODEL_LINE_MAX_POINTS)
     return tuple(
-        Vec3(point.lateral_m, data_scene_forward_m(point.forward_m), height_m)
+        Vec3(point.lateral_m + lateral_shift_m, data_scene_forward_m(point.forward_m), height_m)
         for point in selected
     )
 
@@ -571,7 +577,13 @@ def lane_marking_segments_for_marking(
     extend_before_model: bool = False,
 ) -> tuple[tuple[Vec3, ...], ...]:
     if marking.model_points:
-        centerline = model_line_centerline(marking.model_points, start_m, end_m, 0.0)
+        centerline = model_line_centerline(
+            marking.model_points,
+            start_m,
+            end_m,
+            0.0,
+            marking.model_lateral_shift_m,
+        )
         if len(centerline) < 2:
             if not extend_before_model:
                 return ()
@@ -1181,8 +1193,11 @@ def radar_point_matches_static_road_edge(point: RadarPoint, state: ClusterUiStat
 
 def radar_point_road_edge_distance_m(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> float | None:
     distances: list[float] = []
-    for edge_points in (state.left_road_edge_points, state.right_road_edge_points):
-        edge_lateral = model_line_lateral_at(edge_points, point.longitudinal_m)
+    for edge_points, lateral_shift_m in (
+        (state.left_road_edge_points, state.left_road_edge_lateral_shift_m),
+        (state.right_road_edge_points, state.right_road_edge_lateral_shift_m),
+    ):
+        edge_lateral = model_line_lateral_at(edge_points, point.longitudinal_m, lateral_shift_m)
         if edge_lateral is not None:
             distances.append(abs(point.lateral_m - edge_lateral))
     for edge_offset in (state.left_road_edge_offset, state.right_road_edge_offset):
@@ -1191,18 +1206,22 @@ def radar_point_road_edge_distance_m(point: RadarPoint, state: ClusterUiState, l
     return min(distances) if distances else None
 
 
-def model_line_lateral_at(points: tuple[ModelPathPoint, ...], forward_m: float) -> float | None:
+def model_line_lateral_at(
+    points: tuple[ModelPathPoint, ...],
+    forward_m: float,
+    lateral_shift_m: float = 0.0,
+) -> float | None:
     if not points:
         return None
-    ordered = sorted(points, key=lambda point: point.forward_m)
+    ordered = points
     if forward_m <= ordered[0].forward_m:
-        return ordered[0].lateral_m
+        return ordered[0].lateral_m + lateral_shift_m
     for left, right in zip(ordered, ordered[1:]):
         if left.forward_m <= forward_m <= right.forward_m:
             span = max(0.001, right.forward_m - left.forward_m)
             amount = clamp((forward_m - left.forward_m) / span, 0.0, 1.0)
-            return left.lateral_m + (right.lateral_m - left.lateral_m) * amount
-    return ordered[-1].lateral_m
+            return left.lateral_m + (right.lateral_m - left.lateral_m) * amount + lateral_shift_m
+    return ordered[-1].lateral_m + lateral_shift_m
 
 
 def radar_vehicle_confidence(point: RadarPoint) -> float:
@@ -1518,12 +1537,13 @@ def road_edge_color(
 
 def road_edge_model_strips(
     model_points: tuple[ModelPathPoint, ...],
+    lateral_shift_m: float,
     color: Color,
     start_m: float,
     end_m: float,
     theme: ClusterTheme = LIGHT_CLUSTER_THEME,
 ) -> tuple[MeshStrip, ...]:
-    centerline = model_line_centerline(model_points, start_m, end_m, 0.0)
+    centerline = model_line_centerline(model_points, start_m, end_m, 0.0, lateral_shift_m)
     centerline = extend_centerline_rearward_to_first_point(
         centerline,
         start_m,
@@ -1663,6 +1683,7 @@ def road_edge_strips(
             strips.extend(
                 road_edge_model_strips(
                     state.left_road_edge_points,
+                    state.left_road_edge_lateral_shift_m,
                     left_color,
                     road_start_m,
                     road_end_m,
@@ -1687,6 +1708,7 @@ def road_edge_strips(
             strips.extend(
                 road_edge_model_strips(
                     state.right_road_edge_points,
+                    state.right_road_edge_lateral_shift_m,
                     right_color,
                     road_start_m,
                     road_end_m,

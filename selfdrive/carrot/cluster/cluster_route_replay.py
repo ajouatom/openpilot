@@ -1812,15 +1812,17 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         frame.right_road_edge_offset,
         lane_grid_offset if use_animated_lane_grid else 0.0,
     )
-    left_road_edge_points = transformed_model_line_points(
-        model_line_at(frame.model_road_edges, 0),
+    left_road_edge_points = model_line_at(frame.model_road_edges, 0)
+    left_road_edge_lateral_shift_m = model_line_lateral_shift(
+        left_road_edge_points,
         frame,
         left_road_edge_offset,
         lane_grid_offset,
         use_animated_lane_grid,
     )
-    right_road_edge_points = transformed_model_line_points(
-        model_line_at(frame.model_road_edges, 1),
+    right_road_edge_points = model_line_at(frame.model_road_edges, 1)
+    right_road_edge_lateral_shift_m = model_line_lateral_shift(
+        right_road_edge_points,
         frame,
         right_road_edge_offset,
         lane_grid_offset,
@@ -1858,6 +1860,8 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         right_road_edge_offset=right_road_edge_offset,
         left_road_edge_points=left_road_edge_points,
         right_road_edge_points=right_road_edge_points,
+        left_road_edge_lateral_shift_m=left_road_edge_lateral_shift_m,
+        right_road_edge_lateral_shift_m=right_road_edge_lateral_shift_m,
         throttle=frame.throttle,
         brake=frame.brake,
         model_path=frame.model_path,
@@ -2130,6 +2134,7 @@ def lanes_for_frame(
     markings: list[LaneMarking] = []
     if use_animated_lane_grid and frame.lane_change == "left":
         left_outer = left_inner - 1.0
+        left_outer_points = model_line_at(frame.model_lane_lines, 0)
         markings.append(
             LaneMarking(
                 left_outer,
@@ -2137,8 +2142,9 @@ def lanes_for_frame(
                 "solid",
                 visible=True,
                 width=5,
-                model_points=transformed_model_line_points(
-                    model_line_at(frame.model_lane_lines, 0),
+                model_points=left_outer_points,
+                model_lateral_shift_m=model_line_lateral_shift(
+                    left_outer_points,
                     frame,
                     left_outer,
                     lane_grid_offset,
@@ -2146,6 +2152,7 @@ def lanes_for_frame(
                 ),
             )
         )
+    left_inner_points = model_line_at(frame.model_lane_lines, 1)
     markings.append(
         LaneMarking(
             left_inner,
@@ -2153,8 +2160,9 @@ def lanes_for_frame(
             frame.left_lane_style,
             visible=left_inner_visible,
             width=7,
-            model_points=transformed_model_line_points(
-                model_line_at(frame.model_lane_lines, 1),
+            model_points=left_inner_points,
+            model_lateral_shift_m=model_line_lateral_shift(
+                left_inner_points,
                 frame,
                 left_inner,
                 lane_grid_offset,
@@ -2162,6 +2170,7 @@ def lanes_for_frame(
             ),
         )
     )
+    right_inner_points = model_line_at(frame.model_lane_lines, 2)
     markings.append(
         LaneMarking(
             right_inner,
@@ -2169,8 +2178,9 @@ def lanes_for_frame(
             frame.right_lane_style,
             visible=right_inner_visible,
             width=7,
-            model_points=transformed_model_line_points(
-                model_line_at(frame.model_lane_lines, 2),
+            model_points=right_inner_points,
+            model_lateral_shift_m=model_line_lateral_shift(
+                right_inner_points,
                 frame,
                 right_inner,
                 lane_grid_offset,
@@ -2180,6 +2190,7 @@ def lanes_for_frame(
     )
     if use_animated_lane_grid and frame.lane_change == "right":
         right_outer = right_inner + 1.0
+        right_outer_points = model_line_at(frame.model_lane_lines, 3)
         markings.append(
             LaneMarking(
                 right_outer,
@@ -2187,8 +2198,9 @@ def lanes_for_frame(
                 "dashed",
                 visible=True,
                 width=5,
-                model_points=transformed_model_line_points(
-                    model_line_at(frame.model_lane_lines, 3),
+                model_points=right_outer_points,
+                model_lateral_shift_m=model_line_lateral_shift(
+                    right_outer_points,
                     frame,
                     right_outer,
                     lane_grid_offset,
@@ -2208,46 +2220,24 @@ def model_line_at(
     return lines[index]
 
 
-def transformed_model_line_points(
+def model_line_lateral_shift(
     points: tuple[ModelPathPoint, ...],
     frame: RouteReplayFrame,
     baseline_offset: float | None,
     lane_grid_offset: float,
     use_animated_lane_grid: bool,
-) -> tuple[ModelPathPoint, ...]:
+) -> float:
     if not points:
-        return ()
+        return 0.0
     lane_width_m = max(0.1, frame.lane_width_m)
     if use_animated_lane_grid and baseline_offset is not None:
         origin_lateral_m = points[0].lateral_m
         base_lateral_m = baseline_offset * lane_width_m
-        return tuple(
-            ModelPathPoint(
-                forward_m=point.forward_m,
-                lateral_m=base_lateral_m + point.lateral_m - origin_lateral_m,
-                lateral_std_m=point.lateral_std_m,
-                speed_mps=point.speed_mps,
-                accel_mps2=point.accel_mps2,
-                orientation_rad=point.orientation_rad,
-                orientation_rate_rps=point.orientation_rate_rps,
-            )
-            for point in points
-        )
+        return base_lateral_m - origin_lateral_m
 
     center_m = frame.lane_center_offset_m or 0.0
     shift_m = lane_grid_offset * lane_width_m
-    return tuple(
-        ModelPathPoint(
-            forward_m=point.forward_m,
-            lateral_m=point.lateral_m - center_m + shift_m,
-            lateral_std_m=point.lateral_std_m,
-            speed_mps=point.speed_mps,
-            accel_mps2=point.accel_mps2,
-            orientation_rad=point.orientation_rad,
-            orientation_rate_rps=point.orientation_rate_rps,
-        )
-        for point in points
-    )
+    return -center_m + shift_m
 
 
 def model_line_points(line: Any) -> tuple[ModelPathPoint, ...]:

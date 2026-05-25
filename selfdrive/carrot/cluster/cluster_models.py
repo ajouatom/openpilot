@@ -40,6 +40,7 @@ class LaneMarking:
     visible: bool = True
     width: int = 5
     model_points: tuple[ModelPathPoint, ...] = ()
+    model_lateral_shift_m: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -132,6 +133,8 @@ class ClusterUiState:
     right_road_edge_offset: float | None = None
     left_road_edge_points: tuple[ModelPathPoint, ...] = ()
     right_road_edge_points: tuple[ModelPathPoint, ...] = ()
+    left_road_edge_lateral_shift_m: float = 0.0
+    right_road_edge_lateral_shift_m: float = 0.0
     throttle: float = 0.0
     brake: float = 0.0
     model_path: tuple[ModelPathPoint, ...] = ()
