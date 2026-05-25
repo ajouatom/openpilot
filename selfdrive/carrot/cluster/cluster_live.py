@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import json
 import math
 import sys
 import time
@@ -9,7 +10,7 @@ from typing import Any
 
 from cluster_config import BLUE, DEFAULT_LANE_WIDTH_M
 from cluster_models import ClusterUiState, LaneMarking, LiveDebugInfo
-from cluster_route_replay import RouteLogParser, frame_to_state, safe_get, safe_optional_float
+from cluster_route_replay import RouteLogParser, finite_float, frame_to_state, safe_get, safe_optional_float
 from cluster_utils import clamp
 
 
@@ -58,6 +59,12 @@ class OpenpilotLiveSource:
             ) from exc
 
         self.messaging: Any = messaging
+        try:
+            from cereal import log
+
+            self.log: Any | None = log
+        except Exception:
+            self.log = None
         self.services = list(LIVE_SERVICES_BASE + (LIVE_CAN_SERVICES if include_can else ()))
         self.sm = messaging.SubMaster(self.services)
         self.parser = RouteLogParser()
@@ -69,6 +76,7 @@ class OpenpilotLiveSource:
         self._next_debug_param_read_t = 0.0
         self._custom_steer_ratio: float | None = None
         self._steer_actuator_delay_param_s: float | None = None
+        self._cached_live_debug: LiveDebugInfo | None = None
         try:
             from openpilot.common.params import Params
 
@@ -137,33 +145,53 @@ class OpenpilotLiveSource:
 
     def _live_debug_info(self) -> LiveDebugInfo | None:
         self._refresh_debug_params()
+        cached = self._cached_live_debug
 
-        live_delay_calibration_percent = None
-        live_delay_lateral_s = None
+        live_delay_calibration_percent = cached.live_delay_calibration_percent if cached is not None else None
+        live_delay_lateral_s = cached.live_delay_lateral_s if cached is not None else None
         if self._service_alive("liveDelay"):
             live_delay = self.sm["liveDelay"]
-            live_delay_calibration_percent = safe_optional_float(live_delay, "calPerc")
-            live_delay_lateral_s = safe_optional_float(live_delay, "lateralDelay")
+            live_delay_calibration_percent = self._first_present(
+                safe_optional_float(live_delay, "calPerc"),
+                live_delay_calibration_percent,
+            )
+            live_delay_lateral_s = self._first_present(
+                safe_optional_float(live_delay, "lateralDelay"),
+                live_delay_lateral_s,
+            )
         steer_actuator_delay_s = self._effective_steer_actuator_delay(live_delay_lateral_s)
 
-        live_torque_calibration_percent = None
-        live_torque_valid = None
-        live_torque_lat_accel_factor = None
-        live_torque_friction = None
+        live_torque_calibration_percent = cached.live_torque_calibration_percent if cached is not None else None
+        live_torque_valid = cached.live_torque_valid if cached is not None else None
+        live_torque_lat_accel_factor = cached.live_torque_lat_accel_factor if cached is not None else None
+        live_torque_friction = cached.live_torque_friction if cached is not None else None
         if self._service_alive("liveTorqueParameters"):
             live_torque = self.sm["liveTorqueParameters"]
-            live_torque_calibration_percent = safe_optional_float(live_torque, "calPerc")
-            live_torque_valid = bool(safe_get(live_torque, "liveValid", False))
-            live_torque_lat_accel_factor = safe_optional_float(live_torque, "latAccelFactorFiltered")
+            live_torque_calibration_percent = self._first_present(
+                safe_optional_float(live_torque, "calPerc"),
+                live_torque_calibration_percent,
+            )
+            live_valid = safe_get(live_torque, "liveValid")
+            live_torque_valid = bool(live_valid) if live_valid is not None else live_torque_valid
+            live_torque_lat_accel_factor = self._first_present(
+                safe_optional_float(live_torque, "latAccelFactorFiltered"),
+                live_torque_lat_accel_factor,
+            )
             if live_torque_lat_accel_factor is None:
                 live_torque_lat_accel_factor = safe_optional_float(live_torque, "latAccelFactor")
-            live_torque_friction = safe_optional_float(live_torque, "frictionCoefficientFiltered")
+            live_torque_friction = self._first_present(
+                safe_optional_float(live_torque, "frictionCoefficientFiltered"),
+                live_torque_friction,
+            )
             if live_torque_friction is None:
                 live_torque_friction = safe_optional_float(live_torque, "frictionCoefficient")
 
-        live_steer_ratio = None
+        live_steer_ratio = cached.live_steer_ratio if cached is not None else None
         if self._service_alive("liveParameters"):
-            live_steer_ratio = safe_optional_float(self.sm["liveParameters"], "steerRatio")
+            live_steer_ratio = self._first_present(
+                safe_optional_float(self.sm["liveParameters"], "steerRatio"),
+                live_steer_ratio,
+            )
 
         info = LiveDebugInfo(
             live_delay_calibration_percent=live_delay_calibration_percent,
@@ -198,6 +226,87 @@ class OpenpilotLiveSource:
             return
         self._custom_steer_ratio = self._finite_param_float("CustomSR", 0.1)
         self._steer_actuator_delay_param_s = self._finite_param_float("SteerActuatorDelay", 0.01)
+        self._cached_live_debug = self._read_cached_live_debug()
+
+    def _read_cached_live_debug(self) -> LiveDebugInfo | None:
+        if self.params is None:
+            return None
+
+        live_delay = self._event_service_from_param("LiveDelay", "liveDelay")
+        live_torque = self._event_service_from_param("LiveTorqueParameters", "liveTorqueParameters")
+        live_parameters = self._event_service_from_param("LiveParametersV2", "liveParameters")
+        live_steer_ratio = None
+        if live_parameters is not None:
+            live_steer_ratio = safe_optional_float(live_parameters, "steerRatio")
+        if live_steer_ratio is None:
+            live_steer_ratio = self._legacy_live_parameters_steer_ratio()
+
+        live_torque_valid = None
+        if live_torque is not None:
+            live_valid = safe_get(live_torque, "liveValid")
+            live_torque_valid = bool(live_valid) if live_valid is not None else None
+
+        info = LiveDebugInfo(
+            live_delay_calibration_percent=safe_optional_float(live_delay, "calPerc") if live_delay is not None else None,
+            live_delay_lateral_s=safe_optional_float(live_delay, "lateralDelay") if live_delay is not None else None,
+            live_torque_calibration_percent=(
+                safe_optional_float(live_torque, "calPerc") if live_torque is not None else None
+            ),
+            live_torque_valid=live_torque_valid,
+            live_torque_lat_accel_factor=(
+                safe_optional_float(live_torque, "latAccelFactorFiltered") if live_torque is not None else None
+            ),
+            live_torque_friction=(
+                safe_optional_float(live_torque, "frictionCoefficientFiltered") if live_torque is not None else None
+            ),
+            live_steer_ratio=live_steer_ratio,
+        )
+        values = (
+            info.live_delay_calibration_percent,
+            info.live_delay_lateral_s,
+            info.live_torque_calibration_percent,
+            info.live_torque_valid,
+            info.live_torque_lat_accel_factor,
+            info.live_torque_friction,
+            info.live_steer_ratio,
+        )
+        return info if any(value is not None for value in values) else None
+
+    def _event_service_from_param(self, param_key: str, service_name: str) -> Any | None:
+        if self.params is None or self.log is None:
+            return None
+        try:
+            data = self.params.get(param_key)
+        except Exception:
+            return None
+        if not data:
+            return None
+        try:
+            event = self.messaging.log_from_bytes(data, self.log.Event)
+            return safe_get(event, service_name)
+        except Exception:
+            return None
+
+    def _legacy_live_parameters_steer_ratio(self) -> float | None:
+        if self.params is None:
+            return None
+        try:
+            data = self.params.get("LiveParameters")
+        except Exception:
+            return None
+        if not data:
+            return None
+        if isinstance(data, dict):
+            return finite_float(data.get("steerRatio"))
+        try:
+            if isinstance(data, (bytes, bytearray)):
+                data = data.decode("utf-8")
+            parsed = json.loads(data)
+        except Exception:
+            return None
+        if not isinstance(parsed, dict):
+            return None
+        return finite_float(parsed.get("steerRatio"))
 
     def _effective_steer_actuator_delay(self, live_delay_lateral_s: float | None) -> float | None:
         if self._steer_actuator_delay_param_s is not None and self._steer_actuator_delay_param_s > 0.0:
@@ -205,6 +314,10 @@ class OpenpilotLiveSource:
         if live_delay_lateral_s is not None:
             return live_delay_lateral_s
         return self._steer_actuator_delay_param_s
+
+    @staticmethod
+    def _first_present(value: Any | None, fallback: Any | None) -> Any | None:
+        return value if value is not None else fallback
 
     def _finite_param_float(self, key: str, scale: float) -> float | None:
         if self.params is None:
