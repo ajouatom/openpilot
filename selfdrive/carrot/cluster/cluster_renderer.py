@@ -1,0 +1,1830 @@
+from __future__ import annotations
+
+from collections.abc import Iterator
+from contextlib import contextmanager
+from functools import lru_cache
+import math
+import os
+import time
+from pathlib import Path
+
+import pyray as rl
+
+from cluster_config import (
+    AMBER,
+    BLUE,
+    ClusterTheme,
+    DESIGN_HEIGHT,
+    DESIGN_WIDTH,
+    EGO_FORWARD_M,
+    GREEN,
+    MAX_ACCEL_MPS2,
+    MAX_SPEED_KPH,
+    RED,
+    TEXT,
+    WHITE,
+    current_cluster_theme,
+    normalize_cluster_theme_mode,
+)
+from cluster_models import ClusterUiState, GitBranchStatus, RouteOverlay
+from cluster_scene import (
+    ClusterScene,
+    MeshStrip,
+    RadarPointMarker,
+    RearVehicleIndicator,
+    Vec3,
+    VehicleBox,
+    build_cluster_scene,
+)
+from cluster_system_monitor import SystemStats, SystemStatsSampler
+from cluster_utils import blink_visible, clamp
+
+
+CLUSTER_DIR = Path(__file__).resolve().parent
+SELFDRIVE_DIR = CLUSTER_DIR.parents[1]
+OPENPILOT_FONT_DIR = SELFDRIVE_DIR / "assets" / "fonts"
+OPENPILOT_ADDON_FONT_DIR = SELFDRIVE_DIR / "assets" / "addon" / "font"
+KAIGEN_GOTHIC_KR_BOLD_FONT_PATH = OPENPILOT_FONT_DIR / "KaiGenGothicKR-Bold.ttf"
+JETBRAINS_MONO_FONT_PATH = OPENPILOT_FONT_DIR / "JetBrainsMono-Medium.ttf"
+VEHICLE_MODEL_PATH = CLUSTER_DIR / "assets" / "models" / "cybertruck" / "cybertruck_cluster.obj"
+ACCEL_TEXT_WIDTH_SAMPLES = ("+00.00", "-00.00")
+TURN_SIGNAL_LEFT_CENTER_X = 610
+TURN_SIGNAL_RIGHT_CENTER_X = 1310
+TURN_SIGNAL_CENTER_Y = 72
+TURN_SIGNAL_MID_CENTER_X = (TURN_SIGNAL_LEFT_CENTER_X + TURN_SIGNAL_RIGHT_CENTER_X) * 0.5
+SPEED_VALUE_CENTER_X = 260
+SPEED_VALUE_CENTER_Y = 230
+SPEED_LIMIT_SIGN_CENTER_X = 460
+SPEED_LIMIT_SIGN_CENTER_Y = TURN_SIGNAL_CENTER_Y
+CRUISE_SET_CENTER_X = SPEED_VALUE_CENTER_X
+CRUISE_SET_CENTER_Y = TURN_SIGNAL_CENTER_Y
+SYSTEM_PANEL_X = 1416
+SYSTEM_PANEL_Y = 118
+SYSTEM_PANEL_W = 476
+SYSTEM_STATS_REFRESH_SECONDS = 1.0
+GIT_STATUS_X = 20
+GIT_STATUS_CENTER_Y = 456
+GIT_STATUS_PANEL_H = 32
+GIT_STATUS_MAX_TEXT_W = 610
+VEHICLE_MATERIAL_COLORS: dict[str, tuple[int, int, int, int]] = {
+    "body": (156, 166, 172, 255),
+    "wheel": (18, 20, 22, 255),
+    "besi_roda": (36, 38, 42, 255),
+    "light": (184, 222, 255, 255),
+    "stop_light": (226, 34, 28, 255),
+    "riting": (255, 146, 20, 255),
+    "Material": (136, 142, 148, 255),
+    "Material.002": (68, 72, 78, 255),
+    "Material.003": (18, 20, 22, 255),
+    "Material.004": (18, 20, 22, 255),
+    "Material.005": (18, 20, 22, 255),
+    "Material.006": (18, 20, 22, 255),
+}
+DEFAULT_VEHICLE_MATERIAL_COLOR = (142, 150, 156, 255)
+FXAA_FRAGMENT_SHADER_330 = """
+#version 330
+
+in vec2 fragTexCoord;
+in vec4 fragColor;
+
+uniform sampler2D texture0;
+uniform vec2 resolution;
+
+out vec4 finalColor;
+
+void main()
+{
+    vec2 inverseResolution = 1.0 / resolution;
+    vec3 rgbNW = texture(texture0, fragTexCoord + vec2(-1.0, -1.0) * inverseResolution).rgb;
+    vec3 rgbNE = texture(texture0, fragTexCoord + vec2(1.0, -1.0) * inverseResolution).rgb;
+    vec3 rgbSW = texture(texture0, fragTexCoord + vec2(-1.0, 1.0) * inverseResolution).rgb;
+    vec3 rgbSE = texture(texture0, fragTexCoord + vec2(1.0, 1.0) * inverseResolution).rgb;
+    vec4 center = texture(texture0, fragTexCoord);
+    vec3 rgbM = center.rgb;
+    vec3 luma = vec3(0.299, 0.587, 0.114);
+
+    float lumaNW = dot(rgbNW, luma);
+    float lumaNE = dot(rgbNE, luma);
+    float lumaSW = dot(rgbSW, luma);
+    float lumaSE = dot(rgbSE, luma);
+    float lumaM = dot(rgbM, luma);
+    float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
+    float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));
+
+    vec2 direction;
+    direction.x = -((lumaNW + lumaNE) - (lumaSW + lumaSE));
+    direction.y = ((lumaNW + lumaSW) - (lumaNE + lumaSE));
+    float directionReduce = max((lumaNW + lumaNE + lumaSW + lumaSE) * 0.03125, 0.0078125);
+    float inverseDirectionAdjustment = 1.0 / (min(abs(direction.x), abs(direction.y)) + directionReduce);
+    direction = clamp(direction * inverseDirectionAdjustment, vec2(-8.0), vec2(8.0)) * inverseResolution;
+
+    vec3 rgbA = 0.5 * (
+        texture(texture0, fragTexCoord + direction * (1.0 / 3.0 - 0.5)).rgb +
+        texture(texture0, fragTexCoord + direction * (2.0 / 3.0 - 0.5)).rgb);
+    vec3 rgbB = rgbA * 0.5 + 0.25 * (
+        texture(texture0, fragTexCoord + direction * -0.5).rgb +
+        texture(texture0, fragTexCoord + direction * 0.5).rgb);
+    float lumaB = dot(rgbB, luma);
+
+    vec3 color = ((lumaB < lumaMin) || (lumaB > lumaMax)) ? rgbA : rgbB;
+    finalColor = vec4(color, center.a) * fragColor;
+}
+"""
+FXAA_FRAGMENT_SHADER_100 = """
+#version 100
+precision mediump float;
+
+varying vec2 fragTexCoord;
+varying vec4 fragColor;
+
+uniform sampler2D texture0;
+uniform vec2 resolution;
+
+void main()
+{
+    vec2 inverseResolution = 1.0 / resolution;
+    vec3 rgbNW = texture2D(texture0, fragTexCoord + vec2(-1.0, -1.0) * inverseResolution).rgb;
+    vec3 rgbNE = texture2D(texture0, fragTexCoord + vec2(1.0, -1.0) * inverseResolution).rgb;
+    vec3 rgbSW = texture2D(texture0, fragTexCoord + vec2(-1.0, 1.0) * inverseResolution).rgb;
+    vec3 rgbSE = texture2D(texture0, fragTexCoord + vec2(1.0, 1.0) * inverseResolution).rgb;
+    vec4 center = texture2D(texture0, fragTexCoord);
+    vec3 rgbM = center.rgb;
+    vec3 luma = vec3(0.299, 0.587, 0.114);
+
+    float lumaNW = dot(rgbNW, luma);
+    float lumaNE = dot(rgbNE, luma);
+    float lumaSW = dot(rgbSW, luma);
+    float lumaSE = dot(rgbSE, luma);
+    float lumaM = dot(rgbM, luma);
+    float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
+    float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));
+
+    vec2 direction;
+    direction.x = -((lumaNW + lumaNE) - (lumaSW + lumaSE));
+    direction.y = ((lumaNW + lumaSW) - (lumaNE + lumaSE));
+    float directionReduce = max((lumaNW + lumaNE + lumaSW + lumaSE) * 0.03125, 0.0078125);
+    float inverseDirectionAdjustment = 1.0 / (min(abs(direction.x), abs(direction.y)) + directionReduce);
+    direction = clamp(direction * inverseDirectionAdjustment, vec2(-8.0), vec2(8.0)) * inverseResolution;
+
+    vec3 rgbA = 0.5 * (
+        texture2D(texture0, fragTexCoord + direction * (1.0 / 3.0 - 0.5)).rgb +
+        texture2D(texture0, fragTexCoord + direction * (2.0 / 3.0 - 0.5)).rgb);
+    vec3 rgbB = rgbA * 0.5 + 0.25 * (
+        texture2D(texture0, fragTexCoord + direction * -0.5).rgb +
+        texture2D(texture0, fragTexCoord + direction * 0.5).rgb);
+    float lumaB = dot(rgbB, luma);
+
+    vec3 color = ((lumaB < lumaMin) || (lumaB > lumaMax)) ? rgbA : rgbB;
+    gl_FragColor = vec4(color, center.a) * fragColor;
+}
+"""
+
+
+@lru_cache(maxsize=256)
+def _cached_rl_color(r: int, g: int, b: int, a: int) -> rl.Color:
+    return rl.Color(r, g, b, a)
+
+
+def rl_color(color: tuple[int, int, int] | tuple[int, int, int, int], alpha: int | None = None) -> rl.Color:
+    if len(color) == 4:
+        r, g, b, a = color
+    else:
+        r, g, b = color
+        a = 255
+    if alpha is not None:
+        a = alpha
+    return _cached_rl_color(int(r), int(g), int(b), int(a))
+
+
+def radar_point_distance_label(point: RadarPointMarker) -> str:
+    return f"{point.longitudinal_m:.0f} m"
+
+
+def radar_point_speed_label(point: RadarPointMarker) -> str:
+    if point.absolute_speed_kph is None:
+        return ""
+    return f"{point.absolute_speed_kph:.0f} km/h"
+
+
+def vehicle_distance_label(vehicle: VehicleBox) -> str:
+    return f"{abs(vehicle.center.y - EGO_FORWARD_M):.0f} m"
+
+
+def vehicle_speed_label(vehicle: VehicleBox) -> str:
+    if vehicle.absolute_speed_kph is None:
+        return ""
+    return f"{vehicle.absolute_speed_kph:.0f} km/h"
+
+
+def vehicle_metric_color(vehicle: VehicleBox, theme: ClusterTheme) -> tuple[int, int, int]:
+    return BLUE if "+radar:" in vehicle.source else theme.world_label_text
+
+
+def vec3(point: Vec3) -> rl.Vector3:
+    return rl.Vector3(point.x, point.y, point.z)
+
+
+def rectangles_overlap(
+    left: tuple[float, float, float, float],
+    right: tuple[float, float, float, float],
+) -> bool:
+    lx, ly, lw, lh = left
+    rx, ry, rw, rh = right
+    return lx < rx + rw and lx + lw > rx and ly < ry + rh and ly + lh > ry
+
+
+def camera_forward(camera) -> tuple[float, float, float] | None:
+    dx = float(camera.target.x - camera.position.x)
+    dy = float(camera.target.y - camera.position.y)
+    dz = float(camera.target.z - camera.position.z)
+    length = math.sqrt(dx * dx + dy * dy + dz * dz)
+    if length <= 0.0001 or not all(math.isfinite(value) for value in (dx, dy, dz, length)):
+        return None
+    return dx / length, dy / length, dz / length
+
+
+def camera_depth_m(point, camera) -> float | None:
+    forward = camera_forward(camera)
+    if forward is None:
+        return None
+    px = float(point.x - camera.position.x)
+    py = float(point.y - camera.position.y)
+    pz = float(point.z - camera.position.z)
+    if not all(math.isfinite(value) for value in (px, py, pz)):
+        return None
+    fx, fy, fz = forward
+    return px * fx + py * fy + pz * fz
+
+
+def world_to_screen_label_anchor(point, camera, width: int, height: int):
+    depth_m = camera_depth_m(point, camera)
+    if depth_m is None or depth_m <= 0.05:
+        return None
+    screen = rl.get_world_to_screen_ex(point, camera, width, height)
+    if not math.isfinite(screen.x) or not math.isfinite(screen.y):
+        return None
+    return screen
+
+
+def label_rect_inside_bounds(
+    rect: tuple[float, float, float, float],
+    bounds: tuple[float, float, float, float],
+) -> bool:
+    x, y, width, height = rect
+    left, top, right, bottom = bounds
+    values = (x, y, width, height, left, top, right, bottom)
+    if not all(math.isfinite(value) for value in values):
+        return False
+    return x >= left and y >= top and x + width <= right and y + height <= bottom
+
+
+class ClusterUiRenderer:
+    def __init__(
+        self,
+        width: int = DESIGN_WIDTH,
+        height: int = DESIGN_HEIGHT,
+        title: str = "carrotpilot cluster",
+        target_fps: int = 0,
+        msaa_4x: bool = False,
+        theme_mode: str = "auto",
+    ) -> None:
+        self.width = width
+        self.height = height
+        self.title = title
+        self.target_fps = target_fps
+        self.msaa_4x = msaa_4x
+        self.theme_mode = normalize_cluster_theme_mode(theme_mode)
+        self._theme = current_cluster_theme(self.theme_mode)
+        self.hidden = False
+        self._window_open = False
+        self._font = None
+        self._owns_font = False
+        self._accel_text_width = 0.0
+        self._capture_target = None
+        self._portrait_upload_target = None
+        self._aa_source_target = None
+        self._fxaa_shader = None
+        self._fxaa_resolution_loc = -1
+        self._fxaa_resolution_value = None
+        self._vehicle_model = None
+        self._vehicle_model_load_attempted = False
+        self._route_video_texture = None
+        self._route_video_size: tuple[int, int] | None = None
+        self._route_video_frame_id: str | None = None
+        self._left_turn_signal_started_at: float | None = None
+        self._right_turn_signal_started_at: float | None = None
+        self._triangle_strip_points = None
+        self._triangle_strip_capacity = 0
+        self._system_stats = SystemStatsSampler(SYSTEM_STATS_REFRESH_SECONDS)
+        self.profile_enabled = os.environ.get("CLUSTER_PROFILE_RENDER") == "1"
+        self._profile_samples: list[tuple[str, float]] = []
+
+    def set_profile_enabled(self, enabled: bool) -> None:
+        self.profile_enabled = enabled
+
+    def set_theme_mode(self, theme_mode: str) -> None:
+        self.theme_mode = normalize_cluster_theme_mode(theme_mode)
+        self._theme = current_cluster_theme(self.theme_mode)
+
+    def set_target_fps(self, target_fps: int) -> None:
+        self.target_fps = max(0, int(target_fps))
+        if self._window_open:
+            profile_stage = self._profile_start()
+            rl.set_target_fps(self.target_fps)
+            self._profile_add("renderer.set_target_fps", profile_stage)
+
+    def _current_theme(self) -> ClusterTheme:
+        self._theme = current_cluster_theme(self.theme_mode)
+        return self._theme
+
+    def clear_profile_samples(self) -> None:
+        self._profile_samples.clear()
+
+    def profile_samples(self) -> tuple[tuple[str, float], ...]:
+        return tuple(self._profile_samples)
+
+    def _profile_start(self) -> float:
+        return time.perf_counter() if self.profile_enabled else 0.0
+
+    def _profile_add(self, name: str, start_time: float) -> None:
+        if self.profile_enabled:
+            self._profile_samples.append((name, (time.perf_counter() - start_time) * 1000.0))
+
+    def _profile_add_elapsed(self, name: str, elapsed_ms: float) -> None:
+        if self.profile_enabled:
+            self._profile_samples.append((name, elapsed_ms))
+
+    def open(self, hidden: bool = False) -> None:
+        if self._window_open:
+            return
+        profile_total = self._profile_start()
+        self.hidden = hidden
+        rl.set_trace_log_level(rl.TraceLogLevel.LOG_WARNING)
+        flags = 0
+        if self.msaa_4x:
+            flags |= rl.ConfigFlags.FLAG_MSAA_4X_HINT
+        if hidden:
+            flags |= rl.ConfigFlags.FLAG_WINDOW_HIDDEN
+        if flags:
+            rl.set_config_flags(flags)
+        profile_stage = self._profile_start()
+        rl.init_window(self.width, self.height, self.title)
+        self._profile_add("renderer.open.init_window", profile_stage)
+        if self.target_fps > 0:
+            profile_stage = self._profile_start()
+            rl.set_target_fps(self.target_fps)
+            self._profile_add("renderer.open.set_target_fps", profile_stage)
+        profile_stage = self._profile_start()
+        self._font = self._load_font()
+        self._profile_add("renderer.open.load_font", profile_stage)
+        profile_stage = self._profile_start()
+        self._load_vehicle_model()
+        self._profile_add("renderer.open.load_vehicle_model", profile_stage)
+        # self._load_fxaa_shader()
+        self._window_open = True
+        self._profile_add("renderer.open.total", profile_total)
+
+    def close(self) -> None:
+        if not self._window_open:
+            return
+        if self._aa_source_target is not None:
+            rl.unload_render_texture(self._aa_source_target)
+            self._aa_source_target = None
+        if self._capture_target is not None:
+            rl.unload_render_texture(self._capture_target)
+            self._capture_target = None
+        if self._portrait_upload_target is not None:
+            rl.unload_render_texture(self._portrait_upload_target)
+            self._portrait_upload_target = None
+        if self._fxaa_shader is not None:
+            rl.unload_shader(self._fxaa_shader)
+            self._fxaa_shader = None
+        if self._route_video_texture is not None:
+            rl.unload_texture(self._route_video_texture)
+            self._route_video_texture = None
+        if self._owns_font and self._font is not None:
+            rl.unload_font(self._font)
+        self._font = None
+        self._owns_font = False
+        self._accel_text_width = 0.0
+        self._fxaa_resolution_loc = -1
+        self._fxaa_resolution_value = None
+        if self._vehicle_model is not None:
+            rl.unload_model(self._vehicle_model)
+            self._vehicle_model = None
+        self._vehicle_model_load_attempted = False
+        self._route_video_size = None
+        self._route_video_frame_id = None
+        rl.close_window()
+        self._window_open = False
+
+    def should_close(self) -> bool:
+        return bool(self._window_open and rl.window_should_close())
+
+    def render_frame(self, state: ClusterUiState) -> None:
+        self.open()
+        if self._fxaa_shader is None:
+            profile_stage = self._profile_start()
+            rl.begin_drawing()
+            self._profile_add("render_frame.begin_drawing", profile_stage)
+            profile_stage = self._profile_start()
+            self.render(state)
+            self._profile_add("render_frame.render_no_fxaa", profile_stage)
+            profile_stage = self._profile_start()
+            rl.end_drawing()
+            self._profile_add("render_frame.end_drawing", profile_stage)
+            return
+
+        signal_lights = self._turn_signal_lights(state)
+        scene_target = self._get_aa_source_target()
+        profile_stage = self._profile_start()
+        rl.begin_texture_mode(scene_target)
+        self._render_world(state, signal_lights)
+        rl.end_texture_mode()
+        self._profile_add("render_frame.render_scene_target", profile_stage)
+
+        profile_stage = self._profile_start()
+        rl.begin_drawing()
+        self._draw_antialiased_texture(scene_target.texture)
+        self._draw_hud(state, signal_lights)
+        rl.end_drawing()
+        self._profile_add("render_frame.draw_fxaa_hud", profile_stage)
+
+    def render(self, state: ClusterUiState, signal_lights: tuple[bool, bool] | None = None) -> None:
+        """Draw one frame into the currently active raylib render target."""
+        if signal_lights is None:
+            signal_lights = self._turn_signal_lights(state)
+        profile_stage = self._profile_start()
+        self._render_world(state, signal_lights)
+        self._profile_add("render.world", profile_stage)
+        profile_stage = self._profile_start()
+        self._draw_hud(state, signal_lights)
+        self._profile_add("render.hud", profile_stage)
+
+    def _render_world(self, state: ClusterUiState, signal_lights: tuple[bool, bool] | None = None) -> None:
+        if signal_lights is None:
+            signal_lights = self._turn_signal_lights(state)
+        theme = self._current_theme()
+        profile_stage = self._profile_start()
+        scene = build_cluster_scene(
+            state,
+            self._profile_add_elapsed if self.profile_enabled else None,
+            highlight_lane_lit=self._highlight_lane_lit(state, signal_lights),
+            theme=theme,
+        )
+        self._profile_add("render_world.build_scene", profile_stage)
+        profile_stage = self._profile_start()
+        rl.clear_background(rl_color(theme.bg))
+        self._profile_add("render_world.clear_background", profile_stage)
+        profile_stage = self._profile_start()
+        self._draw_scene(scene)
+        self._profile_add("render_world.draw_scene", profile_stage)
+
+    def render_to_file(self, state: ClusterUiState, output_path: str | Path) -> None:
+        image = self._render_to_image(state)
+        try:
+            rl.export_image(image, str(output_path))
+        finally:
+            rl.unload_image(image)
+
+    def render_to_png_bytes(self, state: ClusterUiState, portrait_upload: bool = False) -> bytes:
+        profile_stage = self._profile_start()
+        image = self._render_to_image(state, portrait_upload=portrait_upload)
+        self._profile_add("render_to_png.render_to_image", profile_stage)
+        try:
+            size = rl.ffi.new("int *")
+            profile_stage = self._profile_start()
+            data = rl.export_image_to_memory(image, ".png", size)
+            self._profile_add("render_to_png.export_png", profile_stage)
+            try:
+                if size[0] <= 0:
+                    raise RuntimeError("raylib failed to encode frame as PNG")
+                return bytes(rl.ffi.buffer(data, size[0]))
+            finally:
+                rl.mem_free(data)
+        finally:
+            profile_stage = self._profile_start()
+            rl.unload_image(image)
+            self._profile_add("render_to_png.unload_image", profile_stage)
+
+    def render_to_rgba_bytes(
+        self,
+        state: ClusterUiState,
+        portrait_upload: bool = False,
+    ) -> tuple[bytes, int, int]:
+        with self.render_to_rgba_buffer(state, portrait_upload=portrait_upload) as (
+            rgba_buffer,
+            image_width,
+            image_height,
+        ):
+            profile_stage = self._profile_start()
+            rgba = bytes(rgba_buffer)
+            self._profile_add("render_to_rgba.copy_bytes", profile_stage)
+            return rgba, image_width, image_height
+
+    @contextmanager
+    def render_to_rgba_buffer(
+        self,
+        state: ClusterUiState,
+        portrait_upload: bool = False,
+    ) -> Iterator[tuple[object, int, int]]:
+        profile_stage = self._profile_start()
+        image = self._render_to_image(state, portrait_upload=portrait_upload)
+        self._profile_add("render_to_rgba.render_to_image", profile_stage)
+
+        try:
+            if image.format != rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8:
+                profile_stage = self._profile_start()
+                rl.image_format(image, rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8)
+                self._profile_add("render_to_rgba.image_format", profile_stage)
+
+            byte_count = image.width * image.height * 4
+            profile_stage = self._profile_start()
+            rgba_buffer = rl.ffi.buffer(image.data, byte_count)
+            self._profile_add("render_to_rgba.buffer_view", profile_stage)
+            yield rgba_buffer, image.width, image.height
+        finally:
+            profile_stage = self._profile_start()
+            rl.unload_image(image)
+            self._profile_add("render_to_rgba.unload_image", profile_stage)
+
+    def _render_to_image(self, state: ClusterUiState, portrait_upload: bool = False):
+        self.open(hidden=self.hidden)
+        profile_stage = self._profile_start()
+        target = self._get_capture_target()
+        self._profile_add("render_to_image.get_capture_target", profile_stage)
+
+        if self._fxaa_shader is None:
+            profile_stage = self._profile_start()
+            rl.begin_texture_mode(target)
+            self.render(state)
+            rl.end_texture_mode()
+            self._profile_add("render_to_image.draw_to_target", profile_stage)
+        else:
+            scene_target = self._get_aa_source_target()
+            signal_lights = self._turn_signal_lights(state)
+            profile_stage = self._profile_start()
+            rl.begin_texture_mode(scene_target)
+            self._render_world(state, signal_lights)
+            rl.end_texture_mode()
+            self._profile_add("render_to_image.draw_scene_target", profile_stage)
+
+            profile_stage = self._profile_start()
+            rl.begin_texture_mode(target)
+            self._draw_antialiased_texture(scene_target.texture)
+            self._draw_hud(state, signal_lights)
+            rl.end_texture_mode()
+            self._profile_add("render_to_image.draw_fxaa_target", profile_stage)
+
+        if portrait_upload:
+            profile_stage = self._profile_start()
+            upload_target = self._get_portrait_upload_target()
+            self._profile_add("render_to_image.get_portrait_upload_target", profile_stage)
+
+            profile_stage = self._profile_start()
+            rl.begin_texture_mode(upload_target)
+            rl.clear_background(rl_color(self._current_theme().bg))
+            source = rl.Rectangle(
+                0.0,
+                0.0,
+                float(target.texture.width),
+                float(target.texture.height),
+            )
+            dest = rl.Rectangle(
+                0.0,
+                float(self.width),
+                float(self.width),
+                float(self.height),
+            )
+            origin = rl.Vector2(0.0, 0.0)
+            rl.draw_texture_pro(
+                target.texture,
+                source,
+                dest,
+                origin,
+                -90.0,
+                rl_color(WHITE),
+            )
+            rl.end_texture_mode()
+            self._profile_add("render_to_image.gpu_upload_transform", profile_stage)
+
+            profile_stage = self._profile_start()
+            image = rl.load_image_from_texture(upload_target.texture)
+            self._profile_add("render_to_image.readback_upload_texture", profile_stage)
+        else:
+            profile_stage = self._profile_start()
+            image = rl.load_image_from_texture(target.texture)
+            self._profile_add("render_to_image.readback_texture", profile_stage)
+
+            profile_stage = self._profile_start()
+            rl.image_flip_vertical(image)
+            self._profile_add("render_to_image.flip_vertical", profile_stage)
+
+        return image
+
+    def _get_capture_target(self):
+        if self._capture_target is None:
+            profile_stage = self._profile_start()
+            self._capture_target = rl.load_render_texture(self.width, self.height)
+            self._profile_add("render_target.alloc_capture", profile_stage)
+            profile_stage = self._profile_start()
+            rl.set_texture_filter(self._capture_target.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+            self._profile_add("render_target.filter_capture", profile_stage)
+        return self._capture_target
+
+    def _get_portrait_upload_target(self):
+        if self._portrait_upload_target is None:
+            profile_stage = self._profile_start()
+            self._portrait_upload_target = rl.load_render_texture(self.height, self.width)
+            self._profile_add("render_target.alloc_portrait_upload", profile_stage)
+            profile_stage = self._profile_start()
+            rl.set_texture_filter(self._portrait_upload_target.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+            self._profile_add("render_target.filter_portrait_upload", profile_stage)
+        return self._portrait_upload_target
+
+    def _get_aa_source_target(self):
+        if self._aa_source_target is None:
+            profile_stage = self._profile_start()
+            self._aa_source_target = rl.load_render_texture(self.width, self.height)
+            self._profile_add("render_target.alloc_aa_source", profile_stage)
+            profile_stage = self._profile_start()
+            rl.set_texture_filter(self._aa_source_target.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+            self._profile_add("render_target.filter_aa_source", profile_stage)
+        return self._aa_source_target
+
+    def _load_fxaa_shader(self) -> None:
+        gl_version = rl.rl_get_version()
+        es_versions = (
+            getattr(rl, "RL_OPENGL_ES_20", 5),
+            getattr(rl, "RL_OPENGL_ES_30", 6),
+        )
+        shader_codes = (
+            (FXAA_FRAGMENT_SHADER_100, FXAA_FRAGMENT_SHADER_330)
+            if gl_version in es_versions
+            else (FXAA_FRAGMENT_SHADER_330, FXAA_FRAGMENT_SHADER_100)
+        )
+        for shader_code in shader_codes:
+            try:
+                shader = rl.load_shader_from_memory(rl.ffi.NULL, shader_code)
+            except Exception as exc:
+                print(f"FXAA shader load failed: {exc}")
+                continue
+            if not rl.is_shader_valid(shader):
+                rl.unload_shader(shader)
+                continue
+            self._fxaa_shader = shader
+            self._fxaa_resolution_loc = rl.get_shader_location(shader, "resolution")
+            self._fxaa_resolution_value = rl.ffi.new("float[2]", [float(self.width), float(self.height)])
+            return
+        self._fxaa_shader = None
+
+    def _draw_antialiased_texture(self, texture) -> None:
+        if self._fxaa_shader is None:
+            return
+        source = rl.Rectangle(0.0, 0.0, float(texture.width), -float(texture.height))
+        dest = rl.Rectangle(0.0, 0.0, float(self.width), float(self.height))
+        origin = rl.Vector2(0.0, 0.0)
+        profile_stage = self._profile_start()
+        rl.clear_background(rl_color(self._current_theme().bg))
+        self._profile_add("fxaa.clear_background", profile_stage)
+        profile_stage = self._profile_start()
+        rl.begin_shader_mode(self._fxaa_shader)
+        if self._fxaa_resolution_loc >= 0 and self._fxaa_resolution_value is not None:
+            rl.set_shader_value(
+                self._fxaa_shader,
+                self._fxaa_resolution_loc,
+                self._fxaa_resolution_value,
+                rl.ShaderUniformDataType.SHADER_UNIFORM_VEC2,
+            )
+        rl.draw_texture_pro(texture, source, dest, origin, 0.0, rl_color(WHITE))
+        rl.end_shader_mode()
+        self._profile_add("fxaa.shader_draw", profile_stage)
+
+    def _load_font(self):
+        for candidate in self._font_candidates():
+            if candidate.exists():
+                try:
+                    font = rl.load_font_ex(str(candidate), 160, None, 0)
+                    if font.texture.id > 0:
+                        rl.gen_texture_mipmaps(font.texture)
+                        rl.set_texture_filter(font.texture, rl.TextureFilter.TEXTURE_FILTER_TRILINEAR)
+                        self._owns_font = True
+                        return font
+                except Exception as exc:
+                    print(f"Cluster font load failed for {candidate}: {exc}")
+        self._owns_font = False
+        return rl.get_font_default()
+
+    def _font_candidates(self) -> list[Path]:
+        return [
+            KAIGEN_GOTHIC_KR_BOLD_FONT_PATH,
+            OPENPILOT_ADDON_FONT_DIR / "KaiGenGothicKR-Bold.ttf",
+            JETBRAINS_MONO_FONT_PATH,
+            OPENPILOT_FONT_DIR / "JetBrainsMono-Bold.ttf",
+            Path("/data/openpilot/selfdrive/assets/fonts/KaiGenGothicKR-Bold.ttf"),
+            Path("/data/openpilot/selfdrive/assets/addon/font/KaiGenGothicKR-Bold.ttf"),
+            Path("/usr/share/fonts/truetype/jetbrains-mono/JetBrainsMono-Medium.ttf"),
+            Path("/usr/share/fonts/TTF/JetBrainsMono-Medium.ttf"),
+            Path("/usr/local/share/fonts/JetBrainsMono-Medium.ttf"),
+        ]
+
+    def _load_vehicle_model(self) -> None:
+        if self._vehicle_model_load_attempted:
+            return
+        self._vehicle_model_load_attempted = True
+        if not VEHICLE_MODEL_PATH.exists():
+            return
+        try:
+            profile_stage = self._profile_start()
+            mesh = self._load_obj_mesh(VEHICLE_MODEL_PATH)
+            self._profile_add("vehicle_model.parse_obj", profile_stage)
+            profile_stage = self._profile_start()
+            rl.upload_mesh(rl.ffi.addressof(mesh), False)
+            self._profile_add("vehicle_model.upload_mesh", profile_stage)
+            profile_stage = self._profile_start()
+            model = rl.load_model_from_mesh(mesh)
+            self._profile_add("vehicle_model.load_from_mesh", profile_stage)
+            if not rl.is_model_valid(model):
+                rl.unload_model(model)
+                return
+            self._vehicle_model = model
+        except Exception as exc:
+            print(f"Cybertruck vehicle model load failed: {exc}")
+            self._vehicle_model = None
+
+    def _load_obj_mesh(self, path: Path):
+        vertices: list[tuple[float, float, float]] = []
+        normals: list[tuple[float, float, float]] = []
+        mesh_vertices: list[float] = []
+        mesh_normals: list[float] = []
+        mesh_colors: list[int] = []
+        material_color = DEFAULT_VEHICLE_MATERIAL_COLOR
+
+        def resolve_index(index_text: str, count: int) -> int:
+            index = int(index_text)
+            if index < 0:
+                index = count + index + 1
+            return index - 1
+
+        def parse_face_token(token: str) -> tuple[int, int | None]:
+            parts = token.split("/")
+            vertex_index = resolve_index(parts[0], len(vertices))
+            normal_index = None
+            if len(parts) >= 3 and parts[2]:
+                normal_index = resolve_index(parts[2], len(normals))
+            return vertex_index, normal_index
+
+        def face_normal(points: tuple[tuple[float, float, float], ...]) -> tuple[float, float, float]:
+            ax, ay, az = points[0]
+            bx, by, bz = points[1]
+            cx, cy, cz = points[2]
+            ux, uy, uz = bx - ax, by - ay, bz - az
+            vx, vy, vz = cx - ax, cy - ay, cz - az
+            nx = uy * vz - uz * vy
+            ny = uz * vx - ux * vz
+            nz = ux * vy - uy * vx
+            length = math.sqrt(nx * nx + ny * ny + nz * nz)
+            if length <= 0.000001:
+                return 0.0, 0.0, 1.0
+            return nx / length, ny / length, nz / length
+
+        for raw in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            parts = raw.split()
+            if not parts or parts[0].startswith("#"):
+                continue
+            tag = parts[0]
+            if tag == "v" and len(parts) >= 4:
+                vertices.append((float(parts[1]), float(parts[2]), float(parts[3])))
+            elif tag == "vn" and len(parts) >= 4:
+                normals.append((float(parts[1]), float(parts[2]), float(parts[3])))
+            elif tag == "usemtl" and len(parts) >= 2:
+                material_color = VEHICLE_MATERIAL_COLORS.get(parts[1], DEFAULT_VEHICLE_MATERIAL_COLOR)
+            elif tag == "f" and len(parts) >= 4:
+                face = [parse_face_token(token) for token in parts[1:]]
+                for index in range(1, len(face) - 1):
+                    triangle = (face[0], face[index], face[index + 1])
+                    points = tuple(vertices[vertex_index] for vertex_index, _ in triangle)
+                    fallback_normal = face_normal(points)
+                    for vertex_index, normal_index in triangle:
+                        vertex = vertices[vertex_index]
+                        normal = normals[normal_index] if normal_index is not None else fallback_normal
+                        mesh_vertices.extend(vertex)
+                        mesh_normals.extend(normal)
+                        mesh_colors.extend(material_color)
+
+        vertex_count = len(mesh_vertices) // 3
+        if vertex_count < 3 or vertex_count % 3 != 0:
+            raise RuntimeError(f"invalid vehicle mesh vertex count: {vertex_count}")
+
+        mesh = rl.Mesh()
+        mesh.vertexCount = vertex_count
+        mesh.triangleCount = vertex_count // 3
+        mesh.vertices = self._alloc_float_array(mesh_vertices)
+        mesh.normals = self._alloc_float_array(mesh_normals)
+        mesh.colors = self._alloc_uchar_array(mesh_colors)
+        return mesh
+
+    def _alloc_float_array(self, values: list[float]):
+        data = rl.ffi.cast("float *", rl.mem_alloc(len(values) * rl.ffi.sizeof("float")))
+        for index, value in enumerate(values):
+            data[index] = value
+        return data
+
+    def _alloc_uchar_array(self, values: list[int]):
+        data = rl.ffi.cast("unsigned char *", rl.mem_alloc(len(values) * rl.ffi.sizeof("unsigned char")))
+        for index, value in enumerate(values):
+            data[index] = int(value)
+        return data
+
+    def _draw_scene(self, scene: ClusterScene) -> None:
+        camera = rl.Camera3D(
+            vec3(scene.camera.position),
+            vec3(scene.camera.target),
+            rl.Vector3(0.0, 0.0, 1.0),
+            scene.camera.fovy_deg,
+            rl.CameraProjection.CAMERA_PERSPECTIVE,
+        )
+        profile_stage = self._profile_start()
+        rl.begin_mode_3d(camera)
+        self._profile_add("draw_scene.begin_mode_3d", profile_stage)
+        rl.rl_push_matrix()
+        if abs(scene.scene_shift_x_m) > 0.0001:
+            rl.rl_translatef(scene.scene_shift_x_m, 0.0, 0.0)
+        try:
+            profile_stage = self._profile_start()
+            for strip in scene.highlight_lanes:
+                self._draw_strip(strip)
+            self._profile_add("draw_scene.highlight_lanes", profile_stage)
+            profile_stage = self._profile_start()
+            for strip in scene.road_edges:
+                self._draw_strip(strip)
+            self._profile_add("draw_scene.road_edges", profile_stage)
+            profile_stage = self._profile_start()
+            for strip in scene.lane_markings:
+                self._draw_strip(strip)
+            self._profile_add("draw_scene.lane_markings", profile_stage)
+            profile_stage = self._profile_start()
+            for strip in scene.planned_path:
+                self._draw_strip(strip)
+            self._profile_add("draw_scene.planned_path", profile_stage)
+            profile_stage = self._profile_start()
+            for point in scene.radar_points:
+                self._draw_radar_point(point)
+            self._profile_add("draw_scene.radar_points", profile_stage)
+            profile_stage = self._profile_start()
+            for vehicle in scene.vehicles:
+                self._draw_vehicle(vehicle)
+            self._profile_add("draw_scene.vehicles", profile_stage)
+        finally:
+            rl.rl_pop_matrix()
+        profile_stage = self._profile_start()
+        rl.end_mode_3d()
+        self._profile_add("draw_scene.end_mode_3d", profile_stage)
+        profile_stage = self._profile_start()
+        self._draw_radar_point_labels(scene.radar_points, camera, scene.scene_shift_x_m)
+        self._profile_add("draw_scene.radar_labels", profile_stage)
+        profile_stage = self._profile_start()
+        self._draw_vehicle_badges(scene.vehicles, camera, scene.scene_shift_x_m)
+        self._profile_add("draw_scene.vehicle_badges", profile_stage)
+        profile_stage = self._profile_start()
+        self._draw_rear_vehicle_indicators(scene.rear_indicators, camera, scene.scene_shift_x_m)
+        self._profile_add("draw_scene.rear_indicators", profile_stage)
+
+    def _draw_strip(self, strip: MeshStrip) -> None:
+        count = min(len(strip.left), len(strip.right))
+        if count < 2:
+            return
+
+        color = rl_color(strip.color)
+        x_offset_m = strip.x_offset_m
+
+        if hasattr(rl, "draw_triangle_strip_3d"):
+            point_count = count * 2
+            if self._triangle_strip_capacity < point_count:
+                self._triangle_strip_points = rl.ffi.new("struct Vector3[]", point_count)
+                self._triangle_strip_capacity = point_count
+            points = self._triangle_strip_points
+
+            for index in range(count):
+                left = strip.left[index]
+                right = strip.right[index]
+
+                points[index * 2].x = left.x + x_offset_m
+                points[index * 2].y = left.y
+                points[index * 2].z = left.z
+
+                points[index * 2 + 1].x = right.x + x_offset_m
+                points[index * 2 + 1].y = right.y
+                points[index * 2 + 1].z = right.z
+
+            rl.draw_triangle_strip_3d(
+                rl.ffi.cast("struct Vector3 *", points),
+                count * 2,
+                color,
+            )
+            return
+
+        for index in range(count - 1):
+            left = strip.left[index]
+            right = strip.right[index]
+            next_left = strip.left[index + 1]
+            next_right = strip.right[index + 1]
+            left_near = rl.Vector3(left.x + x_offset_m, left.y, left.z)
+            right_near = rl.Vector3(right.x + x_offset_m, right.y, right.z)
+            left_far = rl.Vector3(next_left.x + x_offset_m, next_left.y, next_left.z)
+            right_far = rl.Vector3(next_right.x + x_offset_m, next_right.y, next_right.z)
+            rl.draw_triangle_3d(left_near, right_near, right_far, color)
+            rl.draw_triangle_3d(left_near, right_far, left_far, color)
+
+    def _draw_vehicle(self, vehicle: VehicleBox) -> None:
+        use_model = (
+            self._vehicle_model is not None
+            and (not vehicle.source or vehicle.primary or vehicle.cut_in)
+        )
+        if use_model:
+            self._draw_vehicle_shadow(vehicle)
+            self._draw_vehicle_model(vehicle)
+            return
+        if vehicle.source and not vehicle.primary and not vehicle.cut_in:
+            self._draw_vehicle_marker(vehicle)
+            return
+        self._draw_vehicle_box(vehicle)
+
+    def _draw_vehicle_marker(self, vehicle: VehicleBox) -> None:
+        alpha = int(80 + 150 * clamp(vehicle.confidence, 0.0, 1.0))
+        marker_center = rl.Vector3(vehicle.center.x, vehicle.center.y, vehicle.height_m * 0.32)
+        marker_size = rl.Vector3(
+            max(0.55, vehicle.width_m * 0.68),
+            max(1.05, vehicle.length_m * 0.64),
+            max(0.42, vehicle.height_m * 0.45),
+        )
+        rl.draw_cube_v(marker_center, marker_size, rl_color(vehicle.body_color, alpha))
+
+    def _draw_radar_point(self, point: RadarPointMarker) -> None:
+        side_m = max(0.16, point.radius_m * 1.75)
+        height_m = max(0.12, point.radius_m * 1.15)
+        marker_center = rl.Vector3(point.center.x, point.center.y, point.center.z)
+        marker_size = rl.Vector3(side_m, side_m, height_m)
+        rl.draw_cube_v(marker_center, marker_size, rl_color(point.color))
+
+    def _draw_radar_point_labels(
+        self,
+        points: tuple[RadarPointMarker, ...],
+        camera,
+        scene_shift_x_m: float = 0.0,
+    ) -> None:
+        theme = self._current_theme()
+        occupied: list[tuple[float, float, float, float]] = []
+        label_bounds = self._world_label_bounds(left=430, top=52, right=40, bottom=26)
+        ordered = sorted(points, key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label))
+        for point in ordered:
+            anchor = rl.Vector3(point.center.x + scene_shift_x_m, point.center.y, point.center.z + 0.46)
+            screen = world_to_screen_label_anchor(anchor, camera, self.width, self.height)
+            if screen is None:
+                continue
+            distance = radar_point_distance_label(point)
+            speed = radar_point_speed_label(point)
+            label_height = 32 if speed else 22
+            text_width = max(
+                int(rl.measure_text_ex(self._font or rl.get_font_default(), distance, 14, 1).x),
+                int(rl.measure_text_ex(self._font or rl.get_font_default(), speed, 12, 1).x) if speed else 0,
+            )
+            width = max(62, text_width + 14)
+            height = label_height
+            x = screen.x - width * 0.5
+            y = screen.y - height - 4
+            rect_tuple = (x, y, width, height)
+            if not label_rect_inside_bounds(rect_tuple, label_bounds):
+                continue
+            if any(rectangles_overlap(rect_tuple, taken) for taken in occupied):
+                continue
+            occupied.append(rect_tuple)
+            center_x = x + width * 0.5
+            shadow = theme.world_label_shadow
+            text = theme.world_label_text
+            self._draw_text(distance, center_x + 1, y + 8 + 1, 14, shadow, anchor="center")
+            self._draw_text(distance, center_x, y + 8, 14, text, anchor="center")
+            if speed:
+                self._draw_text(speed, center_x + 1, y + 23 + 1, 12, shadow, anchor="center")
+                self._draw_text(speed, center_x, y + 23, 12, text, anchor="center")
+
+    def _draw_vehicle_shadow(self, vehicle: VehicleBox) -> None:
+        half_width = vehicle.width_m * 0.5
+        half_length = vehicle.length_m * 0.5
+
+        def corner(local_x: float, local_y: float, z: float) -> Vec3:
+            return Vec3(
+                vehicle.center.x + vehicle.right_x * local_x + vehicle.forward_x * local_y,
+                vehicle.center.y + vehicle.right_y * local_x + vehicle.forward_y * local_y,
+                z,
+            )
+
+        shadow = (
+            corner(-half_width * 1.12, -half_length * 1.08, 0.018),
+            corner(half_width * 1.12, -half_length * 1.08, 0.018),
+            corner(half_width * 1.12, half_length * 1.08, 0.018),
+            corner(-half_width * 1.12, half_length * 1.08, 0.018),
+        )
+        self._draw_quad(
+            shadow[0],
+            shadow[1],
+            shadow[2],
+            shadow[3],
+            (0, 0, 0, int(18 + 34 * clamp(vehicle.confidence, 0.0, 1.0))),
+        )
+
+    def _draw_vehicle_model(self, vehicle: VehicleBox) -> None:
+        if self._vehicle_model is None:
+            return
+        yaw_deg = math.degrees(math.atan2(-vehicle.forward_x, vehicle.forward_y))
+        position = rl.Vector3(vehicle.center.x, vehicle.center.y, 0.035)
+        rotation_axis = rl.Vector3(0.0, 0.0, 1.0)
+        scale = rl.Vector3(vehicle.width_m, vehicle.length_m, vehicle.height_m)
+        try:
+            rl.rl_disable_backface_culling()
+            alpha = int(92 + 163 * clamp(vehicle.confidence, 0.0, 1.0))
+            tint = rl_color(vehicle.body_color) if vehicle.source == "radarPoint" else rl_color(WHITE, alpha)
+            rl.draw_model_ex(self._vehicle_model, position, rotation_axis, yaw_deg, scale, tint)
+        finally:
+            rl.rl_enable_backface_culling()
+
+    def _draw_vehicle_badges(
+        self,
+        vehicles: tuple[VehicleBox, ...],
+        camera,
+        scene_shift_x_m: float = 0.0,
+    ) -> None:
+        theme = self._current_theme()
+        occupied: list[tuple[float, float, float, float]] = []
+        ordered = sorted(
+            (vehicle for vehicle in vehicles if vehicle.label),
+            key=lambda vehicle: (
+                0 if vehicle.primary else 1 if vehicle.cut_in else 2,
+                max(0.0, vehicle.center.y - EGO_FORWARD_M),
+                -vehicle.confidence,
+            ),
+        )
+        for vehicle in ordered:
+            anchor = rl.Vector3(
+                vehicle.center.x + scene_shift_x_m,
+                vehicle.center.y,
+                vehicle.height_m + 0.55,
+            )
+            screen = world_to_screen_label_anchor(anchor, camera, self.width, self.height)
+            if screen is None:
+                continue
+
+            distance = vehicle_distance_label(vehicle)
+            speed = vehicle_speed_label(vehicle)
+            font = self._font or rl.get_font_default()
+            label_height = 36 if speed else 24
+            width = max(
+                62,
+                int(
+                    max(
+                        rl.measure_text_ex(font, distance, 15, 1).x,
+                        rl.measure_text_ex(font, speed, 13, 1).x if speed else 0,
+                    )
+                )
+                + 14,
+            )
+            height = label_height
+            x = screen.x - width * 0.5
+            y = screen.y - height - 4
+            rect_tuple = (x, y, width, height)
+            label_bounds = self._world_label_bounds(left=430, top=58, right=40, bottom=28)
+            if not label_rect_inside_bounds(rect_tuple, label_bounds):
+                continue
+            if any(rectangles_overlap(rect_tuple, taken) for taken in occupied):
+                if not vehicle.primary and not vehicle.cut_in:
+                    continue
+                for _ in range(3):
+                    y -= height + 4
+                    rect_tuple = (x, y, width, height)
+                    if not label_rect_inside_bounds(rect_tuple, label_bounds):
+                        continue
+                    if not any(rectangles_overlap(rect_tuple, taken) for taken in occupied):
+                        break
+                else:
+                    continue
+            occupied.append(rect_tuple)
+            center_x = x + width * 0.5
+            shadow = theme.world_label_shadow
+            text_color = vehicle_metric_color(vehicle, theme)
+            distance_y = y + (10 if speed else 12)
+            self._draw_text(distance, center_x + 1, distance_y + 1, 15, shadow, anchor="center")
+            self._draw_text(distance, center_x, distance_y, 15, text_color, anchor="center")
+            if speed:
+                self._draw_text(speed, center_x + 1, y + 27 + 1, 13, shadow, anchor="center")
+                self._draw_text(speed, center_x, y + 27, 13, text_color, anchor="center")
+
+    def _draw_rear_vehicle_indicators(
+        self,
+        indicators: tuple[RearVehicleIndicator, ...],
+        camera,
+        scene_shift_x_m: float = 0.0,
+    ) -> None:
+        for indicator in indicators:
+            if self._rear_indicator_vehicle_visible(indicator, camera, scene_shift_x_m):
+                continue
+            x, y = self._rear_indicator_screen_position(indicator, camera, scene_shift_x_m)
+            self._draw_rear_distance_arrow(indicator, x, y)
+
+    def _rear_indicator_vehicle_visible(
+        self,
+        indicator: RearVehicleIndicator,
+        camera,
+        scene_shift_x_m: float = 0.0,
+    ) -> bool:
+        anchor = rl.Vector3(
+            indicator.center.x + scene_shift_x_m,
+            indicator.center.y,
+            indicator.center.z + 0.62,
+        )
+        screen = world_to_screen_label_anchor(anchor, camera, self.width, self.height)
+        if screen is None:
+            return False
+        margin_x = 24.0
+        margin_y = 24.0
+        return (
+            margin_x <= screen.x <= self.width - margin_x
+            and margin_y <= screen.y <= self.height - margin_y
+        )
+
+    def _rear_indicator_screen_position(
+        self,
+        indicator: RearVehicleIndicator,
+        camera,
+        scene_shift_x_m: float = 0.0,
+    ) -> tuple[float, float]:
+        scale_x = self.width / DESIGN_WIDTH
+        scale_y = self.height / DESIGN_HEIGHT
+        proxy = rl.Vector3(indicator.anchor.x + scene_shift_x_m, indicator.anchor.y, indicator.anchor.z)
+        screen = world_to_screen_label_anchor(proxy, camera, self.width, self.height)
+        fallback_x = (735.0 if indicator.lane_side == "left" else 1185.0) * scale_x
+        fallback_y = 382.0 * scale_y
+        if screen is None:
+            return fallback_x, fallback_y
+
+        if indicator.lane_side == "left":
+            min_x, max_x = 560.0 * scale_x, 880.0 * scale_x
+        else:
+            min_x, max_x = 1040.0 * scale_x, 1360.0 * scale_x
+        x = clamp(screen.x, min_x, max_x)
+        y = clamp(screen.y, 318.0 * scale_y, 404.0 * scale_y)
+        return x, y
+
+    def _draw_rear_distance_arrow(self, indicator: RearVehicleIndicator, x: float, y: float) -> None:
+        theme = self._current_theme()
+        scale = max(0.72, min(1.18, min(self.width / DESIGN_WIDTH, self.height / DESIGN_HEIGHT)))
+        distance = f"{indicator.label} {abs(indicator.longitudinal_m):.0f} m"
+        font = self._font or rl.get_font_default()
+        text_size = 16.0 * scale
+        spacing = max(1.0, text_size * 0.02)
+        measured = rl.measure_text_ex(font, distance, text_size, spacing)
+        pad_x = 10.0 * scale
+        pad_y = 5.0 * scale
+        box_w = max(74.0 * scale, measured.x + pad_x * 2.0)
+        box_h = measured.y + pad_y * 2.0
+        box_y = y - 62.0 * scale
+        box = rl.Rectangle(x - box_w * 0.5, box_y, box_w, box_h)
+
+        rl.draw_rectangle_rounded(box, 0.28, 12, rl_color(theme.clock_bg))
+        rl.draw_rectangle_rounded_lines_ex(box, 0.28, 12, max(1.5, 2.0 * scale), rl_color(RED))
+        self._draw_text(
+            distance,
+            x + 1.0,
+            box_y + box_h * 0.5 + 1.0,
+            text_size,
+            theme.world_label_shadow,
+            anchor="center",
+        )
+        self._draw_text(
+            distance,
+            x,
+            box_y + box_h * 0.5,
+            text_size,
+            theme.clock_text,
+            anchor="center",
+        )
+
+        shaft_top = box_y + box_h + 8.0 * scale
+        shaft_bottom = y - 8.0 * scale
+        tip_y = y + 20.0 * scale
+        arrow_color = rl_color(RED)
+        rl.draw_line_ex(
+            rl.Vector2(x, shaft_top),
+            rl.Vector2(x, shaft_bottom),
+            max(4.0, 5.0 * scale),
+            arrow_color,
+        )
+        rl.draw_triangle(
+            rl.Vector2(x - 15.0 * scale, shaft_bottom),
+            rl.Vector2(x, tip_y),
+            rl.Vector2(x + 15.0 * scale, shaft_bottom),
+            arrow_color,
+        )
+
+    def _world_label_bounds(
+        self,
+        left: float,
+        top: float,
+        right: float,
+        bottom: float,
+    ) -> tuple[float, float, float, float]:
+        sx = self.width / DESIGN_WIDTH
+        sy = self.height / DESIGN_HEIGHT
+        return (
+            left * sx,
+            top * sy,
+            self.width - right * sx,
+            self.height - bottom * sy,
+        )
+
+    def _draw_vehicle_box(self, vehicle: VehicleBox) -> None:
+        half_width = vehicle.width_m * 0.5
+        half_length = vehicle.length_m * 0.5
+        z0 = 0.035
+        z1 = vehicle.height_m + z0
+
+        def corner(local_x: float, local_y: float, z: float) -> Vec3:
+            return Vec3(
+                vehicle.center.x + vehicle.right_x * local_x + vehicle.forward_x * local_y,
+                vehicle.center.y + vehicle.right_y * local_x + vehicle.forward_y * local_y,
+                z,
+            )
+
+        base = (
+            corner(-half_width, -half_length, z0),
+            corner(half_width, -half_length, z0),
+            corner(half_width, half_length, z0),
+            corner(-half_width, half_length, z0),
+        )
+        top = (
+            corner(-half_width, -half_length, z1),
+            corner(half_width, -half_length, z1),
+            corner(half_width, half_length, z1),
+            corner(-half_width, half_length, z1),
+        )
+        self._draw_vehicle_shadow(vehicle)
+        self._draw_quad(base[0], base[1], top[1], top[0], vehicle.rear_color)
+        self._draw_quad(base[1], base[2], top[2], top[1], vehicle.side_color)
+        self._draw_quad(base[2], base[3], top[3], top[2], vehicle.body_color)
+        self._draw_quad(base[3], base[0], top[0], top[3], vehicle.side_color)
+        self._draw_quad(top[0], top[1], top[2], top[3], vehicle.body_color)
+
+        inset = 0.22
+        highlight = tuple(
+            Vec3(
+                point.x + (vehicle.center.x - point.x) * inset,
+                point.y + (vehicle.center.y - point.y) * inset,
+                point.z + 0.006,
+            )
+            for point in top
+        )
+        self._draw_quad(highlight[0], highlight[1], highlight[2], highlight[3], vehicle.top_highlight)
+
+        outline = rl_color(vehicle.outline_color)
+        edge_points = base + top
+        edges = (
+            (0, 1),
+            (1, 2),
+            (2, 3),
+            (3, 0),
+            (4, 5),
+            (5, 6),
+            (6, 7),
+            (7, 4),
+            (0, 4),
+            (1, 5),
+            (2, 6),
+            (3, 7),
+        )
+        for start, end in edges:
+            rl.draw_line_3d(vec3(edge_points[start]), vec3(edge_points[end]), outline)
+
+    def _draw_quad(
+        self,
+        p0: Vec3,
+        p1: Vec3,
+        p2: Vec3,
+        p3: Vec3,
+        color: tuple[int, int, int, int],
+    ) -> None:
+        draw_color = rl_color(color)
+        rl.draw_triangle_3d(vec3(p0), vec3(p1), vec3(p2), draw_color)
+        rl.draw_triangle_3d(vec3(p0), vec3(p2), vec3(p3), draw_color)
+
+    def _draw_hud(self, state: ClusterUiState, signal_lights: tuple[bool, bool] | None = None) -> None:
+        if signal_lights is None:
+            signal_lights = self._turn_signal_lights(state)
+        left_signal_lit, right_signal_lit = signal_lights
+        sx = self.width / DESIGN_WIDTH
+        sy = self.height / DESIGN_HEIGHT
+        profile_stage = self._profile_start()
+        rl.rl_push_matrix()
+        rl.rl_scalef(sx, sy, 1.0)
+        self._profile_add("hud.push_scale", profile_stage)
+        try:
+            profile_stage = self._profile_start()
+            self._draw_speed_block(state)
+            self._profile_add("hud.speed_block", profile_stage)
+            profile_stage = self._profile_start()
+            self._draw_accel_block(state)
+            self._profile_add("hud.accel_block", profile_stage)
+            profile_stage = self._profile_start()
+            self._draw_turn_signal("left", left_signal_lit)
+            self._profile_add("hud.turn_signal_left", profile_stage)
+            profile_stage = self._profile_start()
+            self._draw_turn_signal("right", right_signal_lit)
+            self._profile_add("hud.turn_signal_right", profile_stage)
+            profile_stage = self._profile_start()
+            self._draw_center_clock(state)
+            self._profile_add("hud.center_clock", profile_stage)
+            profile_stage = self._profile_start()
+            self._draw_system_stats_panel(state)
+            self._profile_add("hud.system_stats", profile_stage)
+            profile_stage = self._profile_start()
+            self._draw_route_overlay(state.route_overlay)
+            self._profile_add("hud.route_overlay", profile_stage)
+            profile_stage = self._profile_start()
+            self._draw_git_status(state.git_status)
+            self._profile_add("hud.git_status", profile_stage)
+        finally:
+            profile_stage = self._profile_start()
+            rl.rl_pop_matrix()
+            self._profile_add("hud.pop_matrix", profile_stage)
+
+    def _draw_center_clock(self, state: ClusterUiState) -> None:
+        if not state.center_clock_text:
+            return
+
+        theme = self._current_theme()
+        text = state.center_clock_text
+        x = DESIGN_WIDTH * 0.5
+        y = 58
+        size = 54
+        spacing = max(1.0, size * 0.02)
+        font = self._font or rl.get_font_default()
+        measured = rl.measure_text_ex(font, text, size, spacing)
+
+        pad_x = 28
+        pad_y = 14
+        rect = rl.Rectangle(
+            x - measured.x * 0.5 - pad_x,
+            y - measured.y * 0.5 - pad_y,
+            measured.x + pad_x * 2,
+            measured.y + pad_y * 2,
+        )
+
+        rl.draw_rectangle_rounded(rect, 0.28, 12, rl_color(theme.clock_bg))
+        rl.draw_rectangle_rounded_lines_ex(rect, 0.28, 12, 2.0, rl_color(theme.clock_outline))
+        self._draw_text(text, x, y, size, theme.clock_text, anchor="center")
+
+    def _draw_system_stats_panel(self, state: ClusterUiState) -> None:
+        if state.route_overlay is not None:
+            return
+
+        theme = self._current_theme()
+        stats = self._system_stats.sample()
+        cpu_count = len(stats.cpu_core_percents)
+        columns = 2 if cpu_count <= 16 else 4
+        rows = max(1, math.ceil(max(1, cpu_count) / columns))
+        core_row_h = 30.0 if columns == 2 else 24.0
+        header_h = 130.0
+        panel_h = min(DESIGN_HEIGHT - SYSTEM_PANEL_Y - 18.0, header_h + rows * core_row_h + 18.0)
+        core_area_h = max(24.0, panel_h - header_h - 14.0)
+        core_row_h = min(core_row_h, core_area_h / rows)
+
+        panel_x = SYSTEM_PANEL_X
+        panel_y = SYSTEM_PANEL_Y
+        panel_w = SYSTEM_PANEL_W
+        pad_x = 24.0
+        self._rounded_rect(panel_x, panel_y, panel_w, panel_h, 18, theme.route_panel_bg, theme.faint, 2)
+        self._draw_text("SYSTEM", panel_x + pad_x, panel_y + 28, 18, theme.muted)
+
+        mem_percent = stats.memory_used_percent
+        mem_color = self._system_metric_color(mem_percent)
+        self._draw_text("MEM", panel_x + pad_x, panel_y + 62, 17, theme.muted)
+        self._draw_text(
+            self._memory_text(stats),
+            panel_x + 86,
+            panel_y + 62,
+            17,
+            theme.text if stats.memory_used_bytes is not None else theme.muted,
+        )
+        self._draw_text(
+            self._percent_text(mem_percent),
+            panel_x + panel_w - pad_x,
+            panel_y + 62,
+            17,
+            mem_color,
+            anchor="right",
+        )
+        self._draw_percent_bar(panel_x + pad_x, panel_y + 80, panel_w - pad_x * 2, 12, mem_percent, mem_color)
+
+        cpu_header_y = panel_y + 112
+        self._draw_text("CPU CORE %", panel_x + pad_x, cpu_header_y, 15, theme.muted)
+        if cpu_count == 0:
+            self._draw_text("unavailable", panel_x + panel_w - pad_x, cpu_header_y, 15, theme.muted, anchor="right")
+            return
+
+        core_start_y = panel_y + header_h
+        gap_x = 18.0 if columns == 2 else 10.0
+        cell_w = (panel_w - pad_x * 2 - gap_x * (columns - 1)) / columns
+        for index, percent in enumerate(stats.cpu_core_percents):
+            row = index // columns
+            column = index % columns
+            cell_x = panel_x + pad_x + column * (cell_w + gap_x)
+            line_y = core_start_y + row * core_row_h
+            color = self._system_metric_color(percent)
+            text_size = 15 if columns == 2 else 12
+            self._draw_text(f"C{index}", cell_x, line_y + 8, text_size, theme.muted)
+            self._draw_text(self._percent_text(percent), cell_x + cell_w, line_y + 8, text_size, color, anchor="right")
+            self._draw_percent_bar(cell_x, line_y + 19, cell_w, 6, percent, color)
+
+    def _draw_percent_bar(
+        self,
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        percent: float | None,
+        fill: tuple[int, int, int],
+    ) -> None:
+        theme = self._current_theme()
+        self._rounded_rect(x, y, width, height, height * 0.5, theme.gauge_bg)
+        if percent is None:
+            return
+        fill_ratio = clamp(percent, 0.0, 100.0) / 100.0
+        if fill_ratio <= 0.0:
+            return
+        fill_width = max(2.0, width * fill_ratio)
+        self._rounded_rect(x, y, fill_width, height, height * 0.5, fill)
+
+    @staticmethod
+    def _memory_text(stats: SystemStats) -> str:
+        if stats.memory_used_bytes is None or stats.memory_total_bytes is None:
+            return "--/-- GB"
+        used_gib = stats.memory_used_bytes / (1024.0 ** 3)
+        total_gib = stats.memory_total_bytes / (1024.0 ** 3)
+        return f"{used_gib:.1f}/{total_gib:.1f} GB"
+
+    @staticmethod
+    def _percent_text(percent: float | None) -> str:
+        if percent is None:
+            return "--%"
+        return f"{clamp(percent, 0.0, 100.0):3.0f}%"
+
+    def _system_metric_color(self, percent: float | None) -> tuple[int, int, int]:
+        theme = self._current_theme()
+        if percent is None:
+            return theme.muted
+        if percent >= 85.0:
+            return RED
+        if percent >= 60.0:
+            return AMBER
+        return BLUE
+
+    def _draw_route_overlay(self, overlay: RouteOverlay | None) -> None:
+        if overlay is None:
+            return
+        theme = self._current_theme()
+        panel_x = 1416
+        panel_y = 34
+        panel_w = 476
+        video_h = 244
+        data_y = 300
+        profile_stage = self._profile_start()
+        self._rounded_rect(panel_x, panel_y, panel_w, 410, 18, theme.route_panel_bg, theme.faint, 2)
+        self._profile_add("route_overlay.panel", profile_stage)
+        profile_stage = self._profile_start()
+        self._draw_route_video(overlay, panel_x + 10, panel_y + 10, panel_w - 20, video_h)
+        self._profile_add("route_overlay.video", profile_stage)
+        profile_stage = self._profile_start()
+        self._draw_route_data(overlay, panel_x + 18, data_y, panel_w - 36)
+        self._profile_add("route_overlay.data", profile_stage)
+
+    def _draw_route_video(self, overlay: RouteOverlay, x: float, y: float, width: float, height: float) -> None:
+        theme = self._current_theme()
+        video_rect = rl.Rectangle(x, y, width, height)
+        profile_stage = self._profile_start()
+        rl.draw_rectangle_rounded(video_rect, 0.04, 10, rl_color(theme.route_video_bg))
+        self._profile_add("route_video.background", profile_stage)
+        if overlay.video_rgba is None or overlay.video_width <= 0 or overlay.video_height <= 0:
+            status = overlay.video_status or "qcamera unavailable"
+            profile_stage = self._profile_start()
+            self._draw_text(status, x + width * 0.5, y + height * 0.5, 20, theme.route_video_status, anchor="center")
+            self._profile_add("route_video.status_text", profile_stage)
+            return
+
+        profile_stage = self._profile_start()
+        texture = self._route_video_texture_for_overlay(overlay)
+        self._profile_add("route_video.texture_for_overlay", profile_stage)
+        if texture is None:
+            return
+        source = rl.Rectangle(0.0, 0.0, float(overlay.video_width), float(overlay.video_height))
+        scale = min(width / overlay.video_width, height / overlay.video_height)
+        draw_w = overlay.video_width * scale
+        draw_h = overlay.video_height * scale
+        dest = rl.Rectangle(x + (width - draw_w) * 0.5, y + (height - draw_h) * 0.5, draw_w, draw_h)
+        profile_stage = self._profile_start()
+        rl.draw_texture_pro(texture, source, dest, rl.Vector2(0.0, 0.0), 0.0, rl_color(WHITE))
+        self._profile_add("route_video.draw_texture", profile_stage)
+
+    def _route_video_texture_for_overlay(self, overlay: RouteOverlay):
+        size = (overlay.video_width, overlay.video_height)
+        if self._route_video_texture is None or self._route_video_size != size:
+            if self._route_video_texture is not None:
+                rl.unload_texture(self._route_video_texture)
+            profile_stage = self._profile_start()
+            image = rl.gen_image_color(overlay.video_width, overlay.video_height, rl_color((0, 0, 0)))
+            self._route_video_texture = rl.load_texture_from_image(image)
+            rl.unload_image(image)
+            self._profile_add("route_video.alloc_texture", profile_stage)
+            profile_stage = self._profile_start()
+            rl.set_texture_filter(self._route_video_texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+            self._profile_add("route_video.filter_texture", profile_stage)
+            self._route_video_size = size
+            self._route_video_frame_id = None
+
+        if overlay.video_frame_id != self._route_video_frame_id:
+            expected = overlay.video_width * overlay.video_height * 4
+            if len(overlay.video_rgba or b"") != expected:
+                return self._route_video_texture
+            profile_stage = self._profile_start()
+            pixels = rl.ffi.new("unsigned char[]", overlay.video_rgba)
+            self._profile_add("route_video.copy_pixels", profile_stage)
+            profile_stage = self._profile_start()
+            rl.update_texture(self._route_video_texture, pixels)
+            self._profile_add("route_video.update_texture", profile_stage)
+            self._route_video_frame_id = overlay.video_frame_id
+        return self._route_video_texture
+
+    def _draw_route_data(self, overlay: RouteOverlay, x: float, y: float, width: float) -> None:
+        theme = self._current_theme()
+        self._draw_text("ROUTE DATA", x, y, 16, theme.muted)
+        for index, line in enumerate(overlay.data_lines[:10]):
+            self._draw_text(line, x, y + 22 + index * 14, 12, theme.text)
+
+    def _draw_git_status(self, status: GitBranchStatus | None) -> None:
+        if status is None:
+            return
+
+        theme = self._current_theme()
+        color = self._git_status_color(status, theme)
+        text = status.branch if not status.detail else f"{status.branch} ({status.detail})"
+        text_size = 20
+        text = self._ellipsize_text(text, text_size, GIT_STATUS_MAX_TEXT_W)
+        font = self._font or rl.get_font_default()
+        spacing = max(1.0, text_size * 0.02)
+        measured = rl.measure_text_ex(font, text, text_size, spacing)
+
+        panel_x = GIT_STATUS_X
+        panel_y = GIT_STATUS_CENTER_Y - GIT_STATUS_PANEL_H * 0.5
+        panel_w = measured.x + 58
+        self._rounded_rect(panel_x, panel_y, panel_w, GIT_STATUS_PANEL_H, 10, theme.route_panel_bg, theme.faint, 1)
+        rl.draw_circle_v(rl.Vector2(panel_x + 20, GIT_STATUS_CENTER_Y), 7, rl_color(color))
+        self._draw_text(text, panel_x + 36 + 1, GIT_STATUS_CENTER_Y + 1, text_size, theme.world_label_shadow)
+        self._draw_text(text, panel_x + 36, GIT_STATUS_CENTER_Y, text_size, color)
+
+    @staticmethod
+    def _git_status_color(status: GitBranchStatus, theme: ClusterTheme) -> tuple[int, int, int]:
+        if status.state == "ok":
+            return GREEN
+        if status.state == "pull":
+            return AMBER
+        if status.state == "missing":
+            return RED
+        return theme.muted
+
+    def _draw_speed_block(self, state: ClusterUiState) -> None:
+        theme = self._current_theme()
+        display_speed_kph = state.display_speed_kph if state.display_speed_kph is not None else state.speed_kph
+        speed_value = int(round(clamp(display_speed_kph, 0.0, MAX_SPEED_KPH)))
+        self._draw_text(str(speed_value), SPEED_VALUE_CENTER_X, SPEED_VALUE_CENTER_Y, 156, theme.text, anchor="center")
+
+        if state.speed_limit_kph is not None:
+            center = rl.Vector2(SPEED_LIMIT_SIGN_CENTER_X, SPEED_LIMIT_SIGN_CENTER_Y)
+            rl.draw_circle_v(center, 56, rl_color(RED))
+            rl.draw_circle_v(center, 47, rl_color(WHITE))
+            self._draw_text(
+                str(state.speed_limit_kph),
+                SPEED_LIMIT_SIGN_CENTER_X,
+                SPEED_LIMIT_SIGN_CENTER_Y - 1,
+                42,
+                TEXT,
+                anchor="center",
+            )
+
+        if self._cruise_set_visible(state):
+            self._draw_text(
+                f"SET {state.cruise_kph:3d}",
+                CRUISE_SET_CENTER_X,
+                CRUISE_SET_CENTER_Y,
+                60,
+                self._cruise_set_color(state, theme),
+                anchor="center",
+            )
+
+    @staticmethod
+    def _cruise_set_visible(state: ClusterUiState) -> bool:
+        return state.cruise_kph is not None and state.cruise_display_state != "off"
+
+    @staticmethod
+    def _cruise_set_color(state: ClusterUiState, theme: ClusterTheme) -> tuple[int, int, int]:
+        if state.cruise_display_state == "paused":
+            return theme.muted
+        if state.speed_limit_kph is not None and state.cruise_kph == state.speed_limit_kph:
+            return GREEN
+        return BLUE
+
+    def _draw_accel_block(self, state: ClusterUiState) -> None:
+        theme = self._current_theme()
+        top = 80
+        bottom = 400
+        center = (top + bottom) // 2
+        gauge_width = 56
+        accel_value = 0.0 if abs(state.accel_mps2) < 0.005 else state.accel_mps2
+        accel_text = f"{accel_value:+05.2f}"
+        accel_text_x = 20
+        accel_text_size = 38
+        if self._font is None:
+            self._font = rl.get_font_default()
+        text_spacing = max(1.0, accel_text_size * 0.02)
+        if self._accel_text_width <= 0.0:
+            self._accel_text_width = max(
+                rl.measure_text_ex(self._font, text, accel_text_size, text_spacing).x
+                for text in ACCEL_TEXT_WIDTH_SAMPLES
+            )
+        text_width = self._accel_text_width
+        gauge_center_x = accel_text_x + text_width * 0.5
+        gauge_x = gauge_center_x - gauge_width * 0.5
+        fill_x = gauge_x + 8
+        fill_width = 40
+        self._rounded_rect(gauge_x, top, gauge_width, bottom - top, 18, theme.gauge_bg, theme.faint, 2)
+        rl.draw_line_ex(
+            rl.Vector2(gauge_x, center),
+            rl.Vector2(gauge_x + gauge_width, center),
+            3,
+            rl_color(theme.gauge_midline),
+        )
+        value = clamp(state.accel_mps2, -MAX_ACCEL_MPS2, MAX_ACCEL_MPS2)
+        fill_color = GREEN if value > 0 else RED if value < 0 else theme.muted
+        if value != 0.0:
+            fill_height = int(abs(value) / MAX_ACCEL_MPS2 * ((bottom - top) / 2 - 8))
+            if value > 0:
+                self._rounded_rect(fill_x, center - fill_height, fill_width, fill_height, 13, fill_color)
+            else:
+                self._rounded_rect(fill_x, center, fill_width, fill_height, 13, fill_color)
+        self._draw_text(accel_text, accel_text_x, 48, accel_text_size, fill_color)
+        self._draw_text("m/s^2", gauge_center_x, 424, 21, theme.muted, anchor="center")
+
+    def _turn_signal_lights(self, state: ClusterUiState) -> tuple[bool, bool]:
+        now = time.perf_counter()
+        return (
+            self._turn_signal_lit("left", state.left_signal, now),
+            self._turn_signal_lit("right", state.right_signal, now),
+        )
+
+    @staticmethod
+    def _highlight_lane_lit(state: ClusterUiState, signal_lights: tuple[bool, bool]) -> bool:
+        left_signal_lit, right_signal_lit = signal_lights
+        if state.highlight_lane == "left":
+            return left_signal_lit
+        if state.highlight_lane == "right":
+            return right_signal_lit
+        if state.left_signal != state.right_signal:
+            return left_signal_lit if state.left_signal else right_signal_lit
+        return True
+
+    def _turn_signal_lit(self, side: str, active: bool, now: float | None = None) -> bool:
+        if not active:
+            if side == "left":
+                self._left_turn_signal_started_at = None
+            else:
+                self._right_turn_signal_started_at = None
+            return False
+
+        if now is None:
+            now = time.perf_counter()
+        if side == "left":
+            if self._left_turn_signal_started_at is None:
+                self._left_turn_signal_started_at = now
+            started_at = self._left_turn_signal_started_at
+        else:
+            if self._right_turn_signal_started_at is None:
+                self._right_turn_signal_started_at = now
+            started_at = self._right_turn_signal_started_at
+        return blink_visible(now, started_at, float("inf"))
+
+    def _draw_turn_signal(self, side: str, lit: bool) -> None:
+        theme = self._current_theme()
+        cx = TURN_SIGNAL_LEFT_CENTER_X if side == "left" else TURN_SIGNAL_RIGHT_CENTER_X
+        cy = TURN_SIGNAL_CENTER_Y
+        direction = -1 if side == "left" else 1
+        fill = GREEN if lit else theme.inactive_signal_fill
+        outline = (8, 118, 65) if lit else theme.inactive_signal_outline
+        tail_back = -36
+        tail_front = 12
+        tail_half_height = 16
+        head_tip_x = 60
+        head_half_height = 38
+
+        def point(local_x: float, local_y: float) -> rl.Vector2:
+            return rl.Vector2(cx + direction * local_x, cy + local_y)
+
+        tail_rect = rl.Rectangle(
+            cx + direction * tail_back,
+            cy - tail_half_height,
+            direction * (tail_front - tail_back),
+            tail_half_height * 2,
+        )
+        if tail_rect.width < 0:
+            tail_rect.x += tail_rect.width
+            tail_rect.width = -tail_rect.width
+
+        head_top = point(tail_front, -head_half_height)
+        head_tip = point(head_tip_x, 0)
+        head_bottom = point(tail_front, head_half_height)
+        if direction < 0:
+            head_vertices = (head_top, head_tip, head_bottom)
+        else:
+            head_vertices = (head_top, head_bottom, head_tip)
+
+        rl.draw_rectangle_rec(tail_rect, rl_color(fill))
+        rl.draw_triangle(*head_vertices, rl_color(fill))
+
+        outline_points = [
+            point(tail_back, -tail_half_height),
+            point(tail_front, -tail_half_height),
+            head_top,
+            head_tip,
+            head_bottom,
+            point(tail_front, tail_half_height),
+            point(tail_back, tail_half_height),
+        ]
+        line_color = rl_color(outline)
+        for index, start in enumerate(outline_points):
+            end = outline_points[(index + 1) % len(outline_points)]
+            rl.draw_line_ex(start, end, 3, line_color)
+
+    def _rounded_rect(
+        self,
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        radius: float,
+        fill: tuple[int, int, int],
+        outline: tuple[int, int, int] | None = None,
+        outline_width: float = 1.0,
+    ) -> None:
+        rect = rl.Rectangle(x, y, width, height)
+        roundness = max(0.0, min(1.0, radius / max(1.0, min(width, height))))
+        rl.draw_rectangle_rounded(rect, roundness, 12, rl_color(fill))
+        if outline is not None and outline_width > 0:
+            rl.draw_rectangle_rounded_lines_ex(rect, roundness, 12, outline_width, rl_color(outline))
+
+    def _draw_text(
+        self,
+        text: str,
+        x: float,
+        y: float,
+        size: float,
+        color: tuple[int, int, int],
+        anchor: str = "left",
+    ) -> None:
+        if self._font is None:
+            self._font = rl.get_font_default()
+        spacing = max(1.0, size * 0.02)
+        measured = rl.measure_text_ex(self._font, text, size, spacing)
+        draw_x = x
+        draw_y = y
+        if anchor == "center":
+            draw_x = x - measured.x * 0.5
+            draw_y = y - measured.y * 0.5
+        elif anchor == "left":
+            draw_y = y - measured.y * 0.5
+        elif anchor == "right":
+            draw_x = x - measured.x
+            draw_y = y - measured.y * 0.5
+        rl.draw_text_ex(self._font, text, rl.Vector2(draw_x, draw_y), size, spacing, rl_color(color))
+
+    def _ellipsize_text(self, text: str, size: float, max_width: float) -> str:
+        if self._font is None:
+            self._font = rl.get_font_default()
+        spacing = max(1.0, size * 0.02)
+        if rl.measure_text_ex(self._font, text, size, spacing).x <= max_width:
+            return text
+        ellipsis = "..."
+        low = 0
+        high = len(text)
+        while low < high:
+            mid = (low + high + 1) // 2
+            candidate = text[:mid] + ellipsis
+            if rl.measure_text_ex(self._font, candidate, size, spacing).x <= max_width:
+                low = mid
+            else:
+                high = mid - 1
+        return text[:low] + ellipsis
