@@ -471,14 +471,13 @@ def extend_centerline_rearward_to_first_point(
 
     first_point = centerline[0]
     extension_end_m = first_point.y
-    extension_steps = max(2, min(80, int(abs(extension_end_m - start_m))))
-    rear_points = tuple(
-        Vec3(first_point.x, forward_m, height_m)
-        for forward_m in sample_range(start_m, extension_end_m, extension_steps)
-    )
-    if len(rear_points) < 2:
-        return centerline
-    return (*rear_points[:-1], *centerline)
+    extension_length_m = extension_end_m - start_m
+    rear_points = [Vec3(first_point.x, start_m, height_m)]
+    transition_gap_m = min(1.0, extension_length_m * 0.25)
+    transition_m = extension_end_m - transition_gap_m
+    if transition_m > start_m + 0.10:
+        rear_points.append(Vec3(first_point.x, transition_m, height_m))
+    return (*rear_points, *centerline)
 
 
 def extend_model_centerline_rearward(
