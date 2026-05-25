@@ -1525,17 +1525,17 @@
       "group": "화면",
       "name": "ShowPlotMode",
       "title": "디버그플롯(0)",
-      "descr": "1: 가속도 2: 속도+가속도 3: 모델 4: Lead 5: Lead2",
+      "descr": "0: 끄기, 1: 가속도, 2: 속도+가속도, 3: 모델, 4: Lead, 5: Lead2, 6: Steer, 7: SteerA, 8: Curvature",
       "egroup": "DISP",
-      "etitle": "Show Debug plot(0)",
-      "edescr": "1:Accel,2:Accel+vel,3:Model,4:Lead,5:Lead2",
+      "etitle": "Show Debug Plot(0)",
+      "edescr": "0:Off, 1:Accel, 2:Speed+Accel, 3:Model, 4:Lead, 5:Lead2, 6:Steer, 7:SteerA, 8:Curvature",
       "min": 0,
-      "max": 10,
+      "max": 8,
       "default": 0,
       "unit": 1,
       "cgroup": "显示设置",
       "ctitle": "显示调试图表 (0)",
-      "cdescr": "1: 加速度, 2: 加速+速度, 3: 模型, 4: 前车, 5: 前车2"
+      "cdescr": "0:关, 1:加速度, 2:速度+加速度, 3:模型, 4:前车, 5:前车2, 6:转向, 7:转角, 8:曲率"
     },
     {
       "group": "레인모드",
