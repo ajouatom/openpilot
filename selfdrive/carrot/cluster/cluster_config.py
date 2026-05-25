@@ -48,6 +48,7 @@ CLUSTER_THEME_AUTO = 0
 CLUSTER_THEME_DARK = 1
 CLUSTER_THEME_LIGHT = 2
 CLUSTER_THEME_PARAM = "ClusterHudTheme"
+CLUSTER_LIVE_FPS_PARAM = "ClusterHudLiveFps"
 AUTO_DARK_START_HOUR = 18
 AUTO_LIGHT_START_HOUR = 6
 
@@ -132,6 +133,26 @@ def normalize_cluster_theme_mode(value: object) -> str:
     if value == CLUSTER_THEME_LIGHT:
         return "light"
     return "auto"
+
+
+def normalize_cluster_live_fps(value: object) -> float:
+    if isinstance(value, str):
+        normalized = value.strip()
+        try:
+            value = int(normalized)
+        except ValueError:
+            return 0.0
+    try:
+        mode = int(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if mode == 1:
+        return 10.0
+    if mode == 2:
+        return 20.0
+    if mode == 3:
+        return 30.0
+    return 0.0
 
 
 def current_cluster_theme(mode: object = "auto", now: float | None = None) -> ClusterTheme:

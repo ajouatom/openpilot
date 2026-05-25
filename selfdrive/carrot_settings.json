@@ -2304,6 +2304,22 @@
       "max": 2,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "화면",
+      "egroup": "DISPLAY",
+      "cgroup": "显示",
+      "name": "ClusterHudLiveFps",
+      "title": "외부 HUD 라이브 FPS 제한(0)",
+      "descr": "0: 무제한\n1: 10 FPS\n2: 20 FPS\n3: 30 FPS",
+      "etitle": "External HUD Live FPS Limit(0)",
+      "edescr": "0: Uncapped\n1: 10 FPS\n2: 20 FPS\n3: 30 FPS",
+      "ctitle": "外部 HUD 实时 FPS 限制(0)",
+      "cdescr": "0: 不限制\n1: 10 FPS\n2: 20 FPS\n3: 30 FPS",
+      "min": 0,
+      "max": 3,
+      "default": 0,
+      "unit": 1
     }
 
   ]

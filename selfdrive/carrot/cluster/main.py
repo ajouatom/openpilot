@@ -6,7 +6,14 @@ from dataclasses import replace
 import time
 from pathlib import Path
 
-from cluster_config import CLUSTER_THEME_PARAM, DESIGN_HEIGHT, DESIGN_WIDTH, normalize_cluster_theme_mode
+from cluster_config import (
+    CLUSTER_LIVE_FPS_PARAM,
+    CLUSTER_THEME_PARAM,
+    DESIGN_HEIGHT,
+    DESIGN_WIDTH,
+    normalize_cluster_live_fps,
+    normalize_cluster_theme_mode,
+)
 from cluster_gamepad import DualSenseSimulator
 from cluster_live import OpenpilotLiveSource
 from cluster_models import RouteOverlay, SimulatorInput
@@ -38,6 +45,25 @@ class ClusterThemeParamReader:
             return normalize_cluster_theme_mode(self._params.get_int(CLUSTER_THEME_PARAM))
         except Exception:
             return "auto"
+
+
+class ClusterLiveFpsParamReader:
+    def __init__(self) -> None:
+        self._params = None
+        try:
+            from openpilot.common.params import Params
+
+            self._params = Params()
+        except Exception:
+            pass
+
+    def read(self) -> float:
+        if self._params is None:
+            return 0.0
+        try:
+            return normalize_cluster_live_fps(self._params.get_int(CLUSTER_LIVE_FPS_PARAM))
+        except Exception:
+            return 0.0
 
 
 def route_overlay_for_mode(overlay: RouteOverlay | None, mode: str) -> RouteOverlay | None:
@@ -322,8 +348,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--fps",
         type=float,
-        default=DEFAULT_FPS,
-        help="Target refresh rate. Use 0 for uncapped/as-fast-as-possible. Default: 0.",
+        default=None,
+        help=(
+            "Target refresh rate. Use 0 for uncapped/as-fast-as-possible. "
+            f"Default: 0, except live input reads {CLUSTER_LIVE_FPS_PARAM} when --fps is omitted."
+        ),
     )
     parser.add_argument(
         "--duration",
@@ -485,6 +514,9 @@ def parse_args() -> argparse.Namespace:
         help="Disable post-init gc.freeze(). Default enabled to avoid long gen2 pauses during USB rendering.",
     )
     args = parser.parse_args()
+    args.fps_from_cli = args.fps is not None
+    if args.fps is None:
+        args.fps = DEFAULT_FPS
     if args.fps < 0:
         parser.error("--fps must be 0 or greater")
     if (args.width is not None and args.width <= 0) or (args.height is not None and args.height <= 0):
@@ -514,7 +546,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    fps_text = "uncapped" if args.fps == 0 else f"{args.fps:.1f} Hz"
+    target_fps = args.fps
+    fps_source = "--fps" if args.fps_from_cli else "default"
+    if args.input == "live" and not args.fps_from_cli:
+        target_fps = ClusterLiveFpsParamReader().read()
+        fps_source = CLUSTER_LIVE_FPS_PARAM
+    fps_text = "uncapped" if target_fps == 0 else f"{target_fps:.1f} Hz"
     size_text = (
         f"{args.width or 'device'}x{args.height or 'device'}"
         if args.output in ("usb", "both")
@@ -522,12 +559,12 @@ def main() -> None:
     )
     print(
         f"Refreshing native raylib cluster UI at {fps_text} "
-        f"input={args.input} output={args.output}: {size_text}"
+        f"input={args.input} output={args.output}: {size_text} fps_source={fps_source}"
     )
     try:
         run_demo(
             args.duration,
-            args.fps,
+            target_fps,
             args.input,
             args.output,
             args.controller_index,

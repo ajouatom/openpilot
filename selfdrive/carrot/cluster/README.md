@@ -28,6 +28,8 @@ that should match live rendering cost more closely.
 The launcher defaults to `--input live`, subscribes to openpilot cereal services,
 and renders live `carState`, `modelV2`, `radarState`, `liveTracks`, and raw
 Hyundai CAN-FD radar points when CAN subscription is enabled.
+When `--fps` is omitted for live input, `ClusterHudLiveFps` controls the render
+limit: `0` uncapped, `1` 10 Hz, `2` 20 Hz, and `3` 30 Hz.
 
 The bundled TURZX code includes only the Python vendor library. The openpilot
 device uses the system `libusb-1.0.so` through `pyusb`.
