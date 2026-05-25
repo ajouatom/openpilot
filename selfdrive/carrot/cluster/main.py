@@ -108,7 +108,6 @@ def run_demo(
     live_timeout_ms: int,
     profile_render: bool,
     profile_interval_s: float,
-    render_msaa: bool,
     gc_freeze_init: bool,
     theme_mode: str | None,
 ) -> None:
@@ -150,7 +149,6 @@ def run_demo(
         frame_width,
         frame_height,
         target_fps=max(0, int(round(target_fps))),
-        msaa_4x=render_msaa,
         theme_mode=active_theme_mode,
     )
     renderer.set_profile_enabled(profile_render)
@@ -520,11 +518,6 @@ def parse_args() -> argparse.Namespace:
         help="Seconds between --profile-render timing summaries. Default: 2.0.",
     )
     parser.add_argument(
-        "--render-msaa",
-        action="store_true",
-        help="Enable raylib 4x MSAA config hint. Default off for maximum SD845 throughput.",
-    )
-    parser.add_argument(
         "--no-gc-freeze",
         action="store_true",
         help="Disable post-init gc.freeze(). Default enabled to avoid long gen2 pauses during USB rendering.",
@@ -612,7 +605,6 @@ def main() -> None:
             args.live_timeout_ms,
             args.profile_render,
             args.profile_interval,
-            args.render_msaa,
             not args.no_gc_freeze,
             args.theme,
         )

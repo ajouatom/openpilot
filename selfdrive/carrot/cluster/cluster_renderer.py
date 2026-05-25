@@ -81,103 +81,6 @@ VEHICLE_MATERIAL_COLORS: dict[str, tuple[int, int, int, int]] = {
     "Material.006": (18, 20, 22, 255),
 }
 DEFAULT_VEHICLE_MATERIAL_COLOR = (142, 150, 156, 255)
-FXAA_FRAGMENT_SHADER_330 = """
-#version 330
-
-in vec2 fragTexCoord;
-in vec4 fragColor;
-
-uniform sampler2D texture0;
-uniform vec2 resolution;
-
-out vec4 finalColor;
-
-void main()
-{
-    vec2 inverseResolution = 1.0 / resolution;
-    vec3 rgbNW = texture(texture0, fragTexCoord + vec2(-1.0, -1.0) * inverseResolution).rgb;
-    vec3 rgbNE = texture(texture0, fragTexCoord + vec2(1.0, -1.0) * inverseResolution).rgb;
-    vec3 rgbSW = texture(texture0, fragTexCoord + vec2(-1.0, 1.0) * inverseResolution).rgb;
-    vec3 rgbSE = texture(texture0, fragTexCoord + vec2(1.0, 1.0) * inverseResolution).rgb;
-    vec4 center = texture(texture0, fragTexCoord);
-    vec3 rgbM = center.rgb;
-    vec3 luma = vec3(0.299, 0.587, 0.114);
-
-    float lumaNW = dot(rgbNW, luma);
-    float lumaNE = dot(rgbNE, luma);
-    float lumaSW = dot(rgbSW, luma);
-    float lumaSE = dot(rgbSE, luma);
-    float lumaM = dot(rgbM, luma);
-    float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
-    float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));
-
-    vec2 direction;
-    direction.x = -((lumaNW + lumaNE) - (lumaSW + lumaSE));
-    direction.y = ((lumaNW + lumaSW) - (lumaNE + lumaSE));
-    float directionReduce = max((lumaNW + lumaNE + lumaSW + lumaSE) * 0.03125, 0.0078125);
-    float inverseDirectionAdjustment = 1.0 / (min(abs(direction.x), abs(direction.y)) + directionReduce);
-    direction = clamp(direction * inverseDirectionAdjustment, vec2(-8.0), vec2(8.0)) * inverseResolution;
-
-    vec3 rgbA = 0.5 * (
-        texture(texture0, fragTexCoord + direction * (1.0 / 3.0 - 0.5)).rgb +
-        texture(texture0, fragTexCoord + direction * (2.0 / 3.0 - 0.5)).rgb);
-    vec3 rgbB = rgbA * 0.5 + 0.25 * (
-        texture(texture0, fragTexCoord + direction * -0.5).rgb +
-        texture(texture0, fragTexCoord + direction * 0.5).rgb);
-    float lumaB = dot(rgbB, luma);
-
-    vec3 color = ((lumaB < lumaMin) || (lumaB > lumaMax)) ? rgbA : rgbB;
-    finalColor = vec4(color, center.a) * fragColor;
-}
-"""
-FXAA_FRAGMENT_SHADER_100 = """
-#version 100
-precision mediump float;
-
-varying vec2 fragTexCoord;
-varying vec4 fragColor;
-
-uniform sampler2D texture0;
-uniform vec2 resolution;
-
-void main()
-{
-    vec2 inverseResolution = 1.0 / resolution;
-    vec3 rgbNW = texture2D(texture0, fragTexCoord + vec2(-1.0, -1.0) * inverseResolution).rgb;
-    vec3 rgbNE = texture2D(texture0, fragTexCoord + vec2(1.0, -1.0) * inverseResolution).rgb;
-    vec3 rgbSW = texture2D(texture0, fragTexCoord + vec2(-1.0, 1.0) * inverseResolution).rgb;
-    vec3 rgbSE = texture2D(texture0, fragTexCoord + vec2(1.0, 1.0) * inverseResolution).rgb;
-    vec4 center = texture2D(texture0, fragTexCoord);
-    vec3 rgbM = center.rgb;
-    vec3 luma = vec3(0.299, 0.587, 0.114);
-
-    float lumaNW = dot(rgbNW, luma);
-    float lumaNE = dot(rgbNE, luma);
-    float lumaSW = dot(rgbSW, luma);
-    float lumaSE = dot(rgbSE, luma);
-    float lumaM = dot(rgbM, luma);
-    float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
-    float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));
-
-    vec2 direction;
-    direction.x = -((lumaNW + lumaNE) - (lumaSW + lumaSE));
-    direction.y = ((lumaNW + lumaSW) - (lumaNE + lumaSE));
-    float directionReduce = max((lumaNW + lumaNE + lumaSW + lumaSE) * 0.03125, 0.0078125);
-    float inverseDirectionAdjustment = 1.0 / (min(abs(direction.x), abs(direction.y)) + directionReduce);
-    direction = clamp(direction * inverseDirectionAdjustment, vec2(-8.0), vec2(8.0)) * inverseResolution;
-
-    vec3 rgbA = 0.5 * (
-        texture2D(texture0, fragTexCoord + direction * (1.0 / 3.0 - 0.5)).rgb +
-        texture2D(texture0, fragTexCoord + direction * (2.0 / 3.0 - 0.5)).rgb);
-    vec3 rgbB = rgbA * 0.5 + 0.25 * (
-        texture2D(texture0, fragTexCoord + direction * -0.5).rgb +
-        texture2D(texture0, fragTexCoord + direction * 0.5).rgb);
-    float lumaB = dot(rgbB, luma);
-
-    vec3 color = ((lumaB < lumaMin) || (lumaB > lumaMax)) ? rgbA : rgbB;
-    gl_FragColor = vec4(color, center.a) * fragColor;
-}
-"""
 
 
 @lru_cache(maxsize=256)
@@ -285,14 +188,12 @@ class ClusterUiRenderer:
         height: int = DESIGN_HEIGHT,
         title: str = "carrotpilot cluster",
         target_fps: int = 0,
-        msaa_4x: bool = False,
         theme_mode: str = "auto",
     ) -> None:
         self.width = width
         self.height = height
         self.title = title
         self.target_fps = target_fps
-        self.msaa_4x = msaa_4x
         self.theme_mode = normalize_cluster_theme_mode(theme_mode)
         self._theme = current_cluster_theme(self.theme_mode)
         self.hidden = False
@@ -302,10 +203,6 @@ class ClusterUiRenderer:
         self._accel_text_width = 0.0
         self._capture_target = None
         self._portrait_upload_target = None
-        self._aa_source_target = None
-        self._fxaa_shader = None
-        self._fxaa_resolution_loc = -1
-        self._fxaa_resolution_value = None
         self._vehicle_model = None
         self._vehicle_model_load_attempted = False
         self._route_video_texture = None
@@ -361,8 +258,6 @@ class ClusterUiRenderer:
         self.hidden = hidden
         rl.set_trace_log_level(rl.TraceLogLevel.LOG_WARNING)
         flags = 0
-        if self.msaa_4x:
-            flags |= rl.ConfigFlags.FLAG_MSAA_4X_HINT
         if hidden:
             flags |= rl.ConfigFlags.FLAG_WINDOW_HIDDEN
         if flags:
@@ -380,25 +275,18 @@ class ClusterUiRenderer:
         profile_stage = self._profile_start()
         self._load_vehicle_model()
         self._profile_add("renderer.open.load_vehicle_model", profile_stage)
-        # self._load_fxaa_shader()
         self._window_open = True
         self._profile_add("renderer.open.total", profile_total)
 
     def close(self) -> None:
         if not self._window_open:
             return
-        if self._aa_source_target is not None:
-            rl.unload_render_texture(self._aa_source_target)
-            self._aa_source_target = None
         if self._capture_target is not None:
             rl.unload_render_texture(self._capture_target)
             self._capture_target = None
         if self._portrait_upload_target is not None:
             rl.unload_render_texture(self._portrait_upload_target)
             self._portrait_upload_target = None
-        if self._fxaa_shader is not None:
-            rl.unload_shader(self._fxaa_shader)
-            self._fxaa_shader = None
         if self._route_video_texture is not None:
             rl.unload_texture(self._route_video_texture)
             self._route_video_texture = None
@@ -407,8 +295,6 @@ class ClusterUiRenderer:
         self._font = None
         self._owns_font = False
         self._accel_text_width = 0.0
-        self._fxaa_resolution_loc = -1
-        self._fxaa_resolution_value = None
         if self._vehicle_model is not None:
             rl.unload_model(self._vehicle_model)
             self._vehicle_model = None
@@ -423,32 +309,15 @@ class ClusterUiRenderer:
 
     def render_frame(self, state: ClusterUiState) -> None:
         self.open()
-        if self._fxaa_shader is None:
-            profile_stage = self._profile_start()
-            rl.begin_drawing()
-            self._profile_add("render_frame.begin_drawing", profile_stage)
-            profile_stage = self._profile_start()
-            self.render(state)
-            self._profile_add("render_frame.render_no_fxaa", profile_stage)
-            profile_stage = self._profile_start()
-            rl.end_drawing()
-            self._profile_add("render_frame.end_drawing", profile_stage)
-            return
-
-        signal_lights = self._turn_signal_lights(state)
-        scene_target = self._get_aa_source_target()
-        profile_stage = self._profile_start()
-        rl.begin_texture_mode(scene_target)
-        self._render_world(state, signal_lights)
-        rl.end_texture_mode()
-        self._profile_add("render_frame.render_scene_target", profile_stage)
-
         profile_stage = self._profile_start()
         rl.begin_drawing()
-        self._draw_antialiased_texture(scene_target.texture)
-        self._draw_hud(state, signal_lights)
+        self._profile_add("render_frame.begin_drawing", profile_stage)
+        profile_stage = self._profile_start()
+        self.render(state)
+        self._profile_add("render_frame.render", profile_stage)
+        profile_stage = self._profile_start()
         rl.end_drawing()
-        self._profile_add("render_frame.draw_fxaa_hud", profile_stage)
+        self._profile_add("render_frame.end_drawing", profile_stage)
 
     def render(self, state: ClusterUiState, signal_lights: tuple[bool, bool] | None = None) -> None:
         """Draw one frame into the currently active raylib render target."""
@@ -554,27 +423,11 @@ class ClusterUiRenderer:
         target = self._get_capture_target()
         self._profile_add("render_to_image.get_capture_target", profile_stage)
 
-        if self._fxaa_shader is None:
-            profile_stage = self._profile_start()
-            rl.begin_texture_mode(target)
-            self.render(state)
-            rl.end_texture_mode()
-            self._profile_add("render_to_image.draw_to_target", profile_stage)
-        else:
-            scene_target = self._get_aa_source_target()
-            signal_lights = self._turn_signal_lights(state)
-            profile_stage = self._profile_start()
-            rl.begin_texture_mode(scene_target)
-            self._render_world(state, signal_lights)
-            rl.end_texture_mode()
-            self._profile_add("render_to_image.draw_scene_target", profile_stage)
-
-            profile_stage = self._profile_start()
-            rl.begin_texture_mode(target)
-            self._draw_antialiased_texture(scene_target.texture)
-            self._draw_hud(state, signal_lights)
-            rl.end_texture_mode()
-            self._profile_add("render_to_image.draw_fxaa_target", profile_stage)
+        profile_stage = self._profile_start()
+        rl.begin_texture_mode(target)
+        self.render(state)
+        rl.end_texture_mode()
+        self._profile_add("render_to_image.draw_to_target", profile_stage)
 
         if portrait_upload:
             profile_stage = self._profile_start()
@@ -641,64 +494,6 @@ class ClusterUiRenderer:
             rl.set_texture_filter(self._portrait_upload_target.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
             self._profile_add("render_target.filter_portrait_upload", profile_stage)
         return self._portrait_upload_target
-
-    def _get_aa_source_target(self):
-        if self._aa_source_target is None:
-            profile_stage = self._profile_start()
-            self._aa_source_target = rl.load_render_texture(self.width, self.height)
-            self._profile_add("render_target.alloc_aa_source", profile_stage)
-            profile_stage = self._profile_start()
-            rl.set_texture_filter(self._aa_source_target.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
-            self._profile_add("render_target.filter_aa_source", profile_stage)
-        return self._aa_source_target
-
-    def _load_fxaa_shader(self) -> None:
-        gl_version = rl.rl_get_version()
-        es_versions = (
-            getattr(rl, "RL_OPENGL_ES_20", 5),
-            getattr(rl, "RL_OPENGL_ES_30", 6),
-        )
-        shader_codes = (
-            (FXAA_FRAGMENT_SHADER_100, FXAA_FRAGMENT_SHADER_330)
-            if gl_version in es_versions
-            else (FXAA_FRAGMENT_SHADER_330, FXAA_FRAGMENT_SHADER_100)
-        )
-        for shader_code in shader_codes:
-            try:
-                shader = rl.load_shader_from_memory(rl.ffi.NULL, shader_code)
-            except Exception as exc:
-                print(f"FXAA shader load failed: {exc}")
-                continue
-            if not rl.is_shader_valid(shader):
-                rl.unload_shader(shader)
-                continue
-            self._fxaa_shader = shader
-            self._fxaa_resolution_loc = rl.get_shader_location(shader, "resolution")
-            self._fxaa_resolution_value = rl.ffi.new("float[2]", [float(self.width), float(self.height)])
-            return
-        self._fxaa_shader = None
-
-    def _draw_antialiased_texture(self, texture) -> None:
-        if self._fxaa_shader is None:
-            return
-        source = rl.Rectangle(0.0, 0.0, float(texture.width), -float(texture.height))
-        dest = rl.Rectangle(0.0, 0.0, float(self.width), float(self.height))
-        origin = rl.Vector2(0.0, 0.0)
-        profile_stage = self._profile_start()
-        rl.clear_background(rl_color(self._current_theme().bg))
-        self._profile_add("fxaa.clear_background", profile_stage)
-        profile_stage = self._profile_start()
-        rl.begin_shader_mode(self._fxaa_shader)
-        if self._fxaa_resolution_loc >= 0 and self._fxaa_resolution_value is not None:
-            rl.set_shader_value(
-                self._fxaa_shader,
-                self._fxaa_resolution_loc,
-                self._fxaa_resolution_value,
-                rl.ShaderUniformDataType.SHADER_UNIFORM_VEC2,
-            )
-        rl.draw_texture_pro(texture, source, dest, origin, 0.0, rl_color(WHITE))
-        rl.end_shader_mode()
-        self._profile_add("fxaa.shader_draw", profile_stage)
 
     def _load_font(self):
         for candidate in self._font_candidates():
