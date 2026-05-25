@@ -879,6 +879,7 @@ class ClusterUiRenderer:
             return
 
         color = rl_color(strip.color)
+        x_offset_m = strip.x_offset_m
 
         if hasattr(rl, "draw_triangle_strip_3d"):
             point_count = count * 2
@@ -891,11 +892,11 @@ class ClusterUiRenderer:
                 left = strip.left[index]
                 right = strip.right[index]
 
-                points[index * 2].x = left.x
+                points[index * 2].x = left.x + x_offset_m
                 points[index * 2].y = left.y
                 points[index * 2].z = left.z
 
-                points[index * 2 + 1].x = right.x
+                points[index * 2 + 1].x = right.x + x_offset_m
                 points[index * 2 + 1].y = right.y
                 points[index * 2 + 1].z = right.z
 
@@ -907,10 +908,14 @@ class ClusterUiRenderer:
             return
 
         for index in range(count - 1):
-            left_near = vec3(strip.left[index])
-            right_near = vec3(strip.right[index])
-            left_far = vec3(strip.left[index + 1])
-            right_far = vec3(strip.right[index + 1])
+            left = strip.left[index]
+            right = strip.right[index]
+            next_left = strip.left[index + 1]
+            next_right = strip.right[index + 1]
+            left_near = rl.Vector3(left.x + x_offset_m, left.y, left.z)
+            right_near = rl.Vector3(right.x + x_offset_m, right.y, right.z)
+            left_far = rl.Vector3(next_left.x + x_offset_m, next_left.y, next_left.z)
+            right_far = rl.Vector3(next_right.x + x_offset_m, next_right.y, next_right.z)
             rl.draw_triangle_3d(left_near, right_near, right_far, color)
             rl.draw_triangle_3d(left_near, right_far, left_far, color)
 
