@@ -75,6 +75,13 @@ class LiveDebugInfo:
 
 
 @dataclass(frozen=True, slots=True)
+class DebugPlotSnapshot:
+    mode: int
+    title: str
+    values: tuple[float, float, float]
+
+
+@dataclass(frozen=True, slots=True)
 class DetectedVehicle:
     label: str
     longitudinal_m: float
@@ -163,6 +170,7 @@ class ClusterUiState:
     radar_points: tuple[RadarPoint, ...] = ()
     route_overlay: RouteOverlay | None = None
     live_debug: LiveDebugInfo | None = None
+    debug_plot: DebugPlotSnapshot | None = None
     center_clock_text: str | None = None
     planned_speed_kph: float | None = None
     planned_accel_mps2: float | None = None

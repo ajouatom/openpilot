@@ -14,6 +14,7 @@ from cluster_config import (
     AMBER,
     BLUE,
     CLUSTER_SCREEN_MODE_DEBUG,
+    CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
     CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
     ClusterTheme,
     DESIGN_HEIGHT,
@@ -29,7 +30,7 @@ from cluster_config import (
     normalize_cluster_screen_mode,
     normalize_cluster_theme_mode,
 )
-from cluster_models import ClusterUiState, GitBranchStatus, LiveDebugInfo, RouteOverlay
+from cluster_models import ClusterUiState, DebugPlotSnapshot, GitBranchStatus, LiveDebugInfo, RouteOverlay
 from cluster_scene import (
     ClusterScene,
     MeshStrip,
@@ -65,6 +66,12 @@ SYSTEM_PANEL_X = 1416
 SYSTEM_PANEL_Y = 118
 SYSTEM_PANEL_W = 476
 SYSTEM_STATS_REFRESH_SECONDS = 1.0
+DEBUG_PLOT_MAX_SAMPLES = 360
+DEBUG_PLOT_SAMPLE_SECONDS = 0.05
+DEBUG_PLOT_X = 500.0
+DEBUG_PLOT_Y = 110.0
+DEBUG_PLOT_W = 1370.0
+DEBUG_PLOT_H = 338.0
 GIT_STATUS_MARGIN = 2
 GIT_STATUS_DOT_RADIUS = 7
 GIT_STATUS_DOT_TEXT_GAP = 6
@@ -218,6 +225,13 @@ class ClusterUiRenderer:
         self._triangle_strip_points = None
         self._triangle_strip_capacity = 0
         self._system_stats = SystemStatsSampler(SYSTEM_STATS_REFRESH_SECONDS)
+        self._debug_plot_mode_prev = -1
+        self._debug_plot_size = 0
+        self._debug_plot_index = -1
+        self._debug_plot_values = [[0.0] * DEBUG_PLOT_MAX_SAMPLES for _ in range(3)]
+        self._debug_plot_min = -2.0
+        self._debug_plot_max = 2.0
+        self._debug_plot_last_sample_time: float | None = None
         self.profile_enabled = os.environ.get("CLUSTER_PROFILE_RENDER") == "1"
         self._profile_samples: list[tuple[str, float]] = []
 
@@ -1153,7 +1167,15 @@ class ClusterUiRenderer:
                 profile_stage = self._profile_start()
                 self._draw_system_stats_panel(state)
                 self._profile_add("hud.system_stats", profile_stage)
-            if screen_mode not in (CLUSTER_SCREEN_MODE_DEBUG, CLUSTER_SCREEN_MODE_DEBUG_SYSTEM):
+            if screen_mode == CLUSTER_SCREEN_MODE_DEBUG_GRAPH:
+                profile_stage = self._profile_start()
+                self._draw_debug_plot(state.debug_plot)
+                self._profile_add("hud.debug_plot", profile_stage)
+            if screen_mode not in (
+                CLUSTER_SCREEN_MODE_DEBUG,
+                CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
+                CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+            ):
                 profile_stage = self._profile_start()
                 self._draw_route_overlay(state.route_overlay)
                 self._profile_add("hud.route_overlay", profile_stage)
@@ -1190,6 +1212,162 @@ class ClusterUiRenderer:
         rl.draw_rectangle_rounded(rect, 0.28, 12, rl_color(theme.clock_bg))
         rl.draw_rectangle_rounded_lines_ex(rect, 0.28, 12, 2.0, rl_color(theme.clock_outline))
         self._draw_text(text, x, y, size, theme.clock_text, anchor="center")
+
+    def _draw_debug_plot(self, plot: DebugPlotSnapshot | None) -> None:
+        if plot is None or plot.mode <= 0:
+            if self._debug_plot_mode_prev != 0:
+                self._clear_debug_plot(0)
+            self._draw_debug_plot_panel("SHOW PLOT MODE 0", None)
+            return
+
+        if plot.mode != self._debug_plot_mode_prev:
+            self._clear_debug_plot(plot.mode)
+
+        now = time.perf_counter()
+        if self._debug_plot_last_sample_time is None or now - self._debug_plot_last_sample_time >= DEBUG_PLOT_SAMPLE_SECONDS:
+            self._append_debug_plot_values(plot.values)
+            self._debug_plot_last_sample_time = now
+
+        self._draw_debug_plot_panel(plot.title, plot)
+
+    def _clear_debug_plot(self, mode: int) -> None:
+        self._debug_plot_mode_prev = mode
+        self._debug_plot_size = 0
+        self._debug_plot_index = -1
+        self._debug_plot_values = [[0.0] * DEBUG_PLOT_MAX_SAMPLES for _ in range(3)]
+        self._debug_plot_min = -2.0
+        self._debug_plot_max = 2.0
+        self._debug_plot_last_sample_time = None
+
+    def _append_debug_plot_values(self, values: tuple[float, float, float]) -> None:
+        self._debug_plot_index = (self._debug_plot_index + 1) % DEBUG_PLOT_MAX_SAMPLES
+        if self._debug_plot_size < DEBUG_PLOT_MAX_SAMPLES:
+            self._debug_plot_size += 1
+
+        for index, value in enumerate(values):
+            self._debug_plot_values[index][self._debug_plot_index] = value if math.isfinite(value) else 0.0
+
+        self._update_debug_plot_bounds()
+
+    def _update_debug_plot_bounds(self) -> None:
+        if self._debug_plot_size <= 0:
+            self._debug_plot_min = -2.0
+            self._debug_plot_max = 2.0
+            return
+
+        minimum = float("inf")
+        maximum = float("-inf")
+        for series_index in range(3):
+            for offset in range(self._debug_plot_size):
+                value = self._debug_plot_value(series_index, offset)
+                minimum = min(minimum, value)
+                maximum = max(maximum, value)
+
+        if minimum == float("inf") or maximum == float("-inf"):
+            minimum = -2.0
+            maximum = 2.0
+        if minimum > -2.0:
+            minimum = -2.0
+        if maximum < 2.0:
+            maximum = 2.0
+        if maximum - minimum < 0.001:
+            minimum -= 1.0
+            maximum += 1.0
+        self._debug_plot_min = minimum
+        self._debug_plot_max = maximum
+
+    def _debug_plot_value(self, series_index: int, oldest_offset: int) -> float:
+        oldest_index = (self._debug_plot_index - self._debug_plot_size + 1) % DEBUG_PLOT_MAX_SAMPLES
+        return self._debug_plot_values[series_index][(oldest_index + oldest_offset) % DEBUG_PLOT_MAX_SAMPLES]
+
+    def _draw_debug_plot_panel(self, title: str, plot: DebugPlotSnapshot | None) -> None:
+        theme = self._current_theme()
+        panel_x = DEBUG_PLOT_X
+        panel_y = DEBUG_PLOT_Y
+        panel_w = DEBUG_PLOT_W
+        panel_h = DEBUG_PLOT_H
+        pad = 24.0
+        title_y = panel_y + 30.0
+        plot_x = panel_x + pad
+        plot_y = panel_y + 70.0
+        plot_w = panel_w - pad * 2.0
+        plot_h = panel_h - 96.0
+        plot_bottom = plot_y + plot_h
+
+        self._rounded_rect(panel_x, panel_y, panel_w, panel_h, 18, theme.route_panel_bg, theme.faint, 2)
+        title = self._ellipsize_text(title, 22, panel_w - pad * 2.0 - 190.0)
+        self._draw_text(title, panel_x + pad, title_y, 22, theme.text)
+        self._draw_text(
+            f"min {self._debug_plot_min:.2f}  max {self._debug_plot_max:.2f}",
+            panel_x + panel_w - pad,
+            title_y,
+            17,
+            theme.muted,
+            anchor="right",
+        )
+
+        grid_color = rl_color(theme.faint, 110)
+        axis_color = rl_color(theme.muted, 160)
+        plot_rect = rl.Rectangle(plot_x, plot_y, plot_w, plot_h)
+        rl.draw_rectangle_rec(plot_rect, rl_color((0, 0, 0), 52 if theme.is_dark else 30))
+        rl.draw_rectangle_lines_ex(plot_rect, 2.0, rl_color(theme.faint))
+        for index in range(1, 6):
+            x = plot_x + plot_w * index / 6.0
+            rl.draw_line_ex(rl.Vector2(x, plot_y), rl.Vector2(x, plot_bottom), 1.0, grid_color)
+        for index in range(1, 4):
+            y = plot_y + plot_h * index / 4.0
+            rl.draw_line_ex(rl.Vector2(plot_x, y), rl.Vector2(plot_x + plot_w, y), 1.0, grid_color)
+
+        value_range = self._debug_plot_max - self._debug_plot_min
+        if self._debug_plot_min < 0.0 < self._debug_plot_max and value_range > 0.001:
+            zero_y = plot_bottom - (0.0 - self._debug_plot_min) / value_range * plot_h
+            rl.draw_line_ex(rl.Vector2(plot_x, zero_y), rl.Vector2(plot_x + plot_w, zero_y), 2.0, axis_color)
+
+        if plot is None or self._debug_plot_size < 2:
+            self._draw_text("no plot data", plot_x + plot_w * 0.5, plot_y + plot_h * 0.5, 22, theme.muted, anchor="center")
+            return
+
+        colors = (
+            (255, 220, 0),
+            GREEN,
+            (255, 165, 0),
+        )
+        for series_index, color in enumerate(colors):
+            self._draw_debug_plot_series(series_index, plot_x, plot_y, plot_w, plot_h, color)
+
+    def _draw_debug_plot_series(
+        self,
+        series_index: int,
+        plot_x: float,
+        plot_y: float,
+        plot_w: float,
+        plot_h: float,
+        color: tuple[int, int, int],
+    ) -> None:
+        value_range = max(0.001, self._debug_plot_max - self._debug_plot_min)
+        previous: rl.Vector2 | None = None
+        latest: rl.Vector2 | None = None
+        latest_value = 0.0
+        count = self._debug_plot_size
+        dx = plot_w / max(1, count - 1)
+        for offset in range(count):
+            value = self._debug_plot_value(series_index, offset)
+            x = plot_x + dx * offset
+            y = plot_y + plot_h - (value - self._debug_plot_min) / value_range * plot_h
+            point = rl.Vector2(x, y)
+            if previous is not None:
+                rl.draw_line_ex(previous, point, 3.0, rl_color(color))
+            previous = point
+            latest = point
+            latest_value = value
+
+        if latest is None:
+            return
+        label = f"{latest_value:.2f}"
+        label_size = 18.0
+        label_x = min(plot_x + plot_w - 4.0, latest.x + 42.0)
+        label_y = clamp(latest.y + (24.0 if series_index > 0 else 0.0), plot_y + 12.0, plot_y + plot_h - 12.0)
+        self._draw_text(label, label_x, label_y, label_size, color, anchor="right")
 
     def _draw_system_stats_panel(self, state: ClusterUiState) -> None:
         theme = self._current_theme()

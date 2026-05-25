@@ -30,17 +30,18 @@ Manager autostart omits `--fps` by default so live launches follow
 only for fixed test overrides; `0` means uncapped.
 
 The launcher defaults to `--input live`, subscribes to openpilot cereal services,
-and renders live `carState`, `modelV2`, `radarState`, `liveTracks`, and raw
-Hyundai CAN-FD radar points when CAN subscription is enabled.
+and renders live `carState`, `modelV2`, `radarState`, `liveTracks`,
+`controlsState`, `carControl`, and raw Hyundai CAN-FD radar points when CAN
+subscription is enabled.
 When `--fps` is omitted for live input, `ClusterHudLiveFps` controls the render
 limit and is polled about once per second while running: `0` uncapped,
 `1` 10 Hz, `2` 20 Hz, and `3` 30 Hz. Explicit `--fps` remains a fixed
 override.
 `ClusterHudScreenMode` controls optional debug views: `0` default, `1` shows
 the live debug panel with grouped `LIVE DELAY`, `LIVE TORQUE`, `STEERING`, and
-`LATERAL PLAN` rows, `2` shows the system information panel, and `3` graph
-reserved. Modes `1` and `2` suppress the route overlay so the selected debug
-panel remains visible.
+`LATERAL PLAN` rows, `2` shows the system information panel, and `3` shows the
+debug graph selected by `ShowPlotMode`. Modes `1`, `2`, and `3` suppress the
+route overlay so the selected debug view remains visible.
 
 The bundled TURZX code includes only the Python vendor library. The openpilot
 device uses the system `libusb-1.0.so` through `pyusb`.
