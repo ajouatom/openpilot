@@ -297,6 +297,8 @@ class ClusterUiRenderer:
         self._route_video_frame_id: str | None = None
         self._left_turn_signal_started_at: float | None = None
         self._right_turn_signal_started_at: float | None = None
+        self._triangle_strip_points = None
+        self._triangle_strip_capacity = 0
         self.profile_enabled = os.environ.get("CLUSTER_PROFILE_RENDER") == "1"
         self._profile_samples: list[tuple[str, float]] = []
 
@@ -879,7 +881,11 @@ class ClusterUiRenderer:
         color = rl_color(strip.color)
 
         if hasattr(rl, "draw_triangle_strip_3d"):
-            points = rl.ffi.new("struct Vector3[]", count * 2)
+            point_count = count * 2
+            if self._triangle_strip_capacity < point_count:
+                self._triangle_strip_points = rl.ffi.new("struct Vector3[]", point_count)
+                self._triangle_strip_capacity = point_count
+            points = self._triangle_strip_points
 
             for index in range(count):
                 left = strip.left[index]

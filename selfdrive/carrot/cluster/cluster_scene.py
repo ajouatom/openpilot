@@ -443,12 +443,16 @@ def model_line_centerline(
     end_m: float,
     height_m: float,
 ) -> tuple[Vec3, ...]:
-    points: list[Vec3] = []
+    visible_points: list[ModelPathPoint] = []
     for point in model_points:
         forward_m = data_scene_forward_m(point.forward_m)
         if start_m <= forward_m <= end_m:
-            points.append(Vec3(point.lateral_m, forward_m, height_m))
-    return downsample_tuple(tuple(points), MODEL_LINE_MAX_POINTS)
+            visible_points.append(point)
+    selected = downsample_tuple(tuple(visible_points), MODEL_LINE_MAX_POINTS)
+    return tuple(
+        Vec3(point.lateral_m, data_scene_forward_m(point.forward_m), height_m)
+        for point in selected
+    )
 
 
 def extend_centerline_rearward_to_first_point(
