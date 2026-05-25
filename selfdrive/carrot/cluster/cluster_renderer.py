@@ -1161,6 +1161,12 @@ class ClusterUiRenderer:
             screen_mode = self.screen_mode
             if screen_mode == CLUSTER_SCREEN_MODE_DEBUG_GRAPH:
                 profile_stage = self._profile_start()
+                self._draw_speed_block(state)
+                self._profile_add("hud.speed_block", profile_stage)
+                profile_stage = self._profile_start()
+                self._draw_accel_block(state)
+                self._profile_add("hud.accel_block", profile_stage)
+                profile_stage = self._profile_start()
                 self._draw_debug_plot(
                     state.debug_plot,
                     DEBUG_PLOT_FULL_X,
