@@ -2246,7 +2246,7 @@ def model_line_points(line: Any) -> tuple[ModelPathPoint, ...]:
     if xs is None or ys is None:
         return ()
 
-    count = min(len(xs), len(ys), 96)
+    count = min(len(xs), len(ys))
     points: list[ModelPathPoint] = []
     previous_forward_m = -1.0
     for index in range(count):
@@ -2283,7 +2283,7 @@ def model_path_points_from_model_v2(model: Any) -> tuple[ModelPathPoint, ...]:
     orientations = safe_get(orientation, "z") if orientation is not None else None
     orientation_rates = safe_get(orientation_rate, "z") if orientation_rate is not None else None
 
-    count = min(len(xs), len(ys), 96)
+    count = min(len(xs), len(ys))
     points: list[ModelPathPoint] = []
     previous_forward_m = -1.0
     for index in range(count):
@@ -2635,7 +2635,7 @@ def sorted_radar_points(points: Any) -> tuple[RadarPoint, ...]:
         and RADAR_MIN_LONGITUDINAL_M <= point.longitudinal_m <= RADAR_FRONT_MAX_LONGITUDINAL_M
     ]
     filtered.sort(key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label))
-    return tuple(filtered[:48])
+    return tuple(filtered)
 
 
 def normalized_lateral_m(value: float) -> float:

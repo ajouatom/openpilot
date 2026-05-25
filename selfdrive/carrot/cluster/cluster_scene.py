@@ -74,8 +74,6 @@ DETECTED_VEHICLE_MAX_RENDER_BOXES = 5
 DETECTED_VEHICLE_MAX_PATH_BLOCKERS = 10
 VEHICLE_BADGE_TTC_S = 9.9
 VEHICLE_BADGE_ACCEL_MPS2 = 1.0
-MODEL_LINE_MAX_POINTS = 32
-MODEL_PATH_MAX_POINTS = 44
 MODEL_PATH_MAX_METRIC_SEGMENTS = 14
 MODEL_LINE_STRIP_GROUP_CACHE_LIMIT = 384
 LANE_MARKING_SHADOW_HEIGHT_M = 0.026
@@ -440,17 +438,6 @@ def strip_from_centerline(points: tuple[Vec3, ...], width_m: float, color: Color
     return MeshStrip(tuple(left), tuple(right), color)
 
 
-def downsample_tuple(values: tuple, max_count: int) -> tuple:
-    if len(values) <= max_count or max_count <= 1:
-        return values
-    last_index = len(values) - 1
-    indexes = {
-        round(index * last_index / (max_count - 1))
-        for index in range(max_count)
-    }
-    return tuple(values[index] for index in sorted(indexes))
-
-
 def model_line_centerline(
     model_points: tuple[ModelPathPoint, ...],
     start_m: float,
@@ -463,10 +450,9 @@ def model_line_centerline(
         forward_m = data_scene_forward_m(point.forward_m)
         if start_m <= forward_m <= end_m:
             visible_points.append(point)
-    selected = downsample_tuple(tuple(visible_points), MODEL_LINE_MAX_POINTS)
     return tuple(
         Vec3(point.lateral_m + lateral_shift_m, data_scene_forward_m(point.forward_m), height_m)
-        for point in selected
+        for point in visible_points
     )
 
 
@@ -877,12 +863,11 @@ def model_path_centerline(
                 points.append(Vec3(x_m, forward_m, PATH_HEIGHT_M))
         return tuple(points) if len(points) >= 2 else ()
     else:
-        sampled_model_points = downsample_tuple(model_points, MODEL_PATH_MAX_POINTS)
         ego_offset = clamp(state.ego_lane_offset, -1.25, 1.25)
         ego_x_m = road_world_x(ego_offset, EGO_FORWARD_M, state.steering, lane_width_m)
         points = [
             Vec3(ego_x_m + point.lateral_m, data_scene_forward_m(point.forward_m), PATH_HEIGHT_M)
-            for point in sampled_model_points
+            for point in model_points
         ]
     return tuple(points) if len(points) >= 2 else ()
 
@@ -974,7 +959,7 @@ def radar_point_markers(
     max_forward_m: float = ROAD_FAR_M + 30.0,
 ) -> tuple[RadarPointMarker, ...]:
     markers: list[RadarPointMarker] = []
-    for point in state.radar_points[:48]:
+    for point in state.radar_points:
         if any(radar_points_same_vehicle(point, vehicle_point) for vehicle_point in vehicle_points):
             continue
         forward_m = data_scene_forward_m(point.longitudinal_m)
@@ -1011,7 +996,7 @@ def radar_vehicle_points(state: ClusterUiState, lane_width_m: float) -> tuple[Ra
     candidates = sorted(
         (
             point
-            for point in state.radar_points[:48]
+            for point in state.radar_points
             if radar_point_is_vehicle_candidate(point, state, lane_width_m)
         ),
         key=lambda point: (
