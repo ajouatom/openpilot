@@ -960,7 +960,7 @@ class ClusterUiRenderer:
         occupied: list[tuple[float, float, float, float]] = []
         label_bounds = self._world_label_bounds(left=430, top=52, right=40, bottom=26)
         ordered = sorted(points, key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label))
-        for point in ordered[:32]:
+        for point in ordered:
             anchor = rl.Vector3(point.center.x + scene_shift_x_m, point.center.y, point.center.z + 0.46)
             screen = world_to_screen_label_anchor(anchor, camera, self.width, self.height)
             if screen is None:
@@ -1047,7 +1047,7 @@ class ClusterUiRenderer:
                 -vehicle.confidence,
             ),
         )
-        for vehicle in ordered[:18]:
+        for vehicle in ordered:
             anchor = rl.Vector3(
                 vehicle.center.x + scene_shift_x_m,
                 vehicle.center.y,

@@ -70,11 +70,8 @@ RADAR_MERGE_LATERAL_M = 1.35
 RADAR_MERGED_SOURCE_TAG = "+radar:"
 CORNER_RADAR_LABELS = frozenset(("LF", "RF", "LR", "RR"))
 REAR_CORNER_RADAR_LABELS = frozenset(("LR", "RR"))
-DETECTED_VEHICLE_MAX_RENDER_BOXES = 5
-DETECTED_VEHICLE_MAX_PATH_BLOCKERS = 10
 VEHICLE_BADGE_TTC_S = 9.9
 VEHICLE_BADGE_ACCEL_MPS2 = 1.0
-MODEL_PATH_MAX_METRIC_SEGMENTS = 14
 MODEL_LINE_STRIP_GROUP_CACHE_LIMIT = 384
 LANE_MARKING_SHADOW_HEIGHT_M = 0.026
 LANE_MARKING_HEIGHT_M = 0.044
@@ -923,8 +920,7 @@ def model_path_metric_strips(state: ClusterUiState, points: tuple[Vec3, ...]) ->
         return ()
     strips: list[MeshStrip] = []
     metric_count = min(len(state.model_path), len(points))
-    step = max(1, math.ceil((metric_count - 1) / MODEL_PATH_MAX_METRIC_SEGMENTS))
-    for index in range(0, metric_count - 1, step):
+    for index in range(metric_count - 1):
         model_index = min(
             len(state.model_path) - 1,
             round(index * (len(state.model_path) - 1) / max(1, metric_count - 1)),
@@ -1683,29 +1679,6 @@ def detected_vehicle_has_visible_box(vehicle: DetectedVehicle, camera_active: bo
     )
 
 
-def detected_vehicle_priority(vehicle: DetectedVehicle) -> tuple[int, float, float]:
-    if vehicle.primary:
-        category = 0
-    elif vehicle.cut_in:
-        category = 1
-    elif vehicle.ttc_s is not None and vehicle.ttc_s < 5.0:
-        category = 2
-    elif vehicle.source.startswith("modelV2") and vehicle.probability >= 0.55:
-        category = 3
-    else:
-        category = 4
-    return category, max(0.0, vehicle.longitudinal_m), -vehicle.probability
-
-
-def limited_detected_vehicles(
-    vehicles: tuple[DetectedVehicle, ...],
-    limit: int,
-) -> tuple[DetectedVehicle, ...]:
-    if len(vehicles) <= limit:
-        return vehicles
-    return tuple(sorted(vehicles, key=detected_vehicle_priority)[:limit])
-
-
 def road_edge_strips(
     state: ClusterUiState,
     route_mode: bool,
@@ -1960,13 +1933,10 @@ def build_cluster_scene(
             state.radar_points,
             state,
         )
-        render_detected_vehicles = limited_detected_vehicles(
-            tuple(
-                detected
-                for detected in merged_detected_vehicles
-                if detected_vehicle_has_visible_box(detected, camera_active)
-            ),
-            DETECTED_VEHICLE_MAX_RENDER_BOXES,
+        render_detected_vehicles = tuple(
+            detected
+            for detected in merged_detected_vehicles
+            if detected_vehicle_has_visible_box(detected, camera_active)
         )
         merged_radar_labels = frozenset(
             label
@@ -2000,9 +1970,8 @@ def build_cluster_scene(
             )
             for detected in render_detected_vehicles
         )
-        blocking_detected_vehicles = limited_detected_vehicles(
-            tuple(detected for detected in state.detected_vehicles if vehicle_blocks_path(detected)),
-            DETECTED_VEHICLE_MAX_PATH_BLOCKERS,
+        blocking_detected_vehicles = tuple(
+            detected for detected in state.detected_vehicles if vehicle_blocks_path(detected)
         )
         detected_blockers = tuple(
             PathBlocker(

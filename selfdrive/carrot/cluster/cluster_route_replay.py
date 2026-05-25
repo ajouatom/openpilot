@@ -1148,10 +1148,9 @@ class RouteLogParser:
         debug_text = safe_get(lateral_plan, "latDebugText")
         if debug_text:
             self.lateral_plan_debug_text = str(debug_text)[:64]
-        self.lateral_plan_curvatures = numeric_tuple(safe_get(lateral_plan, "curvatures"), limit=10, minimum=-0.08, maximum=0.08)
+        self.lateral_plan_curvatures = numeric_tuple(safe_get(lateral_plan, "curvatures"), minimum=-0.08, maximum=0.08)
         self.lateral_plan_curvature_rates = numeric_tuple(
             safe_get(lateral_plan, "curvatureRates"),
-            limit=10,
             minimum=-0.08,
             maximum=0.08,
         )
@@ -1165,17 +1164,15 @@ class RouteLogParser:
             safe_get(longitudinal_plan, "longitudinalPlanSource", self.longitudinal_plan_source or "")
         ) or self.longitudinal_plan_source
         self.longitudinal_plan_speeds_kph = tuple(
-            value * 3.6 for value in numeric_tuple(safe_get(longitudinal_plan, "speeds"), limit=12, minimum=0.0, maximum=90.0)
+            value * 3.6 for value in numeric_tuple(safe_get(longitudinal_plan, "speeds"), minimum=0.0, maximum=90.0)
         )
         self.longitudinal_plan_accels_mps2 = numeric_tuple(
             safe_get(longitudinal_plan, "accels"),
-            limit=12,
             minimum=-MAX_ACCEL_MPS2,
             maximum=MAX_ACCEL_MPS2,
         )
         self.longitudinal_plan_jerks_mps3 = numeric_tuple(
             safe_get(longitudinal_plan, "jerks"),
-            limit=12,
             minimum=-12.0,
             maximum=12.0,
         )
@@ -2320,8 +2317,7 @@ def model_lead_detections_from_model_v2(model: Any) -> tuple[DetectedVehicle, ..
     model_velocity = safe_get(model, "velocity")
     model_speed_mps = first_list_value(safe_get(model_velocity, "x")) if model_velocity is not None else None
     detections: list[DetectedVehicle] = []
-    for index in range(min(len(leads), 3)):
-        lead = leads[index]
+    for index, lead in enumerate(leads):
         probability = clamp(safe_float(lead, "prob", 0.0), 0.0, 1.0)
         if probability < MODEL_LEAD_MIN_PROB:
             continue
@@ -2378,7 +2374,7 @@ def model_lead_is_cut_in(lead: Any) -> bool:
     y0 = finite_float(ys[0])
     if y0 is None or abs(y0) < 0.85:
         return False
-    for index in range(1, min(len(ys), len(xs), 6)):
+    for index in range(1, min(len(ys), len(xs))):
         future_y = finite_float(ys[index])
         future_x = finite_float(xs[index])
         if future_y is None or future_x is None or future_x - RADAR_TO_CAMERA_M > 75.0:
@@ -2970,7 +2966,7 @@ def enum_text(value: Any) -> str:
 
 def numeric_tuple(
     values: Any,
-    limit: int,
+    limit: int | None = None,
     minimum: float | None = None,
     maximum: float | None = None,
 ) -> tuple[float, ...]:
@@ -2978,7 +2974,7 @@ def numeric_tuple(
         return ()
     parsed: list[float] = []
     for index, value in enumerate(values):
-        if index >= limit:
+        if limit is not None and index >= limit:
             break
         number = finite_float(value)
         if number is None:
