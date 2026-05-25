@@ -74,6 +74,12 @@ REAR_CORNER_RADAR_LABELS = frozenset(("LR", "RR"))
 VEHICLE_BADGE_TTC_S = 9.9
 VEHICLE_BADGE_ACCEL_MPS2 = 1.0
 MODEL_LINE_STRIP_GROUP_CACHE_LIMIT = 48
+ROAD_STEPS_SURROUND = 96
+ROAD_STEPS_MODEL = 48
+ROAD_STEPS_SIM = 64
+STATIC_LINE_STEPS = 56
+PLANNED_PATH_FALLBACK_STEPS = 32
+MODEL_PATH_METRIC_SEGMENT_LIMIT = 14
 LANE_MARKING_SHADOW_HEIGHT_M = 0.026
 LANE_MARKING_HEIGHT_M = 0.044
 LANE_MARKING_BORDER_EXTRA_WIDTH_PX = 3
@@ -591,7 +597,7 @@ def lane_marking_segments_for_marking(
             return dashed_centerline_segments(centerline)
 
     if marking.style == "solid":
-        return (lane_centerline(marking.offset, steering, lane_width_m, start_m, end_m, 80, 0.0),)
+        return (lane_centerline(marking.offset, steering, lane_width_m, start_m, end_m, STATIC_LINE_STEPS, 0.0),)
 
     segments: list[tuple[Vec3, ...]] = []
     dash_m = 5.2
@@ -856,7 +862,7 @@ def model_path_centerline(
         if relative_start_m <= point.forward_m <= relative_end_m
     )
     if len(model_points) < 2:
-        steps = max(4, int(44 * (end_m - PATH_START_M) / (PATH_END_M - PATH_START_M)))
+        steps = max(4, int(PLANNED_PATH_FALLBACK_STEPS * (end_m - PATH_START_M) / (PATH_END_M - PATH_START_M)))
         sample_points = sample_range(PATH_START_M, end_m, steps)
         points: list[Vec3] = []
         for forward_m in sample_points:
@@ -884,7 +890,7 @@ def planned_path_strips(
     model_driven = bool(points)
     if not points:
         end_m = planned_path_end_m(state, blockers)
-        steps = max(4, int(44 * (end_m - PATH_START_M) / (PATH_END_M - PATH_START_M)))
+        steps = max(4, int(PLANNED_PATH_FALLBACK_STEPS * (end_m - PATH_START_M) / (PATH_END_M - PATH_START_M)))
         centerline: list[Vec3] = []
         for forward_m in sample_range(PATH_START_M, end_m, steps):
             lane_offset = planned_path_lane_offset(state, forward_m)
@@ -925,7 +931,13 @@ def model_path_metric_strips(state: ClusterUiState, points: tuple[Vec3, ...]) ->
         return ()
     strips: list[MeshStrip] = []
     metric_count = min(len(state.model_path), len(points))
-    for index in range(metric_count - 1):
+    segment_count = min(metric_count - 1, MODEL_PATH_METRIC_SEGMENT_LIMIT)
+    if segment_count <= 0:
+        return ()
+    source_segment_count = metric_count - 1
+    for segment_index in range(segment_count):
+        index = round(segment_index * source_segment_count / max(1, segment_count - 1))
+        index = min(index, len(points) - 2)
         model_index = min(
             len(state.model_path) - 1,
             round(index * (len(state.model_path) - 1) / max(1, metric_count - 1)),
@@ -1634,7 +1646,7 @@ def road_edge_offset_strips(
     end_m: float,
     theme: ClusterTheme = LIGHT_CLUSTER_THEME,
 ) -> tuple[MeshStrip, ...]:
-    centerline = lane_centerline(offset, steering, lane_width_m, start_m, end_m, 80, 0.0)
+    centerline = lane_centerline(offset, steering, lane_width_m, start_m, end_m, STATIC_LINE_STEPS, 0.0)
     backing, foreground = lane_marking_strip_groups_from_segments(
         (centerline,),
         (
@@ -1854,7 +1866,7 @@ def build_cluster_scene(
         SURROUND_ROAD_FRONT_M if state.surround_view_active
         else ROAD_FAR_M
     )
-    road_steps = 120 if camera_active else 64 if route_mode else 88
+    road_steps = ROAD_STEPS_SURROUND if camera_active else ROAD_STEPS_MODEL if route_mode else ROAD_STEPS_SIM
     if (state.detected_vehicles or selected_radar_vehicle_boxes) and not camera_active:
         nearest_detected_y = min(
             (data_scene_forward_m(vehicle.longitudinal_m) for vehicle in state.detected_vehicles),

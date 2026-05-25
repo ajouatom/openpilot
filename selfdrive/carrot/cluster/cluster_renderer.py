@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from functools import lru_cache
 import math
 import os
 import time
@@ -169,6 +170,11 @@ void main()
 """
 
 
+@lru_cache(maxsize=256)
+def _cached_rl_color(r: int, g: int, b: int, a: int) -> rl.Color:
+    return rl.Color(r, g, b, a)
+
+
 def rl_color(color: tuple[int, int, int] | tuple[int, int, int, int], alpha: int | None = None) -> rl.Color:
     if len(color) == 4:
         r, g, b, a = color
@@ -177,7 +183,7 @@ def rl_color(color: tuple[int, int, int] | tuple[int, int, int, int], alpha: int
         a = 255
     if alpha is not None:
         a = alpha
-    return rl.Color(int(r), int(g), int(b), int(a))
+    return _cached_rl_color(int(r), int(g), int(b), int(a))
 
 
 def radar_point_distance_label(point: RadarPointMarker) -> str:

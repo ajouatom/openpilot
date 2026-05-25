@@ -122,6 +122,7 @@ class TuringUsbDisplay:
         self._frame_error_count = 0
         self._turbojpeg = None
         self._turbojpeg_unavailable = False
+        self._jpeg_buffer = BytesIO()
         self.profile_enabled = os.environ.get("CLUSTER_PROFILE_USB") == "1"
         self._profile_samples: list[tuple[str, float]] = []
 
@@ -334,7 +335,9 @@ class TuringUsbDisplay:
         profile_stage = self._profile_start()
         image = Image.frombuffer("RGB", (width, height), rgba, "raw", "RGBX", 0, 1)
         self._profile_add("usb.encode.rgba_to_rgbx_view", profile_stage)
-        buffer = BytesIO()
+        buffer = self._jpeg_buffer
+        buffer.seek(0)
+        buffer.truncate(0)
         profile_stage = self._profile_start()
         image.save(
             buffer,

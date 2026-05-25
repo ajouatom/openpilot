@@ -20,10 +20,10 @@ RETRY_INTERVAL_S = 5.0
 HUD_CHECK_INTERVAL_S = 5.0
 USB_FALLBACK_SCAN_INTERVAL_S = 60.0
 NETLINK_KOBJECT_UEVENT = 15
-AUTORUN_REALTIME_ENV = {
-    "CLUSTER_REALTIME": "1",
-    "CLUSTER_REALTIME_CORES": "0,1,2,3",
-    "CLUSTER_REALTIME_PRIORITY": "55",
+AUTORUN_FPS_ENV = "CLUSTER_AUTORUN_FPS"
+AUTORUN_DEFAULT_ENV = {
+    "CLUSTER_REALTIME": "0",
+    AUTORUN_FPS_ENV: "20",
 }
 
 
@@ -43,7 +43,7 @@ def _read_hud_mode(params: Params) -> int:
 
 
 def _cluster_args() -> list[str]:
-    return [
+    args = [
         "--input",
         "live",
         "--output",
@@ -54,15 +54,19 @@ def _cluster_args() -> list[str]:
         "68",
         "--live-no-can",
     ]
+    fps = os.environ.get(AUTORUN_FPS_ENV, "20").strip()
+    if fps:
+        args.extend(["--fps", fps])
+    return args
 
 
 def _run_cluster_once() -> None:
     from selfdrive.carrot import cluster_run
 
     previous_argv = sys.argv[:]
-    previous_env = {key: os.environ.get(key) for key in AUTORUN_REALTIME_ENV}
+    previous_env = {key: os.environ.get(key) for key in AUTORUN_DEFAULT_ENV}
     try:
-        for key, value in AUTORUN_REALTIME_ENV.items():
+        for key, value in AUTORUN_DEFAULT_ENV.items():
             os.environ.setdefault(key, value)
         sys.argv = [previous_argv[0], *_cluster_args()]
         cluster_run.main()
