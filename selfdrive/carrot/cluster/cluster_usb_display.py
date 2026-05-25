@@ -5,6 +5,7 @@ import os
 import time
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 
 from cluster_utils import clamp
 
@@ -271,7 +272,7 @@ class TuringUsbDisplay:
         except Exception as exc:
             self._handle_frame_error(exc)
 
-    def encode_jpeg(self, rgba: bytes, width: int, height: int) -> bytes:
+    def encode_jpeg(self, rgba: Any, width: int, height: int) -> bytes:
         if self.jpeg_encoder == "turbojpeg" or (
             self.jpeg_encoder == "auto" and not self._turbojpeg_unavailable
         ):
@@ -287,7 +288,7 @@ class TuringUsbDisplay:
                 self._turbojpeg_unavailable = True
         return self._encode_jpeg_pillow(rgba, width, height)
 
-    def _encode_jpeg_turbojpeg(self, rgba: bytes, width: int, height: int) -> bytes:
+    def _encode_jpeg_turbojpeg(self, rgba: Any, width: int, height: int) -> bytes:
         profile_stage = self._profile_start()
         import numpy as np
         import turbojpeg  # type: ignore
@@ -327,7 +328,7 @@ class TuringUsbDisplay:
 
         raise RuntimeError("unsupported turbojpeg Python API")
 
-    def _encode_jpeg_pillow(self, rgba: bytes, width: int, height: int) -> bytes:
+    def _encode_jpeg_pillow(self, rgba: Any, width: int, height: int) -> bytes:
         from PIL import Image
 
         profile_stage = self._profile_start()

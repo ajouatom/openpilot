@@ -220,21 +220,34 @@ def run_demo(
                 profile.add_elapsed("main.window_render_total", profile_stage)
             if usb_display is not None:
                 if usb_codec == "jpeg":
-                    profile_stage = time.perf_counter()
-                    rgba, image_width, image_height = renderer.render_to_rgba_bytes(
-                        state,
-                        portrait_upload=True,
-                    )
-                    profile.add_elapsed("main.usb.render_rgba_total", profile_stage)
-
                     if usb_pipeline is not None:
+                        profile_stage = time.perf_counter()
+                        usb_pipeline.wait_for_capacity()
+                        profile.add_elapsed("main.usb_async.wait_capacity", profile_stage)
+                        profile.add_samples(usb_pipeline.profile_samples())
+
+                        profile_stage = time.perf_counter()
+                        rgba, image_width, image_height = renderer.render_to_rgba_bytes(
+                            state,
+                            portrait_upload=True,
+                        )
+                        profile.add_elapsed("main.usb.render_rgba_total", profile_stage)
+
                         profile_stage = time.perf_counter()
                         usb_pipeline.submit_rgba(rgba, image_width, image_height)
                         profile.add_elapsed("main.usb_async.submit_rgba", profile_stage)
                     else:
                         profile_stage = time.perf_counter()
-                        jpeg = usb_display.encode_jpeg(rgba, image_width, image_height)
-                        profile.add_elapsed("main.usb.encode_jpeg", profile_stage)
+                        with renderer.render_to_rgba_buffer(state, portrait_upload=True) as (
+                            rgba,
+                            image_width,
+                            image_height,
+                        ):
+                            profile.add_elapsed("main.usb.render_rgba_total", profile_stage)
+
+                            profile_stage = time.perf_counter()
+                            jpeg = usb_display.encode_jpeg(rgba, image_width, image_height)
+                            profile.add_elapsed("main.usb.encode_jpeg", profile_stage)
 
                         profile_stage = time.perf_counter()
                         usb_display.send_jpeg(jpeg)

@@ -25,6 +25,21 @@ class AsyncJpegUsbPipeline:
             self._pending_rgba = (rgba, width, height)
             self._condition.notify()
 
+    def wait_for_capacity(self, timeout: float | None = None) -> bool:
+        deadline = None if timeout is None else time.perf_counter() + max(0.0, timeout)
+        with self._condition:
+            while self._pending_rgba is not None and not self._closing and self._error is None:
+                if deadline is None:
+                    self._condition.wait()
+                    continue
+                remaining = deadline - time.perf_counter()
+                if remaining <= 0.0:
+                    return False
+                self._condition.wait(timeout=remaining)
+            if self._error is not None:
+                raise RuntimeError("asynchronous USB JPEG pipeline failed") from self._error
+            return self._pending_rgba is None
+
     def profile_samples(self) -> tuple[tuple[str, float], ...]:
         with self._condition:
             samples = tuple(self._samples)
@@ -32,8 +47,10 @@ class AsyncJpegUsbPipeline:
         return samples
 
     def check_error(self) -> None:
-        if self._error is not None:
-            raise RuntimeError("asynchronous USB JPEG pipeline failed") from self._error
+        with self._condition:
+            error = self._error
+        if error is not None:
+            raise RuntimeError("asynchronous USB JPEG pipeline failed") from error
 
     def close(self) -> None:
         with self._condition:
@@ -60,6 +77,7 @@ class AsyncJpegUsbPipeline:
                 return None
             pending = self._pending_rgba
             self._pending_rgba = None
+            self._condition.notify_all()
             return pending
 
     def _run(self) -> None:
@@ -80,5 +98,7 @@ class AsyncJpegUsbPipeline:
                 self._add_samples(self.usb_display.profile_samples())
                 self.usb_display.clear_profile_samples()
             except BaseException as exc:
-                self._error = exc
+                with self._condition:
+                    self._error = exc
+                    self._condition.notify_all()
                 return

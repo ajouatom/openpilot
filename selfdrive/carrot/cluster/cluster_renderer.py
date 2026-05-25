@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 import math
 import os
 import time
@@ -484,21 +486,37 @@ class ClusterUiRenderer:
         state: ClusterUiState,
         portrait_upload: bool = False,
     ) -> tuple[bytes, int, int]:
+        with self.render_to_rgba_buffer(state, portrait_upload=portrait_upload) as (
+            rgba_buffer,
+            image_width,
+            image_height,
+        ):
+            profile_stage = self._profile_start()
+            rgba = bytes(rgba_buffer)
+            self._profile_add("render_to_rgba.copy_bytes", profile_stage)
+            return rgba, image_width, image_height
+
+    @contextmanager
+    def render_to_rgba_buffer(
+        self,
+        state: ClusterUiState,
+        portrait_upload: bool = False,
+    ) -> Iterator[tuple[object, int, int]]:
         profile_stage = self._profile_start()
         image = self._render_to_image(state, portrait_upload=portrait_upload)
         self._profile_add("render_to_rgba.render_to_image", profile_stage)
 
         try:
-            profile_stage = self._profile_start()
-            rl.image_format(image, rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8)
-            self._profile_add("render_to_rgba.image_format", profile_stage)
+            if image.format != rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8:
+                profile_stage = self._profile_start()
+                rl.image_format(image, rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8)
+                self._profile_add("render_to_rgba.image_format", profile_stage)
 
             byte_count = image.width * image.height * 4
             profile_stage = self._profile_start()
-            rgba = bytes(rl.ffi.buffer(image.data, byte_count))
-            self._profile_add("render_to_rgba.copy_bytes", profile_stage)
-
-            return rgba, image.width, image.height
+            rgba_buffer = rl.ffi.buffer(image.data, byte_count)
+            self._profile_add("render_to_rgba.buffer_view", profile_stage)
+            yield rgba_buffer, image.width, image.height
         finally:
             profile_stage = self._profile_start()
             rl.unload_image(image)
