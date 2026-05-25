@@ -315,6 +315,13 @@ class ClusterUiRenderer:
         self.theme_mode = normalize_cluster_theme_mode(theme_mode)
         self._theme = current_cluster_theme(self.theme_mode)
 
+    def set_target_fps(self, target_fps: int) -> None:
+        self.target_fps = max(0, int(target_fps))
+        if self._window_open:
+            profile_stage = self._profile_start()
+            rl.set_target_fps(self.target_fps)
+            self._profile_add("renderer.set_target_fps", profile_stage)
+
     def _current_theme(self) -> ClusterTheme:
         self._theme = current_cluster_theme(self.theme_mode)
         return self._theme

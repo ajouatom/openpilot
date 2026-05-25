@@ -26,6 +26,7 @@ from cluster_usb_pipeline import AsyncJpegUsbPipeline
 
 DEFAULT_FPS = 0.0
 THEME_PARAM_POLL_SECONDS = 1.0
+FPS_PARAM_POLL_SECONDS = 1.0
 
 
 class ClusterThemeParamReader:
@@ -77,6 +78,7 @@ def route_overlay_for_mode(overlay: RouteOverlay | None, mode: str) -> RouteOver
 def run_demo(
     duration_seconds: float | None,
     target_fps: float,
+    live_fps_param_reader: ClusterLiveFpsParamReader | None,
     input_mode: str,
     output_mode: str,
     controller_index: int,
@@ -170,6 +172,7 @@ def run_demo(
     last_frame_time = start_time
     last_report_time = start_time
     next_theme_param_read = start_time
+    next_fps_param_read = start_time + FPS_PARAM_POLL_SECONDS
     report_frames = 0
     frame_interval = 1.0 / target_fps if target_fps > 0 else 0.0
 
@@ -196,6 +199,15 @@ def run_demo(
                 if next_theme_mode != renderer.theme_mode:
                     renderer.set_theme_mode(next_theme_mode)
                 next_theme_param_read = now + THEME_PARAM_POLL_SECONDS
+            if live_fps_param_reader is not None and now >= next_fps_param_read:
+                next_target_fps = live_fps_param_reader.read()
+                if next_target_fps != target_fps:
+                    target_fps = next_target_fps
+                    frame_interval = 1.0 / target_fps if target_fps > 0 else 0.0
+                    renderer.set_target_fps(max(0, int(round(target_fps))))
+                    fps_text = "uncapped" if target_fps == 0 else f"{target_fps:.1f} Hz"
+                    print(f"{CLUSTER_LIVE_FPS_PARAM} updated: {fps_text}", flush=True)
+                next_fps_param_read = now + FPS_PARAM_POLL_SECONDS
             if duration_seconds is not None and now - start_time >= duration_seconds:
                 break
 
@@ -548,8 +560,10 @@ def main() -> None:
     args = parse_args()
     target_fps = args.fps
     fps_source = "--fps" if args.fps_from_cli else "default"
+    live_fps_param_reader = None
     if args.input == "live" and not args.fps_from_cli:
-        target_fps = ClusterLiveFpsParamReader().read()
+        live_fps_param_reader = ClusterLiveFpsParamReader()
+        target_fps = live_fps_param_reader.read()
         fps_source = CLUSTER_LIVE_FPS_PARAM
     fps_text = "uncapped" if target_fps == 0 else f"{target_fps:.1f} Hz"
     size_text = (
@@ -565,6 +579,7 @@ def main() -> None:
         run_demo(
             args.duration,
             target_fps,
+            live_fps_param_reader,
             args.input,
             args.output,
             args.controller_index,
