@@ -62,9 +62,7 @@ SYSTEM_PANEL_X = 1416
 SYSTEM_PANEL_Y = 118
 SYSTEM_PANEL_W = 476
 SYSTEM_STATS_REFRESH_SECONDS = 1.0
-GIT_STATUS_X = 20
-GIT_STATUS_CENTER_Y = 456
-GIT_STATUS_PANEL_H = 32
+GIT_STATUS_X = 0
 GIT_STATUS_MAX_TEXT_W = 610
 VEHICLE_MATERIAL_COLORS: dict[str, tuple[int, int, int, int]] = {
     "body": (156, 166, 172, 255),
@@ -1579,14 +1577,7 @@ class ClusterUiRenderer:
         font = self._font or rl.get_font_default()
         spacing = max(1.0, text_size * 0.02)
         measured = rl.measure_text_ex(font, text, text_size, spacing)
-
-        panel_x = GIT_STATUS_X
-        panel_y = GIT_STATUS_CENTER_Y - GIT_STATUS_PANEL_H * 0.5
-        panel_w = measured.x + 58
-        self._rounded_rect(panel_x, panel_y, panel_w, GIT_STATUS_PANEL_H, 10, theme.route_panel_bg, theme.faint, 1)
-        rl.draw_circle_v(rl.Vector2(panel_x + 20, GIT_STATUS_CENTER_Y), 7, rl_color(color))
-        self._draw_text(text, panel_x + 36 + 1, GIT_STATUS_CENTER_Y + 1, text_size, theme.world_label_shadow)
-        self._draw_text(text, panel_x + 36, GIT_STATUS_CENTER_Y, text_size, color)
+        self._draw_text(text, GIT_STATUS_X, DESIGN_HEIGHT - measured.y * 0.5, text_size, color)
 
     @staticmethod
     def _git_status_color(status: GitBranchStatus, theme: ClusterTheme) -> tuple[int, int, int]:
