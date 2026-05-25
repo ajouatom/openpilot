@@ -10,7 +10,7 @@ Color3 = tuple[int, int, int]
 Color4 = tuple[int, int, int, int]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ClusterTheme:
     name: str
     is_dark: bool

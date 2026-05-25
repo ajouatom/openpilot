@@ -62,7 +62,7 @@ LANE_CHANGE_MODEL_DIRECT_ONLY = True
 MODEL_DIRECT_LANE_SETTLE_MIN_PROGRESS = 0.65
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RouteReplayFrame:
     t: float
     speed_kph: float
@@ -164,7 +164,7 @@ class RouteReplayFrame:
     lateral_plan_curvature_rates: tuple[float, ...] = ()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RouteVideoSegment:
     index: int | None
     path: Path
@@ -172,7 +172,7 @@ class RouteVideoSegment:
     end_t: float
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RouteVideoFrame:
     rgba: bytes
     width: int
@@ -180,7 +180,7 @@ class RouteVideoFrame:
     frame_id: str
 
 
-@dataclass
+@dataclass(slots=True)
 class RouteReplayChunk:
     index: int
     path: Path
@@ -189,14 +189,14 @@ class RouteReplayChunk:
     end_t: float
 
 
-@dataclass
+@dataclass(slots=True)
 class RouteReplayParsedFile:
     index: int
     path: Path
     frames: list[RouteReplayFrame]
 
 
-@dataclass
+@dataclass(slots=True)
 class RouteReplayWorkerResult:
     generation: int
     index: int

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import time
+from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 
@@ -72,7 +73,7 @@ CORNER_RADAR_LABELS = frozenset(("LF", "RF", "LR", "RR"))
 REAR_CORNER_RADAR_LABELS = frozenset(("LR", "RR"))
 VEHICLE_BADGE_TTC_S = 9.9
 VEHICLE_BADGE_ACCEL_MPS2 = 1.0
-MODEL_LINE_STRIP_GROUP_CACHE_LIMIT = 384
+MODEL_LINE_STRIP_GROUP_CACHE_LIMIT = 48
 LANE_MARKING_SHADOW_HEIGHT_M = 0.026
 LANE_MARKING_HEIGHT_M = 0.044
 LANE_MARKING_BORDER_EXTRA_WIDTH_PX = 3
@@ -91,21 +92,21 @@ LANE_HIGHLIGHT_ROUTE_ALPHA = 170
 BSD_LANE_MARKING_MATCH_TOLERANCE = 0.45
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Vec3:
     x: float
     y: float
     z: float = 0.0
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CameraSpec:
     position: Vec3
     target: Vec3
     fovy_deg: float
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MeshStrip:
     left: tuple[Vec3, ...]
     right: tuple[Vec3, ...]
@@ -113,7 +114,7 @@ class MeshStrip:
     x_offset_m: float = 0.0
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class VehicleBox:
     center: Vec3
     right_x: float
@@ -140,7 +141,7 @@ class VehicleBox:
     annotate: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RadarPointMarker:
     center: Vec3
     radius_m: float
@@ -157,7 +158,7 @@ class RadarPointMarker:
     in_my_lane: int | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RearVehicleIndicator:
     center: Vec3
     anchor: Vec3
@@ -168,7 +169,7 @@ class RearVehicleIndicator:
     source: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PathBlocker:
     offset: float
     forward_m: float
@@ -176,13 +177,14 @@ class PathBlocker:
 
 
 ModelLineStripGroups = tuple[tuple[MeshStrip, ...], ...] | None
-_MODEL_LINE_STRIP_GROUP_CACHE: dict[
-    tuple[int, float, float, str, bool, tuple[tuple[int, Color, float], ...]],
+ModelLineStripCacheKey = tuple[int, float, float, str, bool, tuple[tuple[int, Color, float], ...]]
+_MODEL_LINE_STRIP_GROUP_CACHE: OrderedDict[
+    ModelLineStripCacheKey,
     tuple[tuple[ModelPathPoint, ...], ModelLineStripGroups],
-] = {}
+] = OrderedDict()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ClusterScene:
     camera: CameraSpec
     scene_shift_x_m: float
@@ -706,7 +708,10 @@ def cached_model_line_strip_groups(
     )
     cached = _MODEL_LINE_STRIP_GROUP_CACHE.get(key)
     if cached is not None and cached[0] is model_points:
+        _MODEL_LINE_STRIP_GROUP_CACHE.move_to_end(key)
         return cached[1]
+    if cached is not None:
+        del _MODEL_LINE_STRIP_GROUP_CACHE[key]
 
     centerline = model_line_centerline(model_points, start_m, end_m, 0.0)
     if len(centerline) < 2:
@@ -717,9 +722,9 @@ def cached_model_line_strip_groups(
         segments = (centerline,) if style == "solid" else dashed_centerline_segments(centerline)
         groups = lane_marking_strip_groups_from_segments(segments, specs)
 
-    if len(_MODEL_LINE_STRIP_GROUP_CACHE) >= MODEL_LINE_STRIP_GROUP_CACHE_LIMIT:
-        _MODEL_LINE_STRIP_GROUP_CACHE.clear()
     _MODEL_LINE_STRIP_GROUP_CACHE[key] = (model_points, groups)
+    while len(_MODEL_LINE_STRIP_GROUP_CACHE) > MODEL_LINE_STRIP_GROUP_CACHE_LIMIT:
+        _MODEL_LINE_STRIP_GROUP_CACHE.popitem(last=False)
     return groups
 
 

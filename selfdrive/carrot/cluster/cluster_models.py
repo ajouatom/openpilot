@@ -8,7 +8,7 @@ from cluster_config import DEFAULT_LANE_WIDTH_M, WHITE
 CruiseDisplayState = Literal["off", "paused", "engaged"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ModelPathPoint:
     forward_m: float
     lateral_m: float
@@ -19,7 +19,7 @@ class ModelPathPoint:
     orientation_rate_rps: float | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ModelRiskPoint:
     t_s: float
     brake_disengage: float = 0.0
@@ -32,7 +32,7 @@ class ModelRiskPoint:
     brake_press: float = 0.0
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LaneMarking:
     offset: float
     color: tuple[int, int, int] = WHITE
@@ -43,7 +43,7 @@ class LaneMarking:
     model_lateral_shift_m: float = 0.0
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RouteOverlay:
     video_rgba: bytes | None = None
     video_width: int = 0
@@ -53,7 +53,7 @@ class RouteOverlay:
     data_lines: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DetectedVehicle:
     label: str
     longitudinal_m: float
@@ -70,7 +70,7 @@ class DetectedVehicle:
     y_std_m: float | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RadarPoint:
     label: str
     longitudinal_m: float
@@ -86,7 +86,7 @@ class RadarPoint:
     in_my_lane: int | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SimulatorInput:
     throttle: float = 0.0
     brake: float = 0.0
@@ -101,7 +101,7 @@ class SimulatorInput:
     right_signal_requested: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ClusterUiState:
     speed_kph: float
     accel_mps2: float
@@ -201,7 +201,7 @@ class ClusterUiState:
     display_speed_kph: float | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SceneCamera:
     active: bool
     position_x_m: float
