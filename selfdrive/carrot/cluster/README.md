@@ -39,7 +39,8 @@ override.
 `ClusterHudScreenMode` controls optional debug views: `0` default, `1` shows
 the c3x-style live debug text in the upper-right (`LD`, `LT`, `SR`, `SAD`, and
 lateral debug text), `2` shows the system information panel, and `3` graph
-reserved.
+reserved. Modes `1` and `2` suppress the route overlay so the selected debug
+panel remains visible.
 
 The bundled TURZX code includes only the Python vendor library. The openpilot
 device uses the system `libusb-1.0.so` through `pyusb`.

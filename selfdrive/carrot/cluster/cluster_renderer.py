@@ -1144,17 +1144,19 @@ class ClusterUiRenderer:
             profile_stage = self._profile_start()
             self._draw_center_clock(state)
             self._profile_add("hud.center_clock", profile_stage)
-            if self.screen_mode == CLUSTER_SCREEN_MODE_DEBUG:
+            screen_mode = self.screen_mode
+            if screen_mode == CLUSTER_SCREEN_MODE_DEBUG:
                 profile_stage = self._profile_start()
                 self._draw_live_debug_panel(state)
                 self._profile_add("hud.live_debug", profile_stage)
-            if self.screen_mode == CLUSTER_SCREEN_MODE_DEBUG_SYSTEM:
+            if screen_mode == CLUSTER_SCREEN_MODE_DEBUG_SYSTEM:
                 profile_stage = self._profile_start()
                 self._draw_system_stats_panel(state)
                 self._profile_add("hud.system_stats", profile_stage)
-            profile_stage = self._profile_start()
-            self._draw_route_overlay(state.route_overlay)
-            self._profile_add("hud.route_overlay", profile_stage)
+            if screen_mode not in (CLUSTER_SCREEN_MODE_DEBUG, CLUSTER_SCREEN_MODE_DEBUG_SYSTEM):
+                profile_stage = self._profile_start()
+                self._draw_route_overlay(state.route_overlay)
+                self._profile_add("hud.route_overlay", profile_stage)
             profile_stage = self._profile_start()
             self._draw_git_status(state.git_status)
             self._profile_add("hud.git_status", profile_stage)
@@ -1190,9 +1192,6 @@ class ClusterUiRenderer:
         self._draw_text(text, x, y, size, theme.clock_text, anchor="center")
 
     def _draw_system_stats_panel(self, state: ClusterUiState) -> None:
-        if state.route_overlay is not None:
-            return
-
         theme = self._current_theme()
         stats = self._system_stats.sample()
         cpu_count = len(stats.cpu_core_percents)
@@ -1252,9 +1251,6 @@ class ClusterUiRenderer:
             self._draw_percent_bar(cell_x, line_y + 19, cell_w, 6, percent, color)
 
     def _draw_live_debug_panel(self, state: ClusterUiState) -> None:
-        if state.route_overlay is not None:
-            return
-
         lines = self._live_debug_lines(state)
         if not lines:
             return

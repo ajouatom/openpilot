@@ -199,6 +199,7 @@ def run_demo(
         theme_mode=active_theme_mode,
         screen_mode=active_screen_mode,
     )
+    print(f"{CLUSTER_SCREEN_MODE_PARAM} initial: {active_screen_mode}", flush=True)
     renderer.set_profile_enabled(profile_render)
     git_status_provider = GitBranchStatusProvider(Path(__file__).resolve().parent)
     simulator = ClusterSimulator() if input_mode in ("random", "gamepad") else None
@@ -252,6 +253,10 @@ def run_demo(
             if now >= next_screen_mode_param_read:
                 next_screen_mode = screen_mode_param_reader.read()
                 if next_screen_mode != renderer.screen_mode:
+                    print(
+                        f"{CLUSTER_SCREEN_MODE_PARAM} updated: {renderer.screen_mode} -> {next_screen_mode}",
+                        flush=True,
+                    )
                     renderer.set_screen_mode(next_screen_mode)
                 next_screen_mode_param_read = now + SCREEN_MODE_PARAM_POLL_SECONDS
             if hud_mode_param_reader is not None and now >= next_hud_mode_param_read:
