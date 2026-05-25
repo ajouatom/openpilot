@@ -37,6 +37,10 @@ When `--fps` is omitted for live input, `ClusterHudLiveFps` controls the render
 limit and is polled about once per second while running: `0` uncapped,
 `1` 10 Hz, `2` 20 Hz, and `3` 30 Hz. Explicit `--fps` remains a fixed
 override.
+`ClusterHudScreenMode` controls optional debug views: `0` default, `1` shows
+the c3x-style live debug text in the upper-right (`LD`, `LT`, `SR`, `SAD`, and
+lateral debug text), `2` shows the system information panel, and `3` graph
+reserved.
 
 The bundled TURZX code includes only the Python vendor library. The openpilot
 device uses the system `libusb-1.0.so` through `pyusb`.

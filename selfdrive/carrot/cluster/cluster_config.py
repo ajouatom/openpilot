@@ -49,6 +49,11 @@ CLUSTER_THEME_DARK = 1
 CLUSTER_THEME_LIGHT = 2
 CLUSTER_THEME_PARAM = "ClusterHudTheme"
 CLUSTER_LIVE_FPS_PARAM = "ClusterHudLiveFps"
+CLUSTER_SCREEN_MODE_DEFAULT = 0
+CLUSTER_SCREEN_MODE_DEBUG = 1
+CLUSTER_SCREEN_MODE_DEBUG_SYSTEM = 2
+CLUSTER_SCREEN_MODE_DEBUG_GRAPH = 3
+CLUSTER_SCREEN_MODE_PARAM = "ClusterHudScreenMode"
 AUTO_DARK_START_HOUR = 18
 AUTO_LIGHT_START_HOUR = 6
 
@@ -153,6 +158,39 @@ def normalize_cluster_live_fps(value: object) -> float:
     if mode == 3:
         return 30.0
     return 0.0
+
+
+def normalize_cluster_screen_mode(value: object) -> int:
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        aliases = {
+            "default": CLUSTER_SCREEN_MODE_DEFAULT,
+            "debug": CLUSTER_SCREEN_MODE_DEBUG,
+            "system": CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
+            "debug-system": CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
+            "debug_system": CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
+            "graph": CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+            "debug-graph": CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+            "debug_graph": CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+        }
+        if normalized in aliases:
+            return aliases[normalized]
+        try:
+            value = int(normalized)
+        except ValueError:
+            return CLUSTER_SCREEN_MODE_DEFAULT
+    try:
+        mode = int(value)
+    except (TypeError, ValueError):
+        return CLUSTER_SCREEN_MODE_DEFAULT
+    if mode in (
+        CLUSTER_SCREEN_MODE_DEFAULT,
+        CLUSTER_SCREEN_MODE_DEBUG,
+        CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
+        CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+    ):
+        return mode
+    return CLUSTER_SCREEN_MODE_DEFAULT
 
 
 def current_cluster_theme(mode: object = "auto", now: float | None = None) -> ClusterTheme:

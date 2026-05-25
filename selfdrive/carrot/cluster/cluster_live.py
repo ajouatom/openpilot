@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+from dataclasses import replace
+import math
 import sys
 import time
 from pathlib import Path
 from typing import Any
 
 from cluster_config import BLUE, DEFAULT_LANE_WIDTH_M
-from cluster_models import ClusterUiState, LaneMarking
-from cluster_route_replay import RouteLogParser, frame_to_state
+from cluster_models import ClusterUiState, LaneMarking, LiveDebugInfo
+from cluster_route_replay import RouteLogParser, frame_to_state, safe_get, safe_optional_float
 from cluster_utils import clamp
 
 
@@ -36,6 +38,9 @@ LIVE_SERVICES_BASE = (
     "controlsState",
     "cameraOdometry",
     "drivingModelData",
+    "liveDelay",
+    "liveParameters",
+    "liveTorqueParameters",
     "navInstruction",
     "navInstructionCarrot",
 )
@@ -60,6 +65,16 @@ class OpenpilotLiveSource:
         self.last_state: ClusterUiState | None = None
         self.start_t = time.monotonic()
         self.frames = 0
+        self.params: Any | None = None
+        self._next_debug_param_read_t = 0.0
+        self._custom_steer_ratio: float | None = None
+        self._steer_actuator_delay_s: float | None = None
+        try:
+            from openpilot.common.params import Params
+
+            self.params = Params()
+        except Exception:
+            pass
 
     def update(self) -> ClusterUiState:
         self.sm.update(self.timeout_ms)
@@ -74,11 +89,11 @@ class OpenpilotLiveSource:
         if self._service_alive("carState"):
             event_t = self._service_time("carState")
             frame = self.parser._frame_from_car_state(self.sm["carState"], event_t)
-            self.last_state = frame_to_state(frame)
+            self.last_state = replace(frame_to_state(frame), live_debug=self._live_debug_info())
             self.frames += 1
             return self.last_state
 
-        self.last_state = standby_state()
+        self.last_state = replace(standby_state(), live_debug=self._live_debug_info())
         return self.last_state
 
     def status_text(self) -> str:
@@ -119,6 +134,78 @@ class OpenpilotLiveSource:
             self.parser._update_live_tracks(data, event_t)
         elif service == "can":
             self.parser._update_can_detections(data, event_t)
+
+    def _live_debug_info(self) -> LiveDebugInfo | None:
+        self._refresh_debug_params()
+
+        live_delay_calibration_percent = None
+        live_delay_lateral_s = None
+        if self._service_alive("liveDelay"):
+            live_delay = self.sm["liveDelay"]
+            live_delay_calibration_percent = safe_optional_float(live_delay, "calPerc")
+            live_delay_lateral_s = safe_optional_float(live_delay, "lateralDelay")
+
+        live_torque_calibration_percent = None
+        live_torque_valid = None
+        live_torque_lat_accel_factor = None
+        live_torque_friction = None
+        if self._service_alive("liveTorqueParameters"):
+            live_torque = self.sm["liveTorqueParameters"]
+            live_torque_calibration_percent = safe_optional_float(live_torque, "calPerc")
+            live_torque_valid = bool(safe_get(live_torque, "liveValid", False))
+            live_torque_lat_accel_factor = safe_optional_float(live_torque, "latAccelFactorFiltered")
+            if live_torque_lat_accel_factor is None:
+                live_torque_lat_accel_factor = safe_optional_float(live_torque, "latAccelFactor")
+            live_torque_friction = safe_optional_float(live_torque, "frictionCoefficientFiltered")
+            if live_torque_friction is None:
+                live_torque_friction = safe_optional_float(live_torque, "frictionCoefficient")
+
+        live_steer_ratio = None
+        if self._service_alive("liveParameters"):
+            live_steer_ratio = safe_optional_float(self.sm["liveParameters"], "steerRatio")
+
+        info = LiveDebugInfo(
+            live_delay_calibration_percent=live_delay_calibration_percent,
+            live_delay_lateral_s=live_delay_lateral_s,
+            live_torque_calibration_percent=live_torque_calibration_percent,
+            live_torque_valid=live_torque_valid,
+            live_torque_lat_accel_factor=live_torque_lat_accel_factor,
+            live_torque_friction=live_torque_friction,
+            live_steer_ratio=live_steer_ratio,
+            custom_steer_ratio=self._custom_steer_ratio,
+            steer_actuator_delay_s=self._steer_actuator_delay_s,
+        )
+        values = (
+            info.live_delay_calibration_percent,
+            info.live_delay_lateral_s,
+            info.live_torque_calibration_percent,
+            info.live_torque_valid,
+            info.live_torque_lat_accel_factor,
+            info.live_torque_friction,
+            info.live_steer_ratio,
+            info.custom_steer_ratio,
+            info.steer_actuator_delay_s,
+        )
+        return info if any(value is not None for value in values) else None
+
+    def _refresh_debug_params(self) -> None:
+        now = time.monotonic()
+        if now < self._next_debug_param_read_t:
+            return
+        self._next_debug_param_read_t = now + 1.0
+        if self.params is None:
+            return
+        self._custom_steer_ratio = self._finite_param_float("CustomSR", 0.1)
+        self._steer_actuator_delay_s = self._finite_param_float("SteerActuatorDelay", 0.01)
+
+    def _finite_param_float(self, key: str, scale: float) -> float | None:
+        if self.params is None:
+            return None
+        try:
+            value = float(self.params.get_float(key)) * scale
+        except Exception:
+            return None
+        return value if math.isfinite(value) else None
 
     def _update_current_speed(self) -> None:
         if not self._service_alive("carState"):

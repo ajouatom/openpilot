@@ -13,6 +13,8 @@ import pyray as rl
 from cluster_config import (
     AMBER,
     BLUE,
+    CLUSTER_SCREEN_MODE_DEBUG,
+    CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
     ClusterTheme,
     DESIGN_HEIGHT,
     DESIGN_WIDTH,
@@ -24,9 +26,10 @@ from cluster_config import (
     TEXT,
     WHITE,
     current_cluster_theme,
+    normalize_cluster_screen_mode,
     normalize_cluster_theme_mode,
 )
-from cluster_models import ClusterUiState, GitBranchStatus, RouteOverlay
+from cluster_models import ClusterUiState, GitBranchStatus, LiveDebugInfo, RouteOverlay
 from cluster_scene import (
     ClusterScene,
     MeshStrip,
@@ -189,12 +192,14 @@ class ClusterUiRenderer:
         title: str = "carrotpilot cluster",
         target_fps: int = 0,
         theme_mode: str = "auto",
+        screen_mode: int = 0,
     ) -> None:
         self.width = width
         self.height = height
         self.title = title
         self.target_fps = target_fps
         self.theme_mode = normalize_cluster_theme_mode(theme_mode)
+        self.screen_mode = normalize_cluster_screen_mode(screen_mode)
         self._theme = current_cluster_theme(self.theme_mode)
         self.hidden = False
         self._window_open = False
@@ -222,6 +227,9 @@ class ClusterUiRenderer:
     def set_theme_mode(self, theme_mode: str) -> None:
         self.theme_mode = normalize_cluster_theme_mode(theme_mode)
         self._theme = current_cluster_theme(self.theme_mode)
+
+    def set_screen_mode(self, screen_mode: int) -> None:
+        self.screen_mode = normalize_cluster_screen_mode(screen_mode)
 
     def set_target_fps(self, target_fps: int) -> None:
         self.target_fps = max(0, int(target_fps))
@@ -1136,9 +1144,14 @@ class ClusterUiRenderer:
             profile_stage = self._profile_start()
             self._draw_center_clock(state)
             self._profile_add("hud.center_clock", profile_stage)
-            profile_stage = self._profile_start()
-            self._draw_system_stats_panel(state)
-            self._profile_add("hud.system_stats", profile_stage)
+            if self.screen_mode == CLUSTER_SCREEN_MODE_DEBUG:
+                profile_stage = self._profile_start()
+                self._draw_live_debug_panel(state)
+                self._profile_add("hud.live_debug", profile_stage)
+            if self.screen_mode == CLUSTER_SCREEN_MODE_DEBUG_SYSTEM:
+                profile_stage = self._profile_start()
+                self._draw_system_stats_panel(state)
+                self._profile_add("hud.system_stats", profile_stage)
             profile_stage = self._profile_start()
             self._draw_route_overlay(state.route_overlay)
             self._profile_add("hud.route_overlay", profile_stage)
@@ -1237,6 +1250,82 @@ class ClusterUiRenderer:
             self._draw_text(f"C{index}", cell_x, line_y + 8, text_size, theme.muted)
             self._draw_text(self._percent_text(percent), cell_x + cell_w, line_y + 8, text_size, color, anchor="right")
             self._draw_percent_bar(cell_x, line_y + 19, cell_w, 6, percent, color)
+
+    def _draw_live_debug_panel(self, state: ClusterUiState) -> None:
+        if state.route_overlay is not None:
+            return
+
+        lines = self._live_debug_lines(state)
+        if not lines:
+            return
+
+        theme = self._current_theme()
+        x = DESIGN_WIDTH - 34
+        y = 26
+        text_size = 24
+        line_gap = 30
+        max_width = 900
+        for index, line in enumerate(lines[:3]):
+            line = self._ellipsize_text(line, text_size, max_width)
+            line_y = y + index * line_gap
+            self._draw_text(line, x + 2, line_y + 2, text_size, theme.world_label_shadow, anchor="right")
+            self._draw_text(line, x, line_y, text_size, theme.world_label_text, anchor="right")
+
+    def _live_debug_lines(self, state: ClusterUiState) -> tuple[str, ...]:
+        lines: list[str] = []
+        live_debug = state.live_debug
+        if live_debug is not None:
+            parts = self._live_debug_parts(live_debug)
+            if parts:
+                lines.append(", ".join(parts))
+        if state.lateral_plan_debug_text:
+            lines.append(str(state.lateral_plan_debug_text))
+        return tuple(lines)
+
+    def _live_debug_parts(self, live_debug: LiveDebugInfo) -> list[str]:
+        parts: list[str] = []
+        if live_debug.live_delay_calibration_percent is not None or live_debug.live_delay_lateral_s is not None:
+            parts.append(
+                "LD["
+                f"{self._optional_percent_text(live_debug.live_delay_calibration_percent)},"
+                f"{self._optional_float_text(live_debug.live_delay_lateral_s, 2)}"
+                "]"
+            )
+        if (
+            live_debug.live_torque_calibration_percent is not None
+            or live_debug.live_torque_valid is not None
+            or live_debug.live_torque_lat_accel_factor is not None
+            or live_debug.live_torque_friction is not None
+        ):
+            live_valid = "--" if live_debug.live_torque_valid is None else "ON" if live_debug.live_torque_valid else "OFF"
+            parts.append(
+                "LT["
+                f"{self._optional_percent_text(live_debug.live_torque_calibration_percent)},"
+                f"{live_valid}]("
+                f"{self._optional_float_text(live_debug.live_torque_lat_accel_factor, 2)}/"
+                f"{self._optional_float_text(live_debug.live_torque_friction, 2)})"
+            )
+        if live_debug.live_steer_ratio is not None:
+            parts.append(
+                "SR("
+                f"{self._optional_float_text(live_debug.live_steer_ratio, 1)},"
+                f"{self._optional_float_text(live_debug.custom_steer_ratio, 1)})"
+            )
+        if live_debug.steer_actuator_delay_s is not None:
+            parts.append(f"SAD({self._optional_float_text(live_debug.steer_actuator_delay_s, 2)})")
+        return parts
+
+    @staticmethod
+    def _optional_percent_text(value: float | None) -> str:
+        if value is None or not math.isfinite(value):
+            return "--%"
+        return f"{value:.0f}%"
+
+    @staticmethod
+    def _optional_float_text(value: float | None, digits: int) -> str:
+        if value is None or not math.isfinite(value):
+            return "--"
+        return f"{value:.{digits}f}"
 
     def _draw_percent_bar(
         self,

@@ -8,10 +8,12 @@ from pathlib import Path
 
 from cluster_config import (
     CLUSTER_LIVE_FPS_PARAM,
+    CLUSTER_SCREEN_MODE_PARAM,
     CLUSTER_THEME_PARAM,
     DESIGN_HEIGHT,
     DESIGN_WIDTH,
     normalize_cluster_live_fps,
+    normalize_cluster_screen_mode,
     normalize_cluster_theme_mode,
 )
 from cluster_gamepad import DualSenseSimulator
@@ -28,6 +30,7 @@ from cluster_usb_pipeline import AsyncJpegUsbPipeline
 DEFAULT_FPS = 0.0
 THEME_PARAM_POLL_SECONDS = 1.0
 FPS_PARAM_POLL_SECONDS = 1.0
+SCREEN_MODE_PARAM_POLL_SECONDS = 1.0
 
 
 class ClusterThemeParamReader:
@@ -66,6 +69,25 @@ class ClusterLiveFpsParamReader:
             return normalize_cluster_live_fps(self._params.get_int(CLUSTER_LIVE_FPS_PARAM))
         except Exception:
             return 0.0
+
+
+class ClusterScreenModeParamReader:
+    def __init__(self) -> None:
+        self._params = None
+        try:
+            from openpilot.common.params import Params
+
+            self._params = Params()
+        except Exception:
+            pass
+
+    def read(self) -> int:
+        if self._params is None:
+            return 0
+        try:
+            return normalize_cluster_screen_mode(self._params.get_int(CLUSTER_SCREEN_MODE_PARAM))
+        except Exception:
+            return 0
 
 
 def route_overlay_for_mode(overlay: RouteOverlay | None, mode: str) -> RouteOverlay | None:
@@ -145,11 +167,14 @@ def run_demo(
     theme_override = normalize_cluster_theme_mode(theme_mode) if theme_mode is not None else None
     theme_param_reader = ClusterThemeParamReader() if theme_override is None else None
     active_theme_mode = theme_override or (theme_param_reader.read() if theme_param_reader is not None else "auto")
+    screen_mode_param_reader = ClusterScreenModeParamReader()
+    active_screen_mode = screen_mode_param_reader.read()
     renderer = ClusterUiRenderer(
         frame_width,
         frame_height,
         target_fps=max(0, int(round(target_fps))),
         theme_mode=active_theme_mode,
+        screen_mode=active_screen_mode,
     )
     renderer.set_profile_enabled(profile_render)
     git_status_provider = GitBranchStatusProvider(Path(__file__).resolve().parent)
@@ -173,6 +198,7 @@ def run_demo(
     last_report_time = start_time
     next_theme_param_read = start_time
     next_fps_param_read = start_time + FPS_PARAM_POLL_SECONDS
+    next_screen_mode_param_read = start_time
     report_frames = 0
     frame_interval = 1.0 / target_fps if target_fps > 0 else 0.0
 
@@ -199,6 +225,11 @@ def run_demo(
                 if next_theme_mode != renderer.theme_mode:
                     renderer.set_theme_mode(next_theme_mode)
                 next_theme_param_read = now + THEME_PARAM_POLL_SECONDS
+            if now >= next_screen_mode_param_read:
+                next_screen_mode = screen_mode_param_reader.read()
+                if next_screen_mode != renderer.screen_mode:
+                    renderer.set_screen_mode(next_screen_mode)
+                next_screen_mode_param_read = now + SCREEN_MODE_PARAM_POLL_SECONDS
             if live_fps_param_reader is not None and now >= next_fps_param_read:
                 next_target_fps = live_fps_param_reader.read()
                 if next_target_fps != target_fps:
