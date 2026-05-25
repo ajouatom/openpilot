@@ -181,6 +181,7 @@ class PathBlocker:
 @dataclass(frozen=True)
 class ClusterScene:
     camera: CameraSpec
+    scene_shift_x_m: float
     road_surface: MeshStrip
     road_edges: tuple[MeshStrip, ...]
     highlight_lanes: tuple[MeshStrip, ...]
@@ -1927,17 +1928,7 @@ def build_cluster_scene(
     profile_scene_add(profile_add, "scene.build.vehicles", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
-    road_left_offset, road_right_offset = road_surface_offsets(state, route_mode)
-    road_surface = strip_between_offsets(
-        road_left_offset,
-        road_right_offset,
-        state.steering,
-        lane_width_m,
-        road_start_m,
-        road_end_m,
-        road_steps,
-        rgba(theme.road),
-    )
+    road_surface = MeshStrip((), (), rgba(theme.road))
     profile_scene_add(profile_add, "scene.build.road_surface", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
@@ -1962,16 +1953,15 @@ def build_cluster_scene(
     profile_stage = profile_scene_start(profile_add)
     scene = ClusterScene(
         camera=camera,
-        road_surface=translate_mesh_strip_x(road_surface, scene_shift_x_m),
-        road_edges=tuple(translate_mesh_strip_x(strip, scene_shift_x_m) for strip in road_edges),
-        highlight_lanes=tuple(translate_mesh_strip_x(strip, scene_shift_x_m) for strip in highlight_lanes),
-        lane_markings=tuple(translate_mesh_strip_x(strip, scene_shift_x_m) for strip in lane_strips),
-        planned_path=tuple(translate_mesh_strip_x(strip, scene_shift_x_m) for strip in planned_path),
-        radar_points=tuple(translate_radar_marker_x(marker, scene_shift_x_m) for marker in radar_points),
-        vehicles=tuple(translate_vehicle_box_x(vehicle, scene_shift_x_m) for vehicle in vehicles),
-        rear_indicators=tuple(
-            translate_rear_indicator_x(indicator, scene_shift_x_m) for indicator in rear_indicators
-        ),
+        scene_shift_x_m=scene_shift_x_m,
+        road_surface=road_surface,
+        road_edges=tuple(road_edges),
+        highlight_lanes=tuple(highlight_lanes),
+        lane_markings=tuple(lane_strips),
+        planned_path=tuple(planned_path),
+        radar_points=tuple(radar_points),
+        vehicles=tuple(vehicles),
+        rear_indicators=tuple(rear_indicators),
     )
     profile_scene_add(profile_add, "scene.build.pack", profile_stage)
     return scene
