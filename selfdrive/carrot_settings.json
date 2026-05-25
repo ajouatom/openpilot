@@ -2272,6 +2272,54 @@
       "max": 3,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "화면",
+      "egroup": "DISPLAY",
+      "cgroup": "显示",
+      "name": "ClusterHud",
+      "title": "외부 HUD 활성화(0)",
+      "descr": "0: 끄기\n1: TURZX 9.2인치\n2: TURZX 12.3인치",
+      "etitle": "External HUD Display(0)",
+      "edescr": "0: Off\n1: TURZX 9.2 inch\n2: TURZX 12.3 inch",
+      "ctitle": "外部 HUD 显示(0)",
+      "cdescr": "0: 关闭\n1: TURZX 9.2 英寸\n2: TURZX 12.3 英寸",
+      "min": 0,
+      "max": 2,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "화면",
+      "egroup": "DISPLAY",
+      "cgroup": "显示",
+      "name": "ClusterHudTheme",
+      "title": "외부 HUD 테마(0)",
+      "descr": "0: 자동\n1: 다크\n2: 라이트",
+      "etitle": "External HUD Theme(0)",
+      "edescr": "0: Auto\n1: Dark\n2: Light",
+      "ctitle": "外部 HUD 主题(0)",
+      "cdescr": "0: 自动\n1: 深色\n2: 浅色",
+      "min": 0,
+      "max": 2,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "화면",
+      "egroup": "DISPLAY",
+      "cgroup": "显示",
+      "name": "ClusterHudLiveFps",
+      "title": "외부 HUD 라이브 FPS 제한(0)",
+      "descr": "0: 무제한\n1: 10 FPS\n2: 20 FPS\n3: 30 FPS",
+      "etitle": "External HUD Live FPS Limit(0)",
+      "edescr": "0: Uncapped\n1: 10 FPS\n2: 20 FPS\n3: 30 FPS",
+      "ctitle": "外部 HUD 实时 FPS 限制(0)",
+      "cdescr": "0: 不限制\n1: 10 FPS\n2: 20 FPS\n3: 30 FPS",
+      "min": 0,
+      "max": 3,
+      "default": 0,
+      "unit": 1
     }
 
   ]
