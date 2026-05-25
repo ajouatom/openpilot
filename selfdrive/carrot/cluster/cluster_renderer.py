@@ -15,6 +15,7 @@ from cluster_config import (
     BLUE,
     CLUSTER_SCREEN_MODE_DEBUG,
     CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+    CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
     CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
     ClusterTheme,
     DESIGN_HEIGHT,
@@ -68,10 +69,14 @@ SYSTEM_PANEL_W = 476
 SYSTEM_STATS_REFRESH_SECONDS = 1.0
 DEBUG_PLOT_MAX_SAMPLES = 360
 DEBUG_PLOT_SAMPLE_SECONDS = 0.05
-DEBUG_PLOT_X = 500.0
-DEBUG_PLOT_Y = 110.0
-DEBUG_PLOT_W = 1370.0
-DEBUG_PLOT_H = 338.0
+DEBUG_PLOT_FULL_X = 500.0
+DEBUG_PLOT_FULL_Y = 92.0
+DEBUG_PLOT_FULL_W = 1392.0
+DEBUG_PLOT_FULL_H = 370.0
+DEBUG_PLOT_RIGHT_X = SYSTEM_PANEL_X
+DEBUG_PLOT_RIGHT_Y = SYSTEM_PANEL_Y
+DEBUG_PLOT_RIGHT_W = SYSTEM_PANEL_W
+DEBUG_PLOT_RIGHT_H = DESIGN_HEIGHT - SYSTEM_PANEL_Y - 18.0
 GIT_STATUS_MARGIN = 2
 GIT_STATUS_DOT_RADIUS = 7
 GIT_STATUS_DOT_TEXT_GAP = 6
@@ -346,11 +351,20 @@ class ClusterUiRenderer:
         if signal_lights is None:
             signal_lights = self._turn_signal_lights(state)
         profile_stage = self._profile_start()
-        self._render_world(state, signal_lights)
+        if self.screen_mode == CLUSTER_SCREEN_MODE_DEBUG_GRAPH:
+            self._clear_world()
+        else:
+            self._render_world(state, signal_lights)
         self._profile_add("render.world", profile_stage)
         profile_stage = self._profile_start()
         self._draw_hud(state, signal_lights)
         self._profile_add("render.hud", profile_stage)
+
+    def _clear_world(self) -> None:
+        theme = self._current_theme()
+        profile_stage = self._profile_start()
+        rl.clear_background(rl_color(theme.bg))
+        self._profile_add("render_world.clear_background", profile_stage)
 
     def _render_world(self, state: ClusterUiState, signal_lights: tuple[bool, bool] | None = None) -> None:
         if signal_lights is None:
@@ -1169,12 +1183,29 @@ class ClusterUiRenderer:
                 self._profile_add("hud.system_stats", profile_stage)
             if screen_mode == CLUSTER_SCREEN_MODE_DEBUG_GRAPH:
                 profile_stage = self._profile_start()
-                self._draw_debug_plot(state.debug_plot)
-                self._profile_add("hud.debug_plot", profile_stage)
+                self._draw_debug_plot(
+                    state.debug_plot,
+                    DEBUG_PLOT_FULL_X,
+                    DEBUG_PLOT_FULL_Y,
+                    DEBUG_PLOT_FULL_W,
+                    DEBUG_PLOT_FULL_H,
+                )
+                self._profile_add("hud.debug_plot_full", profile_stage)
+            if screen_mode == CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT:
+                profile_stage = self._profile_start()
+                self._draw_debug_plot(
+                    state.debug_plot,
+                    DEBUG_PLOT_RIGHT_X,
+                    DEBUG_PLOT_RIGHT_Y,
+                    DEBUG_PLOT_RIGHT_W,
+                    DEBUG_PLOT_RIGHT_H,
+                )
+                self._profile_add("hud.debug_plot_right", profile_stage)
             if screen_mode not in (
                 CLUSTER_SCREEN_MODE_DEBUG,
                 CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
                 CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+                CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
             ):
                 profile_stage = self._profile_start()
                 self._draw_route_overlay(state.route_overlay)
@@ -1213,11 +1244,18 @@ class ClusterUiRenderer:
         rl.draw_rectangle_rounded_lines_ex(rect, 0.28, 12, 2.0, rl_color(theme.clock_outline))
         self._draw_text(text, x, y, size, theme.clock_text, anchor="center")
 
-    def _draw_debug_plot(self, plot: DebugPlotSnapshot | None) -> None:
+    def _draw_debug_plot(
+        self,
+        plot: DebugPlotSnapshot | None,
+        panel_x: float,
+        panel_y: float,
+        panel_w: float,
+        panel_h: float,
+    ) -> None:
         if plot is None or plot.mode <= 0:
             if self._debug_plot_mode_prev != 0:
                 self._clear_debug_plot(0)
-            self._draw_debug_plot_panel("SHOW PLOT MODE 0", None)
+            self._draw_debug_plot_panel("SHOW PLOT MODE 0", None, panel_x, panel_y, panel_w, panel_h)
             return
 
         if plot.mode != self._debug_plot_mode_prev:
@@ -1228,7 +1266,7 @@ class ClusterUiRenderer:
             self._append_debug_plot_values(plot.values)
             self._debug_plot_last_sample_time = now
 
-        self._draw_debug_plot_panel(plot.title, plot)
+        self._draw_debug_plot_panel(plot.title, plot, panel_x, panel_y, panel_w, panel_h)
 
     def _clear_debug_plot(self, mode: int) -> None:
         self._debug_plot_mode_prev = mode
@@ -1280,28 +1318,35 @@ class ClusterUiRenderer:
         oldest_index = (self._debug_plot_index - self._debug_plot_size + 1) % DEBUG_PLOT_MAX_SAMPLES
         return self._debug_plot_values[series_index][(oldest_index + oldest_offset) % DEBUG_PLOT_MAX_SAMPLES]
 
-    def _draw_debug_plot_panel(self, title: str, plot: DebugPlotSnapshot | None) -> None:
+    def _draw_debug_plot_panel(
+        self,
+        title: str,
+        plot: DebugPlotSnapshot | None,
+        panel_x: float,
+        panel_y: float,
+        panel_w: float,
+        panel_h: float,
+    ) -> None:
         theme = self._current_theme()
-        panel_x = DEBUG_PLOT_X
-        panel_y = DEBUG_PLOT_Y
-        panel_w = DEBUG_PLOT_W
-        panel_h = DEBUG_PLOT_H
-        pad = 24.0
+        compact = panel_w < 700.0
+        pad = 18.0 if compact else 24.0
         title_y = panel_y + 30.0
         plot_x = panel_x + pad
-        plot_y = panel_y + 70.0
+        plot_y = panel_y + (74.0 if compact else 70.0)
         plot_w = panel_w - pad * 2.0
-        plot_h = panel_h - 96.0
+        plot_h = panel_h - (100.0 if compact else 96.0)
         plot_bottom = plot_y + plot_h
 
         self._rounded_rect(panel_x, panel_y, panel_w, panel_h, 18, theme.route_panel_bg, theme.faint, 2)
-        title = self._ellipsize_text(title, 22, panel_w - pad * 2.0 - 190.0)
-        self._draw_text(title, panel_x + pad, title_y, 22, theme.text)
+        title_size = 18 if compact else 22
+        title_max_w = panel_w - pad * 2.0 - (120.0 if compact else 190.0)
+        title = self._ellipsize_text(title, title_size, title_max_w)
+        self._draw_text(title, panel_x + pad, title_y, title_size, theme.text)
         self._draw_text(
             f"min {self._debug_plot_min:.2f}  max {self._debug_plot_max:.2f}",
             panel_x + panel_w - pad,
             title_y,
-            17,
+            13 if compact else 17,
             theme.muted,
             anchor="right",
         )

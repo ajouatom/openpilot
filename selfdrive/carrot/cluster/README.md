@@ -39,9 +39,11 @@ limit and is polled about once per second while running: `0` uncapped,
 override.
 `ClusterHudScreenMode` controls optional debug views: `0` default, `1` shows
 the live debug panel with grouped `LIVE DELAY`, `LIVE TORQUE`, `STEERING`, and
-`LATERAL PLAN` rows, `2` shows the system information panel, and `3` shows the
-debug graph selected by `ShowPlotMode`. Modes `1`, `2`, and `3` suppress the
-route overlay so the selected debug view remains visible.
+`LATERAL PLAN` rows, `2` shows the system information panel, `3` shows a large
+debug graph selected by `ShowPlotMode` with the driving scene disabled, and `4`
+shows the same graph in the right-side panel while keeping the driving scene.
+Modes `1`, `2`, `3`, and `4` suppress the route overlay so the selected debug
+view remains visible.
 
 The bundled TURZX code includes only the Python vendor library. The openpilot
 device uses the system `libusb-1.0.so` through `pyusb`.

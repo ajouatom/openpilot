@@ -54,6 +54,7 @@ CLUSTER_SCREEN_MODE_DEFAULT = 0
 CLUSTER_SCREEN_MODE_DEBUG = 1
 CLUSTER_SCREEN_MODE_DEBUG_SYSTEM = 2
 CLUSTER_SCREEN_MODE_DEBUG_GRAPH = 3
+CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT = 4
 CLUSTER_SCREEN_MODE_PARAM = "ClusterHudScreenMode"
 SHOW_PLOT_MODE_PARAM = "ShowPlotMode"
 AUTO_DARK_START_HOUR = 18
@@ -172,8 +173,14 @@ def normalize_cluster_screen_mode(value: object) -> int:
             "debug-system": CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
             "debug_system": CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
             "graph": CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+            "graph-full": CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+            "graph_full": CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+            "graph-right": CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
+            "graph_right": CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
             "debug-graph": CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
             "debug_graph": CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+            "debug-graph-right": CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
+            "debug_graph_right": CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
         }
         if normalized in aliases:
             return aliases[normalized]
@@ -190,6 +197,7 @@ def normalize_cluster_screen_mode(value: object) -> int:
         CLUSTER_SCREEN_MODE_DEBUG,
         CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
         CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+        CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
     ):
         return mode
     return CLUSTER_SCREEN_MODE_DEFAULT
