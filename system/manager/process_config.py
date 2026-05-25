@@ -84,6 +84,12 @@ def enable_webrtc(started, params, CP: car.CarParams) -> bool:
 def c3x_lite(started: bool, params: Params, CP: car.CarParams) -> bool:
   return started and params.get_bool("HardwareC3xLite")
 
+def enable_cluster_hud(started, params, CP: car.CarParams) -> bool:
+  try:
+    return params.get_int("ClusterHud") in (1, 2)
+  except Exception:
+    return False
+
 procs = [
   DaemonProcess("manage_athenad", "system.athena.manage_athenad", "AthenadPid"),
 
@@ -142,6 +148,7 @@ procs = [
   PythonProcess("carrot_man", "selfdrive.carrot.carrot_man", always_run),#, enabled=not PC),
 
   PythonProcess("carrot_server", "selfdrive.carrot.carrot_server", always_run),
+  PythonProcess("carrot_cluster", "selfdrive.carrot.cluster_autorun", enable_cluster_hud, restart_if_crash=True),
 
   #Xiaoge data broadcaster (conditional on ShareData param)
   PythonProcess("xiaoge_data", "selfdrive.carrot.xiaoge_data", enable_xiaoge_data),
