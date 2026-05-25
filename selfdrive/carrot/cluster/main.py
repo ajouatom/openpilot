@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 from cluster_config import (
+    CLUSTER_HUD_PARAM,
     CLUSTER_LIVE_FPS_PARAM,
     CLUSTER_SCREEN_MODE_PARAM,
     CLUSTER_THEME_PARAM,
@@ -31,6 +32,7 @@ DEFAULT_FPS = 0.0
 THEME_PARAM_POLL_SECONDS = 1.0
 FPS_PARAM_POLL_SECONDS = 1.0
 SCREEN_MODE_PARAM_POLL_SECONDS = 1.0
+HUD_MODE_PARAM_POLL_SECONDS = 1.0
 
 
 class ClusterThemeParamReader:
@@ -90,6 +92,25 @@ class ClusterScreenModeParamReader:
             return 0
 
 
+class ClusterHudModeParamReader:
+    def __init__(self) -> None:
+        self._params = None
+        try:
+            from openpilot.common.params import Params
+
+            self._params = Params()
+        except Exception:
+            pass
+
+    def read(self) -> int | None:
+        if self._params is None:
+            return None
+        try:
+            return int(self._params.get_int(CLUSTER_HUD_PARAM))
+        except Exception:
+            return None
+
+
 def route_overlay_for_mode(overlay: RouteOverlay | None, mode: str) -> RouteOverlay | None:
     if overlay is None or mode == "off":
         return None
@@ -132,6 +153,7 @@ def run_demo(
     profile_interval_s: float,
     gc_freeze_init: bool,
     theme_mode: str | None,
+    hud_mode_watch: int | None,
 ) -> None:
     profile = ProfileReporter(profile_render, profile_interval_s)
     gc_hook = GcProfileHook(profile) if profile_render else None
@@ -169,6 +191,7 @@ def run_demo(
     active_theme_mode = theme_override or (theme_param_reader.read() if theme_param_reader is not None else "auto")
     screen_mode_param_reader = ClusterScreenModeParamReader()
     active_screen_mode = screen_mode_param_reader.read()
+    hud_mode_param_reader = ClusterHudModeParamReader() if hud_mode_watch is not None else None
     renderer = ClusterUiRenderer(
         frame_width,
         frame_height,
@@ -199,6 +222,7 @@ def run_demo(
     next_theme_param_read = start_time
     next_fps_param_read = start_time + FPS_PARAM_POLL_SECONDS
     next_screen_mode_param_read = start_time
+    next_hud_mode_param_read = start_time + HUD_MODE_PARAM_POLL_SECONDS
     report_frames = 0
     frame_interval = 1.0 / target_fps if target_fps > 0 else 0.0
 
@@ -230,6 +254,15 @@ def run_demo(
                 if next_screen_mode != renderer.screen_mode:
                     renderer.set_screen_mode(next_screen_mode)
                 next_screen_mode_param_read = now + SCREEN_MODE_PARAM_POLL_SECONDS
+            if hud_mode_param_reader is not None and now >= next_hud_mode_param_read:
+                next_hud_mode = hud_mode_param_reader.read()
+                if next_hud_mode is not None and next_hud_mode != hud_mode_watch:
+                    print(
+                        f"{CLUSTER_HUD_PARAM} changed from {hud_mode_watch} to {next_hud_mode}; exiting",
+                        flush=True,
+                    )
+                    break
+                next_hud_mode_param_read = now + HUD_MODE_PARAM_POLL_SECONDS
             if live_fps_param_reader is not None and now >= next_fps_param_read:
                 next_target_fps = live_fps_param_reader.read()
                 if next_target_fps != target_fps:
@@ -504,6 +537,12 @@ def parse_args() -> argparse.Namespace:
         help=f"HUD theme override. Default reads {CLUSTER_THEME_PARAM}: 0 auto, 1 dark, 2 light.",
     )
     parser.add_argument(
+        "--cluster-hud-mode",
+        type=int,
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
         "--route-loop",
         action="store_true",
         help="Loop route replay instead of stopping at the end.",
@@ -638,6 +677,7 @@ def main() -> None:
             args.profile_interval,
             not args.no_gc_freeze,
             args.theme,
+            args.cluster_hud_mode,
         )
     except KeyboardInterrupt:
         print("\nStopped.")

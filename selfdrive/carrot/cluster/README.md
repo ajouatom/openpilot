@@ -25,10 +25,9 @@ Pillow. Route replay defaults to `--route-overlay compact`, which shows the
 right-side qcamera/debug panel. Use `--route-overlay off` for performance tests
 that should match live rendering cost more closely.
 
-Manager autostart uses `--fps 20` by default through `CLUSTER_AUTORUN_FPS=20`.
-Set `CLUSTER_AUTORUN_FPS=0` only for uncapped performance tests.
-Set it to an empty value if autostart should follow `ClusterHudLiveFps`
-setting changes while running.
+Manager autostart omits `--fps` by default so live launches follow
+`ClusterHudLiveFps` setting changes while running. Set `CLUSTER_AUTORUN_FPS`
+only for fixed test overrides; `0` means uncapped.
 
 The launcher defaults to `--input live`, subscribes to openpilot cereal services,
 and renders live `carState`, `modelV2`, `radarState`, `liveTracks`, and raw

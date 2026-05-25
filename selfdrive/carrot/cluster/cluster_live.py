@@ -68,7 +68,7 @@ class OpenpilotLiveSource:
         self.params: Any | None = None
         self._next_debug_param_read_t = 0.0
         self._custom_steer_ratio: float | None = None
-        self._steer_actuator_delay_s: float | None = None
+        self._steer_actuator_delay_param_s: float | None = None
         try:
             from openpilot.common.params import Params
 
@@ -144,6 +144,7 @@ class OpenpilotLiveSource:
             live_delay = self.sm["liveDelay"]
             live_delay_calibration_percent = safe_optional_float(live_delay, "calPerc")
             live_delay_lateral_s = safe_optional_float(live_delay, "lateralDelay")
+        steer_actuator_delay_s = self._effective_steer_actuator_delay(live_delay_lateral_s)
 
         live_torque_calibration_percent = None
         live_torque_valid = None
@@ -173,7 +174,7 @@ class OpenpilotLiveSource:
             live_torque_friction=live_torque_friction,
             live_steer_ratio=live_steer_ratio,
             custom_steer_ratio=self._custom_steer_ratio,
-            steer_actuator_delay_s=self._steer_actuator_delay_s,
+            steer_actuator_delay_s=steer_actuator_delay_s,
         )
         values = (
             info.live_delay_calibration_percent,
@@ -196,7 +197,14 @@ class OpenpilotLiveSource:
         if self.params is None:
             return
         self._custom_steer_ratio = self._finite_param_float("CustomSR", 0.1)
-        self._steer_actuator_delay_s = self._finite_param_float("SteerActuatorDelay", 0.01)
+        self._steer_actuator_delay_param_s = self._finite_param_float("SteerActuatorDelay", 0.01)
+
+    def _effective_steer_actuator_delay(self, live_delay_lateral_s: float | None) -> float | None:
+        if self._steer_actuator_delay_param_s is not None and self._steer_actuator_delay_param_s > 0.0:
+            return self._steer_actuator_delay_param_s
+        if live_delay_lateral_s is not None:
+            return live_delay_lateral_s
+        return self._steer_actuator_delay_param_s
 
     def _finite_param_float(self, key: str, scale: float) -> float | None:
         if self.params is None:
