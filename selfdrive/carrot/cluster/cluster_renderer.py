@@ -11,6 +11,7 @@ from pathlib import Path
 import pyray as rl
 
 from cluster_config import (
+    AMBER,
     BLUE,
     ClusterTheme,
     DESIGN_HEIGHT,
@@ -35,6 +36,7 @@ from cluster_scene import (
     VehicleBox,
     build_cluster_scene,
 )
+from cluster_system_monitor import SystemStats, SystemStatsSampler
 from cluster_utils import blink_visible, clamp
 
 
@@ -56,6 +58,10 @@ SPEED_LIMIT_SIGN_CENTER_X = 460
 SPEED_LIMIT_SIGN_CENTER_Y = TURN_SIGNAL_CENTER_Y
 CRUISE_SET_CENTER_X = SPEED_VALUE_CENTER_X
 CRUISE_SET_CENTER_Y = TURN_SIGNAL_CENTER_Y
+SYSTEM_PANEL_X = 1416
+SYSTEM_PANEL_Y = 118
+SYSTEM_PANEL_W = 476
+SYSTEM_STATS_REFRESH_SECONDS = 1.0
 VEHICLE_MATERIAL_COLORS: dict[str, tuple[int, int, int, int]] = {
     "body": (156, 166, 172, 255),
     "wheel": (18, 20, 22, 255),
@@ -305,6 +311,7 @@ class ClusterUiRenderer:
         self._right_turn_signal_started_at: float | None = None
         self._triangle_strip_points = None
         self._triangle_strip_capacity = 0
+        self._system_stats = SystemStatsSampler(SYSTEM_STATS_REFRESH_SECONDS)
         self.profile_enabled = os.environ.get("CLUSTER_PROFILE_RENDER") == "1"
         self._profile_samples: list[tuple[str, float]] = []
 
@@ -705,7 +712,6 @@ class ClusterUiRenderer:
         return rl.get_font_default()
 
     def _font_candidates(self) -> list[Path]:
-        windir = Path(os.environ.get("WINDIR", "C:/Windows"))
         return [
             KAIGEN_GOTHIC_KR_BOLD_FONT_PATH,
             OPENPILOT_ADDON_FONT_DIR / "KaiGenGothicKR-Bold.ttf",
@@ -716,12 +722,6 @@ class ClusterUiRenderer:
             Path("/usr/share/fonts/truetype/jetbrains-mono/JetBrainsMono-Medium.ttf"),
             Path("/usr/share/fonts/TTF/JetBrainsMono-Medium.ttf"),
             Path("/usr/local/share/fonts/JetBrainsMono-Medium.ttf"),
-            windir / "Fonts" / "KaiGenGothicKR-Bold.ttf",
-            windir / "Fonts" / "JetBrainsMono-Medium.ttf",
-            windir / "Fonts" / "JetBrainsMono-Bold.ttf",
-            windir / "Fonts" / "segoeuib.ttf",
-            windir / "Fonts" / "arialbd.ttf",
-            windir / "Fonts" / "arial.ttf",
         ]
 
     def _load_vehicle_model(self) -> None:
@@ -1338,6 +1338,9 @@ class ClusterUiRenderer:
             self._draw_center_clock(state)
             self._profile_add("hud.center_clock", profile_stage)
             profile_stage = self._profile_start()
+            self._draw_system_stats_panel(state)
+            self._profile_add("hud.system_stats", profile_stage)
+            profile_stage = self._profile_start()
             self._draw_route_overlay(state.route_overlay)
             self._profile_add("hud.route_overlay", profile_stage)
         finally:
@@ -1370,6 +1373,111 @@ class ClusterUiRenderer:
         rl.draw_rectangle_rounded(rect, 0.28, 12, rl_color(theme.clock_bg))
         rl.draw_rectangle_rounded_lines_ex(rect, 0.28, 12, 2.0, rl_color(theme.clock_outline))
         self._draw_text(text, x, y, size, theme.clock_text, anchor="center")
+
+    def _draw_system_stats_panel(self, state: ClusterUiState) -> None:
+        if state.route_overlay is not None:
+            return
+
+        theme = self._current_theme()
+        stats = self._system_stats.sample()
+        cpu_count = len(stats.cpu_core_percents)
+        columns = 2 if cpu_count <= 16 else 4
+        rows = max(1, math.ceil(max(1, cpu_count) / columns))
+        core_row_h = 30.0 if columns == 2 else 24.0
+        header_h = 130.0
+        panel_h = min(DESIGN_HEIGHT - SYSTEM_PANEL_Y - 18.0, header_h + rows * core_row_h + 18.0)
+        core_area_h = max(24.0, panel_h - header_h - 14.0)
+        core_row_h = min(core_row_h, core_area_h / rows)
+
+        panel_x = SYSTEM_PANEL_X
+        panel_y = SYSTEM_PANEL_Y
+        panel_w = SYSTEM_PANEL_W
+        pad_x = 24.0
+        self._rounded_rect(panel_x, panel_y, panel_w, panel_h, 18, theme.route_panel_bg, theme.faint, 2)
+        self._draw_text("SYSTEM", panel_x + pad_x, panel_y + 28, 18, theme.muted)
+
+        mem_percent = stats.memory_used_percent
+        mem_color = self._system_metric_color(mem_percent)
+        self._draw_text("MEM", panel_x + pad_x, panel_y + 62, 17, theme.muted)
+        self._draw_text(
+            self._memory_text(stats),
+            panel_x + 86,
+            panel_y + 62,
+            17,
+            theme.text if stats.memory_used_bytes is not None else theme.muted,
+        )
+        self._draw_text(
+            self._percent_text(mem_percent),
+            panel_x + panel_w - pad_x,
+            panel_y + 62,
+            17,
+            mem_color,
+            anchor="right",
+        )
+        self._draw_percent_bar(panel_x + pad_x, panel_y + 80, panel_w - pad_x * 2, 12, mem_percent, mem_color)
+
+        cpu_header_y = panel_y + 112
+        self._draw_text("CPU CORE %", panel_x + pad_x, cpu_header_y, 15, theme.muted)
+        if cpu_count == 0:
+            self._draw_text("unavailable", panel_x + panel_w - pad_x, cpu_header_y, 15, theme.muted, anchor="right")
+            return
+
+        core_start_y = panel_y + header_h
+        gap_x = 18.0 if columns == 2 else 10.0
+        cell_w = (panel_w - pad_x * 2 - gap_x * (columns - 1)) / columns
+        for index, percent in enumerate(stats.cpu_core_percents):
+            row = index // columns
+            column = index % columns
+            cell_x = panel_x + pad_x + column * (cell_w + gap_x)
+            line_y = core_start_y + row * core_row_h
+            color = self._system_metric_color(percent)
+            text_size = 15 if columns == 2 else 12
+            self._draw_text(f"C{index}", cell_x, line_y + 8, text_size, theme.muted)
+            self._draw_text(self._percent_text(percent), cell_x + cell_w, line_y + 8, text_size, color, anchor="right")
+            self._draw_percent_bar(cell_x, line_y + 19, cell_w, 6, percent, color)
+
+    def _draw_percent_bar(
+        self,
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        percent: float | None,
+        fill: tuple[int, int, int],
+    ) -> None:
+        theme = self._current_theme()
+        self._rounded_rect(x, y, width, height, height * 0.5, theme.gauge_bg)
+        if percent is None:
+            return
+        fill_ratio = clamp(percent, 0.0, 100.0) / 100.0
+        if fill_ratio <= 0.0:
+            return
+        fill_width = max(2.0, width * fill_ratio)
+        self._rounded_rect(x, y, fill_width, height, height * 0.5, fill)
+
+    @staticmethod
+    def _memory_text(stats: SystemStats) -> str:
+        if stats.memory_used_bytes is None or stats.memory_total_bytes is None:
+            return "--/-- GB"
+        used_gib = stats.memory_used_bytes / (1024.0 ** 3)
+        total_gib = stats.memory_total_bytes / (1024.0 ** 3)
+        return f"{used_gib:.1f}/{total_gib:.1f} GB"
+
+    @staticmethod
+    def _percent_text(percent: float | None) -> str:
+        if percent is None:
+            return "--%"
+        return f"{clamp(percent, 0.0, 100.0):3.0f}%"
+
+    def _system_metric_color(self, percent: float | None) -> tuple[int, int, int]:
+        theme = self._current_theme()
+        if percent is None:
+            return theme.muted
+        if percent >= 85.0:
+            return RED
+        if percent >= 60.0:
+            return AMBER
+        return BLUE
 
     def _draw_route_overlay(self, overlay: RouteOverlay | None) -> None:
         if overlay is None:
@@ -1659,5 +1767,8 @@ class ClusterUiRenderer:
             draw_x = x - measured.x * 0.5
             draw_y = y - measured.y * 0.5
         elif anchor == "left":
+            draw_y = y - measured.y * 0.5
+        elif anchor == "right":
+            draw_x = x - measured.x
             draw_y = y - measured.y * 0.5
         rl.draw_text_ex(self._font, text, rl.Vector2(draw_x, draw_y), size, spacing, rl_color(color))
