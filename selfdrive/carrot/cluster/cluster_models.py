@@ -6,6 +6,14 @@ from typing import Literal
 from cluster_config import DEFAULT_LANE_WIDTH_M, WHITE
 
 CruiseDisplayState = Literal["off", "paused", "engaged"]
+GitBranchStatusState = Literal["ok", "pull", "missing", "unknown"]
+
+
+@dataclass(frozen=True, slots=True)
+class GitBranchStatus:
+    branch: str
+    state: GitBranchStatusState
+    detail: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,6 +207,7 @@ class ClusterUiState:
     lateral_plan_curvatures: tuple[float, ...] = ()
     lateral_plan_curvature_rates: tuple[float, ...] = ()
     display_speed_kph: float | None = None
+    git_status: GitBranchStatus | None = None
 
 
 @dataclass(frozen=True, slots=True)

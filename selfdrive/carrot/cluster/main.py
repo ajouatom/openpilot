@@ -15,6 +15,7 @@ from cluster_config import (
     normalize_cluster_theme_mode,
 )
 from cluster_gamepad import DualSenseSimulator
+from cluster_git_status import GitBranchStatusProvider
 from cluster_live import OpenpilotLiveSource
 from cluster_models import RouteOverlay, SimulatorInput
 from cluster_profile import GcProfileHook, ProfileReporter, freeze_gc_after_init
@@ -153,6 +154,7 @@ def run_demo(
         theme_mode=active_theme_mode,
     )
     renderer.set_profile_enabled(profile_render)
+    git_status_provider = GitBranchStatusProvider(Path(__file__).resolve().parent)
     simulator = ClusterSimulator() if input_mode in ("random", "gamepad") else None
     controller = DualSenseSimulator(controller_index) if input_mode == "gamepad" else None
     random_input = RandomInputSource() if input_mode == "random" else None
@@ -251,6 +253,8 @@ def run_demo(
                     raise RuntimeError("simulator is not available for gamepad input")
                 state = simulator.update(command, dt)
                 profile.add_elapsed("source.gamepad_update", profile_stage)
+
+            state = replace(state, git_status=git_status_provider.status())
 
             if output_mode in ("window", "both"):
                 profile_stage = time.perf_counter()

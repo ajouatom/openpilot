@@ -26,7 +26,7 @@ from cluster_config import (
     current_cluster_theme,
     normalize_cluster_theme_mode,
 )
-from cluster_models import ClusterUiState, RouteOverlay
+from cluster_models import ClusterUiState, GitBranchStatus, RouteOverlay
 from cluster_scene import (
     ClusterScene,
     MeshStrip,
@@ -62,6 +62,10 @@ SYSTEM_PANEL_X = 1416
 SYSTEM_PANEL_Y = 118
 SYSTEM_PANEL_W = 476
 SYSTEM_STATS_REFRESH_SECONDS = 1.0
+GIT_STATUS_X = 20
+GIT_STATUS_CENTER_Y = 456
+GIT_STATUS_PANEL_H = 32
+GIT_STATUS_MAX_TEXT_W = 610
 VEHICLE_MATERIAL_COLORS: dict[str, tuple[int, int, int, int]] = {
     "body": (156, 166, 172, 255),
     "wheel": (18, 20, 22, 255),
@@ -1343,6 +1347,9 @@ class ClusterUiRenderer:
             profile_stage = self._profile_start()
             self._draw_route_overlay(state.route_overlay)
             self._profile_add("hud.route_overlay", profile_stage)
+            profile_stage = self._profile_start()
+            self._draw_git_status(state.git_status)
+            self._profile_add("hud.git_status", profile_stage)
         finally:
             profile_stage = self._profile_start()
             rl.rl_pop_matrix()
@@ -1560,6 +1567,37 @@ class ClusterUiRenderer:
         for index, line in enumerate(overlay.data_lines[:10]):
             self._draw_text(line, x, y + 22 + index * 14, 12, theme.text)
 
+    def _draw_git_status(self, status: GitBranchStatus | None) -> None:
+        if status is None:
+            return
+
+        theme = self._current_theme()
+        color = self._git_status_color(status, theme)
+        text = status.branch if not status.detail else f"{status.branch} ({status.detail})"
+        text_size = 20
+        text = self._ellipsize_text(text, text_size, GIT_STATUS_MAX_TEXT_W)
+        font = self._font or rl.get_font_default()
+        spacing = max(1.0, text_size * 0.02)
+        measured = rl.measure_text_ex(font, text, text_size, spacing)
+
+        panel_x = GIT_STATUS_X
+        panel_y = GIT_STATUS_CENTER_Y - GIT_STATUS_PANEL_H * 0.5
+        panel_w = measured.x + 58
+        self._rounded_rect(panel_x, panel_y, panel_w, GIT_STATUS_PANEL_H, 10, theme.route_panel_bg, theme.faint, 1)
+        rl.draw_circle_v(rl.Vector2(panel_x + 20, GIT_STATUS_CENTER_Y), 7, rl_color(color))
+        self._draw_text(text, panel_x + 36 + 1, GIT_STATUS_CENTER_Y + 1, text_size, theme.world_label_shadow)
+        self._draw_text(text, panel_x + 36, GIT_STATUS_CENTER_Y, text_size, color)
+
+    @staticmethod
+    def _git_status_color(status: GitBranchStatus, theme: ClusterTheme) -> tuple[int, int, int]:
+        if status.state == "ok":
+            return GREEN
+        if status.state == "pull":
+            return AMBER
+        if status.state == "missing":
+            return RED
+        return theme.muted
+
     def _draw_speed_block(self, state: ClusterUiState) -> None:
         theme = self._current_theme()
         display_speed_kph = state.display_speed_kph if state.display_speed_kph is not None else state.speed_kph
@@ -1772,3 +1810,21 @@ class ClusterUiRenderer:
             draw_x = x - measured.x
             draw_y = y - measured.y * 0.5
         rl.draw_text_ex(self._font, text, rl.Vector2(draw_x, draw_y), size, spacing, rl_color(color))
+
+    def _ellipsize_text(self, text: str, size: float, max_width: float) -> str:
+        if self._font is None:
+            self._font = rl.get_font_default()
+        spacing = max(1.0, size * 0.02)
+        if rl.measure_text_ex(self._font, text, size, spacing).x <= max_width:
+            return text
+        ellipsis = "..."
+        low = 0
+        high = len(text)
+        while low < high:
+            mid = (low + high + 1) // 2
+            candidate = text[:mid] + ellipsis
+            if rl.measure_text_ex(self._font, candidate, size, spacing).x <= max_width:
+                low = mid
+            else:
+                high = mid - 1
+        return text[:low] + ellipsis
