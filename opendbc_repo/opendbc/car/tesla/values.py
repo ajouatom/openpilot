@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from enum import Enum, IntFlag
-from opendbc.car import Bus, CarSpecs, DbcDict, PlatformConfig, Platforms, AngleSteeringLimits
+from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, CarSpecs, DbcDict, PlatformConfig, Platforms, AngleSteeringLimits, ISO_LATERAL_ACCEL
 from opendbc.car.structs import CarParams, CarState
 from opendbc.car.docs_definitions import CarDocs, CarFootnote, CarHarness, CarParts, Column
 from opendbc.car.fw_query_definitions import FwQueryConfig, Request, StdQueries
@@ -15,19 +15,23 @@ class Footnote(Enum):
     "See <a href=\"https://www.notateslaapp.com/news/2173/how-to-check-if-your-tesla-has-hardware-4-ai4-or-hardware-3\">this page</a> for more information.",
     Column.MODEL)
 
+  SETUP = CarFootnote(
+    "See more setup details for <a href=\"https://github.com/commaai/openpilot/wiki/tesla\" target=\"_blank\">Tesla</a>.",
+    Column.MAKE, setup_note=True)
+
 
 @dataclass
 class TeslaCarDocsHW3(CarDocs):
   package: str = "All"
   car_parts: CarParts = field(default_factory=CarParts.common([CarHarness.tesla_a]))
-  footnotes: list[Enum] = field(default_factory=lambda: [Footnote.HW_TYPE])
+  footnotes: list[Enum] = field(default_factory=lambda: [Footnote.HW_TYPE, Footnote.SETUP])
 
 
 @dataclass
 class TeslaCarDocsHW4(CarDocs):
   package: str = "All"
   car_parts: CarParts = field(default_factory=CarParts.common([CarHarness.tesla_b]))
-  footnotes: list[Enum] = field(default_factory=lambda: [Footnote.HW_TYPE])
+  footnotes: list[Enum] = field(default_factory=lambda: [Footnote.HW_TYPE, Footnote.SETUP])
 
 
 @dataclass
@@ -43,13 +47,15 @@ class CAR(Platforms):
       TeslaCarDocsHW4("Tesla Model 3 (with HW4) 2024-25"),
     ],
     CarSpecs(mass=1899., wheelbase=2.875, steerRatio=12.0),
+    {Bus.party: 'tesla_model3_party', Bus.radar: 'tesla_radar_continental_generated'},
   )
   TESLA_MODEL_Y = TeslaPlatformConfig(
     [
       TeslaCarDocsHW3("Tesla Model Y (with HW3) 2020-23"),
-      TeslaCarDocsHW4("Tesla Model Y (with HW4) 2024"),
-     ],
+      TeslaCarDocsHW4("Tesla Model Y (with HW4) 2024-25"),
+    ],
     CarSpecs(mass=2072., wheelbase=2.890, steerRatio=12.0),
+    {Bus.party: 'tesla_model3_party', Bus.radar: 'tesla_radar_continental_generated'},
   )
 
 
@@ -80,15 +86,26 @@ GEAR_MAP = {
 }
 
 
+# Add extra tolerance for average banked road since safety doesn't have the roll
+AVERAGE_ROAD_ROLL = 0.06  # ~3.4 degrees, 6% superelevation. higher actual roll lowers lateral acceleration
+
+
 class CarControllerParams:
   ANGLE_LIMITS: AngleSteeringLimits = AngleSteeringLimits(
     # EPAS faults above this angle
     360,  # deg
-    # Angle rate limits are set using the Tesla Model Y VehicleModel such that they maximally meet ISO 11270
-    # At 5 m/s, FSD has been seen hitting up to ~4 deg/frame with ~5 deg/frame at very low creeping speeds
-    # At 30 m/s, FSD has been seen hitting mostly 0.1 deg/frame, sometimes 0.2 deg/frame, and rarely 0.3 deg/frame
+
+    # Speed-based rate limits (primary limiter at low speed, VM handles high speed)
     ([0., 5., 25.], [2.5, 1.5, 0.2]),
     ([0., 5., 25.], [5., 2.0, 0.3]),
+
+    # Vehicle model angle limits (secondary limiter — max lateral accel/jerk)
+    # Add extra tolerance for average banked road since safety doesn't have the roll
+    MAX_LATERAL_ACCEL=ISO_LATERAL_ACCEL + (ACCELERATION_DUE_TO_GRAVITY * AVERAGE_ROAD_ROLL),  # ~3.6 m/s^2
+    MAX_LATERAL_JERK=3.0 + (ACCELERATION_DUE_TO_GRAVITY * AVERAGE_ROAD_ROLL),  # ~3.6 m/s^3
+
+    # Absolute cap: prevent fault even at standstill (EPS faults at 12)
+    MAX_ANGLE_RATE=5,  # deg/20ms frame
   )
 
   STEER_STEP = 2  # Angle command is sent at 50 Hz
@@ -104,11 +121,12 @@ class TeslaSafetyFlags(IntFlag):
 
 class TeslaFlags(IntFlag):
   LONG_CONTROL = 1
+  MISSING_DAS_SETTINGS = 4
 
 
 DBC = CAR.create_dbc_map()
 
-STEER_THRESHOLD = 0.5
+STEER_THRESHOLD = 1
 
 if __name__ == "__main__":
   cars = []
