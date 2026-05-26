@@ -27,24 +27,50 @@ class CarState(CarStateBase):
     ret.vEgoRaw = cp_party.vl["DI_speed"]["DI_vehicleSpeed"] * CV.KPH_TO_MS
     ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
 
+    # Wheel speeds (km/h -> m/s)
+    ws = cp_party.vl["ESP_wheelSpeeds"]
+    ret.wheelSpeeds.fl = ws["ESP_wheelSpeedFrL"] * CV.KPH_TO_MS
+    ret.wheelSpeeds.fr = ws["ESP_wheelSpeedFrR"] * CV.KPH_TO_MS
+    ret.wheelSpeeds.rl = ws["ESP_wheelSpeedReL"] * CV.KPH_TO_MS
+    ret.wheelSpeeds.rr = ws["ESP_wheelSpeedReR"] * CV.KPH_TO_MS
+
     # Displayed speed
     ui_speed_units_raw = int(cp_party.vl["DI_speed"]["DI_uiSpeedUnits"])
     ui_speed_units = self.can_define.dv.get("DI_speed", {}).get("DI_uiSpeedUnits", {}).get(ui_speed_units_raw, ui_speed_units_raw)
-    if ui_speed_units in ("DI_SPEED_KPH", "KPH", 0):
-      ret.vEgoCluster = cp_party.vl["DI_speed"]["DI_uiSpeed"] * CV.KPH_TO_MS
-    elif ui_speed_units in ("DI_SPEED_MPH", "MPH", 1):
-      ret.vEgoCluster = cp_party.vl["DI_speed"]["DI_uiSpeed"] * CV.MPH_TO_MS
+    ui_speed = cp_party.vl["DI_speed"]["DI_uiSpeed"]
+
+    # Infer display unit from consistency with wheel speed first, then fall back to CAN enum/raw bit.
+    ui_is_kph = False
+    if ret.vEgoRaw > 2.0 and ui_speed > 2.0:
+      ui_speed_kph_ms = ui_speed * CV.KPH_TO_MS
+      ui_speed_mph_ms = ui_speed * CV.MPH_TO_MS
+      ui_is_kph = abs(ui_speed_kph_ms - ret.vEgoRaw) <= abs(ui_speed_mph_ms - ret.vEgoRaw)
+    elif ui_speed_units in ("DI_SPEED_KPH", "KPH"):
+      ui_is_kph = True
+    elif ui_speed_units in ("DI_SPEED_MPH", "MPH"):
+      ui_is_kph = False
+    else:
+      ui_is_kph = ui_speed_units_raw == 1
+
+    ret.vEgoCluster = ui_speed * (CV.KPH_TO_MS if ui_is_kph else CV.MPH_TO_MS)
 
     # Gas pedal
     pedal_status = cp_party.vl["DI_systemStatus"]["DI_accelPedalPos"]
     ret.gas = pedal_status / 100.0
     ret.gasPressed = pedal_status > 0
 
+    # Motor speed (EV: motor RPM from inverter)
+    ret.engineRpm = cp_party.vl["DI_torque"]["DI_axleSpeed"]
+
     # Brake pedal
-    ret.brake = 0
+    # Brake pedal position (0.0-1.0) from iBooster push-rod displacement [0,47] mm
+    brake_rod = cp_party.vl["IBST_status"]["IBST_sInputRodDriver"]
+    ret.brake = max(0.0, brake_rod / 47.0) if brake_rod > 0 else 0.0
     ret.brakePressed = cp_party.vl["IBST_status"]["IBST_driverBrakeApply"] == 2
+    ret.brakeLights = cp_party.vl["ESP_status"]["ESP_brakeLamp"] == 1
     ret.regenBraking = cp_party.vl["DI_systemStatus"]["DI_regenLight"] != 0
     ret.espDisabled = cp_party.vl["ESP_status"]["ESP_espFaultLamp"] != 0
+    ret.espActive = cp_party.vl["ESP_status"]["ESP_espModeActive"] != 0
 
     # Steering wheel
     epas_status = cp_party.vl["EPAS3S_sysStatus"]
@@ -64,19 +90,30 @@ class CarState(CarStateBase):
 
     # Cruise state
     cruise_state = self.can_define.dv["DI_state"]["DI_cruiseState"].get(int(cp_party.vl["DI_state"]["DI_cruiseState"]), None)
-    speed_units = self.can_define.dv["DI_state"]["DI_speedUnits"].get(int(cp_party.vl["DI_state"]["DI_speedUnits"]), None)
+    speed_units_raw = int(cp_party.vl["DI_state"]["DI_speedUnits"])
+    speed_units = self.can_define.dv["DI_state"]["DI_speedUnits"].get(speed_units_raw, speed_units_raw)
 
     scale_speed = 1.01
     ret.cruiseState.enabled = cruise_state in ("ENABLED", "STANDSTILL", "OVERRIDE", "PRE_FAULT", "PRE_CANCEL")
-    if speed_units in ("KPH", "DI_SPEED_KPH", 0):
-      ret.cruiseState.speedCluster = cp_party.vl["DI_state"]["DI_digitalSpeed"] * CV.KPH_TO_MS
-    elif speed_units in ("MPH", "DI_SPEED_MPH", 1):
-      ret.cruiseState.speedCluster = cp_party.vl["DI_state"]["DI_digitalSpeed"] * CV.MPH_TO_MS
+    if speed_units in ("KPH", "DI_SPEED_KPH"):
+      cruise_is_kph = True
+    elif speed_units in ("MPH", "DI_SPEED_MPH"):
+      cruise_is_kph = False
+    else:
+      # Keep cruise unit consistent with displayed speed when enum/raw bit are unreliable.
+      cruise_is_kph = ui_is_kph
+
+    ret.cruiseState.speedCluster = cp_party.vl["DI_state"]["DI_digitalSpeed"] * (CV.KPH_TO_MS if cruise_is_kph else CV.MPH_TO_MS)
     ret.cruiseState.speed = max(ret.cruiseState.speedCluster / scale_speed, 1e-3)
     ret.cruiseState.available = cruise_state == "STANDBY" or ret.cruiseState.enabled
     ret.cruiseState.standstill = False  # This needs to be false, since we can resume from stop without sending anything special
     ret.standstill = cruise_state == "STANDSTILL"
     ret.accFaulted = cruise_state == "FAULT"
+
+    # DAS_fusedSpeedLimit is DBC-scaled to kph/mph (0=unknown, 31=none).
+    speed_limit = cp_ap_party.vl["DAS_status"]["DAS_fusedSpeedLimit"]
+    if 0 < speed_limit <= 150:
+      ret.speedLimit = speed_limit if ui_is_kph else speed_limit * CV.MPH_TO_KPH
 
     park_brake_state = self.can_define.dv["DI_state"]["DI_parkBrakeState"].get(int(cp_party.vl["DI_state"]["DI_parkBrakeState"]), None)
     vehicle_hold_state = self.can_define.dv["DI_state"]["DI_vehicleHoldState"].get(int(cp_party.vl["DI_state"]["DI_vehicleHoldState"]), None)
