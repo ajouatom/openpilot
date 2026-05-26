@@ -117,6 +117,10 @@
         <source>SELECT YOUR CAR</source>
         <translation>차량선택</translation>
     </message>
+    <message>
+        <source>Tuning history</source>
+        <translation>튜닝 이력</translation>
+    </message>
 </context>
 <context>
     <name>ConfirmationDialog</name>
@@ -1464,6 +1468,72 @@ This may take up to a minute.</source>
     <message>
         <source>Forget</source>
         <translation>삭제</translation>
+    </message>
+</context>
+<context>
+    <name>AutoTunerHistoryPanel</name>
+    <message>
+        <source>Clear All</source>
+        <translation>전체 이력 삭제</translation>
+    </message>
+    <message>
+        <source>No tuning history available</source>
+        <translation>이력이 없습니다.</translation>
+    </message>
+    <message>
+        <source>[%1 Applied]</source>
+        <translation>[%1 적용됨]</translation>
+    </message>
+    <message>
+        <source>Restore</source>
+        <translation>복구</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>삭제</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to restore the parameters to this state?</source>
+        <translation>이 시점의 튜닝을 취소하고 모든 값을 이전 상태로 되돌리시겠습니까?</translation>
+    </message>
+    <message>
+        <source>Restored to previous values successfully.</source>
+        <translation>이전 값으로 복구가 완료되었습니다.</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to delete this item?</source>
+        <translation>정말 이 항목을 삭제하시겠습니까?</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to delete all history? (This will not restore parameters to their previous values)</source>
+        <translation>모든 이력을 삭제하시겠습니까? (이전 파라미터 값으로 되돌아가지 않습니다)</translation>
+    </message>
+</context>
+<context>
+    <name>AutoTunerDialog</name>
+    <message>
+        <source>OK</source>
+        <translation>확인</translation>
+    </message>
+    <message>
+        <source>Guide</source>
+        <translation>사용 안내</translation>
+    </message>
+    <message>
+        <source>Later</source>
+        <translation>나중에</translation>
+    </message>
+    <message>
+        <source>Reset</source>
+        <translation>초기화</translation>
+    </message>
+    <message>
+        <source>Apply Selected</source>
+        <translation>선택 적용</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to delete all learning data collected so far without applying it?</source>
+        <translation>적용하지 않고 현재까지의 모든 학습 데이터를 삭제하시겠습니까?</translation>
     </message>
 </context>
 </TS>

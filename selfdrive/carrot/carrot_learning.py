@@ -125,6 +125,7 @@ class CarrotLearner:
     self._brake_auto_count = 0   # 자율 주행 중 급제동 횟수
     self._jlead_gas_acc = 0.0    # 제동 중 수동 가속 개입
     self._prev_brake = False
+    self._prev_auto_brake = False
     # Phase 4 (TFollowGap)
     self._tfollow_gas_acc = [0.0] * 4
     self._tfollow_brake_acc = [0.0] * 4 # 수동 브레이크 개입
@@ -134,6 +135,13 @@ class CarrotLearner:
     # Phase 5 (DynamicTFollow / TFollowDecelBoost)
     self._dyn_brake_count = 0    # 앞차 급감속 중 브레이크 개입 횟수
     self._decel_brake_count = 0  # 내 차 강한 감속 중 브레이크 개입 횟수
+
+    # v3 Override Intensity & Dynamics Logging
+    self._gas_max_accel = [0.0] * _NUM_BANDS
+    self._gas_max_pedal = [0.0] * _NUM_BANDS
+    self._brake_max_decel = 0.0
+    self._brake_min_ttc = 999.0
+    self._tfollow_min_gap = [999.0] * 4
 
     self._prev_gear_park = True  # 초기값(시동 시 P단 간주)
     self._has_driven = False     # 주행(D단/이동) 여부 플래그
@@ -153,7 +161,8 @@ class CarrotLearner:
   def update(self, v_ego_kph: float, gas_pressed: bool, engaged: bool, gear_park: bool,
              steer_deg: float = 0.0, steer_pressed: bool = False,
              brake_pressed: bool = False, lead_drel: float = 0.0, lead_v_kph: float = 0.0,
-             a_ego: float = 0.0, lead_jlead: float = 0.0, v_cruise_kph: float = 0.0):
+             a_ego: float = 0.0, lead_jlead: float = 0.0, v_cruise_kph: float = 0.0,
+             gas_val: float = 0.0, brake_val: float = 0.0):
     """
     매 프레임 호출.
     - Phase 1: engaged + gas_pressed → 속도구간 누적
@@ -171,8 +180,8 @@ class CarrotLearner:
       self._clear_all_data()
       self._params.put_bool("CarrotLearningClear", False)
 
-    # 주행 여부 판단 (인게이지 되거나 속도가 5km/h 이상이면 주행한 것으로 간주)
-    if engaged or v_ego_kph >= 5.0:
+    # 주행 여부 판단 (오픈파일럿 인게이지가 단 한 번이라도 실행되었을 때만 유효 주행 세션으로 판단)
+    if engaged:
       self._has_driven = True
 
     # ── Phase 1: 가속 개입 ────────────────────────────────────────────
@@ -180,7 +189,10 @@ class CarrotLearner:
     # 즉, 설정속도보다 충분히 낮은데도 가속이 답답할 때만 학습에 포함
     if engaged and gas_pressed and v_ego_kph >= 1.0:
       if v_ego_kph < (v_cruise_kph - 3.0):
-        self._gas_acc[_speed_band(v_ego_kph)] += _DT
+        idx = _speed_band(v_ego_kph)
+        self._gas_acc[idx] += _DT
+        self._gas_max_accel[idx] = max(self._gas_max_accel[idx], a_ego)
+        self._gas_max_pedal[idx] = max(self._gas_max_pedal[idx], gas_val)
     
     # 가속 과다 학습 방지: 가속 중인데 브레이크를 밟는 경우 OR 자율 주행 중 과도한 가속
     if engaged and v_ego_kph < (v_cruise_kph - 3.0):
@@ -189,7 +201,7 @@ class CarrotLearner:
         if lead_drel == 0 or lead_drel > 120.0:
           self._gas_dec_acc[idx] += _DT
       elif not gas_pressed and a_ego > 1.5: # 자율 주행 중 급가속 감지
-        self._gas_dec_acc[idx] += _DT * 0.5
+        self._gas_dec_auto_acc[idx] += _DT
 
     # ── Phase 2: 조향 패턴 (속도 20km/h 이상, 인게이지 상태) ──────────
     if engaged and v_ego_kph >= 20.0:
@@ -213,13 +225,26 @@ class CarrotLearner:
     self._prev_steer_deg = steer_deg
 
     # Phase 3: 수동 제동 (선행차 근접 시) ────────────────────────
+    is_auto_braking = False
     if engaged and not gear_park and 0 < lead_drel < 100.0:
       # (1) 수동 제동 트리거
-      if brake_pressed and not self._prev_brake:
-        self._brake_count += 1
+      if brake_pressed:
+        if not self._prev_brake:
+          self._brake_count += 1
+        self._brake_max_decel = max(self._brake_max_decel, -a_ego)
+        v_ego_ms = v_ego_kph / 3.6
+        lead_v_ms = lead_v_kph / 3.6
+        v_rel_ms = lead_v_ms - v_ego_ms
+        if v_rel_ms < 0:
+          ttc = lead_drel / -v_rel_ms
+          self._brake_min_ttc = min(self._brake_min_ttc, ttc)
       # (2) 자율 주행 중 너무 늦게 급제동 발생 -> 제동 시점 앞당기기 필요
       elif not brake_pressed and a_ego < -1.7:
-        self._brake_count += 0.3
+        is_auto_braking = True
+        if not self._prev_auto_brake:
+          self._brake_auto_count += 1
+    
+    self._prev_auto_brake = is_auto_braking
     
     # 제동 과다 학습 방지: 강한 제동 중 가속 페달을 밟는 경우 (불필요한 제동 억제)
     if engaged and gas_pressed and a_ego < -0.8:
@@ -227,7 +252,7 @@ class CarrotLearner:
         self._jlead_gas_acc += _DT
 
     # ── Phase 5: DynamicTFollow / TFollowDecelBoost ──────────────────
-    if brake_pressed and not self._prev_brake:
+    if engaged and brake_pressed and not self._prev_brake:
       # DynamicTFollow: 앞차 급감속 중 브레이크 개입
       if lead_jlead < _DYN_JLEAD_THRESHOLD and lead_drel < 150.0:
         self._dyn_brake_count += 1
@@ -244,6 +269,10 @@ class CarrotLearner:
         and lead_drel > _TFOLLOW_MIN_LEAD_DREL):
       gap_idx = self._current_gap - 1  # 0-indexed
       self._tfollow_gas_acc[gap_idx] += _DT
+      v_ego_ms = v_ego_kph / 3.6
+      if v_ego_ms > 1.0:
+        time_gap = lead_drel / v_ego_ms
+        self._tfollow_min_gap[gap_idx] = min(self._tfollow_min_gap[gap_idx], time_gap)
 
     # 거리 부족 학습 방지: 정속 추종 중 불안해서 브레이크를 밟는 경우 OR Hunting 감지
     if engaged and v_ego_kph >= 40.0 and 0 < lead_drel < 80.0:
@@ -273,14 +302,31 @@ class CarrotLearner:
   def _clear_all_data(self):
     """모든 누적 데이터를 0으로 초기화하고 DB에서도 삭제"""
     self._gas_acc = [0.0] * _NUM_BANDS
+    self._gas_dec_acc = [0.0] * _NUM_BANDS
+    self._gas_dec_auto_acc = [0.0] * _NUM_BANDS
     self._steer_acc = 0.0
     self._steer_count = 0
     self._curve_entries = 0
     self._curve_overrides = 0
     self._brake_count = 0
+    self._brake_auto_count = 0
+    self._jlead_gas_acc = 0.0
     self._tfollow_gas_acc = [0.0] * 4
+    self._tfollow_brake_acc = [0.0] * 4
+    self._tfollow_brake_auto_acc = [0.0] * 4
+    self._tfollow_speed_brake_acc = 0.0
     self._dyn_brake_count = 0
     self._decel_brake_count = 0
+    self._prev_brake = False
+    self._prev_auto_brake = False
+
+    # v3 Override Intensity & Dynamics variables reset
+    self._gas_max_accel = [0.0] * _NUM_BANDS
+    self._gas_max_pedal = [0.0] * _NUM_BANDS
+    self._brake_max_decel = 0.0
+    self._brake_min_ttc = 999.0
+    self._tfollow_min_gap = [999.0] * 4
+
     self._params.remove("CarrotLearningData")
     self._params.remove("CarrotLearningRecommend")
 
@@ -332,10 +378,25 @@ class CarrotLearner:
       if len(loaded4_auto) == 4:
         self._tfollow_brake_auto_acc = [float(x) for x in loaded4_auto]
       self._tfollow_speed_brake_acc = float(data.get("tfollow_speed_brake_acc", 0.0))
+      self._brake_auto_count = int(data.get("brake_auto_count", 0))
       # Phase 5
       p5 = data.get("phase5", {})
       self._dyn_brake_count = int(p5.get("dyn_brake_count", 0))
       self._decel_brake_count = int(p5.get("decel_brake_count", 0))
+
+      # v3 Override Intensity & Dynamics Restore
+      override = data.get("override_dynamics", {})
+      loaded_gmax_a = override.get("gas_max_accel", [0.0] * _NUM_BANDS)
+      if len(loaded_gmax_a) == _NUM_BANDS:
+        self._gas_max_accel = [float(x) for x in loaded_gmax_a]
+      loaded_gmax_p = override.get("gas_max_pedal", [0.0] * _NUM_BANDS)
+      if len(loaded_gmax_p) == _NUM_BANDS:
+        self._gas_max_pedal = [float(x) for x in loaded_gmax_p]
+      self._brake_max_decel = float(override.get("brake_max_decel", 0.0))
+      self._brake_min_ttc = float(override.get("brake_min_ttc", 999.0))
+      loaded_tf_min = override.get("tfollow_min_gap", [999.0] * 4)
+      if len(loaded_tf_min) == 4:
+        self._tfollow_min_gap = [float(x) for x in loaded_tf_min]
     except Exception:
       pass  # 데이터 손상 시 기본값 유지
 
@@ -359,9 +420,17 @@ class CarrotLearner:
       "tfollow_brake_auto_acc": self._tfollow_brake_auto_acc,
       "tfollow_speed_brake_acc": self._tfollow_speed_brake_acc,
       "gas_dec_auto_acc": self._gas_dec_auto_acc,
+      "brake_auto_count": self._brake_auto_count,
       "phase5": {
         "dyn_brake_count": self._dyn_brake_count,
         "decel_brake_count": self._decel_brake_count,
+      },
+      "override_dynamics": {
+        "gas_max_accel": self._gas_max_accel,
+        "gas_max_pedal": self._gas_max_pedal,
+        "brake_max_decel": self._brake_max_decel,
+        "brake_min_ttc": self._brake_min_ttc,
+        "tfollow_min_gap": self._tfollow_min_gap,
       },
     }
     self._params.put("CarrotLearningData", json.dumps(data).encode('utf8'))
@@ -392,14 +461,39 @@ class CarrotLearner:
       if current_raw <= 0: continue
 
       total_dec = self._gas_dec_acc[i] + self._gas_dec_auto_acc[i]
-      if acc_sec >= _GAS_THRESHOLD_SEC:
-        recommended_raw = min(250, int(current_raw * (1.0 + _GAS_RECOMMEND_RATIO)))
-        reason = "gas help (manual)"
-        sec = acc_sec
-      elif total_dec >= _GAS_REDUCE_THRESHOLD_SEC:
+      
+      # [상호 억제 로직: Accel Penalty Discount]
+      # 주행 중 브레이크 개입(수동+자동)이 많았다면, 가속이 굼떴던 느낌(gas help)보다
+      # 차량이 거칠어 브레이크를 밟은 상황(instability)이 우선이므로 가속 누적 신호를 깎아줍니다.
+      total_brake_events = self._brake_count + self._brake_auto_count
+      dampened_acc_sec = max(0.0, acc_sec - (total_brake_events * 2.5)) # 브레이크 1회당 가속 누적 2.5초 감쇄
+
+      # 자율 가감속 요동(Auto-Surging) 방지:
+      # 운전자가 페달을 밟지 않았어도 자율 급가속과 자율 급감속이 동시에 잦은 경우, 가속 한계치를 최우선적으로 낮춥니다.
+      is_auto_surging = (self._gas_dec_auto_acc[i] >= 3.0 and self._brake_auto_count >= 3)
+
+      # 오버라이드 중 기록된 피크 가속도 (m/s^2)
+      max_accel = self._gas_max_accel[i]
+      current_accel_limit = current_raw / 100.0
+      accel_deficit = max_accel - current_accel_limit
+
+      if dampened_acc_sec >= _GAS_THRESHOLD_SEC and not is_auto_surging:
+        # 피크 가속도 부족분에 비례하는 가변 증가율 적용 (최소 5%, 최대 25%)
+        if accel_deficit > 0.05:
+          dynamic_ratio = float(np.clip(accel_deficit / current_accel_limit * 0.8, 0.05, 0.25))
+        else:
+          dynamic_ratio = _GAS_RECOMMEND_RATIO # 기본 10%
+        recommended_raw = min(250, int(current_raw * (1.0 + dynamic_ratio)))
+        reason = f"gas help (deficit {accel_deficit:.2f}m/s^2, ratio {dynamic_ratio*100:.1f}%)"
+        sec = dampened_acc_sec
+      elif total_dec >= _GAS_REDUCE_THRESHOLD_SEC or (total_brake_events >= 8 and current_raw > 100) or is_auto_surging:
         recommended_raw = max(50, int(current_raw * (1.0 + _GAS_REDUCE_RATIO)))
-        reason = "aggressive accel (auto)" if self._gas_dec_auto_acc[i] > self._gas_dec_acc[i] else "too aggressive (manual)"
-        sec = total_dec
+        if is_auto_surging:
+          reason = "excessive auto-surging penalty"
+          sec = self._gas_dec_auto_acc[i] + self._brake_auto_count
+        else:
+          reason = "excessive braking penalty" if total_brake_events >= 8 else ("aggressive accel (auto)" if self._gas_dec_auto_acc[i] > self._gas_dec_acc[i] else "too aggressive (manual)")
+          sec = max(total_dec, total_brake_events)
       else:
         continue
 
@@ -418,7 +512,7 @@ class CarrotLearner:
         current_offset = self._params.get_int("PathOffset")
         # 양수 avg_deg: 차가 우측으로 쏠림 → PathOffset 증가 (경로를 우측으로)
         delta = int(avg_deg / _PATH_OFFSET_DEG_PER_UNIT)
-        recommended = int(np.clip(current_offset + delta, -200, 200))
+        recommended = int(np.clip(current_offset + delta, -150, 150))
         if recommended != current_offset:
           result["조향 (Steering)"]["PathOffset"] = {
             "current": current_offset,
@@ -461,13 +555,19 @@ class CarrotLearner:
     total_brake = self._brake_count + self._brake_auto_count
     if total_brake >= _BRAKE_MIN_COUNT:
       current_jlead = self._params.get_int("JLeadFactor3")
-      recommended = min(200, current_jlead + _JLEAD_STEP_UNIT)
+      
+      # TTC와 감속량을 반영한 동적 증가 계산
+      ttc_factor = float(np.clip((4.5 - self._brake_min_ttc) / 2.0, 0.0, 1.0))
+      decel_factor = float(np.clip((self._brake_max_decel - 0.8) / 1.0, 0.0, 1.0))
+      dynamic_step = int(10 + 25 * max(ttc_factor, decel_factor))
+      
+      recommended = min(100, current_jlead + dynamic_step)
       if recommended != current_jlead:
         reason = "late braking (auto)" if self._brake_auto_count > self._brake_count else "approaching lead (manual)"
         jlead_candidate = {
           "current": current_jlead,
           "recommended": recommended,
-          "band_kph": f"{reason}",
+          "band_kph": f"{reason} (TTC min {self._brake_min_ttc:.1f}s, step +{dynamic_step})",
           "brake_count": round(total_brake, 1),
           "_signal": total_brake,
         }
@@ -491,16 +591,35 @@ class CarrotLearner:
       if current_val <= 0: continue
 
       total_dec = self._tfollow_brake_acc[i] + self._tfollow_brake_auto_acc[i]
+      
+      recommended_val = current_val
       if gas_sec >= _TFOLLOW_GAS_THRESHOLD_SEC:
-        recommended_val = max(70, current_val + _TFOLLOW_STEP_UNIT)
-        reason = "too wide (manual gas)"
+        # 실제 차간 거리 오차에 기반한 동적 감소 계산
+        target_val = int(self._tfollow_min_gap[i] * 100)
+        gap_diff = current_val - target_val
+        if gap_diff > 10:
+          dynamic_step = float(np.clip(int(gap_diff * 0.5), 5, 25))
+        else:
+          dynamic_step = 5
+        recommended_val = max(70, current_val - int(dynamic_step))
+        reason = f"too wide (gap diff {gap_diff*0.01:.2f}s, step -{int(dynamic_step)})"
         sec = gas_sec
       elif total_dec >= _TFOLLOW_BRAKE_THRESHOLD_SEC:
-        recommended_val = min(200, current_val + _TFOLLOW_WIDEN_STEP)
-        reason = "hunting detected (auto)" if self._tfollow_brake_auto_acc[i] > self._tfollow_brake_acc[i] else "too short (manual brake)"
+        # 제동 급박도에 비례한 차간 거리 동적 증가
+        dynamic_step = int(5 + float(np.clip((4.0 - self._brake_min_ttc) * 5, 0, 10)))
+        recommended_val = min(200, current_val + dynamic_step)
+        reason = "hunting detected (auto)" if self._tfollow_brake_auto_acc[i] > self._tfollow_brake_acc[i] else f"too short (step +{dynamic_step})"
         sec = total_dec
       else:
         continue
+
+      if recommended_val != current_val:
+        result["거리 (Following Distance)"][key] = {
+          "current": current_val,
+          "recommended": recommended_val,
+          "band_kph": f"highway ≥{_TFOLLOW_MIN_V_KPH:.0f}km/h ({name}, {reason})",
+          "sec": round(sec, 1),
+        }
 
     # ── Phase 6: TFollowSpeedFactor (고속 차간 거리 보정) ───────────
     if self._tfollow_speed_brake_acc >= _TFOLLOW_BRAKE_THRESHOLD_SEC:
@@ -512,14 +631,6 @@ class CarrotLearner:
           "recommended": recommended_sf,
           "band_kph": "high-speed safety (>80km/h)",
           "sec": round(self._tfollow_speed_brake_acc, 1),
-        }
-
-      if recommended_val != current_val:
-        result["거리 (Following Distance)"][key] = {
-          "current": current_val,
-          "recommended": recommended_val,
-          "band_kph": f"highway ≥{_TFOLLOW_MIN_V_KPH:.0f}km/h ({name}, {reason})",
-          "sec": round(sec, 1),
         }
 
     # ── Phase 5a: DynamicTFollow (앞차 급감속 반응 민감도) ───────────
@@ -609,6 +720,317 @@ class CarrotLearner:
     self._tfollow_speed_brake_acc = 0.0
     self._dyn_brake_count = 0
     self._decel_brake_count = 0
+    self._prev_brake = False
+    self._prev_auto_brake = False
+
+    # v3 Override Intensity & Dynamics variables reset
+    self._gas_max_accel = [0.0] * _NUM_BANDS
+    self._gas_max_pedal = [0.0] * _NUM_BANDS
+    self._brake_max_decel = 0.0
+    self._brake_min_ttc = 999.0
+    self._tfollow_min_gap = [999.0] * 4
+
     self._params.remove("CarrotLearningData")
     self._params.remove("CarrotLearningRecommend")
     self._params.put_bool("CarrotLearningPopupReady", False)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Driving Style Profiler (DSP)
+# 수동 주행 데이터를 분석하여 오픈파일럿 종방향 파라미터 초기값을 추천.
+# CarrotLearner(engaged 전용)와 상호 독립적으로 작동.
+# ══════════════════════════════════════════════════════════════════════
+
+# DSP 상수
+_DSP_MIN_ACCEL_SAMPLES = 50       # 가속 프로파일 최소 샘플 수 (~5초)
+_DSP_MIN_FOLLOW_SAMPLES = 30     # 차간 거리 최소 안정 추종 샘플 수 (~3초)
+_DSP_MIN_BRAKE_EVENTS = 5        # 제동 시점 최소 이벤트 수
+_DSP_MIN_DRIVE_TIME_SEC = 600.0  # 최소 수동 주행 시간 (10분)
+_DSP_SAFETY_TF_MIN = 0.70        # TFollowGap 안전 하한선 (초)
+_DSP_SAFETY_TF_MAX = 2.50        # TFollowGap 안전 상한선 (초)
+_DSP_SAFETY_ACCEL_MAX = 250      # CruiseMaxVals 안전 상한 (2.50 m/s²)
+_DSP_SAFETY_ACCEL_MIN = 50       # CruiseMaxVals 안전 하한 (0.50 m/s²)
+_DSP_JLEAD_SAFETY_MULTIPLIER = 1.1  # 시스템 지연 보정 계수 (인간 0.2초 vs 시스템 0.5초)
+
+
+class DrivingStyleProfiler:
+  """수동 주행 성향 프로파일러 (Driving Style Profiler).
+
+  오픈파일럿 미인게이지 상태(수동 운전)에서의 가속/제동/차간거리
+  패턴을 수집하여 오픈파일럿 종방향 파라미터 초기값을 추천합니다.
+
+  CarrotLearner와 역할 분담:
+    - DSP: 초기값 설정 (Personalization, engaged=False)
+    - CarrotLearner: 지속적 미세 조정 (Error Correction, engaged=True)
+  """
+
+  def __init__(self):
+    self._params = Params()
+    self._active = False  # DSP 활성화 여부 (프로파일링 미완료 시 활성)
+
+    # ── 가속 프로파일 (속도 대역별) ──
+    self._accel_samples = [0] * _NUM_BANDS        # 샘플 수
+    self._accel_sum = [0.0] * _NUM_BANDS          # aEgo 합산
+    self._accel_max = [0.0] * _NUM_BANDS          # 대역별 최대 가속도
+
+    # ── 차간 거리 프로파일 (안정 추종 구간) ──
+    self._follow_samples = 0                      # 안정 추종 샘플 수
+    self._follow_time_sum = 0.0                    # 시간거리(dRel/vEgo) 합산
+    self._follow_stable_streak = 0                 # 연속 안정 추종 프레임 수
+    self._follow_speed_time_pairs = []             # (speed_kph, time_gap) 쌍 저장 (최대 500)
+
+    # ── 제동 프로파일 ──
+    self._brake_events = 0                         # 수동 제동 이벤트 수
+    self._brake_drel_sum = 0.0                     # 제동 시점 dRel 합산
+    self._brake_vrel_sum = 0.0                     # 제동 시점 vRel 합산
+
+    # ── 세션 관리 ──
+    self._manual_drive_time = 0.0                  # 수동 주행 누적 시간
+    self._prev_brake = False
+    self._has_manual_driven = False                # 수동 주행이 한 번이라도 있었는지
+
+    self._load()
+
+  def _is_active(self) -> bool:
+    """DSP가 아직 프로파일링이 완료되지 않았을 때만 활성화."""
+    return not self._params.get_bool("CarrotDSPComplete")
+
+  def _load(self):
+    """저장된 DSP 데이터 복원."""
+    raw = self._params.get("CarrotDSPData")
+    if not raw:
+      return
+    try:
+      data = json.loads(raw)
+      self._accel_samples = [int(x) for x in data.get("accel_samples", [0]*_NUM_BANDS)]
+      self._accel_sum = [float(x) for x in data.get("accel_sum", [0.0]*_NUM_BANDS)]
+      self._accel_max = [float(x) for x in data.get("accel_max", [0.0]*_NUM_BANDS)]
+      self._follow_samples = int(data.get("follow_samples", 0))
+      self._follow_time_sum = float(data.get("follow_time_sum", 0.0))
+      self._follow_speed_time_pairs = data.get("follow_speed_time_pairs", [])
+      self._brake_events = int(data.get("brake_events", 0))
+      self._brake_drel_sum = float(data.get("brake_drel_sum", 0.0))
+      self._brake_vrel_sum = float(data.get("brake_vrel_sum", 0.0))
+      self._manual_drive_time = float(data.get("manual_drive_time", 0.0))
+    except Exception:
+      pass
+
+  def _save(self):
+    """DSP 데이터를 Params에 저장."""
+    data = {
+      "accel_samples": self._accel_samples,
+      "accel_sum": self._accel_sum,
+      "accel_max": self._accel_max,
+      "follow_samples": self._follow_samples,
+      "follow_time_sum": self._follow_time_sum,
+      "follow_speed_time_pairs": self._follow_speed_time_pairs[-500:],  # 최대 500개 유지
+      "brake_events": self._brake_events,
+      "brake_drel_sum": self._brake_drel_sum,
+      "brake_vrel_sum": self._brake_vrel_sum,
+      "manual_drive_time": self._manual_drive_time,
+    }
+    self._params.put("CarrotDSPData", json.dumps(data).encode('utf8'))
+
+  def update(self, v_ego_kph: float, engaged: bool, gear_park: bool,
+             a_ego: float = 0.0, brake_pressed: bool = False,
+             lead_drel: float = 0.0, lead_v_kph: float = 0.0):
+    """매 프레임 호출 (carrot_functions.py에서).
+
+    engaged=False(수동 주행) 상태에서만 데이터를 수집합니다.
+    gear_park=True 시 추천을 계산합니다.
+    """
+    if not self._is_active():
+      return
+
+    # 주차 전환 시: 저장 → 추천 계산
+    if gear_park:
+      if self._has_manual_driven:
+        self._save()
+        self._calc_and_publish_recommendations()
+        self._has_manual_driven = False
+      return
+
+    # ── 수동 주행 데이터만 수집 (오픈파일럿 미인게이지) ──
+    if engaged:
+      return  # 인게이지 상태에서는 CarrotLearner가 담당
+
+    if v_ego_kph < 3.0:
+      self._prev_brake = brake_pressed
+      return  # 극저속은 의미 없음
+
+    self._has_manual_driven = True
+    self._manual_drive_time += 0.1  # ~DT_MDL (100ms)
+
+    # ── (A) 가속 프로파일 수집 ──
+    # 가속 페달을 밟고 있을 때(aEgo > 0.3)의 가속도를 속도 대역별로 기록
+    if a_ego > 0.3:
+      idx = _speed_band(v_ego_kph)
+      self._accel_samples[idx] += 1
+      self._accel_sum[idx] += a_ego
+      self._accel_max[idx] = max(self._accel_max[idx], a_ego)
+
+    # ── (B) 차간 거리 프로파일 수집 ──
+    # 선행차가 존재하고, 안정적 추종 중(가/감속 없이 일정 거리 유지)일 때
+    v_ego_ms = v_ego_kph / 3.6
+    if lead_drel > 5.0 and v_ego_ms > 3.0 and abs(a_ego) < 0.5:
+      time_gap = lead_drel / v_ego_ms
+      if 0.5 < time_gap < 4.0:  # 비정상적 값 필터링
+        self._follow_stable_streak += 1
+        if self._follow_stable_streak >= 10:  # 1초 이상 안정 추종
+          self._follow_samples += 1
+          self._follow_time_sum += time_gap
+          if len(self._follow_speed_time_pairs) < 500:
+            self._follow_speed_time_pairs.append([round(v_ego_kph, 1), round(time_gap, 3)])
+      else:
+        self._follow_stable_streak = 0
+    else:
+      self._follow_stable_streak = 0
+
+    # ── (C) 제동 프로파일 수집 ──
+    # 선행차가 가까울 때 브레이크를 밟는 시점의 거리와 상대속도를 기록
+    if brake_pressed and not self._prev_brake:
+      if lead_drel > 0 and lead_drel < 100.0:
+        self._brake_events += 1
+        self._brake_drel_sum += lead_drel
+        v_rel = v_ego_kph - lead_v_kph
+        self._brake_vrel_sum += max(0, v_rel)
+
+    self._prev_brake = brake_pressed
+
+  def _calc_and_publish_recommendations(self):
+    """수집된 수동 주행 데이터를 분석하여 초기 파라미터 추천을 생성."""
+    if self._manual_drive_time < _DSP_MIN_DRIVE_TIME_SEC:
+      return  # 최소 주행 시간 미달
+
+    result = {}
+
+    # ── (A) CruiseMaxVals 초기값 추천 ──
+    accel_recs = {}
+    for i in range(_NUM_BANDS):
+      if self._accel_samples[i] < _DSP_MIN_ACCEL_SAMPLES:
+        continue
+      avg_accel = self._accel_sum[i] / self._accel_samples[i]
+      max_accel = self._accel_max[i]
+      # 운전자의 평균 가속도와 최대 가속도를 모두 고려하여 크루즈 최고 가속도 한계를 설정
+      # OP의 최고 한계이므로 너무 답답하지 않게 평균값보다 훨씬 높게 설정합니다.
+      derived_accel = max(avg_accel * 1.5, max_accel * 0.85)
+      recommended_raw = int(np.clip(derived_accel * 100, _DSP_SAFETY_ACCEL_MIN, _DSP_SAFETY_ACCEL_MAX))
+      current_raw = self._params.get_int(_ACCEL_KEYS[i])
+      if current_raw <= 0:
+        continue
+      # 현재 값과 차이가 5% 이상일 때만 추천
+      if abs(recommended_raw - current_raw) >= current_raw * 0.05:
+        accel_recs[_ACCEL_KEYS[i]] = {
+          "current": current_raw,
+          "recommended": recommended_raw,
+          "band_kph": f"{_BP_KPH[i]}~{_BP_KPH[i+1] if i+1 < _NUM_BANDS else '∞'} km/h",
+          "avg_accel": round(avg_accel, 2),
+          "max_accel": round(self._accel_max[i], 2),
+          "samples": self._accel_samples[i],
+        }
+    if accel_recs:
+      result["🚀 가속 초기값 (Accel Profile)"] = accel_recs
+
+    # ── (B) TFollowGap 초기값 추천 ──
+    follow_recs = {}
+    if self._follow_samples >= _DSP_MIN_FOLLOW_SAMPLES:
+      avg_time_gap = self._follow_time_sum / self._follow_samples
+      # 기계가 유지하는 간격은 사람이 인지하는 것보다 멀게 느껴지므로 0.9를 곱해 보정
+      adjusted_time_gap = avg_time_gap * 0.9
+      # 안전 하한선 적용
+      safe_time_gap = max(_DSP_SAFETY_TF_MIN, min(_DSP_SAFETY_TF_MAX, adjusted_time_gap))
+      recommended_raw = int(safe_time_gap * 100)
+
+      # 현재 GAP2 (Standard) 기준으로 비교
+      current_gap2 = self._params.get_int("TFollowGap2")
+      if current_gap2 > 0 and abs(recommended_raw - current_gap2) >= 5:
+        follow_recs["TFollowGap2"] = {
+          "current": current_gap2,
+          "recommended": recommended_raw,
+          "band_kph": "Standard GAP (수동 주행 평균 차간 시간)",
+          "avg_time_gap": round(avg_time_gap, 2),
+          "samples": self._follow_samples,
+        }
+
+      # 나머지 GAP 레벨도 비례 조정
+      # GAP1 = 추천값 * 0.85, GAP3 = 추천값 * 1.12, GAP4 = 추천값 * 1.23
+      gap_ratios = {"TFollowGap1": 0.85, "TFollowGap3": 1.12, "TFollowGap4": 1.23}
+      for key, ratio in gap_ratios.items():
+        derived = int(np.clip(safe_time_gap * ratio * 100, _DSP_SAFETY_TF_MIN * 100, _DSP_SAFETY_TF_MAX * 100))
+        current = self._params.get_int(key)
+        if current > 0 and abs(derived - current) >= 5:
+          follow_recs[key] = {
+            "current": current,
+            "recommended": derived,
+            "band_kph": f"{key} (비례 조정, ratio={ratio})",
+            "avg_time_gap": round(safe_time_gap * ratio, 2),
+            "samples": self._follow_samples,
+          }
+
+    if follow_recs:
+      result["🛣️ 차간거리 초기값 (Follow Profile)"] = follow_recs
+
+    # ── (C) JLeadFactor3 초기값 추천 ──
+    if self._brake_events >= _DSP_BRAKE_EVENTS_MIN:
+      avg_brake_drel = self._brake_drel_sum / self._brake_events
+      # 운전자의 평균 제동 시작 거리 → JLeadFactor3 매핑
+      # 거리가 먼 운전자 = 조기 제동 선호 = 높은 JLeadFactor3
+      # 거리가 짧은 운전자 = 늦은 제동 선호 = 낮은 JLeadFactor3
+      # 선형 매핑: dRel 15m → 50, dRel 60m → 120
+      raw_factor = int(np.interp(avg_brake_drel, [15, 60], [50, 120]))
+      # 시스템 지연 보정 적용 (1.1배)
+      recommended_jlead = int(np.clip(raw_factor * _DSP_JLEAD_SAFETY_MULTIPLIER, 50, 200))
+      current_jlead = self._params.get_int("JLeadFactor3")
+      if current_jlead > 0 and abs(recommended_jlead - current_jlead) >= 10:
+        result["🚙 제동 시점 초기값 (Brake Profile)"] = {
+          "JLeadFactor3": {
+            "current": current_jlead,
+            "recommended": recommended_jlead,
+            "band_kph": f"평균 제동 시작 거리: {avg_brake_drel:.1f}m (시스템 지연 보정 x{_DSP_JLEAD_SAFETY_MULTIPLIER})",
+            "avg_brake_drel": round(avg_brake_drel, 1),
+            "brake_events": self._brake_events,
+          }
+        }
+
+    if not result:
+      return  # 추천할 항목 없음
+
+    # 추천 결과 저장 및 팝업 트리거
+    self._params.put("CarrotDSPRecommend", json.dumps(result).encode('utf8'))
+    self._params.put_bool("CarrotDSPPopupReady", True)
+
+  def apply_recommendations(self):
+    """UI [적용] 버튼 클릭 시 호출. 추천 적용 + 프로파일링 완료 마킹."""
+    raw = self._params.get("CarrotDSPRecommend")
+    if not raw:
+      return
+    try:
+      recommendations = json.loads(raw)
+    except Exception:
+      return
+    for group in recommendations:
+      for key in recommendations[group]:
+        info = recommendations[group][key]
+        self._params.put_int(key, info["recommended"])
+
+    # 프로파일링 완료 마킹 → 이후 DSP는 비활성화, CarrotLearner가 미세 조정
+    self._params.put_bool("CarrotDSPComplete", True)
+    self._params.remove("CarrotDSPData")
+    self._params.remove("CarrotDSPRecommend")
+    self._params.put_bool("CarrotDSPPopupReady", False)
+
+  def get_profile_progress(self) -> dict:
+    """현재 프로파일링 진행 상황을 반환 (UI 표시용)."""
+    total_min = self._manual_drive_time / 60.0
+    accel_ready = sum(1 for s in self._accel_samples if s >= _DSP_MIN_ACCEL_SAMPLES)
+    return {
+      "drive_time_min": round(total_min, 1),
+      "accel_bands_ready": f"{accel_ready}/{_NUM_BANDS}",
+      "follow_samples": self._follow_samples,
+      "brake_events": self._brake_events,
+      "is_ready": self._manual_drive_time >= _DSP_MIN_DRIVE_TIME_SEC,
+    }
+
+
+# _DSP_BRAKE_EVENTS_MIN: 별도 상수 정의 (상단의 Phase3 상수와 공유 불가)
+_DSP_BRAKE_EVENTS_MIN = 5

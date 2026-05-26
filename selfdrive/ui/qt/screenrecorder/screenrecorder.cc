@@ -9,6 +9,7 @@
 #include <mutex>
 
 #include "libyuv.h"
+#include "common/params.h"
 #include "common/clutil.h"
 
 #include "selfdrive/ui/qt/screenrecorder/screenrecorder.h"
@@ -20,6 +21,12 @@ static long long milliseconds(void) {
   struct timeval tv;
   gettimeofday(&tv, NULL);
   return (((long long)tv.tv_sec) * 1000) + (tv.tv_usec / 1000);
+}
+
+static void screenrecord_report_error(const char *stage, const char *detail) {
+  printf("[screenrecord] ERROR %s: %s\n", stage, detail);
+  fflush(stdout);
+  Params().put("CarrotException", "exception");
 }
 
 ScreenRecoder::ScreenRecoder(QWidget* parent) : QPushButton(parent), image_queue(30) {
@@ -49,6 +56,9 @@ ScreenRecoder::ScreenRecoder(QWidget* parent) : QPushButton(parent), image_queue
 
   rgb_buffer = std::make_unique<uint8_t[]>(src_width * src_height * 4);
   rgb_scale_buffer = std::make_unique<uint8_t[]>(dst_width * dst_height * 4);
+  printf("[screenrecord] init src=%dx%d dst=%dx%d fps=%d path=%s\n",
+         src_width, src_height, dst_width, dst_height, UI_FREQ, path.c_str());
+  fflush(stdout);
   encoder = std::make_unique<OmxEncoder>(path.c_str(), dst_width, dst_height, UI_FREQ, 2 * 1024 * 1024, false, false);
 }
 
@@ -142,6 +152,8 @@ void ScreenRecoder::start_locked() {
   rootWidget = widget;
 
   image_queue.clear();
+  printf("[screenrecord] start filename=%s root=%p dst=%dx%d\n", filename, rootWidget, dst_width, dst_height);
+  fflush(stdout);
   openEncoder(filename);
   recording.store(true);
 
@@ -161,6 +173,8 @@ void ScreenRecoder::stop_locked() {
 
   recording.store(false);
   update();
+  printf("[screenrecord] stop joining encoder thread\n");
+  fflush(stdout);
 
   if (encoding_thread.joinable()) {
     encoding_thread.join();
@@ -168,6 +182,8 @@ void ScreenRecoder::stop_locked() {
 
   image_queue.clear();
   closeEncoder();
+  printf("[screenrecord] stop complete\n");
+  fflush(stdout);
 }
 
 void ScreenRecoder::encoding_thread_func() {
@@ -202,7 +218,7 @@ void ScreenRecoder::encoding_thread_func() {
       }
     }
     catch (...) {
-      printf("Encoding failed, skipping frame\n");
+      screenrecord_report_error("encoding_thread", "Encoding failed, skipping frame");
       continue;
     }
   }
@@ -220,6 +236,10 @@ void ScreenRecoder::update_screen() {
 
       if (rootWidget != nullptr && recording.load()) {
         QPixmap pixmap = rootWidget->grab();
+        if (pixmap.isNull()) {
+          screenrecord_report_error("update_screen", "rootWidget->grab returned null pixmap");
+          return;
+        }
         if (recording.load()) {
           image_queue.push(pixmap.toImage());
         }

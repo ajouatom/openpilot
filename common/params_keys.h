@@ -129,6 +129,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"LongitudinalPersonalityMax", {PERSISTENT, INT, "3"}},
     {"NetworkAddress", {CLEAR_ON_MANAGER_START, STRING}},
     {"ScreenRecord", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL} },
+    {"TrafficLight", {CLEAR_ON_MANAGER_START, STRING} },
 
     {"ApiCache_NavDestinations", {PERSISTENT, STRING}},
     {"NavDestination", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, STRING}},
@@ -167,6 +168,13 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"CarrotLearningPopupReady", {PERSISTENT, BOOL, "0"}},     // Auto-Tuner: 팝업 신호
     {"CarrotLearningClear", {PERSISTENT, BOOL, "0"}},          // Auto-Tuner: 데이터 초기화 신호
     {"CarrotLearningHistory", {PERSISTENT, BYTES, ""}},        // Auto-Tuner: 튜닝 이력 (JSON)
+    {"CarrotDSPData", {PERSISTENT, BYTES, ""}},                // DSP: 수동 주행 프로파일 데이터 (JSON)
+    {"CarrotDSPRecommend", {PERSISTENT, BYTES, ""}},           // DSP: 초기값 추천 (JSON)
+    {"CarrotDSPPopupReady", {PERSISTENT, BOOL, "0"}},          // DSP: 팝업 신호
+    {"CarrotDSPComplete", {PERSISTENT, BOOL, "0"}},            // DSP: 프로파일링 완료 여부
+    {"ClusterHud", {PERSISTENT, INT, "0"}},
+    {"ClusterHudTheme", {PERSISTENT, INT, "0"}},
+    {"ClusterHudLiveFps", {PERSISTENT, INT, "0"}},
     {"RecordRoadCam", {PERSISTENT, INT, "0"}},
     {"HDPuse", {PERSISTENT, INT, "0"}},
 

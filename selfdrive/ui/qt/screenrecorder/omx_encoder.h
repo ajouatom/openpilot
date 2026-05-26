@@ -42,31 +42,31 @@ private:
   int counter = 0;
 
   std::string path;
-  FILE *of;
+  FILE *of = nullptr;
 
-  size_t codec_config_len;
+  size_t codec_config_len = 0;
   uint8_t *codec_config = NULL;
-  bool wrote_codec_config;
+  bool wrote_codec_config = false;
 
   std::mutex state_lock;
   std::condition_variable state_cv;
   OMX_STATETYPE state = OMX_StateLoaded;
 
-  OMX_HANDLETYPE handle;
+  OMX_HANDLETYPE handle = nullptr;
 
   std::vector<OMX_BUFFERHEADERTYPE *> in_buf_headers;
   std::vector<OMX_BUFFERHEADERTYPE *> out_buf_headers;
 
-  uint64_t last_t;
+  uint64_t last_t = 0;
 
   SafeQueue<OMX_BUFFERHEADERTYPE *> free_in;
   SafeQueue<OMX_BUFFERHEADERTYPE *> done_out;
 
-  AVFormatContext *ofmt_ctx;
-  AVCodecContext *codec_ctx;
-  AVStream *out_stream;
-  bool remuxing;
+  AVFormatContext *ofmt_ctx = nullptr;
+  AVCodecContext *codec_ctx = nullptr;
+  AVStream *out_stream = nullptr;
+  bool remuxing = false;
 
-  bool downscale;
-  uint8_t *y_ptr2, *u_ptr2, *v_ptr2;
+  bool downscale = false;
+  uint8_t *y_ptr2 = nullptr, *u_ptr2 = nullptr, *v_ptr2 = nullptr;
 };

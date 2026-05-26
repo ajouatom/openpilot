@@ -7,8 +7,11 @@
 #include <unistd.h>
 
 #include <cassert>
+#include <cerrno>
+#include <cstdarg>
 #include <cstdlib>
 #include <cstdio>
+#include <cstring>
 
 #include <OMX_Component.h>
 #include <OMX_IndexExt.h>
@@ -16,11 +19,25 @@
 #include <OMX_VideoExt.h>
 #include "libyuv.h"
 #include "msm_media_info.h"
+#include "common/params.h"
 #include "common/swaglog.h"
 #include "common/util.h"
 
 
 using namespace libyuv;
+
+static void screenrecord_report_error(const char *stage, const char *fmt, ...) {
+  char detail[1024];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(detail, sizeof(detail), fmt, args);
+  va_end(args);
+
+  printf("[screenrecord] ERROR %s: %s\n", stage, detail);
+  fflush(stdout);
+  LOGE("[screenrecord] ERROR %s: %s", stage, detail);
+  Params().put("CarrotException", "exception");
+}
 
 LIBYUV_API
 int ABGRToNV12(const uint8_t* src_abgr,
@@ -174,9 +191,13 @@ int ABGRToNV12(const uint8_t* src_abgr,
 }
 
 // Check the OMX error code and assert if an error occurred.
-#define OMX_CHECK(_expr)              \
-  do {                                \
-    assert(OMX_ErrorNone == (_expr)); \
+#define OMX_CHECK(_expr)                                                        \
+  do {                                                                          \
+    OMX_ERRORTYPE omx_check_err = (_expr);                                      \
+    if (omx_check_err != OMX_ErrorNone) {                                       \
+      screenrecord_report_error("OMX_CHECK", "%s failed: 0x%08x", #_expr, omx_check_err);\
+    }                                                                           \
+    assert(OMX_ErrorNone == omx_check_err);                                     \
   } while (0)
 
 extern ExitHandler do_exit;
@@ -200,6 +221,9 @@ OMX_ERRORTYPE OmxEncoder::event_handler(OMX_HANDLETYPE component, OMX_PTR app_da
                                    OMX_U32 data1, OMX_U32 data2, OMX_PTR event_data) {
   OmxEncoder *e = (OmxEncoder*)app_data;
   if (event == OMX_EventCmdComplete) {
+    if (data1 != OMX_CommandStateSet) {
+      screenrecord_report_error("event_handler", "unexpected command complete data1=0x%08x data2=0x%08x", data1, data2);
+    }
     assert(data1 == OMX_CommandStateSet);
     LOG("set state event 0x%x", data2);
     {
@@ -208,8 +232,10 @@ OMX_ERRORTYPE OmxEncoder::event_handler(OMX_HANDLETYPE component, OMX_PTR app_da
     }
     e->state_cv.notify_all();
   } else if (event == OMX_EventError) {
+    screenrecord_report_error("event_handler", "OMX error data1=0x%08x data2=0x%08x", data1, data2);
     LOGE("OMX error 0x%08x", data1);
   } else {
+    screenrecord_report_error("event_handler", "unhandled OMX event=%d data1=0x%08x data2=0x%08x", event, data1, data2);
     LOGE("OMX unhandled event %d", event);
     assert(false);
   }
@@ -326,6 +352,7 @@ OmxEncoder::OmxEncoder(const char* path, int width, int height, int fps, int bit
   auto component = (OMX_STRING)(h265 ? "OMX.qcom.video.encoder.hevc" : "OMX.qcom.video.encoder.avc");
   int err = OMX_GetHandle(&this->handle, component, this, &omx_callbacks);
   if (err != OMX_ErrorNone) {
+    screenrecord_report_error("constructor", "OMX_GetHandle(%s) failed: 0x%08x", component, err);
     LOGE("error getting codec: %x", err);
   }
   assert(err == OMX_ErrorNone);
@@ -485,9 +512,17 @@ void OmxEncoder::handle_out_buf(OmxEncoder *e, OMX_BUFFERHEADERTYPE *out_buf) {
 
   if (out_buf->nFlags & OMX_BUFFERFLAG_CODECCONFIG) {
     if (e->codec_config_len < out_buf->nFilledLen) {
-      e->codec_config = (uint8_t *)realloc(e->codec_config, out_buf->nFilledLen);
+      uint8_t *new_codec_config = (uint8_t *)realloc(e->codec_config, out_buf->nFilledLen);
+      if (new_codec_config == nullptr && out_buf->nFilledLen > 0) {
+        screenrecord_report_error("handle_out_buf", "realloc codec_config failed len=%u", out_buf->nFilledLen);
+        assert(new_codec_config != nullptr);
+      }
+      e->codec_config = new_codec_config;
     }
     e->codec_config_len = out_buf->nFilledLen;
+    printf("[screenrecord] codec config len=%zu flags=0x%08x timestamp=%lld\n",
+           e->codec_config_len, out_buf->nFlags, (long long)out_buf->nTimeStamp);
+    fflush(stdout);
     memcpy(e->codec_config, buf_data, out_buf->nFilledLen);
 #ifdef QCOM2
     out_buf->nTimeStamp = 0;
@@ -503,15 +538,27 @@ void OmxEncoder::handle_out_buf(OmxEncoder *e, OMX_BUFFERHEADERTYPE *out_buf) {
     if (!e->wrote_codec_config && e->codec_config_len > 0) {
       // extradata will be freed by av_free() in avcodec_free_context()
       e->codec_ctx->extradata = (uint8_t*)av_mallocz(e->codec_config_len + AV_INPUT_BUFFER_PADDING_SIZE);
+      if (e->codec_ctx->extradata == nullptr) {
+        screenrecord_report_error("handle_out_buf", "av_mallocz extradata failed len=%zu", e->codec_config_len);
+        assert(e->codec_ctx->extradata != nullptr);
+      }
       e->codec_ctx->extradata_size = e->codec_config_len;
       memcpy(e->codec_ctx->extradata, e->codec_config, e->codec_config_len);
 
       err = avcodec_parameters_from_context(e->out_stream->codecpar, e->codec_ctx);
+      if (err < 0) {
+        screenrecord_report_error("handle_out_buf", "avcodec_parameters_from_context failed: %d", err);
+      }
       assert(err >= 0);
       err = avformat_write_header(e->ofmt_ctx, NULL);
+      if (err < 0) {
+        screenrecord_report_error("handle_out_buf", "avformat_write_header failed: %d path=%s", err, e->vid_path);
+      }
       assert(err >= 0);
 
       e->wrote_codec_config = true;
+      printf("[screenrecord] mp4 header written path=%s\n", e->vid_path);
+      fflush(stdout);
     }
 
     if (out_buf->nTimeStamp > 0) {
@@ -532,7 +579,11 @@ void OmxEncoder::handle_out_buf(OmxEncoder *e, OMX_BUFFERHEADERTYPE *out_buf) {
       }
 
       err = av_write_frame(e->ofmt_ctx, &pkt);
-      if (err < 0) { LOGW("ts encoder write issue"); }
+      if (err < 0) {
+        printf("[screenrecord] WARN av_write_frame failed: %d path=%s\n", err, e->vid_path);
+        fflush(stdout);
+        LOGW("ts encoder write issue");
+      }
 
       av_free_packet(&pkt);
     }
@@ -595,6 +646,9 @@ int OmxEncoder::encode_frame_rgba(const uint8_t *ptr, int in_width, int in_heigh
                    in_y_ptr, in_y_stride,
                    in_uv_ptr, in_uv_stride,
                    this->width, this->height);
+  if (err != 0) {
+    screenrecord_report_error("encode_frame_rgba", "ABGRToNV12 failed: %d width=%d height=%d", err, this->width, this->height);
+  }
   assert(err == 0);
 
   // in_buf->nFilledLen = (this->width*this->height) + (this->width*this->height/2);
@@ -625,19 +679,33 @@ int OmxEncoder::encode_frame_rgba(const uint8_t *ptr, int in_width, int in_heigh
 void OmxEncoder::encoder_open(const char* filename) {
   int err;
 
+  this->dirty = false;
+  this->last_t = 0;
+  this->counter = 0;
+
   struct stat st = {0};
   if (stat(this->path.c_str(), &st) == -1) {
-    mkdir(this->path.c_str(), 0755);
+    if (mkdir(this->path.c_str(), 0755) == -1) {
+      screenrecord_report_error("encoder_open", "mkdir(%s) failed: errno=%d %s", this->path.c_str(), errno, strerror(errno));
+      assert(false);
+    }
   }
 
   snprintf(this->vid_path, sizeof(this->vid_path), "%s/%s", this->path.c_str(), filename);
   printf("encoder_open %s remuxing:%d\n", this->vid_path, this->remuxing);
+  fflush(stdout);
 
   if (this->remuxing) {
     avformat_alloc_output_context2(&this->ofmt_ctx, NULL, NULL, this->vid_path);
+    if (!this->ofmt_ctx) {
+      screenrecord_report_error("encoder_open", "avformat_alloc_output_context2 failed path=%s", this->vid_path);
+    }
     assert(this->ofmt_ctx);
 
     this->out_stream = avformat_new_stream(this->ofmt_ctx, NULL);
+    if (!this->out_stream) {
+      screenrecord_report_error("encoder_open", "avformat_new_stream failed path=%s", this->vid_path);
+    }
     assert(this->out_stream);
 
     // set codec correctly
@@ -645,9 +713,15 @@ void OmxEncoder::encoder_open(const char* filename) {
 
     AVCodec *codec = NULL;
     codec = avcodec_find_encoder(AV_CODEC_ID_H264);
+    if (!codec) {
+      screenrecord_report_error("encoder_open", "avcodec_find_encoder(H264) failed");
+    }
     assert(codec);
 
     this->codec_ctx = avcodec_alloc_context3(codec);
+    if (!this->codec_ctx) {
+      screenrecord_report_error("encoder_open", "avcodec_alloc_context3 failed");
+    }
     assert(this->codec_ctx);
     this->codec_ctx->width = this->width;
     this->codec_ctx->height = this->height;
@@ -655,11 +729,17 @@ void OmxEncoder::encoder_open(const char* filename) {
     this->codec_ctx->time_base = (AVRational){ 1, this->fps };
 
     err = avio_open(&this->ofmt_ctx->pb, this->vid_path, AVIO_FLAG_WRITE);
+    if (err < 0) {
+      screenrecord_report_error("encoder_open", "avio_open(%s) failed: %d", this->vid_path, err);
+    }
     assert(err >= 0);
 
     this->wrote_codec_config = false;
   } else {
     this->of = fopen(this->vid_path, "wb");
+    if (!this->of) {
+      screenrecord_report_error("encoder_open", "fopen(%s) failed: errno=%d %s", this->vid_path, errno, strerror(errno));
+    }
     assert(this->of);
 #ifndef QCOM2
     if (this->codec_config_len > 0) {
@@ -671,11 +751,13 @@ void OmxEncoder::encoder_open(const char* filename) {
   // create camera lock file
   snprintf(this->lock_path, sizeof(this->lock_path), "%s/%s.lock", this->path.c_str(), filename);
   int lock_fd = HANDLE_EINTR(open(this->lock_path, O_RDWR | O_CREAT, 0664));
+  if (lock_fd < 0) {
+    screenrecord_report_error("encoder_open", "open lock(%s) failed: errno=%d %s", this->lock_path, errno, strerror(errno));
+  }
   assert(lock_fd >= 0);
   close(lock_fd);
 
   this->is_open = true;
-  this->counter = 0;
 }
 
 void OmxEncoder::encoder_close() {
@@ -704,7 +786,18 @@ void OmxEncoder::encoder_close() {
     }
 
     if (this->remuxing) {
-      av_write_trailer(this->ofmt_ctx);
+      if (this->wrote_codec_config) {
+        int trailer_err = av_write_trailer(this->ofmt_ctx);
+        if (trailer_err < 0) {
+          screenrecord_report_error("encoder_close", "av_write_trailer(%s) failed: %d", this->vid_path, trailer_err);
+        } else {
+          printf("[screenrecord] mp4 trailer written path=%s\n", this->vid_path);
+          fflush(stdout);
+        }
+      } else {
+        printf("[screenrecord] closing before codec config/header path=%s\n", this->vid_path);
+        fflush(stdout);
+      }
       avcodec_free_context(&this->codec_ctx);
       avio_closep(&this->ofmt_ctx->pb);
       avformat_free_context(this->ofmt_ctx);

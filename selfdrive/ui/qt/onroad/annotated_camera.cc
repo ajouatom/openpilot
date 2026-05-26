@@ -205,7 +205,7 @@ void AnnotatedCameraWidget::paintEvent(QPaintEvent *event) {
 	LOGE("ui_nvg_draw failed: %s", e.what());
     print_stack_trace();
     Params params;
-    params.putBool("CarrotException", true);
+    params.put("CarrotException", "exception");
   }
   painter.endNativePainting();
   //dmon.draw(painter, rect());
