@@ -16,6 +16,7 @@ class CarState(CarStateBase):
 
     self.hands_on_level = 0
     self.das_control = None
+    self.coop_steering = True
 
   def update(self, can_parsers) -> structs.CarState:
     cp_party = can_parsers[Bus.party]
@@ -88,12 +89,12 @@ class CarState(CarStateBase):
     ret.steerFaultTemporary = eac_status == "EAC_INHIBITED"
     ret.vehicleSensorsInvalid = cp_ap_party.vl["SCCM_steeringAngleSensor"]["SCCM_steeringAngleValidity"] != 1
 
+
     # Cruise state
     cruise_state = self.can_define.dv["DI_state"]["DI_cruiseState"].get(int(cp_party.vl["DI_state"]["DI_cruiseState"]), None)
     speed_units_raw = int(cp_party.vl["DI_state"]["DI_speedUnits"])
     speed_units = self.can_define.dv["DI_state"]["DI_speedUnits"].get(speed_units_raw, speed_units_raw)
 
-    scale_speed = 1.01
     ret.cruiseState.enabled = cruise_state in ("ENABLED", "STANDSTILL", "OVERRIDE", "PRE_FAULT", "PRE_CANCEL")
     if speed_units in ("KPH", "DI_SPEED_KPH"):
       cruise_is_kph = True
@@ -104,16 +105,16 @@ class CarState(CarStateBase):
       cruise_is_kph = ui_is_kph
 
     ret.cruiseState.speedCluster = cp_party.vl["DI_state"]["DI_digitalSpeed"] * (CV.KPH_TO_MS if cruise_is_kph else CV.MPH_TO_MS)
-    ret.cruiseState.speed = max(ret.cruiseState.speedCluster / scale_speed, 1e-3)
+    ret.cruiseState.speed = max(ret.cruiseState.speedCluster, 1e-3)
     ret.cruiseState.available = cruise_state == "STANDBY" or ret.cruiseState.enabled
     ret.cruiseState.standstill = False  # This needs to be false, since we can resume from stop without sending anything special
     ret.standstill = cruise_state == "STANDSTILL"
     ret.accFaulted = cruise_state == "FAULT"
 
-    # DAS_fusedSpeedLimit is DBC-scaled to kph/mph (0=unknown, 31=none).
+    # DAS_fusedSpeedLimit from DBC is always in kph (scale=5). Do NOT apply ui_is_kph conversion.
     speed_limit = cp_ap_party.vl["DAS_status"]["DAS_fusedSpeedLimit"]
     if 0 < speed_limit <= 150:
-      ret.speedLimit = speed_limit if ui_is_kph else speed_limit * CV.MPH_TO_KPH
+      ret.speedLimit = speed_limit
 
     park_brake_state = self.can_define.dv["DI_state"]["DI_parkBrakeState"].get(int(cp_party.vl["DI_state"]["DI_parkBrakeState"]), None)
     vehicle_hold_state = self.can_define.dv["DI_state"]["DI_vehicleHoldState"].get(int(cp_party.vl["DI_state"]["DI_vehicleHoldState"]), None)
@@ -144,8 +145,7 @@ class CarState(CarStateBase):
     ret.stockAeb = cp_ap_party.vl["DAS_control"]["DAS_aebEvent"] == 1
     ret.stockFcw = cp_ap_party.vl["DAS_status"]["DAS_forwardCollisionWarning"] != 0
 
-    # Stock Autosteer should be off (includes FSD)
-    ret.invalidLkasSetting = cp_ap_party.vl["DAS_settings"]["DAS_autosteerEnabled"] != 0
+    # Model X and HW 2.5 vehicles are missing DAS_settings
 
     # Buttons # ToDo: add Gap adjust button
 
