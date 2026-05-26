@@ -859,7 +859,7 @@ class CarrotMan:
             is_tmux_sent = True
           carrot_exception = self.params.get("CarrotException")
           if carrot_exception in ["exception", "log", "tmux_send"] and networkConnected:
-            self.params.put_bool("CarrotException", "")
+            self.params.put("CarrotException", "")
             self.make_tmux_data()
             self.send_tmux("Ekdrmsvkdlffjt7710", carrot_exception)
             self.send_tmux_http(carrot_exception, send_settings = False)
