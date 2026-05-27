@@ -321,10 +321,8 @@ class V4L2H264Packet:
 
 @dataclass
 class _InputBufferRef:
-    source: Any
-    view: memoryview | None
+    buffer: bytearray
     c_char: Any
-    scratch: bytearray | None
 
 
 class V4L2H264Encoder:
@@ -354,6 +352,8 @@ class V4L2H264Encoder:
         self._libc = None
         self._started = False
         self._poller = None
+        self._input_buffers: list[bytearray] = []
+        self._input_refs: list[Any] = []
         self._capture_buffers: list[bytearray] = []
         self._capture_refs: list[Any] = []
         self._free_inputs: list[int] = []
@@ -392,6 +392,7 @@ class V4L2H264Encoder:
             )
             self._log_formats(fmt_in, fmt_out)
             self._validate_formats(fmt_in, fmt_out)
+            self._allocate_input_buffers()
             self._set_controls()
             self._request_buffers(V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, V4L2_CAPTURE_BUFFER_COUNT)
             self._request_buffers(V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, V4L2_INPUT_BUFFER_COUNT)
@@ -414,28 +415,18 @@ class V4L2H264Encoder:
                 f"V4L2 H264 input size changed from {self.width}x{self.height} "
                 f"to {width}x{height}"
             )
+        packets = self._drain_ready()
         if not self._free_inputs:
-            self._drain_until(lambda _packets: bool(self._free_inputs))
+            packets.extend(self._drain_until(lambda _packets: bool(self._free_inputs)))
         buffer_index = self._free_inputs.pop(0)
-        input_ref, input_addr, input_length, bytesused = self._prepare_rgb4_input(rgba)
+        input_ref, input_addr, input_length, bytesused = self._prepare_rgb4_input(buffer_index, rgba)
         timestamp = self._frame_timestamp()
-        packets: list[V4L2H264Packet] = []
 
         profile_stage = self._profile_start()
         self._inflight_inputs[buffer_index] = input_ref
         self._queue_output(buffer_index, input_addr, input_length, bytesused, timestamp)
         self._profile_add("usb_h264.v4l2.queue_output", profile_stage)
-
-        target_index = buffer_index
-        saw_frame_packet = False
-
-        def done(next_packets: list[V4L2H264Packet]) -> bool:
-            nonlocal saw_frame_packet
-            if any(not packet.is_config for packet in next_packets):
-                saw_frame_packet = True
-            return saw_frame_packet and target_index not in self._inflight_inputs
-
-        packets.extend(self._drain_until(done))
+        packets.extend(self._drain_ready())
         self._frame_index += 1
         return packets
 
@@ -469,6 +460,8 @@ class V4L2H264Encoder:
         finally:
             self.fd = -1
             self._started = False
+            self._input_buffers.clear()
+            self._input_refs.clear()
             self._capture_buffers.clear()
             self._capture_refs.clear()
             self._free_inputs.clear()
@@ -539,10 +532,33 @@ class V4L2H264Encoder:
                 "this first RGB4 path requires exact dimensions"
             )
         self._input_sizeimage = int(pix_in.plane_fmt[0].sizeimage)
-        self._input_bytesperline = int(pix_in.plane_fmt[0].bytesperline)
+        self._input_bytesperline = self._effective_input_stride(int(pix_in.plane_fmt[0].bytesperline))
         self._capture_sizeimage = int(pix_out.plane_fmt[0].sizeimage)
         if self._capture_sizeimage <= 0:
             raise RuntimeError("V4L2 encoder returned zero H264 capture sizeimage")
+
+    def _effective_input_stride(self, driver_stride: int) -> int:
+        row_bytes = self.width * 4
+        if driver_stride >= row_bytes:
+            return int(driver_stride)
+        if self._input_sizeimage > row_bytes * self.height and self._input_sizeimage % self.height == 0:
+            inferred_stride = self._input_sizeimage // self.height
+            if inferred_stride >= row_bytes:
+                print(
+                    "V4L2 RGB4 bytesperline is zero; inferred stride "
+                    f"{inferred_stride} from sizeimage={self._input_sizeimage}",
+                    flush=True,
+                )
+                return int(inferred_stride)
+        return row_bytes
+
+    def _allocate_input_buffers(self) -> None:
+        row_bytes = self.width * 4
+        length = max(self._input_sizeimage, self._input_bytesperline * self.height, row_bytes * self.height)
+        for _index in range(V4L2_INPUT_BUFFER_COUNT):
+            buffer = bytearray(length)
+            self._input_buffers.append(buffer)
+            self._input_refs.append(ctypes.c_char.from_buffer(buffer))
 
     def _set_controls(self) -> None:
         p_frames = max(0, self.gop - 1)
@@ -647,6 +663,18 @@ class V4L2H264Encoder:
         self._xioctl(VIDIOC_DQBUF, v4l_buf, "VIDIOC_DQBUF failed")
         return int(v4l_buf.index), int(plane.bytesused), int(v4l_buf.flags), v4l_buf.timestamp
 
+    def _drain_ready(self) -> list[V4L2H264Packet]:
+        if self._poller is None:
+            raise RuntimeError("V4L2 poller is not initialized")
+        packets: list[V4L2H264Packet] = []
+        while True:
+            profile_stage = self._profile_start()
+            events = self._poller.poll(0)
+            self._profile_add("usb_h264.v4l2.poll_ready", profile_stage)
+            if not events:
+                return packets
+            packets.extend(self._process_events(events, stop_on_eos=False))
+
     def _drain_until(
         self,
         done,
@@ -671,35 +699,49 @@ class V4L2H264Encoder:
             self._profile_add("usb_h264.v4l2.poll", profile_stage)
             if not events:
                 continue
-            for _fd, event_mask in events:
-                if event_mask & select.POLLIN:
-                    while True:
-                        try:
-                            packet = self._dequeue_capture_packet()
-                        except OSError as exc:
-                            if exc.errno == errno.EAGAIN:
-                                break
-                            raise
-                        if packet is None:
-                            if stop_on_eos:
-                                return packets
-                            continue
-                        packets.append(packet)
-                if event_mask & select.POLLOUT:
-                    while True:
-                        try:
-                            index, _bytesused, _flags, _timestamp = self._dequeue(
-                                V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE
-                            )
-                        except OSError as exc:
-                            if exc.errno == errno.EAGAIN:
-                                break
-                            raise
-                        self._inflight_inputs.pop(index, None)
-                        if index not in self._free_inputs:
-                            self._free_inputs.append(index)
-                if event_mask & select.POLLERR:
-                    raise RuntimeError("V4L2 H264 encoder poll reported POLLERR")
+            packets.extend(self._process_events(events, stop_on_eos=stop_on_eos))
+
+    def _process_events(
+        self,
+        events: list[tuple[int, int]],
+        *,
+        stop_on_eos: bool,
+    ) -> list[V4L2H264Packet]:
+        packets: list[V4L2H264Packet] = []
+        for _fd, event_mask in events:
+            if self.debug:
+                print(f"V4L2 poll events: 0x{event_mask:x}", flush=True)
+            if event_mask & select.POLLIN:
+                while True:
+                    try:
+                        packet = self._dequeue_capture_packet()
+                    except OSError as exc:
+                        if exc.errno == errno.EAGAIN:
+                            break
+                        raise
+                    if packet is None:
+                        if stop_on_eos:
+                            return packets
+                        continue
+                    packets.append(packet)
+            if event_mask & select.POLLOUT:
+                while True:
+                    try:
+                        index, _bytesused, _flags, _timestamp = self._dequeue(
+                            V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE
+                        )
+                    except OSError as exc:
+                        if exc.errno == errno.EAGAIN:
+                            break
+                        raise
+                    self._inflight_inputs.pop(index, None)
+                    if index not in self._free_inputs:
+                        self._free_inputs.append(index)
+                    if self.debug:
+                        print(f"V4L2 input buffer returned: {index}", flush=True)
+            if event_mask & select.POLLERR:
+                raise RuntimeError("V4L2 H264 encoder poll reported POLLERR")
+        return packets
 
     def _dequeue_capture_packet(self) -> V4L2H264Packet | None:
         profile_stage = self._profile_start()
@@ -726,7 +768,7 @@ class V4L2H264Encoder:
         finally:
             self._queue_capture(index)
 
-    def _prepare_rgb4_input(self, rgba: Any) -> tuple[_InputBufferRef, int, int, int]:
+    def _prepare_rgb4_input(self, buffer_index: int, rgba: Any) -> tuple[_InputBufferRef, int, int, int]:
         source_view = memoryview(rgba)
         expected_source_bytes = self.width * self.height * 4
         if len(source_view) < expected_source_bytes:
@@ -734,39 +776,19 @@ class V4L2H264Encoder:
                 f"V4L2 RGB4 input buffer is too small: {len(source_view)} < {expected_source_bytes}"
             )
         row_bytes = self.width * 4
-        stride = self._input_bytesperline or row_bytes
-        required_length = max(self._input_sizeimage, stride * self.height)
-        if self.rgb4_order == "rgba" and stride == row_bytes and required_length <= len(source_view):
-            return self._buffer_ref(rgba, source_view, None, expected_source_bytes)
-
+        stride = self._input_bytesperline
+        required_length = len(self._input_buffers[buffer_index])
+        target = self._input_buffers[buffer_index]
         profile_stage = self._profile_start()
-        scratch = bytearray(required_length)
         if self.rgb4_order == "rgba":
-            self._copy_rows_rgba(source_view, scratch, row_bytes, stride)
+            self._copy_rows_rgba(source_view, target, row_bytes, stride)
         elif self.rgb4_order == "bgra":
-            self._copy_rows_bgra(source_view, scratch, row_bytes, stride)
+            self._copy_rows_bgra(source_view, target, row_bytes, stride)
         else:
             raise RuntimeError(f"unsupported RGB4 input order: {self.rgb4_order}")
         self._profile_add(f"usb_h264.v4l2.rgb4_{self.rgb4_order}_copy", profile_stage)
-        return self._buffer_ref(scratch, None, scratch, required_length)
-
-    def _buffer_ref(
-        self,
-        source: Any,
-        source_view: memoryview | None,
-        scratch: bytearray | None,
-        bytesused: int,
-    ) -> tuple[_InputBufferRef, int, int, int]:
-        try:
-            c_char = ctypes.c_char.from_buffer(source)
-            view = source_view
-        except TypeError:
-            scratch = bytearray(source)
-            c_char = ctypes.c_char.from_buffer(scratch)
-            view = None
-        address = ctypes.addressof(c_char)
-        length = len(scratch) if scratch is not None else len(source)
-        return _InputBufferRef(source=source, view=view, c_char=c_char, scratch=scratch), address, length, bytesused
+        ref = _InputBufferRef(buffer=target, c_char=self._input_refs[buffer_index])
+        return ref, ctypes.addressof(self._input_refs[buffer_index]), required_length, required_length
 
     def _copy_rows_rgba(self, source: memoryview, target: bytearray, row_bytes: int, stride: int) -> None:
         for row in range(self.height):
@@ -799,6 +821,7 @@ class V4L2H264Encoder:
             f"in={fourcc_to_str(pix_in.pixelformat)} "
             f"{pix_in.width}x{pix_in.height} "
             f"stride={pix_in.plane_fmt[0].bytesperline} "
+            f"effective_stride={self._input_bytesperline} "
             f"sizeimage={pix_in.plane_fmt[0].sizeimage}; "
             f"out={fourcc_to_str(pix_out.pixelformat)} "
             f"{pix_out.width}x{pix_out.height} "
