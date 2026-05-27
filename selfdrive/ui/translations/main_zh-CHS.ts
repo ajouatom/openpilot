@@ -827,6 +827,18 @@
         <source>SELECT YOUR CAR</source>
         <translation>选择你的车型</translation>
     </message>
+    <message>
+        <source>Tuning history</source>
+        <translation>调参历史</translation>
+    </message>
+    <message>
+        <source>Auto-Tuner: Learning</source>
+        <translation>自动调参：学习</translation>
+    </message>
+    <message>
+        <source>Learn from driver interventions (gas/brake) and recommend parameter adjustments when parking. 0=Off, 1=On</source>
+        <translation>学习驾驶员的踏板干预习惯（油门/刹车），在挂P挡时推荐参数调整。0=关闭，1=开启</translation>
+    </message>
 </context>
 <context>
     <name>ConfirmationDialog</name>
@@ -2626,6 +2638,84 @@ This may take up to a minute.</source>
     <message>
         <source>Forget</source>
         <translation>忽略</translation>
+    </message>
+</context>
+<context>
+    <name>AutoTunerHistoryPanel</name>
+    <message>
+        <source>Auto-Tuner History Log v2</source>
+        <translation>自动调参历史记录</translation>
+    </message>
+    <message>
+        <source>Clear All</source>
+        <translation>清除所有记录</translation>
+    </message>
+    <message>
+        <source>No tuning history available</source>
+        <translation>暂无调参记录</translation>
+    </message>
+    <message>
+        <source>[%1 Applied]</source>
+        <translation>[已应用 %1 项]</translation>
+    </message>
+    <message>
+        <source>Restore</source>
+        <translation>还原</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>删除</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to restore the parameters to this state?</source>
+        <translation>确定要撤销此次调参并将所有参数还原至之前的状态吗？</translation>
+    </message>
+    <message>
+        <source>Restored to previous values successfully.</source>
+        <translation>已成功还原至之前的参数值。</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to delete this item?</source>
+        <translation>确定要删除此条记录吗？</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to delete all history? (This will not restore parameters to their previous values)</source>
+        <translation>确定要删除所有历史记录吗？（此操作不会将参数还原至之前的值）</translation>
+    </message>
+</context>
+<context>
+    <name>AutoTunerDialog</name>
+    <message>
+        <source>OK</source>
+        <translation>确认</translation>
+    </message>
+    <message>
+        <source>Guide</source>
+        <translation>使用说明</translation>
+    </message>
+    <message>
+        <source>Later</source>
+        <translation>稍后</translation>
+    </message>
+    <message>
+        <source>Reset</source>
+        <translation>重置</translation>
+    </message>
+    <message>
+        <source>Apply Selected</source>
+        <translation>应用所选</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to delete all learning data collected so far without applying it?</source>
+        <translation>确定要丢弃目前收集的所有学习数据而不应用吗？</translation>
+    </message>
+    <message>
+        <source>Auto-Tuner: Driving pattern learned!</source>
+        <translation>自动调参：已学习驾驶模式！</translation>
+    </message>
+    <message>
+        <source>🧬 DSP: Manual driving style analyzed! (Auto-Tuner will follow next)</source>
+        <translation>🧬 DSP：手动驾驶风格分析完成！（接下来将由自动调参接管）</translation>
     </message>
 </context>
 </TS>

@@ -1184,4 +1184,97 @@ This may take up to a minute.</source>
         <translation>清除</translation>
     </message>
 </context>
+<context>
+    <name>AutoTunerHistoryPanel</name>
+    <message>
+        <source>Auto-Tuner History Log v2</source>
+        <translation>自動調參歷史記錄</translation>
+    </message>
+    <message>
+        <source>Clear All</source>
+        <translation>清除所有記錄</translation>
+    </message>
+    <message>
+        <source>No tuning history available</source>
+        <translation>目前沒有調參記錄</translation>
+    </message>
+    <message>
+        <source>[%1 Applied]</source>
+        <translation>[已套用 %1 項]</translation>
+    </message>
+    <message>
+        <source>Restore</source>
+        <translation>還原</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>刪除</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to restore the parameters to this state?</source>
+        <translation>確定要撤銷此次調參並將所有參數還原至先前的狀態嗎？</translation>
+    </message>
+    <message>
+        <source>Restored to previous values successfully.</source>
+        <translation>已成功還原至先前的參數值。</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to delete this item?</source>
+        <translation>確定要刪除此筆記錄嗎？</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to delete all history? (This will not restore parameters to their previous values)</source>
+        <translation>確定要刪除所有歷史記錄嗎？（此操作不會將參數還原至先前的值）</translation>
+    </message>
+</context>
+<context>
+    <name>AutoTunerDialog</name>
+    <message>
+        <source>OK</source>
+        <translation>確認</translation>
+    </message>
+    <message>
+        <source>Guide</source>
+        <translation>使用說明</translation>
+    </message>
+    <message>
+        <source>Later</source>
+        <translation>稍後</translation>
+    </message>
+    <message>
+        <source>Reset</source>
+        <translation>重置</translation>
+    </message>
+    <message>
+        <source>Apply Selected</source>
+        <translation>套用所選</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to delete all learning data collected so far without applying it?</source>
+        <translation>確定要放棄目前收集的所有學習資料而不套用嗎？</translation>
+    </message>
+    <message>
+        <source>Auto-Tuner: Driving pattern learned!</source>
+        <translation>自動調參：已學習駕駛模式！</translation>
+    </message>
+    <message>
+        <source>🧬 DSP: Manual driving style analyzed! (Auto-Tuner will follow next)</source>
+        <translation>🧬 DSP：手動駕駛風格分析完成！（接下來將由自動調參接管）</translation>
+    </message>
+</context>
+<context>
+    <name>CarrotPanel</name>
+    <message>
+        <source>Tuning history</source>
+        <translation>調參記錄</translation>
+    </message>
+    <message>
+        <source>Auto-Tuner: Learning</source>
+        <translation>自動調參：學習</translation>
+    </message>
+    <message>
+        <source>Learn from driver interventions (gas/brake) and recommend parameter adjustments when parking. 0=Off, 1=On</source>
+        <translation>學習駕駛員的踏板干預習慣（油門/刹車），在掛P擋時推薦參數調整。0=關閉，1=開啟</translation>
+    </message>
+</context>
 </TS>

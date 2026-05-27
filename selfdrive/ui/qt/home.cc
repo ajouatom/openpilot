@@ -190,7 +190,55 @@ public:
 
     connect(btn_guide, &QPushButton::clicked, this, [=]() {
       QString guide_html;
-      if (QString::fromStdString(Params().get("LanguageSetting")) != "main_ko") {
+      QString lang = QString::fromStdString(Params().get("LanguageSetting"));
+      if (lang == "main_zh-CHS" || lang == "main_zh-CHT") {
+        guide_html = R"(
+        <div style='font-size: 45px;'>
+        <div style='text-align:center; font-size: 55px; font-weight: bold; margin-bottom: 20px;'>🥕 CarrotPilot 自动调参指南</div><hr>
+        <div style='font-size: 50px; font-weight: bold; margin-top: 20px; margin-bottom: 10px;'>📊 数据收集与应用方式</div>
+        <ul>
+        <li><b>行驶数据收集</b>：系统在后台实时记录驾驶数据，重点采集<b>踩油门超控</b>和<b>踩刹车干预</b>的时机。</li>
+        <li><b>模式分析</b>：分析当前设置与驾驶习惯之间的偏差，计算最优参数。</li>
+        <li><b>推荐与应用</b>：挂P挡时弹出推荐值，点击<b>[应用所选]</b>立即生效。（可在设置的<b>调参历史</b>中查看/删除记录）</li>
+        </ul><hr>
+        <div style='font-size: 50px; font-weight: bold; margin-top: 20px; margin-bottom: 10px;'>⚙️ 参数分组说明</div>
+        <b>🚀 [加速] (Acceleration)</b><br>
+        调整巡航加速能力。<br>
+        - <b>CruiseMaxVals0~6</b>：提高各速度段的加速上限，改善起步迟缓和加速无力的问题。<br>
+        <b>🚙 [行驶] (Driving)</b><br>
+        调整纵向（制动）控制能力。<br>
+        - <b>JLeadFactor3</b>：控制针对前车的制动起始时机，数值越高则越早开始平缓减速（范围50~200）。<br>
+        - <b>TFollowSpeedFactor</b>：车速超过80km/h时自动额外拉开跟车距离，提升高速行驶安全裕量。<br>
+        - <b>DynamicTFollow</b>：根据前车急加减速动态调整跟车间距。<br>
+        <b>🛣️ [跟车距离] (Following Distance)</b><br>
+        优化高速跟车距离。跟随前车行驶时若频繁踩油门，说明系统保持间距过大，将推荐降低对应GAP挡位的TFollowGap值。<br>
+        - <b>TFollowGap1~4</b>：各GAP挡位的跟车时距（秒×100），数值越小越近。<br>
+        <b>🎛️ [动态控制] (Dynamic Control)</b><br>
+        若多个制动参数同时触发，为防止叠加过补偿，本轮仅推荐事件数最多的1个，其余留至下次评估。<br>
+        - <b>DynamicTFollow</b>：前车急减速时若驾驶员多次踩刹车，系统将更快响应前车减速以拉开间距（0=关闭）。<br>
+        - <b>TFollowDecelBoost</b>：本车强制动时若多次触发刹车干预，系统将在减速时自动保持更大缓冲间距（默认10，范围0~100）。<br>
+        <b>🔄 [转向] (Steering)</b><br>
+        调整转向响应性。<br>
+        - <b>PathOffset / SteerActuatorDelay</b>：修正转向偏差与延迟。<br>
+        <hr>
+        <div style='font-size: 50px; font-weight: bold; margin-top: 20px; margin-bottom: 10px;'>🧠 自动驾驶模式自主检测</div>
+        即使驾驶员未踩踏板，系统也会持续监控自身控制质量：<br>
+        - <b>(auto) 制动过晚</b>：检测到系统在最后时刻急踩刹车时，推荐提高JLeadFactor3以提前平缓减速。<br>
+        - <b>(auto) 加速过猛</b>：系统相对前车加速过于粗暴时，推荐降低CruiseMaxVals。<br>
+        - <b>(auto) 速度振荡(Hunting)</b>：跟车过程中反复加减速、间距不稳定时，推荐加大跟车间距以稳定控制。<br>
+        <hr>
+        <div style='font-size: 50px; font-weight: bold; margin-top: 20px; margin-bottom: 10px;'>⚖️ 加速-制动相互抑制</div>
+        - 防止"越加速越急刹"的恶性循环。<br>
+        - 即使油门踩踏频繁，<b>刹车干预过多时将屏蔽CruiseMaxVals的提升推荐</b>。<br>
+        - 自动驾驶中检测到系统自主急加速后急刹车（Auto-Surging）时，即使驾驶员未干预，也将优先推荐<b>降低</b>CruiseMaxVals（excessive auto-surging penalty），强制恢复平顺驾驶。<br>
+        <hr>
+        <div style='font-size: 50px; font-weight: bold; margin-top: 20px; margin-bottom: 10px;'>🧬 手动驾驶风格分析器 (DSP)</div>
+        - 在首次激活openpilot前，自动采集手动驾驶中的<b>加速风格、跟车距离习惯、制动时机</b>。<br>
+        - 约10分钟手动驾驶后，为CruiseMaxVals、TFollowGap、JLeadFactor3推荐<b>个性化初始值</b>。<br>
+        - 应用后DSP完成，此后由Auto-Tuner基于自动驾驶数据持续微调。
+        </div>
+        )";
+      } else if (lang != "main_ko") {
         guide_html = R"(
         <div style='font-size: 45px;'>
         <div style='text-align:center; font-size: 55px; font-weight: bold; margin-bottom: 20px;'>🥕 CarrotPilot Auto-Tuner Guide</div><hr>
