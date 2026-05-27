@@ -27,6 +27,9 @@ V_EGO_STATIONARY = 4.   # no stationary object flag below this speed
 RADAR_TO_CENTER = 2.7   # (deprecated) RADAR is ~ 2.7m ahead from center of car
 RADAR_TO_CAMERA = 1.52  # RADAR is ~ 1.5m ahead from center of mesh frame
 
+STICKY_SELECTED_COUNT_MAX = int(2.0 / DT_MDL)
+STICKY_MAX_DPATH = 0.8
+
 
 def laplacian_pdf(x: float, mu: float, b: float):
   diff = abs(x - mu) / max(b, 1e-4)
@@ -50,7 +53,20 @@ class Track:
     self.in_lane_prob = 0.0
     self.in_lane_prob_future = 0.0
 
+    self.dRel = 0.0
+    self.yRel = 0.0
+    self.vRel = 0.0
+    self.vLead = 0.0
+    self.vLeadK = 0.0
+    self.aLead = 0.0
+    self.aLeadK = 0.0
+    self.jLead = 0.0
+    self.yvLead = 0.0
+    self.dRel_future = 0.0
+    self.yRel_future = 0.0
+    self.dPath_future = 0.0
     self.dPath = 0.0
+    self.sticky_dPath = 0.0
 
     # ---- noise filter state (new) ----
     self._vLead_last = 0.0
@@ -58,6 +74,11 @@ class Track:
     self._vLead_filt_init = False
 
   def update(self, md, pt, ready, radar_reaction_factor, radar_lat_factor):
+    prev_measured = self.measured
+    prev_dRel = self.dRel
+    prev_yRel = self.yRel
+    prev_vLead = self.vLead
+
     self.dRel = pt.dRel
     self.yRel = pt.yRel
     self.vRel = pt.vRel
@@ -70,13 +91,27 @@ class Track:
     self.measured = pt.measured
     if not self.measured:
       self.cnt = 0
+      self.selected_count = 0
+      self.is_stopped_car_count = 0
       # optional: also reset filter init when track is not measured
       self._vLead_filt_init = False
+    elif prev_measured and self.selected_count > 0:
+      if (abs(self.dRel - prev_dRel) > 5.0 or
+          abs(self.yRel - prev_yRel) > 2.0 or
+          abs(self.vLead - prev_vLead) > 7.0):
+        self.selected_count = 0
+        self.is_stopped_car_count = 0
 
     self.yRel_future = self.yRel + self.yvLead * radar_lat_factor
     self.dRel_future = self.dRel + self.vLead * radar_lat_factor
     if ready:
       self.d_path(md)
+      if self.selected_count > 0:
+        self.sticky_dPath = self.path_d_path(md)
+
+      if self.selected_count > 0 and abs(self.sticky_dPath) > STICKY_MAX_DPATH:
+        self.selected_count = 0
+        self.is_stopped_car_count = 0
 
     a_lead_threshold = 0.5 * radar_reaction_factor
     if abs(self.aLead) < a_lead_threshold and abs(self.jLead) < 0.5:
@@ -102,6 +137,9 @@ class Track:
 
     self.dPath, self.in_lane_prob = d_path_interp(self.dRel, self.yRel)
     self.dPath_future, self.in_lane_prob_future = d_path_interp(self.dRel_future, self.yRel_future)
+
+  def path_d_path(self, md) -> float:
+    return float(self.yRel + np.interp(self.dRel, md.position.x, md.position.y))
 
   # ---- noise suppression only when cnt>=2 ----
   def vlead_for_matching(self, dv_max: float = 4.0, alpha: float = 0.35) -> float:
@@ -159,7 +197,8 @@ class Track:
     return f"x: {self.dRel:4.1f}  y: {self.yRel:4.1f}  v: {self.vRel:4.1f}  a: {self.aLeadK:4.1f}"
 
 
-def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, lead_prob: float, tracks: dict[int, Track]):
+def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, lead_prob: float,
+                          tracks: dict[int, Track], update_counters: bool = True):
   if not tracks:
     return None
 
@@ -263,7 +302,7 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, lead_p
     if second_track is not None and vel_sane(second_track) and second_track.in_lane_prob > 0.3:
       if second_track.cnt > 5 and offset_vision_dist * 0.5 < second_track.dRel < first_track.dRel:
         select_second_track = True
-        
+
     if select_second_track:
       best_track = second_track
     elif y_sane(first_track):
@@ -302,12 +341,13 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, lead_p
       best_track = second_track
 
   # ---- update counters ----
-  for t in tracks.values():
-    if t is best_track and best_track is not None:
-      t.selected_count += 1
-    else:
-      t.selected_count = 0
-      t.is_stopped_car_count = max(0, t.is_stopped_car_count - 1)
+  if update_counters:
+    for t in tracks.values():
+      if t is best_track and best_track is not None:
+        t.selected_count = min(t.selected_count + 1, STICKY_SELECTED_COUNT_MAX)
+      elif best_track is not None:
+        t.selected_count = 0
+        t.is_stopped_car_count = max(0, t.is_stopped_car_count - 1)
 
   return best_track
 
@@ -507,7 +547,7 @@ class RadarD:
     valid_ids = set()
     for pt in rr.points:
       track_id = pt.trackId
-      valid_ids.add(track_id)      
+      valid_ids.add(track_id)
 
       if track_id not in self.tracks:
         self.tracks[track_id] = Track(track_id)
@@ -557,7 +597,7 @@ class RadarD:
           self.lead_prob_filters[i].x = lead_prob
         else:
           self.lead_prob_filters[i].update(lead_prob)
-          
+
       md = sm['modelV2']
       if model_updated:
         if self.radar_detected:
@@ -585,6 +625,22 @@ class RadarD:
     radar_msg.radarState = self.radar_state
     pm.send("radarState", radar_msg)
 
+  def get_sticky_track(self, tracks: dict[int, Track]) -> Track | None:
+    sticky_tracks = []
+    for t in tracks.values():
+      if t.selected_count > 0 and abs(t.sticky_dPath) > STICKY_MAX_DPATH:
+        t.selected_count = 0
+        t.is_stopped_car_count = 0
+        continue
+
+      if t.measured and t.cnt > 2 and t.selected_count > 0 and 1.0 < t.dRel < 150.0:
+        sticky_tracks.append(t)
+
+    if not sticky_tracks:
+      return None
+
+    return max(sticky_tracks, key=lambda t: (t.selected_count, -t.dRel))
+
   def get_lead(self, CS, md, tracks: dict[int, Track], index: int, lead_msg: capnp._DynamicStructReader,
                model_v_ego: float, lead_prob: float, low_speed_override: bool = True) -> dict[str, Any]:
 
@@ -599,14 +655,21 @@ class RadarD:
 
     # Determine leads, this is where the essential logic happens
     if len(tracks) > 0 and ready and lead_prob > .4:
-      track = match_vision_to_track(v_ego, lead_msg, lead_prob, tracks)
+      track = match_vision_to_track(v_ego, lead_msg, lead_prob, tracks, update_counters=(index == 0))
     else:
       track = None
 
-    if (track is None or lead_prob < .6) and track_scc is not None and track_scc.cnt > 2:
+    sticky_track = False
+    if track is None and index == 0:
+      track = self.get_sticky_track(tracks)
+      if track is not None:
+        sticky_track = True
+        track.selected_count = min(track.selected_count + 1, STICKY_SELECTED_COUNT_MAX)
+
+    if (track is None or (lead_prob < .6 and not sticky_track)) and track_scc is not None and track_scc.cnt > 2:
       #if self.enable_radar_tracks in [-1, 2] or model_v_ego < 5 or track_scc.vLead < 5.0:
       if self.enable_radar_tracks == -1 or (self.enable_radar_tracks >= 2 and track_scc.vLead < 5.0):
-        track = track_scc      
+        track = track_scc
 
     lead_dict = {'status': False}
     radar = False
@@ -642,7 +705,7 @@ class RadarD:
       self.radar_state.leadLeft = {'status': False}
       self.radar_state.leadRight = {'status': False}
       return
-    
+
     left_list, right_list, center_list, cutin_list = [], [], [], []
     for c in tracks.values():
       y_rel_neg = - c.yRel
@@ -693,7 +756,7 @@ class RadarD:
         key=lambda d: d['dRel'],
         default={'status': False}
     )
-   
+
     self.leadTwo = None
     if self.lane_line_available:
       self.leadCenter = min(
@@ -792,7 +855,7 @@ class RadarD:
       self._corner_state[side] = 0    # maintain
 
     return self._corner_state[side]
- 
+
   def corner_radar(self, CS, lead_dict):
     ENTER_LAT = 2.2
     KEEP_LAT  = 2.0
@@ -834,7 +897,7 @@ class RadarD:
       lat_dist, long_dist = +left_lat, CS.leftLongDist
     else:
       lat_dist, long_dist = -right_lat, CS.rightLongDist
-    
+
     if lead_dict['status']:
       if lead_dict['dRel'] > long_dist:
         lead_dict['dRel'] = long_dist
