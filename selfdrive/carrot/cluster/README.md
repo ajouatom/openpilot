@@ -16,6 +16,7 @@ Useful options:
 python selfdrive/carrot/cluster_run.py --output window --width 1920 --height 480
 python selfdrive/carrot/cluster_run.py --output usb --live-no-can
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec jpeg --usb-jpeg-quality 68
+python selfdrive/carrot/cluster_run.py --output usb --input route --route route --route-overlay off --usb-codec h264 --usb-h264-encoder auto --usb-h264-bitrate 6M --usb-h264-fps 30 --profile-render
 python selfdrive/carrot/cluster_run.py --output usb --fps 10 --usb-jpeg-quality 55 --route-overlay off
 python selfdrive/carrot/cluster_run.py --output usb --profile-render --profile-interval 2
 ```
@@ -24,6 +25,12 @@ python selfdrive/carrot/cluster_run.py --output usb --profile-render --profile-i
 Pillow. Route replay defaults to `--route-overlay compact`, which shows the
 right-side qcamera/debug panel. Use `--route-overlay off` for performance tests
 that should match live rendering cost more closely.
+
+`--usb-codec h264` is an experimental replay/live CLI path. It feeds portrait
+RGBA frames to ffmpeg and streams H264 chunks to the TURZX panel; encoder `auto`
+prefers `h264_v4l2m2m` for comma 4 hardware video encoding when available, then
+falls back to `h264_omx` or `libx264`. When `--fps` is omitted, H264 USB runs
+use `--usb-h264-fps 30` as the render cap.
 
 Manager autostart omits `--fps` by default so live launches follow
 `ClusterHudLiveFps` setting changes while running. Set `CLUSTER_AUTORUN_FPS`

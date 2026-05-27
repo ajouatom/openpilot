@@ -23,6 +23,7 @@ from cluster_config import (
 )
 from cluster_gamepad import DualSenseSimulator
 from cluster_git_status import GitBranchStatusProvider
+from cluster_h264_pipeline import H264UsbPipeline
 from cluster_live import OpenpilotLiveSource
 from cluster_models import RouteOverlay, SimulatorInput
 from cluster_profile import GcProfileHook, ProfileReporter, freeze_gc_after_init
@@ -181,6 +182,12 @@ def run_demo(
     usb_fast_write: bool,
     usb_wait_frame_ack: bool,
     usb_async: bool,
+    usb_h264_encoder: str,
+    usb_h264_bitrate: str,
+    usb_h264_fps: int,
+    usb_h264_gop: int,
+    usb_h264_ffmpeg: str,
+    usb_h264_chunk_size: int,
     usb_frame_drain_attempts: int,
     usb_frame_drain_timeout_ms: int,
     usb_fast_drain_attempts: int,
@@ -220,6 +227,7 @@ def run_demo(
 
     usb_display: TuringUsbDisplay | None = None
     usb_pipeline: AsyncJpegUsbPipeline | None = None
+    h264_pipeline: H264UsbPipeline | None = None
     active_brightness_setting = normalize_cluster_brightness_percent(usb_brightness)
     usb_brightness_auto_enabled = usb_brightness_param_reader is not None
     initial_usb_brightness = resolved_usb_brightness(
@@ -303,6 +311,24 @@ def run_demo(
         renderer.open(hidden=output_mode == "usb")
         profile.add_samples(renderer.profile_samples())
         renderer.clear_profile_samples()
+        if usb_display is not None and usb_codec == "h264":
+            h264_encoder_fps = max(1, int(round(target_fps if target_fps > 0 else usb_h264_fps)))
+            h264_pipeline = H264UsbPipeline(
+                usb_display,
+                frame_height,
+                frame_width,
+                h264_encoder_fps,
+                usb_h264_encoder,
+                usb_h264_bitrate,
+                usb_h264_gop,
+                usb_h264_ffmpeg,
+                usb_h264_chunk_size,
+            )
+            profile_stage = time.perf_counter()
+            h264_pipeline.start()
+            profile.add_elapsed("usb_h264.start", profile_stage)
+            profile.add_samples(usb_display.profile_samples())
+            usb_display.clear_profile_samples()
         if gc_freeze_init:
             freeze_gc_after_init(profile)
         while True:
@@ -315,6 +341,9 @@ def run_demo(
             if usb_pipeline is not None:
                 usb_pipeline.check_error()
                 profile.add_samples(usb_pipeline.profile_samples())
+            if h264_pipeline is not None:
+                h264_pipeline.check_error()
+                profile.add_samples(h264_pipeline.profile_samples())
             if output_mode in ("window", "both") and renderer.should_close():
                 break
 
@@ -456,6 +485,20 @@ def run_demo(
                         profile_stage = time.perf_counter()
                         usb_display.send_jpeg(jpeg)
                         profile.add_elapsed("main.usb.send_jpeg", profile_stage)
+                elif usb_codec == "h264":
+                    if h264_pipeline is None:
+                        raise RuntimeError("H264 USB pipeline is not available")
+                    profile_stage = time.perf_counter()
+                    with renderer.render_to_rgba_buffer(state, portrait_upload=True) as (
+                        rgba,
+                        image_width,
+                        image_height,
+                    ):
+                        profile.add_elapsed("main.usb.render_rgba_total", profile_stage)
+
+                        profile_stage = time.perf_counter()
+                        h264_pipeline.submit_rgba(rgba, image_width, image_height)
+                        profile.add_elapsed("main.usb_h264.submit_rgba", profile_stage)
                 else:
                     profile_stage = time.perf_counter()
                     png = renderer.render_to_png_bytes(state, portrait_upload=True)
@@ -465,6 +508,9 @@ def run_demo(
                     profile.add_elapsed("main.usb.send_png", profile_stage)
                 if usb_pipeline is not None:
                     profile.add_samples(usb_pipeline.profile_samples())
+                elif h264_pipeline is not None:
+                    profile.add_samples(h264_pipeline.profile_samples())
+                    profile.add_samples(usb_display.profile_samples())
                 else:
                     profile.add_samples(usb_display.profile_samples())
             profile.add_samples(renderer.profile_samples())
@@ -512,6 +558,8 @@ def run_demo(
                 gc.callbacks.remove(gc_hook)
             except ValueError:
                 pass
+        if h264_pipeline is not None:
+            h264_pipeline.close()
         if usb_pipeline is not None:
             usb_pipeline.close()
         if controller is not None:
@@ -577,7 +625,7 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="Optional TURZX display frame-rate command. Default 0 skips it because some units do not ACK it.",
     )
-    parser.add_argument("--usb-codec", choices=("jpeg", "png"), default="jpeg")
+    parser.add_argument("--usb-codec", choices=("jpeg", "png", "h264"), default="jpeg")
     parser.add_argument("--usb-jpeg-quality", type=int, default=68)
     parser.add_argument(
         "--usb-jpeg-encoder",
@@ -599,6 +647,39 @@ def parse_args() -> argparse.Namespace:
         "--usb-async",
         action="store_true",
         help="Encode and send JPEG USB frames on a background thread to overlap transport with the next render.",
+    )
+    parser.add_argument(
+        "--usb-h264-encoder",
+        default="auto",
+        help="FFmpeg H264 encoder for --usb-codec h264. auto prefers h264_v4l2m2m, then h264_omx, then libx264.",
+    )
+    parser.add_argument(
+        "--usb-h264-bitrate",
+        default="6M",
+        help="Target H264 bitrate for --usb-codec h264. Default: 6M.",
+    )
+    parser.add_argument(
+        "--usb-h264-fps",
+        type=int,
+        default=30,
+        help="H264 encoder input FPS. Also caps H264 USB runs when --fps is omitted. Default: 30.",
+    )
+    parser.add_argument(
+        "--usb-h264-gop",
+        type=int,
+        default=30,
+        help="H264 keyframe interval in frames. Default: 30.",
+    )
+    parser.add_argument(
+        "--usb-h264-ffmpeg",
+        default="ffmpeg",
+        help="ffmpeg executable path/name for --usb-codec h264. Default: ffmpeg.",
+    )
+    parser.add_argument(
+        "--usb-h264-chunk-size",
+        type=int,
+        default=0,
+        help="Override TURZX H264 chunk size in bytes. Default 0 negotiates with the device.",
     )
     parser.add_argument(
         "--usb-frame-drain-attempts",
@@ -721,6 +802,14 @@ def parse_args() -> argparse.Namespace:
         parser.error("--usb-jpeg-quality must be between 1 and 95")
     if args.usb_async and args.usb_codec != "jpeg":
         parser.error("--usb-async only supports --usb-codec jpeg")
+    if args.usb_h264_fps <= 0:
+        parser.error("--usb-h264-fps must be greater than 0")
+    if args.usb_h264_gop <= 0:
+        parser.error("--usb-h264-gop must be greater than 0")
+    if args.usb_h264_chunk_size < 0:
+        parser.error("--usb-h264-chunk-size must be 0 or greater")
+    if not args.usb_h264_bitrate:
+        parser.error("--usb-h264-bitrate must not be empty")
     if args.usb_frame_drain_attempts < 0 or args.usb_fast_drain_attempts < 0:
         parser.error("USB drain attempts must be 0 or greater")
     if args.usb_frame_drain_timeout_ms < 0 or args.usb_fast_drain_timeout_ms < 0:
@@ -745,6 +834,9 @@ def main() -> None:
         live_fps_param_reader = ClusterLiveFpsParamReader()
         target_fps = live_fps_param_reader.read()
         fps_source = CLUSTER_LIVE_FPS_PARAM
+    if args.output in ("usb", "both") and args.usb_codec == "h264" and not args.fps_from_cli:
+        target_fps = float(args.usb_h264_fps)
+        fps_source = "--usb-h264-fps"
     brightness_param_reader = None
     if args.usb_brightness_from_cli:
         usb_brightness = normalize_cluster_brightness_percent(args.usb_brightness)
@@ -763,6 +855,7 @@ def main() -> None:
     print(
         f"Refreshing native raylib cluster UI at {fps_text} "
         f"input={args.input} output={args.output}: {size_text} "
+        f"usb_codec={args.usb_codec} "
         f"fps_source={fps_source} brightness={brightness_text} brightness_source={brightness_source}"
     )
     try:
@@ -784,6 +877,12 @@ def main() -> None:
             args.usb_fast,
             args.usb_wait_frame_ack,
             args.usb_async,
+            args.usb_h264_encoder,
+            args.usb_h264_bitrate,
+            args.usb_h264_fps,
+            args.usb_h264_gop,
+            args.usb_h264_ffmpeg,
+            args.usb_h264_chunk_size,
             args.usb_frame_drain_attempts,
             args.usb_frame_drain_timeout_ms,
             args.usb_fast_drain_attempts,
