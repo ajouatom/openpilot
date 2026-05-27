@@ -9,6 +9,7 @@ import threading
 import time
 from typing import Any
 
+from cluster_h264_v4l2 import DEFAULT_V4L2_ENCODER_DEVICE, V4L2H264Encoder
 from cluster_usb_display import TuringUsbDisplay
 
 
@@ -26,11 +27,15 @@ class H264UsbPipeline:
         requested_chunk_size: int,
         wait_for_ack: bool,
         debug: bool,
+        backend: str = "ffmpeg",
+        rgb4_order: str = "rgba",
     ) -> None:
         self.usb_display = usb_display
         self.width = int(width)
         self.height = int(height)
         self.fps = max(1, int(fps))
+        self.backend_request = backend
+        self.backend_name = backend
         self.encoder_request = encoder
         self.encoder_name = encoder
         self.output_muxer_name = "auto"
@@ -40,9 +45,11 @@ class H264UsbPipeline:
         self.requested_chunk_size = max(0, int(requested_chunk_size))
         self.wait_for_ack = wait_for_ack
         self.debug = debug
+        self.rgb4_order = rgb4_order
         self.chunk_size = 0
         self._chunks_sent = 0
         self._proc: subprocess.Popen[bytes] | None = None
+        self._v4l2_encoder: V4L2H264Encoder | None = None
         self._stdout_thread: threading.Thread | None = None
         self._stderr_thread: threading.Thread | None = None
         self._condition = threading.Condition()
@@ -53,6 +60,58 @@ class H264UsbPipeline:
         self._stderr_tail: deque[str] = deque(maxlen=20)
 
     def start(self) -> None:
+        if self.backend_request == "auto":
+            if Path(DEFAULT_V4L2_ENCODER_DEVICE).exists():
+                try:
+                    self._start_v4l2()
+                    return
+                except Exception as exc:
+                    print(f"Warning: V4L2 RGB4 H264 backend failed, falling back to ffmpeg: {exc}", flush=True)
+                    self._v4l2_encoder = None
+                    if self._stream_started:
+                        try:
+                            self.usb_display.stop_h264_stream()
+                        except Exception:
+                            pass
+                        self._stream_started = False
+            self.backend_name = "ffmpeg"
+        elif self.backend_request == "v4l2-rgb4":
+            self._start_v4l2()
+            return
+
+        self._start_ffmpeg()
+
+    def _start_v4l2(self) -> None:
+        self.backend_name = "v4l2-rgb4"
+        encoder = V4L2H264Encoder(
+            self.width,
+            self.height,
+            self.fps,
+            self.bitrate,
+            self.gop,
+            rgb4_order=self.rgb4_order,
+            debug=self.debug,
+        )
+        profile_stage = time.perf_counter()
+        encoder.start()
+        self._add_sample("usb_h264.v4l2.start", profile_stage)
+        try:
+            self.chunk_size = self.usb_display.start_h264_stream(self.requested_chunk_size)
+            self._stream_started = True
+        except Exception:
+            encoder.close()
+            raise
+        self._v4l2_encoder = encoder
+        print(
+            "Starting H264 USB encoder: "
+            f"v4l2-rgb4 {self.width}x{self.height}@{self.fps} "
+            f"bitrate={self.bitrate} gop={self.gop} rgb4_order={self.rgb4_order} "
+            f"chunk_ack={'on' if self.wait_for_ack else 'off'}",
+            flush=True,
+        )
+
+    def _start_ffmpeg(self) -> None:
+        self.backend_name = "ffmpeg"
         ffmpeg = self._ffmpeg_executable()
         self.encoder_name = self._resolve_encoder(ffmpeg)
         self.output_muxer_name = self._resolve_output_muxer(ffmpeg)
@@ -103,6 +162,15 @@ class H264UsbPipeline:
             )
         if self._closing:
             raise RuntimeError("H264 USB pipeline is closing")
+        if self._v4l2_encoder is not None:
+            profile_stage = time.perf_counter()
+            packets = self._v4l2_encoder.encode_rgba(rgba, width, height)
+            self._add_sample("usb_h264.v4l2.encode_rgba", profile_stage)
+            self._add_samples(self._v4l2_encoder.profile_samples())
+            for packet in packets:
+                self._send_h264_bytes(packet.data, source="v4l2")
+            return
+
         proc = self._proc
         if proc is None or proc.stdin is None:
             raise RuntimeError("H264 USB pipeline is not started")
@@ -142,6 +210,12 @@ class H264UsbPipeline:
         with self._condition:
             self._closing = True
             self._condition.notify_all()
+
+        if self._v4l2_encoder is not None:
+            try:
+                self._v4l2_encoder.close()
+            finally:
+                self._v4l2_encoder = None
 
         proc = self._proc
         if proc is not None:
@@ -354,6 +428,28 @@ class H264UsbPipeline:
         milliseconds = (time.perf_counter() - start_time) * 1000.0
         with self._condition:
             self._samples.append((name, milliseconds))
+
+    def _add_samples(self, samples: tuple[tuple[str, float], ...]) -> None:
+        if not samples:
+            return
+        with self._condition:
+            self._samples.extend(samples)
+
+    def _send_h264_bytes(self, data: bytes, *, source: str) -> None:
+        chunk_size = max(1, self.chunk_size)
+        for offset in range(0, len(data), chunk_size):
+            chunk = data[offset : offset + chunk_size]
+            self._chunks_sent += 1
+            if self.debug and (self._chunks_sent <= 5 or self._chunks_sent % 30 == 0):
+                head = " ".join(f"{byte:02X}" for byte in chunk[:8])
+                print(
+                    f"H264 chunk {self._chunks_sent}: {source} {len(chunk)} bytes "
+                    f"head={head} ack={'on' if self.wait_for_ack else 'off'}",
+                    flush=True,
+                )
+            profile_stage = time.perf_counter()
+            self.usb_display.send_h264_chunk(chunk, wait_for_ack=self.wait_for_ack)
+            self._add_sample("usb_h264.send_chunk", profile_stage)
 
     def _set_error(self, error: BaseException) -> None:
         with self._condition:

@@ -164,6 +164,18 @@ def resolved_usb_brightness(
     return DEFAULT_USB_BRIGHTNESS
 
 
+def build_rgba_color_test_pattern(width: int, height: int) -> bytearray:
+    half_width = max(1, width // 2)
+    half_height = max(1, height // 2)
+    red = bytes((255, 0, 0, 255))
+    green = bytes((0, 255, 0, 255))
+    blue = bytes((0, 0, 255, 255))
+    white = bytes((255, 255, 255, 255))
+    top_row = red * half_width + green * (width - half_width)
+    bottom_row = blue * half_width + white * (width - half_width)
+    return bytearray(top_row * half_height + bottom_row * (height - half_height))
+
+
 def run_demo(
     duration_seconds: float | None,
     target_fps: float,
@@ -190,6 +202,9 @@ def run_demo(
     usb_h264_chunk_size: int,
     usb_h264_wait_ack: bool,
     usb_h264_debug: bool,
+    usb_h264_backend: str,
+    usb_h264_rgb4_order: str,
+    usb_h264_test_pattern: bool,
     usb_frame_drain_attempts: int,
     usb_frame_drain_timeout_ms: int,
     usb_fast_drain_attempts: int,
@@ -308,6 +323,7 @@ def run_demo(
     next_hud_mode_param_read = start_time + HUD_MODE_PARAM_POLL_SECONDS
     report_frames = 0
     frame_interval = 1.0 / target_fps if target_fps > 0 else 0.0
+    h264_test_pattern_rgba: bytearray | None = None
 
     try:
         renderer.open(hidden=output_mode == "usb")
@@ -327,12 +343,24 @@ def run_demo(
                 usb_h264_chunk_size,
                 usb_h264_wait_ack,
                 usb_h264_debug,
+                usb_h264_backend,
+                usb_h264_rgb4_order,
             )
             profile_stage = time.perf_counter()
             h264_pipeline.start()
             profile.add_elapsed("usb_h264.start", profile_stage)
             profile.add_samples(usb_display.profile_samples())
             usb_display.clear_profile_samples()
+            if usb_h264_test_pattern:
+                h264_test_pattern_rgba = build_rgba_color_test_pattern(
+                    h264_pipeline.width,
+                    h264_pipeline.height,
+                )
+                print(
+                    f"Using H264 RGBA color test pattern: "
+                    f"{h264_pipeline.width}x{h264_pipeline.height}",
+                    flush=True,
+                )
         if gc_freeze_init:
             freeze_gc_after_init(profile)
         while True:
@@ -492,17 +520,26 @@ def run_demo(
                 elif usb_codec == "h264":
                     if h264_pipeline is None:
                         raise RuntimeError("H264 USB pipeline is not available")
-                    profile_stage = time.perf_counter()
-                    with renderer.render_to_rgba_buffer(state, portrait_upload=True) as (
-                        rgba,
-                        image_width,
-                        image_height,
-                    ):
-                        profile.add_elapsed("main.usb.render_rgba_total", profile_stage)
-
+                    if h264_test_pattern_rgba is None:
                         profile_stage = time.perf_counter()
-                        h264_pipeline.submit_rgba(rgba, image_width, image_height)
-                        profile.add_elapsed("main.usb_h264.submit_rgba", profile_stage)
+                        with renderer.render_to_rgba_buffer(state, portrait_upload=True) as (
+                            rgba,
+                            image_width,
+                            image_height,
+                        ):
+                            profile.add_elapsed("main.usb.render_rgba_total", profile_stage)
+
+                            profile_stage = time.perf_counter()
+                            h264_pipeline.submit_rgba(rgba, image_width, image_height)
+                            profile.add_elapsed("main.usb_h264.submit_rgba", profile_stage)
+                    else:
+                        profile_stage = time.perf_counter()
+                        h264_pipeline.submit_rgba(
+                            h264_test_pattern_rgba,
+                            h264_pipeline.width,
+                            h264_pipeline.height,
+                        )
+                        profile.add_elapsed("main.usb_h264.submit_test_pattern", profile_stage)
                 else:
                     profile_stage = time.perf_counter()
                     png = renderer.render_to_png_bytes(state, portrait_upload=True)
@@ -688,12 +725,40 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--usb-h264-no-ack",
         action="store_true",
-        help="Send TURZX H264 chunks without waiting for a response after each chunk.",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--usb-h264-wait-ack",
+        action="store_true",
+        help="Wait for a TURZX response after each H264 chunk. Default skips ACK like JPEG frame uploads.",
     )
     parser.add_argument(
         "--usb-h264-debug",
         action="store_true",
         help="Print ffmpeg command and first H264 chunk sizes/headers for USB H264 debugging.",
+    )
+    parser.add_argument(
+        "--usb-h264-backend",
+        choices=("ffmpeg", "v4l2-rgb4", "auto"),
+        default="ffmpeg",
+        help=(
+            "H264 encoder backend. ffmpeg preserves the existing process path; "
+            "v4l2-rgb4 uses the Qualcomm V4L2 encoder with RGB4 input."
+        ),
+    )
+    parser.add_argument(
+        "--usb-h264-rgb4-order",
+        choices=("rgba", "bgra"),
+        default="rgba",
+        help=(
+            "Byte order to queue into V4L2 RGB4. rgba is direct raylib readback; "
+            "bgra swaps red/blue for little-endian A/XRGB panels/drivers."
+        ),
+    )
+    parser.add_argument(
+        "--usb-h264-test-pattern",
+        action="store_true",
+        help="Feed a red/green/blue/white RGBA quadrant pattern into the H264 path.",
     )
     parser.add_argument(
         "--usb-frame-drain-attempts",
@@ -869,7 +934,8 @@ def main() -> None:
     print(
         f"Refreshing native raylib cluster UI at {fps_text} "
         f"input={args.input} output={args.output}: {size_text} "
-        f"usb_codec={args.usb_codec} "
+        f"usb_codec={args.usb_codec}"
+        f"{('/' + args.usb_h264_backend) if args.usb_codec == 'h264' else ''} "
         f"fps_source={fps_source} brightness={brightness_text} brightness_source={brightness_source}"
     )
     try:
@@ -897,8 +963,11 @@ def main() -> None:
             args.usb_h264_gop,
             args.usb_h264_ffmpeg,
             args.usb_h264_chunk_size,
-            not args.usb_h264_no_ack,
+            args.usb_h264_wait_ack and not args.usb_h264_no_ack,
             args.usb_h264_debug,
+            args.usb_h264_backend,
+            args.usb_h264_rgb4_order,
+            args.usb_h264_test_pattern,
             args.usb_frame_drain_attempts,
             args.usb_frame_drain_timeout_ms,
             args.usb_fast_drain_attempts,

@@ -17,6 +17,8 @@ python selfdrive/carrot/cluster_run.py --output window --width 1920 --height 480
 python selfdrive/carrot/cluster_run.py --output usb --live-no-can
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec jpeg --usb-jpeg-quality 68
 python selfdrive/carrot/cluster_run.py --output usb --input route --route route --route-overlay off --usb-codec h264 --usb-h264-encoder auto --usb-h264-bitrate 6M --usb-h264-fps 30 --profile-render
+python selfdrive/carrot/cluster_run.py --output usb --input route --route route --route-overlay off --usb-codec h264 --usb-h264-backend v4l2-rgb4 --usb-h264-rgb4-order rgba --usb-h264-bitrate 6M --usb-h264-fps 30 --profile-render
+python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-backend v4l2-rgb4 --usb-h264-test-pattern --duration 20 --fps 10
 python selfdrive/carrot/cluster_run.py --output usb --fps 10 --usb-jpeg-quality 55 --route-overlay off
 python selfdrive/carrot/cluster_run.py --output usb --profile-render --profile-interval 2
 ```
@@ -26,14 +28,21 @@ Pillow. Route replay defaults to `--route-overlay compact`, which shows the
 right-side qcamera/debug panel. Use `--route-overlay off` for performance tests
 that should match live rendering cost more closely.
 
-`--usb-codec h264` is an experimental replay/live CLI path. It feeds portrait
-RGBA frames to ffmpeg and streams H264 chunks to the TURZX panel; encoder `auto`
-prefers `h264_v4l2m2m` for comma 4 hardware video encoding when available, then
-falls back to `h264_omx` or `libx264`. When `--fps` is omitted, H264 USB runs
-use `--usb-h264-fps 30` as the render cap. The ffmpeg stdout muxer is selected
-automatically: raw `h264` when available, otherwise `rawvideo` for comma builds
-that omit the `h264` muxer. `--usb-h264-no-ack` tests panels that do not return
-per-chunk stream responses, and `--usb-h264-debug` prints early chunk details.
+`--usb-codec h264` is an experimental replay/live CLI path. The default backend
+feeds portrait RGBA frames to ffmpeg and streams H264 chunks to the TURZX panel;
+encoder `auto` prefers `h264_v4l2m2m` when available, then falls back to
+`h264_omx` or `libx264`. The current comma ffmpeg build reports only `libx264`,
+so that default path uses CPU.
+
+`--usb-h264-backend v4l2-rgb4` bypasses ffmpeg and queues the raylib RGBA
+readback into the Qualcomm V4L2 encoder as RGB4 before sending H264 chunks to
+TURZX. It logs the driver-returned RGB4/H264 formats, stride, and `sizeimage`
+after `VIDIOC_S_FMT`. Use `--usb-h264-test-pattern` to check red/green/blue/white
+quadrants on the panel; if red and blue are swapped, retry with
+`--usb-h264-rgb4-order bgra`. When `--fps` is omitted, H264 USB runs use
+`--usb-h264-fps 30` as the render cap. H264 chunks are no-ACK by default like
+JPEG frame uploads; use `--usb-h264-wait-ack` only for panels known to reply,
+and `--usb-h264-debug` to print early chunk details.
 
 Manager autostart omits `--fps` by default so live launches follow
 `ClusterHudLiveFps` setting changes while running. Set `CLUSTER_AUTORUN_FPS`
