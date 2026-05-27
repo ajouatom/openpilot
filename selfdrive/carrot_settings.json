@@ -2302,7 +2302,7 @@
       "cdescr": "0: 自动\n1-100: 亮度",
       "min": 0,
       "max": 100,
-      "default": 0,
+      "default": 60,
       "unit": 1
     },
     {
@@ -2334,7 +2334,7 @@
       "cdescr": "0: 不限制\n1: 10 FPS\n2: 20 FPS\n3: 30 FPS",
       "min": 0,
       "max": 3,
-      "default": 0,
+      "default": 1,
       "unit": 1
     },
     {
