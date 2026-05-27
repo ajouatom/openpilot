@@ -188,6 +188,8 @@ def run_demo(
     usb_h264_gop: int,
     usb_h264_ffmpeg: str,
     usb_h264_chunk_size: int,
+    usb_h264_wait_ack: bool,
+    usb_h264_debug: bool,
     usb_frame_drain_attempts: int,
     usb_frame_drain_timeout_ms: int,
     usb_fast_drain_attempts: int,
@@ -323,6 +325,8 @@ def run_demo(
                 usb_h264_gop,
                 usb_h264_ffmpeg,
                 usb_h264_chunk_size,
+                usb_h264_wait_ack,
+                usb_h264_debug,
             )
             profile_stage = time.perf_counter()
             h264_pipeline.start()
@@ -682,6 +686,16 @@ def parse_args() -> argparse.Namespace:
         help="Override TURZX H264 chunk size in bytes. Default 0 negotiates with the device.",
     )
     parser.add_argument(
+        "--usb-h264-no-ack",
+        action="store_true",
+        help="Send TURZX H264 chunks without waiting for a response after each chunk.",
+    )
+    parser.add_argument(
+        "--usb-h264-debug",
+        action="store_true",
+        help="Print ffmpeg command and first H264 chunk sizes/headers for USB H264 debugging.",
+    )
+    parser.add_argument(
         "--usb-frame-drain-attempts",
         type=int,
         default=2,
@@ -883,6 +897,8 @@ def main() -> None:
             args.usb_h264_gop,
             args.usb_h264_ffmpeg,
             args.usb_h264_chunk_size,
+            not args.usb_h264_no_ack,
+            args.usb_h264_debug,
             args.usb_frame_drain_attempts,
             args.usb_frame_drain_timeout_ms,
             args.usb_fast_drain_attempts,

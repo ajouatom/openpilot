@@ -24,6 +24,8 @@ class H264UsbPipeline:
         gop: int,
         ffmpeg_path: str,
         requested_chunk_size: int,
+        wait_for_ack: bool,
+        debug: bool,
     ) -> None:
         self.usb_display = usb_display
         self.width = int(width)
@@ -36,7 +38,10 @@ class H264UsbPipeline:
         self.gop = max(1, int(gop))
         self.ffmpeg_path = ffmpeg_path
         self.requested_chunk_size = max(0, int(requested_chunk_size))
+        self.wait_for_ack = wait_for_ack
+        self.debug = debug
         self.chunk_size = 0
+        self._chunks_sent = 0
         self._proc: subprocess.Popen[bytes] | None = None
         self._stdout_thread: threading.Thread | None = None
         self._stderr_thread: threading.Thread | None = None
@@ -57,9 +62,12 @@ class H264UsbPipeline:
         print(
             "Starting H264 USB encoder: "
             f"{self.encoder_name} {self.width}x{self.height}@{self.fps} "
-            f"bitrate={self.bitrate} muxer={self.output_muxer_name}",
+            f"bitrate={self.bitrate} muxer={self.output_muxer_name} "
+            f"chunk_ack={'on' if self.wait_for_ack else 'off'}",
             flush=True,
         )
+        if self.debug:
+            print(f"H264 ffmpeg command: {' '.join(command)}", flush=True)
         try:
             self._proc = subprocess.Popen(
                 command,
@@ -122,7 +130,7 @@ class H264UsbPipeline:
             error = self._error
             closing = self._closing
         if error is not None:
-            raise RuntimeError(self._error_text("H264 USB pipeline failed")) from error
+            raise RuntimeError(self._error_text("H264 USB pipeline failed", error)) from error
 
         proc = self._proc
         if proc is not None and not closing:
@@ -169,6 +177,8 @@ class H264UsbPipeline:
             return self.encoder_request
 
         encoders = self._available_encoders(ffmpeg)
+        h264_encoders = sorted(name for name in encoders if "264" in name)
+        print(f"ffmpeg H264 encoders visible: {', '.join(h264_encoders) or 'none'}", flush=True)
         for candidate in ("h264_v4l2m2m", "h264_omx", "libx264"):
             if candidate in encoders:
                 return candidate
@@ -176,6 +186,9 @@ class H264UsbPipeline:
 
     def _resolve_output_muxer(self, ffmpeg: str) -> str:
         muxers = self._available_muxers(ffmpeg)
+        if self.debug:
+            h264_muxers = sorted(name for name in muxers if name in ("h264", "rawvideo"))
+            print(f"ffmpeg H264 stdout muxers visible: {', '.join(h264_muxers) or 'none'}", flush=True)
         for candidate in ("h264", "rawvideo"):
             if candidate in muxers:
                 return candidate
@@ -298,13 +311,26 @@ class H264UsbPipeline:
                 chunk = os.read(fd, chunk_size)
                 if not chunk:
                     return
+                self._chunks_sent += 1
+                if self.debug and (self._chunks_sent <= 5 or self._chunks_sent % 30 == 0):
+                    head = " ".join(f"{byte:02X}" for byte in chunk[:8])
+                    print(
+                        f"H264 chunk {self._chunks_sent}: {len(chunk)} bytes "
+                        f"head={head} ack={'on' if self.wait_for_ack else 'off'}",
+                        flush=True,
+                    )
                 profile_stage = time.perf_counter()
-                self.usb_display.send_h264_chunk(chunk)
+                self.usb_display.send_h264_chunk(chunk, wait_for_ack=self.wait_for_ack)
                 self._add_sample("usb_h264.send_chunk", profile_stage)
         except BaseException as exc:
             with self._condition:
                 if not self._closing:
                     self._error = exc
+                    print(
+                        f"H264 USB stdout worker failed after {self._chunks_sent} chunks: "
+                        f"{type(exc).__name__}: {exc}",
+                        flush=True,
+                    )
                 self._condition.notify_all()
 
     def _read_stderr(self) -> None:
@@ -334,9 +360,12 @@ class H264UsbPipeline:
             self._error = error
             self._condition.notify_all()
 
-    def _error_text(self, message: str) -> str:
+    def _error_text(self, message: str, error: BaseException | None = None) -> str:
+        parts = [message]
+        if error is not None:
+            parts.append(f"cause: {type(error).__name__}: {error}")
         with self._condition:
             tail = "\n".join(self._stderr_tail)
         if tail:
-            return f"{message}\nffmpeg stderr tail:\n{tail}"
-        return message
+            parts.append(f"ffmpeg stderr tail:\n{tail}")
+        return "\n".join(parts)

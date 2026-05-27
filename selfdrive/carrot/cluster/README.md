@@ -32,7 +32,8 @@ prefers `h264_v4l2m2m` for comma 4 hardware video encoding when available, then
 falls back to `h264_omx` or `libx264`. When `--fps` is omitted, H264 USB runs
 use `--usb-h264-fps 30` as the render cap. The ffmpeg stdout muxer is selected
 automatically: raw `h264` when available, otherwise `rawvideo` for comma builds
-that omit the `h264` muxer.
+that omit the `h264` muxer. `--usb-h264-no-ack` tests panels that do not return
+per-chunk stream responses, and `--usb-h264-debug` prints early chunk details.
 
 Manager autostart omits `--fps` by default so live launches follow
 `ClusterHudLiveFps` setting changes while running. Set `CLUSTER_AUTORUN_FPS`
