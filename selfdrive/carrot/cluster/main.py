@@ -37,6 +37,7 @@ DEFAULT_USB_BRIGHTNESS = 80
 THEME_PARAM_POLL_SECONDS = 1.0
 FPS_PARAM_POLL_SECONDS = 1.0
 BRIGHTNESS_PARAM_POLL_SECONDS = 1.0
+BRIGHTNESS_RESEND_SECONDS = 5.0
 SCREEN_MODE_PARAM_POLL_SECONDS = 1.0
 HUD_MODE_PARAM_POLL_SECONDS = 1.0
 
@@ -179,7 +180,6 @@ def run_demo(
     usb_jpeg_encoder: str,
     usb_fast_write: bool,
     usb_wait_frame_ack: bool,
-    usb_wait_brightness_ack: bool,
     usb_async: bool,
     usb_frame_drain_attempts: int,
     usb_frame_drain_timeout_ms: int,
@@ -235,7 +235,6 @@ def run_demo(
             jpeg_encoder=usb_jpeg_encoder,
             fast_write=usb_fast_write,
             wait_for_frame_ack=usb_wait_frame_ack,
-            wait_for_brightness_ack=usb_wait_brightness_ack,
             frame_drain_attempts=usb_frame_drain_attempts,
             frame_drain_timeout_ms=usb_frame_drain_timeout_ms,
             fast_frame_drain_attempts=usb_fast_drain_attempts,
@@ -294,6 +293,7 @@ def run_demo(
     next_theme_param_read = start_time
     next_fps_param_read = start_time + FPS_PARAM_POLL_SECONDS
     next_brightness_param_read = start_time
+    next_brightness_resend = start_time + BRIGHTNESS_RESEND_SECONDS
     next_screen_mode_param_read = start_time
     next_hud_mode_param_read = start_time + HUD_MODE_PARAM_POLL_SECONDS
     report_frames = 0
@@ -413,7 +413,9 @@ def run_demo(
                     live_source,
                     auto_enabled=usb_brightness_auto_enabled,
                 )
-                usb_display.set_brightness(next_usb_brightness)
+                force_brightness_send = brightness_now >= next_brightness_resend
+                if usb_display.set_brightness(next_usb_brightness, force=force_brightness_send):
+                    next_brightness_resend = brightness_now + BRIGHTNESS_RESEND_SECONDS
                 next_brightness_param_read = brightness_now + BRIGHTNESS_PARAM_POLL_SECONDS
 
             if output_mode in ("window", "both"):
@@ -592,11 +594,6 @@ def parse_args() -> argparse.Namespace:
         "--usb-wait-frame-ack",
         action="store_true",
         help="Wait for a TURZX response after each frame upload. Default skips ACK because some units never reply.",
-    )
-    parser.add_argument(
-        "--usb-no-brightness-wait-ack",
-        action="store_true",
-        help="Do not wait for a TURZX response after brightness commands. Default waits once and falls back if unsupported.",
     )
     parser.add_argument(
         "--usb-async",
@@ -786,7 +783,6 @@ def main() -> None:
             args.usb_jpeg_encoder,
             args.usb_fast,
             args.usb_wait_frame_ack,
-            not args.usb_no_brightness_wait_ack,
             args.usb_async,
             args.usb_frame_drain_attempts,
             args.usb_frame_drain_timeout_ms,
