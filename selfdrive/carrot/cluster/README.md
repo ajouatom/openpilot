@@ -25,18 +25,35 @@ Pillow. Route replay defaults to `--route-overlay compact`, which shows the
 right-side qcamera/debug panel. Use `--route-overlay off` for performance tests
 that should match live rendering cost more closely.
 
-Manager autostart uses `--fps 20` by default through `CLUSTER_AUTORUN_FPS=20`.
-Set `CLUSTER_AUTORUN_FPS=0` only for uncapped performance tests.
-Set it to an empty value if autostart should follow `ClusterHudLiveFps`
-setting changes while running.
+Manager autostart omits `--fps` by default so live launches follow
+`ClusterHudLiveFps` setting changes while running. Set `CLUSTER_AUTORUN_FPS`
+only for fixed test overrides; `0` means uncapped.
+When `--usb-brightness` is omitted, USB launches follow `ClusterHudBrightness`:
+`0` auto follows live `deviceState.screenBrightnessPercent` after samples are
+available, and `1` through `100` are fixed brightness percentages.
+Brightness commands use no-ACK command `14`; while USB output is active, the
+current brightness is resent at least once every 5 seconds.
 
 The launcher defaults to `--input live`, subscribes to openpilot cereal services,
-and renders live `carState`, `modelV2`, `radarState`, `liveTracks`, and raw
-Hyundai CAN-FD radar points when CAN subscription is enabled.
+and renders live `carState`, `modelV2`, `radarState`, `liveTracks`,
+`controlsState`, `carControl`, `deviceState`, and raw Hyundai CAN-FD radar
+points when CAN subscription is enabled.
 When `--fps` is omitted for live input, `ClusterHudLiveFps` controls the render
 limit and is polled about once per second while running: `0` uncapped,
 `1` 10 Hz, `2` 20 Hz, and `3` 30 Hz. Explicit `--fps` remains a fixed
 override.
+`ClusterHudScreenMode` controls optional debug views: `0` default, `1` shows
+the live debug panel with grouped `LIVE DELAY`, `LIVE TORQUE`, `STEERING`, and
+`LATERAL PLAN` rows, `2` shows the system information panel, `3` shows a large
+debug graph selected by `ShowPlotMode` with the driving scene disabled, and `4`
+shows the same graph in the right-side panel while keeping the driving scene.
+Mode `3` also hides the speed, accel, clock, turn-signal, and git HUD so the
+large graph uses the available center/right height with only a small margin.
+Mode `4` keeps the driving HUD and uses the maximum right-side panel height with
+the same margin. Modes `1`, `2`, `3`, and `4` suppress the route overlay so the
+selected debug view remains visible.
+Changing `ClusterHud` to another supported mode or `0` makes the running HUD
+exit; cleanup sends TURZX brightness zero before releasing the USB device.
 
 The bundled TURZX code includes only the Python vendor library. The openpilot
 device uses the system `libusb-1.0.so` through `pyusb`.

@@ -13,6 +13,10 @@ import pyray as rl
 from cluster_config import (
     AMBER,
     BLUE,
+    CLUSTER_SCREEN_MODE_DEBUG,
+    CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+    CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
+    CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
     ClusterTheme,
     DESIGN_HEIGHT,
     DESIGN_WIDTH,
@@ -24,9 +28,10 @@ from cluster_config import (
     TEXT,
     WHITE,
     current_cluster_theme,
+    normalize_cluster_screen_mode,
     normalize_cluster_theme_mode,
 )
-from cluster_models import ClusterUiState, GitBranchStatus, RouteOverlay
+from cluster_models import ClusterUiState, DebugPlotSnapshot, GitBranchStatus, LiveDebugInfo, RouteOverlay
 from cluster_scene import (
     ClusterScene,
     MeshStrip,
@@ -62,9 +67,20 @@ SYSTEM_PANEL_X = 1416
 SYSTEM_PANEL_Y = 118
 SYSTEM_PANEL_W = 476
 SYSTEM_STATS_REFRESH_SECONDS = 1.0
-GIT_STATUS_X = 20
-GIT_STATUS_CENTER_Y = 456
-GIT_STATUS_PANEL_H = 32
+DEBUG_PLOT_MAX_SAMPLES = 360
+DEBUG_PLOT_SAMPLE_SECONDS = 0.05
+DEBUG_PLOT_MARGIN = 18.0
+DEBUG_PLOT_FULL_X = 500.0
+DEBUG_PLOT_FULL_Y = DEBUG_PLOT_MARGIN
+DEBUG_PLOT_FULL_W = 1392.0
+DEBUG_PLOT_FULL_H = DESIGN_HEIGHT - DEBUG_PLOT_MARGIN * 2.0
+DEBUG_PLOT_RIGHT_X = SYSTEM_PANEL_X
+DEBUG_PLOT_RIGHT_Y = DEBUG_PLOT_MARGIN
+DEBUG_PLOT_RIGHT_W = SYSTEM_PANEL_W
+DEBUG_PLOT_RIGHT_H = DESIGN_HEIGHT - DEBUG_PLOT_MARGIN * 2.0
+GIT_STATUS_MARGIN = 2
+GIT_STATUS_DOT_RADIUS = 7
+GIT_STATUS_DOT_TEXT_GAP = 6
 GIT_STATUS_MAX_TEXT_W = 610
 VEHICLE_MATERIAL_COLORS: dict[str, tuple[int, int, int, int]] = {
     "body": (156, 166, 172, 255),
@@ -81,103 +97,6 @@ VEHICLE_MATERIAL_COLORS: dict[str, tuple[int, int, int, int]] = {
     "Material.006": (18, 20, 22, 255),
 }
 DEFAULT_VEHICLE_MATERIAL_COLOR = (142, 150, 156, 255)
-FXAA_FRAGMENT_SHADER_330 = """
-#version 330
-
-in vec2 fragTexCoord;
-in vec4 fragColor;
-
-uniform sampler2D texture0;
-uniform vec2 resolution;
-
-out vec4 finalColor;
-
-void main()
-{
-    vec2 inverseResolution = 1.0 / resolution;
-    vec3 rgbNW = texture(texture0, fragTexCoord + vec2(-1.0, -1.0) * inverseResolution).rgb;
-    vec3 rgbNE = texture(texture0, fragTexCoord + vec2(1.0, -1.0) * inverseResolution).rgb;
-    vec3 rgbSW = texture(texture0, fragTexCoord + vec2(-1.0, 1.0) * inverseResolution).rgb;
-    vec3 rgbSE = texture(texture0, fragTexCoord + vec2(1.0, 1.0) * inverseResolution).rgb;
-    vec4 center = texture(texture0, fragTexCoord);
-    vec3 rgbM = center.rgb;
-    vec3 luma = vec3(0.299, 0.587, 0.114);
-
-    float lumaNW = dot(rgbNW, luma);
-    float lumaNE = dot(rgbNE, luma);
-    float lumaSW = dot(rgbSW, luma);
-    float lumaSE = dot(rgbSE, luma);
-    float lumaM = dot(rgbM, luma);
-    float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
-    float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));
-
-    vec2 direction;
-    direction.x = -((lumaNW + lumaNE) - (lumaSW + lumaSE));
-    direction.y = ((lumaNW + lumaSW) - (lumaNE + lumaSE));
-    float directionReduce = max((lumaNW + lumaNE + lumaSW + lumaSE) * 0.03125, 0.0078125);
-    float inverseDirectionAdjustment = 1.0 / (min(abs(direction.x), abs(direction.y)) + directionReduce);
-    direction = clamp(direction * inverseDirectionAdjustment, vec2(-8.0), vec2(8.0)) * inverseResolution;
-
-    vec3 rgbA = 0.5 * (
-        texture(texture0, fragTexCoord + direction * (1.0 / 3.0 - 0.5)).rgb +
-        texture(texture0, fragTexCoord + direction * (2.0 / 3.0 - 0.5)).rgb);
-    vec3 rgbB = rgbA * 0.5 + 0.25 * (
-        texture(texture0, fragTexCoord + direction * -0.5).rgb +
-        texture(texture0, fragTexCoord + direction * 0.5).rgb);
-    float lumaB = dot(rgbB, luma);
-
-    vec3 color = ((lumaB < lumaMin) || (lumaB > lumaMax)) ? rgbA : rgbB;
-    finalColor = vec4(color, center.a) * fragColor;
-}
-"""
-FXAA_FRAGMENT_SHADER_100 = """
-#version 100
-precision mediump float;
-
-varying vec2 fragTexCoord;
-varying vec4 fragColor;
-
-uniform sampler2D texture0;
-uniform vec2 resolution;
-
-void main()
-{
-    vec2 inverseResolution = 1.0 / resolution;
-    vec3 rgbNW = texture2D(texture0, fragTexCoord + vec2(-1.0, -1.0) * inverseResolution).rgb;
-    vec3 rgbNE = texture2D(texture0, fragTexCoord + vec2(1.0, -1.0) * inverseResolution).rgb;
-    vec3 rgbSW = texture2D(texture0, fragTexCoord + vec2(-1.0, 1.0) * inverseResolution).rgb;
-    vec3 rgbSE = texture2D(texture0, fragTexCoord + vec2(1.0, 1.0) * inverseResolution).rgb;
-    vec4 center = texture2D(texture0, fragTexCoord);
-    vec3 rgbM = center.rgb;
-    vec3 luma = vec3(0.299, 0.587, 0.114);
-
-    float lumaNW = dot(rgbNW, luma);
-    float lumaNE = dot(rgbNE, luma);
-    float lumaSW = dot(rgbSW, luma);
-    float lumaSE = dot(rgbSE, luma);
-    float lumaM = dot(rgbM, luma);
-    float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
-    float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));
-
-    vec2 direction;
-    direction.x = -((lumaNW + lumaNE) - (lumaSW + lumaSE));
-    direction.y = ((lumaNW + lumaSW) - (lumaNE + lumaSE));
-    float directionReduce = max((lumaNW + lumaNE + lumaSW + lumaSE) * 0.03125, 0.0078125);
-    float inverseDirectionAdjustment = 1.0 / (min(abs(direction.x), abs(direction.y)) + directionReduce);
-    direction = clamp(direction * inverseDirectionAdjustment, vec2(-8.0), vec2(8.0)) * inverseResolution;
-
-    vec3 rgbA = 0.5 * (
-        texture2D(texture0, fragTexCoord + direction * (1.0 / 3.0 - 0.5)).rgb +
-        texture2D(texture0, fragTexCoord + direction * (2.0 / 3.0 - 0.5)).rgb);
-    vec3 rgbB = rgbA * 0.5 + 0.25 * (
-        texture2D(texture0, fragTexCoord + direction * -0.5).rgb +
-        texture2D(texture0, fragTexCoord + direction * 0.5).rgb);
-    float lumaB = dot(rgbB, luma);
-
-    vec3 color = ((lumaB < lumaMin) || (lumaB > lumaMax)) ? rgbA : rgbB;
-    gl_FragColor = vec4(color, center.a) * fragColor;
-}
-"""
 
 
 @lru_cache(maxsize=256)
@@ -285,15 +204,15 @@ class ClusterUiRenderer:
         height: int = DESIGN_HEIGHT,
         title: str = "carrotpilot cluster",
         target_fps: int = 0,
-        msaa_4x: bool = False,
         theme_mode: str = "auto",
+        screen_mode: int = 0,
     ) -> None:
         self.width = width
         self.height = height
         self.title = title
         self.target_fps = target_fps
-        self.msaa_4x = msaa_4x
         self.theme_mode = normalize_cluster_theme_mode(theme_mode)
+        self.screen_mode = normalize_cluster_screen_mode(screen_mode)
         self._theme = current_cluster_theme(self.theme_mode)
         self.hidden = False
         self._window_open = False
@@ -302,10 +221,6 @@ class ClusterUiRenderer:
         self._accel_text_width = 0.0
         self._capture_target = None
         self._portrait_upload_target = None
-        self._aa_source_target = None
-        self._fxaa_shader = None
-        self._fxaa_resolution_loc = -1
-        self._fxaa_resolution_value = None
         self._vehicle_model = None
         self._vehicle_model_load_attempted = False
         self._route_video_texture = None
@@ -316,6 +231,13 @@ class ClusterUiRenderer:
         self._triangle_strip_points = None
         self._triangle_strip_capacity = 0
         self._system_stats = SystemStatsSampler(SYSTEM_STATS_REFRESH_SECONDS)
+        self._debug_plot_mode_prev = -1
+        self._debug_plot_size = 0
+        self._debug_plot_index = -1
+        self._debug_plot_values = [[0.0] * DEBUG_PLOT_MAX_SAMPLES for _ in range(3)]
+        self._debug_plot_min = -2.0
+        self._debug_plot_max = 2.0
+        self._debug_plot_last_sample_time: float | None = None
         self.profile_enabled = os.environ.get("CLUSTER_PROFILE_RENDER") == "1"
         self._profile_samples: list[tuple[str, float]] = []
 
@@ -325,6 +247,9 @@ class ClusterUiRenderer:
     def set_theme_mode(self, theme_mode: str) -> None:
         self.theme_mode = normalize_cluster_theme_mode(theme_mode)
         self._theme = current_cluster_theme(self.theme_mode)
+
+    def set_screen_mode(self, screen_mode: int) -> None:
+        self.screen_mode = normalize_cluster_screen_mode(screen_mode)
 
     def set_target_fps(self, target_fps: int) -> None:
         self.target_fps = max(0, int(target_fps))
@@ -361,8 +286,6 @@ class ClusterUiRenderer:
         self.hidden = hidden
         rl.set_trace_log_level(rl.TraceLogLevel.LOG_WARNING)
         flags = 0
-        if self.msaa_4x:
-            flags |= rl.ConfigFlags.FLAG_MSAA_4X_HINT
         if hidden:
             flags |= rl.ConfigFlags.FLAG_WINDOW_HIDDEN
         if flags:
@@ -380,25 +303,18 @@ class ClusterUiRenderer:
         profile_stage = self._profile_start()
         self._load_vehicle_model()
         self._profile_add("renderer.open.load_vehicle_model", profile_stage)
-        # self._load_fxaa_shader()
         self._window_open = True
         self._profile_add("renderer.open.total", profile_total)
 
     def close(self) -> None:
         if not self._window_open:
             return
-        if self._aa_source_target is not None:
-            rl.unload_render_texture(self._aa_source_target)
-            self._aa_source_target = None
         if self._capture_target is not None:
             rl.unload_render_texture(self._capture_target)
             self._capture_target = None
         if self._portrait_upload_target is not None:
             rl.unload_render_texture(self._portrait_upload_target)
             self._portrait_upload_target = None
-        if self._fxaa_shader is not None:
-            rl.unload_shader(self._fxaa_shader)
-            self._fxaa_shader = None
         if self._route_video_texture is not None:
             rl.unload_texture(self._route_video_texture)
             self._route_video_texture = None
@@ -407,8 +323,6 @@ class ClusterUiRenderer:
         self._font = None
         self._owns_font = False
         self._accel_text_width = 0.0
-        self._fxaa_resolution_loc = -1
-        self._fxaa_resolution_value = None
         if self._vehicle_model is not None:
             rl.unload_model(self._vehicle_model)
             self._vehicle_model = None
@@ -423,43 +337,35 @@ class ClusterUiRenderer:
 
     def render_frame(self, state: ClusterUiState) -> None:
         self.open()
-        if self._fxaa_shader is None:
-            profile_stage = self._profile_start()
-            rl.begin_drawing()
-            self._profile_add("render_frame.begin_drawing", profile_stage)
-            profile_stage = self._profile_start()
-            self.render(state)
-            self._profile_add("render_frame.render_no_fxaa", profile_stage)
-            profile_stage = self._profile_start()
-            rl.end_drawing()
-            self._profile_add("render_frame.end_drawing", profile_stage)
-            return
-
-        signal_lights = self._turn_signal_lights(state)
-        scene_target = self._get_aa_source_target()
-        profile_stage = self._profile_start()
-        rl.begin_texture_mode(scene_target)
-        self._render_world(state, signal_lights)
-        rl.end_texture_mode()
-        self._profile_add("render_frame.render_scene_target", profile_stage)
-
         profile_stage = self._profile_start()
         rl.begin_drawing()
-        self._draw_antialiased_texture(scene_target.texture)
-        self._draw_hud(state, signal_lights)
+        self._profile_add("render_frame.begin_drawing", profile_stage)
+        profile_stage = self._profile_start()
+        self.render(state)
+        self._profile_add("render_frame.render", profile_stage)
+        profile_stage = self._profile_start()
         rl.end_drawing()
-        self._profile_add("render_frame.draw_fxaa_hud", profile_stage)
+        self._profile_add("render_frame.end_drawing", profile_stage)
 
     def render(self, state: ClusterUiState, signal_lights: tuple[bool, bool] | None = None) -> None:
         """Draw one frame into the currently active raylib render target."""
         if signal_lights is None:
             signal_lights = self._turn_signal_lights(state)
         profile_stage = self._profile_start()
-        self._render_world(state, signal_lights)
+        if self.screen_mode == CLUSTER_SCREEN_MODE_DEBUG_GRAPH:
+            self._clear_world()
+        else:
+            self._render_world(state, signal_lights)
         self._profile_add("render.world", profile_stage)
         profile_stage = self._profile_start()
         self._draw_hud(state, signal_lights)
         self._profile_add("render.hud", profile_stage)
+
+    def _clear_world(self) -> None:
+        theme = self._current_theme()
+        profile_stage = self._profile_start()
+        rl.clear_background(rl_color(theme.bg))
+        self._profile_add("render_world.clear_background", profile_stage)
 
     def _render_world(self, state: ClusterUiState, signal_lights: tuple[bool, bool] | None = None) -> None:
         if signal_lights is None:
@@ -554,27 +460,11 @@ class ClusterUiRenderer:
         target = self._get_capture_target()
         self._profile_add("render_to_image.get_capture_target", profile_stage)
 
-        if self._fxaa_shader is None:
-            profile_stage = self._profile_start()
-            rl.begin_texture_mode(target)
-            self.render(state)
-            rl.end_texture_mode()
-            self._profile_add("render_to_image.draw_to_target", profile_stage)
-        else:
-            scene_target = self._get_aa_source_target()
-            signal_lights = self._turn_signal_lights(state)
-            profile_stage = self._profile_start()
-            rl.begin_texture_mode(scene_target)
-            self._render_world(state, signal_lights)
-            rl.end_texture_mode()
-            self._profile_add("render_to_image.draw_scene_target", profile_stage)
-
-            profile_stage = self._profile_start()
-            rl.begin_texture_mode(target)
-            self._draw_antialiased_texture(scene_target.texture)
-            self._draw_hud(state, signal_lights)
-            rl.end_texture_mode()
-            self._profile_add("render_to_image.draw_fxaa_target", profile_stage)
+        profile_stage = self._profile_start()
+        rl.begin_texture_mode(target)
+        self.render(state)
+        rl.end_texture_mode()
+        self._profile_add("render_to_image.draw_to_target", profile_stage)
 
         if portrait_upload:
             profile_stage = self._profile_start()
@@ -641,64 +531,6 @@ class ClusterUiRenderer:
             rl.set_texture_filter(self._portrait_upload_target.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
             self._profile_add("render_target.filter_portrait_upload", profile_stage)
         return self._portrait_upload_target
-
-    def _get_aa_source_target(self):
-        if self._aa_source_target is None:
-            profile_stage = self._profile_start()
-            self._aa_source_target = rl.load_render_texture(self.width, self.height)
-            self._profile_add("render_target.alloc_aa_source", profile_stage)
-            profile_stage = self._profile_start()
-            rl.set_texture_filter(self._aa_source_target.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
-            self._profile_add("render_target.filter_aa_source", profile_stage)
-        return self._aa_source_target
-
-    def _load_fxaa_shader(self) -> None:
-        gl_version = rl.rl_get_version()
-        es_versions = (
-            getattr(rl, "RL_OPENGL_ES_20", 5),
-            getattr(rl, "RL_OPENGL_ES_30", 6),
-        )
-        shader_codes = (
-            (FXAA_FRAGMENT_SHADER_100, FXAA_FRAGMENT_SHADER_330)
-            if gl_version in es_versions
-            else (FXAA_FRAGMENT_SHADER_330, FXAA_FRAGMENT_SHADER_100)
-        )
-        for shader_code in shader_codes:
-            try:
-                shader = rl.load_shader_from_memory(rl.ffi.NULL, shader_code)
-            except Exception as exc:
-                print(f"FXAA shader load failed: {exc}")
-                continue
-            if not rl.is_shader_valid(shader):
-                rl.unload_shader(shader)
-                continue
-            self._fxaa_shader = shader
-            self._fxaa_resolution_loc = rl.get_shader_location(shader, "resolution")
-            self._fxaa_resolution_value = rl.ffi.new("float[2]", [float(self.width), float(self.height)])
-            return
-        self._fxaa_shader = None
-
-    def _draw_antialiased_texture(self, texture) -> None:
-        if self._fxaa_shader is None:
-            return
-        source = rl.Rectangle(0.0, 0.0, float(texture.width), -float(texture.height))
-        dest = rl.Rectangle(0.0, 0.0, float(self.width), float(self.height))
-        origin = rl.Vector2(0.0, 0.0)
-        profile_stage = self._profile_start()
-        rl.clear_background(rl_color(self._current_theme().bg))
-        self._profile_add("fxaa.clear_background", profile_stage)
-        profile_stage = self._profile_start()
-        rl.begin_shader_mode(self._fxaa_shader)
-        if self._fxaa_resolution_loc >= 0 and self._fxaa_resolution_value is not None:
-            rl.set_shader_value(
-                self._fxaa_shader,
-                self._fxaa_resolution_loc,
-                self._fxaa_resolution_value,
-                rl.ShaderUniformDataType.SHADER_UNIFORM_VEC2,
-            )
-        rl.draw_texture_pro(texture, source, dest, origin, 0.0, rl_color(WHITE))
-        rl.end_shader_mode()
-        self._profile_add("fxaa.shader_draw", profile_stage)
 
     def _load_font(self):
         for candidate in self._font_candidates():
@@ -1326,6 +1158,25 @@ class ClusterUiRenderer:
         rl.rl_scalef(sx, sy, 1.0)
         self._profile_add("hud.push_scale", profile_stage)
         try:
+            screen_mode = self.screen_mode
+            if screen_mode == CLUSTER_SCREEN_MODE_DEBUG_GRAPH:
+                profile_stage = self._profile_start()
+                self._draw_speed_block(state)
+                self._profile_add("hud.speed_block", profile_stage)
+                profile_stage = self._profile_start()
+                self._draw_accel_block(state)
+                self._profile_add("hud.accel_block", profile_stage)
+                profile_stage = self._profile_start()
+                self._draw_debug_plot(
+                    state.debug_plot,
+                    DEBUG_PLOT_FULL_X,
+                    DEBUG_PLOT_FULL_Y,
+                    DEBUG_PLOT_FULL_W,
+                    DEBUG_PLOT_FULL_H,
+                )
+                self._profile_add("hud.debug_plot_full", profile_stage)
+                return
+
             profile_stage = self._profile_start()
             self._draw_speed_block(state)
             self._profile_add("hud.speed_block", profile_stage)
@@ -1341,12 +1192,33 @@ class ClusterUiRenderer:
             profile_stage = self._profile_start()
             self._draw_center_clock(state)
             self._profile_add("hud.center_clock", profile_stage)
-            profile_stage = self._profile_start()
-            self._draw_system_stats_panel(state)
-            self._profile_add("hud.system_stats", profile_stage)
-            profile_stage = self._profile_start()
-            self._draw_route_overlay(state.route_overlay)
-            self._profile_add("hud.route_overlay", profile_stage)
+            if screen_mode == CLUSTER_SCREEN_MODE_DEBUG:
+                profile_stage = self._profile_start()
+                self._draw_live_debug_panel(state)
+                self._profile_add("hud.live_debug", profile_stage)
+            if screen_mode == CLUSTER_SCREEN_MODE_DEBUG_SYSTEM:
+                profile_stage = self._profile_start()
+                self._draw_system_stats_panel(state)
+                self._profile_add("hud.system_stats", profile_stage)
+            if screen_mode == CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT:
+                profile_stage = self._profile_start()
+                self._draw_debug_plot(
+                    state.debug_plot,
+                    DEBUG_PLOT_RIGHT_X,
+                    DEBUG_PLOT_RIGHT_Y,
+                    DEBUG_PLOT_RIGHT_W,
+                    DEBUG_PLOT_RIGHT_H,
+                )
+                self._profile_add("hud.debug_plot_right", profile_stage)
+            if screen_mode not in (
+                CLUSTER_SCREEN_MODE_DEBUG,
+                CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
+                CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+                CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
+            ):
+                profile_stage = self._profile_start()
+                self._draw_route_overlay(state.route_overlay)
+                self._profile_add("hud.route_overlay", profile_stage)
             profile_stage = self._profile_start()
             self._draw_git_status(state.git_status)
             self._profile_add("hud.git_status", profile_stage)
@@ -1381,10 +1253,177 @@ class ClusterUiRenderer:
         rl.draw_rectangle_rounded_lines_ex(rect, 0.28, 12, 2.0, rl_color(theme.clock_outline))
         self._draw_text(text, x, y, size, theme.clock_text, anchor="center")
 
-    def _draw_system_stats_panel(self, state: ClusterUiState) -> None:
-        if state.route_overlay is not None:
+    def _draw_debug_plot(
+        self,
+        plot: DebugPlotSnapshot | None,
+        panel_x: float,
+        panel_y: float,
+        panel_w: float,
+        panel_h: float,
+    ) -> None:
+        if plot is None or plot.mode <= 0:
+            if self._debug_plot_mode_prev != 0:
+                self._clear_debug_plot(0)
+            self._draw_debug_plot_panel("SHOW PLOT MODE 0", None, panel_x, panel_y, panel_w, panel_h)
             return
 
+        if plot.mode != self._debug_plot_mode_prev:
+            self._clear_debug_plot(plot.mode)
+
+        now = time.perf_counter()
+        if self._debug_plot_last_sample_time is None or now - self._debug_plot_last_sample_time >= DEBUG_PLOT_SAMPLE_SECONDS:
+            self._append_debug_plot_values(plot.values)
+            self._debug_plot_last_sample_time = now
+
+        self._draw_debug_plot_panel(plot.title, plot, panel_x, panel_y, panel_w, panel_h)
+
+    def _clear_debug_plot(self, mode: int) -> None:
+        self._debug_plot_mode_prev = mode
+        self._debug_plot_size = 0
+        self._debug_plot_index = -1
+        self._debug_plot_values = [[0.0] * DEBUG_PLOT_MAX_SAMPLES for _ in range(3)]
+        self._debug_plot_min = -2.0
+        self._debug_plot_max = 2.0
+        self._debug_plot_last_sample_time = None
+
+    def _append_debug_plot_values(self, values: tuple[float, float, float]) -> None:
+        self._debug_plot_index = (self._debug_plot_index + 1) % DEBUG_PLOT_MAX_SAMPLES
+        if self._debug_plot_size < DEBUG_PLOT_MAX_SAMPLES:
+            self._debug_plot_size += 1
+
+        for index, value in enumerate(values):
+            self._debug_plot_values[index][self._debug_plot_index] = value if math.isfinite(value) else 0.0
+
+        self._update_debug_plot_bounds()
+
+    def _update_debug_plot_bounds(self) -> None:
+        if self._debug_plot_size <= 0:
+            self._debug_plot_min = -2.0
+            self._debug_plot_max = 2.0
+            return
+
+        minimum = float("inf")
+        maximum = float("-inf")
+        for series_index in range(3):
+            for offset in range(self._debug_plot_size):
+                value = self._debug_plot_value(series_index, offset)
+                minimum = min(minimum, value)
+                maximum = max(maximum, value)
+
+        if minimum == float("inf") or maximum == float("-inf"):
+            minimum = -2.0
+            maximum = 2.0
+        if minimum > -2.0:
+            minimum = -2.0
+        if maximum < 2.0:
+            maximum = 2.0
+        if maximum - minimum < 0.001:
+            minimum -= 1.0
+            maximum += 1.0
+        self._debug_plot_min = minimum
+        self._debug_plot_max = maximum
+
+    def _debug_plot_value(self, series_index: int, oldest_offset: int) -> float:
+        oldest_index = (self._debug_plot_index - self._debug_plot_size + 1) % DEBUG_PLOT_MAX_SAMPLES
+        return self._debug_plot_values[series_index][(oldest_index + oldest_offset) % DEBUG_PLOT_MAX_SAMPLES]
+
+    def _draw_debug_plot_panel(
+        self,
+        title: str,
+        plot: DebugPlotSnapshot | None,
+        panel_x: float,
+        panel_y: float,
+        panel_w: float,
+        panel_h: float,
+    ) -> None:
+        theme = self._current_theme()
+        compact = panel_w < 700.0
+        pad = 18.0 if compact else 24.0
+        title_y = panel_y + 30.0
+        plot_x = panel_x + pad
+        plot_y = panel_y + (74.0 if compact else 70.0)
+        plot_w = panel_w - pad * 2.0
+        plot_h = panel_h - (100.0 if compact else 96.0)
+        plot_bottom = plot_y + plot_h
+
+        self._rounded_rect(panel_x, panel_y, panel_w, panel_h, 18, theme.route_panel_bg, theme.faint, 2)
+        title_size = 18 if compact else 22
+        title_max_w = panel_w - pad * 2.0 - (120.0 if compact else 190.0)
+        title = self._ellipsize_text(title, title_size, title_max_w)
+        self._draw_text(title, panel_x + pad, title_y, title_size, theme.text)
+        self._draw_text(
+            f"min {self._debug_plot_min:.2f}  max {self._debug_plot_max:.2f}",
+            panel_x + panel_w - pad,
+            title_y,
+            13 if compact else 17,
+            theme.muted,
+            anchor="right",
+        )
+
+        grid_color = rl_color(theme.faint, 110)
+        axis_color = rl_color(theme.muted, 160)
+        plot_rect = rl.Rectangle(plot_x, plot_y, plot_w, plot_h)
+        rl.draw_rectangle_rec(plot_rect, rl_color((0, 0, 0), 52 if theme.is_dark else 30))
+        rl.draw_rectangle_lines_ex(plot_rect, 2.0, rl_color(theme.faint))
+        for index in range(1, 6):
+            x = plot_x + plot_w * index / 6.0
+            rl.draw_line_ex(rl.Vector2(x, plot_y), rl.Vector2(x, plot_bottom), 1.0, grid_color)
+        for index in range(1, 4):
+            y = plot_y + plot_h * index / 4.0
+            rl.draw_line_ex(rl.Vector2(plot_x, y), rl.Vector2(plot_x + plot_w, y), 1.0, grid_color)
+
+        value_range = self._debug_plot_max - self._debug_plot_min
+        if self._debug_plot_min < 0.0 < self._debug_plot_max and value_range > 0.001:
+            zero_y = plot_bottom - (0.0 - self._debug_plot_min) / value_range * plot_h
+            rl.draw_line_ex(rl.Vector2(plot_x, zero_y), rl.Vector2(plot_x + plot_w, zero_y), 2.0, axis_color)
+
+        if plot is None or self._debug_plot_size < 2:
+            self._draw_text("no plot data", plot_x + plot_w * 0.5, plot_y + plot_h * 0.5, 22, theme.muted, anchor="center")
+            return
+
+        colors = (
+            (255, 220, 0),
+            GREEN,
+            (255, 165, 0),
+        )
+        for series_index, color in enumerate(colors):
+            self._draw_debug_plot_series(series_index, plot_x, plot_y, plot_w, plot_h, color)
+
+    def _draw_debug_plot_series(
+        self,
+        series_index: int,
+        plot_x: float,
+        plot_y: float,
+        plot_w: float,
+        plot_h: float,
+        color: tuple[int, int, int],
+    ) -> None:
+        value_range = max(0.001, self._debug_plot_max - self._debug_plot_min)
+        previous: rl.Vector2 | None = None
+        latest: rl.Vector2 | None = None
+        latest_value = 0.0
+        count = self._debug_plot_size
+        dx = plot_w / max(1, count - 1)
+        for offset in range(count):
+            value = self._debug_plot_value(series_index, offset)
+            x = plot_x + dx * offset
+            y = plot_y + plot_h - (value - self._debug_plot_min) / value_range * plot_h
+            point = rl.Vector2(x, y)
+            if previous is not None:
+                rl.draw_line_ex(previous, point, 3.0, rl_color(color))
+            previous = point
+            latest = point
+            latest_value = value
+
+        if latest is None:
+            return
+        label = f"{latest_value:.2f}"
+        label_size = 18.0
+        label_x = min(plot_x + plot_w - 4.0, latest.x + 42.0)
+        label_y = clamp(latest.y + (24.0 if series_index > 0 else 0.0), plot_y + 12.0, plot_y + plot_h - 12.0)
+        self._draw_text(label, label_x, label_y, label_size, color, anchor="right")
+
+    def _draw_system_stats_panel(self, state: ClusterUiState) -> None:
         theme = self._current_theme()
         stats = self._system_stats.sample()
         cpu_count = len(stats.cpu_core_percents)
@@ -1442,6 +1481,138 @@ class ClusterUiRenderer:
             self._draw_text(f"C{index}", cell_x, line_y + 8, text_size, theme.muted)
             self._draw_text(self._percent_text(percent), cell_x + cell_w, line_y + 8, text_size, color, anchor="right")
             self._draw_percent_bar(cell_x, line_y + 19, cell_w, 6, percent, color)
+
+    def _draw_live_debug_panel(self, state: ClusterUiState) -> None:
+        sections = self._live_debug_sections(state)
+        if not sections:
+            return
+
+        theme = self._current_theme()
+        panel_x = SYSTEM_PANEL_X
+        panel_y = SYSTEM_PANEL_Y
+        panel_w = SYSTEM_PANEL_W
+        pad_x = 24.0
+        header_h = 54.0
+        section_title_h = 20.0
+        row_h = 24.0
+        section_gap = 10.0
+        content_h = sum(section_title_h + len(rows) * row_h for _, rows in sections)
+        content_h += max(0, len(sections) - 1) * section_gap
+        panel_h = min(DESIGN_HEIGHT - SYSTEM_PANEL_Y - 18.0, header_h + content_h + 18.0)
+        max_y = panel_y + panel_h - 18.0
+
+        self._rounded_rect(panel_x, panel_y, panel_w, panel_h, 18, theme.route_panel_bg, theme.faint, 2)
+        self._draw_text("LIVE DEBUG", panel_x + pad_x, panel_y + 28, 18, theme.muted)
+
+        y = panel_y + header_h
+        label_x = panel_x + pad_x
+        value_x = panel_x + panel_w - pad_x
+        label_w = 168.0
+        value_max_w = panel_w - pad_x * 2 - label_w - 12.0
+        for section_index, (section_title, rows) in enumerate(sections):
+            if section_index > 0:
+                line_y = y - section_gap * 0.45
+                rl.draw_line_ex(
+                    rl.Vector2(panel_x + pad_x, line_y),
+                    rl.Vector2(panel_x + panel_w - pad_x, line_y),
+                    1.0,
+                    rl_color(theme.faint),
+                )
+            if y + section_title_h * 0.5 > max_y:
+                break
+            self._draw_text(section_title, label_x, y + 8.0, 15, theme.muted)
+            y += section_title_h
+            for label, value in rows:
+                if y + row_h * 0.5 > max_y:
+                    break
+                self._draw_text(label, label_x, y + 8.0, 17, theme.muted)
+                value = self._ellipsize_text(value, 17, value_max_w)
+                self._draw_text(value, value_x, y + 8.0, 17, theme.text, anchor="right")
+                y += row_h
+            y += section_gap
+
+    def _live_debug_sections(self, state: ClusterUiState) -> tuple[tuple[str, tuple[tuple[str, str], ...]], ...]:
+        sections: list[tuple[str, tuple[tuple[str, str], ...]]] = []
+        live_debug = state.live_debug
+        if live_debug is not None:
+            if live_debug.live_delay_calibration_percent is not None or live_debug.live_delay_lateral_s is not None:
+                sections.append(
+                    (
+                        "LIVE DELAY",
+                        (
+                            (
+                                "CAL / LAT",
+                                f"{self._optional_percent_text(live_debug.live_delay_calibration_percent)} / "
+                                f"{self._optional_seconds_text(live_debug.live_delay_lateral_s, 2)}",
+                            ),
+                        ),
+                    )
+                )
+            if (
+                live_debug.live_torque_calibration_percent is not None
+                or live_debug.live_torque_valid is not None
+                or live_debug.live_torque_lat_accel_factor is not None
+                or live_debug.live_torque_friction is not None
+            ):
+                live_valid = "--" if live_debug.live_torque_valid is None else "ON" if live_debug.live_torque_valid else "OFF"
+                sections.append(
+                    (
+                        "LIVE TORQUE",
+                        (
+                            (
+                                "STATE",
+                                f"{live_valid} / {self._optional_percent_text(live_debug.live_torque_calibration_percent)}",
+                            ),
+                            (
+                                "FACT / FRIC",
+                                f"{self._optional_float_text(live_debug.live_torque_lat_accel_factor, 2)} / "
+                                f"{self._optional_float_text(live_debug.live_torque_friction, 2)}",
+                            ),
+                        ),
+                    )
+                )
+            if (
+                live_debug.live_steer_ratio is not None
+                or live_debug.custom_steer_ratio is not None
+                or live_debug.steer_actuator_delay_s is not None
+            ):
+                sections.append(
+                    (
+                        "STEERING",
+                        (
+                            (
+                                "SR LIVE / CUSTOM",
+                                f"{self._optional_float_text(live_debug.live_steer_ratio, 1)} / "
+                                f"{self._optional_float_text(live_debug.custom_steer_ratio, 1)}",
+                            ),
+                            ("SAD", self._optional_seconds_text(live_debug.steer_actuator_delay_s, 2)),
+                        ),
+                    )
+                )
+        if state.lateral_plan_debug_text:
+            sections.append(
+                (
+                    "LATERAL PLAN",
+                    (("DEBUG", str(state.lateral_plan_debug_text)),),
+                )
+            )
+        return tuple(sections)
+
+    @staticmethod
+    def _optional_percent_text(value: float | None) -> str:
+        if value is None or not math.isfinite(value):
+            return "--%"
+        return f"{value:.0f}%"
+
+    @staticmethod
+    def _optional_float_text(value: float | None, digits: int) -> str:
+        if value is None or not math.isfinite(value):
+            return "--"
+        return f"{value:.{digits}f}"
+
+    def _optional_seconds_text(self, value: float | None, digits: int) -> str:
+        text = self._optional_float_text(value, digits)
+        return text if text == "--" else f"{text} s"
 
     def _draw_percent_bar(
         self,
@@ -1579,14 +1750,12 @@ class ClusterUiRenderer:
         font = self._font or rl.get_font_default()
         spacing = max(1.0, text_size * 0.02)
         measured = rl.measure_text_ex(font, text, text_size, spacing)
-
-        panel_x = GIT_STATUS_X
-        panel_y = GIT_STATUS_CENTER_Y - GIT_STATUS_PANEL_H * 0.5
-        panel_w = measured.x + 58
-        self._rounded_rect(panel_x, panel_y, panel_w, GIT_STATUS_PANEL_H, 10, theme.route_panel_bg, theme.faint, 1)
-        rl.draw_circle_v(rl.Vector2(panel_x + 20, GIT_STATUS_CENTER_Y), 7, rl_color(color))
-        self._draw_text(text, panel_x + 36 + 1, GIT_STATUS_CENTER_Y + 1, text_size, theme.world_label_shadow)
-        self._draw_text(text, panel_x + 36, GIT_STATUS_CENTER_Y, text_size, color)
+        row_h = max(measured.y, GIT_STATUS_DOT_RADIUS * 2)
+        center_y = DESIGN_HEIGHT - GIT_STATUS_MARGIN - row_h * 0.5
+        dot_center_x = GIT_STATUS_MARGIN + GIT_STATUS_DOT_RADIUS
+        text_x = GIT_STATUS_MARGIN + GIT_STATUS_DOT_RADIUS * 2 + GIT_STATUS_DOT_TEXT_GAP
+        rl.draw_circle_v(rl.Vector2(dot_center_x, center_y), GIT_STATUS_DOT_RADIUS, rl_color(color))
+        self._draw_text(text, text_x, center_y, text_size, color)
 
     @staticmethod
     def _git_status_color(status: GitBranchStatus, theme: ClusterTheme) -> tuple[int, int, int]:

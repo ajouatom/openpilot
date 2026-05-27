@@ -47,8 +47,17 @@ class ClusterTheme:
 CLUSTER_THEME_AUTO = 0
 CLUSTER_THEME_DARK = 1
 CLUSTER_THEME_LIGHT = 2
+CLUSTER_HUD_PARAM = "ClusterHud"
+CLUSTER_BRIGHTNESS_PARAM = "ClusterHudBrightness"
 CLUSTER_THEME_PARAM = "ClusterHudTheme"
 CLUSTER_LIVE_FPS_PARAM = "ClusterHudLiveFps"
+CLUSTER_SCREEN_MODE_DEFAULT = 0
+CLUSTER_SCREEN_MODE_DEBUG = 1
+CLUSTER_SCREEN_MODE_DEBUG_SYSTEM = 2
+CLUSTER_SCREEN_MODE_DEBUG_GRAPH = 3
+CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT = 4
+CLUSTER_SCREEN_MODE_PARAM = "ClusterHudScreenMode"
+SHOW_PLOT_MODE_PARAM = "ShowPlotMode"
 AUTO_DARK_START_HOUR = 18
 AUTO_LIGHT_START_HOUR = 6
 
@@ -153,6 +162,60 @@ def normalize_cluster_live_fps(value: object) -> float:
     if mode == 3:
         return 30.0
     return 0.0
+
+
+def normalize_cluster_brightness_percent(value: object) -> int:
+    if isinstance(value, str):
+        normalized = value.strip()
+        try:
+            value = int(normalized)
+        except ValueError:
+            return 0
+    try:
+        brightness = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return min(100, max(0, brightness))
+
+
+def normalize_cluster_screen_mode(value: object) -> int:
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        aliases = {
+            "default": CLUSTER_SCREEN_MODE_DEFAULT,
+            "debug": CLUSTER_SCREEN_MODE_DEBUG,
+            "system": CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
+            "debug-system": CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
+            "debug_system": CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
+            "graph": CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+            "graph-full": CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+            "graph_full": CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+            "graph-right": CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
+            "graph_right": CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
+            "debug-graph": CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+            "debug_graph": CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+            "debug-graph-right": CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
+            "debug_graph_right": CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
+        }
+        if normalized in aliases:
+            return aliases[normalized]
+        try:
+            value = int(normalized)
+        except ValueError:
+            return CLUSTER_SCREEN_MODE_DEFAULT
+    try:
+        mode = int(value)
+    except (TypeError, ValueError):
+        return CLUSTER_SCREEN_MODE_DEFAULT
+    if mode in (
+        CLUSTER_SCREEN_MODE_DEFAULT,
+        CLUSTER_SCREEN_MODE_DEBUG,
+        CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
+        CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+        CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
+    ):
+        return mode
+    return CLUSTER_SCREEN_MODE_DEFAULT
 
 
 def current_cluster_theme(mode: object = "auto", now: float | None = None) -> ClusterTheme:
