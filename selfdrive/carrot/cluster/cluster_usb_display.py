@@ -25,6 +25,7 @@ MAX_CONSECUTIVE_FRAME_ERRORS = 3
 USB_COMMAND_TIMEOUT_MS = 2000
 USB_FRAME_TIMEOUT_MS = 2000
 USB_COMMAND_GAP_S = 0.2
+TURZX_BRIGHTNESS_COMMAND_MAX = 102
 _LIBUSB_DLL_DIR_HANDLE = None
 
 
@@ -176,6 +177,40 @@ class TuringUsbDisplay:
             self._reset_and_reconnect()
             self._initialize_device()
 
+    def close(self) -> None:
+        if self.dev is None:
+            self._ep_out = None
+            self._ep_in = None
+            return
+
+        try:
+            self._send_brightness(0, "brightness-off")
+        except Exception as exc:
+            print(f"Warning: TURZX USB brightness-off command skipped during close: {exc}", flush=True)
+
+        try:
+            import usb.util
+
+            usb.util.dispose_resources(self.dev)
+        except Exception:
+            pass
+
+        self.dev = None
+        self.dev_pid = None
+        self._ep_out = None
+        self._ep_in = None
+        self._frame_error_count = 0
+
+    def set_brightness(self, brightness: int, *, force: bool = False) -> bool:
+        next_brightness = int(clamp(brightness, 0, 100))
+        if next_brightness == self.brightness and not force:
+            return False
+        self.brightness = next_brightness
+        if self.dev is not None:
+            self._send_brightness(self.brightness, "brightness")
+            return True
+        return False
+
     def _connect_device(self) -> None:
         self.dev, self.dev_pid = self._find_usb_device()
         self._cache_out_endpoint()
@@ -191,7 +226,18 @@ class TuringUsbDisplay:
         time.sleep(USB_COMMAND_GAP_S)
         if self.display_fps > 0:
             self._send_optional_command(15, "frame-rate", {8: self.display_fps})
-        self._send_optional_command(14, "brightness", {8: int(self.brightness / 100 * 102)})
+        self._send_brightness(self.brightness, "brightness")
+
+    def _send_brightness(self, brightness: int, name: str) -> None:
+        value = int(clamp(brightness, 0, 100) / 100 * TURZX_BRIGHTNESS_COMMAND_MAX)
+        self._send_optional_command(
+            14,
+            name,
+            {8: value},
+            log=False,
+            no_ack_gap_s=0.0,
+            no_ack_drain_attempts=0,
+        )
 
     def _send_command(
         self,
@@ -200,6 +246,9 @@ class TuringUsbDisplay:
         fields: dict[int, int] | None = None,
         *,
         expect_response: bool = True,
+        log: bool = True,
+        no_ack_gap_s: float = USB_COMMAND_GAP_S,
+        no_ack_drain_attempts: int = 5,
     ) -> bytes:
         if self._build_command_packet_header is None or self._encrypt_command_packet is None:
             raise RuntimeError("USB command helpers are not initialized")
@@ -207,7 +256,8 @@ class TuringUsbDisplay:
         if fields:
             for index, value in fields.items():
                 packet[index] = value & 0xFF
-        print(f"Sending {name} command (ID {command_id})...")
+        if log:
+            print(f"Sending {name} command (ID {command_id})...")
         payload = self._encrypt_command_packet(packet)
         if not expect_response:
             self._write_payload_no_ack(
@@ -215,8 +265,9 @@ class TuringUsbDisplay:
                 f"TURZX USB {name} command write failed",
                 timeout_ms=USB_COMMAND_TIMEOUT_MS,
             )
-            time.sleep(USB_COMMAND_GAP_S)
-            self._drain_input(attempts=5)
+            if no_ack_gap_s > 0.0:
+                time.sleep(no_ack_gap_s)
+            self._drain_input(attempts=no_ack_drain_attempts)
             return b""
         return self._write_payload_checked(
             payload,
@@ -224,9 +275,26 @@ class TuringUsbDisplay:
             timeout_ms=USB_COMMAND_TIMEOUT_MS,
         )
 
-    def _send_optional_command(self, command_id: int, name: str, fields: dict[int, int] | None = None) -> None:
+    def _send_optional_command(
+        self,
+        command_id: int,
+        name: str,
+        fields: dict[int, int] | None = None,
+        *,
+        log: bool = True,
+        no_ack_gap_s: float = USB_COMMAND_GAP_S,
+        no_ack_drain_attempts: int = 5,
+    ) -> None:
         try:
-            self._send_command(command_id, name, fields, expect_response=False)
+            self._send_command(
+                command_id,
+                name,
+                fields,
+                expect_response=False,
+                log=log,
+                no_ack_gap_s=no_ack_gap_s,
+                no_ack_drain_attempts=no_ack_drain_attempts,
+            )
         except RuntimeError as exc:
             print(f"Warning: optional TURZX USB {name} command skipped: {exc}")
 
