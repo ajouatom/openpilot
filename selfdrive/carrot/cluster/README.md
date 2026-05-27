@@ -30,7 +30,9 @@ that should match live rendering cost more closely.
 RGBA frames to ffmpeg and streams H264 chunks to the TURZX panel; encoder `auto`
 prefers `h264_v4l2m2m` for comma 4 hardware video encoding when available, then
 falls back to `h264_omx` or `libx264`. When `--fps` is omitted, H264 USB runs
-use `--usb-h264-fps 30` as the render cap.
+use `--usb-h264-fps 30` as the render cap. The ffmpeg stdout muxer is selected
+automatically: raw `h264` when available, otherwise `rawvideo` for comma builds
+that omit the `h264` muxer.
 
 Manager autostart omits `--fps` by default so live launches follow
 `ClusterHudLiveFps` setting changes while running. Set `CLUSTER_AUTORUN_FPS`

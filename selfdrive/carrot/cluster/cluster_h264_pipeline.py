@@ -31,6 +31,7 @@ class H264UsbPipeline:
         self.fps = max(1, int(fps))
         self.encoder_request = encoder
         self.encoder_name = encoder
+        self.output_muxer_name = "auto"
         self.bitrate = bitrate
         self.gop = max(1, int(gop))
         self.ffmpeg_path = ffmpeg_path
@@ -47,14 +48,16 @@ class H264UsbPipeline:
         self._stderr_tail: deque[str] = deque(maxlen=20)
 
     def start(self) -> None:
-        self.encoder_name = self._resolve_encoder()
-        command = self._ffmpeg_command(self.encoder_name)
+        ffmpeg = self._ffmpeg_executable()
+        self.encoder_name = self._resolve_encoder(ffmpeg)
+        self.output_muxer_name = self._resolve_output_muxer(ffmpeg)
+        command = self._ffmpeg_command(ffmpeg, self.encoder_name, self.output_muxer_name)
         self.chunk_size = self.usb_display.start_h264_stream(self.requested_chunk_size)
         self._stream_started = True
         print(
             "Starting H264 USB encoder: "
             f"{self.encoder_name} {self.width}x{self.height}@{self.fps} "
-            f"bitrate={self.bitrate}",
+            f"bitrate={self.bitrate} muxer={self.output_muxer_name}",
             flush=True,
         )
         try:
@@ -161,8 +164,7 @@ class H264UsbPipeline:
                 print(f"Warning: TURZX H264 stop command skipped: {exc}", flush=True)
             self._stream_started = False
 
-    def _resolve_encoder(self) -> str:
-        ffmpeg = self._ffmpeg_executable()
+    def _resolve_encoder(self, ffmpeg: str) -> str:
         if self.encoder_request != "auto":
             return self.encoder_request
 
@@ -171,6 +173,16 @@ class H264UsbPipeline:
             if candidate in encoders:
                 return candidate
         return "libx264"
+
+    def _resolve_output_muxer(self, ffmpeg: str) -> str:
+        muxers = self._available_muxers(ffmpeg)
+        for candidate in ("h264", "rawvideo"):
+            if candidate in muxers:
+                return candidate
+        raise RuntimeError(
+            "ffmpeg does not provide a usable raw H264 stdout muxer "
+            "(tried h264 and rawvideo)"
+        )
 
     def _ffmpeg_executable(self) -> str:
         path = Path(self.ffmpeg_path)
@@ -199,8 +211,25 @@ class H264UsbPipeline:
                 names.add(fields[1])
         return names
 
-    def _ffmpeg_command(self, encoder: str) -> list[str]:
-        ffmpeg = self._ffmpeg_executable()
+    def _available_muxers(self, ffmpeg: str) -> set[str]:
+        try:
+            result = subprocess.run(
+                [ffmpeg, "-hide_banner", "-muxers"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5.0,
+            )
+        except Exception:
+            return set()
+        names: set[str] = set()
+        for line in result.stdout.splitlines():
+            fields = line.split()
+            if len(fields) >= 2 and fields[0].endswith("E"):
+                names.add(fields[1])
+        return names
+
+    def _ffmpeg_command(self, ffmpeg: str, encoder: str, output_muxer: str) -> list[str]:
         command = [
             ffmpeg,
             "-hide_banner",
@@ -254,7 +283,7 @@ class H264UsbPipeline:
         else:
             command.extend(["-pix_fmt", "yuv420p"])
 
-        command.extend(["-flush_packets", "1", "-f", "h264", "pipe:1"])
+        command.extend(["-flush_packets", "1", "-f", output_muxer, "pipe:1"])
         return command
 
     def _read_stdout(self) -> None:
