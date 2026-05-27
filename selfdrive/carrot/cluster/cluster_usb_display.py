@@ -201,6 +201,14 @@ class TuringUsbDisplay:
         self._ep_in = None
         self._frame_error_count = 0
 
+    def set_brightness(self, brightness: int) -> None:
+        next_brightness = int(clamp(brightness, 0, 100))
+        if next_brightness == self.brightness:
+            return
+        self.brightness = next_brightness
+        if self.dev is not None:
+            self._send_brightness(self.brightness, "brightness")
+
     def _connect_device(self) -> None:
         self.dev, self.dev_pid = self._find_usb_device()
         self._cache_out_endpoint()

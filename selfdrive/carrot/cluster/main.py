@@ -3,16 +3,20 @@ from __future__ import annotations
 import argparse
 import gc
 from dataclasses import replace
+import signal
+import threading
 import time
 from pathlib import Path
 
 from cluster_config import (
+    CLUSTER_BRIGHTNESS_PARAM,
     CLUSTER_HUD_PARAM,
     CLUSTER_LIVE_FPS_PARAM,
     CLUSTER_SCREEN_MODE_PARAM,
     CLUSTER_THEME_PARAM,
     DESIGN_HEIGHT,
     DESIGN_WIDTH,
+    normalize_cluster_brightness_percent,
     normalize_cluster_live_fps,
     normalize_cluster_screen_mode,
     normalize_cluster_theme_mode,
@@ -29,8 +33,10 @@ from cluster_usb_display import TuringUsbDisplay
 from cluster_usb_pipeline import AsyncJpegUsbPipeline
 
 DEFAULT_FPS = 0.0
+DEFAULT_USB_BRIGHTNESS = 80
 THEME_PARAM_POLL_SECONDS = 1.0
 FPS_PARAM_POLL_SECONDS = 1.0
+BRIGHTNESS_PARAM_POLL_SECONDS = 1.0
 SCREEN_MODE_PARAM_POLL_SECONDS = 1.0
 HUD_MODE_PARAM_POLL_SECONDS = 1.0
 
@@ -71,6 +77,25 @@ class ClusterLiveFpsParamReader:
             return normalize_cluster_live_fps(self._params.get_int(CLUSTER_LIVE_FPS_PARAM))
         except Exception:
             return 0.0
+
+
+class ClusterHudBrightnessParamReader:
+    def __init__(self) -> None:
+        self._params = None
+        try:
+            from openpilot.common.params import Params
+
+            self._params = Params()
+        except Exception:
+            pass
+
+    def read(self) -> int:
+        if self._params is None:
+            return 0
+        try:
+            return normalize_cluster_brightness_percent(self._params.get_int(CLUSTER_BRIGHTNESS_PARAM))
+        except Exception:
+            return 0
 
 
 class ClusterScreenModeParamReader:
@@ -119,6 +144,24 @@ def route_overlay_for_mode(overlay: RouteOverlay | None, mode: str) -> RouteOver
     return overlay
 
 
+def resolved_usb_brightness(
+    setting: int,
+    live_source: OpenpilotLiveSource | None,
+    *,
+    auto_enabled: bool,
+) -> int:
+    normalized = normalize_cluster_brightness_percent(setting)
+    if normalized > 0 or not auto_enabled:
+        return normalized
+
+    if live_source is not None:
+        auto_brightness = live_source.screen_brightness_percent()
+        if auto_brightness is not None:
+            return normalize_cluster_brightness_percent(auto_brightness)
+
+    return DEFAULT_USB_BRIGHTNESS
+
+
 def run_demo(
     duration_seconds: float | None,
     target_fps: float,
@@ -129,6 +172,7 @@ def run_demo(
     width: int | None,
     height: int | None,
     usb_brightness: int,
+    usb_brightness_param_reader: ClusterHudBrightnessParamReader | None,
     usb_display_fps: int,
     usb_codec: str,
     usb_jpeg_quality: int,
@@ -159,11 +203,32 @@ def run_demo(
     gc_hook = GcProfileHook(profile) if profile_render else None
     if gc_hook is not None:
         gc.callbacks.append(gc_hook)
+    stop_requested = False
+    previous_sigterm_handler = None
+    signal_installed = False
+
+    def request_stop(signum: int, _frame: object) -> None:
+        nonlocal stop_requested
+        stop_requested = True
+        print(f"Received signal {signum}; shutting down cluster HUD", flush=True)
+
+    if threading.current_thread() is threading.main_thread():
+        previous_sigterm_handler = signal.getsignal(signal.SIGTERM)
+        signal.signal(signal.SIGTERM, request_stop)
+        signal_installed = True
+
     usb_display: TuringUsbDisplay | None = None
     usb_pipeline: AsyncJpegUsbPipeline | None = None
+    active_brightness_setting = normalize_cluster_brightness_percent(usb_brightness)
+    usb_brightness_auto_enabled = usb_brightness_param_reader is not None
+    initial_usb_brightness = resolved_usb_brightness(
+        active_brightness_setting,
+        None,
+        auto_enabled=usb_brightness_auto_enabled,
+    )
     if output_mode in ("usb", "both"):
         usb_display = TuringUsbDisplay(
-            brightness=usb_brightness,
+            brightness=initial_usb_brightness,
             display_fps=usb_display_fps,
             jpeg_quality=usb_jpeg_quality,
             jpeg_encoder=usb_jpeg_encoder,
@@ -176,7 +241,11 @@ def run_demo(
         )
         usb_display.set_profile_enabled(profile_render)
         profile_stage = time.perf_counter()
-        usb_display.open()
+        try:
+            usb_display.open()
+        except Exception:
+            usb_display.close()
+            raise
         profile.add_elapsed("usb.open", profile_stage)
         profile.add_samples(usb_display.profile_samples())
         usb_display.clear_profile_samples()
@@ -222,6 +291,7 @@ def run_demo(
     last_report_time = start_time
     next_theme_param_read = start_time
     next_fps_param_read = start_time + FPS_PARAM_POLL_SECONDS
+    next_brightness_param_read = start_time
     next_screen_mode_param_read = start_time
     next_hud_mode_param_read = start_time + HUD_MODE_PARAM_POLL_SECONDS
     report_frames = 0
@@ -234,6 +304,8 @@ def run_demo(
         if gc_freeze_init:
             freeze_gc_after_init(profile)
         while True:
+            if stop_requested:
+                break
             frame_start_time = time.perf_counter()
             renderer.clear_profile_samples()
             if usb_display is not None and usb_pipeline is None:
@@ -322,6 +394,25 @@ def run_demo(
                 profile.add_elapsed("source.gamepad_update", profile_stage)
 
             state = replace(state, git_status=git_status_provider.status())
+            brightness_now = time.perf_counter()
+            if usb_display is not None and brightness_now >= next_brightness_param_read:
+                if usb_brightness_param_reader is not None:
+                    next_brightness_setting = usb_brightness_param_reader.read()
+                    if next_brightness_setting != active_brightness_setting:
+                        active_brightness_setting = next_brightness_setting
+                        brightness_text = (
+                            "auto"
+                            if active_brightness_setting == 0
+                            else f"{active_brightness_setting}%"
+                        )
+                        print(f"{CLUSTER_BRIGHTNESS_PARAM} updated: {brightness_text}", flush=True)
+                next_usb_brightness = resolved_usb_brightness(
+                    active_brightness_setting,
+                    live_source,
+                    auto_enabled=usb_brightness_auto_enabled,
+                )
+                usb_display.set_brightness(next_usb_brightness)
+                next_brightness_param_read = brightness_now + BRIGHTNESS_PARAM_POLL_SECONDS
 
             if output_mode in ("window", "both"):
                 profile_stage = time.perf_counter()
@@ -410,6 +501,8 @@ def run_demo(
                 report_frames = 0
                 last_report_time = now
     finally:
+        if signal_installed:
+            signal.signal(signal.SIGTERM, previous_sigterm_handler)
         if gc_hook is not None:
             try:
                 gc.callbacks.remove(gc_hook)
@@ -465,7 +558,15 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--width", type=int, default=None)
     parser.add_argument("--height", type=int, default=None)
-    parser.add_argument("--usb-brightness", type=int, default=80)
+    parser.add_argument(
+        "--usb-brightness",
+        type=int,
+        default=None,
+        help=(
+            "Manual TURZX brightness 0-100. When omitted, live USB mode reads "
+            f"{CLUSTER_BRIGHTNESS_PARAM}: 0 auto, 1-100 manual."
+        ),
+    )
     parser.add_argument(
         "--usb-display-fps",
         type=int,
@@ -607,7 +708,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--fps must be 0 or greater")
     if (args.width is not None and args.width <= 0) or (args.height is not None and args.height <= 0):
         parser.error("--width and --height must be greater than 0")
-    if not 0 <= args.usb_brightness <= 100:
+    args.usb_brightness_from_cli = args.usb_brightness is not None
+    if args.usb_brightness is not None and not 0 <= args.usb_brightness <= 100:
         parser.error("--usb-brightness must be between 0 and 100")
     if not 0 <= args.usb_display_fps <= 255:
         parser.error("--usb-display-fps must be between 0 and 255")
@@ -639,7 +741,16 @@ def main() -> None:
         live_fps_param_reader = ClusterLiveFpsParamReader()
         target_fps = live_fps_param_reader.read()
         fps_source = CLUSTER_LIVE_FPS_PARAM
+    brightness_param_reader = None
+    if args.usb_brightness_from_cli:
+        usb_brightness = normalize_cluster_brightness_percent(args.usb_brightness)
+        brightness_source = "--usb-brightness"
+    else:
+        brightness_param_reader = ClusterHudBrightnessParamReader()
+        usb_brightness = brightness_param_reader.read()
+        brightness_source = CLUSTER_BRIGHTNESS_PARAM
     fps_text = "uncapped" if target_fps == 0 else f"{target_fps:.1f} Hz"
+    brightness_text = "auto" if brightness_param_reader is not None and usb_brightness == 0 else f"{usb_brightness}%"
     size_text = (
         f"{args.width or 'device'}x{args.height or 'device'}"
         if args.output in ("usb", "both")
@@ -647,7 +758,8 @@ def main() -> None:
     )
     print(
         f"Refreshing native raylib cluster UI at {fps_text} "
-        f"input={args.input} output={args.output}: {size_text} fps_source={fps_source}"
+        f"input={args.input} output={args.output}: {size_text} "
+        f"fps_source={fps_source} brightness={brightness_text} brightness_source={brightness_source}"
     )
     try:
         run_demo(
@@ -659,7 +771,8 @@ def main() -> None:
             args.controller_index,
             args.width,
             args.height,
-            args.usb_brightness,
+            usb_brightness,
+            brightness_param_reader,
             args.usb_display_fps,
             args.usb_codec,
             args.usb_jpeg_quality,

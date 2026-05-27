@@ -38,6 +38,7 @@ LIVE_SERVICES_BASE = (
     "lateralPlan",
     "controlsState",
     "carControl",
+    "deviceState",
     "cameraOdometry",
     "drivingModelData",
     "liveDelay",
@@ -118,6 +119,17 @@ class OpenpilotLiveSource:
             f"live {can_status} alive={alive}/{len(self.services)} upd={updated} state={fps:.1f}Hz "
             f"radar={radar_count} detected={detected_count}"
         )
+
+    def screen_brightness_percent(self) -> int | None:
+        if not self._service_alive("deviceState"):
+            return None
+        try:
+            value = float(self.sm["deviceState"].screenBrightnessPercent)
+        except Exception:
+            return None
+        if not math.isfinite(value):
+            return None
+        return int(round(clamp(value, 0.0, 100.0)))
 
     def close(self) -> None:
         return None
