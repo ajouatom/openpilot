@@ -90,6 +90,7 @@ class TuringUsbDisplay:
         jpeg_encoder: str = "auto",
         fast_write: bool = False,
         wait_for_frame_ack: bool = False,
+        wait_for_brightness_ack: bool = True,
         frame_drain_attempts: int = 2,
         frame_drain_timeout_ms: int = 2,
         fast_frame_drain_attempts: int = 3,
@@ -101,6 +102,7 @@ class TuringUsbDisplay:
         self.jpeg_encoder = jpeg_encoder
         self.fast_write = fast_write
         self.wait_for_frame_ack = wait_for_frame_ack
+        self.wait_for_brightness_ack = wait_for_brightness_ack
         self.frame_drain_attempts = max(0, int(frame_drain_attempts))
         self.frame_drain_timeout_ms = max(0, int(frame_drain_timeout_ms))
         self.fast_frame_drain_attempts = max(0, int(fast_frame_drain_attempts))
@@ -121,6 +123,7 @@ class TuringUsbDisplay:
         self._ep_in = None
         self._dll_dir_handle = None
         self._frame_error_count = 0
+        self._brightness_ack_unavailable = False
         self._turbojpeg = None
         self._turbojpeg_unavailable = False
         self._jpeg_buffer = BytesIO()
@@ -200,6 +203,7 @@ class TuringUsbDisplay:
         self._ep_out = None
         self._ep_in = None
         self._frame_error_count = 0
+        self._brightness_ack_unavailable = False
 
     def set_brightness(self, brightness: int) -> None:
         next_brightness = int(clamp(brightness, 0, 100))
@@ -228,6 +232,17 @@ class TuringUsbDisplay:
 
     def _send_brightness(self, brightness: int, name: str) -> None:
         value = int(clamp(brightness, 0, 100) / 100 * TURZX_BRIGHTNESS_COMMAND_MAX)
+        if self.wait_for_brightness_ack and not self._brightness_ack_unavailable:
+            try:
+                self._send_command(14, name, {8: value}, expect_response=True)
+                return
+            except RuntimeError as exc:
+                self._brightness_ack_unavailable = True
+                print(
+                    f"Warning: TURZX USB {name} ACK unavailable; "
+                    f"falling back to no-ACK brightness commands: {exc}",
+                    flush=True,
+                )
         self._send_optional_command(14, name, {8: value})
 
     def _send_command(

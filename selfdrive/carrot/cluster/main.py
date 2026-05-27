@@ -179,6 +179,7 @@ def run_demo(
     usb_jpeg_encoder: str,
     usb_fast_write: bool,
     usb_wait_frame_ack: bool,
+    usb_wait_brightness_ack: bool,
     usb_async: bool,
     usb_frame_drain_attempts: int,
     usb_frame_drain_timeout_ms: int,
@@ -234,6 +235,7 @@ def run_demo(
             jpeg_encoder=usb_jpeg_encoder,
             fast_write=usb_fast_write,
             wait_for_frame_ack=usb_wait_frame_ack,
+            wait_for_brightness_ack=usb_wait_brightness_ack,
             frame_drain_attempts=usb_frame_drain_attempts,
             frame_drain_timeout_ms=usb_frame_drain_timeout_ms,
             fast_frame_drain_attempts=usb_fast_drain_attempts,
@@ -592,6 +594,11 @@ def parse_args() -> argparse.Namespace:
         help="Wait for a TURZX response after each frame upload. Default skips ACK because some units never reply.",
     )
     parser.add_argument(
+        "--usb-no-brightness-wait-ack",
+        action="store_true",
+        help="Do not wait for a TURZX response after brightness commands. Default waits once and falls back if unsupported.",
+    )
+    parser.add_argument(
         "--usb-async",
         action="store_true",
         help="Encode and send JPEG USB frames on a background thread to overlap transport with the next render.",
@@ -779,6 +786,7 @@ def main() -> None:
             args.usb_jpeg_encoder,
             args.usb_fast,
             args.usb_wait_frame_ack,
+            not args.usb_no_brightness_wait_ack,
             args.usb_async,
             args.usb_frame_drain_attempts,
             args.usb_frame_drain_timeout_ms,

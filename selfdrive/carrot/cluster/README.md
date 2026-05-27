@@ -31,6 +31,9 @@ only for fixed test overrides; `0` means uncapped.
 When `--usb-brightness` is omitted, USB launches follow `ClusterHudBrightness`:
 `0` auto follows live `deviceState.screenBrightnessPercent` after samples are
 available, and `1` through `100` are fixed brightness percentages.
+Brightness commands wait for a TURZX ACK by default, then fall back to no-ACK
+for the rest of the session if the panel times out. Use
+`--usb-no-brightness-wait-ack` to force the old no-ACK behavior.
 
 The launcher defaults to `--input live`, subscribes to openpilot cereal services,
 and renders live `carState`, `modelV2`, `radarState`, `liveTracks`,
