@@ -148,6 +148,10 @@ class _V4L2FormatUnion(ctypes.Union):
     _fields_ = [
         ("pix_mp", _V4L2PixFormatMPlane),
         ("raw_data", ctypes.c_uint8 * 200),
+        # The real videodev2.h union also contains pointer-bearing members
+        # such as v4l2_window. Keep the union 8-byte aligned on 64-bit Linux
+        # so VIDIOC_* request numbers encode the same sizeof(v4l2_format).
+        ("_align", ctypes.c_void_p),
     ]
 
 
@@ -368,6 +372,8 @@ class V4L2H264Encoder:
         self._libc = ctypes.CDLL(None, use_errno=True)
         self.fd = os.open(self.device_path, os.O_RDWR | os.O_NONBLOCK)
         try:
+            if self.debug:
+                self._log_ioctl_abi()
             self._query_capability()
             fmt_out = self._set_format(
                 V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE,
@@ -798,6 +804,17 @@ class V4L2H264Encoder:
             f"{pix_out.width}x{pix_out.height} "
             f"sizeimage={pix_out.plane_fmt[0].sizeimage}; "
             f"order={self.rgb4_order}",
+            flush=True,
+        )
+
+    def _log_ioctl_abi(self) -> None:
+        print(
+            "V4L2 ctypes ABI: "
+            f"sizeof(format)={ctypes.sizeof(_V4L2Format)} "
+            f"format.fmt.offset={_V4L2Format.fmt.offset} "
+            f"sizeof(buffer)={ctypes.sizeof(_V4L2Buffer)} "
+            f"sizeof(plane)={ctypes.sizeof(_V4L2Plane)} "
+            f"VIDIOC_S_FMT=0x{VIDIOC_S_FMT:08x}",
             flush=True,
         )
 
