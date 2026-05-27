@@ -62,6 +62,26 @@ class RouteOverlay:
 
 
 @dataclass(frozen=True, slots=True)
+class LiveDebugInfo:
+    live_delay_calibration_percent: float | None = None
+    live_delay_lateral_s: float | None = None
+    live_torque_calibration_percent: float | None = None
+    live_torque_valid: bool | None = None
+    live_torque_lat_accel_factor: float | None = None
+    live_torque_friction: float | None = None
+    live_steer_ratio: float | None = None
+    custom_steer_ratio: float | None = None
+    steer_actuator_delay_s: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DebugPlotSnapshot:
+    mode: int
+    title: str
+    values: tuple[float, float, float]
+
+
+@dataclass(frozen=True, slots=True)
 class DetectedVehicle:
     label: str
     longitudinal_m: float
@@ -149,6 +169,8 @@ class ClusterUiState:
     detected_vehicles: tuple[DetectedVehicle, ...] = ()
     radar_points: tuple[RadarPoint, ...] = ()
     route_overlay: RouteOverlay | None = None
+    live_debug: LiveDebugInfo | None = None
+    debug_plot: DebugPlotSnapshot | None = None
     center_clock_text: str | None = None
     planned_speed_kph: float | None = None
     planned_accel_mps2: float | None = None
