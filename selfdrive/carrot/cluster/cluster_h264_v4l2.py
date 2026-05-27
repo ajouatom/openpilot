@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import ctypes
 import errno
+import mmap
 import os
 import select
 import time
@@ -45,6 +46,14 @@ V4L2_CID_MPEG_VIDC_VIDEO_NUM_B_FRAMES = V4L2_CID_MPEG_MSM_VIDC_BASE + 7
 V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL = V4L2_CID_MPEG_MSM_VIDC_BASE + 9
 V4L2_CID_MPEG_VIDC_VIDEO_H264_CABAC_MODEL = V4L2_CID_MPEG_MSM_VIDC_BASE + 11
 V4L2_CID_MPEG_VIDC_VIDEO_PRIORITY = V4L2_CID_MPEG_MSM_VIDC_BASE + 52
+
+ION_SYSTEM_HEAP_ID = 25
+ION_IOMMU_HEAP_ID = ION_SYSTEM_HEAP_ID
+ION_FLAG_CACHED = 1
+ION_IOC_MAGIC = "I"
+ION_IOC_MSM_MAGIC = "M"
+ION_IOC_CLEAN_CACHES_NR = 0
+ION_IOC_INV_CACHES_NR = 1
 
 V4L2_MPEG_VIDEO_HEADER_MODE_SEPARATE = 0
 V4L2_MPEG_VIDEO_H264_ENTROPY_MODE_CABAC = 1
@@ -299,6 +308,44 @@ class _V4L2EncoderCmd(ctypes.Structure):
     ]
 
 
+class _IonAllocationData(ctypes.Structure):
+    _fields_ = [
+        ("len", ctypes.c_size_t),
+        ("align", ctypes.c_size_t),
+        ("heap_id_mask", ctypes.c_uint32),
+        ("flags", ctypes.c_uint32),
+        ("handle", ctypes.c_int),
+    ]
+
+
+class _IonFdData(ctypes.Structure):
+    _fields_ = [
+        ("handle", ctypes.c_int),
+        ("fd", ctypes.c_int),
+    ]
+
+
+class _IonHandleData(ctypes.Structure):
+    _fields_ = [("handle", ctypes.c_int)]
+
+
+class _IonCustomData(ctypes.Structure):
+    _fields_ = [
+        ("cmd", ctypes.c_uint32),
+        ("arg", ctypes.c_ulong),
+    ]
+
+
+class _IonFlushData(ctypes.Structure):
+    _fields_ = [
+        ("handle", ctypes.c_int),
+        ("fd", ctypes.c_int),
+        ("vaddr", ctypes.c_void_p),
+        ("offset", ctypes.c_uint32),
+        ("length", ctypes.c_uint32),
+    ]
+
+
 VIDIOC_QUERYCAP = _ior("V", 0, _V4L2Capability)
 VIDIOC_S_FMT = _iowr("V", 5, _V4L2Format)
 VIDIOC_REQBUFS = _iowr("V", 8, _V4L2RequestBuffers)
@@ -309,6 +356,12 @@ VIDIOC_STREAMOFF = _iow("V", 19, ctypes.c_int)
 VIDIOC_S_PARM = _iowr("V", 22, _V4L2StreamParm)
 VIDIOC_S_CTRL = _iowr("V", 28, _V4L2Control)
 VIDIOC_ENCODER_CMD = _iowr("V", 77, _V4L2EncoderCmd)
+ION_IOC_ALLOC = _iowr(ION_IOC_MAGIC, 0, _IonAllocationData)
+ION_IOC_FREE = _iowr(ION_IOC_MAGIC, 1, _IonHandleData)
+ION_IOC_SHARE = _iowr(ION_IOC_MAGIC, 4, _IonFdData)
+ION_IOC_CUSTOM = _iowr(ION_IOC_MAGIC, 6, _IonCustomData)
+ION_IOC_CLEAN_CACHES = _iowr(ION_IOC_MSM_MAGIC, ION_IOC_CLEAN_CACHES_NR, _IonFlushData)
+ION_IOC_INV_CACHES = _iowr(ION_IOC_MSM_MAGIC, ION_IOC_INV_CACHES_NR, _IonFlushData)
 
 
 @dataclass
@@ -321,8 +374,94 @@ class V4L2H264Packet:
 
 @dataclass
 class _InputBufferRef:
-    buffer: bytearray
-    c_char: Any
+    buffer: "_IonBuffer"
+
+
+class _IonBuffer:
+    def __init__(self, ion_fd: int, libc: Any, length: int) -> None:
+        self.ion_fd = int(ion_fd)
+        self._libc = libc
+        self.length = int(length)
+        self.alloc_length = int(length) + ctypes.sizeof(ctypes.c_uint64)
+        self.handle = -1
+        self.fd = -1
+        self.mapping: mmap.mmap | None = None
+        self.addr = 0
+        self._allocate()
+
+    def _allocate(self) -> None:
+        alloc = _IonAllocationData()
+        alloc.len = self.alloc_length
+        alloc.align = 4096
+        alloc.heap_id_mask = 1 << ION_IOMMU_HEAP_ID
+        alloc.flags = ION_FLAG_CACHED
+        self._ioctl(self.ion_fd, ION_IOC_ALLOC, alloc, "ION_IOC_ALLOC failed")
+        self.handle = int(alloc.handle)
+        self.alloc_length = int(alloc.len)
+        try:
+            share = _IonFdData()
+            share.handle = self.handle
+            self._ioctl(self.ion_fd, ION_IOC_SHARE, share, "ION_IOC_SHARE failed")
+            self.fd = int(share.fd)
+            self.mapping = mmap.mmap(
+                self.fd,
+                self.alloc_length,
+                flags=mmap.MAP_SHARED,
+                prot=mmap.PROT_READ | mmap.PROT_WRITE,
+            )
+            self.addr = ctypes.addressof(ctypes.c_char.from_buffer(self.mapping))
+        except Exception:
+            self.close()
+            raise
+
+    def sync_to_device(self) -> None:
+        self._sync(ION_IOC_CLEAN_CACHES)
+
+    def sync_from_device(self) -> None:
+        self._sync(ION_IOC_INV_CACHES)
+
+    def close(self) -> None:
+        mapping = self.mapping
+        self.mapping = None
+        self.addr = 0
+        if mapping is not None:
+            mapping.close()
+        if self.fd >= 0:
+            try:
+                os.close(self.fd)
+            finally:
+                self.fd = -1
+        if self.handle >= 0:
+            handle = _IonHandleData()
+            handle.handle = self.handle
+            try:
+                self._ioctl(self.ion_fd, ION_IOC_FREE, handle, "ION_IOC_FREE failed")
+            finally:
+                self.handle = -1
+
+    def _sync(self, cmd: int) -> None:
+        if self.handle < 0 or self.fd < 0 or self.addr == 0:
+            return
+        flush = _IonFlushData()
+        flush.handle = self.handle
+        flush.fd = self.fd
+        flush.vaddr = self.addr
+        flush.offset = 0
+        flush.length = self.length
+        custom = _IonCustomData()
+        custom.cmd = int(cmd)
+        custom.arg = ctypes.addressof(flush)
+        self._ioctl(self.ion_fd, ION_IOC_CUSTOM, custom, "ION_IOC_CUSTOM cache sync failed")
+
+    def _ioctl(self, fd: int, request: int, arg: Any, message: str) -> None:
+        while True:
+            ret = self._libc.ioctl(ctypes.c_int(fd), ctypes.c_ulong(request), ctypes.byref(arg))
+            if ret == 0:
+                return
+            err = ctypes.get_errno()
+            if err == errno.EINTR:
+                continue
+            raise OSError(err, f"{message}: {os.strerror(err)}")
 
 
 class V4L2H264Encoder:
@@ -349,13 +488,12 @@ class V4L2H264Encoder:
         self.rgb4_order = rgb4_order
         self.debug = debug
         self.fd = -1
+        self._ion_fd = -1
         self._libc = None
         self._started = False
         self._poller = None
-        self._input_buffers: list[bytearray] = []
-        self._input_refs: list[Any] = []
-        self._capture_buffers: list[bytearray] = []
-        self._capture_refs: list[Any] = []
+        self._input_buffers: list[_IonBuffer] = []
+        self._capture_buffers: list[_IonBuffer] = []
         self._free_inputs: list[int] = []
         self._inflight_inputs: dict[int, _InputBufferRef] = {}
         self._frame_index = 0
@@ -370,8 +508,9 @@ class V4L2H264Encoder:
             raise RuntimeError("V4L2 H264 RGB4 encoder is only available on Linux/openpilot devices")
 
         self._libc = ctypes.CDLL(None, use_errno=True)
-        self.fd = os.open(self.device_path, os.O_RDWR | os.O_NONBLOCK)
         try:
+            self._ion_fd = os.open("/dev/ion", os.O_RDWR | os.O_NONBLOCK)
+            self.fd = os.open(self.device_path, os.O_RDWR | os.O_NONBLOCK)
             if self.debug:
                 self._log_ioctl_abi()
             self._query_capability()
@@ -390,9 +529,14 @@ class V4L2H264Encoder:
                 V4L2_PIX_FMT_RGB32,
                 V4L2_COLORSPACE_SRGB,
             )
-            self._log_formats(fmt_in, fmt_out)
             self._validate_formats(fmt_in, fmt_out)
+            self._log_formats(fmt_in, fmt_out)
             self._allocate_input_buffers()
+            if self.debug:
+                print(
+                    "V4L2 H264 buffer memory: ION cached USERPTR with plane fd",
+                    flush=True,
+                )
             self._set_controls()
             self._request_buffers(V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, V4L2_CAPTURE_BUFFER_COUNT)
             self._request_buffers(V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, V4L2_INPUT_BUFFER_COUNT)
@@ -419,12 +563,12 @@ class V4L2H264Encoder:
         if not self._free_inputs:
             packets.extend(self._drain_until(lambda _packets: bool(self._free_inputs)))
         buffer_index = self._free_inputs.pop(0)
-        input_ref, input_addr, input_length, bytesused = self._prepare_rgb4_input(buffer_index, rgba)
+        input_ref, input_buffer, bytesused = self._prepare_rgb4_input(buffer_index, rgba)
         timestamp = self._frame_timestamp()
 
         profile_stage = self._profile_start()
         self._inflight_inputs[buffer_index] = input_ref
-        self._queue_output(buffer_index, input_addr, input_length, bytesused, timestamp)
+        self._queue_output(buffer_index, input_buffer, bytesused, timestamp)
         self._profile_add("usb_h264.v4l2.queue_output", profile_stage)
         packets.extend(self._drain_ready())
         self._frame_index += 1
@@ -436,9 +580,7 @@ class V4L2H264Encoder:
         return samples
 
     def close(self) -> None:
-        if self.fd < 0:
-            return
-        if self._started:
+        if self.fd >= 0 and self._started:
             try:
                 cmd = _V4L2EncoderCmd()
                 cmd.cmd = V4L2_ENC_CMD_STOP
@@ -446,26 +588,40 @@ class V4L2H264Encoder:
                 self._drain_until(lambda _packets: False, timeout_ms=250, stop_on_eos=True)
             except Exception:
                 pass
-        for buf_type in (V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE):
+        if self.fd >= 0:
+            for buf_type in (V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE):
+                try:
+                    self._stream_off(buf_type)
+                except Exception:
+                    pass
+                try:
+                    self._request_buffers(buf_type, 0)
+                except Exception:
+                    pass
             try:
-                self._stream_off(buf_type)
+                os.close(self.fd)
+            finally:
+                self.fd = -1
+        self._started = False
+        for buffer in self._input_buffers:
+            try:
+                buffer.close()
             except Exception:
                 pass
+        self._input_buffers.clear()
+        for buffer in self._capture_buffers:
             try:
-                self._request_buffers(buf_type, 0)
+                buffer.close()
             except Exception:
                 pass
-        try:
-            os.close(self.fd)
-        finally:
-            self.fd = -1
-            self._started = False
-            self._input_buffers.clear()
-            self._input_refs.clear()
-            self._capture_buffers.clear()
-            self._capture_refs.clear()
-            self._free_inputs.clear()
-            self._inflight_inputs.clear()
+        self._capture_buffers.clear()
+        if self._ion_fd >= 0:
+            try:
+                os.close(self._ion_fd)
+            finally:
+                self._ion_fd = -1
+        self._free_inputs.clear()
+        self._inflight_inputs.clear()
 
     def _query_capability(self) -> None:
         cap = _V4L2Capability()
@@ -553,12 +709,12 @@ class V4L2H264Encoder:
         return row_bytes
 
     def _allocate_input_buffers(self) -> None:
+        if self._libc is None or self._ion_fd < 0:
+            raise RuntimeError("ION is not initialized")
         row_bytes = self.width * 4
         length = max(self._input_sizeimage, self._input_bytesperline * self.height, row_bytes * self.height)
         for _index in range(V4L2_INPUT_BUFFER_COUNT):
-            buffer = bytearray(length)
-            self._input_buffers.append(buffer)
-            self._input_refs.append(ctypes.c_char.from_buffer(buffer))
+            self._input_buffers.append(_IonBuffer(self._ion_fd, self._libc, length))
 
     def _set_controls(self) -> None:
         p_frames = max(0, self.gop - 1)
@@ -607,21 +763,20 @@ class V4L2H264Encoder:
         self._xioctl(VIDIOC_STREAMOFF, value, "VIDIOC_STREAMOFF failed")
 
     def _queue_capture_buffers(self) -> None:
+        if self._libc is None or self._ion_fd < 0:
+            raise RuntimeError("ION is not initialized")
         for index in range(V4L2_CAPTURE_BUFFER_COUNT):
-            buffer = bytearray(self._capture_sizeimage)
-            c_char = ctypes.c_char.from_buffer(buffer)
-            self._capture_buffers.append(buffer)
-            self._capture_refs.append(c_char)
+            self._capture_buffers.append(_IonBuffer(self._ion_fd, self._libc, self._capture_sizeimage))
             self._queue_capture(index)
 
     def _queue_capture(self, index: int) -> None:
         buffer = self._capture_buffers[index]
-        address = ctypes.addressof(self._capture_refs[index])
         plane = _V4L2Plane()
-        plane.bytesused = 0
-        plane.length = len(buffer)
-        plane.m.userptr = address
+        plane.bytesused = buffer.length
+        plane.length = buffer.length
+        plane.m.userptr = buffer.addr
         plane.data_offset = 0
+        plane.reserved[0] = buffer.fd
         v4l_buf = _V4L2Buffer()
         v4l_buf.index = index
         v4l_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE
@@ -633,16 +788,16 @@ class V4L2H264Encoder:
     def _queue_output(
         self,
         index: int,
-        address: int,
-        length: int,
+        buffer: _IonBuffer,
         bytesused: int,
         timestamp: _TimeVal,
     ) -> None:
         plane = _V4L2Plane()
         plane.bytesused = int(bytesused)
-        plane.length = int(length)
-        plane.m.userptr = int(address)
+        plane.length = buffer.length
+        plane.m.userptr = buffer.addr
         plane.data_offset = 0
+        plane.reserved[0] = buffer.fd
         v4l_buf = _V4L2Buffer()
         v4l_buf.index = int(index)
         v4l_buf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE
@@ -693,7 +848,10 @@ class V4L2H264Encoder:
             if remaining_ms <= 0:
                 if stop_on_eos:
                     return packets
-                raise RuntimeError("V4L2 H264 encoder timed out waiting for an encoded frame")
+                raise RuntimeError(
+                    "V4L2 H264 encoder timed out waiting for buffers "
+                    f"({self._queue_state()}, packets={len(packets)})"
+                )
             profile_stage = self._profile_start()
             events = self._poller.poll(remaining_ms)
             self._profile_add("usb_h264.v4l2.poll", profile_stage)
@@ -743,6 +901,13 @@ class V4L2H264Encoder:
                 raise RuntimeError("V4L2 H264 encoder poll reported POLLERR")
         return packets
 
+    def _queue_state(self) -> str:
+        return (
+            f"free_inputs={len(self._free_inputs)} "
+            f"inflight_inputs={len(self._inflight_inputs)} "
+            f"capture_buffers={len(self._capture_buffers)}"
+        )
+
     def _dequeue_capture_packet(self) -> V4L2H264Packet | None:
         profile_stage = self._profile_start()
         index, bytesused, flags, _timestamp = self._dequeue(V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE)
@@ -752,7 +917,9 @@ class V4L2H264Encoder:
                 return None
             if bytesused <= 0:
                 return None
-            data = bytes(self._capture_buffers[index][:bytesused])
+            buffer = self._capture_buffers[index]
+            buffer.sync_from_device()
+            data = ctypes.string_at(buffer.addr, bytesused)
             is_config = bool(flags & V4L2_QCOM_BUF_FLAG_CODECCONFIG)
             is_keyframe = bool(flags & V4L2_BUF_FLAG_KEYFRAME)
             self._packet_index += 1
@@ -768,7 +935,7 @@ class V4L2H264Encoder:
         finally:
             self._queue_capture(index)
 
-    def _prepare_rgb4_input(self, buffer_index: int, rgba: Any) -> tuple[_InputBufferRef, int, int, int]:
+    def _prepare_rgb4_input(self, buffer_index: int, rgba: Any) -> tuple[_InputBufferRef, _IonBuffer, int]:
         source_view = memoryview(rgba)
         expected_source_bytes = self.width * self.height * 4
         if len(source_view) < expected_source_bytes:
@@ -777,8 +944,10 @@ class V4L2H264Encoder:
             )
         row_bytes = self.width * 4
         stride = self._input_bytesperline
-        required_length = len(self._input_buffers[buffer_index])
-        target = self._input_buffers[buffer_index]
+        input_buffer = self._input_buffers[buffer_index]
+        target = input_buffer.mapping
+        if target is None:
+            raise RuntimeError("V4L2 RGB4 input buffer is closed")
         profile_stage = self._profile_start()
         if self.rgb4_order == "rgba":
             self._copy_rows_rgba(source_view, target, row_bytes, stride)
@@ -787,8 +956,9 @@ class V4L2H264Encoder:
         else:
             raise RuntimeError(f"unsupported RGB4 input order: {self.rgb4_order}")
         self._profile_add(f"usb_h264.v4l2.rgb4_{self.rgb4_order}_copy", profile_stage)
-        ref = _InputBufferRef(buffer=target, c_char=self._input_refs[buffer_index])
-        return ref, ctypes.addressof(self._input_refs[buffer_index]), required_length, required_length
+        input_buffer.sync_to_device()
+        ref = _InputBufferRef(buffer=input_buffer)
+        return ref, input_buffer, input_buffer.length
 
     def _copy_rows_rgba(self, source: memoryview, target: bytearray, row_bytes: int, stride: int) -> None:
         for row in range(self.height):
@@ -797,14 +967,18 @@ class V4L2H264Encoder:
             target[dst_start : dst_start + row_bytes] = source[src_start : src_start + row_bytes]
 
     def _copy_rows_bgra(self, source: memoryview, target: bytearray, row_bytes: int, stride: int) -> None:
-        for row in range(self.height):
-            src_start = row * row_bytes
-            dst_start = row * stride
-            dst_end = dst_start + row_bytes
-            target[dst_start:dst_end:4] = source[src_start + 2 : src_start + row_bytes : 4]
-            target[dst_start + 1 : dst_end : 4] = source[src_start + 1 : src_start + row_bytes : 4]
-            target[dst_start + 2 : dst_end : 4] = source[src_start : src_start + row_bytes : 4]
-            target[dst_start + 3 : dst_end : 4] = source[src_start + 3 : src_start + row_bytes : 4]
+        target_view = memoryview(target)
+        try:
+            for row in range(self.height):
+                src_start = row * row_bytes
+                dst_start = row * stride
+                dst_end = dst_start + row_bytes
+                target_view[dst_start:dst_end:4] = source[src_start + 2 : src_start + row_bytes : 4]
+                target_view[dst_start + 1 : dst_end : 4] = source[src_start + 1 : src_start + row_bytes : 4]
+                target_view[dst_start + 2 : dst_end : 4] = source[src_start : src_start + row_bytes : 4]
+                target_view[dst_start + 3 : dst_end : 4] = source[src_start + 3 : src_start + row_bytes : 4]
+        finally:
+            target_view.release()
 
     def _frame_timestamp(self) -> _TimeVal:
         usec = int(self._frame_index * 1_000_000 / self.fps)
