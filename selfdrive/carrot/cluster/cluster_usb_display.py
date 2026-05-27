@@ -25,6 +25,7 @@ MAX_CONSECUTIVE_FRAME_ERRORS = 3
 USB_COMMAND_TIMEOUT_MS = 2000
 USB_FRAME_TIMEOUT_MS = 2000
 USB_COMMAND_GAP_S = 0.2
+TURZX_BRIGHTNESS_COMMAND_MAX = 102
 _LIBUSB_DLL_DIR_HANDLE = None
 
 
@@ -176,6 +177,30 @@ class TuringUsbDisplay:
             self._reset_and_reconnect()
             self._initialize_device()
 
+    def close(self) -> None:
+        if self.dev is None:
+            self._ep_out = None
+            self._ep_in = None
+            return
+
+        try:
+            self._send_brightness(0, "brightness-off")
+        except Exception as exc:
+            print(f"Warning: TURZX USB brightness-off command skipped during close: {exc}", flush=True)
+
+        try:
+            import usb.util
+
+            usb.util.dispose_resources(self.dev)
+        except Exception:
+            pass
+
+        self.dev = None
+        self.dev_pid = None
+        self._ep_out = None
+        self._ep_in = None
+        self._frame_error_count = 0
+
     def _connect_device(self) -> None:
         self.dev, self.dev_pid = self._find_usb_device()
         self._cache_out_endpoint()
@@ -191,7 +216,11 @@ class TuringUsbDisplay:
         time.sleep(USB_COMMAND_GAP_S)
         if self.display_fps > 0:
             self._send_optional_command(15, "frame-rate", {8: self.display_fps})
-        self._send_optional_command(14, "brightness", {8: int(self.brightness / 100 * 102)})
+        self._send_brightness(self.brightness, "brightness")
+
+    def _send_brightness(self, brightness: int, name: str) -> None:
+        value = int(clamp(brightness, 0, 100) / 100 * TURZX_BRIGHTNESS_COMMAND_MAX)
+        self._send_optional_command(14, name, {8: value})
 
     def _send_command(
         self,

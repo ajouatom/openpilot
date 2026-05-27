@@ -423,6 +423,8 @@ def run_demo(
             route_source.close()
         if live_source is not None:
             live_source.close()
+        if usb_display is not None:
+            usb_display.close()
         renderer.close()
 
 
