@@ -792,48 +792,43 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
             lane_line_warn_left  = CS.out.leftLaneLine  % 10 not in (0, 5)
             lane_line_warn_right = CS.out.rightLaneLine % 10 not in (0, 5)
         else:
-            lane_line_warn_left  = CS.out.leftLaneLine  >= 10  # 황색(10~)/주황(20~) 차단
-            lane_line_warn_right = CS.out.rightLaneLine >= 10
+            lane_line_warn_left  = CS.out.leftLaneLine  >= 20  # 황색(10~)/주황(20~) 차단
+            lane_line_warn_right = CS.out.rightLaneLine >= 20
 
-        # lca_avail: 모델 출력 AND CAN 경고 없음 → 두 조건 모두 통과해야 녹색
-        lca_avail_left  = (md is not None and md.meta.laneChangeAvailableLeft)  and not lane_line_warn_left
-        lca_avail_right = (md is not None and md.meta.laneChangeAvailableRight) and not lane_line_warn_right
+        lca_avail_left  = (md is not None and md.meta.laneChangeAvailableLeft)
+        lca_avail_right = (md is not None and md.meta.laneChangeAvailableRight)
 
-        lca_left_blocked  = CS.out.leftBlindspot  or not lca_avail_left
-        lca_right_blocked = CS.out.rightBlindspot or not lca_avail_right
-
-        # ── 왼쪽 차선 ──
-        if lane_line_warn_left or CS.out.leftBlindspot:
-            lane_color = 4  # 주황: 황색선 또는 BSD 경고
-        elif lca_avail_left:
-            lane_color = 6  # 녹색: 차선변경 가능
+        # 왼쪽
+        if lca_avail_left:
+          lane_color = 6   # 녹색: 변경 가능
+        elif lane_line_warn_left or CS.out.leftBlindspot:
+          lane_color = 4   # 주황: 명확한 차단 이유 있음
         else:
-            lane_color = 2  # 흰색: 차선변경 불가
+          lane_color = 2   # 흰색: 기타 불가 (모델 판단 등)
 
         if hud_control.leftLaneDepart:
-            values["LANELINE_LEFT"] = 4 if (frame // 50) % 2 == 0 else 1
+          values["LANELINE_LEFT"] = 4 if (frame // 50) % 2 == 0 else 1
         else:
-            values["LANELINE_LEFT"] = lane_color if hud_control.leftLaneVisible else 0
+          values["LANELINE_LEFT"] = lane_color
 
-        # ── 오른쪽 차선 ──
-        if lane_line_warn_right or CS.out.rightBlindspot:
-            lane_color = 4  # 주황: 황색선 또는 BSD 경고
-        elif lca_avail_right:
-            lane_color = 6  # 녹색: 차선변경 가능
+        # 오른쪽
+        if lca_avail_right:
+          lane_color = 6
+        elif lane_line_warn_right or CS.out.rightBlindspot:
+          lane_color = 4
         else:
-            lane_color = 2  # 흰색: 차선변경 불가
+          lane_color = 2
 
         if hud_control.rightLaneDepart:
-            values["LANELINE_RIGHT"] = 4 if (frame // 50) % 2 == 0 else 1
+          values["LANELINE_RIGHT"] = 4 if (frame // 50) % 2 == 0 else 1
         else:
-            values["LANELINE_RIGHT"] = lane_color if hud_control.rightLaneVisible else 0
-
+          values["LANELINE_RIGHT"] = lane_color
 
         values["LCA_LEFT_ARROW"] = 2 if CS.out.leftBlinker else 0
         values["LCA_RIGHT_ARROW"] = 2 if CS.out.rightBlinker else 0
 
-        values["LCA_LEFT_ICON"]  = (1 if lca_left_blocked  else 2) if lat_active else 1 if lat_enabled else 0
-        values["LCA_RIGHT_ICON"] = (1 if lca_right_blocked else 2) if lat_active else 1 if lat_enabled else 0
+        values["LCA_LEFT_ICON"]  = (1 if not lca_avail_left  else 2) if lat_active else 1 if lat_enabled else 0
+        values["LCA_RIGHT_ICON"] = (1 if not lca_avail_right else 2) if lat_active else 1 if lat_enabled else 0
 
         values["LANE_LEFT"] = 1 if desire in (1, 3) else 0
         values["LANE_RIGHT"] = 1 if desire in (2, 4) else 0
