@@ -109,6 +109,9 @@ void ClusterH264Encoder::validate_config() const {
   if (config_.slice_max_bytes < 0) {
     throw std::runtime_error("cluster H264 encoder slice max bytes must be 0 or greater");
   }
+  if (config_.slice_max_mb < 0) {
+    throw std::runtime_error("cluster H264 encoder slice max MB must be 0 or greater");
+  }
   if (config_.qp < -1 || config_.qp > 51) {
     throw std::runtime_error("cluster H264 encoder qp must be -1 or between 0 and 51");
   }
@@ -386,7 +389,37 @@ void ClusterH264Encoder::set_controls() {
     set_control(control.id, control.value, control.name);
   }
 
-  if (config_.slice_max_bytes > 0) {
+  if (config_.slice_max_mb > 0) {
+    bool slice_mode_ok = try_control(
+        V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE,
+        V4L2_MPEG_VIDEO_MULTI_SICE_MODE_MAX_MB,
+        "multi-slice-mode-max-mb");
+    bool slice_mb_ok = try_control(
+        V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MAX_MB,
+        config_.slice_max_mb,
+        "multi-slice-max-mb");
+    if (!slice_mode_ok || !slice_mb_ok) {
+      slice_mb_ok = try_control(
+          V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MAX_MB,
+          config_.slice_max_mb,
+          "multi-slice-max-mb");
+      slice_mode_ok = try_control(
+          V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE,
+          V4L2_MPEG_VIDEO_MULTI_SICE_MODE_MAX_MB,
+          "multi-slice-mode-max-mb");
+    }
+    if (slice_mode_ok && slice_mb_ok) {
+      try_control(V4L2_CID_MPEG_VIDEO_MULTI_SLICE_DELIVERY_MODE, 1, "multi-slice-delivery-mode");
+      if (config_.debug) {
+        LOGD("cluster H264 V4L2 multi-slice max_mb=%d", config_.slice_max_mb);
+      }
+    } else {
+      try_control(V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE, V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_SINGLE, "multi-slice-mode-single");
+      if (config_.debug) {
+        LOGW("cluster H264 V4L2 multi-slice max-mb unavailable, using single-slice output");
+      }
+    }
+  } else if (config_.slice_max_bytes > 0) {
     bool slice_mode_ok = try_control(
         V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE,
         V4L2_MPEG_VIDEO_MULTI_SICE_MODE_MAX_BYTES,

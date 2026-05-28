@@ -31,6 +31,7 @@ from cluster_h264_pipeline import (
     DEFAULT_H264_LIBRARY,
     DEFAULT_H264_PACKETIZE,
     DEFAULT_H264_SLICE_MAX_BYTES,
+    DEFAULT_H264_SLICE_MAX_MB,
     H264UsbPipeline,
 )
 from cluster_live import OpenpilotLiveSource
@@ -222,6 +223,7 @@ def run_demo(
     usb_h264_input_format: str,
     usb_h264_rgb4_layout: str,
     usb_h264_slice_max_bytes: int,
+    usb_h264_slice_max_mb: int,
     usb_h264_qp: int,
     usb_h264_packetize: str,
     usb_h264_orientation: str,
@@ -397,6 +399,7 @@ def run_demo(
                 usb_h264_input_format,
                 usb_h264_rgb4_layout,
                 usb_h264_slice_max_bytes,
+                usb_h264_slice_max_mb,
                 usb_h264_qp,
                 usb_h264_packetize,
                 usb_h264_chunk_size,
@@ -835,6 +838,15 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--usb-h264-slice-max-mb",
+        type=int,
+        default=DEFAULT_H264_SLICE_MAX_MB,
+        help=(
+            "Hardware V4L2 multi-slice max macroblocks. When greater than 0 this takes "
+            "priority over --usb-h264-slice-max-bytes. Default: %(default)s."
+        ),
+    )
+    parser.add_argument(
         "--usb-h264-qp",
         type=int,
         default=-1,
@@ -1064,6 +1076,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--usb-h264-chunk-size must be 0 or greater")
     if args.usb_h264_slice_max_bytes < 0:
         parser.error("--usb-h264-slice-max-bytes must be 0 or greater")
+    if args.usb_h264_slice_max_mb < 0:
+        parser.error("--usb-h264-slice-max-mb must be 0 or greater")
     if args.usb_h264_qp < -1 or args.usb_h264_qp > 51:
         parser.error("--usb-h264-qp must be -1 or between 0 and 51")
     if args.usb_h264_align <= 0:
@@ -1163,6 +1177,7 @@ def main() -> None:
             args.usb_h264_input_format,
             args.usb_h264_rgb4_layout,
             args.usb_h264_slice_max_bytes,
+            args.usb_h264_slice_max_mb,
             args.usb_h264_qp,
             args.usb_h264_packetize,
             args.usb_h264_orientation,

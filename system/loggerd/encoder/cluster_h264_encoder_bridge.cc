@@ -92,6 +92,21 @@ int cluster_h264_encoder_bridge_set_slice_max_bytes(ClusterH264EncoderBridge *br
   return 0;
 }
 
+int cluster_h264_encoder_bridge_set_slice_max_mb(ClusterH264EncoderBridge *bridge, int slice_max_mb) {
+  if (bridge == nullptr) return -1;
+  if (bridge->encoder != nullptr) {
+    bridge->last_error = "cannot change slice max MB after encoder open";
+    return -1;
+  }
+  if (slice_max_mb < 0) {
+    bridge->last_error = "slice max MB must be 0 or greater";
+    return -1;
+  }
+  bridge->config.slice_max_mb = slice_max_mb;
+  bridge->last_error.clear();
+  return 0;
+}
+
 int cluster_h264_encoder_bridge_set_qp(ClusterH264EncoderBridge *bridge, int qp) {
   if (bridge == nullptr) return -1;
   if (bridge->encoder != nullptr) {

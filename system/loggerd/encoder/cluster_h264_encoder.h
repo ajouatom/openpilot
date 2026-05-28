@@ -31,6 +31,7 @@ struct ClusterH264EncoderConfig {
   int bitrate = 6000000;
   int gop = 30;
   int slice_max_bytes = 4096;
+  int slice_max_mb = 0;
   int qp = -1;
   bool debug = false;
   ClusterH264InputFormat input_format = ClusterH264InputFormat::Auto;

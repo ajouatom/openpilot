@@ -21,6 +21,7 @@ DEFAULT_H264_DEVICE = "/dev/v4l/by-path/platform-aa00000.qcom_vidc-video-index1"
 DEFAULT_H264_FFMPEG = "ffmpeg"
 DEFAULT_H264_FFMPEG_ENCODER = "libx264"
 DEFAULT_H264_SLICE_MAX_BYTES = 4096
+DEFAULT_H264_SLICE_MAX_MB = 0
 DEFAULT_H264_PACKETIZE = "auto"
 
 NATIVE_INPUT_FORMATS = {"auto": 0, "rgb4": 1, "nv12": 2}
@@ -513,6 +514,7 @@ class H264UsbPipeline:
         input_format: str,
         rgb4_layout: str,
         slice_max_bytes: int,
+        slice_max_mb: int,
         qp: int,
         packetize: str,
         requested_chunk_size: int,
@@ -543,6 +545,7 @@ class H264UsbPipeline:
         self.input_format = input_format
         self.rgb4_layout = rgb4_layout
         self.slice_max_bytes = max(0, int(slice_max_bytes))
+        self.slice_max_mb = max(0, int(slice_max_mb))
         self.qp = int(qp)
         self.packetize_request = packetize
         self.requested_chunk_size = max(0, int(requested_chunk_size))
@@ -618,6 +621,7 @@ class H264UsbPipeline:
         self._native_handle = handle
         self._native_callback = NativePacketCallback(self._native_packet_callback)
         self._set_native_slice_max_bytes(lib, handle)
+        self._set_native_slice_max_mb(lib, handle)
         self._set_native_qp(lib, handle)
 
         if lib.cluster_h264_encoder_bridge_open(handle) != 0:
@@ -646,7 +650,7 @@ class H264UsbPipeline:
             "Starting H264 USB native hardware encoder: "
             f"{self.width}x{self.height}@{self.fps} "
             f"bitrate={bitrate_bps} gop={self.gop} "
-            f"slice_max={self.slice_max_bytes} qp={self.qp} "
+            f"slice_max={self.slice_max_bytes} slice_max_mb={self.slice_max_mb} qp={self.qp} "
             f"packetize={self._packetize_mode('native')} "
             f"input={input_name or self.input_format} stride={input_stride} "
             f"rgb4_layout={self.rgb4_layout} device={self.device_path} "
@@ -669,7 +673,7 @@ class H264UsbPipeline:
             "Starting H264 USB helper hardware encoder: "
             f"{self.width}x{self.height}@{self.fps} "
             f"bitrate={self.bitrate} gop={self.gop} "
-            f"slice_max={self.slice_max_bytes} qp={self.qp} "
+            f"slice_max={self.slice_max_bytes} slice_max_mb={self.slice_max_mb} qp={self.qp} "
             f"packetize={self._packetize_mode('helper')} "
             f"input={self.input_format} rgb4_layout={self.rgb4_layout} "
             f"device={self.device_path} "
@@ -1032,6 +1036,8 @@ class H264UsbPipeline:
             self.rgb4_layout,
             "--slice-max-bytes",
             str(self.slice_max_bytes),
+            "--slice-max-mb",
+            str(self.slice_max_mb),
             "--qp",
             str(self.qp),
         ]
@@ -1207,15 +1213,24 @@ class H264UsbPipeline:
         try:
             set_slice_max = lib.cluster_h264_encoder_bridge_set_slice_max_bytes
         except AttributeError:
-            return
-        set_slice_max.argtypes = [ctypes.c_void_p, ctypes.c_int]
-        set_slice_max.restype = ctypes.c_int
+            pass
+        else:
+            set_slice_max.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            set_slice_max.restype = ctypes.c_int
         try:
             set_qp = lib.cluster_h264_encoder_bridge_set_qp
         except AttributeError:
-            return
-        set_qp.argtypes = [ctypes.c_void_p, ctypes.c_int]
-        set_qp.restype = ctypes.c_int
+            pass
+        else:
+            set_qp.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            set_qp.restype = ctypes.c_int
+        try:
+            set_slice_mb = lib.cluster_h264_encoder_bridge_set_slice_max_mb
+        except AttributeError:
+            pass
+        else:
+            set_slice_mb.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            set_slice_mb.restype = ctypes.c_int
 
     def _set_native_slice_max_bytes(self, lib: ctypes.CDLL, handle: int) -> None:
         try:
@@ -1230,6 +1245,20 @@ class H264UsbPipeline:
             return
         if set_slice_max(handle, self.slice_max_bytes) != 0:
             raise RuntimeError(self._native_error_text("native H264 slice max-byte setup failed"))
+
+    def _set_native_slice_max_mb(self, lib: ctypes.CDLL, handle: int) -> None:
+        try:
+            set_slice_mb = lib.cluster_h264_encoder_bridge_set_slice_max_mb
+        except AttributeError:
+            if self.slice_max_mb and self.debug:
+                print(
+                    "Warning: native H264 library does not expose slice max-MB control; rebuild "
+                    "system/loggerd/libcluster_h264_encoder_bridge.so",
+                    flush=True,
+                )
+            return
+        if set_slice_mb(handle, self.slice_max_mb) != 0:
+            raise RuntimeError(self._native_error_text("native H264 slice max-MB setup failed"))
 
     def _set_native_qp(self, lib: ctypes.CDLL, handle: int) -> None:
         try:
