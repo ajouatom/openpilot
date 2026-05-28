@@ -436,6 +436,7 @@ class H264UsbPipeline:
         input_format: str,
         rgb4_layout: str,
         slice_max_bytes: int,
+        qp: int,
         requested_chunk_size: int,
         wait_for_ack: bool,
         soft_ack: bool,
@@ -463,6 +464,7 @@ class H264UsbPipeline:
         self.input_format = input_format
         self.rgb4_layout = rgb4_layout
         self.slice_max_bytes = max(0, int(slice_max_bytes))
+        self.qp = int(qp)
         self.requested_chunk_size = max(0, int(requested_chunk_size))
         self.wait_for_ack = wait_for_ack
         self.soft_ack = soft_ack
@@ -534,6 +536,7 @@ class H264UsbPipeline:
         self._native_handle = handle
         self._native_callback = NativePacketCallback(self._native_packet_callback)
         self._set_native_slice_max_bytes(lib, handle)
+        self._set_native_qp(lib, handle)
 
         if lib.cluster_h264_encoder_bridge_open(handle) != 0:
             raise RuntimeError(self._native_error_text("native H264 encoder open failed"))
@@ -561,7 +564,7 @@ class H264UsbPipeline:
             "Starting H264 USB native hardware encoder: "
             f"{self.width}x{self.height}@{self.fps} "
             f"bitrate={bitrate_bps} gop={self.gop} "
-            f"slice_max={self.slice_max_bytes} "
+            f"slice_max={self.slice_max_bytes} qp={self.qp} "
             f"input={input_name or self.input_format} stride={input_stride} "
             f"rgb4_layout={self.rgb4_layout} device={self.device_path} "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')} "
@@ -582,7 +585,7 @@ class H264UsbPipeline:
             "Starting H264 USB helper hardware encoder: "
             f"{self.width}x{self.height}@{self.fps} "
             f"bitrate={self.bitrate} gop={self.gop} "
-            f"slice_max={self.slice_max_bytes} "
+            f"slice_max={self.slice_max_bytes} qp={self.qp} "
             f"input={self.input_format} rgb4_layout={self.rgb4_layout} "
             f"device={self.device_path} "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')} "
@@ -891,6 +894,8 @@ class H264UsbPipeline:
             self.rgb4_layout,
             "--slice-max-bytes",
             str(self.slice_max_bytes),
+            "--qp",
+            str(self.qp),
         ]
         if self.debug:
             command.append("--debug")
@@ -1067,6 +1072,12 @@ class H264UsbPipeline:
             return
         set_slice_max.argtypes = [ctypes.c_void_p, ctypes.c_int]
         set_slice_max.restype = ctypes.c_int
+        try:
+            set_qp = lib.cluster_h264_encoder_bridge_set_qp
+        except AttributeError:
+            return
+        set_qp.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        set_qp.restype = ctypes.c_int
 
     def _set_native_slice_max_bytes(self, lib: ctypes.CDLL, handle: int) -> None:
         try:
@@ -1081,6 +1092,20 @@ class H264UsbPipeline:
             return
         if set_slice_max(handle, self.slice_max_bytes) != 0:
             raise RuntimeError(self._native_error_text("native H264 slice max-byte setup failed"))
+
+    def _set_native_qp(self, lib: ctypes.CDLL, handle: int) -> None:
+        try:
+            set_qp = lib.cluster_h264_encoder_bridge_set_qp
+        except AttributeError:
+            if self.qp >= 0 and self.debug:
+                print(
+                    "Warning: native H264 library does not expose QP control; rebuild "
+                    "system/loggerd/libcluster_h264_encoder_bridge.so",
+                    flush=True,
+                )
+            return
+        if set_qp(handle, self.qp) != 0:
+            raise RuntimeError(self._native_error_text("native H264 QP setup failed"))
 
     def _native_packet_callback(
         self,

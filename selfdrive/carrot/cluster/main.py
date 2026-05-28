@@ -221,6 +221,7 @@ def run_demo(
     usb_h264_input_format: str,
     usb_h264_rgb4_layout: str,
     usb_h264_slice_max_bytes: int,
+    usb_h264_qp: int,
     usb_h264_orientation: str,
     usb_h264_align: int,
     usb_h264_chunk_size: int,
@@ -393,6 +394,7 @@ def run_demo(
                 usb_h264_input_format,
                 usb_h264_rgb4_layout,
                 usb_h264_slice_max_bytes,
+                usb_h264_qp,
                 usb_h264_chunk_size,
                 usb_h264_wait_ack,
                 usb_h264_soft_ack,
@@ -828,6 +830,15 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--usb-h264-qp",
+        type=int,
+        default=-1,
+        help=(
+            "Force hardware H264 QP/min-QP controls for compatibility tests; "
+            "-1 keeps driver rate control. Range -1..51. Default: -1."
+        ),
+    )
+    parser.add_argument(
         "--usb-h264-orientation",
         choices=("landscape", "portrait"),
         default="portrait",
@@ -1034,6 +1045,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--usb-h264-chunk-size must be 0 or greater")
     if args.usb_h264_slice_max_bytes < 0:
         parser.error("--usb-h264-slice-max-bytes must be 0 or greater")
+    if args.usb_h264_qp < -1 or args.usb_h264_qp > 51:
+        parser.error("--usb-h264-qp must be -1 or between 0 and 51")
     if args.usb_h264_align <= 0:
         parser.error("--usb-h264-align must be greater than 0")
     if args.usb_h264_wait_ack and args.usb_h264_no_ack:
@@ -1131,6 +1144,7 @@ def main() -> None:
             args.usb_h264_input_format,
             args.usb_h264_rgb4_layout,
             args.usb_h264_slice_max_bytes,
+            args.usb_h264_qp,
             args.usb_h264_orientation,
             args.usb_h264_align,
             args.usb_h264_chunk_size,

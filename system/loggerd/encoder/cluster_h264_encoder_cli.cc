@@ -23,6 +23,7 @@ void usage(const char *prog) {
       << "  --bitrate BPS           Target bitrate in bits/s; K/M suffixes are accepted. Default 6000000.\n"
       << "  --gop N                 Keyframe interval in frames. Default 30.\n"
       << "  --slice-max-bytes N     V4L2 multi-slice max bytes; 0 disables. Default 4096.\n"
+      << "  --qp N                  Force H264 QP/min-QP controls; -1 disables. Range -1..51. Default -1.\n"
       << "  --device PATH           V4L2 encoder device path.\n"
       << "  --input-format auto|rgb4|nv12\n"
       << "                          Hardware input format. Default auto.\n"
@@ -46,6 +47,16 @@ int parse_nonnegative_int(const std::string &name, const std::string &value) {
   errno = 0;
   long parsed = strtol(value.c_str(), &end, 10);
   if (errno != 0 || end == value.c_str() || *end != '\0' || parsed < 0 || parsed > INT_MAX) {
+    throw std::runtime_error("invalid " + name + ": " + value);
+  }
+  return static_cast<int>(parsed);
+}
+
+int parse_qp(const std::string &name, const std::string &value) {
+  char *end = nullptr;
+  errno = 0;
+  long parsed = strtol(value.c_str(), &end, 10);
+  if (errno != 0 || end == value.c_str() || *end != '\0' || parsed < -1 || parsed > 51) {
     throw std::runtime_error("invalid " + name + ": " + value);
   }
   return static_cast<int>(parsed);
@@ -148,6 +159,8 @@ int main(int argc, char **argv) {
         config.gop = parse_int(arg, next_value(arg));
       } else if (arg == "--slice-max-bytes") {
         config.slice_max_bytes = parse_nonnegative_int(arg, next_value(arg));
+      } else if (arg == "--qp") {
+        config.qp = parse_qp(arg, next_value(arg));
       } else if (arg == "--device") {
         config.device_path = next_value(arg);
       } else if (arg == "--input-format") {
@@ -179,6 +192,7 @@ int main(int argc, char **argv) {
               << " bitrate=" << config.bitrate
               << " gop=" << config.gop
               << " slice_max_bytes=" << config.slice_max_bytes
+              << " qp=" << config.qp
               << " input=" << encoder.input_v4l_format_name()
               << " stride=" << encoder.input_stride()
               << " device=" << config.device_path

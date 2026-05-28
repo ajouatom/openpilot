@@ -67,6 +67,8 @@ bytes so hardware output can be compared directly against ffmpeg/libx264.
 `--usb-h264-no-sps-patch` disables the hardware SPS constraint-byte patch.
 `--usb-h264-no-sps-crop-patch` disables the hardware SPS frame-crop patch.
 `--usb-h264-slice-max-bytes 0` disables the hardware multi-slice request.
+`--usb-h264-qp N` forces hardware QP/min-QP controls for compatibility tests;
+higher values produce smaller hardware IDR/P frames.
 
 For a quick H264 transport smoke test, run:
 
@@ -89,6 +91,9 @@ hardware stream is still corrupted, retry `--usb-h264-slice-max-bytes 2048`
 and `1024`; the debug NAL summary should show several smaller IDR/P NALs
 instead of one large slice. For 462x1920 streams, the SPS summary should show
 `display=462x1920` rather than only the coded 464-pixel macroblock width.
+If the first hardware IDR remains much larger than the ffmpeg/libx264 stream,
+retry `--usb-h264-qp 38` and `--usb-h264-qp 44` to test whether the panel is
+rejecting large access units.
 
 The ffmpeg/libx264 path is the known-good H264 comparison mode. To make that
 explicit while testing, run:

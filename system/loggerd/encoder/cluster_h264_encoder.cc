@@ -109,6 +109,9 @@ void ClusterH264Encoder::validate_config() const {
   if (config_.slice_max_bytes < 0) {
     throw std::runtime_error("cluster H264 encoder slice max bytes must be 0 or greater");
   }
+  if (config_.qp < -1 || config_.qp > 51) {
+    throw std::runtime_error("cluster H264 encoder qp must be -1 or between 0 and 51");
+  }
   if (config_.device_path.empty()) {
     throw std::runtime_error("cluster H264 encoder device path must not be empty");
   }
@@ -417,6 +420,27 @@ void ClusterH264Encoder::set_controls() {
     try_control(V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE, V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_SINGLE, "multi-slice-mode-single");
     if (config_.debug) {
       LOGD("cluster H264 V4L2 multi-slice disabled");
+    }
+  }
+
+  if (config_.qp >= 0) {
+    const int qp = config_.qp;
+    try_control(V4L2_CID_MPEG_VIDEO_H264_MAX_QP, 51, "h264-max-qp");
+    try_control(V4L2_CID_MPEG_VIDC_VIDEO_I_FRAME_QP_MAX, 51, "vidc-i-frame-qp-max");
+    try_control(V4L2_CID_MPEG_VIDC_VIDEO_P_FRAME_QP_MAX, 51, "vidc-p-frame-qp-max");
+    try_control(V4L2_CID_MPEG_VIDEO_H264_MIN_QP, qp, "h264-min-qp");
+    try_control(V4L2_CID_MPEG_VIDC_VIDEO_I_FRAME_QP_MIN, qp, "vidc-i-frame-qp-min");
+    try_control(V4L2_CID_MPEG_VIDC_VIDEO_P_FRAME_QP_MIN, qp, "vidc-p-frame-qp-min");
+    try_control(V4L2_CID_MPEG_VIDEO_H264_I_FRAME_QP, qp, "h264-i-frame-qp");
+    try_control(V4L2_CID_MPEG_VIDEO_H264_P_FRAME_QP, qp, "h264-p-frame-qp");
+    try_control(
+        V4L2_CID_MPEG_VIDC_VIDEO_ENABLE_INITIAL_QP,
+        V4L2_CID_MPEG_VIDC_VIDEO_ENABLE_INITIAL_QP_IFRAME | V4L2_CID_MPEG_VIDC_VIDEO_ENABLE_INITIAL_QP_PFRAME,
+        "vidc-enable-initial-qp");
+    try_control(V4L2_CID_MPEG_VIDC_VIDEO_INITIAL_I_FRAME_QP, qp, "vidc-initial-i-frame-qp");
+    try_control(V4L2_CID_MPEG_VIDC_VIDEO_INITIAL_P_FRAME_QP, qp, "vidc-initial-p-frame-qp");
+    if (config_.debug) {
+      LOGD("cluster H264 V4L2 qp=%d", qp);
     }
   }
 

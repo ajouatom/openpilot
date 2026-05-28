@@ -92,6 +92,21 @@ int cluster_h264_encoder_bridge_set_slice_max_bytes(ClusterH264EncoderBridge *br
   return 0;
 }
 
+int cluster_h264_encoder_bridge_set_qp(ClusterH264EncoderBridge *bridge, int qp) {
+  if (bridge == nullptr) return -1;
+  if (bridge->encoder != nullptr) {
+    bridge->last_error = "cannot change qp after encoder open";
+    return -1;
+  }
+  if (qp < -1 || qp > 51) {
+    bridge->last_error = "qp must be -1 or between 0 and 51";
+    return -1;
+  }
+  bridge->config.qp = qp;
+  bridge->last_error.clear();
+  return 0;
+}
+
 int cluster_h264_encoder_bridge_open(ClusterH264EncoderBridge *bridge) {
   if (bridge == nullptr) return -1;
   try {
