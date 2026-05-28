@@ -1008,7 +1008,6 @@ class CarrotMan:
 
   def carrot_curve_speed_params(self):
     self.autoCurveSpeedFactor = self.params.get_int("AutoCurveSpeedFactor")*0.01
-    self.autoCurveSpeedAggressiveness = self.params.get_int("AutoCurveSpeedAggressiveness")*0.01
 
   def carrot_curve_speed(self, sm):
     self.carrot_curve_speed_params()
@@ -1038,7 +1037,7 @@ class CarrotMan:
     max_curve = max_pred_lat_acc / (v_ego**2)
 
     # Set the target lateral acceleration
-    adjusted_target_lat_a = TARGET_LAT_A * self.autoCurveSpeedAggressiveness
+    adjusted_target_lat_a = TARGET_LAT_A
 
     # Get the target velocity for the maximum curve
     #turnSpeed = max(abs(adjusted_target_lat_a / max_curve)**0.5  * 3.6, self.autoCurveSpeedLowerLimit)
