@@ -819,8 +819,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--usb-h264-input-format",
         choices=("auto", "rgb4", "nv12"),
-        default="auto",
-        help="Hardware encoder input format. auto prefers RGB4 when the device reports support.",
+        default="nv12",
+        help=(
+            "Hardware encoder input format. Default nv12 follows the existing loggerd V4L2 path; "
+            "rgb4 remains available for direct RGB input compatibility tests."
+        ),
     )
     parser.add_argument(
         "--usb-h264-rgb4-layout",

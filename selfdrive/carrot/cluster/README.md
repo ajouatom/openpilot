@@ -54,12 +54,15 @@ fall back to helper.
 
 The default V4L2 device is
 `/dev/v4l/by-path/platform-aa00000.qcom_vidc-video-index1`. Input format
-`auto` prefers RGB4 when the device reports it, and the default RGB4 byte
-layout is `bgra`, matching the common little-endian memory order for V4L2
-`RGB4`. The cluster H264 wrapper emits inline SPS/PPS on the first video packet
-and on IDR frames, asks for constrained Baseline/CAVLC plus VUI timing when the
-V4L2 driver accepts those controls, and falls back to the existing
-loggerd-compatible High/CABAC controls if needed. Access-unit delimiter NALs
+defaults to `nv12`, matching the existing loggerd V4L2 encoder path. The device
+also reports RGB4 support, and `--usb-h264-input-format rgb4` remains available
+for direct RGB input tests, but NV12 is the safer compatibility path for the
+TURZX panel. The default RGB4 byte layout is `bgra`, matching the common
+little-endian memory order for V4L2 `RGB4`. The cluster H264 wrapper emits
+inline SPS/PPS on the first video packet and on IDR frames, asks for constrained
+Baseline/CAVLC plus VUI timing when the V4L2 driver accepts those controls, and
+falls back to the existing loggerd-compatible High/CABAC controls if needed.
+Access-unit delimiter NALs
 are off by default because some simple panel decoders expect SPS/PPS or slices
 as the first NAL; use `--usb-h264-insert-aud` only as a compatibility test.
 `--usb-h264-debug` prints per-chunk NAL summaries and SPS profile/constraint
@@ -84,10 +87,10 @@ For a quick H264 transport smoke test, run:
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug --usb-h264-slice-max-bytes 4096
 ```
 
-The panel should show red/green/blue/white quadrants. If RGB4 colors are
-swapped, retry with `--usb-h264-rgb4-layout rgba` or
-`--usb-h264-rgb4-layout axrgb`. If RGB4 itself looks suspicious, use
-`--usb-h264-input-format nv12` as a slower but useful compatibility check.
+The panel should show red/green/blue/white quadrants. If you force
+`--usb-h264-input-format rgb4` and colors are swapped, retry with
+`--usb-h264-rgb4-layout rgba` or `--usb-h264-rgb4-layout axrgb`. If RGB4 itself
+looks suspicious, return to the default `--usb-h264-input-format nv12` path.
 `--usb-h264-orientation landscape` tests direct 1920x462 output, while
 `--usb-h264-align 16` deliberately tests macroblock-aligned output such as
 1920x464. When `--fps` is omitted, H264 USB runs use `--usb-h264-fps 30` as the
