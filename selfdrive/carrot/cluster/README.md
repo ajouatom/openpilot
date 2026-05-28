@@ -73,8 +73,8 @@ driver path can stall before producing capture buffers.
 `--usb-h264-qp N` forces hardware QP/min-QP controls for compatibility tests;
 higher values produce smaller hardware IDR/P frames.
 `--usb-h264-packetize auto` keeps ffmpeg output intact, but sends native/helper
-hardware output as small NAL-boundary groups instead of one large access-unit
-USB command. The native hardware path marks the final USB chunk of each encoder
+hardware output as one NAL per USB command instead of one large access-unit
+USB command. The native hardware path marks only the final NAL of each encoder
 access unit with the TURZX H264 frame-end flag; `--usb-h264-debug` prints this
 as `last=1`.
 
@@ -103,7 +103,7 @@ If the first hardware IDR remains much larger than the ffmpeg/libx264 stream,
 retry `--usb-h264-qp 38` and `--usb-h264-qp 44` to test whether the panel is
 rejecting large access units.
 If QP controls are rejected by the driver, keep `--usb-h264-packetize auto`
-or try `--usb-h264-packetize nal` to send each H264 NAL as its own USB command.
+so each H264 NAL is sent as its own USB command.
 If the hardware SPS summary shows `vui=0`, the default patch adds timing info
 matching the selected H264 FPS; use `--usb-h264-no-sps-vui-patch` only as an
 A/B check.
