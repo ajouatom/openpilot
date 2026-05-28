@@ -1140,8 +1140,6 @@ class H264UsbPipeline:
     def _packetize_mode(self, source: str) -> str:
         if self.packetize_request != "auto":
             return self.packetize_request
-        if source in ("native", "helper"):
-            return "nal"
         return "access-unit"
 
     def _packetize_h264_for_usb(self, packet: bytes, chunk_size: int, *, source: str) -> list[bytes]:

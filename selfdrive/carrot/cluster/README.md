@@ -87,12 +87,12 @@ stride while its H264 SPS reports a 464-pixel coded width.
 driver path can stall before producing capture buffers.
 `--usb-h264-qp N` forces hardware QP/min-QP controls for compatibility tests;
 higher values produce smaller hardware IDR/P frames.
-`--usb-h264-packetize auto` keeps ffmpeg output intact, but sends native/helper
-hardware output as one NAL per USB command instead of one large access-unit
-USB command. By default the native hardware path leaves the TURZX H264 command
-`last` flag off to match the known-good ffmpeg/libx264 path. Use
-`--usb-h264-mark-frame-end` only as a compatibility test; `--usb-h264-debug`
-prints this as `last=1`.
+`--usb-h264-packetize auto` sends native/helper hardware output as encoder
+access units, matching the known-good ffmpeg/libx264 command boundary. Use
+`--usb-h264-packetize nal` or `nal-groups` only for A/B tests. By default the
+native hardware path leaves the TURZX H264 command `last` flag off to match the
+known-good ffmpeg/libx264 path. Use `--usb-h264-mark-frame-end` only as a
+compatibility test; `--usb-h264-debug` prints this as `last=1`.
 
 For a quick H264 transport smoke test, run:
 
@@ -121,7 +121,8 @@ If the first hardware IDR remains much larger than the ffmpeg/libx264 stream,
 retry `--usb-h264-qp 38` and `--usb-h264-qp 44` to test whether the panel is
 rejecting large access units.
 If QP controls are rejected by the driver, keep `--usb-h264-packetize auto`
-so each H264 NAL is sent as its own USB command.
+so each encoder access unit is sent with the same command boundary as the
+software comparison path.
 Also compare the loggerd-style profile with
 `--usb-h264-hardware-profile high --usb-h264-bitrate 1M`; the SPS summary should
 change from `profile=0x42` to `profile=0x64` when the rebuilt native library is

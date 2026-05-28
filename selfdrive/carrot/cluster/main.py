@@ -879,8 +879,9 @@ def parse_args() -> argparse.Namespace:
         choices=("auto", "access-unit", "nal-groups", "nal"),
         default=DEFAULT_H264_PACKETIZE,
         help=(
-            "USB H264 command packetization. auto keeps ffmpeg reads intact and sends "
-            "native/helper hardware output as one NAL per USB command. Default: %(default)s."
+            "USB H264 command packetization. auto sends encoder access units like "
+            "the known-good ffmpeg/libx264 path; use nal or nal-groups for A/B tests. "
+            "Default: %(default)s."
         ),
     )
     parser.add_argument(
