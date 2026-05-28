@@ -85,7 +85,11 @@ public:
 
   uint32_t input_v4l_format() const { return input_v4l_format_; }
   const std::string& input_v4l_format_name() const { return input_v4l_format_name_; }
+  size_t input_sizeimage() const { return input_sizeimage_; }
   size_t input_stride() const { return input_stride_; }
+  size_t input_uv_offset() const { return input_uv_offset_; }
+  size_t input_bytesused() const { return input_bytesused_; }
+  size_t capture_sizeimage() const { return capture_sizeimage_; }
   bool input_is_rgb4() const;
   bool input_is_nv12() const;
 

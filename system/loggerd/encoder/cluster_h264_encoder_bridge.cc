@@ -245,4 +245,24 @@ size_t cluster_h264_encoder_bridge_input_stride(ClusterH264EncoderBridge *bridge
   return bridge->encoder->input_stride();
 }
 
+size_t cluster_h264_encoder_bridge_input_sizeimage(ClusterH264EncoderBridge *bridge) {
+  if (bridge == nullptr || bridge->encoder == nullptr) return 0;
+  return bridge->encoder->input_sizeimage();
+}
+
+size_t cluster_h264_encoder_bridge_input_uv_offset(ClusterH264EncoderBridge *bridge) {
+  if (bridge == nullptr || bridge->encoder == nullptr) return 0;
+  return bridge->encoder->input_uv_offset();
+}
+
+size_t cluster_h264_encoder_bridge_input_bytesused(ClusterH264EncoderBridge *bridge) {
+  if (bridge == nullptr || bridge->encoder == nullptr) return 0;
+  return bridge->encoder->input_bytesused();
+}
+
+size_t cluster_h264_encoder_bridge_capture_sizeimage(ClusterH264EncoderBridge *bridge) {
+  if (bridge == nullptr || bridge->encoder == nullptr) return 0;
+  return bridge->encoder->capture_sizeimage();
+}
+
 }  // extern "C"

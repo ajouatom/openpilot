@@ -72,8 +72,10 @@ as the first NAL; use `--usb-h264-insert-aud` only as a compatibility test.
 which can produce smaller hardware access units than Baseline/CAVLC on this
 Qualcomm encoder; rebuild the native library/helper after changing C++ encoder
 code before testing it.
-`--usb-h264-debug` prints per-chunk NAL summaries and SPS profile/constraint
-bytes so hardware output can be compared directly against ffmpeg/libx264.
+`--usb-h264-debug` prints a detailed trace for each early hardware packet:
+native callback flags/timestamps/keyframe state, raw and patched NAL summaries,
+packetization results, TURZX chunk sizes, and a shutdown summary. The helper
+backend also prints C++ packet metadata to stderr before Python reads stdout.
 `--usb-h264-no-sps-patch` disables the hardware SPS constraint-byte patch.
 `--usb-h264-no-sps-crop-patch` disables the hardware SPS frame-crop patch.
 `--usb-h264-no-sps-vui-patch` disables the hardware SPS VUI timing patch.
@@ -108,11 +110,13 @@ looks suspicious, return to the default `--usb-h264-input-format nv12` path.
 render cap. H264 chunks are no-ACK by default like JPEG frame uploads; use
 `--usb-h264-wait-ack` for strict response diagnostics, or
 `--usb-h264-soft-ack` to mimic the vendor video sender's retry/status polling
-without failing the run. `--usb-h264-debug` prints early chunk details. If the
-hardware stream is still corrupted, retry `--usb-h264-slice-max-bytes 2048`
-and `1024`; the debug NAL summary should show several smaller IDR/P NALs
-instead of one large slice. For 462x1920 streams, the SPS summary should show
-`display=462x1920` rather than only the coded 464-pixel macroblock width.
+without failing the run. If the hardware stream is still corrupted, rerun with
+`--usb-h264-debug --usb-h264-dump /tmp/cluster_hw_native.h264` and keep the
+native packet, packetize, chunk, and final summary lines. Then retry
+`--usb-h264-slice-max-bytes 2048` and `1024`; the debug NAL summary should show
+several smaller IDR/P NALs instead of one large slice. For 462x1920 streams,
+the SPS summary should show `display=462x1920` rather than only the coded
+464-pixel macroblock width.
 If the first hardware IDR remains much larger than the ffmpeg/libx264 stream,
 retry `--usb-h264-qp 38` and `--usb-h264-qp 44` to test whether the panel is
 rejecting large access units.

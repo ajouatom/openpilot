@@ -1,9 +1,11 @@
 #include "system/loggerd/encoder/cluster_h264_encoder.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <climits>
 #include <cstdlib>
 #include <cstring>
+#include <iomanip>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -141,6 +143,27 @@ void write_all(int fd, const uint8_t *data, size_t size) {
   }
 }
 
+bool should_log_packet(uint64_t index) {
+  return index <= 40 || (index % 30) == 0;
+}
+
+void log_packet_debug(uint64_t index, const ClusterH264PacketView &packet) {
+  std::cerr << "cluster_h264_encoder_cli packet " << index
+            << ": size=" << packet.size
+            << " flags=0x" << std::hex << packet.flags << std::dec
+            << " ts=" << packet.timestamp_us
+            << " codec_config=" << (packet.codec_config ? 1 : 0)
+            << " keyframe=" << (packet.keyframe ? 1 : 0)
+            << " head=";
+  const size_t head_size = std::min<size_t>(packet.size, 16);
+  for (size_t i = 0; i < head_size; ++i) {
+    if (i != 0) std::cerr << ' ';
+    std::cerr << std::hex << std::setw(2) << std::setfill('0')
+              << static_cast<int>(packet.data[i]);
+  }
+  std::cerr << std::dec << std::setfill(' ') << std::endl;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -213,21 +236,36 @@ int main(int argc, char **argv) {
               << " profile=" << (config.h264_profile == ClusterH264Profile::High ? "high" : "baseline")
               << " input=" << encoder.input_v4l_format_name()
               << " stride=" << encoder.input_stride()
+              << " input_size=" << encoder.input_sizeimage()
+              << " input_bytes=" << encoder.input_bytesused()
+              << " uv_offset=" << encoder.input_uv_offset()
+              << " capture_size=" << encoder.capture_sizeimage()
               << " device=" << config.device_path
               << std::endl;
 
     uint64_t frame_index = 0;
+    uint64_t packet_index = 0;
+    auto write_packet = [&](const ClusterH264PacketView &packet) {
+      ++packet_index;
+      if (config.debug && should_log_packet(packet_index)) {
+        log_packet_debug(packet_index, packet);
+      }
+      write_all(STDOUT_FILENO, packet.data, packet.size);
+    };
+
     while (read_exact(STDIN_FILENO, frame.data(), frame.size())) {
       const uint64_t timestamp_us = frame_index * 1000000ULL / static_cast<uint64_t>(config.fps);
-      encoder.encode_rgba(frame.data(), frame.size(), timestamp_us, [](const ClusterH264PacketView &packet) {
-        write_all(STDOUT_FILENO, packet.data, packet.size);
-      });
+      encoder.encode_rgba(frame.data(), frame.size(), timestamp_us, write_packet);
       ++frame_index;
     }
 
-    encoder.drain(250, [](const ClusterH264PacketView &packet) {
-      write_all(STDOUT_FILENO, packet.data, packet.size);
-    });
+    encoder.drain(250, write_packet);
+    if (config.debug) {
+      std::cerr << "cluster_h264_encoder_cli summary: frames=" << frame_index
+                << " packets=" << packet_index
+                << " bytes_per_frame=" << frame.size()
+                << std::endl;
+    }
     return 0;
   } catch (const std::exception &e) {
     std::cerr << "cluster_h264_encoder_cli error: " << e.what() << std::endl;

@@ -37,6 +37,15 @@ H264_NAL_NAMES = {
     8: "PPS",
     9: "AUD",
 }
+H264_DEBUG_PACKET_LIMIT = 40
+H264_DEBUG_PACKET_INTERVAL = 30
+H264_DEBUG_CHUNK_LIMIT = 60
+H264_DEBUG_CHUNK_INTERVAL = 25
+V4L2_BUF_FLAG_KEYFRAME = 0x00000008
+V4L2_BUF_FLAG_PFRAME = 0x00000010
+V4L2_BUF_FLAG_BFRAME = 0x00000020
+V4L2_QCOM_BUF_FLAG_CODECCONFIG = 0x00020000
+V4L2_QCOM_BUF_FLAG_EOS = 0x02000000
 
 
 def _align_dimension(value: int, alignment: int) -> int:
@@ -356,6 +365,33 @@ def _h264_packet_summary(data: bytes, max_nals: int = 6) -> str:
     return summary
 
 
+def _bytes_head(data: bytes, limit: int = 16) -> str:
+    return " ".join(f"{byte:02X}" for byte in data[:limit])
+
+
+def _h264_flags_text(flags: int, codec_config: bool = False, keyframe: bool = False) -> str:
+    names: list[str] = []
+    known_mask = 0
+    for value, name in (
+        (V4L2_BUF_FLAG_KEYFRAME, "KEYFRAME"),
+        (V4L2_BUF_FLAG_PFRAME, "PFRAME"),
+        (V4L2_BUF_FLAG_BFRAME, "BFRAME"),
+        (V4L2_QCOM_BUF_FLAG_CODECCONFIG, "CODECCONFIG"),
+        (V4L2_QCOM_BUF_FLAG_EOS, "EOS"),
+    ):
+        known_mask |= value
+        if flags & value:
+            names.append(name)
+    if codec_config and "CODECCONFIG" not in names:
+        names.append("codec_config_cb")
+    if keyframe and "KEYFRAME" not in names:
+        names.append("keyframe_cb")
+    extra = flags & ~known_mask
+    if extra:
+        names.append(f"extra=0x{extra:X}")
+    return "|".join(names) if names else "none"
+
+
 def _patch_h264_sps_constraints(data: bytes) -> tuple[bytes, bool]:
     patched = False
     mutable: bytearray | None = None
@@ -594,6 +630,16 @@ class H264UsbPipeline:
         self._samples: list[tuple[str, float]] = []
         self._stderr_tail: deque[str] = deque(maxlen=20)
         self._padded_rgba: bytearray | None = None
+        self._debug_started_at = time.perf_counter()
+        self._debug_encoder_packets = 0
+        self._debug_encoder_bytes = 0
+        self._debug_stdout_reads = 0
+        self._debug_stdout_bytes = 0
+        self._debug_packetize_events = 0
+        self._debug_packetize_fallbacks = 0
+        self._debug_usb_bytes = 0
+        self._debug_max_packet_bytes = 0
+        self._debug_max_chunk_bytes = 0
 
     def start(self) -> None:
         if self.backend_request == "ffmpeg":
@@ -663,6 +709,10 @@ class H264UsbPipeline:
         self.backend_name = "native"
         input_name = self._native_input_format_name()
         input_stride = lib.cluster_h264_encoder_bridge_input_stride(handle)
+        input_sizeimage = self._native_size_value("cluster_h264_encoder_bridge_input_sizeimage")
+        input_uv_offset = self._native_size_value("cluster_h264_encoder_bridge_input_uv_offset")
+        input_bytesused = self._native_size_value("cluster_h264_encoder_bridge_input_bytesused")
+        capture_sizeimage = self._native_size_value("cluster_h264_encoder_bridge_capture_sizeimage")
         print(
             "Starting H264 USB native hardware encoder: "
             f"{self.width}x{self.height}@{self.fps} "
@@ -672,6 +722,8 @@ class H264UsbPipeline:
             f"profile={self.h264_profile} "
             f"packetize={self._packetize_mode('native')} "
             f"input={input_name or self.input_format} stride={input_stride} "
+            f"input_size={input_sizeimage} input_bytes={input_bytesused} uv_offset={input_uv_offset} "
+            f"capture_size={capture_sizeimage} "
             f"rgb4_layout={self.rgb4_layout} device={self.device_path} "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')} "
             f"frame_end={'on' if self.mark_frame_end else 'off'} "
@@ -681,6 +733,7 @@ class H264UsbPipeline:
             f"sps_vui_patch={'on' if self.patch_sps_vui else 'off'}",
             flush=True,
         )
+        self._debug_log_session_config("native")
 
     def _start_helper(self) -> None:
         helper = self._resolve_helper_executable()
@@ -709,6 +762,11 @@ class H264UsbPipeline:
         )
         if self.debug:
             print(f"H264 helper encoder command: {' '.join(command)}", flush=True)
+            print(
+                "H264 helper debug: stdout is a byte stream, so helper stdout reads are not guaranteed to match encoder packet boundaries.",
+                flush=True,
+            )
+        self._debug_log_session_config("helper")
         try:
             self._proc = subprocess.Popen(
                 command,
@@ -755,6 +813,7 @@ class H264UsbPipeline:
         )
         if self.debug:
             print(f"H264 ffmpeg command: {' '.join(command)}", flush=True)
+        self._debug_log_session_config("ffmpeg")
         try:
             self._proc = subprocess.Popen(
                 command,
@@ -942,6 +1001,7 @@ class H264UsbPipeline:
             except Exception as exc:
                 print(f"Warning: TURZX H264 stop command skipped: {exc}", flush=True)
             self._stream_started = False
+        self._debug_log_close_summary()
         self._close_dump_file()
 
     def _open_dump_file(self) -> None:
@@ -959,6 +1019,94 @@ class H264UsbPipeline:
             return
         self._dump_file.write(chunk)
         self._dump_file.flush()
+
+    @staticmethod
+    def _debug_should_log(index: int, limit: int, interval: int) -> bool:
+        return index <= limit or (interval > 0 and index % interval == 0)
+
+    def _debug_log_session_config(self, source: str) -> None:
+        if not self.debug:
+            return
+        print(
+            "H264 debug session: "
+            f"backend={source} requested_backend={self.backend_request} "
+            f"display={self.width}x{self.height} encoder={self.encoder_width}x{self.encoder_height} "
+            f"fps={self.fps} bitrate={self.bitrate} gop={self.gop} "
+            f"chunk_size={self.chunk_size} requested_chunk={self.requested_chunk_size} "
+            f"packetize_request={self.packetize_request} packetize_mode={self._packetize_mode(source)} "
+            f"wait_ack={1 if self.wait_for_ack else 0} soft_ack={1 if self.soft_ack else 0} "
+            f"mark_frame_end={1 if self.mark_frame_end else 0} dump={self.dump_path or 'off'}",
+            flush=True,
+        )
+
+    def _debug_log_encoder_packet(
+        self,
+        index: int,
+        source: str,
+        stage: str,
+        packet: bytes,
+        *,
+        flags: int = 0,
+        timestamp_us: int = 0,
+        codec_config: bool = False,
+        keyframe: bool = False,
+    ) -> None:
+        if not self.debug or not self._debug_should_log(index, H264_DEBUG_PACKET_LIMIT, H264_DEBUG_PACKET_INTERVAL):
+            return
+        print(
+            f"H264 encoder packet {index}: {source}/{stage} size={len(packet)} "
+            f"flags=0x{flags:08X}({_h264_flags_text(flags, codec_config, keyframe)}) "
+            f"ts={timestamp_us} codec_config={1 if codec_config else 0} keyframe={1 if keyframe else 0} "
+            f"head={_bytes_head(packet)} {_h264_packet_summary(packet, max_nals=10)}",
+            flush=True,
+        )
+
+    def _debug_log_stdout_read(self, index: int, source: str, packet: bytes) -> None:
+        if not self.debug or not self._debug_should_log(index, H264_DEBUG_PACKET_LIMIT, H264_DEBUG_PACKET_INTERVAL):
+            return
+        note = "read_window=1" if source == "helper" else "ffmpeg_read=1"
+        print(
+            f"H264 stdout read {index}: {source} size={len(packet)} {note} "
+            f"head={_bytes_head(packet)} {_h264_packet_summary(packet, max_nals=10)}",
+            flush=True,
+        )
+
+    def _debug_log_packetize(self, source: str, index: int, packet: bytes, chunks: list[bytes], chunk_size: int) -> None:
+        units = _h264_byte_stream_units(packet)
+        if not units and self._packetize_mode(source) != "access-unit":
+            self._debug_packetize_fallbacks += 1
+        self._debug_packetize_events += 1
+        if not self.debug or not self._debug_should_log(index, H264_DEBUG_PACKET_LIMIT, H264_DEBUG_PACKET_INTERVAL):
+            return
+        sizes = [len(chunk) for chunk in chunks]
+        min_size = min(sizes) if sizes else 0
+        max_size = max(sizes) if sizes else 0
+        total_size = sum(sizes)
+        first_head = _bytes_head(chunks[0], 8) if chunks else ""
+        last_head = _bytes_head(chunks[-1], 8) if chunks else ""
+        print(
+            f"H264 packetize {index}: {source} mode={self._packetize_mode(source)} "
+            f"input={len(packet)} chunk_limit={chunk_size} chunks={len(chunks)} "
+            f"sizes={min_size}/{max_size}/{total_size} start_units={len(units)} "
+            f"fallback_no_start={1 if not units and self._packetize_mode(source) != 'access-unit' else 0} "
+            f"first={first_head} last={last_head}",
+            flush=True,
+        )
+
+    def _debug_log_close_summary(self) -> None:
+        if not self.debug:
+            return
+        elapsed = max(0.001, time.perf_counter() - self._debug_started_at)
+        print(
+            "H264 debug summary: "
+            f"backend={self.backend_name} elapsed={elapsed:.2f}s "
+            f"encoder_packets={self._debug_encoder_packets} encoder_bytes={self._debug_encoder_bytes} "
+            f"stdout_reads={self._debug_stdout_reads} stdout_bytes={self._debug_stdout_bytes} "
+            f"packetize_events={self._debug_packetize_events} packetize_fallbacks={self._debug_packetize_fallbacks} "
+            f"usb_chunks={self._chunks_sent} usb_bytes={self._debug_usb_bytes} "
+            f"max_packet={self._debug_max_packet_bytes} max_chunk={self._debug_max_chunk_bytes}",
+            flush=True,
+        )
 
     def _prepare_hardware_packet(self, packet: bytes) -> bytes:
         if self.patch_sps_constraints:
@@ -1264,6 +1412,18 @@ class H264UsbPipeline:
         lib.cluster_h264_encoder_bridge_input_format_name.restype = ctypes.c_char_p
         lib.cluster_h264_encoder_bridge_input_stride.argtypes = [ctypes.c_void_p]
         lib.cluster_h264_encoder_bridge_input_stride.restype = ctypes.c_size_t
+        for getter_name in (
+            "cluster_h264_encoder_bridge_input_sizeimage",
+            "cluster_h264_encoder_bridge_input_uv_offset",
+            "cluster_h264_encoder_bridge_input_bytesused",
+            "cluster_h264_encoder_bridge_capture_sizeimage",
+        ):
+            try:
+                getter = getattr(lib, getter_name)
+            except AttributeError:
+                continue
+            getter.argtypes = [ctypes.c_void_p]
+            getter.restype = ctypes.c_size_t
         try:
             set_slice_max = lib.cluster_h264_encoder_bridge_set_slice_max_bytes
         except AttributeError:
@@ -1352,10 +1512,10 @@ class H264UsbPipeline:
         self,
         data: int,
         size: int,
-        _flags: int,
-        _timestamp_us: int,
-        _codec_config: int,
-        _keyframe: int,
+        flags: int,
+        timestamp_us: int,
+        codec_config: int,
+        keyframe: int,
         _opaque: int,
     ) -> None:
         if size <= 0 or not data:
@@ -1367,9 +1527,35 @@ class H264UsbPipeline:
             chunk_size = max(1, self.chunk_size)
             base = int(data)
             packet = ctypes.string_at(base, int(size))
+            self._debug_encoder_packets += 1
+            packet_index = self._debug_encoder_packets
+            self._debug_encoder_bytes += len(packet)
+            self._debug_max_packet_bytes = max(self._debug_max_packet_bytes, len(packet))
+            self._debug_log_encoder_packet(
+                packet_index,
+                "native",
+                "raw",
+                packet,
+                flags=int(flags),
+                timestamp_us=int(timestamp_us),
+                codec_config=bool(codec_config),
+                keyframe=bool(keyframe),
+            )
             packet = self._prepare_hardware_packet(packet)
+            self._debug_max_packet_bytes = max(self._debug_max_packet_bytes, len(packet))
+            self._debug_log_encoder_packet(
+                packet_index,
+                "native",
+                "patched",
+                packet,
+                flags=int(flags),
+                timestamp_us=int(timestamp_us),
+                codec_config=bool(codec_config),
+                keyframe=bool(keyframe),
+            )
             self._write_dump(packet)
             chunks = self._packetize_h264_for_usb(packet, chunk_size, source="native")
+            self._debug_log_packetize("native", packet_index, packet, chunks, chunk_size)
             for index, chunk in enumerate(chunks):
                 packet_queue.put((chunk, self.mark_frame_end and index == len(chunks) - 1), timeout=1.0)
         except queue.Full as exc:
@@ -1410,6 +1596,17 @@ class H264UsbPipeline:
             return ""
         value = lib.cluster_h264_encoder_bridge_input_format_name(handle)
         return "" if not value else value.decode("utf-8", errors="replace")
+
+    def _native_size_value(self, name: str) -> int:
+        lib = self._native_lib
+        handle = self._native_handle
+        if lib is None or handle is None:
+            return 0
+        try:
+            getter = getattr(lib, name)
+        except AttributeError:
+            return 0
+        return int(getter(handle))
 
     @staticmethod
     def _parse_bitrate_bps(value: str) -> int:
@@ -1452,9 +1649,26 @@ class H264UsbPipeline:
                 chunk = os.read(fd, chunk_size)
                 if not chunk:
                     return
+                self._debug_stdout_reads += 1
+                read_index = self._debug_stdout_reads
+                self._debug_stdout_bytes += len(chunk)
+                self._debug_max_packet_bytes = max(self._debug_max_packet_bytes, len(chunk))
+                self._debug_log_stdout_read(read_index, self.backend_name, chunk)
                 if self.backend_name == "helper":
+                    before_patch = chunk
                     chunk = self._prepare_hardware_packet(chunk)
+                    if self.debug and before_patch != chunk and self._debug_should_log(
+                        read_index,
+                        H264_DEBUG_PACKET_LIMIT,
+                        H264_DEBUG_PACKET_INTERVAL,
+                    ):
+                        print(
+                            f"H264 stdout read {read_index}: helper patched size {len(before_patch)}->{len(chunk)} "
+                            f"head={_bytes_head(chunk)} {_h264_packet_summary(chunk, max_nals=10)}",
+                            flush=True,
+                        )
                 chunks = self._packetize_h264_for_usb(chunk, chunk_size, source=self.backend_name)
+                self._debug_log_packetize(self.backend_name, read_index, chunk, chunks, chunk_size)
                 self._write_dump(chunk)
                 for packet_chunk in chunks:
                     self._send_h264_chunk(packet_chunk, chunk_size, source=self.backend_name)
@@ -1489,13 +1703,19 @@ class H264UsbPipeline:
 
     def _send_h264_chunk(self, chunk: bytes, chunk_size: int, *, source: str, is_last: bool = False) -> None:
         self._chunks_sent += 1
-        if self.debug and (self._chunks_sent <= 5 or self._chunks_sent % 30 == 0 or is_last):
-            head = " ".join(f"{byte:02X}" for byte in chunk[:8])
+        self._debug_usb_bytes += len(chunk)
+        self._debug_max_chunk_bytes = max(self._debug_max_chunk_bytes, len(chunk))
+        if self.debug and (
+            self._chunks_sent <= H264_DEBUG_CHUNK_LIMIT
+            or self._chunks_sent % H264_DEBUG_CHUNK_INTERVAL == 0
+            or is_last
+        ):
             ack_mode = "soft" if self.wait_for_ack and self.soft_ack else ("on" if self.wait_for_ack else "off")
             summary = _h264_packet_summary(chunk)
             print(
                 f"H264 chunk {self._chunks_sent}: {source} {len(chunk)} bytes "
-                f"head={head} ack={ack_mode} last={1 if is_last else 0} {summary}",
+                f"limit={chunk_size} head={_bytes_head(chunk, 8)} ack={ack_mode} "
+                f"last={1 if is_last else 0} total_usb={self._debug_usb_bytes} {summary}",
                 flush=True,
             )
         profile_stage = time.perf_counter()
