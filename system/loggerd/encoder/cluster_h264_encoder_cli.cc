@@ -22,20 +22,14 @@ void usage(const char *prog) {
       << "\n"
       << "Options:\n"
       << "  --fps N                 Input FPS. Default 30.\n"
-      << "  --bitrate BPS           Target bitrate in bits/s; K/M suffixes are accepted. Default 6000000.\n"
+      << "  --bitrate BPS           Target bitrate in bits/s; K/M suffixes are accepted. Default 1000000.\n"
       << "  --gop N                 Keyframe interval in frames. Default 30.\n"
       << "  --slice-max-bytes N     V4L2 multi-slice max bytes; 0 disables. Default 4096.\n"
-      << "  --slice-max-mb N        V4L2 multi-slice max macroblocks; 0 disables. Default 0.\n"
-      << "  --qp N                  Force H264 QP/min-QP controls; -1 disables. Range -1..51. Default -1.\n"
-      << "  --rate-control vbr-cfr|cbr-cfr|cq|off\n"
-      << "                          Qualcomm VIDC rate-control mode. Default vbr-cfr.\n"
       << "  --device PATH           V4L2 encoder device path.\n"
       << "  --input-format auto|rgb4|nv12\n"
       << "                          Hardware input format. Default auto.\n"
       << "  --rgb4-layout axrgb|rgba|bgra\n"
       << "                          RGBA to RGB4 byte layout. Default bgra.\n"
-      << "  --h264-profile baseline|high\n"
-      << "                          H264 profile/entropy mode. baseline uses CAVLC; high uses CABAC. Default baseline.\n"
       << "  --debug                 Enable verbose encoder logging.\n";
 }
 
@@ -54,16 +48,6 @@ int parse_nonnegative_int(const std::string &name, const std::string &value) {
   errno = 0;
   long parsed = strtol(value.c_str(), &end, 10);
   if (errno != 0 || end == value.c_str() || *end != '\0' || parsed < 0 || parsed > INT_MAX) {
-    throw std::runtime_error("invalid " + name + ": " + value);
-  }
-  return static_cast<int>(parsed);
-}
-
-int parse_qp(const std::string &name, const std::string &value) {
-  char *end = nullptr;
-  errno = 0;
-  long parsed = strtol(value.c_str(), &end, 10);
-  if (errno != 0 || end == value.c_str() || *end != '\0' || parsed < -1 || parsed > 51) {
     throw std::runtime_error("invalid " + name + ": " + value);
   }
   return static_cast<int>(parsed);
@@ -105,20 +89,6 @@ ClusterH264Rgb4Layout parse_rgb4_layout(const std::string &value) {
   if (value == "rgba") return ClusterH264Rgb4Layout::RGBA;
   if (value == "bgra") return ClusterH264Rgb4Layout::BGRA;
   throw std::runtime_error("invalid --rgb4-layout: " + value);
-}
-
-ClusterH264Profile parse_h264_profile(const std::string &value) {
-  if (value == "baseline") return ClusterH264Profile::Baseline;
-  if (value == "high") return ClusterH264Profile::High;
-  throw std::runtime_error("invalid --h264-profile: " + value);
-}
-
-ClusterH264RateControl parse_rate_control(const std::string &value) {
-  if (value == "vbr-cfr") return ClusterH264RateControl::VbrCfr;
-  if (value == "cbr-cfr") return ClusterH264RateControl::CbrCfr;
-  if (value == "cq") return ClusterH264RateControl::Cq;
-  if (value == "off") return ClusterH264RateControl::Off;
-  throw std::runtime_error("invalid --rate-control: " + value);
 }
 
 bool read_exact(int fd, uint8_t *data, size_t size) {
@@ -201,23 +171,12 @@ int main(int argc, char **argv) {
         config.gop = parse_int(arg, next_value(arg));
       } else if (arg == "--slice-max-bytes") {
         config.slice_max_bytes = parse_nonnegative_int(arg, next_value(arg));
-      } else if (arg == "--slice-max-mb") {
-        config.slice_max_mb = parse_nonnegative_int(arg, next_value(arg));
-        if (config.slice_max_mb != 0) {
-          throw std::runtime_error("--slice-max-mb is disabled because it can stall the Qualcomm V4L2 encoder");
-        }
-      } else if (arg == "--qp") {
-        config.qp = parse_qp(arg, next_value(arg));
-      } else if (arg == "--rate-control") {
-        config.rate_control = parse_rate_control(next_value(arg));
       } else if (arg == "--device") {
         config.device_path = next_value(arg);
       } else if (arg == "--input-format") {
         config.input_format = parse_input_format(next_value(arg));
       } else if (arg == "--rgb4-layout") {
         config.rgb4_layout = parse_rgb4_layout(next_value(arg));
-      } else if (arg == "--h264-profile") {
-        config.h264_profile = parse_h264_profile(next_value(arg));
       } else if (arg == "--debug") {
         config.debug = true;
       } else if (arg == "--help" || arg == "-h") {
@@ -243,12 +202,6 @@ int main(int argc, char **argv) {
               << " bitrate=" << config.bitrate
               << " gop=" << config.gop
               << " slice_max_bytes=" << config.slice_max_bytes
-              << " slice_max_mb=" << config.slice_max_mb
-              << " qp=" << config.qp
-              << " rate_control=" << (config.rate_control == ClusterH264RateControl::Cq ? "cq" :
-                                      (config.rate_control == ClusterH264RateControl::CbrCfr ? "cbr-cfr" :
-                                       (config.rate_control == ClusterH264RateControl::Off ? "off" : "vbr-cfr")))
-              << " profile=" << (config.h264_profile == ClusterH264Profile::High ? "high" : "baseline")
               << " input=" << encoder.input_v4l_format_name()
               << " stride=" << encoder.input_stride()
               << " scanlines=" << encoder.input_y_scanlines() << "/" << encoder.input_uv_scanlines()

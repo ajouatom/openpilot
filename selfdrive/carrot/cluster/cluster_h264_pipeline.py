@@ -21,16 +21,10 @@ DEFAULT_H264_DEVICE = "/dev/v4l/by-path/platform-aa00000.qcom_vidc-video-index1"
 DEFAULT_H264_FFMPEG = "ffmpeg"
 DEFAULT_H264_FFMPEG_ENCODER = "libx264"
 DEFAULT_H264_SLICE_MAX_BYTES = 4096
-DEFAULT_H264_SLICE_MAX_MB = 0
-DEFAULT_H264_PACKETIZE = "auto"
 DEFAULT_H264_ENCODER_ALIGN = 16
-DEFAULT_H264_RATE_CONTROL = "vbr-cfr"
 
 NATIVE_INPUT_FORMATS = {"auto": 0, "rgb4": 1, "nv12": 2}
 NATIVE_RGB4_LAYOUTS = {"axrgb": 0, "rgba": 1, "bgra": 2}
-NATIVE_H264_PROFILES = {"baseline": 0, "high": 1}
-NATIVE_H264_RATE_CONTROLS = {"vbr-cfr": 0, "cbr-cfr": 1, "cq": 2, "off": 3}
-H264_AUD_NAL = b"\x00\x00\x00\x01\x09\xf0"
 H264_NAL_NAMES = {
     1: "P",
     5: "IDR",
@@ -664,20 +658,10 @@ class H264UsbPipeline:
         device_path: str,
         input_format: str,
         rgb4_layout: str,
-        h264_profile: str,
-        rate_control: str,
         slice_max_bytes: int,
-        slice_max_mb: int,
-        qp: int,
-        packetize: str,
         requested_chunk_size: int,
         wait_for_ack: bool,
         soft_ack: bool,
-        mark_frame_end: bool,
-        insert_aud: bool,
-        patch_sps_constraints: bool,
-        patch_sps_crop: bool,
-        patch_sps_vui: bool,
         dump_path: str,
         debug: bool,
     ) -> None:
@@ -701,20 +685,10 @@ class H264UsbPipeline:
         self.device_path = device_path
         self.input_format = input_format
         self.rgb4_layout = rgb4_layout
-        self.h264_profile = h264_profile
-        self.rate_control = rate_control
         self.slice_max_bytes = max(0, int(slice_max_bytes))
-        self.slice_max_mb = max(0, int(slice_max_mb))
-        self.qp = int(qp)
-        self.packetize_request = packetize
         self.requested_chunk_size = max(0, int(requested_chunk_size))
         self.wait_for_ack = wait_for_ack
         self.soft_ack = soft_ack
-        self.mark_frame_end = mark_frame_end
-        self.insert_aud = insert_aud
-        self.patch_sps_constraints = patch_sps_constraints
-        self.patch_sps_crop = patch_sps_crop
-        self.patch_sps_vui = patch_sps_vui
         self.dump_path = dump_path
         self._dump_file = None
         self.debug = debug
@@ -745,7 +719,6 @@ class H264UsbPipeline:
         self._debug_stdout_reads = 0
         self._debug_stdout_bytes = 0
         self._debug_packetize_events = 0
-        self._debug_packetize_fallbacks = 0
         self._debug_usb_bytes = 0
         self._debug_max_packet_bytes = 0
         self._debug_max_chunk_bytes = 0
@@ -792,10 +765,6 @@ class H264UsbPipeline:
         self._native_handle = handle
         self._native_callback = NativePacketCallback(self._native_packet_callback)
         self._set_native_slice_max_bytes(lib, handle)
-        self._set_native_slice_max_mb(lib, handle)
-        self._set_native_rate_control(lib, handle)
-        self._set_native_qp(lib, handle)
-        self._set_native_h264_profile(lib, handle)
 
         if lib.cluster_h264_encoder_bridge_open(handle) != 0:
             raise RuntimeError(self._native_error_text("native H264 encoder open failed"))
@@ -830,20 +799,14 @@ class H264UsbPipeline:
             f"{self.width}x{self.height}@{self.fps} "
             f"encoder={self.encoder_width}x{self.encoder_height} "
             f"bitrate={bitrate_bps} gop={self.gop} "
-            f"slice_max={self.slice_max_bytes} slice_max_mb={self.slice_max_mb} qp={self.qp} "
-            f"profile={self.h264_profile} rate_control={self.rate_control} "
-            f"packetize={self._packetize_mode('native')} "
+            f"slice_max={self.slice_max_bytes} packetize=access-unit "
             f"input={input_name or self.input_format} stride={input_stride} "
             f"scanlines={input_y_scanlines}/{input_uv_scanlines} "
             f"input_size={input_sizeimage} input_bytes={input_bytesused} uv_offset={input_uv_offset} "
             f"capture_size={capture_sizeimage} "
             f"rgb4_layout={self.rgb4_layout} device={self.device_path} "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')} "
-            f"frame_end={'on' if self.mark_frame_end else 'off'} "
-            f"aud={'on' if self.insert_aud else 'off'} "
-            f"sps_patch={'on' if self.patch_sps_constraints else 'off'} "
-            f"sps_crop_patch={'on' if self.patch_sps_crop else 'off'} "
-            f"sps_vui_patch={'on' if self.patch_sps_vui else 'off'}",
+            "sps_patch=on sps_crop_patch=on sps_vui_patch=on",
             flush=True,
         )
         self._debug_log_session_config("native")
@@ -860,17 +823,11 @@ class H264UsbPipeline:
             f"{self.width}x{self.height}@{self.fps} "
             f"encoder={self.encoder_width}x{self.encoder_height} "
             f"bitrate={self.bitrate} gop={self.gop} "
-            f"slice_max={self.slice_max_bytes} slice_max_mb={self.slice_max_mb} qp={self.qp} "
-            f"profile={self.h264_profile} rate_control={self.rate_control} "
-            f"packetize={self._packetize_mode('helper')} "
+            f"slice_max={self.slice_max_bytes} packetize=access-unit "
             f"input={self.input_format} rgb4_layout={self.rgb4_layout} "
             f"device={self.device_path} "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')} "
-            f"frame_end={'on' if self.mark_frame_end else 'off'} "
-            f"aud={'native-only' if self.insert_aud else 'off'} "
-            f"sps_patch={'on' if self.patch_sps_constraints else 'off'} "
-            f"sps_crop_patch={'on' if self.patch_sps_crop else 'off'} "
-            f"sps_vui_patch={'on' if self.patch_sps_vui else 'off'}",
+            "sps_patch=on sps_crop_patch=on sps_vui_patch=on",
             flush=True,
         )
         if self.debug:
@@ -920,7 +877,7 @@ class H264UsbPipeline:
             "Starting H264 USB ffmpeg encoder: "
             f"{self.ffmpeg_encoder_name} {self.encoder_width}x{self.encoder_height}@{self.fps} "
             f"bitrate={self.bitrate} gop={self.gop} muxer={self.ffmpeg_muxer_name} "
-            f"packetize={self._packetize_mode('ffmpeg')} "
+            "packetize=access-unit "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')}",
             flush=True,
         )
@@ -1145,11 +1102,10 @@ class H264UsbPipeline:
             f"backend={source} requested_backend={self.backend_request} "
             f"display={self.width}x{self.height} encoder={self.encoder_width}x{self.encoder_height} "
             f"fps={self.fps} bitrate={self.bitrate} gop={self.gop} "
-            f"profile={self.h264_profile} rate_control={self.rate_control} qp={self.qp} "
             f"chunk_size={self.chunk_size} requested_chunk={self.requested_chunk_size} "
-            f"packetize_request={self.packetize_request} packetize_mode={self._packetize_mode(source)} "
+            "packetize_mode=access-unit "
             f"wait_ack={1 if self.wait_for_ack else 0} soft_ack={1 if self.soft_ack else 0} "
-            f"mark_frame_end={1 if self.mark_frame_end else 0} dump={self.dump_path or 'off'}",
+            f"dump={self.dump_path or 'off'}",
             flush=True,
         )
 
@@ -1187,8 +1143,6 @@ class H264UsbPipeline:
 
     def _debug_log_packetize(self, source: str, index: int, packet: bytes, chunks: list[bytes], chunk_size: int) -> None:
         units = _h264_byte_stream_units(packet)
-        if not units and self._packetize_mode(source) != "access-unit":
-            self._debug_packetize_fallbacks += 1
         self._debug_packetize_events += 1
         if not self.debug or not self._debug_should_log(index, H264_DEBUG_PACKET_LIMIT, H264_DEBUG_PACKET_INTERVAL):
             return
@@ -1199,10 +1153,9 @@ class H264UsbPipeline:
         first_head = _bytes_head(chunks[0], 8) if chunks else ""
         last_head = _bytes_head(chunks[-1], 8) if chunks else ""
         print(
-            f"H264 packetize {index}: {source} mode={self._packetize_mode(source)} "
+            f"H264 packetize {index}: {source} mode=access-unit "
             f"input={len(packet)} chunk_limit={chunk_size} chunks={len(chunks)} "
             f"sizes={min_size}/{max_size}/{total_size} start_units={len(units)} "
-            f"fallback_no_start={1 if not units and self._packetize_mode(source) != 'access-unit' else 0} "
             f"first={first_head} last={last_head}",
             flush=True,
         )
@@ -1216,81 +1169,39 @@ class H264UsbPipeline:
             f"backend={self.backend_name} elapsed={elapsed:.2f}s "
             f"encoder_packets={self._debug_encoder_packets} encoder_bytes={self._debug_encoder_bytes} "
             f"stdout_reads={self._debug_stdout_reads} stdout_bytes={self._debug_stdout_bytes} "
-            f"packetize_events={self._debug_packetize_events} packetize_fallbacks={self._debug_packetize_fallbacks} "
+            f"packetize_events={self._debug_packetize_events} "
             f"usb_chunks={self._chunks_sent} usb_bytes={self._debug_usb_bytes} "
             f"max_packet={self._debug_max_packet_bytes} max_chunk={self._debug_max_chunk_bytes}",
             flush=True,
         )
 
     def _prepare_hardware_packet(self, packet: bytes) -> bytes:
-        if self.patch_sps_constraints:
-            packet, patched = _patch_h264_sps_constraints(packet)
-            if patched and self.debug and not self._sps_patch_logged:
-                print(
-                    "H264 hardware SPS patched: baseline constraint flags OR 0x40 to match libx264 constrained-baseline",
-                    flush=True,
-                )
-                self._sps_patch_logged = True
-        if self.patch_sps_crop:
-            packet, patched, crop_info = _patch_h264_sps_crop(packet, self.width, self.height)
-            if patched and self.debug and not self._sps_crop_patch_logged:
-                print(
-                    f"H264 hardware SPS crop patched: {crop_info}",
-                    flush=True,
-                )
-                self._sps_crop_patch_logged = True
-        if self.patch_sps_vui:
-            packet, patched, vui_info = _patch_h264_sps_vui_timing(packet, self.fps)
-            if patched and self.debug and not self._sps_vui_patch_logged:
-                print(
-                    f"H264 hardware SPS VUI timing patched: {vui_info}",
-                    flush=True,
-                )
-                self._sps_vui_patch_logged = True
-        if self.insert_aud:
-            packet = H264_AUD_NAL + packet
+        packet, patched = _patch_h264_sps_constraints(packet)
+        if patched and self.debug and not self._sps_patch_logged:
+            print(
+                "H264 hardware SPS patched: baseline constraint flags OR 0x40 to match libx264 constrained-baseline",
+                flush=True,
+            )
+            self._sps_patch_logged = True
+        packet, patched, crop_info = _patch_h264_sps_crop(packet, self.width, self.height)
+        if patched and self.debug and not self._sps_crop_patch_logged:
+            print(
+                f"H264 hardware SPS crop patched: {crop_info}",
+                flush=True,
+            )
+            self._sps_crop_patch_logged = True
+        packet, patched, vui_info = _patch_h264_sps_vui_timing(packet, self.fps)
+        if patched and self.debug and not self._sps_vui_patch_logged:
+            print(
+                f"H264 hardware SPS VUI timing patched: {vui_info}",
+                flush=True,
+            )
+            self._sps_vui_patch_logged = True
         return packet
 
-    def _packetize_mode(self, source: str) -> str:
-        if self.packetize_request != "auto":
-            return self.packetize_request
-        return "access-unit"
-
-    def _packetize_h264_for_usb(self, packet: bytes, chunk_size: int, *, source: str) -> list[bytes]:
+    def _packetize_h264_for_usb(self, packet: bytes, chunk_size: int) -> list[bytes]:
         chunk_size = max(1, chunk_size)
-        mode = self._packetize_mode(source)
-        if mode == "access-unit":
-            return [packet[offset:offset + chunk_size] for offset in range(0, len(packet), chunk_size)]
-
-        units = _h264_byte_stream_units(packet)
-        if not units:
-            return [packet[offset:offset + chunk_size] for offset in range(0, len(packet), chunk_size)]
-
-        if mode == "nal":
-            chunks: list[bytes] = []
-            for unit in units:
-                chunks.extend(unit[offset:offset + chunk_size] for offset in range(0, len(unit), chunk_size))
-            return chunks
-
-        if mode != "nal-groups":
-            raise RuntimeError(f"unsupported H264 USB packetize mode: {mode}")
-
-        chunks: list[bytes] = []
-        current = bytearray()
-        for unit in units:
-            if len(unit) > chunk_size:
-                if current:
-                    chunks.append(bytes(current))
-                    current.clear()
-                chunks.extend(unit[offset:offset + chunk_size] for offset in range(0, len(unit), chunk_size))
-                continue
-            if current and len(current) + len(unit) > chunk_size:
-                chunks.append(bytes(current))
-                current.clear()
-            current.extend(unit)
-        if current:
-            chunks.append(bytes(current))
-        return chunks
+        return [packet[offset:offset + chunk_size] for offset in range(0, len(packet), chunk_size)]
 
     def _close_dump_file(self) -> None:
         if self._dump_file is None:
@@ -1348,15 +1259,7 @@ class H264UsbPipeline:
             self.rgb4_layout,
             "--slice-max-bytes",
             str(self.slice_max_bytes),
-            "--slice-max-mb",
-            str(self.slice_max_mb),
-            "--qp",
-            str(self.qp),
-            "--rate-control",
-            self.rate_control,
         ]
-        if self.h264_profile != "baseline":
-            command.extend(["--h264-profile", self.h264_profile])
         if self.debug:
             command.append("--debug")
         return command
@@ -1547,34 +1450,6 @@ class H264UsbPipeline:
         else:
             set_slice_max.argtypes = [ctypes.c_void_p, ctypes.c_int]
             set_slice_max.restype = ctypes.c_int
-        try:
-            set_qp = lib.cluster_h264_encoder_bridge_set_qp
-        except AttributeError:
-            pass
-        else:
-            set_qp.argtypes = [ctypes.c_void_p, ctypes.c_int]
-            set_qp.restype = ctypes.c_int
-        try:
-            set_slice_mb = lib.cluster_h264_encoder_bridge_set_slice_max_mb
-        except AttributeError:
-            pass
-        else:
-            set_slice_mb.argtypes = [ctypes.c_void_p, ctypes.c_int]
-            set_slice_mb.restype = ctypes.c_int
-        try:
-            set_h264_profile = lib.cluster_h264_encoder_bridge_set_h264_profile
-        except AttributeError:
-            pass
-        else:
-            set_h264_profile.argtypes = [ctypes.c_void_p, ctypes.c_int]
-            set_h264_profile.restype = ctypes.c_int
-        try:
-            set_rate_control = lib.cluster_h264_encoder_bridge_set_rate_control
-        except AttributeError:
-            pass
-        else:
-            set_rate_control.argtypes = [ctypes.c_void_p, ctypes.c_int]
-            set_rate_control.restype = ctypes.c_int
 
     def _set_native_slice_max_bytes(self, lib: ctypes.CDLL, handle: int) -> None:
         try:
@@ -1589,60 +1464,6 @@ class H264UsbPipeline:
             return
         if set_slice_max(handle, self.slice_max_bytes) != 0:
             raise RuntimeError(self._native_error_text("native H264 slice max-byte setup failed"))
-
-    def _set_native_slice_max_mb(self, lib: ctypes.CDLL, handle: int) -> None:
-        try:
-            set_slice_mb = lib.cluster_h264_encoder_bridge_set_slice_max_mb
-        except AttributeError:
-            if self.slice_max_mb and self.debug:
-                print(
-                    "Warning: native H264 library does not expose slice max-MB control; rebuild "
-                    "system/loggerd/libcluster_h264_encoder_bridge.so",
-                    flush=True,
-                )
-            return
-        if set_slice_mb(handle, self.slice_max_mb) != 0:
-            raise RuntimeError(self._native_error_text("native H264 slice max-MB setup failed"))
-
-    def _set_native_qp(self, lib: ctypes.CDLL, handle: int) -> None:
-        try:
-            set_qp = lib.cluster_h264_encoder_bridge_set_qp
-        except AttributeError:
-            if self.qp >= 0 and self.debug:
-                print(
-                    "Warning: native H264 library does not expose QP control; rebuild "
-                    "system/loggerd/libcluster_h264_encoder_bridge.so",
-                    flush=True,
-                )
-            return
-        if set_qp(handle, self.qp) != 0:
-            raise RuntimeError(self._native_error_text("native H264 QP setup failed"))
-
-    def _set_native_rate_control(self, lib: ctypes.CDLL, handle: int) -> None:
-        try:
-            set_rate_control = lib.cluster_h264_encoder_bridge_set_rate_control
-        except AttributeError:
-            if self.rate_control != "vbr-cfr":
-                raise RuntimeError(
-                    "native H264 library does not expose rate-control selection; rebuild "
-                    "system/loggerd/libcluster_h264_encoder_bridge.so"
-                )
-            return
-        if set_rate_control(handle, NATIVE_H264_RATE_CONTROLS[self.rate_control]) != 0:
-            raise RuntimeError(self._native_error_text("native H264 rate-control setup failed"))
-
-    def _set_native_h264_profile(self, lib: ctypes.CDLL, handle: int) -> None:
-        try:
-            set_profile = lib.cluster_h264_encoder_bridge_set_h264_profile
-        except AttributeError:
-            if self.h264_profile != "baseline":
-                raise RuntimeError(
-                    "native H264 library does not expose H264 profile control; rebuild "
-                    "system/loggerd/libcluster_h264_encoder_bridge.so"
-                )
-            return
-        if set_profile(handle, NATIVE_H264_PROFILES[self.h264_profile]) != 0:
-            raise RuntimeError(self._native_error_text("native H264 profile setup failed"))
 
     def _native_packet_callback(
         self,
@@ -1690,10 +1511,10 @@ class H264UsbPipeline:
                 keyframe=bool(keyframe),
             )
             self._write_dump(packet)
-            chunks = self._packetize_h264_for_usb(packet, chunk_size, source="native")
+            chunks = self._packetize_h264_for_usb(packet, chunk_size)
             self._debug_log_packetize("native", packet_index, packet, chunks, chunk_size)
-            for index, chunk in enumerate(chunks):
-                packet_queue.put((chunk, self.mark_frame_end and index == len(chunks) - 1), timeout=1.0)
+            for chunk in chunks:
+                packet_queue.put((chunk, False), timeout=1.0)
         except queue.Full as exc:
             self._set_error(RuntimeError("native H264 USB sender queue is full"))
         except BaseException as exc:
@@ -1803,7 +1624,7 @@ class H264UsbPipeline:
                             f"head={_bytes_head(chunk)} {_h264_packet_summary(chunk, max_nals=10)}",
                             flush=True,
                         )
-                chunks = self._packetize_h264_for_usb(chunk, chunk_size, source=self.backend_name)
+                chunks = self._packetize_h264_for_usb(chunk, chunk_size)
                 self._debug_log_packetize(self.backend_name, read_index, chunk, chunks, chunk_size)
                 self._write_dump(chunk)
                 for packet_chunk in chunks:

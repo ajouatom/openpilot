@@ -30,24 +30,6 @@ ClusterH264Rgb4Layout rgb4_layout_from_int(int value) {
   throw std::runtime_error("invalid RGB4 layout");
 }
 
-ClusterH264Profile h264_profile_from_int(int value) {
-  switch (value) {
-    case 0: return ClusterH264Profile::Baseline;
-    case 1: return ClusterH264Profile::High;
-  }
-  throw std::runtime_error("invalid H264 profile");
-}
-
-ClusterH264RateControl rate_control_from_int(int value) {
-  switch (value) {
-    case 0: return ClusterH264RateControl::VbrCfr;
-    case 1: return ClusterH264RateControl::CbrCfr;
-    case 2: return ClusterH264RateControl::Cq;
-    case 3: return ClusterH264RateControl::Off;
-  }
-  throw std::runtime_error("invalid H264 rate control");
-}
-
 void set_error(ClusterH264EncoderBridge *bridge, const std::exception &e) {
   if (bridge != nullptr) {
     bridge->last_error = e.what();
@@ -108,68 +90,6 @@ int cluster_h264_encoder_bridge_set_slice_max_bytes(ClusterH264EncoderBridge *br
   bridge->config.slice_max_bytes = slice_max_bytes;
   bridge->last_error.clear();
   return 0;
-}
-
-int cluster_h264_encoder_bridge_set_slice_max_mb(ClusterH264EncoderBridge *bridge, int slice_max_mb) {
-  if (bridge == nullptr) return -1;
-  if (bridge->encoder != nullptr) {
-    bridge->last_error = "cannot change slice max MB after encoder open";
-    return -1;
-  }
-  if (slice_max_mb != 0) {
-    bridge->last_error = "slice max MB is disabled because it can stall the Qualcomm V4L2 encoder";
-    return -1;
-  }
-  bridge->config.slice_max_mb = slice_max_mb;
-  bridge->last_error.clear();
-  return 0;
-}
-
-int cluster_h264_encoder_bridge_set_qp(ClusterH264EncoderBridge *bridge, int qp) {
-  if (bridge == nullptr) return -1;
-  if (bridge->encoder != nullptr) {
-    bridge->last_error = "cannot change qp after encoder open";
-    return -1;
-  }
-  if (qp < -1 || qp > 51) {
-    bridge->last_error = "qp must be -1 or between 0 and 51";
-    return -1;
-  }
-  bridge->config.qp = qp;
-  bridge->last_error.clear();
-  return 0;
-}
-
-int cluster_h264_encoder_bridge_set_h264_profile(ClusterH264EncoderBridge *bridge, int profile) {
-  if (bridge == nullptr) return -1;
-  if (bridge->encoder != nullptr) {
-    bridge->last_error = "cannot change H264 profile after encoder open";
-    return -1;
-  }
-  try {
-    bridge->config.h264_profile = h264_profile_from_int(profile);
-    bridge->last_error.clear();
-    return 0;
-  } catch (const std::exception &e) {
-    set_error(bridge, e);
-    return -1;
-  }
-}
-
-int cluster_h264_encoder_bridge_set_rate_control(ClusterH264EncoderBridge *bridge, int rate_control) {
-  if (bridge == nullptr) return -1;
-  if (bridge->encoder != nullptr) {
-    bridge->last_error = "cannot change H264 rate control after encoder open";
-    return -1;
-  }
-  try {
-    bridge->config.rate_control = rate_control_from_int(rate_control);
-    bridge->last_error.clear();
-    return 0;
-  } catch (const std::exception &e) {
-    set_error(bridge, e);
-    return -1;
-  }
 }
 
 int cluster_h264_encoder_bridge_open(ClusterH264EncoderBridge *bridge) {

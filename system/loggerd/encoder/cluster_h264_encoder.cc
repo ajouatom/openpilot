@@ -60,38 +60,6 @@ const char *rgb4_layout_name(ClusterH264Rgb4Layout layout) {
   return "unknown";
 }
 
-const char *h264_profile_name(ClusterH264Profile profile) {
-  switch (profile) {
-    case ClusterH264Profile::Baseline: return "Baseline/CAVLC";
-    case ClusterH264Profile::High: return "High/CABAC";
-  }
-  return "unknown";
-}
-
-const char *rate_control_name(ClusterH264RateControl rate_control) {
-  switch (rate_control) {
-    case ClusterH264RateControl::VbrCfr: return "vbr-cfr";
-    case ClusterH264RateControl::CbrCfr: return "cbr-cfr";
-    case ClusterH264RateControl::Cq: return "cq";
-    case ClusterH264RateControl::Off: return "off";
-  }
-  return "unknown";
-}
-
-int rate_control_value(ClusterH264RateControl rate_control) {
-  switch (rate_control) {
-    case ClusterH264RateControl::VbrCfr: return V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_VBR_CFR;
-    case ClusterH264RateControl::CbrCfr: return V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_CBR_CFR;
-    case ClusterH264RateControl::Cq: return V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_CQ;
-    case ClusterH264RateControl::Off: return V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_OFF;
-  }
-  return V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_VBR_CFR;
-}
-
-int pack_frame_qps(int i_qp, int p_qp, int b_qp) {
-  return (i_qp & 0xff) | ((p_qp & 0xff) << 8) | ((b_qp & 0xff) << 16);
-}
-
 void xioctl(int fd, unsigned long request, void *arg, const char *message) {
   int ret;
   do {
@@ -141,12 +109,6 @@ void ClusterH264Encoder::validate_config() const {
   }
   if (config_.slice_max_bytes < 0) {
     throw std::runtime_error("cluster H264 encoder slice max bytes must be 0 or greater");
-  }
-  if (config_.slice_max_mb != 0) {
-    throw std::runtime_error("cluster H264 encoder slice max MB is disabled because it can stall the Qualcomm V4L2 encoder");
-  }
-  if (config_.qp < -1 || config_.qp > 51) {
-    throw std::runtime_error("cluster H264 encoder qp must be -1 or between 0 and 51");
   }
   if (config_.device_path.empty()) {
     throw std::runtime_error("cluster H264 encoder device path must not be empty");
@@ -371,11 +333,11 @@ void ClusterH264Encoder::configure_formats() {
     throw std::runtime_error("V4L2 encoder returned zero H264 capture sizeimage");
   }
 
-  LOGD("cluster H264 V4L2 formats: in=%s %dx%d driver_stride=%zu stride=%zu scanlines=%zu/%zu sizeimage=%zu bytesused=%zu uv_offset=%zu rgb4_layout=%s profile=%s rate_control=%s out=H264 sizeimage=%zu",
+  LOGD("cluster H264 V4L2 formats: in=%s %dx%d driver_stride=%zu stride=%zu scanlines=%zu/%zu sizeimage=%zu bytesused=%zu uv_offset=%zu rgb4_layout=%s out=H264 sizeimage=%zu",
        input_v4l_format_name_.c_str(), config_.width, config_.height, driver_stride, input_stride_,
        input_y_scanlines_, input_uv_scanlines_, input_sizeimage_, input_bytesused_, input_uv_offset_,
        input_is_rgb4() ? rgb4_layout_name(config_.rgb4_layout) : "n/a",
-       h264_profile_name(config_.h264_profile), rate_control_name(config_.rate_control), capture_sizeimage_);
+       capture_sizeimage_);
 }
 
 void ClusterH264Encoder::set_fps() {
@@ -423,7 +385,7 @@ void ClusterH264Encoder::set_controls() {
     { .id = V4L2_CID_MPEG_VIDC_VIDEO_NUM_P_FRAMES, .value = p_frames, .name = "num-p-frames" },
     { .id = V4L2_CID_MPEG_VIDC_VIDEO_NUM_B_FRAMES, .value = 0, .name = "num-b-frames" },
     { .id = V4L2_CID_MPEG_VIDEO_HEADER_MODE, .value = V4L2_MPEG_VIDEO_HEADER_MODE_SEPARATE, .name = "header-mode-separate" },
-    { .id = V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL, .value = rate_control_value(config_.rate_control), .name = rate_control_name(config_.rate_control) },
+    { .id = V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL, .value = V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_VBR_CFR, .name = "vbr-cfr" },
     { .id = V4L2_CID_MPEG_VIDC_VIDEO_PRIORITY, .value = V4L2_MPEG_VIDC_VIDEO_PRIORITY_REALTIME_DISABLE, .name = "priority-realtime-disable" },
     { .id = V4L2_CID_MPEG_VIDC_VIDEO_IDR_PERIOD, .value = 1, .name = "idr-period" },
     { .id = V4L2_CID_MPEG_VIDEO_H264_LEVEL, .value = V4L2_MPEG_VIDEO_H264_LEVEL_UNKNOWN, .name = "h264-level-unknown" },
@@ -435,37 +397,7 @@ void ClusterH264Encoder::set_controls() {
     set_control(control.id, control.value, control.name);
   }
 
-  if (config_.slice_max_mb > 0) {
-    bool slice_mode_ok = try_control(
-        V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE,
-        V4L2_MPEG_VIDEO_MULTI_SICE_MODE_MAX_MB,
-        "multi-slice-mode-max-mb");
-    bool slice_mb_ok = try_control(
-        V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MAX_MB,
-        config_.slice_max_mb,
-        "multi-slice-max-mb");
-    if (!slice_mode_ok || !slice_mb_ok) {
-      slice_mb_ok = try_control(
-          V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MAX_MB,
-          config_.slice_max_mb,
-          "multi-slice-max-mb");
-      slice_mode_ok = try_control(
-          V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE,
-          V4L2_MPEG_VIDEO_MULTI_SICE_MODE_MAX_MB,
-          "multi-slice-mode-max-mb");
-    }
-    if (slice_mode_ok && slice_mb_ok) {
-      try_control(V4L2_CID_MPEG_VIDEO_MULTI_SLICE_DELIVERY_MODE, 1, "multi-slice-delivery-mode");
-      if (config_.debug) {
-        LOGD("cluster H264 V4L2 multi-slice max_mb=%d", config_.slice_max_mb);
-      }
-    } else {
-      try_control(V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE, V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_SINGLE, "multi-slice-mode-single");
-      if (config_.debug) {
-        LOGW("cluster H264 V4L2 multi-slice max-mb unavailable, using single-slice output");
-      }
-    }
-  } else if (config_.slice_max_bytes > 0) {
+  if (config_.slice_max_bytes > 0) {
     bool slice_mode_ok = try_control(
         V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE,
         V4L2_MPEG_VIDEO_MULTI_SICE_MODE_MAX_BYTES,
@@ -502,32 +434,6 @@ void ClusterH264Encoder::set_controls() {
     }
   }
 
-  if (config_.qp >= 0) {
-    const int qp = config_.qp;
-    const int packed_qp = pack_frame_qps(qp, qp, qp);
-    try_control(V4L2_CID_MPEG_VIDEO_MIN_QP_PACKED, packed_qp, "qp-min-packed");
-    try_control(V4L2_CID_MPEG_VIDEO_MAX_QP_PACKED, packed_qp, "qp-max-packed");
-    try_control(V4L2_CID_MPEG_VIDEO_H264_MAX_QP, qp, "h264-max-qp");
-    try_control(V4L2_CID_MPEG_VIDC_VIDEO_I_FRAME_QP_MAX, qp, "vidc-i-frame-qp-max");
-    try_control(V4L2_CID_MPEG_VIDC_VIDEO_P_FRAME_QP_MAX, qp, "vidc-p-frame-qp-max");
-    try_control(V4L2_CID_MPEG_VIDEO_H264_MIN_QP, qp, "h264-min-qp");
-    try_control(V4L2_CID_MPEG_VIDC_VIDEO_I_FRAME_QP_MIN, qp, "vidc-i-frame-qp-min");
-    try_control(V4L2_CID_MPEG_VIDC_VIDEO_P_FRAME_QP_MIN, qp, "vidc-p-frame-qp-min");
-    try_control(V4L2_CID_MPEG_VIDEO_H264_I_FRAME_QP, qp, "h264-i-frame-qp");
-    try_control(V4L2_CID_MPEG_VIDEO_H264_P_FRAME_QP, qp, "h264-p-frame-qp");
-    try_control(V4L2_CID_MPEG_VIDC_VIDEO_I_FRAME_QP, qp, "vidc-i-frame-qp");
-    try_control(V4L2_CID_MPEG_VIDC_VIDEO_P_FRAME_QP, qp, "vidc-p-frame-qp");
-    try_control(
-        V4L2_CID_MPEG_VIDC_VIDEO_ENABLE_INITIAL_QP,
-        V4L2_CID_MPEG_VIDC_VIDEO_ENABLE_INITIAL_QP_IFRAME | V4L2_CID_MPEG_VIDC_VIDEO_ENABLE_INITIAL_QP_PFRAME,
-        "vidc-enable-initial-qp");
-    try_control(V4L2_CID_MPEG_VIDC_VIDEO_INITIAL_I_FRAME_QP, qp, "vidc-initial-i-frame-qp");
-    try_control(V4L2_CID_MPEG_VIDC_VIDEO_INITIAL_P_FRAME_QP, qp, "vidc-initial-p-frame-qp");
-    if (config_.debug) {
-      LOGD("cluster H264 V4L2 qp=%d", qp);
-    }
-  }
-
   try_control(V4L2_CID_MPEG_VIDEO_REPEAT_SEQ_HEADER, 1, "repeat-seq-header");
   try_control(
       V4L2_CID_MPEG_VIDC_VIDEO_H264_VUI_TIMING_INFO,
@@ -537,13 +443,6 @@ void ClusterH264Encoder::set_controls() {
       V4L2_CID_MPEG_VIDC_VIDEO_H264_VUI_BITSTREAM_RESTRICT,
       V4L2_MPEG_VIDC_VIDEO_H264_VUI_BITSTREAM_RESTRICT_ENABLED,
       "h264-vui-bitstream-restrict");
-
-  if (config_.h264_profile == ClusterH264Profile::High) {
-    set_control(V4L2_CID_MPEG_VIDEO_H264_PROFILE, V4L2_MPEG_VIDEO_H264_PROFILE_HIGH, "h264-profile-high");
-    set_control(V4L2_CID_MPEG_VIDEO_H264_ENTROPY_MODE, V4L2_MPEG_VIDEO_H264_ENTROPY_MODE_CABAC, "h264-entropy-cabac");
-    set_control(V4L2_CID_MPEG_VIDC_VIDEO_H264_CABAC_MODEL, V4L2_CID_MPEG_VIDC_VIDEO_H264_CABAC_MODEL_0, "h264-cabac-model-0");
-    return;
-  }
 
   bool low_complexity_h264 = try_control(
       V4L2_CID_MPEG_VIDEO_H264_PROFILE,

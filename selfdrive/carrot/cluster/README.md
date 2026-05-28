@@ -16,7 +16,7 @@ Useful options:
 python selfdrive/carrot/cluster_run.py --output window --width 1920 --height 480
 python selfdrive/carrot/cluster_run.py --output usb --live-no-can
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec jpeg --usb-jpeg-quality 68
-python selfdrive/carrot/cluster_run.py --output usb --input route --route route --route-overlay off --usb-codec h264 --usb-h264-bitrate 1M --usb-h264-fps 30 --profile-render
+python selfdrive/carrot/cluster_run.py --output usb --input route --route /data/media/0/realdata/0000012e--f190807d64--36 --route-overlay compact --usb-codec h264 --usb-h264-bitrate 1M --usb-h264-fps 30 --profile-render
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug --usb-h264-slice-max-bytes 4096
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-backend ffmpeg --usb-h264-ffmpeg-encoder libx264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug
 python selfdrive/carrot/cluster_run.py --output usb --fps 10 --usb-jpeg-quality 55 --route-overlay off
@@ -69,39 +69,20 @@ little-endian memory order for V4L2 `RGB4`. The cluster H264 wrapper emits
 inline SPS/PPS on the first video packet and on IDR frames, asks for constrained
 Baseline/CAVLC plus VUI timing when the V4L2 driver accepts those controls, and
 the Python sender patches SPS VUI timing and bitstream restriction metadata when
-the driver returns a short VUI without timing info. It falls back to the
-existing loggerd-compatible High/CABAC controls if needed.
-Access-unit delimiter NALs
-are off by default because some simple panel decoders expect SPS/PPS or slices
-as the first NAL; use `--usb-h264-insert-aud` only as a compatibility test.
-`--usb-h264-hardware-profile high` forces the loggerd-style High/CABAC path,
-which can produce smaller hardware access units than Baseline/CAVLC on this
-Qualcomm encoder; rebuild the native library/helper after changing C++ encoder
-code before testing it.
-`--usb-h264-rate-control cq` switches the Qualcomm VIDC rate-control mode for
-fixed-QP experiments; combine it with `--usb-h264-qp N` when checking whether
-the panel rejects large hardware IDR access units.
+the driver returns a short VUI without timing info. If those baseline controls
+are rejected, the native path falls back internally to driver-compatible profile
+controls.
 `--usb-h264-debug` prints a detailed trace for each early hardware packet:
 native callback flags/timestamps/keyframe state, raw and patched NAL summaries,
 packetization results, TURZX chunk sizes, and a shutdown summary. The helper
 backend also prints C++ packet metadata to stderr before Python reads stdout.
-`--usb-h264-no-sps-patch` disables the hardware SPS constraint-byte patch.
-`--usb-h264-no-sps-crop-patch` disables the hardware SPS frame-crop patch.
-`--usb-h264-no-sps-vui-patch` disables the hardware SPS VUI timing patch.
 `--usb-h264-encoder-align 1` disables hardware-only input padding for A/B
 testing; the default `16` avoids feeding the Qualcomm encoder a 462-byte NV12
 stride while its H264 SPS reports a 464-pixel coded width.
 `--usb-h264-slice-max-bytes 0` disables the hardware multi-slice request.
-`--usb-h264-slice-max-mb` is intentionally disabled because this Qualcomm V4L2
-driver path can stall before producing capture buffers.
-`--usb-h264-qp N` forces hardware QP/min-QP controls for compatibility tests;
-higher values produce smaller hardware IDR/P frames.
-`--usb-h264-packetize auto` sends native/helper hardware output as encoder
-access units, matching the known-good ffmpeg/libx264 command boundary. Use
-`--usb-h264-packetize nal` or `nal-groups` only for A/B tests. By default the
-native hardware path leaves the TURZX H264 command `last` flag off to match the
-known-good ffmpeg/libx264 path. Use `--usb-h264-mark-frame-end` only as a
-compatibility test; `--usb-h264-debug` prints this as `last=1`.
+Native/helper hardware output is sent as encoder access units, matching the
+known-good ffmpeg/libx264 command boundary. The TURZX H264 command `last` flag
+is left off to match the working software path.
 
 For a quick H264 transport smoke test, run:
 
@@ -126,21 +107,15 @@ native packet, packetize, chunk, and final summary lines. Then retry
 several smaller IDR/P NALs instead of one large slice. For 462x1920 streams,
 the SPS summary should show `display=462x1920` rather than only the coded
 464-pixel macroblock width.
-If the first hardware IDR remains much larger than the ffmpeg/libx264 stream,
-retry `--usb-h264-rate-control cq --usb-h264-qp 38` and
-`--usb-h264-rate-control cq --usb-h264-qp 44` to test whether the panel is
-rejecting large access units.
-If QP controls are rejected by the driver, keep `--usb-h264-packetize auto`
-so each encoder access unit is sent with the same command boundary as the
-software comparison path.
-Also compare the loggerd-style profile with
-`--usb-h264-hardware-profile high --usb-h264-bitrate 1M`; the SPS summary should
-change from `profile=0x42` to `profile=0x64` when the rebuilt native library is
-being used.
 If the hardware SPS summary shows `vui=0`, `timing=0`, or `timing=?`, the
 default patch rebuilds SPS VUI timing and bitstream restriction info to match
-the selected H264 FPS and the libx264-style no-reorder DPB metadata; use
-`--usb-h264-no-sps-vui-patch` only as an A/B check.
+the selected H264 FPS and the libx264-style no-reorder DPB metadata.
+
+For route replay against a saved device route, run:
+
+```bash
+python selfdrive/carrot/cluster_run.py --input route --route /data/media/0/realdata/0000012e--f190807d64--36 --route-overlay compact --output usb --usb-codec h264 --duration 60 --fps 30 --usb-h264-debug --usb-h264-dump /tmp/cluster_hw_route.h264
+```
 
 The ffmpeg/libx264 path is the known-good H264 comparison mode. To make that
 explicit while testing, run:

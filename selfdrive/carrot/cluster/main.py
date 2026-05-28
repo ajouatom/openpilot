@@ -30,10 +30,7 @@ from cluster_h264_pipeline import (
     DEFAULT_H264_FFMPEG_ENCODER,
     DEFAULT_H264_HELPER,
     DEFAULT_H264_LIBRARY,
-    DEFAULT_H264_PACKETIZE,
-    DEFAULT_H264_RATE_CONTROL,
     DEFAULT_H264_SLICE_MAX_BYTES,
-    DEFAULT_H264_SLICE_MAX_MB,
     H264UsbPipeline,
 )
 from cluster_live import OpenpilotLiveSource
@@ -224,23 +221,13 @@ def run_demo(
     usb_h264_device: str,
     usb_h264_input_format: str,
     usb_h264_rgb4_layout: str,
-    usb_h264_hardware_profile: str,
-    usb_h264_rate_control: str,
     usb_h264_slice_max_bytes: int,
-    usb_h264_slice_max_mb: int,
-    usb_h264_qp: int,
-    usb_h264_packetize: str,
     usb_h264_orientation: str,
     usb_h264_align: int,
     usb_h264_encoder_align: int,
     usb_h264_chunk_size: int,
     usb_h264_wait_ack: bool,
     usb_h264_soft_ack: bool,
-    usb_h264_mark_frame_end: bool,
-    usb_h264_insert_aud: bool,
-    usb_h264_patch_sps_constraints: bool,
-    usb_h264_patch_sps_crop: bool,
-    usb_h264_patch_sps_vui: bool,
     usb_h264_dump: str,
     usb_h264_debug: bool,
     usb_h264_test_pattern: bool,
@@ -405,20 +392,10 @@ def run_demo(
                 usb_h264_device,
                 usb_h264_input_format,
                 usb_h264_rgb4_layout,
-                usb_h264_hardware_profile,
-                usb_h264_rate_control,
                 usb_h264_slice_max_bytes,
-                usb_h264_slice_max_mb,
-                usb_h264_qp,
-                usb_h264_packetize,
                 usb_h264_chunk_size,
                 usb_h264_wait_ack,
                 usb_h264_soft_ack,
-                usb_h264_mark_frame_end,
-                usb_h264_insert_aud,
-                usb_h264_patch_sps_constraints,
-                usb_h264_patch_sps_crop,
-                usb_h264_patch_sps_vui,
                 usb_h264_dump,
                 usb_h264_debug,
             )
@@ -845,58 +822,12 @@ def parse_args() -> argparse.Namespace:
         help="Byte layout used when feeding RGBA readback into V4L2 RGB4 input.",
     )
     parser.add_argument(
-        "--usb-h264-hardware-profile",
-        choices=("baseline", "high"),
-        default="baseline",
-        help=(
-            "Native/helper hardware H264 profile. baseline uses constrained-Baseline/CAVLC; "
-            "high uses the loggerd-style High/CABAC path for smaller hardware output."
-        ),
-    )
-    parser.add_argument(
-        "--usb-h264-rate-control",
-        choices=("vbr-cfr", "cbr-cfr", "cq", "off"),
-        default=DEFAULT_H264_RATE_CONTROL,
-        help=(
-            "Native/helper Qualcomm VIDC rate-control mode. cq is useful with --usb-h264-qp "
-            "to test fixed-QP output. Default: %(default)s."
-        ),
-    )
-    parser.add_argument(
         "--usb-h264-slice-max-bytes",
         type=int,
         default=DEFAULT_H264_SLICE_MAX_BYTES,
         help=(
             "Hardware V4L2 multi-slice max bytes. Lower values produce smaller H264 NALs; "
             "0 disables multi-slice. Default: %(default)s."
-        ),
-    )
-    parser.add_argument(
-        "--usb-h264-slice-max-mb",
-        type=int,
-        default=DEFAULT_H264_SLICE_MAX_MB,
-        help=(
-            "Disabled compatibility experiment: Qualcomm V4L2 max-MB slicing can stall. "
-            "Keep this at 0. Default: %(default)s."
-        ),
-    )
-    parser.add_argument(
-        "--usb-h264-qp",
-        type=int,
-        default=-1,
-        help=(
-            "Force hardware H264 QP/min-QP controls for compatibility tests; "
-            "-1 keeps driver rate control. Range -1..51. Default: -1."
-        ),
-    )
-    parser.add_argument(
-        "--usb-h264-packetize",
-        choices=("auto", "access-unit", "nal-groups", "nal"),
-        default=DEFAULT_H264_PACKETIZE,
-        help=(
-            "USB H264 command packetization. auto sends encoder access units like "
-            "the known-good ffmpeg/libx264 path; use nal or nal-groups for A/B tests. "
-            "Default: %(default)s."
         ),
     )
     parser.add_argument(
@@ -946,43 +877,6 @@ def parse_args() -> argparse.Namespace:
         "--usb-h264-soft-ack",
         action="store_true",
         help="Wait for TURZX H264 responses, but continue when the panel times out like the vendor video sender.",
-    )
-    parser.add_argument(
-        "--usb-h264-mark-frame-end",
-        action="store_true",
-        help=(
-            "Set the TURZX H264 command last flag on the final native/helper chunk of each encoder access unit. "
-            "Default keeps this off to match the known-good ffmpeg/libx264 path."
-        ),
-    )
-    parser.add_argument(
-        "--usb-h264-no-aud",
-        action="store_true",
-        help=argparse.SUPPRESS,
-    )
-    parser.add_argument(
-        "--usb-h264-insert-aud",
-        action="store_true",
-        help="Insert H264 access-unit delimiter NALs before native hardware encoder packets for decoder compatibility tests.",
-    )
-    parser.add_argument(
-        "--usb-h264-no-sps-patch",
-        action="store_true",
-        help=(
-            "Do not patch hardware SPS baseline constraint flags to match libx264 constrained-baseline output."
-        ),
-    )
-    parser.add_argument(
-        "--usb-h264-no-sps-crop-patch",
-        action="store_true",
-        help=(
-            "Do not patch hardware SPS frame-crop metadata to match the requested TURZX stream size."
-        ),
-    )
-    parser.add_argument(
-        "--usb-h264-no-sps-vui-patch",
-        action="store_true",
-        help="Do not patch hardware SPS VUI timing metadata for decoder compatibility tests.",
     )
     parser.add_argument(
         "--usb-h264-dump",
@@ -1128,12 +1022,6 @@ def parse_args() -> argparse.Namespace:
         parser.error("--usb-h264-chunk-size must be 0 or greater")
     if args.usb_h264_slice_max_bytes < 0:
         parser.error("--usb-h264-slice-max-bytes must be 0 or greater")
-    if args.usb_h264_slice_max_mb < 0:
-        parser.error("--usb-h264-slice-max-mb must be 0 or greater")
-    if args.usb_h264_slice_max_mb > 0:
-        parser.error("--usb-h264-slice-max-mb is disabled because it can stall the Qualcomm V4L2 encoder")
-    if args.usb_h264_qp < -1 or args.usb_h264_qp > 51:
-        parser.error("--usb-h264-qp must be -1 or between 0 and 51")
     if args.usb_h264_align <= 0:
         parser.error("--usb-h264-align must be greater than 0")
     if args.usb_h264_encoder_align <= 0:
@@ -1232,23 +1120,13 @@ def main() -> None:
             args.usb_h264_device,
             args.usb_h264_input_format,
             args.usb_h264_rgb4_layout,
-            args.usb_h264_hardware_profile,
-            args.usb_h264_rate_control,
             args.usb_h264_slice_max_bytes,
-            args.usb_h264_slice_max_mb,
-            args.usb_h264_qp,
-            args.usb_h264_packetize,
             args.usb_h264_orientation,
             args.usb_h264_align,
             args.usb_h264_encoder_align,
             args.usb_h264_chunk_size,
             args.usb_h264_wait_ack or args.usb_h264_soft_ack,
             args.usb_h264_soft_ack,
-            args.usb_h264_mark_frame_end,
-            args.usb_h264_insert_aud and not args.usb_h264_no_aud,
-            not args.usb_h264_no_sps_patch,
-            not args.usb_h264_no_sps_crop_patch,
-            not args.usb_h264_no_sps_vui_patch,
             args.usb_h264_dump,
             args.usb_h264_debug,
             args.usb_h264_test_pattern,
