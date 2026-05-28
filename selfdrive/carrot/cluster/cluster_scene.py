@@ -615,41 +615,6 @@ def lane_marking_segments_for_marking(
     return tuple(segments)
 
 
-def strips_from_centerline_specs(
-    points: tuple[Vec3, ...],
-    specs: tuple[tuple[int, Color, float], ...],
-) -> tuple[MeshStrip, ...]:
-    if len(points) < 2:
-        return ()
-
-    half_widths = tuple(max(0.08, width_px * 0.022) * 0.5 for width_px, _, _ in specs)
-    left_groups: list[list[Vec3]] = [[] for _ in specs]
-    right_groups: list[list[Vec3]] = [[] for _ in specs]
-
-    for index, point in enumerate(points):
-        previous_point = points[max(0, index - 1)]
-        next_point = points[min(len(points) - 1, index + 1)]
-        tangent_x, tangent_y = normalize2(
-            next_point.x - previous_point.x,
-            next_point.y - previous_point.y,
-        )
-        right_x = tangent_y
-        right_y = -tangent_x
-        for spec_index, half_width in enumerate(half_widths):
-            height_m = specs[spec_index][2]
-            left_groups[spec_index].append(
-                Vec3(point.x - right_x * half_width, point.y - right_y * half_width, height_m)
-            )
-            right_groups[spec_index].append(
-                Vec3(point.x + right_x * half_width, point.y + right_y * half_width, height_m)
-            )
-
-    return tuple(
-        MeshStrip(tuple(left_groups[index]), tuple(right_groups[index]), color)
-        for index, (_, color, _) in enumerate(specs)
-    )
-
-
 def strips_from_centerline_width_specs(
     points: tuple[Vec3, ...],
     specs: tuple[tuple[float, Color, float], ...],
@@ -692,11 +657,51 @@ def lane_marking_strip_groups_from_segments(
     if not segments or not specs:
         return tuple(() for _ in specs)
 
-    grouped: list[list[MeshStrip]] = [[] for _ in specs]
+    half_widths = tuple(max(0.08, width_px * 0.022) * 0.5 for width_px, _, _ in specs)
+    left_groups: list[list[Vec3]] = [[] for _ in specs]
+    right_groups: list[list[Vec3]] = [[] for _ in specs]
     for segment in segments:
-        for spec_index, strip in enumerate(strips_from_centerline_specs(segment, specs)):
-            grouped[spec_index].append(strip)
-    return tuple(tuple(group) for group in grouped)
+        if len(segment) < 2:
+            continue
+        segment_left: list[list[Vec3]] = [[] for _ in specs]
+        segment_right: list[list[Vec3]] = [[] for _ in specs]
+        for index, point in enumerate(segment):
+            previous_point = segment[max(0, index - 1)]
+            next_point = segment[min(len(segment) - 1, index + 1)]
+            tangent_x, tangent_y = normalize2(
+                next_point.x - previous_point.x,
+                next_point.y - previous_point.y,
+            )
+            right_x = tangent_y
+            right_y = -tangent_x
+            for spec_index, half_width in enumerate(half_widths):
+                height_m = specs[spec_index][2]
+                segment_left[spec_index].append(
+                    Vec3(point.x - right_x * half_width, point.y - right_y * half_width, height_m)
+                )
+                segment_right[spec_index].append(
+                    Vec3(point.x + right_x * half_width, point.y + right_y * half_width, height_m)
+                )
+
+        for spec_index in range(len(specs)):
+            left_group = left_groups[spec_index]
+            right_group = right_groups[spec_index]
+            if left_group and segment_left[spec_index]:
+                previous_right = right_group[-1]
+                next_left = segment_left[spec_index][0]
+                left_group.append(previous_right)
+                right_group.append(previous_right)
+                left_group.append(next_left)
+                right_group.append(next_left)
+            left_group.extend(segment_left[spec_index])
+            right_group.extend(segment_right[spec_index])
+
+    return tuple(
+        (MeshStrip(tuple(left_groups[index]), tuple(right_groups[index]), color),)
+        if len(left_groups[index]) >= 2 and len(right_groups[index]) >= 2
+        else ()
+        for index, (_, color, _) in enumerate(specs)
+    )
 
 
 def model_line_geometry_specs(
