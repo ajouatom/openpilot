@@ -759,8 +759,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--usb-h264-backend",
         choices=("auto", "native", "helper", "ffmpeg"),
-        default="auto",
-        help="H264 encoder backend. auto uses the native shared library and falls back to the helper process.",
+        default="ffmpeg",
+        help=(
+            "H264 encoder backend. Default ffmpeg uses the known-good libx264 path; "
+            "auto/native/helper are hardware encoder diagnostics."
+        ),
     )
     parser.add_argument(
         "--usb-h264-library",
@@ -788,7 +791,7 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_H264_FFMPEG_ENCODER,
         help=(
             "ffmpeg H264 encoder for --usb-h264-backend ffmpeg. "
-            "auto prefers h264_v4l2m2m, then h264_omx, then libx264."
+            "Default libx264; auto prefers h264_v4l2m2m, then h264_omx, then libx264."
         ),
     )
     parser.add_argument(

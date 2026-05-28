@@ -18,7 +18,7 @@ python selfdrive/carrot/cluster_run.py --output usb --live-no-can
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec jpeg --usb-jpeg-quality 68
 python selfdrive/carrot/cluster_run.py --output usb --input route --route route --route-overlay off --usb-codec h264 --usb-h264-bitrate 6M --usb-h264-fps 30 --profile-render
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug
-python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-backend ffmpeg --usb-h264-ffmpeg-encoder libx264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug
+python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-backend native --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug
 python selfdrive/carrot/cluster_run.py --output usb --fps 10 --usb-jpeg-quality 55 --route-overlay off
 python selfdrive/carrot/cluster_run.py --output usb --profile-render --profile-interval 2
 ```
@@ -29,26 +29,25 @@ right-side debug panel. Use `--route-overlay off` for performance tests that
 should match live rendering cost more closely.
 
 `--usb-codec h264` feeds RGBA frames to the Qualcomm V4L2 encoder wrapper in
-`system/loggerd/encoder`. H264 defaults to the same exact portrait upload
-geometry used by the working JPEG/PNG and earlier ffmpeg H264 paths. For a
-9.2-inch panel that means a 462x1920 H264 stream, with no 16-pixel render-size
-padding unless `--usb-h264-align 16` is passed explicitly. The default backend
-is the native shared library at
-`system/loggerd/libcluster_h264_encoder_bridge.so`, which avoids the large RGBA
-stdin pipe and H264 stdout pipe used by the helper process. Build the native
-library and helper before manual testing:
+`system/loggerd/encoder`, or to ffmpeg/libx264. H264 defaults to the same exact
+portrait upload geometry used by the working JPEG/PNG and earlier ffmpeg H264
+paths. For a 9.2-inch panel that means a 462x1920 H264 stream, with no
+16-pixel render-size padding unless `--usb-h264-align 16` is passed explicitly.
+The default backend is `--usb-h264-backend ffmpeg` with libx264 because the
+TURZX panel accepts that stream while the Qualcomm V4L2 hardware stream is
+currently corrupted on-device. The native hardware shared library at
+`system/loggerd/libcluster_h264_encoder_bridge.so` remains available for
+diagnostics. Build the native library and helper before hardware testing:
 
 ```bash
 scons system/loggerd/libcluster_h264_encoder_bridge.so
 scons system/loggerd/cluster_h264_encoder_cli
 ```
 
-Use `--usb-h264-backend helper` to compare the fallback helper process path,
-`--usb-h264-backend native` to fail immediately if the shared library is not
-available, or `--usb-h264-backend ffmpeg` to compare the earlier software
-ffmpeg/libx264 path against the hardware encoder while keeping the same raylib
-readback and TURZX USB transport. `--usb-h264-backend auto` is the default and
-falls back to helper.
+Use `--usb-h264-backend native` to test the shared-library hardware path,
+`--usb-h264-backend helper` to compare the hardware helper process path, or
+`--usb-h264-backend auto` to try native and fall back to helper. Those hardware
+paths are diagnostic until the panel-compatible V4L2 bitstream issue is fixed.
 
 The default V4L2 device is
 `/dev/v4l/by-path/platform-aa00000.qcom_vidc-video-index1`. Input format
@@ -79,8 +78,8 @@ render cap. H264 chunks are no-ACK by default like JPEG frame uploads; use
 `--usb-h264-soft-ack` to mimic the vendor video sender's retry/status polling
 without failing the run. `--usb-h264-debug` prints early chunk details.
 
-To compare the known-good ffmpeg path without changing the rest of the cluster
-pipeline, run:
+The ffmpeg/libx264 path is the default known-good H264 mode. To make that
+explicit while testing, run:
 
 ```bash
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-backend ffmpeg --usb-h264-ffmpeg-encoder libx264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug

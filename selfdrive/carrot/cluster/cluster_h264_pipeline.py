@@ -19,7 +19,7 @@ DEFAULT_H264_LIBRARY = OPENPILOT_ROOT / "system" / "loggerd" / "libcluster_h264_
 DEFAULT_H264_HELPER = OPENPILOT_ROOT / "system" / "loggerd" / "cluster_h264_encoder_cli"
 DEFAULT_H264_DEVICE = "/dev/v4l/by-path/platform-aa00000.qcom_vidc-video-index1"
 DEFAULT_H264_FFMPEG = "ffmpeg"
-DEFAULT_H264_FFMPEG_ENCODER = "auto"
+DEFAULT_H264_FFMPEG_ENCODER = "libx264"
 
 NATIVE_INPUT_FORMATS = {"auto": 0, "rgb4": 1, "nv12": 2}
 NATIVE_RGB4_LAYOUTS = {"axrgb": 0, "rgba": 1, "bgra": 2}
