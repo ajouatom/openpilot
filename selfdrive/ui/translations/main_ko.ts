@@ -1535,5 +1535,13 @@ This may take up to a minute.</source>
         <source>Are you sure you want to delete all learning data collected so far without applying it?</source>
         <translation>적용하지 않고 현재까지의 모든 학습 데이터를 삭제하시겠습니까?</translation>
     </message>
+    <message>
+        <source>Auto-Tuner: Driving pattern learned!</source>
+        <translation>오토튜너: 주행 패턴 학습 완료!</translation>
+    </message>
+    <message>
+        <source>Auto-Tuner: 30min update — driving pattern learned!</source>
+        <translation>오토튜너: 30분 업데이트 — 주행 패턴 학습 완료!</translation>
+    </message>
 </context>
 </TS>
