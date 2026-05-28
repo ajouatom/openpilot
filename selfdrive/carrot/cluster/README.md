@@ -27,15 +27,20 @@ Pillow. Route replay defaults to `--route-overlay compact`, which shows the
 right-side debug panel. Use `--route-overlay off` for performance tests that
 should match live rendering cost more closely.
 
-`--usb-codec h264` feeds portrait RGBA frames to the hardware helper at
-`system/loggerd/cluster_h264_encoder_cli`. The helper uses the Qualcomm V4L2
-encoder wrapper in `system/loggerd/encoder`, writes raw H264 to stdout, and the
-Python path only chunks those bytes to the TURZX panel. Build the helper before
-manual testing:
+`--usb-codec h264` feeds portrait RGBA frames to the Qualcomm V4L2 encoder
+wrapper in `system/loggerd/encoder`. The default backend is the native shared
+library at `system/loggerd/libcluster_h264_encoder_bridge.so`, which avoids the
+large RGBA stdin pipe and H264 stdout pipe used by the helper process. Build the
+native library and helper before manual testing:
 
 ```bash
+scons system/loggerd/libcluster_h264_encoder_bridge.so
 scons system/loggerd/cluster_h264_encoder_cli
 ```
+
+Use `--usb-h264-backend helper` to compare the fallback helper process path, or
+`--usb-h264-backend native` to fail immediately if the shared library is not
+available. `--usb-h264-backend auto` is the default and falls back to helper.
 
 The default V4L2 device is
 `/dev/v4l/by-path/platform-aa00000.qcom_vidc-video-index1`. Input format

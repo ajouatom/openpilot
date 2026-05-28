@@ -173,17 +173,15 @@ int main(int argc, char **argv) {
     uint64_t frame_index = 0;
     while (read_exact(STDIN_FILENO, frame.data(), frame.size())) {
       const uint64_t timestamp_us = frame_index * 1000000ULL / static_cast<uint64_t>(config.fps);
-      std::vector<ClusterH264Packet> packets = encoder.encode_rgba(frame.data(), frame.size(), timestamp_us);
-      for (const auto &packet : packets) {
-        write_all(STDOUT_FILENO, packet.data.data(), packet.data.size());
-      }
+      encoder.encode_rgba(frame.data(), frame.size(), timestamp_us, [](const ClusterH264PacketView &packet) {
+        write_all(STDOUT_FILENO, packet.data, packet.size);
+      });
       ++frame_index;
     }
 
-    std::vector<ClusterH264Packet> packets = encoder.drain(250);
-    for (const auto &packet : packets) {
-      write_all(STDOUT_FILENO, packet.data.data(), packet.data.size());
-    }
+    encoder.drain(250, [](const ClusterH264PacketView &packet) {
+      write_all(STDOUT_FILENO, packet.data, packet.size);
+    });
     return 0;
   } catch (const std::exception &e) {
     std::cerr << "cluster_h264_encoder_cli error: " << e.what() << std::endl;

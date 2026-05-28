@@ -23,7 +23,7 @@ from cluster_config import (
 )
 from cluster_gamepad import DualSenseSimulator
 from cluster_git_status import GitBranchStatusProvider
-from cluster_h264_pipeline import DEFAULT_H264_DEVICE, DEFAULT_H264_HELPER, H264UsbPipeline
+from cluster_h264_pipeline import DEFAULT_H264_DEVICE, DEFAULT_H264_HELPER, DEFAULT_H264_LIBRARY, H264UsbPipeline
 from cluster_live import OpenpilotLiveSource
 from cluster_models import RouteOverlay, SimulatorInput
 from cluster_profile import GcProfileHook, ProfileReporter, freeze_gc_after_init
@@ -197,6 +197,8 @@ def run_demo(
     usb_h264_bitrate: str,
     usb_h264_fps: int,
     usb_h264_gop: int,
+    usb_h264_backend: str,
+    usb_h264_library: str,
     usb_h264_helper: str,
     usb_h264_device: str,
     usb_h264_input_format: str,
@@ -281,6 +283,10 @@ def run_demo(
 
     frame_width = width or (usb_display.landscape_width if usb_display is not None else DESIGN_WIDTH)
     frame_height = height or (usb_display.landscape_height if usb_display is not None else DESIGN_HEIGHT)
+    if usb_codec == "h264" and ((frame_width % 2) != 0 or (frame_height % 2) != 0):
+        raise RuntimeError(
+            f"H264 USB output requires even render dimensions, got {frame_width}x{frame_height}"
+        )
     theme_override = normalize_cluster_theme_mode(theme_mode) if theme_mode is not None else None
     theme_param_reader = ClusterThemeParamReader() if theme_override is None else None
     active_theme_mode = theme_override or (theme_param_reader.read() if theme_param_reader is not None else "auto")
@@ -338,6 +344,8 @@ def run_demo(
                 h264_encoder_fps,
                 usb_h264_bitrate,
                 usb_h264_gop,
+                usb_h264_backend,
+                usb_h264_library,
                 usb_h264_helper,
                 usb_h264_device,
                 usb_h264_input_format,
@@ -707,10 +715,24 @@ def parse_args() -> argparse.Namespace:
         help="H264 keyframe interval in frames. Default: 30.",
     )
     parser.add_argument(
+        "--usb-h264-backend",
+        choices=("auto", "native", "helper"),
+        default="auto",
+        help="H264 encoder bridge. auto uses the native shared library and falls back to the helper process.",
+    )
+    parser.add_argument(
+        "--usb-h264-library",
+        default=str(DEFAULT_H264_LIBRARY),
+        help=(
+            "Native hardware H264 shared library for --usb-codec h264. "
+            f"Default: {DEFAULT_H264_LIBRARY}."
+        ),
+    )
+    parser.add_argument(
         "--usb-h264-helper",
         default=str(DEFAULT_H264_HELPER),
         help=(
-            "Hardware H264 helper executable for --usb-codec h264. "
+            "Fallback hardware H264 helper executable for --usb-codec h264. "
             f"Default: {DEFAULT_H264_HELPER}."
         ),
     )
@@ -886,6 +908,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--usb-h264-chunk-size must be 0 or greater")
     if not args.usb_h264_bitrate:
         parser.error("--usb-h264-bitrate must not be empty")
+    if not args.usb_h264_library:
+        parser.error("--usb-h264-library must not be empty")
     if not args.usb_h264_helper:
         parser.error("--usb-h264-helper must not be empty")
     if not args.usb_h264_device:
@@ -960,6 +984,8 @@ def main() -> None:
             args.usb_h264_bitrate,
             args.usb_h264_fps,
             args.usb_h264_gop,
+            args.usb_h264_backend,
+            args.usb_h264_library,
             args.usb_h264_helper,
             args.usb_h264_device,
             args.usb_h264_input_format,

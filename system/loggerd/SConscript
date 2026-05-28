@@ -27,6 +27,12 @@ env.Program('encoderd', ['encoderd.cc'], LIBS=libs + ["jpeg"], FRAMEWORKS=framew
 env.Program('bootlog.cc', LIBS=libs, FRAMEWORKS=frameworks)
 if arch != "Darwin":
   env.Program('cluster_h264_encoder_cli', ['encoder/cluster_h264_encoder_cli.cc'], LIBS=libs, FRAMEWORKS=frameworks)
+  env.SharedLibrary(
+    'cluster_h264_encoder_bridge',
+    ['encoder/cluster_h264_encoder_bridge.cc', 'encoder/cluster_h264_encoder.cc'],
+    LIBS=[common, messaging, visionipc, 'pthread', 'z', 'm', 'zstd'],
+    FRAMEWORKS=frameworks,
+  )
 
 if GetOption('extras'):
   env.Program('tests/test_logger', ['tests/test_runner.cc', 'tests/test_logger.cc', 'tests/test_zstd_writer.cc'], LIBS=libs)

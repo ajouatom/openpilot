@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -45,6 +46,17 @@ struct ClusterH264Packet {
   bool keyframe = false;
 };
 
+struct ClusterH264PacketView {
+  const uint8_t *data = nullptr;
+  size_t size = 0;
+  uint32_t flags = 0;
+  uint64_t timestamp_us = 0;
+  bool codec_config = false;
+  bool keyframe = false;
+};
+
+using ClusterH264PacketCallback = std::function<void(const ClusterH264PacketView&)>;
+
 class ClusterH264Encoder {
 public:
   explicit ClusterH264Encoder(const ClusterH264EncoderConfig &config);
@@ -58,7 +70,9 @@ public:
   bool is_open() const { return is_open_; }
 
   std::vector<ClusterH264Packet> encode_rgba(const uint8_t *rgba, size_t rgba_size, uint64_t timestamp_us);
+  void encode_rgba(const uint8_t *rgba, size_t rgba_size, uint64_t timestamp_us, const ClusterH264PacketCallback &on_packet);
   std::vector<ClusterH264Packet> drain(int timeout_ms = 0);
+  void drain(int timeout_ms, const ClusterH264PacketCallback &on_packet);
 
   uint32_t input_v4l_format() const { return input_v4l_format_; }
   const std::string& input_v4l_format_name() const { return input_v4l_format_name_; }
@@ -87,6 +101,7 @@ private:
   void queue_output_buffer(unsigned int index, uint64_t timestamp_us);
   bool dequeue_buffer(uint32_t buffer_type, DequeueResult *result);
   std::vector<ClusterH264Packet> process_ready_events(int timeout_ms, bool stop_after_first_event);
+  size_t process_ready_events(int timeout_ms, bool stop_after_first_event, const ClusterH264PacketCallback &on_packet);
   void copy_rgba_to_input(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const;
   void rgba_to_rgb4(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const;
   void rgba_to_nv12(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const;

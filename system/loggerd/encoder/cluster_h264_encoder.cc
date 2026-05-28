@@ -10,6 +10,7 @@
 #include <string>
 #include <sys/ioctl.h>
 #include <sys/time.h>
+#include <utility>
 #include <unistd.h>
 
 #include "common/swaglog.h"
@@ -374,6 +375,7 @@ void ClusterH264Encoder::stream_off(uint32_t buffer_type) {
 void ClusterH264Encoder::allocate_buffers() {
   for (int i = 0; i < CLUSTER_H264_INPUT_BUFFER_COUNT; ++i) {
     input_buffers_[i].allocate(input_bytesused_);
+    memset(input_buffers_[i].addr, 0, input_buffers_[i].len);
     if (input_is_nv12()) {
       input_buffers_[i].init_yuv(config_.width, config_.height, input_stride_, input_uv_offset_);
     }
@@ -456,6 +458,20 @@ bool ClusterH264Encoder::dequeue_buffer(uint32_t buffer_type, DequeueResult *res
 
 std::vector<ClusterH264Packet> ClusterH264Encoder::process_ready_events(int timeout_ms, bool stop_after_first_event) {
   std::vector<ClusterH264Packet> packets;
+  process_ready_events(timeout_ms, stop_after_first_event, [&packets](const ClusterH264PacketView &view) {
+    ClusterH264Packet packet;
+    packet.flags = view.flags;
+    packet.timestamp_us = view.timestamp_us;
+    packet.codec_config = view.codec_config;
+    packet.keyframe = view.keyframe;
+    packet.data.assign(view.data, view.data + view.size);
+    packets.push_back(std::move(packet));
+  });
+  return packets;
+}
+
+size_t ClusterH264Encoder::process_ready_events(int timeout_ms, bool stop_after_first_event, const ClusterH264PacketCallback &on_packet) {
+  size_t packet_count = 0;
   struct pollfd pfd = {
     .fd = fd_,
     .events = POLLIN | POLLOUT | POLLERR,
@@ -471,9 +487,9 @@ std::vector<ClusterH264Packet> ClusterH264Encoder::process_ready_events(int time
       throw std::runtime_error(util::string_format("cluster H264 poll failed: %s (%d)", strerror(errno), errno));
     }
     if (ret == 0) {
-      return packets;
+      return packet_count;
     }
-    if (pfd.revents & POLLERR) {
+    if ((pfd.revents & POLLERR) && (pfd.revents & (POLLIN | POLLOUT)) == 0) {
       throw std::runtime_error("cluster H264 V4L2 encoder reported POLLERR");
     }
 
@@ -486,13 +502,17 @@ std::vector<ClusterH264Packet> ClusterH264Encoder::process_ready_events(int time
         if ((result.flags & V4L2_QCOM_BUF_FLAG_EOS) == 0 && result.bytesused > 0) {
           VisionBuf *buf = &capture_buffers_[result.index];
           buf->sync(VISIONBUF_SYNC_FROM_DEVICE);
-          ClusterH264Packet packet;
+          ClusterH264PacketView packet;
+          packet.data = reinterpret_cast<const uint8_t*>(buf->addr);
+          packet.size = result.bytesused;
           packet.flags = result.flags;
           packet.timestamp_us = result.timestamp_us;
           packet.codec_config = (result.flags & V4L2_QCOM_BUF_FLAG_CODECCONFIG) != 0;
           packet.keyframe = (result.flags & V4L2_BUF_FLAG_KEYFRAME) != 0;
-          packet.data.assign(reinterpret_cast<uint8_t*>(buf->addr), reinterpret_cast<uint8_t*>(buf->addr) + result.bytesused);
-          packets.push_back(std::move(packet));
+          if (on_packet) {
+            on_packet(packet);
+          }
+          ++packet_count;
         }
         queue_capture_buffer(result.index);
       }
@@ -511,7 +531,7 @@ std::vector<ClusterH264Packet> ClusterH264Encoder::process_ready_events(int time
     }
 
     if (stop_after_first_event) {
-      return packets;
+      return packet_count;
     }
     timeout_ms = 0;
   }
@@ -524,7 +544,28 @@ std::vector<ClusterH264Packet> ClusterH264Encoder::drain(int timeout_ms) {
   return process_ready_events(timeout_ms, false);
 }
 
+void ClusterH264Encoder::drain(int timeout_ms, const ClusterH264PacketCallback &on_packet) {
+  if (!is_open_) {
+    return;
+  }
+  process_ready_events(timeout_ms, false, on_packet);
+}
+
 std::vector<ClusterH264Packet> ClusterH264Encoder::encode_rgba(const uint8_t *rgba, size_t rgba_size, uint64_t timestamp_us) {
+  std::vector<ClusterH264Packet> packets;
+  encode_rgba(rgba, rgba_size, timestamp_us, [&packets](const ClusterH264PacketView &view) {
+    ClusterH264Packet packet;
+    packet.flags = view.flags;
+    packet.timestamp_us = view.timestamp_us;
+    packet.codec_config = view.codec_config;
+    packet.keyframe = view.keyframe;
+    packet.data.assign(view.data, view.data + view.size);
+    packets.push_back(std::move(packet));
+  });
+  return packets;
+}
+
+void ClusterH264Encoder::encode_rgba(const uint8_t *rgba, size_t rgba_size, uint64_t timestamp_us, const ClusterH264PacketCallback &on_packet) {
   if (!is_open_) {
     throw std::runtime_error("cluster H264 encoder is not open");
   }
@@ -532,11 +573,10 @@ std::vector<ClusterH264Packet> ClusterH264Encoder::encode_rgba(const uint8_t *rg
     throw std::runtime_error("cluster H264 encoder received null RGBA input");
   }
 
-  std::vector<ClusterH264Packet> packets = process_ready_events(0, false);
+  process_ready_events(0, false, on_packet);
   while (free_inputs_.empty()) {
-    std::vector<ClusterH264Packet> more = process_ready_events(2000, true);
-    packets.insert(packets.end(), std::make_move_iterator(more.begin()), std::make_move_iterator(more.end()));
-    if (free_inputs_.empty() && more.empty()) {
+    const size_t packet_count = process_ready_events(2000, true, on_packet);
+    if (free_inputs_.empty() && packet_count == 0) {
       throw std::runtime_error("cluster H264 encoder timed out waiting for a free input buffer");
     }
   }
@@ -549,9 +589,7 @@ std::vector<ClusterH264Packet> ClusterH264Encoder::encode_rgba(const uint8_t *rg
   }
   queue_output_buffer(index, timestamp_us);
 
-  std::vector<ClusterH264Packet> more = process_ready_events(0, false);
-  packets.insert(packets.end(), std::make_move_iterator(more.begin()), std::make_move_iterator(more.end()));
-  return packets;
+  process_ready_events(0, false, on_packet);
 }
 
 void ClusterH264Encoder::copy_rgba_to_input(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const {
@@ -579,10 +617,6 @@ void ClusterH264Encoder::rgba_to_rgb4(const uint8_t *rgba, size_t rgba_size, Vis
   }
 
   uint8_t *base = reinterpret_cast<uint8_t*>(dst->addr);
-  if (dst->len > input_stride_ * height || input_stride_ > src_row_bytes) {
-    memset(base, 0, dst->len);
-  }
-
   for (size_t y = 0; y < height; ++y) {
     const uint8_t *src = rgba + y * src_row_bytes;
     uint8_t *dst_row = base + y * input_stride_;
@@ -623,7 +657,6 @@ void ClusterH264Encoder::rgba_to_nv12(const uint8_t *rgba, size_t rgba_size, Vis
   }
 
   uint8_t *base = reinterpret_cast<uint8_t*>(dst->addr);
-  memset(base, 0, dst->len);
   uint8_t *y_plane = base;
   uint8_t *uv_plane = base + input_uv_offset_;
 
