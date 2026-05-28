@@ -33,6 +33,75 @@ H264_NAL_NAMES = {
     8: "PPS",
     9: "AUD",
 }
+
+
+class _H264BitReader:
+    def __init__(self, data: bytes) -> None:
+        self.data = data
+        self.bitpos = 0
+
+    def read_bit(self) -> int:
+        if self.bitpos >= len(self.data) * 8:
+            raise ValueError("SPS ended unexpectedly")
+        value = (self.data[self.bitpos // 8] >> (7 - (self.bitpos % 8))) & 1
+        self.bitpos += 1
+        return value
+
+    def read_bits(self, count: int) -> int:
+        value = 0
+        for _ in range(count):
+            value = (value << 1) | self.read_bit()
+        return value
+
+    def read_ue(self) -> int:
+        zeros = 0
+        while self.read_bit() == 0:
+            zeros += 1
+            if zeros > 31:
+                raise ValueError("SPS Exp-Golomb value is too large")
+        value = 1
+        for _ in range(zeros):
+            value = (value << 1) | self.read_bit()
+        return value - 1
+
+    def read_se(self) -> int:
+        value = self.read_ue()
+        sign = -1 if (value & 1) == 0 else 1
+        return sign * ((value + 1) // 2)
+
+
+class _H264BitWriter:
+    def __init__(self) -> None:
+        self.bits: list[int] = []
+
+    def write_bit(self, value: int) -> None:
+        self.bits.append(1 if value else 0)
+
+    def write_bits(self, value: int, count: int) -> None:
+        for shift in range(count - 1, -1, -1):
+            self.write_bit((value >> shift) & 1)
+
+    def write_ue(self, value: int) -> None:
+        code_num = value + 1
+        bit_length = code_num.bit_length()
+        for _ in range(bit_length - 1):
+            self.write_bit(0)
+        self.write_bits(code_num, bit_length)
+
+    def copy_bits(self, data: bytes, start_bit: int, end_bit: int) -> None:
+        for bitpos in range(start_bit, end_bit):
+            self.write_bit((data[bitpos // 8] >> (7 - (bitpos % 8))) & 1)
+
+    def to_bytes(self) -> bytes:
+        while len(self.bits) % 8:
+            self.bits.append(0)
+        out = bytearray(len(self.bits) // 8)
+        for bitpos, bit in enumerate(self.bits):
+            if bit:
+                out[bitpos // 8] |= 1 << (7 - (bitpos % 8))
+        return bytes(out)
+
+
 NativePacketCallback = ctypes.CFUNCTYPE(
     None,
     ctypes.c_void_p,
@@ -79,6 +148,155 @@ def _h264_nals(data: bytes) -> list[tuple[int, int, int]]:
     return nals
 
 
+def _h264_unescape_rbsp(data: bytes) -> bytes:
+    out = bytearray()
+    zeros = 0
+    for value in data:
+        if zeros >= 2 and value == 0x03:
+            zeros = 0
+            continue
+        out.append(value)
+        if value == 0:
+            zeros += 1
+        else:
+            zeros = 0
+    return bytes(out)
+
+
+def _h264_escape_rbsp(data: bytes) -> bytes:
+    out = bytearray()
+    zeros = 0
+    for value in data:
+        if zeros >= 2 and value <= 0x03:
+            out.append(0x03)
+            zeros = 0
+        out.append(value)
+        if value == 0:
+            zeros += 1
+        else:
+            zeros = 0
+    return bytes(out)
+
+
+def _h264_rbsp_stop_bitpos(data: bytes) -> int:
+    for bitpos in range(len(data) * 8 - 1, -1, -1):
+        if (data[bitpos // 8] >> (7 - (bitpos % 8))) & 1:
+            return bitpos
+    raise ValueError("SPS RBSP stop bit not found")
+
+
+def _h264_skip_scaling_list(reader: _H264BitReader, size: int) -> None:
+    last_scale = 8
+    next_scale = 8
+    for _ in range(size):
+        if next_scale:
+            delta_scale = reader.read_se()
+            next_scale = (last_scale + delta_scale + 256) % 256
+        if next_scale:
+            last_scale = next_scale
+
+
+def _h264_read_sps_to_crop(reader: _H264BitReader) -> dict[str, int]:
+    profile_idc = reader.read_bits(8)
+    constraint_flags = reader.read_bits(8)
+    level_idc = reader.read_bits(8)
+    reader.read_ue()
+
+    chroma_format_idc = 1
+    separate_colour_plane_flag = 0
+    high_profiles = {
+        100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134, 135,
+    }
+    if profile_idc in high_profiles:
+        chroma_format_idc = reader.read_ue()
+        if chroma_format_idc == 3:
+            separate_colour_plane_flag = reader.read_bit()
+        reader.read_ue()
+        reader.read_ue()
+        reader.read_bit()
+        if reader.read_bit():
+            scaling_count = 8 if chroma_format_idc != 3 else 12
+            for index in range(scaling_count):
+                if reader.read_bit():
+                    _h264_skip_scaling_list(reader, 16 if index < 6 else 64)
+
+    reader.read_ue()
+    pic_order_cnt_type = reader.read_ue()
+    if pic_order_cnt_type == 0:
+        reader.read_ue()
+    elif pic_order_cnt_type == 1:
+        reader.read_bit()
+        reader.read_se()
+        reader.read_se()
+        for _ in range(reader.read_ue()):
+            reader.read_se()
+
+    reader.read_ue()
+    reader.read_bit()
+    pic_width_in_mbs_minus1 = reader.read_ue()
+    pic_height_in_map_units_minus1 = reader.read_ue()
+    frame_mbs_only_flag = reader.read_bit()
+    if not frame_mbs_only_flag:
+        reader.read_bit()
+    reader.read_bit()
+    crop_flag_bitpos = reader.bitpos
+    frame_cropping_flag = reader.read_bit()
+    crop_left = crop_right = crop_top = crop_bottom = 0
+    if frame_cropping_flag:
+        crop_left = reader.read_ue()
+        crop_right = reader.read_ue()
+        crop_top = reader.read_ue()
+        crop_bottom = reader.read_ue()
+
+    return {
+        "profile_idc": profile_idc,
+        "constraint_flags": constraint_flags,
+        "level_idc": level_idc,
+        "chroma_format_idc": 0 if separate_colour_plane_flag else chroma_format_idc,
+        "pic_width_in_mbs_minus1": pic_width_in_mbs_minus1,
+        "pic_height_in_map_units_minus1": pic_height_in_map_units_minus1,
+        "frame_mbs_only_flag": frame_mbs_only_flag,
+        "crop_flag_bitpos": crop_flag_bitpos,
+        "after_crop_bitpos": reader.bitpos,
+        "crop_left": crop_left,
+        "crop_right": crop_right,
+        "crop_top": crop_top,
+        "crop_bottom": crop_bottom,
+    }
+
+
+def _h264_crop_units(chroma_format_idc: int, frame_mbs_only_flag: int) -> tuple[int, int]:
+    if chroma_format_idc == 0:
+        return 1, 2 - frame_mbs_only_flag
+    if chroma_format_idc == 1:
+        return 2, 2 * (2 - frame_mbs_only_flag)
+    if chroma_format_idc == 2:
+        return 2, 2 - frame_mbs_only_flag
+    return 1, 2 - frame_mbs_only_flag
+
+
+def _h264_sps_info(nal: bytes) -> str:
+    if len(nal) < 5 or (nal[0] & 0x1F) != 7:
+        return ""
+    try:
+        rbsp = _h264_unescape_rbsp(nal[1:])
+        reader = _H264BitReader(rbsp)
+        info = _h264_read_sps_to_crop(reader)
+        coded_width = (info["pic_width_in_mbs_minus1"] + 1) * 16
+        coded_height = (info["pic_height_in_map_units_minus1"] + 1) * 16 * (2 - info["frame_mbs_only_flag"])
+        crop_unit_x, crop_unit_y = _h264_crop_units(info["chroma_format_idc"], info["frame_mbs_only_flag"])
+        display_width = coded_width - (info["crop_left"] + info["crop_right"]) * crop_unit_x
+        display_height = coded_height - (info["crop_top"] + info["crop_bottom"]) * crop_unit_y
+        return (
+            f"profile=0x{info['profile_idc']:02X} constraints=0x{info['constraint_flags']:02X} "
+            f"level=0x{info['level_idc']:02X} coded={coded_width}x{coded_height} "
+            f"display={display_width}x{display_height} "
+            f"crop={info['crop_left']},{info['crop_right']},{info['crop_top']},{info['crop_bottom']}"
+        )
+    except Exception:
+        return ""
+
+
 def _h264_packet_summary(data: bytes, max_nals: int = 6) -> str:
     parts: list[str] = []
     sps_parts: list[str] = []
@@ -90,10 +308,10 @@ def _h264_packet_summary(data: bytes, max_nals: int = 6) -> str:
         nal_type = nal[0] & 0x1F
         name = H264_NAL_NAMES.get(nal_type, f"NAL{nal_type}")
         parts.append(f"{name}:{len(nal)}")
-        if nal_type == 7 and len(nal) >= 4:
-            sps_parts.append(
-                f"profile=0x{nal[1]:02X} constraints=0x{nal[2]:02X} level=0x{nal[3]:02X}"
-            )
+        if nal_type == 7:
+            sps_info = _h264_sps_info(nal)
+            if sps_info:
+                sps_parts.append(sps_info)
     for _, nal_start, nal_end in nals:
         nal = data[nal_start:nal_end]
         nal_size = len(nal)
@@ -132,6 +350,74 @@ def _patch_h264_sps_constraints(data: bytes) -> tuple[bytes, bool]:
     return bytes(mutable), patched
 
 
+def _patch_h264_sps_crop(data: bytes, width: int, height: int) -> tuple[bytes, bool, str]:
+    out = bytearray()
+    last = 0
+    patched = False
+    patched_info = ""
+
+    for _, nal_start, nal_end in _h264_nals(data):
+        nal = data[nal_start:nal_end]
+        if len(nal) < 5 or (nal[0] & 0x1F) != 7:
+            continue
+
+        try:
+            rbsp = _h264_unescape_rbsp(nal[1:])
+            reader = _H264BitReader(rbsp)
+            info = _h264_read_sps_to_crop(reader)
+            coded_width = (info["pic_width_in_mbs_minus1"] + 1) * 16
+            coded_height = (info["pic_height_in_map_units_minus1"] + 1) * 16 * (2 - info["frame_mbs_only_flag"])
+            crop_unit_x, crop_unit_y = _h264_crop_units(info["chroma_format_idc"], info["frame_mbs_only_flag"])
+            if width > coded_width or height > coded_height:
+                continue
+            crop_right_pixels = coded_width - width
+            crop_bottom_pixels = coded_height - height
+            if crop_right_pixels % crop_unit_x or crop_bottom_pixels % crop_unit_y:
+                continue
+            crop_left = 0
+            crop_top = 0
+            crop_right = crop_right_pixels // crop_unit_x
+            crop_bottom = crop_bottom_pixels // crop_unit_y
+            if (
+                info["crop_left"] == crop_left
+                and info["crop_right"] == crop_right
+                and info["crop_top"] == crop_top
+                and info["crop_bottom"] == crop_bottom
+            ):
+                continue
+
+            writer = _H264BitWriter()
+            writer.copy_bits(rbsp, 0, info["crop_flag_bitpos"])
+            if crop_left or crop_right or crop_top or crop_bottom:
+                writer.write_bit(1)
+                writer.write_ue(crop_left)
+                writer.write_ue(crop_right)
+                writer.write_ue(crop_top)
+                writer.write_ue(crop_bottom)
+            else:
+                writer.write_bit(0)
+            stop_bitpos = _h264_rbsp_stop_bitpos(rbsp)
+            writer.copy_bits(rbsp, info["after_crop_bitpos"], stop_bitpos)
+            writer.write_bit(1)
+            patched_nal = bytes([nal[0]]) + _h264_escape_rbsp(writer.to_bytes())
+
+            out.extend(data[last:nal_start])
+            out.extend(patched_nal)
+            last = nal_end
+            patched = True
+            patched_info = (
+                f"coded={coded_width}x{coded_height} display={width}x{height} "
+                f"crop={crop_left},{crop_right},{crop_top},{crop_bottom}"
+            )
+        except Exception:
+            continue
+
+    if not patched:
+        return data, False, ""
+    out.extend(data[last:])
+    return bytes(out), True, patched_info
+
+
 class H264UsbPipeline:
     def __init__(
         self,
@@ -155,6 +441,7 @@ class H264UsbPipeline:
         soft_ack: bool,
         insert_aud: bool,
         patch_sps_constraints: bool,
+        patch_sps_crop: bool,
         dump_path: str,
         debug: bool,
     ) -> None:
@@ -181,10 +468,12 @@ class H264UsbPipeline:
         self.soft_ack = soft_ack
         self.insert_aud = insert_aud
         self.patch_sps_constraints = patch_sps_constraints
+        self.patch_sps_crop = patch_sps_crop
         self.dump_path = dump_path
         self._dump_file = None
         self.debug = debug
         self._sps_patch_logged = False
+        self._sps_crop_patch_logged = False
         self.chunk_size = 0
         self._chunks_sent = 0
         self._proc: subprocess.Popen[bytes] | None = None
@@ -277,7 +566,8 @@ class H264UsbPipeline:
             f"rgb4_layout={self.rgb4_layout} device={self.device_path} "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')} "
             f"aud={'on' if self.insert_aud else 'off'} "
-            f"sps_patch={'on' if self.patch_sps_constraints else 'off'}",
+            f"sps_patch={'on' if self.patch_sps_constraints else 'off'} "
+            f"sps_crop_patch={'on' if self.patch_sps_crop else 'off'}",
             flush=True,
         )
 
@@ -297,7 +587,8 @@ class H264UsbPipeline:
             f"device={self.device_path} "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')} "
             f"aud={'native-only' if self.insert_aud else 'off'} "
-            f"sps_patch={'on' if self.patch_sps_constraints else 'off'}",
+            f"sps_patch={'on' if self.patch_sps_constraints else 'off'} "
+            f"sps_crop_patch={'on' if self.patch_sps_crop else 'off'}",
             flush=True,
         )
         if self.debug:
@@ -532,6 +823,14 @@ class H264UsbPipeline:
                     flush=True,
                 )
                 self._sps_patch_logged = True
+        if self.patch_sps_crop:
+            packet, patched, crop_info = _patch_h264_sps_crop(packet, self.width, self.height)
+            if patched and self.debug and not self._sps_crop_patch_logged:
+                print(
+                    f"H264 hardware SPS crop patched: {crop_info}",
+                    flush=True,
+                )
+                self._sps_crop_patch_logged = True
         if self.insert_aud:
             packet = H264_AUD_NAL + packet
         return packet

@@ -35,11 +35,12 @@ paths. For a 9.2-inch panel that means a 462x1920 H264 stream, with no
 16-pixel render-size padding unless `--usb-h264-align 16` is passed explicitly.
 The default backend is the native Qualcomm hardware path. It patches hardware
 SPS Baseline constraint flags to match the libx264 constrained-Baseline stream
-that the TURZX panel accepts. It also asks the V4L2 encoder for multi-slice
-output capped by `--usb-h264-slice-max-bytes` so the resulting NAL sizes are
-closer to the ffmpeg/libx264 stream accepted by TURZX. The ffmpeg/libx264 path
-remains available as a known-good comparison path. Build the native library and
-helper before hardware testing:
+that the TURZX panel accepts, and patches hardware SPS frame-crop metadata for
+non-macroblock geometry such as 462x1920. It also asks the V4L2 encoder for
+multi-slice output capped by `--usb-h264-slice-max-bytes` so the resulting NAL
+sizes are closer to the ffmpeg/libx264 stream accepted by TURZX. The
+ffmpeg/libx264 path remains available as a known-good comparison path. Build
+the native library and helper before hardware testing:
 
 ```bash
 scons system/loggerd/libcluster_h264_encoder_bridge.so
@@ -64,6 +65,7 @@ as the first NAL; use `--usb-h264-insert-aud` only as a compatibility test.
 `--usb-h264-debug` prints per-chunk NAL summaries and SPS profile/constraint
 bytes so hardware output can be compared directly against ffmpeg/libx264.
 `--usb-h264-no-sps-patch` disables the hardware SPS constraint-byte patch.
+`--usb-h264-no-sps-crop-patch` disables the hardware SPS frame-crop patch.
 `--usb-h264-slice-max-bytes 0` disables the hardware multi-slice request.
 
 For a quick H264 transport smoke test, run:
@@ -85,9 +87,10 @@ render cap. H264 chunks are no-ACK by default like JPEG frame uploads; use
 without failing the run. `--usb-h264-debug` prints early chunk details. If the
 hardware stream is still corrupted, retry `--usb-h264-slice-max-bytes 2048`
 and `1024`; the debug NAL summary should show several smaller IDR/P NALs
-instead of one large slice.
+instead of one large slice. For 462x1920 streams, the SPS summary should show
+`display=462x1920` rather than only the coded 464-pixel macroblock width.
 
-The ffmpeg/libx264 path is the default known-good H264 mode. To make that
+The ffmpeg/libx264 path is the known-good H264 comparison mode. To make that
 explicit while testing, run:
 
 ```bash
