@@ -65,6 +65,10 @@ falls back to the existing loggerd-compatible High/CABAC controls if needed.
 Access-unit delimiter NALs
 are off by default because some simple panel decoders expect SPS/PPS or slices
 as the first NAL; use `--usb-h264-insert-aud` only as a compatibility test.
+`--usb-h264-hardware-profile high` forces the loggerd-style High/CABAC path,
+which can produce smaller hardware access units than Baseline/CAVLC on this
+Qualcomm encoder; rebuild the native library/helper after changing C++ encoder
+code before testing it.
 `--usb-h264-debug` prints per-chunk NAL summaries and SPS profile/constraint
 bytes so hardware output can be compared directly against ffmpeg/libx264.
 `--usb-h264-no-sps-patch` disables the hardware SPS constraint-byte patch.
@@ -107,6 +111,10 @@ retry `--usb-h264-qp 38` and `--usb-h264-qp 44` to test whether the panel is
 rejecting large access units.
 If QP controls are rejected by the driver, keep `--usb-h264-packetize auto`
 so each H264 NAL is sent as its own USB command.
+Also compare the loggerd-style profile with
+`--usb-h264-hardware-profile high --usb-h264-bitrate 1M`; the SPS summary should
+change from `profile=0x42` to `profile=0x64` when the rebuilt native library is
+being used.
 If the hardware SPS summary shows `vui=0`, the default patch adds timing info
 matching the selected H264 FPS; use `--usb-h264-no-sps-vui-patch` only as an
 A/B check.

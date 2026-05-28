@@ -59,6 +59,14 @@ const char *rgb4_layout_name(ClusterH264Rgb4Layout layout) {
   return "unknown";
 }
 
+const char *h264_profile_name(ClusterH264Profile profile) {
+  switch (profile) {
+    case ClusterH264Profile::Baseline: return "Baseline/CAVLC";
+    case ClusterH264Profile::High: return "High/CABAC";
+  }
+  return "unknown";
+}
+
 void xioctl(int fd, unsigned long request, void *arg, const char *message) {
   int ret;
   do {
@@ -330,9 +338,9 @@ void ClusterH264Encoder::configure_formats() {
     throw std::runtime_error("V4L2 encoder returned zero H264 capture sizeimage");
   }
 
-  LOGD("cluster H264 V4L2 formats: in=%s %dx%d stride=%zu sizeimage=%zu bytesused=%zu rgb4_layout=%s out=H264 sizeimage=%zu",
+  LOGD("cluster H264 V4L2 formats: in=%s %dx%d stride=%zu sizeimage=%zu bytesused=%zu rgb4_layout=%s profile=%s out=H264 sizeimage=%zu",
        input_v4l_format_name_.c_str(), config_.width, config_.height, input_stride_, input_sizeimage_, input_bytesused_,
-       input_is_rgb4() ? rgb4_layout_name(config_.rgb4_layout) : "n/a", capture_sizeimage_);
+       input_is_rgb4() ? rgb4_layout_name(config_.rgb4_layout) : "n/a", h264_profile_name(config_.h264_profile), capture_sizeimage_);
 }
 
 void ClusterH264Encoder::set_fps() {
@@ -486,6 +494,13 @@ void ClusterH264Encoder::set_controls() {
       V4L2_CID_MPEG_VIDC_VIDEO_H264_VUI_BITSTREAM_RESTRICT,
       V4L2_MPEG_VIDC_VIDEO_H264_VUI_BITSTREAM_RESTRICT_ENABLED,
       "h264-vui-bitstream-restrict");
+
+  if (config_.h264_profile == ClusterH264Profile::High) {
+    set_control(V4L2_CID_MPEG_VIDEO_H264_PROFILE, V4L2_MPEG_VIDEO_H264_PROFILE_HIGH, "h264-profile-high");
+    set_control(V4L2_CID_MPEG_VIDEO_H264_ENTROPY_MODE, V4L2_MPEG_VIDEO_H264_ENTROPY_MODE_CABAC, "h264-entropy-cabac");
+    set_control(V4L2_CID_MPEG_VIDC_VIDEO_H264_CABAC_MODEL, V4L2_CID_MPEG_VIDC_VIDEO_H264_CABAC_MODEL_0, "h264-cabac-model-0");
+    return;
+  }
 
   bool low_complexity_h264 = try_control(
       V4L2_CID_MPEG_VIDEO_H264_PROFILE,

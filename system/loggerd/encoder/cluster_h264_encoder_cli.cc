@@ -30,6 +30,8 @@ void usage(const char *prog) {
       << "                          Hardware input format. Default auto.\n"
       << "  --rgb4-layout axrgb|rgba|bgra\n"
       << "                          RGBA to RGB4 byte layout. Default bgra.\n"
+      << "  --h264-profile baseline|high\n"
+      << "                          H264 profile/entropy mode. baseline uses CAVLC; high uses CABAC. Default baseline.\n"
       << "  --debug                 Enable verbose encoder logging.\n";
 }
 
@@ -99,6 +101,12 @@ ClusterH264Rgb4Layout parse_rgb4_layout(const std::string &value) {
   if (value == "rgba") return ClusterH264Rgb4Layout::RGBA;
   if (value == "bgra") return ClusterH264Rgb4Layout::BGRA;
   throw std::runtime_error("invalid --rgb4-layout: " + value);
+}
+
+ClusterH264Profile parse_h264_profile(const std::string &value) {
+  if (value == "baseline") return ClusterH264Profile::Baseline;
+  if (value == "high") return ClusterH264Profile::High;
+  throw std::runtime_error("invalid --h264-profile: " + value);
 }
 
 bool read_exact(int fd, uint8_t *data, size_t size) {
@@ -173,6 +181,8 @@ int main(int argc, char **argv) {
         config.input_format = parse_input_format(next_value(arg));
       } else if (arg == "--rgb4-layout") {
         config.rgb4_layout = parse_rgb4_layout(next_value(arg));
+      } else if (arg == "--h264-profile") {
+        config.h264_profile = parse_h264_profile(next_value(arg));
       } else if (arg == "--debug") {
         config.debug = true;
       } else if (arg == "--help" || arg == "-h") {
@@ -200,6 +210,7 @@ int main(int argc, char **argv) {
               << " slice_max_bytes=" << config.slice_max_bytes
               << " slice_max_mb=" << config.slice_max_mb
               << " qp=" << config.qp
+              << " profile=" << (config.h264_profile == ClusterH264Profile::High ? "high" : "baseline")
               << " input=" << encoder.input_v4l_format_name()
               << " stride=" << encoder.input_stride()
               << " device=" << config.device_path

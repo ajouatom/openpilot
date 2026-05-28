@@ -222,6 +222,7 @@ def run_demo(
     usb_h264_device: str,
     usb_h264_input_format: str,
     usb_h264_rgb4_layout: str,
+    usb_h264_hardware_profile: str,
     usb_h264_slice_max_bytes: int,
     usb_h264_slice_max_mb: int,
     usb_h264_qp: int,
@@ -398,6 +399,7 @@ def run_demo(
                 usb_h264_device,
                 usb_h264_input_format,
                 usb_h264_rgb4_layout,
+                usb_h264_hardware_profile,
                 usb_h264_slice_max_bytes,
                 usb_h264_slice_max_mb,
                 usb_h264_qp,
@@ -832,6 +834,15 @@ def parse_args() -> argparse.Namespace:
         help="Byte layout used when feeding RGBA readback into V4L2 RGB4 input.",
     )
     parser.add_argument(
+        "--usb-h264-hardware-profile",
+        choices=("baseline", "high"),
+        default="baseline",
+        help=(
+            "Native/helper hardware H264 profile. baseline uses constrained-Baseline/CAVLC; "
+            "high uses the loggerd-style High/CABAC path for smaller hardware output."
+        ),
+    )
+    parser.add_argument(
         "--usb-h264-slice-max-bytes",
         type=int,
         default=DEFAULT_H264_SLICE_MAX_BYTES,
@@ -1181,6 +1192,7 @@ def main() -> None:
             args.usb_h264_device,
             args.usb_h264_input_format,
             args.usb_h264_rgb4_layout,
+            args.usb_h264_hardware_profile,
             args.usb_h264_slice_max_bytes,
             args.usb_h264_slice_max_mb,
             args.usb_h264_qp,

@@ -30,6 +30,14 @@ ClusterH264Rgb4Layout rgb4_layout_from_int(int value) {
   throw std::runtime_error("invalid RGB4 layout");
 }
 
+ClusterH264Profile h264_profile_from_int(int value) {
+  switch (value) {
+    case 0: return ClusterH264Profile::Baseline;
+    case 1: return ClusterH264Profile::High;
+  }
+  throw std::runtime_error("invalid H264 profile");
+}
+
 void set_error(ClusterH264EncoderBridge *bridge, const std::exception &e) {
   if (bridge != nullptr) {
     bridge->last_error = e.what();
@@ -120,6 +128,22 @@ int cluster_h264_encoder_bridge_set_qp(ClusterH264EncoderBridge *bridge, int qp)
   bridge->config.qp = qp;
   bridge->last_error.clear();
   return 0;
+}
+
+int cluster_h264_encoder_bridge_set_h264_profile(ClusterH264EncoderBridge *bridge, int profile) {
+  if (bridge == nullptr) return -1;
+  if (bridge->encoder != nullptr) {
+    bridge->last_error = "cannot change H264 profile after encoder open";
+    return -1;
+  }
+  try {
+    bridge->config.h264_profile = h264_profile_from_int(profile);
+    bridge->last_error.clear();
+    return 0;
+  } catch (const std::exception &e) {
+    set_error(bridge, e);
+    return -1;
+  }
 }
 
 int cluster_h264_encoder_bridge_open(ClusterH264EncoderBridge *bridge) {

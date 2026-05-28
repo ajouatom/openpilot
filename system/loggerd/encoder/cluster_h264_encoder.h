@@ -24,6 +24,11 @@ enum class ClusterH264Rgb4Layout {
   BGRA,
 };
 
+enum class ClusterH264Profile {
+  Baseline,
+  High,
+};
+
 struct ClusterH264EncoderConfig {
   int width = 0;
   int height = 0;
@@ -36,6 +41,7 @@ struct ClusterH264EncoderConfig {
   bool debug = false;
   ClusterH264InputFormat input_format = ClusterH264InputFormat::Auto;
   ClusterH264Rgb4Layout rgb4_layout = ClusterH264Rgb4Layout::BGRA;
+  ClusterH264Profile h264_profile = ClusterH264Profile::Baseline;
   bool rgb4_use_source_alpha = false;
   uint8_t rgb4_alpha = 0xff;
   std::string device_path = "/dev/v4l/by-path/platform-aa00000.qcom_vidc-video-index1";

@@ -26,6 +26,7 @@ DEFAULT_H264_PACKETIZE = "auto"
 
 NATIVE_INPUT_FORMATS = {"auto": 0, "rgb4": 1, "nv12": 2}
 NATIVE_RGB4_LAYOUTS = {"axrgb": 0, "rgba": 1, "bgra": 2}
+NATIVE_H264_PROFILES = {"baseline": 0, "high": 1}
 H264_AUD_NAL = b"\x00\x00\x00\x01\x09\xf0"
 H264_NAL_NAMES = {
     1: "P",
@@ -513,6 +514,7 @@ class H264UsbPipeline:
         device_path: str,
         input_format: str,
         rgb4_layout: str,
+        h264_profile: str,
         slice_max_bytes: int,
         slice_max_mb: int,
         qp: int,
@@ -544,6 +546,7 @@ class H264UsbPipeline:
         self.device_path = device_path
         self.input_format = input_format
         self.rgb4_layout = rgb4_layout
+        self.h264_profile = h264_profile
         self.slice_max_bytes = max(0, int(slice_max_bytes))
         self.slice_max_mb = max(0, int(slice_max_mb))
         self.qp = int(qp)
@@ -623,6 +626,7 @@ class H264UsbPipeline:
         self._set_native_slice_max_bytes(lib, handle)
         self._set_native_slice_max_mb(lib, handle)
         self._set_native_qp(lib, handle)
+        self._set_native_h264_profile(lib, handle)
 
         if lib.cluster_h264_encoder_bridge_open(handle) != 0:
             raise RuntimeError(self._native_error_text("native H264 encoder open failed"))
@@ -651,6 +655,7 @@ class H264UsbPipeline:
             f"{self.width}x{self.height}@{self.fps} "
             f"bitrate={bitrate_bps} gop={self.gop} "
             f"slice_max={self.slice_max_bytes} slice_max_mb={self.slice_max_mb} qp={self.qp} "
+            f"profile={self.h264_profile} "
             f"packetize={self._packetize_mode('native')} "
             f"input={input_name or self.input_format} stride={input_stride} "
             f"rgb4_layout={self.rgb4_layout} device={self.device_path} "
@@ -674,6 +679,7 @@ class H264UsbPipeline:
             f"{self.width}x{self.height}@{self.fps} "
             f"bitrate={self.bitrate} gop={self.gop} "
             f"slice_max={self.slice_max_bytes} slice_max_mb={self.slice_max_mb} qp={self.qp} "
+            f"profile={self.h264_profile} "
             f"packetize={self._packetize_mode('helper')} "
             f"input={self.input_format} rgb4_layout={self.rgb4_layout} "
             f"device={self.device_path} "
@@ -1041,6 +1047,8 @@ class H264UsbPipeline:
             "--qp",
             str(self.qp),
         ]
+        if self.h264_profile != "baseline":
+            command.extend(["--h264-profile", self.h264_profile])
         if self.debug:
             command.append("--debug")
         return command
@@ -1231,6 +1239,13 @@ class H264UsbPipeline:
         else:
             set_slice_mb.argtypes = [ctypes.c_void_p, ctypes.c_int]
             set_slice_mb.restype = ctypes.c_int
+        try:
+            set_h264_profile = lib.cluster_h264_encoder_bridge_set_h264_profile
+        except AttributeError:
+            pass
+        else:
+            set_h264_profile.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            set_h264_profile.restype = ctypes.c_int
 
     def _set_native_slice_max_bytes(self, lib: ctypes.CDLL, handle: int) -> None:
         try:
@@ -1273,6 +1288,19 @@ class H264UsbPipeline:
             return
         if set_qp(handle, self.qp) != 0:
             raise RuntimeError(self._native_error_text("native H264 QP setup failed"))
+
+    def _set_native_h264_profile(self, lib: ctypes.CDLL, handle: int) -> None:
+        try:
+            set_profile = lib.cluster_h264_encoder_bridge_set_h264_profile
+        except AttributeError:
+            if self.h264_profile != "baseline":
+                raise RuntimeError(
+                    "native H264 library does not expose H264 profile control; rebuild "
+                    "system/loggerd/libcluster_h264_encoder_bridge.so"
+                )
+            return
+        if set_profile(handle, NATIVE_H264_PROFILES[self.h264_profile]) != 0:
+            raise RuntimeError(self._native_error_text("native H264 profile setup failed"))
 
     def _native_packet_callback(
         self,
