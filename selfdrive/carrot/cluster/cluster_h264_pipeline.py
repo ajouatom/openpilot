@@ -522,6 +522,7 @@ class H264UsbPipeline:
         requested_chunk_size: int,
         wait_for_ack: bool,
         soft_ack: bool,
+        mark_frame_end: bool,
         insert_aud: bool,
         patch_sps_constraints: bool,
         patch_sps_crop: bool,
@@ -554,6 +555,7 @@ class H264UsbPipeline:
         self.requested_chunk_size = max(0, int(requested_chunk_size))
         self.wait_for_ack = wait_for_ack
         self.soft_ack = soft_ack
+        self.mark_frame_end = mark_frame_end
         self.insert_aud = insert_aud
         self.patch_sps_constraints = patch_sps_constraints
         self.patch_sps_crop = patch_sps_crop
@@ -660,6 +662,7 @@ class H264UsbPipeline:
             f"input={input_name or self.input_format} stride={input_stride} "
             f"rgb4_layout={self.rgb4_layout} device={self.device_path} "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')} "
+            f"frame_end={'on' if self.mark_frame_end else 'off'} "
             f"aud={'on' if self.insert_aud else 'off'} "
             f"sps_patch={'on' if self.patch_sps_constraints else 'off'} "
             f"sps_crop_patch={'on' if self.patch_sps_crop else 'off'} "
@@ -684,6 +687,7 @@ class H264UsbPipeline:
             f"input={self.input_format} rgb4_layout={self.rgb4_layout} "
             f"device={self.device_path} "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')} "
+            f"frame_end={'on' if self.mark_frame_end else 'off'} "
             f"aud={'native-only' if self.insert_aud else 'off'} "
             f"sps_patch={'on' if self.patch_sps_constraints else 'off'} "
             f"sps_crop_patch={'on' if self.patch_sps_crop else 'off'} "
@@ -1325,7 +1329,7 @@ class H264UsbPipeline:
             self._write_dump(packet)
             chunks = self._packetize_h264_for_usb(packet, chunk_size, source="native")
             for index, chunk in enumerate(chunks):
-                packet_queue.put((chunk, index == len(chunks) - 1), timeout=1.0)
+                packet_queue.put((chunk, self.mark_frame_end and index == len(chunks) - 1), timeout=1.0)
         except queue.Full as exc:
             self._set_error(RuntimeError("native H264 USB sender queue is full"))
         except BaseException as exc:

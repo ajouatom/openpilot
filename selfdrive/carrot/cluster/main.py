@@ -232,6 +232,7 @@ def run_demo(
     usb_h264_chunk_size: int,
     usb_h264_wait_ack: bool,
     usb_h264_soft_ack: bool,
+    usb_h264_mark_frame_end: bool,
     usb_h264_insert_aud: bool,
     usb_h264_patch_sps_constraints: bool,
     usb_h264_patch_sps_crop: bool,
@@ -407,6 +408,7 @@ def run_demo(
                 usb_h264_chunk_size,
                 usb_h264_wait_ack,
                 usb_h264_soft_ack,
+                usb_h264_mark_frame_end,
                 usb_h264_insert_aud,
                 usb_h264_patch_sps_constraints,
                 usb_h264_patch_sps_crop,
@@ -918,6 +920,14 @@ def parse_args() -> argparse.Namespace:
         help="Wait for TURZX H264 responses, but continue when the panel times out like the vendor video sender.",
     )
     parser.add_argument(
+        "--usb-h264-mark-frame-end",
+        action="store_true",
+        help=(
+            "Set the TURZX H264 command last flag on the final native/helper chunk of each encoder access unit. "
+            "Default keeps this off to match the known-good ffmpeg/libx264 path."
+        ),
+    )
+    parser.add_argument(
         "--usb-h264-no-aud",
         action="store_true",
         help=argparse.SUPPRESS,
@@ -1202,6 +1212,7 @@ def main() -> None:
             args.usb_h264_chunk_size,
             args.usb_h264_wait_ack or args.usb_h264_soft_ack,
             args.usb_h264_soft_ack,
+            args.usb_h264_mark_frame_end,
             args.usb_h264_insert_aud and not args.usb_h264_no_aud,
             not args.usb_h264_no_sps_patch,
             not args.usb_h264_no_sps_crop_patch,
