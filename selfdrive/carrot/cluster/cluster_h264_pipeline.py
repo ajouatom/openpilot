@@ -183,11 +183,11 @@ def _h264_byte_stream_units(data: bytes) -> list[bytes]:
     return units
 
 
-def _h264_has_nal_type(data: bytes, nal_type: int) -> bool:
-    for _, nal_start, nal_end in _h264_nals(data):
+def _h264_first_unit_of_type(data: bytes, nal_type: int) -> bytes | None:
+    for start, nal_start, nal_end in _h264_nals(data):
         if nal_start < nal_end and (data[nal_start] & 0x1F) == nal_type:
-            return True
-    return False
+            return data[start:nal_end]
+    return None
 
 
 def _h264_unescape_rbsp(data: bytes) -> bytes:
@@ -712,6 +712,7 @@ class H264UsbPipeline:
         self._sps_patch_logged = False
         self._sps_crop_patch_logged = False
         self._sps_vui_patch_logged = False
+        self._sps_patch_cache: tuple[bytes, bytes] | None = None
         self.chunk_size = 0
         self._chunks_sent = 0
         self._proc: subprocess.Popen[bytes] | None = None
@@ -1196,8 +1197,19 @@ class H264UsbPipeline:
         )
 
     def _prepare_hardware_packet(self, packet: bytes, *, may_have_sps: bool = True) -> bytes:
-        if not may_have_sps or not _h264_has_nal_type(packet, 7):
+        if not may_have_sps:
             return packet
+        cached_sps = self._sps_patch_cache
+        if cached_sps is not None:
+            raw_sps, patched_sps = cached_sps
+            cached_packet = packet.replace(raw_sps, patched_sps, 1)
+            if cached_packet != packet:
+                return cached_packet
+
+        raw_sps = _h264_first_unit_of_type(packet, 7)
+        if raw_sps is None:
+            return packet
+
         packet, patched = _patch_h264_sps_constraints(packet)
         if patched and self.debug and not self._sps_patch_logged:
             print(
@@ -1219,6 +1231,9 @@ class H264UsbPipeline:
                 flush=True,
             )
             self._sps_vui_patch_logged = True
+        patched_sps = _h264_first_unit_of_type(packet, 7)
+        if patched_sps is not None:
+            self._sps_patch_cache = (raw_sps, patched_sps)
         return packet
 
     def _packetize_h264_for_usb(self, packet: bytes, chunk_size: int) -> list[bytes]:
