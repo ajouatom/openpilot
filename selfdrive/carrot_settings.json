@@ -754,22 +754,6 @@
       "cdescr": "值越高：弯道速度越慢"
     },
     {
-      "group": "감속제어",
-      "name": "AutoCurveSpeedAggressiveness",
-      "title": "커브속도 적극성(100%)",
-      "descr": "올리면 진입속도가 적극적으로 변합니다.",
-      "egroup": "DECEL",
-      "etitle": "CurveSpeed Aggressiveness(100%)",
-      "edescr": "Higher value: more speed down",
-      "min": 50,
-      "max": 300,
-      "default": 10,
-      "unit": 1,
-      "cgroup": "减速控制",
-      "ctitle": "弯道速度积极性(100%)",
-      "cdescr": "值越高：减速越多"
-    },
-    {
       "group": "조향일반",
       "name": "AutoTurnControl",
       "title": "ATC: AutoTurnControl(0)",
