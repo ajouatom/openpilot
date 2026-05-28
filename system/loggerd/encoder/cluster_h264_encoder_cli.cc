@@ -27,6 +27,8 @@ void usage(const char *prog) {
       << "  --slice-max-bytes N     V4L2 multi-slice max bytes; 0 disables. Default 4096.\n"
       << "  --slice-max-mb N        V4L2 multi-slice max macroblocks; 0 disables. Default 0.\n"
       << "  --qp N                  Force H264 QP/min-QP controls; -1 disables. Range -1..51. Default -1.\n"
+      << "  --rate-control vbr-cfr|cbr-cfr|cq|off\n"
+      << "                          Qualcomm VIDC rate-control mode. Default vbr-cfr.\n"
       << "  --device PATH           V4L2 encoder device path.\n"
       << "  --input-format auto|rgb4|nv12\n"
       << "                          Hardware input format. Default auto.\n"
@@ -109,6 +111,14 @@ ClusterH264Profile parse_h264_profile(const std::string &value) {
   if (value == "baseline") return ClusterH264Profile::Baseline;
   if (value == "high") return ClusterH264Profile::High;
   throw std::runtime_error("invalid --h264-profile: " + value);
+}
+
+ClusterH264RateControl parse_rate_control(const std::string &value) {
+  if (value == "vbr-cfr") return ClusterH264RateControl::VbrCfr;
+  if (value == "cbr-cfr") return ClusterH264RateControl::CbrCfr;
+  if (value == "cq") return ClusterH264RateControl::Cq;
+  if (value == "off") return ClusterH264RateControl::Off;
+  throw std::runtime_error("invalid --rate-control: " + value);
 }
 
 bool read_exact(int fd, uint8_t *data, size_t size) {
@@ -198,6 +208,8 @@ int main(int argc, char **argv) {
         }
       } else if (arg == "--qp") {
         config.qp = parse_qp(arg, next_value(arg));
+      } else if (arg == "--rate-control") {
+        config.rate_control = parse_rate_control(next_value(arg));
       } else if (arg == "--device") {
         config.device_path = next_value(arg);
       } else if (arg == "--input-format") {
@@ -233,6 +245,9 @@ int main(int argc, char **argv) {
               << " slice_max_bytes=" << config.slice_max_bytes
               << " slice_max_mb=" << config.slice_max_mb
               << " qp=" << config.qp
+              << " rate_control=" << (config.rate_control == ClusterH264RateControl::Cq ? "cq" :
+                                      (config.rate_control == ClusterH264RateControl::CbrCfr ? "cbr-cfr" :
+                                       (config.rate_control == ClusterH264RateControl::Off ? "off" : "vbr-cfr")))
               << " profile=" << (config.h264_profile == ClusterH264Profile::High ? "high" : "baseline")
               << " input=" << encoder.input_v4l_format_name()
               << " stride=" << encoder.input_stride()

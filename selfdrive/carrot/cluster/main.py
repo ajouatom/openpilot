@@ -31,6 +31,7 @@ from cluster_h264_pipeline import (
     DEFAULT_H264_HELPER,
     DEFAULT_H264_LIBRARY,
     DEFAULT_H264_PACKETIZE,
+    DEFAULT_H264_RATE_CONTROL,
     DEFAULT_H264_SLICE_MAX_BYTES,
     DEFAULT_H264_SLICE_MAX_MB,
     H264UsbPipeline,
@@ -224,6 +225,7 @@ def run_demo(
     usb_h264_input_format: str,
     usb_h264_rgb4_layout: str,
     usb_h264_hardware_profile: str,
+    usb_h264_rate_control: str,
     usb_h264_slice_max_bytes: int,
     usb_h264_slice_max_mb: int,
     usb_h264_qp: int,
@@ -404,6 +406,7 @@ def run_demo(
                 usb_h264_input_format,
                 usb_h264_rgb4_layout,
                 usb_h264_hardware_profile,
+                usb_h264_rate_control,
                 usb_h264_slice_max_bytes,
                 usb_h264_slice_max_mb,
                 usb_h264_qp,
@@ -851,6 +854,15 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--usb-h264-rate-control",
+        choices=("vbr-cfr", "cbr-cfr", "cq", "off"),
+        default=DEFAULT_H264_RATE_CONTROL,
+        help=(
+            "Native/helper Qualcomm VIDC rate-control mode. cq is useful with --usb-h264-qp "
+            "to test fixed-QP output. Default: %(default)s."
+        ),
+    )
+    parser.add_argument(
         "--usb-h264-slice-max-bytes",
         type=int,
         default=DEFAULT_H264_SLICE_MAX_BYTES,
@@ -1221,6 +1233,7 @@ def main() -> None:
             args.usb_h264_input_format,
             args.usb_h264_rgb4_layout,
             args.usb_h264_hardware_profile,
+            args.usb_h264_rate_control,
             args.usb_h264_slice_max_bytes,
             args.usb_h264_slice_max_mb,
             args.usb_h264_qp,

@@ -24,10 +24,12 @@ DEFAULT_H264_SLICE_MAX_BYTES = 4096
 DEFAULT_H264_SLICE_MAX_MB = 0
 DEFAULT_H264_PACKETIZE = "auto"
 DEFAULT_H264_ENCODER_ALIGN = 16
+DEFAULT_H264_RATE_CONTROL = "vbr-cfr"
 
 NATIVE_INPUT_FORMATS = {"auto": 0, "rgb4": 1, "nv12": 2}
 NATIVE_RGB4_LAYOUTS = {"axrgb": 0, "rgba": 1, "bgra": 2}
 NATIVE_H264_PROFILES = {"baseline": 0, "high": 1}
+NATIVE_H264_RATE_CONTROLS = {"vbr-cfr": 0, "cbr-cfr": 1, "cq": 2, "off": 3}
 H264_AUD_NAL = b"\x00\x00\x00\x01\x09\xf0"
 H264_NAL_NAMES = {
     1: "P",
@@ -652,6 +654,7 @@ class H264UsbPipeline:
         input_format: str,
         rgb4_layout: str,
         h264_profile: str,
+        rate_control: str,
         slice_max_bytes: int,
         slice_max_mb: int,
         qp: int,
@@ -688,6 +691,7 @@ class H264UsbPipeline:
         self.input_format = input_format
         self.rgb4_layout = rgb4_layout
         self.h264_profile = h264_profile
+        self.rate_control = rate_control
         self.slice_max_bytes = max(0, int(slice_max_bytes))
         self.slice_max_mb = max(0, int(slice_max_mb))
         self.qp = int(qp)
@@ -778,6 +782,7 @@ class H264UsbPipeline:
         self._native_callback = NativePacketCallback(self._native_packet_callback)
         self._set_native_slice_max_bytes(lib, handle)
         self._set_native_slice_max_mb(lib, handle)
+        self._set_native_rate_control(lib, handle)
         self._set_native_qp(lib, handle)
         self._set_native_h264_profile(lib, handle)
 
@@ -813,7 +818,7 @@ class H264UsbPipeline:
             f"encoder={self.encoder_width}x{self.encoder_height} "
             f"bitrate={bitrate_bps} gop={self.gop} "
             f"slice_max={self.slice_max_bytes} slice_max_mb={self.slice_max_mb} qp={self.qp} "
-            f"profile={self.h264_profile} "
+            f"profile={self.h264_profile} rate_control={self.rate_control} "
             f"packetize={self._packetize_mode('native')} "
             f"input={input_name or self.input_format} stride={input_stride} "
             f"input_size={input_sizeimage} input_bytes={input_bytesused} uv_offset={input_uv_offset} "
@@ -842,7 +847,7 @@ class H264UsbPipeline:
             f"encoder={self.encoder_width}x{self.encoder_height} "
             f"bitrate={self.bitrate} gop={self.gop} "
             f"slice_max={self.slice_max_bytes} slice_max_mb={self.slice_max_mb} qp={self.qp} "
-            f"profile={self.h264_profile} "
+            f"profile={self.h264_profile} rate_control={self.rate_control} "
             f"packetize={self._packetize_mode('helper')} "
             f"input={self.input_format} rgb4_layout={self.rgb4_layout} "
             f"device={self.device_path} "
@@ -1126,6 +1131,7 @@ class H264UsbPipeline:
             f"backend={source} requested_backend={self.backend_request} "
             f"display={self.width}x{self.height} encoder={self.encoder_width}x{self.encoder_height} "
             f"fps={self.fps} bitrate={self.bitrate} gop={self.gop} "
+            f"profile={self.h264_profile} rate_control={self.rate_control} qp={self.qp} "
             f"chunk_size={self.chunk_size} requested_chunk={self.requested_chunk_size} "
             f"packetize_request={self.packetize_request} packetize_mode={self._packetize_mode(source)} "
             f"wait_ack={1 if self.wait_for_ack else 0} soft_ack={1 if self.soft_ack else 0} "
@@ -1332,6 +1338,8 @@ class H264UsbPipeline:
             str(self.slice_max_mb),
             "--qp",
             str(self.qp),
+            "--rate-control",
+            self.rate_control,
         ]
         if self.h264_profile != "baseline":
             command.extend(["--h264-profile", self.h264_profile])
@@ -1544,6 +1552,13 @@ class H264UsbPipeline:
         else:
             set_h264_profile.argtypes = [ctypes.c_void_p, ctypes.c_int]
             set_h264_profile.restype = ctypes.c_int
+        try:
+            set_rate_control = lib.cluster_h264_encoder_bridge_set_rate_control
+        except AttributeError:
+            pass
+        else:
+            set_rate_control.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            set_rate_control.restype = ctypes.c_int
 
     def _set_native_slice_max_bytes(self, lib: ctypes.CDLL, handle: int) -> None:
         try:
@@ -1586,6 +1601,19 @@ class H264UsbPipeline:
             return
         if set_qp(handle, self.qp) != 0:
             raise RuntimeError(self._native_error_text("native H264 QP setup failed"))
+
+    def _set_native_rate_control(self, lib: ctypes.CDLL, handle: int) -> None:
+        try:
+            set_rate_control = lib.cluster_h264_encoder_bridge_set_rate_control
+        except AttributeError:
+            if self.rate_control != "vbr-cfr":
+                raise RuntimeError(
+                    "native H264 library does not expose rate-control selection; rebuild "
+                    "system/loggerd/libcluster_h264_encoder_bridge.so"
+                )
+            return
+        if set_rate_control(handle, NATIVE_H264_RATE_CONTROLS[self.rate_control]) != 0:
+            raise RuntimeError(self._native_error_text("native H264 rate-control setup failed"))
 
     def _set_native_h264_profile(self, lib: ctypes.CDLL, handle: int) -> None:
         try:

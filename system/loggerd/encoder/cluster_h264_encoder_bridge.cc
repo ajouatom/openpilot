@@ -38,6 +38,16 @@ ClusterH264Profile h264_profile_from_int(int value) {
   throw std::runtime_error("invalid H264 profile");
 }
 
+ClusterH264RateControl rate_control_from_int(int value) {
+  switch (value) {
+    case 0: return ClusterH264RateControl::VbrCfr;
+    case 1: return ClusterH264RateControl::CbrCfr;
+    case 2: return ClusterH264RateControl::Cq;
+    case 3: return ClusterH264RateControl::Off;
+  }
+  throw std::runtime_error("invalid H264 rate control");
+}
+
 void set_error(ClusterH264EncoderBridge *bridge, const std::exception &e) {
   if (bridge != nullptr) {
     bridge->last_error = e.what();
@@ -138,6 +148,22 @@ int cluster_h264_encoder_bridge_set_h264_profile(ClusterH264EncoderBridge *bridg
   }
   try {
     bridge->config.h264_profile = h264_profile_from_int(profile);
+    bridge->last_error.clear();
+    return 0;
+  } catch (const std::exception &e) {
+    set_error(bridge, e);
+    return -1;
+  }
+}
+
+int cluster_h264_encoder_bridge_set_rate_control(ClusterH264EncoderBridge *bridge, int rate_control) {
+  if (bridge == nullptr) return -1;
+  if (bridge->encoder != nullptr) {
+    bridge->last_error = "cannot change H264 rate control after encoder open";
+    return -1;
+  }
+  try {
+    bridge->config.rate_control = rate_control_from_int(rate_control);
     bridge->last_error.clear();
     return 0;
   } catch (const std::exception &e) {

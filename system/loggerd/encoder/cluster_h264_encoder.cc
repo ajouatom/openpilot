@@ -67,6 +67,30 @@ const char *h264_profile_name(ClusterH264Profile profile) {
   return "unknown";
 }
 
+const char *rate_control_name(ClusterH264RateControl rate_control) {
+  switch (rate_control) {
+    case ClusterH264RateControl::VbrCfr: return "vbr-cfr";
+    case ClusterH264RateControl::CbrCfr: return "cbr-cfr";
+    case ClusterH264RateControl::Cq: return "cq";
+    case ClusterH264RateControl::Off: return "off";
+  }
+  return "unknown";
+}
+
+int rate_control_value(ClusterH264RateControl rate_control) {
+  switch (rate_control) {
+    case ClusterH264RateControl::VbrCfr: return V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_VBR_CFR;
+    case ClusterH264RateControl::CbrCfr: return V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_CBR_CFR;
+    case ClusterH264RateControl::Cq: return V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_CQ;
+    case ClusterH264RateControl::Off: return V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_OFF;
+  }
+  return V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_VBR_CFR;
+}
+
+int pack_frame_qps(int i_qp, int p_qp, int b_qp) {
+  return (i_qp & 0xff) | ((p_qp & 0xff) << 8) | ((b_qp & 0xff) << 16);
+}
+
 void xioctl(int fd, unsigned long request, void *arg, const char *message) {
   int ret;
   do {
@@ -338,9 +362,10 @@ void ClusterH264Encoder::configure_formats() {
     throw std::runtime_error("V4L2 encoder returned zero H264 capture sizeimage");
   }
 
-  LOGD("cluster H264 V4L2 formats: in=%s %dx%d stride=%zu sizeimage=%zu bytesused=%zu rgb4_layout=%s profile=%s out=H264 sizeimage=%zu",
+  LOGD("cluster H264 V4L2 formats: in=%s %dx%d stride=%zu sizeimage=%zu bytesused=%zu rgb4_layout=%s profile=%s rate_control=%s out=H264 sizeimage=%zu",
        input_v4l_format_name_.c_str(), config_.width, config_.height, input_stride_, input_sizeimage_, input_bytesused_,
-       input_is_rgb4() ? rgb4_layout_name(config_.rgb4_layout) : "n/a", h264_profile_name(config_.h264_profile), capture_sizeimage_);
+       input_is_rgb4() ? rgb4_layout_name(config_.rgb4_layout) : "n/a",
+       h264_profile_name(config_.h264_profile), rate_control_name(config_.rate_control), capture_sizeimage_);
 }
 
 void ClusterH264Encoder::set_fps() {
@@ -366,6 +391,9 @@ void ClusterH264Encoder::set_controls() {
     };
     const std::string message = util::string_format("VIDIOC_S_CTRL %s failed", name);
     xioctl(fd_, VIDIOC_S_CTRL, &control, message.c_str());
+    if (config_.debug) {
+      LOGD("cluster H264 V4L2 ctrl %s=%d ok", name, value);
+    }
   };
 
   const auto try_control = [this, &set_control](uint32_t id, int value, const char *name) {
@@ -385,7 +413,7 @@ void ClusterH264Encoder::set_controls() {
     { .id = V4L2_CID_MPEG_VIDC_VIDEO_NUM_P_FRAMES, .value = p_frames, .name = "num-p-frames" },
     { .id = V4L2_CID_MPEG_VIDC_VIDEO_NUM_B_FRAMES, .value = 0, .name = "num-b-frames" },
     { .id = V4L2_CID_MPEG_VIDEO_HEADER_MODE, .value = V4L2_MPEG_VIDEO_HEADER_MODE_SEPARATE, .name = "header-mode-separate" },
-    { .id = V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL, .value = V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_VBR_CFR, .name = "rate-control-vbr-cfr" },
+    { .id = V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL, .value = rate_control_value(config_.rate_control), .name = rate_control_name(config_.rate_control) },
     { .id = V4L2_CID_MPEG_VIDC_VIDEO_PRIORITY, .value = V4L2_MPEG_VIDC_VIDEO_PRIORITY_REALTIME_DISABLE, .name = "priority-realtime-disable" },
     { .id = V4L2_CID_MPEG_VIDC_VIDEO_IDR_PERIOD, .value = 1, .name = "idr-period" },
     { .id = V4L2_CID_MPEG_VIDEO_H264_LEVEL, .value = V4L2_MPEG_VIDEO_H264_LEVEL_UNKNOWN, .name = "h264-level-unknown" },
@@ -466,14 +494,19 @@ void ClusterH264Encoder::set_controls() {
 
   if (config_.qp >= 0) {
     const int qp = config_.qp;
-    try_control(V4L2_CID_MPEG_VIDEO_H264_MAX_QP, 51, "h264-max-qp");
-    try_control(V4L2_CID_MPEG_VIDC_VIDEO_I_FRAME_QP_MAX, 51, "vidc-i-frame-qp-max");
-    try_control(V4L2_CID_MPEG_VIDC_VIDEO_P_FRAME_QP_MAX, 51, "vidc-p-frame-qp-max");
+    const int packed_qp = pack_frame_qps(qp, qp, qp);
+    try_control(V4L2_CID_MPEG_VIDEO_MIN_QP_PACKED, packed_qp, "qp-min-packed");
+    try_control(V4L2_CID_MPEG_VIDEO_MAX_QP_PACKED, packed_qp, "qp-max-packed");
+    try_control(V4L2_CID_MPEG_VIDEO_H264_MAX_QP, qp, "h264-max-qp");
+    try_control(V4L2_CID_MPEG_VIDC_VIDEO_I_FRAME_QP_MAX, qp, "vidc-i-frame-qp-max");
+    try_control(V4L2_CID_MPEG_VIDC_VIDEO_P_FRAME_QP_MAX, qp, "vidc-p-frame-qp-max");
     try_control(V4L2_CID_MPEG_VIDEO_H264_MIN_QP, qp, "h264-min-qp");
     try_control(V4L2_CID_MPEG_VIDC_VIDEO_I_FRAME_QP_MIN, qp, "vidc-i-frame-qp-min");
     try_control(V4L2_CID_MPEG_VIDC_VIDEO_P_FRAME_QP_MIN, qp, "vidc-p-frame-qp-min");
     try_control(V4L2_CID_MPEG_VIDEO_H264_I_FRAME_QP, qp, "h264-i-frame-qp");
     try_control(V4L2_CID_MPEG_VIDEO_H264_P_FRAME_QP, qp, "h264-p-frame-qp");
+    try_control(V4L2_CID_MPEG_VIDC_VIDEO_I_FRAME_QP, qp, "vidc-i-frame-qp");
+    try_control(V4L2_CID_MPEG_VIDC_VIDEO_P_FRAME_QP, qp, "vidc-p-frame-qp");
     try_control(
         V4L2_CID_MPEG_VIDC_VIDEO_ENABLE_INITIAL_QP,
         V4L2_CID_MPEG_VIDC_VIDEO_ENABLE_INITIAL_QP_IFRAME | V4L2_CID_MPEG_VIDC_VIDEO_ENABLE_INITIAL_QP_PFRAME,

@@ -76,6 +76,9 @@ as the first NAL; use `--usb-h264-insert-aud` only as a compatibility test.
 which can produce smaller hardware access units than Baseline/CAVLC on this
 Qualcomm encoder; rebuild the native library/helper after changing C++ encoder
 code before testing it.
+`--usb-h264-rate-control cq` switches the Qualcomm VIDC rate-control mode for
+fixed-QP experiments; combine it with `--usb-h264-qp N` when checking whether
+the panel rejects large hardware IDR access units.
 `--usb-h264-debug` prints a detailed trace for each early hardware packet:
 native callback flags/timestamps/keyframe state, raw and patched NAL summaries,
 packetization results, TURZX chunk sizes, and a shutdown summary. The helper
@@ -122,7 +125,8 @@ several smaller IDR/P NALs instead of one large slice. For 462x1920 streams,
 the SPS summary should show `display=462x1920` rather than only the coded
 464-pixel macroblock width.
 If the first hardware IDR remains much larger than the ffmpeg/libx264 stream,
-retry `--usb-h264-qp 38` and `--usb-h264-qp 44` to test whether the panel is
+retry `--usb-h264-rate-control cq --usb-h264-qp 38` and
+`--usb-h264-rate-control cq --usb-h264-qp 44` to test whether the panel is
 rejecting large access units.
 If QP controls are rejected by the driver, keep `--usb-h264-packetize auto`
 so each encoder access unit is sent with the same command boundary as the
