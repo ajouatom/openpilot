@@ -498,7 +498,18 @@ void HomeWindow::updateState(const UIState &s) {
       QJsonDocument doc = QJsonDocument::fromJson(raw.toUtf8());
       if (!raw.isEmpty() && doc.isObject()) {
         QJsonObject obj = doc.object();
-        QString msg = tr("Auto-Tuner: Driving pattern learned!");
+
+        // 팝업 소스에 따른 타이틀 메시지 분기
+        QString source = QString::fromStdString(params.get("CarrotLearningPopupSource"));
+        QString msg;
+        if (source == "timer") {
+          msg = tr("Auto-Tuner: 30min update — driving pattern learned!");
+        } else if (source == "stop") {
+          msg = tr("Auto-Tuner: Driving pattern learned!");
+        } else {
+          // parking (default)
+          msg = tr("Auto-Tuner: Driving pattern learned!");
+        }
 
         AutoTunerDialog *dialog = new AutoTunerDialog(msg, obj, this);
         connect(dialog, &QDialog::accepted, [=]() {

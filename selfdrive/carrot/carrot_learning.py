@@ -148,6 +148,17 @@ class CarrotLearner:
     self._prev_a_ego = 0.0       # 이전 프레임 가속도
     self._accel_swing_count = 0  # 가감속 반전(Hunting) 카운트
 
+    # ── 주행 중 팝업 타이머 ─────────────────────────────────────────────
+    # Trigger 1: 인게이지 30분 경과 → 즉시 팝업 (주행 중 포함)
+    self._engaged_elapsed_sec = 0.0      # 인게이지 누적 시간
+    self._popup_interval_sec = 1800.0    # 30분 = 1800초
+    # Trigger 2: 5분 주기 추천 체크 → 정차 시 팝업
+    self._check_elapsed_sec = 0.0        # 추천 체크 타이머
+    self._check_interval_sec = 300.0     # 5분마다 체크
+    self._pending_popup = False          # 정차 대기 팝업 플래그
+    # 공통: 팝업 후 쿨다운 (중복 발동 방지)
+    self._popup_cooldown_sec = 0.0       # 팝업 발동 후 5분 쿨다운
+
     self._load()
 
   # ------------------------------------------------------------------
@@ -292,7 +303,38 @@ class CarrotLearner:
       if v_ego_kph >= 80.0 and brake_pressed:
         self._tfollow_speed_brake_acc += _DT
 
-    # 주차 감지 (이전에 주차가 아니었고, 주행을 한 번이라도 한 경우에만 발동)
+    # ── 주행 중 팝업 타이머 업데이트 ──────────────────────────────────
+    if engaged and not gear_park:
+      self._engaged_elapsed_sec += _DT
+      self._check_elapsed_sec += _DT
+
+    # 쿨다운 소모
+    if self._popup_cooldown_sec > 0:
+      self._popup_cooldown_sec -= _DT
+
+    # [Trigger 2-체크] 5분마다 추천사항 확인 → pending 플래그 세팅
+    if self._check_elapsed_sec >= self._check_interval_sec:
+      self._check_elapsed_sec = 0.0
+      if self._has_driven and self._popup_cooldown_sec <= 0:
+        recs = self._calc_recommendations()
+        if recs:
+          self._pending_popup = True
+
+    # [Trigger 2-발동] 정차 시 (v < 3 km/h) pending 팝업 표시
+    if (self._pending_popup and not gear_park
+        and self._has_driven and v_ego_kph < 3.0
+        and self._popup_cooldown_sec <= 0):
+      self._fire_popup(source="stop")
+      self._pending_popup = False
+
+    # [Trigger 1] 인게이지 30분 경과 → 즉시 팝업 (주행 중이라도)
+    if (self._engaged_elapsed_sec >= self._popup_interval_sec
+        and self._has_driven and self._popup_cooldown_sec <= 0):
+      self._fire_popup(source="timer")
+      self._engaged_elapsed_sec = 0.0
+      self._pending_popup = False  # 30분 팝업이 발동하면 pending 취소
+
+    # [Trigger 3] 주차 감지 (이전에 주차가 아니었고, 주행을 한 번이라도 한 경우에만 발동)
     if gear_park and not self._prev_gear_park and self._has_driven:
       self._on_parking()
       self._has_driven = False  # 팝업 후 플래그 초기화
@@ -435,14 +477,24 @@ class CarrotLearner:
     }
     self._params.put("CarrotLearningData", json.dumps(data).encode('utf8'))
 
-  def _on_parking(self):
-    """주차 전환 시: 저장 → 추천 계산 → 팝업 신호"""
+  def _fire_popup(self, source: str = "parking"):
+    """추천 계산 → Params 저장 → 팝업 신호.
+    source: 'parking' | 'stop' | 'timer'
+    """
     self._save()
     recommendations = self._calc_recommendations()
     if not recommendations:
       return
     self._params.put("CarrotLearningRecommend", json.dumps(recommendations).encode('utf8'))
+    self._params.put("CarrotLearningPopupSource", source)
     self._params.put_bool("CarrotLearningPopupReady", True)
+    self._popup_cooldown_sec = 300.0  # 5분 쿨다운 (중복 팝업 방지)
+
+  def _on_parking(self):
+    """주차 전환 시: _fire_popup 호출"""
+    self._fire_popup(source="parking")
+    self._engaged_elapsed_sec = 0.0
+    self._pending_popup = False
 
   def _calc_recommendations(self) -> dict:
     """Phase 1~4 추천값 계산. 추천 없으면 빈 dict 반환."""
@@ -730,8 +782,15 @@ class CarrotLearner:
     self._brake_min_ttc = 999.0
     self._tfollow_min_gap = [999.0] * 4
 
+    # 주행 중 팝업 타이머 리셋 (적용 후 재학습 시작)
+    self._engaged_elapsed_sec = 0.0
+    self._check_elapsed_sec = 0.0
+    self._pending_popup = False
+    self._popup_cooldown_sec = 0.0
+
     self._params.remove("CarrotLearningData")
     self._params.remove("CarrotLearningRecommend")
+    self._params.remove("CarrotLearningPopupSource")
     self._params.put_bool("CarrotLearningPopupReady", False)
 
 

@@ -1258,6 +1258,10 @@ This may take up to a minute.</source>
         <translation>自動調參：已學習駕駛模式！</translation>
     </message>
     <message>
+        <source>Auto-Tuner: 30min update — driving pattern learned!</source>
+        <translation>自動調參：30分鐘更新 — 已學習駕駛模式！</translation>
+    </message>
+    <message>
         <source>🧬 DSP: Manual driving style analyzed! (Auto-Tuner will follow next)</source>
         <translation>🧬 DSP：手動駕駛風格分析完成！（接下來將由自動調參接管）</translation>
     </message>
