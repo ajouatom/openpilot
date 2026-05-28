@@ -28,6 +28,7 @@ karpathy.md 원칙 준수: 최소 구현, 단일 목적.
 """
 
 import json
+import math
 import numpy as np
 from openpilot.common.params import Params
 from openpilot.common.conversions import Conversions as CV
@@ -159,6 +160,12 @@ class CarrotLearner:
     # 공통: 팝업 후 쿨다운 (중복 발동 방지)
     self._popup_cooldown_sec = 0.0       # 팝업 발동 후 5분 쿨다운
 
+    # Phase 6 (Curve Decel Aggressiveness)
+    self._curve_override_gas_sec = 0.0
+    self._curve_override_brake_sec = 0.0
+    self._curve_override_brake_count = 0
+    self._curve_max_decel = 0.0
+
     self._load()
 
   # ------------------------------------------------------------------
@@ -173,7 +180,7 @@ class CarrotLearner:
              steer_deg: float = 0.0, steer_pressed: bool = False,
              brake_pressed: bool = False, lead_drel: float = 0.0, lead_v_kph: float = 0.0,
              a_ego: float = 0.0, lead_jlead: float = 0.0, v_cruise_kph: float = 0.0,
-             gas_val: float = 0.0, brake_val: float = 0.0):
+             gas_val: float = 0.0, brake_val: float = 0.0, sm=None):
     """
     매 프레임 호출.
     - Phase 1: engaged + gas_pressed → 속도구간 누적
@@ -185,6 +192,8 @@ class CarrotLearner:
     """
     if not self._is_active():
       return
+
+    prev_brake = self._prev_brake
 
     # UI로부터 초기화(Clear) 신호가 오면 내부 메모리를 비움
     if self._params.get_bool("CarrotLearningClear"):
@@ -303,6 +312,49 @@ class CarrotLearner:
       if v_ego_kph >= 80.0 and brake_pressed:
         self._tfollow_speed_brake_acc += _DT
 
+    # ── Phase 6: 가변 곡선 감속 학습 ──────────────────────────────────────────
+    if engaged and sm is not None and sm.alive.get('modelV2', False) and v_ego_kph >= 20.0:
+      modelData = sm['modelV2']
+      if len(modelData.position.x) >= 3:
+        x_pts = np.array(modelData.position.x)
+        y_pts = np.array(modelData.position.y)
+        n_points = len(x_pts)
+        
+        # Calculate maximum curvature along the predicted path
+        max_c = 0.0
+        for i in range(1, n_points - 1):
+          x1, y1 = x_pts[i-1], y_pts[i-1]
+          x2, y2 = x_pts[i], y_pts[i]
+          x3, y3 = x_pts[i+1], y_pts[i+1]
+          
+          dx1, dy1 = x2 - x1, y2 - y1
+          dx2, dy2 = x3 - x2, y3 - y2
+          
+          a_side = math.sqrt(dx1**2 + dy1**2)
+          b_side = math.sqrt(dx2**2 + dy2**2)
+          c_side = math.sqrt((x3 - x1)**2 + (y3 - y1)**2)
+          
+          cross = dx1 * dy2 - dy1 * dx2
+          if a_side * b_side * c_side > 1e-6:
+            curvature = (2.0 * abs(cross)) / (a_side * b_side * c_side)
+            max_c = max(max_c, curvature)
+
+        # Curve detected threshold: max_c > 0.0035 (radius < ~285m)
+        is_curve = (max_c > 0.0035)
+        no_lead = (lead_drel == 0.0 or lead_drel > 80.0) # no close lead car
+        
+        if is_curve and no_lead:
+          if gas_pressed:
+            self._curve_override_gas_sec += _DT
+          elif brake_pressed:
+            self._curve_override_brake_sec += _DT
+            # Track peak deceleration in curve
+            self._curve_max_decel = max(self._curve_max_decel, -a_ego)
+            
+            # Detect unique brake event in curve
+            if not prev_brake:
+              self._curve_override_brake_count += 1
+
     # ── 주행 중 팝업 타이머 업데이트 ──────────────────────────────────
     if engaged and not gear_park:
       self._engaged_elapsed_sec += _DT
@@ -369,6 +421,12 @@ class CarrotLearner:
     self._brake_min_ttc = 999.0
     self._tfollow_min_gap = [999.0] * 4
 
+    # Phase 6 reset
+    self._curve_override_gas_sec = 0.0
+    self._curve_override_brake_sec = 0.0
+    self._curve_override_brake_count = 0
+    self._curve_max_decel = 0.0
+
     self._params.remove("CarrotLearningData")
     self._params.remove("CarrotLearningRecommend")
 
@@ -425,6 +483,12 @@ class CarrotLearner:
       p5 = data.get("phase5", {})
       self._dyn_brake_count = int(p5.get("dyn_brake_count", 0))
       self._decel_brake_count = int(p5.get("decel_brake_count", 0))
+      # Phase 6
+      p6 = data.get("phase6", {})
+      self._curve_override_gas_sec = float(p6.get("curve_override_gas_sec", 0.0))
+      self._curve_override_brake_sec = float(p6.get("curve_override_brake_sec", 0.0))
+      self._curve_override_brake_count = int(p6.get("curve_override_brake_count", 0))
+      self._curve_max_decel = float(p6.get("curve_max_decel", 0.0))
 
       # v3 Override Intensity & Dynamics Restore
       override = data.get("override_dynamics", {})
@@ -466,6 +530,12 @@ class CarrotLearner:
       "phase5": {
         "dyn_brake_count": self._dyn_brake_count,
         "decel_brake_count": self._decel_brake_count,
+      },
+      "phase6": {
+        "curve_override_gas_sec": self._curve_override_gas_sec,
+        "curve_override_brake_sec": self._curve_override_brake_sec,
+        "curve_override_brake_count": self._curve_override_brake_count,
+        "curve_max_decel": self._curve_max_decel,
       },
       "override_dynamics": {
         "gas_max_accel": self._gas_max_accel,
@@ -739,6 +809,37 @@ class CarrotLearner:
       entry["band_kph"] = entry["band_kph"] + f" ※다음세션권고:{','.join(deferred_names)}"
       result[winner_group][winner_name] = entry
 
+    # ── Phase 6: Curve Speed Aggressiveness ─────────────────────────
+    key = "AutoCurveSpeedAggressiveness"
+    current_raw = self._params.get_int(key)
+    if current_raw <= 0:
+      current_raw = 100
+
+    recommended_raw = current_raw
+    reason = ""
+    sec = 0.0
+
+    # Brake overrides (Safety critical - takes priority)
+    if self._curve_override_brake_count >= 3 or self._curve_override_brake_sec >= 5.0:
+      recommended_raw = max(60, current_raw - 10)
+      reason = f"brake overrides (count {self._curve_override_brake_count}, peak decel {self._curve_max_decel:.2f}m/s^2)"
+      sec = self._curve_override_brake_sec
+    elif self._curve_override_gas_sec >= 10.0:
+      recommended_raw = min(150, current_raw + 10)
+      reason = f"gas overrides (acc {self._curve_override_gas_sec:.1f}s)"
+      sec = self._curve_override_gas_sec
+
+    if recommended_raw != current_raw:
+      if "곡선 (Curve)" not in result:
+        result["곡선 (Curve)"] = {}
+      result["곡선 (Curve)"][key] = {
+        "current": current_raw,
+        "recommended": recommended_raw,
+        "reason": reason,
+        "band_kph": "curve deceleration",
+        "sec": sec,
+      }
+
     return {k: v for k, v in result.items() if v}
 
   def apply_recommendations(self):
@@ -781,6 +882,12 @@ class CarrotLearner:
     self._brake_max_decel = 0.0
     self._brake_min_ttc = 999.0
     self._tfollow_min_gap = [999.0] * 4
+
+    # Phase 6 reset
+    self._curve_override_gas_sec = 0.0
+    self._curve_override_brake_sec = 0.0
+    self._curve_override_brake_count = 0
+    self._curve_max_decel = 0.0
 
     # 주행 중 팝업 타이머 리셋 (적용 후 재학습 시작)
     self._engaged_elapsed_sec = 0.0
