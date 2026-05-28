@@ -25,6 +25,7 @@ from cluster_gamepad import DualSenseSimulator
 from cluster_git_status import GitBranchStatusProvider
 from cluster_h264_pipeline import (
     DEFAULT_H264_DEVICE,
+    DEFAULT_H264_ENCODER_ALIGN,
     DEFAULT_H264_FFMPEG,
     DEFAULT_H264_FFMPEG_ENCODER,
     DEFAULT_H264_HELPER,
@@ -229,6 +230,7 @@ def run_demo(
     usb_h264_packetize: str,
     usb_h264_orientation: str,
     usb_h264_align: int,
+    usb_h264_encoder_align: int,
     usb_h264_chunk_size: int,
     usb_h264_wait_ack: bool,
     usb_h264_soft_ack: bool,
@@ -389,6 +391,7 @@ def run_demo(
                 usb_display,
                 h264_width,
                 h264_height,
+                usb_h264_encoder_align,
                 h264_encoder_fps,
                 usb_h264_bitrate,
                 usb_h264_gop,
@@ -899,6 +902,15 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--usb-h264-encoder-align",
+        type=int,
+        default=DEFAULT_H264_ENCODER_ALIGN,
+        help=(
+            "Align native/helper hardware encoder input dimensions without changing the rendered display size. "
+            "Default %(default)s pads 462-wide TURZX frames to a macroblock-safe 464-wide encoder input."
+        ),
+    )
+    parser.add_argument(
         "--usb-h264-chunk-size",
         type=int,
         default=0,
@@ -1108,6 +1120,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--usb-h264-qp must be -1 or between 0 and 51")
     if args.usb_h264_align <= 0:
         parser.error("--usb-h264-align must be greater than 0")
+    if args.usb_h264_encoder_align <= 0:
+        parser.error("--usb-h264-encoder-align must be greater than 0")
     if args.usb_h264_wait_ack and args.usb_h264_no_ack:
         parser.error("--usb-h264-wait-ack and --usb-h264-no-ack cannot be used together")
     if args.usb_h264_soft_ack and args.usb_h264_no_ack:
@@ -1209,6 +1223,7 @@ def main() -> None:
             args.usb_h264_packetize,
             args.usb_h264_orientation,
             args.usb_h264_align,
+            args.usb_h264_encoder_align,
             args.usb_h264_chunk_size,
             args.usb_h264_wait_ack or args.usb_h264_soft_ack,
             args.usb_h264_soft_ack,

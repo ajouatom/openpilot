@@ -23,6 +23,7 @@ DEFAULT_H264_FFMPEG_ENCODER = "libx264"
 DEFAULT_H264_SLICE_MAX_BYTES = 4096
 DEFAULT_H264_SLICE_MAX_MB = 0
 DEFAULT_H264_PACKETIZE = "auto"
+DEFAULT_H264_ENCODER_ALIGN = 16
 
 NATIVE_INPUT_FORMATS = {"auto": 0, "rgb4": 1, "nv12": 2}
 NATIVE_RGB4_LAYOUTS = {"axrgb": 0, "rgba": 1, "bgra": 2}
@@ -36,6 +37,11 @@ H264_NAL_NAMES = {
     8: "PPS",
     9: "AUD",
 }
+
+
+def _align_dimension(value: int, alignment: int) -> int:
+    alignment = max(1, int(alignment))
+    return ((int(value) + alignment - 1) // alignment) * alignment
 
 
 class _H264BitReader:
@@ -503,6 +509,7 @@ class H264UsbPipeline:
         usb_display: TuringUsbDisplay,
         width: int,
         height: int,
+        encoder_align: int,
         fps: int,
         bitrate: str,
         gop: int,
@@ -533,6 +540,9 @@ class H264UsbPipeline:
         self.usb_display = usb_display
         self.width = int(width)
         self.height = int(height)
+        align_hardware_input = backend != "ffmpeg"
+        self.encoder_width = _align_dimension(self.width, encoder_align) if align_hardware_input else self.width
+        self.encoder_height = _align_dimension(self.height, encoder_align) if align_hardware_input else self.height
         self.fps = max(1, int(fps))
         self.bitrate = bitrate
         self.gop = max(1, int(gop))
@@ -583,6 +593,7 @@ class H264UsbPipeline:
         self._error: BaseException | None = None
         self._samples: list[tuple[str, float]] = []
         self._stderr_tail: deque[str] = deque(maxlen=20)
+        self._padded_rgba: bytearray | None = None
 
     def start(self) -> None:
         if self.backend_request == "ffmpeg":
@@ -610,8 +621,8 @@ class H264UsbPipeline:
 
         bitrate_bps = self._parse_bitrate_bps(self.bitrate)
         handle = lib.cluster_h264_encoder_bridge_create(
-            self.width,
-            self.height,
+            self.encoder_width,
+            self.encoder_height,
             self.fps,
             bitrate_bps,
             self.gop,
@@ -655,6 +666,7 @@ class H264UsbPipeline:
         print(
             "Starting H264 USB native hardware encoder: "
             f"{self.width}x{self.height}@{self.fps} "
+            f"encoder={self.encoder_width}x{self.encoder_height} "
             f"bitrate={bitrate_bps} gop={self.gop} "
             f"slice_max={self.slice_max_bytes} slice_max_mb={self.slice_max_mb} qp={self.qp} "
             f"profile={self.h264_profile} "
@@ -680,6 +692,7 @@ class H264UsbPipeline:
         print(
             "Starting H264 USB helper hardware encoder: "
             f"{self.width}x{self.height}@{self.fps} "
+            f"encoder={self.encoder_width}x{self.encoder_height} "
             f"bitrate={self.bitrate} gop={self.gop} "
             f"slice_max={self.slice_max_bytes} slice_max_mb={self.slice_max_mb} qp={self.qp} "
             f"profile={self.h264_profile} "
@@ -734,7 +747,7 @@ class H264UsbPipeline:
         self.backend_name = "ffmpeg"
         print(
             "Starting H264 USB ffmpeg encoder: "
-            f"{self.ffmpeg_encoder_name} {self.width}x{self.height}@{self.fps} "
+            f"{self.ffmpeg_encoder_name} {self.encoder_width}x{self.encoder_height}@{self.fps} "
             f"bitrate={self.bitrate} gop={self.gop} muxer={self.ffmpeg_muxer_name} "
             f"packetize={self._packetize_mode('ffmpeg')} "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')}",
@@ -780,7 +793,7 @@ class H264UsbPipeline:
             raise RuntimeError("H264 USB pipeline is closing")
 
         if self._native_handle is not None:
-            self._submit_rgba_native(rgba)
+            self._submit_rgba_native(self._encoder_rgba(rgba))
             return
 
         proc = self._proc
@@ -788,8 +801,9 @@ class H264UsbPipeline:
             raise RuntimeError("H264 USB pipeline is not started")
 
         profile_stage = time.perf_counter()
+        encoder_rgba = self._encoder_rgba(rgba)
         try:
-            self._write_all(proc.stdin.fileno(), rgba, self.width * self.height * 4)
+            self._write_all(proc.stdin.fileno(), encoder_rgba, self.encoder_width * self.encoder_height * 4)
         except BrokenPipeError as exc:
             self._set_error(exc)
             raise RuntimeError(self._error_text(f"H264 {self.backend_name} encoder pipe closed")) from exc
@@ -805,7 +819,7 @@ class H264UsbPipeline:
         if lib is None or handle is None or self._native_callback is None:
             raise RuntimeError("native H264 USB pipeline is not started")
 
-        byte_count = self.width * self.height * 4
+        byte_count = self.encoder_width * self.encoder_height * 4
         view = memoryview(rgba)
         if view.nbytes < byte_count:
             raise RuntimeError(
@@ -834,6 +848,34 @@ class H264UsbPipeline:
         self._native_frame_index += 1
         self._add_sample("usb_h264.native_encode_rgba", profile_stage)
         self.check_error()
+
+    def _encoder_rgba(self, rgba: Any) -> Any:
+        if self.encoder_width == self.width and self.encoder_height == self.height:
+            return rgba
+
+        src_view = memoryview(rgba)
+        src_row_bytes = self.width * 4
+        src_bytes = src_row_bytes * self.height
+        if src_view.nbytes < src_bytes:
+            raise RuntimeError(
+                f"H264 source RGBA input is {src_view.nbytes} bytes, expected at least {src_bytes}"
+            )
+        if not src_view.contiguous:
+            raise RuntimeError("H264 source RGBA input must be contiguous")
+
+        dst_row_bytes = self.encoder_width * 4
+        dst_bytes = dst_row_bytes * self.encoder_height
+        if self._padded_rgba is None or len(self._padded_rgba) != dst_bytes:
+            self._padded_rgba = bytearray(dst_bytes)
+            # Keep padding opaque black so the encoder sees stable macroblock-aligned edges.
+            self._padded_rgba[3::4] = b"\xff" * (dst_bytes // 4)
+
+        dst = self._padded_rgba
+        for y in range(self.height):
+            src_start = y * src_row_bytes
+            dst_start = y * dst_row_bytes
+            dst[dst_start:dst_start + src_row_bytes] = src_view[src_start:src_start + src_row_bytes]
+        return dst
 
     def profile_samples(self) -> tuple[tuple[str, float], ...]:
         with self._condition:
@@ -1029,9 +1071,9 @@ class H264UsbPipeline:
         command = [
             helper,
             "--width",
-            str(self.width),
+            str(self.encoder_width),
             "--height",
-            str(self.height),
+            str(self.encoder_height),
             "--fps",
             str(self.fps),
             "--bitrate",
@@ -1137,7 +1179,7 @@ class H264UsbPipeline:
             "-pix_fmt",
             "rgba",
             "-s:v",
-            f"{self.width}x{self.height}",
+            f"{self.encoder_width}x{self.encoder_height}",
             "-framerate",
             str(self.fps),
             "-i",

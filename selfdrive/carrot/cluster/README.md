@@ -33,6 +33,9 @@ should match live rendering cost more closely.
 portrait upload geometry used by the working JPEG/PNG and earlier ffmpeg H264
 paths. For a 9.2-inch panel that means a 462x1920 H264 stream, with no
 16-pixel render-size padding unless `--usb-h264-align 16` is passed explicitly.
+Native/helper hardware encoding pads only the encoder input to a 16-pixel
+boundary by default, so 462x1920 display frames are fed to V4L2 as 464x1920 and
+cropped back to 462x1920 in SPS metadata.
 The default backend is the native Qualcomm hardware path. It patches hardware
 SPS Baseline constraint flags to match the libx264 constrained-Baseline stream
 that the TURZX panel accepts, and patches hardware SPS frame-crop metadata for
@@ -74,6 +77,9 @@ bytes so hardware output can be compared directly against ffmpeg/libx264.
 `--usb-h264-no-sps-patch` disables the hardware SPS constraint-byte patch.
 `--usb-h264-no-sps-crop-patch` disables the hardware SPS frame-crop patch.
 `--usb-h264-no-sps-vui-patch` disables the hardware SPS VUI timing patch.
+`--usb-h264-encoder-align 1` disables hardware-only input padding for A/B
+testing; the default `16` avoids feeding the Qualcomm encoder a 462-byte NV12
+stride while its H264 SPS reports a 464-pixel coded width.
 `--usb-h264-slice-max-bytes 0` disables the hardware multi-slice request.
 `--usb-h264-slice-max-mb` is intentionally disabled because this Qualcomm V4L2
 driver path can stall before producing capture buffers.
