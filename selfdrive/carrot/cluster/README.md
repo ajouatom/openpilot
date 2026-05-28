@@ -66,7 +66,9 @@ TURZX panel. The default RGB4 byte layout is `bgra`, matching the common
 little-endian memory order for V4L2 `RGB4`. The cluster H264 wrapper emits
 inline SPS/PPS on the first video packet and on IDR frames, asks for constrained
 Baseline/CAVLC plus VUI timing when the V4L2 driver accepts those controls, and
-falls back to the existing loggerd-compatible High/CABAC controls if needed.
+the Python sender patches SPS VUI timing when the driver returns a short VUI
+without timing info. It falls back to the existing loggerd-compatible
+High/CABAC controls if needed.
 Access-unit delimiter NALs
 are off by default because some simple panel decoders expect SPS/PPS or slices
 as the first NAL; use `--usb-h264-insert-aud` only as a compatibility test.
@@ -129,9 +131,9 @@ Also compare the loggerd-style profile with
 `--usb-h264-hardware-profile high --usb-h264-bitrate 1M`; the SPS summary should
 change from `profile=0x42` to `profile=0x64` when the rebuilt native library is
 being used.
-If the hardware SPS summary shows `vui=0`, the default patch adds timing info
-matching the selected H264 FPS; use `--usb-h264-no-sps-vui-patch` only as an
-A/B check.
+If the hardware SPS summary shows `vui=0`, `timing=0`, or `timing=?`, the
+default patch rebuilds SPS VUI timing info to match the selected H264 FPS; use
+`--usb-h264-no-sps-vui-patch` only as an A/B check.
 
 The ffmpeg/libx264 path is the known-good H264 comparison mode. To make that
 explicit while testing, run:

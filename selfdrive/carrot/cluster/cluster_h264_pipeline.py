@@ -226,6 +226,73 @@ def _h264_skip_scaling_list(reader: _H264BitReader, size: int) -> None:
             last_scale = next_scale
 
 
+def _h264_skip_hrd_parameters(reader: _H264BitReader) -> None:
+    cpb_count = reader.read_ue() + 1
+    reader.read_bits(4)
+    reader.read_bits(4)
+    for _ in range(cpb_count):
+        reader.read_ue()
+        reader.read_ue()
+        reader.read_bit()
+    reader.read_bits(5)
+    reader.read_bits(5)
+    reader.read_bits(5)
+    reader.read_bits(5)
+
+
+def _h264_read_vui_info(reader: _H264BitReader) -> dict[str, int]:
+    info = {
+        "timing_info_present": 0,
+        "num_units_in_tick": 0,
+        "time_scale": 0,
+        "fixed_frame_rate_flag": 0,
+        "bitstream_restriction_flag": 0,
+        "max_dec_frame_buffering": 0,
+    }
+
+    if reader.read_bit():
+        aspect_ratio_idc = reader.read_bits(8)
+        if aspect_ratio_idc == 255:
+            reader.read_bits(16)
+            reader.read_bits(16)
+    if reader.read_bit():
+        reader.read_bit()
+    if reader.read_bit():
+        reader.read_bits(3)
+        reader.read_bit()
+        if reader.read_bit():
+            reader.read_bits(8)
+            reader.read_bits(8)
+            reader.read_bits(8)
+    if reader.read_bit():
+        reader.read_ue()
+        reader.read_ue()
+    if reader.read_bit():
+        info["timing_info_present"] = 1
+        info["num_units_in_tick"] = reader.read_bits(32)
+        info["time_scale"] = reader.read_bits(32)
+        info["fixed_frame_rate_flag"] = reader.read_bit()
+    nal_hrd_parameters_present = reader.read_bit()
+    if nal_hrd_parameters_present:
+        _h264_skip_hrd_parameters(reader)
+    vcl_hrd_parameters_present = reader.read_bit()
+    if vcl_hrd_parameters_present:
+        _h264_skip_hrd_parameters(reader)
+    if nal_hrd_parameters_present or vcl_hrd_parameters_present:
+        reader.read_bit()
+    reader.read_bit()
+    if reader.read_bit():
+        info["bitstream_restriction_flag"] = 1
+        reader.read_bit()
+        reader.read_ue()
+        reader.read_ue()
+        reader.read_ue()
+        reader.read_ue()
+        reader.read_ue()
+        info["max_dec_frame_buffering"] = reader.read_ue()
+    return info
+
+
 def _h264_read_sps_to_crop(reader: _H264BitReader) -> dict[str, int]:
     profile_idc = reader.read_bits(8)
     constraint_flags = reader.read_bits(8)
@@ -317,11 +384,24 @@ def _h264_sps_info(nal: bytes) -> str:
         crop_unit_x, crop_unit_y = _h264_crop_units(info["chroma_format_idc"], info["frame_mbs_only_flag"])
         display_width = coded_width - (info["crop_left"] + info["crop_right"]) * crop_unit_x
         display_height = coded_height - (info["crop_top"] + info["crop_bottom"]) * crop_unit_y
-        vui_text = ""
-        if info["after_crop_bitpos"] < len(rbsp) * 8:
+        vui_text = " vui=0"
+        stop_bitpos = _h264_rbsp_stop_bitpos(rbsp)
+        if info["after_crop_bitpos"] < stop_bitpos:
             vui_reader = _H264BitReader(rbsp)
             vui_reader.bitpos = info["after_crop_bitpos"]
-            vui_text = " vui=1" if vui_reader.read_bit() else " vui=0"
+            if vui_reader.read_bit():
+                try:
+                    vui_info = _h264_read_vui_info(vui_reader)
+                    vui_text = (
+                        f" vui=1 timing={vui_info['timing_info_present']}"
+                        f" tick={vui_info['num_units_in_tick']}/{vui_info['time_scale']}"
+                        f" fixed={vui_info['fixed_frame_rate_flag']}"
+                        f" restrict={vui_info['bitstream_restriction_flag']}"
+                    )
+                    if vui_info["max_dec_frame_buffering"]:
+                        vui_text += f" max_dpb={vui_info['max_dec_frame_buffering']}"
+                except Exception:
+                    vui_text = " vui=1 timing=?"
         return (
             f"profile=0x{info['profile_idc']:02X} constraints=0x{info['constraint_flags']:02X} "
             f"level=0x{info['level_idc']:02X} coded={coded_width}x{coded_height} "
@@ -512,11 +592,22 @@ def _patch_h264_sps_vui_timing(data: bytes, fps: int) -> tuple[bytes, bool, str]
             reader = _H264BitReader(rbsp)
             info = _h264_read_sps_to_crop(reader)
             vui_flag_bitpos = info["after_crop_bitpos"]
-            if vui_flag_bitpos >= len(rbsp) * 8:
+            stop_bitpos = _h264_rbsp_stop_bitpos(rbsp)
+            if vui_flag_bitpos > stop_bitpos:
                 continue
-            existing_vui = (rbsp[vui_flag_bitpos // 8] >> (7 - (vui_flag_bitpos % 8))) & 1
-            if existing_vui:
-                continue
+            existing_vui = 0
+            existing_timing = 0
+            if vui_flag_bitpos < stop_bitpos:
+                vui_reader = _H264BitReader(rbsp)
+                vui_reader.bitpos = vui_flag_bitpos
+                existing_vui = vui_reader.read_bit()
+                if existing_vui:
+                    try:
+                        existing_timing = _h264_read_vui_info(vui_reader)["timing_info_present"]
+                    except Exception:
+                        existing_timing = 0
+                    if existing_timing:
+                        continue
 
             writer = _H264BitWriter()
             writer.copy_bits(rbsp, 0, vui_flag_bitpos)
@@ -529,7 +620,10 @@ def _patch_h264_sps_vui_timing(data: bytes, fps: int) -> tuple[bytes, bool, str]
             out.extend(patched_nal)
             last = nal_end
             patched = True
-            patched_info = f"fps={fps} num_units_in_tick=1 time_scale={max(2, int(fps) * 2)}"
+            patched_info = (
+                f"fps={fps} num_units_in_tick=1 time_scale={max(2, int(fps) * 2)} "
+                f"replaced_vui={existing_vui} previous_timing={existing_timing}"
+            )
         except Exception:
             continue
 
