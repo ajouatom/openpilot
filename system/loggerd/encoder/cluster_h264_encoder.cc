@@ -320,11 +320,15 @@ void ClusterH264Encoder::configure_formats() {
     const size_t min_bytesused = input_uv_offset_ + input_stride_ * input_uv_scanlines_;
     input_bytesused_ = std::max({input_sizeimage_, min_bytesused, static_cast<size_t>(venus_size)});
   } else {
-    input_stride_ = driver_stride;
     const size_t min_stride = static_cast<size_t>(config_.width) * 4;
-    if (input_stride_ < min_stride) {
-      input_stride_ = min_stride;
+    size_t sizeimage_stride = 0;
+    if (config_.height > 0 && input_sizeimage_ > 0 && input_sizeimage_ % static_cast<size_t>(config_.height) == 0) {
+      sizeimage_stride = input_sizeimage_ / static_cast<size_t>(config_.height);
     }
+    // Some msm_vidc RGB4 formats report compact bytesperline while sizeimage
+    // implies a wider aligned row. Prefer the larger stride to avoid packing
+    // rows more tightly than the encoder consumes.
+    input_stride_ = std::max({driver_stride, min_stride, sizeimage_stride});
     input_uv_offset_ = 0;
     input_bytesused_ = std::max(input_sizeimage_, input_stride_ * static_cast<size_t>(config_.height));
   }

@@ -64,8 +64,10 @@ also reports RGB4 support, and `--usb-h264-input-format rgb4` remains available
 for direct RGB input tests, but NV12 is the safer compatibility path for the
 TURZX panel. Native NV12 input uses the same Qualcomm/Venus aligned stride,
 scanline count, and UV offset calculation as camerad, rather than a compact
-width-by-height layout. The default RGB4 byte layout is `bgra`, matching the common
-little-endian memory order for V4L2 `RGB4`. The cluster H264 wrapper emits
+width-by-height layout. RGB4 input also honors a larger row stride implied by
+V4L2 `sizeimage` when it disagrees with the reported compact `bytesperline`.
+The default RGB4 byte layout is `bgra`, matching the common little-endian memory
+order for V4L2 `RGB4`. The cluster H264 wrapper emits
 inline SPS/PPS on the first video packet and on IDR frames, asks for constrained
 Baseline/CAVLC plus VUI timing when the V4L2 driver accepts those controls, and
 the Python sender patches SPS VUI timing and bitstream restriction metadata when
