@@ -660,7 +660,7 @@ class CarrotPlanner:
                         lead_v_kph=leadOne.vLead * CV.MS_TO_KPH if leadOne.status else 0.0,
                         a_ego=a_ego, lead_jlead=leadOne.jLead if leadOne.status else 0.0,
                         v_cruise_kph=v_cruise_kph,
-                        gas_val=carstate.gas, brake_val=carstate.brake)
+                        gas_val=carstate.gas, brake_val=carstate.brake, sm=sm)
 
     # DSP: 수동 주행 성향 프로파일링 (오픈파일럿 미인게이지 상태에서만 수집)
     self.profiler.update(v_ego_kph, engaged, gear_park,

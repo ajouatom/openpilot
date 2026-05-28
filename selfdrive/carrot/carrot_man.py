@@ -1008,6 +1008,8 @@ class CarrotMan:
 
   def carrot_curve_speed_params(self):
     self.autoCurveSpeedFactor = self.params.get_int("AutoCurveSpeedFactor")*0.01
+    self.autoCurveSpeedAggressiveness = self.params.get_int("AutoCurveSpeedAggressiveness")*0.01
+    self.autoCurveSpeedLowerLimit = self.params.get_int("AutoCurveSpeedLowerLimit")
 
   def carrot_curve_speed(self, sm):
     self.carrot_curve_speed_params()
@@ -1020,29 +1022,87 @@ class CarrotMan:
     return self.vturn_speed(sm['carState'], sm)
 
   def vturn_speed(self, CS, sm):
-    TARGET_LAT_A = 1.9  # m/s^2
-
     modelData = sm['modelV2']
+    if len(modelData.position.x) < 3:
+      return 250
+
+    x = np.array(modelData.position.x)
+    y = np.array(modelData.position.y)
+
+    # 1. Calculate curvature at each point along the path using Menger curvature
+    n_points = len(x)
+    curvatures = np.zeros(n_points)
+
+    for i in range(1, n_points - 1):
+      # Coordinates of three consecutive points
+      x1, y1 = x[i-1], y[i-1]
+      x2, y2 = x[i], y[i]
+      x3, y3 = x[i+1], y[i+1]
+
+      # Vectors
+      dx1, dy1 = x2 - x1, y2 - y1
+      dx2, dy2 = x3 - x2, y3 - y2
+
+      # Length of sides
+      a = math.sqrt(dx1**2 + dy1**2)
+      b = math.sqrt(dx2**2 + dy2**2)
+      c = math.sqrt((x3 - x1)**2 + (y3 - y1)**2)
+
+      # Cross product (signed area)
+      cross = dx1 * dy2 - dy1 * dx2
+
+      if a * b * c > 1e-6:
+        # Menger curvature = 2 * area / (a * b * c)
+        curvatures[i] = (2.0 * cross) / (a * b * c)
+      else:
+        curvatures[i] = 0.0
+
+    # Apply AutoCurveSpeedFactor to curvatures (sensitivity adjustment)
+    curvatures *= self.autoCurveSpeedFactor
+
+    # 2. Compute safe speed target at each point
+    v_safe = np.zeros(n_points)
     v_ego = max(CS.vEgo, 0.1)
-    # Set the curve sensitivity
-    orientation_rate = np.array(modelData.orientationRate.z) * self.autoCurveSpeedFactor
-    velocity = np.array(modelData.velocity.x)
 
-    # Get the maximum lat accel from the model
-    max_index = np.argmax(np.abs(orientation_rate))
-    curv_direction = np.sign(orientation_rate[max_index])
-    max_pred_lat_acc = np.amax(np.abs(orientation_rate) * velocity)
+    for i in range(n_points):
+      c = abs(curvatures[i])
+      if c < 1e-4:
+        v_safe[i] = 250.0 / 3.6  # No speed limit on straight road
+      else:
+        # Speed-dependent dynamic comfort lateral acceleration limit
+        # At 0 km/h: 2.5 m/s^2, At 100 km/h: 1.4 m/s^2
+        # Base limit: 2.5 m/s^2, Slope: 0.011 m/s^2 per km/h
+        # User aggressiveness multiplier applies to the limit
+        v_approx = v_ego
+        lat_acc_limit = max(1.0, 2.5 - 0.011 * v_approx * 3.6) * self.autoCurveSpeedAggressiveness
 
-    # Get the maximum curve based on the current velocity
-    max_curve = max_pred_lat_acc / (v_ego**2)
+        # turnSpeed = sqrt(a_lat / curvature)
+        v_safe[i] = math.sqrt(lat_acc_limit / c)
 
-    # Set the target lateral acceleration
-    adjusted_target_lat_a = TARGET_LAT_A
+    # 3. Backward Pass integration to calculate the deceleration profile
+    # comfort deceleration limit: autoNaviSpeedDecelRate (default ~1.2 m/s^2)
+    decel_limit = max(0.5, self.carrot_serv.autoNaviSpeedDecelRate)
 
-    # Get the target velocity for the maximum curve
-    #turnSpeed = max(abs(adjusted_target_lat_a / max_curve)**0.5  * 3.6, self.autoCurveSpeedLowerLimit)
-    turnSpeed = max(abs(adjusted_target_lat_a / max_curve)**0.5  * 3.6, 5)
-    turnSpeed = min(turnSpeed, 250)
+    v_target = np.zeros(n_points)
+    v_target[-1] = v_safe[-1]
+
+    for i in range(n_points - 2, -1, -1):
+      dx = x[i+1] - x[i]
+      if dx > 0:
+        # physics formula: v_i^2 = v_f^2 + 2 * a * dx
+        v_target[i] = min(v_safe[i], math.sqrt(v_target[i+1]**2 + 2.0 * decel_limit * dx))
+      else:
+        v_target[i] = v_safe[i]
+
+    # Target speed at current position (i=0)
+    turnSpeed = v_target[0] * 3.6  # Convert to km/h
+    turnSpeed = max(turnSpeed, self.autoCurveSpeedLowerLimit)
+    turnSpeed = min(turnSpeed, 250.0)
+
+    # Find the maximum curvature direction
+    max_idx = np.argmax(np.abs(curvatures))
+    curv_direction = np.sign(curvatures[max_idx]) if abs(curvatures[max_idx]) > 0 else 1.0
+
     return turnSpeed * curv_direction
 
   def carrot_navi_thread(self):
