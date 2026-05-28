@@ -576,7 +576,12 @@ def run_demo(
                         raise RuntimeError("H264 USB pipeline is not available")
                     if h264_test_pattern_rgba is None:
                         profile_stage = time.perf_counter()
-                        with renderer.render_to_rgba_buffer(state, portrait_upload=h264_portrait_upload) as (
+                        with renderer.render_to_rgba_buffer(
+                            state,
+                            portrait_upload=h264_portrait_upload,
+                            output_width=h264_pipeline.encoder_width if h264_portrait_upload else None,
+                            output_height=h264_pipeline.encoder_height if h264_portrait_upload else None,
+                        ) as (
                             rgba,
                             image_width,
                             image_height,

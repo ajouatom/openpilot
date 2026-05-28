@@ -221,6 +221,7 @@ class ClusterUiRenderer:
         self._accel_text_width = 0.0
         self._capture_target = None
         self._portrait_upload_target = None
+        self._portrait_upload_target_size: tuple[int, int] | None = None
         self._vehicle_model = None
         self._vehicle_model_load_attempted = False
         self._route_video_texture = None
@@ -315,6 +316,7 @@ class ClusterUiRenderer:
         if self._portrait_upload_target is not None:
             rl.unload_render_texture(self._portrait_upload_target)
             self._portrait_upload_target = None
+            self._portrait_upload_target_size = None
         if self._route_video_texture is not None:
             rl.unload_texture(self._route_video_texture)
             self._route_video_texture = None
@@ -417,8 +419,15 @@ class ClusterUiRenderer:
         self,
         state: ClusterUiState,
         portrait_upload: bool = False,
+        output_width: int | None = None,
+        output_height: int | None = None,
     ) -> tuple[bytes, int, int]:
-        with self.render_to_rgba_buffer(state, portrait_upload=portrait_upload) as (
+        with self.render_to_rgba_buffer(
+            state,
+            portrait_upload=portrait_upload,
+            output_width=output_width,
+            output_height=output_height,
+        ) as (
             rgba_buffer,
             image_width,
             image_height,
@@ -433,9 +442,16 @@ class ClusterUiRenderer:
         self,
         state: ClusterUiState,
         portrait_upload: bool = False,
+        output_width: int | None = None,
+        output_height: int | None = None,
     ) -> Iterator[tuple[object, int, int]]:
         profile_stage = self._profile_start()
-        image = self._render_to_image(state, portrait_upload=portrait_upload)
+        image = self._render_to_image(
+            state,
+            portrait_upload=portrait_upload,
+            output_width=output_width,
+            output_height=output_height,
+        )
         self._profile_add("render_to_rgba.render_to_image", profile_stage)
 
         try:
@@ -454,7 +470,13 @@ class ClusterUiRenderer:
             rl.unload_image(image)
             self._profile_add("render_to_rgba.unload_image", profile_stage)
 
-    def _render_to_image(self, state: ClusterUiState, portrait_upload: bool = False):
+    def _render_to_image(
+        self,
+        state: ClusterUiState,
+        portrait_upload: bool = False,
+        output_width: int | None = None,
+        output_height: int | None = None,
+    ):
         self.open(hidden=self.hidden)
         profile_stage = self._profile_start()
         target = self._get_capture_target()
@@ -468,7 +490,7 @@ class ClusterUiRenderer:
 
         if portrait_upload:
             profile_stage = self._profile_start()
-            upload_target = self._get_portrait_upload_target()
+            upload_target = self._get_portrait_upload_target(output_width, output_height)
             self._profile_add("render_to_image.get_portrait_upload_target", profile_stage)
 
             profile_stage = self._profile_start()
@@ -522,10 +544,18 @@ class ClusterUiRenderer:
             self._profile_add("render_target.filter_capture", profile_stage)
         return self._capture_target
 
-    def _get_portrait_upload_target(self):
+    def _get_portrait_upload_target(self, width: int | None = None, height: int | None = None):
+        target_width = int(width or self.height)
+        target_height = int(height or self.width)
+        target_size = (target_width, target_height)
+        if self._portrait_upload_target is not None and self._portrait_upload_target_size != target_size:
+            rl.unload_render_texture(self._portrait_upload_target)
+            self._portrait_upload_target = None
+            self._portrait_upload_target_size = None
         if self._portrait_upload_target is None:
             profile_stage = self._profile_start()
-            self._portrait_upload_target = rl.load_render_texture(self.height, self.width)
+            self._portrait_upload_target = rl.load_render_texture(target_width, target_height)
+            self._portrait_upload_target_size = target_size
             self._profile_add("render_target.alloc_portrait_upload", profile_stage)
             profile_stage = self._profile_start()
             rl.set_texture_filter(self._portrait_upload_target.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)

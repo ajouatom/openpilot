@@ -84,7 +84,10 @@ they are diagnostic tools and add console/file I/O overhead. With
 `usb_h264.native.convert` and `usb_h264.native.wait_input`.
 `--usb-h264-encoder-align 1` disables hardware-only input padding for A/B
 testing; the default `16` avoids feeding the Qualcomm encoder a 462-byte NV12
-stride while its H264 SPS reports a 464-pixel coded width.
+stride while its H264 SPS reports a 464-pixel coded width. In portrait H264
+mode, the renderer reads back the aligned encoder size directly so the Python
+sender can avoid a per-frame RGBA padding copy while SPS crop metadata keeps
+the panel display at the requested 462-pixel width.
 `--usb-h264-slice-max-bytes 0` disables the hardware multi-slice request.
 Native/helper hardware output is sent as encoder access units, matching the
 known-good ffmpeg/libx264 command boundary. The TURZX H264 command `last` flag

@@ -931,16 +931,25 @@ class H264UsbPipeline:
 
     def submit_rgba(self, rgba: Any, width: int, height: int) -> None:
         self.check_error()
-        if width != self.width or height != self.height:
+        input_size = (int(width), int(height))
+        display_size = (self.width, self.height)
+        encoder_size = (self.encoder_width, self.encoder_height)
+        if input_size not in (display_size, encoder_size):
             raise RuntimeError(
-                f"H264 encoder input size changed from {self.width}x{self.height} "
-                f"to {width}x{height}"
+                f"H264 encoder input size changed to {width}x{height}; expected "
+                f"display {self.width}x{self.height} or encoder {self.encoder_width}x{self.encoder_height}"
             )
         if self._closing:
             raise RuntimeError("H264 USB pipeline is closing")
 
+        if input_size == encoder_size:
+            encoder_rgba = rgba
+        else:
+            profile_stage = time.perf_counter()
+            encoder_rgba = self._encoder_rgba(rgba, width, height)
+            self._add_sample("usb_h264.pad_rgba", profile_stage)
         if self._native_handle is not None:
-            self._submit_rgba_native(self._encoder_rgba(rgba))
+            self._submit_rgba_native(encoder_rgba)
             return
 
         proc = self._proc
@@ -948,7 +957,6 @@ class H264UsbPipeline:
             raise RuntimeError("H264 USB pipeline is not started")
 
         profile_stage = time.perf_counter()
-        encoder_rgba = self._encoder_rgba(rgba)
         try:
             self._write_all(proc.stdin.fileno(), encoder_rgba, self.encoder_width * self.encoder_height * 4)
         except BrokenPipeError as exc:
@@ -997,13 +1005,13 @@ class H264UsbPipeline:
         self._add_sample("usb_h264.native_encode_rgba", profile_stage)
         self.check_error()
 
-    def _encoder_rgba(self, rgba: Any) -> Any:
-        if self.encoder_width == self.width and self.encoder_height == self.height:
+    def _encoder_rgba(self, rgba: Any, width: int, height: int) -> Any:
+        if self.encoder_width == width and self.encoder_height == height:
             return rgba
 
         src_view = memoryview(rgba)
-        src_row_bytes = self.width * 4
-        src_bytes = src_row_bytes * self.height
+        src_row_bytes = int(width) * 4
+        src_bytes = src_row_bytes * int(height)
         if src_view.nbytes < src_bytes:
             raise RuntimeError(
                 f"H264 source RGBA input is {src_view.nbytes} bytes, expected at least {src_bytes}"
@@ -1019,7 +1027,7 @@ class H264UsbPipeline:
             self._padded_rgba[3::4] = b"\xff" * (dst_bytes // 4)
 
         dst = self._padded_rgba
-        for y in range(self.height):
+        for y in range(int(height)):
             src_start = y * src_row_bytes
             dst_start = y * dst_row_bytes
             dst[dst_start:dst_start + src_row_bytes] = src_view[src_start:src_start + src_row_bytes]
