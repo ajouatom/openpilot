@@ -1415,7 +1415,7 @@ class H264UsbPipeline:
 
     def _send_h264_chunk(self, chunk: bytes, chunk_size: int, *, source: str, is_last: bool = False) -> None:
         self._chunks_sent += 1
-        if self.debug and (self._chunks_sent <= 5 or self._chunks_sent % 30 == 0):
+        if self.debug and (self._chunks_sent <= 5 or self._chunks_sent % 30 == 0 or is_last):
             head = " ".join(f"{byte:02X}" for byte in chunk[:8])
             ack_mode = "soft" if self.wait_for_ack and self.soft_ack else ("on" if self.wait_for_ack else "off")
             summary = _h264_packet_summary(chunk)
