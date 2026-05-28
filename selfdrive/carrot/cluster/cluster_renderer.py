@@ -223,9 +223,6 @@ class ClusterUiRenderer:
         self._capture_target = None
         self._portrait_upload_target = None
         self._portrait_upload_target_size: tuple[int, int] | None = None
-        self._system_stats_panel_target = None
-        self._system_stats_panel_target_size: tuple[int, int] | None = None
-        self._system_stats_panel_cache_key: tuple[int, str, int, int] | None = None
         self._vehicle_model = None
         self._vehicle_model_load_attempted = False
         self._route_video_texture = None
@@ -271,8 +268,8 @@ class ClusterUiRenderer:
     def clear_profile_samples(self) -> None:
         self._profile_samples.clear()
 
-    def profile_samples(self) -> tuple[tuple[str, float], ...]:
-        return tuple(self._profile_samples)
+    def profile_samples(self) -> list[tuple[str, float]]:
+        return self._profile_samples
 
     def _profile_start(self) -> float:
         return time.perf_counter() if self.profile_enabled else 0.0
@@ -322,11 +319,6 @@ class ClusterUiRenderer:
             rl.unload_render_texture(self._portrait_upload_target)
             self._portrait_upload_target = None
             self._portrait_upload_target_size = None
-        if self._system_stats_panel_target is not None:
-            rl.unload_render_texture(self._system_stats_panel_target)
-            self._system_stats_panel_target = None
-            self._system_stats_panel_target_size = None
-            self._system_stats_panel_cache_key = None
         if self._route_video_texture is not None:
             rl.unload_texture(self._route_video_texture)
             self._route_video_texture = None
@@ -489,9 +481,6 @@ class ClusterUiRenderer:
     ):
         self.open(hidden=self.hidden)
         profile_stage = self._profile_start()
-        self._prepare_frame_caches()
-        self._profile_add("render_to_image.prepare_frame_caches", profile_stage)
-        profile_stage = self._profile_start()
         target = self._get_capture_target()
         self._profile_add("render_to_image.get_capture_target", profile_stage)
 
@@ -547,10 +536,6 @@ class ClusterUiRenderer:
 
         return image
 
-    def _prepare_frame_caches(self) -> None:
-        if self.screen_mode == CLUSTER_SCREEN_MODE_DEBUG_SYSTEM:
-            self._prepare_system_stats_panel_cache()
-
     def _get_capture_target(self):
         if self._capture_target is None:
             profile_stage = self._profile_start()
@@ -578,19 +563,6 @@ class ClusterUiRenderer:
             rl.set_texture_filter(self._portrait_upload_target.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
             self._profile_add("render_target.filter_portrait_upload", profile_stage)
         return self._portrait_upload_target
-
-    def _get_system_stats_panel_target(self, width: int, height: int):
-        target_size = (width, height)
-        if self._system_stats_panel_target is not None and self._system_stats_panel_target_size != target_size:
-            rl.unload_render_texture(self._system_stats_panel_target)
-            self._system_stats_panel_target = None
-            self._system_stats_panel_target_size = None
-            self._system_stats_panel_cache_key = None
-        if self._system_stats_panel_target is None:
-            self._system_stats_panel_target = rl.load_render_texture(width, height)
-            self._system_stats_panel_target_size = target_size
-            rl.set_texture_filter(self._system_stats_panel_target.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
-        return self._system_stats_panel_target
 
     def _load_font(self):
         for candidate in self._font_candidates():
@@ -1483,12 +1455,6 @@ class ClusterUiRenderer:
     def _draw_system_stats_panel(self, state: ClusterUiState) -> None:
         theme = self._current_theme()
         stats = self._system_stats.sample()
-        if self._draw_cached_system_stats_panel(stats):
-            return
-        self._draw_system_stats_panel_contents(stats, SYSTEM_PANEL_X, SYSTEM_PANEL_Y, theme)
-
-    @staticmethod
-    def _system_stats_panel_geometry(stats: SystemStats) -> tuple[int, int, float, float, float]:
         cpu_count = len(stats.cpu_core_percents)
         columns = 2 if cpu_count <= 16 else 4
         rows = max(1, math.ceil(max(1, cpu_count) / columns))
@@ -1497,56 +1463,9 @@ class ClusterUiRenderer:
         panel_h = min(DESIGN_HEIGHT - SYSTEM_PANEL_Y - 18.0, header_h + rows * core_row_h + 18.0)
         core_area_h = max(24.0, panel_h - header_h - 14.0)
         core_row_h = min(core_row_h, core_area_h / rows)
-        return columns, rows, core_row_h, header_h, panel_h
 
-    def _prepare_system_stats_panel_cache(self) -> None:
-        stats = self._system_stats.sample()
-        _, _, _, _, panel_h = self._system_stats_panel_geometry(stats)
-        target_w = int(math.ceil(SYSTEM_PANEL_W))
-        target_h = int(math.ceil(panel_h))
-        cache_key = (id(stats), self.theme_mode, target_w, target_h)
-        if self._system_stats_panel_cache_key == cache_key:
-            return
-
-        theme = self._current_theme()
-        target = self._get_system_stats_panel_target(target_w, target_h)
-        rl.begin_texture_mode(target)
-        try:
-            rl.clear_background(rl_color((0, 0, 0, 0)))
-            self._draw_system_stats_panel_contents(stats, 0.0, 0.0, theme)
-        finally:
-            rl.end_texture_mode()
-        self._system_stats_panel_cache_key = cache_key
-
-    def _draw_cached_system_stats_panel(self, stats: SystemStats) -> bool:
-        if self._system_stats_panel_target is None or self._system_stats_panel_target_size is None:
-            return False
-        target_w, target_h = self._system_stats_panel_target_size
-        cache_key = (id(stats), self.theme_mode, target_w, target_h)
-        if self._system_stats_panel_cache_key != cache_key:
-            return False
-        source = rl.Rectangle(0.0, 0.0, float(target_w), -float(target_h))
-        dest = rl.Rectangle(SYSTEM_PANEL_X, SYSTEM_PANEL_Y, float(target_w), float(target_h))
-        rl.draw_texture_pro(
-            self._system_stats_panel_target.texture,
-            source,
-            dest,
-            rl.Vector2(0.0, 0.0),
-            0.0,
-            rl_color(WHITE),
-        )
-        return True
-
-    def _draw_system_stats_panel_contents(
-        self,
-        stats: SystemStats,
-        panel_x: float,
-        panel_y: float,
-        theme: ClusterTheme,
-    ) -> None:
-        cpu_count = len(stats.cpu_core_percents)
-        columns, rows, core_row_h, header_h, panel_h = self._system_stats_panel_geometry(stats)
-
+        panel_x = SYSTEM_PANEL_X
+        panel_y = SYSTEM_PANEL_Y
         panel_w = SYSTEM_PANEL_W
         pad_x = 24.0
         self._rounded_rect(panel_x, panel_y, panel_w, panel_h, 18, theme.route_panel_bg, theme.faint, 2)

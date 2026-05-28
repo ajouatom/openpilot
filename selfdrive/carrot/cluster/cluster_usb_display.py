@@ -145,8 +145,8 @@ class TuringUsbDisplay:
     def clear_profile_samples(self) -> None:
         self._profile_samples.clear()
 
-    def profile_samples(self) -> tuple[tuple[str, float], ...]:
-        return tuple(self._profile_samples)
+    def profile_samples(self) -> list[tuple[str, float]]:
+        return self._profile_samples
 
     def _profile_start(self) -> float:
         return time.perf_counter() if self.profile_enabled else 0.0
