@@ -765,8 +765,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--usb-h264-bitrate",
-        default="6M",
-        help="Target H264 bitrate for --usb-codec h264. Default: 6M.",
+        default="1M",
+        help=(
+            "Target H264 bitrate for --usb-codec h264. Default: 1M, "
+            "kept low because the Qualcomm hardware encoder tends to fill the requested rate."
+        ),
     )
     parser.add_argument(
         "--usb-h264-fps",

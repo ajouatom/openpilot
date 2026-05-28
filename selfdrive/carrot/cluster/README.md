@@ -16,7 +16,7 @@ Useful options:
 python selfdrive/carrot/cluster_run.py --output window --width 1920 --height 480
 python selfdrive/carrot/cluster_run.py --output usb --live-no-can
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec jpeg --usb-jpeg-quality 68
-python selfdrive/carrot/cluster_run.py --output usb --input route --route route --route-overlay off --usb-codec h264 --usb-h264-bitrate 6M --usb-h264-fps 30 --profile-render
+python selfdrive/carrot/cluster_run.py --output usb --input route --route route --route-overlay off --usb-codec h264 --usb-h264-bitrate 1M --usb-h264-fps 30 --profile-render
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug --usb-h264-slice-max-bytes 4096
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-backend ffmpeg --usb-h264-ffmpeg-encoder libx264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug
 python selfdrive/carrot/cluster_run.py --output usb --fps 10 --usb-jpeg-quality 55 --route-overlay off
@@ -41,7 +41,9 @@ SPS Baseline constraint flags to match the libx264 constrained-Baseline stream
 that the TURZX panel accepts, and patches hardware SPS frame-crop metadata for
 non-macroblock geometry such as 462x1920. It also asks the V4L2 encoder for
 multi-slice output capped by `--usb-h264-slice-max-bytes` so the resulting NAL
-sizes are closer to the ffmpeg/libx264 stream accepted by TURZX. The
+sizes are closer to the ffmpeg/libx264 stream accepted by TURZX. The default
+H264 bitrate is `1M` because the Qualcomm hardware path tends to fill the
+requested rate, unlike the libx264 comparison path on static HUD content. The
 ffmpeg/libx264 path remains available as a known-good comparison path. Build
 the native library and helper before hardware testing:
 
