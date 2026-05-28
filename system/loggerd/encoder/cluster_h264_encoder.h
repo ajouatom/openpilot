@@ -32,7 +32,7 @@ struct ClusterH264EncoderConfig {
   int gop = 30;
   bool debug = false;
   ClusterH264InputFormat input_format = ClusterH264InputFormat::Auto;
-  ClusterH264Rgb4Layout rgb4_layout = ClusterH264Rgb4Layout::AXRGB;
+  ClusterH264Rgb4Layout rgb4_layout = ClusterH264Rgb4Layout::BGRA;
   bool rgb4_use_source_alpha = false;
   uint8_t rgb4_alpha = 0xff;
   std::string device_path = "/dev/v4l/by-path/platform-aa00000.qcom_vidc-video-index1";

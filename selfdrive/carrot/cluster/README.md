@@ -27,11 +27,13 @@ Pillow. Route replay defaults to `--route-overlay compact`, which shows the
 right-side debug panel. Use `--route-overlay off` for performance tests that
 should match live rendering cost more closely.
 
-`--usb-codec h264` feeds portrait RGBA frames to the Qualcomm V4L2 encoder
-wrapper in `system/loggerd/encoder`. The default backend is the native shared
-library at `system/loggerd/libcluster_h264_encoder_bridge.so`, which avoids the
-large RGBA stdin pipe and H264 stdout pipe used by the helper process. Build the
-native library and helper before manual testing:
+`--usb-codec h264` feeds RGBA frames to the Qualcomm V4L2 encoder wrapper in
+`system/loggerd/encoder`. H264 defaults to a landscape 1920x480 bitstream
+instead of the rotated JPEG/PNG upload geometry because the panel H264 decoder
+parses dimensions from the stream itself. The default backend is the native
+shared library at `system/loggerd/libcluster_h264_encoder_bridge.so`, which
+avoids the large RGBA stdin pipe and H264 stdout pipe used by the helper
+process. Build the native library and helper before manual testing:
 
 ```bash
 scons system/loggerd/libcluster_h264_encoder_bridge.so
@@ -44,9 +46,10 @@ available. `--usb-h264-backend auto` is the default and falls back to helper.
 
 The default V4L2 device is
 `/dev/v4l/by-path/platform-aa00000.qcom_vidc-video-index1`. Input format
-`auto` prefers RGB4 when the device reports it. If the H264 test pattern shows
-swapped colors, retry with `--usb-h264-rgb4-layout rgba` or
-`--usb-h264-rgb4-layout bgra`.
+`auto` prefers RGB4 when the device reports it, and the default RGB4 byte
+layout is `bgra`, matching the common little-endian memory order for V4L2
+`RGB4`. The cluster H264 wrapper emits inline SPS/PPS on IDR frames and uses
+Baseline/CAVLC for display-decoder compatibility.
 
 For a quick H264 transport smoke test, run:
 
@@ -54,10 +57,16 @@ For a quick H264 transport smoke test, run:
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug
 ```
 
-The panel should show red/green/blue/white quadrants. When `--fps` is omitted,
-H264 USB runs use `--usb-h264-fps 30` as the render cap. H264 chunks are no-ACK
-by default like JPEG frame uploads; use `--usb-h264-wait-ack` only for panels
-known to reply, and `--usb-h264-debug` to print early chunk details.
+The panel should show red/green/blue/white quadrants. If the picture is
+scrambled or rotated, retry the same command with
+`--usb-h264-orientation portrait` to match the older 480x1920 upload geometry.
+If the geometry is correct but colors are swapped, retry with
+`--usb-h264-rgb4-layout rgba` or `--usb-h264-rgb4-layout axrgb`. If RGB4 itself
+looks suspicious, use `--usb-h264-input-format nv12` as a slower but useful
+compatibility check. When `--fps` is omitted, H264 USB runs use
+`--usb-h264-fps 30` as the render cap. H264 chunks are no-ACK by default like
+JPEG frame uploads; use `--usb-h264-wait-ack` only for panels known to reply,
+and `--usb-h264-debug` to print early chunk details.
 
 Manager autostart omits `--fps` by default so live launches follow
 `ClusterHudLiveFps` setting changes while running. Set `CLUSTER_AUTORUN_FPS`

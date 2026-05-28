@@ -336,14 +336,13 @@ void ClusterH264Encoder::set_controls() {
     { .id = V4L2_CID_MPEG_VIDEO_BITRATE, .value = config_.bitrate },
     { .id = V4L2_CID_MPEG_VIDC_VIDEO_NUM_P_FRAMES, .value = p_frames },
     { .id = V4L2_CID_MPEG_VIDC_VIDEO_NUM_B_FRAMES, .value = 0 },
-    { .id = V4L2_CID_MPEG_VIDEO_HEADER_MODE, .value = V4L2_MPEG_VIDEO_HEADER_MODE_SEPARATE },
+    { .id = V4L2_CID_MPEG_VIDEO_HEADER_MODE, .value = V4L2_MPEG_VIDEO_HEADER_MODE_JOINED_WITH_I_FRAME },
     { .id = V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL, .value = V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_VBR_CFR },
     { .id = V4L2_CID_MPEG_VIDC_VIDEO_PRIORITY, .value = V4L2_MPEG_VIDC_VIDEO_PRIORITY_REALTIME_DISABLE },
     { .id = V4L2_CID_MPEG_VIDC_VIDEO_IDR_PERIOD, .value = 1 },
-    { .id = V4L2_CID_MPEG_VIDEO_H264_PROFILE, .value = V4L2_MPEG_VIDEO_H264_PROFILE_HIGH },
+    { .id = V4L2_CID_MPEG_VIDEO_H264_PROFILE, .value = V4L2_MPEG_VIDEO_H264_PROFILE_BASELINE },
     { .id = V4L2_CID_MPEG_VIDEO_H264_LEVEL, .value = V4L2_MPEG_VIDEO_H264_LEVEL_UNKNOWN },
-    { .id = V4L2_CID_MPEG_VIDEO_H264_ENTROPY_MODE, .value = V4L2_MPEG_VIDEO_H264_ENTROPY_MODE_CABAC },
-    { .id = V4L2_CID_MPEG_VIDC_VIDEO_H264_CABAC_MODEL, .value = V4L2_CID_MPEG_VIDC_VIDEO_H264_CABAC_MODEL_0 },
+    { .id = V4L2_CID_MPEG_VIDEO_H264_ENTROPY_MODE, .value = V4L2_MPEG_VIDEO_H264_ENTROPY_MODE_CAVLC },
     { .id = V4L2_CID_MPEG_VIDEO_H264_LOOP_FILTER_MODE, .value = 0 },
     { .id = V4L2_CID_MPEG_VIDEO_H264_LOOP_FILTER_ALPHA, .value = 0 },
     { .id = V4L2_CID_MPEG_VIDEO_H264_LOOP_FILTER_BETA, .value = 0 },
@@ -635,7 +634,7 @@ void ClusterH264Encoder::rgba_to_rgb4(const uint8_t *rgba, size_t rgba_size, Vis
       for (size_t x = 0; x < width; ++x) {
         const uint8_t *src_px = src + x * 4;
         uint8_t *dst_px = dst_row + x * 4;
-        // Raylib readback is R,G,B,A. V4L2 RGB4 is commonly A/X,R,G,B.
+        // Fallback for drivers that want network-order A/X,R,G,B bytes.
         dst_px[0] = config_.rgb4_use_source_alpha ? src_px[3] : config_.rgb4_alpha;
         dst_px[1] = src_px[0];
         dst_px[2] = src_px[1];

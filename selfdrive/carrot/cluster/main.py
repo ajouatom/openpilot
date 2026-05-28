@@ -203,6 +203,7 @@ def run_demo(
     usb_h264_device: str,
     usb_h264_input_format: str,
     usb_h264_rgb4_layout: str,
+    usb_h264_orientation: str,
     usb_h264_chunk_size: int,
     usb_h264_wait_ack: bool,
     usb_h264_debug: bool,
@@ -283,9 +284,12 @@ def run_demo(
 
     frame_width = width or (usb_display.landscape_width if usb_display is not None else DESIGN_WIDTH)
     frame_height = height or (usb_display.landscape_height if usb_display is not None else DESIGN_HEIGHT)
-    if usb_codec == "h264" and ((frame_width % 2) != 0 or (frame_height % 2) != 0):
+    h264_portrait_upload = usb_h264_orientation == "portrait"
+    h264_width = frame_height if h264_portrait_upload else frame_width
+    h264_height = frame_width if h264_portrait_upload else frame_height
+    if usb_codec == "h264" and ((h264_width % 2) != 0 or (h264_height % 2) != 0):
         raise RuntimeError(
-            f"H264 USB output requires even render dimensions, got {frame_width}x{frame_height}"
+            f"H264 USB output requires even encoder dimensions, got {h264_width}x{h264_height}"
         )
     theme_override = normalize_cluster_theme_mode(theme_mode) if theme_mode is not None else None
     theme_param_reader = ClusterThemeParamReader() if theme_override is None else None
@@ -339,8 +343,8 @@ def run_demo(
             h264_encoder_fps = max(1, int(round(target_fps if target_fps > 0 else usb_h264_fps)))
             h264_pipeline = H264UsbPipeline(
                 usb_display,
-                frame_height,
-                frame_width,
+                h264_width,
+                h264_height,
                 h264_encoder_fps,
                 usb_h264_bitrate,
                 usb_h264_gop,
@@ -366,7 +370,8 @@ def run_demo(
                 )
                 print(
                     f"Using H264 RGBA color test pattern: "
-                    f"{h264_pipeline.width}x{h264_pipeline.height}",
+                    f"{h264_pipeline.width}x{h264_pipeline.height} "
+                    f"orientation={usb_h264_orientation}",
                     flush=True,
                 )
         if gc_freeze_init:
@@ -530,7 +535,7 @@ def run_demo(
                         raise RuntimeError("H264 USB pipeline is not available")
                     if h264_test_pattern_rgba is None:
                         profile_stage = time.perf_counter()
-                        with renderer.render_to_rgba_buffer(state, portrait_upload=True) as (
+                        with renderer.render_to_rgba_buffer(state, portrait_upload=h264_portrait_upload) as (
                             rgba,
                             image_width,
                             image_height,
@@ -750,8 +755,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--usb-h264-rgb4-layout",
         choices=("axrgb", "rgba", "bgra"),
-        default="axrgb",
+        default="bgra",
         help="Byte layout used when feeding RGBA readback into V4L2 RGB4 input.",
+    )
+    parser.add_argument(
+        "--usb-h264-orientation",
+        choices=("landscape", "portrait"),
+        default="landscape",
+        help=(
+            "H264 bitstream geometry. landscape encodes the rendered 1920x480 frame; "
+            "portrait matches the JPEG/PNG rotated 480x1920 upload path."
+        ),
     )
     parser.add_argument(
         "--usb-h264-chunk-size",
@@ -990,6 +1004,7 @@ def main() -> None:
             args.usb_h264_device,
             args.usb_h264_input_format,
             args.usb_h264_rgb4_layout,
+            args.usb_h264_orientation,
             args.usb_h264_chunk_size,
             args.usb_h264_wait_ack and not args.usb_h264_no_ack,
             args.usb_h264_debug,

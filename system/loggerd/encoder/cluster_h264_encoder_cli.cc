@@ -26,7 +26,7 @@ void usage(const char *prog) {
       << "  --input-format auto|rgb4|nv12\n"
       << "                          Hardware input format. Default auto.\n"
       << "  --rgb4-layout axrgb|rgba|bgra\n"
-      << "                          RGBA to RGB4 byte layout. Default axrgb.\n"
+      << "                          RGBA to RGB4 byte layout. Default bgra.\n"
       << "  --debug                 Enable verbose encoder logging.\n";
 }
 
