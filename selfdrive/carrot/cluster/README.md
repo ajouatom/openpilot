@@ -18,7 +18,7 @@ python selfdrive/carrot/cluster_run.py --output usb --live-no-can
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec jpeg --usb-jpeg-quality 68
 python selfdrive/carrot/cluster_run.py --output usb --input route --route route --route-overlay off --usb-codec h264 --usb-h264-bitrate 6M --usb-h264-fps 30 --profile-render
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug
-python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-backend native --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug
+python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-backend ffmpeg --usb-h264-ffmpeg-encoder libx264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug
 python selfdrive/carrot/cluster_run.py --output usb --fps 10 --usb-jpeg-quality 55 --route-overlay off
 python selfdrive/carrot/cluster_run.py --output usb --profile-render --profile-interval 2
 ```
@@ -33,21 +33,21 @@ should match live rendering cost more closely.
 portrait upload geometry used by the working JPEG/PNG and earlier ffmpeg H264
 paths. For a 9.2-inch panel that means a 462x1920 H264 stream, with no
 16-pixel render-size padding unless `--usb-h264-align 16` is passed explicitly.
-The default backend is `--usb-h264-backend ffmpeg` with libx264 because the
-TURZX panel accepts that stream while the Qualcomm V4L2 hardware stream is
-currently corrupted on-device. The native hardware shared library at
-`system/loggerd/libcluster_h264_encoder_bridge.so` remains available for
-diagnostics. Build the native library and helper before hardware testing:
+The default backend is the native Qualcomm hardware path. It patches hardware
+SPS Baseline constraint flags to match the libx264 constrained-Baseline stream
+that the TURZX panel accepts. The ffmpeg/libx264 path remains available as a
+known-good comparison path. Build the native library and helper before hardware
+testing:
 
 ```bash
 scons system/loggerd/libcluster_h264_encoder_bridge.so
 scons system/loggerd/cluster_h264_encoder_cli
 ```
 
-Use `--usb-h264-backend native` to test the shared-library hardware path,
-`--usb-h264-backend helper` to compare the hardware helper process path, or
-`--usb-h264-backend auto` to try native and fall back to helper. Those hardware
-paths are diagnostic until the panel-compatible V4L2 bitstream issue is fixed.
+Use `--usb-h264-backend ffmpeg --usb-h264-ffmpeg-encoder libx264` to compare
+the known-good software stream. Use `--usb-h264-backend helper` to compare the
+hardware helper process path, or `--usb-h264-backend auto` to try native and
+fall back to helper.
 
 The default V4L2 device is
 `/dev/v4l/by-path/platform-aa00000.qcom_vidc-video-index1`. Input format
@@ -59,6 +59,9 @@ V4L2 driver accepts those controls, and falls back to the existing
 loggerd-compatible High/CABAC controls if needed. Access-unit delimiter NALs
 are off by default because some simple panel decoders expect SPS/PPS or slices
 as the first NAL; use `--usb-h264-insert-aud` only as a compatibility test.
+`--usb-h264-debug` prints per-chunk NAL summaries and SPS profile/constraint
+bytes so hardware output can be compared directly against ffmpeg/libx264.
+`--usb-h264-no-sps-patch` disables the hardware SPS constraint-byte patch.
 
 For a quick H264 transport smoke test, run:
 

@@ -24,6 +24,14 @@ DEFAULT_H264_FFMPEG_ENCODER = "libx264"
 NATIVE_INPUT_FORMATS = {"auto": 0, "rgb4": 1, "nv12": 2}
 NATIVE_RGB4_LAYOUTS = {"axrgb": 0, "rgba": 1, "bgra": 2}
 H264_AUD_NAL = b"\x00\x00\x00\x01\x09\xf0"
+H264_NAL_NAMES = {
+    1: "P",
+    5: "IDR",
+    6: "SEI",
+    7: "SPS",
+    8: "PPS",
+    9: "AUD",
+}
 NativePacketCallback = ctypes.CFUNCTYPE(
     None,
     ctypes.c_void_p,
@@ -34,6 +42,84 @@ NativePacketCallback = ctypes.CFUNCTYPE(
     ctypes.c_int,
     ctypes.c_void_p,
 )
+
+
+def _h264_start_code_len(data: bytes, index: int) -> int:
+    if index + 4 <= len(data) and data[index:index + 4] == b"\x00\x00\x00\x01":
+        return 4
+    if index + 3 <= len(data) and data[index:index + 3] == b"\x00\x00\x01":
+        return 3
+    return 0
+
+
+def _h264_start_codes(data: bytes) -> list[tuple[int, int]]:
+    positions: list[tuple[int, int]] = []
+    index = 0
+    while index + 3 <= len(data):
+        start_len = _h264_start_code_len(data, index)
+        if start_len:
+            positions.append((index, start_len))
+            index += start_len
+        else:
+            index += 1
+    return positions
+
+
+def _h264_nals(data: bytes) -> list[tuple[int, int, int]]:
+    starts = _h264_start_codes(data)
+    nals: list[tuple[int, int, int]] = []
+    for index, (start, start_len) in enumerate(starts):
+        nal_start = start + start_len
+        nal_end = starts[index + 1][0] if index + 1 < len(starts) else len(data)
+        while nal_end > nal_start and data[nal_end - 1] == 0:
+            nal_end -= 1
+        if nal_start < nal_end:
+            nals.append((start, nal_start, nal_end))
+    return nals
+
+
+def _h264_packet_summary(data: bytes, max_nals: int = 6) -> str:
+    parts: list[str] = []
+    sps_parts: list[str] = []
+    nals = _h264_nals(data)
+    for _, nal_start, nal_end in nals[:max_nals]:
+        nal = data[nal_start:nal_end]
+        nal_type = nal[0] & 0x1F
+        name = H264_NAL_NAMES.get(nal_type, f"NAL{nal_type}")
+        parts.append(f"{name}:{len(nal)}")
+        if nal_type == 7 and len(nal) >= 4:
+            sps_parts.append(
+                f"profile=0x{nal[1]:02X} constraints=0x{nal[2]:02X} level=0x{nal[3]:02X}"
+            )
+    if len(nals) > max_nals:
+        parts.append(f"+{len(nals) - max_nals}")
+    if not parts:
+        return "nals=none"
+    summary = "nals=" + ",".join(parts)
+    if sps_parts:
+        summary += " " + " ".join(f"sps[{part}]" for part in sps_parts)
+    return summary
+
+
+def _patch_h264_sps_constraints(data: bytes) -> tuple[bytes, bool]:
+    patched = False
+    mutable: bytearray | None = None
+    for _, nal_start, nal_end in _h264_nals(data):
+        nal = data[nal_start:nal_end]
+        if len(nal) < 4 or (nal[0] & 0x1F) != 7 or nal[1] != 0x42:
+            continue
+        constraints_index = nal_start + 2
+        constraints = data[constraints_index] if mutable is None else mutable[constraints_index]
+        next_constraints = constraints | 0x40
+        if next_constraints == constraints:
+            continue
+        if mutable is None:
+            mutable = bytearray(data)
+        mutable[constraints_index] = next_constraints
+        patched = True
+    if mutable is None:
+        return data, False
+    return bytes(mutable), patched
 
 
 class H264UsbPipeline:
@@ -57,6 +143,7 @@ class H264UsbPipeline:
         wait_for_ack: bool,
         soft_ack: bool,
         insert_aud: bool,
+        patch_sps_constraints: bool,
         dump_path: str,
         debug: bool,
     ) -> None:
@@ -81,9 +168,11 @@ class H264UsbPipeline:
         self.wait_for_ack = wait_for_ack
         self.soft_ack = soft_ack
         self.insert_aud = insert_aud
+        self.patch_sps_constraints = patch_sps_constraints
         self.dump_path = dump_path
         self._dump_file = None
         self.debug = debug
+        self._sps_patch_logged = False
         self.chunk_size = 0
         self._chunks_sent = 0
         self._proc: subprocess.Popen[bytes] | None = None
@@ -173,7 +262,8 @@ class H264UsbPipeline:
             f"input={input_name or self.input_format} stride={input_stride} "
             f"rgb4_layout={self.rgb4_layout} device={self.device_path} "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')} "
-            f"aud={'on' if self.insert_aud else 'off'}",
+            f"aud={'on' if self.insert_aud else 'off'} "
+            f"sps_patch={'on' if self.patch_sps_constraints else 'off'}",
             flush=True,
         )
 
@@ -191,7 +281,8 @@ class H264UsbPipeline:
             f"input={self.input_format} rgb4_layout={self.rgb4_layout} "
             f"device={self.device_path} "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')} "
-            f"aud={'native-only' if self.insert_aud else 'off'}",
+            f"aud={'native-only' if self.insert_aud else 'off'} "
+            f"sps_patch={'on' if self.patch_sps_constraints else 'off'}",
             flush=True,
         )
         if self.debug:
@@ -416,6 +507,19 @@ class H264UsbPipeline:
             return
         self._dump_file.write(chunk)
         self._dump_file.flush()
+
+    def _prepare_hardware_packet(self, packet: bytes) -> bytes:
+        if self.patch_sps_constraints:
+            packet, patched = _patch_h264_sps_constraints(packet)
+            if patched and self.debug and not self._sps_patch_logged:
+                print(
+                    "H264 hardware SPS patched: baseline constraint flags OR 0x40 to match libx264 constrained-baseline",
+                    flush=True,
+                )
+                self._sps_patch_logged = True
+        if self.insert_aud:
+            packet = H264_AUD_NAL + packet
+        return packet
 
     def _close_dump_file(self) -> None:
         if self._dump_file is None:
@@ -661,8 +765,7 @@ class H264UsbPipeline:
             chunk_size = max(1, self.chunk_size)
             base = int(data)
             packet = ctypes.string_at(base, int(size))
-            if self.insert_aud:
-                packet = H264_AUD_NAL + packet
+            packet = self._prepare_hardware_packet(packet)
             self._write_dump(packet)
             for offset in range(0, len(packet), chunk_size):
                 chunk = packet[offset:offset + chunk_size]
@@ -747,6 +850,8 @@ class H264UsbPipeline:
                 chunk = os.read(fd, chunk_size)
                 if not chunk:
                     return
+                if self.backend_name == "helper":
+                    chunk = self._prepare_hardware_packet(chunk)
                 self._write_dump(chunk)
                 self._send_h264_chunk(chunk, chunk_size, source=self.backend_name)
         except BaseException as exc:
@@ -782,9 +887,10 @@ class H264UsbPipeline:
         if self.debug and (self._chunks_sent <= 5 or self._chunks_sent % 30 == 0):
             head = " ".join(f"{byte:02X}" for byte in chunk[:8])
             ack_mode = "soft" if self.wait_for_ack and self.soft_ack else ("on" if self.wait_for_ack else "off")
+            summary = _h264_packet_summary(chunk)
             print(
                 f"H264 chunk {self._chunks_sent}: {source} {len(chunk)} bytes "
-                f"head={head} ack={ack_mode}",
+                f"head={head} ack={ack_mode} {summary}",
                 flush=True,
             )
         profile_stage = time.perf_counter()

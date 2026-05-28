@@ -225,6 +225,7 @@ def run_demo(
     usb_h264_wait_ack: bool,
     usb_h264_soft_ack: bool,
     usb_h264_insert_aud: bool,
+    usb_h264_patch_sps_constraints: bool,
     usb_h264_dump: str,
     usb_h264_debug: bool,
     usb_h264_test_pattern: bool,
@@ -392,6 +393,7 @@ def run_demo(
                 usb_h264_wait_ack,
                 usb_h264_soft_ack,
                 usb_h264_insert_aud,
+                usb_h264_patch_sps_constraints,
                 usb_h264_dump,
                 usb_h264_debug,
             )
@@ -759,10 +761,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--usb-h264-backend",
         choices=("auto", "native", "helper", "ffmpeg"),
-        default="ffmpeg",
+        default="native",
         help=(
-            "H264 encoder backend. Default ffmpeg uses the known-good libx264 path; "
-            "auto/native/helper are hardware encoder diagnostics."
+            "H264 encoder backend. Default native uses the Qualcomm hardware encoder; "
+            "ffmpeg/libx264 remains available as a known-good comparison path."
         ),
     )
     parser.add_argument(
@@ -859,6 +861,13 @@ def parse_args() -> argparse.Namespace:
         "--usb-h264-insert-aud",
         action="store_true",
         help="Insert H264 access-unit delimiter NALs before native hardware encoder packets for decoder compatibility tests.",
+    )
+    parser.add_argument(
+        "--usb-h264-no-sps-patch",
+        action="store_true",
+        help=(
+            "Do not patch hardware SPS baseline constraint flags to match libx264 constrained-baseline output."
+        ),
     )
     parser.add_argument(
         "--usb-h264-dump",
@@ -1104,6 +1113,7 @@ def main() -> None:
             args.usb_h264_wait_ack or args.usb_h264_soft_ack,
             args.usb_h264_soft_ack,
             args.usb_h264_insert_aud and not args.usb_h264_no_aud,
+            not args.usb_h264_no_sps_patch,
             args.usb_h264_dump,
             args.usb_h264_debug,
             args.usb_h264_test_pattern,
