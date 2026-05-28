@@ -74,6 +74,8 @@ REAR_CORNER_RADAR_LABELS = frozenset(("LR", "RR"))
 VEHICLE_BADGE_TTC_S = 9.9
 VEHICLE_BADGE_ACCEL_MPS2 = 1.0
 MODEL_LINE_STRIP_GROUP_CACHE_LIMIT = 48
+MODEL_LINE_STRIP_GROUP_CACHE_GRID_M = 0.5
+MODEL_LINE_STRIP_GROUP_CACHE_COLOR: Color = (0, 0, 0, 0)
 ROAD_STEPS_SURROUND = 96
 ROAD_STEPS_MODEL = 48
 ROAD_STEPS_SIM = 64
@@ -183,7 +185,8 @@ class PathBlocker:
 
 
 ModelLineStripGroups = tuple[tuple[MeshStrip, ...], ...] | None
-ModelLineStripCacheKey = tuple[int, float, float, str, bool, tuple[tuple[int, Color, float], ...]]
+ModelLineStripGeometrySpecs = tuple[tuple[int, float], ...]
+ModelLineStripCacheKey = tuple[int, float, float, str, bool, ModelLineStripGeometrySpecs]
 _MODEL_LINE_STRIP_GROUP_CACHE: OrderedDict[
     ModelLineStripCacheKey,
     tuple[tuple[ModelPathPoint, ...], ModelLineStripGroups],
@@ -696,6 +699,28 @@ def lane_marking_strip_groups_from_segments(
     return tuple(tuple(group) for group in grouped)
 
 
+def model_line_geometry_specs(
+    specs: tuple[tuple[int, Color, float], ...],
+) -> ModelLineStripGeometrySpecs:
+    return tuple((width_px, height_m) for width_px, _, height_m in specs)
+
+
+def model_line_placeholder_specs(
+    specs: ModelLineStripGeometrySpecs,
+) -> tuple[tuple[int, Color, float], ...]:
+    return tuple((width_px, MODEL_LINE_STRIP_GROUP_CACHE_COLOR, height_m) for width_px, height_m in specs)
+
+
+def model_line_cache_start_m(start_m: float) -> float:
+    grid_m = MODEL_LINE_STRIP_GROUP_CACHE_GRID_M
+    return math.floor(start_m / grid_m) * grid_m
+
+
+def model_line_cache_end_m(end_m: float) -> float:
+    grid_m = MODEL_LINE_STRIP_GROUP_CACHE_GRID_M
+    return math.ceil(end_m / grid_m) * grid_m
+
+
 def cached_model_line_strip_groups(
     model_points: tuple[ModelPathPoint, ...],
     start_m: float,
@@ -704,13 +729,16 @@ def cached_model_line_strip_groups(
     style: str,
     extend_before_model: bool,
 ) -> ModelLineStripGroups:
+    cache_start_m = model_line_cache_start_m(start_m)
+    cache_end_m = model_line_cache_end_m(end_m)
+    geometry_specs = model_line_geometry_specs(specs)
     key = (
         id(model_points),
-        start_m,
-        end_m,
+        cache_start_m,
+        cache_end_m,
         style,
         extend_before_model,
-        specs,
+        geometry_specs,
     )
     cached = _MODEL_LINE_STRIP_GROUP_CACHE.get(key)
     if cached is not None and cached[0] is model_points:
@@ -719,14 +747,14 @@ def cached_model_line_strip_groups(
     if cached is not None:
         del _MODEL_LINE_STRIP_GROUP_CACHE[key]
 
-    centerline = model_line_centerline(model_points, start_m, end_m, 0.0)
+    centerline = model_line_centerline(model_points, cache_start_m, cache_end_m, 0.0)
     if len(centerline) < 2:
-        groups: ModelLineStripGroups = None if extend_before_model else tuple(() for _ in specs)
+        groups: ModelLineStripGroups = None if extend_before_model else tuple(() for _ in geometry_specs)
     else:
         if extend_before_model:
-            centerline = extend_model_centerline_rearward(centerline, start_m)
+            centerline = extend_model_centerline_rearward(centerline, cache_start_m)
         segments = (centerline,) if style == "solid" else dashed_centerline_segments(centerline)
-        groups = lane_marking_strip_groups_from_segments(segments, specs)
+        groups = lane_marking_strip_groups_from_segments(segments, model_line_placeholder_specs(geometry_specs))
 
     _MODEL_LINE_STRIP_GROUP_CACHE[key] = (model_points, groups)
     while len(_MODEL_LINE_STRIP_GROUP_CACHE) > MODEL_LINE_STRIP_GROUP_CACHE_LIMIT:
@@ -734,16 +762,30 @@ def cached_model_line_strip_groups(
     return groups
 
 
-def translate_mesh_strip_groups_x(
+def style_mesh_strip_groups(
     groups: tuple[tuple[MeshStrip, ...], ...],
+    specs: tuple[tuple[int, Color, float], ...],
     shift_x_m: float,
 ) -> tuple[tuple[MeshStrip, ...], ...]:
-    if abs(shift_x_m) <= 0.0001:
-        return groups
-    return tuple(
-        tuple(translate_mesh_strip_x(strip, shift_x_m) for strip in group)
-        for group in groups
-    )
+    has_shift = abs(shift_x_m) > 0.0001
+    styled_groups: list[tuple[MeshStrip, ...]] = []
+    for group_index, group in enumerate(groups):
+        color = specs[group_index][1]
+        styled_group: list[MeshStrip] = []
+        for strip in group:
+            if not has_shift and strip.color == color:
+                styled_group.append(strip)
+            else:
+                styled_group.append(
+                    MeshStrip(
+                        left=strip.left,
+                        right=strip.right,
+                        color=color,
+                        x_offset_m=strip.x_offset_m + shift_x_m,
+                    )
+                )
+        styled_groups.append(tuple(styled_group))
+    return tuple(styled_groups)
 
 
 def model_line_strip_groups(
@@ -765,7 +807,7 @@ def model_line_strip_groups(
     )
     if groups is None:
         return None
-    return translate_mesh_strip_groups_x(groups, lateral_shift_m)
+    return style_mesh_strip_groups(groups, specs, lateral_shift_m)
 
 
 def planned_path_lane_offset(state: ClusterUiState, forward_m: float) -> float:
@@ -1497,17 +1539,6 @@ def blend_camera(start: CameraSpec, end: CameraSpec, amount: float) -> CameraSpe
 
 def translate_vec3_x(point: Vec3, shift_x_m: float) -> Vec3:
     return Vec3(point.x + shift_x_m, point.y, point.z)
-
-
-def translate_mesh_strip_x(strip: MeshStrip, shift_x_m: float) -> MeshStrip:
-    if abs(shift_x_m) <= 0.0001:
-        return strip
-    return MeshStrip(
-        left=strip.left,
-        right=strip.right,
-        color=strip.color,
-        x_offset_m=strip.x_offset_m + shift_x_m,
-    )
 
 
 def translate_vehicle_box_x(vehicle: VehicleBox, shift_x_m: float) -> VehicleBox:
