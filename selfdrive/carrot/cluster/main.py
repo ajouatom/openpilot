@@ -23,7 +23,7 @@ from cluster_config import (
 )
 from cluster_gamepad import DualSenseSimulator
 from cluster_git_status import GitBranchStatusProvider
-from cluster_h264_pipeline import H264UsbPipeline
+from cluster_h264_pipeline import DEFAULT_H264_DEVICE, DEFAULT_H264_HELPER, H264UsbPipeline
 from cluster_live import OpenpilotLiveSource
 from cluster_models import RouteOverlay, SimulatorInput
 from cluster_profile import GcProfileHook, ProfileReporter, freeze_gc_after_init
@@ -194,16 +194,16 @@ def run_demo(
     usb_fast_write: bool,
     usb_wait_frame_ack: bool,
     usb_async: bool,
-    usb_h264_encoder: str,
     usb_h264_bitrate: str,
     usb_h264_fps: int,
     usb_h264_gop: int,
-    usb_h264_ffmpeg: str,
+    usb_h264_helper: str,
+    usb_h264_device: str,
+    usb_h264_input_format: str,
+    usb_h264_rgb4_layout: str,
     usb_h264_chunk_size: int,
     usb_h264_wait_ack: bool,
     usb_h264_debug: bool,
-    usb_h264_backend: str,
-    usb_h264_rgb4_order: str,
     usb_h264_test_pattern: bool,
     usb_frame_drain_attempts: int,
     usb_frame_drain_timeout_ms: int,
@@ -336,15 +336,15 @@ def run_demo(
                 frame_height,
                 frame_width,
                 h264_encoder_fps,
-                usb_h264_encoder,
                 usb_h264_bitrate,
                 usb_h264_gop,
-                usb_h264_ffmpeg,
+                usb_h264_helper,
+                usb_h264_device,
+                usb_h264_input_format,
+                usb_h264_rgb4_layout,
                 usb_h264_chunk_size,
                 usb_h264_wait_ack,
                 usb_h264_debug,
-                usb_h264_backend,
-                usb_h264_rgb4_order,
             )
             profile_stage = time.perf_counter()
             h264_pipeline.start()
@@ -690,11 +690,6 @@ def parse_args() -> argparse.Namespace:
         help="Encode and send JPEG USB frames on a background thread to overlap transport with the next render.",
     )
     parser.add_argument(
-        "--usb-h264-encoder",
-        default="auto",
-        help="FFmpeg H264 encoder for --usb-codec h264. auto prefers h264_v4l2m2m, then h264_omx, then libx264.",
-    )
-    parser.add_argument(
         "--usb-h264-bitrate",
         default="6M",
         help="Target H264 bitrate for --usb-codec h264. Default: 6M.",
@@ -712,9 +707,29 @@ def parse_args() -> argparse.Namespace:
         help="H264 keyframe interval in frames. Default: 30.",
     )
     parser.add_argument(
-        "--usb-h264-ffmpeg",
-        default="ffmpeg",
-        help="ffmpeg executable path/name for --usb-codec h264. Default: ffmpeg.",
+        "--usb-h264-helper",
+        default=str(DEFAULT_H264_HELPER),
+        help=(
+            "Hardware H264 helper executable for --usb-codec h264. "
+            f"Default: {DEFAULT_H264_HELPER}."
+        ),
+    )
+    parser.add_argument(
+        "--usb-h264-device",
+        default=DEFAULT_H264_DEVICE,
+        help=f"V4L2 hardware encoder device path. Default: {DEFAULT_H264_DEVICE}.",
+    )
+    parser.add_argument(
+        "--usb-h264-input-format",
+        choices=("auto", "rgb4", "nv12"),
+        default="auto",
+        help="Hardware encoder input format. auto prefers RGB4 when the device reports support.",
+    )
+    parser.add_argument(
+        "--usb-h264-rgb4-layout",
+        choices=("axrgb", "rgba", "bgra"),
+        default="axrgb",
+        help="Byte layout used when feeding RGBA readback into V4L2 RGB4 input.",
     )
     parser.add_argument(
         "--usb-h264-chunk-size",
@@ -735,25 +750,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--usb-h264-debug",
         action="store_true",
-        help="Print ffmpeg command and first H264 chunk sizes/headers for USB H264 debugging.",
-    )
-    parser.add_argument(
-        "--usb-h264-backend",
-        choices=("ffmpeg", "v4l2-rgb4", "auto"),
-        default="ffmpeg",
-        help=(
-            "H264 encoder backend. ffmpeg preserves the existing process path; "
-            "v4l2-rgb4 uses the Qualcomm V4L2 encoder with RGB4 input."
-        ),
-    )
-    parser.add_argument(
-        "--usb-h264-rgb4-order",
-        choices=("rgba", "bgra"),
-        default="rgba",
-        help=(
-            "Byte order to queue into V4L2 RGB4. rgba is direct raylib readback; "
-            "bgra swaps red/blue for little-endian A/XRGB panels/drivers."
-        ),
+        help="Print hardware encoder command/stderr and first H264 chunk sizes/headers for USB H264 debugging.",
     )
     parser.add_argument(
         "--usb-h264-test-pattern",
@@ -889,6 +886,10 @@ def parse_args() -> argparse.Namespace:
         parser.error("--usb-h264-chunk-size must be 0 or greater")
     if not args.usb_h264_bitrate:
         parser.error("--usb-h264-bitrate must not be empty")
+    if not args.usb_h264_helper:
+        parser.error("--usb-h264-helper must not be empty")
+    if not args.usb_h264_device:
+        parser.error("--usb-h264-device must not be empty")
     if args.usb_frame_drain_attempts < 0 or args.usb_fast_drain_attempts < 0:
         parser.error("USB drain attempts must be 0 or greater")
     if args.usb_frame_drain_timeout_ms < 0 or args.usb_fast_drain_timeout_ms < 0:
@@ -934,8 +935,7 @@ def main() -> None:
     print(
         f"Refreshing native raylib cluster UI at {fps_text} "
         f"input={args.input} output={args.output}: {size_text} "
-        f"usb_codec={args.usb_codec}"
-        f"{('/' + args.usb_h264_backend) if args.usb_codec == 'h264' else ''} "
+        f"usb_codec={args.usb_codec} "
         f"fps_source={fps_source} brightness={brightness_text} brightness_source={brightness_source}"
     )
     try:
@@ -957,16 +957,16 @@ def main() -> None:
             args.usb_fast,
             args.usb_wait_frame_ack,
             args.usb_async,
-            args.usb_h264_encoder,
             args.usb_h264_bitrate,
             args.usb_h264_fps,
             args.usb_h264_gop,
-            args.usb_h264_ffmpeg,
+            args.usb_h264_helper,
+            args.usb_h264_device,
+            args.usb_h264_input_format,
+            args.usb_h264_rgb4_layout,
             args.usb_h264_chunk_size,
             args.usb_h264_wait_ack and not args.usb_h264_no_ack,
             args.usb_h264_debug,
-            args.usb_h264_backend,
-            args.usb_h264_rgb4_order,
             args.usb_h264_test_pattern,
             args.usb_frame_drain_attempts,
             args.usb_frame_drain_timeout_ms,

@@ -7,12 +7,10 @@ import multiprocessing as mp
 import os
 import queue
 import shutil
-import subprocess
 import tempfile
 import traceback
 from bisect import bisect_right
 from dataclasses import dataclass, replace
-from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
@@ -644,7 +642,7 @@ class RouteReplaySource:
         )
 
         if video_frame is None:
-            return RouteOverlay(video_status="qcamera unavailable", data_lines=data_lines)
+            return RouteOverlay(video_status="qcamera disabled", data_lines=data_lines)
         return RouteOverlay(
             video_rgba=video_frame.rgba,
             video_width=video_frame.width,
@@ -657,91 +655,12 @@ class RouteReplaySource:
 class RouteVideoFrameReader:
     def __init__(self, segments: list[RouteVideoSegment]) -> None:
         self.segments = segments
-        self._ffmpeg_path = shutil.which("ffmpeg")
-        self._active_segment: RouteVideoSegment | None = None
-        self._process: subprocess.Popen[bytes] | None = None
-        self._width = 526
-        self._height = 330
-        self._fps = 20.0
-        self._current_index = -1
-        self._last_frame: RouteVideoFrame | None = None
 
     def frame_at(self, playback_seconds: float) -> RouteVideoFrame | None:
-        segment = route_video_segment_at(self.segments, playback_seconds)
-        if segment is None or self._ffmpeg_path is None:
-            return None
-
-        segment_time = clamp(playback_seconds - segment.start_t, 0.0, max(0.0, segment.end_t - segment.start_t))
-        if self._active_segment != segment:
-            self._restart(segment)
-        if self._process is None or self._process.stdout is None:
-            return None
-
-        target_index = max(0, int(segment_time * self._fps))
-        if target_index < self._current_index:
-            self._restart(segment)
-            if self._process is None or self._process.stdout is None:
-                return None
-
-        frame_size = self._width * self._height * 4
-        while self._current_index < target_index:
-            raw = self._process.stdout.read(frame_size)
-            if len(raw) != frame_size:
-                return self._last_frame
-            self._current_index += 1
-            self._last_frame = RouteVideoFrame(
-                rgba=raw,
-                width=self._width,
-                height=self._height,
-                frame_id=f"{segment.index}:{self._current_index}",
-            )
-
-        return self._last_frame
+        return None
 
     def close(self) -> None:
-        if self._process is None:
-            return
-        try:
-            if self._process.stdout is not None:
-                self._process.stdout.close()
-            self._process.terminate()
-            self._process.wait(timeout=1.0)
-        except Exception:
-            try:
-                self._process.kill()
-            except Exception:
-                pass
-        finally:
-            self._process = None
-            self._active_segment = None
-            self._current_index = -1
-
-    def _restart(self, segment: RouteVideoSegment) -> None:
-        self.close()
-        if self._ffmpeg_path is None:
-            return
-        self._width, self._height, self._fps = probe_video(segment.path)
-        self._process = subprocess.Popen(
-            [
-                self._ffmpeg_path,
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-i",
-                str(segment.path),
-                "-an",
-                "-f",
-                "rawvideo",
-                "-pix_fmt",
-                "rgba",
-                "-",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-        )
-        self._active_segment = segment
-        self._current_index = -1
-        self._last_frame = None
+        return
 
 
 class RouteLogParser:
@@ -2777,45 +2696,6 @@ def route_video_segment_at(
     if index + 1 < len(segments):
         return segments[index + 1]
     return segment
-
-
-def probe_video(path: Path) -> tuple[int, int, float]:
-    ffprobe_path = shutil.which("ffprobe")
-    if ffprobe_path is None:
-        return 526, 330, 20.0
-    try:
-        result = subprocess.run(
-            [
-                ffprobe_path,
-                "-v",
-                "error",
-                "-select_streams",
-                "v:0",
-                "-show_entries",
-                "stream=width,height,r_frame_rate",
-                "-of",
-                "csv=p=0:s=x",
-                str(path),
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=3.0,
-        )
-    except Exception:
-        return 526, 330, 20.0
-
-    first_line = result.stdout.strip().splitlines()[0] if result.stdout.strip() else ""
-    parts = first_line.split("x")
-    if len(parts) < 3:
-        return 526, 330, 20.0
-    try:
-        width = int(parts[0])
-        height = int(parts[1])
-        fps = float(Fraction(parts[2]))
-    except (ValueError, ZeroDivisionError):
-        return 526, 330, 20.0
-    return max(1, width), max(1, height), max(1.0, fps)
 
 
 def segment_index(path: Path) -> int | None:
