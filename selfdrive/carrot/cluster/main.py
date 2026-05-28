@@ -805,12 +805,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--usb-h264-no-ack",
         action="store_true",
-        help=argparse.SUPPRESS,
+        help="Send TURZX H264 chunks without waiting for a response. Faster, but any dropped chunk corrupts the stream.",
     )
     parser.add_argument(
         "--usb-h264-wait-ack",
         action="store_true",
-        help="Wait for a TURZX response after each H264 chunk. Default skips ACK like JPEG frame uploads.",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--usb-h264-debug",
@@ -1038,7 +1038,7 @@ def main() -> None:
             args.usb_h264_orientation,
             args.usb_h264_align,
             args.usb_h264_chunk_size,
-            args.usb_h264_wait_ack and not args.usb_h264_no_ack,
+            args.usb_h264_wait_ack or not args.usb_h264_no_ack,
             args.usb_h264_debug,
             args.usb_h264_test_pattern,
             args.usb_frame_drain_attempts,

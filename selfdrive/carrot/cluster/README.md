@@ -69,9 +69,10 @@ If the geometry is correct but colors are swapped, retry with
 looks suspicious, use `--usb-h264-input-format nv12` as a slower but useful
 compatibility check. Use `--usb-h264-align 1` only when deliberately testing the
 panel's exact reported size, such as 1920x462. When `--fps` is omitted, H264
-USB runs use `--usb-h264-fps 30` as the render cap. H264 chunks are no-ACK by
-default like JPEG frame uploads; use `--usb-h264-wait-ack` only for panels known
-to reply, and `--usb-h264-debug` to print early chunk details.
+USB runs use `--usb-h264-fps 30` as the render cap. H264 chunks wait for a TURZX
+response by default because a single dropped video chunk corrupts following
+frames. Use `--usb-h264-no-ack` only for throughput tests after ACK mode is
+visually stable, and `--usb-h264-debug` to print early chunk details.
 
 Manager autostart omits `--fps` by default so live launches follow
 `ClusterHudLiveFps` setting changes while running. Set `CLUSTER_AUTORUN_FPS`
