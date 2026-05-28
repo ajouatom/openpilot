@@ -21,6 +21,7 @@ DEFAULT_H264_DEVICE = "/dev/v4l/by-path/platform-aa00000.qcom_vidc-video-index1"
 DEFAULT_H264_FFMPEG = "ffmpeg"
 DEFAULT_H264_FFMPEG_ENCODER = "libx264"
 DEFAULT_H264_SLICE_MAX_BYTES = 4096
+DEFAULT_H264_PACKETIZE = "auto"
 
 NATIVE_INPUT_FORMATS = {"auto": 0, "rgb4": 1, "nv12": 2}
 NATIVE_RGB4_LAYOUTS = {"axrgb": 0, "rgba": 1, "bgra": 2}
@@ -146,6 +147,18 @@ def _h264_nals(data: bytes) -> list[tuple[int, int, int]]:
         if nal_start < nal_end:
             nals.append((start, nal_start, nal_end))
     return nals
+
+
+def _h264_byte_stream_units(data: bytes) -> list[bytes]:
+    starts = _h264_start_codes(data)
+    if not starts:
+        return []
+    units: list[bytes] = []
+    for index, (start, _) in enumerate(starts):
+        end = starts[index + 1][0] if index + 1 < len(starts) else len(data)
+        if start < end:
+            units.append(data[start:end])
+    return units
 
 
 def _h264_unescape_rbsp(data: bytes) -> bytes:
@@ -437,6 +450,7 @@ class H264UsbPipeline:
         rgb4_layout: str,
         slice_max_bytes: int,
         qp: int,
+        packetize: str,
         requested_chunk_size: int,
         wait_for_ack: bool,
         soft_ack: bool,
@@ -465,6 +479,7 @@ class H264UsbPipeline:
         self.rgb4_layout = rgb4_layout
         self.slice_max_bytes = max(0, int(slice_max_bytes))
         self.qp = int(qp)
+        self.packetize_request = packetize
         self.requested_chunk_size = max(0, int(requested_chunk_size))
         self.wait_for_ack = wait_for_ack
         self.soft_ack = soft_ack
@@ -565,6 +580,7 @@ class H264UsbPipeline:
             f"{self.width}x{self.height}@{self.fps} "
             f"bitrate={bitrate_bps} gop={self.gop} "
             f"slice_max={self.slice_max_bytes} qp={self.qp} "
+            f"packetize={self._packetize_mode('native')} "
             f"input={input_name or self.input_format} stride={input_stride} "
             f"rgb4_layout={self.rgb4_layout} device={self.device_path} "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')} "
@@ -586,6 +602,7 @@ class H264UsbPipeline:
             f"{self.width}x{self.height}@{self.fps} "
             f"bitrate={self.bitrate} gop={self.gop} "
             f"slice_max={self.slice_max_bytes} qp={self.qp} "
+            f"packetize={self._packetize_mode('helper')} "
             f"input={self.input_format} rgb4_layout={self.rgb4_layout} "
             f"device={self.device_path} "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')} "
@@ -636,6 +653,7 @@ class H264UsbPipeline:
             "Starting H264 USB ffmpeg encoder: "
             f"{self.ffmpeg_encoder_name} {self.width}x{self.height}@{self.fps} "
             f"bitrate={self.bitrate} gop={self.gop} muxer={self.ffmpeg_muxer_name} "
+            f"packetize={self._packetize_mode('ffmpeg')} "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')}",
             flush=True,
         )
@@ -837,6 +855,49 @@ class H264UsbPipeline:
         if self.insert_aud:
             packet = H264_AUD_NAL + packet
         return packet
+
+    def _packetize_mode(self, source: str) -> str:
+        if self.packetize_request != "auto":
+            return self.packetize_request
+        if source in ("native", "helper"):
+            return "nal-groups"
+        return "access-unit"
+
+    def _packetize_h264_for_usb(self, packet: bytes, chunk_size: int, *, source: str) -> list[bytes]:
+        chunk_size = max(1, chunk_size)
+        mode = self._packetize_mode(source)
+        if mode == "access-unit":
+            return [packet[offset:offset + chunk_size] for offset in range(0, len(packet), chunk_size)]
+
+        units = _h264_byte_stream_units(packet)
+        if not units:
+            return [packet[offset:offset + chunk_size] for offset in range(0, len(packet), chunk_size)]
+
+        if mode == "nal":
+            chunks: list[bytes] = []
+            for unit in units:
+                chunks.extend(unit[offset:offset + chunk_size] for offset in range(0, len(unit), chunk_size))
+            return chunks
+
+        if mode != "nal-groups":
+            raise RuntimeError(f"unsupported H264 USB packetize mode: {mode}")
+
+        chunks: list[bytes] = []
+        current = bytearray()
+        for unit in units:
+            if len(unit) > chunk_size:
+                if current:
+                    chunks.append(bytes(current))
+                    current.clear()
+                chunks.extend(unit[offset:offset + chunk_size] for offset in range(0, len(unit), chunk_size))
+                continue
+            if current and len(current) + len(unit) > chunk_size:
+                chunks.append(bytes(current))
+                current.clear()
+            current.extend(unit)
+        if current:
+            chunks.append(bytes(current))
+        return chunks
 
     def _close_dump_file(self) -> None:
         if self._dump_file is None:
@@ -1128,8 +1189,7 @@ class H264UsbPipeline:
             packet = ctypes.string_at(base, int(size))
             packet = self._prepare_hardware_packet(packet)
             self._write_dump(packet)
-            for offset in range(0, len(packet), chunk_size):
-                chunk = packet[offset:offset + chunk_size]
+            for chunk in self._packetize_h264_for_usb(packet, chunk_size, source="native"):
                 packet_queue.put(chunk, timeout=1.0)
         except queue.Full as exc:
             self._set_error(RuntimeError("native H264 USB sender queue is full"))
@@ -1213,8 +1273,10 @@ class H264UsbPipeline:
                     return
                 if self.backend_name == "helper":
                     chunk = self._prepare_hardware_packet(chunk)
+                chunks = self._packetize_h264_for_usb(chunk, chunk_size, source=self.backend_name)
                 self._write_dump(chunk)
-                self._send_h264_chunk(chunk, chunk_size, source=self.backend_name)
+                for packet_chunk in chunks:
+                    self._send_h264_chunk(packet_chunk, chunk_size, source=self.backend_name)
         except BaseException as exc:
             with self._condition:
                 if not self._closing:

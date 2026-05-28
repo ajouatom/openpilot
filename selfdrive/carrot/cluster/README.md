@@ -69,6 +69,9 @@ bytes so hardware output can be compared directly against ffmpeg/libx264.
 `--usb-h264-slice-max-bytes 0` disables the hardware multi-slice request.
 `--usb-h264-qp N` forces hardware QP/min-QP controls for compatibility tests;
 higher values produce smaller hardware IDR/P frames.
+`--usb-h264-packetize auto` keeps ffmpeg output intact, but sends native/helper
+hardware output as small NAL-boundary groups instead of one large access-unit
+USB command.
 
 For a quick H264 transport smoke test, run:
 
@@ -94,6 +97,8 @@ instead of one large slice. For 462x1920 streams, the SPS summary should show
 If the first hardware IDR remains much larger than the ffmpeg/libx264 stream,
 retry `--usb-h264-qp 38` and `--usb-h264-qp 44` to test whether the panel is
 rejecting large access units.
+If QP controls are rejected by the driver, keep `--usb-h264-packetize auto`
+or try `--usb-h264-packetize nal` to send each H264 NAL as its own USB command.
 
 The ffmpeg/libx264 path is the known-good H264 comparison mode. To make that
 explicit while testing, run:

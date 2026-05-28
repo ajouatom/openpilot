@@ -29,6 +29,7 @@ from cluster_h264_pipeline import (
     DEFAULT_H264_FFMPEG_ENCODER,
     DEFAULT_H264_HELPER,
     DEFAULT_H264_LIBRARY,
+    DEFAULT_H264_PACKETIZE,
     DEFAULT_H264_SLICE_MAX_BYTES,
     H264UsbPipeline,
 )
@@ -222,6 +223,7 @@ def run_demo(
     usb_h264_rgb4_layout: str,
     usb_h264_slice_max_bytes: int,
     usb_h264_qp: int,
+    usb_h264_packetize: str,
     usb_h264_orientation: str,
     usb_h264_align: int,
     usb_h264_chunk_size: int,
@@ -395,6 +397,7 @@ def run_demo(
                 usb_h264_rgb4_layout,
                 usb_h264_slice_max_bytes,
                 usb_h264_qp,
+                usb_h264_packetize,
                 usb_h264_chunk_size,
                 usb_h264_wait_ack,
                 usb_h264_soft_ack,
@@ -839,6 +842,15 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--usb-h264-packetize",
+        choices=("auto", "access-unit", "nal-groups", "nal"),
+        default=DEFAULT_H264_PACKETIZE,
+        help=(
+            "USB H264 command packetization. auto keeps ffmpeg reads intact and sends "
+            "native/helper hardware output as NAL-boundary groups. Default: %(default)s."
+        ),
+    )
+    parser.add_argument(
         "--usb-h264-orientation",
         choices=("landscape", "portrait"),
         default="portrait",
@@ -1145,6 +1157,7 @@ def main() -> None:
             args.usb_h264_rgb4_layout,
             args.usb_h264_slice_max_bytes,
             args.usb_h264_qp,
+            args.usb_h264_packetize,
             args.usb_h264_orientation,
             args.usb_h264_align,
             args.usb_h264_chunk_size,
