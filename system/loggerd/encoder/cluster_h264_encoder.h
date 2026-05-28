@@ -95,6 +95,8 @@ public:
   const std::string& input_v4l_format_name() const { return input_v4l_format_name_; }
   size_t input_sizeimage() const { return input_sizeimage_; }
   size_t input_stride() const { return input_stride_; }
+  size_t input_y_scanlines() const { return input_y_scanlines_; }
+  size_t input_uv_scanlines() const { return input_uv_scanlines_; }
   size_t input_uv_offset() const { return input_uv_offset_; }
   size_t input_bytesused() const { return input_bytesused_; }
   size_t capture_sizeimage() const { return capture_sizeimage_; }
@@ -137,6 +139,8 @@ private:
   std::string input_v4l_format_name_ = "unknown";
   size_t input_sizeimage_ = 0;
   size_t input_stride_ = 0;
+  size_t input_y_scanlines_ = 0;
+  size_t input_uv_scanlines_ = 0;
   size_t input_uv_offset_ = 0;
   size_t input_bytesused_ = 0;
   size_t capture_sizeimage_ = 0;

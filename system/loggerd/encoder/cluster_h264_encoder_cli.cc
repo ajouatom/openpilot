@@ -251,6 +251,7 @@ int main(int argc, char **argv) {
               << " profile=" << (config.h264_profile == ClusterH264Profile::High ? "high" : "baseline")
               << " input=" << encoder.input_v4l_format_name()
               << " stride=" << encoder.input_stride()
+              << " scanlines=" << encoder.input_y_scanlines() << "/" << encoder.input_uv_scanlines()
               << " input_size=" << encoder.input_sizeimage()
               << " input_bytes=" << encoder.input_bytesused()
               << " uv_offset=" << encoder.input_uv_offset()

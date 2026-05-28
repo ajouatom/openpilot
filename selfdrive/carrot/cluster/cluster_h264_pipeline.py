@@ -819,6 +819,8 @@ class H264UsbPipeline:
         self.backend_name = "native"
         input_name = self._native_input_format_name()
         input_stride = lib.cluster_h264_encoder_bridge_input_stride(handle)
+        input_y_scanlines = self._native_size_value("cluster_h264_encoder_bridge_input_y_scanlines")
+        input_uv_scanlines = self._native_size_value("cluster_h264_encoder_bridge_input_uv_scanlines")
         input_sizeimage = self._native_size_value("cluster_h264_encoder_bridge_input_sizeimage")
         input_uv_offset = self._native_size_value("cluster_h264_encoder_bridge_input_uv_offset")
         input_bytesused = self._native_size_value("cluster_h264_encoder_bridge_input_bytesused")
@@ -832,6 +834,7 @@ class H264UsbPipeline:
             f"profile={self.h264_profile} rate_control={self.rate_control} "
             f"packetize={self._packetize_mode('native')} "
             f"input={input_name or self.input_format} stride={input_stride} "
+            f"scanlines={input_y_scanlines}/{input_uv_scanlines} "
             f"input_size={input_sizeimage} input_bytes={input_bytesused} uv_offset={input_uv_offset} "
             f"capture_size={capture_sizeimage} "
             f"rgb4_layout={self.rgb4_layout} device={self.device_path} "
@@ -1524,6 +1527,8 @@ class H264UsbPipeline:
         lib.cluster_h264_encoder_bridge_input_stride.argtypes = [ctypes.c_void_p]
         lib.cluster_h264_encoder_bridge_input_stride.restype = ctypes.c_size_t
         for getter_name in (
+            "cluster_h264_encoder_bridge_input_y_scanlines",
+            "cluster_h264_encoder_bridge_input_uv_scanlines",
             "cluster_h264_encoder_bridge_input_sizeimage",
             "cluster_h264_encoder_bridge_input_uv_offset",
             "cluster_h264_encoder_bridge_input_bytesused",

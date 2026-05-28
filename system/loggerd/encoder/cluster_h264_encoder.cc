@@ -15,6 +15,7 @@
 
 #include "common/swaglog.h"
 #include "common/util.h"
+#include "system/camerad/cameras/nv12_info.h"
 #include "third_party/linux/include/v4l2-controls.h"
 #include <linux/videodev2.h>
 
@@ -345,25 +346,34 @@ void ClusterH264Encoder::configure_formats() {
   input_v4l_format_ = selected_input_format;
   input_v4l_format_name_ = fourcc_to_string(selected_input_format);
   input_sizeimage_ = fmt_in.fmt.pix_mp.plane_fmt[0].sizeimage;
-  input_stride_ = fmt_in.fmt.pix_mp.plane_fmt[0].bytesperline;
-  const size_t min_stride = selected_input_format == rgb4 ?
-                            static_cast<size_t>(config_.width) * 4 :
-                            static_cast<size_t>(config_.width);
-  if (input_stride_ < min_stride) {
-    input_stride_ = min_stride;
+  const size_t driver_stride = fmt_in.fmt.pix_mp.plane_fmt[0].bytesperline;
+  input_y_scanlines_ = 0;
+  input_uv_scanlines_ = 0;
+  if (selected_input_format == nv12) {
+    auto [venus_stride, venus_y_height, venus_uv_height, venus_size] = get_nv12_info(config_.width, config_.height);
+    input_stride_ = venus_stride;
+    input_y_scanlines_ = venus_y_height;
+    input_uv_scanlines_ = venus_uv_height;
+    input_uv_offset_ = input_stride_ * input_y_scanlines_;
+    const size_t min_bytesused = input_uv_offset_ + input_stride_ * input_uv_scanlines_;
+    input_bytesused_ = std::max({input_sizeimage_, min_bytesused, static_cast<size_t>(venus_size)});
+  } else {
+    input_stride_ = driver_stride;
+    const size_t min_stride = static_cast<size_t>(config_.width) * 4;
+    if (input_stride_ < min_stride) {
+      input_stride_ = min_stride;
+    }
+    input_uv_offset_ = 0;
+    input_bytesused_ = std::max(input_sizeimage_, input_stride_ * static_cast<size_t>(config_.height));
   }
-  input_uv_offset_ = selected_input_format == nv12 ? input_stride_ * static_cast<size_t>(config_.height) : 0;
-  const size_t min_bytesused = selected_input_format == rgb4 ?
-                               input_stride_ * static_cast<size_t>(config_.height) :
-                               input_uv_offset_ + input_stride_ * static_cast<size_t>(config_.height) / 2;
-  input_bytesused_ = std::max(input_sizeimage_, min_bytesused);
   capture_sizeimage_ = fmt_out.fmt.pix_mp.plane_fmt[0].sizeimage;
   if (capture_sizeimage_ == 0) {
     throw std::runtime_error("V4L2 encoder returned zero H264 capture sizeimage");
   }
 
-  LOGD("cluster H264 V4L2 formats: in=%s %dx%d stride=%zu sizeimage=%zu bytesused=%zu rgb4_layout=%s profile=%s rate_control=%s out=H264 sizeimage=%zu",
-       input_v4l_format_name_.c_str(), config_.width, config_.height, input_stride_, input_sizeimage_, input_bytesused_,
+  LOGD("cluster H264 V4L2 formats: in=%s %dx%d driver_stride=%zu stride=%zu scanlines=%zu/%zu sizeimage=%zu bytesused=%zu uv_offset=%zu rgb4_layout=%s profile=%s rate_control=%s out=H264 sizeimage=%zu",
+       input_v4l_format_name_.c_str(), config_.width, config_.height, driver_stride, input_stride_,
+       input_y_scanlines_, input_uv_scanlines_, input_sizeimage_, input_bytesused_, input_uv_offset_,
        input_is_rgb4() ? rgb4_layout_name(config_.rgb4_layout) : "n/a",
        h264_profile_name(config_.h264_profile), rate_control_name(config_.rate_control), capture_sizeimage_);
 }
@@ -579,9 +589,15 @@ void ClusterH264Encoder::stream_off(uint32_t buffer_type) {
 void ClusterH264Encoder::allocate_buffers() {
   for (int i = 0; i < CLUSTER_H264_INPUT_BUFFER_COUNT; ++i) {
     input_buffers_[i].allocate(input_bytesused_);
-    memset(input_buffers_[i].addr, 0, input_buffers_[i].len);
     if (input_is_nv12()) {
+      memset(input_buffers_[i].addr, 16, std::min(input_uv_offset_, input_buffers_[i].len));
+      if (input_uv_offset_ < input_buffers_[i].len) {
+        memset(reinterpret_cast<uint8_t*>(input_buffers_[i].addr) + input_uv_offset_,
+               128, input_buffers_[i].len - input_uv_offset_);
+      }
       input_buffers_[i].init_yuv(config_.width, config_.height, input_stride_, input_uv_offset_);
+    } else {
+      memset(input_buffers_[i].addr, 0, input_buffers_[i].len);
     }
     input_allocated_[i] = true;
   }
