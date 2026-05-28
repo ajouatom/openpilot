@@ -635,6 +635,7 @@ size_t ClusterH264Encoder::process_ready_events(int timeout_ms, bool stop_after_
   };
 
   while (true) {
+    pfd.revents = 0;
     int ret;
     do {
       ret = poll(&pfd, 1, timeout_ms);
@@ -649,12 +650,14 @@ size_t ClusterH264Encoder::process_ready_events(int timeout_ms, bool stop_after_
       throw std::runtime_error("cluster H264 V4L2 encoder reported POLLERR");
     }
 
+    bool made_progress = false;
     if (pfd.revents & POLLIN) {
       while (true) {
         DequeueResult result;
         if (!dequeue_buffer(V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, &result)) {
           break;
         }
+        made_progress = true;
         if ((result.flags & V4L2_QCOM_BUF_FLAG_EOS) == 0 && result.bytesused > 0) {
           VisionBuf *buf = &capture_buffers_[result.index];
           buf->sync(VISIONBUF_SYNC_FROM_DEVICE);
@@ -701,13 +704,14 @@ size_t ClusterH264Encoder::process_ready_events(int timeout_ms, bool stop_after_
         if (!dequeue_buffer(V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, &result)) {
           break;
         }
+        made_progress = true;
         if (std::find(free_inputs_.begin(), free_inputs_.end(), result.index) == free_inputs_.end()) {
           free_inputs_.push_back(result.index);
         }
       }
     }
 
-    if (stop_after_first_event) {
+    if (stop_after_first_event || !made_progress) {
       return packet_count;
     }
     timeout_ms = 0;

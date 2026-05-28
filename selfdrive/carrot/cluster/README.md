@@ -70,6 +70,8 @@ bytes so hardware output can be compared directly against ffmpeg/libx264.
 `--usb-h264-slice-max-bytes 0` disables the hardware multi-slice request.
 `--usb-h264-slice-max-mb N` switches hardware slicing from byte-limited slices
 to macroblock-limited slices; for 462x1920, `435` targets about eight slices.
+This driver path can stall on some devices; the wrapper returns if V4L2 reports
+ready without dequeuing buffers so it does not spin a CPU core.
 `--usb-h264-qp N` forces hardware QP/min-QP controls for compatibility tests;
 higher values produce smaller hardware IDR/P frames.
 `--usb-h264-packetize auto` keeps ffmpeg output intact, but sends native/helper
