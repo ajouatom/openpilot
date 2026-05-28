@@ -842,8 +842,8 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=DEFAULT_H264_SLICE_MAX_MB,
         help=(
-            "Hardware V4L2 multi-slice max macroblocks. When greater than 0 this takes "
-            "priority over --usb-h264-slice-max-bytes. Default: %(default)s."
+            "Disabled compatibility experiment: Qualcomm V4L2 max-MB slicing can stall. "
+            "Keep this at 0. Default: %(default)s."
         ),
     )
     parser.add_argument(
@@ -1078,6 +1078,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--usb-h264-slice-max-bytes must be 0 or greater")
     if args.usb_h264_slice_max_mb < 0:
         parser.error("--usb-h264-slice-max-mb must be 0 or greater")
+    if args.usb_h264_slice_max_mb > 0:
+        parser.error("--usb-h264-slice-max-mb is disabled because it can stall the Qualcomm V4L2 encoder")
     if args.usb_h264_qp < -1 or args.usb_h264_qp > 51:
         parser.error("--usb-h264-qp must be -1 or between 0 and 51")
     if args.usb_h264_align <= 0:

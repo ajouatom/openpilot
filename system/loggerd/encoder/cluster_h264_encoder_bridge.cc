@@ -98,8 +98,8 @@ int cluster_h264_encoder_bridge_set_slice_max_mb(ClusterH264EncoderBridge *bridg
     bridge->last_error = "cannot change slice max MB after encoder open";
     return -1;
   }
-  if (slice_max_mb < 0) {
-    bridge->last_error = "slice max MB must be 0 or greater";
+  if (slice_max_mb != 0) {
+    bridge->last_error = "slice max MB is disabled because it can stall the Qualcomm V4L2 encoder";
     return -1;
   }
   bridge->config.slice_max_mb = slice_max_mb;

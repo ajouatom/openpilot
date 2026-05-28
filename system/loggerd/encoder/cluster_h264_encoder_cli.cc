@@ -162,6 +162,9 @@ int main(int argc, char **argv) {
         config.slice_max_bytes = parse_nonnegative_int(arg, next_value(arg));
       } else if (arg == "--slice-max-mb") {
         config.slice_max_mb = parse_nonnegative_int(arg, next_value(arg));
+        if (config.slice_max_mb != 0) {
+          throw std::runtime_error("--slice-max-mb is disabled because it can stall the Qualcomm V4L2 encoder");
+        }
       } else if (arg == "--qp") {
         config.qp = parse_qp(arg, next_value(arg));
       } else if (arg == "--device") {

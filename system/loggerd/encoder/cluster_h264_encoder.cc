@@ -109,8 +109,8 @@ void ClusterH264Encoder::validate_config() const {
   if (config_.slice_max_bytes < 0) {
     throw std::runtime_error("cluster H264 encoder slice max bytes must be 0 or greater");
   }
-  if (config_.slice_max_mb < 0) {
-    throw std::runtime_error("cluster H264 encoder slice max MB must be 0 or greater");
+  if (config_.slice_max_mb != 0) {
+    throw std::runtime_error("cluster H264 encoder slice max MB is disabled because it can stall the Qualcomm V4L2 encoder");
   }
   if (config_.qp < -1 || config_.qp > 51) {
     throw std::runtime_error("cluster H264 encoder qp must be -1 or between 0 and 51");
