@@ -48,8 +48,10 @@ The default V4L2 device is
 `/dev/v4l/by-path/platform-aa00000.qcom_vidc-video-index1`. Input format
 `auto` prefers RGB4 when the device reports it, and the default RGB4 byte
 layout is `bgra`, matching the common little-endian memory order for V4L2
-`RGB4`. The cluster H264 wrapper emits inline SPS/PPS on IDR frames and uses
-Baseline/CAVLC for display-decoder compatibility.
+`RGB4`. The cluster H264 wrapper emits inline SPS/PPS on the first video packet
+and on IDR frames, and uses Baseline/CAVLC when the V4L2 driver accepts it. If
+the driver rejects that lower-complexity mode, it falls back to the existing
+loggerd-compatible High/CABAC controls.
 
 For a quick H264 transport smoke test, run:
 

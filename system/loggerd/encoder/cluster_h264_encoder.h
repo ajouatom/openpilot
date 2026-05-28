@@ -125,4 +125,6 @@ private:
   bool input_allocated_[CLUSTER_H264_INPUT_BUFFER_COUNT] = {};
   bool capture_allocated_[CLUSTER_H264_CAPTURE_BUFFER_COUNT] = {};
   std::deque<unsigned int> free_inputs_;
+  std::vector<uint8_t> codec_config_;
+  bool sent_video_packet_ = false;
 };

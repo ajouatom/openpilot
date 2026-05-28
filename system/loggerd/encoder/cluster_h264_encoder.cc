@@ -147,6 +147,8 @@ void ClusterH264Encoder::open() {
     for (unsigned int i = 0; i < CLUSTER_H264_INPUT_BUFFER_COUNT; ++i) {
       free_inputs_.push_back(i);
     }
+    codec_config_.clear();
+    sent_video_packet_ = false;
     is_open_ = true;
   } catch (...) {
     close();
@@ -195,6 +197,8 @@ void ClusterH264Encoder::close() {
   }
 
   free_inputs_.clear();
+  codec_config_.clear();
+  sent_video_packet_ = false;
   is_open_ = false;
 }
 
@@ -332,24 +336,65 @@ void ClusterH264Encoder::set_fps() {
 
 void ClusterH264Encoder::set_controls() {
   const int p_frames = std::max(0, config_.gop - 1);
-  struct v4l2_control controls[] = {
-    { .id = V4L2_CID_MPEG_VIDEO_BITRATE, .value = config_.bitrate },
-    { .id = V4L2_CID_MPEG_VIDC_VIDEO_NUM_P_FRAMES, .value = p_frames },
-    { .id = V4L2_CID_MPEG_VIDC_VIDEO_NUM_B_FRAMES, .value = 0 },
-    { .id = V4L2_CID_MPEG_VIDEO_HEADER_MODE, .value = V4L2_MPEG_VIDEO_HEADER_MODE_JOINED_WITH_I_FRAME },
-    { .id = V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL, .value = V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_VBR_CFR },
-    { .id = V4L2_CID_MPEG_VIDC_VIDEO_PRIORITY, .value = V4L2_MPEG_VIDC_VIDEO_PRIORITY_REALTIME_DISABLE },
-    { .id = V4L2_CID_MPEG_VIDC_VIDEO_IDR_PERIOD, .value = 1 },
-    { .id = V4L2_CID_MPEG_VIDEO_H264_PROFILE, .value = V4L2_MPEG_VIDEO_H264_PROFILE_BASELINE },
-    { .id = V4L2_CID_MPEG_VIDEO_H264_LEVEL, .value = V4L2_MPEG_VIDEO_H264_LEVEL_UNKNOWN },
-    { .id = V4L2_CID_MPEG_VIDEO_H264_ENTROPY_MODE, .value = V4L2_MPEG_VIDEO_H264_ENTROPY_MODE_CAVLC },
-    { .id = V4L2_CID_MPEG_VIDEO_H264_LOOP_FILTER_MODE, .value = 0 },
-    { .id = V4L2_CID_MPEG_VIDEO_H264_LOOP_FILTER_ALPHA, .value = 0 },
-    { .id = V4L2_CID_MPEG_VIDEO_H264_LOOP_FILTER_BETA, .value = 0 },
-    { .id = V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE, .value = 0 },
+  struct NamedControl {
+    uint32_t id;
+    int value;
+    const char *name;
   };
-  for (auto &control : controls) {
-    xioctl(fd_, VIDIOC_S_CTRL, &control, "VIDIOC_S_CTRL failed");
+
+  const auto set_control = [this](uint32_t id, int value, const char *name) {
+    struct v4l2_control control = {
+      .id = id,
+      .value = value,
+    };
+    const std::string message = util::string_format("VIDIOC_S_CTRL %s failed", name);
+    xioctl(fd_, VIDIOC_S_CTRL, &control, message.c_str());
+  };
+
+  const auto try_control = [this, &set_control](uint32_t id, int value, const char *name) {
+    try {
+      set_control(id, value, name);
+      return true;
+    } catch (const std::exception &e) {
+      if (config_.debug) {
+        LOGW("%s", e.what());
+      }
+      return false;
+    }
+  };
+
+  const NamedControl controls[] = {
+    { .id = V4L2_CID_MPEG_VIDEO_BITRATE, .value = config_.bitrate, .name = "bitrate" },
+    { .id = V4L2_CID_MPEG_VIDC_VIDEO_NUM_P_FRAMES, .value = p_frames, .name = "num-p-frames" },
+    { .id = V4L2_CID_MPEG_VIDC_VIDEO_NUM_B_FRAMES, .value = 0, .name = "num-b-frames" },
+    { .id = V4L2_CID_MPEG_VIDEO_HEADER_MODE, .value = V4L2_MPEG_VIDEO_HEADER_MODE_SEPARATE, .name = "header-mode-separate" },
+    { .id = V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL, .value = V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_VBR_CFR, .name = "rate-control-vbr-cfr" },
+    { .id = V4L2_CID_MPEG_VIDC_VIDEO_PRIORITY, .value = V4L2_MPEG_VIDC_VIDEO_PRIORITY_REALTIME_DISABLE, .name = "priority-realtime-disable" },
+    { .id = V4L2_CID_MPEG_VIDC_VIDEO_IDR_PERIOD, .value = 1, .name = "idr-period" },
+    { .id = V4L2_CID_MPEG_VIDEO_H264_LEVEL, .value = V4L2_MPEG_VIDEO_H264_LEVEL_UNKNOWN, .name = "h264-level-unknown" },
+    { .id = V4L2_CID_MPEG_VIDEO_H264_LOOP_FILTER_MODE, .value = 0, .name = "h264-loop-filter-mode" },
+    { .id = V4L2_CID_MPEG_VIDEO_H264_LOOP_FILTER_ALPHA, .value = 0, .name = "h264-loop-filter-alpha" },
+    { .id = V4L2_CID_MPEG_VIDEO_H264_LOOP_FILTER_BETA, .value = 0, .name = "h264-loop-filter-beta" },
+    { .id = V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE, .value = 0, .name = "multi-slice-mode" },
+  };
+  for (const NamedControl &control : controls) {
+    set_control(control.id, control.value, control.name);
+  }
+
+  bool low_complexity_h264 = try_control(
+      V4L2_CID_MPEG_VIDEO_H264_PROFILE,
+      V4L2_MPEG_VIDEO_H264_PROFILE_BASELINE,
+      "h264-profile-baseline");
+  if (low_complexity_h264) {
+    low_complexity_h264 = try_control(
+        V4L2_CID_MPEG_VIDEO_H264_ENTROPY_MODE,
+        V4L2_MPEG_VIDEO_H264_ENTROPY_MODE_CAVLC,
+        "h264-entropy-cavlc");
+  }
+  if (!low_complexity_h264) {
+    set_control(V4L2_CID_MPEG_VIDEO_H264_PROFILE, V4L2_MPEG_VIDEO_H264_PROFILE_HIGH, "h264-profile-high");
+    set_control(V4L2_CID_MPEG_VIDEO_H264_ENTROPY_MODE, V4L2_MPEG_VIDEO_H264_ENTROPY_MODE_CABAC, "h264-entropy-cabac");
+    set_control(V4L2_CID_MPEG_VIDC_VIDEO_H264_CABAC_MODEL, V4L2_CID_MPEG_VIDC_VIDEO_H264_CABAC_MODEL_0, "h264-cabac-model-0");
   }
 }
 
@@ -501,16 +546,37 @@ size_t ClusterH264Encoder::process_ready_events(int timeout_ms, bool stop_after_
         if ((result.flags & V4L2_QCOM_BUF_FLAG_EOS) == 0 && result.bytesused > 0) {
           VisionBuf *buf = &capture_buffers_[result.index];
           buf->sync(VISIONBUF_SYNC_FROM_DEVICE);
+          const uint8_t *data = reinterpret_cast<const uint8_t*>(buf->addr);
+          const bool codec_config = (result.flags & V4L2_QCOM_BUF_FLAG_CODECCONFIG) != 0;
+          const bool keyframe = (result.flags & V4L2_BUF_FLAG_KEYFRAME) != 0;
+          if (codec_config) {
+            codec_config_.assign(data, data + result.bytesused);
+            ++packet_count;
+            queue_capture_buffer(result.index);
+            continue;
+          }
+
           ClusterH264PacketView packet;
-          packet.data = reinterpret_cast<const uint8_t*>(buf->addr);
-          packet.size = result.bytesused;
+          std::vector<uint8_t> joined_keyframe;
+          const bool needs_codec_config = !codec_config_.empty() && (keyframe || !sent_video_packet_);
+          if (needs_codec_config) {
+            joined_keyframe.reserve(codec_config_.size() + result.bytesused);
+            joined_keyframe.insert(joined_keyframe.end(), codec_config_.begin(), codec_config_.end());
+            joined_keyframe.insert(joined_keyframe.end(), data, data + result.bytesused);
+            packet.data = joined_keyframe.data();
+            packet.size = joined_keyframe.size();
+          } else {
+            packet.data = data;
+            packet.size = result.bytesused;
+          }
           packet.flags = result.flags;
           packet.timestamp_us = result.timestamp_us;
-          packet.codec_config = (result.flags & V4L2_QCOM_BUF_FLAG_CODECCONFIG) != 0;
-          packet.keyframe = (result.flags & V4L2_BUF_FLAG_KEYFRAME) != 0;
+          packet.codec_config = false;
+          packet.keyframe = keyframe;
           if (on_packet) {
             on_packet(packet);
           }
+          sent_video_packet_ = true;
           ++packet_count;
         }
         queue_capture_buffer(result.index);
