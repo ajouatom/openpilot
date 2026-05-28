@@ -76,7 +76,6 @@ VEHICLE_BADGE_ACCEL_MPS2 = 1.0
 MODEL_LINE_STRIP_GROUP_CACHE_LIMIT = 48
 MODEL_LINE_STRIP_GROUP_CACHE_GRID_M = 0.5
 MODEL_LINE_STRIP_GROUP_CACHE_COLOR: Color = (0, 0, 0, 0)
-MODEL_LINE_CENTERLINE_MAX_POINTS = 18
 ROAD_STEPS_SURROUND = 96
 ROAD_STEPS_MODEL = 48
 ROAD_STEPS_SIM = 64
@@ -459,36 +458,10 @@ def model_line_centerline(
         forward_m = data_scene_forward_m(point.forward_m)
         if start_m <= forward_m <= end_m:
             visible_points.append(point)
-    if len(visible_points) > MODEL_LINE_CENTERLINE_MAX_POINTS:
-        visible_points = decimated_model_points(visible_points, MODEL_LINE_CENTERLINE_MAX_POINTS)
     return tuple(
         Vec3(point.lateral_m + lateral_shift_m, data_scene_forward_m(point.forward_m), height_m)
         for point in visible_points
     )
-
-
-def decimated_model_points(
-    points: list[ModelPathPoint],
-    limit: int,
-) -> list[ModelPathPoint]:
-    if len(points) <= limit:
-        return points
-    if limit <= 2:
-        return [points[0], points[-1]]
-
-    last_index = len(points) - 1
-    step = last_index / (limit - 1)
-    selected: list[ModelPathPoint] = []
-    previous_index = -1
-    for index in range(limit):
-        source_index = round(index * step)
-        if source_index <= previous_index:
-            source_index = previous_index + 1
-        source_index = min(source_index, last_index)
-        selected.append(points[source_index])
-        previous_index = source_index
-    selected[-1] = points[-1]
-    return selected
 
 
 def extend_centerline_rearward_to_first_point(
