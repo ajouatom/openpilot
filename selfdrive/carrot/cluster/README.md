@@ -74,7 +74,9 @@ driver path can stall before producing capture buffers.
 higher values produce smaller hardware IDR/P frames.
 `--usb-h264-packetize auto` keeps ffmpeg output intact, but sends native/helper
 hardware output as small NAL-boundary groups instead of one large access-unit
-USB command.
+USB command. The native hardware path marks the final USB chunk of each encoder
+access unit with the TURZX H264 frame-end flag; `--usb-h264-debug` prints this
+as `last=1`.
 
 For a quick H264 transport smoke test, run:
 

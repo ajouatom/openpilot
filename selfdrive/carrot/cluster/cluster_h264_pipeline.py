@@ -1295,8 +1295,9 @@ class H264UsbPipeline:
             packet = ctypes.string_at(base, int(size))
             packet = self._prepare_hardware_packet(packet)
             self._write_dump(packet)
-            for chunk in self._packetize_h264_for_usb(packet, chunk_size, source="native"):
-                packet_queue.put(chunk, timeout=1.0)
+            chunks = self._packetize_h264_for_usb(packet, chunk_size, source="native")
+            for index, chunk in enumerate(chunks):
+                packet_queue.put((chunk, index == len(chunks) - 1), timeout=1.0)
         except queue.Full as exc:
             self._set_error(RuntimeError("native H264 USB sender queue is full"))
         except BaseException as exc:
@@ -1401,17 +1402,18 @@ class H264UsbPipeline:
         try:
             chunk_size = max(1, self.chunk_size)
             while True:
-                chunk = packet_queue.get()
-                if chunk is None:
+                item = packet_queue.get()
+                if item is None:
                     return
-                self._send_h264_chunk(chunk, chunk_size, source="native")
+                chunk, is_last = item
+                self._send_h264_chunk(chunk, chunk_size, source="native", is_last=is_last)
         except BaseException as exc:
             with self._condition:
                 if not self._closing:
                     self._error = exc
                 self._condition.notify_all()
 
-    def _send_h264_chunk(self, chunk: bytes, chunk_size: int, *, source: str) -> None:
+    def _send_h264_chunk(self, chunk: bytes, chunk_size: int, *, source: str, is_last: bool = False) -> None:
         self._chunks_sent += 1
         if self.debug and (self._chunks_sent <= 5 or self._chunks_sent % 30 == 0):
             head = " ".join(f"{byte:02X}" for byte in chunk[:8])
@@ -1419,12 +1421,13 @@ class H264UsbPipeline:
             summary = _h264_packet_summary(chunk)
             print(
                 f"H264 chunk {self._chunks_sent}: {source} {len(chunk)} bytes "
-                f"head={head} ack={ack_mode} {summary}",
+                f"head={head} ack={ack_mode} last={1 if is_last else 0} {summary}",
                 flush=True,
             )
         profile_stage = time.perf_counter()
         self.usb_display.send_h264_chunk(
             chunk,
+            is_last=is_last,
             wait_for_ack=self.wait_for_ack,
             require_ack_response=not self.soft_ack,
         )
