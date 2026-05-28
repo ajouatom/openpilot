@@ -221,4 +221,39 @@ size_t cluster_h264_encoder_bridge_capture_sizeimage(ClusterH264EncoderBridge *b
   return bridge->encoder->capture_sizeimage();
 }
 
+size_t cluster_h264_encoder_bridge_last_pre_poll_us(ClusterH264EncoderBridge *bridge) {
+  if (bridge == nullptr || bridge->encoder == nullptr) return 0;
+  return bridge->encoder->last_encode_timings().pre_poll_us;
+}
+
+size_t cluster_h264_encoder_bridge_last_wait_input_us(ClusterH264EncoderBridge *bridge) {
+  if (bridge == nullptr || bridge->encoder == nullptr) return 0;
+  return bridge->encoder->last_encode_timings().wait_input_us;
+}
+
+size_t cluster_h264_encoder_bridge_last_convert_us(ClusterH264EncoderBridge *bridge) {
+  if (bridge == nullptr || bridge->encoder == nullptr) return 0;
+  return bridge->encoder->last_encode_timings().convert_us;
+}
+
+size_t cluster_h264_encoder_bridge_last_sync_us(ClusterH264EncoderBridge *bridge) {
+  if (bridge == nullptr || bridge->encoder == nullptr) return 0;
+  return bridge->encoder->last_encode_timings().sync_us;
+}
+
+size_t cluster_h264_encoder_bridge_last_queue_us(ClusterH264EncoderBridge *bridge) {
+  if (bridge == nullptr || bridge->encoder == nullptr) return 0;
+  return bridge->encoder->last_encode_timings().queue_us;
+}
+
+size_t cluster_h264_encoder_bridge_last_post_poll_us(ClusterH264EncoderBridge *bridge) {
+  if (bridge == nullptr || bridge->encoder == nullptr) return 0;
+  return bridge->encoder->last_encode_timings().post_poll_us;
+}
+
+size_t cluster_h264_encoder_bridge_last_total_us(ClusterH264EncoderBridge *bridge) {
+  if (bridge == nullptr || bridge->encoder == nullptr) return 0;
+  return bridge->encoder->last_encode_timings().total_us;
+}
+
 }  // extern "C"

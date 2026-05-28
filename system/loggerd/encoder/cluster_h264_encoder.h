@@ -58,6 +58,16 @@ struct ClusterH264PacketView {
 
 using ClusterH264PacketCallback = std::function<void(const ClusterH264PacketView&)>;
 
+struct ClusterH264EncodeTimings {
+  uint64_t pre_poll_us = 0;
+  uint64_t wait_input_us = 0;
+  uint64_t convert_us = 0;
+  uint64_t sync_us = 0;
+  uint64_t queue_us = 0;
+  uint64_t post_poll_us = 0;
+  uint64_t total_us = 0;
+};
+
 class ClusterH264Encoder {
 public:
   explicit ClusterH264Encoder(const ClusterH264EncoderConfig &config);
@@ -84,6 +94,7 @@ public:
   size_t input_uv_offset() const { return input_uv_offset_; }
   size_t input_bytesused() const { return input_bytesused_; }
   size_t capture_sizeimage() const { return capture_sizeimage_; }
+  const ClusterH264EncodeTimings& last_encode_timings() const { return last_encode_timings_; }
   bool input_is_rgb4() const;
   bool input_is_nv12() const;
 
@@ -136,4 +147,5 @@ private:
   std::deque<unsigned int> free_inputs_;
   std::vector<uint8_t> codec_config_;
   bool sent_video_packet_ = false;
+  ClusterH264EncodeTimings last_encode_timings_;
 };

@@ -25,6 +25,15 @@ DEFAULT_H264_ENCODER_ALIGN = 16
 
 NATIVE_INPUT_FORMATS = {"auto": 0, "rgb4": 1, "nv12": 2}
 NATIVE_RGB4_LAYOUTS = {"axrgb": 0, "rgba": 1, "bgra": 2}
+NATIVE_TIMING_GETTERS = (
+    ("usb_h264.native.pre_poll", "cluster_h264_encoder_bridge_last_pre_poll_us"),
+    ("usb_h264.native.wait_input", "cluster_h264_encoder_bridge_last_wait_input_us"),
+    ("usb_h264.native.convert", "cluster_h264_encoder_bridge_last_convert_us"),
+    ("usb_h264.native.sync", "cluster_h264_encoder_bridge_last_sync_us"),
+    ("usb_h264.native.queue", "cluster_h264_encoder_bridge_last_queue_us"),
+    ("usb_h264.native.post_poll", "cluster_h264_encoder_bridge_last_post_poll_us"),
+    ("usb_h264.native.total_inner", "cluster_h264_encoder_bridge_last_total_us"),
+)
 H264_NAL_NAMES = {
     1: "P",
     5: "IDR",
@@ -172,6 +181,13 @@ def _h264_byte_stream_units(data: bytes) -> list[bytes]:
         if start < end:
             units.append(data[start:end])
     return units
+
+
+def _h264_has_nal_type(data: bytes, nal_type: int) -> bool:
+    for _, nal_start, nal_end in _h264_nals(data):
+        if nal_start < nal_end and (data[nal_start] & 0x1F) == nal_type:
+            return True
+    return False
 
 
 def _h264_unescape_rbsp(data: bytes) -> bytes:
@@ -691,6 +707,7 @@ class H264UsbPipeline:
         self.soft_ack = soft_ack
         self.dump_path = dump_path
         self._dump_file = None
+        self._dump_write_count = 0
         self.debug = debug
         self._sps_patch_logged = False
         self._sps_crop_patch_logged = False
@@ -975,6 +992,7 @@ class H264UsbPipeline:
         if result != 0:
             raise RuntimeError(self._native_error_text("native H264 encode failed"))
         self._native_frame_index += 1
+        self._add_native_timing_samples(lib, handle)
         self._add_sample("usb_h264.native_encode_rgba", profile_stage)
         self.check_error()
 
@@ -1088,7 +1106,9 @@ class H264UsbPipeline:
         if self._dump_file is None:
             return
         self._dump_file.write(chunk)
-        self._dump_file.flush()
+        self._dump_write_count += 1
+        if self._dump_write_count % self.fps == 0:
+            self._dump_file.flush()
 
     @staticmethod
     def _debug_should_log(index: int, limit: int, interval: int) -> bool:
@@ -1142,10 +1162,10 @@ class H264UsbPipeline:
         )
 
     def _debug_log_packetize(self, source: str, index: int, packet: bytes, chunks: list[bytes], chunk_size: int) -> None:
-        units = _h264_byte_stream_units(packet)
         self._debug_packetize_events += 1
         if not self.debug or not self._debug_should_log(index, H264_DEBUG_PACKET_LIMIT, H264_DEBUG_PACKET_INTERVAL):
             return
+        units = _h264_byte_stream_units(packet)
         sizes = [len(chunk) for chunk in chunks]
         min_size = min(sizes) if sizes else 0
         max_size = max(sizes) if sizes else 0
@@ -1175,7 +1195,9 @@ class H264UsbPipeline:
             flush=True,
         )
 
-    def _prepare_hardware_packet(self, packet: bytes) -> bytes:
+    def _prepare_hardware_packet(self, packet: bytes, *, may_have_sps: bool = True) -> bytes:
+        if not may_have_sps or not _h264_has_nal_type(packet, 7):
+            return packet
         packet, patched = _patch_h264_sps_constraints(packet)
         if patched and self.debug and not self._sps_patch_logged:
             print(
@@ -1201,6 +1223,8 @@ class H264UsbPipeline:
 
     def _packetize_h264_for_usb(self, packet: bytes, chunk_size: int) -> list[bytes]:
         chunk_size = max(1, chunk_size)
+        if len(packet) <= chunk_size:
+            return [packet]
         return [packet[offset:offset + chunk_size] for offset in range(0, len(packet), chunk_size)]
 
     def _close_dump_file(self) -> None:
@@ -1443,6 +1467,13 @@ class H264UsbPipeline:
                 continue
             getter.argtypes = [ctypes.c_void_p]
             getter.restype = ctypes.c_size_t
+        for _, getter_name in NATIVE_TIMING_GETTERS:
+            try:
+                getter = getattr(lib, getter_name)
+            except AttributeError:
+                continue
+            getter.argtypes = [ctypes.c_void_p]
+            getter.restype = ctypes.c_size_t
         try:
             set_slice_max = lib.cluster_h264_encoder_bridge_set_slice_max_bytes
         except AttributeError:
@@ -1498,7 +1529,7 @@ class H264UsbPipeline:
                 codec_config=bool(codec_config),
                 keyframe=bool(keyframe),
             )
-            packet = self._prepare_hardware_packet(packet)
+            packet = self._prepare_hardware_packet(packet, may_have_sps=bool(codec_config) or bool(keyframe))
             self._debug_max_packet_bytes = max(self._debug_max_packet_bytes, len(packet))
             self._debug_log_encoder_packet(
                 packet_index,
@@ -1564,6 +1595,16 @@ class H264UsbPipeline:
         except AttributeError:
             return 0
         return int(getter(handle))
+
+    def _add_native_timing_samples(self, lib: ctypes.CDLL, handle: int) -> None:
+        for sample_name, getter_name in NATIVE_TIMING_GETTERS:
+            try:
+                getter = getattr(lib, getter_name)
+            except AttributeError:
+                return
+            value_us = int(getter(handle))
+            if value_us > 0:
+                self._add_sample(sample_name, value_us / 1000.0)
 
     @staticmethod
     def _parse_bitrate_bps(value: str) -> int:

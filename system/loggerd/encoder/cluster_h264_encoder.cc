@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <fcntl.h>
 #include <iterator>
@@ -15,6 +16,7 @@
 
 #include "common/swaglog.h"
 #include "common/util.h"
+#include "libyuv.h"
 #include "system/camerad/cameras/nv12_info.h"
 #include "third_party/linux/include/v4l2-controls.h"
 #include <linux/videodev2.h>
@@ -35,20 +37,9 @@ std::string fourcc_to_string(uint32_t value) {
   return std::string(text);
 }
 
-uint8_t clamp_u8(int value) {
-  return static_cast<uint8_t>(std::clamp(value, 0, 255));
-}
-
-uint8_t rgba_to_y(uint8_t r, uint8_t g, uint8_t b) {
-  return clamp_u8(((66 * r + 129 * g + 25 * b + 128) >> 8) + 16);
-}
-
-uint8_t rgba_to_u(int r, int g, int b) {
-  return clamp_u8(((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128);
-}
-
-uint8_t rgba_to_v(int r, int g, int b) {
-  return clamp_u8(((112 * r - 94 * g - 18 * b + 128) >> 8) + 128);
+uint64_t elapsed_us(std::chrono::steady_clock::time_point start) {
+  return static_cast<uint64_t>(
+      std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count());
 }
 
 const char *rgb4_layout_name(ClusterH264Rgb4Layout layout) {
@@ -258,10 +249,10 @@ void ClusterH264Encoder::configure_formats() {
       throw std::runtime_error("V4L2 encoder does not report NV12 input support");
     }
     selected_input_format = nv12;
-  } else if (supports_format(rgb4)) {
-    selected_input_format = rgb4;
   } else if (supports_format(nv12)) {
     selected_input_format = nv12;
+  } else if (supports_format(rgb4)) {
+    selected_input_format = rgb4;
   } else {
     std::string found;
     for (uint32_t format : input_formats) {
@@ -721,9 +712,15 @@ void ClusterH264Encoder::encode_rgba(const uint8_t *rgba, size_t rgba_size, uint
     throw std::runtime_error("cluster H264 encoder received null RGBA input");
   }
 
+  last_encode_timings_ = {};
+  const auto total_start = std::chrono::steady_clock::now();
+  auto stage_start = std::chrono::steady_clock::now();
   process_ready_events(0, false, on_packet);
+  last_encode_timings_.pre_poll_us = elapsed_us(stage_start);
   while (free_inputs_.empty()) {
+    stage_start = std::chrono::steady_clock::now();
     const size_t packet_count = process_ready_events(2000, true, on_packet);
+    last_encode_timings_.wait_input_us += elapsed_us(stage_start);
     if (free_inputs_.empty() && packet_count == 0) {
       throw std::runtime_error("cluster H264 encoder timed out waiting for a free input buffer");
     }
@@ -731,13 +728,22 @@ void ClusterH264Encoder::encode_rgba(const uint8_t *rgba, size_t rgba_size, uint
 
   unsigned int index = free_inputs_.front();
   free_inputs_.pop_front();
+  stage_start = std::chrono::steady_clock::now();
   copy_rgba_to_input(rgba, rgba_size, &input_buffers_[index]);
+  last_encode_timings_.convert_us = elapsed_us(stage_start);
+  stage_start = std::chrono::steady_clock::now();
   if (input_buffers_[index].sync(VISIONBUF_SYNC_TO_DEVICE) != 0) {
     throw std::runtime_error("cluster H264 encoder failed to sync input to device");
   }
+  last_encode_timings_.sync_us = elapsed_us(stage_start);
+  stage_start = std::chrono::steady_clock::now();
   queue_output_buffer(index, timestamp_us);
+  last_encode_timings_.queue_us = elapsed_us(stage_start);
 
+  stage_start = std::chrono::steady_clock::now();
   process_ready_events(0, false, on_packet);
+  last_encode_timings_.post_poll_us = elapsed_us(stage_start);
+  last_encode_timings_.total_us = elapsed_us(total_start);
 }
 
 void ClusterH264Encoder::copy_rgba_to_input(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const {
@@ -796,6 +802,9 @@ void ClusterH264Encoder::rgba_to_rgb4(const uint8_t *rgba, size_t rgba_size, Vis
 void ClusterH264Encoder::rgba_to_nv12(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const {
   const size_t width = static_cast<size_t>(config_.width);
   const size_t height = static_cast<size_t>(config_.height);
+  if ((width % 2) != 0 || (height % 2) != 0) {
+    throw std::runtime_error("cluster H264 NV12 input dimensions must be even");
+  }
   const size_t expected_rgba_size = width * height * 4;
   if (rgba_size < expected_rgba_size) {
     throw std::runtime_error("cluster H264 encoder RGBA input is smaller than width*height*4");
@@ -808,31 +817,16 @@ void ClusterH264Encoder::rgba_to_nv12(const uint8_t *rgba, size_t rgba_size, Vis
   uint8_t *y_plane = base;
   uint8_t *uv_plane = base + input_uv_offset_;
 
-  for (size_t y = 0; y < height; ++y) {
-    uint8_t *dst_y = y_plane + y * input_stride_;
-    const uint8_t *src = rgba + y * width * 4;
-    for (size_t x = 0; x < width; ++x) {
-      const uint8_t r = src[x * 4 + 0];
-      const uint8_t g = src[x * 4 + 1];
-      const uint8_t b = src[x * 4 + 2];
-      dst_y[x] = rgba_to_y(r, g, b);
-    }
-  }
-
-  for (size_t y = 0; y < height; y += 2) {
-    uint8_t *dst_uv = uv_plane + (y / 2) * input_stride_;
-    const uint8_t *row0 = rgba + y * width * 4;
-    const uint8_t *row1 = rgba + (y + 1) * width * 4;
-    for (size_t x = 0; x < width; x += 2) {
-      const uint8_t *p00 = row0 + x * 4;
-      const uint8_t *p01 = p00 + 4;
-      const uint8_t *p10 = row1 + x * 4;
-      const uint8_t *p11 = p10 + 4;
-      const int r = (static_cast<int>(p00[0]) + p01[0] + p10[0] + p11[0] + 2) / 4;
-      const int g = (static_cast<int>(p00[1]) + p01[1] + p10[1] + p11[1] + 2) / 4;
-      const int b = (static_cast<int>(p00[2]) + p01[2] + p10[2] + p11[2] + 2) / 4;
-      dst_uv[x + 0] = rgba_to_u(r, g, b);
-      dst_uv[x + 1] = rgba_to_v(r, g, b);
-    }
+  const int result = libyuv::ABGRToNV12(
+      rgba,
+      static_cast<int>(width * 4),
+      y_plane,
+      static_cast<int>(input_stride_),
+      uv_plane,
+      static_cast<int>(input_stride_),
+      static_cast<int>(width),
+      static_cast<int>(height));
+  if (result != 0) {
+    throw std::runtime_error("cluster H264 libyuv ABGRToNV12 conversion failed");
   }
 }

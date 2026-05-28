@@ -78,6 +78,10 @@ controls.
 native callback flags/timestamps/keyframe state, raw and patched NAL summaries,
 packetization results, TURZX chunk sizes, and a shutdown summary. The helper
 backend also prints C++ packet metadata to stderr before Python reads stdout.
+Keep `--usb-h264-debug` and `--usb-h264-dump` off for FPS/CPU measurements;
+they are diagnostic tools and add console/file I/O overhead. With
+`--profile-render`, native hardware runs include C++ sub-stage samples such as
+`usb_h264.native.convert` and `usb_h264.native.wait_input`.
 `--usb-h264-encoder-align 1` disables hardware-only input padding for A/B
 testing; the default `16` avoids feeding the Qualcomm encoder a 462-byte NV12
 stride while its H264 SPS reports a 464-pixel coded width.
@@ -116,7 +120,7 @@ the selected H264 FPS and the libx264-style no-reorder DPB metadata.
 For route replay against a saved device route, run:
 
 ```bash
-python selfdrive/carrot/cluster_run.py --input route --route /data/media/0/realdata/0000012e--f190807d64--36 --route-overlay compact --output usb --usb-codec h264 --duration 60 --fps 30 --usb-h264-debug --usb-h264-dump /tmp/cluster_hw_route.h264
+python selfdrive/carrot/cluster_run.py --input route --route /data/media/0/realdata/0000012e--f190807d64--36 --route-overlay compact --output usb --usb-codec h264 --duration 60 --fps 30 --profile-render --profile-interval 2
 ```
 
 The ffmpeg/libx264 path is the known-good H264 comparison mode. To make that
@@ -137,6 +141,12 @@ ffprobe -show_streams /tmp/cluster_hw_nv12.h264
 If the dump plays correctly but the panel is corrupted, the remaining issue is
 TURZX stream compatibility or USB flow control. If the dump is corrupted too,
 the issue is in the V4L2 input conversion or encoder controls.
+
+Keep `--usb-h264-input-format nv12` for normal native hardware testing. RGB4 is
+only a diagnostic mode on the measured device: it is enumerated by V4L2 and
+byte-layout changes alter the corrupted colors, but dumps are ffprobe-invalid
+and the panel remains corrupted even when RGB4 stride and 32-pixel encoder
+alignment match.
 
 Manager autostart omits `--fps` by default so live launches follow
 `ClusterHudLiveFps` setting changes while running. Set `CLUSTER_AUTORUN_FPS`
