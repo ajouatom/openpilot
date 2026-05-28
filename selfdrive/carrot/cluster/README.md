@@ -28,11 +28,13 @@ right-side debug panel. Use `--route-overlay off` for performance tests that
 should match live rendering cost more closely.
 
 `--usb-codec h264` feeds RGBA frames to the Qualcomm V4L2 encoder wrapper in
-`system/loggerd/encoder`. H264 defaults to a landscape 1920x480 bitstream
-instead of the rotated JPEG/PNG upload geometry because the panel H264 decoder
-parses dimensions from the stream itself. The default backend is the native
-shared library at `system/loggerd/libcluster_h264_encoder_bridge.so`, which
-avoids the large RGBA stdin pipe and H264 stdout pipe used by the helper
+`system/loggerd/encoder`. H264 defaults to a landscape bitstream instead of the
+rotated JPEG/PNG upload geometry because the panel H264 decoder parses
+dimensions from the stream itself. H264 dimensions are rounded up to a 16-pixel
+multiple by default, so a 9.2-inch panel reports 1920x462 but encodes 1920x464
+to avoid decoder trouble with cropped macroblocks. The default backend is the
+native shared library at `system/loggerd/libcluster_h264_encoder_bridge.so`,
+which avoids the large RGBA stdin pipe and H264 stdout pipe used by the helper
 process. Build the native library and helper before manual testing:
 
 ```bash
@@ -65,10 +67,11 @@ scrambled or rotated, retry the same command with
 If the geometry is correct but colors are swapped, retry with
 `--usb-h264-rgb4-layout rgba` or `--usb-h264-rgb4-layout axrgb`. If RGB4 itself
 looks suspicious, use `--usb-h264-input-format nv12` as a slower but useful
-compatibility check. When `--fps` is omitted, H264 USB runs use
-`--usb-h264-fps 30` as the render cap. H264 chunks are no-ACK by default like
-JPEG frame uploads; use `--usb-h264-wait-ack` only for panels known to reply,
-and `--usb-h264-debug` to print early chunk details.
+compatibility check. Use `--usb-h264-align 1` only when deliberately testing the
+panel's exact reported size, such as 1920x462. When `--fps` is omitted, H264
+USB runs use `--usb-h264-fps 30` as the render cap. H264 chunks are no-ACK by
+default like JPEG frame uploads; use `--usb-h264-wait-ack` only for panels known
+to reply, and `--usb-h264-debug` to print early chunk details.
 
 Manager autostart omits `--fps` by default so live launches follow
 `ClusterHudLiveFps` setting changes while running. Set `CLUSTER_AUTORUN_FPS`

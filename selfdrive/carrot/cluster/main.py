@@ -35,6 +35,7 @@ from cluster_usb_pipeline import AsyncJpegUsbPipeline
 
 DEFAULT_FPS = 0.0
 DEFAULT_USB_BRIGHTNESS = 80
+DEFAULT_H264_DIMENSION_ALIGN = 16
 THEME_PARAM_POLL_SECONDS = 1.0
 FPS_PARAM_POLL_SECONDS = 1.0
 BRIGHTNESS_PARAM_POLL_SECONDS = 1.0
@@ -176,6 +177,12 @@ def build_rgba_color_test_pattern(width: int, height: int) -> bytearray:
     return bytearray(top_row * half_height + bottom_row * (height - half_height))
 
 
+def align_dimension(value: int, alignment: int) -> int:
+    if alignment <= 1:
+        return value
+    return ((value + alignment - 1) // alignment) * alignment
+
+
 def run_demo(
     duration_seconds: float | None,
     target_fps: float,
@@ -204,6 +211,7 @@ def run_demo(
     usb_h264_input_format: str,
     usb_h264_rgb4_layout: str,
     usb_h264_orientation: str,
+    usb_h264_align: int,
     usb_h264_chunk_size: int,
     usb_h264_wait_ack: bool,
     usb_h264_debug: bool,
@@ -284,6 +292,18 @@ def run_demo(
 
     frame_width = width or (usb_display.landscape_width if usb_display is not None else DESIGN_WIDTH)
     frame_height = height or (usb_display.landscape_height if usb_display is not None else DESIGN_HEIGHT)
+    if usb_codec == "h264":
+        aligned_width = align_dimension(frame_width, usb_h264_align)
+        aligned_height = align_dimension(frame_height, usb_h264_align)
+        if aligned_width != frame_width or aligned_height != frame_height:
+            print(
+                f"H264 USB output aligned render size from "
+                f"{frame_width}x{frame_height} to {aligned_width}x{aligned_height} "
+                f"(alignment={usb_h264_align})",
+                flush=True,
+            )
+            frame_width = aligned_width
+            frame_height = aligned_height
     h264_portrait_upload = usb_h264_orientation == "portrait"
     h264_width = frame_height if h264_portrait_upload else frame_width
     h264_height = frame_width if h264_portrait_upload else frame_height
@@ -768,6 +788,15 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--usb-h264-align",
+        type=int,
+        default=DEFAULT_H264_DIMENSION_ALIGN,
+        help=(
+            "Round H264 render/encoder dimensions up to this multiple. "
+            "Default 16 avoids non-macroblock-aligned streams such as 1920x462."
+        ),
+    )
+    parser.add_argument(
         "--usb-h264-chunk-size",
         type=int,
         default=0,
@@ -920,6 +949,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--usb-h264-gop must be greater than 0")
     if args.usb_h264_chunk_size < 0:
         parser.error("--usb-h264-chunk-size must be 0 or greater")
+    if args.usb_h264_align <= 0:
+        parser.error("--usb-h264-align must be greater than 0")
     if not args.usb_h264_bitrate:
         parser.error("--usb-h264-bitrate must not be empty")
     if not args.usb_h264_library:
@@ -1005,6 +1036,7 @@ def main() -> None:
             args.usb_h264_input_format,
             args.usb_h264_rgb4_layout,
             args.usb_h264_orientation,
+            args.usb_h264_align,
             args.usb_h264_chunk_size,
             args.usb_h264_wait_ack and not args.usb_h264_no_ack,
             args.usb_h264_debug,
