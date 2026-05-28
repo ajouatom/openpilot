@@ -380,11 +380,26 @@ void ClusterH264Encoder::set_controls() {
   for (const NamedControl &control : controls) {
     set_control(control.id, control.value, control.name);
   }
+  try_control(V4L2_CID_MPEG_VIDEO_REPEAT_SEQ_HEADER, 1, "repeat-seq-header");
+  try_control(
+      V4L2_CID_MPEG_VIDC_VIDEO_H264_VUI_TIMING_INFO,
+      V4L2_MPEG_VIDC_VIDEO_H264_VUI_TIMING_INFO_ENABLED,
+      "h264-vui-timing-info");
+  try_control(
+      V4L2_CID_MPEG_VIDC_VIDEO_H264_VUI_BITSTREAM_RESTRICT,
+      V4L2_MPEG_VIDC_VIDEO_H264_VUI_BITSTREAM_RESTRICT_ENABLED,
+      "h264-vui-bitstream-restrict");
 
   bool low_complexity_h264 = try_control(
       V4L2_CID_MPEG_VIDEO_H264_PROFILE,
-      V4L2_MPEG_VIDEO_H264_PROFILE_BASELINE,
-      "h264-profile-baseline");
+      V4L2_MPEG_VIDEO_H264_PROFILE_CONSTRAINED_BASELINE,
+      "h264-profile-constrained-baseline");
+  if (!low_complexity_h264) {
+    low_complexity_h264 = try_control(
+        V4L2_CID_MPEG_VIDEO_H264_PROFILE,
+        V4L2_MPEG_VIDEO_H264_PROFILE_BASELINE,
+        "h264-profile-baseline");
+  }
   if (low_complexity_h264) {
     low_complexity_h264 = try_control(
         V4L2_CID_MPEG_VIDEO_H264_ENTROPY_MODE,

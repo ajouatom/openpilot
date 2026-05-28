@@ -35,7 +35,7 @@ from cluster_usb_pipeline import AsyncJpegUsbPipeline
 
 DEFAULT_FPS = 0.0
 DEFAULT_USB_BRIGHTNESS = 80
-DEFAULT_H264_DIMENSION_ALIGN = 16
+DEFAULT_H264_DIMENSION_ALIGN = 1
 THEME_PARAM_POLL_SECONDS = 1.0
 FPS_PARAM_POLL_SECONDS = 1.0
 BRIGHTNESS_PARAM_POLL_SECONDS = 1.0
@@ -214,6 +214,9 @@ def run_demo(
     usb_h264_align: int,
     usb_h264_chunk_size: int,
     usb_h264_wait_ack: bool,
+    usb_h264_soft_ack: bool,
+    usb_h264_insert_aud: bool,
+    usb_h264_dump: str,
     usb_h264_debug: bool,
     usb_h264_test_pattern: bool,
     usb_frame_drain_attempts: int,
@@ -376,6 +379,9 @@ def run_demo(
                 usb_h264_rgb4_layout,
                 usb_h264_chunk_size,
                 usb_h264_wait_ack,
+                usb_h264_soft_ack,
+                usb_h264_insert_aud,
+                usb_h264_dump,
                 usb_h264_debug,
             )
             profile_stage = time.perf_counter()
@@ -781,10 +787,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--usb-h264-orientation",
         choices=("landscape", "portrait"),
-        default="landscape",
+        default="portrait",
         help=(
-            "H264 bitstream geometry. landscape encodes the rendered 1920x480 frame; "
-            "portrait matches the JPEG/PNG rotated 480x1920 upload path."
+            "H264 bitstream geometry. portrait matches the JPEG/PNG rotated upload path; "
+            "landscape encodes the rendered 1920x480 frame directly."
         ),
     )
     parser.add_argument(
@@ -793,7 +799,7 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_H264_DIMENSION_ALIGN,
         help=(
             "Round H264 render/encoder dimensions up to this multiple. "
-            "Default 16 avoids non-macroblock-aligned streams such as 1920x462."
+            "Default 1 preserves the panel's exact reported size."
         ),
     )
     parser.add_argument(
@@ -805,12 +811,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--usb-h264-no-ack",
         action="store_true",
-        help="Send TURZX H264 chunks without waiting for a response. Faster, but any dropped chunk corrupts the stream.",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--usb-h264-wait-ack",
         action="store_true",
-        help=argparse.SUPPRESS,
+        help="Wait for a TURZX response after each H264 chunk and fail on timeout.",
+    )
+    parser.add_argument(
+        "--usb-h264-soft-ack",
+        action="store_true",
+        help="Wait for TURZX H264 responses, but continue when the panel times out like the vendor video sender.",
+    )
+    parser.add_argument(
+        "--usb-h264-no-aud",
+        action="store_true",
+        help="Do not insert H264 access-unit delimiter NALs before native hardware encoder packets.",
+    )
+    parser.add_argument(
+        "--usb-h264-dump",
+        default="",
+        help="Write the outgoing H264 bytestream to this path for ffprobe/ffplay comparison.",
     )
     parser.add_argument(
         "--usb-h264-debug",
@@ -951,6 +972,10 @@ def parse_args() -> argparse.Namespace:
         parser.error("--usb-h264-chunk-size must be 0 or greater")
     if args.usb_h264_align <= 0:
         parser.error("--usb-h264-align must be greater than 0")
+    if args.usb_h264_wait_ack and args.usb_h264_no_ack:
+        parser.error("--usb-h264-wait-ack and --usb-h264-no-ack cannot be used together")
+    if args.usb_h264_soft_ack and args.usb_h264_no_ack:
+        parser.error("--usb-h264-soft-ack and --usb-h264-no-ack cannot be used together")
     if not args.usb_h264_bitrate:
         parser.error("--usb-h264-bitrate must not be empty")
     if not args.usb_h264_library:
@@ -1038,7 +1063,10 @@ def main() -> None:
             args.usb_h264_orientation,
             args.usb_h264_align,
             args.usb_h264_chunk_size,
-            args.usb_h264_wait_ack or not args.usb_h264_no_ack,
+            args.usb_h264_wait_ack or args.usb_h264_soft_ack,
+            args.usb_h264_soft_ack,
+            not args.usb_h264_no_aud,
+            args.usb_h264_dump,
             args.usb_h264_debug,
             args.usb_h264_test_pattern,
             args.usb_frame_drain_attempts,

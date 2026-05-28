@@ -20,6 +20,7 @@ DEFAULT_H264_DEVICE = "/dev/v4l/by-path/platform-aa00000.qcom_vidc-video-index1"
 
 NATIVE_INPUT_FORMATS = {"auto": 0, "rgb4": 1, "nv12": 2}
 NATIVE_RGB4_LAYOUTS = {"axrgb": 0, "rgba": 1, "bgra": 2}
+H264_AUD_NAL = b"\x00\x00\x00\x01\x09\xf0"
 NativePacketCallback = ctypes.CFUNCTYPE(
     None,
     ctypes.c_void_p,
@@ -49,6 +50,9 @@ class H264UsbPipeline:
         rgb4_layout: str,
         requested_chunk_size: int,
         wait_for_ack: bool,
+        soft_ack: bool,
+        insert_aud: bool,
+        dump_path: str,
         debug: bool,
     ) -> None:
         self.usb_display = usb_display
@@ -66,6 +70,10 @@ class H264UsbPipeline:
         self.rgb4_layout = rgb4_layout
         self.requested_chunk_size = max(0, int(requested_chunk_size))
         self.wait_for_ack = wait_for_ack
+        self.soft_ack = soft_ack
+        self.insert_aud = insert_aud
+        self.dump_path = dump_path
+        self._dump_file = None
         self.debug = debug
         self.chunk_size = 0
         self._chunks_sent = 0
@@ -127,6 +135,7 @@ class H264UsbPipeline:
         try:
             self.chunk_size = self.usb_display.start_h264_stream(self.requested_chunk_size)
             self._stream_started = True
+            self._open_dump_file()
         except Exception:
             self._close_native()
             raise
@@ -148,7 +157,8 @@ class H264UsbPipeline:
             f"bitrate={bitrate_bps} gop={self.gop} "
             f"input={input_name or self.input_format} stride={input_stride} "
             f"rgb4_layout={self.rgb4_layout} device={self.device_path} "
-            f"chunk_ack={'on' if self.wait_for_ack else 'off'}",
+            f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')} "
+            f"aud={'on' if self.insert_aud else 'off'}",
             flush=True,
         )
 
@@ -157,6 +167,7 @@ class H264UsbPipeline:
         command = self._helper_command(helper)
         self.chunk_size = self.usb_display.start_h264_stream(self.requested_chunk_size)
         self._stream_started = True
+        self._open_dump_file()
         self.backend_name = "helper"
         print(
             "Starting H264 USB helper hardware encoder: "
@@ -164,7 +175,8 @@ class H264UsbPipeline:
             f"bitrate={self.bitrate} gop={self.gop} "
             f"input={self.input_format} rgb4_layout={self.rgb4_layout} "
             f"device={self.device_path} "
-            f"chunk_ack={'on' if self.wait_for_ack else 'off'}",
+            f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')} "
+            f"aud={'native-only' if self.insert_aud else 'off'}",
             flush=True,
         )
         if self.debug:
@@ -180,6 +192,7 @@ class H264UsbPipeline:
         except Exception:
             self.usb_display.stop_h264_stream()
             self._stream_started = False
+            self._close_dump_file()
             raise
 
         self._stdout_thread = threading.Thread(
@@ -326,6 +339,32 @@ class H264UsbPipeline:
             except Exception as exc:
                 print(f"Warning: TURZX H264 stop command skipped: {exc}", flush=True)
             self._stream_started = False
+        self._close_dump_file()
+
+    def _open_dump_file(self) -> None:
+        if not self.dump_path:
+            return
+        dump_path = Path(self.dump_path)
+        if not dump_path.is_absolute():
+            dump_path = OPENPILOT_ROOT / dump_path
+        dump_path.parent.mkdir(parents=True, exist_ok=True)
+        self._dump_file = dump_path.open("wb")
+        print(f"Dumping H264 USB bytestream to {dump_path}", flush=True)
+
+    def _write_dump(self, chunk: bytes) -> None:
+        if self._dump_file is None:
+            return
+        self._dump_file.write(chunk)
+        self._dump_file.flush()
+
+    def _close_dump_file(self) -> None:
+        if self._dump_file is None:
+            return
+        try:
+            self._dump_file.close()
+        except Exception:
+            pass
+        self._dump_file = None
 
     def _resolve_library(self) -> str:
         path = Path(self.library_path)
@@ -437,8 +476,12 @@ class H264UsbPipeline:
         try:
             chunk_size = max(1, self.chunk_size)
             base = int(data)
-            for offset in range(0, int(size), chunk_size):
-                chunk = ctypes.string_at(base + offset, min(chunk_size, int(size) - offset))
+            packet = ctypes.string_at(base, int(size))
+            if self.insert_aud:
+                packet = H264_AUD_NAL + packet
+            self._write_dump(packet)
+            for offset in range(0, len(packet), chunk_size):
+                chunk = packet[offset:offset + chunk_size]
                 packet_queue.put(chunk, timeout=1.0)
         except queue.Full as exc:
             self._set_error(RuntimeError("native H264 USB sender queue is full"))
@@ -520,6 +563,7 @@ class H264UsbPipeline:
                 chunk = os.read(fd, chunk_size)
                 if not chunk:
                     return
+                self._write_dump(chunk)
                 self._send_h264_chunk(chunk, chunk_size, source="helper")
         except BaseException as exc:
             with self._condition:
@@ -553,13 +597,18 @@ class H264UsbPipeline:
         self._chunks_sent += 1
         if self.debug and (self._chunks_sent <= 5 or self._chunks_sent % 30 == 0):
             head = " ".join(f"{byte:02X}" for byte in chunk[:8])
+            ack_mode = "soft" if self.wait_for_ack and self.soft_ack else ("on" if self.wait_for_ack else "off")
             print(
                 f"H264 chunk {self._chunks_sent}: {source} {len(chunk)} bytes "
-                f"head={head} ack={'on' if self.wait_for_ack else 'off'}",
+                f"head={head} ack={ack_mode}",
                 flush=True,
             )
         profile_stage = time.perf_counter()
-        self.usb_display.send_h264_chunk(chunk, wait_for_ack=self.wait_for_ack)
+        self.usb_display.send_h264_chunk(
+            chunk,
+            wait_for_ack=self.wait_for_ack,
+            require_ack_response=not self.soft_ack,
+        )
         self._add_sample("usb_h264.send_chunk", profile_stage)
 
     def _read_stderr(self) -> None:

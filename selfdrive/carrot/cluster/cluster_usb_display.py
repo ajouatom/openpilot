@@ -400,6 +400,7 @@ class TuringUsbDisplay:
         *,
         is_last: bool = False,
         wait_for_ack: bool = True,
+        require_ack_response: bool = True,
     ) -> None:
         if self.dev is None:
             raise RuntimeError("USB display is not open")
@@ -407,8 +408,17 @@ class TuringUsbDisplay:
             return
         try:
             if wait_for_ack:
-                response = self._send_h264_chunk_ack(chunk, is_last=is_last)
-                self._check_frame_response(response)
+                try:
+                    response = self._send_h264_chunk_ack(chunk, is_last=is_last)
+                except Exception:
+                    if require_ack_response:
+                        raise
+                    self._h264_flow_control(target_queue_depth=2)
+                    return
+                if require_ack_response:
+                    self._check_frame_response(response)
+                else:
+                    self._h264_flow_control(target_queue_depth=3)
             else:
                 self._send_h264_chunk_no_ack(chunk, is_last=is_last, drain_input=not self.fast_write)
         except Exception as exc:
@@ -707,6 +717,22 @@ class TuringUsbDisplay:
                 return response
             except Exception as exc:
                 raise RuntimeError("TURZX USB H264 chunk timed out") from exc
+
+    def _h264_flow_control(self, *, target_queue_depth: int, max_attempts: int = 8) -> None:
+        for _ in range(max_attempts):
+            try:
+                response = self._send_command(
+                    self._cmd_get_stream_status,
+                    "h264-stream-status",
+                    expect_response=True,
+                    log=False,
+                )
+            except Exception:
+                time.sleep(0.05)
+                return
+            if not response or len(response) <= 8 or response[8] <= target_queue_depth:
+                return
+            time.sleep(0.05)
 
     def _send_h264_chunk_no_ack(self, chunk: bytes, *, is_last: bool, drain_input: bool) -> None:
         if self._ep_out is None:

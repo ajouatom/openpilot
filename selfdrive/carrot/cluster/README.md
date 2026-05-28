@@ -28,14 +28,14 @@ right-side debug panel. Use `--route-overlay off` for performance tests that
 should match live rendering cost more closely.
 
 `--usb-codec h264` feeds RGBA frames to the Qualcomm V4L2 encoder wrapper in
-`system/loggerd/encoder`. H264 defaults to a landscape bitstream instead of the
-rotated JPEG/PNG upload geometry because the panel H264 decoder parses
-dimensions from the stream itself. H264 dimensions are rounded up to a 16-pixel
-multiple by default, so a 9.2-inch panel reports 1920x462 but encodes 1920x464
-to avoid decoder trouble with cropped macroblocks. The default backend is the
-native shared library at `system/loggerd/libcluster_h264_encoder_bridge.so`,
-which avoids the large RGBA stdin pipe and H264 stdout pipe used by the helper
-process. Build the native library and helper before manual testing:
+`system/loggerd/encoder`. H264 defaults to the same exact portrait upload
+geometry used by the working JPEG/PNG and earlier ffmpeg H264 paths. For a
+9.2-inch panel that means a 462x1920 H264 stream, with no 16-pixel render-size
+padding unless `--usb-h264-align 16` is passed explicitly. The default backend
+is the native shared library at
+`system/loggerd/libcluster_h264_encoder_bridge.so`, which avoids the large RGBA
+stdin pipe and H264 stdout pipe used by the helper process. Build the native
+library and helper before manual testing:
 
 ```bash
 scons system/loggerd/libcluster_h264_encoder_bridge.so
@@ -51,9 +51,9 @@ The default V4L2 device is
 `auto` prefers RGB4 when the device reports it, and the default RGB4 byte
 layout is `bgra`, matching the common little-endian memory order for V4L2
 `RGB4`. The cluster H264 wrapper emits inline SPS/PPS on the first video packet
-and on IDR frames, and uses Baseline/CAVLC when the V4L2 driver accepts it. If
-the driver rejects that lower-complexity mode, it falls back to the existing
-loggerd-compatible High/CABAC controls.
+and on IDR frames, asks for constrained Baseline/CAVLC plus VUI timing when the
+V4L2 driver accepts those controls, and falls back to the existing
+loggerd-compatible High/CABAC controls if needed.
 
 For a quick H264 transport smoke test, run:
 
@@ -61,18 +61,29 @@ For a quick H264 transport smoke test, run:
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug
 ```
 
-The panel should show red/green/blue/white quadrants. If the picture is
-scrambled or rotated, retry the same command with
-`--usb-h264-orientation portrait` to match the older 480x1920 upload geometry.
-If the geometry is correct but colors are swapped, retry with
-`--usb-h264-rgb4-layout rgba` or `--usb-h264-rgb4-layout axrgb`. If RGB4 itself
-looks suspicious, use `--usb-h264-input-format nv12` as a slower but useful
-compatibility check. Use `--usb-h264-align 1` only when deliberately testing the
-panel's exact reported size, such as 1920x462. When `--fps` is omitted, H264
-USB runs use `--usb-h264-fps 30` as the render cap. H264 chunks wait for a TURZX
-response by default because a single dropped video chunk corrupts following
-frames. Use `--usb-h264-no-ack` only for throughput tests after ACK mode is
-visually stable, and `--usb-h264-debug` to print early chunk details.
+The panel should show red/green/blue/white quadrants. If RGB4 colors are
+swapped, retry with `--usb-h264-rgb4-layout rgba` or
+`--usb-h264-rgb4-layout axrgb`. If RGB4 itself looks suspicious, use
+`--usb-h264-input-format nv12` as a slower but useful compatibility check.
+`--usb-h264-orientation landscape` tests direct 1920x462 output, while
+`--usb-h264-align 16` deliberately tests macroblock-aligned output such as
+1920x464. When `--fps` is omitted, H264 USB runs use `--usb-h264-fps 30` as the
+render cap. H264 chunks are no-ACK by default like JPEG frame uploads; use
+`--usb-h264-wait-ack` for strict response diagnostics, or
+`--usb-h264-soft-ack` to mimic the vendor video sender's retry/status polling
+without failing the run. `--usb-h264-debug` prints early chunk details.
+
+When the panel still shows a corrupted picture, dump the outgoing stream and
+compare it separately:
+
+```bash
+python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug --usb-h264-input-format nv12 --usb-h264-dump /tmp/cluster_hw_nv12.h264
+ffprobe -show_streams /tmp/cluster_hw_nv12.h264
+```
+
+If the dump plays correctly but the panel is corrupted, the remaining issue is
+TURZX stream compatibility or USB flow control. If the dump is corrupted too,
+the issue is in the V4L2 input conversion or encoder controls.
 
 Manager autostart omits `--fps` by default so live launches follow
 `ClusterHudLiveFps` setting changes while running. Set `CLUSTER_AUTORUN_FPS`
