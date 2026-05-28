@@ -5,6 +5,7 @@ import ctypes
 import os
 from pathlib import Path
 import queue
+import shutil
 import subprocess
 import threading
 import time
@@ -17,6 +18,8 @@ OPENPILOT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_H264_LIBRARY = OPENPILOT_ROOT / "system" / "loggerd" / "libcluster_h264_encoder_bridge.so"
 DEFAULT_H264_HELPER = OPENPILOT_ROOT / "system" / "loggerd" / "cluster_h264_encoder_cli"
 DEFAULT_H264_DEVICE = "/dev/v4l/by-path/platform-aa00000.qcom_vidc-video-index1"
+DEFAULT_H264_FFMPEG = "ffmpeg"
+DEFAULT_H264_FFMPEG_ENCODER = "auto"
 
 NATIVE_INPUT_FORMATS = {"auto": 0, "rgb4": 1, "nv12": 2}
 NATIVE_RGB4_LAYOUTS = {"axrgb": 0, "rgba": 1, "bgra": 2}
@@ -45,6 +48,8 @@ class H264UsbPipeline:
         backend: str,
         library_path: str,
         helper_path: str,
+        ffmpeg_path: str,
+        ffmpeg_encoder: str,
         device_path: str,
         input_format: str,
         rgb4_layout: str,
@@ -65,6 +70,10 @@ class H264UsbPipeline:
         self.backend_name = backend
         self.library_path = library_path
         self.helper_path = helper_path
+        self.ffmpeg_path = ffmpeg_path
+        self.ffmpeg_encoder_request = ffmpeg_encoder
+        self.ffmpeg_encoder_name = ffmpeg_encoder
+        self.ffmpeg_muxer_name = ""
         self.device_path = device_path
         self.input_format = input_format
         self.rgb4_layout = rgb4_layout
@@ -94,6 +103,10 @@ class H264UsbPipeline:
         self._stderr_tail: deque[str] = deque(maxlen=20)
 
     def start(self) -> None:
+        if self.backend_request == "ffmpeg":
+            self._start_ffmpeg()
+            return
+
         if self.backend_request in ("auto", "native"):
             try:
                 self._start_native()
@@ -104,6 +117,8 @@ class H264UsbPipeline:
                 print(f"Warning: native H264 encoder unavailable, falling back to helper: {exc}", flush=True)
                 self._close_native()
 
+        if self.backend_request not in ("auto", "helper"):
+            raise RuntimeError(f"unsupported H264 backend: {self.backend_request}")
         self._start_helper()
 
     def _start_native(self) -> None:
@@ -208,6 +223,51 @@ class H264UsbPipeline:
         self._stdout_thread.start()
         self._stderr_thread.start()
 
+    def _start_ffmpeg(self) -> None:
+        ffmpeg = self._ffmpeg_executable()
+        self.ffmpeg_encoder_name = self._resolve_ffmpeg_encoder(ffmpeg)
+        self.ffmpeg_muxer_name = self._resolve_ffmpeg_output_muxer(ffmpeg)
+        command = self._ffmpeg_command(ffmpeg, self.ffmpeg_encoder_name, self.ffmpeg_muxer_name)
+        self.chunk_size = self.usb_display.start_h264_stream(self.requested_chunk_size)
+        self._stream_started = True
+        self._open_dump_file()
+        self.backend_name = "ffmpeg"
+        print(
+            "Starting H264 USB ffmpeg encoder: "
+            f"{self.ffmpeg_encoder_name} {self.width}x{self.height}@{self.fps} "
+            f"bitrate={self.bitrate} gop={self.gop} muxer={self.ffmpeg_muxer_name} "
+            f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')}",
+            flush=True,
+        )
+        if self.debug:
+            print(f"H264 ffmpeg command: {' '.join(command)}", flush=True)
+        try:
+            self._proc = subprocess.Popen(
+                command,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                bufsize=0,
+            )
+        except Exception:
+            self.usb_display.stop_h264_stream()
+            self._stream_started = False
+            self._close_dump_file()
+            raise
+
+        self._stdout_thread = threading.Thread(
+            target=self._read_stdout,
+            name="cluster-usb-h264-ffmpeg-out",
+            daemon=True,
+        )
+        self._stderr_thread = threading.Thread(
+            target=self._read_stderr,
+            name="cluster-usb-h264-ffmpeg-err",
+            daemon=True,
+        )
+        self._stdout_thread.start()
+        self._stderr_thread.start()
+
     def submit_rgba(self, rgba: Any, width: int, height: int) -> None:
         self.check_error()
         if width != self.width or height != self.height:
@@ -231,7 +291,7 @@ class H264UsbPipeline:
             self._write_all(proc.stdin.fileno(), rgba, self.width * self.height * 4)
         except BrokenPipeError as exc:
             self._set_error(exc)
-            raise RuntimeError(self._error_text("H264 helper encoder pipe closed")) from exc
+            raise RuntimeError(self._error_text(f"H264 {self.backend_name} encoder pipe closed")) from exc
         except Exception as exc:
             self._set_error(exc)
             raise
@@ -291,7 +351,7 @@ class H264UsbPipeline:
         if proc is not None and not closing:
             return_code = proc.poll()
             if return_code is not None:
-                raise RuntimeError(self._error_text(f"H264 helper encoder exited with code {return_code}"))
+                raise RuntimeError(self._error_text(f"H264 {self.backend_name} encoder exited with code {return_code}"))
 
     def close(self) -> None:
         with self._condition:
@@ -414,6 +474,130 @@ class H264UsbPipeline:
         ]
         if self.debug:
             command.append("--debug")
+        return command
+
+    def _ffmpeg_executable(self) -> str:
+        path = Path(self.ffmpeg_path)
+        if path.exists():
+            return str(path)
+        found = shutil.which(self.ffmpeg_path)
+        if found is None:
+            raise RuntimeError(f"ffmpeg executable not found: {self.ffmpeg_path}")
+        return found
+
+    def _available_ffmpeg_encoders(self, ffmpeg: str) -> set[str]:
+        try:
+            result = subprocess.run(
+                [ffmpeg, "-hide_banner", "-encoders"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5.0,
+            )
+        except Exception:
+            return set()
+        names: set[str] = set()
+        for line in result.stdout.splitlines():
+            fields = line.split()
+            if len(fields) >= 2 and fields[0].startswith("V"):
+                names.add(fields[1])
+        return names
+
+    def _available_ffmpeg_muxers(self, ffmpeg: str) -> set[str]:
+        try:
+            result = subprocess.run(
+                [ffmpeg, "-hide_banner", "-muxers"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5.0,
+            )
+        except Exception:
+            return set()
+        names: set[str] = set()
+        for line in result.stdout.splitlines():
+            fields = line.split()
+            if len(fields) >= 2 and fields[0].endswith("E"):
+                names.add(fields[1])
+        return names
+
+    def _resolve_ffmpeg_encoder(self, ffmpeg: str) -> str:
+        if self.ffmpeg_encoder_request != "auto":
+            return self.ffmpeg_encoder_request
+
+        encoders = self._available_ffmpeg_encoders(ffmpeg)
+        h264_encoders = sorted(name for name in encoders if "264" in name)
+        print(f"ffmpeg H264 encoders visible: {', '.join(h264_encoders) or 'none'}", flush=True)
+        for candidate in ("h264_v4l2m2m", "h264_omx", "libx264"):
+            if candidate in encoders:
+                return candidate
+        return "libx264"
+
+    def _resolve_ffmpeg_output_muxer(self, ffmpeg: str) -> str:
+        muxers = self._available_ffmpeg_muxers(ffmpeg)
+        if self.debug:
+            h264_muxers = sorted(name for name in muxers if name in ("h264", "rawvideo"))
+            print(f"ffmpeg H264 stdout muxers visible: {', '.join(h264_muxers) or 'none'}", flush=True)
+        for candidate in ("h264", "rawvideo"):
+            if candidate in muxers:
+                return candidate
+        raise RuntimeError("ffmpeg does not provide a usable raw H264 stdout muxer")
+
+    def _ffmpeg_command(self, ffmpeg: str, encoder: str, output_muxer: str) -> list[str]:
+        command = [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "warning",
+            "-fflags",
+            "nobuffer",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "rgba",
+            "-s:v",
+            f"{self.width}x{self.height}",
+            "-framerate",
+            str(self.fps),
+            "-i",
+            "pipe:0",
+            "-an",
+            "-c:v",
+            encoder,
+            "-b:v",
+            self.bitrate,
+            "-maxrate",
+            self.bitrate,
+            "-bufsize",
+            self.bitrate,
+            "-g",
+            str(self.gop),
+            "-bf",
+            "0",
+            "-flags",
+            "+low_delay",
+        ]
+        if encoder == "libx264":
+            command.extend(
+                [
+                    "-preset",
+                    "ultrafast",
+                    "-tune",
+                    "zerolatency",
+                    "-profile:v",
+                    "baseline",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-x264-params",
+                    f"keyint={self.gop}:min-keyint={self.gop}:scenecut=0:repeat-headers=1",
+                ]
+            )
+        elif encoder == "h264_v4l2m2m":
+            command.extend(["-pix_fmt", "nv12"])
+        else:
+            command.extend(["-pix_fmt", "yuv420p"])
+
+        command.extend(["-flush_packets", "1", "-f", output_muxer, "pipe:1"])
         return command
 
     def _configure_native_library(self, lib: ctypes.CDLL) -> None:
@@ -564,7 +748,7 @@ class H264UsbPipeline:
                 if not chunk:
                     return
                 self._write_dump(chunk)
-                self._send_h264_chunk(chunk, chunk_size, source="helper")
+                self._send_h264_chunk(chunk, chunk_size, source=self.backend_name)
         except BaseException as exc:
             with self._condition:
                 if not self._closing:

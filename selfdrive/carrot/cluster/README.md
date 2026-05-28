@@ -18,6 +18,7 @@ python selfdrive/carrot/cluster_run.py --output usb --live-no-can
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec jpeg --usb-jpeg-quality 68
 python selfdrive/carrot/cluster_run.py --output usb --input route --route route --route-overlay off --usb-codec h264 --usb-h264-bitrate 6M --usb-h264-fps 30 --profile-render
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug
+python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-backend ffmpeg --usb-h264-ffmpeg-encoder libx264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug
 python selfdrive/carrot/cluster_run.py --output usb --fps 10 --usb-jpeg-quality 55 --route-overlay off
 python selfdrive/carrot/cluster_run.py --output usb --profile-render --profile-interval 2
 ```
@@ -42,9 +43,12 @@ scons system/loggerd/libcluster_h264_encoder_bridge.so
 scons system/loggerd/cluster_h264_encoder_cli
 ```
 
-Use `--usb-h264-backend helper` to compare the fallback helper process path, or
+Use `--usb-h264-backend helper` to compare the fallback helper process path,
 `--usb-h264-backend native` to fail immediately if the shared library is not
-available. `--usb-h264-backend auto` is the default and falls back to helper.
+available, or `--usb-h264-backend ffmpeg` to compare the earlier software
+ffmpeg/libx264 path against the hardware encoder while keeping the same raylib
+readback and TURZX USB transport. `--usb-h264-backend auto` is the default and
+falls back to helper.
 
 The default V4L2 device is
 `/dev/v4l/by-path/platform-aa00000.qcom_vidc-video-index1`. Input format
@@ -53,7 +57,9 @@ layout is `bgra`, matching the common little-endian memory order for V4L2
 `RGB4`. The cluster H264 wrapper emits inline SPS/PPS on the first video packet
 and on IDR frames, asks for constrained Baseline/CAVLC plus VUI timing when the
 V4L2 driver accepts those controls, and falls back to the existing
-loggerd-compatible High/CABAC controls if needed.
+loggerd-compatible High/CABAC controls if needed. Access-unit delimiter NALs
+are off by default because some simple panel decoders expect SPS/PPS or slices
+as the first NAL; use `--usb-h264-insert-aud` only as a compatibility test.
 
 For a quick H264 transport smoke test, run:
 
@@ -72,6 +78,13 @@ render cap. H264 chunks are no-ACK by default like JPEG frame uploads; use
 `--usb-h264-wait-ack` for strict response diagnostics, or
 `--usb-h264-soft-ack` to mimic the vendor video sender's retry/status polling
 without failing the run. `--usb-h264-debug` prints early chunk details.
+
+To compare the known-good ffmpeg path without changing the rest of the cluster
+pipeline, run:
+
+```bash
+python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-backend ffmpeg --usb-h264-ffmpeg-encoder libx264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug
+```
 
 When the panel still shows a corrupted picture, dump the outgoing stream and
 compare it separately:

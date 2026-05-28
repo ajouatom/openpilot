@@ -23,7 +23,14 @@ from cluster_config import (
 )
 from cluster_gamepad import DualSenseSimulator
 from cluster_git_status import GitBranchStatusProvider
-from cluster_h264_pipeline import DEFAULT_H264_DEVICE, DEFAULT_H264_HELPER, DEFAULT_H264_LIBRARY, H264UsbPipeline
+from cluster_h264_pipeline import (
+    DEFAULT_H264_DEVICE,
+    DEFAULT_H264_FFMPEG,
+    DEFAULT_H264_FFMPEG_ENCODER,
+    DEFAULT_H264_HELPER,
+    DEFAULT_H264_LIBRARY,
+    H264UsbPipeline,
+)
 from cluster_live import OpenpilotLiveSource
 from cluster_models import RouteOverlay, SimulatorInput
 from cluster_profile import GcProfileHook, ProfileReporter, freeze_gc_after_init
@@ -207,6 +214,8 @@ def run_demo(
     usb_h264_backend: str,
     usb_h264_library: str,
     usb_h264_helper: str,
+    usb_h264_ffmpeg: str,
+    usb_h264_ffmpeg_encoder: str,
     usb_h264_device: str,
     usb_h264_input_format: str,
     usb_h264_rgb4_layout: str,
@@ -374,6 +383,8 @@ def run_demo(
                 usb_h264_backend,
                 usb_h264_library,
                 usb_h264_helper,
+                usb_h264_ffmpeg,
+                usb_h264_ffmpeg_encoder,
                 usb_h264_device,
                 usb_h264_input_format,
                 usb_h264_rgb4_layout,
@@ -747,9 +758,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--usb-h264-backend",
-        choices=("auto", "native", "helper"),
+        choices=("auto", "native", "helper", "ffmpeg"),
         default="auto",
-        help="H264 encoder bridge. auto uses the native shared library and falls back to the helper process.",
+        help="H264 encoder backend. auto uses the native shared library and falls back to the helper process.",
     )
     parser.add_argument(
         "--usb-h264-library",
@@ -765,6 +776,19 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Fallback hardware H264 helper executable for --usb-codec h264. "
             f"Default: {DEFAULT_H264_HELPER}."
+        ),
+    )
+    parser.add_argument(
+        "--usb-h264-ffmpeg",
+        default=DEFAULT_H264_FFMPEG,
+        help=f"ffmpeg executable path/name for --usb-h264-backend ffmpeg. Default: {DEFAULT_H264_FFMPEG}.",
+    )
+    parser.add_argument(
+        "--usb-h264-ffmpeg-encoder",
+        default=DEFAULT_H264_FFMPEG_ENCODER,
+        help=(
+            "ffmpeg H264 encoder for --usb-h264-backend ffmpeg. "
+            "auto prefers h264_v4l2m2m, then h264_omx, then libx264."
         ),
     )
     parser.add_argument(
@@ -826,7 +850,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--usb-h264-no-aud",
         action="store_true",
-        help="Do not insert H264 access-unit delimiter NALs before native hardware encoder packets.",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--usb-h264-insert-aud",
+        action="store_true",
+        help="Insert H264 access-unit delimiter NALs before native hardware encoder packets for decoder compatibility tests.",
     )
     parser.add_argument(
         "--usb-h264-dump",
@@ -982,6 +1011,10 @@ def parse_args() -> argparse.Namespace:
         parser.error("--usb-h264-library must not be empty")
     if not args.usb_h264_helper:
         parser.error("--usb-h264-helper must not be empty")
+    if not args.usb_h264_ffmpeg:
+        parser.error("--usb-h264-ffmpeg must not be empty")
+    if not args.usb_h264_ffmpeg_encoder:
+        parser.error("--usb-h264-ffmpeg-encoder must not be empty")
     if not args.usb_h264_device:
         parser.error("--usb-h264-device must not be empty")
     if args.usb_frame_drain_attempts < 0 or args.usb_fast_drain_attempts < 0:
@@ -1057,6 +1090,8 @@ def main() -> None:
             args.usb_h264_backend,
             args.usb_h264_library,
             args.usb_h264_helper,
+            args.usb_h264_ffmpeg,
+            args.usb_h264_ffmpeg_encoder,
             args.usb_h264_device,
             args.usb_h264_input_format,
             args.usb_h264_rgb4_layout,
@@ -1065,7 +1100,7 @@ def main() -> None:
             args.usb_h264_chunk_size,
             args.usb_h264_wait_ack or args.usb_h264_soft_ack,
             args.usb_h264_soft_ack,
-            not args.usb_h264_no_aud,
+            args.usb_h264_insert_aud and not args.usb_h264_no_aud,
             args.usb_h264_dump,
             args.usb_h264_debug,
             args.usb_h264_test_pattern,
