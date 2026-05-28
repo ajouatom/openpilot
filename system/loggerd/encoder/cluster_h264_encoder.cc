@@ -106,6 +106,9 @@ void ClusterH264Encoder::validate_config() const {
   if (config_.gop <= 0) {
     throw std::runtime_error("cluster H264 encoder gop must be positive");
   }
+  if (config_.slice_max_bytes < 0) {
+    throw std::runtime_error("cluster H264 encoder slice max bytes must be 0 or greater");
+  }
   if (config_.device_path.empty()) {
     throw std::runtime_error("cluster H264 encoder device path must not be empty");
   }
@@ -375,11 +378,48 @@ void ClusterH264Encoder::set_controls() {
     { .id = V4L2_CID_MPEG_VIDEO_H264_LOOP_FILTER_MODE, .value = 0, .name = "h264-loop-filter-mode" },
     { .id = V4L2_CID_MPEG_VIDEO_H264_LOOP_FILTER_ALPHA, .value = 0, .name = "h264-loop-filter-alpha" },
     { .id = V4L2_CID_MPEG_VIDEO_H264_LOOP_FILTER_BETA, .value = 0, .name = "h264-loop-filter-beta" },
-    { .id = V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE, .value = 0, .name = "multi-slice-mode" },
   };
   for (const NamedControl &control : controls) {
     set_control(control.id, control.value, control.name);
   }
+
+  if (config_.slice_max_bytes > 0) {
+    bool slice_mode_ok = try_control(
+        V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE,
+        V4L2_MPEG_VIDEO_MULTI_SICE_MODE_MAX_BYTES,
+        "multi-slice-mode-max-bytes");
+    bool slice_bytes_ok = try_control(
+        V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MAX_BYTES,
+        config_.slice_max_bytes,
+        "multi-slice-max-bytes");
+    if (!slice_mode_ok || !slice_bytes_ok) {
+      slice_bytes_ok = try_control(
+          V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MAX_BYTES,
+          config_.slice_max_bytes,
+          "multi-slice-max-bytes");
+      slice_mode_ok = try_control(
+          V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE,
+          V4L2_MPEG_VIDEO_MULTI_SICE_MODE_MAX_BYTES,
+          "multi-slice-mode-max-bytes");
+    }
+    if (slice_mode_ok && slice_bytes_ok) {
+      try_control(V4L2_CID_MPEG_VIDEO_MULTI_SLICE_DELIVERY_MODE, 1, "multi-slice-delivery-mode");
+      if (config_.debug) {
+        LOGD("cluster H264 V4L2 multi-slice max_bytes=%d", config_.slice_max_bytes);
+      }
+    } else {
+      try_control(V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE, V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_SINGLE, "multi-slice-mode-single");
+      if (config_.debug) {
+        LOGW("cluster H264 V4L2 multi-slice max-bytes unavailable, using single-slice output");
+      }
+    }
+  } else {
+    try_control(V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE, V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_SINGLE, "multi-slice-mode-single");
+    if (config_.debug) {
+      LOGD("cluster H264 V4L2 multi-slice disabled");
+    }
+  }
+
   try_control(V4L2_CID_MPEG_VIDEO_REPEAT_SEQ_HEADER, 1, "repeat-seq-header");
   try_control(
       V4L2_CID_MPEG_VIDC_VIDEO_H264_VUI_TIMING_INFO,

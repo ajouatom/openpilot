@@ -29,6 +29,7 @@ from cluster_h264_pipeline import (
     DEFAULT_H264_FFMPEG_ENCODER,
     DEFAULT_H264_HELPER,
     DEFAULT_H264_LIBRARY,
+    DEFAULT_H264_SLICE_MAX_BYTES,
     H264UsbPipeline,
 )
 from cluster_live import OpenpilotLiveSource
@@ -219,6 +220,7 @@ def run_demo(
     usb_h264_device: str,
     usb_h264_input_format: str,
     usb_h264_rgb4_layout: str,
+    usb_h264_slice_max_bytes: int,
     usb_h264_orientation: str,
     usb_h264_align: int,
     usb_h264_chunk_size: int,
@@ -389,6 +391,7 @@ def run_demo(
                 usb_h264_device,
                 usb_h264_input_format,
                 usb_h264_rgb4_layout,
+                usb_h264_slice_max_bytes,
                 usb_h264_chunk_size,
                 usb_h264_wait_ack,
                 usb_h264_soft_ack,
@@ -814,6 +817,15 @@ def parse_args() -> argparse.Namespace:
         help="Byte layout used when feeding RGBA readback into V4L2 RGB4 input.",
     )
     parser.add_argument(
+        "--usb-h264-slice-max-bytes",
+        type=int,
+        default=DEFAULT_H264_SLICE_MAX_BYTES,
+        help=(
+            "Hardware V4L2 multi-slice max bytes. Lower values produce smaller H264 NALs; "
+            "0 disables multi-slice. Default: %(default)s."
+        ),
+    )
+    parser.add_argument(
         "--usb-h264-orientation",
         choices=("landscape", "portrait"),
         default="portrait",
@@ -1011,6 +1023,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--usb-h264-gop must be greater than 0")
     if args.usb_h264_chunk_size < 0:
         parser.error("--usb-h264-chunk-size must be 0 or greater")
+    if args.usb_h264_slice_max_bytes < 0:
+        parser.error("--usb-h264-slice-max-bytes must be 0 or greater")
     if args.usb_h264_align <= 0:
         parser.error("--usb-h264-align must be greater than 0")
     if args.usb_h264_wait_ack and args.usb_h264_no_ack:
@@ -1107,6 +1121,7 @@ def main() -> None:
             args.usb_h264_device,
             args.usb_h264_input_format,
             args.usb_h264_rgb4_layout,
+            args.usb_h264_slice_max_bytes,
             args.usb_h264_orientation,
             args.usb_h264_align,
             args.usb_h264_chunk_size,

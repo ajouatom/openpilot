@@ -20,6 +20,7 @@ DEFAULT_H264_HELPER = OPENPILOT_ROOT / "system" / "loggerd" / "cluster_h264_enco
 DEFAULT_H264_DEVICE = "/dev/v4l/by-path/platform-aa00000.qcom_vidc-video-index1"
 DEFAULT_H264_FFMPEG = "ffmpeg"
 DEFAULT_H264_FFMPEG_ENCODER = "libx264"
+DEFAULT_H264_SLICE_MAX_BYTES = 4096
 
 NATIVE_INPUT_FORMATS = {"auto": 0, "rgb4": 1, "nv12": 2}
 NATIVE_RGB4_LAYOUTS = {"axrgb": 0, "rgba": 1, "bgra": 2}
@@ -82,6 +83,8 @@ def _h264_packet_summary(data: bytes, max_nals: int = 6) -> str:
     parts: list[str] = []
     sps_parts: list[str] = []
     nals = _h264_nals(data)
+    largest_name = ""
+    largest_size = 0
     for _, nal_start, nal_end in nals[:max_nals]:
         nal = data[nal_start:nal_end]
         nal_type = nal[0] & 0x1F
@@ -91,11 +94,18 @@ def _h264_packet_summary(data: bytes, max_nals: int = 6) -> str:
             sps_parts.append(
                 f"profile=0x{nal[1]:02X} constraints=0x{nal[2]:02X} level=0x{nal[3]:02X}"
             )
+    for _, nal_start, nal_end in nals:
+        nal = data[nal_start:nal_end]
+        nal_size = len(nal)
+        if nal_size > largest_size:
+            largest_size = nal_size
+            largest_name = H264_NAL_NAMES.get(nal[0] & 0x1F, f"NAL{nal[0] & 0x1F}")
     if len(nals) > max_nals:
         parts.append(f"+{len(nals) - max_nals}")
     if not parts:
         return "nals=none"
     summary = "nals=" + ",".join(parts)
+    summary += f" nal_count={len(nals)} max={largest_name}:{largest_size}"
     if sps_parts:
         summary += " " + " ".join(f"sps[{part}]" for part in sps_parts)
     return summary
@@ -139,6 +149,7 @@ class H264UsbPipeline:
         device_path: str,
         input_format: str,
         rgb4_layout: str,
+        slice_max_bytes: int,
         requested_chunk_size: int,
         wait_for_ack: bool,
         soft_ack: bool,
@@ -164,6 +175,7 @@ class H264UsbPipeline:
         self.device_path = device_path
         self.input_format = input_format
         self.rgb4_layout = rgb4_layout
+        self.slice_max_bytes = max(0, int(slice_max_bytes))
         self.requested_chunk_size = max(0, int(requested_chunk_size))
         self.wait_for_ack = wait_for_ack
         self.soft_ack = soft_ack
@@ -232,6 +244,7 @@ class H264UsbPipeline:
         self._native_lib = lib
         self._native_handle = handle
         self._native_callback = NativePacketCallback(self._native_packet_callback)
+        self._set_native_slice_max_bytes(lib, handle)
 
         if lib.cluster_h264_encoder_bridge_open(handle) != 0:
             raise RuntimeError(self._native_error_text("native H264 encoder open failed"))
@@ -259,6 +272,7 @@ class H264UsbPipeline:
             "Starting H264 USB native hardware encoder: "
             f"{self.width}x{self.height}@{self.fps} "
             f"bitrate={bitrate_bps} gop={self.gop} "
+            f"slice_max={self.slice_max_bytes} "
             f"input={input_name or self.input_format} stride={input_stride} "
             f"rgb4_layout={self.rgb4_layout} device={self.device_path} "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')} "
@@ -278,6 +292,7 @@ class H264UsbPipeline:
             "Starting H264 USB helper hardware encoder: "
             f"{self.width}x{self.height}@{self.fps} "
             f"bitrate={self.bitrate} gop={self.gop} "
+            f"slice_max={self.slice_max_bytes} "
             f"input={self.input_format} rgb4_layout={self.rgb4_layout} "
             f"device={self.device_path} "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')} "
@@ -575,6 +590,8 @@ class H264UsbPipeline:
             self.input_format,
             "--rgb4-layout",
             self.rgb4_layout,
+            "--slice-max-bytes",
+            str(self.slice_max_bytes),
         ]
         if self.debug:
             command.append("--debug")
@@ -745,6 +762,26 @@ class H264UsbPipeline:
         lib.cluster_h264_encoder_bridge_input_format_name.restype = ctypes.c_char_p
         lib.cluster_h264_encoder_bridge_input_stride.argtypes = [ctypes.c_void_p]
         lib.cluster_h264_encoder_bridge_input_stride.restype = ctypes.c_size_t
+        try:
+            set_slice_max = lib.cluster_h264_encoder_bridge_set_slice_max_bytes
+        except AttributeError:
+            return
+        set_slice_max.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        set_slice_max.restype = ctypes.c_int
+
+    def _set_native_slice_max_bytes(self, lib: ctypes.CDLL, handle: int) -> None:
+        try:
+            set_slice_max = lib.cluster_h264_encoder_bridge_set_slice_max_bytes
+        except AttributeError:
+            if self.slice_max_bytes and self.debug:
+                print(
+                    "Warning: native H264 library does not expose slice max-byte control; rebuild "
+                    "system/loggerd/libcluster_h264_encoder_bridge.so",
+                    flush=True,
+                )
+            return
+        if set_slice_max(handle, self.slice_max_bytes) != 0:
+            raise RuntimeError(self._native_error_text("native H264 slice max-byte setup failed"))
 
     def _native_packet_callback(
         self,

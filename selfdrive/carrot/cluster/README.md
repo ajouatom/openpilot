@@ -17,7 +17,7 @@ python selfdrive/carrot/cluster_run.py --output window --width 1920 --height 480
 python selfdrive/carrot/cluster_run.py --output usb --live-no-can
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec jpeg --usb-jpeg-quality 68
 python selfdrive/carrot/cluster_run.py --output usb --input route --route route --route-overlay off --usb-codec h264 --usb-h264-bitrate 6M --usb-h264-fps 30 --profile-render
-python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug
+python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug --usb-h264-slice-max-bytes 4096
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-backend ffmpeg --usb-h264-ffmpeg-encoder libx264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug
 python selfdrive/carrot/cluster_run.py --output usb --fps 10 --usb-jpeg-quality 55 --route-overlay off
 python selfdrive/carrot/cluster_run.py --output usb --profile-render --profile-interval 2
@@ -35,9 +35,11 @@ paths. For a 9.2-inch panel that means a 462x1920 H264 stream, with no
 16-pixel render-size padding unless `--usb-h264-align 16` is passed explicitly.
 The default backend is the native Qualcomm hardware path. It patches hardware
 SPS Baseline constraint flags to match the libx264 constrained-Baseline stream
-that the TURZX panel accepts. The ffmpeg/libx264 path remains available as a
-known-good comparison path. Build the native library and helper before hardware
-testing:
+that the TURZX panel accepts. It also asks the V4L2 encoder for multi-slice
+output capped by `--usb-h264-slice-max-bytes` so the resulting NAL sizes are
+closer to the ffmpeg/libx264 stream accepted by TURZX. The ffmpeg/libx264 path
+remains available as a known-good comparison path. Build the native library and
+helper before hardware testing:
 
 ```bash
 scons system/loggerd/libcluster_h264_encoder_bridge.so
@@ -62,11 +64,12 @@ as the first NAL; use `--usb-h264-insert-aud` only as a compatibility test.
 `--usb-h264-debug` prints per-chunk NAL summaries and SPS profile/constraint
 bytes so hardware output can be compared directly against ffmpeg/libx264.
 `--usb-h264-no-sps-patch` disables the hardware SPS constraint-byte patch.
+`--usb-h264-slice-max-bytes 0` disables the hardware multi-slice request.
 
 For a quick H264 transport smoke test, run:
 
 ```bash
-python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug
+python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug --usb-h264-slice-max-bytes 4096
 ```
 
 The panel should show red/green/blue/white quadrants. If RGB4 colors are
@@ -79,7 +82,10 @@ swapped, retry with `--usb-h264-rgb4-layout rgba` or
 render cap. H264 chunks are no-ACK by default like JPEG frame uploads; use
 `--usb-h264-wait-ack` for strict response diagnostics, or
 `--usb-h264-soft-ack` to mimic the vendor video sender's retry/status polling
-without failing the run. `--usb-h264-debug` prints early chunk details.
+without failing the run. `--usb-h264-debug` prints early chunk details. If the
+hardware stream is still corrupted, retry `--usb-h264-slice-max-bytes 2048`
+and `1024`; the debug NAL summary should show several smaller IDR/P NALs
+instead of one large slice.
 
 The ffmpeg/libx264 path is the default known-good H264 mode. To make that
 explicit while testing, run:
