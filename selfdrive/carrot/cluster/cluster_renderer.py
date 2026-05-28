@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections import OrderedDict
 from collections.abc import Iterator
 from contextlib import contextmanager
 from functools import lru_cache
@@ -8,7 +7,6 @@ import math
 import os
 import time
 from pathlib import Path
-from typing import Any
 
 import pyray as rl
 
@@ -84,7 +82,6 @@ GIT_STATUS_MARGIN = 2
 GIT_STATUS_DOT_RADIUS = 7
 GIT_STATUS_DOT_TEXT_GAP = 6
 GIT_STATUS_MAX_TEXT_W = 610
-TRIANGLE_STRIP_POINT_CACHE_LIMIT = 160
 VEHICLE_MATERIAL_COLORS: dict[str, tuple[int, int, int, int]] = {
     "body": (156, 166, 172, 255),
     "wheel": (18, 20, 22, 255),
@@ -232,10 +229,8 @@ class ClusterUiRenderer:
         self._route_video_frame_id: str | None = None
         self._left_turn_signal_started_at: float | None = None
         self._right_turn_signal_started_at: float | None = None
-        self._triangle_strip_point_cache: OrderedDict[
-            tuple[int, int, int],
-            tuple[tuple[Vec3, ...], tuple[Vec3, ...], Any],
-        ] = OrderedDict()
+        self._triangle_strip_points = None
+        self._triangle_strip_capacity = 0
         self._system_stats = SystemStatsSampler(SYSTEM_STATS_REFRESH_SECONDS)
         self._debug_plot_mode_prev = -1
         self._debug_plot_size = 0
@@ -766,24 +761,29 @@ class ClusterUiRenderer:
         x_offset_m = strip.x_offset_m
 
         if hasattr(rl, "draw_triangle_strip_3d"):
-            points = self._triangle_strip_points_for(strip, count)
-            if abs(x_offset_m) > 0.0001:
-                rl.rl_push_matrix()
-                rl.rl_translatef(x_offset_m, 0.0, 0.0)
-                try:
-                    rl.draw_triangle_strip_3d(
-                        rl.ffi.cast("struct Vector3 *", points),
-                        count * 2,
-                        color,
-                    )
-                finally:
-                    rl.rl_pop_matrix()
-            else:
-                rl.draw_triangle_strip_3d(
-                    rl.ffi.cast("struct Vector3 *", points),
-                    count * 2,
-                    color,
-                )
+            point_count = count * 2
+            if self._triangle_strip_capacity < point_count:
+                self._triangle_strip_points = rl.ffi.new("struct Vector3[]", point_count)
+                self._triangle_strip_capacity = point_count
+            points = self._triangle_strip_points
+
+            for index in range(count):
+                left = strip.left[index]
+                right = strip.right[index]
+
+                points[index * 2].x = left.x + x_offset_m
+                points[index * 2].y = left.y
+                points[index * 2].z = left.z
+
+                points[index * 2 + 1].x = right.x + x_offset_m
+                points[index * 2 + 1].y = right.y
+                points[index * 2 + 1].z = right.z
+
+            rl.draw_triangle_strip_3d(
+                rl.ffi.cast("struct Vector3 *", points),
+                count * 2,
+                color,
+            )
             return
 
         for index in range(count - 1):
@@ -797,33 +797,6 @@ class ClusterUiRenderer:
             right_far = rl.Vector3(next_right.x + x_offset_m, next_right.y, next_right.z)
             rl.draw_triangle_3d(left_near, right_near, right_far, color)
             rl.draw_triangle_3d(left_near, right_far, left_far, color)
-
-    def _triangle_strip_points_for(self, strip: MeshStrip, count: int):
-        key = (id(strip.left), id(strip.right), count)
-        cached = self._triangle_strip_point_cache.get(key)
-        if cached is not None and cached[0] is strip.left and cached[1] is strip.right:
-            self._triangle_strip_point_cache.move_to_end(key)
-            return cached[2]
-        if cached is not None:
-            del self._triangle_strip_point_cache[key]
-
-        points = rl.ffi.new("struct Vector3[]", count * 2)
-        for index in range(count):
-            left = strip.left[index]
-            right = strip.right[index]
-
-            points[index * 2].x = left.x
-            points[index * 2].y = left.y
-            points[index * 2].z = left.z
-
-            points[index * 2 + 1].x = right.x
-            points[index * 2 + 1].y = right.y
-            points[index * 2 + 1].z = right.z
-
-        self._triangle_strip_point_cache[key] = (strip.left, strip.right, points)
-        while len(self._triangle_strip_point_cache) > TRIANGLE_STRIP_POINT_CACHE_LIMIT:
-            self._triangle_strip_point_cache.popitem(last=False)
-        return points
 
     def _draw_vehicle(self, vehicle: VehicleBox) -> None:
         use_model = (
