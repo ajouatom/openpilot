@@ -249,6 +249,7 @@ def _h264_read_vui_info(reader: _H264BitReader) -> dict[str, int]:
         "time_scale": 0,
         "fixed_frame_rate_flag": 0,
         "bitstream_restriction_flag": 0,
+        "max_num_reorder_frames": 0,
         "max_dec_frame_buffering": 0,
     }
 
@@ -290,7 +291,7 @@ def _h264_read_vui_info(reader: _H264BitReader) -> dict[str, int]:
         reader.read_ue()
         reader.read_ue()
         reader.read_ue()
-        reader.read_ue()
+        info["max_num_reorder_frames"] = reader.read_ue()
         info["max_dec_frame_buffering"] = reader.read_ue()
     return info
 
@@ -400,8 +401,11 @@ def _h264_sps_info(nal: bytes) -> str:
                         f" fixed={vui_info['fixed_frame_rate_flag']}"
                         f" restrict={vui_info['bitstream_restriction_flag']}"
                     )
-                    if vui_info["max_dec_frame_buffering"]:
-                        vui_text += f" max_dpb={vui_info['max_dec_frame_buffering']}"
+                    if vui_info["bitstream_restriction_flag"]:
+                        vui_text += (
+                            f" reorder={vui_info['max_num_reorder_frames']}"
+                            f" max_dpb={vui_info['max_dec_frame_buffering']}"
+                        )
                 except Exception:
                     vui_text = " vui=1 timing=?"
         return (
@@ -575,7 +579,14 @@ def _write_h264_vui_timing(writer: _H264BitWriter, fps: int) -> None:
     writer.write_bit(0)  # nal_hrd_parameters_present_flag
     writer.write_bit(0)  # vcl_hrd_parameters_present_flag
     writer.write_bit(0)  # pic_struct_present_flag
-    writer.write_bit(0)  # bitstream_restriction_flag
+    writer.write_bit(1)  # bitstream_restriction_flag
+    writer.write_bit(1)  # motion_vectors_over_pic_boundaries_flag
+    writer.write_ue(0)  # max_bytes_per_pic_denom
+    writer.write_ue(0)  # max_bits_per_mb_denom
+    writer.write_ue(10)  # log2_max_mv_length_horizontal
+    writer.write_ue(10)  # log2_max_mv_length_vertical
+    writer.write_ue(0)  # max_num_reorder_frames
+    writer.write_ue(4)  # max_dec_frame_buffering
 
 
 def _patch_h264_sps_vui_timing(data: bytes, fps: int) -> tuple[bytes, bool, str]:
