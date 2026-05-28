@@ -67,6 +67,7 @@ SYSTEM_PANEL_X = 1416
 SYSTEM_PANEL_Y = 118
 SYSTEM_PANEL_W = 476
 SYSTEM_STATS_REFRESH_SECONDS = 1.0
+TEXT_MEASURE_CACHE_LIMIT = 1024
 DEBUG_PLOT_MAX_SAMPLES = 360
 DEBUG_PLOT_SAMPLE_SECONDS = 0.05
 DEBUG_PLOT_MARGIN = 18.0
@@ -231,6 +232,7 @@ class ClusterUiRenderer:
         self._right_turn_signal_started_at: float | None = None
         self._triangle_strip_points = None
         self._triangle_strip_capacity = 0
+        self._text_measure_cache: dict[tuple[int, str, float, float], tuple[float, float]] = {}
         self._system_stats = SystemStatsSampler(SYSTEM_STATS_REFRESH_SECONDS)
         self._debug_plot_mode_prev = -1
         self._debug_plot_size = 0
@@ -848,8 +850,8 @@ class ClusterUiRenderer:
             speed = radar_point_speed_label(point)
             label_height = 32 if speed else 22
             text_width = max(
-                int(rl.measure_text_ex(self._font or rl.get_font_default(), distance, 14, 1).x),
-                int(rl.measure_text_ex(self._font or rl.get_font_default(), speed, 12, 1).x) if speed else 0,
+                int(self._measure_text(distance, 14, 1)[0]),
+                int(self._measure_text(speed, 12, 1)[0]) if speed else 0,
             )
             width = max(62, text_width + 14)
             height = label_height
@@ -938,14 +940,13 @@ class ClusterUiRenderer:
 
             distance = vehicle_distance_label(vehicle)
             speed = vehicle_speed_label(vehicle)
-            font = self._font or rl.get_font_default()
             label_height = 36 if speed else 24
             width = max(
                 62,
                 int(
                     max(
-                        rl.measure_text_ex(font, distance, 15, 1).x,
-                        rl.measure_text_ex(font, speed, 13, 1).x if speed else 0,
+                        self._measure_text(distance, 15, 1)[0],
+                        self._measure_text(speed, 13, 1)[0] if speed else 0,
                     )
                 )
                 + 14,
@@ -1040,14 +1041,13 @@ class ClusterUiRenderer:
         theme = self._current_theme()
         scale = max(0.72, min(1.18, min(self.width / DESIGN_WIDTH, self.height / DESIGN_HEIGHT)))
         distance = f"{indicator.label} {abs(indicator.longitudinal_m):.0f} m"
-        font = self._font or rl.get_font_default()
         text_size = 16.0 * scale
         spacing = max(1.0, text_size * 0.02)
-        measured = rl.measure_text_ex(font, distance, text_size, spacing)
+        text_width, text_height = self._measure_text(distance, text_size, spacing)
         pad_x = 10.0 * scale
         pad_y = 5.0 * scale
-        box_w = max(74.0 * scale, measured.x + pad_x * 2.0)
-        box_h = measured.y + pad_y * 2.0
+        box_w = max(74.0 * scale, text_width + pad_x * 2.0)
+        box_h = text_height + pad_y * 2.0
         box_y = y - 62.0 * scale
         box = rl.Rectangle(x - box_w * 0.5, box_y, box_w, box_h)
 
@@ -1267,16 +1267,15 @@ class ClusterUiRenderer:
         y = 58
         size = 54
         spacing = max(1.0, size * 0.02)
-        font = self._font or rl.get_font_default()
-        measured = rl.measure_text_ex(font, text, size, spacing)
+        text_width, text_height = self._measure_text(text, size, spacing)
 
         pad_x = 28
         pad_y = 14
         rect = rl.Rectangle(
-            x - measured.x * 0.5 - pad_x,
-            y - measured.y * 0.5 - pad_y,
-            measured.x + pad_x * 2,
-            measured.y + pad_y * 2,
+            x - text_width * 0.5 - pad_x,
+            y - text_height * 0.5 - pad_y,
+            text_width + pad_x * 2,
+            text_height + pad_y * 2,
         )
 
         rl.draw_rectangle_rounded(rect, 0.28, 12, rl_color(theme.clock_bg))
@@ -1777,10 +1776,9 @@ class ClusterUiRenderer:
         text = status.branch if not status.detail else f"{status.branch} ({status.detail})"
         text_size = 20
         text = self._ellipsize_text(text, text_size, GIT_STATUS_MAX_TEXT_W)
-        font = self._font or rl.get_font_default()
         spacing = max(1.0, text_size * 0.02)
-        measured = rl.measure_text_ex(font, text, text_size, spacing)
-        row_h = max(measured.y, GIT_STATUS_DOT_RADIUS * 2)
+        _, text_height = self._measure_text(text, text_size, spacing)
+        row_h = max(text_height, GIT_STATUS_DOT_RADIUS * 2)
         center_y = DESIGN_HEIGHT - GIT_STATUS_MARGIN - row_h * 0.5
         dot_center_x = GIT_STATUS_MARGIN + GIT_STATUS_DOT_RADIUS
         text_x = GIT_STATUS_MARGIN + GIT_STATUS_DOT_RADIUS * 2 + GIT_STATUS_DOT_TEXT_GAP
@@ -1848,12 +1846,10 @@ class ClusterUiRenderer:
         accel_text = f"{accel_value:+05.2f}"
         accel_text_x = 20
         accel_text_size = 38
-        if self._font is None:
-            self._font = rl.get_font_default()
         text_spacing = max(1.0, accel_text_size * 0.02)
         if self._accel_text_width <= 0.0:
             self._accel_text_width = max(
-                rl.measure_text_ex(self._font, text, accel_text_size, text_spacing).x
+                self._measure_text(text, accel_text_size, text_spacing)[0]
                 for text in ACCEL_TEXT_WIDTH_SAMPLES
             )
         text_width = self._accel_text_width
@@ -1994,27 +1990,38 @@ class ClusterUiRenderer:
         color: tuple[int, int, int],
         anchor: str = "left",
     ) -> None:
-        if self._font is None:
-            self._font = rl.get_font_default()
         spacing = max(1.0, size * 0.02)
-        measured = rl.measure_text_ex(self._font, text, size, spacing)
+        text_width, text_height = self._measure_text(text, size, spacing)
         draw_x = x
         draw_y = y
         if anchor == "center":
-            draw_x = x - measured.x * 0.5
-            draw_y = y - measured.y * 0.5
+            draw_x = x - text_width * 0.5
+            draw_y = y - text_height * 0.5
         elif anchor == "left":
-            draw_y = y - measured.y * 0.5
+            draw_y = y - text_height * 0.5
         elif anchor == "right":
-            draw_x = x - measured.x
-            draw_y = y - measured.y * 0.5
+            draw_x = x - text_width
+            draw_y = y - text_height * 0.5
         rl.draw_text_ex(self._font, text, rl.Vector2(draw_x, draw_y), size, spacing, rl_color(color))
 
-    def _ellipsize_text(self, text: str, size: float, max_width: float) -> str:
+    def _measure_text(self, text: str, size: float, spacing: float | None = None) -> tuple[float, float]:
         if self._font is None:
             self._font = rl.get_font_default()
+        measure_spacing = max(1.0, size * 0.02) if spacing is None else spacing
+        key = (id(self._font), text, float(size), float(measure_spacing))
+        measured = self._text_measure_cache.get(key)
+        if measured is not None:
+            return measured
+        if len(self._text_measure_cache) >= TEXT_MEASURE_CACHE_LIMIT:
+            self._text_measure_cache.clear()
+        text_size = rl.measure_text_ex(self._font, text, size, measure_spacing)
+        measured = (float(text_size.x), float(text_size.y))
+        self._text_measure_cache[key] = measured
+        return measured
+
+    def _ellipsize_text(self, text: str, size: float, max_width: float) -> str:
         spacing = max(1.0, size * 0.02)
-        if rl.measure_text_ex(self._font, text, size, spacing).x <= max_width:
+        if self._measure_text(text, size, spacing)[0] <= max_width:
             return text
         ellipsis = "..."
         low = 0
@@ -2022,7 +2029,7 @@ class ClusterUiRenderer:
         while low < high:
             mid = (low + high + 1) // 2
             candidate = text[:mid] + ellipsis
-            if rl.measure_text_ex(self._font, candidate, size, spacing).x <= max_width:
+            if self._measure_text(candidate, size, spacing)[0] <= max_width:
                 low = mid
             else:
                 high = mid - 1
