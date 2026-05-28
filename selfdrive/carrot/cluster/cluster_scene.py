@@ -661,41 +661,143 @@ def lane_marking_strip_groups_from_segments(
     left_groups: list[list[Vec3]] = [[] for _ in specs]
     right_groups: list[list[Vec3]] = [[] for _ in specs]
     for segment in segments:
-        if len(segment) < 2:
+        append_lane_marking_segment_strip_groups(segment, half_widths, specs, left_groups, right_groups)
+
+    return finish_lane_marking_strip_groups(left_groups, right_groups, specs)
+
+
+def lane_marking_strip_groups_from_centerline(
+    centerline: tuple[Vec3, ...],
+    specs: tuple[tuple[int, Color, float], ...],
+    style: str,
+) -> tuple[tuple[MeshStrip, ...], ...]:
+    if len(centerline) < 2 or not specs:
+        return tuple(() for _ in specs)
+
+    half_widths = tuple(max(0.08, width_px * 0.022) * 0.5 for width_px, _, _ in specs)
+    left_groups: list[list[Vec3]] = [[] for _ in specs]
+    right_groups: list[list[Vec3]] = [[] for _ in specs]
+    if style == "solid":
+        append_lane_marking_segment_strip_groups(centerline, half_widths, specs, left_groups, right_groups)
+        return finish_lane_marking_strip_groups(left_groups, right_groups, specs)
+
+    dash_m = 5.2
+    gap_m = 4.2
+    cycle_m = dash_m + gap_m
+    current_dash: list[Vec3] = []
+    distance_m = 0.0
+    previous = centerline[0]
+    eps = 0.0001
+
+    for current in centerline[1:]:
+        segment_dx = current.x - previous.x
+        segment_dy = current.y - previous.y
+        segment_dz = current.z - previous.z
+        segment_m = math.sqrt(segment_dx * segment_dx + segment_dy * segment_dy + segment_dz * segment_dz)
+        if segment_m <= 0.001:
+            previous = current
             continue
-        segment_left: list[list[Vec3]] = [[] for _ in specs]
-        segment_right: list[list[Vec3]] = [[] for _ in specs]
-        for index, point in enumerate(segment):
-            previous_point = segment[max(0, index - 1)]
-            next_point = segment[min(len(segment) - 1, index + 1)]
-            tangent_x, tangent_y = normalize2(
-                next_point.x - previous_point.x,
-                next_point.y - previous_point.y,
+
+        segment_start_m = distance_m
+        segment_end_m = distance_m + segment_m
+        cursor_m = segment_start_m
+        cursor_point = previous
+
+        while cursor_m < segment_end_m - eps:
+            cycle_offset_m = cursor_m % cycle_m
+            if cycle_offset_m < eps or abs(cycle_offset_m - cycle_m) < eps:
+                cycle_offset_m = 0.0
+            elif abs(cycle_offset_m - dash_m) < eps:
+                cycle_offset_m = dash_m
+            in_dash = cycle_offset_m < dash_m
+            boundary_m = cursor_m + (dash_m - cycle_offset_m if in_dash else cycle_m - cycle_offset_m)
+            next_m = min(segment_end_m, boundary_m)
+            if next_m <= cursor_m + eps:
+                next_m = segment_end_m
+
+            next_point = lerp_vec3(previous, current, (next_m - segment_start_m) / segment_m)
+            if in_dash:
+                append_unique_point(current_dash, cursor_point)
+                append_unique_point(current_dash, next_point)
+                if boundary_m <= next_m + eps and len(current_dash) >= 2:
+                    append_lane_marking_segment_strip_groups(
+                        current_dash,
+                        half_widths,
+                        specs,
+                        left_groups,
+                        right_groups,
+                    )
+                    current_dash = []
+            elif len(current_dash) >= 2:
+                append_lane_marking_segment_strip_groups(
+                    current_dash,
+                    half_widths,
+                    specs,
+                    left_groups,
+                    right_groups,
+                )
+                current_dash = []
+
+            cursor_m = next_m
+            cursor_point = next_point
+
+        distance_m = segment_end_m
+        previous = current
+
+    if len(current_dash) >= 2:
+        append_lane_marking_segment_strip_groups(current_dash, half_widths, specs, left_groups, right_groups)
+
+    return finish_lane_marking_strip_groups(left_groups, right_groups, specs)
+
+
+def append_lane_marking_segment_strip_groups(
+    segment: tuple[Vec3, ...] | list[Vec3],
+    half_widths: tuple[float, ...],
+    specs: tuple[tuple[int, Color, float], ...],
+    left_groups: list[list[Vec3]],
+    right_groups: list[list[Vec3]],
+) -> None:
+    if len(segment) < 2:
+        return
+    segment_left: list[list[Vec3]] = [[] for _ in specs]
+    segment_right: list[list[Vec3]] = [[] for _ in specs]
+    for index, point in enumerate(segment):
+        previous_point = segment[max(0, index - 1)]
+        next_point = segment[min(len(segment) - 1, index + 1)]
+        tangent_x, tangent_y = normalize2(
+            next_point.x - previous_point.x,
+            next_point.y - previous_point.y,
+        )
+        right_x = tangent_y
+        right_y = -tangent_x
+        for spec_index, half_width in enumerate(half_widths):
+            height_m = specs[spec_index][2]
+            segment_left[spec_index].append(
+                Vec3(point.x - right_x * half_width, point.y - right_y * half_width, height_m)
             )
-            right_x = tangent_y
-            right_y = -tangent_x
-            for spec_index, half_width in enumerate(half_widths):
-                height_m = specs[spec_index][2]
-                segment_left[spec_index].append(
-                    Vec3(point.x - right_x * half_width, point.y - right_y * half_width, height_m)
-                )
-                segment_right[spec_index].append(
-                    Vec3(point.x + right_x * half_width, point.y + right_y * half_width, height_m)
-                )
+            segment_right[spec_index].append(
+                Vec3(point.x + right_x * half_width, point.y + right_y * half_width, height_m)
+            )
 
-        for spec_index in range(len(specs)):
-            left_group = left_groups[spec_index]
-            right_group = right_groups[spec_index]
-            if left_group and segment_left[spec_index]:
-                previous_right = right_group[-1]
-                next_left = segment_left[spec_index][0]
-                left_group.append(previous_right)
-                right_group.append(previous_right)
-                left_group.append(next_left)
-                right_group.append(next_left)
-            left_group.extend(segment_left[spec_index])
-            right_group.extend(segment_right[spec_index])
+    for spec_index in range(len(specs)):
+        left_group = left_groups[spec_index]
+        right_group = right_groups[spec_index]
+        if left_group and segment_left[spec_index]:
+            previous_right = right_group[-1]
+            next_left = segment_left[spec_index][0]
+            left_group.append(previous_right)
+            right_group.append(previous_right)
+            left_group.append(next_left)
+            right_group.append(next_left)
+        left_group.extend(segment_left[spec_index])
+        right_group.extend(segment_right[spec_index])
 
+
+def finish_lane_marking_strip_groups(
+    left_groups: list[list[Vec3]],
+    right_groups: list[list[Vec3]],
+    specs: tuple[tuple[int, Color, float], ...],
+) -> tuple[tuple[MeshStrip, ...], ...]:
     return tuple(
         (MeshStrip(tuple(left_groups[index]), tuple(right_groups[index]), color),)
         if len(left_groups[index]) >= 2 and len(right_groups[index]) >= 2
@@ -758,8 +860,11 @@ def cached_model_line_strip_groups(
     else:
         if extend_before_model:
             centerline = extend_model_centerline_rearward(centerline, cache_start_m)
-        segments = (centerline,) if style == "solid" else dashed_centerline_segments(centerline)
-        groups = lane_marking_strip_groups_from_segments(segments, model_line_placeholder_specs(geometry_specs))
+        groups = lane_marking_strip_groups_from_centerline(
+            centerline,
+            model_line_placeholder_specs(geometry_specs),
+            style,
+        )
 
     _MODEL_LINE_STRIP_GROUP_CACHE[key] = (model_points, groups)
     while len(_MODEL_LINE_STRIP_GROUP_CACHE) > MODEL_LINE_STRIP_GROUP_CACHE_LIMIT:
