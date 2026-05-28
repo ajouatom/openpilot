@@ -759,8 +759,6 @@ def append_lane_marking_segment_strip_groups(
 ) -> None:
     if len(segment) < 2:
         return
-    segment_left: list[list[Vec3]] = [[] for _ in specs]
-    segment_right: list[list[Vec3]] = [[] for _ in specs]
     for index, point in enumerate(segment):
         previous_point = segment[max(0, index - 1)]
         next_point = segment[min(len(segment) - 1, index + 1)]
@@ -772,25 +770,18 @@ def append_lane_marking_segment_strip_groups(
         right_y = -tangent_x
         for spec_index, half_width in enumerate(half_widths):
             height_m = specs[spec_index][2]
-            segment_left[spec_index].append(
-                Vec3(point.x - right_x * half_width, point.y - right_y * half_width, height_m)
-            )
-            segment_right[spec_index].append(
-                Vec3(point.x + right_x * half_width, point.y + right_y * half_width, height_m)
-            )
-
-    for spec_index in range(len(specs)):
-        left_group = left_groups[spec_index]
-        right_group = right_groups[spec_index]
-        if left_group and segment_left[spec_index]:
-            previous_right = right_group[-1]
-            next_left = segment_left[spec_index][0]
-            left_group.append(previous_right)
-            right_group.append(previous_right)
-            left_group.append(next_left)
-            right_group.append(next_left)
-        left_group.extend(segment_left[spec_index])
-        right_group.extend(segment_right[spec_index])
+            left = Vec3(point.x - right_x * half_width, point.y - right_y * half_width, height_m)
+            right = Vec3(point.x + right_x * half_width, point.y + right_y * half_width, height_m)
+            left_group = left_groups[spec_index]
+            right_group = right_groups[spec_index]
+            if index == 0 and left_group:
+                previous_right = right_group[-1]
+                left_group.append(previous_right)
+                right_group.append(previous_right)
+                left_group.append(left)
+                right_group.append(left)
+            left_group.append(left)
+            right_group.append(right)
 
 
 def finish_lane_marking_strip_groups(
