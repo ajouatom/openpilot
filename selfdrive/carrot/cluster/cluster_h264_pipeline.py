@@ -1604,7 +1604,7 @@ class H264UsbPipeline:
                 return
             value_us = int(getter(handle))
             if value_us > 0:
-                self._add_sample(sample_name, value_us / 1000.0)
+                self._add_sample_value(sample_name, value_us / 1000.0)
 
     @staticmethod
     def _parse_bitrate_bps(value: str) -> int:
@@ -1746,6 +1746,9 @@ class H264UsbPipeline:
 
     def _add_sample(self, name: str, start_time: float) -> None:
         milliseconds = (time.perf_counter() - start_time) * 1000.0
+        self._add_sample_value(name, milliseconds)
+
+    def _add_sample_value(self, name: str, milliseconds: float) -> None:
         with self._condition:
             self._samples.append((name, milliseconds))
 
