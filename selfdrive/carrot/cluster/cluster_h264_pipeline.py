@@ -300,11 +300,17 @@ def _h264_sps_info(nal: bytes) -> str:
         crop_unit_x, crop_unit_y = _h264_crop_units(info["chroma_format_idc"], info["frame_mbs_only_flag"])
         display_width = coded_width - (info["crop_left"] + info["crop_right"]) * crop_unit_x
         display_height = coded_height - (info["crop_top"] + info["crop_bottom"]) * crop_unit_y
+        vui_text = ""
+        if info["after_crop_bitpos"] < len(rbsp) * 8:
+            vui_reader = _H264BitReader(rbsp)
+            vui_reader.bitpos = info["after_crop_bitpos"]
+            vui_text = " vui=1" if vui_reader.read_bit() else " vui=0"
         return (
             f"profile=0x{info['profile_idc']:02X} constraints=0x{info['constraint_flags']:02X} "
             f"level=0x{info['level_idc']:02X} coded={coded_width}x{coded_height} "
             f"display={display_width}x{display_height} "
             f"crop={info['crop_left']},{info['crop_right']},{info['crop_top']},{info['crop_bottom']}"
+            f"{vui_text}"
         )
     except Exception:
         return ""
@@ -431,6 +437,64 @@ def _patch_h264_sps_crop(data: bytes, width: int, height: int) -> tuple[bytes, b
     return bytes(out), True, patched_info
 
 
+def _write_h264_vui_timing(writer: _H264BitWriter, fps: int) -> None:
+    writer.write_bit(0)  # aspect_ratio_info_present_flag
+    writer.write_bit(0)  # overscan_info_present_flag
+    writer.write_bit(0)  # video_signal_type_present_flag
+    writer.write_bit(0)  # chroma_loc_info_present_flag
+    writer.write_bit(1)  # timing_info_present_flag
+    writer.write_bits(1, 32)  # num_units_in_tick
+    writer.write_bits(max(2, int(fps) * 2), 32)  # time_scale
+    writer.write_bit(1)  # fixed_frame_rate_flag
+    writer.write_bit(0)  # nal_hrd_parameters_present_flag
+    writer.write_bit(0)  # vcl_hrd_parameters_present_flag
+    writer.write_bit(0)  # pic_struct_present_flag
+    writer.write_bit(0)  # bitstream_restriction_flag
+
+
+def _patch_h264_sps_vui_timing(data: bytes, fps: int) -> tuple[bytes, bool, str]:
+    out = bytearray()
+    last = 0
+    patched = False
+    patched_info = ""
+
+    for _, nal_start, nal_end in _h264_nals(data):
+        nal = data[nal_start:nal_end]
+        if len(nal) < 5 or (nal[0] & 0x1F) != 7:
+            continue
+
+        try:
+            rbsp = _h264_unescape_rbsp(nal[1:])
+            reader = _H264BitReader(rbsp)
+            info = _h264_read_sps_to_crop(reader)
+            vui_flag_bitpos = info["after_crop_bitpos"]
+            if vui_flag_bitpos >= len(rbsp) * 8:
+                continue
+            existing_vui = (rbsp[vui_flag_bitpos // 8] >> (7 - (vui_flag_bitpos % 8))) & 1
+            if existing_vui:
+                continue
+
+            writer = _H264BitWriter()
+            writer.copy_bits(rbsp, 0, vui_flag_bitpos)
+            writer.write_bit(1)
+            _write_h264_vui_timing(writer, fps)
+            writer.write_bit(1)
+            patched_nal = bytes([nal[0]]) + _h264_escape_rbsp(writer.to_bytes())
+
+            out.extend(data[last:nal_start])
+            out.extend(patched_nal)
+            last = nal_end
+            patched = True
+            patched_info = f"fps={fps} num_units_in_tick=1 time_scale={max(2, int(fps) * 2)}"
+        except Exception:
+            continue
+
+    if not patched:
+        return data, False, ""
+    out.extend(data[last:])
+    return bytes(out), True, patched_info
+
+
 class H264UsbPipeline:
     def __init__(
         self,
@@ -457,6 +521,7 @@ class H264UsbPipeline:
         insert_aud: bool,
         patch_sps_constraints: bool,
         patch_sps_crop: bool,
+        patch_sps_vui: bool,
         dump_path: str,
         debug: bool,
     ) -> None:
@@ -486,11 +551,13 @@ class H264UsbPipeline:
         self.insert_aud = insert_aud
         self.patch_sps_constraints = patch_sps_constraints
         self.patch_sps_crop = patch_sps_crop
+        self.patch_sps_vui = patch_sps_vui
         self.dump_path = dump_path
         self._dump_file = None
         self.debug = debug
         self._sps_patch_logged = False
         self._sps_crop_patch_logged = False
+        self._sps_vui_patch_logged = False
         self.chunk_size = 0
         self._chunks_sent = 0
         self._proc: subprocess.Popen[bytes] | None = None
@@ -586,7 +653,8 @@ class H264UsbPipeline:
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')} "
             f"aud={'on' if self.insert_aud else 'off'} "
             f"sps_patch={'on' if self.patch_sps_constraints else 'off'} "
-            f"sps_crop_patch={'on' if self.patch_sps_crop else 'off'}",
+            f"sps_crop_patch={'on' if self.patch_sps_crop else 'off'} "
+            f"sps_vui_patch={'on' if self.patch_sps_vui else 'off'}",
             flush=True,
         )
 
@@ -608,7 +676,8 @@ class H264UsbPipeline:
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')} "
             f"aud={'native-only' if self.insert_aud else 'off'} "
             f"sps_patch={'on' if self.patch_sps_constraints else 'off'} "
-            f"sps_crop_patch={'on' if self.patch_sps_crop else 'off'}",
+            f"sps_crop_patch={'on' if self.patch_sps_crop else 'off'} "
+            f"sps_vui_patch={'on' if self.patch_sps_vui else 'off'}",
             flush=True,
         )
         if self.debug:
@@ -852,6 +921,14 @@ class H264UsbPipeline:
                     flush=True,
                 )
                 self._sps_crop_patch_logged = True
+        if self.patch_sps_vui:
+            packet, patched, vui_info = _patch_h264_sps_vui_timing(packet, self.fps)
+            if patched and self.debug and not self._sps_vui_patch_logged:
+                print(
+                    f"H264 hardware SPS VUI timing patched: {vui_info}",
+                    flush=True,
+                )
+                self._sps_vui_patch_logged = True
         if self.insert_aud:
             packet = H264_AUD_NAL + packet
         return packet

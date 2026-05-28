@@ -66,6 +66,7 @@ as the first NAL; use `--usb-h264-insert-aud` only as a compatibility test.
 bytes so hardware output can be compared directly against ffmpeg/libx264.
 `--usb-h264-no-sps-patch` disables the hardware SPS constraint-byte patch.
 `--usb-h264-no-sps-crop-patch` disables the hardware SPS frame-crop patch.
+`--usb-h264-no-sps-vui-patch` disables the hardware SPS VUI timing patch.
 `--usb-h264-slice-max-bytes 0` disables the hardware multi-slice request.
 `--usb-h264-qp N` forces hardware QP/min-QP controls for compatibility tests;
 higher values produce smaller hardware IDR/P frames.
@@ -99,6 +100,9 @@ retry `--usb-h264-qp 38` and `--usb-h264-qp 44` to test whether the panel is
 rejecting large access units.
 If QP controls are rejected by the driver, keep `--usb-h264-packetize auto`
 or try `--usb-h264-packetize nal` to send each H264 NAL as its own USB command.
+If the hardware SPS summary shows `vui=0`, the default patch adds timing info
+matching the selected H264 FPS; use `--usb-h264-no-sps-vui-patch` only as an
+A/B check.
 
 The ffmpeg/libx264 path is the known-good H264 comparison mode. To make that
 explicit while testing, run:

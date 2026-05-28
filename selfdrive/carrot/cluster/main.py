@@ -232,6 +232,7 @@ def run_demo(
     usb_h264_insert_aud: bool,
     usb_h264_patch_sps_constraints: bool,
     usb_h264_patch_sps_crop: bool,
+    usb_h264_patch_sps_vui: bool,
     usb_h264_dump: str,
     usb_h264_debug: bool,
     usb_h264_test_pattern: bool,
@@ -404,6 +405,7 @@ def run_demo(
                 usb_h264_insert_aud,
                 usb_h264_patch_sps_constraints,
                 usb_h264_patch_sps_crop,
+                usb_h264_patch_sps_vui,
                 usb_h264_dump,
                 usb_h264_debug,
             )
@@ -914,6 +916,11 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--usb-h264-no-sps-vui-patch",
+        action="store_true",
+        help="Do not patch hardware SPS VUI timing metadata for decoder compatibility tests.",
+    )
+    parser.add_argument(
         "--usb-h264-dump",
         default="",
         help="Write the outgoing H264 bytestream to this path for ffprobe/ffplay comparison.",
@@ -1166,6 +1173,7 @@ def main() -> None:
             args.usb_h264_insert_aud and not args.usb_h264_no_aud,
             not args.usb_h264_no_sps_patch,
             not args.usb_h264_no_sps_crop_patch,
+            not args.usb_h264_no_sps_vui_patch,
             args.usb_h264_dump,
             args.usb_h264_debug,
             args.usb_h264_test_pattern,
