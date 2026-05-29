@@ -30,6 +30,13 @@ ENCODER_DEVFREQ_PRIORITY_HINTS = (
     "video",
 )
 EXCLUDED_DEVFREQ_HINTS = ("kgsl", "gpu", "cpu", "cpubw")
+DEVFREQ_LOAD_PATHS = (("load",), ("device", "load"))
+DEVFREQ_BUSY_PATHS = (("busy_time",), ("busy",), ("device", "busy_time"))
+DEVFREQ_TOTAL_PATHS = (("total_time",), ("total",), ("device", "total_time"))
+DEVFREQ_CUR_FREQ_PATHS = (("cur_freq",), ("current_freq",), ("target_freq",), ("freq",))
+DEVFREQ_MAX_FREQ_PATHS = (("max_freq",), ("max_frequency",), ("peak_freq",))
+DEVFREQ_AVAILABLE_FREQ_PATHS = (("available_frequencies",), ("available_freqs",), ("freq_table",))
+DEVFREQ_TIME_IN_STATE_PATHS = (("time_in_state",), ("stats", "time_in_state"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +61,8 @@ class SystemStatsSampler:
         self._stats = SystemStats()
         self._previous_linux_cpu_times: tuple[tuple[int, int], ...] | None = None
         self._previous_devfreq_times: dict[str, tuple[int, int]] = {}
+        self._previous_devfreq_time_in_state: dict[str, dict[int, int]] = {}
+        self._reported_encoder_unavailable = False
 
     def sample(self, now: float | None = None) -> SystemStats:
         if now is None:
@@ -76,6 +85,13 @@ class SystemStatsSampler:
         gpu_freq = self._read_first_int(KGSL_GPU_FREQ_PATHS)
         gpu_max_freq = self._read_first_int(KGSL_GPU_MAX_FREQ_PATHS)
         encoder_percent, encoder_freq, encoder_max_freq, encoder_source = self._read_encoder_devfreq()
+        if encoder_percent is None and not self._reported_encoder_unavailable:
+            debug_text = self.encoder_devfreq_debug_text()
+            if debug_text:
+                print(f"System stats VENC devfreq unavailable: {debug_text}", flush=True)
+                self._reported_encoder_unavailable = True
+        elif encoder_percent is not None:
+            self._reported_encoder_unavailable = False
         cpu_times = self._read_linux_cpu_times()
         if cpu_times is None:
             cpu_percents: tuple[float | None, ...] = ()
@@ -151,17 +167,25 @@ class SystemStatsSampler:
         return max(0.0, min(100.0, used / total * 100.0))
 
     def _read_encoder_devfreq(self) -> tuple[float | None, int | None, int | None, str | None]:
+        fallback: tuple[float | None, int | None, int | None, str | None] = (None, None, None, None)
         for path in self._encoder_devfreq_paths():
             used_percent = self._read_devfreq_percent(path)
-            cur_freq = self._read_int_file(path / "cur_freq")
-            max_freq = self._read_int_file(path / "max_freq")
+            cur_freq = self._read_first_child_int(path, DEVFREQ_CUR_FREQ_PATHS)
+            max_freq = self._read_first_child_int(path, DEVFREQ_MAX_FREQ_PATHS)
             if max_freq is None or max_freq <= 0:
                 max_freq = self._read_available_max_freq(path)
             if used_percent is None:
+                time_percent, time_max_freq = self._read_time_in_state_percent(path)
+                used_percent = time_percent
+                if (max_freq is None or max_freq <= 0) and time_max_freq is not None:
+                    max_freq = time_max_freq
+            if used_percent is None:
                 used_percent = self._freq_ratio_percent(cur_freq, max_freq)
-            if used_percent is not None or cur_freq is not None:
+            if used_percent is not None:
                 return used_percent, cur_freq, max_freq, path.name
-        return None, None, None, None
+            if fallback[3] is None and (cur_freq is not None or max_freq is not None):
+                fallback = (None, cur_freq, max_freq, path.name)
+        return fallback
 
     @classmethod
     def _encoder_devfreq_paths(cls) -> tuple[Path, ...]:
@@ -197,9 +221,8 @@ class SystemStatsSampler:
 
     @staticmethod
     def _read_available_max_freq(path: Path) -> int | None:
-        try:
-            text = (path / "available_frequencies").read_text(encoding="utf-8", errors="ignore")
-        except OSError:
+        text = SystemStatsSampler._read_first_child_text(path, DEVFREQ_AVAILABLE_FREQ_PATHS)
+        if not text:
             return None
         values: list[int] = []
         for match in re.finditer(r"\d+", text):
@@ -212,12 +235,12 @@ class SystemStatsSampler:
         return max(values) if values else None
 
     def _read_devfreq_percent(self, path: Path) -> float | None:
-        load = self._read_float_file(path / "load")
+        load = self._read_first_child_float(path, DEVFREQ_LOAD_PATHS)
         if load is not None:
             return self._normalize_percent(load)
 
-        busy = self._read_int_file(path / "busy_time")
-        total = self._read_int_file(path / "total_time")
+        busy = self._read_first_child_int(path, DEVFREQ_BUSY_PATHS)
+        total = self._read_first_child_int(path, DEVFREQ_TOTAL_PATHS)
         if busy is None or total is None or total <= 0:
             return None
 
@@ -245,6 +268,107 @@ class SystemStatsSampler:
         if cur_freq is None or max_freq is None or max_freq <= 0:
             return None
         return max(0.0, min(100.0, cur_freq / max_freq * 100.0))
+
+    def _read_time_in_state_percent(self, path: Path) -> tuple[float | None, int | None]:
+        states = self._read_time_in_state(path)
+        if not states:
+            return None, None
+
+        max_freq = max(states)
+        if max_freq <= 0:
+            return None, None
+
+        key = str(path)
+        previous = self._previous_devfreq_time_in_state.get(key)
+        self._previous_devfreq_time_in_state[key] = states
+        active_states = states
+        if previous is not None:
+            deltas = {freq: time_value - previous.get(freq, 0) for freq, time_value in states.items()}
+            deltas = {freq: time_value for freq, time_value in deltas.items() if time_value > 0}
+            if deltas:
+                active_states = deltas
+
+        total_time = sum(active_states.values())
+        if total_time <= 0:
+            return None, max_freq
+        weighted_freq = sum(freq * time_value for freq, time_value in active_states.items())
+        return max(0.0, min(100.0, weighted_freq / total_time / max_freq * 100.0)), max_freq
+
+    @staticmethod
+    def _read_time_in_state(path: Path) -> dict[int, int]:
+        text = SystemStatsSampler._read_first_child_text(path, DEVFREQ_TIME_IN_STATE_PATHS)
+        if not text:
+            return {}
+        states: dict[int, int] = {}
+        for line in text.splitlines():
+            values = re.findall(r"\d+", line)
+            if len(values) < 2:
+                continue
+            try:
+                freq = int(values[0])
+                time_value = int(values[1])
+            except ValueError:
+                continue
+            if freq > 0 and time_value >= 0:
+                states[freq] = time_value
+        return states
+
+    @staticmethod
+    def _read_first_child_text(path: Path, child_paths: tuple[tuple[str, ...], ...]) -> str | None:
+        for child_path in child_paths:
+            try:
+                text = path.joinpath(*child_path).read_text(encoding="utf-8", errors="ignore").strip()
+            except OSError:
+                continue
+            if text:
+                return text
+        return None
+
+    @staticmethod
+    def _read_first_child_int(path: Path, child_paths: tuple[tuple[str, ...], ...]) -> int | None:
+        for child_path in child_paths:
+            value = SystemStatsSampler._read_int_file(path.joinpath(*child_path))
+            if value is not None:
+                return value
+        return None
+
+    @staticmethod
+    def _read_first_child_float(path: Path, child_paths: tuple[tuple[str, ...], ...]) -> float | None:
+        for child_path in child_paths:
+            value = SystemStatsSampler._read_float_file(path.joinpath(*child_path))
+            if value is not None:
+                return value
+        return None
+
+    def encoder_devfreq_debug_text(self) -> str:
+        parts: list[str] = []
+        for path in self._encoder_devfreq_paths():
+            cur_freq = self._read_first_child_int(path, DEVFREQ_CUR_FREQ_PATHS)
+            max_freq = self._read_first_child_int(path, DEVFREQ_MAX_FREQ_PATHS)
+            available_max = self._read_available_max_freq(path)
+            load = self._read_first_child_float(path, DEVFREQ_LOAD_PATHS)
+            busy = self._read_first_child_int(path, DEVFREQ_BUSY_PATHS)
+            total = self._read_first_child_int(path, DEVFREQ_TOTAL_PATHS)
+            time_in_state = self._read_time_in_state(path)
+            fields = [
+                f"cur={self._debug_value(cur_freq)}",
+                f"max={self._debug_value(max_freq)}",
+                f"avail_max={self._debug_value(available_max)}",
+                f"load={self._debug_value(load)}",
+                f"busy={self._debug_value(busy)}",
+                f"total={self._debug_value(total)}",
+                f"tis={'yes' if time_in_state else 'no'}",
+            ]
+            parts.append(f"{path.name}({','.join(fields)})")
+        return "; ".join(parts)
+
+    @staticmethod
+    def _debug_value(value: int | float | None) -> str:
+        if value is None:
+            return "-"
+        if isinstance(value, float):
+            return f"{value:g}"
+        return str(value)
 
     @staticmethod
     def _read_linux_memory() -> tuple[int | None, int | None, float | None]:
