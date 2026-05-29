@@ -154,6 +154,10 @@ alignment match.
 Manager autostart omits `--fps` by default so live launches follow
 `ClusterHudLiveFps` setting changes while running. Set `CLUSTER_AUTORUN_FPS`
 only for fixed test overrides; `0` means uncapped.
+Manager autostart enables the `cluster_run.py` realtime setup by default, so
+live HUD launches are affined to cores `0,1,2,3` with priority `55` unless
+`CLUSTER_REALTIME`, `CLUSTER_REALTIME_CORES`, or `CLUSTER_REALTIME_PRIORITY` is
+set explicitly.
 When `--usb-brightness` is omitted, USB launches follow `ClusterHudBrightness`:
 `0` auto follows live `deviceState.screenBrightnessPercent` after samples are
 available, and `1` through `100` are fixed brightness percentages.
