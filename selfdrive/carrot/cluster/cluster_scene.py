@@ -208,6 +208,16 @@ class ClusterScene:
     rear_indicators: tuple[RearVehicleIndicator, ...] = ()
 
 
+def vec3_with_x_offset(vec: Vec3, x_offset_m: float) -> Vec3:
+    return Vec3(vec.x + x_offset_m, vec.y, vec.z)
+
+
+def vehicle_box_with_x_offset(vehicle: VehicleBox, x_offset_m: float) -> VehicleBox:
+    if abs(x_offset_m) <= 0.0001:
+        return vehicle
+    return replace(vehicle, center=vec3_with_x_offset(vehicle.center, x_offset_m))
+
+
 def rgba(color: tuple[int, int, int], alpha: int = 255) -> Color:
     return color[0], color[1], color[2], alpha
 
@@ -1114,6 +1124,7 @@ def radar_point_markers(
     vehicle_points: tuple[RadarPoint, ...] = (),
     min_forward_m: float = ROAD_NEAR_M,
     max_forward_m: float = ROAD_FAR_M + 30.0,
+    x_offset_m: float = 0.0,
 ) -> tuple[RadarPointMarker, ...]:
     markers: list[RadarPointMarker] = []
     for point in state.radar_points:
@@ -1127,7 +1138,7 @@ def radar_point_markers(
         markers.append(
             RadarPointMarker(
                 center=Vec3(
-                    clamp(point.lateral_m, -lane_width_m * 3.0, lane_width_m * 3.0),
+                    clamp(point.lateral_m, -lane_width_m * 3.0, lane_width_m * 3.0) + x_offset_m,
                     forward_m,
                     0.20,
                 ),
@@ -1515,6 +1526,7 @@ def rear_vehicle_indicators(
     vehicles: tuple[DetectedVehicle, ...],
     state: ClusterUiState,
     lane_width_m: float,
+    x_offset_m: float = 0.0,
 ) -> tuple[RearVehicleIndicator, ...]:
     selected: dict[str, DetectedVehicle] = {}
     for vehicle in vehicles:
@@ -1536,12 +1548,12 @@ def rear_vehicle_indicators(
         indicators.append(
             RearVehicleIndicator(
                 center=Vec3(
-                    road_world_x(offset, forward_m, state.steering, lane_width_m),
+                    road_world_x(offset, forward_m, state.steering, lane_width_m) + x_offset_m,
                     forward_m,
                     VEHICLE_HEIGHT_M * 0.5,
                 ),
                 anchor=Vec3(
-                    road_world_x(offset, anchor_forward_m, state.steering, lane_width_m),
+                    road_world_x(offset, anchor_forward_m, state.steering, lane_width_m) + x_offset_m,
                     anchor_forward_m,
                     0.22,
                 ),
@@ -1573,11 +1585,12 @@ def vehicle_box(
     cut_in: bool = False,
     primary: bool = False,
     annotate: bool = False,
+    x_offset_m: float = 0.0,
 ) -> VehicleBox:
     confidence = clamp(confidence, 0.0, 1.0)
     alpha = int(92 + 163 * confidence)
     body_color = color
-    center_x_m = road_world_x(offset, forward_m, steering, lane_width_m)
+    center_x_m = road_world_x(offset, forward_m, steering, lane_width_m) + x_offset_m
     right_x, right_y, forward_x, forward_y = vehicle_heading(
         offset,
         forward_m,
@@ -2024,6 +2037,7 @@ def build_cluster_scene(
     lane_width_m = max(2.4, min(4.6, state.lane_width_m or DEFAULT_LANE_WIDTH_M))
     anchor_x_m = ego_anchor_x_m(state, lane_width_m)
     scene_shift_x_m = -anchor_x_m
+    relative_scene_x_offset_m = -scene_shift_x_m
     camera = scene_camera(state, lane_width_m, anchor_x_m)
     camera_active = state.surround_view_active
     selected_radar_vehicle_points = radar_vehicle_points(state, lane_width_m)
@@ -2158,6 +2172,7 @@ def build_cluster_scene(
                 cut_in=detected.cut_in,
                 primary=detected.primary,
                 annotate=vehicle_badge_has_special_info(detected),
+                x_offset_m=relative_scene_x_offset_m,
             )
             for detected in render_detected_vehicles
         )
@@ -2178,21 +2193,28 @@ def build_cluster_scene(
             if point.label not in merged_radar_labels
         )
         visible_radar_vehicle_points = tuple(point for point, _ in visible_radar_vehicle_pairs)
-        visible_radar_vehicle_boxes = tuple(box for _, box in visible_radar_vehicle_pairs)
+        visible_radar_vehicle_boxes_raw = tuple(box for _, box in visible_radar_vehicle_pairs)
         radar_blockers = tuple(
             PathBlocker(
                 clamp(vehicle.center.x / lane_width_m, -2.2, 2.2),
                 vehicle.center.y,
                 vehicle.length_m,
             )
-            for vehicle in visible_radar_vehicle_boxes
+            for vehicle in visible_radar_vehicle_boxes_raw
+        )
+        visible_radar_vehicle_boxes = tuple(
+            vehicle_box_with_x_offset(vehicle, relative_scene_x_offset_m)
+            for vehicle in visible_radar_vehicle_boxes_raw
         )
         blockers = (*detected_blockers, *radar_blockers)
         vehicles = (ego_vehicle, *detected_vehicle_boxes, *visible_radar_vehicle_boxes)
     else:
         blockers = ()
         vehicles = (ego_vehicle,)
-    rear_indicators = rear_vehicle_indicators(state.detected_vehicles, state, lane_width_m) if route_mode else ()
+    rear_indicators = (
+        rear_vehicle_indicators(state.detected_vehicles, state, lane_width_m, relative_scene_x_offset_m)
+        if route_mode else ()
+    )
     profile_scene_add(profile_add, "scene.build.vehicles", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
@@ -2215,6 +2237,7 @@ def build_cluster_scene(
         (*selected_radar_vehicle_points, *hidden_merged_radar_points),
         min_forward_m=road_start_m if camera_active else ROAD_NEAR_M,
         max_forward_m=road_end_m if camera_active else ROAD_FAR_M + 30.0,
+        x_offset_m=relative_scene_x_offset_m,
     )
     profile_scene_add(profile_add, "scene.build.radar_points", profile_stage)
 
