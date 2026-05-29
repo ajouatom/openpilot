@@ -168,6 +168,12 @@ When `--fps` is omitted for live input, `ClusterHudLiveFps` controls the render
 limit and is polled about once per second while running: `0` uncapped,
 `1` 10 Hz, `2` 20 Hz, and `3` 30 Hz. Explicit `--fps` remains a fixed
 override.
+`ClusterHudEncoder` controls the encoder used by manager autostart: `0` auto
+tries native hardware H264, then ffmpeg/libx264 software H264, then JPEG;
+`1` forces JPEG, `2` forces native hardware H264, and `3` forces
+ffmpeg/libx264 software H264. Changing this setting while the HUD is running
+makes the current HUD process exit so `cluster_autorun` can relaunch it with the
+new encoder choice.
 `ClusterHudScreenMode` controls optional debug views: `0` default, `1` shows
 the live debug panel with grouped `LIVE DELAY`, `LIVE TORQUE`, `STEERING`, and
 `LATERAL PLAN` rows, `2` shows the system information panel, `3` shows a large

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from cluster_config import (
     CLUSTER_BRIGHTNESS_PARAM,
+    CLUSTER_ENCODER_PARAM,
     CLUSTER_HUD_PARAM,
     CLUSTER_LIVE_FPS_PARAM,
     CLUSTER_SCREEN_MODE_PARAM,
@@ -148,6 +149,25 @@ class ClusterHudModeParamReader:
             return None
 
 
+class ClusterHudEncoderParamReader:
+    def __init__(self) -> None:
+        self._params = None
+        try:
+            from openpilot.common.params import Params
+
+            self._params = Params()
+        except Exception:
+            pass
+
+    def read(self) -> int | None:
+        if self._params is None:
+            return None
+        try:
+            return int(self._params.get_int(CLUSTER_ENCODER_PARAM))
+        except Exception:
+            return None
+
+
 def route_overlay_for_mode(overlay: RouteOverlay | None, mode: str) -> RouteOverlay | None:
     if overlay is None or mode == "off":
         return None
@@ -249,6 +269,7 @@ def run_demo(
     gc_freeze_init: bool,
     theme_mode: str | None,
     hud_mode_watch: int | None,
+    hud_encoder_watch: int | None,
 ) -> None:
     profile = ProfileReporter(profile_render, profile_interval_s)
     gc_hook = GcProfileHook(profile) if profile_render else None
@@ -332,6 +353,7 @@ def run_demo(
     screen_mode_param_reader = ClusterScreenModeParamReader()
     active_screen_mode = screen_mode_param_reader.read()
     hud_mode_param_reader = ClusterHudModeParamReader() if hud_mode_watch is not None else None
+    hud_encoder_param_reader = ClusterHudEncoderParamReader() if hud_encoder_watch is not None else None
     renderer = ClusterUiRenderer(
         frame_width,
         frame_height,
@@ -453,6 +475,13 @@ def run_demo(
                 if next_hud_mode is not None and next_hud_mode != hud_mode_watch:
                     print(
                         f"{CLUSTER_HUD_PARAM} changed from {hud_mode_watch} to {next_hud_mode}; exiting",
+                        flush=True,
+                    )
+                    break
+                next_hud_encoder = hud_encoder_param_reader.read() if hud_encoder_param_reader is not None else None
+                if next_hud_encoder is not None and next_hud_encoder != hud_encoder_watch:
+                    print(
+                        f"{CLUSTER_ENCODER_PARAM} changed from {hud_encoder_watch} to {next_hud_encoder}; exiting",
                         flush=True,
                     )
                     break
@@ -953,6 +982,12 @@ def parse_args() -> argparse.Namespace:
         help=argparse.SUPPRESS,
     )
     parser.add_argument(
+        "--cluster-hud-encoder",
+        type=int,
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
         "--route-loop",
         action="store_true",
         help="Loop route replay instead of stopping at the end.",
@@ -1153,6 +1188,7 @@ def main() -> None:
             not args.no_gc_freeze,
             args.theme,
             args.cluster_hud_mode,
+            args.cluster_hud_encoder,
         )
     except KeyboardInterrupt:
         print("\nStopped.")

@@ -16,6 +16,7 @@ CARROT_DIR = Path(__file__).resolve().parent
 CLUSTER_DIR = CARROT_DIR / "cluster"
 OPENPILOT_ROOT = CARROT_DIR.parents[1]
 HUD_PARAM = "ClusterHud"
+HUD_ENCODER_PARAM = "ClusterHudEncoder"
 RETRY_INTERVAL_S = 5.0
 HUD_CHECK_INTERVAL_S = 5.0
 USB_FALLBACK_SCAN_INTERVAL_S = 60.0
@@ -23,6 +24,16 @@ NETLINK_KOBJECT_UEVENT = 15
 AUTORUN_FPS_ENV = "CLUSTER_AUTORUN_FPS"
 AUTORUN_DEFAULT_ENV = {
     "CLUSTER_REALTIME": "0",
+}
+ENCODER_AUTO = 0
+ENCODER_JPEG = 1
+ENCODER_HARDWARE = 2
+ENCODER_SOFTWARE = 3
+ENCODER_NAMES = {
+    ENCODER_AUTO: "auto",
+    ENCODER_JPEG: "jpeg",
+    ENCODER_HARDWARE: "hardware",
+    ENCODER_SOFTWARE: "software",
 }
 
 
@@ -41,19 +52,54 @@ def _read_hud_mode(params: Params) -> int:
         return 0
 
 
-def _cluster_args(hud_mode: int) -> list[str]:
+def _read_encoder_mode(params: Params) -> int:
+    try:
+        encoder_mode = int(params.get_int(HUD_ENCODER_PARAM))
+    except Exception as exc:
+        print(f"[cluster_autorun] failed to read {HUD_ENCODER_PARAM}: {exc}", flush=True)
+        return ENCODER_AUTO
+    if encoder_mode not in ENCODER_NAMES:
+        print(
+            f"[cluster_autorun] unsupported {HUD_ENCODER_PARAM}={encoder_mode}; using auto",
+            flush=True,
+        )
+        return ENCODER_AUTO
+    return encoder_mode
+
+
+def _encoder_sequence(encoder_mode: int) -> list[int]:
+    if encoder_mode == ENCODER_AUTO:
+        return [ENCODER_HARDWARE, ENCODER_SOFTWARE, ENCODER_JPEG]
+    return [encoder_mode]
+
+
+def _encoder_args(encoder_mode: int) -> list[str]:
+    if encoder_mode == ENCODER_HARDWARE:
+        return ["--usb-codec", "h264", "--usb-h264-backend", "native"]
+    if encoder_mode == ENCODER_SOFTWARE:
+        return [
+            "--usb-codec",
+            "h264",
+            "--usb-h264-backend",
+            "ffmpeg",
+            "--usb-h264-ffmpeg-encoder",
+            "libx264",
+        ]
+    return ["--usb-codec", "jpeg", "--usb-jpeg-quality", "68"]
+
+
+def _cluster_args(hud_mode: int, configured_encoder_mode: int, active_encoder_mode: int) -> list[str]:
     args = [
         "--input",
         "live",
         "--output",
         "usb",
-        "--usb-codec",
-        "jpeg",
-        "--usb-jpeg-quality",
-        "68",
+        *_encoder_args(active_encoder_mode),
         "--live-no-can",
         "--cluster-hud-mode",
         str(hud_mode),
+        "--cluster-hud-encoder",
+        str(configured_encoder_mode),
     ]
     fps = os.environ.get(AUTORUN_FPS_ENV, "").strip()
     if fps:
@@ -61,7 +107,7 @@ def _cluster_args(hud_mode: int) -> list[str]:
     return args
 
 
-def _run_cluster_once(hud_mode: int) -> None:
+def _run_cluster_once(hud_mode: int, encoder_mode: int) -> None:
     from selfdrive.carrot import cluster_run
 
     previous_argv = sys.argv[:]
@@ -69,8 +115,31 @@ def _run_cluster_once(hud_mode: int) -> None:
     try:
         for key, value in AUTORUN_DEFAULT_ENV.items():
             os.environ.setdefault(key, value)
-        sys.argv = [previous_argv[0], *_cluster_args(hud_mode)]
-        cluster_run.main()
+        sequence = _encoder_sequence(encoder_mode)
+        for index, active_encoder_mode in enumerate(sequence):
+            print(
+                f"[cluster_autorun] starting HUD encoder "
+                f"{ENCODER_NAMES[active_encoder_mode]} "
+                f"(setting={encoder_mode}:{ENCODER_NAMES[encoder_mode]})",
+                flush=True,
+            )
+            try:
+                sys.argv = [
+                    previous_argv[0],
+                    *_cluster_args(hud_mode, encoder_mode, active_encoder_mode),
+                ]
+                cluster_run.main()
+                return
+            except Exception:
+                if encoder_mode != ENCODER_AUTO or index == len(sequence) - 1:
+                    raise
+                next_encoder_mode = sequence[index + 1]
+                print(
+                    f"[cluster_autorun] HUD encoder {ENCODER_NAMES[active_encoder_mode]} failed; "
+                    f"falling back to {ENCODER_NAMES[next_encoder_mode]}",
+                    flush=True,
+                )
+                traceback.print_exc()
     finally:
         sys.argv = previous_argv
         for key, value in previous_env.items():
@@ -263,6 +332,7 @@ def main() -> None:
     print(f"[cluster_autorun] found {product_label(found_product_id)}; starting cluster HUD", flush=True)
     while True:
         hud_mode = _read_hud_mode(params)
+        encoder_mode = _read_encoder_mode(params)
         expected_product_id = product_id_for_hud_mode(hud_mode)
         if expected_product_id is None:
             print(f"[cluster_autorun] {HUD_PARAM}={hud_mode}; stopping cluster HUD", flush=True)
@@ -279,11 +349,14 @@ def main() -> None:
             print(f"[cluster_autorun] found {product_label(found_product_id)}; starting cluster HUD", flush=True)
 
         try:
-            _run_cluster_once(hud_mode)
+            _run_cluster_once(hud_mode, encoder_mode)
             next_hud_mode = _read_hud_mode(params)
-            if next_hud_mode != hud_mode:
+            next_encoder_mode = _read_encoder_mode(params)
+            if next_hud_mode != hud_mode or next_encoder_mode != encoder_mode:
                 print(
-                    f"[cluster_autorun] {HUD_PARAM} changed from {hud_mode} to {next_hud_mode}; rechecking",
+                    f"[cluster_autorun] HUD setting changed "
+                    f"mode {hud_mode}->{next_hud_mode}, "
+                    f"encoder {encoder_mode}->{next_encoder_mode}; rechecking",
                     flush=True,
                 )
                 continue
