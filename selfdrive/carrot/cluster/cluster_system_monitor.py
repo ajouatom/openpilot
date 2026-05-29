@@ -19,7 +19,17 @@ KGSL_GPU_MAX_FREQ_PATHS = (
 )
 DEVFREQ_PATH = Path("/sys/class/devfreq")
 ENCODER_DEVFREQ_HINTS = ("vidc", "venus", "vcodec", "video")
-EXCLUDED_DEVFREQ_HINTS = ("kgsl", "gpu", "cpu", "cpubw", "llcc")
+ENCODER_DEVFREQ_PRIORITY_HINTS = (
+    "venus_bus_ddr",
+    "venus_bus_llcc",
+    "arm9_bus_ddr",
+    "bus_cnoc",
+    "vidc",
+    "venus",
+    "vcodec",
+    "video",
+)
+EXCLUDED_DEVFREQ_HINTS = ("kgsl", "gpu", "cpu", "cpubw")
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,29 +155,61 @@ class SystemStatsSampler:
             used_percent = self._read_devfreq_percent(path)
             cur_freq = self._read_int_file(path / "cur_freq")
             max_freq = self._read_int_file(path / "max_freq")
+            if max_freq is None or max_freq <= 0:
+                max_freq = self._read_available_max_freq(path)
+            if used_percent is None:
+                used_percent = self._freq_ratio_percent(cur_freq, max_freq)
             if used_percent is not None or cur_freq is not None:
                 return used_percent, cur_freq, max_freq, path.name
         return None, None, None, None
 
-    @staticmethod
-    def _encoder_devfreq_paths() -> tuple[Path, ...]:
+    @classmethod
+    def _encoder_devfreq_paths(cls) -> tuple[Path, ...]:
         try:
             paths = tuple(DEVFREQ_PATH.iterdir())
         except OSError:
             return ()
         candidates: list[Path] = []
         for path in paths:
-            name = path.name.lower()
-            try:
-                target = str(path.resolve()).lower()
-            except OSError:
-                target = ""
-            haystack = f"{name} {target}"
+            haystack = cls._devfreq_haystack(path)
             if any(hint in haystack for hint in EXCLUDED_DEVFREQ_HINTS):
                 continue
             if any(hint in haystack for hint in ENCODER_DEVFREQ_HINTS):
                 candidates.append(path)
-        return tuple(candidates)
+        return tuple(sorted(candidates, key=cls._devfreq_priority))
+
+    @staticmethod
+    def _devfreq_haystack(path: Path) -> str:
+        name = path.name.lower()
+        try:
+            target = str(path.resolve()).lower()
+        except OSError:
+            target = ""
+        return f"{name} {target}"
+
+    @staticmethod
+    def _devfreq_priority(path: Path) -> tuple[int, str]:
+        haystack = SystemStatsSampler._devfreq_haystack(path)
+        for index, hint in enumerate(ENCODER_DEVFREQ_PRIORITY_HINTS):
+            if hint in haystack:
+                return index, path.name
+        return len(ENCODER_DEVFREQ_PRIORITY_HINTS), path.name
+
+    @staticmethod
+    def _read_available_max_freq(path: Path) -> int | None:
+        try:
+            text = (path / "available_frequencies").read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            return None
+        values: list[int] = []
+        for match in re.finditer(r"\d+", text):
+            try:
+                value = int(match.group(0))
+            except ValueError:
+                continue
+            if value > 0:
+                values.append(value)
+        return max(values) if values else None
 
     def _read_devfreq_percent(self, path: Path) -> float | None:
         load = self._read_float_file(path / "load")
@@ -197,6 +239,12 @@ class SystemStatsSampler:
         elif value > 1000.0:
             value /= 1000.0
         return max(0.0, min(100.0, value))
+
+    @staticmethod
+    def _freq_ratio_percent(cur_freq: int | None, max_freq: int | None) -> float | None:
+        if cur_freq is None or max_freq is None or max_freq <= 0:
+            return None
+        return max(0.0, min(100.0, cur_freq / max_freq * 100.0))
 
     @staticmethod
     def _read_linux_memory() -> tuple[int | None, int | None, float | None]:
