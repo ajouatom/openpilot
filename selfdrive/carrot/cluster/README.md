@@ -202,8 +202,8 @@ openpilot realtime helper when `CLUSTER_REALTIME` is enabled.
 When `--usb-brightness` is omitted, USB launches follow `ClusterHudBrightness`:
 `0` auto follows live `deviceState.screenBrightnessPercent` after samples are
 available, and `1` through `100` are fixed brightness percentages.
-Brightness commands use no-ACK command `14`; while USB output is active, the
-current brightness is resent at least once every 5 seconds.
+Brightness commands use no-ACK command `14` during USB initialization and when
+the resolved brightness changes.
 
 The launcher defaults to `--input live`, subscribes to openpilot cereal services,
 and renders live `carState`, `modelV2`, `radarState`, `liveTracks`,
