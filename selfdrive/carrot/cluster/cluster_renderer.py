@@ -1466,7 +1466,7 @@ class ClusterUiRenderer:
         columns = 2 if cpu_count <= 8 else 4
         rows = max(1, math.ceil(max(1, cpu_count) / columns))
         core_row_h = 30.0 if columns == 2 else 24.0
-        header_h = 206.0
+        header_h = 122.0
         panel_h = min(DESIGN_HEIGHT - SYSTEM_PANEL_Y - 18.0, header_h + rows * core_row_h + 18.0)
         core_area_h = max(24.0, panel_h - header_h - 14.0)
         core_row_h = min(core_row_h, core_area_h / rows)
@@ -1498,56 +1498,7 @@ class ClusterUiRenderer:
         )
         self._draw_percent_bar(panel_x + pad_x, panel_y + 80, panel_w - pad_x * 2, 12, mem_percent, mem_color)
 
-        gpu_y = panel_y + 104
-        gpu_percent = stats.gpu_used_percent
-        gpu_color = self._system_metric_color(gpu_percent)
-        self._draw_text("GPU", panel_x + pad_x, gpu_y, 17, theme.muted)
-        self._draw_text(
-            self._freq_text(stats.gpu_freq_hz, stats.gpu_max_freq_hz),
-            panel_x + 86,
-            gpu_y,
-            17,
-            theme.text if stats.gpu_freq_hz is not None else theme.muted,
-        )
-        self._draw_text(
-            self._percent_text(gpu_percent),
-            panel_x + panel_w - pad_x,
-            gpu_y,
-            17,
-            gpu_color,
-            anchor="right",
-        )
-        self._draw_percent_bar(panel_x + pad_x, gpu_y + 18, panel_w - pad_x * 2, 12, gpu_percent, gpu_color)
-
-        encoder_y = panel_y + 146
-        encoder_percent = stats.encoder_used_percent
-        encoder_color = self._system_metric_color(encoder_percent)
-        self._draw_text("VENC", panel_x + pad_x, encoder_y, 17, theme.muted)
-        self._draw_text(
-            self._encoder_text(stats),
-            panel_x + 92,
-            encoder_y,
-            17,
-            theme.text
-            if (
-                stats.encoder_freq_hz is not None
-                or stats.encoder_source is not None
-                or stats.encoder_frame_rate_fps is not None
-                or stats.encoder_target_fps is not None
-            )
-            else theme.muted,
-        )
-        self._draw_text(
-            self._percent_text(encoder_percent),
-            panel_x + panel_w - pad_x,
-            encoder_y,
-            17,
-            encoder_color,
-            anchor="right",
-        )
-        self._draw_percent_bar(panel_x + pad_x, encoder_y + 18, panel_w - pad_x * 2, 12, encoder_percent, encoder_color)
-
-        cpu_header_y = panel_y + 188
+        cpu_header_y = panel_y + 104
         self._draw_text("CPU CORE %", panel_x + pad_x, cpu_header_y, 15, theme.muted)
         if cpu_count == 0:
             self._draw_text("unavailable", panel_x + panel_w - pad_x, cpu_header_y, 15, theme.muted, anchor="right")
@@ -1725,39 +1676,6 @@ class ClusterUiRenderer:
         used_gib = stats.memory_used_bytes / (1024.0 ** 3)
         total_gib = stats.memory_total_bytes / (1024.0 ** 3)
         return f"{used_gib:.1f}/{total_gib:.1f} GB"
-
-    def _encoder_text(self, stats: SystemStats) -> str:
-        if stats.encoder_frame_rate_fps is not None or stats.encoder_target_fps is not None:
-            rate_text = self._optional_fps_text(stats.encoder_frame_rate_fps)
-            target_text = self._optional_fps_text(stats.encoder_target_fps)
-            if stats.encoder_source is None:
-                return f"{rate_text}/{target_text} fps"
-            source = self._ellipsize_text(stats.encoder_source, 17, 116.0)
-            return f"{source} {rate_text}/{target_text} fps"
-
-        freq_text = self._freq_text(stats.encoder_freq_hz, stats.encoder_max_freq_hz)
-        if stats.encoder_source is None:
-            return freq_text
-        source = self._ellipsize_text(stats.encoder_source, 17, 168.0)
-        return f"{source} {freq_text}"
-
-    @staticmethod
-    def _optional_fps_text(value: float | None) -> str:
-        if value is None:
-            return "--"
-        if value >= 10.0:
-            return f"{value:.0f}"
-        return f"{value:.1f}"
-
-    @staticmethod
-    def _freq_text(freq_hz: int | None, max_freq_hz: int | None = None) -> str:
-        if freq_hz is None or freq_hz <= 0:
-            return "-- MHz"
-        freq_mhz = freq_hz / 1_000_000.0
-        if max_freq_hz is not None and max_freq_hz > 0:
-            max_mhz = max_freq_hz / 1_000_000.0
-            return f"{freq_mhz:.0f}/{max_mhz:.0f} MHz"
-        return f"{freq_mhz:.0f} MHz"
 
     @staticmethod
     def _percent_text(percent: float | None) -> str:
