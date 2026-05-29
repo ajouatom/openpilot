@@ -579,10 +579,31 @@ class CarrotLearner:
     }
 
     # ── Phase 1: CruiseMaxVals ──────────────────────────────────────
+    drive_mode = self._params.get_int("MyDrivingMode") # 1: ECO, 2: SAFE, 3: NORMAL, 4: HIGH
     for i, acc_sec in enumerate(self._gas_acc):
       key = _ACCEL_KEYS[i]
       current_raw = self._params.get_int(key)
       if current_raw <= 0: continue
+
+      # 드라이브 모드별 동적 가속 제한 상한값 설정
+      max_limit = 250
+      if key == "CruiseMaxVals1":
+        if drive_mode in (1, 2):    # ECO, SAFE
+          max_limit = 180
+        elif drive_mode == 3:       # NORMAL
+          max_limit = 200
+        elif drive_mode == 4:       # HIGH
+          max_limit = 250
+      elif key == "CruiseMaxVals2":
+        if drive_mode in (1, 2):    # ECO, SAFE
+          max_limit = 150
+        elif drive_mode in (3, 4):  # NORMAL, HIGH
+          max_limit = 160
+      elif key == "CruiseMaxVals3":
+        if drive_mode in (1, 2):    # ECO, SAFE
+          max_limit = 110
+        elif drive_mode in (3, 4):  # NORMAL, HIGH
+          max_limit = 120
 
       total_dec = self._gas_dec_acc[i] + self._gas_dec_auto_acc[i]
       
@@ -601,17 +622,27 @@ class CarrotLearner:
       current_accel_limit = current_raw / 100.0
       accel_deficit = max_accel - current_accel_limit
 
-      if dampened_acc_sec >= _GAS_THRESHOLD_SEC and not is_auto_surging:
+      recommended_raw = current_raw
+      reason = ""
+      sec = 0.0
+
+      if current_raw > max_limit:
+        # 현재 설정값이 동적 상한선보다 큰 경우 강제 상한 제한으로 하향 조치 트리거
+        recommended_raw = max_limit
+        reason = f"exceeds drive-mode limit ({max_limit})"
+        sec = 0.0
+      elif dampened_acc_sec >= _GAS_THRESHOLD_SEC and not is_auto_surging:
         # 피크 가속도 부족분에 비례하는 가변 증가율 적용 (최소 5%, 최대 25%)
         if accel_deficit > 0.05:
           dynamic_ratio = float(np.clip(accel_deficit / current_accel_limit * 0.8, 0.05, 0.25))
         else:
           dynamic_ratio = _GAS_RECOMMEND_RATIO # 기본 10%
-        recommended_raw = min(250, int(current_raw * (1.0 + dynamic_ratio)))
+        recommended_raw = min(max_limit, int(current_raw * (1.0 + dynamic_ratio)))
         reason = f"gas help (deficit {accel_deficit:.2f}m/s^2, ratio {dynamic_ratio*100:.1f}%)"
         sec = dampened_acc_sec
       elif total_dec >= _GAS_REDUCE_THRESHOLD_SEC or (total_brake_events >= 8 and current_raw > 100) or is_auto_surging:
         recommended_raw = max(50, int(current_raw * (1.0 + _GAS_REDUCE_RATIO)))
+        recommended_raw = min(max_limit, recommended_raw)
         if is_auto_surging:
           reason = "excessive auto-surging penalty"
           sec = self._gas_dec_auto_acc[i] + self._brake_auto_count
