@@ -44,6 +44,33 @@ def _ensure_cluster_paths() -> None:
             sys.path.insert(0, path_text)
 
 
+def _apply_autorun_defaults() -> None:
+    for key, value in AUTORUN_DEFAULT_ENV.items():
+        os.environ.setdefault(key, value)
+
+
+def _cluster_realtime_enabled() -> bool:
+    return os.environ.get("CLUSTER_REALTIME", "0").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _cluster_realtime_cores() -> list[int]:
+    cores_text = os.environ.get("CLUSTER_REALTIME_CORES", "0,1,2,3")
+    return [int(core.strip()) for core in cores_text.split(",") if core.strip()]
+
+
+def _configure_autorun_affinity() -> None:
+    if not _cluster_realtime_enabled():
+        return
+    try:
+        from openpilot.common.realtime import set_core_affinity
+
+        cores = _cluster_realtime_cores()
+        set_core_affinity(cores)
+        print(f"[cluster_autorun] affinity enabled cores={cores}", flush=True)
+    except Exception as exc:
+        print(f"[cluster_autorun] failed to set core affinity: {exc}", flush=True)
+
+
 def _read_hud_mode(params: Params) -> int:
     try:
         return int(params.get_int(HUD_PARAM))
@@ -113,8 +140,7 @@ def _run_cluster_once(hud_mode: int, encoder_mode: int) -> None:
     previous_argv = sys.argv[:]
     previous_env = {key: os.environ.get(key) for key in AUTORUN_DEFAULT_ENV}
     try:
-        for key, value in AUTORUN_DEFAULT_ENV.items():
-            os.environ.setdefault(key, value)
+        _apply_autorun_defaults()
         sequence = _encoder_sequence(encoder_mode)
         for index, active_encoder_mode in enumerate(sequence):
             print(
@@ -310,6 +336,8 @@ def _wait_for_supported_usb_device(params: Params, expected_product_id: int, rea
 
 def main() -> None:
     _ensure_cluster_paths()
+    _apply_autorun_defaults()
+    _configure_autorun_affinity()
     from cluster_usb_display import find_supported_usb_product, product_id_for_hud_mode, product_label
 
     params = Params()
