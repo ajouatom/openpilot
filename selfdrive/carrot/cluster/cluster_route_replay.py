@@ -46,9 +46,12 @@ LOG_FILENAMES = {
 RADAR_TO_CAMERA_M = 1.52
 MODEL_LEAD_MIN_PROB = 0.08
 RADAR_POINT_STALE_S = 0.12
+CORNER_DETECTION_STALE_S = 0.8
 RADAR_MIN_LONGITUDINAL_M = 0.0
 RADAR_FRONT_MAX_LONGITUDINAL_M = 180.0
 CORNER_RADAR_REAR_MIN_LONGITUDINAL_M = -180.0
+CCNC_CORNER_RADAR_ADDRESS = 0x162
+ADRV_CORNER_RADAR_ADDRESS = 0x1EA
 ROUTE_REPLAY_MIN_BUFFER_FILES = 2
 ROUTE_REPLAY_START_BUFFER_FILES = 1
 ROUTE_REPLAY_READAHEAD_S = 5.0
@@ -740,8 +743,12 @@ class RouteLogParser:
         self.lane_change_continuation_active = False
         self.lane_change_previous_state = "off"
         self.lane_change_peak_directional_observed_offset = 0.0
-        self.corner_detections: dict[str, DetectedVehicle] = {}
-        self.corner_detection_t = -999.0
+        self.ccnc_corner_detections: dict[str, DetectedVehicle] = {}
+        self.ccnc_corner_message_t = -999.0
+        self.adrv_corner_detections: dict[str, DetectedVehicle] = {}
+        self.adrv_corner_message_t = -999.0
+        self.adrv_lane_changing = 0
+        self.adrv_lane_changing_t = -999.0
         self.hyundai_canfd_radar_points: dict[str, RadarPoint] = {}
         self.hyundai_canfd_radar_history: dict[str, tuple[float, float]] = {}
         self.hyundai_canfd_radar_t = -999.0
@@ -829,7 +836,13 @@ class RouteLogParser:
             right_signal,
             observed_ego_lane_offset,
         )
-        detected_vehicles = self._detected_vehicles_from_current_state(car_state, event_t, lane_values)
+        detected_vehicles = self._detected_vehicles_from_current_state(
+            car_state,
+            event_t,
+            lane_values,
+            lane_change,
+            lane_change_phase,
+        )
         radar_points = self._radar_points_from_current_state(event_t)
 
         return RouteReplayFrame(
@@ -1186,14 +1199,19 @@ class RouteLogParser:
                     self.hyundai_canfd_radar_points[point.label] = self._radar_point_with_absolute_speed(point, event_t)
                 self.hyundai_canfd_radar_t = event_t
                 continue
-            if address not in (0x162, 0x1EA):
+            if address not in (CCNC_CORNER_RADAR_ADDRESS, ADRV_CORNER_RADAR_ADDRESS):
                 continue
             if len(data) < 24:
                 continue
             parsed = parse_corner_radar_message(address, data)
-            if parsed:
-                self.corner_detections = parsed
-                self.corner_detection_t = event_t
+            if address == ADRV_CORNER_RADAR_ADDRESS:
+                self.adrv_corner_detections = parsed
+                self.adrv_corner_message_t = event_t
+                self.adrv_lane_changing = dbc_unsigned(data, 45, 3, "be")
+                self.adrv_lane_changing_t = event_t
+            else:
+                self.ccnc_corner_detections = parsed
+                self.ccnc_corner_message_t = event_t
 
     def _update_live_tracks(self, live_tracks: Any, event_t: float) -> None:
         points: dict[str, RadarPoint] = {}
@@ -1240,13 +1258,20 @@ class RouteLogParser:
         car_state: Any,
         event_t: float,
         lane_values: dict[str, Any],
+        lane_change: str | None,
+        lane_change_phase: str,
     ) -> tuple[DetectedVehicle, ...]:
         detections: list[DetectedVehicle] = []
         if event_t - self.model_detection_t < 0.8:
             detections.extend(self.model_detections)
 
-        if event_t - self.corner_detection_t < 0.8:
-            for vehicle in self.corner_detections.values():
+        corner_detections = self._corner_detections_for_current_state(
+            event_t,
+            lane_change,
+            lane_change_phase,
+        )
+        if corner_detections is not None:
+            for vehicle in corner_detections:
                 if not vehicle_is_inside_road_edges(vehicle, lane_values):
                     continue
                 if not has_nearby_vehicle(detections, vehicle, longitudinal_tolerance=3.0, lateral_tolerance=1.1):
@@ -1266,6 +1291,29 @@ class RouteLogParser:
                     detections.append(vehicle)
 
         return tuple(sorted(detections, key=lambda vehicle: vehicle.longitudinal_m))
+
+    def _corner_detections_for_current_state(
+        self,
+        event_t: float,
+        lane_change: str | None,
+        lane_change_phase: str,
+    ) -> tuple[DetectedVehicle, ...] | None:
+        adrv_fresh = event_t - self.adrv_corner_message_t < CORNER_DETECTION_STALE_S
+        ccnc_fresh = event_t - self.ccnc_corner_message_t < CORNER_DETECTION_STALE_S
+        adrv_lane_change_fresh = event_t - self.adrv_lane_changing_t < CORNER_DETECTION_STALE_S
+        lane_change_active = (
+            lane_change in ("left", "right")
+            and lane_change_phase in ("preparing", "changing", "recentering")
+        )
+        adrv_lane_change_active = adrv_lane_change_fresh and self.adrv_lane_changing != 0
+
+        if adrv_fresh and (lane_change_active or adrv_lane_change_active):
+            return tuple(self.adrv_corner_detections.values())
+        if ccnc_fresh:
+            return tuple(self.ccnc_corner_detections.values())
+        if adrv_fresh:
+            return tuple(self.adrv_corner_detections.values())
+        return None
 
     def _current_road_curvature(self) -> tuple[float | None, str]:
         if self.model_curvature_m_inv is not None:
