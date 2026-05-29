@@ -1259,8 +1259,7 @@ class RouteLogParser:
         )
 
     def _update_nav_instruction(self, nav_instruction: Any) -> None:
-        speed_limit_mps = safe_float(nav_instruction, "speedLimit", 0.0)
-        self.nav_speed_limit_kph = int(round(speed_limit_mps * 3.6)) if speed_limit_mps > 0.1 else None
+        self.nav_speed_limit_kph = self._speed_limit_kph_from_nav_instruction(nav_instruction)
 
     def _update_longitudinal_plan(self, longitudinal_plan: Any) -> None:
         self.longitudinal_plan_source = enum_text(
@@ -1635,6 +1634,17 @@ class RouteLogParser:
         if speed_limit <= 0.0:
             return None
         return int(round(speed_limit))
+
+    def _speed_limit_kph_from_nav_instruction(self, nav_instruction: Any) -> int | None:
+        speed_limit = safe_float(nav_instruction, "speedLimit", 0.0)
+        if speed_limit <= 0.1:
+            return None
+        rounded = int(round(speed_limit))
+        integer_like = abs(speed_limit - rounded) < 0.05
+        kph_like = speed_limit >= 45.0 or (speed_limit >= 30.0 and integer_like and rounded % 5 == 0)
+        if kph_like:
+            return rounded
+        return int(round(speed_limit * 3.6))
 
     def _update_lane_styles_from_car_state(self, car_state: Any) -> None:
         left_code = safe_optional_int(car_state, "leftLaneLine")
