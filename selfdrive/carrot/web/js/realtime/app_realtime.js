@@ -179,6 +179,21 @@ async function toggleCarrotFullscreen(options = {}) {
   return requestCarrotFullscreen(options);
 }
 
+function isCarrotVisionDefaultFullscreenEnabled() {
+  const settings = window.CarrotWebSettingsState || {};
+  const fallback = true;
+  const value = Object.prototype.hasOwnProperty.call(settings, "vision_fullscreen_default")
+    ? settings.vision_fullscreen_default
+    : fallback;
+  if (typeof value === "string") return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+  return Boolean(value);
+}
+
+function requestCarrotVisionDefaultFullscreen(options = {}) {
+  if (!isCarrotVisionDefaultFullscreenEnabled()) return Promise.resolve(false);
+  return requestCarrotFullscreen(options);
+}
+
 function shouldKeepCarrotFullscreen() {
   return document.body?.dataset?.page === "carrot" && isCarrotVisionActive();
 }
@@ -198,6 +213,11 @@ window.addEventListener("carrot:pagechange", () => {
 window.addEventListener("carrot:visionchange", () => {
   void syncCarrotFullscreenLifecycle();
 });
+window.addEventListener("carrot:websettingschange", (event) => {
+  if (event?.detail?.key !== "vision_fullscreen_default") return;
+  if (isCarrotVisionDefaultFullscreenEnabled()) return;
+  void exitCarrotFullscreen({ quiet: true }).catch(() => {});
+});
 
 function emitCarrotRenderRequest(detail = {}) {
   window.dispatchEvent(new CustomEvent("carrot:render-request", { detail }));
@@ -216,7 +236,7 @@ window.emitCarrotVisionChange = emitCarrotVisionChange;
 function maybeRequestCarrotFullscreenOnPageChange(detail = {}) {
   if (String(detail?.page || "") !== "carrot") return;
   if (!isCarrotVisionActive()) return;
-  requestCarrotFullscreen({ quiet: true }).catch(() => {});
+  requestCarrotVisionDefaultFullscreen({ quiet: true }).catch(() => {});
 }
 
 function getLiveRuntimeDataSignature(payload) {
@@ -282,8 +302,25 @@ async function fetchLiveRuntimeState(force = false) {
   return LIVE_RUNTIME_FETCH_IN_FLIGHT;
 }
 
+function isKmapStreaming() {
+  if (!isCarrotPageVisible()) return false;
+  const settings = window.CarrotWebSettingsState || {};
+  const enabled = settings.kmap_enabled;
+  const enabledBool = typeof enabled === "string"
+    ? ["1", "true", "yes", "on"].includes(enabled.trim().toLowerCase())
+    : Boolean(enabled);
+  if (!enabledBool) return false;
+  if (typeof window.matchMedia === "function") {
+    try {
+      if (!window.matchMedia("(orientation: landscape)").matches) return false;
+    } catch {}
+  }
+  return true;
+}
+
 function getLiveRuntimePollMs() {
-  return isCarrotPageVisible() ? 1000 : 3000;
+  if (!isCarrotPageVisible()) return 3000;
+  return isKmapStreaming() ? 500 : 1000;
 }
 
 function scheduleLiveRuntimeStateFetch(ms = getLiveRuntimePollMs()) {
@@ -448,7 +485,7 @@ window.CarrotVisionStart = async function() {
     if (typeof showAppToast === "function") showAppToast(window.CARROT_VISION_DISABLED_MESSAGE, { tone: "error" });
     return;
   }
-  requestCarrotFullscreen({ quiet: false }).catch(() => {});
+  requestCarrotVisionDefaultFullscreen({ quiet: false }).catch(() => {});
   setCarrotVisionActive(true, {
     phase: CARROT_VISION_PHASE.STARTING,
     reason: "user start",
@@ -573,7 +610,7 @@ function syncCarrotRealtimeLifecycle(forceFetch = false) {
       reason: "vision lifecycle active",
       updateRtcStatus: false,
     });
-    requestCarrotFullscreen({ quiet: true }).catch(() => {});
+    requestCarrotVisionDefaultFullscreen({ quiet: true }).catch(() => {});
     ensureRawDecodeWorker();
     rawOverlayConnectAll();
     startRtcPerfPolling(true);

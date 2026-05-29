@@ -903,6 +903,7 @@
 }
 
 .device-ssh-account {
+  appearance: none;
   min-width: 0;
   max-width: min(42vw, 240px);
   min-height: 38px;
@@ -920,6 +921,7 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
   box-sizing: border-box;
   overflow: hidden;
+  cursor: pointer;
 }
 
 .device-ssh-account.is-configured {
@@ -952,12 +954,139 @@
   white-space: nowrap;
 }
 
+.device-ssh-fingerprints {
+  display: grid;
+  gap: 3px;
+  margin-top: 7px;
+}
+
+.device-ssh-fingerprint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--md-on-surface-var);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.device-ssh-fingerprint span {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--md-primary) 72%, var(--md-on-surface-var));
+  font-weight: 900;
+}
+
+.device-ssh-fingerprint code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--md-on-surface);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .device-ssh-action {
   flex: 0 0 auto;
 }
 
 .device-ssh-action--remove {
   color: var(--md-error);
+}
+
+.app-dialog--device-ssh .app-dialog__sheet {
+  width: min(520px, calc(100vw - 28px));
+  max-height: min(560px, calc(100dvh - 28px));
+}
+
+.app-dialog--device-ssh .app-dialog__body {
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.device-ssh-dialog {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.device-ssh-dialog__field {
+  display: grid;
+  gap: 7px;
+  color: var(--md-on-surface-var);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.device-ssh-dialog__input {
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 58%, transparent);
+  border-radius: var(--r-sm);
+  background: var(--md-surface-cont-h);
+  color: var(--md-on-surface);
+  box-sizing: border-box;
+  font-family: var(--font-mono);
+  font-weight: 850;
+  outline: none;
+}
+
+.device-ssh-dialog__input:focus {
+  border-color: color-mix(in srgb, var(--md-primary) 88%, var(--md-outline-var));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--md-primary) 18%, transparent);
+}
+
+.device-ssh-dialog__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.device-ssh-dialog__actions .smallBtn {
+  width: 100%;
+  justify-content: center;
+}
+
+.device-ssh-dialog__empty {
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 34%, transparent);
+  border-radius: var(--r-sm);
+  color: var(--md-on-surface-var);
+  font-weight: 800;
+  text-align: center;
+}
+
+.device-ssh-key-list {
+  display: grid;
+  gap: 8px;
+}
+
+.device-ssh-key-list__item {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 34%, transparent);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--md-surface-cont-h) 72%, transparent);
+}
+
+.device-ssh-key-list__item span {
+  color: color-mix(in srgb, var(--md-primary) 78%, var(--md-on-surface));
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.device-ssh-key-list__item code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--md-on-surface);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.25;
 }
 
 .page--setting #deviceItems .settingTop > :first-child {
@@ -998,6 +1127,14 @@
 
   .device-ssh-account {
     max-width: min(52vw, 220px);
+  }
+
+  .device-ssh-fingerprints {
+    max-width: 100%;
+  }
+
+  .device-ssh-dialog__actions {
+    grid-template-columns: 1fr;
   }
 }
 
