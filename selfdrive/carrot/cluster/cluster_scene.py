@@ -50,6 +50,7 @@ RADAR_VEHICLE_MAX_DISTANCE_M = 150.0
 RADAR_VEHICLE_MAX_LATERAL_LANES = 2.75
 RADAR_ROAD_EDGE_HARD_CLEARANCE_M = 0.55
 RADAR_ROAD_EDGE_STATIONARY_CLEARANCE_M = 1.05
+RADAR_ROAD_EDGE_OUTSIDE_MARGIN_M = 0.25
 RADAR_STATIC_OBJECT_SPEED_MPS = 1.25
 RADAR_STATIC_OBJECT_SPEED_KPH = 8.0
 RADAR_SIDE_STATIC_LATERAL_LANES = 0.58
@@ -1314,6 +1315,8 @@ def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, l
         return False
     if point.probability is not None and point.probability < 0.20 and not point.in_my_lane:
         return False
+    if radar_point_is_outside_road_edges(point, state, lane_width_m):
+        return False
     if radar_point_has_vehicle_estimate(point, state, lane_width_m):
         return True
     if radar_point_is_stationary_object(point, state):
@@ -1406,6 +1409,45 @@ def radar_point_matches_static_road_edge(point: RadarPoint, state: ClusterUiStat
     absolute_static = absolute_speed_kph is not None and absolute_speed_kph <= RADAR_STATIC_OBJECT_SPEED_KPH
     relative_static = rel_speed <= RADAR_STATIC_OBJECT_SPEED_MPS
     return edge_distance <= RADAR_ROAD_EDGE_STATIONARY_CLEARANCE_M and (absolute_static or relative_static)
+
+
+def radar_point_is_outside_road_edges(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> bool:
+    left_edge_m = road_edge_lateral_at(
+        state.left_road_edge_points,
+        state.left_road_edge_lateral_shift_m,
+        state.left_road_edge_offset,
+        point.longitudinal_m,
+        lane_width_m,
+    )
+    right_edge_m = road_edge_lateral_at(
+        state.right_road_edge_points,
+        state.right_road_edge_lateral_shift_m,
+        state.right_road_edge_offset,
+        point.longitudinal_m,
+        lane_width_m,
+    )
+    if left_edge_m is not None and right_edge_m is not None and left_edge_m >= right_edge_m:
+        return False
+    if left_edge_m is not None and point.lateral_m < left_edge_m - RADAR_ROAD_EDGE_OUTSIDE_MARGIN_M:
+        return True
+    if right_edge_m is not None and point.lateral_m > right_edge_m + RADAR_ROAD_EDGE_OUTSIDE_MARGIN_M:
+        return True
+    return False
+
+
+def road_edge_lateral_at(
+    edge_points: tuple[ModelPathPoint, ...],
+    lateral_shift_m: float,
+    edge_offset: float | None,
+    forward_m: float,
+    lane_width_m: float,
+) -> float | None:
+    edge_lateral = model_line_lateral_at(edge_points, forward_m, lateral_shift_m)
+    if edge_lateral is not None:
+        return edge_lateral
+    if edge_offset is not None:
+        return edge_offset * lane_width_m
+    return None
 
 
 

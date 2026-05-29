@@ -53,6 +53,7 @@ ROUTE_REPLAY_MIN_BUFFER_FILES = 2
 ROUTE_REPLAY_START_BUFFER_FILES = 1
 ROUTE_REPLAY_READAHEAD_S = 5.0
 ROUTE_REPLAY_RETAIN_BEHIND_S = 1.0
+ROAD_EDGE_VEHICLE_OUTSIDE_MARGIN_M = 0.25
 LANE_CHANGE_REINDEX_PEAK_THRESHOLD = 0.22
 LANE_CHANGE_REINDEX_RESET_THRESHOLD = -0.08
 CONTINUOUS_LANE_CHANGE_REBASE_PROGRESS = 0.12
@@ -828,7 +829,7 @@ class RouteLogParser:
             right_signal,
             observed_ego_lane_offset,
         )
-        detected_vehicles = self._detected_vehicles_from_current_state(car_state, event_t)
+        detected_vehicles = self._detected_vehicles_from_current_state(car_state, event_t, lane_values)
         radar_points = self._radar_points_from_current_state(event_t)
 
         return RouteReplayFrame(
@@ -1234,22 +1235,33 @@ class RouteLogParser:
         absolute_speed_kph = observed_speed_kph if observed_speed_kph is not None else signal_speed_kph
         return replace(point, absolute_speed_kph=absolute_speed_kph)
 
-    def _detected_vehicles_from_current_state(self, car_state: Any, event_t: float) -> tuple[DetectedVehicle, ...]:
+    def _detected_vehicles_from_current_state(
+        self,
+        car_state: Any,
+        event_t: float,
+        lane_values: dict[str, Any],
+    ) -> tuple[DetectedVehicle, ...]:
         detections: list[DetectedVehicle] = []
         if event_t - self.model_detection_t < 0.8:
             detections.extend(self.model_detections)
 
         if event_t - self.corner_detection_t < 0.8:
             for vehicle in self.corner_detections.values():
+                if not vehicle_is_inside_road_edges(vehicle, lane_values):
+                    continue
                 if not has_nearby_vehicle(detections, vehicle, longitudinal_tolerance=3.0, lateral_tolerance=1.1):
                     detections.append(vehicle)
         else:
             for vehicle in car_state_corner_detections(car_state):
+                if not vehicle_is_inside_road_edges(vehicle, lane_values):
+                    continue
                 if not has_nearby_vehicle(detections, vehicle, longitudinal_tolerance=3.0, lateral_tolerance=1.1):
                     detections.append(vehicle)
 
         if event_t - self.radar_detection_t < 0.8:
             for vehicle in self.radar_detections:
+                if not vehicle_is_inside_road_edges(vehicle, lane_values):
+                    continue
                 if not has_nearby_vehicle(detections, vehicle, longitudinal_tolerance=4.0, lateral_tolerance=1.4):
                     detections.append(vehicle)
 
@@ -2568,6 +2580,34 @@ def has_nearby_vehicle(
         and abs(vehicle.lateral_m - candidate.lateral_m) <= lateral_tolerance
         for vehicle in vehicles
     )
+
+
+def road_edge_lateral_bounds_m(lane_values: dict[str, Any]) -> tuple[float | None, float | None]:
+    center_m = lane_values.get("center")
+    if center_m is None:
+        return None, None
+    width_m = max(0.1, float(lane_values.get("width", DEFAULT_LANE_WIDTH_M)))
+
+    def edge_lateral(offset_name: str) -> float | None:
+        offset = lane_values.get(offset_name)
+        if offset is None:
+            return None
+        return float(center_m) + float(offset) * width_m
+
+    left_edge_m = edge_lateral("left_road_edge_offset")
+    right_edge_m = edge_lateral("right_road_edge_offset")
+    if left_edge_m is not None and right_edge_m is not None and left_edge_m >= right_edge_m:
+        return None, None
+    return left_edge_m, right_edge_m
+
+
+def vehicle_is_inside_road_edges(vehicle: DetectedVehicle, lane_values: dict[str, Any]) -> bool:
+    left_edge_m, right_edge_m = road_edge_lateral_bounds_m(lane_values)
+    if left_edge_m is not None and vehicle.lateral_m < left_edge_m - ROAD_EDGE_VEHICLE_OUTSIDE_MARGIN_M:
+        return False
+    if right_edge_m is not None and vehicle.lateral_m > right_edge_m + ROAD_EDGE_VEHICLE_OUTSIDE_MARGIN_M:
+        return False
+    return True
 
 
 def detected_vehicle_summary(vehicles: tuple[DetectedVehicle, ...]) -> str:
