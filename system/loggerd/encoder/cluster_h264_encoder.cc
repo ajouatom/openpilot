@@ -51,6 +51,20 @@ const char *rgb4_layout_name(ClusterH264Rgb4Layout layout) {
   return "unknown";
 }
 
+const char *rate_control_name(int value) {
+  switch (value) {
+    case V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_OFF: return "rate-control-off";
+    case V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_VBR_VFR: return "rate-control-vbr-vfr";
+    case V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_VBR_CFR: return "rate-control-vbr-cfr";
+    case V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_CBR_VFR: return "rate-control-cbr-vfr";
+    case V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_CBR_CFR: return "rate-control-cbr-cfr";
+    case V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_MBR_CFR: return "rate-control-mbr-cfr";
+    case V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_MBR_VFR: return "rate-control-mbr-vfr";
+    case V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_CQ: return "rate-control-cq";
+  }
+  return "rate-control-unknown";
+}
+
 void xioctl(int fd, unsigned long request, void *arg, const char *message) {
   int ret;
   do {
@@ -100,6 +114,10 @@ void ClusterH264Encoder::validate_config() const {
   }
   if (config_.slice_max_bytes < 0) {
     throw std::runtime_error("cluster H264 encoder slice max bytes must be 0 or greater");
+  }
+  if (config_.rate_control < V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_OFF ||
+      config_.rate_control > V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_CQ) {
+    throw std::runtime_error("cluster H264 encoder rate control is invalid");
   }
   if (config_.device_path.empty()) {
     throw std::runtime_error("cluster H264 encoder device path must not be empty");
@@ -380,8 +398,14 @@ void ClusterH264Encoder::set_controls() {
     { .id = V4L2_CID_MPEG_VIDC_VIDEO_NUM_P_FRAMES, .value = p_frames, .name = "num-p-frames" },
     { .id = V4L2_CID_MPEG_VIDC_VIDEO_NUM_B_FRAMES, .value = 0, .name = "num-b-frames" },
     { .id = V4L2_CID_MPEG_VIDEO_HEADER_MODE, .value = V4L2_MPEG_VIDEO_HEADER_MODE_SEPARATE, .name = "header-mode-separate" },
-    { .id = V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL, .value = V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_VBR_CFR, .name = "vbr-cfr" },
-    { .id = V4L2_CID_MPEG_VIDC_VIDEO_PRIORITY, .value = V4L2_MPEG_VIDC_VIDEO_PRIORITY_REALTIME_DISABLE, .name = "priority-realtime-disable" },
+    { .id = V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL, .value = config_.rate_control, .name = rate_control_name(config_.rate_control) },
+    {
+      .id = V4L2_CID_MPEG_VIDC_VIDEO_PRIORITY,
+      .value = config_.realtime_priority ?
+               V4L2_MPEG_VIDC_VIDEO_PRIORITY_REALTIME_ENABLE :
+               V4L2_MPEG_VIDC_VIDEO_PRIORITY_REALTIME_DISABLE,
+      .name = config_.realtime_priority ? "priority-realtime-enable" : "priority-realtime-disable",
+    },
     { .id = V4L2_CID_MPEG_VIDC_VIDEO_IDR_PERIOD, .value = 1, .name = "idr-period" },
     { .id = V4L2_CID_MPEG_VIDEO_H264_LEVEL, .value = V4L2_MPEG_VIDEO_H264_LEVEL_UNKNOWN, .name = "h264-level-unknown" },
     { .id = V4L2_CID_MPEG_VIDEO_H264_LOOP_FILTER_MODE, .value = 0, .name = "h264-loop-filter-mode" },

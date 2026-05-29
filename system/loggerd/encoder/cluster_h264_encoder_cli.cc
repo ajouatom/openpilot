@@ -25,6 +25,9 @@ void usage(const char *prog) {
       << "  --bitrate BPS           Target bitrate in bits/s; K/M suffixes are accepted. Default 1000000.\n"
       << "  --gop N                 Keyframe interval in frames. Default 30.\n"
       << "  --slice-max-bytes N     V4L2 multi-slice max bytes; 0 disables. Default 4096.\n"
+      << "  --rate-control MODE     V4L2 rate control: off, vbr-vfr, vbr-cfr, cbr-vfr,\n"
+      << "                          cbr-cfr, mbr-cfr, mbr-vfr, cq. Default vbr-cfr.\n"
+      << "  --realtime-priority     Request realtime encoder priority.\n"
       << "  --device PATH           V4L2 encoder device path.\n"
       << "  --input-format auto|rgb4|nv12\n"
       << "                          Hardware input format. Default auto.\n"
@@ -89,6 +92,32 @@ ClusterH264Rgb4Layout parse_rgb4_layout(const std::string &value) {
   if (value == "rgba") return ClusterH264Rgb4Layout::RGBA;
   if (value == "bgra") return ClusterH264Rgb4Layout::BGRA;
   throw std::runtime_error("invalid --rgb4-layout: " + value);
+}
+
+int parse_rate_control(const std::string &value) {
+  if (value == "off") return 0;
+  if (value == "vbr-vfr") return 1;
+  if (value == "vbr-cfr") return 2;
+  if (value == "cbr-vfr") return 3;
+  if (value == "cbr-cfr") return 4;
+  if (value == "mbr-cfr") return 5;
+  if (value == "mbr-vfr") return 6;
+  if (value == "cq") return 7;
+  throw std::runtime_error("invalid --rate-control: " + value);
+}
+
+const char *rate_control_name(int value) {
+  switch (value) {
+    case 0: return "off";
+    case 1: return "vbr-vfr";
+    case 2: return "vbr-cfr";
+    case 3: return "cbr-vfr";
+    case 4: return "cbr-cfr";
+    case 5: return "mbr-cfr";
+    case 6: return "mbr-vfr";
+    case 7: return "cq";
+  }
+  return "unknown";
 }
 
 bool read_exact(int fd, uint8_t *data, size_t size) {
@@ -171,6 +200,10 @@ int main(int argc, char **argv) {
         config.gop = parse_int(arg, next_value(arg));
       } else if (arg == "--slice-max-bytes") {
         config.slice_max_bytes = parse_nonnegative_int(arg, next_value(arg));
+      } else if (arg == "--rate-control") {
+        config.rate_control = parse_rate_control(next_value(arg));
+      } else if (arg == "--realtime-priority") {
+        config.realtime_priority = true;
       } else if (arg == "--device") {
         config.device_path = next_value(arg);
       } else if (arg == "--input-format") {
@@ -202,6 +235,8 @@ int main(int argc, char **argv) {
               << " bitrate=" << config.bitrate
               << " gop=" << config.gop
               << " slice_max_bytes=" << config.slice_max_bytes
+              << " rate_control=" << rate_control_name(config.rate_control)
+              << " realtime_priority=" << (config.realtime_priority ? 1 : 0)
               << " input=" << encoder.input_v4l_format_name()
               << " stride=" << encoder.input_stride()
               << " scanlines=" << encoder.input_y_scanlines() << "/" << encoder.input_uv_scanlines()

@@ -92,6 +92,32 @@ int cluster_h264_encoder_bridge_set_slice_max_bytes(ClusterH264EncoderBridge *br
   return 0;
 }
 
+int cluster_h264_encoder_bridge_set_rate_control(ClusterH264EncoderBridge *bridge, int rate_control) {
+  if (bridge == nullptr) return -1;
+  if (bridge->encoder != nullptr) {
+    bridge->last_error = "cannot change rate control after encoder open";
+    return -1;
+  }
+  if (rate_control < 0 || rate_control > 7) {
+    bridge->last_error = "rate control must be between 0 and 7";
+    return -1;
+  }
+  bridge->config.rate_control = rate_control;
+  bridge->last_error.clear();
+  return 0;
+}
+
+int cluster_h264_encoder_bridge_set_realtime_priority(ClusterH264EncoderBridge *bridge, int realtime_priority) {
+  if (bridge == nullptr) return -1;
+  if (bridge->encoder != nullptr) {
+    bridge->last_error = "cannot change realtime priority after encoder open";
+    return -1;
+  }
+  bridge->config.realtime_priority = realtime_priority != 0;
+  bridge->last_error.clear();
+  return 0;
+}
+
 int cluster_h264_encoder_bridge_open(ClusterH264EncoderBridge *bridge) {
   if (bridge == nullptr) return -1;
   try {

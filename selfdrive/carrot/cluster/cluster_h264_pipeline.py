@@ -22,9 +22,20 @@ DEFAULT_H264_FFMPEG = "ffmpeg"
 DEFAULT_H264_FFMPEG_ENCODER = "libx264"
 DEFAULT_H264_SLICE_MAX_BYTES = 4096
 DEFAULT_H264_ENCODER_ALIGN = 16
+DEFAULT_H264_RATE_CONTROL = "vbr-cfr"
 
 NATIVE_INPUT_FORMATS = {"auto": 0, "rgb4": 1, "nv12": 2}
 NATIVE_RGB4_LAYOUTS = {"axrgb": 0, "rgba": 1, "bgra": 2}
+NATIVE_RATE_CONTROLS = {
+    "off": 0,
+    "vbr-vfr": 1,
+    "vbr-cfr": 2,
+    "cbr-vfr": 3,
+    "cbr-cfr": 4,
+    "mbr-cfr": 5,
+    "mbr-vfr": 6,
+    "cq": 7,
+}
 NATIVE_TIMING_GETTERS = (
     ("usb_h264.native.pre_poll", "cluster_h264_encoder_bridge_last_pre_poll_us"),
     ("usb_h264.native.wait_input", "cluster_h264_encoder_bridge_last_wait_input_us"),
@@ -709,6 +720,8 @@ class H264UsbPipeline:
         input_format: str,
         rgb4_layout: str,
         slice_max_bytes: int,
+        rate_control: str,
+        realtime_priority: bool,
         requested_chunk_size: int,
         wait_for_ack: bool,
         soft_ack: bool,
@@ -737,6 +750,8 @@ class H264UsbPipeline:
         self.input_format = input_format
         self.rgb4_layout = rgb4_layout
         self.slice_max_bytes = max(0, int(slice_max_bytes))
+        self.rate_control = rate_control
+        self.realtime_priority = realtime_priority
         self.requested_chunk_size = max(0, int(requested_chunk_size))
         self.wait_for_ack = wait_for_ack
         self.soft_ack = soft_ack
@@ -827,6 +842,8 @@ class H264UsbPipeline:
         self._native_handle = handle
         self._native_callback = NativePacketCallback(self._native_packet_callback)
         self._set_native_slice_max_bytes(lib, handle)
+        self._set_native_rate_control(lib, handle)
+        self._set_native_realtime_priority(lib, handle)
 
         if lib.cluster_h264_encoder_bridge_open(handle) != 0:
             raise RuntimeError(self._native_error_text("native H264 encoder open failed"))
@@ -861,7 +878,8 @@ class H264UsbPipeline:
             f"{self.width}x{self.height}@{self.fps} "
             f"encoder={self.encoder_width}x{self.encoder_height} "
             f"bitrate={bitrate_bps} gop={self.gop} "
-            f"slice_max={self.slice_max_bytes} packetize=access-unit "
+            f"slice_max={self.slice_max_bytes} rate_control={self.rate_control} "
+            f"realtime_priority={'on' if self.realtime_priority else 'off'} packetize=access-unit "
             f"input={input_name or self.input_format} stride={input_stride} "
             f"scanlines={input_y_scanlines}/{input_uv_scanlines} "
             f"input_size={input_sizeimage} input_bytes={input_bytesused} uv_offset={input_uv_offset} "
@@ -886,7 +904,8 @@ class H264UsbPipeline:
             f"{self.width}x{self.height}@{self.fps} "
             f"encoder={self.encoder_width}x{self.encoder_height} "
             f"bitrate={self.bitrate} gop={self.gop} "
-            f"slice_max={self.slice_max_bytes} packetize=access-unit "
+            f"slice_max={self.slice_max_bytes} rate_control={self.rate_control} "
+            f"realtime_priority={'on' if self.realtime_priority else 'off'} packetize=access-unit "
             f"input={self.input_format} rgb4_layout={self.rgb4_layout} "
             f"device={self.device_path} "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')}"
@@ -1453,6 +1472,10 @@ class H264UsbPipeline:
             "--slice-max-bytes",
             str(self.slice_max_bytes),
         ]
+        if self.rate_control != DEFAULT_H264_RATE_CONTROL:
+            command.extend(["--rate-control", self.rate_control])
+        if self.realtime_priority:
+            command.append("--realtime-priority")
         if self.debug:
             command.append("--debug")
         return command
@@ -1650,6 +1673,20 @@ class H264UsbPipeline:
         else:
             set_slice_max.argtypes = [ctypes.c_void_p, ctypes.c_int]
             set_slice_max.restype = ctypes.c_int
+        try:
+            set_rate_control = lib.cluster_h264_encoder_bridge_set_rate_control
+        except AttributeError:
+            pass
+        else:
+            set_rate_control.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            set_rate_control.restype = ctypes.c_int
+        try:
+            set_realtime_priority = lib.cluster_h264_encoder_bridge_set_realtime_priority
+        except AttributeError:
+            pass
+        else:
+            set_realtime_priority.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            set_realtime_priority.restype = ctypes.c_int
 
     def _set_native_slice_max_bytes(self, lib: ctypes.CDLL, handle: int) -> None:
         try:
@@ -1664,6 +1701,32 @@ class H264UsbPipeline:
             return
         if set_slice_max(handle, self.slice_max_bytes) != 0:
             raise RuntimeError(self._native_error_text("native H264 slice max-byte setup failed"))
+
+    def _set_native_rate_control(self, lib: ctypes.CDLL, handle: int) -> None:
+        try:
+            set_rate_control = lib.cluster_h264_encoder_bridge_set_rate_control
+        except AttributeError:
+            if self.rate_control != DEFAULT_H264_RATE_CONTROL:
+                raise RuntimeError(
+                    "native H264 library does not expose rate-control setup; rebuild "
+                    "system/loggerd/libcluster_h264_encoder_bridge.so"
+                )
+            return
+        if set_rate_control(handle, NATIVE_RATE_CONTROLS[self.rate_control]) != 0:
+            raise RuntimeError(self._native_error_text("native H264 rate-control setup failed"))
+
+    def _set_native_realtime_priority(self, lib: ctypes.CDLL, handle: int) -> None:
+        try:
+            set_realtime_priority = lib.cluster_h264_encoder_bridge_set_realtime_priority
+        except AttributeError:
+            if self.realtime_priority:
+                raise RuntimeError(
+                    "native H264 library does not expose realtime-priority setup; rebuild "
+                    "system/loggerd/libcluster_h264_encoder_bridge.so"
+                )
+            return
+        if set_realtime_priority(handle, 1 if self.realtime_priority else 0) != 0:
+            raise RuntimeError(self._native_error_text("native H264 realtime-priority setup failed"))
 
     def _native_packet_callback(
         self,

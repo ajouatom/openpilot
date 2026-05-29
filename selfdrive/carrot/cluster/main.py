@@ -31,8 +31,10 @@ from cluster_h264_pipeline import (
     DEFAULT_H264_FFMPEG_ENCODER,
     DEFAULT_H264_HELPER,
     DEFAULT_H264_LIBRARY,
+    DEFAULT_H264_RATE_CONTROL,
     DEFAULT_H264_SLICE_MAX_BYTES,
     H264UsbPipeline,
+    NATIVE_RATE_CONTROLS,
 )
 from cluster_live import OpenpilotLiveSource
 from cluster_models import RouteOverlay, SimulatorInput
@@ -276,6 +278,8 @@ def run_demo(
     usb_h264_input_format: str,
     usb_h264_rgb4_layout: str,
     usb_h264_slice_max_bytes: int,
+    usb_h264_rate_control: str,
+    usb_h264_realtime_priority: bool,
     usb_h264_orientation: str,
     usb_h264_align: int,
     usb_h264_encoder_align: int,
@@ -451,6 +455,8 @@ def run_demo(
                 usb_h264_input_format,
                 usb_h264_rgb4_layout,
                 usb_h264_slice_max_bytes,
+                usb_h264_rate_control,
+                usb_h264_realtime_priority,
                 usb_h264_chunk_size,
                 usb_h264_wait_ack,
                 usb_h264_soft_ack,
@@ -921,6 +927,20 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--usb-h264-rate-control",
+        choices=tuple(NATIVE_RATE_CONTROLS.keys()),
+        default=DEFAULT_H264_RATE_CONTROL,
+        help=(
+            "Hardware V4L2 rate-control mode for native/helper H264. "
+            "Default: %(default)s."
+        ),
+    )
+    parser.add_argument(
+        "--usb-h264-realtime-priority",
+        action="store_true",
+        help="Request realtime priority from the native/helper V4L2 encoder.",
+    )
+    parser.add_argument(
         "--usb-h264-orientation",
         choices=("landscape", "portrait"),
         default="portrait",
@@ -1208,6 +1228,10 @@ def main() -> None:
     if args.usb_codec == "h264":
         bitrate_text = f"auto->{usb_h264_bitrate}" if usb_h264_bitrate_auto else usb_h264_bitrate
         h264_bitrate_text = f" h264_bitrate={bitrate_text}"
+        if args.usb_h264_rate_control != DEFAULT_H264_RATE_CONTROL:
+            h264_bitrate_text += f" h264_rc={args.usb_h264_rate_control}"
+        if args.usb_h264_realtime_priority:
+            h264_bitrate_text += " h264_realtime=on"
         if args.usb_h264_diagnose_interval > 0:
             h264_bitrate_text += f" h264_diag={args.usb_h264_diagnose_interval:g}s"
     brightness_text = "auto" if brightness_param_reader is not None and usb_brightness == 0 else f"{usb_brightness}%"
@@ -1255,6 +1279,8 @@ def main() -> None:
             args.usb_h264_input_format,
             args.usb_h264_rgb4_layout,
             args.usb_h264_slice_max_bytes,
+            args.usb_h264_rate_control,
+            args.usb_h264_realtime_priority,
             args.usb_h264_orientation,
             args.usb_h264_align,
             args.usb_h264_encoder_align,

@@ -56,6 +56,11 @@ chunk writes into large latency spikes, so the auto cap remains `6M`. The
 larger `--usb-h264-slice-max-bytes 8192` A/B also looked worse than the default
 4096-byte slice cap, and `2048` caused smaller but more frequent smearing, so
 keep the default slice setting for normal tests. The
+hardware V4L2 rate-control default remains `--usb-h264-rate-control vbr-cfr`;
+use `cbr-cfr` or `mbr-cfr` only for A/B runs when residual block artifacts
+appear without USB send spikes. `--usb-h264-realtime-priority` requests the
+Qualcomm encoder realtime-priority control and is also diagnostic-only until
+device measurements prove it helps without increasing stalls. The
 ffmpeg/libx264 path remains available as a known-good comparison path. Build
 the native library and helper before hardware testing:
 
@@ -80,8 +85,9 @@ width-by-height layout. RGB4 input also honors a larger row stride implied by
 V4L2 `sizeimage` when it disagrees with the reported compact `bytesperline`.
 The default RGB4 byte layout is `bgra`, matching the common little-endian memory
 order for V4L2 `RGB4`. The cluster H264 wrapper emits
-inline SPS/PPS on the first video packet and on IDR frames, asks for constrained
-Baseline/CAVLC plus VUI timing when the V4L2 driver accepts those controls, and
+inline SPS/PPS on the first video packet and on IDR frames, asks for VBR-CFR
+rate control, constrained Baseline/CAVLC, and VUI timing when the V4L2 driver
+accepts those controls, and
 the Python sender patches SPS VUI timing and bitstream restriction metadata when
 the driver returns a short VUI without timing info. If those baseline controls
 are rejected, the native path falls back internally to driver-compatible profile
@@ -145,6 +151,8 @@ For route replay against a saved device route, run:
 
 ```bash
 python selfdrive/carrot/cluster_run.py --input route --route /data/media/0/realdata/0000012e--f190807d64--36 --route-overlay compact --output usb --usb-codec h264 --duration 60 --fps 30 --profile-render --profile-interval 2
+python selfdrive/carrot/cluster_run.py --input route --route /data/media/0/realdata/0000012e--f190807d64--36 --route-overlay compact --output usb --usb-codec h264 --duration 60 --fps 30 --usb-h264-gop 2 --usb-h264-rate-control cbr-cfr
+python selfdrive/carrot/cluster_run.py --input route --route /data/media/0/realdata/0000012e--f190807d64--36 --route-overlay compact --output usb --usb-codec h264 --duration 60 --fps 30 --usb-h264-gop 2 --usb-h264-realtime-priority
 ```
 
 To compare native hardware output against ffmpeg/libx264 with the same USB
