@@ -2,11 +2,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 import time
 
 
 PROC_STAT_PATH = Path("/proc/stat")
 PROC_MEMINFO_PATH = Path("/proc/meminfo")
+KGSL_GPU_BUSY_PATH = Path("/sys/class/kgsl/kgsl-3d0/gpubusy")
+KGSL_GPU_FREQ_PATHS = (
+    Path("/sys/class/kgsl/kgsl-3d0/devfreq/cur_freq"),
+    Path("/sys/class/devfreq/soc:qcom,kgsl-3d0/cur_freq"),
+)
+KGSL_GPU_MAX_FREQ_PATHS = (
+    Path("/sys/class/kgsl/kgsl-3d0/devfreq/max_freq"),
+    Path("/sys/class/devfreq/soc:qcom,kgsl-3d0/max_freq"),
+)
+DEVFREQ_PATH = Path("/sys/class/devfreq")
+ENCODER_DEVFREQ_HINTS = ("vidc", "venus", "vcodec", "video")
+EXCLUDED_DEVFREQ_HINTS = ("kgsl", "gpu", "cpu", "cpubw", "llcc")
 
 
 @dataclass(frozen=True, slots=True)
@@ -14,6 +27,13 @@ class SystemStats:
     memory_total_bytes: int | None = None
     memory_used_bytes: int | None = None
     memory_used_percent: float | None = None
+    gpu_used_percent: float | None = None
+    gpu_freq_hz: int | None = None
+    gpu_max_freq_hz: int | None = None
+    encoder_used_percent: float | None = None
+    encoder_freq_hz: int | None = None
+    encoder_max_freq_hz: int | None = None
+    encoder_source: str | None = None
     cpu_core_percents: tuple[float | None, ...] = ()
 
 
@@ -23,6 +43,7 @@ class SystemStatsSampler:
         self._next_sample_time = 0.0
         self._stats = SystemStats()
         self._previous_linux_cpu_times: tuple[tuple[int, int], ...] | None = None
+        self._previous_devfreq_times: dict[str, tuple[int, int]] = {}
 
     def sample(self, now: float | None = None) -> SystemStats:
         if now is None:
@@ -41,6 +62,10 @@ class SystemStatsSampler:
             return None
 
         memory_total, memory_used, memory_percent = self._read_linux_memory()
+        gpu_percent = self._read_gpu_percent()
+        gpu_freq = self._read_first_int(KGSL_GPU_FREQ_PATHS)
+        gpu_max_freq = self._read_first_int(KGSL_GPU_MAX_FREQ_PATHS)
+        encoder_percent, encoder_freq, encoder_max_freq, encoder_source = self._read_encoder_devfreq()
         cpu_times = self._read_linux_cpu_times()
         if cpu_times is None:
             cpu_percents: tuple[float | None, ...] = ()
@@ -52,8 +77,126 @@ class SystemStatsSampler:
             memory_total_bytes=memory_total,
             memory_used_bytes=memory_used,
             memory_used_percent=memory_percent,
+            gpu_used_percent=gpu_percent,
+            gpu_freq_hz=gpu_freq,
+            gpu_max_freq_hz=gpu_max_freq,
+            encoder_used_percent=encoder_percent,
+            encoder_freq_hz=encoder_freq,
+            encoder_max_freq_hz=encoder_max_freq,
+            encoder_source=encoder_source,
             cpu_core_percents=cpu_percents,
         )
+
+    @staticmethod
+    def _read_first_int(paths: tuple[Path, ...]) -> int | None:
+        for path in paths:
+            value = SystemStatsSampler._read_int_file(path)
+            if value is not None:
+                return value
+        return None
+
+    @staticmethod
+    def _read_int_file(path: Path) -> int | None:
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore").strip()
+        except OSError:
+            return None
+        match = re.search(r"-?\d+", text)
+        if match is None:
+            return None
+        try:
+            return int(match.group(0))
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _read_float_file(path: Path) -> float | None:
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore").strip()
+        except OSError:
+            return None
+        match = re.search(r"-?\d+(?:\.\d+)?", text)
+        if match is None:
+            return None
+        try:
+            return float(match.group(0))
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _read_gpu_percent() -> float | None:
+        try:
+            parts = KGSL_GPU_BUSY_PATH.read_text(encoding="utf-8", errors="ignore").strip().split()
+        except OSError:
+            return None
+        if len(parts) < 2:
+            return None
+        try:
+            used = int(parts[0])
+            total = int(parts[1])
+        except ValueError:
+            return None
+        if total <= 0:
+            return None
+        return max(0.0, min(100.0, used / total * 100.0))
+
+    def _read_encoder_devfreq(self) -> tuple[float | None, int | None, int | None, str | None]:
+        for path in self._encoder_devfreq_paths():
+            used_percent = self._read_devfreq_percent(path)
+            cur_freq = self._read_int_file(path / "cur_freq")
+            max_freq = self._read_int_file(path / "max_freq")
+            if used_percent is not None or cur_freq is not None:
+                return used_percent, cur_freq, max_freq, path.name
+        return None, None, None, None
+
+    @staticmethod
+    def _encoder_devfreq_paths() -> tuple[Path, ...]:
+        try:
+            paths = tuple(DEVFREQ_PATH.iterdir())
+        except OSError:
+            return ()
+        candidates: list[Path] = []
+        for path in paths:
+            name = path.name.lower()
+            try:
+                target = str(path.resolve()).lower()
+            except OSError:
+                target = ""
+            haystack = f"{name} {target}"
+            if any(hint in haystack for hint in EXCLUDED_DEVFREQ_HINTS):
+                continue
+            if any(hint in haystack for hint in ENCODER_DEVFREQ_HINTS):
+                candidates.append(path)
+        return tuple(candidates)
+
+    def _read_devfreq_percent(self, path: Path) -> float | None:
+        load = self._read_float_file(path / "load")
+        if load is not None:
+            return self._normalize_percent(load)
+
+        busy = self._read_int_file(path / "busy_time")
+        total = self._read_int_file(path / "total_time")
+        if busy is None or total is None or total <= 0:
+            return None
+
+        key = str(path)
+        previous = self._previous_devfreq_times.get(key)
+        self._previous_devfreq_times[key] = (busy, total)
+        if previous is not None:
+            previous_busy, previous_total = previous
+            delta_busy = busy - previous_busy
+            delta_total = total - previous_total
+            if delta_total > 0:
+                return max(0.0, min(100.0, delta_busy / delta_total * 100.0))
+        return max(0.0, min(100.0, busy / total * 100.0))
+
+    @staticmethod
+    def _normalize_percent(value: float) -> float:
+        if value > 100.0 and value <= 1000.0:
+            value /= 10.0
+        elif value > 1000.0:
+            value /= 1000.0
+        return max(0.0, min(100.0, value))
 
     @staticmethod
     def _read_linux_memory() -> tuple[int | None, int | None, float | None]:
