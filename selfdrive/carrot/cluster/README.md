@@ -44,23 +44,22 @@ multi-slice output capped by `--usb-h264-slice-max-bytes` so the resulting NAL
 sizes are closer to the ffmpeg/libx264 stream accepted by TURZX. The default
 H264 bitrate is `auto`, which keeps roughly the same bits per frame as FPS
 changes and resolves to `6M` at 30 FPS. The native default GOP is short
-(`--usb-h264-gop 3`) because TURZX panel corruption measurements improved when
+(`--usb-h264-gop 2`) because TURZX panel corruption measurements improved when
 IDR refreshes were more frequent. GOP 3 route replay was much better than the
 earlier long-GOP runs, though periodic corruption was not fully eliminated and
 fast-changing detail still smeared at `3M`; raising 30 FPS auto bitrate to
 `6M` made block artifacts nearly disappear and reduced fast-motion smearing to
 rare occurrences. GOP 2 at 6M almost eliminated obvious breakage but introduced
-periodic whole-scene small-motion smearing, so GOP 3 remains the measured
-default for now. An explicit `8M` route replay was worse and pushed H264 USB
+periodic whole-scene small-motion smearing. A later GOP 2 / 6M route test
+remained cleaner than CBR-CFR or realtime-priority variants, so GOP 2 is the
+measured default for now. An explicit `8M` route replay was worse and pushed H264 USB
 chunk writes into large latency spikes, so the auto cap remains `6M`. The
 larger `--usb-h264-slice-max-bytes 8192` A/B also looked worse than the default
 4096-byte slice cap, and `2048` caused smaller but more frequent smearing, so
 keep the default slice setting for normal tests. The
 hardware V4L2 rate-control default remains `--usb-h264-rate-control vbr-cfr`;
-use `cbr-cfr` or `mbr-cfr` only for A/B runs when residual block artifacts
-appear without USB send spikes. `--usb-h264-realtime-priority` requests the
-Qualcomm encoder realtime-priority control and is also diagnostic-only until
-device measurements prove it helps without increasing stalls. The
+`cbr-cfr` made frequent small blocks and `--usb-h264-realtime-priority` landed
+between VBR-CFR and CBR-CFR, so keep both off for normal tests. The
 ffmpeg/libx264 path remains available as a known-good comparison path. Build
 the native library and helper before hardware testing:
 
