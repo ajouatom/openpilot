@@ -188,8 +188,11 @@ and the panel remains corrupted even when RGB4 stride and 32-pixel encoder
 alignment match.
 
 Manager autostart omits `--fps` by default so live launches follow
-`ClusterHudLiveFps` setting changes while running. Set `CLUSTER_AUTORUN_FPS`
-only for fixed test overrides; `0` means uncapped.
+`ClusterHudLiveFps`. JPEG/PNG runs apply setting changes while running; H264
+runs exit and let `cluster_autorun` relaunch when the setting changes the
+encoder FPS because the V4L2 encoder timing, SPS timing, and automatic bitrate
+are fixed at startup. Set `CLUSTER_AUTORUN_FPS` only for fixed test overrides;
+`0` means uncapped.
 Manager autostart enables realtime affinity by default. `cluster_autorun.py`
 affines the manager-launched process to cores `0,1,2,3` before waiting for USB
 or starting the HUD by calling Linux `sched_setaffinity` directly. Explicit
@@ -209,8 +212,9 @@ points when CAN subscription is enabled.
 When `--fps` is omitted for live input, `ClusterHudLiveFps` controls the render
 limit and is polled about once per second while running: `0` uncapped,
 `1` 10 Hz, `2` 20 Hz, `3` 30 Hz, `4` 40 Hz, `5` 50 Hz, and `6` 60 Hz.
-Explicit `--fps` remains a fixed
-override.
+Explicit `--fps` remains a fixed override. For H264 USB output, changing the
+effective FPS exits the current HUD process so autostart can relaunch with a
+matching encoder FPS.
 `ClusterHudEncoder` controls the encoder used by manager autostart: `0` auto
 tries native hardware H264, then ffmpeg/libx264 software H264, then JPEG;
 `1` forces JPEG, `2` forces native hardware H264, and `3` forces

@@ -89,6 +89,10 @@ def resolved_usb_h264_bitrate(requested_bitrate: str, target_fps: float, h264_fp
     return str(bitrate_bps)
 
 
+def resolved_h264_encoder_fps(target_fps: float, h264_fps: int) -> int:
+    return max(1, int(round(target_fps if target_fps > 0 else h264_fps)))
+
+
 class ClusterThemeParamReader:
     def __init__(self) -> None:
         self._params = None
@@ -437,7 +441,7 @@ def run_demo(
         profile.add_samples(renderer.profile_samples())
         renderer.clear_profile_samples()
         if usb_display is not None and usb_codec == "h264":
-            h264_encoder_fps = max(1, int(round(target_fps if target_fps > 0 else usb_h264_fps)))
+            h264_encoder_fps = resolved_h264_encoder_fps(target_fps, usb_h264_fps)
             h264_pipeline = H264UsbPipeline(
                 usb_display,
                 h264_width,
@@ -532,6 +536,14 @@ def run_demo(
             if live_fps_param_reader is not None and now >= next_fps_param_read:
                 next_target_fps = live_fps_param_reader.read()
                 if next_target_fps != target_fps:
+                    next_h264_encoder_fps = resolved_h264_encoder_fps(next_target_fps, usb_h264_fps)
+                    if h264_pipeline is not None and next_h264_encoder_fps != h264_pipeline.fps:
+                        print(
+                            f"{CLUSTER_LIVE_FPS_PARAM} changed H264 encoder FPS "
+                            f"from {h264_pipeline.fps} to {next_h264_encoder_fps}; exiting for restart",
+                            flush=True,
+                        )
+                        break
                     target_fps = next_target_fps
                     frame_interval = 1.0 / target_fps if target_fps > 0 else 0.0
                     renderer.set_target_fps(max(0, int(round(target_fps))))
