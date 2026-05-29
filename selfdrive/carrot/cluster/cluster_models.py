@@ -230,6 +230,7 @@ class ClusterUiState:
     lateral_plan_curvature_rates: tuple[float, ...] = ()
     display_speed_kph: float | None = None
     git_status: GitBranchStatus | None = None
+    actual_fps: float | None = None
 
 
 @dataclass(frozen=True, slots=True)

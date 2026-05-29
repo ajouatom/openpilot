@@ -83,6 +83,10 @@ GIT_STATUS_MARGIN = 2
 GIT_STATUS_DOT_RADIUS = 7
 GIT_STATUS_DOT_TEXT_GAP = 6
 GIT_STATUS_MAX_TEXT_W = 610
+FPS_STATUS_MARGIN = 2
+FPS_STATUS_DOT_RADIUS = 7
+FPS_STATUS_DOT_TEXT_GAP = 6
+FPS_STATUS_MAX_TEXT_W = 220
 VEHICLE_MATERIAL_COLORS: dict[str, tuple[int, int, int, int]] = {
     "body": (156, 166, 172, 255),
     "wheel": (18, 20, 22, 255),
@@ -1222,6 +1226,9 @@ class ClusterUiRenderer:
             profile_stage = self._profile_start()
             self._draw_center_clock(state)
             self._profile_add("hud.center_clock", profile_stage)
+            profile_stage = self._profile_start()
+            self._draw_actual_fps(state.actual_fps)
+            self._profile_add("hud.actual_fps", profile_stage)
             if screen_mode == CLUSTER_SCREEN_MODE_DEBUG:
                 profile_stage = self._profile_start()
                 self._draw_live_debug_panel(state)
@@ -1784,6 +1791,24 @@ class ClusterUiRenderer:
         text_x = GIT_STATUS_MARGIN + GIT_STATUS_DOT_RADIUS * 2 + GIT_STATUS_DOT_TEXT_GAP
         rl.draw_circle_v(rl.Vector2(dot_center_x, center_y), GIT_STATUS_DOT_RADIUS, rl_color(color))
         self._draw_text(text, text_x, center_y, text_size, color)
+
+    def _draw_actual_fps(self, actual_fps: float | None) -> None:
+        if actual_fps is None or not math.isfinite(actual_fps):
+            return
+
+        theme = self._current_theme()
+        color = theme.muted
+        text = f"FPS {actual_fps:.1f} Hz"
+        text_size = 20
+        text = self._ellipsize_text(text, text_size, FPS_STATUS_MAX_TEXT_W)
+        spacing = max(1.0, text_size * 0.02)
+        text_width, text_height = self._measure_text(text, text_size, spacing)
+        row_h = max(text_height, FPS_STATUS_DOT_RADIUS * 2)
+        center_y = FPS_STATUS_MARGIN + row_h * 0.5
+        text_x = DESIGN_WIDTH - FPS_STATUS_MARGIN
+        dot_center_x = text_x - text_width - FPS_STATUS_DOT_TEXT_GAP - FPS_STATUS_DOT_RADIUS
+        rl.draw_circle_v(rl.Vector2(dot_center_x, center_y), FPS_STATUS_DOT_RADIUS, rl_color(GREEN))
+        self._draw_text(text, text_x, center_y, text_size, color, anchor="right")
 
     @staticmethod
     def _git_status_color(status: GitBranchStatus, theme: ClusterTheme) -> tuple[int, int, int]:

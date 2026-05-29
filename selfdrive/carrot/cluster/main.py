@@ -389,6 +389,7 @@ def run_demo(
     next_screen_mode_param_read = start_time
     next_hud_mode_param_read = start_time + HUD_MODE_PARAM_POLL_SECONDS
     report_frames = 0
+    display_actual_fps: float | None = None
     frame_interval = 1.0 / target_fps if target_fps > 0 else 0.0
     h264_test_pattern_rgba: bytearray | None = None
 
@@ -500,6 +501,13 @@ def run_demo(
 
             dt = max(0.001, now - last_frame_time)
             last_frame_time = now
+            if dt < 1.0:
+                instant_fps = 1.0 / dt
+                display_actual_fps = (
+                    instant_fps
+                    if display_actual_fps is None
+                    else display_actual_fps * 0.85 + instant_fps * 0.15
+                )
             if live_source is not None:
                 profile_stage = time.perf_counter()
                 state = live_source.update()
@@ -539,7 +547,7 @@ def run_demo(
                 state = simulator.update(command, dt)
                 profile.add_elapsed("source.gamepad_update", profile_stage)
 
-            state = replace(state, git_status=git_status_provider.status())
+            state = replace(state, git_status=git_status_provider.status(), actual_fps=display_actual_fps)
             brightness_now = time.perf_counter()
             if usb_display is not None and brightness_now >= next_brightness_param_read:
                 if usb_brightness_param_reader is not None:
