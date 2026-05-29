@@ -52,7 +52,8 @@ fast-changing detail still smeared at `3M`; raising 30 FPS auto bitrate to
 rare occurrences. An explicit `8M` route replay was worse and pushed H264 USB
 chunk writes into large latency spikes, so the auto cap remains `6M`. The
 larger `--usb-h264-slice-max-bytes 8192` A/B also looked worse than the default
-4096-byte slice cap, so keep the default slice setting for normal tests. The
+4096-byte slice cap, and `2048` caused smaller but more frequent smearing, so
+keep the default slice setting for normal tests. The
 ffmpeg/libx264 path remains available as a known-good comparison path. Build
 the native library and helper before hardware testing:
 
