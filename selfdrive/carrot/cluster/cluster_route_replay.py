@@ -3,11 +3,10 @@ from __future__ import annotations
 import bz2
 import io
 import math
-import multiprocessing as mp
-import os
 import queue
 import shutil
 import tempfile
+import threading
 import traceback
 from bisect import bisect_right
 from dataclasses import dataclass, replace
@@ -50,9 +49,9 @@ RADAR_MIN_LONGITUDINAL_M = 0.0
 RADAR_FRONT_MAX_LONGITUDINAL_M = 180.0
 CORNER_RADAR_REAR_MIN_LONGITUDINAL_M = -180.0
 ROUTE_REPLAY_MIN_BUFFER_FILES = 2
+ROUTE_REPLAY_START_BUFFER_FILES = 1
 ROUTE_REPLAY_READAHEAD_S = 5.0
 ROUTE_REPLAY_RETAIN_BEHIND_S = 1.0
-ROUTE_REPLAY_PRELOAD_NICE = 5
 LANE_CHANGE_REINDEX_PEAK_THRESHOLD = 0.22
 LANE_CHANGE_REINDEX_RESET_THRESHOLD = -0.08
 CONTINUOUS_LANE_CHANGE_REBASE_PROGRESS = 0.12
@@ -205,10 +204,9 @@ class RouteReplayWorkerResult:
 
 class RouteLogPreloadWorker:
     def __init__(self) -> None:
-        self._context = mp.get_context("spawn")
         self._requests: Any | None = None
         self._results: Any | None = None
-        self._process: mp.Process | None = None
+        self._thread: threading.Thread | None = None
         self._start()
 
     def request(self, generation: int, file_index: int, file_path: Path) -> None:
@@ -229,64 +227,40 @@ class RouteLogPreloadWorker:
             except queue.Empty:
                 if not block:
                     return None
-                process = self._process
-                if process is not None and process.exitcode is not None:
-                    raise RuntimeError(f"route preload worker exited with code {process.exitcode}")
+                thread = self._thread
+                if thread is not None and not thread.is_alive():
+                    raise RuntimeError("route preload worker exited")
 
     def restart(self) -> None:
         self.close()
         self._start()
 
     def close(self) -> None:
-        process = self._process
         requests = self._requests
-        if process is not None and process.is_alive() and requests is not None:
+        thread = self._thread
+        if thread is not None and thread.is_alive() and requests is not None:
             try:
                 requests.put(("stop", 0, 0, ""), block=False)
             except Exception:
                 pass
-            process.join(timeout=0.5)
-        if process is not None and process.is_alive():
-            process.terminate()
-            process.join(timeout=1.0)
-        if process is not None and process.is_alive():
-            try:
-                process.kill()
-            except Exception:
-                pass
-            process.join(timeout=1.0)
-
-        for pipe in (self._requests, self._results):
-            if pipe is None:
-                continue
-            try:
-                pipe.close()
-                pipe.join_thread()
-            except Exception:
-                pass
+            thread.join(timeout=0.5)
         self._requests = None
         self._results = None
-        self._process = None
+        self._thread = None
 
     def _start(self) -> None:
-        self._requests = self._context.Queue(maxsize=1)
-        self._results = self._context.Queue(maxsize=1)
-        self._process = self._context.Process(
+        self._requests = queue.Queue(maxsize=2)
+        self._results = queue.Queue()
+        self._thread = threading.Thread(
             target=route_log_preload_worker,
-            args=(self._requests, self._results, ROUTE_REPLAY_PRELOAD_NICE),
+            args=(self._requests, self._results),
             name="route-log-preload",
             daemon=True,
         )
-        self._process.start()
+        self._thread.start()
 
 
-def route_log_preload_worker(requests: Any, results: Any, nice_increment: int) -> None:
-    if nice_increment > 0:
-        try:
-            os.nice(nice_increment)
-        except Exception:
-            pass
-
+def route_log_preload_worker(requests: Any, results: Any) -> None:
     log_schema = load_openpilot_log_schema()
     parser = RouteLogParser()
     while True:
@@ -438,7 +412,7 @@ class RouteReplaySource:
 
         while not self._end_of_route and (
             not self.frames
-            or len(self._loaded_chunks) < ROUTE_REPLAY_MIN_BUFFER_FILES
+            or len(self._loaded_chunks) < ROUTE_REPLAY_START_BUFFER_FILES
             or playback_seconds >= self.duration - ROUTE_REPLAY_READAHEAD_S
         ):
             if not self._load_next_file():
