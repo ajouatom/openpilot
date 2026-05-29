@@ -143,9 +143,7 @@ def _run_cluster_once(hud_mode: int, encoder_mode: int) -> None:
     from selfdrive.carrot import cluster_run
 
     previous_argv = sys.argv[:]
-    previous_env = {key: os.environ.get(key) for key in AUTORUN_DEFAULT_ENV}
     try:
-        _apply_autorun_defaults()
         sequence = _encoder_sequence(encoder_mode)
         for index, active_encoder_mode in enumerate(sequence):
             print(
@@ -173,11 +171,6 @@ def _run_cluster_once(hud_mode: int, encoder_mode: int) -> None:
                 traceback.print_exc()
     finally:
         sys.argv = previous_argv
-        for key, value in previous_env.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
 
 
 def _open_usb_uevent_socket() -> socket.socket | None:

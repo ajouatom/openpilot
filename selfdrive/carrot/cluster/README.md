@@ -156,13 +156,10 @@ Manager autostart omits `--fps` by default so live launches follow
 only for fixed test overrides; `0` means uncapped.
 Manager autostart enables realtime affinity by default. `cluster_autorun.py`
 affines the manager-launched process to cores `0,1,2,3` before waiting for USB
-or starting the HUD, and `cluster_run.py` also applies the same affinity before
-trying priority `55`. The cluster path uses Linux `sched_setaffinity` directly
-so it still applies on devices that do not report the legacy `/TICI` hardware
-flag. Explicit `CLUSTER_REALTIME`, `CLUSTER_REALTIME_CORES`, or
-`CLUSTER_REALTIME_PRIORITY` environment values still win. If the device user
-lacks permission for realtime priority, the core affinity still applies when
-the kernel allows it.
+or starting the HUD by calling Linux `sched_setaffinity` directly. Explicit
+`CLUSTER_REALTIME` or `CLUSTER_REALTIME_CORES` environment values still win.
+`cluster_run.py` separately attempts realtime priority `55` through the common
+openpilot realtime helper when `CLUSTER_REALTIME` is enabled.
 When `--usb-brightness` is omitted, USB launches follow `ClusterHudBrightness`:
 `0` auto follows live `deviceState.screenBrightnessPercent` after samples are
 available, and `1` through `100` are fixed brightness percentages.

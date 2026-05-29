@@ -40,34 +40,10 @@ def configure_cluster_realtime() -> None:
         cores_text = os.environ.get("CLUSTER_REALTIME_CORES", "0,1,2,3")
         cores = [int(core.strip()) for core in cores_text.split(",") if core.strip()]
         priority = int(os.environ.get("CLUSTER_REALTIME_PRIORITY", "55"))
-    except Exception as exc:
-        print(f"[cluster_run] invalid realtime configuration: {exc}", flush=True)
-        return
-
-    affinity_enabled = False
-    allowed_cores: list[int] = []
-    try:
-        if sys.platform == "linux" and hasattr(os, "sched_setaffinity"):
-            os.sched_setaffinity(0, cores)
-            allowed_cores = sorted(os.sched_getaffinity(0))
-        affinity_enabled = True
-    except Exception as affinity_exc:
-        print(f"[cluster_run] failed to set core affinity: {affinity_exc}", flush=True)
-
-    try:
         config_realtime_process(cores, priority)
-        print(
-            f"[cluster_run] realtime enabled cores={allowed_cores or cores} priority={priority}",
-            flush=True,
-        )
+        print(f"[cluster_run] realtime enabled cores={cores} priority={priority}", flush=True)
     except Exception as exc:
-        if affinity_enabled:
-            print(
-                f"[cluster_run] affinity enabled cores={allowed_cores or cores}; realtime priority failed: {exc}",
-                flush=True,
-            )
-        else:
-            print(f"[cluster_run] failed to configure realtime process: {exc}", flush=True)
+        print(f"[cluster_run] failed to configure realtime process: {exc}", flush=True)
 
 
 def main() -> None:
