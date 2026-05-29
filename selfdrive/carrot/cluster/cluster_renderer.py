@@ -88,6 +88,24 @@ FPS_STATUS_MARGIN = 2
 FPS_STATUS_DOT_RADIUS = 7
 FPS_STATUS_DOT_TEXT_GAP = 6
 FPS_STATUS_MAX_TEXT_W = 220
+RADAR_LABEL_DISTANCE_FONT_SIZE = 16
+RADAR_LABEL_SPEED_FONT_SIZE = 14
+RADAR_LABEL_MIN_WIDTH = 68
+RADAR_LABEL_PADDING_X = 16
+RADAR_LABEL_SINGLE_HEIGHT = 25
+RADAR_LABEL_STACKED_HEIGHT = 38
+RADAR_LABEL_DISTANCE_Y = 10
+RADAR_LABEL_SPEED_Y = 28
+VEHICLE_BADGE_DISTANCE_FONT_SIZE = 17
+VEHICLE_BADGE_SPEED_FONT_SIZE = 15
+VEHICLE_BADGE_MIN_WIDTH = 70
+VEHICLE_BADGE_PADDING_X = 16
+VEHICLE_BADGE_SINGLE_HEIGHT = 28
+VEHICLE_BADGE_STACKED_HEIGHT = 42
+VEHICLE_BADGE_DISTANCE_Y_SINGLE = 14
+VEHICLE_BADGE_DISTANCE_Y_STACKED = 12
+VEHICLE_BADGE_SPEED_Y = 32
+WORLD_LABEL_REPOSITION_ATTEMPTS = 4
 VEHICLE_MATERIAL_COLORS: dict[str, tuple[int, int, int, int]] = {
     "body": (156, 166, 172, 255),
     "wheel": (18, 20, 22, 255),
@@ -866,7 +884,15 @@ class ClusterUiRenderer:
         theme = self._current_theme()
         occupied: list[tuple[float, float, float, float]] = []
         label_bounds = self._world_label_bounds(left=430, top=52, right=40, bottom=26)
-        ordered = sorted(points, key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label))
+        ordered = sorted(
+            points,
+            key=lambda point: (
+                0 if point.absolute_speed_kph is not None else 1,
+                point.longitudinal_m,
+                abs(point.lateral_m),
+                point.label,
+            ),
+        )
         for point in ordered:
             anchor = rl.Vector3(point.center.x + scene_shift_x_m, point.center.y, point.center.z + 0.46)
             screen = world_to_screen_label_anchor(anchor, camera, self.width, self.height)
@@ -874,12 +900,12 @@ class ClusterUiRenderer:
                 continue
             distance = radar_point_distance_label(point)
             speed = radar_point_speed_label(point)
-            label_height = 32 if speed else 22
+            label_height = RADAR_LABEL_STACKED_HEIGHT if speed else RADAR_LABEL_SINGLE_HEIGHT
             text_width = max(
-                int(self._measure_text(distance, 14, 1)[0]),
-                int(self._measure_text(speed, 12, 1)[0]) if speed else 0,
+                int(self._measure_text(distance, RADAR_LABEL_DISTANCE_FONT_SIZE, 1)[0]),
+                int(self._measure_text(speed, RADAR_LABEL_SPEED_FONT_SIZE, 1)[0]) if speed else 0,
             )
-            width = max(62, text_width + 14)
+            width = max(RADAR_LABEL_MIN_WIDTH, text_width + RADAR_LABEL_PADDING_X)
             height = label_height
             x = screen.x - width * 0.5
             y = screen.y - height - 4
@@ -887,16 +913,56 @@ class ClusterUiRenderer:
             if not label_rect_inside_bounds(rect_tuple, label_bounds):
                 continue
             if any(rectangles_overlap(rect_tuple, taken) for taken in occupied):
-                continue
+                if not speed:
+                    continue
+                for attempt in range(1, WORLD_LABEL_REPOSITION_ATTEMPTS + 1):
+                    candidate_y = y - attempt * (height + 4)
+                    candidate_rect = (x, candidate_y, width, height)
+                    if not label_rect_inside_bounds(candidate_rect, label_bounds):
+                        continue
+                    if not any(rectangles_overlap(candidate_rect, taken) for taken in occupied):
+                        y = candidate_y
+                        rect_tuple = candidate_rect
+                        break
+                else:
+                    continue
             occupied.append(rect_tuple)
             center_x = x + width * 0.5
             shadow = theme.world_label_shadow
             text = theme.world_label_text
-            self._draw_text(distance, center_x + 1, y + 8 + 1, 14, shadow, anchor="center")
-            self._draw_text(distance, center_x, y + 8, 14, text, anchor="center")
+            self._draw_text(
+                distance,
+                center_x + 1,
+                y + RADAR_LABEL_DISTANCE_Y + 1,
+                RADAR_LABEL_DISTANCE_FONT_SIZE,
+                shadow,
+                anchor="center",
+            )
+            self._draw_text(
+                distance,
+                center_x,
+                y + RADAR_LABEL_DISTANCE_Y,
+                RADAR_LABEL_DISTANCE_FONT_SIZE,
+                text,
+                anchor="center",
+            )
             if speed:
-                self._draw_text(speed, center_x + 1, y + 23 + 1, 12, shadow, anchor="center")
-                self._draw_text(speed, center_x, y + 23, 12, text, anchor="center")
+                self._draw_text(
+                    speed,
+                    center_x + 1,
+                    y + RADAR_LABEL_SPEED_Y + 1,
+                    RADAR_LABEL_SPEED_FONT_SIZE,
+                    shadow,
+                    anchor="center",
+                )
+                self._draw_text(
+                    speed,
+                    center_x,
+                    y + RADAR_LABEL_SPEED_Y,
+                    RADAR_LABEL_SPEED_FONT_SIZE,
+                    text,
+                    anchor="center",
+                )
 
     def _draw_vehicle_shadow(self, vehicle: VehicleBox) -> None:
         half_width = vehicle.width_m * 0.5
@@ -950,6 +1016,7 @@ class ClusterUiRenderer:
             (vehicle for vehicle in vehicles if vehicle.label),
             key=lambda vehicle: (
                 0 if vehicle.primary else 1 if vehicle.cut_in else 2,
+                0 if vehicle.absolute_speed_kph is not None else 1,
                 max(0.0, vehicle.center.y - EGO_FORWARD_M),
                 -vehicle.confidence,
             ),
@@ -966,16 +1033,16 @@ class ClusterUiRenderer:
 
             distance = vehicle_distance_label(vehicle)
             speed = vehicle_speed_label(vehicle)
-            label_height = 36 if speed else 24
+            label_height = VEHICLE_BADGE_STACKED_HEIGHT if speed else VEHICLE_BADGE_SINGLE_HEIGHT
             width = max(
-                62,
+                VEHICLE_BADGE_MIN_WIDTH,
                 int(
                     max(
-                        self._measure_text(distance, 15, 1)[0],
-                        self._measure_text(speed, 13, 1)[0] if speed else 0,
+                        self._measure_text(distance, VEHICLE_BADGE_DISTANCE_FONT_SIZE, 1)[0],
+                        self._measure_text(speed, VEHICLE_BADGE_SPEED_FONT_SIZE, 1)[0] if speed else 0,
                     )
                 )
-                + 14,
+                + VEHICLE_BADGE_PADDING_X,
             )
             height = label_height
             x = screen.x - width * 0.5
@@ -985,14 +1052,16 @@ class ClusterUiRenderer:
             if not label_rect_inside_bounds(rect_tuple, label_bounds):
                 continue
             if any(rectangles_overlap(rect_tuple, taken) for taken in occupied):
-                if not vehicle.primary and not vehicle.cut_in:
+                if not (vehicle.primary or vehicle.cut_in or speed):
                     continue
-                for _ in range(3):
-                    y -= height + 4
-                    rect_tuple = (x, y, width, height)
-                    if not label_rect_inside_bounds(rect_tuple, label_bounds):
+                for attempt in range(1, WORLD_LABEL_REPOSITION_ATTEMPTS + 1):
+                    candidate_y = y - attempt * (height + 4)
+                    candidate_rect = (x, candidate_y, width, height)
+                    if not label_rect_inside_bounds(candidate_rect, label_bounds):
                         continue
-                    if not any(rectangles_overlap(rect_tuple, taken) for taken in occupied):
+                    if not any(rectangles_overlap(candidate_rect, taken) for taken in occupied):
+                        y = candidate_y
+                        rect_tuple = candidate_rect
                         break
                 else:
                     continue
@@ -1000,12 +1069,40 @@ class ClusterUiRenderer:
             center_x = x + width * 0.5
             shadow = theme.world_label_shadow
             text_color = vehicle_metric_color(vehicle, theme)
-            distance_y = y + (10 if speed else 12)
-            self._draw_text(distance, center_x + 1, distance_y + 1, 15, shadow, anchor="center")
-            self._draw_text(distance, center_x, distance_y, 15, text_color, anchor="center")
+            distance_y = y + (VEHICLE_BADGE_DISTANCE_Y_STACKED if speed else VEHICLE_BADGE_DISTANCE_Y_SINGLE)
+            self._draw_text(
+                distance,
+                center_x + 1,
+                distance_y + 1,
+                VEHICLE_BADGE_DISTANCE_FONT_SIZE,
+                shadow,
+                anchor="center",
+            )
+            self._draw_text(
+                distance,
+                center_x,
+                distance_y,
+                VEHICLE_BADGE_DISTANCE_FONT_SIZE,
+                text_color,
+                anchor="center",
+            )
             if speed:
-                self._draw_text(speed, center_x + 1, y + 27 + 1, 13, shadow, anchor="center")
-                self._draw_text(speed, center_x, y + 27, 13, text_color, anchor="center")
+                self._draw_text(
+                    speed,
+                    center_x + 1,
+                    y + VEHICLE_BADGE_SPEED_Y + 1,
+                    VEHICLE_BADGE_SPEED_FONT_SIZE,
+                    shadow,
+                    anchor="center",
+                )
+                self._draw_text(
+                    speed,
+                    center_x,
+                    y + VEHICLE_BADGE_SPEED_Y,
+                    VEHICLE_BADGE_SPEED_FONT_SIZE,
+                    text_color,
+                    anchor="center",
+                )
 
     def _draw_rear_vehicle_indicators(
         self,
