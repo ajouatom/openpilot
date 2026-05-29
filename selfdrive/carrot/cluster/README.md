@@ -157,7 +157,8 @@ only for fixed test overrides; `0` means uncapped.
 Manager autostart enables the `cluster_run.py` realtime setup by default, so
 live HUD launches are affined to cores `0,1,2,3` with priority `55` unless
 `CLUSTER_REALTIME`, `CLUSTER_REALTIME_CORES`, or `CLUSTER_REALTIME_PRIORITY` is
-set explicitly.
+set explicitly. If the device user lacks permission for realtime priority,
+`cluster_run.py` still applies the core affinity when the kernel allows it.
 When `--usb-brightness` is omitted, USB launches follow `ClusterHudBrightness`:
 `0` auto follows live `deviceState.screenBrightnessPercent` after samples are
 available, and `1` through `100` are fixed brightness percentages.

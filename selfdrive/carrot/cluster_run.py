@@ -35,15 +35,33 @@ def configure_cluster_realtime() -> None:
         return
 
     try:
-        from openpilot.common.realtime import config_realtime_process
+        from openpilot.common.realtime import config_realtime_process, set_core_affinity
 
         cores_text = os.environ.get("CLUSTER_REALTIME_CORES", "0,1,2,3")
         cores = [int(core.strip()) for core in cores_text.split(",") if core.strip()]
         priority = int(os.environ.get("CLUSTER_REALTIME_PRIORITY", "55"))
+    except Exception as exc:
+        print(f"[cluster_run] invalid realtime configuration: {exc}", flush=True)
+        return
+
+    affinity_enabled = False
+    try:
+        set_core_affinity(cores)
+        affinity_enabled = True
+    except Exception as affinity_exc:
+        print(f"[cluster_run] failed to set core affinity: {affinity_exc}", flush=True)
+
+    try:
         config_realtime_process(cores, priority)
         print(f"[cluster_run] realtime enabled cores={cores} priority={priority}", flush=True)
     except Exception as exc:
-        print(f"[cluster_run] failed to configure realtime process: {exc}", flush=True)
+        if affinity_enabled:
+            print(
+                f"[cluster_run] affinity enabled cores={cores}; realtime priority failed: {exc}",
+                flush=True,
+            )
+        else:
+            print(f"[cluster_run] failed to configure realtime process: {exc}", flush=True)
 
 
 def main() -> None:
