@@ -45,6 +45,10 @@ from cluster_usb_pipeline import AsyncJpegUsbPipeline
 
 DEFAULT_FPS = 0.0
 DEFAULT_USB_BRIGHTNESS = 80
+DEFAULT_H264_BITRATE = "auto"
+H264_AUTO_BITRATE_BITS_PER_FPS = 100_000
+H264_AUTO_BITRATE_MIN_BPS = 1_000_000
+H264_AUTO_BITRATE_MAX_BPS = 6_000_000
 DEFAULT_H264_DIMENSION_ALIGN = 1
 THEME_PARAM_POLL_SECONDS = 1.0
 FPS_PARAM_POLL_SECONDS = 1.0
@@ -66,6 +70,20 @@ def resolved_usb_display_fps(
         return 0
     source_fps = target_fps if target_fps > 0 else float(h264_fps)
     return int(max(1, min(255, round(source_fps))))
+
+
+def resolved_usb_h264_bitrate(requested_bitrate: str, target_fps: float, h264_fps: int) -> str:
+    text = requested_bitrate.strip()
+    if text.lower() != "auto":
+        return text
+    source_fps = int(max(1, round(target_fps if target_fps > 0 else float(h264_fps))))
+    bitrate_bps = source_fps * H264_AUTO_BITRATE_BITS_PER_FPS
+    bitrate_bps = int(max(H264_AUTO_BITRATE_MIN_BPS, min(H264_AUTO_BITRATE_MAX_BPS, bitrate_bps)))
+    if bitrate_bps % 1_000_000 == 0:
+        return f"{bitrate_bps // 1_000_000}M"
+    if bitrate_bps % 1_000 == 0:
+        return f"{bitrate_bps // 1_000}k"
+    return str(bitrate_bps)
 
 
 class ClusterThemeParamReader:
@@ -814,10 +832,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--usb-h264-bitrate",
-        default="1M",
+        default=DEFAULT_H264_BITRATE,
         help=(
-            "Target H264 bitrate for --usb-codec h264. Default: 1M, "
-            "kept low because the Qualcomm hardware encoder tends to fill the requested rate."
+            "Target H264 bitrate for --usb-codec h264. Default auto uses about 100k per FPS "
+            "bounded to 1M-6M; 30 FPS resolves to 3M."
         ),
     )
     parser.add_argument(
@@ -1105,7 +1123,7 @@ def parse_args() -> argparse.Namespace:
         parser.error("--usb-h264-wait-ack and --usb-h264-no-ack cannot be used together")
     if args.usb_h264_soft_ack and args.usb_h264_no_ack:
         parser.error("--usb-h264-soft-ack and --usb-h264-no-ack cannot be used together")
-    if not args.usb_h264_bitrate:
+    if not args.usb_h264_bitrate.strip():
         parser.error("--usb-h264-bitrate must not be empty")
     if not args.usb_h264_library:
         parser.error("--usb-h264-library must not be empty")
@@ -1156,6 +1174,8 @@ def main() -> None:
         else 0
     )
     usb_display_fps_auto = usb_output_enabled and args.usb_display_fps is None and args.usb_codec == "h264"
+    usb_h264_bitrate = resolved_usb_h264_bitrate(args.usb_h264_bitrate, target_fps, args.usb_h264_fps)
+    usb_h264_bitrate_auto = args.usb_h264_bitrate.strip().lower() == "auto"
     brightness_param_reader = None
     if args.usb_brightness_from_cli:
         usb_brightness = normalize_cluster_brightness_percent(args.usb_brightness)
@@ -1170,6 +1190,10 @@ def main() -> None:
         if usb_display_fps_auto
         else ("off" if usb_display_fps == 0 else str(usb_display_fps))
     )
+    h264_bitrate_text = ""
+    if args.usb_codec == "h264":
+        bitrate_text = f"auto->{usb_h264_bitrate}" if usb_h264_bitrate_auto else usb_h264_bitrate
+        h264_bitrate_text = f" h264_bitrate={bitrate_text}"
     brightness_text = "auto" if brightness_param_reader is not None and usb_brightness == 0 else f"{usb_brightness}%"
     size_text = (
         f"{args.width or 'device'}x{args.height or 'device'}"
@@ -1179,7 +1203,7 @@ def main() -> None:
     print(
         f"Refreshing native raylib cluster UI at {fps_text} "
         f"input={args.input} output={args.output}: {size_text} "
-        f"usb_codec={args.usb_codec} "
+        f"usb_codec={args.usb_codec}{h264_bitrate_text} "
         f"fps_source={fps_source} display_fps={display_fps_text} "
         f"brightness={brightness_text} brightness_source={brightness_source}"
     )
@@ -1203,7 +1227,7 @@ def main() -> None:
             args.usb_fast,
             args.usb_wait_frame_ack,
             args.usb_async,
-            args.usb_h264_bitrate,
+            usb_h264_bitrate,
             args.usb_h264_fps,
             args.usb_h264_gop,
             args.usb_h264_backend,
