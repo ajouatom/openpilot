@@ -106,7 +106,9 @@ looks suspicious, return to the default `--usb-h264-input-format nv12` path.
 `--usb-h264-orientation landscape` tests direct 1920x462 output, while
 `--usb-h264-align 16` deliberately tests macroblock-aligned output such as
 1920x464. When `--fps` is omitted, H264 USB runs use `--usb-h264-fps 30` as the
-render cap. H264 chunks are no-ACK by default like JPEG frame uploads; use
+render cap, and the TURZX display frame-rate command follows the effective H264
+FPS unless `--usb-display-fps 0` is passed explicitly. H264 chunks are no-ACK by
+default like JPEG frame uploads; use
 `--usb-h264-wait-ack` for strict response diagnostics, or
 `--usb-h264-soft-ack` to mimic the vendor video sender's retry/status polling
 without failing the run. If the hardware stream is still corrupted, rerun with

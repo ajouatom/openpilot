@@ -54,6 +54,20 @@ SCREEN_MODE_PARAM_POLL_SECONDS = 1.0
 HUD_MODE_PARAM_POLL_SECONDS = 1.0
 
 
+def resolved_usb_display_fps(
+    requested_fps: int | None,
+    usb_codec: str,
+    target_fps: float,
+    h264_fps: int,
+) -> int:
+    if requested_fps is not None:
+        return int(requested_fps)
+    if usb_codec != "h264":
+        return 0
+    source_fps = target_fps if target_fps > 0 else float(h264_fps)
+    return int(max(1, min(255, round(source_fps))))
+
+
 class ClusterThemeParamReader:
     def __init__(self) -> None:
         self._params = None
@@ -224,6 +238,7 @@ def run_demo(
     usb_brightness: int,
     usb_brightness_param_reader: ClusterHudBrightnessParamReader | None,
     usb_display_fps: int,
+    usb_display_fps_auto: bool,
     usb_codec: str,
     usb_jpeg_quality: int,
     usb_jpeg_encoder: str,
@@ -495,6 +510,15 @@ def run_demo(
                     renderer.set_target_fps(max(0, int(round(target_fps))))
                     fps_text = "uncapped" if target_fps == 0 else f"{target_fps:.1f} Hz"
                     print(f"{CLUSTER_LIVE_FPS_PARAM} updated: {fps_text}", flush=True)
+                    if usb_display is not None and usb_display_fps_auto:
+                        next_display_fps = resolved_usb_display_fps(
+                            None,
+                            usb_codec,
+                            target_fps,
+                            usb_h264_fps,
+                        )
+                        if usb_display.set_display_fps(next_display_fps):
+                            print(f"TURZX display FPS updated: {next_display_fps}", flush=True)
                 next_fps_param_read = now + FPS_PARAM_POLL_SECONDS
             if duration_seconds is not None and now - start_time >= duration_seconds:
                 break
@@ -759,8 +783,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--usb-display-fps",
         type=int,
-        default=0,
-        help="Optional TURZX display frame-rate command. Default 0 skips it because some units do not ACK it.",
+        default=None,
+        help=(
+            "Optional TURZX display frame-rate command. Default auto matches H264 output FPS "
+            "and skips it for JPEG/PNG; use 0 to skip."
+        ),
     )
     parser.add_argument("--usb-codec", choices=("jpeg", "png", "h264"), default="jpeg")
     parser.add_argument("--usb-jpeg-quality", type=int, default=68)
@@ -1056,7 +1083,7 @@ def parse_args() -> argparse.Namespace:
     args.usb_brightness_from_cli = args.usb_brightness is not None
     if args.usb_brightness is not None and not 0 <= args.usb_brightness <= 100:
         parser.error("--usb-brightness must be between 0 and 100")
-    if not 0 <= args.usb_display_fps <= 255:
+    if args.usb_display_fps is not None and not 0 <= args.usb_display_fps <= 255:
         parser.error("--usb-display-fps must be between 0 and 255")
     if not 1 <= args.usb_jpeg_quality <= 95:
         parser.error("--usb-jpeg-quality must be between 1 and 95")
@@ -1117,6 +1144,18 @@ def main() -> None:
     if args.output in ("usb", "both") and args.usb_codec == "h264" and not args.fps_from_cli:
         target_fps = float(args.usb_h264_fps)
         fps_source = "--usb-h264-fps"
+    usb_output_enabled = args.output in ("usb", "both")
+    usb_display_fps = (
+        resolved_usb_display_fps(
+            args.usb_display_fps,
+            args.usb_codec,
+            target_fps,
+            args.usb_h264_fps,
+        )
+        if usb_output_enabled
+        else 0
+    )
+    usb_display_fps_auto = usb_output_enabled and args.usb_display_fps is None and args.usb_codec == "h264"
     brightness_param_reader = None
     if args.usb_brightness_from_cli:
         usb_brightness = normalize_cluster_brightness_percent(args.usb_brightness)
@@ -1126,6 +1165,11 @@ def main() -> None:
         usb_brightness = brightness_param_reader.read()
         brightness_source = CLUSTER_BRIGHTNESS_PARAM
     fps_text = "uncapped" if target_fps == 0 else f"{target_fps:.1f} Hz"
+    display_fps_text = (
+        f"auto->{usb_display_fps}"
+        if usb_display_fps_auto
+        else ("off" if usb_display_fps == 0 else str(usb_display_fps))
+    )
     brightness_text = "auto" if brightness_param_reader is not None and usb_brightness == 0 else f"{usb_brightness}%"
     size_text = (
         f"{args.width or 'device'}x{args.height or 'device'}"
@@ -1136,7 +1180,8 @@ def main() -> None:
         f"Refreshing native raylib cluster UI at {fps_text} "
         f"input={args.input} output={args.output}: {size_text} "
         f"usb_codec={args.usb_codec} "
-        f"fps_source={fps_source} brightness={brightness_text} brightness_source={brightness_source}"
+        f"fps_source={fps_source} display_fps={display_fps_text} "
+        f"brightness={brightness_text} brightness_source={brightness_source}"
     )
     try:
         run_demo(
@@ -1150,7 +1195,8 @@ def main() -> None:
             args.height,
             usb_brightness,
             brightness_param_reader,
-            args.usb_display_fps,
+            usb_display_fps,
+            usb_display_fps_auto,
             args.usb_codec,
             args.usb_jpeg_quality,
             args.usb_jpeg_encoder,

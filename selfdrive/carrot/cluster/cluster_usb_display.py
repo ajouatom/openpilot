@@ -245,8 +245,27 @@ class TuringUsbDisplay:
         self._send_command(10, "sync")
         time.sleep(USB_COMMAND_GAP_S)
         if self.display_fps > 0:
-            self._send_optional_command(15, "frame-rate", {8: self.display_fps})
+            self._send_frame_rate(self.display_fps)
         self._send_brightness(self.brightness, "brightness")
+
+    def set_display_fps(self, display_fps: int, *, force: bool = False) -> bool:
+        next_display_fps = int(clamp(display_fps, 0, 255))
+        if next_display_fps == self.display_fps and not force:
+            return False
+        self.display_fps = next_display_fps
+        if self.dev is not None and self.display_fps > 0:
+            self._send_frame_rate(self.display_fps)
+            return True
+        return False
+
+    def _send_frame_rate(self, display_fps: int) -> None:
+        self._send_optional_command(
+            15,
+            "frame-rate",
+            {8: int(clamp(display_fps, 0, 255))},
+            no_ack_gap_s=0.05,
+            no_ack_drain_attempts=1,
+        )
 
     def _send_brightness(self, brightness: int, name: str) -> None:
         value = int(clamp(brightness, 0, 100) / 100 * TURZX_BRIGHTNESS_COMMAND_MAX)
