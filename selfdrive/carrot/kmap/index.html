@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Carrot kmap</title>
+  <link rel="dns-prefetch" href="https://dapi.kakao.com">
+  <link rel="preconnect" href="https://dapi.kakao.com" crossorigin>
+  <link rel="dns-prefetch" href="https://t1.daumcdn.net">
+  <link rel="preconnect" href="https://t1.daumcdn.net" crossorigin>
+  <link rel="stylesheet" href="./kmap.css?v=2605-44">
+</head>
+<body>
+  <main id="kmapRoot" class="kmap-root" data-mode="box" data-status="idle">
+    <div class="kmap-shell" aria-label="Carrot kmap">
+      <div id="kakaoMap" class="kmap-kakao-map" aria-hidden="true"></div>
+      <div id="mapSurface" class="kmap-surface">
+        <div class="kmap-road kmap-road--a"></div>
+        <div class="kmap-road kmap-road--b"></div>
+        <div class="kmap-road kmap-road--c"></div>
+        <div class="kmap-center-glow" aria-hidden="true"></div>
+      </div>
+      <canvas id="overlayCanvas" class="kmap-overlay" aria-hidden="true"></canvas>
+      <div id="overlayHtml" class="kmap-overlay-html" aria-hidden="true">
+        <div id="navInfo" class="kmap-nav-info" hidden>
+          <div id="navRoad" class="kmap-nav-info__road"></div>
+          <div id="navMeta" class="kmap-nav-info__meta"></div>
+        </div>
+      </div>
+      <div id="vehicleMarker" class="kmap-marker" aria-hidden="true"></div>
+      <div class="kmap-label">Kakao Map Mock</div>
+      <div id="statusText" class="kmap-status">waiting</div>
+    </div>
+
+    <section id="demoPanel" class="kmap-demo" aria-label="Mock controls">
+      <button id="demoMove" type="button">move</button>
+      <button id="demoMode" type="button">mode</button>
+    </section>
+  </main>
+
+  <script src="./kmap.js?v=2605-55"></script>
+</body>
+</html>

@@ -1,15 +1,18 @@
 @media (max-width: 640px), (orientation: portrait) {
   .app-dialog--web-settings .app-dialog__sheet {
-    --web-settings-content-max: min(58dvh, 440px);
+    --web-settings-sheet-width: 420px;
+    --web-settings-sheet-height: clamp(440px, 72dvh, 560px);
+    --web-settings-row-min: 64px;
     width: min(calc(100vw - 24px), 420px);
-    max-height: min(calc(100dvh - 24px), 560px);
+    height: min(var(--web-settings-sheet-height), calc(100dvh - 24px));
+    max-height: min(var(--web-settings-sheet-height), calc(100dvh - 24px));
     padding: 14px;
   }
 
   .web-settings-dialog {
     grid-template-columns: minmax(0, 1fr);
     gap: 12px;
-    height: auto;
+    height: 100%;
     width: 100%;
   }
 
@@ -71,7 +74,9 @@
 
 @media (max-height: 430px) and (orientation: landscape) {
   .app-dialog--web-settings .app-dialog__sheet {
-    --web-settings-content-max: min(48dvh, 270px);
+    --web-settings-sheet-height: calc(100dvh - 20px);
+    --web-settings-row-min: 56px;
+    height: var(--web-settings-sheet-height);
     max-height: calc(100dvh - 20px);
     padding: 12px 14px;
   }
@@ -86,7 +91,6 @@
 
   .web-settings-row,
   .web-settings-empty {
-    min-height: 52px;
     padding-block: 10px;
   }
 }
