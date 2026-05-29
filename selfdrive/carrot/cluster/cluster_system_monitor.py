@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import re
+import subprocess
 import time
 
 
@@ -37,6 +38,8 @@ DEVFREQ_CUR_FREQ_PATHS = (("cur_freq",), ("current_freq",), ("target_freq",), ("
 DEVFREQ_MAX_FREQ_PATHS = (("max_freq",), ("max_frequency",), ("peak_freq",))
 DEVFREQ_AVAILABLE_FREQ_PATHS = (("available_frequencies",), ("available_freqs",), ("freq_table",))
 DEVFREQ_TIME_IN_STATE_PATHS = (("time_in_state",), ("stats", "time_in_state"))
+MSM_VIDC_DEBUGFS_PATH = Path("/sys/kernel/debug/msm_vidc")
+SUDO_READ_TIMEOUT_S = 0.5
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +53,8 @@ class SystemStats:
     encoder_used_percent: float | None = None
     encoder_freq_hz: int | None = None
     encoder_max_freq_hz: int | None = None
+    encoder_frame_rate_fps: float | None = None
+    encoder_target_fps: float | None = None
     encoder_source: str | None = None
     cpu_core_percents: tuple[float | None, ...] = ()
 
@@ -62,6 +67,8 @@ class SystemStatsSampler:
         self._previous_linux_cpu_times: tuple[tuple[int, int], ...] | None = None
         self._previous_devfreq_times: dict[str, tuple[int, int]] = {}
         self._previous_devfreq_time_in_state: dict[str, dict[int, int]] = {}
+        self._previous_vidc_debugfs_counts: dict[str, tuple[int, float]] = {}
+        self._vidc_debugfs_info_paths: tuple[Path, ...] | None = None
         self._reported_encoder_unavailable = False
 
     def sample(self, now: float | None = None) -> SystemStats:
@@ -70,13 +77,13 @@ class SystemStatsSampler:
         if now < self._next_sample_time:
             return self._stats
 
-        stats = self._sample_linux()
+        stats = self._sample_linux(now)
         if stats is not None:
             self._stats = stats
         self._next_sample_time = now + self.refresh_interval_s
         return self._stats
 
-    def _sample_linux(self) -> SystemStats | None:
+    def _sample_linux(self, now: float) -> SystemStats | None:
         if not PROC_STAT_PATH.exists() and not PROC_MEMINFO_PATH.exists():
             return None
 
@@ -84,13 +91,20 @@ class SystemStatsSampler:
         gpu_percent = self._read_gpu_percent()
         gpu_freq = self._read_first_int(KGSL_GPU_FREQ_PATHS)
         gpu_max_freq = self._read_first_int(KGSL_GPU_MAX_FREQ_PATHS)
-        encoder_percent, encoder_freq, encoder_max_freq, encoder_source = self._read_encoder_devfreq()
-        if encoder_percent is None and not self._reported_encoder_unavailable:
+        (
+            encoder_percent,
+            encoder_freq,
+            encoder_max_freq,
+            encoder_rate_fps,
+            encoder_target_fps,
+            encoder_source,
+        ) = self._read_encoder_stats(now)
+        if encoder_percent is None and encoder_source is None and not self._reported_encoder_unavailable:
             debug_text = self.encoder_devfreq_debug_text()
             if debug_text:
                 print(f"System stats VENC devfreq unavailable: {debug_text}", flush=True)
                 self._reported_encoder_unavailable = True
-        elif encoder_percent is not None:
+        elif encoder_percent is not None or encoder_source is not None:
             self._reported_encoder_unavailable = False
         cpu_times = self._read_linux_cpu_times()
         if cpu_times is None:
@@ -109,6 +123,8 @@ class SystemStatsSampler:
             encoder_used_percent=encoder_percent,
             encoder_freq_hz=encoder_freq,
             encoder_max_freq_hz=encoder_max_freq,
+            encoder_frame_rate_fps=encoder_rate_fps,
+            encoder_target_fps=encoder_target_fps,
             encoder_source=encoder_source,
             cpu_core_percents=cpu_percents,
         )
@@ -165,6 +181,128 @@ class SystemStatsSampler:
         if total <= 0:
             return None
         return max(0.0, min(100.0, used / total * 100.0))
+
+    def _read_encoder_stats(
+        self,
+        now: float,
+    ) -> tuple[float | None, int | None, int | None, float | None, float | None, str | None]:
+        debugfs_percent, debugfs_rate, debugfs_target, debugfs_source = self._read_encoder_debugfs(now)
+        if debugfs_source is not None:
+            return debugfs_percent, None, None, debugfs_rate, debugfs_target, debugfs_source
+
+        devfreq_percent, devfreq_freq, devfreq_max_freq, devfreq_source = self._read_encoder_devfreq()
+        return devfreq_percent, devfreq_freq, devfreq_max_freq, None, None, devfreq_source
+
+    def _read_encoder_debugfs(self, now: float) -> tuple[float | None, float | None, float | None, str | None]:
+        fallback: tuple[float | None, float | None, float | None, str | None] = (None, None, None, None)
+        valid_paths = False
+        for path in self._vidc_debugfs_instance_paths():
+            text = self._read_text_file(path, allow_sudo=True)
+            if not text:
+                continue
+            valid_paths = True
+            parsed = self._parse_vidc_instance_info(text)
+            if parsed is None:
+                continue
+            target_fps, completed_count = parsed
+            rate_fps = self._vidc_completed_rate(path, completed_count, now)
+            used_percent = self._freq_ratio_percent_float(rate_fps, target_fps)
+            source = "msm_vidc"
+            if used_percent is not None:
+                return used_percent, rate_fps, target_fps, source
+            if fallback[3] is None:
+                fallback = (None, rate_fps, target_fps, source)
+        if not valid_paths:
+            self._vidc_debugfs_info_paths = None
+        return fallback
+
+    def _vidc_completed_rate(self, path: Path, completed_count: int | None, now: float) -> float | None:
+        if completed_count is None:
+            return None
+        key = str(path)
+        previous = self._previous_vidc_debugfs_counts.get(key)
+        self._previous_vidc_debugfs_counts[key] = (completed_count, now)
+        if previous is None:
+            return None
+        previous_count, previous_time = previous
+        elapsed = now - previous_time
+        if elapsed <= 0.05 or completed_count < previous_count:
+            return None
+        return (completed_count - previous_count) / elapsed
+
+    @classmethod
+    def _parse_vidc_instance_info(cls, text: str) -> tuple[float | None, int | None] | None:
+        if "(Encoder)" not in text:
+            return None
+        target_fps = cls._first_regex_float(text, r"(?m)^\s*fps:\s*([0-9]+(?:\.[0-9]+)?)\s*$")
+        completed_count = cls._first_regex_int(text, r"(?m)^\s*FBD Count:\s*([0-9]+)\s*$")
+        if completed_count is None:
+            completed_count = cls._first_regex_int(text, r"(?m)^\s*EBD Count:\s*([0-9]+)\s*$")
+        if target_fps is None and completed_count is None:
+            return None
+        return target_fps, completed_count
+
+    @staticmethod
+    def _first_regex_int(text: str, pattern: str) -> int | None:
+        match = re.search(pattern, text)
+        if match is None:
+            return None
+        try:
+            return int(match.group(1))
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _first_regex_float(text: str, pattern: str) -> float | None:
+        match = re.search(pattern, text)
+        if match is None:
+            return None
+        try:
+            return float(match.group(1))
+        except ValueError:
+            return None
+
+    def _vidc_debugfs_instance_paths(self) -> tuple[Path, ...]:
+        if self._vidc_debugfs_info_paths:
+            return self._vidc_debugfs_info_paths
+
+        paths: tuple[Path, ...] = ()
+        try:
+            paths = tuple(sorted(MSM_VIDC_DEBUGFS_PATH.glob("core*/inst_*/info")))
+        except OSError:
+            paths = ()
+
+        if not paths:
+            paths = self._sudo_find_vidc_debugfs_instance_paths()
+
+        if paths:
+            self._vidc_debugfs_info_paths = paths
+        return paths
+
+    @staticmethod
+    def _sudo_find_vidc_debugfs_instance_paths() -> tuple[Path, ...]:
+        try:
+            output = subprocess.check_output(
+                [
+                    "sudo",
+                    "-n",
+                    "find",
+                    str(MSM_VIDC_DEBUGFS_PATH),
+                    "-maxdepth",
+                    "3",
+                    "-type",
+                    "f",
+                    "-path",
+                    "*/inst_*/info",
+                ],
+                encoding="utf-8",
+                errors="ignore",
+                timeout=SUDO_READ_TIMEOUT_S,
+                stderr=subprocess.DEVNULL,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return ()
+        return tuple(Path(line.strip()) for line in output.splitlines() if line.strip())
 
     def _read_encoder_devfreq(self) -> tuple[float | None, int | None, int | None, str | None]:
         fallback: tuple[float | None, int | None, int | None, str | None] = (None, None, None, None)
@@ -267,7 +405,13 @@ class SystemStatsSampler:
     def _freq_ratio_percent(cur_freq: int | None, max_freq: int | None) -> float | None:
         if cur_freq is None or max_freq is None or max_freq <= 0:
             return None
-        return max(0.0, min(100.0, cur_freq / max_freq * 100.0))
+        return SystemStatsSampler._freq_ratio_percent_float(float(cur_freq), float(max_freq))
+
+    @staticmethod
+    def _freq_ratio_percent_float(current: float | None, maximum: float | None) -> float | None:
+        if current is None or maximum is None or maximum <= 0:
+            return None
+        return max(0.0, min(100.0, current / maximum * 100.0))
 
     def _read_time_in_state_percent(self, path: Path) -> tuple[float | None, int | None]:
         states = self._read_time_in_state(path)
@@ -316,13 +460,28 @@ class SystemStatsSampler:
     @staticmethod
     def _read_first_child_text(path: Path, child_paths: tuple[tuple[str, ...], ...]) -> str | None:
         for child_path in child_paths:
-            try:
-                text = path.joinpath(*child_path).read_text(encoding="utf-8", errors="ignore").strip()
-            except OSError:
-                continue
+            text = SystemStatsSampler._read_text_file(path.joinpath(*child_path))
             if text:
                 return text
         return None
+
+    @staticmethod
+    def _read_text_file(path: Path, allow_sudo: bool = False) -> str | None:
+        try:
+            return path.read_text(encoding="utf-8", errors="ignore").strip()
+        except OSError:
+            if not allow_sudo:
+                return None
+        try:
+            return subprocess.check_output(
+                ["sudo", "-n", "cat", str(path)],
+                encoding="utf-8",
+                errors="ignore",
+                timeout=SUDO_READ_TIMEOUT_S,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+        except (OSError, subprocess.SubprocessError):
+            return None
 
     @staticmethod
     def _read_first_child_int(path: Path, child_paths: tuple[tuple[str, ...], ...]) -> int | None:

@@ -1528,7 +1528,14 @@ class ClusterUiRenderer:
             panel_x + 92,
             encoder_y,
             17,
-            theme.text if stats.encoder_freq_hz is not None or stats.encoder_source is not None else theme.muted,
+            theme.text
+            if (
+                stats.encoder_freq_hz is not None
+                or stats.encoder_source is not None
+                or stats.encoder_frame_rate_fps is not None
+                or stats.encoder_target_fps is not None
+            )
+            else theme.muted,
         )
         self._draw_text(
             self._percent_text(encoder_percent),
@@ -1720,11 +1727,27 @@ class ClusterUiRenderer:
         return f"{used_gib:.1f}/{total_gib:.1f} GB"
 
     def _encoder_text(self, stats: SystemStats) -> str:
+        if stats.encoder_frame_rate_fps is not None or stats.encoder_target_fps is not None:
+            rate_text = self._optional_fps_text(stats.encoder_frame_rate_fps)
+            target_text = self._optional_fps_text(stats.encoder_target_fps)
+            if stats.encoder_source is None:
+                return f"{rate_text}/{target_text} fps"
+            source = self._ellipsize_text(stats.encoder_source, 17, 116.0)
+            return f"{source} {rate_text}/{target_text} fps"
+
         freq_text = self._freq_text(stats.encoder_freq_hz, stats.encoder_max_freq_hz)
         if stats.encoder_source is None:
             return freq_text
         source = self._ellipsize_text(stats.encoder_source, 17, 168.0)
         return f"{source} {freq_text}"
+
+    @staticmethod
+    def _optional_fps_text(value: float | None) -> str:
+        if value is None:
+            return "--"
+        if value >= 10.0:
+            return f"{value:.0f}"
+        return f"{value:.1f}"
 
     @staticmethod
     def _freq_text(freq_hz: int | None, max_freq_hz: int | None = None) -> str:
