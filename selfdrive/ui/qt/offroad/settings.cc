@@ -703,8 +703,8 @@ AutoTunerHistoryPanel::AutoTunerHistoryPanel(QWidget* parent) : QFrame(parent) {
   header_layout->addStretch();
 
   QPushButton *btn_card_list = new QPushButton(tr("View Card Type"));
-  btn_card_list->setStyleSheet("background-color: #4a4a4a; font-size: 26px; border-radius: 10px; color: white; font-weight: bold;");
-  btn_card_list->setFixedHeight(55);
+  btn_card_list->setStyleSheet("background-color: #4a4a4a; font-size: 52px; border-radius: 10px; color: white; font-weight: bold;");
+  btn_card_list->setFixedHeight(110);
   connect(btn_card_list, &QPushButton::clicked, this, [=]() {
     AutoTunerCardListDialog dlg(this);
     dlg.exec();
@@ -712,16 +712,16 @@ AutoTunerHistoryPanel::AutoTunerHistoryPanel(QWidget* parent) : QFrame(parent) {
   header_layout->addWidget(btn_card_list);
 
   QPushButton *btn_all = new QPushButton(tr("Show All Parameters"));
-  btn_all->setStyleSheet("background-color: #3b5998; font-size: 26px; border-radius: 10px; color: white; font-weight: bold;");
-  btn_all->setFixedHeight(55);
+  btn_all->setStyleSheet("background-color: #3b5998; font-size: 52px; border-radius: 10px; color: white; font-weight: bold;");
+  btn_all->setFixedHeight(110);
   connect(btn_all, &QPushButton::clicked, this, [=]() {
     if (graph_widget) graph_widget->setSelectedParam("");
   });
   header_layout->addWidget(btn_all);
 
   QPushButton *btn_clear = new QPushButton(tr("Clear All Logs"));
-  btn_clear->setStyleSheet("background-color: #bb3333; font-size: 26px; border-radius: 10px; color: white; font-weight: bold;");
-  btn_clear->setFixedHeight(55);
+  btn_clear->setStyleSheet("background-color: #bb3333; font-size: 52px; border-radius: 10px; color: white; font-weight: bold;");
+  btn_clear->setFixedHeight(110);
   connect(btn_clear, &QPushButton::clicked, this, &AutoTunerHistoryPanel::clearAll);
   header_layout->addWidget(btn_clear);
 
