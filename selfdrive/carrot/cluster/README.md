@@ -49,7 +49,9 @@ IDR refreshes were more frequent. GOP 3 route replay was much better than the
 earlier long-GOP runs, though periodic corruption was not fully eliminated and
 fast-changing detail still smeared at `3M`; raising 30 FPS auto bitrate to
 `6M` made block artifacts nearly disappear and reduced fast-motion smearing to
-rare occurrences. An explicit `8M` route replay was worse and pushed H264 USB
+rare occurrences. GOP 2 at 6M almost eliminated obvious breakage but introduced
+periodic whole-scene small-motion smearing, so GOP 3 remains the measured
+default for now. An explicit `8M` route replay was worse and pushed H264 USB
 chunk writes into large latency spikes, so the auto cap remains `6M`. The
 larger `--usb-h264-slice-max-bytes 8192` A/B also looked worse than the default
 4096-byte slice cap, and `2048` caused smaller but more frequent smearing, so
