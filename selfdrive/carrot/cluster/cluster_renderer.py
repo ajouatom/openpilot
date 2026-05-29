@@ -62,6 +62,19 @@ SPEED_VALUE_CENTER_X = 260
 SPEED_VALUE_CENTER_Y = 230
 SPEED_LIMIT_SIGN_CENTER_X = 460
 SPEED_LIMIT_SIGN_CENTER_Y = TURN_SIGNAL_CENTER_Y
+SPEED_LIMIT_SOURCE_LABELS = {
+    "vehicle": "v",
+    "car": "v",
+    "v": "v",
+    "nav": "n",
+    "navigation": "n",
+    "n": "n",
+    "model": "m",
+    "m": "m",
+    "vision": "vis",
+    "vis": "vis",
+    "sim": "sim",
+}
 CRUISE_SET_CENTER_X = SPEED_VALUE_CENTER_X
 CRUISE_SET_CENTER_Y = TURN_SIGNAL_CENTER_Y
 SYSTEM_PANEL_X = 1416
@@ -154,6 +167,15 @@ def vehicle_metric_color(vehicle: VehicleBox, theme: ClusterTheme) -> tuple[int,
     if vehicle.source == "radarState" or vehicle.source == "radarPoint":
         return RED
     return BLUE if "+radar:" in vehicle.source else theme.world_label_text
+
+
+def speed_limit_source_label(source: str | None) -> str:
+    if source is None:
+        return ""
+    normalized = source.strip().lower()
+    if not normalized:
+        return ""
+    return SPEED_LIMIT_SOURCE_LABELS.get(normalized, normalized[:3])
 
 
 def world_label_scale(distance_m: float) -> float:
@@ -1898,11 +1920,21 @@ class ClusterUiRenderer:
             self._draw_text(
                 str(state.speed_limit_kph),
                 SPEED_LIMIT_SIGN_CENTER_X,
-                SPEED_LIMIT_SIGN_CENTER_Y - 1,
+                SPEED_LIMIT_SIGN_CENTER_Y - 12,
                 42,
                 TEXT,
                 anchor="center",
             )
+            source_label = speed_limit_source_label(state.speed_limit_source)
+            if source_label:
+                self._draw_text(
+                    source_label,
+                    SPEED_LIMIT_SIGN_CENTER_X,
+                    SPEED_LIMIT_SIGN_CENTER_Y + 31,
+                    17,
+                    TEXT,
+                    anchor="center",
+                )
 
         if self._cruise_set_visible(state):
             self._draw_text(

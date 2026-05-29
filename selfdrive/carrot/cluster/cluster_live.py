@@ -510,6 +510,7 @@ def standby_state() -> ClusterUiState:
         accel_mps2=0.0,
         steering=0.0,
         speed_limit_kph=None,
+        speed_limit_source=None,
         cruise_kph=None,
         cruise_display_state="off",
         left_signal=False,

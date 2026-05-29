@@ -80,6 +80,7 @@ class RouteReplayFrame:
     steering: float
     steering_angle_deg: float | None
     speed_limit_kph: int | None
+    speed_limit_source: str | None
     cruise_kph: int | None
     cruise_display_state: CruiseDisplayState
     left_signal: bool
@@ -628,7 +629,8 @@ class RouteReplaySource:
         video_frame = self._video_reader.frame_at(shown_time) if self._video_reader is not None else None
         signal_text = ("L" if frame.left_signal else "-") + ("R" if frame.right_signal else "-")
         lane_offset_text = "--" if frame.lane_center_offset_m is None else f"{frame.lane_center_offset_m:+.2f}m"
-        limit_text = "--" if frame.speed_limit_kph is None else f"{frame.speed_limit_kph:d}"
+        limit_source = frame.speed_limit_source or "-"
+        limit_text = "--" if frame.speed_limit_kph is None else f"{frame.speed_limit_kph:d}:{limit_source}"
         cruise_text = "--" if frame.cruise_kph is None else f"{frame.cruise_kph:d}"
         curve_text = "--" if frame.road_curvature is None else f"{frame.road_curvature:+.5f}"
         detected_text = detected_vehicle_summary(frame.detected_vehicles)
@@ -828,6 +830,7 @@ class RouteVideoFrameReader:
 class RouteLogParser:
     def __init__(self) -> None:
         self.speed_limit_kph: int | None = None
+        self.speed_limit_source: str | None = None
         self.nav_speed_limit_kph: int | None = None
         self.cruise_kph: int | None = None
         self.controls_enabled: bool | None = None
@@ -996,7 +999,15 @@ class RouteLogParser:
         cruise_display_state = self._cruise_display_state_from_car_state(car_state, self.cruise_kph)
 
         car_speed_limit_kph = self._speed_limit_kph_from_car_state(car_state)
-        self.speed_limit_kph = car_speed_limit_kph if car_speed_limit_kph is not None else self.nav_speed_limit_kph
+        if car_speed_limit_kph is not None:
+            self.speed_limit_kph = car_speed_limit_kph
+            self.speed_limit_source = "v"
+        elif self.nav_speed_limit_kph is not None:
+            self.speed_limit_kph = self.nav_speed_limit_kph
+            self.speed_limit_source = "n"
+        else:
+            self.speed_limit_kph = None
+            self.speed_limit_source = None
 
         self._update_lane_styles_from_car_state(car_state)
         lane_values = self._lane_values()
@@ -1035,6 +1046,7 @@ class RouteLogParser:
             steering=steering,
             steering_angle_deg=steering_angle_deg,
             speed_limit_kph=self.speed_limit_kph,
+            speed_limit_source=self.speed_limit_source,
             cruise_kph=self.cruise_kph,
             cruise_display_state=cruise_display_state,
             left_signal=left_signal,
@@ -1973,6 +1985,7 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         accel_mps2=frame.accel_mps2,
         steering=frame.steering,
         speed_limit_kph=frame.speed_limit_kph,
+        speed_limit_source=frame.speed_limit_source,
         cruise_kph=frame.cruise_kph,
         cruise_display_state=frame.cruise_display_state,
         left_signal=frame.left_signal,
@@ -2151,6 +2164,7 @@ def blend_frames(left: RouteReplayFrame, right: RouteReplayFrame, amount: float)
         steering=lerp(left.steering, right.steering),
         steering_angle_deg=lerp_optional(left.steering_angle_deg, right.steering_angle_deg),
         speed_limit_kph=discrete.speed_limit_kph,
+        speed_limit_source=discrete.speed_limit_source,
         cruise_kph=discrete.cruise_kph,
         cruise_display_state=discrete.cruise_display_state,
         left_signal=discrete.left_signal,

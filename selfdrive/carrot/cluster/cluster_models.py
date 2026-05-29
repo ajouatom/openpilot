@@ -135,6 +135,7 @@ class ClusterUiState:
     accel_mps2: float
     steering: float
     speed_limit_kph: int | None
+    speed_limit_source: str | None
     cruise_kph: int | None
     cruise_display_state: CruiseDisplayState
     left_signal: bool

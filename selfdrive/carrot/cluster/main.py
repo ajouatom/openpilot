@@ -738,7 +738,7 @@ def run_demo(
                     f"Refresh {actual_fps:.1f} Hz | "
                     f"speed={state.speed_kph:5.1f} km/h "
                     f"accel={state.accel_mps2:+.2f} m/s^2 "
-                    f"limit={state.speed_limit_kph} "
+                    f"limit={state.speed_limit_kph}:{state.speed_limit_source or '-'} "
                     f"lane={lane_status}:{state.lane_change_progress:.2f} "
                     f"ego_offset={state.ego_lane_offset:+.2f} | "
                     f"output={output_mode}/{usb_codec if usb_display else 'screen'}"

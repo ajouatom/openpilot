@@ -77,6 +77,7 @@ class ClusterSimulator:
             accel_mps2=self.accel_mps2,
             steering=self.steering,
             speed_limit_kph=speed_limit_kph,
+            speed_limit_source="sim",
             cruise_kph=cruise_kph,
             cruise_display_state="engaged",
             left_signal=left_signal,
