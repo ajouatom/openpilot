@@ -7,6 +7,7 @@ import multiprocessing
 import os
 import queue
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
@@ -59,6 +60,10 @@ ROUTE_REPLAY_START_BUFFER_FILES = 1
 ROUTE_REPLAY_READAHEAD_S = 5.0
 ROUTE_REPLAY_RETAIN_BEHIND_S = 1.0
 ROUTE_REPLAY_PRELOAD_NICE = 10
+ROUTE_VIDEO_FPS = 20.0
+ROUTE_VIDEO_DECODE_WIDTH = 388
+ROUTE_VIDEO_DECODE_HEIGHT = 244
+ROUTE_VIDEO_SEEK_RESTART_FRAMES = 45
 ROAD_EDGE_VEHICLE_OUTSIDE_MARGIN_M = 0.25
 LANE_CHANGE_REINDEX_PEAK_THRESHOLD = 0.22
 LANE_CHANGE_REINDEX_RESET_THRESHOLD = -0.08
@@ -656,7 +661,8 @@ class RouteReplaySource:
         )
 
         if video_frame is None:
-            return RouteOverlay(video_status="qcamera disabled", data_lines=data_lines)
+            status = self._video_reader.status_text() if self._video_reader is not None else "qcamera unavailable"
+            return RouteOverlay(video_status=status, data_lines=data_lines)
         return RouteOverlay(
             video_rgba=video_frame.rgba,
             video_width=video_frame.width,
@@ -669,12 +675,154 @@ class RouteReplaySource:
 class RouteVideoFrameReader:
     def __init__(self, segments: list[RouteVideoSegment]) -> None:
         self.segments = segments
+        self._ffmpeg = shutil.which("ffmpeg")
+        self._process: subprocess.Popen[bytes] | None = None
+        self._segment_key: tuple[int | None, str, float, float] | None = None
+        self._frame_index = -1
+        self._last_frame: RouteVideoFrame | None = None
+        self._status = "qcamera waiting"
 
     def frame_at(self, playback_seconds: float) -> RouteVideoFrame | None:
-        return None
+        segment = route_video_segment_at(self.segments, playback_seconds)
+        if segment is None:
+            self._close_process()
+            self._status = "qcamera missing"
+            return None
+        if not segment.path.exists():
+            self._close_process()
+            self._status = "qcamera file missing"
+            return None
+        if self._ffmpeg is None:
+            self._status = "qcamera ffmpeg missing"
+            return None
+
+        local_time_s = clamp(playback_seconds - segment.start_t, 0.0, max(0.0, segment.end_t - segment.start_t))
+        target_frame = max(0, int(local_time_s * ROUTE_VIDEO_FPS))
+        segment_key = self._key_for_segment(segment)
+        needs_restart = (
+            self._process is None
+            or self._segment_key != segment_key
+            or target_frame < self._frame_index
+            or target_frame - self._frame_index > ROUTE_VIDEO_SEEK_RESTART_FRAMES
+        )
+        if needs_restart and not self._open_segment(segment, target_frame):
+            return self._last_frame
+
+        while self._frame_index < target_frame:
+            if not self._read_next_frame():
+                return self._last_frame
+        self._status = ""
+        return self._last_frame
+
+    def status_text(self) -> str:
+        return self._status or "qcamera unavailable"
 
     def close(self) -> None:
-        return
+        self._close_process()
+
+    def _open_segment(self, segment: RouteVideoSegment, start_frame: int) -> bool:
+        self._close_process()
+        if self._ffmpeg is None:
+            self._status = "qcamera ffmpeg missing"
+            return False
+        seek_s = max(0.0, start_frame / ROUTE_VIDEO_FPS)
+        command = [
+            self._ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-threads",
+            "1",
+            "-ss",
+            f"{seek_s:.3f}",
+            "-i",
+            str(segment.path),
+            "-an",
+            "-sn",
+            "-vf",
+            f"scale={ROUTE_VIDEO_DECODE_WIDTH}:{ROUTE_VIDEO_DECODE_HEIGHT}",
+            "-pix_fmt",
+            "rgba",
+            "-f",
+            "rawvideo",
+            "pipe:1",
+        ]
+        try:
+            self._process = subprocess.Popen(
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+            )
+        except OSError as exc:
+            self._status = f"qcamera ffmpeg failed: {exc}"
+            self._process = None
+            return False
+        self._segment_key = self._key_for_segment(segment)
+        self._frame_index = start_frame - 1
+        self._last_frame = None
+        self._status = "qcamera starting"
+        return True
+
+    def _read_next_frame(self) -> bool:
+        process = self._process
+        if process is None or process.stdout is None:
+            self._status = "qcamera unavailable"
+            return False
+        frame_size = ROUTE_VIDEO_DECODE_WIDTH * ROUTE_VIDEO_DECODE_HEIGHT * 4
+        data = self._read_exact(process.stdout, frame_size)
+        if data is None:
+            self._status = "qcamera ended"
+            self._close_process()
+            return False
+        self._frame_index += 1
+        frame_id = f"{self._segment_key}:{self._frame_index}"
+        self._last_frame = RouteVideoFrame(
+            rgba=data,
+            width=ROUTE_VIDEO_DECODE_WIDTH,
+            height=ROUTE_VIDEO_DECODE_HEIGHT,
+            frame_id=frame_id,
+        )
+        return True
+
+    @staticmethod
+    def _read_exact(stream: Any, size: int) -> bytes | None:
+        chunks: list[bytes] = []
+        remaining = size
+        while remaining > 0:
+            chunk = stream.read(remaining)
+            if not chunk:
+                return None
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        return chunks[0] if len(chunks) == 1 else b"".join(chunks)
+
+    @staticmethod
+    def _key_for_segment(segment: RouteVideoSegment) -> tuple[int | None, str, float, float]:
+        return segment.index, str(segment.path), segment.start_t, segment.end_t
+
+    def _close_process(self) -> None:
+        process = self._process
+        self._process = None
+        self._segment_key = None
+        self._frame_index = -1
+        if process is None:
+            return
+        if process.stdout is not None:
+            try:
+                process.stdout.close()
+            except OSError:
+                pass
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=0.3)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                try:
+                    process.wait(timeout=0.3)
+                except subprocess.TimeoutExpired:
+                    pass
 
 
 class RouteLogParser:

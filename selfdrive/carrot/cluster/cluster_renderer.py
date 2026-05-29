@@ -90,22 +90,11 @@ FPS_STATUS_DOT_TEXT_GAP = 6
 FPS_STATUS_MAX_TEXT_W = 220
 RADAR_LABEL_DISTANCE_FONT_SIZE = 16
 RADAR_LABEL_SPEED_FONT_SIZE = 14
-RADAR_LABEL_MIN_WIDTH = 68
-RADAR_LABEL_PADDING_X = 16
-RADAR_LABEL_SINGLE_HEIGHT = 25
-RADAR_LABEL_STACKED_HEIGHT = 38
-RADAR_LABEL_DISTANCE_Y = 10
-RADAR_LABEL_SPEED_Y = 28
 VEHICLE_BADGE_DISTANCE_FONT_SIZE = 17
 VEHICLE_BADGE_SPEED_FONT_SIZE = 15
-VEHICLE_BADGE_MIN_WIDTH = 70
-VEHICLE_BADGE_PADDING_X = 16
-VEHICLE_BADGE_SINGLE_HEIGHT = 28
-VEHICLE_BADGE_STACKED_HEIGHT = 42
-VEHICLE_BADGE_DISTANCE_Y_SINGLE = 14
-VEHICLE_BADGE_DISTANCE_Y_STACKED = 12
-VEHICLE_BADGE_SPEED_Y = 32
-WORLD_LABEL_REPOSITION_ATTEMPTS = 4
+WORLD_LABEL_NEAR_M = 18.0
+WORLD_LABEL_FAR_M = 180.0
+WORLD_LABEL_MIN_SCALE = 0.56
 VEHICLE_MATERIAL_COLORS: dict[str, tuple[int, int, int, int]] = {
     "body": (156, 166, 172, 255),
     "wheel": (18, 20, 22, 255),
@@ -165,6 +154,11 @@ def vehicle_metric_color(vehicle: VehicleBox, theme: ClusterTheme) -> tuple[int,
     if vehicle.source == "radarState" or vehicle.source == "radarPoint":
         return RED
     return BLUE if "+radar:" in vehicle.source else theme.world_label_text
+
+
+def world_label_scale(distance_m: float) -> float:
+    far_amount = clamp((abs(distance_m) - WORLD_LABEL_NEAR_M) / (WORLD_LABEL_FAR_M - WORLD_LABEL_NEAR_M), 0.0, 1.0)
+    return 1.0 - far_amount * (1.0 - WORLD_LABEL_MIN_SCALE)
 
 
 def vec3(point: Vec3) -> rl.Vector3:
@@ -882,16 +876,10 @@ class ClusterUiRenderer:
         scene_shift_x_m: float = 0.0,
     ) -> None:
         theme = self._current_theme()
-        occupied: list[tuple[float, float, float, float]] = []
-        label_bounds = self._world_label_bounds(left=430, top=52, right=40, bottom=26)
         ordered = sorted(
             points,
-            key=lambda point: (
-                0 if point.absolute_speed_kph is not None else 1,
-                point.longitudinal_m,
-                abs(point.lateral_m),
-                point.label,
-            ),
+            key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label),
+            reverse=True,
         )
         for point in ordered:
             anchor = rl.Vector3(point.center.x + scene_shift_x_m, point.center.y, point.center.z + 0.46)
@@ -900,66 +888,49 @@ class ClusterUiRenderer:
                 continue
             distance = radar_point_distance_label(point)
             speed = radar_point_speed_label(point)
-            label_height = RADAR_LABEL_STACKED_HEIGHT if speed else RADAR_LABEL_SINGLE_HEIGHT
-            text_width = max(
-                int(self._measure_text(distance, RADAR_LABEL_DISTANCE_FONT_SIZE, 1)[0]),
-                int(self._measure_text(speed, RADAR_LABEL_SPEED_FONT_SIZE, 1)[0]) if speed else 0,
-            )
-            width = max(RADAR_LABEL_MIN_WIDTH, text_width + RADAR_LABEL_PADDING_X)
-            height = label_height
-            x = screen.x - width * 0.5
-            y = screen.y - height - 4
-            rect_tuple = (x, y, width, height)
-            if not label_rect_inside_bounds(rect_tuple, label_bounds):
-                continue
-            if any(rectangles_overlap(rect_tuple, taken) for taken in occupied):
-                if not speed:
-                    continue
-                for attempt in range(1, WORLD_LABEL_REPOSITION_ATTEMPTS + 1):
-                    candidate_y = y - attempt * (height + 4)
-                    candidate_rect = (x, candidate_y, width, height)
-                    if not label_rect_inside_bounds(candidate_rect, label_bounds):
-                        continue
-                    if not any(rectangles_overlap(candidate_rect, taken) for taken in occupied):
-                        y = candidate_y
-                        rect_tuple = candidate_rect
-                        break
-                else:
-                    continue
-            occupied.append(rect_tuple)
-            center_x = x + width * 0.5
+            scale = world_label_scale(point.longitudinal_m)
+            distance_size = max(9.0, RADAR_LABEL_DISTANCE_FONT_SIZE * scale)
+            speed_size = max(8.0, RADAR_LABEL_SPEED_FONT_SIZE * scale)
+            shadow_offset = max(1.0, 1.2 * scale)
+            gap = max(2.0, 4.0 * scale)
+            if speed:
+                speed_y = screen.y - speed_size * 0.5
+                distance_y = speed_y - (speed_size + distance_size) * 0.5 - gap
+            else:
+                distance_y = screen.y - distance_size * 0.5
+            center_x = screen.x
             shadow = theme.world_label_shadow
             text = theme.world_label_text
             self._draw_text(
                 distance,
-                center_x + 1,
-                y + RADAR_LABEL_DISTANCE_Y + 1,
-                RADAR_LABEL_DISTANCE_FONT_SIZE,
+                center_x + shadow_offset,
+                distance_y + shadow_offset,
+                distance_size,
                 shadow,
                 anchor="center",
             )
             self._draw_text(
                 distance,
                 center_x,
-                y + RADAR_LABEL_DISTANCE_Y,
-                RADAR_LABEL_DISTANCE_FONT_SIZE,
+                distance_y,
+                distance_size,
                 text,
                 anchor="center",
             )
             if speed:
                 self._draw_text(
                     speed,
-                    center_x + 1,
-                    y + RADAR_LABEL_SPEED_Y + 1,
-                    RADAR_LABEL_SPEED_FONT_SIZE,
+                    center_x + shadow_offset,
+                    speed_y + shadow_offset,
+                    speed_size,
                     shadow,
                     anchor="center",
                 )
                 self._draw_text(
                     speed,
                     center_x,
-                    y + RADAR_LABEL_SPEED_Y,
-                    RADAR_LABEL_SPEED_FONT_SIZE,
+                    speed_y,
+                    speed_size,
                     text,
                     anchor="center",
                 )
@@ -1011,12 +982,10 @@ class ClusterUiRenderer:
         scene_shift_x_m: float = 0.0,
     ) -> None:
         theme = self._current_theme()
-        occupied: list[tuple[float, float, float, float]] = []
         ordered = sorted(
             (vehicle for vehicle in vehicles if vehicle.label),
             key=lambda vehicle: (
                 0 if vehicle.primary else 1 if vehicle.cut_in else 2,
-                0 if vehicle.absolute_speed_kph is not None else 1,
                 max(0.0, vehicle.center.y - EGO_FORWARD_M),
                 -vehicle.confidence,
             ),
@@ -1033,48 +1002,25 @@ class ClusterUiRenderer:
 
             distance = vehicle_distance_label(vehicle)
             speed = vehicle_speed_label(vehicle)
-            label_height = VEHICLE_BADGE_STACKED_HEIGHT if speed else VEHICLE_BADGE_SINGLE_HEIGHT
-            width = max(
-                VEHICLE_BADGE_MIN_WIDTH,
-                int(
-                    max(
-                        self._measure_text(distance, VEHICLE_BADGE_DISTANCE_FONT_SIZE, 1)[0],
-                        self._measure_text(speed, VEHICLE_BADGE_SPEED_FONT_SIZE, 1)[0] if speed else 0,
-                    )
-                )
-                + VEHICLE_BADGE_PADDING_X,
-            )
-            height = label_height
-            x = screen.x - width * 0.5
-            y = screen.y - height - 4
-            rect_tuple = (x, y, width, height)
-            label_bounds = self._world_label_bounds(left=430, top=58, right=40, bottom=28)
-            if not label_rect_inside_bounds(rect_tuple, label_bounds):
-                continue
-            if any(rectangles_overlap(rect_tuple, taken) for taken in occupied):
-                if not (vehicle.primary or vehicle.cut_in or speed):
-                    continue
-                for attempt in range(1, WORLD_LABEL_REPOSITION_ATTEMPTS + 1):
-                    candidate_y = y - attempt * (height + 4)
-                    candidate_rect = (x, candidate_y, width, height)
-                    if not label_rect_inside_bounds(candidate_rect, label_bounds):
-                        continue
-                    if not any(rectangles_overlap(candidate_rect, taken) for taken in occupied):
-                        y = candidate_y
-                        rect_tuple = candidate_rect
-                        break
-                else:
-                    continue
-            occupied.append(rect_tuple)
-            center_x = x + width * 0.5
+            distance_m = abs(vehicle.center.y - EGO_FORWARD_M)
+            scale = world_label_scale(distance_m)
+            distance_size = max(9.0, VEHICLE_BADGE_DISTANCE_FONT_SIZE * scale)
+            speed_size = max(8.0, VEHICLE_BADGE_SPEED_FONT_SIZE * scale)
+            shadow_offset = max(1.0, 1.2 * scale)
+            gap = max(2.0, 4.0 * scale)
+            if speed:
+                speed_y = screen.y - speed_size * 0.5
+                distance_y = speed_y - (speed_size + distance_size) * 0.5 - gap
+            else:
+                distance_y = screen.y - distance_size * 0.5
+            center_x = screen.x
             shadow = theme.world_label_shadow
             text_color = vehicle_metric_color(vehicle, theme)
-            distance_y = y + (VEHICLE_BADGE_DISTANCE_Y_STACKED if speed else VEHICLE_BADGE_DISTANCE_Y_SINGLE)
             self._draw_text(
                 distance,
-                center_x + 1,
-                distance_y + 1,
-                VEHICLE_BADGE_DISTANCE_FONT_SIZE,
+                center_x + shadow_offset,
+                distance_y + shadow_offset,
+                distance_size,
                 shadow,
                 anchor="center",
             )
@@ -1082,24 +1028,24 @@ class ClusterUiRenderer:
                 distance,
                 center_x,
                 distance_y,
-                VEHICLE_BADGE_DISTANCE_FONT_SIZE,
+                distance_size,
                 text_color,
                 anchor="center",
             )
             if speed:
                 self._draw_text(
                     speed,
-                    center_x + 1,
-                    y + VEHICLE_BADGE_SPEED_Y + 1,
-                    VEHICLE_BADGE_SPEED_FONT_SIZE,
+                    center_x + shadow_offset,
+                    speed_y + shadow_offset,
+                    speed_size,
                     shadow,
                     anchor="center",
                 )
                 self._draw_text(
                     speed,
                     center_x,
-                    y + VEHICLE_BADGE_SPEED_Y,
-                    VEHICLE_BADGE_SPEED_FONT_SIZE,
+                    speed_y,
+                    speed_size,
                     text_color,
                     anchor="center",
                 )
