@@ -99,6 +99,8 @@ LANE_HIGHLIGHT_COLOR = (64, 148, 255)
 LANE_HIGHLIGHT_ALPHA = 220
 LANE_HIGHLIGHT_ROUTE_ALPHA = 170
 BSD_LANE_MARKING_MATCH_TOLERANCE = 0.45
+LANE_DASH_LENGTH_M = 5.2
+LANE_DASH_GAP_M = 4.2
 
 
 @dataclass(frozen=True, slots=True)
@@ -518,10 +520,23 @@ def lerp_vec3(start: Vec3, end: Vec3, amount: float) -> Vec3:
     )
 
 
+def lane_dash_cycle_offset(distance_m: float, dash_phase_m: float, cycle_m: float, dash_m: float, eps: float) -> float:
+    cycle_offset_m = (distance_m + dash_phase_m) % cycle_m
+    if cycle_offset_m < eps or abs(cycle_offset_m - cycle_m) < eps:
+        return 0.0
+    if abs(cycle_offset_m - dash_m) < eps:
+        return dash_m
+    return cycle_offset_m
+
+
+def lane_dash_phase_m(centerline: tuple[Vec3, ...]) -> float:
+    return centerline[0].y if centerline else 0.0
+
+
 def dashed_centerline_segments(
     centerline: tuple[Vec3, ...],
-    dash_m: float = 5.2,
-    gap_m: float = 4.2,
+    dash_m: float = LANE_DASH_LENGTH_M,
+    gap_m: float = LANE_DASH_GAP_M,
 ) -> tuple[tuple[Vec3, ...], ...]:
     if len(centerline) < 2:
         return ()
@@ -530,6 +545,7 @@ def dashed_centerline_segments(
     segments: list[tuple[Vec3, ...]] = []
     current_dash: list[Vec3] = []
     distance_m = 0.0
+    dash_phase_m = lane_dash_phase_m(centerline)
     previous = centerline[0]
     eps = 0.0001
 
@@ -548,11 +564,7 @@ def dashed_centerline_segments(
         cursor_point = previous
 
         while cursor_m < segment_end_m - eps:
-            cycle_offset_m = cursor_m % cycle_m
-            if cycle_offset_m < eps or abs(cycle_offset_m - cycle_m) < eps:
-                cycle_offset_m = 0.0
-            elif abs(cycle_offset_m - dash_m) < eps:
-                cycle_offset_m = dash_m
+            cycle_offset_m = lane_dash_cycle_offset(cursor_m, dash_phase_m, cycle_m, dash_m, eps)
             in_dash = cycle_offset_m < dash_m
             boundary_m = cursor_m + (dash_m - cycle_offset_m if in_dash else cycle_m - cycle_offset_m)
             next_m = min(segment_end_m, boundary_m)
@@ -614,15 +626,16 @@ def lane_marking_segments_for_marking(
         return (lane_centerline(marking.offset, steering, lane_width_m, start_m, end_m, STATIC_LINE_STEPS, 0.0),)
 
     segments: list[tuple[Vec3, ...]] = []
-    dash_m = 5.2
-    gap_m = 4.2
-    cursor = start_m
+    dash_m = LANE_DASH_LENGTH_M
+    cycle_m = dash_m + LANE_DASH_GAP_M
+    cursor = start_m - (start_m % cycle_m)
     while cursor < end_m:
+        dash_start = max(cursor, start_m)
         dash_end = min(cursor + dash_m, end_m)
-        segment = lane_centerline(marking.offset, steering, lane_width_m, cursor, dash_end, 6, 0.0)
-        if len(segment) >= 2:
+        if dash_end > dash_start + 0.001:
+            segment = lane_centerline(marking.offset, steering, lane_width_m, dash_start, dash_end, 6, 0.0)
             segments.append(segment)
-        cursor += dash_m + gap_m
+        cursor += cycle_m
     return tuple(segments)
 
 
@@ -692,11 +705,12 @@ def lane_marking_strip_groups_from_centerline(
         append_lane_marking_segment_strip_groups(centerline, half_widths, specs, left_groups, right_groups)
         return finish_lane_marking_strip_groups(left_groups, right_groups, specs)
 
-    dash_m = 5.2
-    gap_m = 4.2
+    dash_m = LANE_DASH_LENGTH_M
+    gap_m = LANE_DASH_GAP_M
     cycle_m = dash_m + gap_m
     current_dash: list[Vec3] = []
     distance_m = 0.0
+    dash_phase_m = lane_dash_phase_m(centerline)
     previous = centerline[0]
     eps = 0.0001
 
@@ -715,11 +729,7 @@ def lane_marking_strip_groups_from_centerline(
         cursor_point = previous
 
         while cursor_m < segment_end_m - eps:
-            cycle_offset_m = cursor_m % cycle_m
-            if cycle_offset_m < eps or abs(cycle_offset_m - cycle_m) < eps:
-                cycle_offset_m = 0.0
-            elif abs(cycle_offset_m - dash_m) < eps:
-                cycle_offset_m = dash_m
+            cycle_offset_m = lane_dash_cycle_offset(cursor_m, dash_phase_m, cycle_m, dash_m, eps)
             in_dash = cycle_offset_m < dash_m
             boundary_m = cursor_m + (dash_m - cycle_offset_m if in_dash else cycle_m - cycle_offset_m)
             next_m = min(segment_end_m, boundary_m)
