@@ -49,8 +49,10 @@ IDR refreshes were more frequent. GOP 3 route replay was much better than the
 earlier long-GOP runs, though periodic corruption was not fully eliminated and
 fast-changing detail still smeared at `3M`; raising 30 FPS auto bitrate to
 `6M` made block artifacts nearly disappear and reduced fast-motion smearing to
-rare occurrences. The ffmpeg/libx264 path remains available as a known-good
-comparison path. Build the native library and helper before hardware testing:
+rare occurrences. An explicit `8M` route replay was worse and pushed H264 USB
+chunk writes into large latency spikes, so the auto cap remains `6M`. The
+ffmpeg/libx264 path remains available as a known-good comparison path. Build
+the native library and helper before hardware testing:
 
 ```bash
 scons system/loggerd/libcluster_h264_encoder_bridge.so
