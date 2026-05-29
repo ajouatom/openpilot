@@ -47,7 +47,7 @@ DEFAULT_FPS = 0.0
 DEFAULT_USB_BRIGHTNESS = 80
 DEFAULT_H264_BITRATE = "auto"
 DEFAULT_H264_GOP = 3
-H264_AUTO_BITRATE_BITS_PER_FPS = 100_000
+H264_AUTO_BITRATE_BITS_PER_FPS = 200_000
 H264_AUTO_BITRATE_MIN_BPS = 1_000_000
 H264_AUTO_BITRATE_MAX_BPS = 6_000_000
 DEFAULT_H264_DIMENSION_ALIGN = 1
@@ -835,8 +835,8 @@ def parse_args() -> argparse.Namespace:
         "--usb-h264-bitrate",
         default=DEFAULT_H264_BITRATE,
         help=(
-            "Target H264 bitrate for --usb-codec h264. Default auto uses about 100k per FPS "
-            "bounded to 1M-6M; 30 FPS resolves to 3M."
+            "Target H264 bitrate for --usb-codec h264. Default auto uses about 200k per FPS "
+            "bounded to 1M-6M; 30 FPS resolves to 6M."
         ),
     )
     parser.add_argument(

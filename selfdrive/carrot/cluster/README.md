@@ -43,12 +43,13 @@ non-macroblock geometry such as 462x1920. It also asks the V4L2 encoder for
 multi-slice output capped by `--usb-h264-slice-max-bytes` so the resulting NAL
 sizes are closer to the ffmpeg/libx264 stream accepted by TURZX. The default
 H264 bitrate is `auto`, which keeps roughly the same bits per frame as FPS
-changes and resolves to `3M` at 30 FPS. The native default GOP is short
+changes and resolves to `6M` at 30 FPS. The native default GOP is short
 (`--usb-h264-gop 3`) because TURZX panel corruption measurements improved when
 IDR refreshes were more frequent. GOP 3 route replay was much better than the
-earlier long-GOP runs, though periodic corruption was not fully eliminated. The
-ffmpeg/libx264 path remains available as a known-good comparison path. Build
-the native library and helper before hardware testing:
+earlier long-GOP runs, though periodic corruption was not fully eliminated and
+fast-changing detail still smeared at `3M`. The ffmpeg/libx264 path remains
+available as a known-good comparison path. Build the native library and helper
+before hardware testing:
 
 ```bash
 scons system/loggerd/libcluster_h264_encoder_bridge.so
