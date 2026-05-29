@@ -5,6 +5,7 @@ import io
 import math
 import queue
 import shutil
+import sys
 import tempfile
 import threading
 import traceback
@@ -2701,6 +2702,15 @@ def load_openpilot_log_schema() -> Any:
     global _LOG_SCHEMA
     if _LOG_SCHEMA is not None:
         return _LOG_SCHEMA
+
+    if sys.platform != "win32":
+        try:
+            from cereal import log as capnp_log
+
+            _LOG_SCHEMA = capnp_log
+            return _LOG_SCHEMA
+        except Exception:
+            pass
 
     try:
         import capnp
