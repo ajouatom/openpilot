@@ -1,6 +1,7 @@
 "use strict";
 
 const DEVICE_NETWORK_REFRESH_MS = 3000;
+const DEVICE_SSH_REFRESH_MS = 3000;
 
 const DEVICE_GROUPS = [
   { id: "Device", labelKey: "device_group_info", defaultLabel: "Device Info" },

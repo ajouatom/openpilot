@@ -450,6 +450,29 @@ def _build_carrot(service: Any, previous: dict[str, Any] | None = None) -> dict[
   p["leftBlindspot"] = safe_bool(safe_get(service, "leftBlindspot"))
   p["rightBlindspot"] = safe_bool(safe_get(service, "rightBlindspot"))
   p["stockDebugTopRightText"] = safe_text(safe_get(service, "stockDebugTopRightText"))
+  p["xPosLat"] = safe_float(safe_get(service, "xPosLat"))
+  p["xPosLon"] = safe_float(safe_get(service, "xPosLon"))
+  p["xPosAngle"] = safe_float(safe_get(service, "xPosAngle"))
+  p["xPosSpeed"] = safe_float(safe_get(service, "xPosSpeed"))
+  p["xTurnInfo"] = safe_int(safe_get(service, "xTurnInfo"))
+  p["xDistToTurn"] = safe_int(safe_get(service, "xDistToTurn"))
+  p["xTurnCountDown"] = safe_int(safe_get(service, "xTurnCountDown"))
+  p["szTBTMainText"] = safe_text(safe_get(service, "szTBTMainText"))
+  p["szPosRoadName"] = safe_text(safe_get(service, "szPosRoadName"))
+  p["nGoPosDist"] = safe_int(safe_get(service, "nGoPosDist"))
+  p["nGoPosTime"] = safe_int(safe_get(service, "nGoPosTime"))
+  p["xSpdType"] = safe_int(safe_get(service, "xSpdType"))
+  p["xSpdLimit"] = safe_int(safe_get(service, "xSpdLimit"))
+  p["xSpdDist"] = safe_int(safe_get(service, "xSpdDist"))
+  p["xSpdCountDown"] = safe_int(safe_get(service, "xSpdCountDown"))
+  p["szSdiDescr"] = safe_text(safe_get(service, "szSdiDescr"))
+  p["naviPaths"] = safe_text(safe_get(service, "naviPaths"))
+  # Extra carrotMan fields surfaced for the parent-side nav HUD card
+  # (capnp unchanged — these were already in the struct).
+  p["nRoadLimitSpeed"] = safe_int(safe_get(service, "nRoadLimitSpeed"))
+  p["atcType"] = safe_text(safe_get(service, "atcType"))
+  p["vTurnSpeed"] = safe_int(safe_get(service, "vTurnSpeed"))
+  p["leftSec"] = safe_int(safe_get(service, "leftSec"))
   return p
 
 
@@ -457,6 +480,11 @@ def _build_gps(service: Any, previous: dict[str, Any] | None = None) -> dict[str
   p = previous if isinstance(previous, dict) else {}
   p["latitude"] = safe_float(safe_get(service, "latitude"))
   p["longitude"] = safe_float(safe_get(service, "longitude"))
+  p["speed"] = safe_float(safe_get(service, "speed"))
+  p["bearingDeg"] = safe_float(safe_get(service, "bearingDeg"))
+  p["bearingAccuracyDeg"] = safe_float(safe_get(service, "bearingAccuracyDeg"))
+  p["speedAccuracy"] = safe_float(safe_get(service, "speedAccuracy"))
+  p["hasFix"] = safe_bool(safe_get(service, "hasFix"))
   return p
 
 
@@ -478,6 +506,31 @@ def _build_nav_instruction(service: Any, previous: dict[str, Any] | None = None)
   p["mainText"] = safe_text(safe_get(service, "mainText"))
   p["distanceText"] = safe_text(safe_get(service, "distanceText"))
   p["turnType"] = safe_text(safe_get(service, "turnType"))
+  return p
+
+
+def _build_nav_route(service: Any, previous: dict[str, Any] | None = None) -> dict[str, Any]:
+  p = previous if isinstance(previous, dict) else {}
+  coordinates = _ensure_list(p, "coordinates")
+  coordinates.clear()
+  raw_coordinates = safe_get(service, "coordinates")
+  if raw_coordinates is None:
+    p["count"] = 0
+    return p
+  try:
+    for idx, coord in enumerate(raw_coordinates):
+      if idx >= 2000:
+        break
+      lat = safe_float(safe_get(coord, "latitude"))
+      lon = safe_float(safe_get(coord, "longitude"))
+      if lat is None or lon is None:
+        continue
+      if abs(lat) > 90 or abs(lon) > 180 or (lat == 0 and lon == 0):
+        continue
+      coordinates.append({"lat": lat, "lon": lon})
+  except Exception:
+    coordinates.clear()
+  p["count"] = len(coordinates)
   return p
 
 
@@ -504,5 +557,6 @@ _SERVICE_BUILDERS: dict[str, Any] = {
   "gpsLocationExternal": _build_gps,
   "lateralPlan": _build_lateral_plan,
   "navInstructionCarrot": _build_nav_instruction,
+  "navRoute": _build_nav_route,
   "carControl": _build_car_control,
 }

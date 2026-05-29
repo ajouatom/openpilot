@@ -73,6 +73,10 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
         xSpdType: { kind: "int32", offset: 2 },
         xSpdLimit: { kind: "int32", offset: 3 },
         desiredSpeed: { kind: "int32", offset: 10 },
+        xPosLat: { kind: "float32", offset: 19 },
+        xPosLon: { kind: "float32", offset: 20 },
+        xPosAngle: { kind: "float32", offset: 21 },
+        xPosSpeed: { kind: "float32", offset: 22 },
         desiredSource: { kind: "text", offset: 4 },
       },
     },
@@ -85,6 +89,11 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
       fields: {
         latitude: { kind: "float64", offset: 1 },
         longitude: { kind: "float64", offset: 2 },
+        speed: { kind: "float32", offset: 4 },
+        bearingDeg: { kind: "float32", offset: 5 },
+        bearingAccuracyDeg: { kind: "float32", offset: 11 },
+        speedAccuracy: { kind: "float32", offset: 12 },
+        hasFix: { kind: "bool", offset: 13 },
       },
     },
     longitudinalPlan: {

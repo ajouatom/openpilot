@@ -5,6 +5,7 @@ from ..services.ssh_keys import (
   add_github_ssh_keys,
   clear_ssh_keys,
   get_ssh_key_status,
+  refresh_github_ssh_keys,
 )
 
 
@@ -27,6 +28,11 @@ async def api_ssh_keys(request: web.Request) -> web.Response:
       if session is None:
         return web.json_response({"ok": False, "error": "http client unavailable"}, status=500)
       return web.json_response({"ok": True, **await add_github_ssh_keys(session, body.get("username", ""))})
+    if action == "refresh":
+      session = request.app.get("http")
+      if session is None:
+        return web.json_response({"ok": False, "error": "http client unavailable"}, status=500)
+      return web.json_response({"ok": True, **await refresh_github_ssh_keys(session)})
   except SshKeyError as e:
     return web.json_response({"ok": False, "error": str(e)}, status=e.status)
   except Exception as e:

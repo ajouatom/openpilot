@@ -9,6 +9,9 @@ let deviceParamValues = {};
 let deviceGroupLoadPromises = new Map();
 let deviceNetworkInfo = null;
 let deviceNetworkLoadPromise = null;
+let deviceSshStatus = null;
+let deviceSshRefreshTimer = null;
+let deviceSshRefreshInFlight = false;
 let deviceTabLoaded = false;
 
 function mergeDeviceParamValues(values) {
@@ -102,6 +105,7 @@ async function loadDeviceParams(groupId, force = false) {
         "GithubUsername",
         "GithubSshKeys",
       ]);
+      values.SshKeyStatus = await loadDeviceSshStatus(false);
     }
     return mergeDeviceParamValues(values);
   })().catch((err) => {
@@ -249,6 +253,77 @@ async function selectDeviceGroup(groupId) {
   await renderDeviceItems(CURRENT_DEVICE_GROUP, true, { animateItems: true });
 }
 
+async function loadDeviceSshStatus(useCache = true) {
+  if (deviceSshStatus && useCache) return deviceSshStatus;
+  const payload = await requestJson("/api/ssh_keys", { cache: "no-store" });
+  deviceSshStatus = {
+    username: payload.username || "",
+    has_keys: Boolean(payload.has_keys),
+    key_count: Number(payload.key_count || 0),
+    fingerprints: Array.isArray(payload.fingerprints) ? payload.fingerprints : [],
+    updated_at: payload.updated_at || "",
+  };
+  mergeDeviceParamValues({
+    GithubUsername: deviceSshStatus.username,
+    GithubSshKeys: deviceSshStatus.has_keys ? "1" : "",
+    SshKeyStatus: deviceSshStatus,
+  });
+  return deviceSshStatus;
+}
+
+function shouldRefreshDeviceSsh() {
+  const deviceItems = document.getElementById("deviceItems");
+  return (
+    CURRENT_PAGE === "setting" &&
+    CURRENT_SETTING_TAB === "device" &&
+    CURRENT_DEVICE_GROUP === "Developer" &&
+    !document.hidden &&
+    deviceItems &&
+    !deviceItems.hidden &&
+    deviceItems.style.display !== "none"
+  );
+}
+
+function stopDeviceSshRefresh() {
+  if (!deviceSshRefreshTimer) return;
+  window.clearTimeout(deviceSshRefreshTimer);
+  deviceSshRefreshTimer = null;
+}
+
+function scheduleDeviceSshRefresh(delay = DEVICE_SSH_REFRESH_MS) {
+  stopDeviceSshRefresh();
+  if (!shouldRefreshDeviceSsh()) return;
+  deviceSshRefreshTimer = window.setTimeout(() => {
+    deviceSshRefreshTimer = null;
+    refreshDeviceSshPanel().catch((err) => console.error("[DeviceTab]", err));
+  }, delay);
+}
+
+function syncDeviceSshRefresh() {
+  if (shouldRefreshDeviceSsh()) scheduleDeviceSshRefresh();
+  else stopDeviceSshRefresh();
+}
+
+async function refreshDeviceSshPanel() {
+  if (!shouldRefreshDeviceSsh() || deviceSshRefreshInFlight) {
+    syncDeviceSshRefresh();
+    return;
+  }
+
+  deviceSshRefreshInFlight = true;
+  try {
+    const previous = JSON.stringify(deviceSshStatus || {});
+    await loadDeviceSshStatus(false);
+    const next = JSON.stringify(deviceSshStatus || {});
+    if (previous !== next) {
+      await renderDeviceItems("Developer", false, { silentRefresh: true });
+    }
+  } finally {
+    deviceSshRefreshInFlight = false;
+    syncDeviceSshRefresh();
+  }
+}
+
 async function getDeviceGroupValues(groupId) {
   if (groupId === "Network") {
     await loadDeviceNetwork(false);
@@ -275,6 +350,7 @@ async function renderDeviceItems(groupId, showItemsScreen = true, options = {}) 
 
   if (CURRENT_SETTING_TAB !== "device" || CURRENT_DEVICE_GROUP !== groupId) {
     syncDeviceNetworkRefresh();
+    syncDeviceSshRefresh();
     return;
   }
 
@@ -286,6 +362,7 @@ async function renderDeviceItems(groupId, showItemsScreen = true, options = {}) 
   syncDeviceGroupActiveState(groupId);
   syncDeviceGroupChrome(groupId);
   syncDeviceNetworkRefresh();
+  syncDeviceSshRefresh();
 }
 
 function renderDeviceGroupItems(groupId, values) {
@@ -357,7 +434,7 @@ function renderDeviceToggleItems(values) {
 }
 
 function renderDeviceDeveloperItems(values) {
-  let html = renderSshKeysRow(values.GithubUsername || "", Boolean(values.GithubSshKeys));
+  let html = renderSshKeysRow(values.SshKeyStatus || values.GithubUsername || "", Boolean(values.GithubSshKeys));
   DEVICE_DEVELOPER_TOGGLES.forEach((toggle) => {
     html += renderDeviceToggleRow(
       toggle.param,
@@ -395,17 +472,22 @@ async function switchSettingTab(tab) {
     syncSettingTabState(nextTab);
     if (nextTab !== "device") {
       stopDeviceNetworkRefresh();
+      stopDeviceSshRefresh();
       if (typeof syncSettingGroupChrome === "function") syncSettingGroupChrome(CURRENT_GROUP);
     } else {
       syncDeviceGroupChrome(CURRENT_DEVICE_GROUP);
       syncDeviceNetworkRefresh();
+      syncDeviceSshRefresh();
     }
     return;
   }
 
   CURRENT_SETTING_TAB = nextTab;
   syncSettingTabState(nextTab);
-  if (nextTab !== "device") stopDeviceNetworkRefresh();
+  if (nextTab !== "device") {
+    stopDeviceNetworkRefresh();
+    stopDeviceSshRefresh();
+  }
 
   if (nextTab === "device") {
     await renderDeviceTab();
@@ -413,6 +495,7 @@ async function switchSettingTab(tab) {
       showSettingScreen("groups", false);
     }
     syncDeviceGroupChrome(CURRENT_DEVICE_GROUP);
+    syncDeviceSshRefresh();
     return;
   }
 
@@ -459,7 +542,10 @@ window.addEventListener("carrot:paramchange", (event) => {
 });
 
 document.addEventListener("visibilitychange", syncDeviceNetworkRefresh);
+document.addEventListener("visibilitychange", syncDeviceSshRefresh);
 window.addEventListener("carrot:pagechange", syncDeviceNetworkRefresh);
+window.addEventListener("carrot:pagechange", syncDeviceSshRefresh);
 window.addEventListener("resize", syncDeviceNetworkRefresh);
+window.addEventListener("resize", syncDeviceSshRefresh);
 
 syncSettingTabState("carrot");

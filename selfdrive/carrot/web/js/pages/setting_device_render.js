@@ -53,24 +53,26 @@ function renderDeviceActionRow(title, descr, buttonText, buttonId, buttonClass =
     </div>`;
 }
 
-function renderSshKeysRow(username, hasKeys) {
-  const displayName = String(username || "").trim();
+function renderSshKeysRow(statusOrUsername, fallbackHasKeys) {
+  const status = (statusOrUsername && typeof statusOrUsername === "object")
+    ? statusOrUsername
+    : { username: statusOrUsername || "", has_keys: Boolean(fallbackHasKeys) };
+  const displayName = String(status.username || "").trim();
+  const hasKeys = Boolean(status.has_keys || status.hasKeys);
+  const fingerprints = Array.isArray(status.fingerprints) ? status.fingerprints : [];
   const accountText = hasKeys ? (displayName || "-") : getUIText("not_configured", "Not configured");
-  const buttonText = hasKeys ? getUIText("remove_upper", "REMOVE") : getUIText("add_upper", "ADD");
-  const buttonClass = hasKeys ? "smallBtn device-ssh-action device-ssh-action--remove" : "smallBtn device-ssh-action";
   return `
     <div class="setting device-setting">
       <div class="settingTop">
         <div>
           <div class="title">${escapeHtml(getUIText("ssh_keys", "SSH Keys"))}</div>
-          <div class="descr">${escapeHtml(getUIText("ssh_keys_desc", "Warning: This grants SSH access to all public keys in your GitHub settings. Never enter a GitHub username other than your own."))}</div>
         </div>
         <div class="ctrl device-ssh-control">
-          <div class="device-ssh-account ${hasKeys ? "is-configured" : ""}" title="${escapeHtml(accountText)}">
+          <button type="button" class="device-ssh-account ${hasKeys ? "is-configured" : ""}" data-ssh-action="manage" data-has-keys="${hasKeys ? "1" : "0"}" title="${escapeHtml(accountText)}">
             <span class="device-ssh-account__label">GitHub</span>
             <span class="device-ssh-account__value">${escapeHtml(accountText)}</span>
-          </div>
-          <button type="button" class="${buttonClass}" id="btnDeviceSshKeys" data-has-keys="${hasKeys ? "1" : "0"}">${escapeHtml(buttonText)}</button>
+          </button>
+          ${fingerprints.length ? `<button type="button" class="smallBtn device-ssh-action" data-ssh-action="view" data-has-keys="1">${escapeHtml(getUIText("ssh_keys_view", "View keys"))}</button>` : ""}
         </div>
       </div>
     </div>`;
