@@ -804,7 +804,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         # 왼쪽
         if lca_avail_left:
           lane_color = 6   # 녹색: 변경 가능
-        elif lane_line_warn_left or (side_object_left and side_object_detect_display): #or CS.out.leftBlindspot:
+        elif lane_line_warn_left or CS.out.leftBlindspot or (side_object_left and side_object_detect_display):
           lane_color = 4   # 주황: 명확한 차단 이유 있음
         else:
           lane_color = 2   # 흰색: 기타 불가 (모델 판단 등)
@@ -817,7 +817,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         # 오른쪽
         if lca_avail_right:
           lane_color = 6
-        elif lane_line_warn_right or (side_object_right and side_object_detect_display): #or CS.out.rightBlindspot:
+        elif lane_line_warn_right or CS.out.rightBlindspot or (side_object_right and side_object_detect_display):
           lane_color = 4
         else:
           lane_color = 2
