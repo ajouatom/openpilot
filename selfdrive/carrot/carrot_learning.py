@@ -191,6 +191,8 @@ class CarrotLearner:
     - gear_park=True → 추천 계산 및 Params 저장
     """
     if not self._is_active():
+      if self._params.get_bool("CarrotLearningPopupReady"):
+        self._params.put_bool("CarrotLearningPopupReady", False)
       return
 
     prev_brake = self._prev_brake

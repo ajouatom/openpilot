@@ -156,17 +156,62 @@ private:
   int m_unit;
 };
 
-class AutoTunerHistoryPanel : public QFrame {
+#include <QMap>
+#include <QList>
+#include <QColor>
+
+class AutoTunerGraphWidget : public QWidget {
   Q_OBJECT
 public:
-  explicit AutoTunerHistoryPanel(QWidget* parent = nullptr);
+  explicit AutoTunerGraphWidget(QWidget *parent = nullptr);
+  void setData(const QList<QString> &timestamps, const QMap<QString, QList<double>> &param_histories, const QMap<QString, QColor> &colors);
+  void setSelectedParam(const QString &param);
+
+protected:
+  void paintEvent(QPaintEvent *event) override;
+  void mousePressEvent(QMouseEvent *event) override;
+
+private:
+  QList<QString> timestamps;
+  QMap<QString, QList<double>> param_histories;
+  QMap<QString, QColor> colors;
+  QString selected_param;
+  int selected_index = -1;
+};
+
+class AutoTunerCardListDialog : public DialogBase {
+  Q_OBJECT
+public:
+  explicit AutoTunerCardListDialog(QWidget *parent = nullptr);
 private slots:
   void refreshHistory();
   void deleteItem(const QString& id);
   void restoreItem(const QString& id);
-  void clearAll();
 private:
   QVBoxLayout *list_layout;
+};
+
+class AutoTunerHistoryDialog : public DialogBase {
+  Q_OBJECT
+public:
+  explicit AutoTunerHistoryDialog(QWidget *parent = nullptr);
+};
+
+class AutoTunerHistoryPanel : public QFrame {
+  Q_OBJECT
+public:
+  explicit AutoTunerHistoryPanel(QWidget* parent = nullptr);
+public slots:
+  void refreshHistory();
+private slots:
+  void deleteItem(const QString& id);
+  void restoreItem(const QString& id);
+  void clearAll();
+private:
+  AutoTunerGraphWidget *graph_widget;
+  QVBoxLayout *param_list_layout;
+  QString latest_id;
+  QMap<QString, QColor> param_colors;
 protected:
   void showEvent(QShowEvent *event) override;
 };

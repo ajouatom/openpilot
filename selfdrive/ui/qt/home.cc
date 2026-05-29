@@ -6,6 +6,8 @@
 #include <QVBoxLayout>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonArray>
+#include <QTimer>
 
 #include "selfdrive/ui/qt/offroad/experimental_mode.h"
 #include "selfdrive/ui/qt/util.h"
@@ -77,8 +79,14 @@ class AutoTunerDialog : public DialogBase {
 public:
   QMap<QString, QCheckBox*> item_checkboxes;
   QJsonObject recommendations;
+  bool auto_apply_clicked = false;
+  bool is_auto_applied_popup = false;
+  int countdown_seconds = 5;
+  QPushButton *btn_close = nullptr;
+  QTimer *countdown_timer = nullptr;
 
-  explicit AutoTunerDialog(const QString &title_text, const QJsonObject &recs, QWidget *parent = nullptr) : DialogBase(parent), recommendations(recs) {
+  explicit AutoTunerDialog(const QString &title_text, const QJsonObject &recs, bool auto_applied = false, QWidget *parent = nullptr) 
+      : DialogBase(parent), recommendations(recs), is_auto_applied_popup(auto_applied) {
     setWindowFlags(Qt::Popup | Qt::FramelessWindowHint);
     setAttribute(Qt::WA_TranslucentBackground);
     setStyleSheet(R"(
@@ -136,13 +144,6 @@ public:
                                     .arg(info["current"].toInt())
                                     .arg(info["recommended"].toInt());
         
-        QCheckBox *cb = new QCheckBox();
-        cb->setText(item_text);
-        // Qt uses rich text in QCheckBox only if we set it this way or implicitly, but since Qt 5.11 text formats are auto-detected.
-        // If rich text doesn't render in QCheckBox text, we will use a QLabel alongside a checkbox.
-        // Wait, QCheckBox text does not support rich text by default natively in all styles.
-        // Let's create a horizontal layout for each item: Checkbox + QLabel
-        
         QHBoxLayout *item_layout = new QHBoxLayout();
         item_layout->setContentsMargins(0, 0, 0, 15);
         item_layout->setSpacing(20);
@@ -150,6 +151,9 @@ public:
         QCheckBox *item_cb = new QCheckBox();
         item_cb->setChecked(true);
         item_cb->setStyleSheet("QCheckBox::indicator { width: 50px; height: 50px; }");
+        if (is_auto_applied_popup) {
+          item_cb->setEnabled(false);
+        }
         
         QLabel *item_label = new QLabel(item_text);
         item_label->setStyleSheet("font-size: 45px; color: white;");
@@ -166,26 +170,92 @@ public:
     scroll->setWidget(scroll_widget);
     main_layout->addWidget(scroll, 1);
 
+    QString lang = QString::fromStdString(Params().get("LanguageSetting"));
+    QString txt_guide = tr("Guide");
+    QString txt_later = tr("Later");
+    QString txt_reset = tr("Reset");
+    QString txt_apply = tr("Apply Selected");
+    QString txt_auto_apply = tr("Auto Apply");
+    QString txt_close_fmt = tr("Close (%1s)");
+    
+    if (lang == "main_ko") {
+      txt_guide = "가이드";
+      txt_later = "나중에";
+      txt_reset = "초기화";
+      txt_apply = "선택 적용";
+      txt_auto_apply = "자동 적용";
+      txt_close_fmt = "닫기 (%1초)";
+    } else if (lang == "main_zh-CHS" || lang == "main_zh-CHT") {
+      txt_guide = "指南";
+      txt_later = "稍后";
+      txt_reset = "重置";
+      txt_apply = "应用所选";
+      txt_auto_apply = "自动应用";
+      txt_close_fmt = "关闭 (%1秒)";
+    }
+
     QHBoxLayout *btn_layout = new QHBoxLayout();
     
-    QPushButton *btn_guide = new QPushButton(tr("Guide"));
+    QPushButton *btn_guide = new QPushButton(txt_guide);
     btn_guide->setStyleSheet("background-color: #3b5998;");
-    
-    QPushButton *btn_later = new QPushButton(tr("Later"));
-    btn_later->setStyleSheet("background-color: #555555;");
-    
-    QPushButton *btn_clear = new QPushButton(tr("Reset"));
-    btn_clear->setStyleSheet("background-color: #8a1d1d;");
-    
-    QPushButton *btn_apply = new QPushButton(tr("Apply Selected"));
-    btn_apply->setStyleSheet("background-color: #178644;");
-
     btn_layout->addWidget(btn_guide);
-    btn_layout->addWidget(btn_later);
-    btn_layout->addWidget(btn_clear);
-    btn_layout->addWidget(btn_apply);
-    main_layout->addLayout(btn_layout);
 
+    if (is_auto_applied_popup) {
+      btn_close = new QPushButton(txt_close_fmt.arg(countdown_seconds));
+      btn_close->setStyleSheet("background-color: #555555;");
+      btn_layout->addWidget(btn_close);
+
+      countdown_timer = new QTimer(this);
+      connect(countdown_timer, &QTimer::timeout, this, [=]() {
+        countdown_seconds--;
+        if (countdown_seconds <= 0) {
+          countdown_timer->stop();
+          accept();
+        } else {
+          if (btn_close) {
+            btn_close->setText(txt_close_fmt.arg(countdown_seconds));
+          }
+        }
+      });
+      countdown_timer->start(1000);
+
+      connect(btn_close, &QPushButton::clicked, this, &QDialog::accept);
+    } else {
+      QPushButton *btn_later = new QPushButton(txt_later);
+      btn_later->setStyleSheet("background-color: #555555;");
+      
+      QPushButton *btn_clear = new QPushButton(txt_reset);
+      btn_clear->setStyleSheet("background-color: #8a1d1d;");
+      
+      QPushButton *btn_apply = new QPushButton(txt_apply);
+      btn_apply->setStyleSheet("background-color: #178644;");
+      
+      QPushButton *btn_auto_apply = new QPushButton(txt_auto_apply);
+      btn_auto_apply->setStyleSheet("background-color: #0b76a0;");
+
+      btn_layout->addWidget(btn_later);
+      btn_layout->addWidget(btn_clear);
+      btn_layout->addWidget(btn_apply);
+      btn_layout->addWidget(btn_auto_apply);
+
+      connect(btn_later, &QPushButton::clicked, this, &QDialog::reject);
+      
+      connect(btn_clear, &QPushButton::clicked, [=]() {
+        if (ConfirmationDialog::confirm(tr("Are you sure you want to delete all learning data collected so far without applying it?"), tr("Reset"), this)) {
+          Params().putBool("CarrotLearningClear", true);
+          this->reject();
+        }
+      });
+
+      connect(btn_apply, &QPushButton::clicked, this, &QDialog::accept);
+
+      connect(btn_auto_apply, &QPushButton::clicked, this, [=]() {
+        auto_apply_clicked = true;
+        accept();
+      });
+    }
+
+    main_layout->addLayout(btn_layout);
     outer_layout->addWidget(container);
 
     connect(btn_guide, &QPushButton::clicked, this, [=]() {
@@ -346,17 +416,6 @@ public:
       d->exec();
       d->deleteLater();
     });
-
-    connect(btn_later, &QPushButton::clicked, this, &QDialog::reject);
-    
-    connect(btn_clear, &QPushButton::clicked, [=]() {
-      if (ConfirmationDialog::confirm(tr("Are you sure you want to delete all learning data collected so far without applying it?"), tr("Reset"), this)) {
-        Params().putBool("CarrotLearningClear", true);
-        this->reject();
-      }
-    });
-
-    connect(btn_apply, &QPushButton::clicked, this, &QDialog::accept);
   }
 
   QJsonObject getSelectedItems() {
@@ -468,7 +527,7 @@ void HomeWindow::updateState(const UIState &s) {
         QJsonObject dsp_obj = dsp_doc.object();
         QString dsp_msg = tr("🧬 DSP: Manual driving style analyzed! (Auto-Tuner will follow next)");
 
-        AutoTunerDialog *dsp_dialog = new AutoTunerDialog(dsp_msg, dsp_obj, this);
+        AutoTunerDialog *dsp_dialog = new AutoTunerDialog(dsp_msg, dsp_obj, false, this);
         connect(dsp_dialog, &QDialog::accepted, [=]() {
           Params p;
           QJsonObject selected = dsp_dialog->getSelectedItems();
@@ -478,9 +537,7 @@ void HomeWindow::updateState(const UIState &s) {
               for (const QString& key : group_items.keys()) {
                 QJsonObject info = group_items[key].toObject();
                 int recommended = info["recommended"].toInt(0);
-                if (recommended > 0) {
-                  p.put(key.toStdString(), std::to_string(recommended));
-                }
+                p.put(key.toStdString(), std::to_string(recommended));
               }
             }
           }
@@ -508,60 +565,118 @@ void HomeWindow::updateState(const UIState &s) {
       if (!raw.isEmpty() && doc.isObject()) {
         QJsonObject obj = doc.object();
 
-        // 팝업 소스에 따른 타이틀 메시지 분기
-        QString source = QString::fromStdString(params.get("CarrotLearningPopupSource"));
-        QString msg;
-        if (source == "timer") {
-          msg = tr("Auto-Tuner: 30min update — driving pattern learned!");
-        } else if (source == "stop") {
-          msg = tr("Auto-Tuner: Driving pattern learned!");
-        } else {
-          // parking (default)
-          msg = tr("Auto-Tuner: Driving pattern learned!");
-        }
-
-        AutoTunerDialog *dialog = new AutoTunerDialog(msg, obj, this);
-        connect(dialog, &QDialog::accepted, [=]() {
+        bool auto_apply = params.getBool("CarrotLearningAutoApply");
+        if (auto_apply) {
+          // ── [자동 적용 모드] 백그라운드 선적용 + 5초 카운트다운 알림 ──
           Params p;
-          QJsonObject selected = dialog->getSelectedItems();
-          if (!selected.isEmpty()) {
-            QJsonArray history_array;
-            QString history_raw = QString::fromStdString(p.get("CarrotLearningHistory"));
-            if (!history_raw.isEmpty()) {
-              QJsonDocument h_doc = QJsonDocument::fromJson(history_raw.toUtf8());
-              if (h_doc.isArray()) history_array = h_doc.array();
+          QJsonArray history_array;
+          QString history_raw = QString::fromStdString(p.get("CarrotLearningHistory"));
+          if (!history_raw.isEmpty()) {
+            QJsonDocument h_doc = QJsonDocument::fromJson(history_raw.toUtf8());
+            if (h_doc.isArray()) history_array = h_doc.array();
+          }
+
+          QJsonObject history_entry;
+          history_entry["timestamp"] = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm");
+          history_entry["changes"] = obj;
+          history_entry["id"] = QString::number(QDateTime::currentMSecsSinceEpoch());
+          history_entry["auto_applied"] = true;
+
+          history_array.prepend(history_entry);
+          while (history_array.size() > 50) history_array.removeLast();
+
+          p.put("CarrotLearningHistory", QJsonDocument(history_array).toJson(QJsonDocument::Compact).toStdString());
+
+          for (const QString& group : obj.keys()) {
+            QJsonObject group_items = obj[group].toObject();
+            for (const QString& key : group_items.keys()) {
+              QJsonObject info = group_items[key].toObject();
+              int recommended = info["recommended"].toInt(0);
+              p.put(key.toStdString(), std::to_string(recommended));
             }
+          }
 
-            QJsonObject history_entry;
-            history_entry["timestamp"] = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm");
-            history_entry["changes"] = selected;
-            history_entry["id"] = QString::number(QDateTime::currentMSecsSinceEpoch());
+          QString lang = QString::fromStdString(params.get("LanguageSetting"));
+          QString msg;
+          if (lang == "main_ko") {
+            msg = "🥕 Auto-Tuner: 추천 파라미터가 자동 적용되었습니다!";
+          } else if (lang == "main_zh-CHS" || lang == "main_zh-CHT") {
+            msg = "🥕 Auto-Tuner: 推荐参数已自动应用！";
+          } else {
+            msg = "🥕 Auto-Tuner: Parameters automatically applied!";
+          }
 
-            history_array.prepend(history_entry);
-            while (history_array.size() > 50) history_array.removeLast();
+          AutoTunerDialog *dialog = new AutoTunerDialog(msg, obj, true, this);
+          connect(dialog, &QDialog::accepted, [=]() {
+            Params().putBool("CarrotLearningClear", true);
+            dialog->deleteLater();
+          });
+          connect(dialog, &QDialog::rejected, [=]() {
+            Params().putBool("CarrotLearningClear", true);
+            dialog->deleteLater();
+          });
+          setMainWindow(dialog);
 
-            p.put("CarrotLearningHistory", QJsonDocument(history_array).toJson(QJsonDocument::Compact).toStdString());
+        } else {
+          // ── [수동 적용 모드] 선택적용 vs 자동적용 선택 ──────────────────
+          QString source = QString::fromStdString(params.get("CarrotLearningPopupSource"));
+          QString msg;
+          if (source == "timer") {
+            msg = tr("Auto-Tuner: 30min update — driving pattern learned!");
+          } else if (source == "stop") {
+            msg = tr("Auto-Tuner: Driving pattern learned!");
+          } else {
+            msg = tr("Auto-Tuner: Driving pattern learned!");
+          }
 
-            for (const QString& group : selected.keys()) {
-              QJsonObject group_items = selected[group].toObject();
-              for (const QString& key : group_items.keys()) {
-                QJsonObject info = group_items[key].toObject();
-                int recommended = info["recommended"].toInt(0);
-                if (recommended > 0) {
+          AutoTunerDialog *dialog = new AutoTunerDialog(msg, obj, false, this);
+          connect(dialog, &QDialog::accepted, [=]() {
+            Params p;
+            QJsonObject selected = dialog->getSelectedItems();
+            if (!selected.isEmpty()) {
+              QJsonArray history_array;
+              QString history_raw = QString::fromStdString(p.get("CarrotLearningHistory"));
+              if (!history_raw.isEmpty()) {
+                QJsonDocument h_doc = QJsonDocument::fromJson(history_raw.toUtf8());
+                if (h_doc.isArray()) history_array = h_doc.array();
+              }
+
+              QJsonObject history_entry;
+              history_entry["timestamp"] = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm");
+              history_entry["changes"] = selected;
+              history_entry["id"] = QString::number(QDateTime::currentMSecsSinceEpoch());
+              if (dialog->auto_apply_clicked) {
+                history_entry["auto_applied"] = true;
+              }
+
+              history_array.prepend(history_entry);
+              while (history_array.size() > 50) history_array.removeLast();
+
+              p.put("CarrotLearningHistory", QJsonDocument(history_array).toJson(QJsonDocument::Compact).toStdString());
+
+              for (const QString& group : selected.keys()) {
+                QJsonObject group_items = selected[group].toObject();
+                for (const QString& key : group_items.keys()) {
+                  QJsonObject info = group_items[key].toObject();
+                  int recommended = info["recommended"].toInt(0);
                   p.put(key.toStdString(), std::to_string(recommended));
                 }
               }
+
+              if (dialog->auto_apply_clicked) {
+                p.putBool("CarrotLearningAutoApply", true);
+              }
             }
-          }
-          Params().putBool("CarrotLearningClear", true);
-          dialog->deleteLater();
-        });
+            Params().putBool("CarrotLearningClear", true);
+            dialog->deleteLater();
+          });
 
-        connect(dialog, &QDialog::rejected, [=]() {
-          dialog->deleteLater();
-        });
+          connect(dialog, &QDialog::rejected, [=]() {
+            dialog->deleteLater();
+          });
 
-        setMainWindow(dialog);
+          setMainWindow(dialog);
+        }
       }
     }
   }
