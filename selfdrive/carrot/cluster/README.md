@@ -43,15 +43,16 @@ non-macroblock geometry such as 462x1920. It also asks the V4L2 encoder for
 multi-slice output capped by `--usb-h264-slice-max-bytes` so the resulting NAL
 sizes are closer to the ffmpeg/libx264 stream accepted by TURZX. The default
 H264 bitrate is `auto`, which keeps roughly the same bits per frame as FPS
-changes and resolves to `6M` at 30 FPS. The native default is all-I
+changes and resolves to `7M` at 30 FPS. The native default is all-I
 (`--usb-h264-gop 1`) because TURZX panel corruption measurements improved as
 P-frame references were removed. GOP 3 route replay was much better than the
 earlier long-GOP runs, and GOP 2 further improved compact-overlay tests, but a
 route replay without the overlay showed frequent small block artifacts at GOP 2.
 GOP 1 at 6M removed the visible squares on the same route, with only slightly
-softer compression detail, so GOP 1 is the measured stability default for now.
+softer compression detail, and a follow-up GOP 1 / 7M run also stayed clean, so
+GOP 1 is the measured stability default for now.
 An explicit `8M` route replay was worse and pushed H264 USB
-chunk writes into large latency spikes, so the auto cap remains `6M`. The
+chunk writes into large latency spikes, so the auto cap is limited to `7M`. The
 larger `--usb-h264-slice-max-bytes 8192` A/B also looked worse than the default
 4096-byte slice cap, and `2048` caused smaller but more frequent smearing, so
 keep the default slice setting for normal tests. The
@@ -149,7 +150,7 @@ For route replay against a saved device route, run:
 ```bash
 python selfdrive/carrot/cluster_run.py --input route --route /data/media/0/realdata/0000012e--f190807d64--36 --route-overlay compact --output usb --usb-codec h264 --duration 60 --fps 30 --profile-render --profile-interval 2
 python selfdrive/carrot/cluster_run.py --input route --route /data/media/0/realdata/0000012e--f190807d64--36 --route-overlay off --output usb --usb-codec h264 --duration 60 --fps 30
-python selfdrive/carrot/cluster_run.py --input route --route /data/media/0/realdata/0000012e--f190807d64--36 --route-overlay off --output usb --usb-codec h264 --duration 60 --fps 30 --usb-h264-bitrate 7M
+python selfdrive/carrot/cluster_run.py --input route --route /data/media/0/realdata/0000012e--f190807d64--36 --route-overlay off --output usb --usb-codec h264 --duration 60 --fps 30 --usb-h264-bitrate 6M
 ```
 
 To compare native hardware output against ffmpeg/libx264 with the same USB
