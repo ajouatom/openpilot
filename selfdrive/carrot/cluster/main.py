@@ -843,15 +843,15 @@ def parse_args() -> argparse.Namespace:
         "--usb-h264-bitrate",
         default=DEFAULT_H264_BITRATE,
         help=(
-            "Target H264 bitrate for --usb-codec h264. Default auto uses about 200k per FPS "
-            "bounded to 1M-6M; 30 FPS resolves to 6M."
+            "Target H264 bitrate for --usb-codec h264. Default auto uses about 234k per FPS "
+            "bounded to 1M-7M; 30 FPS resolves to 7M."
         ),
     )
     parser.add_argument(
         "--usb-h264-fps",
         type=int,
         default=30,
-        help="H264 encoder input FPS. Also caps H264 USB runs when --fps is omitted. Default: 30.",
+        help="H264 encoder input FPS. Also caps non-live H264 USB runs when --fps is omitted. Default: 30.",
     )
     parser.add_argument(
         "--usb-h264-gop",
@@ -1193,7 +1193,12 @@ def main() -> None:
         live_fps_param_reader = ClusterLiveFpsParamReader()
         target_fps = live_fps_param_reader.read()
         fps_source = CLUSTER_LIVE_FPS_PARAM
-    if args.output in ("usb", "both") and args.usb_codec == "h264" and not args.fps_from_cli:
+    if (
+        args.output in ("usb", "both")
+        and args.usb_codec == "h264"
+        and not args.fps_from_cli
+        and live_fps_param_reader is None
+    ):
         target_fps = float(args.usb_h264_fps)
         fps_source = "--usb-h264-fps"
     usb_output_enabled = args.output in ("usb", "both")

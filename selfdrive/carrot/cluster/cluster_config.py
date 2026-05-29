@@ -61,6 +61,15 @@ CLUSTER_SCREEN_MODE_PARAM = "ClusterHudScreenMode"
 SHOW_PLOT_MODE_PARAM = "ShowPlotMode"
 AUTO_DARK_START_HOUR = 18
 AUTO_LIGHT_START_HOUR = 6
+CLUSTER_LIVE_FPS_BY_MODE = {
+    0: 0.0,
+    1: 10.0,
+    2: 20.0,
+    3: 30.0,
+    4: 40.0,
+    5: 50.0,
+    6: 60.0,
+}
 
 LIGHT_CLUSTER_THEME = ClusterTheme(
     name="light",
@@ -156,13 +165,7 @@ def normalize_cluster_live_fps(value: object) -> float:
         mode = int(value)
     except (TypeError, ValueError):
         return 0.0
-    if mode == 1:
-        return 10.0
-    if mode == 2:
-        return 20.0
-    if mode == 3:
-        return 30.0
-    return 0.0
+    return CLUSTER_LIVE_FPS_BY_MODE.get(mode, 0.0)
 
 
 def normalize_cluster_brightness_percent(value: object) -> int:

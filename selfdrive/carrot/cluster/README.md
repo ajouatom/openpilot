@@ -128,9 +128,10 @@ The panel should show red/green/blue/white quadrants. If you force
 looks suspicious, return to the default `--usb-h264-input-format nv12` path.
 `--usb-h264-orientation landscape` tests direct 1920x462 output, while
 `--usb-h264-align 16` deliberately tests macroblock-aligned output such as
-1920x464. When `--fps` is omitted, H264 USB runs use `--usb-h264-fps 30` as the
-render cap, and the TURZX display frame-rate command follows the effective H264
-FPS unless `--usb-display-fps 0` is passed explicitly. H264 chunks are no-ACK by
+1920x464. When `--fps` is omitted, non-live H264 USB runs use
+`--usb-h264-fps 30` as the render cap; live H264 runs follow
+`ClusterHudLiveFps`. The TURZX display frame-rate command follows the effective
+H264 FPS unless `--usb-display-fps 0` is passed explicitly. H264 chunks are no-ACK by
 default like JPEG frame uploads; use
 `--usb-h264-wait-ack` for strict response diagnostics, or
 `--usb-h264-soft-ack` to mimic the vendor video sender's retry/status polling
@@ -207,7 +208,8 @@ and renders live `carState`, `modelV2`, `radarState`, `liveTracks`,
 points when CAN subscription is enabled.
 When `--fps` is omitted for live input, `ClusterHudLiveFps` controls the render
 limit and is polled about once per second while running: `0` uncapped,
-`1` 10 Hz, `2` 20 Hz, and `3` 30 Hz. Explicit `--fps` remains a fixed
+`1` 10 Hz, `2` 20 Hz, `3` 30 Hz, `4` 40 Hz, `5` 50 Hz, and `6` 60 Hz.
+Explicit `--fps` remains a fixed
 override.
 `ClusterHudEncoder` controls the encoder used by manager autostart: `0` auto
 tries native hardware H264, then ffmpeg/libx264 software H264, then JPEG;
