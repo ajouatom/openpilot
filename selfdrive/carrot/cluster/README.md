@@ -96,7 +96,9 @@ unit, NAL sizes, native sender queue depth, and USB send latency. Use it on both
 native and ffmpeg runs when deciding whether artifacts line up with encoder
 output size/cadence or with USB transport stalls.
 Keep `--usb-h264-debug` and `--usb-h264-dump` off for FPS/CPU measurements;
-they are diagnostic tools and add console/file I/O overhead. With
+they are diagnostic tools and add console/file I/O overhead. The compact
+diagnostic log is lighter than debug/dump, but final FPS measurements should
+still rerun without it after the suspect interval is identified. With
 `--profile-render`, native hardware runs include C++ sub-stage samples such as
 `usb_h264.native.convert` and `usb_h264.native.wait_input`.
 `--usb-h264-encoder-align 1` disables hardware-only input padding for A/B

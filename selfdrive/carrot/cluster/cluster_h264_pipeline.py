@@ -461,17 +461,38 @@ def _h264_packet_summary(data: bytes, max_nals: int = 6) -> str:
     return summary
 
 
+def _h264_diag_next_start_code(data: bytes, index: int) -> tuple[int, int]:
+    start3 = data.find(b"\x00\x00\x01", index)
+    start4 = data.find(b"\x00\x00\x00\x01", index)
+    if start4 >= 0 and (start3 < 0 or start4 <= start3):
+        return start4, 4
+    if start3 >= 0:
+        return start3, 3
+    return -1, 0
+
+
 def _h264_diag_stats(data: bytes) -> tuple[int, int, bool]:
-    nals = _h264_nals(data)
+    nal_count = 0
     max_nal_bytes = 0
     has_idr = False
-    for _, nal_start, nal_end in nals:
+    start, start_len = _h264_diag_next_start_code(data, 0)
+    while start >= 0:
+        nal_start = start + start_len
+        next_start, next_len = _h264_diag_next_start_code(data, nal_start)
+        nal_end = next_start if next_start >= 0 else len(data)
+        while nal_end > nal_start and data[nal_end - 1] == 0:
+            nal_end -= 1
+        if nal_start >= nal_end:
+            start, start_len = next_start, next_len
+            continue
+        nal_count += 1
         nal_size = nal_end - nal_start
         if nal_size > max_nal_bytes:
             max_nal_bytes = nal_size
-        if nal_start < nal_end and (data[nal_start] & 0x1F) == 5:
+        if (data[nal_start] & 0x1F) == 5:
             has_idr = True
-    return len(nals), max_nal_bytes, has_idr
+        start, start_len = next_start, next_len
+    return nal_count, max_nal_bytes, has_idr
 
 
 def _bytes_head(data: bytes, limit: int = 16) -> str:
@@ -1274,7 +1295,6 @@ class H264UsbPipeline:
             self._diag_nals += nal_count
             self._diag_max_nals = max(self._diag_max_nals, nal_count)
             self._diag_max_nal_bytes = max(self._diag_max_nal_bytes, max_nal_bytes)
-        self._maybe_log_h264_diag()
 
     def _record_h264_queue_depth(self, depth: int) -> None:
         if not self._diagnostics_enabled():
