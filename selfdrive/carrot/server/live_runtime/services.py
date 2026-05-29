@@ -33,6 +33,7 @@ OPTIONAL_SERVICES: tuple[str, ...] = (
   "gpsLocationExternal",  # Time / location helpers.
   "lateralPlan",          # Lane-less and lateral helper state.
   "navInstructionCarrot", # Nav instruction text / turn state.
+  "navRoute",             # Full destination route coordinates.
   "peripheralState",      # Voltage and peripheral info.
   "wideRoadCameraState",  # Metadata kept for sync/fallback compatibility.
   "carControl",           # Extra actuator / debug state when needed.

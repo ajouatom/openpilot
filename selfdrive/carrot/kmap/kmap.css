@@ -1,0 +1,328 @@
+:root {
+  --kmap-bg: rgba(236, 241, 235, .96);
+  --kmap-line: rgba(77, 87, 91, .34);
+  --kmap-road: rgba(78, 88, 92, .38);
+  --kmap-panel-border: rgba(255,255,255,.24);
+  --kmap-text: rgba(15, 19, 24, .80);
+  --kmap-tile-filter: saturate(1.00) brightness(.96) contrast(1.24);
+  --kmap-shell-overlay:
+    linear-gradient(90deg, rgba(255,255,255,.12), transparent 22%),
+    radial-gradient(circle at 50% 50%, transparent 44%, rgba(8, 12, 16, .10));
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+  font-family: Arial, "Malgun Gothic", sans-serif;
+}
+
+.kmap-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 1px;
+  min-height: 1px;
+  background: transparent;
+}
+
+.kmap-root[data-theme="day"] {
+  --kmap-bg: rgba(236, 241, 235, .96);
+  --kmap-panel-border: rgba(255,255,255,.26);
+  --kmap-tile-filter: saturate(1.00) brightness(.96) contrast(1.24);
+  --kmap-shell-overlay:
+    linear-gradient(90deg, rgba(255,255,255,.12), transparent 22%),
+    radial-gradient(circle at 50% 50%, transparent 44%, rgba(8, 12, 16, .10));
+}
+
+.kmap-shell {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border: 1px solid var(--kmap-panel-border);
+  border-radius: 8px;
+  background: var(--kmap-bg);
+  box-shadow: 0 14px 34px rgba(0,0,0,.40);
+}
+
+.kmap-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  opacity: 1;
+  background: var(--kmap-shell-overlay);
+}
+
+.kmap-kakao-map {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity .24s ease;
+}
+
+.kmap-root[data-provider="kakao"] .kmap-kakao-map {
+  opacity: 1;
+  filter: var(--kmap-tile-filter);
+}
+
+.kmap-root[data-embedded="1"]:not([data-has-vehicle="1"]) .kmap-kakao-map {
+  opacity: 0;
+}
+
+.kmap-surface {
+  position: absolute;
+  inset: -16%;
+  z-index: 2;
+  transform: translate3d(var(--map-pan-x, 0px), var(--map-pan-y, 0px), 0);
+  will-change: transform;
+}
+
+.kmap-root[data-provider="kakao"] .kmap-surface,
+.kmap-root[data-provider="mock"] .kmap-surface {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.kmap-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.kmap-overlay-html {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.kmap-root[data-provider="mock"] .kmap-overlay,
+.kmap-root[data-provider="mock"] .kmap-overlay-html,
+.kmap-root[data-provider="mock"] .kmap-marker,
+.kmap-root[data-provider="mock"] .kmap-center-glow {
+  display: none !important;
+}
+
+/* Layout A: the in-iframe nav info panel is superseded by the parent-side
+   #carrotNavHud (top-center card on the camera). Keep the DOM/JS in case
+   a future provider wants it back, but hide it for now to avoid showing
+   the same data twice. */
+.kmap-nav-info {
+  display: none !important;
+  position: absolute;
+  left: clamp(6px, 2.4vw, 10px);
+  bottom: clamp(6px, 2.4vw, 10px);
+  max-width: min(58%, 190px);
+  padding: 5px 7px 6px;
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(16, 24, 29, .66), rgba(6, 10, 13, .58));
+  box-shadow: 0 6px 14px rgba(0,0,0,.20);
+  color: rgba(255,255,255,.92);
+  text-shadow: 0 1px 2px rgba(0,0,0,.45);
+}
+
+.kmap-nav-info__road,
+.kmap-nav-info__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kmap-nav-info__road {
+  font-size: clamp(10px, 2.7vw, 12px);
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+.kmap-nav-info__meta {
+  margin-top: 2px;
+  font-size: clamp(9px, 2.35vw, 11px);
+  font-weight: 800;
+  line-height: 1.1;
+  color: rgba(255,255,255,.72);
+}
+
+.kmap-surface::after {
+  content: "";
+  position: absolute;
+  inset: 16%;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(255,255,255,.34), transparent 24%),
+    radial-gradient(circle at center, transparent 30%, rgba(255,255,255,.42));
+}
+
+.kmap-road {
+  position: absolute;
+  inset: 0;
+  opacity: .92;
+}
+
+.kmap-road--a {
+  background:
+    linear-gradient(26deg, transparent 47%, var(--kmap-road) 48%, var(--kmap-road) 52%, transparent 53%);
+  background-size: 116px 94px;
+}
+
+.kmap-road--b {
+  background:
+    linear-gradient(91deg, transparent 47%, var(--kmap-road) 48%, var(--kmap-road) 52%, transparent 53%);
+  background-size: 136px 112px;
+}
+
+.kmap-road--c {
+  background:
+    linear-gradient(143deg, transparent 47%, var(--kmap-road) 48%, var(--kmap-road) 52%, transparent 53%);
+  background-size: 164px 140px;
+}
+
+.kmap-center-glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 26%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 177, 74, .12), transparent 70%);
+  pointer-events: none;
+}
+
+.kmap-marker {
+  position: absolute;
+  left: var(--vehicle-marker-left, 50%);
+  top: var(--vehicle-marker-top, 50%);
+  width: clamp(36px, 9.2vw, 52px);
+  height: clamp(44px, 11.2vw, 64px);
+  transform: translate(-50%, -50%) rotate(var(--heading, 0deg));
+  transform-origin: 50% 50%;
+  pointer-events: none;
+  will-change: transform;
+  z-index: 7;
+  filter:
+    drop-shadow(0 0 1px rgba(255, 255, 255, .92))
+    drop-shadow(0 0 3px rgba(82, 38, 10, .62))
+    drop-shadow(0 5px 7px rgba(0, 0, 0, .34));
+}
+
+.kmap-marker::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(160deg, rgba(255,255,255,.34) 0 16%, rgba(255,255,255,0) 34%),
+    linear-gradient(180deg, #ffb75d 0%, #f47a20 48%, #c65618 100%);
+  clip-path: polygon(50% 3%, 86% 87%, 58% 73%, 50% 95%, 42% 73%, 14% 87%);
+  border-radius: 12px;
+  filter:
+    drop-shadow(0 0 1px rgba(255, 255, 255, .98))
+    drop-shadow(0 0 2px rgba(84, 36, 9, .62));
+}
+
+.kmap-marker::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 53%;
+  width: 14%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: rgba(255,255,255,.82);
+  box-shadow:
+    0 0 0 1px rgba(159,58,15,.36),
+    0 1px 2px rgba(0,0,0,.28);
+}
+
+.kmap-root[data-status="waiting"] .kmap-marker,
+.kmap-root[data-status="invalid"] .kmap-marker {
+  display: none;
+}
+
+/* legacy class kept for backward compatibility; marker now stays inside
+   .kmap-shell for both providers so the map's opacity/filter never dims it */
+
+.kmap-label,
+.kmap-status {
+  position: absolute;
+  z-index: 8;
+  max-width: calc(100% - 16px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.kmap-label,
+.kmap-status {
+  display: none;
+}
+
+.kmap-label {
+  display: none;
+  left: 8px;
+  top: 8px;
+  padding: 5px 7px;
+  border-radius: 6px;
+  background: rgba(255,255,255,.78);
+  color: var(--kmap-text);
+}
+
+.kmap-status {
+  right: 8px;
+  bottom: 8px;
+  max-width: calc(100% - 16px);
+  padding: 5px 7px;
+  border-radius: 6px;
+  background: rgba(8, 12, 16, .54);
+  color: rgba(255,255,255,.84);
+}
+
+.kmap-demo {
+  position: fixed;
+  right: 10px;
+  bottom: 10px;
+  z-index: 10;
+  display: flex;
+  gap: 8px;
+}
+
+.kmap-root[data-embedded="1"] .kmap-demo {
+  display: none;
+}
+
+.kmap-demo button {
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 8px;
+  background: rgba(10, 14, 19, .72);
+  color: rgba(255,255,255,.92);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+@media (max-width: 220px), (max-height: 180px) {
+  .kmap-label,
+  .kmap-status,
+  .kmap-demo {
+    display: none;
+  }
+}

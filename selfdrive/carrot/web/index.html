@@ -79,11 +79,12 @@
   <link rel="stylesheet" href="/css/pages/terminal.css?v=2605-07" />
   <link rel="stylesheet" href="/css/pages/settings/base.css?v=2605-37" />
   <link rel="stylesheet" href="/css/pages/settings/panels.css?v=2605-37" />
-  <link rel="stylesheet" href="/css/pages/settings/device.css?v=2605-37" />
-  <link rel="stylesheet" href="/css/pages/tools/base.css?v=2605-41" />
+  <link rel="stylesheet" href="/css/pages/settings/device.css?v=2605-39" />
+  <link rel="stylesheet" href="/css/pages/tools/base.css?v=2605-43" />
   <link rel="stylesheet" href="/css/pages/tools/qr.css?v=2605-40" />
-  <link rel="stylesheet" href="/css/pages/tools/main.css?v=2605-48" />
-  <link rel="stylesheet" href="/css/pages/drive.css?v=2605-11" />
+  <link rel="stylesheet" href="/css/pages/tools/main.css?v=2605-50" />
+  <link rel="stylesheet" href="/css/pages/drive.css?v=2605-18" />
+  <link rel="stylesheet" href="/css/components/nav_hud.css?v=2605-24" />
   <link rel="stylesheet" href="/css/responsive.css?v=2605-10" />
   <link rel="stylesheet" href="/css/vendor/plyr.css?v=3.7.8" />
 </head>
@@ -406,6 +407,45 @@
         <canvas id="carrotLastFrameCanvas" class="carrot-stage__videoHold" aria-hidden="true"></canvas>
         <canvas id="carrotOverlayCanvas" class="carrot-stage__canvas"></canvas>
         <canvas id="carrotHudCanvas" class="carrot-stage__hud"></canvas>
+        <div id="carrotMapDock" class="carrot-map-dock" hidden>
+          <iframe id="carrotMapFrame" class="carrot-map-frame" title="Carrot map" loading="eager" referrerpolicy="no-referrer"></iframe>
+          <div class="carrot-map-zoom" data-carrot-map-zoom-bar>
+            <button type="button" class="carrot-map-zoom__btn" data-carrot-map-zoom="out" aria-label="지도 축소">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+            </button>
+            <button type="button" class="carrot-map-zoom__btn" data-carrot-map-zoom="in" aria-label="지도 확대">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="carrot-map-zoom-level" data-carrot-map-zoom-level hidden>기본</div>
+        <div id="carrotNavHud" class="carrot-nav-hud" hidden aria-live="polite">
+          <div class="carrot-nav-hud__side" data-nav-hud-side hidden>
+            <div class="carrot-nav-hud__side-sign" data-nav-hud-side-sign></div>
+            <div class="carrot-nav-hud__side-body">
+              <div class="carrot-nav-hud__side-dist" data-nav-hud-side-dist></div>
+              <div class="carrot-nav-hud__side-label" data-nav-hud-side-label></div>
+            </div>
+            <div class="carrot-nav-hud__side-countdown" data-nav-hud-side-countdown hidden></div>
+          </div>
+          <div class="carrot-nav-hud__main" data-nav-hud-main>
+            <div class="carrot-nav-hud__atc" data-nav-hud-atc hidden></div>
+            <div class="carrot-nav-hud__icon" data-nav-hud-icon>↑</div>
+            <div class="carrot-nav-hud__body">
+              <div class="carrot-nav-hud__dist-row">
+                <span class="carrot-nav-hud__dist" data-nav-hud-dist></span>
+                <span class="carrot-nav-hud__advice" data-nav-hud-advice hidden></span>
+                <span class="carrot-nav-hud__countdown" data-nav-hud-countdown hidden></span>
+              </div>
+              <div class="carrot-nav-hud__road-row">
+                <span class="carrot-nav-hud__road" data-nav-hud-road></span>
+                <span class="carrot-nav-hud__limit" data-nav-hud-limit hidden></span>
+              </div>
+              <div class="carrot-nav-hud__meta" data-nav-hud-meta hidden></div>
+            </div>
+            <div class="carrot-nav-hud__hint" data-nav-hud-hint hidden></div>
+          </div>
+        </div>
         <div id="carrotOnroadAlert" class="carrot-stage__alert" hidden aria-live="polite" aria-atomic="true">
           <div id="carrotOnroadAlertBox" class="carrot-stage__alert-box">
             <div id="carrotOnroadAlertText1" class="carrot-stage__alert-text carrot-stage__alert-text--primary"></div>
@@ -612,9 +652,9 @@
   <script src="/js/vendor/qrcode-generator.js?v=1.4.4"></script>
   <script src="/js/vendor/jsQR.js?v=1.4.0"></script>
   <script src="/js/translations/registry.js?v=2605-09"></script>
-  <script src="/js/translations/ko.js?v=2605-14"></script>
-  <script src="/js/translations/en.js?v=2605-14"></script>
-  <script src="/js/translations/zh.js?v=2605-14"></script>
+  <script src="/js/translations/ko.js?v=2605-17"></script>
+  <script src="/js/translations/en.js?v=2605-17"></script>
+  <script src="/js/translations/zh.js?v=2605-17"></script>
   <script src="/js/realtime/hud_card.js?v=2604-05"></script>
   <script src="/js/shared/constants.js?v=2604-72"></script>
   <script src="/js/shared/dom.js?v=2604-71"></script>
@@ -630,12 +670,12 @@
   <script src="/js/shared/ui/navigation.js?v=2605-14"></script>
   <script src="/js/pages/car.js?v=2604-75"></script>
   <script src="/js/pages/setting.js?v=2605-17"></script>
-  <script src="/js/pages/setting_device_config.js?v=2605-04"></script>
-  <script src="/js/pages/setting_device_render.js?v=2605-02"></script>
+  <script src="/js/pages/setting_device_config.js?v=2605-05"></script>
+  <script src="/js/pages/setting_device_render.js?v=2605-04"></script>
   <script src="/js/pages/setting_device_network.js?v=2605-01"></script>
-  <script src="/js/pages/setting_device_actions.js?v=2605-02"></script>
-  <script src="/js/pages/setting_device.js?v=2605-09"></script>
-  <script src="/js/pages/tools_web_settings.js?v=2605-04"></script>
+  <script src="/js/pages/setting_device_actions.js?v=2605-04"></script>
+  <script src="/js/pages/setting_device.js?v=2605-10"></script>
+  <script src="/js/pages/tools_web_settings.js?v=2605-09"></script>
   <script src="/js/pages/tools_notifications.js?v=2605-30"></script>
   <script src="/js/pages/tools.js?v=2605-17"></script>
   <script src="/js/pages/tools_settings_qr.js?v=2605-11"></script>
@@ -648,9 +688,11 @@
   <script src="/js/realtime/vision_state.js?v=2605-01"></script>
   <script src="/js/realtime/vision_rtc.js?v=2605-01"></script>
   <script src="/js/realtime/vision_raw.js?v=2605-01"></script>
-  <script src="/js/realtime/app_realtime.js?v=2604-29"></script>
+  <script src="/js/realtime/app_realtime.js?v=2605-01"></script>
+  <script src="/js/realtime/carrot_map.js?v=2605-53"></script>
+  <script src="/js/realtime/nav_hud.js?v=2605-14"></script>
   <script src="/js/pages/vision_background.js?v=2605-01"></script>
-  <script src="/js/realtime/home_drive.js?v=2605-05"></script>
+  <script src="/js/realtime/home_drive.js?v=2605-07"></script>
   <script src="/js/app.js?v=2604-76"></script>
 </body>
 </html>
