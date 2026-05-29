@@ -284,6 +284,7 @@ def run_demo(
     usb_h264_soft_ack: bool,
     usb_h264_dump: str,
     usb_h264_debug: bool,
+    usb_h264_diagnose_interval_s: float,
     usb_h264_test_pattern: bool,
     usb_frame_drain_attempts: int,
     usb_frame_drain_timeout_ms: int,
@@ -455,6 +456,7 @@ def run_demo(
                 usb_h264_soft_ack,
                 usb_h264_dump,
                 usb_h264_debug,
+                usb_h264_diagnose_interval_s,
             )
             profile_stage = time.perf_counter()
             h264_pipeline.start()
@@ -977,6 +979,15 @@ def parse_args() -> argparse.Namespace:
         help="Print hardware encoder command/stderr and first H264 chunk sizes/headers for USB H264 debugging.",
     )
     parser.add_argument(
+        "--usb-h264-diagnose-interval",
+        type=float,
+        default=0.0,
+        help=(
+            "Print compact H264 unit/chunk/USB timing summaries every N seconds; "
+            "0 disables the periodic diagnostic log."
+        ),
+    )
+    parser.add_argument(
         "--usb-h264-test-pattern",
         action="store_true",
         help="Feed a red/green/blue/white RGBA quadrant pattern into the H264 path.",
@@ -1126,6 +1137,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--usb-h264-soft-ack and --usb-h264-no-ack cannot be used together")
     if not args.usb_h264_bitrate.strip():
         parser.error("--usb-h264-bitrate must not be empty")
+    if args.usb_h264_diagnose_interval < 0:
+        parser.error("--usb-h264-diagnose-interval must be 0 or greater")
     if not args.usb_h264_library:
         parser.error("--usb-h264-library must not be empty")
     if not args.usb_h264_helper:
@@ -1195,6 +1208,8 @@ def main() -> None:
     if args.usb_codec == "h264":
         bitrate_text = f"auto->{usb_h264_bitrate}" if usb_h264_bitrate_auto else usb_h264_bitrate
         h264_bitrate_text = f" h264_bitrate={bitrate_text}"
+        if args.usb_h264_diagnose_interval > 0:
+            h264_bitrate_text += f" h264_diag={args.usb_h264_diagnose_interval:g}s"
     brightness_text = "auto" if brightness_param_reader is not None and usb_brightness == 0 else f"{usb_brightness}%"
     size_text = (
         f"{args.width or 'device'}x{args.height or 'device'}"
@@ -1248,6 +1263,7 @@ def main() -> None:
             args.usb_h264_soft_ack,
             args.usb_h264_dump,
             args.usb_h264_debug,
+            args.usb_h264_diagnose_interval,
             args.usb_h264_test_pattern,
             args.usb_frame_drain_attempts,
             args.usb_frame_drain_timeout_ms,

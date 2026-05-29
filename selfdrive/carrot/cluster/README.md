@@ -90,6 +90,11 @@ controls.
 native callback flags/timestamps/keyframe state, raw and patched NAL summaries,
 packetization results, TURZX chunk sizes, and a shutdown summary. The helper
 backend also prints C++ packet metadata to stderr before Python reads stdout.
+`--usb-h264-diagnose-interval N` prints a compact periodic summary that is less
+noisy than debug mode: H264 unit count/keyframes, unit byte rate, chunks per
+unit, NAL sizes, native sender queue depth, and USB send latency. Use it on both
+native and ffmpeg runs when deciding whether artifacts line up with encoder
+output size/cadence or with USB transport stalls.
 Keep `--usb-h264-debug` and `--usb-h264-dump` off for FPS/CPU measurements;
 they are diagnostic tools and add console/file I/O overhead. With
 `--profile-render`, native hardware runs include C++ sub-stage samples such as
@@ -138,6 +143,14 @@ For route replay against a saved device route, run:
 
 ```bash
 python selfdrive/carrot/cluster_run.py --input route --route /data/media/0/realdata/0000012e--f190807d64--36 --route-overlay compact --output usb --usb-codec h264 --duration 60 --fps 30 --profile-render --profile-interval 2
+```
+
+To compare native hardware output against ffmpeg/libx264 with the same USB
+transport diagnostics, use:
+
+```bash
+python selfdrive/carrot/cluster_run.py --input route --route /data/media/0/realdata/0000012e--f190807d64--36 --route-overlay compact --output usb --usb-codec h264 --duration 30 --fps 30 --profile-render --profile-interval 2 --usb-h264-diagnose-interval 1
+python selfdrive/carrot/cluster_run.py --input route --route /data/media/0/realdata/0000012e--f190807d64--36 --route-overlay compact --output usb --usb-codec h264 --usb-h264-backend ffmpeg --usb-h264-ffmpeg-encoder libx264 --duration 30 --fps 30 --profile-render --profile-interval 2 --usb-h264-diagnose-interval 1
 ```
 
 The ffmpeg/libx264 path is the known-good H264 comparison mode. To make that

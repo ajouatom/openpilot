@@ -461,6 +461,19 @@ def _h264_packet_summary(data: bytes, max_nals: int = 6) -> str:
     return summary
 
 
+def _h264_diag_stats(data: bytes) -> tuple[int, int, bool]:
+    nals = _h264_nals(data)
+    max_nal_bytes = 0
+    has_idr = False
+    for _, nal_start, nal_end in nals:
+        nal_size = nal_end - nal_start
+        if nal_size > max_nal_bytes:
+            max_nal_bytes = nal_size
+        if nal_start < nal_end and (data[nal_start] & 0x1F) == 5:
+            has_idr = True
+    return len(nals), max_nal_bytes, has_idr
+
+
 def _bytes_head(data: bytes, limit: int = 16) -> str:
     return " ".join(f"{byte:02X}" for byte in data[:limit])
 
@@ -680,6 +693,7 @@ class H264UsbPipeline:
         soft_ack: bool,
         dump_path: str,
         debug: bool,
+        diagnose_interval_s: float = 0.0,
     ) -> None:
         self.usb_display = usb_display
         self.width = int(width)
@@ -709,6 +723,7 @@ class H264UsbPipeline:
         self._dump_file = None
         self._dump_write_count = 0
         self.debug = debug
+        self.diagnose_interval_s = max(0.0, float(diagnose_interval_s))
         self._sps_patch_logged = False
         self._sps_crop_patch_logged = False
         self._sps_vui_patch_logged = False
@@ -731,7 +746,8 @@ class H264UsbPipeline:
         self._samples: list[tuple[str, float]] = []
         self._stderr_tail: deque[str] = deque(maxlen=20)
         self._padded_rgba: bytearray | None = None
-        self._debug_started_at = time.perf_counter()
+        now = time.perf_counter()
+        self._debug_started_at = now
         self._debug_encoder_packets = 0
         self._debug_encoder_bytes = 0
         self._debug_stdout_reads = 0
@@ -740,6 +756,8 @@ class H264UsbPipeline:
         self._debug_usb_bytes = 0
         self._debug_max_packet_bytes = 0
         self._debug_max_chunk_bytes = 0
+        self._diag_window_started_at = now
+        self._reset_h264_diag_window(now)
 
     def start(self) -> None:
         if self.backend_request == "ffmpeg":
@@ -759,6 +777,11 @@ class H264UsbPipeline:
         if self.backend_request not in ("auto", "helper"):
             raise RuntimeError(f"unsupported H264 backend: {self.backend_request}")
         self._start_helper()
+
+    def _diagnose_text(self) -> str:
+        if not self._diagnostics_enabled():
+            return ""
+        return f" diag={self.diagnose_interval_s:g}s"
 
     def _start_native(self) -> None:
         library = self._resolve_library()
@@ -823,7 +846,8 @@ class H264UsbPipeline:
             f"input_size={input_sizeimage} input_bytes={input_bytesused} uv_offset={input_uv_offset} "
             f"capture_size={capture_sizeimage} "
             f"rgb4_layout={self.rgb4_layout} device={self.device_path} "
-            f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')} "
+            f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')}"
+            f"{self._diagnose_text()} "
             "sps_patch=on sps_crop_patch=on sps_vui_patch=on",
             flush=True,
         )
@@ -844,7 +868,8 @@ class H264UsbPipeline:
             f"slice_max={self.slice_max_bytes} packetize=access-unit "
             f"input={self.input_format} rgb4_layout={self.rgb4_layout} "
             f"device={self.device_path} "
-            f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')} "
+            f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')}"
+            f"{self._diagnose_text()} "
             "sps_patch=on sps_crop_patch=on sps_vui_patch=on",
             flush=True,
         )
@@ -896,7 +921,8 @@ class H264UsbPipeline:
             f"{self.ffmpeg_encoder_name} {self.encoder_width}x{self.encoder_height}@{self.fps} "
             f"bitrate={self.bitrate} gop={self.gop} muxer={self.ffmpeg_muxer_name} "
             "packetize=access-unit "
-            f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')}",
+            f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')}"
+            f"{self._diagnose_text()}",
             flush=True,
         )
         if self.debug:
@@ -1098,6 +1124,7 @@ class H264UsbPipeline:
             except Exception as exc:
                 print(f"Warning: TURZX H264 stop command skipped: {exc}", flush=True)
             self._stream_started = False
+        self._maybe_log_h264_diag(force=True)
         self._debug_log_close_summary()
         self._close_dump_file()
 
@@ -1203,6 +1230,105 @@ class H264UsbPipeline:
             f"max_packet={self._debug_max_packet_bytes} max_chunk={self._debug_max_chunk_bytes}",
             flush=True,
         )
+
+    def _reset_h264_diag_window(self, now: float) -> None:
+        self._diag_window_started_at = now
+        self._diag_source = ""
+        self._diag_units = 0
+        self._diag_key_units = 0
+        self._diag_unit_bytes = 0
+        self._diag_max_unit_bytes = 0
+        self._diag_chunks = 0
+        self._diag_max_chunks = 0
+        self._diag_nals = 0
+        self._diag_max_nals = 0
+        self._diag_max_nal_bytes = 0
+        self._diag_queue_max = 0
+        self._diag_send_chunks = 0
+        self._diag_send_bytes = 0
+        self._diag_send_ms = 0.0
+        self._diag_send_ms_max = 0.0
+
+    def _diagnostics_enabled(self) -> bool:
+        return self.diagnose_interval_s > 0.0
+
+    def _record_h264_unit(
+        self,
+        source: str,
+        packet: bytes,
+        chunks: list[bytes],
+        *,
+        keyframe: bool = False,
+    ) -> None:
+        if not self._diagnostics_enabled():
+            return
+        nal_count, max_nal_bytes, has_idr = _h264_diag_stats(packet)
+        with self._condition:
+            self._diag_source = source
+            self._diag_units += 1
+            self._diag_key_units += 1 if keyframe or has_idr else 0
+            self._diag_unit_bytes += len(packet)
+            self._diag_max_unit_bytes = max(self._diag_max_unit_bytes, len(packet))
+            self._diag_chunks += len(chunks)
+            self._diag_max_chunks = max(self._diag_max_chunks, len(chunks))
+            self._diag_nals += nal_count
+            self._diag_max_nals = max(self._diag_max_nals, nal_count)
+            self._diag_max_nal_bytes = max(self._diag_max_nal_bytes, max_nal_bytes)
+        self._maybe_log_h264_diag()
+
+    def _record_h264_queue_depth(self, depth: int) -> None:
+        if not self._diagnostics_enabled():
+            return
+        with self._condition:
+            self._diag_queue_max = max(self._diag_queue_max, int(depth))
+
+    def _record_h264_send(self, source: str, byte_count: int, milliseconds: float) -> None:
+        if not self._diagnostics_enabled():
+            return
+        with self._condition:
+            self._diag_source = source
+            self._diag_send_chunks += 1
+            self._diag_send_bytes += int(byte_count)
+            self._diag_send_ms += float(milliseconds)
+            self._diag_send_ms_max = max(self._diag_send_ms_max, float(milliseconds))
+        self._maybe_log_h264_diag()
+
+    def _maybe_log_h264_diag(self, *, force: bool = False) -> None:
+        if not self._diagnostics_enabled():
+            return
+
+        line = ""
+        now = time.perf_counter()
+        with self._condition:
+            span_s = max(0.001, now - self._diag_window_started_at)
+            if not force and span_s < self.diagnose_interval_s:
+                return
+            if self._diag_units == 0 and self._diag_send_chunks == 0:
+                self._reset_h264_diag_window(now)
+                return
+
+            unit_avg = self._diag_unit_bytes / self._diag_units if self._diag_units else 0.0
+            chunks_avg = self._diag_chunks / self._diag_units if self._diag_units else 0.0
+            nals_avg = self._diag_nals / self._diag_units if self._diag_units else 0.0
+            unit_kbps = (self._diag_unit_bytes * 8.0) / span_s / 1000.0
+            send_kbps = (self._diag_send_bytes * 8.0) / span_s / 1000.0
+            send_avg_ms = self._diag_send_ms / self._diag_send_chunks if self._diag_send_chunks else 0.0
+            source = self._diag_source or self.backend_name
+            line = (
+                f"H264 diag {span_s:.1f}s: backend={self.backend_name} source={source} "
+                f"units={self._diag_units} key={self._diag_key_units} "
+                f"unit_bytes_avg={unit_avg:.0f} max={self._diag_max_unit_bytes} "
+                f"unit_kbps={unit_kbps:.0f} "
+                f"chunks_avg={chunks_avg:.1f} max={self._diag_max_chunks} "
+                f"nals_avg={nals_avg:.1f} max={self._diag_max_nals} "
+                f"max_nal={self._diag_max_nal_bytes} qmax={self._diag_queue_max} "
+                f"send_chunks={self._diag_send_chunks} send_kbps={send_kbps:.0f} "
+                f"send_ms_avg={send_avg_ms:.2f} max={self._diag_send_ms_max:.2f}"
+            )
+            self._reset_h264_diag_window(now)
+
+        if line:
+            print(line, flush=True)
 
     def _prepare_hardware_packet(self, packet: bytes, *, may_have_sps: bool = True) -> bytes:
         if not may_have_sps:
@@ -1567,8 +1693,10 @@ class H264UsbPipeline:
             self._write_dump(packet)
             chunks = self._packetize_h264_for_usb(packet, chunk_size)
             self._debug_log_packetize("native", packet_index, packet, chunks, chunk_size)
+            self._record_h264_unit("native", packet, chunks, keyframe=bool(keyframe))
             for chunk in chunks:
                 packet_queue.put((chunk, False), timeout=1.0)
+                self._record_h264_queue_depth(packet_queue.qsize())
         except queue.Full as exc:
             self._set_error(RuntimeError("native H264 USB sender queue is full"))
         except BaseException as exc:
@@ -1691,6 +1819,7 @@ class H264UsbPipeline:
                 chunks = self._packetize_h264_for_usb(chunk, chunk_size)
                 self._debug_log_packetize(self.backend_name, read_index, chunk, chunks, chunk_size)
                 self._write_dump(chunk)
+                self._record_h264_unit(self.backend_name, chunk, chunks)
                 for packet_chunk in chunks:
                     self._send_h264_chunk(packet_chunk, chunk_size, source=self.backend_name)
         except BaseException as exc:
@@ -1746,7 +1875,9 @@ class H264UsbPipeline:
             wait_for_ack=self.wait_for_ack,
             require_ack_response=not self.soft_ack,
         )
-        self._add_sample("usb_h264.send_chunk", profile_stage)
+        elapsed_ms = (time.perf_counter() - profile_stage) * 1000.0
+        self._add_sample_value("usb_h264.send_chunk", elapsed_ms)
+        self._record_h264_send(source, len(chunk), elapsed_ms)
 
     def _read_stderr(self) -> None:
         proc = self._proc
