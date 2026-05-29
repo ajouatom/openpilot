@@ -46,6 +46,7 @@ from cluster_usb_pipeline import AsyncJpegUsbPipeline
 DEFAULT_FPS = 0.0
 DEFAULT_USB_BRIGHTNESS = 80
 DEFAULT_H264_BITRATE = "auto"
+DEFAULT_H264_GOP = 3
 H264_AUTO_BITRATE_BITS_PER_FPS = 100_000
 H264_AUTO_BITRATE_MIN_BPS = 1_000_000
 H264_AUTO_BITRATE_MAX_BPS = 6_000_000
@@ -847,8 +848,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--usb-h264-gop",
         type=int,
-        default=30,
-        help="H264 keyframe interval in frames. Default: 30.",
+        default=DEFAULT_H264_GOP,
+        help="H264 keyframe interval in frames. Default: %(default)s.",
     )
     parser.add_argument(
         "--usb-h264-backend",
