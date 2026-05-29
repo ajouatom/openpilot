@@ -3,6 +3,8 @@ from __future__ import annotations
 import bz2
 import io
 import math
+import multiprocessing
+import os
 import queue
 import shutil
 import sys
@@ -56,6 +58,7 @@ ROUTE_REPLAY_MIN_BUFFER_FILES = 2
 ROUTE_REPLAY_START_BUFFER_FILES = 1
 ROUTE_REPLAY_READAHEAD_S = 5.0
 ROUTE_REPLAY_RETAIN_BEHIND_S = 1.0
+ROUTE_REPLAY_PRELOAD_NICE = 10
 ROAD_EDGE_VEHICLE_OUTSIDE_MARGIN_M = 0.25
 LANE_CHANGE_REINDEX_PEAK_THRESHOLD = 0.22
 LANE_CHANGE_REINDEX_RESET_THRESHOLD = -0.08
@@ -207,11 +210,17 @@ class RouteReplayWorkerResult:
     error: str | None = None
 
 
+def normalize_route_frames(frames: list[RouteReplayFrame], first_t: float) -> list[RouteReplayFrame]:
+    normalized = [replace(frame, t=frame.t - first_t) for frame in frames]
+    normalized.sort(key=lambda frame: frame.t)
+    return normalized
+
+
 class RouteLogPreloadWorker:
     def __init__(self) -> None:
         self._requests: Any | None = None
         self._results: Any | None = None
-        self._thread: threading.Thread | None = None
+        self._worker: Any | None = None
         self._start()
 
     def request(self, generation: int, file_index: int, file_path: Path) -> None:
@@ -232,8 +241,8 @@ class RouteLogPreloadWorker:
             except queue.Empty:
                 if not block:
                     return None
-                thread = self._thread
-                if thread is not None and not thread.is_alive():
+                worker = self._worker
+                if worker is not None and not worker.is_alive():
                     raise RuntimeError("route preload worker exited")
 
     def restart(self) -> None:
@@ -242,32 +251,61 @@ class RouteLogPreloadWorker:
 
     def close(self) -> None:
         requests = self._requests
-        thread = self._thread
-        if thread is not None and thread.is_alive() and requests is not None:
+        worker = self._worker
+        if worker is not None and worker.is_alive() and requests is not None:
             try:
                 requests.put(("stop", 0, 0, ""), block=False)
             except Exception:
                 pass
-            thread.join(timeout=0.5)
+            worker.join(timeout=0.5)
+            if worker.is_alive():
+                terminate = getattr(worker, "terminate", None)
+                if callable(terminate):
+                    terminate()
+                    worker.join(timeout=0.5)
         self._requests = None
         self._results = None
-        self._thread = None
+        self._worker = None
 
     def _start(self) -> None:
+        if sys.platform != "win32":
+            try:
+                context = multiprocessing.get_context("fork")
+                self._requests = context.Queue(maxsize=2)
+                self._results = context.Queue(maxsize=2)
+                self._worker = context.Process(
+                    target=route_log_preload_worker,
+                    args=(self._requests, self._results, True),
+                    name="route-log-preload",
+                    daemon=True,
+                )
+                self._worker.start()
+                return
+            except Exception:
+                self._requests = None
+                self._results = None
+                self._worker = None
+
         self._requests = queue.Queue(maxsize=2)
         self._results = queue.Queue()
-        self._thread = threading.Thread(
+        self._worker = threading.Thread(
             target=route_log_preload_worker,
-            args=(self._requests, self._results),
+            args=(self._requests, self._results, False),
             name="route-log-preload",
             daemon=True,
         )
-        self._thread.start()
+        self._worker.start()
 
 
-def route_log_preload_worker(requests: Any, results: Any) -> None:
+def route_log_preload_worker(requests: Any, results: Any, low_priority: bool = False) -> None:
+    if low_priority:
+        try:
+            os.nice(ROUTE_REPLAY_PRELOAD_NICE)
+        except OSError:
+            pass
     log_schema = load_openpilot_log_schema()
     parser = RouteLogParser()
+    first_t: float | None = None
     while True:
         command, generation, file_index, file_path_text = requests.get()
         if command == "stop":
@@ -277,6 +315,10 @@ def route_log_preload_worker(requests: Any, results: Any) -> None:
         try:
             file_path = Path(file_path_text)
             frames = parser.parse_file(file_path, log_schema)
+            if frames:
+                if first_t is None:
+                    first_t = min(frame.t for frame in frames)
+                frames = normalize_route_frames(frames, first_t)
             results.put(RouteReplayWorkerResult(generation, file_index, file_path_text, frames=frames))
         except BaseException:
             results.put(
@@ -303,7 +345,6 @@ class RouteReplaySource:
         self.video_segments: list[RouteVideoSegment] = []
         self._video_reader = RouteVideoFrameReader(self.video_segments)
         self._preload_worker = RouteLogPreloadWorker()
-        self._first_t: float | None = None
         self._next_file_index = 0
         self._loaded_chunks: list[RouteReplayChunk] = []
         self._loaded_file_count = 0
@@ -497,17 +538,12 @@ class RouteReplaySource:
         if not parsed_frames:
             return True
 
-        if self._first_t is None:
-            self._first_t = min(frame.t for frame in parsed_frames)
-        first_t = self._first_t
-        normalized = [replace(frame, t=frame.t - first_t) for frame in parsed_frames]
-        normalized.sort(key=lambda frame: frame.t)
         chunk = RouteReplayChunk(
             index=file_index,
             path=file_path,
-            frames=normalized,
-            start_t=normalized[0].t,
-            end_t=normalized[-1].t,
+            frames=parsed_frames,
+            start_t=parsed_frames[0].t,
+            end_t=parsed_frames[-1].t,
         )
         self._loaded_chunks.append(chunk)
         self._append_video_segment(file_path, chunk)
@@ -558,7 +594,6 @@ class RouteReplaySource:
         self.duration = 0.0
         self.video_segments = []
         self._video_reader = RouteVideoFrameReader(self.video_segments)
-        self._first_t = None
         self._next_file_index = 0
         self._loaded_chunks = []
         self._loaded_file_count = 0
