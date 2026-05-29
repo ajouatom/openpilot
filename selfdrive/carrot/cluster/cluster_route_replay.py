@@ -1634,8 +1634,6 @@ class RouteLogParser:
         speed_limit = safe_float(car_state, "speedLimit", 0.0)
         if speed_limit <= 0.0:
             return None
-        if speed_limit < 45.0:
-            return int(round(speed_limit * 3.6))
         return int(round(speed_limit))
 
     def _update_lane_styles_from_car_state(self, car_state: Any) -> None:

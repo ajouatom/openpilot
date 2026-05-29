@@ -209,6 +209,9 @@ The launcher defaults to `--input live`, subscribes to openpilot cereal services
 and renders live `carState`, `modelV2`, `radarState`, `liveTracks`,
 `controlsState`, `carControl`, `deviceState`, and raw Hyundai CAN-FD radar
 points when CAN subscription is enabled.
+Cluster road speed-limit display treats `carState.speedLimit` from the
+vehicle/HDA path as km/h and `navInstruction.speedLimit` as m/s, matching the
+cereal/opendbc sources; vehicle values are not unit-guessed from their size.
 When `--fps` is omitted for live input, `ClusterHudLiveFps` controls the render
 limit and is polled about once per second while running: `0` uncapped,
 `1` 10 Hz, `2` 20 Hz, `3` 30 Hz, `4` 40 Hz, `5` 50 Hz, and `6` 60 Hz.
