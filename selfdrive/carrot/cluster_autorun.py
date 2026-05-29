@@ -58,15 +58,20 @@ def _cluster_realtime_cores() -> list[int]:
     return [int(core.strip()) for core in cores_text.split(",") if core.strip()]
 
 
+def _set_current_process_affinity(cores: list[int]) -> list[int]:
+    if sys.platform != "linux" or not hasattr(os, "sched_setaffinity"):
+        return []
+    os.sched_setaffinity(0, cores)
+    return sorted(os.sched_getaffinity(0))
+
+
 def _configure_autorun_affinity() -> None:
     if not _cluster_realtime_enabled():
         return
     try:
-        from openpilot.common.realtime import set_core_affinity
-
         cores = _cluster_realtime_cores()
-        set_core_affinity(cores)
-        print(f"[cluster_autorun] affinity enabled cores={cores}", flush=True)
+        allowed_cores = _set_current_process_affinity(cores)
+        print(f"[cluster_autorun] affinity enabled cores={allowed_cores or cores}", flush=True)
     except Exception as exc:
         print(f"[cluster_autorun] failed to set core affinity: {exc}", flush=True)
 

@@ -157,7 +157,9 @@ only for fixed test overrides; `0` means uncapped.
 Manager autostart enables realtime affinity by default. `cluster_autorun.py`
 affines the manager-launched process to cores `0,1,2,3` before waiting for USB
 or starting the HUD, and `cluster_run.py` also applies the same affinity before
-trying priority `55`. Explicit `CLUSTER_REALTIME`, `CLUSTER_REALTIME_CORES`, or
+trying priority `55`. The cluster path uses Linux `sched_setaffinity` directly
+so it still applies on devices that do not report the legacy `/TICI` hardware
+flag. Explicit `CLUSTER_REALTIME`, `CLUSTER_REALTIME_CORES`, or
 `CLUSTER_REALTIME_PRIORITY` environment values still win. If the device user
 lacks permission for realtime priority, the core affinity still applies when
 the kernel allows it.
