@@ -13,13 +13,13 @@ from cluster_config import (
     DEFAULT_LANE_WIDTH_M,
     EGO,
     EGO_FORWARD_M,
-    GREEN,
     LIGHT_CLUSTER_THEME,
     PATH_END_M,
     PATH_HEIGHT_M,
     PATH_LANE_CHANGE_CURVE_END_M,
     PATH_LANE_CHANGE_CURVE_START_M,
     PATH_START_M,
+    PURPLE,
     RED,
     ROAD_CURVE_M_PER_M2,
     ROAD_FAR_M,
@@ -1300,7 +1300,7 @@ def radar_points_same_vehicle(left: RadarPoint, right: RadarPoint) -> bool:
 def radar_vehicle_box(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> VehicleBox:
     confidence = radar_vehicle_confidence(point)
     alpha = int(92 + 163 * confidence)
-    body_color = GREEN
+    body_color = RED
     forward_m = data_scene_forward_m(point.longitudinal_m)
     center_x_m = clamp(point.lateral_m, -lane_width_m * 3.0, lane_width_m * 3.0)
     return VehicleBox(
@@ -1858,6 +1858,10 @@ def vehicle_color_for_detection(
     vehicle: DetectedVehicle,
     theme: ClusterTheme = LIGHT_CLUSTER_THEME,
 ) -> tuple[int, int, int]:
+    if vehicle.source.startswith("modelV2"):
+        return PURPLE
+    if vehicle.source == "radarState":
+        return RED
     if RADAR_MERGED_SOURCE_TAG in vehicle.source:
         return BLUE
     if vehicle.cut_in:

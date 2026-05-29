@@ -24,6 +24,7 @@ from cluster_config import (
     GREEN,
     MAX_ACCEL_MPS2,
     MAX_SPEED_KPH,
+    PURPLE,
     RED,
     TEXT,
     WHITE,
@@ -141,6 +142,10 @@ def vehicle_speed_label(vehicle: VehicleBox) -> str:
 
 
 def vehicle_metric_color(vehicle: VehicleBox, theme: ClusterTheme) -> tuple[int, int, int]:
+    if vehicle.source.startswith("modelV2"):
+        return PURPLE
+    if vehicle.source == "radarState" or vehicle.source == "radarPoint":
+        return RED
     return BLUE if "+radar:" in vehicle.source else theme.world_label_text
 
 
@@ -805,27 +810,44 @@ class ClusterUiRenderer:
             rl.draw_triangle_3d(left_near, right_far, left_far, color)
 
     def _draw_vehicle(self, vehicle: VehicleBox) -> None:
+        source_marker = vehicle.source.startswith("modelV2") or vehicle.source in ("radarState", "radarPoint")
         use_model = (
             self._vehicle_model is not None
+            and not source_marker
             and (not vehicle.source or vehicle.primary or vehicle.cut_in)
         )
         if use_model:
             self._draw_vehicle_shadow(vehicle)
             self._draw_vehicle_model(vehicle)
             return
-        if vehicle.source and not vehicle.primary and not vehicle.cut_in:
+        if vehicle.source and (source_marker or (not vehicle.primary and not vehicle.cut_in)):
             self._draw_vehicle_marker(vehicle)
             return
         self._draw_vehicle_box(vehicle)
 
     def _draw_vehicle_marker(self, vehicle: VehicleBox) -> None:
         alpha = int(80 + 150 * clamp(vehicle.confidence, 0.0, 1.0))
-        marker_center = rl.Vector3(vehicle.center.x, vehicle.center.y, vehicle.height_m * 0.32)
-        marker_size = rl.Vector3(
-            max(0.55, vehicle.width_m * 0.68),
-            max(1.05, vehicle.length_m * 0.64),
-            max(0.42, vehicle.height_m * 0.45),
-        )
+        if vehicle.source.startswith("modelV2"):
+            marker_center = rl.Vector3(vehicle.center.x, vehicle.center.y, vehicle.height_m * 0.72)
+            marker_size = rl.Vector3(
+                max(0.42, vehicle.width_m * 0.42),
+                max(0.78, vehicle.length_m * 0.42),
+                max(0.36, vehicle.height_m * 0.32),
+            )
+        elif vehicle.source in ("radarState", "radarPoint"):
+            marker_center = rl.Vector3(vehicle.center.x, vehicle.center.y, vehicle.height_m * 0.22)
+            marker_size = rl.Vector3(
+                max(0.72, vehicle.width_m * 0.82),
+                max(1.15, vehicle.length_m * 0.72),
+                max(0.24, vehicle.height_m * 0.26),
+            )
+        else:
+            marker_center = rl.Vector3(vehicle.center.x, vehicle.center.y, vehicle.height_m * 0.32)
+            marker_size = rl.Vector3(
+                max(0.55, vehicle.width_m * 0.68),
+                max(1.05, vehicle.length_m * 0.64),
+                max(0.42, vehicle.height_m * 0.45),
+            )
         rl.draw_cube_v(marker_center, marker_size, rl_color(vehicle.body_color, alpha))
 
     def _draw_radar_point(self, point: RadarPointMarker) -> None:

@@ -1287,7 +1287,12 @@ class RouteLogParser:
             for vehicle in self.radar_detections:
                 if not vehicle_is_inside_road_edges(vehicle, lane_values):
                     continue
-                if not has_nearby_vehicle(detections, vehicle, longitudinal_tolerance=4.0, lateral_tolerance=1.4):
+                if vehicle.source == "radarState" or not has_nearby_vehicle(
+                    detections,
+                    vehicle,
+                    longitudinal_tolerance=4.0,
+                    lateral_tolerance=1.4,
+                ):
                     detections.append(vehicle)
 
         return tuple(sorted(detections, key=lambda vehicle: vehicle.longitudinal_m))
