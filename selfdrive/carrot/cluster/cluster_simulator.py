@@ -82,6 +82,7 @@ class ClusterSimulator:
             cruise_display_state="engaged",
             gear_text="D",
             cruise_gap=3,
+            lfa_active=True,
             left_signal=left_signal,
             right_signal=right_signal,
             left_blindspot=False,

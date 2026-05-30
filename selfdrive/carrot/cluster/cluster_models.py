@@ -140,6 +140,7 @@ class ClusterUiState:
     cruise_display_state: CruiseDisplayState
     gear_text: str | None
     cruise_gap: int | None
+    lfa_active: bool | None
     left_signal: bool
     right_signal: bool
     left_blindspot: bool

@@ -62,9 +62,16 @@ GEAR_STATUS_CENTER_X = TURN_SIGNAL_LEFT_CENTER_X + 102
 GEAR_STATUS_CENTER_Y = TURN_SIGNAL_CENTER_Y
 GEAR_STATUS_BOX_SIZE = 46
 GEAR_STATUS_FONT_SIZE = 34
-GAP_STATUS_CENTER_X = GEAR_STATUS_CENTER_X + 58
-GAP_STATUS_BOX_SIZE = GEAR_STATUS_BOX_SIZE
-GAP_STATUS_FONT_SIZE = 30
+FOLLOW_STATUS_CENTER_X = GEAR_STATUS_CENTER_X + 78
+FOLLOW_STATUS_W = 88
+FOLLOW_STATUS_H = 46
+FOLLOW_STATUS_GAP_BARS = 4
+TOP_CRUISE_CENTER_X = FOLLOW_STATUS_CENTER_X + 122
+TOP_CRUISE_FONT_SIZE = 34
+TOP_CRUISE_UNIT_FONT_SIZE = 17
+AUTO_LANE_CHANGE_CENTER_X = TOP_CRUISE_CENTER_X + 116
+LFA_STATUS_CENTER_X = AUTO_LANE_CHANGE_CENTER_X + 50
+TOP_ICON_SIZE = 36
 DRIVE_STATUS_BOX_RADIUS = 8.0
 SPEED_VALUE_CENTER_X = 260
 SPEED_VALUE_CENTER_Y = 230
@@ -83,8 +90,6 @@ SPEED_LIMIT_SOURCE_LABELS = {
     "vis": "vis",
     "sim": "sim",
 }
-CRUISE_SET_CENTER_X = SPEED_VALUE_CENTER_X
-CRUISE_SET_CENTER_Y = TURN_SIGNAL_CENTER_Y
 SYSTEM_PANEL_X = 1416
 SYSTEM_PANEL_Y = 118
 SYSTEM_PANEL_W = 476
@@ -1921,7 +1926,7 @@ class ClusterUiRenderer:
     def _draw_drive_status(self, state: ClusterUiState) -> None:
         theme = self._current_theme()
         gear_text = (state.gear_text or "").strip().upper()
-        if not gear_text and state.cruise_gap is None:
+        if not gear_text and state.cruise_gap is None and not self._cruise_set_visible(state) and state.lfa_active is None:
             return
 
         gear_display = gear_text[:2] if gear_text else "-"
@@ -1935,20 +1940,10 @@ class ClusterUiRenderer:
             gear_color,
         )
 
-        gap_text = "-"
-        gap_color = theme.muted
-        if state.cruise_gap is not None:
-            gap = int(clamp(float(state.cruise_gap), 1.0, 4.0))
-            gap_text = str(gap)
-            gap_color = theme.clock_text
-        self._draw_drive_status_box(
-            gap_text,
-            GAP_STATUS_CENTER_X,
-            GEAR_STATUS_CENTER_Y,
-            GAP_STATUS_BOX_SIZE,
-            GAP_STATUS_FONT_SIZE,
-            gap_color,
-        )
+        self._draw_follow_gap_status(state)
+        self._draw_top_cruise_set(state)
+        self._draw_auto_lane_change_icon(AUTO_LANE_CHANGE_CENTER_X, GEAR_STATUS_CENTER_Y, theme.muted)
+        self._draw_lfa_status_icon(state)
 
     def _draw_drive_status_box(
         self,
@@ -1981,6 +1976,107 @@ class ClusterUiRenderer:
             anchor="center",
         )
 
+    def _draw_follow_gap_status(self, state: ClusterUiState) -> None:
+        theme = self._current_theme()
+        x = FOLLOW_STATUS_CENTER_X - FOLLOW_STATUS_W * 0.5
+        y = GEAR_STATUS_CENTER_Y - FOLLOW_STATUS_H * 0.5
+        self._rounded_rect(
+            x,
+            y,
+            FOLLOW_STATUS_W,
+            FOLLOW_STATUS_H,
+            DRIVE_STATUS_BOX_RADIUS,
+            theme.clock_bg,
+            GREEN,
+            2.0,
+        )
+
+        hda_color = GREEN if self._cruise_set_visible(state) else theme.muted
+        self._draw_text("HDA", x + 18, y + 11, 12, hda_color, anchor="center")
+
+        gap_count = 0 if state.cruise_gap is None else int(clamp(float(state.cruise_gap), 1.0, float(FOLLOW_STATUS_GAP_BARS)))
+        bar_x = x + 12
+        bar_y = y + 22
+        for index in range(FOLLOW_STATUS_GAP_BARS):
+            active = index < gap_count
+            bar_color = BLUE if active else theme.muted
+            bar_alpha = 230 if active else 82
+            bar_w = 7.0 + index * 2.0
+            self._rounded_rect(
+                bar_x + index * 5.5,
+                bar_y + index * 3.6,
+                bar_w,
+                4.0,
+                2.0,
+                (*bar_color, bar_alpha),
+            )
+
+        car_x = x + 58
+        car_y = GEAR_STATUS_CENTER_Y
+        car_color = theme.clock_text if state.cruise_gap is not None else theme.muted
+        car_shadow = (0, 0, 0, 78)
+        self._rounded_rect(car_x - 19, car_y - 7, 38, 15, 5.0, car_shadow)
+        self._rounded_rect(car_x - 16, car_y - 8, 32, 16, 5.0, car_color)
+        self._rounded_rect(car_x - 7, car_y - 15, 16, 9, 4.0, car_color)
+        rl.draw_circle_v(rl.Vector2(car_x - 10, car_y + 9), 3.0, rl_color(theme.clock_bg))
+        rl.draw_circle_v(rl.Vector2(car_x + 11, car_y + 9), 3.0, rl_color(theme.clock_bg))
+
+    def _draw_top_cruise_set(self, state: ClusterUiState) -> None:
+        theme = self._current_theme()
+        visible = self._cruise_set_visible(state)
+        speed_text = "--" if not visible or state.cruise_kph is None else str(int(round(state.cruise_kph)))
+        speed_color = self._cruise_set_color(state, theme) if visible else theme.muted
+        unit_color = speed_color if visible else theme.muted
+        speed_spacing = max(1.0, TOP_CRUISE_FONT_SIZE * 0.02)
+        unit_spacing = max(1.0, TOP_CRUISE_UNIT_FONT_SIZE * 0.02)
+        speed_w, _ = self._measure_text(speed_text, TOP_CRUISE_FONT_SIZE, speed_spacing)
+        unit_w, _ = self._measure_text("km/h", TOP_CRUISE_UNIT_FONT_SIZE, unit_spacing)
+        total_w = speed_w + unit_w + 2.0
+        start_x = TOP_CRUISE_CENTER_X - total_w * 0.5
+        self._draw_text(speed_text, start_x, GEAR_STATUS_CENTER_Y, TOP_CRUISE_FONT_SIZE, speed_color)
+        self._draw_text("km/h", start_x + speed_w + 2.0, GEAR_STATUS_CENTER_Y + 5, TOP_CRUISE_UNIT_FONT_SIZE, unit_color)
+
+    def _draw_auto_lane_change_icon(
+        self,
+        center_x: float,
+        center_y: float,
+        color: tuple[int, int, int],
+    ) -> None:
+        draw_color = rl_color(color, 170)
+        x = center_x
+        y = center_y
+        rl.draw_line_ex(rl.Vector2(x - 16, y + 15), rl.Vector2(x - 6, y - 15), 2.4, draw_color)
+        rl.draw_line_ex(rl.Vector2(x + 16, y + 15), rl.Vector2(x + 6, y - 15), 2.4, draw_color)
+        rl.draw_line_ex(rl.Vector2(x - 11, y + 4), rl.Vector2(x + 4, y - 8), 3.0, draw_color)
+        rl.draw_triangle(
+            rl.Vector2(x + 4, y - 8),
+            rl.Vector2(x - 2, y - 10),
+            rl.Vector2(x + 1, y - 3),
+            draw_color,
+        )
+
+    def _draw_lfa_status_icon(self, state: ClusterUiState) -> None:
+        theme = self._current_theme()
+        active = bool(state.lfa_active)
+        outline = GREEN if active else theme.muted
+        fill_alpha = 46 if active else 26
+        center = rl.Vector2(LFA_STATUS_CENTER_X, GEAR_STATUS_CENTER_Y)
+        rl.draw_circle_v(center, TOP_ICON_SIZE * 0.5, rl_color(outline, fill_alpha))
+        rl.draw_circle_lines(int(center.x), int(center.y), TOP_ICON_SIZE * 0.5, rl_color(outline, 210))
+        rl.draw_circle_lines(int(center.x), int(center.y + 1), TOP_ICON_SIZE * 0.26, rl_color(outline, 210))
+        rl.draw_line_ex(
+            rl.Vector2(center.x - 7, center.y + 5),
+            rl.Vector2(center.x + 7, center.y + 5),
+            2.2,
+            rl_color(outline, 210),
+        )
+        rl.draw_line_ex(
+            rl.Vector2(center.x, center.y + 5),
+            rl.Vector2(center.x, center.y + 12),
+            2.2,
+            rl_color(outline, 210),
+        )
+
     def _draw_speed_block(self, state: ClusterUiState) -> None:
         theme = self._current_theme()
         display_speed_kph = state.display_speed_kph if state.display_speed_kph is not None else state.speed_kph
@@ -2009,16 +2105,6 @@ class ClusterUiRenderer:
                     TEXT,
                     anchor="center",
                 )
-
-        if self._cruise_set_visible(state):
-            self._draw_text(
-                f"SET {state.cruise_kph:3d}",
-                CRUISE_SET_CENTER_X,
-                CRUISE_SET_CENTER_Y,
-                60,
-                self._cruise_set_color(state, theme),
-                anchor="center",
-            )
 
     @staticmethod
     def _cruise_set_visible(state: ClusterUiState) -> bool:

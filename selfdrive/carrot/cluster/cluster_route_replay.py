@@ -91,6 +91,7 @@ class RouteReplayFrame:
     cruise_display_state: CruiseDisplayState
     gear_text: str | None
     cruise_gap: int | None
+    lfa_active: bool | None
     left_signal: bool
     right_signal: bool
     left_blindspot: bool
@@ -845,6 +846,7 @@ class RouteLogParser:
         self.nav_speed_limit_kph: int | None = None
         self.cruise_kph: int | None = None
         self.cruise_gap: int | None = None
+        self.lfa_active: bool | None = None
         self.controls_enabled: bool | None = None
         self.lane_width_m = DEFAULT_LANE_WIDTH_M
         self.left_lane_y_m: float | None = None
@@ -981,6 +983,8 @@ class RouteLogParser:
                 self._update_controls_state(event.controlsState)
             elif event_type == "selfdriveState":
                 self._update_selfdrive_state(event.selfdriveState)
+            elif event_type == "carControl":
+                self._update_car_control(event.carControl)
             elif event_type == "cameraOdometry":
                 self._update_camera_odometry(event.cameraOdometry, bool(safe_get(event, "valid", True)))
             elif event_type == "radarState":
@@ -1070,6 +1074,7 @@ class RouteLogParser:
             cruise_display_state=cruise_display_state,
             gear_text=gear_text,
             cruise_gap=cruise_gap,
+            lfa_active=self.lfa_active,
             left_signal=left_signal,
             right_signal=right_signal,
             left_blindspot=left_blindspot,
@@ -1365,6 +1370,11 @@ class RouteLogParser:
         cruise_gap = self._cruise_gap_from_personality(safe_get(selfdrive_state, "personality"))
         if cruise_gap is not None:
             self.cruise_gap = cruise_gap
+
+    def _update_car_control(self, car_control: Any) -> None:
+        lat_active = safe_get(car_control, "latActive", None)
+        if lat_active is not None:
+            self.lfa_active = bool(lat_active)
 
     def _update_radar_state(self, radar_state: Any, event_t: float) -> None:
         detections: list[DetectedVehicle] = []
@@ -2072,6 +2082,7 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         cruise_display_state=frame.cruise_display_state,
         gear_text=frame.gear_text,
         cruise_gap=frame.cruise_gap,
+        lfa_active=frame.lfa_active,
         left_signal=frame.left_signal,
         right_signal=frame.right_signal,
         left_blindspot=frame.left_blindspot,
@@ -2253,6 +2264,7 @@ def blend_frames(left: RouteReplayFrame, right: RouteReplayFrame, amount: float)
         cruise_display_state=discrete.cruise_display_state,
         gear_text=discrete.gear_text,
         cruise_gap=discrete.cruise_gap,
+        lfa_active=discrete.lfa_active,
         left_signal=discrete.left_signal,
         right_signal=discrete.right_signal,
         left_blindspot=discrete.left_blindspot,

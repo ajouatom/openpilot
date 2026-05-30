@@ -152,7 +152,7 @@ class OpenpilotLiveSource:
         elif service == "selfdriveState":
             self.parser._update_selfdrive_state(data)
         elif service == "carControl":
-            return
+            self.parser._update_car_control(data)
         elif service == "cameraOdometry":
             self.parser._update_camera_odometry(data, self._service_valid(service))
         elif service == "radarState":
@@ -518,6 +518,7 @@ def standby_state() -> ClusterUiState:
         cruise_display_state="off",
         gear_text=None,
         cruise_gap=None,
+        lfa_active=None,
         left_signal=False,
         right_signal=False,
         left_blindspot=False,
