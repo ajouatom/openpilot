@@ -227,7 +227,8 @@ vehicle while inactive bars are gray and active bars use `#bb3d91`. Cruise set
 speed and `km/h` use the same font size and color. The lane and LFA icons use
 `selfdrive/assets/icons_mici/carrot_wheel_lane.png` and
 `selfdrive/assets/icons_mici/carrot_wheel_org.png`, share one center to save
-space, and recolor the LFA icon's white pixels green when LFA is active.
+space, rotate the LFA icon by `-carState.steeringAngleDeg`, and recolor the LFA
+icon's white pixels green when LFA is active.
 When `--fps` is omitted for live input, `ClusterHudLiveFps` controls the render
 limit and is polled about once per second while running: `0` uncapped,
 `1` 10 Hz, `2` 20 Hz, `3` 30 Hz, `4` 40 Hz, `5` 50 Hz, and `6` 60 Hz.

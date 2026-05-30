@@ -2136,12 +2136,14 @@ class ClusterUiRenderer:
         height: float,
         tint: tuple[int, int, int] | tuple[int, int, int, int],
         alpha: int | None = None,
+        rotation_deg: float = 0.0,
     ) -> bool:
         if texture is None:
             return False
         source = rl.Rectangle(0.0, 0.0, float(texture.width), float(texture.height))
-        dest = rl.Rectangle(center_x - width * 0.5, bottom_y - height, width, height)
-        rl.draw_texture_pro(texture, source, dest, rl.Vector2(0.0, 0.0), 0.0, rl_color(tint, alpha))
+        dest = rl.Rectangle(center_x, bottom_y - height * 0.5, width, height)
+        origin = rl.Vector2(width * 0.5, height * 0.5)
+        rl.draw_texture_pro(texture, source, dest, origin, rotation_deg, rl_color(tint, alpha))
         return True
 
     def _draw_top_cruise_set(self, state: ClusterUiState, bottom_y: float) -> None:
@@ -2206,6 +2208,7 @@ class ClusterUiRenderer:
         texture = self._lfa_active_texture if active and self._lfa_active_texture is not None else self._lfa_texture
         tint = WHITE if active else theme.muted
         alpha = 255 if active else 190
+        rotation_deg = -float(state.steering_angle_deg or 0.0)
         if self._draw_bottom_aligned_texture_icon(
             texture,
             LFA_STATUS_CENTER_X,
@@ -2214,6 +2217,7 @@ class ClusterUiRenderer:
             LFA_STATUS_ICON_SIZE,
             tint,
             alpha,
+            rotation_deg,
         ):
             return
 
