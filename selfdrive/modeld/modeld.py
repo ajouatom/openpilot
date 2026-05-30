@@ -462,6 +462,8 @@ def main(demo=False):
       modelv2_send.modelV2.meta.modelTurnSpeed = float(DH.model_turn_speed)
       modelv2_send.modelV2.meta.laneChangeAvailableLeft = DH.lane_change_available_left
       modelv2_send.modelV2.meta.laneChangeAvailableRight = DH.lane_change_available_right
+      modelv2_send.modelV2.meta.sideObjectDetectedLeft  = DH.left.side_object_detected
+      modelv2_send.modelV2.meta.sideObjectDetectedRight = DH.right.side_object_detected
       mt3 = time.perf_counter()
       drivingdata_send.drivingModelData.modelExecutionTime = mt3 - mt1
 

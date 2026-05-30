@@ -273,9 +273,13 @@
 }
 
 .app-dialog--web-settings .app-dialog__sheet {
-  --web-settings-content-max: min(52dvh, 360px);
-  width: min(calc(100vw - 32px), 620px);
-  max-height: min(calc(100dvh - 32px), 560px);
+  --web-settings-sheet-width: 560px;
+  --web-settings-sheet-height: clamp(420px, 68dvh, 560px);
+  --web-settings-nav-width: 112px;
+  --web-settings-row-min: 64px;
+  width: min(calc(100vw - 32px), var(--web-settings-sheet-width));
+  height: min(var(--web-settings-sheet-height), calc(100dvh - 32px));
+  max-height: min(var(--web-settings-sheet-height), calc(100dvh - 32px));
   padding: 16px;
   overflow: hidden;
 }
@@ -285,9 +289,10 @@
 }
 
 .app-dialog--web-settings .app-dialog__body {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
+  display: flex;
   min-height: 0;
-  max-height: var(--web-settings-content-max);
+  max-height: none;
   white-space: normal;
   overflow: hidden;
 }
@@ -298,13 +303,13 @@
 
 .web-settings-dialog {
   display: grid;
-  grid-template-columns: 116px minmax(0, 1fr);
+  grid-template-columns: var(--web-settings-nav-width) minmax(0, 1fr);
   align-items: start;
   gap: 16px;
   min-width: 0;
   min-height: 0;
-  height: auto;
-  max-height: var(--web-settings-content-max);
+  height: 100%;
+  max-height: none;
   width: 100%;
 }
 
@@ -324,8 +329,8 @@
   appearance: none;
   -webkit-appearance: none;
   width: 100%;
-  min-height: 38px;
-  padding: 8px 10px;
+  min-height: 40px;
+  padding: 9px 10px;
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 58%, transparent);
   border-radius: 6px;
   background: color-mix(in srgb, var(--md-surface-cont) 58%, transparent);
@@ -358,12 +363,14 @@
 }
 
 .web-settings-panels {
-  max-height: var(--web-settings-content-max);
+  height: 100%;
+  max-height: none;
   overflow: hidden;
 }
 
 .web-settings-group {
-  max-height: var(--web-settings-content-max);
+  height: 100%;
+  max-height: none;
   display: flex;
   flex-direction: column;
 }
@@ -383,9 +390,12 @@
 
 .web-settings-group__body {
   display: grid;
+  grid-auto-rows: max-content;
   gap: 8px;
+  align-content: start;
+  flex: 1 1 auto;
   min-height: 0;
-  max-height: calc(var(--web-settings-content-max) - 28px);
+  max-height: none;
   overflow: auto;
   overscroll-behavior: contain;
   padding-right: 2px;
@@ -393,7 +403,7 @@
 
 .web-settings-row,
 .web-settings-empty {
-  min-height: 58px;
+  min-height: var(--web-settings-row-min);
   padding: 12px 14px;
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 62%, transparent);
   border-radius: 6px;
@@ -438,7 +448,7 @@
 .web-settings-row__desc,
 .web-settings-empty {
   color: var(--md-on-surface-var);
-  font-size: 13px;
+  font-size: 12.5px;
   line-height: 1.35;
 }
 

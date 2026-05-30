@@ -35,10 +35,9 @@ function bindDeviceTabEvents(container) {
     });
   }
 
-  const sshKeysButton = container.querySelector("#btnDeviceSshKeys");
-  if (sshKeysButton) {
-    sshKeysButton.addEventListener("click", () => handleSshKeysButton(sshKeysButton));
-  }
+  container.querySelectorAll("[data-ssh-action]").forEach((button) => {
+    button.addEventListener("click", () => handleSshKeysButton(button));
+  });
 }
 
 function bindDeviceToggleRows(container) {
@@ -177,36 +176,182 @@ async function openCalibrationStatusModal() {
 }
 
 async function handleSshKeysButton(button) {
-  const hasKeys = button.dataset.hasKeys === "1";
-  if (hasKeys) {
-    button.disabled = true;
-    try {
-      await postJson("/api/ssh_keys", { action: "remove" });
-      showAppToast(getUIText("ssh_keys_removed", "SSH keys removed"), { tone: "info" });
-      await renderDeviceItems("Developer", false);
-    } catch (err) {
-      button.disabled = false;
-      showAppToast(err.message || getUIText("failed", "Failed"), { tone: "error" });
-    }
+  const action = button.dataset.sshAction || "change";
+  if (action === "manage") {
+    await openSshKeysManageDialog();
+    return;
+  }
+
+  if (action === "view") {
+    await openSshKeyListDialog();
+    return;
+  }
+
+  if (action === "remove") {
+    const ok = await appConfirm(getUIText("ssh_keys_remove_confirm", "Remove SSH keys from this device?"), {
+      title: getUIText("ssh_keys", "SSH Keys"),
+      confirmLabel: getUIText("remove_upper", "REMOVE"),
+    });
+    if (!ok) return;
+    await runSshKeyAction(button, { action: "remove" }, getUIText("ssh_keys_removed", "SSH keys removed"));
+    return;
+  }
+
+  if (action === "refresh") {
+    await runSshKeyAction(button, { action: "refresh" }, getUIText("ssh_keys_refreshed", "SSH keys refreshed"));
     return;
   }
 
   const username = await appPrompt(getUIText("ssh_github_username_prompt", "Enter your GitHub username"), {
     title: getUIText("ssh_keys", "SSH Keys"),
-    confirmLabel: getUIText("add_upper", "ADD"),
+    confirmLabel: getUIText(button.dataset.hasKeys === "1" ? "change" : "add_upper", button.dataset.hasKeys === "1" ? "Change" : "ADD"),
   });
   const trimmed = String(username || "").trim();
   if (!trimmed) return;
 
+  await runSshKeyAction(button, { action: "add", username: trimmed }, getUIText("ssh_keys_added", "SSH keys added"));
+}
+
+function getSshDialogStatus() {
+  return deviceSshStatus || deviceParamValues.SshKeyStatus || {
+    username: deviceParamValues.GithubUsername || "",
+    has_keys: Boolean(deviceParamValues.GithubSshKeys),
+    key_count: 0,
+    fingerprints: [],
+    updated_at: "",
+  };
+}
+
+function renderSshKeysManageDialogHtml(status = getSshDialogStatus()) {
+  const username = String(status.username || "");
+  const hasKeys = Boolean(status.has_keys);
+  return `
+    <div class="device-ssh-dialog">
+      <label class="device-ssh-dialog__field">
+        <span>${escapeHtml(getUIText("ssh_github_username", "GitHub username"))}</span>
+        <input id="sshGithubUsernameInput" class="app-dialog__input device-ssh-dialog__input" value="${escapeHtml(username)}" autocomplete="off" spellcheck="false">
+      </label>
+      <div class="device-ssh-dialog__actions">
+        <button type="button" class="smallBtn btn--filled" data-ssh-dialog-action="apply">${escapeHtml(getUIText("apply", "Apply"))}</button>
+        <button type="button" class="smallBtn btn--danger" data-ssh-dialog-action="remove" ${hasKeys ? "" : "disabled"}>${escapeHtml(getUIText("remove_upper", "REMOVE"))}</button>
+      </div>
+    </div>`;
+}
+
+function renderSshKeyListDialogHtml(status = getSshDialogStatus()) {
+  const fingerprints = Array.isArray(status.fingerprints) ? status.fingerprints : [];
+  if (!fingerprints.length) {
+    return `<div class="device-ssh-dialog"><div class="device-ssh-dialog__empty">${escapeHtml(getUIText("ssh_keys_none", "No SSH keys configured"))}</div></div>`;
+  }
+  return `
+    <div class="device-ssh-dialog">
+      <div class="device-ssh-key-list">
+        ${fingerprints.map((item) => {
+          const type = String(item?.type || "").replace(/^ssh-/, "");
+          const fingerprint = String(item?.fingerprint || "");
+          return `<div class="device-ssh-key-list__item">
+            <span>${escapeHtml(type || "key")}</span>
+            <code>${escapeHtml(fingerprint || "-")}</code>
+          </div>`;
+        }).join("")}
+      </div>
+    </div>`;
+}
+
+async function refreshSshDialogContent() {
+  await loadDeviceSshStatus(false);
+  await renderDeviceItems("Developer", false, { silentRefresh: true });
+  if (typeof appDialogBody !== "undefined" && appDialogBody && appDialog?.classList.contains("app-dialog--device-ssh")) {
+    appDialogBody.innerHTML = renderSshKeysManageDialogHtml();
+    bindSshKeysDialogEvents();
+  }
+}
+
+async function runSshDialogAction(button, payload, successMessage) {
+  const originalText = button.textContent;
   button.disabled = true;
   button.textContent = getUIText("loading", "Loading...");
   try {
-    await postJson("/api/ssh_keys", { action: "add", username: trimmed });
-    showAppToast(getUIText("ssh_keys_added", "SSH keys added"), { tone: "info" });
+    await postJson("/api/ssh_keys", payload);
+    showAppToast(successMessage, { tone: "info" });
+    await refreshSshDialogContent();
+  } catch (err) {
+    button.disabled = false;
+    button.textContent = originalText;
+    await appAlert(err.message || getUIText("failed", "Failed"), {
+      title: getUIText("ssh_keys", "SSH Keys"),
+    });
+  }
+}
+
+function bindSshKeysDialogEvents() {
+  const host = appDialogBody?.querySelector?.(".device-ssh-dialog");
+  if (!host) return;
+  host.querySelectorAll("[data-ssh-dialog-action]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const action = button.dataset.sshDialogAction;
+      if (action === "apply") {
+        const username = String(host.querySelector("#sshGithubUsernameInput")?.value || "").trim();
+        if (!username) return;
+        await runSshDialogAction(button, { action: "add", username }, getUIText("ssh_keys_added", "SSH keys added"));
+      } else if (action === "remove") {
+        await runSshDialogAction(button, { action: "remove" }, getUIText("ssh_keys_removed", "SSH keys removed"));
+      }
+    });
+  });
+}
+
+async function openSshKeysManageDialog() {
+  await loadDeviceSshStatus(false).catch(() => {});
+  const dialogPromise = appAlert("", {
+    title: getUIText("ssh_keys_manage", "Manage SSH keys"),
+    html: true,
+    messageHtml: renderSshKeysManageDialogHtml(),
+    confirmLabel: getUIText("close", "Close"),
+  });
+  if (typeof appDialog !== "undefined" && appDialog) {
+    appDialog.classList.add("app-dialog--device-ssh");
+  }
+  window.setTimeout(bindSshKeysDialogEvents, 0);
+  dialogPromise.finally(() => {
+    if (typeof appDialog !== "undefined" && appDialog) {
+      appDialog.classList.remove("app-dialog--device-ssh");
+    }
+  });
+  return dialogPromise;
+}
+
+async function openSshKeyListDialog() {
+  await loadDeviceSshStatus(false).catch(() => {});
+  const dialogPromise = appAlert("", {
+    title: getUIText("ssh_key_fingerprints", "SSH key fingerprints"),
+    html: true,
+    messageHtml: renderSshKeyListDialogHtml(),
+    confirmLabel: getUIText("close", "Close"),
+  });
+  if (typeof appDialog !== "undefined" && appDialog) {
+    appDialog.classList.add("app-dialog--device-ssh");
+  }
+  dialogPromise.finally(() => {
+    if (typeof appDialog !== "undefined" && appDialog) {
+      appDialog.classList.remove("app-dialog--device-ssh");
+    }
+  });
+  return dialogPromise;
+}
+
+async function runSshKeyAction(button, payload, successMessage) {
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = getUIText("loading", "Loading...");
+  try {
+    await postJson("/api/ssh_keys", payload);
+    showAppToast(successMessage, { tone: "info" });
     await renderDeviceItems("Developer", false);
   } catch (err) {
     button.disabled = false;
-    button.textContent = getUIText("add_upper", "ADD");
+    button.textContent = originalText;
+    await refreshDeviceSshPanel().catch(() => {});
     await appAlert(err.message || getUIText("failed", "Failed"), {
       title: getUIText("ssh_keys", "SSH Keys"),
     });

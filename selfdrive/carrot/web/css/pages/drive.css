@@ -361,6 +361,167 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--overlay .hudWrap {
   transform-origin: left bottom;
 }
 
+.carrot-map-dock {
+  position: absolute;
+  right: var(--carrot-map-right, 48px);
+  top: 50%;
+  width: var(--carrot-map-width, var(--carrot-map-size, 410px));
+  height: var(--carrot-map-height, var(--carrot-map-size, 460px));
+  transform: translateY(calc(-50% + var(--carrot-map-offset-y, -20px))) scale(0.985);
+  z-index: 4;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  border-radius: 8px;
+  background: #e7ebe5;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.40);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
+    width 0.22s ease,
+    height 0.22s ease,
+    right 0.22s ease,
+    transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.22s ease;
+  will-change: opacity, transform;
+}
+
+.carrot-map-dock.is-visible {
+  opacity: 1;
+  transform: translateY(calc(-50% + var(--carrot-map-offset-y, -20px))) scale(1);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.carrot-map-dock.is-expanded {
+  z-index: 45;
+  border-color: rgba(255, 255, 255, 0.30);
+  box-shadow:
+    0 26px 72px rgba(0, 0, 0, 0.56),
+    0 0 0 1px rgba(255, 255, 255, 0.10);
+}
+
+.carrot-map-dock::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.20), transparent 24%),
+    radial-gradient(circle at 50% 50%, transparent 38%, rgba(255, 255, 255, 0.28));
+}
+
+.carrot-map-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+}
+
+/* Zoom-bias controls — bottom edge of the map dock. They nudge the global
+   zoom offset (added on top of the automatic speed-based zoom) so each
+   device/resolution can be tuned. */
+.carrot-map-zoom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: clamp(10px, 2.4vh, 18px);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 clamp(10px, 2.4%, 18px);
+  pointer-events: none;
+}
+
+/* Carrot-web control button styling (matches .carrot-stage__controlBtn:
+   surface tint + primary accent + glass blur). Square via aspect-ratio. */
+.carrot-map-zoom__btn {
+  flex: 0 0 auto;
+  width: clamp(44px, 6vmin, 58px);
+  height: clamp(44px, 6vmin, 58px);
+  aspect-ratio: 1 / 1;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 58%, rgba(255, 255, 255, 0.18));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--md-surface-cont-h) 80%, rgba(0, 0, 0, 0.5));
+  color: rgba(255, 255, 255, 0.96);
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-backdrop-filter: blur(10px) saturate(118%);
+  backdrop-filter: blur(10px) saturate(118%);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.1s ease, opacity 0.16s ease;
+  opacity: 0.82;
+}
+
+.carrot-map-zoom__btn svg {
+  width: 54%;
+  height: 54%;
+  display: block;
+}
+
+.carrot-map-zoom__btn:hover {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--md-primary) 42%, rgba(255, 255, 255, 0.22));
+  background: color-mix(in srgb, var(--md-surface-cont-h) 76%, var(--md-primary));
+}
+
+.carrot-map-zoom__btn:active {
+  transform: translateY(1px) scale(0.94);
+  border-color: color-mix(in srgb, var(--md-primary) 64%, rgba(255, 255, 255, 0.22));
+  background: color-mix(in srgb, var(--md-primary) 22%, var(--md-surface-cont-h));
+  color: var(--md-primary);
+}
+
+.carrot-map-zoom__btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* Always-on zoom-step label. Lives in the stage (outside the dock, which
+   clips overflow). carrot_map.js positions it just below the dock center. */
+.carrot-map-zoom-level {
+  position: absolute;
+  z-index: 4;
+  transform: translateX(50%);
+  pointer-events: none;
+  padding: clamp(4px, 0.8vh, 7px) clamp(11px, 1.4vw, 16px);
+  border: 1px solid color-mix(in srgb, var(--md-primary) 30%, rgba(255, 255, 255, 0.14));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-surface-cont-h) 82%, rgba(0, 0, 0, 0.55));
+  color: var(--md-primary);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: clamp(14px, 1.4vw, 19px);
+  font-weight: 900;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  -webkit-backdrop-filter: blur(10px) saturate(118%);
+  backdrop-filter: blur(10px) saturate(118%);
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.carrot-map-zoom-level.is-visible {
+  opacity: 1;
+}
+
+.carrot-map-zoom-level[hidden] {
+  display: none !important;
+}
+
+@media (orientation: portrait) {
+  .carrot-map-dock {
+    display: none !important;
+  }
+}
+
 body[data-page="carrot"] #driveHudCard.driveHudCard--loading {
   opacity: 1;
   visibility: visible;
@@ -531,6 +692,7 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--loading {
   will-change: transform;
   pointer-events: none;
   contain: strict;
+  z-index: 3;
 }
 
 .carrot-stage__hud {
