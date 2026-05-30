@@ -91,7 +91,7 @@ AUTO_LANE_CHANGE_CENTER_X = TOP_CRUISE_CENTER_X + 142
 AUTO_LANE_CHANGE_ICON_ASPECT = 2.0
 AUTO_LANE_CHANGE_ICON_H = 22.0 * DRIVE_STATUS_SCALE
 AUTO_LANE_CHANGE_ICON_W = AUTO_LANE_CHANGE_ICON_H * AUTO_LANE_CHANGE_ICON_ASPECT
-LFA_STATUS_CENTER_X = AUTO_LANE_CHANGE_CENTER_X + 62
+LFA_STATUS_CENTER_X = AUTO_LANE_CHANGE_CENTER_X
 LFA_STATUS_ICON_SIZE = 28.0 * DRIVE_STATUS_SCALE
 TOP_ICON_SIZE = 34.0 * DRIVE_STATUS_SCALE
 DRIVE_STATUS_BOX_RADIUS = 8.0 * DRIVE_STATUS_SCALE
@@ -306,6 +306,7 @@ class ClusterUiRenderer:
         self._follow_vehicle_texture = None
         self._auto_lane_change_texture = None
         self._lfa_texture = None
+        self._lfa_active_texture = None
         self._route_video_texture = None
         self._route_video_size: tuple[int, int] | None = None
         self._route_video_frame_id: str | None = None
@@ -418,6 +419,9 @@ class ClusterUiRenderer:
         if self._lfa_texture is not None:
             rl.unload_texture(self._lfa_texture)
             self._lfa_texture = None
+        if self._lfa_active_texture is not None:
+            rl.unload_texture(self._lfa_active_texture)
+            self._lfa_active_texture = None
         if self._owns_font and self._font is not None:
             rl.unload_font(self._font)
         self._font = None
@@ -722,6 +726,8 @@ class ClusterUiRenderer:
             self._auto_lane_change_texture = self._load_icon_texture(AUTO_LANE_CHANGE_ICON_PATH, "Auto lane change")
         if self._lfa_texture is None:
             self._lfa_texture = self._load_icon_texture(LFA_ICON_PATH, "LFA")
+        if self._lfa_active_texture is None:
+            self._lfa_active_texture = self._load_lfa_active_texture()
 
     def _load_icon_texture(self, path: Path, label: str):
         if not path.exists():
@@ -735,6 +741,44 @@ class ClusterUiRenderer:
         except Exception as exc:
             print(f"{label} icon load failed: {exc}")
             return None
+
+    def _load_lfa_active_texture(self):
+        if not LFA_ICON_PATH.exists():
+            return None
+        image = None
+        try:
+            image = rl.load_image(str(LFA_ICON_PATH))
+            if not rl.is_image_valid(image):
+                return None
+            if image.format != rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8:
+                rl.image_format(image, rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8)
+
+            data = rl.ffi.cast("unsigned char *", image.data)
+            byte_count = image.width * image.height * 4
+            green_r, green_g, green_b = GREEN
+            for offset in range(0, byte_count, 4):
+                alpha = int(data[offset + 3])
+                if alpha == 0:
+                    continue
+                red = int(data[offset])
+                green = int(data[offset + 1])
+                blue = int(data[offset + 2])
+                if red >= 220 and green >= 220 and blue >= 220:
+                    data[offset] = green_r
+                    data[offset + 1] = green_g
+                    data[offset + 2] = green_b
+
+            texture = rl.load_texture_from_image(image)
+            if texture.id <= 0:
+                return None
+            rl.set_texture_filter(texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+            return texture
+        except Exception as exc:
+            print(f"LFA active icon load failed: {exc}")
+            return None
+        finally:
+            if image is not None and rl.is_image_valid(image):
+                rl.unload_image(image)
 
     def _load_obj_mesh(self, path: Path):
         vertices: list[tuple[float, float, float]] = []
@@ -2096,7 +2140,7 @@ class ClusterUiRenderer:
         visible = self._cruise_set_visible(state)
         speed_text = "--" if not visible or state.cruise_kph is None else str(int(round(state.cruise_kph)))
         speed_color = theme.text if visible else theme.muted
-        unit_color = GREEN if visible else theme.muted
+        unit_color = speed_color
         speed_spacing = max(1.0, TOP_CRUISE_FONT_SIZE * 0.02)
         unit_spacing = max(1.0, TOP_CRUISE_UNIT_FONT_SIZE * 0.02)
         speed_w, _ = self._measure_text(speed_text, TOP_CRUISE_FONT_SIZE, speed_spacing)
@@ -2146,10 +2190,11 @@ class ClusterUiRenderer:
     def _draw_lfa_status_icon(self, state: ClusterUiState) -> None:
         theme = self._current_theme()
         active = bool(state.lfa_active)
+        texture = self._lfa_active_texture if active and self._lfa_active_texture is not None else self._lfa_texture
         tint = WHITE if active else theme.muted
         alpha = 255 if active else 190
         if self._draw_centered_texture_icon(
-            self._lfa_texture,
+            texture,
             LFA_STATUS_CENTER_X,
             GEAR_STATUS_CENTER_Y,
             LFA_STATUS_ICON_SIZE,
