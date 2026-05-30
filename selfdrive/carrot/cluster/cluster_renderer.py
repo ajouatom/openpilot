@@ -13,6 +13,12 @@ import pyray as rl
 from cluster_config import (
     AMBER,
     BLUE,
+    CLUSTER_RADAR_INFO_ALL_SPEED,
+    CLUSTER_RADAR_INFO_ALL_SPEED_DISTANCE,
+    CLUSTER_RADAR_INFO_NONE,
+    CLUSTER_RADAR_INFO_VEHICLE_SPEED,
+    CLUSTER_RADAR_INFO_VEHICLE_SPEED_DISTANCE,
+    CLUSTER_RADAR_SOURCE_COLOR_BY_SOURCE,
     CLUSTER_SCREEN_MODE_DEBUG,
     CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
     CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
@@ -24,7 +30,6 @@ from cluster_config import (
     GREEN,
     MAX_ACCEL_MPS2,
     MAX_SPEED_KPH,
-    PURPLE,
     RED,
     TEXT,
     WHITE,
@@ -197,12 +202,45 @@ def vehicle_speed_label(vehicle: VehicleBox) -> str:
     return f"{vehicle.absolute_speed_kph:.0f} km/h"
 
 
-def vehicle_metric_color(vehicle: VehicleBox, theme: ClusterTheme) -> tuple[int, int, int]:
-    if vehicle.source.startswith("modelV2"):
-        return PURPLE
-    if vehicle.source == "radarState" or vehicle.source == "radarPoint":
+def radar_info_shows_vehicle(mode: int) -> bool:
+    return mode in (
+        CLUSTER_RADAR_INFO_VEHICLE_SPEED,
+        CLUSTER_RADAR_INFO_VEHICLE_SPEED_DISTANCE,
+        CLUSTER_RADAR_INFO_ALL_SPEED,
+        CLUSTER_RADAR_INFO_ALL_SPEED_DISTANCE,
+    )
+
+
+def radar_info_shows_radar_points(mode: int) -> bool:
+    return mode in (
+        CLUSTER_RADAR_INFO_ALL_SPEED,
+        CLUSTER_RADAR_INFO_ALL_SPEED_DISTANCE,
+    )
+
+
+def radar_info_shows_speed(mode: int) -> bool:
+    return mode != CLUSTER_RADAR_INFO_NONE
+
+
+def radar_info_shows_distance(mode: int) -> bool:
+    return mode in (
+        CLUSTER_RADAR_INFO_VEHICLE_SPEED_DISTANCE,
+        CLUSTER_RADAR_INFO_ALL_SPEED_DISTANCE,
+    )
+
+
+def vehicle_metric_color(vehicle: VehicleBox, theme: ClusterTheme, source_color_mode: int) -> tuple[int, int, int]:
+    if source_color_mode != CLUSTER_RADAR_SOURCE_COLOR_BY_SOURCE:
+        return theme.world_label_text
+    if vehicle.source == "radarState":
         return RED
-    return BLUE if "+radar:" in vehicle.source else theme.world_label_text
+    if vehicle.source == "radarPoint" or vehicle.source == "liveTracks" or vehicle.source.startswith("CAN-FD"):
+        return AMBER
+    if "+radar:" in vehicle.source or vehicle.source == "carState" or vehicle.source.startswith("CAN 0x"):
+        return BLUE
+    if vehicle.source.startswith("modelV2"):
+        return BLUE
+    return theme.world_label_text
 
 
 def speed_limit_source_label(source: str | None) -> str:
@@ -488,7 +526,7 @@ class ClusterUiRenderer:
         rl.clear_background(rl_color(theme.bg))
         self._profile_add("render_world.clear_background", profile_stage)
         profile_stage = self._profile_start()
-        self._draw_scene(scene)
+        self._draw_scene(scene, state)
         self._profile_add("render_world.draw_scene", profile_stage)
 
     def render_to_file(self, state: ClusterUiState, output_path: str | Path) -> None:
@@ -865,7 +903,7 @@ class ClusterUiRenderer:
             data[index] = int(value)
         return data
 
-    def _draw_scene(self, scene: ClusterScene) -> None:
+    def _draw_scene(self, scene: ClusterScene, state: ClusterUiState) -> None:
         camera = rl.Camera3D(
             vec3(scene.camera.position),
             vec3(scene.camera.target),
@@ -910,10 +948,21 @@ class ClusterUiRenderer:
         rl.end_mode_3d()
         self._profile_add("draw_scene.end_mode_3d", profile_stage)
         profile_stage = self._profile_start()
-        self._draw_radar_point_labels(scene.radar_points, camera, scene.scene_shift_x_m)
+        self._draw_radar_point_labels(
+            scene.radar_points,
+            camera,
+            scene.scene_shift_x_m,
+            state.radar_info_mode,
+        )
         self._profile_add("draw_scene.radar_labels", profile_stage)
         profile_stage = self._profile_start()
-        self._draw_vehicle_badges(scene.vehicles, camera, scene.scene_shift_x_m)
+        self._draw_vehicle_badges(
+            scene.vehicles,
+            camera,
+            scene.scene_shift_x_m,
+            state.radar_info_mode,
+            state.radar_source_color_mode,
+        )
         self._profile_add("draw_scene.vehicle_badges", profile_stage)
         profile_stage = self._profile_start()
         self._draw_rear_vehicle_indicators(scene.rear_indicators, camera, scene.scene_shift_x_m)
@@ -983,27 +1032,12 @@ class ClusterUiRenderer:
 
     def _draw_vehicle_marker(self, vehicle: VehicleBox) -> None:
         alpha = int(80 + 150 * clamp(vehicle.confidence, 0.0, 1.0))
-        if vehicle.source.startswith("modelV2"):
-            marker_center = rl.Vector3(vehicle.center.x, vehicle.center.y, vehicle.height_m * 0.72)
-            marker_size = rl.Vector3(
-                max(0.42, vehicle.width_m * 0.42),
-                max(0.78, vehicle.length_m * 0.42),
-                max(0.36, vehicle.height_m * 0.32),
-            )
-        elif vehicle.source in ("radarState", "radarPoint"):
-            marker_center = rl.Vector3(vehicle.center.x, vehicle.center.y, vehicle.height_m * 0.22)
-            marker_size = rl.Vector3(
-                max(0.72, vehicle.width_m * 0.82),
-                max(1.15, vehicle.length_m * 0.72),
-                max(0.24, vehicle.height_m * 0.26),
-            )
-        else:
-            marker_center = rl.Vector3(vehicle.center.x, vehicle.center.y, vehicle.height_m * 0.32)
-            marker_size = rl.Vector3(
-                max(0.55, vehicle.width_m * 0.68),
-                max(1.05, vehicle.length_m * 0.64),
-                max(0.42, vehicle.height_m * 0.45),
-            )
+        marker_center = rl.Vector3(vehicle.center.x, vehicle.center.y, vehicle.height_m * 0.32)
+        marker_size = rl.Vector3(
+            max(0.55, vehicle.width_m * 0.68),
+            max(1.05, vehicle.length_m * 0.64),
+            max(0.42, vehicle.height_m * 0.45),
+        )
         rl.draw_cube_v(marker_center, marker_size, rl_color(vehicle.body_color, alpha))
 
     def _draw_radar_point(self, point: RadarPointMarker) -> None:
@@ -1018,7 +1052,10 @@ class ClusterUiRenderer:
         points: tuple[RadarPointMarker, ...],
         camera,
         scene_shift_x_m: float = 0.0,
+        radar_info_mode: int = CLUSTER_RADAR_INFO_ALL_SPEED_DISTANCE,
     ) -> None:
+        if not radar_info_shows_radar_points(radar_info_mode):
+            return
         theme = self._current_theme()
         ordered = sorted(
             points,
@@ -1030,37 +1067,43 @@ class ClusterUiRenderer:
             screen = world_to_screen_label_anchor(anchor, camera, self.width, self.height)
             if screen is None:
                 continue
-            distance = radar_point_distance_label(point)
-            speed = radar_point_speed_label(point)
+            distance = radar_point_distance_label(point) if radar_info_shows_distance(radar_info_mode) else ""
+            speed = radar_point_speed_label(point) if radar_info_shows_speed(radar_info_mode) else ""
+            if not distance and not speed:
+                continue
             scale = world_label_scale(point.longitudinal_m)
             distance_size = max(9.0, RADAR_LABEL_DISTANCE_FONT_SIZE * scale)
             speed_size = max(8.0, RADAR_LABEL_SPEED_FONT_SIZE * scale)
             shadow_offset = max(1.0, 1.2 * scale)
             gap = max(2.0, 4.0 * scale)
-            if speed:
+            if speed and distance:
                 speed_y = screen.y - speed_size * 0.5
                 distance_y = speed_y - (speed_size + distance_size) * 0.5 - gap
+            elif speed:
+                speed_y = screen.y - speed_size * 0.5
+                distance_y = 0.0
             else:
                 distance_y = screen.y - distance_size * 0.5
             center_x = screen.x
             shadow = theme.world_label_shadow
             text = theme.world_label_text
-            self._draw_text(
-                distance,
-                center_x + shadow_offset,
-                distance_y + shadow_offset,
-                distance_size,
-                shadow,
-                anchor="center",
-            )
-            self._draw_text(
-                distance,
-                center_x,
-                distance_y,
-                distance_size,
-                text,
-                anchor="center",
-            )
+            if distance:
+                self._draw_text(
+                    distance,
+                    center_x + shadow_offset,
+                    distance_y + shadow_offset,
+                    distance_size,
+                    shadow,
+                    anchor="center",
+                )
+                self._draw_text(
+                    distance,
+                    center_x,
+                    distance_y,
+                    distance_size,
+                    text,
+                    anchor="center",
+                )
             if speed:
                 self._draw_text(
                     speed,
@@ -1124,7 +1167,11 @@ class ClusterUiRenderer:
         vehicles: tuple[VehicleBox, ...],
         camera,
         scene_shift_x_m: float = 0.0,
+        radar_info_mode: int = CLUSTER_RADAR_INFO_ALL_SPEED_DISTANCE,
+        radar_source_color_mode: int = 0,
     ) -> None:
+        if not radar_info_shows_vehicle(radar_info_mode):
+            return
         theme = self._current_theme()
         ordered = sorted(
             (vehicle for vehicle in vehicles if vehicle.label),
@@ -1144,38 +1191,44 @@ class ClusterUiRenderer:
             if screen is None:
                 continue
 
-            distance = vehicle_distance_label(vehicle)
-            speed = vehicle_speed_label(vehicle)
+            distance = vehicle_distance_label(vehicle) if radar_info_shows_distance(radar_info_mode) else ""
+            speed = vehicle_speed_label(vehicle) if radar_info_shows_speed(radar_info_mode) else ""
+            if not distance and not speed:
+                continue
             distance_m = abs(vehicle.center.y - EGO_FORWARD_M)
             scale = world_label_scale(distance_m)
             distance_size = max(9.0, VEHICLE_BADGE_DISTANCE_FONT_SIZE * scale)
             speed_size = max(8.0, VEHICLE_BADGE_SPEED_FONT_SIZE * scale)
             shadow_offset = max(1.0, 1.2 * scale)
             gap = max(2.0, 4.0 * scale)
-            if speed:
+            if speed and distance:
                 speed_y = screen.y - speed_size * 0.5
                 distance_y = speed_y - (speed_size + distance_size) * 0.5 - gap
+            elif speed:
+                speed_y = screen.y - speed_size * 0.5
+                distance_y = 0.0
             else:
                 distance_y = screen.y - distance_size * 0.5
             center_x = screen.x
             shadow = theme.world_label_shadow
-            text_color = vehicle_metric_color(vehicle, theme)
-            self._draw_text(
-                distance,
-                center_x + shadow_offset,
-                distance_y + shadow_offset,
-                distance_size,
-                shadow,
-                anchor="center",
-            )
-            self._draw_text(
-                distance,
-                center_x,
-                distance_y,
-                distance_size,
-                text_color,
-                anchor="center",
-            )
+            text_color = vehicle_metric_color(vehicle, theme, radar_source_color_mode)
+            if distance:
+                self._draw_text(
+                    distance,
+                    center_x + shadow_offset,
+                    distance_y + shadow_offset,
+                    distance_size,
+                    shadow,
+                    anchor="center",
+                )
+                self._draw_text(
+                    distance,
+                    center_x,
+                    distance_y,
+                    distance_size,
+                    text_color,
+                    anchor="center",
+                )
             if speed:
                 self._draw_text(
                     speed,

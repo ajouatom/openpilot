@@ -2368,6 +2368,38 @@
       "max": 4,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "외부 HUD",
+      "egroup": "CLUSTER HUD",
+      "cgroup": "外部 HUD",
+      "name": "ClusterHudRadarInfo",
+      "title": "외부 HUD 레이더 정보 표시(4)",
+      "descr": "0: 표시 안함\n1: 속도(차량만)\n2: 속도,거리(차량만)\n3: 속도(모두)\n4: 속도,거리(모두)",
+      "etitle": "External HUD Radar Info(4)",
+      "edescr": "0: Off\n1: Speed (vehicles only)\n2: Speed, distance (vehicles only)\n3: Speed (all)\n4: Speed, distance (all)",
+      "ctitle": "外部 HUD 雷达信息(4)",
+      "cdescr": "0: 关闭\n1: 速度(仅车辆)\n2: 速度,距离(仅车辆)\n3: 速度(全部)\n4: 速度,距离(全部)",
+      "min": 0,
+      "max": 4,
+      "default": 4,
+      "unit": 1
+    },
+    {
+      "group": "외부 HUD",
+      "egroup": "CLUSTER HUD",
+      "cgroup": "外部 HUD",
+      "name": "ClusterHudRadarSourceColor",
+      "title": "외부 HUD 레이더 소스 색구분(0)",
+      "descr": "0: 기본(모든 차량 회색)\n1: 켜짐(SCC=R, HDA=B, RADAR=O)",
+      "etitle": "External HUD Radar Source Colors(0)",
+      "edescr": "0: Default (all vehicles gray)\n1: On (SCC=R, HDA=B, RADAR=O)",
+      "ctitle": "外部 HUD 雷达来源颜色(0)",
+      "cdescr": "0: 默认(所有车辆灰色)\n1: 开启(SCC=R, HDA=B, RADAR=O)",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
     }
 
   ]

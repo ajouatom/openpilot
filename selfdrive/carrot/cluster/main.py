@@ -13,12 +13,16 @@ from cluster_config import (
     CLUSTER_ENCODER_PARAM,
     CLUSTER_HUD_PARAM,
     CLUSTER_LIVE_FPS_PARAM,
+    CLUSTER_RADAR_INFO_PARAM,
+    CLUSTER_RADAR_SOURCE_COLOR_PARAM,
     CLUSTER_SCREEN_MODE_PARAM,
     CLUSTER_THEME_PARAM,
     DESIGN_HEIGHT,
     DESIGN_WIDTH,
     normalize_cluster_brightness_percent,
     normalize_cluster_live_fps,
+    normalize_cluster_radar_info_mode,
+    normalize_cluster_radar_source_color_mode,
     normalize_cluster_screen_mode,
     normalize_cluster_theme_mode,
 )
@@ -57,6 +61,7 @@ THEME_PARAM_POLL_SECONDS = 1.0
 FPS_PARAM_POLL_SECONDS = 1.0
 BRIGHTNESS_PARAM_POLL_SECONDS = 1.0
 SCREEN_MODE_PARAM_POLL_SECONDS = 1.0
+RADAR_PARAM_POLL_SECONDS = 1.0
 HUD_MODE_PARAM_POLL_SECONDS = 1.0
 
 
@@ -164,6 +169,54 @@ class ClusterScreenModeParamReader:
             return 0
         try:
             return normalize_cluster_screen_mode(self._params.get_int(CLUSTER_SCREEN_MODE_PARAM))
+        except Exception:
+            return 0
+
+
+class ClusterRadarInfoParamReader:
+    def __init__(self) -> None:
+        self._params = None
+        try:
+            from openpilot.common.params import Params
+
+            self._params = Params()
+        except Exception:
+            pass
+
+    def read(self) -> int:
+        if self._params is None:
+            return 4
+        try:
+            value = self._params.get(CLUSTER_RADAR_INFO_PARAM)
+            if value is None:
+                return 4
+            if isinstance(value, bytes):
+                value = value.decode("utf-8", "ignore")
+            return normalize_cluster_radar_info_mode(value)
+        except Exception:
+            return 4
+
+
+class ClusterRadarSourceColorParamReader:
+    def __init__(self) -> None:
+        self._params = None
+        try:
+            from openpilot.common.params import Params
+
+            self._params = Params()
+        except Exception:
+            pass
+
+    def read(self) -> int:
+        if self._params is None:
+            return 0
+        try:
+            value = self._params.get(CLUSTER_RADAR_SOURCE_COLOR_PARAM)
+            if value is None:
+                return 0
+            if isinstance(value, bytes):
+                value = value.decode("utf-8", "ignore")
+            return normalize_cluster_radar_source_color_mode(value)
         except Exception:
             return 0
 
@@ -394,6 +447,10 @@ def run_demo(
     active_theme_mode = theme_override or (theme_param_reader.read() if theme_param_reader is not None else "auto")
     screen_mode_param_reader = ClusterScreenModeParamReader()
     active_screen_mode = screen_mode_param_reader.read()
+    radar_info_param_reader = ClusterRadarInfoParamReader()
+    active_radar_info_mode = radar_info_param_reader.read()
+    radar_source_color_param_reader = ClusterRadarSourceColorParamReader()
+    active_radar_source_color_mode = radar_source_color_param_reader.read()
     hud_mode_param_reader = ClusterHudModeParamReader() if hud_mode_watch is not None else None
     hud_encoder_param_reader = ClusterHudEncoderParamReader() if hud_encoder_watch is not None else None
     renderer = ClusterUiRenderer(
@@ -404,6 +461,11 @@ def run_demo(
         screen_mode=active_screen_mode,
     )
     print(f"{CLUSTER_SCREEN_MODE_PARAM} initial: {active_screen_mode}", flush=True)
+    print(
+        f"{CLUSTER_RADAR_INFO_PARAM} initial: {active_radar_info_mode} "
+        f"{CLUSTER_RADAR_SOURCE_COLOR_PARAM} initial: {active_radar_source_color_mode}",
+        flush=True,
+    )
     renderer.set_profile_enabled(profile_render)
     git_status_provider = GitBranchStatusProvider(Path(__file__).resolve().parent)
     simulator = ClusterSimulator() if input_mode in ("random", "gamepad") else None
@@ -428,6 +490,7 @@ def run_demo(
     next_fps_param_read = start_time + FPS_PARAM_POLL_SECONDS
     next_brightness_param_read = start_time
     next_screen_mode_param_read = start_time
+    next_radar_param_read = start_time
     next_hud_mode_param_read = start_time + HUD_MODE_PARAM_POLL_SECONDS
     report_frames = 0
     display_actual_fps: float | None = None
@@ -515,6 +578,24 @@ def run_demo(
                     )
                     renderer.set_screen_mode(next_screen_mode)
                 next_screen_mode_param_read = now + SCREEN_MODE_PARAM_POLL_SECONDS
+            if now >= next_radar_param_read:
+                next_radar_info_mode = radar_info_param_reader.read()
+                if next_radar_info_mode != active_radar_info_mode:
+                    print(
+                        f"{CLUSTER_RADAR_INFO_PARAM} updated: "
+                        f"{active_radar_info_mode} -> {next_radar_info_mode}",
+                        flush=True,
+                    )
+                    active_radar_info_mode = next_radar_info_mode
+                next_radar_source_color_mode = radar_source_color_param_reader.read()
+                if next_radar_source_color_mode != active_radar_source_color_mode:
+                    print(
+                        f"{CLUSTER_RADAR_SOURCE_COLOR_PARAM} updated: "
+                        f"{active_radar_source_color_mode} -> {next_radar_source_color_mode}",
+                        flush=True,
+                    )
+                    active_radar_source_color_mode = next_radar_source_color_mode
+                next_radar_param_read = now + RADAR_PARAM_POLL_SECONDS
             if hud_mode_param_reader is not None and now >= next_hud_mode_param_read:
                 next_hud_mode = hud_mode_param_reader.read()
                 if next_hud_mode is not None and next_hud_mode != hud_mode_watch:
@@ -608,7 +689,13 @@ def run_demo(
                 state = simulator.update(command, dt)
                 profile.add_elapsed("source.gamepad_update", profile_stage)
 
-            state = replace(state, git_status=git_status_provider.status(), actual_fps=display_actual_fps)
+            state = replace(
+                state,
+                radar_info_mode=active_radar_info_mode,
+                radar_source_color_mode=active_radar_source_color_mode,
+                git_status=git_status_provider.status(),
+                actual_fps=display_actual_fps,
+            )
             brightness_now = time.perf_counter()
             if usb_display is not None and brightness_now >= next_brightness_param_read:
                 if usb_brightness_param_reader is not None:

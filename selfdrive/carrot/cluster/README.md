@@ -253,6 +253,13 @@ large graph uses the available center/right height with only a small margin.
 Mode `4` keeps the driving HUD and uses the maximum right-side panel height with
 the same margin. Modes `1`, `2`, `3`, and `4` suppress the route overlay so the
 selected debug view remains visible.
+`ClusterHudRadarInfo` controls world radar/vehicle speed and distance labels:
+`0` off, `1` speed for vehicle boxes only, `2` speed and distance for vehicle
+boxes only, `3` speed for all vehicle boxes and raw radar points, and `4` speed
+and distance for all. `ClusterHudRadarSourceColor` controls vehicle box colors:
+`0` keeps all vehicle boxes gray, while `1` uses source colors with
+SCC/radarState red, HDA/model/CAN/corner detections blue, and raw radar vehicle
+boxes orange.
 Changing `ClusterHud` to another supported mode or `0` makes the running HUD
 exit; cleanup sends TURZX brightness zero before releasing the USB device.
 

@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 from cluster_config import (
     AMBER,
     BLUE,
+    CLUSTER_RADAR_SOURCE_COLOR_BY_SOURCE,
     ClusterTheme,
     DEFAULT_LANE_WIDTH_M,
     EGO,
@@ -19,7 +20,6 @@ from cluster_config import (
     PATH_LANE_CHANGE_CURVE_END_M,
     PATH_LANE_CHANGE_CURVE_START_M,
     PATH_START_M,
-    PURPLE,
     RED,
     ROAD_CURVE_M_PER_M2,
     ROAD_FAR_M,
@@ -1319,10 +1319,15 @@ def radar_points_same_vehicle(left: RadarPoint, right: RadarPoint) -> bool:
     )
 
 
-def radar_vehicle_box(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> VehicleBox:
+def radar_vehicle_box(
+    point: RadarPoint,
+    state: ClusterUiState,
+    lane_width_m: float,
+    theme: ClusterTheme = LIGHT_CLUSTER_THEME,
+) -> VehicleBox:
     confidence = radar_vehicle_confidence(point)
     alpha = int(92 + 163 * confidence)
-    body_color = RED
+    body_color = vehicle_color_for_source("radarPoint", theme, state.radar_source_color_mode)
     forward_m = data_scene_forward_m(point.longitudinal_m)
     center_x_m = clamp(point.lateral_m, -lane_width_m * 3.0, lane_width_m * 3.0)
     return VehicleBox(
@@ -1978,23 +1983,33 @@ def road_edge_offset_strips(
     return tuple(strips)
 
 
+def vehicle_color_for_source(
+    source: str,
+    theme: ClusterTheme,
+    source_color_mode: int,
+) -> tuple[int, int, int]:
+    if source_color_mode != CLUSTER_RADAR_SOURCE_COLOR_BY_SOURCE:
+        return theme.default_vehicle
+    if source == "radarState":
+        return RED
+    if source == "radarPoint" or source == "liveTracks" or source.startswith("CAN-FD"):
+        return AMBER
+    if (
+        RADAR_MERGED_SOURCE_TAG in source
+        or source == "carState"
+        or source.startswith("CAN 0x")
+        or source.startswith("modelV2")
+    ):
+        return BLUE
+    return theme.default_vehicle
+
+
 def vehicle_color_for_detection(
     vehicle: DetectedVehicle,
     theme: ClusterTheme = LIGHT_CLUSTER_THEME,
+    source_color_mode: int = 0,
 ) -> tuple[int, int, int]:
-    if vehicle.source.startswith("modelV2"):
-        return PURPLE
-    if vehicle.source == "radarState":
-        return RED
-    if RADAR_MERGED_SOURCE_TAG in vehicle.source:
-        return BLUE
-    if vehicle.cut_in:
-        return AMBER
-    if vehicle.primary:
-        return theme.primary_vehicle
-    if vehicle.source.startswith("modelV2"):
-        return theme.model_vehicle
-    return theme.default_vehicle
+    return vehicle_color_for_source(vehicle.source, theme, source_color_mode)
 
 
 def vehicle_blocks_path(vehicle: DetectedVehicle) -> bool:
@@ -2186,7 +2201,7 @@ def build_cluster_scene(
     camera_active = state.surround_view_active
     selected_radar_vehicle_points = radar_vehicle_points(state, lane_width_m)
     selected_radar_vehicle_boxes = tuple(
-        radar_vehicle_box(point, state, lane_width_m)
+        radar_vehicle_box(point, state, lane_width_m, theme)
         for point in selected_radar_vehicle_points
     )
     route_mode = data_geometry_mode_for_state(state)
@@ -2298,7 +2313,7 @@ def build_cluster_scene(
                 data_scene_forward_m(detected.longitudinal_m),
                 state.steering,
                 lane_width_m,
-                vehicle_color_for_detection(detected, theme),
+                vehicle_color_for_detection(detected, theme, state.radar_source_color_mode),
                 camera_active,
                 confidence=detected.probability,
                 label=detected.label,
