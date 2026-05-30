@@ -244,7 +244,7 @@ struct CarState {
   pcmCruiseGap @63 :Int16;      #0: can't read, 1,2,3,4: gap setting
   speedLimit @64 :Float32;
   speedLimitDistance @65 :Float32;
-  gearStep @66 :Int16;
+  gearStep @66 :Int16;          
   tpms @67 : Tpms;
   useLaneLineSpeed @68 : Float32;
   leftLatDist @69 : Float32;  # distance to left lane line
@@ -255,8 +255,6 @@ struct CarState {
   leftLaneLine @74 : Int16; # -1: no lane, 0: dashed, 1: solid, +10: white, +20: yellow, ex) 21: solid yellow
   rightLaneLine @75 : Int16; # -1: no lane, 0: dashed, 1: solid, +10: white, +20: yellow, ex) 21: solid yellow
   datetime @76 :UInt64; # timestamp in milliseconds since epoch
-  leftLongDistRear  @77 :Float32;  # 좌측 측후방 거리 (m), 0이면 미감지/미장착
-  rightLongDistRear @78 :Float32;  # 우측 측후방 거리 (m), 0이면 미감지/미장착
 
   struct Tpms {
     fl @0 :Float32;
