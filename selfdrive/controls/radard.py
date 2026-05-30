@@ -29,6 +29,9 @@ RADAR_TO_CAMERA = 1.52  # RADAR is ~ 1.5m ahead from center of mesh frame
 
 STICKY_SELECTED_COUNT_MAX = int(2.0 / DT_MDL)
 STICKY_MAX_DPATH = 0.8
+STICKY_FAR_DREL = 60.0
+STICKY_MAX_DPATH_FAR = 1.6
+STICKY_PATH_Y_STD_GAIN = 0.7
 
 
 def laplacian_pdf(x: float, mu: float, b: float):
@@ -67,6 +70,7 @@ class Track:
     self.dPath_future = 0.0
     self.dPath = 0.0
     self.sticky_dPath = 0.0
+    self.sticky_path_y_std = 0.0
 
     # ---- noise filter state (new) ----
     self._vLead_last = 0.0
@@ -107,9 +111,9 @@ class Track:
     if ready:
       self.d_path(md)
       if self.selected_count > 0:
-        self.sticky_dPath = self.path_d_path(md)
+        self.sticky_dPath, self.sticky_path_y_std = self.path_d_path(md)
 
-      if self.selected_count > 0 and abs(self.sticky_dPath) > STICKY_MAX_DPATH:
+      if self.selected_count > 0 and abs(self.sticky_dPath) > self.sticky_dpath_limit():
         self.selected_count = 0
         self.is_stopped_car_count = 0
 
@@ -138,8 +142,16 @@ class Track:
     self.dPath, self.in_lane_prob = d_path_interp(self.dRel, self.yRel)
     self.dPath_future, self.in_lane_prob_future = d_path_interp(self.dRel_future, self.yRel_future)
 
-  def path_d_path(self, md) -> float:
-    return float(self.yRel + np.interp(self.dRel, md.position.x, md.position.y))
+  def path_d_path(self, md) -> tuple[float, float]:
+    path_y = float(np.interp(self.dRel, md.position.x, md.position.y))
+    path_y_std = float(np.interp(self.dRel, md.position.x, md.position.yStd)) if len(md.position.yStd) else 0.0
+    return float(self.yRel + path_y), path_y_std
+
+  def sticky_dpath_limit(self) -> float:
+    if self.dRel < STICKY_FAR_DREL:
+      return STICKY_MAX_DPATH
+    return float(np.clip(STICKY_MAX_DPATH + STICKY_PATH_Y_STD_GAIN * self.sticky_path_y_std,
+                         STICKY_MAX_DPATH, STICKY_MAX_DPATH_FAR))
 
   # ---- noise suppression only when cnt>=2 ----
   def vlead_for_matching(self, dv_max: float = 4.0, alpha: float = 0.35) -> float:
@@ -611,7 +623,7 @@ class RadarD:
   def get_sticky_track(self, tracks: dict[int, Track]) -> Track | None:
     sticky_tracks = []
     for t in tracks.values():
-      if t.selected_count > 0 and abs(t.sticky_dPath) > STICKY_MAX_DPATH:
+      if t.selected_count > 0 and abs(t.sticky_dPath) > t.sticky_dpath_limit():
         t.selected_count = 0
         t.is_stopped_car_count = 0
         continue
