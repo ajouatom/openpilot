@@ -62,16 +62,16 @@ GEAR_STATUS_CENTER_X = TURN_SIGNAL_LEFT_CENTER_X + 102
 GEAR_STATUS_CENTER_Y = TURN_SIGNAL_CENTER_Y
 GEAR_STATUS_BOX_SIZE = 46
 GEAR_STATUS_FONT_SIZE = 34
-FOLLOW_STATUS_CENTER_X = GEAR_STATUS_CENTER_X + 78
-FOLLOW_STATUS_W = 88
-FOLLOW_STATUS_H = 46
+FOLLOW_STATUS_CENTER_X = GEAR_STATUS_CENTER_X + 80
+FOLLOW_STATUS_W = 82
+FOLLOW_STATUS_H = 42
 FOLLOW_STATUS_GAP_BARS = 4
-TOP_CRUISE_CENTER_X = FOLLOW_STATUS_CENTER_X + 122
-TOP_CRUISE_FONT_SIZE = 34
-TOP_CRUISE_UNIT_FONT_SIZE = 17
-AUTO_LANE_CHANGE_CENTER_X = TOP_CRUISE_CENTER_X + 116
-LFA_STATUS_CENTER_X = AUTO_LANE_CHANGE_CENTER_X + 50
-TOP_ICON_SIZE = 36
+TOP_CRUISE_CENTER_X = FOLLOW_STATUS_CENTER_X + 112
+TOP_CRUISE_FONT_SIZE = 31
+TOP_CRUISE_UNIT_FONT_SIZE = 15
+AUTO_LANE_CHANGE_CENTER_X = TOP_CRUISE_CENTER_X + 108
+LFA_STATUS_CENTER_X = AUTO_LANE_CHANGE_CENTER_X + 48
+TOP_ICON_SIZE = 34
 DRIVE_STATUS_BOX_RADIUS = 8.0
 SPEED_VALUE_CENTER_X = 260
 SPEED_VALUE_CENTER_Y = 230
@@ -1980,53 +1980,42 @@ class ClusterUiRenderer:
         theme = self._current_theme()
         x = FOLLOW_STATUS_CENTER_X - FOLLOW_STATUS_W * 0.5
         y = GEAR_STATUS_CENTER_Y - FOLLOW_STATUS_H * 0.5
-        self._rounded_rect(
-            x,
-            y,
-            FOLLOW_STATUS_W,
-            FOLLOW_STATUS_H,
-            DRIVE_STATUS_BOX_RADIUS,
-            theme.clock_bg,
-            GREEN,
-            2.0,
-        )
 
         hda_color = GREEN if self._cruise_set_visible(state) else theme.muted
-        self._draw_text("HDA", x + 18, y + 11, 12, hda_color, anchor="center")
+        self._draw_text("HDA", x + 16, y + 8, 11, hda_color, anchor="center")
 
         gap_count = 0 if state.cruise_gap is None else int(clamp(float(state.cruise_gap), 1.0, float(FOLLOW_STATUS_GAP_BARS)))
-        bar_x = x + 12
-        bar_y = y + 22
+        bar_x = x + 8
+        bar_y = y + 19
         for index in range(FOLLOW_STATUS_GAP_BARS):
             active = index < gap_count
             bar_color = BLUE if active else theme.muted
-            bar_alpha = 230 if active else 82
-            bar_w = 7.0 + index * 2.0
-            self._rounded_rect(
-                bar_x + index * 5.5,
-                bar_y + index * 3.6,
-                bar_w,
+            bar_alpha = 230 if active else 72
+            start = rl.Vector2(bar_x + index * 5.4, bar_y + index * 3.1)
+            end = rl.Vector2(bar_x + 8.0 + index * 7.1, bar_y + index * 3.1)
+            rl.draw_line_ex(
+                start,
+                end,
                 4.0,
-                2.0,
-                (*bar_color, bar_alpha),
+                rl_color(bar_color, bar_alpha),
             )
 
         car_x = x + 58
         car_y = GEAR_STATUS_CENTER_Y
-        car_color = theme.clock_text if state.cruise_gap is not None else theme.muted
-        car_shadow = (0, 0, 0, 78)
-        self._rounded_rect(car_x - 19, car_y - 7, 38, 15, 5.0, car_shadow)
-        self._rounded_rect(car_x - 16, car_y - 8, 32, 16, 5.0, car_color)
-        self._rounded_rect(car_x - 7, car_y - 15, 16, 9, 4.0, car_color)
-        rl.draw_circle_v(rl.Vector2(car_x - 10, car_y + 9), 3.0, rl_color(theme.clock_bg))
-        rl.draw_circle_v(rl.Vector2(car_x + 11, car_y + 9), 3.0, rl_color(theme.clock_bg))
+        car_color = (242, 245, 248) if state.cruise_gap is not None else theme.muted
+        car_shadow = (0, 0, 0, 92)
+        self._rounded_rect(car_x - 18, car_y - 6, 36, 15, 5.0, car_shadow, None, 0.0)
+        self._rounded_rect(car_x - 16, car_y - 8, 32, 16, 5.0, car_color, None, 0.0)
+        self._rounded_rect(car_x - 7, car_y - 14, 15, 8, 4.0, car_color, None, 0.0)
+        rl.draw_circle_v(rl.Vector2(car_x - 10, car_y + 8), 2.7, rl_color((0, 0, 0), 190))
+        rl.draw_circle_v(rl.Vector2(car_x + 11, car_y + 8), 2.7, rl_color((0, 0, 0), 190))
 
     def _draw_top_cruise_set(self, state: ClusterUiState) -> None:
         theme = self._current_theme()
         visible = self._cruise_set_visible(state)
         speed_text = "--" if not visible or state.cruise_kph is None else str(int(round(state.cruise_kph)))
-        speed_color = self._cruise_set_color(state, theme) if visible else theme.muted
-        unit_color = speed_color if visible else theme.muted
+        speed_color = theme.text if visible else theme.muted
+        unit_color = GREEN if visible else theme.muted
         speed_spacing = max(1.0, TOP_CRUISE_FONT_SIZE * 0.02)
         unit_spacing = max(1.0, TOP_CRUISE_UNIT_FONT_SIZE * 0.02)
         speed_w, _ = self._measure_text(speed_text, TOP_CRUISE_FONT_SIZE, speed_spacing)
@@ -2045,13 +2034,14 @@ class ClusterUiRenderer:
         draw_color = rl_color(color, 170)
         x = center_x
         y = center_y
-        rl.draw_line_ex(rl.Vector2(x - 16, y + 15), rl.Vector2(x - 6, y - 15), 2.4, draw_color)
-        rl.draw_line_ex(rl.Vector2(x + 16, y + 15), rl.Vector2(x + 6, y - 15), 2.4, draw_color)
-        rl.draw_line_ex(rl.Vector2(x - 11, y + 4), rl.Vector2(x + 4, y - 8), 3.0, draw_color)
+        rl.draw_line_ex(rl.Vector2(x - 15, y + 14), rl.Vector2(x - 8, y - 12), 2.2, draw_color)
+        rl.draw_line_ex(rl.Vector2(x + 16, y + 14), rl.Vector2(x + 7, y - 12), 2.2, draw_color)
+        rl.draw_line_ex(rl.Vector2(x - 13, y + 7), rl.Vector2(x - 3, y - 5), 2.8, draw_color)
+        rl.draw_line_ex(rl.Vector2(x - 3, y - 5), rl.Vector2(x + 9, y - 2), 2.8, draw_color)
         rl.draw_triangle(
-            rl.Vector2(x + 4, y - 8),
-            rl.Vector2(x - 2, y - 10),
-            rl.Vector2(x + 1, y - 3),
+            rl.Vector2(x + 11, y - 1),
+            rl.Vector2(x + 4, y - 6),
+            rl.Vector2(x + 5, y + 2),
             draw_color,
         )
 
