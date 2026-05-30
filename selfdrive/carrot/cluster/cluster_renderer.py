@@ -58,6 +58,12 @@ TURN_SIGNAL_LEFT_CENTER_X = 610
 TURN_SIGNAL_RIGHT_CENTER_X = 1310
 TURN_SIGNAL_CENTER_Y = 72
 TURN_SIGNAL_MID_CENTER_X = (TURN_SIGNAL_LEFT_CENTER_X + TURN_SIGNAL_RIGHT_CENTER_X) * 0.5
+GEAR_STATUS_CENTER_X = TURN_SIGNAL_LEFT_CENTER_X + 102
+GEAR_STATUS_CENTER_Y = TURN_SIGNAL_CENTER_Y
+GEAR_STATUS_FONT_SIZE = 44
+GAP_STATUS_CENTER_X = GEAR_STATUS_CENTER_X + 58
+GAP_STATUS_BOX_SIZE = 44
+GAP_STATUS_FONT_SIZE = 28
 SPEED_VALUE_CENTER_X = 260
 SPEED_VALUE_CENTER_Y = 230
 SPEED_LIMIT_SIGN_CENTER_X = 460
@@ -1308,6 +1314,9 @@ class ClusterUiRenderer:
             self._draw_turn_signal("left", left_signal_lit)
             self._profile_add("hud.turn_signal_left", profile_stage)
             profile_stage = self._profile_start()
+            self._draw_drive_status(state)
+            self._profile_add("hud.drive_status", profile_stage)
+            profile_stage = self._profile_start()
             self._draw_turn_signal("right", right_signal_lit)
             self._profile_add("hud.turn_signal_right", profile_stage)
             profile_stage = self._profile_start()
@@ -1906,6 +1915,44 @@ class ClusterUiRenderer:
         if status.state == "missing":
             return RED
         return theme.muted
+
+    def _draw_drive_status(self, state: ClusterUiState) -> None:
+        theme = self._current_theme()
+        gear_text = (state.gear_text or "").strip().upper()
+        if gear_text:
+            self._draw_text(
+                gear_text[:2],
+                GEAR_STATUS_CENTER_X,
+                GEAR_STATUS_CENTER_Y + 1,
+                GEAR_STATUS_FONT_SIZE,
+                GREEN if gear_text != "U" else theme.muted,
+                anchor="center",
+            )
+
+        if state.cruise_gap is None:
+            return
+        gap = int(clamp(float(state.cruise_gap), 1.0, 4.0))
+        box_size = GAP_STATUS_BOX_SIZE
+        box_x = GAP_STATUS_CENTER_X - box_size * 0.5
+        box_y = GEAR_STATUS_CENTER_Y - box_size * 0.5
+        self._rounded_rect(
+            box_x,
+            box_y,
+            box_size,
+            box_size,
+            8.0,
+            theme.clock_bg,
+            GREEN,
+            2.0,
+        )
+        self._draw_text(
+            str(gap),
+            GAP_STATUS_CENTER_X,
+            GEAR_STATUS_CENTER_Y + 1,
+            GAP_STATUS_FONT_SIZE,
+            theme.clock_text,
+            anchor="center",
+        )
 
     def _draw_speed_block(self, state: ClusterUiState) -> None:
         theme = self._current_theme()

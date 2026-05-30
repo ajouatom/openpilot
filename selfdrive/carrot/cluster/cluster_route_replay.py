@@ -83,6 +83,8 @@ class RouteReplayFrame:
     speed_limit_source: str | None
     cruise_kph: int | None
     cruise_display_state: CruiseDisplayState
+    gear_text: str | None
+    cruise_gap: int | None
     left_signal: bool
     right_signal: bool
     left_blindspot: bool
@@ -649,13 +651,16 @@ class RouteReplaySource:
             ("L" if frame.lane_change_available_left else "-")
             + ("R" if frame.lane_change_available_right else "-")
         )
+        gear_text = frame.gear_text or "--"
+        gap_text = "--" if frame.cruise_gap is None else f"{frame.cruise_gap:d}"
         data_lines = (
             f"t {shown_time:6.1f}/{self.duration:6.1f}s   seg {segment_label}",
             f"vEgo {state.speed_kph:5.1f} km/h   aEgo {state.accel_mps2:+.2f} m/s2",
             f"steer {frame.steering_angle_deg or 0.0:+.1f} deg   limit {limit_text}   cruise {cruise_text}",
+            f"gear {gear_text}   gap {gap_text}   signals {signal_text}",
             f"curve {curve_text}   plan {plan_speed_text}kph {plan_accel_text}m/s2",
             f"lane {frame.lane_width_m:.2f}m center {lane_offset_text}   src {frame.lane_position_source}",
-            f"signals {signal_text}   lc {lane_change_text} avail {availability_text} p{frame.lane_change_prob:.2f}",
+            f"lc {lane_change_text} avail {availability_text} p{frame.lane_change_prob:.2f}",
             f"model {confidence_text} eng {engaged_text} risk {frame.disengage_risk:.2f} hb {frame.hard_brake_risk:.2f}",
             f"turn {turn_speed_text}kph ttc {lead_ttc_text} stop {int(frame.should_stop)} drop {frame_drop_text} exec {model_time_text}",
             f"vision {vision_text} yaw {frame.vision_yaw_rate_rps or 0.0:+.3f}   detected {detected_text}",
@@ -997,6 +1002,8 @@ class RouteLogParser:
 
         self.cruise_kph = self._cruise_kph_from_car_state(car_state)
         cruise_display_state = self._cruise_display_state_from_car_state(car_state, self.cruise_kph)
+        gear_text = self._gear_text_from_car_state(car_state)
+        cruise_gap = self._cruise_gap_from_car_state(car_state)
 
         car_speed_limit_kph = self._speed_limit_kph_from_car_state(car_state)
         if car_speed_limit_kph is not None:
@@ -1049,6 +1056,8 @@ class RouteLogParser:
             speed_limit_source=self.speed_limit_source,
             cruise_kph=self.cruise_kph,
             cruise_display_state=cruise_display_state,
+            gear_text=gear_text,
+            cruise_gap=cruise_gap,
             left_signal=left_signal,
             right_signal=right_signal,
             left_blindspot=left_blindspot,
@@ -1646,6 +1655,42 @@ class RouteLogParser:
             return rounded
         return int(round(speed_limit * 3.6))
 
+    def _gear_text_from_car_state(self, car_state: Any) -> str | None:
+        gear = safe_get(car_state, "gearShifter")
+        if gear is None:
+            return None
+        gear_name = str(gear).split(".")[-1].strip().lower()
+        if not gear_name:
+            return None
+        if "drive" in gear_name:
+            gear_step = safe_optional_int(car_state, "gearStep")
+            if gear_step is not None and 1 <= gear_step <= 8:
+                return str(gear_step)
+            return "D"
+        if "park" in gear_name:
+            return "P"
+        if "reverse" in gear_name:
+            return "R"
+        if "neutral" in gear_name:
+            return "N"
+        if "sport" in gear_name:
+            return "S"
+        if "low" in gear_name:
+            return "L"
+        if "brake" in gear_name:
+            return "B"
+        if "eco" in gear_name:
+            return "E"
+        if "unknown" in gear_name:
+            return "U"
+        return "M"
+
+    def _cruise_gap_from_car_state(self, car_state: Any) -> int | None:
+        cruise_gap = safe_optional_int(car_state, "pcmCruiseGap")
+        if cruise_gap is None or not 1 <= cruise_gap <= 4:
+            return None
+        return cruise_gap
+
     def _update_lane_styles_from_car_state(self, car_state: Any) -> None:
         left_code = safe_optional_int(car_state, "leftLaneLine")
         right_code = safe_optional_int(car_state, "rightLaneLine")
@@ -1996,6 +2041,8 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         speed_limit_source=frame.speed_limit_source,
         cruise_kph=frame.cruise_kph,
         cruise_display_state=frame.cruise_display_state,
+        gear_text=frame.gear_text,
+        cruise_gap=frame.cruise_gap,
         left_signal=frame.left_signal,
         right_signal=frame.right_signal,
         left_blindspot=frame.left_blindspot,
@@ -2175,6 +2222,8 @@ def blend_frames(left: RouteReplayFrame, right: RouteReplayFrame, amount: float)
         speed_limit_source=discrete.speed_limit_source,
         cruise_kph=discrete.cruise_kph,
         cruise_display_state=discrete.cruise_display_state,
+        gear_text=discrete.gear_text,
+        cruise_gap=discrete.cruise_gap,
         left_signal=discrete.left_signal,
         right_signal=discrete.right_signal,
         left_blindspot=discrete.left_blindspot,

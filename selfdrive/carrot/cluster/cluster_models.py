@@ -138,6 +138,8 @@ class ClusterUiState:
     speed_limit_source: str | None
     cruise_kph: int | None
     cruise_display_state: CruiseDisplayState
+    gear_text: str | None
+    cruise_gap: int | None
     left_signal: bool
     right_signal: bool
     left_blindspot: bool

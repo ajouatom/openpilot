@@ -513,6 +513,8 @@ def standby_state() -> ClusterUiState:
         speed_limit_source=None,
         cruise_kph=None,
         cruise_display_state="off",
+        gear_text=None,
+        cruise_gap=None,
         left_signal=False,
         right_signal=False,
         left_blindspot=False,

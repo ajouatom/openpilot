@@ -80,6 +80,8 @@ class ClusterSimulator:
             speed_limit_source="sim",
             cruise_kph=cruise_kph,
             cruise_display_state="engaged",
+            gear_text="D",
+            cruise_gap=3,
             left_signal=left_signal,
             right_signal=right_signal,
             left_blindspot=False,
