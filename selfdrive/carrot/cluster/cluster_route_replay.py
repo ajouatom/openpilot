@@ -1209,7 +1209,7 @@ class RouteLogParser:
         lane_lines = safe_get(model, "laneLines")
         lane_probs = safe_get(model, "laneLineProbs")
         if lane_lines is not None:
-            self.model_lane_lines = tuple(model_line_points(lane_lines[index]) for index in range(min(len(lane_lines), 4)))
+            self.model_lane_lines = tuple(model_line_points(lane_lines[index]) for index in range(len(lane_lines)))
         if lane_lines is not None and len(lane_lines) >= 3:
             left_y = first_list_value(safe_get(lane_lines[1], "y"))
             right_y = first_list_value(safe_get(lane_lines[2], "y"))
@@ -2383,6 +2383,54 @@ def lanes_for_frame(
     right_inner_visible = frame.right_lane_visible or force_lane_change_lanes
 
     markings: list[LaneMarking] = []
+    for index, points in enumerate(frame.model_lane_lines):
+        if not points:
+            continue
+        if index == 1:
+            offset = left_inner
+            color = left_inner_color
+            style = frame.left_lane_style
+            visible = left_inner_visible
+            width = 7
+        elif index == 2:
+            offset = right_inner
+            color = right_inner_color
+            style = frame.right_lane_style
+            visible = right_inner_visible
+            width = 7
+        else:
+            offset = model_lane_offset_for_index(
+                index,
+                points,
+                frame,
+                left_inner,
+                right_inner,
+                lane_grid_offset,
+            )
+            color = model_lane_color_for_index(index, frame.lane_change)
+            style = model_lane_style_for_index(index)
+            visible = True
+            width = 5
+        markings.append(
+            LaneMarking(
+                offset,
+                color,
+                style,
+                visible=visible,
+                width=width,
+                model_points=points,
+                model_lateral_shift_m=model_line_lateral_shift(
+                    points,
+                    frame,
+                    offset,
+                    lane_grid_offset,
+                    use_animated_lane_grid,
+                ),
+            )
+        )
+    if markings:
+        return tuple(markings)
+
     if use_animated_lane_grid and frame.lane_change == "left":
         left_outer = left_inner - 1.0
         left_outer_points = model_line_at(frame.model_lane_lines, 0)
@@ -2460,6 +2508,42 @@ def lanes_for_frame(
             )
         )
     return tuple(markings)
+
+
+def model_lane_offset_for_index(
+    index: int,
+    points: tuple[ModelPathPoint, ...],
+    frame: RouteReplayFrame,
+    left_inner: float,
+    right_inner: float,
+    lane_grid_offset: float,
+) -> float:
+    center_m = frame.lane_center_offset_m
+    if center_m is not None and points:
+        offset = lane_offset_from_y(points[0].lateral_m, center_m, frame.lane_width_m)
+        if offset is not None:
+            return offset + lane_grid_offset
+    if index < 1:
+        return left_inner - (1 - index)
+    if index > 2:
+        return right_inner + (index - 2)
+    return left_inner if index == 1 else right_inner
+
+
+def model_lane_color_for_index(index: int, lane_change: str | None) -> tuple[int, int, int]:
+    if index in (1, 2):
+        return BLUE
+    if index == 0 and lane_change == "left":
+        return BLUE_SOFT
+    if index == 3 and lane_change == "right":
+        return BLUE_SOFT
+    return WHITE
+
+
+def model_lane_style_for_index(index: int) -> str:
+    if index < 2:
+        return "solid"
+    return "dashed"
 
 
 def model_line_at(
