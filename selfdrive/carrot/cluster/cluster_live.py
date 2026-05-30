@@ -47,6 +47,7 @@ LIVE_SERVICES_BASE = (
     "liveTorqueParameters",
     "navInstruction",
     "navInstructionCarrot",
+    "wideRoadCameraState",
 )
 LIVE_CAN_SERVICES = ("can",)
 
@@ -122,6 +123,10 @@ class OpenpilotLiveSource:
         )
 
     def screen_brightness_percent(self) -> int | None:
+        camera_brightness = self._camera_brightness_percent()
+        if camera_brightness is not None:
+            return camera_brightness
+
         if not self._service_alive("deviceState"):
             return None
         try:
@@ -131,6 +136,24 @@ class OpenpilotLiveSource:
         if not math.isfinite(value):
             return None
         return int(round(clamp(value, 0.0, 100.0)))
+
+    def _camera_brightness_percent(self) -> int | None:
+        if not self._service_alive("wideRoadCameraState") or not self._service_valid("wideRoadCameraState"):
+            return None
+        try:
+            exposure = float(self.sm["wideRoadCameraState"].exposureValPercent)
+        except Exception:
+            return None
+        if not math.isfinite(exposure):
+            return None
+
+        lightness = clamp(100.0 - exposure, 0.0, 100.0)
+        if lightness <= 8.0:
+            normalized = lightness / 903.3
+        else:
+            normalized = ((lightness + 16.0) / 116.0) ** 3.0
+        brightness = 30.0 + clamp(normalized, 0.0, 1.0) * 70.0
+        return int(round(clamp(brightness, 0.0, 100.0)))
 
     def close(self) -> None:
         return None
