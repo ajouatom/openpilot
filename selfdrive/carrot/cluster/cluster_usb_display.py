@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import os
+import threading
 import time
 from io import BytesIO
 from pathlib import Path
@@ -26,6 +27,12 @@ USB_COMMAND_TIMEOUT_MS = 2000
 USB_FRAME_TIMEOUT_MS = 2000
 USB_COMMAND_GAP_S = 0.2
 TURZX_BRIGHTNESS_COMMAND_MAX = 102
+CMD_GET_H264_CHUNK_SIZE = 17
+CMD_PLAY_H264_CHUNK = 121
+CMD_GET_STREAM_STATUS = 122
+CMD_STOP_STREAM = 123
+DEFAULT_H264_CHUNK_SIZE = 202752
+MAX_H264_CHUNK_SIZE = 1024 * 1024
 _LIBUSB_DLL_DIR_HANDLE = None
 
 
@@ -117,6 +124,10 @@ class TuringUsbDisplay:
         self._encrypt_command_packet = None
         self._cmd_upload_jpeg = 101
         self._cmd_upload_png = 102
+        self._cmd_get_h264_chunk_size = CMD_GET_H264_CHUNK_SIZE
+        self._cmd_play_h264_chunk = CMD_PLAY_H264_CHUNK
+        self._cmd_get_stream_status = CMD_GET_STREAM_STATUS
+        self._cmd_stop_stream = CMD_STOP_STREAM
         self._ep_out = None
         self._ep_in = None
         self._dll_dir_handle = None
@@ -124,6 +135,7 @@ class TuringUsbDisplay:
         self._turbojpeg = None
         self._turbojpeg_unavailable = False
         self._jpeg_buffer = BytesIO()
+        self._usb_lock = threading.Lock()
         self.profile_enabled = os.environ.get("CLUSTER_PROFILE_USB") == "1"
         self._profile_samples: list[tuple[str, float]] = []
 
@@ -133,8 +145,8 @@ class TuringUsbDisplay:
     def clear_profile_samples(self) -> None:
         self._profile_samples.clear()
 
-    def profile_samples(self) -> tuple[tuple[str, float], ...]:
-        return tuple(self._profile_samples)
+    def profile_samples(self) -> list[tuple[str, float]]:
+        return self._profile_samples
 
     def _profile_start(self) -> float:
         return time.perf_counter() if self.profile_enabled else 0.0
@@ -151,6 +163,10 @@ class TuringUsbDisplay:
             sys.path.insert(0, str(VENDOR_ROOT))
 
         from library.lcd.lcd_comm_turing_usb import (  # type: ignore
+            CMD_GET_H264_CHUNK_SIZE,
+            CMD_GET_STREAM_STATUS,
+            CMD_PLAY_H264_CHUNK,
+            CMD_STOP_STREAM,
             CMD_UPLOAD_JPEG,
             CMD_UPLOAD_PNG,
             PRODUCT_ID,
@@ -169,6 +185,10 @@ class TuringUsbDisplay:
         self._encrypt_command_packet = encrypt_command_packet
         self._cmd_upload_jpeg = CMD_UPLOAD_JPEG
         self._cmd_upload_png = CMD_UPLOAD_PNG
+        self._cmd_get_h264_chunk_size = CMD_GET_H264_CHUNK_SIZE
+        self._cmd_play_h264_chunk = CMD_PLAY_H264_CHUNK
+        self._cmd_get_stream_status = CMD_GET_STREAM_STATUS
+        self._cmd_stop_stream = CMD_STOP_STREAM
         self._connect_device()
         try:
             self._initialize_device()
@@ -225,8 +245,27 @@ class TuringUsbDisplay:
         self._send_command(10, "sync")
         time.sleep(USB_COMMAND_GAP_S)
         if self.display_fps > 0:
-            self._send_optional_command(15, "frame-rate", {8: self.display_fps})
+            self._send_frame_rate(self.display_fps)
         self._send_brightness(self.brightness, "brightness")
+
+    def set_display_fps(self, display_fps: int, *, force: bool = False) -> bool:
+        next_display_fps = int(clamp(display_fps, 0, 255))
+        if next_display_fps == self.display_fps and not force:
+            return False
+        self.display_fps = next_display_fps
+        if self.dev is not None and self.display_fps > 0:
+            self._send_frame_rate(self.display_fps)
+            return True
+        return False
+
+    def _send_frame_rate(self, display_fps: int) -> None:
+        self._send_optional_command(
+            15,
+            "frame-rate",
+            {8: int(clamp(display_fps, 0, 255))},
+            no_ack_gap_s=0.05,
+            no_ack_drain_attempts=1,
+        )
 
     def _send_brightness(self, brightness: int, name: str) -> None:
         value = int(clamp(brightness, 0, 100) / 100 * TURZX_BRIGHTNESS_COMMAND_MAX)
@@ -340,6 +379,69 @@ class TuringUsbDisplay:
             self._send_frame(self._cmd_upload_jpeg, frame)
         except Exception as exc:
             self._handle_frame_error(exc)
+
+    def start_h264_stream(self, requested_chunk_size: int = 0) -> int:
+        if self.dev is None:
+            raise RuntimeError("USB display is not open")
+
+        for command_id, name in (
+            (111, "video-setup-111"),
+            (112, "video-setup-112"),
+            (13, "video-setup-13"),
+            (41, "video-setup-41"),
+        ):
+            self._send_optional_command(
+                command_id,
+                name,
+                log=False,
+                no_ack_gap_s=0.05,
+                no_ack_drain_attempts=1,
+            )
+
+        chunk_size = self._h264_chunk_size(requested_chunk_size)
+        print(f"TURZX H264 stream chunk size: {chunk_size} bytes", flush=True)
+        return chunk_size
+
+    def stop_h264_stream(self) -> None:
+        if self.dev is None:
+            return
+        self._send_optional_command(
+            self._cmd_stop_stream,
+            "stop-stream",
+            log=False,
+            no_ack_gap_s=0.0,
+            no_ack_drain_attempts=1,
+        )
+
+    def send_h264_chunk(
+        self,
+        chunk: bytes,
+        *,
+        is_last: bool = False,
+        wait_for_ack: bool = True,
+        require_ack_response: bool = True,
+    ) -> None:
+        if self.dev is None:
+            raise RuntimeError("USB display is not open")
+        if not chunk:
+            return
+        try:
+            if wait_for_ack:
+                try:
+                    response = self._send_h264_chunk_ack(chunk, is_last=is_last)
+                except Exception:
+                    if require_ack_response:
+                        raise
+                    self._h264_flow_control(target_queue_depth=2)
+                    return
+                if require_ack_response:
+                    self._check_frame_response(response)
+                else:
+                    self._h264_flow_control(target_queue_depth=3)
+            else:
+                self._send_h264_chunk_no_ack(chunk, is_last=is_last, drain_input=not self.fast_write)
+        except Exception as exc:
+            raise RuntimeError(f"TURZX USB H264 chunk upload failed: {exc}") from exc
 
     def encode_jpeg(self, rgba: Any, width: int, height: int) -> bytes:
         if self.jpeg_encoder == "turbojpeg" or (
@@ -470,34 +572,36 @@ class TuringUsbDisplay:
     def _write_payload_checked(self, payload: bytes, error_message: str, timeout_ms: int) -> bytes:
         if self._ep_out is None or self._ep_in is None:
             raise RuntimeError("USB endpoints are not open")
-        profile_stage = self._profile_start()
-        self._clear_endpoint_halt()
-        self._drain_input()
-        self._profile_add("usb.write_checked.prepare", profile_stage)
-        try:
+        with self._usb_lock:
             profile_stage = self._profile_start()
-            self._ep_out.write(payload, timeout_ms)
-            self._profile_add("usb.write_checked.write", profile_stage)
-            profile_stage = self._profile_start()
-            response = bytes(self._ep_in.read(512, timeout_ms))
-            self._profile_add("usb.write_checked.read_ack", profile_stage)
-            return response
-        except Exception as exc:
-            raise RuntimeError(error_message) from exc
+            self._clear_endpoint_halt()
+            self._drain_input()
+            self._profile_add("usb.write_checked.prepare", profile_stage)
+            try:
+                profile_stage = self._profile_start()
+                self._ep_out.write(payload, timeout_ms)
+                self._profile_add("usb.write_checked.write", profile_stage)
+                profile_stage = self._profile_start()
+                response = bytes(self._ep_in.read(512, timeout_ms))
+                self._profile_add("usb.write_checked.read_ack", profile_stage)
+                return response
+            except Exception as exc:
+                raise RuntimeError(error_message) from exc
 
     def _write_payload_no_ack(self, payload: bytes, error_message: str, timeout_ms: int) -> None:
         if self._ep_out is None:
             raise RuntimeError("USB OUT endpoint is not open")
-        profile_stage = self._profile_start()
-        self._clear_endpoint_halt()
-        self._drain_input()
-        self._profile_add("usb.write_no_ack.prepare", profile_stage)
-        try:
+        with self._usb_lock:
             profile_stage = self._profile_start()
-            self._ep_out.write(payload, timeout_ms)
-            self._profile_add("usb.write_no_ack.write", profile_stage)
-        except Exception as exc:
-            raise RuntimeError(error_message) from exc
+            self._clear_endpoint_halt()
+            self._drain_input()
+            self._profile_add("usb.write_no_ack.prepare", profile_stage)
+            try:
+                profile_stage = self._profile_start()
+                self._ep_out.write(payload, timeout_ms)
+                self._profile_add("usb.write_no_ack.write", profile_stage)
+            except Exception as exc:
+                raise RuntimeError(error_message) from exc
 
     def _build_frame_payload(self, command_id: int, frame: bytes) -> bytes:
         if self._build_command_packet_header is None or self._encrypt_command_packet is None:
@@ -534,47 +638,148 @@ class TuringUsbDisplay:
         )
 
     def _send_frame_fast(self, command_id: int, frame: bytes) -> bytes:
-        if self._ep_out is None:
+        if self._ep_out is None or self._ep_in is None:
             raise RuntimeError("USB OUT endpoint is not open")
 
-        profile_stage = self._profile_start()
-        self._clear_endpoint_halt()
-        self._drain_input()
-        self._profile_add("usb.frame_fast.prepare", profile_stage)
-        profile_stage = self._profile_start()
-        payload = self._build_frame_payload(command_id, frame)
-        self._profile_add("usb.frame_fast.payload", profile_stage)
-        profile_stage = self._profile_start()
-        self._ep_out.write(payload, USB_FRAME_TIMEOUT_MS)
-        self._profile_add("usb.frame_fast.write", profile_stage)
-        profile_stage = self._profile_start()
-        response = bytes(self._ep_in.read(512, USB_FRAME_TIMEOUT_MS))
-        self._profile_add("usb.frame_fast.read_ack", profile_stage)
-        return response
+        with self._usb_lock:
+            profile_stage = self._profile_start()
+            self._clear_endpoint_halt()
+            self._drain_input()
+            self._profile_add("usb.frame_fast.prepare", profile_stage)
+            profile_stage = self._profile_start()
+            payload = self._build_frame_payload(command_id, frame)
+            self._profile_add("usb.frame_fast.payload", profile_stage)
+            profile_stage = self._profile_start()
+            self._ep_out.write(payload, USB_FRAME_TIMEOUT_MS)
+            self._profile_add("usb.frame_fast.write", profile_stage)
+            profile_stage = self._profile_start()
+            response = bytes(self._ep_in.read(512, USB_FRAME_TIMEOUT_MS))
+            self._profile_add("usb.frame_fast.read_ack", profile_stage)
+            return response
 
     def _send_frame_no_ack(self, command_id: int, frame: bytes, *, drain_input: bool) -> None:
         if self._ep_out is None:
             raise RuntimeError("USB OUT endpoint is not open")
 
-        profile_stage = self._profile_start()
-        if drain_input:
-            self._drain_input(
-                attempts=self.frame_drain_attempts,
-                timeout_ms=self.frame_drain_timeout_ms,
-            )
-        else:
-            self._drain_input(
-                attempts=self.fast_frame_drain_attempts,
-                timeout_ms=self.fast_frame_drain_timeout_ms,
-            )
-        self._profile_add("usb.frame_no_ack.drain_input", profile_stage)
+        with self._usb_lock:
+            profile_stage = self._profile_start()
+            if drain_input:
+                self._drain_input(
+                    attempts=self.frame_drain_attempts,
+                    timeout_ms=self.frame_drain_timeout_ms,
+                )
+            else:
+                self._drain_input(
+                    attempts=self.fast_frame_drain_attempts,
+                    timeout_ms=self.fast_frame_drain_timeout_ms,
+                )
+            self._profile_add("usb.frame_no_ack.drain_input", profile_stage)
 
+            profile_stage = self._profile_start()
+            payload = self._build_frame_payload(command_id, frame)
+            self._profile_add("usb.frame_no_ack.payload", profile_stage)
+            profile_stage = self._profile_start()
+            self._ep_out.write(payload, USB_FRAME_TIMEOUT_MS)
+            self._profile_add("usb.frame_no_ack.write", profile_stage)
+
+    def _h264_chunk_size(self, requested_chunk_size: int) -> int:
+        if requested_chunk_size > 0:
+            return int(clamp(requested_chunk_size, 1, MAX_H264_CHUNK_SIZE))
+
+        try:
+            response = self._send_command(
+                self._cmd_get_h264_chunk_size,
+                "h264-chunk-size",
+                expect_response=True,
+                log=False,
+            )
+            if len(response) >= 12:
+                chunk_size = int.from_bytes(response[8:12], byteorder="big", signed=False)
+                if 0 < chunk_size <= MAX_H264_CHUNK_SIZE:
+                    return chunk_size
+        except Exception as exc:
+            print(f"Warning: TURZX H264 chunk-size negotiation failed: {exc}", flush=True)
+        return DEFAULT_H264_CHUNK_SIZE
+
+    def _build_h264_chunk_payload(self, chunk: bytes, *, is_last: bool) -> bytes:
+        if self._build_command_packet_header is None or self._encrypt_command_packet is None:
+            raise RuntimeError("USB command helpers are not initialized")
+
+        chunk_size = len(chunk)
         profile_stage = self._profile_start()
-        payload = self._build_frame_payload(command_id, frame)
-        self._profile_add("usb.frame_no_ack.payload", profile_stage)
-        profile_stage = self._profile_start()
-        self._ep_out.write(payload, USB_FRAME_TIMEOUT_MS)
-        self._profile_add("usb.frame_no_ack.write", profile_stage)
+        cmd_packet = self._build_command_packet_header(self._cmd_play_h264_chunk)
+        cmd_packet[8] = (chunk_size >> 24) & 0xFF
+        cmd_packet[9] = (chunk_size >> 16) & 0xFF
+        cmd_packet[10] = (chunk_size >> 8) & 0xFF
+        cmd_packet[11] = chunk_size & 0xFF
+        if is_last:
+            cmd_packet[12] = 1
+        payload = self._encrypt_command_packet(cmd_packet) + chunk
+        self._profile_add("usb.h264.build_payload", profile_stage)
+        return payload
+
+    def _send_h264_chunk_ack(self, chunk: bytes, *, is_last: bool) -> bytes:
+        if self._ep_out is None or self._ep_in is None:
+            raise RuntimeError("USB endpoints are not open")
+
+        with self._usb_lock:
+            profile_stage = self._profile_start()
+            payload = self._build_h264_chunk_payload(chunk, is_last=is_last)
+            self._profile_add("usb.h264.payload", profile_stage)
+            try:
+                profile_stage = self._profile_start()
+                self._ep_out.write(payload, USB_FRAME_TIMEOUT_MS)
+                self._profile_add("usb.h264.write", profile_stage)
+                profile_stage = self._profile_start()
+                response = bytes(self._ep_in.read(512, USB_FRAME_TIMEOUT_MS))
+                self._profile_add("usb.h264.read_ack", profile_stage)
+                return response
+            except Exception as exc:
+                raise RuntimeError("TURZX USB H264 chunk timed out") from exc
+
+    def _h264_flow_control(self, *, target_queue_depth: int, max_attempts: int = 8) -> None:
+        for _ in range(max_attempts):
+            try:
+                response = self._send_command(
+                    self._cmd_get_stream_status,
+                    "h264-stream-status",
+                    expect_response=True,
+                    log=False,
+                )
+            except Exception:
+                time.sleep(0.05)
+                return
+            if not response or len(response) <= 8 or response[8] <= target_queue_depth:
+                return
+            time.sleep(0.05)
+
+    def _send_h264_chunk_no_ack(self, chunk: bytes, *, is_last: bool, drain_input: bool) -> None:
+        if self._ep_out is None:
+            raise RuntimeError("USB OUT endpoint is not open")
+
+        with self._usb_lock:
+            profile_stage = self._profile_start()
+            if drain_input:
+                self._drain_input(
+                    attempts=self.frame_drain_attempts,
+                    timeout_ms=self.frame_drain_timeout_ms,
+                )
+            else:
+                self._drain_input(
+                    attempts=self.fast_frame_drain_attempts,
+                    timeout_ms=self.fast_frame_drain_timeout_ms,
+                )
+            self._profile_add("usb.h264_no_ack.drain_input", profile_stage)
+
+            profile_stage = self._profile_start()
+            payload = self._build_h264_chunk_payload(chunk, is_last=is_last)
+            self._profile_add("usb.h264_no_ack.payload", profile_stage)
+            try:
+                profile_stage = self._profile_start()
+                self._ep_out.write(payload, USB_FRAME_TIMEOUT_MS)
+                self._profile_add("usb.h264_no_ack.write", profile_stage)
+            except Exception as exc:
+                raise RuntimeError("TURZX USB H264 chunk write failed") from exc
 
     def _check_frame_response(self, response: bytes | None) -> None:
         if not response:

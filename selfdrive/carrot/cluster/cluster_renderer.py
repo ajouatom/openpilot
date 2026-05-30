@@ -13,6 +13,12 @@ import pyray as rl
 from cluster_config import (
     AMBER,
     BLUE,
+    CLUSTER_RADAR_INFO_ALL_SPEED,
+    CLUSTER_RADAR_INFO_ALL_SPEED_DISTANCE,
+    CLUSTER_RADAR_INFO_NONE,
+    CLUSTER_RADAR_INFO_VEHICLE_SPEED,
+    CLUSTER_RADAR_INFO_VEHICLE_SPEED_DISTANCE,
+    CLUSTER_RADAR_SOURCE_COLOR_BY_SOURCE,
     CLUSTER_SCREEN_MODE_DEBUG,
     CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
     CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
@@ -52,21 +58,66 @@ OPENPILOT_ADDON_FONT_DIR = SELFDRIVE_DIR / "assets" / "addon" / "font"
 KAIGEN_GOTHIC_KR_BOLD_FONT_PATH = OPENPILOT_FONT_DIR / "KaiGenGothicKR-Bold.ttf"
 JETBRAINS_MONO_FONT_PATH = OPENPILOT_FONT_DIR / "JetBrainsMono-Medium.ttf"
 VEHICLE_MODEL_PATH = CLUSTER_DIR / "assets" / "models" / "cybertruck" / "cybertruck_cluster.obj"
+FOLLOW_VEHICLE_ICON_PATH = SELFDRIVE_DIR / "assets" / "icons_mici" / "carrot_cruse_gap_trimmed.png"
+LFA_ICON_PATH = SELFDRIVE_DIR / "assets" / "icons_mici" / "carrot_wheel_org.png"
 ACCEL_TEXT_WIDTH_SAMPLES = ("+00.00", "-00.00")
 TURN_SIGNAL_LEFT_CENTER_X = 610
 TURN_SIGNAL_RIGHT_CENTER_X = 1310
 TURN_SIGNAL_CENTER_Y = 72
+TURN_SIGNAL_HEAD_HALF_HEIGHT = 38
 TURN_SIGNAL_MID_CENTER_X = (TURN_SIGNAL_LEFT_CENTER_X + TURN_SIGNAL_RIGHT_CENTER_X) * 0.5
+DRIVE_STATUS_BASE_BOX_SIZE = 46.0
+DRIVE_STATUS_ROW_HEIGHT = TURN_SIGNAL_HEAD_HALF_HEIGHT * 2.0
+DRIVE_STATUS_SCALE = DRIVE_STATUS_ROW_HEIGHT / DRIVE_STATUS_BASE_BOX_SIZE
+GEAR_STATUS_CENTER_X = TURN_SIGNAL_LEFT_CENTER_X + 102
+GEAR_STATUS_CENTER_Y = TURN_SIGNAL_CENTER_Y
+GEAR_STATUS_BOX_SIZE = DRIVE_STATUS_ROW_HEIGHT * 0.82
+GEAR_STATUS_FONT_SIZE = 34.0 * DRIVE_STATUS_SCALE * 0.82
+GEAR_STATUS_OUTLINE_WIDTH = 2.0 * DRIVE_STATUS_SCALE
+FOLLOW_STATUS_CENTER_X = GEAR_STATUS_CENTER_X + 132
+FOLLOW_STATUS_W = 160
+FOLLOW_STATUS_H = 42.0 * DRIVE_STATUS_SCALE
+FOLLOW_STATUS_GAP_BARS = 4
+FOLLOW_GAP_ACTIVE = (187, 61, 145, 255)
+FOLLOW_GAP_INACTIVE = (118, 122, 128, 150)
+FOLLOW_GAP_BAR_W = 5.4
+FOLLOW_GAP_BAR_H = 7.7
+FOLLOW_GAP_BAR_R = 1.3
+FOLLOW_GAP_BAR_SCALE = 1.75 * DRIVE_STATUS_SCALE
+FOLLOW_GAP_BAR_STEP_X = 6.3
+FOLLOW_GAP_ICON_ASPECT = 44.0 / 27.5
+FOLLOW_GAP_ICON_H = 32.0 * DRIVE_STATUS_SCALE
+FOLLOW_GAP_ICON_W = FOLLOW_GAP_ICON_H * FOLLOW_GAP_ICON_ASPECT
+TOP_CRUISE_CENTER_X = FOLLOW_STATUS_CENTER_X + 202
+TOP_CRUISE_FONT_SIZE = 27.0 * DRIVE_STATUS_SCALE
+TOP_CRUISE_UNIT_FONT_SIZE = TOP_CRUISE_FONT_SIZE
+LFA_STATUS_CENTER_X = TOP_CRUISE_CENTER_X + 142
+LFA_STATUS_ICON_SIZE = 28.0 * DRIVE_STATUS_SCALE
+TOP_ICON_SIZE = 34.0 * DRIVE_STATUS_SCALE
+DRIVE_STATUS_BOX_RADIUS = 8.0 * DRIVE_STATUS_SCALE
 SPEED_VALUE_CENTER_X = 260
 SPEED_VALUE_CENTER_Y = 230
 SPEED_LIMIT_SIGN_CENTER_X = 460
 SPEED_LIMIT_SIGN_CENTER_Y = TURN_SIGNAL_CENTER_Y
-CRUISE_SET_CENTER_X = SPEED_VALUE_CENTER_X
-CRUISE_SET_CENTER_Y = TURN_SIGNAL_CENTER_Y
+SPEED_LIMIT_SIGN_RADIUS = 56.0
+SPEED_LIMIT_SOURCE_LABELS = {
+    "vehicle": "v",
+    "car": "v",
+    "v": "v",
+    "nav": "n",
+    "navigation": "n",
+    "n": "n",
+    "model": "m",
+    "m": "m",
+    "vision": "vis",
+    "vis": "vis",
+    "sim": "sim",
+}
 SYSTEM_PANEL_X = 1416
 SYSTEM_PANEL_Y = 118
 SYSTEM_PANEL_W = 476
 SYSTEM_STATS_REFRESH_SECONDS = 1.0
+TEXT_MEASURE_CACHE_LIMIT = 1024
 DEBUG_PLOT_MAX_SAMPLES = 360
 DEBUG_PLOT_SAMPLE_SECONDS = 0.05
 DEBUG_PLOT_MARGIN = 18.0
@@ -82,6 +133,19 @@ GIT_STATUS_MARGIN = 2
 GIT_STATUS_DOT_RADIUS = 7
 GIT_STATUS_DOT_TEXT_GAP = 6
 GIT_STATUS_MAX_TEXT_W = 610
+FPS_STATUS_MARGIN = 4
+FPS_STATUS_DOT_RADIUS = 7
+FPS_STATUS_DOT_TEXT_GAP = 6
+FPS_STATUS_MAX_TEXT_W = 220
+RADAR_LABEL_DISTANCE_FONT_SIZE = 16
+RADAR_LABEL_SPEED_FONT_SIZE = 14
+VEHICLE_BADGE_DISTANCE_FONT_SIZE = 17
+VEHICLE_BADGE_SPEED_FONT_SIZE = 15
+RADAR_LABEL_ANCHOR_Z_OFFSET_M = 0.30
+VEHICLE_BADGE_ANCHOR_Z_OFFSET_M = 0.32
+WORLD_LABEL_NEAR_M = 18.0
+WORLD_LABEL_FAR_M = 180.0
+WORLD_LABEL_MIN_SCALE = 0.56
 VEHICLE_MATERIAL_COLORS: dict[str, tuple[int, int, int, int]] = {
     "body": (156, 166, 172, 255),
     "wheel": (18, 20, 22, 255),
@@ -135,8 +199,59 @@ def vehicle_speed_label(vehicle: VehicleBox) -> str:
     return f"{vehicle.absolute_speed_kph:.0f} km/h"
 
 
-def vehicle_metric_color(vehicle: VehicleBox, theme: ClusterTheme) -> tuple[int, int, int]:
-    return BLUE if "+radar:" in vehicle.source else theme.world_label_text
+def radar_info_shows_vehicle(mode: int) -> bool:
+    return mode in (
+        CLUSTER_RADAR_INFO_VEHICLE_SPEED,
+        CLUSTER_RADAR_INFO_VEHICLE_SPEED_DISTANCE,
+        CLUSTER_RADAR_INFO_ALL_SPEED,
+        CLUSTER_RADAR_INFO_ALL_SPEED_DISTANCE,
+    )
+
+
+def radar_info_shows_radar_points(mode: int) -> bool:
+    return mode in (
+        CLUSTER_RADAR_INFO_ALL_SPEED,
+        CLUSTER_RADAR_INFO_ALL_SPEED_DISTANCE,
+    )
+
+
+def radar_info_shows_speed(mode: int) -> bool:
+    return mode != CLUSTER_RADAR_INFO_NONE
+
+
+def radar_info_shows_distance(mode: int) -> bool:
+    return mode in (
+        CLUSTER_RADAR_INFO_VEHICLE_SPEED_DISTANCE,
+        CLUSTER_RADAR_INFO_ALL_SPEED_DISTANCE,
+    )
+
+
+def vehicle_metric_color(vehicle: VehicleBox, theme: ClusterTheme, source_color_mode: int) -> tuple[int, int, int]:
+    if source_color_mode != CLUSTER_RADAR_SOURCE_COLOR_BY_SOURCE:
+        return theme.world_label_text
+    if vehicle.source == "radarState":
+        return RED
+    if vehicle.source == "radarPoint" or vehicle.source == "liveTracks" or vehicle.source.startswith("CAN-FD"):
+        return AMBER
+    if "+radar:" in vehicle.source or vehicle.source == "carState" or vehicle.source.startswith("CAN 0x"):
+        return BLUE
+    if vehicle.source.startswith("modelV2"):
+        return BLUE
+    return theme.world_label_text
+
+
+def speed_limit_source_label(source: str | None) -> str:
+    if source is None:
+        return ""
+    normalized = source.strip().lower()
+    if not normalized:
+        return ""
+    return SPEED_LIMIT_SOURCE_LABELS.get(normalized, normalized[:3])
+
+
+def world_label_scale(distance_m: float) -> float:
+    far_amount = clamp((abs(distance_m) - WORLD_LABEL_NEAR_M) / (WORLD_LABEL_FAR_M - WORLD_LABEL_NEAR_M), 0.0, 1.0)
+    return 1.0 - far_amount * (1.0 - WORLD_LABEL_MIN_SCALE)
 
 
 def vec3(point: Vec3) -> rl.Vector3:
@@ -221,8 +336,12 @@ class ClusterUiRenderer:
         self._accel_text_width = 0.0
         self._capture_target = None
         self._portrait_upload_target = None
+        self._portrait_upload_target_size: tuple[int, int] | None = None
         self._vehicle_model = None
         self._vehicle_model_load_attempted = False
+        self._follow_vehicle_texture = None
+        self._lfa_texture = None
+        self._lfa_active_texture = None
         self._route_video_texture = None
         self._route_video_size: tuple[int, int] | None = None
         self._route_video_frame_id: str | None = None
@@ -230,6 +349,7 @@ class ClusterUiRenderer:
         self._right_turn_signal_started_at: float | None = None
         self._triangle_strip_points = None
         self._triangle_strip_capacity = 0
+        self._text_measure_cache: dict[tuple[int, str, float, float], tuple[float, float]] = {}
         self._system_stats = SystemStatsSampler(SYSTEM_STATS_REFRESH_SECONDS)
         self._debug_plot_mode_prev = -1
         self._debug_plot_size = 0
@@ -265,8 +385,8 @@ class ClusterUiRenderer:
     def clear_profile_samples(self) -> None:
         self._profile_samples.clear()
 
-    def profile_samples(self) -> tuple[tuple[str, float], ...]:
-        return tuple(self._profile_samples)
+    def profile_samples(self) -> list[tuple[str, float]]:
+        return self._profile_samples
 
     def _profile_start(self) -> float:
         return time.perf_counter() if self.profile_enabled else 0.0
@@ -303,6 +423,12 @@ class ClusterUiRenderer:
         profile_stage = self._profile_start()
         self._load_vehicle_model()
         self._profile_add("renderer.open.load_vehicle_model", profile_stage)
+        profile_stage = self._profile_start()
+        self._load_follow_vehicle_texture()
+        self._profile_add("renderer.open.load_follow_vehicle_texture", profile_stage)
+        profile_stage = self._profile_start()
+        self._load_drive_status_textures()
+        self._profile_add("renderer.open.load_drive_status_textures", profile_stage)
         self._window_open = True
         self._profile_add("renderer.open.total", profile_total)
 
@@ -315,9 +441,19 @@ class ClusterUiRenderer:
         if self._portrait_upload_target is not None:
             rl.unload_render_texture(self._portrait_upload_target)
             self._portrait_upload_target = None
+            self._portrait_upload_target_size = None
         if self._route_video_texture is not None:
             rl.unload_texture(self._route_video_texture)
             self._route_video_texture = None
+        if self._follow_vehicle_texture is not None:
+            rl.unload_texture(self._follow_vehicle_texture)
+            self._follow_vehicle_texture = None
+        if self._lfa_texture is not None:
+            rl.unload_texture(self._lfa_texture)
+            self._lfa_texture = None
+        if self._lfa_active_texture is not None:
+            rl.unload_texture(self._lfa_active_texture)
+            self._lfa_active_texture = None
         if self._owns_font and self._font is not None:
             rl.unload_font(self._font)
         self._font = None
@@ -383,7 +519,7 @@ class ClusterUiRenderer:
         rl.clear_background(rl_color(theme.bg))
         self._profile_add("render_world.clear_background", profile_stage)
         profile_stage = self._profile_start()
-        self._draw_scene(scene)
+        self._draw_scene(scene, state)
         self._profile_add("render_world.draw_scene", profile_stage)
 
     def render_to_file(self, state: ClusterUiState, output_path: str | Path) -> None:
@@ -417,8 +553,15 @@ class ClusterUiRenderer:
         self,
         state: ClusterUiState,
         portrait_upload: bool = False,
+        output_width: int | None = None,
+        output_height: int | None = None,
     ) -> tuple[bytes, int, int]:
-        with self.render_to_rgba_buffer(state, portrait_upload=portrait_upload) as (
+        with self.render_to_rgba_buffer(
+            state,
+            portrait_upload=portrait_upload,
+            output_width=output_width,
+            output_height=output_height,
+        ) as (
             rgba_buffer,
             image_width,
             image_height,
@@ -433,9 +576,16 @@ class ClusterUiRenderer:
         self,
         state: ClusterUiState,
         portrait_upload: bool = False,
+        output_width: int | None = None,
+        output_height: int | None = None,
     ) -> Iterator[tuple[object, int, int]]:
         profile_stage = self._profile_start()
-        image = self._render_to_image(state, portrait_upload=portrait_upload)
+        image = self._render_to_image(
+            state,
+            portrait_upload=portrait_upload,
+            output_width=output_width,
+            output_height=output_height,
+        )
         self._profile_add("render_to_rgba.render_to_image", profile_stage)
 
         try:
@@ -454,7 +604,13 @@ class ClusterUiRenderer:
             rl.unload_image(image)
             self._profile_add("render_to_rgba.unload_image", profile_stage)
 
-    def _render_to_image(self, state: ClusterUiState, portrait_upload: bool = False):
+    def _render_to_image(
+        self,
+        state: ClusterUiState,
+        portrait_upload: bool = False,
+        output_width: int | None = None,
+        output_height: int | None = None,
+    ):
         self.open(hidden=self.hidden)
         profile_stage = self._profile_start()
         target = self._get_capture_target()
@@ -468,7 +624,7 @@ class ClusterUiRenderer:
 
         if portrait_upload:
             profile_stage = self._profile_start()
-            upload_target = self._get_portrait_upload_target()
+            upload_target = self._get_portrait_upload_target(output_width, output_height)
             self._profile_add("render_to_image.get_portrait_upload_target", profile_stage)
 
             profile_stage = self._profile_start()
@@ -522,10 +678,18 @@ class ClusterUiRenderer:
             self._profile_add("render_target.filter_capture", profile_stage)
         return self._capture_target
 
-    def _get_portrait_upload_target(self):
+    def _get_portrait_upload_target(self, width: int | None = None, height: int | None = None):
+        target_width = int(width or self.height)
+        target_height = int(height or self.width)
+        target_size = (target_width, target_height)
+        if self._portrait_upload_target is not None and self._portrait_upload_target_size != target_size:
+            rl.unload_render_texture(self._portrait_upload_target)
+            self._portrait_upload_target = None
+            self._portrait_upload_target_size = None
         if self._portrait_upload_target is None:
             profile_stage = self._profile_start()
-            self._portrait_upload_target = rl.load_render_texture(self.height, self.width)
+            self._portrait_upload_target = rl.load_render_texture(target_width, target_height)
+            self._portrait_upload_target_size = target_size
             self._profile_add("render_target.alloc_portrait_upload", profile_stage)
             profile_stage = self._profile_start()
             rl.set_texture_filter(self._portrait_upload_target.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
@@ -583,6 +747,68 @@ class ClusterUiRenderer:
         except Exception as exc:
             print(f"Cybertruck vehicle model load failed: {exc}")
             self._vehicle_model = None
+
+    def _load_follow_vehicle_texture(self) -> None:
+        if self._follow_vehicle_texture is not None:
+            return
+        self._follow_vehicle_texture = self._load_icon_texture(FOLLOW_VEHICLE_ICON_PATH, "Follow gap vehicle")
+
+    def _load_drive_status_textures(self) -> None:
+        if self._lfa_texture is None:
+            self._lfa_texture = self._load_icon_texture(LFA_ICON_PATH, "LFA")
+        if self._lfa_active_texture is None:
+            self._lfa_active_texture = self._load_lfa_active_texture()
+
+    def _load_icon_texture(self, path: Path, label: str):
+        if not path.exists():
+            return None
+        try:
+            texture = rl.load_texture(str(path))
+            if texture.id <= 0:
+                return None
+            rl.set_texture_filter(texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+            return texture
+        except Exception as exc:
+            print(f"{label} icon load failed: {exc}")
+            return None
+
+    def _load_lfa_active_texture(self):
+        if not LFA_ICON_PATH.exists():
+            return None
+        image = None
+        try:
+            image = rl.load_image(str(LFA_ICON_PATH))
+            if not rl.is_image_valid(image):
+                return None
+            if image.format != rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8:
+                rl.image_format(image, rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8)
+
+            data = rl.ffi.cast("unsigned char *", image.data)
+            byte_count = image.width * image.height * 4
+            green_r, green_g, green_b = GREEN
+            for offset in range(0, byte_count, 4):
+                alpha = int(data[offset + 3])
+                if alpha == 0:
+                    continue
+                red = int(data[offset])
+                green = int(data[offset + 1])
+                blue = int(data[offset + 2])
+                if red >= 220 and green >= 220 and blue >= 220:
+                    data[offset] = green_r
+                    data[offset + 1] = green_g
+                    data[offset + 2] = green_b
+
+            texture = rl.load_texture_from_image(image)
+            if texture.id <= 0:
+                return None
+            rl.set_texture_filter(texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+            return texture
+        except Exception as exc:
+            print(f"LFA active icon load failed: {exc}")
+            return None
+        finally:
+            if image is not None and rl.is_image_valid(image):
+                rl.unload_image(image)
 
     def _load_obj_mesh(self, path: Path):
         vertices: list[tuple[float, float, float]] = []
@@ -668,7 +894,7 @@ class ClusterUiRenderer:
             data[index] = int(value)
         return data
 
-    def _draw_scene(self, scene: ClusterScene) -> None:
+    def _draw_scene(self, scene: ClusterScene, state: ClusterUiState) -> None:
         camera = rl.Camera3D(
             vec3(scene.camera.position),
             vec3(scene.camera.target),
@@ -713,10 +939,21 @@ class ClusterUiRenderer:
         rl.end_mode_3d()
         self._profile_add("draw_scene.end_mode_3d", profile_stage)
         profile_stage = self._profile_start()
-        self._draw_radar_point_labels(scene.radar_points, camera, scene.scene_shift_x_m)
+        self._draw_radar_point_labels(
+            scene.radar_points,
+            camera,
+            scene.scene_shift_x_m,
+            state.radar_info_mode,
+        )
         self._profile_add("draw_scene.radar_labels", profile_stage)
         profile_stage = self._profile_start()
-        self._draw_vehicle_badges(scene.vehicles, camera, scene.scene_shift_x_m)
+        self._draw_vehicle_badges(
+            scene.vehicles,
+            camera,
+            scene.scene_shift_x_m,
+            state.radar_info_mode,
+            state.radar_source_color_mode,
+        )
         self._profile_add("draw_scene.vehicle_badges", profile_stage)
         profile_stage = self._profile_start()
         self._draw_rear_vehicle_indicators(scene.rear_indicators, camera, scene.scene_shift_x_m)
@@ -769,15 +1006,17 @@ class ClusterUiRenderer:
             rl.draw_triangle_3d(left_near, right_far, left_far, color)
 
     def _draw_vehicle(self, vehicle: VehicleBox) -> None:
+        source_marker = vehicle.source.startswith("modelV2") or vehicle.source in ("radarState", "radarPoint")
         use_model = (
             self._vehicle_model is not None
+            and not source_marker
             and (not vehicle.source or vehicle.primary or vehicle.cut_in)
         )
         if use_model:
             self._draw_vehicle_shadow(vehicle)
             self._draw_vehicle_model(vehicle)
             return
-        if vehicle.source and not vehicle.primary and not vehicle.cut_in:
+        if vehicle.source and (source_marker or (not vehicle.primary and not vehicle.cut_in)):
             self._draw_vehicle_marker(vehicle)
             return
         self._draw_vehicle_box(vehicle)
@@ -804,41 +1043,79 @@ class ClusterUiRenderer:
         points: tuple[RadarPointMarker, ...],
         camera,
         scene_shift_x_m: float = 0.0,
+        radar_info_mode: int = CLUSTER_RADAR_INFO_ALL_SPEED_DISTANCE,
     ) -> None:
+        if not radar_info_shows_radar_points(radar_info_mode):
+            return
         theme = self._current_theme()
-        occupied: list[tuple[float, float, float, float]] = []
-        label_bounds = self._world_label_bounds(left=430, top=52, right=40, bottom=26)
-        ordered = sorted(points, key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label))
+        ordered = sorted(
+            points,
+            key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label),
+            reverse=True,
+        )
         for point in ordered:
-            anchor = rl.Vector3(point.center.x + scene_shift_x_m, point.center.y, point.center.z + 0.46)
+            anchor = rl.Vector3(
+                point.center.x + scene_shift_x_m,
+                point.center.y,
+                point.center.z + RADAR_LABEL_ANCHOR_Z_OFFSET_M,
+            )
             screen = world_to_screen_label_anchor(anchor, camera, self.width, self.height)
             if screen is None:
                 continue
-            distance = radar_point_distance_label(point)
-            speed = radar_point_speed_label(point)
-            label_height = 32 if speed else 22
-            text_width = max(
-                int(rl.measure_text_ex(self._font or rl.get_font_default(), distance, 14, 1).x),
-                int(rl.measure_text_ex(self._font or rl.get_font_default(), speed, 12, 1).x) if speed else 0,
-            )
-            width = max(62, text_width + 14)
-            height = label_height
-            x = screen.x - width * 0.5
-            y = screen.y - height - 4
-            rect_tuple = (x, y, width, height)
-            if not label_rect_inside_bounds(rect_tuple, label_bounds):
+            distance = radar_point_distance_label(point) if radar_info_shows_distance(radar_info_mode) else ""
+            speed = radar_point_speed_label(point) if radar_info_shows_speed(radar_info_mode) else ""
+            if not distance and not speed:
                 continue
-            if any(rectangles_overlap(rect_tuple, taken) for taken in occupied):
-                continue
-            occupied.append(rect_tuple)
-            center_x = x + width * 0.5
+            scale = world_label_scale(point.longitudinal_m)
+            distance_size = max(9.0, RADAR_LABEL_DISTANCE_FONT_SIZE * scale)
+            speed_size = max(8.0, RADAR_LABEL_SPEED_FONT_SIZE * scale)
+            shadow_offset = max(1.0, 1.2 * scale)
+            gap = max(2.0, 4.0 * scale)
+            if speed and distance:
+                speed_y = screen.y - speed_size * 0.5
+                distance_y = speed_y - (speed_size + distance_size) * 0.5 - gap
+            elif speed:
+                speed_y = screen.y - speed_size * 0.5
+                distance_y = 0.0
+            else:
+                distance_y = screen.y - distance_size * 0.5
+            center_x = screen.x
             shadow = theme.world_label_shadow
             text = theme.world_label_text
-            self._draw_text(distance, center_x + 1, y + 8 + 1, 14, shadow, anchor="center")
-            self._draw_text(distance, center_x, y + 8, 14, text, anchor="center")
+            if distance:
+                self._draw_text(
+                    distance,
+                    center_x + shadow_offset,
+                    distance_y + shadow_offset,
+                    distance_size,
+                    shadow,
+                    anchor="center",
+                )
+                self._draw_text(
+                    distance,
+                    center_x,
+                    distance_y,
+                    distance_size,
+                    text,
+                    anchor="center",
+                )
             if speed:
-                self._draw_text(speed, center_x + 1, y + 23 + 1, 12, shadow, anchor="center")
-                self._draw_text(speed, center_x, y + 23, 12, text, anchor="center")
+                self._draw_text(
+                    speed,
+                    center_x + shadow_offset,
+                    speed_y + shadow_offset,
+                    speed_size,
+                    shadow,
+                    anchor="center",
+                )
+                self._draw_text(
+                    speed,
+                    center_x,
+                    speed_y,
+                    speed_size,
+                    text,
+                    anchor="center",
+                )
 
     def _draw_vehicle_shadow(self, vehicle: VehicleBox) -> None:
         half_width = vehicle.width_m * 0.5
@@ -885,9 +1162,12 @@ class ClusterUiRenderer:
         vehicles: tuple[VehicleBox, ...],
         camera,
         scene_shift_x_m: float = 0.0,
+        radar_info_mode: int = CLUSTER_RADAR_INFO_ALL_SPEED_DISTANCE,
+        radar_source_color_mode: int = 0,
     ) -> None:
+        if not radar_info_shows_vehicle(radar_info_mode):
+            return
         theme = self._current_theme()
-        occupied: list[tuple[float, float, float, float]] = []
         ordered = sorted(
             (vehicle for vehicle in vehicles if vehicle.label),
             key=lambda vehicle: (
@@ -900,55 +1180,67 @@ class ClusterUiRenderer:
             anchor = rl.Vector3(
                 vehicle.center.x + scene_shift_x_m,
                 vehicle.center.y,
-                vehicle.height_m + 0.55,
+                vehicle.height_m + VEHICLE_BADGE_ANCHOR_Z_OFFSET_M,
             )
             screen = world_to_screen_label_anchor(anchor, camera, self.width, self.height)
             if screen is None:
                 continue
 
-            distance = vehicle_distance_label(vehicle)
-            speed = vehicle_speed_label(vehicle)
-            font = self._font or rl.get_font_default()
-            label_height = 36 if speed else 24
-            width = max(
-                62,
-                int(
-                    max(
-                        rl.measure_text_ex(font, distance, 15, 1).x,
-                        rl.measure_text_ex(font, speed, 13, 1).x if speed else 0,
-                    )
-                )
-                + 14,
-            )
-            height = label_height
-            x = screen.x - width * 0.5
-            y = screen.y - height - 4
-            rect_tuple = (x, y, width, height)
-            label_bounds = self._world_label_bounds(left=430, top=58, right=40, bottom=28)
-            if not label_rect_inside_bounds(rect_tuple, label_bounds):
+            distance = vehicle_distance_label(vehicle) if radar_info_shows_distance(radar_info_mode) else ""
+            speed = vehicle_speed_label(vehicle) if radar_info_shows_speed(radar_info_mode) else ""
+            if not distance and not speed:
                 continue
-            if any(rectangles_overlap(rect_tuple, taken) for taken in occupied):
-                if not vehicle.primary and not vehicle.cut_in:
-                    continue
-                for _ in range(3):
-                    y -= height + 4
-                    rect_tuple = (x, y, width, height)
-                    if not label_rect_inside_bounds(rect_tuple, label_bounds):
-                        continue
-                    if not any(rectangles_overlap(rect_tuple, taken) for taken in occupied):
-                        break
-                else:
-                    continue
-            occupied.append(rect_tuple)
-            center_x = x + width * 0.5
+            distance_m = abs(vehicle.center.y - EGO_FORWARD_M)
+            scale = world_label_scale(distance_m)
+            distance_size = max(9.0, VEHICLE_BADGE_DISTANCE_FONT_SIZE * scale)
+            speed_size = max(8.0, VEHICLE_BADGE_SPEED_FONT_SIZE * scale)
+            shadow_offset = max(1.0, 1.2 * scale)
+            gap = max(2.0, 4.0 * scale)
+            if speed and distance:
+                speed_y = screen.y - speed_size * 0.5
+                distance_y = speed_y - (speed_size + distance_size) * 0.5 - gap
+            elif speed:
+                speed_y = screen.y - speed_size * 0.5
+                distance_y = 0.0
+            else:
+                distance_y = screen.y - distance_size * 0.5
+            center_x = screen.x
             shadow = theme.world_label_shadow
-            text_color = vehicle_metric_color(vehicle, theme)
-            distance_y = y + (10 if speed else 12)
-            self._draw_text(distance, center_x + 1, distance_y + 1, 15, shadow, anchor="center")
-            self._draw_text(distance, center_x, distance_y, 15, text_color, anchor="center")
+            text_color = vehicle_metric_color(vehicle, theme, radar_source_color_mode)
+            if distance:
+                self._draw_text(
+                    distance,
+                    center_x + shadow_offset,
+                    distance_y + shadow_offset,
+                    distance_size,
+                    shadow,
+                    anchor="center",
+                )
+                self._draw_text(
+                    distance,
+                    center_x,
+                    distance_y,
+                    distance_size,
+                    text_color,
+                    anchor="center",
+                )
             if speed:
-                self._draw_text(speed, center_x + 1, y + 27 + 1, 13, shadow, anchor="center")
-                self._draw_text(speed, center_x, y + 27, 13, text_color, anchor="center")
+                self._draw_text(
+                    speed,
+                    center_x + shadow_offset,
+                    speed_y + shadow_offset,
+                    speed_size,
+                    shadow,
+                    anchor="center",
+                )
+                self._draw_text(
+                    speed,
+                    center_x,
+                    speed_y,
+                    speed_size,
+                    text_color,
+                    anchor="center",
+                )
 
     def _draw_rear_vehicle_indicators(
         self,
@@ -1010,14 +1302,13 @@ class ClusterUiRenderer:
         theme = self._current_theme()
         scale = max(0.72, min(1.18, min(self.width / DESIGN_WIDTH, self.height / DESIGN_HEIGHT)))
         distance = f"{indicator.label} {abs(indicator.longitudinal_m):.0f} m"
-        font = self._font or rl.get_font_default()
         text_size = 16.0 * scale
         spacing = max(1.0, text_size * 0.02)
-        measured = rl.measure_text_ex(font, distance, text_size, spacing)
+        text_width, text_height = self._measure_text(distance, text_size, spacing)
         pad_x = 10.0 * scale
         pad_y = 5.0 * scale
-        box_w = max(74.0 * scale, measured.x + pad_x * 2.0)
-        box_h = measured.y + pad_y * 2.0
+        box_w = max(74.0 * scale, text_width + pad_x * 2.0)
+        box_h = text_height + pad_y * 2.0
         box_y = y - 62.0 * scale
         box = rl.Rectangle(x - box_w * 0.5, box_y, box_w, box_h)
 
@@ -1187,11 +1478,17 @@ class ClusterUiRenderer:
             self._draw_turn_signal("left", left_signal_lit)
             self._profile_add("hud.turn_signal_left", profile_stage)
             profile_stage = self._profile_start()
+            self._draw_drive_status(state)
+            self._profile_add("hud.drive_status", profile_stage)
+            profile_stage = self._profile_start()
             self._draw_turn_signal("right", right_signal_lit)
             self._profile_add("hud.turn_signal_right", profile_stage)
             profile_stage = self._profile_start()
             self._draw_center_clock(state)
             self._profile_add("hud.center_clock", profile_stage)
+            profile_stage = self._profile_start()
+            self._draw_actual_fps(state.actual_fps)
+            self._profile_add("hud.actual_fps", profile_stage)
             if screen_mode == CLUSTER_SCREEN_MODE_DEBUG:
                 profile_stage = self._profile_start()
                 self._draw_live_debug_panel(state)
@@ -1237,16 +1534,15 @@ class ClusterUiRenderer:
         y = 58
         size = 54
         spacing = max(1.0, size * 0.02)
-        font = self._font or rl.get_font_default()
-        measured = rl.measure_text_ex(font, text, size, spacing)
+        text_width, text_height = self._measure_text(text, size, spacing)
 
         pad_x = 28
         pad_y = 14
         rect = rl.Rectangle(
-            x - measured.x * 0.5 - pad_x,
-            y - measured.y * 0.5 - pad_y,
-            measured.x + pad_x * 2,
-            measured.y + pad_y * 2,
+            x - text_width * 0.5 - pad_x,
+            y - text_height * 0.5 - pad_y,
+            text_width + pad_x * 2,
+            text_height + pad_y * 2,
         )
 
         rl.draw_rectangle_rounded(rect, 0.28, 12, rl_color(theme.clock_bg))
@@ -1427,10 +1723,10 @@ class ClusterUiRenderer:
         theme = self._current_theme()
         stats = self._system_stats.sample()
         cpu_count = len(stats.cpu_core_percents)
-        columns = 2 if cpu_count <= 16 else 4
+        columns = 2 if cpu_count <= 8 else 4
         rows = max(1, math.ceil(max(1, cpu_count) / columns))
         core_row_h = 30.0 if columns == 2 else 24.0
-        header_h = 130.0
+        header_h = 122.0
         panel_h = min(DESIGN_HEIGHT - SYSTEM_PANEL_Y - 18.0, header_h + rows * core_row_h + 18.0)
         core_area_h = max(24.0, panel_h - header_h - 14.0)
         core_row_h = min(core_row_h, core_area_h / rows)
@@ -1462,7 +1758,7 @@ class ClusterUiRenderer:
         )
         self._draw_percent_bar(panel_x + pad_x, panel_y + 80, panel_w - pad_x * 2, 12, mem_percent, mem_color)
 
-        cpu_header_y = panel_y + 112
+        cpu_header_y = panel_y + 104
         self._draw_text("CPU CORE %", panel_x + pad_x, cpu_header_y, 15, theme.muted)
         if cpu_count == 0:
             self._draw_text("unavailable", panel_x + panel_w - pad_x, cpu_header_y, 15, theme.muted, anchor="right")
@@ -1747,15 +2043,32 @@ class ClusterUiRenderer:
         text = status.branch if not status.detail else f"{status.branch} ({status.detail})"
         text_size = 20
         text = self._ellipsize_text(text, text_size, GIT_STATUS_MAX_TEXT_W)
-        font = self._font or rl.get_font_default()
         spacing = max(1.0, text_size * 0.02)
-        measured = rl.measure_text_ex(font, text, text_size, spacing)
-        row_h = max(measured.y, GIT_STATUS_DOT_RADIUS * 2)
+        _, text_height = self._measure_text(text, text_size, spacing)
+        row_h = max(text_height, GIT_STATUS_DOT_RADIUS * 2)
         center_y = DESIGN_HEIGHT - GIT_STATUS_MARGIN - row_h * 0.5
         dot_center_x = GIT_STATUS_MARGIN + GIT_STATUS_DOT_RADIUS
         text_x = GIT_STATUS_MARGIN + GIT_STATUS_DOT_RADIUS * 2 + GIT_STATUS_DOT_TEXT_GAP
         rl.draw_circle_v(rl.Vector2(dot_center_x, center_y), GIT_STATUS_DOT_RADIUS, rl_color(color))
         self._draw_text(text, text_x, center_y, text_size, color)
+
+    def _draw_actual_fps(self, actual_fps: float | None) -> None:
+        if actual_fps is None or not math.isfinite(actual_fps):
+            return
+
+        theme = self._current_theme()
+        color = theme.muted
+        text = f"FPS {actual_fps:.1f} Hz"
+        text_size = 20
+        text = self._ellipsize_text(text, text_size, FPS_STATUS_MAX_TEXT_W)
+        spacing = max(1.0, text_size * 0.02)
+        text_width, text_height = self._measure_text(text, text_size, spacing)
+        row_h = max(text_height, FPS_STATUS_DOT_RADIUS * 2)
+        center_y = FPS_STATUS_MARGIN + row_h * 0.5
+        text_x = DESIGN_WIDTH - FPS_STATUS_MARGIN
+        dot_center_x = text_x - text_width - FPS_STATUS_DOT_TEXT_GAP - FPS_STATUS_DOT_RADIUS
+        rl.draw_circle_v(rl.Vector2(dot_center_x, center_y), FPS_STATUS_DOT_RADIUS, rl_color(GREEN))
+        self._draw_text(text, text_x, center_y, text_size, color, anchor="right")
 
     @staticmethod
     def _git_status_color(status: GitBranchStatus, theme: ClusterTheme) -> tuple[int, int, int]:
@@ -1767,6 +2080,184 @@ class ClusterUiRenderer:
             return RED
         return theme.muted
 
+    def _draw_drive_status(self, state: ClusterUiState) -> None:
+        theme = self._current_theme()
+        gear_text = (state.gear_text or "").strip().upper()
+        if not gear_text and state.cruise_gap is None and not self._cruise_set_visible(state) and state.lfa_active is None:
+            return
+
+        bottom_y = self._drive_status_bottom_y(state)
+        gear_display = gear_text[:2] if gear_text else "-"
+        gear_color = GREEN if gear_text and gear_text != "U" else theme.muted
+        self._draw_drive_status_box(
+            gear_display,
+            GEAR_STATUS_CENTER_X,
+            bottom_y - GEAR_STATUS_BOX_SIZE * 0.5,
+            GEAR_STATUS_BOX_SIZE,
+            GEAR_STATUS_FONT_SIZE,
+            gear_color,
+        )
+
+        self._draw_follow_gap_status(state, bottom_y)
+        self._draw_top_cruise_set(state, bottom_y)
+        self._draw_lfa_status_icon(state, bottom_y)
+
+    def _drive_status_bottom_y(self, state: ClusterUiState) -> float:
+        speed_text = self._cruise_set_speed_text(state)
+        speed_spacing = max(1.0, TOP_CRUISE_FONT_SIZE * 0.02)
+        unit_spacing = max(1.0, TOP_CRUISE_UNIT_FONT_SIZE * 0.02)
+        _, speed_h = self._measure_text(speed_text, TOP_CRUISE_FONT_SIZE, speed_spacing)
+        _, unit_h = self._measure_text("km/h", TOP_CRUISE_UNIT_FONT_SIZE, unit_spacing)
+        row_h = max(
+            GEAR_STATUS_BOX_SIZE,
+            FOLLOW_GAP_ICON_H,
+            LFA_STATUS_ICON_SIZE,
+            speed_h,
+            unit_h,
+        )
+        return SPEED_LIMIT_SIGN_CENTER_Y - SPEED_LIMIT_SIGN_RADIUS + row_h
+
+    def _draw_drive_status_box(
+        self,
+        text: str,
+        center_x: float,
+        center_y: float,
+        box_size: float,
+        font_size: float,
+        text_color: tuple[int, int, int],
+    ) -> None:
+        box_x = center_x - box_size * 0.5
+        box_y = center_y - box_size * 0.5
+        rect = rl.Rectangle(box_x, box_y, box_size, box_size)
+        roundness = max(0.0, min(1.0, DRIVE_STATUS_BOX_RADIUS / max(1.0, box_size)))
+        rl.draw_rectangle_rounded_lines_ex(rect, roundness, 12, GEAR_STATUS_OUTLINE_WIDTH, rl_color(text_color))
+        self._draw_text(
+            text,
+            center_x,
+            center_y + 1,
+            font_size,
+            text_color,
+            anchor="center",
+        )
+
+    def _draw_follow_gap_status(self, state: ClusterUiState, bottom_y: float) -> None:
+        x = FOLLOW_STATUS_CENTER_X - FOLLOW_STATUS_W * 0.5
+
+        gap_count = 0 if state.cruise_gap is None else int(clamp(float(state.cruise_gap), 1.0, float(FOLLOW_STATUS_GAP_BARS)))
+        bar_w = FOLLOW_GAP_BAR_W * FOLLOW_GAP_BAR_SCALE
+        bar_h = FOLLOW_GAP_BAR_H * FOLLOW_GAP_BAR_SCALE
+        bar_r = FOLLOW_GAP_BAR_R * FOLLOW_GAP_BAR_SCALE
+        bar_step = FOLLOW_GAP_BAR_STEP_X * FOLLOW_GAP_BAR_SCALE
+        bars_total_w = bar_w + bar_step * (FOLLOW_STATUS_GAP_BARS - 1)
+        icon_x = x + FOLLOW_STATUS_W - FOLLOW_GAP_ICON_W
+        icon_y = bottom_y - FOLLOW_GAP_ICON_H
+        bar_x = icon_x - bars_total_w - 3.0
+        bar_y = bottom_y - bar_h
+        for index in range(FOLLOW_STATUS_GAP_BARS):
+            active = index >= FOLLOW_STATUS_GAP_BARS - gap_count
+            self._rounded_rect(
+                bar_x + index * bar_step,
+                bar_y,
+                bar_w,
+                bar_h,
+                bar_r,
+                FOLLOW_GAP_ACTIVE if active else FOLLOW_GAP_INACTIVE,
+                None,
+                0.0,
+            )
+
+        self._draw_follow_vehicle_icon(icon_x, icon_y)
+
+    def _draw_follow_vehicle_icon(self, x: float, y: float) -> None:
+        texture = self._follow_vehicle_texture
+        if texture is None:
+            theme = self._current_theme()
+            car_x = x + FOLLOW_GAP_ICON_W * 0.5
+            car_y = y + FOLLOW_GAP_ICON_H * 0.5
+            self._rounded_rect(car_x - 16, car_y - 8, 32, 16, 5.0, theme.muted, None, 0.0)
+            self._rounded_rect(car_x - 7, car_y - 14, 15, 8, 4.0, theme.muted, None, 0.0)
+            return
+
+        source = rl.Rectangle(0.0, 0.0, float(texture.width), float(texture.height))
+        dest = rl.Rectangle(x, y, FOLLOW_GAP_ICON_W, FOLLOW_GAP_ICON_H)
+        rl.draw_texture_pro(texture, source, dest, rl.Vector2(0.0, 0.0), 0.0, rl_color(WHITE))
+
+    def _draw_bottom_aligned_texture_icon(
+        self,
+        texture,
+        center_x: float,
+        bottom_y: float,
+        width: float,
+        height: float,
+        tint: tuple[int, int, int] | tuple[int, int, int, int],
+        alpha: int | None = None,
+        rotation_deg: float = 0.0,
+    ) -> bool:
+        if texture is None:
+            return False
+        source = rl.Rectangle(0.0, 0.0, float(texture.width), float(texture.height))
+        dest = rl.Rectangle(center_x, bottom_y - height * 0.5, width, height)
+        origin = rl.Vector2(width * 0.5, height * 0.5)
+        rl.draw_texture_pro(texture, source, dest, origin, rotation_deg, rl_color(tint, alpha))
+        return True
+
+    def _draw_top_cruise_set(self, state: ClusterUiState, bottom_y: float) -> None:
+        theme = self._current_theme()
+        speed_text = self._cruise_set_speed_text(state)
+        speed_color = self._cruise_set_color(state, theme)
+        unit_color = speed_color
+        speed_spacing = max(1.0, TOP_CRUISE_FONT_SIZE * 0.02)
+        unit_spacing = max(1.0, TOP_CRUISE_UNIT_FONT_SIZE * 0.02)
+        speed_w, _ = self._measure_text(speed_text, TOP_CRUISE_FONT_SIZE, speed_spacing)
+        unit_w, _ = self._measure_text("km/h", TOP_CRUISE_UNIT_FONT_SIZE, unit_spacing)
+        unit_gap = 5.0
+        total_w = speed_w + unit_w + unit_gap
+        start_x = TOP_CRUISE_CENTER_X - total_w * 0.5
+        _, speed_h = self._measure_text(speed_text, TOP_CRUISE_FONT_SIZE, speed_spacing)
+        _, unit_h = self._measure_text("km/h", TOP_CRUISE_UNIT_FONT_SIZE, unit_spacing)
+        text_center_y = bottom_y - max(speed_h, unit_h) * 0.5
+        self._draw_text(speed_text, start_x, text_center_y, TOP_CRUISE_FONT_SIZE, speed_color)
+        self._draw_text("km/h", start_x + speed_w + unit_gap, text_center_y, TOP_CRUISE_UNIT_FONT_SIZE, unit_color)
+
+    def _draw_lfa_status_icon(self, state: ClusterUiState, bottom_y: float) -> None:
+        theme = self._current_theme()
+        active = bool(state.lfa_active)
+        texture = self._lfa_active_texture if active and self._lfa_active_texture is not None else self._lfa_texture
+        tint = WHITE if active else theme.muted
+        alpha = 255 if active else 190
+        rotation_deg = -float(state.steering_angle_deg or 0.0)
+        if self._draw_bottom_aligned_texture_icon(
+            texture,
+            LFA_STATUS_CENTER_X,
+            bottom_y,
+            LFA_STATUS_ICON_SIZE,
+            LFA_STATUS_ICON_SIZE,
+            tint,
+            alpha,
+            rotation_deg,
+        ):
+            return
+
+        outline = GREEN if active else theme.muted
+        fill_alpha = 46 if active else 26
+        center = rl.Vector2(LFA_STATUS_CENTER_X, bottom_y - LFA_STATUS_ICON_SIZE * 0.5)
+        scale = TOP_ICON_SIZE / 34.0
+        rl.draw_circle_v(center, TOP_ICON_SIZE * 0.5, rl_color(outline, fill_alpha))
+        rl.draw_circle_lines(int(center.x), int(center.y), TOP_ICON_SIZE * 0.5, rl_color(outline, 210))
+        rl.draw_circle_lines(int(center.x), int(center.y + 1), TOP_ICON_SIZE * 0.26, rl_color(outline, 210))
+        rl.draw_line_ex(
+            rl.Vector2(center.x - 7 * scale, center.y + 5 * scale),
+            rl.Vector2(center.x + 7 * scale, center.y + 5 * scale),
+            2.2 * scale,
+            rl_color(outline, 210),
+        )
+        rl.draw_line_ex(
+            rl.Vector2(center.x, center.y + 5 * scale),
+            rl.Vector2(center.x, center.y + 12 * scale),
+            2.2 * scale,
+            rl_color(outline, 210),
+        )
+
     def _draw_speed_block(self, state: ClusterUiState) -> None:
         theme = self._current_theme()
         display_speed_kph = state.display_speed_kph if state.display_speed_kph is not None else state.speed_kph
@@ -1775,33 +2266,41 @@ class ClusterUiRenderer:
 
         if state.speed_limit_kph is not None:
             center = rl.Vector2(SPEED_LIMIT_SIGN_CENTER_X, SPEED_LIMIT_SIGN_CENTER_Y)
-            rl.draw_circle_v(center, 56, rl_color(RED))
+            rl.draw_circle_v(center, SPEED_LIMIT_SIGN_RADIUS, rl_color(RED))
             rl.draw_circle_v(center, 47, rl_color(WHITE))
             self._draw_text(
                 str(state.speed_limit_kph),
                 SPEED_LIMIT_SIGN_CENTER_X,
-                SPEED_LIMIT_SIGN_CENTER_Y - 1,
+                SPEED_LIMIT_SIGN_CENTER_Y - 12,
                 42,
                 TEXT,
                 anchor="center",
             )
-
-        if self._cruise_set_visible(state):
-            self._draw_text(
-                f"SET {state.cruise_kph:3d}",
-                CRUISE_SET_CENTER_X,
-                CRUISE_SET_CENTER_Y,
-                60,
-                self._cruise_set_color(state, theme),
-                anchor="center",
-            )
+            source_label = speed_limit_source_label(state.speed_limit_source)
+            if source_label:
+                self._draw_text(
+                    source_label,
+                    SPEED_LIMIT_SIGN_CENTER_X,
+                    SPEED_LIMIT_SIGN_CENTER_Y + 31,
+                    17,
+                    TEXT,
+                    anchor="center",
+                )
 
     @staticmethod
     def _cruise_set_visible(state: ClusterUiState) -> bool:
         return state.cruise_kph is not None and state.cruise_display_state != "off"
 
     @staticmethod
+    def _cruise_set_speed_text(state: ClusterUiState) -> str:
+        if state.cruise_display_state == "off" or state.cruise_kph is None:
+            return "---"
+        return str(int(round(state.cruise_kph)))
+
+    @staticmethod
     def _cruise_set_color(state: ClusterUiState, theme: ClusterTheme) -> tuple[int, int, int]:
+        if state.cruise_display_state == "off" or state.cruise_kph is None:
+            return theme.muted
         if state.cruise_display_state == "paused":
             return theme.muted
         if state.speed_limit_kph is not None and state.cruise_kph == state.speed_limit_kph:
@@ -1818,12 +2317,10 @@ class ClusterUiRenderer:
         accel_text = f"{accel_value:+05.2f}"
         accel_text_x = 20
         accel_text_size = 38
-        if self._font is None:
-            self._font = rl.get_font_default()
         text_spacing = max(1.0, accel_text_size * 0.02)
         if self._accel_text_width <= 0.0:
             self._accel_text_width = max(
-                rl.measure_text_ex(self._font, text, accel_text_size, text_spacing).x
+                self._measure_text(text, accel_text_size, text_spacing)[0]
                 for text in ACCEL_TEXT_WIDTH_SAMPLES
             )
         text_width = self._accel_text_width
@@ -1888,17 +2385,19 @@ class ClusterUiRenderer:
         return blink_visible(now, started_at, float("inf"))
 
     def _draw_turn_signal(self, side: str, lit: bool) -> None:
-        theme = self._current_theme()
+        if not lit:
+            return
+
         cx = TURN_SIGNAL_LEFT_CENTER_X if side == "left" else TURN_SIGNAL_RIGHT_CENTER_X
         cy = TURN_SIGNAL_CENTER_Y
         direction = -1 if side == "left" else 1
-        fill = GREEN if lit else theme.inactive_signal_fill
-        outline = (8, 118, 65) if lit else theme.inactive_signal_outline
+        fill = GREEN
+        outline = (8, 118, 65)
         tail_back = -36
         tail_front = 12
         tail_half_height = 16
         head_tip_x = 60
-        head_half_height = 38
+        head_half_height = TURN_SIGNAL_HEAD_HALF_HEIGHT
 
         def point(local_x: float, local_y: float) -> rl.Vector2:
             return rl.Vector2(cx + direction * local_x, cy + local_y)
@@ -1964,27 +2463,38 @@ class ClusterUiRenderer:
         color: tuple[int, int, int],
         anchor: str = "left",
     ) -> None:
-        if self._font is None:
-            self._font = rl.get_font_default()
         spacing = max(1.0, size * 0.02)
-        measured = rl.measure_text_ex(self._font, text, size, spacing)
+        text_width, text_height = self._measure_text(text, size, spacing)
         draw_x = x
         draw_y = y
         if anchor == "center":
-            draw_x = x - measured.x * 0.5
-            draw_y = y - measured.y * 0.5
+            draw_x = x - text_width * 0.5
+            draw_y = y - text_height * 0.5
         elif anchor == "left":
-            draw_y = y - measured.y * 0.5
+            draw_y = y - text_height * 0.5
         elif anchor == "right":
-            draw_x = x - measured.x
-            draw_y = y - measured.y * 0.5
+            draw_x = x - text_width
+            draw_y = y - text_height * 0.5
         rl.draw_text_ex(self._font, text, rl.Vector2(draw_x, draw_y), size, spacing, rl_color(color))
 
-    def _ellipsize_text(self, text: str, size: float, max_width: float) -> str:
+    def _measure_text(self, text: str, size: float, spacing: float | None = None) -> tuple[float, float]:
         if self._font is None:
             self._font = rl.get_font_default()
+        measure_spacing = max(1.0, size * 0.02) if spacing is None else spacing
+        key = (id(self._font), text, float(size), float(measure_spacing))
+        measured = self._text_measure_cache.get(key)
+        if measured is not None:
+            return measured
+        if len(self._text_measure_cache) >= TEXT_MEASURE_CACHE_LIMIT:
+            self._text_measure_cache.clear()
+        text_size = rl.measure_text_ex(self._font, text, size, measure_spacing)
+        measured = (float(text_size.x), float(text_size.y))
+        self._text_measure_cache[key] = measured
+        return measured
+
+    def _ellipsize_text(self, text: str, size: float, max_width: float) -> str:
         spacing = max(1.0, size * 0.02)
-        if rl.measure_text_ex(self._font, text, size, spacing).x <= max_width:
+        if self._measure_text(text, size, spacing)[0] <= max_width:
             return text
         ellipsis = "..."
         low = 0
@@ -1992,7 +2502,7 @@ class ClusterUiRenderer:
         while low < high:
             mid = (low + high + 1) // 2
             candidate = text[:mid] + ellipsis
-            if rl.measure_text_ex(self._font, candidate, size, spacing).x <= max_width:
+            if self._measure_text(candidate, size, spacing)[0] <= max_width:
                 low = mid
             else:
                 high = mid - 1
