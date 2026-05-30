@@ -135,8 +135,12 @@ class ClusterUiState:
     accel_mps2: float
     steering: float
     speed_limit_kph: int | None
+    speed_limit_source: str | None
     cruise_kph: int | None
     cruise_display_state: CruiseDisplayState
+    gear_text: str | None
+    cruise_gap: int | None
+    lfa_active: bool | None
     left_signal: bool
     right_signal: bool
     left_blindspot: bool
@@ -168,6 +172,9 @@ class ClusterUiState:
     model_path: tuple[ModelPathPoint, ...] = ()
     detected_vehicles: tuple[DetectedVehicle, ...] = ()
     radar_points: tuple[RadarPoint, ...] = ()
+    radar_info_mode: int = 4
+    radar_display_mode: int = 0
+    radar_source_color_mode: int = 0
     route_overlay: RouteOverlay | None = None
     live_debug: LiveDebugInfo | None = None
     debug_plot: DebugPlotSnapshot | None = None
@@ -230,6 +237,7 @@ class ClusterUiState:
     lateral_plan_curvature_rates: tuple[float, ...] = ()
     display_speed_kph: float | None = None
     git_status: GitBranchStatus | None = None
+    actual_fps: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
