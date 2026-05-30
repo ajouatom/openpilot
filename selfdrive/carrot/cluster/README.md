@@ -200,8 +200,9 @@ or starting the HUD by calling Linux `sched_setaffinity` directly. Explicit
 `cluster_run.py` separately attempts realtime priority `55` through the common
 openpilot realtime helper when `CLUSTER_REALTIME` is enabled.
 When `--usb-brightness` is omitted, USB launches follow `ClusterHudBrightness`:
-`0` auto follows live `deviceState.screenBrightnessPercent` after samples are
-available, and `1` through `100` are fixed brightness percentages.
+`0` auto follows live `wideRoadCameraState.exposureValPercent` after samples are
+available, falling back to `deviceState.screenBrightnessPercent`; `1` through
+`100` are fixed brightness percentages.
 Brightness commands use no-ACK command `14` during USB initialization and when
 the resolved brightness changes.
 
