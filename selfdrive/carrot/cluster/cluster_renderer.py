@@ -58,31 +58,37 @@ ACCEL_TEXT_WIDTH_SAMPLES = ("+00.00", "-00.00")
 TURN_SIGNAL_LEFT_CENTER_X = 610
 TURN_SIGNAL_RIGHT_CENTER_X = 1310
 TURN_SIGNAL_CENTER_Y = 72
+TURN_SIGNAL_HEAD_HALF_HEIGHT = 38
 TURN_SIGNAL_MID_CENTER_X = (TURN_SIGNAL_LEFT_CENTER_X + TURN_SIGNAL_RIGHT_CENTER_X) * 0.5
+DRIVE_STATUS_BASE_BOX_SIZE = 46.0
+DRIVE_STATUS_ROW_HEIGHT = TURN_SIGNAL_HEAD_HALF_HEIGHT * 2.0
+DRIVE_STATUS_SCALE = DRIVE_STATUS_ROW_HEIGHT / DRIVE_STATUS_BASE_BOX_SIZE
 GEAR_STATUS_CENTER_X = TURN_SIGNAL_LEFT_CENTER_X + 102
 GEAR_STATUS_CENTER_Y = TURN_SIGNAL_CENTER_Y
-GEAR_STATUS_BOX_SIZE = 46
-GEAR_STATUS_FONT_SIZE = 34
-FOLLOW_STATUS_CENTER_X = GEAR_STATUS_CENTER_X + 84
-FOLLOW_STATUS_W = 92
-FOLLOW_STATUS_H = 42
+GEAR_STATUS_BOX_SIZE = DRIVE_STATUS_ROW_HEIGHT
+GEAR_STATUS_FONT_SIZE = 34.0 * DRIVE_STATUS_SCALE
+GEAR_STATUS_OUTLINE_WIDTH = 2.0 * DRIVE_STATUS_SCALE
+FOLLOW_STATUS_CENTER_X = GEAR_STATUS_CENTER_X + 122
+FOLLOW_STATUS_W = 150
+FOLLOW_STATUS_H = 42.0 * DRIVE_STATUS_SCALE
 FOLLOW_STATUS_GAP_BARS = 4
 FOLLOW_GAP_ACTIVE = (187, 61, 145, 255)
 FOLLOW_GAP_INACTIVE = (118, 122, 128, 150)
 FOLLOW_GAP_BAR_W = 5.4
 FOLLOW_GAP_BAR_H = 7.7
 FOLLOW_GAP_BAR_R = 1.3
-FOLLOW_GAP_BAR_SCALE = 1.75
+FOLLOW_GAP_BAR_SCALE = 1.75 * DRIVE_STATUS_SCALE
 FOLLOW_GAP_BAR_STEP_X = 6.3
-FOLLOW_GAP_ICON_W = 44.0
-FOLLOW_GAP_ICON_H = 27.5
-TOP_CRUISE_CENTER_X = FOLLOW_STATUS_CENTER_X + 118
-TOP_CRUISE_FONT_SIZE = 31
-TOP_CRUISE_UNIT_FONT_SIZE = 15
-AUTO_LANE_CHANGE_CENTER_X = TOP_CRUISE_CENTER_X + 108
-LFA_STATUS_CENTER_X = AUTO_LANE_CHANGE_CENTER_X + 48
-TOP_ICON_SIZE = 34
-DRIVE_STATUS_BOX_RADIUS = 8.0
+FOLLOW_GAP_ICON_ASPECT = 44.0 / 27.5
+FOLLOW_GAP_ICON_H = 27.5 * DRIVE_STATUS_SCALE
+FOLLOW_GAP_ICON_W = FOLLOW_GAP_ICON_H * FOLLOW_GAP_ICON_ASPECT
+TOP_CRUISE_CENTER_X = FOLLOW_STATUS_CENTER_X + 172
+TOP_CRUISE_FONT_SIZE = 31.0 * DRIVE_STATUS_SCALE
+TOP_CRUISE_UNIT_FONT_SIZE = 15.0 * DRIVE_STATUS_SCALE
+AUTO_LANE_CHANGE_CENTER_X = TOP_CRUISE_CENTER_X + 134
+LFA_STATUS_CENTER_X = AUTO_LANE_CHANGE_CENTER_X + 64
+TOP_ICON_SIZE = 34.0 * DRIVE_STATUS_SCALE
+DRIVE_STATUS_BOX_RADIUS = 8.0 * DRIVE_STATUS_SCALE
 SPEED_VALUE_CENTER_X = 260
 SPEED_VALUE_CENTER_Y = 230
 SPEED_LIMIT_SIGN_CENTER_X = 460
@@ -1984,19 +1990,11 @@ class ClusterUiRenderer:
         font_size: float,
         text_color: tuple[int, int, int],
     ) -> None:
-        theme = self._current_theme()
         box_x = center_x - box_size * 0.5
         box_y = center_y - box_size * 0.5
-        self._rounded_rect(
-            box_x,
-            box_y,
-            box_size,
-            box_size,
-            DRIVE_STATUS_BOX_RADIUS,
-            theme.clock_bg,
-            GREEN,
-            2.0,
-        )
+        rect = rl.Rectangle(box_x, box_y, box_size, box_size)
+        roundness = max(0.0, min(1.0, DRIVE_STATUS_BOX_RADIUS / max(1.0, box_size)))
+        rl.draw_rectangle_rounded_lines_ex(rect, roundness, 12, GEAR_STATUS_OUTLINE_WIDTH, rl_color(text_color))
         self._draw_text(
             text,
             center_x,
@@ -2070,16 +2068,21 @@ class ClusterUiRenderer:
         color: tuple[int, int, int],
     ) -> None:
         draw_color = rl_color(color, 170)
+        scale = TOP_ICON_SIZE / 34.0
         x = center_x
         y = center_y
-        rl.draw_line_ex(rl.Vector2(x - 15, y + 14), rl.Vector2(x - 8, y - 12), 2.2, draw_color)
-        rl.draw_line_ex(rl.Vector2(x + 16, y + 14), rl.Vector2(x + 7, y - 12), 2.2, draw_color)
-        rl.draw_line_ex(rl.Vector2(x - 13, y + 7), rl.Vector2(x - 3, y - 5), 2.8, draw_color)
-        rl.draw_line_ex(rl.Vector2(x - 3, y - 5), rl.Vector2(x + 9, y - 2), 2.8, draw_color)
+
+        def p(dx: float, dy: float) -> rl.Vector2:
+            return rl.Vector2(x + dx * scale, y + dy * scale)
+
+        rl.draw_line_ex(p(-15, 14), p(-8, -12), 2.2 * scale, draw_color)
+        rl.draw_line_ex(p(16, 14), p(7, -12), 2.2 * scale, draw_color)
+        rl.draw_line_ex(p(-13, 7), p(-3, -5), 2.8 * scale, draw_color)
+        rl.draw_line_ex(p(-3, -5), p(9, -2), 2.8 * scale, draw_color)
         rl.draw_triangle(
-            rl.Vector2(x + 11, y - 1),
-            rl.Vector2(x + 4, y - 6),
-            rl.Vector2(x + 5, y + 2),
+            p(11, -1),
+            p(4, -6),
+            p(5, 2),
             draw_color,
         )
 
@@ -2089,19 +2092,20 @@ class ClusterUiRenderer:
         outline = GREEN if active else theme.muted
         fill_alpha = 46 if active else 26
         center = rl.Vector2(LFA_STATUS_CENTER_X, GEAR_STATUS_CENTER_Y)
+        scale = TOP_ICON_SIZE / 34.0
         rl.draw_circle_v(center, TOP_ICON_SIZE * 0.5, rl_color(outline, fill_alpha))
         rl.draw_circle_lines(int(center.x), int(center.y), TOP_ICON_SIZE * 0.5, rl_color(outline, 210))
         rl.draw_circle_lines(int(center.x), int(center.y + 1), TOP_ICON_SIZE * 0.26, rl_color(outline, 210))
         rl.draw_line_ex(
-            rl.Vector2(center.x - 7, center.y + 5),
-            rl.Vector2(center.x + 7, center.y + 5),
-            2.2,
+            rl.Vector2(center.x - 7 * scale, center.y + 5 * scale),
+            rl.Vector2(center.x + 7 * scale, center.y + 5 * scale),
+            2.2 * scale,
             rl_color(outline, 210),
         )
         rl.draw_line_ex(
-            rl.Vector2(center.x, center.y + 5),
-            rl.Vector2(center.x, center.y + 12),
-            2.2,
+            rl.Vector2(center.x, center.y + 5 * scale),
+            rl.Vector2(center.x, center.y + 12 * scale),
+            2.2 * scale,
             rl_color(outline, 210),
         )
 
@@ -2234,7 +2238,7 @@ class ClusterUiRenderer:
         tail_front = 12
         tail_half_height = 16
         head_tip_x = 60
-        head_half_height = 38
+        head_half_height = TURN_SIGNAL_HEAD_HALF_HEIGHT
 
         def point(local_x: float, local_y: float) -> rl.Vector2:
             return rl.Vector2(cx + direction * local_x, cy + local_y)

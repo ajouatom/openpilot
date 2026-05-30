@@ -215,8 +215,10 @@ km/h values used by the current navigation integrations or the m/s values used
 by upstream `navd`; km/h-looking values such as 50/100 stay unchanged.
 The top HUD also uses `carState.gearShifter`, `gearStep`, `pcmCruiseGap`,
 `selfdriveState.personality`, and `carControl.latActive` to show gear
-(`P/R/N/D/1-8`), front gap bars, cruise set speed, a disabled gray
-auto-lane-change icon, and the LFA active icon. The gap vehicle uses
+(`P/R/N/D/1-8`) in a transparent rounded-square outline, front gap bars, cruise
+set speed, a disabled gray auto-lane-change icon, and the LFA active icon. This
+top drive-status row scales from the turn-signal head height so the gear outline
+reaches the direction-signal top line. The gap vehicle uses
 `selfdrive/assets/icons_mici/carrot_cruse_gap_trimmed.png` at its source aspect
 ratio; all four gap bars stay visible, sit close together, and bottom-align to
 the vehicle while inactive bars are gray and active bars use `#bb3d91`.
