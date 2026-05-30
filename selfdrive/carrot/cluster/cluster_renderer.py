@@ -59,7 +59,6 @@ KAIGEN_GOTHIC_KR_BOLD_FONT_PATH = OPENPILOT_FONT_DIR / "KaiGenGothicKR-Bold.ttf"
 JETBRAINS_MONO_FONT_PATH = OPENPILOT_FONT_DIR / "JetBrainsMono-Medium.ttf"
 VEHICLE_MODEL_PATH = CLUSTER_DIR / "assets" / "models" / "cybertruck" / "cybertruck_cluster.obj"
 FOLLOW_VEHICLE_ICON_PATH = SELFDRIVE_DIR / "assets" / "icons_mici" / "carrot_cruse_gap_trimmed.png"
-AUTO_LANE_CHANGE_ICON_PATH = SELFDRIVE_DIR / "assets" / "icons_mici" / "carrot_wheel_lane.png"
 LFA_ICON_PATH = SELFDRIVE_DIR / "assets" / "icons_mici" / "carrot_wheel_org.png"
 ACCEL_TEXT_WIDTH_SAMPLES = ("+00.00", "-00.00")
 TURN_SIGNAL_LEFT_CENTER_X = 610
@@ -92,11 +91,7 @@ FOLLOW_GAP_ICON_W = FOLLOW_GAP_ICON_H * FOLLOW_GAP_ICON_ASPECT
 TOP_CRUISE_CENTER_X = FOLLOW_STATUS_CENTER_X + 202
 TOP_CRUISE_FONT_SIZE = 27.0 * DRIVE_STATUS_SCALE
 TOP_CRUISE_UNIT_FONT_SIZE = TOP_CRUISE_FONT_SIZE
-AUTO_LANE_CHANGE_CENTER_X = TOP_CRUISE_CENTER_X + 142
-AUTO_LANE_CHANGE_ICON_ASPECT = 2.0
-AUTO_LANE_CHANGE_ICON_H = 22.0 * DRIVE_STATUS_SCALE
-AUTO_LANE_CHANGE_ICON_W = AUTO_LANE_CHANGE_ICON_H * AUTO_LANE_CHANGE_ICON_ASPECT
-LFA_STATUS_CENTER_X = AUTO_LANE_CHANGE_CENTER_X
+LFA_STATUS_CENTER_X = TOP_CRUISE_CENTER_X + 142
 LFA_STATUS_ICON_SIZE = 28.0 * DRIVE_STATUS_SCALE
 TOP_ICON_SIZE = 34.0 * DRIVE_STATUS_SCALE
 DRIVE_STATUS_BOX_RADIUS = 8.0 * DRIVE_STATUS_SCALE
@@ -343,7 +338,6 @@ class ClusterUiRenderer:
         self._vehicle_model = None
         self._vehicle_model_load_attempted = False
         self._follow_vehicle_texture = None
-        self._auto_lane_change_texture = None
         self._lfa_texture = None
         self._lfa_active_texture = None
         self._route_video_texture = None
@@ -452,9 +446,6 @@ class ClusterUiRenderer:
         if self._follow_vehicle_texture is not None:
             rl.unload_texture(self._follow_vehicle_texture)
             self._follow_vehicle_texture = None
-        if self._auto_lane_change_texture is not None:
-            rl.unload_texture(self._auto_lane_change_texture)
-            self._auto_lane_change_texture = None
         if self._lfa_texture is not None:
             rl.unload_texture(self._lfa_texture)
             self._lfa_texture = None
@@ -761,8 +752,6 @@ class ClusterUiRenderer:
         self._follow_vehicle_texture = self._load_icon_texture(FOLLOW_VEHICLE_ICON_PATH, "Follow gap vehicle")
 
     def _load_drive_status_textures(self) -> None:
-        if self._auto_lane_change_texture is None:
-            self._auto_lane_change_texture = self._load_icon_texture(AUTO_LANE_CHANGE_ICON_PATH, "Auto lane change")
         if self._lfa_texture is None:
             self._lfa_texture = self._load_icon_texture(LFA_ICON_PATH, "LFA")
         if self._lfa_active_texture is None:
@@ -2105,7 +2094,6 @@ class ClusterUiRenderer:
 
         self._draw_follow_gap_status(state, bottom_y)
         self._draw_top_cruise_set(state, bottom_y)
-        self._draw_auto_lane_change_icon(AUTO_LANE_CHANGE_CENTER_X, bottom_y, theme.muted)
         self._draw_lfa_status_icon(state, bottom_y)
 
     def _drive_status_bottom_y(self, state: ClusterUiState) -> float:
@@ -2117,7 +2105,6 @@ class ClusterUiRenderer:
         row_h = max(
             GEAR_STATUS_BOX_SIZE,
             FOLLOW_GAP_ICON_H,
-            AUTO_LANE_CHANGE_ICON_H,
             LFA_STATUS_ICON_SIZE,
             speed_h,
             unit_h,
@@ -2226,43 +2213,6 @@ class ClusterUiRenderer:
         text_center_y = bottom_y - max(speed_h, unit_h) * 0.5
         self._draw_text(speed_text, start_x, text_center_y, TOP_CRUISE_FONT_SIZE, speed_color)
         self._draw_text("km/h", start_x + speed_w + unit_gap, text_center_y, TOP_CRUISE_UNIT_FONT_SIZE, unit_color)
-
-    def _draw_auto_lane_change_icon(
-        self,
-        center_x: float,
-        bottom_y: float,
-        color: tuple[int, int, int],
-    ) -> None:
-        if self._draw_bottom_aligned_texture_icon(
-            self._auto_lane_change_texture,
-            center_x,
-            bottom_y,
-            AUTO_LANE_CHANGE_ICON_W,
-            AUTO_LANE_CHANGE_ICON_H,
-            color,
-            190,
-        ):
-            return
-
-        draw_color = rl_color(color, 170)
-        scale = TOP_ICON_SIZE / 34.0
-        center_y = bottom_y - AUTO_LANE_CHANGE_ICON_H * 0.5
-        x = center_x
-        y = center_y
-
-        def p(dx: float, dy: float) -> rl.Vector2:
-            return rl.Vector2(x + dx * scale, y + dy * scale)
-
-        rl.draw_line_ex(p(-15, 14), p(-8, -12), 2.2 * scale, draw_color)
-        rl.draw_line_ex(p(16, 14), p(7, -12), 2.2 * scale, draw_color)
-        rl.draw_line_ex(p(-13, 7), p(-3, -5), 2.8 * scale, draw_color)
-        rl.draw_line_ex(p(-3, -5), p(9, -2), 2.8 * scale, draw_color)
-        rl.draw_triangle(
-            p(11, -1),
-            p(4, -6),
-            p(5, 2),
-            draw_color,
-        )
 
     def _draw_lfa_status_icon(self, state: ClusterUiState, bottom_y: float) -> None:
         theme = self._current_theme()

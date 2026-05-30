@@ -64,6 +64,7 @@ ROUTE_VIDEO_FPS = 20.0
 ROUTE_VIDEO_DECODE_WIDTH = 388
 ROUTE_VIDEO_DECODE_HEIGHT = 244
 ROUTE_VIDEO_SEEK_RESTART_FRAMES = 45
+NAV_SPEED_LIMIT_HOLD_SECONDS = 10.0
 ROAD_EDGE_VEHICLE_OUTSIDE_MARGIN_M = 0.25
 LANE_CHANGE_REINDEX_PEAK_THRESHOLD = 0.22
 LANE_CHANGE_REINDEX_RESET_THRESHOLD = -0.08
@@ -844,6 +845,7 @@ class RouteLogParser:
         self.speed_limit_kph: int | None = None
         self.speed_limit_source: str | None = None
         self.nav_speed_limit_kph: int | None = None
+        self.nav_speed_limit_t = -999.0
         self.cruise_kph: int | None = None
         self.cruise_gap: int | None = None
         self.lfa_active: bool | None = None
@@ -976,7 +978,7 @@ class RouteLogParser:
             elif event_type == "lateralPlan":
                 self._update_lateral_plan(event.lateralPlan)
             elif event_type in ("navInstructionCarrot", "navInstruction"):
-                self._update_nav_instruction(getattr(event, event_type))
+                self._update_nav_instruction(getattr(event, event_type), event_t)
             elif event_type == "longitudinalPlan":
                 self._update_longitudinal_plan(event.longitudinalPlan)
             elif event_type == "controlsState":
@@ -1022,6 +1024,7 @@ class RouteLogParser:
         cruise_gap = car_cruise_gap if car_cruise_gap is not None else self.cruise_gap
 
         car_speed_limit_kph = self._speed_limit_kph_from_car_state(car_state)
+        self._expire_nav_speed_limit(event_t)
         if car_speed_limit_kph is not None:
             self.speed_limit_kph = car_speed_limit_kph
             self.speed_limit_source = "v"
@@ -1284,8 +1287,21 @@ class RouteLogParser:
             maximum=0.08,
         )
 
-    def _update_nav_instruction(self, nav_instruction: Any) -> None:
-        self.nav_speed_limit_kph = self._speed_limit_kph_from_nav_instruction(nav_instruction)
+    def _update_nav_instruction(self, nav_instruction: Any, event_t: float) -> None:
+        nav_speed_limit_kph = self._speed_limit_kph_from_nav_instruction(nav_instruction)
+        if nav_speed_limit_kph is None:
+            self._expire_nav_speed_limit(event_t)
+            return
+        self.nav_speed_limit_kph = nav_speed_limit_kph
+        self.nav_speed_limit_t = event_t
+
+    def _expire_nav_speed_limit(self, event_t: float) -> None:
+        if (
+            self.nav_speed_limit_kph is not None
+            and event_t - self.nav_speed_limit_t > NAV_SPEED_LIMIT_HOLD_SECONDS
+        ):
+            self.nav_speed_limit_kph = None
+            self.nav_speed_limit_t = -999.0
 
     def _update_longitudinal_plan(self, longitudinal_plan: Any) -> None:
         self.longitudinal_plan_source = enum_text(

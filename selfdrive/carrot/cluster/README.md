@@ -212,24 +212,26 @@ CAN-FD radar points when CAN subscription is enabled.
 Cluster road speed-limit display treats `carState.speedLimit` from the
 vehicle/HDA path as km/h. Navigation speed limits are accepted in either the
 km/h values used by the current navigation integrations or the m/s values used
-by upstream `navd`; km/h-looking values such as 50/100 stay unchanged.
+by upstream `navd`; km/h-looking values such as 50/100 stay unchanged. Empty
+navigation speed-limit samples do not immediately clear the last valid
+navigation limit; the cluster holds it briefly to avoid `n` source flicker
+between `--` and the real limit during nav update timing gaps.
 Turn-signal arrows are hidden while off and only draw during their blink-on
 phase. The top HUD also uses `carState.gearShifter`, `gearStep`, `pcmCruiseGap`,
 `selfdriveState.personality`, and `carControl.latActive` to show gear
 (`P/R/N/D/1-8`) in a smaller transparent rounded-square outline, front gap bars,
-cruise set speed, a disabled gray lane icon, and the LFA active icon. This top
+cruise set speed, and the LFA active icon. This top
 drive-status row uses the same top margin as the road speed-limit sign while
-bottom-aligning gear, gap, cruise set, lane, and LFA elements to the measured
+bottom-aligning gear, gap, cruise set, and LFA elements to the measured
 bottom of the cruise-set text. The gap vehicle uses
 `selfdrive/assets/icons_mici/carrot_cruse_gap_trimmed.png` at its source aspect
 ratio and is taller than before while the gap bars keep their own size/spacing;
 all four gap bars stay visible, sit close together, and bottom-align to the
 vehicle while inactive bars are gray and active bars use `#bb3d91`. Cruise set
-speed and `km/h` use the same font size and color. The lane and LFA icons use
-`selfdrive/assets/icons_mici/carrot_wheel_lane.png` and
-`selfdrive/assets/icons_mici/carrot_wheel_org.png`, share one center to save
-space, rotate the LFA icon by `-carState.steeringAngleDeg`, and recolor the LFA
-icon's white pixels green when LFA is active.
+speed and `km/h` use the same font size and color. The lane-change icon is not
+drawn; the LFA icon uses `selfdrive/assets/icons_mici/carrot_wheel_org.png`,
+rotates by `-carState.steeringAngleDeg`, and recolors its white pixels green
+when LFA is active.
 When `--fps` is omitted for live input, `ClusterHudLiveFps` controls the render
 limit and is polled about once per second while running: `0` uncapped,
 `1` 10 Hz, `2` 20 Hz, `3` 30 Hz, `4` 40 Hz, `5` 50 Hz, and `6` 60 Hz.

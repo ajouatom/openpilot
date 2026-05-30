@@ -144,7 +144,7 @@ class OpenpilotLiveSource:
         elif service == "lateralPlan":
             self.parser._update_lateral_plan(data)
         elif service in ("navInstruction", "navInstructionCarrot"):
-            self.parser._update_nav_instruction(data)
+            self.parser._update_nav_instruction(data, event_t)
         elif service == "longitudinalPlan":
             self.parser._update_longitudinal_plan(data)
         elif service == "controlsState":
