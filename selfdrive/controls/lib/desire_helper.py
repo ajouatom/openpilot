@@ -12,6 +12,7 @@ from openpilot.selfdrive.controls.lib.desire_lib.constants import (
 )
 from openpilot.selfdrive.controls.lib.desire_lib.side_state import SideState
 from openpilot.selfdrive.controls.lib.desire_lib.maneuver_classifier import classify_maneuver_type
+
 class DesireHelper:
   def __init__(self):
     self.params = Params()
@@ -21,7 +22,7 @@ class DesireHelper:
     self.lane_change_direction = LaneChangeDirection.none
     self.lane_change_timer = 0.0
     self.lane_change_ll_prob = 1.0
-    self.lane_change_delay = 0.0
+    self.lane_change_delay_timer = 0.0
     self.maneuver_type = "none"
 
     self.desire = log.Desire.none
@@ -43,17 +44,15 @@ class DesireHelper:
     self.atc_active = 0
 
     self.auto_lane_change_enable = False
-    self.next_lane_change = False
-    self.lane_change_continuous = False
-    self.unsafe_cancel_timer= 0.0
+    self.unsafe_cancel_timer = 0.0
 
     self.keep_pulse_timer = 0.0
 
-    self.laneChangeNeedTorque = 0
-    self.laneChangeBsd = 0
-    self.laneLineCheck = 0
-    self.laneChangeDelay = 0.0
-    self.modelTurnSpeedFactor = 0.0
+    self.lane_change_need_torque = 0
+    self.lane_change_bsd = 0
+    self.lane_line_check = 0
+    self.lane_change_delay = 0.0
+    self.model_turn_speed_factor = 0.0
     self.model_turn_speed = 200.0
     self.side_gap_margin  = 3.0
     self.bsd_clear_sec    = 0.0
@@ -62,7 +61,7 @@ class DesireHelper:
     self.ignore_bsd = False
 
     self.prev_desire_enabled = False
-    self.desireLog = ""
+    self.desire_log = ""
 
     self.lane_change_available_left = False
     self.lane_change_available_right = False
@@ -70,21 +69,20 @@ class DesireHelper:
   # ─────────────────────────────────────────────
   def _update_params_periodic(self):
     if self.frame % 100 == 0:
-      self.laneChangeNeedTorque = self.params.get_int("LaneChangeNeedTorque")
-      self.laneChangeBsd        = self.params.get_int("LaneChangeBsd")
-      self.ignore_bsd           = (self.laneChangeBsd < 0)
-      self.laneLineCheck        = self.params.get_int("LaneLineCheck")
-      self.laneChangeDelay      = self.params.get_int("LaneChangeDelay") * 0.1
-      self.modelTurnSpeedFactor = self.params.get_int("ModelTurnSpeedFactor") * 0.1
+      self.lane_change_need_torque = self.params.get_int("LaneChangeNeedTorque")
+      self.lane_change_bsd        = self.params.get_int("LaneChangeBsd")
+      self.ignore_bsd           = (self.lane_change_bsd < 0)
+      self.lane_line_check        = self.params.get_int("LaneLineCheck")
+      self.lane_change_delay      = self.params.get_int("LaneChangeDelay") * 0.1
+      self.model_turn_speed_factor = self.params.get_int("ModelTurnSpeedFactor") * 0.1
       self.side_gap_margin      = self.params.get_int("SideGapMargin") * 0.1
       self.bsd_clear_sec        = self.params.get_int("BsdClearSec") * 0.1
       self.object_clear_sec     = self.params.get_int("ObjectClearSec") * 0.1
       self.bsd_hold_sec         = self.params.get_int("BsdHoldSec") * 0.1
-      self.lane_change_continuous = self.params.get_int("LaneChangeContinuous") > 0
 
   def _make_model_turn_speed(self, modeldata):
-    if self.modelTurnSpeedFactor > 0:
-      model_turn_speed = np.interp(self.modelTurnSpeedFactor,
+    if self.model_turn_speed_factor > 0:
+      model_turn_speed = np.interp(self.model_turn_speed_factor,
                                    modeldata.velocity.t,
                                    modeldata.velocity.x) * CV.MS_TO_KPH * 1.2
       self.model_turn_speed = self.model_turn_speed * 0.9 + model_turn_speed * 0.1
@@ -107,7 +105,7 @@ class DesireHelper:
     changed = st != self.driver_blinker_state
     self.driver_blinker_state = st
     enabled = st in (BLINKER_LEFT, BLINKER_RIGHT)
-    if self.laneChangeNeedTorque < 0:
+    if self.lane_change_need_torque < 0:
       enabled = False
     return st, changed, enabled
 
@@ -190,15 +188,15 @@ class DesireHelper:
     )
 
     # compute available (include BSD+object)
-    if self.laneLineCheck >= 1:
+    if self.lane_line_check >= 1:
       left_line_ok = self.left.lane_line_info_mod in (0, 5)
       right_line_ok = self.right.lane_line_info_mod in (0, 5)
     else:
       left_line_ok = self.left.lane_line_info_raw < 20
       right_line_ok = self.right.lane_line_info_raw < 20
-    
-    self.left.compute_lane_change_available(lane_line_info_lt_20=left_line_ok,  bsd_level=self.laneChangeBsd, bsd_clear_sec=self.bsd_clear_sec)
-    self.right.compute_lane_change_available(lane_line_info_lt_20=right_line_ok, bsd_level=self.laneChangeBsd, bsd_clear_sec=self.bsd_clear_sec)
+
+    self.left.compute_lane_change_available(lane_line_info_lt_20=left_line_ok,  bsd_level=self.lane_change_bsd, bsd_clear_sec=self.bsd_clear_sec)
+    self.right.compute_lane_change_available(lane_line_info_lt_20=right_line_ok, bsd_level=self.lane_change_bsd, bsd_clear_sec=self.bsd_clear_sec)
 
     self.left.update_triggers()
     self.right.update_triggers()
@@ -216,7 +214,7 @@ class DesireHelper:
     self._make_model_turn_speed(modeldata)
 
     self.carrot_lane_change_count = max(0, self.carrot_lane_change_count - 1)
-    self.lane_change_delay        = max(0.0, self.lane_change_delay - DT_MDL)
+    self.lane_change_delay_timer        = max(0.0, self.lane_change_delay_timer - DT_MDL)
     self.unsafe_cancel_timer      = max(0.0, self.unsafe_cancel_timer - DT_MDL)
 
     v_ego = carstate.vEgo
@@ -244,26 +242,26 @@ class DesireHelper:
     avail_now  = side.lane_change_available      if side is not None else False
     avail_last = side.lane_change_available_last if side is not None else False
 
-    clear_ready = (
-      side is not None and
-      side.bsd_clear_count >= max(1, int(self.bsd_clear_sec / DT_MDL)) and
-      side.object_clear_count >= max(1, int(self.object_clear_sec / DT_MDL))
-    )
-
     # ── avail_just_cleared: off 상태에서 깜빡이 켜진 채 available이 된 순간 ──
-    # (not avail_last) 조건 제거 → available이면 계속 재진입 허용
     avail_just_cleared = (
-        desire_enabled and
-        side is not None and
-        avail_now and
-        self.prev_desire_enabled and        # 깜빡이를 새로 켠 게 아니라 유지 중
-        self.lane_change_state == LaneChangeState.off and  # off 상태일 때만
-        self.unsafe_cancel_timer <= 0.0 and
-        (not self.next_lane_change)
+      desire_enabled and
+      side is not None and
+      avail_now and
+      not avail_last and
+      self.prev_desire_enabled and
+      self.lane_change_state == LaneChangeState.off and
+      self.unsafe_cancel_timer <= 0.0
     )
 
-    # 차량이 사라진 직후 즉시 재진입하지 않고,
-    # BSD/object clear 안정화와 unsafe cancel cooldown 이후에만 재진입 허용
+    avail_retry = (
+      desire_enabled and
+      side is not None and
+      avail_now and
+      avail_last and
+      self.prev_desire_enabled and
+      self.lane_change_state == LaneChangeState.off and
+      self.unsafe_cancel_timer <= 0.0
+    )
 
     # ── auto lane change trigger ──────────────────────────────────
     auto_lane_change_trigger = False
@@ -271,13 +269,6 @@ class DesireHelper:
     if desire_enabled and side is not None:
       if self.carrot_lane_change_count > 0:
         auto_lane_change_trigger = side.lane_change_available
-
-      elif self.next_lane_change:
-        auto_lane_change_trigger = (
-          self.auto_lane_change_enable and
-          side.lane_change_available
-        )
-
       else:
         auto_lane_change_trigger = (
           self.auto_lane_change_enable and
@@ -287,11 +278,9 @@ class DesireHelper:
           side.lane_change_available
         )
 
-      self.desireLog = f"{side.name}:ALC={self.auto_lane_change_enable}, "
+      self.desire_log = f"{side.name}:ALC={self.auto_lane_change_enable}, "
     else:
       self.auto_lane_change_enable = False
-      if not desire_enabled:
-        self.next_lane_change = False
 
     # ───────────────────────── FSM ─────────────────────────
     if not lateral_active or self.lane_change_timer > LANE_CHANGE_TIME_MAX:
@@ -341,26 +330,19 @@ class DesireHelper:
         if self.lane_change_state == LaneChangeState.off:
           reentry = (
             not self.prev_desire_enabled or   # A) 깜빡이 새로 켠 순간
-            self.next_lane_change or           # B) 연속 차선변경
-            avail_just_cleared                 # C) 대기 중 차량 사라짐
+            avail_just_cleared or              # C-1) 차량 사라진 순간
+            avail_retry                        # C-2) 취소 후 쿨다운 종료
           )
-
 
           if desire_enabled and reentry and not below_lane_change_speed and side is not None:
             self.lane_change_state   = LaneChangeState.preLaneChange
             self.lane_change_ll_prob = 1.0
-
-            if not self.next_lane_change:
-              self.lane_change_delay = self.laneChangeDelay
+            self.lane_change_delay_timer   = self.lane_change_delay
 
             lane_exist_counter_side    = side.lane_exist_count.counter
             lane_change_available_geom = side.lane_change_available_geom
 
-            if self.next_lane_change:
-              self.auto_lane_change_enable = True
-            elif avail_just_cleared:
-              # 차량이 방금 사라진 케이스:
-              # available이 이미 True이므로 ALC 즉시 활성화
+            if avail_just_cleared:
               self.auto_lane_change_enable = True
             else:
               self.auto_lane_change_enable = False if (lane_exist_counter_side > 0 or lane_change_available_geom) else True
@@ -378,17 +360,17 @@ class DesireHelper:
             torque_applied = carstate.steeringPressed and torque_cond
 
             # laneChangeBsd >= 1 일 때만 BSD를 hard block 으로 사용
-            bsd_active = (self.laneChangeBsd >= 1) and (side.bsd_hold_counter > 0)
+            bsd_active = (self.lane_change_bsd >= 1) and (side.bsd_hold_counter > 0)
             object_active = side.side_object_detected
 
-            solid_line_blocked = (self.laneLineCheck >= 2) and \
+            solid_line_blocked = (self.lane_line_check >= 2) and \
                 (not side.lane_change_available_geom) and \
                 (side.lane_available or side.edge_available)
 
             geom_blocked = (not side.lane_change_available_geom) and (not solid_line_blocked)
             unsafe_prechange = bsd_active or object_active or geom_blocked
 
-            start_gate = self.lane_change_delay == 0 and \
+            start_gate = self.lane_change_delay_timer == 0 and \
                 (side.lane_change_available_geom or side.lane_line_info_edge_detect or solid_line_blocked)
 
             if side.lane_change_available and not self.auto_lane_change_enable:
@@ -398,15 +380,12 @@ class DesireHelper:
               self.lane_change_state     = LaneChangeState.off
               self.lane_change_direction = LaneChangeDirection.none
               self.auto_lane_change_enable = False
-              self.next_lane_change        = False
 
             elif unsafe_prechange:
-              # 대기 중 위험 요소가 생기면 강하게 취소
               self.lane_change_state       = LaneChangeState.off
               self.lane_change_direction   = LaneChangeDirection.none
               self.auto_lane_change_enable = False
-              self.next_lane_change        = False
-              self.lane_change_delay       = max(self.laneChangeDelay, 1.5)
+              self.lane_change_delay_timer       = max(self.lane_change_delay, 1.5)
               self.unsafe_cancel_timer     = max(self.unsafe_cancel_timer, 1.5)
 
             elif not start_gate:
@@ -416,17 +395,17 @@ class DesireHelper:
               if torque_applied:
                 self.lane_change_state = LaneChangeState.laneChangeStarting
 
-            elif self.laneChangeNeedTorque > 0:
+            elif self.lane_change_need_torque > 0:
               if torque_applied and side.lane_change_available:
                 self.lane_change_state = LaneChangeState.laneChangeStarting
-              elif self.laneChangeBsd == 0 and torque_applied and side.lane_change_available_no_bsd:
+              elif self.lane_change_bsd == 0 and torque_applied and side.lane_change_available_no_bsd:
                 # 경고 모드(0)에서만 토크로 BSD override 허용
                 self.lane_change_state = LaneChangeState.laneChangeStarting
 
-            elif driver_enabled or self.next_lane_change:
+            elif driver_enabled:
               if side.lane_change_available:
                 self.lane_change_state = LaneChangeState.laneChangeStarting
-              elif self.laneChangeBsd == 0 and side.lane_change_available_no_bsd and torque_applied:
+              elif self.lane_change_bsd == 0 and side.lane_change_available_no_bsd and torque_applied:
                 # laneChangeBsd >= 1 에서는 여기로 시작하면 안 됨
                 self.lane_change_state = LaneChangeState.laneChangeStarting
 
@@ -438,7 +417,7 @@ class DesireHelper:
 
         # ── laneChangeStarting 상태 ──────────────────────────────
         elif self.lane_change_state == LaneChangeState.laneChangeStarting:
-          bsd_active   = (side is not None) and (self.laneChangeBsd >= 1) and (side.bsd_hold_counter > 0)
+          bsd_active   = (side is not None) and (self.lane_change_bsd >= 1) and (side.bsd_hold_counter > 0)
           object_active = (side is not None) and side.side_object_detected
           geom_lost    = (side is None) or (not side.lane_change_available_geom)
 
@@ -449,8 +428,7 @@ class DesireHelper:
             self.lane_change_direction   = LaneChangeDirection.none
             self.lane_change_state       = LaneChangeState.off
             self.auto_lane_change_enable = False
-            self.next_lane_change        = False
-            self.lane_change_delay       = max(self.laneChangeDelay, 2.0)
+            self.lane_change_delay_timer       = max(self.lane_change_delay, 2.0)
             self.unsafe_cancel_timer     = max(
               self.unsafe_cancel_timer,
               max(self.bsd_clear_sec, self.object_clear_sec, 1.5)
@@ -463,7 +441,6 @@ class DesireHelper:
               # geometry flicker 정도만 finishing으로 넘김
               self.lane_change_direction = LaneChangeDirection.none
               self.lane_change_state     = LaneChangeState.laneChangeFinishing
-              self.next_lane_change      = False
             else:
               self.lane_change_ll_prob = max(self.lane_change_ll_prob - 2 * DT_MDL, 0.0)
               if lane_change_prob < 0.02 and self.lane_change_ll_prob < 0.01:
@@ -474,28 +451,8 @@ class DesireHelper:
           self.lane_change_ll_prob = min(self.lane_change_ll_prob + DT_MDL, 1.0)
           if self.lane_change_ll_prob > 0.99:
             self.lane_change_direction = LaneChangeDirection.none
-
-            clear_ready = (
-              side is not None and
-              side.bsd_clear_count >= max(1, int(self.bsd_clear_sec / DT_MDL)) and
-              side.object_clear_count >= max(1, int(self.object_clear_sec / DT_MDL))
-            )
-
-            continuous_ok = (
-              desire_enabled and
-              self.lane_change_continuous and
-              clear_ready and
-              self.unsafe_cancel_timer <= 0.0
-            )
-
-            if continuous_ok:
-              self.lane_change_delay = max(self.laneChangeDelay, 2.5)
-              self.next_lane_change  = True
-            else:
-              self.next_lane_change = False
-
             self.lane_change_state = LaneChangeState.off
-
+            self.unsafe_cancel_timer = max(self.unsafe_cancel_timer, 0.5)
 
     # ── 타이머 ───────────────────────────────────────────────────
     if self.lane_change_state in (LaneChangeState.off, LaneChangeState.preLaneChange):

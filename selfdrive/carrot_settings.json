@@ -2260,22 +2260,6 @@
     },
     {
       "group": "차선변경",
-      "name": "LaneChangeContinuous",
-      "title": "연속차선변경(0)",
-      "descr": "차선변경 완료 후 자동으로 다음 차선변경 재시도\n0:사용안함 1:사용",
-      "egroup": "LANE_CHANGE",
-      "etitle": "Continuous Lane Change(0)",
-      "edescr": "After lane change, automatically retry next lane change. 0: Disable, 1: Enable",
-      "min": 0,
-      "max": 1,
-      "default": 0,
-      "unit": 1,
-      "cgroup": "转向设置",
-      "ctitle": "连续变道(0)",
-      "cdescr": "变道完成后自动重试下一次变道。0: 禁用, 1: 启用"
-    },
-    {
-      "group": "차선변경",
       "name": "BsdHoldSec",
       "title": "BSD감지유지시간(25)x0.1s",
       "descr": "BSD 감지 해제 후 차선변경 차단 유지 시간\n25=2.5초",
