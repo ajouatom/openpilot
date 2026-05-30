@@ -84,10 +84,10 @@ class SideState:
 
   # ── 상수 (인스턴스마다 바뀌지 않음) ───────────────────────────
   _MISS_RESET_FRAMES: int   = field(default=5,    init=False, repr=False, compare=False)
-  _APPR_RAW_LIMIT:   float  = field(default=25.0, init=False, repr=False, compare=False)
+  _APPR_RAW_LIMIT:   float  = field(default=15.0, init=False, repr=False, compare=False)
   _APPR_EMA_ALPHA:   float  = field(default=0.6,  init=False, repr=False, compare=False)
   _APPR_MIN_REF:     float  = field(default=0.10, init=False, repr=False, compare=False)
-  _APPR_MAX_REF:     float  = field(default=8.0, init=False, repr=False, compare=False)
+  _APPR_MAX_REF:     float  = field(default=2.50, init=False, repr=False, compare=False)
 
 
   # ════════════════════════════════════════════════════════════════
@@ -360,8 +360,8 @@ class SideState:
     appr_norm = float(np.clip(self.front_approach, 0.0, self._APPR_MAX_REF))
 
     # ── 거리 임계 보간
-    dist_th_min = float(np.interp(gap, [1.0, 6.0], [6.0,  12.0]))
-    dist_th_max = float(np.interp(gap, [1.0, 6.0], [15.0, 30.0]))
+    dist_th_min = float(np.interp(gap, [1.0, 6.0], [4.0,  8.0]))
+    dist_th_max = float(np.interp(gap, [1.0, 6.0], [10.0, 22.0]))
     dist_th     = float(np.interp(appr_norm,
                                   [self._APPR_MIN_REF, self._APPR_MAX_REF],
                                   [dist_th_min, dist_th_max]))
@@ -373,7 +373,7 @@ class SideState:
     if self.front_approach > self._APPR_MIN_REF:
       T_predict   = float(np.interp(gap, [1.0, 6.0], [2.0, 4.0]))
       d_future    = d_cur - self.front_approach * T_predict
-      future_block = d_future < dist_th  # 미래에 동적 임계 이내로 들어오면 차단
+      future_block = d_future < dist_th_min  # 미래에 최소 임계 이내로 들어오면 차단
 
     # ── TTC 임계 보간
     ttc_th_min = float(np.interp(gap, [1.0, 6.0], [1.5, 3.5]))
@@ -427,8 +427,8 @@ class SideState:
     appr_norm = float(np.clip(self.rear_approach, 0.0, self._APPR_MAX_REF))
 
     # ── 거리 임계 보간
-    dist_th_min = float(np.interp(gap, [1.0, 6.0], [9.0,  17.0]))
-    dist_th_max = float(np.interp(gap, [1.0, 6.0], [22.0, 48.0]))
+    dist_th_min = float(np.interp(gap, [1.0, 6.0], [8.0,  15.0]))
+    dist_th_max = float(np.interp(gap, [1.0, 6.0], [20.0, 45.0]))
     dist_th     = float(np.interp(appr_norm,
                                   [self._APPR_MIN_REF, self._APPR_MAX_REF],
                                   [dist_th_min, dist_th_max]))
@@ -438,7 +438,7 @@ class SideState:
     if self.rear_approach > self._APPR_MIN_REF:
       T_predict    = float(np.interp(gap, [1.0, 6.0], [3.0, 6.0]))
       d_future     = d_cur - self.rear_approach * T_predict
-      future_block = d_future < dist_th  # 미래에 동적 임계 이내로 들어오면 차단
+      future_block = d_future < dist_th_min  # 미래에 최소 임계 이내로 들어오면 차단
 
     # ── TTC 임계 보간
     ttc_th_min = float(np.interp(gap, [1.0, 6.0], [3.0, 6.0]))
