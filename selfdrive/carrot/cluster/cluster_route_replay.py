@@ -70,6 +70,12 @@ LANE_CHANGE_REINDEX_RESET_THRESHOLD = -0.08
 CONTINUOUS_LANE_CHANGE_REBASE_PROGRESS = 0.12
 LANE_CHANGE_MODEL_DIRECT_ONLY = True
 MODEL_DIRECT_LANE_SETTLE_MIN_PROGRESS = 0.65
+LONGITUDINAL_PERSONALITY_GAPS = {
+    "aggressive": 1,
+    "standard": 2,
+    "relaxed": 3,
+    "morerelaxed": 4,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -838,6 +844,7 @@ class RouteLogParser:
         self.speed_limit_source: str | None = None
         self.nav_speed_limit_kph: int | None = None
         self.cruise_kph: int | None = None
+        self.cruise_gap: int | None = None
         self.controls_enabled: bool | None = None
         self.lane_width_m = DEFAULT_LANE_WIDTH_M
         self.left_lane_y_m: float | None = None
@@ -972,6 +979,8 @@ class RouteLogParser:
                 self._update_longitudinal_plan(event.longitudinalPlan)
             elif event_type == "controlsState":
                 self._update_controls_state(event.controlsState)
+            elif event_type == "selfdriveState":
+                self._update_selfdrive_state(event.selfdriveState)
             elif event_type == "cameraOdometry":
                 self._update_camera_odometry(event.cameraOdometry, bool(safe_get(event, "valid", True)))
             elif event_type == "radarState":
@@ -1003,7 +1012,10 @@ class RouteLogParser:
         self.cruise_kph = self._cruise_kph_from_car_state(car_state)
         cruise_display_state = self._cruise_display_state_from_car_state(car_state, self.cruise_kph)
         gear_text = self._gear_text_from_car_state(car_state)
-        cruise_gap = self._cruise_gap_from_car_state(car_state)
+        car_cruise_gap = self._cruise_gap_from_car_state(car_state)
+        if car_cruise_gap is not None:
+            self.cruise_gap = car_cruise_gap
+        cruise_gap = car_cruise_gap if car_cruise_gap is not None else self.cruise_gap
 
         car_speed_limit_kph = self._speed_limit_kph_from_car_state(car_state)
         if car_speed_limit_kph is not None:
@@ -1349,6 +1361,11 @@ class RouteLogParser:
             self.controls_curvature_m_inv = curvature
             self.controls_curvature_source = "controlsState"
 
+    def _update_selfdrive_state(self, selfdrive_state: Any) -> None:
+        cruise_gap = self._cruise_gap_from_personality(safe_get(selfdrive_state, "personality"))
+        if cruise_gap is not None:
+            self.cruise_gap = cruise_gap
+
     def _update_radar_state(self, radar_state: Any, event_t: float) -> None:
         detections: list[DetectedVehicle] = []
         for label, lead_name in (("TARGET", "leadOne"), ("TARGET2", "leadTwo")):
@@ -1690,6 +1707,18 @@ class RouteLogParser:
         if cruise_gap is None or not 1 <= cruise_gap <= 4:
             return None
         return cruise_gap
+
+    def _cruise_gap_from_personality(self, personality: Any) -> int | None:
+        for value in (safe_get(personality, "raw"), personality):
+            try:
+                personality_index = int(value)
+            except (TypeError, ValueError):
+                continue
+            if 0 <= personality_index <= 3:
+                return personality_index + 1
+
+        personality_name = str(personality).split(".")[-1].strip().replace("_", "").replace(" ", "").lower()
+        return LONGITUDINAL_PERSONALITY_GAPS.get(personality_name)
 
     def _update_lane_styles_from_car_state(self, car_state: Any) -> None:
         left_code = safe_optional_int(car_state, "leftLaneLine")

@@ -60,10 +60,12 @@ TURN_SIGNAL_CENTER_Y = 72
 TURN_SIGNAL_MID_CENTER_X = (TURN_SIGNAL_LEFT_CENTER_X + TURN_SIGNAL_RIGHT_CENTER_X) * 0.5
 GEAR_STATUS_CENTER_X = TURN_SIGNAL_LEFT_CENTER_X + 102
 GEAR_STATUS_CENTER_Y = TURN_SIGNAL_CENTER_Y
-GEAR_STATUS_FONT_SIZE = 44
+GEAR_STATUS_BOX_SIZE = 46
+GEAR_STATUS_FONT_SIZE = 34
 GAP_STATUS_CENTER_X = GEAR_STATUS_CENTER_X + 58
-GAP_STATUS_BOX_SIZE = 44
-GAP_STATUS_FONT_SIZE = 28
+GAP_STATUS_BOX_SIZE = GEAR_STATUS_BOX_SIZE
+GAP_STATUS_FONT_SIZE = 30
+DRIVE_STATUS_BOX_RADIUS = 8.0
 SPEED_VALUE_CENTER_X = 260
 SPEED_VALUE_CENTER_Y = 230
 SPEED_LIMIT_SIGN_CENTER_X = 460
@@ -1919,38 +1921,63 @@ class ClusterUiRenderer:
     def _draw_drive_status(self, state: ClusterUiState) -> None:
         theme = self._current_theme()
         gear_text = (state.gear_text or "").strip().upper()
-        if gear_text:
-            self._draw_text(
-                gear_text[:2],
-                GEAR_STATUS_CENTER_X,
-                GEAR_STATUS_CENTER_Y + 1,
-                GEAR_STATUS_FONT_SIZE,
-                GREEN if gear_text != "U" else theme.muted,
-                anchor="center",
-            )
-
-        if state.cruise_gap is None:
+        if not gear_text and state.cruise_gap is None:
             return
-        gap = int(clamp(float(state.cruise_gap), 1.0, 4.0))
-        box_size = GAP_STATUS_BOX_SIZE
-        box_x = GAP_STATUS_CENTER_X - box_size * 0.5
-        box_y = GEAR_STATUS_CENTER_Y - box_size * 0.5
+
+        gear_display = gear_text[:2] if gear_text else "-"
+        gear_color = GREEN if gear_text and gear_text != "U" else theme.muted
+        self._draw_drive_status_box(
+            gear_display,
+            GEAR_STATUS_CENTER_X,
+            GEAR_STATUS_CENTER_Y,
+            GEAR_STATUS_BOX_SIZE,
+            GEAR_STATUS_FONT_SIZE,
+            gear_color,
+        )
+
+        gap_text = "-"
+        gap_color = theme.muted
+        if state.cruise_gap is not None:
+            gap = int(clamp(float(state.cruise_gap), 1.0, 4.0))
+            gap_text = str(gap)
+            gap_color = theme.clock_text
+        self._draw_drive_status_box(
+            gap_text,
+            GAP_STATUS_CENTER_X,
+            GEAR_STATUS_CENTER_Y,
+            GAP_STATUS_BOX_SIZE,
+            GAP_STATUS_FONT_SIZE,
+            gap_color,
+        )
+
+    def _draw_drive_status_box(
+        self,
+        text: str,
+        center_x: float,
+        center_y: float,
+        box_size: float,
+        font_size: float,
+        text_color: tuple[int, int, int],
+    ) -> None:
+        theme = self._current_theme()
+        box_x = center_x - box_size * 0.5
+        box_y = center_y - box_size * 0.5
         self._rounded_rect(
             box_x,
             box_y,
             box_size,
             box_size,
-            8.0,
+            DRIVE_STATUS_BOX_RADIUS,
             theme.clock_bg,
             GREEN,
             2.0,
         )
         self._draw_text(
-            str(gap),
-            GAP_STATUS_CENTER_X,
-            GEAR_STATUS_CENTER_Y + 1,
-            GAP_STATUS_FONT_SIZE,
-            theme.clock_text,
+            text,
+            center_x,
+            center_y + 1,
+            font_size,
+            text_color,
             anchor="center",
         )
 

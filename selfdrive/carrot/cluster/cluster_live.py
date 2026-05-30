@@ -37,6 +37,7 @@ LIVE_SERVICES_BASE = (
     "longitudinalPlan",
     "lateralPlan",
     "controlsState",
+    "selfdriveState",
     "carControl",
     "deviceState",
     "cameraOdometry",
@@ -148,6 +149,8 @@ class OpenpilotLiveSource:
             self.parser._update_longitudinal_plan(data)
         elif service == "controlsState":
             self.parser._update_controls_state(data)
+        elif service == "selfdriveState":
+            self.parser._update_selfdrive_state(data)
         elif service == "carControl":
             return
         elif service == "cameraOdometry":
