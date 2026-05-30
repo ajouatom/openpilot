@@ -73,7 +73,7 @@ FOLLOW_GAP_BAR_W = 5.4
 FOLLOW_GAP_BAR_H = 7.7
 FOLLOW_GAP_BAR_R = 1.3
 FOLLOW_GAP_BAR_SCALE = 1.75
-FOLLOW_GAP_BAR_STEP_X = 8.6
+FOLLOW_GAP_BAR_STEP_X = 6.3
 FOLLOW_GAP_ICON_W = 44.0
 FOLLOW_GAP_ICON_H = 27.5
 TOP_CRUISE_CENTER_X = FOLLOW_STATUS_CENTER_X + 118
@@ -2007,12 +2007,7 @@ class ClusterUiRenderer:
         )
 
     def _draw_follow_gap_status(self, state: ClusterUiState) -> None:
-        theme = self._current_theme()
         x = FOLLOW_STATUS_CENTER_X - FOLLOW_STATUS_W * 0.5
-        y = GEAR_STATUS_CENTER_Y - FOLLOW_STATUS_H * 0.5
-
-        hda_color = GREEN if self._cruise_set_visible(state) else theme.muted
-        self._draw_text("HDA", x + 16, y + 8, 11, hda_color, anchor="center")
 
         gap_count = 0 if state.cruise_gap is None else int(clamp(float(state.cruise_gap), 1.0, float(FOLLOW_STATUS_GAP_BARS)))
         bar_w = FOLLOW_GAP_BAR_W * FOLLOW_GAP_BAR_SCALE
@@ -2021,8 +2016,9 @@ class ClusterUiRenderer:
         bar_step = FOLLOW_GAP_BAR_STEP_X * FOLLOW_GAP_BAR_SCALE
         bars_total_w = bar_w + bar_step * (FOLLOW_STATUS_GAP_BARS - 1)
         icon_x = x + FOLLOW_STATUS_W - FOLLOW_GAP_ICON_W
+        icon_y = GEAR_STATUS_CENTER_Y - FOLLOW_GAP_ICON_H * 0.5 + 2.0
         bar_x = icon_x - bars_total_w - 3.0
-        bar_y = GEAR_STATUS_CENTER_Y - bar_h * 0.5 + 3.0
+        bar_y = icon_y + FOLLOW_GAP_ICON_H - bar_h
         for index in range(FOLLOW_STATUS_GAP_BARS):
             active = index >= FOLLOW_STATUS_GAP_BARS - gap_count
             self._rounded_rect(
@@ -2036,7 +2032,7 @@ class ClusterUiRenderer:
                 0.0,
             )
 
-        self._draw_follow_vehicle_icon(icon_x, GEAR_STATUS_CENTER_Y - FOLLOW_GAP_ICON_H * 0.5 + 2.0)
+        self._draw_follow_vehicle_icon(icon_x, icon_y)
 
     def _draw_follow_vehicle_icon(self, x: float, y: float) -> None:
         texture = self._follow_vehicle_texture
