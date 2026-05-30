@@ -294,6 +294,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"LaneChangeBsd", {PERSISTENT, INT, "0"}},
     {"LaneLineCheck", {PERSISTENT, INT, "0"}},
     {"LaneChangeContinuous", {PERSISTENT, INT, "0"}},
+    {"SideObjectDetectDisplay", {PERSISTENT, INT, "0"}},
     {"MaxAngleFrames", {PERSISTENT, INT, "89"}},
 
     {"SideGapMargin", {PERSISTENT, INT, "30"}},

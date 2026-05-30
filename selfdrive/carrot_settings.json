@@ -2323,6 +2323,22 @@
       "cdescr": "开启转向灯后在设定时间后变道"
     },
     {
+      "group": "차선변경",
+      "name": "SideObjectDetectDisplay",
+      "title": "옆차선감지 표시(HDA2)",
+      "descr": "옆 차선 차량 감지 시 차선을 주황색으로 표시\n0: 비활성 / 1: 활성",
+      "egroup": "LANE_CHANGE",
+      "etitle": "Side Detection Display(HDA2)",
+      "edescr": "Show lane line in orange when side vehicle detected\n0: Off / 1: On",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "cgroup": "转向设置",
+      "ctitle": "侧方感知显示(HDA2)",
+      "cdescr": "侧方检测到车辆时车道线显示为橙色\n0: 关 / 1: 开"
+    },
+    {
       "group": "화면",
       "egroup": "DISPLAY",
       "cgroup": "显示",
