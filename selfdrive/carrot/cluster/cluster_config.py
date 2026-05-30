@@ -53,6 +53,7 @@ CLUSTER_ENCODER_PARAM = "ClusterHudEncoder"
 CLUSTER_THEME_PARAM = "ClusterHudTheme"
 CLUSTER_LIVE_FPS_PARAM = "ClusterHudLiveFps"
 CLUSTER_RADAR_INFO_PARAM = "ClusterHudRadarInfo"
+CLUSTER_RADAR_DISPLAY_PARAM = "ClusterHudRadarDisplay"
 CLUSTER_RADAR_SOURCE_COLOR_PARAM = "ClusterHudRadarSourceColor"
 CLUSTER_SCREEN_MODE_DEFAULT = 0
 CLUSTER_SCREEN_MODE_DEBUG = 1
@@ -65,6 +66,8 @@ CLUSTER_RADAR_INFO_VEHICLE_SPEED = 1
 CLUSTER_RADAR_INFO_VEHICLE_SPEED_DISTANCE = 2
 CLUSTER_RADAR_INFO_ALL_SPEED = 3
 CLUSTER_RADAR_INFO_ALL_SPEED_DISTANCE = 4
+CLUSTER_RADAR_DISPLAY_MERGED = 0
+CLUSTER_RADAR_DISPLAY_DETAIL = 1
 CLUSTER_RADAR_SOURCE_COLOR_DEFAULT = 0
 CLUSTER_RADAR_SOURCE_COLOR_BY_SOURCE = 1
 SHOW_PLOT_MODE_PARAM = "ShowPlotMode"
@@ -259,6 +262,32 @@ def normalize_cluster_radar_info_mode(value: object) -> int:
     if CLUSTER_RADAR_INFO_NONE <= mode <= CLUSTER_RADAR_INFO_ALL_SPEED_DISTANCE:
         return mode
     return CLUSTER_RADAR_INFO_ALL_SPEED_DISTANCE
+
+
+def normalize_cluster_radar_display_mode(value: object) -> int:
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        aliases = {
+            "default": CLUSTER_RADAR_DISPLAY_MERGED,
+            "merge": CLUSTER_RADAR_DISPLAY_MERGED,
+            "merged": CLUSTER_RADAR_DISPLAY_MERGED,
+            "detail": CLUSTER_RADAR_DISPLAY_DETAIL,
+            "detailed": CLUSTER_RADAR_DISPLAY_DETAIL,
+            "raw": CLUSTER_RADAR_DISPLAY_DETAIL,
+        }
+        if normalized in aliases:
+            return aliases[normalized]
+        try:
+            value = int(normalized)
+        except ValueError:
+            return CLUSTER_RADAR_DISPLAY_MERGED
+    try:
+        mode = int(value)
+    except (TypeError, ValueError):
+        return CLUSTER_RADAR_DISPLAY_MERGED
+    if mode == CLUSTER_RADAR_DISPLAY_DETAIL:
+        return CLUSTER_RADAR_DISPLAY_DETAIL
+    return CLUSTER_RADAR_DISPLAY_MERGED
 
 
 def normalize_cluster_radar_source_color_mode(value: object) -> int:

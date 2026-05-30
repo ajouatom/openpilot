@@ -141,6 +141,8 @@ RADAR_LABEL_DISTANCE_FONT_SIZE = 16
 RADAR_LABEL_SPEED_FONT_SIZE = 14
 VEHICLE_BADGE_DISTANCE_FONT_SIZE = 17
 VEHICLE_BADGE_SPEED_FONT_SIZE = 15
+RADAR_LABEL_ANCHOR_Z_OFFSET_M = 0.30
+VEHICLE_BADGE_ANCHOR_Z_OFFSET_M = 0.32
 WORLD_LABEL_NEAR_M = 18.0
 WORLD_LABEL_FAR_M = 180.0
 WORLD_LABEL_MIN_SCALE = 0.56
@@ -1052,7 +1054,11 @@ class ClusterUiRenderer:
             reverse=True,
         )
         for point in ordered:
-            anchor = rl.Vector3(point.center.x + scene_shift_x_m, point.center.y, point.center.z + 0.46)
+            anchor = rl.Vector3(
+                point.center.x + scene_shift_x_m,
+                point.center.y,
+                point.center.z + RADAR_LABEL_ANCHOR_Z_OFFSET_M,
+            )
             screen = world_to_screen_label_anchor(anchor, camera, self.width, self.height)
             if screen is None:
                 continue
@@ -1174,7 +1180,7 @@ class ClusterUiRenderer:
             anchor = rl.Vector3(
                 vehicle.center.x + scene_shift_x_m,
                 vehicle.center.y,
-                vehicle.height_m + 0.55,
+                vehicle.height_m + VEHICLE_BADGE_ANCHOR_Z_OFFSET_M,
             )
             screen = world_to_screen_label_anchor(anchor, camera, self.width, self.height)
             if screen is None:
@@ -2097,7 +2103,7 @@ class ClusterUiRenderer:
         self._draw_lfa_status_icon(state, bottom_y)
 
     def _drive_status_bottom_y(self, state: ClusterUiState) -> float:
-        speed_text = "--" if not self._cruise_set_visible(state) or state.cruise_kph is None else str(int(round(state.cruise_kph)))
+        speed_text = self._cruise_set_speed_text(state)
         speed_spacing = max(1.0, TOP_CRUISE_FONT_SIZE * 0.02)
         unit_spacing = max(1.0, TOP_CRUISE_UNIT_FONT_SIZE * 0.02)
         _, speed_h = self._measure_text(speed_text, TOP_CRUISE_FONT_SIZE, speed_spacing)
@@ -2197,9 +2203,8 @@ class ClusterUiRenderer:
 
     def _draw_top_cruise_set(self, state: ClusterUiState, bottom_y: float) -> None:
         theme = self._current_theme()
-        visible = self._cruise_set_visible(state)
-        speed_text = "--" if not visible or state.cruise_kph is None else str(int(round(state.cruise_kph)))
-        speed_color = theme.text if visible else theme.muted
+        speed_text = self._cruise_set_speed_text(state)
+        speed_color = self._cruise_set_color(state, theme)
         unit_color = speed_color
         speed_spacing = max(1.0, TOP_CRUISE_FONT_SIZE * 0.02)
         unit_spacing = max(1.0, TOP_CRUISE_UNIT_FONT_SIZE * 0.02)
@@ -2287,7 +2292,15 @@ class ClusterUiRenderer:
         return state.cruise_kph is not None and state.cruise_display_state != "off"
 
     @staticmethod
+    def _cruise_set_speed_text(state: ClusterUiState) -> str:
+        if state.cruise_display_state == "off" or state.cruise_kph is None:
+            return "---"
+        return str(int(round(state.cruise_kph)))
+
+    @staticmethod
     def _cruise_set_color(state: ClusterUiState, theme: ClusterTheme) -> tuple[int, int, int]:
+        if state.cruise_display_state == "off" or state.cruise_kph is None:
+            return theme.muted
         if state.cruise_display_state == "paused":
             return theme.muted
         if state.speed_limit_kph is not None and state.cruise_kph == state.speed_limit_kph:

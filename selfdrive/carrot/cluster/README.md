@@ -228,10 +228,12 @@ bottom of the cruise-set text. The gap vehicle uses
 ratio and is taller than before while the gap bars keep their own size/spacing;
 all four gap bars stay visible, sit close together, and bottom-align to the
 vehicle while inactive bars are gray and active bars use `#bb3d91`. Cruise set
-speed and `km/h` use the same font size and color. The lane-change icon is not
-drawn; the LFA icon uses `selfdrive/assets/icons_mici/carrot_wheel_org.png`,
-rotates by `-carState.steeringAngleDeg`, and recolors its white pixels green
-when LFA is active.
+speed and `km/h` use the same font size and color; paused cruise keeps the set
+speed but draws it gray, and inactive cruise draws gray `--- km/h`. The
+lane-change icon is not drawn; the LFA icon uses
+`selfdrive/assets/icons_mici/carrot_wheel_org.png`, rotates by
+`-carState.steeringAngleDeg`, and recolors its white pixels green when LFA is
+active.
 When `--fps` is omitted for live input, `ClusterHudLiveFps` controls the render
 limit and is polled about once per second while running: `0` uncapped,
 `1` 10 Hz, `2` 20 Hz, `3` 30 Hz, `4` 40 Hz, `5` 50 Hz, and `6` 60 Hz.
@@ -258,7 +260,11 @@ selected debug view remains visible.
 `ClusterHudRadarInfo` controls world radar/vehicle speed and distance labels:
 `0` off, `1` speed for vehicle boxes only, `2` speed and distance for vehicle
 boxes only, `3` speed for all vehicle boxes and raw radar points, and `4` speed
-and distance for all. `ClusterHudRadarSourceColor` controls vehicle box colors:
+and distance for all. `ClusterHudRadarDisplay` controls raw radar point
+presentation: `0` averages nearby points with nearly matching speed/position,
+and `1` leaves raw points unmerged for detail checks. Vehicle/radar metric
+labels sit closer to the point/box top so speed and distance are less high
+above the vehicle. `ClusterHudRadarSourceColor` controls vehicle box colors:
 `0` keeps all vehicle boxes gray, while `1` uses source colors with
 SCC/radarState red, HDA/model/CAN/corner detections blue, and raw radar vehicle
 boxes orange.

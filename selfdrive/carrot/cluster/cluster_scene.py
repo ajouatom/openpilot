@@ -3,12 +3,13 @@ from __future__ import annotations
 import math
 import time
 from collections import OrderedDict
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 
 from cluster_config import (
     AMBER,
     BLUE,
+    CLUSTER_RADAR_DISPLAY_DETAIL,
     CLUSTER_RADAR_SOURCE_COLOR_BY_SOURCE,
     ClusterTheme,
     DEFAULT_LANE_WIDTH_M,
@@ -70,6 +71,10 @@ RADAR_PROBABLE_VEHICLE_LATERAL_LANES = 2.75
 RADAR_VEHICLE_MIN_PROBABILITY = 0.35
 RADAR_VEHICLE_DEDUP_LONGITUDINAL_M = 7.0
 RADAR_VEHICLE_DEDUP_LATERAL_M = 1.6
+RADAR_POINT_MERGE_BASE_LONGITUDINAL_M = 0.75
+RADAR_POINT_MERGE_MAX_LONGITUDINAL_M = 2.4
+RADAR_POINT_MERGE_LATERAL_M = 0.65
+RADAR_POINT_MERGE_SPEED_KPH = 3.0
 RADAR_MERGE_LONGITUDINAL_MIN_M = 3.0
 RADAR_MERGE_LONGITUDINAL_MAX_M = 7.0
 RADAR_MERGE_LATERAL_M = 1.35
@@ -1150,6 +1155,94 @@ def path_metric_color(accel_mps2: float) -> Color:
     return 70, 152, 255, 145
 
 
+def radar_points_for_display(state: ClusterUiState) -> tuple[RadarPoint, ...]:
+    if state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL:
+        return state.radar_points
+    return merged_radar_points(state.radar_points, state)
+
+
+def merged_radar_points(points: tuple[RadarPoint, ...], state: ClusterUiState) -> tuple[RadarPoint, ...]:
+    if len(points) < 2:
+        return points
+    groups: list[list[RadarPoint]] = []
+    centroids: list[RadarPoint] = []
+    for point in sorted(points, key=lambda item: (item.longitudinal_m, item.lateral_m, item.label)):
+        match_index = next(
+            (
+                index
+                for index, centroid in enumerate(centroids)
+                if radar_points_are_mergeable(point, centroid, state)
+            ),
+            None,
+        )
+        if match_index is None:
+            groups.append([point])
+            centroids.append(point)
+            continue
+        groups[match_index].append(point)
+        centroids[match_index] = merged_radar_point(groups[match_index], state)
+    merged = tuple(centroid if len(group) > 1 else group[0] for centroid, group in zip(centroids, groups))
+    return tuple(sorted(merged, key=lambda item: (item.longitudinal_m, abs(item.lateral_m), item.label)))
+
+
+def radar_points_are_mergeable(left: RadarPoint, right: RadarPoint, state: ClusterUiState) -> bool:
+    distance_m = max(abs(left.longitudinal_m), abs(right.longitudinal_m))
+    longitudinal_tolerance = max(
+        RADAR_POINT_MERGE_BASE_LONGITUDINAL_M,
+        min(RADAR_POINT_MERGE_MAX_LONGITUDINAL_M, distance_m * 0.018),
+    )
+    if abs(left.longitudinal_m - right.longitudinal_m) > longitudinal_tolerance:
+        return False
+    if abs(left.lateral_m - right.lateral_m) > RADAR_POINT_MERGE_LATERAL_M:
+        return False
+    left_speed = radar_point_absolute_speed_kph(left, state)
+    right_speed = radar_point_absolute_speed_kph(right, state)
+    if (
+        left_speed is not None
+        and right_speed is not None
+        and abs(left_speed - right_speed) > RADAR_POINT_MERGE_SPEED_KPH
+    ):
+        return False
+    return True
+
+
+def merged_radar_point(points: list[RadarPoint], state: ClusterUiState) -> RadarPoint:
+    first = points[0]
+    label = first.label if len(points) == 1 else f"{first.label}+{len(points) - 1}"
+    source = first.source if all(point.source == first.source for point in points) else "merged"
+    return RadarPoint(
+        label=label,
+        longitudinal_m=average_float(point.longitudinal_m for point in points),
+        lateral_m=average_float(point.lateral_m for point in points),
+        source=source,
+        relative_speed_mps=average_optional_float(point.relative_speed_mps for point in points),
+        absolute_speed_kph=average_optional_float(radar_point_absolute_speed_kph(point, state) for point in points),
+        lateral_speed_mps=average_optional_float(point.lateral_speed_mps for point in points),
+        relative_accel_mps2=average_optional_float(point.relative_accel_mps2 for point in points),
+        probability=average_optional_float(point.probability for point in points),
+        valid=max_optional_int(point.valid for point in points),
+        valid_count=max_optional_int(point.valid_count for point in points),
+        in_my_lane=max_optional_int(point.in_my_lane for point in points),
+    )
+
+
+def average_float(values: Iterable[float]) -> float:
+    numbers = [float(value) for value in values]
+    return sum(numbers) / max(1, len(numbers))
+
+
+def average_optional_float(values: Iterable[float | None]) -> float | None:
+    numbers = [float(value) for value in values if value is not None]
+    if not numbers:
+        return None
+    return sum(numbers) / len(numbers)
+
+
+def max_optional_int(values: Iterable[int | None]) -> int | None:
+    numbers = [int(value) for value in values if value is not None]
+    return max(numbers) if numbers else None
+
+
 def radar_point_markers(
     state: ClusterUiState,
     lane_width_m: float,
@@ -2194,6 +2287,9 @@ def build_cluster_scene(
 ) -> ClusterScene:
     profile_stage = profile_scene_start(profile_add)
     lane_width_m = max(2.4, min(4.6, state.lane_width_m or DEFAULT_LANE_WIDTH_M))
+    display_radar_points = radar_points_for_display(state)
+    if display_radar_points is not state.radar_points:
+        state = replace(state, radar_points=display_radar_points)
     anchor_x_m = ego_anchor_x_m(state, lane_width_m)
     scene_shift_x_m = -anchor_x_m
     relative_scene_x_offset_m = -scene_shift_x_m

@@ -13,6 +13,7 @@ from cluster_config import (
     CLUSTER_ENCODER_PARAM,
     CLUSTER_HUD_PARAM,
     CLUSTER_LIVE_FPS_PARAM,
+    CLUSTER_RADAR_DISPLAY_PARAM,
     CLUSTER_RADAR_INFO_PARAM,
     CLUSTER_RADAR_SOURCE_COLOR_PARAM,
     CLUSTER_SCREEN_MODE_PARAM,
@@ -21,6 +22,7 @@ from cluster_config import (
     DESIGN_WIDTH,
     normalize_cluster_brightness_percent,
     normalize_cluster_live_fps,
+    normalize_cluster_radar_display_mode,
     normalize_cluster_radar_info_mode,
     normalize_cluster_radar_source_color_mode,
     normalize_cluster_screen_mode,
@@ -195,6 +197,30 @@ class ClusterRadarInfoParamReader:
             return normalize_cluster_radar_info_mode(value)
         except Exception:
             return 4
+
+
+class ClusterRadarDisplayParamReader:
+    def __init__(self) -> None:
+        self._params = None
+        try:
+            from openpilot.common.params import Params
+
+            self._params = Params()
+        except Exception:
+            pass
+
+    def read(self) -> int:
+        if self._params is None:
+            return 0
+        try:
+            value = self._params.get(CLUSTER_RADAR_DISPLAY_PARAM)
+            if value is None:
+                return 0
+            if isinstance(value, bytes):
+                value = value.decode("utf-8", "ignore")
+            return normalize_cluster_radar_display_mode(value)
+        except Exception:
+            return 0
 
 
 class ClusterRadarSourceColorParamReader:
@@ -449,6 +475,8 @@ def run_demo(
     active_screen_mode = screen_mode_param_reader.read()
     radar_info_param_reader = ClusterRadarInfoParamReader()
     active_radar_info_mode = radar_info_param_reader.read()
+    radar_display_param_reader = ClusterRadarDisplayParamReader()
+    active_radar_display_mode = radar_display_param_reader.read()
     radar_source_color_param_reader = ClusterRadarSourceColorParamReader()
     active_radar_source_color_mode = radar_source_color_param_reader.read()
     hud_mode_param_reader = ClusterHudModeParamReader() if hud_mode_watch is not None else None
@@ -463,6 +491,7 @@ def run_demo(
     print(f"{CLUSTER_SCREEN_MODE_PARAM} initial: {active_screen_mode}", flush=True)
     print(
         f"{CLUSTER_RADAR_INFO_PARAM} initial: {active_radar_info_mode} "
+        f"{CLUSTER_RADAR_DISPLAY_PARAM} initial: {active_radar_display_mode} "
         f"{CLUSTER_RADAR_SOURCE_COLOR_PARAM} initial: {active_radar_source_color_mode}",
         flush=True,
     )
@@ -587,6 +616,14 @@ def run_demo(
                         flush=True,
                     )
                     active_radar_info_mode = next_radar_info_mode
+                next_radar_display_mode = radar_display_param_reader.read()
+                if next_radar_display_mode != active_radar_display_mode:
+                    print(
+                        f"{CLUSTER_RADAR_DISPLAY_PARAM} updated: "
+                        f"{active_radar_display_mode} -> {next_radar_display_mode}",
+                        flush=True,
+                    )
+                    active_radar_display_mode = next_radar_display_mode
                 next_radar_source_color_mode = radar_source_color_param_reader.read()
                 if next_radar_source_color_mode != active_radar_source_color_mode:
                     print(
@@ -692,6 +729,7 @@ def run_demo(
             state = replace(
                 state,
                 radar_info_mode=active_radar_info_mode,
+                radar_display_mode=active_radar_display_mode,
                 radar_source_color_mode=active_radar_source_color_mode,
                 git_status=git_status_provider.status(),
                 actual_fps=display_actual_fps,

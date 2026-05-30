@@ -173,6 +173,7 @@ class ClusterUiState:
     detected_vehicles: tuple[DetectedVehicle, ...] = ()
     radar_points: tuple[RadarPoint, ...] = ()
     radar_info_mode: int = 4
+    radar_display_mode: int = 0
     radar_source_color_mode: int = 0
     route_overlay: RouteOverlay | None = None
     live_debug: LiveDebugInfo | None = None
