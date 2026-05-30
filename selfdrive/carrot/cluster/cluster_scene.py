@@ -42,6 +42,7 @@ from cluster_utils import clamp, darken, lighten, smoothstep
 
 
 Color = tuple[int, int, int, int]
+RoadEdgeLayer = tuple[int, Color, float, float]
 ProfileAdd = Callable[[str, float], None]
 PATH_BLOCKER_CLEARANCE_M = 1.25
 PATH_BLOCKER_LANE_TOLERANCE = 0.42
@@ -87,8 +88,13 @@ LANE_MARKING_SHADOW_HEIGHT_M = 0.026
 LANE_MARKING_HEIGHT_M = 0.044
 LANE_MARKING_BORDER_EXTRA_WIDTH_PX = 3
 LANE_MARKING_BORDER_COLOR = LIGHT_CLUSTER_THEME.lane_marking_border
-ROAD_EDGE_HEIGHT_M = 0.052
-ROAD_EDGE_SHADOW_HEIGHT_M = 0.038
+ROAD_EDGE_SHADOW_HEIGHT_M = 0.032
+ROAD_EDGE_BODY_HEIGHT_M = 0.058
+ROAD_EDGE_HEIGHT_M = 0.074
+ROAD_EDGE_CREST_HEIGHT_M = 0.106
+ROAD_EDGE_OUTSIDE_SHADOW_OFFSET_M = 0.13
+ROAD_EDGE_BODY_OFFSET_M = 0.055
+ROAD_EDGE_CREST_OFFSET_M = -0.045
 ROAD_EDGE_BACKING_COLOR = LIGHT_CLUSTER_THEME.road_edge_backing
 PATH_SHADOW_LAYER_M = 0.024
 PATH_UNCERTAINTY_LAYER_M = PATH_HEIGHT_M + 0.002
@@ -222,6 +228,10 @@ def vehicle_box_with_x_offset(vehicle: VehicleBox, x_offset_m: float) -> Vehicle
 
 def rgba(color: tuple[int, int, int], alpha: int = 255) -> Color:
     return color[0], color[1], color[2], alpha
+
+
+def rgba_with_alpha(color: tuple[int, int, int], alpha: float) -> Color:
+    return color[0], color[1], color[2], int(clamp(alpha, 0, 255))
 
 
 def road_curve_m(forward_m: float, steering: float) -> float:
@@ -889,10 +899,19 @@ def style_mesh_strip_groups(
     specs: tuple[tuple[int, Color, float], ...],
     shift_x_m: float,
 ) -> tuple[tuple[MeshStrip, ...], ...]:
-    has_shift = abs(shift_x_m) > 0.0001
+    return style_mesh_strip_groups_by_shift(groups, specs, tuple(shift_x_m for _ in specs))
+
+
+def style_mesh_strip_groups_by_shift(
+    groups: tuple[tuple[MeshStrip, ...], ...],
+    specs: tuple[tuple[int, Color, float], ...],
+    shift_x_m_by_group: tuple[float, ...],
+) -> tuple[tuple[MeshStrip, ...], ...]:
     styled_groups: list[tuple[MeshStrip, ...]] = []
     for group_index, group in enumerate(groups):
         color = specs[group_index][1]
+        shift_x_m = shift_x_m_by_group[group_index] if group_index < len(shift_x_m_by_group) else 0.0
+        has_shift = abs(shift_x_m) > 0.0001
         styled_group: list[MeshStrip] = []
         for strip in group:
             if not has_shift and strip.color == color:
@@ -1808,30 +1827,72 @@ def road_edge_color(
     return base[0], base[1], base[2], int(clamp(alpha, 120, 245))
 
 
+def road_edge_3d_layers(
+    color: Color,
+    theme: ClusterTheme = LIGHT_CLUSTER_THEME,
+) -> tuple[RoadEdgeLayer, ...]:
+    base_rgb = color[:3]
+    alpha = color[3]
+    shadow_alpha = max(theme.road_edge_backing[3], int(alpha * 0.58))
+    return (
+        (
+            22,
+            rgba_with_alpha(darken(base_rgb, 0.58), shadow_alpha),
+            ROAD_EDGE_SHADOW_HEIGHT_M,
+            ROAD_EDGE_OUTSIDE_SHADOW_OFFSET_M,
+        ),
+        (
+            14,
+            rgba_with_alpha(darken(base_rgb, 0.30), alpha * 0.88),
+            ROAD_EDGE_BODY_HEIGHT_M,
+            ROAD_EDGE_BODY_OFFSET_M,
+        ),
+        (
+            8,
+            color,
+            ROAD_EDGE_HEIGHT_M,
+            0.0,
+        ),
+        (
+            3,
+            rgba_with_alpha(lighten(base_rgb, 0.38), alpha + 26),
+            ROAD_EDGE_CREST_HEIGHT_M,
+            ROAD_EDGE_CREST_OFFSET_M,
+        ),
+    )
+
+
+def road_edge_layer_specs(layers: tuple[RoadEdgeLayer, ...]) -> tuple[tuple[int, Color, float], ...]:
+    return tuple((width_px, color, height_m) for width_px, color, height_m, _ in layers)
+
+
 def road_edge_model_strips(
     model_points: tuple[ModelPathPoint, ...],
     lateral_shift_m: float,
     color: Color,
+    side: float,
     start_m: float,
     end_m: float,
     theme: ClusterTheme = LIGHT_CLUSTER_THEME,
 ) -> tuple[MeshStrip, ...]:
-    groups = model_line_strip_groups(
+    layers = road_edge_3d_layers(color, theme)
+    specs = road_edge_layer_specs(layers)
+    groups = cached_model_line_strip_groups(
         model_points,
-        lateral_shift_m,
         start_m,
         end_m,
-        (
-            (12, theme.road_edge_backing, ROAD_EDGE_SHADOW_HEIGHT_M),
-            (7, color, ROAD_EDGE_HEIGHT_M),
-        ),
+        specs,
         "solid",
         True,
     )
     if groups is None:
         return ()
-    backing, foreground = groups
-    return (*backing, *foreground)
+    shifts = tuple(lateral_shift_m + side * lateral_offset_m for _, _, _, lateral_offset_m in layers)
+    return tuple(
+        strip
+        for group in style_mesh_strip_groups_by_shift(groups, specs, shifts)
+        for strip in group
+    )
 
 
 def road_edge_offset_strips(
@@ -1839,19 +1900,30 @@ def road_edge_offset_strips(
     steering: float,
     lane_width_m: float,
     color: Color,
+    side: float,
     start_m: float,
     end_m: float,
     theme: ClusterTheme = LIGHT_CLUSTER_THEME,
 ) -> tuple[MeshStrip, ...]:
-    centerline = lane_centerline(offset, steering, lane_width_m, start_m, end_m, STATIC_LINE_STEPS, 0.0)
-    backing, foreground = lane_marking_strip_groups_from_segments(
-        (centerline,),
-        (
-            (12, theme.road_edge_backing, ROAD_EDGE_SHADOW_HEIGHT_M),
-            (7, color, ROAD_EDGE_HEIGHT_M),
-        ),
-    )
-    return (*backing, *foreground)
+    layers = road_edge_3d_layers(color, theme)
+    strips: list[MeshStrip] = []
+    for width_px, layer_color, height_m, lateral_offset_m in layers:
+        layer_offset = offset + side * lateral_offset_m / max(0.1, lane_width_m)
+        centerline = lane_centerline(
+            layer_offset,
+            steering,
+            lane_width_m,
+            start_m,
+            end_m,
+            STATIC_LINE_STEPS,
+            0.0,
+        )
+        (layer_strips,) = lane_marking_strip_groups_from_segments(
+            (centerline,),
+            ((width_px, layer_color, height_m),),
+        )
+        strips.extend(layer_strips)
+    return tuple(strips)
 
 
 def vehicle_color_for_detection(
@@ -1914,6 +1986,7 @@ def road_edge_strips(
                 state.steering,
                 lane_width_m,
                 default_color,
+                -1.0,
                 road_start_m,
                 road_end_m,
                 theme,
@@ -1923,6 +1996,7 @@ def road_edge_strips(
                 state.steering,
                 lane_width_m,
                 default_color,
+                1.0,
                 road_start_m,
                 road_end_m,
                 theme,
@@ -1941,6 +2015,7 @@ def road_edge_strips(
                     state.left_road_edge_points,
                     state.left_road_edge_lateral_shift_m,
                     left_color,
+                    -1.0,
                     road_start_m,
                     road_end_m,
                     theme,
@@ -1953,6 +2028,7 @@ def road_edge_strips(
                     state.steering,
                     lane_width_m,
                     left_color,
+                    -1.0,
                     road_start_m,
                     road_end_m,
                     theme,
@@ -1966,6 +2042,7 @@ def road_edge_strips(
                     state.right_road_edge_points,
                     state.right_road_edge_lateral_shift_m,
                     right_color,
+                    1.0,
                     road_start_m,
                     road_end_m,
                     theme,
@@ -1978,6 +2055,7 @@ def road_edge_strips(
                     state.steering,
                     lane_width_m,
                     right_color,
+                    1.0,
                     road_start_m,
                     road_end_m,
                     theme,
