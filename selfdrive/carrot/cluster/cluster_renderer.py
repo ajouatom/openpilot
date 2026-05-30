@@ -53,6 +53,7 @@ OPENPILOT_ADDON_FONT_DIR = SELFDRIVE_DIR / "assets" / "addon" / "font"
 KAIGEN_GOTHIC_KR_BOLD_FONT_PATH = OPENPILOT_FONT_DIR / "KaiGenGothicKR-Bold.ttf"
 JETBRAINS_MONO_FONT_PATH = OPENPILOT_FONT_DIR / "JetBrainsMono-Medium.ttf"
 VEHICLE_MODEL_PATH = CLUSTER_DIR / "assets" / "models" / "cybertruck" / "cybertruck_cluster.obj"
+FOLLOW_VEHICLE_ICON_PATH = SELFDRIVE_DIR / "assets" / "icons_mici" / "carrot_cruse_gap_trimmed.png"
 ACCEL_TEXT_WIDTH_SAMPLES = ("+00.00", "-00.00")
 TURN_SIGNAL_LEFT_CENTER_X = 610
 TURN_SIGNAL_RIGHT_CENTER_X = 1310
@@ -62,11 +63,20 @@ GEAR_STATUS_CENTER_X = TURN_SIGNAL_LEFT_CENTER_X + 102
 GEAR_STATUS_CENTER_Y = TURN_SIGNAL_CENTER_Y
 GEAR_STATUS_BOX_SIZE = 46
 GEAR_STATUS_FONT_SIZE = 34
-FOLLOW_STATUS_CENTER_X = GEAR_STATUS_CENTER_X + 80
-FOLLOW_STATUS_W = 82
+FOLLOW_STATUS_CENTER_X = GEAR_STATUS_CENTER_X + 84
+FOLLOW_STATUS_W = 92
 FOLLOW_STATUS_H = 42
 FOLLOW_STATUS_GAP_BARS = 4
-TOP_CRUISE_CENTER_X = FOLLOW_STATUS_CENTER_X + 112
+FOLLOW_GAP_ACTIVE = (187, 61, 145, 255)
+FOLLOW_GAP_INACTIVE = (118, 122, 128, 150)
+FOLLOW_GAP_BAR_W = 5.4
+FOLLOW_GAP_BAR_H = 7.7
+FOLLOW_GAP_BAR_R = 1.3
+FOLLOW_GAP_BAR_SCALE = 1.75
+FOLLOW_GAP_BAR_STEP_X = 8.6
+FOLLOW_GAP_ICON_W = 44.0
+FOLLOW_GAP_ICON_H = 27.5
+TOP_CRUISE_CENTER_X = FOLLOW_STATUS_CENTER_X + 118
 TOP_CRUISE_FONT_SIZE = 31
 TOP_CRUISE_UNIT_FONT_SIZE = 15
 AUTO_LANE_CHANGE_CENTER_X = TOP_CRUISE_CENTER_X + 108
@@ -281,6 +291,7 @@ class ClusterUiRenderer:
         self._portrait_upload_target_size: tuple[int, int] | None = None
         self._vehicle_model = None
         self._vehicle_model_load_attempted = False
+        self._follow_vehicle_texture = None
         self._route_video_texture = None
         self._route_video_size: tuple[int, int] | None = None
         self._route_video_frame_id: str | None = None
@@ -362,6 +373,9 @@ class ClusterUiRenderer:
         profile_stage = self._profile_start()
         self._load_vehicle_model()
         self._profile_add("renderer.open.load_vehicle_model", profile_stage)
+        profile_stage = self._profile_start()
+        self._load_follow_vehicle_texture()
+        self._profile_add("renderer.open.load_follow_vehicle_texture", profile_stage)
         self._window_open = True
         self._profile_add("renderer.open.total", profile_total)
 
@@ -378,6 +392,9 @@ class ClusterUiRenderer:
         if self._route_video_texture is not None:
             rl.unload_texture(self._route_video_texture)
             self._route_video_texture = None
+        if self._follow_vehicle_texture is not None:
+            rl.unload_texture(self._follow_vehicle_texture)
+            self._follow_vehicle_texture = None
         if self._owns_font and self._font is not None:
             rl.unload_font(self._font)
         self._font = None
@@ -671,6 +688,19 @@ class ClusterUiRenderer:
         except Exception as exc:
             print(f"Cybertruck vehicle model load failed: {exc}")
             self._vehicle_model = None
+
+    def _load_follow_vehicle_texture(self) -> None:
+        if self._follow_vehicle_texture is not None or not FOLLOW_VEHICLE_ICON_PATH.exists():
+            return
+        try:
+            texture = rl.load_texture(str(FOLLOW_VEHICLE_ICON_PATH))
+            if texture.id <= 0:
+                return
+            rl.set_texture_filter(texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+            self._follow_vehicle_texture = texture
+        except Exception as exc:
+            print(f"Follow gap vehicle icon load failed: {exc}")
+            self._follow_vehicle_texture = None
 
     def _load_obj_mesh(self, path: Path):
         vertices: list[tuple[float, float, float]] = []
@@ -1985,30 +2015,42 @@ class ClusterUiRenderer:
         self._draw_text("HDA", x + 16, y + 8, 11, hda_color, anchor="center")
 
         gap_count = 0 if state.cruise_gap is None else int(clamp(float(state.cruise_gap), 1.0, float(FOLLOW_STATUS_GAP_BARS)))
-        bar_x = x + 8
-        bar_y = y + 19
+        bar_w = FOLLOW_GAP_BAR_W * FOLLOW_GAP_BAR_SCALE
+        bar_h = FOLLOW_GAP_BAR_H * FOLLOW_GAP_BAR_SCALE
+        bar_r = FOLLOW_GAP_BAR_R * FOLLOW_GAP_BAR_SCALE
+        bar_step = FOLLOW_GAP_BAR_STEP_X * FOLLOW_GAP_BAR_SCALE
+        bars_total_w = bar_w + bar_step * (FOLLOW_STATUS_GAP_BARS - 1)
+        icon_x = x + FOLLOW_STATUS_W - FOLLOW_GAP_ICON_W
+        bar_x = icon_x - bars_total_w - 3.0
+        bar_y = GEAR_STATUS_CENTER_Y - bar_h * 0.5 + 3.0
         for index in range(FOLLOW_STATUS_GAP_BARS):
-            active = index < gap_count
-            bar_color = BLUE if active else theme.muted
-            bar_alpha = 230 if active else 72
-            start = rl.Vector2(bar_x + index * 5.4, bar_y + index * 3.1)
-            end = rl.Vector2(bar_x + 8.0 + index * 7.1, bar_y + index * 3.1)
-            rl.draw_line_ex(
-                start,
-                end,
-                4.0,
-                rl_color(bar_color, bar_alpha),
+            active = index >= FOLLOW_STATUS_GAP_BARS - gap_count
+            self._rounded_rect(
+                bar_x + index * bar_step,
+                bar_y,
+                bar_w,
+                bar_h,
+                bar_r,
+                FOLLOW_GAP_ACTIVE if active else FOLLOW_GAP_INACTIVE,
+                None,
+                0.0,
             )
 
-        car_x = x + 58
-        car_y = GEAR_STATUS_CENTER_Y
-        car_color = (242, 245, 248) if state.cruise_gap is not None else theme.muted
-        car_shadow = (0, 0, 0, 92)
-        self._rounded_rect(car_x - 18, car_y - 6, 36, 15, 5.0, car_shadow, None, 0.0)
-        self._rounded_rect(car_x - 16, car_y - 8, 32, 16, 5.0, car_color, None, 0.0)
-        self._rounded_rect(car_x - 7, car_y - 14, 15, 8, 4.0, car_color, None, 0.0)
-        rl.draw_circle_v(rl.Vector2(car_x - 10, car_y + 8), 2.7, rl_color((0, 0, 0), 190))
-        rl.draw_circle_v(rl.Vector2(car_x + 11, car_y + 8), 2.7, rl_color((0, 0, 0), 190))
+        self._draw_follow_vehicle_icon(icon_x, GEAR_STATUS_CENTER_Y - FOLLOW_GAP_ICON_H * 0.5 + 2.0)
+
+    def _draw_follow_vehicle_icon(self, x: float, y: float) -> None:
+        texture = self._follow_vehicle_texture
+        if texture is None:
+            theme = self._current_theme()
+            car_x = x + FOLLOW_GAP_ICON_W * 0.5
+            car_y = y + FOLLOW_GAP_ICON_H * 0.5
+            self._rounded_rect(car_x - 16, car_y - 8, 32, 16, 5.0, theme.muted, None, 0.0)
+            self._rounded_rect(car_x - 7, car_y - 14, 15, 8, 4.0, theme.muted, None, 0.0)
+            return
+
+        source = rl.Rectangle(0.0, 0.0, float(texture.width), float(texture.height))
+        dest = rl.Rectangle(x, y, FOLLOW_GAP_ICON_W, FOLLOW_GAP_ICON_H)
+        rl.draw_texture_pro(texture, source, dest, rl.Vector2(0.0, 0.0), 0.0, rl_color(WHITE))
 
     def _draw_top_cruise_set(self, state: ClusterUiState) -> None:
         theme = self._current_theme()

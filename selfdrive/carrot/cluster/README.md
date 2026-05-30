@@ -216,7 +216,9 @@ by upstream `navd`; km/h-looking values such as 50/100 stay unchanged.
 The top HUD also uses `carState.gearShifter`, `gearStep`, `pcmCruiseGap`,
 `selfdriveState.personality`, and `carControl.latActive` to show gear
 (`P/R/N/D/1-8`), HDA-style front gap bars, cruise set speed, a disabled gray
-auto-lane-change icon, and the LFA active icon.
+auto-lane-change icon, and the LFA active icon. The gap vehicle uses
+`selfdrive/assets/icons_mici/carrot_cruse_gap_trimmed.png`; all four gap bars
+stay visible while inactive bars are gray and active bars use `#bb3d91`.
 When `--fps` is omitted for live input, `ClusterHudLiveFps` controls the render
 limit and is polled about once per second while running: `0` uncapped,
 `1` 10 Hz, `2` 20 Hz, `3` 30 Hz, `4` 40 Hz, `5` 50 Hz, and `6` 60 Hz.
