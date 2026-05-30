@@ -218,8 +218,9 @@ phase. The top HUD also uses `carState.gearShifter`, `gearStep`, `pcmCruiseGap`,
 `selfdriveState.personality`, and `carControl.latActive` to show gear
 (`P/R/N/D/1-8`) in a smaller transparent rounded-square outline, front gap bars,
 cruise set speed, a disabled gray lane icon, and the LFA active icon. This top
-drive-status row bottom-aligns gear, gap, cruise set, lane, and LFA elements to
-the measured bottom of the cruise-set text. The gap vehicle uses
+drive-status row uses the same top margin as the road speed-limit sign while
+bottom-aligning gear, gap, cruise set, lane, and LFA elements to the measured
+bottom of the cruise-set text. The gap vehicle uses
 `selfdrive/assets/icons_mici/carrot_cruse_gap_trimmed.png` at its source aspect
 ratio and is taller than before while the gap bars keep their own size/spacing;
 all four gap bars stay visible, sit close together, and bottom-align to the

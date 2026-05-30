@@ -99,6 +99,7 @@ SPEED_VALUE_CENTER_X = 260
 SPEED_VALUE_CENTER_Y = 230
 SPEED_LIMIT_SIGN_CENTER_X = 460
 SPEED_LIMIT_SIGN_CENTER_Y = TURN_SIGNAL_CENTER_Y
+SPEED_LIMIT_SIGN_RADIUS = 56.0
 SPEED_LIMIT_SOURCE_LABELS = {
     "vehicle": "v",
     "car": "v",
@@ -132,7 +133,7 @@ GIT_STATUS_MARGIN = 2
 GIT_STATUS_DOT_RADIUS = 7
 GIT_STATUS_DOT_TEXT_GAP = 6
 GIT_STATUS_MAX_TEXT_W = 610
-FPS_STATUS_MARGIN = 2
+FPS_STATUS_MARGIN = 4
 FPS_STATUS_DOT_RADIUS = 7
 FPS_STATUS_DOT_TEXT_GAP = 6
 FPS_STATUS_MAX_TEXT_W = 220
@@ -2060,7 +2061,15 @@ class ClusterUiRenderer:
         unit_spacing = max(1.0, TOP_CRUISE_UNIT_FONT_SIZE * 0.02)
         _, speed_h = self._measure_text(speed_text, TOP_CRUISE_FONT_SIZE, speed_spacing)
         _, unit_h = self._measure_text("km/h", TOP_CRUISE_UNIT_FONT_SIZE, unit_spacing)
-        return GEAR_STATUS_CENTER_Y + max(speed_h, unit_h) * 0.5
+        row_h = max(
+            GEAR_STATUS_BOX_SIZE,
+            FOLLOW_GAP_ICON_H,
+            AUTO_LANE_CHANGE_ICON_H,
+            LFA_STATUS_ICON_SIZE,
+            speed_h,
+            unit_h,
+        )
+        return SPEED_LIMIT_SIGN_CENTER_Y - SPEED_LIMIT_SIGN_RADIUS + row_h
 
     def _draw_drive_status_box(
         self,
@@ -2249,7 +2258,7 @@ class ClusterUiRenderer:
 
         if state.speed_limit_kph is not None:
             center = rl.Vector2(SPEED_LIMIT_SIGN_CENTER_X, SPEED_LIMIT_SIGN_CENTER_Y)
-            rl.draw_circle_v(center, 56, rl_color(RED))
+            rl.draw_circle_v(center, SPEED_LIMIT_SIGN_RADIUS, rl_color(RED))
             rl.draw_circle_v(center, 47, rl_color(WHITE))
             self._draw_text(
                 str(state.speed_limit_kph),
