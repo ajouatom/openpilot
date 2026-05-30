@@ -39,7 +39,7 @@ def configure_cluster_realtime() -> None:
 
         cores_text = os.environ.get("CLUSTER_REALTIME_CORES", "0,1,2,3")
         cores = [int(core.strip()) for core in cores_text.split(",") if core.strip()]
-        priority = int(os.environ.get("CLUSTER_REALTIME_PRIORITY", "55"))
+        priority = int(os.environ.get("CLUSTER_REALTIME_PRIORITY", "4"))
         config_realtime_process(cores, priority)
         print(f"[cluster_run] realtime enabled cores={cores} priority={priority}", flush=True)
     except Exception as exc:
