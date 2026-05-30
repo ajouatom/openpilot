@@ -3,16 +3,17 @@ from __future__ import annotations
 import bz2
 import io
 import math
-import multiprocessing as mp
+import multiprocessing
 import os
 import queue
 import shutil
 import subprocess
+import sys
 import tempfile
+import threading
 import traceback
 from bisect import bisect_right
 from dataclasses import dataclass, replace
-from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
@@ -48,18 +49,34 @@ LOG_FILENAMES = {
 RADAR_TO_CAMERA_M = 1.52
 MODEL_LEAD_MIN_PROB = 0.08
 RADAR_POINT_STALE_S = 0.12
+CORNER_DETECTION_STALE_S = 0.8
 RADAR_MIN_LONGITUDINAL_M = 0.0
 RADAR_FRONT_MAX_LONGITUDINAL_M = 180.0
 CORNER_RADAR_REAR_MIN_LONGITUDINAL_M = -180.0
+CCNC_CORNER_RADAR_ADDRESS = 0x162
+ADRV_CORNER_RADAR_ADDRESS = 0x1EA
 ROUTE_REPLAY_MIN_BUFFER_FILES = 2
+ROUTE_REPLAY_START_BUFFER_FILES = 1
 ROUTE_REPLAY_READAHEAD_S = 5.0
 ROUTE_REPLAY_RETAIN_BEHIND_S = 1.0
-ROUTE_REPLAY_PRELOAD_NICE = 5
+ROUTE_REPLAY_PRELOAD_NICE = 10
+ROUTE_VIDEO_FPS = 20.0
+ROUTE_VIDEO_DECODE_WIDTH = 388
+ROUTE_VIDEO_DECODE_HEIGHT = 244
+ROUTE_VIDEO_SEEK_RESTART_FRAMES = 45
+NAV_SPEED_LIMIT_HOLD_SECONDS = 10.0
+ROAD_EDGE_VEHICLE_OUTSIDE_MARGIN_M = 0.25
 LANE_CHANGE_REINDEX_PEAK_THRESHOLD = 0.22
 LANE_CHANGE_REINDEX_RESET_THRESHOLD = -0.08
 CONTINUOUS_LANE_CHANGE_REBASE_PROGRESS = 0.12
 LANE_CHANGE_MODEL_DIRECT_ONLY = True
 MODEL_DIRECT_LANE_SETTLE_MIN_PROGRESS = 0.65
+LONGITUDINAL_PERSONALITY_GAPS = {
+    "aggressive": 1,
+    "standard": 2,
+    "relaxed": 3,
+    "morerelaxed": 4,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,8 +87,12 @@ class RouteReplayFrame:
     steering: float
     steering_angle_deg: float | None
     speed_limit_kph: int | None
+    speed_limit_source: str | None
     cruise_kph: int | None
     cruise_display_state: CruiseDisplayState
+    gear_text: str | None
+    cruise_gap: int | None
+    lfa_active: bool | None
     left_signal: bool
     right_signal: bool
     left_blindspot: bool
@@ -205,12 +226,17 @@ class RouteReplayWorkerResult:
     error: str | None = None
 
 
+def normalize_route_frames(frames: list[RouteReplayFrame], first_t: float) -> list[RouteReplayFrame]:
+    normalized = [replace(frame, t=frame.t - first_t) for frame in frames]
+    normalized.sort(key=lambda frame: frame.t)
+    return normalized
+
+
 class RouteLogPreloadWorker:
     def __init__(self) -> None:
-        self._context = mp.get_context("spawn")
         self._requests: Any | None = None
         self._results: Any | None = None
-        self._process: mp.Process | None = None
+        self._worker: Any | None = None
         self._start()
 
     def request(self, generation: int, file_index: int, file_path: Path) -> None:
@@ -231,66 +257,71 @@ class RouteLogPreloadWorker:
             except queue.Empty:
                 if not block:
                     return None
-                process = self._process
-                if process is not None and process.exitcode is not None:
-                    raise RuntimeError(f"route preload worker exited with code {process.exitcode}")
+                worker = self._worker
+                if worker is not None and not worker.is_alive():
+                    raise RuntimeError("route preload worker exited")
 
     def restart(self) -> None:
         self.close()
         self._start()
 
     def close(self) -> None:
-        process = self._process
         requests = self._requests
-        if process is not None and process.is_alive() and requests is not None:
+        worker = self._worker
+        if worker is not None and worker.is_alive() and requests is not None:
             try:
                 requests.put(("stop", 0, 0, ""), block=False)
             except Exception:
                 pass
-            process.join(timeout=0.5)
-        if process is not None and process.is_alive():
-            process.terminate()
-            process.join(timeout=1.0)
-        if process is not None and process.is_alive():
-            try:
-                process.kill()
-            except Exception:
-                pass
-            process.join(timeout=1.0)
-
-        for pipe in (self._requests, self._results):
-            if pipe is None:
-                continue
-            try:
-                pipe.close()
-                pipe.join_thread()
-            except Exception:
-                pass
+            worker.join(timeout=0.5)
+            if worker.is_alive():
+                terminate = getattr(worker, "terminate", None)
+                if callable(terminate):
+                    terminate()
+                    worker.join(timeout=0.5)
         self._requests = None
         self._results = None
-        self._process = None
+        self._worker = None
 
     def _start(self) -> None:
-        self._requests = self._context.Queue(maxsize=1)
-        self._results = self._context.Queue(maxsize=1)
-        self._process = self._context.Process(
+        if sys.platform != "win32":
+            try:
+                context = multiprocessing.get_context("fork")
+                self._requests = context.Queue(maxsize=2)
+                self._results = context.Queue(maxsize=2)
+                self._worker = context.Process(
+                    target=route_log_preload_worker,
+                    args=(self._requests, self._results, True),
+                    name="route-log-preload",
+                    daemon=True,
+                )
+                self._worker.start()
+                return
+            except Exception:
+                self._requests = None
+                self._results = None
+                self._worker = None
+
+        self._requests = queue.Queue(maxsize=2)
+        self._results = queue.Queue()
+        self._worker = threading.Thread(
             target=route_log_preload_worker,
-            args=(self._requests, self._results, ROUTE_REPLAY_PRELOAD_NICE),
+            args=(self._requests, self._results, False),
             name="route-log-preload",
             daemon=True,
         )
-        self._process.start()
+        self._worker.start()
 
 
-def route_log_preload_worker(requests: Any, results: Any, nice_increment: int) -> None:
-    if nice_increment > 0:
+def route_log_preload_worker(requests: Any, results: Any, low_priority: bool = False) -> None:
+    if low_priority:
         try:
-            os.nice(nice_increment)
-        except Exception:
+            os.nice(ROUTE_REPLAY_PRELOAD_NICE)
+        except OSError:
             pass
-
     log_schema = load_openpilot_log_schema()
     parser = RouteLogParser()
+    first_t: float | None = None
     while True:
         command, generation, file_index, file_path_text = requests.get()
         if command == "stop":
@@ -300,6 +331,10 @@ def route_log_preload_worker(requests: Any, results: Any, nice_increment: int) -
         try:
             file_path = Path(file_path_text)
             frames = parser.parse_file(file_path, log_schema)
+            if frames:
+                if first_t is None:
+                    first_t = min(frame.t for frame in frames)
+                frames = normalize_route_frames(frames, first_t)
             results.put(RouteReplayWorkerResult(generation, file_index, file_path_text, frames=frames))
         except BaseException:
             results.put(
@@ -326,7 +361,6 @@ class RouteReplaySource:
         self.video_segments: list[RouteVideoSegment] = []
         self._video_reader = RouteVideoFrameReader(self.video_segments)
         self._preload_worker = RouteLogPreloadWorker()
-        self._first_t: float | None = None
         self._next_file_index = 0
         self._loaded_chunks: list[RouteReplayChunk] = []
         self._loaded_file_count = 0
@@ -440,7 +474,7 @@ class RouteReplaySource:
 
         while not self._end_of_route and (
             not self.frames
-            or len(self._loaded_chunks) < ROUTE_REPLAY_MIN_BUFFER_FILES
+            or len(self._loaded_chunks) < ROUTE_REPLAY_START_BUFFER_FILES
             or playback_seconds >= self.duration - ROUTE_REPLAY_READAHEAD_S
         ):
             if not self._load_next_file():
@@ -520,17 +554,12 @@ class RouteReplaySource:
         if not parsed_frames:
             return True
 
-        if self._first_t is None:
-            self._first_t = min(frame.t for frame in parsed_frames)
-        first_t = self._first_t
-        normalized = [replace(frame, t=frame.t - first_t) for frame in parsed_frames]
-        normalized.sort(key=lambda frame: frame.t)
         chunk = RouteReplayChunk(
             index=file_index,
             path=file_path,
-            frames=normalized,
-            start_t=normalized[0].t,
-            end_t=normalized[-1].t,
+            frames=parsed_frames,
+            start_t=parsed_frames[0].t,
+            end_t=parsed_frames[-1].t,
         )
         self._loaded_chunks.append(chunk)
         self._append_video_segment(file_path, chunk)
@@ -581,7 +610,6 @@ class RouteReplaySource:
         self.duration = 0.0
         self.video_segments = []
         self._video_reader = RouteVideoFrameReader(self.video_segments)
-        self._first_t = None
         self._next_file_index = 0
         self._loaded_chunks = []
         self._loaded_file_count = 0
@@ -611,7 +639,8 @@ class RouteReplaySource:
         video_frame = self._video_reader.frame_at(shown_time) if self._video_reader is not None else None
         signal_text = ("L" if frame.left_signal else "-") + ("R" if frame.right_signal else "-")
         lane_offset_text = "--" if frame.lane_center_offset_m is None else f"{frame.lane_center_offset_m:+.2f}m"
-        limit_text = "--" if frame.speed_limit_kph is None else f"{frame.speed_limit_kph:d}"
+        limit_source = frame.speed_limit_source or "-"
+        limit_text = "--" if frame.speed_limit_kph is None else f"{frame.speed_limit_kph:d}:{limit_source}"
         cruise_text = "--" if frame.cruise_kph is None else f"{frame.cruise_kph:d}"
         curve_text = "--" if frame.road_curvature is None else f"{frame.road_curvature:+.5f}"
         detected_text = detected_vehicle_summary(frame.detected_vehicles)
@@ -630,13 +659,16 @@ class RouteReplaySource:
             ("L" if frame.lane_change_available_left else "-")
             + ("R" if frame.lane_change_available_right else "-")
         )
+        gear_text = frame.gear_text or "--"
+        gap_text = "--" if frame.cruise_gap is None else f"{frame.cruise_gap:d}"
         data_lines = (
             f"t {shown_time:6.1f}/{self.duration:6.1f}s   seg {segment_label}",
             f"vEgo {state.speed_kph:5.1f} km/h   aEgo {state.accel_mps2:+.2f} m/s2",
             f"steer {frame.steering_angle_deg or 0.0:+.1f} deg   limit {limit_text}   cruise {cruise_text}",
+            f"gear {gear_text}   gap {gap_text}   signals {signal_text}",
             f"curve {curve_text}   plan {plan_speed_text}kph {plan_accel_text}m/s2",
             f"lane {frame.lane_width_m:.2f}m center {lane_offset_text}   src {frame.lane_position_source}",
-            f"signals {signal_text}   lc {lane_change_text} avail {availability_text} p{frame.lane_change_prob:.2f}",
+            f"lc {lane_change_text} avail {availability_text} p{frame.lane_change_prob:.2f}",
             f"model {confidence_text} eng {engaged_text} risk {frame.disengage_risk:.2f} hb {frame.hard_brake_risk:.2f}",
             f"turn {turn_speed_text}kph ttc {lead_ttc_text} stop {int(frame.should_stop)} drop {frame_drop_text} exec {model_time_text}",
             f"vision {vision_text} yaw {frame.vision_yaw_rate_rps or 0.0:+.3f}   detected {detected_text}",
@@ -644,7 +676,8 @@ class RouteReplaySource:
         )
 
         if video_frame is None:
-            return RouteOverlay(video_status="qcamera unavailable", data_lines=data_lines)
+            status = self._video_reader.status_text() if self._video_reader is not None else "qcamera unavailable"
+            return RouteOverlay(video_status=status, data_lines=data_lines)
         return RouteOverlay(
             video_rgba=video_frame.rgba,
             video_width=video_frame.width,
@@ -657,98 +690,165 @@ class RouteReplaySource:
 class RouteVideoFrameReader:
     def __init__(self, segments: list[RouteVideoSegment]) -> None:
         self.segments = segments
-        self._ffmpeg_path = shutil.which("ffmpeg")
-        self._active_segment: RouteVideoSegment | None = None
+        self._ffmpeg = shutil.which("ffmpeg")
         self._process: subprocess.Popen[bytes] | None = None
-        self._width = 526
-        self._height = 330
-        self._fps = 20.0
-        self._current_index = -1
+        self._segment_key: tuple[int | None, str, float, float] | None = None
+        self._frame_index = -1
         self._last_frame: RouteVideoFrame | None = None
+        self._status = "qcamera waiting"
 
     def frame_at(self, playback_seconds: float) -> RouteVideoFrame | None:
         segment = route_video_segment_at(self.segments, playback_seconds)
-        if segment is None or self._ffmpeg_path is None:
+        if segment is None:
+            self._close_process()
+            self._status = "qcamera missing"
+            return None
+        if not segment.path.exists():
+            self._close_process()
+            self._status = "qcamera file missing"
+            return None
+        if self._ffmpeg is None:
+            self._status = "qcamera ffmpeg missing"
             return None
 
-        segment_time = clamp(playback_seconds - segment.start_t, 0.0, max(0.0, segment.end_t - segment.start_t))
-        if self._active_segment != segment:
-            self._restart(segment)
-        if self._process is None or self._process.stdout is None:
-            return None
+        local_time_s = clamp(playback_seconds - segment.start_t, 0.0, max(0.0, segment.end_t - segment.start_t))
+        target_frame = max(0, int(local_time_s * ROUTE_VIDEO_FPS))
+        segment_key = self._key_for_segment(segment)
+        needs_restart = (
+            self._process is None
+            or self._segment_key != segment_key
+            or target_frame < self._frame_index
+            or target_frame - self._frame_index > ROUTE_VIDEO_SEEK_RESTART_FRAMES
+        )
+        if needs_restart and not self._open_segment(segment, target_frame):
+            return self._last_frame
 
-        target_index = max(0, int(segment_time * self._fps))
-        if target_index < self._current_index:
-            self._restart(segment)
-            if self._process is None or self._process.stdout is None:
-                return None
-
-        frame_size = self._width * self._height * 4
-        while self._current_index < target_index:
-            raw = self._process.stdout.read(frame_size)
-            if len(raw) != frame_size:
+        while self._frame_index < target_frame:
+            if not self._read_next_frame():
                 return self._last_frame
-            self._current_index += 1
-            self._last_frame = RouteVideoFrame(
-                rgba=raw,
-                width=self._width,
-                height=self._height,
-                frame_id=f"{segment.index}:{self._current_index}",
-            )
-
+        self._status = ""
         return self._last_frame
 
-    def close(self) -> None:
-        if self._process is None:
-            return
-        try:
-            if self._process.stdout is not None:
-                self._process.stdout.close()
-            self._process.terminate()
-            self._process.wait(timeout=1.0)
-        except Exception:
-            try:
-                self._process.kill()
-            except Exception:
-                pass
-        finally:
-            self._process = None
-            self._active_segment = None
-            self._current_index = -1
+    def status_text(self) -> str:
+        return self._status or "qcamera unavailable"
 
-    def _restart(self, segment: RouteVideoSegment) -> None:
-        self.close()
-        if self._ffmpeg_path is None:
-            return
-        self._width, self._height, self._fps = probe_video(segment.path)
-        self._process = subprocess.Popen(
-            [
-                self._ffmpeg_path,
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-i",
-                str(segment.path),
-                "-an",
-                "-f",
-                "rawvideo",
-                "-pix_fmt",
-                "rgba",
-                "-",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-        )
-        self._active_segment = segment
-        self._current_index = -1
+    def close(self) -> None:
+        self._close_process()
+
+    def _open_segment(self, segment: RouteVideoSegment, start_frame: int) -> bool:
+        self._close_process()
+        if self._ffmpeg is None:
+            self._status = "qcamera ffmpeg missing"
+            return False
+        seek_s = max(0.0, start_frame / ROUTE_VIDEO_FPS)
+        command = [
+            self._ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-threads",
+            "1",
+            "-ss",
+            f"{seek_s:.3f}",
+            "-i",
+            str(segment.path),
+            "-an",
+            "-sn",
+            "-vf",
+            f"scale={ROUTE_VIDEO_DECODE_WIDTH}:{ROUTE_VIDEO_DECODE_HEIGHT}",
+            "-pix_fmt",
+            "rgba",
+            "-f",
+            "rawvideo",
+            "pipe:1",
+        ]
+        try:
+            self._process = subprocess.Popen(
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+            )
+        except OSError as exc:
+            self._status = f"qcamera ffmpeg failed: {exc}"
+            self._process = None
+            return False
+        self._segment_key = self._key_for_segment(segment)
+        self._frame_index = start_frame - 1
         self._last_frame = None
+        self._status = "qcamera starting"
+        return True
+
+    def _read_next_frame(self) -> bool:
+        process = self._process
+        if process is None or process.stdout is None:
+            self._status = "qcamera unavailable"
+            return False
+        frame_size = ROUTE_VIDEO_DECODE_WIDTH * ROUTE_VIDEO_DECODE_HEIGHT * 4
+        data = self._read_exact(process.stdout, frame_size)
+        if data is None:
+            self._status = "qcamera ended"
+            self._close_process()
+            return False
+        self._frame_index += 1
+        frame_id = f"{self._segment_key}:{self._frame_index}"
+        self._last_frame = RouteVideoFrame(
+            rgba=data,
+            width=ROUTE_VIDEO_DECODE_WIDTH,
+            height=ROUTE_VIDEO_DECODE_HEIGHT,
+            frame_id=frame_id,
+        )
+        return True
+
+    @staticmethod
+    def _read_exact(stream: Any, size: int) -> bytes | None:
+        chunks: list[bytes] = []
+        remaining = size
+        while remaining > 0:
+            chunk = stream.read(remaining)
+            if not chunk:
+                return None
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        return chunks[0] if len(chunks) == 1 else b"".join(chunks)
+
+    @staticmethod
+    def _key_for_segment(segment: RouteVideoSegment) -> tuple[int | None, str, float, float]:
+        return segment.index, str(segment.path), segment.start_t, segment.end_t
+
+    def _close_process(self) -> None:
+        process = self._process
+        self._process = None
+        self._segment_key = None
+        self._frame_index = -1
+        if process is None:
+            return
+        if process.stdout is not None:
+            try:
+                process.stdout.close()
+            except OSError:
+                pass
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=0.3)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                try:
+                    process.wait(timeout=0.3)
+                except subprocess.TimeoutExpired:
+                    pass
 
 
 class RouteLogParser:
     def __init__(self) -> None:
         self.speed_limit_kph: int | None = None
+        self.speed_limit_source: str | None = None
         self.nav_speed_limit_kph: int | None = None
+        self.nav_speed_limit_t = -999.0
         self.cruise_kph: int | None = None
+        self.cruise_gap: int | None = None
+        self.lfa_active: bool | None = None
         self.controls_enabled: bool | None = None
         self.lane_width_m = DEFAULT_LANE_WIDTH_M
         self.left_lane_y_m: float | None = None
@@ -845,8 +945,12 @@ class RouteLogParser:
         self.lane_change_continuation_active = False
         self.lane_change_previous_state = "off"
         self.lane_change_peak_directional_observed_offset = 0.0
-        self.corner_detections: dict[str, DetectedVehicle] = {}
-        self.corner_detection_t = -999.0
+        self.ccnc_corner_detections: dict[str, DetectedVehicle] = {}
+        self.ccnc_corner_message_t = -999.0
+        self.adrv_corner_detections: dict[str, DetectedVehicle] = {}
+        self.adrv_corner_message_t = -999.0
+        self.adrv_lane_changing = 0
+        self.adrv_lane_changing_t = -999.0
         self.hyundai_canfd_radar_points: dict[str, RadarPoint] = {}
         self.hyundai_canfd_radar_history: dict[str, tuple[float, float]] = {}
         self.hyundai_canfd_radar_t = -999.0
@@ -874,11 +978,15 @@ class RouteLogParser:
             elif event_type == "lateralPlan":
                 self._update_lateral_plan(event.lateralPlan)
             elif event_type in ("navInstructionCarrot", "navInstruction"):
-                self._update_nav_instruction(getattr(event, event_type))
+                self._update_nav_instruction(getattr(event, event_type), event_t)
             elif event_type == "longitudinalPlan":
                 self._update_longitudinal_plan(event.longitudinalPlan)
             elif event_type == "controlsState":
                 self._update_controls_state(event.controlsState)
+            elif event_type == "selfdriveState":
+                self._update_selfdrive_state(event.selfdriveState)
+            elif event_type == "carControl":
+                self._update_car_control(event.carControl)
             elif event_type == "cameraOdometry":
                 self._update_camera_odometry(event.cameraOdometry, bool(safe_get(event, "valid", True)))
             elif event_type == "radarState":
@@ -909,9 +1017,23 @@ class RouteLogParser:
 
         self.cruise_kph = self._cruise_kph_from_car_state(car_state)
         cruise_display_state = self._cruise_display_state_from_car_state(car_state, self.cruise_kph)
+        gear_text = self._gear_text_from_car_state(car_state)
+        car_cruise_gap = self._cruise_gap_from_car_state(car_state)
+        if car_cruise_gap is not None:
+            self.cruise_gap = car_cruise_gap
+        cruise_gap = car_cruise_gap if car_cruise_gap is not None else self.cruise_gap
 
         car_speed_limit_kph = self._speed_limit_kph_from_car_state(car_state)
-        self.speed_limit_kph = car_speed_limit_kph if car_speed_limit_kph is not None else self.nav_speed_limit_kph
+        self._expire_nav_speed_limit(event_t)
+        if car_speed_limit_kph is not None:
+            self.speed_limit_kph = car_speed_limit_kph
+            self.speed_limit_source = "v"
+        elif self.nav_speed_limit_kph is not None:
+            self.speed_limit_kph = self.nav_speed_limit_kph
+            self.speed_limit_source = "n"
+        else:
+            self.speed_limit_kph = None
+            self.speed_limit_source = None
 
         self._update_lane_styles_from_car_state(car_state)
         lane_values = self._lane_values()
@@ -934,7 +1056,13 @@ class RouteLogParser:
             right_signal,
             observed_ego_lane_offset,
         )
-        detected_vehicles = self._detected_vehicles_from_current_state(car_state, event_t)
+        detected_vehicles = self._detected_vehicles_from_current_state(
+            car_state,
+            event_t,
+            lane_values,
+            lane_change,
+            lane_change_phase,
+        )
         radar_points = self._radar_points_from_current_state(event_t)
 
         return RouteReplayFrame(
@@ -944,8 +1072,12 @@ class RouteLogParser:
             steering=steering,
             steering_angle_deg=steering_angle_deg,
             speed_limit_kph=self.speed_limit_kph,
+            speed_limit_source=self.speed_limit_source,
             cruise_kph=self.cruise_kph,
             cruise_display_state=cruise_display_state,
+            gear_text=gear_text,
+            cruise_gap=cruise_gap,
+            lfa_active=self.lfa_active,
             left_signal=left_signal,
             right_signal=right_signal,
             left_blindspot=left_blindspot,
@@ -1080,7 +1212,7 @@ class RouteLogParser:
         lane_lines = safe_get(model, "laneLines")
         lane_probs = safe_get(model, "laneLineProbs")
         if lane_lines is not None:
-            self.model_lane_lines = tuple(model_line_points(lane_lines[index]) for index in range(min(len(lane_lines), 4)))
+            self.model_lane_lines = tuple(model_line_points(lane_lines[index]) for index in range(len(lane_lines)))
         if lane_lines is not None and len(lane_lines) >= 3:
             left_y = first_list_value(safe_get(lane_lines[1], "y"))
             right_y = first_list_value(safe_get(lane_lines[2], "y"))
@@ -1155,9 +1287,21 @@ class RouteLogParser:
             maximum=0.08,
         )
 
-    def _update_nav_instruction(self, nav_instruction: Any) -> None:
-        speed_limit_mps = safe_float(nav_instruction, "speedLimit", 0.0)
-        self.nav_speed_limit_kph = int(round(speed_limit_mps * 3.6)) if speed_limit_mps > 0.1 else None
+    def _update_nav_instruction(self, nav_instruction: Any, event_t: float) -> None:
+        nav_speed_limit_kph = self._speed_limit_kph_from_nav_instruction(nav_instruction)
+        if nav_speed_limit_kph is None:
+            self._expire_nav_speed_limit(event_t)
+            return
+        self.nav_speed_limit_kph = nav_speed_limit_kph
+        self.nav_speed_limit_t = event_t
+
+    def _expire_nav_speed_limit(self, event_t: float) -> None:
+        if (
+            self.nav_speed_limit_kph is not None
+            and event_t - self.nav_speed_limit_t > NAV_SPEED_LIMIT_HOLD_SECONDS
+        ):
+            self.nav_speed_limit_kph = None
+            self.nav_speed_limit_t = -999.0
 
     def _update_longitudinal_plan(self, longitudinal_plan: Any) -> None:
         self.longitudinal_plan_source = enum_text(
@@ -1238,6 +1382,16 @@ class RouteLogParser:
             self.controls_curvature_m_inv = curvature
             self.controls_curvature_source = "controlsState"
 
+    def _update_selfdrive_state(self, selfdrive_state: Any) -> None:
+        cruise_gap = self._cruise_gap_from_personality(safe_get(selfdrive_state, "personality"))
+        if cruise_gap is not None:
+            self.cruise_gap = cruise_gap
+
+    def _update_car_control(self, car_control: Any) -> None:
+        lat_active = safe_get(car_control, "latActive", None)
+        if lat_active is not None:
+            self.lfa_active = bool(lat_active)
+
     def _update_radar_state(self, radar_state: Any, event_t: float) -> None:
         detections: list[DetectedVehicle] = []
         for label, lead_name in (("TARGET", "leadOne"), ("TARGET2", "leadTwo")):
@@ -1291,14 +1445,19 @@ class RouteLogParser:
                     self.hyundai_canfd_radar_points[point.label] = self._radar_point_with_absolute_speed(point, event_t)
                 self.hyundai_canfd_radar_t = event_t
                 continue
-            if address not in (0x162, 0x1EA):
+            if address not in (CCNC_CORNER_RADAR_ADDRESS, ADRV_CORNER_RADAR_ADDRESS):
                 continue
             if len(data) < 24:
                 continue
             parsed = parse_corner_radar_message(address, data)
-            if parsed:
-                self.corner_detections = parsed
-                self.corner_detection_t = event_t
+            if address == ADRV_CORNER_RADAR_ADDRESS:
+                self.adrv_corner_detections = parsed
+                self.adrv_corner_message_t = event_t
+                self.adrv_lane_changing = dbc_unsigned(data, 45, 3, "be")
+                self.adrv_lane_changing_t = event_t
+            else:
+                self.ccnc_corner_detections = parsed
+                self.ccnc_corner_message_t = event_t
 
     def _update_live_tracks(self, live_tracks: Any, event_t: float) -> None:
         points: dict[str, RadarPoint] = {}
@@ -1340,26 +1499,72 @@ class RouteLogParser:
         absolute_speed_kph = observed_speed_kph if observed_speed_kph is not None else signal_speed_kph
         return replace(point, absolute_speed_kph=absolute_speed_kph)
 
-    def _detected_vehicles_from_current_state(self, car_state: Any, event_t: float) -> tuple[DetectedVehicle, ...]:
+    def _detected_vehicles_from_current_state(
+        self,
+        car_state: Any,
+        event_t: float,
+        lane_values: dict[str, Any],
+        lane_change: str | None,
+        lane_change_phase: str,
+    ) -> tuple[DetectedVehicle, ...]:
         detections: list[DetectedVehicle] = []
         if event_t - self.model_detection_t < 0.8:
             detections.extend(self.model_detections)
 
-        if event_t - self.corner_detection_t < 0.8:
-            for vehicle in self.corner_detections.values():
+        corner_detections = self._corner_detections_for_current_state(
+            event_t,
+            lane_change,
+            lane_change_phase,
+        )
+        if corner_detections is not None:
+            for vehicle in corner_detections:
+                if not vehicle_is_inside_road_edges(vehicle, lane_values):
+                    continue
                 if not has_nearby_vehicle(detections, vehicle, longitudinal_tolerance=3.0, lateral_tolerance=1.1):
                     detections.append(vehicle)
         else:
             for vehicle in car_state_corner_detections(car_state):
+                if not vehicle_is_inside_road_edges(vehicle, lane_values):
+                    continue
                 if not has_nearby_vehicle(detections, vehicle, longitudinal_tolerance=3.0, lateral_tolerance=1.1):
                     detections.append(vehicle)
 
         if event_t - self.radar_detection_t < 0.8:
             for vehicle in self.radar_detections:
-                if not has_nearby_vehicle(detections, vehicle, longitudinal_tolerance=4.0, lateral_tolerance=1.4):
+                if not vehicle_is_inside_road_edges(vehicle, lane_values):
+                    continue
+                if vehicle.source == "radarState" or not has_nearby_vehicle(
+                    detections,
+                    vehicle,
+                    longitudinal_tolerance=4.0,
+                    lateral_tolerance=1.4,
+                ):
                     detections.append(vehicle)
 
         return tuple(sorted(detections, key=lambda vehicle: vehicle.longitudinal_m))
+
+    def _corner_detections_for_current_state(
+        self,
+        event_t: float,
+        lane_change: str | None,
+        lane_change_phase: str,
+    ) -> tuple[DetectedVehicle, ...] | None:
+        adrv_fresh = event_t - self.adrv_corner_message_t < CORNER_DETECTION_STALE_S
+        ccnc_fresh = event_t - self.ccnc_corner_message_t < CORNER_DETECTION_STALE_S
+        adrv_lane_change_fresh = event_t - self.adrv_lane_changing_t < CORNER_DETECTION_STALE_S
+        lane_change_active = (
+            lane_change in ("left", "right")
+            and lane_change_phase in ("preparing", "changing", "recentering")
+        )
+        adrv_lane_change_active = adrv_lane_change_fresh and self.adrv_lane_changing != 0
+
+        if adrv_fresh and (lane_change_active or adrv_lane_change_active):
+            return tuple(self.adrv_corner_detections.values())
+        if ccnc_fresh:
+            return tuple(self.ccnc_corner_detections.values())
+        if adrv_fresh:
+            return tuple(self.adrv_corner_detections.values())
+        return None
 
     def _current_road_curvature(self) -> tuple[float | None, str]:
         if self.model_curvature_m_inv is not None:
@@ -1480,9 +1685,66 @@ class RouteLogParser:
         speed_limit = safe_float(car_state, "speedLimit", 0.0)
         if speed_limit <= 0.0:
             return None
-        if speed_limit < 45.0:
-            return int(round(speed_limit * 3.6))
         return int(round(speed_limit))
+
+    def _speed_limit_kph_from_nav_instruction(self, nav_instruction: Any) -> int | None:
+        speed_limit = safe_float(nav_instruction, "speedLimit", 0.0)
+        if speed_limit <= 0.1:
+            return None
+        rounded = int(round(speed_limit))
+        integer_like = abs(speed_limit - rounded) < 0.05
+        kph_like = speed_limit >= 45.0 or (speed_limit >= 30.0 and integer_like and rounded % 5 == 0)
+        if kph_like:
+            return rounded
+        return int(round(speed_limit * 3.6))
+
+    def _gear_text_from_car_state(self, car_state: Any) -> str | None:
+        gear = safe_get(car_state, "gearShifter")
+        if gear is None:
+            return None
+        gear_name = str(gear).split(".")[-1].strip().lower()
+        if not gear_name:
+            return None
+        if "drive" in gear_name:
+            gear_step = safe_optional_int(car_state, "gearStep")
+            if gear_step is not None and 1 <= gear_step <= 8:
+                return str(gear_step)
+            return "D"
+        if "park" in gear_name:
+            return "P"
+        if "reverse" in gear_name:
+            return "R"
+        if "neutral" in gear_name:
+            return "N"
+        if "sport" in gear_name:
+            return "S"
+        if "low" in gear_name:
+            return "L"
+        if "brake" in gear_name:
+            return "B"
+        if "eco" in gear_name:
+            return "E"
+        if "unknown" in gear_name:
+            return "U"
+        return "M"
+
+    def _cruise_gap_from_car_state(self, car_state: Any) -> int | None:
+        cruise_gap = safe_optional_int(car_state, "pcmCruiseGap")
+        if cruise_gap is None or not 1 <= cruise_gap <= 4:
+            return None
+        return cruise_gap
+
+    def _cruise_gap_from_personality(self, personality: Any) -> int | None:
+        for value in (safe_get(personality, "raw"), personality):
+            try:
+                personality_index = int(value)
+            except (TypeError, ValueError):
+                continue
+            if 0 <= personality_index <= 3:
+                return personality_index + 1
+
+        personality_name = str(personality).split(".")[-1].strip().replace("_", "").replace(" ", "").lower()
+        return LONGITUDINAL_PERSONALITY_GAPS.get(personality_name)
 
     def _update_lane_styles_from_car_state(self, car_state: Any) -> None:
         left_code = safe_optional_int(car_state, "leftLaneLine")
@@ -1831,8 +2093,12 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         accel_mps2=frame.accel_mps2,
         steering=frame.steering,
         speed_limit_kph=frame.speed_limit_kph,
+        speed_limit_source=frame.speed_limit_source,
         cruise_kph=frame.cruise_kph,
         cruise_display_state=frame.cruise_display_state,
+        gear_text=frame.gear_text,
+        cruise_gap=frame.cruise_gap,
+        lfa_active=frame.lfa_active,
         left_signal=frame.left_signal,
         right_signal=frame.right_signal,
         left_blindspot=frame.left_blindspot,
@@ -2009,8 +2275,12 @@ def blend_frames(left: RouteReplayFrame, right: RouteReplayFrame, amount: float)
         steering=lerp(left.steering, right.steering),
         steering_angle_deg=lerp_optional(left.steering_angle_deg, right.steering_angle_deg),
         speed_limit_kph=discrete.speed_limit_kph,
+        speed_limit_source=discrete.speed_limit_source,
         cruise_kph=discrete.cruise_kph,
         cruise_display_state=discrete.cruise_display_state,
+        gear_text=discrete.gear_text,
+        cruise_gap=discrete.cruise_gap,
+        lfa_active=discrete.lfa_active,
         left_signal=discrete.left_signal,
         right_signal=discrete.right_signal,
         left_blindspot=discrete.left_blindspot,
@@ -2129,6 +2399,54 @@ def lanes_for_frame(
     right_inner_visible = frame.right_lane_visible or force_lane_change_lanes
 
     markings: list[LaneMarking] = []
+    for index, points in enumerate(frame.model_lane_lines):
+        if not points:
+            continue
+        if index == 1:
+            offset = left_inner
+            color = left_inner_color
+            style = frame.left_lane_style
+            visible = left_inner_visible
+            width = 7
+        elif index == 2:
+            offset = right_inner
+            color = right_inner_color
+            style = frame.right_lane_style
+            visible = right_inner_visible
+            width = 7
+        else:
+            offset = model_lane_offset_for_index(
+                index,
+                points,
+                frame,
+                left_inner,
+                right_inner,
+                lane_grid_offset,
+            )
+            color = model_lane_color_for_index(index, frame.lane_change)
+            style = model_lane_style_for_index(index)
+            visible = True
+            width = 5
+        markings.append(
+            LaneMarking(
+                offset,
+                color,
+                style,
+                visible=visible,
+                width=width,
+                model_points=points,
+                model_lateral_shift_m=model_line_lateral_shift(
+                    points,
+                    frame,
+                    offset,
+                    lane_grid_offset,
+                    use_animated_lane_grid,
+                ),
+            )
+        )
+    if markings:
+        return tuple(markings)
+
     if use_animated_lane_grid and frame.lane_change == "left":
         left_outer = left_inner - 1.0
         left_outer_points = model_line_at(frame.model_lane_lines, 0)
@@ -2206,6 +2524,42 @@ def lanes_for_frame(
             )
         )
     return tuple(markings)
+
+
+def model_lane_offset_for_index(
+    index: int,
+    points: tuple[ModelPathPoint, ...],
+    frame: RouteReplayFrame,
+    left_inner: float,
+    right_inner: float,
+    lane_grid_offset: float,
+) -> float:
+    center_m = frame.lane_center_offset_m
+    if center_m is not None and points:
+        offset = lane_offset_from_y(points[0].lateral_m, center_m, frame.lane_width_m)
+        if offset is not None:
+            return offset + lane_grid_offset
+    if index < 1:
+        return left_inner - (1 - index)
+    if index > 2:
+        return right_inner + (index - 2)
+    return left_inner if index == 1 else right_inner
+
+
+def model_lane_color_for_index(index: int, lane_change: str | None) -> tuple[int, int, int]:
+    if index in (1, 2):
+        return BLUE
+    if index == 0 and lane_change == "left":
+        return BLUE_SOFT
+    if index == 3 and lane_change == "right":
+        return BLUE_SOFT
+    return WHITE
+
+
+def model_lane_style_for_index(index: int) -> str:
+    if index < 2:
+        return "solid"
+    return "dashed"
 
 
 def model_line_at(
@@ -2676,6 +3030,34 @@ def has_nearby_vehicle(
     )
 
 
+def road_edge_lateral_bounds_m(lane_values: dict[str, Any]) -> tuple[float | None, float | None]:
+    center_m = lane_values.get("center")
+    if center_m is None:
+        return None, None
+    width_m = max(0.1, float(lane_values.get("width", DEFAULT_LANE_WIDTH_M)))
+
+    def edge_lateral(offset_name: str) -> float | None:
+        offset = lane_values.get(offset_name)
+        if offset is None:
+            return None
+        return float(center_m) + float(offset) * width_m
+
+    left_edge_m = edge_lateral("left_road_edge_offset")
+    right_edge_m = edge_lateral("right_road_edge_offset")
+    if left_edge_m is not None and right_edge_m is not None and left_edge_m >= right_edge_m:
+        return None, None
+    return left_edge_m, right_edge_m
+
+
+def vehicle_is_inside_road_edges(vehicle: DetectedVehicle, lane_values: dict[str, Any]) -> bool:
+    left_edge_m, right_edge_m = road_edge_lateral_bounds_m(lane_values)
+    if left_edge_m is not None and vehicle.lateral_m < left_edge_m - ROAD_EDGE_VEHICLE_OUTSIDE_MARGIN_M:
+        return False
+    if right_edge_m is not None and vehicle.lateral_m > right_edge_m + ROAD_EDGE_VEHICLE_OUTSIDE_MARGIN_M:
+        return False
+    return True
+
+
 def detected_vehicle_summary(vehicles: tuple[DetectedVehicle, ...]) -> str:
     if not vehicles:
         return "none"
@@ -2779,45 +3161,6 @@ def route_video_segment_at(
     return segment
 
 
-def probe_video(path: Path) -> tuple[int, int, float]:
-    ffprobe_path = shutil.which("ffprobe")
-    if ffprobe_path is None:
-        return 526, 330, 20.0
-    try:
-        result = subprocess.run(
-            [
-                ffprobe_path,
-                "-v",
-                "error",
-                "-select_streams",
-                "v:0",
-                "-show_entries",
-                "stream=width,height,r_frame_rate",
-                "-of",
-                "csv=p=0:s=x",
-                str(path),
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=3.0,
-        )
-    except Exception:
-        return 526, 330, 20.0
-
-    first_line = result.stdout.strip().splitlines()[0] if result.stdout.strip() else ""
-    parts = first_line.split("x")
-    if len(parts) < 3:
-        return 526, 330, 20.0
-    try:
-        width = int(parts[0])
-        height = int(parts[1])
-        fps = float(Fraction(parts[2]))
-    except (ValueError, ZeroDivisionError):
-        return 526, 330, 20.0
-    return max(1, width), max(1, height), max(1.0, fps)
-
-
 def segment_index(path: Path) -> int | None:
     return segment_index_from_name(path.parent.name)
 
@@ -2847,6 +3190,15 @@ def load_openpilot_log_schema() -> Any:
     global _LOG_SCHEMA
     if _LOG_SCHEMA is not None:
         return _LOG_SCHEMA
+
+    if sys.platform != "win32":
+        try:
+            from cereal import log as capnp_log
+
+            _LOG_SCHEMA = capnp_log
+            return _LOG_SCHEMA
+        except Exception:
+            pass
 
     try:
         import capnp

@@ -5,10 +5,13 @@ libs = [common, messaging, visionipc,
         'pthread', 'z', 'm', 'zstd']
 frameworks = []
 
-src = ['logger.cc', 'zstd_writer.cc', 'video_writer.cc', 'encoder/encoder.cc', 'encoder/v4l_encoder.cc', 'encoder/jpeg_encoder.cc']
+src = ['logger.cc', 'zstd_writer.cc', 'video_writer.cc', 'encoder/encoder.cc', 'encoder/v4l_encoder.cc', 'encoder/cluster_h264_encoder.cc', 'encoder/jpeg_encoder.cc']
+if arch != "Darwin":
+  libs += ['yuv']
 if arch != "larch64":
   src += ['encoder/ffmpeg_encoder.cc']
-  libs += ['yuv']
+  if 'yuv' not in libs:
+    libs += ['yuv']
   if arch == "Darwin":
     frameworks += ['VideoToolbox', 'CoreMedia', 'CoreFoundation', 'CoreVideo']
   else:
@@ -17,6 +20,7 @@ if arch != "larch64":
 if arch == "Darwin":
   # exclude v4l
   del src[src.index('encoder/v4l_encoder.cc')]
+  del src[src.index('encoder/cluster_h264_encoder.cc')]
 
 logger_lib = env.Library('logger', src)
 libs.insert(0, logger_lib)
@@ -24,6 +28,14 @@ libs.insert(0, logger_lib)
 env.Program('loggerd', ['loggerd.cc'], LIBS=libs, FRAMEWORKS=frameworks)
 env.Program('encoderd', ['encoderd.cc'], LIBS=libs + ["jpeg"], FRAMEWORKS=frameworks)
 env.Program('bootlog.cc', LIBS=libs, FRAMEWORKS=frameworks)
+if arch != "Darwin":
+  env.Program('cluster_h264_encoder_cli', ['encoder/cluster_h264_encoder_cli.cc'], LIBS=libs, FRAMEWORKS=frameworks)
+  env.SharedLibrary(
+    'cluster_h264_encoder_bridge',
+    ['encoder/cluster_h264_encoder_bridge.cc', 'encoder/cluster_h264_encoder.cc'],
+    LIBS=[common, messaging, visionipc, 'pthread', 'z', 'm', 'zstd', 'yuv'],
+    FRAMEWORKS=frameworks,
+  )
 
 if GetOption('extras'):
   env.Program('tests/test_logger', ['tests/test_runner.cc', 'tests/test_logger.cc', 'tests/test_zstd_writer.cc'], LIBS=libs)
