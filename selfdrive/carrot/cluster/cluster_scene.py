@@ -105,6 +105,7 @@ ROAD_EDGE_OUTSIDE_SHADOW_OFFSET_M = 0.13
 ROAD_EDGE_BODY_OFFSET_M = 0.055
 ROAD_EDGE_CREST_OFFSET_M = -0.045
 ROAD_EDGE_BACKING_COLOR = LIGHT_CLUSTER_THEME.road_edge_backing
+ROAD_EDGE_MODEL_POINT_LIMIT = 18
 PATH_SHADOW_LAYER_M = 0.024
 PATH_UNCERTAINTY_LAYER_M = PATH_HEIGHT_M + 0.002
 PATH_BODY_LAYER_M = PATH_HEIGHT_M + 0.046
@@ -2039,6 +2040,22 @@ def road_edge_layer_specs(layers: tuple[RoadEdgeLayer, ...]) -> tuple[tuple[int,
     return tuple((width_px, color, height_m) for width_px, color, height_m, _ in layers)
 
 
+def road_edge_model_points_for_render(model_points: tuple[ModelPathPoint, ...]) -> tuple[ModelPathPoint, ...]:
+    point_count = len(model_points)
+    if point_count <= ROAD_EDGE_MODEL_POINT_LIMIT:
+        return model_points
+    last_index = point_count - 1
+    selected: list[ModelPathPoint] = []
+    previous_index = -1
+    for output_index in range(ROAD_EDGE_MODEL_POINT_LIMIT):
+        index = round(output_index * last_index / (ROAD_EDGE_MODEL_POINT_LIMIT - 1))
+        if index == previous_index:
+            continue
+        selected.append(model_points[index])
+        previous_index = index
+    return tuple(selected)
+
+
 def road_edge_model_strips(
     model_points: tuple[ModelPathPoint, ...],
     lateral_shift_m: float,
@@ -2050,8 +2067,9 @@ def road_edge_model_strips(
 ) -> tuple[MeshStrip, ...]:
     layers = road_edge_3d_layers(color, theme)
     specs = road_edge_layer_specs(layers)
+    render_points = road_edge_model_points_for_render(model_points)
     groups = cached_model_line_strip_groups(
-        model_points,
+        render_points,
         start_m,
         end_m,
         specs,
