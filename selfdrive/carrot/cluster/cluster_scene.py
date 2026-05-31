@@ -96,6 +96,7 @@ ROAD_EDGE_OFFSET_STRIP_CACHE_LIMIT = 48
 ROAD_EDGE_OFFSET_STRIP_CACHE_OFFSET_GRID = 0.01
 ROAD_EDGE_OFFSET_STRIP_CACHE_STEERING_GRID = 0.002
 ROAD_EDGE_OFFSET_STRIP_CACHE_LANE_WIDTH_GRID_M = 0.02
+PLANNED_PATH_STRIP_CACHE_LIMIT = 48
 ROAD_STEPS_SURROUND = 96
 ROAD_STEPS_MODEL = 48
 ROAD_STEPS_SIM = 64
@@ -247,6 +248,9 @@ RoadEdgeOffsetStripCacheKey = tuple[
     RoadEdgeOffsetLayerGeometrySpecs,
 ]
 _ROAD_EDGE_OFFSET_STRIP_CACHE: OrderedDict[RoadEdgeOffsetStripCacheKey, RoadEdgeOffsetStripGroups] = OrderedDict()
+PlannedPathStripSpecs = tuple[tuple[float, Color, float], ...]
+PlannedPathStripCacheKey = tuple[tuple[Vec3, ...], PlannedPathStripSpecs]
+_PLANNED_PATH_STRIP_CACHE: OrderedDict[PlannedPathStripCacheKey, tuple[MeshStrip, ...]] = OrderedDict()
 
 
 @dataclass(frozen=True, slots=True)
@@ -729,6 +733,23 @@ def strips_from_centerline_width_specs(
         MeshStrip(tuple(left_groups[index]), tuple(right_groups[index]), color)
         for index, (_, color, _) in enumerate(specs)
     )
+
+
+def cached_strips_from_centerline_width_specs(
+    points: tuple[Vec3, ...],
+    specs: PlannedPathStripSpecs,
+) -> tuple[MeshStrip, ...]:
+    key = (points, specs)
+    cached = _PLANNED_PATH_STRIP_CACHE.get(key)
+    if cached is not None:
+        _PLANNED_PATH_STRIP_CACHE.move_to_end(key)
+        return cached
+
+    strips = strips_from_centerline_width_specs(points, specs)
+    _PLANNED_PATH_STRIP_CACHE[key] = strips
+    while len(_PLANNED_PATH_STRIP_CACHE) > PLANNED_PATH_STRIP_CACHE_LIMIT:
+        _PLANNED_PATH_STRIP_CACHE.popitem(last=False)
+    return strips
 
 
 def lane_marking_strip_groups_from_segments(
@@ -1268,7 +1289,7 @@ def planned_path_strips(
             path_specs.append((uncertainty_width, theme.path_uncertainty, PATH_UNCERTAINTY_LAYER_M))
     path_specs.append((0.46, theme.path_body, PATH_BODY_LAYER_M))
     path_specs.append((0.16, theme.path_highlight, PATH_HIGHLIGHT_LAYER_M))
-    strips = list(strips_from_centerline_width_specs(points, tuple(path_specs)))
+    strips = list(cached_strips_from_centerline_width_specs(points, tuple(path_specs)))
     profile_scene_add(profile_add, "scene.build.planned_path.strips", profile_stage)
 
     if model_driven:
