@@ -1518,23 +1518,48 @@ class ClusterUiRenderer:
         if not radar_info_shows_radar_points(radar_info_mode):
             return
         theme = self._current_theme()
+        profile_enabled = self.profile_enabled
+        profile_stage = self._profile_start()
         ordered = sorted(
             points,
             key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label),
             reverse=True,
         )
+        self._profile_add("draw_scene.radar_labels.sort", profile_stage)
+
+        project_ms = 0.0
+        layout_ms = 0.0
+        text_ms = 0.0
+
+        def draw_label_text(label, x, y, size, color) -> None:
+            nonlocal text_ms
+            if profile_enabled:
+                text_stage = time.perf_counter()
+                self._draw_text(label, x, y, size, color, anchor="center")
+                text_ms += (time.perf_counter() - text_stage) * 1000.0
+                return
+            self._draw_text(label, x, y, size, color, anchor="center")
+
         for point in ordered:
             anchor = rl.Vector3(
                 point.center.x + scene_shift_x_m,
                 point.center.y,
                 point.center.z + RADAR_LABEL_ANCHOR_Z_OFFSET_M,
             )
+            if profile_enabled:
+                project_stage = time.perf_counter()
             screen = world_to_screen_label_anchor(anchor, camera, self.width, self.height)
+            if profile_enabled:
+                project_ms += (time.perf_counter() - project_stage) * 1000.0
             if screen is None:
                 continue
+            if profile_enabled:
+                layout_stage = time.perf_counter()
             distance = radar_point_distance_label(point) if radar_info_shows_distance(radar_info_mode) else ""
             speed = radar_point_speed_label(point) if radar_info_shows_speed(radar_info_mode) else ""
             if not distance and not speed:
+                if profile_enabled:
+                    layout_ms += (time.perf_counter() - layout_stage) * 1000.0
                 continue
             scale = world_label_scale(point.longitudinal_m)
             distance_size = max(9.0, RADAR_LABEL_DISTANCE_FONT_SIZE * scale)
@@ -1552,40 +1577,41 @@ class ClusterUiRenderer:
             center_x = screen.x
             shadow = theme.world_label_shadow
             text = theme.world_label_text
+            if profile_enabled:
+                layout_ms += (time.perf_counter() - layout_stage) * 1000.0
             if distance:
-                self._draw_text(
+                draw_label_text(
                     distance,
                     center_x + shadow_offset,
                     distance_y + shadow_offset,
                     distance_size,
                     shadow,
-                    anchor="center",
                 )
-                self._draw_text(
+                draw_label_text(
                     distance,
                     center_x,
                     distance_y,
                     distance_size,
                     text,
-                    anchor="center",
                 )
             if speed:
-                self._draw_text(
+                draw_label_text(
                     speed,
                     center_x + shadow_offset,
                     speed_y + shadow_offset,
                     speed_size,
                     shadow,
-                    anchor="center",
                 )
-                self._draw_text(
+                draw_label_text(
                     speed,
                     center_x,
                     speed_y,
                     speed_size,
                     text,
-                    anchor="center",
                 )
+        self._profile_add_elapsed("draw_scene.radar_labels.project", project_ms)
+        self._profile_add_elapsed("draw_scene.radar_labels.layout", layout_ms)
+        self._profile_add_elapsed("draw_scene.radar_labels.text", text_ms)
 
     def _draw_vehicle_shadow(self, vehicle: VehicleBox) -> None:
         half_width = vehicle.width_m * 0.5
@@ -1638,6 +1664,8 @@ class ClusterUiRenderer:
         if not radar_info_shows_vehicle(radar_info_mode):
             return
         theme = self._current_theme()
+        profile_enabled = self.profile_enabled
+        profile_stage = self._profile_start()
         ordered = sorted(
             (vehicle for vehicle in vehicles if vehicle.label),
             key=lambda vehicle: (
@@ -1646,19 +1674,42 @@ class ClusterUiRenderer:
                 -vehicle.confidence,
             ),
         )
+        self._profile_add("draw_scene.vehicle_badges.sort", profile_stage)
+
+        project_ms = 0.0
+        layout_ms = 0.0
+        text_ms = 0.0
+
+        def draw_label_text(label, x, y, size, color) -> None:
+            nonlocal text_ms
+            if profile_enabled:
+                text_stage = time.perf_counter()
+                self._draw_text(label, x, y, size, color, anchor="center")
+                text_ms += (time.perf_counter() - text_stage) * 1000.0
+                return
+            self._draw_text(label, x, y, size, color, anchor="center")
+
         for vehicle in ordered:
             anchor = rl.Vector3(
                 vehicle.center.x + scene_shift_x_m,
                 vehicle.center.y,
                 vehicle.height_m + VEHICLE_BADGE_ANCHOR_Z_OFFSET_M,
             )
+            if profile_enabled:
+                project_stage = time.perf_counter()
             screen = world_to_screen_label_anchor(anchor, camera, self.width, self.height)
+            if profile_enabled:
+                project_ms += (time.perf_counter() - project_stage) * 1000.0
             if screen is None:
                 continue
 
+            if profile_enabled:
+                layout_stage = time.perf_counter()
             distance = vehicle_distance_label(vehicle) if radar_info_shows_distance(radar_info_mode) else ""
             speed = vehicle_speed_label(vehicle) if radar_info_shows_speed(radar_info_mode) else ""
             if not distance and not speed:
+                if profile_enabled:
+                    layout_ms += (time.perf_counter() - layout_stage) * 1000.0
                 continue
             distance_m = abs(vehicle.center.y - EGO_FORWARD_M)
             scale = world_label_scale(distance_m)
@@ -1677,40 +1728,41 @@ class ClusterUiRenderer:
             center_x = screen.x
             shadow = theme.world_label_shadow
             text_color = vehicle_metric_color(vehicle, theme, radar_source_color_mode)
+            if profile_enabled:
+                layout_ms += (time.perf_counter() - layout_stage) * 1000.0
             if distance:
-                self._draw_text(
+                draw_label_text(
                     distance,
                     center_x + shadow_offset,
                     distance_y + shadow_offset,
                     distance_size,
                     shadow,
-                    anchor="center",
                 )
-                self._draw_text(
+                draw_label_text(
                     distance,
                     center_x,
                     distance_y,
                     distance_size,
                     text_color,
-                    anchor="center",
                 )
             if speed:
-                self._draw_text(
+                draw_label_text(
                     speed,
                     center_x + shadow_offset,
                     speed_y + shadow_offset,
                     speed_size,
                     shadow,
-                    anchor="center",
                 )
-                self._draw_text(
+                draw_label_text(
                     speed,
                     center_x,
                     speed_y,
                     speed_size,
                     text_color,
-                    anchor="center",
                 )
+        self._profile_add_elapsed("draw_scene.vehicle_badges.project", project_ms)
+        self._profile_add_elapsed("draw_scene.vehicle_badges.layout", layout_ms)
+        self._profile_add_elapsed("draw_scene.vehicle_badges.text", text_ms)
 
     def _draw_rear_vehicle_indicators(
         self,
