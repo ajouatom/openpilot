@@ -87,7 +87,7 @@ MODEL_LINE_STRIP_GROUP_CACHE_LIMIT = 48
 MODEL_LINE_STRIP_GROUP_CACHE_GRID_M = 0.5
 MODEL_LINE_STRIP_GROUP_CACHE_POINT_GRID_M = 0.05
 MODEL_LINE_STRIP_GROUP_CACHE_COLOR: Color = (0, 0, 0, 0)
-MODEL_LINE_RENDER_POINT_LIMIT = 24
+MODEL_LINE_RENDER_POINT_LIMIT = 0
 LANE_OFFSET_STRIP_CACHE_LIMIT = 64
 LANE_OFFSET_STRIP_CACHE_OFFSET_GRID = 0.01
 LANE_OFFSET_STRIP_CACHE_STEERING_GRID = 0.002
@@ -100,7 +100,7 @@ ROAD_STEPS_SURROUND = 96
 ROAD_STEPS_MODEL = 48
 ROAD_STEPS_SIM = 64
 STATIC_LINE_STEPS = 56
-ROAD_EDGE_OFFSET_STEPS = 36
+ROAD_EDGE_OFFSET_STEPS = STATIC_LINE_STEPS
 PLANNED_PATH_FALLBACK_STEPS = 32
 MODEL_PATH_METRIC_SEGMENT_LIMIT = 14
 LANE_MARKING_SHADOW_HEIGHT_M = 0.026
@@ -115,7 +115,7 @@ ROAD_EDGE_OUTSIDE_SHADOW_OFFSET_M = 0.13
 ROAD_EDGE_BODY_OFFSET_M = 0.055
 ROAD_EDGE_CREST_OFFSET_M = -0.045
 ROAD_EDGE_BACKING_COLOR = LIGHT_CLUSTER_THEME.road_edge_backing
-ROAD_EDGE_MODEL_POINT_LIMIT = 18
+ROAD_EDGE_MODEL_POINT_LIMIT = 0
 PATH_SHADOW_LAYER_M = 0.024
 PATH_UNCERTAINTY_LAYER_M = PATH_HEIGHT_M + 0.002
 PATH_BODY_LAYER_M = PATH_HEIGHT_M + 0.046
@@ -914,7 +914,7 @@ def model_line_cache_point_key(model_points: tuple[ModelPathPoint, ...]) -> Mode
 
 def model_line_points_for_render(model_points: tuple[ModelPathPoint, ...]) -> tuple[ModelPathPoint, ...]:
     point_count = len(model_points)
-    if point_count <= MODEL_LINE_RENDER_POINT_LIMIT:
+    if MODEL_LINE_RENDER_POINT_LIMIT <= 0 or point_count <= MODEL_LINE_RENDER_POINT_LIMIT:
         return model_points
     last_index = point_count - 1
     selected: list[ModelPathPoint] = []
@@ -2193,7 +2193,7 @@ def road_edge_layer_geometry_specs(layers: tuple[RoadEdgeLayer, ...]) -> RoadEdg
 
 def road_edge_model_points_for_render(model_points: tuple[ModelPathPoint, ...]) -> tuple[ModelPathPoint, ...]:
     point_count = len(model_points)
-    if point_count <= ROAD_EDGE_MODEL_POINT_LIMIT:
+    if ROAD_EDGE_MODEL_POINT_LIMIT <= 0 or point_count <= ROAD_EDGE_MODEL_POINT_LIMIT:
         return model_points
     last_index = point_count - 1
     selected: list[ModelPathPoint] = []
