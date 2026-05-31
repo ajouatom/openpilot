@@ -125,6 +125,11 @@ PATH_UNCERTAINTY_LAYER_M = PATH_HEIGHT_M + 0.002
 PATH_BODY_LAYER_M = PATH_HEIGHT_M + 0.046
 PATH_METRIC_LAYER_M = PATH_HEIGHT_M + 0.066
 PATH_HIGHLIGHT_LAYER_M = PATH_HEIGHT_M + 0.088
+FOLLOW_DISTANCE_MARKER_BACKING_LAYER_M = PATH_HEIGHT_M + 0.116
+FOLLOW_DISTANCE_MARKER_BODY_LAYER_M = PATH_HEIGHT_M + 0.132
+FOLLOW_DISTANCE_MARKER_BACKING_FORWARD_M = 0.28
+FOLLOW_DISTANCE_MARKER_BODY_FORWARD_M = 0.14
+FOLLOW_DISTANCE_MARKER_BACKING_EXTRA_WIDTH_M = 0.22
 LANE_HIGHLIGHT_COLOR = (64, 148, 255)
 LANE_HIGHLIGHT_ALPHA = 220
 LANE_HIGHLIGHT_ROUTE_ALPHA = 170
@@ -1479,7 +1484,75 @@ def planned_path_strips(
         profile_scene_add(profile_add, "scene.build.planned_path.metrics", profile_stage)
         if highlight_strip is not None:
             strips.append(highlight_strip)
+    profile_stage = profile_scene_start(profile_add)
+    strips.extend(follow_distance_marker_strips(state, points, lane_width_m, theme))
+    profile_scene_add(profile_add, "scene.build.planned_path.follow_distance", profile_stage)
     return tuple(strips)
+
+
+def follow_distance_marker_strips(
+    state: ClusterUiState,
+    points: tuple[Vec3, ...],
+    lane_width_m: float,
+    theme: ClusterTheme = LIGHT_CLUSTER_THEME,
+) -> tuple[MeshStrip, ...]:
+    distance_m = state.longitudinal_desired_distance_m
+    if distance_m is None or distance_m <= 0.0 or len(points) < 2:
+        return ()
+    forward_m = data_scene_forward_m(distance_m)
+    if forward_m < points[0].y or forward_m > points[-1].y:
+        return ()
+    center_x_m = centerline_x_at_forward(points, forward_m)
+    if center_x_m is None:
+        return ()
+    half_width_m = lane_width_m * 0.5
+
+    def marker_strip(half_forward_m: float, extra_width_m: float, height_m: float, color: Color) -> MeshStrip:
+        left_x_m = center_x_m - half_width_m - extra_width_m
+        right_x_m = center_x_m + half_width_m + extra_width_m
+        near_m = forward_m - half_forward_m
+        far_m = forward_m + half_forward_m
+        return MeshStrip(
+            left=(
+                Vec3(left_x_m, near_m, height_m),
+                Vec3(left_x_m, far_m, height_m),
+            ),
+            right=(
+                Vec3(right_x_m, near_m, height_m),
+                Vec3(right_x_m, far_m, height_m),
+            ),
+            color=color,
+        )
+
+    return (
+        marker_strip(
+            FOLLOW_DISTANCE_MARKER_BACKING_FORWARD_M,
+            FOLLOW_DISTANCE_MARKER_BACKING_EXTRA_WIDTH_M,
+            FOLLOW_DISTANCE_MARKER_BACKING_LAYER_M,
+            theme.path_shadow,
+        ),
+        marker_strip(
+            FOLLOW_DISTANCE_MARKER_BODY_FORWARD_M,
+            0.0,
+            FOLLOW_DISTANCE_MARKER_BODY_LAYER_M,
+            theme.path_highlight,
+        ),
+    )
+
+
+def centerline_x_at_forward(points: tuple[Vec3, ...], forward_m: float) -> float | None:
+    if not points:
+        return None
+    previous = points[0]
+    if forward_m <= previous.y:
+        return previous.x
+    for point in points[1:]:
+        if forward_m <= point.y:
+            span = max(0.001, point.y - previous.y)
+            amount = clamp((forward_m - previous.y) / span, 0.0, 1.0)
+            return previous.x + (point.x - previous.x) * amount
+        previous = point
+    return points[-1].x
 
 
 def model_path_uncertainty_width(state: ClusterUiState) -> float | None:
