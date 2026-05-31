@@ -1239,7 +1239,9 @@ def planned_path_strips(
     lane_width_m: float,
     blockers: tuple[PathBlocker, ...],
     theme: ClusterTheme = LIGHT_CLUSTER_THEME,
+    profile_add: ProfileAdd | None = None,
 ) -> tuple[MeshStrip, ...]:
+    profile_stage = profile_scene_start(profile_add)
     points = model_path_centerline(state, lane_width_m, blockers)
     model_driven = bool(points)
     if not points:
@@ -1256,6 +1258,9 @@ def planned_path_strips(
                 )
             )
         points = tuple(centerline)
+    profile_scene_add(profile_add, "scene.build.planned_path.centerline", profile_stage)
+
+    profile_stage = profile_scene_start(profile_add)
     path_specs: list[tuple[float, Color, float]] = [(0.86, theme.path_shadow, PATH_SHADOW_LAYER_M)]
     if model_driven:
         uncertainty_width = model_path_uncertainty_width(state)
@@ -1264,9 +1269,13 @@ def planned_path_strips(
     path_specs.append((0.46, theme.path_body, PATH_BODY_LAYER_M))
     path_specs.append((0.16, theme.path_highlight, PATH_HIGHLIGHT_LAYER_M))
     strips = list(strips_from_centerline_width_specs(points, tuple(path_specs)))
+    profile_scene_add(profile_add, "scene.build.planned_path.strips", profile_stage)
+
     if model_driven:
         highlight_strip = strips.pop() if strips else None
+        profile_stage = profile_scene_start(profile_add)
         strips.extend(model_path_metric_strips(state, points))
+        profile_scene_add(profile_add, "scene.build.planned_path.metrics", profile_stage)
         if highlight_strip is not None:
             strips.append(highlight_strip)
     return tuple(strips)
@@ -2727,7 +2736,7 @@ def build_cluster_scene(
     profile_scene_add(profile_add, "scene.build.road_edges", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
-    planned_path = planned_path_strips(state, lane_width_m, blockers, theme)
+    planned_path = planned_path_strips(state, lane_width_m, blockers, theme, profile_add)
     profile_scene_add(profile_add, "scene.build.planned_path", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
