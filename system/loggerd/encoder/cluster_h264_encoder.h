@@ -14,24 +14,7 @@ constexpr int CLUSTER_H264_CAPTURE_BUFFER_COUNT = 6;
 
 enum class ClusterH264InputFormat {
   Auto,
-  RGB4,
   NV12,
-  BGR4,
-  AR24,
-  AB24,
-  RA24,
-  BA24,
-  RX24,
-  BX24,
-  XR24,
-  XB24,
-};
-
-enum class ClusterH264Rgb4Layout {
-  AXRGB,
-  RGBA,
-  BGRA,
-  ABGR,
 };
 
 struct ClusterH264EncoderConfig {
@@ -45,11 +28,6 @@ struct ClusterH264EncoderConfig {
   bool realtime_priority = false;
   bool debug = false;
   ClusterH264InputFormat input_format = ClusterH264InputFormat::Auto;
-  ClusterH264Rgb4Layout rgb4_layout = ClusterH264Rgb4Layout::BGRA;
-  bool rgb4_use_source_alpha = false;
-  uint8_t rgb4_alpha = 0xff;
-  bool pass_input_fd = true;
-  bool pass_rgb4_compression_ratio = true;
   std::string device_path = "/dev/v4l/by-path/platform-aa00000.qcom_vidc-video-index1";
 };
 
@@ -109,8 +87,6 @@ public:
   size_t input_bytesused() const { return input_bytesused_; }
   size_t capture_sizeimage() const { return capture_sizeimage_; }
   const ClusterH264EncodeTimings& last_encode_timings() const { return last_encode_timings_; }
-  bool input_is_rgb4() const;
-  bool input_is_rgb32_family() const;
   bool input_is_nv12() const;
 
 private:
@@ -136,7 +112,6 @@ private:
   std::vector<ClusterH264Packet> process_ready_events(int timeout_ms, bool stop_after_first_event);
   size_t process_ready_events(int timeout_ms, bool stop_after_first_event, const ClusterH264PacketCallback &on_packet);
   void copy_rgba_to_input(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const;
-  void rgba_to_rgb4(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const;
   void rgba_to_nv12(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const;
   void validate_config() const;
 

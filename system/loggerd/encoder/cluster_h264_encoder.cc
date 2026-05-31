@@ -26,36 +26,6 @@
 
 namespace {
 
-// Qualcomm msm_vidc color metadata values used by the Android RGBA8888
-// encoder path. They are not present in the local generated v4l2 header.
-constexpr int MSM_VIDC_BT601_6_525 = 6;
-constexpr int MSM_VIDC_TRANSFER_601_6_525 = 6;
-constexpr int MSM_VIDC_MATRIX_601_6_525 = 6;
-
-constexpr uint32_t fourcc_const(char a, char b, char c, char d) {
-  return static_cast<uint32_t>(a) |
-         (static_cast<uint32_t>(b) << 8) |
-         (static_cast<uint32_t>(c) << 16) |
-         (static_cast<uint32_t>(d) << 24);
-}
-
-constexpr uint32_t V4L2_PIX_FMT_CLUSTER_BGR32 = fourcc_const('B', 'G', 'R', '4');
-constexpr uint32_t V4L2_PIX_FMT_CLUSTER_AR24 = fourcc_const('A', 'R', '2', '4');
-constexpr uint32_t V4L2_PIX_FMT_CLUSTER_AB24 = fourcc_const('A', 'B', '2', '4');
-constexpr uint32_t V4L2_PIX_FMT_CLUSTER_RA24 = fourcc_const('R', 'A', '2', '4');
-constexpr uint32_t V4L2_PIX_FMT_CLUSTER_BA24 = fourcc_const('B', 'A', '2', '4');
-constexpr uint32_t V4L2_PIX_FMT_CLUSTER_RX24 = fourcc_const('R', 'X', '2', '4');
-constexpr uint32_t V4L2_PIX_FMT_CLUSTER_BX24 = fourcc_const('B', 'X', '2', '4');
-constexpr uint32_t V4L2_PIX_FMT_CLUSTER_XR24 = fourcc_const('X', 'R', '2', '4');
-constexpr uint32_t V4L2_PIX_FMT_CLUSTER_XB24 = fourcc_const('X', 'B', '2', '4');
-
-size_t align_up(size_t value, size_t alignment) {
-  if (alignment == 0) {
-    return value;
-  }
-  return ((value + alignment - 1) / alignment) * alignment;
-}
-
 std::string fourcc_to_string(uint32_t value) {
   char text[5] = {
     static_cast<char>(value & 0xff),
@@ -72,16 +42,6 @@ uint64_t elapsed_us(std::chrono::steady_clock::time_point start) {
       std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count());
 }
 
-const char *rgb4_layout_name(ClusterH264Rgb4Layout layout) {
-  switch (layout) {
-    case ClusterH264Rgb4Layout::AXRGB: return "AXRGB";
-    case ClusterH264Rgb4Layout::RGBA: return "RGBA";
-    case ClusterH264Rgb4Layout::BGRA: return "BGRA";
-    case ClusterH264Rgb4Layout::ABGR: return "ABGR";
-  }
-  return "unknown";
-}
-
 const char *rate_control_name(int value) {
   switch (value) {
     case V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_OFF: return "rate-control-off";
@@ -94,62 +54,6 @@ const char *rate_control_name(int value) {
     case V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_CQ: return "rate-control-cq";
   }
   return "rate-control-unknown";
-}
-
-uint32_t input_format_fourcc(ClusterH264InputFormat format) {
-  switch (format) {
-    case ClusterH264InputFormat::RGB4: return V4L2_PIX_FMT_RGB32;
-    case ClusterH264InputFormat::NV12: return V4L2_PIX_FMT_NV12;
-    case ClusterH264InputFormat::BGR4: return V4L2_PIX_FMT_CLUSTER_BGR32;
-    case ClusterH264InputFormat::AR24: return V4L2_PIX_FMT_CLUSTER_AR24;
-    case ClusterH264InputFormat::AB24: return V4L2_PIX_FMT_CLUSTER_AB24;
-    case ClusterH264InputFormat::RA24: return V4L2_PIX_FMT_CLUSTER_RA24;
-    case ClusterH264InputFormat::BA24: return V4L2_PIX_FMT_CLUSTER_BA24;
-    case ClusterH264InputFormat::RX24: return V4L2_PIX_FMT_CLUSTER_RX24;
-    case ClusterH264InputFormat::BX24: return V4L2_PIX_FMT_CLUSTER_BX24;
-    case ClusterH264InputFormat::XR24: return V4L2_PIX_FMT_CLUSTER_XR24;
-    case ClusterH264InputFormat::XB24: return V4L2_PIX_FMT_CLUSTER_XB24;
-    case ClusterH264InputFormat::Auto: break;
-  }
-  return 0;
-}
-
-bool fourcc_is_rgb32_family(uint32_t format) {
-  return format == V4L2_PIX_FMT_RGB32 ||
-         format == V4L2_PIX_FMT_CLUSTER_BGR32 ||
-         format == V4L2_PIX_FMT_CLUSTER_AR24 ||
-         format == V4L2_PIX_FMT_CLUSTER_AB24 ||
-         format == V4L2_PIX_FMT_CLUSTER_RA24 ||
-         format == V4L2_PIX_FMT_CLUSTER_BA24 ||
-         format == V4L2_PIX_FMT_CLUSTER_RX24 ||
-         format == V4L2_PIX_FMT_CLUSTER_BX24 ||
-         format == V4L2_PIX_FMT_CLUSTER_XR24 ||
-         format == V4L2_PIX_FMT_CLUSTER_XB24;
-}
-
-bool try_v4l2_control(int fd, uint32_t id, int value, const char *name, bool debug, bool visible_success = false) {
-  struct v4l2_control control = {
-    .id = id,
-    .value = value,
-  };
-  int ret;
-  do {
-    ret = ioctl(fd, VIDIOC_S_CTRL, &control);
-  } while (ret == -1 && errno == EINTR);
-  if (ret == -1) {
-    if (debug) {
-      LOGW("cluster H264 V4L2 ctrl %s=%d failed: %s (%d)", name, value, strerror(errno), errno);
-    }
-    return false;
-  }
-  if (debug) {
-    if (visible_success) {
-      LOGW("cluster H264 V4L2 ctrl %s=%d ok", name, value);
-    } else {
-      LOGD("cluster H264 V4L2 ctrl %s=%d ok", name, value);
-    }
-  }
-  return true;
 }
 
 void xioctl(int fd, unsigned long request, void *arg, const char *message) {
@@ -209,14 +113,6 @@ void ClusterH264Encoder::validate_config() const {
   if (config_.device_path.empty()) {
     throw std::runtime_error("cluster H264 encoder device path must not be empty");
   }
-}
-
-bool ClusterH264Encoder::input_is_rgb4() const {
-  return input_v4l_format_ == V4L2_PIX_FMT_RGB32;
-}
-
-bool ClusterH264Encoder::input_is_rgb32_family() const {
-  return fourcc_is_rgb32_family(input_v4l_format_);
 }
 
 bool ClusterH264Encoder::input_is_nv12() const {
@@ -346,24 +242,7 @@ void ClusterH264Encoder::configure_formats() {
     return input_formats.empty() || std::find(input_formats.begin(), input_formats.end(), format) != input_formats.end();
   };
 
-  uint32_t selected_input_format = 0;
-  if (config_.input_format == ClusterH264InputFormat::NV12) {
-    if (!supports_format(nv12)) {
-      throw std::runtime_error("V4L2 encoder does not report NV12 input support");
-    }
-    selected_input_format = nv12;
-  } else if (config_.input_format != ClusterH264InputFormat::Auto) {
-    selected_input_format = input_format_fourcc(config_.input_format);
-    if (selected_input_format == 0) {
-      throw std::runtime_error("cluster H264 encoder input format is invalid");
-    }
-    if (!supports_format(selected_input_format) && config_.debug) {
-      LOGW("cluster H264 V4L2 format %s is not enumerated; trying explicit S_FMT anyway",
-           fourcc_to_string(selected_input_format).c_str());
-    }
-  } else if (supports_format(nv12)) {
-    selected_input_format = nv12;
-  } else {
+  if (!supports_format(nv12)) {
     std::string found;
     for (uint32_t format : input_formats) {
       if (!found.empty()) found += ", ";
@@ -371,6 +250,7 @@ void ClusterH264Encoder::configure_formats() {
     }
     throw std::runtime_error("V4L2 encoder does not report NV12 input support; found: " + found);
   }
+  const uint32_t selected_input_format = nv12;
 
   struct v4l2_format fmt_out = {};
   fmt_out.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
@@ -387,52 +267,7 @@ void ClusterH264Encoder::configure_formats() {
   fmt_in.fmt.pix_mp.height = static_cast<unsigned int>(config_.height);
   fmt_in.fmt.pix_mp.pixelformat = selected_input_format;
   fmt_in.fmt.pix_mp.field = V4L2_FIELD_ANY;
-  fmt_in.fmt.pix_mp.colorspace = fourcc_is_rgb32_family(selected_input_format) ?
-                                  V4L2_COLORSPACE_SRGB :
-                                  V4L2_COLORSPACE_470_SYSTEM_BG;
-  if (fourcc_is_rgb32_family(selected_input_format)) {
-    const size_t rgb_stride = align_up(static_cast<size_t>(config_.width) * 4, 128);
-    const size_t rgb_scanlines = align_up(static_cast<size_t>(config_.height), 32);
-    const size_t rgb_sizeimage = align_up(rgb_stride * rgb_scanlines, 4096);
-    fmt_in.fmt.pix_mp.num_planes = 1;
-    fmt_in.fmt.pix_mp.plane_fmt[0].bytesperline = static_cast<unsigned int>(rgb_stride);
-    fmt_in.fmt.pix_mp.plane_fmt[0].sizeimage = static_cast<unsigned int>(rgb_sizeimage);
-    try_v4l2_control(
-        fd_,
-        V4L2_CID_MPEG_VIDC_VIDEO_COLOR_SPACE,
-        MSM_VIDC_BT601_6_525,
-        "rgb4-color-space-bt601-525",
-        config_.debug,
-        true);
-    try_v4l2_control(
-        fd_,
-        V4L2_CID_MPEG_VIDC_VIDEO_FULL_RANGE,
-        V4L2_CID_MPEG_VIDC_VIDEO_FULL_RANGE_DISABLE,
-        "rgb4-full-range-disable",
-        config_.debug,
-        true);
-    try_v4l2_control(
-        fd_,
-        V4L2_CID_MPEG_VIDC_VIDEO_TRANSFER_CHARS,
-        MSM_VIDC_TRANSFER_601_6_525,
-        "rgb4-transfer-601-525",
-        config_.debug,
-        true);
-    try_v4l2_control(
-        fd_,
-        V4L2_CID_MPEG_VIDC_VIDEO_MATRIX_COEFFS,
-        MSM_VIDC_MATRIX_601_6_525,
-        "rgb4-matrix-601-525",
-        config_.debug,
-        true);
-    try_v4l2_control(
-        fd_,
-        V4L2_CID_MPEG_VIDC_VIDEO_VPE_CSC,
-        V4L2_CID_MPEG_VIDC_VIDEO_VPE_CSC_ENABLE,
-        "rgb4-vpe-csc-enable",
-        config_.debug,
-        true);
-  }
+  fmt_in.fmt.pix_mp.colorspace = V4L2_COLORSPACE_470_SYSTEM_BG;
   xioctl(fd_, VIDIOC_S_FMT, &fmt_in, "VIDIOC_S_FMT output failed");
 
   if (fmt_in.fmt.pix_mp.pixelformat != selected_input_format) {
@@ -453,44 +288,21 @@ void ClusterH264Encoder::configure_formats() {
   input_v4l_format_name_ = fourcc_to_string(selected_input_format);
   input_sizeimage_ = fmt_in.fmt.pix_mp.plane_fmt[0].sizeimage;
   const size_t driver_stride = fmt_in.fmt.pix_mp.plane_fmt[0].bytesperline;
-  input_y_scanlines_ = 0;
-  input_uv_scanlines_ = 0;
-  if (selected_input_format == nv12) {
-    auto [venus_stride, venus_y_height, venus_uv_height, venus_size] = get_nv12_info(config_.width, config_.height);
-    input_stride_ = venus_stride;
-    input_y_scanlines_ = venus_y_height;
-    input_uv_scanlines_ = venus_uv_height;
-    input_uv_offset_ = input_stride_ * input_y_scanlines_;
-    const size_t min_bytesused = input_uv_offset_ + input_stride_ * input_uv_scanlines_;
-    input_bytesused_ = std::max({input_sizeimage_, min_bytesused, static_cast<size_t>(venus_size)});
-  } else if (fourcc_is_rgb32_family(selected_input_format)) {
-    const size_t min_stride = static_cast<size_t>(config_.width) * 4;
-    const size_t venus_rgb_stride = align_up(min_stride, 128);
-    const size_t venus_rgb_scanlines = align_up(static_cast<size_t>(config_.height), 32);
-    const size_t venus_rgb_size = align_up(venus_rgb_stride * venus_rgb_scanlines, 4096);
-    size_t sizeimage_stride = 0;
-    if (config_.height > 0 && input_sizeimage_ > 0 && input_sizeimage_ % static_cast<size_t>(config_.height) == 0) {
-      sizeimage_stride = input_sizeimage_ / static_cast<size_t>(config_.height);
-    }
-    // Some msm_vidc RGB4 formats report compact bytesperline while sizeimage
-    // implies a wider aligned row. Prefer the larger stride to avoid packing
-    // rows more tightly than the encoder consumes.
-    input_stride_ = std::max({driver_stride, min_stride, venus_rgb_stride, sizeimage_stride});
-    input_y_scanlines_ = venus_rgb_scanlines;
-    input_uv_offset_ = 0;
-    input_bytesused_ = std::max({input_sizeimage_, input_stride_ * input_y_scanlines_, venus_rgb_size});
-  } else {
-    throw std::runtime_error("cluster H264 encoder selected unsupported input format " + input_v4l_format_name_);
-  }
+  auto [venus_stride, venus_y_height, venus_uv_height, venus_size] = get_nv12_info(config_.width, config_.height);
+  input_stride_ = venus_stride;
+  input_y_scanlines_ = venus_y_height;
+  input_uv_scanlines_ = venus_uv_height;
+  input_uv_offset_ = input_stride_ * input_y_scanlines_;
+  const size_t min_bytesused = input_uv_offset_ + input_stride_ * input_uv_scanlines_;
+  input_bytesused_ = std::max({input_sizeimage_, min_bytesused, static_cast<size_t>(venus_size)});
   capture_sizeimage_ = fmt_out.fmt.pix_mp.plane_fmt[0].sizeimage;
   if (capture_sizeimage_ == 0) {
     throw std::runtime_error("V4L2 encoder returned zero H264 capture sizeimage");
   }
 
-  LOGD("cluster H264 V4L2 formats: in=%s %dx%d driver_stride=%zu stride=%zu scanlines=%zu/%zu sizeimage=%zu bytesused=%zu uv_offset=%zu rgb4_layout=%s out=H264 sizeimage=%zu",
+  LOGD("cluster H264 V4L2 formats: in=%s %dx%d driver_stride=%zu stride=%zu scanlines=%zu/%zu sizeimage=%zu bytesused=%zu uv_offset=%zu out=H264 sizeimage=%zu",
        input_v4l_format_name_.c_str(), config_.width, config_.height, driver_stride, input_stride_,
        input_y_scanlines_, input_uv_scanlines_, input_sizeimage_, input_bytesused_, input_uv_offset_,
-       input_is_rgb32_family() ? rgb4_layout_name(config_.rgb4_layout) : "n/a",
        capture_sizeimage_);
 }
 
@@ -648,16 +460,12 @@ void ClusterH264Encoder::stream_off(uint32_t buffer_type) {
 void ClusterH264Encoder::allocate_buffers() {
   for (int i = 0; i < CLUSTER_H264_INPUT_BUFFER_COUNT; ++i) {
     input_buffers_[i].allocate(input_bytesused_);
-    if (input_is_nv12()) {
-      memset(input_buffers_[i].addr, 16, std::min(input_uv_offset_, input_buffers_[i].len));
-      if (input_uv_offset_ < input_buffers_[i].len) {
-        memset(reinterpret_cast<uint8_t*>(input_buffers_[i].addr) + input_uv_offset_,
-               128, input_buffers_[i].len - input_uv_offset_);
-      }
-      input_buffers_[i].init_yuv(config_.width, config_.height, input_stride_, input_uv_offset_);
-    } else {
-      memset(input_buffers_[i].addr, 0, input_buffers_[i].len);
+    memset(input_buffers_[i].addr, 16, std::min(input_uv_offset_, input_buffers_[i].len));
+    if (input_uv_offset_ < input_buffers_[i].len) {
+      memset(reinterpret_cast<uint8_t*>(input_buffers_[i].addr) + input_uv_offset_,
+             128, input_buffers_[i].len - input_uv_offset_);
     }
+    input_buffers_[i].init_yuv(config_.width, config_.height, input_stride_, input_uv_offset_);
     input_allocated_[i] = true;
   }
   for (int i = 0; i < CLUSTER_H264_CAPTURE_BUFFER_COUNT; ++i) {
@@ -694,15 +502,7 @@ void ClusterH264Encoder::queue_output_buffer(unsigned int index, uint64_t timest
   plane.bytesused = static_cast<uint32_t>(input_bytesused_);
   plane.length = static_cast<uint32_t>(buf->len);
   plane.m.userptr = reinterpret_cast<unsigned long>(buf->addr);
-  if (config_.pass_input_fd) {
-    plane.reserved[0] = static_cast<unsigned int>(buf->fd);
-  }
-  if (input_is_rgb32_family() && config_.pass_rgb4_compression_ratio) {
-    // Qualcomm's Android gralloc RGB path passes a 16.16 compression ratio
-    // field even for linear buffers. Use 1.0 so msm_vidc sees an explicit
-    // non-compressed RGB input.
-    plane.reserved[2] = 1U << 16;
-  }
+  plane.reserved[0] = static_cast<unsigned int>(buf->fd);
 
   struct v4l2_buffer v4l_buf = {};
   v4l_buf.index = index;
@@ -920,65 +720,11 @@ void ClusterH264Encoder::encode_rgba(const uint8_t *rgba, size_t rgba_size, uint
 }
 
 void ClusterH264Encoder::copy_rgba_to_input(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const {
-  if (input_is_rgb32_family()) {
-    rgba_to_rgb4(rgba, rgba_size, dst);
-    return;
-  }
   if (input_is_nv12()) {
     rgba_to_nv12(rgba, rgba_size, dst);
     return;
   }
   throw std::runtime_error("cluster H264 encoder has unsupported input format " + input_v4l_format_name_);
-}
-
-void ClusterH264Encoder::rgba_to_rgb4(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const {
-  const size_t width = static_cast<size_t>(config_.width);
-  const size_t height = static_cast<size_t>(config_.height);
-  const size_t src_row_bytes = width * 4;
-  const size_t expected_rgba_size = src_row_bytes * height;
-  if (rgba_size < expected_rgba_size) {
-    throw std::runtime_error("cluster H264 encoder RGBA input is smaller than width*height*4");
-  }
-  if (dst == nullptr || dst->addr == nullptr || dst->len < input_bytesused_) {
-    throw std::runtime_error("cluster H264 encoder input buffer is not allocated");
-  }
-
-  uint8_t *base = reinterpret_cast<uint8_t*>(dst->addr);
-  for (size_t y = 0; y < height; ++y) {
-    const uint8_t *src = rgba + y * src_row_bytes;
-    uint8_t *dst_row = base + y * input_stride_;
-    if (config_.rgb4_layout == ClusterH264Rgb4Layout::RGBA) {
-      memcpy(dst_row, src, src_row_bytes);
-    } else if (config_.rgb4_layout == ClusterH264Rgb4Layout::BGRA) {
-      for (size_t x = 0; x < width; ++x) {
-        const uint8_t *src_px = src + x * 4;
-        uint8_t *dst_px = dst_row + x * 4;
-        dst_px[0] = src_px[2];
-        dst_px[1] = src_px[1];
-        dst_px[2] = src_px[0];
-        dst_px[3] = config_.rgb4_use_source_alpha ? src_px[3] : config_.rgb4_alpha;
-      }
-    } else if (config_.rgb4_layout == ClusterH264Rgb4Layout::ABGR) {
-      for (size_t x = 0; x < width; ++x) {
-        const uint8_t *src_px = src + x * 4;
-        uint8_t *dst_px = dst_row + x * 4;
-        dst_px[0] = config_.rgb4_use_source_alpha ? src_px[3] : config_.rgb4_alpha;
-        dst_px[1] = src_px[2];
-        dst_px[2] = src_px[1];
-        dst_px[3] = src_px[0];
-      }
-    } else {
-      for (size_t x = 0; x < width; ++x) {
-        const uint8_t *src_px = src + x * 4;
-        uint8_t *dst_px = dst_row + x * 4;
-        // Fallback for drivers that want network-order A/X,R,G,B bytes.
-        dst_px[0] = config_.rgb4_use_source_alpha ? src_px[3] : config_.rgb4_alpha;
-        dst_px[1] = src_px[0];
-        dst_px[2] = src_px[1];
-        dst_px[3] = src_px[2];
-      }
-    }
-  }
 }
 
 void ClusterH264Encoder::rgba_to_nv12(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const {

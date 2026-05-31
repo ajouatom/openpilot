@@ -15,29 +15,10 @@ namespace {
 ClusterH264InputFormat input_format_from_int(int value) {
   switch (value) {
     case 0: return ClusterH264InputFormat::Auto;
-    case 1: return ClusterH264InputFormat::RGB4;
+    case 1: return ClusterH264InputFormat::NV12;
     case 2: return ClusterH264InputFormat::NV12;
-    case 3: return ClusterH264InputFormat::BGR4;
-    case 4: return ClusterH264InputFormat::AR24;
-    case 5: return ClusterH264InputFormat::AB24;
-    case 6: return ClusterH264InputFormat::RA24;
-    case 7: return ClusterH264InputFormat::BA24;
-    case 8: return ClusterH264InputFormat::RX24;
-    case 9: return ClusterH264InputFormat::BX24;
-    case 10: return ClusterH264InputFormat::XR24;
-    case 11: return ClusterH264InputFormat::XB24;
   }
   throw std::runtime_error("invalid input format");
-}
-
-ClusterH264Rgb4Layout rgb4_layout_from_int(int value) {
-  switch (value) {
-    case 0: return ClusterH264Rgb4Layout::AXRGB;
-    case 1: return ClusterH264Rgb4Layout::RGBA;
-    case 2: return ClusterH264Rgb4Layout::BGRA;
-    case 3: return ClusterH264Rgb4Layout::ABGR;
-  }
-  throw std::runtime_error("invalid RGB4 layout");
 }
 
 void set_error(ClusterH264EncoderBridge *bridge, const std::exception &e) {
@@ -67,10 +48,11 @@ ClusterH264EncoderBridge *cluster_h264_encoder_bridge_create(
     int gop,
     const char *device_path,
     int input_format,
-    int rgb4_layout,
+    int unused_input_layout,
     int debug) {
   ClusterH264EncoderBridge *bridge = new ClusterH264EncoderBridge();
   try {
+    (void)unused_input_layout;
     bridge->config.width = width;
     bridge->config.height = height;
     bridge->config.fps = fps;
@@ -79,7 +61,6 @@ ClusterH264EncoderBridge *cluster_h264_encoder_bridge_create(
     bridge->config.debug = debug != 0;
     bridge->config.device_path = device_path == nullptr ? "" : device_path;
     bridge->config.input_format = input_format_from_int(input_format);
-    bridge->config.rgb4_layout = rgb4_layout_from_int(rgb4_layout);
     return bridge;
   } catch (const std::exception &e) {
     set_error(bridge, e);

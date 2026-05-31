@@ -26,19 +26,8 @@ DEFAULT_H264_RATE_CONTROL = "vbr-cfr"
 
 NATIVE_INPUT_FORMATS = {
     "auto": 0,
-    "rgb4": 1,
     "nv12": 2,
-    "bgr4": 3,
-    "ar24": 4,
-    "ab24": 5,
-    "ra24": 6,
-    "ba24": 7,
-    "rx24": 8,
-    "bx24": 9,
-    "xr24": 10,
-    "xb24": 11,
 }
-NATIVE_RGB4_LAYOUTS = {"axrgb": 0, "rgba": 1, "bgra": 2, "abgr": 3}
 NATIVE_RATE_CONTROLS = {
     "off": 0,
     "vbr-vfr": 1,
@@ -731,7 +720,6 @@ class H264UsbPipeline:
         ffmpeg_encoder: str,
         device_path: str,
         input_format: str,
-        rgb4_layout: str,
         slice_max_bytes: int,
         rate_control: str,
         realtime_priority: bool,
@@ -761,7 +749,6 @@ class H264UsbPipeline:
         self.ffmpeg_muxer_name = ""
         self.device_path = device_path
         self.input_format = input_format
-        self.rgb4_layout = rgb4_layout
         self.slice_max_bytes = max(0, int(slice_max_bytes))
         self.rate_control = rate_control
         self.realtime_priority = realtime_priority
@@ -846,7 +833,7 @@ class H264UsbPipeline:
             self.gop,
             self.device_path.encode("utf-8"),
             NATIVE_INPUT_FORMATS[self.input_format],
-            NATIVE_RGB4_LAYOUTS[self.rgb4_layout],
+            0,
             1 if self.debug else 0,
         )
         if not handle:
@@ -897,7 +884,7 @@ class H264UsbPipeline:
             f"scanlines={input_y_scanlines}/{input_uv_scanlines} "
             f"input_size={input_sizeimage} input_bytes={input_bytesused} uv_offset={input_uv_offset} "
             f"capture_size={capture_sizeimage} "
-            f"rgb4_layout={self.rgb4_layout} device={self.device_path} "
+            f"device={self.device_path} "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')}"
             f"{self._diagnose_text()} "
             "sps_patch=on sps_crop_patch=on sps_vui_patch=on",
@@ -919,7 +906,7 @@ class H264UsbPipeline:
             f"bitrate={self.bitrate} gop={self.gop} "
             f"slice_max={self.slice_max_bytes} rate_control={self.rate_control} "
             f"realtime_priority={'on' if self.realtime_priority else 'off'} packetize=access-unit "
-            f"input={self.input_format} rgb4_layout={self.rgb4_layout} "
+            f"input={self.input_format} "
             f"device={self.device_path} "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')}"
             f"{self._diagnose_text()} "
@@ -1480,8 +1467,6 @@ class H264UsbPipeline:
             self.device_path,
             "--input-format",
             self.input_format,
-            "--rgb4-layout",
-            self.rgb4_layout,
             "--slice-max-bytes",
             str(self.slice_max_bytes),
         ]

@@ -359,7 +359,6 @@ def run_demo(
     usb_h264_ffmpeg_encoder: str,
     usb_h264_device: str,
     usb_h264_input_format: str,
-    usb_h264_rgb4_layout: str,
     usb_h264_slice_max_bytes: int,
     usb_h264_rate_control: str,
     usb_h264_realtime_priority: bool,
@@ -549,7 +548,6 @@ def run_demo(
                 usb_h264_ffmpeg_encoder,
                 usb_h264_device,
                 usb_h264_input_format,
-                usb_h264_rgb4_layout,
                 usb_h264_slice_max_bytes,
                 usb_h264_rate_control,
                 usb_h264_realtime_priority,
@@ -1042,21 +1040,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--usb-h264-input-format",
-        choices=(
-            "auto", "rgb4", "nv12", "bgr4", "ar24", "ab24",
-            "ra24", "ba24", "rx24", "bx24", "xr24", "xb24",
-        ),
+        choices=("auto", "nv12"),
         default="nv12",
         help=(
-            "Hardware encoder input format. Default nv12 follows the existing loggerd V4L2 path; "
-            "32-bit RGB fourcc values remain available for direct RGB input compatibility tests."
+            "Hardware encoder input format. Default nv12 follows the existing loggerd V4L2 path."
         ),
-    )
-    parser.add_argument(
-        "--usb-h264-rgb4-layout",
-        choices=("axrgb", "rgba", "bgra", "abgr"),
-        default="bgra",
-        help="Byte layout used when feeding RGBA readback into V4L2 RGB4 input.",
     )
     parser.add_argument(
         "--usb-h264-slice-max-bytes",
@@ -1423,7 +1411,6 @@ def main() -> None:
             args.usb_h264_ffmpeg_encoder,
             args.usb_h264_device,
             args.usb_h264_input_format,
-            args.usb_h264_rgb4_layout,
             args.usb_h264_slice_max_bytes,
             args.usb_h264_rate_control,
             args.usb_h264_realtime_priority,
