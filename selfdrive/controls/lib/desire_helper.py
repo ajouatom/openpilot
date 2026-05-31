@@ -229,7 +229,12 @@ class DesireHelper:
     desire_enabled = driver_enabled or atc_enabled
     blinker_state  = driver_st if driver_enabled else atc_st
 
-    side = self._get_selected_side(blinker_state) if blinker_state in (BLINKER_LEFT, BLINKER_RIGHT) else None
+    # 이미 차선 변경 플래그가 살아서 움직이는 중이라면, 깜빡이 OFF와 무관하게 기존 진행 방향의 side를 유지
+    if self.lane_change_state in (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing):
+      side = self.left if self.lane_change_direction == LaneChangeDirection.left else self.right
+    else:
+      side = self._get_selected_side(blinker_state) if blinker_state in (BLINKER_LEFT, BLINKER_RIGHT) else None
+    
     atc_lane_change_manual_only = (
       atc_enabled and
       not driver_enabled and
