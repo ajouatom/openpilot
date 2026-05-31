@@ -41,6 +41,7 @@ from cluster_models import ClusterUiState, DebugPlotSnapshot, GitBranchStatus, L
 from cluster_scene import (
     ClusterScene,
     MeshStrip,
+    RADAR_STATIC_OBJECT_SPEED_KPH,
     RadarPointMarker,
     RearVehicleIndicator,
     Vec3,
@@ -180,21 +181,29 @@ def rl_color(color: tuple[int, int, int] | tuple[int, int, int, int], alpha: int
 
 
 def radar_point_distance_label(point: RadarPointMarker) -> str:
+    if point.absolute_speed_kph is not None and point.absolute_speed_kph <= RADAR_STATIC_OBJECT_SPEED_KPH:
+        return ""
     return f"{point.longitudinal_m:.0f} m"
 
 
 def radar_point_speed_label(point: RadarPointMarker) -> str:
     if point.absolute_speed_kph is None:
         return ""
+    if point.absolute_speed_kph <= RADAR_STATIC_OBJECT_SPEED_KPH:
+        return ""
     return f"{point.absolute_speed_kph:.0f} km/h"
 
 
 def vehicle_distance_label(vehicle: VehicleBox) -> str:
+    if vehicle.absolute_speed_kph is not None and vehicle.absolute_speed_kph <= RADAR_STATIC_OBJECT_SPEED_KPH:
+        return ""
     return f"{abs(vehicle.center.y - EGO_FORWARD_M):.0f} m"
 
 
 def vehicle_speed_label(vehicle: VehicleBox) -> str:
     if vehicle.absolute_speed_kph is None:
+        return ""
+    if vehicle.absolute_speed_kph <= RADAR_STATIC_OBJECT_SPEED_KPH:
         return ""
     return f"{vehicle.absolute_speed_kph:.0f} km/h"
 
