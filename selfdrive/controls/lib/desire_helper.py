@@ -328,11 +328,15 @@ class DesireHelper:
 
         # ── off 상태 ──────────────────────────────────────────────
         if self.lane_change_state == LaneChangeState.off:
-          reentry = (
-            not self.prev_desire_enabled or   # A) 깜빡이 새로 켠 순간
-            avail_just_cleared or              # C-1) 차량 사라진 순간
-            avail_retry                        # C-2) 취소 후 쿨다운 종료
-          )
+          if driver_enabled:
+            reentry = not self.prev_desire_enabled
+          else:
+            # 내비게이션(ATC) 등 자동 제어일 때만 기존 재시도 로직 유지
+            reentry = (
+              not self.prev_desire_enabled or   
+              avail_just_cleared or              
+              avail_retry                        
+            )
 
           if desire_enabled and reentry and not below_lane_change_speed and side is not None:
             self.lane_change_state   = LaneChangeState.preLaneChange
