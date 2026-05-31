@@ -71,6 +71,31 @@ const char *rate_control_name(int value) {
   return "rate-control-unknown";
 }
 
+bool try_v4l2_control(int fd, uint32_t id, int value, const char *name, bool debug, bool visible_success = false) {
+  struct v4l2_control control = {
+    .id = id,
+    .value = value,
+  };
+  int ret;
+  do {
+    ret = ioctl(fd, VIDIOC_S_CTRL, &control);
+  } while (ret == -1 && errno == EINTR);
+  if (ret == -1) {
+    if (debug) {
+      LOGW("cluster H264 V4L2 ctrl %s=%d failed: %s (%d)", name, value, strerror(errno), errno);
+    }
+    return false;
+  }
+  if (debug) {
+    if (visible_success) {
+      LOGW("cluster H264 V4L2 ctrl %s=%d ok", name, value);
+    } else {
+      LOGD("cluster H264 V4L2 ctrl %s=%d ok", name, value);
+    }
+  }
+  return true;
+}
+
 void xioctl(int fd, unsigned long request, void *arg, const char *message) {
   int ret;
   do {
@@ -304,6 +329,43 @@ void ClusterH264Encoder::configure_formats() {
   fmt_in.fmt.pix_mp.colorspace = selected_input_format == rgb4 ?
                                   V4L2_COLORSPACE_SRGB :
                                   V4L2_COLORSPACE_470_SYSTEM_BG;
+  if (selected_input_format == rgb4) {
+    try_v4l2_control(
+        fd_,
+        V4L2_CID_MPEG_VIDC_VIDEO_COLOR_SPACE,
+        MSM_VIDC_BT601_6_525,
+        "rgb4-color-space-bt601-525",
+        config_.debug,
+        true);
+    try_v4l2_control(
+        fd_,
+        V4L2_CID_MPEG_VIDC_VIDEO_FULL_RANGE,
+        V4L2_CID_MPEG_VIDC_VIDEO_FULL_RANGE_DISABLE,
+        "rgb4-full-range-disable",
+        config_.debug,
+        true);
+    try_v4l2_control(
+        fd_,
+        V4L2_CID_MPEG_VIDC_VIDEO_TRANSFER_CHARS,
+        MSM_VIDC_TRANSFER_601_6_525,
+        "rgb4-transfer-601-525",
+        config_.debug,
+        true);
+    try_v4l2_control(
+        fd_,
+        V4L2_CID_MPEG_VIDC_VIDEO_MATRIX_COEFFS,
+        MSM_VIDC_MATRIX_601_6_525,
+        "rgb4-matrix-601-525",
+        config_.debug,
+        true);
+    try_v4l2_control(
+        fd_,
+        V4L2_CID_MPEG_VIDC_VIDEO_VPE_CSC,
+        V4L2_CID_MPEG_VIDC_VIDEO_VPE_CSC_ENABLE,
+        "rgb4-vpe-csc-enable",
+        config_.debug,
+        true);
+  }
   xioctl(fd_, VIDIOC_S_FMT, &fmt_in, "VIDIOC_S_FMT output failed");
 
   if (fmt_in.fmt.pix_mp.pixelformat != selected_input_format) {
@@ -420,17 +482,6 @@ void ClusterH264Encoder::set_controls() {
   };
   for (const NamedControl &control : controls) {
     set_control(control.id, control.value, control.name);
-  }
-
-  if (input_is_rgb4()) {
-    try_control(V4L2_CID_MPEG_VIDC_VIDEO_COLOR_SPACE, MSM_VIDC_BT601_6_525, "rgb4-color-space-bt601-525");
-    try_control(
-        V4L2_CID_MPEG_VIDC_VIDEO_FULL_RANGE,
-        V4L2_CID_MPEG_VIDC_VIDEO_FULL_RANGE_DISABLE,
-        "rgb4-full-range-disable");
-    try_control(V4L2_CID_MPEG_VIDC_VIDEO_TRANSFER_CHARS, MSM_VIDC_TRANSFER_601_6_525, "rgb4-transfer-601-525");
-    try_control(V4L2_CID_MPEG_VIDC_VIDEO_MATRIX_COEFFS, MSM_VIDC_MATRIX_601_6_525, "rgb4-matrix-601-525");
-    try_control(V4L2_CID_MPEG_VIDC_VIDEO_VPE_CSC, V4L2_CID_MPEG_VIDC_VIDEO_VPE_CSC_ENABLE, "rgb4-vpe-csc-enable");
   }
 
   if (config_.slice_max_bytes > 0) {
