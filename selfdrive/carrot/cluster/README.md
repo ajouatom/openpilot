@@ -226,12 +226,13 @@ lane-change icon is not drawn; the LFA icon uses
 `selfdrive/assets/icons_mici/carrot_wheel_org.png`, rotates by
 `-carState.steeringAngleDeg`, and recolors its white pixels green when LFA is
 active.
-When `--fps` is omitted for live input, `ClusterHudLiveFps` controls the render
-limit and is polled about once per second while running: `0` uncapped,
-`1` 10 Hz, `2` 20 Hz, `3` 30 Hz, `4` 40 Hz, `5` 50 Hz, and `6` 60 Hz.
-Explicit `--fps` remains a fixed override. For H264 USB output, changing the
-effective FPS exits the current HUD process so autostart can relaunch with a
-matching encoder FPS.
+When `--fps` is omitted, `ClusterHudLiveFps` controls the render limit and is
+polled about once per second while running: `0` uncapped, `1` 10 Hz,
+`2` 20 Hz, `3` 30 Hz, `4` 40 Hz, `5` 50 Hz, and `6` 60 Hz. Direct route/replay
+CLI runs also apply nonzero values; mode `0` keeps non-live H264 runs on the
+`--usb-h264-fps` safety cap. Explicit `--fps` remains a fixed override. For
+H264 USB output, changing the effective FPS exits the current HUD process so
+autostart can relaunch with a matching encoder FPS when a launcher is present.
 Runs also show a compact lower-right cluster-process CPU overlay by current
 core, formatted like `[0(10),1(25)]`, with 2 px bottom/right margins. The
 sampler reads the current cluster process and direct child processes only,
@@ -239,12 +240,13 @@ avoiding a full `/proc` PID scan in the render loop. Use
 `--cluster-core-usage-debug` with `--profile-render` to log the sampler scan
 cost plus per-process/core CPU breakdown, or `--no-cluster-core-usage` for an
 A/B run without the overlay.
-`ClusterHudEncoder` controls the encoder used by manager autostart: `0` auto
-tries native hardware H264, then ffmpeg/libx264 software H264, then JPEG;
-`1` forces JPEG, `2` forces native hardware H264, and `3` forces
-ffmpeg/libx264 software H264. Changing this setting while the HUD is running
-makes the current HUD process exit so `cluster_autorun` can relaunch it with the
-new encoder choice.
+`ClusterHudEncoder` controls the encoder used by manager autostart and by
+direct USB CLI runs when `--usb-codec` is omitted: `0` auto tries native
+hardware H264, then ffmpeg/libx264 software H264, then JPEG in autostart;
+direct CLI auto uses the native hardware H264 choice. `1` forces JPEG,
+`2` forces native hardware H264, and `3` forces ffmpeg/libx264 software H264.
+Changing this setting while the HUD is running makes the current HUD process
+exit so `cluster_autorun` can relaunch it with the new encoder choice.
 `ClusterHudScreenMode` controls optional debug views: `0` default, `1` shows
 the live debug panel with grouped `LIVE DELAY`, `LIVE TORQUE`, `STEERING`, and
 `LATERAL PLAN` rows, `2` shows the system information panel with memory and CPU

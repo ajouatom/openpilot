@@ -2085,7 +2085,7 @@ class ClusterUiRenderer:
 
         theme = self._current_theme()
         text = state.center_clock_text
-        x = DESIGN_WIDTH * 0.5
+        x = SYSTEM_PANEL_X + SYSTEM_PANEL_W * 0.5
         y = 58
         size = 54
         spacing = max(1.0, size * 0.02)

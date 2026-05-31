@@ -47,6 +47,10 @@ class ClusterTheme:
 CLUSTER_THEME_AUTO = 0
 CLUSTER_THEME_DARK = 1
 CLUSTER_THEME_LIGHT = 2
+CLUSTER_ENCODER_AUTO = 0
+CLUSTER_ENCODER_JPEG = 1
+CLUSTER_ENCODER_HARDWARE = 2
+CLUSTER_ENCODER_SOFTWARE = 3
 CLUSTER_HUD_PARAM = "ClusterHud"
 CLUSTER_BRIGHTNESS_PARAM = "ClusterHudBrightness"
 CLUSTER_ENCODER_PARAM = "ClusterHudEncoder"
@@ -178,6 +182,41 @@ def normalize_cluster_live_fps(value: object) -> float:
     except (TypeError, ValueError):
         return 0.0
     return CLUSTER_LIVE_FPS_BY_MODE.get(mode, 0.0)
+
+
+def normalize_cluster_encoder_mode(value: object) -> int:
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        aliases = {
+            "auto": CLUSTER_ENCODER_AUTO,
+            "jpeg": CLUSTER_ENCODER_JPEG,
+            "jpg": CLUSTER_ENCODER_JPEG,
+            "hardware": CLUSTER_ENCODER_HARDWARE,
+            "hw": CLUSTER_ENCODER_HARDWARE,
+            "h264": CLUSTER_ENCODER_HARDWARE,
+            "native": CLUSTER_ENCODER_HARDWARE,
+            "software": CLUSTER_ENCODER_SOFTWARE,
+            "sw": CLUSTER_ENCODER_SOFTWARE,
+            "ffmpeg": CLUSTER_ENCODER_SOFTWARE,
+        }
+        if normalized in aliases:
+            return aliases[normalized]
+        try:
+            value = int(normalized)
+        except ValueError:
+            return CLUSTER_ENCODER_AUTO
+    try:
+        mode = int(value)
+    except (TypeError, ValueError):
+        return CLUSTER_ENCODER_AUTO
+    if mode in (
+        CLUSTER_ENCODER_AUTO,
+        CLUSTER_ENCODER_JPEG,
+        CLUSTER_ENCODER_HARDWARE,
+        CLUSTER_ENCODER_SOFTWARE,
+    ):
+        return mode
+    return CLUSTER_ENCODER_AUTO
 
 
 def normalize_cluster_brightness_percent(value: object) -> int:

@@ -4,13 +4,18 @@ import argparse
 import gc
 from dataclasses import replace
 import signal
+import sys
 import threading
 import time
 from pathlib import Path
 
 from cluster_config import (
     CLUSTER_BRIGHTNESS_PARAM,
+    CLUSTER_ENCODER_AUTO,
+    CLUSTER_ENCODER_HARDWARE,
+    CLUSTER_ENCODER_JPEG,
     CLUSTER_ENCODER_PARAM,
+    CLUSTER_ENCODER_SOFTWARE,
     CLUSTER_HUD_PARAM,
     CLUSTER_LIVE_FPS_PARAM,
     CLUSTER_RADAR_DISPLAY_PARAM,
@@ -24,6 +29,7 @@ from cluster_config import (
     DESIGN_HEIGHT,
     DESIGN_WIDTH,
     normalize_cluster_brightness_percent,
+    normalize_cluster_encoder_mode,
     normalize_cluster_live_fps,
     normalize_cluster_radar_display_mode,
     normalize_cluster_radar_info_mode,
@@ -109,6 +115,32 @@ def resolved_usb_h264_bitrate(requested_bitrate: str, target_fps: float, h264_fp
 
 def resolved_h264_encoder_fps(target_fps: float, h264_fps: int) -> int:
     return max(1, int(round(target_fps if target_fps > 0 else h264_fps)))
+
+
+def option_present(argv: list[str], option: str) -> bool:
+    return any(arg == option or arg.startswith(f"{option}=") for arg in argv)
+
+
+def apply_cluster_encoder_param(args: argparse.Namespace) -> str:
+    if args.output not in ("usb", "both"):
+        return "disabled"
+    if args.usb_codec_from_cli:
+        return "--usb-codec"
+
+    encoder_mode = ClusterHudEncoderParamReader().read()
+    if encoder_mode is None:
+        return "default"
+    encoder_mode = normalize_cluster_encoder_mode(encoder_mode)
+
+    if encoder_mode == CLUSTER_ENCODER_JPEG:
+        args.usb_codec = "jpeg"
+    elif encoder_mode in (CLUSTER_ENCODER_AUTO, CLUSTER_ENCODER_HARDWARE, CLUSTER_ENCODER_SOFTWARE):
+        args.usb_codec = "h264"
+        if not args.usb_h264_backend_from_cli:
+            args.usb_h264_backend = "ffmpeg" if encoder_mode == CLUSTER_ENCODER_SOFTWARE else "native"
+        if encoder_mode == CLUSTER_ENCODER_SOFTWARE and not args.usb_h264_ffmpeg_encoder_from_cli:
+            args.usb_h264_ffmpeg_encoder = "libx264"
+    return CLUSTER_ENCODER_PARAM
 
 
 class ClusterThemeParamReader:
@@ -292,7 +324,7 @@ class ClusterHudEncoderParamReader:
         if self._params is None:
             return None
         try:
-            return int(self._params.get_int(CLUSTER_ENCODER_PARAM))
+            return normalize_cluster_encoder_mode(self._params.get_int(CLUSTER_ENCODER_PARAM))
         except Exception:
             return None
 
@@ -1009,7 +1041,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Target refresh rate. Use 0 for uncapped/as-fast-as-possible. "
-            f"Default: 0, except live input reads {CLUSTER_LIVE_FPS_PARAM} when --fps is omitted."
+            f"When omitted, CLI runs read {CLUSTER_LIVE_FPS_PARAM}; mode 0 keeps the default cap behavior."
         ),
     )
     parser.add_argument(
@@ -1056,7 +1088,12 @@ def parse_args() -> argparse.Namespace:
             "and skips it for JPEG/PNG; use 0 to skip."
         ),
     )
-    parser.add_argument("--usb-codec", choices=("jpeg", "png", "h264"), default="jpeg")
+    parser.add_argument(
+        "--usb-codec",
+        choices=("jpeg", "png", "h264"),
+        default="jpeg",
+        help=f"USB output codec. When omitted, USB CLI runs read {CLUSTER_ENCODER_PARAM}.",
+    )
     parser.add_argument("--usb-jpeg-quality", type=int, default=68)
     parser.add_argument(
         "--usb-jpeg-encoder",
@@ -1382,8 +1419,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Disable post-init gc.freeze(). Default enabled to avoid long gen2 pauses during USB rendering.",
     )
+    raw_args = sys.argv[1:]
     args = parser.parse_args()
     args.fps_from_cli = args.fps is not None
+    args.usb_codec_from_cli = option_present(raw_args, "--usb-codec")
+    args.usb_h264_backend_from_cli = option_present(raw_args, "--usb-h264-backend")
+    args.usb_h264_ffmpeg_encoder_from_cli = option_present(raw_args, "--usb-h264-ffmpeg-encoder")
     if args.fps is None:
         args.fps = DEFAULT_FPS
     if args.fps < 0:
@@ -1452,13 +1493,21 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    encoder_source = apply_cluster_encoder_param(args)
+    if args.usb_async and args.usb_codec != "jpeg":
+        raise SystemExit("--usb-async only supports --usb-codec jpeg")
+    if args.usb_h264_render_nv12 and args.usb_h264_backend not in ("auto", "native"):
+        raise SystemExit("--usb-h264-render-nv12 requires --usb-h264-backend native or auto")
     target_fps = args.fps
     fps_source = "--fps" if args.fps_from_cli else "default"
     live_fps_param_reader = None
-    if args.input == "live" and not args.fps_from_cli:
-        live_fps_param_reader = ClusterLiveFpsParamReader()
-        target_fps = live_fps_param_reader.read()
-        fps_source = CLUSTER_LIVE_FPS_PARAM
+    if not args.fps_from_cli:
+        fps_param_reader = ClusterLiveFpsParamReader()
+        param_fps = fps_param_reader.read()
+        if args.input == "live" or param_fps > 0:
+            live_fps_param_reader = fps_param_reader
+            target_fps = param_fps
+            fps_source = CLUSTER_LIVE_FPS_PARAM
     if (
         args.output in ("usb", "both")
         and args.usb_codec == "h264"
@@ -1519,7 +1568,7 @@ def main() -> None:
     print(
         f"Refreshing native raylib cluster UI at {fps_text} "
         f"input={args.input} output={args.output}: {size_text} "
-        f"usb_codec={args.usb_codec}{h264_bitrate_text} "
+        f"usb_codec={args.usb_codec} encoder_source={encoder_source}{h264_bitrate_text} "
         f"fps_source={fps_source} display_fps={display_fps_text} "
         f"brightness={brightness_text} brightness_source={brightness_source}"
     )
