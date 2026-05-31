@@ -385,6 +385,7 @@ def run_demo(
     usb_h264_test_pattern: bool,
     usb_h264_test_pattern_nv12: bool,
     usb_h264_render_nv12: bool,
+    usb_h264_render_nv12_flip_x: bool,
     usb_frame_drain_attempts: int,
     usb_frame_drain_timeout_ms: int,
     usb_fast_drain_attempts: int,
@@ -598,7 +599,8 @@ def run_demo(
                     f"Using H264 GPU NV12 render path: "
                     f"{h264_pipeline.encoder_width}x{h264_pipeline.encoder_height} "
                     f"stride={stride} scanlines={y_scanlines}/{uv_scanlines} "
-                    f"uv_offset={uv_offset} bytes={input_bytes}",
+                    f"uv_offset={uv_offset} bytes={input_bytes} "
+                    f"flip_x={'on' if usb_h264_render_nv12_flip_x else 'off'}",
                     flush=True,
                 )
             if usb_h264_test_pattern:
@@ -874,6 +876,7 @@ def run_demo(
                                 uv_offset,
                                 input_bytes,
                                 h264_render_nv12_buffer,
+                                flip_x=usb_h264_render_nv12_flip_x,
                             )
                             profile.add_elapsed("main.usb.render_nv12_total", profile_stage)
 
@@ -1250,6 +1253,13 @@ def parse_args() -> argparse.Namespace:
         help="Experimental native path: render through a GPU RGBA-to-NV12 pack shader and submit aligned NV12.",
     )
     parser.add_argument(
+        "--usb-h264-render-nv12-no-flip-x",
+        dest="usb_h264_render_nv12_flip_x",
+        action="store_false",
+        default=True,
+        help="Disable the experimental GPU NV12 path's default horizontal sampling correction.",
+    )
+    parser.add_argument(
         "--usb-frame-drain-attempts",
         type=int,
         default=2,
@@ -1491,7 +1501,10 @@ def main() -> None:
         if args.usb_h264_realtime_priority:
             h264_bitrate_text += " h264_realtime=on"
         if args.usb_h264_render_nv12:
-            h264_bitrate_text += " h264_render_nv12=on"
+            h264_bitrate_text += (
+                " h264_render_nv12=on"
+                f" h264_nv12_flip_x={'on' if args.usb_h264_render_nv12_flip_x else 'off'}"
+            )
         if args.usb_h264_diagnose_interval > 0:
             h264_bitrate_text += f" h264_diag={args.usb_h264_diagnose_interval:g}s"
     brightness_text = "auto" if brightness_param_reader is not None and usb_brightness == 0 else f"{usb_brightness}%"
@@ -1552,6 +1565,7 @@ def main() -> None:
             args.usb_h264_test_pattern,
             args.usb_h264_test_pattern_nv12,
             args.usb_h264_render_nv12,
+            args.usb_h264_render_nv12_flip_x,
             args.usb_frame_drain_attempts,
             args.usb_frame_drain_timeout_ms,
             args.usb_fast_drain_attempts,

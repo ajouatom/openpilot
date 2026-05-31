@@ -194,8 +194,12 @@ uniform sampler2D texture0;
 uniform vec2 srcSize;
 uniform vec2 packedSize;
 uniform int plane;
+uniform int flipX;
 
 vec3 sampleRgb(float x, float y) {
+    if (flipX != 0) {
+        x = srcSize.x - 1.0 - x;
+    }
     vec2 clamped = clamp(vec2(x, y), vec2(0.0), srcSize - vec2(1.0));
     return texture2D(texture0, (clamped + vec2(0.5)) / srcSize).rgb;
 }
@@ -722,6 +726,7 @@ class ClusterUiRenderer:
         uv_offset: int,
         byte_count: int,
         buffer: bytearray | None = None,
+        flip_x: bool = False,
     ) -> bytearray:
         self.open(hidden=self.hidden)
         output_width = int(output_width)
@@ -788,7 +793,7 @@ class ClusterUiRenderer:
         self._profile_add("render_to_nv12.get_pack_targets", profile_stage)
 
         profile_stage = self._profile_start()
-        self._render_nv12_pack_plane(upload_target.texture, y_target, output_width, output_height, 0)
+        self._render_nv12_pack_plane(upload_target.texture, y_target, output_width, output_height, 0, flip_x)
         self._profile_add("render_to_nv12.pack_y_shader", profile_stage)
 
         profile_stage = self._profile_start()
@@ -796,7 +801,7 @@ class ClusterUiRenderer:
         self._profile_add("render_to_nv12.readback_y", profile_stage)
 
         profile_stage = self._profile_start()
-        self._render_nv12_pack_plane(upload_target.texture, uv_target, output_width, output_height, 1)
+        self._render_nv12_pack_plane(upload_target.texture, uv_target, output_width, output_height, 1, flip_x)
         self._profile_add("render_to_nv12.pack_uv_shader", profile_stage)
 
         profile_stage = self._profile_start()
@@ -979,23 +984,35 @@ class ClusterUiRenderer:
                 "srcSize": rl.get_shader_location(self._nv12_pack_shader, "srcSize"),
                 "packedSize": rl.get_shader_location(self._nv12_pack_shader, "packedSize"),
                 "plane": rl.get_shader_location(self._nv12_pack_shader, "plane"),
+                "flipX": rl.get_shader_location(self._nv12_pack_shader, "flipX"),
             }
         return self._nv12_pack_shader
 
-    def _render_nv12_pack_plane(self, source_texture, target, source_width: int, source_height: int, plane: int) -> None:
+    def _render_nv12_pack_plane(
+        self,
+        source_texture,
+        target,
+        source_width: int,
+        source_height: int,
+        plane: int,
+        flip_x: bool,
+    ) -> None:
         shader = self._get_nv12_pack_shader()
         locations = self._nv12_pack_shader_locations
         src_size = rl.ffi.new("float[]", [float(source_width), float(source_height)])
         packed_size = rl.ffi.new("float[]", [float(target.texture.width), float(target.texture.height)])
         plane_value = rl.ffi.new("int[]", [int(plane)])
+        flip_x_value = rl.ffi.new("int[]", [1 if flip_x else 0])
         rl.set_shader_value(shader, locations["srcSize"], src_size, rl.ShaderUniformDataType.SHADER_UNIFORM_VEC2)
         rl.set_shader_value(shader, locations["packedSize"], packed_size, rl.ShaderUniformDataType.SHADER_UNIFORM_VEC2)
         rl.set_shader_value(shader, locations["plane"], plane_value, rl.ShaderUniformDataType.SHADER_UNIFORM_INT)
+        rl.set_shader_value(shader, locations["flipX"], flip_x_value, rl.ShaderUniformDataType.SHADER_UNIFORM_INT)
 
         rl.begin_texture_mode(target)
         rl.clear_background(rl_color((0, 0, 0, 0)))
         rl.begin_shader_mode(shader)
-        rl.rl_disable_color_blend()
+        rl.rl_set_blend_factors(rl.RL_ONE, rl.RL_ZERO, rl.RL_FUNC_ADD)
+        rl.begin_blend_mode(rl.BlendMode.BLEND_CUSTOM)
         try:
             rl.draw_texture_pro(
                 source_texture,
@@ -1006,7 +1023,7 @@ class ClusterUiRenderer:
                 rl_color(WHITE),
             )
         finally:
-            rl.rl_enable_color_blend()
+            rl.end_blend_mode()
             rl.end_shader_mode()
             rl.end_texture_mode()
 
