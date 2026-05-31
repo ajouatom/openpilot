@@ -58,6 +58,7 @@ ADRV_CORNER_RADAR_ADDRESS = 0x1EA
 ROUTE_REPLAY_MIN_BUFFER_FILES = 2
 ROUTE_REPLAY_START_BUFFER_FILES = 1
 ROUTE_REPLAY_READAHEAD_S = 5.0
+ROUTE_REPLAY_PRELOAD_READY_AHEAD_S = 20.0
 ROUTE_REPLAY_RETAIN_BEHIND_S = 1.0
 ROUTE_REPLAY_PRELOAD_NICE = 10
 ROUTE_VIDEO_FPS = 20.0
@@ -472,6 +473,8 @@ class RouteReplaySource:
         if self.frames and playback_seconds < self.frames[0].t and not self._end_of_route:
             self._reset_stream()
 
+        self._finish_preload_if_ready(playback_seconds)
+
         while not self._end_of_route and (
             not self.frames
             or len(self._loaded_chunks) < ROUTE_REPLAY_START_BUFFER_FILES
@@ -482,6 +485,13 @@ class RouteReplaySource:
 
         self._trim_loaded_chunks(playback_seconds)
         self._start_preload()
+
+    def _finish_preload_if_ready(self, playback_seconds: float) -> bool:
+        if not self._preload_active or not self.frames:
+            return False
+        if playback_seconds < self.duration - ROUTE_REPLAY_PRELOAD_READY_AHEAD_S:
+            return False
+        return self._finish_preload(block=False)
 
     def _load_next_file(self) -> bool:
         if self._preload_active:
