@@ -639,6 +639,12 @@ void ClusterH264Encoder::queue_output_buffer(unsigned int index, uint64_t timest
   plane.length = static_cast<uint32_t>(buf->len);
   plane.m.userptr = reinterpret_cast<unsigned long>(buf->addr);
   plane.reserved[0] = static_cast<unsigned int>(buf->fd);
+  if (input_is_rgb4()) {
+    // Qualcomm's Android gralloc RGB path passes a 16.16 compression ratio
+    // field even for linear buffers. Use 1.0 so msm_vidc sees an explicit
+    // non-compressed RGB input.
+    plane.reserved[2] = 1U << 16;
+  }
 
   struct v4l2_buffer v4l_buf = {};
   v4l_buf.index = index;
