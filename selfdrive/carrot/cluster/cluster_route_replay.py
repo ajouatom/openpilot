@@ -27,6 +27,7 @@ from cluster_config import (
     MODEL_DIRECT_LANE_RECENTER_SECONDS,
     ROAD_CURVE_M_PER_M2,
     WHITE,
+    YELLOW,
 )
 from cluster_models import (
     ClusterUiState,
@@ -110,6 +111,8 @@ class RouteReplayFrame:
     right_road_edge_offset: float | None
     left_lane_style: str
     right_lane_style: str
+    left_lane_color: tuple[int, int, int] | None
+    right_lane_color: tuple[int, int, int] | None
     road_curvature: float | None
     road_curvature_source: str
     lane_position_source: str
@@ -875,6 +878,8 @@ class RouteLogParser:
         self.right_road_edge_confidence = 0.0
         self.left_lane_style = "solid"
         self.right_lane_style = "solid"
+        self.left_lane_color: tuple[int, int, int] | None = None
+        self.right_lane_color: tuple[int, int, int] | None = None
         self.lane_position_source = "default"
         self.model_curvature_m_inv: float | None = None
         self.model_curvature_source = "steeringAngleDeg"
@@ -1104,6 +1109,8 @@ class RouteLogParser:
             right_road_edge_offset=lane_values["right_road_edge_offset"],
             left_lane_style=self.left_lane_style,
             right_lane_style=self.right_lane_style,
+            left_lane_color=self.left_lane_color,
+            right_lane_color=self.right_lane_color,
             road_curvature=road_curvature,
             road_curvature_source=road_curvature_source,
             lane_position_source=self.lane_position_source,
@@ -1761,10 +1768,12 @@ class RouteLogParser:
         right_code = safe_optional_int(car_state, "rightLaneLine")
         if left_code is not None:
             self.left_lane_style = lane_style_from_code(left_code)
+            self.left_lane_color = lane_color_from_code(left_code)
             if left_code < 0:
                 self.left_lane_prob = 0.0
         if right_code is not None:
             self.right_lane_style = lane_style_from_code(right_code)
+            self.right_lane_color = lane_color_from_code(right_code)
             if right_code < 0:
                 self.right_lane_prob = 0.0
 
@@ -2318,6 +2327,8 @@ def blend_frames(left: RouteReplayFrame, right: RouteReplayFrame, amount: float)
         right_road_edge_offset=lerp_optional(left.right_road_edge_offset, right.right_road_edge_offset),
         left_lane_style=discrete.left_lane_style,
         right_lane_style=discrete.right_lane_style,
+        left_lane_color=discrete.left_lane_color,
+        right_lane_color=discrete.right_lane_color,
         road_curvature=lerp_optional(left.road_curvature, right.road_curvature),
         road_curvature_source=discrete.road_curvature_source,
         lane_position_source=discrete.lane_position_source,
@@ -2399,8 +2410,8 @@ def lanes_for_frame(
     lane_grid_offset: float = 0.0,
     use_animated_lane_grid: bool = False,
 ) -> tuple[LaneMarking, ...]:
-    left_inner_color = BLUE
-    right_inner_color = BLUE
+    left_inner_color = frame.left_lane_color or BLUE
+    right_inner_color = frame.right_lane_color or BLUE
     left_outer_color = WHITE
     right_outer_color = WHITE
     if frame.lane_change == "left":
@@ -3485,3 +3496,14 @@ def lane_style_from_code(code: int) -> str:
     if code < 0:
         return "solid"
     return "dashed" if code % 10 == 0 else "solid"
+
+
+def lane_color_from_code(code: int) -> tuple[int, int, int] | None:
+    if code < 10:
+        return None
+    color_code = code // 10
+    if color_code == 1:
+        return WHITE
+    if color_code == 2:
+        return YELLOW
+    return None

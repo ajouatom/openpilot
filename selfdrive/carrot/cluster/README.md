@@ -277,6 +277,9 @@ Lane and road-edge rendering keeps model geometry visible instead of filtering
 by `laneLineProbs` or `roadEdgeStds`, avoiding distracting HUD flicker when
 model confidence jitters. Lane markings are still suppressed when their
 lateral offset falls outside a valid model road-edge boundary.
+When `carState.leftLaneLine` or `carState.rightLaneLine` carries camera/CAN
+lane color codes, the current lane markings use that color first
+(`+10=white`, `+20=yellow`) before falling back to the cluster model colors.
 The planned path draws `longitudinalPlan.desiredDistance` as a magenta
 horizontal bar across the current lane width at the matching forward position.
 Changing `ClusterHud` to another supported mode or `0` makes the running HUD
