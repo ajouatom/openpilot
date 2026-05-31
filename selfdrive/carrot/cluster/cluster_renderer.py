@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from functools import lru_cache
 import math
 import os
@@ -151,6 +152,9 @@ VEHICLE_BADGE_ANCHOR_Z_OFFSET_M = 0.32
 WORLD_LABEL_NEAR_M = 18.0
 WORLD_LABEL_FAR_M = 180.0
 WORLD_LABEL_MIN_SCALE = 0.56
+WORLD_LABEL_TEXTURE_CACHE_LIMIT = 512
+WORLD_LABEL_TEXTURE_SIZE_GRID = 0.25
+WORLD_LABEL_TEXTURE_PADDING_PX = 4
 VEHICLE_MATERIAL_COLORS: dict[str, tuple[int, int, int, int]] = {
     "body": (156, 166, 172, 255),
     "wheel": (18, 20, 22, 255),
@@ -265,17 +269,32 @@ void main() {
 """
 
 
+@dataclass(slots=True)
+class CachedTextTexture:
+    texture: object
+    text_width: float
+    text_height: float
+    texture_width: int
+    texture_height: int
+    padding_px: float
+
+
 @lru_cache(maxsize=256)
 def _cached_rl_color(r: int, g: int, b: int, a: int) -> rl.Color:
     return rl.Color(r, g, b, a)
 
 
-def rl_color(color: tuple[int, int, int] | tuple[int, int, int, int], alpha: int | None = None) -> rl.Color:
+def rgba_key(color: tuple[int, int, int] | tuple[int, int, int, int]) -> tuple[int, int, int, int]:
     if len(color) == 4:
         r, g, b, a = color
     else:
         r, g, b = color
         a = 255
+    return int(r), int(g), int(b), int(a)
+
+
+def rl_color(color: tuple[int, int, int] | tuple[int, int, int, int], alpha: int | None = None) -> rl.Color:
+    r, g, b, a = rgba_key(color)
     if alpha is not None:
         a = alpha
     return _cached_rl_color(int(r), int(g), int(b), int(a))
@@ -469,6 +488,11 @@ class ClusterUiRenderer:
             tuple[int, int, float],
             tuple[tuple[Vec3, ...], tuple[Vec3, ...], float, object, int],
         ] = OrderedDict()
+        self._world_label_texture_cache: OrderedDict[
+            tuple[int, str, float, float, tuple[int, int, int, int]],
+            CachedTextTexture,
+        ] = OrderedDict()
+        self._world_label_texture_cache_enabled = os.environ.get("CLUSTER_WORLD_LABEL_TEXTURE_CACHE", "1") != "0"
         self._text_measure_cache: dict[tuple[int, str, float, float], tuple[float, float]] = {}
         self._system_stats = SystemStatsSampler(SYSTEM_STATS_REFRESH_SECONDS)
         self._debug_plot_mode_prev = -1
@@ -578,6 +602,9 @@ class ClusterUiRenderer:
             rl.unload_shader(self._nv12_pack_shader)
             self._nv12_pack_shader = None
             self._nv12_pack_shader_locations = {}
+        for cached_text in self._world_label_texture_cache.values():
+            rl.unload_texture(cached_text.texture)
+        self._world_label_texture_cache.clear()
         if self._route_video_texture is not None:
             rl.unload_texture(self._route_video_texture)
             self._route_video_texture = None
@@ -1535,10 +1562,10 @@ class ClusterUiRenderer:
             nonlocal text_ms
             if profile_enabled:
                 text_stage = time.perf_counter()
-                self._draw_text(label, x, y, size, color, anchor="center")
+                self._draw_world_label_text(label, x, y, size, color, anchor="center")
                 text_ms += (time.perf_counter() - text_stage) * 1000.0
                 return
-            self._draw_text(label, x, y, size, color, anchor="center")
+            self._draw_world_label_text(label, x, y, size, color, anchor="center")
 
         for point in ordered:
             anchor = rl.Vector3(
@@ -1684,10 +1711,10 @@ class ClusterUiRenderer:
             nonlocal text_ms
             if profile_enabled:
                 text_stage = time.perf_counter()
-                self._draw_text(label, x, y, size, color, anchor="center")
+                self._draw_world_label_text(label, x, y, size, color, anchor="center")
                 text_ms += (time.perf_counter() - text_stage) * 1000.0
                 return
-            self._draw_text(label, x, y, size, color, anchor="center")
+            self._draw_world_label_text(label, x, y, size, color, anchor="center")
 
         for vehicle in ordered:
             anchor = rl.Vector3(
@@ -3014,6 +3041,126 @@ class ClusterUiRenderer:
             draw_x = x - text_width
             draw_y = y - text_height * 0.5
         rl.draw_text_ex(self._font, text, rl.Vector2(draw_x, draw_y), size, spacing, rl_color(color))
+
+    def _draw_world_label_text(
+        self,
+        text: str,
+        x: float,
+        y: float,
+        size: float,
+        color: tuple[int, int, int] | tuple[int, int, int, int],
+        anchor: str = "left",
+    ) -> None:
+        if not self._world_label_texture_cache_enabled:
+            self._draw_text(text, x, y, size, color, anchor)
+            return
+
+        cached_text = self._world_label_texture(text, size, color)
+        if cached_text is None:
+            self._draw_text(text, x, y, size, color, anchor)
+            return
+
+        draw_x = x
+        draw_y = y
+        if anchor == "center":
+            draw_x = x - cached_text.text_width * 0.5
+            draw_y = y - cached_text.text_height * 0.5
+        elif anchor == "left":
+            draw_y = y - cached_text.text_height * 0.5
+        elif anchor == "right":
+            draw_x = x - cached_text.text_width
+            draw_y = y - cached_text.text_height * 0.5
+        draw_x -= cached_text.padding_px
+        draw_y -= cached_text.padding_px
+
+        source = rl.Rectangle(
+            0.0,
+            0.0,
+            float(cached_text.texture_width),
+            float(cached_text.texture_height),
+        )
+        dest = rl.Rectangle(
+            draw_x,
+            draw_y,
+            float(cached_text.texture_width),
+            float(cached_text.texture_height),
+        )
+        rl.draw_texture_pro(
+            cached_text.texture,
+            source,
+            dest,
+            rl.Vector2(0.0, 0.0),
+            0.0,
+            rl_color(WHITE),
+        )
+
+    def _world_label_texture(
+        self,
+        text: str,
+        size: float,
+        color: tuple[int, int, int] | tuple[int, int, int, int],
+    ) -> CachedTextTexture | None:
+        if self._font is None:
+            self._font = rl.get_font_default()
+        render_size = max(
+            1.0,
+            round(float(size) / WORLD_LABEL_TEXTURE_SIZE_GRID) * WORLD_LABEL_TEXTURE_SIZE_GRID,
+        )
+        spacing = max(1.0, render_size * 0.02)
+        color_key = rgba_key(color)
+        cache_key = (id(self._font), text, render_size, spacing, color_key)
+        cached_text = self._world_label_texture_cache.get(cache_key)
+        if cached_text is not None:
+            self._world_label_texture_cache.move_to_end(cache_key)
+            return cached_text
+
+        profile_stage = self._profile_start()
+        text_width, text_height = self._measure_text(text, render_size, spacing)
+        padding_px = float(WORLD_LABEL_TEXTURE_PADDING_PX)
+        texture_width = max(1, int(math.ceil(text_width + padding_px * 2.0)))
+        texture_height = max(1, int(math.ceil(text_height + padding_px * 2.0)))
+        image = None
+        texture = None
+        try:
+            image = rl.gen_image_color(texture_width, texture_height, rl_color((0, 0, 0, 0)))
+            rl.image_draw_text_ex(
+                image,
+                self._font,
+                text,
+                rl.Vector2(padding_px, padding_px),
+                render_size,
+                spacing,
+                rl_color(color_key),
+            )
+            texture = rl.load_texture_from_image(image)
+            if hasattr(rl, "is_texture_valid") and not rl.is_texture_valid(texture):
+                rl.unload_texture(texture)
+                return None
+        except Exception:
+            if texture is not None:
+                try:
+                    rl.unload_texture(texture)
+                except Exception:
+                    pass
+            return None
+        finally:
+            if image is not None:
+                rl.unload_image(image)
+
+        cached_text = CachedTextTexture(
+            texture=texture,
+            text_width=text_width,
+            text_height=text_height,
+            texture_width=texture_width,
+            texture_height=texture_height,
+            padding_px=padding_px,
+        )
+        self._world_label_texture_cache[cache_key] = cached_text
+        while len(self._world_label_texture_cache) > WORLD_LABEL_TEXTURE_CACHE_LIMIT:
+            _, old_text = self._world_label_texture_cache.popitem(last=False)
+            rl.unload_texture(old_text.texture)
+        self._profile_add("world_label_texture_cache.miss", profile_stage)
+        return cached_text
 
     def _measure_text(self, text: str, size: float, spacing: float | None = None) -> tuple[float, float]:
         if self._font is None:
