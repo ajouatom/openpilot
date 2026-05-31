@@ -717,11 +717,12 @@ def run_demo(
                     if display_actual_fps is None
                     else display_actual_fps * 0.85 + instant_fps * 0.15
                 )
+            source_status: str | None = None
+            center_clock_text: str | None = None
             if live_source is not None:
                 profile_stage = time.perf_counter()
                 state = live_source.update()
-                state = replace(state, center_clock_text=time.strftime("%H:%M:%S"))
-                source_status = live_source.status_text()
+                center_clock_text = time.strftime("%H:%M:%S")
                 profile.add_samples(live_source.profile_samples())
                 profile.add_elapsed("source.live_update", profile_stage)
             elif route_source is not None:
@@ -757,6 +758,9 @@ def run_demo(
                 state = simulator.update(command, dt)
                 profile.add_elapsed("source.gamepad_update", profile_stage)
 
+            if live_source is None:
+                center_clock_text = state.center_clock_text
+
             cluster_core_usage_text = None
             if cluster_core_usage_sampler is not None:
                 profile_stage = time.perf_counter()
@@ -767,6 +771,7 @@ def run_demo(
                 radar_info_mode=active_radar_info_mode,
                 radar_display_mode=active_radar_display_mode,
                 radar_source_color_mode=active_radar_source_color_mode,
+                center_clock_text=center_clock_text,
                 git_status=git_status_provider.status(),
                 actual_fps=display_actual_fps,
                 cluster_core_usage_text=cluster_core_usage_text,
@@ -888,8 +893,12 @@ def run_demo(
             now = time.perf_counter()
             profile.add_elapsed("main.frame_total", frame_start_time)
             profile.frame_done()
+            should_print_status = now - last_report_time >= 2.0
+            if should_print_status and source_status is None and live_source is not None:
+                source_status = live_source.status_text()
+                profile.add_samples(live_source.profile_samples())
             profile.maybe_report(now)
-            if now - last_report_time >= 2.0:
+            if should_print_status:
                 actual_fps = report_frames / (now - last_report_time)
                 lane_status = state.lane_change or (
                     "keep" if state.lane_change_phase == "idle" else state.lane_change_phase
