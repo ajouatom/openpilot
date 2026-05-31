@@ -152,6 +152,35 @@ int cluster_h264_encoder_bridge_encode_rgba(
   }
 }
 
+int cluster_h264_encoder_bridge_encode_nv12(
+    ClusterH264EncoderBridge *bridge,
+    const uint8_t *nv12,
+    size_t nv12_size,
+    uint64_t timestamp_us,
+    cluster_h264_packet_callback callback,
+    void *opaque) {
+  if (bridge == nullptr || bridge->encoder == nullptr) return -1;
+  try {
+    bridge->encoder->encode_nv12(nv12, nv12_size, timestamp_us, [callback, opaque](const ClusterH264PacketView &packet) {
+      if (callback != nullptr) {
+        callback(
+            packet.data,
+            packet.size,
+            packet.flags,
+            packet.timestamp_us,
+            packet.codec_config ? 1 : 0,
+            packet.keyframe ? 1 : 0,
+            opaque);
+      }
+    });
+    bridge->last_error.clear();
+    return 0;
+  } catch (const std::exception &e) {
+    set_error(bridge, e);
+    return -1;
+  }
+}
+
 int cluster_h264_encoder_bridge_drain(
     ClusterH264EncoderBridge *bridge,
     int timeout_ms,

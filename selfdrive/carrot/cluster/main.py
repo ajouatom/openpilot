@@ -383,6 +383,7 @@ def run_demo(
     usb_h264_debug: bool,
     usb_h264_diagnose_interval_s: float,
     usb_h264_test_pattern: bool,
+    usb_h264_test_pattern_nv12: bool,
     usb_frame_drain_attempts: int,
     usb_frame_drain_timeout_ms: int,
     usb_fast_drain_attempts: int,
@@ -549,6 +550,7 @@ def run_demo(
     display_actual_fps: float | None = None
     frame_interval = 1.0 / target_fps if target_fps > 0 else 0.0
     h264_test_pattern_rgba: bytearray | None = None
+    h264_test_pattern_nv12: bytearray | None = None
 
     try:
         renderer.open(hidden=output_mode == "usb")
@@ -595,6 +597,14 @@ def run_demo(
                     f"Using H264 RGBA color test pattern: "
                     f"{h264_pipeline.width}x{h264_pipeline.height} "
                     f"orientation={usb_h264_orientation}",
+                    flush=True,
+                )
+            if usb_h264_test_pattern_nv12:
+                h264_test_pattern_nv12 = h264_pipeline.build_nv12_color_test_pattern()
+                print(
+                    f"Using H264 native NV12 color test pattern: "
+                    f"{h264_pipeline.encoder_width}x{h264_pipeline.encoder_height} "
+                    f"bytes={len(h264_test_pattern_nv12)} orientation={usb_h264_orientation}",
                     flush=True,
                 )
         if gc_freeze_init:
@@ -835,7 +845,7 @@ def run_demo(
                 elif usb_codec == "h264":
                     if h264_pipeline is None:
                         raise RuntimeError("H264 USB pipeline is not available")
-                    if h264_test_pattern_rgba is None:
+                    if h264_test_pattern_rgba is None and h264_test_pattern_nv12 is None:
                         profile_stage = time.perf_counter()
                         with renderer.render_to_rgba_buffer(
                             state,
@@ -854,11 +864,18 @@ def run_demo(
                             profile.add_elapsed("main.usb_h264.submit_rgba", profile_stage)
                     else:
                         profile_stage = time.perf_counter()
-                        h264_pipeline.submit_rgba(
-                            h264_test_pattern_rgba,
-                            h264_pipeline.width,
-                            h264_pipeline.height,
-                        )
+                        if h264_test_pattern_nv12 is not None:
+                            h264_pipeline.submit_nv12(
+                                h264_test_pattern_nv12,
+                                h264_pipeline.encoder_width,
+                                h264_pipeline.encoder_height,
+                            )
+                        else:
+                            h264_pipeline.submit_rgba(
+                                h264_test_pattern_rgba,
+                                h264_pipeline.width,
+                                h264_pipeline.height,
+                            )
                         profile.add_elapsed("main.usb_h264.submit_test_pattern", profile_stage)
                 else:
                     profile_stage = time.perf_counter()
@@ -1184,6 +1201,11 @@ def parse_args() -> argparse.Namespace:
         help="Feed a red/green/blue/white RGBA quadrant pattern into the H264 path.",
     )
     parser.add_argument(
+        "--usb-h264-test-pattern-nv12",
+        action="store_true",
+        help="Feed a native-aligned red/green/blue/white NV12 quadrant pattern into the native H264 path.",
+    )
+    parser.add_argument(
         "--usb-frame-drain-attempts",
         type=int,
         default=2,
@@ -1340,6 +1362,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--usb-h264-bitrate must not be empty")
     if args.usb_h264_diagnose_interval < 0:
         parser.error("--usb-h264-diagnose-interval must be 0 or greater")
+    if args.usb_h264_test_pattern and args.usb_h264_test_pattern_nv12:
+        parser.error("--usb-h264-test-pattern and --usb-h264-test-pattern-nv12 cannot be used together")
     if not args.usb_h264_library:
         parser.error("--usb-h264-library must not be empty")
     if not args.usb_h264_helper:
@@ -1476,6 +1500,7 @@ def main() -> None:
             args.usb_h264_debug,
             args.usb_h264_diagnose_interval,
             args.usb_h264_test_pattern,
+            args.usb_h264_test_pattern_nv12,
             args.usb_frame_drain_attempts,
             args.usb_frame_drain_timeout_ms,
             args.usb_fast_drain_attempts,

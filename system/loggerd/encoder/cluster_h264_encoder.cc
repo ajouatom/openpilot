@@ -678,11 +678,35 @@ std::vector<ClusterH264Packet> ClusterH264Encoder::encode_rgba(const uint8_t *rg
 }
 
 void ClusterH264Encoder::encode_rgba(const uint8_t *rgba, size_t rgba_size, uint64_t timestamp_us, const ClusterH264PacketCallback &on_packet) {
+  encode_input(rgba, rgba_size, timestamp_us, on_packet, &ClusterH264Encoder::copy_rgba_to_input, "RGBA");
+}
+
+std::vector<ClusterH264Packet> ClusterH264Encoder::encode_nv12(const uint8_t *nv12, size_t nv12_size, uint64_t timestamp_us) {
+  std::vector<ClusterH264Packet> packets;
+  encode_nv12(nv12, nv12_size, timestamp_us, [&packets](const ClusterH264PacketView &view) {
+    ClusterH264Packet packet;
+    packet.flags = view.flags;
+    packet.timestamp_us = view.timestamp_us;
+    packet.codec_config = view.codec_config;
+    packet.keyframe = view.keyframe;
+    packet.data.assign(view.data, view.data + view.size);
+    packets.push_back(std::move(packet));
+  });
+  return packets;
+}
+
+void ClusterH264Encoder::encode_nv12(const uint8_t *nv12, size_t nv12_size, uint64_t timestamp_us, const ClusterH264PacketCallback &on_packet) {
+  encode_input(nv12, nv12_size, timestamp_us, on_packet, &ClusterH264Encoder::copy_nv12_to_input, "NV12");
+}
+
+void ClusterH264Encoder::encode_input(const uint8_t *data, size_t data_size, uint64_t timestamp_us,
+                                      const ClusterH264PacketCallback &on_packet, InputCopyFn copy_input,
+                                      const char *input_name) {
   if (!is_open_) {
     throw std::runtime_error("cluster H264 encoder is not open");
   }
-  if (rgba == nullptr) {
-    throw std::runtime_error("cluster H264 encoder received null RGBA input");
+  if (data == nullptr) {
+    throw std::runtime_error(std::string("cluster H264 encoder received null ") + input_name + " input");
   }
 
   last_encode_timings_ = {};
@@ -702,7 +726,7 @@ void ClusterH264Encoder::encode_rgba(const uint8_t *rgba, size_t rgba_size, uint
   unsigned int index = free_inputs_.front();
   free_inputs_.pop_front();
   stage_start = std::chrono::steady_clock::now();
-  copy_rgba_to_input(rgba, rgba_size, &input_buffers_[index]);
+  (this->*copy_input)(data, data_size, &input_buffers_[index]);
   last_encode_timings_.convert_us = elapsed_us(stage_start);
   stage_start = std::chrono::steady_clock::now();
   if (input_buffers_[index].sync(VISIONBUF_SYNC_TO_DEVICE) != 0) {
@@ -725,6 +749,19 @@ void ClusterH264Encoder::copy_rgba_to_input(const uint8_t *rgba, size_t rgba_siz
     return;
   }
   throw std::runtime_error("cluster H264 encoder has unsupported input format " + input_v4l_format_name_);
+}
+
+void ClusterH264Encoder::copy_nv12_to_input(const uint8_t *nv12, size_t nv12_size, VisionBuf *dst) const {
+  if (!input_is_nv12()) {
+    throw std::runtime_error("cluster H264 encoder has unsupported input format " + input_v4l_format_name_);
+  }
+  if (nv12_size < input_bytesused_) {
+    throw std::runtime_error("cluster H264 encoder NV12 input is smaller than the V4L2 input bytesused");
+  }
+  if (dst == nullptr || dst->addr == nullptr || dst->len < input_bytesused_) {
+    throw std::runtime_error("cluster H264 encoder input buffer is not allocated");
+  }
+  memcpy(dst->addr, nv12, input_bytesused_);
 }
 
 void ClusterH264Encoder::rgba_to_nv12(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const {
