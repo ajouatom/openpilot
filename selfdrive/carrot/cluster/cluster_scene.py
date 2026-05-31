@@ -777,10 +777,11 @@ def lane_marking_strip_groups_from_segments(
         return tuple(() for _ in specs)
 
     half_widths = tuple(max(0.08, width_px * 0.022) * 0.5 for width_px, _, _ in specs)
+    heights = tuple(height_m for _, _, height_m in specs)
     left_groups: list[list[Vec3]] = [[] for _ in specs]
     right_groups: list[list[Vec3]] = [[] for _ in specs]
     for segment in segments:
-        append_lane_marking_segment_strip_groups(segment, half_widths, specs, left_groups, right_groups)
+        append_lane_marking_segment_strip_groups(segment, half_widths, heights, left_groups, right_groups)
 
     return finish_lane_marking_strip_groups(left_groups, right_groups, specs)
 
@@ -794,10 +795,11 @@ def lane_marking_strip_groups_from_centerline(
         return tuple(() for _ in specs)
 
     half_widths = tuple(max(0.08, width_px * 0.022) * 0.5 for width_px, _, _ in specs)
+    heights = tuple(height_m for _, _, height_m in specs)
     left_groups: list[list[Vec3]] = [[] for _ in specs]
     right_groups: list[list[Vec3]] = [[] for _ in specs]
     if style == "solid":
-        append_lane_marking_segment_strip_groups(centerline, half_widths, specs, left_groups, right_groups)
+        append_lane_marking_segment_strip_groups(centerline, half_widths, heights, left_groups, right_groups)
         return finish_lane_marking_strip_groups(left_groups, right_groups, specs)
 
     dash_m = LANE_DASH_LENGTH_M
@@ -839,7 +841,7 @@ def lane_marking_strip_groups_from_centerline(
                     append_lane_marking_segment_strip_groups(
                         current_dash,
                         half_widths,
-                        specs,
+                        heights,
                         left_groups,
                         right_groups,
                     )
@@ -848,7 +850,7 @@ def lane_marking_strip_groups_from_centerline(
                 append_lane_marking_segment_strip_groups(
                     current_dash,
                     half_widths,
-                    specs,
+                    heights,
                     left_groups,
                     right_groups,
                 )
@@ -861,7 +863,7 @@ def lane_marking_strip_groups_from_centerline(
         previous = current
 
     if len(current_dash) >= 2:
-        append_lane_marking_segment_strip_groups(current_dash, half_widths, specs, left_groups, right_groups)
+        append_lane_marking_segment_strip_groups(current_dash, half_widths, heights, left_groups, right_groups)
 
     return finish_lane_marking_strip_groups(left_groups, right_groups, specs)
 
@@ -869,28 +871,46 @@ def lane_marking_strip_groups_from_centerline(
 def append_lane_marking_segment_strip_groups(
     segment: tuple[Vec3, ...] | list[Vec3],
     half_widths: tuple[float, ...],
-    specs: tuple[tuple[int, Color, float], ...],
+    heights: tuple[float, ...],
     left_groups: list[list[Vec3]],
     right_groups: list[list[Vec3]],
 ) -> None:
-    if len(segment) < 2:
+    point_count = len(segment)
+    if point_count < 2:
         return
+    vec3 = Vec3
+    sqrt = math.sqrt
+    group_specs = tuple(zip(half_widths, heights, left_groups, right_groups))
+    last_index = point_count - 1
     for index, point in enumerate(segment):
-        previous_point = segment[max(0, index - 1)]
-        next_point = segment[min(len(segment) - 1, index + 1)]
-        tangent_x, tangent_y = normalize2(
-            next_point.x - previous_point.x,
-            next_point.y - previous_point.y,
-        )
-        right_x = tangent_y
-        right_y = -tangent_x
-        for spec_index, half_width in enumerate(half_widths):
-            height_m = specs[spec_index][2]
-            left = Vec3(point.x - right_x * half_width, point.y - right_y * half_width, height_m)
-            right = Vec3(point.x + right_x * half_width, point.y + right_y * half_width, height_m)
-            left_group = left_groups[spec_index]
-            right_group = right_groups[spec_index]
-            if index == 0 and left_group:
+        if index == 0:
+            previous_point = segment[0]
+            next_point = segment[1]
+        elif index == last_index:
+            previous_point = segment[last_index - 1]
+            next_point = segment[last_index]
+        else:
+            previous_point = segment[index - 1]
+            next_point = segment[index + 1]
+
+        dx = next_point.x - previous_point.x
+        dy = next_point.y - previous_point.y
+        length = sqrt(dx * dx + dy * dy)
+        if length <= 0.0001:
+            right_x = 1.0
+            right_y = -0.0
+        else:
+            inverse_length = 1.0 / length
+            right_x = dy * inverse_length
+            right_y = -dx * inverse_length
+
+        point_x = point.x
+        point_y = point.y
+        first_point = index == 0
+        for half_width, height_m, left_group, right_group in group_specs:
+            left = vec3(point_x - right_x * half_width, point_y - right_y * half_width, height_m)
+            right = vec3(point_x + right_x * half_width, point_y + right_y * half_width, height_m)
+            if first_point and left_group:
                 previous_right = right_group[-1]
                 left_group.append(previous_right)
                 right_group.append(previous_right)
