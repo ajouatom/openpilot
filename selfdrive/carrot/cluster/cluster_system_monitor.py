@@ -158,7 +158,7 @@ class ClusterProcessCoreUsageSampler:
             return self._text
 
         scan_start = time.perf_counter()
-        samples, scanned_processes, matched_processes = self._read_cluster_thread_samples()
+        samples, candidate_processes, matched_processes = self._read_cluster_thread_samples()
         scan_ms = (time.perf_counter() - scan_start) * 1000.0
         next_ticks = {sample.key: sample.cpu_time_ticks for sample in samples}
         text: str | None = None
@@ -188,7 +188,7 @@ class ClusterProcessCoreUsageSampler:
         if self.debug:
             print(
                 "CLUSTER_CORE_USAGE "
-                f"scan={scan_ms:.2f}ms pids={scanned_processes} matched={matched_processes} "
+                f"scan={scan_ms:.2f}ms candidates={candidate_processes} matched={matched_processes} "
                 f"threads={len(samples)} active_threads={active_threads} "
                 f"cores={self._format_percent_map(by_core)} "
                 f"procs={self._format_percent_map(by_process)} "
@@ -208,17 +208,10 @@ class ClusterProcessCoreUsageSampler:
 
         current_pid = os.getpid()
         samples: list[_ThreadCpuSample] = []
-        try:
-            pid_dirs = tuple(PROC_PATH.iterdir())
-        except OSError:
-            return (), 0, 0
-        scanned_processes = 0
         matched_processes = 0
-        for pid_dir in pid_dirs:
-            if not pid_dir.name.isdigit():
-                continue
-            scanned_processes += 1
-            pid = int(pid_dir.name)
+        candidate_pids = (current_pid, *self._read_child_pids(current_pid))
+        for pid in candidate_pids:
+            pid_dir = PROC_PATH / str(pid)
             process_name = self._process_name(pid_dir)
             if pid != current_pid and not self._is_cluster_process_name(process_name):
                 continue
@@ -234,7 +227,22 @@ class ClusterProcessCoreUsageSampler:
                 sample = self._read_thread_stat(pid, int(thread_dir.name), process_name, thread_dir / "stat")
                 if sample is not None:
                     samples.append(sample)
-        return tuple(samples), scanned_processes, matched_processes
+        return tuple(samples), len(candidate_pids), matched_processes
+
+    @staticmethod
+    def _read_child_pids(pid: int) -> tuple[int, ...]:
+        children_path = PROC_PATH / str(pid) / "task" / str(pid) / "children"
+        try:
+            text = children_path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            return ()
+        child_pids: list[int] = []
+        for value in text.split():
+            try:
+                child_pids.append(int(value))
+            except ValueError:
+                continue
+        return tuple(child_pids)
 
     @staticmethod
     def _process_name(pid_dir: Path) -> str:
