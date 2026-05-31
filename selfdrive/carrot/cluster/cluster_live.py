@@ -130,6 +130,11 @@ class OpenpilotLiveSource:
         if not self._service_alive("deviceState"):
             return None
         try:
+            if not bool(self.sm["deviceState"].started):
+                return 0
+        except Exception:
+            return None
+        try:
             value = float(self.sm["deviceState"].screenBrightnessPercent)
         except Exception:
             return None
