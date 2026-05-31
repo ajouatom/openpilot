@@ -232,6 +232,8 @@ limit and is polled about once per second while running: `0` uncapped,
 Explicit `--fps` remains a fixed override. For H264 USB output, changing the
 effective FPS exits the current HUD process so autostart can relaunch with a
 matching encoder FPS.
+Live input also shows a compact lower-right cluster-process CPU overlay by
+current core, formatted like `[0(10),1(25)]`, with 2 px bottom/right margins.
 `ClusterHudEncoder` controls the encoder used by manager autostart: `0` auto
 tries native hardware H264, then ffmpeg/libx264 software H264, then JPEG;
 `1` forces JPEG, `2` forces native hardware H264, and `3` forces

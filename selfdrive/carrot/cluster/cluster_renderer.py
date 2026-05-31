@@ -138,6 +138,8 @@ FPS_STATUS_MARGIN = 4
 FPS_STATUS_DOT_RADIUS = 7
 FPS_STATUS_DOT_TEXT_GAP = 6
 FPS_STATUS_MAX_TEXT_W = 220
+CLUSTER_CORE_USAGE_MARGIN = 2
+CLUSTER_CORE_USAGE_MAX_TEXT_W = 760
 RADAR_LABEL_DISTANCE_FONT_SIZE = 16
 RADAR_LABEL_SPEED_FONT_SIZE = 14
 VEHICLE_BADGE_DISTANCE_FONT_SIZE = 17
@@ -1528,6 +1530,9 @@ class ClusterUiRenderer:
             profile_stage = self._profile_start()
             self._draw_git_status(state.git_status)
             self._profile_add("hud.git_status", profile_stage)
+            profile_stage = self._profile_start()
+            self._draw_cluster_core_usage(state.cluster_core_usage_text)
+            self._profile_add("hud.cluster_core_usage", profile_stage)
         finally:
             profile_stage = self._profile_start()
             rl.rl_pop_matrix()
@@ -2078,6 +2083,19 @@ class ClusterUiRenderer:
         dot_center_x = text_x - text_width - FPS_STATUS_DOT_TEXT_GAP - FPS_STATUS_DOT_RADIUS
         rl.draw_circle_v(rl.Vector2(dot_center_x, center_y), FPS_STATUS_DOT_RADIUS, rl_color(GREEN))
         self._draw_text(text, text_x, center_y, text_size, color, anchor="right")
+
+    def _draw_cluster_core_usage(self, text: str | None) -> None:
+        if not text:
+            return
+
+        theme = self._current_theme()
+        text_size = 18
+        text = self._ellipsize_text(text, text_size, CLUSTER_CORE_USAGE_MAX_TEXT_W)
+        spacing = max(1.0, text_size * 0.02)
+        _, text_height = self._measure_text(text, text_size, spacing)
+        x = DESIGN_WIDTH - CLUSTER_CORE_USAGE_MARGIN
+        y = DESIGN_HEIGHT - CLUSTER_CORE_USAGE_MARGIN - text_height * 0.5
+        self._draw_text(text, x, y, text_size, theme.muted, anchor="right")
 
     @staticmethod
     def _git_status_color(status: GitBranchStatus, theme: ClusterTheme) -> tuple[int, int, int]:

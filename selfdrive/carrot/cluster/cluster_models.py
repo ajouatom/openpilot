@@ -238,6 +238,7 @@ class ClusterUiState:
     display_speed_kph: float | None = None
     git_status: GitBranchStatus | None = None
     actual_fps: float | None = None
+    cluster_core_usage_text: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
 import time
 
 
+PROC_PATH = Path("/proc")
 PROC_STAT_PATH = Path("/proc/stat")
 PROC_MEMINFO_PATH = Path("/proc/meminfo")
 
@@ -125,3 +127,125 @@ class SystemStatsSampler:
             busy = max(0, min(delta_total, delta_total - delta_idle))
             percents.append(busy / delta_total * 100.0)
         return tuple(percents)
+
+
+@dataclass(frozen=True, slots=True)
+class _ThreadCpuSample:
+    key: tuple[int, int, int]
+    cpu_time_ticks: int
+    processor: int
+
+
+class ClusterProcessCoreUsageSampler:
+    def __init__(self, refresh_interval_s: float = 1.0) -> None:
+        self.refresh_interval_s = max(0.1, float(refresh_interval_s))
+        self._next_sample_time = 0.0
+        self._last_sample_time: float | None = None
+        self._previous_thread_ticks: dict[tuple[int, int, int], int] | None = None
+        self._text: str | None = None
+        try:
+            self._clock_ticks = int(os.sysconf(os.sysconf_names["SC_CLK_TCK"]))
+        except (AttributeError, KeyError, OSError, ValueError):
+            self._clock_ticks = 100
+
+    def sample_text(self, now: float | None = None) -> str | None:
+        if now is None:
+            now = time.perf_counter()
+        if now < self._next_sample_time:
+            return self._text
+
+        samples = self._read_cluster_thread_samples()
+        next_ticks = {sample.key: sample.cpu_time_ticks for sample in samples}
+        text: str | None = None
+        if self._previous_thread_ticks is not None and self._last_sample_time is not None:
+            elapsed = max(0.001, now - self._last_sample_time)
+            by_core: dict[int, float] = {}
+            for sample in samples:
+                previous_ticks = self._previous_thread_ticks.get(sample.key)
+                if previous_ticks is None or sample.processor < 0:
+                    continue
+                delta_ticks = max(0, sample.cpu_time_ticks - previous_ticks)
+                if delta_ticks == 0:
+                    continue
+                percent = delta_ticks / max(1, self._clock_ticks) / elapsed * 100.0
+                by_core[sample.processor] = by_core.get(sample.processor, 0.0) + percent
+            parts = [
+                f"{core}({max(1, int(round(percent)))})"
+                for core, percent in sorted(by_core.items())
+                if percent >= 0.5
+            ]
+            text = "[" + ",".join(parts) + "]"
+
+        self._previous_thread_ticks = next_ticks
+        self._last_sample_time = now
+        self._next_sample_time = now + self.refresh_interval_s
+        self._text = text
+        return self._text
+
+    def _read_cluster_thread_samples(self) -> tuple[_ThreadCpuSample, ...]:
+        if not PROC_PATH.exists():
+            return ()
+
+        current_pid = os.getpid()
+        samples: list[_ThreadCpuSample] = []
+        try:
+            pid_dirs = tuple(PROC_PATH.iterdir())
+        except OSError:
+            return ()
+        for pid_dir in pid_dirs:
+            if not pid_dir.name.isdigit():
+                continue
+            pid = int(pid_dir.name)
+            if pid != current_pid and not self._is_cluster_process(pid_dir):
+                continue
+            task_dir = pid_dir / "task"
+            try:
+                thread_dirs = tuple(task_dir.iterdir())
+            except OSError:
+                continue
+            for thread_dir in thread_dirs:
+                if not thread_dir.name.isdigit():
+                    continue
+                sample = self._read_thread_stat(pid, int(thread_dir.name), thread_dir / "stat")
+                if sample is not None:
+                    samples.append(sample)
+        return tuple(samples)
+
+    @staticmethod
+    def _is_cluster_process(pid_dir: Path) -> bool:
+        text_parts: list[str] = []
+        try:
+            text_parts.append((pid_dir / "comm").read_text(encoding="utf-8", errors="ignore"))
+        except OSError:
+            pass
+        try:
+            cmdline = (pid_dir / "cmdline").read_bytes().replace(b"\0", b" ")
+            text_parts.append(cmdline.decode("utf-8", errors="ignore"))
+        except OSError:
+            pass
+        return "cluster" in " ".join(text_parts).lower()
+
+    @staticmethod
+    def _read_thread_stat(pid: int, tid: int, stat_path: Path) -> _ThreadCpuSample | None:
+        try:
+            text = stat_path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            return None
+        close = text.rfind(")")
+        if close < 0 or close + 2 >= len(text):
+            return None
+        fields = text[close + 2 :].split()
+        if len(fields) <= 36:
+            return None
+        try:
+            utime = int(fields[11])
+            stime = int(fields[12])
+            starttime = int(fields[19])
+            processor = int(fields[36])
+        except ValueError:
+            return None
+        return _ThreadCpuSample(
+            key=(pid, tid, starttime),
+            cpu_time_ticks=utime + stime,
+            processor=processor,
+        )
