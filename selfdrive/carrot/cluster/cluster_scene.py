@@ -546,15 +546,13 @@ def model_line_centerline(
     height_m: float,
     lateral_shift_m: float = 0.0,
 ) -> tuple[Vec3, ...]:
-    visible_points: list[ModelPathPoint] = []
+    centerline: list[Vec3] = []
+    ego_forward_m = EGO_FORWARD_M
     for point in model_points:
-        forward_m = data_scene_forward_m(point.forward_m)
+        forward_m = ego_forward_m + point.forward_m
         if start_m <= forward_m <= end_m:
-            visible_points.append(point)
-    return tuple(
-        Vec3(point.lateral_m + lateral_shift_m, data_scene_forward_m(point.forward_m), height_m)
-        for point in visible_points
-    )
+            centerline.append(Vec3(point.lateral_m + lateral_shift_m, forward_m, height_m))
+    return tuple(centerline)
 
 
 def extend_centerline_rearward_to_first_point(
@@ -1020,10 +1018,11 @@ def cache_grid_value(value: float, grid_m: float) -> float:
 
 def model_line_cache_point_key(model_points: tuple[ModelPathPoint, ...]) -> ModelLineStripPointKey:
     grid_scale = 1.0 / MODEL_LINE_STRIP_GROUP_CACHE_POINT_GRID_M
+    round_value = round
     return tuple(
         (
-            round(point.forward_m * grid_scale),
-            round(point.lateral_m * grid_scale),
+            round_value(point.forward_m * grid_scale),
+            round_value(point.lateral_m * grid_scale),
         )
         for point in model_points
     )
@@ -1076,11 +1075,15 @@ def cached_model_line_strip_groups(
     specs: tuple[tuple[int, Color, float], ...],
     style: str,
     extend_before_model: bool,
+    profile_add: ProfileAdd | None = None,
+    profile_prefix: str = "scene.model_line",
 ) -> ModelLineStripGroups:
     cache_start_m = model_line_cache_start_m(start_m)
     cache_end_m = model_line_cache_end_m(end_m)
     geometry_specs = model_line_geometry_specs(specs)
+    profile_stage = profile_scene_start(profile_add)
     render_points, point_key = model_line_render_points_and_key(model_points, MODEL_LINE_RENDER_POINT_LIMIT)
+    profile_scene_add(profile_add, f"{profile_prefix}.key", profile_stage)
     key = (
         point_key,
         cache_start_m,
@@ -1092,19 +1095,27 @@ def cached_model_line_strip_groups(
     cached = _MODEL_LINE_STRIP_GROUP_CACHE.get(key)
     if cached is not None:
         _MODEL_LINE_STRIP_GROUP_CACHE.move_to_end(key)
+        profile_scene_add_elapsed(profile_add, f"{profile_prefix}.hit", 0.0)
         return cached
 
+    profile_scene_add_elapsed(profile_add, f"{profile_prefix}.miss", 0.0)
+    profile_stage = profile_scene_start(profile_add)
     centerline = model_line_centerline(render_points, cache_start_m, cache_end_m, 0.0)
+    profile_scene_add(profile_add, f"{profile_prefix}.centerline", profile_stage)
     if len(centerline) < 2:
         groups: ModelLineStripGroups = None if extend_before_model else tuple(() for _ in geometry_specs)
     else:
         if extend_before_model:
+            profile_stage = profile_scene_start(profile_add)
             centerline = extend_model_centerline_rearward(centerline, cache_start_m)
+            profile_scene_add(profile_add, f"{profile_prefix}.extend", profile_stage)
+        profile_stage = profile_scene_start(profile_add)
         groups = lane_marking_strip_groups_from_centerline(
             centerline,
             model_line_placeholder_specs(geometry_specs),
             style,
         )
+        profile_scene_add(profile_add, f"{profile_prefix}.strips", profile_stage)
 
     _MODEL_LINE_STRIP_GROUP_CACHE[key] = groups
     while len(_MODEL_LINE_STRIP_GROUP_CACHE) > MODEL_LINE_STRIP_GROUP_CACHE_LIMIT:
@@ -1262,6 +1273,8 @@ def model_line_strip_groups(
     specs: tuple[tuple[int, Color, float], ...],
     style: str,
     extend_before_model: bool,
+    profile_add: ProfileAdd | None = None,
+    profile_prefix: str = "scene.model_line",
 ) -> ModelLineStripGroups:
     groups = cached_model_line_strip_groups(
         model_points,
@@ -1270,10 +1283,15 @@ def model_line_strip_groups(
         specs,
         style,
         extend_before_model,
+        profile_add,
+        profile_prefix,
     )
     if groups is None:
         return None
-    return style_mesh_strip_groups(groups, specs, lateral_shift_m)
+    profile_stage = profile_scene_start(profile_add)
+    styled_groups = style_mesh_strip_groups(groups, specs, lateral_shift_m)
+    profile_scene_add(profile_add, f"{profile_prefix}.style", profile_stage)
+    return styled_groups
 
 
 def planned_path_lane_offset(state: ClusterUiState, forward_m: float) -> float:
@@ -2425,10 +2443,14 @@ def road_edge_model_strips(
     start_m: float,
     end_m: float,
     theme: ClusterTheme = LIGHT_CLUSTER_THEME,
+    profile_add: ProfileAdd | None = None,
 ) -> tuple[MeshStrip, ...]:
     layers = road_edge_3d_layers(color, theme)
     specs = road_edge_layer_specs(layers)
-    render_points = road_edge_model_points_for_render(model_points)
+    render_points = (
+        model_points if ROAD_EDGE_MODEL_POINT_LIMIT <= 0
+        else road_edge_model_points_for_render(model_points)
+    )
     groups = cached_model_line_strip_groups(
         render_points,
         start_m,
@@ -2436,15 +2458,20 @@ def road_edge_model_strips(
         specs,
         "solid",
         True,
+        profile_add,
+        "scene.road_model",
     )
     if groups is None:
         return ()
     shifts = tuple(lateral_shift_m + side * lateral_offset_m for _, _, _, lateral_offset_m in layers)
-    return tuple(
+    profile_stage = profile_scene_start(profile_add)
+    styled_strips = tuple(
         strip
         for group in style_mesh_strip_groups_by_shift(groups, specs, shifts)
         for strip in group
     )
+    profile_scene_add(profile_add, "scene.road_model.style", profile_stage)
+    return styled_strips
 
 
 def road_edge_offset_strips(
@@ -2536,6 +2563,7 @@ def road_edge_strips(
     road_start_m: float,
     road_end_m: float,
     theme: ClusterTheme = LIGHT_CLUSTER_THEME,
+    profile_add: ProfileAdd | None = None,
 ) -> tuple[MeshStrip, ...]:
     def default_road_edge_strips() -> tuple[MeshStrip, ...]:
         default_color = road_edge_color(None, 1.0, theme)
@@ -2592,6 +2620,7 @@ def road_edge_strips(
                     road_start_m,
                     road_end_m,
                     theme,
+                    profile_add,
                 )
             )
     if state.right_road_edge_offset is not None or state.right_road_edge_points:
@@ -2606,6 +2635,7 @@ def road_edge_strips(
                     road_start_m,
                     road_end_m,
                     theme,
+                    profile_add,
                 )
             )
         elif state.right_road_edge_offset is not None:
@@ -2775,6 +2805,8 @@ def build_cluster_scene(
                 marking_specs,
                 marking.style,
                 True,
+                profile_add,
+                "scene.lane_model",
             )
             if profile_add is not None:
                 lane_model_ms += (time.perf_counter() - profile_step) * 1000.0
@@ -2901,7 +2933,7 @@ def build_cluster_scene(
 
     profile_stage = profile_scene_start(profile_add)
     profile_geometry = profile_scene_start(profile_add)
-    road_edges_raw = road_edge_strips(state, route_mode, lane_width_m, road_start_m, road_end_m, theme)
+    road_edges_raw = road_edge_strips(state, route_mode, lane_width_m, road_start_m, road_end_m, theme, profile_add)
     profile_scene_add(profile_add, "scene.build.road_edges.geometry", profile_geometry)
     profile_merge = profile_scene_start(profile_add)
     road_edges = merge_mesh_strips_by_style(road_edges_raw)
