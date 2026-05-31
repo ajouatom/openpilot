@@ -2286,7 +2286,7 @@
       "cdescr": "0: 自动\n1-100: 亮度",
       "min": 0,
       "max": 100,
-      "default": 60,
+      "default": 0,
       "unit": 1
     },
     {
@@ -2334,7 +2334,7 @@
       "cdescr": "0: 不限制\n1: 10 FPS\n2: 20 FPS\n3: 30 FPS\n4: 40 FPS\n5: 50 FPS\n6: 60 FPS",
       "min": 0,
       "max": 6,
-      "default": 1,
+      "default": 0,
       "unit": 1
     },
     {
@@ -2366,7 +2366,7 @@
       "cdescr": "0: 关闭\n1: 速度(仅车辆)\n2: 速度,距离(仅车辆)\n3: 速度(全部)\n4: 速度,距离(全部)",
       "min": 0,
       "max": 4,
-      "default": 1,
+      "default": 4,
       "unit": 1
     },
     {

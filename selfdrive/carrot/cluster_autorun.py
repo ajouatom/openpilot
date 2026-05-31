@@ -17,6 +17,7 @@ CLUSTER_DIR = CARROT_DIR / "cluster"
 OPENPILOT_ROOT = CARROT_DIR.parents[1]
 HUD_PARAM = "ClusterHud"
 HUD_ENCODER_PARAM = "ClusterHudEncoder"
+HUD_LIVE_FPS_PARAM = "ClusterHudLiveFps"
 RETRY_INTERVAL_S = 5.0
 HUD_CHECK_INTERVAL_S = 5.0
 USB_FALLBACK_SCAN_INTERVAL_S = 60.0
@@ -97,6 +98,14 @@ def _read_encoder_mode(params: Params) -> int:
         )
         return ENCODER_AUTO
     return encoder_mode
+
+
+def _read_live_fps_mode(params: Params) -> int:
+    try:
+        return int(params.get_int(HUD_LIVE_FPS_PARAM))
+    except Exception as exc:
+        print(f"[cluster_autorun] failed to read {HUD_LIVE_FPS_PARAM}: {exc}", flush=True)
+        return 0
 
 
 def _encoder_sequence(encoder_mode: int) -> list[int]:
@@ -359,6 +368,7 @@ def main() -> None:
     while True:
         hud_mode = _read_hud_mode(params)
         encoder_mode = _read_encoder_mode(params)
+        live_fps_mode = _read_live_fps_mode(params)
         expected_product_id = product_id_for_hud_mode(hud_mode)
         if expected_product_id is None:
             print(f"[cluster_autorun] {HUD_PARAM}={hud_mode}; stopping cluster HUD", flush=True)
@@ -378,11 +388,17 @@ def main() -> None:
             _run_cluster_once(hud_mode, encoder_mode)
             next_hud_mode = _read_hud_mode(params)
             next_encoder_mode = _read_encoder_mode(params)
-            if next_hud_mode != hud_mode or next_encoder_mode != encoder_mode:
+            next_live_fps_mode = _read_live_fps_mode(params)
+            if (
+                next_hud_mode != hud_mode
+                or next_encoder_mode != encoder_mode
+                or next_live_fps_mode != live_fps_mode
+            ):
                 print(
                     f"[cluster_autorun] HUD setting changed "
                     f"mode {hud_mode}->{next_hud_mode}, "
-                    f"encoder {encoder_mode}->{next_encoder_mode}; rechecking",
+                    f"encoder {encoder_mode}->{next_encoder_mode}, "
+                    f"live_fps {live_fps_mode}->{next_live_fps_mode}; rechecking",
                     flush=True,
                 )
                 continue

@@ -171,6 +171,9 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"ClusterHudTheme", {PERSISTENT, INT, "0"}},
     {"ClusterHudLiveFps", {PERSISTENT, INT, "0"}},
     {"ClusterHudScreenMode", {PERSISTENT, INT, "0"}},
+    {"ClusterHudRadarInfo", {PERSISTENT, INT, "4"}},
+    {"ClusterHudRadarDisplay", {PERSISTENT, INT, "0"}},
+    {"ClusterHudRadarSourceColor", {PERSISTENT, INT, "0"}},
     {"RecordRoadCam", {PERSISTENT, INT, "0"}},
     {"HDPuse", {PERSISTENT, INT, "0"}},
 
