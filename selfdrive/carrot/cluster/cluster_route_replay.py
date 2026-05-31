@@ -67,6 +67,9 @@ ROUTE_VIDEO_DECODE_HEIGHT = 244
 ROUTE_VIDEO_SEEK_RESTART_FRAMES = 45
 NAV_SPEED_LIMIT_HOLD_SECONDS = 10.0
 ROAD_EDGE_VEHICLE_OUTSIDE_MARGIN_M = 0.25
+HUD_LANE_VISIBLE_PROB_THRESHOLD = 0.5
+HUD_EXTRA_LANE_VISIBLE_PROB_THRESHOLD = 0.5
+HUD_ROAD_EDGE_VISIBLE_CONFIDENCE_THRESHOLD = 0.5
 LANE_CHANGE_REINDEX_PEAK_THRESHOLD = 0.22
 LANE_CHANGE_REINDEX_RESET_THRESHOLD = -0.08
 CONTINUOUS_LANE_CHANGE_REBASE_PROGRESS = 0.12
@@ -1779,8 +1782,8 @@ class RouteLogParser:
                 "center": center_m,
                 "left_offset": -0.5,
                 "right_offset": 0.5,
-                "left_visible": True,
-                "right_visible": True,
+                "left_visible": self.left_lane_prob >= HUD_LANE_VISIBLE_PROB_THRESHOLD,
+                "right_visible": self.right_lane_prob >= HUD_LANE_VISIBLE_PROB_THRESHOLD,
                 "extra_left_visible": False,
                 "extra_right_visible": False,
                 "left_road_edge_offset": None,
@@ -1795,23 +1798,23 @@ class RouteLogParser:
         extra_left_visible = (
             outer_left_offset is not None
             and outer_left_offset < -0.78
-            and self.outer_left_lane_prob > 0.35
+            and self.outer_left_lane_prob >= HUD_EXTRA_LANE_VISIBLE_PROB_THRESHOLD
         )
         extra_right_visible = (
             outer_right_offset is not None
             and outer_right_offset > 0.78
-            and self.outer_right_lane_prob > 0.35
+            and self.outer_right_lane_prob >= HUD_EXTRA_LANE_VISIBLE_PROB_THRESHOLD
         )
         left_edge_visible = (
             left_edge_offset is not None
             and left_edge_offset < -0.68
-            and self.left_road_edge_confidence > 0.15
+            and self.left_road_edge_confidence >= HUD_ROAD_EDGE_VISIBLE_CONFIDENCE_THRESHOLD
             and (extra_left_visible or left_edge_offset > -1.25)
         )
         right_edge_visible = (
             right_edge_offset is not None
             and right_edge_offset > 0.68
-            and self.right_road_edge_confidence > 0.15
+            and self.right_road_edge_confidence >= HUD_ROAD_EDGE_VISIBLE_CONFIDENCE_THRESHOLD
             and (extra_right_visible or right_edge_offset < 1.25)
         )
         return {
@@ -1819,8 +1822,8 @@ class RouteLogParser:
             "center": center_m,
             "left_offset": clamp((left_y - center_m) / width, -0.75, -0.25),
             "right_offset": clamp((right_y - center_m) / width, 0.25, 0.75),
-            "left_visible": self.left_lane_prob > 0.22,
-            "right_visible": self.right_lane_prob > 0.22,
+            "left_visible": self.left_lane_prob >= HUD_LANE_VISIBLE_PROB_THRESHOLD,
+            "right_visible": self.right_lane_prob >= HUD_LANE_VISIBLE_PROB_THRESHOLD,
             "extra_left_visible": extra_left_visible,
             "extra_right_visible": extra_right_visible,
             "left_road_edge_offset": clamp(left_edge_offset, -2.8, -0.68) if left_edge_visible else None,
@@ -2081,7 +2084,11 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         frame.right_road_edge_offset,
         lane_grid_offset if use_animated_lane_grid else 0.0,
     )
-    left_road_edge_points = model_line_at(frame.model_road_edges, 0)
+    left_road_edge_points = (
+        model_line_at(frame.model_road_edges, 0)
+        if frame.left_road_edge_offset is not None
+        else ()
+    )
     left_road_edge_lateral_shift_m = model_line_lateral_shift(
         left_road_edge_points,
         frame,
@@ -2089,7 +2096,11 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         lane_grid_offset,
         use_animated_lane_grid,
     )
-    right_road_edge_points = model_line_at(frame.model_road_edges, 1)
+    right_road_edge_points = (
+        model_line_at(frame.model_road_edges, 1)
+        if frame.right_road_edge_offset is not None
+        else ()
+    )
     right_road_edge_lateral_shift_m = model_line_lateral_shift(
         right_road_edge_points,
         frame,
@@ -2404,9 +2415,8 @@ def lanes_for_frame(
         left_inner = frame.left_lane_offset + lane_grid_offset
         right_inner = frame.right_lane_offset + lane_grid_offset
 
-    force_lane_change_lanes = use_animated_lane_grid and frame.lane_change in ("left", "right")
-    left_inner_visible = frame.left_lane_visible or force_lane_change_lanes
-    right_inner_visible = frame.right_lane_visible or force_lane_change_lanes
+    left_inner_visible = frame.left_lane_visible
+    right_inner_visible = frame.right_lane_visible
 
     markings: list[LaneMarking] = []
     for index, points in enumerate(frame.model_lane_lines):
@@ -2424,6 +2434,32 @@ def lanes_for_frame(
             style = frame.right_lane_style
             visible = right_inner_visible
             width = 7
+        elif index == 0:
+            offset = model_lane_offset_for_index(
+                index,
+                points,
+                frame,
+                left_inner,
+                right_inner,
+                lane_grid_offset,
+            )
+            color = model_lane_color_for_index(index, frame.lane_change)
+            style = model_lane_style_for_index(index)
+            visible = frame.extra_left_lane_visible
+            width = 5
+        elif index == 3:
+            offset = model_lane_offset_for_index(
+                index,
+                points,
+                frame,
+                left_inner,
+                right_inner,
+                lane_grid_offset,
+            )
+            color = model_lane_color_for_index(index, frame.lane_change)
+            style = model_lane_style_for_index(index)
+            visible = frame.extra_right_lane_visible
+            width = 5
         else:
             offset = model_lane_offset_for_index(
                 index,
@@ -2465,7 +2501,7 @@ def lanes_for_frame(
                 left_outer,
                 left_outer_color,
                 "solid",
-                visible=True,
+                visible=frame.extra_left_lane_visible,
                 width=5,
                 model_points=left_outer_points,
                 model_lateral_shift_m=model_line_lateral_shift(
@@ -2521,7 +2557,7 @@ def lanes_for_frame(
                 right_outer,
                 right_outer_color,
                 "dashed",
-                visible=True,
+                visible=frame.extra_right_lane_visible,
                 width=5,
                 model_points=right_outer_points,
                 model_lateral_shift_m=model_line_lateral_shift(

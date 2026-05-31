@@ -2680,7 +2680,7 @@ def road_edge_strips(
                     theme,
                 )
             )
-    return tuple(strips) if strips else default_road_edge_strips()
+    return tuple(strips)
 
 
 def profile_scene_start(profile_add: ProfileAdd | None) -> float:
