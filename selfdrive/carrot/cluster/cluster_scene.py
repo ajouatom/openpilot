@@ -87,6 +87,9 @@ RADAR_FRONT_DETECTED_MERGE_LATERAL_M = 2.25
 RADAR_MERGED_SOURCE_TAG = "+radar:"
 CORNER_RADAR_LABELS = frozenset(("LF", "RF", "LR", "RR"))
 REAR_CORNER_RADAR_LABELS = frozenset(("LR", "RR"))
+REAR_INDICATOR_ANCHOR_FORWARD_M = EGO_FORWARD_M - VEHICLE_LENGTH_M * 0.34
+REAR_INDICATOR_TIRE_LATERAL_M = VEHICLE_WIDTH_M * 0.55
+REAR_INDICATOR_ANCHOR_HEIGHT_M = 0.14
 VEHICLE_BADGE_TTC_S = 9.9
 VEHICLE_BADGE_ACCEL_MPS2 = 1.0
 MODEL_LINE_STRIP_GROUP_CACHE_LIMIT = 48
@@ -2266,8 +2269,10 @@ def rear_vehicle_indicators(
         if vehicle is None:
             continue
         forward_m = data_scene_forward_m(vehicle.longitudinal_m)
-        anchor_forward_m = EGO_FORWARD_M + 2.3
         offset = clamp(vehicle.lateral_m / lane_width_m, -2.2, 2.2)
+        ego_lateral_m = clamp(state.ego_lane_offset, -1.25, 1.25) * lane_width_m
+        tire_lateral_m = -REAR_INDICATOR_TIRE_LATERAL_M if side == "left" else REAR_INDICATOR_TIRE_LATERAL_M
+        anchor_offset = (ego_lateral_m + tire_lateral_m) / max(0.1, lane_width_m)
         indicators.append(
             RearVehicleIndicator(
                 center=Vec3(
@@ -2276,9 +2281,10 @@ def rear_vehicle_indicators(
                     VEHICLE_HEIGHT_M * 0.5,
                 ),
                 anchor=Vec3(
-                    road_world_x(offset, anchor_forward_m, state.steering, lane_width_m) + x_offset_m,
-                    anchor_forward_m,
-                    0.22,
+                    road_world_x(anchor_offset, REAR_INDICATOR_ANCHOR_FORWARD_M, state.steering, lane_width_m)
+                    + x_offset_m,
+                    REAR_INDICATOR_ANCHOR_FORWARD_M,
+                    REAR_INDICATOR_ANCHOR_HEIGHT_M,
                 ),
                 label=vehicle.label,
                 lane_side=side,

@@ -1838,7 +1838,7 @@ class ClusterUiRenderer:
         proxy = rl.Vector3(indicator.anchor.x + scene_shift_x_m, indicator.anchor.y, indicator.anchor.z)
         screen = world_to_screen_label_anchor(proxy, camera, self.width, self.height)
         fallback_x = (735.0 if indicator.lane_side == "left" else 1185.0) * scale_x
-        fallback_y = 382.0 * scale_y
+        fallback_y = 432.0 * scale_y
         if screen is None:
             return fallback_x, fallback_y
 
@@ -1847,7 +1847,7 @@ class ClusterUiRenderer:
         else:
             min_x, max_x = 1040.0 * scale_x, 1360.0 * scale_x
         x = clamp(screen.x, min_x, max_x)
-        y = clamp(screen.y, 318.0 * scale_y, 404.0 * scale_y)
+        y = clamp(screen.y, 352.0 * scale_y, 456.0 * scale_y)
         return x, y
 
     def _draw_rear_distance_arrow(self, indicator: RearVehicleIndicator, x: float, y: float) -> None:
