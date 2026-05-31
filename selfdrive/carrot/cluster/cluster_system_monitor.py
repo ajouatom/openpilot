@@ -132,13 +132,16 @@ class SystemStatsSampler:
 @dataclass(frozen=True, slots=True)
 class _ThreadCpuSample:
     key: tuple[int, int, int]
+    pid: int
+    process_name: str
     cpu_time_ticks: int
     processor: int
 
 
 class ClusterProcessCoreUsageSampler:
-    def __init__(self, refresh_interval_s: float = 1.0) -> None:
+    def __init__(self, refresh_interval_s: float = 1.0, debug: bool = False) -> None:
         self.refresh_interval_s = max(0.1, float(refresh_interval_s))
+        self.debug = debug
         self._next_sample_time = 0.0
         self._last_sample_time: float | None = None
         self._previous_thread_ticks: dict[tuple[int, int, int], int] | None = None
@@ -154,12 +157,16 @@ class ClusterProcessCoreUsageSampler:
         if now < self._next_sample_time:
             return self._text
 
-        samples = self._read_cluster_thread_samples()
+        scan_start = time.perf_counter()
+        samples, scanned_processes, matched_processes = self._read_cluster_thread_samples()
+        scan_ms = (time.perf_counter() - scan_start) * 1000.0
         next_ticks = {sample.key: sample.cpu_time_ticks for sample in samples}
         text: str | None = None
+        by_core: dict[int, float] = {}
+        by_process: dict[str, float] = {}
+        active_threads = 0
         if self._previous_thread_ticks is not None and self._last_sample_time is not None:
             elapsed = max(0.001, now - self._last_sample_time)
-            by_core: dict[int, float] = {}
             for sample in samples:
                 previous_ticks = self._previous_thread_ticks.get(sample.key)
                 if previous_ticks is None or sample.processor < 0:
@@ -169,6 +176,8 @@ class ClusterProcessCoreUsageSampler:
                     continue
                 percent = delta_ticks / max(1, self._clock_ticks) / elapsed * 100.0
                 by_core[sample.processor] = by_core.get(sample.processor, 0.0) + percent
+                by_process[sample.process_name] = by_process.get(sample.process_name, 0.0) + percent
+                active_threads += 1
             parts = [
                 f"{core}({max(1, int(round(percent)))})"
                 for core, percent in sorted(by_core.items())
@@ -176,28 +185,44 @@ class ClusterProcessCoreUsageSampler:
             ]
             text = "[" + ",".join(parts) + "]"
 
+        if self.debug:
+            print(
+                "CLUSTER_CORE_USAGE "
+                f"scan={scan_ms:.2f}ms pids={scanned_processes} matched={matched_processes} "
+                f"threads={len(samples)} active_threads={active_threads} "
+                f"cores={self._format_percent_map(by_core)} "
+                f"procs={self._format_percent_map(by_process)} "
+                f"text={text or '-'}",
+                flush=True,
+            )
+
         self._previous_thread_ticks = next_ticks
         self._last_sample_time = now
         self._next_sample_time = now + self.refresh_interval_s
         self._text = text
         return self._text
 
-    def _read_cluster_thread_samples(self) -> tuple[_ThreadCpuSample, ...]:
+    def _read_cluster_thread_samples(self) -> tuple[tuple[_ThreadCpuSample, ...], int, int]:
         if not PROC_PATH.exists():
-            return ()
+            return (), 0, 0
 
         current_pid = os.getpid()
         samples: list[_ThreadCpuSample] = []
         try:
             pid_dirs = tuple(PROC_PATH.iterdir())
         except OSError:
-            return ()
+            return (), 0, 0
+        scanned_processes = 0
+        matched_processes = 0
         for pid_dir in pid_dirs:
             if not pid_dir.name.isdigit():
                 continue
+            scanned_processes += 1
             pid = int(pid_dir.name)
-            if pid != current_pid and not self._is_cluster_process(pid_dir):
+            process_name = self._process_name(pid_dir)
+            if pid != current_pid and not self._is_cluster_process_name(process_name):
                 continue
+            matched_processes += 1
             task_dir = pid_dir / "task"
             try:
                 thread_dirs = tuple(task_dir.iterdir())
@@ -206,27 +231,41 @@ class ClusterProcessCoreUsageSampler:
             for thread_dir in thread_dirs:
                 if not thread_dir.name.isdigit():
                     continue
-                sample = self._read_thread_stat(pid, int(thread_dir.name), thread_dir / "stat")
+                sample = self._read_thread_stat(pid, int(thread_dir.name), process_name, thread_dir / "stat")
                 if sample is not None:
                     samples.append(sample)
-        return tuple(samples)
+        return tuple(samples), scanned_processes, matched_processes
 
     @staticmethod
-    def _is_cluster_process(pid_dir: Path) -> bool:
-        text_parts: list[str] = []
+    def _process_name(pid_dir: Path) -> str:
+        comm = ""
         try:
-            text_parts.append((pid_dir / "comm").read_text(encoding="utf-8", errors="ignore"))
+            comm = (pid_dir / "comm").read_text(encoding="utf-8", errors="ignore").strip()
         except OSError:
             pass
+        cmdline_parts: list[str] = []
         try:
-            cmdline = (pid_dir / "cmdline").read_bytes().replace(b"\0", b" ")
-            text_parts.append(cmdline.decode("utf-8", errors="ignore"))
+            raw_parts = (pid_dir / "cmdline").read_bytes().split(b"\0")
+            cmdline_parts = [
+                part.decode("utf-8", errors="ignore")
+                for part in raw_parts
+                if part
+            ]
         except OSError:
             pass
-        return "cluster" in " ".join(text_parts).lower()
+        for part in cmdline_parts:
+            if "cluster" in part.lower():
+                return Path(part).name or part
+        if comm:
+            return comm
+        return pid_dir.name
 
     @staticmethod
-    def _read_thread_stat(pid: int, tid: int, stat_path: Path) -> _ThreadCpuSample | None:
+    def _is_cluster_process_name(process_name: str) -> bool:
+        return "cluster" in process_name.lower()
+
+    @staticmethod
+    def _read_thread_stat(pid: int, tid: int, process_name: str, stat_path: Path) -> _ThreadCpuSample | None:
         try:
             text = stat_path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
@@ -246,6 +285,19 @@ class ClusterProcessCoreUsageSampler:
             return None
         return _ThreadCpuSample(
             key=(pid, tid, starttime),
+            pid=pid,
+            process_name=process_name,
             cpu_time_ticks=utime + stime,
             processor=processor,
         )
+
+    @staticmethod
+    def _format_percent_map(values: dict[object, float]) -> str:
+        if not values:
+            return "-"
+        parts = [
+            f"{key}:{percent:.1f}%"
+            for key, percent in sorted(values.items(), key=lambda item: item[1], reverse=True)
+            if percent >= 0.5
+        ]
+        return ",".join(parts) if parts else "-"

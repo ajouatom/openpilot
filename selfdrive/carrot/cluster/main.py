@@ -386,6 +386,8 @@ def run_demo(
     route_max_segments: int | None,
     live_include_can: bool,
     live_timeout_ms: int,
+    cluster_core_usage_enabled: bool,
+    cluster_core_usage_debug: bool,
     profile_render: bool,
     profile_interval_s: float,
     gc_freeze_init: bool,
@@ -498,7 +500,11 @@ def run_demo(
     )
     renderer.set_profile_enabled(profile_render)
     git_status_provider = GitBranchStatusProvider(Path(__file__).resolve().parent)
-    cluster_core_usage_sampler = ClusterProcessCoreUsageSampler() if input_mode == "live" else None
+    cluster_core_usage_sampler = (
+        ClusterProcessCoreUsageSampler(debug=cluster_core_usage_debug)
+        if input_mode == "live" and cluster_core_usage_enabled
+        else None
+    )
     simulator = ClusterSimulator() if input_mode in ("random", "gamepad") else None
     controller = DualSenseSimulator(controller_index) if input_mode == "gamepad" else None
     random_input = RandomInputSource() if input_mode == "random" else None
@@ -728,11 +734,11 @@ def run_demo(
                 state = simulator.update(command, dt)
                 profile.add_elapsed("source.gamepad_update", profile_stage)
 
-            cluster_core_usage_text = (
-                cluster_core_usage_sampler.sample_text(now)
-                if cluster_core_usage_sampler is not None
-                else None
-            )
+            cluster_core_usage_text = None
+            if cluster_core_usage_sampler is not None:
+                profile_stage = time.perf_counter()
+                cluster_core_usage_text = cluster_core_usage_sampler.sample_text(now)
+                profile.add_elapsed("main.cluster_core_usage_sample", profile_stage)
             state = replace(
                 state,
                 radar_info_mode=active_radar_info_mode,
@@ -1244,6 +1250,16 @@ def parse_args() -> argparse.Namespace:
         help="SubMaster update timeout for --input live. Default 0 keeps rendering responsive.",
     )
     parser.add_argument(
+        "--no-cluster-core-usage",
+        action="store_true",
+        help="Disable the live lower-right cluster process per-core CPU overlay.",
+    )
+    parser.add_argument(
+        "--cluster-core-usage-debug",
+        action="store_true",
+        help="Print live cluster process per-core CPU sampler scan cost and per-process CPU details.",
+    )
+    parser.add_argument(
         "--profile-render",
         action="store_true",
         help="Log render, GPU readback, USB encode/send, and input source timings.",
@@ -1445,6 +1461,8 @@ def main() -> None:
             args.route_max_segments,
             not args.live_no_can,
             args.live_timeout_ms,
+            not args.no_cluster_core_usage,
+            args.cluster_core_usage_debug,
             args.profile_render,
             args.profile_interval,
             not args.no_gc_freeze,
