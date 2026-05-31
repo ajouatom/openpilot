@@ -87,6 +87,7 @@ MODEL_LINE_STRIP_GROUP_CACHE_LIMIT = 48
 MODEL_LINE_STRIP_GROUP_CACHE_GRID_M = 0.5
 MODEL_LINE_STRIP_GROUP_CACHE_POINT_GRID_M = 0.05
 MODEL_LINE_STRIP_GROUP_CACHE_COLOR: Color = (0, 0, 0, 0)
+MODEL_LINE_RENDER_POINT_KEY_CACHE_LIMIT = 256
 MODEL_LINE_RENDER_POINT_LIMIT = 0
 LANE_OFFSET_STRIP_CACHE_LIMIT = 64
 LANE_OFFSET_STRIP_CACHE_OFFSET_GRID = 0.01
@@ -117,6 +118,7 @@ ROAD_EDGE_BODY_OFFSET_M = 0.055
 ROAD_EDGE_CREST_OFFSET_M = -0.045
 ROAD_EDGE_BACKING_COLOR = LIGHT_CLUSTER_THEME.road_edge_backing
 ROAD_EDGE_MODEL_POINT_LIMIT = 0
+STYLE_MESH_STRIP_GROUP_CACHE_LIMIT = 128
 PATH_SHADOW_LAYER_M = 0.024
 PATH_UNCERTAINTY_LAYER_M = PATH_HEIGHT_M + 0.002
 PATH_BODY_LAYER_M = PATH_HEIGHT_M + 0.046
@@ -214,7 +216,8 @@ class PathBlocker:
     length_m: float
 
 
-ModelLineStripGroups = tuple[tuple[MeshStrip, ...], ...] | None
+MeshStripGroups = tuple[tuple[MeshStrip, ...], ...]
+ModelLineStripGroups = MeshStripGroups | None
 ModelLineStripGeometrySpecs = tuple[tuple[int, float], ...]
 ModelLineStripPointKey = tuple[tuple[int, int], ...]
 ModelLineStripCacheKey = tuple[
@@ -226,6 +229,11 @@ ModelLineStripCacheKey = tuple[
     ModelLineStripGeometrySpecs,
 ]
 _MODEL_LINE_STRIP_GROUP_CACHE: OrderedDict[ModelLineStripCacheKey, ModelLineStripGroups] = OrderedDict()
+ModelLineRenderPointKeyCacheKey = tuple[int, int]
+_MODEL_LINE_RENDER_POINT_KEY_CACHE: OrderedDict[
+    ModelLineRenderPointKeyCacheKey,
+    tuple[tuple[ModelPathPoint, ...], tuple[ModelPathPoint, ...], ModelLineStripPointKey],
+] = OrderedDict()
 LaneOffsetStripCacheKey = tuple[
     float,
     float,
@@ -251,6 +259,11 @@ _ROAD_EDGE_OFFSET_STRIP_CACHE: OrderedDict[RoadEdgeOffsetStripCacheKey, RoadEdge
 PlannedPathStripSpecs = tuple[tuple[float, Color, float], ...]
 PlannedPathStripCacheKey = tuple[tuple[Vec3, ...], PlannedPathStripSpecs]
 _PLANNED_PATH_STRIP_CACHE: OrderedDict[PlannedPathStripCacheKey, tuple[MeshStrip, ...]] = OrderedDict()
+StyledMeshStripGroupCacheKey = tuple[int, tuple[tuple[int, Color, float], ...], tuple[float, ...]]
+_STYLE_MESH_STRIP_GROUP_CACHE: OrderedDict[
+    StyledMeshStripGroupCacheKey,
+    tuple[MeshStripGroups, MeshStripGroups],
+] = OrderedDict()
 
 
 @dataclass(frozen=True, slots=True)
@@ -933,20 +946,44 @@ def model_line_cache_point_key(model_points: tuple[ModelPathPoint, ...]) -> Mode
     )
 
 
-def model_line_points_for_render(model_points: tuple[ModelPathPoint, ...]) -> tuple[ModelPathPoint, ...]:
+def model_line_render_points_and_key(
+    model_points: tuple[ModelPathPoint, ...],
+    point_limit: int,
+) -> tuple[tuple[ModelPathPoint, ...], ModelLineStripPointKey]:
+    cache_key = (id(model_points), int(point_limit))
+    cached = _MODEL_LINE_RENDER_POINT_KEY_CACHE.get(cache_key)
+    if cached is not None:
+        cached_model_points, render_points, point_key = cached
+        if cached_model_points is model_points:
+            _MODEL_LINE_RENDER_POINT_KEY_CACHE.move_to_end(cache_key)
+            return render_points, point_key
+        _MODEL_LINE_RENDER_POINT_KEY_CACHE.pop(cache_key, None)
+
     point_count = len(model_points)
-    if MODEL_LINE_RENDER_POINT_LIMIT <= 0 or point_count <= MODEL_LINE_RENDER_POINT_LIMIT:
-        return model_points
-    last_index = point_count - 1
-    selected: list[ModelPathPoint] = []
-    previous_index = -1
-    for output_index in range(MODEL_LINE_RENDER_POINT_LIMIT):
-        index = round(output_index * last_index / (MODEL_LINE_RENDER_POINT_LIMIT - 1))
-        if index == previous_index:
-            continue
-        selected.append(model_points[index])
-        previous_index = index
-    return tuple(selected)
+    if point_limit <= 0 or point_count <= point_limit:
+        render_points = model_points
+    else:
+        last_index = point_count - 1
+        selected: list[ModelPathPoint] = []
+        previous_index = -1
+        for output_index in range(point_limit):
+            index = round(output_index * last_index / (point_limit - 1))
+            if index == previous_index:
+                continue
+            selected.append(model_points[index])
+            previous_index = index
+        render_points = tuple(selected)
+
+    point_key = model_line_cache_point_key(render_points)
+    _MODEL_LINE_RENDER_POINT_KEY_CACHE[cache_key] = (model_points, render_points, point_key)
+    while len(_MODEL_LINE_RENDER_POINT_KEY_CACHE) > MODEL_LINE_RENDER_POINT_KEY_CACHE_LIMIT:
+        _MODEL_LINE_RENDER_POINT_KEY_CACHE.popitem(last=False)
+    return render_points, point_key
+
+
+def model_line_points_for_render(model_points: tuple[ModelPathPoint, ...]) -> tuple[ModelPathPoint, ...]:
+    render_points, _ = model_line_render_points_and_key(model_points, MODEL_LINE_RENDER_POINT_LIMIT)
+    return render_points
 
 
 def cached_model_line_strip_groups(
@@ -960,9 +997,9 @@ def cached_model_line_strip_groups(
     cache_start_m = model_line_cache_start_m(start_m)
     cache_end_m = model_line_cache_end_m(end_m)
     geometry_specs = model_line_geometry_specs(specs)
-    render_points = model_line_points_for_render(model_points)
+    render_points, point_key = model_line_render_points_and_key(model_points, MODEL_LINE_RENDER_POINT_LIMIT)
     key = (
-        model_line_cache_point_key(render_points),
+        point_key,
         cache_start_m,
         cache_end_m,
         style,
@@ -1095,10 +1132,19 @@ def style_mesh_strip_groups(
 
 
 def style_mesh_strip_groups_by_shift(
-    groups: tuple[tuple[MeshStrip, ...], ...],
+    groups: MeshStripGroups,
     specs: tuple[tuple[int, Color, float], ...],
     shift_x_m_by_group: tuple[float, ...],
-) -> tuple[tuple[MeshStrip, ...], ...]:
+) -> MeshStripGroups:
+    cache_key = (id(groups), specs, shift_x_m_by_group)
+    cached = _STYLE_MESH_STRIP_GROUP_CACHE.get(cache_key)
+    if cached is not None:
+        cached_groups, styled_groups = cached
+        if cached_groups is groups:
+            _STYLE_MESH_STRIP_GROUP_CACHE.move_to_end(cache_key)
+            return styled_groups
+        _STYLE_MESH_STRIP_GROUP_CACHE.pop(cache_key, None)
+
     styled_groups: list[tuple[MeshStrip, ...]] = []
     for group_index, group in enumerate(groups):
         color = specs[group_index][1]
@@ -1118,7 +1164,11 @@ def style_mesh_strip_groups_by_shift(
                     )
                 )
         styled_groups.append(tuple(styled_group))
-    return tuple(styled_groups)
+    result = tuple(styled_groups)
+    _STYLE_MESH_STRIP_GROUP_CACHE[cache_key] = (groups, result)
+    while len(_STYLE_MESH_STRIP_GROUP_CACHE) > STYLE_MESH_STRIP_GROUP_CACHE_LIMIT:
+        _STYLE_MESH_STRIP_GROUP_CACHE.popitem(last=False)
+    return result
 
 
 def model_line_strip_groups(
@@ -2222,19 +2272,8 @@ def road_edge_layer_geometry_specs(layers: tuple[RoadEdgeLayer, ...]) -> RoadEdg
 
 
 def road_edge_model_points_for_render(model_points: tuple[ModelPathPoint, ...]) -> tuple[ModelPathPoint, ...]:
-    point_count = len(model_points)
-    if ROAD_EDGE_MODEL_POINT_LIMIT <= 0 or point_count <= ROAD_EDGE_MODEL_POINT_LIMIT:
-        return model_points
-    last_index = point_count - 1
-    selected: list[ModelPathPoint] = []
-    previous_index = -1
-    for output_index in range(ROAD_EDGE_MODEL_POINT_LIMIT):
-        index = round(output_index * last_index / (ROAD_EDGE_MODEL_POINT_LIMIT - 1))
-        if index == previous_index:
-            continue
-        selected.append(model_points[index])
-        previous_index = index
-    return tuple(selected)
+    render_points, _ = model_line_render_points_and_key(model_points, ROAD_EDGE_MODEL_POINT_LIMIT)
+    return render_points
 
 
 def cached_road_edge_offset_strip_groups(
@@ -2345,9 +2384,11 @@ def road_edge_offset_strips(
         end_m,
         layers,
     )
+    specs = road_edge_layer_specs(layers)
+    styled_groups = style_mesh_strip_groups_by_shift(groups, specs, (0.0,) * len(specs))
     return tuple(
-        MeshStrip(strip.left, strip.right, layer_color, strip.x_offset_m)
-        for group, (_, layer_color, _, _) in zip(groups, layers)
+        strip
+        for group in styled_groups
         for strip in group
     )
 
