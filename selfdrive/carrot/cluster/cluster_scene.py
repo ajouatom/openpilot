@@ -120,6 +120,7 @@ ROAD_EDGE_BACKING_COLOR = LIGHT_CLUSTER_THEME.road_edge_backing
 ROAD_EDGE_MODEL_POINT_LIMIT = 0
 STYLE_MESH_STRIP_GROUP_CACHE_LIMIT = 128
 MERGED_MESH_STRIP_CACHE_LIMIT = 128
+MERGED_MESH_STRIP_PENDING_LIMIT = 256
 PATH_SHADOW_LAYER_M = 0.024
 PATH_UNCERTAINTY_LAYER_M = PATH_HEIGHT_M + 0.002
 PATH_BODY_LAYER_M = PATH_HEIGHT_M + 0.046
@@ -270,6 +271,7 @@ _MERGED_MESH_STRIP_CACHE: OrderedDict[
     MergedMeshStripCacheKey,
     tuple[tuple[MeshStrip, ...], MeshStrip],
 ] = OrderedDict()
+_MERGED_MESH_STRIP_PENDING: OrderedDict[MergedMeshStripCacheKey, tuple[MeshStrip, ...]] = OrderedDict()
 
 
 @dataclass(frozen=True, slots=True)
@@ -915,7 +917,7 @@ def finish_lane_marking_strip_groups(
     )
 
 
-def merged_mesh_strip(strips: tuple[MeshStrip, ...]) -> MeshStrip:
+def cached_or_repeated_merged_mesh_strip(strips: tuple[MeshStrip, ...]) -> MeshStrip | None:
     if len(strips) == 1:
         return strips[0]
 
@@ -935,6 +937,21 @@ def merged_mesh_strip(strips: tuple[MeshStrip, ...]) -> MeshStrip:
             return merged
         _MERGED_MESH_STRIP_CACHE.pop(key, None)
 
+    pending_strips = _MERGED_MESH_STRIP_PENDING.get(key)
+    if pending_strips is not None and (
+        len(pending_strips) != len(strips)
+        or any(pending_strip is not strip for pending_strip, strip in zip(pending_strips, strips))
+    ):
+        _MERGED_MESH_STRIP_PENDING.pop(key, None)
+        pending_strips = None
+
+    if pending_strips is None:
+        _MERGED_MESH_STRIP_PENDING[key] = strips
+        while len(_MERGED_MESH_STRIP_PENDING) > MERGED_MESH_STRIP_PENDING_LIMIT:
+            _MERGED_MESH_STRIP_PENDING.popitem(last=False)
+        return None
+
+    _MERGED_MESH_STRIP_PENDING.pop(key, None)
     left_group: list[Vec3] = []
     right_group: list[Vec3] = []
     for strip in strips:
@@ -952,7 +969,7 @@ def merged_mesh_strip(strips: tuple[MeshStrip, ...]) -> MeshStrip:
         right_group.extend(strip.right[:count])
 
     if len(left_group) < 2 or len(right_group) < 2:
-        return first
+        return None
 
     merged = MeshStrip(
         left=tuple(left_group),
@@ -983,7 +1000,12 @@ def merge_mesh_strips_by_style(strips: Iterable[MeshStrip]) -> tuple[MeshStrip, 
         if len(group) == 1:
             merged.append(group[0])
         else:
-            merged.append(merged_mesh_strip(tuple(group)))
+            group_tuple = tuple(group)
+            merged_strip = cached_or_repeated_merged_mesh_strip(group_tuple)
+            if merged_strip is None:
+                merged.extend(group_tuple)
+            else:
+                merged.append(merged_strip)
     return tuple(merged)
 
 
