@@ -1744,7 +1744,12 @@ class H264UsbPipeline:
         try:
             chunk_size = max(1, self.chunk_size)
             base = int(data)
+            profile_callback = self.usb_display.profile_enabled
+            profile_total = time.perf_counter() if profile_callback else 0.0
+            profile_stage = profile_total
             packet = ctypes.string_at(base, int(size))
+            if profile_callback:
+                self._add_sample("usb_h264.native.callback_copy", profile_stage)
             self._debug_encoder_packets += 1
             packet_index = self._debug_encoder_packets
             self._debug_encoder_bytes += len(packet)
@@ -1759,7 +1764,10 @@ class H264UsbPipeline:
                 codec_config=bool(codec_config),
                 keyframe=bool(keyframe),
             )
+            profile_stage = time.perf_counter() if profile_callback else 0.0
             packet = self._prepare_hardware_packet(packet, may_have_sps=bool(codec_config) or bool(keyframe))
+            if profile_callback:
+                self._add_sample("usb_h264.native.callback_prepare", profile_stage)
             self._debug_max_packet_bytes = max(self._debug_max_packet_bytes, len(packet))
             self._debug_log_encoder_packet(
                 packet_index,
@@ -1772,12 +1780,19 @@ class H264UsbPipeline:
                 keyframe=bool(keyframe),
             )
             self._write_dump(packet)
+            profile_stage = time.perf_counter() if profile_callback else 0.0
             chunks = self._packetize_h264_for_usb(packet, chunk_size)
+            if profile_callback:
+                self._add_sample("usb_h264.native.callback_packetize", profile_stage)
             self._debug_log_packetize("native", packet_index, packet, chunks, chunk_size)
             self._record_h264_unit("native", packet, chunks, keyframe=bool(keyframe))
+            profile_stage = time.perf_counter() if profile_callback else 0.0
             for chunk in chunks:
                 packet_queue.put((chunk, False), timeout=1.0)
                 self._record_h264_queue_depth(packet_queue.qsize())
+            if profile_callback:
+                self._add_sample("usb_h264.native.callback_queue", profile_stage)
+                self._add_sample("usb_h264.native.callback_total", profile_total)
         except queue.Full as exc:
             self._set_error(RuntimeError("native H264 USB sender queue is full"))
         except BaseException as exc:
