@@ -66,7 +66,6 @@ DEFAULT_H264_DIMENSION_ALIGN = 1
 THEME_PARAM_POLL_SECONDS = 1.0
 FPS_PARAM_POLL_SECONDS = 1.0
 BRIGHTNESS_PARAM_POLL_SECONDS = 1.0
-BRIGHTNESS_RESEND_SECONDS = 5.0
 SCREEN_MODE_PARAM_POLL_SECONDS = 1.0
 RADAR_PARAM_POLL_SECONDS = 1.0
 HUD_MODE_PARAM_POLL_SECONDS = 1.0
@@ -543,7 +542,6 @@ def run_demo(
     next_theme_param_read = start_time
     next_fps_param_read = start_time + FPS_PARAM_POLL_SECONDS
     next_brightness_param_read = start_time
-    next_brightness_resend = start_time + BRIGHTNESS_RESEND_SECONDS
     next_screen_mode_param_read = start_time
     next_radar_param_read = start_time
     next_hud_mode_param_read = start_time + HUD_MODE_PARAM_POLL_SECONDS
@@ -793,9 +791,7 @@ def run_demo(
                     live_source,
                     auto_enabled=usb_brightness_auto_enabled,
                 )
-                force_brightness_send = brightness_now >= next_brightness_resend
-                if usb_display.set_brightness(next_usb_brightness, force=force_brightness_send):
-                    next_brightness_resend = brightness_now + BRIGHTNESS_RESEND_SECONDS
+                usb_display.set_brightness(next_usb_brightness)
                 next_brightness_param_read = brightness_now + BRIGHTNESS_PARAM_POLL_SECONDS
 
             if output_mode in ("window", "both"):
