@@ -274,7 +274,8 @@ SCC/radarState red, HDA/model/CAN/corner detections blue, and raw radar vehicle
 boxes orange.
 Lane and road-edge rendering keeps model geometry visible instead of filtering
 by `laneLineProbs` or `roadEdgeStds`, avoiding distracting HUD flicker when
-model confidence jitters.
+model confidence jitters. Lane markings are still suppressed when their
+lateral offset falls outside a valid model road-edge boundary.
 Changing `ClusterHud` to another supported mode or `0` makes the running HUD
 exit; cleanup sends TURZX brightness zero before releasing the USB device.
 

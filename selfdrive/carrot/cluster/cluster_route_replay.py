@@ -1792,14 +1792,6 @@ class RouteLogParser:
         outer_right_offset = lane_offset_from_y(self.outer_right_lane_y_m, center_m, width)
         left_edge_offset = lane_offset_from_y(self.left_road_edge_y_m, center_m, width)
         right_edge_offset = lane_offset_from_y(self.right_road_edge_y_m, center_m, width)
-        extra_left_visible = (
-            outer_left_offset is not None
-            and outer_left_offset < -0.78
-        )
-        extra_right_visible = (
-            outer_right_offset is not None
-            and outer_right_offset > 0.78
-        )
         left_edge_visible = (
             left_edge_offset is not None
             and left_edge_offset < -0.68
@@ -1808,17 +1800,34 @@ class RouteLogParser:
             right_edge_offset is not None
             and right_edge_offset > 0.68
         )
+        left_edge_bound = clamp(left_edge_offset, -2.8, -0.68) if left_edge_visible else None
+        right_edge_bound = clamp(right_edge_offset, 0.68, 2.8) if right_edge_visible else None
+        if left_edge_bound is not None and right_edge_bound is not None and left_edge_bound >= right_edge_bound:
+            left_edge_bound = None
+            right_edge_bound = None
+        left_offset = clamp((left_y - center_m) / width, -0.75, -0.25)
+        right_offset = clamp((right_y - center_m) / width, 0.25, 0.75)
+        extra_left_visible = (
+            outer_left_offset is not None
+            and outer_left_offset < -0.78
+            and lane_offset_inside_road_edges(outer_left_offset, left_edge_bound, right_edge_bound)
+        )
+        extra_right_visible = (
+            outer_right_offset is not None
+            and outer_right_offset > 0.78
+            and lane_offset_inside_road_edges(outer_right_offset, left_edge_bound, right_edge_bound)
+        )
         return {
             "width": width,
             "center": center_m,
-            "left_offset": clamp((left_y - center_m) / width, -0.75, -0.25),
-            "right_offset": clamp((right_y - center_m) / width, 0.25, 0.75),
-            "left_visible": True,
-            "right_visible": True,
+            "left_offset": left_offset,
+            "right_offset": right_offset,
+            "left_visible": lane_offset_inside_road_edges(left_offset, left_edge_bound, right_edge_bound),
+            "right_visible": lane_offset_inside_road_edges(right_offset, left_edge_bound, right_edge_bound),
             "extra_left_visible": extra_left_visible,
             "extra_right_visible": extra_right_visible,
-            "left_road_edge_offset": clamp(left_edge_offset, -2.8, -0.68) if left_edge_visible else None,
-            "right_road_edge_offset": clamp(right_edge_offset, 0.68, 2.8) if right_edge_visible else None,
+            "left_road_edge_offset": left_edge_bound,
+            "right_road_edge_offset": right_edge_bound,
         }
 
     def _lane_change_values(
@@ -2408,6 +2417,9 @@ def lanes_for_frame(
 
     left_inner_visible = frame.left_lane_visible
     right_inner_visible = frame.right_lane_visible
+    road_edge_shift = lane_grid_offset if use_animated_lane_grid else 0.0
+    left_road_edge_offset = shifted_optional_offset(frame.left_road_edge_offset, road_edge_shift)
+    right_road_edge_offset = shifted_optional_offset(frame.right_road_edge_offset, road_edge_shift)
 
     markings: list[LaneMarking] = []
     for index, points in enumerate(frame.model_lane_lines):
@@ -2464,6 +2476,11 @@ def lanes_for_frame(
             style = model_lane_style_for_index(index)
             visible = True
             width = 5
+        visible = visible and lane_offset_inside_road_edges(
+            offset,
+            left_road_edge_offset,
+            right_road_edge_offset,
+        )
         markings.append(
             LaneMarking(
                 offset,
@@ -2492,7 +2509,11 @@ def lanes_for_frame(
                 left_outer,
                 left_outer_color,
                 "solid",
-                visible=frame.extra_left_lane_visible,
+                visible=frame.extra_left_lane_visible and lane_offset_inside_road_edges(
+                    left_outer,
+                    left_road_edge_offset,
+                    right_road_edge_offset,
+                ),
                 width=5,
                 model_points=left_outer_points,
                 model_lateral_shift_m=model_line_lateral_shift(
@@ -2510,7 +2531,11 @@ def lanes_for_frame(
             left_inner,
             left_inner_color,
             frame.left_lane_style,
-            visible=left_inner_visible,
+            visible=left_inner_visible and lane_offset_inside_road_edges(
+                left_inner,
+                left_road_edge_offset,
+                right_road_edge_offset,
+            ),
             width=7,
             model_points=left_inner_points,
             model_lateral_shift_m=model_line_lateral_shift(
@@ -2528,7 +2553,11 @@ def lanes_for_frame(
             right_inner,
             right_inner_color,
             frame.right_lane_style,
-            visible=right_inner_visible,
+            visible=right_inner_visible and lane_offset_inside_road_edges(
+                right_inner,
+                left_road_edge_offset,
+                right_road_edge_offset,
+            ),
             width=7,
             model_points=right_inner_points,
             model_lateral_shift_m=model_line_lateral_shift(
@@ -2548,7 +2577,11 @@ def lanes_for_frame(
                 right_outer,
                 right_outer_color,
                 "dashed",
-                visible=frame.extra_right_lane_visible,
+                visible=frame.extra_right_lane_visible and lane_offset_inside_road_edges(
+                    right_outer,
+                    left_road_edge_offset,
+                    right_road_edge_offset,
+                ),
                 width=5,
                 model_points=right_outer_points,
                 model_lateral_shift_m=model_line_lateral_shift(
@@ -2779,6 +2812,20 @@ def lane_offset_from_y(y_m: float | None, center_m: float, lane_width_m: float) 
     if y_m is None:
         return None
     return (y_m - center_m) / max(0.1, lane_width_m)
+
+
+def lane_offset_inside_road_edges(
+    offset: float | None,
+    left_road_edge_offset: float | None,
+    right_road_edge_offset: float | None,
+) -> bool:
+    if offset is None:
+        return True
+    if left_road_edge_offset is not None and offset < left_road_edge_offset:
+        return False
+    if right_road_edge_offset is not None and offset > right_road_edge_offset:
+        return False
+    return True
 
 
 def road_edge_confidence_from_std(std: float | None) -> float:
