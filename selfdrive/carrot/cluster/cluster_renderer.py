@@ -196,6 +196,9 @@ uniform vec2 packedSize;
 uniform int plane;
 uniform int flipX;
 
+const float Y_PAD = 0.062745;
+const float UV_PAD = 0.501961;
+
 vec3 sampleRgb(float x, float y) {
     if (flipX != 0) {
         // The portrait upload transform maps screen horizontal correction to source Y.
@@ -226,22 +229,37 @@ vec3 sample2x2(float x, float y) {
     ) * 0.25;
 }
 
+float packedY(float x, float y) {
+    if (x >= srcSize.x || y >= srcSize.y) {
+        return Y_PAD;
+    }
+    return y601(sampleRgb(x, y));
+}
+
+vec2 packedUV(float x, float y) {
+    if (x >= srcSize.x || y >= srcSize.y) {
+        return vec2(UV_PAD, UV_PAD);
+    }
+    vec3 rgb = sample2x2(x, y);
+    return vec2(u601(rgb), v601(rgb));
+}
+
 void main() {
     vec2 packedCoord = min(floor(fragTexCoord * packedSize), packedSize - vec2(1.0));
     float baseX = packedCoord.x * 4.0;
     if (plane == 0) {
         float y = packedCoord.y;
         gl_FragColor = vec4(
-            y601(sampleRgb(baseX, y)),
-            y601(sampleRgb(baseX + 1.0, y)),
-            y601(sampleRgb(baseX + 2.0, y)),
-            y601(sampleRgb(baseX + 3.0, y))
+            packedY(baseX, y),
+            packedY(baseX + 1.0, y),
+            packedY(baseX + 2.0, y),
+            packedY(baseX + 3.0, y)
         );
     } else {
         float y = packedCoord.y * 2.0;
-        vec3 left = sample2x2(baseX, y);
-        vec3 right = sample2x2(baseX + 2.0, y);
-        gl_FragColor = vec4(u601(left), v601(left), u601(right), v601(right));
+        vec2 left = packedUV(baseX, y);
+        vec2 right = packedUV(baseX + 2.0, y);
+        gl_FragColor = vec4(left.x, left.y, right.x, right.y);
     }
 }
 """
@@ -784,10 +802,17 @@ class ClusterUiRenderer:
         rl.end_texture_mode()
         self._profile_add("render_to_nv12.gpu_upload_transform", profile_stage)
 
-        y_pack_w = (output_width + 3) // 4
-        y_pack_h = output_height
-        uv_pack_w = (output_width + 3) // 4
-        uv_pack_h = (output_height + 1) // 2
+        pack_full_stride = stride % 4 == 0
+        if pack_full_stride:
+            y_pack_w = stride // 4
+            y_pack_h = y_scanlines
+            uv_pack_w = stride // 4
+            uv_pack_h = uv_scanlines
+        else:
+            y_pack_w = (output_width + 3) // 4
+            y_pack_h = output_height
+            uv_pack_w = (output_width + 3) // 4
+            uv_pack_h = (output_height + 1) // 2
         profile_stage = self._profile_start()
         y_target = self._get_nv12_pack_target("y", y_pack_w, y_pack_h)
         uv_target = self._get_nv12_pack_target("uv", uv_pack_w, uv_pack_h)
@@ -830,19 +855,30 @@ class ClusterUiRenderer:
             y_data = rl.ffi.buffer(y_image.data, y_row_bytes * y_pack_h)
             uv_data = rl.ffi.buffer(uv_image.data, uv_row_bytes * uv_pack_h)
 
-            profile_stage = self._profile_start()
-            for row in range(output_height):
-                src_start = row * y_row_bytes
-                dst_start = row * stride
-                buffer[dst_start:dst_start + output_width] = y_data[src_start:src_start + output_width]
-            self._profile_add("render_to_nv12.copy_y", profile_stage)
+            if pack_full_stride:
+                y_plane_bytes = stride * y_scanlines
+                uv_plane_bytes = stride * uv_scanlines
+                profile_stage = self._profile_start()
+                buffer[:y_plane_bytes] = y_data[:y_plane_bytes]
+                self._profile_add("render_to_nv12.copy_y", profile_stage)
 
-            profile_stage = self._profile_start()
-            for row in range(uv_pack_h):
-                src_start = row * uv_row_bytes
-                dst_start = uv_offset + row * stride
-                buffer[dst_start:dst_start + output_width] = uv_data[src_start:src_start + output_width]
-            self._profile_add("render_to_nv12.copy_uv", profile_stage)
+                profile_stage = self._profile_start()
+                buffer[uv_offset:uv_offset + uv_plane_bytes] = uv_data[:uv_plane_bytes]
+                self._profile_add("render_to_nv12.copy_uv", profile_stage)
+            else:
+                profile_stage = self._profile_start()
+                for row in range(output_height):
+                    src_start = row * y_row_bytes
+                    dst_start = row * stride
+                    buffer[dst_start:dst_start + output_width] = y_data[src_start:src_start + output_width]
+                self._profile_add("render_to_nv12.copy_y", profile_stage)
+
+                profile_stage = self._profile_start()
+                for row in range(uv_pack_h):
+                    src_start = row * uv_row_bytes
+                    dst_start = uv_offset + row * stride
+                    buffer[dst_start:dst_start + output_width] = uv_data[src_start:src_start + output_width]
+                self._profile_add("render_to_nv12.copy_uv", profile_stage)
             return buffer
         finally:
             profile_stage = self._profile_start()
