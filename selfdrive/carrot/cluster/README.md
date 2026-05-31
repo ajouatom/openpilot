@@ -184,6 +184,9 @@ runs exit and let `cluster_autorun` relaunch when the setting changes the
 encoder FPS because the V4L2 encoder timing, SPS timing, and automatic bitrate
 are fixed at startup. Set `CLUSTER_AUTORUN_FPS` only for fixed test overrides;
 `0` means uncapped.
+`ClusterHudDebug` controls the manager launch gate: `0` starts the external HUD
+only while openpilot is onroad, and `1` keeps the older always-on debug
+behavior after power-up.
 Manager autostart enables realtime affinity by default. `cluster_autorun.py`
 affines the manager-launched process to cores `0,1,2,3` before waiting for USB
 or starting the HUD by calling Linux `sched_setaffinity` directly. Explicit
@@ -247,7 +250,10 @@ direct CLI auto uses the native hardware H264 choice. `1` forces JPEG,
 `2` forces native hardware H264, and `3` forces ffmpeg/libx264 software H264.
 Live native hardware H264 automatically enables `--usb-h264-render-nv12`, so
 both auto hardware selection and explicit hardware selection use the lower-copy
-GPU NV12 submit path. Use `--no-usb-h264-render-nv12` only for A/B profiling.
+GPU NV12 submit path. Direct live CLI runs with backend `native` or
+native-first `auto` also auto-enable it; if `auto` falls back to the helper
+backend, the run disables the GPU NV12 path and uses the RGBA helper path. Use
+`--no-usb-h264-render-nv12` only for A/B profiling.
 Changing this setting while the HUD is running makes the current HUD process
 exit so `cluster_autorun` can relaunch it with the new encoder choice.
 `ClusterHudScreenMode` controls optional debug views: `0` default, `1` shows

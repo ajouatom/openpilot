@@ -151,7 +151,7 @@ def apply_live_hardware_nv12_default(args: argparse.Namespace) -> None:
         args.input == "live"
         and args.output in ("usb", "both")
         and args.usb_codec == "h264"
-        and args.usb_h264_backend == "native"
+        and args.usb_h264_backend in ("auto", "native")
         and not args.usb_h264_test_pattern
         and not args.usb_h264_test_pattern_nv12
     )
@@ -639,17 +639,24 @@ def run_demo(
             profile.add_samples(usb_display.profile_samples())
             usb_display.clear_profile_samples()
             if usb_h264_render_nv12:
-                h264_render_nv12_layout = h264_pipeline.native_nv12_render_layout()
-                stride, y_scanlines, uv_scanlines, uv_offset, input_bytes, render_bytes, active_submit = h264_render_nv12_layout
-                print(
-                    f"Using H264 GPU NV12 render path: "
-                    f"{h264_pipeline.encoder_width}x{h264_pipeline.encoder_height} "
-                    f"stride={stride} scanlines={y_scanlines}/{uv_scanlines} "
-                    f"uv_offset={uv_offset} bytes={input_bytes} render_bytes={render_bytes} "
-                    f"active_submit={'on' if active_submit else 'off'} "
-                    f"flip_x={'on' if usb_h264_render_nv12_flip_x else 'off'}",
-                    flush=True,
-                )
+                if h264_pipeline.backend_name != "native":
+                    print(
+                        f"H264 GPU NV12 render path disabled; backend resolved to {h264_pipeline.backend_name}",
+                        flush=True,
+                    )
+                    usb_h264_render_nv12 = False
+                else:
+                    h264_render_nv12_layout = h264_pipeline.native_nv12_render_layout()
+                    stride, y_scanlines, uv_scanlines, uv_offset, input_bytes, render_bytes, active_submit = h264_render_nv12_layout
+                    print(
+                        f"Using H264 GPU NV12 render path: "
+                        f"{h264_pipeline.encoder_width}x{h264_pipeline.encoder_height} "
+                        f"stride={stride} scanlines={y_scanlines}/{uv_scanlines} "
+                        f"uv_offset={uv_offset} bytes={input_bytes} render_bytes={render_bytes} "
+                        f"active_submit={'on' if active_submit else 'off'} "
+                        f"flip_x={'on' if usb_h264_render_nv12_flip_x else 'off'}",
+                        flush=True,
+                    )
             if usb_h264_test_pattern:
                 h264_test_pattern_rgba = build_rgba_color_test_pattern(
                     h264_pipeline.width,
