@@ -512,7 +512,7 @@ def run_demo(
     git_status_provider = GitBranchStatusProvider(Path(__file__).resolve().parent)
     cluster_core_usage_sampler = (
         ClusterProcessCoreUsageSampler(debug=cluster_core_usage_debug)
-        if input_mode == "live" and cluster_core_usage_enabled
+        if cluster_core_usage_enabled
         else None
     )
     simulator = ClusterSimulator() if input_mode in ("random", "gamepad") else None
@@ -1280,7 +1280,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--no-cluster-core-usage",
         action="store_true",
-        help="Disable the live lower-right cluster process per-core CPU overlay.",
+        help="Disable the lower-right cluster process per-core CPU overlay.",
     )
     parser.add_argument(
         "--cluster-core-usage-debug",

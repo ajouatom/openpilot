@@ -232,9 +232,9 @@ limit and is polled about once per second while running: `0` uncapped,
 Explicit `--fps` remains a fixed override. For H264 USB output, changing the
 effective FPS exits the current HUD process so autostart can relaunch with a
 matching encoder FPS.
-Live input also shows a compact lower-right cluster-process CPU overlay by
-current core, formatted like `[0(10),1(25)]`, with 2 px bottom/right margins.
-The sampler reads the current cluster process and direct child processes only,
+Runs also show a compact lower-right cluster-process CPU overlay by current
+core, formatted like `[0(10),1(25)]`, with 2 px bottom/right margins. The
+sampler reads the current cluster process and direct child processes only,
 avoiding a full `/proc` PID scan in the render loop. Use
 `--cluster-core-usage-debug` with `--profile-render` to log the sampler scan
 cost plus per-process/core CPU breakdown, or `--no-cluster-core-usage` for an
