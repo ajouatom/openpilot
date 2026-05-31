@@ -88,7 +88,6 @@ RADAR_MERGED_SOURCE_TAG = "+radar:"
 CORNER_RADAR_LABELS = frozenset(("LF", "RF", "LR", "RR"))
 REAR_CORNER_RADAR_LABELS = frozenset(("LR", "RR"))
 REAR_INDICATOR_ANCHOR_FORWARD_M = EGO_FORWARD_M - VEHICLE_LENGTH_M * 0.34
-REAR_INDICATOR_TIRE_LATERAL_M = VEHICLE_WIDTH_M * 0.55
 REAR_INDICATOR_ANCHOR_HEIGHT_M = 0.14
 VEHICLE_BADGE_TTC_S = 9.9
 VEHICLE_BADGE_ACCEL_MPS2 = 1.0
@@ -1820,6 +1819,88 @@ def detected_vehicles_with_merged_radar(
     return tuple(merged)
 
 
+def detected_vehicles_for_display(
+    vehicles: tuple[DetectedVehicle, ...],
+    state: ClusterUiState,
+) -> tuple[DetectedVehicle, ...]:
+    if state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL or len(vehicles) < 2:
+        return vehicles
+    selected: list[DetectedVehicle] = []
+    for vehicle in sorted(vehicles, key=detected_vehicle_display_priority):
+        match_index = next(
+            (
+                index
+                for index, existing in enumerate(selected)
+                if detected_vehicles_same_front_vehicle(vehicle, existing)
+            ),
+            None,
+        )
+        if match_index is None:
+            selected.append(vehicle)
+        else:
+            selected[match_index] = merge_detected_vehicle_for_display(selected[match_index], vehicle)
+    return tuple(sorted(selected, key=lambda vehicle: vehicle.longitudinal_m))
+
+
+def detected_vehicle_display_priority(vehicle: DetectedVehicle) -> tuple[int, float, float]:
+    if vehicle.source == "radarState":
+        source_priority = 0
+    elif vehicle.primary:
+        source_priority = 1
+    elif vehicle.source.startswith("modelV2"):
+        source_priority = 2
+    elif vehicle.source == "carState" or vehicle.source.startswith("CAN 0x"):
+        source_priority = 3
+    else:
+        source_priority = 4
+    return source_priority, vehicle.longitudinal_m, -vehicle.probability
+
+
+def detected_vehicles_same_front_vehicle(left: DetectedVehicle, right: DetectedVehicle) -> bool:
+    if not (detected_vehicle_is_front_merge_candidate(left) and detected_vehicle_is_front_merge_candidate(right)):
+        return False
+    if detected_vehicle_base_source(left) == detected_vehicle_base_source(right):
+        return False
+    distance_m = max(left.longitudinal_m, right.longitudinal_m)
+    longitudinal_tolerance = max(
+        RADAR_FRONT_DETECTED_MERGE_LONGITUDINAL_MIN_M,
+        min(RADAR_FRONT_DETECTED_MERGE_LONGITUDINAL_MAX_M, distance_m * 0.20),
+    )
+    return (
+        abs(left.longitudinal_m - right.longitudinal_m) <= longitudinal_tolerance
+        and abs(left.lateral_m - right.lateral_m) <= RADAR_FRONT_DETECTED_MERGE_LATERAL_M
+    )
+
+
+def detected_vehicle_is_front_merge_candidate(vehicle: DetectedVehicle) -> bool:
+    if vehicle.longitudinal_m <= 0.0 or vehicle.label in CORNER_RADAR_LABELS:
+        return False
+    return (
+        detected_vehicle_is_front_lead(vehicle)
+        or vehicle.source.startswith("modelV2")
+        or vehicle.primary
+    )
+
+
+def detected_vehicle_base_source(vehicle: DetectedVehicle) -> str:
+    return vehicle.source.split(RADAR_MERGED_SOURCE_TAG, 1)[0]
+
+
+def merge_detected_vehicle_for_display(base: DetectedVehicle, other: DetectedVehicle) -> DetectedVehicle:
+    return replace(
+        base,
+        probability=max(base.probability, other.probability),
+        relative_speed_mps=base.relative_speed_mps if base.relative_speed_mps is not None else other.relative_speed_mps,
+        absolute_speed_kph=base.absolute_speed_kph if base.absolute_speed_kph is not None else other.absolute_speed_kph,
+        acceleration_mps2=base.acceleration_mps2 if base.acceleration_mps2 is not None else other.acceleration_mps2,
+        cut_in=base.cut_in or other.cut_in,
+        primary=base.primary or other.primary,
+        ttc_s=base.ttc_s if base.ttc_s is not None else other.ttc_s,
+        x_std_m=base.x_std_m if base.x_std_m is not None else other.x_std_m,
+        y_std_m=base.y_std_m if base.y_std_m is not None else other.y_std_m,
+    )
+
+
 def radar_merge_point_for_vehicle(
     vehicle: DetectedVehicle,
     radar_points: tuple[RadarPoint, ...],
@@ -2270,9 +2351,6 @@ def rear_vehicle_indicators(
             continue
         forward_m = data_scene_forward_m(vehicle.longitudinal_m)
         offset = clamp(vehicle.lateral_m / lane_width_m, -2.2, 2.2)
-        ego_lateral_m = clamp(state.ego_lane_offset, -1.25, 1.25) * lane_width_m
-        tire_lateral_m = -REAR_INDICATOR_TIRE_LATERAL_M if side == "left" else REAR_INDICATOR_TIRE_LATERAL_M
-        anchor_offset = (ego_lateral_m + tire_lateral_m) / max(0.1, lane_width_m)
         indicators.append(
             RearVehicleIndicator(
                 center=Vec3(
@@ -2281,7 +2359,7 @@ def rear_vehicle_indicators(
                     VEHICLE_HEIGHT_M * 0.5,
                 ),
                 anchor=Vec3(
-                    road_world_x(anchor_offset, REAR_INDICATOR_ANCHOR_FORWARD_M, state.steering, lane_width_m)
+                    road_world_x(offset, REAR_INDICATOR_ANCHOR_FORWARD_M, state.steering, lane_width_m)
                     + x_offset_m,
                     REAR_INDICATOR_ANCHOR_FORWARD_M,
                     REAR_INDICATOR_ANCHOR_HEIGHT_M,
@@ -3048,6 +3126,7 @@ def build_cluster_scene(
                 state.radar_points,
                 state,
             )
+            merged_detected_vehicles = detected_vehicles_for_display(merged_detected_vehicles, state)
         render_detected_vehicles = tuple(
             detected
             for detected in merged_detected_vehicles
