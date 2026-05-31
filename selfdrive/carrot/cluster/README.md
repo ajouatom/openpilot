@@ -272,9 +272,9 @@ above the vehicle. `ClusterHudRadarSourceColor` controls vehicle box colors:
 `0` keeps all vehicle boxes gray, while `1` uses source colors with
 SCC/radarState red, HDA/model/CAN/corner detections blue, and raw radar vehicle
 boxes orange.
-Lane and road-edge rendering filters very low-confidence model geometry: inner
-and outer lane lines require `laneLineProbs >= 0.35`, and road edges require
-converted confidence at least `0.35` from `roadEdgeStds`.
+Lane and road-edge rendering keeps model geometry visible instead of filtering
+by `laneLineProbs` or `roadEdgeStds`, avoiding distracting HUD flicker when
+model confidence jitters.
 Changing `ClusterHud` to another supported mode or `0` makes the running HUD
 exit; cleanup sends TURZX brightness zero before releasing the USB device.
 

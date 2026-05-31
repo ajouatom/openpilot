@@ -67,9 +67,6 @@ ROUTE_VIDEO_DECODE_HEIGHT = 244
 ROUTE_VIDEO_SEEK_RESTART_FRAMES = 45
 NAV_SPEED_LIMIT_HOLD_SECONDS = 10.0
 ROAD_EDGE_VEHICLE_OUTSIDE_MARGIN_M = 0.25
-HUD_LANE_VISIBLE_PROB_THRESHOLD = 0.35
-HUD_EXTRA_LANE_VISIBLE_PROB_THRESHOLD = 0.35
-HUD_ROAD_EDGE_VISIBLE_CONFIDENCE_THRESHOLD = 0.35
 LANE_CHANGE_REINDEX_PEAK_THRESHOLD = 0.22
 LANE_CHANGE_REINDEX_RESET_THRESHOLD = -0.08
 CONTINUOUS_LANE_CHANGE_REBASE_PROGRESS = 0.12
@@ -1782,8 +1779,8 @@ class RouteLogParser:
                 "center": center_m,
                 "left_offset": -0.5,
                 "right_offset": 0.5,
-                "left_visible": self.left_lane_prob >= HUD_LANE_VISIBLE_PROB_THRESHOLD,
-                "right_visible": self.right_lane_prob >= HUD_LANE_VISIBLE_PROB_THRESHOLD,
+                "left_visible": True,
+                "right_visible": True,
                 "extra_left_visible": False,
                 "extra_right_visible": False,
                 "left_road_edge_offset": None,
@@ -1798,32 +1795,26 @@ class RouteLogParser:
         extra_left_visible = (
             outer_left_offset is not None
             and outer_left_offset < -0.78
-            and self.outer_left_lane_prob >= HUD_EXTRA_LANE_VISIBLE_PROB_THRESHOLD
         )
         extra_right_visible = (
             outer_right_offset is not None
             and outer_right_offset > 0.78
-            and self.outer_right_lane_prob >= HUD_EXTRA_LANE_VISIBLE_PROB_THRESHOLD
         )
         left_edge_visible = (
             left_edge_offset is not None
             and left_edge_offset < -0.68
-            and self.left_road_edge_confidence >= HUD_ROAD_EDGE_VISIBLE_CONFIDENCE_THRESHOLD
-            and (extra_left_visible or left_edge_offset > -1.25)
         )
         right_edge_visible = (
             right_edge_offset is not None
             and right_edge_offset > 0.68
-            and self.right_road_edge_confidence >= HUD_ROAD_EDGE_VISIBLE_CONFIDENCE_THRESHOLD
-            and (extra_right_visible or right_edge_offset < 1.25)
         )
         return {
             "width": width,
             "center": center_m,
             "left_offset": clamp((left_y - center_m) / width, -0.75, -0.25),
             "right_offset": clamp((right_y - center_m) / width, 0.25, 0.75),
-            "left_visible": self.left_lane_prob >= HUD_LANE_VISIBLE_PROB_THRESHOLD,
-            "right_visible": self.right_lane_prob >= HUD_LANE_VISIBLE_PROB_THRESHOLD,
+            "left_visible": True,
+            "right_visible": True,
             "extra_left_visible": extra_left_visible,
             "extra_right_visible": extra_right_visible,
             "left_road_edge_offset": clamp(left_edge_offset, -2.8, -0.68) if left_edge_visible else None,
