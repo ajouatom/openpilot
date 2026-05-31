@@ -384,6 +384,7 @@ def run_demo(
     usb_h264_diagnose_interval_s: float,
     usb_h264_test_pattern: bool,
     usb_h264_test_pattern_nv12: bool,
+    usb_h264_render_nv12: bool,
     usb_frame_drain_attempts: int,
     usb_frame_drain_timeout_ms: int,
     usb_fast_drain_attempts: int,
@@ -551,6 +552,8 @@ def run_demo(
     frame_interval = 1.0 / target_fps if target_fps > 0 else 0.0
     h264_test_pattern_rgba: bytearray | None = None
     h264_test_pattern_nv12: bytearray | None = None
+    h264_render_nv12_buffer: bytearray | None = None
+    h264_render_nv12_layout: tuple[int, int, int, int, int] | None = None
 
     try:
         renderer.open(hidden=output_mode == "usb")
@@ -588,6 +591,16 @@ def run_demo(
             profile.add_elapsed("usb_h264.start", profile_stage)
             profile.add_samples(usb_display.profile_samples())
             usb_display.clear_profile_samples()
+            if usb_h264_render_nv12:
+                h264_render_nv12_layout = h264_pipeline.native_nv12_layout()
+                stride, y_scanlines, uv_scanlines, uv_offset, input_bytes = h264_render_nv12_layout
+                print(
+                    f"Using H264 GPU NV12 render path: "
+                    f"{h264_pipeline.encoder_width}x{h264_pipeline.encoder_height} "
+                    f"stride={stride} scanlines={y_scanlines}/{uv_scanlines} "
+                    f"uv_offset={uv_offset} bytes={input_bytes}",
+                    flush=True,
+                )
             if usb_h264_test_pattern:
                 h264_test_pattern_rgba = build_rgba_color_test_pattern(
                     h264_pipeline.width,
@@ -846,22 +859,48 @@ def run_demo(
                     if h264_pipeline is None:
                         raise RuntimeError("H264 USB pipeline is not available")
                     if h264_test_pattern_rgba is None and h264_test_pattern_nv12 is None:
-                        profile_stage = time.perf_counter()
-                        with renderer.render_to_rgba_buffer(
-                            state,
-                            portrait_upload=h264_portrait_upload,
-                            output_width=h264_pipeline.encoder_width if h264_portrait_upload else None,
-                            output_height=h264_pipeline.encoder_height if h264_portrait_upload else None,
-                        ) as (
-                            rgba,
-                            image_width,
-                            image_height,
-                        ):
-                            profile.add_elapsed("main.usb.render_rgba_total", profile_stage)
+                        if usb_h264_render_nv12:
+                            if h264_render_nv12_layout is None:
+                                raise RuntimeError("H264 GPU NV12 render path is missing the native layout")
+                            stride, y_scanlines, uv_scanlines, uv_offset, input_bytes = h264_render_nv12_layout
+                            profile_stage = time.perf_counter()
+                            h264_render_nv12_buffer = renderer.render_to_nv12_buffer(
+                                state,
+                                h264_pipeline.encoder_width,
+                                h264_pipeline.encoder_height,
+                                stride,
+                                y_scanlines,
+                                uv_scanlines,
+                                uv_offset,
+                                input_bytes,
+                                h264_render_nv12_buffer,
+                            )
+                            profile.add_elapsed("main.usb.render_nv12_total", profile_stage)
 
                             profile_stage = time.perf_counter()
-                            h264_pipeline.submit_rgba(rgba, image_width, image_height)
-                            profile.add_elapsed("main.usb_h264.submit_rgba", profile_stage)
+                            h264_pipeline.submit_nv12(
+                                h264_render_nv12_buffer,
+                                h264_pipeline.encoder_width,
+                                h264_pipeline.encoder_height,
+                            )
+                            profile.add_elapsed("main.usb_h264.submit_nv12", profile_stage)
+                        else:
+                            profile_stage = time.perf_counter()
+                            with renderer.render_to_rgba_buffer(
+                                state,
+                                portrait_upload=h264_portrait_upload,
+                                output_width=h264_pipeline.encoder_width if h264_portrait_upload else None,
+                                output_height=h264_pipeline.encoder_height if h264_portrait_upload else None,
+                            ) as (
+                                rgba,
+                                image_width,
+                                image_height,
+                            ):
+                                profile.add_elapsed("main.usb.render_rgba_total", profile_stage)
+
+                                profile_stage = time.perf_counter()
+                                h264_pipeline.submit_rgba(rgba, image_width, image_height)
+                                profile.add_elapsed("main.usb_h264.submit_rgba", profile_stage)
                     else:
                         profile_stage = time.perf_counter()
                         if h264_test_pattern_nv12 is not None:
@@ -1206,6 +1245,11 @@ def parse_args() -> argparse.Namespace:
         help="Feed a native-aligned red/green/blue/white NV12 quadrant pattern into the native H264 path.",
     )
     parser.add_argument(
+        "--usb-h264-render-nv12",
+        action="store_true",
+        help="Experimental native path: render through a GPU RGBA-to-NV12 pack shader and submit aligned NV12.",
+    )
+    parser.add_argument(
         "--usb-frame-drain-attempts",
         type=int,
         default=2,
@@ -1364,6 +1408,10 @@ def parse_args() -> argparse.Namespace:
         parser.error("--usb-h264-diagnose-interval must be 0 or greater")
     if args.usb_h264_test_pattern and args.usb_h264_test_pattern_nv12:
         parser.error("--usb-h264-test-pattern and --usb-h264-test-pattern-nv12 cannot be used together")
+    if args.usb_h264_render_nv12 and (args.usb_h264_test_pattern or args.usb_h264_test_pattern_nv12):
+        parser.error("--usb-h264-render-nv12 cannot be combined with H264 test-pattern flags")
+    if args.usb_h264_render_nv12 and args.usb_h264_backend not in ("auto", "native"):
+        parser.error("--usb-h264-render-nv12 requires --usb-h264-backend native or auto")
     if not args.usb_h264_library:
         parser.error("--usb-h264-library must not be empty")
     if not args.usb_h264_helper:
@@ -1442,6 +1490,8 @@ def main() -> None:
             h264_bitrate_text += f" h264_rc={args.usb_h264_rate_control}"
         if args.usb_h264_realtime_priority:
             h264_bitrate_text += " h264_realtime=on"
+        if args.usb_h264_render_nv12:
+            h264_bitrate_text += " h264_render_nv12=on"
         if args.usb_h264_diagnose_interval > 0:
             h264_bitrate_text += f" h264_diag={args.usb_h264_diagnose_interval:g}s"
     brightness_text = "auto" if brightness_param_reader is not None and usb_brightness == 0 else f"{usb_brightness}%"
@@ -1501,6 +1551,7 @@ def main() -> None:
             args.usb_h264_diagnose_interval,
             args.usb_h264_test_pattern,
             args.usb_h264_test_pattern_nv12,
+            args.usb_h264_render_nv12,
             args.usb_frame_drain_attempts,
             args.usb_frame_drain_timeout_ms,
             args.usb_fast_drain_attempts,

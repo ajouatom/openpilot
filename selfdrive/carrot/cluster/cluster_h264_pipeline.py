@@ -1173,6 +1173,19 @@ class H264UsbPipeline:
                         pattern[offset + 1] = v_value
         return pattern
 
+    def native_nv12_layout(self) -> tuple[int, int, int, int, int]:
+        if self._native_handle is None:
+            raise RuntimeError("native NV12 layout is only available for the native H264 backend")
+        if self._native_input_stride <= 0 or self._native_input_uv_offset <= 0 or self._native_input_bytesused <= 0:
+            raise RuntimeError("native H264 encoder did not report a usable NV12 layout")
+        return (
+            self._native_input_stride,
+            self._native_input_y_scanlines,
+            self._native_input_uv_scanlines,
+            self._native_input_uv_offset,
+            self._native_input_bytesused,
+        )
+
     def _encoder_rgba(self, rgba: Any, width: int, height: int) -> Any:
         if self.encoder_width == width and self.encoder_height == height:
             return rgba
