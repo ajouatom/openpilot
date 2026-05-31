@@ -1626,7 +1626,7 @@ def radar_point_markers(
 ) -> tuple[RadarPointMarker, ...]:
     markers: list[RadarPointMarker] = []
     for point in state.radar_points:
-        if any(radar_points_same_vehicle(point, vehicle_point) for vehicle_point in vehicle_points):
+        if radar_point_hidden_by_vehicle_box(point, vehicle_points, state):
             continue
         forward_m = data_scene_forward_m(point.longitudinal_m)
         if forward_m < min_forward_m or forward_m > max_forward_m:
@@ -1657,6 +1657,16 @@ def radar_point_markers(
     return tuple(markers)
 
 
+def radar_point_hidden_by_vehicle_box(
+    point: RadarPoint,
+    vehicle_points: tuple[RadarPoint, ...],
+    state: ClusterUiState,
+) -> bool:
+    if state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL:
+        return any(point.label == vehicle_point.label for vehicle_point in vehicle_points)
+    return any(radar_points_same_vehicle(point, vehicle_point) for vehicle_point in vehicle_points)
+
+
 def radar_vehicle_points(state: ClusterUiState, lane_width_m: float) -> tuple[RadarPoint, ...]:
     selected: list[RadarPoint] = []
     candidates = sorted(
@@ -1671,6 +1681,13 @@ def radar_vehicle_points(state: ClusterUiState, lane_width_m: float) -> tuple[Ra
             abs(point.lateral_m),
         ),
     )
+    if state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL:
+        return tuple(
+            sorted(
+                candidates,
+                key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label),
+            )
+        )
     for point in candidates:
         if any(radar_points_same_vehicle(point, existing) for existing in selected):
             continue
@@ -2649,7 +2666,6 @@ def road_edge_strips(
                     road_start_m,
                     road_end_m,
                     theme,
-                    profile_add,
                 )
             )
     if state.right_road_edge_offset is not None or state.right_road_edge_points:
@@ -2872,11 +2888,14 @@ def build_cluster_scene(
     ego_vehicle = vehicle_box(ego_offset, EGO_FORWARD_M, state.steering, lane_width_m, EGO, camera_active, target_offset)
     merged_radar_labels = frozenset[str]()
     if route_mode:
-        merged_detected_vehicles = detected_vehicles_with_merged_radar(
-            state.detected_vehicles,
-            state.radar_points,
-            state,
-        )
+        if state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL:
+            merged_detected_vehicles = state.detected_vehicles
+        else:
+            merged_detected_vehicles = detected_vehicles_with_merged_radar(
+                state.detected_vehicles,
+                state.radar_points,
+                state,
+            )
         render_detected_vehicles = tuple(
             detected
             for detected in merged_detected_vehicles

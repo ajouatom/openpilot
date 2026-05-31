@@ -266,9 +266,10 @@ selected debug view remains visible.
 boxes only, `3` speed for all vehicle boxes and raw radar points, and `4` speed
 and distance for all. `ClusterHudRadarDisplay` controls raw radar point
 presentation: `0` averages nearby points with nearly matching speed/position,
-and `1` leaves raw points unmerged for detail checks. Vehicle/radar metric
-labels sit closer to the point/box top so speed and distance are less high
-above the vehicle. `ClusterHudRadarSourceColor` controls vehicle box colors:
+and `1` leaves raw points unmerged for detail checks, including radar vehicle
+candidate boxes and radar-to-detected-vehicle speed merges. Vehicle/radar
+metric labels sit closer to the point/box top so speed and distance are less
+high above the vehicle. `ClusterHudRadarSourceColor` controls vehicle box colors:
 `0` keeps all vehicle boxes gray, while `1` uses source colors with
 SCC/radarState red, HDA/model/CAN/corner detections blue, and raw radar vehicle
 boxes orange.
