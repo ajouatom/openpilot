@@ -866,7 +866,7 @@ def run_demo(
                                 raise RuntimeError("H264 GPU NV12 render path is missing the native layout")
                             stride, y_scanlines, uv_scanlines, uv_offset, input_bytes = h264_render_nv12_layout
                             profile_stage = time.perf_counter()
-                            h264_render_nv12_buffer = renderer.render_to_nv12_buffer(
+                            with renderer.render_to_nv12_buffer(
                                 state,
                                 h264_pipeline.encoder_width,
                                 h264_pipeline.encoder_height,
@@ -877,16 +877,18 @@ def run_demo(
                                 input_bytes,
                                 h264_render_nv12_buffer,
                                 flip_x=usb_h264_render_nv12_flip_x,
-                            )
-                            profile.add_elapsed("main.usb.render_nv12_total", profile_stage)
+                            ) as h264_render_nv12_frame:
+                                profile.add_elapsed("main.usb.render_nv12_total", profile_stage)
+                                if isinstance(h264_render_nv12_frame, bytearray):
+                                    h264_render_nv12_buffer = h264_render_nv12_frame
 
-                            profile_stage = time.perf_counter()
-                            h264_pipeline.submit_nv12(
-                                h264_render_nv12_buffer,
-                                h264_pipeline.encoder_width,
-                                h264_pipeline.encoder_height,
-                            )
-                            profile.add_elapsed("main.usb_h264.submit_nv12", profile_stage)
+                                profile_stage = time.perf_counter()
+                                h264_pipeline.submit_nv12(
+                                    h264_render_nv12_frame,
+                                    h264_pipeline.encoder_width,
+                                    h264_pipeline.encoder_height,
+                                )
+                                profile.add_elapsed("main.usb_h264.submit_nv12", profile_stage)
                         else:
                             profile_stage = time.perf_counter()
                             with renderer.render_to_rgba_buffer(

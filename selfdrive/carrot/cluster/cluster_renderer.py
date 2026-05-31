@@ -451,6 +451,8 @@ class ClusterUiRenderer:
         self._nv12_pack_y_size: tuple[int, int] | None = None
         self._nv12_pack_uv_target = None
         self._nv12_pack_uv_size: tuple[int, int] | None = None
+        self._nv12_pack_full_target = None
+        self._nv12_pack_full_size: tuple[int, int] | None = None
         self._nv12_pack_shader = None
         self._nv12_pack_shader_locations: dict[str, int] = {}
         self._vehicle_model = None
@@ -568,6 +570,10 @@ class ClusterUiRenderer:
             rl.unload_render_texture(self._nv12_pack_uv_target)
             self._nv12_pack_uv_target = None
             self._nv12_pack_uv_size = None
+        if self._nv12_pack_full_target is not None:
+            rl.unload_render_texture(self._nv12_pack_full_target)
+            self._nv12_pack_full_target = None
+            self._nv12_pack_full_size = None
         if self._nv12_pack_shader is not None:
             rl.unload_shader(self._nv12_pack_shader)
             self._nv12_pack_shader = None
@@ -734,6 +740,7 @@ class ClusterUiRenderer:
             rl.unload_image(image)
             self._profile_add("render_to_rgba.unload_image", profile_stage)
 
+    @contextmanager
     def render_to_nv12_buffer(
         self,
         state: ClusterUiState,
@@ -746,7 +753,7 @@ class ClusterUiRenderer:
         byte_count: int,
         buffer: bytearray | None = None,
         flip_x: bool = False,
-    ) -> bytearray:
+    ) -> Iterator[object]:
         self.open(hidden=self.hidden)
         output_width = int(output_width)
         output_height = int(output_height)
@@ -801,6 +808,69 @@ class ClusterUiRenderer:
         )
         rl.end_texture_mode()
         self._profile_add("render_to_nv12.gpu_upload_transform", profile_stage)
+
+        pack_direct_input = stride % 4 == 0 and byte_count % stride == 0 and uv_offset % stride == 0
+        if pack_direct_input:
+            full_pack_w = stride // 4
+            full_pack_h = byte_count // stride
+            tail_pack_h = max(0, full_pack_h - y_scanlines - uv_scanlines)
+            uv_pack_y = tail_pack_h
+            y_pack_y = tail_pack_h + uv_scanlines
+
+            profile_stage = self._profile_start()
+            full_target = self._get_nv12_pack_target("full", full_pack_w, full_pack_h)
+            self._profile_add("render_to_nv12.get_pack_targets", profile_stage)
+
+            profile_stage = self._profile_start()
+            self._render_nv12_pack_plane(
+                upload_target.texture,
+                full_target,
+                output_width,
+                output_height,
+                0,
+                flip_x,
+                packed_width=full_pack_w,
+                packed_height=y_scanlines,
+                dest_y=y_pack_y,
+                clear_target=True,
+                clear_color=(128, 128, 128, 128),
+            )
+            self._profile_add("render_to_nv12.pack_y_shader", profile_stage)
+
+            profile_stage = self._profile_start()
+            self._render_nv12_pack_plane(
+                upload_target.texture,
+                full_target,
+                output_width,
+                output_height,
+                1,
+                flip_x,
+                packed_width=full_pack_w,
+                packed_height=uv_scanlines,
+                dest_y=uv_pack_y,
+                clear_target=False,
+            )
+            self._profile_add("render_to_nv12.pack_uv_shader", profile_stage)
+
+            profile_stage = self._profile_start()
+            image = rl.load_image_from_texture(full_target.texture)
+            self._profile_add("render_to_nv12.readback_packed", profile_stage)
+
+            try:
+                if image.format != rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8:
+                    profile_stage = self._profile_start()
+                    rl.image_format(image, rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8)
+                    self._profile_add("render_to_nv12.packed_image_format", profile_stage)
+
+                profile_stage = self._profile_start()
+                nv12_buffer = rl.ffi.buffer(image.data, byte_count)
+                self._profile_add("render_to_nv12.buffer_view", profile_stage)
+                yield nv12_buffer
+            finally:
+                profile_stage = self._profile_start()
+                rl.unload_image(image)
+                self._profile_add("render_to_nv12.unload_image", profile_stage)
+            return
 
         pack_full_stride = stride % 4 == 0
         if pack_full_stride:
@@ -879,7 +949,7 @@ class ClusterUiRenderer:
                     dst_start = uv_offset + row * stride
                     buffer[dst_start:dst_start + output_width] = uv_data[src_start:src_start + output_width]
                 self._profile_add("render_to_nv12.copy_uv", profile_stage)
-            return buffer
+            yield buffer
         finally:
             profile_stage = self._profile_start()
             rl.unload_image(y_image)
@@ -986,6 +1056,9 @@ class ClusterUiRenderer:
         elif plane == "uv":
             current = self._nv12_pack_uv_target
             current_size = self._nv12_pack_uv_size
+        elif plane == "full":
+            current = self._nv12_pack_full_target
+            current_size = self._nv12_pack_full_size
         else:
             raise RuntimeError(f"unknown NV12 pack plane: {plane}")
 
@@ -1005,9 +1078,12 @@ class ClusterUiRenderer:
         if plane == "y":
             self._nv12_pack_y_target = current
             self._nv12_pack_y_size = current_size
-        else:
+        elif plane == "uv":
             self._nv12_pack_uv_target = current
             self._nv12_pack_uv_size = current_size
+        else:
+            self._nv12_pack_full_target = current
+            self._nv12_pack_full_size = current_size
         return current
 
     def _get_nv12_pack_shader(self):
@@ -1033,11 +1109,18 @@ class ClusterUiRenderer:
         source_height: int,
         plane: int,
         flip_x: bool,
+        packed_width: int | None = None,
+        packed_height: int | None = None,
+        dest_y: int = 0,
+        clear_target: bool = True,
+        clear_color: tuple[int, int, int, int] = (0, 0, 0, 0),
     ) -> None:
         shader = self._get_nv12_pack_shader()
         locations = self._nv12_pack_shader_locations
+        pack_width = int(packed_width) if packed_width is not None else int(target.texture.width)
+        pack_height = int(packed_height) if packed_height is not None else int(target.texture.height)
         src_size = rl.ffi.new("float[]", [float(source_width), float(source_height)])
-        packed_size = rl.ffi.new("float[]", [float(target.texture.width), float(target.texture.height)])
+        packed_size = rl.ffi.new("float[]", [float(pack_width), float(pack_height)])
         plane_value = rl.ffi.new("int[]", [int(plane)])
         flip_x_value = rl.ffi.new("int[]", [1 if flip_x else 0])
         rl.set_shader_value(shader, locations["srcSize"], src_size, rl.ShaderUniformDataType.SHADER_UNIFORM_VEC2)
@@ -1046,7 +1129,8 @@ class ClusterUiRenderer:
         rl.set_shader_value(shader, locations["flipX"], flip_x_value, rl.ShaderUniformDataType.SHADER_UNIFORM_INT)
 
         rl.begin_texture_mode(target)
-        rl.clear_background(rl_color((0, 0, 0, 0)))
+        if clear_target:
+            rl.clear_background(rl_color(clear_color))
         rl.begin_shader_mode(shader)
         rl.rl_set_blend_factors(rl.RL_ONE, rl.RL_ZERO, rl.RL_FUNC_ADD)
         rl.begin_blend_mode(rl.BlendMode.BLEND_CUSTOM)
@@ -1054,7 +1138,7 @@ class ClusterUiRenderer:
             rl.draw_texture_pro(
                 source_texture,
                 rl.Rectangle(0.0, 0.0, float(source_width), float(source_height)),
-                rl.Rectangle(0.0, 0.0, float(target.texture.width), float(target.texture.height)),
+                rl.Rectangle(0.0, float(dest_y), float(pack_width), float(pack_height)),
                 rl.Vector2(0.0, 0.0),
                 0.0,
                 rl_color(WHITE),
