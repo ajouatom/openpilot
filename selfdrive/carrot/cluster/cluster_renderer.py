@@ -198,7 +198,8 @@ uniform int flipX;
 
 vec3 sampleRgb(float x, float y) {
     if (flipX != 0) {
-        x = srcSize.x - 1.0 - x;
+        // The portrait upload transform maps screen horizontal correction to source Y.
+        y = srcSize.y - 1.0 - y;
     }
     vec2 clamped = clamp(vec2(x, y), vec2(0.0), srcSize - vec2(1.0));
     return texture2D(texture0, (clamped + vec2(0.5)) / srcSize).rgb;
