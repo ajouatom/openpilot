@@ -245,6 +245,9 @@ direct USB CLI runs when `--usb-codec` is omitted: `0` auto tries native
 hardware H264, then ffmpeg/libx264 software H264, then JPEG in autostart;
 direct CLI auto uses the native hardware H264 choice. `1` forces JPEG,
 `2` forces native hardware H264, and `3` forces ffmpeg/libx264 software H264.
+Live native hardware H264 automatically enables `--usb-h264-render-nv12`, so
+both auto hardware selection and explicit hardware selection use the lower-copy
+GPU NV12 submit path. Use `--no-usb-h264-render-nv12` only for A/B profiling.
 Changing this setting while the HUD is running makes the current HUD process
 exit so `cluster_autorun` can relaunch it with the new encoder choice.
 `ClusterHudScreenMode` controls optional debug views: `0` default, `1` shows

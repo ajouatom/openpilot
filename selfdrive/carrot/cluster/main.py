@@ -143,6 +143,20 @@ def apply_cluster_encoder_param(args: argparse.Namespace) -> str:
     return CLUSTER_ENCODER_PARAM
 
 
+def apply_live_hardware_nv12_default(args: argparse.Namespace) -> None:
+    if args.usb_h264_render_nv12 is not None:
+        return
+
+    args.usb_h264_render_nv12 = (
+        args.input == "live"
+        and args.output in ("usb", "both")
+        and args.usb_codec == "h264"
+        and args.usb_h264_backend == "native"
+        and not args.usb_h264_test_pattern
+        and not args.usb_h264_test_pattern_nv12
+    )
+
+
 class ClusterThemeParamReader:
     def __init__(self) -> None:
         self._params = None
@@ -1289,8 +1303,19 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--usb-h264-render-nv12",
+        dest="usb_h264_render_nv12",
         action="store_true",
-        help="Experimental native path: render through a GPU RGBA-to-NV12 pack shader and submit aligned NV12.",
+        default=None,
+        help=(
+            "Native path: render through a GPU RGBA-to-NV12 pack shader and submit aligned NV12. "
+            "Auto-enabled for live native-H264 USB output."
+        ),
+    )
+    parser.add_argument(
+        "--no-usb-h264-render-nv12",
+        dest="usb_h264_render_nv12",
+        action="store_false",
+        help="Disable live native-H264 automatic GPU NV12 rendering for A/B profiling.",
     )
     parser.add_argument(
         "--usb-h264-render-nv12-no-flip-x",
@@ -1494,6 +1519,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     encoder_source = apply_cluster_encoder_param(args)
+    apply_live_hardware_nv12_default(args)
     if args.usb_async and args.usb_codec != "jpeg":
         raise SystemExit("--usb-async only supports --usb-codec jpeg")
     if args.usb_h264_render_nv12 and args.usb_h264_backend not in ("auto", "native"):
