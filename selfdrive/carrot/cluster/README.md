@@ -273,6 +273,10 @@ high above the vehicle. `ClusterHudRadarSourceColor` controls vehicle box colors
 `0` keeps all vehicle boxes gray, while `1` uses source colors with
 SCC/radarState red, HDA/model/CAN/corner detections blue, and raw radar vehicle
 boxes orange.
+Raw radar vehicle classification rejects points outside model road edges, but
+does not require in-road points to sit near the road-edge line; center-lane
+points can classify as vehicles when probability/in-lane data or moving raw
+radar evidence is sufficient.
 Lane and road-edge rendering keeps model geometry visible instead of filtering
 by `laneLineProbs` or `roadEdgeStds`, avoiding distracting HUD flicker when
 model confidence jitters. Lane markings are still suppressed when their
