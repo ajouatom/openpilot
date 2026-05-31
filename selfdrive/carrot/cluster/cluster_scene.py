@@ -81,6 +81,9 @@ RADAR_POINT_MERGE_SPEED_KPH = 3.0
 RADAR_MERGE_LONGITUDINAL_MIN_M = 3.0
 RADAR_MERGE_LONGITUDINAL_MAX_M = 7.0
 RADAR_MERGE_LATERAL_M = 1.35
+RADAR_FRONT_DETECTED_MERGE_LONGITUDINAL_MIN_M = 5.0
+RADAR_FRONT_DETECTED_MERGE_LONGITUDINAL_MAX_M = 11.0
+RADAR_FRONT_DETECTED_MERGE_LATERAL_M = 2.25
 RADAR_MERGED_SOURCE_TAG = "+radar:"
 CORNER_RADAR_LABELS = frozenset(("LF", "RF", "LR", "RR"))
 REAR_CORNER_RADAR_LABELS = frozenset(("LR", "RR"))
@@ -2045,10 +2048,7 @@ def radar_point_is_near_or_outside_road_edge(
 
 def radar_point_matches_detected_vehicle(point: RadarPoint, state: ClusterUiState) -> bool:
     for vehicle in state.detected_vehicles:
-        longitudinal_tolerance = max(4.0, min(8.0, point.longitudinal_m * 0.08))
-        if abs(point.longitudinal_m - vehicle.longitudinal_m) > longitudinal_tolerance:
-            continue
-        if abs(point.lateral_m - vehicle.lateral_m) <= 1.35:
+        if radar_point_close_to_detected_vehicle(point, vehicle):
             return True
     return False
 
@@ -2061,12 +2061,32 @@ def radar_point_hidden_by_detected_vehicle(
     if state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL:
         return False
     for vehicle in vehicles:
-        longitudinal_tolerance = max(4.0, min(8.0, point.longitudinal_m * 0.08))
-        if abs(point.longitudinal_m - vehicle.longitudinal_m) > longitudinal_tolerance:
-            continue
-        if abs(point.lateral_m - vehicle.lateral_m) <= 1.35:
+        if radar_point_close_to_detected_vehicle(point, vehicle):
             return True
     return False
+
+
+def radar_point_close_to_detected_vehicle(point: RadarPoint, vehicle: DetectedVehicle) -> bool:
+    if detected_vehicle_is_front_lead(vehicle):
+        longitudinal_tolerance = max(
+            RADAR_FRONT_DETECTED_MERGE_LONGITUDINAL_MIN_M,
+            min(
+                RADAR_FRONT_DETECTED_MERGE_LONGITUDINAL_MAX_M,
+                max(point.longitudinal_m, vehicle.longitudinal_m) * 0.20,
+            ),
+        )
+        lateral_tolerance = RADAR_FRONT_DETECTED_MERGE_LATERAL_M
+    else:
+        longitudinal_tolerance = max(4.0, min(8.0, point.longitudinal_m * 0.08))
+        lateral_tolerance = 1.35
+    return (
+        abs(point.longitudinal_m - vehicle.longitudinal_m) <= longitudinal_tolerance
+        and abs(point.lateral_m - vehicle.lateral_m) <= lateral_tolerance
+    )
+
+
+def detected_vehicle_is_front_lead(vehicle: DetectedVehicle) -> bool:
+    return vehicle.source == "radarState" or vehicle.label in ("TARGET", "TARGET2")
 
 
 def radar_point_absolute_speed_kph(point: RadarPoint, state: ClusterUiState) -> float | None:

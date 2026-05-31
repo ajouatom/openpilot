@@ -271,6 +271,8 @@ vehicles such as front-center `radarState` leads; `1` leaves raw points
 unmerged for detail checks, including radar vehicle candidate boxes and
 radar-to-detected-vehicle speed merges. Vehicle/radar metric labels sit closer
 to the point/box top so speed and distance are less high above the vehicle.
+Front-center `radarState` lead overlap uses a wider vehicle-sized tolerance than
+corner radar overlap so source-split front radar reflections merge cleanly.
 `ClusterHudRadarSourceColor` controls vehicle box colors:
 `0` keeps all vehicle boxes gray, while `1` uses source colors with
 SCC/radarState red, HDA/model/CAN/corner detections blue, and raw radar vehicle
