@@ -2053,6 +2053,22 @@ def radar_point_matches_detected_vehicle(point: RadarPoint, state: ClusterUiStat
     return False
 
 
+def radar_point_hidden_by_detected_vehicle(
+    point: RadarPoint,
+    vehicles: tuple[DetectedVehicle, ...],
+    state: ClusterUiState,
+) -> bool:
+    if state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL:
+        return False
+    for vehicle in vehicles:
+        longitudinal_tolerance = max(4.0, min(8.0, point.longitudinal_m * 0.08))
+        if abs(point.longitudinal_m - vehicle.longitudinal_m) > longitudinal_tolerance:
+            continue
+        if abs(point.lateral_m - vehicle.lateral_m) <= 1.35:
+            return True
+    return False
+
+
 def radar_point_absolute_speed_kph(point: RadarPoint, state: ClusterUiState) -> float | None:
     if point.absolute_speed_kph is not None:
         return point.absolute_speed_kph
@@ -3059,6 +3075,7 @@ def build_cluster_scene(
             (point, box)
             for point, box in zip(selected_radar_vehicle_points, selected_radar_vehicle_boxes)
             if point.label not in merged_radar_labels
+            and not radar_point_hidden_by_detected_vehicle(point, render_detected_vehicles, state)
         )
         visible_radar_vehicle_points = tuple(point for point, _ in visible_radar_vehicle_pairs)
         visible_radar_vehicle_boxes_raw = tuple(box for _, box in visible_radar_vehicle_pairs)
