@@ -8,7 +8,7 @@ import time
 from typing import Any
 
 
-GC_POST_FREEZE_THRESHOLDS = (9000, 60, 60)
+GC_POST_FREEZE_THRESHOLDS = (60000, 120, 120)
 
 
 def _post_freeze_gc_thresholds() -> tuple[int, int, int]:
