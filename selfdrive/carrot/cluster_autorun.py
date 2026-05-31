@@ -16,11 +16,14 @@ CARROT_DIR = Path(__file__).resolve().parent
 CLUSTER_DIR = CARROT_DIR / "cluster"
 OPENPILOT_ROOT = CARROT_DIR.parents[1]
 HUD_PARAM = "ClusterHud"
+HUD_DEBUG_PARAM = "ClusterHudDebug"
 HUD_ENCODER_PARAM = "ClusterHudEncoder"
 HUD_LIVE_FPS_PARAM = "ClusterHudLiveFps"
+IS_ONROAD_PARAM = "IsOnroad"
 RETRY_INTERVAL_S = 5.0
 HUD_CHECK_INTERVAL_S = 5.0
 USB_FALLBACK_SCAN_INTERVAL_S = 60.0
+USB_OFF_DIM_INTERVAL_S = 30.0
 NETLINK_KOBJECT_UEVENT = 15
 AUTORUN_FPS_ENV = "CLUSTER_AUTORUN_FPS"
 AUTORUN_DEFAULT_ENV = {
@@ -83,6 +86,26 @@ def _read_hud_mode(params: Params) -> int:
     except Exception as exc:
         print(f"[cluster_autorun] failed to read {HUD_PARAM}: {exc}", flush=True)
         return 0
+
+
+def _read_hud_debug_mode(params: Params) -> int:
+    try:
+        return int(params.get_int(HUD_DEBUG_PARAM))
+    except Exception as exc:
+        print(f"[cluster_autorun] failed to read {HUD_DEBUG_PARAM}: {exc}", flush=True)
+        return 0
+
+
+def _read_is_onroad(params: Params) -> bool:
+    try:
+        return bool(params.get_bool(IS_ONROAD_PARAM))
+    except Exception as exc:
+        print(f"[cluster_autorun] failed to read {IS_ONROAD_PARAM}: {exc}", flush=True)
+        return False
+
+
+def _hud_output_allowed(params: Params) -> bool:
+    return _read_hud_debug_mode(params) == 1 or _read_is_onroad(params)
 
 
 def _read_encoder_mode(params: Params) -> int:
@@ -319,6 +342,13 @@ def _wait_for_supported_usb_device(params: Params, expected_product_id: int, rea
                 if current_product_id is None:
                     print(f"[cluster_autorun] {HUD_PARAM}={hud_mode}; stopping cluster HUD", flush=True)
                     return None
+                if not _hud_output_allowed(params):
+                    print(
+                        f"[cluster_autorun] {HUD_DEBUG_PARAM}=0 and {IS_ONROAD_PARAM}=0; "
+                        "stopping HUD output while waiting for USB",
+                        flush=True,
+                    )
+                    return None
                 if current_product_id != expected_product_id:
                     expected_product_id = current_product_id
                     next_fallback_scan = now
@@ -341,6 +371,61 @@ def _wait_for_supported_usb_device(params: Params, expected_product_id: int, rea
             usb_events.close()
 
 
+def _turn_off_supported_usb_device(expected_product_id: int, reason: str) -> bool:
+    from cluster_usb_display import TuringUsbDisplay, find_supported_usb_product, product_label
+
+    if find_supported_usb_product(expected_product_id) is None:
+        return False
+
+    display = TuringUsbDisplay(brightness=0, display_fps=0)
+    try:
+        display.open()
+        print(
+            f"[cluster_autorun] sent brightness 0 to {product_label(expected_product_id)} ({reason})",
+            flush=True,
+        )
+        return True
+    except Exception as exc:
+        print(
+            f"[cluster_autorun] failed to turn off {product_label(expected_product_id)} ({reason}): {exc}",
+            flush=True,
+        )
+        return False
+    finally:
+        display.close()
+
+
+def _wait_for_hud_output_allowed(params: Params, expected_product_id: int) -> int | None:
+    from cluster_usb_display import product_id_for_hud_mode
+
+    print(
+        f"[cluster_autorun] {HUD_DEBUG_PARAM}=0 and {IS_ONROAD_PARAM}=0; "
+        "keeping external HUD output off",
+        flush=True,
+    )
+    next_hud_check = time.monotonic()
+    next_off_dim = time.monotonic()
+    while True:
+        now = time.monotonic()
+        if now >= next_hud_check:
+            hud_mode = _read_hud_mode(params)
+            current_product_id = product_id_for_hud_mode(hud_mode)
+            if current_product_id is None:
+                print(f"[cluster_autorun] {HUD_PARAM}={hud_mode}; stopping cluster HUD", flush=True)
+                return None
+            expected_product_id = current_product_id
+            if _hud_output_allowed(params):
+                return expected_product_id
+            next_hud_check = now + HUD_CHECK_INTERVAL_S
+
+        now = time.monotonic()
+        if now >= next_off_dim:
+            _turn_off_supported_usb_device(expected_product_id, "output disabled")
+            next_off_dim = now + USB_OFF_DIM_INTERVAL_S
+
+        time.sleep(max(0.1, min(next_hud_check, next_off_dim) - time.monotonic()))
+
+
 def main() -> None:
     _ensure_cluster_paths()
     _apply_autorun_defaults()
@@ -348,23 +433,6 @@ def main() -> None:
     from cluster_usb_display import find_supported_usb_product, product_id_for_hud_mode, product_label
 
     params = Params()
-    hud_mode = _read_hud_mode(params)
-    expected_product_id = product_id_for_hud_mode(hud_mode)
-    if expected_product_id is None:
-        print(f"[cluster_autorun] {HUD_PARAM}={hud_mode}; HUD disabled", flush=True)
-        return
-
-    found_product_id = find_supported_usb_product(expected_product_id)
-    if found_product_id is None:
-        found_product_id = _wait_for_supported_usb_device(
-            params,
-            expected_product_id,
-            "not found at startup",
-        )
-        if found_product_id is None:
-            return
-
-    print(f"[cluster_autorun] found {product_label(found_product_id)}; starting cluster HUD", flush=True)
     while True:
         hud_mode = _read_hud_mode(params)
         encoder_mode = _read_encoder_mode(params)
@@ -374,15 +442,23 @@ def main() -> None:
             print(f"[cluster_autorun] {HUD_PARAM}={hud_mode}; stopping cluster HUD", flush=True)
             return
 
+        if not _hud_output_allowed(params):
+            expected_product_id = _wait_for_hud_output_allowed(params, expected_product_id)
+            if expected_product_id is None:
+                return
+            continue
+
         if find_supported_usb_product(expected_product_id) is None:
             found_product_id = _wait_for_supported_usb_device(
                 params,
                 expected_product_id,
-                "disconnected",
+                "not found or disconnected",
             )
             if found_product_id is None:
-                return
+                continue
             print(f"[cluster_autorun] found {product_label(found_product_id)}; starting cluster HUD", flush=True)
+        else:
+            print(f"[cluster_autorun] found {product_label(expected_product_id)}; starting cluster HUD", flush=True)
 
         try:
             _run_cluster_once(hud_mode, encoder_mode)

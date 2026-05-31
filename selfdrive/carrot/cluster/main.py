@@ -16,6 +16,7 @@ from cluster_config import (
     CLUSTER_ENCODER_JPEG,
     CLUSTER_ENCODER_PARAM,
     CLUSTER_ENCODER_SOFTWARE,
+    CLUSTER_HUD_DEBUG_PARAM,
     CLUSTER_HUD_PARAM,
     CLUSTER_LIVE_FPS_PARAM,
     CLUSTER_RADAR_DISPLAY_PARAM,
@@ -324,6 +325,25 @@ class ClusterHudModeParamReader:
             return None
 
 
+class ClusterHudOutputGateParamReader:
+    def __init__(self) -> None:
+        self._params = None
+        try:
+            from openpilot.common.params import Params
+
+            self._params = Params()
+        except Exception:
+            pass
+
+    def allowed(self) -> bool:
+        if self._params is None:
+            return True
+        try:
+            return int(self._params.get_int(CLUSTER_HUD_DEBUG_PARAM)) == 1 or bool(self._params.get_bool("IsOnroad"))
+        except Exception:
+            return False
+
+
 class ClusterHudEncoderParamReader:
     def __init__(self) -> None:
         self._params = None
@@ -543,6 +563,7 @@ def run_demo(
     active_radar_source_color_mode = radar_source_color_param_reader.read()
     hud_mode_param_reader = ClusterHudModeParamReader() if hud_mode_watch is not None else None
     hud_encoder_param_reader = ClusterHudEncoderParamReader() if hud_encoder_watch is not None else None
+    hud_output_gate_param_reader = ClusterHudOutputGateParamReader() if hud_mode_watch is not None else None
     renderer = ClusterUiRenderer(
         frame_width,
         frame_height,
@@ -593,7 +614,7 @@ def run_demo(
     next_brightness_param_read = start_time
     next_screen_mode_param_read = start_time
     next_radar_param_read = start_time
-    next_hud_mode_param_read = start_time + HUD_MODE_PARAM_POLL_SECONDS
+    next_hud_mode_param_read = start_time
     report_frames = 0
     display_actual_fps: float | None = None
     frame_interval = 1.0 / target_fps if target_fps > 0 else 0.0
@@ -601,6 +622,14 @@ def run_demo(
     h264_test_pattern_nv12: bytearray | None = None
     h264_render_nv12_buffer: bytearray | None = None
     h264_render_nv12_layout: tuple[int, int, int, int, int, int, bool] | None = None
+
+    if hud_output_gate_param_reader is not None and not hud_output_gate_param_reader.allowed():
+        print(
+            f"{CLUSTER_HUD_DEBUG_PARAM}=0 and IsOnroad=0; "
+            "cluster HUD output remains off",
+            flush=True,
+        )
+        return
 
     try:
         renderer.open(hidden=output_mode == "usb")
@@ -752,6 +781,13 @@ def run_demo(
                 if next_hud_encoder is not None and next_hud_encoder != hud_encoder_watch:
                     print(
                         f"{CLUSTER_ENCODER_PARAM} changed from {hud_encoder_watch} to {next_hud_encoder}; exiting",
+                        flush=True,
+                    )
+                    break
+                if hud_output_gate_param_reader is not None and not hud_output_gate_param_reader.allowed():
+                    print(
+                        f"{CLUSTER_HUD_DEBUG_PARAM}=0 and IsOnroad=0; "
+                        "exiting to turn off cluster HUD output",
                         flush=True,
                     )
                     break

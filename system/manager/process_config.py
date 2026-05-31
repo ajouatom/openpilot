@@ -87,7 +87,7 @@ def enable_webrtc(started, params, CP: car.CarParams) -> bool:
 
 def enable_cluster_hud(started, params, CP: car.CarParams) -> bool:
   try:
-    return params.get_int("ClusterHud") in (1, 2) and (started or params.get_int("ClusterHudDebug") == 1)
+    return params.get_int("ClusterHud") in (1, 2)
   except Exception:
     return False
 
