@@ -95,6 +95,7 @@ ROAD_STEPS_SURROUND = 96
 ROAD_STEPS_MODEL = 48
 ROAD_STEPS_SIM = 64
 STATIC_LINE_STEPS = 56
+ROAD_EDGE_OFFSET_STEPS = 36
 PLANNED_PATH_FALLBACK_STEPS = 32
 MODEL_PATH_METRIC_SEGMENT_LIMIT = 14
 LANE_MARKING_SHADOW_HEIGHT_M = 0.026
@@ -2122,7 +2123,7 @@ def cached_road_edge_offset_strip_groups(
             cache_lane_width_m,
             cache_start_m,
             cache_end_m,
-            STATIC_LINE_STEPS,
+            ROAD_EDGE_OFFSET_STEPS,
             0.0,
         )
         (layer_strips,) = lane_marking_strip_groups_from_segments(
