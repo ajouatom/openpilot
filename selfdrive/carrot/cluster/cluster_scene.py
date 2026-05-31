@@ -87,6 +87,10 @@ MODEL_LINE_STRIP_GROUP_CACHE_LIMIT = 48
 MODEL_LINE_STRIP_GROUP_CACHE_GRID_M = 0.5
 MODEL_LINE_STRIP_GROUP_CACHE_POINT_GRID_M = 0.05
 MODEL_LINE_STRIP_GROUP_CACHE_COLOR: Color = (0, 0, 0, 0)
+ROAD_EDGE_OFFSET_STRIP_CACHE_LIMIT = 48
+ROAD_EDGE_OFFSET_STRIP_CACHE_OFFSET_GRID = 0.01
+ROAD_EDGE_OFFSET_STRIP_CACHE_STEERING_GRID = 0.002
+ROAD_EDGE_OFFSET_STRIP_CACHE_LANE_WIDTH_GRID_M = 0.02
 ROAD_STEPS_SURROUND = 96
 ROAD_STEPS_MODEL = 48
 ROAD_STEPS_SIM = 64
@@ -215,6 +219,18 @@ ModelLineStripCacheKey = tuple[
     ModelLineStripGeometrySpecs,
 ]
 _MODEL_LINE_STRIP_GROUP_CACHE: OrderedDict[ModelLineStripCacheKey, ModelLineStripGroups] = OrderedDict()
+RoadEdgeOffsetLayerGeometrySpecs = tuple[tuple[int, float, float], ...]
+RoadEdgeOffsetStripGroups = tuple[tuple[MeshStrip, ...], ...]
+RoadEdgeOffsetStripCacheKey = tuple[
+    float,
+    float,
+    float,
+    float,
+    float,
+    float,
+    RoadEdgeOffsetLayerGeometrySpecs,
+]
+_ROAD_EDGE_OFFSET_STRIP_CACHE: OrderedDict[RoadEdgeOffsetStripCacheKey, RoadEdgeOffsetStripGroups] = OrderedDict()
 
 
 @dataclass(frozen=True, slots=True)
@@ -863,6 +879,10 @@ def model_line_cache_start_m(start_m: float) -> float:
 def model_line_cache_end_m(end_m: float) -> float:
     grid_m = MODEL_LINE_STRIP_GROUP_CACHE_GRID_M
     return math.ceil(end_m / grid_m) * grid_m
+
+
+def cache_grid_value(value: float, grid_m: float) -> float:
+    return round(value / grid_m) * grid_m
 
 
 def model_line_cache_point_key(model_points: tuple[ModelPathPoint, ...]) -> ModelLineStripPointKey:
@@ -2040,6 +2060,10 @@ def road_edge_layer_specs(layers: tuple[RoadEdgeLayer, ...]) -> tuple[tuple[int,
     return tuple((width_px, color, height_m) for width_px, color, height_m, _ in layers)
 
 
+def road_edge_layer_geometry_specs(layers: tuple[RoadEdgeLayer, ...]) -> RoadEdgeOffsetLayerGeometrySpecs:
+    return tuple((width_px, height_m, lateral_offset_m) for width_px, _, height_m, lateral_offset_m in layers)
+
+
 def road_edge_model_points_for_render(model_points: tuple[ModelPathPoint, ...]) -> tuple[ModelPathPoint, ...]:
     point_count = len(model_points)
     if point_count <= ROAD_EDGE_MODEL_POINT_LIMIT:
@@ -2054,6 +2078,64 @@ def road_edge_model_points_for_render(model_points: tuple[ModelPathPoint, ...]) 
         selected.append(model_points[index])
         previous_index = index
     return tuple(selected)
+
+
+def cached_road_edge_offset_strip_groups(
+    offset: float,
+    steering: float,
+    lane_width_m: float,
+    side: float,
+    start_m: float,
+    end_m: float,
+    layers: tuple[RoadEdgeLayer, ...],
+) -> RoadEdgeOffsetStripGroups:
+    cache_offset = cache_grid_value(offset, ROAD_EDGE_OFFSET_STRIP_CACHE_OFFSET_GRID)
+    cache_steering = cache_grid_value(steering, ROAD_EDGE_OFFSET_STRIP_CACHE_STEERING_GRID)
+    cache_lane_width_m = max(
+        0.1,
+        cache_grid_value(lane_width_m, ROAD_EDGE_OFFSET_STRIP_CACHE_LANE_WIDTH_GRID_M),
+    )
+    cache_side = -1.0 if side < 0.0 else 1.0
+    cache_start_m = model_line_cache_start_m(start_m)
+    cache_end_m = model_line_cache_end_m(end_m)
+    geometry_specs = road_edge_layer_geometry_specs(layers)
+    key = (
+        cache_offset,
+        cache_steering,
+        cache_lane_width_m,
+        cache_side,
+        cache_start_m,
+        cache_end_m,
+        geometry_specs,
+    )
+    cached = _ROAD_EDGE_OFFSET_STRIP_CACHE.get(key)
+    if cached is not None:
+        _ROAD_EDGE_OFFSET_STRIP_CACHE.move_to_end(key)
+        return cached
+
+    strip_groups: list[tuple[MeshStrip, ...]] = []
+    for width_px, height_m, lateral_offset_m in geometry_specs:
+        layer_offset = cache_offset + cache_side * lateral_offset_m / cache_lane_width_m
+        centerline = lane_centerline(
+            layer_offset,
+            cache_steering,
+            cache_lane_width_m,
+            cache_start_m,
+            cache_end_m,
+            STATIC_LINE_STEPS,
+            0.0,
+        )
+        (layer_strips,) = lane_marking_strip_groups_from_segments(
+            (centerline,),
+            ((width_px, MODEL_LINE_STRIP_GROUP_CACHE_COLOR, height_m),),
+        )
+        strip_groups.append(layer_strips)
+
+    groups = tuple(strip_groups)
+    _ROAD_EDGE_OFFSET_STRIP_CACHE[key] = groups
+    while len(_ROAD_EDGE_OFFSET_STRIP_CACHE) > ROAD_EDGE_OFFSET_STRIP_CACHE_LIMIT:
+        _ROAD_EDGE_OFFSET_STRIP_CACHE.popitem(last=False)
+    return groups
 
 
 def road_edge_model_strips(
@@ -2097,24 +2179,20 @@ def road_edge_offset_strips(
     theme: ClusterTheme = LIGHT_CLUSTER_THEME,
 ) -> tuple[MeshStrip, ...]:
     layers = road_edge_3d_layers(color, theme)
-    strips: list[MeshStrip] = []
-    for width_px, layer_color, height_m, lateral_offset_m in layers:
-        layer_offset = offset + side * lateral_offset_m / max(0.1, lane_width_m)
-        centerline = lane_centerline(
-            layer_offset,
-            steering,
-            lane_width_m,
-            start_m,
-            end_m,
-            STATIC_LINE_STEPS,
-            0.0,
-        )
-        (layer_strips,) = lane_marking_strip_groups_from_segments(
-            (centerline,),
-            ((width_px, layer_color, height_m),),
-        )
-        strips.extend(layer_strips)
-    return tuple(strips)
+    groups = cached_road_edge_offset_strip_groups(
+        offset,
+        steering,
+        lane_width_m,
+        side,
+        start_m,
+        end_m,
+        layers,
+    )
+    return tuple(
+        MeshStrip(strip.left, strip.right, layer_color, strip.x_offset_m)
+        for group, (_, layer_color, _, _) in zip(groups, layers)
+        for strip in group
+    )
 
 
 def vehicle_color_for_source(
