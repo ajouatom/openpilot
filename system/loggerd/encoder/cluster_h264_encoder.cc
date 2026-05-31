@@ -26,6 +26,12 @@
 
 namespace {
 
+// Qualcomm msm_vidc color metadata values used by the Android RGBA8888
+// encoder path. They are not present in the local generated v4l2 header.
+constexpr int MSM_VIDC_BT601_6_525 = 6;
+constexpr int MSM_VIDC_TRANSFER_601_6_525 = 6;
+constexpr int MSM_VIDC_MATRIX_601_6_525 = 6;
+
 std::string fourcc_to_string(uint32_t value) {
   char text[5] = {
     static_cast<char>(value & 0xff),
@@ -414,6 +420,17 @@ void ClusterH264Encoder::set_controls() {
   };
   for (const NamedControl &control : controls) {
     set_control(control.id, control.value, control.name);
+  }
+
+  if (input_is_rgb4()) {
+    try_control(V4L2_CID_MPEG_VIDC_VIDEO_COLOR_SPACE, MSM_VIDC_BT601_6_525, "rgb4-color-space-bt601-525");
+    try_control(
+        V4L2_CID_MPEG_VIDC_VIDEO_FULL_RANGE,
+        V4L2_CID_MPEG_VIDC_VIDEO_FULL_RANGE_DISABLE,
+        "rgb4-full-range-disable");
+    try_control(V4L2_CID_MPEG_VIDC_VIDEO_TRANSFER_CHARS, MSM_VIDC_TRANSFER_601_6_525, "rgb4-transfer-601-525");
+    try_control(V4L2_CID_MPEG_VIDC_VIDEO_MATRIX_COEFFS, MSM_VIDC_MATRIX_601_6_525, "rgb4-matrix-601-525");
+    try_control(V4L2_CID_MPEG_VIDC_VIDEO_VPE_CSC, V4L2_CID_MPEG_VIDC_VIDEO_VPE_CSC_ENABLE, "rgb4-vpe-csc-enable");
   }
 
   if (config_.slice_max_bytes > 0) {
