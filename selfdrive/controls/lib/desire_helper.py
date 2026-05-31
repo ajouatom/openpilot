@@ -66,6 +66,8 @@ class DesireHelper:
     self.lane_change_available_left = False
     self.lane_change_available_right = False
 
+    self.lane_change_completed_on_blinker = False
+
   # ─────────────────────────────────────────────
   def _update_params_periodic(self):
     if self.frame % 100 == 0:
@@ -229,6 +231,9 @@ class DesireHelper:
     desire_enabled = driver_enabled or atc_enabled
     blinker_state  = driver_st if driver_enabled else atc_st
 
+    if not desire_enabled:
+      self.lane_change_completed_on_blinker = False
+      
     # 이미 차선 변경 플래그가 살아서 움직이는 중이라면, 깜빡이 OFF와 무관하게 기존 진행 방향의 side를 유지
     if self.lane_change_state in (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing):
       side = self.left if self.lane_change_direction == LaneChangeDirection.left else self.right
@@ -333,15 +338,15 @@ class DesireHelper:
 
         # ── off 상태 ──────────────────────────────────────────────
         if self.lane_change_state == LaneChangeState.off:
-          if driver_enabled:
-            reentry = not self.prev_desire_enabled
-          else:
-            # 내비게이션(ATC) 등 자동 제어일 때만 기존 재시도 로직 유지
-            reentry = (
-              not self.prev_desire_enabled or   
-              avail_just_cleared or              
-              avail_retry                        
-            )
+          reentry = (
+            not self.prev_desire_enabled or   
+            avail_just_cleared or              
+            avail_retry                        
+          )
+
+          # 이미 한 번 완료했다면 깜빡이를 새로 켜기 전까지 재진입 차단!
+          if driver_enabled and self.lane_change_completed_on_blinker:
+            reentry = False
 
           if desire_enabled and reentry and not below_lane_change_speed and side is not None:
             self.lane_change_state   = LaneChangeState.preLaneChange
@@ -462,6 +467,7 @@ class DesireHelper:
             self.lane_change_direction = LaneChangeDirection.none
             self.lane_change_state = LaneChangeState.off
             self.unsafe_cancel_timer = max(self.unsafe_cancel_timer, 0.5)
+            self.lane_change_completed_on_blinker = True
 
     # ── 타이머 ───────────────────────────────────────────────────
     if self.lane_change_state in (LaneChangeState.off, LaneChangeState.preLaneChange):
