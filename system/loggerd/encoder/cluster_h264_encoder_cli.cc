@@ -29,10 +29,13 @@ void usage(const char *prog) {
       << "                          cbr-cfr, mbr-cfr, mbr-vfr, cq. Default vbr-cfr.\n"
       << "  --realtime-priority     Request realtime encoder priority.\n"
       << "  --device PATH           V4L2 encoder device path.\n"
-      << "  --input-format auto|rgb4|nv12\n"
+      << "  --input-format auto|rgb4|nv12|bgr4|ar24|ab24|ra24|ba24|rx24|bx24|xr24|xb24\n"
       << "                          Hardware input format. Default auto.\n"
-      << "  --rgb4-layout axrgb|rgba|bgra\n"
+      << "  --rgb4-layout axrgb|rgba|bgra|abgr\n"
       << "                          RGBA to RGB4 byte layout. Default bgra.\n"
+      << "  --no-input-fd          Do not pass the VisionBuf fd in v4l2_plane.reserved[0].\n"
+      << "  --no-rgb4-compression-ratio\n"
+      << "                          Do not pass the RGB4 16.16 compression-ratio hint.\n"
       << "  --debug                 Enable verbose encoder logging.\n";
 }
 
@@ -84,6 +87,15 @@ ClusterH264InputFormat parse_input_format(const std::string &value) {
   if (value == "auto") return ClusterH264InputFormat::Auto;
   if (value == "rgb4") return ClusterH264InputFormat::RGB4;
   if (value == "nv12") return ClusterH264InputFormat::NV12;
+  if (value == "bgr4") return ClusterH264InputFormat::BGR4;
+  if (value == "ar24") return ClusterH264InputFormat::AR24;
+  if (value == "ab24") return ClusterH264InputFormat::AB24;
+  if (value == "ra24") return ClusterH264InputFormat::RA24;
+  if (value == "ba24") return ClusterH264InputFormat::BA24;
+  if (value == "rx24") return ClusterH264InputFormat::RX24;
+  if (value == "bx24") return ClusterH264InputFormat::BX24;
+  if (value == "xr24") return ClusterH264InputFormat::XR24;
+  if (value == "xb24") return ClusterH264InputFormat::XB24;
   throw std::runtime_error("invalid --input-format: " + value);
 }
 
@@ -91,6 +103,7 @@ ClusterH264Rgb4Layout parse_rgb4_layout(const std::string &value) {
   if (value == "axrgb") return ClusterH264Rgb4Layout::AXRGB;
   if (value == "rgba") return ClusterH264Rgb4Layout::RGBA;
   if (value == "bgra") return ClusterH264Rgb4Layout::BGRA;
+  if (value == "abgr") return ClusterH264Rgb4Layout::ABGR;
   throw std::runtime_error("invalid --rgb4-layout: " + value);
 }
 
@@ -210,6 +223,10 @@ int main(int argc, char **argv) {
         config.input_format = parse_input_format(next_value(arg));
       } else if (arg == "--rgb4-layout") {
         config.rgb4_layout = parse_rgb4_layout(next_value(arg));
+      } else if (arg == "--no-input-fd") {
+        config.pass_input_fd = false;
+      } else if (arg == "--no-rgb4-compression-ratio") {
+        config.pass_rgb4_compression_ratio = false;
       } else if (arg == "--debug") {
         config.debug = true;
       } else if (arg == "--help" || arg == "-h") {
@@ -244,6 +261,8 @@ int main(int argc, char **argv) {
               << " input_bytes=" << encoder.input_bytesused()
               << " uv_offset=" << encoder.input_uv_offset()
               << " capture_size=" << encoder.capture_sizeimage()
+              << " pass_fd=" << (config.pass_input_fd ? 1 : 0)
+              << " rgb4_cr=" << (config.pass_rgb4_compression_ratio ? 1 : 0)
               << " device=" << config.device_path
               << std::endl;
 

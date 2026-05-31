@@ -77,12 +77,16 @@ The default V4L2 device is
 defaults to `nv12`, matching the existing loggerd V4L2 encoder path. The device
 also reports RGB4 support, and `--usb-h264-input-format rgb4` remains available
 for direct RGB input tests, but NV12 is the safer compatibility path for the
-TURZX panel. Native NV12 input uses the same Qualcomm/Venus aligned stride,
+TURZX panel. Diagnostic 32-bit RGB aliases (`bgr4`, `ar24`, `ab24`, `ra24`,
+`ba24`, `rx24`, `bx24`, `xr24`, and `xb24`) are accepted by the CLI and native
+bridge so hidden driver aliases can be probed without changing the normal NV12
+path. Native NV12 input uses the same Qualcomm/Venus aligned stride,
 scanline count, and UV offset calculation as camerad, rather than a compact
 width-by-height layout. RGB4 input also honors a larger row stride implied by
 V4L2 `sizeimage` when it disagrees with the reported compact `bytesperline`.
 The default RGB4 byte layout is `bgra`, matching the common little-endian memory
-order for V4L2 `RGB4`. The cluster H264 wrapper emits
+order for V4L2 `RGB4`. Diagnostic layouts also include `abgr` for 32-bit RGB
+aliases that place alpha before B/G/R bytes. The cluster H264 wrapper emits
 inline SPS/PPS on the first video packet and on IDR frames, asks for VBR-CFR
 rate control, constrained Baseline/CAVLC, and VUI timing when the V4L2 driver
 accepts those controls, and
@@ -124,7 +128,8 @@ python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-
 
 The panel should show red/green/blue/white quadrants. If you force
 `--usb-h264-input-format rgb4` and colors are swapped, retry with
-`--usb-h264-rgb4-layout rgba` or `--usb-h264-rgb4-layout axrgb`. If RGB4 itself
+`--usb-h264-rgb4-layout rgba`, `--usb-h264-rgb4-layout axrgb`, or
+`--usb-h264-rgb4-layout abgr`. If RGB4 itself
 looks suspicious, return to the default `--usb-h264-input-format nv12` path.
 `--usb-h264-orientation landscape` tests direct 1920x462 output, while
 `--usb-h264-align 16` deliberately tests macroblock-aligned output such as
@@ -183,9 +188,15 @@ the issue is in the V4L2 input conversion or encoder controls.
 
 Keep `--usb-h264-input-format nv12` for normal native hardware testing. RGB4 is
 only a diagnostic mode on the measured device: it is enumerated by V4L2 and
-byte-layout changes alter the corrupted colors, but dumps are ffprobe-invalid
-and the panel remains corrupted even when RGB4 stride and 32-pixel encoder
-alignment match.
+byte-layout changes alter the corrupted colors, but solid-color dumps decode
+incorrectly even when RGB4 stride, row padding, and 32-pixel encoder alignment
+are removed from the test. `cluster_h264_encoder_cli` also has
+`--no-input-fd` and `--no-rgb4-compression-ratio` for final USERPTR/QBUF
+diagnostics; those switches are not normal runtime settings. The final RGB4
+diagnostic run rejected the hidden 32-bit RGB fourcc aliases with
+`VIDIOC_S_FMT EINVAL`, disabling the input fd produced no encoded packets, and
+disabling only the compression-ratio hint did not change the corrupted RGB4
+output. Treat direct RGB4 USERPTR input as unusable on the measured device.
 
 Manager autostart omits `--fps` by default so live launches follow
 `ClusterHudLiveFps`. JPEG/PNG runs apply setting changes while running; H264

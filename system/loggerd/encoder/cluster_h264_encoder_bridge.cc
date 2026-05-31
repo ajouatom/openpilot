@@ -17,6 +17,15 @@ ClusterH264InputFormat input_format_from_int(int value) {
     case 0: return ClusterH264InputFormat::Auto;
     case 1: return ClusterH264InputFormat::RGB4;
     case 2: return ClusterH264InputFormat::NV12;
+    case 3: return ClusterH264InputFormat::BGR4;
+    case 4: return ClusterH264InputFormat::AR24;
+    case 5: return ClusterH264InputFormat::AB24;
+    case 6: return ClusterH264InputFormat::RA24;
+    case 7: return ClusterH264InputFormat::BA24;
+    case 8: return ClusterH264InputFormat::RX24;
+    case 9: return ClusterH264InputFormat::BX24;
+    case 10: return ClusterH264InputFormat::XR24;
+    case 11: return ClusterH264InputFormat::XB24;
   }
   throw std::runtime_error("invalid input format");
 }
@@ -26,6 +35,7 @@ ClusterH264Rgb4Layout rgb4_layout_from_int(int value) {
     case 0: return ClusterH264Rgb4Layout::AXRGB;
     case 1: return ClusterH264Rgb4Layout::RGBA;
     case 2: return ClusterH264Rgb4Layout::BGRA;
+    case 3: return ClusterH264Rgb4Layout::ABGR;
   }
   throw std::runtime_error("invalid RGB4 layout");
 }

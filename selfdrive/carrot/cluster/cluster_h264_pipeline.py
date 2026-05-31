@@ -24,8 +24,21 @@ DEFAULT_H264_SLICE_MAX_BYTES = 4096
 DEFAULT_H264_ENCODER_ALIGN = 16
 DEFAULT_H264_RATE_CONTROL = "vbr-cfr"
 
-NATIVE_INPUT_FORMATS = {"auto": 0, "rgb4": 1, "nv12": 2}
-NATIVE_RGB4_LAYOUTS = {"axrgb": 0, "rgba": 1, "bgra": 2}
+NATIVE_INPUT_FORMATS = {
+    "auto": 0,
+    "rgb4": 1,
+    "nv12": 2,
+    "bgr4": 3,
+    "ar24": 4,
+    "ab24": 5,
+    "ra24": 6,
+    "ba24": 7,
+    "rx24": 8,
+    "bx24": 9,
+    "xr24": 10,
+    "xb24": 11,
+}
+NATIVE_RGB4_LAYOUTS = {"axrgb": 0, "rgba": 1, "bgra": 2, "abgr": 3}
 NATIVE_RATE_CONTROLS = {
     "off": 0,
     "vbr-vfr": 1,

@@ -1042,16 +1042,19 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--usb-h264-input-format",
-        choices=("auto", "rgb4", "nv12"),
+        choices=(
+            "auto", "rgb4", "nv12", "bgr4", "ar24", "ab24",
+            "ra24", "ba24", "rx24", "bx24", "xr24", "xb24",
+        ),
         default="nv12",
         help=(
             "Hardware encoder input format. Default nv12 follows the existing loggerd V4L2 path; "
-            "rgb4 remains available for direct RGB input compatibility tests."
+            "32-bit RGB fourcc values remain available for direct RGB input compatibility tests."
         ),
     )
     parser.add_argument(
         "--usb-h264-rgb4-layout",
-        choices=("axrgb", "rgba", "bgra"),
+        choices=("axrgb", "rgba", "bgra", "abgr"),
         default="bgra",
         help="Byte layout used when feeding RGBA readback into V4L2 RGB4 input.",
     )
