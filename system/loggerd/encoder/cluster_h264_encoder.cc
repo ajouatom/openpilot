@@ -32,6 +32,13 @@ constexpr int MSM_VIDC_BT601_6_525 = 6;
 constexpr int MSM_VIDC_TRANSFER_601_6_525 = 6;
 constexpr int MSM_VIDC_MATRIX_601_6_525 = 6;
 
+size_t align_up(size_t value, size_t alignment) {
+  if (alignment == 0) {
+    return value;
+  }
+  return ((value + alignment - 1) / alignment) * alignment;
+}
+
 std::string fourcc_to_string(uint32_t value) {
   char text[5] = {
     static_cast<char>(value & 0xff),
@@ -330,6 +337,12 @@ void ClusterH264Encoder::configure_formats() {
                                   V4L2_COLORSPACE_SRGB :
                                   V4L2_COLORSPACE_470_SYSTEM_BG;
   if (selected_input_format == rgb4) {
+    const size_t rgb_stride = align_up(static_cast<size_t>(config_.width) * 4, 128);
+    const size_t rgb_scanlines = align_up(static_cast<size_t>(config_.height), 32);
+    const size_t rgb_sizeimage = align_up(rgb_stride * rgb_scanlines, 4096);
+    fmt_in.fmt.pix_mp.num_planes = 1;
+    fmt_in.fmt.pix_mp.plane_fmt[0].bytesperline = static_cast<unsigned int>(rgb_stride);
+    fmt_in.fmt.pix_mp.plane_fmt[0].sizeimage = static_cast<unsigned int>(rgb_sizeimage);
     try_v4l2_control(
         fd_,
         V4L2_CID_MPEG_VIDC_VIDEO_COLOR_SPACE,
@@ -398,6 +411,9 @@ void ClusterH264Encoder::configure_formats() {
     input_bytesused_ = std::max({input_sizeimage_, min_bytesused, static_cast<size_t>(venus_size)});
   } else {
     const size_t min_stride = static_cast<size_t>(config_.width) * 4;
+    const size_t venus_rgb_stride = align_up(min_stride, 128);
+    const size_t venus_rgb_scanlines = align_up(static_cast<size_t>(config_.height), 32);
+    const size_t venus_rgb_size = align_up(venus_rgb_stride * venus_rgb_scanlines, 4096);
     size_t sizeimage_stride = 0;
     if (config_.height > 0 && input_sizeimage_ > 0 && input_sizeimage_ % static_cast<size_t>(config_.height) == 0) {
       sizeimage_stride = input_sizeimage_ / static_cast<size_t>(config_.height);
@@ -405,9 +421,10 @@ void ClusterH264Encoder::configure_formats() {
     // Some msm_vidc RGB4 formats report compact bytesperline while sizeimage
     // implies a wider aligned row. Prefer the larger stride to avoid packing
     // rows more tightly than the encoder consumes.
-    input_stride_ = std::max({driver_stride, min_stride, sizeimage_stride});
+    input_stride_ = std::max({driver_stride, min_stride, venus_rgb_stride, sizeimage_stride});
+    input_y_scanlines_ = venus_rgb_scanlines;
     input_uv_offset_ = 0;
-    input_bytesused_ = std::max(input_sizeimage_, input_stride_ * static_cast<size_t>(config_.height));
+    input_bytesused_ = std::max({input_sizeimage_, input_stride_ * input_y_scanlines_, venus_rgb_size});
   }
   capture_sizeimage_ = fmt_out.fmt.pix_mp.plane_fmt[0].sizeimage;
   if (capture_sizeimage_ == 0) {
