@@ -16,6 +16,9 @@ from cluster_config import (
     CLUSTER_RADAR_DISPLAY_PARAM,
     CLUSTER_RADAR_INFO_PARAM,
     CLUSTER_RADAR_SOURCE_COLOR_PARAM,
+    CLUSTER_SCREEN_MODE_DEBUG,
+    CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+    CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
     CLUSTER_SCREEN_MODE_PARAM,
     CLUSTER_THEME_PARAM,
     DESIGN_HEIGHT,
@@ -67,6 +70,14 @@ BRIGHTNESS_RESEND_SECONDS = 5.0
 SCREEN_MODE_PARAM_POLL_SECONDS = 1.0
 RADAR_PARAM_POLL_SECONDS = 1.0
 HUD_MODE_PARAM_POLL_SECONDS = 1.0
+
+
+def live_debug_panel_enabled(screen_mode: int) -> bool:
+    return screen_mode == CLUSTER_SCREEN_MODE_DEBUG
+
+
+def live_debug_plot_enabled(screen_mode: int) -> bool:
+    return screen_mode in (CLUSTER_SCREEN_MODE_DEBUG_GRAPH, CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT)
 
 
 def resolved_usb_display_fps(
@@ -511,6 +522,10 @@ def run_demo(
     live_source = OpenpilotLiveSource(include_can=live_include_can, timeout_ms=live_timeout_ms) if input_mode == "live" else None
     if live_source is not None:
         live_source.set_profile_enabled(profile_render)
+        live_source.set_debug_panels_enabled(
+            live_debug=live_debug_panel_enabled(active_screen_mode),
+            debug_plot=live_debug_plot_enabled(active_screen_mode),
+        )
     route_source = None
     if input_mode == "route":
         profile_stage = time.perf_counter()
@@ -616,6 +631,11 @@ def run_demo(
                         flush=True,
                     )
                     renderer.set_screen_mode(next_screen_mode)
+                    if live_source is not None:
+                        live_source.set_debug_panels_enabled(
+                            live_debug=live_debug_panel_enabled(next_screen_mode),
+                            debug_plot=live_debug_plot_enabled(next_screen_mode),
+                        )
                 next_screen_mode_param_read = now + SCREEN_MODE_PARAM_POLL_SECONDS
             if now >= next_radar_param_read:
                 next_radar_info_mode = radar_info_param_reader.read()
