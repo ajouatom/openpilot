@@ -85,6 +85,7 @@ VEHICLE_BADGE_TTC_S = 9.9
 VEHICLE_BADGE_ACCEL_MPS2 = 1.0
 MODEL_LINE_STRIP_GROUP_CACHE_LIMIT = 48
 MODEL_LINE_STRIP_GROUP_CACHE_GRID_M = 0.5
+MODEL_LINE_STRIP_GROUP_CACHE_POINT_GRID_M = 0.05
 MODEL_LINE_STRIP_GROUP_CACHE_COLOR: Color = (0, 0, 0, 0)
 ROAD_STEPS_SURROUND = 96
 ROAD_STEPS_MODEL = 48
@@ -203,11 +204,16 @@ class PathBlocker:
 
 ModelLineStripGroups = tuple[tuple[MeshStrip, ...], ...] | None
 ModelLineStripGeometrySpecs = tuple[tuple[int, float], ...]
-ModelLineStripCacheKey = tuple[int, float, float, str, bool, ModelLineStripGeometrySpecs]
-_MODEL_LINE_STRIP_GROUP_CACHE: OrderedDict[
-    ModelLineStripCacheKey,
-    tuple[tuple[ModelPathPoint, ...], ModelLineStripGroups],
-] = OrderedDict()
+ModelLineStripPointKey = tuple[tuple[int, int], ...]
+ModelLineStripCacheKey = tuple[
+    ModelLineStripPointKey,
+    float,
+    float,
+    str,
+    bool,
+    ModelLineStripGeometrySpecs,
+]
+_MODEL_LINE_STRIP_GROUP_CACHE: OrderedDict[ModelLineStripCacheKey, ModelLineStripGroups] = OrderedDict()
 
 
 @dataclass(frozen=True, slots=True)
@@ -858,6 +864,17 @@ def model_line_cache_end_m(end_m: float) -> float:
     return math.ceil(end_m / grid_m) * grid_m
 
 
+def model_line_cache_point_key(model_points: tuple[ModelPathPoint, ...]) -> ModelLineStripPointKey:
+    grid_scale = 1.0 / MODEL_LINE_STRIP_GROUP_CACHE_POINT_GRID_M
+    return tuple(
+        (
+            round(point.forward_m * grid_scale),
+            round(point.lateral_m * grid_scale),
+        )
+        for point in model_points
+    )
+
+
 def cached_model_line_strip_groups(
     model_points: tuple[ModelPathPoint, ...],
     start_m: float,
@@ -870,7 +887,7 @@ def cached_model_line_strip_groups(
     cache_end_m = model_line_cache_end_m(end_m)
     geometry_specs = model_line_geometry_specs(specs)
     key = (
-        id(model_points),
+        model_line_cache_point_key(model_points),
         cache_start_m,
         cache_end_m,
         style,
@@ -878,11 +895,9 @@ def cached_model_line_strip_groups(
         geometry_specs,
     )
     cached = _MODEL_LINE_STRIP_GROUP_CACHE.get(key)
-    if cached is not None and cached[0] is model_points:
-        _MODEL_LINE_STRIP_GROUP_CACHE.move_to_end(key)
-        return cached[1]
     if cached is not None:
-        del _MODEL_LINE_STRIP_GROUP_CACHE[key]
+        _MODEL_LINE_STRIP_GROUP_CACHE.move_to_end(key)
+        return cached
 
     centerline = model_line_centerline(model_points, cache_start_m, cache_end_m, 0.0)
     if len(centerline) < 2:
@@ -896,7 +911,7 @@ def cached_model_line_strip_groups(
             style,
         )
 
-    _MODEL_LINE_STRIP_GROUP_CACHE[key] = (model_points, groups)
+    _MODEL_LINE_STRIP_GROUP_CACHE[key] = groups
     while len(_MODEL_LINE_STRIP_GROUP_CACHE) > MODEL_LINE_STRIP_GROUP_CACHE_LIMIT:
         _MODEL_LINE_STRIP_GROUP_CACHE.popitem(last=False)
     return groups
