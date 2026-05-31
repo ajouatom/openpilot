@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from collections.abc import Iterator
 from contextlib import contextmanager
 from functools import lru_cache
@@ -119,6 +120,7 @@ SYSTEM_PANEL_Y = 118
 SYSTEM_PANEL_W = 476
 SYSTEM_STATS_REFRESH_SECONDS = 1.0
 TEXT_MEASURE_CACHE_LIMIT = 1024
+TRIANGLE_STRIP_POINT_CACHE_LIMIT = 256
 DEBUG_PLOT_MAX_SAMPLES = 360
 DEBUG_PLOT_SAMPLE_SECONDS = 0.05
 DEBUG_PLOT_MARGIN = 18.0
@@ -358,8 +360,10 @@ class ClusterUiRenderer:
         self._route_video_frame_id: str | None = None
         self._left_turn_signal_started_at: float | None = None
         self._right_turn_signal_started_at: float | None = None
-        self._triangle_strip_points = None
-        self._triangle_strip_capacity = 0
+        self._triangle_strip_point_cache: OrderedDict[
+            tuple[int, int, float],
+            tuple[tuple[Vec3, ...], tuple[Vec3, ...], float, object, int],
+        ] = OrderedDict()
         self._text_measure_cache: dict[tuple[int, str, float, float], tuple[float, float]] = {}
         self._system_stats = SystemStatsSampler(SYSTEM_STATS_REFRESH_SECONDS)
         self._debug_plot_mode_prev = -1
@@ -979,27 +983,10 @@ class ClusterUiRenderer:
         x_offset_m = strip.x_offset_m
 
         if hasattr(rl, "draw_triangle_strip_3d"):
-            point_count = count * 2
-            if self._triangle_strip_capacity < point_count:
-                self._triangle_strip_points = rl.ffi.new("struct Vector3[]", point_count)
-                self._triangle_strip_capacity = point_count
-            points = self._triangle_strip_points
-
-            for index in range(count):
-                left = strip.left[index]
-                right = strip.right[index]
-
-                points[index * 2].x = left.x + x_offset_m
-                points[index * 2].y = left.y
-                points[index * 2].z = left.z
-
-                points[index * 2 + 1].x = right.x + x_offset_m
-                points[index * 2 + 1].y = right.y
-                points[index * 2 + 1].z = right.z
-
+            points, point_count = self._triangle_strip_points_for(strip, count)
             rl.draw_triangle_strip_3d(
                 rl.ffi.cast("struct Vector3 *", points),
-                count * 2,
+                point_count,
                 color,
             )
             return
@@ -1015,6 +1002,41 @@ class ClusterUiRenderer:
             right_far = rl.Vector3(next_right.x + x_offset_m, next_right.y, next_right.z)
             rl.draw_triangle_3d(left_near, right_near, right_far, color)
             rl.draw_triangle_3d(left_near, right_far, left_far, color)
+
+    def _triangle_strip_points_for(self, strip: MeshStrip, count: int):
+        key = (id(strip.left), id(strip.right), strip.x_offset_m)
+        cached = self._triangle_strip_point_cache.get(key)
+        if cached is not None:
+            left_ref, right_ref, x_offset_m, points, point_count = cached
+            if left_ref is strip.left and right_ref is strip.right and x_offset_m == strip.x_offset_m:
+                self._triangle_strip_point_cache.move_to_end(key)
+                return points, point_count
+
+        point_count = count * 2
+        points = rl.ffi.new("struct Vector3[]", point_count)
+        x_offset_m = strip.x_offset_m
+        for index in range(count):
+            left = strip.left[index]
+            right = strip.right[index]
+
+            points[index * 2].x = left.x + x_offset_m
+            points[index * 2].y = left.y
+            points[index * 2].z = left.z
+
+            points[index * 2 + 1].x = right.x + x_offset_m
+            points[index * 2 + 1].y = right.y
+            points[index * 2 + 1].z = right.z
+
+        self._triangle_strip_point_cache[key] = (
+            strip.left,
+            strip.right,
+            strip.x_offset_m,
+            points,
+            point_count,
+        )
+        while len(self._triangle_strip_point_cache) > TRIANGLE_STRIP_POINT_CACHE_LIMIT:
+            self._triangle_strip_point_cache.popitem(last=False)
+        return points, point_count
 
     def _draw_vehicle(self, vehicle: VehicleBox) -> None:
         source_marker = vehicle.source.startswith("modelV2") or vehicle.source in ("radarState", "radarPoint")
