@@ -779,6 +779,8 @@ class H264UsbPipeline:
         self._native_input_uv_scanlines = 0
         self._native_input_uv_offset = 0
         self._native_input_bytesused = 0
+        self._native_input_active_bytes = 0
+        self._native_has_active_nv12 = False
         self._packet_queue: queue.Queue[Any] | None = None
         self._condition = threading.Condition()
         self._closing = False
@@ -877,12 +879,16 @@ class H264UsbPipeline:
         input_sizeimage = self._native_size_value("cluster_h264_encoder_bridge_input_sizeimage")
         input_uv_offset = self._native_size_value("cluster_h264_encoder_bridge_input_uv_offset")
         input_bytesused = self._native_size_value("cluster_h264_encoder_bridge_input_bytesused")
+        input_active_bytes = self._native_size_value("cluster_h264_encoder_bridge_input_active_bytes")
+        if input_active_bytes <= 0:
+            input_active_bytes = int(input_uv_offset) + int(input_stride) * int(input_uv_scanlines)
         capture_sizeimage = self._native_size_value("cluster_h264_encoder_bridge_capture_sizeimage")
         self._native_input_stride = int(input_stride)
         self._native_input_y_scanlines = int(input_y_scanlines)
         self._native_input_uv_scanlines = int(input_uv_scanlines)
         self._native_input_uv_offset = int(input_uv_offset)
         self._native_input_bytesused = int(input_bytesused)
+        self._native_input_active_bytes = int(input_active_bytes)
         print(
             "Starting H264 USB native hardware encoder: "
             f"{self.width}x{self.height}@{self.fps} "
@@ -892,7 +898,8 @@ class H264UsbPipeline:
             f"realtime_priority={'on' if self.realtime_priority else 'off'} packetize=access-unit "
             f"input={input_name or self.input_format} stride={input_stride} "
             f"scanlines={input_y_scanlines}/{input_uv_scanlines} "
-            f"input_size={input_sizeimage} input_bytes={input_bytesused} uv_offset={input_uv_offset} "
+            f"input_size={input_sizeimage} input_bytes={input_bytesused} "
+            f"active_bytes={input_active_bytes} uv_offset={input_uv_offset} "
             f"capture_size={capture_sizeimage} "
             f"device={self.device_path} "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')}"
@@ -1106,12 +1113,17 @@ class H264UsbPipeline:
             ) from exc
 
         byte_count = self._native_input_bytesused
+        active_count = self._native_input_active_bytes
         if byte_count <= 0:
             raise RuntimeError("native H264 encoder did not report NV12 input bytesused")
         view = memoryview(nv12)
+        use_active = False
         if view.nbytes < byte_count:
+            use_active = self._native_has_active_nv12 and active_count > 0 and view.nbytes >= active_count
+        if view.nbytes < byte_count and not use_active:
             raise RuntimeError(
                 f"H264 encoder NV12 input is {view.nbytes} bytes, expected at least {byte_count}"
+                + (f" or active {active_count}" if self._native_has_active_nv12 and active_count > 0 else "")
             )
         if not view.contiguous:
             raise RuntimeError("H264 encoder NV12 input must be contiguous")
@@ -1123,10 +1135,23 @@ class H264UsbPipeline:
             raise RuntimeError("H264 encoder NV12 input must expose a writable buffer") from exc
 
         timestamp_us = self._native_frame_index * 1000000 // self.fps
-        result = encode_nv12(
+        encode_fn = encode_nv12
+        encode_size = byte_count
+        sample_name = "usb_h264.native_encode_nv12"
+        if use_active:
+            try:
+                encode_fn = lib.cluster_h264_encoder_bridge_encode_nv12_active
+            except AttributeError as exc:
+                raise RuntimeError(
+                    "native H264 library does not expose active NV12 input; rebuild "
+                    "system/loggerd/libcluster_h264_encoder_bridge.so"
+                ) from exc
+            encode_size = active_count
+            sample_name = "usb_h264.native_encode_nv12_active"
+        result = encode_fn(
             handle,
             ctypes.c_void_p(data_ptr),
-            byte_count,
+            encode_size,
             timestamp_us,
             self._native_callback,
             None,
@@ -1135,7 +1160,7 @@ class H264UsbPipeline:
             raise RuntimeError(self._native_error_text("native H264 NV12 encode failed"))
         self._native_frame_index += 1
         self._add_native_timing_samples(lib, handle)
-        self._add_sample("usb_h264.native_encode_nv12", profile_stage)
+        self._add_sample(sample_name, profile_stage)
         self.check_error()
 
     def build_nv12_color_test_pattern(self) -> bytearray:
@@ -1185,6 +1210,13 @@ class H264UsbPipeline:
             self._native_input_uv_offset,
             self._native_input_bytesused,
         )
+
+    def native_nv12_render_layout(self) -> tuple[int, int, int, int, int, int, bool]:
+        stride, y_scanlines, uv_scanlines, uv_offset, input_bytes = self.native_nv12_layout()
+        active_bytes = self._native_input_active_bytes or (uv_offset + stride * uv_scanlines)
+        use_active = self._native_has_active_nv12 and 0 < active_bytes < input_bytes
+        render_bytes = active_bytes if use_active else input_bytes
+        return stride, y_scanlines, uv_scanlines, uv_offset, input_bytes, render_bytes, use_active
 
     def _encoder_rgba(self, rgba: Any, width: int, height: int) -> Any:
         if self.encoder_width == width and self.encoder_height == height:
@@ -1755,6 +1787,21 @@ class H264UsbPipeline:
                 ctypes.c_void_p,
             ]
             encode_nv12.restype = ctypes.c_int
+        try:
+            encode_nv12_active = lib.cluster_h264_encoder_bridge_encode_nv12_active
+        except AttributeError:
+            self._native_has_active_nv12 = False
+        else:
+            encode_nv12_active.argtypes = [
+                ctypes.c_void_p,
+                ctypes.c_void_p,
+                ctypes.c_size_t,
+                ctypes.c_uint64,
+                NativePacketCallback,
+                ctypes.c_void_p,
+            ]
+            encode_nv12_active.restype = ctypes.c_int
+            self._native_has_active_nv12 = True
         lib.cluster_h264_encoder_bridge_drain.argtypes = [
             ctypes.c_void_p,
             ctypes.c_int,
@@ -1778,6 +1825,7 @@ class H264UsbPipeline:
             "cluster_h264_encoder_bridge_input_sizeimage",
             "cluster_h264_encoder_bridge_input_uv_offset",
             "cluster_h264_encoder_bridge_input_bytesused",
+            "cluster_h264_encoder_bridge_input_active_bytes",
             "cluster_h264_encoder_bridge_capture_sizeimage",
         ):
             try:

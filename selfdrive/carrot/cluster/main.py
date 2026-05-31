@@ -554,7 +554,7 @@ def run_demo(
     h264_test_pattern_rgba: bytearray | None = None
     h264_test_pattern_nv12: bytearray | None = None
     h264_render_nv12_buffer: bytearray | None = None
-    h264_render_nv12_layout: tuple[int, int, int, int, int] | None = None
+    h264_render_nv12_layout: tuple[int, int, int, int, int, int, bool] | None = None
 
     try:
         renderer.open(hidden=output_mode == "usb")
@@ -593,13 +593,14 @@ def run_demo(
             profile.add_samples(usb_display.profile_samples())
             usb_display.clear_profile_samples()
             if usb_h264_render_nv12:
-                h264_render_nv12_layout = h264_pipeline.native_nv12_layout()
-                stride, y_scanlines, uv_scanlines, uv_offset, input_bytes = h264_render_nv12_layout
+                h264_render_nv12_layout = h264_pipeline.native_nv12_render_layout()
+                stride, y_scanlines, uv_scanlines, uv_offset, input_bytes, render_bytes, active_submit = h264_render_nv12_layout
                 print(
                     f"Using H264 GPU NV12 render path: "
                     f"{h264_pipeline.encoder_width}x{h264_pipeline.encoder_height} "
                     f"stride={stride} scanlines={y_scanlines}/{uv_scanlines} "
-                    f"uv_offset={uv_offset} bytes={input_bytes} "
+                    f"uv_offset={uv_offset} bytes={input_bytes} render_bytes={render_bytes} "
+                    f"active_submit={'on' if active_submit else 'off'} "
                     f"flip_x={'on' if usb_h264_render_nv12_flip_x else 'off'}",
                     flush=True,
                 )
@@ -864,7 +865,7 @@ def run_demo(
                         if usb_h264_render_nv12:
                             if h264_render_nv12_layout is None:
                                 raise RuntimeError("H264 GPU NV12 render path is missing the native layout")
-                            stride, y_scanlines, uv_scanlines, uv_offset, input_bytes = h264_render_nv12_layout
+                            stride, y_scanlines, uv_scanlines, uv_offset, input_bytes, render_bytes, _ = h264_render_nv12_layout
                             profile_stage = time.perf_counter()
                             with renderer.render_to_nv12_buffer(
                                 state,
@@ -874,7 +875,7 @@ def run_demo(
                                 y_scanlines,
                                 uv_scanlines,
                                 uv_offset,
-                                input_bytes,
+                                render_bytes,
                                 h264_render_nv12_buffer,
                                 flip_x=usb_h264_render_nv12_flip_x,
                             ) as h264_render_nv12_frame:

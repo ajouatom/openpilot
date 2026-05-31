@@ -76,6 +76,8 @@ public:
   void encode_rgba(const uint8_t *rgba, size_t rgba_size, uint64_t timestamp_us, const ClusterH264PacketCallback &on_packet);
   std::vector<ClusterH264Packet> encode_nv12(const uint8_t *nv12, size_t nv12_size, uint64_t timestamp_us);
   void encode_nv12(const uint8_t *nv12, size_t nv12_size, uint64_t timestamp_us, const ClusterH264PacketCallback &on_packet);
+  std::vector<ClusterH264Packet> encode_nv12_active(const uint8_t *nv12, size_t nv12_size, uint64_t timestamp_us);
+  void encode_nv12_active(const uint8_t *nv12, size_t nv12_size, uint64_t timestamp_us, const ClusterH264PacketCallback &on_packet);
   std::vector<ClusterH264Packet> drain(int timeout_ms = 0);
   void drain(int timeout_ms, const ClusterH264PacketCallback &on_packet);
 
@@ -87,6 +89,7 @@ public:
   size_t input_uv_scanlines() const { return input_uv_scanlines_; }
   size_t input_uv_offset() const { return input_uv_offset_; }
   size_t input_bytesused() const { return input_bytesused_; }
+  size_t input_active_bytes() const { return input_uv_offset_ + input_stride_ * input_uv_scanlines_; }
   size_t capture_sizeimage() const { return capture_sizeimage_; }
   const ClusterH264EncodeTimings& last_encode_timings() const { return last_encode_timings_; }
   bool input_is_nv12() const;
@@ -118,6 +121,7 @@ private:
                     InputCopyFn copy_input, const char *input_name);
   void copy_rgba_to_input(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const;
   void copy_nv12_to_input(const uint8_t *nv12, size_t nv12_size, VisionBuf *dst) const;
+  void copy_nv12_active_to_input(const uint8_t *nv12, size_t nv12_size, VisionBuf *dst) const;
   void rgba_to_nv12(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const;
   void validate_config() const;
 

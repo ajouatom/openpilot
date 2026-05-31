@@ -699,6 +699,24 @@ void ClusterH264Encoder::encode_nv12(const uint8_t *nv12, size_t nv12_size, uint
   encode_input(nv12, nv12_size, timestamp_us, on_packet, &ClusterH264Encoder::copy_nv12_to_input, "NV12");
 }
 
+std::vector<ClusterH264Packet> ClusterH264Encoder::encode_nv12_active(const uint8_t *nv12, size_t nv12_size, uint64_t timestamp_us) {
+  std::vector<ClusterH264Packet> packets;
+  encode_nv12_active(nv12, nv12_size, timestamp_us, [&packets](const ClusterH264PacketView &view) {
+    ClusterH264Packet packet;
+    packet.flags = view.flags;
+    packet.timestamp_us = view.timestamp_us;
+    packet.codec_config = view.codec_config;
+    packet.keyframe = view.keyframe;
+    packet.data.assign(view.data, view.data + view.size);
+    packets.push_back(std::move(packet));
+  });
+  return packets;
+}
+
+void ClusterH264Encoder::encode_nv12_active(const uint8_t *nv12, size_t nv12_size, uint64_t timestamp_us, const ClusterH264PacketCallback &on_packet) {
+  encode_input(nv12, nv12_size, timestamp_us, on_packet, &ClusterH264Encoder::copy_nv12_active_to_input, "NV12 active");
+}
+
 void ClusterH264Encoder::encode_input(const uint8_t *data, size_t data_size, uint64_t timestamp_us,
                                       const ClusterH264PacketCallback &on_packet, InputCopyFn copy_input,
                                       const char *input_name) {
@@ -762,6 +780,20 @@ void ClusterH264Encoder::copy_nv12_to_input(const uint8_t *nv12, size_t nv12_siz
     throw std::runtime_error("cluster H264 encoder input buffer is not allocated");
   }
   memcpy(dst->addr, nv12, input_bytesused_);
+}
+
+void ClusterH264Encoder::copy_nv12_active_to_input(const uint8_t *nv12, size_t nv12_size, VisionBuf *dst) const {
+  if (!input_is_nv12()) {
+    throw std::runtime_error("cluster H264 encoder has unsupported input format " + input_v4l_format_name_);
+  }
+  const size_t active_bytes = input_active_bytes();
+  if (nv12_size < active_bytes) {
+    throw std::runtime_error("cluster H264 encoder active NV12 input is smaller than the Y+UV plane bytes");
+  }
+  if (dst == nullptr || dst->addr == nullptr || dst->len < input_bytesused_) {
+    throw std::runtime_error("cluster H264 encoder input buffer is not allocated");
+  }
+  memcpy(dst->addr, nv12, active_bytes);
 }
 
 void ClusterH264Encoder::rgba_to_nv12(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const {
