@@ -130,6 +130,8 @@ FOLLOW_DISTANCE_MARKER_BODY_LAYER_M = PATH_HEIGHT_M + 0.132
 FOLLOW_DISTANCE_MARKER_BACKING_FORWARD_M = 0.28
 FOLLOW_DISTANCE_MARKER_BODY_FORWARD_M = 0.14
 FOLLOW_DISTANCE_MARKER_BACKING_EXTRA_WIDTH_M = 0.22
+FOLLOW_DISTANCE_MARKER_BACKING_COLOR: Color = (42, 0, 38, 230)
+FOLLOW_DISTANCE_MARKER_BODY_COLOR: Color = (255, 0, 220, 248)
 LANE_HIGHLIGHT_COLOR = (64, 148, 255)
 LANE_HIGHLIGHT_ALPHA = 220
 LANE_HIGHLIGHT_ROUTE_ALPHA = 170
@@ -1485,7 +1487,7 @@ def planned_path_strips(
         if highlight_strip is not None:
             strips.append(highlight_strip)
     profile_stage = profile_scene_start(profile_add)
-    strips.extend(follow_distance_marker_strips(state, points, lane_width_m, theme))
+    strips.extend(follow_distance_marker_strips(state, points, lane_width_m))
     profile_scene_add(profile_add, "scene.build.planned_path.follow_distance", profile_stage)
     return tuple(strips)
 
@@ -1494,7 +1496,6 @@ def follow_distance_marker_strips(
     state: ClusterUiState,
     points: tuple[Vec3, ...],
     lane_width_m: float,
-    theme: ClusterTheme = LIGHT_CLUSTER_THEME,
 ) -> tuple[MeshStrip, ...]:
     distance_m = state.longitudinal_desired_distance_m
     if distance_m is None or distance_m <= 0.0 or len(points) < 2:
@@ -1529,13 +1530,13 @@ def follow_distance_marker_strips(
             FOLLOW_DISTANCE_MARKER_BACKING_FORWARD_M,
             FOLLOW_DISTANCE_MARKER_BACKING_EXTRA_WIDTH_M,
             FOLLOW_DISTANCE_MARKER_BACKING_LAYER_M,
-            theme.path_shadow,
+            FOLLOW_DISTANCE_MARKER_BACKING_COLOR,
         ),
         marker_strip(
             FOLLOW_DISTANCE_MARKER_BODY_FORWARD_M,
             0.0,
             FOLLOW_DISTANCE_MARKER_BODY_LAYER_M,
-            theme.path_highlight,
+            FOLLOW_DISTANCE_MARKER_BODY_COLOR,
         ),
     )
 
