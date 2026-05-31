@@ -87,6 +87,7 @@ MODEL_LINE_STRIP_GROUP_CACHE_LIMIT = 48
 MODEL_LINE_STRIP_GROUP_CACHE_GRID_M = 0.5
 MODEL_LINE_STRIP_GROUP_CACHE_POINT_GRID_M = 0.05
 MODEL_LINE_STRIP_GROUP_CACHE_COLOR: Color = (0, 0, 0, 0)
+MODEL_LINE_RENDER_POINT_LIMIT = 24
 ROAD_EDGE_OFFSET_STRIP_CACHE_LIMIT = 48
 ROAD_EDGE_OFFSET_STRIP_CACHE_OFFSET_GRID = 0.01
 ROAD_EDGE_OFFSET_STRIP_CACHE_STEERING_GRID = 0.002
@@ -897,6 +898,22 @@ def model_line_cache_point_key(model_points: tuple[ModelPathPoint, ...]) -> Mode
     )
 
 
+def model_line_points_for_render(model_points: tuple[ModelPathPoint, ...]) -> tuple[ModelPathPoint, ...]:
+    point_count = len(model_points)
+    if point_count <= MODEL_LINE_RENDER_POINT_LIMIT:
+        return model_points
+    last_index = point_count - 1
+    selected: list[ModelPathPoint] = []
+    previous_index = -1
+    for output_index in range(MODEL_LINE_RENDER_POINT_LIMIT):
+        index = round(output_index * last_index / (MODEL_LINE_RENDER_POINT_LIMIT - 1))
+        if index == previous_index:
+            continue
+        selected.append(model_points[index])
+        previous_index = index
+    return tuple(selected)
+
+
 def cached_model_line_strip_groups(
     model_points: tuple[ModelPathPoint, ...],
     start_m: float,
@@ -908,8 +925,9 @@ def cached_model_line_strip_groups(
     cache_start_m = model_line_cache_start_m(start_m)
     cache_end_m = model_line_cache_end_m(end_m)
     geometry_specs = model_line_geometry_specs(specs)
+    render_points = model_line_points_for_render(model_points)
     key = (
-        model_line_cache_point_key(model_points),
+        model_line_cache_point_key(render_points),
         cache_start_m,
         cache_end_m,
         style,
@@ -921,7 +939,7 @@ def cached_model_line_strip_groups(
         _MODEL_LINE_STRIP_GROUP_CACHE.move_to_end(key)
         return cached
 
-    centerline = model_line_centerline(model_points, cache_start_m, cache_end_m, 0.0)
+    centerline = model_line_centerline(render_points, cache_start_m, cache_end_m, 0.0)
     if len(centerline) < 2:
         groups: ModelLineStripGroups = None if extend_before_model else tuple(() for _ in geometry_specs)
     else:
