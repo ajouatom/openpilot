@@ -2633,6 +2633,11 @@ def profile_scene_add(profile_add: ProfileAdd | None, name: str, start_time: flo
         profile_add(name, (time.perf_counter() - start_time) * 1000.0)
 
 
+def profile_scene_add_elapsed(profile_add: ProfileAdd | None, name: str, elapsed_ms: float) -> None:
+    if profile_add is not None:
+        profile_add(name, elapsed_ms)
+
+
 def lane_highlight_color(route_mode: bool) -> Color:
     alpha = LANE_HIGHLIGHT_ROUTE_ALPHA if route_mode else LANE_HIGHLIGHT_ALPHA
     return LANE_HIGHLIGHT_COLOR[0], LANE_HIGHLIGHT_COLOR[1], LANE_HIGHLIGHT_COLOR[2], alpha
@@ -2740,6 +2745,9 @@ def build_cluster_scene(
 
     profile_stage = profile_scene_start(profile_add)
     lane_strips: list[MeshStrip] = []
+    lane_model_ms = 0.0
+    lane_offset_ms = 0.0
+    lane_collect_ms = 0.0
     bsd_marking_offsets = bsd_lane_marking_offsets(state)
     for marking in state.lanes:
         if not marking.visible:
@@ -2758,6 +2766,7 @@ def build_cluster_scene(
         )
         strip_groups: tuple[tuple[MeshStrip, ...], ...] | None = None
         if marking.model_points:
+            profile_step = profile_scene_start(profile_add)
             strip_groups = model_line_strip_groups(
                 marking.model_points,
                 marking.model_lateral_shift_m,
@@ -2767,7 +2776,10 @@ def build_cluster_scene(
                 marking.style,
                 True,
             )
+            if profile_add is not None:
+                lane_model_ms += (time.perf_counter() - profile_step) * 1000.0
         if strip_groups is None:
+            profile_step = profile_scene_start(profile_add)
             strip_groups = lane_offset_strip_groups(
                 marking.offset,
                 state.steering,
@@ -2777,11 +2789,19 @@ def build_cluster_scene(
                 marking_specs,
                 marking.style,
             )
+            if profile_add is not None:
+                lane_offset_ms += (time.perf_counter() - profile_step) * 1000.0
+        profile_step = profile_scene_start(profile_add)
         backing_strips, foreground_strips = strip_groups
         lane_strips.extend(backing_strips)
         lane_strips.extend(foreground_strips)
+        if profile_add is not None:
+            lane_collect_ms += (time.perf_counter() - profile_step) * 1000.0
+    profile_scene_add_elapsed(profile_add, "scene.build.lane_markings.model", lane_model_ms)
+    profile_scene_add_elapsed(profile_add, "scene.build.lane_markings.offset", lane_offset_ms)
+    profile_scene_add_elapsed(profile_add, "scene.build.lane_markings.collect", lane_collect_ms)
     profile_merge = profile_scene_start(profile_add)
-    lane_strips = list(merge_mesh_strips_by_style(lane_strips))
+    lane_markings = merge_mesh_strips_by_style(lane_strips)
     profile_scene_add(profile_add, "scene.build.lane_markings.merge", profile_merge)
     profile_scene_add(profile_add, "scene.build.lane_markings", profile_stage)
 
@@ -2880,7 +2900,9 @@ def build_cluster_scene(
     profile_scene_add(profile_add, "scene.build.road_surface", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
+    profile_geometry = profile_scene_start(profile_add)
     road_edges_raw = road_edge_strips(state, route_mode, lane_width_m, road_start_m, road_end_m, theme)
+    profile_scene_add(profile_add, "scene.build.road_edges.geometry", profile_geometry)
     profile_merge = profile_scene_start(profile_add)
     road_edges = merge_mesh_strips_by_style(road_edges_raw)
     profile_scene_add(profile_add, "scene.build.road_edges.merge", profile_merge)
@@ -2907,9 +2929,9 @@ def build_cluster_scene(
         camera=camera,
         scene_shift_x_m=scene_shift_x_m,
         road_surface=road_surface,
-        road_edges=tuple(road_edges),
+        road_edges=road_edges,
         highlight_lanes=tuple(highlight_lanes),
-        lane_markings=tuple(lane_strips),
+        lane_markings=lane_markings,
         planned_path=tuple(planned_path),
         radar_points=tuple(radar_points),
         vehicles=tuple(vehicles),
