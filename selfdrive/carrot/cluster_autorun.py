@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import locale
 import os
 import select
 import socket
@@ -39,6 +40,18 @@ ENCODER_NAMES = {
     ENCODER_HARDWARE: "hardware",
     ENCODER_SOFTWARE: "software",
 }
+
+
+def _configure_autorun_locale() -> None:
+    for candidate in ("C.UTF-8", "C"):
+        try:
+            locale.setlocale(locale.LC_ALL, candidate)
+        except locale.Error:
+            continue
+        os.environ["LC_ALL"] = candidate
+        os.environ["LC_CTYPE"] = candidate
+        os.environ["LANG"] = candidate
+        return
 
 
 def _ensure_cluster_paths() -> None:
@@ -372,6 +385,8 @@ def _wait_for_supported_usb_device(params: Params, expected_product_id: int, rea
 
 
 def _turn_off_supported_usb_device(expected_product_id: int, reason: str) -> bool:
+    _configure_autorun_locale()
+
     from cluster_usb_display import TuringUsbDisplay, find_supported_usb_product, product_label
 
     if find_supported_usb_product(expected_product_id) is None:
@@ -427,6 +442,7 @@ def _wait_for_hud_output_allowed(params: Params, expected_product_id: int) -> in
 
 
 def main() -> None:
+    _configure_autorun_locale()
     _ensure_cluster_paths()
     _apply_autorun_defaults()
     _configure_autorun_affinity()

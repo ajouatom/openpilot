@@ -188,6 +188,8 @@ are fixed at startup. Set `CLUSTER_AUTORUN_FPS` only for fixed test overrides;
 rendering only while openpilot is onroad, and `1` keeps the older always-on
 debug behavior after power-up. When output is gated off, `cluster_autorun`
 sends TURZX brightness `0` so a stale HUD frame does not remain visible.
+The autorun watcher normalizes locale before this dim-only USB path too, so
+vendor USB initialization does not fail before the renderer is launched.
 Manager autostart enables realtime affinity by default. `cluster_autorun.py`
 affines the manager-launched process to cores `0,1,2,3` before waiting for USB
 or starting the HUD by calling Linux `sched_setaffinity` directly. Explicit
