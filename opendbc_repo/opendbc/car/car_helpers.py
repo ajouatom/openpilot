@@ -158,10 +158,15 @@ def get_car(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_multip
   selected_car = Params().get("CarSelected3")
   if selected_car:
     def find_car(name: str):
+      from opendbc.car.ford.values import CAR as FORD
       from opendbc.car.hyundai.values import CAR as HYUNDAI
       from opendbc.car.gm.values import CAR as GM
       from opendbc.car.toyota.values import CAR as TOYOTA
       from opendbc.car.mazda.values import CAR as MAZDA
+      for platform in FORD:
+        for doc in platform.config.car_docs:
+          if name == doc.name:
+            return platform
       for platform in GM:
         for doc in platform.config.car_docs:
           if name == doc.name:
