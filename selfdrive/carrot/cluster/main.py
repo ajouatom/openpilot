@@ -509,6 +509,8 @@ def run_demo(
     controller = DualSenseSimulator(controller_index) if input_mode == "gamepad" else None
     random_input = RandomInputSource() if input_mode == "random" else None
     live_source = OpenpilotLiveSource(include_can=live_include_can, timeout_ms=live_timeout_ms) if input_mode == "live" else None
+    if live_source is not None:
+        live_source.set_profile_enabled(profile_render)
     route_source = None
     if input_mode == "route":
         profile_stage = time.perf_counter()
@@ -700,6 +702,7 @@ def run_demo(
                 state = live_source.update()
                 state = replace(state, center_clock_text=time.strftime("%H:%M:%S"))
                 source_status = live_source.status_text()
+                profile.add_samples(live_source.profile_samples())
                 profile.add_elapsed("source.live_update", profile_stage)
             elif route_source is not None:
                 profile_stage = time.perf_counter()
