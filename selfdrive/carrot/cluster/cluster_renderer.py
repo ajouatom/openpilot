@@ -485,8 +485,8 @@ class ClusterUiRenderer:
         self._left_turn_signal_started_at: float | None = None
         self._right_turn_signal_started_at: float | None = None
         self._triangle_strip_point_cache: OrderedDict[
-            tuple[int, int, float],
-            tuple[tuple[Vec3, ...], tuple[Vec3, ...], float, object, int],
+            tuple[int, int],
+            tuple[tuple[Vec3, ...], tuple[Vec3, ...], object, int],
         ] = OrderedDict()
         self._world_label_texture_cache: OrderedDict[
             tuple[int, str, float, float, tuple[int, int, int, int]],
@@ -1448,11 +1448,16 @@ class ClusterUiRenderer:
 
         if hasattr(rl, "draw_triangle_strip_3d"):
             points, point_count = self._triangle_strip_points_for(strip, count)
-            rl.draw_triangle_strip_3d(
-                rl.ffi.cast("struct Vector3 *", points),
-                point_count,
-                color,
-            )
+            point_ptr = rl.ffi.cast("struct Vector3 *", points)
+            if x_offset_m != 0.0:
+                rl.rl_push_matrix()
+                try:
+                    rl.rl_translatef(x_offset_m, 0.0, 0.0)
+                    rl.draw_triangle_strip_3d(point_ptr, point_count, color)
+                finally:
+                    rl.rl_pop_matrix()
+            else:
+                rl.draw_triangle_strip_3d(point_ptr, point_count, color)
             return
 
         for index in range(count - 1):
@@ -1468,33 +1473,31 @@ class ClusterUiRenderer:
             rl.draw_triangle_3d(left_near, right_far, left_far, color)
 
     def _triangle_strip_points_for(self, strip: MeshStrip, count: int):
-        key = (id(strip.left), id(strip.right), strip.x_offset_m)
+        key = (id(strip.left), id(strip.right))
         cached = self._triangle_strip_point_cache.get(key)
         if cached is not None:
-            left_ref, right_ref, x_offset_m, points, point_count = cached
-            if left_ref is strip.left and right_ref is strip.right and x_offset_m == strip.x_offset_m:
+            left_ref, right_ref, points, point_count = cached
+            if left_ref is strip.left and right_ref is strip.right:
                 self._triangle_strip_point_cache.move_to_end(key)
                 return points, point_count
 
         point_count = count * 2
         points = rl.ffi.new("struct Vector3[]", point_count)
-        x_offset_m = strip.x_offset_m
         for index in range(count):
             left = strip.left[index]
             right = strip.right[index]
 
-            points[index * 2].x = left.x + x_offset_m
+            points[index * 2].x = left.x
             points[index * 2].y = left.y
             points[index * 2].z = left.z
 
-            points[index * 2 + 1].x = right.x + x_offset_m
+            points[index * 2 + 1].x = right.x
             points[index * 2 + 1].y = right.y
             points[index * 2 + 1].z = right.z
 
         self._triangle_strip_point_cache[key] = (
             strip.left,
             strip.right,
-            strip.x_offset_m,
             points,
             point_count,
         )

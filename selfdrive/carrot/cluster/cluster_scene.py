@@ -265,10 +265,11 @@ _STYLE_MESH_STRIP_GROUP_CACHE: OrderedDict[
     StyledMeshStripGroupCacheKey,
     tuple[MeshStripGroups, MeshStripGroups],
 ] = OrderedDict()
-MergedMeshStripCacheKey = tuple[tuple[tuple[int, int, float], ...], Color, float]
+MergedMeshStripCacheKey = tuple[tuple[int, int], ...]
+MergedMeshStripRefs = tuple[tuple[tuple[Vec3, ...], tuple[Vec3, ...]], ...]
 _MERGED_MESH_STRIP_CACHE: OrderedDict[
     MergedMeshStripCacheKey,
-    tuple[tuple[MeshStrip, ...], MeshStrip],
+    tuple[MergedMeshStripRefs, tuple[Vec3, ...], tuple[Vec3, ...]],
 ] = OrderedDict()
 
 
@@ -938,19 +939,21 @@ def cached_or_merged_mesh_strip(strips: tuple[MeshStrip, ...]) -> MeshStrip | No
         return strips[0]
 
     first = strips[0]
-    key = (
-        tuple((id(strip.left), id(strip.right), strip.x_offset_m) for strip in strips),
-        first.color,
-        first.x_offset_m,
-    )
+    key = tuple((id(strip.left), id(strip.right)) for strip in strips)
     cached = _MERGED_MESH_STRIP_CACHE.get(key)
     if cached is not None:
-        cached_strips, merged = cached
-        if len(cached_strips) == len(strips) and all(
-            cached_strip is strip for cached_strip, strip in zip(cached_strips, strips)
+        cached_refs, merged_left, merged_right = cached
+        if len(cached_refs) == len(strips) and all(
+            left_ref is strip.left and right_ref is strip.right
+            for (left_ref, right_ref), strip in zip(cached_refs, strips)
         ):
             _MERGED_MESH_STRIP_CACHE.move_to_end(key)
-            return merged
+            return MeshStrip(
+                left=merged_left,
+                right=merged_right,
+                color=first.color,
+                x_offset_m=first.x_offset_m,
+            )
         _MERGED_MESH_STRIP_CACHE.pop(key, None)
 
     left_group: list[Vec3] = []
@@ -972,13 +975,19 @@ def cached_or_merged_mesh_strip(strips: tuple[MeshStrip, ...]) -> MeshStrip | No
     if len(left_group) < 2 or len(right_group) < 2:
         return None
 
+    merged_left = tuple(left_group)
+    merged_right = tuple(right_group)
+    _MERGED_MESH_STRIP_CACHE[key] = (
+        tuple((strip.left, strip.right) for strip in strips),
+        merged_left,
+        merged_right,
+    )
     merged = MeshStrip(
-        left=tuple(left_group),
-        right=tuple(right_group),
+        left=merged_left,
+        right=merged_right,
         color=first.color,
         x_offset_m=first.x_offset_m,
     )
-    _MERGED_MESH_STRIP_CACHE[key] = (strips, merged)
     while len(_MERGED_MESH_STRIP_CACHE) > MERGED_MESH_STRIP_CACHE_LIMIT:
         _MERGED_MESH_STRIP_CACHE.popitem(last=False)
     return merged
