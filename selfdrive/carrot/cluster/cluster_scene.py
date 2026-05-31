@@ -120,7 +120,6 @@ ROAD_EDGE_BACKING_COLOR = LIGHT_CLUSTER_THEME.road_edge_backing
 ROAD_EDGE_MODEL_POINT_LIMIT = 0
 STYLE_MESH_STRIP_GROUP_CACHE_LIMIT = 128
 MERGED_MESH_STRIP_CACHE_LIMIT = 128
-MERGED_MESH_STRIP_PENDING_LIMIT = 256
 PATH_SHADOW_LAYER_M = 0.024
 PATH_UNCERTAINTY_LAYER_M = PATH_HEIGHT_M + 0.002
 PATH_BODY_LAYER_M = PATH_HEIGHT_M + 0.046
@@ -271,7 +270,6 @@ _MERGED_MESH_STRIP_CACHE: OrderedDict[
     MergedMeshStripCacheKey,
     tuple[tuple[MeshStrip, ...], MeshStrip],
 ] = OrderedDict()
-_MERGED_MESH_STRIP_PENDING: OrderedDict[MergedMeshStripCacheKey, tuple[MeshStrip, ...]] = OrderedDict()
 
 
 @dataclass(frozen=True, slots=True)
@@ -917,7 +915,7 @@ def finish_lane_marking_strip_groups(
     )
 
 
-def cached_or_repeated_merged_mesh_strip(strips: tuple[MeshStrip, ...]) -> MeshStrip | None:
+def cached_or_merged_mesh_strip(strips: tuple[MeshStrip, ...]) -> MeshStrip | None:
     if len(strips) == 1:
         return strips[0]
 
@@ -937,21 +935,6 @@ def cached_or_repeated_merged_mesh_strip(strips: tuple[MeshStrip, ...]) -> MeshS
             return merged
         _MERGED_MESH_STRIP_CACHE.pop(key, None)
 
-    pending_strips = _MERGED_MESH_STRIP_PENDING.get(key)
-    if pending_strips is not None and (
-        len(pending_strips) != len(strips)
-        or any(pending_strip is not strip for pending_strip, strip in zip(pending_strips, strips))
-    ):
-        _MERGED_MESH_STRIP_PENDING.pop(key, None)
-        pending_strips = None
-
-    if pending_strips is None:
-        _MERGED_MESH_STRIP_PENDING[key] = strips
-        while len(_MERGED_MESH_STRIP_PENDING) > MERGED_MESH_STRIP_PENDING_LIMIT:
-            _MERGED_MESH_STRIP_PENDING.popitem(last=False)
-        return None
-
-    _MERGED_MESH_STRIP_PENDING.pop(key, None)
     left_group: list[Vec3] = []
     right_group: list[Vec3] = []
     for strip in strips:
@@ -1001,7 +984,7 @@ def merge_mesh_strips_by_style(strips: Iterable[MeshStrip]) -> tuple[MeshStrip, 
             merged.append(group[0])
         else:
             group_tuple = tuple(group)
-            merged_strip = cached_or_repeated_merged_mesh_strip(group_tuple)
+            merged_strip = cached_or_merged_mesh_strip(group_tuple)
             if merged_strip is None:
                 merged.extend(group_tuple)
             else:
@@ -2797,7 +2780,9 @@ def build_cluster_scene(
         backing_strips, foreground_strips = strip_groups
         lane_strips.extend(backing_strips)
         lane_strips.extend(foreground_strips)
+    profile_merge = profile_scene_start(profile_add)
     lane_strips = list(merge_mesh_strips_by_style(lane_strips))
+    profile_scene_add(profile_add, "scene.build.lane_markings.merge", profile_merge)
     profile_scene_add(profile_add, "scene.build.lane_markings", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
@@ -2895,9 +2880,10 @@ def build_cluster_scene(
     profile_scene_add(profile_add, "scene.build.road_surface", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
-    road_edges = merge_mesh_strips_by_style(
-        road_edge_strips(state, route_mode, lane_width_m, road_start_m, road_end_m, theme)
-    )
+    road_edges_raw = road_edge_strips(state, route_mode, lane_width_m, road_start_m, road_end_m, theme)
+    profile_merge = profile_scene_start(profile_add)
+    road_edges = merge_mesh_strips_by_style(road_edges_raw)
+    profile_scene_add(profile_add, "scene.build.road_edges.merge", profile_merge)
     profile_scene_add(profile_add, "scene.build.road_edges", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
