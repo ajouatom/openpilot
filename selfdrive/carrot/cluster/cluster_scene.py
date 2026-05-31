@@ -54,8 +54,11 @@ RADAR_ROAD_EDGE_HARD_CLEARANCE_M = 0.50
 RADAR_ROAD_EDGE_STATIONARY_CLEARANCE_M = 1.05
 RADAR_ROAD_EDGE_OUTSIDE_MARGIN_M = 0.0
 RADAR_ROAD_EDGE_KEEP_OUTSIDE_MARGIN_M = 0.85
+RADAR_ROAD_EDGE_STABLE_VEHICLE_OUTSIDE_MARGIN_M = 2.25
 RADAR_ROAD_EDGE_KEEP_SPEED_KPH = 18.0
 RADAR_ROAD_EDGE_KEEP_MIN_VALID_COUNT = 24
+RADAR_ROAD_EDGE_STABLE_VEHICLE_MIN_VALID_COUNT = 35
+RADAR_ROAD_EDGE_STABLE_VEHICLE_MAX_ACCEL_MPS2 = 5.0
 RADAR_STATIC_OBJECT_SPEED_MPS = 1.25
 RADAR_STATIC_OBJECT_SPEED_KPH = 8.0
 RADAR_SIDE_STATIC_LATERAL_LANES = 0.58
@@ -1918,9 +1921,18 @@ def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, l
         return False
     if point.valid_count is not None and point.valid_count < RADAR_VEHICLE_MIN_VALID_COUNT:
         return False
-    if point.probability is not None and point.probability < 0.20 and not point.in_my_lane:
-        return False
     outside_road_edge_m = radar_point_road_edge_outside_distance_m(point, state, lane_width_m)
+    stable_edge_vehicle = (
+        radar_point_has_stable_edge_vehicle_motion(point, state, lane_width_m)
+        and radar_point_is_near_or_outside_road_edge(point, state, lane_width_m, outside_road_edge_m)
+    )
+    if (
+        point.probability is not None
+        and point.probability < 0.20
+        and not point.in_my_lane
+        and not stable_edge_vehicle
+    ):
+        return False
     keep_across_road_edge = radar_point_should_keep_across_road_edge(
         point,
         state,
@@ -1979,26 +1991,56 @@ def radar_point_should_keep_across_road_edge(
     lane_width_m: float,
     outside_road_edge_m: float | None,
 ) -> bool:
+    stable_edge_vehicle = radar_point_has_stable_edge_vehicle_motion(point, state, lane_width_m)
     if outside_road_edge_m is not None and outside_road_edge_m > RADAR_ROAD_EDGE_KEEP_OUTSIDE_MARGIN_M:
-        return False
+        return (
+            outside_road_edge_m <= RADAR_ROAD_EDGE_STABLE_VEHICLE_OUTSIDE_MARGIN_M
+            and stable_edge_vehicle
+        )
     valid_count = point.valid_count if point.valid_count is not None else 0
     if valid_count < RADAR_ROAD_EDGE_KEEP_MIN_VALID_COUNT:
         return False
     absolute_speed_kph = radar_point_absolute_speed_kph(point, state)
     if absolute_speed_kph is None or absolute_speed_kph < RADAR_ROAD_EDGE_KEEP_SPEED_KPH:
         return False
-    edge_distance_m = radar_point_road_edge_distance_m(point, state, lane_width_m)
-    near_or_overlapping_edge = (
-        (outside_road_edge_m is not None and outside_road_edge_m > 0.0)
-        or (edge_distance_m is not None and edge_distance_m <= RADAR_ROAD_EDGE_STATIONARY_CLEARANCE_M)
-    )
-    if not near_or_overlapping_edge:
+    if not radar_point_is_near_or_outside_road_edge(point, state, lane_width_m, outside_road_edge_m):
         return False
-    return radar_point_has_vehicle_estimate(point, state, lane_width_m) or radar_point_is_moving_raw_vehicle(
-        point,
-        state,
-        lane_width_m,
+    return (
+        stable_edge_vehicle
+        or radar_point_has_vehicle_estimate(point, state, lane_width_m)
+        or radar_point_is_moving_raw_vehicle(point, state, lane_width_m)
     )
+
+
+def radar_point_has_stable_edge_vehicle_motion(
+    point: RadarPoint,
+    state: ClusterUiState,
+    lane_width_m: float,
+) -> bool:
+    valid_count = point.valid_count if point.valid_count is not None else 0
+    if valid_count < RADAR_ROAD_EDGE_STABLE_VEHICLE_MIN_VALID_COUNT:
+        return False
+    absolute_speed_kph = radar_point_absolute_speed_kph(point, state)
+    if absolute_speed_kph is None or absolute_speed_kph < RADAR_ROAD_EDGE_KEEP_SPEED_KPH:
+        return False
+    if (
+        point.relative_accel_mps2 is not None
+        and abs(point.relative_accel_mps2) > RADAR_ROAD_EDGE_STABLE_VEHICLE_MAX_ACCEL_MPS2
+    ):
+        return False
+    return abs(point.lateral_m) <= lane_width_m * RADAR_VEHICLE_MAX_LATERAL_LANES
+
+
+def radar_point_is_near_or_outside_road_edge(
+    point: RadarPoint,
+    state: ClusterUiState,
+    lane_width_m: float,
+    outside_road_edge_m: float | None,
+) -> bool:
+    if outside_road_edge_m is not None and outside_road_edge_m > 0.0:
+        return True
+    edge_distance_m = radar_point_road_edge_distance_m(point, state, lane_width_m)
+    return edge_distance_m is not None and edge_distance_m <= RADAR_ROAD_EDGE_STATIONARY_CLEARANCE_M
 
 
 def radar_point_matches_detected_vehicle(point: RadarPoint, state: ClusterUiState) -> bool:

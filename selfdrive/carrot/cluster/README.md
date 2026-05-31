@@ -276,7 +276,10 @@ boxes orange.
 Raw radar vehicle classification rejects points outside model road edges, but
 does not require in-road points to sit near the road-edge line; center-lane
 points can classify as vehicles when probability/in-lane data or moving raw
-radar evidence is sufficient.
+radar evidence is sufficient. Points near or slightly outside a road edge can
+still classify as vehicles when their counter is stable, absolute speed is
+vehicle-like, and acceleration stays within about +/-5 m/s^2, even if the raw
+radar probability is low.
 Lane and road-edge rendering keeps model geometry visible instead of filtering
 by `laneLineProbs` or `roadEdgeStds`, avoiding distracting HUD flicker when
 model confidence jitters. Lane markings are still suppressed when their
