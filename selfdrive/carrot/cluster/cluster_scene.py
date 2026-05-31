@@ -88,6 +88,10 @@ MODEL_LINE_STRIP_GROUP_CACHE_GRID_M = 0.5
 MODEL_LINE_STRIP_GROUP_CACHE_POINT_GRID_M = 0.05
 MODEL_LINE_STRIP_GROUP_CACHE_COLOR: Color = (0, 0, 0, 0)
 MODEL_LINE_RENDER_POINT_LIMIT = 24
+LANE_OFFSET_STRIP_CACHE_LIMIT = 64
+LANE_OFFSET_STRIP_CACHE_OFFSET_GRID = 0.01
+LANE_OFFSET_STRIP_CACHE_STEERING_GRID = 0.002
+LANE_OFFSET_STRIP_CACHE_LANE_WIDTH_GRID_M = 0.02
 ROAD_EDGE_OFFSET_STRIP_CACHE_LIMIT = 48
 ROAD_EDGE_OFFSET_STRIP_CACHE_OFFSET_GRID = 0.01
 ROAD_EDGE_OFFSET_STRIP_CACHE_STEERING_GRID = 0.002
@@ -221,6 +225,16 @@ ModelLineStripCacheKey = tuple[
     ModelLineStripGeometrySpecs,
 ]
 _MODEL_LINE_STRIP_GROUP_CACHE: OrderedDict[ModelLineStripCacheKey, ModelLineStripGroups] = OrderedDict()
+LaneOffsetStripCacheKey = tuple[
+    float,
+    float,
+    float,
+    float,
+    float,
+    str,
+    ModelLineStripGeometrySpecs,
+]
+_LANE_OFFSET_STRIP_CACHE: OrderedDict[LaneOffsetStripCacheKey, tuple[tuple[MeshStrip, ...], ...]] = OrderedDict()
 RoadEdgeOffsetLayerGeometrySpecs = tuple[tuple[int, float, float], ...]
 RoadEdgeOffsetStripGroups = tuple[tuple[MeshStrip, ...], ...]
 RoadEdgeOffsetStripCacheKey = tuple[
@@ -955,6 +969,100 @@ def cached_model_line_strip_groups(
     while len(_MODEL_LINE_STRIP_GROUP_CACHE) > MODEL_LINE_STRIP_GROUP_CACHE_LIMIT:
         _MODEL_LINE_STRIP_GROUP_CACHE.popitem(last=False)
     return groups
+
+
+def cached_lane_offset_strip_groups(
+    offset: float,
+    steering: float,
+    lane_width_m: float,
+    start_m: float,
+    end_m: float,
+    specs: tuple[tuple[int, Color, float], ...],
+    style: str,
+) -> tuple[tuple[MeshStrip, ...], ...]:
+    cache_offset = cache_grid_value(offset, LANE_OFFSET_STRIP_CACHE_OFFSET_GRID)
+    cache_steering = cache_grid_value(steering, LANE_OFFSET_STRIP_CACHE_STEERING_GRID)
+    cache_lane_width_m = max(
+        0.1,
+        cache_grid_value(lane_width_m, LANE_OFFSET_STRIP_CACHE_LANE_WIDTH_GRID_M),
+    )
+    cache_start_m = model_line_cache_start_m(start_m)
+    cache_end_m = model_line_cache_end_m(end_m)
+    geometry_specs = model_line_geometry_specs(specs)
+    key = (
+        cache_offset,
+        cache_steering,
+        cache_lane_width_m,
+        cache_start_m,
+        cache_end_m,
+        style,
+        geometry_specs,
+    )
+    cached = _LANE_OFFSET_STRIP_CACHE.get(key)
+    if cached is not None:
+        _LANE_OFFSET_STRIP_CACHE.move_to_end(key)
+        return cached
+
+    placeholder_specs = model_line_placeholder_specs(geometry_specs)
+    if style == "solid":
+        centerline = lane_centerline(
+            cache_offset,
+            cache_steering,
+            cache_lane_width_m,
+            cache_start_m,
+            cache_end_m,
+            STATIC_LINE_STEPS,
+            0.0,
+        )
+        groups = lane_marking_strip_groups_from_segments((centerline,), placeholder_specs)
+    else:
+        segments: list[tuple[Vec3, ...]] = []
+        dash_m = LANE_DASH_LENGTH_M
+        cycle_m = dash_m + LANE_DASH_GAP_M
+        cursor = cache_start_m - (cache_start_m % cycle_m)
+        while cursor < cache_end_m:
+            dash_start = max(cursor, cache_start_m)
+            dash_end = min(cursor + dash_m, cache_end_m)
+            if dash_end > dash_start + 0.001:
+                segments.append(
+                    lane_centerline(
+                        cache_offset,
+                        cache_steering,
+                        cache_lane_width_m,
+                        dash_start,
+                        dash_end,
+                        6,
+                        0.0,
+                    )
+                )
+            cursor += cycle_m
+        groups = lane_marking_strip_groups_from_segments(tuple(segments), placeholder_specs)
+
+    _LANE_OFFSET_STRIP_CACHE[key] = groups
+    while len(_LANE_OFFSET_STRIP_CACHE) > LANE_OFFSET_STRIP_CACHE_LIMIT:
+        _LANE_OFFSET_STRIP_CACHE.popitem(last=False)
+    return groups
+
+
+def lane_offset_strip_groups(
+    offset: float,
+    steering: float,
+    lane_width_m: float,
+    start_m: float,
+    end_m: float,
+    specs: tuple[tuple[int, Color, float], ...],
+    style: str,
+) -> tuple[tuple[MeshStrip, ...], ...]:
+    groups = cached_lane_offset_strip_groups(
+        offset,
+        steering,
+        lane_width_m,
+        start_m,
+        end_m,
+        specs,
+        style,
+    )
+    return style_mesh_strip_groups(groups, specs, 0.0)
 
 
 def style_mesh_strip_groups(
@@ -2506,15 +2614,15 @@ def build_cluster_scene(
                 True,
             )
         if strip_groups is None:
-            marking_segments = lane_marking_segments_for_marking(
-                marking,
+            strip_groups = lane_offset_strip_groups(
+                marking.offset,
                 state.steering,
                 lane_width_m,
                 road_start_m,
                 road_end_m,
-                extend_before_model=True,
+                marking_specs,
+                marking.style,
             )
-            strip_groups = lane_marking_strip_groups_from_segments(marking_segments, marking_specs)
         backing_strips, foreground_strips = strip_groups
         lane_strips.extend(backing_strips)
         lane_strips.extend(foreground_strips)
