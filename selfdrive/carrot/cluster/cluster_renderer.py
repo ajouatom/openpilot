@@ -316,7 +316,13 @@ def radar_point_speed_label(point: RadarPointMarker) -> str:
 def vehicle_distance_label(vehicle: VehicleBox) -> str:
     if vehicle.absolute_speed_kph is not None and vehicle.absolute_speed_kph <= RADAR_STATIC_OBJECT_SPEED_KPH:
         return ""
-    return f"{abs(vehicle.center.y - EGO_FORWARD_M):.0f} m"
+    return f"{vehicle_distance_m(vehicle):.0f} m"
+
+
+def vehicle_distance_m(vehicle: VehicleBox) -> float:
+    if vehicle.longitudinal_m is not None:
+        return abs(vehicle.longitudinal_m)
+    return abs(vehicle.center.y - EGO_FORWARD_M)
 
 
 def vehicle_speed_label(vehicle: VehicleBox) -> str:
@@ -1737,7 +1743,7 @@ class ClusterUiRenderer:
                 if profile_enabled:
                     layout_ms += (time.perf_counter() - layout_stage) * 1000.0
                 continue
-            distance_m = abs(vehicle.center.y - EGO_FORWARD_M)
+            distance_m = vehicle_distance_m(vehicle)
             scale = world_label_scale(distance_m)
             distance_size = max(9.0, VEHICLE_BADGE_DISTANCE_FONT_SIZE * scale)
             speed_size = max(8.0, VEHICLE_BADGE_SPEED_FONT_SIZE * scale)

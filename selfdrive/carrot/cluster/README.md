@@ -291,11 +291,11 @@ to the point/box top so speed and distance are less high above the vehicle.
 detected positions. The older fixed rear-tire-depth 2D arrow/label is removed.
 The default drive camera sits closer to the ego roof, lower than the earlier
 high view, and tilted downward so route/live views keep rear context visible
-down to about `-10m` relative to ego. It uses a closer/lower target and wider
-FOV so nearby vehicles read larger while the far road converges more tightly,
-with road/lane/radar geometry starting about three meters farther back so the
-rear lane-start seam sits below the visible bottom edge; rear vehicle presence
-does not expand the default drive scene back toward the older `-20m` view.
+down to about rendered `-5m` relative to ego. Rear object rendering compresses
+negative longitudinal distance by `0.5`, so an actual `-10m` LR/RR detection is
+drawn at the rendered `-5m` position while labels keep the actual distance.
+Road/lane/radar geometry still starts far enough behind that rendered bound so
+the rear lane-start seam sits below the visible bottom edge.
 Front-center `radarState` lead overlap uses a wider vehicle-sized tolerance
 than corner radar overlap, and default mode also collapses overlapping
 front-center detected vehicle boxes so source-split front radar/model

@@ -86,8 +86,9 @@ RADAR_FRONT_DETECTED_MERGE_LONGITUDINAL_MAX_M = 11.0
 RADAR_FRONT_DETECTED_MERGE_LATERAL_M = 2.25
 RADAR_MERGED_SOURCE_TAG = "+radar:"
 CORNER_RADAR_LABELS = frozenset(("LF", "RF", "LR", "RR"))
-DRIVE_VIEW_REAR_RELATIVE_M = -10.0
-DRIVE_VIEW_REAR_ROAD_MARGIN_M = 3.0
+DRIVE_VIEW_REAR_RELATIVE_M = -5.0
+DRIVE_VIEW_REAR_ROAD_MARGIN_M = 8.0
+REAR_RENDER_DISTANCE_SCALE = 0.5
 DRIVE_VIEW_ROAD_START_M = (
     EGO_FORWARD_M + DRIVE_VIEW_REAR_RELATIVE_M - DRIVE_VIEW_REAR_ROAD_MARGIN_M
 )
@@ -190,6 +191,7 @@ class VehicleBox:
     confidence: float = 1.0
     label: str = ""
     source: str = ""
+    longitudinal_m: float | None = None
     relative_speed_mps: float | None = None
     absolute_speed_kph: float | None = None
     acceleration_mps2: float | None = None
@@ -354,6 +356,16 @@ def sample_range(start_m: float, end_m: float, steps: int) -> tuple[float, ...]:
 
 def data_scene_forward_m(relative_forward_m: float) -> float:
     return EGO_FORWARD_M + relative_forward_m
+
+
+def render_relative_forward_m(relative_forward_m: float) -> float:
+    if relative_forward_m >= 0.0:
+        return relative_forward_m
+    return relative_forward_m * REAR_RENDER_DISTANCE_SCALE
+
+
+def render_scene_forward_m(relative_forward_m: float) -> float:
+    return data_scene_forward_m(render_relative_forward_m(relative_forward_m))
 
 
 def scene_data_relative_forward_m(forward_m: float) -> float:
@@ -1700,7 +1712,7 @@ def radar_point_markers(
     for point in state.radar_points:
         if radar_point_hidden_by_vehicle_box(point, vehicle_points, state):
             continue
-        forward_m = data_scene_forward_m(point.longitudinal_m)
+        forward_m = render_scene_forward_m(point.longitudinal_m)
         if forward_m < min_forward_m or forward_m > max_forward_m:
             continue
         color = radar_point_color(point)
@@ -1965,7 +1977,7 @@ def radar_vehicle_box(
     confidence = radar_vehicle_confidence(point)
     alpha = int(92 + 163 * confidence)
     body_color = vehicle_color_for_source("radarPoint", theme, state.radar_source_color_mode)
-    forward_m = data_scene_forward_m(point.longitudinal_m)
+    forward_m = render_scene_forward_m(point.longitudinal_m)
     center_x_m = clamp(point.lateral_m, -lane_width_m * 3.0, lane_width_m * 3.0)
     return VehicleBox(
         center=Vec3(center_x_m, forward_m, VEHICLE_HEIGHT_M * 0.5),
@@ -1984,6 +1996,7 @@ def radar_vehicle_box(
         confidence=confidence,
         label=point.label,
         source="radarPoint",
+        longitudinal_m=point.longitudinal_m,
         relative_speed_mps=point.relative_speed_mps,
         absolute_speed_kph=radar_point_absolute_speed_kph(point, state),
         acceleration_mps2=point.relative_accel_mps2,
@@ -2330,6 +2343,7 @@ def vehicle_box(
     confidence: float = 1.0,
     label: str = "",
     source: str = "",
+    longitudinal_m: float | None = None,
     relative_speed_mps: float | None = None,
     absolute_speed_kph: float | None = None,
     acceleration_mps2: float | None = None,
@@ -2353,6 +2367,11 @@ def vehicle_box(
     width_m = VEHICLE_WIDTH_M
     length_m = VEHICLE_LENGTH_M
     height_m = VEHICLE_HEIGHT_M
+    actual_longitudinal_m = (
+        scene_data_relative_forward_m(forward_m)
+        if longitudinal_m is None
+        else longitudinal_m
+    )
 
     return VehicleBox(
         center=Vec3(center_x_m, forward_m, height_m * 0.5),
@@ -2371,6 +2390,7 @@ def vehicle_box(
         confidence=confidence,
         label=label,
         source=source,
+        longitudinal_m=actual_longitudinal_m,
         relative_speed_mps=relative_speed_mps,
         absolute_speed_kph=absolute_speed_kph,
         acceleration_mps2=acceleration_mps2,
@@ -2469,6 +2489,7 @@ def translate_vehicle_box_x(vehicle: VehicleBox, shift_x_m: float) -> VehicleBox
         confidence=vehicle.confidence,
         label=vehicle.label,
         source=vehicle.source,
+        longitudinal_m=vehicle.longitudinal_m,
         relative_speed_mps=vehicle.relative_speed_mps,
         absolute_speed_kph=vehicle.absolute_speed_kph,
         acceleration_mps2=vehicle.acceleration_mps2,
@@ -2945,7 +2966,7 @@ def build_cluster_scene(
     road_steps = ROAD_STEPS_SURROUND if camera_active else ROAD_STEPS_MODEL if route_mode else ROAD_STEPS_SIM
     if (state.detected_vehicles or selected_radar_vehicle_boxes) and not camera_active:
         nearest_detected_y = min(
-            (data_scene_forward_m(vehicle.longitudinal_m) for vehicle in state.detected_vehicles),
+            (render_scene_forward_m(vehicle.longitudinal_m) for vehicle in state.detected_vehicles),
             default=ROAD_FAR_M,
         )
         nearest_radar_y = min((vehicle.center.y for vehicle in selected_radar_vehicle_boxes), default=ROAD_FAR_M)
@@ -3060,7 +3081,7 @@ def build_cluster_scene(
         detected_vehicle_boxes = tuple(
             vehicle_box(
                 clamp(detected.lateral_m / lane_width_m, -2.2, 2.2),
-                data_scene_forward_m(detected.longitudinal_m),
+                render_scene_forward_m(detected.longitudinal_m),
                 state.steering,
                 lane_width_m,
                 vehicle_color_for_detection(detected, theme, state.radar_source_color_mode),
@@ -3068,6 +3089,7 @@ def build_cluster_scene(
                 confidence=detected.probability,
                 label=detected.label,
                 source=detected.source,
+                longitudinal_m=detected.longitudinal_m,
                 relative_speed_mps=detected.relative_speed_mps,
                 absolute_speed_kph=detected.absolute_speed_kph
                 if detected.absolute_speed_kph is not None
