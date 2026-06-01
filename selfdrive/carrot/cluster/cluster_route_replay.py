@@ -2943,8 +2943,8 @@ def corner_radar_specs(address: int) -> dict[str, tuple[str, int, int, str, int,
     return {
         "LF": ("be", 74, 3, "le", 46, 11, "be", 70, 7, 1.0),
         "RF": ("be", 98, 3, "le", 75, 11, "be", 94, 7, 1.0),
-        "LR": ("be", 162, 3, "le", 139, 8, "le", 152, 6, -1.0),
-        "RR": ("be", 186, 3, "le", 163, 8, "le", 172, 6, -1.0),
+        "LR": ("be", 162, 3, "le", 139, 9, "le", 152, 6, -1.0),
+        "RR": ("be", 186, 3, "le", 163, 9, "le", 172, 6, -1.0),
     }
 
 

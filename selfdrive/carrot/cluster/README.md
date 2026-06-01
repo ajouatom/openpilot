@@ -297,7 +297,9 @@ down to about rendered `-5m` relative to ego. Rear object rendering compresses
 negative longitudinal distance by `0.5`, so an actual `-10m` LR/RR detection is
 drawn at the rendered `-5m` position while labels keep the actual distance.
 When both raw camera-bus ADRV `0x1EA` and CCNC `0x162` corner messages are
-fresh, ADRV is preferred for LF/RF/LR/RR distance.
+fresh, ADRV is preferred for LF/RF/LR/RR distance. ADRV LR/RR distance is
+decoded as the 9-bit `0..511` raw field so rear detections beyond `25.5m` do
+not wrap into the 20m range.
 Road/lane/radar geometry still starts far enough behind that rendered bound so
 the rear lane-start seam sits below the visible bottom edge.
 Front-center `radarState` lead overlap uses a wider vehicle-sized tolerance
