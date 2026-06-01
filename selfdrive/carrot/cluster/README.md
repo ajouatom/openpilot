@@ -290,12 +290,12 @@ to the point/box top so speed and distance are less high above the vehicle.
 Off-screen `LR`/`RR` rear-corner indicators anchor their arrows at rear-tire
 depth while still following the detected lateral position, so the labels stay
 low and still show left/right separation.
-The default drive camera is raised, backed up, and tilted downward so route/live
-views keep rear context visible down to about `-20m` relative to ego. It uses a
-slightly closer/lower target and narrower FOV so distant objects feel less far
-away while the road still reads like a low over-road flight path, with
-road/lane/radar geometry starting a few meters farther back to avoid empty scene
-edges.
+The default drive camera sits closer to the ego roof, lower than the earlier
+high view, and tilted downward so route/live views keep rear context visible
+down to about `-20m` relative to ego. It uses a closer/lower target and wider
+FOV so nearby vehicles read larger while the far road converges more tightly,
+with road/lane/radar geometry starting a few meters farther back to avoid empty
+scene edges.
 Front-center `radarState` lead overlap uses a wider vehicle-sized tolerance
 than corner radar overlap, and default mode also collapses overlapping
 front-center detected vehicle boxes so source-split front radar/model
