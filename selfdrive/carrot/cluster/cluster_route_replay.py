@@ -107,9 +107,6 @@ ROUTE_VIDEO_DECODE_HEIGHT = 244
 ROUTE_VIDEO_SEEK_RESTART_FRAMES = 45
 NAV_SPEED_LIMIT_HOLD_SECONDS = 10.0
 ROAD_EDGE_VEHICLE_OUTSIDE_MARGIN_M = 0.25
-CAR_STATE_BSD_REAR_LONGITUDINAL_M = -1.55
-CAR_STATE_BSD_REAR_LATERAL_M = 2.15
-CAR_STATE_BSD_FRONT_SKIP_M = 7.0
 LANE_CHANGE_REINDEX_PEAK_THRESHOLD = 0.22
 LANE_CHANGE_REINDEX_RESET_THRESHOLD = -0.08
 CONTINUOUS_LANE_CHANGE_REBASE_PROGRESS = 0.12
@@ -1601,12 +1598,6 @@ class RouteLogParser:
                 if not has_nearby_vehicle(detections, vehicle, longitudinal_tolerance=3.0, lateral_tolerance=1.1):
                     detections.append(vehicle)
 
-        for vehicle in car_state_rear_blindspot_detections(car_state, car_state_detections):
-            if not vehicle_is_inside_road_edges(vehicle, lane_values):
-                continue
-            if not has_nearby_vehicle(detections, vehicle, longitudinal_tolerance=3.0, lateral_tolerance=1.1):
-                detections.append(vehicle)
-
         if event_t - self.radar_detection_t < 0.8:
             for vehicle in self.radar_detections:
                 if not vehicle_is_inside_road_edges(vehicle, lane_values):
@@ -2944,37 +2935,6 @@ def car_state_corner_detections(car_state: Any) -> tuple[DetectedVehicle, ...]:
                 longitudinal_m=longitudinal_m,
                 lateral_m=side * lateral_mag,
                 source="carState",
-            )
-        )
-    return tuple(detections)
-
-
-def car_state_rear_blindspot_detections(
-    car_state: Any,
-    front_detections: tuple[DetectedVehicle, ...],
-) -> tuple[DetectedVehicle, ...]:
-    detections: list[DetectedVehicle] = []
-    for label, blindspot_name, side in (
-        ("LR", "leftBlindspot", -1.0),
-        ("RR", "rightBlindspot", 1.0),
-    ):
-        if not bool(safe_get(car_state, blindspot_name, False)):
-            continue
-        if any(vehicle.label == label for vehicle in front_detections):
-            continue
-        if any(
-            vehicle.lateral_m * side > 0.0
-            and 0.2 < vehicle.longitudinal_m < CAR_STATE_BSD_FRONT_SKIP_M
-            for vehicle in front_detections
-        ):
-            continue
-        detections.append(
-            DetectedVehicle(
-                label=label,
-                longitudinal_m=CAR_STATE_BSD_REAR_LONGITUDINAL_M,
-                lateral_m=side * CAR_STATE_BSD_REAR_LATERAL_M,
-                source="carState.blindspot",
-                probability=0.85,
             )
         )
     return tuple(detections)
