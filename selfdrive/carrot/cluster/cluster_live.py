@@ -49,7 +49,7 @@ LIVE_SERVICES_BASE = (
     "navInstructionCarrot",
     "wideRoadCameraState",
 )
-LIVE_CAN_SERVICES = ("can",)
+LIVE_CAN_SERVICES = ("can", "sendcan")
 
 
 class OpenpilotLiveSource:
@@ -82,6 +82,11 @@ class OpenpilotLiveSource:
         self._steer_actuator_delay_param_s: float | None = None
         self._cached_live_debug: LiveDebugInfo | None = None
         self._show_plot_mode = 0
+        self._live_debug_enabled = False
+        self._debug_plot_enabled = False
+        self._standby_state = standby_state()
+        self.profile_enabled = False
+        self._profile_samples: list[tuple[str, float]] = []
         try:
             from openpilot.common.params import Params
 
@@ -89,38 +94,80 @@ class OpenpilotLiveSource:
         except Exception:
             pass
 
-    def update(self) -> ClusterUiState:
-        self.sm.update(self.timeout_ms)
-        self._update_current_speed()
+    def set_profile_enabled(self, enabled: bool) -> None:
+        self.profile_enabled = enabled
 
+    def set_debug_panels_enabled(self, *, live_debug: bool, debug_plot: bool) -> None:
+        if live_debug != self._live_debug_enabled or debug_plot != self._debug_plot_enabled:
+            self._next_debug_param_read_t = 0.0
+        self._live_debug_enabled = live_debug
+        self._debug_plot_enabled = debug_plot
+
+    def profile_samples(self) -> tuple[tuple[str, float], ...]:
+        samples = tuple(self._profile_samples)
+        self._profile_samples.clear()
+        return samples
+
+    def _profile_start(self) -> float:
+        return time.perf_counter() if self.profile_enabled else 0.0
+
+    def _profile_add(self, name: str, start_time: float) -> None:
+        if self.profile_enabled:
+            self._profile_samples.append((name, (time.perf_counter() - start_time) * 1000.0))
+
+    def update(self) -> ClusterUiState:
+        profile_stage = self._profile_start()
+        self.sm.update(self.timeout_ms)
+        self._profile_add("source.live.submaster_update", profile_stage)
+
+        profile_stage = self._profile_start()
+        self._update_current_speed()
+        self._profile_add("source.live.current_speed", profile_stage)
+
+        profile_stage = self._profile_start()
         for service in self.services:
             if not self._service_updated(service):
                 continue
             event_t = self._service_time(service)
             self._apply_service_update(service, event_t)
+        self._profile_add("source.live.apply_updates", profile_stage)
 
         if self._service_alive("carState"):
+            profile_stage = self._profile_start()
             event_t = self._service_time("carState")
             frame = self.parser._frame_from_car_state(self.sm["carState"], event_t)
-            self.last_state = self._with_debug_state(frame_to_state(frame))
+            self._profile_add("source.live.car_frame", profile_stage)
+
+            profile_stage = self._profile_start()
+            state = frame_to_state(frame)
+            self._profile_add("source.live.frame_to_state", profile_stage)
+
+            self.last_state = self._with_debug_state(state)
             self.frames += 1
             return self.last_state
 
-        self.last_state = self._with_debug_state(standby_state())
+        profile_stage = self._profile_start()
+        state = self._standby_state
+        self._profile_add("source.live.standby_state", profile_stage)
+
+        self.last_state = self._with_debug_state(state)
         return self.last_state
 
     def status_text(self) -> str:
+        profile_stage = self._profile_start()
         alive = sum(1 for service in self.services if self._service_alive(service))
         updated = sum(1 for service in self.services if self._service_updated(service))
-        can_status = "can" if "can" in self.services else "no-can"
+        can_status = "can/sendcan" if "sendcan" in self.services else "no-can"
         age = time.monotonic() - self.start_t
         fps = self.frames / age if age > 0.1 else 0.0
         radar_count = len(self.last_state.radar_points) if self.last_state is not None else 0
         detected_count = len(self.last_state.detected_vehicles) if self.last_state is not None else 0
-        return (
+        text = (
             f"live {can_status} alive={alive}/{len(self.services)} upd={updated} state={fps:.1f}Hz "
             f"radar={radar_count} detected={detected_count}"
         )
+        self._profile_add("source.live.status_text", profile_stage)
+        return text
 
     def screen_brightness_percent(self) -> int | None:
         camera_brightness = self._camera_brightness_percent()
@@ -187,11 +234,25 @@ class OpenpilotLiveSource:
             self.parser._update_radar_state(data, event_t)
         elif service == "liveTracks":
             self.parser._update_live_tracks(data, event_t)
-        elif service == "can":
-            self.parser._update_can_detections(data, event_t)
+        elif service in ("can", "sendcan"):
+            self.parser._update_can_detections(data, event_t, service)
 
     def _with_debug_state(self, state: ClusterUiState) -> ClusterUiState:
-        return replace(state, live_debug=self._live_debug_info(), debug_plot=self._debug_plot_snapshot())
+        if not self._live_debug_enabled and not self._debug_plot_enabled:
+            return state
+
+        profile_stage = self._profile_start()
+        live_debug = self._live_debug_info() if self._live_debug_enabled else None
+        self._profile_add("source.live.debug_info", profile_stage)
+
+        profile_stage = self._profile_start()
+        debug_plot = self._debug_plot_snapshot() if self._debug_plot_enabled else None
+        self._profile_add("source.live.debug_plot", profile_stage)
+
+        profile_stage = self._profile_start()
+        state = replace(state, live_debug=live_debug, debug_plot=debug_plot)
+        self._profile_add("source.live.debug_replace", profile_stage)
+        return state
 
     def _live_debug_info(self) -> LiveDebugInfo | None:
         self._refresh_debug_params()

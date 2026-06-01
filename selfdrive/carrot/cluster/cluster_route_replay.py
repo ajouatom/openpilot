@@ -6,6 +6,7 @@ import math
 import multiprocessing
 import os
 import queue
+import re
 import shutil
 import subprocess
 import sys
@@ -14,6 +15,7 @@ import threading
 import traceback
 from bisect import bisect_right
 from dataclasses import dataclass, replace
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +29,7 @@ from cluster_config import (
     MODEL_DIRECT_LANE_RECENTER_SECONDS,
     ROAD_CURVE_M_PER_M2,
     WHITE,
+    YELLOW,
 )
 from cluster_models import (
     ClusterUiState,
@@ -41,11 +44,26 @@ from cluster_models import (
 from cluster_utils import clamp, smoothstep
 
 
+DBC_SIGNAL_RE = re.compile(
+    r'^\s*SG_ (\w+) : (\d+)\|(\d+)@([01])([+-]) \(([0-9.+\-eE]+),([0-9.+\-eE]+)\)'
+)
 ROUTE_SCHEMA_CACHE_NAME = "carrotpilot_cluster_capnp_v1"
 LOG_FILENAMES = {
     "qlog": "qlog.zst",
     "rlog": "rlog.zst",
 }
+
+
+@dataclass(frozen=True)
+class DbcSignalSpec:
+    start: int
+    length: int
+    byte_order: str
+    signed: bool
+    factor: float
+    offset: float
+
+
 RADAR_TO_CAMERA_M = 1.52
 MODEL_LEAD_MIN_PROB = 0.08
 RADAR_POINT_STALE_S = 0.12
@@ -55,9 +73,32 @@ RADAR_FRONT_MAX_LONGITUDINAL_M = 180.0
 CORNER_RADAR_REAR_MIN_LONGITUDINAL_M = -180.0
 CCNC_CORNER_RADAR_ADDRESS = 0x162
 ADRV_CORNER_RADAR_ADDRESS = 0x1EA
+HYUNDAI_CAMERA_CAN_BUS_MOD = 2
+CORNER_RADAR_DBC_MESSAGES = {
+    CCNC_CORNER_RADAR_ADDRESS: "CCNC_0x162",
+    ADRV_CORNER_RADAR_ADDRESS: "ADRV_0x1ea",
+}
+CORNER_RADAR_DBC_SIGNAL_NAMES = frozenset(
+    {
+        "LANE_CHANGING",
+        "LF_DETECT",
+        "LF_DETECT_DISTANCE",
+        "LF_DETECT_LATERAL",
+        "RF_DETECT",
+        "RF_DETECT_DISTANCE",
+        "RF_DETECT_LATERAL",
+        "LR_DETECT",
+        "LR_DETECT_DISTANCE",
+        "LR_DETECT_LATERAL",
+        "RR_DETECT",
+        "RR_DETECT_DISTANCE",
+        "RR_DETECT_LATERAL",
+    }
+)
 ROUTE_REPLAY_MIN_BUFFER_FILES = 2
 ROUTE_REPLAY_START_BUFFER_FILES = 1
 ROUTE_REPLAY_READAHEAD_S = 5.0
+ROUTE_REPLAY_PRELOAD_READY_AHEAD_S = 20.0
 ROUTE_REPLAY_RETAIN_BEHIND_S = 1.0
 ROUTE_REPLAY_PRELOAD_NICE = 10
 ROUTE_VIDEO_FPS = 20.0
@@ -109,6 +150,8 @@ class RouteReplayFrame:
     right_road_edge_offset: float | None
     left_lane_style: str
     right_lane_style: str
+    left_lane_color: tuple[int, int, int] | None
+    right_lane_color: tuple[int, int, int] | None
     road_curvature: float | None
     road_curvature_source: str
     lane_position_source: str
@@ -472,6 +515,8 @@ class RouteReplaySource:
         if self.frames and playback_seconds < self.frames[0].t and not self._end_of_route:
             self._reset_stream()
 
+        self._finish_preload_if_ready(playback_seconds)
+
         while not self._end_of_route and (
             not self.frames
             or len(self._loaded_chunks) < ROUTE_REPLAY_START_BUFFER_FILES
@@ -482,6 +527,13 @@ class RouteReplaySource:
 
         self._trim_loaded_chunks(playback_seconds)
         self._start_preload()
+
+    def _finish_preload_if_ready(self, playback_seconds: float) -> bool:
+        if not self._preload_active or not self.frames:
+            return False
+        if playback_seconds < self.duration - ROUTE_REPLAY_PRELOAD_READY_AHEAD_S:
+            return False
+        return self._finish_preload(block=False)
 
     def _load_next_file(self) -> bool:
         if self._preload_active:
@@ -865,6 +917,8 @@ class RouteLogParser:
         self.right_road_edge_confidence = 0.0
         self.left_lane_style = "solid"
         self.right_lane_style = "solid"
+        self.left_lane_color: tuple[int, int, int] | None = None
+        self.right_lane_color: tuple[int, int, int] | None = None
         self.lane_position_source = "default"
         self.model_curvature_m_inv: float | None = None
         self.model_curvature_source = "steeringAngleDeg"
@@ -994,7 +1048,7 @@ class RouteLogParser:
             elif event_type == "liveTracks":
                 self._update_live_tracks(event.liveTracks, event_t)
             elif event_type in ("can", "sendcan"):
-                self._update_can_detections(getattr(event, event_type), event_t)
+                self._update_can_detections(getattr(event, event_type), event_t, event_type)
 
         return frames
 
@@ -1094,6 +1148,8 @@ class RouteLogParser:
             right_road_edge_offset=lane_values["right_road_edge_offset"],
             left_lane_style=self.left_lane_style,
             right_lane_style=self.right_lane_style,
+            left_lane_color=self.left_lane_color,
+            right_lane_color=self.right_lane_color,
             road_curvature=road_curvature,
             road_curvature_source=road_curvature_source,
             lane_position_source=self.lane_position_source,
@@ -1429,11 +1485,16 @@ class RouteLogParser:
         self.radar_detections = tuple(detections)
         self.radar_detection_t = event_t
 
-    def _update_can_detections(self, can_messages: Any, event_t: float) -> None:
+    def _update_can_detections(self, can_messages: Any, event_t: float, source_service: str = "can") -> None:
         for can_message in can_messages:
             address = int(safe_get(can_message, "address", -1))
+            bus = int(safe_get(can_message, "src", -1))
+            if source_service == "can" and bus >= 0x80:
+                continue
             data = bytes(safe_get(can_message, "dat", b""))
             if is_hyundai_canfd_radar_address(address):
+                if source_service == "sendcan":
+                    continue
                 labels = hyundai_canfd_radar_labels_for_address(address)
                 radar_points = parse_hyundai_canfd_radar_message(address, data)
                 valid_labels = {point.label for point in radar_points}
@@ -1447,13 +1508,17 @@ class RouteLogParser:
                 continue
             if address not in (CCNC_CORNER_RADAR_ADDRESS, ADRV_CORNER_RADAR_ADDRESS):
                 continue
+            if source_service == "sendcan" or not is_hyundai_camera_can_bus(bus):
+                continue
             if len(data) < 24:
                 continue
-            parsed = parse_corner_radar_message(address, data)
+            corner_values = decode_hyundai_canfd_dbc_message(address, data)
+            parsed = parse_corner_radar_message(address, data, corner_values)
             if address == ADRV_CORNER_RADAR_ADDRESS:
+                lane_changing = int(corner_values.get("LANE_CHANGING", 0.0))
                 self.adrv_corner_detections = parsed
                 self.adrv_corner_message_t = event_t
-                self.adrv_lane_changing = dbc_unsigned(data, 45, 3, "be")
+                self.adrv_lane_changing = lane_changing
                 self.adrv_lane_changing_t = event_t
             else:
                 self.ccnc_corner_detections = parsed
@@ -1511,6 +1576,14 @@ class RouteLogParser:
         if event_t - self.model_detection_t < 0.8:
             detections.extend(self.model_detections)
 
+        car_state_detections = car_state_corner_detections(car_state)
+        car_state_corner_labels = {vehicle.label for vehicle in car_state_detections}
+        for vehicle in car_state_detections:
+            if not vehicle_is_inside_road_edges(vehicle, lane_values):
+                continue
+            if not has_nearby_vehicle(detections, vehicle, longitudinal_tolerance=3.0, lateral_tolerance=1.1):
+                detections.append(vehicle)
+
         corner_detections = self._corner_detections_for_current_state(
             event_t,
             lane_change,
@@ -1518,12 +1591,8 @@ class RouteLogParser:
         )
         if corner_detections is not None:
             for vehicle in corner_detections:
-                if not vehicle_is_inside_road_edges(vehicle, lane_values):
+                if vehicle.label in car_state_corner_labels:
                     continue
-                if not has_nearby_vehicle(detections, vehicle, longitudinal_tolerance=3.0, lateral_tolerance=1.1):
-                    detections.append(vehicle)
-        else:
-            for vehicle in car_state_corner_detections(car_state):
                 if not vehicle_is_inside_road_edges(vehicle, lane_values):
                     continue
                 if not has_nearby_vehicle(detections, vehicle, longitudinal_tolerance=3.0, lateral_tolerance=1.1):
@@ -1551,19 +1620,11 @@ class RouteLogParser:
     ) -> tuple[DetectedVehicle, ...] | None:
         adrv_fresh = event_t - self.adrv_corner_message_t < CORNER_DETECTION_STALE_S
         ccnc_fresh = event_t - self.ccnc_corner_message_t < CORNER_DETECTION_STALE_S
-        adrv_lane_change_fresh = event_t - self.adrv_lane_changing_t < CORNER_DETECTION_STALE_S
-        lane_change_active = (
-            lane_change in ("left", "right")
-            and lane_change_phase in ("preparing", "changing", "recentering")
-        )
-        adrv_lane_change_active = adrv_lane_change_fresh and self.adrv_lane_changing != 0
 
-        if adrv_fresh and (lane_change_active or adrv_lane_change_active):
+        if adrv_fresh:
             return tuple(self.adrv_corner_detections.values())
         if ccnc_fresh:
             return tuple(self.ccnc_corner_detections.values())
-        if adrv_fresh:
-            return tuple(self.adrv_corner_detections.values())
         return None
 
     def _current_road_curvature(self) -> tuple[float | None, str]:
@@ -1751,10 +1812,12 @@ class RouteLogParser:
         right_code = safe_optional_int(car_state, "rightLaneLine")
         if left_code is not None:
             self.left_lane_style = lane_style_from_code(left_code)
+            self.left_lane_color = lane_color_from_code(left_code)
             if left_code < 0:
                 self.left_lane_prob = 0.0
         if right_code is not None:
             self.right_lane_style = lane_style_from_code(right_code)
+            self.right_lane_color = lane_color_from_code(right_code)
             if right_code < 0:
                 self.right_lane_prob = 0.0
 
@@ -1782,39 +1845,42 @@ class RouteLogParser:
         outer_right_offset = lane_offset_from_y(self.outer_right_lane_y_m, center_m, width)
         left_edge_offset = lane_offset_from_y(self.left_road_edge_y_m, center_m, width)
         right_edge_offset = lane_offset_from_y(self.right_road_edge_y_m, center_m, width)
-        extra_left_visible = (
-            outer_left_offset is not None
-            and outer_left_offset < -0.78
-            and self.outer_left_lane_prob > 0.35
-        )
-        extra_right_visible = (
-            outer_right_offset is not None
-            and outer_right_offset > 0.78
-            and self.outer_right_lane_prob > 0.35
-        )
         left_edge_visible = (
             left_edge_offset is not None
             and left_edge_offset < -0.68
-            and self.left_road_edge_confidence > 0.15
-            and (extra_left_visible or left_edge_offset > -1.25)
         )
         right_edge_visible = (
             right_edge_offset is not None
             and right_edge_offset > 0.68
-            and self.right_road_edge_confidence > 0.15
-            and (extra_right_visible or right_edge_offset < 1.25)
+        )
+        left_edge_bound = clamp(left_edge_offset, -2.8, -0.68) if left_edge_visible else None
+        right_edge_bound = clamp(right_edge_offset, 0.68, 2.8) if right_edge_visible else None
+        if left_edge_bound is not None and right_edge_bound is not None and left_edge_bound >= right_edge_bound:
+            left_edge_bound = None
+            right_edge_bound = None
+        left_offset = clamp((left_y - center_m) / width, -0.75, -0.25)
+        right_offset = clamp((right_y - center_m) / width, 0.25, 0.75)
+        extra_left_visible = (
+            outer_left_offset is not None
+            and outer_left_offset < -0.78
+            and lane_offset_inside_road_edges(outer_left_offset, left_edge_bound, right_edge_bound)
+        )
+        extra_right_visible = (
+            outer_right_offset is not None
+            and outer_right_offset > 0.78
+            and lane_offset_inside_road_edges(outer_right_offset, left_edge_bound, right_edge_bound)
         )
         return {
             "width": width,
             "center": center_m,
-            "left_offset": clamp((left_y - center_m) / width, -0.75, -0.25),
-            "right_offset": clamp((right_y - center_m) / width, 0.25, 0.75),
-            "left_visible": self.left_lane_prob > 0.22,
-            "right_visible": self.right_lane_prob > 0.22,
+            "left_offset": left_offset,
+            "right_offset": right_offset,
+            "left_visible": lane_offset_inside_road_edges(left_offset, left_edge_bound, right_edge_bound),
+            "right_visible": lane_offset_inside_road_edges(right_offset, left_edge_bound, right_edge_bound),
             "extra_left_visible": extra_left_visible,
             "extra_right_visible": extra_right_visible,
-            "left_road_edge_offset": clamp(left_edge_offset, -2.8, -0.68) if left_edge_visible else None,
-            "right_road_edge_offset": clamp(right_edge_offset, 0.68, 2.8) if right_edge_visible else None,
+            "left_road_edge_offset": left_edge_bound,
+            "right_road_edge_offset": right_edge_bound,
         }
 
     def _lane_change_values(
@@ -2071,7 +2137,11 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         frame.right_road_edge_offset,
         lane_grid_offset if use_animated_lane_grid else 0.0,
     )
-    left_road_edge_points = model_line_at(frame.model_road_edges, 0)
+    left_road_edge_points = (
+        model_line_at(frame.model_road_edges, 0)
+        if frame.left_road_edge_offset is not None
+        else ()
+    )
     left_road_edge_lateral_shift_m = model_line_lateral_shift(
         left_road_edge_points,
         frame,
@@ -2079,7 +2149,11 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         lane_grid_offset,
         use_animated_lane_grid,
     )
-    right_road_edge_points = model_line_at(frame.model_road_edges, 1)
+    right_road_edge_points = (
+        model_line_at(frame.model_road_edges, 1)
+        if frame.right_road_edge_offset is not None
+        else ()
+    )
     right_road_edge_lateral_shift_m = model_line_lateral_shift(
         right_road_edge_points,
         frame,
@@ -2297,6 +2371,8 @@ def blend_frames(left: RouteReplayFrame, right: RouteReplayFrame, amount: float)
         right_road_edge_offset=lerp_optional(left.right_road_edge_offset, right.right_road_edge_offset),
         left_lane_style=discrete.left_lane_style,
         right_lane_style=discrete.right_lane_style,
+        left_lane_color=discrete.left_lane_color,
+        right_lane_color=discrete.right_lane_color,
         road_curvature=lerp_optional(left.road_curvature, right.road_curvature),
         road_curvature_source=discrete.road_curvature_source,
         lane_position_source=discrete.lane_position_source,
@@ -2378,8 +2454,8 @@ def lanes_for_frame(
     lane_grid_offset: float = 0.0,
     use_animated_lane_grid: bool = False,
 ) -> tuple[LaneMarking, ...]:
-    left_inner_color = BLUE
-    right_inner_color = BLUE
+    left_inner_color = frame.left_lane_color or BLUE
+    right_inner_color = frame.right_lane_color or BLUE
     left_outer_color = WHITE
     right_outer_color = WHITE
     if frame.lane_change == "left":
@@ -2394,9 +2470,11 @@ def lanes_for_frame(
         left_inner = frame.left_lane_offset + lane_grid_offset
         right_inner = frame.right_lane_offset + lane_grid_offset
 
-    force_lane_change_lanes = use_animated_lane_grid and frame.lane_change in ("left", "right")
-    left_inner_visible = frame.left_lane_visible or force_lane_change_lanes
-    right_inner_visible = frame.right_lane_visible or force_lane_change_lanes
+    left_inner_visible = frame.left_lane_visible
+    right_inner_visible = frame.right_lane_visible
+    road_edge_shift = lane_grid_offset if use_animated_lane_grid else 0.0
+    left_road_edge_offset = shifted_optional_offset(frame.left_road_edge_offset, road_edge_shift)
+    right_road_edge_offset = shifted_optional_offset(frame.right_road_edge_offset, road_edge_shift)
 
     markings: list[LaneMarking] = []
     for index, points in enumerate(frame.model_lane_lines):
@@ -2414,6 +2492,32 @@ def lanes_for_frame(
             style = frame.right_lane_style
             visible = right_inner_visible
             width = 7
+        elif index == 0:
+            offset = model_lane_offset_for_index(
+                index,
+                points,
+                frame,
+                left_inner,
+                right_inner,
+                lane_grid_offset,
+            )
+            color = model_lane_color_for_index(index, frame.lane_change)
+            style = model_lane_style_for_index(index)
+            visible = frame.extra_left_lane_visible
+            width = 5
+        elif index == 3:
+            offset = model_lane_offset_for_index(
+                index,
+                points,
+                frame,
+                left_inner,
+                right_inner,
+                lane_grid_offset,
+            )
+            color = model_lane_color_for_index(index, frame.lane_change)
+            style = model_lane_style_for_index(index)
+            visible = frame.extra_right_lane_visible
+            width = 5
         else:
             offset = model_lane_offset_for_index(
                 index,
@@ -2427,6 +2531,11 @@ def lanes_for_frame(
             style = model_lane_style_for_index(index)
             visible = True
             width = 5
+        visible = visible and lane_offset_inside_road_edges(
+            offset,
+            left_road_edge_offset,
+            right_road_edge_offset,
+        )
         markings.append(
             LaneMarking(
                 offset,
@@ -2455,7 +2564,11 @@ def lanes_for_frame(
                 left_outer,
                 left_outer_color,
                 "solid",
-                visible=True,
+                visible=frame.extra_left_lane_visible and lane_offset_inside_road_edges(
+                    left_outer,
+                    left_road_edge_offset,
+                    right_road_edge_offset,
+                ),
                 width=5,
                 model_points=left_outer_points,
                 model_lateral_shift_m=model_line_lateral_shift(
@@ -2473,7 +2586,11 @@ def lanes_for_frame(
             left_inner,
             left_inner_color,
             frame.left_lane_style,
-            visible=left_inner_visible,
+            visible=left_inner_visible and lane_offset_inside_road_edges(
+                left_inner,
+                left_road_edge_offset,
+                right_road_edge_offset,
+            ),
             width=7,
             model_points=left_inner_points,
             model_lateral_shift_m=model_line_lateral_shift(
@@ -2491,7 +2608,11 @@ def lanes_for_frame(
             right_inner,
             right_inner_color,
             frame.right_lane_style,
-            visible=right_inner_visible,
+            visible=right_inner_visible and lane_offset_inside_road_edges(
+                right_inner,
+                left_road_edge_offset,
+                right_road_edge_offset,
+            ),
             width=7,
             model_points=right_inner_points,
             model_lateral_shift_m=model_line_lateral_shift(
@@ -2511,7 +2632,11 @@ def lanes_for_frame(
                 right_outer,
                 right_outer_color,
                 "dashed",
-                visible=True,
+                visible=frame.extra_right_lane_visible and lane_offset_inside_road_edges(
+                    right_outer,
+                    left_road_edge_offset,
+                    right_road_edge_offset,
+                ),
                 width=5,
                 model_points=right_outer_points,
                 model_lateral_shift_m=model_line_lateral_shift(
@@ -2744,6 +2869,20 @@ def lane_offset_from_y(y_m: float | None, center_m: float, lane_width_m: float) 
     return (y_m - center_m) / max(0.1, lane_width_m)
 
 
+def lane_offset_inside_road_edges(
+    offset: float | None,
+    left_road_edge_offset: float | None,
+    right_road_edge_offset: float | None,
+) -> bool:
+    if offset is None:
+        return True
+    if left_road_edge_offset is not None and offset < left_road_edge_offset:
+        return False
+    if right_road_edge_offset is not None and offset > right_road_edge_offset:
+        return False
+    return True
+
+
 def road_edge_confidence_from_std(std: float | None) -> float:
     if std is None:
         return 0.0
@@ -2778,19 +2917,22 @@ def list_max(values: Any) -> float:
 
 def car_state_corner_detections(car_state: Any) -> tuple[DetectedVehicle, ...]:
     pairs = (
-        ("LF", "leftLongDist", "leftLatDist", -1.0),
-        ("RF", "rightLongDist", "rightLatDist", 1.0),
+        ("LF", "leftLongDist", "leftLatDist", -1.0, 1.0),
+        ("RF", "rightLongDist", "rightLatDist", 1.0, 1.0),
+        ("LR", "leftRearLongDist", "leftRearLatDist", -1.0, -1.0),
+        ("RR", "rightRearLongDist", "rightRearLatDist", 1.0, -1.0),
     )
     detections: list[DetectedVehicle] = []
-    for label, distance_name, lateral_name, side in pairs:
+    for label, distance_name, lateral_name, side, forward_sign in pairs:
         distance_m = safe_float(car_state, distance_name, 0.0)
         if not 0.2 < distance_m < 180.0:
             continue
+        longitudinal_m = forward_sign * distance_m
         lateral_mag = normalized_lateral_m(safe_float(car_state, lateral_name, 0.0))
         detections.append(
             DetectedVehicle(
                 label=label,
-                longitudinal_m=distance_m,
+                longitudinal_m=longitudinal_m,
                 lateral_m=side * lateral_mag,
                 source="carState",
             )
@@ -2798,29 +2940,17 @@ def car_state_corner_detections(car_state: Any) -> tuple[DetectedVehicle, ...]:
     return tuple(detections)
 
 
-def corner_radar_specs(address: int) -> dict[str, tuple[str, int, int, str, int, int, str, int, int, float]]:
-    if address == 0x162:
-        return {
-            "LF": ("le", 112, 5, "le", 117, 11, "le", 128, 7, 1.0),
-            "RF": ("le", 136, 5, "le", 141, 11, "le", 152, 7, 1.0),
-            "LR": ("le", 163, 5, "be", 175, 8, "le", 176, 7, -1.0),
-            "RR": ("le", 192, 5, "le", 197, 8, "le", 205, 7, -1.0),
-        }
-    return {
-        "LF": ("be", 74, 3, "le", 46, 11, "be", 70, 7, 1.0),
-        "RF": ("be", 98, 3, "le", 75, 11, "be", 94, 7, 1.0),
-        "LR": ("be", 162, 3, "le", 139, 8, "le", 152, 6, -1.0),
-        "RR": ("be", 186, 3, "le", 163, 8, "le", 172, 6, -1.0),
-    }
-
-
-def parse_corner_radar_message(address: int, data: bytes) -> dict[str, DetectedVehicle]:
-    specs = corner_radar_specs(address)
+def parse_corner_radar_message(
+    address: int,
+    data: bytes,
+    values: dict[str, float] | None = None,
+) -> dict[str, DetectedVehicle]:
+    if values is None:
+        values = decode_hyundai_canfd_dbc_message(address, data)
     detections: dict[str, DetectedVehicle] = {}
-    for label, spec in specs.items():
-        det_order, det_start, det_len, dist_order, dist_start, dist_len, lat_order, lat_start, lat_len, forward_sign = spec
-        detect = dbc_unsigned(data, det_start, det_len, det_order)
-        distance_m = dbc_unsigned(data, dist_start, dist_len, dist_order) * 0.1
+    for label, forward_sign in (("LF", 1.0), ("RF", 1.0), ("LR", -1.0), ("RR", -1.0)):
+        detect = values.get(f"{label}_DETECT", 0.0)
+        distance_m = values.get(f"{label}_DETECT_DISTANCE", 0.0)
         if detect == 0 or not 0.2 < distance_m < 180.0:
             continue
         longitudinal_m = forward_sign * distance_m
@@ -2829,12 +2959,8 @@ def parse_corner_radar_message(address: int, data: bytes) -> dict[str, DetectedV
                 continue
         elif not RADAR_MIN_LONGITUDINAL_M <= longitudinal_m <= RADAR_FRONT_MAX_LONGITUDINAL_M:
             continue
-        lateral_mag = normalized_lateral_m(dbc_unsigned(data, lat_start, lat_len, lat_order) * 0.1)
-        side = -1.0 if label.endswith("F") and label.startswith("L") else 1.0
-        if label.startswith("L"):
-            side = -1.0
-        elif label.startswith("R"):
-            side = 1.0
+        lateral_mag = normalized_lateral_m(values.get(f"{label}_DETECT_LATERAL", 0.0))
+        side = -1.0 if label.startswith("L") else 1.0
         detections[label] = DetectedVehicle(
             label=label,
             longitudinal_m=longitudinal_m,
@@ -2842,6 +2968,53 @@ def parse_corner_radar_message(address: int, data: bytes) -> dict[str, DetectedV
             source=f"CAN 0x{address:x}",
         )
     return detections
+
+
+@cache
+def hyundai_canfd_corner_dbc_signals() -> dict[int, dict[str, DbcSignalSpec]]:
+    openpilot_root = find_openpilot_root_for_schema(Path(__file__).resolve().parent)
+    dbc_path = openpilot_root / "opendbc_repo" / "opendbc" / "dbc" / "generator" / "hyundai" / "hyundai_canfd.dbc"
+    signals: dict[int, dict[str, DbcSignalSpec]] = {address: {} for address in CORNER_RADAR_DBC_MESSAGES}
+    current_address: int | None = None
+    with open(dbc_path, encoding="utf-8") as dbc_file:
+        for line in dbc_file:
+            if line.startswith("BO_ "):
+                parts = line.split()
+                current_address = int(parts[1], 0) if len(parts) > 1 else None
+                continue
+            if current_address not in signals:
+                continue
+            match = DBC_SIGNAL_RE.match(line)
+            if match is None:
+                continue
+            name, start, length, endian, sign, factor, offset = match.groups()
+            if name not in CORNER_RADAR_DBC_SIGNAL_NAMES:
+                continue
+            signals[current_address][name] = DbcSignalSpec(
+                start=int(start),
+                length=int(length),
+                byte_order="le" if endian == "1" else "be",
+                signed=sign == "-",
+                factor=float(factor),
+                offset=float(offset),
+            )
+    return signals
+
+
+def decode_hyundai_canfd_dbc_message(address: int, data: bytes) -> dict[str, float]:
+    if address not in CORNER_RADAR_DBC_MESSAGES:
+        return {}
+    values: dict[str, float] = {}
+    for name, signal in hyundai_canfd_corner_dbc_signals().get(address, {}).items():
+        raw_value = dbc_unsigned(data, signal.start, signal.length, signal.byte_order)
+        if signal.signed:
+            raw_value -= ((raw_value >> (signal.length - 1)) & 0x1) * (1 << signal.length)
+        values[name] = raw_value * signal.factor + signal.offset
+    return values
+
+
+def is_hyundai_camera_can_bus(bus: int) -> bool:
+    return bus >= 0 and bus % 4 == HYUNDAI_CAMERA_CAN_BUS_MOD
 
 
 def parse_hyundai_canfd_radar_message(address: int, data: bytes) -> tuple[RadarPoint, ...]:
@@ -3401,3 +3574,14 @@ def lane_style_from_code(code: int) -> str:
     if code < 0:
         return "solid"
     return "dashed" if code % 10 == 0 else "solid"
+
+
+def lane_color_from_code(code: int) -> tuple[int, int, int] | None:
+    if code < 10:
+        return None
+    color_code = code // 10
+    if color_code == 1:
+        return WHITE
+    if color_code == 2:
+        return YELLOW
+    return None

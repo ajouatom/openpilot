@@ -4,24 +4,38 @@ import argparse
 import gc
 from dataclasses import replace
 import signal
+import sys
 import threading
 import time
 from pathlib import Path
 
 from cluster_config import (
     CLUSTER_BRIGHTNESS_PARAM,
+    CLUSTER_ENCODER_AUTO,
+    CLUSTER_ENCODER_HARDWARE,
+    CLUSTER_ENCODER_JPEG,
     CLUSTER_ENCODER_PARAM,
+    CLUSTER_ENCODER_SOFTWARE,
+    CLUSTER_CORE_MODE_PARAM,
+    CLUSTER_HUD_DEBUG_PARAM,
     CLUSTER_HUD_PARAM,
     CLUSTER_LIVE_FPS_PARAM,
+    CLUSTER_PRIORITY_PARAM,
     CLUSTER_RADAR_DISPLAY_PARAM,
     CLUSTER_RADAR_INFO_PARAM,
     CLUSTER_RADAR_SOURCE_COLOR_PARAM,
+    CLUSTER_SCREEN_MODE_DEBUG,
+    CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+    CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
     CLUSTER_SCREEN_MODE_PARAM,
     CLUSTER_THEME_PARAM,
     DESIGN_HEIGHT,
     DESIGN_WIDTH,
     normalize_cluster_brightness_percent,
+    normalize_cluster_core_mode,
+    normalize_cluster_encoder_mode,
     normalize_cluster_live_fps,
+    normalize_cluster_priority,
     normalize_cluster_radar_display_mode,
     normalize_cluster_radar_info_mode,
     normalize_cluster_radar_source_color_mode,
@@ -48,6 +62,7 @@ from cluster_profile import GcProfileHook, ProfileReporter, freeze_gc_after_init
 from cluster_renderer import ClusterUiRenderer
 from cluster_route_replay import RouteReplaySource
 from cluster_simulator import ClusterSimulator, RandomInputSource
+from cluster_system_monitor import ClusterProcessCoreUsageSampler
 from cluster_usb_display import TuringUsbDisplay
 from cluster_usb_pipeline import AsyncJpegUsbPipeline
 
@@ -62,10 +77,17 @@ DEFAULT_H264_DIMENSION_ALIGN = 1
 THEME_PARAM_POLL_SECONDS = 1.0
 FPS_PARAM_POLL_SECONDS = 1.0
 BRIGHTNESS_PARAM_POLL_SECONDS = 1.0
-BRIGHTNESS_RESEND_SECONDS = 5.0
 SCREEN_MODE_PARAM_POLL_SECONDS = 1.0
 RADAR_PARAM_POLL_SECONDS = 1.0
 HUD_MODE_PARAM_POLL_SECONDS = 1.0
+
+
+def live_debug_panel_enabled(screen_mode: int) -> bool:
+    return screen_mode == CLUSTER_SCREEN_MODE_DEBUG
+
+
+def live_debug_plot_enabled(screen_mode: int) -> bool:
+    return screen_mode in (CLUSTER_SCREEN_MODE_DEBUG_GRAPH, CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT)
 
 
 def resolved_usb_display_fps(
@@ -98,6 +120,46 @@ def resolved_usb_h264_bitrate(requested_bitrate: str, target_fps: float, h264_fp
 
 def resolved_h264_encoder_fps(target_fps: float, h264_fps: int) -> int:
     return max(1, int(round(target_fps if target_fps > 0 else h264_fps)))
+
+
+def option_present(argv: list[str], option: str) -> bool:
+    return any(arg == option or arg.startswith(f"{option}=") for arg in argv)
+
+
+def apply_cluster_encoder_param(args: argparse.Namespace) -> str:
+    if args.output not in ("usb", "both"):
+        return "disabled"
+    if args.usb_codec_from_cli:
+        return "--usb-codec"
+
+    encoder_mode = ClusterHudEncoderParamReader().read()
+    if encoder_mode is None:
+        return "default"
+    encoder_mode = normalize_cluster_encoder_mode(encoder_mode)
+
+    if encoder_mode == CLUSTER_ENCODER_JPEG:
+        args.usb_codec = "jpeg"
+    elif encoder_mode in (CLUSTER_ENCODER_AUTO, CLUSTER_ENCODER_HARDWARE, CLUSTER_ENCODER_SOFTWARE):
+        args.usb_codec = "h264"
+        if not args.usb_h264_backend_from_cli:
+            args.usb_h264_backend = "ffmpeg" if encoder_mode == CLUSTER_ENCODER_SOFTWARE else "native"
+        if encoder_mode == CLUSTER_ENCODER_SOFTWARE and not args.usb_h264_ffmpeg_encoder_from_cli:
+            args.usb_h264_ffmpeg_encoder = "libx264"
+    return CLUSTER_ENCODER_PARAM
+
+
+def apply_live_hardware_nv12_default(args: argparse.Namespace) -> None:
+    if args.usb_h264_render_nv12 is not None:
+        return
+
+    args.usb_h264_render_nv12 = (
+        args.input == "live"
+        and args.output in ("usb", "both")
+        and args.usb_codec == "h264"
+        and args.usb_h264_backend in ("auto", "native")
+        and not args.usb_h264_test_pattern
+        and not args.usb_h264_test_pattern_nv12
+    )
 
 
 class ClusterThemeParamReader:
@@ -267,6 +329,25 @@ class ClusterHudModeParamReader:
             return None
 
 
+class ClusterHudOutputGateParamReader:
+    def __init__(self) -> None:
+        self._params = None
+        try:
+            from openpilot.common.params import Params
+
+            self._params = Params()
+        except Exception:
+            pass
+
+    def allowed(self) -> bool:
+        if self._params is None:
+            return True
+        try:
+            return int(self._params.get_int(CLUSTER_HUD_DEBUG_PARAM)) == 1 or bool(self._params.get_bool("IsOnroad"))
+        except Exception:
+            return False
+
+
 class ClusterHudEncoderParamReader:
     def __init__(self) -> None:
         self._params = None
@@ -281,7 +362,45 @@ class ClusterHudEncoderParamReader:
         if self._params is None:
             return None
         try:
-            return int(self._params.get_int(CLUSTER_ENCODER_PARAM))
+            return normalize_cluster_encoder_mode(self._params.get_int(CLUSTER_ENCODER_PARAM))
+        except Exception:
+            return None
+
+
+class ClusterHudCoreModeParamReader:
+    def __init__(self) -> None:
+        self._params = None
+        try:
+            from openpilot.common.params import Params
+
+            self._params = Params()
+        except Exception:
+            pass
+
+    def read(self) -> int | None:
+        if self._params is None:
+            return None
+        try:
+            return normalize_cluster_core_mode(self._params.get_int(CLUSTER_CORE_MODE_PARAM))
+        except Exception:
+            return None
+
+
+class ClusterHudPriorityParamReader:
+    def __init__(self) -> None:
+        self._params = None
+        try:
+            from openpilot.common.params import Params
+
+            self._params = Params()
+        except Exception:
+            pass
+
+    def read(self) -> int | None:
+        if self._params is None:
+            return None
+        try:
+            return normalize_cluster_priority(self._params.get_int(CLUSTER_PRIORITY_PARAM))
         except Exception:
             return None
 
@@ -359,7 +478,6 @@ def run_demo(
     usb_h264_ffmpeg_encoder: str,
     usb_h264_device: str,
     usb_h264_input_format: str,
-    usb_h264_rgb4_layout: str,
     usb_h264_slice_max_bytes: int,
     usb_h264_rate_control: str,
     usb_h264_realtime_priority: bool,
@@ -373,6 +491,9 @@ def run_demo(
     usb_h264_debug: bool,
     usb_h264_diagnose_interval_s: float,
     usb_h264_test_pattern: bool,
+    usb_h264_test_pattern_nv12: bool,
+    usb_h264_render_nv12: bool,
+    usb_h264_render_nv12_flip_x: bool,
     usb_frame_drain_attempts: int,
     usb_frame_drain_timeout_ms: int,
     usb_fast_drain_attempts: int,
@@ -386,13 +507,21 @@ def run_demo(
     route_max_segments: int | None,
     live_include_can: bool,
     live_timeout_ms: int,
+    cluster_core_usage_enabled: bool,
+    cluster_core_usage_debug: bool,
     profile_render: bool,
     profile_interval_s: float,
     gc_freeze_init: bool,
     theme_mode: str | None,
     hud_mode_watch: int | None,
     hud_encoder_watch: int | None,
+    hud_core_mode_watch: int | None,
+    hud_priority_watch: int | None,
 ) -> None:
+    if hud_core_mode_watch is not None:
+        hud_core_mode_watch = normalize_cluster_core_mode(hud_core_mode_watch)
+    if hud_priority_watch is not None:
+        hud_priority_watch = normalize_cluster_priority(hud_priority_watch)
     profile = ProfileReporter(profile_render, profile_interval_s)
     gc_hook = GcProfileHook(profile) if profile_render else None
     if gc_hook is not None:
@@ -482,6 +611,9 @@ def run_demo(
     active_radar_source_color_mode = radar_source_color_param_reader.read()
     hud_mode_param_reader = ClusterHudModeParamReader() if hud_mode_watch is not None else None
     hud_encoder_param_reader = ClusterHudEncoderParamReader() if hud_encoder_watch is not None else None
+    hud_core_mode_param_reader = ClusterHudCoreModeParamReader() if hud_core_mode_watch is not None else None
+    hud_priority_param_reader = ClusterHudPriorityParamReader() if hud_priority_watch is not None else None
+    hud_output_gate_param_reader = ClusterHudOutputGateParamReader() if hud_mode_watch is not None else None
     renderer = ClusterUiRenderer(
         frame_width,
         frame_height,
@@ -498,10 +630,21 @@ def run_demo(
     )
     renderer.set_profile_enabled(profile_render)
     git_status_provider = GitBranchStatusProvider(Path(__file__).resolve().parent)
+    cluster_core_usage_sampler = (
+        ClusterProcessCoreUsageSampler(debug=cluster_core_usage_debug)
+        if cluster_core_usage_enabled
+        else None
+    )
     simulator = ClusterSimulator() if input_mode in ("random", "gamepad") else None
     controller = DualSenseSimulator(controller_index) if input_mode == "gamepad" else None
     random_input = RandomInputSource() if input_mode == "random" else None
     live_source = OpenpilotLiveSource(include_can=live_include_can, timeout_ms=live_timeout_ms) if input_mode == "live" else None
+    if live_source is not None:
+        live_source.set_profile_enabled(profile_render)
+        live_source.set_debug_panels_enabled(
+            live_debug=live_debug_panel_enabled(active_screen_mode),
+            debug_plot=live_debug_plot_enabled(active_screen_mode),
+        )
     route_source = None
     if input_mode == "route":
         profile_stage = time.perf_counter()
@@ -519,14 +662,24 @@ def run_demo(
     next_theme_param_read = start_time
     next_fps_param_read = start_time + FPS_PARAM_POLL_SECONDS
     next_brightness_param_read = start_time
-    next_brightness_resend = start_time + BRIGHTNESS_RESEND_SECONDS
     next_screen_mode_param_read = start_time
     next_radar_param_read = start_time
-    next_hud_mode_param_read = start_time + HUD_MODE_PARAM_POLL_SECONDS
+    next_hud_mode_param_read = start_time
     report_frames = 0
     display_actual_fps: float | None = None
     frame_interval = 1.0 / target_fps if target_fps > 0 else 0.0
     h264_test_pattern_rgba: bytearray | None = None
+    h264_test_pattern_nv12: bytearray | None = None
+    h264_render_nv12_buffer: bytearray | None = None
+    h264_render_nv12_layout: tuple[int, int, int, int, int, int, bool] | None = None
+
+    if hud_output_gate_param_reader is not None and not hud_output_gate_param_reader.allowed():
+        print(
+            f"{CLUSTER_HUD_DEBUG_PARAM}=0 and IsOnroad=0; "
+            "cluster HUD output remains off",
+            flush=True,
+        )
+        return
 
     try:
         renderer.open(hidden=output_mode == "usb")
@@ -549,7 +702,6 @@ def run_demo(
                 usb_h264_ffmpeg_encoder,
                 usb_h264_device,
                 usb_h264_input_format,
-                usb_h264_rgb4_layout,
                 usb_h264_slice_max_bytes,
                 usb_h264_rate_control,
                 usb_h264_realtime_priority,
@@ -565,6 +717,25 @@ def run_demo(
             profile.add_elapsed("usb_h264.start", profile_stage)
             profile.add_samples(usb_display.profile_samples())
             usb_display.clear_profile_samples()
+            if usb_h264_render_nv12:
+                if h264_pipeline.backend_name != "native":
+                    print(
+                        f"H264 GPU NV12 render path disabled; backend resolved to {h264_pipeline.backend_name}",
+                        flush=True,
+                    )
+                    usb_h264_render_nv12 = False
+                else:
+                    h264_render_nv12_layout = h264_pipeline.native_nv12_render_layout()
+                    stride, y_scanlines, uv_scanlines, uv_offset, input_bytes, render_bytes, active_submit = h264_render_nv12_layout
+                    print(
+                        f"Using H264 GPU NV12 render path: "
+                        f"{h264_pipeline.encoder_width}x{h264_pipeline.encoder_height} "
+                        f"stride={stride} scanlines={y_scanlines}/{uv_scanlines} "
+                        f"uv_offset={uv_offset} bytes={input_bytes} render_bytes={render_bytes} "
+                        f"active_submit={'on' if active_submit else 'off'} "
+                        f"flip_x={'on' if usb_h264_render_nv12_flip_x else 'off'}",
+                        flush=True,
+                    )
             if usb_h264_test_pattern:
                 h264_test_pattern_rgba = build_rgba_color_test_pattern(
                     h264_pipeline.width,
@@ -574,6 +745,14 @@ def run_demo(
                     f"Using H264 RGBA color test pattern: "
                     f"{h264_pipeline.width}x{h264_pipeline.height} "
                     f"orientation={usb_h264_orientation}",
+                    flush=True,
+                )
+            if usb_h264_test_pattern_nv12:
+                h264_test_pattern_nv12 = h264_pipeline.build_nv12_color_test_pattern()
+                print(
+                    f"Using H264 native NV12 color test pattern: "
+                    f"{h264_pipeline.encoder_width}x{h264_pipeline.encoder_height} "
+                    f"bytes={len(h264_test_pattern_nv12)} orientation={usb_h264_orientation}",
                     flush=True,
                 )
         if gc_freeze_init:
@@ -608,6 +787,11 @@ def run_demo(
                         flush=True,
                     )
                     renderer.set_screen_mode(next_screen_mode)
+                    if live_source is not None:
+                        live_source.set_debug_panels_enabled(
+                            live_debug=live_debug_panel_enabled(next_screen_mode),
+                            debug_plot=live_debug_plot_enabled(next_screen_mode),
+                        )
                 next_screen_mode_param_read = now + SCREEN_MODE_PARAM_POLL_SECONDS
             if now >= next_radar_param_read:
                 next_radar_info_mode = radar_info_param_reader.read()
@@ -635,9 +819,18 @@ def run_demo(
                     )
                     active_radar_source_color_mode = next_radar_source_color_mode
                 next_radar_param_read = now + RADAR_PARAM_POLL_SECONDS
-            if hud_mode_param_reader is not None and now >= next_hud_mode_param_read:
-                next_hud_mode = hud_mode_param_reader.read()
-                if next_hud_mode is not None and next_hud_mode != hud_mode_watch:
+            if (
+                now >= next_hud_mode_param_read
+                and (
+                    hud_mode_param_reader is not None
+                    or hud_encoder_param_reader is not None
+                    or hud_core_mode_param_reader is not None
+                    or hud_priority_param_reader is not None
+                    or hud_output_gate_param_reader is not None
+                )
+            ):
+                next_hud_mode = hud_mode_param_reader.read() if hud_mode_param_reader is not None else None
+                if hud_mode_param_reader is not None and next_hud_mode is not None and next_hud_mode != hud_mode_watch:
                     print(
                         f"{CLUSTER_HUD_PARAM} changed from {hud_mode_watch} to {next_hud_mode}; exiting",
                         flush=True,
@@ -647,6 +840,29 @@ def run_demo(
                 if next_hud_encoder is not None and next_hud_encoder != hud_encoder_watch:
                     print(
                         f"{CLUSTER_ENCODER_PARAM} changed from {hud_encoder_watch} to {next_hud_encoder}; exiting",
+                        flush=True,
+                    )
+                    break
+                next_hud_core_mode = hud_core_mode_param_reader.read() if hud_core_mode_param_reader is not None else None
+                if next_hud_core_mode is not None and next_hud_core_mode != hud_core_mode_watch:
+                    print(
+                        f"{CLUSTER_CORE_MODE_PARAM} changed from "
+                        f"{hud_core_mode_watch} to {next_hud_core_mode}; exiting for restart",
+                        flush=True,
+                    )
+                    break
+                next_hud_priority = hud_priority_param_reader.read() if hud_priority_param_reader is not None else None
+                if next_hud_priority is not None and next_hud_priority != hud_priority_watch:
+                    print(
+                        f"{CLUSTER_PRIORITY_PARAM} changed from "
+                        f"{hud_priority_watch} to {next_hud_priority}; exiting for restart",
+                        flush=True,
+                    )
+                    break
+                if hud_output_gate_param_reader is not None and not hud_output_gate_param_reader.allowed():
+                    print(
+                        f"{CLUSTER_HUD_DEBUG_PARAM}=0 and IsOnroad=0; "
+                        "exiting to turn off cluster HUD output",
                         flush=True,
                     )
                     break
@@ -689,11 +905,13 @@ def run_demo(
                     if display_actual_fps is None
                     else display_actual_fps * 0.85 + instant_fps * 0.15
                 )
+            source_status: str | None = None
+            center_clock_text: str | None = None
             if live_source is not None:
                 profile_stage = time.perf_counter()
                 state = live_source.update()
-                state = replace(state, center_clock_text=time.strftime("%H:%M:%S"))
-                source_status = live_source.status_text()
+                center_clock_text = time.strftime("%H:%M:%S")
+                profile.add_samples(live_source.profile_samples())
                 profile.add_elapsed("source.live_update", profile_stage)
             elif route_source is not None:
                 profile_stage = time.perf_counter()
@@ -728,13 +946,23 @@ def run_demo(
                 state = simulator.update(command, dt)
                 profile.add_elapsed("source.gamepad_update", profile_stage)
 
+            if live_source is None:
+                center_clock_text = state.center_clock_text
+
+            cluster_core_usage_text = None
+            if cluster_core_usage_sampler is not None:
+                profile_stage = time.perf_counter()
+                cluster_core_usage_text = cluster_core_usage_sampler.sample_text(now)
+                profile.add_elapsed("main.cluster_core_usage_sample", profile_stage)
             state = replace(
                 state,
                 radar_info_mode=active_radar_info_mode,
                 radar_display_mode=active_radar_display_mode,
                 radar_source_color_mode=active_radar_source_color_mode,
+                center_clock_text=center_clock_text,
                 git_status=git_status_provider.status(),
                 actual_fps=display_actual_fps,
+                cluster_core_usage_text=cluster_core_usage_text,
             )
             brightness_now = time.perf_counter()
             if usb_display is not None and brightness_now >= next_brightness_param_read:
@@ -753,9 +981,7 @@ def run_demo(
                     live_source,
                     auto_enabled=usb_brightness_auto_enabled,
                 )
-                force_brightness_send = brightness_now >= next_brightness_resend
-                if usb_display.set_brightness(next_usb_brightness, force=force_brightness_send):
-                    next_brightness_resend = brightness_now + BRIGHTNESS_RESEND_SECONDS
+                usb_display.set_brightness(next_usb_brightness)
                 next_brightness_param_read = brightness_now + BRIGHTNESS_PARAM_POLL_SECONDS
 
             if output_mode in ("window", "both"):
@@ -799,30 +1025,66 @@ def run_demo(
                 elif usb_codec == "h264":
                     if h264_pipeline is None:
                         raise RuntimeError("H264 USB pipeline is not available")
-                    if h264_test_pattern_rgba is None:
-                        profile_stage = time.perf_counter()
-                        with renderer.render_to_rgba_buffer(
-                            state,
-                            portrait_upload=h264_portrait_upload,
-                            output_width=h264_pipeline.encoder_width if h264_portrait_upload else None,
-                            output_height=h264_pipeline.encoder_height if h264_portrait_upload else None,
-                        ) as (
-                            rgba,
-                            image_width,
-                            image_height,
-                        ):
-                            profile.add_elapsed("main.usb.render_rgba_total", profile_stage)
-
+                    if h264_test_pattern_rgba is None and h264_test_pattern_nv12 is None:
+                        if usb_h264_render_nv12:
+                            if h264_render_nv12_layout is None:
+                                raise RuntimeError("H264 GPU NV12 render path is missing the native layout")
+                            stride, y_scanlines, uv_scanlines, uv_offset, input_bytes, render_bytes, _ = h264_render_nv12_layout
                             profile_stage = time.perf_counter()
-                            h264_pipeline.submit_rgba(rgba, image_width, image_height)
-                            profile.add_elapsed("main.usb_h264.submit_rgba", profile_stage)
+                            with renderer.render_to_nv12_buffer(
+                                state,
+                                h264_pipeline.encoder_width,
+                                h264_pipeline.encoder_height,
+                                stride,
+                                y_scanlines,
+                                uv_scanlines,
+                                uv_offset,
+                                render_bytes,
+                                h264_render_nv12_buffer,
+                                flip_x=usb_h264_render_nv12_flip_x,
+                            ) as h264_render_nv12_frame:
+                                profile.add_elapsed("main.usb.render_nv12_total", profile_stage)
+                                if isinstance(h264_render_nv12_frame, bytearray):
+                                    h264_render_nv12_buffer = h264_render_nv12_frame
+
+                                profile_stage = time.perf_counter()
+                                h264_pipeline.submit_nv12(
+                                    h264_render_nv12_frame,
+                                    h264_pipeline.encoder_width,
+                                    h264_pipeline.encoder_height,
+                                )
+                                profile.add_elapsed("main.usb_h264.submit_nv12", profile_stage)
+                        else:
+                            profile_stage = time.perf_counter()
+                            with renderer.render_to_rgba_buffer(
+                                state,
+                                portrait_upload=h264_portrait_upload,
+                                output_width=h264_pipeline.encoder_width if h264_portrait_upload else None,
+                                output_height=h264_pipeline.encoder_height if h264_portrait_upload else None,
+                            ) as (
+                                rgba,
+                                image_width,
+                                image_height,
+                            ):
+                                profile.add_elapsed("main.usb.render_rgba_total", profile_stage)
+
+                                profile_stage = time.perf_counter()
+                                h264_pipeline.submit_rgba(rgba, image_width, image_height)
+                                profile.add_elapsed("main.usb_h264.submit_rgba", profile_stage)
                     else:
                         profile_stage = time.perf_counter()
-                        h264_pipeline.submit_rgba(
-                            h264_test_pattern_rgba,
-                            h264_pipeline.width,
-                            h264_pipeline.height,
-                        )
+                        if h264_test_pattern_nv12 is not None:
+                            h264_pipeline.submit_nv12(
+                                h264_test_pattern_nv12,
+                                h264_pipeline.encoder_width,
+                                h264_pipeline.encoder_height,
+                            )
+                        else:
+                            h264_pipeline.submit_rgba(
+                                h264_test_pattern_rgba,
+                                h264_pipeline.width,
+                                h264_pipeline.height,
+                            )
                         profile.add_elapsed("main.usb_h264.submit_test_pattern", profile_stage)
                 else:
                     profile_stage = time.perf_counter()
@@ -853,8 +1115,12 @@ def run_demo(
             now = time.perf_counter()
             profile.add_elapsed("main.frame_total", frame_start_time)
             profile.frame_done()
+            should_print_status = now - last_report_time >= 2.0
+            if should_print_status and source_status is None and live_source is not None:
+                source_status = live_source.status_text()
+                profile.add_samples(live_source.profile_samples())
             profile.maybe_report(now)
-            if now - last_report_time >= 2.0:
+            if should_print_status:
                 actual_fps = report_frames / (now - last_report_time)
                 lane_status = state.lane_change or (
                     "keep" if state.lane_change_phase == "idle" else state.lane_change_phase
@@ -907,7 +1173,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Target refresh rate. Use 0 for uncapped/as-fast-as-possible. "
-            f"Default: 0, except live input reads {CLUSTER_LIVE_FPS_PARAM} when --fps is omitted."
+            f"When omitted, CLI runs read {CLUSTER_LIVE_FPS_PARAM}; mode 0 keeps the default cap behavior."
         ),
     )
     parser.add_argument(
@@ -954,7 +1220,12 @@ def parse_args() -> argparse.Namespace:
             "and skips it for JPEG/PNG; use 0 to skip."
         ),
     )
-    parser.add_argument("--usb-codec", choices=("jpeg", "png", "h264"), default="jpeg")
+    parser.add_argument(
+        "--usb-codec",
+        choices=("jpeg", "png", "h264"),
+        default="jpeg",
+        help=f"USB output codec. When omitted, USB CLI runs read {CLUSTER_ENCODER_PARAM}.",
+    )
     parser.add_argument("--usb-jpeg-quality", type=int, default=68)
     parser.add_argument(
         "--usb-jpeg-encoder",
@@ -1042,18 +1313,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--usb-h264-input-format",
-        choices=("auto", "rgb4", "nv12"),
+        choices=("auto", "nv12"),
         default="nv12",
         help=(
-            "Hardware encoder input format. Default nv12 follows the existing loggerd V4L2 path; "
-            "rgb4 remains available for direct RGB input compatibility tests."
+            "Hardware encoder input format. Default nv12 follows the existing loggerd V4L2 path."
         ),
-    )
-    parser.add_argument(
-        "--usb-h264-rgb4-layout",
-        choices=("axrgb", "rgba", "bgra"),
-        default="bgra",
-        help="Byte layout used when feeding RGBA readback into V4L2 RGB4 input.",
     )
     parser.add_argument(
         "--usb-h264-slice-max-bytes",
@@ -1151,6 +1415,34 @@ def parse_args() -> argparse.Namespace:
         help="Feed a red/green/blue/white RGBA quadrant pattern into the H264 path.",
     )
     parser.add_argument(
+        "--usb-h264-test-pattern-nv12",
+        action="store_true",
+        help="Feed a native-aligned red/green/blue/white NV12 quadrant pattern into the native H264 path.",
+    )
+    parser.add_argument(
+        "--usb-h264-render-nv12",
+        dest="usb_h264_render_nv12",
+        action="store_true",
+        default=None,
+        help=(
+            "Native path: render through a GPU RGBA-to-NV12 pack shader and submit aligned NV12. "
+            "Auto-enabled for live native-H264 USB output."
+        ),
+    )
+    parser.add_argument(
+        "--no-usb-h264-render-nv12",
+        dest="usb_h264_render_nv12",
+        action="store_false",
+        help="Disable live native-H264 automatic GPU NV12 rendering for A/B profiling.",
+    )
+    parser.add_argument(
+        "--usb-h264-render-nv12-no-flip-x",
+        dest="usb_h264_render_nv12_flip_x",
+        action="store_false",
+        default=True,
+        help="Disable the experimental GPU NV12 path's default horizontal sampling correction.",
+    )
+    parser.add_argument(
         "--usb-frame-drain-attempts",
         type=int,
         default=2,
@@ -1211,6 +1503,18 @@ def parse_args() -> argparse.Namespace:
         help=argparse.SUPPRESS,
     )
     parser.add_argument(
+        "--cluster-hud-core-mode",
+        type=int,
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--cluster-hud-priority",
+        type=int,
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
         "--route-loop",
         action="store_true",
         help="Loop route replay instead of stopping at the end.",
@@ -1236,13 +1540,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--live-no-can",
         action="store_true",
-        help="Disable live CAN subscription. This keeps radarState/modelV2/liveTracks data but skips direct raw CAN-FD parsing.",
+        help=(
+            "Disable live CAN/sendcan subscriptions. This keeps radarState/modelV2/liveTracks data "
+            "but skips direct raw CAN-FD parsing."
+        ),
     )
     parser.add_argument(
         "--live-timeout-ms",
         type=int,
         default=0,
         help="SubMaster update timeout for --input live. Default 0 keeps rendering responsive.",
+    )
+    parser.add_argument(
+        "--no-cluster-core-usage",
+        action="store_true",
+        help="Disable the lower-right cluster process per-core CPU overlay.",
+    )
+    parser.add_argument(
+        "--cluster-core-usage-debug",
+        action="store_true",
+        help="Print live cluster process per-core CPU sampler scan cost and per-process CPU details.",
     )
     parser.add_argument(
         "--profile-render",
@@ -1260,8 +1577,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Disable post-init gc.freeze(). Default enabled to avoid long gen2 pauses during USB rendering.",
     )
+    raw_args = sys.argv[1:]
     args = parser.parse_args()
     args.fps_from_cli = args.fps is not None
+    args.usb_codec_from_cli = option_present(raw_args, "--usb-codec")
+    args.usb_h264_backend_from_cli = option_present(raw_args, "--usb-h264-backend")
+    args.usb_h264_ffmpeg_encoder_from_cli = option_present(raw_args, "--usb-h264-ffmpeg-encoder")
     if args.fps is None:
         args.fps = DEFAULT_FPS
     if args.fps < 0:
@@ -1297,6 +1618,12 @@ def parse_args() -> argparse.Namespace:
         parser.error("--usb-h264-bitrate must not be empty")
     if args.usb_h264_diagnose_interval < 0:
         parser.error("--usb-h264-diagnose-interval must be 0 or greater")
+    if args.usb_h264_test_pattern and args.usb_h264_test_pattern_nv12:
+        parser.error("--usb-h264-test-pattern and --usb-h264-test-pattern-nv12 cannot be used together")
+    if args.usb_h264_render_nv12 and (args.usb_h264_test_pattern or args.usb_h264_test_pattern_nv12):
+        parser.error("--usb-h264-render-nv12 cannot be combined with H264 test-pattern flags")
+    if args.usb_h264_render_nv12 and args.usb_h264_backend not in ("auto", "native"):
+        parser.error("--usb-h264-render-nv12 requires --usb-h264-backend native or auto")
     if not args.usb_h264_library:
         parser.error("--usb-h264-library must not be empty")
     if not args.usb_h264_helper:
@@ -1324,13 +1651,22 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    encoder_source = apply_cluster_encoder_param(args)
+    apply_live_hardware_nv12_default(args)
+    if args.usb_async and args.usb_codec != "jpeg":
+        raise SystemExit("--usb-async only supports --usb-codec jpeg")
+    if args.usb_h264_render_nv12 and args.usb_h264_backend not in ("auto", "native"):
+        raise SystemExit("--usb-h264-render-nv12 requires --usb-h264-backend native or auto")
     target_fps = args.fps
     fps_source = "--fps" if args.fps_from_cli else "default"
     live_fps_param_reader = None
-    if args.input == "live" and not args.fps_from_cli:
-        live_fps_param_reader = ClusterLiveFpsParamReader()
-        target_fps = live_fps_param_reader.read()
-        fps_source = CLUSTER_LIVE_FPS_PARAM
+    if not args.fps_from_cli:
+        fps_param_reader = ClusterLiveFpsParamReader()
+        param_fps = fps_param_reader.read()
+        if args.input == "live" or param_fps > 0:
+            live_fps_param_reader = fps_param_reader
+            target_fps = param_fps
+            fps_source = CLUSTER_LIVE_FPS_PARAM
     if (
         args.output in ("usb", "both")
         and args.usb_codec == "h264"
@@ -1375,6 +1711,11 @@ def main() -> None:
             h264_bitrate_text += f" h264_rc={args.usb_h264_rate_control}"
         if args.usb_h264_realtime_priority:
             h264_bitrate_text += " h264_realtime=on"
+        if args.usb_h264_render_nv12:
+            h264_bitrate_text += (
+                " h264_render_nv12=on"
+                f" h264_nv12_flip_x={'on' if args.usb_h264_render_nv12_flip_x else 'off'}"
+            )
         if args.usb_h264_diagnose_interval > 0:
             h264_bitrate_text += f" h264_diag={args.usb_h264_diagnose_interval:g}s"
     brightness_text = "auto" if brightness_param_reader is not None and usb_brightness == 0 else f"{usb_brightness}%"
@@ -1386,7 +1727,7 @@ def main() -> None:
     print(
         f"Refreshing native raylib cluster UI at {fps_text} "
         f"input={args.input} output={args.output}: {size_text} "
-        f"usb_codec={args.usb_codec}{h264_bitrate_text} "
+        f"usb_codec={args.usb_codec} encoder_source={encoder_source}{h264_bitrate_text} "
         f"fps_source={fps_source} display_fps={display_fps_text} "
         f"brightness={brightness_text} brightness_source={brightness_source}"
     )
@@ -1420,7 +1761,6 @@ def main() -> None:
             args.usb_h264_ffmpeg_encoder,
             args.usb_h264_device,
             args.usb_h264_input_format,
-            args.usb_h264_rgb4_layout,
             args.usb_h264_slice_max_bytes,
             args.usb_h264_rate_control,
             args.usb_h264_realtime_priority,
@@ -1434,6 +1774,9 @@ def main() -> None:
             args.usb_h264_debug,
             args.usb_h264_diagnose_interval,
             args.usb_h264_test_pattern,
+            args.usb_h264_test_pattern_nv12,
+            args.usb_h264_render_nv12,
+            args.usb_h264_render_nv12_flip_x,
             args.usb_frame_drain_attempts,
             args.usb_frame_drain_timeout_ms,
             args.usb_fast_drain_attempts,
@@ -1447,12 +1790,16 @@ def main() -> None:
             args.route_max_segments,
             not args.live_no_can,
             args.live_timeout_ms,
+            not args.no_cluster_core_usage,
+            args.cluster_core_usage_debug,
             args.profile_render,
             args.profile_interval,
             not args.no_gc_freeze,
             args.theme,
             args.cluster_hud_mode,
             args.cluster_hud_encoder,
+            args.cluster_hud_core_mode,
+            args.cluster_hud_priority,
         )
     except KeyboardInterrupt:
         print("\nStopped.")

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from functools import lru_cache
 import math
 import os
@@ -43,7 +45,6 @@ from cluster_scene import (
     MeshStrip,
     RADAR_STATIC_OBJECT_SPEED_KPH,
     RadarPointMarker,
-    RearVehicleIndicator,
     Vec3,
     VehicleBox,
     build_cluster_scene,
@@ -119,6 +120,7 @@ SYSTEM_PANEL_Y = 118
 SYSTEM_PANEL_W = 476
 SYSTEM_STATS_REFRESH_SECONDS = 1.0
 TEXT_MEASURE_CACHE_LIMIT = 1024
+TRIANGLE_STRIP_POINT_CACHE_LIMIT = 256
 DEBUG_PLOT_MAX_SAMPLES = 360
 DEBUG_PLOT_SAMPLE_SECONDS = 0.05
 DEBUG_PLOT_MARGIN = 18.0
@@ -138,6 +140,8 @@ FPS_STATUS_MARGIN = 4
 FPS_STATUS_DOT_RADIUS = 7
 FPS_STATUS_DOT_TEXT_GAP = 6
 FPS_STATUS_MAX_TEXT_W = 220
+CLUSTER_CORE_USAGE_MARGIN = 2
+CLUSTER_CORE_USAGE_MAX_TEXT_W = 760
 RADAR_LABEL_DISTANCE_FONT_SIZE = 16
 RADAR_LABEL_SPEED_FONT_SIZE = 14
 VEHICLE_BADGE_DISTANCE_FONT_SIZE = 17
@@ -147,6 +151,9 @@ VEHICLE_BADGE_ANCHOR_Z_OFFSET_M = 0.32
 WORLD_LABEL_NEAR_M = 18.0
 WORLD_LABEL_FAR_M = 180.0
 WORLD_LABEL_MIN_SCALE = 0.56
+WORLD_LABEL_TEXTURE_CACHE_LIMIT = 512
+WORLD_LABEL_TEXTURE_SIZE_GRID = 0.25
+WORLD_LABEL_TEXTURE_PADDING_PX = 4
 VEHICLE_MATERIAL_COLORS: dict[str, tuple[int, int, int, int]] = {
     "body": (156, 166, 172, 255),
     "wheel": (18, 20, 22, 255),
@@ -162,6 +169,113 @@ VEHICLE_MATERIAL_COLORS: dict[str, tuple[int, int, int, int]] = {
     "Material.006": (18, 20, 22, 255),
 }
 DEFAULT_VEHICLE_MATERIAL_COLOR = (142, 150, 156, 255)
+NV12_PACK_VERTEX_SHADER = """
+attribute vec3 vertexPosition;
+attribute vec2 vertexTexCoord;
+attribute vec4 vertexColor;
+
+varying vec2 fragTexCoord;
+varying vec4 fragColor;
+
+uniform mat4 mvp;
+
+void main() {
+    fragTexCoord = vertexTexCoord;
+    fragColor = vertexColor;
+    gl_Position = mvp * vec4(vertexPosition, 1.0);
+}
+"""
+NV12_PACK_FRAGMENT_SHADER = """
+#ifdef GL_ES
+precision mediump float;
+#endif
+
+varying vec2 fragTexCoord;
+varying vec4 fragColor;
+
+uniform sampler2D texture0;
+uniform vec2 srcSize;
+uniform vec2 packedSize;
+uniform int plane;
+uniform int flipX;
+
+const float Y_PAD = 0.062745;
+const float UV_PAD = 0.501961;
+
+vec3 sampleRgb(float x, float y) {
+    if (flipX != 0) {
+        // The portrait upload transform maps screen horizontal correction to source Y.
+        y = srcSize.y - 1.0 - y;
+    }
+    vec2 clamped = clamp(vec2(x, y), vec2(0.0), srcSize - vec2(1.0));
+    return texture2D(texture0, (clamped + vec2(0.5)) / srcSize).rgb;
+}
+
+float y601(vec3 rgb) {
+    return clamp(0.062745 + 0.256788 * rgb.r + 0.504129 * rgb.g + 0.097906 * rgb.b, 0.0, 1.0);
+}
+
+float u601(vec3 rgb) {
+    return clamp(0.501961 - 0.148223 * rgb.r - 0.290993 * rgb.g + 0.439216 * rgb.b, 0.0, 1.0);
+}
+
+float v601(vec3 rgb) {
+    return clamp(0.501961 + 0.439216 * rgb.r - 0.367788 * rgb.g - 0.071427 * rgb.b, 0.0, 1.0);
+}
+
+vec3 sample2x2(float x, float y) {
+    return (
+        sampleRgb(x, y) +
+        sampleRgb(x + 1.0, y) +
+        sampleRgb(x, y + 1.0) +
+        sampleRgb(x + 1.0, y + 1.0)
+    ) * 0.25;
+}
+
+float packedY(float x, float y) {
+    if (x >= srcSize.x || y >= srcSize.y) {
+        return Y_PAD;
+    }
+    return y601(sampleRgb(x, y));
+}
+
+vec2 packedUV(float x, float y) {
+    if (x >= srcSize.x || y >= srcSize.y) {
+        return vec2(UV_PAD, UV_PAD);
+    }
+    vec3 rgb = sample2x2(x, y);
+    return vec2(u601(rgb), v601(rgb));
+}
+
+void main() {
+    vec2 packedCoord = min(floor(fragTexCoord * packedSize), packedSize - vec2(1.0));
+    float baseX = packedCoord.x * 4.0;
+    if (plane == 0) {
+        float y = packedCoord.y;
+        gl_FragColor = vec4(
+            packedY(baseX, y),
+            packedY(baseX + 1.0, y),
+            packedY(baseX + 2.0, y),
+            packedY(baseX + 3.0, y)
+        );
+    } else {
+        float y = packedCoord.y * 2.0;
+        vec2 left = packedUV(baseX, y);
+        vec2 right = packedUV(baseX + 2.0, y);
+        gl_FragColor = vec4(left.x, left.y, right.x, right.y);
+    }
+}
+"""
+
+
+@dataclass(slots=True)
+class CachedTextTexture:
+    texture: object
+    text_width: float
+    text_height: float
+    texture_width: int
+    texture_height: int
+    padding_px: float
 
 
 @lru_cache(maxsize=256)
@@ -169,12 +283,17 @@ def _cached_rl_color(r: int, g: int, b: int, a: int) -> rl.Color:
     return rl.Color(r, g, b, a)
 
 
-def rl_color(color: tuple[int, int, int] | tuple[int, int, int, int], alpha: int | None = None) -> rl.Color:
+def rgba_key(color: tuple[int, int, int] | tuple[int, int, int, int]) -> tuple[int, int, int, int]:
     if len(color) == 4:
         r, g, b, a = color
     else:
         r, g, b = color
         a = 255
+    return int(r), int(g), int(b), int(a)
+
+
+def rl_color(color: tuple[int, int, int] | tuple[int, int, int, int], alpha: int | None = None) -> rl.Color:
+    r, g, b, a = rgba_key(color)
     if alpha is not None:
         a = alpha
     return _cached_rl_color(int(r), int(g), int(b), int(a))
@@ -197,7 +316,13 @@ def radar_point_speed_label(point: RadarPointMarker) -> str:
 def vehicle_distance_label(vehicle: VehicleBox) -> str:
     if vehicle.absolute_speed_kph is not None and vehicle.absolute_speed_kph <= RADAR_STATIC_OBJECT_SPEED_KPH:
         return ""
-    return f"{abs(vehicle.center.y - EGO_FORWARD_M):.0f} m"
+    return f"{vehicle_distance_m(vehicle):.0f} m"
+
+
+def vehicle_distance_m(vehicle: VehicleBox) -> float:
+    if vehicle.longitudinal_m is not None:
+        return abs(vehicle.longitudinal_m)
+    return abs(vehicle.center.y - EGO_FORWARD_M)
 
 
 def vehicle_speed_label(vehicle: VehicleBox) -> str:
@@ -346,6 +471,14 @@ class ClusterUiRenderer:
         self._capture_target = None
         self._portrait_upload_target = None
         self._portrait_upload_target_size: tuple[int, int] | None = None
+        self._nv12_pack_y_target = None
+        self._nv12_pack_y_size: tuple[int, int] | None = None
+        self._nv12_pack_uv_target = None
+        self._nv12_pack_uv_size: tuple[int, int] | None = None
+        self._nv12_pack_full_target = None
+        self._nv12_pack_full_size: tuple[int, int] | None = None
+        self._nv12_pack_shader = None
+        self._nv12_pack_shader_locations: dict[str, int] = {}
         self._vehicle_model = None
         self._vehicle_model_load_attempted = False
         self._follow_vehicle_texture = None
@@ -356,8 +489,15 @@ class ClusterUiRenderer:
         self._route_video_frame_id: str | None = None
         self._left_turn_signal_started_at: float | None = None
         self._right_turn_signal_started_at: float | None = None
-        self._triangle_strip_points = None
-        self._triangle_strip_capacity = 0
+        self._triangle_strip_point_cache: OrderedDict[
+            tuple[int, int],
+            tuple[tuple[Vec3, ...], tuple[Vec3, ...], object, int],
+        ] = OrderedDict()
+        self._world_label_texture_cache: OrderedDict[
+            tuple[int, str, float, float, tuple[int, int, int, int]],
+            CachedTextTexture,
+        ] = OrderedDict()
+        self._world_label_texture_cache_enabled = os.environ.get("CLUSTER_WORLD_LABEL_TEXTURE_CACHE", "0") == "1"
         self._text_measure_cache: dict[tuple[int, str, float, float], tuple[float, float]] = {}
         self._system_stats = SystemStatsSampler(SYSTEM_STATS_REFRESH_SECONDS)
         self._debug_plot_mode_prev = -1
@@ -451,6 +591,25 @@ class ClusterUiRenderer:
             rl.unload_render_texture(self._portrait_upload_target)
             self._portrait_upload_target = None
             self._portrait_upload_target_size = None
+        if self._nv12_pack_y_target is not None:
+            rl.unload_render_texture(self._nv12_pack_y_target)
+            self._nv12_pack_y_target = None
+            self._nv12_pack_y_size = None
+        if self._nv12_pack_uv_target is not None:
+            rl.unload_render_texture(self._nv12_pack_uv_target)
+            self._nv12_pack_uv_target = None
+            self._nv12_pack_uv_size = None
+        if self._nv12_pack_full_target is not None:
+            rl.unload_render_texture(self._nv12_pack_full_target)
+            self._nv12_pack_full_target = None
+            self._nv12_pack_full_size = None
+        if self._nv12_pack_shader is not None:
+            rl.unload_shader(self._nv12_pack_shader)
+            self._nv12_pack_shader = None
+            self._nv12_pack_shader_locations = {}
+        for cached_text in self._world_label_texture_cache.values():
+            rl.unload_texture(cached_text.texture)
+        self._world_label_texture_cache.clear()
         if self._route_video_texture is not None:
             rl.unload_texture(self._route_video_texture)
             self._route_video_texture = None
@@ -613,6 +772,222 @@ class ClusterUiRenderer:
             rl.unload_image(image)
             self._profile_add("render_to_rgba.unload_image", profile_stage)
 
+    @contextmanager
+    def render_to_nv12_buffer(
+        self,
+        state: ClusterUiState,
+        output_width: int,
+        output_height: int,
+        stride: int,
+        y_scanlines: int,
+        uv_scanlines: int,
+        uv_offset: int,
+        byte_count: int,
+        buffer: bytearray | None = None,
+        flip_x: bool = False,
+    ) -> Iterator[object]:
+        self.open(hidden=self.hidden)
+        output_width = int(output_width)
+        output_height = int(output_height)
+        stride = int(stride)
+        y_scanlines = int(y_scanlines)
+        uv_scanlines = int(uv_scanlines)
+        uv_offset = int(uv_offset)
+        byte_count = int(byte_count)
+        if output_width <= 0 or output_height <= 0 or stride <= 0 or byte_count <= 0:
+            raise RuntimeError("NV12 render target layout is invalid")
+        if stride < output_width or y_scanlines < output_height or uv_scanlines < (output_height + 1) // 2:
+            raise RuntimeError("NV12 render target layout is smaller than the rendered frame")
+        if uv_offset < stride * y_scanlines or byte_count < uv_offset + stride * uv_scanlines:
+            raise RuntimeError("NV12 render target byte layout is inconsistent")
+
+        profile_stage = self._profile_start()
+        target = self._get_capture_target()
+        self._profile_add("render_to_nv12.get_capture_target", profile_stage)
+
+        profile_stage = self._profile_start()
+        rl.begin_texture_mode(target)
+        self.render(state)
+        rl.end_texture_mode()
+        self._profile_add("render_to_nv12.draw_to_target", profile_stage)
+
+        profile_stage = self._profile_start()
+        upload_target = self._get_portrait_upload_target(output_width, output_height)
+        self._profile_add("render_to_nv12.get_portrait_upload_target", profile_stage)
+
+        profile_stage = self._profile_start()
+        rl.begin_texture_mode(upload_target)
+        rl.clear_background(rl_color(self._current_theme().bg))
+        source = rl.Rectangle(
+            0.0,
+            0.0,
+            float(target.texture.width),
+            float(target.texture.height),
+        )
+        dest = rl.Rectangle(
+            0.0,
+            float(self.width),
+            float(self.width),
+            float(self.height),
+        )
+        rl.draw_texture_pro(
+            target.texture,
+            source,
+            dest,
+            rl.Vector2(0.0, 0.0),
+            -90.0,
+            rl_color(WHITE),
+        )
+        rl.end_texture_mode()
+        self._profile_add("render_to_nv12.gpu_upload_transform", profile_stage)
+
+        pack_direct_input = stride % 4 == 0 and byte_count % stride == 0 and uv_offset % stride == 0
+        if pack_direct_input:
+            full_pack_w = stride // 4
+            full_pack_h = byte_count // stride
+            tail_pack_h = max(0, full_pack_h - y_scanlines - uv_scanlines)
+            uv_pack_y = tail_pack_h
+            y_pack_y = tail_pack_h + uv_scanlines
+
+            profile_stage = self._profile_start()
+            full_target = self._get_nv12_pack_target("full", full_pack_w, full_pack_h)
+            self._profile_add("render_to_nv12.get_pack_targets", profile_stage)
+
+            profile_stage = self._profile_start()
+            self._render_nv12_pack_plane(
+                upload_target.texture,
+                full_target,
+                output_width,
+                output_height,
+                0,
+                flip_x,
+                packed_width=full_pack_w,
+                packed_height=y_scanlines,
+                dest_y=y_pack_y,
+                clear_target=True,
+                clear_color=(128, 128, 128, 128),
+            )
+            self._profile_add("render_to_nv12.pack_y_shader", profile_stage)
+
+            profile_stage = self._profile_start()
+            self._render_nv12_pack_plane(
+                upload_target.texture,
+                full_target,
+                output_width,
+                output_height,
+                1,
+                flip_x,
+                packed_width=full_pack_w,
+                packed_height=uv_scanlines,
+                dest_y=uv_pack_y,
+                clear_target=False,
+            )
+            self._profile_add("render_to_nv12.pack_uv_shader", profile_stage)
+
+            profile_stage = self._profile_start()
+            image = rl.load_image_from_texture(full_target.texture)
+            self._profile_add("render_to_nv12.readback_packed", profile_stage)
+
+            try:
+                if image.format != rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8:
+                    profile_stage = self._profile_start()
+                    rl.image_format(image, rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8)
+                    self._profile_add("render_to_nv12.packed_image_format", profile_stage)
+
+                profile_stage = self._profile_start()
+                nv12_buffer = rl.ffi.buffer(image.data, byte_count)
+                self._profile_add("render_to_nv12.buffer_view", profile_stage)
+                yield nv12_buffer
+            finally:
+                profile_stage = self._profile_start()
+                rl.unload_image(image)
+                self._profile_add("render_to_nv12.unload_image", profile_stage)
+            return
+
+        pack_full_stride = stride % 4 == 0
+        if pack_full_stride:
+            y_pack_w = stride // 4
+            y_pack_h = y_scanlines
+            uv_pack_w = stride // 4
+            uv_pack_h = uv_scanlines
+        else:
+            y_pack_w = (output_width + 3) // 4
+            y_pack_h = output_height
+            uv_pack_w = (output_width + 3) // 4
+            uv_pack_h = (output_height + 1) // 2
+        profile_stage = self._profile_start()
+        y_target = self._get_nv12_pack_target("y", y_pack_w, y_pack_h)
+        uv_target = self._get_nv12_pack_target("uv", uv_pack_w, uv_pack_h)
+        self._profile_add("render_to_nv12.get_pack_targets", profile_stage)
+
+        profile_stage = self._profile_start()
+        self._render_nv12_pack_plane(upload_target.texture, y_target, output_width, output_height, 0, flip_x)
+        self._profile_add("render_to_nv12.pack_y_shader", profile_stage)
+
+        profile_stage = self._profile_start()
+        y_image = rl.load_image_from_texture(y_target.texture)
+        self._profile_add("render_to_nv12.readback_y", profile_stage)
+
+        profile_stage = self._profile_start()
+        self._render_nv12_pack_plane(upload_target.texture, uv_target, output_width, output_height, 1, flip_x)
+        self._profile_add("render_to_nv12.pack_uv_shader", profile_stage)
+
+        profile_stage = self._profile_start()
+        uv_image = rl.load_image_from_texture(uv_target.texture)
+        self._profile_add("render_to_nv12.readback_uv", profile_stage)
+
+        try:
+            if y_image.format != rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8:
+                profile_stage = self._profile_start()
+                rl.image_format(y_image, rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8)
+                self._profile_add("render_to_nv12.y_image_format", profile_stage)
+            if uv_image.format != rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8:
+                profile_stage = self._profile_start()
+                rl.image_format(uv_image, rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8)
+                self._profile_add("render_to_nv12.uv_image_format", profile_stage)
+
+            if buffer is None or len(buffer) != byte_count:
+                buffer = bytearray(byte_count)
+                buffer[:min(uv_offset, byte_count)] = b"\x10" * min(uv_offset, byte_count)
+                if uv_offset < byte_count:
+                    buffer[uv_offset:] = b"\x80" * (byte_count - uv_offset)
+
+            y_row_bytes = y_pack_w * 4
+            uv_row_bytes = uv_pack_w * 4
+            y_data = rl.ffi.buffer(y_image.data, y_row_bytes * y_pack_h)
+            uv_data = rl.ffi.buffer(uv_image.data, uv_row_bytes * uv_pack_h)
+
+            if pack_full_stride:
+                y_plane_bytes = stride * y_scanlines
+                uv_plane_bytes = stride * uv_scanlines
+                profile_stage = self._profile_start()
+                buffer[:y_plane_bytes] = y_data[:y_plane_bytes]
+                self._profile_add("render_to_nv12.copy_y", profile_stage)
+
+                profile_stage = self._profile_start()
+                buffer[uv_offset:uv_offset + uv_plane_bytes] = uv_data[:uv_plane_bytes]
+                self._profile_add("render_to_nv12.copy_uv", profile_stage)
+            else:
+                profile_stage = self._profile_start()
+                for row in range(output_height):
+                    src_start = row * y_row_bytes
+                    dst_start = row * stride
+                    buffer[dst_start:dst_start + output_width] = y_data[src_start:src_start + output_width]
+                self._profile_add("render_to_nv12.copy_y", profile_stage)
+
+                profile_stage = self._profile_start()
+                for row in range(uv_pack_h):
+                    src_start = row * uv_row_bytes
+                    dst_start = uv_offset + row * stride
+                    buffer[dst_start:dst_start + output_width] = uv_data[src_start:src_start + output_width]
+                self._profile_add("render_to_nv12.copy_uv", profile_stage)
+            yield buffer
+        finally:
+            profile_stage = self._profile_start()
+            rl.unload_image(y_image)
+            rl.unload_image(uv_image)
+            self._profile_add("render_to_nv12.unload_images", profile_stage)
+
     def _render_to_image(
         self,
         state: ClusterUiState,
@@ -704,6 +1079,106 @@ class ClusterUiRenderer:
             rl.set_texture_filter(self._portrait_upload_target.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
             self._profile_add("render_target.filter_portrait_upload", profile_stage)
         return self._portrait_upload_target
+
+    def _get_nv12_pack_target(self, plane: str, width: int, height: int):
+        target_size = (int(width), int(height))
+        if plane == "y":
+            current = self._nv12_pack_y_target
+            current_size = self._nv12_pack_y_size
+        elif plane == "uv":
+            current = self._nv12_pack_uv_target
+            current_size = self._nv12_pack_uv_size
+        elif plane == "full":
+            current = self._nv12_pack_full_target
+            current_size = self._nv12_pack_full_size
+        else:
+            raise RuntimeError(f"unknown NV12 pack plane: {plane}")
+
+        if current is not None and current_size != target_size:
+            rl.unload_render_texture(current)
+            current = None
+            current_size = None
+        if current is None:
+            profile_stage = self._profile_start()
+            current = rl.load_render_texture(target_size[0], target_size[1])
+            self._profile_add(f"render_target.alloc_nv12_{plane}", profile_stage)
+            profile_stage = self._profile_start()
+            rl.set_texture_filter(current.texture, rl.TextureFilter.TEXTURE_FILTER_POINT)
+            self._profile_add(f"render_target.filter_nv12_{plane}", profile_stage)
+            current_size = target_size
+
+        if plane == "y":
+            self._nv12_pack_y_target = current
+            self._nv12_pack_y_size = current_size
+        elif plane == "uv":
+            self._nv12_pack_uv_target = current
+            self._nv12_pack_uv_size = current_size
+        else:
+            self._nv12_pack_full_target = current
+            self._nv12_pack_full_size = current_size
+        return current
+
+    def _get_nv12_pack_shader(self):
+        if self._nv12_pack_shader is None:
+            profile_stage = self._profile_start()
+            self._nv12_pack_shader = rl.load_shader_from_memory(NV12_PACK_VERTEX_SHADER, NV12_PACK_FRAGMENT_SHADER)
+            self._profile_add("render_to_nv12.load_pack_shader", profile_stage)
+            if not rl.is_shader_valid(self._nv12_pack_shader):
+                raise RuntimeError("failed to load NV12 pack shader")
+            self._nv12_pack_shader_locations = {
+                "srcSize": rl.get_shader_location(self._nv12_pack_shader, "srcSize"),
+                "packedSize": rl.get_shader_location(self._nv12_pack_shader, "packedSize"),
+                "plane": rl.get_shader_location(self._nv12_pack_shader, "plane"),
+                "flipX": rl.get_shader_location(self._nv12_pack_shader, "flipX"),
+            }
+        return self._nv12_pack_shader
+
+    def _render_nv12_pack_plane(
+        self,
+        source_texture,
+        target,
+        source_width: int,
+        source_height: int,
+        plane: int,
+        flip_x: bool,
+        packed_width: int | None = None,
+        packed_height: int | None = None,
+        dest_y: int = 0,
+        clear_target: bool = True,
+        clear_color: tuple[int, int, int, int] = (0, 0, 0, 0),
+    ) -> None:
+        shader = self._get_nv12_pack_shader()
+        locations = self._nv12_pack_shader_locations
+        pack_width = int(packed_width) if packed_width is not None else int(target.texture.width)
+        pack_height = int(packed_height) if packed_height is not None else int(target.texture.height)
+        src_size = rl.ffi.new("float[]", [float(source_width), float(source_height)])
+        packed_size = rl.ffi.new("float[]", [float(pack_width), float(pack_height)])
+        plane_value = rl.ffi.new("int[]", [int(plane)])
+        flip_x_value = rl.ffi.new("int[]", [1 if flip_x else 0])
+        rl.set_shader_value(shader, locations["srcSize"], src_size, rl.ShaderUniformDataType.SHADER_UNIFORM_VEC2)
+        rl.set_shader_value(shader, locations["packedSize"], packed_size, rl.ShaderUniformDataType.SHADER_UNIFORM_VEC2)
+        rl.set_shader_value(shader, locations["plane"], plane_value, rl.ShaderUniformDataType.SHADER_UNIFORM_INT)
+        rl.set_shader_value(shader, locations["flipX"], flip_x_value, rl.ShaderUniformDataType.SHADER_UNIFORM_INT)
+
+        rl.begin_texture_mode(target)
+        if clear_target:
+            rl.clear_background(rl_color(clear_color))
+        rl.begin_shader_mode(shader)
+        rl.rl_set_blend_factors(rl.RL_ONE, rl.RL_ZERO, rl.RL_FUNC_ADD)
+        rl.begin_blend_mode(rl.BlendMode.BLEND_CUSTOM)
+        try:
+            rl.draw_texture_pro(
+                source_texture,
+                rl.Rectangle(0.0, 0.0, float(source_width), float(source_height)),
+                rl.Rectangle(0.0, float(dest_y), float(pack_width), float(pack_height)),
+                rl.Vector2(0.0, 0.0),
+                0.0,
+                rl_color(WHITE),
+            )
+        finally:
+            rl.end_blend_mode()
+            rl.end_shader_mode()
+            rl.end_texture_mode()
 
     def _load_font(self):
         for candidate in self._font_candidates():
@@ -964,9 +1439,6 @@ class ClusterUiRenderer:
             state.radar_source_color_mode,
         )
         self._profile_add("draw_scene.vehicle_badges", profile_stage)
-        profile_stage = self._profile_start()
-        self._draw_rear_vehicle_indicators(scene.rear_indicators, camera, scene.scene_shift_x_m)
-        self._profile_add("draw_scene.rear_indicators", profile_stage)
 
     def _draw_strip(self, strip: MeshStrip) -> None:
         count = min(len(strip.left), len(strip.right))
@@ -977,29 +1449,17 @@ class ClusterUiRenderer:
         x_offset_m = strip.x_offset_m
 
         if hasattr(rl, "draw_triangle_strip_3d"):
-            point_count = count * 2
-            if self._triangle_strip_capacity < point_count:
-                self._triangle_strip_points = rl.ffi.new("struct Vector3[]", point_count)
-                self._triangle_strip_capacity = point_count
-            points = self._triangle_strip_points
-
-            for index in range(count):
-                left = strip.left[index]
-                right = strip.right[index]
-
-                points[index * 2].x = left.x + x_offset_m
-                points[index * 2].y = left.y
-                points[index * 2].z = left.z
-
-                points[index * 2 + 1].x = right.x + x_offset_m
-                points[index * 2 + 1].y = right.y
-                points[index * 2 + 1].z = right.z
-
-            rl.draw_triangle_strip_3d(
-                rl.ffi.cast("struct Vector3 *", points),
-                count * 2,
-                color,
-            )
+            points, point_count = self._triangle_strip_points_for(strip, count)
+            point_ptr = rl.ffi.cast("struct Vector3 *", points)
+            if x_offset_m != 0.0:
+                rl.rl_push_matrix()
+                try:
+                    rl.rl_translatef(x_offset_m, 0.0, 0.0)
+                    rl.draw_triangle_strip_3d(point_ptr, point_count, color)
+                finally:
+                    rl.rl_pop_matrix()
+            else:
+                rl.draw_triangle_strip_3d(point_ptr, point_count, color)
             return
 
         for index in range(count - 1):
@@ -1013,6 +1473,39 @@ class ClusterUiRenderer:
             right_far = rl.Vector3(next_right.x + x_offset_m, next_right.y, next_right.z)
             rl.draw_triangle_3d(left_near, right_near, right_far, color)
             rl.draw_triangle_3d(left_near, right_far, left_far, color)
+
+    def _triangle_strip_points_for(self, strip: MeshStrip, count: int):
+        key = (id(strip.left), id(strip.right))
+        cached = self._triangle_strip_point_cache.get(key)
+        if cached is not None:
+            left_ref, right_ref, points, point_count = cached
+            if left_ref is strip.left and right_ref is strip.right:
+                self._triangle_strip_point_cache.move_to_end(key)
+                return points, point_count
+
+        point_count = count * 2
+        points = rl.ffi.new("struct Vector3[]", point_count)
+        for index in range(count):
+            left = strip.left[index]
+            right = strip.right[index]
+
+            points[index * 2].x = left.x
+            points[index * 2].y = left.y
+            points[index * 2].z = left.z
+
+            points[index * 2 + 1].x = right.x
+            points[index * 2 + 1].y = right.y
+            points[index * 2 + 1].z = right.z
+
+        self._triangle_strip_point_cache[key] = (
+            strip.left,
+            strip.right,
+            points,
+            point_count,
+        )
+        while len(self._triangle_strip_point_cache) > TRIANGLE_STRIP_POINT_CACHE_LIMIT:
+            self._triangle_strip_point_cache.popitem(last=False)
+        return points, point_count
 
     def _draw_vehicle(self, vehicle: VehicleBox) -> None:
         source_marker = vehicle.source.startswith("modelV2") or vehicle.source in ("radarState", "radarPoint")
@@ -1057,23 +1550,48 @@ class ClusterUiRenderer:
         if not radar_info_shows_radar_points(radar_info_mode):
             return
         theme = self._current_theme()
+        profile_enabled = self.profile_enabled
+        profile_stage = self._profile_start()
         ordered = sorted(
             points,
             key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label),
             reverse=True,
         )
+        self._profile_add("draw_scene.radar_labels.sort", profile_stage)
+
+        project_ms = 0.0
+        layout_ms = 0.0
+        text_ms = 0.0
+
+        def draw_label_text(label, x, y, size, color) -> None:
+            nonlocal text_ms
+            if profile_enabled:
+                text_stage = time.perf_counter()
+                self._draw_world_label_text(label, x, y, size, color, anchor="center")
+                text_ms += (time.perf_counter() - text_stage) * 1000.0
+                return
+            self._draw_world_label_text(label, x, y, size, color, anchor="center")
+
         for point in ordered:
             anchor = rl.Vector3(
                 point.center.x + scene_shift_x_m,
                 point.center.y,
                 point.center.z + RADAR_LABEL_ANCHOR_Z_OFFSET_M,
             )
+            if profile_enabled:
+                project_stage = time.perf_counter()
             screen = world_to_screen_label_anchor(anchor, camera, self.width, self.height)
+            if profile_enabled:
+                project_ms += (time.perf_counter() - project_stage) * 1000.0
             if screen is None:
                 continue
+            if profile_enabled:
+                layout_stage = time.perf_counter()
             distance = radar_point_distance_label(point) if radar_info_shows_distance(radar_info_mode) else ""
             speed = radar_point_speed_label(point) if radar_info_shows_speed(radar_info_mode) else ""
             if not distance and not speed:
+                if profile_enabled:
+                    layout_ms += (time.perf_counter() - layout_stage) * 1000.0
                 continue
             scale = world_label_scale(point.longitudinal_m)
             distance_size = max(9.0, RADAR_LABEL_DISTANCE_FONT_SIZE * scale)
@@ -1091,40 +1609,41 @@ class ClusterUiRenderer:
             center_x = screen.x
             shadow = theme.world_label_shadow
             text = theme.world_label_text
+            if profile_enabled:
+                layout_ms += (time.perf_counter() - layout_stage) * 1000.0
             if distance:
-                self._draw_text(
+                draw_label_text(
                     distance,
                     center_x + shadow_offset,
                     distance_y + shadow_offset,
                     distance_size,
                     shadow,
-                    anchor="center",
                 )
-                self._draw_text(
+                draw_label_text(
                     distance,
                     center_x,
                     distance_y,
                     distance_size,
                     text,
-                    anchor="center",
                 )
             if speed:
-                self._draw_text(
+                draw_label_text(
                     speed,
                     center_x + shadow_offset,
                     speed_y + shadow_offset,
                     speed_size,
                     shadow,
-                    anchor="center",
                 )
-                self._draw_text(
+                draw_label_text(
                     speed,
                     center_x,
                     speed_y,
                     speed_size,
                     text,
-                    anchor="center",
                 )
+        self._profile_add_elapsed("draw_scene.radar_labels.project", project_ms)
+        self._profile_add_elapsed("draw_scene.radar_labels.layout", layout_ms)
+        self._profile_add_elapsed("draw_scene.radar_labels.text", text_ms)
 
     def _draw_vehicle_shadow(self, vehicle: VehicleBox) -> None:
         half_width = vehicle.width_m * 0.5
@@ -1177,6 +1696,8 @@ class ClusterUiRenderer:
         if not radar_info_shows_vehicle(radar_info_mode):
             return
         theme = self._current_theme()
+        profile_enabled = self.profile_enabled
+        profile_stage = self._profile_start()
         ordered = sorted(
             (vehicle for vehicle in vehicles if vehicle.label),
             key=lambda vehicle: (
@@ -1185,21 +1706,44 @@ class ClusterUiRenderer:
                 -vehicle.confidence,
             ),
         )
+        self._profile_add("draw_scene.vehicle_badges.sort", profile_stage)
+
+        project_ms = 0.0
+        layout_ms = 0.0
+        text_ms = 0.0
+
+        def draw_label_text(label, x, y, size, color) -> None:
+            nonlocal text_ms
+            if profile_enabled:
+                text_stage = time.perf_counter()
+                self._draw_world_label_text(label, x, y, size, color, anchor="center")
+                text_ms += (time.perf_counter() - text_stage) * 1000.0
+                return
+            self._draw_world_label_text(label, x, y, size, color, anchor="center")
+
         for vehicle in ordered:
             anchor = rl.Vector3(
                 vehicle.center.x + scene_shift_x_m,
                 vehicle.center.y,
                 vehicle.height_m + VEHICLE_BADGE_ANCHOR_Z_OFFSET_M,
             )
+            if profile_enabled:
+                project_stage = time.perf_counter()
             screen = world_to_screen_label_anchor(anchor, camera, self.width, self.height)
+            if profile_enabled:
+                project_ms += (time.perf_counter() - project_stage) * 1000.0
             if screen is None:
                 continue
 
+            if profile_enabled:
+                layout_stage = time.perf_counter()
             distance = vehicle_distance_label(vehicle) if radar_info_shows_distance(radar_info_mode) else ""
             speed = vehicle_speed_label(vehicle) if radar_info_shows_speed(radar_info_mode) else ""
             if not distance and not speed:
+                if profile_enabled:
+                    layout_ms += (time.perf_counter() - layout_stage) * 1000.0
                 continue
-            distance_m = abs(vehicle.center.y - EGO_FORWARD_M)
+            distance_m = vehicle_distance_m(vehicle)
             scale = world_label_scale(distance_m)
             distance_size = max(9.0, VEHICLE_BADGE_DISTANCE_FONT_SIZE * scale)
             speed_size = max(8.0, VEHICLE_BADGE_SPEED_FONT_SIZE * scale)
@@ -1216,146 +1760,41 @@ class ClusterUiRenderer:
             center_x = screen.x
             shadow = theme.world_label_shadow
             text_color = vehicle_metric_color(vehicle, theme, radar_source_color_mode)
+            if profile_enabled:
+                layout_ms += (time.perf_counter() - layout_stage) * 1000.0
             if distance:
-                self._draw_text(
+                draw_label_text(
                     distance,
                     center_x + shadow_offset,
                     distance_y + shadow_offset,
                     distance_size,
                     shadow,
-                    anchor="center",
                 )
-                self._draw_text(
+                draw_label_text(
                     distance,
                     center_x,
                     distance_y,
                     distance_size,
                     text_color,
-                    anchor="center",
                 )
             if speed:
-                self._draw_text(
+                draw_label_text(
                     speed,
                     center_x + shadow_offset,
                     speed_y + shadow_offset,
                     speed_size,
                     shadow,
-                    anchor="center",
                 )
-                self._draw_text(
+                draw_label_text(
                     speed,
                     center_x,
                     speed_y,
                     speed_size,
                     text_color,
-                    anchor="center",
                 )
-
-    def _draw_rear_vehicle_indicators(
-        self,
-        indicators: tuple[RearVehicleIndicator, ...],
-        camera,
-        scene_shift_x_m: float = 0.0,
-    ) -> None:
-        for indicator in indicators:
-            if self._rear_indicator_vehicle_visible(indicator, camera, scene_shift_x_m):
-                continue
-            x, y = self._rear_indicator_screen_position(indicator, camera, scene_shift_x_m)
-            self._draw_rear_distance_arrow(indicator, x, y)
-
-    def _rear_indicator_vehicle_visible(
-        self,
-        indicator: RearVehicleIndicator,
-        camera,
-        scene_shift_x_m: float = 0.0,
-    ) -> bool:
-        anchor = rl.Vector3(
-            indicator.center.x + scene_shift_x_m,
-            indicator.center.y,
-            indicator.center.z + 0.62,
-        )
-        screen = world_to_screen_label_anchor(anchor, camera, self.width, self.height)
-        if screen is None:
-            return False
-        margin_x = 24.0
-        margin_y = 24.0
-        return (
-            margin_x <= screen.x <= self.width - margin_x
-            and margin_y <= screen.y <= self.height - margin_y
-        )
-
-    def _rear_indicator_screen_position(
-        self,
-        indicator: RearVehicleIndicator,
-        camera,
-        scene_shift_x_m: float = 0.0,
-    ) -> tuple[float, float]:
-        scale_x = self.width / DESIGN_WIDTH
-        scale_y = self.height / DESIGN_HEIGHT
-        proxy = rl.Vector3(indicator.anchor.x + scene_shift_x_m, indicator.anchor.y, indicator.anchor.z)
-        screen = world_to_screen_label_anchor(proxy, camera, self.width, self.height)
-        fallback_x = (735.0 if indicator.lane_side == "left" else 1185.0) * scale_x
-        fallback_y = 382.0 * scale_y
-        if screen is None:
-            return fallback_x, fallback_y
-
-        if indicator.lane_side == "left":
-            min_x, max_x = 560.0 * scale_x, 880.0 * scale_x
-        else:
-            min_x, max_x = 1040.0 * scale_x, 1360.0 * scale_x
-        x = clamp(screen.x, min_x, max_x)
-        y = clamp(screen.y, 318.0 * scale_y, 404.0 * scale_y)
-        return x, y
-
-    def _draw_rear_distance_arrow(self, indicator: RearVehicleIndicator, x: float, y: float) -> None:
-        theme = self._current_theme()
-        scale = max(0.72, min(1.18, min(self.width / DESIGN_WIDTH, self.height / DESIGN_HEIGHT)))
-        distance = f"{indicator.label} {abs(indicator.longitudinal_m):.0f} m"
-        text_size = 16.0 * scale
-        spacing = max(1.0, text_size * 0.02)
-        text_width, text_height = self._measure_text(distance, text_size, spacing)
-        pad_x = 10.0 * scale
-        pad_y = 5.0 * scale
-        box_w = max(74.0 * scale, text_width + pad_x * 2.0)
-        box_h = text_height + pad_y * 2.0
-        box_y = y - 62.0 * scale
-        box = rl.Rectangle(x - box_w * 0.5, box_y, box_w, box_h)
-
-        rl.draw_rectangle_rounded(box, 0.28, 12, rl_color(theme.clock_bg))
-        rl.draw_rectangle_rounded_lines_ex(box, 0.28, 12, max(1.5, 2.0 * scale), rl_color(RED))
-        self._draw_text(
-            distance,
-            x + 1.0,
-            box_y + box_h * 0.5 + 1.0,
-            text_size,
-            theme.world_label_shadow,
-            anchor="center",
-        )
-        self._draw_text(
-            distance,
-            x,
-            box_y + box_h * 0.5,
-            text_size,
-            theme.clock_text,
-            anchor="center",
-        )
-
-        shaft_top = box_y + box_h + 8.0 * scale
-        shaft_bottom = y - 8.0 * scale
-        tip_y = y + 20.0 * scale
-        arrow_color = rl_color(RED)
-        rl.draw_line_ex(
-            rl.Vector2(x, shaft_top),
-            rl.Vector2(x, shaft_bottom),
-            max(4.0, 5.0 * scale),
-            arrow_color,
-        )
-        rl.draw_triangle(
-            rl.Vector2(x - 15.0 * scale, shaft_bottom),
-            rl.Vector2(x, tip_y),
-            rl.Vector2(x + 15.0 * scale, shaft_bottom),
-            arrow_color,
-        )
+        self._profile_add_elapsed("draw_scene.vehicle_badges.project", project_ms)
+        self._profile_add_elapsed("draw_scene.vehicle_badges.layout", layout_ms)
+        self._profile_add_elapsed("draw_scene.vehicle_badges.text", text_ms)
 
     def _world_label_bounds(
         self,
@@ -1528,6 +1967,9 @@ class ClusterUiRenderer:
             profile_stage = self._profile_start()
             self._draw_git_status(state.git_status)
             self._profile_add("hud.git_status", profile_stage)
+            profile_stage = self._profile_start()
+            self._draw_cluster_core_usage(state.cluster_core_usage_text)
+            self._profile_add("hud.cluster_core_usage", profile_stage)
         finally:
             profile_stage = self._profile_start()
             rl.rl_pop_matrix()
@@ -1539,7 +1981,7 @@ class ClusterUiRenderer:
 
         theme = self._current_theme()
         text = state.center_clock_text
-        x = DESIGN_WIDTH * 0.5
+        x = SYSTEM_PANEL_X + SYSTEM_PANEL_W * 0.5
         y = 58
         size = 54
         spacing = max(1.0, size * 0.02)
@@ -2079,6 +2521,19 @@ class ClusterUiRenderer:
         rl.draw_circle_v(rl.Vector2(dot_center_x, center_y), FPS_STATUS_DOT_RADIUS, rl_color(GREEN))
         self._draw_text(text, text_x, center_y, text_size, color, anchor="right")
 
+    def _draw_cluster_core_usage(self, text: str | None) -> None:
+        if not text:
+            return
+
+        theme = self._current_theme()
+        text_size = 18
+        text = self._ellipsize_text(text, text_size, CLUSTER_CORE_USAGE_MAX_TEXT_W)
+        spacing = max(1.0, text_size * 0.02)
+        _, text_height = self._measure_text(text, text_size, spacing)
+        x = DESIGN_WIDTH - CLUSTER_CORE_USAGE_MARGIN
+        y = DESIGN_HEIGHT - CLUSTER_CORE_USAGE_MARGIN - text_height * 0.5
+        self._draw_text(text, x, y, text_size, theme.muted, anchor="right")
+
     @staticmethod
     def _git_status_color(status: GitBranchStatus, theme: ClusterTheme) -> tuple[int, int, int]:
         if status.state == "ok":
@@ -2485,6 +2940,126 @@ class ClusterUiRenderer:
             draw_x = x - text_width
             draw_y = y - text_height * 0.5
         rl.draw_text_ex(self._font, text, rl.Vector2(draw_x, draw_y), size, spacing, rl_color(color))
+
+    def _draw_world_label_text(
+        self,
+        text: str,
+        x: float,
+        y: float,
+        size: float,
+        color: tuple[int, int, int] | tuple[int, int, int, int],
+        anchor: str = "left",
+    ) -> None:
+        if not self._world_label_texture_cache_enabled:
+            self._draw_text(text, x, y, size, color, anchor)
+            return
+
+        cached_text = self._world_label_texture(text, size, color)
+        if cached_text is None:
+            self._draw_text(text, x, y, size, color, anchor)
+            return
+
+        draw_x = x
+        draw_y = y
+        if anchor == "center":
+            draw_x = x - cached_text.text_width * 0.5
+            draw_y = y - cached_text.text_height * 0.5
+        elif anchor == "left":
+            draw_y = y - cached_text.text_height * 0.5
+        elif anchor == "right":
+            draw_x = x - cached_text.text_width
+            draw_y = y - cached_text.text_height * 0.5
+        draw_x -= cached_text.padding_px
+        draw_y -= cached_text.padding_px
+
+        source = rl.Rectangle(
+            0.0,
+            0.0,
+            float(cached_text.texture_width),
+            float(cached_text.texture_height),
+        )
+        dest = rl.Rectangle(
+            draw_x,
+            draw_y,
+            float(cached_text.texture_width),
+            float(cached_text.texture_height),
+        )
+        rl.draw_texture_pro(
+            cached_text.texture,
+            source,
+            dest,
+            rl.Vector2(0.0, 0.0),
+            0.0,
+            rl_color(WHITE),
+        )
+
+    def _world_label_texture(
+        self,
+        text: str,
+        size: float,
+        color: tuple[int, int, int] | tuple[int, int, int, int],
+    ) -> CachedTextTexture | None:
+        if self._font is None:
+            self._font = rl.get_font_default()
+        render_size = max(
+            1.0,
+            round(float(size) / WORLD_LABEL_TEXTURE_SIZE_GRID) * WORLD_LABEL_TEXTURE_SIZE_GRID,
+        )
+        spacing = max(1.0, render_size * 0.02)
+        color_key = rgba_key(color)
+        cache_key = (id(self._font), text, render_size, spacing, color_key)
+        cached_text = self._world_label_texture_cache.get(cache_key)
+        if cached_text is not None:
+            self._world_label_texture_cache.move_to_end(cache_key)
+            return cached_text
+
+        profile_stage = self._profile_start()
+        text_width, text_height = self._measure_text(text, render_size, spacing)
+        padding_px = float(WORLD_LABEL_TEXTURE_PADDING_PX)
+        texture_width = max(1, int(math.ceil(text_width + padding_px * 2.0)))
+        texture_height = max(1, int(math.ceil(text_height + padding_px * 2.0)))
+        image = None
+        texture = None
+        try:
+            image = rl.gen_image_color(texture_width, texture_height, rl_color((0, 0, 0, 0)))
+            rl.image_draw_text_ex(
+                image,
+                self._font,
+                text,
+                rl.Vector2(padding_px, padding_px),
+                render_size,
+                spacing,
+                rl_color(color_key),
+            )
+            texture = rl.load_texture_from_image(image)
+            if hasattr(rl, "is_texture_valid") and not rl.is_texture_valid(texture):
+                rl.unload_texture(texture)
+                return None
+        except Exception:
+            if texture is not None:
+                try:
+                    rl.unload_texture(texture)
+                except Exception:
+                    pass
+            return None
+        finally:
+            if image is not None:
+                rl.unload_image(image)
+
+        cached_text = CachedTextTexture(
+            texture=texture,
+            text_width=text_width,
+            text_height=text_height,
+            texture_width=texture_width,
+            texture_height=texture_height,
+            padding_px=padding_px,
+        )
+        self._world_label_texture_cache[cache_key] = cached_text
+        while len(self._world_label_texture_cache) > WORLD_LABEL_TEXTURE_CACHE_LIMIT:
+            _, old_text = self._world_label_texture_cache.popitem(last=False)
+            rl.unload_texture(old_text.texture)
+        self._profile_add("world_label_texture_cache.miss", profile_stage)
+        return cached_text
 
     def _measure_text(self, text: str, size: float, spacing: float | None = None) -> tuple[float, float]:
         if self._font is None:

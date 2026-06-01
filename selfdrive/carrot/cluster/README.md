@@ -74,18 +74,13 @@ fall back to helper.
 
 The default V4L2 device is
 `/dev/v4l/by-path/platform-aa00000.qcom_vidc-video-index1`. Input format
-defaults to `nv12`, matching the existing loggerd V4L2 encoder path. The device
-also reports RGB4 support, and `--usb-h264-input-format rgb4` remains available
-for direct RGB input tests, but NV12 is the safer compatibility path for the
-TURZX panel. Native NV12 input uses the same Qualcomm/Venus aligned stride,
-scanline count, and UV offset calculation as camerad, rather than a compact
-width-by-height layout. RGB4 input also honors a larger row stride implied by
-V4L2 `sizeimage` when it disagrees with the reported compact `bytesperline`.
-The default RGB4 byte layout is `bgra`, matching the common little-endian memory
-order for V4L2 `RGB4`. The cluster H264 wrapper emits
-inline SPS/PPS on the first video packet and on IDR frames, asks for VBR-CFR
-rate control, constrained Baseline/CAVLC, and VUI timing when the V4L2 driver
-accepts those controls, and
+defaults to `nv12`, matching the existing loggerd V4L2 encoder path. Native
+NV12 input uses the same Qualcomm/Venus aligned stride, scanline count, and UV
+offset calculation as camerad, rather than a compact width-by-height layout.
+The previous direct and hidden 32-bit RGB diagnostic input paths have been
+removed. The cluster H264 wrapper emits inline SPS/PPS on the first video
+packet and on IDR frames, asks for VBR-CFR rate control, constrained
+Baseline/CAVLC, and VUI timing when the V4L2 driver accepts those controls, and
 the Python sender patches SPS VUI timing and bitstream restriction metadata when
 the driver returns a short VUI without timing info. If those baseline controls
 are rejected, the native path falls back internally to driver-compatible profile
@@ -122,10 +117,8 @@ For a quick H264 transport smoke test, run:
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug --usb-h264-slice-max-bytes 4096
 ```
 
-The panel should show red/green/blue/white quadrants. If you force
-`--usb-h264-input-format rgb4` and colors are swapped, retry with
-`--usb-h264-rgb4-layout rgba` or `--usb-h264-rgb4-layout axrgb`. If RGB4 itself
-looks suspicious, return to the default `--usb-h264-input-format nv12` path.
+The panel should show red/green/blue/white quadrants on the default NV12
+hardware path.
 `--usb-h264-orientation landscape` tests direct 1920x462 output, while
 `--usb-h264-align 16` deliberately tests macroblock-aligned output such as
 1920x464. When `--fps` is omitted, non-live H264 USB runs use
@@ -181,11 +174,9 @@ If the dump plays correctly but the panel is corrupted, the remaining issue is
 TURZX stream compatibility or USB flow control. If the dump is corrupted too,
 the issue is in the V4L2 input conversion or encoder controls.
 
-Keep `--usb-h264-input-format nv12` for normal native hardware testing. RGB4 is
-only a diagnostic mode on the measured device: it is enumerated by V4L2 and
-byte-layout changes alter the corrupted colors, but dumps are ffprobe-invalid
-and the panel remains corrupted even when RGB4 stride and 32-pixel encoder
-alignment match.
+Keep `--usb-h264-input-format nv12` for native hardware testing. Direct RGB
+USERPTR diagnostics were removed after measured device tests showed corrupted
+output across direct and hidden 32-bit RGB variants.
 
 Manager autostart omits `--fps` by default so live launches follow
 `ClusterHudLiveFps`. JPEG/PNG runs apply setting changes while running; H264
@@ -193,12 +184,20 @@ runs exit and let `cluster_autorun` relaunch when the setting changes the
 encoder FPS because the V4L2 encoder timing, SPS timing, and automatic bitrate
 are fixed at startup. Set `CLUSTER_AUTORUN_FPS` only for fixed test overrides;
 `0` means uncapped.
+`ClusterHudDebug` controls the autorun output gate: `0` starts external HUD
+rendering only while openpilot is onroad, and `1` keeps the older always-on
+debug behavior after power-up. When output is gated off, `cluster_autorun`
+sends TURZX brightness `0` so a stale HUD frame does not remain visible.
+The autorun watcher normalizes locale before this dim-only USB path too, so
+vendor USB initialization does not fail before the renderer is launched.
 Manager autostart enables realtime affinity by default. `cluster_autorun.py`
-affines the manager-launched process to cores `0,1,2,3` before waiting for USB
-or starting the HUD by calling Linux `sched_setaffinity` directly. Explicit
-`CLUSTER_REALTIME` or `CLUSTER_REALTIME_CORES` environment values still win.
-`cluster_run.py` separately attempts realtime priority `55` through the common
-openpilot realtime helper when `CLUSTER_REALTIME` is enabled.
+uses `ClusterHudCoreMode=0` by default, which maps to cores `1,2,3,4`; mode
+`1` maps to all initially allowed CPU cores. `ClusterHudPriority` controls the
+common openpilot realtime helper priority with range `1..99`, default `10`.
+Changing either param makes the running HUD exit so `cluster_autorun` can
+relaunch it with the new affinity/priority, without a whole system restart.
+Explicit `CLUSTER_REALTIME`, `CLUSTER_REALTIME_CORES`, or
+`CLUSTER_REALTIME_PRIORITY` environment values still win.
 When `--usb-brightness` is omitted, USB launches follow `ClusterHudBrightness`:
 `0` auto follows live `wideRoadCameraState.exposureValPercent` after samples are
 available, falling back to `deviceState.screenBrightnessPercent`; `1` through
@@ -209,7 +208,16 @@ the resolved brightness changes.
 The launcher defaults to `--input live`, subscribes to openpilot cereal services,
 and renders live `carState`, `modelV2`, `radarState`, `liveTracks`,
 `controlsState`, `selfdriveState`, `carControl`, `deviceState`, and raw Hyundai
-CAN-FD radar points when CAN subscription is enabled.
+CAN-FD radar points when CAN subscription is enabled. Manager/autostart leaves
+the live CAN/sendcan subscriptions enabled, but exact LF/RF/LR/RR corner radar
+distance now comes only from received Hyundai camera-bus `can` `0x162`/`0x1EA`
+messages (`src % 4 == 2`). `sendcan`, ECAN copies generated by
+`hyundaicanfd.py`, and returned/rejected `can` echo frames with `src >= 0x80`
+are ignored for direct corner/radar parsing so sent presentation frames do not
+re-enter as received distance. `--live-no-can` remains a manual diagnostic
+option; without raw received CAN, `carState` still provides LF/RF distance and
+LR/RR distance when the current cereal schema exposes it. Blindspot booleans do
+not create fallback vehicle boxes.
 Cluster road speed-limit display treats `carState.speedLimit` from the
 vehicle/HDA path as km/h. Navigation speed limits are accepted in either the
 km/h values used by the current navigation integrations or the m/s values used
@@ -235,18 +243,33 @@ lane-change icon is not drawn; the LFA icon uses
 `selfdrive/assets/icons_mici/carrot_wheel_org.png`, rotates by
 `-carState.steeringAngleDeg`, and recolors its white pixels green when LFA is
 active.
-When `--fps` is omitted for live input, `ClusterHudLiveFps` controls the render
-limit and is polled about once per second while running: `0` uncapped,
-`1` 10 Hz, `2` 20 Hz, `3` 30 Hz, `4` 40 Hz, `5` 50 Hz, and `6` 60 Hz.
-Explicit `--fps` remains a fixed override. For H264 USB output, changing the
-effective FPS exits the current HUD process so autostart can relaunch with a
-matching encoder FPS.
-`ClusterHudEncoder` controls the encoder used by manager autostart: `0` auto
-tries native hardware H264, then ffmpeg/libx264 software H264, then JPEG;
-`1` forces JPEG, `2` forces native hardware H264, and `3` forces
-ffmpeg/libx264 software H264. Changing this setting while the HUD is running
-makes the current HUD process exit so `cluster_autorun` can relaunch it with the
-new encoder choice.
+When `--fps` is omitted, `ClusterHudLiveFps` controls the render limit and is
+polled about once per second while running: `0` uncapped, `1` 10 Hz,
+`2` 20 Hz, `3` 30 Hz, `4` 40 Hz, `5` 50 Hz, and `6` 60 Hz. Direct route/replay
+CLI runs also apply nonzero values; mode `0` keeps non-live H264 runs on the
+`--usb-h264-fps` safety cap. Explicit `--fps` remains a fixed override. For
+H264 USB output, changing the effective FPS exits the current HUD process so
+autostart can relaunch with a matching encoder FPS when a launcher is present.
+Runs also show a compact lower-right cluster-process CPU overlay by current
+core, formatted like `[0(10),1(25)]`, with 2 px bottom/right margins. The
+sampler reads the current cluster process and direct child processes only,
+avoiding a full `/proc` PID scan in the render loop. Use
+`--cluster-core-usage-debug` with `--profile-render` to log the sampler scan
+cost plus per-process/core CPU breakdown, or `--no-cluster-core-usage` for an
+A/B run without the overlay.
+`ClusterHudEncoder` controls the encoder used by manager autostart and by
+direct USB CLI runs when `--usb-codec` is omitted: `0` auto tries native
+hardware H264, then ffmpeg/libx264 software H264, then JPEG in autostart;
+direct CLI auto uses the native hardware H264 choice. `1` forces JPEG,
+`2` forces native hardware H264, and `3` forces ffmpeg/libx264 software H264.
+Live native hardware H264 automatically enables `--usb-h264-render-nv12`, so
+both auto hardware selection and explicit hardware selection use the lower-copy
+GPU NV12 submit path. Direct live CLI runs with backend `native` or
+native-first `auto` also auto-enable it; if `auto` falls back to the helper
+backend, the run disables the GPU NV12 path and uses the RGBA helper path. Use
+`--no-usb-h264-render-nv12` only for A/B profiling.
+Changing this setting while the HUD is running makes the current HUD process
+exit so `cluster_autorun` can relaunch it with the new encoder choice.
 `ClusterHudScreenMode` controls optional debug views: `0` default, `1` shows
 the live debug panel with grouped `LIVE DELAY`, `LIVE TORQUE`, `STEERING`, and
 `LATERAL PLAN` rows, `2` shows the system information panel with memory and CPU
@@ -263,12 +286,52 @@ selected debug view remains visible.
 boxes only, `3` speed for all vehicle boxes and raw radar points, and `4` speed
 and distance for all. `ClusterHudRadarDisplay` controls raw radar point
 presentation: `0` averages nearby points with nearly matching speed/position,
-and `1` leaves raw points unmerged for detail checks. Vehicle/radar metric
-labels sit closer to the point/box top so speed and distance are less high
-above the vehicle. `ClusterHudRadarSourceColor` controls vehicle box colors:
+and hides raw radar vehicle boxes that overlap already-rendered detected
+vehicles such as front-center `radarState` leads; `1` leaves raw points
+unmerged for detail checks, including radar vehicle candidate boxes and
+radar-to-detected-vehicle speed merges. Vehicle/radar metric labels sit closer
+to the point/box top so speed and distance are less high above the vehicle.
+`LR`/`RR` rear-corner detections render as normal vehicle boxes at their actual
+detected positions. The older fixed rear-tire-depth 2D arrow/label is removed.
+The default drive camera sits closer to the ego roof, lower than the earlier
+high view, tilted downward, and shifted `5m` forward so route/live scene space
+is pulled rearward together instead of moving only the ego vehicle. Rear object
+rendering compresses negative longitudinal distance by `0.5`, so an actual
+`-10m` LR/RR detection is drawn at the rendered `-5m` position while labels
+keep the actual distance.
+When both raw camera-bus ADRV `0x1EA` and CCNC `0x162` corner messages are
+fresh, ADRV is preferred for LF/RF/LR/RR distance in the Hyundai `carState`
+DBC parsing path. The cluster consumes the DBC-parsed `carState` corner fields
+first; route replay/raw-CAN fallback also decodes `0x162`/`0x1EA` through the
+Hyundai CAN-FD DBC instead of hand-coded bit positions.
+Road/lane/radar geometry still starts far enough behind that rendered bound so
+the rear lane-start seam sits below the visible bottom edge.
+Front-center `radarState` lead overlap uses a wider vehicle-sized tolerance
+than corner radar overlap, and default mode also collapses overlapping
+front-center detected vehicle boxes so source-split front radar/model
+reflections merge cleanly.
+`ClusterHudRadarSourceColor` controls vehicle box colors:
 `0` keeps all vehicle boxes gray, while `1` uses source colors with
 SCC/radarState red, HDA/model/CAN/corner detections blue, and raw radar vehicle
 boxes orange.
+Raw radar vehicle classification rejects points outside model road edges, but
+does not require in-road points to sit near the road-edge line; center-lane
+points can classify as vehicles when probability/in-lane data or moving raw
+radar evidence is sufficient. Points near or slightly outside a road edge can
+still classify as vehicles when their counter is stable, absolute speed is
+vehicle-like, and acceleration stays within about +/-5 m/s^2, even if the raw
+radar probability is low.
+Lane and road-edge rendering keeps model geometry visible instead of filtering
+by `laneLineProbs` or `roadEdgeStds`, avoiding distracting HUD flicker when
+model confidence jitters. Lane markings are still suppressed when their
+lateral offset falls outside a valid model road-edge boundary. Dashed lane
+markings are phased so the visible rear bound starts with a line segment
+instead of a gap.
+When `carState.leftLaneLine` or `carState.rightLaneLine` carries camera/CAN
+lane color codes, the current lane markings use that color first
+(`+10=white`, `+20=yellow`) before falling back to the cluster model colors.
+The planned path draws `longitudinalPlan.desiredDistance` as a magenta
+horizontal bar across the current lane width at the matching forward position.
 Changing `ClusterHud` to another supported mode or `0` makes the running HUD
 exit; cleanup sends TURZX brightness zero before releasing the USB device.
 

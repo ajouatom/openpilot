@@ -15,19 +15,10 @@ namespace {
 ClusterH264InputFormat input_format_from_int(int value) {
   switch (value) {
     case 0: return ClusterH264InputFormat::Auto;
-    case 1: return ClusterH264InputFormat::RGB4;
+    case 1: return ClusterH264InputFormat::NV12;
     case 2: return ClusterH264InputFormat::NV12;
   }
   throw std::runtime_error("invalid input format");
-}
-
-ClusterH264Rgb4Layout rgb4_layout_from_int(int value) {
-  switch (value) {
-    case 0: return ClusterH264Rgb4Layout::AXRGB;
-    case 1: return ClusterH264Rgb4Layout::RGBA;
-    case 2: return ClusterH264Rgb4Layout::BGRA;
-  }
-  throw std::runtime_error("invalid RGB4 layout");
 }
 
 void set_error(ClusterH264EncoderBridge *bridge, const std::exception &e) {
@@ -57,10 +48,11 @@ ClusterH264EncoderBridge *cluster_h264_encoder_bridge_create(
     int gop,
     const char *device_path,
     int input_format,
-    int rgb4_layout,
+    int unused_input_layout,
     int debug) {
   ClusterH264EncoderBridge *bridge = new ClusterH264EncoderBridge();
   try {
+    (void)unused_input_layout;
     bridge->config.width = width;
     bridge->config.height = height;
     bridge->config.fps = fps;
@@ -69,7 +61,6 @@ ClusterH264EncoderBridge *cluster_h264_encoder_bridge_create(
     bridge->config.debug = debug != 0;
     bridge->config.device_path = device_path == nullptr ? "" : device_path;
     bridge->config.input_format = input_format_from_int(input_format);
-    bridge->config.rgb4_layout = rgb4_layout_from_int(rgb4_layout);
     return bridge;
   } catch (const std::exception &e) {
     set_error(bridge, e);
@@ -142,6 +133,64 @@ int cluster_h264_encoder_bridge_encode_rgba(
   if (bridge == nullptr || bridge->encoder == nullptr) return -1;
   try {
     bridge->encoder->encode_rgba(rgba, rgba_size, timestamp_us, [callback, opaque](const ClusterH264PacketView &packet) {
+      if (callback != nullptr) {
+        callback(
+            packet.data,
+            packet.size,
+            packet.flags,
+            packet.timestamp_us,
+            packet.codec_config ? 1 : 0,
+            packet.keyframe ? 1 : 0,
+            opaque);
+      }
+    });
+    bridge->last_error.clear();
+    return 0;
+  } catch (const std::exception &e) {
+    set_error(bridge, e);
+    return -1;
+  }
+}
+
+int cluster_h264_encoder_bridge_encode_nv12(
+    ClusterH264EncoderBridge *bridge,
+    const uint8_t *nv12,
+    size_t nv12_size,
+    uint64_t timestamp_us,
+    cluster_h264_packet_callback callback,
+    void *opaque) {
+  if (bridge == nullptr || bridge->encoder == nullptr) return -1;
+  try {
+    bridge->encoder->encode_nv12(nv12, nv12_size, timestamp_us, [callback, opaque](const ClusterH264PacketView &packet) {
+      if (callback != nullptr) {
+        callback(
+            packet.data,
+            packet.size,
+            packet.flags,
+            packet.timestamp_us,
+            packet.codec_config ? 1 : 0,
+            packet.keyframe ? 1 : 0,
+            opaque);
+      }
+    });
+    bridge->last_error.clear();
+    return 0;
+  } catch (const std::exception &e) {
+    set_error(bridge, e);
+    return -1;
+  }
+}
+
+int cluster_h264_encoder_bridge_encode_nv12_active(
+    ClusterH264EncoderBridge *bridge,
+    const uint8_t *nv12,
+    size_t nv12_size,
+    uint64_t timestamp_us,
+    cluster_h264_packet_callback callback,
+    void *opaque) {
+  if (bridge == nullptr || bridge->encoder == nullptr) return -1;
+  try {
+    bridge->encoder->encode_nv12_active(nv12, nv12_size, timestamp_us, [callback, opaque](const ClusterH264PacketView &packet) {
       if (callback != nullptr) {
         callback(
             packet.data,
@@ -240,6 +289,11 @@ size_t cluster_h264_encoder_bridge_input_uv_offset(ClusterH264EncoderBridge *bri
 size_t cluster_h264_encoder_bridge_input_bytesused(ClusterH264EncoderBridge *bridge) {
   if (bridge == nullptr || bridge->encoder == nullptr) return 0;
   return bridge->encoder->input_bytesused();
+}
+
+size_t cluster_h264_encoder_bridge_input_active_bytes(ClusterH264EncoderBridge *bridge) {
+  if (bridge == nullptr || bridge->encoder == nullptr) return 0;
+  return bridge->encoder->input_active_bytes();
 }
 
 size_t cluster_h264_encoder_bridge_capture_sizeimage(ClusterH264EncoderBridge *bridge) {
