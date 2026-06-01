@@ -921,11 +921,21 @@ def _git_command(action: str, payload: dict) -> str | None:
     branch = str(payload.get("branch") or "").strip()
     if not branch:
       return None
+    b = shlex.quote(branch)
     return (
-      "git remote set-url origin https://github.com/ajouatom/openpilot.git && "
-      "git fetch origin --prune && "
-      f"git checkout -B {shlex.quote(branch)} origin/{shlex.quote(branch)} && "
-      f"git reset --hard origin/{shlex.quote(branch)} && "
+      # robust factory reset (matches the tools server): clear stale locks +
+      # abort any in-progress op (';' so failures are ignored), rebuild remote
+      # refs so a corrupt ref can't block fetch, then FORCE the branch to the
+      # remote ('&&' chain stops only on a real failure).
+      "find .git -type f -name '*.lock' -delete 2>/dev/null; "
+      "git remote set-url origin https://github.com/ajouatom/openpilot.git 2>/dev/null; "
+      "git merge --abort 2>/dev/null; git rebase --abort 2>/dev/null; "
+      "git cherry-pick --abort 2>/dev/null; git revert --abort 2>/dev/null; "
+      "git am --abort 2>/dev/null; git bisect reset 2>/dev/null; "
+      "git pack-refs --all 2>/dev/null; rm -rf .git/refs/remotes/origin 2>/dev/null; "
+      "git fetch origin --prune --force && "
+      f"git checkout -f -B {b} origin/{b} && "
+      f"git reset --hard origin/{b} && "
       "git clean -xfd"
     )
   if action == "git_rebuild":

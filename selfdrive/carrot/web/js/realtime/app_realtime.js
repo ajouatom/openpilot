@@ -49,6 +49,7 @@ let LIVE_RUNTIME_FETCH_IN_FLIGHT = null;
 let LIVE_RUNTIME_POLL_ACTIVE = false;
 const CARROT_VISION_REQUIRED_LIVE_SERVICES = Object.freeze(["roadCameraState", "modelV2"]);
 var CARROT_VISION_PHASE = window.CarrotVisionPhase;
+var CARROT_VISION_CONTROL = window.CarrotVisionControl;
 var CARROT_VISION_STATE = window.CarrotVisionState;
 var isCarrotVisionActive = window.isCarrotVisionActive;
 var setCarrotVisionPhase = window.CarrotVisionSetPhase;
@@ -612,7 +613,13 @@ function syncCarrotRealtimeLifecycle(forceFetch = false) {
     });
     requestCarrotVisionDefaultFullscreen({ quiet: true }).catch(() => {});
     ensureRawDecodeWorker();
-    rawOverlayConnectAll();
+    // Staged startup: do NOT connect the heavy overlay multiplex WS here.
+    // The overlay stream (modelV2 + 8 services, full-rate) competes with the
+    // WebRTC first-frame/keyframe for the same link and viewer CPU. Overlay
+    // data does not affect reaching "ready" (that comes from the camera video
+    // frame), so we defer it until the first frame renders — see the
+    // carrot:visionstatechange listener below. This gives the keyframe a clean
+    // window so first-frame-waiting resolves fast.
     startRtcPerfPolling(true);
     if (rtcShouldConnect()) {
       rtcCancelRetry();
@@ -666,6 +673,36 @@ window.addEventListener("pagehide", rtcExitPictureInPicture);
 window.addEventListener("carrot:pagechange", (event) => {
   maybeRequestCarrotFullscreenOnPageChange(event?.detail || {});
   syncCarrotRealtimeLifecycle(false);
+});
+
+// Staged overlay gate, driven by vision phase:
+//   - Connect the heavy overlay multiplex WS (modelV2 + 8 services, full-rate)
+//     only once the camera video has produced its first renderable frame
+//     (phase === "ready"). Until then the WebRTC first-frame/keyframe owns the
+//     link + viewer CPU, so first-frame-waiting resolves fast.
+//   - When phase leaves "ready" for an active (re)connection state, drop the
+//     overlay WS again so the reconnect's keyframe gets a clean window. With
+//     the tolerant freeze watchdog, transient stalls hold at phase "ready"
+//     (no churn here); only genuine reconnects leave "ready", which is exactly
+//     when we want the link freed.
+// The _overlayStaged flag is REQUIRED: connectOverlay()/disconnectOverlay()
+// themselves publish a (non-silent) vision state change, so acting on every
+// event without an edge guard would re-enter this listener infinitely.
+let _overlayStaged = false;
+window.addEventListener("carrot:visionstatechange", (event) => {
+  const state = event?.detail?.state || window.CarrotVisionState;
+  if (!state || !state.active) {
+    _overlayStaged = false;
+    return;
+  }
+  const isReady = state.controlState === CARROT_VISION_CONTROL.LIVE;
+  if (isReady && !_overlayStaged) {
+    _overlayStaged = true;
+    window.CarrotVisionRaw?.connectOverlay?.();
+  } else if (!isReady && _overlayStaged) {
+    _overlayStaged = false;
+    window.CarrotVisionRaw?.disconnectOverlay?.();
+  }
 });
 
 

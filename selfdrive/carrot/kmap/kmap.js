@@ -48,6 +48,7 @@
     mode: "box",
     overlayHeadingUp: true,
     curvatureColor: false,
+    mapType: "roadmap",   // roadmap | satellite | hybrid (Kakao base layer)
     themeMode: "day",
     displayTheme: "day",
     kakaoReady: false,
@@ -892,11 +893,27 @@
   function applyOverlayOptions(params) {
     state.overlayHeadingUp = boolParam(params, "heading_up", true);
     state.curvatureColor = boolParam(params, "curvature", false);
+    const mt = String(params.get("map_type") || "roadmap").toLowerCase();
+    state.mapType = (mt === "satellite" || mt === "hybrid") ? mt : "roadmap";
+    applyKakaoMapType();   // no-op until the Kakao map exists
     setDisplayTheme();
     root.dataset.headingUp = state.overlayHeadingUp ? "1" : "0";
     root.dataset.curvature = state.curvatureColor ? "1" : "0";
+    root.dataset.mapType = state.mapType;
     navState.dirty = true;
     routeState.dirty = true;
+  }
+
+  // Apply the selected base layer to the live Kakao map (roadmap / satellite
+  // (SKYVIEW) / hybrid). Safe no-op before the map is created or on SDKs that
+  // lack setMapTypeId.
+  function applyKakaoMapType() {
+    if (!state.map || !window.kakao?.maps?.MapTypeId) return;
+    const M = window.kakao.maps.MapTypeId;
+    const id = state.mapType === "satellite" ? M.SKYVIEW
+             : state.mapType === "hybrid" ? M.HYBRID
+             : M.ROADMAP;
+    try { state.map.setMapTypeId(id); } catch (_) {}
   }
 
   function updateStatus() {
@@ -1094,6 +1111,7 @@
     });
     state.map.setMinLevel?.(KAKAO_MIN_LEVEL);
     state.map.setMaxLevel?.(KAKAO_MAX_LEVEL);
+    applyKakaoMapType();
     if (state.map.setCopyrightPosition && window.kakao.maps.CopyrightPosition) {
       state.map.setCopyrightPosition(window.kakao.maps.CopyrightPosition.BOTTOMRIGHT, true);
     }

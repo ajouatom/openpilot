@@ -232,7 +232,9 @@ def upload_folder_to_ftp(
         check_cancel()
         local_path = os.path.join(root, filename)
         with open(local_path, "rb") as f:
-          ftp.storbinary(f"STOR {filename}", f)
+          # 1MB chunks (vs ftplib's 8KB default) cut per-chunk Python/syscall
+          # overhead for large camera files.
+          ftp.storbinary(f"STOR {filename}", f, blocksize=1024 * 1024)
         check_cancel()
     return True
   finally:

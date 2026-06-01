@@ -11,10 +11,36 @@
     FAILED: "failed",
   });
   const CARROT_VISION_PHASE_SET = new Set(Object.values(CARROT_VISION_PHASE));
+  // Control state = the 4 states code actually reasons about. The 9 phases
+  // above are kept purely as display labels (they drive the status/detail
+  // text); each phase maps onto exactly one control state. Consumers should
+  // branch on controlState (live / connecting / reconnecting / idle), not on a
+  // specific phase value.
+  const CARROT_VISION_CONTROL = Object.freeze({
+    IDLE: "idle",
+    CONNECTING: "connecting",
+    LIVE: "live",
+    RECONNECTING: "reconnecting",
+  });
+  const PHASE_TO_CONTROL = Object.freeze({
+    [CARROT_VISION_PHASE.UNAVAILABLE]: CARROT_VISION_CONTROL.IDLE,
+    [CARROT_VISION_PHASE.INACTIVE]: CARROT_VISION_CONTROL.IDLE,
+    [CARROT_VISION_PHASE.FAILED]: CARROT_VISION_CONTROL.IDLE,
+    [CARROT_VISION_PHASE.STARTING]: CARROT_VISION_CONTROL.CONNECTING,
+    [CARROT_VISION_PHASE.RTC_CONNECTING]: CARROT_VISION_CONTROL.CONNECTING,
+    [CARROT_VISION_PHASE.TRACK_WAITING]: CARROT_VISION_CONTROL.CONNECTING,
+    [CARROT_VISION_PHASE.FIRST_FRAME_WAITING]: CARROT_VISION_CONTROL.CONNECTING,
+    [CARROT_VISION_PHASE.READY]: CARROT_VISION_CONTROL.LIVE,
+    [CARROT_VISION_PHASE.RECOVERING]: CARROT_VISION_CONTROL.RECONNECTING,
+  });
+  function controlStateForPhase(phase) {
+    return PHASE_TO_CONTROL[phase] || CARROT_VISION_CONTROL.IDLE;
+  }
   const CARROT_VISION_STATE = {
     active: false,
     available: false,
     phase: CARROT_VISION_PHASE.UNAVAILABLE,
+    controlState: CARROT_VISION_CONTROL.IDLE,
     statusText: "",
     detailText: "",
     disabledMessage: getUIText("vision_unavailable_hint", "Available when DisableDM is 2."),
@@ -35,6 +61,14 @@
 
   function isCarrotVisionActive() {
     return Boolean(CARROT_VISION_STATE.active);
+  }
+
+  function getCarrotVisionControlState() {
+    return CARROT_VISION_STATE.controlState || CARROT_VISION_CONTROL.IDLE;
+  }
+
+  function isCarrotVisionLive() {
+    return getCarrotVisionControlState() === CARROT_VISION_CONTROL.LIVE;
   }
 
   function syncLegacyCarrotVisionFlags() {
@@ -169,6 +203,7 @@
     }
     setCarrotVisionState({
       phase: nextPhase,
+      controlState: controlStateForPhase(nextPhase),
       statusText,
       detailText,
       reason: nextReason,
@@ -236,6 +271,9 @@
   }
 
   window.CarrotVisionPhase = CARROT_VISION_PHASE;
+  window.CarrotVisionControl = CARROT_VISION_CONTROL;
+  window.getCarrotVisionControlState = getCarrotVisionControlState;
+  window.isCarrotVisionLive = isCarrotVisionLive;
   window.CarrotVisionState = CARROT_VISION_STATE;
   window.CarrotVisionSetPhase = setCarrotVisionPhase;
   window.CarrotVisionSetState = setCarrotVisionState;
