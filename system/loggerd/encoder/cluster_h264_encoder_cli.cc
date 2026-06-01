@@ -29,10 +29,8 @@ void usage(const char *prog) {
       << "                          cbr-cfr, mbr-cfr, mbr-vfr, cq. Default vbr-cfr.\n"
       << "  --realtime-priority     Request realtime encoder priority.\n"
       << "  --device PATH           V4L2 encoder device path.\n"
-      << "  --input-format auto|rgb4|nv12\n"
+      << "  --input-format auto|nv12\n"
       << "                          Hardware input format. Default auto.\n"
-      << "  --rgb4-layout axrgb|rgba|bgra\n"
-      << "                          RGBA to RGB4 byte layout. Default bgra.\n"
       << "  --debug                 Enable verbose encoder logging.\n";
 }
 
@@ -82,16 +80,8 @@ int parse_bitrate(const std::string &value) {
 
 ClusterH264InputFormat parse_input_format(const std::string &value) {
   if (value == "auto") return ClusterH264InputFormat::Auto;
-  if (value == "rgb4") return ClusterH264InputFormat::RGB4;
   if (value == "nv12") return ClusterH264InputFormat::NV12;
   throw std::runtime_error("invalid --input-format: " + value);
-}
-
-ClusterH264Rgb4Layout parse_rgb4_layout(const std::string &value) {
-  if (value == "axrgb") return ClusterH264Rgb4Layout::AXRGB;
-  if (value == "rgba") return ClusterH264Rgb4Layout::RGBA;
-  if (value == "bgra") return ClusterH264Rgb4Layout::BGRA;
-  throw std::runtime_error("invalid --rgb4-layout: " + value);
 }
 
 int parse_rate_control(const std::string &value) {
@@ -208,8 +198,6 @@ int main(int argc, char **argv) {
         config.device_path = next_value(arg);
       } else if (arg == "--input-format") {
         config.input_format = parse_input_format(next_value(arg));
-      } else if (arg == "--rgb4-layout") {
-        config.rgb4_layout = parse_rgb4_layout(next_value(arg));
       } else if (arg == "--debug") {
         config.debug = true;
       } else if (arg == "--help" || arg == "-h") {

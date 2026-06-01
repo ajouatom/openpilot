@@ -42,15 +42,6 @@ uint64_t elapsed_us(std::chrono::steady_clock::time_point start) {
       std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count());
 }
 
-const char *rgb4_layout_name(ClusterH264Rgb4Layout layout) {
-  switch (layout) {
-    case ClusterH264Rgb4Layout::AXRGB: return "AXRGB";
-    case ClusterH264Rgb4Layout::RGBA: return "RGBA";
-    case ClusterH264Rgb4Layout::BGRA: return "BGRA";
-  }
-  return "unknown";
-}
-
 const char *rate_control_name(int value) {
   switch (value) {
     case V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_OFF: return "rate-control-off";
@@ -122,10 +113,6 @@ void ClusterH264Encoder::validate_config() const {
   if (config_.device_path.empty()) {
     throw std::runtime_error("cluster H264 encoder device path must not be empty");
   }
-}
-
-bool ClusterH264Encoder::input_is_rgb4() const {
-  return input_v4l_format_ == V4L2_PIX_FMT_RGB32;
 }
 
 bool ClusterH264Encoder::input_is_nv12() const {
@@ -249,36 +236,21 @@ std::vector<uint32_t> ClusterH264Encoder::enumerate_formats(uint32_t buffer_type
 }
 
 void ClusterH264Encoder::configure_formats() {
-  const uint32_t rgb4 = V4L2_PIX_FMT_RGB32;
   const uint32_t nv12 = V4L2_PIX_FMT_NV12;
   std::vector<uint32_t> input_formats = enumerate_formats(V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
   const auto supports_format = [&input_formats](uint32_t format) {
     return input_formats.empty() || std::find(input_formats.begin(), input_formats.end(), format) != input_formats.end();
   };
 
-  uint32_t selected_input_format = 0;
-  if (config_.input_format == ClusterH264InputFormat::RGB4) {
-    if (!supports_format(rgb4)) {
-      throw std::runtime_error("V4L2 encoder does not report RGB4 input support");
-    }
-    selected_input_format = rgb4;
-  } else if (config_.input_format == ClusterH264InputFormat::NV12) {
-    if (!supports_format(nv12)) {
-      throw std::runtime_error("V4L2 encoder does not report NV12 input support");
-    }
-    selected_input_format = nv12;
-  } else if (supports_format(nv12)) {
-    selected_input_format = nv12;
-  } else if (supports_format(rgb4)) {
-    selected_input_format = rgb4;
-  } else {
+  if (!supports_format(nv12)) {
     std::string found;
     for (uint32_t format : input_formats) {
       if (!found.empty()) found += ", ";
       found += fourcc_to_string(format);
     }
-    throw std::runtime_error("V4L2 encoder does not report RGB4 or NV12 input support; found: " + found);
+    throw std::runtime_error("V4L2 encoder does not report NV12 input support; found: " + found);
   }
+  const uint32_t selected_input_format = nv12;
 
   struct v4l2_format fmt_out = {};
   fmt_out.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
@@ -295,9 +267,7 @@ void ClusterH264Encoder::configure_formats() {
   fmt_in.fmt.pix_mp.height = static_cast<unsigned int>(config_.height);
   fmt_in.fmt.pix_mp.pixelformat = selected_input_format;
   fmt_in.fmt.pix_mp.field = V4L2_FIELD_ANY;
-  fmt_in.fmt.pix_mp.colorspace = selected_input_format == rgb4 ?
-                                  V4L2_COLORSPACE_SRGB :
-                                  V4L2_COLORSPACE_470_SYSTEM_BG;
+  fmt_in.fmt.pix_mp.colorspace = V4L2_COLORSPACE_470_SYSTEM_BG;
   xioctl(fd_, VIDIOC_S_FMT, &fmt_in, "VIDIOC_S_FMT output failed");
 
   if (fmt_in.fmt.pix_mp.pixelformat != selected_input_format) {
@@ -318,38 +288,21 @@ void ClusterH264Encoder::configure_formats() {
   input_v4l_format_name_ = fourcc_to_string(selected_input_format);
   input_sizeimage_ = fmt_in.fmt.pix_mp.plane_fmt[0].sizeimage;
   const size_t driver_stride = fmt_in.fmt.pix_mp.plane_fmt[0].bytesperline;
-  input_y_scanlines_ = 0;
-  input_uv_scanlines_ = 0;
-  if (selected_input_format == nv12) {
-    auto [venus_stride, venus_y_height, venus_uv_height, venus_size] = get_nv12_info(config_.width, config_.height);
-    input_stride_ = venus_stride;
-    input_y_scanlines_ = venus_y_height;
-    input_uv_scanlines_ = venus_uv_height;
-    input_uv_offset_ = input_stride_ * input_y_scanlines_;
-    const size_t min_bytesused = input_uv_offset_ + input_stride_ * input_uv_scanlines_;
-    input_bytesused_ = std::max({input_sizeimage_, min_bytesused, static_cast<size_t>(venus_size)});
-  } else {
-    const size_t min_stride = static_cast<size_t>(config_.width) * 4;
-    size_t sizeimage_stride = 0;
-    if (config_.height > 0 && input_sizeimage_ > 0 && input_sizeimage_ % static_cast<size_t>(config_.height) == 0) {
-      sizeimage_stride = input_sizeimage_ / static_cast<size_t>(config_.height);
-    }
-    // Some msm_vidc RGB4 formats report compact bytesperline while sizeimage
-    // implies a wider aligned row. Prefer the larger stride to avoid packing
-    // rows more tightly than the encoder consumes.
-    input_stride_ = std::max({driver_stride, min_stride, sizeimage_stride});
-    input_uv_offset_ = 0;
-    input_bytesused_ = std::max(input_sizeimage_, input_stride_ * static_cast<size_t>(config_.height));
-  }
+  auto [venus_stride, venus_y_height, venus_uv_height, venus_size] = get_nv12_info(config_.width, config_.height);
+  input_stride_ = venus_stride;
+  input_y_scanlines_ = venus_y_height;
+  input_uv_scanlines_ = venus_uv_height;
+  input_uv_offset_ = input_stride_ * input_y_scanlines_;
+  const size_t min_bytesused = input_uv_offset_ + input_stride_ * input_uv_scanlines_;
+  input_bytesused_ = std::max({input_sizeimage_, min_bytesused, static_cast<size_t>(venus_size)});
   capture_sizeimage_ = fmt_out.fmt.pix_mp.plane_fmt[0].sizeimage;
   if (capture_sizeimage_ == 0) {
     throw std::runtime_error("V4L2 encoder returned zero H264 capture sizeimage");
   }
 
-  LOGD("cluster H264 V4L2 formats: in=%s %dx%d driver_stride=%zu stride=%zu scanlines=%zu/%zu sizeimage=%zu bytesused=%zu uv_offset=%zu rgb4_layout=%s out=H264 sizeimage=%zu",
+  LOGD("cluster H264 V4L2 formats: in=%s %dx%d driver_stride=%zu stride=%zu scanlines=%zu/%zu sizeimage=%zu bytesused=%zu uv_offset=%zu out=H264 sizeimage=%zu",
        input_v4l_format_name_.c_str(), config_.width, config_.height, driver_stride, input_stride_,
        input_y_scanlines_, input_uv_scanlines_, input_sizeimage_, input_bytesused_, input_uv_offset_,
-       input_is_rgb4() ? rgb4_layout_name(config_.rgb4_layout) : "n/a",
        capture_sizeimage_);
 }
 
@@ -507,16 +460,12 @@ void ClusterH264Encoder::stream_off(uint32_t buffer_type) {
 void ClusterH264Encoder::allocate_buffers() {
   for (int i = 0; i < CLUSTER_H264_INPUT_BUFFER_COUNT; ++i) {
     input_buffers_[i].allocate(input_bytesused_);
-    if (input_is_nv12()) {
-      memset(input_buffers_[i].addr, 16, std::min(input_uv_offset_, input_buffers_[i].len));
-      if (input_uv_offset_ < input_buffers_[i].len) {
-        memset(reinterpret_cast<uint8_t*>(input_buffers_[i].addr) + input_uv_offset_,
-               128, input_buffers_[i].len - input_uv_offset_);
-      }
-      input_buffers_[i].init_yuv(config_.width, config_.height, input_stride_, input_uv_offset_);
-    } else {
-      memset(input_buffers_[i].addr, 0, input_buffers_[i].len);
+    memset(input_buffers_[i].addr, 16, std::min(input_uv_offset_, input_buffers_[i].len));
+    if (input_uv_offset_ < input_buffers_[i].len) {
+      memset(reinterpret_cast<uint8_t*>(input_buffers_[i].addr) + input_uv_offset_,
+             128, input_buffers_[i].len - input_uv_offset_);
     }
+    input_buffers_[i].init_yuv(config_.width, config_.height, input_stride_, input_uv_offset_);
     input_allocated_[i] = true;
   }
   for (int i = 0; i < CLUSTER_H264_CAPTURE_BUFFER_COUNT; ++i) {
@@ -729,11 +678,53 @@ std::vector<ClusterH264Packet> ClusterH264Encoder::encode_rgba(const uint8_t *rg
 }
 
 void ClusterH264Encoder::encode_rgba(const uint8_t *rgba, size_t rgba_size, uint64_t timestamp_us, const ClusterH264PacketCallback &on_packet) {
+  encode_input(rgba, rgba_size, timestamp_us, on_packet, &ClusterH264Encoder::copy_rgba_to_input, "RGBA");
+}
+
+std::vector<ClusterH264Packet> ClusterH264Encoder::encode_nv12(const uint8_t *nv12, size_t nv12_size, uint64_t timestamp_us) {
+  std::vector<ClusterH264Packet> packets;
+  encode_nv12(nv12, nv12_size, timestamp_us, [&packets](const ClusterH264PacketView &view) {
+    ClusterH264Packet packet;
+    packet.flags = view.flags;
+    packet.timestamp_us = view.timestamp_us;
+    packet.codec_config = view.codec_config;
+    packet.keyframe = view.keyframe;
+    packet.data.assign(view.data, view.data + view.size);
+    packets.push_back(std::move(packet));
+  });
+  return packets;
+}
+
+void ClusterH264Encoder::encode_nv12(const uint8_t *nv12, size_t nv12_size, uint64_t timestamp_us, const ClusterH264PacketCallback &on_packet) {
+  encode_input(nv12, nv12_size, timestamp_us, on_packet, &ClusterH264Encoder::copy_nv12_to_input, "NV12");
+}
+
+std::vector<ClusterH264Packet> ClusterH264Encoder::encode_nv12_active(const uint8_t *nv12, size_t nv12_size, uint64_t timestamp_us) {
+  std::vector<ClusterH264Packet> packets;
+  encode_nv12_active(nv12, nv12_size, timestamp_us, [&packets](const ClusterH264PacketView &view) {
+    ClusterH264Packet packet;
+    packet.flags = view.flags;
+    packet.timestamp_us = view.timestamp_us;
+    packet.codec_config = view.codec_config;
+    packet.keyframe = view.keyframe;
+    packet.data.assign(view.data, view.data + view.size);
+    packets.push_back(std::move(packet));
+  });
+  return packets;
+}
+
+void ClusterH264Encoder::encode_nv12_active(const uint8_t *nv12, size_t nv12_size, uint64_t timestamp_us, const ClusterH264PacketCallback &on_packet) {
+  encode_input(nv12, nv12_size, timestamp_us, on_packet, &ClusterH264Encoder::copy_nv12_active_to_input, "NV12 active");
+}
+
+void ClusterH264Encoder::encode_input(const uint8_t *data, size_t data_size, uint64_t timestamp_us,
+                                      const ClusterH264PacketCallback &on_packet, InputCopyFn copy_input,
+                                      const char *input_name) {
   if (!is_open_) {
     throw std::runtime_error("cluster H264 encoder is not open");
   }
-  if (rgba == nullptr) {
-    throw std::runtime_error("cluster H264 encoder received null RGBA input");
+  if (data == nullptr) {
+    throw std::runtime_error(std::string("cluster H264 encoder received null ") + input_name + " input");
   }
 
   last_encode_timings_ = {};
@@ -753,7 +744,7 @@ void ClusterH264Encoder::encode_rgba(const uint8_t *rgba, size_t rgba_size, uint
   unsigned int index = free_inputs_.front();
   free_inputs_.pop_front();
   stage_start = std::chrono::steady_clock::now();
-  copy_rgba_to_input(rgba, rgba_size, &input_buffers_[index]);
+  (this->*copy_input)(data, data_size, &input_buffers_[index]);
   last_encode_timings_.convert_us = elapsed_us(stage_start);
   stage_start = std::chrono::steady_clock::now();
   if (input_buffers_[index].sync(VISIONBUF_SYNC_TO_DEVICE) != 0) {
@@ -771,10 +762,6 @@ void ClusterH264Encoder::encode_rgba(const uint8_t *rgba, size_t rgba_size, uint
 }
 
 void ClusterH264Encoder::copy_rgba_to_input(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const {
-  if (input_is_rgb4()) {
-    rgba_to_rgb4(rgba, rgba_size, dst);
-    return;
-  }
   if (input_is_nv12()) {
     rgba_to_nv12(rgba, rgba_size, dst);
     return;
@@ -782,45 +769,31 @@ void ClusterH264Encoder::copy_rgba_to_input(const uint8_t *rgba, size_t rgba_siz
   throw std::runtime_error("cluster H264 encoder has unsupported input format " + input_v4l_format_name_);
 }
 
-void ClusterH264Encoder::rgba_to_rgb4(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const {
-  const size_t width = static_cast<size_t>(config_.width);
-  const size_t height = static_cast<size_t>(config_.height);
-  const size_t src_row_bytes = width * 4;
-  const size_t expected_rgba_size = src_row_bytes * height;
-  if (rgba_size < expected_rgba_size) {
-    throw std::runtime_error("cluster H264 encoder RGBA input is smaller than width*height*4");
+void ClusterH264Encoder::copy_nv12_to_input(const uint8_t *nv12, size_t nv12_size, VisionBuf *dst) const {
+  if (!input_is_nv12()) {
+    throw std::runtime_error("cluster H264 encoder has unsupported input format " + input_v4l_format_name_);
+  }
+  if (nv12_size < input_bytesused_) {
+    throw std::runtime_error("cluster H264 encoder NV12 input is smaller than the V4L2 input bytesused");
   }
   if (dst == nullptr || dst->addr == nullptr || dst->len < input_bytesused_) {
     throw std::runtime_error("cluster H264 encoder input buffer is not allocated");
   }
+  memcpy(dst->addr, nv12, input_bytesused_);
+}
 
-  uint8_t *base = reinterpret_cast<uint8_t*>(dst->addr);
-  for (size_t y = 0; y < height; ++y) {
-    const uint8_t *src = rgba + y * src_row_bytes;
-    uint8_t *dst_row = base + y * input_stride_;
-    if (config_.rgb4_layout == ClusterH264Rgb4Layout::RGBA) {
-      memcpy(dst_row, src, src_row_bytes);
-    } else if (config_.rgb4_layout == ClusterH264Rgb4Layout::BGRA) {
-      for (size_t x = 0; x < width; ++x) {
-        const uint8_t *src_px = src + x * 4;
-        uint8_t *dst_px = dst_row + x * 4;
-        dst_px[0] = src_px[2];
-        dst_px[1] = src_px[1];
-        dst_px[2] = src_px[0];
-        dst_px[3] = config_.rgb4_use_source_alpha ? src_px[3] : config_.rgb4_alpha;
-      }
-    } else {
-      for (size_t x = 0; x < width; ++x) {
-        const uint8_t *src_px = src + x * 4;
-        uint8_t *dst_px = dst_row + x * 4;
-        // Fallback for drivers that want network-order A/X,R,G,B bytes.
-        dst_px[0] = config_.rgb4_use_source_alpha ? src_px[3] : config_.rgb4_alpha;
-        dst_px[1] = src_px[0];
-        dst_px[2] = src_px[1];
-        dst_px[3] = src_px[2];
-      }
-    }
+void ClusterH264Encoder::copy_nv12_active_to_input(const uint8_t *nv12, size_t nv12_size, VisionBuf *dst) const {
+  if (!input_is_nv12()) {
+    throw std::runtime_error("cluster H264 encoder has unsupported input format " + input_v4l_format_name_);
   }
+  const size_t active_bytes = input_active_bytes();
+  if (nv12_size < active_bytes) {
+    throw std::runtime_error("cluster H264 encoder active NV12 input is smaller than the Y+UV plane bytes");
+  }
+  if (dst == nullptr || dst->addr == nullptr || dst->len < input_bytesused_) {
+    throw std::runtime_error("cluster H264 encoder input buffer is not allocated");
+  }
+  memcpy(dst->addr, nv12, active_bytes);
 }
 
 void ClusterH264Encoder::rgba_to_nv12(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const {
