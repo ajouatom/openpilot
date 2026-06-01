@@ -234,19 +234,6 @@ class DesireHelper:
     desire_enabled = driver_enabled or atc_enabled
     blinker_state  = driver_st if driver_enabled else atc_st
 
-    # 옆 차선이 새로 나타났을 때(lane_appeared) 바로 진입하지 못하도록 타이머 계산
-    if side is not None and side.lane_appeared:
-      self.lane_appeared_timer += DT_MDL
-    else:
-      self.lane_appeared_timer = 0.0
-
-    # 차선이 나타나고 최소 2.5초는 지나야 안정된 것으로 판단
-    lane_appeared_stable = self.lane_appeared_timer > 2.5
-
-    # 램프 구간 특유의 높은 곡률(급코너) 상태인지 감지
-    # 조향각이 크거나(예: 15도 이상) 차량의 회전 속도(Yaw rate)가 높으면 램프 주행 중으로 판단
-    is_shaping_ramp = abs(carstate.steeringAngleDeg) > 15.0 or abs(modeldata.orientationRate.z[5]) > 0.05
-
     # ── 깜빡이 노이즈 필터링 및 반대 방향 전환 감지 ──
     if desire_enabled:
       self.blinker_off_timer = 0.0
@@ -267,6 +254,19 @@ class DesireHelper:
     else:
       side = self._get_selected_side(blinker_state) if blinker_state in (BLINKER_LEFT, BLINKER_RIGHT) else None
     
+    # 옆 차선이 새로 나타났을 때(lane_appeared) 바로 진입하지 못하도록 타이머 계산
+    if side is not None and side.lane_appeared:
+      self.lane_appeared_timer += DT_MDL
+    else:
+      self.lane_appeared_timer = 0.0
+
+    # 차선이 나타나고 최소 2.5초는 지나야 안정된 것으로 판단
+    lane_appeared_stable = self.lane_appeared_timer > 2.5
+
+    # 램프 구간 특유의 높은 곡률(급코너) 상태인지 감지
+    # 조향각이 크거나(예: 15도 이상) 차량의 회전 속도(Yaw rate)가 높으면 램프 주행 중으로 판단
+    is_shaping_ramp = abs(carstate.steeringAngleDeg) > 15.0 or abs(modeldata.orientationRate.z[5]) > 0.05
+
     atc_lane_change_manual_only = (
       atc_enabled and
       not driver_enabled and
