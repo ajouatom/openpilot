@@ -172,7 +172,6 @@ def _cluster_args(hud_mode: int, configured_encoder_mode: int, active_encoder_mo
         "--output",
         "usb",
         *_encoder_args(active_encoder_mode),
-        "--live-no-can",
         "--cluster-hud-mode",
         str(hud_mode),
         "--cluster-hud-encoder",

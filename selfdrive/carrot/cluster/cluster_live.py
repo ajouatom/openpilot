@@ -49,7 +49,7 @@ LIVE_SERVICES_BASE = (
     "navInstructionCarrot",
     "wideRoadCameraState",
 )
-LIVE_CAN_SERVICES = ("can",)
+LIVE_CAN_SERVICES = ("can", "sendcan")
 
 
 class OpenpilotLiveSource:
@@ -157,7 +157,7 @@ class OpenpilotLiveSource:
         profile_stage = self._profile_start()
         alive = sum(1 for service in self.services if self._service_alive(service))
         updated = sum(1 for service in self.services if self._service_updated(service))
-        can_status = "can" if "can" in self.services else "no-can"
+        can_status = "can/sendcan" if "sendcan" in self.services else "no-can"
         age = time.monotonic() - self.start_t
         fps = self.frames / age if age > 0.1 else 0.0
         radar_count = len(self.last_state.radar_points) if self.last_state is not None else 0
@@ -234,8 +234,8 @@ class OpenpilotLiveSource:
             self.parser._update_radar_state(data, event_t)
         elif service == "liveTracks":
             self.parser._update_live_tracks(data, event_t)
-        elif service == "can":
-            self.parser._update_can_detections(data, event_t)
+        elif service in ("can", "sendcan"):
+            self.parser._update_can_detections(data, event_t, service)
 
     def _with_debug_state(self, state: ClusterUiState) -> ClusterUiState:
         if not self._live_debug_enabled and not self._debug_plot_enabled:

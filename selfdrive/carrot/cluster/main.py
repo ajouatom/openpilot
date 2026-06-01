@@ -1453,7 +1453,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--live-no-can",
         action="store_true",
-        help="Disable live CAN subscription. This keeps radarState/modelV2/liveTracks data but skips direct raw CAN-FD parsing.",
+        help=(
+            "Disable live CAN/sendcan subscriptions. This keeps radarState/modelV2/liveTracks data "
+            "but skips direct raw CAN-FD parsing."
+        ),
     )
     parser.add_argument(
         "--live-timeout-ms",
