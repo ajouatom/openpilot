@@ -302,11 +302,6 @@ fresh, ADRV is preferred for LF/RF/LR/RR distance in the Hyundai `carState`
 DBC parsing path. The cluster consumes the DBC-parsed `carState` corner fields
 first; route replay/raw-CAN fallback also decodes `0x162`/`0x1EA` through the
 Hyundai CAN-FD DBC instead of hand-coded bit positions.
-Route replay overlay data now shows both the DBC-parsed `carState` corner
-distances and the raw camera-bus CAN decode for `0x162`/`0x1EA`, so LR/RR
-distance source mismatches can be checked directly on-screen.
-The `corner` overlay line always includes both raw `1EA` and raw `162` slots,
-using `--/--` until that message has appeared.
 Road/lane/radar geometry still starts far enough behind that rendered bound so
 the rear lane-start seam sits below the visible bottom edge.
 Front-center `radarState` lead overlap uses a wider vehicle-sized tolerance

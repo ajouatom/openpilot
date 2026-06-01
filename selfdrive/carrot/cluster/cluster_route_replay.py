@@ -78,6 +78,23 @@ CORNER_RADAR_DBC_MESSAGES = {
     CCNC_CORNER_RADAR_ADDRESS: "CCNC_0x162",
     ADRV_CORNER_RADAR_ADDRESS: "ADRV_0x1ea",
 }
+CORNER_RADAR_DBC_SIGNAL_NAMES = frozenset(
+    {
+        "LANE_CHANGING",
+        "LF_DETECT",
+        "LF_DETECT_DISTANCE",
+        "LF_DETECT_LATERAL",
+        "RF_DETECT",
+        "RF_DETECT_DISTANCE",
+        "RF_DETECT_LATERAL",
+        "LR_DETECT",
+        "LR_DETECT_DISTANCE",
+        "LR_DETECT_LATERAL",
+        "RR_DETECT",
+        "RR_DETECT_DISTANCE",
+        "RR_DETECT_LATERAL",
+    }
+)
 ROUTE_REPLAY_MIN_BUFFER_FILES = 2
 ROUTE_REPLAY_START_BUFFER_FILES = 1
 ROUTE_REPLAY_READAHEAD_S = 5.0
@@ -212,7 +229,6 @@ class RouteReplayFrame:
     lateral_plan_debug_text: str | None = None
     lateral_plan_curvatures: tuple[float, ...] = ()
     lateral_plan_curvature_rates: tuple[float, ...] = ()
-    corner_debug_text: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -694,7 +710,6 @@ class RouteReplaySource:
         frame_drop_text = "--" if frame.frame_drop_perc is None else f"{frame.frame_drop_perc:.1f}%"
         model_time_text = "--" if frame.model_execution_time_ms is None else f"{frame.model_execution_time_ms:.0f}ms"
         confidence_text = frame.model_confidence or "--"
-        corner_text = frame.corner_debug_text or "car -- | raw --"
         availability_text = (
             ("L" if frame.lane_change_available_left else "-")
             + ("R" if frame.lane_change_available_right else "-")
@@ -705,7 +720,6 @@ class RouteReplaySource:
             f"t {shown_time:6.1f}/{self.duration:6.1f}s   seg {segment_label}",
             f"vEgo {state.speed_kph:5.1f} km/h   aEgo {state.accel_mps2:+.2f} m/s2",
             f"steer {frame.steering_angle_deg or 0.0:+.1f} deg   limit {limit_text}   cruise {cruise_text}",
-            f"corner {corner_text}",
             f"gear {gear_text}   gap {gap_text}   signals {signal_text}",
             f"curve {curve_text}   plan {plan_speed_text}kph {plan_accel_text}m/s2",
             f"lane {frame.lane_width_m:.2f}m center {lane_offset_text}   src {frame.lane_position_source}",
@@ -990,10 +1004,8 @@ class RouteLogParser:
         self.lane_change_peak_directional_observed_offset = 0.0
         self.ccnc_corner_detections: dict[str, DetectedVehicle] = {}
         self.ccnc_corner_message_t = -999.0
-        self.ccnc_corner_raw_text = "162 --/--"
         self.adrv_corner_detections: dict[str, DetectedVehicle] = {}
         self.adrv_corner_message_t = -999.0
-        self.adrv_corner_raw_text = "1EA --/--"
         self.adrv_lane_changing = 0
         self.adrv_lane_changing_t = -999.0
         self.hyundai_canfd_radar_points: dict[str, RadarPoint] = {}
@@ -1109,7 +1121,6 @@ class RouteLogParser:
             lane_change_phase,
         )
         radar_points = self._radar_points_from_current_state(event_t)
-        corner_debug_text = self._corner_debug_text(car_state, event_t)
 
         return RouteReplayFrame(
             t=event_t,
@@ -1216,7 +1227,6 @@ class RouteLogParser:
             lateral_plan_debug_text=self.lateral_plan_debug_text,
             lateral_plan_curvatures=self.lateral_plan_curvatures,
             lateral_plan_curvature_rates=self.lateral_plan_curvature_rates,
-            corner_debug_text=corner_debug_text,
         )
 
     def _display_speed_kph_from_car_state(self, car_state: Any, fallback_speed_mps: float) -> float:
@@ -1507,18 +1517,15 @@ class RouteLogParser:
                 continue
             corner_values = decode_hyundai_canfd_dbc_message(address, data)
             parsed = parse_corner_radar_message(address, data, corner_values)
-            raw_text = corner_raw_debug_text(address, corner_values)
             if address == ADRV_CORNER_RADAR_ADDRESS:
                 lane_changing = int(corner_values.get("LANE_CHANGING", 0.0))
                 self.adrv_corner_detections = parsed
                 self.adrv_corner_message_t = event_t
-                self.adrv_corner_raw_text = raw_text
                 self.adrv_lane_changing = lane_changing
                 self.adrv_lane_changing_t = event_t
             else:
                 self.ccnc_corner_detections = parsed
                 self.ccnc_corner_message_t = event_t
-                self.ccnc_corner_raw_text = raw_text
 
     def _update_live_tracks(self, live_tracks: Any, event_t: float) -> None:
         points: dict[str, RadarPoint] = {}
@@ -1628,11 +1635,6 @@ class RouteLogParser:
         if ccnc_fresh:
             return tuple(self.ccnc_corner_detections.values())
         return None
-
-    def _corner_debug_text(self, car_state: Any, event_t: float) -> str:
-        car_text = car_state_corner_debug_text(car_state)
-        raw_text = f"{self.adrv_corner_raw_text} {self.ccnc_corner_raw_text}"
-        return f"car {car_text} | raw {raw_text}"
 
     def _current_road_curvature(self) -> tuple[float | None, str]:
         if self.model_curvature_m_inv is not None:
@@ -2453,7 +2455,6 @@ def blend_frames(left: RouteReplayFrame, right: RouteReplayFrame, amount: float)
         lateral_plan_debug_text=discrete.lateral_plan_debug_text,
         lateral_plan_curvatures=discrete.lateral_plan_curvatures,
         lateral_plan_curvature_rates=discrete.lateral_plan_curvature_rates,
-        corner_debug_text=discrete.corner_debug_text,
     )
 
 
@@ -2948,13 +2949,6 @@ def car_state_corner_detections(car_state: Any) -> tuple[DetectedVehicle, ...]:
     return tuple(detections)
 
 
-def car_state_corner_debug_text(car_state: Any) -> str:
-    return (
-        f"{corner_optional_distance_text(safe_optional_float(car_state, 'leftRearLongDist'))}/"
-        f"{corner_optional_distance_text(safe_optional_float(car_state, 'rightRearLongDist'))}"
-    )
-
-
 def car_state_rear_blindspot_detections(
     car_state: Any,
     front_detections: tuple[DetectedVehicle, ...],
@@ -3006,11 +3000,7 @@ def parse_corner_radar_message(
         elif not RADAR_MIN_LONGITUDINAL_M <= longitudinal_m <= RADAR_FRONT_MAX_LONGITUDINAL_M:
             continue
         lateral_mag = normalized_lateral_m(values.get(f"{label}_DETECT_LATERAL", 0.0))
-        side = -1.0 if label.endswith("F") and label.startswith("L") else 1.0
-        if label.startswith("L"):
-            side = -1.0
-        elif label.startswith("R"):
-            side = 1.0
+        side = -1.0 if label.startswith("L") else 1.0
         detections[label] = DetectedVehicle(
             label=label,
             longitudinal_m=longitudinal_m,
@@ -3018,28 +3008,6 @@ def parse_corner_radar_message(
             source=f"CAN 0x{address:x}",
         )
     return detections
-
-
-def corner_raw_debug_text(address: int, values: dict[str, float]) -> str:
-    name = "1EA" if address == ADRV_CORNER_RADAR_ADDRESS else "162" if address == CCNC_CORNER_RADAR_ADDRESS else f"0x{address:x}"
-    return (
-        f"{name} {corner_detect_distance_text(values, 'LR')}/"
-        f"{corner_detect_distance_text(values, 'RR')}"
-    )
-
-
-def corner_detect_distance_text(values: dict[str, float], label: str) -> str:
-    detect = values.get(f"{label}_DETECT", 0.0)
-    distance = values.get(f"{label}_DETECT_DISTANCE", 0.0)
-    if detect == 0:
-        return "--"
-    return corner_optional_distance_text(distance)
-
-
-def corner_optional_distance_text(value: float | None) -> str:
-    if value is None or not math.isfinite(value) or value <= 0.0:
-        return "--"
-    return f"{value:.1f}"
 
 
 @cache
@@ -3060,6 +3028,8 @@ def hyundai_canfd_corner_dbc_signals() -> dict[int, dict[str, DbcSignalSpec]]:
             if match is None:
                 continue
             name, start, length, endian, sign, factor, offset = match.groups()
+            if name not in CORNER_RADAR_DBC_SIGNAL_NAMES:
+                continue
             signals[current_address][name] = DbcSignalSpec(
                 start=int(start),
                 length=int(length),
