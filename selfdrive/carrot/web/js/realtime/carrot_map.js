@@ -9,7 +9,7 @@
   //     kmap.js) actually change in user-visible ways. Changes inside
   //     this bridge file (carrot_map.js) do NOT require a bump.
   //   - Try to batch multiple iframe-side changes into one bump per week.
-  const FRAME_VERSION = "2605-55";
+  const FRAME_VERSION = "2605-56";
   const SEND_INTERVAL_MS = 500;
   const NAV_KEEPALIVE_MS = 1200;
   // Parent timeout must be comfortably longer than kmap's own SDK timeout.
@@ -92,6 +92,24 @@
     return Boolean(window.CarrotVisionState?.active);
   }
 
+  // Sticky "vision reached ready once" gate. The Kakao map iframe pulls the
+  // external SDK + map tiles over the network; loading it while the WebRTC
+  // first frame is still being acquired competes for the same link. So hold
+  // the map until the camera has produced a renderable frame (phase ===
+  // "ready"), then keep it up through transient recoveries (sticky) to avoid
+  // flicker. Reset when vision goes inactive.
+  let _visionReachedReadyOnce = false;
+  function hasVisionReachedReady() {
+    if (!isVisionActive()) {
+      _visionReachedReadyOnce = false;
+      return false;
+    }
+    if ((window.CarrotVisionState?.controlState || "") === "live") {
+      _visionReachedReadyOnce = true;
+    }
+    return _visionReachedReadyOnce;
+  }
+
   function validLatLon(lat, lon) {
     return lat !== null && lon !== null && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 && !(lat === 0 && lon === 0);
   }
@@ -127,6 +145,7 @@
       parsed.searchParams.set("mode", "box");
       setBoolSearchParam(parsed.searchParams, "heading_up", options.headingUp ?? true);
       setBoolSearchParam(parsed.searchParams, "curvature", options.curvatureColor ?? false);
+      parsed.searchParams.set("map_type", options.mapType || "roadmap");
       if (options.forceMock) {
         parsed.searchParams.set("mock", "1");
         parsed.searchParams.delete("provider");
@@ -338,13 +357,15 @@
       const rawUrl = String(getSetting("kmap_url", DEFAULT_KMAP_URL) || DEFAULT_KMAP_URL).trim();
       const headingUp = normalizeBool(getSetting("kmap_overlay_heading_up", true));
       const curvatureColor = normalizeBool(getSetting("kmap_overlay_curvature_color", false));
+      const rawMapType = String(getSetting("kmap_map_type", "roadmap") || "roadmap").trim().toLowerCase();
+      const mapType = ["roadmap", "satellite", "hybrid"].includes(rawMapType) ? rawMapType : "roadmap";
       const baseUrl = rawUrl || DEFAULT_KMAP_URL;
       // Strong quota guards: development hosts, the daily circuit breaker,
       // and the session fallback (after consecutive iframe fails) all force
       // mock mode so the Kakao SDK is bypassed.
       const forceMock = isDevHost() || this.circuitTrippedToday || this.sessionForceMock;
-      const url = buildFrameUrl(baseUrl, { forceMock, headingUp, curvatureColor });
-      return { enabled, url, forceMock, mode: "box", headingUp, curvatureColor };
+      const url = buildFrameUrl(baseUrl, { forceMock, headingUp, curvatureColor, mapType });
+      return { enabled, url, forceMock, mode: "box", headingUp, curvatureColor, mapType };
     }
 
     shouldRun() {
@@ -357,6 +378,9 @@
       if (!settings.enabled) return false;
       if (!isCarrotPageActive()) return false;
       if (!isVisionActive()) return false;
+      // Staged startup: hold the map until the first camera frame renders so
+      // it does not compete with the WebRTC first-frame acquisition.
+      if (!hasVisionReachedReady()) return false;
       if (!isLandscape()) return false;
       if (document.visibilityState === "hidden") return false;
       return true;
@@ -544,19 +568,9 @@
       }, 260);
     }
 
-    // Position the zoom-step label just below the dock center. The label is
-    // a stage child (dock clips overflow), so it reads the same layout vars.
-    positionZoomLabel() {
-      if (!this.zoomLevelEl || !this.dock) return;
-      const right = parseFloat(this.dock.style.getPropertyValue("--carrot-map-right")) || 0;
-      const width = parseFloat(this.dock.style.getPropertyValue("--carrot-map-width")) || 0;
-      const height = parseFloat(this.dock.style.getPropertyValue("--carrot-map-height")) || 0;
-      const offsetY = parseFloat(this.dock.style.getPropertyValue("--carrot-map-offset-y")) || 0;
-      // dock is right-anchored, vertically centered (+offsetY). Place label
-      // centered under the dock with a small gap.
-      this.zoomLevelEl.style.right = `${right + width / 2}px`;
-      this.zoomLevelEl.style.top = `calc(50% + ${offsetY + height / 2 + 10}px)`;
-    }
+    // The zoom-step label now lives inside the zoom bar, centered between the
+    // - / + buttons by flexbox, so no manual absolute positioning is needed.
+    positionZoomLabel() {}
 
     // Show the dock as soon as the user-facing conditions (vision, page,
     // landscape, etc.) are satisfied. The iframe content (Kakao tiles vs
@@ -939,8 +953,17 @@
         this.sync();
         return;
       }
-      if (!this.frame?.contentWindow) return;
-      if (!this.loaded) return;
+      if (!this.frame?.contentWindow || !this.loaded) {
+        // shouldRun() just became true (e.g. vision reached "ready") but the
+        // iframe isn't up yet. ensureFrame() is otherwise only called from
+        // sync(), which tick() doesn't reach here — so without this the dock
+        // stays hidden until some other event happens to call sync() (a page
+        // switch, settings change, etc.). Both calls are idempotent, so this
+        // is safe to run on every render-request until the iframe loads.
+        this.ensureFrame();
+        this.revealIfShouldRun();
+        return;
+      }
       const payload = this.buildVehiclePayload();
       const navPayload = this.buildNavPayload(payload);
       const routePayload = this.buildRoutePayload();

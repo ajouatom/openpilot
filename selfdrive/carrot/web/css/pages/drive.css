@@ -484,12 +484,10 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--overlay .hudWrap {
   cursor: default;
 }
 
-/* Always-on zoom-step label. Lives in the stage (outside the dock, which
-   clips overflow). carrot_map.js positions it just below the dock center. */
+/* Always-on zoom-step label. Sits inside the zoom bar, centered between the
+   - / + buttons by the bar's flex (justify-content: space-between). */
 .carrot-map-zoom-level {
-  position: absolute;
-  z-index: 4;
-  transform: translateX(50%);
+  flex: 0 0 auto;
   pointer-events: none;
   padding: clamp(4px, 0.8vh, 7px) clamp(11px, 1.4vw, 16px);
   border: 1px solid color-mix(in srgb, var(--md-primary) 30%, rgba(255, 255, 255, 0.14));
@@ -666,10 +664,12 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--loading {
   opacity: 1;
 }
 
+/* Record / display-mode controls stay visible and usable even while the
+   stage is connecting/waiting (record works regardless of the video). */
 .carrot-stage.is-loading .carrot-stage__controls {
-  opacity: 0;
-  transform: translateY(8px);
-  pointer-events: none;
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
 }
 
 .carrot-stage__video {

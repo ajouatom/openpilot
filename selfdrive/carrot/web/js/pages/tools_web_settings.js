@@ -80,6 +80,19 @@ const WEB_SETTINGS_GROUPS = [
         defaultDesc: "Tint local path segments more strongly on sharper bends.",
       },
       {
+        id: "kmap_map_type",
+        type: "select",
+        titleKey: "web_kmap_map_type",
+        defaultTitle: "Map type",
+        descKey: "web_kmap_map_type_desc",
+        defaultDesc: "Kakao base layer for the Carrot map (reloads the map on change).",
+        options: [
+          { value: "roadmap", labelKey: "web_kmap_map_type_roadmap", defaultLabel: "Roadmap" },
+          { value: "satellite", labelKey: "web_kmap_map_type_satellite", defaultLabel: "Satellite" },
+          { value: "hybrid", labelKey: "web_kmap_map_type_hybrid", defaultLabel: "Hybrid" },
+        ],
+      },
+      {
         id: "nav_hud_enabled",
         type: "toggle",
         titleKey: "web_nav_hud_enabled",
@@ -103,6 +116,7 @@ const WEB_SETTING_DEFAULTS = {
   kmap_url: "https://jominki354.github.io/kmap/",
   kmap_overlay_heading_up: true,
   kmap_overlay_curvature_color: false,
+  kmap_map_type: "roadmap",
   nav_hud_enabled: true,
 };
 
@@ -140,6 +154,10 @@ function normalizeWebSettingValue(key, value) {
   if (key === "kmap_url") {
     const url = String(value || "").trim();
     return url || WEB_SETTING_DEFAULTS.kmap_url;
+  }
+  if (key === "kmap_map_type") {
+    const mt = String(value || "").trim().toLowerCase();
+    return ["roadmap", "satellite", "hybrid"].includes(mt) ? mt : WEB_SETTING_DEFAULTS.kmap_map_type;
   }
   return value;
 }

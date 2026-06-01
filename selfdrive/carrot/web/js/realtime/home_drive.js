@@ -1448,6 +1448,16 @@ window.HomeDrive = (() => {
   }
 
   function setCarrotVisionRenderPhase(phase, detail = {}) {
+    // Single phase owner: home_drive is the authority on whether a real camera
+    // frame is on screen, but it no longer writes the phase directly. It
+    // reports renderability to vision_rtc, which owns the live/first-frame
+    // transitions (removes the old home_drive/vision_rtc phase race).
+    const rtc = window.CarrotVisionRtc;
+    if (rtc && typeof rtc.reportCameraRenderable === "function") {
+      if (phase === "ready") { rtc.reportCameraRenderable(true); return; }
+      if (phase === "first-frame-waiting") { rtc.reportCameraRenderable(false); return; }
+    }
+    // Fallback (other phases, or vision_rtc not loaded yet): set directly.
     if (typeof window.CarrotVisionSetPhase !== "function") return;
     window.CarrotVisionSetPhase(phase, {
       source: "home_drive",
@@ -3067,10 +3077,14 @@ window.HomeDrive = (() => {
     const bitrateMbps = Number.isFinite(Number(network.bitrateMbps)) ? Number(network.bitrateMbps) : null;
     const fps = Number.isFinite(Number(inbound.framesPerSecond)) ? Number(inbound.framesPerSecond) : null;
     const rttMs = Number.isFinite(Number(network.rttMs)) ? Number(network.rttMs) : null;
+    const lossPct = Number.isFinite(Number(network.lossPct)) ? Number(network.lossPct) : null;
+    const jitterMs = Number.isFinite(Number(network.jitterMs)) ? Number(network.jitterMs) : null;
+    const keyFramesDecoded = Number.isFinite(Number(inbound.keyFramesDecoded)) ? Number(inbound.keyFramesDecoded) : null;
+    const packetsLost = Number.isFinite(Number(inbound.packetsLost)) ? Number(inbound.packetsLost) : null;
     const hasFreeze = Number.isFinite(Number(inbound.freezeCount)) && Number(inbound.freezeCount) > 0 &&
       Number.isFinite(Number(video.readyState)) && Number(video.readyState) < 3;
 
-    if (!resolutionLabel && bitrateMbps == null && fps == null && rttMs == null) {
+    if (!resolutionLabel && bitrateMbps == null && fps == null && rttMs == null && lossPct == null && jitterMs == null) {
       return hasFreeze ? "STALL" : "";
     }
 
@@ -3079,7 +3093,16 @@ window.HomeDrive = (() => {
       : "-m";
     const fpsLabel = fps != null ? `${Math.round(fps)}fps` : "-fps";
     const rttLabel = rttMs != null ? `${Math.round(rttMs)}ms` : "-ms";
-    return [resolutionLabel || "-p", bitrateLabel, fpsLabel, rttLabel].join(" ");
+    const warningLabels = [];
+    if (lossPct != null && lossPct >= 0.5) {
+      warningLabels.push(`loss${lossPct >= 10 ? Math.round(lossPct) : lossPct.toFixed(1)}%`);
+    } else if (packetsLost != null && packetsLost > 0 && Number(inbound.framesDecoded || 0) <= 0) {
+      warningLabels.push(`lost${packetsLost}`);
+    }
+    if (jitterMs != null && jitterMs >= 30) warningLabels.push(`jit${Math.round(jitterMs)}`);
+    if (keyFramesDecoded === 0 && Number(inbound.framesDecoded || 0) <= 0) warningLabels.push("key0");
+
+    return [resolutionLabel || "-p", bitrateLabel, fpsLabel, rttLabel].concat(warningLabels).join(" ");
   }
 
   function drawHudRightCenterPerfText(stageWidth, stageHeight, viewportRect, pathMode) {
@@ -3742,7 +3765,13 @@ window.HomeDrive = (() => {
     setStageReady(true);
     setCarrotVisionRenderPhase("ready", { reason: "camera frame renderable" });
     applyCarrotHudLayout(viewportRect);
-    setStageLoading(false);
+    // The <video> may hold a renderable-but-stale last frame during a reconnect.
+    // vision_rtc only promotes to controlState "live" when the connection is
+    // genuinely up, so key the loading panel on that: live -> hide it; otherwise
+    // keep a "reconnecting/connecting" message over the frozen frame instead of
+    // a silent blank.
+    const carrotLive = (getCarrotVisionState().controlState || "") === "live";
+    setStageLoading(!carrotLive, getCarrotVisionStatusText(getUIText("connecting", "Connecting...")), getCarrotVisionDetailText());
 
     if (overlayDirty) {
       resetFrameProjectionCache();
@@ -3936,8 +3965,8 @@ window.HomeDrive = (() => {
   function handleLifecycleChange() {
     if (isStageVisible()) {
       if (isCarrotVisionActive()) {
-        const phase = String(getCarrotVisionState().phase || "");
-        setStageLoading(phase !== "ready", getCarrotVisionStatusText(getUIText("connecting", "Connecting...")), getCarrotVisionDetailText());
+        const live = (getCarrotVisionState().controlState || "") === "live";
+        setStageLoading(!live, getCarrotVisionStatusText(getUIText("connecting", "Connecting...")), getCarrotVisionDetailText());
       }
       refreshOverlayInfo().catch(() => {});
       requestFullRender();

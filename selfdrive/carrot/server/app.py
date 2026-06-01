@@ -72,6 +72,10 @@ async def on_startup(app: web.Application) -> None:
   except Exception as exc:
     app["realtime_broker"] = None
     app["realtime_broker_error"] = str(exc)
+  # Serializes broker.poll() across concurrent /api/live_runtime requests.
+  # SubMaster (msgq) is not thread-safe, so two parallel polls can crash it
+  # and take the whole server down.
+  app["realtime_broker_poll_lock"] = asyncio.Lock()
   app["realtime_camera_hub"] = CameraWsHub(messaging)
   app["realtime_raw_hub"] = RawWsHub(messaging)
   if HAS_PARAMS:
