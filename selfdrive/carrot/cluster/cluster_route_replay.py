@@ -1472,7 +1472,7 @@ class RouteLogParser:
             parsed = parse_corner_radar_message(address, data)
             if address == ADRV_CORNER_RADAR_ADDRESS:
                 lane_changing = dbc_unsigned(data, 45, 3, "be")
-                if source_service == "sendcan" and event_t - self.adrv_corner_message_t < CORNER_DETECTION_STALE_S:
+                if source_service == "sendcan":
                     self.adrv_lane_changing = lane_changing
                     self.adrv_lane_changing_t = event_t
                     continue
@@ -1481,7 +1481,7 @@ class RouteLogParser:
                 self.adrv_lane_changing = lane_changing
                 self.adrv_lane_changing_t = event_t
             else:
-                if source_service == "sendcan" and event_t - self.ccnc_corner_message_t < CORNER_DETECTION_STALE_S:
+                if source_service == "sendcan":
                     continue
                 self.ccnc_corner_detections = parsed
                 self.ccnc_corner_message_t = event_t

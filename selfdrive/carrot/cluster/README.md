@@ -207,13 +207,14 @@ The launcher defaults to `--input live`, subscribes to openpilot cereal services
 and renders live `carState`, `modelV2`, `radarState`, `liveTracks`,
 `controlsState`, `selfdriveState`, `carControl`, `deviceState`, and raw Hyundai
 CAN-FD radar points when CAN subscription is enabled. Manager/autostart leaves
-the live CAN/sendcan subscriptions enabled so raw Hyundai `0x162`/`0x1EA`
-messages can supply exact LF/RF/LR/RR corner radar detail. Fresh received
-`can` messages win over `sendcan` fallback so outgoing blink/distance-clamp
-presentation does not overwrite exact received distance. `--live-no-can`
-remains a manual diagnostic option; without raw CAN/sendcan, `carState` still
-provides LF/RF distance and blindspot booleans, and the HUD can show coarse
-LR/RR blindspot fallback vehicle boxes but not exact rear distance.
+the live CAN/sendcan subscriptions enabled, but exact LF/RF/LR/RR corner radar
+distance now comes only from received Hyundai `can` `0x162`/`0x1EA` messages.
+`sendcan` is still watched for ADRV lane-change metadata, but not for corner
+radar distance because outgoing Hyundai CAN-FD presentation messages can clamp
+LR/RR to `14m`. `--live-no-can` remains a manual diagnostic option; without
+raw received CAN, `carState` still provides LF/RF distance and blindspot
+booleans, and the HUD can show coarse LR/RR blindspot fallback vehicle boxes
+but not exact rear distance.
 Cluster road speed-limit display treats `carState.speedLimit` from the
 vehicle/HDA path as km/h. Navigation speed limits are accepted in either the
 km/h values used by the current navigation integrations or the m/s values used
