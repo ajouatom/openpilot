@@ -386,16 +386,26 @@ class DesireHelper:
             torque_cond    = (carstate.steeringTorque > 0) if blinker_state == BLINKER_LEFT else (carstate.steeringTorque < 0)
             torque_applied = carstate.steeringPressed and torque_cond
 
-            # laneChangeBsd >= 1 일 때만 BSD를 hard block 으로 사용
-            bsd_active = (self.lane_change_bsd >= 1) and (side.bsd_hold_counter > 0)
-            object_active = side.side_object_detected
+            # ── 설정값과 무관하게 실질적인 차량 감지 여부 파악 ──
+            bsd_detected = side.bsd_hold_counter > 0
+            object_detected = side.side_object_detected
+            
+            # 차량 감지 시 모드별 차단 로직 정교화
+            vehicle_blocked = False
+            if bsd_detected or object_detected:
+              if self.lane_change_bsd >= 1:
+                vehicle_blocked = True  # 하드 블록 모드: 무조건 진입 차단
+              elif self.lane_change_bsd == 0:
+                vehicle_blocked = not torque_applied  # 경고 모드: 운전자의 강제 조향 토크가 없으면 자동 진입 차단
 
             solid_line_blocked = (self.lane_line_check >= 2) and \
                 (not side.lane_change_available_geom) and \
                 (side.lane_available or side.edge_available)
 
             geom_blocked = (not side.lane_change_available_geom) and (not solid_line_blocked)
-            unsafe_prechange = bsd_active or object_active or geom_blocked
+            
+            # 이제 vehicle_blocked가 적용되어 차량이 있으면 토크 없인 절대 못 넘어갑니다.
+            unsafe_prechange = vehicle_blocked or geom_blocked
 
             start_gate = self.lane_change_delay_timer == 0 and \
                 (side.lane_change_available_geom or side.lane_line_info_edge_detect or solid_line_blocked)
@@ -442,9 +452,11 @@ class DesireHelper:
                       and side.lane_change_available:
                 self.lane_change_state = LaneChangeState.laneChangeStarting
 
+        
         # ── laneChangeStarting 상태 ──────────────────────────────
         elif self.lane_change_state == LaneChangeState.laneChangeStarting:
-          bsd_active   = (side is not None) and (self.lane_change_bsd >= 1) and (side.bsd_hold_counter > 0)
+          # ── 이미 조향이 시작된 단계이므로 모드와 무관하게 차량 감지 시 즉시 취소 ──
+          bsd_active   = (side is not None) and (side.bsd_hold_counter > 0) and (self.lane_change_bsd >= 0)
           object_active = (side is not None) and side.side_object_detected
           geom_lost    = (side is None) or (not side.lane_change_available_geom)
 
@@ -477,11 +489,15 @@ class DesireHelper:
         elif self.lane_change_state == LaneChangeState.laneChangeFinishing:
           self.lane_change_ll_prob = min(self.lane_change_ll_prob + DT_MDL, 1.0)
           if self.lane_change_ll_prob > 0.99:
+            self.lane_change_completed_on_blinker = True
+            
+            # ── direction을 none으로 지우기 전에 현재 방향을 먼저 대입해야 합니다! ──
+            self.completed_direction = self.lane_change_direction
+            
             self.lane_change_direction = LaneChangeDirection.none
             self.lane_change_state = LaneChangeState.off
             self.unsafe_cancel_timer = max(self.unsafe_cancel_timer, 0.5)
-            self.lane_change_completed_on_blinker = True
-            self.completed_direction = self.lane_change_direction
+
 
     # ── 타이머 ───────────────────────────────────────────────────
     if self.lane_change_state in (LaneChangeState.off, LaneChangeState.preLaneChange):
