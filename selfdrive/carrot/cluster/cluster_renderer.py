@@ -45,7 +45,6 @@ from cluster_scene import (
     MeshStrip,
     RADAR_STATIC_OBJECT_SPEED_KPH,
     RadarPointMarker,
-    RearVehicleIndicator,
     Vec3,
     VehicleBox,
     build_cluster_scene,
@@ -1434,9 +1433,6 @@ class ClusterUiRenderer:
             state.radar_source_color_mode,
         )
         self._profile_add("draw_scene.vehicle_badges", profile_stage)
-        profile_stage = self._profile_start()
-        self._draw_rear_vehicle_indicators(scene.rear_indicators, camera, scene.scene_shift_x_m)
-        self._profile_add("draw_scene.rear_indicators", profile_stage)
 
     def _draw_strip(self, strip: MeshStrip) -> None:
         count = min(len(strip.left), len(strip.right))
@@ -1793,112 +1789,6 @@ class ClusterUiRenderer:
         self._profile_add_elapsed("draw_scene.vehicle_badges.project", project_ms)
         self._profile_add_elapsed("draw_scene.vehicle_badges.layout", layout_ms)
         self._profile_add_elapsed("draw_scene.vehicle_badges.text", text_ms)
-
-    def _draw_rear_vehicle_indicators(
-        self,
-        indicators: tuple[RearVehicleIndicator, ...],
-        camera,
-        scene_shift_x_m: float = 0.0,
-    ) -> None:
-        for indicator in indicators:
-            if self._rear_indicator_vehicle_visible(indicator, camera, scene_shift_x_m):
-                continue
-            x, y = self._rear_indicator_screen_position(indicator, camera, scene_shift_x_m)
-            self._draw_rear_distance_arrow(indicator, x, y)
-
-    def _rear_indicator_vehicle_visible(
-        self,
-        indicator: RearVehicleIndicator,
-        camera,
-        scene_shift_x_m: float = 0.0,
-    ) -> bool:
-        anchor = rl.Vector3(
-            indicator.center.x + scene_shift_x_m,
-            indicator.center.y,
-            indicator.center.z + 0.62,
-        )
-        screen = world_to_screen_label_anchor(anchor, camera, self.width, self.height)
-        if screen is None:
-            return False
-        margin_x = 24.0
-        margin_y = 24.0
-        return (
-            margin_x <= screen.x <= self.width - margin_x
-            and margin_y <= screen.y <= self.height - margin_y
-        )
-
-    def _rear_indicator_screen_position(
-        self,
-        indicator: RearVehicleIndicator,
-        camera,
-        scene_shift_x_m: float = 0.0,
-    ) -> tuple[float, float]:
-        scale_x = self.width / DESIGN_WIDTH
-        scale_y = self.height / DESIGN_HEIGHT
-        proxy = rl.Vector3(indicator.anchor.x + scene_shift_x_m, indicator.anchor.y, indicator.anchor.z)
-        screen = world_to_screen_label_anchor(proxy, camera, self.width, self.height)
-        fallback_x = (735.0 if indicator.lane_side == "left" else 1185.0) * scale_x
-        fallback_y = 432.0 * scale_y
-        if screen is None:
-            return fallback_x, fallback_y
-
-        if indicator.lane_side == "left":
-            min_x, max_x = 560.0 * scale_x, 880.0 * scale_x
-        else:
-            min_x, max_x = 1040.0 * scale_x, 1360.0 * scale_x
-        x = clamp(screen.x, min_x, max_x)
-        y = clamp(screen.y, 352.0 * scale_y, 456.0 * scale_y)
-        return x, y
-
-    def _draw_rear_distance_arrow(self, indicator: RearVehicleIndicator, x: float, y: float) -> None:
-        theme = self._current_theme()
-        scale = max(0.72, min(1.18, min(self.width / DESIGN_WIDTH, self.height / DESIGN_HEIGHT)))
-        distance = f"{indicator.label} {abs(indicator.longitudinal_m):.0f} m"
-        text_size = 16.0 * scale
-        spacing = max(1.0, text_size * 0.02)
-        text_width, text_height = self._measure_text(distance, text_size, spacing)
-        pad_x = 10.0 * scale
-        pad_y = 5.0 * scale
-        box_w = max(74.0 * scale, text_width + pad_x * 2.0)
-        box_h = text_height + pad_y * 2.0
-        box_y = y - 62.0 * scale
-        box = rl.Rectangle(x - box_w * 0.5, box_y, box_w, box_h)
-
-        rl.draw_rectangle_rounded(box, 0.28, 12, rl_color(theme.clock_bg))
-        rl.draw_rectangle_rounded_lines_ex(box, 0.28, 12, max(1.5, 2.0 * scale), rl_color(RED))
-        self._draw_text(
-            distance,
-            x + 1.0,
-            box_y + box_h * 0.5 + 1.0,
-            text_size,
-            theme.world_label_shadow,
-            anchor="center",
-        )
-        self._draw_text(
-            distance,
-            x,
-            box_y + box_h * 0.5,
-            text_size,
-            theme.clock_text,
-            anchor="center",
-        )
-
-        shaft_top = box_y + box_h + 8.0 * scale
-        shaft_bottom = y - 8.0 * scale
-        tip_y = y + 20.0 * scale
-        arrow_color = rl_color(RED)
-        rl.draw_line_ex(
-            rl.Vector2(x, shaft_top),
-            rl.Vector2(x, shaft_bottom),
-            max(4.0, 5.0 * scale),
-            arrow_color,
-        )
-        rl.draw_triangle(
-            rl.Vector2(x - 15.0 * scale, shaft_bottom),
-            rl.Vector2(x, tip_y),
-            rl.Vector2(x + 15.0 * scale, shaft_bottom),
-            arrow_color,
-        )
 
     def _world_label_bounds(
         self,

@@ -213,7 +213,7 @@ messages can supply exact LF/RF/LR/RR corner radar detail. Fresh received
 presentation does not overwrite exact received distance. `--live-no-can`
 remains a manual diagnostic option; without raw CAN/sendcan, `carState` still
 provides LF/RF distance and blindspot booleans, and the HUD can show coarse
-LR/RR blindspot fallback indicators but not exact rear distance.
+LR/RR blindspot fallback vehicle boxes but not exact rear distance.
 Cluster road speed-limit display treats `carState.speedLimit` from the
 vehicle/HDA path as km/h. Navigation speed limits are accepted in either the
 km/h values used by the current navigation integrations or the m/s values used
@@ -287,9 +287,8 @@ vehicles such as front-center `radarState` leads; `1` leaves raw points
 unmerged for detail checks, including radar vehicle candidate boxes and
 radar-to-detected-vehicle speed merges. Vehicle/radar metric labels sit closer
 to the point/box top so speed and distance are less high above the vehicle.
-Off-screen `LR`/`RR` rear-corner indicators anchor their arrows at rear-tire
-depth while still following the detected lateral position, so the labels stay
-low and still show left/right separation.
+`LR`/`RR` rear-corner detections render as normal vehicle boxes at their actual
+detected positions. The older fixed rear-tire-depth 2D arrow/label is removed.
 The default drive camera sits closer to the ego roof, lower than the earlier
 high view, and tilted downward so route/live views keep rear context visible
 down to about `-10m` relative to ego. It uses a closer/lower target and wider
