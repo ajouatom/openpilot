@@ -89,6 +89,11 @@ CORNER_RADAR_LABELS = frozenset(("LF", "RF", "LR", "RR"))
 REAR_CORNER_RADAR_LABELS = frozenset(("LR", "RR"))
 REAR_INDICATOR_ANCHOR_FORWARD_M = EGO_FORWARD_M - VEHICLE_LENGTH_M * 0.34
 REAR_INDICATOR_ANCHOR_HEIGHT_M = 0.14
+DRIVE_VIEW_REAR_RELATIVE_M = -20.0
+DRIVE_VIEW_REAR_ROAD_MARGIN_M = 4.0
+DRIVE_VIEW_ROAD_START_M = (
+    EGO_FORWARD_M + DRIVE_VIEW_REAR_RELATIVE_M - DRIVE_VIEW_REAR_ROAD_MARGIN_M
+)
 VEHICLE_BADGE_TTC_S = 9.9
 VEHICLE_BADGE_ACCEL_MPS2 = 1.0
 MODEL_LINE_STRIP_GROUP_CACHE_LIMIT = 48
@@ -2446,9 +2451,9 @@ def scene_camera(state: ClusterUiState, lane_width_m: float, anchor_x_m: float =
     ego_y_m = EGO_FORWARD_M
 
     drive_camera = CameraSpec(
-        position=Vec3(0.0, -8.80, 5.20),
-        target=Vec3(0.0, 22.0, 0.18),
-        fovy_deg=31.0,
+        position=Vec3(0.0, -32.0, 7.20),
+        target=Vec3(0.0, 24.0, 0.22),
+        fovy_deg=40.0,
     )
 
     if not state.surround_view_active:
@@ -3013,7 +3018,7 @@ def build_cluster_scene(
     route_mode = data_geometry_mode_for_state(state)
     road_start_m = (
         SURROUND_ROAD_REAR_M if state.surround_view_active
-        else ROAD_NEAR_M
+        else DRIVE_VIEW_ROAD_START_M
     )
     road_end_m = (
         SURROUND_ROAD_FRONT_M if state.surround_view_active
@@ -3230,7 +3235,7 @@ def build_cluster_scene(
         state,
         lane_width_m,
         (*selected_radar_vehicle_points, *hidden_merged_radar_points),
-        min_forward_m=road_start_m if camera_active else ROAD_NEAR_M,
+        min_forward_m=road_start_m,
         max_forward_m=road_end_m if camera_active else ROAD_FAR_M + 30.0,
         x_offset_m=relative_scene_x_offset_m,
     )
