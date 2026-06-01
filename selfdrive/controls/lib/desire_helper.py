@@ -67,6 +67,8 @@ class DesireHelper:
     self.lane_change_available_right = False
 
     self.lane_change_completed_on_blinker = False
+    self.blinker_off_timer = 0.0  
+    self.completed_direction = LaneChangeDirection.none
 
   # ─────────────────────────────────────────────
   def _update_params_periodic(self):
@@ -231,9 +233,20 @@ class DesireHelper:
     desire_enabled = driver_enabled or atc_enabled
     blinker_state  = driver_st if driver_enabled else atc_st
 
-    if not desire_enabled:
-      self.lane_change_completed_on_blinker = False
-      
+    # ── 깜빡이 노이즈 필터링 및 반대 방향 전환 감지 ──
+    if desire_enabled:
+      self.blinker_off_timer = 0.0
+      # 만약 완료된 차선 변경 방향과 현재 켠 깜빡이 방향이 다르면 (예: 왼쪽 변경 후 즉시 오른쪽 복귀) 플래그 즉시 리셋
+      if (blinker_state == BLINKER_LEFT and self.completed_direction == LaneChangeDirection.right) or \
+         (blinker_state == BLINKER_RIGHT and self.completed_direction == LaneChangeDirection.left):
+        self.lane_change_completed_on_blinker = False
+    else:
+      # 깜빡이가 꺼졌을 때, 최소 0.5초(하드웨어 노이즈가 끝날 시간) 동안 유지되어야 완료 플래그를 최종 리셋
+      self.blinker_off_timer += DT_MDL
+      if self.blinker_off_timer > 0.5:
+        self.lane_change_completed_on_blinker = False
+        self.completed_direction = LaneChangeDirection.none
+
     # 이미 차선 변경 플래그가 살아서 움직이는 중이라면, 깜빡이 OFF와 무관하게 기존 진행 방향의 side를 유지
     if self.lane_change_state in (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing):
       side = self.left if self.lane_change_direction == LaneChangeDirection.left else self.right
@@ -468,6 +481,7 @@ class DesireHelper:
             self.lane_change_state = LaneChangeState.off
             self.unsafe_cancel_timer = max(self.unsafe_cancel_timer, 0.5)
             self.lane_change_completed_on_blinker = True
+            self.completed_direction = self.lane_change_direction
 
     # ── 타이머 ───────────────────────────────────────────────────
     if self.lane_change_state in (LaneChangeState.off, LaneChangeState.preLaneChange):
