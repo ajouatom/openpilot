@@ -17,6 +17,7 @@ DEFAULT_WEB_SETTINGS: Dict[str, Any] = {
   "kmap_url": "https://jominki354.github.io/kmap/",
   "kmap_overlay_heading_up": True,
   "kmap_overlay_curvature_color": False,
+  "kmap_map_type": "roadmap",
   "nav_hud_enabled": True,
 }
 
@@ -66,6 +67,8 @@ def sanitize_web_settings(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
   settings["kmap_url"] = _normalize_kmap_url(raw.get("kmap_url", settings["kmap_url"]))
   settings["kmap_overlay_heading_up"] = _to_bool(raw.get("kmap_overlay_heading_up", settings["kmap_overlay_heading_up"]))
   settings["kmap_overlay_curvature_color"] = _to_bool(raw.get("kmap_overlay_curvature_color", settings["kmap_overlay_curvature_color"]))
+  map_type = str(raw.get("kmap_map_type", settings["kmap_map_type"]) or "").strip().lower()
+  settings["kmap_map_type"] = map_type if map_type in {"roadmap", "satellite", "hybrid"} else "roadmap"
   settings["nav_hud_enabled"] = _to_bool(raw.get("nav_hud_enabled", settings["nav_hud_enabled"]))
   return settings
 

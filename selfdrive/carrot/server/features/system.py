@@ -139,8 +139,21 @@ async def api_live_runtime(request: web.Request) -> web.Response:
 
   age_ms = broker.snapshot_age_ms()
   if force or age_ms is None or age_ms > 250 or not runtime.get("params"):
+    # Serialize poll across concurrent requests: broker.poll() runs
+    # SubMaster.update(), and msgq's SubMaster is NOT thread-safe — parallel
+    # polls (multiple tabs/devices hitting /api/live_runtime) can corrupt or
+    # crash it and take the whole server down. Re-check freshness inside the
+    # lock so a request that waited skips a now-redundant poll.
+    lock = request.app.get("realtime_broker_poll_lock")
     try:
-      await asyncio.to_thread(broker.poll, 0)
+      if lock is not None:
+        async with lock:
+          fresh_age = broker.snapshot_age_ms()
+          fresh_runtime = broker.last_snapshot.get("runtime") if isinstance(broker.last_snapshot, dict) else {}
+          if force or fresh_age is None or fresh_age > 250 or not (fresh_runtime or {}).get("params"):
+            await asyncio.to_thread(broker.poll, 0)
+      else:
+        await asyncio.to_thread(broker.poll, 0)
     except Exception as exc:
       return web.json_response({"ok": False, "error": str(exc)}, status=500)
     runtime = broker.last_snapshot.get("runtime") if isinstance(broker.last_snapshot, dict) else {}

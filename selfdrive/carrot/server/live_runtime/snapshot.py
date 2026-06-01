@@ -153,11 +153,28 @@ def _service(sm: Any, name: str) -> Any:
     return None
 
 
+# Services pushed live to the browser over the raw capnp WS and NOT consumed
+# from this broker snapshot. The browser draws lanes / path / road edges /
+# leads from CarrotOverlayState (raw WS), and readiness uses sm.alive
+# (independent of this payload). So skip the per-poll dict build for these —
+# modelV2 in particular (position / laneLines / roadEdges / leadsV3 arrays)
+# dominates broker CPU. The key stays present (empty dict) when the service is
+# alive, so the snapshot contract / serviceAlive map are unchanged.
+_LIVE_PUSH_ONLY_SERVICES = frozenset({
+  "modelV2",
+  "liveCalibration",
+  "roadCameraState",
+  "wideRoadCameraState",
+})
+
+
 def _build_service_payload(sm: Any, name: str, previous: dict[str, Any] | None = None) -> dict[str, Any] | None:
   builder = _SERVICE_BUILDERS.get(name)
   service = _service(sm, name)
   if service is None:
     return None
+  if name in _LIVE_PUSH_ONLY_SERVICES:
+    return {}
   if builder is None:
     return {}
   try:

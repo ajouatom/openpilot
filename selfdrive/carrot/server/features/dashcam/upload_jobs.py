@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 import uuid
 from datetime import datetime
@@ -175,62 +176,80 @@ async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = 
   directory = f"{car_selected} {dongle_id}".strip()
   remote_base_path = f"routes/{directory}/".replace("\\", "/")
   total = len(segments)
-  results = []
+  results: list[Any] = [None] * total  # filled by index so order matches input
 
   if job:
     job["upload_meta"] = meta
     job["remote_base_path"] = remote_base_path
-    job["partial_results"] = results
+    job["partial_results"] = []
     progress(job, message="Preparing upload", current=0, total=total, percent=0)
 
   ensure_not_canceled(job)
-  for idx, segment in enumerate(segments, start=1):
-    ensure_not_canceled(job)
-    files = []
-    if job:
-      progress(job, message=f"Uploading {idx}/{total}", current=idx - 1, total=total)
-      append(job, f"[{idx}/{total}] {segment}")
-    try:
-      segment_path = segment_dir(segment)
-      files = await asyncio.to_thread(segment_file_summary, segment_path)
-      ok = await asyncio.to_thread(
-        upload.upload_folder_to_ftp,
-        segment_path,
-        directory,
-        segment,
-        (lambda: is_cancel_requested(job)) if job else None,
-      )
-      ensure_not_canceled(job)
-      results.append({
-        "segment": segment,
-        "route": route_name(segment),
-        "segmentIndex": segment_index(segment),
-        "ok": bool(ok),
-        "remotePath": f"{remote_base_path}{segment}",
-        "files": files,
-      })
-      if job:
-        append(job, f"[{idx}/{total}] {segment} OK")
-    except Exception as e:
-      if is_cancel_requested(job):
-        raise UploadCanceled("upload canceled") from e
-      results.append({
-        "segment": segment,
-        "route": route_name(segment),
-        "segmentIndex": segment_index(segment),
-        "ok": False,
-        "remotePath": f"{remote_base_path}{segment}",
-        "files": files,
-        "error": str(e),
-      })
-      if job:
-        append(job, f"[{idx}/{total}] {segment} FAILED: {e}")
 
+  # Upload segments in parallel with bounded concurrency. Each
+  # upload_folder_to_ftp() opens its own FTP connection, so concurrent calls
+  # are safe. Concurrency is kept small because the NAS is shared across all
+  # users; tune with CARROT_FTP_CONCURRENCY (default 3).
+  try:
+    concurrency = max(1, min(6, int(os.environ.get("CARROT_FTP_CONCURRENCY", "3") or "3")))
+  except Exception:
+    concurrency = 3
+  sem = asyncio.Semaphore(concurrency)
+  completed = 0
+
+  async def upload_one(idx0: int, segment: str) -> None:
+    nonlocal completed
+    idx = idx0 + 1
+    files: list[Any] = []
+    async with sem:
+      if is_cancel_requested(job):
+        return
+      if job:
+        append(job, f"[{idx}/{total}] {segment}")
+      try:
+        segment_path = segment_dir(segment)
+        files = await asyncio.to_thread(segment_file_summary, segment_path)
+        ok = await asyncio.to_thread(
+          upload.upload_folder_to_ftp,
+          segment_path,
+          directory,
+          segment,
+          (lambda: is_cancel_requested(job)) if job else None,
+        )
+        results[idx0] = {
+          "segment": segment,
+          "route": route_name(segment),
+          "segmentIndex": segment_index(segment),
+          "ok": bool(ok),
+          "remotePath": f"{remote_base_path}{segment}",
+          "files": files,
+        }
+        if job:
+          append(job, f"[{idx}/{total}] {segment} OK")
+      except Exception as e:
+        if is_cancel_requested(job):
+          return  # canceled mid-upload — handled after gather
+        results[idx0] = {
+          "segment": segment,
+          "route": route_name(segment),
+          "segmentIndex": segment_index(segment),
+          "ok": False,
+          "remotePath": f"{remote_base_path}{segment}",
+          "files": files,
+          "error": str(e),
+        }
+        if job:
+          append(job, f"[{idx}/{total}] {segment} FAILED: {e}")
+    # post-upload bookkeeping runs synchronously (atomic between awaits)
+    completed += 1
     if job:
-      job["partial_results"] = results
-      progress(job, message=f"Uploaded {idx}/{total}", current=idx, total=total)
+      job["partial_results"] = [r for r in results if r is not None]
+      progress(job, message=f"Uploaded {completed}/{total}", current=completed, total=total)
+
+  await asyncio.gather(*(upload_one(i, seg) for i, seg in enumerate(segments)))
 
   ensure_not_canceled(job)
+  results = [r for r in results if r is not None]
   ok_count = sum(1 for item in results if item["ok"])
   uploaded_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
   response_payload = {

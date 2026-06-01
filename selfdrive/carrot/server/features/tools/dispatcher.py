@@ -521,6 +521,9 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
 
     if action == "git_reset_repo_fetch":
       url = "https://github.com/ajouatom/openpilot.git"
+      # Phase 0: clear stale git locks so the remote/config/fetch steps below
+      # aren't blocked by a leftover *.lock from a crashed git process.
+      await jobs.capture_exec(["find", ".git", "-type", "f", "-name", "*.lock", "-delete"], cwd=repo_dir, timeout=10)
       # Phase 1: ensure origin points to the correct URL
       jobs.progress(job, message="configuring origin remote", current=1, total=4)
 
@@ -552,10 +555,16 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
             ["git", "remote", "remove", remote_name], cwd=repo_dir, timeout=10
           )
 
-      # Phase 3: fetch from origin only
-      jobs.progress(job, message="git fetch origin --prune", current=3, total=4)
+      # Phase 3: fetch from origin only.
+      # First clear remote-tracking refs + repack so a corrupt/broken ref
+      # ("unable to update local ref", "cannot lock ref ... reference broken"
+      # from a power-loss mid-fetch) can't block the fetch — git rebuilds
+      # origin/* fresh. --force allows non-fast-forward ref updates.
+      jobs.progress(job, message="git fetch origin --prune --force", current=3, total=4)
+      await jobs.capture_exec(["git", "pack-refs", "--all"], cwd=repo_dir, timeout=20)
+      await jobs.capture_exec(["rm", "-rf", ".git/refs/remotes/origin"], cwd=repo_dir, timeout=10)
       rc_fetch = await jobs.stream_exec(
-        job, ["git", "fetch", "origin", "--prune"], cwd=repo_dir, timeout=300
+        job, ["git", "fetch", "origin", "--prune", "--force"], cwd=repo_dir, timeout=300
       )
       if rc_fetch != 0:
         jobs.finish(job, ok=False, result=jobs.result_from_log(job, rc_fetch))
@@ -587,15 +596,27 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
         jobs.finish(job, ok=False, result={"ok": False, "error": "missing branch"}, error="missing branch")
         return
 
+      # Robust factory reset: first clear a stuck index lock and abort any
+      # half-finished operation (merge/rebase/cherry-pick/am) so the checkout
+      # isn't blocked, then FORCE the branch to the remote (-f discards local
+      # changes that would otherwise abort the checkout). The abort/cleanup
+      # steps are allowed to fail (they no-op when not applicable).
       steps = [
-        (f"git checkout -B {branch} origin/{branch}", ["git", "checkout", "-B", branch, f"origin/{branch}"]),
-        (f"git reset --hard origin/{branch}", ["git", "reset", "--hard", f"origin/{branch}"]),
-        ("git clean -xfd", ["git", "clean", "-xfd"]),
+        ("clear stale git locks", ["find", ".git", "-type", "f", "-name", "*.lock", "-delete"], True),
+        ("git merge --abort", ["git", "merge", "--abort"], True),
+        ("git rebase --abort", ["git", "rebase", "--abort"], True),
+        ("git cherry-pick --abort", ["git", "cherry-pick", "--abort"], True),
+        ("git revert --abort", ["git", "revert", "--abort"], True),
+        ("git am --abort", ["git", "am", "--abort"], True),
+        ("git bisect reset", ["git", "bisect", "reset"], True),
+        (f"git checkout -f -B {branch} origin/{branch}", ["git", "checkout", "-f", "-B", branch, f"origin/{branch}"], False),
+        (f"git reset --hard origin/{branch}", ["git", "reset", "--hard", f"origin/{branch}"], False),
+        ("git clean -xfd", ["git", "clean", "-xfd"], False),
       ]
-      for i, (msg, cmd) in enumerate(steps):
+      for i, (msg, cmd, allow_fail) in enumerate(steps):
         jobs.progress(job, message=msg, current=i + 1, total=len(steps))
         rc = await jobs.stream_exec(job, cmd, cwd=repo_dir, timeout=120)
-        if rc != 0:
+        if rc != 0 and not allow_fail:
           jobs.finish(job, ok=False, result=jobs.result_from_log(job, rc))
           return
 
@@ -1026,6 +1047,8 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
       url = "https://github.com/ajouatom/openpilot.git"
       out_all = ""
 
+      # clear stale git locks so the remote/config/fetch steps aren't blocked
+      run(["find", ".git", "-type", "f", "-name", "*.lock", "-delete"], cwd=REPO_DIR)
       rc_set, out_set = run(["git", "remote", "set-url", "origin", url], cwd=REPO_DIR)
       if rc_set != 0:
         run(["git", "remote", "remove", "origin"], cwd=REPO_DIR)
@@ -1043,8 +1066,12 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
           run(["git", "remote", "remove", rname], cwd=REPO_DIR)
           out_all += f"> removed remote: {rname}\n"
 
-      rc_fetch, out_fetch = run(["git", "fetch", "origin", "--prune"], cwd=REPO_DIR)
-      out_all += f"> git fetch origin --prune\n{out_fetch}\n\n"
+      # clear remote-tracking refs + repack so a corrupt/broken ref can't block
+      # the fetch (git rebuilds origin/* fresh); --force allows non-ff updates
+      run(["git", "pack-refs", "--all"], cwd=REPO_DIR)
+      run(["rm", "-rf", ".git/refs/remotes/origin"], cwd=REPO_DIR)
+      rc_fetch, out_fetch = run(["git", "fetch", "origin", "--prune", "--force"], cwd=REPO_DIR)
+      out_all += f"> git fetch origin --prune --force\n{out_fetch}\n\n"
       if rc_fetch != 0:
         return web.json_response({"ok": False, "rc": rc_fetch, "out": out_all.strip()})
 
@@ -1064,16 +1091,25 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
       branch = str(body.get("branch") or "").strip()
       if not branch:
         return web.json_response({"ok": False, "error": "missing branch"}, status=400)
+      # Robust factory reset (see job path above): clear stuck lock + abort any
+      # in-progress op, then force the branch to the remote. (cmd, allow_fail)
       commands = [
-        ["git", "checkout", "-B", branch, f"origin/{branch}"],
-        ["git", "reset", "--hard", f"origin/{branch}"],
-        ["git", "clean", "-xfd"],
+        (["find", ".git", "-type", "f", "-name", "*.lock", "-delete"], True),
+        (["git", "merge", "--abort"], True),
+        (["git", "rebase", "--abort"], True),
+        (["git", "cherry-pick", "--abort"], True),
+        (["git", "revert", "--abort"], True),
+        (["git", "am", "--abort"], True),
+        (["git", "bisect", "reset"], True),
+        (["git", "checkout", "-f", "-B", branch, f"origin/{branch}"], False),
+        (["git", "reset", "--hard", f"origin/{branch}"], False),
+        (["git", "clean", "-xfd"], False),
       ]
       out_all = ""
-      for c in commands:
+      for c, allow_fail in commands:
         rc, out = run(c, cwd=REPO_DIR)
         out_all += f"> {' '.join(c)}\n{out}\n\n"
-        if rc != 0:
+        if rc != 0 and not allow_fail:
           return web.json_response({"ok": False, "rc": rc, "out": out_all.strip()})
       return web.json_response({"ok": True, "out": out_all.strip(), "summary_key": "git_result_reset_repo_checkout_done", "summary_vars": {"branch": branch}, "empty_output": not out_all.strip()})
 
