@@ -2451,9 +2451,9 @@ def scene_camera(state: ClusterUiState, lane_width_m: float, anchor_x_m: float =
     ego_y_m = EGO_FORWARD_M
 
     drive_camera = CameraSpec(
-        position=Vec3(0.0, -34.0, 9.20),
-        target=Vec3(0.0, 20.0, -0.15),
-        fovy_deg=40.0,
+        position=Vec3(0.0, -35.0, 10.20),
+        target=Vec3(0.0, 17.5, -0.35),
+        fovy_deg=39.0,
     )
 
     if not state.surround_view_active:

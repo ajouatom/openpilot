@@ -291,7 +291,9 @@ Off-screen `LR`/`RR` rear-corner indicators anchor their arrows at rear-tire
 depth while still following the detected lateral position, so the labels stay
 low and still show left/right separation.
 The default drive camera is raised, backed up, and tilted downward so route/live
-views keep rear context visible down to about `-20m` relative to ego, with
+views keep rear context visible down to about `-20m` relative to ego. It uses a
+slightly closer/lower target and narrower FOV so distant objects feel less far
+away while the road still reads like a low over-road flight path, with
 road/lane/radar geometry starting a few meters farther back to avoid empty scene
 edges.
 Front-center `radarState` lead overlap uses a wider vehicle-sized tolerance
