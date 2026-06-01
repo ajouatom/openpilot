@@ -211,7 +211,9 @@ the live CAN/sendcan subscriptions enabled, but exact LF/RF/LR/RR corner radar
 distance now comes only from received Hyundai `can` `0x162`/`0x1EA` messages.
 `sendcan` is still watched for ADRV lane-change metadata, but not for corner
 radar distance because outgoing Hyundai CAN-FD presentation messages can clamp
-LR/RR to `14m`. `--live-no-can` remains a manual diagnostic option; without
+LR/RR to `14m`. Returned/rejected `can` echo frames with `src >= 0x80` are also
+ignored for direct radar parsing so sent presentation frames do not re-enter as
+received distance. `--live-no-can` remains a manual diagnostic option; without
 raw received CAN, `carState` still provides LF/RF distance and blindspot
 booleans, and the HUD can show coarse LR/RR blindspot fallback vehicle boxes
 but not exact rear distance.

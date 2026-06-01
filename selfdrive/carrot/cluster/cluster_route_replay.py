@@ -1452,6 +1452,9 @@ class RouteLogParser:
     def _update_can_detections(self, can_messages: Any, event_t: float, source_service: str = "can") -> None:
         for can_message in can_messages:
             address = int(safe_get(can_message, "address", -1))
+            bus = int(safe_get(can_message, "src", -1))
+            if source_service == "can" and bus >= 0x80:
+                continue
             data = bytes(safe_get(can_message, "dat", b""))
             if is_hyundai_canfd_radar_address(address):
                 labels = hyundai_canfd_radar_labels_for_address(address)
