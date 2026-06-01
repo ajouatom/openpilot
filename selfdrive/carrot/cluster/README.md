@@ -322,7 +322,9 @@ radar probability is low.
 Lane and road-edge rendering keeps model geometry visible instead of filtering
 by `laneLineProbs` or `roadEdgeStds`, avoiding distracting HUD flicker when
 model confidence jitters. Lane markings are still suppressed when their
-lateral offset falls outside a valid model road-edge boundary.
+lateral offset falls outside a valid model road-edge boundary. Dashed lane
+markings start with a visible dash at the rear render bound so they continue
+behind ego instead of beginning with a rear gap.
 When `carState.leftLaneLine` or `carState.rightLaneLine` carries camera/CAN
 lane color codes, the current lane markings use that color first
 (`+10=white`, `+20=yellow`) before falling back to the cluster model colors.

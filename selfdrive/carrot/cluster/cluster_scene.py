@@ -627,7 +627,8 @@ def lane_dash_cycle_offset(distance_m: float, dash_phase_m: float, cycle_m: floa
 
 
 def lane_dash_phase_m(centerline: tuple[Vec3, ...]) -> float:
-    return centerline[0].y if centerline else 0.0
+    # Start the rear-most visible dashed lane segment with paint, not a gap.
+    return 0.0
 
 
 def dashed_centerline_segments(
@@ -725,7 +726,7 @@ def lane_marking_segments_for_marking(
     segments: list[tuple[Vec3, ...]] = []
     dash_m = LANE_DASH_LENGTH_M
     cycle_m = dash_m + LANE_DASH_GAP_M
-    cursor = start_m - (start_m % cycle_m)
+    cursor = start_m
     while cursor < end_m:
         dash_start = max(cursor, start_m)
         dash_end = min(cursor + dash_m, end_m)
@@ -1218,7 +1219,7 @@ def cached_lane_offset_strip_groups(
         segments: list[tuple[Vec3, ...]] = []
         dash_m = LANE_DASH_LENGTH_M
         cycle_m = dash_m + LANE_DASH_GAP_M
-        cursor = cache_start_m - (cache_start_m % cycle_m)
+        cursor = cache_start_m
         while cursor < cache_end_m:
             dash_start = max(cursor, cache_start_m)
             dash_end = min(cursor + dash_m, cache_end_m)
