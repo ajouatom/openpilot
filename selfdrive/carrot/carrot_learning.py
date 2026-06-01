@@ -149,6 +149,15 @@ class CarrotLearner:
     self._prev_a_ego = 0.0       # 이전 프레임 가속도
     self._accel_swing_count = 0  # 가감속 반전(Hunting) 카운트
 
+    # ── 조향 방식 자동 감지 및 토크 학습 변수 ──────────────────────────
+    self.is_angle_control = None
+    self._torque_curve_entries = 0
+    self._torque_curve_overrides = 0
+    self._torque_straight_entries = 0
+    self._torque_straight_overrides = 0
+    self._torque_error_count = 0
+
+
     # ── 주행 중 팝업 타이머 ─────────────────────────────────────────────
     # Trigger 1: 인게이지 30분 경과 → 즉시 팝업 (주행 중 포함)
     self._engaged_elapsed_sec = 0.0      # 인게이지 누적 시간
@@ -171,6 +180,22 @@ class CarrotLearner:
   # ------------------------------------------------------------------
   # 공개 API
   # ------------------------------------------------------------------
+
+  def _detect_steer_control_type(self):
+    try:
+      from cereal import car
+      import cereal.messaging as messaging
+      cp_bytes = self._params.get("CarParams")
+      if cp_bytes is not None:
+        cp = messaging.log_from_bytes(cp_bytes, car.CarParams)
+        self.is_angle_control = (cp.steerControlType == car.CarParams.SteerControlType.angle)
+        print(f"CarrotLearner: Detected steerControlType = {cp.steerControlType} (is_angle_control: {self.is_angle_control})")
+      else:
+        # CarParams가 아직 로드되지 않은 경우 다음 프레임에서 재시도하도록 None 유지
+        pass
+    except Exception as e:
+      self.is_angle_control = False  # 에러 시 기본값 torque(False)로 롤백
+      print(f"CarrotLearner: Error detecting steerControlType: {e}")
 
   def set_current_gap(self, gap: int):
     """현재 GAP 단계 설정 (1~4). CarrotPlanner에서 매 프레임 전달."""
@@ -195,7 +220,12 @@ class CarrotLearner:
         self._params.put_bool("CarrotLearningPopupReady", False)
       return
 
+    # 조향 제어 방식 lazy loading 감지
+    if self.is_angle_control is None:
+      self._detect_steer_control_type()
+
     prev_brake = self._prev_brake
+
 
     # UI로부터 초기화(Clear) 신호가 오면 내부 메모리를 비움
     if self._params.get_bool("CarrotLearningClear"):
@@ -216,8 +246,18 @@ class CarrotLearner:
         self._gas_max_accel[idx] = max(self._gas_max_accel[idx], a_ego)
         self._gas_max_pedal[idx] = max(self._gas_max_pedal[idx], gas_val)
     
+    # 과속방지턱 감속 작동 중이거나 40km/h 미만 저속 구간 여부 판별 (A/B안 적용)
+    is_speed_bump = False
+    if sm is not None and sm.alive.get('carrotMan', False):
+      try:
+        carrot_man = sm['carrotMan']
+        is_speed_bump = (carrot_man.xSpdType == 22 or carrot_man.activeCarrot == 5)
+      except Exception:
+        pass
+
     # 가속 과다 학습 방지: 가속 중인데 브레이크를 밟는 경우 OR 자율 주행 중 과도한 가속
-    if engaged and v_ego_kph < (v_cruise_kph - 3.0):
+    # A/B안 적용: 과속방지턱 통과 중이거나 40km/h 미만에서는 가속 하향 패널티 수집 제외
+    if engaged and v_ego_kph < (v_cruise_kph - 3.0) and not is_speed_bump and v_ego_kph >= 40.0:
       idx = _speed_band(v_ego_kph)
       if brake_pressed:
         if lead_drel == 0 or lead_drel > 120.0:
@@ -229,26 +269,59 @@ class CarrotLearner:
     if engaged and v_ego_kph >= 20.0:
       steer_rate = abs(steer_deg - self._prev_steer_deg) / _DT
 
-      # 직진 구간 편차 수집 (override 없을 때만 순수 자동조향 편차)
-      if abs(steer_deg) < _STRAIGHT_DEG and not steer_pressed:
-        self._steer_acc += steer_deg
-        self._steer_count += 1
+      if self.is_angle_control:
+        # [A] 앵글 조향 차량 데이터 수집
+        # 직진 구간 편차 수집 (override 없을 때만 순수 자동조향 편차)
+        if abs(steer_deg) < _STRAIGHT_DEG and not steer_pressed:
+          self._steer_acc += steer_deg
+          self._steer_count += 1
 
-      # 커브 진입 감지 (조향각 변화율이 임계값 초과)
-      if steer_rate > _CURVE_RATE_DEG_S:
-        if not self._in_curve_entry:
-          self._curve_entries += 1
-          if steer_pressed:
-            self._curve_overrides += 1
-          self._in_curve_entry = True
+        # 커브 진입 감지 (조향각 변화율이 임계값 초과)
+        if steer_rate > _CURVE_RATE_DEG_S:
+          if not self._in_curve_entry:
+            self._curve_entries += 1
+            if steer_pressed:
+              self._curve_overrides += 1
+            self._in_curve_entry = True
+        else:
+          self._in_curve_entry = False
       else:
-        self._in_curve_entry = False
+        # [B] 토크 조향 차량 데이터 수집
+        # 1. 커브 구간 (조향각이 크고 속도가 있을 때)
+        if v_ego_kph >= 40.0 and abs(steer_deg) >= 8.0:
+          self._torque_curve_entries += 1
+          if steer_pressed:
+            self._torque_curve_overrides += 1
+            
+          # 조향 오차 계산 시도
+          steer_err = 0.0
+          if sm is not None:
+            try:
+              desired_angle = 0.0
+              if sm.alive.get('carControl', False):
+                desired_angle = sm['carControl'].actuators.steeringAngleDeg
+              elif sm.alive.get('controlsState', False):
+                desired_angle = sm['controlsState'].steeringAngleDesired
+              
+              steer_err = desired_angle - steer_deg
+            except Exception:
+              pass
+              
+          if abs(steer_err) >= 1.5:
+            self._torque_error_count += 1
+        
+        # 2. 완만한/직선 구간 (조향각이 작을 때 - Friction 용)
+        elif v_ego_kph >= 30.0 and abs(steer_deg) < 4.0:
+          self._torque_straight_entries += 1
+          if steer_pressed:
+            self._torque_straight_overrides += 1
 
     self._prev_steer_deg = steer_deg
 
     # Phase 3: 수동 제동 (선행차 근접 시) ────────────────────────
     is_auto_braking = False
-    if engaged and not gear_park and 0 < lead_drel < 100.0:
+    # A/B안 적용: 과속방지턱 통과 중이거나 40km/h 미만에서는 제동 학습(JLeadFactor) 수집 제외
+    if engaged and not gear_park and 0 < lead_drel < 100.0 and not is_speed_bump and v_ego_kph >= 40.0:
       # (1) 수동 제동 트리거
       if brake_pressed:
         if not self._prev_brake:
@@ -269,12 +342,14 @@ class CarrotLearner:
     self._prev_auto_brake = is_auto_braking
     
     # 제동 과다 학습 방지: 강한 제동 중 가속 페달을 밟는 경우 (불필요한 제동 억제)
-    if engaged and gas_pressed and a_ego < -0.8:
+    # A/B안 적용: 과속방지턱 통과 중이거나 40km/h 미만에서는 가속 오버라이드 학습 수집 제외
+    if engaged and gas_pressed and a_ego < -0.8 and not is_speed_bump and v_ego_kph >= 40.0:
       if 0 < lead_drel < 150.0:
         self._jlead_gas_acc += _DT
 
     # ── Phase 5: DynamicTFollow / TFollowDecelBoost ──────────────────
-    if engaged and brake_pressed and not self._prev_brake:
+    # A/B안 적용: 과속방지턱 통과 중이거나 40km/h 미만에서는 DynamicTFollow 학습 수집 제외
+    if engaged and brake_pressed and not self._prev_brake and not is_speed_bump and v_ego_kph >= 40.0:
       # DynamicTFollow: 앞차 급감속 중 브레이크 개입
       if lead_jlead < _DYN_JLEAD_THRESHOLD and lead_drel < 150.0:
         self._dyn_brake_count += 1
@@ -404,6 +479,11 @@ class CarrotLearner:
     self._steer_count = 0
     self._curve_entries = 0
     self._curve_overrides = 0
+    self._torque_curve_entries = 0
+    self._torque_curve_overrides = 0
+    self._torque_straight_entries = 0
+    self._torque_straight_overrides = 0
+    self._torque_error_count = 0
     self._brake_count = 0
     self._brake_auto_count = 0
     self._jlead_gas_acc = 0.0
@@ -465,6 +545,11 @@ class CarrotLearner:
       self._steer_count = int(lat.get("steer_count", 0))
       self._curve_entries = int(lat.get("curve_entries", 0))
       self._curve_overrides = int(lat.get("curve_overrides", 0))
+      self._torque_curve_entries = int(lat.get("torque_curve_entries", 0))
+      self._torque_curve_overrides = int(lat.get("torque_curve_overrides", 0))
+      self._torque_straight_entries = int(lat.get("torque_straight_entries", 0))
+      self._torque_straight_overrides = int(lat.get("torque_straight_overrides", 0))
+      self._torque_error_count = int(lat.get("torque_error_count", 0))
       # Phase 3
       lon = data.get("lon", {})
       self._brake_count = int(lon.get("brake_count", 0))
@@ -518,6 +603,11 @@ class CarrotLearner:
         "steer_count": self._steer_count,
         "curve_entries": self._curve_entries,
         "curve_overrides": self._curve_overrides,
+        "torque_curve_entries": self._torque_curve_entries,
+        "torque_curve_overrides": self._torque_curve_overrides,
+        "torque_straight_entries": self._torque_straight_entries,
+        "torque_straight_overrides": self._torque_straight_overrides,
+        "torque_error_count": self._torque_error_count,
       },
       "lon": {
         "brake_count": self._brake_count,
@@ -660,49 +750,153 @@ class CarrotLearner:
           "acc_sec": round(sec, 1),
         }
 
-    # ── Phase 2a: PathOffset (직진 편차) ────────────────────────────
-    if self._steer_count >= _LATERAL_MIN_SAMPLES:
-      avg_deg = self._steer_acc / self._steer_count
-      if abs(avg_deg) >= _PATH_OFFSET_DEG_THRESHOLD:
-        current_offset = self._params.get_int("PathOffset")
-        # 양수 avg_deg: 차가 우측으로 쏠림 → PathOffset 증가 (경로를 우측으로)
-        delta = int(avg_deg / _PATH_OFFSET_DEG_PER_UNIT)
-        recommended = int(np.clip(current_offset + delta, -150, 150))
-        if recommended != current_offset:
-          result["조향 (Steering)"]["PathOffset"] = {
-            "current": current_offset,
-            "recommended": recommended,
-            "band_kph": "straight driving",
-            "avg_deg": round(avg_deg, 2),
-          }
+    # ── Phase 2: 조향 패턴 추천 ─────────────────────────────────────
+    if self.is_angle_control:
+      # ── [A] 앵글 조향 차량 튜닝 ────────────────────────────────────
+      # Phase 2a: PathOffset (직진 편차)
+      if self._steer_count >= _LATERAL_MIN_SAMPLES:
+        avg_deg = self._steer_acc / self._steer_count
+        if abs(avg_deg) >= _PATH_OFFSET_DEG_THRESHOLD:
+          current_offset = self._params.get_int("PathOffset")
+          # 양수 avg_deg: 차가 우측으로 쏠림 → PathOffset 증가 (경로를 우측으로)
+          delta = int(avg_deg / _PATH_OFFSET_DEG_PER_UNIT)
+          recommended = int(np.clip(current_offset + delta, -150, 150))
+          if recommended != current_offset:
+            result["조향 (Steering)"]["PathOffset"] = {
+              "current": current_offset,
+              "recommended": recommended,
+              "band_kph": "직진 주행 편차 보정",
+              "avg_deg": round(avg_deg, 2),
+            }
 
-    # ── Phase 2b: SteerActuatorDelay (커브 진입 override 비율) ──────
-    if self._curve_entries >= _LATERAL_MIN_CURVE:
-      override_ratio = self._curve_overrides / self._curve_entries
-      if override_ratio >= _CURVE_OVERRIDE_RATIO:
+      # Phase 2b: SteerActuatorDelay & SteerRatioRate
+      if self._curve_entries >= _LATERAL_MIN_CURVE:
+        override_ratio = self._curve_overrides / self._curve_entries
+        
+        # (1) SteerActuatorDelay
         current_delay = self._params.get_int("SteerActuatorDelay")
-        recommended = min(300, current_delay + _DELAY_STEP_UNIT)
-        if recommended != current_delay:
+        recommended_delay = current_delay
+        if override_ratio >= 0.30:
+          recommended_delay = min(300, current_delay + _DELAY_STEP_UNIT)
+        elif override_ratio < 0.10: # 개입이 거의 없는 안정 상태 → 지연시간 소폭 감소로 최적점 수렴
+          recommended_delay = max(50, current_delay - 10)
+          
+        if recommended_delay != current_delay:
           result["조향 (Steering)"]["SteerActuatorDelay"] = {
             "current": current_delay,
-            "recommended": recommended,
-            "band_kph": "curve entry",
+            "recommended": recommended_delay,
+            "band_kph": "커브 진입 지연 보정" if override_ratio >= 0.30 else "커브 진입 안정화 감쇄",
             "override_ratio": round(override_ratio * 100, 1),
           }
 
-      # ── Phase 2c: SteerRatioRate (커브 override 비율이 매우 높을 때) ─
-      # SteerActuatorDelay 증가로도 부족한 경우, SteerRatioRate(SR 배율)를 추가로 높임
-      if override_ratio >= _SR_RATE_OVERRIDE_RATIO:
+        # (2) SteerRatioRate
         current_sr_rate = self._params.get_int("SteerRatioRate")
         if current_sr_rate <= 0:
           current_sr_rate = 100  # 기본값 100%
-        recommended_sr = min(150, current_sr_rate + _SR_RATE_STEP_UNIT)
+        recommended_sr = current_sr_rate
+        
+        if override_ratio >= 0.40:
+          recommended_sr = min(150, current_sr_rate + _SR_RATE_STEP_UNIT)
+        elif override_ratio < 0.15: # 개입이 적은 경우 → 조향비 소폭 감소하여 더 완만하고 부드럽게
+          recommended_sr = max(90, current_sr_rate - 2)
+          
         if recommended_sr != current_sr_rate:
           result["조향 (Steering)"]["SteerRatioRate"] = {
             "current": current_sr_rate,
             "recommended": recommended_sr,
-            "band_kph": "curve entry (high override)",
+            "band_kph": "커브 강한 개입 대응 (조향 강화)" if override_ratio >= 0.40 else "부드러운 조향 감속 보정",
             "override_ratio": round(override_ratio * 100, 1),
+          }
+    
+    else:
+      # ── [B] 토크 조향 차량 튜닝 ────────────────────────────────────
+      # 1. SteerActuatorDelay
+      if self._torque_curve_entries >= 100: # 최소 샘플 수 (약 10초)
+        override_ratio = self._torque_curve_overrides / self._torque_curve_entries
+        current_delay = self._params.get_int("SteerActuatorDelay")
+        recommended_delay = current_delay
+        if override_ratio >= 0.30:
+          recommended_delay = min(300, current_delay + 10)
+        elif override_ratio < 0.10:
+          recommended_delay = max(50, current_delay - 10)
+          
+        if recommended_delay != current_delay:
+          result["조향 (Steering)"]["SteerActuatorDelay"] = {
+            "current": current_delay,
+            "recommended": recommended_delay,
+            "band_kph": "토크 커브 진입 지연 보정" if override_ratio >= 0.30 else "토크 커브 안정화 감쇄",
+            "override_ratio": round(override_ratio * 100, 1),
+          }
+
+        # 2. LateralTorqueAccelFactor & LateralTorqueKf (횡가속도 비례 피드포워드)
+        current_factor = self._params.get_int("LateralTorqueAccelFactor")
+        current_kf = self._params.get_int("LateralTorqueKf")
+        
+        recommended_factor = current_factor
+        recommended_kf = current_kf
+        
+        if override_ratio >= 0.40: # 개입 비중이 높음 → 피드포워드 상향
+          recommended_factor = min(4000, current_factor + 100)
+          recommended_kf = min(200, current_kf + 3)
+        elif override_ratio < 0.15: # 개입이 거의 없음 → 피드포워드 소폭 하향 수렴
+          recommended_factor = max(1500, current_factor - 50)
+          recommended_kf = max(50, current_kf - 1)
+          
+        if recommended_factor != current_factor:
+          result["조향 (Steering)"]["LateralTorqueAccelFactor"] = {
+            "current": current_factor,
+            "recommended": recommended_factor,
+            "band_kph": "토크 커브 선향력 상향" if override_ratio >= 0.40 else "토크 커브 선향력 안정화 감쇄",
+            "override_ratio": round(override_ratio * 100, 1),
+          }
+        if recommended_kf != current_kf:
+          result["조향 (Steering)"]["LateralTorqueKf"] = {
+            "current": current_kf,
+            "recommended": recommended_kf,
+            "band_kph": "토크 커브 피드포워드 강화" if override_ratio >= 0.40 else "토크 피드포워드 안정화 감쇄",
+            "override_ratio": round(override_ratio * 100, 1),
+          }
+
+      # 3. LateralTorqueFriction (직선 미세 지연 보정)
+      if self._torque_straight_entries >= 200: # 직선/완만 구간 약 20초
+        straight_override_ratio = self._torque_straight_overrides / self._torque_straight_entries
+        current_friction = self._params.get_int("LateralTorqueFriction")
+        recommended_friction = current_friction
+        
+        if straight_override_ratio >= 0.35: # 미세 보정 구간 개입 높음 → 마찰보상 상향
+          recommended_friction = min(300, current_friction + 5)
+        elif straight_override_ratio < 0.08: # 개입 없음 → 마찰보상 소폭 하향 수렴
+          recommended_friction = max(10, current_friction - 2)
+          
+        if recommended_friction != current_friction:
+          result["조향 (Steering)"]["LateralTorqueFriction"] = {
+            "current": current_friction,
+            "recommended": recommended_friction,
+            "band_kph": "직선 미세 불감대 해소" if straight_override_ratio >= 0.35 else "미세 조향 마찰보상 최적화",
+            "override_ratio": round(straight_override_ratio * 100, 1),
+          }
+
+      # 4. LateralTorqueKiV / LateralTorqueKpV (조향 누적 오차 피드백 보정)
+      if self._torque_error_count >= 50: # 오차가 일정 횟수 이상 누적된 경우 (약 5초 누적)
+        current_kiv = self._params.get_int("LateralTorqueKiV")
+        current_kpv = self._params.get_int("LateralTorqueKpV")
+        
+        recommended_kiv = min(100, current_kiv + 1)
+        recommended_kpv = min(300, current_kpv + 5)
+        
+        if recommended_kiv != current_kiv:
+          result["조향 (Steering)"]["LateralTorqueKiV"] = {
+            "current": current_kiv,
+            "recommended": recommended_kiv,
+            "band_kph": "조향 정상오차 쏠림 제어 (피드백)",
+            "error_ticks": self._torque_error_count,
+          }
+        if recommended_kpv != current_kpv:
+          result["조향 (Steering)"]["LateralTorqueKpV"] = {
+            "current": current_kpv,
+            "recommended": recommended_kpv,
+            "band_kph": "조향 오차 복원 속도 상향 (피드백)",
+            "error_ticks": self._torque_error_count,
           }
 
     # ── Phase 3: JLeadFactor3 (수동 제동) ───────────────────────────
