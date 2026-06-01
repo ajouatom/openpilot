@@ -89,8 +89,8 @@ CORNER_RADAR_LABELS = frozenset(("LF", "RF", "LR", "RR"))
 REAR_CORNER_RADAR_LABELS = frozenset(("LR", "RR"))
 REAR_INDICATOR_ANCHOR_FORWARD_M = EGO_FORWARD_M - VEHICLE_LENGTH_M * 0.34
 REAR_INDICATOR_ANCHOR_HEIGHT_M = 0.14
-DRIVE_VIEW_REAR_RELATIVE_M = -20.0
-DRIVE_VIEW_REAR_ROAD_MARGIN_M = 4.0
+DRIVE_VIEW_REAR_RELATIVE_M = -10.0
+DRIVE_VIEW_REAR_ROAD_MARGIN_M = 2.0
 DRIVE_VIEW_ROAD_START_M = (
     EGO_FORWARD_M + DRIVE_VIEW_REAR_RELATIVE_M - DRIVE_VIEW_REAR_ROAD_MARGIN_M
 )
@@ -2451,9 +2451,9 @@ def scene_camera(state: ClusterUiState, lane_width_m: float, anchor_x_m: float =
     ego_y_m = EGO_FORWARD_M
 
     drive_camera = CameraSpec(
-        position=Vec3(0.0, -29.0, 8.20),
-        target=Vec3(0.0, 11.0, -0.30),
-        fovy_deg=45.0,
+        position=Vec3(0.0, -24.5, 7.20),
+        target=Vec3(0.0, 9.5, -0.25),
+        fovy_deg=44.0,
     )
 
     if not state.surround_view_active:
@@ -3032,7 +3032,8 @@ def build_cluster_scene(
         )
         nearest_radar_y = min((vehicle.center.y for vehicle in selected_radar_vehicle_boxes), default=ROAD_FAR_M)
         nearest_detected_y = min(nearest_detected_y, nearest_radar_y)
-        road_start_m = min(road_start_m, max(-35.0, nearest_detected_y - 8.0))
+        candidate_road_start_m = max(-35.0, nearest_detected_y - DRIVE_VIEW_REAR_ROAD_MARGIN_M)
+        road_start_m = min(road_start_m, max(DRIVE_VIEW_ROAD_START_M, candidate_road_start_m))
     profile_scene_add(profile_add, "scene.build.setup", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
