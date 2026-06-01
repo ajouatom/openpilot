@@ -2414,7 +2414,7 @@ class ClusterUiRenderer:
         video_h = 244
         data_y = 300
         profile_stage = self._profile_start()
-        self._rounded_rect(panel_x, panel_y, panel_w, 410, 18, theme.route_panel_bg, theme.faint, 2)
+        self._rounded_rect(panel_x, panel_y, panel_w, 452, 18, theme.route_panel_bg, theme.faint, 2)
         self._profile_add("route_overlay.panel", profile_stage)
         profile_stage = self._profile_start()
         self._draw_route_video(overlay, panel_x + 10, panel_y + 10, panel_w - 20, video_h)
@@ -2482,7 +2482,7 @@ class ClusterUiRenderer:
     def _draw_route_data(self, overlay: RouteOverlay, x: float, y: float, width: float) -> None:
         theme = self._current_theme()
         self._draw_text("ROUTE DATA", x, y, 16, theme.muted)
-        for index, line in enumerate(overlay.data_lines[:10]):
+        for index, line in enumerate(overlay.data_lines[:13]):
             self._draw_text(line, x, y + 22 + index * 14, 12, theme.text)
 
     def _draw_git_status(self, status: GitBranchStatus | None) -> None:

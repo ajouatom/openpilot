@@ -367,7 +367,7 @@ def route_overlay_for_mode(overlay: RouteOverlay | None, mode: str) -> RouteOver
     if overlay is None or mode == "off":
         return None
     if mode == "compact":
-        return replace(overlay, data_lines=overlay.data_lines[:4])
+        return replace(overlay, data_lines=overlay.data_lines[:5])
     return overlay
 
 
