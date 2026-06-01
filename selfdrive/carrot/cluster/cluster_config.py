@@ -47,14 +47,26 @@ class ClusterTheme:
 CLUSTER_THEME_AUTO = 0
 CLUSTER_THEME_DARK = 1
 CLUSTER_THEME_LIGHT = 2
+CLUSTER_ENCODER_AUTO = 0
+CLUSTER_ENCODER_JPEG = 1
+CLUSTER_ENCODER_HARDWARE = 2
+CLUSTER_ENCODER_SOFTWARE = 3
 CLUSTER_HUD_PARAM = "ClusterHud"
+CLUSTER_HUD_DEBUG_PARAM = "ClusterHudDebug"
 CLUSTER_BRIGHTNESS_PARAM = "ClusterHudBrightness"
 CLUSTER_ENCODER_PARAM = "ClusterHudEncoder"
+CLUSTER_CORE_MODE_PARAM = "ClusterHudCoreMode"
+CLUSTER_PRIORITY_PARAM = "ClusterHudPriority"
 CLUSTER_THEME_PARAM = "ClusterHudTheme"
 CLUSTER_LIVE_FPS_PARAM = "ClusterHudLiveFps"
 CLUSTER_RADAR_INFO_PARAM = "ClusterHudRadarInfo"
 CLUSTER_RADAR_DISPLAY_PARAM = "ClusterHudRadarDisplay"
 CLUSTER_RADAR_SOURCE_COLOR_PARAM = "ClusterHudRadarSourceColor"
+CLUSTER_CORE_MODE_DEDICATED = 0
+CLUSTER_CORE_MODE_ALL = 1
+CLUSTER_PRIORITY_DEFAULT = 10
+CLUSTER_PRIORITY_MIN = 1
+CLUSTER_PRIORITY_MAX = 99
 CLUSTER_SCREEN_MODE_DEFAULT = 0
 CLUSTER_SCREEN_MODE_DEBUG = 1
 CLUSTER_SCREEN_MODE_DEBUG_SYSTEM = 2
@@ -178,6 +190,77 @@ def normalize_cluster_live_fps(value: object) -> float:
     except (TypeError, ValueError):
         return 0.0
     return CLUSTER_LIVE_FPS_BY_MODE.get(mode, 0.0)
+
+
+def normalize_cluster_encoder_mode(value: object) -> int:
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        aliases = {
+            "auto": CLUSTER_ENCODER_AUTO,
+            "jpeg": CLUSTER_ENCODER_JPEG,
+            "jpg": CLUSTER_ENCODER_JPEG,
+            "hardware": CLUSTER_ENCODER_HARDWARE,
+            "hw": CLUSTER_ENCODER_HARDWARE,
+            "h264": CLUSTER_ENCODER_HARDWARE,
+            "native": CLUSTER_ENCODER_HARDWARE,
+            "software": CLUSTER_ENCODER_SOFTWARE,
+            "sw": CLUSTER_ENCODER_SOFTWARE,
+            "ffmpeg": CLUSTER_ENCODER_SOFTWARE,
+        }
+        if normalized in aliases:
+            return aliases[normalized]
+        try:
+            value = int(normalized)
+        except ValueError:
+            return CLUSTER_ENCODER_AUTO
+    try:
+        mode = int(value)
+    except (TypeError, ValueError):
+        return CLUSTER_ENCODER_AUTO
+    if mode in (
+        CLUSTER_ENCODER_AUTO,
+        CLUSTER_ENCODER_JPEG,
+        CLUSTER_ENCODER_HARDWARE,
+        CLUSTER_ENCODER_SOFTWARE,
+    ):
+        return mode
+    return CLUSTER_ENCODER_AUTO
+
+
+def normalize_cluster_core_mode(value: object) -> int:
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in ("all", "all-cores", "all_cores"):
+            return CLUSTER_CORE_MODE_ALL
+        if normalized in ("dedicated", "default", "cluster", "1,2,3,4"):
+            return CLUSTER_CORE_MODE_DEDICATED
+        try:
+            value = int(normalized)
+        except ValueError:
+            return CLUSTER_CORE_MODE_DEDICATED
+    try:
+        mode = int(value)
+    except (TypeError, ValueError):
+        return CLUSTER_CORE_MODE_DEDICATED
+    if mode == CLUSTER_CORE_MODE_ALL:
+        return CLUSTER_CORE_MODE_ALL
+    return CLUSTER_CORE_MODE_DEDICATED
+
+
+def normalize_cluster_priority(value: object) -> int:
+    if isinstance(value, str):
+        normalized = value.strip()
+        try:
+            value = int(normalized)
+        except ValueError:
+            return CLUSTER_PRIORITY_DEFAULT
+    try:
+        priority = int(value)
+    except (TypeError, ValueError):
+        return CLUSTER_PRIORITY_DEFAULT
+    if priority < CLUSTER_PRIORITY_MIN:
+        return CLUSTER_PRIORITY_DEFAULT
+    return min(CLUSTER_PRIORITY_MAX, priority)
 
 
 def normalize_cluster_brightness_percent(value: object) -> int:
@@ -337,6 +420,7 @@ ROAD_EDGE = LIGHT_CLUSTER_THEME.road_edge
 WHITE = (255, 255, 255)
 BLUE = (38, 132, 255)
 BLUE_SOFT = (168, 207, 255)
+YELLOW = (218, 202, 37)
 GREEN = (20, 188, 104)
 AMBER = (244, 172, 54)
 RED = (222, 72, 64)

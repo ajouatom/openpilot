@@ -8,7 +8,22 @@ import time
 from typing import Any
 
 
-GC_POST_FREEZE_THRESHOLDS = (3000, 30, 30)
+GC_POST_FREEZE_THRESHOLDS = (60000, 120, 120)
+
+
+def _post_freeze_gc_thresholds() -> tuple[int, int, int]:
+    text = os.environ.get("CLUSTER_GC_THRESHOLDS", "").strip()
+    if not text:
+        return GC_POST_FREEZE_THRESHOLDS
+    try:
+        values = tuple(int(part.strip()) for part in text.replace(":", ",").split(","))
+    except ValueError:
+        print(f"Warning: invalid CLUSTER_GC_THRESHOLDS={text!r}; using defaults", flush=True)
+        return GC_POST_FREEZE_THRESHOLDS
+    if len(values) != 3 or any(value <= 0 for value in values):
+        print(f"Warning: invalid CLUSTER_GC_THRESHOLDS={text!r}; using defaults", flush=True)
+        return GC_POST_FREEZE_THRESHOLDS
+    return values
 
 
 def _read_proc_status() -> dict[str, str]:
@@ -202,4 +217,4 @@ def freeze_gc_after_init(profile: ProfileReporter) -> None:
     profile_stage = time.perf_counter()
     freeze()
     profile.add_elapsed("gc.freeze_init.freeze", profile_stage)
-    gc.set_threshold(*GC_POST_FREEZE_THRESHOLDS)
+    gc.set_threshold(*_post_freeze_gc_thresholds())

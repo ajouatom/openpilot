@@ -54,8 +54,11 @@ RADAR_ROAD_EDGE_HARD_CLEARANCE_M = 0.50
 RADAR_ROAD_EDGE_STATIONARY_CLEARANCE_M = 1.05
 RADAR_ROAD_EDGE_OUTSIDE_MARGIN_M = 0.0
 RADAR_ROAD_EDGE_KEEP_OUTSIDE_MARGIN_M = 0.85
+RADAR_ROAD_EDGE_STABLE_VEHICLE_OUTSIDE_MARGIN_M = 2.25
 RADAR_ROAD_EDGE_KEEP_SPEED_KPH = 18.0
 RADAR_ROAD_EDGE_KEEP_MIN_VALID_COUNT = 24
+RADAR_ROAD_EDGE_STABLE_VEHICLE_MIN_VALID_COUNT = 35
+RADAR_ROAD_EDGE_STABLE_VEHICLE_MAX_ACCEL_MPS2 = 5.0
 RADAR_STATIC_OBJECT_SPEED_MPS = 1.25
 RADAR_STATIC_OBJECT_SPEED_KPH = 8.0
 RADAR_SIDE_STATIC_LATERAL_LANES = 0.58
@@ -78,18 +81,41 @@ RADAR_POINT_MERGE_SPEED_KPH = 3.0
 RADAR_MERGE_LONGITUDINAL_MIN_M = 3.0
 RADAR_MERGE_LONGITUDINAL_MAX_M = 7.0
 RADAR_MERGE_LATERAL_M = 1.35
+RADAR_FRONT_DETECTED_MERGE_LONGITUDINAL_MIN_M = 5.0
+RADAR_FRONT_DETECTED_MERGE_LONGITUDINAL_MAX_M = 11.0
+RADAR_FRONT_DETECTED_MERGE_LATERAL_M = 2.25
 RADAR_MERGED_SOURCE_TAG = "+radar:"
 CORNER_RADAR_LABELS = frozenset(("LF", "RF", "LR", "RR"))
-REAR_CORNER_RADAR_LABELS = frozenset(("LR", "RR"))
+DRIVE_CAMERA_FORWARD_SHIFT_M = 5.0
+DRIVE_VIEW_REAR_RELATIVE_M = -5.0
+DRIVE_VIEW_REAR_ROAD_MARGIN_M = 8.0
+REAR_RENDER_DISTANCE_SCALE = 0.5
+DRIVE_VIEW_REAR_VISIBLE_M = EGO_FORWARD_M + DRIVE_VIEW_REAR_RELATIVE_M
+DRIVE_VIEW_ROAD_START_M = (
+    DRIVE_VIEW_REAR_VISIBLE_M - DRIVE_VIEW_REAR_ROAD_MARGIN_M
+)
 VEHICLE_BADGE_TTC_S = 9.9
 VEHICLE_BADGE_ACCEL_MPS2 = 1.0
 MODEL_LINE_STRIP_GROUP_CACHE_LIMIT = 48
 MODEL_LINE_STRIP_GROUP_CACHE_GRID_M = 0.5
+MODEL_LINE_STRIP_GROUP_CACHE_POINT_GRID_M = 0.05
 MODEL_LINE_STRIP_GROUP_CACHE_COLOR: Color = (0, 0, 0, 0)
+MODEL_LINE_RENDER_POINT_KEY_CACHE_LIMIT = 256
+MODEL_LINE_RENDER_POINT_LIMIT = 0
+LANE_OFFSET_STRIP_CACHE_LIMIT = 64
+LANE_OFFSET_STRIP_CACHE_OFFSET_GRID = 0.01
+LANE_OFFSET_STRIP_CACHE_STEERING_GRID = 0.002
+LANE_OFFSET_STRIP_CACHE_LANE_WIDTH_GRID_M = 0.02
+ROAD_EDGE_OFFSET_STRIP_CACHE_LIMIT = 48
+ROAD_EDGE_OFFSET_STRIP_CACHE_OFFSET_GRID = 0.01
+ROAD_EDGE_OFFSET_STRIP_CACHE_STEERING_GRID = 0.002
+ROAD_EDGE_OFFSET_STRIP_CACHE_LANE_WIDTH_GRID_M = 0.02
+PLANNED_PATH_STRIP_CACHE_LIMIT = 48
 ROAD_STEPS_SURROUND = 96
 ROAD_STEPS_MODEL = 48
 ROAD_STEPS_SIM = 64
 STATIC_LINE_STEPS = 56
+ROAD_EDGE_OFFSET_STEPS = STATIC_LINE_STEPS
 PLANNED_PATH_FALLBACK_STEPS = 32
 MODEL_PATH_METRIC_SEGMENT_LIMIT = 14
 LANE_MARKING_SHADOW_HEIGHT_M = 0.026
@@ -104,11 +130,21 @@ ROAD_EDGE_OUTSIDE_SHADOW_OFFSET_M = 0.13
 ROAD_EDGE_BODY_OFFSET_M = 0.055
 ROAD_EDGE_CREST_OFFSET_M = -0.045
 ROAD_EDGE_BACKING_COLOR = LIGHT_CLUSTER_THEME.road_edge_backing
+ROAD_EDGE_MODEL_POINT_LIMIT = 0
+STYLE_MESH_STRIP_GROUP_CACHE_LIMIT = 128
+MERGED_MESH_STRIP_CACHE_LIMIT = 128
 PATH_SHADOW_LAYER_M = 0.024
 PATH_UNCERTAINTY_LAYER_M = PATH_HEIGHT_M + 0.002
 PATH_BODY_LAYER_M = PATH_HEIGHT_M + 0.046
 PATH_METRIC_LAYER_M = PATH_HEIGHT_M + 0.066
 PATH_HIGHLIGHT_LAYER_M = PATH_HEIGHT_M + 0.088
+FOLLOW_DISTANCE_MARKER_BACKING_LAYER_M = PATH_HEIGHT_M + 0.116
+FOLLOW_DISTANCE_MARKER_BODY_LAYER_M = PATH_HEIGHT_M + 0.132
+FOLLOW_DISTANCE_MARKER_BACKING_FORWARD_M = 0.28
+FOLLOW_DISTANCE_MARKER_BODY_FORWARD_M = 0.14
+FOLLOW_DISTANCE_MARKER_BACKING_EXTRA_WIDTH_M = 0.22
+FOLLOW_DISTANCE_MARKER_BACKING_COLOR: Color = (42, 0, 38, 230)
+FOLLOW_DISTANCE_MARKER_BODY_COLOR: Color = (255, 0, 220, 248)
 LANE_HIGHLIGHT_COLOR = (64, 148, 255)
 LANE_HIGHLIGHT_ALPHA = 220
 LANE_HIGHLIGHT_ROUTE_ALPHA = 170
@@ -157,6 +193,7 @@ class VehicleBox:
     confidence: float = 1.0
     label: str = ""
     source: str = ""
+    longitudinal_m: float | None = None
     relative_speed_mps: float | None = None
     absolute_speed_kph: float | None = None
     acceleration_mps2: float | None = None
@@ -184,29 +221,65 @@ class RadarPointMarker:
 
 
 @dataclass(frozen=True, slots=True)
-class RearVehicleIndicator:
-    center: Vec3
-    anchor: Vec3
-    label: str
-    lane_side: str
-    longitudinal_m: float
-    lateral_m: float
-    source: str = ""
-
-
-@dataclass(frozen=True, slots=True)
 class PathBlocker:
     offset: float
     forward_m: float
     length_m: float
 
 
-ModelLineStripGroups = tuple[tuple[MeshStrip, ...], ...] | None
+MeshStripGroups = tuple[tuple[MeshStrip, ...], ...]
+ModelLineStripGroups = MeshStripGroups | None
 ModelLineStripGeometrySpecs = tuple[tuple[int, float], ...]
-ModelLineStripCacheKey = tuple[int, float, float, str, bool, ModelLineStripGeometrySpecs]
-_MODEL_LINE_STRIP_GROUP_CACHE: OrderedDict[
-    ModelLineStripCacheKey,
-    tuple[tuple[ModelPathPoint, ...], ModelLineStripGroups],
+ModelLineStripPointKey = tuple[tuple[int, int], ...]
+ModelLineStripCacheKey = tuple[
+    ModelLineStripPointKey,
+    float,
+    float,
+    str,
+    bool,
+    ModelLineStripGeometrySpecs,
+]
+_MODEL_LINE_STRIP_GROUP_CACHE: OrderedDict[ModelLineStripCacheKey, ModelLineStripGroups] = OrderedDict()
+ModelLineRenderPointKeyCacheKey = tuple[int, int]
+_MODEL_LINE_RENDER_POINT_KEY_CACHE: OrderedDict[
+    ModelLineRenderPointKeyCacheKey,
+    tuple[tuple[ModelPathPoint, ...], tuple[ModelPathPoint, ...], ModelLineStripPointKey],
+] = OrderedDict()
+LaneOffsetStripCacheKey = tuple[
+    float,
+    float,
+    float,
+    float,
+    float,
+    str,
+    ModelLineStripGeometrySpecs,
+]
+_LANE_OFFSET_STRIP_CACHE: OrderedDict[LaneOffsetStripCacheKey, tuple[tuple[MeshStrip, ...], ...]] = OrderedDict()
+RoadEdgeOffsetLayerGeometrySpecs = tuple[tuple[int, float, float], ...]
+RoadEdgeOffsetStripGroups = tuple[tuple[MeshStrip, ...], ...]
+RoadEdgeOffsetStripCacheKey = tuple[
+    float,
+    float,
+    float,
+    float,
+    float,
+    float,
+    RoadEdgeOffsetLayerGeometrySpecs,
+]
+_ROAD_EDGE_OFFSET_STRIP_CACHE: OrderedDict[RoadEdgeOffsetStripCacheKey, RoadEdgeOffsetStripGroups] = OrderedDict()
+PlannedPathStripSpecs = tuple[tuple[float, Color, float], ...]
+PlannedPathStripCacheKey = tuple[tuple[Vec3, ...], PlannedPathStripSpecs]
+_PLANNED_PATH_STRIP_CACHE: OrderedDict[PlannedPathStripCacheKey, tuple[MeshStrip, ...]] = OrderedDict()
+StyledMeshStripGroupCacheKey = tuple[int, tuple[tuple[int, Color, float], ...], tuple[float, ...]]
+_STYLE_MESH_STRIP_GROUP_CACHE: OrderedDict[
+    StyledMeshStripGroupCacheKey,
+    tuple[MeshStripGroups, MeshStripGroups],
+] = OrderedDict()
+MergedMeshStripCacheKey = tuple[tuple[int, int], ...]
+MergedMeshStripRefs = tuple[tuple[tuple[Vec3, ...], tuple[Vec3, ...]], ...]
+_MERGED_MESH_STRIP_CACHE: OrderedDict[
+    MergedMeshStripCacheKey,
+    tuple[MergedMeshStripRefs, tuple[Vec3, ...], tuple[Vec3, ...]],
 ] = OrderedDict()
 
 
@@ -221,7 +294,6 @@ class ClusterScene:
     planned_path: tuple[MeshStrip, ...]
     radar_points: tuple[RadarPointMarker, ...]
     vehicles: tuple[VehicleBox, ...]
-    rear_indicators: tuple[RearVehicleIndicator, ...] = ()
 
 
 def vec3_with_x_offset(vec: Vec3, x_offset_m: float) -> Vec3:
@@ -286,6 +358,16 @@ def sample_range(start_m: float, end_m: float, steps: int) -> tuple[float, ...]:
 
 def data_scene_forward_m(relative_forward_m: float) -> float:
     return EGO_FORWARD_M + relative_forward_m
+
+
+def render_relative_forward_m(relative_forward_m: float) -> float:
+    if relative_forward_m >= 0.0:
+        return relative_forward_m
+    return relative_forward_m * REAR_RENDER_DISTANCE_SCALE
+
+
+def render_scene_forward_m(relative_forward_m: float) -> float:
+    return data_scene_forward_m(render_relative_forward_m(relative_forward_m))
 
 
 def scene_data_relative_forward_m(forward_m: float) -> float:
@@ -484,15 +566,13 @@ def model_line_centerline(
     height_m: float,
     lateral_shift_m: float = 0.0,
 ) -> tuple[Vec3, ...]:
-    visible_points: list[ModelPathPoint] = []
+    centerline: list[Vec3] = []
+    ego_forward_m = EGO_FORWARD_M
     for point in model_points:
-        forward_m = data_scene_forward_m(point.forward_m)
+        forward_m = ego_forward_m + point.forward_m
         if start_m <= forward_m <= end_m:
-            visible_points.append(point)
-    return tuple(
-        Vec3(point.lateral_m + lateral_shift_m, data_scene_forward_m(point.forward_m), height_m)
-        for point in visible_points
-    )
+            centerline.append(Vec3(point.lateral_m + lateral_shift_m, forward_m, height_m))
+    return tuple(centerline)
 
 
 def extend_centerline_rearward_to_first_point(
@@ -547,8 +627,24 @@ def lane_dash_cycle_offset(distance_m: float, dash_phase_m: float, cycle_m: floa
     return cycle_offset_m
 
 
-def lane_dash_phase_m(centerline: tuple[Vec3, ...]) -> float:
-    return centerline[0].y if centerline else 0.0
+def lane_dash_phase_m(
+    centerline: tuple[Vec3, ...],
+    dash_m: float = LANE_DASH_LENGTH_M,
+    gap_m: float = LANE_DASH_GAP_M,
+) -> float:
+    if not centerline:
+        return 0.0
+    # Start the visible rear bound with paint even when road geometry begins below the screen.
+    visible_rear_distance_m = max(0.0, DRIVE_VIEW_REAR_VISIBLE_M - centerline[0].y)
+    return (-visible_rear_distance_m) % (dash_m + gap_m)
+
+
+def dashed_lane_start_cursor_m(start_m: float, dash_m: float, gap_m: float) -> float:
+    if start_m >= DRIVE_VIEW_REAR_VISIBLE_M:
+        return start_m
+    cycle_m = dash_m + gap_m
+    cycles_to_visible = math.ceil((DRIVE_VIEW_REAR_VISIBLE_M - start_m) / cycle_m)
+    return DRIVE_VIEW_REAR_VISIBLE_M - cycles_to_visible * cycle_m
 
 
 def dashed_centerline_segments(
@@ -563,7 +659,7 @@ def dashed_centerline_segments(
     segments: list[tuple[Vec3, ...]] = []
     current_dash: list[Vec3] = []
     distance_m = 0.0
-    dash_phase_m = lane_dash_phase_m(centerline)
+    dash_phase_m = lane_dash_phase_m(centerline, dash_m, gap_m)
     previous = centerline[0]
     eps = 0.0001
 
@@ -646,7 +742,7 @@ def lane_marking_segments_for_marking(
     segments: list[tuple[Vec3, ...]] = []
     dash_m = LANE_DASH_LENGTH_M
     cycle_m = dash_m + LANE_DASH_GAP_M
-    cursor = start_m - (start_m % cycle_m)
+    cursor = dashed_lane_start_cursor_m(start_m, dash_m, LANE_DASH_GAP_M)
     while cursor < end_m:
         dash_start = max(cursor, start_m)
         dash_end = min(cursor + dash_m, end_m)
@@ -692,6 +788,23 @@ def strips_from_centerline_width_specs(
     )
 
 
+def cached_strips_from_centerline_width_specs(
+    points: tuple[Vec3, ...],
+    specs: PlannedPathStripSpecs,
+) -> tuple[MeshStrip, ...]:
+    key = (points, specs)
+    cached = _PLANNED_PATH_STRIP_CACHE.get(key)
+    if cached is not None:
+        _PLANNED_PATH_STRIP_CACHE.move_to_end(key)
+        return cached
+
+    strips = strips_from_centerline_width_specs(points, specs)
+    _PLANNED_PATH_STRIP_CACHE[key] = strips
+    while len(_PLANNED_PATH_STRIP_CACHE) > PLANNED_PATH_STRIP_CACHE_LIMIT:
+        _PLANNED_PATH_STRIP_CACHE.popitem(last=False)
+    return strips
+
+
 def lane_marking_strip_groups_from_segments(
     segments: tuple[tuple[Vec3, ...], ...],
     specs: tuple[tuple[int, Color, float], ...],
@@ -700,10 +813,11 @@ def lane_marking_strip_groups_from_segments(
         return tuple(() for _ in specs)
 
     half_widths = tuple(max(0.08, width_px * 0.022) * 0.5 for width_px, _, _ in specs)
+    heights = tuple(height_m for _, _, height_m in specs)
     left_groups: list[list[Vec3]] = [[] for _ in specs]
     right_groups: list[list[Vec3]] = [[] for _ in specs]
     for segment in segments:
-        append_lane_marking_segment_strip_groups(segment, half_widths, specs, left_groups, right_groups)
+        append_lane_marking_segment_strip_groups(segment, half_widths, heights, left_groups, right_groups)
 
     return finish_lane_marking_strip_groups(left_groups, right_groups, specs)
 
@@ -717,10 +831,11 @@ def lane_marking_strip_groups_from_centerline(
         return tuple(() for _ in specs)
 
     half_widths = tuple(max(0.08, width_px * 0.022) * 0.5 for width_px, _, _ in specs)
+    heights = tuple(height_m for _, _, height_m in specs)
     left_groups: list[list[Vec3]] = [[] for _ in specs]
     right_groups: list[list[Vec3]] = [[] for _ in specs]
     if style == "solid":
-        append_lane_marking_segment_strip_groups(centerline, half_widths, specs, left_groups, right_groups)
+        append_lane_marking_segment_strip_groups(centerline, half_widths, heights, left_groups, right_groups)
         return finish_lane_marking_strip_groups(left_groups, right_groups, specs)
 
     dash_m = LANE_DASH_LENGTH_M
@@ -728,7 +843,7 @@ def lane_marking_strip_groups_from_centerline(
     cycle_m = dash_m + gap_m
     current_dash: list[Vec3] = []
     distance_m = 0.0
-    dash_phase_m = lane_dash_phase_m(centerline)
+    dash_phase_m = lane_dash_phase_m(centerline, dash_m, gap_m)
     previous = centerline[0]
     eps = 0.0001
 
@@ -762,7 +877,7 @@ def lane_marking_strip_groups_from_centerline(
                     append_lane_marking_segment_strip_groups(
                         current_dash,
                         half_widths,
-                        specs,
+                        heights,
                         left_groups,
                         right_groups,
                     )
@@ -771,7 +886,7 @@ def lane_marking_strip_groups_from_centerline(
                 append_lane_marking_segment_strip_groups(
                     current_dash,
                     half_widths,
-                    specs,
+                    heights,
                     left_groups,
                     right_groups,
                 )
@@ -784,7 +899,7 @@ def lane_marking_strip_groups_from_centerline(
         previous = current
 
     if len(current_dash) >= 2:
-        append_lane_marking_segment_strip_groups(current_dash, half_widths, specs, left_groups, right_groups)
+        append_lane_marking_segment_strip_groups(current_dash, half_widths, heights, left_groups, right_groups)
 
     return finish_lane_marking_strip_groups(left_groups, right_groups, specs)
 
@@ -792,28 +907,46 @@ def lane_marking_strip_groups_from_centerline(
 def append_lane_marking_segment_strip_groups(
     segment: tuple[Vec3, ...] | list[Vec3],
     half_widths: tuple[float, ...],
-    specs: tuple[tuple[int, Color, float], ...],
+    heights: tuple[float, ...],
     left_groups: list[list[Vec3]],
     right_groups: list[list[Vec3]],
 ) -> None:
-    if len(segment) < 2:
+    point_count = len(segment)
+    if point_count < 2:
         return
+    vec3 = Vec3
+    sqrt = math.sqrt
+    group_specs = tuple(zip(half_widths, heights, left_groups, right_groups))
+    last_index = point_count - 1
     for index, point in enumerate(segment):
-        previous_point = segment[max(0, index - 1)]
-        next_point = segment[min(len(segment) - 1, index + 1)]
-        tangent_x, tangent_y = normalize2(
-            next_point.x - previous_point.x,
-            next_point.y - previous_point.y,
-        )
-        right_x = tangent_y
-        right_y = -tangent_x
-        for spec_index, half_width in enumerate(half_widths):
-            height_m = specs[spec_index][2]
-            left = Vec3(point.x - right_x * half_width, point.y - right_y * half_width, height_m)
-            right = Vec3(point.x + right_x * half_width, point.y + right_y * half_width, height_m)
-            left_group = left_groups[spec_index]
-            right_group = right_groups[spec_index]
-            if index == 0 and left_group:
+        if index == 0:
+            previous_point = segment[0]
+            next_point = segment[1]
+        elif index == last_index:
+            previous_point = segment[last_index - 1]
+            next_point = segment[last_index]
+        else:
+            previous_point = segment[index - 1]
+            next_point = segment[index + 1]
+
+        dx = next_point.x - previous_point.x
+        dy = next_point.y - previous_point.y
+        length = sqrt(dx * dx + dy * dy)
+        if length <= 0.0001:
+            right_x = 1.0
+            right_y = -0.0
+        else:
+            inverse_length = 1.0 / length
+            right_x = dy * inverse_length
+            right_y = -dx * inverse_length
+
+        point_x = point.x
+        point_y = point.y
+        first_point = index == 0
+        for half_width, height_m, left_group, right_group in group_specs:
+            left = vec3(point_x - right_x * half_width, point_y - right_y * half_width, height_m)
+            right = vec3(point_x + right_x * half_width, point_y + right_y * half_width, height_m)
+            if first_point and left_group:
                 previous_right = right_group[-1]
                 left_group.append(previous_right)
                 right_group.append(previous_right)
@@ -834,6 +967,91 @@ def finish_lane_marking_strip_groups(
         else ()
         for index, (_, color, _) in enumerate(specs)
     )
+
+
+def cached_or_merged_mesh_strip(strips: tuple[MeshStrip, ...]) -> MeshStrip | None:
+    if len(strips) == 1:
+        return strips[0]
+
+    first = strips[0]
+    key = tuple((id(strip.left), id(strip.right)) for strip in strips)
+    cached = _MERGED_MESH_STRIP_CACHE.get(key)
+    if cached is not None:
+        cached_refs, merged_left, merged_right = cached
+        if len(cached_refs) == len(strips) and all(
+            left_ref is strip.left and right_ref is strip.right
+            for (left_ref, right_ref), strip in zip(cached_refs, strips)
+        ):
+            _MERGED_MESH_STRIP_CACHE.move_to_end(key)
+            return MeshStrip(
+                left=merged_left,
+                right=merged_right,
+                color=first.color,
+                x_offset_m=first.x_offset_m,
+            )
+        _MERGED_MESH_STRIP_CACHE.pop(key, None)
+
+    left_group: list[Vec3] = []
+    right_group: list[Vec3] = []
+    for strip in strips:
+        count = min(len(strip.left), len(strip.right))
+        if count < 2:
+            continue
+        if left_group:
+            previous_right = right_group[-1]
+            next_left = strip.left[0]
+            left_group.append(previous_right)
+            right_group.append(previous_right)
+            left_group.append(next_left)
+            right_group.append(next_left)
+        left_group.extend(strip.left[:count])
+        right_group.extend(strip.right[:count])
+
+    if len(left_group) < 2 or len(right_group) < 2:
+        return None
+
+    merged_left = tuple(left_group)
+    merged_right = tuple(right_group)
+    _MERGED_MESH_STRIP_CACHE[key] = (
+        tuple((strip.left, strip.right) for strip in strips),
+        merged_left,
+        merged_right,
+    )
+    merged = MeshStrip(
+        left=merged_left,
+        right=merged_right,
+        color=first.color,
+        x_offset_m=first.x_offset_m,
+    )
+    while len(_MERGED_MESH_STRIP_CACHE) > MERGED_MESH_STRIP_CACHE_LIMIT:
+        _MERGED_MESH_STRIP_CACHE.popitem(last=False)
+    return merged
+
+
+def merge_mesh_strips_by_style(strips: Iterable[MeshStrip]) -> tuple[MeshStrip, ...]:
+    groups: OrderedDict[tuple[Color, float], list[MeshStrip]] = OrderedDict()
+    for strip in strips:
+        if min(len(strip.left), len(strip.right)) < 2:
+            continue
+        key = (strip.color, strip.x_offset_m)
+        group = groups.get(key)
+        if group is None:
+            groups[key] = [strip]
+        else:
+            group.append(strip)
+
+    merged: list[MeshStrip] = []
+    for group in groups.values():
+        if len(group) == 1:
+            merged.append(group[0])
+        else:
+            group_tuple = tuple(group)
+            merged_strip = cached_or_merged_mesh_strip(group_tuple)
+            if merged_strip is None:
+                merged.extend(group_tuple)
+            else:
+                merged.append(merged_strip)
+    return tuple(merged)
 
 
 def model_line_geometry_specs(
@@ -858,6 +1076,62 @@ def model_line_cache_end_m(end_m: float) -> float:
     return math.ceil(end_m / grid_m) * grid_m
 
 
+def cache_grid_value(value: float, grid_m: float) -> float:
+    return round(value / grid_m) * grid_m
+
+
+def model_line_cache_point_key(model_points: tuple[ModelPathPoint, ...]) -> ModelLineStripPointKey:
+    grid_scale = 1.0 / MODEL_LINE_STRIP_GROUP_CACHE_POINT_GRID_M
+    round_value = round
+    return tuple(
+        (
+            round_value(point.forward_m * grid_scale),
+            round_value(point.lateral_m * grid_scale),
+        )
+        for point in model_points
+    )
+
+
+def model_line_render_points_and_key(
+    model_points: tuple[ModelPathPoint, ...],
+    point_limit: int,
+) -> tuple[tuple[ModelPathPoint, ...], ModelLineStripPointKey]:
+    cache_key = (id(model_points), int(point_limit))
+    cached = _MODEL_LINE_RENDER_POINT_KEY_CACHE.get(cache_key)
+    if cached is not None:
+        cached_model_points, render_points, point_key = cached
+        if cached_model_points is model_points:
+            _MODEL_LINE_RENDER_POINT_KEY_CACHE.move_to_end(cache_key)
+            return render_points, point_key
+        _MODEL_LINE_RENDER_POINT_KEY_CACHE.pop(cache_key, None)
+
+    point_count = len(model_points)
+    if point_limit <= 0 or point_count <= point_limit:
+        render_points = model_points
+    else:
+        last_index = point_count - 1
+        selected: list[ModelPathPoint] = []
+        previous_index = -1
+        for output_index in range(point_limit):
+            index = round(output_index * last_index / (point_limit - 1))
+            if index == previous_index:
+                continue
+            selected.append(model_points[index])
+            previous_index = index
+        render_points = tuple(selected)
+
+    point_key = model_line_cache_point_key(render_points)
+    _MODEL_LINE_RENDER_POINT_KEY_CACHE[cache_key] = (model_points, render_points, point_key)
+    while len(_MODEL_LINE_RENDER_POINT_KEY_CACHE) > MODEL_LINE_RENDER_POINT_KEY_CACHE_LIMIT:
+        _MODEL_LINE_RENDER_POINT_KEY_CACHE.popitem(last=False)
+    return render_points, point_key
+
+
+def model_line_points_for_render(model_points: tuple[ModelPathPoint, ...]) -> tuple[ModelPathPoint, ...]:
+    render_points, _ = model_line_render_points_and_key(model_points, MODEL_LINE_RENDER_POINT_LIMIT)
+    return render_points
+
+
 def cached_model_line_strip_groups(
     model_points: tuple[ModelPathPoint, ...],
     start_m: float,
@@ -865,12 +1139,17 @@ def cached_model_line_strip_groups(
     specs: tuple[tuple[int, Color, float], ...],
     style: str,
     extend_before_model: bool,
+    profile_add: ProfileAdd | None = None,
+    profile_prefix: str = "scene.model_line",
 ) -> ModelLineStripGroups:
     cache_start_m = model_line_cache_start_m(start_m)
     cache_end_m = model_line_cache_end_m(end_m)
     geometry_specs = model_line_geometry_specs(specs)
+    profile_stage = profile_scene_start(profile_add)
+    render_points, point_key = model_line_render_points_and_key(model_points, MODEL_LINE_RENDER_POINT_LIMIT)
+    profile_scene_add(profile_add, f"{profile_prefix}.key", profile_stage)
     key = (
-        id(model_points),
+        point_key,
         cache_start_m,
         cache_end_m,
         style,
@@ -878,28 +1157,128 @@ def cached_model_line_strip_groups(
         geometry_specs,
     )
     cached = _MODEL_LINE_STRIP_GROUP_CACHE.get(key)
-    if cached is not None and cached[0] is model_points:
-        _MODEL_LINE_STRIP_GROUP_CACHE.move_to_end(key)
-        return cached[1]
     if cached is not None:
-        del _MODEL_LINE_STRIP_GROUP_CACHE[key]
+        _MODEL_LINE_STRIP_GROUP_CACHE.move_to_end(key)
+        profile_scene_add_elapsed(profile_add, f"{profile_prefix}.hit", 0.0)
+        return cached
 
-    centerline = model_line_centerline(model_points, cache_start_m, cache_end_m, 0.0)
+    profile_scene_add_elapsed(profile_add, f"{profile_prefix}.miss", 0.0)
+    profile_stage = profile_scene_start(profile_add)
+    centerline = model_line_centerline(render_points, cache_start_m, cache_end_m, 0.0)
+    profile_scene_add(profile_add, f"{profile_prefix}.centerline", profile_stage)
     if len(centerline) < 2:
         groups: ModelLineStripGroups = None if extend_before_model else tuple(() for _ in geometry_specs)
     else:
         if extend_before_model:
+            profile_stage = profile_scene_start(profile_add)
             centerline = extend_model_centerline_rearward(centerline, cache_start_m)
+            profile_scene_add(profile_add, f"{profile_prefix}.extend", profile_stage)
+        profile_stage = profile_scene_start(profile_add)
         groups = lane_marking_strip_groups_from_centerline(
             centerline,
             model_line_placeholder_specs(geometry_specs),
             style,
         )
+        profile_scene_add(profile_add, f"{profile_prefix}.strips", profile_stage)
 
-    _MODEL_LINE_STRIP_GROUP_CACHE[key] = (model_points, groups)
+    _MODEL_LINE_STRIP_GROUP_CACHE[key] = groups
     while len(_MODEL_LINE_STRIP_GROUP_CACHE) > MODEL_LINE_STRIP_GROUP_CACHE_LIMIT:
         _MODEL_LINE_STRIP_GROUP_CACHE.popitem(last=False)
     return groups
+
+
+def cached_lane_offset_strip_groups(
+    offset: float,
+    steering: float,
+    lane_width_m: float,
+    start_m: float,
+    end_m: float,
+    specs: tuple[tuple[int, Color, float], ...],
+    style: str,
+) -> tuple[tuple[MeshStrip, ...], ...]:
+    cache_offset = cache_grid_value(offset, LANE_OFFSET_STRIP_CACHE_OFFSET_GRID)
+    cache_steering = cache_grid_value(steering, LANE_OFFSET_STRIP_CACHE_STEERING_GRID)
+    cache_lane_width_m = max(
+        0.1,
+        cache_grid_value(lane_width_m, LANE_OFFSET_STRIP_CACHE_LANE_WIDTH_GRID_M),
+    )
+    cache_start_m = model_line_cache_start_m(start_m)
+    cache_end_m = model_line_cache_end_m(end_m)
+    geometry_specs = model_line_geometry_specs(specs)
+    key = (
+        cache_offset,
+        cache_steering,
+        cache_lane_width_m,
+        cache_start_m,
+        cache_end_m,
+        style,
+        geometry_specs,
+    )
+    cached = _LANE_OFFSET_STRIP_CACHE.get(key)
+    if cached is not None:
+        _LANE_OFFSET_STRIP_CACHE.move_to_end(key)
+        return cached
+
+    placeholder_specs = model_line_placeholder_specs(geometry_specs)
+    if style == "solid":
+        centerline = lane_centerline(
+            cache_offset,
+            cache_steering,
+            cache_lane_width_m,
+            cache_start_m,
+            cache_end_m,
+            STATIC_LINE_STEPS,
+            0.0,
+        )
+        groups = lane_marking_strip_groups_from_segments((centerline,), placeholder_specs)
+    else:
+        segments: list[tuple[Vec3, ...]] = []
+        dash_m = LANE_DASH_LENGTH_M
+        cycle_m = dash_m + LANE_DASH_GAP_M
+        cursor = dashed_lane_start_cursor_m(cache_start_m, dash_m, LANE_DASH_GAP_M)
+        while cursor < cache_end_m:
+            dash_start = max(cursor, cache_start_m)
+            dash_end = min(cursor + dash_m, cache_end_m)
+            if dash_end > dash_start + 0.001:
+                segments.append(
+                    lane_centerline(
+                        cache_offset,
+                        cache_steering,
+                        cache_lane_width_m,
+                        dash_start,
+                        dash_end,
+                        6,
+                        0.0,
+                    )
+                )
+            cursor += cycle_m
+        groups = lane_marking_strip_groups_from_segments(tuple(segments), placeholder_specs)
+
+    _LANE_OFFSET_STRIP_CACHE[key] = groups
+    while len(_LANE_OFFSET_STRIP_CACHE) > LANE_OFFSET_STRIP_CACHE_LIMIT:
+        _LANE_OFFSET_STRIP_CACHE.popitem(last=False)
+    return groups
+
+
+def lane_offset_strip_groups(
+    offset: float,
+    steering: float,
+    lane_width_m: float,
+    start_m: float,
+    end_m: float,
+    specs: tuple[tuple[int, Color, float], ...],
+    style: str,
+) -> tuple[tuple[MeshStrip, ...], ...]:
+    groups = cached_lane_offset_strip_groups(
+        offset,
+        steering,
+        lane_width_m,
+        start_m,
+        end_m,
+        specs,
+        style,
+    )
+    return style_mesh_strip_groups(groups, specs, 0.0)
 
 
 def style_mesh_strip_groups(
@@ -911,10 +1290,19 @@ def style_mesh_strip_groups(
 
 
 def style_mesh_strip_groups_by_shift(
-    groups: tuple[tuple[MeshStrip, ...], ...],
+    groups: MeshStripGroups,
     specs: tuple[tuple[int, Color, float], ...],
     shift_x_m_by_group: tuple[float, ...],
-) -> tuple[tuple[MeshStrip, ...], ...]:
+) -> MeshStripGroups:
+    cache_key = (id(groups), specs, shift_x_m_by_group)
+    cached = _STYLE_MESH_STRIP_GROUP_CACHE.get(cache_key)
+    if cached is not None:
+        cached_groups, styled_groups = cached
+        if cached_groups is groups:
+            _STYLE_MESH_STRIP_GROUP_CACHE.move_to_end(cache_key)
+            return styled_groups
+        _STYLE_MESH_STRIP_GROUP_CACHE.pop(cache_key, None)
+
     styled_groups: list[tuple[MeshStrip, ...]] = []
     for group_index, group in enumerate(groups):
         color = specs[group_index][1]
@@ -934,7 +1322,11 @@ def style_mesh_strip_groups_by_shift(
                     )
                 )
         styled_groups.append(tuple(styled_group))
-    return tuple(styled_groups)
+    result = tuple(styled_groups)
+    _STYLE_MESH_STRIP_GROUP_CACHE[cache_key] = (groups, result)
+    while len(_STYLE_MESH_STRIP_GROUP_CACHE) > STYLE_MESH_STRIP_GROUP_CACHE_LIMIT:
+        _STYLE_MESH_STRIP_GROUP_CACHE.popitem(last=False)
+    return result
 
 
 def model_line_strip_groups(
@@ -945,6 +1337,8 @@ def model_line_strip_groups(
     specs: tuple[tuple[int, Color, float], ...],
     style: str,
     extend_before_model: bool,
+    profile_add: ProfileAdd | None = None,
+    profile_prefix: str = "scene.model_line",
 ) -> ModelLineStripGroups:
     groups = cached_model_line_strip_groups(
         model_points,
@@ -953,10 +1347,15 @@ def model_line_strip_groups(
         specs,
         style,
         extend_before_model,
+        profile_add,
+        profile_prefix,
     )
     if groups is None:
         return None
-    return style_mesh_strip_groups(groups, specs, lateral_shift_m)
+    profile_stage = profile_scene_start(profile_add)
+    styled_groups = style_mesh_strip_groups(groups, specs, lateral_shift_m)
+    profile_scene_add(profile_add, f"{profile_prefix}.style", profile_stage)
+    return styled_groups
 
 
 def planned_path_lane_offset(state: ClusterUiState, forward_m: float) -> float:
@@ -1076,7 +1475,9 @@ def planned_path_strips(
     lane_width_m: float,
     blockers: tuple[PathBlocker, ...],
     theme: ClusterTheme = LIGHT_CLUSTER_THEME,
+    profile_add: ProfileAdd | None = None,
 ) -> tuple[MeshStrip, ...]:
+    profile_stage = profile_scene_start(profile_add)
     points = model_path_centerline(state, lane_width_m, blockers)
     model_driven = bool(points)
     if not points:
@@ -1093,6 +1494,9 @@ def planned_path_strips(
                 )
             )
         points = tuple(centerline)
+    profile_scene_add(profile_add, "scene.build.planned_path.centerline", profile_stage)
+
+    profile_stage = profile_scene_start(profile_add)
     path_specs: list[tuple[float, Color, float]] = [(0.86, theme.path_shadow, PATH_SHADOW_LAYER_M)]
     if model_driven:
         uncertainty_width = model_path_uncertainty_width(state)
@@ -1100,13 +1504,84 @@ def planned_path_strips(
             path_specs.append((uncertainty_width, theme.path_uncertainty, PATH_UNCERTAINTY_LAYER_M))
     path_specs.append((0.46, theme.path_body, PATH_BODY_LAYER_M))
     path_specs.append((0.16, theme.path_highlight, PATH_HIGHLIGHT_LAYER_M))
-    strips = list(strips_from_centerline_width_specs(points, tuple(path_specs)))
+    strips = list(cached_strips_from_centerline_width_specs(points, tuple(path_specs)))
+    profile_scene_add(profile_add, "scene.build.planned_path.strips", profile_stage)
+
     if model_driven:
         highlight_strip = strips.pop() if strips else None
+        profile_stage = profile_scene_start(profile_add)
         strips.extend(model_path_metric_strips(state, points))
+        profile_scene_add(profile_add, "scene.build.planned_path.metrics", profile_stage)
         if highlight_strip is not None:
             strips.append(highlight_strip)
+    profile_stage = profile_scene_start(profile_add)
+    strips.extend(follow_distance_marker_strips(state, points, lane_width_m))
+    profile_scene_add(profile_add, "scene.build.planned_path.follow_distance", profile_stage)
     return tuple(strips)
+
+
+def follow_distance_marker_strips(
+    state: ClusterUiState,
+    points: tuple[Vec3, ...],
+    lane_width_m: float,
+) -> tuple[MeshStrip, ...]:
+    distance_m = state.longitudinal_desired_distance_m
+    if distance_m is None or distance_m <= 0.0 or len(points) < 2:
+        return ()
+    forward_m = data_scene_forward_m(distance_m)
+    if forward_m < points[0].y or forward_m > points[-1].y:
+        return ()
+    center_x_m = centerline_x_at_forward(points, forward_m)
+    if center_x_m is None:
+        return ()
+    half_width_m = lane_width_m * 0.5
+
+    def marker_strip(half_forward_m: float, extra_width_m: float, height_m: float, color: Color) -> MeshStrip:
+        left_x_m = center_x_m - half_width_m - extra_width_m
+        right_x_m = center_x_m + half_width_m + extra_width_m
+        near_m = forward_m - half_forward_m
+        far_m = forward_m + half_forward_m
+        return MeshStrip(
+            left=(
+                Vec3(left_x_m, near_m, height_m),
+                Vec3(left_x_m, far_m, height_m),
+            ),
+            right=(
+                Vec3(right_x_m, near_m, height_m),
+                Vec3(right_x_m, far_m, height_m),
+            ),
+            color=color,
+        )
+
+    return (
+        marker_strip(
+            FOLLOW_DISTANCE_MARKER_BACKING_FORWARD_M,
+            FOLLOW_DISTANCE_MARKER_BACKING_EXTRA_WIDTH_M,
+            FOLLOW_DISTANCE_MARKER_BACKING_LAYER_M,
+            FOLLOW_DISTANCE_MARKER_BACKING_COLOR,
+        ),
+        marker_strip(
+            FOLLOW_DISTANCE_MARKER_BODY_FORWARD_M,
+            0.0,
+            FOLLOW_DISTANCE_MARKER_BODY_LAYER_M,
+            FOLLOW_DISTANCE_MARKER_BODY_COLOR,
+        ),
+    )
+
+
+def centerline_x_at_forward(points: tuple[Vec3, ...], forward_m: float) -> float | None:
+    if not points:
+        return None
+    previous = points[0]
+    if forward_m <= previous.y:
+        return previous.x
+    for point in points[1:]:
+        if forward_m <= point.y:
+            span = max(0.001, point.y - previous.y)
+            amount = clamp((forward_m - previous.y) / span, 0.0, 1.0)
+            return previous.x + (point.x - previous.x) * amount
+        previous = point
+    return points[-1].x
 
 
 def model_path_uncertainty_width(state: ClusterUiState) -> float | None:
@@ -1253,9 +1728,9 @@ def radar_point_markers(
 ) -> tuple[RadarPointMarker, ...]:
     markers: list[RadarPointMarker] = []
     for point in state.radar_points:
-        if any(radar_points_same_vehicle(point, vehicle_point) for vehicle_point in vehicle_points):
+        if radar_point_hidden_by_vehicle_box(point, vehicle_points, state):
             continue
-        forward_m = data_scene_forward_m(point.longitudinal_m)
+        forward_m = render_scene_forward_m(point.longitudinal_m)
         if forward_m < min_forward_m or forward_m > max_forward_m:
             continue
         color = radar_point_color(point)
@@ -1284,6 +1759,16 @@ def radar_point_markers(
     return tuple(markers)
 
 
+def radar_point_hidden_by_vehicle_box(
+    point: RadarPoint,
+    vehicle_points: tuple[RadarPoint, ...],
+    state: ClusterUiState,
+) -> bool:
+    if state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL:
+        return any(point.label == vehicle_point.label for vehicle_point in vehicle_points)
+    return any(radar_points_same_vehicle(point, vehicle_point) for vehicle_point in vehicle_points)
+
+
 def radar_vehicle_points(state: ClusterUiState, lane_width_m: float) -> tuple[RadarPoint, ...]:
     selected: list[RadarPoint] = []
     candidates = sorted(
@@ -1298,6 +1783,13 @@ def radar_vehicle_points(state: ClusterUiState, lane_width_m: float) -> tuple[Ra
             abs(point.lateral_m),
         ),
     )
+    if state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL:
+        return tuple(
+            sorted(
+                candidates,
+                key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label),
+            )
+        )
     for point in candidates:
         if any(radar_points_same_vehicle(point, existing) for existing in selected):
             continue
@@ -1345,6 +1837,88 @@ def detected_vehicles_with_merged_radar(
             )
         )
     return tuple(merged)
+
+
+def detected_vehicles_for_display(
+    vehicles: tuple[DetectedVehicle, ...],
+    state: ClusterUiState,
+) -> tuple[DetectedVehicle, ...]:
+    if state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL or len(vehicles) < 2:
+        return vehicles
+    selected: list[DetectedVehicle] = []
+    for vehicle in sorted(vehicles, key=detected_vehicle_display_priority):
+        match_index = next(
+            (
+                index
+                for index, existing in enumerate(selected)
+                if detected_vehicles_same_front_vehicle(vehicle, existing)
+            ),
+            None,
+        )
+        if match_index is None:
+            selected.append(vehicle)
+        else:
+            selected[match_index] = merge_detected_vehicle_for_display(selected[match_index], vehicle)
+    return tuple(sorted(selected, key=lambda vehicle: vehicle.longitudinal_m))
+
+
+def detected_vehicle_display_priority(vehicle: DetectedVehicle) -> tuple[int, float, float]:
+    if vehicle.source == "radarState":
+        source_priority = 0
+    elif vehicle.primary:
+        source_priority = 1
+    elif vehicle.source.startswith("modelV2"):
+        source_priority = 2
+    elif vehicle.source == "carState" or vehicle.source.startswith("CAN 0x"):
+        source_priority = 3
+    else:
+        source_priority = 4
+    return source_priority, vehicle.longitudinal_m, -vehicle.probability
+
+
+def detected_vehicles_same_front_vehicle(left: DetectedVehicle, right: DetectedVehicle) -> bool:
+    if not (detected_vehicle_is_front_merge_candidate(left) and detected_vehicle_is_front_merge_candidate(right)):
+        return False
+    if detected_vehicle_base_source(left) == detected_vehicle_base_source(right):
+        return False
+    distance_m = max(left.longitudinal_m, right.longitudinal_m)
+    longitudinal_tolerance = max(
+        RADAR_FRONT_DETECTED_MERGE_LONGITUDINAL_MIN_M,
+        min(RADAR_FRONT_DETECTED_MERGE_LONGITUDINAL_MAX_M, distance_m * 0.20),
+    )
+    return (
+        abs(left.longitudinal_m - right.longitudinal_m) <= longitudinal_tolerance
+        and abs(left.lateral_m - right.lateral_m) <= RADAR_FRONT_DETECTED_MERGE_LATERAL_M
+    )
+
+
+def detected_vehicle_is_front_merge_candidate(vehicle: DetectedVehicle) -> bool:
+    if vehicle.longitudinal_m <= 0.0 or vehicle.label in CORNER_RADAR_LABELS:
+        return False
+    return (
+        detected_vehicle_is_front_lead(vehicle)
+        or vehicle.source.startswith("modelV2")
+        or vehicle.primary
+    )
+
+
+def detected_vehicle_base_source(vehicle: DetectedVehicle) -> str:
+    return vehicle.source.split(RADAR_MERGED_SOURCE_TAG, 1)[0]
+
+
+def merge_detected_vehicle_for_display(base: DetectedVehicle, other: DetectedVehicle) -> DetectedVehicle:
+    return replace(
+        base,
+        probability=max(base.probability, other.probability),
+        relative_speed_mps=base.relative_speed_mps if base.relative_speed_mps is not None else other.relative_speed_mps,
+        absolute_speed_kph=base.absolute_speed_kph if base.absolute_speed_kph is not None else other.absolute_speed_kph,
+        acceleration_mps2=base.acceleration_mps2 if base.acceleration_mps2 is not None else other.acceleration_mps2,
+        cut_in=base.cut_in or other.cut_in,
+        primary=base.primary or other.primary,
+        ttc_s=base.ttc_s if base.ttc_s is not None else other.ttc_s,
+        x_std_m=base.x_std_m if base.x_std_m is not None else other.x_std_m,
+        y_std_m=base.y_std_m if base.y_std_m is not None else other.y_std_m,
+    )
 
 
 def radar_merge_point_for_vehicle(
@@ -1421,7 +1995,7 @@ def radar_vehicle_box(
     confidence = radar_vehicle_confidence(point)
     alpha = int(92 + 163 * confidence)
     body_color = vehicle_color_for_source("radarPoint", theme, state.radar_source_color_mode)
-    forward_m = data_scene_forward_m(point.longitudinal_m)
+    forward_m = render_scene_forward_m(point.longitudinal_m)
     center_x_m = clamp(point.lateral_m, -lane_width_m * 3.0, lane_width_m * 3.0)
     return VehicleBox(
         center=Vec3(center_x_m, forward_m, VEHICLE_HEIGHT_M * 0.5),
@@ -1440,6 +2014,7 @@ def radar_vehicle_box(
         confidence=confidence,
         label=point.label,
         source="radarPoint",
+        longitudinal_m=point.longitudinal_m,
         relative_speed_mps=point.relative_speed_mps,
         absolute_speed_kph=radar_point_absolute_speed_kph(point, state),
         acceleration_mps2=point.relative_accel_mps2,
@@ -1454,12 +2029,17 @@ def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, l
         return False
     if point.valid_count is not None and point.valid_count < RADAR_VEHICLE_MIN_VALID_COUNT:
         return False
-    if point.probability is not None and point.probability < 0.20 and not point.in_my_lane:
-        return False
     outside_road_edge_m = radar_point_road_edge_outside_distance_m(point, state, lane_width_m)
-    if outside_road_edge_m is not None and outside_road_edge_m > RADAR_ROAD_EDGE_OUTSIDE_MARGIN_M:
-        return False
-    if not radar_point_is_inside_road_edge_margin(point, state, lane_width_m):
+    stable_edge_vehicle = (
+        radar_point_has_stable_edge_vehicle_motion(point, state, lane_width_m)
+        and radar_point_is_near_or_outside_road_edge(point, state, lane_width_m, outside_road_edge_m)
+    )
+    if (
+        point.probability is not None
+        and point.probability < 0.20
+        and not point.in_my_lane
+        and not stable_edge_vehicle
+    ):
         return False
     keep_across_road_edge = radar_point_should_keep_across_road_edge(
         point,
@@ -1467,6 +2047,12 @@ def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, l
         lane_width_m,
         outside_road_edge_m,
     )
+    if (
+        outside_road_edge_m is not None
+        and outside_road_edge_m > RADAR_ROAD_EDGE_OUTSIDE_MARGIN_M
+        and not keep_across_road_edge
+    ):
+        return False
     if radar_point_matches_detected_vehicle(point, state):
         return True
     if radar_point_has_vehicle_estimate(point, state, lane_width_m):
@@ -1513,36 +2099,99 @@ def radar_point_should_keep_across_road_edge(
     lane_width_m: float,
     outside_road_edge_m: float | None,
 ) -> bool:
+    stable_edge_vehicle = radar_point_has_stable_edge_vehicle_motion(point, state, lane_width_m)
     if outside_road_edge_m is not None and outside_road_edge_m > RADAR_ROAD_EDGE_KEEP_OUTSIDE_MARGIN_M:
-        return False
+        return (
+            outside_road_edge_m <= RADAR_ROAD_EDGE_STABLE_VEHICLE_OUTSIDE_MARGIN_M
+            and stable_edge_vehicle
+        )
     valid_count = point.valid_count if point.valid_count is not None else 0
     if valid_count < RADAR_ROAD_EDGE_KEEP_MIN_VALID_COUNT:
         return False
     absolute_speed_kph = radar_point_absolute_speed_kph(point, state)
     if absolute_speed_kph is None or absolute_speed_kph < RADAR_ROAD_EDGE_KEEP_SPEED_KPH:
         return False
-    edge_distance_m = radar_point_road_edge_distance_m(point, state, lane_width_m)
-    near_or_overlapping_edge = (
-        (outside_road_edge_m is not None and outside_road_edge_m > 0.0)
-        or (edge_distance_m is not None and edge_distance_m <= RADAR_ROAD_EDGE_STATIONARY_CLEARANCE_M)
-    )
-    if not near_or_overlapping_edge:
+    if not radar_point_is_near_or_outside_road_edge(point, state, lane_width_m, outside_road_edge_m):
         return False
-    return radar_point_has_vehicle_estimate(point, state, lane_width_m) or radar_point_is_moving_raw_vehicle(
-        point,
-        state,
-        lane_width_m,
+    return (
+        stable_edge_vehicle
+        or radar_point_has_vehicle_estimate(point, state, lane_width_m)
+        or radar_point_is_moving_raw_vehicle(point, state, lane_width_m)
     )
+
+
+def radar_point_has_stable_edge_vehicle_motion(
+    point: RadarPoint,
+    state: ClusterUiState,
+    lane_width_m: float,
+) -> bool:
+    valid_count = point.valid_count if point.valid_count is not None else 0
+    if valid_count < RADAR_ROAD_EDGE_STABLE_VEHICLE_MIN_VALID_COUNT:
+        return False
+    absolute_speed_kph = radar_point_absolute_speed_kph(point, state)
+    if absolute_speed_kph is None or absolute_speed_kph < RADAR_ROAD_EDGE_KEEP_SPEED_KPH:
+        return False
+    if (
+        point.relative_accel_mps2 is not None
+        and abs(point.relative_accel_mps2) > RADAR_ROAD_EDGE_STABLE_VEHICLE_MAX_ACCEL_MPS2
+    ):
+        return False
+    return abs(point.lateral_m) <= lane_width_m * RADAR_VEHICLE_MAX_LATERAL_LANES
+
+
+def radar_point_is_near_or_outside_road_edge(
+    point: RadarPoint,
+    state: ClusterUiState,
+    lane_width_m: float,
+    outside_road_edge_m: float | None,
+) -> bool:
+    if outside_road_edge_m is not None and outside_road_edge_m > 0.0:
+        return True
+    edge_distance_m = radar_point_road_edge_distance_m(point, state, lane_width_m)
+    return edge_distance_m is not None and edge_distance_m <= RADAR_ROAD_EDGE_STATIONARY_CLEARANCE_M
 
 
 def radar_point_matches_detected_vehicle(point: RadarPoint, state: ClusterUiState) -> bool:
     for vehicle in state.detected_vehicles:
-        longitudinal_tolerance = max(4.0, min(8.0, point.longitudinal_m * 0.08))
-        if abs(point.longitudinal_m - vehicle.longitudinal_m) > longitudinal_tolerance:
-            continue
-        if abs(point.lateral_m - vehicle.lateral_m) <= 1.35:
+        if radar_point_close_to_detected_vehicle(point, vehicle):
             return True
     return False
+
+
+def radar_point_hidden_by_detected_vehicle(
+    point: RadarPoint,
+    vehicles: tuple[DetectedVehicle, ...],
+    state: ClusterUiState,
+) -> bool:
+    if state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL:
+        return False
+    for vehicle in vehicles:
+        if radar_point_close_to_detected_vehicle(point, vehicle):
+            return True
+    return False
+
+
+def radar_point_close_to_detected_vehicle(point: RadarPoint, vehicle: DetectedVehicle) -> bool:
+    if detected_vehicle_is_front_lead(vehicle):
+        longitudinal_tolerance = max(
+            RADAR_FRONT_DETECTED_MERGE_LONGITUDINAL_MIN_M,
+            min(
+                RADAR_FRONT_DETECTED_MERGE_LONGITUDINAL_MAX_M,
+                max(point.longitudinal_m, vehicle.longitudinal_m) * 0.20,
+            ),
+        )
+        lateral_tolerance = RADAR_FRONT_DETECTED_MERGE_LATERAL_M
+    else:
+        longitudinal_tolerance = max(4.0, min(8.0, point.longitudinal_m * 0.08))
+        lateral_tolerance = 1.35
+    return (
+        abs(point.longitudinal_m - vehicle.longitudinal_m) <= longitudinal_tolerance
+        and abs(point.lateral_m - vehicle.lateral_m) <= lateral_tolerance
+    )
+
+
+def detected_vehicle_is_front_lead(vehicle: DetectedVehicle) -> bool:
+    return vehicle.source == "radarState" or vehicle.label in ("TARGET", "TARGET2")
 
 
 def radar_point_absolute_speed_kph(point: RadarPoint, state: ClusterUiState) -> float | None:
@@ -1589,14 +2238,6 @@ def radar_point_matches_static_road_edge(point: RadarPoint, state: ClusterUiStat
     absolute_static = absolute_speed_kph is not None and absolute_speed_kph <= RADAR_STATIC_OBJECT_SPEED_KPH
     relative_static = rel_speed <= RADAR_STATIC_OBJECT_SPEED_MPS
     return edge_distance <= RADAR_ROAD_EDGE_STATIONARY_CLEARANCE_M and (absolute_static or relative_static)
-
-
-def radar_point_is_inside_road_edge_margin(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> bool:
-    outside_m = radar_point_road_edge_outside_distance_m(point, state, lane_width_m)
-    if outside_m is None or outside_m > RADAR_ROAD_EDGE_OUTSIDE_MARGIN_M:
-        return False
-    edge_distance = radar_point_road_edge_distance_m(point, state, lane_width_m)
-    return edge_distance is not None and edge_distance <= RADAR_ROAD_EDGE_HARD_CLEARANCE_M
 
 
 def radar_point_is_outside_road_edges(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> bool:
@@ -1709,51 +2350,6 @@ def radar_point_radius(point: RadarPoint) -> float:
     return clamp(0.105 + 0.07 * probability, 0.095, 0.19)
 
 
-def rear_vehicle_indicators(
-    vehicles: tuple[DetectedVehicle, ...],
-    state: ClusterUiState,
-    lane_width_m: float,
-    x_offset_m: float = 0.0,
-) -> tuple[RearVehicleIndicator, ...]:
-    selected: dict[str, DetectedVehicle] = {}
-    for vehicle in vehicles:
-        if vehicle.label not in REAR_CORNER_RADAR_LABELS or vehicle.longitudinal_m >= -0.2:
-            continue
-        side = "left" if vehicle.label == "LR" or vehicle.lateral_m < 0.0 else "right"
-        existing = selected.get(side)
-        if existing is None or abs(vehicle.longitudinal_m) < abs(existing.longitudinal_m):
-            selected[side] = vehicle
-
-    indicators: list[RearVehicleIndicator] = []
-    for side in ("left", "right"):
-        vehicle = selected.get(side)
-        if vehicle is None:
-            continue
-        forward_m = data_scene_forward_m(vehicle.longitudinal_m)
-        anchor_forward_m = EGO_FORWARD_M + 2.3
-        offset = clamp(vehicle.lateral_m / lane_width_m, -2.2, 2.2)
-        indicators.append(
-            RearVehicleIndicator(
-                center=Vec3(
-                    road_world_x(offset, forward_m, state.steering, lane_width_m) + x_offset_m,
-                    forward_m,
-                    VEHICLE_HEIGHT_M * 0.5,
-                ),
-                anchor=Vec3(
-                    road_world_x(offset, anchor_forward_m, state.steering, lane_width_m) + x_offset_m,
-                    anchor_forward_m,
-                    0.22,
-                ),
-                label=vehicle.label,
-                lane_side=side,
-                longitudinal_m=vehicle.longitudinal_m,
-                lateral_m=vehicle.lateral_m,
-                source=vehicle.source,
-            )
-        )
-    return tuple(indicators)
-
-
 def vehicle_box(
     offset: float,
     forward_m: float,
@@ -1765,6 +2361,7 @@ def vehicle_box(
     confidence: float = 1.0,
     label: str = "",
     source: str = "",
+    longitudinal_m: float | None = None,
     relative_speed_mps: float | None = None,
     absolute_speed_kph: float | None = None,
     acceleration_mps2: float | None = None,
@@ -1788,6 +2385,11 @@ def vehicle_box(
     width_m = VEHICLE_WIDTH_M
     length_m = VEHICLE_LENGTH_M
     height_m = VEHICLE_HEIGHT_M
+    actual_longitudinal_m = (
+        scene_data_relative_forward_m(forward_m)
+        if longitudinal_m is None
+        else longitudinal_m
+    )
 
     return VehicleBox(
         center=Vec3(center_x_m, forward_m, height_m * 0.5),
@@ -1806,6 +2408,7 @@ def vehicle_box(
         confidence=confidence,
         label=label,
         source=source,
+        longitudinal_m=actual_longitudinal_m,
         relative_speed_mps=relative_speed_mps,
         absolute_speed_kph=absolute_speed_kph,
         acceleration_mps2=acceleration_mps2,
@@ -1826,9 +2429,9 @@ def scene_camera(state: ClusterUiState, lane_width_m: float, anchor_x_m: float =
     ego_y_m = EGO_FORWARD_M
 
     drive_camera = CameraSpec(
-        position=Vec3(0.0, -8.80, 5.20),
-        target=Vec3(0.0, 22.0, 0.18),
-        fovy_deg=31.0,
+        position=Vec3(0.0, -16.0 + DRIVE_CAMERA_FORWARD_SHIFT_M, 6.00),
+        target=Vec3(0.0, 7.0 + DRIVE_CAMERA_FORWARD_SHIFT_M, -0.20),
+        fovy_deg=44.0,
     )
 
     if not state.surround_view_active:
@@ -1904,6 +2507,7 @@ def translate_vehicle_box_x(vehicle: VehicleBox, shift_x_m: float) -> VehicleBox
         confidence=vehicle.confidence,
         label=vehicle.label,
         source=vehicle.source,
+        longitudinal_m=vehicle.longitudinal_m,
         relative_speed_mps=vehicle.relative_speed_mps,
         absolute_speed_kph=vehicle.absolute_speed_kph,
         acceleration_mps2=vehicle.acceleration_mps2,
@@ -1931,20 +2535,6 @@ def translate_radar_marker_x(marker: RadarPointMarker, shift_x_m: float) -> Rada
         probability=marker.probability,
         valid=marker.valid,
         in_my_lane=marker.in_my_lane,
-    )
-
-
-def translate_rear_indicator_x(indicator: RearVehicleIndicator, shift_x_m: float) -> RearVehicleIndicator:
-    if abs(shift_x_m) <= 0.0001:
-        return indicator
-    return RearVehicleIndicator(
-        center=translate_vec3_x(indicator.center, shift_x_m),
-        anchor=translate_vec3_x(indicator.anchor, shift_x_m),
-        label=indicator.label,
-        lane_side=indicator.lane_side,
-        longitudinal_m=indicator.longitudinal_m,
-        lateral_m=indicator.lateral_m,
-        source=indicator.source,
     )
 
 
@@ -2024,6 +2614,73 @@ def road_edge_layer_specs(layers: tuple[RoadEdgeLayer, ...]) -> tuple[tuple[int,
     return tuple((width_px, color, height_m) for width_px, color, height_m, _ in layers)
 
 
+def road_edge_layer_geometry_specs(layers: tuple[RoadEdgeLayer, ...]) -> RoadEdgeOffsetLayerGeometrySpecs:
+    return tuple((width_px, height_m, lateral_offset_m) for width_px, _, height_m, lateral_offset_m in layers)
+
+
+def road_edge_model_points_for_render(model_points: tuple[ModelPathPoint, ...]) -> tuple[ModelPathPoint, ...]:
+    render_points, _ = model_line_render_points_and_key(model_points, ROAD_EDGE_MODEL_POINT_LIMIT)
+    return render_points
+
+
+def cached_road_edge_offset_strip_groups(
+    offset: float,
+    steering: float,
+    lane_width_m: float,
+    side: float,
+    start_m: float,
+    end_m: float,
+    layers: tuple[RoadEdgeLayer, ...],
+) -> RoadEdgeOffsetStripGroups:
+    cache_offset = cache_grid_value(offset, ROAD_EDGE_OFFSET_STRIP_CACHE_OFFSET_GRID)
+    cache_steering = cache_grid_value(steering, ROAD_EDGE_OFFSET_STRIP_CACHE_STEERING_GRID)
+    cache_lane_width_m = max(
+        0.1,
+        cache_grid_value(lane_width_m, ROAD_EDGE_OFFSET_STRIP_CACHE_LANE_WIDTH_GRID_M),
+    )
+    cache_side = -1.0 if side < 0.0 else 1.0
+    cache_start_m = model_line_cache_start_m(start_m)
+    cache_end_m = model_line_cache_end_m(end_m)
+    geometry_specs = road_edge_layer_geometry_specs(layers)
+    key = (
+        cache_offset,
+        cache_steering,
+        cache_lane_width_m,
+        cache_side,
+        cache_start_m,
+        cache_end_m,
+        geometry_specs,
+    )
+    cached = _ROAD_EDGE_OFFSET_STRIP_CACHE.get(key)
+    if cached is not None:
+        _ROAD_EDGE_OFFSET_STRIP_CACHE.move_to_end(key)
+        return cached
+
+    strip_groups: list[tuple[MeshStrip, ...]] = []
+    for width_px, height_m, lateral_offset_m in geometry_specs:
+        layer_offset = cache_offset + cache_side * lateral_offset_m / cache_lane_width_m
+        centerline = lane_centerline(
+            layer_offset,
+            cache_steering,
+            cache_lane_width_m,
+            cache_start_m,
+            cache_end_m,
+            ROAD_EDGE_OFFSET_STEPS,
+            0.0,
+        )
+        (layer_strips,) = lane_marking_strip_groups_from_segments(
+            (centerline,),
+            ((width_px, MODEL_LINE_STRIP_GROUP_CACHE_COLOR, height_m),),
+        )
+        strip_groups.append(layer_strips)
+
+    groups = tuple(strip_groups)
+    _ROAD_EDGE_OFFSET_STRIP_CACHE[key] = groups
+    while len(_ROAD_EDGE_OFFSET_STRIP_CACHE) > ROAD_EDGE_OFFSET_STRIP_CACHE_LIMIT:
+        _ROAD_EDGE_OFFSET_STRIP_CACHE.popitem(last=False)
+    return groups
+
+
 def road_edge_model_strips(
     model_points: tuple[ModelPathPoint, ...],
     lateral_shift_m: float,
@@ -2032,25 +2689,35 @@ def road_edge_model_strips(
     start_m: float,
     end_m: float,
     theme: ClusterTheme = LIGHT_CLUSTER_THEME,
+    profile_add: ProfileAdd | None = None,
 ) -> tuple[MeshStrip, ...]:
     layers = road_edge_3d_layers(color, theme)
     specs = road_edge_layer_specs(layers)
+    render_points = (
+        model_points if ROAD_EDGE_MODEL_POINT_LIMIT <= 0
+        else road_edge_model_points_for_render(model_points)
+    )
     groups = cached_model_line_strip_groups(
-        model_points,
+        render_points,
         start_m,
         end_m,
         specs,
         "solid",
         True,
+        profile_add,
+        "scene.road_model",
     )
     if groups is None:
         return ()
     shifts = tuple(lateral_shift_m + side * lateral_offset_m for _, _, _, lateral_offset_m in layers)
-    return tuple(
+    profile_stage = profile_scene_start(profile_add)
+    styled_strips = tuple(
         strip
         for group in style_mesh_strip_groups_by_shift(groups, specs, shifts)
         for strip in group
     )
+    profile_scene_add(profile_add, "scene.road_model.style", profile_stage)
+    return styled_strips
 
 
 def road_edge_offset_strips(
@@ -2064,24 +2731,22 @@ def road_edge_offset_strips(
     theme: ClusterTheme = LIGHT_CLUSTER_THEME,
 ) -> tuple[MeshStrip, ...]:
     layers = road_edge_3d_layers(color, theme)
-    strips: list[MeshStrip] = []
-    for width_px, layer_color, height_m, lateral_offset_m in layers:
-        layer_offset = offset + side * lateral_offset_m / max(0.1, lane_width_m)
-        centerline = lane_centerline(
-            layer_offset,
-            steering,
-            lane_width_m,
-            start_m,
-            end_m,
-            STATIC_LINE_STEPS,
-            0.0,
-        )
-        (layer_strips,) = lane_marking_strip_groups_from_segments(
-            (centerline,),
-            ((width_px, layer_color, height_m),),
-        )
-        strips.extend(layer_strips)
-    return tuple(strips)
+    groups = cached_road_edge_offset_strip_groups(
+        offset,
+        steering,
+        lane_width_m,
+        side,
+        start_m,
+        end_m,
+        layers,
+    )
+    specs = road_edge_layer_specs(layers)
+    styled_groups = style_mesh_strip_groups_by_shift(groups, specs, (0.0,) * len(specs))
+    return tuple(
+        strip
+        for group in styled_groups
+        for strip in group
+    )
 
 
 def vehicle_color_for_source(
@@ -2129,14 +2794,6 @@ def vehicle_badge_has_special_info(vehicle: DetectedVehicle) -> bool:
     return vehicle.acceleration_mps2 is not None and abs(vehicle.acceleration_mps2) > VEHICLE_BADGE_ACCEL_MPS2
 
 
-def detected_vehicle_has_visible_box(vehicle: DetectedVehicle, camera_active: bool) -> bool:
-    return not (
-        vehicle.label in REAR_CORNER_RADAR_LABELS
-        and vehicle.longitudinal_m < -0.2
-        and not camera_active
-    )
-
-
 def road_edge_strips(
     state: ClusterUiState,
     route_mode: bool,
@@ -2144,6 +2801,7 @@ def road_edge_strips(
     road_start_m: float,
     road_end_m: float,
     theme: ClusterTheme = LIGHT_CLUSTER_THEME,
+    profile_add: ProfileAdd | None = None,
 ) -> tuple[MeshStrip, ...]:
     def default_road_edge_strips() -> tuple[MeshStrip, ...]:
         default_color = road_edge_color(None, 1.0, theme)
@@ -2214,6 +2872,7 @@ def road_edge_strips(
                     road_start_m,
                     road_end_m,
                     theme,
+                    profile_add,
                 )
             )
         elif state.right_road_edge_offset is not None:
@@ -2229,7 +2888,7 @@ def road_edge_strips(
                     theme,
                 )
             )
-    return tuple(strips) if strips else default_road_edge_strips()
+    return tuple(strips)
 
 
 def profile_scene_start(profile_add: ProfileAdd | None) -> float:
@@ -2239,6 +2898,11 @@ def profile_scene_start(profile_add: ProfileAdd | None) -> float:
 def profile_scene_add(profile_add: ProfileAdd | None, name: str, start_time: float) -> None:
     if profile_add is not None:
         profile_add(name, (time.perf_counter() - start_time) * 1000.0)
+
+
+def profile_scene_add_elapsed(profile_add: ProfileAdd | None, name: str, elapsed_ms: float) -> None:
+    if profile_add is not None:
+        profile_add(name, elapsed_ms)
 
 
 def lane_highlight_color(route_mode: bool) -> Color:
@@ -2311,7 +2975,7 @@ def build_cluster_scene(
     route_mode = data_geometry_mode_for_state(state)
     road_start_m = (
         SURROUND_ROAD_REAR_M if state.surround_view_active
-        else ROAD_NEAR_M
+        else DRIVE_VIEW_ROAD_START_M
     )
     road_end_m = (
         SURROUND_ROAD_FRONT_M if state.surround_view_active
@@ -2320,12 +2984,13 @@ def build_cluster_scene(
     road_steps = ROAD_STEPS_SURROUND if camera_active else ROAD_STEPS_MODEL if route_mode else ROAD_STEPS_SIM
     if (state.detected_vehicles or selected_radar_vehicle_boxes) and not camera_active:
         nearest_detected_y = min(
-            (data_scene_forward_m(vehicle.longitudinal_m) for vehicle in state.detected_vehicles),
+            (render_scene_forward_m(vehicle.longitudinal_m) for vehicle in state.detected_vehicles),
             default=ROAD_FAR_M,
         )
         nearest_radar_y = min((vehicle.center.y for vehicle in selected_radar_vehicle_boxes), default=ROAD_FAR_M)
         nearest_detected_y = min(nearest_detected_y, nearest_radar_y)
-        road_start_m = min(road_start_m, max(-35.0, nearest_detected_y - 8.0))
+        candidate_road_start_m = max(-35.0, nearest_detected_y - DRIVE_VIEW_REAR_ROAD_MARGIN_M)
+        road_start_m = min(road_start_m, max(DRIVE_VIEW_ROAD_START_M, candidate_road_start_m))
     profile_scene_add(profile_add, "scene.build.setup", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
@@ -2348,6 +3013,9 @@ def build_cluster_scene(
 
     profile_stage = profile_scene_start(profile_add)
     lane_strips: list[MeshStrip] = []
+    lane_model_ms = 0.0
+    lane_offset_ms = 0.0
+    lane_collect_ms = 0.0
     bsd_marking_offsets = bsd_lane_marking_offsets(state)
     for marking in state.lanes:
         if not marking.visible:
@@ -2366,6 +3034,7 @@ def build_cluster_scene(
         )
         strip_groups: tuple[tuple[MeshStrip, ...], ...] | None = None
         if marking.model_points:
+            profile_step = profile_scene_start(profile_add)
             strip_groups = model_line_strip_groups(
                 marking.model_points,
                 marking.model_lateral_shift_m,
@@ -2374,20 +3043,36 @@ def build_cluster_scene(
                 marking_specs,
                 marking.style,
                 True,
+                profile_add,
+                "scene.lane_model",
             )
+            if profile_add is not None:
+                lane_model_ms += (time.perf_counter() - profile_step) * 1000.0
         if strip_groups is None:
-            marking_segments = lane_marking_segments_for_marking(
-                marking,
+            profile_step = profile_scene_start(profile_add)
+            strip_groups = lane_offset_strip_groups(
+                marking.offset,
                 state.steering,
                 lane_width_m,
                 road_start_m,
                 road_end_m,
-                extend_before_model=True,
+                marking_specs,
+                marking.style,
             )
-            strip_groups = lane_marking_strip_groups_from_segments(marking_segments, marking_specs)
+            if profile_add is not None:
+                lane_offset_ms += (time.perf_counter() - profile_step) * 1000.0
+        profile_step = profile_scene_start(profile_add)
         backing_strips, foreground_strips = strip_groups
         lane_strips.extend(backing_strips)
         lane_strips.extend(foreground_strips)
+        if profile_add is not None:
+            lane_collect_ms += (time.perf_counter() - profile_step) * 1000.0
+    profile_scene_add_elapsed(profile_add, "scene.build.lane_markings.model", lane_model_ms)
+    profile_scene_add_elapsed(profile_add, "scene.build.lane_markings.offset", lane_offset_ms)
+    profile_scene_add_elapsed(profile_add, "scene.build.lane_markings.collect", lane_collect_ms)
+    profile_merge = profile_scene_start(profile_add)
+    lane_markings = merge_mesh_strips_by_style(lane_strips)
+    profile_scene_add(profile_add, "scene.build.lane_markings.merge", profile_merge)
     profile_scene_add(profile_add, "scene.build.lane_markings", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
@@ -2396,16 +3081,16 @@ def build_cluster_scene(
     ego_vehicle = vehicle_box(ego_offset, EGO_FORWARD_M, state.steering, lane_width_m, EGO, camera_active, target_offset)
     merged_radar_labels = frozenset[str]()
     if route_mode:
-        merged_detected_vehicles = detected_vehicles_with_merged_radar(
-            state.detected_vehicles,
-            state.radar_points,
-            state,
-        )
-        render_detected_vehicles = tuple(
-            detected
-            for detected in merged_detected_vehicles
-            if detected_vehicle_has_visible_box(detected, camera_active)
-        )
+        if state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL:
+            merged_detected_vehicles = state.detected_vehicles
+        else:
+            merged_detected_vehicles = detected_vehicles_with_merged_radar(
+                state.detected_vehicles,
+                state.radar_points,
+                state,
+            )
+            merged_detected_vehicles = detected_vehicles_for_display(merged_detected_vehicles, state)
+        render_detected_vehicles = merged_detected_vehicles
         merged_radar_labels = frozenset(
             label
             for label in (merged_radar_point_label(vehicle) for vehicle in render_detected_vehicles)
@@ -2414,7 +3099,7 @@ def build_cluster_scene(
         detected_vehicle_boxes = tuple(
             vehicle_box(
                 clamp(detected.lateral_m / lane_width_m, -2.2, 2.2),
-                data_scene_forward_m(detected.longitudinal_m),
+                render_scene_forward_m(detected.longitudinal_m),
                 state.steering,
                 lane_width_m,
                 vehicle_color_for_detection(detected, theme, state.radar_source_color_mode),
@@ -2422,6 +3107,7 @@ def build_cluster_scene(
                 confidence=detected.probability,
                 label=detected.label,
                 source=detected.source,
+                longitudinal_m=detected.longitudinal_m,
                 relative_speed_mps=detected.relative_speed_mps,
                 absolute_speed_kph=detected.absolute_speed_kph
                 if detected.absolute_speed_kph is not None
@@ -2454,6 +3140,7 @@ def build_cluster_scene(
             (point, box)
             for point, box in zip(selected_radar_vehicle_points, selected_radar_vehicle_boxes)
             if point.label not in merged_radar_labels
+            and not radar_point_hidden_by_detected_vehicle(point, render_detected_vehicles, state)
         )
         visible_radar_vehicle_points = tuple(point for point, _ in visible_radar_vehicle_pairs)
         visible_radar_vehicle_boxes_raw = tuple(box for _, box in visible_radar_vehicle_pairs)
@@ -2474,10 +3161,6 @@ def build_cluster_scene(
     else:
         blockers = ()
         vehicles = (ego_vehicle,)
-    rear_indicators = (
-        rear_vehicle_indicators(state.detected_vehicles, state, lane_width_m, relative_scene_x_offset_m)
-        if route_mode else ()
-    )
     profile_scene_add(profile_add, "scene.build.vehicles", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
@@ -2485,11 +3168,16 @@ def build_cluster_scene(
     profile_scene_add(profile_add, "scene.build.road_surface", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
-    road_edges = road_edge_strips(state, route_mode, lane_width_m, road_start_m, road_end_m, theme)
+    profile_geometry = profile_scene_start(profile_add)
+    road_edges_raw = road_edge_strips(state, route_mode, lane_width_m, road_start_m, road_end_m, theme, profile_add)
+    profile_scene_add(profile_add, "scene.build.road_edges.geometry", profile_geometry)
+    profile_merge = profile_scene_start(profile_add)
+    road_edges = merge_mesh_strips_by_style(road_edges_raw)
+    profile_scene_add(profile_add, "scene.build.road_edges.merge", profile_merge)
     profile_scene_add(profile_add, "scene.build.road_edges", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
-    planned_path = planned_path_strips(state, lane_width_m, blockers, theme)
+    planned_path = planned_path_strips(state, lane_width_m, blockers, theme, profile_add)
     profile_scene_add(profile_add, "scene.build.planned_path", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
@@ -2498,7 +3186,7 @@ def build_cluster_scene(
         state,
         lane_width_m,
         (*selected_radar_vehicle_points, *hidden_merged_radar_points),
-        min_forward_m=road_start_m if camera_active else ROAD_NEAR_M,
+        min_forward_m=road_start_m,
         max_forward_m=road_end_m if camera_active else ROAD_FAR_M + 30.0,
         x_offset_m=relative_scene_x_offset_m,
     )
@@ -2509,13 +3197,12 @@ def build_cluster_scene(
         camera=camera,
         scene_shift_x_m=scene_shift_x_m,
         road_surface=road_surface,
-        road_edges=tuple(road_edges),
+        road_edges=road_edges,
         highlight_lanes=tuple(highlight_lanes),
-        lane_markings=tuple(lane_strips),
+        lane_markings=lane_markings,
         planned_path=tuple(planned_path),
         radar_points=tuple(radar_points),
         vehicles=tuple(vehicles),
-        rear_indicators=tuple(rear_indicators),
     )
     profile_scene_add(profile_add, "scene.build.pack", profile_stage)
     return scene
