@@ -990,10 +990,10 @@ class RouteLogParser:
         self.lane_change_peak_directional_observed_offset = 0.0
         self.ccnc_corner_detections: dict[str, DetectedVehicle] = {}
         self.ccnc_corner_message_t = -999.0
-        self.ccnc_corner_raw_text = "--"
+        self.ccnc_corner_raw_text = "162 --/--"
         self.adrv_corner_detections: dict[str, DetectedVehicle] = {}
         self.adrv_corner_message_t = -999.0
-        self.adrv_corner_raw_text = "--"
+        self.adrv_corner_raw_text = "1EA --/--"
         self.adrv_lane_changing = 0
         self.adrv_lane_changing_t = -999.0
         self.hyundai_canfd_radar_points: dict[str, RadarPoint] = {}
@@ -1631,12 +1631,7 @@ class RouteLogParser:
 
     def _corner_debug_text(self, car_state: Any, event_t: float) -> str:
         car_text = car_state_corner_debug_text(car_state)
-        raw_parts: list[str] = []
-        if event_t - self.adrv_corner_message_t < CORNER_DETECTION_STALE_S:
-            raw_parts.append(self.adrv_corner_raw_text)
-        if event_t - self.ccnc_corner_message_t < CORNER_DETECTION_STALE_S:
-            raw_parts.append(self.ccnc_corner_raw_text)
-        raw_text = " ".join(part for part in raw_parts if part and part != "--") or "--"
+        raw_text = f"{self.adrv_corner_raw_text} {self.ccnc_corner_raw_text}"
         return f"car {car_text} | raw {raw_text}"
 
     def _current_road_curvature(self) -> tuple[float | None, str]:
@@ -2955,7 +2950,7 @@ def car_state_corner_detections(car_state: Any) -> tuple[DetectedVehicle, ...]:
 
 def car_state_corner_debug_text(car_state: Any) -> str:
     return (
-        f"LR/RR {corner_optional_distance_text(safe_optional_float(car_state, 'leftRearLongDist'))}/"
+        f"{corner_optional_distance_text(safe_optional_float(car_state, 'leftRearLongDist'))}/"
         f"{corner_optional_distance_text(safe_optional_float(car_state, 'rightRearLongDist'))}"
     )
 
@@ -3026,9 +3021,9 @@ def parse_corner_radar_message(
 
 
 def corner_raw_debug_text(address: int, values: dict[str, float]) -> str:
-    name = "ADRV" if address == ADRV_CORNER_RADAR_ADDRESS else "CCNC" if address == CCNC_CORNER_RADAR_ADDRESS else f"0x{address:x}"
+    name = "1EA" if address == ADRV_CORNER_RADAR_ADDRESS else "162" if address == CCNC_CORNER_RADAR_ADDRESS else f"0x{address:x}"
     return (
-        f"{name} LR/RR {corner_detect_distance_text(values, 'LR')}/"
+        f"{name} {corner_detect_distance_text(values, 'LR')}/"
         f"{corner_detect_distance_text(values, 'RR')}"
     )
 
