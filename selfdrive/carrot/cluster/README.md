@@ -191,11 +191,13 @@ sends TURZX brightness `0` so a stale HUD frame does not remain visible.
 The autorun watcher normalizes locale before this dim-only USB path too, so
 vendor USB initialization does not fail before the renderer is launched.
 Manager autostart enables realtime affinity by default. `cluster_autorun.py`
-affines the manager-launched process to cores `0,1,2,3` before waiting for USB
-or starting the HUD by calling Linux `sched_setaffinity` directly. Explicit
-`CLUSTER_REALTIME` or `CLUSTER_REALTIME_CORES` environment values still win.
-`cluster_run.py` separately attempts realtime priority `55` through the common
-openpilot realtime helper when `CLUSTER_REALTIME` is enabled.
+uses `ClusterHudCoreMode=0` by default, which maps to cores `1,2,3,4`; mode
+`1` maps to all initially allowed CPU cores. `ClusterHudPriority` controls the
+common openpilot realtime helper priority with range `1..99`, default `10`.
+Changing either param makes the running HUD exit so `cluster_autorun` can
+relaunch it with the new affinity/priority, without a whole system restart.
+Explicit `CLUSTER_REALTIME`, `CLUSTER_REALTIME_CORES`, or
+`CLUSTER_REALTIME_PRIORITY` environment values still win.
 When `--usb-brightness` is omitted, USB launches follow `ClusterHudBrightness`:
 `0` auto follows live `wideRoadCameraState.exposureValPercent` after samples are
 available, falling back to `deviceState.screenBrightnessPercent`; `1` through

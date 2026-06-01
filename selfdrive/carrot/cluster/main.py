@@ -16,9 +16,11 @@ from cluster_config import (
     CLUSTER_ENCODER_JPEG,
     CLUSTER_ENCODER_PARAM,
     CLUSTER_ENCODER_SOFTWARE,
+    CLUSTER_CORE_MODE_PARAM,
     CLUSTER_HUD_DEBUG_PARAM,
     CLUSTER_HUD_PARAM,
     CLUSTER_LIVE_FPS_PARAM,
+    CLUSTER_PRIORITY_PARAM,
     CLUSTER_RADAR_DISPLAY_PARAM,
     CLUSTER_RADAR_INFO_PARAM,
     CLUSTER_RADAR_SOURCE_COLOR_PARAM,
@@ -30,8 +32,10 @@ from cluster_config import (
     DESIGN_HEIGHT,
     DESIGN_WIDTH,
     normalize_cluster_brightness_percent,
+    normalize_cluster_core_mode,
     normalize_cluster_encoder_mode,
     normalize_cluster_live_fps,
+    normalize_cluster_priority,
     normalize_cluster_radar_display_mode,
     normalize_cluster_radar_info_mode,
     normalize_cluster_radar_source_color_mode,
@@ -363,6 +367,44 @@ class ClusterHudEncoderParamReader:
             return None
 
 
+class ClusterHudCoreModeParamReader:
+    def __init__(self) -> None:
+        self._params = None
+        try:
+            from openpilot.common.params import Params
+
+            self._params = Params()
+        except Exception:
+            pass
+
+    def read(self) -> int | None:
+        if self._params is None:
+            return None
+        try:
+            return normalize_cluster_core_mode(self._params.get_int(CLUSTER_CORE_MODE_PARAM))
+        except Exception:
+            return None
+
+
+class ClusterHudPriorityParamReader:
+    def __init__(self) -> None:
+        self._params = None
+        try:
+            from openpilot.common.params import Params
+
+            self._params = Params()
+        except Exception:
+            pass
+
+    def read(self) -> int | None:
+        if self._params is None:
+            return None
+        try:
+            return normalize_cluster_priority(self._params.get_int(CLUSTER_PRIORITY_PARAM))
+        except Exception:
+            return None
+
+
 def route_overlay_for_mode(overlay: RouteOverlay | None, mode: str) -> RouteOverlay | None:
     if overlay is None or mode == "off":
         return None
@@ -473,7 +515,13 @@ def run_demo(
     theme_mode: str | None,
     hud_mode_watch: int | None,
     hud_encoder_watch: int | None,
+    hud_core_mode_watch: int | None,
+    hud_priority_watch: int | None,
 ) -> None:
+    if hud_core_mode_watch is not None:
+        hud_core_mode_watch = normalize_cluster_core_mode(hud_core_mode_watch)
+    if hud_priority_watch is not None:
+        hud_priority_watch = normalize_cluster_priority(hud_priority_watch)
     profile = ProfileReporter(profile_render, profile_interval_s)
     gc_hook = GcProfileHook(profile) if profile_render else None
     if gc_hook is not None:
@@ -563,6 +611,8 @@ def run_demo(
     active_radar_source_color_mode = radar_source_color_param_reader.read()
     hud_mode_param_reader = ClusterHudModeParamReader() if hud_mode_watch is not None else None
     hud_encoder_param_reader = ClusterHudEncoderParamReader() if hud_encoder_watch is not None else None
+    hud_core_mode_param_reader = ClusterHudCoreModeParamReader() if hud_core_mode_watch is not None else None
+    hud_priority_param_reader = ClusterHudPriorityParamReader() if hud_priority_watch is not None else None
     hud_output_gate_param_reader = ClusterHudOutputGateParamReader() if hud_mode_watch is not None else None
     renderer = ClusterUiRenderer(
         frame_width,
@@ -769,9 +819,18 @@ def run_demo(
                     )
                     active_radar_source_color_mode = next_radar_source_color_mode
                 next_radar_param_read = now + RADAR_PARAM_POLL_SECONDS
-            if hud_mode_param_reader is not None and now >= next_hud_mode_param_read:
-                next_hud_mode = hud_mode_param_reader.read()
-                if next_hud_mode is not None and next_hud_mode != hud_mode_watch:
+            if (
+                now >= next_hud_mode_param_read
+                and (
+                    hud_mode_param_reader is not None
+                    or hud_encoder_param_reader is not None
+                    or hud_core_mode_param_reader is not None
+                    or hud_priority_param_reader is not None
+                    or hud_output_gate_param_reader is not None
+                )
+            ):
+                next_hud_mode = hud_mode_param_reader.read() if hud_mode_param_reader is not None else None
+                if hud_mode_param_reader is not None and next_hud_mode is not None and next_hud_mode != hud_mode_watch:
                     print(
                         f"{CLUSTER_HUD_PARAM} changed from {hud_mode_watch} to {next_hud_mode}; exiting",
                         flush=True,
@@ -781,6 +840,22 @@ def run_demo(
                 if next_hud_encoder is not None and next_hud_encoder != hud_encoder_watch:
                     print(
                         f"{CLUSTER_ENCODER_PARAM} changed from {hud_encoder_watch} to {next_hud_encoder}; exiting",
+                        flush=True,
+                    )
+                    break
+                next_hud_core_mode = hud_core_mode_param_reader.read() if hud_core_mode_param_reader is not None else None
+                if next_hud_core_mode is not None and next_hud_core_mode != hud_core_mode_watch:
+                    print(
+                        f"{CLUSTER_CORE_MODE_PARAM} changed from "
+                        f"{hud_core_mode_watch} to {next_hud_core_mode}; exiting for restart",
+                        flush=True,
+                    )
+                    break
+                next_hud_priority = hud_priority_param_reader.read() if hud_priority_param_reader is not None else None
+                if next_hud_priority is not None and next_hud_priority != hud_priority_watch:
+                    print(
+                        f"{CLUSTER_PRIORITY_PARAM} changed from "
+                        f"{hud_priority_watch} to {next_hud_priority}; exiting for restart",
                         flush=True,
                     )
                     break
@@ -1428,6 +1503,18 @@ def parse_args() -> argparse.Namespace:
         help=argparse.SUPPRESS,
     )
     parser.add_argument(
+        "--cluster-hud-core-mode",
+        type=int,
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--cluster-hud-priority",
+        type=int,
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
         "--route-loop",
         action="store_true",
         help="Loop route replay instead of stopping at the end.",
@@ -1711,6 +1798,8 @@ def main() -> None:
             args.theme,
             args.cluster_hud_mode,
             args.cluster_hud_encoder,
+            args.cluster_hud_core_mode,
+            args.cluster_hud_priority,
         )
     except KeyboardInterrupt:
         print("\nStopped.")

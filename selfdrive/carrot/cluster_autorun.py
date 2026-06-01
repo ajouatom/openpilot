@@ -20,6 +20,8 @@ HUD_PARAM = "ClusterHud"
 HUD_DEBUG_PARAM = "ClusterHudDebug"
 HUD_ENCODER_PARAM = "ClusterHudEncoder"
 HUD_LIVE_FPS_PARAM = "ClusterHudLiveFps"
+HUD_CORE_MODE_PARAM = "ClusterHudCoreMode"
+HUD_PRIORITY_PARAM = "ClusterHudPriority"
 IS_ONROAD_PARAM = "IsOnroad"
 RETRY_INTERVAL_S = 5.0
 HUD_CHECK_INTERVAL_S = 5.0
@@ -27,9 +29,17 @@ USB_FALLBACK_SCAN_INTERVAL_S = 60.0
 USB_OFF_DIM_INTERVAL_S = 30.0
 NETLINK_KOBJECT_UEVENT = 15
 AUTORUN_FPS_ENV = "CLUSTER_AUTORUN_FPS"
+REALTIME_CORES_ENV = "CLUSTER_REALTIME_CORES"
+REALTIME_PRIORITY_ENV = "CLUSTER_REALTIME_PRIORITY"
 AUTORUN_DEFAULT_ENV = {
     "CLUSTER_REALTIME": "1",
 }
+DEFAULT_REALTIME_CORES = [1, 2, 3, 4]
+DEFAULT_REALTIME_PRIORITY = 10
+CORE_MODE_DEDICATED = 0
+CORE_MODE_ALL = 1
+EXPLICIT_REALTIME_CORES_ENV = REALTIME_CORES_ENV in os.environ
+EXPLICIT_REALTIME_PRIORITY_ENV = REALTIME_PRIORITY_ENV in os.environ
 ENCODER_AUTO = 0
 ENCODER_JPEG = 1
 ENCODER_HARDWARE = 2
@@ -40,6 +50,11 @@ ENCODER_NAMES = {
     ENCODER_HARDWARE: "hardware",
     ENCODER_SOFTWARE: "software",
 }
+INITIAL_ALLOWED_CORES = (
+    sorted(os.sched_getaffinity(0))
+    if sys.platform == "linux" and hasattr(os, "sched_getaffinity")
+    else list(range(os.cpu_count() or 1))
+)
 
 
 def _configure_autorun_locale() -> None:
@@ -70,9 +85,71 @@ def _cluster_realtime_enabled() -> bool:
     return os.environ.get("CLUSTER_REALTIME", "0").strip().lower() in ("1", "true", "yes", "on")
 
 
+def _normalize_core_mode(value: object) -> int:
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in ("all", "all-cores", "all_cores"):
+            return CORE_MODE_ALL
+        if normalized in ("dedicated", "default", "cluster", "1,2,3,4"):
+            return CORE_MODE_DEDICATED
+        try:
+            value = int(normalized)
+        except ValueError:
+            return CORE_MODE_DEDICATED
+    try:
+        mode = int(value)
+    except (TypeError, ValueError):
+        return CORE_MODE_DEDICATED
+    if mode == CORE_MODE_ALL:
+        return CORE_MODE_ALL
+    return CORE_MODE_DEDICATED
+
+
+def _normalize_priority(value: object) -> int:
+    if isinstance(value, str):
+        normalized = value.strip()
+        try:
+            value = int(normalized)
+        except ValueError:
+            return DEFAULT_REALTIME_PRIORITY
+    try:
+        priority = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_REALTIME_PRIORITY
+    if priority < 1:
+        return DEFAULT_REALTIME_PRIORITY
+    return min(99, priority)
+
+
+def _all_realtime_cores() -> list[int]:
+    return INITIAL_ALLOWED_CORES[:] or list(range(os.cpu_count() or 1))
+
+
+def _cores_for_core_mode(core_mode: int) -> list[int]:
+    if core_mode == CORE_MODE_ALL:
+        return _all_realtime_cores()
+    return DEFAULT_REALTIME_CORES[:]
+
+
+def _parse_realtime_cores(text: str) -> list[int]:
+    normalized = text.strip().lower()
+    if normalized in ("all", "*"):
+        return _all_realtime_cores()
+    return [int(core.strip()) for core in text.split(",") if core.strip()]
+
+
+def _apply_realtime_setting_env(core_mode: int, priority: int) -> None:
+    if not EXPLICIT_REALTIME_CORES_ENV:
+        os.environ[REALTIME_CORES_ENV] = ",".join(str(core) for core in _cores_for_core_mode(core_mode))
+    if not EXPLICIT_REALTIME_PRIORITY_ENV:
+        os.environ[REALTIME_PRIORITY_ENV] = str(priority)
+
+
 def _cluster_realtime_cores() -> list[int]:
-    cores_text = os.environ.get("CLUSTER_REALTIME_CORES", "0,1,2,3")
-    return [int(core.strip()) for core in cores_text.split(",") if core.strip()]
+    cores_text = os.environ.get(REALTIME_CORES_ENV)
+    if cores_text:
+        return _parse_realtime_cores(cores_text)
+    return DEFAULT_REALTIME_CORES[:]
 
 
 def _set_current_process_affinity(cores: list[int]) -> list[int]:
@@ -144,6 +221,22 @@ def _read_live_fps_mode(params: Params) -> int:
         return 0
 
 
+def _read_core_mode(params: Params) -> int:
+    try:
+        return _normalize_core_mode(params.get_int(HUD_CORE_MODE_PARAM))
+    except Exception as exc:
+        print(f"[cluster_autorun] failed to read {HUD_CORE_MODE_PARAM}: {exc}", flush=True)
+        return CORE_MODE_DEDICATED
+
+
+def _read_priority(params: Params) -> int:
+    try:
+        return _normalize_priority(params.get_int(HUD_PRIORITY_PARAM))
+    except Exception as exc:
+        print(f"[cluster_autorun] failed to read {HUD_PRIORITY_PARAM}: {exc}", flush=True)
+        return DEFAULT_REALTIME_PRIORITY
+
+
 def _encoder_sequence(encoder_mode: int) -> list[int]:
     if encoder_mode == ENCODER_AUTO:
         return [ENCODER_HARDWARE, ENCODER_SOFTWARE, ENCODER_JPEG]
@@ -165,7 +258,13 @@ def _encoder_args(encoder_mode: int) -> list[str]:
     return ["--usb-codec", "jpeg", "--usb-jpeg-quality", "68"]
 
 
-def _cluster_args(hud_mode: int, configured_encoder_mode: int, active_encoder_mode: int) -> list[str]:
+def _cluster_args(
+    hud_mode: int,
+    configured_encoder_mode: int,
+    active_encoder_mode: int,
+    core_mode: int,
+    priority: int,
+) -> list[str]:
     args = [
         "--input",
         "live",
@@ -176,6 +275,10 @@ def _cluster_args(hud_mode: int, configured_encoder_mode: int, active_encoder_mo
         str(hud_mode),
         "--cluster-hud-encoder",
         str(configured_encoder_mode),
+        "--cluster-hud-core-mode",
+        str(core_mode),
+        "--cluster-hud-priority",
+        str(priority),
     ]
     fps = os.environ.get(AUTORUN_FPS_ENV, "").strip()
     if fps:
@@ -183,7 +286,7 @@ def _cluster_args(hud_mode: int, configured_encoder_mode: int, active_encoder_mo
     return args
 
 
-def _run_cluster_once(hud_mode: int, encoder_mode: int) -> None:
+def _run_cluster_once(hud_mode: int, encoder_mode: int, core_mode: int, priority: int) -> None:
     from selfdrive.carrot import cluster_run
 
     previous_argv = sys.argv[:]
@@ -199,7 +302,7 @@ def _run_cluster_once(hud_mode: int, encoder_mode: int) -> None:
             try:
                 sys.argv = [
                     previous_argv[0],
-                    *_cluster_args(hud_mode, encoder_mode, active_encoder_mode),
+                    *_cluster_args(hud_mode, encoder_mode, active_encoder_mode, core_mode, priority),
                 ]
                 cluster_run.main()
                 return
@@ -444,11 +547,14 @@ def main() -> None:
     _configure_autorun_locale()
     _ensure_cluster_paths()
     _apply_autorun_defaults()
-    _configure_autorun_affinity()
     from cluster_usb_display import find_supported_usb_product, product_id_for_hud_mode, product_label
 
     params = Params()
     while True:
+        core_mode = _read_core_mode(params)
+        priority = _read_priority(params)
+        _apply_realtime_setting_env(core_mode, priority)
+        _configure_autorun_affinity()
         hud_mode = _read_hud_mode(params)
         encoder_mode = _read_encoder_mode(params)
         live_fps_mode = _read_live_fps_mode(params)
@@ -476,20 +582,26 @@ def main() -> None:
             print(f"[cluster_autorun] found {product_label(expected_product_id)}; starting cluster HUD", flush=True)
 
         try:
-            _run_cluster_once(hud_mode, encoder_mode)
+            _run_cluster_once(hud_mode, encoder_mode, core_mode, priority)
             next_hud_mode = _read_hud_mode(params)
             next_encoder_mode = _read_encoder_mode(params)
             next_live_fps_mode = _read_live_fps_mode(params)
+            next_core_mode = _read_core_mode(params)
+            next_priority = _read_priority(params)
             if (
                 next_hud_mode != hud_mode
                 or next_encoder_mode != encoder_mode
                 or next_live_fps_mode != live_fps_mode
+                or next_core_mode != core_mode
+                or next_priority != priority
             ):
                 print(
                     f"[cluster_autorun] HUD setting changed "
                     f"mode {hud_mode}->{next_hud_mode}, "
                     f"encoder {encoder_mode}->{next_encoder_mode}, "
-                    f"live_fps {live_fps_mode}->{next_live_fps_mode}; rechecking",
+                    f"live_fps {live_fps_mode}->{next_live_fps_mode}, "
+                    f"core_mode {core_mode}->{next_core_mode}, "
+                    f"priority {priority}->{next_priority}; rechecking",
                     flush=True,
                 )
                 continue

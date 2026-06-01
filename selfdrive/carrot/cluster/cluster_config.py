@@ -55,11 +55,18 @@ CLUSTER_HUD_PARAM = "ClusterHud"
 CLUSTER_HUD_DEBUG_PARAM = "ClusterHudDebug"
 CLUSTER_BRIGHTNESS_PARAM = "ClusterHudBrightness"
 CLUSTER_ENCODER_PARAM = "ClusterHudEncoder"
+CLUSTER_CORE_MODE_PARAM = "ClusterHudCoreMode"
+CLUSTER_PRIORITY_PARAM = "ClusterHudPriority"
 CLUSTER_THEME_PARAM = "ClusterHudTheme"
 CLUSTER_LIVE_FPS_PARAM = "ClusterHudLiveFps"
 CLUSTER_RADAR_INFO_PARAM = "ClusterHudRadarInfo"
 CLUSTER_RADAR_DISPLAY_PARAM = "ClusterHudRadarDisplay"
 CLUSTER_RADAR_SOURCE_COLOR_PARAM = "ClusterHudRadarSourceColor"
+CLUSTER_CORE_MODE_DEDICATED = 0
+CLUSTER_CORE_MODE_ALL = 1
+CLUSTER_PRIORITY_DEFAULT = 10
+CLUSTER_PRIORITY_MIN = 1
+CLUSTER_PRIORITY_MAX = 99
 CLUSTER_SCREEN_MODE_DEFAULT = 0
 CLUSTER_SCREEN_MODE_DEBUG = 1
 CLUSTER_SCREEN_MODE_DEBUG_SYSTEM = 2
@@ -218,6 +225,42 @@ def normalize_cluster_encoder_mode(value: object) -> int:
     ):
         return mode
     return CLUSTER_ENCODER_AUTO
+
+
+def normalize_cluster_core_mode(value: object) -> int:
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in ("all", "all-cores", "all_cores"):
+            return CLUSTER_CORE_MODE_ALL
+        if normalized in ("dedicated", "default", "cluster", "1,2,3,4"):
+            return CLUSTER_CORE_MODE_DEDICATED
+        try:
+            value = int(normalized)
+        except ValueError:
+            return CLUSTER_CORE_MODE_DEDICATED
+    try:
+        mode = int(value)
+    except (TypeError, ValueError):
+        return CLUSTER_CORE_MODE_DEDICATED
+    if mode == CLUSTER_CORE_MODE_ALL:
+        return CLUSTER_CORE_MODE_ALL
+    return CLUSTER_CORE_MODE_DEDICATED
+
+
+def normalize_cluster_priority(value: object) -> int:
+    if isinstance(value, str):
+        normalized = value.strip()
+        try:
+            value = int(normalized)
+        except ValueError:
+            return CLUSTER_PRIORITY_DEFAULT
+    try:
+        priority = int(value)
+    except (TypeError, ValueError):
+        return CLUSTER_PRIORITY_DEFAULT
+    if priority < CLUSTER_PRIORITY_MIN:
+        return CLUSTER_PRIORITY_DEFAULT
+    return min(CLUSTER_PRIORITY_MAX, priority)
 
 
 def normalize_cluster_brightness_percent(value: object) -> int:
