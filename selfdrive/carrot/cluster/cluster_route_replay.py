@@ -56,6 +56,7 @@ RADAR_FRONT_MAX_LONGITUDINAL_M = 180.0
 CORNER_RADAR_REAR_MIN_LONGITUDINAL_M = -180.0
 CCNC_CORNER_RADAR_ADDRESS = 0x162
 ADRV_CORNER_RADAR_ADDRESS = 0x1EA
+HYUNDAI_CAMERA_CAN_BUS_MOD = 2
 ROUTE_REPLAY_MIN_BUFFER_FILES = 2
 ROUTE_REPLAY_START_BUFFER_FILES = 1
 ROUTE_REPLAY_READAHEAD_S = 5.0
@@ -1457,6 +1458,8 @@ class RouteLogParser:
                 continue
             data = bytes(safe_get(can_message, "dat", b""))
             if is_hyundai_canfd_radar_address(address):
+                if source_service == "sendcan":
+                    continue
                 labels = hyundai_canfd_radar_labels_for_address(address)
                 radar_points = parse_hyundai_canfd_radar_message(address, data)
                 valid_labels = {point.label for point in radar_points}
@@ -1470,22 +1473,18 @@ class RouteLogParser:
                 continue
             if address not in (CCNC_CORNER_RADAR_ADDRESS, ADRV_CORNER_RADAR_ADDRESS):
                 continue
+            if source_service == "sendcan" or not is_hyundai_camera_can_bus(bus):
+                continue
             if len(data) < 24:
                 continue
             parsed = parse_corner_radar_message(address, data)
             if address == ADRV_CORNER_RADAR_ADDRESS:
                 lane_changing = dbc_unsigned(data, 45, 3, "be")
-                if source_service == "sendcan":
-                    self.adrv_lane_changing = lane_changing
-                    self.adrv_lane_changing_t = event_t
-                    continue
                 self.adrv_corner_detections = parsed
                 self.adrv_corner_message_t = event_t
                 self.adrv_lane_changing = lane_changing
                 self.adrv_lane_changing_t = event_t
             else:
-                if source_service == "sendcan":
-                    continue
                 self.ccnc_corner_detections = parsed
                 self.ccnc_corner_message_t = event_t
 
@@ -1587,19 +1586,11 @@ class RouteLogParser:
     ) -> tuple[DetectedVehicle, ...] | None:
         adrv_fresh = event_t - self.adrv_corner_message_t < CORNER_DETECTION_STALE_S
         ccnc_fresh = event_t - self.ccnc_corner_message_t < CORNER_DETECTION_STALE_S
-        adrv_lane_change_fresh = event_t - self.adrv_lane_changing_t < CORNER_DETECTION_STALE_S
-        lane_change_active = (
-            lane_change in ("left", "right")
-            and lane_change_phase in ("preparing", "changing", "recentering")
-        )
-        adrv_lane_change_active = adrv_lane_change_fresh and self.adrv_lane_changing != 0
 
-        if adrv_fresh and (lane_change_active or adrv_lane_change_active):
+        if adrv_fresh:
             return tuple(self.adrv_corner_detections.values())
         if ccnc_fresh:
             return tuple(self.ccnc_corner_detections.values())
-        if adrv_fresh:
-            return tuple(self.adrv_corner_detections.values())
         return None
 
     def _current_road_curvature(self) -> tuple[float | None, str]:
@@ -2985,6 +2976,10 @@ def parse_corner_radar_message(address: int, data: bytes) -> dict[str, DetectedV
             source=f"CAN 0x{address:x}",
         )
     return detections
+
+
+def is_hyundai_camera_can_bus(bus: int) -> bool:
+    return bus >= 0 and bus % 4 == HYUNDAI_CAMERA_CAN_BUS_MOD
 
 
 def parse_hyundai_canfd_radar_message(address: int, data: bytes) -> tuple[RadarPoint, ...]:
