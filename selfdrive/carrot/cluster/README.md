@@ -293,10 +293,11 @@ to the point/box top so speed and distance are less high above the vehicle.
 `LR`/`RR` rear-corner detections render as normal vehicle boxes at their actual
 detected positions. The older fixed rear-tire-depth 2D arrow/label is removed.
 The default drive camera sits closer to the ego roof, lower than the earlier
-high view, and tilted downward so route/live views keep rear context visible
-down to about rendered `-5m` relative to ego. Rear object rendering compresses
-negative longitudinal distance by `0.5`, so an actual `-10m` LR/RR detection is
-drawn at the rendered `-5m` position while labels keep the actual distance.
+high view, tilted downward, and shifted `10m` forward so route/live scene space
+is pulled rearward together instead of moving only the ego vehicle. Rear object
+rendering compresses negative longitudinal distance by `0.5`, so an actual
+`-10m` LR/RR detection is drawn at the rendered `-5m` position while labels
+keep the actual distance.
 When both raw camera-bus ADRV `0x1EA` and CCNC `0x162` corner messages are
 fresh, ADRV is preferred for LF/RF/LR/RR distance in the Hyundai `carState`
 DBC parsing path. The cluster consumes the DBC-parsed `carState` corner fields
