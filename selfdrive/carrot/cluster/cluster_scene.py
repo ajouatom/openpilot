@@ -90,7 +90,7 @@ REAR_CORNER_RADAR_LABELS = frozenset(("LR", "RR"))
 REAR_INDICATOR_ANCHOR_FORWARD_M = EGO_FORWARD_M - VEHICLE_LENGTH_M * 0.34
 REAR_INDICATOR_ANCHOR_HEIGHT_M = 0.14
 DRIVE_VIEW_REAR_RELATIVE_M = -10.0
-DRIVE_VIEW_REAR_ROAD_MARGIN_M = 2.0
+DRIVE_VIEW_REAR_ROAD_MARGIN_M = 3.0
 DRIVE_VIEW_ROAD_START_M = (
     EGO_FORWARD_M + DRIVE_VIEW_REAR_RELATIVE_M - DRIVE_VIEW_REAR_ROAD_MARGIN_M
 )
@@ -2451,8 +2451,8 @@ def scene_camera(state: ClusterUiState, lane_width_m: float, anchor_x_m: float =
     ego_y_m = EGO_FORWARD_M
 
     drive_camera = CameraSpec(
-        position=Vec3(0.0, -24.5, 7.20),
-        target=Vec3(0.0, 9.5, -0.25),
+        position=Vec3(0.0, -16.0, 6.00),
+        target=Vec3(0.0, 7.0, -0.20),
         fovy_deg=44.0,
     )
 

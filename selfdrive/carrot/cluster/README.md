@@ -294,9 +294,9 @@ The default drive camera sits closer to the ego roof, lower than the earlier
 high view, and tilted downward so route/live views keep rear context visible
 down to about `-10m` relative to ego. It uses a closer/lower target and wider
 FOV so nearby vehicles read larger while the far road converges more tightly,
-with road/lane/radar geometry starting about two meters farther back; rear
-vehicle presence does not expand the default drive scene back toward the older
-`-20m` view.
+with road/lane/radar geometry starting about three meters farther back so the
+rear lane-start seam sits below the visible bottom edge; rear vehicle presence
+does not expand the default drive scene back toward the older `-20m` view.
 Front-center `radarState` lead overlap uses a wider vehicle-sized tolerance
 than corner radar overlap, and default mode also collapses overlapping
 front-center detected vehicle boxes so source-split front radar/model
