@@ -6,6 +6,7 @@ import math
 import multiprocessing
 import os
 import queue
+import re
 import shutil
 import subprocess
 import sys
@@ -14,6 +15,7 @@ import threading
 import traceback
 from bisect import bisect_right
 from dataclasses import dataclass, replace
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -42,11 +44,24 @@ from cluster_models import (
 from cluster_utils import clamp, smoothstep
 
 
+DBC_SIGNAL_RE = re.compile(
+    r'^\s*SG_ (\w+) : (\d+)\|(\d+)@([01])([+-]) \(([0-9.+\-eE]+),([0-9.+\-eE]+)\)'
+)
 ROUTE_SCHEMA_CACHE_NAME = "carrotpilot_cluster_capnp_v1"
 LOG_FILENAMES = {
     "qlog": "qlog.zst",
     "rlog": "rlog.zst",
 }
+
+
+@dataclass(frozen=True)
+class DbcSignalSpec:
+    start: int
+    length: int
+    byte_order: str
+    signed: bool
+    factor: float
+    offset: float
 RADAR_TO_CAMERA_M = 1.52
 MODEL_LEAD_MIN_PROB = 0.08
 RADAR_POINT_STALE_S = 0.12
@@ -57,6 +72,10 @@ CORNER_RADAR_REAR_MIN_LONGITUDINAL_M = -180.0
 CCNC_CORNER_RADAR_ADDRESS = 0x162
 ADRV_CORNER_RADAR_ADDRESS = 0x1EA
 HYUNDAI_CAMERA_CAN_BUS_MOD = 2
+CORNER_RADAR_DBC_MESSAGES = {
+    CCNC_CORNER_RADAR_ADDRESS: "CCNC_0x162",
+    ADRV_CORNER_RADAR_ADDRESS: "ADRV_0x1ea",
+}
 ROUTE_REPLAY_MIN_BUFFER_FILES = 2
 ROUTE_REPLAY_START_BUFFER_FILES = 1
 ROUTE_REPLAY_READAHEAD_S = 5.0
@@ -1540,6 +1559,14 @@ class RouteLogParser:
         if event_t - self.model_detection_t < 0.8:
             detections.extend(self.model_detections)
 
+        car_state_detections = car_state_corner_detections(car_state)
+        car_state_corner_labels = {vehicle.label for vehicle in car_state_detections}
+        for vehicle in car_state_detections:
+            if not vehicle_is_inside_road_edges(vehicle, lane_values):
+                continue
+            if not has_nearby_vehicle(detections, vehicle, longitudinal_tolerance=3.0, lateral_tolerance=1.1):
+                detections.append(vehicle)
+
         corner_detections = self._corner_detections_for_current_state(
             event_t,
             lane_change,
@@ -1547,22 +1574,18 @@ class RouteLogParser:
         )
         if corner_detections is not None:
             for vehicle in corner_detections:
+                if vehicle.label in car_state_corner_labels:
+                    continue
                 if not vehicle_is_inside_road_edges(vehicle, lane_values):
                     continue
                 if not has_nearby_vehicle(detections, vehicle, longitudinal_tolerance=3.0, lateral_tolerance=1.1):
                     detections.append(vehicle)
-        else:
-            car_state_detections = car_state_corner_detections(car_state)
-            for vehicle in car_state_detections:
-                if not vehicle_is_inside_road_edges(vehicle, lane_values):
-                    continue
-                if not has_nearby_vehicle(detections, vehicle, longitudinal_tolerance=3.0, lateral_tolerance=1.1):
-                    detections.append(vehicle)
-            for vehicle in car_state_rear_blindspot_detections(car_state, car_state_detections):
-                if not vehicle_is_inside_road_edges(vehicle, lane_values):
-                    continue
-                if not has_nearby_vehicle(detections, vehicle, longitudinal_tolerance=3.0, lateral_tolerance=1.1):
-                    detections.append(vehicle)
+
+        for vehicle in car_state_rear_blindspot_detections(car_state, car_state_detections):
+            if not vehicle_is_inside_road_edges(vehicle, lane_values):
+                continue
+            if not has_nearby_vehicle(detections, vehicle, longitudinal_tolerance=3.0, lateral_tolerance=1.1):
+                detections.append(vehicle)
 
         if event_t - self.radar_detection_t < 0.8:
             for vehicle in self.radar_detections:
@@ -2883,19 +2906,22 @@ def list_max(values: Any) -> float:
 
 def car_state_corner_detections(car_state: Any) -> tuple[DetectedVehicle, ...]:
     pairs = (
-        ("LF", "leftLongDist", "leftLatDist", -1.0),
-        ("RF", "rightLongDist", "rightLatDist", 1.0),
+        ("LF", "leftLongDist", "leftLatDist", -1.0, 1.0),
+        ("RF", "rightLongDist", "rightLatDist", 1.0, 1.0),
+        ("LR", "leftRearLongDist", "leftRearLatDist", -1.0, -1.0),
+        ("RR", "rightRearLongDist", "rightRearLatDist", 1.0, -1.0),
     )
     detections: list[DetectedVehicle] = []
-    for label, distance_name, lateral_name, side in pairs:
+    for label, distance_name, lateral_name, side, forward_sign in pairs:
         distance_m = safe_float(car_state, distance_name, 0.0)
         if not 0.2 < distance_m < 180.0:
             continue
+        longitudinal_m = forward_sign * distance_m
         lateral_mag = normalized_lateral_m(safe_float(car_state, lateral_name, 0.0))
         detections.append(
             DetectedVehicle(
                 label=label,
-                longitudinal_m=distance_m,
+                longitudinal_m=longitudinal_m,
                 lateral_m=side * lateral_mag,
                 source="carState",
             )
@@ -2913,6 +2939,8 @@ def car_state_rear_blindspot_detections(
         ("RR", "rightBlindspot", 1.0),
     ):
         if not bool(safe_get(car_state, blindspot_name, False)):
+            continue
+        if any(vehicle.label == label for vehicle in front_detections):
             continue
         if any(
             vehicle.lateral_m * side > 0.0
@@ -2932,29 +2960,12 @@ def car_state_rear_blindspot_detections(
     return tuple(detections)
 
 
-def corner_radar_specs(address: int) -> dict[str, tuple[str, int, int, str, int, int, str, int, int, float]]:
-    if address == 0x162:
-        return {
-            "LF": ("le", 112, 5, "le", 117, 11, "le", 128, 7, 1.0),
-            "RF": ("le", 136, 5, "le", 141, 11, "le", 152, 7, 1.0),
-            "LR": ("le", 163, 5, "be", 175, 8, "le", 176, 7, -1.0),
-            "RR": ("le", 192, 5, "le", 197, 8, "le", 205, 7, -1.0),
-        }
-    return {
-        "LF": ("be", 74, 3, "le", 46, 11, "be", 70, 7, 1.0),
-        "RF": ("be", 98, 3, "le", 75, 11, "be", 94, 7, 1.0),
-        "LR": ("be", 162, 3, "le", 139, 9, "le", 152, 6, -1.0),
-        "RR": ("be", 186, 3, "le", 163, 9, "le", 172, 6, -1.0),
-    }
-
-
 def parse_corner_radar_message(address: int, data: bytes) -> dict[str, DetectedVehicle]:
-    specs = corner_radar_specs(address)
+    values = decode_hyundai_canfd_dbc_message(address, data)
     detections: dict[str, DetectedVehicle] = {}
-    for label, spec in specs.items():
-        det_order, det_start, det_len, dist_order, dist_start, dist_len, lat_order, lat_start, lat_len, forward_sign = spec
-        detect = dbc_unsigned(data, det_start, det_len, det_order)
-        distance_m = dbc_unsigned(data, dist_start, dist_len, dist_order) * 0.1
+    for label, forward_sign in (("LF", 1.0), ("RF", 1.0), ("LR", -1.0), ("RR", -1.0)):
+        detect = values.get(f"{label}_DETECT", 0.0)
+        distance_m = values.get(f"{label}_DETECT_DISTANCE", 0.0)
         if detect == 0 or not 0.2 < distance_m < 180.0:
             continue
         longitudinal_m = forward_sign * distance_m
@@ -2963,7 +2974,7 @@ def parse_corner_radar_message(address: int, data: bytes) -> dict[str, DetectedV
                 continue
         elif not RADAR_MIN_LONGITUDINAL_M <= longitudinal_m <= RADAR_FRONT_MAX_LONGITUDINAL_M:
             continue
-        lateral_mag = normalized_lateral_m(dbc_unsigned(data, lat_start, lat_len, lat_order) * 0.1)
+        lateral_mag = normalized_lateral_m(values.get(f"{label}_DETECT_LATERAL", 0.0))
         side = -1.0 if label.endswith("F") and label.startswith("L") else 1.0
         if label.startswith("L"):
             side = -1.0
@@ -2976,6 +2987,47 @@ def parse_corner_radar_message(address: int, data: bytes) -> dict[str, DetectedV
             source=f"CAN 0x{address:x}",
         )
     return detections
+
+
+@cache
+def hyundai_canfd_corner_dbc_signals() -> dict[int, dict[str, DbcSignalSpec]]:
+    openpilot_root = find_openpilot_root_for_schema(Path(__file__).resolve().parent)
+    dbc_path = openpilot_root / "opendbc_repo" / "opendbc" / "dbc" / "generator" / "hyundai" / "hyundai_canfd.dbc"
+    signals: dict[int, dict[str, DbcSignalSpec]] = {address: {} for address in CORNER_RADAR_DBC_MESSAGES}
+    current_address: int | None = None
+    with open(dbc_path, encoding="utf-8") as dbc_file:
+        for line in dbc_file:
+            if line.startswith("BO_ "):
+                parts = line.split()
+                current_address = int(parts[1], 0) if len(parts) > 1 else None
+                continue
+            if current_address not in signals:
+                continue
+            match = DBC_SIGNAL_RE.match(line)
+            if match is None:
+                continue
+            name, start, length, endian, sign, factor, offset = match.groups()
+            signals[current_address][name] = DbcSignalSpec(
+                start=int(start),
+                length=int(length),
+                byte_order="le" if endian == "1" else "be",
+                signed=sign == "-",
+                factor=float(factor),
+                offset=float(offset),
+            )
+    return signals
+
+
+def decode_hyundai_canfd_dbc_message(address: int, data: bytes) -> dict[str, float]:
+    if address not in CORNER_RADAR_DBC_MESSAGES:
+        return {}
+    values: dict[str, float] = {}
+    for name, signal in hyundai_canfd_corner_dbc_signals().get(address, {}).items():
+        raw_value = dbc_unsigned(data, signal.start, signal.length, signal.byte_order)
+        if signal.signed:
+            raw_value -= ((raw_value >> (signal.length - 1)) & 0x1) * (1 << signal.length)
+        values[name] = raw_value * signal.factor + signal.offset
+    return values
 
 
 def is_hyundai_camera_can_bus(bus: int) -> bool:

@@ -590,23 +590,19 @@ class CarState(CarStateBase):
 
     speed_limit_cam = False
     corner = False
-    if self.ccnc_0x162 is not None:
-      ret.leftLongDist = self.lf_distance = self.ccnc_0x162["LF_DETECT_DISTANCE"]
-      ret.rightLongDist = self.rf_distance = self.ccnc_0x162["RF_DETECT_DISTANCE"]
-      self.lr_distance = self.ccnc_0x162["LR_DETECT_DISTANCE"]
-      self.rr_distance = self.ccnc_0x162["RR_DETECT_DISTANCE"]
-      ret.leftLatDist = self.ccnc_0x162["LF_DETECT_LATERAL"]
-      ret.rightLatDist = self.ccnc_0x162["RF_DETECT_LATERAL"]
+    corner_info = self.adrv_0x1ea if self.adrv_0x1ea is not None else self.ccnc_0x162
+    if corner_info is not None:
+      ret.leftLongDist = self.lf_distance = corner_info["LF_DETECT_DISTANCE"]
+      ret.rightLongDist = self.rf_distance = corner_info["RF_DETECT_DISTANCE"]
+      self.lr_distance = corner_info["LR_DETECT_DISTANCE"]
+      self.rr_distance = corner_info["RR_DETECT_DISTANCE"]
+      ret.leftLatDist = corner_info["LF_DETECT_LATERAL"]
+      ret.rightLatDist = corner_info["RF_DETECT_LATERAL"]
+      ret.leftRearLongDist = self.lr_distance
+      ret.rightRearLongDist = self.rr_distance
+      ret.leftRearLatDist = corner_info["LR_DETECT_LATERAL"]
+      ret.rightRearLatDist = corner_info["RR_DETECT_LATERAL"]
       corner = True
-    if self.adrv_0x1ea is not None:
-      if not corner:
-        ret.leftLongDist = self.adrv_0x1ea["LF_DETECT_DISTANCE"]
-        ret.rightLongDist = self.adrv_0x1ea["RF_DETECT_DISTANCE"]
-        self.lr_distance = self.adrv_0x1ea["LR_DETECT_DISTANCE"]
-        self.rr_distance = self.adrv_0x1ea["RR_DETECT_DISTANCE"]
-        ret.leftLatDist = self.adrv_0x1ea["LF_DETECT_LATERAL"]
-        ret.rightLatDist = self.adrv_0x1ea["RF_DETECT_LATERAL"]
-        corner = True
     if corner:
       left_block = True if 0 < ret.leftLongDist < 7.0 or 0 < self.lr_distance < 7.0 else False
       right_block = True if 0 < ret.rightLongDist < 7.0 or 0 < self.rr_distance < 7.0 else False
