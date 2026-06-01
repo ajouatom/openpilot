@@ -90,8 +90,9 @@ DRIVE_CAMERA_FORWARD_SHIFT_M = 5.0
 DRIVE_VIEW_REAR_RELATIVE_M = -5.0
 DRIVE_VIEW_REAR_ROAD_MARGIN_M = 8.0
 REAR_RENDER_DISTANCE_SCALE = 0.5
+DRIVE_VIEW_REAR_VISIBLE_M = EGO_FORWARD_M + DRIVE_VIEW_REAR_RELATIVE_M
 DRIVE_VIEW_ROAD_START_M = (
-    EGO_FORWARD_M + DRIVE_VIEW_REAR_RELATIVE_M - DRIVE_VIEW_REAR_ROAD_MARGIN_M
+    DRIVE_VIEW_REAR_VISIBLE_M - DRIVE_VIEW_REAR_ROAD_MARGIN_M
 )
 VEHICLE_BADGE_TTC_S = 9.9
 VEHICLE_BADGE_ACCEL_MPS2 = 1.0
@@ -626,9 +627,24 @@ def lane_dash_cycle_offset(distance_m: float, dash_phase_m: float, cycle_m: floa
     return cycle_offset_m
 
 
-def lane_dash_phase_m(centerline: tuple[Vec3, ...]) -> float:
-    # Start the rear-most visible dashed lane segment with paint, not a gap.
-    return 0.0
+def lane_dash_phase_m(
+    centerline: tuple[Vec3, ...],
+    dash_m: float = LANE_DASH_LENGTH_M,
+    gap_m: float = LANE_DASH_GAP_M,
+) -> float:
+    if not centerline:
+        return 0.0
+    # Start the visible rear bound with paint even when road geometry begins below the screen.
+    visible_rear_distance_m = max(0.0, DRIVE_VIEW_REAR_VISIBLE_M - centerline[0].y)
+    return (-visible_rear_distance_m) % (dash_m + gap_m)
+
+
+def dashed_lane_start_cursor_m(start_m: float, dash_m: float, gap_m: float) -> float:
+    if start_m >= DRIVE_VIEW_REAR_VISIBLE_M:
+        return start_m
+    cycle_m = dash_m + gap_m
+    cycles_to_visible = math.ceil((DRIVE_VIEW_REAR_VISIBLE_M - start_m) / cycle_m)
+    return DRIVE_VIEW_REAR_VISIBLE_M - cycles_to_visible * cycle_m
 
 
 def dashed_centerline_segments(
@@ -643,7 +659,7 @@ def dashed_centerline_segments(
     segments: list[tuple[Vec3, ...]] = []
     current_dash: list[Vec3] = []
     distance_m = 0.0
-    dash_phase_m = lane_dash_phase_m(centerline)
+    dash_phase_m = lane_dash_phase_m(centerline, dash_m, gap_m)
     previous = centerline[0]
     eps = 0.0001
 
@@ -726,7 +742,7 @@ def lane_marking_segments_for_marking(
     segments: list[tuple[Vec3, ...]] = []
     dash_m = LANE_DASH_LENGTH_M
     cycle_m = dash_m + LANE_DASH_GAP_M
-    cursor = start_m
+    cursor = dashed_lane_start_cursor_m(start_m, dash_m, LANE_DASH_GAP_M)
     while cursor < end_m:
         dash_start = max(cursor, start_m)
         dash_end = min(cursor + dash_m, end_m)
@@ -827,7 +843,7 @@ def lane_marking_strip_groups_from_centerline(
     cycle_m = dash_m + gap_m
     current_dash: list[Vec3] = []
     distance_m = 0.0
-    dash_phase_m = lane_dash_phase_m(centerline)
+    dash_phase_m = lane_dash_phase_m(centerline, dash_m, gap_m)
     previous = centerline[0]
     eps = 0.0001
 
@@ -1219,7 +1235,7 @@ def cached_lane_offset_strip_groups(
         segments: list[tuple[Vec3, ...]] = []
         dash_m = LANE_DASH_LENGTH_M
         cycle_m = dash_m + LANE_DASH_GAP_M
-        cursor = cache_start_m
+        cursor = dashed_lane_start_cursor_m(cache_start_m, dash_m, LANE_DASH_GAP_M)
         while cursor < cache_end_m:
             dash_start = max(cursor, cache_start_m)
             dash_end = min(cursor + dash_m, cache_end_m)
