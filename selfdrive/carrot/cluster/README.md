@@ -298,11 +298,11 @@ high view, tilted downward, and shifted `5m` forward so route/live scene space
 is pulled rearward together instead of moving only the ego vehicle. Drive
 object rendering compresses positive and negative longitudinal distance by
 `0.5`, so actual `20m` and `-10m` detections draw with half-scale spacing while
-labels keep the actual distance. Radar-origin objects (`radarState`, raw radar
-points, and LF/RF/LR/RR corner detections) start that compressed spacing from
-their matching radar zero origin, not from the ego center.
+labels keep the actual distance. Radar-origin objects use the same ego-center
+compressed position transform as the rest of the scene.
 Side reference bars mark the physical corner-radar zero-origin positions on the
-ego vehicle: front radar `0m` is red and rear radar `0m` is blue.
+ego vehicle for visual comparison only: front radar `0m` is red and rear radar
+`0m` is blue.
 Non-ego vehicle objects draw a thin vertical yellow bar at the point where
 vehicle distance is measured; it remains at the vehicle center and is visual
 only.
