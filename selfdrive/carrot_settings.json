@@ -2448,6 +2448,22 @@
       "max": 99,
       "default": 10,
       "unit": 1
+    },
+    {
+      "group": "\uc678\ubd80 HUD",
+      "egroup": "CLUSTER HUD",
+      "cgroup": "\u5916\u90e8 HUD",
+      "name": "ClusterHudCameraViewMode",
+      "title": "\uc678\ubd80 HUD \uce74\uba54\ub77c \ubdf0 \ubaa8\ub4dc(0)",
+      "descr": "0: \uae30\ubcf8\n1: \ubaa8\ub4dc1(\ud558\ub2e8\ubdf0)",
+      "etitle": "External HUD Camera View Mode(0)",
+      "edescr": "0: Default\n1: Mode 1 (bottom view)",
+      "ctitle": "External HUD Camera View Mode(0)",
+      "cdescr": "0: Default\n1: Mode 1 (bottom view)",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
     }
 
   ]

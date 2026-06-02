@@ -295,10 +295,17 @@ to the point/box top so speed and distance are less high above the vehicle.
 detected positions. The older fixed rear-tire-depth 2D arrow/label is removed.
 The default drive camera sits closer to the ego roof, lower than the earlier
 high view, tilted downward, and shifted `5m` forward so route/live scene space
-is pulled rearward together instead of moving only the ego vehicle. Rear object
-rendering compresses negative longitudinal distance by `0.5`, so an actual
-`-10m` LR/RR detection is drawn at the rendered `-5m` position while labels
-keep the actual distance.
+is easier to see. Detected vehicles, radar points, and desired-distance markers
+compress signed longitudinal placement by `0.5` in the rendered scene only, so
+actual `20m` and `-10m` draw at rendered `10m` and `-5m`. Distance labels keep
+the actual signed longitudinal values. The ego vehicle is drawn half a vehicle
+length behind the raw `0m` reference so its front bumper aligns to that
+reference. The temporary radar-zero, lane-start, and ego-zero debug marker bars
+are no longer rendered.
+`ClusterHudCameraViewMode=0` keeps this current camera. Mode `1` uses a
+pulled-back ego-bottom camera view for cars without rear radar.
+The console refresh line prints `cam=<mode>` so live param changes can be
+confirmed while the HUD is running.
 When both raw camera-bus ADRV `0x1EA` and CCNC `0x162` corner messages are
 fresh, ADRV is preferred for LF/RF/LR/RR distance in the Hyundai `carState`
 DBC parsing path. The cluster consumes the DBC-parsed `carState` corner fields

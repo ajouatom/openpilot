@@ -321,8 +321,8 @@ def vehicle_distance_label(vehicle: VehicleBox) -> str:
 
 def vehicle_distance_m(vehicle: VehicleBox) -> float:
     if vehicle.longitudinal_m is not None:
-        return abs(vehicle.longitudinal_m)
-    return abs(vehicle.center.y - EGO_FORWARD_M)
+        return vehicle.longitudinal_m
+    return vehicle.center.y - EGO_FORWARD_M
 
 
 def vehicle_speed_label(vehicle: VehicleBox) -> str:
