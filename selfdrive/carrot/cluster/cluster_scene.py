@@ -89,7 +89,7 @@ CORNER_RADAR_LABELS = frozenset(("LF", "RF", "LR", "RR"))
 DRIVE_CAMERA_FORWARD_SHIFT_M = 5.0
 DRIVE_VIEW_REAR_RELATIVE_M = -5.0
 DRIVE_VIEW_REAR_ROAD_MARGIN_M = 8.0
-REAR_RENDER_DISTANCE_SCALE = 0.5
+LONGITUDINAL_RENDER_DISTANCE_SCALE = 0.5
 DRIVE_VIEW_REAR_VISIBLE_M = EGO_FORWARD_M + DRIVE_VIEW_REAR_RELATIVE_M
 DRIVE_VIEW_ROAD_START_M = (
     DRIVE_VIEW_REAR_VISIBLE_M - DRIVE_VIEW_REAR_ROAD_MARGIN_M
@@ -361,9 +361,7 @@ def data_scene_forward_m(relative_forward_m: float) -> float:
 
 
 def render_relative_forward_m(relative_forward_m: float) -> float:
-    if relative_forward_m >= 0.0:
-        return relative_forward_m
-    return relative_forward_m * REAR_RENDER_DISTANCE_SCALE
+    return relative_forward_m * LONGITUDINAL_RENDER_DISTANCE_SCALE
 
 
 def render_scene_forward_m(relative_forward_m: float) -> float:
@@ -1528,7 +1526,7 @@ def follow_distance_marker_strips(
     distance_m = state.longitudinal_desired_distance_m
     if distance_m is None or distance_m <= 0.0 or len(points) < 2:
         return ()
-    forward_m = data_scene_forward_m(distance_m)
+    forward_m = render_scene_forward_m(distance_m)
     if forward_m < points[0].y or forward_m > points[-1].y:
         return ()
     center_x_m = centerline_x_at_forward(points, forward_m)
@@ -3131,7 +3129,7 @@ def build_cluster_scene(
         detected_blockers = tuple(
             PathBlocker(
                 clamp(detected.lateral_m / lane_width_m, -2.2, 2.2),
-                data_scene_forward_m(detected.longitudinal_m),
+                render_scene_forward_m(detected.longitudinal_m),
                 VEHICLE_LENGTH_M,
             )
             for detected in blocking_detected_vehicles
