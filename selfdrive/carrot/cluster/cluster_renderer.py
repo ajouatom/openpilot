@@ -1548,9 +1548,10 @@ class ClusterUiRenderer:
         if not vehicle.source and not vehicle.label:
             return
         bar_height_m = max(1.15, vehicle.height_m + VEHICLE_DISTANCE_BAR_EXTRA_HEIGHT_M)
+        marker_y_m = vehicle.distance_marker_y_m if vehicle.distance_marker_y_m is not None else vehicle.center.y
         marker_center = rl.Vector3(
             vehicle.center.x,
-            vehicle.center.y,
+            marker_y_m,
             bar_height_m * 0.5 + 0.035,
         )
         marker_size = rl.Vector3(

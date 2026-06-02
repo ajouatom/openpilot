@@ -198,6 +198,7 @@ class VehicleBox:
     confidence: float = 1.0
     label: str = ""
     source: str = ""
+    distance_marker_y_m: float | None = None
     longitudinal_m: float | None = None
     relative_speed_mps: float | None = None
     absolute_speed_kph: float | None = None
@@ -2053,7 +2054,10 @@ def radar_vehicle_box(
     confidence = radar_vehicle_confidence(point)
     alpha = int(92 + 163 * confidence)
     body_color = vehicle_color_for_source("radarPoint", theme, state.radar_source_color_mode)
-    forward_m = radar_distance_scene_forward_m(point.longitudinal_m, point.label)
+    distance_marker_y_m = radar_distance_scene_forward_m(point.longitudinal_m, point.label)
+    forward_m = distance_marker_y_m
+    if radar_distance_uses_rear_origin(point.label, point.longitudinal_m):
+        forward_m -= VEHICLE_LENGTH_M * 0.5
     center_x_m = clamp(point.lateral_m, -lane_width_m * 3.0, lane_width_m * 3.0)
     return VehicleBox(
         center=Vec3(center_x_m, forward_m, VEHICLE_HEIGHT_M * 0.5),
@@ -2072,6 +2076,7 @@ def radar_vehicle_box(
         confidence=confidence,
         label=point.label,
         source="radarPoint",
+        distance_marker_y_m=distance_marker_y_m,
         longitudinal_m=point.longitudinal_m,
         relative_speed_mps=point.relative_speed_mps,
         absolute_speed_kph=radar_point_absolute_speed_kph(point, state),
@@ -2254,8 +2259,17 @@ def detected_vehicle_is_front_lead(vehicle: DetectedVehicle) -> bool:
 
 def detected_vehicle_scene_forward_m(vehicle: DetectedVehicle) -> float:
     if vehicle.label in CORNER_RADAR_LABELS or detected_vehicle_is_front_lead(vehicle):
-        return radar_distance_scene_forward_m(vehicle.longitudinal_m, vehicle.label)
+        forward_m = radar_distance_scene_forward_m(vehicle.longitudinal_m, vehicle.label)
+        if radar_distance_uses_rear_origin(vehicle.label, vehicle.longitudinal_m):
+            return forward_m - VEHICLE_LENGTH_M * 0.5
+        return forward_m
     return render_scene_forward_m(vehicle.longitudinal_m)
+
+
+def detected_vehicle_distance_marker_y_m(vehicle: DetectedVehicle) -> float | None:
+    if vehicle.label in CORNER_RADAR_LABELS or detected_vehicle_is_front_lead(vehicle):
+        return radar_distance_scene_forward_m(vehicle.longitudinal_m, vehicle.label)
+    return None
 
 
 def radar_point_absolute_speed_kph(point: RadarPoint, state: ClusterUiState) -> float | None:
@@ -2434,6 +2448,7 @@ def vehicle_box(
     primary: bool = False,
     annotate: bool = False,
     x_offset_m: float = 0.0,
+    distance_marker_y_m: float | None = None,
 ) -> VehicleBox:
     confidence = clamp(confidence, 0.0, 1.0)
     alpha = int(92 + 163 * confidence)
@@ -2472,6 +2487,7 @@ def vehicle_box(
         confidence=confidence,
         label=label,
         source=source,
+        distance_marker_y_m=distance_marker_y_m,
         longitudinal_m=actual_longitudinal_m,
         relative_speed_mps=relative_speed_mps,
         absolute_speed_kph=absolute_speed_kph,
@@ -3186,6 +3202,7 @@ def build_cluster_scene(
                 primary=detected.primary,
                 annotate=vehicle_badge_has_special_info(detected),
                 x_offset_m=relative_scene_x_offset_m,
+                distance_marker_y_m=detected_vehicle_distance_marker_y_m(detected),
             )
             for detected in render_detected_vehicles
         )
