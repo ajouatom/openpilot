@@ -298,12 +298,10 @@ high view, tilted downward, and shifted `5m` forward so route/live scene space
 is easier to see. Detected vehicles, radar points, and desired-distance markers
 compress signed longitudinal placement by `0.5` in the rendered scene only, so
 actual `20m` and `-10m` draw at rendered `10m` and `-5m`. Distance labels keep
-the actual signed longitudinal values, and there is no ego-vehicle visual
-offset. A red horizontal marker bar is drawn at the rendered radar
-`longitudinal_m=0` position. Visible model lane-line start points are connected
-with a green marker line. A blue ego `0m` marker bar is drawn slightly wider
-than the ego vehicle at the same raw `0m` reference, with the ego vehicle
-drawn half a vehicle length behind it so the front bumper aligns to that line.
+the actual signed longitudinal values. The ego vehicle is drawn half a vehicle
+length behind the raw `0m` reference so its front bumper aligns to that
+reference. The temporary radar-zero, lane-start, and ego-zero debug marker bars
+are no longer rendered.
 `ClusterHudCameraViewMode=0` keeps this current camera. Mode `1` uses a closer
 ego-bottom camera that places the ego vehicle almost against the lower screen
 edge for cars without rear radar.
