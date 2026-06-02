@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 from cluster_config import (
     AMBER,
     BLUE,
+    CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM,
     CLUSTER_RADAR_DISPLAY_DETAIL,
     CLUSTER_RADAR_SOURCE_COLOR_BY_SOURCE,
     ClusterTheme,
@@ -87,9 +88,11 @@ RADAR_FRONT_DETECTED_MERGE_LATERAL_M = 2.25
 RADAR_MERGED_SOURCE_TAG = "+radar:"
 CORNER_RADAR_LABELS = frozenset(("LF", "RF", "LR", "RR"))
 DRIVE_CAMERA_FORWARD_SHIFT_M = 5.0
+DRIVE_CAMERA_EGO_BOTTOM_POSITION_M = (0.0, -6.0, 5.00)
+DRIVE_CAMERA_EGO_BOTTOM_TARGET_M = (0.0, 14.0, -1.00)
 DRIVE_VIEW_REAR_RELATIVE_M = -5.0
 DRIVE_VIEW_REAR_ROAD_MARGIN_M = 8.0
-REAR_RENDER_DISTANCE_SCALE = 0.5
+LONGITUDINAL_RENDER_DISTANCE_SCALE = 0.5
 DRIVE_VIEW_REAR_VISIBLE_M = EGO_FORWARD_M + DRIVE_VIEW_REAR_RELATIVE_M
 DRIVE_VIEW_ROAD_START_M = (
     DRIVE_VIEW_REAR_VISIBLE_M - DRIVE_VIEW_REAR_ROAD_MARGIN_M
@@ -145,6 +148,7 @@ FOLLOW_DISTANCE_MARKER_BODY_FORWARD_M = 0.14
 FOLLOW_DISTANCE_MARKER_BACKING_EXTRA_WIDTH_M = 0.22
 FOLLOW_DISTANCE_MARKER_BACKING_COLOR: Color = (42, 0, 38, 230)
 FOLLOW_DISTANCE_MARKER_BODY_COLOR: Color = (255, 0, 220, 248)
+EGO_VEHICLE_CENTER_FORWARD_M = EGO_FORWARD_M - VEHICLE_LENGTH_M * 0.5
 LANE_HIGHLIGHT_COLOR = (64, 148, 255)
 LANE_HIGHLIGHT_ALPHA = 220
 LANE_HIGHLIGHT_ROUTE_ALPHA = 170
@@ -361,9 +365,7 @@ def data_scene_forward_m(relative_forward_m: float) -> float:
 
 
 def render_relative_forward_m(relative_forward_m: float) -> float:
-    if relative_forward_m >= 0.0:
-        return relative_forward_m
-    return relative_forward_m * REAR_RENDER_DISTANCE_SCALE
+    return relative_forward_m * LONGITUDINAL_RENDER_DISTANCE_SCALE
 
 
 def render_scene_forward_m(relative_forward_m: float) -> float:
@@ -1528,7 +1530,7 @@ def follow_distance_marker_strips(
     distance_m = state.longitudinal_desired_distance_m
     if distance_m is None or distance_m <= 0.0 or len(points) < 2:
         return ()
-    forward_m = data_scene_forward_m(distance_m)
+    forward_m = render_scene_forward_m(distance_m)
     if forward_m < points[0].y or forward_m > points[-1].y:
         return ()
     center_x_m = centerline_x_at_forward(points, forward_m)
@@ -2427,12 +2429,18 @@ def ego_anchor_x_m(state: ClusterUiState, lane_width_m: float) -> float:
 def scene_camera(state: ClusterUiState, lane_width_m: float, anchor_x_m: float = 0.0) -> CameraSpec:
     ego_x_m = ego_anchor_x_m(state, lane_width_m) - anchor_x_m
     ego_y_m = EGO_FORWARD_M
-
-    drive_camera = CameraSpec(
-        position=Vec3(0.0, -16.0 + DRIVE_CAMERA_FORWARD_SHIFT_M, 6.00),
-        target=Vec3(0.0, 7.0 + DRIVE_CAMERA_FORWARD_SHIFT_M, -0.20),
-        fovy_deg=44.0,
-    )
+    if state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM:
+        drive_camera = CameraSpec(
+            position=Vec3(*DRIVE_CAMERA_EGO_BOTTOM_POSITION_M),
+            target=Vec3(*DRIVE_CAMERA_EGO_BOTTOM_TARGET_M),
+            fovy_deg=44.0,
+        )
+    else:
+        drive_camera = CameraSpec(
+            position=Vec3(0.0, -16.0 + DRIVE_CAMERA_FORWARD_SHIFT_M, 6.00),
+            target=Vec3(0.0, 7.0 + DRIVE_CAMERA_FORWARD_SHIFT_M, -0.20),
+            fovy_deg=44.0,
+        )
 
     if not state.surround_view_active:
         return drive_camera
@@ -3078,7 +3086,15 @@ def build_cluster_scene(
     profile_stage = profile_scene_start(profile_add)
     ego_offset = clamp(state.ego_lane_offset, -1.25, 1.25)
     target_offset = state.highlight_lane_offset if state.lane_change_phase == "changing" else None
-    ego_vehicle = vehicle_box(ego_offset, EGO_FORWARD_M, state.steering, lane_width_m, EGO, camera_active, target_offset)
+    ego_vehicle = vehicle_box(
+        ego_offset,
+        EGO_VEHICLE_CENTER_FORWARD_M,
+        state.steering,
+        lane_width_m,
+        EGO,
+        camera_active,
+        target_offset,
+    )
     merged_radar_labels = frozenset[str]()
     if route_mode:
         if state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL:
@@ -3131,7 +3147,7 @@ def build_cluster_scene(
         detected_blockers = tuple(
             PathBlocker(
                 clamp(detected.lateral_m / lane_width_m, -2.2, 2.2),
-                data_scene_forward_m(detected.longitudinal_m),
+                render_scene_forward_m(detected.longitudinal_m),
                 VEHICLE_LENGTH_M,
             )
             for detected in blocking_detected_vehicles

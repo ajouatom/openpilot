@@ -67,6 +67,9 @@ CLUSTER_CORE_MODE_ALL = 1
 CLUSTER_PRIORITY_DEFAULT = 10
 CLUSTER_PRIORITY_MIN = 1
 CLUSTER_PRIORITY_MAX = 99
+CLUSTER_CAMERA_VIEW_MODE_DEFAULT = 0
+CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM = 1
+CLUSTER_CAMERA_VIEW_MODE_PARAM = "ClusterHudCameraViewMode"
 CLUSTER_SCREEN_MODE_DEFAULT = 0
 CLUSTER_SCREEN_MODE_DEBUG = 1
 CLUSTER_SCREEN_MODE_DEBUG_SYSTEM = 2
@@ -261,6 +264,36 @@ def normalize_cluster_priority(value: object) -> int:
     if priority < CLUSTER_PRIORITY_MIN:
         return CLUSTER_PRIORITY_DEFAULT
     return min(CLUSTER_PRIORITY_MAX, priority)
+
+
+def normalize_cluster_camera_view_mode(value: object) -> int:
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        aliases = {
+            "default": CLUSTER_CAMERA_VIEW_MODE_DEFAULT,
+            "mode0": CLUSTER_CAMERA_VIEW_MODE_DEFAULT,
+            "mode-0": CLUSTER_CAMERA_VIEW_MODE_DEFAULT,
+            "rear": CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM,
+            "bottom": CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM,
+            "ego-bottom": CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM,
+            "ego_bottom": CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM,
+            "mode1": CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM,
+            "mode-1": CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM,
+            "legacy": CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM,
+        }
+        if normalized in aliases:
+            return aliases[normalized]
+        try:
+            value = int(normalized)
+        except ValueError:
+            return CLUSTER_CAMERA_VIEW_MODE_DEFAULT
+    try:
+        mode = int(value)
+    except (TypeError, ValueError):
+        return CLUSTER_CAMERA_VIEW_MODE_DEFAULT
+    if mode == CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM:
+        return CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM
+    return CLUSTER_CAMERA_VIEW_MODE_DEFAULT
 
 
 def normalize_cluster_brightness_percent(value: object) -> int:
